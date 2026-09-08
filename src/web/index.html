@@ -1,90 +1,157 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>timeflow</title>
-  <style>
-    :root { --accent: #3b82f6; --bg:#f8fafc; --card:#ffffff; --text:#1e293b; --muted:#64748b; --danger:#ef4444; }
-    * { box-sizing:border-box; }
-    body { margin:0; font-family:-apple-system,"Segoe UI",PingFang SC,"Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }
-    header { padding:20px 28px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
-    h1 { font-size:20px; margin:0; }
-    .accent { color:var(--accent); }
-    .summary { color:var(--muted); font-size:14px; }
-    main { max-width:760px; margin:0 auto; padding:0 28px 60px; }
-    .new { display:flex; gap:8px; margin:16px 0 24px; }
-    .new input { flex:1; padding:12px 14px; border:1px solid #e2e8f0; border-radius:10px; font-size:15px; }
-    .new input:focus { outline:2px solid var(--accent); }
-    button { border:none; border-radius:10px; padding:10px 16px; font-size:14px; cursor:pointer; background:var(--accent); color:#fff; }
-    button.ghost { background:transparent; color:var(--muted); border:1px solid #e2e8f0; }
-    .card { background:var(--card); border-radius:12px; padding:14px 16px; margin-bottom:10px; box-shadow:0 1px 2px rgba(0,0,0,.04); display:flex; align-items:center; gap:12px; }
-    .card .title { flex:1; }
-    .card .meta { color:var(--muted); font-size:12px; }
-    .card.done .title { text-decoration:line-through; color:var(--muted); }
-    .card.overdue { border-left:3px solid var(--danger); }
-    .check { width:22px; height:22px; border:2px solid var(--accent); border-radius:50%; cursor:pointer; flex:none; background:transparent; position:relative; }
-    .check.on { background:var(--accent); }
-    .group { display:inline-block; background:#f1f5f9; color:var(--muted); border-radius:6px; padding:2px 8px; font-size:12px; margin-left:6px; }
-    .section-title { font-size:13px; color:var(--muted); margin:22px 0 10px; }
-    .empty { color:var(--muted); text-align:center; padding:40px 0; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>timeflow</title>
+<style>
+:root{--accent:#3b82f6;--bg:#f8fafc;--card:#fff;--text:#1e293b;--muted:#64748b;--danger:#ef4444;--ok:#22c55e}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"Segoe UI",PingFang SC,"Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+header{padding:16px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #e2e8f0}
+header h1{font-size:18px;margin:0}
+.accent{color:var(--accent)}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+nav button{border:none;background:transparent;padding:8px 14px;border-radius:8px;font-size:13px;color:var(--muted);cursor:pointer}
+nav button.active{background:var(--accent);color:#fff}
+main{max-width:820px;margin:0 auto;padding:0 24px 60px}
+.section-title{font-size:13px;color:var(--muted);margin:20px 0 10px}
+.card{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;align-items:center;gap:12px}
+.card .title{flex:1}
+.card .meta{color:var(--muted);font-size:12px}
+.card.overdue{border-left:3px solid var(--danger)}
+.card.done .title{text-decoration:line-through;color:var(--muted)}
+.check{width:22px;height:22px;border:2px solid var(--accent);border-radius:50%;cursor:pointer;flex:none;background:transparent}
+.check.on{background:var(--accent)}
+button{border:none;border-radius:10px;padding:9px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:#fff}
+button.ghost{background:transparent;color:var(--muted);border:1px solid #e2e8f0}
+.new{display:flex;gap:8px;margin:16px 0}
+.new input{flex:1;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.big{font-size:30px;font-weight:700;color:var(--accent)}
+.badge{display:inline-block;background:#f1f5f9;color:var(--muted);border-radius:6px;padding:2px 8px;font-size:12px;margin-left:6px}
+.empty{color:var(--muted);text-align:center;padding:30px 0}
+.textarea{width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;resize:vertical}
+</style>
 </head>
 <body>
-  <header>
-    <h1>My Day <span class="accent">·</span> <span class="summary" id="summary"></span></h1>
-    <button class="ghost" onclick="location.reload()">刷新</button>
-  </header>
-  <main>
-    <div class="new">
-      <input id="title" placeholder="今天要做什么？回车添加…" onkeydown="if(event.key==='Enter')add()">
-      <button onclick="add()">添加到 My Day</button>
-    </div>
-    <div class="section-title">逾期（债务）</div>
-    <div id="overdue"></div>
-    <div class="section-title">今天（My Day）</div>
-    <div id="myday"></div>
-  </main>
-  <script>
-    let accent = '#3b82f6';
-    async function load() {
-      const cfg = await (await fetch('/api/config')).json();
-      accent = cfg.accent_color; document.documentElement.style.setProperty('--accent', accent);
-      const [mydays, overdue, summary] = await Promise.all([
-        fetch('/api/mydays').then(r=>r.json()),
-        fetch('/api/overdue').then(r=>r.json()),
-        fetch('/api/summary').then(r=>r.json()),
-      ]);
-      document.getElementById('summary').textContent =
-        `今日债务 ${summary.debt_count} 项 · 投入 ${summary.invest_hours}h`;
-      document.getElementById('myday').innerHTML = render(mydays) || '<div class="empty">今天还没有任务，挑一件加进来吧</div>';
-      document.getElementById('overdue').innerHTML = render(overdue, true) || '<div class="empty">没有逾期</div>';
-    }
-    function render(list, isOverdue) {
-      if (!list.length) return '';
-      return list.map(t => `
-        <div class="card ${t.status==='完成'?'done':''} ${isOverdue?'overdue':''}">
-          <button class="check ${t.status==='完成'?'on':''}" onclick="done('${t.id}')"></button>
-          <div>
-            <div class="title">${t.title}</div>
-            <div class="meta">${t.due_date||''} ${t.group_name?`<span class="group">${t.group_name}</span>`:''}</div>
-          </div>
-          ${t.status==='完成'?'':`<button class="ghost" onclick="remove('${t.id}')">移除</button>`}
-        </div>`).join('');
-    }
-    async function done(id) { await fetch(`/api/tasks/${id}/complete`, {method:'POST'}); load(); }
-    async function remove(id) {
-      const t = await (await fetch(`/api/tasks/${id}`)).json();
-      await fetch(`/api/tasks/${id}/myday`, {method:'POST'});
-      if (t.is_myday) load();
-    }
-    async function add() {
-      const title = document.getElementById('title').value.trim();
-      if (!title) return;
-      await fetch('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title, is_myday:true})});
-      document.getElementById('title').value=''; load();
-    }
-    load();
-  </script>
+<header>
+  <h1>timeflow <span class="accent">·</span> <span id="summary" style="color:var(--muted);font-size:13px"></span></h1>
+  <nav>
+    <button data-view="today" class="active">今日</button>
+    <button data-view="focus">专注</button>
+    <button data-view="habit">习惯</button>
+    <button data-view="academic">学业</button>
+    <button data-view="review">复习</button>
+    <button data-view="memo">备忘录</button>
+    <button id="refresh" class="ghost">刷新</button>
+  </nav>
+</header>
+<main id="main"></main>
+<script>
+let accent='#3b82f6';
+async function api(path,opts={}){const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});return r.json()}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function el(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
+function view(name){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));render(name)}
+document.querySelectorAll('nav button[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view));
+document.getElementById('refresh').onclick=()=>view(current);
+let current='today';
+
+async function render(name){
+  current=name;
+  const m=document.getElementById('main');
+  const cfg=await api('/api/config');accent=cfg.accent_color;document.documentElement.style.setProperty('--accent',accent);
+  if(name==='today')return renderToday(m);
+  if(name==='focus')return renderFocus(m);
+  if(name==='habit')return renderHabit(m);
+  if(name==='academic')return renderAcademic(m);
+  if(name==='review')return renderReview(m);
+  if(name==='memo')return renderMemo(m);
+}
+
+function taskCard(t,isOverdue){
+  return `<div class="card ${t.status==='完成'?'done':''} ${isOverdue?'overdue':''}">
+    <button class="check ${t.status==='完成'?'on':''}" onclick="done('${t.id}')"></button>
+    <div><div class="title">${esc(t.title)}</div>
+    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}</div></div>
+    ${t.status==='完成'?'':`<button class="ghost" onclick="remove('${t.id}')">移除</button>`}</div>`;
+}
+async function done(id){await api(`/api/tasks/${id}/complete`,{method:'POST'});view(current)}
+async function remove(id){const t=await api(`/api/tasks/${id}`);await api(`/api/tasks/${id}/myday`,{method:'POST'});view(current)}
+async function addTask(){const title=document.getElementById('newTitle').value.trim();if(!title)return;
+  await api('/api/tasks',{method:'POST',body:JSON.stringify({title,is_myday:true})});
+  document.getElementById('newTitle').value='';view(current)}
+
+async function renderToday(m){
+  const [mydays,overdue,summary]=await Promise.all([api('/api/mydays'),api('/api/overdue'),api('/api/summary')]);
+  el('summary',`债务 ${summary.debt_count} 项 · 投入 ${summary.invest_hours}h`);
+  m.innerHTML=`<div class="new"><input id="newTitle" placeholder="今天要做什么？回车添加…" onkeydown="if(event.key==='Enter')addTask()"><button onclick="addTask()">添加</button></div>
+  <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||'<div class="empty">没有逾期</div>'}</div>
+  <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||'<div class="empty">今天还没有任务，挑一件加进来吧</div>'}`;
+}
+
+async function renderFocus(m){
+  const today=await api('/api/focus/today');
+  m.innerHTML=`<div class="card"><div><div class="big">${today.focus_minutes}</div><div class="meta">今日专注分钟</div></div></div>
+  <div class="new"><button onclick="startFocus('tomato')">番茄钟(25分)</button><button class="ghost" onclick="startFocus('plain')">普通计时</button></div>
+  <div id="focusSessions"><div class="empty">正在计时…</div></div>`;
+}
+async function startFocus(kind){await api('/api/focus/start',{method:'POST',body:JSON.stringify({kind})});alert(`已开始${kind==='tomato'?'番茄钟':'普通计时'}，25分钟后结束`);}
+
+async function renderHabit(m){
+  const sc=(await api('/api/selfcheck'));
+  const habitId=sessionStorage.getItem('habitId');
+  let habit=null;if(habitId)habit=await api(`/api/habits/${habitId}`);
+  m.innerHTML=`<div class="card"><div class="meta">本周专注 ${sc.week_focus_minutes}h · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项</div></div>
+  <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡"><button onclick="addHabit()">新建</button></div>
+  ${habit?`<div class="card"><div class="title">${esc(habit.id?habit.name||'': '')}连续 ${habit.streak} 天</div><button onclick="toggleHabit('${sessionStorage.getItem('habitId')}')">打卡</button></div>`:'<div class="empty">先新建一个习惯</div>'}
+  <div class="section-title">每日反馈（计划 vs 执行）</div>
+  <textarea class="textarea" id="fbPlan" placeholder="计划："></textarea><br>
+  <textarea class="textarea" id="fbGap" placeholder="差距/复盘："></textarea><br>
+  <button onclick="saveFeedback()">保存反馈</button>`;
+}
+async function addHabit(){const name=document.getElementById('habitName').value.trim();if(!name)return;
+  const h=await api('/api/habits',{method:'POST',body:JSON.stringify({name})});
+  sessionStorage.setItem('habitId',h.id);view(current)}
+async function toggleHabit(id){await api(`/api/habits/${id}/toggle`,{method:'POST'});view(current)}
+async function saveFeedback(){await api('/api/feedback',{method:'POST',body:JSON.stringify({plan_note:document.getElementById('fbPlan').value,gap_note:document.getElementById('fbGap').value})});view(current)}
+
+async function renderAcademic(m){
+  const gpa=await api('/api/gpa');const gpa5=await api('/api/gpa?scale=5.0');
+  const courses=await api('/api/courses');
+  m.innerHTML=`<div class="grid">
+   <div class="card"><div class="big">${gpa.gpa}</div><div class="meta">GPA（4.0制，${gpa.credits}学分）</div></div>
+   <div class="card"><div class="big">${gpa5.gpa}</div><div class="meta">GPA（5.0制）</div></div></div>
+  <div class="new"><input id="cName" placeholder="新建课程，如：高数"><button onclick="addCourse()">新建课程</button></div>
+  ${courses.map(c=>`<div class="card"><div class="title">${esc(c.name)}</div><div class="meta">${c.credits}学分 ${c.teacher||''}</div></div>`).join('')||'<div class="empty">暂无课程</div>'}
+  <div class="section-title">录入成绩</div>
+  <div class="new"><input id="gScore" type="number" placeholder="成绩" style="width:80px"><input id="gCredits" type="number" placeholder="学分" value="2" style="width:80px"><button onclick="addGrade()">录入</button></div>`;
+}
+async function addCourse(){const name=document.getElementById('cName').value.trim();if(!name)return;
+  await api('/api/courses',{method:'POST',body:JSON.stringify({name})});view(current)}
+async function addGrade(){const score=parseFloat(document.getElementById('gScore').value);const credits=parseFloat(document.getElementById('gCredits').value);
+  if(isNaN(score))return;await api('/api/grades',{method:'POST',body:JSON.stringify({score,credits})});view(current)}
+
+async function renderReview(m){
+  const due=await api('/api/review/due');
+  m.innerHTML=`<div class="new"><input id="rvTitle" placeholder="新建复习卡内容"><button onclick="addReview()">新建</button></div>
+  <div class="section-title">到期复习（${due.length}）</div>
+  ${due.map(r=>`<div class="card"><div class="title">${esc(r.title)}</div><div class="meta">${r.reps}次 · ${r.interval_days}天</div>
+    <button onclick="review('${r.id}','remember')">记得</button><button class="ghost" onclick="review('${r.id}','fuzzy')">模糊</button><button class="ghost" onclick="review('${r.id}','forgot')">忘了</button></div>`).join('')||'<div class="empty">没有到期复习</div>'}`;
+}
+async function addReview(){const title=document.getElementById('rvTitle').value.trim();if(!title)return;
+  await api('/api/review/items',{method:'POST',body:JSON.stringify({title})});view(current)}
+async function review(id,fb){await api(`/api/review/${id}/review`,{method:'POST',body:JSON.stringify({feedback:fb})});view(current)}
+
+async function renderMemo(m){
+  const memos=await api('/api/memos');
+  m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…"><button onclick="addMemo()">记录</button></div>
+  ${memos.map(x=>`<div class="card"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge">${esc(x.ref_handle)}</span>`:''}</div></div>`).join('')||'<div class="empty">暂无备忘录</div>'}`;
+}
+async function addMemo(){const text=document.getElementById('memoTxt').value.trim();if(!text)return;
+  await api('/api/memos',{method:'POST',body:JSON.stringify({text})});view(current)}
+</script>
 </body>
 </html>
