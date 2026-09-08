@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>timeflow</title>
+  <style>
+    :root { --accent: #3b82f6; --bg:#f8fafc; --card:#ffffff; --text:#1e293b; --muted:#64748b; --danger:#ef4444; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,"Segoe UI",PingFang SC,"Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }
+    header { padding:20px 28px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    h1 { font-size:20px; margin:0; }
+    .accent { color:var(--accent); }
+    .summary { color:var(--muted); font-size:14px; }
+    main { max-width:760px; margin:0 auto; padding:0 28px 60px; }
+    .new { display:flex; gap:8px; margin:16px 0 24px; }
+    .new input { flex:1; padding:12px 14px; border:1px solid #e2e8f0; border-radius:10px; font-size:15px; }
+    .new input:focus { outline:2px solid var(--accent); }
+    button { border:none; border-radius:10px; padding:10px 16px; font-size:14px; cursor:pointer; background:var(--accent); color:#fff; }
+    button.ghost { background:transparent; color:var(--muted); border:1px solid #e2e8f0; }
+    .card { background:var(--card); border-radius:12px; padding:14px 16px; margin-bottom:10px; box-shadow:0 1px 2px rgba(0,0,0,.04); display:flex; align-items:center; gap:12px; }
+    .card .title { flex:1; }
+    .card .meta { color:var(--muted); font-size:12px; }
+    .card.done .title { text-decoration:line-through; color:var(--muted); }
+    .card.overdue { border-left:3px solid var(--danger); }
+    .check { width:22px; height:22px; border:2px solid var(--accent); border-radius:50%; cursor:pointer; flex:none; background:transparent; position:relative; }
+    .check.on { background:var(--accent); }
+    .group { display:inline-block; background:#f1f5f9; color:var(--muted); border-radius:6px; padding:2px 8px; font-size:12px; margin-left:6px; }
+    .section-title { font-size:13px; color:var(--muted); margin:22px 0 10px; }
+    .empty { color:var(--muted); text-align:center; padding:40px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>My Day <span class="accent">·</span> <span class="summary" id="summary"></span></h1>
+    <button class="ghost" onclick="location.reload()">刷新</button>
+  </header>
+  <main>
+    <div class="new">
+      <input id="title" placeholder="今天要做什么？回车添加…" onkeydown="if(event.key==='Enter')add()">
+      <button onclick="add()">添加到 My Day</button>
+    </div>
+    <div class="section-title">逾期（债务）</div>
+    <div id="overdue"></div>
+    <div class="section-title">今天（My Day）</div>
+    <div id="myday"></div>
+  </main>
+  <script>
+    let accent = '#3b82f6';
+    async function load() {
+      const cfg = await (await fetch('/api/config')).json();
+      accent = cfg.accent_color; document.documentElement.style.setProperty('--accent', accent);
+      const [mydays, overdue, summary] = await Promise.all([
+        fetch('/api/mydays').then(r=>r.json()),
+        fetch('/api/overdue').then(r=>r.json()),
+        fetch('/api/summary').then(r=>r.json()),
+      ]);
+      document.getElementById('summary').textContent =
+        `今日债务 ${summary.debt_count} 项 · 投入 ${summary.invest_hours}h`;
+      document.getElementById('myday').innerHTML = render(mydays) || '<div class="empty">今天还没有任务，挑一件加进来吧</div>';
+      document.getElementById('overdue').innerHTML = render(overdue, true) || '<div class="empty">没有逾期</div>';
+    }
+    function render(list, isOverdue) {
+      if (!list.length) return '';
+      return list.map(t => `
+        <div class="card ${t.status==='完成'?'done':''} ${isOverdue?'overdue':''}">
+          <button class="check ${t.status==='完成'?'on':''}" onclick="done('${t.id}')"></button>
+          <div>
+            <div class="title">${t.title}</div>
+            <div class="meta">${t.due_date||''} ${t.group_name?`<span class="group">${t.group_name}</span>`:''}</div>
+          </div>
+          ${t.status==='完成'?'':`<button class="ghost" onclick="remove('${t.id}')">移除</button>`}
+        </div>`).join('');
+    }
+    async function done(id) { await fetch(`/api/tasks/${id}/complete`, {method:'POST'}); load(); }
+    async function remove(id) {
+      const t = await (await fetch(`/api/tasks/${id}`)).json();
+      await fetch(`/api/tasks/${id}/myday`, {method:'POST'});
+      if (t.is_myday) load();
+    }
+    async function add() {
+      const title = document.getElementById('title').value.trim();
+      if (!title) return;
+      await fetch('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title, is_myday:true})});
+      document.getElementById('title').value=''; load();
+    }
+    load();
+  </script>
+</body>
+</html>
