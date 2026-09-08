@@ -18,8 +18,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from timeflow.config import load_settings
+from timeflow.core import academic as ac
 from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
+from timeflow.core import review as rv
 from timeflow.core import tasks as tm
 from timeflow.core.ledger import ledger
 from timeflow.storage import db
@@ -235,5 +237,75 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.get("/api/selfcheck")
     def selfcheck() -> dict[str, object]:
         return fb.self_check(conn)
+
+    # ---- SR-F5 学业追踪 ----
+    @app.post("/api/courses")
+    def create_course(payload: dict[str, Any]) -> dict[str, str]:
+        return {"id": ac.create_course(
+            conn,
+            name=payload["name"],
+            credits=payload.get("credits"),
+            teacher=payload.get("teacher"),
+            note=payload.get("note"),
+        )}
+
+    @app.get("/api/courses")
+    def list_courses() -> list[dict[str, object]]:
+        return ac.list_courses(conn)
+
+    @app.post("/api/assessments")
+    def add_assessment(payload: dict[str, Any]) -> dict[str, str]:
+        return {"id": ac.add_assessment(
+            conn,
+            course_id=payload["course_id"],
+            name=payload["name"],
+            due_date=payload.get("due_date"),
+            weight=payload.get("weight"),
+            score=payload.get("score"),
+            note=payload.get("note"),
+        )}
+
+    @app.get("/api/assessments")
+    def list_assessments(course_id: str | None = None) -> list[dict[str, object]]:
+        return ac.list_assessments(conn, course_id)
+
+    @app.post("/api/grades")
+    def add_grade(payload: dict[str, Any]) -> dict[str, str]:
+        return {"id": ac.add_grade(
+            conn,
+            score=payload["score"],
+            credits=payload["credits"],
+            course_id=payload.get("course_id"),
+            term=payload.get("term"),
+        )}
+
+    @app.get("/api/gpa")
+    def get_gpa() -> dict[str, float]:
+        g, credits = ac.gpa(conn)
+        return {"gpa": g, "credits": credits}
+
+    # ---- SR-F6 复习间隔重复 ----
+    @app.post("/api/review/items")
+    def create_review(payload: dict[str, Any]) -> dict[str, str]:
+        return {"id": rv.create_item(
+            conn,
+            title=payload["title"],
+            form=payload.get("form", "qa"),
+            source=payload.get("source", "internal"),
+            ref_handle=payload.get("ref_handle"),
+        )}
+
+    @app.get("/api/review/due")
+    def review_due() -> list[dict[str, object]]:
+        return rv.due_items(conn)
+
+    @app.post("/api/review/{item_id}/review")
+    def do_review(item_id: str, payload: dict[str, Any]) -> dict[str, object]:
+        try:
+            return rv.review(conn, item_id, payload["feedback"])
+        except KeyError:
+            raise HTTPException(status_code=404, detail="复习卡不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     return app
