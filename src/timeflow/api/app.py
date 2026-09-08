@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from timeflow.config import load_settings
@@ -85,11 +85,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    web_index = Path(__file__).resolve().parent.parent.parent / "web" / "index.html"
-
-    @app.get("/", include_in_schema=False)
-    def index() -> FileResponse:
-        return FileResponse(web_index)
+    web_dir = Path(__file__).resolve().parent.parent.parent / "web"
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
@@ -386,5 +382,8 @@ def create_app(db_path: str | None = None) -> FastAPI:
              "local_ts": r["local_ts"], "remote_ts": r["remote_ts"]}
             for r in rows
         ]
+
+    # 静态前端入口：/ （index.html）、/manifest.json、/sw.js、图标等
+    app.mount("/", StaticFiles(directory=str(web_dir), html=True), name="web")
 
     return app
