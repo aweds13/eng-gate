@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# 虚拟环境
+.venv/
+venv/
+
+# 本地配置（敏感，不入库）
+config.toml
+
+# 本地数据 + 备份
+data/*.db
+data/*.db-*
+backups/
+*.sqlite3
+*.db-journal
+
+# 工具缓存
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 前端构建产物（如需）
+src/web/dist/
+node_modules/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp

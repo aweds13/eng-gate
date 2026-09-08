@@ -1,0 +1,22 @@
+# timeflow 配置模板 → 复制为 config.toml（本地使用，勿入库）
+
+[database]
+# SQLite 数据文件路径（相对项目根或绝对路径均可）
+path = "data/timeflow.db"
+
+[app]
+# 主题强调色（可自定义，像键盘灯光）
+accent_color = "#3b82f6"
+# 亮/暗主题：light / dark
+theme = "light"
+
+[focus]
+# 专注白名单默认：阻止非白名单（默认 true）
+block_by_default = true
+# 勿扰时段（24h，空则全天）
+do_not_disturb = ["22:00-07:00"]
+
+[ledger]
+# B 系统：周结算；债务轻度/中度/重度阈值（天）
+debt_mild = 3
+debt_medium = 7
