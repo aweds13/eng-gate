@@ -6,13 +6,28 @@
 - 想清楚「今天该做什么」（My Day），并把待办如实记下来、能追踪、能拆解。
 - 用「债务 / 储蓄」看自己在**长期投入上是否均衡**（不突击、不拖延），但**不施压**——只如实记账、温和呈现。
 - 学校 KPI / 考试 / 作业别漏掉（硬约束提醒），与自学不冲突。
+- 专注计时 / 习惯打卡 / 每日复盘 / 复习(FSRS) 与学习投入统一在一个本地工具里。
 
 ## 快速开始
 ```bash
 pip install -e ".[dev]"
 cp config.example.toml config.toml     # 首次：生成本地配置（勿入库）
 timeflow                                # 启动桌面窗口
+# 或仅本地 API：python -m uvicorn timeflow.api.app:create_app --factory --port 8520
 ```
+
+## 功能模块（对应治理三层 SR-F）
+| 模块 | 说明 | 规格 |
+|---|---|---|
+| 任务管理 | My Day / CRUD / 逾期栏 / 多分组 / 子任务 / Repeat / 状态机 | SR-F1 |
+| B 系统记账 | 逾期=债务(天数/程度) / 专注=投入 / 顶部轻量摘要 / 产出投入流水 | SR-F2 |
+| 专注计时 | 番茄/普通计时、绑定任务、中断三选、白名单勿扰 | SR-F3 |
+| 反馈/习惯/自检 | 每日复盘、习惯打卡热力图、自检消费B数据 | SR-F4 |
+| 学业追踪 | 课程档案 / 考核项 / GPA（**4.0/5.0 制可切换**） | SR-F5 |
+| 复习(FSRS) | 间隔重复调度、反馈三态、外部执行源 | SR-F6 |
+| 团队/AI | 管理者/执行者、任务分配、AI 接口(只读+新增) | SR-F7 |
+| 备忘录/知识资产 | 顺手记录、**只存引用句柄**(Vault路径/KB-id) | SR-F8 |
+| 存储/同步 | SQLite + schema迁移 + LWW同步(不静默覆盖) | SR-F9 |
 
 ## 结构（三层治理 + 源码）
 ```
@@ -22,12 +37,13 @@ implementation/  怎么实现（模块名+职责+取舍，SR→模块）
 taste/  技术品味与红线
 CODING_GUIDELINES.md / ACCEPTANCE.md  护栏与验收
 src/  源码（app · api · core · storage · getaways · config）
-tests/  单元测试
+tests/  单元测试（44 项）
 ```
 
 ## 状态
-- ✅ intention / specification / implementation 骨架已闭环（含护栏、验收、三层对齐脚本）。
-- 🔨 编码中：第一版 MVP = 任务管理（My Day / CRUD / 逾期 / 分组 / 子任务 / Repeat / 轻债务 + SQLite + 桌面窗口）。
-- ⏭️ 后续：专注计时、B 系统完整记账、复习(FSRS)、学业 KPI、团队/AI 接口、知识资产句柄。
+- ✅ intention / specification / implementation 骨架闭环（含护栏、验收、三层对齐脚本）。
+- ✅ **第一版完整**：任务管理 + B 记账 + 专注(F3) + 反馈/习惯(F4) + 学业/GPA(F5) + 复习FSRS(F6) + 团队/AI(F7) + 备忘录(F8) + 同步(F9) + **GPA 4.0/5.0 切换**。
+- ✅ 质量门：pytest 44 passed / ruff 0 / mypy 0 / 三层对齐 PASS。
+- ⏭️ 后置（第二版）：重规划/债务重组(F2.8)、AI 接口写/改/删、学校通知监测脚本(F10)、移动端 PWA 深联动。
 
 > 设计决策（know-why）见 `DESIGN.md`；工程规范见 `CODING_GUIDELINES.md`；功能验收见 `ACCEPTANCE.md`。
