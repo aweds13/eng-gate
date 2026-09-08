@@ -1,6 +1,8 @@
 """学业追踪子包：re-export 领域逻辑。"""
 from timeflow.core.academic.academic import (
     GPA_4_0,
+    GPA_SCALES,
+    VALID_GPA_SCALES,
     add_assessment,
     add_grade,
     all_grade_rows,
@@ -12,6 +14,8 @@ from timeflow.core.academic.academic import (
 
 __all__ = [
     "GPA_4_0",
+    "GPA_SCALES",
+    "VALID_GPA_SCALES",
     "create_course",
     "list_courses",
     "add_assessment",

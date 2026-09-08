@@ -120,40 +120,39 @@ def add_grade(
     return gid
 
 
-def _grade_point(score: float) -> float:
-    """百分制分数 → 4.0 制绩点（中国高校常用分段法，封顶 4.0）。
+# GPA 制式：可按学校切换（4.0 制 / 5.0 制）。每种是「分数下限 → 绩点」的分段表。
+GPA_SCALES: dict[str, list[tuple[float, float]]] = {
+    "4.0": [
+        (90, 4.0), (85, 3.7), (82, 3.3), (78, 3.0), (75, 2.8),
+        (70, 2.3), (65, 1.8), (60, 1.0),
+    ],
+    "5.0": [
+        (90, 5.0), (85, 4.5), (82, 4.0), (78, 3.5), (75, 3.2),
+        (70, 2.7), (65, 2.2), (60, 1.5),
+    ],
+}
 
-    90+ → 4.0；85+ → 3.7；82+ → 3.3；78+ → 3.0；75+ → 2.8；
-    70+ → 2.3；65+ → 1.8；60+ → 1.0；<60 → 0。
-    """
-    if score >= 90:
-        return 4.0
-    if score >= 85:
-        return 3.7
-    if score >= 82:
-        return 3.3
-    if score >= 78:
-        return 3.0
-    if score >= 75:
-        return 2.8
-    if score >= 70:
-        return 2.3
-    if score >= 65:
-        return 1.8
-    if score >= 60:
-        return 1.0
+VALID_GPA_SCALES = tuple(GPA_SCALES.keys())
+
+
+def _grade_point(score: float, gpa_scale: str = "4.0") -> float:
+    """百分制分数 → 对应制式下的绩点（封顶为该制式满分，如 4.0/5.0）。"""
+    bands = GPA_SCALES.get(gpa_scale, GPA_SCALES["4.0"])
+    for threshold, point in bands:
+        if score >= threshold:
+            return point
     return 0.0
 
 
-def gpa(conn: sqlite3.Connection) -> tuple[float, float]:
-    """加权 GPA（4.0 制，封顶 4.0）与总学分。"""
+def gpa(conn: sqlite3.Connection, gpa_scale: str = "4.0") -> tuple[float, float]:
+    """加权 GPA（可按 4.0/5.0 制切换）与总学分。"""
     total = 0.0
     credit_sum = 0.0
     for r in conn.execute("SELECT score, credits FROM grades").fetchall():
         score = float(r["score"])
         credits = float(r["credits"] or 0)
         credit_sum += credits
-        total += _grade_point(score) * credits
+        total += _grade_point(score, gpa_scale) * credits
     if not credit_sum:
         return (0.0, 0.0)
     return (round(total / credit_sum, 2), credit_sum)

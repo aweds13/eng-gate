@@ -97,7 +97,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.get("/api/config")
     def config() -> dict[str, Any]:
-        return {"accent_color": settings.app.accent_color, "theme": settings.app.theme}
+        return {
+            "accent_color": settings.app.accent_color,
+            "theme": settings.app.theme,
+            "gpa_scale": settings.academic.gpa_scale,
+        }
 
     @app.get("/api/tasks")
     def list_tasks() -> list[TaskOut]:
@@ -283,9 +287,13 @@ def create_app(db_path: str | None = None) -> FastAPI:
         )}
 
     @app.get("/api/gpa")
-    def get_gpa() -> dict[str, float]:
-        g, credits = ac.gpa(conn)
-        return {"gpa": g, "credits": credits}
+    def get_gpa(scale: str | None = None) -> dict[str, Any]:
+        # scale 查询参数可临时切换（4.0 / 5.0），缺省用配置值
+        gpa_scale = scale or settings.academic.gpa_scale
+        if gpa_scale not in ac.VALID_GPA_SCALES:
+            raise HTTPException(status_code=400, detail=f"非法 GPA 制式: {gpa_scale}")
+        g, credits = ac.gpa(conn, gpa_scale)
+        return {"gpa": g, "credits": credits, "scale": gpa_scale}
 
     # ---- SR-F6 复习间隔重复 ----
     @app.post("/api/review/items")

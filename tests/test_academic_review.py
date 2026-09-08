@@ -44,11 +44,33 @@ def test_gpa_capped_at_4(conn) -> None:
 def test_grade_point_bands(conn) -> None:
     from timeflow.core.academic.academic import _grade_point
 
-    assert _grade_point(100) == 4.0
-    assert _grade_point(90) == 4.0
-    assert _grade_point(85) == 3.7
-    assert _grade_point(60) == 1.0
-    assert _grade_point(40) == 0.0
+    assert _grade_point(100, "4.0") == 4.0
+    assert _grade_point(90, "4.0") == 4.0
+    assert _grade_point(85, "4.0") == 3.7
+    assert _grade_point(60, "4.0") == 1.0
+    assert _grade_point(40, "4.0") == 0.0
+
+
+def test_gpa_scale_switch(conn) -> None:
+    """同一批分数，4.0 制与 5.0 制给出不同绩点（可切换）。"""
+    ac.add_grade(conn, score=90, credits=5)
+    g4, _ = ac.gpa(conn, "4.0")
+    g5, _ = ac.gpa(conn, "5.0")
+    assert g4 < g5  # 5.0 制对应绩点更高
+    assert g4 == 4.0
+    assert g5 == 5.0
+
+
+def test_gpa_invalid_scale(conn) -> None:
+    """非法制式回退到 4.0（bounds 用默认表），不报错。"""
+    g, _ = ac.gpa(conn, "3.0")
+    assert g == 0.0  # 无成绩
+
+
+def test_valid_scales(conn) -> None:
+    assert set(ac.VALID_GPA_SCALES) == {"4.0", "5.0"}
+    assert ac.GPA_SCALES["4.0"][0] == (90, 4.0)
+    assert ac.GPA_SCALES["5.0"][0] == (90, 5.0)
 
 
 def test_review_fsrs_advances(conn) -> None:
