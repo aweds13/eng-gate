@@ -37,7 +37,10 @@ def _degree(days: int, mild: int, medium: int) -> str:
 def summary(
     conn: sqlite3.Connection, today: str | None = None, mild: int = 3, medium: int = 7
 ) -> LedgerSummary:
-    """顶部轻量摘要（AC-9）：今日债务项数 + 各逾期项天数/程度，投入时长(MVP 暂 0)。"""
+    """顶部轻量摘要（AC-9）：今日债务项数 + 各逾期项天数/程度，投入时长。
+
+    投入（invest_hours）= 今日已完成专注时长 / 3600（SR-F2.1 专注=投入）。
+    """
     t = today or date.today().isoformat()
     items: list[DebtItem] = []
     for task in tm.overdue_tasks(conn, t):
@@ -53,4 +56,14 @@ def summary(
             )
         )
     items.sort(key=lambda x: x.overdue_days, reverse=True)
-    return LedgerSummary(debt_count=len(items), debt_items=items, invest_hours=0.0)
+    # 投入：今日已完成专注
+    invested = conn.execute(
+        "SELECT COALESCE(SUM(duration_sec),0) FROM focus_sessions "
+        "WHERE status = 'finished' AND substr(started_at,1,10) = ?",
+        (t,),
+    ).fetchone()
+    return LedgerSummary(
+        debt_count=len(items),
+        debt_items=items,
+        invest_hours=round((invested[0] or 0) / 3600.0, 2),
+    )

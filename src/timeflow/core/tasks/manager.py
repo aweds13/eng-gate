@@ -167,14 +167,32 @@ def myday_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Task
 
 
 def overdue_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Task]:
-    """逾期任务（AC-5）：未完成且 due_date < 今天（不强推，只如实列出）。"""
+    """逾期任务（AC-5）：未完成且 due_date < 今天（不强推，只如实列出）。
+
+    AC-4 补充：无截止日但**昨日仍未完成的 My Day 任务**也自动移入逾期栏
+    （My Day=今天要做的集合，没做完不假装消失）。
+    """
     t = today or _today()
+    t_date = date.fromisoformat(t)
     rows = conn.execute(
         "SELECT * FROM tasks WHERE due_date IS NOT NULL AND due_date < ? AND status NOT IN (?,?,?) "
         "ORDER BY due_date",
         (t, STATUS_DONE, STATUS_CANCELLED, STATUS_ARCHIVED),
     ).fetchall()
-    return [_row_to_task(r) for r in rows]
+    overdue = [_row_to_task(r) for r in rows]
+
+    # 无 due 但过期的 My Day 任务：加入 My Day 的日期早于今天（用 created_at 日期近似）
+    myday_rows = conn.execute(
+        "SELECT * FROM tasks WHERE due_date IS NULL AND is_myday = 1 AND status NOT IN (?,?,?)",
+        (STATUS_DONE, STATUS_CANCELLED, STATUS_ARCHIVED),
+    ).fetchall()
+    for r in myday_rows:
+        task = _row_to_task(r)
+        created = date.fromisoformat(task.created_at[:10])
+        if created < t_date:
+            overdue.append(task)
+    overdue.sort(key=lambda x: (x.due_date or x.created_at))
+    return overdue
 
 
 def complete_task(conn: sqlite3.Connection, task_id: str) -> Task:

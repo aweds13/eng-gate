@@ -29,10 +29,23 @@ class LedgerConfig(BaseModel):
     debt_medium: int = 7
 
 
+class FocusConfig(BaseModel):
+    block_by_default: bool = True
+    do_not_disturb: list[str] = []
+    pomodoro_minutes: int = 25
+
+
+class AcademicConfig(BaseModel):
+    # GPA 制式：不同学校不同（4.0 制 / 5.0 制），可切换
+    gpa_scale: str = "4.0"
+
+
 class Settings(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     app: AppConfig = Field(default_factory=AppConfig)
     ledger: LedgerConfig = Field(default_factory=LedgerConfig)
+    focus: FocusConfig = Field(default_factory=FocusConfig)
+    academic: AcademicConfig = Field(default_factory=AcademicConfig)
 
 
 def _read_toml(config_path: Path | None) -> dict[str, Any]:

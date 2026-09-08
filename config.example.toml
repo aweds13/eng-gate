@@ -20,3 +20,7 @@ do_not_disturb = ["22:00-07:00"]
 # B 系统：周结算；债务轻度/中度/重度阈值（天）
 debt_mild = 3
 debt_medium = 7
+
+[academic]
+# GPA 制式：按你的学校切换（4.0 制 / 5.0 制）。默认 4.0。
+gpa_scale = "4.0"
