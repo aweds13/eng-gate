@@ -1,12 +1,16 @@
 """FastAPI REST（SR-F7.3 AI 接口 + 供前端）。本地优先。
 
-create_app(db_path) 封装为工厂；路由对任务做 CRUD / My Day / 逾期 / 轻债务摘要。
+create_app(db_path) 封装为工厂；路由对任务做 CRUD / My Day / 逾期 / 多分组 / 轻债务摘要，
+并预留后续域（专注/习惯/学业/复习/备忘录）的接口落点。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import sqlite3
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +30,7 @@ class TaskIn(BaseModel):
     repeat_days: int | None = None
     parent_id: str | None = None
     is_myday: bool = False
+    groups: list[str] = []
 
 
 class TaskOut(BaseModel):
@@ -40,9 +45,11 @@ class TaskOut(BaseModel):
     created_at: str
     updated_at: str
     version: int
+    groups: list[str] = []
 
 
-def _out(t: tm.Task) -> TaskOut:
+def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
+    groups = tm.get_task_groups(conn, t.id)
     return TaskOut(
         id=t.id,
         title=t.title,
@@ -55,6 +62,7 @@ def _out(t: tm.Task) -> TaskOut:
         created_at=t.created_at,
         updated_at=t.updated_at,
         version=t.version,
+        groups=groups,
     )
 
 
@@ -86,7 +94,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.get("/api/tasks")
     def list_tasks() -> list[TaskOut]:
-        return [_out(t) for t in tm.list_tasks(conn)]
+        return [_out(t, conn) for t in tm.list_tasks(conn)]
 
     @app.post("/api/tasks", response_model=TaskOut)
     def create_task(payload: TaskIn) -> TaskOut:
@@ -100,21 +108,27 @@ def create_app(db_path: str | None = None) -> FastAPI:
                 parent_id=payload.parent_id,
                 is_myday=payload.is_myday,
             )
+            if payload.groups:
+                tm.set_task_groups(conn, t.id, payload.groups)
+            return _out(t, conn)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        return _out(t)
 
     @app.get("/api/tasks/{task_id}", response_model=TaskOut)
     def get_task(task_id: str) -> TaskOut:
         try:
-            return _out(tm.get_task(conn, task_id))
+            return _out(tm.get_task(conn, task_id), conn)
         except KeyError:
             raise HTTPException(status_code=404, detail="任务不存在") from None
 
     @app.patch("/api/tasks/{task_id}", response_model=TaskOut)
     def update_task(task_id: str, payload: dict[str, Any]) -> TaskOut:
         try:
-            return _out(tm.update_task(conn, task_id, **payload))
+            fields = {k: v for k, v in payload.items() if k != "groups"}
+            t = tm.update_task(conn, task_id, **fields)
+            if "groups" in payload:
+                tm.set_task_groups(conn, task_id, payload["groups"])
+            return _out(t, conn)
         except (KeyError, ValueError) as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -126,7 +140,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.post("/api/tasks/{task_id}/complete", response_model=TaskOut)
     def complete_task(task_id: str) -> TaskOut:
         try:
-            return _out(tm.complete_task(conn, task_id))
+            return _out(tm.complete_task(conn, task_id), conn)
         except KeyError:
             raise HTTPException(status_code=404, detail="任务不存在") from None
         except ValueError as e:
@@ -134,11 +148,15 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.get("/api/mydays")
     def mydays() -> list[TaskOut]:
-        return [_out(t) for t in tm.myday_tasks(conn)]
+        return [_out(t, conn) for t in tm.myday_tasks(conn)]
 
     @app.get("/api/overdue")
     def overdue() -> list[TaskOut]:
-        return [_out(t) for t in tm.overdue_tasks(conn)]
+        return [_out(t, conn) for t in tm.overdue_tasks(conn)]
+
+    @app.get("/api/groups")
+    def groups() -> list[dict[str, Any]]:
+        return tm.list_groups(conn)
 
     @app.get("/api/summary")
     def summary() -> ledger.LedgerSummary:
@@ -149,6 +167,6 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.post("/api/tasks/{task_id}/myday")
     def toggle_myday(task_id: str) -> TaskOut:
         task = tm.get_task(conn, task_id)
-        return _out(tm.update_task(conn, task_id, is_myday=not task.is_myday))
+        return _out(tm.update_task(conn, task_id, is_myday=not task.is_myday), conn)
 
     return app
