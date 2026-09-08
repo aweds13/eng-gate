@@ -29,10 +29,17 @@ class LedgerConfig(BaseModel):
     debt_medium: int = 7
 
 
+class FocusConfig(BaseModel):
+    block_by_default: bool = True
+    do_not_disturb: list[str] = []
+    pomodoro_minutes: int = 25
+
+
 class Settings(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     app: AppConfig = Field(default_factory=AppConfig)
     ledger: LedgerConfig = Field(default_factory=LedgerConfig)
+    focus: FocusConfig = Field(default_factory=FocusConfig)
 
 
 def _read_toml(config_path: Path | None) -> dict[str, Any]:

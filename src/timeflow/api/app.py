@@ -18,6 +18,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from timeflow.config import load_settings
+from timeflow.core import feedback as fb
+from timeflow.core import focus as fc
 from timeflow.core import tasks as tm
 from timeflow.core.ledger import ledger
 from timeflow.storage import db
@@ -168,5 +170,70 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def toggle_myday(task_id: str) -> TaskOut:
         task = tm.get_task(conn, task_id)
         return _out(tm.update_task(conn, task_id, is_myday=not task.is_myday), conn)
+
+    # ---- SR-F3 专注计时 ----
+    @app.post("/api/focus/start")
+    def focus_start(payload: dict[str, Any]) -> dict[str, str]:
+        kind = payload.get("kind", fc.KIND_TOMATO)
+        task_id = payload.get("task_id")
+        device_id = payload.get("device_id")
+        sid = fc.start_session(conn, kind=kind, task_id=task_id, device_id=device_id)
+        return {"id": sid, "status": fc.STATUS_FINISHED}
+
+    @app.post("/api/focus/{session_id}/finish")
+    def focus_finish(session_id: str, payload: dict[str, Any]) -> dict[str, str]:
+        duration = int(payload.get("duration_sec", 0))
+        status = payload.get("status", fc.STATUS_FINISHED)
+        fc.finish_session(conn, session_id, duration, status)
+        return {"id": session_id, "status": status}
+
+    @app.get("/api/focus/today")
+    def focus_today() -> dict[str, float]:
+        return {"focus_minutes": fc.today_focus_minutes(conn)}
+
+    @app.get("/api/focus/tasks/{task_id}")
+    def focus_task_sessions(task_id: str) -> list[dict[str, object]]:
+        return fc.sessions_by_task(conn, task_id)
+
+    @app.get("/api/focus/guard")
+    def focus_guard() -> dict[str, object]:
+        cfg = settings.focus
+        return {
+            "block_by_default": cfg.block_by_default,
+            "do_not_disturb": cfg.do_not_disturb,
+        }
+
+    # ---- SR-F4 反馈/习惯/自检 ----
+    @app.post("/api/feedback")
+    def set_feedback(payload: dict[str, Any]) -> dict[str, str]:
+        fb.set_daily_feedback(
+            conn,
+            on_date=payload.get("date"),
+            plan_note=payload.get("plan_note"),
+            executed=payload.get("executed"),
+            gap_note=payload.get("gap_note"),
+            focus_minutes=payload.get("focus_minutes"),
+        )
+        return {"status": "ok"}
+
+    @app.get("/api/feedback")
+    def get_feedback(date: str | None = None) -> dict[str, object] | None:
+        return fb.get_feedback(conn, on_date=date)
+
+    @app.post("/api/habits")
+    def create_habit(payload: dict[str, Any]) -> dict[str, str]:
+        return {"id": fb.create_habit(conn, payload["name"])}
+
+    @app.post("/api/habits/{habit_id}/toggle")
+    def toggle_habit(habit_id: str, on_date: str | None = None) -> dict[str, bool]:
+        return {"done": fb.toggle_habit_log(conn, habit_id, on_date)}
+
+    @app.get("/api/habits/{habit_id}")
+    def get_habit(habit_id: str) -> dict[str, object]:
+        return {"streak": fb.habit_streak(conn, habit_id), "logs": fb.habit_logs(conn, habit_id)}
+
+    @app.get("/api/selfcheck")
+    def selfcheck() -> dict[str, object]:
+        return fb.self_check(conn)
 
     return app
