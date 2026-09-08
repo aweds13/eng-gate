@@ -21,8 +21,10 @@ from timeflow.config import load_settings
 from timeflow.core import academic as ac
 from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
+from timeflow.core import memo as memo
 from timeflow.core import review as rv
 from timeflow.core import tasks as tm
+from timeflow.core import team as team
 from timeflow.core.ledger import ledger
 from timeflow.storage import db
 
@@ -307,5 +309,57 @@ def create_app(db_path: str | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="复习卡不存在") from None
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # ---- SR-F7 团队/AI 协作 ----
+    @app.post("/api/team/assign")
+    def team_assign(payload: dict[str, Any]) -> dict[str, str]:
+        return {"id": team.assign_task(
+            conn,
+            task_id=payload["task_id"],
+            assignee=payload["assignee"],
+            assigner=payload.get("assigner", "me"),
+            note=payload.get("note"),
+        )}
+
+    @app.patch("/api/team/assign/{assignment_id}")
+    def team_status(assignment_id: str, payload: dict[str, Any]) -> dict[str, str]:
+        team.update_assignment_status(conn, assignment_id, payload["status"])
+        return {"id": assignment_id}
+
+    @app.get("/api/team/assignments")
+    def team_assignments(assignee: str | None = None) -> list[dict[str, object]]:
+        return team.assignments(conn, assignee)
+
+    # ---- SR-F8 备忘录/知识资产 ----
+    @app.post("/api/memos")
+    def create_memo(payload: dict[str, Any]) -> dict[str, str]:
+        try:
+            return {"id": memo.create_memo(
+                conn,
+                text=payload["text"],
+                ref_handle=payload.get("ref_handle"),
+                task_id=payload.get("task_id"),
+            )}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/memos")
+    def list_memos() -> list[dict[str, object]]:
+        return memo.list_memos(conn)
+
+    # B 系统产出/投入流水（SR-F8.4 产出评价器接口，第一版手动）
+    @app.post("/api/ledger/output")
+    def ledger_output(payload: dict[str, Any]) -> dict[str, str]:
+        return {"id": memo.add_output_entry(
+            conn, value=payload["value"], kind=payload.get("kind", "asset"),
+            note=payload.get("note"), ref_handle=payload.get("ref_handle"),
+        )}
+
+    @app.post("/api/ledger/invest")
+    def ledger_invest(payload: dict[str, Any]) -> dict[str, str]:
+        return {"id": memo.add_invest_entry(
+            conn, value=payload["value"], kind=payload.get("kind", "focus"),
+            note=payload.get("note"),
+        )}
 
     return app

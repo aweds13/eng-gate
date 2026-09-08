@@ -228,3 +228,18 @@ def _migrate_v2(conn: sqlite3.Connection) -> None:
         )
         """
     )
+
+    # 团队/AI 分配记录（SR-F7）
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS team_assignments (
+            id          TEXT PRIMARY KEY,
+            task_id     TEXT NOT NULL,
+            assignee    TEXT NOT NULL,
+            assigner    TEXT NOT NULL,
+            note        TEXT,
+            status      TEXT DEFAULT 'assigned',
+            created_at  TEXT
+        )
+        """
+    )
