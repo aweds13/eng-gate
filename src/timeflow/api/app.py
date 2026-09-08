@@ -23,6 +23,7 @@ from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
 from timeflow.core import memo as memo
 from timeflow.core import review as rv
+from timeflow.core import sync as sync_mod
 from timeflow.core import tasks as tm
 from timeflow.core import team as team
 from timeflow.core.ledger import ledger
@@ -361,5 +362,21 @@ def create_app(db_path: str | None = None) -> FastAPI:
             conn, value=payload["value"], kind=payload.get("kind", "focus"),
             note=payload.get("note"),
         )}
+
+    # ---- SR-F9 跨端同步 (LWW + 去重) ----
+    @app.post("/api/sync/tasks")
+    def sync_tasks(payload: dict[str, Any]) -> dict[str, Any]:
+        records = payload.get("records", [])
+        results = [sync_mod.merge_task(conn, r) for r in records]
+        return {"merged": results}
+
+    @app.get("/api/sync/logs")
+    def sync_logs() -> list[dict[str, object]]:
+        rows = conn.execute("SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 50").fetchall()
+        return [
+            {"id": r["id"], "entity": r["entity"], "entity_id": r["entity_id"],
+             "local_ts": r["local_ts"], "remote_ts": r["remote_ts"]}
+            for r in rows
+        ]
 
     return app

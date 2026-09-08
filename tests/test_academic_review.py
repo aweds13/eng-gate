@@ -26,11 +26,29 @@ def test_course_and_assessment(conn) -> None:
 
 
 def test_gpa_calculation(conn) -> None:
-    ac.add_grade(conn, score=90, credits=5)  # 90 → (90/20)*5 = 22.5
-    ac.add_grade(conn, score=70, credits=5)  # 70 → (70/20)*5 = 17.5
+    ac.add_grade(conn, score=90, credits=5)  # 90 → 4.0 * 5 = 20.0
+    ac.add_grade(conn, score=70, credits=5)  # 70 → 2.3 * 5 = 11.5
     g, credits = ac.gpa(conn)
     assert credits == 10
-    assert round(g, 2) == 4.0  # (22.5+17.5)/10 = 4.0
+    assert round(g, 2) == 3.15
+
+
+def test_gpa_capped_at_4(conn) -> None:
+    """GPA 最高 4.0（不因 95/100 分超上限）。"""
+    ac.add_grade(conn, score=100, credits=5)
+    ac.add_grade(conn, score=95, credits=5)
+    g, _ = ac.gpa(conn)
+    assert g == 4.0
+
+
+def test_grade_point_bands(conn) -> None:
+    from timeflow.core.academic.academic import _grade_point
+
+    assert _grade_point(100) == 4.0
+    assert _grade_point(90) == 4.0
+    assert _grade_point(85) == 3.7
+    assert _grade_point(60) == 1.0
+    assert _grade_point(40) == 0.0
 
 
 def test_review_fsrs_advances(conn) -> None:

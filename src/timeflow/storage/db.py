@@ -243,3 +243,17 @@ def _migrate_v2(conn: sqlite3.Connection) -> None:
         )
         """
     )
+
+    # 同步冲突日志（SR-F9.2）
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sync_logs (
+            id          TEXT PRIMARY KEY,
+            entity      TEXT NOT NULL,
+            entity_id   TEXT NOT NULL,
+            local_ts    TEXT,
+            remote_ts   TEXT,
+            created_at  TEXT
+        )
+        """
+    )

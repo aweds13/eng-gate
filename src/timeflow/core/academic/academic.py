@@ -120,15 +120,40 @@ def add_grade(
     return gid
 
 
+def _grade_point(score: float) -> float:
+    """百分制分数 → 4.0 制绩点（中国高校常用分段法，封顶 4.0）。
+
+    90+ → 4.0；85+ → 3.7；82+ → 3.3；78+ → 3.0；75+ → 2.8；
+    70+ → 2.3；65+ → 1.8；60+ → 1.0；<60 → 0。
+    """
+    if score >= 90:
+        return 4.0
+    if score >= 85:
+        return 3.7
+    if score >= 82:
+        return 3.3
+    if score >= 78:
+        return 3.0
+    if score >= 75:
+        return 2.8
+    if score >= 70:
+        return 2.3
+    if score >= 65:
+        return 1.8
+    if score >= 60:
+        return 1.0
+    return 0.0
+
+
 def gpa(conn: sqlite3.Connection) -> tuple[float, float]:
-    """加权 GPA（4.0 制）与总学分。"""
+    """加权 GPA（4.0 制，封顶 4.0）与总学分。"""
     total = 0.0
     credit_sum = 0.0
     for r in conn.execute("SELECT score, credits FROM grades").fetchall():
         score = float(r["score"])
         credits = float(r["credits"] or 0)
         credit_sum += credits
-        total += (score / 20.0) * credits  # 百分制 → 4.0 制（score/20）
+        total += _grade_point(score) * credits
     if not credit_sum:
         return (0.0, 0.0)
     return (round(total / credit_sum, 2), credit_sum)
