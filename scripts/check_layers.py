@@ -12,9 +12,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-INT = ROOT / "intention" / "needs.md"
-SPEC_TRACE = ROOT / "specification" / "traceability.md"
-IMPL_TRACE = ROOT / "implementation" / "traceability.md"
+INT = ROOT / "docs" / "intention" / "needs.md"
+SPEC_TRACE = ROOT / "docs" / "specification" / "traceability.md"
+IMPL_TRACE = ROOT / "docs" / "implementation" / "traceability.md"
 
 FORBIDDEN = ["目标实体", "时间折算", "折算成", "学期分账", "Assigned to me"]
 NEG = ["不", "无", "砍", "去", "免", "禁", "避免", "杜绝", "不要", "不设"]
