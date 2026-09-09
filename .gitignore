@@ -18,9 +18,13 @@ config.toml
 # 本地数据 + 备份
 data/*.db
 data/*.db-*
+data/*.png
 backups/
 *.sqlite3
 *.db-journal
+
+# 探查用外部 skill 工具（勿入库）
+.uiux-skill-probe/
 
 # 工具缓存
 .mypy_cache/
