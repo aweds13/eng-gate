@@ -36,10 +36,14 @@ def _to_int(value: object, default: int) -> int:
 def newer_is_win(
     local_updated: str, remote_updated: str, local_version: int, remote_version: int
 ) -> bool:
-    """LWW 判定：谁更新（时间戳新，或同时间则版本大）谁胜。返回 remote 是否较新。"""
-    if local_updated != remote_updated:
-        return remote_updated > local_updated
-    return remote_version > local_version
+    """LWW 判定：返回 remote 是否较新。
+
+    version 是跨端同步的可靠递增标记，优先用它判定；version 一致时退化为时间戳。
+    （本地任务新建时 updated_at=当前时刻，若只比时间戳，远端稍早但 version 更大也会被
+    判败——故 version 优先更符合「谁更新」。）"""
+    if remote_version != local_version:
+        return remote_version > local_version
+    return remote_updated > local_updated
 
 
 def merge_task(
