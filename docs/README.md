@@ -42,6 +42,8 @@ contracts/        怎么才算真的做成（操作闭环 + 动线）
 implementation/   哪个模块负责（模块名+职责+取舍，SR→模块）
 taste/            技术品味与红线
 README.md / ACCEPTANCE.md / CODING_GUIDELINES.md / changelog.md   总入口·验收·护栏·日志
+DESIGN.md         设计决策（know-why：为什么这样设计）
+LEARN.md          零基础定制指南（改配置就能用）
 ```
 
 **仓库根（代码与配置）**：
@@ -64,5 +66,4 @@ config.example.toml / pyproject.toml
 - ✅ 质量门：pytest 44 passed / ruff 0 / mypy 0 / 五层对齐 PASS。
 - ⏭️ 后置（第二版）：重规划/债务重组(F2.8)、AI 接口写/改/删、学校通知监测脚本(F10)、移动端 PWA 深联动。
 
-> 工程规范见 `CODING_GUIDELINES.md`；功能验收见 `ACCEPTANCE.md`；变更日志见 `changelog.md`。
-> 设计决策（know-why）：`DESIGN.md` **尚未建立**（见 `../复盘/docs一致性审查-发现清单.md` S4），暂以本文件 + `changelog.md` + `specification/conventions.md` 承载。
+> 工程规范见 `CODING_GUIDELINES.md`；功能验收见 `ACCEPTANCE.md`；变更日志见 `changelog.md`；设计决策（know-why）见 `DESIGN.md`；零基础定制见 `LEARN.md`。
