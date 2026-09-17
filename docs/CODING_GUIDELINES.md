@@ -1,7 +1,7 @@
 # 编码规范（CODING_GUIDELINES）— 本仓库所有代码必须遵循
 
 > 依据：本项目 TASTE（品味/红线）+ implementation 模块划分 + 五层（intention / specification(+conventions) / contracts / implementation / taste）对齐。原则：**一切以仓库现状为准；改动必须经 AC 验收、可回退、有测试、有文档。**
-> 本文件是**护栏**（硬规则），与 `ACCEPTANCE.md`（功能验收+闭环验收）、`specification/conventions.md`（约定基线）、`contracts/`（操作/动线契约）、`DESIGN.md`（know-why）、`LEARN.md`（零基础定制）、`taste/`（品味）配合。
+> 本文件是**护栏**（硬规则），与 `ACCEPTANCE.md`（功能验收）、`specification/conventions.md`（约定基线）、`contracts/`（操作/动线契约）、`taste/`（品味）配合。
 
 ## 0. 实现前必读顺序（硬约束）
 1. `specification/conventions.md` —— 不能违反什么（横切基线）
