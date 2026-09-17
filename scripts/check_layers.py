@@ -1,4 +1,4 @@
-"""六层对齐检查（护栏）：intention → specification(含 conventions) → contracts → implementation ← taste。
+"""五层对齐检查（护栏）：intention → spec(含 conventions) → contracts → impl ← taste。
 
 层级（本项目文档体系）：
   intention/        为什么做（N1–N46）
@@ -82,29 +82,31 @@ def check_link_integrity() -> list[str]:
 
     路径可能相对「当前文档」或相对「docs/ 根」书写（两种约定都常见），
     故对每个候选路径依次尝试多个基准目录，命中其一即算通过。
-    已显式声明"待建/不存在"的目标（见 KNOWN_MISSING）豁免。
+    已显式声明"待建/不存在"的目标（见 known_missing）豁免。
+    绝对路径（项目外引用，如引上一项目的 TASTE）不属本检查范围，豁免。
     """
-    KNOWN_MISSING = {"DESIGN.md", "LEARN.md"}  # 文档中已标注为"待建"，不算断链
+    known_missing = {"DESIGN.md", "LEARN.md"}  # 文档中已标注为"待建"，不算断链
     problems: list[str] = []
     docs_root = ROOT / "docs"
-    # 匹配形如 `../contracts/flows.md` / `contracts/interactions.md` / `specification/x.md` 的反引号路径
-    pattern = re.compile(r"`(\.{0,2}/?[A-Za-z0-9_\-/]+\.md)`")
+    # 匹配反引号内的 .md 路径（支持中文文件名；相对当前文档 / docs 根 / 仓库根三种写法）
+    pattern = re.compile(r"`([^\s`]*?\.md)`")
     for md in docs_root.rglob("*.md"):
         text = read(md)
         for m in pattern.finditer(text):
             rel = m.group(1)
-            if rel.startswith("http"):
+            # 豁免：URL、绝对路径（含盘符）、待建文件
+            if rel.startswith(("http", "/")) or re.match(r"^[A-Za-z]:[\\/]", rel):
                 continue
-            if Path(rel).name in KNOWN_MISSING:
+            if Path(rel).name in known_missing:
                 continue
-            # 多基准尝试：相对当前文档 / 相对 docs 根 / 相对仓库根 / 相对 docs 各子目录
+            # 多基准尝试：相对当前文档 / 相对 docs 根 / 相对仓库根
             candidates = [
                 (md.parent / rel).resolve(),
                 (docs_root / rel).resolve(),
                 (ROOT / rel).resolve(),
             ]
             # 裸文件名（无目录分隔）时，在 docs 下递归查找同名文件
-            if "/" not in rel:
+            if "/" not in rel and "\\" not in rel:
                 candidates += [p.resolve() for p in docs_root.rglob(rel)]
             if not any(c.exists() for c in candidates):
                 problems.append(f"{md.relative_to(ROOT)} 引用了不存在的 {rel}")
@@ -149,7 +151,8 @@ def main() -> int:
         ]
         unlabeled = [ln for ln in rule_lines if not extract_n(ln)]
         if unlabeled:
-            print(f"[FAIL] 约定层有 {len(unlabeled)} 条规则未标注来源 N（示例: {unlabeled[0][:40]}...）")
+            n = len(unlabeled)
+            print(f"[FAIL] 约定层有 {n} 条规则未标注来源 N（示例: {unlabeled[0][:40]}…）")
             ok = False
 
     # --- 4. 契约层存在性与 SR 可追溯 ---
