@@ -33,12 +33,16 @@ timeflow                                # 启动桌面窗口
 ```
 intention/  为什么做（N1–N46 + 决策）
 specification/  必须做到什么（SR-F / SR-NF，N→SR 追踪）
+  conventions.md  约定层（横切基线，实现任何 SR 前必读）
+contracts/  怎么才算真的做成（操作闭环 + 动线，实现前必读）
 implementation/  怎么实现（模块名+职责+取舍，SR→模块）
 taste/  技术品味与红线
 CODING_GUIDELINES.md / ACCEPTANCE.md  护栏与验收
 src/  源码（app · api · core · storage · getaways · config）
 tests/  单元测试（44 项）
 ```
+
+> **文档读法（防"做一半"）**：实现任一功能前，先读 `specification/conventions.md`（不能违反什么）→ 再读 `contracts/interactions.md` + `contracts/flows.md`（怎样才算做完/走通）→ 最后看 `implementation/`（谁负责写）。
 
 ## 状态
 - ✅ intention / specification / implementation 骨架闭环（含护栏、验收、三层对齐脚本）。
