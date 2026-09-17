@@ -2,7 +2,7 @@
 
 > **本层是什么**：`docs/contracts/` 的第二份。`interactions.md` 管「单个操作怎样才算做完」，本文件管「**多个操作串起来的主流程必须走通**」。
 > 它回答的问题是——**用户从"想做"到"做完"，路径是否连续、数据是否流动**。
-> 上游：`specification/functional.md` + `conventions.md`。配套：`interactions.md`。
+> 上游：`specification/functional.md` + `specification/conventions.md`。配套：`contracts/interactions.md`。
 > ⚠️ **实现任何联动前必读**。只写「链路与触发」，不写"哪个模块"（implementation 的事），不贴源码。
 > 范围：**MVP 主链路**（任务 / 专注 / 记账 / 反馈 / 摘要）。其余域延后。
 
@@ -158,7 +158,7 @@
 | 文档 | 回答什么 | 颗粒度 |
 |---|---|---|
 | `specification/functional.md` | 系统**必须有什么**（结果） | 一条条"必须" |
-| `conventions.md` | **无论做什么都不能违反什么**（横切基线） | 简短规则 |
+| `specification/conventions.md` | **无论做什么都不能违反什么**（横切基线） | 简短规则 |
 | **`contracts/interactions.md`** | **单个操作要走到哪步才算做完**（行为链路） | 六要素 |
 | **`contracts/flows.md`** | **多个操作串起来必须走通什么**（数据流动） | 触发→传导→落点 |
 | `implementation/modules.md` | **哪个模块负责** | 模块名+职责 |

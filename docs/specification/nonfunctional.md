@@ -27,7 +27,8 @@
 - 必须：模块单测+回归；敏感改动（改基线/排序）shadow+一键回退（开关默认不改变现状）。
 
 ## SR-NF9 · 开源文档完整（N38）——一版
-- 必须：README（问题驱动）/架构文档/DESIGN.md（know-why）/LEARN.md（零基础定制）/CODING_GUIDELINES。
+- 必须：README（问题驱动）/架构文档/CODING_GUIDELINES。
+- 待建：DESIGN.md（know-why）、LEARN.md（零基础定制）——**当前不存在**（见 `../复盘/docs一致性审查-发现清单.md` S4/S5）。
 
 ## SR-NF10 · 零基础定制友好（N39）——一版
 - 必须：常见定制做成「改配置/填模板」；2–3 个由浅入深扩展示例；代码注释中文。

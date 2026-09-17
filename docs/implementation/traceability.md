@@ -19,11 +19,11 @@
 | SR-NF11 | 全仓库 | Git 工作流（worktree/commits/PR） |
 | SR-NF16~NF18 | `src/storage/`,`src/app/` | 本地隐私/移动端/性能 |
 
-## 三层闭合校验
+## 五层闭合校验
 | 维度 | 结果 |
 |---|---|
 | 每条 SR 是否都有实现落点 | ✅ 是（SR-F1~F10、SR-NF1~NF18 均有模块） |
 | 每个模块是否都能回溯到规格与需求 | ✅ 是（按模块名可回溯到 SR→N） |
-| 三层闭环 | intention → specification → implementation 闭合，无孤儿哑项 |
+| 五层闭环 | intention → specification(+conventions) → contracts → implementation → taste 闭合，无孤儿哑项 |
 
-> 至此 three-layer 骨架完成。真实代码在根目录 `src/`，按模块名阅读；护栏/验收见根目录 `CODING_GUIDELINES.md`、`ACCEPTANCE.md`。
+> 至此五层骨架完成。真实代码在仓库根 `src/`，按模块名阅读；护栏/验收见 `docs/CODING_GUIDELINES.md`、`docs/ACCEPTANCE.md`。

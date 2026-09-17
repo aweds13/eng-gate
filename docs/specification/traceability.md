@@ -76,4 +76,5 @@
 | 孤儿 / 哑项 | ✅ 无 |
 | 后置项（N4/N5/N21/N22） | 已标 [二版]/[后置]，不阻塞一版 |
 
-> 下一步：`../implementation/` 按 SR 给出实现落点（模块名 + 职责 + 取舍）。此时 intention → specification 两层已形成闭合追踪链。
+> 下一步：`../implementation/` 按 SR 给出实现落点（模块名 + 职责 + 取舍）；操作/动线契约见 `../contracts/`。
+> 此时 intention → specification(+conventions) → contracts → implementation 已形成闭合追踪链。

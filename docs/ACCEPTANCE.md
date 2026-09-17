@@ -1,8 +1,10 @@
-# 验收清单（ACCEPTANCE / DoD）— 第一版 MVP
+# 验收清单（ACCEPTANCE / DoD）— 第一版（历史归档）
 
 > 每个功能 = 一段**具体、可验证的验收标准（DoD）**。编码拿它当"完成定义"，提交前逐条打勾，跑测试 + 手动验证。对应 `CODING_GUIDELINES.md` 与规格（SR）。
+> ⚠️ **术语警告**：本文件的"MVP"＝**第一版功能清单**；与 `contracts/`（契约层）中的"MVP"＝**框架+2线+交叉**含义不同，勿混用。
+> ⚠️ **已知局限**：下表 AC 以「功能存在」为判据，**不足以发现"操作做一半/联动断裂"**——闭环验收见 `contracts/interactions.md` 的自查表 + `contracts/flows.md` 的贯通验收。
 
-## 第一版 MVP 范围（任务管理为核心，能跑）
+## 第一版范围·组A（任务管理为核心，能跑）
 > 粗颗粒可运行。范围：任务 CRUD / My Day / 逾期 / 分组 / 子任务 / Repeat / 轻债务（逾期=债务计数+顶部摘要）／SQLite 持久化／桌面窗口简约界面。
 
 | # | 功能 | 验收标准（DoD） | SR | 验证方式 |
@@ -17,12 +19,12 @@
 | AC-8 | Repeat | 重复任务到点生成下一次（按上次完成时间） | SR-F1.5 | 单测 |
 | AC-9 | 轻债务 | 逾期任务 → 记"债务"（计数+逾期天数/程度）；顶部显示轻量摘要（今日债务项数+投入时长） | SR-F2.3/F2.7 | 单测+手动 |
 | AC-10 | SQLite 持久化 | 数据在本地 SQLite，重启不丢；schema 可迁移；可备份 | SR-F9.1/9.3 | 单测 |
-| AC-11 | 桌面窗口界面 | pywebview 启动出窗口，默认视图=MYSQL 清爽的 My Day；强调色可自定义 | SR-NF1/2/4 | 手动 |
+| AC-11 | 桌面窗口界面 | pywebview 启动出窗口，默认视图=清爽的 My Day；强调色可自定义 | SR-NF1/2/4 | 手动 |
 | AC-12 | 测试闭环 | 上述核心均有 pytest 单测；ruff/mypy/pytest 全绿；覆盖率≥70% | SR-NF15 | 运行 pytest/ruff/mypy |
 
-## 第一版完整验收（SR-F3~F9 新增域）
+## 第一版范围·组B（SR-F3~F9 新增域）
 
-> 在第一版 MVP 基础上，完整第一版新增以下功能域。每条 DoD 均有对应 pytest 单测 + 手动验证。
+> 在组A 基础上，完整第一版新增以下功能域。每条 DoD 均有对应 pytest 单测 + 手动验证。
 
 | # | 功能 | 验收标准（DoD） | SR | 验证方式 |
 |---|---|---|---|---|
@@ -44,4 +46,4 @@ ruff format src/ tests/ && ruff check src/ tests/   # 零错误
 mypy src/                                            # strict
 pytest --cov=timeflow                                # 全绿，≥70%
 ```
-> 三层对齐：`scripts/check_layers.py`（intent↔spec↔impl↔taste）。编码前后各跑一次。
+> 五层对齐：`scripts/check_layers.py`（intention → specification(+conventions) → contracts → implementation → taste）。编码前后各跑一次。

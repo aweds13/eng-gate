@@ -1,7 +1,14 @@
 # 编码规范（CODING_GUIDELINES）— 本仓库所有代码必须遵循
 
-> 依据：本项目 TASTE（品味/红线）+ implementation 模块划分 + 三层（intent/spec/impl）对齐。原则：**一切以仓库现状为准；改动必须经 AC 验收、可回退、有测试、有文档。**
-> 本文件是**护栏**（硬规则），与 `ACCEPTANCE.md`（功能验收）、`DESIGN.md`（know-why）、`taSte/`（品味）配合。
+> 依据：本项目 TASTE（品味/红线）+ implementation 模块划分 + 五层（intention / specification(+conventions) / contracts / implementation / taste）对齐。原则：**一切以仓库现状为准；改动必须经 AC 验收、可回退、有测试、有文档。**
+> 本文件是**护栏**（硬规则），与 `ACCEPTANCE.md`（功能验收）、`specification/conventions.md`（约定基线）、`contracts/`（操作/动线契约）、`taste/`（品味）配合。
+
+## 0. 实现前必读顺序（硬约束）
+1. `specification/conventions.md` —— 不能违反什么（横切基线）
+2. `contracts/interactions.md` + `contracts/flows.md` —— 怎样才算做完/走通
+3. `implementation/README.md` + `modules.md` —— 谁负责写
+
+> 判定原则：**「存在」不等于「完成」**；操作六要素齐备且契约验收通过才算实现完成。
 
 ---
 
@@ -52,8 +59,8 @@ build:/chore:/perf:/ci: ...
 - **不得**提交真实 `config.toml`、Cookie、API Key、本地敏感数据。
 
 ## 9. 文档更新要求（强制）
-- 改接口/模块边界/配置/数据流/依赖 → 同步 `implementation/modules.md`(模块职责) + `docs/changelog.md` + `DESIGN.md`(若 know-why 变化) + `config.example.toml`。
-- 改动必须能通过三层对齐：**intent→spec→impl**，并用 `taSte/` 品味自检（见 `scripts/check_layers.py`）。
+- 改接口/模块边界/配置/数据流/依赖 → 同步 `implementation/modules.md`(模块职责) + `changelog.md` + `config.example.toml`；若涉及横切规则 → 同步 `specification/conventions.md`。
+- 改动必须能通过五层对齐：**intention → specification(+conventions) → contracts → implementation → taste**（见 `scripts/check_layers.py`）。
 
 ## 10. 配置与敏感信息
 - 配置基于 `config.example.toml` → 本地 `config.toml`（gitignore）；敏感（API Key/Cookie）**只存本机**，不入 Git/PR/日志/截图。

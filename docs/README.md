@@ -16,7 +16,7 @@ timeflow                                # 启动桌面窗口
 # 或仅本地 API：python -m uvicorn timeflow.api.app:create_app --factory --port 8520
 ```
 
-## 功能模块（对应治理三层 SR-F）
+## 功能模块（对应治理规格层 SR-F）
 | 模块 | 说明 | 规格 |
 |---|---|---|
 | 任务管理 | My Day / CRUD / 逾期栏 / 多分组 / 子任务 / Repeat / 状态机 | SR-F1 |
@@ -29,25 +29,40 @@ timeflow                                # 启动桌面窗口
 | 备忘录/知识资产 | 顺手记录、**只存引用句柄**(Vault路径/KB-id) | SR-F8 |
 | 存储/同步 | SQLite + schema迁移 + LWW同步(不静默覆盖) | SR-F9 |
 
-## 结构（三层治理 + 源码）
+## 结构（五层治理 + 源码）
+
+**`docs/` 目录（治理文档）**：
 ```
-intention/  为什么做（N1–N46 + 决策）
-specification/  必须做到什么（SR-F / SR-NF，N→SR 追踪）
-  conventions.md  约定层（横切基线，实现任何 SR 前必读）
-contracts/  怎么才算真的做成（操作闭环 + 动线，实现前必读）
-implementation/  怎么实现（模块名+职责+取舍，SR→模块）
-taste/  技术品味与红线
-CODING_GUIDELINES.md / ACCEPTANCE.md  护栏与验收
-src/  源码（app · api · core · storage · getaways · config）
-tests/  单元测试（44 项）
+intention/        为什么做（N1–N46 + 决策）
+specification/    必须做到什么（SR-F / SR-NF，N→SR 追踪）
+  conventions.md    约定层：横切基线（不能违反什么）
+contracts/        怎么才算真的做成（操作闭环 + 动线）
+  interactions.md   单个操作六要素
+  flows.md          多操作链路（触发→传导→落点）
+implementation/   哪个模块负责（模块名+职责+取舍，SR→模块）
+taste/            技术品味与红线
+README.md / ACCEPTANCE.md / CODING_GUIDELINES.md / changelog.md   总入口·验收·护栏·日志
 ```
 
-> **文档读法（防"做一半"）**：实现任一功能前，先读 `specification/conventions.md`（不能违反什么）→ 再读 `contracts/interactions.md` + `contracts/flows.md`（怎样才算做完/走通）→ 最后看 `implementation/`（谁负责写）。
+**仓库根（代码与配置）**：
+```
+src/    源码（timeflow/：app · api · core · storage · getaways · config）
+tests/  单元测试
+scripts/  护栏脚本（check_layers.py：五层对齐检查）
+config.example.toml / pyproject.toml
+```
+
+> **文档读法（防"做一半"）**：实现任一功能前，依次读
+> ① `specification/conventions.md`（不能违反什么）→
+> ② `contracts/interactions.md` + `contracts/flows.md`（怎样才算做完/走通）→
+> ③ `implementation/`（谁负责写）。
 
 ## 状态
-- ✅ intention / specification / implementation 骨架闭环（含护栏、验收、三层对齐脚本）。
+- ✅ 五层骨架闭环：intention / specification（含 conventions）/ contracts / implementation / taste（含护栏、验收、五层对齐脚本 `check_layers.py`）。
 - ✅ **第一版完整**：任务管理 + B 记账 + 专注(F3) + 反馈/习惯(F4) + 学业/GPA(F5) + 复习FSRS(F6) + 团队/AI(F7) + 备忘录(F8) + 同步(F9) + **GPA 4.0/5.0 切换**。
-- ✅ 质量门：pytest 44 passed / ruff 0 / mypy 0 / 三层对齐 PASS。
+- ⚠️ **已知断层**：契约层 `contracts/` 揭示多项"操作闭环/模块联动"缺口（详见 `../复盘/三层断裂诊断-实现与交互复盘.md`），MVP 重构进行中。
+- ✅ 质量门：pytest 44 passed / ruff 0 / mypy 0 / 五层对齐 PASS。
 - ⏭️ 后置（第二版）：重规划/债务重组(F2.8)、AI 接口写/改/删、学校通知监测脚本(F10)、移动端 PWA 深联动。
 
-> 设计决策（know-why）见 `DESIGN.md`；工程规范见 `CODING_GUIDELINES.md`；功能验收见 `ACCEPTANCE.md`。
+> 工程规范见 `CODING_GUIDELINES.md`；功能验收见 `ACCEPTANCE.md`；变更日志见 `changelog.md`。
+> 设计决策（know-why）：`DESIGN.md` **尚未建立**（见 `../复盘/docs一致性审查-发现清单.md` S4），暂以本文件 + `changelog.md` + `specification/conventions.md` 承载。

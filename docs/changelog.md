@@ -2,6 +2,18 @@
 
 > 按时间倒序记录每次有意义的功能/变更。遵循 Conventional Commits 类型。
 
+## [未发布] — 文档体系重建与 MVP 结构梳理
+
+### 文档
+- **约定层**：新增 `specification/conventions.md`（横切基线，实现任何 SR 前必读）。
+- **契约层**：新增 `contracts/interactions.md`（操作六要素）+ `contracts/flows.md`（动线契约）。
+- **一致性**：统一为**五层**口径（intention / specification(+conventions) / contracts / implementation / taste）；`scripts/check_layers.py` 扩展为五层检查（含引用完整性）。
+- **验收**：`ACCEPTANCE.md` 标注"MVP"术语两义 + 已知局限；补闭环验收指引。
+
+### 已知断层（待 MVP 重构解决）
+- 契约层揭示多项"操作闭环/模块联动"缺口（专注结束不记账、完成后不记账等）。
+- 详见 `../复盘/三层断裂诊断-实现与交互复盘.md`。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增
@@ -17,7 +29,7 @@
 
 ### 工程
 - **schema 版本化迁移**：`SCHEMA_VERSION` 从 1 升到 2（多分组 + F3–F8 全部基础表：groups/task_groups/focus_sessions/habits/habit_logs/feedback_logs/courses/course_assessments/grades/review_items/memos/ledger_entries/team_assignments/sync_logs）。
-- **质量门**：pytest **44 passed** / ruff 0 / mypy 0（strict）/ 三层对齐 PASS。
+- **质量门**：pytest **44 passed** / ruff 0 / mypy 0（strict）/ 五层对齐 PASS。
 - 新增模块：`core/focus`、`core/feedback`、`core/academic`、`core/review`、`core/team`、`core/memo`、`core/sync`、`core/tasks/groups`。
 
 ### 待办（第二版 / 后置）

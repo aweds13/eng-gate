@@ -6,8 +6,11 @@
 
 ## 来源：复用 openbiliclaw 的 TASTE
 
-上一项目（OpenBiliClaw）的完整 TASTE 在：
-`D:/docs\知识库\Jelly文件_Pro\vibe-coding-1\TASTE.md`
+本层**当前为待完善状态**：核心品味尚未重写进本目录（见文末清单）。
+
+参考：上一项目（OpenBiliClaw）的完整 TASTE（**项目外**，仅供本机参考）：
+> `D:/docs\知识库\Jelly文件_Pro\vibe-coding-1\TASTE.md`
+> ⚠️ 该路径在项目外、仅本机有效；**正式内容应重写进本目录**，勿依赖外部路径。
 
 它面向「本地优先、跨平台的内容发现 Agent」，很多**架构品味**是通用的，可直接迁移；但其中「soul / 记忆 / 发现 / 评估」**内容发现特定**的部分，需要为「时间管理工具」重写。
 
