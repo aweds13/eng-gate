@@ -57,11 +57,38 @@ def finish_session(
         raise ValueError(f"非法结束状态: {status}")
     if duration_sec < 0:
         raise ValueError("时长不能为负")
+    row = conn.execute(
+        "SELECT task_id, device_id FROM focus_sessions WHERE id = ?", (session_id,)
+    ).fetchone()
     conn.execute(
         "UPDATE focus_sessions SET ended_at = ?, duration_sec = ?, status = ? WHERE id = ?",
         (_now(), duration_sec, status, session_id),
     )
     conn.commit()
+    # 发布事实（事实层与解读层解耦的起点；订阅者为空时 publish 为空操作，安全）
+    from timeflow.core import facts as facts_mod
+
+    task_id = row["task_id"] if row is not None else None
+    device_id = row["device_id"] if row is not None else None
+    facts_mod.record(
+        conn,
+        kind="focus.finished",
+        subject_type="task" if task_id else "focus_session",
+        subject_id=task_id or session_id,
+        value_num=float(duration_sec),
+        extra={"session_id": session_id, "status": status},
+        source="desktop",
+        device_id=device_id,
+    )
+    facts_mod.publish(
+        "focus.finished",
+        {
+            "session_id": session_id,
+            "task_id": task_id,
+            "duration_sec": duration_sec,
+            "status": status,
+        },
+    )
 
 
 def today_focus_minutes(conn: sqlite3.Connection, today: str | None = None) -> float:

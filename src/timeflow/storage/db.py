@@ -9,7 +9,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -38,12 +38,15 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
     """逐版本迁移到 SCHEMA_VERSION。每版只做增量、幂等（CREATE IF NOT EXISTS）。"""
     if current < 2:
         _migrate_v2(conn)  # 多分组 + F3–F8 基础表
+    if current < 3:
+        _migrate_v3(conn)  # 事实层（facts）——事实与解读分离的地基
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
 def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v1(conn)
     _migrate_v2(conn)
+    _migrate_v3(conn)
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -256,4 +259,39 @@ def _migrate_v2(conn: sqlite3.Connection) -> None:
             created_at  TEXT
         )
         """
+    )
+
+
+def _migrate_v3(conn: sqlite3.Connection) -> None:
+    """v3：事实层（facts）——事实与解读分离的地基。
+
+    事实 = 与心智模型无关的「发生了什么」（见 复盘/事实层架构设计复盘.md）：
+    - kind 为自由字符串（"域.动作"），加新事实类型不改表；
+    - 高频值放 value_num/value_text（可索引），罕见字段放 extra(JSON) 兜底；
+    - revision/supersedes 为修正机制预留（MVP 不实现逻辑）。
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS facts (
+            id           TEXT PRIMARY KEY,
+            kind         TEXT NOT NULL,
+            subject_type TEXT,
+            subject_id   TEXT,
+            value_num    REAL,
+            value_text   TEXT,
+            extra        TEXT,
+            occurred_at  TEXT NOT NULL,
+            recorded_at  TEXT NOT NULL,
+            source       TEXT,
+            device_id    TEXT,
+            revision     INTEGER DEFAULT 1,
+            supersedes   TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_facts_kind_time ON facts(kind, occurred_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_type, subject_id)"
     )
