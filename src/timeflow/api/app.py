@@ -352,6 +352,15 @@ def create_app(db_path: str | None = None) -> FastAPI:
             )
         return insights.group_insights(conn, days=days)
 
+    @app.get("/api/insights/heatmap")
+    def insights_heatmap(days: int = insights.DEFAULT_HEATMAP_DAYS) -> list[insights.HeatmapCell]:
+        """近 N 天逐日多指标（时间热力图：投入/手动/复习/产出/债务快照）；1≤days≤400。"""
+        if not 1 <= days <= insights.MAX_HEATMAP_DAYS:
+            raise HTTPException(
+                status_code=400, detail=f"days 需在 1~{insights.MAX_HEATMAP_DAYS} 之间"
+            )
+        return insights.heatmap(conn, days=days)
+
     # ---- SR-F5 学业追踪 ----
     @app.post("/api/courses")
     def create_course(payload: dict[str, Any]) -> dict[str, str]:

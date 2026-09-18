@@ -16,7 +16,9 @@
   `value_text=kind`（asset / kpi）、`value_num=数量`、`extra` 带 note/ref_handle）；
   撤销发 `output.retracted` 反向事实，不删历史。旧表 `ledger_entries` 仍写（兼容），两者不合并聚合。
 - **可视化数据底座**（第 7 步，SR-F2.7）：`core/insights.py` —— `daily_insights()` 逐日时序、
-  `group_insights()` 按任务分组的投入分布；后端只出数据，前端出图形；口径只读 facts。
+  `group_insights()` 按任务分组的投入分布、`heatmap()` **时间热力图**逐日多指标
+  （专注分钟/手动分钟/复习张数/产出条数/债务快照；债务=当日快照，不是当日新增）；
+  后端只出数据，前端出图形（曲线 + 分组条 + 可切换日历热力图）；口径只读 facts。
 - **债务**：逾期任务集合 + 天数/程度（轻≤3 / 中≤7 / 重>7），不折算时间。
 - **周结算**：按本地周聚合投入/产出/债务趋势；温和呈现。
   实现（第 6 步）：`ledger.weekly_summary()` / `GET /api/summary/weekly` —— 周 = 周一→周日，
@@ -80,6 +82,7 @@
 - 第 5 步补充：`../../tests/test_output_axis.py`（产出事实 + 撤销 + `output_count` 与投入分离）、
   `../../tests/test_invest_axis.py`（手动投入事实按秒 + 撤销 + `manual_hours` 与 invest_hours 分离）。
 - 第 6 步补充：`../../tests/test_week_summary.py`（周边界/跨月跨年/四项聚合/撤销扣除/债务快照/温和提示/API）。
-- 第 7 步补充：`../../tests/test_insights.py`（逐日时序/债务快照/撤销扣除/分组分布与「未分组」/未绑定不计入/API 边界）。
+- 第 7 步补充：`../../tests/test_insights.py`（逐日时序/债务快照/撤销扣除/分组分布与「未分组」/未绑定不计入/
+  时间热力图多指标与 400 天上限/API 边界）。
 - 真实运行验证：`../../tools/lf1_live_check.py`（起真服务走 LF-1 主链 8 步）。
-- 待补（B4）：时间热力图形态的债务/储蓄视图（当前已曲线 + 分组分布；热力图已用于习惯）。
+- 待补（B4）：复习的「卡片+进度条」与今日完成度进度环（SR-NF3 列举的其余形态）。

@@ -135,6 +135,41 @@ def test_daily_insights_respects_retraction(conn: sqlite3.Connection) -> None:
 
 # ---- 分组分布 ----
 
+def test_heatmap_length_and_metrics(conn: sqlite3.Connection) -> None:
+    today = date.today().isoformat()
+    _focus_on(conn, today, 1800.0)
+    facts_mod.record(
+        conn,
+        kind="output.manual",
+        subject_type="output",
+        subject_id="o1",
+        value_num=1.0,
+        occurred_at=f"{today}T12:00:00",
+    )
+
+    cells = insights.heatmap(conn, days=30)
+    assert len(cells) == 30
+    assert cells[-1].date == today
+    assert cells[-1].focus_minutes == 30.0
+    assert cells[-1].output_count == 1
+    assert all(c.debt_count == 0 for c in cells)
+
+
+def test_heatmap_carries_debt_snapshot(conn: sqlite3.Connection) -> None:
+    """时间热力图的债务维度：截止日之后逐日点亮。"""
+    today = date.today()
+    due = (today - timedelta(days=2)).isoformat()
+    tm.create_task(conn, "旧账", due_date=due)
+
+    cells = {c.date: c.debt_count for c in insights.heatmap(conn, days=7)}
+    assert cells[(today - timedelta(days=4)).isoformat()] == 0
+    assert cells[today.isoformat()] == 1
+
+
+def test_heatmap_caps_at_400(conn: sqlite3.Connection) -> None:
+    assert len(insights.heatmap(conn, days=1000)) == insights.MAX_HEATMAP_DAYS
+
+
 def test_group_insights_buckets_by_group(conn: sqlite3.Connection) -> None:
     today = date.today().isoformat()
     a = tm.create_task(conn, "写论文")
@@ -235,6 +270,18 @@ def test_api_insights_days_bounds(tmp_path) -> None:  # type: ignore[no-untyped-
     assert client.get("/api/insights/daily?days=91").status_code == 400
     assert client.get("/api/insights/groups?days=0").status_code == 400
     assert client.get("/api/insights/daily?days=1").status_code == 200
+
+
+def test_api_insights_heatmap(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    client = TestClient(create_app(str(tmp_path / "hm.db")))
+    cells = client.get("/api/insights/heatmap?days=14").json()
+    assert len(cells) == 14
+    assert set(cells[0]) >= {
+        "date", "focus_minutes", "manual_minutes", "review_count", "output_count", "debt_count"
+    }
+    assert client.get("/api/insights/heatmap?days=0").status_code == 400
+    assert client.get("/api/insights/heatmap?days=401").status_code == 400
+    assert client.get("/api/insights/heatmap?days=365").status_code == 200
 
 
 def test_api_habits_list(tmp_path) -> None:  # type: ignore[no-untyped-def]

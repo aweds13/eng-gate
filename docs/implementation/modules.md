@@ -20,9 +20,10 @@
 - **周结算**（SR-F2.5 / OP-15，第 6 步）：`ledger.weekly_summary()` —— 周=周一→周日、只读 facts、
   债务取周日快照、7 天逐日专注 + `steady_note`（如实描述，不设目标不告警）；`GET /api/summary/weekly`。
 - **可视化数据底座**（SR-F2.7 / SR-NF3，第 7 步）：`core/insights.py` —— `daily_insights()`（逐日专注/手动/复习/
-  产出/习惯/债务快照）、`group_insights()`（按任务分组的投入分布；未绑定专注不计入、多分组如实重复计数）；
-  `GET /api/insights/daily`、`GET /api/insights/groups`（days 1~90）。前端：统计页曲线 + 分组条形。
-- **未实现**：债务/储蓄的**时间热力图**形态（当前曲线 + 分组分布已覆盖主要诉求）。
+  产出/习惯/债务快照）、`group_insights()`（按任务分组的投入分布；未绑定专注不计入、多分组如实重复计数）、
+  `heatmap()`（**近一年时间热力图**逐日多指标：专注分钟/手动分钟/复习/产出/债务快照）；
+  `GET /api/insights/daily`、`/api/insights/groups`（days 1~90）、`/api/insights/heatmap`（days 1~400）。
+  前端：统计页曲线 + 分组条 + 可切换维度的时间热力图（专注/手动/复习/产出/债务）。
 
 ## SR-F3 计时与专注 → `core/focus/`
 - 番茄/普通计时（SR-F3.1/3.2）：`timer.py`；`status=进行中` 为真实中间态（未结束不计投入）；

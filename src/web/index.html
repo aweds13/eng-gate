@@ -255,7 +255,9 @@ function renderStats(m){
     const activeDays=daily.filter(d=>d.focus_minutes>0).length;
     const debtNow=days?daily[days-1].debt_count:0;
     const peak=Math.max(0,...daily.map(d=>d.focus_minutes));
-    return api('/api/insights/groups?days=30').then(groups=>{
+    return api('/api/insights/groups?days=30').then(groups=>api('/api/insights/heatmap?days=371').then(cells=>{
+      hmCells=cells;
+      return api('/api/summary/weekly').then(week=>{
       const curve=`<div class="card" style="display:block">
         <div class="meta">近 ${days} 天专注走势（分钟）· 合计 ${focusTotal} 分钟 · 有投入 ${activeDays} 天 · 单日最高 ${Math.round(peak)}</div>
         <div style="margin-top:10px">${lineChart(daily,d=>d.focus_minutes)}</div>
@@ -264,9 +266,67 @@ function renderStats(m){
         label:g.group,value:g.focus_hours,display:`${g.focus_hours}h · ${g.task_count} 个任务`}))):'<div class="empty">这段时间还没有绑定任务的专注</div>';
       m.innerHTML=curve+`<div class="section-title">投入分布（按任务分组 · 近 ${days} 天）</div>
         <div class="card" style="display:block">${dist}
-        <div class="sub">任务可属多个分组，各组之和可能大于总投入；未绑定任务的专注不计入分组。当前债务 ${debtNow} 项。</div></div>`;
-    });
+        <div class="sub">任务可属多个分组，各组之和可能大于总投入；未绑定任务的专注不计入分组。当前债务 ${debtNow} 项。</div></div>
+      <div class="section-title">本周投入</div>${weekCard(week)}
+      <div class="section-title">时间热力图（近一年）</div>
+        <div class="card" style="display:block">
+          <div class="row" id="hmRow">${hmButtons('focus')}</div>
+          <div id="hmBox" style="margin-top:10px">${valueHeatmap(cells,'focus')}</div>
+          <div class="sub" id="hmNote">${hmNote(cells,'focus')}</div></div>`;
+      });
+    }));
   });
+}
+let hmCells=null;
+function fmtDay(v,metric){
+  if(metric==='debt_count')return v>0?`欠 ${v} 项`:'不欠';
+  if(metric==='review_count')return `${v} 张`;
+  if(metric==='output_count')return `${v} 条`;
+  return `${v} 分钟`;
+}
+const HM_METRICS=[
+  ['focus','专注','focus_minutes'],['manual','手动投入','manual_minutes'],
+  ['review','复习','review_count'],['output','产出','output_count'],
+  ['debt','债务（欠多少）','debt_count']];
+function hmButtons(active){
+  return HM_METRICS.map(([k,label])=>
+    `<button class="${k===active?'':'ghost'}" onclick="setHeatmap('${k}')">${label}</button>`).join('');
+}
+function hmNote(cells,metric){
+  const label=(HM_METRICS.find(x=>x[0]===metric)||[])[1]||'';
+  const isCount=metric==='review_count'||metric==='output_count'||metric==='debt_count';
+  return `${label} · 颜色越深=${isCount?'当天越多':'当天投入越多'}；空=没有记录（不是失败，只是那天没记）。`;
+}
+// 时间热力图：53 周 × 7 天（列=周、行=周一→周日），颜色深浅表示当天数值
+function valueHeatmap(cells,metric){
+  const map=new Map(cells.map(c=>[c.date,c]));
+  const today=new Date();const todayIso=new Date(today.getTime()-today.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+  const monday=new Date(today);monday.setDate(today.getDate()-((today.getDay()+6)%7));
+  const cols=53,cell=11,gap=2;
+  const values=cells.map(c=>Number(c[metric])||0);
+  const max=Math.max(1,...values);
+  let rects='';
+  for(let c=0;c<cols;c++){
+    for(let r=0;r<7;r++){
+      const d=new Date(monday);d.setDate(monday.getDate()-(cols-1-c)*7+r);
+      const iso=new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+      if(iso>todayIso)continue;
+      const v=map.has(iso)?Number(map.get(iso)[metric])||0:0;
+      const on=v>0;
+      const ratio=on?0.25+0.75*(v/max):0;
+      rects+=`<rect x="${c*(cell+gap)}" y="${r*(cell+gap)}" width="${cell}" height="${cell}" rx="2.5"
+        fill="${on?'var(--accent)':'#eef2f7'}" opacity="${on?ratio.toFixed(2):0.9}"><title>${iso}${on?' · '+fmtDay(v,metric):''}</title></rect>`;
+    }
+  }
+  const w=cols*(cell+gap),h=7*(cell+gap);
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block">${rects}</svg>`;
+}
+function setHeatmap(metric){
+  const row=document.getElementById('hmRow'),box=document.getElementById('hmBox'),note=document.getElementById('hmNote');
+  if(!row||!box||!hmCells)return;
+  row.innerHTML=hmButtons(metric);
+  box.innerHTML=valueHeatmap(hmCells,metric);
+  note.textContent=hmNote(hmCells,metric);
 }
 
 function weekCard(w){

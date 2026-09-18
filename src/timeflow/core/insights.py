@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 MAX_TREND_DAYS = 90
 DEFAULT_TREND_DAYS = 30
+MAX_HEATMAP_DAYS = 400  # 一年多一点（含闰年与对齐周一起点）
+DEFAULT_HEATMAP_DAYS = 365
 
 
 class DayInsight(BaseModel):
@@ -43,6 +45,30 @@ class GroupInsight(BaseModel):
     task_count: int = 0
 
 
+class HeatmapCell(BaseModel):
+    """时间热力图的一天（SR-NF3 / N32：债务/储蓄「曲线 + 时间热力图」，也用于投入与产出）。"""
+
+    date: str
+    focus_minutes: float
+    manual_minutes: float = 0.0
+    review_count: int = 0
+    output_count: int = 0
+    debt_count: int = 0
+
+
+def heatmap(conn: sqlite3.Connection, days: int = DEFAULT_HEATMAP_DAYS) -> list[HeatmapCell]:
+    """近 `days` 天的**逐日多指标**（时间热力图的原始数据）。
+
+    一天一格，五个可切换维度：专注分钟 / 手动投入分钟 / 复习张数 / 产出条数 / **当日债务快照**。
+    与 `daily_insights()` 同口径（只读 facts；习惯不计入此处，习惯有独立的日历热力图）。
+    """
+    total = max(1, min(int(days), MAX_HEATMAP_DAYS))
+    start = date.today() - timedelta(days=total - 1)
+    return [
+        _cell(conn, (start + timedelta(days=i)).isoformat()) for i in range(total)
+    ]
+
+
 def daily_insights(
     conn: sqlite3.Connection, days: int = DEFAULT_TREND_DAYS
 ) -> list[DayInsight]:
@@ -57,15 +83,16 @@ def daily_insights(
     out: list[DayInsight] = []
     for i in range(total):
         day = (start + timedelta(days=i)).isoformat()
+        cell = _cell(conn, day)
         out.append(
             DayInsight(
                 date=day,
-                focus_minutes=round(_focus_seconds(conn, day) / 60.0, 1),
-                manual_minutes=round(_manual_seconds(conn, day) / 60.0, 1),
-                review_count=len(_review_subjects(conn, day)),
-                output_count=len(_output_entries(conn, day)),
+                focus_minutes=cell.focus_minutes,
+                manual_minutes=cell.manual_minutes,
+                review_count=cell.review_count,
+                output_count=cell.output_count,
                 habit_done=_habit_done(conn, day),
-                debt_count=len(tm.overdue_tasks(conn, day)),
+                debt_count=cell.debt_count,
             )
         )
     return out
@@ -127,6 +154,18 @@ def _focus_seconds(conn: sqlite3.Connection, day: str) -> float:
         conn, kind="focus.finished", since=f"{day}T00:00:00", until=f"{day}T23:59:59"
     )
     return sum(_num(row["value_num"]) for row in rows)
+
+
+def _cell(conn: sqlite3.Connection, day: str) -> HeatmapCell:
+    """一天的多指标（`daily_insights` 与 `heatmap` 共用，避免口径分叉）。"""
+    return HeatmapCell(
+        date=day,
+        focus_minutes=round(_focus_seconds(conn, day) / 60.0, 1),
+        manual_minutes=round(_manual_seconds(conn, day) / 60.0, 1),
+        review_count=len(_review_subjects(conn, day)),
+        output_count=len(_output_entries(conn, day)),
+        debt_count=len(tm.overdue_tasks(conn, day)),
+    )
 
 
 def _manual_seconds(conn: sqlite3.Connection, day: str) -> float:
