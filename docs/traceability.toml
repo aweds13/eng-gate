@@ -837,6 +837,18 @@ evidence = [
 ]
 gaps = ""
 
+[entries."STEP-17"]
+id = "STEP-17"
+title = "段2 口径定案（提醒 / 附件打开方式 / 优先级）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/段2设计决策-提醒与附件打开方式.md",
+  "text:复盘/任务重规划-剩余工作.md::T-B5",
+  "text:复盘/新窗口交接卡.md::F1 主线·段2",
+]
+gaps = ""
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
