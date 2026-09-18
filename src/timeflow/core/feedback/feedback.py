@@ -139,6 +139,26 @@ def habit_logs(conn: sqlite3.Connection, habit_id: str) -> list[str]:
     return [r["date"] for r in rows]
 
 
+def update_habit(conn: sqlite3.Connection, habit_id: str, name: str) -> None:
+    """重命名习惯（重名允许但提示由前端负责；空名拒绝）。"""
+    name = name.strip()
+    if not name:
+        raise ValueError("习惯名不能为空")
+    conn.execute("UPDATE habits SET name = ? WHERE id = ?", (name, habit_id))
+    conn.commit()
+
+
+def delete_habit(conn: sqlite3.Connection, habit_id: str) -> None:
+    """删除习惯及其打卡记录（幂等）。
+
+    取舍：打卡历史一并删除 —— 习惯被删掉后，孤立的历史打卡没有归属，
+    留着只会在热力图上制造无法解释的格子。删除前由前端二次确认。
+    """
+    conn.execute("DELETE FROM habit_logs WHERE habit_id = ?", (habit_id,))
+    conn.execute("DELETE FROM habits WHERE id = ?", (habit_id,))
+    conn.commit()
+
+
 def list_habits(conn: sqlite3.Connection, today: str | None = None) -> list[dict[str, object]]:
     """全部习惯 + 连续天数 + 最近 90 天打卡日期（供列表与日历热力图，SR-F4.2 / OP-19）。
 

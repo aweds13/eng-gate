@@ -164,6 +164,26 @@
 - 至此 **SR-NF3 列举的六类形态全部实现**；`docs/implementation/traceability.md` 的「未实现」标注同步清空。
 - 质量门：pytest 215 passed + 2 deselected / 验收 2 passed / ruff 0 / mypy 0（34 文件）/ 五层对齐 PASS。
 
+### 第 10 步 · 延后域补强（学业 / 团队 / 备忘录 / 习惯 / 同步）
+- **学业**：新增 `upcoming_assessments()` + `GET /api/assessments/upcoming?days=14`（OP-25 课程提醒）——
+  只提醒**未录成绩**的考核项，`days_until` 负=逾期 / None=无截止日，排序「逾期优先 → 无截止日最后」；
+  新增 `DELETE /api/assessments/{id}` 与 `DELETE /api/grades/{id}`（此前**只能建不能删**）；前端学业页加
+  「临期与逾期（14 天内）」区、添加考核项表单、成绩删除。
+- **团队**：`TaskOut.assignments`（任务直接带回分配）+ `team.assignments_for_task()` ——
+  任务卡片显示「谁负责 / 进展到哪」，并按状态给「开始 / 完成 / 恢复」按钮（OP-31/32 的反馈闭环）；
+  `assign_task` 补校验：任务不存在 404、执行者空 400（此前会产生指向不存在任务的分配）。
+- **备忘录**：`POST /api/memos/{id}/to-task`（OP-36 顺手建任务：保留备忘录并写回 `task_id`）
+  + `DELETE /api/memos/{id}`（不连坐任务）。
+- **习惯**：`PATCH /api/habits/{id}` 改名、`DELETE /api/habits/{id}` 删除（打卡记录一并删除，避免孤立历史）；
+  前端习惯卡片加「改名 / 删除」。
+- **同步**：`sync.status()` + `GET /api/sync/status` —— 只报告事实（冲突条数/最近时间），
+  跨端传输未实现时 **`enabled=false`，不谎报"已同步"**；设置页显示在线/离线与同步说明。
+- **修 bug**：`sync.log_conflict` 原用**秒级时间戳当主键**，同一秒两次冲突触发
+  `sqlite3.IntegrityError` —— 改为随机 id（由新测试发现）。
+- 新增测试 `tests/test_academic_line.py`（9 项）、`tests/test_habit_memo_line.py`（10 项）、
+  `tests/test_team_line.py`（7 项）+ 同步状态 3 项；共 **246 passed**。
+- 质量门：pytest 246 passed + 2 deselected / 验收 2 passed / 覆盖率 92.34% / ruff 0 / mypy 0（34 文件）/ 五层对齐 PASS。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

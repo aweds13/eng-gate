@@ -42,6 +42,14 @@ class TaskIn(BaseModel):
     groups: list[str] = []
 
 
+class AssigneeOut(BaseModel):
+    id: str
+    assignee: str
+    assigner: str
+    status: str
+    note: str | None = None
+
+
 class TaskOut(BaseModel):
     id: str
     title: str
@@ -55,6 +63,8 @@ class TaskOut(BaseModel):
     updated_at: str
     version: int
     groups: list[str] = []
+    # 团队分配（SR-F7.1）：任务卡片上直接可见「谁负责 / 进展到哪」，不必另开页面
+    assignments: list[AssigneeOut] = []
 
 
 def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
@@ -72,6 +82,10 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
         updated_at=t.updated_at,
         version=t.version,
         groups=groups,
+        assignments=[
+            AssigneeOut(**a)  # type: ignore[arg-type]
+            for a in team.assignments_for_task(conn, t.id)
+        ],
     )
 
 
@@ -325,6 +339,21 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def toggle_habit(habit_id: str, on_date: str | None = None) -> dict[str, bool]:
         return {"done": fb.toggle_habit_log(conn, habit_id, on_date)}
 
+    @app.patch("/api/habits/{habit_id}")
+    def rename_habit(habit_id: str, payload: dict[str, Any]) -> dict[str, str]:
+        """重命名习惯（空名拒绝）。"""
+        try:
+            fb.update_habit(conn, habit_id, str(payload.get("name", "")))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"id": habit_id}
+
+    @app.delete("/api/habits/{habit_id}")
+    def delete_habit(habit_id: str) -> dict[str, str]:
+        """删除习惯及其打卡记录（幂等）。"""
+        fb.delete_habit(conn, habit_id)
+        return {"deleted": habit_id}
+
     @app.get("/api/habits/{habit_id}")
     def get_habit(habit_id: str) -> dict[str, object]:
         return {"streak": fb.habit_streak(conn, habit_id), "logs": fb.habit_logs(conn, habit_id)}
@@ -392,6 +421,18 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def list_assessments(course_id: str | None = None) -> list[dict[str, object]]:
         return ac.list_assessments(conn, course_id)
 
+    @app.get("/api/assessments/upcoming")
+    def upcoming_assessments(days: int = 14) -> list[dict[str, object]]:
+        """临期/逾期考核项（OP-25）：只取未录成绩的；带 `days_until`（负=逾期，None=无截止日）。"""
+        if not 0 <= days <= 365:
+            raise HTTPException(status_code=400, detail="days 需在 0~365 之间")
+        return ac.upcoming_assessments(conn, days=days)
+
+    @app.delete("/api/assessments/{assessment_id}")
+    def delete_assessment(assessment_id: str) -> dict[str, str]:
+        ac.delete_assessment(conn, assessment_id)
+        return {"deleted": assessment_id}
+
     @app.post("/api/grades")
     def add_grade(payload: dict[str, Any]) -> dict[str, str]:
         return {"id": ac.add_grade(
@@ -415,6 +456,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def list_grades() -> list[dict[str, object]]:
         """成绩明细（SR-F5.1 / N32 的学业可视化数据源：卡片 + 多维呈现）。"""
         return ac.all_grade_rows(conn)
+
+    @app.delete("/api/grades/{grade_id}")
+    def delete_grade(grade_id: str) -> dict[str, str]:
+        """删除一条成绩（OP-23 可逆）；GPA 随之重算。"""
+        ac.delete_grade(conn, grade_id)
+        return {"deleted": grade_id}
 
     # ---- SR-F6 复习间隔重复 ----
     @app.post("/api/review/items")
@@ -464,17 +511,25 @@ def create_app(db_path: str | None = None) -> FastAPI:
     # ---- SR-F7 团队/AI 协作 ----
     @app.post("/api/team/assign")
     def team_assign(payload: dict[str, Any]) -> dict[str, str]:
-        return {"id": team.assign_task(
-            conn,
-            task_id=payload["task_id"],
-            assignee=payload["assignee"],
-            assigner=payload.get("assigner", "me"),
-            note=payload.get("note"),
-        )}
+        try:
+            return {"id": team.assign_task(
+                conn,
+                task_id=payload["task_id"],
+                assignee=payload["assignee"],
+                assigner=payload.get("assigner", "me"),
+                note=payload.get("note"),
+            )}
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.patch("/api/team/assign/{assignment_id}")
     def team_status(assignment_id: str, payload: dict[str, Any]) -> dict[str, str]:
-        team.update_assignment_status(conn, assignment_id, payload["status"])
+        try:
+            team.update_assignment_status(conn, assignment_id, payload["status"])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         return {"id": assignment_id}
 
     @app.get("/api/team/assignments")
@@ -497,6 +552,27 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.get("/api/memos")
     def list_memos() -> list[dict[str, object]]:
         return memo.list_memos(conn)
+
+    @app.delete("/api/memos/{memo_id}")
+    def delete_memo(memo_id: str) -> dict[str, str]:
+        """删除备忘录（幂等）；关联任务不自动删除。"""
+        memo.delete_memo(conn, memo_id)
+        return {"deleted": memo_id}
+
+    @app.post("/api/memos/{memo_id}/to-task")
+    def memo_to_task(memo_id: str, payload: dict[str, Any] | None = None) -> dict[str, str]:
+        """把备忘录转成任务（SR-F8 R2）：备忘录保留并记下 task_id。"""
+        body = payload or {}
+        try:
+            tid = memo.memo_to_task(
+                conn,
+                memo_id,
+                due_date=body.get("due_date"),
+                is_myday=bool(body.get("is_myday", True)),
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="备忘录不存在") from None
+        return {"task_id": tid}
 
     # B 系统产出/投入流水（SR-F8.4 产出评价器接口，第一版手动）
     @app.post("/api/ledger/output")
@@ -554,6 +630,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
         records = payload.get("records", [])
         results = [sync_mod.merge_task(conn, r) for r in records]
         return {"merged": results}
+
+    @app.get("/api/sync/status")
+    def sync_status() -> dict[str, object]:
+        """同步状态（OP-40/OP-41）：只报告事实，跨端传输未实现时 `enabled=false`（不谎报）。"""
+        return sync_mod.status(conn)
 
     @app.get("/api/sync/logs")
     def sync_logs() -> list[dict[str, object]]:

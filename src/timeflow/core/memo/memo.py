@@ -43,6 +43,35 @@ def create_memo(
     return mid
 
 
+def delete_memo(conn: sqlite3.Connection, memo_id: str) -> None:
+    """删除备忘录（幂等）。关联任务不自动删除（R2：两者互相关联但不连坐）。"""
+    conn.execute("DELETE FROM memos WHERE id = ?", (memo_id,))
+    conn.commit()
+
+
+def memo_to_task(
+    conn: sqlite3.Connection,
+    memo_id: str,
+    due_date: str | None = None,
+    is_myday: bool = True,
+) -> str:
+    """把备忘录转成任务（SR-F8 R2）：备忘录保留，并在其上记录 task_id，二者互相可查。
+
+    入口在备忘录页（「转为任务」）；标题沿用备忘录正文（超长由前端截断显示）。
+    """
+    row = conn.execute("SELECT * FROM memos WHERE id = ?", (memo_id,)).fetchone()
+    if row is None:
+        raise KeyError(f"备忘录不存在: {memo_id}")
+    from timeflow.core import tasks as tm
+
+    task = tm.create_task(
+        conn, title=str(row["text"]), due_date=due_date, is_myday=is_myday
+    )
+    conn.execute("UPDATE memos SET task_id = ? WHERE id = ?", (task.id, memo_id))
+    conn.commit()
+    return task.id
+
+
 def list_memos(conn: sqlite3.Connection) -> list[dict[str, object]]:
     """列出全部备忘录（倒序，最新在前）。"""
     rows = conn.execute("SELECT * FROM memos ORDER BY created_at DESC").fetchall()

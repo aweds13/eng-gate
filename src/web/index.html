@@ -121,19 +121,38 @@ async function render(name){
 
 function taskCard(t,isOverdue){
   const isDone=t.status==='完成';
+  const asg=(t.assignments||[]);
+  const asgMeta=asg.map(a=>`<span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span>`).join('');
+  const asgButtons=asg.map(a=>TEAM_NEXT[a.status]?`<button class="ghost" onclick="teamStatus('${a.id}','${TEAM_NEXT[a.status][0]}')">${TEAM_NEXT[a.status][1]}</button>`:'').join('');
   return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" onclick="toggleDone('${t.id}',${isDone})"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${isDone?'<span class="badge">已完成</span>':''}</div></div>
+    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${isDone?'<span class="badge">已完成</span>':''}</div></div>
     <div class="row">
       ${isDone?'':`<button class="ghost" onclick="startFocusFor('${t.id}')">专注</button>`}
       ${isOverdue?`<button class="ghost" onclick="pushToTomorrow('${t.id}')">推到明天</button>
         <button class="ghost" onclick="cancelTask('${t.id}')">取消</button>`:''}
+      ${asgButtons}
       ${isDone?`<button class="ghost" onclick="undoDone('${t.id}')">撤销完成</button>`
               :`<button class="ghost" onclick="toggleMyDay('${t.id}',true)">${t.is_myday?'移出 My Day':'加入 My Day'}</button>`}
+      <button class="ghost" onclick="assignTask('${t.id}')">分配</button>
       <button class="ghost" onclick="showFacts('${t.id}')">记录</button>
       <button class="ghost" onclick="removeTask('${t.id}')">删除</button>
     </div></div>`;
+}
+// 团队分配的四种状态与「下一步」动作（SR-F7.2：进展回报）
+const TEAM_STATUS={assigned:'已分配',in_progress:'进行中',done:'已完成',blocked:'受阻'};
+const TEAM_NEXT={assigned:['in_progress','开始'],in_progress:['done','完成'],blocked:['in_progress','恢复']};
+async function assignTask(id){
+  const assignee=prompt('分配给谁？（名字或昵称）');
+  if(assignee===null)return;
+  if(!assignee.trim()){toast('执行者不能为空');return}
+  await api('/api/team/assign',{method:'POST',body:JSON.stringify({task_id:id,assignee:assignee.trim()})});
+  toast(`已分配给 ${assignee.trim()}（团队任务不计个人投入）`);view(current);
+}
+async function teamStatus(assignmentId,status){
+  await api(`/api/team/assign/${assignmentId}`,{method:'PATCH',body:JSON.stringify({status})});
+  toast(`进展已记为「${TEAM_STATUS[status]||status}」`);view(current);
 }
 async function toggleDone(id,isDone){
   await api(`/api/tasks/${id}/${isDone?'uncomplete':'complete'}`,{method:'POST'});
@@ -509,6 +528,8 @@ async function renderHabit(m){
         <div style="flex:1"><div class="title">${esc(h.name)}</div>
           <div class="meta">连续 ${h.streak} 天 · 近一年打卡 ${(h.logs||[]).length} 天</div></div>
         <button class="${doneToday?'':'ghost'}" onclick="toggleHabit('${h.id}')">${doneToday?'已打卡（点此取消）':'打卡'}</button>
+        <button class="ghost" onclick="renameHabit('${h.id}','${esc(h.name).replace(/'/g,"\\'")}')">改名</button>
+        <button class="ghost" onclick="deleteHabit('${h.id}','${esc(h.name).replace(/'/g,"\\'")}')">删除</button>
       </div>
       <div style="margin-top:10px">${heatmap(h.logs)}</div></div>`;
   }).join('');
@@ -524,24 +545,75 @@ async function addHabit(){const name=document.getElementById('habitName').value.
   await api('/api/habits',{method:'POST',body:JSON.stringify({name})});
   toast('习惯已建好，打卡后热力图会亮起来');view(current)}
 async function toggleHabit(id){await api(`/api/habits/${id}/toggle`,{method:'POST'});view(current)}
+async function renameHabit(id,oldName){
+  const name=prompt('习惯改名：',oldName||'');
+  if(name===null)return;
+  if(!name.trim()){toast('习惯名不能为空');return}
+  await api(`/api/habits/${id}`,{method:'PATCH',body:JSON.stringify({name:name.trim()})});
+  toast('已改名');view(current);
+}
+async function deleteHabit(id,name){
+  if(!confirm(`删除习惯「${name}」？它的打卡记录也会一起删掉，且不可恢复。`))return;
+  await api(`/api/habits/${id}`,{method:'DELETE'});toast('已删除');view(current);
+}
 async function saveFeedback(){await api('/api/feedback',{method:'POST',body:JSON.stringify({plan_note:document.getElementById('fbPlan').value,gap_note:document.getElementById('fbGap').value})});
   toast('反馈已保存（专注分钟由事实层自动计）');view(current)}
 
 async function renderAcademic(m){
-  const [gpa,gpa5,courses,grades]=await Promise.all([
-    api('/api/gpa'),api('/api/gpa?scale=5.0'),api('/api/courses'),api('/api/grades')]);
+  const [gpa,gpa5,courses,grades,upcoming]=await Promise.all([
+    api('/api/gpa'),api('/api/gpa?scale=5.0'),api('/api/courses'),api('/api/grades'),
+    api('/api/assessments/upcoming?days=14')]);
+  const soon=upcoming.filter(a=>a.days_until!==null&&a.days_until<=14);
+  const upcomingHtml=soon.length?`<div class="section-title">临期与逾期（14 天内）</div>
+    ${soon.map(a=>{
+      const d=a.days_until;
+      const when=d<0?`已逾期 ${-d} 天`:d===0?'今天到期':`还有 ${d} 天`;
+      return `<div class="card ${d<0?'overdue':''}"><div style="flex:1">
+        <div class="title">${esc(a.name)}</div>
+        <div class="meta">${esc(a.course_name||'未关联课程')} · ${a.due_date} · ${when}${a.weight?` · 占 ${a.weight}`:''}</div></div>
+        <button class="ghost" onclick="delAssessment('${a.id}')">删除</button></div>`;}).join('')}`:'';
+  const courseOpts=courses.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   m.innerHTML=`<div class="grid">
    <div class="card"><div class="big">${gpa.gpa}</div><div class="meta">GPA（4.0制，${gpa.credits}学分）</div></div>
    <div class="card"><div class="big">${gpa5.gpa}</div><div class="meta">GPA（5.0制）</div></div></div>
+  ${upcomingHtml}
   <div class="section-title">学业概览（多维）</div>
   ${gpaRadar(gpa,gpa5,courses.length,grades)}
   <div class="new"><input id="cName" placeholder="新建课程，如：高数"><button onclick="addCourse()">新建课程</button></div>
   ${courses.map(c=>`<div class="card"><div class="title">${esc(c.name)}</div><div class="meta">${c.credits}学分 ${c.teacher||''}</div></div>`).join('')||'<div class="empty">暂无课程</div>'}
+  <div class="section-title">添加考核项（考试/作业/论文/小测）</div>
+  <div class="new">
+    <select id="aCourse" ${courses.length?'':'disabled'}><option value="">${courses.length?'选课程':'先建课程'}</option>${courseOpts}</select>
+    <input id="aName" placeholder="名称，如：期中考试">
+    <input id="aDue" type="date" title="截止日（可选）">
+    <input id="aWeight" type="number" step="0.05" placeholder="权重" style="width:80px">
+    <button onclick="addAssessment()">添加</button></div>
   <div class="section-title">录入成绩</div>
   <div class="new"><input id="gScore" type="number" placeholder="成绩" style="width:80px"><input id="gCredits" type="number" placeholder="学分" value="2" style="width:80px"><button onclick="addGrade()">录入</button></div>
   ${grades.length?`<div class="section-title">成绩明细（${grades.length} 条）</div>
     ${grades.slice().reverse().map(g=>`<div class="card"><div style="flex:1"><div class="title">${g.score} 分</div>
-      <div class="meta">${g.credits} 学分 ${g.term?`· ${esc(g.term)}`:''} ${g.course_id?'· 已关联课程':''}</div></div></div>`).join('')}`:''}`;
+      <div class="meta">${g.credits} 学分 ${g.term?`· ${esc(g.term)}`:''}</div></div>
+      <button class="ghost" onclick="delGrade('${g.id}')">删除</button></div>`).join('')}`:''}`;
+}
+async function addAssessment(){
+  const courseId=document.getElementById('aCourse').value;
+  const name=document.getElementById('aName').value.trim();
+  if(!courseId){toast('先建一门课程，再把考核项挂在课上');return}
+  if(!name){toast('考核项名称不能为空');return}
+  const weightRaw=document.getElementById('aWeight').value;
+  await api('/api/assessments',{method:'POST',body:JSON.stringify({
+    course_id:courseId,name,
+    due_date:document.getElementById('aDue').value||null,
+    weight:weightRaw?parseFloat(weightRaw):null})});
+  toast('已添加考核项，临期会出现在提醒里');view(current);
+}
+async function delAssessment(id){
+  if(!confirm('删除这个考核项？'))return;
+  await api(`/api/assessments/${id}`,{method:'DELETE'});toast('已删除');view(current);
+}
+async function delGrade(id){
+  if(!confirm('删除这条成绩？GPA 会重新计算。'))return;
+  await api(`/api/grades/${id}`,{method:'DELETE'});toast('已删除，GPA 已重算');view(current);
 }
 async function addCourse(){const name=document.getElementById('cName').value.trim();if(!name)return;
   await api('/api/courses',{method:'POST',body:JSON.stringify({name})});view(current)}
@@ -580,8 +652,10 @@ async function review(id,fb){await api(`/api/review/${id}/review`,{method:'POST'
 async function renderMemo(m){
   const [memos,outputs,invests]=await Promise.all([
     api('/api/memos'),api('/api/ledger/outputs'),api('/api/ledger/invests')]);
-  m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…"><button onclick="addMemo()">记录</button></div>
-  ${memos.map(x=>`<div class="card"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge">${esc(x.ref_handle)}</span>`:''}</div></div>`).join('')||'<div class="empty">暂无备忘录</div>'}
+  m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…" onkeydown="if(event.key==='Enter')addMemo()"><button onclick="addMemo()">记录</button></div>
+  ${memos.map(x=>`<div class="card"><div style="flex:1"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge">${esc(x.ref_handle)}</span>`:''}${x.task_id?'<span class="badge">已转任务</span>':''}</div></div>
+    <div class="row">${x.task_id?'':`<button class="ghost" onclick="memoToTask('${x.id}')">转为任务</button>`}
+    <button class="ghost" onclick="deleteMemo('${x.id}')">删除</button></div></div>`).join('')||'<div class="empty">暂无备忘录</div>'}
   <div class="section-title">今日手动投入（独立于专注投入）</div>
   <div class="new">
     <select id="inKind"><option value="focus">专注补记</option><option value="habit">习惯</option><option value="other">其它</option></select>
@@ -604,6 +678,14 @@ async function renderMemo(m){
 }
 async function addMemo(){const text=document.getElementById('memoTxt').value.trim();if(!text)return;
   await api('/api/memos',{method:'POST',body:JSON.stringify({text})});view(current)}
+async function memoToTask(id){
+  const r=await api(`/api/memos/${id}/to-task`,{method:'POST',body:JSON.stringify({is_myday:true})});
+  toast(`已建成任务并加入今天（${r.task_id.slice(0,6)}…）`);view(current);
+}
+async function deleteMemo(id){
+  if(!confirm('删除这条备忘录？关联的任务会保留。'))return;
+  await api(`/api/memos/${id}`,{method:'DELETE'});toast('已删除');view(current);
+}
 async function addInvest(){
   const minutes=parseFloat(document.getElementById('inMinutes').value||'0');
   if(isNaN(minutes)||minutes<0){toast('分钟数不合法');return}
@@ -630,8 +712,12 @@ async function retractOutput(entryId){
 
 // 移动端「设置」页：GPA 制式切换 + 学业/复习/备忘录入口（简版合并）
 async function renderSetting(m){
-  const cfg=await api('/api/config');
-  m.innerHTML=`<div class="section-title">GPA 制式</div>
+  const [cfg,sync]=await Promise.all([api('/api/config'),api('/api/sync/status')]);
+  const off=!navigator.onLine;
+  m.innerHTML=`<div class="section-title">同步与离线</div>
+  <div class="card"><div style="flex:1"><div class="title">${off?'当前离线':'当前在线'}</div>
+    <div class="meta">跨端传输尚未实现：本机数据始终可用；同步一旦接上会在这里显示状态${sync.conflict_logs?` · 已有 ${sync.conflict_logs} 条冲突记录`:''}</div></div></div>
+  <div class="section-title">GPA 制式</div>
   <div class="grid">
     <div class="card"><div class="title">当前 ${cfg.gpa_scale==='4.0'?'4.0 制':'5.0 制'}</div>
       <button class="ghost" onclick="setGpa('4.0')">切到 4.0</button>

@@ -7,9 +7,12 @@ from timeflow.core.academic.academic import (
     add_grade,
     all_grade_rows,
     create_course,
+    delete_assessment,
+    delete_grade,
     gpa,
     list_assessments,
     list_courses,
+    upcoming_assessments,
 )
 
 __all__ = [
@@ -20,7 +23,10 @@ __all__ = [
     "list_courses",
     "add_assessment",
     "list_assessments",
+    "delete_assessment",
+    "upcoming_assessments",
     "add_grade",
+    "delete_grade",
     "gpa",
     "all_grade_rows",
 ]

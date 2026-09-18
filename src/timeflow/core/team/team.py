@@ -34,7 +34,16 @@ def assign_task(
     assigner: str,
     note: str | None = None,
 ) -> str:
-    """给任务标注分配（管理者分给执行者）。返回分配记录 id。"""
+    """给任务标注分配（管理者分给执行者）。返回分配记录 id。
+
+    校验：任务必须存在（否则会在卡片上指向一个不存在的任务）；assignee 非空。
+    """
+    from timeflow.core import tasks as tm
+
+    tm.get_task(conn, task_id)  # 不存在则 KeyError
+    assignee = assignee.strip()
+    if not assignee:
+        raise ValueError("执行者不能为空")
     rid = _uid()
     conn.execute(
         "INSERT INTO team_assignments (id, task_id, assignee, assigner, note, status, "
@@ -68,14 +77,25 @@ def assignments(
         ).fetchall()
     else:
         rows = conn.execute("SELECT * FROM team_assignments ORDER BY created_at").fetchall()
-    return [
-        {
-            "id": r["id"],
-            "task_id": r["task_id"],
-            "assignee": r["assignee"],
-            "assigner": r["assigner"],
-            "note": r["note"],
-            "status": r["status"],
-        }
-        for r in rows
-    ]
+    return [_row(r) for r in rows]
+
+
+def assignments_for_task(
+    conn: sqlite3.Connection, task_id: str
+) -> list[dict[str, object]]:
+    """某任务的分配记录（供任务卡片直接显示「谁负责 / 进展到哪」，SR-F7.1）。"""
+    rows = conn.execute(
+        "SELECT * FROM team_assignments WHERE task_id = ? ORDER BY created_at", (task_id,)
+    ).fetchall()
+    return [_row(r) for r in rows]
+
+
+def _row(r: sqlite3.Row) -> dict[str, object]:
+    return {
+        "id": r["id"],
+        "task_id": r["task_id"],
+        "assignee": r["assignee"],
+        "assigner": r["assigner"],
+        "note": r["note"],
+        "status": r["status"],
+    }

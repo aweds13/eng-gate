@@ -88,18 +88,60 @@ def list_assessments(
         ).fetchall()
     else:
         rows = conn.execute("SELECT * FROM course_assessments ORDER BY due_date").fetchall()
-    return [
-        {
-            "id": r["id"],
-            "course_id": r["course_id"],
-            "name": r["name"],
-            "due_date": r["due_date"],
-            "weight": r["weight"],
-            "score": r["score"],
-            "note": r["note"],
-        }
-        for r in rows
-    ]
+    return [_assessment_row(r) for r in rows]
+
+
+def _assessment_row(r: sqlite3.Row) -> dict[str, object]:
+    return {
+        "id": r["id"],
+        "course_id": r["course_id"],
+        "name": r["name"],
+        "due_date": r["due_date"],
+        "weight": r["weight"],
+        "score": r["score"],
+        "note": r["note"],
+    }
+
+
+def delete_assessment(conn: sqlite3.Connection, assessment_id: str) -> None:
+    """删除考核项（OP-22 可逆）。不存在则视为幂等。"""
+    conn.execute("DELETE FROM course_assessments WHERE id = ?", (assessment_id,))
+    conn.commit()
+
+
+def upcoming_assessments(
+    conn: sqlite3.Connection, today: str | None = None, days: int = 14
+) -> list[dict[str, object]]:
+    """临期/逾期考核项（OP-25 课程提醒的数据源）。
+
+    口径：
+    - 只取**还没录成绩**的考核项（录了分就算完成，不再提醒）；
+    - `days_until` = 截止日 - 今天：负=已逾期；0=今天；正=还有几天；
+      **无截止日返回 None**（不猜时间）；
+    - 按「逾期优先 → 无截止日最后」排序，供前端温和呈现（不强制、不告警）。
+    """
+    t = today or _today()
+    t_date = date.fromisoformat(t)
+    rows = conn.execute(
+        "SELECT * FROM course_assessments WHERE score IS NULL ORDER BY due_date IS NULL, due_date"
+    ).fetchall()
+    course_names = {
+        str(r["id"]): str(r["name"])
+        for r in conn.execute("SELECT id, name FROM courses").fetchall()
+    }
+    out: list[dict[str, object]] = []
+    for r in rows:
+        due = r["due_date"]
+        days_until: int | None = None
+        if due:
+            days_until = (date.fromisoformat(str(due)) - t_date).days
+        if days_until is not None and days_until > days:
+            continue  # 还早，不打扰
+        item = _assessment_row(r)
+        item["course_name"] = course_names.get(str(r["course_id"]))
+        item["days_until"] = days_until
+        out.append(item)
+    return out
 
 
 # ---- GPA（SR-F5.1）----
@@ -156,6 +198,12 @@ def gpa(conn: sqlite3.Connection, gpa_scale: str = "4.0") -> tuple[float, float]
     if not credit_sum:
         return (0.0, 0.0)
     return (round(total / credit_sum, 2), credit_sum)
+
+
+def delete_grade(conn: sqlite3.Connection, grade_id: str) -> None:
+    """删除一条成绩（OP-23 可逆）：GPA 会随之重算。不存在则幂等。"""
+    conn.execute("DELETE FROM grades WHERE id = ?", (grade_id,))
+    conn.commit()
 
 
 def all_grade_rows(conn: sqlite3.Connection) -> list[dict[str, object]]:

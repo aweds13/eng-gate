@@ -4,6 +4,7 @@ from timeflow.core.team.team import (
     ROLE_MANAGER,
     assign_task,
     assignments,
+    assignments_for_task,
     update_assignment_status,
 )
 
@@ -13,4 +14,5 @@ __all__ = [
     "assign_task",
     "update_assignment_status",
     "assignments",
+    "assignments_for_task",
 ]

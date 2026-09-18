@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from fastapi.testclient import TestClient
 
+from timeflow.api.app import create_app
 from timeflow.core import sync as sync
 from timeflow.core import tasks as tm
 from timeflow.storage import db
@@ -56,3 +58,29 @@ def test_log_conflict(conn) -> None:
     sync.log_conflict(conn, "task", "abc", "t1", "t2")
     row = conn.execute("SELECT entity_id FROM sync_logs").fetchone()
     assert row and row["entity_id"] == "abc"
+
+
+# ---- 同步状态（OP-40/OP-41 可观测面，第 10 步）----
+
+def test_status_reports_disabled_honestly(conn) -> None:
+    """跨端传输未实现 → 必须报告 enabled=False，不谎报"已同步"。"""
+    st = sync.status(conn)
+    assert st["enabled"] is False
+    assert st["conflict_logs"] == 0
+    assert st["last_conflict_at"] is None
+
+
+def test_status_counts_conflicts(conn) -> None:
+    sync.log_conflict(conn, "task", "abc", "t1", "t2")
+    sync.log_conflict(conn, "task", "def", "t3", "t4")
+
+    st = sync.status(conn)
+    assert st["conflict_logs"] == 2
+    assert st["last_conflict_at"] is not None
+
+
+def test_api_sync_status(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    client = TestClient(create_app(str(tmp_path / "s.db")))
+    st = client.get("/api/sync/status").json()
+    assert st["enabled"] is False
+    assert client.get("/api/sync/logs").json() == []

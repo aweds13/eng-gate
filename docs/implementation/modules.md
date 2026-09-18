@@ -46,6 +46,9 @@
 - 课程档案（学分/考核/任课）+ 考核项 + GPA（4.0/5.0 可切换）；学校任务**同构**进任务系统（只多课程标签+硬约束元数据）。
 - **可视化**（第 9 步）：`GET /api/grades`（`all_grade_rows`）供前端「学业多维概览」（GPA 4.0/5.0、平均分、
   学分、课程覆盖的雷达 + 条形）；各轴各自归一到本图最大值，**只用于看均衡，不跨人比较**。
+- **考核提醒与增删**（第 10 步）：`upcoming_assessments()`（只提醒未录成绩的；`days_until` 负=逾期/None=无截止日）
+  + `GET /api/assessments/upcoming` + `delete_assessment` / `delete_grade`；前端学业页「临期与逾期（14 天内）」区。
+- **未实现**：学校任务↔课程的字段级合流（OP-24，可先用「分组」当课程标签）。
 
 ## SR-F6 复习间隔重复 → `core/review/`
 - FSRS 调度（SR-F6.1）用现成 Python `fsrs` 库；到期按「最久未复习 + 低 reps」排序；外部 app 只做调度中枢。
@@ -55,9 +58,15 @@
 
 ## SR-F7 团队/AI → `core/team/`
 - 管理者/执行者两视角；不强制执行者装软件（状态手动为主）；AI 接口（`api/`）第一版只读+新增；团队任务不计个人投入。
+- **分配可见性**（第 10 步）：`assignments_for_task()` 让 `TaskOut.assignments` 直接带回分配 ——
+  任务卡片显示「谁负责 / 进展到哪」，并按状态给「开始 / 完成 / 恢复」下一步动作；
+  `assign_task` 校验任务存在（404）与执行者非空（400）。
+- **未实现**：独立的管理者/执行者视角切换页（OP-33）。
 
 ## SR-F8 备忘录/知识资产 → `core/memo/`
 - 备忘录本地记录（可带引用句柄与任务关联）。
+- **转任务**（第 10 步，R2）：`memo_to_task()` —— 备忘录用正文建任务、**保留原记录**并写回 `task_id`；
+  另有 `delete_memo()`（删备忘录不连坐任务）。
 - **产出/投入手动入口**（SR-F8.4）：`add_output_entry` / `add_invest_entry` 同时落旧表（兼容）与事实
   （`output.manual` / `invest.manual`），并支持 `retract_*` 反向事实；**知识资产只存引用句柄**（Vault 路径/KB-ID）。
 - `getaways/`：外部集成（知识资产/学校通知）**预留占位**，尚无实现。
@@ -65,6 +74,9 @@
 ## SR-F9 存储/同步 → `storage/`
 - SQLite（标准库 `sqlite3`，非 ORM）+ schema 版本化迁移（当前 **v5**：v3 facts、v4 focus 回填、v5 已完成任务回填）；
   LWW 同步（时间戳+version，不静默覆盖）；跨端去重（来源标记）。
+- **同步状态**（第 10 步）：`sync.status()` + `GET /api/sync/status` —— 只报告事实
+  （冲突日志条数/最近时间），**跨端传输未实现时 `enabled=false`，不谎报"已同步"**。
+- **已修 bug**（第 10 步）：`log_conflict` 原用秒级时间戳当主键，同一秒两次冲突会 `IntegrityError` —— 改随机 id。
 
 ## 重构地基（非 SR）→ `core/facts/`
 - 事实层：`store.py` 读写 `facts` 表；`bus.py` 同步发布-订阅、通配匹配、订阅者异常隔离。
