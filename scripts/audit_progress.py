@@ -275,25 +275,28 @@ def main() -> int:
                     git_fails.append("没有 gates/last.json（门禁未落盘）")
                 else:
                     gate = json.loads(GATES.read_text(encoding="utf-8"))
-                    # 为什么不用 rev/tree 校验（两个坑都实测踩过）：
+                    # 为什么不用 rev/tree 校验（三个坑都实测踩过）：
                     #  ① tree 自指：产物自己在那棵树里，写入哈希会让树变化 → 永不相等；
-                    #  ② rev 时序：门禁必须**提交前**跑，那时新提交还不存在 → rev 必然落后一次。
-                    # 所以改成"时效"校验：产物必须由本轮（最近一次提交之后）跑出来。
+                    #  ② rev 时序：门禁必须**提交前**跑，那时新提交还不存在 → rev 必然落后一次；
+                    #  ③ 与"本次提交时间"比较也是反的 —— 门禁必然比提交早。
+                    # 正确的尺子是**父提交**：产物必须比上一次提交更新（否则就是沿用了陈旧产物）。
                     if not gate.get("ok"):
                         git_fails.append("gates/last.json 里 ok=false（门禁没过）")
                     else:
                         at_raw = str(gate.get("at", ""))
-                        last_commit_ts = git("log", "-1", "--format=%cI", rev)
+                        parent_ts = git("log", "-1", "--format=%cI", f"{rev}^") or git(
+                            "log", "-1", "--format=%cI", rev
+                        )
                         try:
                             at = datetime.fromisoformat(at_raw).replace(tzinfo=None)
-                            commit_at = datetime.fromisoformat(last_commit_ts).replace(tzinfo=None)
+                            parent_at = datetime.fromisoformat(parent_ts).replace(tzinfo=None)
                         except ValueError:
                             git_fails.append(f"gates/last.json 的时间戳无法解析：{at_raw!r}")
                         else:
-                            if at < commit_at - timedelta(seconds=5):
+                            if parent_at - at > timedelta(seconds=120):
                                 git_fails.append(
-                                    f"门禁产物时间 {at_raw} 早于本次提交 {last_commit_ts}"
-                                    "（不是这一版跑的，请重跑 scripts/run_gates.py 再提交）"
+                                    f"门禁产物时间 {at_raw} 早于父提交 {parent_ts}"
+                                    "（沿用了旧产物，请重跑 scripts/run_gates.py）"
                                 )
                 if not meta["Gates"]:
                     git_fails.append("提交没有 `Gates:` trailer（没有门禁结果）")

@@ -1,11 +1,11 @@
 {
-  "rev": "90ee9f4",
-  "tree": "34e25c3f86aafd71503851ee5cca0bf81dd08b72",
-  "parent": "90ee9f4",
+  "rev": "8811197",
+  "tree": "b57b09b3506838f48d2aa1be749c38a71de540f4",
+  "parent": "8811197",
   "branch": "line/impl-v1",
   "dirty": true,
-  "at": "2026-09-18T22:34:48",
-  "quick": false,
+  "at": "2026-09-18T22:39:55",
+  "quick": true,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
   "ok": true,
@@ -13,57 +13,45 @@
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 21.64,
-      "summary": "284 passed, 2 deselected, 306 warnings in 19.78s"
+      "seconds": 32.27,
+      "summary": "284 passed, 2 deselected, 305 warnings in 30.34s"
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 2.94,
-      "summary": "2 passed, 284 deselected, 2 warnings in 1.16s"
+      "seconds": 5.0,
+      "summary": "2 passed, 284 deselected, 2 warnings in 2.50s"
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 0.61,
+      "seconds": 1.15,
       "summary": "All checks passed!"
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 1.67,
+      "seconds": 1.76,
       "summary": "Success: no issues found in 34 source files"
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 0.67,
+      "seconds": 0.83,
       "summary": "LAYER CHECKS: PASS ✅"
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 7.49,
+      "seconds": 7.51,
       "summary": "SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）"
     },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 2.38,
+      "seconds": 2.41,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）"
-    },
-    {
-      "name": "lf1_live",
-      "exit_code": 0,
-      "seconds": 2.31,
-      "summary": "LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）"
-    },
-    {
-      "name": "web_live",
-      "exit_code": 0,
-      "seconds": 1.62,
-      "summary": "[OK ] data-view 全部有落点"
     }
   ],
-  "trailer": "pytest 284 passed, 2 deselected, 306 warnings in 19.78s; acceptance 2 passed, 284 deselected, 2 warnings in 1.16s; ruff All checks passed!; mypy Success: no issues found in 34 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; audit 审计通过 ✅（豁免 0 项已知欠账）; lf1_live LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）; web_live [OK ] data-view 全部有落点"
+  "trailer": "pytest 284 passed, 2 deselected, 305 warnings in 30.34s; acceptance 2 passed, 284 deselected, 2 warnings in 2.50s; ruff All checks passed!; mypy Success: no issues found in 34 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; audit 审计通过 ✅（豁免 0 项已知欠账）"
 }
