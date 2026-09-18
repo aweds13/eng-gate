@@ -53,17 +53,62 @@ body {
   color: var(--text);
 }
 
-/* ---------- 头部与导航 ---------- */
-header {
-  padding: 16px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border-bottom: 1px solid var(--line);
-  flex-wrap: wrap;
+/* ---------- R3 三栏骨架（SR-NF4）：左导航 / 中列表 / 右详情 + 计时器常驻 ----------
+ * 宽屏（≥1024px）三栏；窄屏折回单列（右栏落到主区下方），≤640px 用底部 Tab 导航。
+ * 布局只在这里定义，视图依旧只往 `main` 里渲染，互不干扰。
+ */
+.shell { padding-bottom: 90px }
+@media (min-width: 1024px) {
+  .shell {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr) 340px;
+    gap: 20px;
+    align-items: start;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 24px 40px;
+  }
+  .rail {
+    grid-column: 1;
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow: auto;
+    padding: 18px 0;
+    border-right: 1px solid var(--line);
+  }
+  .sidebar {
+    grid-column: 3;
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow: auto;
+    padding: 18px 0;
+  }
+  main { grid-column: 2; padding: 18px 0 60px }
+  .bottom-nav { display: none }
 }
-header h1 { font-size: 18px; margin: 0 }
+/* ---------- 左导航栏 ---------- */
+.rail h1 { font-size: 18px; margin: 0 0 6px }
+.rail-summary { display: block; margin-bottom: 12px; line-height: 1.5 }
+.rail nav { flex-direction: column; align-items: stretch; gap: 2px }
+.rail nav button { text-align: left; padding: 9px 12px }
+/* ---------- 右栏面板 ---------- */
+.panel {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.panel:empty { display: none }
+.panel-title { font-size: 13px; color: var(--muted); margin-bottom: 8px }
+.panel .timer { font-size: 34px }
+.panel .title { font-size: 15px; font-weight: 600 }
+.panel .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap }
+.panel .section-title { margin: 12px 0 6px }
+
+/* ---------- 导航（左栏；窄屏时仍是主区上方的一行） ---------- */
 .accent { color: var(--accent) }
 nav { display: flex; gap: 6px; flex-wrap: wrap }
 nav button {
@@ -230,11 +275,29 @@ select {
 .modal-box .row { display: flex; gap: 8px; margin-top: 12px }
 
 /* ---------- 移动端（A 档） ---------- */
+/* 中屏（≤1023px）：退回单列——左栏变成主区上方的一条横向导航，右栏落到主区下方 */
+@media (max-width: 1023px) {
+  .rail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 24px 0;
+  }
+  .rail h1 { margin: 0 }
+  .rail-summary { margin: 0 }
+  .rail nav { flex-direction: row; flex-wrap: wrap; flex: 1 1 100% }
+  .rail nav button { text-align: center }
+  .sidebar { padding: 0 24px 90px }
+  main { padding-bottom: 24px }
+}
 .bottom-nav { display: none }
 @media (max-width: 640px) {
   .grid { grid-template-columns: 1fr }
-  header > nav { display: none }
-  main { padding: 0 14px 90px }
+  .rail { padding: 12px 14px 0 }
+  .rail nav { display: none }
+  .sidebar { padding: 0 14px 90px }
+  main { padding: 0 14px 24px }
   .bottom-nav {
     display: flex;
     position: fixed;

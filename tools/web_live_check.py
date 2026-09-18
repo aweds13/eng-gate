@@ -66,6 +66,10 @@ def main() -> int:
     cfg = json.loads(
         urllib.request.urlopen(f"{base}/api/config", timeout=10).read().decode("utf-8")
     )
+    # 右栏计时器的数据源：新库没有进行中的专注，应返回 null（而不是 500）
+    active = json.loads(
+        urllib.request.urlopen(f"{base}/api/focus/active", timeout=10).read().decode("utf-8")
+    )
 
     checks = {
         "无内联事件处理器": "onclick=" not in html and "onkeydown=" not in html,
@@ -75,6 +79,13 @@ def main() -> int:
         "页面引用 app.css": "/app.css" in html,
         "样式可取到": "--accent-soft" in css,
         "config 提供强调色": bool(cfg.get("accent_color")),
+        # R3 三栏（SR-NF4）：壳里三个区域都在，且右栏计时器/详情挂载点存在
+        "三栏骨架齐全": all(k in html for k in
+                            ('class="shell"', 'class="rail"', 'id="main"', 'class="sidebar"',
+                             'id="focusRail"', 'id="detailRail"')),
+        "宽屏三栏是有网格的": "grid-template-columns: 200px minmax(0, 1fr) 340px" in css,
+        "计时器归属右栏": "function renderActive(el,active)" in html and "paintRail(mySeq)" in html,
+        "计时器数据源可用": active is None or isinstance(active, dict),
     }
     for name, passed in checks.items():
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")

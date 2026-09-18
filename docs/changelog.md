@@ -202,6 +202,31 @@
   `GET /api/gpa` 一次返回 `{gpa, credits, scale, weighted_average, weighted_credits}`。
 - 质量门：pytest 265 passed + 2 deselected / 覆盖率 92.03% / ruff 0 / mypy 0（34 文件）/ 五层对齐 PASS。
 
+### 前端接缝重构 R1 + R2（视觉/行为零变化）
+- **R1 抽样式 + 颜色令牌化**：新增 `src/web/app.css`（语义令牌 `:root` + `[data-theme="dark"]` 预置 + 布局/元件样式），
+  `index.html` 删内联 `<style>` 改引 `/app.css`（735→689 行）；JS 模板里的硬编码色清零
+  （只剩 `<meta name="theme-color">`，它不接受变量）。
+- **R2 事件委托 + 壳级模态**：58 处内联 `onclick/onkeydown` → `data-action` + `ACTIONS` 注册表 + 全局委托；
+  新增壳级模态 `ask()` 取代 `prompt()`、`alert()` 改 `toast()`。
+- 新增护栏 6 项（无硬编码色 / 令牌亮暗齐备 / 无内联事件 / 动作必须注册 / 无 alert·prompt）
+  + `tools/web_live_check.py`（用 `node --check` **真解析页面脚本** —— JS 语法错会整页白屏而字符串测试抓不到）。
+- 质量门：pytest 252 passed + 2 deselected / 覆盖率 92.34% / 真机自检 8 项 OK。
+
+### 前端接缝重构 R3 · 三栏布局（SR-NF4 落地）
+- **壳改三栏**：`index.html` 顶层改为 `.shell`（左 `.rail` 导航 / 中 `#main` / 右 `.sidebar`），
+  文案与挂载点布局交给 CSS：**≥1024px 三栏网格（200 / 1fr / 340）**，1023px 以下退回单列
+  （左栏变成主区上方的横向导航、右栏落到主区下方），≤640px 仍用底部 Tab；未引入任何框架/打包器。
+- **计时器常驻右栏**（R3 的核心）：「进行中」的计时与「结束 / 记中断 / 放弃」渲染在右栏 `#focusRail`，
+  `render()` 每次渲染都重画右栏 —— **切到任何页面计时都不丢**，分页不再各自维护一个计时器
+  （专注页改为只说明"去哪里结束"，全页只剩一个 `#clock`）。
+- **右详情面板（渐进聚焦）**：任务卡片新增「详情」，点开在右栏 `#detailRail` 显示字段
+  （标题/状态/截止/分组/重复/分配）+ 最近事实流水 + 与列表一致的动作；切视图自动收起，默认不占屏。
+- 新增护栏 3 项（`tests/test_web_frontend.py`：三栏骨架与网格断点 / 计时器只有一个主人 / 切视图清详情），
+  真机自检加 3 项（骨架齐全 / 宽屏网格存在 / 计时器归右栏 + 数据源 `GET /api/focus/active` 可用）。
+- 质量门：pytest 268 passed + 2 deselected / 验收 2 passed / 覆盖率 92.03% / ruff 0 / mypy 0（34 文件）/
+  五层对齐 PASS / 护栏自测 PASS / LF-1 真机 PASS / 前端自检 12 项 OK。
+- ⚠️ 诚实声明：**布局视觉与点击手感需人工在浏览器确认**（本环境无浏览器，只能保证骨架、脚本语法与接口可用）。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

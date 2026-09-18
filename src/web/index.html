@@ -9,21 +9,30 @@
 <title>timeflow</title>
 </head>
 <body>
-<header>
-  <h1>timeflow <span class="accent">·</span> <span id="summary" class="hint"></span></h1>
-  <nav>
-    <button data-action="view" data-view="today" class="active">今日</button>
-    <button data-action="view" data-view="tasks">全部任务</button>
-    <button data-action="view" data-view="focus">专注</button>
-    <button data-action="view" data-view="stats">统计</button>
-    <button data-action="view" data-view="habit">习惯</button>
-    <button data-action="view" data-view="academic">学业</button>
-    <button data-action="view" data-view="review">复习</button>
-    <button data-action="view" data-view="memo">备忘录</button>
-    <button id="refresh" class="ghost" data-action="refresh">刷新</button>
-  </nav>
-</header>
-<main id="main"></main>
+<!-- R3 三栏（SR-NF4）：左导航 / 中列表 / 右详情 + 计时器常驻。
+     骨架在这里，样式在 app.css，渲染在下面的脚本；窄屏（≤1023px）折回单列 + 底部 Tab。 -->
+<div class="shell">
+  <aside class="rail">
+    <h1>timeflow <span class="accent">·</span></h1>
+    <div id="summary" class="hint rail-summary"></div>
+    <nav>
+      <button data-action="view" data-view="today" class="active">今日</button>
+      <button data-action="view" data-view="tasks">全部任务</button>
+      <button data-action="view" data-view="focus">专注</button>
+      <button data-action="view" data-view="stats">统计</button>
+      <button data-action="view" data-view="habit">习惯</button>
+      <button data-action="view" data-view="academic">学业</button>
+      <button data-action="view" data-view="review">复习</button>
+      <button data-action="view" data-view="memo">备忘录</button>
+      <button id="refresh" class="ghost" data-action="refresh">刷新</button>
+    </nav>
+  </aside>
+  <main id="main"></main>
+  <aside class="sidebar">
+    <div class="panel" id="focusRail"></div>
+    <div class="panel" id="detailRail"></div>
+  </aside>
+</div>
 <div class="toast" id="toast"></div>
 <div class="modal" id="modal" hidden>
   <div class="modal-box">
@@ -50,6 +59,7 @@ let gpaScale='4.0';          // 学业页 GPA 制式（默认 4.0，可切换）
 let renderSeq=0;             // 渲染序号：用于「后点的那次说了算」
 let abortCtl=null;           // 进行中的请求组：切视图即取消，避免过期渲染互相覆盖
 let themeChoice='light';     // 主题选择（R4 接通暗色）
+let detailTaskId=null;       // R3：右栏正在查看的任务（跨视图保留；切视图时清空）
 
 /* 同步强调色到 CSS 变量（本地缓存先应用，避免首屏闪默认色） */
 function applyAccent(color){if(color)document.documentElement.style.setProperty('--accent',color)}
@@ -98,7 +108,12 @@ function toastAction(msg,label,fn){
   t.innerHTML=`${esc(msg)} <button class="ghost" style="margin-left:8px;padding:4px 10px" data-action="toast-run" id="toastAct">${esc(label)}</button>`;
   t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),6000);
 }
-function view(name){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));render(name)}
+function view(name){
+  if(name!==current)detailTaskId=null;          // 切视图：右栏详情不再适用（计时器不受影响）
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+  document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+  render(name);
+}
 
 /* ---------- 事件委托（R2）----------
  * 约定：模板里只写 `data-action="动作名"` + `data-*` 参数，不再写内联 onclick。
@@ -115,6 +130,8 @@ const ACTIONS = {
   'set-heatmap':    el => setHeatmap(el.dataset.metric),
   'set-gpa':        el => setGpa(el.dataset.scale),
   // 任务
+  'task-detail':    el => showDetail(el.dataset.id),
+  'task-close':     () => { detailTaskId=null; render(current); },
   'task-done':      el => toggleDone(el.dataset.id, el.dataset.done === 'true'),
   'task-undo-done': el => undoDone(el.dataset.id),
   'task-myday':     el => toggleMyDay(el.dataset.id, true),
@@ -176,11 +193,12 @@ document.addEventListener('keydown', ev => {
 
 async function render(name){
   current=name;
-  clearInterval(focusTimer);focusTimer=null;
   // 竞态防护：每次渲染发一个号并取消上一组请求；只有"最新那次"才允许写 DOM。
   const mySeq=++renderSeq;
   if(abortCtl)abortCtl.abort();
   abortCtl=new AbortController();
+  clearInterval(focusTimer);focusTimer=null;    // 计时器由右栏（paintRail）重新接管
+  paintRail(mySeq);                             // 右栏：计时器常驻 + 详情面板（与视图无关）
   const m=document.getElementById('main');
   try{
     const cfg=await api('/api/config');
@@ -203,6 +221,86 @@ async function render(name){
   }
 }
 
+/* ---------- R3 右栏：计时器常驻 + 详情面板（SR-NF4 三栏）----------
+ * 约定：右栏**不随视图切换而消失**——计时态在任何页面都能看到、都能结束；
+ * 详情面板只在用户点了「详情」后出现（渐进聚焦：重信息点进去才有）。
+ * 两者都只读/只发既有动作，不自己聚合业务表（数字一律来自后端接口）。
+ */
+function renderActive(el,active){
+  if(!active){
+    el.innerHTML=`<div class="panel-title">专注计时</div>
+      <div class="sub">当前没有进行中的专注。去「专注」页或任务上点「专注」开始。</div>`;
+    clearInterval(focusTimer);focusTimer=null;
+    return;
+  }
+  const started=new Date(String(active.started_at).replace(' ','T')).getTime();
+  el.innerHTML=`<div class="panel-title">专注进行中</div>
+    <div class="timer" id="clock">--:--</div>
+    <div class="meta">${active.kind==='tomato'?'番茄钟':'普通计时'}</div>
+    <div class="sub" id="focusTask">${active.task_id?'已绑定任务':'未绑定任务'}</div>
+    <div class="row" style="margin-top:10px">
+      <button data-action="focus-finish" data-status="finished">结束（计入投入）</button>
+      <button class="ghost" data-action="focus-finish" data-status="interrupted">记中断</button>
+      <button class="ghost" data-action="focus-finish" data-status="abandoned">放弃（不入账）</button></div>`;
+  const tick=()=>{const e=document.getElementById('clock');if(e)e.textContent=fmt((Date.now()-started)/1000)};
+  tick();clearInterval(focusTimer);focusTimer=setInterval(tick,1000);
+  if(active.task_id){
+    api(`/api/tasks/${active.task_id}`).then(t=>{     // 只负责把标题补进右栏
+      const e=document.getElementById('focusTask');if(e)e.textContent=`归属任务：${t.title}`;
+    }).catch(()=>{});
+  }
+}
+function teamButtonsHTML(asg){
+  return asg.map(a=>TEAM_NEXT[a.status]
+    ?`<button class="ghost" data-action="team-status" data-id="${a.id}" data-status="${TEAM_NEXT[a.status][0]}">${TEAM_NEXT[a.status][1]}</button>`
+    :'').join('');
+}
+// 右栏详情：任务字段 + 事实流水 + 与列表一致的动作（动作后由 view(current) 统一刷新）
+function renderDetail(el,t,facts){
+  const isDone=t.status==='完成';
+  const asg=(t.assignments||[]).map(a=>
+    `<div class="meta"><span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span></div>`).join('');
+  const lines=(facts||[]).slice(-8).reverse().map(f=>
+    `<div class="meta">${esc(factLabel(f.kind))} · ${String(f.occurred_at).slice(0,16)}</div>`).join('');
+  el.innerHTML=`<div class="panel-title">任务详情</div>
+    <div class="title">${esc(t.title)}</div>
+    <div class="meta">状态 ${esc(t.status)} · 截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
+    <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'}</div>
+    <div class="meta">更新于 ${String(t.updated_at).slice(0,16)}</div>
+    ${asg}
+    <div class="row" style="margin-top:10px">
+      <button class="${isDone?'ghost':''}" data-action="${isDone?'task-undo-done':'task-done'}" data-id="${t.id}" data-done="${isDone}">${isDone?'撤销完成':'完成'}</button>
+      ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
+      <button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>
+      <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
+      ${teamButtonsHTML(t.assignments||[])}
+      <button class="ghost" data-action="task-delete" data-id="${t.id}">删除</button>
+      <button class="ghost" data-action="task-close">收起</button></div>
+    <div class="section-title">记录（最近 ${Math.min((facts||[]).length,8)} 条）</div>
+    ${lines||'<div class="sub">还没有记录。</div>'}`;
+}
+function paintRail(mySeq){
+  const rail=document.getElementById('focusRail'),box=document.getElementById('detailRail');
+  if(!rail||!box)return;
+  api('/api/focus/active')
+    .then(a=>{if(mySeq===renderSeq)renderActive(rail,a)})
+    .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
+  if(!detailTaskId){box.innerHTML='';return}
+  Promise.all([api(`/api/tasks/${detailTaskId}`),api(`/api/tasks/${detailTaskId}/facts`)])
+    .then(([t,facts])=>{if(mySeq===renderSeq)renderDetail(box,t,facts)})
+    .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
+}
+async function showDetail(id){
+  detailTaskId=id;
+  await render(current);        // 走同一条渲染路径：顺带保证「后点优先」的竞态防护一致
+}
+// 事实 kind → 人话（与 showFacts 的映射保持一致）
+function factLabel(kind){
+  return kind==='task.completed'?'完成':kind==='task.uncompleted'?'撤销完成':kind==='task.deleted'?'删除'
+    :kind==='task.restored'?'恢复':kind==='task.repeat.generated'?'生成下一次':kind==='task.assigned'?'分配'
+    :kind==='task.assignment.status'?'进展':kind;
+}
+
 function taskCard(t,isOverdue){
   const isDone=t.status==='完成';
   const asg=(t.assignments||[]);
@@ -220,6 +318,7 @@ function taskCard(t,isOverdue){
       ${isDone?`<button class="ghost" data-action="task-undo-done" data-id="${t.id}">撤销完成</button>`
               :`<button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>`}
       <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
+      <button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button>
       <button class="ghost" data-action="task-facts" data-id="${t.id}">记录</button>
       <button class="ghost" data-action="task-delete" data-id="${t.id}">删除</button>
     </div></div>`;
@@ -554,24 +653,16 @@ async function renderToday(m){
   ${debt}`;
 }
 
-// ---- 专注：计时态可见、结束即联动（OP-3 / OP-4）----
+// ---- 专注：计时器常驻右栏（R3），本页只负责开始与「今日/本周」读数（OP-3 / OP-4）----
 let focusTimer=null;
 function fmt(sec){const s=Math.max(0,Math.floor(sec));const h=Math.floor(s/3600),mm=String(Math.floor(s%3600/60)).padStart(2,'0'),ss=String(s%60).padStart(2,'0');return h?`${h}:${mm}:${ss}`:`${mm}:${ss}`}
 async function renderFocus(m){
   const [today,active,cfg]=await Promise.all([api('/api/focus/today'),api('/api/focus/active'),api('/api/config')]);
-  clearInterval(focusTimer);focusTimer=null;
-  if(active){
-    const started=new Date(String(active.started_at).replace(' ','T')).getTime();
-    m.innerHTML=`<div class="card"><div>
-      <div class="timer" id="clock">--:--</div>
-      <div class="meta">${active.kind==='tomato'?'番茄钟':'普通计时'} · 进行中${active.task_id?' · 已绑定任务':''}</div>
-      <div class="sub" id="focusTask"></div></div></div>
-    <div class="new"><button data-action="focus-finish" data-status="finished">结束（计入投入）</button>
-      <button class="ghost" data-action="focus-finish" data-status="interrupted">记中断</button>
-      <button class="ghost" data-action="focus-finish" data-status="abandoned">放弃（不入账）</button></div>`;
-    const tick=()=>{const e=document.getElementById('clock');if(e)e.textContent=fmt((Date.now()-started)/1000)};
-    tick();focusTimer=setInterval(tick,1000);
-    if(active.task_id){api(`/api/tasks/${active.task_id}`).then(t=>{const e=document.getElementById('focusTask');if(e)e.textContent=`归属任务：${t.title}`}).catch(()=>{})}
+  if(active){   // 计时态在右栏；这里只说明「去哪里结束」，避免两处计时器对不上
+    m.innerHTML=`<div class="card" style="display:block">
+      <div class="title">专注进行中</div>
+      <div class="meta">计时与「结束 / 记中断 / 放弃」都在右侧常驻面板里，切到任何页面都不会停。</div>
+      <div class="sub">今日已计入 ${today.focus_minutes} 分钟（只算正常结束的）。</div></div>`;
     return;
   }
   const tasks=await api('/api/mydays');

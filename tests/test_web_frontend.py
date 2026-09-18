@@ -140,6 +140,62 @@ def test_gpa_scale_is_switchable_in_page() -> None:
     assert "weighted_average" in html and "加权平均成绩" in html
 
 
+def test_three_column_shell_exists() -> None:
+    """R3 护栏（SR-NF4）：三栏骨架必须留在这里 —— 左导航 / 中列表 / 右详情 + 计时器常驻。
+
+    实现要点：布局靠 CSS 网格（宽屏三栏、窄屏折回单列），
+    计时器渲染在右栏 `#focusRail`（任何视图都在），详情在 `#detailRail`（点了「详情」才出现）。
+    这条护栏防的是「重构把右栏或计时器常驻悄悄弄丢」——那会退化成单列 + 详情靠弹窗。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    css = WEB_CSS.read_text(encoding="utf-8")
+
+    # ① 壳里的三个区域（外加窄屏底部 Tab 仍在）
+    for needle in ('class="shell"', 'class="rail"', 'id="main"', 'class="sidebar"',
+                   'id="focusRail"', 'id="detailRail"', 'class="bottom-nav"'):
+        assert needle in html, f"三栏骨架缺少 {needle}"
+
+    # ② 右栏计时器常驻：`render` 每次都刷右栏，且计时器只在这里走
+    assert "function paintRail(mySeq)" in html
+    assert "paintRail(mySeq)" in html.split("async function render(")[1][:600], (
+        "render 必须每次都刷右栏（否则切视图后计时器消失）"
+    )
+    assert "function renderActive(el,active)" in html
+    assert 'id="clock"' in html.split("function renderActive")[1][:900]
+    assert "focusTimer=setInterval(tick,1000)" in html
+
+    # ③ 详情面板 + 渐进聚焦：默认空、点「详情」才填、切视图清空
+    assert "let detailTaskId=null" in html
+    assert '"task-detail"' in html and 'data-action="task-detail"' in html
+    assert "if(!detailTaskId){box.innerHTML='';return}" in html
+    assert "detailTaskId=null" in html.split("function view(")[1][:300], (
+        "切视图应清掉右栏详情（渐进聚焦：不把上一个视图的详情留在屏上）"
+    )
+
+    # ④ CSS 侧：宽屏才三栏，窄屏折回单列（不能只剩单列）
+    assert "@media (min-width: 1024px)" in css
+    assert "grid-template-columns: 200px minmax(0, 1fr) 340px" in css
+    assert "@media (max-width: 1023px)" in css
+
+
+def test_focus_timer_has_single_owner() -> None:
+    """R3 护栏：计时器只有右栏一个「主人」（两处计时器会互相打脸）。
+
+    专注页在计时态下只说明「去哪里结束」，不再自己渲染 `#clock`。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert html.count('id="clock"') == 1, "页面上只允许有一个计时器读数"
+    focus_view = html.split("async function renderFocus(")[1].split("async function startFocus(")[0]
+    assert 'id="clock"' not in focus_view, "专注页不应再自渲染计时器（统一交给右栏）"
+
+
+def test_three_column_shell_exists_in_served_page(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """三栏骨架要真的出现在服务端返回的页面里（不只是源文件里写着）。"""
+    html = _html(tmp_path)
+    for needle in ('id="focusRail"', 'id="detailRail"', 'class="rail"', 'class="sidebar"'):
+        assert needle in html, f"页面缺少 {needle}"
+
+
 def test_index_exposes_core_entries(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """关键入口必须在页面上存在（回归：改前端别把主链按钮弄丢）。"""
     html = _html(tmp_path)
