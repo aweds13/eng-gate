@@ -8,7 +8,7 @@
 | SR-F1.1~F1.9 | `src/timeflow/core/tasks/`（`manager.py`/`groups.py`） | My Day/逾期栏/状态机/分组/Repeat/子任务/软删除 |
 | SR-F2.1~F2.7 | `src/timeflow/core/ledger/`（`ledger.py`） | 两轴记账/债务(逾期天数/程度)/顶部摘要 + **周结算(OP-15)**（只读 facts） |
 | SR-F2.7 可视化 | `src/timeflow/core/insights.py` + `src/web/index.html` | 逐日曲线 + 按任务分组分布 + **可切换维度的时间热力图**（专注/手动/复习/产出/债务）+ 周走势柱状（SR-F2.7 已覆盖） |
-| SR-NF3 可视化分工 | `src/timeflow/core/insights.py`（数据）+ `src/web/index.html`（图形） | 后端出数据、前端出图；习惯日历热力图与债务时间热力图均实现 |
+| SR-NF3 可视化分工 | `src/timeflow/core/insights.py`（数据）+ `src/web/index.html`（图形） | 后端出数据、前端出图；**六类形态已全覆盖**：债务/储蓄曲线+时间热力图、习惯日历热力图、计划-执行柱状、复习卡片+进度条+到期列表、今日完成度进度环、GPA 卡片+多维雷达 |
 | SR-F2.8 | `src/timeflow/core/ledger/` | 重规划/债务重组（二版） |
 | SR-F3.1~F3.4 | `src/timeflow/core/focus/`（`timer.py`/`guard.py`/`subscribers.py`） | 计时/中断三选/白名单/勿扰/多设备同步/事实联动 |
 | SR-F4.1~F4.3 | `src/timeflow/core/feedback/` | 每日反馈/习惯打卡与 streak/自检（读 facts） |

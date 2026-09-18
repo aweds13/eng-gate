@@ -411,6 +411,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
         g, credits = ac.gpa(conn, gpa_scale)
         return {"gpa": g, "credits": credits, "scale": gpa_scale}
 
+    @app.get("/api/grades")
+    def list_grades() -> list[dict[str, object]]:
+        """成绩明细（SR-F5.1 / N32 的学业可视化数据源：卡片 + 多维呈现）。"""
+        return ac.all_grade_rows(conn)
+
     # ---- SR-F6 复习间隔重复 ----
     @app.post("/api/review/items")
     def create_review(payload: dict[str, Any]) -> dict[str, str]:

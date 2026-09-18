@@ -49,4 +49,6 @@
 ## 7. 测试映射
 
 - 现有：`../../tests/test_academic_review.py`。
-- 待补（B4）：课程→考核→成绩→GPA 全链路；合流任务。
+- 第 9 步（可视化）：`GET /api/grades`（成绩明细，`academic.all_grade_rows`）+ 学业页「多维概览」
+  （GPA 4.0/5.0、平均分、学分、课程覆盖的多维雷达 + 条形）；前端图形由 `src/web/index.html` 渲染。
+- 待补（B4）：课程→考核→成绩→GPA 全链路；合流任务；考核项提醒。

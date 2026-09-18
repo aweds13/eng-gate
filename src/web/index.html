@@ -248,6 +248,75 @@ function heatmap(logs){
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block">${cells}</svg>
     <div class="sub" style="margin-top:6px">近一年打卡（列=周，行=周一→周日）</div>`;
 }
+// ---- SR-NF3 其余形态：进度环 / 复习进度条 / GPA 多维 ----
+// 今日完成度进度环：已完成 ÷（已完成 + 仍在待办）
+function ring(done,pending){
+  const total=done+pending;
+  const ratio=total?done/total:0;
+  const r=30,c=2*Math.PI*r,on=c*ratio;
+  const label=total?`${done}/${total}`:'—';
+  return `<svg viewBox="0 0 80 80" style="width:80px;height:80px;flex:none">
+    <circle cx="40" cy="40" r="${r}" fill="none" stroke="#eef2f7" stroke-width="9"/>
+    <circle cx="40" cy="40" r="${r}" fill="none" stroke="var(--accent)" stroke-width="9"
+      stroke-linecap="round" stroke-dasharray="${on.toFixed(1)} ${(c-on).toFixed(1)}"
+      transform="rotate(-90 40 40)"/>
+    <text x="40" y="44" text-anchor="middle" font-size="15" font-weight="700" fill="#1e293b">${label}</text>
+  </svg>`;
+}
+function todayCard(done,pending){
+  const note=pending?`还有 ${pending} 项在手`:'今天的清单是空的';
+  return `<div class="card"><div style="display:flex;align-items:center;gap:14px">
+    ${ring(done,pending)}
+    <div><div class="title">今日完成度</div><div class="meta">已完成 ${done} 项 · ${note}</div>
+    <div class="sub">只统计今天的清单与今天完成的，不翻旧账。</div></div></div></div>`;
+}
+// 复习进度条：今天该复习的里面，已完成多少张
+function progressBar(done,total,label){
+  const ratio=total?done/total:0;
+  return `<div style="margin-top:8px">
+    <div class="sub" style="display:flex;justify-content:space-between"><span>${esc(label)}</span><span>${done}/${total}</span></div>
+    <div style="height:8px;background:#f1f5f9;border-radius:6px;overflow:hidden;margin-top:4px">
+      <div style="width:${(ratio*100).toFixed(1)}%;height:100%;background:var(--accent)"></div></div></div>`;
+}
+// 学业多维（雷达）：把不同量纲各自归一到本图最大值，只用于看"是否均衡"，不跨人比较
+function radar(axes){
+  const n=axes.length;if(!n)return '';
+  const cx=110,cy=100,R=72;
+  const pt=(i,ratio)=>{const a=-Math.PI/2+i*2*Math.PI/n;return [cx+Math.cos(a)*R*ratio,cy+Math.sin(a)*R*ratio]};
+  const rings=[0.33,0.66,1].map(k=>{
+    const p=Array.from({length:n},(_,i)=>pt(i,k).map(v=>v.toFixed(1)).join(',')).join(' ');
+    return `<polygon points="${p}" fill="none" stroke="#eef2f7" stroke-width="1"/>`;
+  }).join('');
+  const spokes=Array.from({length:n},(_,i)=>{
+    const [x,y]=pt(i,1);return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#eef2f7" stroke-width="1"/>`;
+  }).join('');
+  const poly=axes.map((a,i)=>pt(i,Math.min(1,a.ratio)).map(v=>v.toFixed(1)).join(',')).join(' ');
+  const dots=axes.map((a,i)=>{const [x,y]=pt(i,Math.min(1,a.ratio));return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="var(--accent)"/>`}).join('');
+  const labels=axes.map((a,i)=>{const [x,y]=pt(i,1.22);return `<text x="${x.toFixed(1)}" y="${(y+3).toFixed(1)}" text-anchor="middle" font-size="10" fill="#64748b">${esc(a.label)}</text>`}).join('');
+  return `<svg viewBox="0 0 220 200" style="width:100%;max-width:260px;height:auto">
+    ${rings}${spokes}<polygon points="${poly}" fill="var(--accent)" opacity="0.18" stroke="var(--accent)" stroke-width="2"/>${dots}${labels}</svg>`;
+}
+function gpaRadar(g4,g5,courses,grades){
+  const credits=(g4.credits||0);
+  const scores=grades.map(x=>Number(x.score)||0).filter(x=>x>0);
+  const avg=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:0;
+  const gradedCourses=new Set(grades.map(x=>x.course_id).filter(Boolean)).size;
+  const axes=[
+    {label:'GPA(4.0制)',value:g4.gpa,ratio:(g4.gpa||0)/4},
+    {label:'GPA(5.0制)',value:g5.gpa,ratio:(g5.gpa||0)/5},
+    {label:'平均分',value:Math.round(avg*10)/10,ratio:avg/100},
+    {label:'学分',value:credits,ratio:Math.min(1,credits/(credits||1))},
+    {label:'课程覆盖',value:`${gradedCourses}/${courses}`,ratio:courses?gradedCourses/courses:0},
+  ];
+  return `<div class="card" style="display:block">
+    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <div>${radar(axes)}</div>
+      <div style="flex:1;min-width:150px">
+        ${barList(axes.map(a=>({label:a.label,value:a.ratio,display:String(a.value)})))}
+      </div></div>
+    <div class="sub">各轴各自归一到本图最大值，只看「是否均衡」，不用于跨人比较；成绩录得越多，覆盖越满。</div></div>`;
+}
+
 function renderStats(m){
   return api('/api/insights/daily?days=30').then(daily=>{
     const days=daily.length;
@@ -357,9 +426,13 @@ function weekCard(w){
   return parts.join(' · ');
 }
 async function renderToday(m){
-  const [mydays,overdue,summary,due,deleted]=await Promise.all([
-    api('/api/mydays'),api('/api/overdue'),api('/api/summary'),api('/api/review/due'),api('/api/tasks/deleted')]);
+  const [mydays,overdue,summary,due,deleted,all]=await Promise.all([
+    api('/api/mydays'),api('/api/overdue'),api('/api/summary'),api('/api/review/due'),
+    api('/api/tasks/deleted'),api('/api/tasks')]);
   el('summary',summaryLine(summary));
+  // 今日完成度：已完成 + 仍在手（取消/归档/已删不算）——只统计"今天的清单与今天完成的"
+  const doneTasks=all.filter(t=>t.status==='完成').length;
+  const pendingTasks=all.filter(t=>t.status!=='完成').length;
   const debt=summary.debt_count?`<div class="sub">逾期共 ${summary.debt_count} 项（轻≤3天 / 中≤7天 / 重>7天）：${(summary.debt_items||[]).map(d=>`${esc(d.title)}(${d.degree}·${d.overdue_days}天)`).join('、')}</div>`:'';
   const trash=deleted.length?`<div class="section-title">回收站（软删除，可恢复）</div>
     ${deleted.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div><div class="meta">已删</div></div>
@@ -369,6 +442,7 @@ async function renderToday(m){
     <input id="newDue" type="date" title="截止日（可选）">
     <label class="sub" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="newMyDay" checked>加入今天</label>
     <button onclick="addTask()">添加</button></div>
+  ${todayCard(doneTasks,pendingTasks)}
   <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||'<div class="empty">没有逾期，很好</div>'}</div>
   <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||'<div class="empty">今天还没有任务，挑一件加进来吧</div>'}
   ${due.length?`<div class="section-title">今天该复习（${due.length}）</div>${due.map(r=>reviewCard(r)).join('')}`:''}
@@ -454,15 +528,20 @@ async function saveFeedback(){await api('/api/feedback',{method:'POST',body:JSON
   toast('反馈已保存（专注分钟由事实层自动计）');view(current)}
 
 async function renderAcademic(m){
-  const gpa=await api('/api/gpa');const gpa5=await api('/api/gpa?scale=5.0');
-  const courses=await api('/api/courses');
+  const [gpa,gpa5,courses,grades]=await Promise.all([
+    api('/api/gpa'),api('/api/gpa?scale=5.0'),api('/api/courses'),api('/api/grades')]);
   m.innerHTML=`<div class="grid">
    <div class="card"><div class="big">${gpa.gpa}</div><div class="meta">GPA（4.0制，${gpa.credits}学分）</div></div>
    <div class="card"><div class="big">${gpa5.gpa}</div><div class="meta">GPA（5.0制）</div></div></div>
+  <div class="section-title">学业概览（多维）</div>
+  ${gpaRadar(gpa,gpa5,courses.length,grades)}
   <div class="new"><input id="cName" placeholder="新建课程，如：高数"><button onclick="addCourse()">新建课程</button></div>
   ${courses.map(c=>`<div class="card"><div class="title">${esc(c.name)}</div><div class="meta">${c.credits}学分 ${c.teacher||''}</div></div>`).join('')||'<div class="empty">暂无课程</div>'}
   <div class="section-title">录入成绩</div>
-  <div class="new"><input id="gScore" type="number" placeholder="成绩" style="width:80px"><input id="gCredits" type="number" placeholder="学分" value="2" style="width:80px"><button onclick="addGrade()">录入</button></div>`;
+  <div class="new"><input id="gScore" type="number" placeholder="成绩" style="width:80px"><input id="gCredits" type="number" placeholder="学分" value="2" style="width:80px"><button onclick="addGrade()">录入</button></div>
+  ${grades.length?`<div class="section-title">成绩明细（${grades.length} 条）</div>
+    ${grades.slice().reverse().map(g=>`<div class="card"><div style="flex:1"><div class="title">${g.score} 分</div>
+      <div class="meta">${g.credits} 学分 ${g.term?`· ${esc(g.term)}`:''} ${g.course_id?'· 已关联课程':''}</div></div></div>`).join('')}`:''}`;
 }
 async function addCourse(){const name=document.getElementById('cName').value.trim();if(!name)return;
   await api('/api/courses',{method:'POST',body:JSON.stringify({name})});view(current)}
@@ -483,7 +562,12 @@ async function undoReview(id){
 }
 async function renderReview(m){
   const [due,summary]=await Promise.all([api('/api/review/due'),api('/api/summary')]);
-  m.innerHTML=`<div class="card"><div class="meta">今日已复习 ${summary.review_count} 张 · 复习完成计投入（维持），不折算时间</div></div>
+  const doneToday=summary.review_count||0;
+  const total=due.length+doneToday;  // 今天该复习的 = 还没做的 + 今天已做的
+  m.innerHTML=`<div class="card" style="display:block">
+    <div class="meta">复习完成计投入（维持），不折算时间</div>
+    ${progressBar(doneToday,total,'今日复习进度')}
+    <div class="sub" style="margin-top:6px">${total?`还剩 ${due.length} 张；点了「记得/模糊/忘了」就会计入进度。`:'今天没有到期的复习卡。'}</div></div>
   <div class="new"><input id="rvTitle" placeholder="新建复习卡内容"><button onclick="addReview()">新建</button></div>
   <div class="section-title">到期复习（${due.length}）</div>
   ${due.map(r=>reviewCard(r)).join('')||'<div class="empty">没有到期复习，轻松一下</div>'}`;
