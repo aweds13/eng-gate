@@ -34,7 +34,7 @@ def test_facts_table_exists(conn: sqlite3.Connection) -> None:
 
 
 def test_migration_idempotent(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """重复连接同一库不应报错，且版本保持 3。"""
+    """重复连接同一库不应报错，且版本保持最新。"""
     p = str(tmp_path / "t2.db")
     c1 = db_mod.connect(p)
     c1.close()
@@ -45,7 +45,7 @@ def test_migration_idempotent(tmp_path) -> None:  # type: ignore[no-untyped-def]
 
 
 def test_upgrade_from_v2_preserves_data(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """模拟 v2 旧库：应能升级到 v3，且旧数据不丢。"""
+    """模拟 v2 旧库：应能升级到最新版，且旧数据不丢。"""
     p = str(tmp_path / "old.db")
     raw = sqlite3.connect(p)
     raw.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
@@ -58,10 +58,14 @@ def test_upgrade_from_v2_preserves_data(tmp_path) -> None:  # type: ignore[no-un
         "INSERT INTO tasks (id,title,status,created_at,updated_at,version)"
         " VALUES ('old1','旧任务','未开始','2026-01-01','2026-01-01',1)"
     )
+    raw.execute(
+        "INSERT INTO tasks (id,title,status,created_at,updated_at,version)"
+        " VALUES ('old2','旧已完成','完成','2026-01-02','2026-01-02',1)"
+    )
     raw.commit()
     raw.close()
 
-    c = db_mod.connect(p)  # 触发 v2 → v3 → v4 升级
+    c = db_mod.connect(p)  # 触发 v2 → v3 → v4 → v5 升级
     ver = c.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
     assert int(ver["version"]) == db_mod.SCHEMA_VERSION
     old = c.execute("SELECT title FROM tasks WHERE id='old1'").fetchone()
@@ -72,6 +76,8 @@ def test_upgrade_from_v2_preserves_data(tmp_path) -> None:  # type: ignore[no-un
         ).fetchone()
         is not None
     )
+    # 真实旧库可能缺 due_date 等列：回填必须不因缺列而失败
+    assert facts_mod.count(c, kind="task.completed") == 1
     c.close()
 
 
@@ -114,6 +120,64 @@ def test_upgrade_from_v3_backfills_focus_facts(tmp_path) -> None:  # type: ignor
     c3 = db_mod.connect(p)  # 重复连接不应重复插入
     assert facts_mod.count(c3, kind="focus.") == 2
     c3.close()
+
+
+def test_upgrade_from_v4_backfills_completed_tasks(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """v4 旧库的已完成任务应在升级 v5 时补成 `task.completed` 事实（第 3 步）。"""
+    p = str(tmp_path / "v5.db")
+    c = db_mod.connect(p)
+    done_at = "2026-09-17T21:30:00"
+    c.execute(
+        "INSERT INTO tasks (id, title, due_date, is_myday, status, created_at, updated_at, "
+        "version) VALUES (?,?,?,?,?,?,?,1)",
+        ("t_done", "旧已完成", "2026-09-17", 1, "完成", "2026-09-15T08:00:00", done_at),
+    )
+    c.execute(
+        "INSERT INTO tasks (id, title, status, created_at, updated_at, version) "
+        "VALUES (?,?,?,?,?,1)",
+        ("t_todo", "旧未完成", "未开始", "2026-09-15T08:00:00", "2026-09-15T08:00:00"),
+    )
+    c.execute("UPDATE schema_version SET version = 4")
+    c.commit()
+    c.close()
+
+    c2 = db_mod.connect(p)  # 触发 v4 → v5 回填
+    rows = facts_mod.query(c2, kind="task.completed")
+    assert len(rows) == 1
+    fact = rows[0]
+    assert fact["subject_type"] == "task"
+    assert fact["subject_id"] == "t_done"
+    assert fact["value_num"] is None  # 完成不估时
+    assert fact["value_text"] == "旧已完成"
+    assert fact["extra"]["migrated"] is True
+    assert fact["occurred_at"] == done_at  # 归属完成时刻
+    assert facts_mod.count(c2, kind="task.") == 1  # 未完成的任务不回填
+    c2.close()
+
+    c3 = db_mod.connect(p)  # 重复连接不应重复插入
+    assert facts_mod.count(c3, kind="task.completed") == 1
+    c3.close()
+
+
+def test_upgrade_v5_backfill_does_not_touch_invest(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """回填的完成任务不得进入投入时长（投入只认专注事实）。"""
+    from timeflow.core.ledger import ledger
+
+    p = str(tmp_path / "v5b.db")
+    c = db_mod.connect(p)
+    c.execute(
+        "INSERT INTO tasks (id, title, status, created_at, updated_at, version) "
+        "VALUES (?,?,?,?,?,1)",
+        ("t_old", "旧完成任务", "完成", "2026-09-01T08:00:00", "2026-09-01T08:00:00"),
+    )
+    c.execute("UPDATE schema_version SET version = 4")
+    c.commit()
+    c.close()
+
+    c2 = db_mod.connect(p)
+    assert facts_mod.count(c2, kind="task.completed") == 1
+    assert ledger.summary(c2).invest_hours == 0.0
+    c2.close()
 
 
 # ---- store 读写 ----

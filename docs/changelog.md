@@ -2,7 +2,7 @@
 
 > 按时间倒序记录每次有意义的功能/变更。遵循 Conventional Commits 类型。
 
-## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 步）
+## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
 ### 文档
 - **约定层**：新增 `specification/conventions.md`（横切基线，实现任何 SR 前必读）。
@@ -29,6 +29,23 @@
 - `ledger.summary()` 的投入项从 facts 读 `focus.finished`，按 `occurred_at`（完成日）归属当日；对外 API 不变。
 - 新增 `tests/test_ledger_summary.py`：事实计入 / 放弃不计入 / 完成日边界 / API 集成。
 - 质量门：pytest 68 passed / ruff 0 / mypy 0（32 文件）/ 五层对齐 PASS / 护栏自测 PASS。
+
+### 重构 · 第 2 步：各业务线发事实（事实层成为唯一出口）
+- **专注线**：`focus.finished` 订阅器（幂等接线）→ 当日反馈 `focus_minutes` 按事实重算落库；
+  `today_focus_minutes`/`self_check`/`sessions_by_task` 改读 facts。
+- **任务线**：完成发 `task.completed`、撤销发 `task.uncompleted`（成对事实，不删历史）；
+  `POST /api/tasks/{id}/uncomplete`、`GET /api/tasks/{id}/facts`。
+- **复习线**：复习完成发 `review.completed`（当日同卡去重）；`ledger.summary` 新增 `review_count`；
+  `GET /api/mydays?include_reviews=1`、`GET /api/review/{id}/facts`。
+- **口径定案**：`ledger_entries`（旧路径/手动投入产出）与 facts（新路径/唯一真源）不合并聚合、不重复计账。
+- **可执行验收**：MVP 主链靶子转真实通过（验收 2 passed）；新增 LF-1 真机脚本 `tools/lf1_live_check.py`。
+- 质量门：pytest 109 passed + 2 deselected / 验收 2 passed / 覆盖率 85.47% / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
+
+### 重构 · 第 3 步：旧数据迁移（schema v5）
+- 历史**已完成任务**幂等回填 `task.completed` 事实：`value_num=NULL`（不估时）、归属 `updated_at`、
+  `extra.migrated=True`；缺列旧库（v1 tasks 无 due_date）不失败。
+- 历史复习记录**不回填**（无逐次时间戳，不伪造时间，记缺口 A-015）。
+- 质量门：pytest 111 passed + 2 deselected / 验收 2 passed / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
 
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 

@@ -67,4 +67,6 @@
 
 - 现有：`../../tests/test_tasks.py`、`../../tests/test_groups.py`、`../../tests/test_api.py`。
 - 第 2 步（任务线发事实）：`../../tests/test_task_line.py` —— 完成发 `task.completed`、撤销发 `task.uncompleted`、幂等与 API 全链路。
+- 第 3 步（旧数据迁移）：`../../tests/test_facts.py` 中的 v5 用例 —— 历史已完成任务回填 `task.completed`、
+  幂等可重入、缺列旧库不失败、回填不进入投入口径。
 - 待补（B4）：创建→加入 My Day→完成→撤销的 API 全链路验收（已由 `test_task_line.py` 覆盖完成/撤销段）。

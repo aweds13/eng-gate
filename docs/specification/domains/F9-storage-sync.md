@@ -14,6 +14,10 @@
 
 - schema 版本只增不减；connect 时逐版本升级到目标版本；每版增量、幂等。
 - 同一数据跨端同步：时间戳 + version → LWW；同 id 去重 + 来源标记；冲突写日志。
+- **版本履历**：v3 事实层（facts）；v4 历史 `focus_sessions` 回填 `focus.*` 事实；
+  v5（第 3 步）历史**已完成任务**回填 `task.completed` 事实（`extra.migrated=True`，
+  归属时间取 `updated_at`，缺列/缺值退回 `created_at`；只回填「完成」，不做反向猜测）。
+  历史复习记录**不回填**（无逐次时间戳，见 A-015）。
 
 ## 3. 规则
 
@@ -49,5 +53,6 @@
 
 ## 7. 测试映射
 
-- 现有：`../../tests/test_sync.py`、`../../tests/test_facts.py`。
-- 待补（B4）：真实旧库迁移、并发写、冲突提示、备份回滚。
+- 现有：`../../tests/test_sync.py`、`../../tests/test_facts.py`（含 v4/v5 迁移与幂等：旧库升级后事实条数正确、
+  缺列旧库不失败、回填不进入投入口径）。
+- 待补（B4）：并发写、冲突提示、备份回滚。

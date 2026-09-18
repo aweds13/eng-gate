@@ -14,7 +14,8 @@
 | SR-F6 复习 | `../specification/domains/F6-review.md` | OP-27/28 | AC-20（历史） | `../../tests/test_academic_review.py`、`../../tests/test_review_line.py` | ✅ 规格/契约 |
 | SR-F7 团队 / AI | `../specification/domains/F7-team.md` | 待 B3 定义 | AC-21（历史） | `../../tests/test_team_memo.py` | ✅ 规格/契约 |
 | SR-F8 备忘录 | `../specification/domains/F8-memo.md` | 待 B3 定义 | AC-22（历史） | `../../tests/test_team_memo.py` | ✅ 规格/契约 |
-| SR-F9 存储 / 同步 | `../specification/domains/F9-storage-sync.md` | 待 B3 定义 | AC-23（历史） | `../../tests/test_sync.py`、`../../tests/test_facts.py` | ✅ 规格/契约 |
+| SR-F9 存储 / 同步 | `../specification/domains/F9-storage-sync.md` | OP-39–43 | AC-23（历史） | `../../tests/test_sync.py`、`../../tests/test_facts.py`（含 v4/v5 迁移） | ✅ 规格/契约 |
 | SR-F10 学校通知 | `../specification/domains/F10-notify.md` | 后置 | 后置 | ⬜ 待补 | 后置 |
 
-> 契约文件在 `../contracts/domains/`；可执行验收见 `../../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）；覆盖率门 70%（当前 82.54%）。
+> 契约文件在 `../contracts/domains/`；可执行验收见 `../../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）；
+> 覆盖率门 70%（第 3 步后实测 85.45%）；真实运行验证见 `../../tools/lf1_live_check.py`。

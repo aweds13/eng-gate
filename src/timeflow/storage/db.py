@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -45,6 +45,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v3(conn)  # 事实层（facts）——事实与解读分离的地基
     if current < 4:
         _migrate_v4(conn)  # 历史 focus_sessions 回填为 facts（第 1 步前兼容旧数据）
+    if current < 5:
+        _migrate_v5(conn)  # 历史已完成任务回填 task.completed 事实（第 3 步）
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
@@ -53,6 +55,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v2(conn)
     _migrate_v3(conn)
     _migrate_v4(conn)  # 新库 focus_sessions 为空，此处为空操作
+    _migrate_v5(conn)  # 新库 tasks 为空，此处为空操作
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -372,5 +375,85 @@ def _migrate_v4(conn: sqlite3.Connection) -> None:
                 datetime.now().isoformat(timespec="seconds"),
                 "migration:v4",
                 row["device_id"],
+            ),
+        )
+
+
+def _migrate_v5(conn: sqlite3.Connection) -> None:
+    """v5：把历史**已完成**任务幂等回填为 `task.completed` 事实（重构第 3 步）。
+
+    背景：第 2 步起「完成」由事实驱动，旧库里已完成的任务没有对应事实；
+    若不回填，旧数据的完成记录在新口径下会「看起来没发生过」。
+    口径（对齐 A-001 / 约定）：
+    - 完成不估时 ⇒ `value_num=NULL`、`value_text=标题`；
+    - 归属时间取 `updated_at`（完成时的最后写入时刻），无则退回 `created_at`；
+    - `extra.migrated=True` 标明来源，便于与人/机新记录区分。
+    幂等：按 `subject_id` 跳过已存在的 `task.completed` 事实。
+
+    复习（`review_items`）**不在本版回填**：该表只有聚合的 reps/lapses，没有逐次复习时间戳，
+    按迁移规则「不伪造时间」记为缺口（见 `复盘/缺口处理与假设台账.md` A-015）。
+    """
+    if (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
+        ).fetchone()
+        is None
+    ):
+        return  # 极端旧库 / 残缺库：无 tasks 表，跳过长任务回填
+    # 真实旧库可能缺列（如 v1 的 tasks 没有 due_date）：只取实际存在的列
+    columns = {str(r["name"]) for r in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    selected = ", ".join(
+        col
+        for col in ("id", "title", "due_date", "updated_at", "created_at")
+        if col in columns
+    )
+    rows = conn.execute(
+        f"SELECT {selected} FROM tasks WHERE status = ?",  # noqa: S608 —— 列名取自白名单
+        ("完成",),
+    ).fetchall()
+    if not rows:
+        return
+    existing: set[str] = set()
+    for fact in conn.execute(
+        "SELECT subject_id FROM facts WHERE kind = 'task.completed'"
+    ).fetchall():
+        if fact["subject_id"]:
+            existing.add(str(fact["subject_id"]))
+    now = datetime.now().isoformat(timespec="seconds")
+    for row in rows:
+        tid = str(row["id"])
+        if tid in existing:
+            continue
+        keys = set(row.keys())
+        title = row["title"] if "title" in keys else tid
+        due_date = row["due_date"] if "due_date" in keys else None
+        occurred_at = (
+            (row["updated_at"] if "updated_at" in keys else None)
+            or (row["created_at"] if "created_at" in keys else None)
+            or now
+        )
+        extra = json.dumps(
+            {"title": title, "due_date": due_date, "migrated": True},
+            ensure_ascii=False,
+        )
+        conn.execute(
+            """
+            INSERT INTO facts
+            (id, kind, subject_type, subject_id, value_num, value_text, extra,
+             occurred_at, recorded_at, source, device_id, revision, supersedes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,1,NULL)
+            """,
+            (
+                uuid.uuid4().hex[:12],
+                "task.completed",
+                "task",
+                tid,
+                None,
+                title,
+                extra,
+                occurred_at,
+                now,
+                "migration:v5",
+                None,
             ),
         )
