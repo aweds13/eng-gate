@@ -7,7 +7,7 @@
 | SR | 详细规格 | 操作 / 动线 | 验收 | 测试 | 状态 |
 |---|---|---|---|---|---|
 | SR-F1 任务管理 | `../specification/domains/F1-tasks.md` | OP-1/2/5/6/8，FLOW-1/2 | LC-1/2/5/6/8，LF-1/2 | `../../tests/test_tasks.py`、`../../tests/test_groups.py`、`../../tests/test_api.py`、`../../tests/test_task_line.py`、`../../tests/test_task_repeat.py`、`../../tests/test_task_delete.py` | ✅ 规格/契约 |
-| SR-F2 B 系统记账 | `../specification/domains/F2-ledger.md` | OP-5/7/13/14 | LC-5/7，LF-1 | `../../tests/test_ledger_summary.py`、`../../tests/test_facts.py`、`../../tests/test_output_axis.py`、`../../tests/test_invest_axis.py` | ✅ 规格/契约 |
+| SR-F2 B 系统记账 | `../specification/domains/F2-ledger.md` | OP-5/7/13/14 | LC-5/7，LF-1 | `../../tests/test_ledger_summary.py`、`../../tests/test_facts.py`、`../../tests/test_output_axis.py`、`../../tests/test_invest_axis.py` | ✅ 规格/契约（周结算 OP-15 未实现） |
 | SR-F3 计时与专注 | `../specification/domains/F3-focus.md` | OP-3/4 | LC-3/4，LF-1/3 | `../../tests/test_focus_feedback.py`、`../../tests/test_facts.py`、`../../tests/test_focus_line.py` | ✅ 规格/契约 |
 | SR-F4 反馈 / 习惯 | `../specification/domains/F4-feedback.md` | OP-4 后续，FLOW-4 | LF-4 | `../../tests/test_focus_feedback.py`、`../../tests/test_focus_line.py` | ✅ 规格/契约 |
 | SR-F5 学业追踪 | `../specification/domains/F5-academic.md` | 待 B2 定义 | AC-18/19（历史） | `../../tests/test_academic_review.py` | ✅ 规格/契约 |
@@ -16,7 +16,8 @@
 | SR-F8 备忘录 | `../specification/domains/F8-memo.md` | OP-37/38 | AC-22（历史） | `../../tests/test_team_memo.py`、`../../tests/test_output_axis.py` | ✅ 规格/契约 |
 | SR-F9 存储 / 同步 | `../specification/domains/F9-storage-sync.md` | OP-39–43 | AC-23（历史） | `../../tests/test_sync.py`、`../../tests/test_facts.py`（含 v4/v5 迁移） | ✅ 规格/契约 |
 | SR-F10 学校通知 | `../specification/domains/F10-notify.md` | 后置 | 后置 | ⬜ 待补 | 后置 |
-| 前端交互层（第 4 步） | `../contracts/interactions.md`（OP-1–OP-7 自查表） | 六要素齐备 | LC-1–LC-8 / LF-1 | `../../tests/test_web_frontend.py`、真机 `../../tools/lf1_live_check.py` | ✅ 已闭环（OP-8 与软删除为残留） |
+| 前端交互层（第 4/5 步） | `../contracts/interactions.md`（OP-1–OP-8 自查表） | 六要素齐备 | LC-1–LC-8 / LF-1–LF-4 | `../../tests/test_web_frontend.py`、真机 `../../tools/lf1_live_check.py` | ✅ 全闭环 |
 
 > 契约文件在 `../contracts/domains/`；可执行验收见 `../../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）；
-> 覆盖率门 70%（第 5 步 OP-6 后实测 87.17%）；真实运行验证见 `../../tools/lf1_live_check.py`。
+> 覆盖率门 70%（当前实测 88.77%）；真实运行验证见 `../../tools/lf1_live_check.py`。
+> 未实现项在各域行内标注（如 SR-F2 的周结算/可视化）；实现文档与代码一致性见 `../../复盘/文档债务清理-实现层对齐.md`。

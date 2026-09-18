@@ -14,21 +14,25 @@
 ---
 
 ## 1. 项目结构（别放错地方）
-- 主代码：`src/`（`app/` 壳 · `api/` · `core/`(tasks·ledger·focus·feedback·academic·review·team·memo·facts) · `storage/` · `getaways/`）
-- 测试：`tests/`（`test_<module>.py`）；前端：`src/web/`；配置：`src/config.py`
+- 主代码：`src/timeflow/`（`app/` 壳 · `api/` · `core/`(tasks·ledger·focus·feedback·academic·review·team·memo·facts) · `storage/` · `getaways/`(预留)）
+- 测试：`tests/`（`test_<module>.py`）+ `tests/acceptance/`（默认排除）；前端：`src/web/`；配置：`src/timeflow/config.py`
+- 工具：`tools/`（真机验证脚本、沙箱垫片）；护栏脚本：`scripts/`
 - 文档：`docs/`（或根 README；DESIGN/LEARN 经用户决定撤回、暂不建）；护栏：`CODING_GUIDELINES.md`、`ACCEPTANCE.md`
 
 ## 2. 环境与检查命令（写完后必须跑）
 ```bash
 ruff format src/ tests/        # 格式化
-ruff check src/ tests/         # lint（⚠️ 新增代码必须零错误）
+ruff check src/ tests/ scripts/ tools/   # lint（⚠️ 新增代码必须零错误）
 mypy src/                      # 类型检查（strict；改接口/配置/类型必跑）
-pytest                         # 测试（提交前必跑，且功能 AC 通过；当前 68 passed + 2 deselected）
-python -m pytest -m acceptance # 可执行验收（当前 1 passed + 1 xfailed）
+pytest                         # 测试（提交前必跑；当前 179 passed + 2 deselected）
+python -m pytest -m acceptance # 可执行验收（当前 2 passed）
+python -X utf8 tools/lf1_live_check.py   # LF-1 真机验证（真 uvicorn + 真 HTTP，应 PASS）
 python -X utf8 scripts/check_layers.py       # 五层对齐（含引用完整性）
 python -X utf8 scripts/test_check_layers.py  # 护栏脚本自测（正/负样例）
-python -m pytest --cov=timeflow --cov-fail-under=70  # 覆盖率门（目标 ≥70%；当前 82.54%）
+python -m pytest --cov=timeflow --cov-fail-under=70  # 覆盖率门（目标 ≥70%；当前 88.80%）
 ```
+> 受限沙箱/Windows 环境：pytest `tmp_path` 可能因目录权限失败 —— 见 `复盘/交接-重构进度.md` §六；本仓库提供垫片
+> `$env:PYTHONPATH="tools/sandbox_shim"`（仅放宽 0o700 mkdir，非项目代码）。
 
 ## 3. 编码风格（Python，Ruff 为准）
 - 4 空格、PEP 8、`line-length = 100`。
@@ -43,9 +47,11 @@ python -m pytest --cov=timeflow --cov-fail-under=70  # 覆盖率门（目标 ≥
 - 真实/外部调用（知识资产/网络）拆成**可 mock** 的单测；真实调用留给集成测试（标 `integration` marker）。
 - 覆盖率目标 ≥70%；提交前 `pytest` 全绿。
 
-## 6. Worktree 开发约定（强制）
-- 新功能/修 bug **先用 `git worktree add` 建独立 worktree + 分支**，在其中改/测/提交；不得在主工作区直接动手。
-- 开始前确认当前工作区未提交改动不丢失；完成后保留清晰分支边界。
+## 6. 分支与开发约定
+- **当前实情（2026-09-18）**：单工作区在 `audit-snapshot` 分支上按「步骤级 checkpoint」推进（见 `复盘/长任务执行协议.md`），
+  不再强制 worktree —— 改动的可回退性由「每步提交 + 测试全绿 + 文档同步」保证。
+- 若需并行开发/试验高风险改动：**可选** `git worktree add` 建独立工作区 + 分支，在其中改/测/提交。
+- 不论哪种方式：开始前确认未提交改动不丢失；完成后保留清晰的分支与提交边界。
 
 ## 7. 提交规范（Conventional Commits）
 ```
@@ -63,8 +69,9 @@ build:/chore:/perf:/ci: ...
 - **不得**提交真实 `config.toml`、Cookie、API Key、本地敏感数据。
 
 ## 9. 文档更新要求（强制）
-- 改接口/模块边界/配置/数据流/依赖 → 同步 `implementation/modules.md`(模块职责) + `changelog.md` + `config.example.toml`；若涉及横切规则 → 同步 `specification/conventions.md`。
+- 改接口/模块边界/配置/数据流/依赖 → 同步 `implementation/modules.md`(模块职责 + 事实 kind 总表) + `changelog.md`；若涉及横切规则 → 同步 `specification/conventions.md`。
 - 新增/修改操作、动线、验收或测试 → 同步 `implementation/coverage.md`；发现规格缺口 → 先登记 `复盘/缺口处理与假设台账.md` 再实现。
+- **发现文档与代码不一致**（如路径/模块名/未实现项被宣称已实现）→ 按 `复盘/长任务执行协议.md` §四 先登记、再对齐；未实现项必须显式标注，不宣称已有落点。
 - 改动必须能通过五层对齐：**intention → specification(+conventions) → contracts → implementation → taste**（见 `scripts/check_layers.py`）。
 
 ## 10. 配置与敏感信息

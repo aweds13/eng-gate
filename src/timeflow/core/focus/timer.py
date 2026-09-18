@@ -81,30 +81,9 @@ def start_session(
         (sid, task_id, kind, now, STATUS_ACTIVE, device_id, now),
     )
     conn.commit()
-    # 开始只发「开始」事实（不计投入）；结束才产生 focus.finished 等投入事实
-    _publish_started(conn, sid, kind, task_id, now)
+    # 开始**不发事实**：投入事实只在结束时产生（focus.finished 等）。
+    # 前端需要「正在计时」状态时读 `GET /api/focus/active`；如未来要做跨线联动再引入 focus.started。
     return sid
-
-
-def _publish_started(
-    conn: sqlite3.Connection,
-    session_id: str,
-    kind: str,
-    task_id: str | None,
-    occurred_at: str,
-) -> None:
-    """广播 `focus.started`（不写 facts 表：开始不是投入事实，只做进程内联动/前端提示）。"""
-    from timeflow.core import facts as facts_mod
-
-    facts_mod.publish(
-        "focus.started",
-        {
-            "session_id": session_id,
-            "task_id": task_id,
-            "kind": kind,
-            "occurred_at": occurred_at,
-        },
-    )
 
 
 def finish_session(

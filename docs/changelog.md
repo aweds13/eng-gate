@@ -106,6 +106,19 @@
 - 新增 `tests/test_invest_axis.py`（12 项）；台账 A-016 记录单位决策。
 - 质量门：pytest 179 passed + 2 deselected / 验收 2 passed / 覆盖率 88.80% / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
 
+### 文档/代码债务收尾（实现层对齐）
+- 修正 `docs/implementation/modules.md`、`docs/implementation/architecture.md`、`docs/implementation/traceability.md`、
+  `docs/implementation/README.md`：**路径从搬家前的 `src/core/...` 改为实际的 `src/timeflow/...`**；
+  删掉对**不存在文件**的宣传（`status.py`/`repeat.py`/`subtask.py`/`debt.py`/`settle.py`/`stats.py`）；
+  架构图「SQLAlchemy」更正为「标准库 sqlite3」；数据流改写为第 2 步后的真实链路（发事实 → 订阅器 → 只读 facts）；
+  新增「事实 kind 总表」（含第 2/3/5 步新增的 `task.deleted/restored/repeat.generated`、`review.undone`、`output.*`、`invest.*`）。
+- 未实现项改为**显式标注**（周结算 OP-15/可视化、习惯热力图、`getaways/` 外部集成），不再宣称已有落点。
+- 更新 `docs/CODING_GUIDELINES.md` §1/§2/§6/§9：项目结构补 `src/timeflow/`、`tools/`；质量门口径更新为当前实测值
+  （179 passed / 验收 2 passed / 覆盖率 88.80%）；worktree 由「强制」改为「可选」（与当前单工作区 checkpoint 流程一致）；
+  新增「发现文档与代码不一致必须先登记再对齐、未实现项必须标注」的硬要求。
+- 清理死代码：`core/focus/timer.py` 的 `_publish_started()`（定义后从未调用；`focus.started` 不作为事实存在）。
+- 登记：`复盘/文档债务清理-实现层对齐.md`（D-01~D-12 逐条发现与处置）。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增
