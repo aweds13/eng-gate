@@ -292,6 +292,21 @@
   而 rev 因"门禁必须提交前跑"时序上也对不上 → 改为时效校验）⑥覆盖率门槛没进配置（GAP-NF-08）
   ⑦台账自身缺必填校验与反向覆盖。全部已修。
 
+### F1 主线 · T-A1 分组管理（契约 OP-11 / SR-F1.3 收口）
+- **后端**：`groups.py` 补 `get_group / rename_group / delete_group / toggle_task_group /
+  tasks_in_group / groups_of_task`；**删除分组只解绑、不删任务**；改名到已存在的分组 = 合并（不留同名组）。
+- **API**：`POST /api/groups`（空名 400、**重名 400**）、`PATCH /api/groups/{id}`（404/400，改名合并幂等）、
+  `DELETE /api/groups/{id}`（返回解绑任务数）、`GET /api/groups/{id}/tasks`（点分组看任务）、
+  `POST /api/tasks/{id}/group`（`{name,on}`，按名字加入/移出，缺组自建）。
+- **前端**：设置页新增「分组管理」区（新建/改名/删除 + 计数）；任务详情面板新增「所属分组」chips，
+  点一下即加入/移出（选中显示 ✓）；分组列表做了缓存避免每个任务卡都请求。
+- **测试**：`tests/test_task_groups_line.py`（11 项：领域层 8 + API 3）。
+- **工具**：新增 `tools/ui_dom_probe.mjs`（**假 DOM 渲染探针**）并加进门禁 —— 在本机跑不了浏览器的情况下，
+  把 9 个视图各真渲染一遍，抓 TypeError／未注册动作／空渲染。定式门禁因此从 9 项升到 10 项。
+- 台账：`SR-F1.12` 与 `OP-11` partial → **done**（缺口 GAP-F1-08 消除）；`DELIVERY.READY` 证据补 2 条路由。
+- 质量门：pytest **295 passed** + 2 deselected / 验收 2 passed / ruff 0 / mypy 0 / 五层 PASS /
+  DOM 探针 9/9 / LF-1 PASS / 前端自检 PASS / 审计通过。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

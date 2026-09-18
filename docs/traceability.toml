@@ -122,9 +122,25 @@ gaps = "无分类字段、无界面（GAP-F1-07）"
 id = "SR-F1.12"
 title = "分组：多分组 + 计数 + 增删改（OP-11）"
 group = "F1"
-status = "partial"
-evidence = ["table:task_groups", "text:src/timeflow/core/tasks/groups.py::def list_groups", "route:GET /api/groups"]
-gaps = "只有 GET，无增删改接口，也无界面（GAP-F1-08）"
+status = "done"
+evidence = [
+  "table:task_groups",
+  "text:src/timeflow/core/tasks/groups.py::def list_groups",
+  "text:src/timeflow/core/tasks/groups.py::def rename_group",
+  "text:src/timeflow/core/tasks/groups.py::def delete_group",
+  "route:GET /api/groups",
+  "route:POST /api/groups",
+  "route:PATCH /api/groups/{group_id}",
+  "route:DELETE /api/groups/{group_id}",
+  "route:GET /api/groups/{group_id}/tasks",
+  "route:POST /api/tasks/{task_id}/group",
+  "ui:data-action=group-add",
+  "ui:data-action=group-rename",
+  "ui:data-action=group-delete",
+  "ui:data-action=task-group",
+  "test:test_task_groups_line.py",
+]
+gaps = ""
 
 [entries."SR-F1.13"]
 id = "SR-F1.13"
@@ -714,9 +730,19 @@ gaps = "有推到明天/取消；「改 ddl」无专用入口（可走编辑，�
 id = "OP-11"
 title = "分组管理（创建/重命名/删除）"
 group = "OP"
-status = "partial"
-evidence = ["table:groups", "route:GET /api/groups"]
-gaps = "**无增删改接口、无界面**（T-A1 待做）"
+status = "done"
+evidence = [
+  "table:groups",
+  "route:GET /api/groups",
+  "route:POST /api/groups",
+  "route:PATCH /api/groups/{group_id}",
+  "route:DELETE /api/groups/{group_id}",
+  "ui:data-action=group-add",
+  "ui:data-action=group-rename",
+  "ui:data-action=group-delete",
+  "test:test_task_groups_line.py",
+]
+gaps = ""
 
 [entries."OP-12"]
 id = "OP-12"
@@ -726,11 +752,28 @@ status = "todo"
 evidence = ["column:tasks.parent_id"]
 gaps = "**界面无入口**（T-A2 待做）"
 
+[entries."T-A1"]
+id = "T-A1"
+title = "F1 主线·段1：分组管理收口（OP-11）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "route:POST /api/groups",
+  "route:PATCH /api/groups/{group_id}",
+  "route:DELETE /api/groups/{group_id}",
+  "route:GET /api/groups/{group_id}/tasks",
+  "route:POST /api/tasks/{task_id}/group",
+  "ui:data-action=group-add",
+  "ui:data-action=task-group",
+  "test:test_task_groups_line.py",
+]
+gaps = ""
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
 group = "DELIVERY"
 status = "partial"
-evidence = ["route:GET /api/tasks", "route:GET /api/memos", "route:POST /api/memos", "route:GET /api/habits", "route:POST /api/feedback", "route:GET /api/insights/daily", "route:GET /api/assessments", "route:POST /api/grades", "route:GET /api/team/assignments", "route:GET /api/ledger/outputs", "route:POST /api/ledger/invest", "route:POST /api/review/items", "route:GET /api/focus/today", "route:GET /api/tasks/{task_id}/facts", "route:GET /api/courses", "route:GET /api/config", "route:GET /api/feedback", "route:GET /api/focus/tasks/{task_id}", "route:DELETE /api/ledger/invest/{entry_id}", "route:DELETE /api/ledger/output/{entry_id}", "route:DELETE /api/memos/{memo_id}", "route:GET /api/grades", "route:GET /api/habits/{habit_id}", "route:GET /api/insights/groups", "route:GET /api/ledger/invests", "route:GET /api/review/{item_id}/facts", "route:GET /api/sync/logs", "route:GET /api/tasks/deleted", "route:GET /api/tasks/{task_id}", "route:POST /api/habits", "route:POST /api/habits/{habit_id}/toggle", "route:POST /api/ledger/output", "route:POST /api/review/{item_id}/review", "route:POST /api/grades"]
-gaps = "后端 58 条路由里，白名单/勿扰配置、分组管理、子任务、AI 边界等仍无界面入口（见各 SR 的 gaps）"
+evidence = ["route:GET /api/tasks", "route:GET /api/memos", "route:POST /api/memos", "route:GET /api/habits", "route:POST /api/feedback", "route:GET /api/insights/daily", "route:GET /api/assessments", "route:POST /api/grades", "route:GET /api/team/assignments", "route:GET /api/ledger/outputs", "route:POST /api/ledger/invest", "route:POST /api/review/items", "route:GET /api/focus/today", "route:GET /api/tasks/{task_id}/facts", "route:GET /api/courses", "route:GET /api/config", "route:GET /api/feedback", "route:GET /api/focus/tasks/{task_id}", "route:DELETE /api/ledger/invest/{entry_id}", "route:DELETE /api/ledger/output/{entry_id}", "route:DELETE /api/memos/{memo_id}", "route:GET /api/grades", "route:GET /api/habits/{habit_id}", "route:GET /api/insights/groups", "route:GET /api/ledger/invests", "route:GET /api/review/{item_id}/facts", "route:GET /api/sync/logs", "route:GET /api/tasks/deleted", "route:GET /api/tasks/{task_id}", "route:POST /api/habits", "route:POST /api/habits/{habit_id}/toggle", "route:POST /api/ledger/output", "route:POST /api/review/{item_id}/review", "route:POST /api/grades", "route:GET /api/groups/{group_id}/tasks", "route:POST /api/tasks/{task_id}/group"]
+gaps = "白名单/勿扰配置（SR-F3.3）、子任务（OP-12）、AI 边界（SR-F7.4）等仍无界面入口；**分组管理已在本轮接通（T-A1）**"
 

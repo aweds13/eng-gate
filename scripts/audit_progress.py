@@ -43,7 +43,12 @@ OK, FAIL, WARN = "[OK ]", "[FAIL]", "[WARN]"
 
 
 def git(*args: str) -> str:
-    r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=False)
+    # core.quotepath=false：否则中文路径会变成八进制转义，凡是"文件名比对"的判断都会失效
+    # （run_gates 的文档同步检查实测踩过这个坑）。
+    r = subprocess.run(
+        ["git", "-c", "core.quotepath=false", *args],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
     return r.stdout.strip()
 
 

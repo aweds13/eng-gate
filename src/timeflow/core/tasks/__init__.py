@@ -2,9 +2,15 @@
 
 from timeflow.core.tasks.groups import (
     create_group,
+    delete_group,
+    get_group,
     get_task_groups,
+    groups_of_task,
     list_groups,
+    rename_group,
     set_task_groups,
+    tasks_in_group,
+    toggle_task_group,
 )
 from timeflow.core.tasks.manager import (
     HIDDEN_STATUSES,
@@ -48,6 +54,12 @@ __all__ = [
     "process_repeats",
     "create_group",
     "list_groups",
+    "get_group",
+    "rename_group",
+    "delete_group",
+    "tasks_in_group",
+    "groups_of_task",
+    "toggle_task_group",
     "set_task_groups",
     "get_task_groups",
     "STATUS_TODO",

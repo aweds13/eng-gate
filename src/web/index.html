@@ -61,6 +61,7 @@ let renderSeq=0;             // 渲染序号：用于「后点的那次说了算
 let abortCtl=null;           // 进行中的请求组：切视图即取消，避免过期渲染互相覆盖
 let themeChoice='light';     // 主题选择（R4 接通暗色）
 let detailTaskId=null;       // R3：右栏正在查看的任务（跨视图保留；切视图时清空）
+let groupCache=[];           // 分组列表缓存（渲染任务详情的"所属分组"用，避免每张卡都请求一次）
 // 合法视图名（render 的白名单：写错的视图名会被立刻发现，而不是静默空屏）
 const VIEWS=['today','tasks','focus','stats','habit','academic','review','memo','setting'];
 
@@ -155,6 +156,11 @@ const ACTIONS = {
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
   'task-close':     () => { detailTaskId=null; render(current); },
+  // 分组（OP-11）
+  'group-add':      () => addGroup(),
+  'group-rename':   el => renameGroup(el.dataset.id, el.dataset.name || ''),
+  'group-delete':   el => deleteGroup(el.dataset.id, el.dataset.name || ''),
+  'task-group':     el => toggleTaskGroup(el.dataset.id, el.dataset.name || '', el.dataset.on === 'true'),
   'task-done':      el => toggleDone(el.dataset.id, el.dataset.done === 'true'),
   'task-undo-done': el => undoDone(el.dataset.id),
   'task-myday':     el => toggleMyDay(el.dataset.id, true),
@@ -295,9 +301,19 @@ function paintRail(mySeq){
     .then(a=>{if(mySeq===renderSeq)renderActive(rail,a)})
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
   if(!detailTaskId){box.innerHTML='';return}
-  Promise.all([api(`/api/tasks/${detailTaskId}`),api(`/api/tasks/${detailTaskId}/facts`)])
-    .then(([t,facts])=>{if(mySeq===renderSeq)renderDetail(box,t,facts)})
+  Promise.all([api(`/api/tasks/${detailTaskId}`),api(`/api/tasks/${detailTaskId}/facts`),
+    api('/api/groups')])                       // 详情要显示"所属分组"的可选项，一并取回来
+    .then(([t,facts,groups])=>{
+      if(mySeq!==renderSeq)return;
+      groupCache=groups||[];
+      renderDetail(box,t,facts);
+    })
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
+}
+// 详情面板用的分组列表：优先用缓存，没缓存过就退回"任务已有的分组"
+function groupsOf(t){
+  if(groupCache.length)return groupCache;
+  return (t.groups||[]).map(name=>({id:'',name,task_count:0}));
 }
 async function showDetail(id){
   detailTaskId=id;
@@ -308,6 +324,55 @@ function factLabel(kind){
   return kind==='task.completed'?'完成':kind==='task.uncompleted'?'撤销完成':kind==='task.deleted'?'删除'
     :kind==='task.restored'?'恢复':kind==='task.repeat.generated'?'生成下一次':kind==='task.assigned'?'分配'
     :kind==='task.assignment.status'?'进展':kind;
+}
+/* ---------- 分组（OP-11）：管理 + 任务归属 ----------
+ * 分组是"组织维度"，只影响分类与查找，不改变任务执行逻辑（contracts/domains/F1-tasks.md OP-11）。
+ * 管理放在设置页（配置类）；任务归属放在详情面板（就地改）。
+ */
+async function renderGroupAdmin(el){
+  const groups=await api('/api/groups');
+  el.innerHTML=`<div class="settings-sub">分组管理</div>
+    <div class="sub">分组用来按项目/领域归类任务（如「高数」「自媒体」）。删除分组**不会删任务**，只解除归类。</div>
+    <div class="new"><input id="groupName" placeholder="新建分组，如：高数" data-enter="group-add">
+      <button data-action="group-add">新建</button></div>
+    ${groups.map(g=>`<div class="row tight" style="margin:6px 0">
+        <span class="badge">${g.task_count} 项</span>
+        <span class="grow" style="flex:1">${esc(g.name)}</span>
+        <button class="ghost" data-action="group-rename" data-id="${g.id}" data-name="${esc(g.name)}">改名</button>
+        <button class="ghost" data-action="group-delete" data-id="${g.id}" data-name="${esc(g.name)}">删除</button>
+      </div>`).join('')||'<div class="empty">还没有分组</div>'}`;
+}
+async function addGroup(){
+  const input=document.getElementById('groupName');
+  const name=(input.value||'').trim();
+  if(!name){toast('分组名不能为空');return}
+  await api('/api/groups',{method:'POST',body:JSON.stringify({name})});
+  toast(`已新建分组「${name}」`);view(current);
+}
+async function renameGroup(id,oldName){
+  const name=await ask('分组改名：',oldName||'');
+  if(name===null)return;
+  if(!name.trim()){toast('分组名不能为空');return}
+  await api(`/api/groups/${id}`,{method:'PATCH',body:JSON.stringify({name:name.trim()})});
+  toast('分组已改名');view(current);
+}
+async function deleteGroup(id,name){
+  if(!confirm(`删除分组「${name}」？任务会保留，只是不再归到这个分组。`))return;
+  const r=await api(`/api/groups/${id}`,{method:'DELETE'});
+  toast(`已删除分组（${r.unbound_tasks} 个任务解除归类）`);view(current);
+}
+// 任务详情里勾选/取消所属分组：按钮显示当前是否属于该分组
+function groupChips(groups,assigned){
+  const inGroup=new Set(assigned||[]);
+  return groups.map(g=>{
+    const on=inGroup.has(g.name);
+    return `<button class="${on?'':'ghost'}" data-action="task-group" data-id="${detailTaskId}"
+      data-name="${esc(g.name)}" data-on="${on}">${on?'✓ ':''}${esc(g.name)}</button>`;
+  }).join('');
+}
+async function toggleTaskGroup(taskId,name,on){
+  await api(`/api/tasks/${taskId}/group`,{method:'POST',body:JSON.stringify({name,on})});
+  toast(on?`已加入分组「${name}」`:`已移出分组「${name}」`);view(current);
 }
 // 右栏详情：任务字段 + 事实流水 + 与列表一致的动作（动作后由 view(current) 统一刷新）
 function renderDetail(el,t,facts){
@@ -325,6 +390,9 @@ function renderDetail(el,t,facts){
     <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'}</div>
     <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}</div>
     ${asg}
+    <div class="settings-sub">所属分组</div>
+    <div class="row tight" id="detailGroups" data-task="${t.id}">${groupChips(groupsOf(t),(t.groups||[]))}</div>
+    <div class="sub" id="detailGroupsHint">点分组名加入/移出；在「设置 · 分组管理」里可新建、改名、删除。</div>
     <div class="row" style="margin-top:10px">
       <button class="${isDone?'ghost':''}" data-action="${isDone?'task-undo-done':'task-done'}" data-id="${t.id}" data-done="${isDone}">${isDone?'撤销完成':'完成'}</button>
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
@@ -974,7 +1042,9 @@ async function retractOutput(entryId){
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync]=await Promise.all([api('/api/config'),api('/api/sync/status')]);
+  const [cfg,sync,groups]=await Promise.all([
+    api('/api/config'),api('/api/sync/status'),api('/api/groups')]);
+  groupCache=groups||[];
   const off=!navigator.onLine;
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
@@ -1006,6 +1076,8 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="academic">去学业页</button></div>
     <div class="sub">配置默认值来自 config.toml 的 [academic] gpa_scale；这里切的是查看口径。</div>
   </div>
+  <div class="section-title">分组管理</div>
+  <div class="card panel-card" id="groupAdmin"></div>
   <div class="section-title">数据与同步</div>
   <div class="card panel-card" id="set-sync">
     <div class="title">${off?'当前离线':'当前在线'}</div>
@@ -1022,6 +1094,9 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="memo">备忘录</button>
       <button class="ghost" data-action="view" data-view="academic">学业</button></div>
   </div>`;
+  // 分组管理单独渲染（它自己还要请求一次列表，且失败不该影响整页）
+  const box=document.getElementById('groupAdmin');
+  if(box)renderGroupAdmin(box);
 }
 // GPA 制式切换：只改查看口径（写死配置是后端职责），立即重渲染
 async function setGpa(scale){

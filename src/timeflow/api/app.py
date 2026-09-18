@@ -262,7 +262,66 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.get("/api/groups")
     def groups() -> list[dict[str, Any]]:
+        """分组列表（含任务计数）。"""
         return tm.list_groups(conn)
+
+    @app.post("/api/groups", status_code=201)
+    def create_group(payload: dict[str, Any]) -> dict[str, Any]:
+        """新建分组（OP-11）。空名 400；**重名 400**（不允许静默复用，免得用户以为建了新组）。"""
+        name = str(payload.get("name", "")).strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="分组名不能为空") from None
+        existing = {str(g["name"]) for g in tm.list_groups(conn)}
+        if name in existing:
+            raise HTTPException(status_code=400, detail=f"分组「{name}」已存在") from None
+        gid = tm.create_group(conn, name)
+        return tm.get_group(conn, gid)
+
+    @app.patch("/api/groups/{group_id}")
+    def rename_group(group_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """重命名分组（OP-11）。空名 400；不存在 404；改到已有名字 = 与那个分组合并（幂等）。"""
+        if "name" not in payload:
+            raise HTTPException(status_code=400, detail="缺少 name") from None
+        try:
+            return tm.rename_group(conn, group_id, str(payload["name"]))
+        except KeyError:
+            raise HTTPException(status_code=404, detail="分组不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.delete("/api/groups/{group_id}")
+    def delete_group(group_id: str) -> dict[str, Any]:
+        """删除分组（OP-11）：**只删分组与关联，任务本身保留**。不存在 404。"""
+        try:
+            tm.get_group(conn, group_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="分组不存在") from None
+        unbound = tm.delete_group(conn, group_id)
+        return {"deleted": group_id, "unbound_tasks": unbound}
+
+    @app.get("/api/groups/{group_id}/tasks")
+    def group_tasks(group_id: str) -> list[TaskOut]:
+        """某分组下的任务（点分组看任务）。不存在 404。"""
+        try:
+            tm.get_group(conn, group_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="分组不存在") from None
+        ids = set(tm.tasks_in_group(conn, group_id))
+        return [_out(t, conn) for t in tm.list_tasks(conn) if t.id in ids]
+
+    @app.post("/api/tasks/{task_id}/group")
+    def toggle_task_group(task_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """把任务加入/移出某分组（`{name, on}`）。任务不存在 404；空名 400。"""
+        try:
+            tm.get_task(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        name = str(payload.get("name", ""))
+        try:
+            names = tm.toggle_task_group(conn, task_id, name, bool(payload.get("on", True)))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"task_id": task_id, "groups": names}
 
     @app.get("/api/summary")
     def summary() -> ledger.LedgerSummary:

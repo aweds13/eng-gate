@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -35,6 +36,7 @@ COMMON = [
     ("mypy", [PY, "-m", "mypy", "src/"]),
     ("check_layers", [PY, "-X", "utf8", "scripts/check_layers.py"]),
     ("check_layers_selftest", [PY, "-X", "utf8", "scripts/test_check_layers.py"]),
+    ("ui_dom_probe", []),          # 占位：下面按 node 是否可用来填
     ("audit", [PY, "-X", "utf8", "scripts/audit_progress.py", "--all"]),
 ]
 REAL = [
@@ -42,6 +44,12 @@ REAL = [
     ("web_live", [PY, "-X", "utf8", "tools/web_live_check.py"]),
 ]
 SUCCESS_HINTS = ("passed", "failed", "error", "PASS", "Success", "checks passed", "OK")
+
+
+def dom_probe_cmd() -> list[str] | None:
+    """假 DOM 渲染探针：真跑 9 个视图。node 不在就跳过（不谎报通过）。"""
+    node = shutil.which("node")
+    return [node, str(ROOT / "tools" / "ui_dom_probe.mjs")] if node else None
 
 
 def env() -> dict[str, str]:
@@ -107,7 +115,12 @@ def staged_tree() -> str:
 
 
 def git(*args: str) -> str:
-    r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=False)
+    # core.quotepath=false：否则 git 把中文路径输出成八进制转义（\345\244\215 这种），
+    # 于是"复盘/xxx.md 有没有一起改"这类判断会永远为假（实测踩到，等于中文文档的同步检查失效）。
+    r = subprocess.run(
+        ["git", "-c", "core.quotepath=false", *args],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
     return r.stdout.strip()
 
 
@@ -165,7 +178,14 @@ def main() -> int:
         print(f"  [FAIL] 改了源码但还没同步：{missing}")
 
     results: list[dict[str, object]] = []
-    for name, cmd in COMMON + ([] if args.quick else REAL):
+    jobs = COMMON + ([] if args.quick else REAL)
+    for name, cmd in jobs:
+        if name == "ui_dom_probe":
+            filled = dom_probe_cmd()
+            if filled is None:
+                print("[WARN] ui_dom_probe        跳过：环境里没有 node（未验证，不算通过）")
+                continue
+            cmd = filled
         t0 = time.time()
         # errors="replace"：Windows 下子进程输出可能是 GBK/混合编码，不能让门禁脚本自己因解码崩掉
         proc = subprocess.run(
