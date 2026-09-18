@@ -1,0 +1,736 @@
+# 五层台账（机器可读真源）—— 手写维护（本条注释由 2026-09-18 框架落地时更新）
+#
+# 状态词表：done=已做到（断言必须全过）/ partial=半成品 / todo=没做 / deferred=规格自标二版或后置
+#           broken=声称 done 但证据对不上（审计必须 FAIL）
+# 证据语法：file:路径 | text:路径::要包含的文字（或 text:路径::re:正则）| route:方法 路径 |
+#           table:表 | column:表.列 | ui:data-action=x | ui:view=x | test:文件名
+# 规则：status=done 必须至少 1 条证据；partial/todo/deferred 必须写 gaps（说明缺什么）
+#
+# [exceptions]：已知欠账（声称 done 但断言暂不成立）。**每修一条删一条**，不许静默豁免。
+# [meta.acknowledged_routes]：确认过但暂不单独登记的运维/根路径。
+
+[meta]
+acknowledged_routes = []
+
+[exceptions]
+# 目前没有需要豁免的条目（done 的断言全部成立）
+
+[entries."T-00"]
+id = "T-00"
+title = "强制框架：git + 台账 + 门禁三方对账"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:docs/traceability.toml",
+  "file:scripts/audit_progress.py",
+  "file:scripts/run_gates.py",
+  "file:gates/last.json",
+  "text:复盘/长任务执行协议.md::九、强制框架",
+  "text:pyproject.toml::--cov-fail-under=70",
+]
+gaps = ""
+
+[entries."SR-F1.1"]
+id = "SR-F1.1"
+title = "My Day 语义 + 昨日未完成进逾期栏"
+group = "F1"
+status = "done"
+evidence = ["text:src/timeflow/core/tasks/manager.py::def myday_tasks", "text:src/timeflow/core/tasks/manager.py::def overdue_tasks", "route:GET /api/mydays", "route:GET /api/overdue", "ui:data-action=task-myday", "test:test_tasks.py"]
+gaps = ""
+
+[entries."SR-F1.2"]
+id = "SR-F1.2"
+title = "排序 = 截止日 → 优先级 → 手动拖拽"
+group = "F1"
+status = "todo"
+evidence = ["text:src/timeflow/core/tasks/manager.py::ORDER BY due_date"]
+gaps = "无 priority 字段；无拖拽排序（只有 due_date 排序）"
+
+[entries."SR-F1.3"]
+id = "SR-F1.3"
+title = "视图 My Day / Important / Planned / Flagged / 逾期栏"
+group = "F1"
+status = "todo"
+evidence = ["route:GET /api/mydays", "route:GET /api/overdue"]
+gaps = "Important/Planned/Flagged 视图不存在；任务表无对应标记字段"
+
+[entries."SR-F1.4"]
+id = "SR-F1.4"
+title = "任务字段：子步骤/备注/提醒/附件"
+group = "F1"
+status = "todo"
+evidence = ["column:tasks.due_date", "column:tasks.repeat_days", "column:tasks.parent_id"]
+gaps = "提醒(remind_at)/附件(attach)/备注(note) 字段都不存在（见审计 GAP-F1-01）"
+
+[entries."SR-F1.5"]
+id = "SR-F1.5"
+title = "状态机 未开始/进行中/完成/逾期/取消/归档"
+group = "F1"
+status = "done"
+evidence = ["text:src/timeflow/core/tasks/manager.py::未开始", "text:src/timeflow/core/tasks/manager.py::归档", "text:src/timeflow/core/tasks/manager.py::VALID_STATUS"]
+gaps = ""
+
+[entries."SR-F1.6"]
+id = "SR-F1.6"
+title = "Repeat 按上次完成时间生成下一次（幂等）"
+group = "F1"
+status = "done"
+evidence = ["text:src/timeflow/core/tasks/manager.py::def process_repeats", "text:src/timeflow/core/tasks/manager.py::task.repeat.generated", "test:test_task_repeat.py"]
+gaps = ""
+
+[entries."SR-F1.7"]
+id = "SR-F1.7"
+title = "重复节奏用热力图管理"
+group = "F1"
+status = "partial"
+evidence = ["text:src/timeflow/core/insights.py::def heatmap", "route:GET /api/insights/heatmap"]
+gaps = "热力图是「天 × 指标」，没有按任务/重复节奏的视图"
+
+[entries."SR-F1.8"]
+id = "SR-F1.8"
+title = "子任务：任务树/折叠 + 添加子任务入口"
+group = "F1"
+status = "todo"
+evidence = ["column:tasks.parent_id", "text:src/timeflow/core/tasks/manager.py::parent_id"]
+gaps = "前端无任务树、无添加入口（GAP-F1-04）；后端有 parent_id 与联动"
+
+[entries."SR-F1.9"]
+id = "SR-F1.9"
+title = "任务存档：尝试记录 + 关联笔记 + 存档视图"
+group = "F1"
+status = "todo"
+evidence = ["text:src/timeflow/core/tasks/manager.py::归档"]
+gaps = "无 attempt/关联笔记字段；无存档视图（GAP-F1-05）"
+
+[entries."SR-F1.10"]
+id = "SR-F1.10"
+title = "逾期处置：推到明天/改ddl/取消 + 强弱提醒分级"
+group = "F1"
+status = "partial"
+evidence = ["ui:data-action=task-tomorrow", "ui:data-action=task-cancel", "text:src/web/app.css::card.overdue"]
+gaps = "无「学校硬考核强提醒 vs 普通温和」分级（GAP-F1-06）"
+
+[entries."SR-F1.11"]
+id = "SR-F1.11"
+title = "三类任务区分（指标/作业/竞赛）"
+group = "F1"
+status = "todo"
+evidence = []
+gaps = "无分类字段、无界面（GAP-F1-07）"
+
+[entries."SR-F1.12"]
+id = "SR-F1.12"
+title = "分组：多分组 + 计数 + 增删改（OP-11）"
+group = "F1"
+status = "partial"
+evidence = ["table:task_groups", "text:src/timeflow/core/tasks/groups.py::def list_groups", "route:GET /api/groups"]
+gaps = "只有 GET，无增删改接口，也无界面（GAP-F1-08）"
+
+[entries."SR-F1.13"]
+id = "SR-F1.13"
+title = "任务编辑（契约 OP-9）"
+group = "F1"
+status = "partial"
+evidence = ["route:PATCH /api/tasks/{task_id}"]
+gaps = "后端 PATCH 已有；界面只有「推到明天」，无编辑入口（GAP-F2 契约 OP-9）"
+
+[entries."SR-F1.14"]
+id = "SR-F1.14"
+title = "任务删除 = 软删除 + 回收站 + 彻底删除/清空"
+group = "F1"
+status = "done"
+evidence = ["text:src/timeflow/core/tasks/manager.py::STATUS_DELETED", "route:POST /api/tasks/{task_id}/restore", "route:DELETE /api/tasks/{task_id}/purge", "route:POST /api/tasks/purge-deleted", "test:test_task_delete.py"]
+gaps = ""
+
+[entries."SR-F2.1"]
+id = "SR-F2.1"
+title = "两轴记账：投入（专注）与产出（KPI/知识资产）分开"
+group = "F2"
+status = "done"
+evidence = ["text:src/timeflow/core/ledger/ledger.py::focus.finished", "text:src/timeflow/core/ledger/ledger.py::output.manual", "route:GET /api/summary", "test:test_ledger_summary.py"]
+gaps = ""
+
+[entries."SR-F2.2"]
+id = "SR-F2.2"
+title = "习惯保持计入投入轴"
+group = "F2"
+status = "todo"
+evidence = []
+gaps = "ledger 里无 habit（GAP-F2-01）"
+
+[entries."SR-F2.3"]
+id = "SR-F2.3"
+title = "温故知新可额外记一笔产出"
+group = "F2"
+status = "todo"
+evidence = []
+gaps = "无「复习 → 产出」入口（GAP-F2-02）"
+
+[entries."SR-F2.4"]
+id = "SR-F2.4"
+title = "债务 = 逾期清单 + 天数/程度（不折算时间）"
+group = "F2"
+status = "done"
+evidence = ["text:src/timeflow/core/ledger/ledger.py::_degree", "test:test_ledger_summary.py"]
+gaps = ""
+
+[entries."SR-F2.5"]
+id = "SR-F2.5"
+title = "学校 KPI 与知识资产分开记录与展示"
+group = "F2"
+status = "partial"
+evidence = ["text:src/timeflow/core/memo/memo.py::kpi"]
+gaps = "实现为同一产出轴内 kind=asset/kpi；规格字面要求「独立记账、分开展示」（GAP-F2-04，待用户定）"
+
+[entries."SR-F2.6"]
+id = "SR-F2.6"
+title = "周结算 + 均衡度指标（波动/空档）+ 温和呈现"
+group = "F2"
+status = "partial"
+evidence = ["text:src/timeflow/core/ledger/ledger.py::def weekly_summary", "route:GET /api/summary/weekly", "test:test_week_summary.py"]
+gaps = "无「波动/空档」指标（GAP-F2-03）"
+
+[entries."SR-F2.7"]
+id = "SR-F2.7"
+title = "债务生命周期：完成清零 / 取消计完 / 推到累计"
+group = "F2"
+status = "done"
+evidence = ["text:src/timeflow/core/tasks/manager.py::HIDDEN_STATUSES"]
+gaps = ""
+
+[entries."SR-F2.8"]
+id = "SR-F2.8"
+title = "曲线 + 时间热力图 + 分组分布 + 顶部摘要"
+group = "F2"
+status = "done"
+evidence = ["text:src/timeflow/core/insights.py::def heatmap", "text:src/timeflow/core/insights.py::def group_insights", "ui:data-action=set-heatmap", "test:test_insights.py"]
+gaps = ""
+
+[entries."SR-F2.9"]
+id = "SR-F2.9"
+title = "重规划 / 债务重组（规格标二版）"
+group = "F2"
+status = "deferred"
+evidence = []
+gaps = "规格自标「二版」"
+
+[entries."SR-F3.1"]
+id = "SR-F3.1"
+title = "番茄/普通计时 + 绑定任务计入"
+group = "F3"
+status = "done"
+evidence = ["text:src/timeflow/core/focus/timer.py::tomato", "route:POST /api/focus/start", "test:test_focus_line.py"]
+gaps = ""
+
+[entries."SR-F3.2"]
+id = "SR-F3.2"
+title = "中断三选（暂停/放弃/记中断）"
+group = "F3"
+status = "done"
+evidence = ["text:src/timeflow/core/focus/timer.py::abandoned", "text:src/timeflow/core/focus/timer.py::interrupted"]
+gaps = ""
+
+[entries."SR-F3.3"]
+id = "SR-F3.3"
+title = "白名单/勿扰判定 + 设置界面"
+group = "F3"
+status = "partial"
+evidence = ["text:src/timeflow/core/focus/guard.py::白名单", "route:GET /api/focus/guard"]
+gaps = "后端判定有；**前端无任何设置界面**（GAP-F3-02）"
+
+[entries."SR-F3.4"]
+id = "SR-F3.4"
+title = "多设备同步专注"
+group = "F3"
+status = "todo"
+evidence = []
+gaps = "无专注状态推拉传输（GAP-F3-01）"
+
+[entries."SR-F4.1"]
+id = "SR-F4.1"
+title = "每日复盘（计划 vs 执行）+ 专注自动计入"
+group = "F4"
+status = "done"
+evidence = ["text:src/timeflow/core/feedback/feedback.py::plan_note", "text:src/timeflow/core/focus/subscribers.py::register", "test:test_focus_feedback.py"]
+gaps = ""
+
+[entries."SR-F4.2"]
+id = "SR-F4.2"
+title = "习惯打卡 + 热力图 + 纳入 B 系统可视化"
+group = "F4"
+status = "partial"
+evidence = ["text:src/timeflow/core/feedback/feedback.py::habit", "text:src/timeflow/core/insights.py::habit", "route:GET /api/habits"]
+gaps = "打卡/streak/热力图都有；**未计入投入轴**（与 SR-F2.2 同一缺口）"
+
+[entries."SR-F4.3"]
+id = "SR-F4.3"
+title = "自检消费 B 账本数据"
+group = "F4"
+status = "done"
+evidence = ["route:GET /api/selfcheck", "text:src/timeflow/core/feedback/feedback.py::self_check"]
+gaps = ""
+
+[entries."SR-F4.4"]
+id = "SR-F4.4"
+title = "习惯改名/删除"
+group = "F4"
+status = "done"
+evidence = ["route:PATCH /api/habits/{habit_id}", "route:DELETE /api/habits/{habit_id}", "test:test_habit_memo_line.py"]
+gaps = ""
+
+[entries."SR-F5.1"]
+id = "SR-F5.1"
+title = "GPA/学分手动录入 + 制式切换 + 加权平均"
+group = "F5"
+status = "done"
+evidence = ["text:src/timeflow/core/academic/academic.py::def gpa", "text:src/timeflow/core/academic/academic.py::def weighted_average", "route:GET /api/gpa", "test:test_academic_line.py"]
+gaps = ""
+
+[entries."SR-F5.2"]
+id = "SR-F5.2"
+title = "按课程建档（学分/考核/任课）+ 课程与考核增删"
+group = "F5"
+status = "done"
+evidence = ["route:POST /api/courses", "route:POST /api/assessments", "route:DELETE /api/assessments/{assessment_id}", "route:DELETE /api/grades/{grade_id}"]
+gaps = ""
+
+[entries."SR-F5.3"]
+id = "SR-F5.3"
+title = "考核要求备注 + 跳转本地文件/网站"
+group = "F5"
+status = "todo"
+evidence = []
+gaps = "两张表都没有链接/路径字段（GAP-F5-01）"
+
+[entries."SR-F5.4"]
+id = "SR-F5.4"
+title = "学校任务与普通任务同构（课程标签 + 硬约束元数据）"
+group = "F5"
+status = "partial"
+evidence = ["column:tasks.group_name"]
+gaps = "tasks 无 course_id，无法字段级挂课程（OP-24 未做，GAP-F5-02）"
+
+[entries."SR-F5.5"]
+id = "SR-F5.5"
+title = "考核临期/逾期提醒"
+group = "F5"
+status = "done"
+evidence = ["text:src/timeflow/core/academic/academic.py::def upcoming_assessments", "route:GET /api/assessments/upcoming"]
+gaps = ""
+
+[entries."SR-F5.6"]
+id = "SR-F5.6"
+title = "与自学时间线对照"
+group = "F5"
+status = "todo"
+evidence = []
+gaps = "无对照视图（GAP-F5-03）"
+
+[entries."SR-F6.1"]
+id = "SR-F6.1"
+title = "FSRS 调度 + 兼容字段"
+group = "F6"
+status = "done"
+evidence = ["text:src/timeflow/core/review/review.py::fsrs", "test:test_review_line.py"]
+gaps = ""
+
+[entries."SR-F6.2"]
+id = "SR-F6.2"
+title = "到期按最久未复习排序 + 优先进 My Day"
+group = "F6"
+status = "done"
+evidence = ["route:GET /api/review/due", "text:src/timeflow/api/app.py::include_reviews"]
+gaps = ""
+
+[entries."SR-F6.3"]
+id = "SR-F6.3"
+title = "外部 app 只做调度中枢 + 执行源标签"
+group = "F6"
+status = "done"
+evidence = ["text:src/timeflow/core/review/review.py::external"]
+gaps = ""
+
+[entries."SR-F6.4"]
+id = "SR-F6.4"
+title = "三态反馈（记得/模糊/忘了）"
+group = "F6"
+status = "done"
+evidence = ["text:src/timeflow/core/review/review.py::remember", "text:src/timeflow/core/review/review.py::fuzzy", "text:src/timeflow/core/review/review.py::forgot"]
+gaps = ""
+
+[entries."SR-F6.5"]
+id = "SR-F6.5"
+title = "复习撤销（可逆）"
+group = "F6"
+status = "done"
+evidence = ["text:src/timeflow/core/review/review.py::def undo_review", "route:POST /api/review/{item_id}/undo"]
+gaps = ""
+
+[entries."SR-F6.6"]
+id = "SR-F6.6"
+title = "由学习任务升级为复习任务"
+group = "F6"
+status = "todo"
+evidence = []
+gaps = "只能手动建卡（GAP-F6-01）"
+
+[entries."SR-F6.7"]
+id = "SR-F6.7"
+title = "复习形式字段（挖空/真题/问答卡）"
+group = "F6"
+status = "todo"
+evidence = []
+gaps = "review_items 无形式字段（GAP-F6-02）"
+
+[entries."SR-F6.8"]
+id = "SR-F6.8"
+title = "复习卡挂引用句柄（Vault/KB-ID）"
+group = "F6"
+status = "todo"
+evidence = []
+gaps = "review_items 无句柄字段（GAP-F6-03）"
+
+[entries."SR-F7.1"]
+id = "SR-F7.1"
+title = "任务分配 + 进展回报可见"
+group = "F7"
+status = "done"
+evidence = ["route:POST /api/team/assign", "route:PATCH /api/team/assign/{assignment_id}", "text:src/timeflow/api/app.py::assignments", "test:test_team_line.py"]
+gaps = ""
+
+[entries."SR-F7.2"]
+id = "SR-F7.2"
+title = "分配出去不计个人投入"
+group = "F7"
+status = "done"
+evidence = ["text:src/web/index.html::团队任务不计个人投入"]
+gaps = ""
+
+[entries."SR-F7.3"]
+id = "SR-F7.3"
+title = "管理者/执行者两视角可切换（OP-33）"
+group = "F7"
+status = "todo"
+evidence = []
+gaps = "只有角色常量，无视角接口与页面（GAP-F7-01）"
+
+[entries."SR-F7.4"]
+id = "SR-F7.4"
+title = "AI 接口第一版只读 + 新增（有边界）"
+group = "F7"
+status = "partial"
+evidence = ["route:POST /api/sync/tasks"]
+gaps = "无独立 AI 接口与权限边界；对外 REST 含 PATCH/DELETE（GAP-F7-02）"
+
+[entries."SR-F8.1"]
+id = "SR-F8.1"
+title = "碎片随手记 + 转任务"
+group = "F8"
+status = "done"
+evidence = ["route:POST /api/memos", "route:POST /api/memos/{memo_id}/to-task", "test:test_habit_memo_line.py"]
+gaps = ""
+
+[entries."SR-F8.2"]
+id = "SR-F8.2"
+title = "只存引用句柄（Vault/KB-ID）"
+group = "F8"
+status = "done"
+evidence = ["column:memos.ref_handle"]
+gaps = ""
+
+[entries."SR-F8.3"]
+id = "SR-F8.3"
+title = "复习卡挂引用句柄（Vault/KB-ID）"
+group = "F8"
+status = "todo"
+evidence = []
+gaps = "review_items 无句柄字段（GAP-F6-03）"
+
+[entries."SR-F8.4"]
+id = "SR-F8.4"
+title = "预留产出评价器接口"
+group = "F8"
+status = "todo"
+evidence = []
+gaps = "无接口（规格写「合同待知识管理对齐」，可后置 GAP-F8-01）"
+
+[entries."SR-F9.1"]
+id = "SR-F9.1"
+title = "本地优先 SQLite + 多域可扩展"
+group = "F9"
+status = "done"
+evidence = ["text:src/timeflow/storage/db.py::import sqlite3", "text:src/timeflow/storage/db.py::CREATE TABLE IF NOT EXISTS facts", "test:test_facts.py"]
+gaps = ""
+
+[entries."SR-F9.2"]
+id = "SR-F9.2"
+title = "schema 版本化迁移 + 备份/回滚"
+group = "F9"
+status = "done"
+evidence = ["text:src/timeflow/storage/db.py::SCHEMA_VERSION", "file:tools/snapshot.py", "text:tools/serve.py::backup"]
+gaps = ""
+
+[entries."SR-F9.3"]
+id = "SR-F9.3"
+title = "跨端同步 LWW + 推拉传输"
+group = "F9"
+status = "partial"
+evidence = ["text:src/timeflow/core/sync.py::def", "route:GET /api/sync/status"]
+gaps = "只有 LWW 合并语义与冲突日志；**无推拉传输**（GAP-F9-01）"
+
+[entries."SR-F10.1"]
+id = "SR-F10.1"
+title = "学校通知监测（独立脚本 + 合作接口，规格标后置）"
+group = "F10"
+status = "deferred"
+evidence = []
+gaps = "规格自标「后置」"
+
+[entries."SR-NF1"]
+id = "SR-NF1"
+title = "中性底色 + 单一强调色 + 亮暗双主题 + 强调色可配"
+group = "NF"
+status = "done"
+evidence = ["text:src/web/app.css::[data-theme=\"dark\"]", "text:src/web/index.html::accentPalette", "ui:data-action=set-theme"]
+gaps = ""
+
+[entries."SR-NF2"]
+id = "SR-NF2"
+title = "状态色 + 字体/间距/圆角/阴影统一"
+group = "NF"
+status = "partial"
+evidence = ["text:src/web/app.css::--danger", "text:src/web/app.css::--ok"]
+gaps = "状态色刚接入 2 处；间距 48 种取值未收敛（GAP-NF-01，随 R5）"
+
+[entries."SR-NF3"]
+id = "SR-NF3"
+title = "打开即 My Day + 一键 + 可撤销 + 空态友好 + 新手引导"
+group = "NF"
+status = "partial"
+evidence = ["text:src/web/index.html::view('today')", "ui:data-action=toast-run"]
+gaps = "无新手引导（GAP-NF-02）"
+
+[entries."SR-NF4"]
+id = "SR-NF4"
+title = "六类可视化形态"
+group = "NF"
+status = "done"
+evidence = ["text:src/web/index.html::function lineChart", "text:src/web/index.html::function heatmap", "text:src/web/index.html::function progressBar", "text:src/web/index.html::function radar", "text:src/web/index.html::function ring", "text:src/web/index.html::function barList"]
+gaps = ""
+
+[entries."SR-NF5"]
+id = "SR-NF5"
+title = "左导航 + 中列表 + 右详情（可折叠）+ 渐进聚焦"
+group = "NF"
+status = "partial"
+evidence = ["text:src/web/index.html::class=\"rail\"", "text:src/web/index.html::class=\"sidebar\"", "test:test_web_frontend.py"]
+gaps = "三栏已落地；右栏无折叠开关（GAP-NF-03）"
+
+[entries."SR-NF6"]
+id = "SR-NF6"
+title = "完成划线 / toast / 撤销 / 不可逆二次确认"
+group = "NF"
+status = "done"
+evidence = ["text:src/web/index.html::toastAction", "text:src/web/index.html::confirm("]
+gaps = ""
+
+[entries."SR-NF7"]
+id = "SR-NF7"
+title = "模块化分层 + 局部错误隔离 + 配置驱动"
+group = "NF"
+status = "done"
+evidence = ["text:src/timeflow/core/facts/bus.py::订阅者", "text:src/timeflow/api/app.py::load_settings"]
+gaps = ""
+
+[entries."SR-NF8"]
+id = "SR-NF8"
+title = "插件/自定义机制 + 「如何加一个功能」模板"
+group = "NF"
+status = "todo"
+evidence = []
+gaps = "只有配置层定制；无扩展模板（GAP-NF-04）"
+
+[entries."SR-NF9"]
+id = "SR-NF9"
+title = "shadow + 一键回退开关"
+group = "NF"
+status = "todo"
+evidence = []
+gaps = "只有单测/快照，无 shadow 与回退开关（GAP-NF-05）"
+
+[entries."SR-NF10"]
+id = "SR-NF10"
+title = "README / 架构 / CODING_GUIDELINES（DESIGN/LEARN 已撤回）"
+group = "NF"
+status = "done"
+evidence = ["file:docs/CODING_GUIDELINES.md", "file:docs/implementation/architecture.md"]
+gaps = ""
+
+[entries."SR-NF11"]
+id = "SR-NF11"
+title = "配置化 + 2–3 个扩展示例 + 中文注释"
+group = "NF"
+status = "todo"
+evidence = ["file:config.example.toml"]
+gaps = "无 2–3 个由浅入深扩展示例（GAP-NF-06）"
+
+[entries."SR-NF12"]
+id = "SR-NF12"
+title = "Worktree + Conventional Commits + PR 清单"
+group = "NF"
+status = "partial"
+evidence = ["file:docs/CODING_GUIDELINES.md"]
+gaps = "无 PR 模板文件（GAP-NF-10）；worktree 由「强制」改「可选」"
+
+[entries."SR-NF13"]
+id = "SR-NF13"
+title = "关键路径日志 + 健康检查/调试开关"
+group = "NF"
+status = "partial"
+evidence = ["route:GET /api/health"]
+gaps = "无结构化日志、无调试开关（GAP-NF-07）"
+
+[entries."SR-NF14"]
+id = "SR-NF14"
+title = "config.example.toml + Pydantic 校验 + env 覆盖"
+group = "NF"
+status = "done"
+evidence = ["file:config.example.toml", "text:src/timeflow/config.py::TIMEFLOW_"]
+gaps = ""
+
+[entries."SR-NF15"]
+id = "SR-NF15"
+title = "单测 + 覆盖率门槛（写进配置）+ 合入 checklist"
+group = "NF"
+status = "partial"
+evidence = ["file:docs/CODING_GUIDELINES.md", "text:pyproject.toml::testpaths"]
+gaps = "覆盖率门槛未写进 pyproject（GAP-NF-08）—— 本次框架一并修"
+
+[entries."SR-NF16"]
+id = "SR-NF16"
+title = "数据不出本地"
+group = "NF"
+status = "done"
+evidence = ["text:src/timeflow/app/main.py::127.0.0.1", "text:tools/serve.py::回环"]
+gaps = ""
+
+[entries."SR-NF17"]
+id = "SR-NF17"
+title = "PWA + IndexedDB 离线 + 异步对齐 + 响应式底部 Tab"
+group = "NF"
+status = "partial"
+evidence = ["file:src/web/manifest.json", "file:src/web/sw.js", "ui:view=setting"]
+gaps = "无 IndexedDB、无离线队列、无跨端对齐（GAP-F9-02）"
+
+[entries."SR-NF18"]
+id = "SR-NF18"
+title = "轻量：启动快/内存低/大数据量流畅（可验证）"
+group = "NF"
+status = "todo"
+evidence = []
+gaps = "无任何基准测试（GAP-NF-09）"
+
+[entries."OP-1"]
+id = "OP-1"
+title = "新建任务（六要素闭环）"
+group = "OP"
+status = "done"
+evidence = ["route:POST /api/tasks", "ui:data-action=task-add", "text:src/web/index.html::data-enter=\"task-add\""]
+gaps = ""
+
+[entries."OP-2"]
+id = "OP-2"
+title = "加入/移出 My Day"
+group = "OP"
+status = "done"
+evidence = ["route:POST /api/tasks/{task_id}/myday", "ui:data-action=task-myday"]
+gaps = ""
+
+[entries."OP-3"]
+id = "OP-3"
+title = "开始专注（进行中态 + 拒绝并行）"
+group = "OP"
+status = "done"
+evidence = ["route:GET /api/focus/active", "route:POST /api/focus/start", "ui:data-action=focus-start"]
+gaps = ""
+
+[entries."OP-4"]
+id = "OP-4"
+title = "结束专注（落库+投入+反馈+任务时长）"
+group = "OP"
+status = "done"
+evidence = ["route:POST /api/focus/{session_id}/finish", "ui:data-action=focus-finish"]
+gaps = ""
+
+[entries."OP-5"]
+id = "OP-5"
+title = "完成/撤销完成（发反向事实）"
+group = "OP"
+status = "done"
+evidence = ["route:POST /api/tasks/{task_id}/complete", "route:POST /api/tasks/{task_id}/uncomplete", "ui:data-action=task-done"]
+gaps = ""
+
+[entries."OP-6"]
+id = "OP-6"
+title = "删除（软删除 + 撤销 + 彻底删除）"
+group = "OP"
+status = "done"
+evidence = ["route:DELETE /api/tasks/{task_id}", "route:POST /api/tasks/{task_id}/restore", "route:DELETE /api/tasks/{task_id}/purge", "ui:data-action=task-purge"]
+gaps = ""
+
+[entries."OP-7"]
+id = "OP-7"
+title = "查看今日摘要（含程度分档）"
+group = "OP"
+status = "done"
+evidence = ["route:GET /api/summary", "text:src/web/index.html::summaryLine"]
+gaps = ""
+
+[entries."OP-8"]
+id = "OP-8"
+title = "Repeat 生成下一次（幂等 + 血缘）"
+group = "OP"
+status = "done"
+evidence = ["text:src/timeflow/core/tasks/manager.py::process_repeats", "test:test_task_repeat.py"]
+gaps = ""
+
+[entries."OP-9"]
+id = "OP-9"
+title = "编辑任务（入口：任务详情面板）"
+group = "OP"
+status = "partial"
+evidence = ["route:PATCH /api/tasks/{task_id}"]
+gaps = "后端已支持；**界面无编辑入口**（T-A3 待做）"
+
+[entries."OP-10"]
+id = "OP-10"
+title = "逾期处理四选一"
+group = "OP"
+status = "partial"
+evidence = ["ui:data-action=task-tomorrow", "ui:data-action=task-cancel"]
+gaps = "有推到明天/取消；「改 ddl」无专用入口（可走编辑，编辑也还没做）"
+
+[entries."OP-11"]
+id = "OP-11"
+title = "分组管理（创建/重命名/删除）"
+group = "OP"
+status = "partial"
+evidence = ["table:groups", "route:GET /api/groups"]
+gaps = "**无增删改接口、无界面**（T-A1 待做）"
+
+[entries."OP-12"]
+id = "OP-12"
+title = "子任务管理（入口：任务详情「添加子任务」）"
+group = "OP"
+status = "todo"
+evidence = ["column:tasks.parent_id"]
+gaps = "**界面无入口**（T-A2 待做）"
+
+[entries."DELIVERY.READY"]
+id = "DELIVERY.READY"
+title = "后端能力都要有界面入口（可达性）"
+group = "DELIVERY"
+status = "partial"
+evidence = ["route:GET /api/tasks", "route:GET /api/memos", "route:POST /api/memos", "route:GET /api/habits", "route:POST /api/feedback", "route:GET /api/insights/daily", "route:GET /api/assessments", "route:POST /api/grades", "route:GET /api/team/assignments", "route:GET /api/ledger/outputs", "route:POST /api/ledger/invest", "route:POST /api/review/items", "route:GET /api/focus/today", "route:GET /api/tasks/{task_id}/facts", "route:GET /api/courses", "route:GET /api/config", "route:GET /api/feedback", "route:GET /api/focus/tasks/{task_id}", "route:DELETE /api/ledger/invest/{entry_id}", "route:DELETE /api/ledger/output/{entry_id}", "route:DELETE /api/memos/{memo_id}", "route:GET /api/grades", "route:GET /api/habits/{habit_id}", "route:GET /api/insights/groups", "route:GET /api/ledger/invests", "route:GET /api/review/{item_id}/facts", "route:GET /api/sync/logs", "route:GET /api/tasks/deleted", "route:GET /api/tasks/{task_id}", "route:POST /api/habits", "route:POST /api/habits/{habit_id}/toggle", "route:POST /api/ledger/output", "route:POST /api/review/{item_id}/review", "route:POST /api/grades"]
+gaps = "后端 58 条路由里，白名单/勿扰配置、分组管理、子任务、AI 边界等仍无界面入口（见各 SR 的 gaps）"
+

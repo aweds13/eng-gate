@@ -274,6 +274,19 @@
 - **审计脚本自身查出 3 个假判定**并修正（拿错源文件、条件过松、`--shadow` 令牌误命中）—— 已记入报告。
 - 质量门：pytest 284 passed + 2 deselected / 验收 2 passed / ruff 0 / mypy 0（34 文件）/ 前端自检 17 项 OK。
 
+### 强制框架：git + 台账 + 门禁三方对账（治"文档偏移 / 前后端接缝断裂 / 后端做不完整"）
+- **问题复盘**：`复盘/文档偏移与约束框架复盘.md`（用户指出三件事 → 我的核实 → 决策与边界）。
+- **机器可读台账**：新增 `docs/traceability.toml`（88 条：done 42 / partial 22 / todo 22 / deferred 2），
+  每条 = 状态 + **可验证断言**（file/text/route/table/column/ui/test）+ gaps；
+  生成器 `scripts/seed_traceability.py`（一次性初始化，之后台账本身是真源）。
+- **六项对账**：`scripts/audit_progress.py` —— ①提交带 `Task:` ②任务号已登记 ③**声称=证据**（逐条实跑断言）
+  ④**文档与代码同提交** ⑤门禁有落盘产物 ⑥进度可从 git 重建；**不通过退出码 1 → 不许提交**。
+- **门禁落盘**：`scripts/run_gates.py` 跑全套门禁并把结果写 `gates/last.json`（入库），
+  提交里的 `Gates:` trailer 因此有产物支撑；含"改了 src 必须同提交改台账/changelog/CHECKPOINT"的提交前检查。
+- **覆盖率门槛写进配置**（GAP-NF-08）：`pyproject` 的 `addopts` 加 `--cov=timeflow --cov-fail-under=70`。
+- **协议新增 §九 强制框架**：六条硬规矩（无任务卡不开工 / 必须带 Task: / 文档同提交 / 门禁落盘 /
+  审计不过不提交 / CHECKPOINT 带台账状态变更）+ 台账状态词表 + 标准动作 + "一条线一条线"的节奏。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

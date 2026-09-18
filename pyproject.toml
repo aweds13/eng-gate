@@ -30,7 +30,8 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q -m \"not acceptance\""
+# 覆盖率门槛写进配置（2026-09-18 审计 GAP-NF-08：以前只写在文档与手敲命令里，换个人跑就绕过去了）
+addopts = "-q -m \"not acceptance\" --cov=timeflow --cov-fail-under=70"
 markers = ["acceptance: 可执行验收层（默认排除；显式 -m acceptance 运行）"]
 
 [tool.mypy]

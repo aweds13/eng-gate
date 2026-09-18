@@ -43,16 +43,6 @@ htmlcov/
 # 受限沙箱下 pytest basetemp 遗留目录（建出后不可删/不可读，非项目产物）
 .p_*/
 .pt*/
-.pytest_tmp/
-
-# 前端构建产物（如需）
-src/web/dist/
-node_modules/
-
-# 编辑器
-.vscode/
-.idea/
-*.swp
 
 # 沙箱探针残留目录（同 basetemp，不可删）
 md_700/
@@ -63,3 +53,17 @@ seqa_29mzr1/
 tfprobe5tbeq3at/
 um1/
 um2/
+
+# 说明：gates/last.json **要入库**（它是门禁落盘产物，审计脚本按它核对提交里 Gates: trailer 的真伪）
+# 只有临时产物不入库：
+gates/last.json.tmp
+.pytest_tmp/
+
+# 前端构建产物（如需）
+src/web/dist/
+node_modules/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
