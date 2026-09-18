@@ -217,14 +217,27 @@ def create_app(db_path: str | None = None) -> FastAPI:
         kind = payload.get("kind", fc.KIND_TOMATO)
         task_id = payload.get("task_id")
         device_id = payload.get("device_id")
-        sid = fc.start_session(conn, kind=kind, task_id=task_id, device_id=device_id)
-        return {"id": sid, "status": fc.STATUS_FINISHED}
+        try:
+            sid = fc.start_session(conn, kind=kind, task_id=task_id, device_id=device_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"id": sid, "status": fc.STATUS_ACTIVE}
+
+    @app.get("/api/focus/active")
+    def focus_active() -> dict[str, object] | None:
+        """当前进行中的专注（无则 null）；供前端重开页面恢复计时。"""
+        return fc.active_session(conn)
 
     @app.post("/api/focus/{session_id}/finish")
     def focus_finish(session_id: str, payload: dict[str, Any]) -> dict[str, str]:
         duration = int(payload.get("duration_sec", 0))
         status = payload.get("status", fc.STATUS_FINISHED)
-        fc.finish_session(conn, session_id, duration, status)
+        try:
+            fc.finish_session(conn, session_id, duration, status)
+        except KeyError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         return {"id": session_id, "status": status}
 
     @app.get("/api/focus/today")

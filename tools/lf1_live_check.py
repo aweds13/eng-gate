@@ -43,6 +43,21 @@ def http(method: str, url: str, payload: dict[str, object] | None = None) -> obj
         return json.loads(resp.read().decode("utf-8"))
 
 
+def http_raw(
+    method: str, url: str, payload: dict[str, object] | None = None
+) -> tuple[int, str]:
+    """返回 (状态码, 文本)，用于验证错误路径（4xx 预期）。"""
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(url, data=data, method=method)
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310 —— 本地回环
+            return resp.status, resp.read().decode("utf-8")
+    except urllib.error.HTTPError as err:
+        return err.code, err.read().decode("utf-8")
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -80,8 +95,21 @@ def main() -> int:
         session = http("POST", f"{base}/api/focus/start", {"kind": "plain", "task_id": tid})
         sid = session["id"]  # type: ignore[index]
 
+        # ②b 进行中可见且不计投入（前端据此显示计时器）
+        active = http("GET", f"{base}/api/focus/active")
+        check("②b 进行中会话", active["id"], sid)  # type: ignore[index]
+        check(
+            "②b 进行中不计投入",
+            http("GET", f"{base}/api/summary")["invest_hours"],  # type: ignore[index]
+            0.0,
+        )
+        # ②c 不产生两条并行
+        second = http_raw("POST", f"{base}/api/focus/start", {"kind": "plain"})[0]
+        check("②c 重复开始被拒(400)", second, 400)
+
         # ③ 正常结束 1800 秒
         http("POST", f"{base}/api/focus/{sid}/finish", {"duration_sec": 1800})
+        check("③ 结束后无进行中", http("GET", f"{base}/api/focus/active"), None)
 
         # ④ 摘要投入 = 0.5h
         check("④ 摘要 invest_hours", http("GET", f"{base}/api/summary")["invest_hours"], 0.5)  # type: ignore[index]
@@ -113,6 +141,12 @@ def main() -> int:
             [f["kind"] for f in facts2],  # type: ignore[union-attr]
             ["task.completed", "task.uncompleted"],
         )
+
+        # ⑨ 静态前端：根路径能拿到带计时器/主链入口的页面（第 4 步）
+        status, html = http_raw("GET", f"{base}/")
+        check("⑨ 前端页面可达", status, 200)
+        for needle in ("finishFocus(", "/api/focus/active", "toggleDone(", "reviewCard("):
+            check(f"⑨ 页面含 {needle}", needle in html, True)
     except (urllib.error.URLError, KeyError) as exc:
         print(f"FAIL: 请求异常 {exc!r}")
         FAILURES.append("http")
@@ -124,7 +158,7 @@ def main() -> int:
     if FAILURES:
         print(f"LF-1 真实运行验证：FAIL（{len(FAILURES)} 项：{', '.join(FAILURES)}）")
         return 1
-    print("LF-1 真实运行验证：PASS（主链 8 步全通过）")
+    print("LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）")
     return 0
 
 

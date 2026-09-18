@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 KIND_TOMATO = "tomato"
 KIND_PLAIN = "plain"
 
+STATUS_ACTIVE = "进行中"
 STATUS_FINISHED = "finished"
 STATUS_PAUSED = "paused"
 STATUS_ABANDONED = "abandoned"
@@ -36,23 +37,74 @@ def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+def active_session(conn: sqlite3.Connection) -> dict[str, object] | None:
+    """当前进行中的专注（同一时间只允许一个）；无则 None。
+
+    供前端「重开页面恢复计时」使用（SR-F3 边界：应用关闭/重开可恢复）。
+    """
+    row = conn.execute(
+        "SELECT id, task_id, kind, started_at FROM focus_sessions "
+        "WHERE status = ? ORDER BY started_at DESC LIMIT 1",
+        (STATUS_ACTIVE,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "task_id": row["task_id"],
+        "kind": row["kind"],
+        "started_at": row["started_at"],
+    }
+
+
 def start_session(
     conn: sqlite3.Connection,
     kind: str = KIND_TOMATO,
     task_id: str | None = None,
     device_id: str | None = None,
 ) -> str:
-    """开始一段专注，返回 session id。番茄钟默认时长由前端/配置控制。"""
+    """开始一段专注，返回 session id。番茄钟默认时长由前端/配置控制。
+
+    - 落库状态为 `进行中`（OP-3：**不得**直接置 finished，否则未结束的专注会被算进投入）。
+    - 已有进行中 session 时拒绝（OP-3 边界：不产生两条并行）。
+    """
     if kind not in (KIND_TOMATO, KIND_PLAIN):
         raise ValueError(f"非法专注类型: {kind}")
+    running = active_session(conn)
+    if running is not None:
+        raise ValueError(f"已有进行中的专注: {running['id']}")
     sid = uuid.uuid4().hex[:12]
+    now = _now()
     conn.execute(
         "INSERT INTO focus_sessions (id, task_id, kind, started_at, status, device_id, created_at) "
         "VALUES (?,?,?,?,?,?,?)",
-        (sid, task_id, kind, _now(), STATUS_FINISHED, device_id, _now()),
+        (sid, task_id, kind, now, STATUS_ACTIVE, device_id, now),
     )
     conn.commit()
+    # 开始只发「开始」事实（不计投入）；结束才产生 focus.finished 等投入事实
+    _publish_started(conn, sid, kind, task_id, now)
     return sid
+
+
+def _publish_started(
+    conn: sqlite3.Connection,
+    session_id: str,
+    kind: str,
+    task_id: str | None,
+    occurred_at: str,
+) -> None:
+    """广播 `focus.started`（不写 facts 表：开始不是投入事实，只做进程内联动/前端提示）。"""
+    from timeflow.core import facts as facts_mod
+
+    facts_mod.publish(
+        "focus.started",
+        {
+            "session_id": session_id,
+            "task_id": task_id,
+            "kind": kind,
+            "occurred_at": occurred_at,
+        },
+    )
 
 
 def finish_session(
@@ -71,9 +123,13 @@ def finish_session(
     if duration_sec < 0:
         raise ValueError("时长不能为负")
     row = conn.execute(
-        "SELECT task_id, kind, started_at, device_id FROM focus_sessions WHERE id = ?",
+        "SELECT task_id, kind, started_at, device_id, status FROM focus_sessions WHERE id = ?",
         (session_id,),
     ).fetchone()
+    if row is None:
+        raise KeyError(f"专注记录不存在: {session_id}")
+    if row["status"] != STATUS_ACTIVE:
+        return  # 已结束过：幂等，不重复计时长/发事实（OP-4 边界：结束两次幂等）
     conn.execute(
         "UPDATE focus_sessions SET ended_at = ?, duration_sec = ?, status = ? WHERE id = ?",
         (_now(), duration_sec, status, session_id),
@@ -82,8 +138,8 @@ def finish_session(
     # 发布事实（事实层与解读层解耦的起点；订阅者为空时 publish 为空操作，安全）
     from timeflow.core import facts as facts_mod
 
-    task_id = row["task_id"] if row is not None else None
-    device_id = row["device_id"] if row is not None else None
+    task_id = row["task_id"]
+    device_id = row["device_id"]
     fact_kind = _END_KIND[status]
     occurred_at = _now()
     facts_mod.record(
@@ -95,8 +151,8 @@ def finish_session(
         extra={
             "session_id": session_id,
             "status": status,
-            "kind": (row["kind"] if row is not None else None) or KIND_TOMATO,
-            "started_at": row["started_at"] if row is not None else None,
+            "kind": row["kind"] or KIND_TOMATO,
+            "started_at": row["started_at"],
         },
         occurred_at=occurred_at,
         source="desktop",
@@ -110,6 +166,7 @@ def finish_session(
             "duration_sec": duration_sec,
             "status": status,
             "occurred_at": occurred_at,
+            "conn": conn,  # 让订阅者知道该写哪个库（多 app/连接并存不串库）
         },
     )
 

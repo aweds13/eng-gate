@@ -28,6 +28,48 @@ def test_session_invalid_kind(conn) -> None:
         fc.start_session(conn, kind="bogus")
 
 
+# ---- 进行中状态（第 4 步：OP-3 不得直接置 finished）----
+
+def test_start_session_is_active_not_finished(conn) -> None:
+    sid = fc.start_session(conn, kind=fc.KIND_PLAIN)
+    row = conn.execute("SELECT status FROM focus_sessions WHERE id = ?", (sid,)).fetchone()
+    assert row["status"] == fc.STATUS_ACTIVE
+    # 未结束不计入投入（否则未完成的专注会虚增账目）
+    assert fc.today_focus_minutes(conn) == 0.0
+
+
+def test_active_session_lookup_and_reject_parallel(conn) -> None:
+    assert fc.active_session(conn) is None
+    sid = fc.start_session(conn, kind=fc.KIND_TOMATO)
+    running = fc.active_session(conn)
+    assert running is not None and running["id"] == sid
+    with pytest.raises(ValueError):  # 不产生两条并行
+        fc.start_session(conn, kind=fc.KIND_PLAIN)
+
+
+def test_finish_releases_active_slot(conn) -> None:
+    sid = fc.start_session(conn, kind=fc.KIND_PLAIN)
+    fc.finish_session(conn, sid, 600)
+    assert fc.active_session(conn) is None
+    assert fc.start_session(conn, kind=fc.KIND_PLAIN)  # 结束可再开始
+
+
+def test_finish_unknown_session_raises(conn) -> None:
+    with pytest.raises(KeyError):
+        fc.finish_session(conn, "nope", 600)
+
+
+def test_finish_twice_is_idempotent(conn) -> None:
+    from timeflow.core import facts as facts_mod
+
+    facts_mod.clear()
+    sid = fc.start_session(conn, kind=fc.KIND_PLAIN)
+    fc.finish_session(conn, sid, 1500)
+    fc.finish_session(conn, sid, 1500)
+    assert facts_mod.count(conn, kind="focus.finished") == 1
+    assert fc.today_focus_minutes(conn) == 25.0
+
+
 def test_focus_bind_task(conn) -> None:
     from timeflow.core import tasks as tm
 

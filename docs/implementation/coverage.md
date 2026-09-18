@@ -16,6 +16,7 @@
 | SR-F8 备忘录 | `../specification/domains/F8-memo.md` | 待 B3 定义 | AC-22（历史） | `../../tests/test_team_memo.py` | ✅ 规格/契约 |
 | SR-F9 存储 / 同步 | `../specification/domains/F9-storage-sync.md` | OP-39–43 | AC-23（历史） | `../../tests/test_sync.py`、`../../tests/test_facts.py`（含 v4/v5 迁移） | ✅ 规格/契约 |
 | SR-F10 学校通知 | `../specification/domains/F10-notify.md` | 后置 | 后置 | ⬜ 待补 | 后置 |
+| 前端交互层（第 4 步） | `../contracts/interactions.md`（OP-1–OP-7 自查表） | 六要素齐备 | LC-1–LC-8 / LF-1 | `../../tests/test_web_frontend.py`、真机 `../../tools/lf1_live_check.py` | ✅ 已闭环（OP-8 与软删除为残留） |
 
 > 契约文件在 `../contracts/domains/`；可执行验收见 `../../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）；
-> 覆盖率门 70%（第 3 步后实测 85.45%）；真实运行验证见 `../../tools/lf1_live_check.py`。
+> 覆盖率门 70%（第 4 步后实测 85.83%）；真实运行验证见 `../../tools/lf1_live_check.py`。

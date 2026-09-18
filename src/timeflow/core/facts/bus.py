@@ -15,6 +15,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+# payload 允许携带任意值（含 sqlite 连接）：发布方常需把「用哪个库」一并交给订阅者，
+# 否则订阅者只能靠全局单例猜连接，多个 app/连接并存时会串库。
 Handler = Callable[[str, dict[str, Any]], None]
 
 _subscribers: list[tuple[str, Handler]] = []
