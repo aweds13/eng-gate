@@ -17,4 +17,4 @@
 | SR-F9 存储 / 同步 | `../specification/domains/F9-storage-sync.md` | 待 B3 定义 | AC-23（历史） | `../../tests/test_sync.py`、`../../tests/test_facts.py` | ✅ 规格/契约 |
 | SR-F10 学校通知 | `../specification/domains/F10-notify.md` | 后置 | 后置 | ⬜ 待补 | 后置 |
 
-> 契约文件在 `../contracts/domains/`；可执行验收在 B4 加入 `../../tests/acceptance/`。
+> 契约文件在 `../contracts/domains/`；可执行验收见 `../../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）；覆盖率门 70%（当前 82.54%）。

@@ -23,10 +23,11 @@
 ruff format src/ tests/        # 格式化
 ruff check src/ tests/         # lint（⚠️ 新增代码必须零错误）
 mypy src/                      # 类型检查（strict；改接口/配置/类型必跑）
-pytest                         # 测试（提交前必跑，且功能 AC 通过）
+pytest                         # 测试（提交前必跑，且功能 AC 通过；当前 68 passed + 2 deselected）
+python -m pytest -m acceptance # 可执行验收（当前 1 passed + 1 xfailed）
 python -X utf8 scripts/check_layers.py       # 五层对齐（含引用完整性）
 python -X utf8 scripts/test_check_layers.py  # 护栏脚本自测（正/负样例）
-pytest --cov=timeflow          # 覆盖率（目标 ≥70%）
+python -m pytest --cov=timeflow --cov-fail-under=70  # 覆盖率门（目标 ≥70%；当前 82.54%）
 ```
 
 ## 3. 编码风格（Python，Ruff 为准）

@@ -15,6 +15,7 @@
 4. 契约层存在性与覆盖：interactions.md / flows.md 必须存在；
    contracts 中引用的 SR 须能在 specification 中找到。
 5. 引用完整性：文档中引用的 docs 内相对路径必须真实存在。
+6. 覆盖矩阵：coverage.md 存在、含 SR-F1~F10，且每域详细规格/契约文件存在。
 
 用法：python scripts/check_layers.py
 """
@@ -32,6 +33,9 @@ CONVENTIONS = ROOT / "docs" / "specification" / "conventions.md"
 CONTRACTS = ROOT / "docs" / "contracts"
 INTERACTIONS = CONTRACTS / "interactions.md"
 FLOWS = CONTRACTS / "flows.md"
+COVERAGE = ROOT / "docs" / "implementation" / "coverage.md"
+SPEC_DOMAINS = ROOT / "docs" / "specification" / "domains"
+CONTRACT_DOMAINS = CONTRACTS / "domains"
 
 FORBIDDEN = ["目标实体", "时间折算", "折算成", "学期分账", "Assigned to me"]
 NEG = ["不", "无", "砍", "去", "免", "禁", "避免", "杜绝", "不要", "不设"]
@@ -176,6 +180,24 @@ def main() -> int:
         if len(broken) > 10:
             print(f"       …等共 {len(broken)} 处")
         ok = False
+
+    # --- 6. 覆盖矩阵 ---
+    cov_text = read(COVERAGE)
+    if not cov_text:
+        print("[FAIL] 覆盖矩阵缺失: docs/implementation/coverage.md")
+        ok = False
+    else:
+        for i in range(1, 11):
+            sr = f"SR-F{i}"
+            if sr not in cov_text:
+                print(f"[FAIL] 覆盖矩阵缺 {sr}")
+                ok = False
+            if not list(SPEC_DOMAINS.glob(f"F{i}-*.md")):
+                print(f"[FAIL] 缺详细规格: docs/specification/domains/F{i}-*.md")
+                ok = False
+            if not list(CONTRACT_DOMAINS.glob(f"F{i}-*.md")):
+                print(f"[FAIL] 缺域契约: docs/contracts/domains/F{i}-*.md")
+                ok = False
 
     print("LAYER CHECKS:", "PASS ✅" if ok else "FAIL ❌")
     return 0 if ok else 1

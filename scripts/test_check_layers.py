@@ -33,6 +33,16 @@ def with_injected(path: Path, extra: str) -> tuple[int, str]:
         path.write_text(original, encoding="utf-8")
 
 
+def with_removed(path: Path, needle: str) -> tuple[int, str]:
+    """临时删除文件中的一段内容，跑检查，再还原。"""
+    original = path.read_text(encoding="utf-8")
+    try:
+        path.write_text(original.replace(needle, "", 1), encoding="utf-8")
+        return run_check()
+    finally:
+        path.write_text(original, encoding="utf-8")
+
+
 def main() -> int:
     failures: list[str] = []
 
@@ -61,7 +71,14 @@ def main() -> int:
     if code == 0 or "不存在的 SR" not in out:
         failures.append(f"应抓出未知 SR，实际: {out.strip()[:200]}")
 
-    # --- 负样例 4：待建文件（DESIGN.md）应被豁免、不报断链 ---
+    # --- 负样例 4：覆盖矩阵缺 SR-F10 → 应 FAIL ---
+    coverage = ROOT / "docs" / "implementation" / "coverage.md"
+    code, out = with_removed(coverage, "| SR-F10 ")
+    print(f"[负样例4] 覆盖矩阵缺 SR-F10 → exit={code}")
+    if code == 0 or "覆盖矩阵缺 SR-F10" not in out:
+        failures.append(f"应抓出覆盖矩阵缺 SR-F10，实际: {out.strip()[:200]}")
+
+    # --- 豁免用例：待建文件（DESIGN.md）不应被报断链 ---
     code, out = run_check()
     if "DESIGN.md" in out and "引用断裂" in out:
         failures.append("DESIGN.md 应被豁免，但仍被报断链")
@@ -72,7 +89,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("SELF-TEST PASS ✅ （1 正样例 + 3 负样例 + 1 豁免用例）")
+    print("SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）")
     return 0
 
 

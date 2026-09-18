@@ -30,7 +30,8 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -m \"not acceptance\""
+markers = ["acceptance: 可执行验收层（默认排除；显式 -m acceptance 运行）"]
 
 [tool.mypy]
 strict = true
