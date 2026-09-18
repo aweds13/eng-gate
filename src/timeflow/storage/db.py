@@ -6,10 +6,13 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
+import uuid
+from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -40,6 +43,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v2(conn)  # 多分组 + F3–F8 基础表
     if current < 3:
         _migrate_v3(conn)  # 事实层（facts）——事实与解读分离的地基
+    if current < 4:
+        _migrate_v4(conn)  # 历史 focus_sessions 回填为 facts（第 1 步前兼容旧数据）
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
@@ -47,6 +52,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v1(conn)
     _migrate_v2(conn)
     _migrate_v3(conn)
+    _migrate_v4(conn)  # 新库 focus_sessions 为空，此处为空操作
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -295,3 +301,76 @@ def _migrate_v3(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_type, subject_id)"
     )
+
+
+_END_KIND_BY_STATUS = {
+    "finished": "focus.finished",
+    "paused": "focus.paused",
+    "abandoned": "focus.abandoned",
+    "interrupted": "focus.interrupted",
+}
+
+
+def _migrate_v4(conn: sqlite3.Connection) -> None:
+    """v4：把历史 focus_sessions 幂等回填为 facts。
+
+    第 1 步 ledger 改读 facts 后，v3 之前的旧专注记录不能归零；
+    这里只回填 focus 这一域，其余域仍按重构第 3 步迁移。
+    """
+    if (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='focus_sessions'"
+        ).fetchone()
+        is None
+    ):
+        return  # 极端旧库 / 残缺库：无 focus_sessions 表，跳过回填
+    rows = conn.execute(
+        "SELECT id, task_id, started_at, ended_at, duration_sec, status, device_id "
+        "FROM focus_sessions"
+    ).fetchall()
+    if not rows:
+        return
+    existing: set[str] = set()
+    for fact in conn.execute("SELECT extra FROM facts WHERE kind LIKE 'focus.%'").fetchall():
+        raw = fact["extra"]
+        if not raw:
+            continue
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        sid = payload.get("session_id")
+        if sid:
+            existing.add(str(sid))
+    for row in rows:
+        sid = str(row["id"])
+        if sid in existing:
+            continue
+        status = row["status"] or "finished"
+        kind = _END_KIND_BY_STATUS.get(status, "focus.finished")
+        occurred_at = row["ended_at"] or row["started_at"]
+        extra = json.dumps(
+            {"session_id": sid, "status": status, "migrated": True},
+            ensure_ascii=False,
+        )
+        conn.execute(
+            """
+            INSERT INTO facts
+            (id, kind, subject_type, subject_id, value_num, value_text, extra,
+             occurred_at, recorded_at, source, device_id, revision, supersedes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,1,NULL)
+            """,
+            (
+                uuid.uuid4().hex[:12],
+                kind,
+                "task" if row["task_id"] else "focus_session",
+                row["task_id"] or sid,
+                float(row["duration_sec"] or 0),
+                None,
+                extra,
+                occurred_at or datetime.now().isoformat(timespec="seconds"),
+                datetime.now().isoformat(timespec="seconds"),
+                "migration:v4",
+                row["device_id"],
+            ),
+        )

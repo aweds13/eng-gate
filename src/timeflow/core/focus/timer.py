@@ -22,6 +22,15 @@ STATUS_PAUSED = "paused"
 STATUS_ABANDONED = "abandoned"
 STATUS_INTERRUPTED = "interrupted"
 
+# 结束状态 → 事实 kind：只有正常结束才算「完成投入」，放弃/中断/暂停各自成 kind。
+# 否则第 1 步 ledger 只查 focus.finished 时会把放弃/中断误计入投入（OP-4 / FLOW-3）。
+_END_KIND = {
+    STATUS_FINISHED: "focus.finished",
+    STATUS_PAUSED: "focus.paused",
+    STATUS_ABANDONED: "focus.abandoned",
+    STATUS_INTERRUPTED: "focus.interrupted",
+}
+
 
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
@@ -52,7 +61,11 @@ def finish_session(
     duration_sec: int,
     status: str = STATUS_FINISHED,
 ) -> None:
-    """结束一段专注并记时长。status 决定中断三选的落账（暂停/放弃/记中断）。"""
+    """结束一段专注并记时长。
+
+    status 决定事实 kind：正常结束 = focus.finished；暂停/放弃/记中断分别
+    落 focus.paused / focus.abandoned / focus.interrupted（只有正常结束计投入）。
+    """
     if status not in (STATUS_FINISHED, STATUS_PAUSED, STATUS_ABANDONED, STATUS_INTERRUPTED):
         raise ValueError(f"非法结束状态: {status}")
     if duration_sec < 0:
@@ -70,9 +83,10 @@ def finish_session(
 
     task_id = row["task_id"] if row is not None else None
     device_id = row["device_id"] if row is not None else None
+    fact_kind = _END_KIND[status]
     facts_mod.record(
         conn,
-        kind="focus.finished",
+        kind=fact_kind,
         subject_type="task" if task_id else "focus_session",
         subject_id=task_id or session_id,
         value_num=float(duration_sec),
@@ -81,7 +95,7 @@ def finish_session(
         device_id=device_id,
     )
     facts_mod.publish(
-        "focus.finished",
+        fact_kind,
         {
             "session_id": session_id,
             "task_id": task_id,
