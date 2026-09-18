@@ -133,3 +133,50 @@ def test_register_is_idempotent(conn: sqlite3.Connection) -> None:
     got = fb.get_feedback(conn)
     assert got is not None
     assert got["focus_minutes"] == 10.0  # 未因重复注册而双计
+
+
+# ---- 读口径收拢（子任务 4）：全部只从 facts 读 ----
+
+def test_today_focus_minutes_reads_facts(conn: sqlite3.Connection) -> None:
+    sid = fc.start_session(conn, kind=fc.KIND_PLAIN)
+    fc.finish_session(conn, sid, 1500)
+    # 即使旧表被清空，口径也不受影响（唯一出口是 facts）
+    conn.execute("DELETE FROM focus_sessions")
+    conn.commit()
+
+    assert fc.today_focus_minutes(conn) == 25.0
+
+
+def test_self_check_week_focus_reads_facts(conn: sqlite3.Connection) -> None:
+    sid = fc.start_session(conn, kind=fc.KIND_PLAIN)
+    fc.finish_session(conn, sid, 1800)
+    conn.execute("DELETE FROM focus_sessions")
+    conn.commit()
+
+    assert fb.self_check(conn)["week_focus_minutes"] == 30.0
+
+
+def test_sessions_by_task_reads_facts(conn: sqlite3.Connection) -> None:
+    t = tm.create_task(conn, "写高数")
+    sid = fc.start_session(conn, kind=fc.KIND_TOMATO, task_id=t.id)
+    fc.finish_session(conn, sid, 900)
+
+    sessions = fc.sessions_by_task(conn, t.id)
+    assert len(sessions) == 1
+    assert sessions[0]["id"] == sid
+    assert sessions[0]["duration_sec"] == 900
+    assert sessions[0]["kind"] == fc.KIND_TOMATO
+    assert sessions[0]["status"] == fc.STATUS_FINISHED
+
+
+def test_abandoned_session_visible_but_not_invested(conn: sqlite3.Connection) -> None:
+    """放弃的专注仍留痕在任务流水里，但不进投入/反馈口径。"""
+    t = tm.create_task(conn, "半途而废")
+    sid = fc.start_session(conn, kind=fc.KIND_PLAIN, task_id=t.id)
+    fc.finish_session(conn, sid, 600, fc.STATUS_ABANDONED)
+
+    sessions = fc.sessions_by_task(conn, t.id)
+    assert len(sessions) == 1
+    assert sessions[0]["status"] == fc.STATUS_ABANDONED
+    assert fc.today_focus_minutes(conn) == 0.0
+    assert fb.get_feedback(conn) is None

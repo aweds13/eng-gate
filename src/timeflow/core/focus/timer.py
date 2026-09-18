@@ -71,7 +71,8 @@ def finish_session(
     if duration_sec < 0:
         raise ValueError("时长不能为负")
     row = conn.execute(
-        "SELECT task_id, device_id FROM focus_sessions WHERE id = ?", (session_id,)
+        "SELECT task_id, kind, started_at, device_id FROM focus_sessions WHERE id = ?",
+        (session_id,),
     ).fetchone()
     conn.execute(
         "UPDATE focus_sessions SET ended_at = ?, duration_sec = ?, status = ? WHERE id = ?",
@@ -91,7 +92,12 @@ def finish_session(
         subject_type="task" if task_id else "focus_session",
         subject_id=task_id or session_id,
         value_num=float(duration_sec),
-        extra={"session_id": session_id, "status": status},
+        extra={
+            "session_id": session_id,
+            "status": status,
+            "kind": (row["kind"] if row is not None else None) or KIND_TOMATO,
+            "started_at": row["started_at"] if row is not None else None,
+        },
         occurred_at=occurred_at,
         source="desktop",
         device_id=device_id,
@@ -132,17 +138,23 @@ def focus_minutes_from_facts(conn: sqlite3.Connection, day: str) -> float:
 
 
 def sessions_by_task(conn: sqlite3.Connection, task_id: str) -> list[dict[str, object]]:
-    """某任务的所有专注记录（用于把时长归因到任务 + 每日反馈）。"""
-    rows = conn.execute(
-        "SELECT * FROM focus_sessions WHERE task_id = ? ORDER BY started_at", (task_id,)
-    ).fetchall()
+    """某任务的专注记录（用于把时长归因到任务 + 每日反馈）。
+
+    第 2 步子任务 4（读口径收拢）：改读**事实层**（`focus.*` 中 subject 指向该任务的事实），
+    与投入口径同源；返回结构保持向后兼容（id/kind/started_at/duration_sec/status）。
+    """
+    from timeflow.core import facts as facts_mod
+
+    rows = facts_mod.query(conn, kind="focus.", subject_type="task", subject_id=task_id)
     return [
         {
-            "id": r["id"],
-            "kind": r["kind"],
-            "started_at": r["started_at"],
-            "duration_sec": r["duration_sec"],
-            "status": r["status"],
+            "id": str((row["extra"] or {}).get("session_id") or row["id"]),
+            "kind": str((row["extra"] or {}).get("kind") or ""),
+            "started_at": str(
+                (row["extra"] or {}).get("started_at") or row["occurred_at"]
+            ),
+            "duration_sec": int(float(row["value_num"] or 0)),
+            "status": str((row["extra"] or {}).get("status") or ""),
         }
-        for r in rows
+        for row in rows
     ]

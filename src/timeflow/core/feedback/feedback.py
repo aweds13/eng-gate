@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -141,31 +141,37 @@ def habit_logs(conn: sqlite3.Connection, habit_id: str) -> list[str]:
 
 # ---- 自检（SR-F4.3）----
 def self_check(conn: sqlite3.Connection, today: str | None = None) -> dict[str, object]:
-    """自检：消费 B 账本数据。返回投入/产出/债务的轻量趋势（温和呈现，不告警）。"""
+    """自检：消费 B 账本数据。返回投入/产出/债务的轻量趋势（温和呈现，不告警）。
+
+    第 2 步子任务 4（读口径收拢）：本周专注分钟改读**事实层**（`focus.finished`），
+    不再直接聚合 `focus_sessions`——事实层是唯一投入出口。
+    """
     t = today or _today()
-    # 本周（近 7 天）专注分钟
-    focus = conn.execute(
-        "SELECT SUM(duration_sec) FROM focus_sessions "
-        "WHERE status = 'finished' AND substr(started_at,1,10) >= ?",
-        (_week_start(t),),
-    ).fetchone()
+    # 本周（近 7 天）专注分钟：读 facts，按完成时刻归属（与 summary 同口径）
+    from timeflow.core import focus as fc
+
+    week_start = _week_start(t)
+    days = [
+        (date.fromisoformat(week_start) + timedelta(days=i)).isoformat() for i in range(7)
+    ]
+    week_minutes = sum(
+        fc.focus_minutes_from_facts(conn, d) for d in days if d <= t
+    )
     # 逾期任务数（债务）
     from timeflow.core import tasks as tm
 
     debt = len(tm.overdue_tasks(conn, t))
     # 本周习惯打卡数
     habit_done = conn.execute(
-        "SELECT COUNT(*) FROM habit_logs WHERE date >= ? AND done = 1", (_week_start(t),)
+        "SELECT COUNT(*) FROM habit_logs WHERE date >= ? AND done = 1", (week_start,)
     ).fetchone()
     return {
-        "week_focus_minutes": round((focus["SUM(duration_sec)"] or 0) / 60.0, 1),
+        "week_focus_minutes": round(week_minutes, 1),
         "debt_count": debt,
         "week_habit_done": int(habit_done["COUNT(*)"] or 0),
     }
 
 
 def _week_start(today: str) -> str:
-    from datetime import date, timedelta
-
     d = date.fromisoformat(today)
     return (d - timedelta(days=d.weekday())).isoformat()

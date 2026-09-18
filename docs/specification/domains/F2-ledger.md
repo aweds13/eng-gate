@@ -35,7 +35,14 @@
 - 0 秒/0 值：可记录，但不产生有效投入；负值拒绝。
 - 撤销后再完成：产生新事实，按最新有效状态解读。
 - 旧数据无 facts：由 v4 回填保证；迁移后仍缺则回退读旧表并记录缺口。
-- `ledger_entries` 与 facts 并存：明确其为旧路径/待物化；不得重复计账。
+- `ledger_entries` 与 facts 并存：**已定案（第 2 步子任务 4）**——两者**互不相通**，记为「新/旧两条路」：
+  - 事实层 `facts` = **新路径 / 唯一真源**。专注、任务完成、复习完成等**计算型**记录一律走 facts；
+    `ledger.summary()` 与各线读口径只读 facts，不读 `ledger_entries`。
+  - `ledger_entries` = **旧路径（待物化）**。仅由 `memo.add_invest_entry/add_output_entry` 手动写入，
+    是「手动记投入/产出」的落点（覆盖 SR-F8.4 产出评价器第一版「手动粗颗粒」）。
+  - `type` 与 `source` **不跨表 join、不合并聚合** ⇒ 不存在重复计账。
+  - 后续（第 3 步或产出轴开工时）再决定：产出轴改发 `output.*` 事实、`invest.manual` 统一到事实层，
+    届时 `ledger_entries` 降级为迁移来源。
 - 跨端冲突：LWW + 冲突日志，不静默覆盖。
 - 空账本：投入 0 / 债务 0，界面友好，不显示错误。
 
@@ -53,5 +60,7 @@
 ## 7. 测试映射
 
 - 现有：`../../tests/test_ledger_summary.py`、`../../tests/test_facts.py`、`../../tests/test_team_memo.py`。
-- 第 2 步补充：`../../tests/test_task_line.py`（完成事实不得混入投入口径）、`../../tests/test_focus_line.py`（专注事实→反馈口径）。
-- 待补（B4）：专注→记账主链、完成→记账、撤销回退、产出写入。
+- 第 2 步补充：`../../tests/test_task_line.py`（完成事实不得混入投入口径）、`../../tests/test_focus_line.py`
+  （专注事实→反馈/自检口径、读口径只认 facts）、`../../tests/test_review_line.py`（复习投入计张数）。
+- 真实运行验证：`../../tools/lf1_live_check.py`（起真服务走 LF-1 主链 8 步）。
+- 待补（B4）：专注→记账主链、完成→记账、产出写入。
