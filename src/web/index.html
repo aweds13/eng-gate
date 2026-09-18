@@ -161,6 +161,9 @@ const ACTIONS = {
   'group-rename':   el => renameGroup(el.dataset.id, el.dataset.name || ''),
   'group-delete':   el => deleteGroup(el.dataset.id, el.dataset.name || ''),
   'task-group':     el => toggleTaskGroup(el.dataset.id, el.dataset.name || '', el.dataset.on === 'true'),
+  // 子任务（OP-12）
+  'subtask-add':    () => addSubtask(),
+  'task-parent':    el => setTaskParent(el.dataset.id, el.dataset.parent || null),
   'task-done':      el => toggleDone(el.dataset.id, el.dataset.done === 'true'),
   'task-undo-done': el => undoDone(el.dataset.id),
   'task-myday':     el => toggleMyDay(el.dataset.id, true),
@@ -302,11 +305,11 @@ function paintRail(mySeq){
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
   if(!detailTaskId){box.innerHTML='';return}
   Promise.all([api(`/api/tasks/${detailTaskId}`),api(`/api/tasks/${detailTaskId}/facts`),
-    api('/api/groups')])                       // 详情要显示"所属分组"的可选项，一并取回来
-    .then(([t,facts,groups])=>{
+    api('/api/groups'),api(`/api/tasks/${detailTaskId}/subtasks`)])   // 详情要显示分组可选项与子任务
+    .then(([t,facts,groups,kids])=>{
       if(mySeq!==renderSeq)return;
       groupCache=groups||[];
-      renderDetail(box,t,facts);
+      renderDetail(box,t,facts||[],kids||[]);
     })
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
 }
@@ -374,14 +377,41 @@ async function toggleTaskGroup(taskId,name,on){
   await api(`/api/tasks/${taskId}/group`,{method:'POST',body:JSON.stringify({name,on})});
   toast(on?`已加入分组「${name}」`:`已移出分组「${name}」`);view(current);
 }
-// 右栏详情：任务字段 + 事实流水 + 与列表一致的动作（动作后由 view(current) 统一刷新）
-function renderDetail(el,t,facts){
+/* ---------- 子任务（OP-12 / SR-F1.6）：拆步 + 联动完成 ----------
+ * 联动在后端：最后一个子任务完成时父任务自动完成（已由测试钉住），前端只负责显示与刷新。
+ */
+async function addSubtask(){
+  const input=document.getElementById('subtaskTitle');
+  const title=(input&&input.value||'').trim();
+  if(!title){toast('步骤名不能为空');return}
+  if(!detailTaskId){toast('先打开一个任务的详情');return}
+  await api(`/api/tasks/${detailTaskId}/subtasks`,{method:'POST',body:JSON.stringify({title})});
+  toast('已加一步；完成最后一步时父任务会自动完成');view(current);
+}
+async function setTaskParent(taskId,parentId){
+  await api(`/api/tasks/${taskId}/parent`,{method:'POST',body:JSON.stringify({parent_id:parentId})});
+  toast(parentId?'已挂到父任务下':'已脱离父任务');view(current);
+}
+// 右栏详情：任务字段 + 子任务 + 事实流水 + 与列表一致的动作（动作后由 view(current) 统一刷新）
+function renderDetail(el,t,facts,kids){
   const isDone=t.status==='完成';
   const asg=(t.assignments||[]).map(a=>
     `<div class="meta"><span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span></div>`).join('');
   const lines=(facts||[]).slice(-12).reverse().map(f=>
     `<div class="fact"><span>${esc(factLabel(f.kind))}</span>
       <span class="sub">${humanTime(f.occurred_at)}</span></div>`).join('');
+  const subtaskList=(kids||[]).map(s=>{
+    const sDone=s.status==='完成';
+    return `<div class="fact">
+      <button class="check ${sDone?'on':''}" title="${sDone?'撤销完成':'标记完成'}"
+        data-action="task-done" data-id="${s.id}" data-done="${sDone}"></button>
+      <span class="grow" style="flex:1;${sDone?'text-decoration:line-through;color:var(--muted)':''}">${esc(s.title)}</span>
+      ${s.due_date?`<span class="sub">${s.due_date}</span>`:''}
+      <button class="ghost" data-action="task-parent" data-id="${s.id}" data-parent="">脱离</button>
+    </div>`;
+  }).join('');
+  const doneCount=(kids||[]).filter(s=>s.status==='完成').length;
+  const progress=(kids||[]).length?`<span class="badge">${doneCount}/${kids.length}</span>`:'';
   el.innerHTML=`<div class="panel-title">任务详情</div>
     <div class="title">${esc(t.title)}</div>
     <div class="meta">${isDone?`<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
@@ -392,7 +422,10 @@ function renderDetail(el,t,facts){
     ${asg}
     <div class="settings-sub">所属分组</div>
     <div class="row tight" id="detailGroups" data-task="${t.id}">${groupChips(groupsOf(t),(t.groups||[]))}</div>
-    <div class="sub" id="detailGroupsHint">点分组名加入/移出；在「设置 · 分组管理」里可新建、改名、删除。</div>
+    <div class="settings-sub">步骤（子任务）${progress}</div>
+    <div id="subtaskList">${subtaskList||'<div class="sub">还没有步骤。拆成小步，完成到最后一个时父任务会自动完成。</div>'}</div>
+    <div class="new"><input id="subtaskTitle" placeholder="添加一个步骤…" data-enter="subtask-add">
+      <button class="ghost" data-action="subtask-add">添加</button></div>
     <div class="row" style="margin-top:10px">
       <button class="${isDone?'ghost':''}" data-action="${isDone?'task-undo-done':'task-done'}" data-id="${t.id}" data-done="${isDone}">${isDone?'撤销完成':'完成'}</button>
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
@@ -400,6 +433,7 @@ function renderDetail(el,t,facts){
       <button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
       <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
       ${teamButtonsHTML(t.assignments||[])}
+      ${t.parent_id?`<button class="ghost" data-action="task-parent" data-id="${t.id}" data-parent="">脱离父任务</button>`:''}
       <button class="ghost" data-action="task-delete" data-id="${t.id}">删除</button>
       <button class="ghost" data-action="task-close">收起</button></div>
     <div class="section-title">记录（最近 ${Math.min((facts||[]).length,12)} 条）</div>
@@ -414,10 +448,12 @@ function taskCard(t,isOverdue){
   const badge=t.status==='完成'
     ? `<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`
     : `<span class="badge todo">未完成</span>`;
+  const sub=(t.subtask_total>0)
+    ? `<span class="badge">步骤 ${t.subtask_done}/${t.subtask_total}</span>` : '';
   return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${badge}</div></div>
+    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${badge}</div></div>
     <div class="row">
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
       ${isOverdue?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>

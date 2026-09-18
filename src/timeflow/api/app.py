@@ -65,10 +65,14 @@ class TaskOut(BaseModel):
     groups: list[str] = []
     # 团队分配（SR-F7.1）：任务卡片上直接可见「谁负责 / 进展到哪」，不必另开页面
     assignments: list[AssigneeOut] = []
+    # 子任务进度（SR-F1.6）：父任务卡片上直接显示「2/3 步已完成」，不必点进去数
+    subtask_done: int = 0
+    subtask_total: int = 0
 
 
 def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
     groups = tm.get_task_groups(conn, t.id)
+    progress = tm.subtask_progress(conn, t.id)
     return TaskOut(
         id=t.id,
         title=t.title,
@@ -86,6 +90,8 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
             AssigneeOut(**a)  # type: ignore[arg-type]
             for a in team.assignments_for_task(conn, t.id)
         ],
+        subtask_done=progress["done"],
+        subtask_total=progress["total"],
     )
 
 
@@ -233,6 +239,43 @@ def create_app(db_path: str | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="任务不存在") from None
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/tasks/{task_id}/subtasks")
+    def list_subtasks(task_id: str) -> list[TaskOut]:
+        """子任务列表（未完成在前）。任务不存在 404。"""
+        try:
+            tm.get_task(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        return [_out(t, conn) for t in tm.subtasks(conn, task_id)]
+
+    @app.post("/api/tasks/{task_id}/subtasks", response_model=TaskOut, status_code=201)
+    def add_subtask(task_id: str, payload: dict[str, Any]) -> TaskOut:
+        """新建子任务（OP-12）。父任务不存在 404；标题空 400。
+
+        子任务全完成时父任务自动完成（`create_subtask` 内部联动）。
+        """
+        try:
+            child = tm.create_subtask(
+                conn, task_id, str(payload.get("title", "")), payload.get("due_date")
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return _out(child, conn)
+
+    @app.post("/api/tasks/{task_id}/parent")
+    def set_task_parent(task_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """改父任务（`{parent_id}`，null 表示脱离父任务）。**成环 / 自己作父 一律 400**。"""
+        parent_id = payload.get("parent_id")
+        try:
+            t = tm.set_task_parent(conn, task_id, None if parent_id is None else str(parent_id))
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"task_id": t.id, "parent_id": t.parent_id}
 
     @app.get("/api/tasks/{task_id}/facts")
     def task_facts(task_id: str) -> list[dict[str, Any]]:

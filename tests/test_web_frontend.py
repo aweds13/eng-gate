@@ -266,15 +266,28 @@ def test_task_cards_show_completion_state() -> None:
 
 
 def test_task_detail_panel_shows_readable_history() -> None:
-    """用户要求：点任务卡进详情，能看到这个任务的历史（完成时间等），不是一串 ISO 串。"""
+    """用户要求：点任务卡进详情，能看到这个任务的历史（完成时间等），不是一串 ISO 串；
+
+    并（F1 段1 起）要能看到/添加**步骤（子任务）**与所属分组。
+    """
     html = WEB_INDEX.read_text(encoding="utf-8")
-    detail = html.split("function renderDetail(el,t,facts){", 1)[1].split("\n}", 1)[0]
-    for need in ("humanTime(f.occurred_at)", "建于 ", "更新于 "):
+    detail = html.split("function renderDetail(el,t,facts,kids){", 1)[1].split("\n}", 1)[0]
+    for need in ("humanTime(f.occurred_at)", "建于 ", "更新于 ", "步骤（子任务）", "subtaskTitle"):
         assert need in detail, f"详情面板缺少 {need}"
     assert "任务详情" in detail and "记录（最近" in detail
     # 选中态：列表里那张卡要有标记，否则不知道右栏在看哪个
     css = WEB_CSS.read_text(encoding="utf-8")
     assert "t.id===detailTaskId?'selected'" in html and ".card.selected" in css
+    # 详情面板要取子任务列表（否则"步骤"永远是空的）
+    assert "/subtasks`" in html
+
+
+def test_subtask_flow_is_wired_in_frontend() -> None:
+    """F1 段1（OP-12）：建步骤、勾完成、脱离父任务都要有界面入口。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    for needle in ("function addSubtask(", "function setTaskParent(", "subtask-add", "task-parent"):
+        assert needle in html, f"子任务前端缺少 {needle}"
+    assert "subtask_done" in html and "subtask_total" in html, "任务卡应显示步骤进度"
 
 
 def test_recycle_bin_can_hard_delete_and_clear() -> None:

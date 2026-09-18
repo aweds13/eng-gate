@@ -307,6 +307,24 @@
 - 质量门：pytest **295 passed** + 2 deselected / 验收 2 passed / ruff 0 / mypy 0 / 五层 PASS /
   DOM 探针 9/9 / LF-1 PASS / 前端自检 PASS / 审计通过。
 
+### F1 主线 · T-A2 子任务树（契约 OP-12 / SR-F1.6 收口）
+- **后端**：`subtask_progress / subtasks / create_subtask / set_task_parent`（+ `_would_cycle` / `_autocomplete_parent`）。
+  **子任务全完成 → 父任务自动完成**（链式向上，每层都过"子任务是否全完成"的校验）；**禁止成环**
+  （自己作父、挂到自己的子/孙任务下都 400）；`parent_id=null` 可脱离父任务。
+- **API**：`GET/POST /api/tasks/{id}/subtasks`、`POST /api/tasks/{id}/parent`；
+  `TaskOut` 新增 `subtask_done/subtask_total`（父任务卡直接显示「步骤 1/3」）。
+- **前端**：详情面板新增「步骤（子任务）」——进度徽标 + 列表（勾选即完成，最后一步完成时父任务自动完成）
+  + 「添加一个步骤」（回车即加）+ 每个子任务可「脱离」；任务卡片显示步骤进度。
+- **修两个真 bug**（都是自测/单测抓出来的）：
+  ① `update_task` 用 `v is not None` 过滤，导致 `parent_id=None` / `due_date=None` 这类**清空操作被静默忽略**
+     → 改为按"键是否存在"判断；
+  ② `complete_task` **没有挂"子任务全完成 → 父任务自动完成"**（原始需求 SR-F1.6 的联动），只做了反向拦截
+     → 补上，并在最后一个子任务完成时触发。
+- **测试**：`tests/test_task_subtasks_line.py`（12 项，含成环、脱离、联动、进度、可空字段清空）。
+- 台账：`SR-F1.8` 与 `OP-12` todo → **done**（缺口 GAP-F1-04 消除）；done 45→49。
+- 质量门：pytest **307 passed** + 2 deselected / 验收 2 passed / ruff 0 / mypy 0 / 五层 PASS /
+  DOM 探针 9/9 / LF-1 PASS / 前端自检 PASS / 审计通过。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

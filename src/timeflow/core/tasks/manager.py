@@ -149,7 +149,9 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         "is_myday",
         "status",
     }
-    updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+    # 注意：用"键在 payload 里"判断，而不是"值不是 None" ——
+    # 否则 `parent_id=None` / `due_date=None` 这类**清空操作**会被静默忽略（实测踩到）。
+    updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return get_task(conn, task_id)
     if "status" in updates and updates["status"] not in VALID_STATUS:
@@ -326,6 +328,93 @@ def overdue_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Ta
     return overdue
 
 
+# ---------------------------------------------------------------- 子任务（SR-F1.6 / OP-12）
+def subtask_progress(conn: sqlite3.Connection, task_id: str) -> dict[str, int]:
+    """子任务进度：{done, total}（没有子任务时 total=0）。"""
+    rows = conn.execute("SELECT status FROM tasks WHERE parent_id = ?", (task_id,)).fetchall()
+    total = len(rows)
+    done = sum(1 for r in rows if r["status"] == STATUS_DONE)
+    return {"done": done, "total": total}
+
+
+def subtasks(conn: sqlite3.Connection, task_id: str) -> list[Task]:
+    """列出子任务：未完成在前，再按截止日（无截止日最后）；同状态按创建时间。"""
+    rows = conn.execute(
+        "SELECT * FROM tasks WHERE parent_id = ? "
+        "ORDER BY (status = ?) ASC, due_date IS NULL, due_date, created_at",
+        (task_id, STATUS_DONE),
+    ).fetchall()
+    return [_row_to_task(r) for r in rows]
+
+
+def _would_cycle(conn: sqlite3.Connection, task_id: str, parent_id: str) -> bool:
+    """把 task_id 挂到 parent_id 下会不会成环（沿父链上溯，撞到自己就是环）。"""
+    seen: set[str] = set()
+    cursor: str | None = parent_id
+    while cursor and cursor not in seen:
+        if cursor == task_id:
+            return True
+        seen.add(cursor)
+        row = conn.execute("SELECT parent_id FROM tasks WHERE id = ?", (cursor,)).fetchone()
+        cursor = str(row["parent_id"]) if row and row["parent_id"] else None
+    return False
+
+
+def _autocomplete_parent(conn: sqlite3.Connection, parent_id: str | None) -> Task | None:
+    """子任务全完成时**自动完成父任务**（OP-12 联动）。
+
+    父任务若还有别的未完成子任务，`complete_task` 会抛 ValueError —— 那不是错误，
+    只是"还没到时候"，这里静默忽略。
+    """
+    if not parent_id:
+        return None
+    progress = subtask_progress(conn, parent_id)
+    if progress["total"] == 0 or progress["done"] < progress["total"]:
+        return None
+    try:
+        return complete_task(conn, parent_id)
+    except (KeyError, ValueError):
+        return None
+
+
+def create_subtask(
+    conn: sqlite3.Connection,
+    parent_id: str,
+    title: str,
+    due_date: str | None = None,
+) -> Task:
+    """新建子任务（OP-12）。父任务不存在 → KeyError；标题空 → ValueError。
+
+    继承父任务的 My Day 归属（子任务跟着父任务出现在今天的清单里）；
+    建完若父任务的子任务已全部完成 → 自动完成父任务。
+    """
+    parent = get_task(conn, parent_id)
+    if not title.strip():
+        raise ValueError("子任务标题不能为空")
+    child = create_task(
+        conn,
+        title.strip(),
+        due_date=due_date,
+        parent_id=parent_id,
+        is_myday=parent.is_myday,
+    )
+    _autocomplete_parent(conn, parent_id)
+    return get_task(conn, child.id)
+
+
+def set_task_parent(
+    conn: sqlite3.Connection, task_id: str, parent_id: str | None
+) -> Task:
+    """改父任务（OP-12 边界：**禁止成环**）。`parent_id=None` 表示脱离父任务。"""
+    if parent_id is not None:
+        if parent_id == task_id:
+            raise ValueError("任务不能作为自己的子任务")
+        get_task(conn, parent_id)  # 父任务不存在 → KeyError
+        if _would_cycle(conn, task_id, parent_id):
+            raise ValueError("不能把任务挂到它自己的子任务下（会成环）")
+    return update_task(conn, task_id, parent_id=parent_id)
+
+
 def complete_task(conn: sqlite3.Connection, task_id: str) -> Task:
     """完成任务（AC-7 联动）：若为父任务，仅当全部子任务完成才自动完成；否则标记完成。
 
@@ -341,6 +430,11 @@ def complete_task(conn: sqlite3.Connection, task_id: str) -> Task:
     done = update_task(conn, task_id, status=STATUS_DONE)
     if done.repeat_days is not None:
         process_repeats(conn)
+    # 子任务全完成 → 父任务自动完成（OP-12 联动）。
+    # 放在最后、并且只在"确实还有父任务"时递归一层 —— 链式向上（子→父→祖父）不会无限递归：
+    # 每上一层，`complete_task` 都会先检查那一层的子任务是否全完成。
+    if done.parent_id:
+        _autocomplete_parent(conn, done.parent_id)
     return done
 
 

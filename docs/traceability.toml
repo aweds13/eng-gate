@@ -90,9 +90,22 @@ gaps = "热力图是「天 × 指标」，没有按任务/重复节奏的视图"
 id = "SR-F1.8"
 title = "子任务：任务树/折叠 + 添加子任务入口"
 group = "F1"
-status = "todo"
-evidence = ["column:tasks.parent_id", "text:src/timeflow/core/tasks/manager.py::parent_id"]
-gaps = "前端无任务树、无添加入口（GAP-F1-04）；后端有 parent_id 与联动"
+status = "done"
+evidence = [
+  "column:tasks.parent_id",
+  "text:src/timeflow/core/tasks/manager.py::def create_subtask",
+  "text:src/timeflow/core/tasks/manager.py::def subtasks",
+  "text:src/timeflow/core/tasks/manager.py::def set_task_parent",
+  "text:src/timeflow/core/tasks/manager.py::def _autocomplete_parent",
+  "route:GET /api/tasks/{task_id}/subtasks",
+  "route:POST /api/tasks/{task_id}/subtasks",
+  "route:POST /api/tasks/{task_id}/parent",
+  "ui:data-action=subtask-add",
+  "ui:data-action=task-parent",
+  "text:src/web/index.html::步骤（子任务）",
+  "test:test_task_subtasks_line.py",
+]
+gaps = ""
 
 [entries."SR-F1.9"]
 id = "SR-F1.9"
@@ -748,9 +761,17 @@ gaps = ""
 id = "OP-12"
 title = "子任务管理（入口：任务详情「添加子任务」）"
 group = "OP"
-status = "todo"
-evidence = ["column:tasks.parent_id"]
-gaps = "**界面无入口**（T-A2 待做）"
+status = "done"
+evidence = [
+  "column:tasks.parent_id",
+  "route:GET /api/tasks/{task_id}/subtasks",
+  "route:POST /api/tasks/{task_id}/subtasks",
+  "route:POST /api/tasks/{task_id}/parent",
+  "ui:data-action=subtask-add",
+  "text:src/web/index.html::function addSubtask(",
+  "test:test_task_subtasks_line.py",
+]
+gaps = ""
 
 [entries."T-A1"]
 id = "T-A1"
@@ -766,6 +787,21 @@ evidence = [
   "ui:data-action=group-add",
   "ui:data-action=task-group",
   "test:test_task_groups_line.py",
+]
+gaps = ""
+
+[entries."T-A2"]
+id = "T-A2"
+title = "F1 主线·段1：子任务树收口（OP-12）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "route:GET /api/tasks/{task_id}/subtasks",
+  "route:POST /api/tasks/{task_id}/subtasks",
+  "route:POST /api/tasks/{task_id}/parent",
+  "ui:data-action=subtask-add",
+  "ui:data-action=task-parent",
+  "test:test_task_subtasks_line.py",
 ]
 gaps = ""
 
