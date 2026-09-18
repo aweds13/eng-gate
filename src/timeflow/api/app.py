@@ -389,6 +389,15 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+    @app.post("/api/review/{item_id}/undo")
+    def undo_review(item_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        """撤销当日最近一次复习反馈（OP-27 可逆）：回退 FSRS 字段 + 追加 `review.undone` 事实。"""
+        on_date = (payload or {}).get("date")
+        try:
+            return rv.undo_review(conn, item_id, on_date=on_date)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="复习卡不存在") from None
+
     @app.get("/api/review/{item_id}/facts")
     def review_facts(item_id: str) -> list[dict[str, Any]]:
         """某复习卡的事实流水（复习完成），供前端展示与验收核对。"""

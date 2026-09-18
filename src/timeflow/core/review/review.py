@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, time, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import sqlite3
@@ -103,6 +103,7 @@ def review(
 
     反馈 → Rating：记得=Good / 模糊=Hard / 忘了=Again。
     返回新卡状态、下次到期日、以及给前端展示的 reps/lapses。
+    事实 extra 里带**复习前的卡片快照**，供「撤销本次反馈」精确回退（F6 OP-27 可逆）。
     """
     mapping = {"remember": 3, "fuzzy": 2, "forgot": 1}  # Good / Hard / Again
     if feedback not in mapping:
@@ -112,6 +113,7 @@ def review(
         raise KeyError(f"复习卡不存在: {item_id}")
     from fsrs import Rating
 
+    before = _item_snapshot(row)
     card = _card_from_row(row)
     sched = _scheduler()
     new_card, _log = sched.review_card(card, Rating(mapping[feedback]), _now())
@@ -136,6 +138,7 @@ def review(
     _record_completed_fact(
         conn, item_id=item_id, title=str(row["title"]), feedback=feedback,
         reps=reps, next_due=new_card.due.date().isoformat(), reviewed_on=reviewed_on,
+        before=before,
     )
     return {
         "id": item_id,
@@ -147,6 +150,122 @@ def review(
     }
 
 
+def undo_review(
+    conn: sqlite3.Connection, item_id: str, on_date: str | None = None
+) -> dict[str, object]:
+    """撤销**当日最近一次**复习反馈（F6 OP-27 可逆）。
+
+    - 回退 FSRS 字段到复习前快照（存在 `review.completed` 事实的 extra.before 里）；
+    - 追加 `review.undone` 反向事实，不删历史；账本按「完成 − 撤销」计数（同卡当日回到 0）。
+    幂等：无当日完成事实、或该次已被撤销 → 直接返回当前卡片状态。
+    """
+    day = on_date or date.today().isoformat()
+    rows = [
+        row
+        for row in _completed_facts_for(conn, item_id)
+        if str(row["occurred_at"] or "")[:10] == day
+    ]
+    item = conn.execute("SELECT * FROM review_items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        raise KeyError(f"复习卡不存在: {item_id}")
+    done_ids = {str(row["id"]) for row in rows}
+    undone_ids = {
+        str((row["extra"] or {}).get("fact_id"))
+        for row in _undone_facts_for(conn, item_id)
+        if str(row["occurred_at"] or "")[:10] == day
+    }
+    pending = [row for row in rows if str(row["id"]) not in undone_ids]
+    if not pending:
+        return _item_state(item)
+    target = pending[-1]
+    before = (target["extra"] or {}).get("before") or {}
+    if before:
+        conn.execute(
+            "UPDATE review_items SET due_date=?, interval_days=?, ease=?, reps=?, lapses=?, "
+            "state=? WHERE id=?",
+            (
+                str(before.get("due_date") or item["due_date"]),
+                float(before.get("interval_days") or 0),
+                float(before.get("ease") or 2.5),
+                int(before.get("reps") or 0),
+                int(before.get("lapses") or 0),
+                str(before.get("state") or STATE_DUE),
+                item_id,
+            ),
+        )
+        conn.commit()
+    item = conn.execute("SELECT * FROM review_items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        raise KeyError(f"复习卡不存在: {item_id}")
+    state = _item_state(item)
+    raw_reps = state["reps"]
+    reps_value = float(raw_reps) if isinstance(raw_reps, (int, float)) else 0.0
+    from timeflow.core import facts as facts_mod
+
+    extra = {
+        "entry_id": item_id,
+        "fact_id": str(target["id"]),
+        "kind": item_id,
+        "value": state["reps"],
+        "restored": before,
+        "undone_on": day,
+    }
+    facts_mod.record(
+        conn,
+        kind="review.undone",
+        subject_type="review_item",
+        subject_id=item_id,
+        value_num=reps_value,
+        value_text=str(item["title"]),
+        extra=extra,
+        source="desktop",
+    )
+    facts_mod.publish("review.undone", {"item_id": item_id, "fact_id": str(target["id"]), **extra})
+    assert done_ids  # 显式表达：仅在确认存在当日完成事实后才写撤销事实
+    return state
+
+
+def _item_snapshot(row: sqlite3.Row) -> dict[str, object]:
+    """复习前的卡片快照（供撤销精确回退）。"""
+    return {
+        "due_date": row["due_date"],
+        "interval_days": float(row["interval_days"] or 0),
+        "ease": float(row["ease"] or 2.5),
+        "reps": int(row["reps"] or 0),
+        "lapses": int(row["lapses"] or 0),
+        "state": row["state"] or STATE_DUE,
+    }
+
+
+def _item_state(row: sqlite3.Row) -> dict[str, object]:
+    """当前卡片状态（供 API 返回）。"""
+    state = _item_snapshot(row)
+    return {
+        "id": row["id"],
+        "due_date": state["due_date"],
+        "interval_days": state["interval_days"],
+        "reps": state["reps"],
+        "lapses": state["lapses"],
+        "state": state["state"],
+    }
+
+
+def _completed_facts_for(conn: sqlite3.Connection, item_id: str) -> list[dict[str, Any]]:
+    from timeflow.core import facts as facts_mod
+
+    return facts_mod.query(
+        conn, kind="review.completed", subject_type="review_item", subject_id=item_id
+    )
+
+
+def _undone_facts_for(conn: sqlite3.Connection, item_id: str) -> list[dict[str, Any]]:
+    from timeflow.core import facts as facts_mod
+
+    return facts_mod.query(
+        conn, kind="review.undone", subject_type="review_item", subject_id=item_id
+    )
+
+
 def _record_completed_fact(
     conn: sqlite3.Connection,
     item_id: str,
@@ -155,26 +274,32 @@ def _record_completed_fact(
     reps: int,
     next_due: str,
     reviewed_on: str,
+    before: dict[str, object] | None = None,
 ) -> bool:
     """发 `review.completed` 事实 + 广播事件；同一天同卡只记一次（SR-F6 边界：幂等）。
 
     复习完成 = 投入（维持）由解读层按事实计数；本函数只负责「如实留痕」。
+    `extra.before` 存复习前快照，供 `undo_review` 精确回退。
     """
     from timeflow.core import facts as facts_mod
 
-    already = conn.execute(
-        "SELECT 1 FROM facts WHERE kind = 'review.completed' AND subject_id = ? "
-        "AND substr(occurred_at, 1, 10) = ? LIMIT 1",
-        (item_id, reviewed_on),
-    ).fetchone()
-    if already is not None:
-        return False
+    # 当日已有「未被撤销」的完成事实 → 幂等跳过；已撤销的那次不算，可以重新复习入账
+    completed = _completed_facts_for(conn, item_id)
+    undone_ids = {
+        str((row["extra"] or {}).get("fact_id")) for row in _undone_facts_for(conn, item_id)
+    }
+    for row in completed:
+        if str(row["occurred_at"] or "")[:10] != reviewed_on:
+            continue
+        if str(row["id"]) not in undone_ids:
+            return False
     extra = {
         "title": title,
         "feedback": feedback,
         "reps": reps,
         "next_due": next_due,
         "reviewed_on": reviewed_on,
+        "before": before or {},
     }
     facts_mod.record(
         conn,
@@ -205,6 +330,29 @@ def due_items(
         (t,),
     ).fetchall()
     return [_item_dict(r) for r in rows]
+
+
+def reviewed_today(conn: sqlite3.Connection, day: str) -> set[str]:
+    """某日「有效复习」的卡片 id 集合 = 当日 `review.completed` − 当日已撤销（`review.undone`）。
+
+    账本用它计 `review_count`（同一张卡当日只算一次）。
+    """
+    from timeflow.core import facts as facts_mod
+
+    completed = facts_mod.query(
+        conn, kind="review.completed", since=f"{day}T00:00:00", until=f"{day}T23:59:59"
+    )
+    undone = facts_mod.query(
+        conn, kind="review.undone", since=f"{day}T00:00:00", until=f"{day}T23:59:59"
+    )
+    undone_fact_ids = {
+        str((row["extra"] or {}).get("fact_id")) for row in undone
+    }
+    return {
+        str(row["subject_id"] or row["id"])
+        for row in completed
+        if str(row["id"]) not in undone_fact_ids
+    }
 
 
 def myday_entries(

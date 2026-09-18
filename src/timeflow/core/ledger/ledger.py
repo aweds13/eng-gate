@@ -72,16 +72,10 @@ def summary(
         until=f"{t}T23:59:59",
     )
     invested_sec = sum(float(row["value_num"] or 0) for row in finished_today)
-    # 复习投入：今日完成复习的不同卡片数（第 2 步子任务 3）
-    reviews_today = facts_mod.query(
-        conn,
-        kind="review.completed",
-        since=f"{t}T00:00:00",
-        until=f"{t}T23:59:59",
-    )
-    review_subjects = {
-        row["subject_id"] or row["id"] for row in reviews_today
-    }
+    # 复习投入：今日完成复习的不同卡片数（第 2 步子任务 3；第 5 步起扣除当日已撤销）
+    from timeflow.core import review as rv
+
+    review_subjects = rv.reviewed_today(conn, t)
     # 产出（第 5 步产出轴物化）：今日产出事实 - 已撤销的（按 entry_id 去重，独立于投入轴）
     outputs_today = facts_mod.query(
         conn, kind="output.manual", since=f"{t}T00:00:00", until=f"{t}T23:59:59"

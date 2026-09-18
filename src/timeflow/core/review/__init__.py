@@ -9,6 +9,8 @@ from timeflow.core.review.review import (
     due_items,
     myday_entries,
     review,
+    reviewed_today,
+    undo_review,
 )
 
 __all__ = [
@@ -21,4 +23,6 @@ __all__ = [
     "due_items",
     "myday_entries",
     "review",
+    "reviewed_today",
+    "undo_review",
 ]

@@ -124,6 +124,8 @@ function taskCard(t,isOverdue){
     <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${isDone?'<span class="badge">已完成</span>':''}</div></div>
     <div class="row">
       ${isDone?'':`<button class="ghost" onclick="startFocusFor('${t.id}')">专注</button>`}
+      ${isOverdue?`<button class="ghost" onclick="pushToTomorrow('${t.id}')">推到明天</button>
+        <button class="ghost" onclick="cancelTask('${t.id}')">取消</button>`:''}
       ${isDone?`<button class="ghost" onclick="undoDone('${t.id}')">撤销完成</button>`
               :`<button class="ghost" onclick="toggleMyDay('${t.id}',true)">${t.is_myday?'移出 My Day':'加入 My Day'}</button>`}
       <button class="ghost" onclick="showFacts('${t.id}')">记录</button>
@@ -153,7 +155,18 @@ async function restoreTask(id){
 async function showFacts(id){
   const facts=await api(`/api/tasks/${id}/facts`);
   if(!facts.length){toast('还没有完成记录');return}
-  toast(facts.map(f=>`${f.kind==='task.completed'?'完成':'撤销'} ${String(f.occurred_at).slice(5,16)}`).join(' · '));
+  toast(facts.map(f=>`${f.kind==='task.completed'?'完成':f.kind==='task.uncompleted'?'撤销':f.kind==='task.deleted'?'删除':f.kind==='task.restored'?'恢复':f.kind==='task.repeat.generated'?'生成下一次':'记录'} ${String(f.occurred_at).slice(5,16)}`).join(' · '));
+}
+// LF-2 逾期处理：推到明天 / 取消（其余处置由编辑入口承担）
+function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
+async function pushToTomorrow(id){
+  await api(`/api/tasks/${id}`,{method:'PATCH',body:JSON.stringify({due_date:tomorrow()})});
+  toast('已推到明天，债务随之重算');view(current);
+}
+async function cancelTask(id){
+  if(!confirm('取消这个任务？取消后不再计入债务。'))return;
+  await api(`/api/tasks/${id}`,{method:'PATCH',body:JSON.stringify({status:'取消'})});
+  toast('已取消');view(current);
 }
 async function addTask(){
   const titleEl=document.getElementById('newTitle');
@@ -299,7 +312,12 @@ function reviewCard(r){
     <div class="meta">${r.reps}次 · ${r.interval_days}天${r.source==='external'?'<span class="badge">外部</span>':''}</div></div>
     <div class="row"><button onclick="review('${r.id}','remember')">记得</button>
     <button class="ghost" onclick="review('${r.id}','fuzzy')">模糊</button>
-    <button class="ghost" onclick="review('${r.id}','forgot')">忘了</button></div></div>`;
+    <button class="ghost" onclick="review('${r.id}','forgot')">忘了</button>
+    <button class="ghost" onclick="undoReview('${r.id}')">撤销上次</button></div></div>`;
+}
+async function undoReview(id){
+  await api(`/api/review/${id}/undo`,{method:'POST'});
+  toast('已撤销当日最近一次复习（间隔与账目一并回退）');view(current);
 }
 async function renderReview(m){
   const [due,summary]=await Promise.all([api('/api/review/due'),api('/api/summary')]);

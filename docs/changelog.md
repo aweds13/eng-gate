@@ -86,6 +86,15 @@
 - 新增 `tests/test_output_axis.py`（11 项）。
 - 质量门：pytest 161 passed + 2 deselected / 验收 2 passed / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
 
+### 重构 · 第 5 步·复习撤销 + LF-2 逾期处置
+- **复习撤销（F6 OP-27 可逆）**：`review.completed` 事实的 `extra.before` 存复习前卡片快照；
+  新增 `review.undo_review` 回退 FSRS 字段（due/interval/ease/reps/lapses/state）并追加 `review.undone` 反向事实；
+  账本 `review_count` 改为按 `review.reviewed_today()`（当日完成 − 当日已撤销）计数；已撤销的那次不阻止重新复习入账；
+  API `POST /api/review/{item_id}/undo`；前端复习卡加「撤销上次」。
+- **LF-2 逾期处置**：逾期卡片新增「推到明天」（`PATCH due_date`）与「取消」（二次确认）；债务随摘要即时重算。
+- 新增/扩展测试 5 项（`tests/test_review_line.py`）；`ACCEPTANCE.md` LF-2 转 ✅。
+- 质量门：pytest 166 passed + 2 deselected / 验收 2 passed / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

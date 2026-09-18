@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import TYPE_CHECKING
 
 import pytest
@@ -170,3 +171,57 @@ def test_api_mydays_mixes_tasks_and_reviews(tmp_path) -> None:  # type: ignore[n
     items = client.get("/api/mydays?include_reviews=1").json()
     assert len(items) == 2
     assert {i.get("kind", "task") for i in items} == {"task", "review"}
+
+
+# ---- 撤销本次反馈（第 5 步 · F6 OP-27 可逆）----
+
+def test_undo_review_restores_card_and_accounting(conn: sqlite3.Connection) -> None:
+    rid = rv.create_item(conn, "泰勒展开")
+    after = rv.review(conn, rid, rv.RATING_REMEMBER)
+    assert ledger.summary(conn).review_count == 1
+    assert after["reps"] == 1
+
+    state = rv.undo_review(conn, rid)
+    assert state["reps"] == 0
+    assert state["due_date"] == date.today().isoformat()  # 回到复习前的到期日
+    assert ledger.summary(conn).review_count == 0  # 账目一并回退
+    facts = facts_mod.query(conn, kind="review.")
+    assert {f["kind"] for f in facts} == {"review.completed", "review.undone"}
+
+
+def test_undo_review_is_idempotent(conn: sqlite3.Connection) -> None:
+    rid = rv.create_item(conn, "洛必达")
+    rv.review(conn, rid, rv.RATING_FUZZY)
+    rv.undo_review(conn, rid)
+    rv.undo_review(conn, rid)
+
+    assert facts_mod.count(conn, kind="review.undone") == 1
+    assert ledger.summary(conn).review_count == 0
+
+
+def test_undo_review_without_completion_is_noop(conn: sqlite3.Connection) -> None:
+    rid = rv.create_item(conn, "从未复习")
+    state = rv.undo_review(conn, rid)
+    assert state["reps"] == 0
+    assert facts_mod.count(conn, kind="review.undone") == 0
+
+
+def test_review_after_undo_counts_again(conn: sqlite3.Connection) -> None:
+    rid = rv.create_item(conn, "重新复习")
+    rv.review(conn, rid, rv.RATING_REMEMBER)
+    rv.undo_review(conn, rid)
+    rv.review(conn, rid, rv.RATING_FORGOT)
+
+    assert ledger.summary(conn).review_count == 1
+    assert rv.due_items(conn)  # 卡片仍在到期列表里（学习阶段）
+
+
+def test_api_undo_review(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    client = TestClient(create_app(str(tmp_path / "u.db")))
+    rid = client.post("/api/review/items", json={"title": "傅里叶"}).json()["id"]
+    client.post(f"/api/review/{rid}/review", json={"feedback": "remember"})
+    assert client.get("/api/summary").json()["review_count"] == 1
+
+    assert client.post(f"/api/review/{rid}/undo").status_code == 200
+    assert client.get("/api/summary").json()["review_count"] == 0
+    assert client.post("/api/review/nope/undo").status_code == 404

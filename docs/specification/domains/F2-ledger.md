@@ -7,7 +7,9 @@
 
 - **Fact（事实层）**：kind、subject、value_num、value_text、occurred_at、source。
 - **投入轴**：专注 `focus.finished`（value_num=秒）；任务完成 `task.completed`（不估时）；复习完成 `review.completed`（不折算时间，计张数）；手动投入 `invest.manual`。
-- **事实反向标记**：撤销类事实与正向事实成对（如 `task.uncompleted` 对 `task.completed`），解读层按最新有效状态计账，不删历史事实（R7 / A-003）。
+- **事实反向标记**：撤销类事实与正向事实成对（如 `task.uncompleted` 对 `task.completed`、
+  `task.restored` 对 `task.deleted`、`output.retracted` 对 `output.manual`、`review.undone` 对 `review.completed`），
+  解读层按最新有效状态计账，不删历史事实（R7 / A-003）。
 - **产出轴**：学校 KPI（成绩/综测）与知识资产，独立记账、分开显示。
   事实形态（第 5 步物化）：`output.manual`（`subject_type=output`、`subject_id=ledger_entries.id`、
   `value_text=kind`（asset / kpi）、`value_num=数量`、`extra` 带 note/ref_handle）；
