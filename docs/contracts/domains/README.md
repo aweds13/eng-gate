@@ -12,7 +12,7 @@
 | SR-F4 | `F4-feedback.md` | B2 ✅ |
 | SR-F5 | `F5-academic.md` | B2 ✅ |
 | SR-F6 | `F6-review.md` | B2 ✅ |
-| SR-F7 | `F7-team.md` | B3 |
-| SR-F8 | `F8-memo.md` | B3 |
-| SR-F9 | `F9-storage-sync.md` | B3 |
-| SR-F10 | `F10-notify.md` | B3 |
+| SR-F7 | `F7-team.md` | B3 ✅ |
+| SR-F8 | `F8-memo.md` | B3 ✅ |
+| SR-F9 | `F9-storage-sync.md` | B3 ✅ |
+| SR-F10 | `F10-notify.md` | B3 ✅ |

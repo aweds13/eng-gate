@@ -12,9 +12,9 @@
 | SR-F4 反馈 / 习惯 | `../specification/domains/F4-feedback.md` | OP-4 后续，FLOW-4 | LF-4 | `../../tests/test_focus_feedback.py` | ✅ 规格/契约 |
 | SR-F5 学业追踪 | `../specification/domains/F5-academic.md` | 待 B2 定义 | AC-18/19（历史） | `../../tests/test_academic_review.py` | ✅ 规格/契约 |
 | SR-F6 复习 | `../specification/domains/F6-review.md` | 待 B2 定义 | AC-20（历史） | `../../tests/test_academic_review.py` | ✅ 规格/契约 |
-| SR-F7 团队 / AI | `../specification/domains/F7-team.md` | 待 B3 定义 | AC-21（历史） | `../../tests/test_team_memo.py` | 🟡 |
-| SR-F8 备忘录 | `../specification/domains/F8-memo.md` | 待 B3 定义 | AC-22（历史） | `../../tests/test_team_memo.py` | 🟡 |
-| SR-F9 存储 / 同步 | `../specification/domains/F9-storage-sync.md` | 待 B3 定义 | AC-23（历史） | `../../tests/test_sync.py`、`../../tests/test_facts.py` | 🟡 |
-| SR-F10 学校通知 | `../specification/domains/F10-notify.md` | 后置 | 后置 | ⬜ 待补 | ⬜ |
+| SR-F7 团队 / AI | `../specification/domains/F7-team.md` | 待 B3 定义 | AC-21（历史） | `../../tests/test_team_memo.py` | ✅ 规格/契约 |
+| SR-F8 备忘录 | `../specification/domains/F8-memo.md` | 待 B3 定义 | AC-22（历史） | `../../tests/test_team_memo.py` | ✅ 规格/契约 |
+| SR-F9 存储 / 同步 | `../specification/domains/F9-storage-sync.md` | 待 B3 定义 | AC-23（历史） | `../../tests/test_sync.py`、`../../tests/test_facts.py` | ✅ 规格/契约 |
+| SR-F10 学校通知 | `../specification/domains/F10-notify.md` | 后置 | 后置 | ⬜ 待补 | 后置 |
 
 > 契约文件在 `../contracts/domains/`；可执行验收在 B4 加入 `../../tests/acceptance/`。
