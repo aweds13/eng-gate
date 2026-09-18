@@ -174,8 +174,28 @@ def test_three_column_shell_exists() -> None:
 
     # ④ CSS 侧：宽屏才三栏，窄屏折回单列（不能只剩单列）
     assert "@media (min-width: 1024px)" in css
-    assert "grid-template-columns: 200px minmax(0, 1fr) 340px" in css
+    assert "grid-template-columns" in css and "minmax(0, 820px)" in css
     assert "@media (max-width: 1023px)" in css
+
+
+def test_main_stays_bounded_and_padded_on_wide_screens() -> None:
+    """布局回归守卫（2026-09-18 用户报「UI 是不是修崩了」后补）。
+
+    三栏版把 `main` 交给网格后，**基础规则（写在媒体块之后）会把中列重新拉成整列宽、
+    并清掉媒体块里设的上边距** —— 卡片被拉到 1500px+、内容顶到视口顶部，看着就像"崩了"。
+    所以：宽屏媒体块里的 `main` 必须自带 max-width 与完整 padding（不能只写 grid-column）。
+    """
+    css = WEB_CSS.read_text(encoding="utf-8")
+    wide = css.split("@media (min-width: 1024px) {", 1)[1].split("\n}", 1)[0]
+    main_rule = [ln for ln in wide.splitlines() if ln.strip().startswith("main {")]
+    assert main_rule, "宽屏媒体块里应有 main 规则"
+    rule = main_rule[0]
+    for need in ("grid-column: 2", "max-width: 820px", "padding:"):
+        assert need in rule, f"宽屏 main 规则缺 {need}（会被后面的基础规则覆盖）→ {rule.strip()}"
+    # 中列同时受"列宽上限"与"自身 max-width"约束，且三栏整体居中
+    assert "justify-content: center" in wide or "margin: 0 auto" in css
+    # 窄屏才需要给底部固定 Tab 留 90px；宽屏不该白留一条
+    assert ".shell { padding-bottom: 0 }" in css
 
 
 def test_focus_timer_has_single_owner() -> None:

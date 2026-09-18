@@ -65,23 +65,23 @@ body {
  * 宽屏（≥1024px）三栏；窄屏折回单列（右栏落到主区下方），≤640px 用底部 Tab 导航。
  * 布局只在这里定义，视图依旧只往 `main` 里渲染，互不干扰。
  */
+/* 窄屏：底部有固定 Tab，给内容留出不被压住的空间；宽屏（三栏）由上方媒体块覆盖 */
 .shell { padding-bottom: 90px }
+@media (min-width: 1024px) { .shell { padding-bottom: 0 } }
 @media (min-width: 1024px) {
   .shell {
     display: grid;
-    grid-template-columns: 200px minmax(0, 1fr) 340px;
-    gap: 20px;
+    /* rail 有上下限（窄屏别把中列挤没、宽屏别拉太开）；右栏给范围，中列始终留得下 */
+    grid-template-columns: minmax(170px, 200px) minmax(0, 820px) minmax(280px, 340px);
+    justify-content: center;
+    gap: 24px;
     align-items: start;
-    max-width: 1440px;
-    margin: 0 auto;
-    padding: 0 24px 40px;
+    padding: 0 24px;
   }
   .rail {
     grid-column: 1;
     position: sticky;
     top: 0;
-    max-height: 100vh;
-    overflow: auto;
     padding: 18px 0;
     border-right: 1px solid var(--line);
   }
@@ -89,11 +89,11 @@ body {
     grid-column: 3;
     position: sticky;
     top: 0;
-    max-height: 100vh;
-    overflow: auto;
     padding: 18px 0;
   }
-  main { grid-column: 2; padding: 18px 0 60px }
+  /* 本块在基础 `main` 规则**之前**，而后面的基础规则会覆盖同属性 —— 所以这里必须把
+     padding / max-width / margin 全部写全，否则中列会被重新拉成整列宽、上边距被清掉。 */
+  main { grid-column: 2; max-width: 820px; margin: 0; padding: 18px 24px 60px }
   .bottom-nav { display: none }
 }
 /* ---------- 左导航栏 ---------- */
