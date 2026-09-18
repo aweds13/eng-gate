@@ -46,13 +46,18 @@
 
 ## OP-15 周结算
 
-- 入口：统计/账本页（B4 前可无 UI）。
+- 入口：统计/账本页（当前落在**专注页「本周投入」区**）。
 - 前置：有事实数据。
-- 输入：周起止（默认本地周一）。
+- 输入：周起止（默认本地周一）；`week_of` 传该周任意一天即可定位。
 - 后续：聚合投入/产出/债务趋势与波动；温和呈现。
 - 可逆：只读。
 - 反馈：图表/数字。
 - 边界：无数据空态友好；不硬对标、不告警。
+- 实现（第 6 步）：`GET /api/summary/weekly?week_of=` → `{start, end, focus_hours, manual_hours,
+  review_count, output_count, debt_count, days[7], active_days, steady_note}`；
+  口径与 `GET /api/summary` 同源（只读 facts，撤销照扣）；**债务取周日快照**；
+  `days` 固定返回周一→周日 7 天（含 0，便于画走势）；`steady_note` 只如实描述、不评价不告警；
+  非法日期 400。前端专注页用 7 根柱状展示逐日专注，空态给友好文案。
 
 ## OP-16 逾期债务展示
 

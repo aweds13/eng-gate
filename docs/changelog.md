@@ -119,6 +119,16 @@
 - 清理死代码：`core/focus/timer.py` 的 `_publish_started()`（定义后从未调用；`focus.started` 不作为事实存在）。
 - 登记：`复盘/文档债务清理-实现层对齐.md`（D-01~D-12 逐条发现与处置）。
 
+### 第 6 步 · 周结算视图（OP-15 / SR-F2.5）
+- 新增 `ledger.weekly_summary()` + `GET /api/summary/weekly?week_of=`：周 = **周一→周日**（`week_of` 传该周任意一天），
+  只读事实层（撤销照扣），返回 `focus_hours / manual_hours / review_count / output_count / debt_count(周日快照)
+  / days[7] / active_days / steady_note`；非法日期 400。
+- 温和口径：`days` 固定 7 天（含 0，便于画走势）；`steady_note` 只如实描述「几天在投入」，**不设目标、不评价、不告警**
+  （单测断言不得出现「目标/应该/警告/失败/落后」等词）。
+- 前端专注页新增「本周投入」区：7 根柱状走势 + 数字行 + 一句温和提示；空态文案友好。
+- 新增 `tests/test_week_summary.py`（12 项）；F2 规格/契约、modules/traceability/coverage 同步（可视化细项仍标注未实现）。
+- 质量门：pytest 192 passed + 2 deselected / 验收 2 passed / 覆盖率 89.23% / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

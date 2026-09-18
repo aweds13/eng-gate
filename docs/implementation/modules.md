@@ -17,7 +17,9 @@
   `output.manual − output.retracted`（条数）、`invest.manual − invest.retracted`（单列小时）；`focus_sessions` 仅作原始记录/回填来源。
 - **债务口径**（SR-F2.3）：在 `ledger.py` 内按逾期天数给档（轻≤3 / 中≤7 / 重>7），**不折算时间**。
 - **旧表 `ledger_entries`**：已降级为**兼容/迁移来源**（手动投入与产出都走事实层），解读层不读它。
-- **未实现**：周结算聚合（OP-15）与可视化（SR-F2.5/F2.7 的曲线、热力图、按分组分布）——文档不再宣称已有落点。
+- **周结算**（SR-F2.5 / OP-15，第 6 步）：`ledger.weekly_summary()` —— 周=周一→周日、只读 facts、
+  债务取周日快照、7 天逐日专注 + `steady_note`（如实描述，不设目标不告警）；`GET /api/summary/weekly`。
+- **未实现**：更细的可视化（SR-F2.7 的曲线、热力图、按分组分布）——文档不再宣称已有落点。
 
 ## SR-F3 计时与专注 → `core/focus/`
 - 番茄/普通计时（SR-F3.1/3.2）：`timer.py`；`status=进行中` 为真实中间态（未结束不计投入）；

@@ -17,6 +17,8 @@
   撤销发 `output.retracted` 反向事实，不删历史。旧表 `ledger_entries` 仍写（兼容），两者不合并聚合。
 - **债务**：逾期任务集合 + 天数/程度（轻≤3 / 中≤7 / 重>7），不折算时间。
 - **周结算**：按本地周聚合投入/产出/债务趋势；温和呈现。
+  实现（第 6 步）：`ledger.weekly_summary()` / `GET /api/summary/weekly` —— 周 = 周一→周日，
+  只读 facts（撤销照扣），债务取周日快照，附 7 天逐日专注与 `steady_note`（如实描述，不设目标、不告警）。
 
 ## 2. 状态与生命周期
 
@@ -75,5 +77,6 @@
   （专注事实→反馈/自检口径、读口径只认 facts）、`../../tests/test_review_line.py`（复习投入计张数）。
 - 第 5 步补充：`../../tests/test_output_axis.py`（产出事实 + 撤销 + `output_count` 与投入分离）、
   `../../tests/test_invest_axis.py`（手动投入事实按秒 + 撤销 + `manual_hours` 与 invest_hours 分离）。
+- 第 6 步补充：`../../tests/test_week_summary.py`（周边界/跨月跨年/四项聚合/撤销扣除/债务快照/温和提示/API）。
 - 真实运行验证：`../../tools/lf1_live_check.py`（起真服务走 LF-1 主链 8 步）。
-- 待补（B4）：周结算（OP-15）聚合展示。
+- 待补（B4）：曲线/热力图等更细的可视化（SR-F2.7 的图形部分）。

@@ -200,7 +200,28 @@ async function addTaskHere(){
   toast('已加入全部任务（未进今天）');view(current);
 }
 
-function summaryLine(s){
+// 周结算（OP-15）：逐日柱状走势 + 温和一句；无数据时给空态
+function weekCard(w){
+  const max=Math.max(1,...w.days.map(d=>d.focus_minutes));
+  const bars=w.days.map(d=>{
+    const h=Math.round(6+d.focus_minutes/max*34);           // 6~40px，0 也留一条底线
+    const label=Number(d.date.slice(8,10));
+    const bg=d.focus_minutes>0?'var(--accent)':'#e2e8f0';
+    return `<div title="${d.date} ${d.focus_minutes} 分钟" style="flex:1;text-align:center">
+      <div style="height:${h}px;background:${bg};border-radius:4px 4px 0 0"></div>
+      <div class="sub" style="margin-top:4px">${label}</div></div>`;
+  }).join('');
+  const nums=[`专注 ${w.focus_hours}h`];
+  if(w.manual_hours)nums.push(`手动 ${w.manual_hours}h`);
+  if(w.review_count)nums.push(`复习 ${w.review_count} 张`);
+  if(w.output_count)nums.push(`产出 ${w.output_count} 条`);
+  if(w.debt_count)nums.push(`债务 ${w.debt_count} 项`);
+  return `<div class="card" style="display:block">
+    <div class="meta">本周 ${w.start} ~ ${w.end} · ${nums.join(' · ')}</div>
+    <div style="display:flex;gap:6px;align-items:flex-end;margin-top:12px">${bars}</div>
+    <div class="sub" style="margin-top:8px">${esc(w.steady_note)}</div></div>`;
+}
+
   const parts=[`债务 ${s.debt_count} 项`,`投入 ${s.invest_hours}h`];
   if(s.manual_hours)parts.push(`手动投入 ${s.manual_hours}h`);
   if(s.review_count)parts.push(`复习 ${s.review_count} 张`);
@@ -248,11 +269,14 @@ async function renderFocus(m){
     return;
   }
   const tasks=await api('/api/mydays');
+  const week=await api('/api/summary/weekly');
   m.innerHTML=`<div class="card"><div><div class="big">${today.focus_minutes}</div><div class="meta">今日专注分钟（只算正常结束）</div></div></div>
   <div class="new">
     <select id="focusTaskSel"><option value="">不绑定任务</option>${tasks.map(t=>`<option value="${t.id}">${esc(t.title)}</option>`).join('')}</select>
     <button onclick="startFocus('tomato')">番茄钟 ${cfg.pomodoro_minutes||25} 分</button>
-    <button class="ghost" onclick="startFocus('plain')">普通计时</button></div>`;
+    <button class="ghost" onclick="startFocus('plain')">普通计时</button></div>
+  <div class="section-title">本周投入</div>
+  ${weekCard(week)}`;
 }
 async function startFocus(kind){
   const sel=document.getElementById('focusTaskSel');

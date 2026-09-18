@@ -6,8 +6,8 @@
 | 规格 | 主导实现模块 | 抽象实现要点 |
 |---|---|---|
 | SR-F1.1~F1.9 | `src/timeflow/core/tasks/`（`manager.py`/`groups.py`） | My Day/逾期栏/状态机/分组/Repeat/子任务/软删除 |
-| SR-F2.1~F2.7 | `src/timeflow/core/ledger/`（`ledger.py`） | 两轴记账/债务(逾期天数/程度)/顶部摘要（只读 facts） |
-| SR-F2.5 周结算、F2.7 可视化 | —（**未实现**） | 周聚合与曲线/热力图留待后续；文档不再宣称已有落点 |
+| SR-F2.1~F2.7 | `src/timeflow/core/ledger/`（`ledger.py`） | 两轴记账/债务(逾期天数/程度)/顶部摘要 + **周结算(OP-15)**（只读 facts） |
+| SR-F2.7 可视化 | `src/web/index.html`（周走势柱状） | 逐日专注柱状 + 数字；曲线/热力图/分组分布**未实现** |
 | SR-F2.8 | `src/timeflow/core/ledger/` | 重规划/债务重组（二版） |
 | SR-F3.1~F3.4 | `src/timeflow/core/focus/`（`timer.py`/`guard.py`/`subscribers.py`） | 计时/中断三选/白名单/勿扰/多设备同步/事实联动 |
 | SR-F4.1~F4.3 | `src/timeflow/core/feedback/` | 每日反馈/习惯打卡与 streak/自检（读 facts） |

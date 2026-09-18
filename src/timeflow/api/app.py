@@ -232,6 +232,18 @@ def create_app(db_path: str | None = None) -> FastAPI:
             conn, mild=settings.ledger.debt_mild, medium=settings.ledger.debt_medium
         )
 
+    @app.get("/api/summary/weekly")
+    def weekly_summary(week_of: str | None = None) -> ledger.WeekSummary:
+        """周结算（OP-15）：默认本周（周一起算），`week_of` 传该周任意一天。"""
+        if week_of is not None:
+            try:
+                from datetime import date as _date
+
+                _date.fromisoformat(week_of)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="非法日期") from None
+        return ledger.weekly_summary(conn, week_of=week_of)
+
     @app.post("/api/tasks/{task_id}/myday")
     def toggle_myday(task_id: str) -> TaskOut:
         task = tm.get_task(conn, task_id)
