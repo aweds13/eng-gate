@@ -52,11 +52,17 @@ def test_index_exposes_core_entries(tmp_path) -> None:  # type: ignore[no-untype
         "retractInvest(",
         "addInvest(",
         "weekCard(",
+        "renderStats",
+        "lineChart(",
+        "barList(",
+        "heatmap(",
         "/api/focus/active",
         "/api/tasks/deleted",
         "/api/ledger/outputs",
         "/api/ledger/invests",
         "/api/summary/weekly",
+        "/api/insights/daily",
+        "/api/insights/groups",
     ):
         assert needle in html, f"前端缺少入口: {needle}"
 
@@ -92,6 +98,9 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
         ("get", "/api/ledger/outputs", None),
         ("get", "/api/ledger/invests", None),
         ("get", "/api/summary/weekly", None),
+        ("get", "/api/insights/daily?days=30", None),
+        ("get", "/api/insights/groups?days=30", None),
+        ("get", "/api/habits", None),
         ("get", "/api/focus/today", None),
         ("get", "/api/focus/active", None),
         ("get", "/api/feedback", None),

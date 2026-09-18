@@ -139,6 +139,37 @@ def habit_logs(conn: sqlite3.Connection, habit_id: str) -> list[str]:
     return [r["date"] for r in rows]
 
 
+def list_habits(conn: sqlite3.Connection, today: str | None = None) -> list[dict[str, object]]:
+    """全部习惯 + 连续天数 + 最近 90 天打卡日期（供列表与日历热力图，SR-F4.2 / OP-19）。
+
+    之前只有「按 id 查单个」，前端只能把 id 存在 sessionStorage 里，刷新即丢；
+    这里补上列表，使习惯在界面上可稳定呈现与切换。
+    """
+    t = today or _today()
+    since = (date.fromisoformat(t) - timedelta(days=89)).isoformat()
+    rows = conn.execute("SELECT id, name, created_at FROM habits ORDER BY created_at").fetchall()
+    out: list[dict[str, object]] = []
+    for row in rows:
+        hid = str(row["id"])
+        logs = [
+            r["date"]
+            for r in conn.execute(
+                "SELECT date FROM habit_logs WHERE habit_id = ? AND done = 1 AND date >= ? "
+                "ORDER BY date",
+                (hid, since),
+            ).fetchall()
+        ]
+        out.append(
+            {
+                "id": hid,
+                "name": row["name"],
+                "streak": habit_streak(conn, hid, t),
+                "logs": logs,
+            }
+        )
+    return out
+
+
 # ---- 自检（SR-F4.3）----
 def self_check(conn: sqlite3.Connection, today: str | None = None) -> dict[str, object]:
     """自检：消费 B 账本数据。返回投入/产出/债务的轻量趋势（温和呈现，不告警）。

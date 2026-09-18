@@ -7,9 +7,9 @@
 | SR | 详细规格 | 操作 / 动线 | 验收 | 测试 | 状态 |
 |---|---|---|---|---|---|
 | SR-F1 任务管理 | `../specification/domains/F1-tasks.md` | OP-1/2/5/6/8，FLOW-1/2 | LC-1/2/5/6/8，LF-1/2 | `../../tests/test_tasks.py`、`../../tests/test_groups.py`、`../../tests/test_api.py`、`../../tests/test_task_line.py`、`../../tests/test_task_repeat.py`、`../../tests/test_task_delete.py` | ✅ 规格/契约 |
-| SR-F2 B 系统记账 | `../specification/domains/F2-ledger.md` | OP-5/7/13/14/15 | LC-5/7，LF-1 | `../../tests/test_ledger_summary.py`、`../../tests/test_facts.py`、`../../tests/test_output_axis.py`、`../../tests/test_invest_axis.py`、`../../tests/test_week_summary.py` | ✅ 规格/契约（曲线/热力图未实现） |
+| SR-F2 B 系统记账 | `../specification/domains/F2-ledger.md` | OP-5/7/13/14/15 | LC-5/7，LF-1 | `../../tests/test_ledger_summary.py`、`../../tests/test_facts.py`、`../../tests/test_output_axis.py`、`../../tests/test_invest_axis.py`、`../../tests/test_week_summary.py`、`../../tests/test_insights.py` | ✅ 规格/契约（债务时间热力图未实现） |
 | SR-F3 计时与专注 | `../specification/domains/F3-focus.md` | OP-3/4 | LC-3/4，LF-1/3 | `../../tests/test_focus_feedback.py`、`../../tests/test_facts.py`、`../../tests/test_focus_line.py` | ✅ 规格/契约 |
-| SR-F4 反馈 / 习惯 | `../specification/domains/F4-feedback.md` | OP-4 后续，FLOW-4 | LF-4 | `../../tests/test_focus_feedback.py`、`../../tests/test_focus_line.py` | ✅ 规格/契约 |
+| SR-F4 反馈 / 习惯 | `../specification/domains/F4-feedback.md` | OP-4/17/18/19，FLOW-4 | LF-4 | `../../tests/test_focus_feedback.py`、`../../tests/test_focus_line.py`、`../../tests/test_insights.py` | ✅ 规格/契约（习惯删除未实现） |
 | SR-F5 学业追踪 | `../specification/domains/F5-academic.md` | 待 B2 定义 | AC-18/19（历史） | `../../tests/test_academic_review.py` | ✅ 规格/契约 |
 | SR-F6 复习 | `../specification/domains/F6-review.md` | OP-27/28 | AC-20（历史） | `../../tests/test_academic_review.py`、`../../tests/test_review_line.py`（含撤销反馈） | ✅ 规格/契约 |
 | SR-F7 团队 / AI | `../specification/domains/F7-team.md` | 待 B3 定义 | AC-21（历史） | `../../tests/test_team_memo.py` | ✅ 规格/契约 |

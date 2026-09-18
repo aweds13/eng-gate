@@ -22,6 +22,7 @@ from timeflow.core import academic as ac
 from timeflow.core import facts as facts_mod
 from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
+from timeflow.core import insights
 from timeflow.core import memo as memo
 from timeflow.core import review as rv
 from timeflow.core import sync as sync_mod
@@ -315,6 +316,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def create_habit(payload: dict[str, Any]) -> dict[str, str]:
         return {"id": fb.create_habit(conn, payload["name"])}
 
+    @app.get("/api/habits")
+    def list_habits() -> list[dict[str, object]]:
+        """全部习惯 + 连续天数 + 最近 90 天打卡（列表与日历热力图数据源，SR-F4.2）。"""
+        return fb.list_habits(conn)
+
     @app.post("/api/habits/{habit_id}/toggle")
     def toggle_habit(habit_id: str, on_date: str | None = None) -> dict[str, bool]:
         return {"done": fb.toggle_habit_log(conn, habit_id, on_date)}
@@ -326,6 +332,25 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.get("/api/selfcheck")
     def selfcheck() -> dict[str, object]:
         return fb.self_check(conn)
+
+    # ---- 可视化数据底座（SR-F2.7 / SR-F4.2：后端出数据，前端出图形）----
+    @app.get("/api/insights/daily")
+    def insights_daily(days: int = insights.DEFAULT_TREND_DAYS) -> list[insights.DayInsight]:
+        """近 N 天逐日时序（专注/手动/复习/产出/习惯/债务快照）；1≤days≤90。"""
+        if not 1 <= days <= insights.MAX_TREND_DAYS:
+            raise HTTPException(
+                status_code=400, detail=f"days 需在 1~{insights.MAX_TREND_DAYS} 之间"
+            )
+        return insights.daily_insights(conn, days=days)
+
+    @app.get("/api/insights/groups")
+    def insights_groups(days: int = insights.DEFAULT_TREND_DAYS) -> list[insights.GroupInsight]:
+        """近 N 天投入按任务分组（领域）分布；任务可属多分组，各组之和可能大于总投入。"""
+        if not 1 <= days <= insights.MAX_TREND_DAYS:
+            raise HTTPException(
+                status_code=400, detail=f"days 需在 1~{insights.MAX_TREND_DAYS} 之间"
+            )
+        return insights.group_insights(conn, days=days)
 
     # ---- SR-F5 学业追踪 ----
     @app.post("/api/courses")

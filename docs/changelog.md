@@ -129,6 +129,19 @@
 - 新增 `tests/test_week_summary.py`（12 项）；F2 规格/契约、modules/traceability/coverage 同步（可视化细项仍标注未实现）。
 - 质量门：pytest 192 passed + 2 deselected / 验收 2 passed / 覆盖率 89.23% / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
 
+### 第 7 步 · 更细可视化（SR-F2.7 / SR-F4.2 / SR-NF3）
+- 新增 `core/insights.py`（可视化数据底座，**后端出数据、前端出图形**）：
+  - `daily_insights(days)`：近 N 天逐日时序——专注/手动投入/复习/产出/习惯打卡/**债务当日快照**；无记录日也返回 0（走势连续）。
+  - `group_insights(days)`：近 N 天投入**按任务分组（领域）分布**；只统计绑定任务的专注（未绑定不计入，
+    不制造假归因）；多分组任务如实重复计入（界面注明）；无分组归「未分组」。
+- 新增 `GET /api/insights/daily`、`GET /api/insights/groups`（`days` 1~90，越界 400）。
+- 新增 `GET /api/habits` + `feedback.list_habits()`：补齐此前缺失的**习惯列表**接口（带 streak 与近 90 天打卡日期）；
+  前端习惯页改为列表 + **日历热力图**（53 周 × 7 天，列=周、行=周一→周日），修掉「刷新后习惯消失」（原靠 sessionStorage 记 id）。
+- 前端新增「统计」页：近 30 天投入曲线（SVG）+ 按分组的投入分布条 + 债务快照；桌面导航与移动底栏各加入口。
+- 新增 `tests/test_insights.py`（14 项）；F2/F4 规格与契约、modules/README/traceability/coverage 同步
+  （债务时间热力图仍标注未实现）。
+- 质量门：pytest 209 passed + 2 deselected / 验收 2 passed / 覆盖率 90.32% / ruff 0 / mypy 0（34 文件）/ 五层对齐 PASS。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

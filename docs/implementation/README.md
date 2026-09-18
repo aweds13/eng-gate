@@ -27,7 +27,8 @@
 | `src/timeflow/api/` | FastAPI REST（供前端 + 外部/AI 接口） | SR-F7.3, SR-NF16 |
 | `src/timeflow/core/tasks/` | 任务管理（CRUD/My Day/逾期/Repeat/子任务/软删除） | SR-F1 |
 | `src/timeflow/core/facts/` | 事实层：只记「发生了什么」+ 同步事件总线（事实与解读解耦） | —（重构地基） |
-| `src/timeflow/core/ledger/` | B 系统记账（投入轴/产出轴/债务/摘要，只读 facts） | SR-F2 |
+| `src/timeflow/core/ledger/` | B 系统记账（投入轴/产出轴/债务/摘要/周结算，只读 facts） | SR-F2 |
+| `src/timeflow/core/insights.py` | 可视化数据底座（逐日时序 / 按任务分组分布；后端出数据、前端出图） | SR-F2.7, SR-NF3 |
 | `src/timeflow/core/focus/` | 计时与专注（番茄/普通/白名单/勿扰）+ **业务线订阅器** | SR-F3 |
 | `src/timeflow/core/feedback/` | 每日反馈/习惯打卡与 streak/自检 | SR-F4 |
 | `src/timeflow/core/academic/` | 学业追踪（GPA/学分/课程档案/考核项） | SR-F5 |

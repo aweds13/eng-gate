@@ -62,6 +62,7 @@ select{padding:9px 10px;border:1px solid #e2e8f0;border-radius:10px;font-size:13
     <button data-view="today" class="active">今日</button>
     <button data-view="tasks">全部任务</button>
     <button data-view="focus">专注</button>
+    <button data-view="stats">统计</button>
     <button data-view="habit">习惯</button>
     <button data-view="academic">学业</button>
     <button data-view="review">复习</button>
@@ -76,6 +77,7 @@ select{padding:9px 10px;border:1px solid #e2e8f0;border-radius:10px;font-size:13
   <button data-view="tasks"><span class="ic">🗂️</span>任务</button>
   <button data-view="focus"><span class="ic">⏱️</span>专注</button>
   <button data-view="habit"><span class="ic">🔥</span>习惯</button>
+  <button data-view="stats"><span class="ic">📈</span>统计</button>
   <button data-view="setting"><span class="ic">⚙️</span>设置</button>
 </nav>
 <script>
@@ -109,6 +111,7 @@ async function render(name){
   if(name==='today')return renderToday(m);
   if(name==='tasks')return renderTasks(m);
   if(name==='focus')return renderFocus(m);
+  if(name==='stats')return renderStats(m);
   if(name==='habit')return renderHabit(m);
   if(name==='academic')return renderAcademic(m);
   if(name==='review')return renderReview(m);
@@ -200,7 +203,72 @@ async function addTaskHere(){
   toast('已加入全部任务（未进今天）');view(current);
 }
 
-// 周结算（OP-15）：逐日柱状走势 + 温和一句；无数据时给空态
+// ---- 更细可视化（SR-F2.7 / SR-F4.2）：后端出数据，这里只出图形 ----
+function lineChart(points,valueOf,height){
+  const pts=points.map(valueOf);
+  if(!pts.length)return '<div class="empty">暂无数据</div>';
+  const w=600,h=height||120,max=Math.max(1,...pts);
+  const step=pts.length>1?w/(pts.length-1):0;
+  const xy=pts.map((v,i)=>[i*step,h-(v/max)*(h-14)-4]);
+  const line=xy.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const area=`0,${h} ${line} ${w},${h}`;
+  const marks=xy.map((p,i)=>pts[i]>0?`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" fill="var(--accent)"/>`:'').join('');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block">
+    <polygon points="${area}" fill="var(--accent)" opacity="0.10"/>
+    <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+    ${marks}</svg>`;
+}
+function barList(rows){
+  const max=Math.max(1,...rows.map(r=>r.value));
+  return rows.map(r=>`<div style="margin-bottom:8px">
+    <div class="sub" style="display:flex;justify-content:space-between">
+      <span>${esc(r.label)}</span><span>${r.display}</span></div>
+    <div style="height:10px;background:#f1f5f9;border-radius:6px;overflow:hidden">
+      <div style="width:${(r.value/max*100).toFixed(1)}%;height:100%;background:var(--accent)"></div></div>
+  </div>`).join('');
+}
+// 习惯日历热力图：53 周 × 7 天（周一在上），只画到本周，未来格子留白
+function heatmap(logs){
+  const done=new Set(logs||[]);
+  const today=new Date();today.setHours(0,0,0,0);
+  const monday=new Date(today);monday.setDate(today.getDate()-((today.getDay()+6)%7));
+  const cols=53,cell=11,gap=2;
+  let cells='';
+  for(let c=0;c<cols;c++){
+    for(let r=0;r<7;r++){
+      const d=new Date(monday);d.setDate(monday.getDate()-(cols-1-c)*7+r);
+      if(d>today)continue;
+      const iso=d.toISOString().slice(0,10);
+      const on=done.has(iso);
+      cells+=`<rect x="${c*(cell+gap)}" y="${r*(cell+gap)}" width="${cell}" height="${cell}" rx="2.5"
+        fill="${on?'var(--accent)':'#eef2f7'}" opacity="${on?1:0.9}"><title>${iso}${on?' 已打卡':''}</title></rect>`;
+    }
+  }
+  const w=cols*(cell+gap),h=7*(cell+gap);
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block">${cells}</svg>
+    <div class="sub" style="margin-top:6px">近一年打卡（列=周，行=周一→周日）</div>`;
+}
+function renderStats(m){
+  return api('/api/insights/daily?days=30').then(daily=>{
+    const days=daily.length;
+    const focusTotal=Math.round(daily.reduce((a,d)=>a+d.focus_minutes,0));
+    const activeDays=daily.filter(d=>d.focus_minutes>0).length;
+    const debtNow=days?daily[days-1].debt_count:0;
+    const peak=Math.max(0,...daily.map(d=>d.focus_minutes));
+    return api('/api/insights/groups?days=30').then(groups=>{
+      const curve=`<div class="card" style="display:block">
+        <div class="meta">近 ${days} 天专注走势（分钟）· 合计 ${focusTotal} 分钟 · 有投入 ${activeDays} 天 · 单日最高 ${Math.round(peak)}</div>
+        <div style="margin-top:10px">${lineChart(daily,d=>d.focus_minutes)}</div>
+        <div class="sub" style="display:flex;justify-content:space-between"><span>${daily.length?daily[0].date.slice(5):''}</span><span>今天</span></div></div>`;
+      const dist=groups.length?barList(groups.map(g=>({
+        label:g.group,value:g.focus_hours,display:`${g.focus_hours}h · ${g.task_count} 个任务`}))):'<div class="empty">这段时间还没有绑定任务的专注</div>';
+      m.innerHTML=curve+`<div class="section-title">投入分布（按任务分组 · 近 ${days} 天）</div>
+        <div class="card" style="display:block">${dist}
+        <div class="sub">任务可属多个分组，各组之和可能大于总投入；未绑定任务的专注不计入分组。当前债务 ${debtNow} 项。</div></div>`;
+    });
+  });
+}
+
 function weekCard(w){
   const max=Math.max(1,...w.days.map(d=>d.focus_minutes));
   const bars=w.days.map(d=>{
@@ -297,21 +365,30 @@ async function finishFocus(status){
 }
 
 async function renderHabit(m){
-  const sc=(await api('/api/selfcheck'));
-  const habitId=sessionStorage.getItem('habitId');
-  let habit=null;if(habitId)habit=await api(`/api/habits/${habitId}`);
-  const fb=await api('/api/feedback');
+  const [sc,habits,fb]=await Promise.all([
+    api('/api/selfcheck'),api('/api/habits'),api('/api/feedback')]);
+  const today=new Date().toISOString().slice(0,10);
+  const cards=habits.map(h=>{
+    const doneToday=(h.logs||[]).includes(today);
+    return `<div class="card" style="display:block">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1"><div class="title">${esc(h.name)}</div>
+          <div class="meta">连续 ${h.streak} 天 · 近一年打卡 ${(h.logs||[]).length} 天</div></div>
+        <button class="${doneToday?'':'ghost'}" onclick="toggleHabit('${h.id}')">${doneToday?'已打卡（点此取消）':'打卡'}</button>
+      </div>
+      <div style="margin-top:10px">${heatmap(h.logs)}</div></div>`;
+  }).join('');
   m.innerHTML=`<div class="card"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div></div>
-  <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡"><button onclick="addHabit()">新建</button></div>
-  ${habit?`<div class="card"><div class="title">连续 ${habit.streak} 天</div><button onclick="toggleHabit('${sessionStorage.getItem('habitId')}')">打卡</button></div>`:'<div class="empty">先新建一个习惯</div>'}
+  <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡" onkeydown="if(event.key==='Enter')addHabit()"><button onclick="addHabit()">新建</button></div>
+  ${cards||'<div class="empty">还没有习惯；建一个，明天就能看到热力图</div>'}
   <div class="section-title">每日反馈（计划 vs 执行）</div>
   <textarea class="textarea" id="fbPlan" placeholder="计划：">${esc(fb&&fb.plan_note||'')}</textarea><br>
   <textarea class="textarea" id="fbGap" placeholder="差距/复盘：">${esc(fb&&fb.gap_note||'')}</textarea><br>
   <button onclick="saveFeedback()">保存反馈</button>`;
 }
 async function addHabit(){const name=document.getElementById('habitName').value.trim();if(!name)return;
-  const h=await api('/api/habits',{method:'POST',body:JSON.stringify({name})});
-  sessionStorage.setItem('habitId',h.id);view(current)}
+  await api('/api/habits',{method:'POST',body:JSON.stringify({name})});
+  toast('习惯已建好，打卡后热力图会亮起来');view(current)}
 async function toggleHabit(id){await api(`/api/habits/${id}/toggle`,{method:'POST'});view(current)}
 async function saveFeedback(){await api('/api/feedback',{method:'POST',body:JSON.stringify({plan_note:document.getElementById('fbPlan').value,gap_note:document.getElementById('fbGap').value})});
   toast('反馈已保存（专注分钟由事实层自动计）');view(current)}
@@ -416,8 +493,9 @@ async function renderSetting(m){
       <button class="ghost" onclick="setGpa('4.0')">切到 4.0</button>
       <button class="ghost" onclick="setGpa('5.0')">切到 5.0</button></div></div>
   <div class="section-title">深度功能（桌面端更完整）</div>
-  <div class="card"><div class="title">全部任务 / 学业 / 复习 / 备忘录</div>
+  <div class="card"><div class="title">全部任务 / 统计 / 学业 / 复习 / 备忘录</div>
     <button onclick="view('tasks')">全部</button>
+    <button class="ghost" onclick="view('stats')">统计</button>
     <button class="ghost" onclick="view('academic')">学业</button>
     <button class="ghost" onclick="view('review')">复习</button>
     <button class="ghost" onclick="view('memo')">备忘录</button></div>

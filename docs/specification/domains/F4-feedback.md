@@ -49,4 +49,6 @@
 
 - 现有：`../../tests/test_focus_feedback.py`、`../../tests/test_api.py`。
 - 第 2 步（专注线发事实）：`../../tests/test_focus_line.py` —— 专注结束自动累加当日 min、只认正常结束、幂等、按完成日归属、不覆盖备注。
-- 待补（B4）：习惯热力图/streak 边界。
+- 第 7 步（习惯列表与热力图数据）：`../../tests/test_insights.py` —— `GET /api/habits` 返回全部习惯 +
+  连续天数 + 近一年打卡日期；前端习惯页用日历热力图呈现（SR-F4.2 / OP-19）。
+- 待补（B4）：习惯删除/管理（当前只有新建与打卡）。
