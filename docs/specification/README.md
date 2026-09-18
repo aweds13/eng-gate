@@ -36,4 +36,4 @@
 ## 阶段标注
 - **[一版]**＝进第一版；**[二版]**＝后置/并行；**[后置]**＝设计层待定（平台载体 / 复习形式工具 / 通知接口契约）。
 
-> 目录：`conventions.md`（约定层·首读）｜ `functional.md` ｜ `nonfunctional.md` ｜ `traceability.md`
+> 目录：`conventions.md`（约定层·首读）｜ `behaviors.md`（用户逻辑横切细则）｜ `functional.md` ｜ `nonfunctional.md` ｜ `domains/`（每域详细规格）｜ `traceability.md`

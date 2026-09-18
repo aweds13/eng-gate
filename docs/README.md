@@ -38,18 +38,22 @@ timeflow                                # 启动桌面窗口
 intention/        为什么做（N1–N46 + 决策）
 specification/    必须做到什么（SR-F / SR-NF，N→SR 追踪）
   conventions.md    约定层：横切基线（不能违反什么）
+  behaviors.md      用户逻辑横切细则（B-xx：状态/校验/撤销/边界/并发）
+  domains/          每域详细规格（F1–F10）
 contracts/        怎么才算真的做成（操作闭环 + 动线）
-  interactions.md   单个操作六要素
-  flows.md          多操作链路（触发→传导→落点）
+  interactions.md   单个操作六要素（MVP 核心）
+  flows.md          多操作链路（触发→传导→落点；MVP 核心）
+  domains/          其余域与边界契约（F1–F10）
 implementation/   哪个模块负责（模块名+职责+取舍，SR→模块）
-taste/            技术品味与红线
+  coverage.md       SR→操作/动线→验收→测试 覆盖矩阵
+taste/            技术品味与红线（已重写为项目专属）
 README.md / ACCEPTANCE.md / CODING_GUIDELINES.md / changelog.md   总入口·验收·护栏·日志
 ```
 
 **仓库根（代码与配置）**：
 ```
 src/    源码（timeflow/：app · api · core · storage · getaways · config）
-tests/  单元测试
+tests/  单元测试 + tests/acceptance/（可执行验收，B4）
 scripts/  护栏脚本（check_layers.py：五层对齐检查）
 config.example.toml / pyproject.toml
 ```

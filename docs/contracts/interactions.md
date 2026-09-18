@@ -5,6 +5,7 @@
 > 上游：`specification/functional.md`（SR）+ `specification/conventions.md`（约定）。下游：真实代码。
 > ⚠️ **实现任何操作前必读**。只写「行为与链路」，不写"哪个模块"（那是 implementation 的事），不贴源码。
 > 范围：**MVP 核心操作**（任务 / 专注 / 记账 / 摘要）。其余域（复习/学业/团队/备忘录/分组/习惯/同步）延后。
+> 其余域与全部边界契约见 `domains/README.md`（B1–B3 逐域填充）。
 
 ---
 

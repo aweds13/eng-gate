@@ -5,8 +5,9 @@
 
 ## 0. 实现前必读顺序（硬约束）
 1. `specification/conventions.md` —— 不能违反什么（横切基线）
-2. `contracts/interactions.md` + `contracts/flows.md` —— 怎样才算做完/走通
-3. `implementation/README.md` + `modules.md` —— 谁负责写
+2. `specification/behaviors.md` + `specification/domains/` —— 用户逻辑横切细则 + 每域细节
+3. `contracts/interactions.md` + `contracts/flows.md` + `contracts/domains/` —— 怎样才算做完/走通
+4. `implementation/README.md` + `modules.md` + `implementation/coverage.md` —— 谁负责写 + 覆盖矩阵
 
 > 判定原则：**「存在」不等于「完成」**；操作六要素齐备且契约验收通过才算实现完成。
 
@@ -62,6 +63,7 @@ build:/chore:/perf:/ci: ...
 
 ## 9. 文档更新要求（强制）
 - 改接口/模块边界/配置/数据流/依赖 → 同步 `implementation/modules.md`(模块职责) + `changelog.md` + `config.example.toml`；若涉及横切规则 → 同步 `specification/conventions.md`。
+- 新增/修改操作、动线、验收或测试 → 同步 `implementation/coverage.md`；发现规格缺口 → 先登记 `复盘/缺口处理与假设台账.md` 再实现。
 - 改动必须能通过五层对齐：**intention → specification(+conventions) → contracts → implementation → taste**（见 `scripts/check_layers.py`）。
 
 ## 10. 配置与敏感信息

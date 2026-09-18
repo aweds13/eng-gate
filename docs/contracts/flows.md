@@ -5,6 +5,7 @@
 > 上游：`specification/functional.md` + `specification/conventions.md`。配套：`contracts/interactions.md`。
 > ⚠️ **实现任何联动前必读**。只写「链路与触发」，不写"哪个模块"（implementation 的事），不贴源码。
 > 范围：**MVP 主链路**（任务 / 专注 / 记账 / 反馈 / 摘要）。其余域延后。
+> 其余域与全部边界动线见 `domains/README.md`（B1–B3 逐域填充）。
 
 ---
 
