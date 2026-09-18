@@ -159,9 +159,16 @@ gaps = ""
 id = "SR-F1.13"
 title = "任务编辑（契约 OP-9）"
 group = "F1"
-status = "partial"
-evidence = ["route:PATCH /api/tasks/{task_id}"]
-gaps = "后端 PATCH 已有；界面只有「推到明天」，无编辑入口（GAP-F2 契约 OP-9）"
+status = "done"
+evidence = [
+  "route:PATCH /api/tasks/{task_id}",
+  "text:src/web/index.html::function saveTaskEdit(",
+  "text:src/web/index.html::function editForm(",
+  "ui:data-action=task-edit",
+  "ui:data-action=task-save",
+  "test:test_task_edit_line.py",
+]
+gaps = ""
 
 [entries."SR-F1.14"]
 id = "SR-F1.14"
@@ -727,17 +734,29 @@ gaps = ""
 id = "OP-9"
 title = "编辑任务（入口：任务详情面板）"
 group = "OP"
-status = "partial"
-evidence = ["route:PATCH /api/tasks/{task_id}"]
-gaps = "后端已支持；**界面无编辑入口**（T-A3 待做）"
+status = "done"
+evidence = [
+  "route:PATCH /api/tasks/{task_id}",
+  "ui:data-action=task-edit",
+  "ui:data-action=task-save",
+  "ui:data-action=task-edit-cancel",
+  "text:src/web/index.html::function editForm(",
+  "test:test_task_edit_line.py",
+]
+gaps = ""
 
 [entries."OP-10"]
 id = "OP-10"
 title = "逾期处理四选一"
 group = "OP"
-status = "partial"
-evidence = ["ui:data-action=task-tomorrow", "ui:data-action=task-cancel"]
-gaps = "有推到明天/取消；「改 ddl」无专用入口（可走编辑，编辑也还没做）"
+status = "done"
+evidence = [
+  "ui:data-action=task-tomorrow",
+  "ui:data-action=task-cancel",
+  "ui:data-action=task-edit",
+  "text:src/web/index.html::function editForm(",
+]
+gaps = ""
 
 [entries."OP-11"]
 id = "OP-11"
@@ -802,6 +821,19 @@ evidence = [
   "ui:data-action=subtask-add",
   "ui:data-action=task-parent",
   "test:test_task_subtasks_line.py",
+]
+gaps = ""
+
+[entries."T-A3"]
+id = "T-A3"
+title = "F1 主线·段1：任务编辑收口（OP-9）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "route:PATCH /api/tasks/{task_id}",
+  "ui:data-action=task-edit",
+  "ui:data-action=task-save",
+  "test:test_task_edit_line.py",
 ]
 gaps = ""
 

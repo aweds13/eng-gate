@@ -178,14 +178,21 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.patch("/api/tasks/{task_id}", response_model=TaskOut)
     def update_task(task_id: str, payload: dict[str, Any]) -> TaskOut:
+        """编辑任务（OP-9）：标题/截止/分组/重复/My Day/父任务。
+
+        `KeyError` = 任务不存在 → **404**（以前被 `(KeyError, ValueError)` 一起吞成 400，
+        还会把 `str(KeyError)` 的引号一起显示出来 —— 实测踩到）。
+        """
+        fields = {k: v for k, v in payload.items() if k != "groups"}
         try:
-            fields = {k: v for k, v in payload.items() if k != "groups"}
             t = tm.update_task(conn, task_id, **fields)
             if "groups" in payload:
                 tm.set_task_groups(conn, task_id, payload["groups"])
-            return _out(t, conn)
-        except (KeyError, ValueError) as e:
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        return _out(t, conn)
 
     @app.delete("/api/tasks/{task_id}")
     def delete_task(task_id: str) -> dict[str, str]:

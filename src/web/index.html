@@ -61,6 +61,7 @@ let renderSeq=0;             // 渲染序号：用于「后点的那次说了算
 let abortCtl=null;           // 进行中的请求组：切视图即取消，避免过期渲染互相覆盖
 let themeChoice='light';     // 主题选择（R4 接通暗色）
 let detailTaskId=null;       // R3：右栏正在查看的任务（跨视图保留；切视图时清空）
+let detailEditing=false;     // OP-9：详情面板是否处于「编辑」态（切任务/切视图即退出）
 let groupCache=[];           // 分组列表缓存（渲染任务详情的"所属分组"用，避免每张卡都请求一次）
 // 合法视图名（render 的白名单：写错的视图名会被立刻发现，而不是静默空屏）
 const VIEWS=['today','tasks','focus','stats','habit','academic','review','memo','setting'];
@@ -127,6 +128,7 @@ function toastAction(msg,label,fn){
 }
 function view(name){
   if(name!==current)detailTaskId=null;          // 切视图：右栏详情不再适用（计时器不受影响）
+  detailEditing=false;                          // 切视图也退出编辑态，避免残留半截表单
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   render(name);
@@ -164,6 +166,10 @@ const ACTIONS = {
   // 子任务（OP-12）
   'subtask-add':    () => addSubtask(),
   'task-parent':    el => setTaskParent(el.dataset.id, el.dataset.parent || null),
+  // 任务编辑（OP-9）
+  'task-edit':      () => { detailEditing=true; render(current); },
+  'task-edit-cancel': () => { detailEditing=false; render(current); },
+  'task-save':      () => saveTaskEdit(),
   'task-done':      el => toggleDone(el.dataset.id, el.dataset.done === 'true'),
   'task-undo-done': el => undoDone(el.dataset.id),
   'task-myday':     el => toggleMyDay(el.dataset.id, true),
@@ -392,6 +398,46 @@ async function setTaskParent(taskId,parentId){
   await api(`/api/tasks/${taskId}/parent`,{method:'POST',body:JSON.stringify({parent_id:parentId})});
   toast(parentId?'已挂到父任务下':'已脱离父任务');view(current);
 }
+/* ---------- 任务编辑（契约 OP-9）----------
+ * 只改**已经存在的字段**（标题/截止/分组/重复/My Day）：
+ * 备注、提醒、优先级的字段在库里还没有（F1 段2 才加），所以这里不假装能改。
+ * 已完成任务也可编辑，但**不改历史完成事实**（契约 OP-9 边界）。
+ */
+function editForm(t){
+  const groups=groupCache.map(g=>esc(g.name));
+  const current=t.group_name||'';
+  return `<div class="form">
+    <div class="field wide"><label>标题</label><input id="editTitle" value="${esc(t.title)}" data-enter="task-save"></div>
+    <div class="field narrow"><label>截止日</label><input id="editDue" type="date" value="${t.due_date||''}"></div>
+    <div class="field narrow"><label>重复（天）</label><input id="editRepeat" type="number" min="1" value="${t.repeat_days||''}" placeholder="不重复"></div>
+    <div class="field"><label>分组</label>
+      <select id="editGroup"><option value="">未分组</option>
+        ${groups.map(n=>`<option value="${n}" ${n===current?'selected':''}>${n}</option>`).join('')}
+        ${current&&!groups.includes(current)?`<option value="${esc(current)}" selected>${esc(current)}</option>`:''}
+      </select></div>
+    <div class="field narrow"><label>今天</label>
+      <select id="editMyDay"><option value="1" ${t.is_myday?'selected':''}>在今天的清单</option>
+        <option value="0" ${t.is_myday?'':'selected'}>不在今天</option></select></div>
+  </div>
+  <div class="sub">改截止日会立刻重算逾期与债务；已完成的任务也能改，但不会改写历史完成记录。</div>`;
+}
+async function saveTaskEdit(){
+  if(!detailTaskId){toast('没有正在编辑的任务');return}
+  const titleEl=document.getElementById('editTitle');
+  const title=(titleEl&&titleEl.value||'').trim();
+  if(!title){toast('标题不能为空');return}
+  const repeatRaw=(document.getElementById('editRepeat').value||'').trim();
+  const body={
+    title,
+    due_date:document.getElementById('editDue').value||null,
+    repeat_days:repeatRaw?parseInt(repeatRaw,10):null,
+    group_name:document.getElementById('editGroup').value||null,
+    is_myday:document.getElementById('editMyDay').value==='1',
+  };
+  await api(`/api/tasks/${detailTaskId}`,{method:'PATCH',body:JSON.stringify(body)});
+  detailEditing=false;
+  toast('已保存；逾期与债务已按新截止日重算');view(current);
+}
 // 右栏详情：任务字段 + 子任务 + 事实流水 + 与列表一致的动作（动作后由 view(current) 统一刷新）
 function renderDetail(el,t,facts,kids){
   const isDone=t.status==='完成';
@@ -412,13 +458,13 @@ function renderDetail(el,t,facts,kids){
   }).join('');
   const doneCount=(kids||[]).filter(s=>s.status==='完成').length;
   const progress=(kids||[]).length?`<span class="badge">${doneCount}/${kids.length}</span>`:'';
-  el.innerHTML=`<div class="panel-title">任务详情</div>
+  el.innerHTML=`<div class="panel-title">任务详情${detailEditing?' · 编辑中':''}</div>
     <div class="title">${esc(t.title)}</div>
-    <div class="meta">${isDone?`<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
+    ${detailEditing?editForm(t):`<div class="meta">${isDone?`<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
       状态 ${esc(t.status)}</div>
     <div class="meta">截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
     <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'}</div>
-    <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}</div>
+    <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}</div>`}
     ${asg}
     <div class="settings-sub">所属分组</div>
     <div class="row tight" id="detailGroups" data-task="${t.id}">${groupChips(groupsOf(t),(t.groups||[]))}</div>
@@ -427,15 +473,19 @@ function renderDetail(el,t,facts,kids){
     <div class="new"><input id="subtaskTitle" placeholder="添加一个步骤…" data-enter="subtask-add">
       <button class="ghost" data-action="subtask-add">添加</button></div>
     <div class="row" style="margin-top:10px">
+      ${detailEditing?`
+        <button data-action="task-save">保存</button>
+        <button class="ghost" data-action="task-edit-cancel">取消</button>`:`
       <button class="${isDone?'ghost':''}" data-action="${isDone?'task-undo-done':'task-done'}" data-id="${t.id}" data-done="${isDone}">${isDone?'撤销完成':'完成'}</button>
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
       <button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>
       <button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
+      <button class="ghost" data-action="task-edit">编辑</button>
       <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
       ${teamButtonsHTML(t.assignments||[])}
       ${t.parent_id?`<button class="ghost" data-action="task-parent" data-id="${t.id}" data-parent="">脱离父任务</button>`:''}
       <button class="ghost" data-action="task-delete" data-id="${t.id}">删除</button>
-      <button class="ghost" data-action="task-close">收起</button></div>
+      <button class="ghost" data-action="task-close">收起</button>`}</div>
     <div class="section-title">记录（最近 ${Math.min((facts||[]).length,12)} 条）</div>
     ${lines||'<div class="sub">还没有记录（完成、撤销、删除、生成下一次都会留下记录）。</div>'}`;
 }
