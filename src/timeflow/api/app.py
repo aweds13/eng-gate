@@ -77,6 +77,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
     settings = load_settings()
     conn = db.connect(db_path or settings.database.path)
 
+    # 第 2 步：各线只发事实，跨线联动由订阅器接线（幂等，重复建 app 不叠加）
+    from timeflow.core.focus import subscribers as focus_subscribers
+
+    focus_subscribers.register(conn)
+
     app = FastAPI(title="timeflow", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,

@@ -84,6 +84,7 @@ def finish_session(
     task_id = row["task_id"] if row is not None else None
     device_id = row["device_id"] if row is not None else None
     fact_kind = _END_KIND[status]
+    occurred_at = _now()
     facts_mod.record(
         conn,
         kind=fact_kind,
@@ -91,6 +92,7 @@ def finish_session(
         subject_id=task_id or session_id,
         value_num=float(duration_sec),
         extra={"session_id": session_id, "status": status},
+        occurred_at=occurred_at,
         source="desktop",
         device_id=device_id,
     )
@@ -101,19 +103,32 @@ def finish_session(
             "task_id": task_id,
             "duration_sec": duration_sec,
             "status": status,
+            "occurred_at": occurred_at,
         },
     )
 
 
 def today_focus_minutes(conn: sqlite3.Connection, today: str | None = None) -> float:
-    """今日累计专注分钟数（已完成的，计入投入轴的来源之一）。"""
-    t = today or datetime.now().date().isoformat()
-    rows = conn.execute(
-        "SELECT duration_sec FROM focus_sessions "
-        "WHERE status = ? AND substr(started_at,1,10) = ?",
-        (STATUS_FINISHED, t),
-    ).fetchall()
-    return sum(r["duration_sec"] or 0 for r in rows) / 60.0
+    """今日累计专注分钟数（第 2 步起：读事实层，`focus.finished` 为唯一口径）。
+
+    保持原有返回精度（秒/60，不四舍五入）以免破坏既有调用方；需要落库/展示时再取整。
+    """
+    return focus_minutes_from_facts(conn, today or datetime.now().date().isoformat())
+
+
+def focus_minutes_from_facts(conn: sqlite3.Connection, day: str) -> float:
+    """某日已完成专注分钟数 —— 唯一口径：读事实层 `focus.finished`。
+
+    第 2 步「读口径收拢」：各线不再各自聚合 `focus_sessions`，统一按
+    `occurred_at`（完成时刻）归属当日（SR-F2 R5 / F3 OP-4「跨午夜按完成日」）。
+    """
+    from timeflow.core import facts as facts_mod
+
+    rows = facts_mod.query(
+        conn, kind="focus.finished", since=f"{day}T00:00:00", until=f"{day}T23:59:59"
+    )
+    total_sec = sum(float(row["value_num"] or 0) for row in rows)
+    return total_sec / 60.0
 
 
 def sessions_by_task(conn: sqlite3.Connection, task_id: str) -> list[dict[str, object]]:

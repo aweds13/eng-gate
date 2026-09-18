@@ -33,6 +33,11 @@ backups/
 .coverage
 htmlcov/
 
+# 受限沙箱下 pytest basetemp 遗留目录（建出后不可删/不可读，非项目产物）
+.p_*/
+.pt*/
+.pytest_tmp/
+
 # 前端构建产物（如需）
 src/web/dist/
 node_modules/
@@ -41,3 +46,13 @@ node_modules/
 .vscode/
 .idea/
 *.swp
+
+# 沙箱探针残留目录（同 basetemp，不可删）
+md_700/
+m_acl2/
+m_acl81z2m_qc/
+m_mkdtempvfsar68a/
+seqa_29mzr1/
+tfprobe5tbeq3at/
+um1/
+um2/

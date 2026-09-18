@@ -13,6 +13,7 @@
 from timeflow.core.facts.bus import (
     clear,
     errors,
+    list_subscribers,
     publish,
     subscribe,
     unsubscribe,
@@ -32,6 +33,7 @@ __all__ = [
     "publish",
     "subscribe",
     "unsubscribe",
+    "list_subscribers",
     "clear",
     "errors",
 ]

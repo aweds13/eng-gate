@@ -64,6 +64,21 @@ def get_feedback(conn: sqlite3.Connection, on_date: str | None = None) -> dict[s
     }
 
 
+def upsert_focus_minutes(conn: sqlite3.Connection, on_date: str, minutes: float) -> None:
+    """把某日专注分钟写入 `feedback_logs`（只动 focus_minutes，不碰备注字段）。
+
+    由专注线订阅器在 `focus.finished` 时调用（FLOW-4：不靠前端传参）。
+    备注列写 NULL，仅当该日尚无记录时创建行；已有记录时保留备注。
+    """
+    conn.execute(
+        "INSERT INTO feedback_logs (date, plan_note, executed, gap_note, focus_minutes, "
+        "created_at) VALUES (?,NULL,NULL,NULL,?,?) "
+        "ON CONFLICT(date) DO UPDATE SET focus_minutes=excluded.focus_minutes",
+        (on_date, float(minutes), _now()),
+    )
+    conn.commit()
+
+
 # ---- 习惯打卡（SR-F4.2）----
 def create_habit(conn: sqlite3.Connection, name: str) -> str:
     name = name.strip()

@@ -7,6 +7,7 @@ from timeflow.core.feedback.feedback import (
     self_check,
     set_daily_feedback,
     toggle_habit_log,
+    upsert_focus_minutes,
 )
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     "habit_streak",
     "habit_logs",
     "self_check",
+    "upsert_focus_minutes",
 ]

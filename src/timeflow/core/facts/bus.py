@@ -37,6 +37,11 @@ def unsubscribe(kind_pattern: str, handler: Handler) -> bool:
     return False
 
 
+def list_subscribers() -> list[tuple[str, Handler]]:
+    """当前订阅者快照（只读，供排查/自检/幂等注册判断）。"""
+    return list(_subscribers)
+
+
 def publish(kind: str, payload: dict[str, Any] | None = None) -> int:
     """发布一条事实（同步通知订阅者），返回被通知的订阅者数量。
 

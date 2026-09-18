@@ -12,6 +12,7 @@ from timeflow.core.focus.timer import (
     STATUS_INTERRUPTED,
     STATUS_PAUSED,
     finish_session,
+    focus_minutes_from_facts,
     sessions_by_task,
     start_session,
     today_focus_minutes,
@@ -30,5 +31,6 @@ __all__ = [
     "start_session",
     "finish_session",
     "today_focus_minutes",
+    "focus_minutes_from_facts",
     "sessions_by_task",
 ]
