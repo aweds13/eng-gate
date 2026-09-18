@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 from timeflow.api.app import create_app
 
 WEB_INDEX = Path(__file__).resolve().parent.parent / "src" / "web" / "index.html"
+WEB_CSS = Path(__file__).resolve().parent.parent / "src" / "web" / "app.css"
 
 
 def _html(tmp_path) -> str:  # type: ignore[no-untyped-def]
@@ -33,6 +34,48 @@ def _html(tmp_path) -> str:  # type: ignore[no-untyped-def]
 def test_index_served_at_root(tmp_path) -> None:  # type: ignore[no-untyped-def]
     html = _html(tmp_path)
     assert "<title>timeflow</title>" in html
+
+
+def test_index_has_no_hardcoded_colors() -> None:
+    """R1 护栏：颜色只允许出现在 app.css 的令牌区，index.html 里不许写死。
+
+    唯一豁免：`<meta name="theme-color">` —— 那是给浏览器 UI（地址栏/状态栏）看的，
+    不接受 CSS 变量，必须留字面色值。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    offenders = [
+        line.strip()
+        for line in html.splitlines()
+        if re.search(r"#[0-9a-fA-F]{3,8}\b", line) and "theme-color" not in line
+    ]
+    assert offenders == [], f"index.html 出现硬编码颜色：{offenders}"
+
+
+def test_css_tokens_exist_and_cover_both_themes() -> None:
+    """R1 护栏：令牌区必须同时定义亮/暗两套，且覆盖关键语义色。"""
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert ":root" in css
+    assert '[data-theme="dark"]' in css
+    for token in (
+        "--accent", "--accent-on", "--accent-soft", "--bg", "--card", "--surface-2",
+        "--line", "--text", "--muted", "--danger", "--ok", "--shadow",
+    ):
+        assert token in css, f"缺少令牌 {token}"
+    # 暗色块里也要有背景/文字/表面的覆盖（否则暗色会是半成品）
+    dark = css.split('[data-theme="dark"]', 1)[1].split("}", 1)[0]
+    for token in ("--bg", "--card", "--surface-2", "--line", "--text"):
+        assert token in dark, f"暗色令牌缺少 {token}"
+
+
+def test_index_links_app_css_and_serves_it(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """样式抽出去之后，页面要真的引用到它，且服务端能取到（否则会白屏无样式）。"""
+    html = _html(tmp_path)
+    assert '/app.css' in html
+
+    client = TestClient(create_app(str(tmp_path / "css.db")))
+    resp = client.get("/app.css")
+    assert resp.status_code == 200
+    assert "--accent" in resp.text
 
 
 def test_index_exposes_core_entries(tmp_path) -> None:  # type: ignore[no-untyped-def]
