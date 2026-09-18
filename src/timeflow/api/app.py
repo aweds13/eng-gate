@@ -91,7 +91,9 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
 
 def create_app(db_path: str | None = None) -> FastAPI:
     settings = load_settings()
-    conn = db.connect(db_path or settings.database.path)
+    # 并发约定（见 storage/db.py）：HTTP 服务多线程共享 conn 变量，但底层**每线程一个连接**，
+    # 否则一个请求的 commit() 会打断另一个请求的事务（表现为「快速点击 → 操作未完成」）。
+    conn = db.thread_local(db_path or settings.database.path)
 
     # 第 2 步：各线只发事实，跨线联动由订阅器接线（幂等，重复建 app 不叠加）
     from timeflow.core.focus import subscribers as focus_subscribers
@@ -445,12 +447,23 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.get("/api/gpa")
     def get_gpa(scale: str | None = None) -> dict[str, Any]:
-        # scale 查询参数可临时切换（4.0 / 5.0），缺省用配置值
+        """GPA（按 scale，缺省用配置）+ 学分 + **加权平均成绩**（Σ学分×成绩 / Σ学分，百分制）。
+
+        两个口径并存：GPA 是绩点加权，加权平均成绩是原始分加权 —— 都在这里一次返回，
+        前端切 4.0/5.0 制时只重取这一个接口。
+        """
         gpa_scale = scale or settings.academic.gpa_scale
         if gpa_scale not in ac.VALID_GPA_SCALES:
             raise HTTPException(status_code=400, detail=f"非法 GPA 制式: {gpa_scale}")
         g, credits = ac.gpa(conn, gpa_scale)
-        return {"gpa": g, "credits": credits, "scale": gpa_scale}
+        avg, avg_credits = ac.weighted_average(conn)
+        return {
+            "gpa": g,
+            "credits": credits,
+            "scale": gpa_scale,
+            "weighted_average": avg,
+            "weighted_credits": avg_credits,
+        }
 
     @app.get("/api/grades")
     def list_grades() -> list[dict[str, object]]:

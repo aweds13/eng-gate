@@ -2,12 +2,20 @@
 
 用标准库 sqlite3（轻量、零运维）。数据本地保存，路径来自配置。
 迁移机制：SCHEMA_VERSION 只增不减；connect() 时逐版本升级到目标版本。
+
+**并发约定（2026-09-18 修）**：sqlite3 的 Connection 不是线程安全的——多线程共用同一个连接时，
+一个线程的 `commit()` 会打断另一个线程正在进行的事务，表现为
+`cannot commit - no transaction is active`、`another row available`、
+`bad parameter or other API misuse` 等
+（实测：并发 80 次读写有 16 次异常；真机上表现为「快速点击顶部导航 → 操作未完成」）。
+因此 `thread_local(db_path)` 返回的代理**按线程各持一个连接**，路由代码无需改动。
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +30,63 @@ def connect(db_path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     _migrate(conn)
     return conn
+
+
+class _ThreadLocalConn:
+    """按线程分发连接的代理：路由代码继续用 `conn.execute(...)`，但每个线程各自持有连接。
+
+    这样既修掉并发下的事务互相打断，又不需要改动任何路由签名与测试（最小侵入）。
+    用途限定在「多线程服务共享一个 conn 变量」的场景；单线程脚本用 `connect()` 即可。
+    """
+
+    def __init__(self, db_path: str) -> None:
+        self._db_path = db_path
+        self._local = threading.local()
+
+    def _conn(self) -> sqlite3.Connection:
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = connect(self._db_path)
+            self._local.conn = conn
+        return conn
+
+    def execute(self, *args: object, **kwargs: object) -> sqlite3.Cursor:
+        cur = self._conn().execute(*args, **kwargs)  # type: ignore[arg-type]
+        return cur
+
+    def executemany(self, *args: object, **kwargs: object) -> sqlite3.Cursor:
+        cur = self._conn().executemany(*args, **kwargs)  # type: ignore[arg-type]
+        return cur
+
+    def executescript(self, script: str) -> sqlite3.Cursor:
+        return self._conn().executescript(script)
+
+    def commit(self) -> None:
+        self._conn().commit()
+
+    def rollback(self) -> None:
+        self._conn().rollback()
+
+    def close(self) -> None:
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
+
+    def cursor(self) -> sqlite3.Cursor:
+        return self._conn().cursor()
+
+    def __getattr__(self, name: str) -> object:
+        # 其余属性（如 row_factory / in_transaction）透传给当前线程的连接
+        return getattr(self._conn(), name)
+
+
+def thread_local(db_path: str) -> sqlite3.Connection:
+    """给多线程 HTTP 服务用的连接：**每个线程一个 Connection**（见模块开头并发约定）。
+
+    返回类型标注为 Connection 以便路由代码与 mypy 不用感知代理细节。
+    """
+    return _ThreadLocalConn(db_path)  # type: ignore[return-value]
 
 
 def _migrate(conn: sqlite3.Connection) -> None:

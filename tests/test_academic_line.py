@@ -5,6 +5,8 @@
 - `assessments` / `grades` 只有「建」和「列」，**没有删** → 录错了只能留着。
 口径：提醒只取**未录成绩**的考核项；`days_until` 负=逾期、0=今天、None=无截止日；
 排序「逾期优先 → 无截止日最后」；不强制、不告警（温和）。
+加权平均成绩：`Σ(单科学分 × 单科成绩) / Σ单科学分`（百分制原始分加权），
+与 `gpa()`（绩点加权）并存、互不替代。
 """
 
 from __future__ import annotations
@@ -28,6 +30,12 @@ def conn(tmp_path):  # type: ignore[no-untyped-def]
     c = db_mod.connect(str(tmp_path / "t.db"))
     yield c
     c.close()
+
+
+def _clear_grades(conn: sqlite3.Connection) -> None:
+    """清空成绩，保证加权/GPA 断言不被同文件其它用例的数据污染。"""
+    conn.execute("DELETE FROM grades")
+    conn.commit()
 
 
 # ---- 考核提醒 ----
@@ -135,3 +143,68 @@ def test_api_delete_grade(tmp_path) -> None:  # type: ignore[no-untyped-def]
 
     assert client.delete(f"/api/grades/{gid}").status_code == 200
     assert client.get("/api/gpa").json()["gpa"] == 0.0
+
+
+# ---- 加权平均成绩（Σ学分×成绩 / Σ学分）----
+
+def test_weighted_average_formula(conn: sqlite3.Connection) -> None:
+    """(3×92 + 2×78 + 4×85) / (3+2+4) = 772/9 = 85.78 —— 与手算一致。"""
+    _clear_grades(conn)
+    ac.add_grade(conn, score=92, credits=3)
+    ac.add_grade(conn, score=78, credits=2)
+    ac.add_grade(conn, score=85, credits=4)
+
+    avg, credits = ac.weighted_average(conn)
+    assert avg == 85.78
+    assert credits == 9.0
+
+
+def test_weighted_average_differs_from_gpa(conn: sqlite3.Connection) -> None:
+    """两个口径必须并存且不同：GPA 用绩点加权，加权平均用原始分加权。"""
+    _clear_grades(conn)
+    ac.add_grade(conn, score=95, credits=1)  # 绩点 4.0
+    ac.add_grade(conn, score=61, credits=1)  # 绩点 1.0
+
+    assert ac.gpa(conn, "4.0")[0] == 2.5           # (4.0+1.0)/2
+    assert ac.weighted_average(conn)[0] == 78.0    # (95+61)/2
+
+
+def test_weighted_average_ignores_zero_credits(conn: sqlite3.Connection) -> None:
+    """学分为 0 的记录不参与加权（否则会凭空拉低平均）。"""
+    _clear_grades(conn)
+    ac.add_grade(conn, score=90, credits=2)
+    ac.add_grade(conn, score=10, credits=0)
+
+    assert ac.weighted_average(conn) == (90.0, 2.0)
+
+
+def test_weighted_average_empty(conn: sqlite3.Connection) -> None:
+    _clear_grades(conn)
+    assert ac.weighted_average(conn) == (0.0, 0.0)
+
+
+def test_weighted_average_updates_after_delete(conn: sqlite3.Connection) -> None:
+    _clear_grades(conn)
+    g1 = ac.add_grade(conn, score=100, credits=1)
+    ac.add_grade(conn, score=60, credits=1)
+    assert ac.weighted_average(conn)[0] == 80.0
+
+    ac.delete_grade(conn, g1)
+    assert ac.weighted_average(conn)[0] == 60.0
+
+
+def test_api_gpa_includes_weighted_average(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    client = TestClient(create_app(str(tmp_path / "w.db")))
+    client.post("/api/grades", json={"score": 92, "credits": 3})
+    client.post("/api/grades", json={"score": 78, "credits": 2})
+
+    body = client.get("/api/gpa").json()
+    assert body["weighted_average"] == 86.4  # (3×92 + 2×78)/5
+    assert body["weighted_credits"] == 5.0
+    assert body["gpa"] == 3.6  # (4.0×3 + 3.0×2)/5 —— 92≥90 记 4.0，78≥78 记 3.0
+    assert body["scale"] == "4.0"
+
+    five = client.get("/api/gpa?scale=5.0").json()
+    assert five["scale"] == "5.0"
+    assert five["weighted_average"] == 86.4  # 加权平均成绩与制式无关
+    assert client.get("/api/gpa?scale=9.9").status_code == 400

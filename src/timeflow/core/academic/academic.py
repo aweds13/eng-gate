@@ -200,6 +200,29 @@ def gpa(conn: sqlite3.Connection, gpa_scale: str = "4.0") -> tuple[float, float]
     return (round(total / credit_sum, 2), credit_sum)
 
 
+def weighted_average(conn: sqlite3.Connection) -> tuple[float, float]:
+    """加权平均成绩 = Σ(单科学分 × 单科成绩) / Σ单科学分（百分制原始分，不换算绩点）。
+
+    与 `gpa()` 的区别：GPA 先把分数映射成绩点再加权；这里**直接用原始百分制分数加权** ——
+    两个口径并存，各自代表不同含义，互不替代。
+
+    边界：
+    - 学分为 0/负 的记录**不参与**加权（否则会拉低平均，属于脏数据而非真实权重）；
+    - 无有效记录返回 (0.0, 0.0)，由界面显示空态。
+    """
+    total = 0.0
+    credit_sum = 0.0
+    for r in conn.execute("SELECT score, credits FROM grades").fetchall():
+        credits = float(r["credits"] or 0)
+        if credits <= 0:
+            continue
+        total += credits * float(r["score"])
+        credit_sum += credits
+    if not credit_sum:
+        return (0.0, 0.0)
+    return (round(total / credit_sum, 2), round(credit_sum, 2))
+
+
 def delete_grade(conn: sqlite3.Connection, grade_id: str) -> None:
     """删除一条成绩（OP-23 可逆）：GPA 会随之重算。不存在则幂等。"""
     conn.execute("DELETE FROM grades WHERE id = ?", (grade_id,))

@@ -111,6 +111,35 @@ def test_no_alert_or_prompt_in_script() -> None:
     assert "prompt(" not in html, "不要用 prompt 做输入（改用内联表单/面板）"
 
 
+def test_race_guard_exists() -> None:
+    """护栏：「快速点击顶部 → 操作未完成」的修复必须留在代码里。
+
+    修复要点：渲染序号（后点的那次说了算）+ AbortController（切视图取消上一组请求）+
+    AbortError 静默（取消不是错误，不该弹提示）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    for needle in (
+        "let renderSeq=0",
+        "let abortCtl=null",
+        "abortCtl.abort()",
+        "mySeq!==renderSeq",
+        "name==='AbortError'",
+    ):
+        assert needle in html, f"缺少竞态防护：{needle}"
+    assert "toast('网络请求失败，稍后再试')" in html, "非取消类网络错误仍应提示"
+
+
+def test_gpa_scale_is_switchable_in_page() -> None:
+    """护栏：GPA 制式要能**在页面上切换**（而不是只弹一句"去改 config.toml"）。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "let gpaScale=" in html
+    assert "data-action=\"set-gpa\"" in html and 'data-scale="5.0"' in html
+    assert "gpaScale=" in html.split("async function setGpa")[1][:200]
+    assert "/api/gpa?scale=" in html
+    # 加权平均成绩（Σ学分×成绩 / Σ学分）必须展示
+    assert "weighted_average" in html and "加权平均成绩" in html
+
+
 def test_index_exposes_core_entries(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """关键入口必须在页面上存在（回归：改前端别把主链按钮弄丢）。"""
     html = _html(tmp_path)

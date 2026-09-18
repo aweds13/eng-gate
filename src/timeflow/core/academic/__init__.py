@@ -13,6 +13,7 @@ from timeflow.core.academic.academic import (
     list_assessments,
     list_courses,
     upcoming_assessments,
+    weighted_average,
 )
 
 __all__ = [
@@ -28,5 +29,6 @@ __all__ = [
     "add_grade",
     "delete_grade",
     "gpa",
+    "weighted_average",
     "all_grade_rows",
 ]

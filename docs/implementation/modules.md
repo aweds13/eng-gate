@@ -48,6 +48,9 @@
   学分、课程覆盖的雷达 + 条形）；各轴各自归一到本图最大值，**只用于看均衡，不跨人比较**。
 - **考核提醒与增删**（第 10 步）：`upcoming_assessments()`（只提醒未录成绩的；`days_until` 负=逾期/None=无截止日）
   + `GET /api/assessments/upcoming` + `delete_assessment` / `delete_grade`；前端学业页「临期与逾期（14 天内）」区。
+- **加权平均成绩 + 制式切换**（第 11 步，用户要求）：`weighted_average()` =
+  `Σ(学分×成绩)/Σ学分`（百分制原始分加权，学分为 0/负 不参与），与 `gpa()`（绩点加权）并存；
+  `GET /api/gpa?scale=` 一次返回两个口径；前端学业页可在 4.0/5.0 制之间**切换查看**（写死默认值仍在 config.toml）。
 - **未实现**：学校任务↔课程的字段级合流（OP-24，可先用「分组」当课程标签）。
 
 ## SR-F6 复习间隔重复 → `core/review/`
@@ -74,6 +77,10 @@
 ## SR-F9 存储/同步 → `storage/`
 - SQLite（标准库 `sqlite3`，非 ORM）+ schema 版本化迁移（当前 **v5**：v3 facts、v4 focus 回填、v5 已完成任务回填）；
   LWW 同步（时间戳+version，不静默覆盖）；跨端去重（来源标记）。
+- **并发连接（第 11 步修）**：`db.thread_local()` 代理按线程各持一个连接（`create_app` 用它）。
+  原因：`sqlite3.Connection` 非线程安全，共享时一个请求的 `commit()` 会打断另一个请求的事务
+  （真机表现：快速点击顶部导航 → 「操作未完成」）；实测并发 180 请求由 33 次 500 降到 0。
+  回归守卫：`tests/test_concurrency.py`。
 - **同步状态**（第 10 步）：`sync.status()` + `GET /api/sync/status` —— 只报告事实
   （冲突日志条数/最近时间），**跨端传输未实现时 `enabled=false`，不谎报"已同步"**。
 - **已修 bug**（第 10 步）：`log_conflict` 原用秒级时间戳当主键，同一秒两次冲突会 `IntegrityError` —— 改随机 id。

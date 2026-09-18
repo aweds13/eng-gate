@@ -46,10 +46,34 @@
 <script>
 /* 应用外壳：视图路由 + 顶部摘要 + 通用反馈（R2 会把调度收敛到这里） */
 let current='today';
-async function api(path,opts={}){const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});
-  if(!r.ok){let detail='';try{detail=(await r.json()).detail||''}catch(e){}
-    toast(detail?`操作未完成：${detail}`:'操作未完成，请稍后再试');throw new Error(`${r.status} ${path}`)}
-  return r.json()}
+let gpaScale='4.0';          // 学业页 GPA 制式（默认 4.0，可切换）
+let renderSeq=0;             // 渲染序号：用于「后点的那次说了算」
+let abortCtl=null;           // 进行中的请求组：切视图即取消，避免过期渲染互相覆盖
+let themeChoice='light';     // 主题选择（R4 接通暗色）
+
+/* 同步强调色到 CSS 变量（本地缓存先应用，避免首屏闪默认色） */
+function applyAccent(color){if(color)document.documentElement.style.setProperty('--accent',color)}
+try{applyAccent(localStorage.getItem('tf_accent'))}catch(e){}
+
+async function api(path,opts={}){
+  const init={headers:{'Content-Type':'application/json'},...opts};
+  if(abortCtl)init.signal=abortCtl.signal;      // 同一次渲染的请求共享取消信号
+  let r;
+  try{
+    r=await fetch(path,init);
+  }catch(err){
+    if(err&&err.name==='AbortError')throw err;   // 取消不是错误：静默抛出，不打扰用户
+    toast('网络请求失败，稍后再试');throw err;
+  }
+  if(!r.ok){
+    let detail='';try{detail=(await r.json()).detail||''}catch(e){}
+    toast(detail?`操作未完成：${detail}`:'操作未完成，请稍后再试');
+    throw new Error(`${r.status} ${path}`);
+  }
+  if(r.status===204)return null;
+  const text=await r.text();
+  return text?JSON.parse(text):null;
+}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function el(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
 let toastTimer=null;
@@ -153,18 +177,30 @@ document.addEventListener('keydown', ev => {
 async function render(name){
   current=name;
   clearInterval(focusTimer);focusTimer=null;
+  // 竞态防护：每次渲染发一个号并取消上一组请求；只有"最新那次"才允许写 DOM。
+  const mySeq=++renderSeq;
+  if(abortCtl)abortCtl.abort();
+  abortCtl=new AbortController();
   const m=document.getElementById('main');
-  const cfg=await api('/api/config');
-  document.documentElement.style.setProperty('--accent',cfg.accent_color);
-  if(name==='today')return renderToday(m);
-  if(name==='tasks')return renderTasks(m);
-  if(name==='focus')return renderFocus(m);
-  if(name==='stats')return renderStats(m);
-  if(name==='habit')return renderHabit(m);
-  if(name==='academic')return renderAcademic(m);
-  if(name==='review')return renderReview(m);
-  if(name==='memo')return renderMemo(m);
-  if(name==='setting')return renderSetting(m);
+  try{
+    const cfg=await api('/api/config');
+    if(mySeq!==renderSeq)return;                 // 已被更新的点击取代：不做任何写入
+    applyAccent(cfg.accent_color);
+    try{localStorage.setItem('tf_accent',cfg.accent_color)}catch(e){}
+    const paint=w=>{if(mySeq===renderSeq)w(m)};
+    if(name==='today')return paint(renderToday);
+    if(name==='tasks')return paint(renderTasks);
+    if(name==='focus')return paint(renderFocus);
+    if(name==='stats')return paint(renderStats);
+    if(name==='habit')return paint(renderHabit);
+    if(name==='academic')return paint(renderAcademic);
+    if(name==='review')return paint(renderReview);
+    if(name==='memo')return paint(renderMemo);
+    if(name==='setting')return paint(renderSetting);
+  }catch(err){
+    if(err&&err.name==='AbortError')return;      // 被下一次点击取消：不是错误
+    console.error(err);
+  }
 }
 
 function taskCard(t,isOverdue){
@@ -369,8 +405,8 @@ function gpaRadar(g4,g5,courses,grades){
   const avg=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:0;
   const gradedCourses=new Set(grades.map(x=>x.course_id).filter(Boolean)).size;
   const axes=[
-    {label:'GPA(4.0制)',value:g4.gpa,ratio:(g4.gpa||0)/4},
-    {label:'GPA(5.0制)',value:g5.gpa,ratio:(g5.gpa||0)/5},
+    {label:'GPA(当前制)',value:g4.gpa,ratio:(g4.gpa||0)/(String(g4.scale||'4.0')==='5.0'?5:4)},
+    {label:'加权平均',value:g4.weighted_average||0,ratio:(g4.weighted_average||0)/100},
     {label:'平均分',value:Math.round(avg*10)/10,ratio:avg/100},
     {label:'学分',value:credits,ratio:Math.min(1,credits/(credits||1))},
     {label:'课程覆盖',value:`${gradedCourses}/${courses}`,ratio:courses?gradedCourses/courses:0},
@@ -609,9 +645,10 @@ async function saveFeedback(){await api('/api/feedback',{method:'POST',body:JSON
   toast('反馈已保存（专注分钟由事实层自动计）');view(current)}
 
 async function renderAcademic(m){
-  const [gpa,gpa5,courses,grades,upcoming]=await Promise.all([
-    api('/api/gpa'),api('/api/gpa?scale=5.0'),api('/api/courses'),api('/api/grades'),
-    api('/api/assessments/upcoming?days=14')]);
+  const scale=gpaScale;
+  const [gpaG,other,courses,grades,upcoming]=await Promise.all([
+    api(`/api/gpa?scale=${scale}`),api(`/api/gpa?scale=${scale==='4.0'?'5.0':'4.0'}`),
+    api('/api/courses'),api('/api/grades'),api('/api/assessments/upcoming?days=14')]);
   const soon=upcoming.filter(a=>a.days_until!==null&&a.days_until<=14);
   const upcomingHtml=soon.length?`<div class="section-title">临期与逾期（14 天内）</div>
     ${soon.map(a=>{
@@ -622,12 +659,24 @@ async function renderAcademic(m){
         <div class="meta">${esc(a.course_name||'未关联课程')} · ${a.due_date} · ${when}${a.weight?` · 占 ${a.weight}`:''}</div></div>
         <button class="ghost" data-action="assessment-del" data-id="${a.id}">删除</button></div>`;}).join('')}`:'';
   const courseOpts=courses.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const otherScale=scale==='4.0'?'5.0':'4.0';
+  const hasGrades=grades.length>0;
   m.innerHTML=`<div class="grid">
-   <div class="card"><div class="big">${gpa.gpa}</div><div class="meta">GPA（4.0制，${gpa.credits}学分）</div></div>
-   <div class="card"><div class="big">${gpa5.gpa}</div><div class="meta">GPA（5.0制）</div></div></div>
+   <div class="card"><div class="big">${gpaG.weighted_average||0}</div>
+     <div class="meta">加权平均成绩（百分制）<br><span class="sub">Σ(学分×成绩) ÷ Σ学分 · ${gpaG.weighted_credits||0} 学分计入</span></div></div>
+   <div class="card"><div class="big">${gpaG.gpa}</div>
+     <div class="meta">GPA（${scale} 制，${gpaG.credits} 学分）<br><span class="sub">切换制式：另 ${otherScale} 制为 ${other.gpa}</span></div></div></div>
+  <div class="card" style="display:block">
+    <div class="meta">GPA 制式（切换后本页所有数值按该制式显示）</div>
+    <div class="row" style="margin-top:8px">
+      <button class="${scale==='4.0'?'':'ghost'}" data-action="set-gpa" data-scale="4.0">4.0 制</button>
+      <button class="${scale==='5.0'?'':'ghost'}" data-action="set-gpa" data-scale="5.0">5.0 制</button>
+      <span class="sub">配置默认值来自 config.toml 的 [academic] gpa_scale；这里只切当前查看口径。</span>
+    </div></div>
   ${upcomingHtml}
   <div class="section-title">学业概览（多维）</div>
-  ${gpaRadar(gpa,gpa5,courses.length,grades)}
+  ${gpaRadar(gpaG,{gpa:other.gpa},courses.length,grades)}
+  ${hasGrades?'':`<div class="sub">还没有成绩记录：录入后「加权平均成绩」与「GPA」会自动按学分加权计算。</div>`}
   <div class="new"><input id="cName" placeholder="新建课程，如：高数"><button data-action="course-add">新建课程</button></div>
   ${courses.map(c=>`<div class="card"><div class="title">${esc(c.name)}</div><div class="meta">${c.credits}学分 ${c.teacher||''}</div></div>`).join('')||'<div class="empty">暂无课程</div>'}
   <div class="section-title">添加考核项（考试/作业/论文/小测）</div>
@@ -780,8 +829,11 @@ async function renderSetting(m){
     <button class="ghost" data-action="view" data-view="memo">备忘录</button></div>
   <div class="card"><div class="meta">提示：复杂统计、课程建档、债务重规划等留桌面端。移动端 A 档为简版，离线看缓存页，改动同步需联网。</div></div>`;
 }
+  // GPA 制式切换：只改本页查看口径（写死配置是后端职责），立即重渲染
 async function setGpa(scale){
-  toast('GPA 制式通过本地 config.toml 的 [academic] gpa_scale 持久设置；临时查看：/api/gpa?scale='+scale);
+  gpaScale=scale==='5.0'?'5.0':'4.0';
+  toast(`已切到 ${gpaScale} 制（本页按该制式显示）`);
+  view('academic');
 }
 
 // PWA：注册 service worker（仅 secure context，如 https 或 localhost）

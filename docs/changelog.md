@@ -184,6 +184,24 @@
   `tests/test_team_line.py`（7 项）+ 同步状态 3 项；共 **246 passed**。
 - 质量门：pytest 246 passed + 2 deselected / 验收 2 passed / 覆盖率 92.34% / ruff 0 / mypy 0（34 文件）/ 五层对齐 PASS。
 
+### 第 11 步 · 并发修复 + 学业制式切换 + 加权平均成绩（用户反馈驱动）
+- **修 `快速点击顶部导航 → 「操作未完成」`**：根因在**后端**——`create_app` 让所有请求共用一个
+  `sqlite3.Connection`，而 Connection 非线程安全，一个请求的 `commit()` 会打断另一个请求的事务
+  （实测复现：并发 80 次读写 16 次异常，异常类型含 `cannot commit - no transaction is active`、
+  `another row available`、`bad parameter or other API misuse`；真机 132 并发请求 33 次 500）。
+  修复：新增 `storage/db.thread_local()` **按线程分发连接**的代理（路由代码零改动）；
+  真机复测 **180 并发请求 0 个 500**。新增 `tests/test_concurrency.py`（5 项回归守卫）。
+- **前端竞态防护**（同一问题的客户端侧）：渲染加**序号**（后点的那次说了算）+ `AbortController`
+  （切视图即取消上一组请求）；`AbortError` **静默**处理（取消不是错误，不该弹提示）；
+  强调色先读 localStorage 再校正，消除首屏闪色。
+- **GPA 制式可在页面切换**（用户指出「4.0 与 5.0 应该是要切换的」）：学业页新增「4.0 制 / 5.0 制」按钮，
+  切换即按该制式重算显示并记住选择；不再只弹一句"去改 config.toml"
+  （写死默认值仍归 `config.toml`，前端不偷偷改本地配置）。
+- **新增加权平均成绩**（用户给定公式）：`weighted_average()` = `Σ(单科学分 × 单科成绩) / Σ单科学分`，
+  用**百分制原始分**加权，与 GPA（绩点加权）**并存、同屏、互不替代**；学分为 0/负 的记录不参与加权；
+  `GET /api/gpa` 一次返回 `{gpa, credits, scale, weighted_average, weighted_credits}`。
+- 质量门：pytest 265 passed + 2 deselected / 覆盖率 92.03% / ruff 0 / mypy 0（34 文件）/ 五层对齐 PASS。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增
