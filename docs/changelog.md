@@ -25,6 +25,11 @@
 - schema v3→v4：幂等回填历史 `focus_sessions` → facts，保证 ledger 改读 facts 后旧数据不归零。
 - 质量门：pytest 64 passed / ruff 0 / mypy 0（32 文件）/ 五层对齐 PASS / 护栏自测 PASS。
 
+### 重构 · 第 1 步：ledger.summary 改读 facts
+- `ledger.summary()` 的投入项从 facts 读 `focus.finished`，按 `occurred_at`（完成日）归属当日；对外 API 不变。
+- 新增 `tests/test_ledger_summary.py`：事实计入 / 放弃不计入 / 完成日边界 / API 集成。
+- 质量门：pytest 68 passed / ruff 0 / mypy 0（32 文件）/ 五层对齐 PASS / 护栏自测 PASS。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

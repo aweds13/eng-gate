@@ -62,9 +62,9 @@ config.example.toml / pyproject.toml
 ## 状态
 - ✅ 五层骨架闭环：intention / specification（含 conventions）/ contracts / implementation / taste（含护栏、验收、五层对齐脚本 `check_layers.py`）。
 - ✅ **第一版功能域已落地（存在级）**：任务管理 + B 记账 + 专注(F3) + 反馈/习惯(F4) + 学业/GPA(F5) + 复习FSRS(F6) + 团队/AI(F7) + 备忘录(F8) + 同步(F9) + **GPA 4.0/5.0 切换**。
-- ✅ **重构第 0 步（事实层）已完成**：`src/core/facts/`（facts 表 + 同步事件总线）；专注结束记事实。第 0.1 步修正事实语义并回填历史专注，详见 `changelog.md`。
+- ✅ **重构第 0 / 0.1 / 1 步已完成**：事实层（facts + 总线）→ 事实语义分 kind + v4 历史回填 → `ledger.summary()` 改读 facts（完成日口径）。详见 `changelog.md`。
 - ⚠️ **已知断层**：契约层 `contracts/` 揭示多项"操作闭环/模块联动"缺口（详见 `../复盘/三层断裂诊断-实现与交互复盘.md`），存在 ≠ 完成，LC-1~LC-8 多数仍 ❌。
-- ✅ 质量门：pytest 64 passed / ruff 0 / mypy 0（32 文件）/ 五层对齐 PASS / 护栏自测 PASS。
+- ✅ 质量门：pytest 68 passed / ruff 0 / mypy 0（32 文件）/ 五层对齐 PASS / 护栏自测 PASS。
 - ⏭️ 后置（第二版）：重规划/债务重组(F2.8)、AI 接口写/改/删、学校通知监测脚本(F10)、移动端 PWA 深联动。
 
 > 工程规范见 `CODING_GUIDELINES.md`；功能验收见 `ACCEPTANCE.md`；变更日志见 `changelog.md`。

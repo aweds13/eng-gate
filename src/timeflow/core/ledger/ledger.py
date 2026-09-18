@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from timeflow.core import facts as facts_mod
 from timeflow.core import tasks as tm
 
 if TYPE_CHECKING:
@@ -39,7 +40,9 @@ def summary(
 ) -> LedgerSummary:
     """顶部轻量摘要（AC-9）：今日债务项数 + 各逾期项天数/程度，投入时长。
 
-    投入（invest_hours）= 今日已完成专注时长 / 3600（SR-F2.1 专注=投入）。
+    投入（invest_hours）= 今日已完成的专注事实 / 3600（SR-F2.1 专注=投入）。
+    事实来源：`facts` 表 kind=focus.finished；按 occurred_at（完成时刻）归属当日，
+    取代原先直接聚合 `focus_sessions`（第 1 步·事实与解读分离）。
     """
     t = today or date.today().isoformat()
     items: list[DebtItem] = []
@@ -56,14 +59,16 @@ def summary(
             )
         )
     items.sort(key=lambda x: x.overdue_days, reverse=True)
-    # 投入：今日已完成专注
-    invested = conn.execute(
-        "SELECT COALESCE(SUM(duration_sec),0) FROM focus_sessions "
-        "WHERE status = 'finished' AND substr(started_at,1,10) = ?",
-        (t,),
-    ).fetchone()
+    # 投入：今日已完成的专注事实（第 1 步：读 facts，按完成时刻归属当日）
+    finished_today = facts_mod.query(
+        conn,
+        kind="focus.finished",
+        since=f"{t}T00:00:00",
+        until=f"{t}T23:59:59",
+    )
+    invested_sec = sum(float(row["value_num"] or 0) for row in finished_today)
     return LedgerSummary(
         debt_count=len(items),
         debt_items=items,
-        invest_hours=round((invested[0] or 0) / 3600.0, 2),
+        invest_hours=round(invested_sec / 3600.0, 2),
     )
