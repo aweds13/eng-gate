@@ -246,6 +246,7 @@ def complete_task(conn: sqlite3.Connection, task_id: str) -> Task:
     """完成任务（AC-7 联动）：若为父任务，仅当全部子任务完成才自动完成；否则标记完成。
 
     第 2 步：完成时发 `task.completed` 事实（幂等——已完成的重复调用不再发）。
+    第 5 步（OP-8）：完成设了重复的任务后，自动生成下一次（只生成一次）。
     """
     current = get_task(conn, task_id)
     if current.status == STATUS_DONE:
@@ -253,7 +254,10 @@ def complete_task(conn: sqlite3.Connection, task_id: str) -> Task:
     children = conn.execute("SELECT * FROM tasks WHERE parent_id = ?", (task_id,)).fetchall()
     if children and any(_row_to_task(c).status != STATUS_DONE for c in children):
         raise ValueError("存在未完成的子任务，父任务不能自动完成")
-    return update_task(conn, task_id, status=STATUS_DONE)
+    done = update_task(conn, task_id, status=STATUS_DONE)
+    if done.repeat_days is not None:
+        process_repeats(conn)
+    return done
 
 
 def uncomplete_task(
@@ -271,7 +275,14 @@ def uncomplete_task(
 
 
 def process_repeats(conn: sqlite3.Connection) -> int:
-    """Repeat（AC-8）：到点（按上次完成时间 + repeat_days）自动生成下一次。返回生成数。"""
+    """Repeat（AC-8 / OP-8）：为「已完成且设了重复」的任务生成下一次。返回本次生成数。
+
+    口径：
+    - 基准是**上次完成时间**（`updated_at`，完成即写）；无截止日的任务不生成（无从推算下一次）。
+    - **幂等**：同一任务只生成一次下一次 —— 以 `task.repeat.generated` 事实为准
+      （该事实随生成一起写入，既做去重依据，也留下可审计痕迹）。
+    - 继承：标题 / 分组 / 重复周期 / 是否 My Day（下一次仍进今天，保持动线连续）。
+    """
     generated = 0
     for row in conn.execute(
         "SELECT * FROM tasks WHERE repeat_days IS NOT NULL AND status = ?", (STATUS_DONE,)
@@ -279,15 +290,58 @@ def process_repeats(conn: sqlite3.Connection) -> int:
         task = _row_to_task(row)
         if task.due_date is None:
             continue
+        if _repeat_already_generated(conn, task.id):
+            continue
         last = datetime.fromisoformat(task.updated_at).date()
         next_due = (last + timedelta(days=task.repeat_days or 0)).isoformat()
-        create_task(
+        next_task = create_task(
             conn,
             title=task.title,
             due_date=next_due,
             group_name=task.group_name,
             repeat_days=task.repeat_days,
             parent_id=task.parent_id,
+            is_myday=task.is_myday,
         )
+        _record_repeat_generated(conn, task, next_task, next_due)
         generated += 1
     return generated
+
+
+def _repeat_already_generated(conn: sqlite3.Connection, task_id: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM facts WHERE kind = 'task.repeat.generated' AND subject_id = ? LIMIT 1",
+        (task_id,),
+    ).fetchone()
+    return row is not None
+
+
+def _record_repeat_generated(
+    conn: sqlite3.Connection,
+    task: Task,
+    next_task: Task,
+    next_due: str,
+) -> None:
+    """记录「已生成下一次」事实：既是幂等依据，也让重复动线可追溯。"""
+    from timeflow.core import facts as facts_mod
+
+    extra = {
+        "title": task.title,
+        "repeat_days": task.repeat_days,
+        "next_task_id": next_task.id,
+        "next_due": next_due,
+    }
+    facts_mod.record(
+        conn,
+        kind="task.repeat.generated",
+        subject_type="task",
+        subject_id=task.id,
+        value_num=float(task.repeat_days or 0),
+        value_text=next_task.id,
+        extra=extra,
+        source="desktop",
+    )
+    facts_mod.publish(
+        "task.repeat.generated",
+        {"task_id": task.id, "next_task_id": next_task.id, "next_due": next_due, **extra},
+    )

@@ -53,7 +53,9 @@
 - 后续：以上次完成时间为基准 + 周期 → 生成下一次（继承标题/分组/重复/My Day 设置）。
 - 可逆：可删除生成项。
 - 反馈：列表多出下一次任务。
-- 边界：未完成不生成；重复完成不重复生成。
+- 边界：未完成不生成；重复完成不重复生成；无截止日的重复任务不生成（无从推算）。
+- 实现（第 5 步）：`complete_task` → `process_repeats`；幂等依据 = `task.repeat.generated` 事实
+  （subject=原任务、extra 带 `next_task_id`/`next_due`/`repeat_days`），同一任务只生成一次。
 
 ## OP-9 编辑任务
 

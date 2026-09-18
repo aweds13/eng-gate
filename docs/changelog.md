@@ -60,6 +60,14 @@
   LF-1 真机脚本扩到含「进行中不计投入 / 重复开始被拒 / 前端页面可达」。
 - 质量门：pytest 131 passed + 2 deselected / 验收 2 passed / 覆盖率 85.83% / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
 
+### 重构 · 第 5 步·OP-8：Repeat 触发收口
+- `complete_task` 完成后对设了重复的任务调用 `process_repeats`（此前是**死代码**，无任何触发点）。
+- 幂等与审计：以 `task.repeat.generated` 事实（subject=原任务，extra 带 `next_task_id`/`next_due`/`repeat_days`）
+  作为「已生成」依据 —— 同一任务只生成一次，重复完成/重复扫描不再生成。
+- 生成的下一次继承标题/分组/周期/My Day；无截止日的重复任务不生成。
+- 新增 `tests/test_task_repeat.py`（7 项）。
+- 质量门：pytest 138 passed + 2 deselected / 验收 2 passed / 覆盖率 86.42% / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增
