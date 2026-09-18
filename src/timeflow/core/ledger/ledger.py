@@ -27,6 +27,7 @@ class LedgerSummary(BaseModel):
     invest_hours: float
     review_count: int = 0
     output_count: int = 0
+    manual_hours: float = 0.0
 
 
 def _degree(days: int, mild: int, medium: int) -> str:
@@ -37,17 +38,36 @@ def _degree(days: int, mild: int, medium: int) -> str:
     return "重"
 
 
+def _num(value: object) -> float:
+    return float(value) if isinstance(value, (int, float)) else 0.0
+
+
+def _manual_invests_today(conn: sqlite3.Connection, day: str) -> list[dict[str, object]]:
+    """当日**有效**手动投入事实 = `invest.manual` − 当日 `invest.retracted`。"""
+    manual = facts_mod.query(
+        conn, kind="invest.manual", since=f"{day}T00:00:00", until=f"{day}T23:59:59"
+    )
+    retracted = {
+        row["subject_id"]
+        for row in facts_mod.query(
+            conn, kind="invest.retracted", since=f"{day}T00:00:00", until=f"{day}T23:59:59"
+        )
+    }
+    return [row for row in manual if row["subject_id"] not in retracted]
+
+
 def summary(
     conn: sqlite3.Connection, today: str | None = None, mild: int = 3, medium: int = 7
 ) -> LedgerSummary:
-    """顶部轻量摘要（AC-9）：今日债务项数 + 各逾期项天数/程度，投入时长 + 复习投入张数 + 产出条数。
+    """顶部轻量摘要（AC-9）：债务项数/程度 + 投入时长 + 复习张数 + 产出条数 + 手动投入。
 
-    投入（invest_hours）= 今日已完成的专注事实 / 3600（SR-F2.1 专注=投入）。
-    复习投入（review_count）= 今日不同的 `review.completed` 主体数（复习完成=投入·维持；
-    同一天同卡只算一次，对应 SR-F6 边界「重复完成幂等」）。
-    产出（output_count）= 今日 `output.manual` 去重后减去 `output.retracted`
+    投入（invest_hours）= 今日已完成的**专注**事实 / 3600（SR-F2.1 专注=投入；口径不含手动投入）。
+    手动投入（manual_hours）= 今日有效 `invest.manual`（value_num=秒）/ 3600 —— **单列**，
+    与 invest_hours 分开展示、不合并（2026-09-18 用户确认：手动投入单位=秒）。
+    复习投入（review_count）= 今日有效 `review.completed` 主体数（复习完成=投入·维持）。
+    产出（output_count）= 今日 `output.manual` 去重减 `output.retracted`
     （产出轴独立，不折算成投入）。
-    事实来源：`facts` 表；按 occurred_at（完成时刻）归属当日，只读事实层（R1）。
+    事实来源：`facts` 表；按 occurred_at 归属当日，只读事实层（R1）。
     """
     t = today or date.today().isoformat()
     items: list[DebtItem] = []
@@ -89,10 +109,13 @@ def summary(
     output_entries = {
         row["subject_id"] or row["id"] for row in outputs_today
     } - retracted
+    # 手动投入（第 5 步物化）：invest.manual（秒）− invest.retracted；单列，不并入 invest_hours
+    manual_sec = sum(_num(row["value_num"]) for row in _manual_invests_today(conn, t))
     return LedgerSummary(
         debt_count=len(items),
         debt_items=items,
         invest_hours=round(invested_sec / 3600.0, 2),
         review_count=len(review_subjects),
         output_count=len(output_entries),
+        manual_hours=round(manual_sec / 3600.0, 2),
     )

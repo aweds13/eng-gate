@@ -6,7 +6,8 @@
 ## 1. 实体与字段
 
 - **Fact（事实层）**：kind、subject、value_num、value_text、occurred_at、source。
-- **投入轴**：专注 `focus.finished`（value_num=秒）；任务完成 `task.completed`（不估时）；复习完成 `review.completed`（不折算时间，计张数）；手动投入 `invest.manual`。
+- **投入轴**：专注 `focus.finished`（value_num=秒）；任务完成 `task.completed`（不估时）；
+  复习完成 `review.completed`（不折算时间，计张数）；手动投入 `invest.manual`（**value_num=秒**，同专注口径）。
 - **事实反向标记**：撤销类事实与正向事实成对（如 `task.uncompleted` 对 `task.completed`、
   `task.restored` 对 `task.deleted`、`output.retracted` 对 `output.manual`、`review.undone` 对 `review.completed`），
   解读层按最新有效状态计账，不删历史事实（R7 / A-003）。
@@ -26,9 +27,12 @@
 ## 3. 规则
 
 - **R1 事实优先**：ledger 只从 facts 读，不直接查业务表；`focus_sessions` 仅作原始记录/回填来源。
+- **R2b 手动投入口径（2026-09-18 用户确认）**：单位 = **秒**（与专注同口径，便于相加与换小时）；
+  `manual_hours` 单列，**不并入** `invest_hours`（后者保持「只算专注」，避免两种来源混成一个数字）。
 - **R2 投入口径**：专注按秒累加；完成/复习按完成事实；未绑定专注也计投入。
-  `ledger.summary()` 返回 `invest_hours`（专注换算小时）+ `review_count`（今日复习张数，去重）
-  + `output_count`（今日产出条数，已撤销不计）；**三者分开展示、互不折算**。
+  `ledger.summary()` 返回 `invest_hours`（**专注**换算小时）+ `review_count`（今日复习张数，去重）
+  + `output_count`（今日产出条数，已撤销不计）+ `manual_hours`（今日有效手动投入，秒/3600，**单列**）；
+  **各项分开展示、互不折算、不合并**。
 - **R3 产出口径**：学校 KPI 与知识资产分开；第一版手动粗颗粒；不做打分器。
   手动产出（第 5 步起）同时落 `ledger_entries`（兼容旧路径）与 `output.manual` 事实；撤销发反向事实。
 - **R4 债务口径**：不折算时间；分级展示；无截止日任务不计债务。
@@ -45,11 +49,11 @@
 - `ledger_entries` 与 facts 并存：**已定案（第 2 步子任务 4）**——两者**互不相通**，记为「新/旧两条路」：
   - 事实层 `facts` = **新路径 / 唯一真源**。专注、任务完成、复习完成等**计算型**记录一律走 facts；
     `ledger.summary()` 与各线读口径只读 facts，不读 `ledger_entries`。
-  - `ledger_entries` = **旧路径（待物化）**。仅由 `memo.add_invest_entry/add_output_entry` 手动写入，
-    是「手动记投入/产出」的落点（覆盖 SR-F8.4 产出评价器第一版「手动粗颗粒」）。
-    **第 5 步进展**：手动**产出**已同时发 `output.manual` 事实（产出轴物化）；手动**投入**（`invest.manual`）仍只在旧表。
+  - `ledger_entries` = **旧路径（兼容保留）**。仍由 `memo.add_invest_entry/add_output_entry` 写入，
+    是「手动记投入/产出」的历史落点（覆盖 SR-F8.4 产出评价器第一版「手动粗颗粒」）。
+    **第 5 步进展**：手动**产出**（`output.manual`）与手动**投入**（`invest.manual`，秒）**都已物化到事实层**；
+    `ledger_entries` 自此仅为兼容/迁移来源，解读层不读它。
   - `type` 与 `source` **不跨表 join、不合并聚合** ⇒ 不存在重复计账。
-  - 后续：`invest.manual` 也物化到事实层后，`ledger_entries` 降级为迁移来源。
 - 跨端冲突：LWW + 冲突日志，不静默覆盖。
 - 空账本：投入 0 / 债务 0，界面友好，不显示错误。
 
@@ -69,6 +73,7 @@
 - 现有：`../../tests/test_ledger_summary.py`、`../../tests/test_facts.py`、`../../tests/test_team_memo.py`。
 - 第 2 步补充：`../../tests/test_task_line.py`（完成事实不得混入投入口径）、`../../tests/test_focus_line.py`
   （专注事实→反馈/自检口径、读口径只认 facts）、`../../tests/test_review_line.py`（复习投入计张数）。
-- 第 5 步补充：`../../tests/test_output_axis.py`（产出事实 + 撤销 + `output_count` 与投入分离）。
+- 第 5 步补充：`../../tests/test_output_axis.py`（产出事实 + 撤销 + `output_count` 与投入分离）、
+  `../../tests/test_invest_axis.py`（手动投入事实按秒 + 撤销 + `manual_hours` 与 invest_hours 分离）。
 - 真实运行验证：`../../tools/lf1_live_check.py`（起真服务走 LF-1 主链 8 步）。
-- 待补（B4）：专注→记账主链、完成→记账、`invest.manual` 物化。
+- 待补（B4）：周结算（OP-15）聚合展示。

@@ -202,6 +202,7 @@ async function addTaskHere(){
 
 function summaryLine(s){
   const parts=[`债务 ${s.debt_count} 项`,`投入 ${s.invest_hours}h`];
+  if(s.manual_hours)parts.push(`手动投入 ${s.manual_hours}h`);
   if(s.review_count)parts.push(`复习 ${s.review_count} 张`);
   if(s.output_count)parts.push(`产出 ${s.output_count} 条`);
   return parts.join(' · ');
@@ -332,9 +333,20 @@ async function review(id,fb){await api(`/api/review/${id}/review`,{method:'POST'
   toast('复习已记录，下次到期已由 FSRS 排好');view(current)}
 
 async function renderMemo(m){
-  const [memos,outputs]=await Promise.all([api('/api/memos'),api('/api/ledger/outputs')]);
+  const [memos,outputs,invests]=await Promise.all([
+    api('/api/memos'),api('/api/ledger/outputs'),api('/api/ledger/invests')]);
   m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…"><button onclick="addMemo()">记录</button></div>
   ${memos.map(x=>`<div class="card"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge">${esc(x.ref_handle)}</span>`:''}</div></div>`).join('')||'<div class="empty">暂无备忘录</div>'}
+  <div class="section-title">今日手动投入（独立于专注投入）</div>
+  <div class="new">
+    <select id="inKind"><option value="focus">专注补记</option><option value="habit">习惯</option><option value="other">其它</option></select>
+    <input id="inMinutes" type="number" min="0" step="5" value="25" style="width:90px" title="分钟">
+    <span class="sub">分钟</span>
+    <input id="inNote" placeholder="备注，如：番茄补记">
+    <button onclick="addInvest()">记一笔投入</button></div>
+  ${invests.map(i=>`<div class="card ${i.retracted?'done':''}"><div style="flex:1"><div class="title">${esc(i.note||i.kind)} · ${i.minutes} 分钟</div>
+    <div class="meta">${i.kind}${i.retracted?' · 已撤销':''}</div></div>
+    ${i.retracted?'':`<button class="ghost" onclick="retractInvest('${i.entry_id}')">撤销</button>`}</div>`).join('')||'<div class="empty">今天还没有手动投入</div>'}
   <div class="section-title">今日产出（独立于投入轴）</div>
   <div class="new">
     <select id="outKind"><option value="asset">知识资产</option><option value="kpi">学校 KPI</option></select>
@@ -347,6 +359,18 @@ async function renderMemo(m){
 }
 async function addMemo(){const text=document.getElementById('memoTxt').value.trim();if(!text)return;
   await api('/api/memos',{method:'POST',body:JSON.stringify({text})});view(current)}
+async function addInvest(){
+  const minutes=parseFloat(document.getElementById('inMinutes').value||'0');
+  if(isNaN(minutes)||minutes<0){toast('分钟数不合法');return}
+  const body={value:Math.round(minutes*60),  // 存储口径=秒
+    kind:document.getElementById('inKind').value,
+    note:document.getElementById('inNote').value.trim()||null};
+  await api('/api/ledger/invest',{method:'POST',body:JSON.stringify(body)});
+  toast(`已记 ${minutes} 分钟手动投入（与专注分开统计）`);view(current);
+}
+async function retractInvest(entryId){
+  await api(`/api/ledger/invest/${entryId}`,{method:'DELETE'});toast('已撤销该笔投入');view(current);
+}
 async function addOutput(){
   const body={value:parseFloat(document.getElementById('outValue').value||'1'),
     kind:document.getElementById('outKind').value,

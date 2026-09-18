@@ -208,16 +208,133 @@ def add_invest_entry(
     kind: str = "focus",
     note: str | None = None,
 ) -> str:
-    """记一条投入流水（投入轴）。
+    """记一条手动投入（投入轴）。
 
-    注意（F2 规格 §4 定案）：这是**旧路径**，写 `ledger_entries` 但**不**发事实，
-    也**不**参与 `ledger.summary()` 的投入口径（投入只认 facts）。手动投入物化留待后续。
+    **单位口径（2026-09-18 用户确认）：秒**，与 `focus.finished` 完全同口径 ——
+    这样 `ledger.summary()` 里手动投入 = `sum(value_num)/3600`，无需按来源换算。
+
+    除旧表 `ledger_entries`（兼容保留）外，同时发 `invest.manual` 事实；
+    账本按「`invest.manual` − `invest.retracted`」计 `manual_hours`，
+    且**不**并入 `invest_hours`（后者保持「只算专注」，口径不混）。
     """
+    if value < 0:
+        raise ValueError("投入值不能为负")
     eid = _uid()
+    today = date.today().isoformat()
     conn.execute(
         "INSERT INTO ledger_entries (id, axis, kind, value, date, note, created_at) "
         "VALUES (?,?,?,?,?,?,?)",
-        (eid, "invest", kind, value, date.today().isoformat(), note, _now()),
+        (eid, "invest", kind, value, today, note, _now()),
     )
     conn.commit()
+    _record_invest_fact(conn, entry_id=eid, kind=kind, value=value, note=note, occurred_on=today)
     return eid
+
+
+def retract_invest_entry(conn: sqlite3.Connection, entry_id: str) -> bool:
+    """撤销一条手动投入（OP-13 可逆）：追加 `invest.retracted` 反向事实，不删历史。幂等。"""
+    from timeflow.core import facts as facts_mod
+
+    target = _find_invest_fact(conn, entry_id)
+    if target is None:
+        raise KeyError(f"投入记录不存在: {entry_id}")
+    if _is_invest_retracted(conn, entry_id):
+        return False
+    target_kind = str(target["value_text"] or "")
+    raw_value = target["value_num"]
+    target_value = float(raw_value) if isinstance(raw_value, (int, float)) else 0.0
+    extra = {
+        "entry_id": entry_id,
+        "kind": target_kind,
+        "seconds": target_value,
+        "migrated": False,
+    }
+    facts_mod.record(
+        conn,
+        kind="invest.retracted",
+        subject_type="invest",
+        subject_id=entry_id,
+        value_num=target_value,
+        value_text=target_kind,
+        extra=extra,
+        source="desktop",
+    )
+    facts_mod.publish("invest.retracted", {"entry_id": entry_id, **extra})
+    return True
+
+
+def _record_invest_fact(
+    conn: sqlite3.Connection,
+    entry_id: str,
+    kind: str,
+    value: float,
+    note: str | None,
+    occurred_on: str,
+) -> None:
+    """发 `invest.manual` 事实（value_num = 秒）。"""
+    from timeflow.core import facts as facts_mod
+
+    extra = {"entry_id": entry_id, "kind": kind, "note": note}
+    facts_mod.record(
+        conn,
+        kind="invest.manual",
+        subject_type="invest",
+        subject_id=entry_id,
+        value_num=float(value),
+        value_text=kind,
+        extra=extra,
+        source="desktop",
+    )
+    facts_mod.publish("invest.manual", {"entry_id": entry_id, **extra, "seconds": float(value)})
+
+
+def _invest_facts(conn: sqlite3.Connection, day: str | None = None) -> list[dict[str, object]]:
+    """某日手动投入事实（默认今天）。"""
+    from timeflow.core import facts as facts_mod
+
+    d = day or date.today().isoformat()
+    return facts_mod.query(
+        conn, kind="invest.manual", since=f"{d}T00:00:00", until=f"{d}T23:59:59"
+    )
+
+
+def list_invests(conn: sqlite3.Connection, day: str | None = None) -> list[dict[str, object]]:
+    """某日手动投入流水（含是否已撤销），供前端展示与核对。"""
+    out: list[dict[str, object]] = []
+    for fact in _invest_facts(conn, day):
+        entry_id = str(fact["subject_id"])
+        extra_obj = fact["extra"]
+        extra: dict[str, object] = extra_obj if isinstance(extra_obj, dict) else {}
+        raw_seconds = fact["value_num"]
+        seconds = float(raw_seconds) if isinstance(raw_seconds, (int, float)) else 0.0
+        out.append(
+            {
+                "entry_id": entry_id,
+                "kind": fact["value_text"],
+                "seconds": seconds,
+                "minutes": round(seconds / 60.0, 1),
+                "note": extra.get("note"),
+                "occurred_at": fact["occurred_at"],
+                "retracted": _is_invest_retracted(conn, entry_id),
+            }
+        )
+    return out
+
+
+def _find_invest_fact(conn: sqlite3.Connection, entry_id: str) -> dict[str, object] | None:
+    from timeflow.core import facts as facts_mod
+
+    rows = facts_mod.query(
+        conn, kind="invest.manual", subject_type="invest", subject_id=entry_id
+    )
+    return rows[-1] if rows else None
+
+
+def _is_invest_retracted(conn: sqlite3.Connection, entry_id: str) -> bool:
+    from timeflow.core import facts as facts_mod
+
+    return bool(
+        facts_mod.query(
+            conn, kind="invest.retracted", subject_type="invest", subject_id=entry_id
+        )
+    )

@@ -95,6 +95,17 @@
 - 新增/扩展测试 5 项（`tests/test_review_line.py`）；`ACCEPTANCE.md` LF-2 转 ✅。
 - 质量门：pytest 166 passed + 2 deselected / 验收 2 passed / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
 
+### 重构 · 第 5 步·手动投入物化（收尾）
+- 单位定案（用户确认）：手动投入 = **秒**，与 `focus.finished` 同口径。
+- `memo.add_invest_entry` 除写 `ledger_entries`（兼容）外发 `invest.manual` 事实；新增
+  `retract_invest_entry`（`invest.retracted` 反向事实、幂等）与 `list_invests`（含 `minutes`）；
+  API `POST /api/ledger/invest`（负值 400）、`GET /api/ledger/invests`、`DELETE /api/ledger/invest/{id}`。
+- `ledger.summary()` 新增 `manual_hours`（今日有效手动投入 /3600），**单列、不并入** `invest_hours`；
+  前端备忘录页新增「今日手动投入」区（按分钟输入、内部换算成秒），摘要行显示「手动投入 Xh」。
+- `ledger_entries` 至此仅为兼容/迁移来源（手动投入与产出都走事实层）。
+- 新增 `tests/test_invest_axis.py`（12 项）；台账 A-016 记录单位决策。
+- 质量门：pytest 179 passed + 2 deselected / 验收 2 passed / 覆盖率 88.80% / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

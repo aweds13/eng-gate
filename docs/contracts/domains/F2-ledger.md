@@ -8,24 +8,28 @@
 - 前置：无。
 - 输入：无。
 - 后续：债务 = 逾期项数 + 天数/程度；投入 = 今日 `focus.finished` 事实 sum/3600；
-  复习投入 = 今日不同 `review.completed` 主体数（`review_count`）；
-  产出 = 今日 `output.manual` 去重减 `output.retracted`（`output_count`，与投入分开展示）；任一操作后刷新。
+  复习投入 = 今日有效 `review.completed` 主体数（`review_count`）；
+  产出 = 今日 `output.manual` 去重减 `output.retracted`（`output_count`，与投入分开展示）；
+  手动投入 = 今日有效 `invest.manual`（秒）/3600（`manual_hours`，同样单列）；任一操作后刷新。
 - 可逆：只读。
 - 反馈：一行摘要，温和不告警。
 - 边界：空账本显示 0；跨午夜按完成日；旧库无 facts 由回填/回退保证。
-- API：`GET /api/summary` → `{debt_count, debt_items, invest_hours, review_count, output_count}`。
+- API：`GET /api/summary` →
+  `{debt_count, debt_items, invest_hours, review_count, output_count, manual_hours}`。
 
 ## OP-13 手动记投入（目标态）
 
 - 入口：投入流水/设置页（第一版可无 UI，API 保留）。
 - 前置：无。
-- 输入：数值（非负）、可选备注/来源。
+- 输入：数值（非负，**单位=秒**）、可选备注/来源。
 - 后续：发 `invest.manual` 事实 → 摘要/周结算重算。
 - 可逆：撤销/反向事实。
 - 反馈：流水新增。
 - 边界：0 值可存不显；负值拒绝。
-- 现状（第 2 步）：`POST /api/ledger/invest` 仍写旧表 `ledger_entries`（手动投入的旧路径），
-  **不改读口径、不与 facts 合并**；摘要/账本目前不消费它（见规格 §4 定案）。
+- 实现（第 5 步物化，2026-09-18 单位定案=秒）：`POST /api/ledger/invest` 写 `ledger_entries`（兼容）**并**发
+  `invest.manual` 事实（value_num=秒）；`GET /api/ledger/invests?date_str=` 列当日（含 `retracted`、`minutes`）；
+  `DELETE /api/ledger/invest/{entry_id}` 追加 `invest.retracted` 反向事实（幂等、不删历史）；负值 400。
+  账本：`manual_hours = 今日有效手动投入(秒)/3600`，**单列**，不并入 `invest_hours`。
 
 ## OP-14 手动记产出（目标态）
 

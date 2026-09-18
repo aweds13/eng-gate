@@ -474,10 +474,28 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.post("/api/ledger/invest")
     def ledger_invest(payload: dict[str, Any]) -> dict[str, str]:
-        return {"id": memo.add_invest_entry(
-            conn, value=payload["value"], kind=payload.get("kind", "focus"),
-            note=payload.get("note"),
-        )}
+        """手动投入（OP-13）。**单位：秒**（与专注事实同口径）。"""
+        try:
+            return {"id": memo.add_invest_entry(
+                conn, value=payload["value"], kind=payload.get("kind", "focus"),
+                note=payload.get("note"),
+            )}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/ledger/invests")
+    def ledger_invests(date_str: str | None = None) -> list[dict[str, object]]:
+        """某日手动投入流水（含是否已撤销）；默认今天。秒为存储口径，另附 minutes。"""
+        return memo.list_invests(conn, day=date_str)
+
+    @app.delete("/api/ledger/invest/{entry_id}")
+    def ledger_invest_retract(entry_id: str) -> dict[str, object]:
+        """撤销一条手动投入（追加 `invest.retracted` 反向事实，不删历史）。"""
+        try:
+            changed = memo.retract_invest_entry(conn, entry_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="投入记录不存在") from None
+        return {"entry_id": entry_id, "retracted": changed}
 
     # ---- SR-F9 跨端同步 (LWW + 去重) ----
     @app.post("/api/sync/tasks")

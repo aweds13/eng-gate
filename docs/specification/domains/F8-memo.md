@@ -43,5 +43,6 @@
 ## 7. 测试映射
 
 - 现有：`../../tests/test_team_memo.py`。
-- 第 5 步（产出轴物化）：`../../tests/test_output_axis.py`（事实/撤销/`output_count` 与投入分离/API）。
+- 第 5 步（轴物化）：`../../tests/test_output_axis.py`（产出事实/撤销/`output_count`）、
+  `../../tests/test_invest_axis.py`（手动投入事实按秒/撤销/`manual_hours`）。
 - 待补（B4）：备忘录→转任务→到期全链路；句柄边界。
