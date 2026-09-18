@@ -155,6 +155,14 @@ def create_app(db_path: str | None = None) -> FastAPI:
         ]
         return [_out(t, conn) for t in rows]
 
+    @app.post("/api/tasks/purge-deleted")
+    def purge_deleted_tasks() -> dict[str, int]:
+        """清空回收站：物理删除全部已删任务，返回条数（幂等）。
+
+        注意：本路由必须声明在 `/api/tasks/{task_id}` 之前，否则 "purge-deleted" 会被当成 task_id。
+        """
+        return {"purged": tm.purge_deleted_tasks(conn)}
+
     @app.get("/api/tasks/{task_id}", response_model=TaskOut)
     def get_task(task_id: str) -> TaskOut:
         try:
@@ -192,6 +200,19 @@ def create_app(db_path: str | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="任务不存在") from None
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.delete("/api/tasks/{task_id}/purge")
+    def purge_task(task_id: str) -> dict[str, str]:
+        """彻底删除（**不可逆**，OP-6）：只允许删回收站里（已删）的任务。
+
+        为什么要有：只软删除的话回收站会越积越多，总得有个真正的清理出口。
+        活动中的任务必须先软删除（DELETE /api/tasks/{id}），这里拒绝（400），避免误用。
+        """
+        try:
+            tm.purge_task(conn, task_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"purged": task_id}
 
     @app.post("/api/tasks/{task_id}/complete", response_model=TaskOut)
     def complete_task(task_id: str) -> TaskOut:

@@ -64,7 +64,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/__rev":
             self._send(f"{self.rev} -> backend {self.backend}".encode(), "text/plain")
         else:
-            self.send_error(404, "本服务只提供旧版 index.html / app.css；接口请走 base 指定的后端")
+            # 注意：错误信息必须是 ASCII —— http.server 按 latin-1 编码状态行，
+            # 中文 reason 会抛 UnicodeEncodeError 并把连接直接打断（写这工具时踩过）。
+            self.send_error(404, "only old index.html and app.css are served here")
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        self.do_GET()
 
     def _send(self, body: bytes, ctype: str) -> None:
         self.send_response(200)

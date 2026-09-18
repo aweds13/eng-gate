@@ -88,7 +88,9 @@ def main() -> int:
         "三栏骨架齐全": all(k in html for k in
                             ('class="shell"', 'class="rail"', 'id="main"', 'class="sidebar"',
                              'id="focusRail"', 'id="detailRail"')),
-        "宽屏三栏是有网格的": "grid-template-columns" in css and "minmax(0, 820px)" in css,
+        "宽屏三栏是弹性布局": "flex: 0 0 168px" in css and "max-width: 820px" in css,
+        "断点互斥(980/979)": "@media (min-width: 980px)" in css
+        and "@media (max-width: 979px)" in css,
         "计时器归属右栏": "function renderActive(el,active)" in html and "paintRail(mySeq)" in html,
         "计时器数据源可用": active is None or isinstance(active, dict),
         # 设置页（用户要求统一收拢）+ 挤压/遮挡修复的样式约定

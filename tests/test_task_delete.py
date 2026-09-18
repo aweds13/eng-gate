@@ -101,6 +101,67 @@ def test_purge_removes_row(conn: sqlite3.Connection) -> None:
         tm.get_task(conn, t.id)
 
 
+def test_purge_only_accepts_deleted_tasks(conn: sqlite3.Connection) -> None:
+    """护栏：彻底删除只对回收站里的任务开放，活动任务必须走软删除（避免误删）。"""
+    live = tm.create_task(conn, "还在用的任务")
+    with pytest.raises(ValueError):
+        tm.purge_task(conn, live.id)
+    assert tm.get_task(conn, live.id).status == tm.STATUS_TODO  # 没被删掉
+
+    tm.delete_task(conn, live.id)
+    tm.purge_task(conn, live.id)  # 软删除之后才允许
+    assert tm.list_tasks(conn, active_only=False) == []
+
+
+def test_purge_unknown_task_is_idempotent(conn: sqlite3.Connection) -> None:
+    tm.purge_task(conn, "nope")  # 不抛错
+
+
+def test_purge_deleted_tasks_clears_recycle_bin(conn: sqlite3.Connection) -> None:
+    """清空回收站：只清已删的，活着的任务不受影响。"""
+    keep = tm.create_task(conn, "保留")
+    a = tm.create_task(conn, "删掉 A")
+    b = tm.create_task(conn, "删掉 B")
+    tm.delete_task(conn, a.id)
+    tm.delete_task(conn, b.id)
+
+    assert tm.purge_deleted_tasks(conn) == 2
+    assert [t.id for t in tm.list_tasks(conn, active_only=False)] == [keep.id]
+    assert tm.purge_deleted_tasks(conn) == 0  # 幂等
+
+
+def test_purge_also_clears_group_links(conn: sqlite3.Connection) -> None:
+    t = tm.create_task(conn, "带分组的任务")
+    tm.set_task_groups(conn, t.id, ["学习"])
+    tm.delete_task(conn, t.id)
+    tm.purge_task(conn, t.id)
+
+    left = conn.execute("SELECT COUNT(*) AS c FROM task_groups WHERE task_id = ?", (t.id,))
+    assert left.fetchone()["c"] == 0  # 不留孤儿关联
+
+
+def test_api_purge_and_clear_recycle_bin(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    client = TestClient(create_app(str(tmp_path / "p.db")))
+    live = client.post("/api/tasks", json={"title": "活着的"}).json()["id"]
+    gone = client.post("/api/tasks", json={"title": "要清的"}).json()["id"]
+    client.delete(f"/api/tasks/{gone}")
+
+    # 活动任务不允许彻底删（400），回收站里的可以（幂等：再来一次也 200）
+    assert client.delete(f"/api/tasks/{live}/purge").status_code == 400
+    assert client.delete(f"/api/tasks/{gone}/purge").status_code == 200
+    assert client.delete(f"/api/tasks/{gone}/purge").status_code == 200
+    assert client.get("/api/tasks/deleted").json() == []
+
+    # 清空回收站：路由不能被 /{task_id} 抢走（这是声明顺序的回归守卫）
+    ids = [client.post("/api/tasks", json={"title": f"清{i}"}).json()["id"] for i in range(2)]
+    for tid in ids:
+        client.delete(f"/api/tasks/{tid}")
+    assert client.post("/api/tasks/purge-deleted").json() == {"purged": 2}
+    assert client.post("/api/tasks/purge-deleted").json() == {"purged": 0}
+    assert [t["id"] for t in client.get("/api/tasks").json()] == [live]
+    assert client.get(f"/api/tasks/{ids[0]}").status_code == 404  # 真的没了
+
+
 def test_api_delete_restore_flow(tmp_path) -> None:  # type: ignore[no-untyped-def]
     client = TestClient(create_app(str(tmp_path / "s.db")))
     tid = client.post("/api/tasks", json={"title": "写高数", "is_myday": True}).json()["id"]

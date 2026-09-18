@@ -172,30 +172,30 @@ def test_three_column_shell_exists() -> None:
         "切视图应清掉右栏详情（渐进聚焦：不把上一个视图的详情留在屏上）"
     )
 
-    # ④ CSS 侧：宽屏才三栏，窄屏折回单列（不能只剩单列）
-    assert "@media (min-width: 1024px)" in css
-    assert "grid-template-columns" in css and "minmax(0, 820px)" in css
-    assert "@media (max-width: 1023px)" in css
+    # ④ CSS 侧：宽屏三栏、窄屏折回单列，且两个断点**互斥**（重叠过一次：980 与 1023）
+    assert "@media (min-width: 980px)" in css
+    assert "@media (max-width: 979px)" in css
+    assert "flex: 0 0 168px" in css and "flex: 0 1 820px" in css, "左栏/中列宽度约束不见了"
 
 
 def test_main_stays_bounded_and_padded_on_wide_screens() -> None:
-    """布局回归守卫（2026-09-18 用户报「UI 是不是修崩了」后补）。
+    """布局回归守卫（用户报「UI 是不是修崩了」后补，2026-09-18）。
 
-    三栏版把 `main` 交给网格后，**基础规则（写在媒体块之后）会把中列重新拉成整列宽、
+    三栏版把 `main` 交给网格/弹性布局后，**基础规则（写在媒体块之后）会把中列重新拉成整列宽、
     并清掉媒体块里设的上边距** —— 卡片被拉到 1500px+、内容顶到视口顶部，看着就像"崩了"。
-    所以：宽屏媒体块里的 `main` 必须自带 max-width 与完整 padding（不能只写 grid-column）。
+    所以：宽屏媒体块里的 `main` 必须自带宽度上限与完整 padding，不能只写定位。
     """
     css = WEB_CSS.read_text(encoding="utf-8")
-    wide = css.split("@media (min-width: 1024px) {", 1)[1].split("\n}", 1)[0]
+    wide = css.split("@media (min-width: 980px) {", 1)[1].split("\n}", 1)[0]
     main_rule = [ln for ln in wide.splitlines() if ln.strip().startswith("main {")]
     assert main_rule, "宽屏媒体块里应有 main 规则"
     rule = main_rule[0]
-    for need in ("grid-column: 2", "max-width: 820px", "padding:"):
+    for need in ("max-width: 820px", "padding:", "min-width: 0"):
         assert need in rule, f"宽屏 main 规则缺 {need}（会被后面的基础规则覆盖）→ {rule.strip()}"
-    # 中列同时受"列宽上限"与"自身 max-width"约束，且三栏整体居中
-    assert "justify-content: center" in wide or "margin: 0 auto" in css
+    # 中列同时受"宽度上限"与"自身 max-width"约束，且整体居中
+    assert "justify-content: center" in wide
     # 窄屏才需要给底部固定 Tab 留 90px；宽屏不该白留一条
-    assert ".shell { padding-bottom: 0 }" in css
+    assert "@media (min-width: 980px)" in css and "padding: 0 24px" in wide
 
 
 def test_focus_timer_has_single_owner() -> None:
@@ -230,6 +230,71 @@ def test_inputs_cannot_cover_submit_buttons() -> None:
     assert "min-width: 0" in new_block, "输入框必须可收缩，否则会把按钮挤出去"
     assert ".new button { flex: none }" in new_block, "按钮不能被压缩"
     assert ".field" in css and ".form {" in css, "学业/设置这类多字段表单应用表单块"
+
+
+def test_date_fields_default_to_today() -> None:
+    """用户要求：新增任务的日期默认就是**今天**，想看别的日期再点进去改。
+
+    边界要说清：`due_date`（截止日）与 `is_myday`（是否进今天清单）是两件事 ——
+    日期默认今天不等于"自动进今天"，所以「加入今天」勾选保留。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "function todayISO(" in html, "应有本地时区的今天（不能用 toISOString 的 UTC 值）"
+    assert "function defaultDateFields(" in html
+    assert "defaultDateFields(['newDue'])" in html, "今日页的截止日应默认今天"
+    assert "defaultDateFields(['allDue'])" in html, "全部任务页的截止日也应默认今天"
+    assert "newMyDay" in html, "「加入今天」是独立维度，必须保留"
+    assert "截止日（默认今天，可改）" in html
+
+
+def test_check_circle_is_a_real_circle() -> None:
+    """用户要求：完成圈改成**正圆**（各浏览器默认按钮外观会把它压成椭圆）。"""
+    css = WEB_CSS.read_text(encoding="utf-8")
+    check = css.split(".check {", 1)[1].split("}", 1)[0]
+    for need in ("appearance: none", "width: 22px", "height: 22px", "min-width: 22px",
+                 "border-radius: 999px", "padding: 0"):
+        assert need in check, f"完成圈缺少 {need}（会变椭圆/被压扁）→ {check.strip()}"
+
+
+def test_task_cards_show_completion_state() -> None:
+    """用户要求：任务卡上直接看出「完成于某时/未完成」，时间要是人话。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "function humanTime(" in html
+    assert '完成于 ${humanTime(t.updated_at)}' in html
+    assert '>未完成<' in html
+    assert "年${m[2]}月${m[3]}日" in html, "时间应显示成「2026年09月18日 17:31」"
+
+
+def test_task_detail_panel_shows_readable_history() -> None:
+    """用户要求：点任务卡进详情，能看到这个任务的历史（完成时间等），不是一串 ISO 串。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    detail = html.split("function renderDetail(el,t,facts){", 1)[1].split("\n}", 1)[0]
+    for need in ("humanTime(f.occurred_at)", "建于 ", "更新于 "):
+        assert need in detail, f"详情面板缺少 {need}"
+    assert "任务详情" in detail and "记录（最近" in detail
+    # 选中态：列表里那张卡要有标记，否则不知道右栏在看哪个
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert "t.id===detailTaskId?'selected'" in html and ".card.selected" in css
+
+
+def test_recycle_bin_can_hard_delete_and_clear() -> None:
+    """用户要求：回收站要能彻底删除 / 清空（纯软删除会越积越多）。
+
+    安全约定：界面上的彻底删除**只能作用于回收站里的任务**，活动任务必须先软删除；
+    `POST /api/tasks/purge-deleted` 是固定路径，不能被 `/{task_id}` 吃掉（声明顺序回归）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "function purgeTask(" in html and "function emptyTrash(" in html
+    assert 'data-action="task-purge"' in html and 'data-action="trash-empty"' in html
+    assert "purge-deleted" in html
+    # 不可逆操作必须二次确认（清空是两道确认）
+    assert html.count("不可恢复") >= 1, "彻底删除/清空必须给出「不可恢复」的明确警告"
+    assert html.count("再确认一次") >= 1, "清空回收站要两道确认"
+    root = Path(__file__).resolve().parent.parent
+    api = (root / "src" / "timeflow" / "api" / "app.py").read_text(encoding="utf-8")
+    idx_bulk = api.index('@app.post("/api/tasks/purge-deleted")')
+    idx_single = api.index('@app.get("/api/tasks/{task_id}"')
+    assert idx_bulk < idx_single, "purge-deleted 必须声明在 /{task_id} 之前，否则会被当成 task_id"
 
 
 def test_settings_page_is_unified_and_reachable() -> None:

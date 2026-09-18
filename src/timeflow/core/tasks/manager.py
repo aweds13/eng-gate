@@ -261,10 +261,30 @@ def restore_task(
 
 
 def purge_task(conn: sqlite3.Connection, task_id: str) -> None:
-    """彻底删除（不可逆）：仅用于明确的清理场景；常规路径请用 `delete_task`（软删除）。"""
+    """彻底删除（不可逆）。
+
+    只允许删**已删（回收站）里的任务**：这是界面上「彻底删除 / 清空回收站」的入口，
+    目的是让回收站不会无限堆积，同时避免误用——活动中的任务必须先走 `delete_task`（软删除）。
+    幂等：任务已不存在时什么都不做。
+    """
+    try:
+        current = get_task(conn, task_id)
+    except KeyError:
+        return
+    if current.status != STATUS_DELETED:
+        raise ValueError("只有回收站里（已删）的任务才能彻底删除")
     conn.execute("DELETE FROM task_groups WHERE task_id = ?", (task_id,))
     conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
     conn.commit()
+
+
+def purge_deleted_tasks(conn: sqlite3.Connection) -> int:
+    """清空回收站：物理删除所有「已删」任务，返回删除条数（幂等，无已删任务时返回 0）。"""
+    rows = conn.execute("SELECT id FROM tasks WHERE status = ?", (STATUS_DELETED,)).fetchall()
+    ids = [str(r["id"]) for r in rows]
+    for task_id in ids:
+        purge_task(conn, task_id)
+    return len(ids)
 
 
 def myday_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Task]:

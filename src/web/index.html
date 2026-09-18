@@ -89,6 +89,19 @@ async function api(path,opts={}){
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function el(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
+// 本机今天（日期默认值 / 「推到明天」用）；按本地时区拼，避免 toISOString 的 UTC 偏移
+function todayISO(d){const x=d||new Date();return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`}
+// 事实时间戳 → 人话：「完成于 2026年09月18日 17:31」（后端存的是本地时间，用 "T" 分隔）
+function humanTime(iso){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  if(!m)return String(iso||'—');
+  return `${Number(m[1])}年${m[2]}月${m[3]}日 ${m[4]}:${m[5]}`;
+}
+// 日期输入框默认给「今天」：想改成别的日期，点进去选即可（空着也不影响提交）
+function defaultDateFields(ids){
+  const t=todayISO();
+  ids.forEach(id=>{const e=document.getElementById(id);if(e&&!e.value)e.value=t});
+}
 let toastTimer=null;
 let modalResolve=null;
 /* 壳级模态：替代 prompt（温和、可键盘、可测试）。返回 Promise<string|null>。 */
@@ -147,6 +160,8 @@ const ACTIONS = {
   'task-myday':     el => toggleMyDay(el.dataset.id, true),
   'task-delete':    el => removeTask(el.dataset.id),
   'task-restore':   el => restoreTask(el.dataset.id),
+  'task-purge':     el => purgeTask(el.dataset.id),
+  'trash-empty':    () => emptyTrash(),
   'task-facts':     el => showFacts(el.dataset.id),
   'task-focus':     el => startFocusFor(el.dataset.id),
   'task-tomorrow':  el => pushToTomorrow(el.dataset.id),
@@ -272,29 +287,7 @@ function teamButtonsHTML(asg){
     :'').join('');
 }
 // 右栏详情：任务字段 + 事实流水 + 与列表一致的动作（动作后由 view(current) 统一刷新）
-function renderDetail(el,t,facts){
-  const isDone=t.status==='完成';
-  const asg=(t.assignments||[]).map(a=>
-    `<div class="meta"><span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span></div>`).join('');
-  const lines=(facts||[]).slice(-8).reverse().map(f=>
-    `<div class="meta">${esc(factLabel(f.kind))} · ${String(f.occurred_at).slice(0,16)}</div>`).join('');
-  el.innerHTML=`<div class="panel-title">任务详情</div>
-    <div class="title">${esc(t.title)}</div>
-    <div class="meta">状态 ${esc(t.status)} · 截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
-    <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'}</div>
-    <div class="meta">更新于 ${String(t.updated_at).slice(0,16)}</div>
-    ${asg}
-    <div class="row" style="margin-top:10px">
-      <button class="${isDone?'ghost':''}" data-action="${isDone?'task-undo-done':'task-done'}" data-id="${t.id}" data-done="${isDone}">${isDone?'撤销完成':'完成'}</button>
-      ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
-      <button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>
-      <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
-      ${teamButtonsHTML(t.assignments||[])}
-      <button class="ghost" data-action="task-delete" data-id="${t.id}">删除</button>
-      <button class="ghost" data-action="task-close">收起</button></div>
-    <div class="section-title">记录（最近 ${Math.min((facts||[]).length,8)} 条）</div>
-    ${lines||'<div class="sub">还没有记录。</div>'}`;
-}
+// 注意：真正的实现在下面（用 humanTime 显示可读时间）；这里只保留一份，别重复定义。
 function paintRail(mySeq){
   const rail=document.getElementById('focusRail'),box=document.getElementById('detailRail');
   if(!rail||!box)return;
@@ -316,16 +309,47 @@ function factLabel(kind){
     :kind==='task.restored'?'恢复':kind==='task.repeat.generated'?'生成下一次':kind==='task.assigned'?'分配'
     :kind==='task.assignment.status'?'进展':kind;
 }
+// 右栏详情：任务字段 + 事实流水 + 与列表一致的动作（动作后由 view(current) 统一刷新）
+function renderDetail(el,t,facts){
+  const isDone=t.status==='完成';
+  const asg=(t.assignments||[]).map(a=>
+    `<div class="meta"><span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span></div>`).join('');
+  const lines=(facts||[]).slice(-12).reverse().map(f=>
+    `<div class="fact"><span>${esc(factLabel(f.kind))}</span>
+      <span class="sub">${humanTime(f.occurred_at)}</span></div>`).join('');
+  el.innerHTML=`<div class="panel-title">任务详情</div>
+    <div class="title">${esc(t.title)}</div>
+    <div class="meta">${isDone?`<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
+      状态 ${esc(t.status)}</div>
+    <div class="meta">截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
+    <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'}</div>
+    <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}</div>
+    ${asg}
+    <div class="row" style="margin-top:10px">
+      <button class="${isDone?'ghost':''}" data-action="${isDone?'task-undo-done':'task-done'}" data-id="${t.id}" data-done="${isDone}">${isDone?'撤销完成':'完成'}</button>
+      ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
+      <button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>
+      <button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
+      <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
+      ${teamButtonsHTML(t.assignments||[])}
+      <button class="ghost" data-action="task-delete" data-id="${t.id}">删除</button>
+      <button class="ghost" data-action="task-close">收起</button></div>
+    <div class="section-title">记录（最近 ${Math.min((facts||[]).length,12)} 条）</div>
+    ${lines||'<div class="sub">还没有记录（完成、撤销、删除、生成下一次都会留下记录）。</div>'}`;
+}
 
 function taskCard(t,isOverdue){
   const isDone=t.status==='完成';
   const asg=(t.assignments||[]);
   const asgMeta=asg.map(a=>`<span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span>`).join('');
   const asgButtons=asg.map(a=>TEAM_NEXT[a.status]?`<button class="ghost" data-action="team-status" data-id="${a.id}" data-status="${TEAM_NEXT[a.status][0]}">${TEAM_NEXT[a.status][1]}</button>`:'').join('');
-  return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''}">
+  const badge=t.status==='完成'
+    ? `<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`
+    : `<span class="badge todo">未完成</span>`;
+  return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${isDone?'<span class="badge">已完成</span>':''}</div></div>
+    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${badge}</div></div>
     <div class="row">
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
       ${isOverdue?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
@@ -373,13 +397,25 @@ async function removeTask(id){
 async function restoreTask(id){
   await api(`/api/tasks/${id}/restore`,{method:'POST'});toast('已恢复');view(current);
 }
+// 彻底删除（不可逆）：二次确认，措辞直白（软删除的「删除」按钮不吓人，这两个才吓人）
+async function purgeTask(id){
+  if(!confirm('彻底删除？这一步不可恢复，记录也会一起消失。'))return;
+  await api(`/api/tasks/${id}/purge`,{method:'DELETE'});
+  toast('已彻底删除');view(current);
+}
+async function emptyTrash(){
+  if(!confirm('清空回收站？里面的任务会被永久删除，不可恢复。'))return;
+  if(!confirm('再确认一次：真的永久删除回收站里的全部任务？'))return;
+  const r=await api('/api/tasks/purge-deleted',{method:'POST'});
+  toast(`回收站已清空（${r.purged} 项永久删除）`);view(current);
+}
 async function showFacts(id){
   const facts=await api(`/api/tasks/${id}/facts`);
   if(!facts.length){toast('还没有完成记录');return}
   toast(facts.map(f=>`${f.kind==='task.completed'?'完成':f.kind==='task.uncompleted'?'撤销':f.kind==='task.deleted'?'删除':f.kind==='task.restored'?'恢复':f.kind==='task.repeat.generated'?'生成下一次':'记录'} ${String(f.occurred_at).slice(5,16)}`).join(' · '));
 }
 // LF-2 逾期处理：推到明天 / 取消（其余处置由编辑入口承担）
-function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
+function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return todayISO(d)}
 async function pushToTomorrow(id){
   await api(`/api/tasks/${id}`,{method:'PATCH',body:JSON.stringify({due_date:tomorrow()})});
   toast('已推到明天，债务随之重算');view(current);
@@ -406,11 +442,12 @@ async function renderTasks(m){
   const done=all.filter(t=>t.status==='完成');
   m.innerHTML=`<div class="new">
       <input id="allTitle" placeholder="新任务（默认不进今天）" data-enter="task-add-here">
-      <input id="allDue" type="date" title="截止日（可选）">
+      <input id="allDue" type="date" title="截止日（默认今天，可改）">
       <button data-action="task-add-here">添加</button></div>
     <div class="section-title">全部任务（${all.length}）</div>
     ${all.map(t=>taskCard(t)).join('')||'<div class="empty">还没有任务</div>'}
-    <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项；删除的任务在「今日 · 回收站」里可恢复。</div>`;
+    <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项；删除的任务在「今日 · 回收站」里可恢复或彻底删除。</div>`;
+  defaultDateFields(['allDue']);
 }
 async function addTaskHere(){
   const titleEl=document.getElementById('allTitle');
@@ -653,13 +690,15 @@ async function renderToday(m){
   const doneTasks=all.filter(t=>t.status==='完成').length;
   const pendingTasks=all.filter(t=>t.status!=='完成').length;
   const debt=summary.debt_count?`<div class="sub">逾期共 ${summary.debt_count} 项（轻≤3天 / 中≤7天 / 重>7天）：${(summary.debt_items||[]).map(d=>`${esc(d.title)}(${d.degree}·${d.overdue_days}天)`).join('、')}</div>`:'';
-  const trash=deleted.length?`<div class="section-title">回收站（软删除，可恢复）</div>
-    ${deleted.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div><div class="meta">已删</div></div>
-    <button class="ghost" data-action="task-restore" data-id="${t.id}">恢复</button></div>`).join('')}`:'';
+  const trash=deleted.length?`<div class="section-title">回收站（软删除，可恢复或彻底删除）</div>
+    ${deleted.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div><div class="meta">已删 · 删除于 ${humanTime(t.updated_at)}</div></div>
+    <div class="row"><button class="ghost" data-action="task-restore" data-id="${t.id}">恢复</button>
+    <button class="ghost" data-action="task-purge" data-id="${t.id}">彻底删除</button></div></div>`).join('')}
+    <div class="new"><button class="ghost" data-action="trash-empty">清空回收站（${deleted.length} 项，不可恢复）</button></div>`:'';
   m.innerHTML=`<div class="new">
     <input id="newTitle" placeholder="今天要做什么？回车添加…" data-enter="task-add">
-    <input id="newDue" type="date" title="截止日（可选）">
-    <label class="sub"><input type="checkbox" id="newMyDay" checked>加入今天</label>
+    <input id="newDue" type="date" title="截止日（默认今天，可改）">
+    <label class="sub"><input type="checkbox" id="newMyDay" checked>也放进今天的清单</label>
     <button data-action="task-add">添加</button></div>
   ${todayCard(doneTasks,pendingTasks)}
   <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||'<div class="empty">没有逾期，很好</div>'}</div>
@@ -667,6 +706,7 @@ async function renderToday(m){
   ${due.length?`<div class="section-title">今天该复习（${due.length}）</div>${due.map(r=>reviewCard(r)).join('')}`:''}
   ${trash}
   ${debt}`;
+  defaultDateFields(['newDue']);   // 默认截止日=今天（可点进去改），省掉每天手选
 }
 
 // ---- 专注：计时器常驻右栏（R3），本页只负责开始与「今日/本周」读数（OP-3 / OP-4）----
