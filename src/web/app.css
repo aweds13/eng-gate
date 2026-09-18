@@ -197,6 +197,38 @@ select {
 .toast button { color: var(--text-on-dark); border-color: var(--line-strong) }
 @media (min-width: 641px) { .toast { bottom: 24px } }
 
+/* ---------- 模态（替代 prompt：温和、可键盘、可测试） ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(var(--shadow-rgb), .45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  padding: 16px;
+}
+.modal[hidden] { display: none }
+.modal-box {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 16px;
+  width: 100%;
+  max-width: 340px;
+  box-shadow: var(--shadow);
+}
+.modal-box .title { font-size: 14px; margin-bottom: 10px }
+.modal-box input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+}
+.modal-box .row { display: flex; gap: 8px; margin-top: 12px }
+
 /* ---------- 移动端（A 档） ---------- */
 .bottom-nav { display: none }
 @media (max-width: 640px) {

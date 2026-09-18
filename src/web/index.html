@@ -12,26 +12,36 @@
 <header>
   <h1>timeflow <span class="accent">·</span> <span id="summary" class="hint"></span></h1>
   <nav>
-    <button data-view="today" class="active">今日</button>
-    <button data-view="tasks">全部任务</button>
-    <button data-view="focus">专注</button>
-    <button data-view="stats">统计</button>
-    <button data-view="habit">习惯</button>
-    <button data-view="academic">学业</button>
-    <button data-view="review">复习</button>
-    <button data-view="memo">备忘录</button>
-    <button id="refresh" class="ghost">刷新</button>
+    <button data-action="view" data-view="today" class="active">今日</button>
+    <button data-action="view" data-view="tasks">全部任务</button>
+    <button data-action="view" data-view="focus">专注</button>
+    <button data-action="view" data-view="stats">统计</button>
+    <button data-action="view" data-view="habit">习惯</button>
+    <button data-action="view" data-view="academic">学业</button>
+    <button data-action="view" data-view="review">复习</button>
+    <button data-action="view" data-view="memo">备忘录</button>
+    <button id="refresh" class="ghost" data-action="refresh">刷新</button>
   </nav>
 </header>
 <main id="main"></main>
 <div class="toast" id="toast"></div>
+<div class="modal" id="modal" hidden>
+  <div class="modal-box">
+    <div class="title" id="modalTitle"></div>
+    <input id="modalInput" data-enter="modal-ok">
+    <div class="row" style="justify-content:flex-end">
+      <button class="ghost" data-action="modal-cancel">取消</button>
+      <button data-action="modal-ok">确定</button>
+    </div>
+  </div>
+</div>
 <nav class="bottom-nav">
-  <button data-view="today" class="active"><span class="ic">📅</span>今日</button>
-  <button data-view="tasks"><span class="ic">🗂️</span>任务</button>
-  <button data-view="focus"><span class="ic">⏱️</span>专注</button>
-  <button data-view="habit"><span class="ic">🔥</span>习惯</button>
-  <button data-view="stats"><span class="ic">📈</span>统计</button>
-  <button data-view="setting"><span class="ic">⚙️</span>设置</button>
+  <button data-action="view" data-view="today" class="active"><span class="ic">📅</span>今日</button>
+  <button data-action="view" data-view="tasks"><span class="ic">🗂️</span>任务</button>
+  <button data-action="view" data-view="focus"><span class="ic">⏱️</span>专注</button>
+  <button data-action="view" data-view="habit"><span class="ic">🔥</span>习惯</button>
+  <button data-action="view" data-view="stats"><span class="ic">📈</span>统计</button>
+  <button data-action="view" data-view="setting"><span class="ic">⚙️</span>设置</button>
 </nav>
 <script>
 /* 应用外壳：视图路由 + 顶部摘要 + 通用反馈（R2 会把调度收敛到这里） */
@@ -43,18 +53,102 @@ async function api(path,opts={}){const r=await fetch(path,{headers:{'Content-Typ
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function el(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
 let toastTimer=null;
+let modalResolve=null;
+/* 壳级模态：替代 prompt（温和、可键盘、可测试）。返回 Promise<string|null>。 */
+function ask(title,value=''){
+  const box=document.getElementById('modal'),input=document.getElementById('modalInput');
+  document.getElementById('modalTitle').textContent=title;
+  input.value=value;box.hidden=false;input.focus();input.select();
+  return new Promise(resolve=>{modalResolve=resolve});
+}
+function closeModal(result){
+  const box=document.getElementById('modal');if(box)box.hidden=true;
+  const r=modalResolve;modalResolve=null;if(r)r(result);
+}
 function toast(msg){const t=document.getElementById('toast');t.innerHTML=esc(msg);t.classList.add('show');
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
+let toastRun=null;  // toast 上的「撤销」回调（由 ACTIONS['toast-run'] 触发，不走内联）
 function toastAction(msg,label,fn){
   const t=document.getElementById('toast');
-  t.innerHTML=`${esc(msg)} <button class="ghost" style="margin-left:8px;padding:4px 10px" id="toastAct">${esc(label)}</button>`;
-  const btn=document.getElementById('toastAct');if(btn)btn.onclick=fn;
+  toastRun=fn;
+  t.innerHTML=`${esc(msg)} <button class="ghost" style="margin-left:8px;padding:4px 10px" data-action="toast-run" id="toastAct">${esc(label)}</button>`;
   t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),6000);
 }
 function view(name){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));render(name)}
-document.querySelectorAll('nav button[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view));
-document.querySelectorAll('.bottom-nav button[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view));
-document.getElementById('refresh').onclick=()=>view(current);
+
+/* ---------- 事件委托（R2）----------
+ * 约定：模板里只写 `data-action="动作名"` + `data-*` 参数，不再写内联 onclick。
+ * 理由：内联字符串要手工转义引号（习惯名处已踩过）、三栏布局会有三处事件源、无法统一测试。
+ * 新增交互 = 在 ACTIONS 里加一条 + 模板里写 data-action。
+ */
+const ACTIONS = {
+  // 导航与视图
+  'view':           el => view(el.dataset.view),
+  'refresh':        () => view(current),
+  'modal-ok':       () => closeModal(document.getElementById('modalInput').value),
+  'modal-cancel':   () => closeModal(null),
+  'toast-run':      () => { const fn=toastRun; toastRun=null; if(fn) fn(); },
+  'set-heatmap':    el => setHeatmap(el.dataset.metric),
+  'set-gpa':        el => setGpa(el.dataset.scale),
+  // 任务
+  'task-done':      el => toggleDone(el.dataset.id, el.dataset.done === 'true'),
+  'task-undo-done': el => undoDone(el.dataset.id),
+  'task-myday':     el => toggleMyDay(el.dataset.id, true),
+  'task-delete':    el => removeTask(el.dataset.id),
+  'task-restore':   el => restoreTask(el.dataset.id),
+  'task-facts':     el => showFacts(el.dataset.id),
+  'task-focus':     el => startFocusFor(el.dataset.id),
+  'task-tomorrow':  el => pushToTomorrow(el.dataset.id),
+  'task-cancel':    el => cancelTask(el.dataset.id),
+  'task-assign':    el => assignTask(el.dataset.id),
+  'task-add':       () => addTask(),
+  'task-add-here':  () => addTaskHere(),
+  'team-status':    el => teamStatus(el.dataset.id, el.dataset.status),
+  // 专注
+  'focus-start':    el => startFocus(el.dataset.kind),
+  'focus-finish':   el => finishFocus(el.dataset.status),
+  // 习惯
+  'habit-add':      () => addHabit(),
+  'habit-toggle':   el => toggleHabit(el.dataset.id),
+  'habit-rename':   el => renameHabit(el.dataset.id, el.dataset.name || ''),
+  'habit-delete':   el => deleteHabit(el.dataset.id, el.dataset.name || ''),
+  'feedback-save':  () => saveFeedback(),
+  // 复习
+  'review-do':      el => review(el.dataset.id, el.dataset.feedback),
+  'review-undo':    el => undoReview(el.dataset.id),
+  'review-add':     () => addReview(),
+  // 学业
+  'course-add':     () => addCourse(),
+  'assessment-add': () => addAssessment(),
+  'assessment-del': el => delAssessment(el.dataset.id),
+  'grade-add':      () => addGrade(),
+  'grade-del':      el => delGrade(el.dataset.id),
+  // 备忘录 / 产出 / 手动投入
+  'memo-add':       () => addMemo(),
+  'memo-to-task':   el => memoToTask(el.dataset.id),
+  'memo-delete':    el => deleteMemo(el.dataset.id),
+  'output-add':     () => addOutput(),
+  'output-retract': el => retractOutput(el.dataset.id),
+  'invest-add':     () => addInvest(),
+  'invest-retract': el => retractInvest(el.dataset.id),
+};
+
+document.addEventListener('click', ev => {
+  const el = ev.target.closest('[data-action]');
+  if (!el) return;
+  const fn = ACTIONS[el.dataset.action];
+  if (!fn) { console.warn('未注册的动作:', el.dataset.action); return; }
+  ev.preventDefault();
+  fn(el);
+});
+// 输入框回车 = 点同名按钮（data-enter="动作名"）
+document.addEventListener('keydown', ev => {
+  if (ev.key !== 'Enter') return;
+  const el = ev.target.closest('[data-enter]');
+  if (!el) return;
+  const fn = ACTIONS[el.dataset.enter];
+  if (fn) fn(el);
+});
 
 async function render(name){
   current=name;
@@ -77,28 +171,28 @@ function taskCard(t,isOverdue){
   const isDone=t.status==='完成';
   const asg=(t.assignments||[]);
   const asgMeta=asg.map(a=>`<span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span>`).join('');
-  const asgButtons=asg.map(a=>TEAM_NEXT[a.status]?`<button class="ghost" onclick="teamStatus('${a.id}','${TEAM_NEXT[a.status][0]}')">${TEAM_NEXT[a.status][1]}</button>`:'').join('');
+  const asgButtons=asg.map(a=>TEAM_NEXT[a.status]?`<button class="ghost" data-action="team-status" data-id="${a.id}" data-status="${TEAM_NEXT[a.status][0]}">${TEAM_NEXT[a.status][1]}</button>`:'').join('');
   return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''}">
-    <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" onclick="toggleDone('${t.id}',${isDone})"></button>
+    <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
     <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${isDone?'<span class="badge">已完成</span>':''}</div></div>
     <div class="row">
-      ${isDone?'':`<button class="ghost" onclick="startFocusFor('${t.id}')">专注</button>`}
-      ${isOverdue?`<button class="ghost" onclick="pushToTomorrow('${t.id}')">推到明天</button>
-        <button class="ghost" onclick="cancelTask('${t.id}')">取消</button>`:''}
+      ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
+      ${isOverdue?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
+        <button class="ghost" data-action="task-cancel" data-id="${t.id}">取消</button>`:''}
       ${asgButtons}
-      ${isDone?`<button class="ghost" onclick="undoDone('${t.id}')">撤销完成</button>`
-              :`<button class="ghost" onclick="toggleMyDay('${t.id}',true)">${t.is_myday?'移出 My Day':'加入 My Day'}</button>`}
-      <button class="ghost" onclick="assignTask('${t.id}')">分配</button>
-      <button class="ghost" onclick="showFacts('${t.id}')">记录</button>
-      <button class="ghost" onclick="removeTask('${t.id}')">删除</button>
+      ${isDone?`<button class="ghost" data-action="task-undo-done" data-id="${t.id}">撤销完成</button>`
+              :`<button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>`}
+      <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
+      <button class="ghost" data-action="task-facts" data-id="${t.id}">记录</button>
+      <button class="ghost" data-action="task-delete" data-id="${t.id}">删除</button>
     </div></div>`;
 }
 // 团队分配的四种状态与「下一步」动作（SR-F7.2：进展回报）
 const TEAM_STATUS={assigned:'已分配',in_progress:'进行中',done:'已完成',blocked:'受阻'};
 const TEAM_NEXT={assigned:['in_progress','开始'],in_progress:['done','完成'],blocked:['in_progress','恢复']};
 async function assignTask(id){
-  const assignee=prompt('分配给谁？（名字或昵称）');
+  const assignee=await ask('分配给谁？（名字或昵称）');
   if(assignee===null)return;
   if(!assignee.trim()){toast('执行者不能为空');return}
   await api('/api/team/assign',{method:'POST',body:JSON.stringify({task_id:id,assignee:assignee.trim()})});
@@ -160,9 +254,9 @@ async function renderTasks(m){
   const notMyDay=all.filter(t=>!t.is_myday&&t.status!=='完成');
   const done=all.filter(t=>t.status==='完成');
   m.innerHTML=`<div class="new">
-      <input id="allTitle" placeholder="新任务（默认不进今天）" onkeydown="if(event.key==='Enter')addTaskHere()">
+      <input id="allTitle" placeholder="新任务（默认不进今天）" data-enter="task-add-here">
       <input id="allDue" type="date" title="截止日（可选）">
-      <button onclick="addTaskHere()">添加</button></div>
+      <button data-action="task-add-here">添加</button></div>
     <div class="section-title">全部任务（${all.length}）</div>
     ${all.map(t=>taskCard(t)).join('')||'<div class="empty">还没有任务</div>'}
     <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项；删除的任务在「今日 · 回收站」里可恢复。</div>`;
@@ -332,7 +426,7 @@ const HM_METRICS=[
   ['debt','债务（欠多少）','debt_count']];
 function hmButtons(active){
   return HM_METRICS.map(([k,label])=>
-    `<button class="${k===active?'':'ghost'}" onclick="setHeatmap('${k}')">${label}</button>`).join('');
+    `<button class="${k===active?'':'ghost'}" data-action="set-heatmap" data-metric="${k}">${label}</button>`).join('');
 }
 function hmNote(cells,metric){
   const label=(HM_METRICS.find(x=>x[0]===metric)||[])[1]||'';
@@ -392,6 +486,7 @@ function weekCard(w){
     <div class="sub" style="margin-top:8px">${esc(w.steady_note)}</div></div>`;
 }
 
+function summaryLine(s){
   const parts=[`债务 ${s.debt_count} 项`,`投入 ${s.invest_hours}h`];
   if(s.manual_hours)parts.push(`手动投入 ${s.manual_hours}h`);
   if(s.review_count)parts.push(`复习 ${s.review_count} 张`);
@@ -409,12 +504,12 @@ async function renderToday(m){
   const debt=summary.debt_count?`<div class="sub">逾期共 ${summary.debt_count} 项（轻≤3天 / 中≤7天 / 重>7天）：${(summary.debt_items||[]).map(d=>`${esc(d.title)}(${d.degree}·${d.overdue_days}天)`).join('、')}</div>`:'';
   const trash=deleted.length?`<div class="section-title">回收站（软删除，可恢复）</div>
     ${deleted.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div><div class="meta">已删</div></div>
-    <button class="ghost" onclick="restoreTask('${t.id}')">恢复</button></div>`).join('')}`:'';
+    <button class="ghost" data-action="task-restore" data-id="${t.id}">恢复</button></div>`).join('')}`:'';
   m.innerHTML=`<div class="new">
-    <input id="newTitle" placeholder="今天要做什么？回车添加…" onkeydown="if(event.key==='Enter')addTask()">
+    <input id="newTitle" placeholder="今天要做什么？回车添加…" data-enter="task-add">
     <input id="newDue" type="date" title="截止日（可选）">
     <label class="sub" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="newMyDay" checked>加入今天</label>
-    <button onclick="addTask()">添加</button></div>
+    <button data-action="task-add">添加</button></div>
   ${todayCard(doneTasks,pendingTasks)}
   <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||'<div class="empty">没有逾期，很好</div>'}</div>
   <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||'<div class="empty">今天还没有任务，挑一件加进来吧</div>'}
@@ -435,9 +530,9 @@ async function renderFocus(m){
       <div class="timer" id="clock">--:--</div>
       <div class="meta">${active.kind==='tomato'?'番茄钟':'普通计时'} · 进行中${active.task_id?' · 已绑定任务':''}</div>
       <div class="sub" id="focusTask"></div></div></div>
-    <div class="new"><button onclick="finishFocus('finished')">结束（计入投入）</button>
-      <button class="ghost" onclick="finishFocus('interrupted')">记中断</button>
-      <button class="ghost" onclick="finishFocus('abandoned')">放弃（不入账）</button></div>`;
+    <div class="new"><button data-action="focus-finish" data-status="finished">结束（计入投入）</button>
+      <button class="ghost" data-action="focus-finish" data-status="interrupted">记中断</button>
+      <button class="ghost" data-action="focus-finish" data-status="abandoned">放弃（不入账）</button></div>`;
     const tick=()=>{const e=document.getElementById('clock');if(e)e.textContent=fmt((Date.now()-started)/1000)};
     tick();focusTimer=setInterval(tick,1000);
     if(active.task_id){api(`/api/tasks/${active.task_id}`).then(t=>{const e=document.getElementById('focusTask');if(e)e.textContent=`归属任务：${t.title}`}).catch(()=>{})}
@@ -448,8 +543,8 @@ async function renderFocus(m){
   m.innerHTML=`<div class="card"><div><div class="big">${today.focus_minutes}</div><div class="meta">今日专注分钟（只算正常结束）</div></div></div>
   <div class="new">
     <select id="focusTaskSel"><option value="">不绑定任务</option>${tasks.map(t=>`<option value="${t.id}">${esc(t.title)}</option>`).join('')}</select>
-    <button onclick="startFocus('tomato')">番茄钟 ${cfg.pomodoro_minutes||25} 分</button>
-    <button class="ghost" onclick="startFocus('plain')">普通计时</button></div>
+    <button data-action="focus-start" data-kind="tomato">番茄钟 ${cfg.pomodoro_minutes||25} 分</button>
+    <button class="ghost" data-action="focus-start" data-kind="plain">普通计时</button></div>
   <div class="section-title">本周投入</div>
   ${weekCard(week)}`;
 }
@@ -481,26 +576,26 @@ async function renderHabit(m){
       <div style="display:flex;align-items:center;gap:10px">
         <div style="flex:1"><div class="title">${esc(h.name)}</div>
           <div class="meta">连续 ${h.streak} 天 · 近一年打卡 ${(h.logs||[]).length} 天</div></div>
-        <button class="${doneToday?'':'ghost'}" onclick="toggleHabit('${h.id}')">${doneToday?'已打卡（点此取消）':'打卡'}</button>
-        <button class="ghost" onclick="renameHabit('${h.id}','${esc(h.name).replace(/'/g,"\\'")}')">改名</button>
-        <button class="ghost" onclick="deleteHabit('${h.id}','${esc(h.name).replace(/'/g,"\\'")}')">删除</button>
+        <button class="${doneToday?'':'ghost'}" data-action="habit-toggle" data-id="${h.id}">${doneToday?'已打卡（点此取消）':'打卡'}</button>
+        <button class="ghost" data-action="habit-rename" data-id="${h.id}" data-name="${esc(h.name)}">改名</button>
+        <button class="ghost" data-action="habit-delete" data-id="${h.id}" data-name="${esc(h.name)}">删除</button>
       </div>
       <div style="margin-top:10px">${heatmap(h.logs)}</div></div>`;
   }).join('');
   m.innerHTML=`<div class="card"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div></div>
-  <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡" onkeydown="if(event.key==='Enter')addHabit()"><button onclick="addHabit()">新建</button></div>
+  <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡" data-enter="habit-add"><button data-action="habit-add">新建</button></div>
   ${cards||'<div class="empty">还没有习惯；建一个，明天就能看到热力图</div>'}
   <div class="section-title">每日反馈（计划 vs 执行）</div>
   <textarea class="textarea" id="fbPlan" placeholder="计划：">${esc(fb&&fb.plan_note||'')}</textarea><br>
   <textarea class="textarea" id="fbGap" placeholder="差距/复盘：">${esc(fb&&fb.gap_note||'')}</textarea><br>
-  <button onclick="saveFeedback()">保存反馈</button>`;
+  <button data-action="feedback-save">保存反馈</button>`;
 }
 async function addHabit(){const name=document.getElementById('habitName').value.trim();if(!name)return;
   await api('/api/habits',{method:'POST',body:JSON.stringify({name})});
   toast('习惯已建好，打卡后热力图会亮起来');view(current)}
 async function toggleHabit(id){await api(`/api/habits/${id}/toggle`,{method:'POST'});view(current)}
 async function renameHabit(id,oldName){
-  const name=prompt('习惯改名：',oldName||'');
+  const name=await ask('习惯改名：',oldName||'');
   if(name===null)return;
   if(!name.trim()){toast('习惯名不能为空');return}
   await api(`/api/habits/${id}`,{method:'PATCH',body:JSON.stringify({name:name.trim()})});
@@ -525,7 +620,7 @@ async function renderAcademic(m){
       return `<div class="card ${d<0?'overdue':''}"><div style="flex:1">
         <div class="title">${esc(a.name)}</div>
         <div class="meta">${esc(a.course_name||'未关联课程')} · ${a.due_date} · ${when}${a.weight?` · 占 ${a.weight}`:''}</div></div>
-        <button class="ghost" onclick="delAssessment('${a.id}')">删除</button></div>`;}).join('')}`:'';
+        <button class="ghost" data-action="assessment-del" data-id="${a.id}">删除</button></div>`;}).join('')}`:'';
   const courseOpts=courses.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   m.innerHTML=`<div class="grid">
    <div class="card"><div class="big">${gpa.gpa}</div><div class="meta">GPA（4.0制，${gpa.credits}学分）</div></div>
@@ -533,7 +628,7 @@ async function renderAcademic(m){
   ${upcomingHtml}
   <div class="section-title">学业概览（多维）</div>
   ${gpaRadar(gpa,gpa5,courses.length,grades)}
-  <div class="new"><input id="cName" placeholder="新建课程，如：高数"><button onclick="addCourse()">新建课程</button></div>
+  <div class="new"><input id="cName" placeholder="新建课程，如：高数"><button data-action="course-add">新建课程</button></div>
   ${courses.map(c=>`<div class="card"><div class="title">${esc(c.name)}</div><div class="meta">${c.credits}学分 ${c.teacher||''}</div></div>`).join('')||'<div class="empty">暂无课程</div>'}
   <div class="section-title">添加考核项（考试/作业/论文/小测）</div>
   <div class="new">
@@ -541,13 +636,13 @@ async function renderAcademic(m){
     <input id="aName" placeholder="名称，如：期中考试">
     <input id="aDue" type="date" title="截止日（可选）">
     <input id="aWeight" type="number" step="0.05" placeholder="权重" style="width:80px">
-    <button onclick="addAssessment()">添加</button></div>
+    <button data-action="assessment-add">添加</button></div>
   <div class="section-title">录入成绩</div>
-  <div class="new"><input id="gScore" type="number" placeholder="成绩" style="width:80px"><input id="gCredits" type="number" placeholder="学分" value="2" style="width:80px"><button onclick="addGrade()">录入</button></div>
+  <div class="new"><input id="gScore" type="number" placeholder="成绩" style="width:80px"><input id="gCredits" type="number" placeholder="学分" value="2" style="width:80px"><button data-action="grade-add">录入</button></div>
   ${grades.length?`<div class="section-title">成绩明细（${grades.length} 条）</div>
     ${grades.slice().reverse().map(g=>`<div class="card"><div style="flex:1"><div class="title">${g.score} 分</div>
       <div class="meta">${g.credits} 学分 ${g.term?`· ${esc(g.term)}`:''}</div></div>
-      <button class="ghost" onclick="delGrade('${g.id}')">删除</button></div>`).join('')}`:''}`;
+      <button class="ghost" data-action="grade-del" data-id="${g.id}">删除</button></div>`).join('')}`:''}`;
 }
 async function addAssessment(){
   const courseId=document.getElementById('aCourse').value;
@@ -577,10 +672,10 @@ async function addGrade(){const score=parseFloat(document.getElementById('gScore
 function reviewCard(r){
   return `<div class="card"><div style="flex:1"><div class="title">${esc(r.title)}</div>
     <div class="meta">${r.reps}次 · ${r.interval_days}天${r.source==='external'?'<span class="badge">外部</span>':''}</div></div>
-    <div class="row"><button onclick="review('${r.id}','remember')">记得</button>
-    <button class="ghost" onclick="review('${r.id}','fuzzy')">模糊</button>
-    <button class="ghost" onclick="review('${r.id}','forgot')">忘了</button>
-    <button class="ghost" onclick="undoReview('${r.id}')">撤销上次</button></div></div>`;
+    <div class="row"><button data-action="review-do" data-id="${r.id}" data-feedback="remember">记得</button>
+    <button class="ghost" data-action="review-do" data-id="${r.id}" data-feedback="fuzzy">模糊</button>
+    <button class="ghost" data-action="review-do" data-id="${r.id}" data-feedback="forgot">忘了</button>
+    <button class="ghost" data-action="review-undo" data-id="${r.id}">撤销上次</button></div></div>`;
 }
 async function undoReview(id){
   await api(`/api/review/${id}/undo`,{method:'POST'});
@@ -594,7 +689,7 @@ async function renderReview(m){
     <div class="meta">复习完成计投入（维持），不折算时间</div>
     ${progressBar(doneToday,total,'今日复习进度')}
     <div class="sub" style="margin-top:6px">${total?`还剩 ${due.length} 张；点了「记得/模糊/忘了」就会计入进度。`:'今天没有到期的复习卡。'}</div></div>
-  <div class="new"><input id="rvTitle" placeholder="新建复习卡内容"><button onclick="addReview()">新建</button></div>
+  <div class="new"><input id="rvTitle" placeholder="新建复习卡内容"><button data-action="review-add">新建</button></div>
   <div class="section-title">到期复习（${due.length}）</div>
   ${due.map(r=>reviewCard(r)).join('')||'<div class="empty">没有到期复习，轻松一下</div>'}`;
 }
@@ -606,29 +701,29 @@ async function review(id,fb){await api(`/api/review/${id}/review`,{method:'POST'
 async function renderMemo(m){
   const [memos,outputs,invests]=await Promise.all([
     api('/api/memos'),api('/api/ledger/outputs'),api('/api/ledger/invests')]);
-  m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…" onkeydown="if(event.key==='Enter')addMemo()"><button onclick="addMemo()">记录</button></div>
+  m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…" data-enter="memo-add"><button data-action="memo-add">记录</button></div>
   ${memos.map(x=>`<div class="card"><div style="flex:1"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge">${esc(x.ref_handle)}</span>`:''}${x.task_id?'<span class="badge">已转任务</span>':''}</div></div>
-    <div class="row">${x.task_id?'':`<button class="ghost" onclick="memoToTask('${x.id}')">转为任务</button>`}
-    <button class="ghost" onclick="deleteMemo('${x.id}')">删除</button></div></div>`).join('')||'<div class="empty">暂无备忘录</div>'}
+    <div class="row">${x.task_id?'':`<button class="ghost" data-action="memo-to-task" data-id="${x.id}">转为任务</button>`}
+    <button class="ghost" data-action="memo-delete" data-id="${x.id}">删除</button></div></div>`).join('')||'<div class="empty">暂无备忘录</div>'}
   <div class="section-title">今日手动投入（独立于专注投入）</div>
   <div class="new">
     <select id="inKind"><option value="focus">专注补记</option><option value="habit">习惯</option><option value="other">其它</option></select>
     <input id="inMinutes" type="number" min="0" step="5" value="25" style="width:90px" title="分钟">
     <span class="sub">分钟</span>
     <input id="inNote" placeholder="备注，如：番茄补记">
-    <button onclick="addInvest()">记一笔投入</button></div>
+    <button data-action="invest-add">记一笔投入</button></div>
   ${invests.map(i=>`<div class="card ${i.retracted?'done':''}"><div style="flex:1"><div class="title">${esc(i.note||i.kind)} · ${i.minutes} 分钟</div>
     <div class="meta">${i.kind}${i.retracted?' · 已撤销':''}</div></div>
-    ${i.retracted?'':`<button class="ghost" onclick="retractInvest('${i.entry_id}')">撤销</button>`}</div>`).join('')||'<div class="empty">今天还没有手动投入</div>'}
+    ${i.retracted?'':`<button class="ghost" data-action="invest-retract" data-id="${i.entry_id}">撤销</button>`}</div>`).join('')||'<div class="empty">今天还没有手动投入</div>'}
   <div class="section-title">今日产出（独立于投入轴）</div>
   <div class="new">
     <select id="outKind"><option value="asset">知识资产</option><option value="kpi">学校 KPI</option></select>
     <input id="outValue" type="number" step="0.5" value="1" style="width:90px" title="数量">
     <input id="outNote" placeholder="备注，如：数学笔记#3">
-    <button onclick="addOutput()">记一笔产出</button></div>
+    <button data-action="output-add">记一笔产出</button></div>
   ${outputs.map(o=>`<div class="card ${o.retracted?'done':''}"><div style="flex:1"><div class="title">${esc(o.note||o.kind)} ×${o.value}</div>
     <div class="meta">${o.kind==='kpi'?'学校 KPI':'知识资产'}${o.retracted?' · 已撤销':''}</div></div>
-    ${o.retracted?'':`<button class="ghost" onclick="retractOutput('${o.entry_id}')">撤销</button>`}</div>`).join('')||'<div class="empty">今天还没有产出记录</div>'}`;
+    ${o.retracted?'':`<button class="ghost" data-action="output-retract" data-id="${o.entry_id}">撤销</button>`}</div>`).join('')||'<div class="empty">今天还没有产出记录</div>'}`;
 }
 async function addMemo(){const text=document.getElementById('memoTxt').value.trim();if(!text)return;
   await api('/api/memos',{method:'POST',body:JSON.stringify({text})});view(current)}
@@ -674,18 +769,20 @@ async function renderSetting(m){
   <div class="section-title">GPA 制式</div>
   <div class="grid">
     <div class="card"><div class="title">当前 ${cfg.gpa_scale==='4.0'?'4.0 制':'5.0 制'}</div>
-      <button class="ghost" onclick="setGpa('4.0')">切到 4.0</button>
-      <button class="ghost" onclick="setGpa('5.0')">切到 5.0</button></div></div>
+      <button class="ghost" data-action="set-gpa" data-scale="4.0">切到 4.0</button>
+      <button class="ghost" data-action="set-gpa" data-scale="5.0">切到 5.0</button></div></div>
   <div class="section-title">深度功能（桌面端更完整）</div>
   <div class="card"><div class="title">全部任务 / 统计 / 学业 / 复习 / 备忘录</div>
-    <button onclick="view('tasks')">全部</button>
-    <button class="ghost" onclick="view('stats')">统计</button>
-    <button class="ghost" onclick="view('academic')">学业</button>
-    <button class="ghost" onclick="view('review')">复习</button>
-    <button class="ghost" onclick="view('memo')">备忘录</button></div>
+    <button data-action="view" data-view="tasks">全部</button>
+    <button class="ghost" data-action="view" data-view="stats">统计</button>
+    <button class="ghost" data-action="view" data-view="academic">学业</button>
+    <button class="ghost" data-action="view" data-view="review">复习</button>
+    <button class="ghost" data-action="view" data-view="memo">备忘录</button></div>
   <div class="card"><div class="meta">提示：复杂统计、课程建档、债务重规划等留桌面端。移动端 A 档为简版，离线看缓存页，改动同步需联网。</div></div>`;
 }
-async function setGpa(scale){view(current);alert('GPA 制式通过本地 config.toml 的 [academic] gpa_scale 持久设置（改 "4.0" 或 "5.0"）。API 临时查看：/api/gpa?scale=5.0');}
+async function setGpa(scale){
+  toast('GPA 制式通过本地 config.toml 的 [academic] gpa_scale 持久设置；临时查看：/api/gpa?scale='+scale);
+}
 
 // PWA：注册 service worker（仅 secure context，如 https 或 localhost）
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}

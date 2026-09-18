@@ -78,6 +78,39 @@ def test_index_links_app_css_and_serves_it(tmp_path) -> None:  # type: ignore[no
     assert "--accent" in resp.text
 
 
+def test_no_inline_event_handlers() -> None:
+    """R2 护栏：交互一律走 `data-action` 事件委托，模板里不许再出现内联 onclick/onkeydown。
+
+    理由：内联字符串要手工转义引号（习惯名处踩过）、三栏布局会引入三处事件源、无法统一测试。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    offenders = re.findall(r'on(?:click|keydown|input|change)\s*=', html)
+    assert offenders == [], f"仍有内联事件处理器 {len(offenders)} 处：{offenders[:5]}"
+
+
+def test_every_data_action_is_registered() -> None:
+    """R2 护栏：模板里用到的每个 data-action 都必须在 JS 的 ACTIONS 表里注册。
+
+    否则点了没反应（比报错更难发现）—— 这是事件委托最大的坑。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    used = set(re.findall(r'data-action="([a-z-]+)"', html))
+    registered = set(re.findall(r"'([a-z-]+)':\s*(?:el\s*=>|\()", html.split("const ACTIONS")[1]))
+    missing = sorted(used - registered)
+    assert not missing, f"这些 data-action 未注册：{missing}"
+    assert len(used) >= 30, f"data-action 数量异常偏少（{len(used)}），可能漏改模板"
+
+
+def test_no_alert_or_prompt_in_script() -> None:
+    """R2 护栏：不用浏览器模态框做确认/输入（温和基调 + 部分环境会禁用 prompt）。
+
+    允许 confirm（删除类二次确认当前仍用它）；alert/prompt 不允许新增。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "alert(" not in html, "不要用 alert 打断用户"
+    assert "prompt(" not in html, "不要用 prompt 做输入（改用内联表单/面板）"
+
+
 def test_index_exposes_core_entries(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """关键入口必须在页面上存在（回归：改前端别把主链按钮弄丢）。"""
     html = _html(tmp_path)
