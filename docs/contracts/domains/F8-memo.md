@@ -41,6 +41,7 @@
 - 可逆：可撤销。
 - 反馈：流水新增。
 - 边界：不做打分器；合同待对齐。
+- 实现（第 5 步）：同时落 `ledger_entries` 与 `output.manual` 事实；撤销走 `output.retracted`（见 F2 契约 OP-14）。
 
 ## 验收与测试
 

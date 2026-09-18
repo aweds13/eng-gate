@@ -41,12 +41,17 @@ def test_index_exposes_core_entries(tmp_path) -> None:  # type: ignore[no-untype
     for needle in (
         'id="main"',
         "renderToday",
+        "renderTasks",
         "renderFocus",
         "taskCard",
         "toggleDone(",
         "undoDone(",
         "finishFocus(",
+        "restoreTask(",
+        "retractOutput(",
         "/api/focus/active",
+        "/api/tasks/deleted",
+        "/api/ledger/outputs",
     ):
         assert needle in html, f"前端缺少入口: {needle}"
 
@@ -64,6 +69,7 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
         "/api/focus/",
         "/api/feedback",
         "/api/selfcheck",
+        "/api/ledger/outputs",
     ):
         assert any(p.startswith(path) or path.startswith(p.rstrip("/")) for p in prefixes), (
             f"前端未调用 {path}"
@@ -75,7 +81,10 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
     [
         ("get", "/api/mydays?include_reviews=1", None),
         ("get", "/api/overdue", None),
+        ("get", "/api/tasks", None),
+        ("get", "/api/tasks/deleted", None),
         ("get", "/api/summary", None),
+        ("get", "/api/ledger/outputs", None),
         ("get", "/api/focus/today", None),
         ("get", "/api/focus/active", None),
         ("get", "/api/feedback", None),

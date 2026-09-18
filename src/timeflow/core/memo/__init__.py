@@ -4,6 +4,8 @@ from timeflow.core.memo.memo import (
     add_output_entry,
     create_memo,
     list_memos,
+    list_outputs,
+    retract_output_entry,
 )
 
 __all__ = [
@@ -11,4 +13,6 @@ __all__ = [
     "list_memos",
     "add_output_entry",
     "add_invest_entry",
+    "list_outputs",
+    "retract_output_entry",
 ]

@@ -8,6 +8,7 @@
 - **memos**：id、text、ref_handle、task_id、created_at。
 - **引用句柄**：Vault 相对路径 / KB-ID；只存句柄，不存正文、不读写外部文件。
 - **产出评价器接口**：第一版手动粗颗粒，合同待知识管理项目对齐。
+  第 5 步物化：手动产出同时落 `ledger_entries` 与 `output.manual` 事实（撤销发 `output.retracted`）。
 
 ## 2. 状态与生命周期
 
@@ -42,4 +43,5 @@
 ## 7. 测试映射
 
 - 现有：`../../tests/test_team_memo.py`。
+- 第 5 步（产出轴物化）：`../../tests/test_output_axis.py`（事实/撤销/`output_count` 与投入分离/API）。
 - 待补（B4）：备忘录→转任务→到期全链路；句柄边界。

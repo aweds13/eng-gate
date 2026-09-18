@@ -60,6 +60,7 @@ select{padding:9px 10px;border:1px solid #e2e8f0;border-radius:10px;font-size:13
   <h1>timeflow <span class="accent">·</span> <span id="summary" style="color:var(--muted);font-size:13px"></span></h1>
   <nav>
     <button data-view="today" class="active">今日</button>
+    <button data-view="tasks">全部任务</button>
     <button data-view="focus">专注</button>
     <button data-view="habit">习惯</button>
     <button data-view="academic">学业</button>
@@ -72,6 +73,7 @@ select{padding:9px 10px;border:1px solid #e2e8f0;border-radius:10px;font-size:13
 <div class="toast" id="toast"></div>
 <nav class="bottom-nav">
   <button data-view="today" class="active"><span class="ic">📅</span>今日</button>
+  <button data-view="tasks"><span class="ic">🗂️</span>任务</button>
   <button data-view="focus"><span class="ic">⏱️</span>专注</button>
   <button data-view="habit"><span class="ic">🔥</span>习惯</button>
   <button data-view="setting"><span class="ic">⚙️</span>设置</button>
@@ -105,6 +107,7 @@ async function render(name){
   const m=document.getElementById('main');
   const cfg=await api('/api/config');accent=cfg.accent_color;document.documentElement.style.setProperty('--accent',accent);
   if(name==='today')return renderToday(m);
+  if(name==='tasks')return renderTasks(m);
   if(name==='focus')return renderFocus(m);
   if(name==='habit')return renderHabit(m);
   if(name==='academic')return renderAcademic(m);
@@ -162,9 +165,32 @@ async function addTask(){
   toast(myday?'已加入今天':'已记入任务（未进 My Day）');view(current);
 }
 
+// ---- 全部任务（OP-2：未进 My Day 的任务也要看得见）----
+async function renderTasks(m){
+  const all=await api('/api/tasks');
+  const notMyDay=all.filter(t=>!t.is_myday&&t.status!=='完成');
+  const done=all.filter(t=>t.status==='完成');
+  m.innerHTML=`<div class="new">
+      <input id="allTitle" placeholder="新任务（默认不进今天）" onkeydown="if(event.key==='Enter')addTaskHere()">
+      <input id="allDue" type="date" title="截止日（可选）">
+      <button onclick="addTaskHere()">添加</button></div>
+    <div class="section-title">全部任务（${all.length}）</div>
+    ${all.map(t=>taskCard(t)).join('')||'<div class="empty">还没有任务</div>'}
+    <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项；删除的任务在「今日 · 回收站」里可恢复。</div>`;
+}
+async function addTaskHere(){
+  const titleEl=document.getElementById('allTitle');
+  const title=(titleEl.value||'').trim();if(!title)return;
+  const due=document.getElementById('allDue').value||null;
+  await api('/api/tasks',{method:'POST',body:JSON.stringify({title,due_date:due,is_myday:false})});
+  titleEl.value='';document.getElementById('allDue').value='';titleEl.focus();
+  toast('已加入全部任务（未进今天）');view(current);
+}
+
 function summaryLine(s){
   const parts=[`债务 ${s.debt_count} 项`,`投入 ${s.invest_hours}h`];
   if(s.review_count)parts.push(`复习 ${s.review_count} 张`);
+  if(s.output_count)parts.push(`产出 ${s.output_count} 条`);
   return parts.join(' · ');
 }
 async function renderToday(m){
@@ -288,12 +314,32 @@ async function review(id,fb){await api(`/api/review/${id}/review`,{method:'POST'
   toast('复习已记录，下次到期已由 FSRS 排好');view(current)}
 
 async function renderMemo(m){
-  const memos=await api('/api/memos');
+  const [memos,outputs]=await Promise.all([api('/api/memos'),api('/api/ledger/outputs')]);
   m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…"><button onclick="addMemo()">记录</button></div>
-  ${memos.map(x=>`<div class="card"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge">${esc(x.ref_handle)}</span>`:''}</div></div>`).join('')||'<div class="empty">暂无备忘录</div>'}`;
+  ${memos.map(x=>`<div class="card"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge">${esc(x.ref_handle)}</span>`:''}</div></div>`).join('')||'<div class="empty">暂无备忘录</div>'}
+  <div class="section-title">今日产出（独立于投入轴）</div>
+  <div class="new">
+    <select id="outKind"><option value="asset">知识资产</option><option value="kpi">学校 KPI</option></select>
+    <input id="outValue" type="number" step="0.5" value="1" style="width:90px" title="数量">
+    <input id="outNote" placeholder="备注，如：数学笔记#3">
+    <button onclick="addOutput()">记一笔产出</button></div>
+  ${outputs.map(o=>`<div class="card ${o.retracted?'done':''}"><div style="flex:1"><div class="title">${esc(o.note||o.kind)} ×${o.value}</div>
+    <div class="meta">${o.kind==='kpi'?'学校 KPI':'知识资产'}${o.retracted?' · 已撤销':''}</div></div>
+    ${o.retracted?'':`<button class="ghost" onclick="retractOutput('${o.entry_id}')">撤销</button>`}</div>`).join('')||'<div class="empty">今天还没有产出记录</div>'}`;
 }
 async function addMemo(){const text=document.getElementById('memoTxt').value.trim();if(!text)return;
   await api('/api/memos',{method:'POST',body:JSON.stringify({text})});view(current)}
+async function addOutput(){
+  const body={value:parseFloat(document.getElementById('outValue').value||'1'),
+    kind:document.getElementById('outKind').value,
+    note:document.getElementById('outNote').value.trim()||null};
+  if(isNaN(body.value))return;
+  await api('/api/ledger/output',{method:'POST',body:JSON.stringify(body)});
+  toast('已记一笔产出（与投入分开展示）');view(current);
+}
+async function retractOutput(entryId){
+  await api(`/api/ledger/output/${entryId}`,{method:'DELETE'});toast('已撤销该笔产出');view(current);
+}
 
 // 移动端「设置」页：GPA 制式切换 + 学业/复习/备忘录入口（简版合并）
 async function renderSetting(m){
@@ -304,7 +350,11 @@ async function renderSetting(m){
       <button class="ghost" onclick="setGpa('4.0')">切到 4.0</button>
       <button class="ghost" onclick="setGpa('5.0')">切到 5.0</button></div></div>
   <div class="section-title">深度功能（桌面端更完整）</div>
-  <div class="card"><div class="title">学业 / 复习 / 备忘录</div><button onclick="view('academic')">学业</button><button class="ghost" onclick="view('review')">复习</button><button class="ghost" onclick="view('memo')">备忘录</button></div>
+  <div class="card"><div class="title">全部任务 / 学业 / 复习 / 备忘录</div>
+    <button onclick="view('tasks')">全部</button>
+    <button class="ghost" onclick="view('academic')">学业</button>
+    <button class="ghost" onclick="view('review')">复习</button>
+    <button class="ghost" onclick="view('memo')">备忘录</button></div>
   <div class="card"><div class="meta">提示：复杂统计、课程建档、债务重规划等留桌面端。移动端 A 档为简版，离线看缓存页，改动同步需联网。</div></div>`;
 }
 async function setGpa(scale){view(current);alert('GPA 制式通过本地 config.toml 的 [academic] gpa_scale 持久设置（改 "4.0" 或 "5.0"）。API 临时查看：/api/gpa?scale=5.0');}

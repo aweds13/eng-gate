@@ -77,6 +77,15 @@
 - 新增 `tests/test_task_delete.py`（9 项）；`interactions.md` 自查表 OP-6 回填 → **OP-1~OP-8 全部闭环**。
 - 质量门：pytest 147 passed + 2 deselected / 验收 2 passed / 覆盖率 87.17% / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
 
+### 重构 · 第 5 步·产出轴物化 + 全部任务视图
+- **产出轴物化**：`POST /api/ledger/output` 除写 `ledger_entries`（兼容）外，发 `output.manual` 事实；
+  撤销走 `output.retracted` 反向事实（幂等、不删历史）；新增 `GET /api/ledger/outputs`、`DELETE /api/ledger/output/{id}`；
+  `ledger.summary()` 新增 `output_count`（今日产出 − 已撤销），**与投入轴分开展示、互不折算**。
+- **前端**：新增「全部任务」视图（补 OP-2 残留：未进 My Day 的任务可见、可加回今天）；备忘录页新增
+  「今日产出」区（记一笔 + 撤销）；摘要行加产出条数；移动端底栏加「任务」入口。
+- 新增 `tests/test_output_axis.py`（11 项）。
+- 质量门：pytest 161 passed + 2 deselected / 验收 2 passed / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

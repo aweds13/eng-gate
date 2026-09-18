@@ -441,10 +441,27 @@ def create_app(db_path: str | None = None) -> FastAPI:
     # B 系统产出/投入流水（SR-F8.4 产出评价器接口，第一版手动）
     @app.post("/api/ledger/output")
     def ledger_output(payload: dict[str, Any]) -> dict[str, str]:
-        return {"id": memo.add_output_entry(
-            conn, value=payload["value"], kind=payload.get("kind", "asset"),
-            note=payload.get("note"), ref_handle=payload.get("ref_handle"),
-        )}
+        try:
+            return {"id": memo.add_output_entry(
+                conn, value=payload["value"], kind=payload.get("kind", "asset"),
+                note=payload.get("note"), ref_handle=payload.get("ref_handle"),
+            )}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/ledger/outputs")
+    def ledger_outputs(date_str: str | None = None) -> list[dict[str, object]]:
+        """某日产出流水（产出轴，含是否已撤销）；默认今天。"""
+        return memo.list_outputs(conn, day=date_str)
+
+    @app.delete("/api/ledger/output/{entry_id}")
+    def ledger_output_retract(entry_id: str) -> dict[str, object]:
+        """撤销一条产出（追加 `output.retracted` 反向事实，不删历史）。"""
+        try:
+            changed = memo.retract_output_entry(conn, entry_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="产出记录不存在") from None
+        return {"entry_id": entry_id, "retracted": changed}
 
     @app.post("/api/ledger/invest")
     def ledger_invest(payload: dict[str, Any]) -> dict[str, str]:

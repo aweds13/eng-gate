@@ -8,11 +8,12 @@
 - 前置：无。
 - 输入：无。
 - 后续：债务 = 逾期项数 + 天数/程度；投入 = 今日 `focus.finished` 事实 sum/3600；
-  复习投入 = 今日不同 `review.completed` 主体数（`review_count`）；任一操作后刷新。
+  复习投入 = 今日不同 `review.completed` 主体数（`review_count`）；
+  产出 = 今日 `output.manual` 去重减 `output.retracted`（`output_count`，与投入分开展示）；任一操作后刷新。
 - 可逆：只读。
 - 反馈：一行摘要，温和不告警。
 - 边界：空账本显示 0；跨午夜按完成日；旧库无 facts 由回填/回退保证。
-- API：`GET /api/summary` → `{debt_count, debt_items, invest_hours, review_count}`。
+- API：`GET /api/summary` → `{debt_count, debt_items, invest_hours, review_count, output_count}`。
 
 ## OP-13 手动记投入（目标态）
 
@@ -35,6 +36,9 @@
 - 可逆：撤销。
 - 反馈：产出流水新增。
 - 边界：不做知识资产打分；只存句柄。
+- 实现（第 5 步物化）：`POST /api/ledger/output` 写 `ledger_entries` **并** 发 `output.manual` 事实；
+  `GET /api/ledger/outputs?date_str=` 列当日产出（含 `retracted` 标记）；
+  `DELETE /api/ledger/output/{entry_id}` 追加 `output.retracted` 反向事实（幂等、不删历史）；负值 400。
 
 ## OP-15 周结算
 
