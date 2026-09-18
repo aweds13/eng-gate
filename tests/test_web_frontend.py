@@ -196,6 +196,81 @@ def test_three_column_shell_exists_in_served_page(tmp_path) -> None:  # type: ig
         assert needle in html, f"页面缺少 {needle}"
 
 
+def test_inputs_cannot_cover_submit_buttons() -> None:
+    """反馈修（2026-09-18 用户实测）：新增行的「添加」按钮曾被挤出去遮住。
+
+    根因：标题输入 `flex:1` + 日期框/按钮不收缩 → 一行总宽超出容器时按钮溢出被裁。
+    约定：新增行允许换行、输入框可收缩且有最小宽度、**按钮永不收缩**；
+    表单块 .form/.field 同理（学业页那一堆输入框靠它不再挤成一条缝）。
+    """
+    css = WEB_CSS.read_text(encoding="utf-8")
+    new_block = css.split(".new {", 1)[1].split("/* ---------- 表单块", 1)[0]
+    assert "flex-wrap: wrap" in new_block, "新增行必须允许换行"
+    assert "flex: 1 1 220px" in new_block, "标题输入应有最小宽度（220px）"
+    assert "min-width: 0" in new_block, "输入框必须可收缩，否则会把按钮挤出去"
+    assert ".new button { flex: none }" in new_block, "按钮不能被压缩"
+    assert ".field" in css and ".form {" in css, "学业/设置这类多字段表单应用表单块"
+
+
+def test_settings_page_is_unified_and_reachable() -> None:
+    """用户要求：把散落的调整收进一个「设置」界面，并且宽屏左栏也要有入口。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    # ① 宽屏左栏有设置入口（此前只有移动端底部 Tab 才有，宽屏根本进不去）
+    rail_nav = html.split('class="rail"', 1)[1].split("</nav>", 1)[0]
+    assert 'data-view="setting"' in rail_nav, "左栏导航缺少「设置」入口"
+    # ② 设置页收拢了这四类调整
+    setting = html.split("async function renderSetting(", 1)[1]
+    setting = setting.split("async function setGpa(", 1)[0]
+    for needle in ("set-theme", "set-accent", "set-gpa", "set-sync", "数据与同步"):
+        assert needle in setting, f"设置页缺少 {needle}"
+    # ③ 设置页里的动作都必须已注册（点了没反应比报错更难发现）
+    used = set(re.findall(r'data-action="([a-z-]+)"', setting))
+    registered = set(re.findall(r"'([a-z-]+)':\s*(?:el\s*=>|\()", html.split("const ACTIONS")[1]))
+    assert not (used - registered), f"设置页有未注册动作：{sorted(used - registered)}"
+
+
+def test_every_data_view_button_has_a_handler() -> None:
+    """护栏：`data-view="X"` 要么是合法视图，要么是已注册的动作。
+
+    否则点了没反应（设置页的「跳到某一节」就是这种用法：data-view 指向动作名）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    views = set(re.findall(r'const VIEWS=\[([^\]]*)\]', html)[0].replace("'", "").split(","))
+    views = {v.strip() for v in views if v.strip()}
+    targets = set(re.findall(r'data-view="([a-z-]+)"', html))
+    registered = set(re.findall(r"'([a-z-]+)':\s*(?:el\s*=>|\()", html.split("const ACTIONS")[1]))
+    unknown = sorted(targets - views - registered)
+    assert not unknown, f"这些 data-view 既不是视图也没注册动作：{unknown}"
+    assert "if(!VIEWS.includes(name))" in html, "render 应对未知视图名报警而不是静默空屏"
+
+
+def test_theme_is_selectable_and_wired() -> None:
+    """R4 接通（用户要求「设置里能调」）：亮 / 暗 / 跟随系统，写在 <html data-theme> 上。
+
+    暗色令牌在 R1 就位；这里的护栏防「开关没接线 / 选择没记住 / 没有跟随系统」。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert "left, dark, system" in html or "'light','dark','system'" in html, "应提供三种主题选择"
+    assert "dataset.theme=" in html, "主题必须写到 <html data-theme>（CSS 令牌靠它生效）"
+    assert "localStorage.setItem(THEME_KEY" in html and "localStorage.getItem(THEME_KEY)" in html, (
+        "主题选择要记住"
+    )
+    assert "prefers-color-scheme" in html, "「跟随系统」需要监听系统偏好"
+    assert "matchMedia" in html and "addEventListener" in html
+    assert '[data-theme="dark"]' in css
+
+
+def test_accent_palette_lives_in_css_not_js() -> None:
+    """R1 约定：颜色只住在 app.css；设置页的色板必须从 CSS 令牌读，不能在脚本里写字面色值。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert "accentPalette()" in html and "getPropertyValue" in html
+    assert html.count("--accent-${i}") == 1
+    for token in ("--accent-1", "--accent-6"):
+        assert token in css, f"app.css 缺少色板令牌 {token}"
+
+
 def test_index_exposes_core_entries(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """关键入口必须在页面上存在（回归：改前端别把主链按钮弄丢）。"""
     html = _html(tmp_path)

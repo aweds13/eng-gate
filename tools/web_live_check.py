@@ -43,6 +43,11 @@ def check_js_syntax(tmp: Path) -> tuple[bool, str]:
     return True, f"node --check 通过（{js_file.name}）"
 
 
+def _rail_nav(html: str) -> str:
+    """取出左栏导航那一段（用于检查「设置」入口是否在宽屏左栏里）。"""
+    return html.split('class="rail"', 1)[1].split("</nav>", 1)[0]
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="r2_"))
     ok, detail = check_js_syntax(tmp)
@@ -86,7 +91,20 @@ def main() -> int:
         "宽屏三栏是有网格的": "grid-template-columns: 200px minmax(0, 1fr) 340px" in css,
         "计时器归属右栏": "function renderActive(el,active)" in html and "paintRail(mySeq)" in html,
         "计时器数据源可用": active is None or isinstance(active, dict),
+        # 设置页（用户要求统一收拢）+ 挤压/遮挡修复的样式约定
+        "左栏有设置入口": 'data-view="setting"' in _rail_nav(html),
+        "挤压修复样式在位": ".new button { flex: none }" in css and ".field" in css,
+        "暗色令牌可取到": '[data-theme="dark"]' in css,
     }
+    # 视图路由自检：每个 data-view 要么是合法视图，要么是已注册的动作（点了没反应最难查）
+    views = set(re.findall(r"const VIEWS=\[([^\]]*)\]", html)[0].replace("'", "").split(","))
+    views = {v.strip() for v in views if v.strip()}
+    actions = set(re.findall(r"'([a-z-]+)':\s*(?:el\s*=>|\()", html.split("const ACTIONS")[1]))
+    targets = set(re.findall(r'data-view="([a-z-]+)"', html))
+    unknown = sorted(targets - views - actions)
+    checks["data-view 全部有落点"] = not unknown
+    if unknown:
+        print(f"[提示] 以下 data-view 既不是视图也没注册动作：{unknown}")
     for name, passed in checks.items():
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")
     server.should_exit = True

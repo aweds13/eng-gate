@@ -24,6 +24,7 @@
       <button data-action="view" data-view="academic">学业</button>
       <button data-action="view" data-view="review">复习</button>
       <button data-action="view" data-view="memo">备忘录</button>
+      <button data-action="view" data-view="setting">设置</button>
       <button id="refresh" class="ghost" data-action="refresh">刷新</button>
     </nav>
   </aside>
@@ -60,6 +61,8 @@ let renderSeq=0;             // 渲染序号：用于「后点的那次说了算
 let abortCtl=null;           // 进行中的请求组：切视图即取消，避免过期渲染互相覆盖
 let themeChoice='light';     // 主题选择（R4 接通暗色）
 let detailTaskId=null;       // R3：右栏正在查看的任务（跨视图保留；切视图时清空）
+// 合法视图名（render 的白名单：写错的视图名会被立刻发现，而不是静默空屏）
+const VIEWS=['today','tasks','focus','stats','habit','academic','review','memo','setting'];
 
 /* 同步强调色到 CSS 变量（本地缓存先应用，避免首屏闪默认色） */
 function applyAccent(color){if(color)document.documentElement.style.setProperty('--accent',color)}
@@ -122,13 +125,20 @@ function view(name){
  */
 const ACTIONS = {
   // 导航与视图
-  'view':           el => view(el.dataset.view),
+  // `data-view="X"` 默认当作视图名；若 X 本身已注册为动作（如 settings-scroll），则执行该动作
+  // —— 这样按钮可以同时用「跳到某视图」和「跳到设置里的某一节」两种写法。
+  'view':           el => { const k=el.dataset.view;
+                            if(ACTIONS[k]){ACTIONS[k](el);return}
+                            view(k); },
   'refresh':        () => view(current),
   'modal-ok':       () => closeModal(document.getElementById('modalInput').value),
   'modal-cancel':   () => closeModal(null),
   'toast-run':      () => { const fn=toastRun; toastRun=null; if(fn) fn(); },
   'set-heatmap':    el => setHeatmap(el.dataset.metric),
   'set-gpa':        el => setGpa(el.dataset.scale),
+  'set-theme':      el => setTheme(el.dataset.themeChoice),
+  'set-accent':     el => setAccent(el.dataset.color),
+  'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
   'task-close':     () => { detailTaskId=null; render(current); },
@@ -193,6 +203,8 @@ document.addEventListener('keydown', ev => {
 
 async function render(name){
   current=name;
+  // 视图白名单：写错的视图名只会警告 + 空屏，不会静默什么都不做（data-view 打错字时能立刻发现）
+  if(!VIEWS.includes(name)){console.warn('未知视图:',name);return}
   // 竞态防护：每次渲染发一个号并取消上一组请求；只有"最新那次"才允许写 DOM。
   const mySeq=++renderSeq;
   if(abortCtl)abortCtl.abort();
@@ -203,8 +215,12 @@ async function render(name){
   try{
     const cfg=await api('/api/config');
     if(mySeq!==renderSeq)return;                 // 已被更新的点击取代：不做任何写入
-    applyAccent(cfg.accent_color);
-    try{localStorage.setItem('tf_accent',cfg.accent_color)}catch(e){}
+    // 强调色：本机选过就以本机为准（配置默认只在没选过时用，否则每次渲染都会把用户的选择打回默认）
+    if(accentChoice){applyAccent(accentChoice)}
+    else{
+      applyAccent(cfg.accent_color);
+      try{localStorage.setItem('tf_accent',cfg.accent_color)}catch(e){}
+    }
     const paint=w=>{if(mySeq===renderSeq)w(m)};
     if(name==='today')return paint(renderToday);
     if(name==='tasks')return paint(renderTasks);
@@ -643,7 +659,7 @@ async function renderToday(m){
   m.innerHTML=`<div class="new">
     <input id="newTitle" placeholder="今天要做什么？回车添加…" data-enter="task-add">
     <input id="newDue" type="date" title="截止日（可选）">
-    <label class="sub" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="newMyDay" checked>加入今天</label>
+    <label class="sub"><input type="checkbox" id="newMyDay" checked>加入今天</label>
     <button data-action="task-add">添加</button></div>
   ${todayCard(doneTasks,pendingTasks)}
   <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||'<div class="empty">没有逾期，很好</div>'}</div>
@@ -768,17 +784,33 @@ async function renderAcademic(m){
   <div class="section-title">学业概览（多维）</div>
   ${gpaRadar(gpaG,{gpa:other.gpa},courses.length,grades)}
   ${hasGrades?'':`<div class="sub">还没有成绩记录：录入后「加权平均成绩」与「GPA」会自动按学分加权计算。</div>`}
-  <div class="new"><input id="cName" placeholder="新建课程，如：高数"><button data-action="course-add">新建课程</button></div>
-  ${courses.map(c=>`<div class="card"><div class="title">${esc(c.name)}</div><div class="meta">${c.credits}学分 ${c.teacher||''}</div></div>`).join('')||'<div class="empty">暂无课程</div>'}
+  <div class="section-title">课程</div>
+  <div class="new"><input id="cName" placeholder="新建课程，如：高数" data-enter="course-add"><button data-action="course-add">新建课程</button></div>
+  ${courses.map(c=>`<div class="card"><div style="flex:1"><div class="title">${esc(c.name)}</div><div class="meta">${c.credits}学分 ${c.teacher||''}</div></div></div>`).join('')||'<div class="empty">暂无课程</div>'}
   <div class="section-title">添加考核项（考试/作业/论文/小测）</div>
-  <div class="new">
-    <select id="aCourse" ${courses.length?'':'disabled'}><option value="">${courses.length?'选课程':'先建课程'}</option>${courseOpts}</select>
-    <input id="aName" placeholder="名称，如：期中考试">
-    <input id="aDue" type="date" title="截止日（可选）">
-    <input id="aWeight" type="number" step="0.05" placeholder="权重" style="width:80px">
-    <button data-action="assessment-add">添加</button></div>
+  <div class="card panel-card">
+    <div class="form">
+      <div class="field"><label>课程</label>
+        <select id="aCourse" ${courses.length?'':'disabled'}><option value="">${courses.length?'选课程':'先建课程'}</option>${courseOpts}</select></div>
+      <div class="field wide"><label>名称</label>
+        <input id="aName" placeholder="如：期中考试"></div>
+      <div class="field narrow"><label>截止日（可选）</label>
+        <input id="aDue" type="date"></div>
+      <div class="field narrow"><label>权重（可选）</label>
+        <input id="aWeight" type="number" step="0.05" placeholder="如 0.3"></div>
+      <div class="actions"><button data-action="assessment-add">添加考核项</button></div>
+    </div>
+  </div>
   <div class="section-title">录入成绩</div>
-  <div class="new"><input id="gScore" type="number" placeholder="成绩" style="width:80px"><input id="gCredits" type="number" placeholder="学分" value="2" style="width:80px"><button data-action="grade-add">录入</button></div>
+  <div class="card panel-card">
+    <div class="form">
+      <div class="field narrow"><label>成绩（百分制）</label>
+        <input id="gScore" type="number" placeholder="如 88"></div>
+      <div class="field narrow"><label>学分</label>
+        <input id="gCredits" type="number" value="2"></div>
+      <div class="actions"><button data-action="grade-add">录入成绩</button></div>
+    </div>
+  </div>
   ${grades.length?`<div class="section-title">成绩明细（${grades.length} 条）</div>
     ${grades.slice().reverse().map(g=>`<div class="card"><div style="flex:1"><div class="title">${g.score} 分</div>
       <div class="meta">${g.credits} 学分 ${g.term?`· ${esc(g.term)}`:''}</div></div>
@@ -899,33 +931,121 @@ async function retractOutput(entryId){
   await api(`/api/ledger/output/${entryId}`,{method:'DELETE'});toast('已撤销该笔产出');view(current);
 }
 
-// 移动端「设置」页：GPA 制式切换 + 学业/复习/备忘录入口（简版合并）
+// ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
+// 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
   const [cfg,sync]=await Promise.all([api('/api/config'),api('/api/sync/status')]);
   const off=!navigator.onLine;
-  m.innerHTML=`<div class="section-title">同步与离线</div>
-  <div class="card"><div style="flex:1"><div class="title">${off?'当前离线':'当前在线'}</div>
-    <div class="meta">跨端传输尚未实现：本机数据始终可用；同步一旦接上会在这里显示状态${sync.conflict_logs?` · 已有 ${sync.conflict_logs} 条冲突记录`:''}</div></div></div>
-  <div class="section-title">GPA 制式</div>
-  <div class="grid">
-    <div class="card"><div class="title">当前 ${cfg.gpa_scale==='4.0'?'4.0 制':'5.0 制'}</div>
-      <button class="ghost" data-action="set-gpa" data-scale="4.0">切到 4.0</button>
-      <button class="ghost" data-action="set-gpa" data-scale="5.0">切到 5.0</button></div></div>
-  <div class="section-title">深度功能（桌面端更完整）</div>
-  <div class="card"><div class="title">全部任务 / 统计 / 学业 / 复习 / 备忘录</div>
-    <button data-action="view" data-view="tasks">全部</button>
-    <button class="ghost" data-action="view" data-view="stats">统计</button>
-    <button class="ghost" data-action="view" data-view="academic">学业</button>
-    <button class="ghost" data-action="view" data-view="review">复习</button>
-    <button class="ghost" data-action="view" data-view="memo">备忘录</button></div>
-  <div class="card"><div class="meta">提示：复杂统计、课程建档、债务重规划等留桌面端。移动端 A 档为简版，离线看缓存页，改动同步需联网。</div></div>`;
+  const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
+  const swatches=accentPalette().map(c=>
+    `<button class="swatch ${sameColor(accentChoice,c)?'on':''}" data-action="set-accent" data-color="${c}"
+      style="background:${c}" title="强调色 ${c}"></button>`).join('');
+  m.innerHTML=`<div class="section-title">常用</div>
+  <div class="card panel-card">
+    <div class="row tight">
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-appearance">主题 / 强调色</button>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-academic">GPA 制式</button>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-sync">数据与同步</button></div>
+  </div>
+  <div class="section-title" id="set-appearance">外观</div>
+  <div class="card panel-card">
+    <div class="settings-sub">主题</div>
+    <div class="row">${themeBtn('light','亮色')}${themeBtn('dark','暗色')}${themeBtn('system','跟随系统')}</div>
+    <div class="sub">当前：${{light:'亮色',dark:'暗色',system:'跟随系统'}[themeChoice]||themeChoice}${themeChoice==='system'?(systemDark()?' · 系统现在是暗色':' · 系统现在是亮色'):''}</div>
+    <div class="settings-sub" id="set-accent">强调色</div>
+    <div class="row">${swatches}
+      <button class="ghost" data-action="set-accent" data-color="">恢复默认（配置：${esc(cfg.accent_color||'—')}）</button></div>
+    <div class="sub">强调色在本机记住；想改成别的颜色，改 config.toml 的 app.accent_color 后会作为默认值出现。</div>
+  </div>
+  <div class="section-title" id="set-academic">学业</div>
+  <div class="card panel-card">
+    <div class="settings-sub">GPA 制式</div>
+    <div class="row">
+      <button class="${gpaScale==='4.0'?'':'ghost'}" data-action="set-gpa" data-scale="4.0">4.0 制</button>
+      <button class="${gpaScale==='5.0'?'':'ghost'}" data-action="set-gpa" data-scale="5.0">5.0 制</button>
+      <button class="ghost" data-action="view" data-view="academic">去学业页</button></div>
+    <div class="sub">配置默认值来自 config.toml 的 [academic] gpa_scale；这里切的是查看口径。</div>
+  </div>
+  <div class="section-title">数据与同步</div>
+  <div class="card panel-card" id="set-sync">
+    <div class="title">${off?'当前离线':'当前在线'}</div>
+    <div class="meta">跨端传输尚未实现：本机数据始终可用；同步一旦接上会在这里显示状态${sync.conflict_logs?` · 已有 ${sync.conflict_logs} 条冲突记录`:''}</div>
+    <div class="sub">数字都来自本机数据库，不上传任何服务器。</div>
+  </div>
+  <div class="section-title">入口</div>
+  <div class="card panel-card">
+    <div class="row tight">
+      <button class="ghost" data-action="view" data-view="tasks">全部任务</button>
+      <button class="ghost" data-action="view" data-view="stats">统计</button>
+      <button class="ghost" data-action="view" data-view="habit">习惯</button>
+      <button class="ghost" data-action="view" data-view="review">复习</button>
+      <button class="ghost" data-action="view" data-view="memo">备忘录</button>
+      <button class="ghost" data-action="view" data-view="academic">学业</button></div>
+  </div>`;
 }
-  // GPA 制式切换：只改本页查看口径（写死配置是后端职责），立即重渲染
+// GPA 制式切换：只改查看口径（写死配置是后端职责），立即重渲染
 async function setGpa(scale){
   gpaScale=scale==='5.0'?'5.0':'4.0';
-  toast(`已切到 ${gpaScale} 制（本页按该制式显示）`);
-  view('academic');
+  toast(`已切到 ${gpaScale} 制`);
+  view(current);
 }
+/* ---------- 主题（R4 接通）----------
+ * 三选：亮色 / 暗色 / 跟随系统。结果写成 <html data-theme="dark|light">，令牌在 app.css 里已备好。
+ * 强调色单独存（见 applyAccent 的 tf_accent），此处只管明暗。
+ */
+const THEME_KEY='tf_theme';
+function systemDark(){
+  try{return !!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)}catch(e){return false}
+}
+function applyTheme(){
+  const dark=themeChoice==='dark'||(themeChoice==='system'&&systemDark());
+  document.documentElement.dataset.theme=dark?'dark':'light';
+}
+function setTheme(choice){
+  themeChoice=['light','dark','system'].includes(choice)?choice:'system';
+  try{localStorage.setItem(THEME_KEY,themeChoice)}catch(e){}
+  applyTheme();
+  toast(`主题已切到「${{light:'亮色',dark:'暗色',system:'跟随系统'}[themeChoice]}」`);
+  view(current);
+}
+// 强调色：页面上给常用几个；空 = 回到 config.toml 的默认值（与 applyAccent 同一套写入）
+// 色值一律从 app.css 的令牌区读（R1 约定：颜色只住在 CSS 里，脚本不许写死色值）
+let accentChoice=null;          // 本机所选强调色（null = 用配置默认）
+function accentPalette(){
+  const cs=getComputedStyle(document.documentElement);
+  return [1,2,3,4,5,6].map(i=>cs.getPropertyValue(`--accent-${i}`).trim()).filter(Boolean);
+}
+function sameColor(a,b){
+  if(!a||!b)return false;
+  const hex=s=>String(s).trim().toLowerCase();
+  return hex(a)===hex(b);
+}
+function setAccent(color){
+  if(!color){
+    accentChoice=null;
+    try{localStorage.removeItem('tf_accent')}catch(e){}
+    api('/api/config').then(c=>{applyAccent(c.accent_color);view(current)}).catch(()=>view(current));
+    toast('已恢复默认强调色');
+    return;
+  }
+  accentChoice=color;applyAccent(color);
+  try{localStorage.setItem('tf_accent',color)}catch(e){}
+  toast('强调色已更新（记在本机）');
+  view(current);
+}
+function initTheme(){
+  try{
+    const saved=localStorage.getItem(THEME_KEY);
+    if(saved)themeChoice=saved;
+    accentChoice=localStorage.getItem('tf_accent');
+  }catch(e){}
+  applyTheme();
+  try{
+    const mq=window.matchMedia('(prefers-color-scheme: dark)');
+    if(mq.addEventListener)mq.addEventListener('change',()=>{if(themeChoice==='system')applyTheme()});
+  }catch(e){}
+}
+initTheme();
 
 // PWA：注册 service worker（仅 secure context，如 https 或 localhost）
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}
