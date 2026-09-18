@@ -6,9 +6,9 @@
 
 | 域 | 详细规格 | 批次 |
 |---|---|---|
-| SR-F1 | `F1-tasks.md` | B1 |
-| SR-F2 | `F2-ledger.md` | B1 |
-| SR-F3 | `F3-focus.md` | B1 |
+| SR-F1 | `F1-tasks.md` | B1 ✅ |
+| SR-F2 | `F2-ledger.md` | B1 ✅ |
+| SR-F3 | `F3-focus.md` | B1 ✅ |
 | SR-F4 | `F4-feedback.md` | B2 |
 | SR-F5 | `F5-academic.md` | B2 |
 | SR-F6 | `F6-review.md` | B2 |
