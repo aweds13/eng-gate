@@ -22,6 +22,7 @@ from timeflow.core.tasks.manager import (
     myday_tasks,
     overdue_tasks,
     process_repeats,
+    uncomplete_task,
     update_task,
 )
 
@@ -35,6 +36,7 @@ __all__ = [
     "myday_tasks",
     "overdue_tasks",
     "complete_task",
+    "uncomplete_task",
     "process_repeats",
     "create_group",
     "list_groups",

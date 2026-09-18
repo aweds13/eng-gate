@@ -11,10 +11,6 @@ from timeflow.storage import db as db_mod
 
 
 @pytest.mark.acceptance
-@pytest.mark.xfail(
-    strict=True,
-    reason="第 2 步接入前应失败：专注→反馈/任务、完成→事实/记账尚未接线",
-)
 def test_mvp_journey(tmp_path) -> None:  # type: ignore[no-untyped-def]
     db_path = str(tmp_path / "a.db")
     client = TestClient(create_app(db_path))

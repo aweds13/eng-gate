@@ -66,4 +66,5 @@
 ## 7. 测试映射
 
 - 现有：`../../tests/test_tasks.py`、`../../tests/test_groups.py`、`../../tests/test_api.py`。
-- 待补（B4）：创建→加入 My Day→完成→撤销的 API 全链路验收。
+- 第 2 步（任务线发事实）：`../../tests/test_task_line.py` —— 完成发 `task.completed`、撤销发 `task.uncompleted`、幂等与 API 全链路。
+- 待补（B4）：创建→加入 My Day→完成→撤销的 API 全链路验收（已由 `test_task_line.py` 覆盖完成/撤销段）。

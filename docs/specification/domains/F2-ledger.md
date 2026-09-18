@@ -7,6 +7,7 @@
 
 - **Fact（事实层）**：kind、subject、value_num、value_text、occurred_at、source。
 - **投入轴**：专注 `focus.finished`（value_num=秒）；任务完成 `task.completed`（不估时）；复习完成 `review.completed`；手动投入 `invest.manual`。
+- **事实反向标记**：撤销类事实与正向事实成对（如 `task.uncompleted` 对 `task.completed`），解读层按最新有效状态计账，不删历史事实（R7 / A-003）。
 - **产出轴**：学校 KPI（成绩/综测）与知识资产，独立记账、分开显示。
 - **债务**：逾期任务集合 + 天数/程度（轻≤3 / 中≤7 / 重>7），不折算时间。
 - **周结算**：按本地周聚合投入/产出/债务趋势；温和呈现。
@@ -51,4 +52,5 @@
 ## 7. 测试映射
 
 - 现有：`../../tests/test_ledger_summary.py`、`../../tests/test_facts.py`、`../../tests/test_team_memo.py`。
+- 第 2 步补充：`../../tests/test_task_line.py`（完成事实不得混入投入口径）、`../../tests/test_focus_line.py`（专注事实→反馈口径）。
 - 待补（B4）：专注→记账主链、完成→记账、撤销回退、产出写入。

@@ -127,7 +127,11 @@ def list_tasks(conn: sqlite3.Connection, active_only: bool = True) -> list[Task]
 
 
 def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Task:
-    """更新任务字段（AC-2/AC-3）。只允许白名单字段，version+1，刷新 updated_at。"""
+    """更新任务字段（AC-2/AC-3）。只允许白名单字段，version+1，刷新 updated_at。
+
+    第 2 步子任务 2：状态在「完成 ↔ 非完成」之间切换时发事实
+    （完成发 `task.completed`，撤销发 `task.uncompleted`），使账本/联动只依赖事实层。
+    """
     allowed = {
         "title",
         "due_date",
@@ -142,13 +146,56 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         return get_task(conn, task_id)
     if "status" in updates and updates["status"] not in VALID_STATUS:
         raise ValueError(f"非法状态: {updates['status']}")
+    before = get_task(conn, task_id)
     sets = ", ".join(f"{k} = ?" for k in updates)
     conn.execute(
         f"UPDATE tasks SET {sets}, updated_at = ?, version = version + 1 WHERE id = ?",
         (*updates.values(), _now(), task_id),
     )
     conn.commit()
-    return get_task(conn, task_id)
+    after = get_task(conn, task_id)
+    if before.status != after.status:
+        _publish_status_facts(conn, before, after)
+    return after
+
+
+def _publish_status_facts(conn: sqlite3.Connection, before: Task, after: Task) -> None:
+    """状态跃迁 → 事实（仅「完成 ↔ 非完成」跨线有语义；其它状态变化不记账）。"""
+    from timeflow.core import facts as facts_mod
+
+    if after.status == STATUS_DONE and before.status != STATUS_DONE:
+        facts_mod.record(
+            conn,
+            kind="task.completed",
+            subject_type="task",
+            subject_id=after.id,
+            value_text=after.title,
+            extra={
+                "title": after.title,
+                "due_date": after.due_date,
+                "from_status": before.status,
+                "completed_on": _today(),
+            },
+            source="desktop",
+        )
+        facts_mod.publish(
+            "task.completed",
+            {"task_id": after.id, "title": after.title, "from_status": before.status},
+        )
+    elif before.status == STATUS_DONE and after.status != STATUS_DONE:
+        facts_mod.record(
+            conn,
+            kind="task.uncompleted",
+            subject_type="task",
+            subject_id=after.id,
+            value_text=after.title,
+            extra={"title": after.title, "to_status": after.status, "reverted_on": _today()},
+            source="desktop",
+        )
+        facts_mod.publish(
+            "task.uncompleted",
+            {"task_id": after.id, "title": after.title, "to_status": after.status},
+        )
 
 
 def delete_task(conn: sqlite3.Connection, task_id: str) -> None:
@@ -196,11 +243,31 @@ def overdue_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Ta
 
 
 def complete_task(conn: sqlite3.Connection, task_id: str) -> Task:
-    """完成任务（AC-7 联动）：若为父任务，仅当全部子任务完成才自动完成；否则标记完成。"""
+    """完成任务（AC-7 联动）：若为父任务，仅当全部子任务完成才自动完成；否则标记完成。
+
+    第 2 步：完成时发 `task.completed` 事实（幂等——已完成的重复调用不再发）。
+    """
+    current = get_task(conn, task_id)
+    if current.status == STATUS_DONE:
+        return current
     children = conn.execute("SELECT * FROM tasks WHERE parent_id = ?", (task_id,)).fetchall()
     if children and any(_row_to_task(c).status != STATUS_DONE for c in children):
         raise ValueError("存在未完成的子任务，父任务不能自动完成")
     return update_task(conn, task_id, status=STATUS_DONE)
+
+
+def uncomplete_task(
+    conn: sqlite3.Connection,
+    task_id: str,
+    restore_status: str = STATUS_TODO,
+) -> Task:
+    """撤销完成（OP-5 可逆）：发 `task.uncompleted` 反向事实并恢复状态（幂等）。"""
+    current = get_task(conn, task_id)
+    if current.status != STATUS_DONE:
+        return current
+    if restore_status not in VALID_STATUS or restore_status == STATUS_DONE:
+        raise ValueError(f"非法恢复状态: {restore_status}")
+    return update_task(conn, task_id, status=restore_status)
 
 
 def process_repeats(conn: sqlite3.Connection) -> int:

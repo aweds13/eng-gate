@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from timeflow.config import load_settings
 from timeflow.core import academic as ac
+from timeflow.core import facts as facts_mod
 from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
 from timeflow.core import memo as memo
@@ -157,6 +158,31 @@ def create_app(db_path: str | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="任务不存在") from None
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/tasks/{task_id}/uncomplete", response_model=TaskOut)
+    def uncomplete_task(task_id: str, payload: dict[str, Any] | None = None) -> TaskOut:
+        """撤销完成（OP-5 可逆）：发 task.uncompleted 反向事实并恢复状态。"""
+        restore = (payload or {}).get("restore_status", tm.STATUS_TODO)
+        try:
+            return _out(tm.uncomplete_task(conn, task_id, restore_status=restore), conn)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/tasks/{task_id}/facts")
+    def task_facts(task_id: str) -> list[dict[str, Any]]:
+        """某任务的事实流水（完成/撤销），供前端展示与验收核对。"""
+        try:
+            tm.get_task(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        return facts_mod.query(
+            conn,
+            kind="task.",
+            subject_type="task",
+            subject_id=task_id,
+        )
 
     @app.get("/api/mydays")
     def mydays() -> list[TaskOut]:
