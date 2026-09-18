@@ -2,17 +2,28 @@
 
 > 按时间倒序记录每次有意义的功能/变更。遵循 Conventional Commits 类型。
 
-## [未发布] — 文档体系重建与 MVP 结构梳理
+## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 步）
 
 ### 文档
 - **约定层**：新增 `specification/conventions.md`（横切基线，实现任何 SR 前必读）。
 - **契约层**：新增 `contracts/interactions.md`（操作六要素）+ `contracts/flows.md`（动线契约）。
 - **一致性**：统一为**五层**口径（intention / specification(+conventions) / contracts / implementation / taste）；`scripts/check_layers.py` 扩展为五层检查（含引用完整性）。
 - **验收**：`ACCEPTANCE.md` 标注"MVP"术语两义 + 已知局限；补闭环验收指引。
+- **本轮同步**：事实层进展回写 README / implementation / CODING_GUIDELINES；DESIGN/LEARN 状态改为「经决定撤回、暂不建」；交接文档质量门口径更新。
 
 ### 已知断层（待 MVP 重构解决）
 - 契约层揭示多项"操作闭环/模块联动"缺口（专注结束不记账、完成后不记账等）。
 - 详见 `../复盘/三层断裂诊断-实现与交互复盘.md`。
+
+### 重构 · 第 0 步：事实层
+- 新增 `src/core/facts/`：facts 表（schema v3）+ 进程内同步事件总线（异常隔离、通配订阅）。
+- 专注 `finish_session` 结束即落事实并 `publish`；事实与解读层（ledger）解耦。
+- 质量门：pytest 60 passed / ruff 0 / mypy 0（32 文件）/ 五层对齐 PASS。
+
+### 重构 · 第 0.1 步：事实语义修正 + 历史回填
+- 结束状态分 kind：只有正常结束记 `focus.finished`；暂停/放弃/记中断分别记 `focus.paused/abandoned/interrupted`，避免第 1 步误计入投入。
+- schema v3→v4：幂等回填历史 `focus_sessions` → facts，保证 ledger 改读 facts 后旧数据不归零。
+- 质量门：pytest 64 passed / ruff 0 / mypy 0（32 文件）/ 五层对齐 PASS / 护栏自测 PASS。
 
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 

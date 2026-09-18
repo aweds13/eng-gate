@@ -35,16 +35,31 @@
    → 顶部轻量摘要(债务项数+投入时长) 与 曲线/热力图 呈现
 ```
 
-## 三、两条关键边界（设计取舍）
+## 三、事实层与解读层（重构地基）
+
+```
+业务线(tasks/focus/review/…) --发布事实--> 事实层 facts（SQLite）
+                                                │ 查询 / 订阅
+                                                ▼
+                                          解读层 ledger（按当前心智模型算账）
+```
+
+- `facts` 只记「发生了什么」：`kind` 自由字符串，高频值放 `value_num/value_text`，`extra` JSON 兜底，`revision/supersedes` 预留。
+- 事件总线同步执行、单订阅者异常隔离（对应 SR-NF6 局部错误隔离）；第 0 步只建管道，订阅者从第 1 步起逐个接入。
+- **换心智模型只换解读层，事实不动**。
+- 存储边界（按 `../specification/conventions.md` 数据分流）：计算型事实（专注/完成/复习等）落结构化索引 `facts`；沉淀型内容（任务信息/备忘录/产出记录）落 Markdown（目标态，迁移契约见重构第 3 步）。
+
+## 四、两条关键边界（设计取舍）
+
 1. **业务与存储分离**：`core/` 只做领域逻辑，不碰 SQL；`storage/` 负责持久化与 schema 迁移——改存储不牵动业务（可维护，SR-NF6）。
 2. **本软件与知识资产解耦**：知识/笔记**只存引用句柄**（Vault 路径 / KB-ID），读写交给「知识资产项目」，本软件不碰 Vault 文件——避免膨胀与耦合（SR-F8.2）。
 
-## 四、模块目录对照
+## 五、模块目录对照
 | 分层 | 目录 |
 |---|---|
 | 交互/壳 | `src/app/`（pywebview）+ `src/web/`（前端静态） |
 | API | `src/api/` |
-| 核心领域 | `src/core/`（tasks/ledger/focus/feedback/academic/review/team/memo） |
+| 核心领域 | `src/core/`（tasks/ledger/focus/feedback/academic/review/team/memo/facts） |
 | 存储 | `src/storage/` |
 | 外部集成 | `src/getaways/` |
 | 配置 | `src/config.py` |

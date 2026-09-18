@@ -28,7 +28,7 @@
 
 ## SR-NF9 · 开源文档完整（N38）——一版
 - 必须：README（问题驱动）/架构文档/CODING_GUIDELINES。
-- 待建：DESIGN.md（know-why）、LEARN.md（零基础定制）——**当前不存在**（见 `../复盘/docs一致性审查-发现清单.md` S4/S5）。
+- DESIGN.md（know-why）/ LEARN.md（零基础定制）：**经用户决定撤回、暂不建**（当前优先保证软件闭环；决策见 `../../复盘/DESIGN-LEARN撤回与闭环验收恢复.md`）；开源文档由 README / 架构文档 / CODING_GUIDELINES 承载。
 
 ## SR-NF10 · 零基础定制友好（N39）——一版
 - 必须：常见定制做成「改配置/填模板」；2–3 个由浅入深扩展示例；代码注释中文。

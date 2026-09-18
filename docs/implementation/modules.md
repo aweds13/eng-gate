@@ -36,7 +36,13 @@
 ## SR-F9 存储/同步 → `src/storage/`
 - SQLite + schema 版本迁移；LWW 同步（时间戳+version，不静默覆盖）；跨端去重（来源标记）；备份/回滚。
 
+## 重构地基（非 SR）→ `src/core/facts/`
+- 事实层：`store.py` 读写 `facts` 表；`bus.py` 同步发布-订阅、通配匹配、订阅者异常隔离。
+- 设计取舍：`kind` 自由字符串（加事实类型不改表）；高频值走 `value_num/value_text`；`extra` JSON 兜底；`revision/supersedes` 预留不实现。
+- 与 ledger 的关系：业务线只发事实，ledger 读事实按当前心智模型算账；换心智模型只改解读层。
+
 ## 质量属性（SR-NF）落点
+
 | SR-NF | 实现关键 |
 |---|---|
 | NF1 美感 | 前端 CSS（自定义强调色/主题） |

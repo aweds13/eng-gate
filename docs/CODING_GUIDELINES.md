@@ -13,9 +13,9 @@
 ---
 
 ## 1. 项目结构（别放错地方）
-- 主代码：`src/`（`app/` 壳 · `api/` · `core/`(tasks·ledger·focus·feedback·academic·review·team·memo) · `storage/` · `getaways/`）
+- 主代码：`src/`（`app/` 壳 · `api/` · `core/`(tasks·ledger·focus·feedback·academic·review·team·memo·facts) · `storage/` · `getaways/`）
 - 测试：`tests/`（`test_<module>.py`）；前端：`src/web/`；配置：`src/config.py`
-- 文档：`docs/`（或根 README/DESIGN）；护栏：`CODING_GUIDELINES.md`、`ACCEPTANCE.md`
+- 文档：`docs/`（或根 README；DESIGN/LEARN 经用户决定撤回、暂不建）；护栏：`CODING_GUIDELINES.md`、`ACCEPTANCE.md`
 
 ## 2. 环境与检查命令（写完后必须跑）
 ```bash
@@ -23,6 +23,8 @@ ruff format src/ tests/        # 格式化
 ruff check src/ tests/         # lint（⚠️ 新增代码必须零错误）
 mypy src/                      # 类型检查（strict；改接口/配置/类型必跑）
 pytest                         # 测试（提交前必跑，且功能 AC 通过）
+python -X utf8 scripts/check_layers.py       # 五层对齐（含引用完整性）
+python -X utf8 scripts/test_check_layers.py  # 护栏脚本自测（正/负样例）
 pytest --cov=timeflow          # 覆盖率（目标 ≥70%）
 ```
 

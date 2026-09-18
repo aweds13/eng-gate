@@ -22,6 +22,7 @@
 | `src/app/` | 桌面壳（pywebview 窗口）+ Web 前端 UI | SR-NF1/2/4 |
 | `src/api/` | FastAPI REST（供前端 + 外部/AI 接口） | SR-F7.3, SR-NF16 |
 | `src/core/tasks/` | 任务管理（CRUD/My Day/逾期/Repeat/子任务/存档） | SR-F1 |
+| `src/core/facts/` | 事实层：只记「发生了什么」+ 同步事件总线（事实与解读解耦） | —（重构地基） |
 | `src/core/ledger/` | B 系统记账（投入轴/产出轴/债务/可视化） | SR-F2 |
 | `src/core/focus/` | 计时与专注（番茄/普通/白名单/勿扰/多设备） | SR-F3 |
 | `src/core/feedback/` | 每日反馈/习惯热力图/自检 | SR-F4 |
