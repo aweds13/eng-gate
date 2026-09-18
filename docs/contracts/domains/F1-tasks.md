@@ -29,9 +29,11 @@
 - 前置：任务未完成/未取消；父任务需子任务全完成（或确认强制）。
 - 输入：无。
 - 后续：置完成 → 发 `task.completed` 事实 → 账本记投入 → 父任务联动 → Repeat 生成下一次。
-- 可逆：取消完成 → 发反向事实 → 回退投入 → 恢复原状态。
+- 可逆：取消完成 → 发反向事实 `task.uncompleted` → 回退投入 → 恢复原状态。
 - 反馈：划线；摘要/债务即时更新。
 - 边界：重复完成幂等；已完成子任务；Repeat 只生成一次；撤销后 Repeat 生成的下一次也被撤销或标记。
+- API（第 2 步实现）：`POST /api/tasks/{id}/complete`、`POST /api/tasks/{id}/uncomplete`
+  （body 可选 `restore_status`，默认回「未开始」）、`GET /api/tasks/{id}/facts`（事实流水）。
 
 ## OP-6 删除任务
 

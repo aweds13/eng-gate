@@ -18,9 +18,10 @@
 - 前置：卡片到期。
 - 输入：rating。
 - 后续：FSRS 推进间隔 → 更新 due/reps → 记 `review.completed` 事实 → 投入账。
-- 可逆：可撤销本次反馈（回退 interval/reps 与事实）。
+- 可逆：可撤销本次反馈（回退 interval/reps 与事实）——**未实现，后续补**。
 - 反馈：下一间隔/到期时间即时更新。
-- 边界：非法 rating 拒绝；重复完成幂等。
+- 边界：非法 rating 拒绝；同一天同卡只记一条投入事实（重复完成幂等）。
+- API（第 2 步实现）：`POST /api/review/{id}/review`、`GET /api/review/{id}/facts`（事实流水）。
 
 ## OP-28 到期列表 / 进 My Day
 
@@ -31,6 +32,7 @@
 - 可逆：可移出。
 - 反馈：列表按优先级展示。
 - 边界：无到期卡空态；进 My Day 不重复。
+- API（第 2 步实现）：`GET /api/mydays?include_reviews=1` 并入到期复习卡（`kind="review"`），默认不含。
 
 ## OP-29 关联引用句柄
 

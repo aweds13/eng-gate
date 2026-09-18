@@ -7,10 +7,12 @@
 - 入口：顶部摘要区。
 - 前置：无。
 - 输入：无。
-- 后续：债务 = 逾期项数 + 天数/程度；投入 = 今日 `focus.finished` 事实 sum/3600；任一操作后刷新。
+- 后续：债务 = 逾期项数 + 天数/程度；投入 = 今日 `focus.finished` 事实 sum/3600；
+  复习投入 = 今日不同 `review.completed` 主体数（`review_count`）；任一操作后刷新。
 - 可逆：只读。
 - 反馈：一行摘要，温和不告警。
 - 边界：空账本显示 0；跨午夜按完成日；旧库无 facts 由回填/回退保证。
+- API：`GET /api/summary` → `{debt_count, debt_items, invest_hours, review_count}`。
 
 ## OP-13 手动记投入（目标态）
 

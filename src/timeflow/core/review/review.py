@@ -131,6 +131,12 @@ def review(
         ),
     )
     conn.commit()
+    # 复习完成 = 投入（维持，SR-F6 R6 / 约定「复习轴」）：发事实，账本只读事实层
+    reviewed_on = date.today().isoformat()
+    _record_completed_fact(
+        conn, item_id=item_id, title=str(row["title"]), feedback=feedback,
+        reps=reps, next_due=new_card.due.date().isoformat(), reviewed_on=reviewed_on,
+    )
     return {
         "id": item_id,
         "due_date": new_card.due.date().isoformat(),
@@ -139,6 +145,53 @@ def review(
         "lapses": lapses,
         "state": STATE_DONE if reps >= 1 else STATE_DUE,
     }
+
+
+def _record_completed_fact(
+    conn: sqlite3.Connection,
+    item_id: str,
+    title: str,
+    feedback: str,
+    reps: int,
+    next_due: str,
+    reviewed_on: str,
+) -> bool:
+    """发 `review.completed` 事实 + 广播事件；同一天同卡只记一次（SR-F6 边界：幂等）。
+
+    复习完成 = 投入（维持）由解读层按事实计数；本函数只负责「如实留痕」。
+    """
+    from timeflow.core import facts as facts_mod
+
+    already = conn.execute(
+        "SELECT 1 FROM facts WHERE kind = 'review.completed' AND subject_id = ? "
+        "AND substr(occurred_at, 1, 10) = ? LIMIT 1",
+        (item_id, reviewed_on),
+    ).fetchone()
+    if already is not None:
+        return False
+    extra = {
+        "title": title,
+        "feedback": feedback,
+        "reps": reps,
+        "next_due": next_due,
+        "reviewed_on": reviewed_on,
+    }
+    facts_mod.record(
+        conn,
+        kind="review.completed",
+        subject_type="review_item",
+        subject_id=item_id,
+        value_num=0.0,  # 复习完成不折算时间（约定：不折算精确时间）
+        value_text=title,
+        extra=extra,
+        occurred_at=f"{reviewed_on}T{datetime.now().strftime('%H:%M:%S')}",
+        source="desktop",
+    )
+    facts_mod.publish(
+        "review.completed",
+        {"item_id": item_id, "title": title, "feedback": feedback, "reviewed_on": reviewed_on},
+    )
+    return True
 
 
 def due_items(
@@ -151,16 +204,27 @@ def due_items(
         "ORDER BY reps ASC, due_date ASC",
         (t,),
     ).fetchall()
-    return [
-        {
-            "id": r["id"],
-            "title": r["title"],
-            "form": r["form"],
-            "source": r["source"],
-            "due_date": r["due_date"],
-            "reps": r["reps"],
-            "interval_days": r["interval_days"],
-            "ref_handle": r["ref_handle"],
-        }
-        for r in rows
-    ]
+    return [_item_dict(r) for r in rows]
+
+
+def myday_entries(
+    conn: sqlite3.Connection, today: str | None = None
+) -> list[dict[str, object]]:
+    """到期复习卡转成 My Day 条目（SR-F6.3 / OP-28：到期优先建议进 My Day，不强制）。
+
+    返回结构带 `kind="review"`，供前端与任务条目混排时区分。
+    """
+    return [{"kind": "review", **item} for item in due_items(conn, today)]
+
+
+def _item_dict(row: sqlite3.Row) -> dict[str, object]:
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "form": row["form"],
+        "source": row["source"],
+        "due_date": row["due_date"],
+        "reps": row["reps"],
+        "interval_days": row["interval_days"],
+        "ref_handle": row["ref_handle"],
+    }

@@ -6,7 +6,7 @@
 ## 1. 实体与字段
 
 - **Fact（事实层）**：kind、subject、value_num、value_text、occurred_at、source。
-- **投入轴**：专注 `focus.finished`（value_num=秒）；任务完成 `task.completed`（不估时）；复习完成 `review.completed`；手动投入 `invest.manual`。
+- **投入轴**：专注 `focus.finished`（value_num=秒）；任务完成 `task.completed`（不估时）；复习完成 `review.completed`（不折算时间，计张数）；手动投入 `invest.manual`。
 - **事实反向标记**：撤销类事实与正向事实成对（如 `task.uncompleted` 对 `task.completed`），解读层按最新有效状态计账，不删历史事实（R7 / A-003）。
 - **产出轴**：学校 KPI（成绩/综测）与知识资产，独立记账、分开显示。
 - **债务**：逾期任务集合 + 天数/程度（轻≤3 / 中≤7 / 重>7），不折算时间。
@@ -22,6 +22,7 @@
 
 - **R1 事实优先**：ledger 只从 facts 读，不直接查业务表；`focus_sessions` 仅作原始记录/回填来源。
 - **R2 投入口径**：专注按秒累加；完成/复习按完成事实；未绑定专注也计投入。
+  `ledger.summary()` 现返回 `invest_hours`（专注换算小时）+ `review_count`（今日复习张数，去重）。
 - **R3 产出口径**：学校 KPI 与知识资产分开；第一版手动粗颗粒；不做打分器。
 - **R4 债务口径**：不折算时间；分级展示；无截止日任务不计债务。
 - **R5 日期**：投入按 `occurred_at` 完成日归属；周起点周一。

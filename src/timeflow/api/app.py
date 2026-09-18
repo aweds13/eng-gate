@@ -185,8 +185,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
         )
 
     @app.get("/api/mydays")
-    def mydays() -> list[TaskOut]:
-        return [_out(t, conn) for t in tm.myday_tasks(conn)]
+    def mydays(include_reviews: bool = False) -> list[Any]:
+        """My Day（AC-4）。`include_reviews=1` 时并入到期复习卡（SR-F6.3 / OP-28，不强制）。"""
+        items: list[Any] = [_out(t, conn) for t in tm.myday_tasks(conn)]
+        if include_reviews:
+            items.extend(rv.myday_entries(conn))
+        return items
 
     @app.get("/api/overdue")
     def overdue() -> list[TaskOut]:
@@ -345,6 +349,18 @@ def create_app(db_path: str | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="复习卡不存在") from None
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/review/{item_id}/facts")
+    def review_facts(item_id: str) -> list[dict[str, Any]]:
+        """某复习卡的事实流水（复习完成），供前端展示与验收核对。"""
+        exists = conn.execute(
+            "SELECT 1 FROM review_items WHERE id = ?", (item_id,)
+        ).fetchone()
+        if exists is None:
+            raise HTTPException(status_code=404, detail="复习卡不存在")
+        return facts_mod.query(
+            conn, kind="review.completed", subject_type="review_item", subject_id=item_id
+        )
 
     # ---- SR-F7 团队/AI 协作 ----
     @app.post("/api/team/assign")

@@ -25,6 +25,7 @@ class LedgerSummary(BaseModel):
     debt_count: int
     debt_items: list[DebtItem]
     invest_hours: float
+    review_count: int = 0
 
 
 def _degree(days: int, mild: int, medium: int) -> str:
@@ -38,11 +39,12 @@ def _degree(days: int, mild: int, medium: int) -> str:
 def summary(
     conn: sqlite3.Connection, today: str | None = None, mild: int = 3, medium: int = 7
 ) -> LedgerSummary:
-    """顶部轻量摘要（AC-9）：今日债务项数 + 各逾期项天数/程度，投入时长。
+    """顶部轻量摘要（AC-9）：今日债务项数 + 各逾期项天数/程度，投入时长 + 复习投入张数。
 
     投入（invest_hours）= 今日已完成的专注事实 / 3600（SR-F2.1 专注=投入）。
-    事实来源：`facts` 表 kind=focus.finished；按 occurred_at（完成时刻）归属当日，
-    取代原先直接聚合 `focus_sessions`（第 1 步·事实与解读分离）。
+    复习投入（review_count）= 今日不同的 `review.completed` 主体数（复习完成=投入·维持；
+    同一天同卡只算一次，对应 SR-F6 边界「重复完成幂等」）。
+    事实来源：`facts` 表；按 occurred_at（完成时刻）归属当日，只读事实层（R1）。
     """
     t = today or date.today().isoformat()
     items: list[DebtItem] = []
@@ -67,8 +69,19 @@ def summary(
         until=f"{t}T23:59:59",
     )
     invested_sec = sum(float(row["value_num"] or 0) for row in finished_today)
+    # 复习投入：今日完成复习的不同卡片数（第 2 步子任务 3）
+    reviews_today = facts_mod.query(
+        conn,
+        kind="review.completed",
+        since=f"{t}T00:00:00",
+        until=f"{t}T23:59:59",
+    )
+    review_subjects = {
+        row["subject_id"] or row["id"] for row in reviews_today
+    }
     return LedgerSummary(
         debt_count=len(items),
         debt_items=items,
         invest_hours=round(invested_sec / 3600.0, 2),
+        review_count=len(review_subjects),
     )

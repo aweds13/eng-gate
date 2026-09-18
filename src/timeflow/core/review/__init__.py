@@ -7,6 +7,7 @@ from timeflow.core.review.review import (
     STATE_DUE,
     create_item,
     due_items,
+    myday_entries,
     review,
 )
 
@@ -18,5 +19,6 @@ __all__ = [
     "STATE_DONE",
     "create_item",
     "due_items",
+    "myday_entries",
     "review",
 ]
