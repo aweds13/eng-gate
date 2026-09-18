@@ -6,7 +6,7 @@
 
 | SR | 详细规格 | 操作 / 动线 | 验收 | 测试 | 状态 |
 |---|---|---|---|---|---|
-| SR-F1 任务管理 | `../specification/domains/F1-tasks.md` | OP-1/2/5/6/8，FLOW-1/2 | LC-1/2/5/6/8，LF-1/2 | `../../tests/test_tasks.py`、`../../tests/test_groups.py`、`../../tests/test_api.py`、`../../tests/test_task_line.py`、`../../tests/test_task_repeat.py` | ✅ 规格/契约 |
+| SR-F1 任务管理 | `../specification/domains/F1-tasks.md` | OP-1/2/5/6/8，FLOW-1/2 | LC-1/2/5/6/8，LF-1/2 | `../../tests/test_tasks.py`、`../../tests/test_groups.py`、`../../tests/test_api.py`、`../../tests/test_task_line.py`、`../../tests/test_task_repeat.py`、`../../tests/test_task_delete.py` | ✅ 规格/契约 |
 | SR-F2 B 系统记账 | `../specification/domains/F2-ledger.md` | OP-5/7 | LC-5/7，LF-1 | `../../tests/test_ledger_summary.py`、`../../tests/test_facts.py` | ✅ 规格/契约 |
 | SR-F3 计时与专注 | `../specification/domains/F3-focus.md` | OP-3/4 | LC-3/4，LF-1/3 | `../../tests/test_focus_feedback.py`、`../../tests/test_facts.py`、`../../tests/test_focus_line.py` | ✅ 规格/契约 |
 | SR-F4 反馈 / 习惯 | `../specification/domains/F4-feedback.md` | OP-4 后续，FLOW-4 | LF-4 | `../../tests/test_focus_feedback.py`、`../../tests/test_focus_line.py` | ✅ 规格/契约 |
@@ -19,4 +19,4 @@
 | 前端交互层（第 4 步） | `../contracts/interactions.md`（OP-1–OP-7 自查表） | 六要素齐备 | LC-1–LC-8 / LF-1 | `../../tests/test_web_frontend.py`、真机 `../../tools/lf1_live_check.py` | ✅ 已闭环（OP-8 与软删除为残留） |
 
 > 契约文件在 `../contracts/domains/`；可执行验收见 `../../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）；
-> 覆盖率门 70%（第 4 步后实测 85.83%）；真实运行验证见 `../../tools/lf1_live_check.py`。
+> 覆盖率门 70%（第 5 步 OP-6 后实测 87.17%）；真实运行验证见 `../../tools/lf1_live_check.py`。

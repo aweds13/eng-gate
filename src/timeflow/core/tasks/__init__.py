@@ -7,8 +7,10 @@ from timeflow.core.tasks.groups import (
     set_task_groups,
 )
 from timeflow.core.tasks.manager import (
+    HIDDEN_STATUSES,
     STATUS_ARCHIVED,
     STATUS_CANCELLED,
+    STATUS_DELETED,
     STATUS_DOING,
     STATUS_DONE,
     STATUS_OVERDUE,
@@ -22,6 +24,8 @@ from timeflow.core.tasks.manager import (
     myday_tasks,
     overdue_tasks,
     process_repeats,
+    purge_task,
+    restore_task,
     uncomplete_task,
     update_task,
 )
@@ -33,6 +37,8 @@ __all__ = [
     "list_tasks",
     "update_task",
     "delete_task",
+    "restore_task",
+    "purge_task",
     "myday_tasks",
     "overdue_tasks",
     "complete_task",
@@ -48,4 +54,6 @@ __all__ = [
     "STATUS_OVERDUE",
     "STATUS_CANCELLED",
     "STATUS_ARCHIVED",
+    "STATUS_DELETED",
+    "HIDDEN_STATUSES",
 ]

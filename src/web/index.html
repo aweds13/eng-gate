@@ -85,8 +85,14 @@ async function api(path,opts={}){const r=await fetch(path,{headers:{'Content-Typ
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function el(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
 let toastTimer=null;
-function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+function toast(msg){const t=document.getElementById('toast');t.innerHTML=esc(msg);t.classList.add('show');
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
+function toastAction(msg,label,fn){
+  const t=document.getElementById('toast');
+  t.innerHTML=`${esc(msg)} <button class="ghost" style="margin-left:8px;padding:4px 10px;color:#fff;border-color:#475569" id="toastAct">${esc(label)}</button>`;
+  const btn=document.getElementById('toastAct');if(btn)btn.onclick=fn;
+  t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),6000);
+}
 function view(name){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));render(name)}
 document.querySelectorAll('nav button[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view));
 document.querySelectorAll('.bottom-nav button[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view));
@@ -133,8 +139,13 @@ async function toggleMyDay(id,toMyDay){
 }
 async function removeTask(id){
   const t=await api(`/api/tasks/${id}`);
-  if(!confirm(`删除「${t.title}」？删除不可撤销。`))return;
-  await api(`/api/tasks/${id}`,{method:'DELETE'});toast('已删除');view(current);
+  if(!confirm(`删除「${t.title}」？可在提示条里撤销。`))return;
+  await api(`/api/tasks/${id}`,{method:'DELETE'});
+  toastAction('已删除，可撤销',"撤销",async()=>{await api(`/api/tasks/${id}/restore`,{method:'POST'});toast('已恢复');view(current)});
+  view(current);
+}
+async function restoreTask(id){
+  await api(`/api/tasks/${id}/restore`,{method:'POST'});toast('已恢复');view(current);
 }
 async function showFacts(id){
   const facts=await api(`/api/tasks/${id}/facts`);
@@ -157,10 +168,13 @@ function summaryLine(s){
   return parts.join(' · ');
 }
 async function renderToday(m){
-  const [mydays,overdue,summary,due]=await Promise.all([
-    api('/api/mydays'),api('/api/overdue'),api('/api/summary'),api('/api/review/due')]);
+  const [mydays,overdue,summary,due,deleted]=await Promise.all([
+    api('/api/mydays'),api('/api/overdue'),api('/api/summary'),api('/api/review/due'),api('/api/tasks/deleted')]);
   el('summary',summaryLine(summary));
   const debt=summary.debt_count?`<div class="sub">逾期共 ${summary.debt_count} 项（轻≤3天 / 中≤7天 / 重>7天）：${(summary.debt_items||[]).map(d=>`${esc(d.title)}(${d.degree}·${d.overdue_days}天)`).join('、')}</div>`:'';
+  const trash=deleted.length?`<div class="section-title">回收站（软删除，可恢复）</div>
+    ${deleted.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div><div class="meta">已删</div></div>
+    <button class="ghost" onclick="restoreTask('${t.id}')">恢复</button></div>`).join('')}`:'';
   m.innerHTML=`<div class="new">
     <input id="newTitle" placeholder="今天要做什么？回车添加…" onkeydown="if(event.key==='Enter')addTask()">
     <input id="newDue" type="date" title="截止日（可选）">
@@ -169,6 +183,7 @@ async function renderToday(m){
   <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||'<div class="empty">没有逾期，很好</div>'}</div>
   <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||'<div class="empty">今天还没有任务，挑一件加进来吧</div>'}
   ${due.length?`<div class="section-title">今天该复习（${due.length}）</div>${due.map(r=>reviewCard(r)).join('')}`:''}
+  ${trash}
   ${debt}`;
 }
 

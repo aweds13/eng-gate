@@ -127,6 +127,17 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+    @app.get("/api/tasks/deleted")
+    def deleted_tasks() -> list[TaskOut]:
+        """已删任务（软删除回收站）：仅用于撤销入口展示。
+
+        注意：本路由必须声明在 `/api/tasks/{task_id}` 之前，否则 "deleted" 会被当成 task_id。
+        """
+        rows = [
+            t for t in tm.list_tasks(conn, active_only=False) if t.status == tm.STATUS_DELETED
+        ]
+        return [_out(t, conn) for t in rows]
+
     @app.get("/api/tasks/{task_id}", response_model=TaskOut)
     def get_task(task_id: str) -> TaskOut:
         try:
@@ -147,8 +158,23 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.delete("/api/tasks/{task_id}")
     def delete_task(task_id: str) -> dict[str, str]:
-        tm.delete_task(conn, task_id)
-        return {"deleted": task_id}
+        """软删除（OP-6）：置「已删」并留 `task.deleted` 事实；可用 `/restore` 撤销。"""
+        try:
+            t = tm.delete_task(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        return {"deleted": task_id, "status": t.status}
+
+    @app.post("/api/tasks/{task_id}/restore", response_model=TaskOut)
+    def restore_task(task_id: str, payload: dict[str, Any] | None = None) -> TaskOut:
+        """撤销软删除（OP-6 可逆）：置回指定状态（默认「未开始」）。"""
+        restore = (payload or {}).get("restore_status", tm.STATUS_TODO)
+        try:
+            return _out(tm.restore_task(conn, task_id, restore_status=restore), conn)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.post("/api/tasks/{task_id}/complete", response_model=TaskOut)
     def complete_task(task_id: str) -> TaskOut:

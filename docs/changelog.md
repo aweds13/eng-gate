@@ -68,6 +68,15 @@
 - 新增 `tests/test_task_repeat.py`（7 项）。
 - 质量门：pytest 138 passed + 2 deselected / 验收 2 passed / 覆盖率 86.42% / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
 
+### 重构 · 第 5 步·OP-6：软删除 + 撤销
+- 新增状态「已删」（`STATUS_DELETED`）：`DELETE /api/tasks/{id}` 改为**软删除**（置状态 + 发 `task.deleted` 事实），
+  不再物理删行；默认视图（列表 / My Day / 逾期 / 债务）统一隐藏（`HIDDEN_STATUSES`）。
+- 可逆：`POST /api/tasks/{id}/restore`（默认恢复「未开始」，可指定）+ `GET /api/tasks/deleted` 回收站；
+  前端删除后提示条给「撤销」，今日页有回收站区。
+- 彻底删除保留为 `purge_task()`（显式调用、不在界面暴露）。
+- 新增 `tests/test_task_delete.py`（9 项）；`interactions.md` 自查表 OP-6 回填 → **OP-1~OP-8 全部闭环**。
+- 质量门：pytest 147 passed + 2 deselected / 验收 2 passed / 覆盖率 87.17% / ruff 0 / mypy 0（33 文件）/ 五层对齐 PASS。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增
