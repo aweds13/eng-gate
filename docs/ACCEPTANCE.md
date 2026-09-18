@@ -72,7 +72,7 @@ python -m pytest                      # 功能单测
 | AC-8 | Repeat | 重复任务到点生成下一次（按上次完成时间） | SR-F1.5 | 单测 |
 | AC-9 | 轻债务 | 逾期任务 → 记"债务"（计数+逾期天数/程度）；顶部显示轻量摘要（今日债务项数+投入时长） | SR-F2.3/F2.7 | 单测+手动 |
 | AC-10 | SQLite 持久化 | 数据在本地 SQLite，重启不丢；schema 可迁移；可备份 | SR-F9.1/9.3 | 单测 |
-| AC-11 | 桌面窗口界面 | pywebview 启动出窗口，默认视图=清爽的 My Day；强调色可自定义 | SR-NF1/2/4 | 手动 |
+| AC-11 | 桌面窗口界面 | pywebview 启动出窗口，默认视图=清爽的 My Day；强调色可自定义 | SR-NF1/2/4 | 手动 ⚠️ **未验证**：入口代码在（`timeflow.app.main`），但 pywebview 未安装、实际回退浏览器（审计 GAP-NF-11） |
 | AC-12 | 测试闭环 | 上述核心均有 pytest 单测；ruff/mypy/pytest 全绿；覆盖率≥70% | SR-NF15 | 运行 pytest/ruff/mypy |
 
 ## 第一版范围·组B（SR-F3~F9 新增域）
