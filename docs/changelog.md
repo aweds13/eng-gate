@@ -510,8 +510,8 @@
   标题正文做 XML 转义（不转义会把 XML 弄坏、通知直接弹不出来）；`show_notification()` 按 style 弹；
   `notify_due()` 缺省跟随设置；`--test` 与 `POST /api/reminders/test` 也按当前方式弹。
 - **前端**：设置页「提醒」顶部新增「提醒方式」两个按钮 + 说明（写清闹钟式的效果与代价）。
-- **真机实测**：按闹钟式弹了一条（`show_notification` 返回成功）；**"是否真的留在屏幕上并响铃"由用户目视确认**
-  —— 若 Windows 对非打包程序的 alarm 方案有限制，退路是自建"响铃窗口"（见复盘 §九）。
+- **真机实测（已确认）**：按闹钟式弹了一条，**用户目视确认效果正确 —— 会一直留在屏幕上 + 有响铃**
+  ✅（无需再自建"响铃窗口"）。
 - **测试**：`tests/test_remind_channel.py` +6（闹钟 XML 的 scenario/duration/loop、温和 XML 无 scenario、
   XML 转义、默认值与设置校验、`show_notification` 真的把 XML 传下去、`notify_due` 跟随设置）；
   `tests/test_web_frontend.py` 护栏补「提醒方式」入口与措辞。
