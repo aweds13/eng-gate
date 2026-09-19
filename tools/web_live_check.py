@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -46,6 +47,68 @@ def check_js_syntax(tmp: Path) -> tuple[bool, str]:
 def _rail_nav(html: str) -> str:
     """取出左栏导航那一段（用于检查「设置」入口是否在宽屏左栏里）。"""
     return html.split('class="rail"', 1)[1].split("</nav>", 1)[0]
+
+
+def _json_call(base: str, path: str, method: str = "GET", payload: dict | None = None,
+               headers: dict | None = None) -> tuple[int, object]:
+    """打真服务的 JSON 接口，返回 (状态码, 解析结果)。"""
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(f"{base}{path}", data=data, method=method)
+    req.add_header("Content-Type", "application/json")
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status, json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:  # 4xx/5xx 也要看得到状态码
+        return e.code, None
+
+
+def live_attach_checks(base: str, tmp: Path) -> dict[str, bool]:
+    """T-B4 真机自检：附件打开规则在**真服务 + 真文件系统**上的行为。
+
+    只走 `dry_run`（不真的弹资源管理器/开程序）——验的是"规则与解析"这段；
+    真正弹窗那一下由用户点「打开」触发，属于人工确认项（见 CHECKPOINT 说明）。
+    """
+    folder = tmp / "课件"
+    folder.mkdir(exist_ok=True)
+    pdf = folder / "第3章.pdf"
+    pdf.write_text("x", encoding="utf-8")
+
+    _, default_run = _json_call(
+        base, "/api/attach/open", "POST", {"target": str(pdf), "dry_run": True}
+    )
+    _json_call(base, "/api/settings/attach", "PUT", {"mode": "auto"})
+    _, auto_run = _json_call(
+        base, "/api/attach/open", "POST", {"target": str(pdf), "dry_run": True}
+    )
+    _, url_run = _json_call(base, "/api/attach/open", "POST", {"target": "https://example.com/x"})
+    _, missing_run = _json_call(
+        base, "/api/attach/open", "POST", {"target": str(tmp / "没有这个.pdf")}
+    )
+    dir_run = _json_call(
+        base, "/api/attach/open", "POST", {"target": str(folder), "dry_run": True}
+    )[1]
+    bad_mode = _json_call(base, "/api/settings/attach", "PUT", {"mode": "乱写"})[0]
+    bad_ext = _json_call(base, "/api/settings/attach", "PUT", {"whitelist": [".exe"]})[0]
+    cross = _json_call(
+        base, "/api/attach/open", "POST", {"target": str(pdf), "dry_run": True},
+        headers={"Origin": "https://evil.example"},
+    )[0]
+
+    def action(payload: object) -> object:
+        return payload.get("action") if isinstance(payload, dict) else None
+
+    return {
+        "附件规则（默认只到文件夹）": action(default_run) == "folder",
+        "附件规则（按格式→定位文件）": action(auto_run) == "select",
+        "附件规则（网址交浏览器）": action(url_run) == "browser",
+        "附件规则（路径不存在→复制兜底）": action(missing_run) == "copy",
+        "附件规则（目录→开目录）": action(dir_run) == "folder",
+        "打开方式非法值被拒": bad_mode == 400,
+        "白名单拒绝可执行类": bad_ext == 400,
+        "跨站来源被拒（本机接口守卫）": cross == 403,
+    }
 
 
 def main() -> int:
@@ -113,6 +176,7 @@ def main() -> int:
     checks["data-view 全部有落点"] = not unknown
     if unknown:
         print(f"[提示] 以下 data-view 既不是视图也没注册动作：{unknown}")
+    checks.update(live_attach_checks(base, tmp))
     for name, passed in checks.items():
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")
     server.should_exit = True

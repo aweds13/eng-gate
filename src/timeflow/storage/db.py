@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -118,6 +118,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v7(conn)  # 任务优先级 priority（F1 段2 · T-B2）
     if current < 8:
         _migrate_v8(conn)  # 任务手动标记 flagged（F1 段2 · T-B3）
+    if current < 9:
+        _migrate_v9(conn)  # 附件/要求链接 attach + 应用设置表（F1/F5 段2 · T-B4）
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
@@ -130,6 +132,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v6(conn)  # 新库也要走一遍：v1 的 tasks 建表语句保持历史原样，note 由本版加列
     _migrate_v7(conn)  # 同上：priority 由本版加列
     _migrate_v8(conn)  # 同上：flagged 由本版加列
+    _migrate_v9(conn)  # 新库也要走一遍：attach 两列与 app_settings 表
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -598,3 +601,46 @@ def _migrate_v8(conn: sqlite3.Connection) -> None:
     if "flagged" in columns:
         return  # 幂等
     conn.execute("ALTER TABLE tasks ADD COLUMN flagged INTEGER DEFAULT 0")
+
+
+def _add_column_if_missing(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> bool:
+    """给已存在的表加列（缺列才加）。表不存在 / 列已在 → 返回 False，不报错。
+
+    迁移脚本的通用小工具：加列必须**幂等**（重复连接、新库老库都要安全），
+    且不能假设表一定存在（残缺库/极端旧库要跳过而不是崩）。
+    """
+    if (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+        is None
+    ):
+        return False
+    columns = {str(r["name"]) for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column in columns:
+        return False
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+    return True
+
+
+def _migrate_v9(conn: sqlite3.Connection) -> None:
+    """v9：附件 / 要求链接 `attach`（任务 + 学业考核项共用同一字段）+ 应用设置表 —— T-B4。
+
+    口径（`复盘/段2设计决策-提醒与附件打开方式.md` §三）：
+    - 附件 = JSON 数组文本，元素 `{target, title}`（网址或本地路径 + 可选标题）；
+    - **任务与考核项用同一个字段名与同一套打开规则**（SR-F5.3 的"跳转要求"与任务的"附件"是一件事，
+      分成两套只会让规则各写一遍）；
+    - `app_settings`：通用 key/value 表 —— 第一个用户是「附件打开方式 / 直接打开白名单」，
+      这两项必须**存在服务端**（不能由前端请求参数决定，否则任何网页都能要求"直接打开"）。
+    老行一律 NULL（没有附件），不猜内容；缺表跳过不失败。
+    """
+    _add_column_if_missing(conn, "tasks", "attach", "attach TEXT")
+    _add_column_if_missing(conn, "course_assessments", "attach", "attach TEXT")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key         TEXT PRIMARY KEY,
+            value       TEXT
+        )
+        """
+    )

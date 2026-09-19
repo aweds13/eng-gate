@@ -176,6 +176,16 @@ const ACTIONS = {
   'task-done':      el => toggleDone(el.dataset.id, el.dataset.done === 'true'),
   'task-undo-done': el => undoDone(el.dataset.id),
   'task-flag':      el => toggleFlag(el.dataset.id),
+  // 附件 / 要求链接（T-B4）：任务与考核项共用打开规则
+  'attach-open':    el => openAttach(el.dataset.target || ''),
+  'attach-add':     el => addAttachment(el.dataset.id || detailTaskId),
+  'attach-del':     el => removeAttachment(el.dataset.id || detailTaskId, Number(el.dataset.index)),
+  'assessment-attach-add': el => addAssessmentAttachment(el.dataset.id),
+  'assessment-attach-del': el => removeAssessmentAttachment(el.dataset.id, Number(el.dataset.index)),
+  // 打开方式设置（T-B4）
+  'set-attach-mode': el => setAttachMode(el.dataset.mode),
+  'wl-add':         () => addWhitelist(),
+  'wl-del':         el => removeWhitelist(el.dataset.ext),
   'task-myday':     el => toggleMyDay(el.dataset.id, true),
   'task-delete':    el => removeTask(el.dataset.id),
   'task-restore':   el => restoreTask(el.dataset.id),
@@ -482,6 +492,7 @@ function renderDetail(el,t,facts,kids){
     ${asg}
     <div class="settings-sub">所属分组</div>
     <div class="row tight" id="detailGroups" data-task="${t.id}">${groupChips(groupsOf(t),(t.groups||[]))}</div>
+    ${detailEditing?'':taskAttachHTML(t)}
     <div class="settings-sub">步骤（子任务）${progress}</div>
     <div id="subtaskList">${subtaskList||'<div class="sub">还没有步骤。拆成小步，完成到最后一个时父任务会自动完成。</div>'}</div>
     <div class="new"><input id="subtaskTitle" placeholder="添加一个步骤…" data-enter="subtask-add">
@@ -505,6 +516,51 @@ function renderDetail(el,t,facts,kids){
     ${lines||'<div class="sub">还没有记录（完成、撤销、删除、生成下一次都会留下记录）。</div>'}`;
 }
 
+// ---- 附件 / 要求链接（SR-F1.4「附件」+ SR-F5.3「跳转要求」/ T-B4）----
+// 打开规则**在后端**（core/attach.py：默认保守→设置可切→白名单直接打开；可执行类只到文件夹）；
+// 这里只负责发请求与"打不开就复制路径 + 出声"（不许静默失败）。
+async function copyText(text){
+  try{ if(navigator.clipboard&&navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); return true } }catch(e){}
+  return false;
+}
+async function openAttach(target){
+  const r=await api('/api/attach/open',{method:'POST',body:JSON.stringify({target})});
+  if(r.action==='browser'){ window.open(r.target,'_blank','noopener'); toast('已在新标签打开'); return }
+  if(r.executed){ toast(r.executed_detail||'已打开'); return }
+  // 打不开：复制路径 + 明确提示（后端返回 action=copy 就是这条兜底路）
+  const copied=await copyText(r.target);
+  toast(copied?`打不开（${r.reason}）；路径已复制到剪贴板`:`打不开（${r.reason}）：${r.target}`);
+}
+// 附件行（任务与考核项共用同一套渲染：同一个字段、同一套规则）
+function attachRowsHTML(items,delAction,ownerId){
+  return (items||[]).map((a,i)=>`<div class="fact">
+    <span class="badge">${/^https?:\/\//i.test(a.target)?'网址':'本地'}</span>
+    <span style="flex:1;word-break:break-all">${esc(a.title||a.target)}</span>
+    <button class="ghost" data-action="attach-open" data-target="${esc(a.target)}">打开</button>
+    <button class="ghost" data-action="${delAction}" data-id="${esc(ownerId)}" data-index="${i}">删除</button>
+  </div>`).join('');
+}
+function taskAttachHTML(t){
+  return `<div class="settings-sub">附件 / 要求链接</div>
+    ${attachRowsHTML(t.attach,'attach-del',t.id)||'<div class="sub">还没有附件：可以挂作业要求网页，或本地文件/文件夹路径。</div>'}
+    <div class="new"><input id="attachTarget" placeholder="网址或本地路径" data-enter="attach-add">
+      <input id="attachTitle" placeholder="标题（可选）">
+      <button class="ghost" data-action="attach-add" data-id="${t.id}">添加</button></div>
+    <div class="sub">打开方式在「设置 · 附件打开方式」里选；可执行/脚本类只到文件夹，不会直接运行。</div>`;
+}
+async function addAttachment(taskId){
+  const targetEl=document.getElementById('attachTarget');
+  const titleEl=document.getElementById('attachTitle');
+  const target=(targetEl&&targetEl.value||'').trim();
+  if(!target){toast('网址或路径不能为空');return}
+  await api(`/api/tasks/${taskId}/attachments`,{method:'POST',
+    body:JSON.stringify({target,title:(titleEl&&titleEl.value||'').trim()||null})});
+  toast('已添加附件');view(current);
+}
+async function removeAttachment(taskId,index){
+  await api(`/api/tasks/${taskId}/attachments/${index}`,{method:'DELETE'});
+  toast('已删除附件');view(current);
+}
 // 优先级（SR-F1.2 / T-B2）：三档高/中/低，卡片上一个小色标（颜色住在 app.css 的 .prio 里）
 const PRIO_CLASS={'高':'high','中':'mid','低':'low'};
 function prioBadge(p){const v=p||'中';return `<span class="prio ${PRIO_CLASS[v]||'mid'}">${esc(v)}</span>`}
@@ -526,7 +582,7 @@ function taskCard(t,isOverdue){
   return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${badge}</div></div>
+    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div></div>
     <div class="row">
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
       ${isOverdue?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
@@ -1001,18 +1057,31 @@ async function saveFeedback(){await api('/api/feedback',{method:'POST',body:JSON
 
 async function renderAcademic(m){
   const scale=gpaScale;
-  const [gpaG,other,courses,grades,upcoming]=await Promise.all([
+  const [gpaG,other,courses,grades,upcoming,assessments]=await Promise.all([
     api(`/api/gpa?scale=${scale}`),api(`/api/gpa?scale=${scale==='4.0'?'5.0':'4.0'}`),
-    api('/api/courses'),api('/api/grades'),api('/api/assessments/upcoming?days=14')]);
+    api('/api/courses'),api('/api/grades'),api('/api/assessments/upcoming?days=14'),
+    api('/api/assessments')]);
   const soon=upcoming.filter(a=>a.days_until!==null&&a.days_until<=14);
+  const courseName=id=>{const c=courses.find(x=>x.id===id);return c?c.name:'未关联课程'};
   const upcomingHtml=soon.length?`<div class="section-title">临期与逾期（14 天内）</div>
     ${soon.map(a=>{
       const d=a.days_until;
       const when=d<0?`已逾期 ${-d} 天`:d===0?'今天到期':`还有 ${d} 天`;
       return `<div class="card ${d<0?'overdue':''}"><div style="flex:1">
         <div class="title">${esc(a.name)}</div>
-        <div class="meta">${esc(a.course_name||'未关联课程')} · ${a.due_date} · ${when}${a.weight?` · 占 ${a.weight}`:''}</div></div>
+        <div class="meta">${esc(a.course_name||'未关联课程')} · ${a.due_date} · ${when}${a.weight?` · 占 ${a.weight}`:''}</div>
+        ${(a.attach||[]).length?`<div class="meta">${attachRowsHTML(a.attach,'assessment-attach-del',a.id)}</div>`:''}
+        </div>
         <button class="ghost" data-action="assessment-del" data-id="${a.id}">删除</button></div>`;}).join('')}`:'';
+  // 全部考核项（含 14 天以外的）：要求备注 + 要求链接（SR-F5.3）在这里就近可写可点
+  const allAssessments=assessments.length?`<div class="section-title">考核项（${assessments.length}）</div>
+    ${assessments.map(a=>`<div class="card" style="display:block">
+      <div class="title">${esc(a.name)}${a.score!==null&&a.score!==undefined?` <span class="badge">${a.score} 分</span>`:''}</div>
+      <div class="meta">${esc(courseName(a.course_id))} · ${a.due_date||'没设截止日'}${a.weight?` · 占 ${a.weight}`:''}</div>
+      ${a.note?`<div class="sub">要求：${esc(a.note)}</div>`:''}
+      ${assessmentAttachHTML(a)}
+      <div class="row" style="margin-top:6px"><button class="ghost" data-action="assessment-del" data-id="${a.id}">删除考核项</button></div>
+    </div>`).join('')}`:'';
   const courseOpts=courses.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   const otherScale=scale==='4.0'?'5.0':'4.0';
   const hasGrades=grades.length>0;
@@ -1029,6 +1098,7 @@ async function renderAcademic(m){
       <span class="sub">配置默认值来自 config.toml 的 [academic] gpa_scale；这里只切当前查看口径。</span>
     </div></div>
   ${upcomingHtml}
+  ${allAssessments}
   <div class="section-title">学业概览（多维）</div>
   ${gpaRadar(gpaG,{gpa:other.gpa},courses.length,grades)}
   ${hasGrades?'':`<div class="sub">还没有成绩记录：录入后「加权平均成绩」与「GPA」会自动按学分加权计算。</div>`}
@@ -1079,6 +1149,25 @@ async function addAssessment(){
 async function delAssessment(id){
   if(!confirm('删除这个考核项？'))return;
   await api(`/api/assessments/${id}`,{method:'DELETE'});toast('已删除');view(current);
+}
+// ---- 考核项的「要求链接」（SR-F5.3 / T-B4）：与任务附件同一个字段、同一套打开规则 ----
+function assessmentAttachHTML(a){
+  return `<div class="meta" style="display:block;margin-top:6px">
+    ${attachRowsHTML(a.attach,'assessment-attach-del',a.id)||'<span class="sub">还没挂要求链接</span>'}
+    <div class="new" style="margin:6px 0">
+      <input id="asTarget-${a.id}" placeholder="要求网页或本地路径" data-enter="assessment-attach-add" data-id="${a.id}">
+      <button class="ghost" data-action="assessment-attach-add" data-id="${a.id}">挂上</button></div></div>`;
+}
+async function addAssessmentAttachment(assessmentId){
+  const el=document.getElementById(`asTarget-${assessmentId}`);
+  const target=(el&&el.value||'').trim();
+  if(!target){toast('网址或路径不能为空');return}
+  await api(`/api/assessments/${assessmentId}/attachments`,{method:'POST',body:JSON.stringify({target})});
+  toast('已挂上要求链接（点「打开」看要求）');view(current);
+}
+async function removeAssessmentAttachment(assessmentId,index){
+  await api(`/api/assessments/${assessmentId}/attachments/${index}`,{method:'DELETE'});
+  toast('已移除要求链接');view(current);
 }
 async function delGrade(id){
   if(!confirm('删除这条成绩？GPA 会重新计算。'))return;
@@ -1182,8 +1271,8 @@ async function retractOutput(entryId){
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups]=await Promise.all([
-    api('/api/config'),api('/api/sync/status'),api('/api/groups')]);
+  const [cfg,sync,groups,attachCfg]=await Promise.all([
+    api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach')]);
   groupCache=groups||[];
   const off=!navigator.onLine;
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
@@ -1195,6 +1284,7 @@ async function renderSetting(m){
     <div class="row tight">
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-appearance">主题 / 强调色</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-academic">GPA 制式</button>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-attach">附件打开方式</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-sync">数据与同步</button></div>
   </div>
   <div class="section-title" id="set-appearance">外观</div>
@@ -1218,6 +1308,21 @@ async function renderSetting(m){
   </div>
   <div class="section-title">分组管理</div>
   <div class="card panel-card" id="groupAdmin"></div>
+  <div class="section-title" id="set-attach">附件打开方式</div>
+  <div class="card panel-card">
+    <div class="settings-sub">本地文件怎么打开</div>
+    <div class="row">${(attachCfg.modes||[]).map(x=>
+      `<button class="${attachCfg.mode===x.value?'':'ghost'}" data-action="set-attach-mode" data-mode="${x.value}">${esc(x.label)}</button>`).join('')}</div>
+    <div class="sub">网址始终在浏览器新标签打开；目录总是打开该目录。默认最保守（只到文件夹）；
+      可执行/脚本类（.exe/.bat/.lnk 等）**任何设置下都只到文件夹**，不会直接运行。</div>
+    <div class="settings-sub">直接打开白名单（扩展名）</div>
+    <div class="row tight">${(attachCfg.whitelist||[]).map(e=>
+      `<button class="ghost" data-action="wl-del" data-ext="${esc(e)}">${esc(e)} ✕</button>`).join('')
+      ||'<span class="sub">空 —— 白名单里的扩展名会直接用默认程序打开</span>'}</div>
+    <div class="new"><input id="wlExt" placeholder="加扩展名，如 .pdf" data-enter="wl-add">
+      <button class="ghost" data-action="wl-add">加入白名单</button></div>
+    <div class="sub">打开方式与白名单存在本机数据库（服务端），不由页面参数决定 —— 免得任何网页都能要求"直接打开"。</div>
+  </div>
   <div class="section-title">数据与同步</div>
   <div class="card panel-card" id="set-sync">
     <div class="title">${off?'当前离线':'当前在线'}</div>
@@ -1240,6 +1345,28 @@ async function renderSetting(m){
   // 分组管理单独渲染（它自己还要请求一次列表，且失败不该影响整页）
   const box=document.getElementById('groupAdmin');
   if(box)renderGroupAdmin(box);
+}
+// GPA 制式切换：只改查看口径（写死配置是后端职责），立即重渲染
+// ---- 附件打开方式设置（T-B4）：模式与白名单存服务端 ----
+async function setAttachMode(mode){
+  await api('/api/settings/attach',{method:'PUT',body:JSON.stringify({mode})});
+  toast('打开方式已更新');view(current);
+}
+async function addWhitelist(){
+  const el=document.getElementById('wlExt');
+  const ext=(el&&el.value||'').trim();
+  if(!ext){toast('先填一个扩展名，如 .pdf');return}
+  const cur=await api('/api/settings/attach');
+  // 后端会拒绝可执行/脚本类（400 的 detail 由 api() 直接提示），这里不做本地白名单校验
+  await api('/api/settings/attach',{method:'PUT',
+    body:JSON.stringify({whitelist:[...(cur.whitelist||[]),ext]})});
+  toast(`已加入白名单：${ext}（这类文件点开就直接打开）`);view(current);
+}
+async function removeWhitelist(ext){
+  const cur=await api('/api/settings/attach');
+  await api('/api/settings/attach',{method:'PUT',
+    body:JSON.stringify({whitelist:(cur.whitelist||[]).filter(x=>x!==ext)})});
+  toast('已移出白名单');view(current);
 }
 // GPA 制式切换：只改查看口径（写死配置是后端职责），立即重渲染
 async function setGpa(scale){

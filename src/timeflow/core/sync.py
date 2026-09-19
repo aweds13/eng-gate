@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -68,7 +69,8 @@ def merge_task(
     """
     tid = str(remote_task["id"])
     local = conn.execute(
-        "SELECT updated_at, version, note, priority, flagged FROM tasks WHERE id = ?", (tid,)
+        "SELECT updated_at, version, note, priority, flagged, attach FROM tasks WHERE id = ?",
+        (tid,),
     ).fetchone()
     remote_updated = str(remote_task.get("updated_at") or "")
     remote_version = _to_int(remote_task.get("version"), 1)
@@ -82,8 +84,8 @@ def merge_task(
         # 本地不存在：插入（来源标记）
         conn.execute(
             "INSERT INTO tasks (id, title, due_date, group_name, repeat_days, parent_id, "
-            "is_myday, status, created_at, updated_at, version, note, priority, flagged) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "is_myday, status, created_at, updated_at, version, note, priority, flagged, attach) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 tid,
                 remote_task.get("title"),
@@ -99,6 +101,7 @@ def merge_task(
                 remote_task.get("note"),
                 str(remote_priority or _DEFAULT_PRIORITY),
                 int(bool(remote_task.get("flagged"))),
+                _remote_attach(remote_task),
             ),
         )
         conn.commit()
@@ -120,10 +123,12 @@ def merge_task(
             if "flagged" in remote_task
             else int(bool(local["flagged"]))
         )
+        # attach（T-B4）：同规矩 —— 远端没带就保留本地附件列表（别把用户挂的要求链接抹掉）
+        attach = _remote_attach(remote_task) if "attach" in remote_task else local["attach"]
         conn.execute(
             "UPDATE tasks SET title=?, due_date=?, group_name=?, repeat_days=?, parent_id=?, "
-            "is_myday=?, status=?, note=?, priority=?, flagged=?, updated_at=?, version=? "
-            "WHERE id=?",
+            "is_myday=?, status=?, note=?, priority=?, flagged=?, attach=?, updated_at=?, "
+            "version=? WHERE id=?",
             (
                 remote_task.get("title"),
                 remote_task.get("due_date"),
@@ -135,6 +140,7 @@ def merge_task(
                 note,
                 priority,
                 flagged,
+                attach,
                 remote_updated,
                 remote_version,
                 tid,
@@ -143,6 +149,34 @@ def merge_task(
         conn.commit()
         return "updated"
     return "skipped"
+
+
+def _remote_attach(remote_task: dict[str, object]) -> str:
+    """远端记录的 attach → 本库存的 JSON 文本。
+
+    容错：远端可能传列表（JSON 数组）或字符串；坏数据一律收敛成 `[]`
+    （**不把坏 JSON 写进库**，也不因此拒绝整条合并）。本模块不 import 领域层，
+    所以这里只做 JSON 层面的规整，不做附件语义校验。
+    """
+    raw = remote_task.get("attach")
+    if raw is None:
+        return "[]"
+    if isinstance(raw, str):
+        try:
+            loaded = json.loads(raw)
+        except (TypeError, ValueError):
+            return "[]"
+    else:
+        loaded = raw
+    if not isinstance(loaded, list):
+        return "[]"
+    clean = [
+        {"target": str(i["target"]).strip(), "title": (str(i["title"]).strip() or None)
+         if i.get("title") else None}
+        for i in loaded
+        if isinstance(i, dict) and str(i.get("target") or "").strip()
+    ]
+    return json.dumps(clean, ensure_ascii=False)
 
 
 def log_conflict(

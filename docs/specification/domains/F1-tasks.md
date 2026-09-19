@@ -8,8 +8,9 @@
 - **Task**：id、title（必填）、due_date（可空）、status、is_myday、priority、note、repeat_rule、parent_id、created_at、updated_at、version、source。
   - 落地现状（2026-09-18）：`note`（备注）已落地（schema **v6** / T-B1）、`parent_id` 已落地（子任务 / T-A2）、
     `priority`（高/中/低，默认中）已落地（schema **v7** / T-B2，排序 `截止日 → 优先级 → 创建时间`）、
-    `flagged`（手动标记位）已落地（schema **v8** / T-B3）；
-    **`remind_at`/`attach` 仍未做**（段2 的 T-B4/T-B5）。
+    `flagged`（手动标记位）已落地（schema **v8** / T-B3）、
+    `attach`（附件/要求链接，JSON 数组）已落地（schema **v9** / T-B4，**与学业考核项共用同一字段与打开规则**）；
+    **`remind_at` 仍未做**（段2 的 T-B5）。
 - **status 取值**：未开始 / 进行中 / 完成 / 逾期 / 取消 / 归档 / 已删。
 - **Group**：id、name（非空、唯一）、created_at。
 - **task_groups**：task_id + group_id 多对多。
@@ -88,5 +89,7 @@
   不发事实不动账本、同步合并不丢备注；`../../tests/test_task_priority_line.py` —— schema v7 加列幂等、
   三档与默认值、非法拒绝、**三处排序统一**、Repeat 继承、同步合并；
   `../../tests/test_task_views_line.py` —— schema v8 标记位、**三视图口径**（Important=高优先级 /
-  Planned=有截止日 / Flagged=手动标记）、基线（隐藏归档已删、完成仍显示）、未知视图拒绝。
+  Planned=有截止日 / Flagged=手动标记）、基线（隐藏归档已删、完成仍显示）、未知视图拒绝；
+  `../../tests/test_attach_line.py` —— schema v9 附件两列、打开规则矩阵（网址/目录/文件/不存在）、
+  白名单压过模式、可执行类永不直接打开、失败降级为复制路径、跨站来源 403、跨端合并。
 - 待补（B4）：创建→加入 My Day→完成→撤销的 API 全链路验收（已由 `test_task_line.py` 覆盖完成/撤销段）。

@@ -57,7 +57,7 @@ def routes() -> set[str]:
     src = (ROOT / "src" / "timeflow" / "api" / "app.py").read_text(encoding="utf-8")
     return {
         f"{m.group(1).upper()} {m.group(2)}"
-        for m in re.finditer(r'@app\.(get|post|patch|delete)\("([^"]+)"', src)
+        for m in re.finditer(r'@app\.(get|post|patch|delete|put)\("([^"]+)"', src)
     }
 
 
@@ -69,9 +69,12 @@ def tables() -> set[str]:
 def columns(table: str) -> set[str]:
     """表里有哪些列 —— 建表语句里的 + **后续迁移 ALTER TABLE 加的**。
 
-    为什么要把 ALTER 也算进来：加列的迁移（v6 的 `note`、后续的 priority/flagged/remind_at）
-    不会回写 v1 的历史建表语句，只看 `CREATE TABLE` 会把这些**真实存在的列**判成"没有列"，
-    于是 `column:` 断言永远不成立（第一版就只认建表语句）。
+    为什么要把 ALTER 也算进来：加列的迁移（v6 的 `note`、v7 的 `priority`、v8 的 `flagged`、
+    v9 的 `attach`）不会回写 v1 的历史建表语句，只看 `CREATE TABLE` 会把这些**真实存在的列**
+    判成"没有列"，于是 `column:` 断言永远不成立（第一版就只认建表语句）。
+    加列有两种写法，两种都要认：
+      ① 直接写 `ALTER TABLE <表> ADD COLUMN <列>`；
+      ② 用 `_add_column_if_missing(conn, "<表>", "<列>", ...)` 这个幂等小工具（列名在参数里）。
     """
     db = (ROOT / "src" / "timeflow" / "storage" / "db.py").read_text(encoding="utf-8")
     found: set[str] = set()
@@ -81,6 +84,11 @@ def columns(table: str) -> set[str]:
         col_re = r"^\s*(\w+)\s+TEXT|^\s*(\w+)\s+INTEGER"
         found |= {a or b for a, b in re.findall(col_re, body, re.M)}
     found |= set(re.findall(rf"ALTER TABLE {table} ADD COLUMN (\w+)", db))
+    for m in re.finditer(
+        r'_add_column_if_missing\(\s*conn,\s*"(\w+)",\s*"(\w+)"', db
+    ):
+        if m.group(1) == table:
+            found.add(m.group(2))
     return found
 
 

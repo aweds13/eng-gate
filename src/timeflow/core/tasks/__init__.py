@@ -31,6 +31,7 @@ from timeflow.core.tasks.manager import (
     VIEW_IMPORTANT,
     VIEW_PLANNED,
     Task,
+    add_attachment,
     complete_task,
     create_subtask,
     create_task,
@@ -42,6 +43,7 @@ from timeflow.core.tasks.manager import (
     process_repeats,
     purge_deleted_tasks,
     purge_task,
+    remove_attachment,
     restore_task,
     set_task_parent,
     subtask_progress,
@@ -100,4 +102,6 @@ __all__ = [
     "VALID_VIEWS",
     "tasks_in_view",
     "toggle_flag",
+    "add_attachment",
+    "remove_attachment",
 ]

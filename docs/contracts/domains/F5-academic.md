@@ -23,6 +23,10 @@
 - 边界：权重非法/负数拒绝；due 过去则标逾期。
 - 实现（第 10 步）：`POST /api/assessments`、`DELETE /api/assessments/{id}`（幂等）；
   前端可添加并删除考核项。
+- **要求备注 + 要求链接（T-B4，2026-09-18）**：`note`（要求备注，建考核项时可填）+
+  `attach`（要求网页/本地路径）——用 `POST/DELETE /api/assessments/{id}/attachments[/{index}]` 维护，
+  打开走同一套规则（`POST /api/attach/open`，见 `F1-tasks.md` OP-46）；
+  学业页「考核项」区把两者都摆在考核项旁边，临期卡片上也带已挂的链接。
 
 ## OP-25 课程提醒
 

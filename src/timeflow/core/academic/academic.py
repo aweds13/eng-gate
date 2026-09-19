@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import sqlite3
 
+from timeflow.core import attach as attach_mod
+
 GPA_4_0 = 4.0
 
 
@@ -92,6 +94,7 @@ def list_assessments(
 
 
 def _assessment_row(r: sqlite3.Row) -> dict[str, object]:
+    keys = set(r.keys())
     return {
         "id": r["id"],
         "course_id": r["course_id"],
@@ -100,7 +103,62 @@ def _assessment_row(r: sqlite3.Row) -> dict[str, object]:
         "weight": r["weight"],
         "score": r["score"],
         "note": r["note"],
+        # 附件 / 要求链接（SR-F5.3 / T-B4）：与任务**共用同一字段与打开规则**（core/attach.py）
+        "attach": attach_mod.load_attach(r["attach"]) if "attach" in keys else [],
     }
+
+
+def add_assessment_attachment(
+    conn: sqlite3.Connection,
+    assessment_id: str,
+    target: str,
+    title: str | None = None,
+) -> dict[str, object]:
+    """给考核项挂"要求链接/本地文件"（SR-F5.3 / OP-25 侧）：与任务附件同一套规则。
+
+    考核项不存在 → KeyError（由 API 转 404）。
+    """
+    row = conn.execute(
+        "SELECT attach FROM course_assessments WHERE id = ?", (assessment_id,)
+    ).fetchone()
+    if row is None:
+        raise KeyError(f"考核项不存在: {assessment_id}")
+    items = attach_mod.add_attachment_item(attach_mod.load_attach(row["attach"]), target, title)
+    _write_attach(conn, assessment_id, items)
+    return get_assessment(conn, assessment_id)
+
+
+def remove_assessment_attachment(
+    conn: sqlite3.Connection, assessment_id: str, index: int
+) -> dict[str, object]:
+    """按下标删一条（越界 ValueError / 考核项不存在 KeyError）。"""
+    row = conn.execute(
+        "SELECT attach FROM course_assessments WHERE id = ?", (assessment_id,)
+    ).fetchone()
+    if row is None:
+        raise KeyError(f"考核项不存在: {assessment_id}")
+    items = attach_mod.remove_attachment_item(attach_mod.load_attach(row["attach"]), index)
+    _write_attach(conn, assessment_id, items)
+    return get_assessment(conn, assessment_id)
+
+
+def _write_attach(
+    conn: sqlite3.Connection, assessment_id: str, items: list[dict[str, str | None]]
+) -> None:
+    conn.execute(
+        "UPDATE course_assessments SET attach = ? WHERE id = ?",
+        (attach_mod.dump_attach(items), assessment_id),
+    )
+    conn.commit()
+
+
+def get_assessment(conn: sqlite3.Connection, assessment_id: str) -> dict[str, object]:
+    row = conn.execute(
+        "SELECT * FROM course_assessments WHERE id = ?", (assessment_id,)
+    ).fetchone()
+    if row is None:
+        raise KeyError(f"考核项不存在: {assessment_id}")
+    return _assessment_row(row)
 
 
 def delete_assessment(conn: sqlite3.Connection, assessment_id: str) -> None:

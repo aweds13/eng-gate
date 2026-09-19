@@ -8,17 +8,19 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
     import sqlite3
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from timeflow.config import load_settings
 from timeflow.core import academic as ac
+from timeflow.core import attach as attach_mod
 from timeflow.core import facts as facts_mod
 from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
@@ -45,6 +47,8 @@ class TaskIn(BaseModel):
     priority: str = tm.DEFAULT_PRIORITY
     # 手动标记（SR-F1.3 / T-B3）：Flagged 视图就是它
     flagged: bool = False
+    # 附件（T-B4）：建任务时一起带上（元素 `{target, title}`）
+    attach: list[dict[str, Any]] = []
 
 
 class AssigneeOut(BaseModel):
@@ -79,6 +83,23 @@ class TaskOut(BaseModel):
     priority: str = tm.DEFAULT_PRIORITY
     # 手动标记（SR-F1.3 / T-B3）：卡片上一枚小旗，Flagged 视图按它筛
     flagged: bool = False
+    # 附件 / 要求链接（SR-F1.4 / T-B4）：`{target, title}` 列表；打开规则见 core/attach.py
+    attach: list[dict[str, Any]] = []
+
+
+# 会**在本机打开文件/程序**或改服务端设置的接口，只接受本机页面调用。
+# 为什么需要：服务开着 CORS 且监听回环，若不看来源，随便一个网页都能让本机去开东西
+# （localhost 服务被跨站调用的经典风险）。带 Origin 的请求必须是 127.0.0.1/localhost/::1。
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "0.0.0.0"}
+
+
+def require_local_origin(request: Request) -> None:
+    origin = request.headers.get("origin")
+    if not origin:
+        return  # 无 Origin：本机脚本 / curl / 同源 GET —— 放行
+    host = urlsplit(origin).hostname
+    if host not in _LOOPBACK_HOSTS:
+        raise HTTPException(status_code=403, detail="这个接口只允许本机页面调用")
 
 
 def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
@@ -106,6 +127,7 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
         note=t.note,
         priority=t.priority,
         flagged=t.flagged,
+        attach=[dict(i) for i in t.attach],
     )
 
 
@@ -163,6 +185,67 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except KeyError:
             raise HTTPException(status_code=404, detail="任务不存在") from None
 
+    # ---- 附件 / 要求链接（SR-F1.4 / T-B4）：增删在任务上，打开规则走 /api/attach/* ----
+    @app.post("/api/tasks/{task_id}/attachments", response_model=TaskOut)
+    def add_attachment(task_id: str, payload: dict[str, Any]) -> TaskOut:
+        """加一条附件/要求链接（网址或本地路径）；同一 target 幂等不加。"""
+        try:
+            task = tm.add_attachment(
+                conn, task_id, str(payload.get("target", "")), payload.get("title")
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return _out(task, conn)
+
+    @app.delete("/api/tasks/{task_id}/attachments/{index}", response_model=TaskOut)
+    def remove_attachment(task_id: str, index: int) -> TaskOut:
+        """按下标删一条；越界 400、任务不存在 404。"""
+        try:
+            task = tm.remove_attachment(conn, task_id, index)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return _out(task, conn)
+
+    @app.post("/api/attach/open")
+    def open_attach(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """打开一条附件（T-B4 / SR-F5.3 的"跳转要求"）。
+
+        三层规则在 `core/attach.py`（**打开方式与白名单取服务端设置**，不接受请求参数指定，
+        否则任何页面都能要求"直接打开"）；这个接口会在本机打开文件夹/程序，故加来源守卫。
+        打不开时返回 `action="copy"` + 路径 —— 界面必须复制路径并出声（不许静默失败）。
+        `dry_run=True` 只解析不执行（测试 / 先看会发生什么）。
+        """
+        require_local_origin(request)
+        settings_now = attach_mod.get_settings(conn)
+        try:
+            return attach_mod.open_target(
+                payload.get("target", ""),
+                settings_now["mode"],
+                settings_now["whitelist"],
+                dry_run=bool(payload.get("dry_run")),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/settings/attach")
+    def get_attach_settings() -> dict[str, Any]:
+        """附件打开方式（当前值 + 可选值 + 规则说明；规则只有一份，前端不复述）。"""
+        return {**attach_mod.get_settings(conn), **attach_mod.describe_rules()}
+
+    @app.put("/api/settings/attach")
+    def put_attach_settings(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """改打开方式 / 白名单（服务端持久化；可执行/脚本类不许进白名单）。"""
+        require_local_origin(request)
+        try:
+            attach_mod.set_settings(conn, payload.get("mode"), payload.get("whitelist"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {**attach_mod.get_settings(conn), **attach_mod.describe_rules()}
+
     @app.post("/api/tasks", response_model=TaskOut)
     def create_task(payload: TaskIn) -> TaskOut:
         try:
@@ -177,6 +260,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
                 note=payload.note,
                 priority=payload.priority,
                 flagged=payload.flagged,
+                attach=[dict(i) for i in payload.attach],
             )
             if payload.groups:
                 tm.set_task_groups(conn, t.id, payload.groups)
@@ -598,6 +682,31 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def delete_assessment(assessment_id: str) -> dict[str, str]:
         ac.delete_assessment(conn, assessment_id)
         return {"deleted": assessment_id}
+
+    # ---- 考核项的"要求链接"（SR-F5.3 / T-B4）：与任务附件**共用同一字段与打开规则** ----
+    @app.post("/api/assessments/{assessment_id}/attachments")
+    def add_assessment_attachment(
+        assessment_id: str, payload: dict[str, Any]
+    ) -> dict[str, object]:
+        try:
+            return ac.add_assessment_attachment(
+                conn, assessment_id, str(payload.get("target", "")), payload.get("title")
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="考核项不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.delete("/api/assessments/{assessment_id}/attachments/{index}")
+    def remove_assessment_attachment(
+        assessment_id: str, index: int
+    ) -> dict[str, object]:
+        try:
+            return ac.remove_assessment_attachment(conn, assessment_id, index)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="考核项不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.post("/api/grades")
     def add_grade(payload: dict[str, Any]) -> dict[str, str]:

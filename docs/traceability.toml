@@ -69,8 +69,8 @@ id = "SR-F1.4"
 title = "任务字段：子步骤/备注/提醒/附件"
 group = "F1"
 status = "partial"
-evidence = ["column:tasks.due_date", "column:tasks.repeat_days", "column:tasks.parent_id", "column:tasks.note", "test:test_task_note_line.py"]
-gaps = "备注 note 已落地（T-B1，schema v6 加列）；**提醒 remind_at（T-B5）与附件 attach（T-B4）仍未做**（见审计 GAP-F1-01）；子步骤=子任务（SR-F1.8/T-A2）已 done"
+evidence = ["column:tasks.due_date", "column:tasks.repeat_days", "column:tasks.parent_id", "column:tasks.note", "column:tasks.attach", "test:test_task_note_line.py", "test:test_attach_line.py"]
+gaps = "备注 note（T-B1）、附件/要求链接 attach（T-B4）已落地；**提醒 remind_at（T-B5）仍未做**（见审计 GAP-F1-01）；子步骤=子任务（SR-F1.8/T-A2）已 done"
 
 [entries."SR-F1.5"]
 id = "SR-F1.5"
@@ -344,9 +344,18 @@ gaps = ""
 id = "SR-F5.3"
 title = "考核要求备注 + 跳转本地文件/网站"
 group = "F5"
-status = "todo"
-evidence = []
-gaps = "两张表都没有链接/路径字段（GAP-F5-01）"
+status = "done"
+evidence = [
+  "column:course_assessments.note",
+  "column:course_assessments.attach",
+  "route:POST /api/assessments/{assessment_id}/attachments",
+  "route:DELETE /api/assessments/{assessment_id}/attachments/{index}",
+  "route:POST /api/attach/open",
+  "text:src/timeflow/core/attach.py::def resolve",
+  "ui:data-action=assessment-attach-add",
+  "test:test_attach_line.py",
+]
+gaps = ""
 
 [entries."SR-F5.4"]
 id = "SR-F5.4"
@@ -911,6 +920,43 @@ evidence = [
   "ui:view=flagged",
   "ui:data-action=task-flag",
   "test:test_task_views_line.py",
+]
+gaps = ""
+
+[entries."T-B4"]
+id = "T-B4"
+title = "F1/F5 主线·段2：附件 / 要求链接 attach + 打开方式三层（schema v9）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "column:tasks.attach",
+  "column:course_assessments.attach",
+  "text:src/timeflow/storage/db.py::def _migrate_v9",
+  "text:src/timeflow/core/attach.py::def resolve",
+  "text:src/timeflow/core/attach.py::def open_target",
+  "route:POST /api/tasks/{task_id}/attachments",
+  "route:DELETE /api/tasks/{task_id}/attachments/{index}",
+  "route:POST /api/attach/open",
+  "route:GET /api/settings/attach",
+  "route:PUT /api/settings/attach",
+  "ui:data-action=attach-open",
+  "test:test_attach_line.py",
+]
+gaps = ""
+
+[entries."OP-46"]
+id = "OP-46"
+title = "附件 / 要求链接：挂上 → 点开（三层规则 + 白名单 + 失败必提示）"
+group = "OP"
+status = "done"
+evidence = [
+  "route:POST /api/attach/open",
+  "route:PUT /api/settings/attach",
+  "text:src/timeflow/core/attach.py::DANGEROUS_EXTENSIONS",
+  "text:src/timeflow/core/attach.py::def check_whitelist_entry",
+  "text:src/timeflow/api/app.py::def require_local_origin",
+  "ui:data-action=attach-open",
+  "test:test_attach_line.py",
 ]
 gaps = ""
 

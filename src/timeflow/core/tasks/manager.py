@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import sqlite3
+
+from timeflow.core import attach as attach_mod
 
 STATUS_TODO = "未开始"
 STATUS_DOING = "进行中"
@@ -84,6 +86,8 @@ class Task:
     priority: str = DEFAULT_PRIORITY
     # 手动标记（SR-F1.3 / T-B3）：用户自己按的标记位，Flagged 视图就是它。
     flagged: bool = False
+    # 附件 / 要求链接（SR-F1.4 / T-B4）：元素 `{target, title}`；打开规则见 core/attach.py。
+    attach: list[dict[str, str | None]] = field(default_factory=list)
 
 
 def _row_to_task(row: sqlite3.Row) -> Task:
@@ -104,6 +108,7 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         note=row["note"] if "note" in keys else None,
         priority=row["priority"] if "priority" in keys else DEFAULT_PRIORITY,
         flagged=bool(row["flagged"]) if "flagged" in keys else False,
+        attach=attach_mod.load_attach(row["attach"]) if "attach" in keys else [],
     )
 
 
@@ -133,6 +138,7 @@ def create_task(
     note: str | None = None,
     priority: str = DEFAULT_PRIORITY,
     flagged: bool = False,
+    attach: list[dict[str, str | None]] | None = None,
 ) -> Task:
     """新建任务（AC-1）。校验标题非空；若 due 过去且未完成，初始状态标逾期。"""
     title = title.strip()
@@ -148,8 +154,8 @@ def create_task(
         """
         INSERT INTO tasks
         (id, title, due_date, group_name, repeat_days, parent_id, is_myday, status,
-         created_at, updated_at, version, note, priority, flagged)
-        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?)
+         created_at, updated_at, version, note, priority, flagged, attach)
+        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)
         """,
         (
             task_id,
@@ -165,6 +171,7 @@ def create_task(
             note,
             priority,
             int(bool(flagged)),
+            attach_mod.dump_attach(attach_mod.load_attach(attach or [])),
         ),
     )
     conn.commit()
@@ -230,6 +237,7 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         "note",
         "priority",
         "flagged",
+        "attach",
     }
     # 注意：用"键在 payload 里"判断，而不是"值不是 None" ——
     # 否则 `parent_id=None` / `due_date=None` 这类**清空操作**会被静默忽略（实测踩到）。
@@ -244,6 +252,9 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
     if "flagged" in updates:
         # 布尔位统一收敛成 0/1（接口传的是 JSON true/false，这里再收一道，免得写进 1/"1"/None）
         updates["flagged"] = int(bool(updates["flagged"]))
+    if "attach" in updates:
+        # 附件列表：规整 + 落成 JSON 文本（坏数据在这里被挡下，不让它进库）
+        updates["attach"] = attach_mod.dump_attach(attach_mod.load_attach(updates["attach"]))
     before = get_task(conn, task_id)
     sets = ", ".join(f"{k} = ?" for k in updates)
     conn.execute(
@@ -561,6 +572,29 @@ def toggle_flag(conn: sqlite3.Connection, task_id: str) -> Task:
     """
     current = get_task(conn, task_id)
     return update_task(conn, task_id, flagged=not current.flagged)
+
+
+# ---------------------------------------------------------------- 附件 / 要求链接（SR-F1.4 / T-B4）
+def add_attachment(
+    conn: sqlite3.Connection,
+    task_id: str,
+    target: str,
+    title: str | None = None,
+) -> Task:
+    """给任务加一条附件/要求链接（T-B4）。同一个 target 加两次是误操作 → 幂等不加。
+
+    只存引用（网址或本地路径），**不复制文件内容**（对齐 conventions 的存储边界）。
+    """
+    current = get_task(conn, task_id)
+    items = attach_mod.add_attachment_item(current.attach, target, title)
+    return update_task(conn, task_id, attach=items)
+
+
+def remove_attachment(conn: sqlite3.Connection, task_id: str, index: int) -> Task:
+    """按下标删一条附件（T-B4）。越界 → ValueError（不静默无操作）。"""
+    current = get_task(conn, task_id)
+    items = attach_mod.remove_attachment_item(current.attach, index)
+    return update_task(conn, task_id, attach=items)
 
 
 def process_repeats(conn: sqlite3.Connection) -> int:

@@ -99,7 +99,9 @@ const DB = {
     id: 't1', title: '探针任务', due_date: '2030-01-01', group_name: null, repeat_days: null,
     parent_id: null, is_myday: true, status: '未开始', created_at: '2026-09-18T10:00:00',
     updated_at: '2026-09-18T10:00:00', version: 1, groups: [], assignments: [],
-    subtask_done: 0, subtask_total: 0, note: '备注也要渲染一遍', priority: '高',
+    subtask_done: 0, subtask_total: 0, note: '备注也要渲染一遍', priority: '高', flagged: true,
+    attach: [{ target: 'https://x.example/要求', title: '要求页' },
+      { target: 'D:\\课件\\第3章.pdf', title: null }],
   },
   '/api/tasks/t1/facts': [],
   '/api/tasks/t1/subtasks': [],
@@ -108,6 +110,14 @@ const DB = {
   '/api/focus/today': { focus_minutes: 0 }, '/api/focus/active': null,
   '/api/habits': [], '/api/selfcheck': { week_focus_minutes: 0, week_habit_done: 0, debt_count: 0 },
   '/api/feedback': null, '/api/courses': [], '/api/grades': [], '/api/assessments/upcoming': [],
+  // 全部考核项（T-B4 起学业页用它列表 + 挂要求链接）与附件打开方式设置
+  '/api/assessments': [],
+  '/api/settings/attach': {
+    mode: 'folder', whitelist: [],
+    modes: [{ value: 'folder', label: '打开所在文件夹' },
+      { value: 'direct', label: '直接用默认程序打开' }, { value: 'auto', label: '按格式自动' }],
+    default_mode: 'folder', doc_extensions: ['.pdf'], blocked_extensions: ['.exe'],
+  },
   '/api/gpa': { gpa: 0, credits: 0, scale: '4.0', weighted_average: 0, weighted_credits: 0 },
   '/api/memos': [], '/api/ledger/outputs': [], '/api/ledger/invests': [],
   '/api/insights/daily': [], '/api/insights/groups': [], '/api/insights/heatmap': [],
@@ -171,7 +181,7 @@ for (const editing of [false, true]) {
     // 只读态：显示任务字段（含备注、优先级色标）；编辑态：两个可写控件都在
     const needs = editing
       ? ['id="editNote"', 'id="editPriority"']
-      : ['备注也要渲染一遍', 'prio'];
+      : ['备注也要渲染一遍', 'prio', 'attach-open', '要求页'];
     const missing = needs.filter((n) => !rail.includes(n));
     const rendered = rail.includes('任务详情') && missing.length === 0;
     if (!rendered) detailBad++;

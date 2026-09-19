@@ -6,7 +6,8 @@
 ## 1. 实体与字段
 
 - **courses**：id、name、credits、teacher、exam_mode、created_at。
-- **course_assessments**：id、course_id、name、due_date、weight、note。
+- **course_assessments**：id、course_id、name、due_date、weight、note、**attach**（要求链接/本地路径，
+  JSON 数组，schema **v9** / T-B4；与任务附件共用同一字段与打开规则）。
 - **grades**：id、course_id（可空）、score、credits、scale、created_at。
 - 学校任务：与普通任务同构，额外带课程标签 + 硬约束元数据。
 
@@ -20,6 +21,9 @@
 
 - **R1 建档**：课程可录学分 / 考核方式 / 任课；学期初手动建档一次。
 - **R2 考核项**：按课追踪与提醒，防漏考漏交；可跳转外部要求（本地路径 / 网站）。
+  **落地（T-B4，schema v9）**：要求备注 = `course_assessments.note`（已有），要求跳转 = `course_assessments.attach`
+  （与任务附件同一套三层打开规则，见 `../../contracts/domains/F1-tasks.md` OP-46）；
+  学业页新增「考核项」列表（**全部**考核项，不再只在 14 天临期窗口里可见），可就近挂/点开要求链接。
 - **R3 GPA**：加权计算；4.0 / 5.0 可切换；分段绩点封顶不越界。
   **切换语义（2026-09-18 用户澄清）**：制式要能**在页面上切换**并立即改变显示口径
   （`GET /api/gpa?scale=`；页面记住所选制式），而不是只提示"去改 config.toml"。
@@ -60,4 +64,6 @@
 - 第 11 步（制式切换 + 加权平均）：`../../tests/test_academic_line.py` ——
   加权公式手算对照、与 GPA 口径不同、学分为 0 不参与、删除后重算、`/api/gpa` 返回
   `weighted_average`/`weighted_credits`、非法制式 400。
+- F1/F5 段2·T-B4（要求链接）：`../../tests/test_attach_line.py` —— 考核项挂/删要求链接、
+  列表与临期提醒都带 `attach`、越界 400、考核项不存在 404（打开规则本身见 F1 侧用例）。
 - 待补（B4）：课程→考核→成绩→GPA 全链路；合流任务；考核项提醒。

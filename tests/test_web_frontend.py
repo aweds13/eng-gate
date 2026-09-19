@@ -295,6 +295,46 @@ def test_task_note_is_editable_in_detail_only() -> None:
     assert "note" not in card, "备注不该出现在列表卡片里（渐进聚焦）"
 
 
+def test_attach_open_flow_is_wired_and_never_silent() -> None:
+    """T-B4（SR-F1.4 附件 / SR-F5.3 跳转要求）：能挂、能点开、**打不开必出声**。
+
+    规则在后端（`core/attach.py`），前端只负责把三种结果分开处理：
+    网址→新标签、本机动作→已执行、其余→**复制路径 + 提示**（不许静默失败）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    # ① 任务详情：附件区（列表 + 添加 + 打开 + 删除）
+    detail = html.split("function renderDetail(el,t,facts,kids){", 1)[1].split("\n}", 1)[0]
+    assert "taskAttachHTML(t)" in detail, "详情面板没有附件区"
+    for needle in ("function attachRowsHTML(", "function taskAttachHTML(",
+                   "function addAttachment(", "function removeAttachment("):
+        assert needle in html, f"缺 {needle}"
+    # 动作是动态生成的（行模板里带 ${delAction}），所以这里断言 ACTIONS 注册表
+    for action in ("attach-open", "attach-add", "attach-del"):
+        assert f"'{action}':" in html, f"ACTIONS 里缺 {action}"
+    assert "attachRowsHTML(t.attach,'attach-del',t.id)" in html, "附件行没有绑定删除动作"
+    # ② 卡片上有附件数徽标（列表不展开内容，渐进聚焦）
+    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    assert "附件 ${t.attach.length}" in card, "任务卡片没有附件计数"
+    # ③ 打开动作：三种分支齐全 + 复制兜底（不许静默）
+    opener = html.split("async function openAttach(", 1)[1].split("\n}", 1)[0]
+    for needle in ("action==='browser'", "r.executed", "copyText(", "toast("):
+        assert needle in opener, f"openAttach 缺少 {needle}"
+    assert "/api/attach/open" in html
+    # ④ 设置页：三种打开方式 + 白名单维护 + 常用区快捷入口
+    setting = html.split("async function renderSetting(", 1)[1]
+    assert 'id="set-attach"' in setting and "set-attach-mode" in setting
+    assert "wl-add" in setting and "wl-del" in setting
+    assert 'data-target="set-attach"' in html, "常用区没有快捷入口"
+    assert "/api/settings/attach" in html
+    # ⑤ 学业：考核项列表也能挂要求链接（同一个字段、同一套规则）
+    academic = html.split("async function renderAcademic(", 1)[1]
+    academic = academic.split("async function addAssessment(", 1)[0]
+    assert "assessmentAttachHTML(" in academic and "考核项" in academic
+    assert 'data-action="assessment-attach-add"' in html
+    assert "function addAssessmentAttachment(" in html
+    assert "function removeAssessmentAttachment(" in html
+
+
 def test_smart_views_are_reachable_at_every_breakpoint() -> None:
     """T-B3（SR-F1.3）：三个智能视图要真的进得去 —— 左栏、全部任务页、设置页都有入口。
 
