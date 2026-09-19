@@ -64,6 +64,25 @@ def _json_call(base: str, path: str, method: str = "GET", payload: dict | None =
         return e.code, None
 
 
+def live_remind_checks(base: str) -> dict[str, bool]:
+    """T-B5 真机自检：到点提醒的**只读**面（开关状态与守卫）。
+
+    **不在这里开启通知**：那会真的注册系统计划任务（改系统状态），属用户显式动作；
+    而且本沙箱屏蔽了任务计划程序/WMI，注册必然失败 —— 用假 runner 的单元测试覆盖逻辑，
+    真机验证交给用户点「试一下」与开关。
+    """
+    st_code, st = _json_call(base, "/api/settings/reminder")
+    cross = _json_call(
+        base, "/api/settings/reminder", "PUT", {"enabled": True},
+        headers={"Origin": "https://evil.example"},
+    )[0]
+    return {
+        "提醒通道状态可读": st_code == 200 and isinstance(st, dict)
+        and st.get("enabled") is False and st.get("task_name") == "timeflow-reminders",
+        "提醒开关拒绝跨站": cross == 403,
+    }
+
+
 def live_attach_checks(base: str, tmp: Path) -> dict[str, bool]:
     """T-B4 真机自检：附件打开规则在**真服务 + 真文件系统**上的行为。
 
@@ -177,6 +196,7 @@ def main() -> int:
     if unknown:
         print(f"[提示] 以下 data-view 既不是视图也没注册动作：{unknown}")
     checks.update(live_attach_checks(base, tmp))
+    checks.update(live_remind_checks(base))
     for name, passed in checks.items():
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")
     server.should_exit = True

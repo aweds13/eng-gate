@@ -25,12 +25,15 @@
   模式（`folder` 默认 / `direct` / `auto`）与直接打开白名单存 `app_settings`（**服务端**，不由请求参数决定），
   可执行/脚本类永不直接打开；失败返回 `action="copy"` 让界面复制路径 + 提示。
   执行本机动作的接口（`POST /api/attach/open`、`PUT /api/settings/attach`）带**来源守卫**（只接受本机页面）。
-- **提醒**（SR-F1.4 / T-B5 前半）：`tasks.remind_at`（本地时间，schema **v10**）+
+- **提醒**（SR-F1.4 / T-B5）：`tasks.remind_at`（本地时间，schema **v10**）+
   `reminder_state()`（`over/today/soon/later`，完成/取消/归档/已删=不再催）+ `due_reminders(now)`（只读数据源）；
   `GET /api/reminders/due`、`GET /api/reminders`；前端详情可设、卡片/详情标注、今日页「该提醒了」区。
-  **到点发系统通知未做**（新增运行时依赖，选型见复盘 §八，等用户拍板）。
+  **到点系统通知**（用户选 B′）在 `core/remind.py`：注册 `schtasks` 计划任务 `timeflow-reminders`
+  （每分钟跑 `pythonw src/timeflow/app/remind.py`，`pythonw` 不闪控制台窗口、脚本与库都用绝对路径）；
+  `show_notification()` 走 PowerShell WinRT 系统通知（失败退 `msg`，再不行如实报错）；
+  **默认关**、开关可逆（关掉即删任务）、同一条提醒只弹一次、失败不标记下次重试、>3 条合并成一条汇总。
 - **未实现**（以 `../../复盘/全量审计报告-五层一致性与缺口登记.md` §四 F1 为准）：拖拽排序（段2 决策明确不做）、
-  任务存档（尝试记录+关联笔记）、三类任务区分；提醒的**通知通道**（选型待定）。
+  任务存档（尝试记录+关联笔记）、三类任务区分。
 - **Repeat 触发**（第 5 步）：完成时调 `process_repeats`；以 `task.repeat.generated` 事实去重 ⇒ 同一任务只生成一次。
 
 ## SR-F2 B 系统记账 → `core/ledger/`

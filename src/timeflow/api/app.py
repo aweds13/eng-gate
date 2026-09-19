@@ -28,6 +28,7 @@ from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
 from timeflow.core import insights
 from timeflow.core import memo as memo
+from timeflow.core import remind as remind_mod
 from timeflow.core import review as rv
 from timeflow.core import sync as sync_mod
 from timeflow.core import tasks as tm
@@ -144,9 +145,11 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
 
 def create_app(db_path: str | None = None) -> FastAPI:
     settings = load_settings()
+    # 解析后的库路径：计划任务的 `--db` 要用**绝对路径**（任务的工作目录不是项目根）
+    db_path = db_path or settings.database.path
     # 并发约定（见 storage/db.py）：HTTP 服务多线程共享 conn 变量，但底层**每线程一个连接**，
     # 否则一个请求的 commit() 会打断另一个请求的事务（表现为「快速点击 → 操作未完成」）。
-    conn = db.thread_local(db_path or settings.database.path)
+    conn = db.thread_local(db_path)
 
     # 第 2 步：各线只发事实，跨线联动由订阅器接线（幂等，重复建 app 不叠加）
     from timeflow.core.focus import subscribers as focus_subscribers
@@ -246,6 +249,38 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def get_attach_settings() -> dict[str, Any]:
         """附件打开方式（当前值 + 可选值 + 规则说明；规则只有一份，前端不复述）。"""
         return {**attach_mod.get_settings(conn), **attach_mod.describe_rules()}
+
+    # ---- 到点提醒的通知通道（T-B5 后半）：计划任务 + 系统通知（用户选 B′）----
+    @app.get("/api/settings/reminder")
+    def get_reminder_settings() -> dict[str, Any]:
+        """到点通知的状态（是否启用、计划任务在不在、上次通知时间/结果/错误）。
+
+        都是**事实**：没装就是没装，弹失败会把原因带出来（不谎报"已提醒"）。
+        """
+        return remind_mod.status(conn)
+
+    @app.put("/api/settings/reminder")
+    def put_reminder_settings(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """打开/关闭到点通知。打开会**注册 Windows 计划任务**（关掉会删掉它，可逆）。
+
+        改系统状态，所以要求来源本机；注册失败时设置不落库（避免"以为开了其实没开"）。
+        """
+        require_local_origin(request)
+        enabled = bool(payload.get("enabled"))
+        try:
+            return remind_mod.set_enabled(conn, enabled, db_path=db_path)
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/reminders/test")
+    def test_reminder(request: Request) -> dict[str, Any]:
+        """弹一条测试通知（让你当场确认系统通知真的能响）。会弹窗，故要求来源本机。"""
+        require_local_origin(request)
+        ok, detail = remind_mod.show_notification(
+            "timeflow 提醒测试", "看到这条就说明到点提醒能用。"
+        )
+        remind_mod.record_result(conn, ok, detail if ok else detail)
+        return {"ok": ok, "detail": detail, **remind_mod.status(conn)}
 
     # ---- 提醒（SR-F1.4 / T-B5）：字段与"该提醒了"的只读数据源 ----
     @app.get("/api/reminders/due")

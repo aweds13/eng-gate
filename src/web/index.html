@@ -186,6 +186,9 @@ const ACTIONS = {
   'set-attach-mode': el => setAttachMode(el.dataset.mode),
   'wl-add':         () => addWhitelist(),
   'wl-del':         el => removeWhitelist(el.dataset.ext),
+  // 到点通知开关（T-B5 后半）
+  'set-remind-notify': el => setRemindNotify(el.dataset.on === 'true'),
+  'remind-test':    () => testRemindNotify(),
   'task-myday':     el => toggleMyDay(el.dataset.id, true),
   'task-delete':    el => removeTask(el.dataset.id),
   'task-restore':   el => restoreTask(el.dataset.id),
@@ -1290,8 +1293,9 @@ async function retractOutput(entryId){
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups,attachCfg]=await Promise.all([
-    api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach')]);
+  const [cfg,sync,groups,attachCfg,remindCfg]=await Promise.all([
+    api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach'),
+    api('/api/settings/reminder')]);
   groupCache=groups||[];
   const off=!navigator.onLine;
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
@@ -1345,11 +1349,22 @@ async function renderSetting(m){
   </div>
   <div class="section-title" id="set-remind">提醒</div>
   <div class="card panel-card">
-    <div class="settings-sub">提醒时间</div>
-    <div class="sub">在任务详情里设「提醒」时间；到点后：① 今日页出现「该提醒了」区、卡片上标出（现在就能用）；
-      ② **系统通知通道尚未接入** —— 属于本项目第一个新增运行时依赖，选型方案见复盘
-      「段2设计决策-提醒与附件打开方式.md」§八，等你拍板后再接（这里不放假开关）。</div>
-    <div class="sub">移动端只做界面标注，不发系统通知（浏览器/PWA 通知需要 HTTPS + 授权，一版不做）。</div>
+    <div class="settings-sub">到点提醒你（系统通知）</div>
+    <div class="row">
+      <button class="${remindCfg.enabled?'':'ghost'}" data-action="set-remind-notify" data-on="true">开启</button>
+      <button class="${remindCfg.enabled?'ghost':''}" data-action="set-remind-notify" data-on="false">关闭</button>
+      <button class="ghost" data-action="remind-test">试一下</button>
+      <span class="badge">${remindCfg.enabled?'已开启':'默认关闭'}</span>
+      ${remindCfg.installed?'<span class="badge">计划任务已注册</span>':'<span class="badge">未注册计划任务</span>'}
+    </div>
+    <div class="meta">在任务详情里设「提醒」时间；到点后：① 今日页出现「该提醒了」、卡片上标出（不用开通知也能用）；
+      ② 开启后会注册一个 Windows 计划任务（每 ${remindCfg.interval_minutes} 分钟检查一次），**关掉应用也会响**。</div>
+    <div class="meta">上次通知：${remindCfg.last_notify_at?esc(String(remindCfg.last_notify_at).replace('T',' ')):'（还没有）'}
+      ${remindCfg.last_result?` · ${esc(remindCfg.last_result)}`:''}</div>
+    ${remindCfg.last_error?`<div class="meta" style="color:var(--danger)">上次出错：${esc(remindCfg.last_error)}（弹不出来不会静默，下次自动重试）</div>`:''}
+    <div class="sub">诚实边界：计划任务以**当前用户、交互式**运行 —— 应用关掉也响，但**注销/关机时不响**
+      （要做到"注销也响"得改系统层权限，不擅自做）。开启/关闭都是可逆的：关闭会把计划任务删掉、不留痕。
+      移动端只做界面标注，不发系统通知。</div>
   </div>
   <div class="section-title">数据与同步</div>
   <div class="card panel-card" id="set-sync">
@@ -1395,6 +1410,17 @@ async function removeWhitelist(ext){
   await api('/api/settings/attach',{method:'PUT',
     body:JSON.stringify({whitelist:(cur.whitelist||[]).filter(x=>x!==ext)})});
   toast('已移出白名单');view(current);
+}
+// 到点通知开关（T-B5 后半，方案 B′）：开启 = 注册 Windows 计划任务（可逆），关闭 = 删除它
+async function setRemindNotify(on){
+  await api('/api/settings/reminder',{method:'PUT',body:JSON.stringify({enabled:on})});
+  toast(on?'已开启到点通知（应用关掉也会响）':'已关闭到点通知（计划任务已删除）');
+  view(current);
+}
+async function testRemindNotify(){
+  const r=await api('/api/reminders/test',{method:'POST'});
+  toast(r.ok?'已弹出测试通知 —— 看到就说明能用':`弹不出来：${r.detail}`);
+  view(current);
 }
 // GPA 制式切换：只改查看口径（写死配置是后端职责），立即重渲染
 async function setGpa(scale){
