@@ -48,9 +48,13 @@ class Task:
     created_at: str
     updated_at: str
     version: int
+    # 备注（SR-F1.4 / T-B1）：人写的说明，列表不显示、详情面板可写（渐进聚焦）。
+    # 默认值放在最后，老代码按位置构造 Task 也不会被破坏。
+    note: str | None = None
 
 
 def _row_to_task(row: sqlite3.Row) -> Task:
+    keys = set(row.keys())
     return Task(
         id=row["id"],
         title=row["title"],
@@ -63,6 +67,8 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         version=row["version"],
+        # 缺列兜底：迁移（v6）已保证列存在，但残缺库/手工建的测试库可能没有 note
+        note=row["note"] if "note" in keys else None,
     )
 
 
@@ -82,6 +88,7 @@ def create_task(
     repeat_days: int | None = None,
     parent_id: str | None = None,
     is_myday: bool = False,
+    note: str | None = None,
 ) -> Task:
     """新建任务（AC-1）。校验标题非空；若 due 过去且未完成，初始状态标逾期。"""
     title = title.strip()
@@ -96,8 +103,8 @@ def create_task(
         """
         INSERT INTO tasks
         (id, title, due_date, group_name, repeat_days, parent_id, is_myday, status,
-         created_at, updated_at, version)
-        VALUES (?,?,?,?,?,?,?,?,?,?,1)
+         created_at, updated_at, version, note)
+        VALUES (?,?,?,?,?,?,?,?,?,?,1,?)
         """,
         (
             task_id,
@@ -110,6 +117,7 @@ def create_task(
             status,
             now,
             now,
+            note,
         ),
     )
     conn.commit()
@@ -148,6 +156,7 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         "parent_id",
         "is_myday",
         "status",
+        "note",
     }
     # 注意：用"键在 payload 里"判断，而不是"值不是 None" ——
     # 否则 `parent_id=None` / `due_date=None` 这类**清空操作**会被静默忽略（实测踩到）。

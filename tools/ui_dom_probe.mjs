@@ -94,6 +94,15 @@ const DB = {
   '/api/config': { accent_color: '#3b82f6', theme: 'light', gpa_scale: '4.0' },
   '/api/mydays': [], '/api/overdue': [], '/api/tasks': [], '/api/tasks/deleted': [],
   '/api/review/due': [], '/api/review/items': [], '/api/groups': [],
+  // 任务详情（右栏 #detailRail）：T-B1 起详情面板带「备注」，编辑态渲染必须也跑一遍
+  '/api/tasks/t1': {
+    id: 't1', title: '探针任务', due_date: '2030-01-01', group_name: null, repeat_days: null,
+    parent_id: null, is_myday: true, status: '未开始', created_at: '2026-09-18T10:00:00',
+    updated_at: '2026-09-18T10:00:00', version: 1, groups: [], assignments: [],
+    subtask_done: 0, subtask_total: 0, note: '备注也要渲染一遍',
+  },
+  '/api/tasks/t1/facts': [],
+  '/api/tasks/t1/subtasks': [],
   '/api/summary': { debt_count: 0, invest_hours: 0, manual_hours: 0, review_count: 0, output_count: 0 },
   '/api/summary/weekly': { start: '2026-09-14', end: '2026-09-20', days: [], focus_hours: 0, steady_note: '—' },
   '/api/focus/today': { focus_minutes: 0 }, '/api/focus/active': null,
@@ -116,14 +125,17 @@ const realWarn = console.warn;
 console.warn = (...a) => problems.push('warn: ' + a.join(' '));
 
 try {
-  new Function(code + '\n;globalThis.__view=view;')();
+  new Function(code + '\n;globalThis.__view=view;globalThis.__showDetail=showDetail;'
+    + 'globalThis.__render=render;globalThis.__setEdit=v=>{detailEditing=v};')();
 } catch (e) {
   console.log(`❌ 脚本求值就抛错：${e.message}`);
   process.exit(1);
 }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const views = ['today', 'tasks', 'focus', 'stats', 'habit', 'academic', 'review', 'memo', 'setting'];
 let bad = 0;
+let detailBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -144,6 +156,30 @@ for (const v of views) {
 }
 
 const unused = [];
+// 右栏详情面板（R3 渐进聚焦）：任务字段 + 事实流水 + 编辑态（T-B1 的备注输入就在这里）。
+// 视图循环覆盖不到它 —— 探针默认没有选中任务（`detailTaskId` 为空时右栏是空的），
+// 所以这里单独跑两遍：只读态 + 编辑态，任何 TypeError／空渲染都算失败。
+const detailChecks = [];
+for (const editing of [false, true]) {
+  byId.get('detailRail')._html = '';
+  globalThis.__setEdit(editing);
+  try {
+    await globalThis.__showDetail('t1');
+    await sleep(30);
+    const rail = byId.get('detailRail')._html;
+    const need = editing ? 'id="editNote"' : '备注也要渲染一遍';
+    const rendered = rail.includes('任务详情') && rail.includes(need);
+    if (!rendered) detailBad++;
+    detailChecks.push({ editing, rail: rail.length, rendered });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} 详情面板${editing ? '·编辑态' : '·只读'} rail ${String(rail.length).padStart(5)}B`);
+  } catch (e) {
+    detailBad++;
+    detailChecks.push({ editing, error: e.message });
+    console.log(`  ❌ 详情面板${editing ? '·编辑态' : '·只读'} 渲染抛错: ${e.message}`);
+  }
+}
+globalThis.__setEdit(false);
+
 try {
   const body = code.split('const ACTIONS')[1];
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
@@ -152,7 +188,8 @@ try {
 
 console.warn = realWarn;
 if (process.argv.includes('--json')) {
-  console.log(JSON.stringify({ views: results, problems, unregistered: unused }, null, 2));
+  console.log(JSON.stringify(
+    { views: results, detail: detailChecks, problems, unregistered: unused }, null, 2));
 }
 if (unused.length) {
   console.log(`  ❌ 模板里用到但未注册的动作：${unused.join(', ')}`);
@@ -160,7 +197,8 @@ if (unused.length) {
 if (problems.length) {
   console.log(`  ⚠️  运行时告警/异常：${problems.slice(0, 5).join(' | ')}`);
 }
-const failed = bad > 0 || unused.length > 0 || problems.length > 0;
+const failed = bad > 0 || detailBad > 0 || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
+  + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

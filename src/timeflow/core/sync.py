@@ -62,7 +62,9 @@ def merge_task(
     若存在但远端较新 → 覆盖；否则保留本地。返回 merged（'inserted'/'updated'/'skipped'）。
     """
     tid = str(remote_task["id"])
-    local = conn.execute("SELECT updated_at, version FROM tasks WHERE id = ?", (tid,)).fetchone()
+    local = conn.execute(
+        "SELECT updated_at, version, note FROM tasks WHERE id = ?", (tid,)
+    ).fetchone()
     remote_updated = str(remote_task.get("updated_at") or "")
     remote_version = _to_int(remote_task.get("version"), 1)
 
@@ -70,8 +72,8 @@ def merge_task(
         # 本地不存在：插入（来源标记）
         conn.execute(
             "INSERT INTO tasks (id, title, due_date, group_name, repeat_days, parent_id, "
-            "is_myday, status, created_at, updated_at, version) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "is_myday, status, created_at, updated_at, version, note) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 tid,
                 remote_task.get("title"),
@@ -84,6 +86,7 @@ def merge_task(
                 remote_task.get("created_at"),
                 remote_updated,
                 remote_version,
+                remote_task.get("note"),
             ),
         )
         conn.commit()
@@ -92,10 +95,14 @@ def merge_task(
     local_updated = str(local["updated_at"])
     local_version = int(local["version"])
     if newer_is_win(local_updated, remote_updated, local_version, remote_version):
-        # 远端较新，覆盖
+        # 远端较新，覆盖。
+        # 注意 note（T-B1）：**只有远端记录里真的带了 note 才覆盖** ——
+        # 老版本客户端/旧快照不带这个字段，直接覆盖会把本地写的备注清空（＝静默数据丢失）。
+        # 其余字段沿既有口径（远端说了算）。
+        note = remote_task["note"] if "note" in remote_task else local["note"]
         conn.execute(
             "UPDATE tasks SET title=?, due_date=?, group_name=?, repeat_days=?, parent_id=?, "
-            "is_myday=?, status=?, updated_at=?, version=? WHERE id=?",
+            "is_myday=?, status=?, note=?, updated_at=?, version=? WHERE id=?",
             (
                 remote_task.get("title"),
                 remote_task.get("due_date"),
@@ -104,6 +111,7 @@ def merge_task(
                 remote_task.get("parent_id"),
                 int(bool(remote_task.get("is_myday"))),
                 remote_task.get("status", "未开始"),
+                note,
                 remote_updated,
                 remote_version,
                 tid,

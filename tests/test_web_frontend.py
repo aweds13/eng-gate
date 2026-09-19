@@ -282,6 +282,19 @@ def test_task_detail_panel_shows_readable_history() -> None:
     assert "/subtasks`" in html
 
 
+def test_task_note_is_editable_in_detail_only() -> None:
+    """T-B1（SR-F1.4 备注）：详情面板能读能写，**列表卡片不显示**（渐进聚焦）。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    edit = html.split("function editForm(t){", 1)[1].split("\n}", 1)[0]
+    assert 'id="editNote"' in edit, "编辑态缺少备注输入（备注就只能靠 API 写了）"
+    save = html.split("async function saveTaskEdit(){", 1)[1].split("\n}", 1)[0]
+    assert "editNote" in save and "note:" in save, "保存时没把备注带上"
+    detail = html.split("function renderDetail(el,t,facts,kids){", 1)[1].split("\n}", 1)[0]
+    assert "t.note" in detail, "详情面板没有显示备注"
+    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    assert "note" not in card, "备注不该出现在列表卡片里（渐进聚焦）"
+
+
 def test_subtask_flow_is_wired_in_frontend() -> None:
     """F1 段1（OP-12）：建步骤、勾完成、脱离父任务都要有界面入口。"""
     html = WEB_INDEX.read_text(encoding="utf-8")

@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -112,6 +112,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v4(conn)  # 历史 focus_sessions 回填为 facts（第 1 步前兼容旧数据）
     if current < 5:
         _migrate_v5(conn)  # 历史已完成任务回填 task.completed 事实（第 3 步）
+    if current < 6:
+        _migrate_v6(conn)  # 任务备注 note（F1 段2 · T-B1）
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
@@ -121,6 +123,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v3(conn)
     _migrate_v4(conn)  # 新库 focus_sessions 为空，此处为空操作
     _migrate_v5(conn)  # 新库 tasks 为空，此处为空操作
+    _migrate_v6(conn)  # 新库也要走一遍：v1 的 tasks 建表语句保持历史原样，note 由本版加列
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -522,3 +525,26 @@ def _migrate_v5(conn: sqlite3.Connection) -> None:
                 None,
             ),
         )
+
+
+def _migrate_v6(conn: sqlite3.Connection) -> None:
+    """v6：任务加 `note`（备注）列 —— F1 段2 · T-B1（SR-F1.4 的「备注」）。
+
+    口径：
+    - **向后兼容的加列**（不改已有列、不动数据）：老库补一列，新库照常建；
+    - **幂等**：先查 `PRAGMA table_info`，已有该列就什么都不做（重复连接/迁移都安全）；
+    - 缺 tasks 表的残缺库直接跳过，不失败（与 v5 同规矩）。
+    - 备注是**沉淀型内容**（人写的说明），不是计算型事实 —— 因此**不发 facts**
+      （账本口径只认 facts，见 conventions「事实/解读分离」）。
+    """
+    if (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
+        ).fetchone()
+        is None
+    ):
+        return  # 极端旧库 / 残缺库：无 tasks 表，跳过加列
+    columns = {str(r["name"]) for r in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    if "note" in columns:
+        return  # 幂等：新库（或已迁移过的库）直接返回
+    conn.execute("ALTER TABLE tasks ADD COLUMN note TEXT")

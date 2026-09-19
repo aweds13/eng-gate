@@ -67,13 +67,21 @@ def tables() -> set[str]:
 
 
 def columns(table: str) -> set[str]:
+    """表里有哪些列 —— 建表语句里的 + **后续迁移 ALTER TABLE 加的**。
+
+    为什么要把 ALTER 也算进来：加列的迁移（v6 的 `note`、后续的 priority/flagged/remind_at）
+    不会回写 v1 的历史建表语句，只看 `CREATE TABLE` 会把这些**真实存在的列**判成"没有列"，
+    于是 `column:` 断言永远不成立（第一版就只认建表语句）。
+    """
     db = (ROOT / "src" / "timeflow" / "storage" / "db.py").read_text(encoding="utf-8")
+    found: set[str] = set()
     parts = db.split(f"CREATE TABLE IF NOT EXISTS {table} (", 1)
-    if len(parts) < 2:
-        return set()
-    body = parts[1].split("\n        )", 1)[0]
-    found = re.findall(r"^\s*(\w+)\s+TEXT|^\s*(\w+)\s+INTEGER", body, re.M)
-    return {a or b for a, b in found}
+    if len(parts) >= 2:
+        body = parts[1].split("\n        )", 1)[0]
+        col_re = r"^\s*(\w+)\s+TEXT|^\s*(\w+)\s+INTEGER"
+        found |= {a or b for a, b in re.findall(col_re, body, re.M)}
+    found |= set(re.findall(rf"ALTER TABLE {table} ADD COLUMN (\w+)", db))
+    return found
 
 
 def web_source() -> str:

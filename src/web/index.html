@@ -399,8 +399,8 @@ async function setTaskParent(taskId,parentId){
   toast(parentId?'已挂到父任务下':'已脱离父任务');view(current);
 }
 /* ---------- 任务编辑（契约 OP-9）----------
- * 只改**已经存在的字段**（标题/截止/分组/重复/My Day）：
- * 备注、提醒、优先级的字段在库里还没有（F1 段2 才加），所以这里不假装能改。
+ * 只改**已经存在的字段**（标题/截止/分组/重复/My Day/备注）：
+ * 提醒、优先级的字段在库里还没有（段2 的 T-B2/T-B5 才加），所以这里不假装能改。
  * 已完成任务也可编辑，但**不改历史完成事实**（契约 OP-9 边界）。
  */
 function editForm(t){
@@ -418,8 +418,10 @@ function editForm(t){
     <div class="field narrow"><label>今天</label>
       <select id="editMyDay"><option value="1" ${t.is_myday?'selected':''}>在今天的清单</option>
         <option value="0" ${t.is_myday?'':'selected'}>不在今天</option></select></div>
+    <div class="field wide"><label>备注</label>
+      <textarea id="editNote" class="textarea" rows="3" placeholder="要求、思路、要带的东西…（只在这里显示，不进列表）">${esc(t.note||'')}</textarea></div>
   </div>
-  <div class="sub">改截止日会立刻重算逾期与债务；已完成的任务也能改，但不会改写历史完成记录。</div>`;
+  <div class="sub">备注只属于这个任务，不参与账本；改截止日会立刻重算逾期与债务。已完成的任务也能改，但不会改写历史完成记录。</div>`;
 }
 async function saveTaskEdit(){
   if(!detailTaskId){toast('没有正在编辑的任务');return}
@@ -427,12 +429,15 @@ async function saveTaskEdit(){
   const title=(titleEl&&titleEl.value||'').trim();
   if(!title){toast('标题不能为空');return}
   const repeatRaw=(document.getElementById('editRepeat').value||'').trim();
+  const noteEl=document.getElementById('editNote');
+  const noteRaw=(noteEl&&noteEl.value||'');
   const body={
     title,
     due_date:document.getElementById('editDue').value||null,
     repeat_days:repeatRaw?parseInt(repeatRaw,10):null,
     group_name:document.getElementById('editGroup').value||null,
     is_myday:document.getElementById('editMyDay').value==='1',
+    note:noteRaw.trim()?noteRaw.trim():null,   // 清空备注 = 存 null（不是空串，免得两种"空"）
   };
   await api(`/api/tasks/${detailTaskId}`,{method:'PATCH',body:JSON.stringify(body)});
   detailEditing=false;
@@ -464,7 +469,8 @@ function renderDetail(el,t,facts,kids){
       状态 ${esc(t.status)}</div>
     <div class="meta">截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
     <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'}</div>
-    <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}</div>`}
+    <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}</div>
+    ${t.note?`<div class="settings-sub">备注</div><div class="sub" style="white-space:pre-wrap">${esc(t.note)}</div>`:''}`}
     ${asg}
     <div class="settings-sub">所属分组</div>
     <div class="row tight" id="detailGroups" data-task="${t.id}">${groupChips(groupsOf(t),(t.groups||[]))}</div>

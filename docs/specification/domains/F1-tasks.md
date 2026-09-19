@@ -6,6 +6,8 @@
 ## 1. 实体与字段
 
 - **Task**：id、title（必填）、due_date（可空）、status、is_myday、priority、note、repeat_rule、parent_id、created_at、updated_at、version、source。
+  - 落地现状（2026-09-18）：`note`（备注）已落地（schema **v6** / T-B1）、`parent_id` 已落地（子任务 / T-A2）；
+    **`priority` 与 `remind_at`/`attach` 仍未做**（段2 的 T-B2~T-B5）。
 - **status 取值**：未开始 / 进行中 / 完成 / 逾期 / 取消 / 归档 / 已删。
 - **Group**：id、name（非空、唯一）、created_at。
 - **task_groups**：task_id + group_id 多对多。
@@ -78,4 +80,8 @@
   幂等可重入、缺列旧库不失败、回填不进入投入口径。
 - 第 5 步（OP-8 Repeat）：`../../tests/test_task_repeat.py` —— 完成即生成下一次、基准为完成时间、只生成一次、继承与边界。
 - 第 5 步（OP-6 软删除）：`../../tests/test_task_delete.py` —— 软删除隐藏于默认视图、撤销恢复、幂等、留事实、API 全链路。
+- F1 段1（收口到界面）：`../../tests/test_task_groups_line.py`（分组）、`../../tests/test_task_subtasks_line.py`（子任务树）、
+  `../../tests/test_task_edit_line.py`（编辑）。
+- F1 段2（任务字段地基）：`../../tests/test_task_note_line.py` —— schema v6 加列幂等、备注可写可清空、
+  不发事实不动账本、同步合并不丢备注。
 - 待补（B4）：创建→加入 My Day→完成→撤销的 API 全链路验收（已由 `test_task_line.py` 覆盖完成/撤销段）。

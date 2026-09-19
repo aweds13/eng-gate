@@ -58,9 +58,9 @@ gaps = "Important/Planned/Flagged 视图不存在；任务表无对应标记字�
 id = "SR-F1.4"
 title = "任务字段：子步骤/备注/提醒/附件"
 group = "F1"
-status = "todo"
-evidence = ["column:tasks.due_date", "column:tasks.repeat_days", "column:tasks.parent_id"]
-gaps = "提醒(remind_at)/附件(attach)/备注(note) 字段都不存在（见审计 GAP-F1-01）"
+status = "partial"
+evidence = ["column:tasks.due_date", "column:tasks.repeat_days", "column:tasks.parent_id", "column:tasks.note", "test:test_task_note_line.py"]
+gaps = "备注 note 已落地（T-B1，schema v6 加列）；**提醒 remind_at（T-B5）与附件 attach（T-B4）仍未做**（见审计 GAP-F1-01）；子步骤=子任务（SR-F1.8/T-A2）已 done"
 
 [entries."SR-F1.5"]
 id = "SR-F1.5"
@@ -834,6 +834,22 @@ evidence = [
   "ui:data-action=task-edit",
   "ui:data-action=task-save",
   "test:test_task_edit_line.py",
+]
+gaps = ""
+
+[entries."T-B1"]
+id = "T-B1"
+title = "F1 主线·段2：任务备注 note（schema v6）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "column:tasks.note",
+  "text:src/timeflow/storage/db.py::def _migrate_v6",
+  "text:src/timeflow/core/tasks/manager.py::note: str | None = None",
+  "route:POST /api/tasks",
+  "route:PATCH /api/tasks/{task_id}",
+  "ui:data-action=task-save",
+  "test:test_task_note_line.py",
 ]
 gaps = ""
 
