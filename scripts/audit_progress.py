@@ -216,8 +216,14 @@ def changed_files(rev: str) -> list[str]:
     return [p for p in git("show", "--name-only", "--format=", rev).splitlines() if p.strip()]
 
 
-def progress(data: dict) -> tuple[list[str], list[str]]:
-    """台账 ↔ git：谁已提交却没更新台账（失败）/ 谁标了 done 却没提交（提示）。"""
+def progress(data: dict, exc: set[str]) -> tuple[list[str], list[str], list[str]]:
+    """台账 ↔ git：谁已提交却没更新台账（失败）/ 谁标了 done 却没提交（提示）。
+
+    一个例外（实测踩到）：**有意拆分的任务** —— 比如 T-B5 的"字段+界面"随提交落地、
+    "系统通知通道"要等用户选型才能做。这种条目在台账里仍是 `partial`（如实），
+    但它的 Task 提交是真的。逐条写进 `[exceptions]` 才豁免（**留痕、修一条删一条**），
+    不许默默放过 —— 否则"提交了但忘了改台账"这条最有用的检查就废了。
+    """
     log = git("log", "--format=%h%x09%(trailers:key=Task,valueonly)", "HEAD")
     seen: dict[str, list[str]] = {}
     for line in log.splitlines():
@@ -226,14 +232,16 @@ def progress(data: dict) -> tuple[list[str], list[str]]:
             seen.setdefault(task.strip(), []).append(sha)
     warn: list[str] = []
     fail: list[str] = []
+    exempted: list[str] = []
     for eid, e in sorted(data.get("entries", {}).items()):
         status = e.get("status")
         if status == "done" and eid not in seen:
             warn.append(f"{eid}: 台账 done，但 git 里没有挂 Task:{eid} 的提交（多为老账）")
         if status in {"todo", "partial"} and eid in seen:
             shas = ",".join(seen[eid])
-            fail.append(f"{eid}: 台账仍是 {status}，但提交 {shas} 挂了 Task:{eid} → 台账漏更新")
-    return warn, fail
+            line = f"{eid}: 台账仍是 {status}，但提交 {shas} 挂了 Task:{eid} → 台账漏更新"
+            (exempted if eid in exc else fail).append(line)
+    return warn, fail, exempted
 
 
 def main() -> int:
@@ -271,6 +279,7 @@ def main() -> int:
         print(f"  {OK} 所有 status=done 的断言都成立（{counts.get('done', 0)} 条）")
 
     git_fails: list[str] = []
+    git_exempt: list[str] = []
     if not args.no_git:
         rev = args.rev
         sha = git("rev-parse", "--short", rev)
@@ -321,8 +330,11 @@ def main() -> int:
                                 )
                 if not meta["Gates"]:
                     git_fails.append("提交没有 `Gates:` trailer（没有门禁结果）")
-        warn, wrong = progress(data)
+        warn, wrong, exempt_now = progress(data, exc)
+        git_exempt.extend(exempt_now)
         print("\n=== ⑥ 进度重建（台账 ↔ git）===")
+        for line in exempt_now:
+            print(f"  {WARN} 已豁免 {line}（见 [exceptions] 的理由）")
         for line in wrong:
             print(f"  {FAIL} {line}")
             git_fails.append(line)
@@ -332,14 +344,15 @@ def main() -> int:
             print(f"  {WARN} {line}")
 
     all_fails = shape + fails + git_fails
+    n_exempt = len(exempted) + len(git_exempt)
     print("\n" + "=" * 72)
     if all_fails:
-        print(f"审计不通过：{len(all_fails)} 项失败（{len(exempted)} 项已豁免）")
+        print(f"审计不通过：{len(all_fails)} 项失败（{n_exempt} 项已豁免）")
         for line in all_fails:
             print(f"  - {line}")
         print("→ 按用户约定：**审计不通过不许提交**。修完或写进 exceptions 再提交。")
         return 1
-    print(f"审计通过 ✅（豁免 {len(exempted)} 项已知欠账）")
+    print(f"审计通过 ✅（豁免 {n_exempt} 项已知欠账）")
     return 0
 
 

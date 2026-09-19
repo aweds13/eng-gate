@@ -6,14 +6,17 @@
 #           table:表 | column:表.列 | ui:data-action=x | ui:view=x | test:文件名
 # 规则：status=done 必须至少 1 条证据；partial/todo/deferred 必须写 gaps（说明缺什么）
 #
-# [exceptions]：已知欠账（声称 done 但断言暂不成立）。**每修一条删一条**，不许静默豁免。
+# [exceptions]：已知欠账（**逐条留痕、修一条删一条**），不许静默豁免。两种用法：
+#   ① 声称 done 但某条断言暂时不成立（③ 声称=证据 会打印为"已豁免"）；
+#   ② **有意拆分的任务**：Task 提交只覆盖了条目的一部分（如 T-B5 前半字段+界面、后半等用户选型），
+#      条目如实保持 partial，但 ⑥ 进度对账不再报"台账漏更新"（同样打印理由）。
 # [meta.acknowledged_routes]：确认过但暂不单独登记的运维/根路径。
 
 [meta]
 acknowledged_routes = []
 
 [exceptions]
-# 目前没有需要豁免的条目（done 的断言全部成立）
+T-B5 = "有意拆分：前半（remind_at 字段 + 界面标注）已随 c32f17f 提交；后半（到点发系统通知）属新增运行时依赖，选型方案已出（复盘/段2设计决策-提醒与附件打开方式.md §八）等用户拍板。条目如实保持 partial；**接上通知后删掉本条**。"
 
 [entries."T-00"]
 id = "T-00"
