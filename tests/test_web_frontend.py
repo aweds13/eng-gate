@@ -319,6 +319,9 @@ def test_reminder_ui_and_notify_switch() -> None:
     assert "/api/settings/reminder" in setting, "设置页没读通知通道状态"
     assert 'data-action="set-remind-notify"' in setting, "缺少到点通知开关"
     assert 'data-action="remind-test"' in setting, "缺少「试一下」按钮"
+    assert 'data-action="set-remind-style"' in setting, "缺少「提醒方式」（闹钟式/温和）"
+    assert "function setRemindStyle(" in html
+    assert "留在屏幕上" in setting, "必须写清闹钟式的效果（留在屏幕上 + 循环响铃）"
     assert "默认关闭" in setting, "必须标出默认是关的"
     assert "注销/关机时不响" in setting, "必须写明真实边界（不谎报）"
     assert "计划任务" in setting

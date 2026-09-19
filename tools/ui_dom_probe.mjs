@@ -122,7 +122,10 @@ const DB = {
   },
   // 到点通知开关（T-B5 后半）
   '/api/settings/reminder': {
-    enabled: false, task_name: 'timeflow-reminders', installed: false, interval_minutes: 1,
+    enabled: false, style: 'alarm',
+    styles: [{ value: 'alarm', label: '闹钟式（留在屏幕上 + 循环响铃）' },
+      { value: 'gentle', label: '温和通知（几秒后消失）' }],
+    task_name: 'timeflow-reminders', installed: false, interval_minutes: 1,
     last_notify_at: null, last_result: null, last_error: null,
   },
   '/api/gpa': { gpa: 0, credits: 0, scale: '4.0', weighted_average: 0, weighted_credits: 0 },

@@ -188,6 +188,7 @@ const ACTIONS = {
   'wl-del':         el => removeWhitelist(el.dataset.ext),
   // 到点通知开关（T-B5 后半）
   'set-remind-notify': el => setRemindNotify(el.dataset.on === 'true'),
+  'set-remind-style': el => setRemindStyle(el.dataset.style),
   'remind-test':    () => testRemindNotify(),
   'task-myday':     el => toggleMyDay(el.dataset.id, true),
   'task-delete':    el => removeTask(el.dataset.id),
@@ -1349,11 +1350,17 @@ async function renderSetting(m){
   </div>
   <div class="section-title" id="set-remind">提醒</div>
   <div class="card panel-card">
-    <div class="settings-sub">到点提醒你（系统通知）</div>
+    <div class="settings-sub">提醒方式（到点时怎么叫你）</div>
+    <div class="row">${(remindCfg.styles||[]).map(x=>
+      `<button class="${remindCfg.style===x.value?'':'ghost'}" data-action="set-remind-style" data-style="${x.value}">${esc(x.label)}</button>`).join('')}
+      <button class="ghost" data-action="remind-test">试一下</button></div>
+    <div class="sub">「闹钟式」用 Windows 的**警报通知**：预先展开、**留在屏幕上直到你手动关掉**、循环播放闹钟音，
+      并能突破「专注助手/免打扰」—— 这才是"提得住人"的效果；「温和通知」只在右下角浮几秒。
+      两种都不引第三方依赖。</div>
+    <div class="settings-sub">到点自动提醒（关掉应用也响）</div>
     <div class="row">
       <button class="${remindCfg.enabled?'':'ghost'}" data-action="set-remind-notify" data-on="true">开启</button>
       <button class="${remindCfg.enabled?'ghost':''}" data-action="set-remind-notify" data-on="false">关闭</button>
-      <button class="ghost" data-action="remind-test">试一下</button>
       <span class="badge">${remindCfg.enabled?'已开启':'默认关闭'}</span>
       ${remindCfg.installed?'<span class="badge">计划任务已注册</span>':'<span class="badge">未注册计划任务</span>'}
     </div>
@@ -1420,6 +1427,12 @@ async function setRemindNotify(on){
 async function testRemindNotify(){
   const r=await api('/api/reminders/test',{method:'POST'});
   toast(r.ok?'已弹出测试通知 —— 看到就说明能用':`弹不出来：${r.detail}`);
+  view(current);
+}
+// 提醒方式（用户反馈"普通通知效果很差"后加）：闹钟式 = 留在屏幕上 + 循环响铃；温和 = 几秒消失
+async function setRemindStyle(style){
+  await api('/api/settings/reminder',{method:'PUT',body:JSON.stringify({style})});
+  toast(style==='alarm'?'已切到闹钟式提醒（会留在屏幕上，需手动关掉）':'已切到温和通知（几秒后消失）');
   view(current);
 }
 // GPA 制式切换：只改查看口径（写死配置是后端职责），立即重渲染

@@ -18,6 +18,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from timeflow.api.app import create_app
@@ -70,11 +71,79 @@ def test_delete_and_query_commands() -> None:
     assert "/Query" in rm.query_task_command()
 
 
-def test_toast_script_mentions_template_and_appid() -> None:
+def test_toast_script_loads_xml_and_uses_appid() -> None:
     ps = rm.powershell_toast_script("标题", "正文")
-    assert "ToastNotificationManager" in ps and "GetTemplateContent" in ps
-    assert "TF_TITLE" in ps and "TF_BODY" in ps  # 标题/正文走环境变量，避免转义问题
+    assert "ToastNotificationManager" in ps and "LoadXml($env:TF_XML)" in ps
+    assert "TF_XML" in ps  # XML 走环境变量，避免转义问题
     assert rm._encode_ps("echo 中文").isascii()  # base64：中文不会在命令行上乱码
+
+
+# ---------------------------------------------------------------- 提醒方式（闹钟式 / 温和）
+
+def test_alarm_toast_xml_is_sticky_and_rings() -> None:
+    """用户反馈"普通通知效果很差" → 闹钟式用 Windows 的 alarm 方案：
+    预先展开、留在屏幕上直到手动关掉（duration=long + scenario=alarm）、循环播放闹钟音。"""
+    xml = rm.build_toast_xml("交作业", "提醒时间 2026-09-20 09:00", rm.STYLE_ALARM)
+    assert 'scenario="alarm"' in xml and 'duration="long"' in xml
+    assert "Notification.Looping.Alarm" in xml and 'loop="true"' in xml
+    assert "交作业" in xml
+
+
+def test_gentle_toast_xml_is_plain() -> None:
+    xml = rm.build_toast_xml("交作业", "正文", rm.STYLE_GENTLE)
+    assert "scenario=" not in xml and 'duration="short"' in xml
+    assert "Looping.Alarm" not in xml
+
+
+def test_toast_xml_escapes_user_text() -> None:
+    xml = rm.build_toast_xml('写 <报告> & "总结"', "5 > 3", rm.STYLE_ALARM)
+    assert "&lt;报告&gt;" in xml and "&amp;" in xml and "&quot;总结&quot;" in xml
+    assert "<报告>" not in xml  # 没转义就会把 XML 弄坏（通知直接弹不出来）
+
+
+def test_default_style_is_alarm_and_settable(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    conn = db_mod.connect(str(tmp_path / "style.db"))
+    assert rm.get_style(conn) == rm.STYLE_ALARM  # 默认闹钟式（普通通知提不住人）
+    assert rm.set_style(conn, rm.STYLE_GENTLE) == rm.STYLE_GENTLE
+    assert rm.status(conn)["style"] == "gentle"
+    assert {s["value"] for s in rm.status(conn)["styles"]} == set(rm.VALID_STYLES)
+    with pytest.raises(ValueError):
+        rm.set_style(conn, "随便")
+    assert rm.get_style(conn) == rm.STYLE_GENTLE  # 非法值没有落库
+    conn.close()
+
+
+def test_show_notification_passes_style_xml(monkeypatch) -> None:
+    """真正交给 PowerShell 的 XML 要跟着"提醒方式"走（否则设置切了也没用）。"""
+    captured: dict[str, str] = {}
+
+    def runner(args: list[str], env: dict[str, str]) -> tuple[bool, str]:
+        captured.update(env)
+        return True, "ok"
+
+    ok, detail = rm.show_notification("A", "B", rm.STYLE_ALARM, run=runner)
+    assert ok and 'scenario="alarm"' in captured["TF_XML"]
+    assert "留" in detail  # 提示里说清"留在屏幕上直到你关掉"
+    ok2, _ = rm.show_notification("A", "B", rm.STYLE_GENTLE, run=runner)
+    assert ok2 and "scenario=" not in captured["TF_XML"]
+
+
+def test_notify_due_uses_configured_style(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """路径：设置切到温和 → notify_due 不传 style 时也按设置走。"""
+    conn = db_mod.connect(str(tmp_path / "nstyle.db"))
+    rm.set_style(conn, rm.STYLE_GENTLE)
+    tm.create_task(conn, "任务", remind_at="2026-09-20T09:00")
+    seen: list[str] = []
+    real = rm.show_notification
+    try:
+        rm.show_notification = lambda t, b, style=rm.DEFAULT_STYLE: (  # type: ignore[assignment]
+            seen.append(style) or (True, "ok")
+        )
+        rm.notify_due(conn, datetime(2026, 9, 20, 12, 0))
+    finally:
+        rm.show_notification = real  # type: ignore[assignment]
+    assert seen == [rm.STYLE_GENTLE]
+    conn.close()
 
 
 # ---------------------------------------------------------------- 开关（用假 runner）
@@ -240,6 +309,7 @@ def test_api_reminder_settings_roundtrip(tmp_path, monkeypatch) -> None:  # type
     client = _client(tmp_path)
     got = client.get("/api/settings/reminder").json()
     assert got["enabled"] is False and got["task_name"] == rm.TASK_NAME
+    assert got["style"] == "alarm"  # 默认闹钟式
 
     calls: list[list[str]] = []
     monkeypatch.setattr(
@@ -254,6 +324,10 @@ def test_api_reminder_settings_roundtrip(tmp_path, monkeypatch) -> None:  # type
     assert on["enabled"] is True and calls == [["install"]]
     off = client.put("/api/settings/reminder", json={"enabled": False}).json()
     assert off["enabled"] is False and calls == [["install"], ["uninstall"]]
+    # 只改提醒方式：不动计划任务
+    st = client.put("/api/settings/reminder", json={"style": "gentle"}).json()
+    assert st["style"] == "gentle" and calls == [["install"], ["uninstall"]]
+    assert client.put("/api/settings/reminder", json={"style": "吼我"}).status_code == 400
 
 
 def test_api_reminder_install_failure_is_400(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

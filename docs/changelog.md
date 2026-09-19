@@ -496,6 +496,27 @@
 - 台账：**`SR-F1.4` → done**、**`T-B5` → done**（**删掉之前那条例外**：修一条删一条）、新增 `OP-47`。
   **段2（T-B1~T-B5）全部收口。**
 
+### F1 主线 · T-B5b 提醒方式：闹钟式（留在屏幕上 + 循环响铃）/ 温和 —— 用户反馈驱动
+- **触发**：用户看了实际提醒后说「这个提醒不是闹钟那种吗，效果很差」——普通 toast 右下角浮几秒就没了，
+  确实"提不住人"。
+- **改法（用 Windows 官方 toast 能力，仍不引第三方依赖）**：新增**提醒方式**设置
+  （`reminder.style`，默认 **`alarm`**）：
+  - `alarm` = **警报通知**：`<toast duration="long" scenario="alarm">` + `<audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="true"/>`
+    → 预先展开、**留在屏幕上直到手动关掉**、**循环播放闹钟音**，并**能突破「专注助手/免打扰」**
+    （见 [toast 元素](https://learn.microsoft.com/zh-cn/uwp/schemas/tiles/toastschema/element-toast)、
+    [audio 元素](https://learn.microsoft.com/en-au/uwp/schemas/tiles/toastschema/element-audio)）；
+  - `gentle` = 普通通知（几秒后消失）。
+- **实现**：`build_toast_xml()` 直接产 XML（不再用 ToastText02 模板，才能控制 scenario/duration/audio），
+  标题正文做 XML 转义（不转义会把 XML 弄坏、通知直接弹不出来）；`show_notification()` 按 style 弹；
+  `notify_due()` 缺省跟随设置；`--test` 与 `POST /api/reminders/test` 也按当前方式弹。
+- **前端**：设置页「提醒」顶部新增「提醒方式」两个按钮 + 说明（写清闹钟式的效果与代价）。
+- **真机实测**：按闹钟式弹了一条（`show_notification` 返回成功）；**"是否真的留在屏幕上并响铃"由用户目视确认**
+  —— 若 Windows 对非打包程序的 alarm 方案有限制，退路是自建"响铃窗口"（见复盘 §九）。
+- **测试**：`tests/test_remind_channel.py` +6（闹钟 XML 的 scenario/duration/loop、温和 XML 无 scenario、
+  XML 转义、默认值与设置校验、`show_notification` 真的把 XML 传下去、`notify_due` 跟随设置）；
+  `tests/test_web_frontend.py` 护栏补「提醒方式」入口与措辞。
+- 台账：新增 `T-B5b`（done）。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

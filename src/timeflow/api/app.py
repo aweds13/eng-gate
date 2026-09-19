@@ -261,25 +261,33 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.put("/api/settings/reminder")
     def put_reminder_settings(payload: dict[str, Any], request: Request) -> dict[str, Any]:
-        """打开/关闭到点通知。打开会**注册 Windows 计划任务**（关掉会删掉它，可逆）。
+        """打开/关闭到点通知、切换提醒方式。打开会**注册 Windows 计划任务**（关掉会删掉它，可逆）。
 
         改系统状态，所以要求来源本机；注册失败时设置不落库（避免"以为开了其实没开"）。
+        `style`：`alarm`=闹钟式（留在屏幕上 + 循环响铃）/ `gentle`=温和通知。
         """
         require_local_origin(request)
-        enabled = bool(payload.get("enabled"))
         try:
-            return remind_mod.set_enabled(conn, enabled, db_path=db_path)
+            if "style" in payload:
+                remind_mod.set_style(conn, payload["style"])
+            if "enabled" in payload:
+                remind_mod.set_enabled(conn, bool(payload["enabled"]), db_path=db_path)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        return remind_mod.status(conn)
 
     @app.post("/api/reminders/test")
     def test_reminder(request: Request) -> dict[str, Any]:
-        """弹一条测试通知（让你当场确认系统通知真的能响）。会弹窗，故要求来源本机。"""
+        """弹一条测试通知（让你当场确认效果；按当前"提醒方式"弹）。会弹窗，故要求来源本机。"""
         require_local_origin(request)
         ok, detail = remind_mod.show_notification(
-            "timeflow 提醒测试", "看到这条就说明到点提醒能用。"
+            "timeflow 提醒测试",
+            "看到这条就说明到点提醒能用。",
+            remind_mod.get_style(conn),
         )
-        remind_mod.record_result(conn, ok, detail if ok else detail)
+        remind_mod.record_result(conn, ok, detail)
         return {"ok": ok, "detail": detail, **remind_mod.status(conn)}
 
     # ---- 提醒（SR-F1.4 / T-B5）：字段与"该提醒了"的只读数据源 ----

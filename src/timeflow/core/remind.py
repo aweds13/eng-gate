@@ -37,12 +37,28 @@ if TYPE_CHECKING:
 TASK_NAME = "timeflow-reminders"
 # 设置键（app_settings 是通用 key/value 表）
 KEY_ENABLED = "reminder.notify_enabled"
+KEY_STYLE = "reminder.style"
 KEY_LAST_AT = "reminder.last_notify_at"
 KEY_LAST_RESULT = "reminder.last_result"
 KEY_LAST_ERROR = "reminder.last_error"
 KEY_FIRED_PREFIX = "reminder.fired."
 # 检查间隔（分钟）：1 分钟足够准，且脚本是"查一下就走"，代价极小
 INTERVAL_MINUTES = 1
+
+# 提醒强度（用户反馈"普通通知效果很差"后加的）：
+#   gentle = 普通系统通知（右下角浮一下、几秒消失、有无声音看系统设置）；
+#   alarm  = **闹钟式**（`scenario="alarm"`：预先展开、**留在屏幕上直到手动关掉**、
+#            默认**循环播放闹钟音**，并且能突破「专注助手/免打扰」）——
+#            这是 Windows 官方 toast schema 支持的方案，比第三方库更稳、也不需要额外依赖
+#            （见 MS Learn：toast 元素 scenario / audio）。
+STYLE_GENTLE = "gentle"
+STYLE_ALARM = "alarm"
+VALID_STYLES = (STYLE_ALARM, STYLE_GENTLE)
+DEFAULT_STYLE = STYLE_ALARM  # 默认闹钟式：普通通知"提不住人"，等于没提醒
+STYLE_LABELS = {
+    STYLE_ALARM: "闹钟式（留在屏幕上 + 循环响铃）",
+    STYLE_GENTLE: "温和通知（几秒后消失）",
+}
 
 # 项目里的脚本入口（计划任务直接跑它，不依赖 PYTHONPATH）
 REMIND_SCRIPT = Path(__file__).resolve().parent.parent / "app" / "remind.py"
@@ -142,6 +158,21 @@ def is_enabled(conn: sqlite3.Connection) -> bool:
     return (_get(conn, KEY_ENABLED) or "0") == "1"
 
 
+def get_style(conn: sqlite3.Connection) -> str:
+    """当前提醒强度（默认**闹钟式** —— 普通通知"提不住人"，等于没提醒）。"""
+    raw = _get(conn, KEY_STYLE) or DEFAULT_STYLE
+    return raw if raw in VALID_STYLES else DEFAULT_STYLE
+
+
+def set_style(conn: sqlite3.Connection, style: object) -> str:
+    """改提醒强度。非法值拒绝（不静默回落默认值）。"""
+    if str(style) not in VALID_STYLES:
+        raise ValueError(f"未知提醒方式: {style}（只能是 {'/'.join(VALID_STYLES)}）")
+    _put(conn, KEY_STYLE, str(style))
+    conn.commit()
+    return get_style(conn)
+
+
 def record_result(conn: sqlite3.Connection, ok: bool, detail: str) -> None:
     """把一次通知尝试的结果写进设置（设置页据此显示；失败必提示，不静默）。"""
     if ok:
@@ -156,6 +187,8 @@ def status(conn: sqlite3.Connection, run: Any = None) -> dict[str, Any]:
     """设置页要显示的状态（都是**事实**，不含猜测）。"""
     return {
         "enabled": is_enabled(conn),
+        "style": get_style(conn),
+        "styles": [{"value": s, "label": STYLE_LABELS[s]} for s in VALID_STYLES],
         "task_name": TASK_NAME,
         "installed": task_installed(run),
         "interval_minutes": INTERVAL_MINUTES,
@@ -210,22 +243,58 @@ def _default_db_path() -> str:
 
 
 # ---------------------------------------------------------------- 弹系统通知
-def powershell_toast_script(title: str, body: str) -> str:
-    """生成弹 Windows 系统通知的 PowerShell 脚本（标题/正文用环境变量传入，避免转义地狱）。"""
+def _xml_escape(text: str) -> str:
+    return (
+        str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace('"', "&quot;").replace("'", "&apos;")
+    )
+
+
+def build_toast_xml(title: str, body: str, style: str = DEFAULT_STYLE) -> str:
+    """生成 toast XML（**纯函数**，可单测）。
+
+    - `alarm`（闹钟式）：`scenario="alarm" duration="long"` → 预先展开、**留在屏幕上直到手动关掉**、
+      并带 `Notification.Looping.Alarm` **循环闹钟音**（微软文档：alarm 方案默认循环且用警报音频）。
+    - `gentle`（温和）：普通通知，几秒后自动消失。
+    """
+    t, b = _xml_escape(title), _xml_escape(body)
+    if style == STYLE_ALARM:
+        return (
+            '<toast duration="long" scenario="alarm">'
+            '<visual><binding template="ToastGeneric">'
+            f"<text>{t}</text><text>{b}</text>"
+            "</binding></visual>"
+            '<audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="true"/>'
+            "</toast>"
+        )
+    return (
+        '<toast duration="short">'
+        '<visual><binding template="ToastGeneric">'
+        f"<text>{t}</text><text>{b}</text>"
+        "</binding></visual>"
+        "</toast>"
+    )
+
+
+def powershell_toast_script(title: str, body: str, style: str = DEFAULT_STYLE) -> str:
+    """生成弹通知的 PowerShell 脚本（XML 与环境变量传入，避免转义地狱）。
+
+    注意：`title`/`body` 在这里只用于**校验参数**（真正的 XML 由调用方放进 `TF_XML`），
+    所以这里不重复拼 XML。
+    """
     return (
         "$ErrorActionPreference='Stop'\n"
         "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
         "ContentType=WindowsRuntime] > $null\n"
-        "$t=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent("
-        "[Windows.UI.Notifications.ToastTemplateType]::ToastText02)\n"
-        "$x=$t.GetElementsByTagName('text')\n"
-        "$x.Item(0).AppendChild($t.CreateTextNode($env:TF_TITLE)) > $null\n"
-        "$x.Item(1).AppendChild($t.CreateTextNode($env:TF_BODY)) > $null\n"
+        "[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, "
+        "ContentType=WindowsRuntime] > $null\n"
+        "$doc=[Windows.Data.Xml.Dom.XmlDocument]::new()\n"
+        "$doc.LoadXml($env:TF_XML)\n"
         # AppId 用 Windows PowerShell 已注册的 AUMID：未打包程序没有自己的 AUMID 时，
         # 这是"不额外注册系统组件也能弹通知"的通行做法。
         "$id='{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe'\n"
-        "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($id).Show("
-        "[Windows.UI.Notifications.ToastNotification]::new($t))\n"
+        "$toast=[Windows.UI.Notifications.ToastNotification]::new($doc)\n"
+        "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($id).Show($toast)\n"
     )
 
 
@@ -234,29 +303,36 @@ def _encode_ps(script: str) -> str:
     return base64.b64encode(script.encode("utf-16-le")).decode("ascii")
 
 
-def show_notification(title: str, body: str, run: Any = None) -> tuple[bool, str]:
-    """弹一条系统通知。Windows 走 WinRT toast，失败再退 `msg`；都不行就如实返回失败。
+def show_notification(
+    title: str, body: str, style: str = DEFAULT_STYLE, run: Any = None
+) -> tuple[bool, str]:
+    """弹一条系统通知。Windows 走 WinRT toast（按 `style` 决定闹钟式/温和），失败再退 `msg`。
 
     `run` 是注入点，签名固定为 `(args, env) -> (ok, detail)`（默认 `_run_env`）——
     测试里替换它就不会真的弹窗。
     """
     if not sys.platform.startswith("win"):
         return False, "当前平台未实现系统通知（Windows 之外的平台请用界面标注）"
+    if style not in VALID_STYLES:
+        style = DEFAULT_STYLE
     runner: Any = run or _run_env
     ps = shutil.which("powershell") or shutil.which("pwsh")
     if ps:
+        xml = build_toast_xml(title, body, style)
         cmd = [
             ps, "-NoProfile", "-NonInteractive",
-            "-EncodedCommand", _encode_ps(powershell_toast_script(title, body)),
+            "-EncodedCommand", _encode_ps(powershell_toast_script(title, body, style)),
         ]
-        ok, detail = runner(cmd, {"TF_TITLE": title, "TF_BODY": body})
+        ok, detail = runner(cmd, {"TF_XML": xml})
         if ok:
-            return True, "已弹出系统通知"
+            return True, ("已弹出闹钟式提醒（留在屏幕上直到你关掉）" if style == STYLE_ALARM
+                          else "已弹出温和通知")
         toast_error = detail
     else:
         toast_error = "找不到 powershell"
     msg = shutil.which("msg")
     if msg:
+        # msg 是模态弹窗：比 toast 更"提得住人"，作为闹钟式的兜底反而合适
         ok, detail = runner([msg, "*", "/TIME:60", f"{title}：{body}"], {})
         if ok:
             return True, "已用 msg 弹出提醒（toast 不可用）"
@@ -294,6 +370,7 @@ def notify_due(
     conn: sqlite3.Connection,
     now: datetime | None = None,
     sender: Any = None,
+    style: str | None = None,
 ) -> list[dict[str, Any]]:
     """把"到点该提醒"的任务弹系统通知（**同一条提醒只弹一次**；太多则合并成一条汇总）。
 
@@ -301,8 +378,10 @@ def notify_due(
     - 失败**不抛异常**、也**不标记已弹**：写进 `last_error` 并由返回值如实报告，
       下一次检查会重试（不许静默失败）。
     - 成功才标记（键 = 该条的 `remind_at`）→ 用户改了提醒时间会重新弹。
+    - `style` 缺省用当前设置（闹钟式 / 温和）。
     """
     moment = now or datetime.now()
+    use_style = style or get_style(conn)
     pending = [
         t for t in tm.due_reminders(conn, moment)
         if _fired_mark(conn, t.id) != str(t.remind_at)
@@ -310,7 +389,7 @@ def notify_due(
     if not pending:
         return []
     results: list[dict[str, Any]] = []
-    send = sender or show_notification
+    send = sender or (lambda title, body: show_notification(title, body, use_style))
 
     if len(pending) > MAX_NOTIFICATIONS_PER_RUN:
         names = "、".join(t.title for t in pending[:3])

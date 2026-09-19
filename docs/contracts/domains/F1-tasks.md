@@ -149,7 +149,7 @@
 
 - 入口：设置页「提醒」一节（开启 / 关闭 / 试一下）。
 - 前置：Windows；用户显式打开（**默认关**）。
-- 输入：`enabled`（true/false）。
+- 输入：`enabled`（true/false）、`style`（`alarm` 闹钟式 / `gentle` 温和）。
 - 后续：打开 → `PUT /api/settings/reminder` → 注册计划任务 `timeflow-reminders`
   （每 1 分钟跑 `pythonw src/timeflow/app/remind.py --db <库>`，到点弹系统通知）；
   关闭 → **删除该计划任务**（可逆、不留痕）。
@@ -158,6 +158,9 @@
 - 边界：**应用关掉也响**（计划任务在系统层），但**注销/关机时不响**（不擅自用 SYSTEM/密码凭据）；
   同一条提醒只弹一次（改时间重新弹）；一次到点 >3 条合并成一条汇总；**弹失败不静默**（记错误 + 下次重试）；
   改系统状态，故要求来源本机（跨站 403）。
+- **提醒方式（2026-09-18 用户反馈"普通通知效果很差"后加）**：`alarm` = Windows **警报通知**
+  （`scenario="alarm" duration="long"` + `Notification.Looping.Alarm` 循环响铃 → **留在屏幕上直到手动关掉**、
+  能突破免打扰）；`gentle` = 普通通知（几秒消失）。**默认 `alarm`**；两种都不引第三方依赖。
 
 ## FLOW-1 / FLOW-2 扩展
 

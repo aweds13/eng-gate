@@ -45,8 +45,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{k}: {v}")
             return 0
         if args.test:
+            style = remind_mod.get_style(conn)
             ok, detail = remind_mod.show_notification(
-                "timeflow 提醒测试", "看到这条就说明系统通知能用。"
+                "timeflow 提醒测试", "看到这条就说明系统通知能用。", style
             )
             print(("OK " if ok else "FAIL ") + detail)
             return 0 if ok else 1

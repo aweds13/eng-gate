@@ -1001,6 +1001,21 @@ evidence = [
 ]
 gaps = ""
 
+[entries."T-B5b"]
+id = "T-B5b"
+title = "F1 主线·段2：提醒方式（闹钟式 / 温和）—— 用户反馈「普通通知效果很差」"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/remind.py::def build_toast_xml",
+  "text:src/timeflow/core/remind.py::STYLE_ALARM",
+  "text:src/timeflow/core/remind.py::def set_style",
+  "route:PUT /api/settings/reminder",
+  "ui:data-action=set-remind-style",
+  "test:test_remind_channel.py",
+]
+gaps = ""
+
 [entries."OP-47"]
 id = "OP-47"
 title = "到点通知开关（计划任务 + 系统通知，默认关）"
