@@ -88,6 +88,8 @@ class Task:
     flagged: bool = False
     # 附件 / 要求链接（SR-F1.4 / T-B4）：元素 `{target, title}`；打开规则见 core/attach.py。
     attach: list[dict[str, str | None]] = field(default_factory=list)
+    # 提醒（SR-F1.4 / T-B5）：本地时间字符串 `YYYY-MM-DDTHH:MM`，可空=不提醒。
+    remind_at: str | None = None
 
 
 def _row_to_task(row: sqlite3.Row) -> Task:
@@ -109,6 +111,7 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         priority=row["priority"] if "priority" in keys else DEFAULT_PRIORITY,
         flagged=bool(row["flagged"]) if "flagged" in keys else False,
         attach=attach_mod.load_attach(row["attach"]) if "attach" in keys else [],
+        remind_at=row["remind_at"] if "remind_at" in keys else None,
     )
 
 
@@ -127,6 +130,69 @@ def _check_priority(value: object) -> str:
     return str(value)
 
 
+# 提醒时间：本地时间字符串 `YYYY-MM-DDTHH:MM`（前端 datetime-local 就是这个形状）。
+# 为什么不用 UTC：本项目全部日期口径都是**本地时间**（见 U-07「日期框默认今天」的教训，
+# 用 UTC 会在东八区晚上差一天）；提醒要跟着用户的钟表走。
+_REMIND_FORMATS = ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S")
+
+
+def _check_remind_at(value: object) -> str | None:
+    """校验并规整提醒时间。空值 = 清除提醒（存 NULL，不写空串）；非法值拒绝（不猜、不静默忽略）。"""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt in _REMIND_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).strftime("%Y-%m-%dT%H:%M")
+        except ValueError:
+            continue
+    raise ValueError(f"提醒时间格式不对: {value}（要「2026-09-20 08:30」这样的日期+时间）")
+
+
+def reminder_state(task: Task, now: datetime | None = None) -> str | None:
+    """提醒的**界面口径**（一处定义，卡片/详情/自检都用它）：`over` / `today` / `soon` / `later`。
+
+    - `over`  = 已经到点或过点（该提醒了）；
+    - `today` = 今天稍后；
+    - `soon`  = 7 天内；
+    - `later` = 更远；
+    - `None`  = 没设提醒 / 任务已完成（完成后不再催——**不打扰**是基调）。
+    为什么放领域层：这是"什么时候算该提醒"的**口径**，写在前端就会和通知通道各算一套。
+    """
+    if not task.remind_at or task.status in (STATUS_DONE, STATUS_CANCELLED, *HIDDEN_STATUSES):
+        return None
+    now = now or datetime.now()
+    try:
+        when = datetime.fromisoformat(task.remind_at)
+    except ValueError:
+        return None
+    delta_days = (when.date() - now.date()).days
+    if when <= now:
+        return "over"
+    if delta_days == 0:
+        return "today"
+    if delta_days <= 7:
+        return "soon"
+    return "later"
+
+
+def due_reminders(conn: sqlite3.Connection, now: datetime | None = None) -> list[Task]:
+    """到点该提醒的任务（T-B5）：`remind_at <= now` 且任务还"活着"（非完成/取消/归档/已删）。
+
+    按提醒时间正序 —— 越早该提醒的越靠前。**只读**：不改任务、不发事实
+    （通知只是"把已知时间说出来"，不改变任何账目）。
+    """
+    moment = (now or datetime.now()).strftime("%Y-%m-%dT%H:%M")
+    rows = conn.execute(
+        "SELECT * FROM tasks WHERE remind_at IS NOT NULL AND remind_at <= ? "
+        "AND status NOT IN (?,?,?,?) ORDER BY remind_at",
+        (moment, STATUS_DONE, STATUS_CANCELLED, *HIDDEN_STATUSES),
+    ).fetchall()
+    return [_row_to_task(r) for r in rows]
+
+
 def create_task(
     conn: sqlite3.Connection,
     title: str,
@@ -139,12 +205,14 @@ def create_task(
     priority: str = DEFAULT_PRIORITY,
     flagged: bool = False,
     attach: list[dict[str, str | None]] | None = None,
+    remind_at: str | None = None,
 ) -> Task:
     """新建任务（AC-1）。校验标题非空；若 due 过去且未完成，初始状态标逾期。"""
     title = title.strip()
     if not title:
         raise ValueError("任务标题不能为空")
     priority = _check_priority(priority)
+    remind_at = _check_remind_at(remind_at)
     now = _now()
     task_id = uuid.uuid4().hex[:12]
     status = STATUS_TODO
@@ -154,8 +222,8 @@ def create_task(
         """
         INSERT INTO tasks
         (id, title, due_date, group_name, repeat_days, parent_id, is_myday, status,
-         created_at, updated_at, version, note, priority, flagged, attach)
-        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)
+         created_at, updated_at, version, note, priority, flagged, attach, remind_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)
         """,
         (
             task_id,
@@ -172,6 +240,7 @@ def create_task(
             priority,
             int(bool(flagged)),
             attach_mod.dump_attach(attach_mod.load_attach(attach or [])),
+            remind_at,
         ),
     )
     conn.commit()
@@ -238,6 +307,7 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         "priority",
         "flagged",
         "attach",
+        "remind_at",
     }
     # 注意：用"键在 payload 里"判断，而不是"值不是 None" ——
     # 否则 `parent_id=None` / `due_date=None` 这类**清空操作**会被静默忽略（实测踩到）。
@@ -255,6 +325,9 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
     if "attach" in updates:
         # 附件列表：规整 + 落成 JSON 文本（坏数据在这里被挡下，不让它进库）
         updates["attach"] = attach_mod.dump_attach(attach_mod.load_attach(updates["attach"]))
+    if "remind_at" in updates:
+        # 提醒时间：空值=清除（NULL）；非法格式拒绝（不静默忽略）
+        updates["remind_at"] = _check_remind_at(updates["remind_at"])
     before = get_task(conn, task_id)
     sets = ", ".join(f"{k} = ?" for k in updates)
     conn.execute(

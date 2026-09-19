@@ -69,7 +69,8 @@ def merge_task(
     """
     tid = str(remote_task["id"])
     local = conn.execute(
-        "SELECT updated_at, version, note, priority, flagged, attach FROM tasks WHERE id = ?",
+        "SELECT updated_at, version, note, priority, flagged, attach, remind_at "
+        "FROM tasks WHERE id = ?",
         (tid,),
     ).fetchone()
     remote_updated = str(remote_task.get("updated_at") or "")
@@ -84,8 +85,8 @@ def merge_task(
         # 本地不存在：插入（来源标记）
         conn.execute(
             "INSERT INTO tasks (id, title, due_date, group_name, repeat_days, parent_id, "
-            "is_myday, status, created_at, updated_at, version, note, priority, flagged, attach) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "is_myday, status, created_at, updated_at, version, note, priority, flagged, attach, "
+            "remind_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 tid,
                 remote_task.get("title"),
@@ -102,6 +103,7 @@ def merge_task(
                 str(remote_priority or _DEFAULT_PRIORITY),
                 int(bool(remote_task.get("flagged"))),
                 _remote_attach(remote_task),
+                remote_task.get("remind_at"),
             ),
         )
         conn.commit()
@@ -125,10 +127,14 @@ def merge_task(
         )
         # attach（T-B4）：同规矩 —— 远端没带就保留本地附件列表（别把用户挂的要求链接抹掉）
         attach = _remote_attach(remote_task) if "attach" in remote_task else local["attach"]
+        # remind_at（T-B5）：同上（这条提醒是用户自己定的时间，不能被旧快照抹掉）
+        remind_at = (
+            remote_task["remind_at"] if "remind_at" in remote_task else local["remind_at"]
+        )
         conn.execute(
             "UPDATE tasks SET title=?, due_date=?, group_name=?, repeat_days=?, parent_id=?, "
-            "is_myday=?, status=?, note=?, priority=?, flagged=?, attach=?, updated_at=?, "
-            "version=? WHERE id=?",
+            "is_myday=?, status=?, note=?, priority=?, flagged=?, attach=?, remind_at=?, "
+            "updated_at=?, version=? WHERE id=?",
             (
                 remote_task.get("title"),
                 remote_task.get("due_date"),
@@ -141,6 +147,7 @@ def merge_task(
                 priority,
                 flagged,
                 attach,
+                remind_at,
                 remote_updated,
                 remote_version,
                 tid,

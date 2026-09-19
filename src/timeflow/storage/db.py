@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -120,6 +120,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v8(conn)  # 任务手动标记 flagged（F1 段2 · T-B3）
     if current < 9:
         _migrate_v9(conn)  # 附件/要求链接 attach + 应用设置表（F1/F5 段2 · T-B4）
+    if current < 10:
+        _migrate_v10(conn)  # 任务提醒 remind_at（F1 段2 · T-B5 前半）
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
@@ -133,6 +135,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v7(conn)  # 同上：priority 由本版加列
     _migrate_v8(conn)  # 同上：flagged 由本版加列
     _migrate_v9(conn)  # 新库也要走一遍：attach 两列与 app_settings 表
+    _migrate_v10(conn)  # 同上：remind_at 由本版加列
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -644,3 +647,16 @@ def _migrate_v9(conn: sqlite3.Connection) -> None:
         )
         """
     )
+
+
+def _migrate_v10(conn: sqlite3.Connection) -> None:
+    """v10：任务加 `remind_at`（提醒时间，本地时间字符串）—— F1 段2 · T-B5 前半。
+
+    口径：
+    - 存**本地时间字符串** `YYYY-MM-DDTHH:MM`（与事实层/展示口径一致，不用 UTC —— 见 U-07 的教训）；
+    - 可空 = 不提醒；**清空是真的清空**（存 NULL，不写空串）；
+    - 界面按「今天 / 临期 / 已过」标出来（**没开通知也不瞎**）；
+    - **系统通知通道属于新增运行时依赖，选型须用户确认后再接**
+      （`复盘/段2设计决策-提醒与附件打开方式.md` §八）；本列只负责"什么时候该提醒"这件事本身。
+    """
+    _add_column_if_missing(conn, "tasks", "remind_at", "remind_at TEXT")

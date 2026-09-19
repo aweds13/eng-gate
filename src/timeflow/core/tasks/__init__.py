@@ -36,6 +36,7 @@ from timeflow.core.tasks.manager import (
     create_subtask,
     create_task,
     delete_task,
+    due_reminders,
     get_task,
     list_tasks,
     myday_tasks,
@@ -43,6 +44,7 @@ from timeflow.core.tasks.manager import (
     process_repeats,
     purge_deleted_tasks,
     purge_task,
+    reminder_state,
     remove_attachment,
     restore_task,
     set_task_parent,
@@ -104,4 +106,6 @@ __all__ = [
     "toggle_flag",
     "add_attachment",
     "remove_attachment",
+    "reminder_state",
+    "due_reminders",
 ]

@@ -295,6 +295,32 @@ def test_task_note_is_editable_in_detail_only() -> None:
     assert "note" not in card, "备注不该出现在列表卡片里（渐进聚焦）"
 
 
+def test_reminder_ui_and_honest_no_channel_note() -> None:
+    """T-B5（SR-F1.4 提醒）：能设、能标出来，且**不谎报**通知通道。
+
+    本期只做"字段 + 界面标注"（系统通知是新增运行时依赖，选型等用户拍板）——
+    所以设置页要如实写"通道尚未接入"，**不许放一个按了没反应的开关**。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    edit = html.split("function editForm(t){", 1)[1].split("\n}", 1)[0]
+    assert 'id="editRemind"' in edit and 'type="datetime-local"' in edit, "编辑态不能设提醒"
+    save = html.split("async function saveTaskEdit(){", 1)[1].split("\n}", 1)[0]
+    assert "remind_at" in save, "保存时没把提醒带上"
+    # 卡片与详情都要标出来（口径来自后端 reminder_state，前端只翻译成人话）
+    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    assert "remindBadge(t)" in card, "任务卡片没有提醒标记"
+    assert "REMIND_LABEL" in html and "function remindBadge(" in html
+    # 今日页「该提醒了」区（不接通道也能用）
+    today = html.split("async function renderToday(m){", 1)[1].split("\n}", 1)[0]
+    assert "/api/reminders/due" in today and "该提醒了" in today
+    # 设置页如实说明 + 没有假开关
+    setting = html.split("async function renderSetting(", 1)[1]
+    setting = setting.split("async function setAttachMode(", 1)[0]
+    assert 'id="set-remind"' in setting, "设置页缺少提醒一节"
+    assert "系统通知通道尚未接入" in setting, "必须如实说明通知通道没接"
+    assert 'data-target="set-remind"' in html, "常用区没有提醒快捷入口"
+
+
 def test_attach_open_flow_is_wired_and_never_silent() -> None:
     """T-B4（SR-F1.4 附件 / SR-F5.3 跳转要求）：能挂、能点开、**打不开必出声**。
 

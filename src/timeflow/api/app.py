@@ -13,6 +13,8 @@ from urllib.parse import urlsplit
 if TYPE_CHECKING:
     import sqlite3
 
+from datetime import datetime
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -49,6 +51,8 @@ class TaskIn(BaseModel):
     flagged: bool = False
     # 附件（T-B4）：建任务时一起带上（元素 `{target, title}`）
     attach: list[dict[str, Any]] = []
+    # 提醒（T-B5）：本地时间「2026-09-20T08:30」；空=不提醒
+    remind_at: str | None = None
 
 
 class AssigneeOut(BaseModel):
@@ -85,6 +89,11 @@ class TaskOut(BaseModel):
     flagged: bool = False
     # 附件 / 要求链接（SR-F1.4 / T-B4）：`{target, title}` 列表；打开规则见 core/attach.py
     attach: list[dict[str, Any]] = []
+    # 提醒（SR-F1.4 / T-B5）：本地时间；界面按 已过/今天/临期 标出（通知通道待选型）
+    remind_at: str | None = None
+    # 提醒的界面口径（`over`/`today`/`soon`/`later`；None=没设或已完成）——
+    # **由领域层算**（`tm.reminder_state`），前端不自己拿当前时间去比（免得口径分叉）
+    reminder_state: str | None = None
 
 
 # 会**在本机打开文件/程序**或改服务端设置的接口，只接受本机页面调用。
@@ -128,6 +137,8 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
         priority=t.priority,
         flagged=t.flagged,
         attach=[dict(i) for i in t.attach],
+        remind_at=t.remind_at,
+        reminder_state=tm.reminder_state(t),
     )
 
 
@@ -236,6 +247,43 @@ def create_app(db_path: str | None = None) -> FastAPI:
         """附件打开方式（当前值 + 可选值 + 规则说明；规则只有一份，前端不复述）。"""
         return {**attach_mod.get_settings(conn), **attach_mod.describe_rules()}
 
+    # ---- 提醒（SR-F1.4 / T-B5）：字段与"该提醒了"的只读数据源 ----
+    @app.get("/api/reminders/due")
+    def due_reminders(now: str | None = None) -> list[TaskOut]:
+        """到点该提醒的任务（`remind_at <= now`，排除完成/取消/归档/已删），按提醒时间正序。
+
+        `now` 可用本地时间字符串覆盖（便于测试/演示）；缺省用本机当前时间。
+        只读：不改任务、不发事实 —— **通知通道另说**（选型见复盘 §八，未接入前界面自己标出来）。
+        """
+        moment: datetime | None = None
+        if now:
+            try:
+                moment = datetime.fromisoformat(now)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="now 需是本地时间字符串") from None
+        return [_out(t, conn) for t in tm.due_reminders(conn, moment)]
+
+    @app.get("/api/reminders")
+    def reminders() -> list[dict[str, Any]]:
+        """所有设了提醒且任务还"活着"的条目：`{task_id, title, remind_at, state}`。
+
+        `state` 是**界面口径**（`over`/`today`/`soon`/`later`），来自领域层 `reminder_state` ——
+        卡片、详情、将来的通知通道共用同一份判断，不各算一套。
+        """
+        out: list[dict[str, Any]] = []
+        for t in tm.list_tasks(conn):
+            state = tm.reminder_state(t)
+            if state is None:
+                continue
+            out.append({
+                "task_id": t.id,
+                "title": t.title,
+                "remind_at": t.remind_at,
+                "state": state,
+            })
+        out.sort(key=lambda x: str(x["remind_at"]))
+        return out
+
     @app.put("/api/settings/attach")
     def put_attach_settings(payload: dict[str, Any], request: Request) -> dict[str, Any]:
         """改打开方式 / 白名单（服务端持久化；可执行/脚本类不许进白名单）。"""
@@ -261,6 +309,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
                 priority=payload.priority,
                 flagged=payload.flagged,
                 attach=[dict(i) for i in payload.attach],
+                remind_at=payload.remind_at,
             )
             if payload.groups:
                 tm.set_task_groups(conn, t.id, payload.groups)

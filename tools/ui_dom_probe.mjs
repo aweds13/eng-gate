@@ -93,6 +93,8 @@ globalThis.AbortController = class { constructor() { this.signal = {}; } abort()
 const DB = {
   '/api/config': { accent_color: '#3b82f6', theme: 'light', gpa_scale: '4.0' },
   '/api/mydays': [], '/api/overdue': [], '/api/tasks': [], '/api/tasks/deleted': [],
+  // 到点提醒（T-B5）：今日页「该提醒了」区用它
+  '/api/reminders/due': [],
   '/api/review/due': [], '/api/review/items': [], '/api/groups': [],
   // 任务详情（右栏 #detailRail）：T-B1 起详情面板带「备注」，编辑态渲染必须也跑一遍
   '/api/tasks/t1': {

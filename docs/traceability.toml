@@ -69,8 +69,8 @@ id = "SR-F1.4"
 title = "任务字段：子步骤/备注/提醒/附件"
 group = "F1"
 status = "partial"
-evidence = ["column:tasks.due_date", "column:tasks.repeat_days", "column:tasks.parent_id", "column:tasks.note", "column:tasks.attach", "test:test_task_note_line.py", "test:test_attach_line.py"]
-gaps = "备注 note（T-B1）、附件/要求链接 attach（T-B4）已落地；**提醒 remind_at（T-B5）仍未做**（见审计 GAP-F1-01）；子步骤=子任务（SR-F1.8/T-A2）已 done"
+evidence = ["column:tasks.due_date", "column:tasks.repeat_days", "column:tasks.parent_id", "column:tasks.note", "column:tasks.attach", "column:tasks.remind_at", "test:test_task_note_line.py", "test:test_attach_line.py", "test:test_remind_line.py"]
+gaps = "字段与界面已齐：子步骤（T-A2）、备注（T-B1）、附件（T-B4）、提醒 remind_at + 界面标注（T-B5 前半）。**仍缺：到点发系统通知**（新增运行时依赖，选型待用户确认，见 复盘/段2设计决策-提醒与附件打开方式.md §八）"
 
 [entries."SR-F1.5"]
 id = "SR-F1.5"
@@ -959,6 +959,22 @@ evidence = [
   "test:test_attach_line.py",
 ]
 gaps = ""
+
+[entries."T-B5"]
+id = "T-B5"
+title = "F1 主线·段2：提醒 remind_at（字段 + 界面标注）；系统通知通道待选型"
+group = "PROCESS"
+status = "partial"
+evidence = [
+  "column:tasks.remind_at",
+  "text:src/timeflow/storage/db.py::def _migrate_v10",
+  "text:src/timeflow/core/tasks/manager.py::def reminder_state",
+  "text:src/timeflow/core/tasks/manager.py::def due_reminders",
+  "route:GET /api/reminders/due",
+  "route:GET /api/reminders",
+  "test:test_remind_line.py",
+]
+gaps = "**到点发系统通知未做**：属于本项目第一个新增运行时依赖，按用户约定须先出选型方案确认（见 复盘/段2设计决策-提醒与附件打开方式.md §八，含 A 后台轮询 / B 计划任务 / C 第三方库三案与取舍）；移动端只做界面标注。已完成：字段 + 校验 + 界面口径（over/today/soon/later）+ 今日页「该提醒了」区 + 卡片/详情标注"
 
 [entries."STEP-17"]
 id = "STEP-17"

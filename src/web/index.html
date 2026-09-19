@@ -435,10 +435,13 @@ function editForm(t){
         <option value="0" ${t.is_myday?'':'selected'}>不在今天</option></select></div>
     <div class="field narrow"><label>优先级</label>
       <select id="editPriority">${prioOptions(t.priority)}</select></div>
+    <div class="field narrow"><label>提醒（可选）</label>
+      <input id="editRemind" type="datetime-local" value="${t.remind_at?esc(t.remind_at):''}"></div>
     <div class="field wide"><label>备注</label>
       <textarea id="editNote" class="textarea" rows="3" placeholder="要求、思路、要带的东西…（只在这里显示，不进列表）">${esc(t.note||'')}</textarea></div>
   </div>
-  <div class="sub">备注只属于这个任务，不参与账本；改截止日会立刻重算逾期与债务。已完成的任务也能改，但不会改写历史完成记录。</div>`;
+  <div class="sub">备注只属于这个任务，不参与账本；提醒到点会在界面上标出来（系统通知通道待选型）。
+    改截止日会立刻重算逾期与债务。已完成的任务也能改，但不会改写历史完成记录。</div>`;
 }
 async function saveTaskEdit(){
   if(!detailTaskId){toast('没有正在编辑的任务');return}
@@ -455,6 +458,7 @@ async function saveTaskEdit(){
     group_name:document.getElementById('editGroup').value||null,
     is_myday:document.getElementById('editMyDay').value==='1',
     priority:document.getElementById('editPriority').value||'中',
+    remind_at:(document.getElementById('editRemind').value||'')||null,   // 清空 = 取消提醒
     note:noteRaw.trim()?noteRaw.trim():null,   // 清空备注 = 存 null（不是空串，免得两种"空"）
   };
   await api(`/api/tasks/${detailTaskId}`,{method:'PATCH',body:JSON.stringify(body)});
@@ -487,6 +491,7 @@ function renderDetail(el,t,facts,kids){
       状态 ${esc(t.status)}</div>
     <div class="meta">截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
     <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'} · 优先级 ${prioBadge(t.priority)} ${flagBadge(t)}</div>
+    <div class="meta">提醒 ${t.remind_at?`${esc(String(t.remind_at).replace('T',' '))}（${REMIND_LABEL[t.reminder_state]||'—'}）`:'未设'}</div>
     <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}</div>
     ${t.note?`<div class="settings-sub">备注</div><div class="sub" style="white-space:pre-wrap">${esc(t.note)}</div>`:''}`}
     ${asg}
@@ -566,6 +571,13 @@ const PRIO_CLASS={'高':'high','中':'mid','低':'low'};
 function prioBadge(p){const v=p||'中';return `<span class="prio ${PRIO_CLASS[v]||'mid'}">${esc(v)}</span>`}
 // 手动标记（SR-F1.3 / T-B3）：只有"已标记"才显示一面小旗（没标记就不占位置）
 function flagBadge(t){return t.flagged?'<span class="flag" title="你自己标记的">⚑ 已标记</span>':''}
+// 提醒（SR-F1.4 / T-B5）：状态由**后端**算（`reminder_state`：over/today/soon/later），这里只翻译成人话
+const REMIND_LABEL={over:'提醒已到',today:'今天提醒',soon:'临期提醒',later:'以后提醒'};
+function remindBadge(t){
+  if(!t.remind_at||!t.reminder_state)return '';
+  const when=String(t.remind_at).replace('T',' ').slice(5);   // 09-20 08:30
+  return `<span class="prio ${t.reminder_state==='over'?'high':'mid'}" title="提醒时间 ${when}">${REMIND_LABEL[t.reminder_state]||'提醒'} ${when}</span>`;
+}
 function prioOptions(current){
   return ['高','中','低'].map(v=>`<option value="${v}" ${v===(current||'中')?'selected':''}>${v}</option>`).join('');
 }
@@ -582,7 +594,7 @@ function taskCard(t,isOverdue){
   return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div></div>
+    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div></div>
     <div class="row">
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
       ${isOverdue?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
@@ -946,10 +958,16 @@ function summaryLine(s){
   return parts.join(' · ');
 }
 async function renderToday(m){
-  const [mydays,overdue,summary,due,deleted,all]=await Promise.all([
+  const [mydays,overdue,summary,due,deleted,all,reminders]=await Promise.all([
     api('/api/mydays'),api('/api/overdue'),api('/api/summary'),api('/api/review/due'),
-    api('/api/tasks/deleted'),api('/api/tasks')]);
+    api('/api/tasks/deleted'),api('/api/tasks'),api('/api/reminders/due')]);
   el('summary',summaryLine(summary));
+  // 到点的提醒（T-B5）：界面自己标出来 —— 没接系统通知通道也不瞎（口径由后端 reminder_state 定）
+  const remind=reminders.length?`<div class="section-title">该提醒了（${reminders.length}）</div>
+    ${reminders.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div>
+      <div class="meta">提醒时间 ${esc(String(t.remind_at).replace('T',' '))}${t.due_date?` · 截止 ${t.due_date}`:''}</div></div>
+      <div class="row"><button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button>
+      <button class="ghost" data-action="task-done" data-id="${t.id}" data-done="false">完成</button></div></div>`).join('')}`:'';
   // 今日完成度：已完成 + 仍在手（取消/归档/已删不算）——只统计"今天的清单与今天完成的"
   const doneTasks=all.filter(t=>t.status==='完成').length;
   const pendingTasks=all.filter(t=>t.status!=='完成').length;
@@ -965,6 +983,7 @@ async function renderToday(m){
     <label class="sub"><input type="checkbox" id="newMyDay" checked>也放进今天的清单</label>
     <button data-action="task-add">添加</button></div>
   ${todayCard(doneTasks,pendingTasks)}
+  ${remind}
   <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||'<div class="empty">没有逾期，很好</div>'}</div>
   <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||'<div class="empty">今天还没有任务，挑一件加进来吧</div>'}
   ${due.length?`<div class="section-title">今天该复习（${due.length}）</div>${due.map(r=>reviewCard(r)).join('')}`:''}
@@ -1285,6 +1304,7 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-appearance">主题 / 强调色</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-academic">GPA 制式</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-attach">附件打开方式</button>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-remind">提醒</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-sync">数据与同步</button></div>
   </div>
   <div class="section-title" id="set-appearance">外观</div>
@@ -1322,6 +1342,14 @@ async function renderSetting(m){
     <div class="new"><input id="wlExt" placeholder="加扩展名，如 .pdf" data-enter="wl-add">
       <button class="ghost" data-action="wl-add">加入白名单</button></div>
     <div class="sub">打开方式与白名单存在本机数据库（服务端），不由页面参数决定 —— 免得任何网页都能要求"直接打开"。</div>
+  </div>
+  <div class="section-title" id="set-remind">提醒</div>
+  <div class="card panel-card">
+    <div class="settings-sub">提醒时间</div>
+    <div class="sub">在任务详情里设「提醒」时间；到点后：① 今日页出现「该提醒了」区、卡片上标出（现在就能用）；
+      ② **系统通知通道尚未接入** —— 属于本项目第一个新增运行时依赖，选型方案见复盘
+      「段2设计决策-提醒与附件打开方式.md」§八，等你拍板后再接（这里不放假开关）。</div>
+    <div class="sub">移动端只做界面标注，不发系统通知（浏览器/PWA 通知需要 HTTPS + 授权，一版不做）。</div>
   </div>
   <div class="section-title">数据与同步</div>
   <div class="card panel-card" id="set-sync">
