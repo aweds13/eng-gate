@@ -47,13 +47,13 @@ def _make_v5_db(path: str) -> None:
 # ---------------------------------------------------------------- 迁移（v6）
 
 def test_upgrade_v5_adds_note_column_and_keeps_data(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """v5 → v6：补一列 note，旧行数据不丢，值为 NULL（不猜内容）。"""
+    """v5 → v6（及以后）：补一列 note，旧行数据不丢，值为 NULL（不猜内容）。"""
     p = str(tmp_path / "v5.db")
     _make_v5_db(p)
 
-    conn = db_mod.connect(p)  # 触发 v5 → v6
+    conn = db_mod.connect(p)  # 触发 v5 → v6 → …
     ver = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
-    assert int(ver["version"]) == db_mod.SCHEMA_VERSION == 6
+    assert int(ver["version"]) == db_mod.SCHEMA_VERSION
     cols = {str(r["name"]) for r in conn.execute("PRAGMA table_info(tasks)").fetchall()}
     assert "note" in cols
     row = conn.execute("SELECT title, note FROM tasks WHERE id='old1'").fetchone()
@@ -92,12 +92,16 @@ def test_v6_missing_tasks_table_does_not_fail(tmp_path) -> None:  # type: ignore
 
     conn = db_mod.connect(p)
     ver = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
-    assert int(ver["version"]) == 6
+    assert int(ver["version"]) == db_mod.SCHEMA_VERSION
     conn.close()
 
 
 def test_row_without_note_column_does_not_crash() -> None:
-    """缺列兜底：拿不到 note 列的老 row 也要能读出 Task（note=None）。"""
+    """缺列兜底：拿不到 note 列的老 row 也要能读出 Task（note=None）。
+
+    注意边界：**排序路径要求列存在**（`list_tasks` 的 ORDER BY 会引用 v7 的 priority）——
+    列由迁移保证；这里的兜底是给 `get_task` 这类不排序的读取路径用的。
+    """
     raw = sqlite3.connect(":memory:")
     raw.row_factory = sqlite3.Row
     raw.execute(
@@ -109,8 +113,8 @@ def test_row_without_note_column_does_not_crash() -> None:
         "INSERT INTO tasks (id,title,status,created_at,updated_at,version)"
         " VALUES ('x','老行','未开始','2026-01-01','2026-01-01',1)"
     )
-    got = tm.list_tasks(raw)
-    assert len(got) == 1 and got[0].note is None
+    got = tm.get_task(raw, "x")
+    assert got.note is None
     raw.close()
 
 

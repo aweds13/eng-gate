@@ -13,7 +13,11 @@ from timeflow.core.tasks.groups import (
     toggle_task_group,
 )
 from timeflow.core.tasks.manager import (
+    DEFAULT_PRIORITY,
     HIDDEN_STATUSES,
+    PRIORITY_HIGH,
+    PRIORITY_LOW,
+    PRIORITY_MID,
     STATUS_ARCHIVED,
     STATUS_CANCELLED,
     STATUS_DELETED,
@@ -21,6 +25,7 @@ from timeflow.core.tasks.manager import (
     STATUS_DONE,
     STATUS_OVERDUE,
     STATUS_TODO,
+    VALID_PRIORITIES,
     Task,
     complete_task,
     create_subtask,
@@ -78,4 +83,9 @@ __all__ = [
     "STATUS_ARCHIVED",
     "STATUS_DELETED",
     "HIDDEN_STATUSES",
+    "VALID_PRIORITIES",
+    "PRIORITY_HIGH",
+    "PRIORITY_MID",
+    "PRIORITY_LOW",
+    "DEFAULT_PRIORITY",
 ]

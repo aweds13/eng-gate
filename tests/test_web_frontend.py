@@ -295,6 +295,21 @@ def test_task_note_is_editable_in_detail_only() -> None:
     assert "note" not in card, "备注不该出现在列表卡片里（渐进聚焦）"
 
 
+def test_task_priority_badge_and_edit() -> None:
+    """T-B2（SR-F1.2）：卡片有优先级色标、编辑态能改优先级，颜色只住 app.css。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "function prioBadge(" in html, "缺少优先级色标组件"
+    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    assert "prioBadge(t.priority)" in card, "任务卡片没显示优先级"
+    edit = html.split("function editForm(t){", 1)[1].split("\n}", 1)[0]
+    assert 'id="editPriority"' in edit, "编辑态不能改优先级"
+    save = html.split("async function saveTaskEdit(){", 1)[1].split("\n}", 1)[0]
+    assert "editPriority" in save and "priority:" in save, "保存时没把优先级带上"
+    css = WEB_CSS.read_text(encoding="utf-8")
+    for needle in (".prio {", ".prio.high", ".prio.mid", ".prio.low"):
+        assert needle in css, f"app.css 缺少优先级样式 {needle}"
+
+
 def test_subtask_flow_is_wired_in_frontend() -> None:
     """F1 段1（OP-12）：建步骤、勾完成、脱离父任务都要有界面入口。"""
     html = WEB_INDEX.read_text(encoding="utf-8")

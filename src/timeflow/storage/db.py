@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -114,6 +114,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v5(conn)  # 历史已完成任务回填 task.completed 事实（第 3 步）
     if current < 6:
         _migrate_v6(conn)  # 任务备注 note（F1 段2 · T-B1）
+    if current < 7:
+        _migrate_v7(conn)  # 任务优先级 priority（F1 段2 · T-B2）
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
@@ -124,6 +126,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v4(conn)  # 新库 focus_sessions 为空，此处为空操作
     _migrate_v5(conn)  # 新库 tasks 为空，此处为空操作
     _migrate_v6(conn)  # 新库也要走一遍：v1 的 tasks 建表语句保持历史原样，note 由本版加列
+    _migrate_v7(conn)  # 同上：priority 由本版加列
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -548,3 +551,26 @@ def _migrate_v6(conn: sqlite3.Connection) -> None:
     if "note" in columns:
         return  # 幂等：新库（或已迁移过的库）直接返回
     conn.execute("ALTER TABLE tasks ADD COLUMN note TEXT")
+
+
+def _migrate_v7(conn: sqlite3.Connection) -> None:
+    """v7：任务加 `priority`（优先级：高/中/低）—— F1 段2 · T-B2（SR-F1.2）。
+
+    口径（段2 决策已定案）：
+    - 三档 **高 / 中 / 低**，**默认「中」**（不给"无优先级"这种第四态，免得排序时又要想怎么排）；
+    - 排序统一为 **截止日 → 优先级 → 创建时间**（无截止日排最后，见 `manager._ORDER_BY`）；
+    - **不加 1–5 数字分级、不做拖拽排序**（拖拽要前端持久化顺序，属独立任务）。
+    迁移性质：向后兼容加列、幂等（已有列就跳过）、缺 tasks 表的残缺库跳过；
+    老行由 `DEFAULT '中'` 补齐，**不猜**（不按截止日远近偷偷标高低）。
+    """
+    if (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
+        ).fetchone()
+        is None
+    ):
+        return  # 极端旧库 / 残缺库：无 tasks 表，跳过加列
+    columns = {str(r["name"]) for r in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    if "priority" in columns:
+        return  # 幂等
+    conn.execute("ALTER TABLE tasks ADD COLUMN priority TEXT DEFAULT '中'")

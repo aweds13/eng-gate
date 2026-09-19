@@ -41,6 +41,8 @@ class TaskIn(BaseModel):
     is_myday: bool = False
     groups: list[str] = []
     note: str | None = None
+    # 优先级（SR-F1.2 / T-B2）：高/中/低，默认「中」；非法值由领域层拒绝（400）
+    priority: str = tm.DEFAULT_PRIORITY
 
 
 class AssigneeOut(BaseModel):
@@ -71,6 +73,8 @@ class TaskOut(BaseModel):
     subtask_total: int = 0
     # 备注（SR-F1.4 / T-B1）：卡片列表不渲染，只在详情面板显示/编辑（渐进聚焦）
     note: str | None = None
+    # 优先级（SR-F1.2 / T-B2）：卡片上是小色标；三档 高/中/低
+    priority: str = tm.DEFAULT_PRIORITY
 
 
 def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
@@ -96,6 +100,7 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
         subtask_done=progress["done"],
         subtask_total=progress["total"],
         note=t.note,
+        priority=t.priority,
     )
 
 
@@ -148,6 +153,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
                 parent_id=payload.parent_id,
                 is_myday=payload.is_myday,
                 note=payload.note,
+                priority=payload.priority,
             )
             if payload.groups:
                 tm.set_task_groups(conn, t.id, payload.groups)
@@ -183,7 +189,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.patch("/api/tasks/{task_id}", response_model=TaskOut)
     def update_task(task_id: str, payload: dict[str, Any]) -> TaskOut:
-        """编辑任务（OP-9）：标题/截止/分组/备注/重复/My Day/父任务。
+        """编辑任务（OP-9）：标题/截止/分组/备注/优先级/重复/My Day/父任务。
 
         `KeyError` = 任务不存在 → **404**（以前被 `(KeyError, ValueError)` 一起吞成 400，
         还会把 `str(KeyError)` 的引号一起显示出来 —— 实测踩到）。

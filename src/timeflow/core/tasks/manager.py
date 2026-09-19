@@ -34,6 +34,22 @@ VALID_STATUS = {
 # 默认视图（列表 / My Day / 逾期 / 债务）不可见的状态：归档 + 已删（软删除）。
 HIDDEN_STATUSES = (STATUS_ARCHIVED, STATUS_DELETED)
 
+# 优先级（SR-F1.2 / 段2 决策）：只有三档，**默认「中」**；不做 1–5 数字分级，也不做拖拽排序。
+PRIORITY_HIGH = "高"
+PRIORITY_MID = "中"
+PRIORITY_LOW = "低"
+VALID_PRIORITIES = (PRIORITY_HIGH, PRIORITY_MID, PRIORITY_LOW)
+DEFAULT_PRIORITY = PRIORITY_MID
+_PRIORITY_RANK = {PRIORITY_HIGH: 0, PRIORITY_MID: 1, PRIORITY_LOW: 2}
+
+# 排序口径（三处统一：列表 / My Day / 逾期）：**截止日 → 优先级 → 创建时间**；无截止日排最后。
+# 写成 SQL 片段是为了让三处用**同一份**口径，避免"各视图各排各的"（那正是 SR-F1.2 要收的口子）。
+_ORDER_BY = (
+    " ORDER BY due_date IS NULL, due_date,"
+    " CASE priority WHEN '高' THEN 0 WHEN '中' THEN 1 WHEN '低' THEN 2 ELSE 1 END,"
+    " created_at"
+)
+
 
 @dataclass
 class Task:
@@ -51,6 +67,8 @@ class Task:
     # 备注（SR-F1.4 / T-B1）：人写的说明，列表不显示、详情面板可写（渐进聚焦）。
     # 默认值放在最后，老代码按位置构造 Task 也不会被破坏。
     note: str | None = None
+    # 优先级（SR-F1.2 / T-B2）：高/中/低，默认「中」。
+    priority: str = DEFAULT_PRIORITY
 
 
 def _row_to_task(row: sqlite3.Row) -> Task:
@@ -67,8 +85,9 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         version=row["version"],
-        # 缺列兜底：迁移（v6）已保证列存在，但残缺库/手工建的测试库可能没有 note
+        # 缺列兜底：迁移（v6/v7）已保证列存在，但残缺库/手工建的测试库可能没有
         note=row["note"] if "note" in keys else None,
+        priority=row["priority"] if "priority" in keys else DEFAULT_PRIORITY,
     )
 
 
@@ -80,6 +99,13 @@ def _today() -> str:
     return date.today().isoformat()
 
 
+def _check_priority(value: object) -> str:
+    """优先级只有三档（高/中/低）—— 别的一律拒绝，不静默降级（避免"设了高却没生效"）。"""
+    if value not in VALID_PRIORITIES:
+        raise ValueError(f"非法优先级: {value}（只能是 高/中/低）")
+    return str(value)
+
+
 def create_task(
     conn: sqlite3.Connection,
     title: str,
@@ -89,11 +115,13 @@ def create_task(
     parent_id: str | None = None,
     is_myday: bool = False,
     note: str | None = None,
+    priority: str = DEFAULT_PRIORITY,
 ) -> Task:
     """新建任务（AC-1）。校验标题非空；若 due 过去且未完成，初始状态标逾期。"""
     title = title.strip()
     if not title:
         raise ValueError("任务标题不能为空")
+    priority = _check_priority(priority)
     now = _now()
     task_id = uuid.uuid4().hex[:12]
     status = STATUS_TODO
@@ -103,8 +131,8 @@ def create_task(
         """
         INSERT INTO tasks
         (id, title, due_date, group_name, repeat_days, parent_id, is_myday, status,
-         created_at, updated_at, version, note)
-        VALUES (?,?,?,?,?,?,?,?,?,?,1,?)
+         created_at, updated_at, version, note, priority)
+        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?)
         """,
         (
             task_id,
@@ -118,6 +146,7 @@ def create_task(
             now,
             now,
             note,
+            priority,
         ),
     )
     conn.commit()
@@ -132,13 +161,17 @@ def get_task(conn: sqlite3.Connection, task_id: str) -> Task:
 
 
 def list_tasks(conn: sqlite3.Connection, active_only: bool = True) -> list[Task]:
-    """任务列表。`active_only=True` 时排除「归档 / 已删（软删除）」。"""
+    """任务列表（**按统一口径排序**：截止日 → 优先级 → 创建时间）。
+
+    `active_only=True` 时排除「归档 / 已删（软删除）」。
+    回收站（`active_only=False`）也走同一排序，让"最近该处理的"排前面。
+    """
     sql = "SELECT * FROM tasks"
     params: tuple[object, ...] = ()
     if active_only:
         sql += " WHERE status NOT IN (?,?)"
         params = HIDDEN_STATUSES
-    rows = conn.execute(sql, params).fetchall()
+    rows = conn.execute(sql + _ORDER_BY, params).fetchall()
     return [_row_to_task(r) for r in rows]
 
 
@@ -157,6 +190,7 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         "is_myday",
         "status",
         "note",
+        "priority",
     }
     # 注意：用"键在 payload 里"判断，而不是"值不是 None" ——
     # 否则 `parent_id=None` / `due_date=None` 这类**清空操作**会被静默忽略（实测踩到）。
@@ -165,6 +199,9 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         return get_task(conn, task_id)
     if "status" in updates and updates["status"] not in VALID_STATUS:
         raise ValueError(f"非法状态: {updates['status']}")
+    if "priority" in updates:
+        # 优先级**不可清空**（没有"无优先级"这一态）：非法/None 一律拒绝，不静默变默认值
+        _check_priority(updates["priority"])
     before = get_task(conn, task_id)
     sets = ", ".join(f"{k} = ?" for k in updates)
     conn.execute(
@@ -299,17 +336,30 @@ def purge_deleted_tasks(conn: sqlite3.Connection) -> int:
 
 
 def myday_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Task]:
-    """My Day 集合（AC-4）：is_myday=1 且非完成/取消/归档/已删；默认含今日应做。"""
+    """My Day 集合（AC-4）：is_myday=1 且非完成/取消/归档/已删；**按统一口径排序**。"""
     rows = conn.execute(
-        "SELECT * FROM tasks WHERE is_myday = 1 AND status NOT IN (?,?,?,?) "
-        "ORDER BY due_date IS NULL, due_date",
+        "SELECT * FROM tasks WHERE is_myday = 1 AND status NOT IN (?,?,?,?)" + _ORDER_BY,
         (STATUS_DONE, STATUS_CANCELLED, *HIDDEN_STATUSES),
     ).fetchall()
     return [_row_to_task(r) for r in rows]
 
 
+def _sort_key(task: Task) -> tuple[int, str, int, str]:
+    """Python 侧排序键 —— 与 `_ORDER_BY` **同口径**（无截止日最后 → 截止日 → 优先级 → 创建时间）。
+
+    为什么要有第二份：逾期栏是"SQL 查出来的 + 无截止日但昨天就该做的 My Day"两拨合并，
+    只能先在 SQL 里排、再在 Python 里重排一次；两份口径必须一致，否则逾期栏与列表顺序会打架。
+    """
+    return (
+        1 if task.due_date is None else 0,
+        task.due_date or "",
+        _PRIORITY_RANK.get(task.priority, 1),
+        task.created_at,
+    )
+
+
 def overdue_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Task]:
-    """逾期任务（AC-5）：未完成且 due_date < 今天（不强推，只如实列出）。
+    """逾期任务（AC-5）：未完成且 due_date < 今天（不强推，只如实列出）；**按统一口径排序**。
 
     AC-4 补充：无截止日但**昨日仍未完成的 My Day 任务**也自动移入逾期栏
     （My Day=今天要做的集合，没做完不假装消失）。
@@ -318,7 +368,7 @@ def overdue_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Ta
     t_date = date.fromisoformat(t)
     rows = conn.execute(
         "SELECT * FROM tasks WHERE due_date IS NOT NULL AND due_date < ? "
-        "AND status NOT IN (?,?,?,?) ORDER BY due_date",
+        "AND status NOT IN (?,?,?,?)" + _ORDER_BY,
         (t, STATUS_DONE, STATUS_CANCELLED, *HIDDEN_STATUSES),
     ).fetchall()
     overdue = [_row_to_task(r) for r in rows]
@@ -333,7 +383,7 @@ def overdue_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Ta
         created = date.fromisoformat(task.created_at[:10])
         if created < t_date:
             overdue.append(task)
-    overdue.sort(key=lambda x: (x.due_date or x.created_at))
+    overdue.sort(key=_sort_key)
     return overdue
 
 
@@ -468,7 +518,9 @@ def process_repeats(conn: sqlite3.Connection) -> int:
     - 基准是**上次完成时间**（`updated_at`，完成即写）；无截止日的任务不生成（无从推算下一次）。
     - **幂等**：同一任务只生成一次下一次 —— 以 `task.repeat.generated` 事实为准
       （该事实随生成一起写入，既做去重依据，也留下可审计痕迹）。
-    - 继承：标题 / 分组 / 重复周期 / 是否 My Day（下一次仍进今天，保持动线连续）。
+    - 继承：标题 / 分组 / 重复周期 / 是否 My Day（下一次仍进今天，保持动线连续）
+      + **优先级**（T-B2：优先级是"这件事有多要紧"，属于任务定义，不该每周期掉回默认「中」）。
+      **备注不继承**（T-B1：备注往往是这一次的具体说明，抄到下一周期会变成误导）。
     """
     generated = 0
     for row in conn.execute(
@@ -489,6 +541,7 @@ def process_repeats(conn: sqlite3.Connection) -> int:
             repeat_days=task.repeat_days,
             parent_id=task.parent_id,
             is_myday=task.is_myday,
+            priority=task.priority,
         )
         _record_repeat_generated(conn, task, next_task, next_due)
         generated += 1

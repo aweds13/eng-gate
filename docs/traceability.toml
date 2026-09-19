@@ -42,9 +42,9 @@ gaps = ""
 id = "SR-F1.2"
 title = "排序 = 截止日 → 优先级 → 手动拖拽"
 group = "F1"
-status = "todo"
-evidence = ["text:src/timeflow/core/tasks/manager.py::ORDER BY due_date"]
-gaps = "无 priority 字段；无拖拽排序（只有 due_date 排序）"
+status = "partial"
+evidence = ["column:tasks.priority", "text:src/timeflow/core/tasks/manager.py::_ORDER_BY", "test:test_task_priority_line.py"]
+gaps = "已实现 **截止日 → 优先级 → 创建时间**，且 `list_tasks/myday_tasks/overdue_tasks` 三处同口径（T-B2）；**拖拽排序按段2 决策明确不做**（需要前端持久化顺序，属独立任务、未排期）"
 
 [entries."SR-F1.3"]
 id = "SR-F1.3"
@@ -850,6 +850,23 @@ evidence = [
   "route:PATCH /api/tasks/{task_id}",
   "ui:data-action=task-save",
   "test:test_task_note_line.py",
+]
+gaps = ""
+
+[entries."T-B2"]
+id = "T-B2"
+title = "F1 主线·段2：优先级 priority + 三处排序统一（schema v7）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "column:tasks.priority",
+  "text:src/timeflow/storage/db.py::def _migrate_v7",
+  "text:src/timeflow/core/tasks/manager.py::_ORDER_BY",
+  "route:POST /api/tasks",
+  "route:PATCH /api/tasks/{task_id}",
+  "ui:data-action=task-save",
+  "text:src/web/app.css::.prio.high",
+  "test:test_task_priority_line.py",
 ]
 gaps = ""
 

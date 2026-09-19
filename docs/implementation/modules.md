@@ -12,11 +12,14 @@
 - **任务字段**（F1 段2 起）：`note`（备注）已在 schema **v6** 落地（T-B1）——领域层 `create_task(note=)` 与
   `update_task` 白名单都带它；**备注是沉淀型内容，不发 facts、不进账本**；界面只在详情面板读写（列表不显示）。
   跨端 `sync.merge_task` 会带上 note，且**远端没带该字段时不清空本地备注**。
+  `priority`（优先级 高/中/低，默认中）已在 schema **v7** 落地（T-B2）：非法值拒绝、不可清空；
+  **排序统一为 `截止日 → 优先级 → 创建时间`**（`_ORDER_BY` 一处定义，列表/My Day/逾期三处共用，
+  逾期栏两拨来源合并后用同口径的 `_sort_key` 重排）；Repeat 生成的下一次继承优先级。
 - **界面收口**（F1 段1，2026-09-18）：分组增删改 + 任务归属（T-A1）、子任务树与联动（T-A2）、任务编辑（T-A3）
   都已有入口；`purge_task` 收紧为「只能删回收站里的任务」。
 - **未实现**（以 `../../复盘/全量审计报告-五层一致性与缺口登记.md` §四 F1 为准）：任务字段「提醒 `remind_at` /
-  附件 `attach`」与优先级 `priority`（段2 的 T-B2/T-B4/T-B5）、Important/Planned/Flagged 视图、
-  拖拽排序、任务存档（尝试记录+关联笔记）、三类任务区分。
+  附件 `attach`」（段2 的 T-B4/T-B5）、Important/Planned/Flagged 视图（T-B3）、
+  拖拽排序（段2 决策明确不做）、任务存档（尝试记录+关联笔记）、三类任务区分。
 - **Repeat 触发**（第 5 步）：完成时调 `process_repeats`；以 `task.repeat.generated` 事实去重 ⇒ 同一任务只生成一次。
 
 ## SR-F2 B 系统记账 → `core/ledger/`

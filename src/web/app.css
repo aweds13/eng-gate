@@ -227,6 +227,12 @@ select {
   font-size: 14px;
   resize: vertical;
 }
+/* 优先级色标（SR-F1.2 / T-B2）：高=实心强调色 / 中=描边 / 低=灰（颜色只住令牌区） */
+.prio { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted) }
+.prio.high { background: var(--accent); border-color: var(--accent); color: var(--accent-on) }
+.prio.mid { border-color: var(--accent); color: var(--accent) }
+.prio.low { color: var(--muted) }
+
 /* ---------- 设置页 ---------- */
 .settings-sub { font-size: 13px; margin: 18px 0 8px; color: var(--text) }
 .settings-sub:first-child { margin-top: 0 }

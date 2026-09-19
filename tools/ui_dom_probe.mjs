@@ -99,7 +99,7 @@ const DB = {
     id: 't1', title: '探针任务', due_date: '2030-01-01', group_name: null, repeat_days: null,
     parent_id: null, is_myday: true, status: '未开始', created_at: '2026-09-18T10:00:00',
     updated_at: '2026-09-18T10:00:00', version: 1, groups: [], assignments: [],
-    subtask_done: 0, subtask_total: 0, note: '备注也要渲染一遍',
+    subtask_done: 0, subtask_total: 0, note: '备注也要渲染一遍', priority: '高',
   },
   '/api/tasks/t1/facts': [],
   '/api/tasks/t1/subtasks': [],
@@ -167,11 +167,16 @@ for (const editing of [false, true]) {
     await globalThis.__showDetail('t1');
     await sleep(30);
     const rail = byId.get('detailRail')._html;
-    const need = editing ? 'id="editNote"' : '备注也要渲染一遍';
-    const rendered = rail.includes('任务详情') && rail.includes(need);
+    // 只读态：显示任务字段（含备注、优先级色标）；编辑态：两个可写控件都在
+    const needs = editing
+      ? ['id="editNote"', 'id="editPriority"']
+      : ['备注也要渲染一遍', 'prio'];
+    const missing = needs.filter((n) => !rail.includes(n));
+    const rendered = rail.includes('任务详情') && missing.length === 0;
     if (!rendered) detailBad++;
-    detailChecks.push({ editing, rail: rail.length, rendered });
-    console.log(`  ${rendered ? '✅' : '⚠️ '} 详情面板${editing ? '·编辑态' : '·只读'} rail ${String(rail.length).padStart(5)}B`);
+    detailChecks.push({ editing, rail: rail.length, rendered, missing });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} 详情面板${editing ? '·编辑态' : '·只读'} rail ${String(rail.length).padStart(5)}B`
+      + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
   } catch (e) {
     detailBad++;
     detailChecks.push({ editing, error: e.message });
