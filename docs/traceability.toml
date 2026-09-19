@@ -1010,6 +1010,7 @@ evidence = [
   "text:src/timeflow/core/remind.py::def build_toast_xml",
   "text:src/timeflow/core/remind.py::STYLE_ALARM",
   "text:src/timeflow/core/remind.py::def set_style",
+  "text:src/timeflow/core/remind.py::def manual_command_text",
   "route:PUT /api/settings/reminder",
   "ui:data-action=set-remind-style",
   "test:test_remind_channel.py",

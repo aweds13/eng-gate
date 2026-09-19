@@ -166,13 +166,34 @@ def test_disabled_by_default_and_install_uninstall(tmp_path) -> None:  # type: i
     conn.close()
 
 
+def test_manual_command_matches_what_we_run(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """失败时要给用户一条**可直接粘贴**的命令；它必须与真实下发的 /TR 完全等价。
+
+    背景：应用跑在受限环境（沙箱/容器）里时 `schtasks` 会被挡（实测报
+    `ERROR: The system cannot find the path specified.`），此时用户在自己终端跑这条命令即可。
+    """
+    exe = sys.executable
+    script = ROOT / "src" / "timeflow" / "app" / "remind.py"
+    db = str(tmp_path / "m.db")
+    args = rm.create_task_command(exe, script, db)
+    real_tr = args[args.index("/TR") + 1]          # 真实下发（含内层引号）
+    manual = rm.manual_command_text(exe, script, db)
+    assert "schtasks /Create" in manual and "/SC MINUTE /MO 1" in manual and "/F" in manual
+    assert str(script) in manual and db in manual
+    # 手动命令里的 /TR 把内层引号转义成 \" —— 去掉最外层引号与转义后，应与真实下发一模一样
+    inner = manual.split("/TR ", 1)[1].rsplit(" /F", 1)[0]
+    assert inner.startswith('"') and inner.endswith('"')
+    assert inner[1:-1].replace('\\"', '"') == real_tr
+
+
 def test_install_failure_does_not_persist_enabled(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """注册失败 → 设置**不落库**（否则会出现"以为开了其实没开"）。"""
+    """注册失败 → 设置**不落库**（否则会出现"以为开了其实没开"），且错误里带手动命令。"""
     conn = db_mod.connect(str(tmp_path / "f.db"))
     try:
         rm.set_enabled(conn, True, python_exe=sys.executable, run=FakeRun(fail=True))
     except RuntimeError as e:
         assert "注册计划任务失败" in str(e)
+        assert "手动执行" in str(e) and "schtasks /Create" in str(e)  # 可自助诊断
     else:  # pragma: no cover - 必须抛
         raise AssertionError("注册失败时应当报错")
     assert rm.is_enabled(conn) is False

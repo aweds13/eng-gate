@@ -198,6 +198,21 @@ def status(conn: sqlite3.Connection, run: Any = None) -> dict[str, Any]:
     }
 
 
+def manual_command_text(python_exe: str, script: Path, db_path: str) -> str:
+    """给用户**手动注册**用的命令（可直接粘进 PowerShell）。
+
+    为什么要有：注册要在系统层跑 `schtasks`，如果应用是跑在受限环境（沙箱/容器）里，
+    系统调用会被挡（实测报 `ERROR: The system cannot find the path specified.`）。
+    这时把**原样命令**给用户，他能在普通终端里一条命令搞定。
+    """
+    run = build_run_command(python_exe, script, db_path)
+    # schtasks 要求 /TR 的整个值再包一层引号，内部引号用 \" 转义（与 subprocess 传给它的形式一致）
+    tr = '"' + run.replace('"', '\\"') + '"'
+    return (
+        f"schtasks /Create /TN {TASK_NAME} /SC MINUTE /MO {INTERVAL_MINUTES} /TR {tr} /F"
+    )
+
+
 def set_enabled(
     conn: sqlite3.Connection,
     enabled: bool,
@@ -209,7 +224,8 @@ def set_enabled(
     """打开/关闭到点通知。
 
     打开 = 写设置 + 注册计划任务；关闭 = 写设置 + 删除计划任务（**可逆、不留痕**）。
-    注册失败 → 设置**不落库**（保持"以为开了其实没开"这种事不发生），并把错误如实抛给界面。
+    注册失败 → 设置**不落库**（保持"以为开了其实没开"这种事不发生），并把错误如实抛给界面 ——
+    **错误里带上手动注册命令**：受限环境（沙箱/容器）里系统调用会被挡，用户在自己终端一条命令就能搞定。
     """
     if enabled:
         exe = python_exe or sys.executable
@@ -217,7 +233,11 @@ def set_enabled(
         db = db_path or _default_db_path()
         ok, detail = install_task(exe, sc, db, run)
         if not ok:
-            raise RuntimeError(f"注册计划任务失败：{detail}")
+            raise RuntimeError(
+                f"注册计划任务失败：{detail}"
+                f"（若应用跑在受限环境里，系统调用会被挡；可在普通 PowerShell 里手动执行："
+                f"{manual_command_text(exe, sc, db)}）"
+            )
         _put(conn, KEY_ENABLED, "1")
         _put(conn, KEY_LAST_RESULT, f"已注册计划任务（每 {INTERVAL_MINUTES} 分钟检查一次）")
     else:

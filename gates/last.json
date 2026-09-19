@@ -1,10 +1,10 @@
 {
-  "rev": "fb43e2e",
-  "tree": "4414f0e1ea04cb2bb293cf8931c0aa9636287e80",
-  "parent": "fb43e2e",
+  "rev": "160288d",
+  "tree": "f97151e2f1b80320645fde75a079cee4691197af",
+  "parent": "160288d",
   "branch": "line/impl-v1",
   "dirty": true,
-  "at": "2026-09-19T22:51:47",
+  "at": "2026-09-19T23:03:46",
   "quick": true,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
@@ -13,51 +13,51 @@
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 78.2,
-      "summary": "424 passed, 2 deselected, 473 warnings in 76.58s (0:01:16)"
+      "seconds": 97.11,
+      "summary": "425 passed, 2 deselected, 470 warnings in 95.46s (0:01:35)"
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 3.86,
-      "summary": "2 passed, 424 deselected, 2 warnings in 2.08s"
+      "seconds": 6.61,
+      "summary": "2 passed, 425 deselected, 2 warnings in 3.75s"
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 0.75,
+      "seconds": 1.84,
       "summary": "All checks passed!"
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 1.62,
+      "seconds": 2.67,
       "summary": "Success: no issues found in 37 source files"
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 0.66,
+      "seconds": 1.64,
       "summary": "LAYER CHECKS: PASS ✅"
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 7.17,
+      "seconds": 10.34,
       "summary": "SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）"
     },
     {
       "name": "ui_dom_probe",
       "exit_code": 0,
-      "seconds": 0.68,
+      "seconds": 0.96,
       "summary": "✅ 假 DOM 渲染探针：12/12 个视图正常渲染，详情面板 2/2 正常，未注册动作 0 个，运行时告警 0 条"
     },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 3.01,
+      "seconds": 7.21,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）"
     }
   ],
-  "trailer": "pytest 424 passed, 2 deselected, 473 warnings in 76.58s (0:01:16); acceptance 2 passed, 424 deselected, 2 warnings in 2.08s; ruff All checks passed!; mypy Success: no issues found in 37 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; ui_dom_probe ✅ 假 DOM 渲染探针：12/12 个视图正常渲染，详情面板 2/2 正常，未注册动作 0 个，运行时告警 0 条; audit 审计通过 ✅（豁免 0 项已知欠账）"
+  "trailer": "pytest 425 passed, 2 deselected, 470 warnings in 95.46s (0:01:35); acceptance 2 passed, 425 deselected, 2 warnings in 3.75s; ruff All checks passed!; mypy Success: no issues found in 37 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; ui_dom_probe ✅ 假 DOM 渲染探针：12/12 个视图正常渲染，详情面板 2/2 正常，未注册动作 0 个，运行时告警 0 条; audit 审计通过 ✅（豁免 0 项已知欠账）"
 }
