@@ -232,6 +232,8 @@ select {
 .prio.high { background: var(--accent); border-color: var(--accent); color: var(--accent-on) }
 .prio.mid { border-color: var(--accent); color: var(--accent) }
 .prio.low { color: var(--muted) }
+/* 手动标记（SR-F1.3 / T-B3）：只有已标记才出现的小旗 */
+.flag { font-size: 12px; color: var(--accent) }
 
 /* ---------- 设置页 ---------- */
 .settings-sub { font-size: 13px; margin: 18px 0 8px; color: var(--text) }

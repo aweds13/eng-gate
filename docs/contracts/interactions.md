@@ -206,4 +206,5 @@
 > 证据：`../../tests/test_task_line.py`、`../../tests/test_task_repeat.py`、`../../tests/test_task_delete.py`、
 > `../../tests/test_focus_line.py`、`../../tests/test_review_line.py`、`../../tests/test_web_frontend.py`、
 > 真机 `../../tools/lf1_live_check.py`。**OP-1~OP-8 全部闭环，无残留格。**
-> 尚未纳入本表（第 5 步剩余）：OP-2 的「全部任务」视图、产出轴物化、复习撤销反馈。
+> 域扩展操作各自在域契约里定义并已闭环：OP-9 编辑任务 / OP-10 逾期处理 / OP-11 分组管理 /
+> OP-12 子任务管理 / OP-45 智能视图筛选，见 `domains/F1-tasks.md`（「全部任务」视图 = OP-2 扩展，亦已做）。

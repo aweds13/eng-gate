@@ -68,7 +68,7 @@ def merge_task(
     """
     tid = str(remote_task["id"])
     local = conn.execute(
-        "SELECT updated_at, version, note, priority FROM tasks WHERE id = ?", (tid,)
+        "SELECT updated_at, version, note, priority, flagged FROM tasks WHERE id = ?", (tid,)
     ).fetchone()
     remote_updated = str(remote_task.get("updated_at") or "")
     remote_version = _to_int(remote_task.get("version"), 1)
@@ -82,8 +82,8 @@ def merge_task(
         # 本地不存在：插入（来源标记）
         conn.execute(
             "INSERT INTO tasks (id, title, due_date, group_name, repeat_days, parent_id, "
-            "is_myday, status, created_at, updated_at, version, note, priority) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "is_myday, status, created_at, updated_at, version, note, priority, flagged) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 tid,
                 remote_task.get("title"),
@@ -98,6 +98,7 @@ def merge_task(
                 remote_version,
                 remote_task.get("note"),
                 str(remote_priority or _DEFAULT_PRIORITY),
+                int(bool(remote_task.get("flagged"))),
             ),
         )
         conn.commit()
@@ -112,9 +113,17 @@ def merge_task(
         # 其余字段沿既有口径（远端说了算）。
         note = remote_task["note"] if "note" in remote_task else local["note"]
         priority = str(remote_priority or local["priority"] or _DEFAULT_PRIORITY)
+        # flagged（T-B3）：与 note 同规矩 —— 远端没带这个字段就保留本地的
+        # （别把用户自己按的标记抹掉）
+        flagged = (
+            int(bool(remote_task["flagged"]))
+            if "flagged" in remote_task
+            else int(bool(local["flagged"]))
+        )
         conn.execute(
             "UPDATE tasks SET title=?, due_date=?, group_name=?, repeat_days=?, parent_id=?, "
-            "is_myday=?, status=?, note=?, priority=?, updated_at=?, version=? WHERE id=?",
+            "is_myday=?, status=?, note=?, priority=?, flagged=?, updated_at=?, version=? "
+            "WHERE id=?",
             (
                 remote_task.get("title"),
                 remote_task.get("due_date"),
@@ -125,6 +134,7 @@ def merge_task(
                 remote_task.get("status", "未开始"),
                 note,
                 priority,
+                flagged,
                 remote_updated,
                 remote_version,
                 tid,

@@ -18,6 +18,9 @@
     <nav>
       <button data-action="view" data-view="today" class="active">今日</button>
       <button data-action="view" data-view="tasks">全部任务</button>
+      <button data-action="view" data-view="important">重要</button>
+      <button data-action="view" data-view="planned">有计划</button>
+      <button data-action="view" data-view="flagged">已标记</button>
       <button data-action="view" data-view="focus">专注</button>
       <button data-action="view" data-view="stats">统计</button>
       <button data-action="view" data-view="habit">习惯</button>
@@ -64,7 +67,7 @@ let detailTaskId=null;       // R3：右栏正在查看的任务（跨视图保�
 let detailEditing=false;     // OP-9：详情面板是否处于「编辑」态（切任务/切视图即退出）
 let groupCache=[];           // 分组列表缓存（渲染任务详情的"所属分组"用，避免每张卡都请求一次）
 // 合法视图名（render 的白名单：写错的视图名会被立刻发现，而不是静默空屏）
-const VIEWS=['today','tasks','focus','stats','habit','academic','review','memo','setting'];
+const VIEWS=['today','tasks','important','planned','flagged','focus','stats','habit','academic','review','memo','setting'];
 
 /* 同步强调色到 CSS 变量（本地缓存先应用，避免首屏闪默认色） */
 function applyAccent(color){if(color)document.documentElement.style.setProperty('--accent',color)}
@@ -172,6 +175,7 @@ const ACTIONS = {
   'task-save':      () => saveTaskEdit(),
   'task-done':      el => toggleDone(el.dataset.id, el.dataset.done === 'true'),
   'task-undo-done': el => undoDone(el.dataset.id),
+  'task-flag':      el => toggleFlag(el.dataset.id),
   'task-myday':     el => toggleMyDay(el.dataset.id, true),
   'task-delete':    el => removeTask(el.dataset.id),
   'task-restore':   el => restoreTask(el.dataset.id),
@@ -254,6 +258,7 @@ async function render(name){
     const paint=w=>{if(mySeq===renderSeq)w(m)};
     if(name==='today')return paint(renderToday);
     if(name==='tasks')return paint(renderTasks);
+    if(name==='important'||name==='planned'||name==='flagged')return paint(m=>renderSmart(m,name));
     if(name==='focus')return paint(renderFocus);
     if(name==='stats')return paint(renderStats);
     if(name==='habit')return paint(renderHabit);
@@ -471,7 +476,7 @@ function renderDetail(el,t,facts,kids){
     ${detailEditing?editForm(t):`<div class="meta">${isDone?`<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
       状态 ${esc(t.status)}</div>
     <div class="meta">截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
-    <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'} · 优先级 ${prioBadge(t.priority)}</div>
+    <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'} · 优先级 ${prioBadge(t.priority)} ${flagBadge(t)}</div>
     <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}</div>
     ${t.note?`<div class="settings-sub">备注</div><div class="sub" style="white-space:pre-wrap">${esc(t.note)}</div>`:''}`}
     ${asg}
@@ -488,6 +493,7 @@ function renderDetail(el,t,facts,kids){
       <button class="${isDone?'ghost':''}" data-action="${isDone?'task-undo-done':'task-done'}" data-id="${t.id}" data-done="${isDone}">${isDone?'撤销完成':'完成'}</button>
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
       <button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>
+      <button class="ghost" data-action="task-flag" data-id="${t.id}">${t.flagged?'取消标记':'标记'}</button>
       <button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
       <button class="ghost" data-action="task-edit">编辑</button>
       <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
@@ -502,6 +508,8 @@ function renderDetail(el,t,facts,kids){
 // 优先级（SR-F1.2 / T-B2）：三档高/中/低，卡片上一个小色标（颜色住在 app.css 的 .prio 里）
 const PRIO_CLASS={'高':'high','中':'mid','低':'low'};
 function prioBadge(p){const v=p||'中';return `<span class="prio ${PRIO_CLASS[v]||'mid'}">${esc(v)}</span>`}
+// 手动标记（SR-F1.3 / T-B3）：只有"已标记"才显示一面小旗（没标记就不占位置）
+function flagBadge(t){return t.flagged?'<span class="flag" title="你自己标记的">⚑ 已标记</span>':''}
 function prioOptions(current){
   return ['高','中','低'].map(v=>`<option value="${v}" ${v===(current||'中')?'selected':''}>${v}</option>`).join('');
 }
@@ -518,7 +526,7 @@ function taskCard(t,isOverdue){
   return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${badge}</div></div>
+    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${badge}</div></div>
     <div class="row">
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
       ${isOverdue?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
@@ -526,6 +534,7 @@ function taskCard(t,isOverdue){
       ${asgButtons}
       ${isDone?`<button class="ghost" data-action="task-undo-done" data-id="${t.id}">撤销完成</button>`
               :`<button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>`}
+      <button class="ghost" data-action="task-flag" data-id="${t.id}">${t.flagged?'取消标记':'标记'}</button>
       <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
       <button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button>
       <button class="ghost" data-action="task-facts" data-id="${t.id}">记录</button>
@@ -552,6 +561,12 @@ async function toggleDone(id,isDone){
   view(current);
 }
 async function undoDone(id){await toggleDone(id,true)}
+// 手动标记（SR-F1.3 / T-B3）：翻转 Flagged。后端幂等（按一次翻一次），这里只负责提示与刷新。
+async function toggleFlag(id){
+  const t=await api(`/api/tasks/${id}/flag`,{method:'POST'});
+  toast(t.flagged?'已标记（只是提醒自己，不代表重要）':'已取消标记');
+  view(current);
+}
 async function toggleMyDay(id,toMyDay){
   await api(`/api/tasks/${id}/myday`,{method:'POST'});
   toast(toMyDay?'已加入 My Day':'已移出 My Day');view(current);
@@ -613,6 +628,7 @@ async function renderTasks(m){
       <input id="allTitle" placeholder="新任务（默认不进今天）" data-enter="task-add-here">
       <input id="allDue" type="date" title="截止日（默认今天，可改）">
       <button data-action="task-add-here">添加</button></div>
+    ${smartViewNavHTML('')}
     <div class="section-title">全部任务（${all.length}）</div>
     ${all.map(t=>taskCard(t)).join('')||'<div class="empty">还没有任务</div>'}
     <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项；删除的任务在「今日 · 回收站」里可恢复或彻底删除。</div>`;
@@ -625,6 +641,29 @@ async function addTaskHere(){
   await api('/api/tasks',{method:'POST',body:JSON.stringify({title,due_date:due,is_myday:false})});
   titleEl.value='';document.getElementById('allDue').value='';titleEl.focus();
   toast('已加入全部任务（未进今天）');view(current);
+}
+
+// ---- 三个智能视图（SR-F1.3 / T-B3）：Important / Planned / Flagged ----
+// 口径在**后端**（`GET /api/tasks?view=`），这里只负责说明白"这个视图是什么"并渲染。
+// 基线同「全部任务」：只隐藏归档/已删（完成的仍显示）。
+const SMART_VIEWS={
+  important:{title:'重要',note:'优先级为「高」的任务。优先级在任务详情里改；这里不重新定义"什么算重要"。'},
+  planned:{title:'有计划',note:'**设了截止日**的任务，越近越靠前（无截止日的不算"有计划"）。'},
+  flagged:{title:'已标记',note:'你自己按了标记的任务（卡片上的「标记」按钮）。标记只是提醒自己，不代表重要。'},
+};
+async function renderSmart(m,view){
+  const meta=SMART_VIEWS[view]||{title:view,note:''};
+  const list=await api(`/api/tasks?view=${view}`);
+  m.innerHTML=`<div class="section-title">${esc(meta.title)}（${list.length}）</div>
+    <div class="sub">${meta.note}</div>
+    ${smartViewNavHTML(view)}
+    ${list.map(t=>taskCard(t)).join('')||'<div class="empty">这个视图下暂时没有任务</div>'}`;
+}
+// 三个智能视图之间的互跳行：也让"手机端（左栏导航被隐藏）"有入口 —— 它挂在「全部任务」页与各视图自己头上。
+function smartViewNavHTML(active){
+  return `<div class="row tight" style="margin:10px 0">
+    ${Object.keys(SMART_VIEWS).map(k=>`<button class="${k===active?'':'ghost'}" data-action="view" data-view="${k}">${esc(SMART_VIEWS[k].title)}</button>`).join('')}
+  </div>`;
 }
 
 // ---- 更细可视化（SR-F2.7 / SR-F4.2）：后端出数据，这里只出图形 ----
@@ -1189,6 +1228,9 @@ async function renderSetting(m){
   <div class="card panel-card">
     <div class="row tight">
       <button class="ghost" data-action="view" data-view="tasks">全部任务</button>
+      <button class="ghost" data-action="view" data-view="important">重要</button>
+      <button class="ghost" data-action="view" data-view="planned">有计划</button>
+      <button class="ghost" data-action="view" data-view="flagged">已标记</button>
       <button class="ghost" data-action="view" data-view="stats">统计</button>
       <button class="ghost" data-action="view" data-view="habit">习惯</button>
       <button class="ghost" data-action="view" data-view="review">复习</button>

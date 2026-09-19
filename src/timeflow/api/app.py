@@ -43,6 +43,8 @@ class TaskIn(BaseModel):
     note: str | None = None
     # 优先级（SR-F1.2 / T-B2）：高/中/低，默认「中」；非法值由领域层拒绝（400）
     priority: str = tm.DEFAULT_PRIORITY
+    # 手动标记（SR-F1.3 / T-B3）：Flagged 视图就是它
+    flagged: bool = False
 
 
 class AssigneeOut(BaseModel):
@@ -75,6 +77,8 @@ class TaskOut(BaseModel):
     note: str | None = None
     # 优先级（SR-F1.2 / T-B2）：卡片上是小色标；三档 高/中/低
     priority: str = tm.DEFAULT_PRIORITY
+    # 手动标记（SR-F1.3 / T-B3）：卡片上一枚小旗，Flagged 视图按它筛
+    flagged: bool = False
 
 
 def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
@@ -101,6 +105,7 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
         subtask_total=progress["total"],
         note=t.note,
         priority=t.priority,
+        flagged=t.flagged,
     )
 
 
@@ -138,8 +143,25 @@ def create_app(db_path: str | None = None) -> FastAPI:
         }
 
     @app.get("/api/tasks")
-    def list_tasks() -> list[TaskOut]:
-        return [_out(t, conn) for t in tm.list_tasks(conn)]
+    def list_tasks(view: str | None = None) -> list[TaskOut]:
+        """任务列表；`?view=important|planned|flagged` 走智能视图口径（SR-F1.3 / T-B3）。
+
+        筛选口径**在领域层**（`tm.tasks_in_view`），界面不自己筛 —— 否则同一套"什么算重要"
+        会在前端/后端/测试三处各写一遍。未知视图名 → 400（不静默返回全部）。
+        """
+        try:
+            items = tm.list_tasks(conn) if view is None else tm.tasks_in_view(conn, view)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return [_out(t, conn) for t in items]
+
+    @app.post("/api/tasks/{task_id}/flag", response_model=TaskOut)
+    def toggle_flag(task_id: str) -> TaskOut:
+        """手动标记开关（T-B3）：翻转 Flagged；幂等（按一次翻一次），不发事实、不动账本。"""
+        try:
+            return _out(tm.toggle_flag(conn, task_id), conn)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
 
     @app.post("/api/tasks", response_model=TaskOut)
     def create_task(payload: TaskIn) -> TaskOut:
@@ -154,6 +176,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
                 is_myday=payload.is_myday,
                 note=payload.note,
                 priority=payload.priority,
+                flagged=payload.flagged,
             )
             if payload.groups:
                 tm.set_task_groups(conn, t.id, payload.groups)

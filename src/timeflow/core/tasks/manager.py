@@ -50,6 +50,19 @@ _ORDER_BY = (
     " created_at"
 )
 
+# 三个智能视图（SR-F1.3 / T-B3）：口径写在**领域层**，界面只负责显示
+# （免得同一套筛选在前端/后端/测试三处各写一遍）。
+VIEW_IMPORTANT = "important"
+VIEW_PLANNED = "planned"
+VIEW_FLAGGED = "flagged"
+# 视图 → SQL 条件（取自白名单，不拼用户输入）
+_VIEW_WHERE = {
+    VIEW_IMPORTANT: "priority = '高'",
+    VIEW_PLANNED: "due_date IS NOT NULL",
+    VIEW_FLAGGED: "flagged = 1",
+}
+VALID_VIEWS = tuple(_VIEW_WHERE)
+
 
 @dataclass
 class Task:
@@ -69,6 +82,8 @@ class Task:
     note: str | None = None
     # 优先级（SR-F1.2 / T-B2）：高/中/低，默认「中」。
     priority: str = DEFAULT_PRIORITY
+    # 手动标记（SR-F1.3 / T-B3）：用户自己按的标记位，Flagged 视图就是它。
+    flagged: bool = False
 
 
 def _row_to_task(row: sqlite3.Row) -> Task:
@@ -85,9 +100,10 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         version=row["version"],
-        # 缺列兜底：迁移（v6/v7）已保证列存在，但残缺库/手工建的测试库可能没有
+        # 缺列兜底：迁移（v6/v7/v8）已保证列存在，但残缺库/手工建的测试库可能没有
         note=row["note"] if "note" in keys else None,
         priority=row["priority"] if "priority" in keys else DEFAULT_PRIORITY,
+        flagged=bool(row["flagged"]) if "flagged" in keys else False,
     )
 
 
@@ -116,6 +132,7 @@ def create_task(
     is_myday: bool = False,
     note: str | None = None,
     priority: str = DEFAULT_PRIORITY,
+    flagged: bool = False,
 ) -> Task:
     """新建任务（AC-1）。校验标题非空；若 due 过去且未完成，初始状态标逾期。"""
     title = title.strip()
@@ -131,8 +148,8 @@ def create_task(
         """
         INSERT INTO tasks
         (id, title, due_date, group_name, repeat_days, parent_id, is_myday, status,
-         created_at, updated_at, version, note, priority)
-        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?)
+         created_at, updated_at, version, note, priority, flagged)
+        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?)
         """,
         (
             task_id,
@@ -147,6 +164,7 @@ def create_task(
             now,
             note,
             priority,
+            int(bool(flagged)),
         ),
     )
     conn.commit()
@@ -175,6 +193,26 @@ def list_tasks(conn: sqlite3.Connection, active_only: bool = True) -> list[Task]
     return [_row_to_task(r) for r in rows]
 
 
+def tasks_in_view(conn: sqlite3.Connection, view: str) -> list[Task]:
+    """智能视图（SR-F1.3 / T-B3）：`important` / `planned` / `flagged`。
+
+    口径（**在领域层定死，界面不自己筛**）：
+    - `important` = 优先级「高」（T-B2 的字段）；
+    - `planned`   = **有截止日**（Planned 的本义是"排进日历的事"）；
+    - `flagged`   = **手动标记位**（用户自己按的，不是自动推断"重要"）。
+    基线同「全部任务」：只隐藏**归档 / 已删**（完成的仍如实显示），排序同统一口径。
+    未知视图名 → ValueError（由 API 转 400），**不静默返回全部**（那会让人以为筛选生效了）。
+    """
+    if view not in _VIEW_WHERE:
+        raise ValueError(f"未知视图: {view}（只能是 {'/'.join(VALID_VIEWS)}）")
+    where = _VIEW_WHERE[view]  # 取自白名单字典，不含用户输入
+    rows = conn.execute(
+        f"SELECT * FROM tasks WHERE status NOT IN (?,?) AND {where}" + _ORDER_BY,  # noqa: S608
+        HIDDEN_STATUSES,
+    ).fetchall()
+    return [_row_to_task(r) for r in rows]
+
+
 def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Task:
     """更新任务字段（AC-2/AC-3）。只允许白名单字段，version+1，刷新 updated_at。
 
@@ -191,6 +229,7 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         "status",
         "note",
         "priority",
+        "flagged",
     }
     # 注意：用"键在 payload 里"判断，而不是"值不是 None" ——
     # 否则 `parent_id=None` / `due_date=None` 这类**清空操作**会被静默忽略（实测踩到）。
@@ -202,6 +241,9 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
     if "priority" in updates:
         # 优先级**不可清空**（没有"无优先级"这一态）：非法/None 一律拒绝，不静默变默认值
         _check_priority(updates["priority"])
+    if "flagged" in updates:
+        # 布尔位统一收敛成 0/1（接口传的是 JSON true/false，这里再收一道，免得写进 1/"1"/None）
+        updates["flagged"] = int(bool(updates["flagged"]))
     before = get_task(conn, task_id)
     sets = ", ".join(f"{k} = ?" for k in updates)
     conn.execute(
@@ -509,6 +551,16 @@ def uncomplete_task(
     if restore_status not in VALID_STATUS or restore_status == STATUS_DONE:
         raise ValueError(f"非法恢复状态: {restore_status}")
     return update_task(conn, task_id, status=restore_status)
+
+
+def toggle_flag(conn: sqlite3.Connection, task_id: str) -> Task:
+    """手动标记开关（T-B3 / Flagged 视图的唯一入口）：翻转 `flagged`，幂等可反复按。
+
+    注意：标记只是"我自己圈出来要留意"，**不发事实、不改状态、不动账本**
+    （与「优先级」「备注」同属任务定义，不是"发生了什么"）。
+    """
+    current = get_task(conn, task_id)
+    return update_task(conn, task_id, flagged=not current.flagged)
 
 
 def process_repeats(conn: sqlite3.Connection) -> int:

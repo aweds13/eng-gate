@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -116,6 +116,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v6(conn)  # 任务备注 note（F1 段2 · T-B1）
     if current < 7:
         _migrate_v7(conn)  # 任务优先级 priority（F1 段2 · T-B2）
+    if current < 8:
+        _migrate_v8(conn)  # 任务手动标记 flagged（F1 段2 · T-B3）
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
@@ -127,6 +129,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v5(conn)  # 新库 tasks 为空，此处为空操作
     _migrate_v6(conn)  # 新库也要走一遍：v1 的 tasks 建表语句保持历史原样，note 由本版加列
     _migrate_v7(conn)  # 同上：priority 由本版加列
+    _migrate_v8(conn)  # 同上：flagged 由本版加列
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -574,3 +577,24 @@ def _migrate_v7(conn: sqlite3.Connection) -> None:
     if "priority" in columns:
         return  # 幂等
     conn.execute("ALTER TABLE tasks ADD COLUMN priority TEXT DEFAULT '中'")
+
+
+def _migrate_v8(conn: sqlite3.Connection) -> None:
+    """v8：任务加 `flagged`（手动标记位）—— F1 段2 · T-B3（SR-F1.3 的 Flagged 视图）。
+
+    口径（段2 决策）：
+    - **手动标记**（用户自己按的），不是自动推断的"重要"——所以是个布尔位，`0/1`，默认 `0`；
+    - 三个智能视图里：Important=**高优先级**、Planned=**有截止日**、Flagged=**本标记位**（T-B3）。
+    迁移性质：向后兼容加列、幂等、缺 tasks 表的残缺库跳过；老行一律 `0`（**不猜**，不帮用户标）。
+    """
+    if (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
+        ).fetchone()
+        is None
+    ):
+        return  # 极端旧库 / 残缺库：无 tasks 表，跳过加列
+    columns = {str(r["name"]) for r in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    if "flagged" in columns:
+        return  # 幂等
+    conn.execute("ALTER TABLE tasks ADD COLUMN flagged INTEGER DEFAULT 0")

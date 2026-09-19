@@ -392,6 +392,24 @@
 - **工具**：假 DOM 探针的详情面板检查补上优先级（只读态要有色标、编辑态要有 `editPriority`）。
 - 台账：`SR-F1.2` todo → **partial**（排序已统一，拖拽按决策不做）；新增 `T-B2`。
 
+### F1 主线 · T-B3 三视图 Important / Planned / Flagged（SR-F1.3，schema v7 → v8）
+- **schema v8**：`tasks` 加 `flagged INTEGER DEFAULT 0`（手动标记位；幂等加列，老行一律 0=未标记
+  —— **不帮用户猜**"哪些算标记"）。
+- **口径定在领域层**（`tm.tasks_in_view`，界面不自己筛）：`important` = **优先级「高」**（复用 T-B2 的字段，
+  不另造"重要"概念）；`planned` = **有截止日**；`flagged` = **手动标记位**。
+  基线同「全部任务」：只隐藏 归档/已删（**完成的仍如实显示**）；排序沿用统一口径（截止日→优先级→创建时间）。
+  **未知视图名 → 400，不静默返回全部**（否则用户会以为筛选生效了）。
+- **API**：`GET /api/tasks?view=important|planned|flagged`；`POST /api/tasks/{id}/flag`（翻转标记，幂等），
+  `PATCH` 白名单也带 `flagged`。
+- **前端（可达性）**：三个视图加入 `VIEWS` 白名单与左栏导航；「全部任务」页与每个智能视图顶部都有
+  互跳行（`smartViewNavHTML`），设置页「入口」也列出 —— **手机端（≤640px）左栏导航被 CSS 隐藏**，
+  所以不能只靠左栏，否则手机上根本进不去。卡片新增「标记 / 取消标记」按钮与已标记小旗（`.flag`）。
+- **跨端**：`sync.merge_task` 带 `flagged`（远端没带则保留本地；带了以远端为准）。
+- **测试**：`tests/test_task_views_line.py`（14 项：v8 迁移/口径/基线/排序/未知视图/API/标记幂等/
+  不发事实不动账本/同步两条）；`tests/test_web_frontend.py` +1（**处处可达**护栏）；
+  `tools/web_live_check.py` +1（智能视图可达）；`tools/ui_dom_probe.mjs` 视图从 9 个扩到 **12 个**。
+- 台账：`SR-F1.3` todo → **done**（GAP-F1-03 消除）；新增 `T-B3`。
+
 ## [0.1.0] — 第一版完整（功能域 F1–F9 + GPA 制式切换）
 
 ### 新增

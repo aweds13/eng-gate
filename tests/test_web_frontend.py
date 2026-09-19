@@ -295,6 +295,34 @@ def test_task_note_is_editable_in_detail_only() -> None:
     assert "note" not in card, "备注不该出现在列表卡片里（渐进聚焦）"
 
 
+def test_smart_views_are_reachable_at_every_breakpoint() -> None:
+    """T-B3（SR-F1.3）：三个智能视图要真的进得去 —— 左栏、全部任务页、设置页都有入口。
+
+    为什么强调"处处"：手机端（≤640px）CSS 把 `.rail nav` 隐藏了，只留底部 Tab；
+    只把入口放在左栏 = 手机上根本进不去（这正是"规格有、界面没有"的老毛病）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    rail_nav = html.split('class="rail"', 1)[1].split("</nav>", 1)[0]
+    views_match = re.search(r"const VIEWS=\[([^\]]*)\]", html)
+    assert views_match is not None
+    views = {v.strip().strip("'") for v in views_match.group(1).split(",")}
+    for name in ("important", "planned", "flagged"):
+        assert name in views, f"VIEWS 白名单缺少 {name}（render 会直接拒绝渲染）"
+        assert f'data-view="{name}"' in rail_nav, f"左栏缺少 {name} 入口"
+        assert f'data-view="{name}"' in html, f"页面里缺少 {name} 入口"
+    # 互跳行挂在「全部任务」页与各智能视图上（手机端靠它 + 设置页入口）
+    assert "function smartViewNavHTML(" in html
+    assert html.count("smartViewNavHTML(") >= 3
+    # 渲染分发要接上（否则点了白屏）
+    assert "renderSmart(m,name)" in html
+    setting = html.split("async function renderSetting(", 1)[1]
+    assert 'data-view="flagged"' in setting, "设置页「入口」缺少智能视图"
+    # 卡片上的标记开关 + 标记徽标
+    assert "function flagBadge(" in html and "flagBadge(t)" in html
+    assert 'data-action="task-flag"' in html and "function toggleFlag(" in html
+    assert "/flag`" in html, "前端没调用 POST /api/tasks/{id}/flag"
+
+
 def test_task_priority_badge_and_edit() -> None:
     """T-B2（SR-F1.2）：卡片有优先级色标、编辑态能改优先级，颜色只住 app.css。"""
     html = WEB_INDEX.read_text(encoding="utf-8")

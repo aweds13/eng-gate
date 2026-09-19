@@ -50,9 +50,19 @@ gaps = "已实现 **截止日 → 优先级 → 创建时间**，且 `list_tasks
 id = "SR-F1.3"
 title = "视图 My Day / Important / Planned / Flagged / 逾期栏"
 group = "F1"
-status = "todo"
-evidence = ["route:GET /api/mydays", "route:GET /api/overdue"]
-gaps = "Important/Planned/Flagged 视图不存在；任务表无对应标记字段"
+status = "done"
+evidence = [
+  "route:GET /api/mydays",
+  "route:GET /api/overdue",
+  "route:GET /api/tasks",
+  "column:tasks.flagged",
+  "text:src/timeflow/core/tasks/manager.py::def tasks_in_view",
+  "ui:view=important",
+  "ui:view=planned",
+  "ui:view=flagged",
+  "test:test_task_views_line.py",
+]
+gaps = ""
 
 [entries."SR-F1.4"]
 id = "SR-F1.4"
@@ -792,6 +802,22 @@ evidence = [
 ]
 gaps = ""
 
+[entries."OP-45"]
+id = "OP-45"
+title = "智能视图筛选 Important / Planned / Flagged（入口：左栏 + 全部任务页 + 设置页）"
+group = "OP"
+status = "done"
+evidence = [
+  "route:GET /api/tasks",
+  "column:tasks.flagged",
+  "text:src/timeflow/core/tasks/manager.py::def tasks_in_view",
+  "ui:view=important",
+  "ui:view=planned",
+  "ui:view=flagged",
+  "test:test_task_views_line.py",
+]
+gaps = ""
+
 [entries."T-A1"]
 id = "T-A1"
 title = "F1 主线·段1：分组管理收口（OP-11）"
@@ -867,6 +893,24 @@ evidence = [
   "ui:data-action=task-save",
   "text:src/web/app.css::.prio.high",
   "test:test_task_priority_line.py",
+]
+gaps = ""
+
+[entries."T-B3"]
+id = "T-B3"
+title = "F1 主线·段2：三视图 Important / Planned / Flagged（schema v8）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "column:tasks.flagged",
+  "text:src/timeflow/storage/db.py::def _migrate_v8",
+  "text:src/timeflow/core/tasks/manager.py::def tasks_in_view",
+  "route:GET /api/tasks",
+  "route:POST /api/tasks/{task_id}/flag",
+  "ui:view=important",
+  "ui:view=flagged",
+  "ui:data-action=task-flag",
+  "test:test_task_views_line.py",
 ]
 gaps = ""
 

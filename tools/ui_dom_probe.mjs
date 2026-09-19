@@ -133,7 +133,8 @@ try {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const views = ['today', 'tasks', 'focus', 'stats', 'habit', 'academic', 'review', 'memo', 'setting'];
+const views = ['today', 'tasks', 'important', 'planned', 'flagged', 'focus', 'stats', 'habit',
+  'academic', 'review', 'memo', 'setting'];
 let bad = 0;
 let detailBad = 0;
 const results = [];

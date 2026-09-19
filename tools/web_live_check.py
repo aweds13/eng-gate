@@ -97,6 +97,12 @@ def main() -> int:
         "左栏有设置入口": 'data-view="setting"' in _rail_nav(html),
         "挤压修复样式在位": ".new button { flex: none }" in css and ".field" in css,
         "暗色令牌可取到": '[data-theme="dark"]' in css,
+        # 智能视图可达（T-B3）：左栏 / 全部任务页 / 设置页都有入口 ——
+        # 手机端（≤640px）左栏导航被 CSS 隐藏，所以不能只靠左栏（否则手机上直接进不去）。
+        "智能视图可达": all(
+            f'data-view="{v}"' in _rail_nav(html) and f'data-view="{v}"' in html
+            for v in ("important", "planned", "flagged")
+        ) and html.count("smartViewNavHTML(") >= 3,
     }
     # 视图路由自检：每个 data-view 要么是合法视图，要么是已注册的动作（点了没反应最难查）
     views = set(re.findall(r"const VIEWS=\[([^\]]*)\]", html)[0].replace("'", "").split(","))
