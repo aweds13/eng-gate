@@ -427,6 +427,31 @@ def test_task_priority_badge_and_edit() -> None:
         assert needle in css, f"app.css 缺少优先级样式 {needle}"
 
 
+def test_task_type_and_course_are_wired_in_frontend() -> None:
+    """T-C12（SR-F5.4）：任务能选「类型」并绑到一门课程 —— 编辑能改、卡片看得见、学业页也找得回来。
+
+    口径护栏（与后端同一条规则）：**「普通」不挂课程** —— 切到普通时课程下拉禁用并可见地清空，
+    不是"偷偷清掉"（静默数据丢失正是本项目一直在防的事）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "const TASK_TYPES=['普通','作业','考试','论文','小测']" in html, "类型词表要与后端同口径"
+    assert "function courseBadge(" in html and "function taskTypeOptions(" in html
+    assert "function courseOptions(" in html and "function syncTypeCourse(" in html
+    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    assert "courseBadge(t)" in card, "任务卡片没显示「课程 · 类型」"
+    edit = html.split("function editForm(t){", 1)[1].split("\n}", 1)[0]
+    assert 'id="editType"' in edit and 'id="editCourse"' in edit, "编辑态不能改类型/所属课程"
+    save = html.split("async function saveTaskEdit(){", 1)[1].split("\n}", 1)[0]
+    assert "task_type:" in save and "course_id:" in save, "保存时没把类型/课程带上"
+    assert "courseEl.disabled=normal" in html, "「普通」时课程下拉应禁用（与后端校验同一条规则）"
+    # 事件委托：change 走 data-change（本页零依赖、无内联脚本）
+    assert "data-change=\"type-course\"" in html and "'type-course':" in html
+    assert "addEventListener('change'" in html, "change 事件没走委托"
+    # 学业页：课程卡能倒着列出挂在这门课上的任务，并能打开任务详情
+    assert "data-action=\"task-open\"" in html and "'task-open':" in html
+    assert "tasksOfCourse" in html, "课程卡没显示关联任务"
+
+
 def test_subtask_flow_is_wired_in_frontend() -> None:
     """F1 段1（OP-12）：建步骤、勾完成、脱离父任务都要有界面入口。"""
     html = WEB_INDEX.read_text(encoding="utf-8")

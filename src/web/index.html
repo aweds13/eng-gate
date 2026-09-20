@@ -66,6 +66,7 @@ let themeChoice='light';     // 主题选择（R4 接通暗色）
 let detailTaskId=null;       // R3：右栏正在查看的任务（跨视图保留；切视图时清空）
 let detailEditing=false;     // OP-9：详情面板是否处于「编辑」态（切任务/切视图即退出）
 let groupCache=[];           // 分组列表缓存（渲染任务详情的"所属分组"用，避免每张卡都请求一次）
+let courseCache=[];          // 课程列表缓存（任务编辑里的"所属课程"下拉 + 学业页关联任务用）
 // 合法视图名（render 的白名单：写错的视图名会被立刻发现，而不是静默空屏）
 const VIEWS=['today','tasks','important','planned','flagged','focus','stats','habit','academic','review','memo','setting'];
 
@@ -160,6 +161,7 @@ const ACTIONS = {
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
+  'task-open':      el => showDetail(el.dataset.id),   // 从别的视图（如学业页课程卡）打开任务详情
   'task-close':     () => { detailTaskId=null; render(current); },
   // 分组（OP-11）
   'group-add':      () => addGroup(),
@@ -176,6 +178,8 @@ const ACTIONS = {
   'task-done':      el => toggleDone(el.dataset.id, el.dataset.done === 'true'),
   'task-undo-done': el => undoDone(el.dataset.id),
   'task-flag':      el => toggleFlag(el.dataset.id),
+  // 任务「类型 ↔ 所属课程」（SR-F5.4 / T-C12）：切换类型时同步课程下拉可用性
+  'type-course':    () => syncTypeCourse(),
   // 附件 / 要求链接（T-B4）：任务与考核项共用打开规则
   'attach-open':    el => openAttach(el.dataset.target || ''),
   'attach-add':     el => addAttachment(el.dataset.id || detailTaskId),
@@ -247,6 +251,14 @@ document.addEventListener('keydown', ev => {
   if (!el) return;
   const fn = ACTIONS[el.dataset.enter];
   if (fn) fn(el);
+});
+// 下拉/开关变化 = 触发同名动作（data-change="动作名"）——与 data-enter 共用一张注册表，
+// 这样"选了什么就联动什么"也不必在 HTML 里写内联脚本（本页零依赖、无构建，靠事件委托）。
+document.addEventListener('change', ev => {
+  const el = ev.target.closest('[data-change]');
+  if (!el) return;
+  const fn = ACTIONS[el.dataset.change];
+  if (fn) fn(el); else console.warn('未注册的变化动作:', el.dataset.change);
 });
 
 async function render(name){
@@ -330,10 +342,11 @@ function paintRail(mySeq){
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
   if(!detailTaskId){box.innerHTML='';return}
   Promise.all([api(`/api/tasks/${detailTaskId}`),api(`/api/tasks/${detailTaskId}/facts`),
-    api('/api/groups'),api(`/api/tasks/${detailTaskId}/subtasks`)])   // 详情要显示分组可选项与子任务
-    .then(([t,facts,groups,kids])=>{
+    api('/api/groups'),api(`/api/tasks/${detailTaskId}/subtasks`),api('/api/courses')])   // 详情要显示分组可选项、子任务与课程可选项
+    .then(([t,facts,groups,kids,courses])=>{
       if(mySeq!==renderSeq)return;
       groupCache=groups||[];
+      courseCache=courses||[];     // 每次打开详情都刷新：新建课程后立刻可选
       renderDetail(box,t,facts||[],kids||[]);
     })
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
@@ -439,11 +452,18 @@ function editForm(t){
         <option value="0" ${t.is_myday?'':'selected'}>不在今天</option></select></div>
     <div class="field narrow"><label>优先级</label>
       <select id="editPriority">${prioOptions(t.priority)}</select></div>
+    <div class="field narrow"><label>类型</label>
+      <select id="editType" data-change="type-course">${taskTypeOptions(t.task_type)}</select></div>
+    <div class="field narrow"><label>所属课程（可选）</label>
+      <select id="editCourse" ${(t.task_type||'普通')==='普通'?'disabled':''}>${courseOptions(t.course_id)}</select></div>
     <div class="field narrow"><label>提醒（可选）</label>
       <input id="editRemind" type="datetime-local" value="${t.remind_at?esc(t.remind_at):''}"></div>
     <div class="field wide"><label>备注</label>
       <textarea id="editNote" class="textarea" rows="3" placeholder="要求、思路、要带的东西…（只在这里显示，不进列表）">${esc(t.note||'')}</textarea></div>
   </div>
+  <div class="sub" id="editCourseHint">${(t.task_type||'普通')==='普通'
+    ? '「普通」= 与课程无关，不挂课程；要挂课程请把类型改成 作业/考试/论文/小测。'
+    : '选了课程就等于说「这件事属于这门课」；课程在学业页新建。'}</div>
   <div class="sub">备注只属于这个任务，不参与账本；提醒到点会在界面上标出来（系统通知通道待选型）。
     改截止日会立刻重算逾期与债务。已完成的任务也能改，但不会改写历史完成记录。</div>`;
 }
@@ -462,6 +482,9 @@ async function saveTaskEdit(){
     group_name:document.getElementById('editGroup').value||null,
     is_myday:document.getElementById('editMyDay').value==='1',
     priority:document.getElementById('editPriority').value||'中',
+    // 类型 + 课程（T-C12）：一起送（后端按"改完之后的组合"校验：普通不挂课程）
+    task_type:document.getElementById('editType').value||'普通',
+    course_id:(document.getElementById('editCourse').value||'')||null,
     remind_at:(document.getElementById('editRemind').value||'')||null,   // 清空 = 取消提醒
     note:noteRaw.trim()?noteRaw.trim():null,   // 清空备注 = 存 null（不是空串，免得两种"空"）
   };
@@ -495,6 +518,7 @@ function renderDetail(el,t,facts,kids){
       状态 ${esc(t.status)}</div>
     <div class="meta">截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
     <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'} · 优先级 ${prioBadge(t.priority)} ${flagBadge(t)}</div>
+    <div class="meta">类型 ${esc(t.task_type||'普通')}${t.course_id?` · 课程 ${t.course_name?esc(t.course_name):'课程已删'}`:''}</div>
     <div class="meta">提醒 ${t.remind_at?`${esc(String(t.remind_at).replace('T',' '))}（${REMIND_LABEL[t.reminder_state]||'—'}）`:'未设'}</div>
     <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}</div>
     ${t.note?`<div class="settings-sub">备注</div><div class="sub" style="white-space:pre-wrap">${esc(t.note)}</div>`:''}`}
@@ -585,6 +609,36 @@ function remindBadge(t){
 function prioOptions(current){
   return ['高','中','低'].map(v=>`<option value="${v}" ${v===(current||'中')?'selected':''}>${v}</option>`).join('');
 }
+// 任务类型 + 所属课程（SR-F5.4 / T-C12）：类型词表与后端 `tm.VALID_TASK_TYPES` 一致；
+// 「普通」= 与课程无关（此时课程下拉禁用并清空），其余四种是学校事项，可绑一门课。
+const TASK_TYPES=['普通','作业','考试','论文','小测'];
+function taskTypeOptions(current){
+  const cur=current||'普通';
+  return TASK_TYPES.map(v=>`<option value="${v}" ${v===cur?'selected':''}>${v}</option>`).join('');
+}
+function courseOptions(current){
+  return `<option value="">不挂课程</option>`+courseCache.map(c=>
+    `<option value="${esc(c.id)}" ${c.id===current?'selected':''}>${esc(c.name)}</option>`).join('');
+}
+// 卡片上的一枚「课程 · 类型」徽标：普通任务且没挂课程 → 不显示（不占位置）
+function courseBadge(t){
+  const type=t.task_type||'普通';
+  if(type==='普通'&&!t.course_id)return '';
+  const name=t.course_name?esc(t.course_name):(t.course_id?'课程已删':'未指定课程');
+  return `<span class="badge" title="所属课程 · 任务类型">${name} · ${esc(type)}</span>`;
+}
+// 类型/课程是一对：切换类型时同步课程下拉的可用性（「普通」不挂课程 —— 与后端校验同一条规则）
+function syncTypeCourse(){
+  const typeEl=document.getElementById('editType'),courseEl=document.getElementById('editCourse'),
+        hint=document.getElementById('editCourseHint');
+  if(!typeEl||!courseEl)return;
+  const normal=typeEl.value==='普通';
+  courseEl.disabled=normal;
+  if(normal){courseEl.value='';}          // 可见地清空（不是偷偷清），并在下面写清原因
+  if(hint)hint.textContent=normal
+    ? '「普通」= 与课程无关，不挂课程；要挂课程请把类型改成 作业/考试/论文/小测。'
+    : '选了课程就等于说「这件事属于这门课」；课程在学业页新建。';
+}
 function taskCard(t,isOverdue){
   const isDone=t.status==='完成';
   const asg=(t.assignments||[]);
@@ -598,7 +652,7 @@ function taskCard(t,isOverdue){
   return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div></div>
+    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div></div>
     <div class="row">
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
       ${isOverdue?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
@@ -1085,10 +1139,12 @@ async function saveFeedback(){await api('/api/feedback',{method:'POST',body:JSON
 
 async function renderAcademic(m){
   const scale=gpaScale;
-  const [gpaG,other,courses,grades,upcoming,assessments]=await Promise.all([
+  const [gpaG,other,courses,grades,upcoming,assessments,allTasks]=await Promise.all([
     api(`/api/gpa?scale=${scale}`),api(`/api/gpa?scale=${scale==='4.0'?'5.0':'4.0'}`),
     api('/api/courses'),api('/api/grades'),api('/api/assessments/upcoming?days=14'),
-    api('/api/assessments')]);
+    api('/api/assessments'),api('/api/tasks')]);      // 任务：课程卡上显示"这门课挂了哪些作业"
+  courseCache=courses||[];                             // 顺带刷新课程缓存（任务编辑的下拉要用）
+  const tasksOfCourse=id=>(allTasks||[]).filter(t=>t.course_id===id);
   const soon=upcoming.filter(a=>a.days_until!==null&&a.days_until<=14);
   const courseName=id=>{const c=courses.find(x=>x.id===id);return c?c.name:'未关联课程'};
   const upcomingHtml=soon.length?`<div class="section-title">临期与逾期（14 天内）</div>
@@ -1132,7 +1188,18 @@ async function renderAcademic(m){
   ${hasGrades?'':`<div class="sub">还没有成绩记录：录入后「加权平均成绩」与「GPA」会自动按学分加权计算。</div>`}
   <div class="section-title">课程</div>
   <div class="new"><input id="cName" placeholder="新建课程，如：高数" data-enter="course-add"><button data-action="course-add">新建课程</button></div>
-  ${courses.map(c=>`<div class="card"><div style="flex:1"><div class="title">${esc(c.name)}</div><div class="meta">${c.credits}学分 ${c.teacher||''}</div></div></div>`).join('')||'<div class="empty">暂无课程</div>'}
+  ${courses.map(c=>{const ts=tasksOfCourse(c.id);const open=ts.filter(t=>t.status!=='完成');
+    return `<div class="card" style="display:block">
+      <div class="title">${esc(c.name)}</div>
+      <div class="meta">${c.credits}学分 ${c.teacher||''} · 关联任务 ${ts.length}（未完成 ${open.length}）</div>
+      ${open.slice(0,5).map(t=>`<div class="fact"><span class="badge">${esc(t.task_type||'普通')}</span>
+        <span class="grow" style="flex:1">${esc(t.title)}</span>
+        ${t.due_date?`<span class="sub">${t.due_date}</span>`:''}
+        <button class="ghost" data-action="task-open" data-id="${t.id}">打开</button></div>`).join('')}
+      ${open.length>5?`<div class="sub">还有 ${open.length-5} 项未完成；任务页可见全部。</div>`:''}
+      ${ts.length&&!open.length?'<div class="sub">挂在这门课上的任务都已做完。</div>':''}
+      ${ts.length?'':'<div class="sub">还没有挂到这门课的任务：在任务详情里把「类型」改成 作业/考试/论文/小测，再选这门课。</div>'}
+    </div>`}).join('')||'<div class="empty">暂无课程</div>'}
   <div class="section-title">添加考核项（考试/作业/论文/小测）</div>
   <div class="card panel-card">
     <div class="form">

@@ -13,7 +13,9 @@ from timeflow.core.tasks.groups import (
     toggle_task_group,
 )
 from timeflow.core.tasks.manager import (
+    COURSE_TASK_TYPES,
     DEFAULT_PRIORITY,
+    DEFAULT_TASK_TYPE,
     HIDDEN_STATUSES,
     PRIORITY_HIGH,
     PRIORITY_LOW,
@@ -25,7 +27,9 @@ from timeflow.core.tasks.manager import (
     STATUS_DONE,
     STATUS_OVERDUE,
     STATUS_TODO,
+    TASK_TYPE_NORMAL,
     VALID_PRIORITIES,
+    VALID_TASK_TYPES,
     VALID_VIEWS,
     VIEW_FLAGGED,
     VIEW_IMPORTANT,
@@ -33,6 +37,7 @@ from timeflow.core.tasks.manager import (
     Task,
     add_attachment,
     complete_task,
+    course_name,
     create_subtask,
     create_task,
     delete_task,
@@ -108,4 +113,9 @@ __all__ = [
     "remove_attachment",
     "reminder_state",
     "due_reminders",
+    "VALID_TASK_TYPES",
+    "TASK_TYPE_NORMAL",
+    "DEFAULT_TASK_TYPE",
+    "COURSE_TASK_TYPES",
+    "course_name",
 ]

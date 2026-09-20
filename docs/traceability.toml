@@ -378,9 +378,21 @@ gaps = ""
 id = "SR-F5.4"
 title = "学校任务与普通任务同构（课程标签 + 硬约束元数据）"
 group = "F5"
-status = "partial"
-evidence = ["column:tasks.group_name"]
-gaps = "tasks 无 course_id，无法字段级挂课程（OP-24 未做，GAP-F5-02）"
+status = "done"
+evidence = [
+  "column:tasks.task_type",
+  "column:tasks.course_id",
+  "text:src/timeflow/core/tasks/manager.py::def _check_course_pair",
+  "text:src/timeflow/core/tasks/manager.py::def course_name",
+  "route:POST /api/tasks",
+  "route:PATCH /api/tasks/{task_id}",
+  "text:src/web/index.html::function courseBadge(",
+  "text:src/web/index.html::data-change=\"type-course\"",
+  "text:src/web/index.html::const tasksOfCourse=id=>",
+  "ui:data-action=task-open",
+  "test:test_task_course_line.py",
+]
+gaps = ""
 
 [entries."SR-F5.5"]
 id = "SR-F5.5"
@@ -1082,6 +1094,23 @@ group = "PROCESS"
 status = "partial"
 evidence = ["file:复盘/C批口径定案.md"]
 gaps = "待做：只读接口（今天完成的任务/子步骤 + 按父任务分组与进度 + 产出按 kind 分组）+ 今日页可展开选项卡。用户要求：大任务一天推不完，**完成了哪些子步骤要看得见**"
+
+[entries."T-C12"]
+id = "T-C12"
+title = "C 批：任务「类型 + 所属课程」（用户要求：作业能绑到那门课上）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "column:tasks.task_type",
+  "column:tasks.course_id",
+  "text:src/timeflow/core/tasks/manager.py::COURSE_TASK_TYPES",
+  "text:src/timeflow/core/tasks/manager.py::def _check_course_pair",
+  "text:src/web/index.html::function syncTypeCourse(",
+  "text:src/web/index.html::data-change=\"type-course\"",
+  "text:src/web/index.html::const tasksOfCourse=id=>",
+  "test:test_task_course_line.py",
+]
+gaps = ""
 
 [entries."STEP-17"]
 id = "STEP-17"

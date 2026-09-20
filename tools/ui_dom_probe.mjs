@@ -102,6 +102,8 @@ const DB = {
     parent_id: null, is_myday: true, status: '未开始', created_at: '2026-09-18T10:00:00',
     updated_at: '2026-09-18T10:00:00', version: 1, groups: [], assignments: [],
     subtask_done: 0, subtask_total: 0, note: '备注也要渲染一遍', priority: '高', flagged: true,
+    // 类型 + 所属课程（T-C12）：编辑态要渲染课程下拉、只读态要渲染课程徽标
+    task_type: '作业', course_id: 'c1', course_name: '高等数学',
     attach: [{ target: 'https://x.example/要求', title: '要求页' },
       { target: 'D:\\课件\\第3章.pdf', title: null }],
   },
@@ -111,7 +113,8 @@ const DB = {
   '/api/summary/weekly': { start: '2026-09-14', end: '2026-09-20', days: [], focus_hours: 0, steady_note: '—' },
   '/api/focus/today': { focus_minutes: 0 }, '/api/focus/active': null,
   '/api/habits': [], '/api/selfcheck': { week_focus_minutes: 0, week_habit_done: 0, debt_count: 0 },
-  '/api/feedback': null, '/api/courses': [], '/api/grades': [], '/api/assessments/upcoming': [],
+  '/api/feedback': null, '/api/courses': [{ id: 'c1', name: '高等数学', credits: 4, teacher: '张老师' }],
+  '/api/grades': [], '/api/assessments/upcoming': [],
   // 全部考核项（T-B4 起学业页用它列表 + 挂要求链接）与附件打开方式设置
   '/api/assessments': [],
   '/api/settings/attach': {

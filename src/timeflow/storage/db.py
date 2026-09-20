@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -122,6 +122,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v9(conn)  # 附件/要求链接 attach + 应用设置表（F1/F5 段2 · T-B4）
     if current < 10:
         _migrate_v10(conn)  # 任务提醒 remind_at（F1 段2 · T-B5 前半）
+    if current < 11:
+        _migrate_v11(conn)  # 任务类型 + 所属课程（F1/F5 · T-C12）
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
@@ -136,6 +138,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v8(conn)  # 同上：flagged 由本版加列
     _migrate_v9(conn)  # 新库也要走一遍：attach 两列与 app_settings 表
     _migrate_v10(conn)  # 同上：remind_at 由本版加列
+    _migrate_v11(conn)  # 同上：task_type / course_id 由本版加列
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -660,3 +663,17 @@ def _migrate_v10(conn: sqlite3.Connection) -> None:
       （`复盘/段2设计决策-提醒与附件打开方式.md` §八）；本列只负责"什么时候该提醒"这件事本身。
     """
     _add_column_if_missing(conn, "tasks", "remind_at", "remind_at TEXT")
+
+
+def _migrate_v11(conn: sqlite3.Connection) -> None:
+    """v11：任务类型 + 所属课程（SR-F5.4「学校任务带课程标签」· T-C12）。
+
+    口径（用户 2026-09-19 要求：「有的作业任务是课程相关的，能选它是作业类型，然后绑到那门课上」）：
+    - `task_type`：`普通` / `作业` / `考试` / `论文` / `小测`（默认 `普通`）；
+      **复用 `course_assessments.name` 已有的词表**（考试/作业/论文/小测），不另造一套说法；
+    - `course_id`：指向 `courses.id` 的**弱关联**（不建外键、不级联）——
+      课程被删时任务不跟着消失，只显示成「课程已删」；老行一律 `普通` + NULL，不猜内容；
+    - 两列都走 `_add_column_if_missing`（缺列才加，重复连接/新库老库都安全，缺表跳过不失败）。
+    """
+    _add_column_if_missing(conn, "tasks", "task_type", "task_type TEXT DEFAULT '普通'")
+    _add_column_if_missing(conn, "tasks", "course_id", "course_id TEXT")

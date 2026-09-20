@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 # 不 import 领域层，避免 storage/sync 与 tasks 相互依赖。
 _VALID_PRIORITIES = ("高", "中", "低")
 _DEFAULT_PRIORITY = "中"
+# 任务类型默认档（与 `core/tasks/manager.py` 同口径）：远端没带 task_type 时用它。
+_DEFAULT_TASK_TYPE = "普通"
 
 
 def _uid() -> str:
@@ -69,8 +71,8 @@ def merge_task(
     """
     tid = str(remote_task["id"])
     local = conn.execute(
-        "SELECT updated_at, version, note, priority, flagged, attach, remind_at "
-        "FROM tasks WHERE id = ?",
+        "SELECT updated_at, version, note, priority, flagged, attach, remind_at, task_type, "
+        "course_id FROM tasks WHERE id = ?",
         (tid,),
     ).fetchone()
     remote_updated = str(remote_task.get("updated_at") or "")
@@ -86,7 +88,7 @@ def merge_task(
         conn.execute(
             "INSERT INTO tasks (id, title, due_date, group_name, repeat_days, parent_id, "
             "is_myday, status, created_at, updated_at, version, note, priority, flagged, attach, "
-            "remind_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "remind_at, task_type, course_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 tid,
                 remote_task.get("title"),
@@ -104,6 +106,11 @@ def merge_task(
                 int(bool(remote_task.get("flagged"))),
                 _remote_attach(remote_task),
                 remote_task.get("remind_at"),
+                # 类型/课程（T-C12）：老客户端不带这两个字段时回落默认「普通」+ 无课程，
+                # 合法值直接写入（本模块不做领域校验 —— 远端非法值由合并方的领域层负责，
+                # 这里只保证"带了就写、没带就用默认"，与 priority 同规矩）。
+                str(remote_task.get("task_type") or _DEFAULT_TASK_TYPE),
+                remote_task.get("course_id"),
             ),
         )
         conn.commit()
@@ -131,10 +138,18 @@ def merge_task(
         remind_at = (
             remote_task["remind_at"] if "remind_at" in remote_task else local["remind_at"]
         )
+        # task_type / course_id（T-C12）：与 note/flagged/attach 同规矩 —— 远端没带就保留本地的
+        # （老客户端/旧快照不带这两个字段，直接覆盖会把"这是哪门课的作业"抹掉）
+        task_type = (
+            str(remote_task["task_type"] or _DEFAULT_TASK_TYPE)
+            if "task_type" in remote_task
+            else (local["task_type"] or _DEFAULT_TASK_TYPE)
+        )
+        course_id = remote_task["course_id"] if "course_id" in remote_task else local["course_id"]
         conn.execute(
             "UPDATE tasks SET title=?, due_date=?, group_name=?, repeat_days=?, parent_id=?, "
             "is_myday=?, status=?, note=?, priority=?, flagged=?, attach=?, remind_at=?, "
-            "updated_at=?, version=? WHERE id=?",
+            "task_type=?, course_id=?, updated_at=?, version=? WHERE id=?",
             (
                 remote_task.get("title"),
                 remote_task.get("due_date"),
@@ -148,6 +163,8 @@ def merge_task(
                 flagged,
                 attach,
                 remind_at,
+                task_type,
+                course_id,
                 remote_updated,
                 remote_version,
                 tid,

@@ -44,6 +44,14 @@ VALID_PRIORITIES = (PRIORITY_HIGH, PRIORITY_MID, PRIORITY_LOW)
 DEFAULT_PRIORITY = PRIORITY_MID
 _PRIORITY_RANK = {PRIORITY_HIGH: 0, PRIORITY_MID: 1, PRIORITY_LOW: 2}
 
+# 任务类型 + 所属课程（SR-F5.4 学校任务带课程标签 / T-C12，用户 2026-09-19 要求）。
+# 词表**复用 `course_assessments.name` 已有的四种学校事项**（考试/作业/论文/小测）+ 普通，
+# 不另造一套说法；只有「非普通」才允许挂课程 —— 挂了课程就意味着这件事属于某门课。
+TASK_TYPE_NORMAL = "普通"
+VALID_TASK_TYPES = (TASK_TYPE_NORMAL, "作业", "考试", "论文", "小测")
+DEFAULT_TASK_TYPE = TASK_TYPE_NORMAL
+COURSE_TASK_TYPES = tuple(t for t in VALID_TASK_TYPES if t != TASK_TYPE_NORMAL)
+
 # 排序口径（三处统一：列表 / My Day / 逾期）：**截止日 → 优先级 → 创建时间**；无截止日排最后。
 # 写成 SQL 片段是为了让三处用**同一份**口径，避免"各视图各排各的"（那正是 SR-F1.2 要收的口子）。
 _ORDER_BY = (
@@ -90,6 +98,10 @@ class Task:
     attach: list[dict[str, str | None]] = field(default_factory=list)
     # 提醒（SR-F1.4 / T-B5）：本地时间字符串 `YYYY-MM-DDTHH:MM`，可空=不提醒。
     remind_at: str | None = None
+    # 任务类型（SR-F5.4 / T-C12）：普通/作业/考试/论文/小测，默认「普通」。
+    task_type: str = DEFAULT_TASK_TYPE
+    # 所属课程（SR-F5.4 / T-C12）：指向 `courses.id`；只有非「普通」才能挂（`_check_course_pair`）。
+    course_id: str | None = None
 
 
 def _row_to_task(row: sqlite3.Row) -> Task:
@@ -112,6 +124,10 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         flagged=bool(row["flagged"]) if "flagged" in keys else False,
         attach=attach_mod.load_attach(row["attach"]) if "attach" in keys else [],
         remind_at=row["remind_at"] if "remind_at" in keys else None,
+        task_type=(
+            row["task_type"] if "task_type" in keys and row["task_type"] else DEFAULT_TASK_TYPE
+        ),
+        course_id=row["course_id"] if "course_id" in keys else None,
     )
 
 
@@ -128,6 +144,49 @@ def _check_priority(value: object) -> str:
     if value not in VALID_PRIORITIES:
         raise ValueError(f"非法优先级: {value}（只能是 高/中/低）")
     return str(value)
+
+
+def _check_task_type(value: object) -> str:
+    """任务类型只有五档（普通/作业/考试/论文/小测）—— 非法值拒绝，不静默降级成普通。
+
+    为什么拒绝而不是回落默认值：用户明确选了「作业」却存成「普通」，他会以为绑定生效了。
+    """
+    if value is None or str(value).strip() == "":
+        raise ValueError(f"任务类型不能为空（只能是 {'/'.join(VALID_TASK_TYPES)}）")
+    text = str(value).strip()
+    if text not in VALID_TASK_TYPES:
+        raise ValueError(f"非法任务类型: {value}（只能是 {'/'.join(VALID_TASK_TYPES)}）")
+    return text
+
+
+def _check_course_pair(conn: sqlite3.Connection, task_type: str, course_id: object) -> str | None:
+    """校验「类型 ↔ 课程」这一对，返回规整后的 course_id。**按合并后的最终状态校验**。
+
+    规则（T-C12）：
+    - 空值 = 不挂课程（存 NULL，不写空串）；
+    - 挂了课程就必须存在（拒绝拼错的 id，不写进库）；
+    - **只有非「普通」类型才允许挂课程** —— 挂了课程这件事本身就在说"它属于某门课"，
+      「普通」是"与课程无关"，两者不能同时成立。这里拒绝而不是偷偷清掉课程：
+      清掉是静默数据丢失，用户会以为保存成功了。
+    """
+    text = None if course_id is None else str(course_id).strip()
+    if not text:
+        return None
+    if task_type == TASK_TYPE_NORMAL:
+        kinds = "/".join(COURSE_TASK_TYPES)
+        raise ValueError(f"「{TASK_TYPE_NORMAL}」类型不挂课程：请把类型改成 {kinds}，或清空课程")
+    row = conn.execute("SELECT 1 FROM courses WHERE id = ?", (text,)).fetchone()
+    if row is None:
+        raise ValueError(f"课程不存在: {text}（先到学业页建课程，或清空课程选择）")
+    return text
+
+
+def course_name(conn: sqlite3.Connection, course_id: str | None) -> str | None:
+    """课程 id → 课程名（只用于显示）。课程已删 → None（**任务不跟着消失**，显示「课程已删」）。"""
+    if not course_id:
+        return None
+    row = conn.execute("SELECT name FROM courses WHERE id = ?", (course_id,)).fetchone()
+    return str(row["name"]) if row is not None else None
 
 
 # 提醒时间：本地时间字符串 `YYYY-MM-DDTHH:MM`（前端 datetime-local 就是这个形状）。
@@ -206,6 +265,8 @@ def create_task(
     flagged: bool = False,
     attach: list[dict[str, str | None]] | None = None,
     remind_at: str | None = None,
+    task_type: str = DEFAULT_TASK_TYPE,
+    course_id: str | None = None,
 ) -> Task:
     """新建任务（AC-1）。校验标题非空；若 due 过去且未完成，初始状态标逾期。"""
     title = title.strip()
@@ -213,6 +274,8 @@ def create_task(
         raise ValueError("任务标题不能为空")
     priority = _check_priority(priority)
     remind_at = _check_remind_at(remind_at)
+    task_type = _check_task_type(task_type)
+    course_id = _check_course_pair(conn, task_type, course_id)
     now = _now()
     task_id = uuid.uuid4().hex[:12]
     status = STATUS_TODO
@@ -222,8 +285,9 @@ def create_task(
         """
         INSERT INTO tasks
         (id, title, due_date, group_name, repeat_days, parent_id, is_myday, status,
-         created_at, updated_at, version, note, priority, flagged, attach, remind_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)
+         created_at, updated_at, version, note, priority, flagged, attach, remind_at,
+         task_type, course_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?)
         """,
         (
             task_id,
@@ -241,6 +305,8 @@ def create_task(
             int(bool(flagged)),
             attach_mod.dump_attach(attach_mod.load_attach(attach or [])),
             remind_at,
+            task_type,
+            course_id,
         ),
     )
     conn.commit()
@@ -308,6 +374,8 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         "flagged",
         "attach",
         "remind_at",
+        "task_type",
+        "course_id",
     }
     # 注意：用"键在 payload 里"判断，而不是"值不是 None" ——
     # 否则 `parent_id=None` / `due_date=None` 这类**清空操作**会被静默忽略（实测踩到）。
@@ -329,6 +397,16 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         # 提醒时间：空值=清除（NULL）；非法格式拒绝（不静默忽略）
         updates["remind_at"] = _check_remind_at(updates["remind_at"])
     before = get_task(conn, task_id)
+    if "task_type" in updates or "course_id" in updates:
+        # 类型与课程是一对：**按改完之后的状态**校验（只传 course_id 时也要看当前类型，
+        # 只传 task_type='普通' 时也要看当前课程）—— 单看某一列会放过"普通 + 挂课程"这种组合。
+        new_type = (
+            _check_task_type(updates["task_type"]) if "task_type" in updates else before.task_type
+        )
+        updates["task_type"] = new_type
+        updates["course_id"] = _check_course_pair(
+            conn, new_type, updates.get("course_id", before.course_id)
+        )
     sets = ", ".join(f"{k} = ?" for k in updates)
     conn.execute(
         f"UPDATE tasks SET {sets}, updated_at = ?, version = version + 1 WHERE id = ?",
@@ -678,7 +756,8 @@ def process_repeats(conn: sqlite3.Connection) -> int:
     - **幂等**：同一任务只生成一次下一次 —— 以 `task.repeat.generated` 事实为准
       （该事实随生成一起写入，既做去重依据，也留下可审计痕迹）。
     - 继承：标题 / 分组 / 重复周期 / 是否 My Day（下一次仍进今天，保持动线连续）
-      + **优先级**（T-B2：优先级是"这件事有多要紧"，属于任务定义，不该每周期掉回默认「中」）。
+      + **优先级**（T-B2：优先级是"这件事有多要紧"，属于任务定义，不该每周期掉回默认「中」）
+      + **类型与课程**（T-C12：每周的作业还是那门课的作业，不该每周期掉回「普通」）。
       **备注不继承**（T-B1：备注往往是这一次的具体说明，抄到下一周期会变成误导）。
     """
     generated = 0
@@ -692,6 +771,11 @@ def process_repeats(conn: sqlite3.Connection) -> int:
             continue
         last = datetime.fromisoformat(task.updated_at).date()
         next_due = (last + timedelta(days=task.repeat_days or 0)).isoformat()
+        # 课程可能已经被删掉了：这时**回到"不挂课程"**继续生成下一次，
+        # 而不是让生成抛错、连累"完成任务"这条主链（课程删除不级联，任务照旧活着）。
+        repeat_course = (
+            task.course_id if (task.course_id and course_name(conn, task.course_id)) else None
+        )
         next_task = create_task(
             conn,
             title=task.title,
@@ -701,6 +785,8 @@ def process_repeats(conn: sqlite3.Connection) -> int:
             parent_id=task.parent_id,
             is_myday=task.is_myday,
             priority=task.priority,
+            task_type=task.task_type,
+            course_id=repeat_course,
         )
         _record_repeat_generated(conn, task, next_task, next_due)
         generated += 1

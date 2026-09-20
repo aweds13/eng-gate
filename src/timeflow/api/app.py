@@ -54,6 +54,9 @@ class TaskIn(BaseModel):
     attach: list[dict[str, Any]] = []
     # 提醒（T-B5）：本地时间「2026-09-20T08:30」；空=不提醒
     remind_at: str | None = None
+    # 任务类型 + 所属课程（SR-F5.4 / T-C12）：普通/作业/考试/论文/小测；只有非「普通」才允许挂课程
+    task_type: str = tm.DEFAULT_TASK_TYPE
+    course_id: str | None = None
 
 
 class AssigneeOut(BaseModel):
@@ -95,6 +98,11 @@ class TaskOut(BaseModel):
     # 提醒的界面口径（`over`/`today`/`soon`/`later`；None=没设或已完成）——
     # **由领域层算**（`tm.reminder_state`），前端不自己拿当前时间去比（免得口径分叉）
     reminder_state: str | None = None
+    # 任务类型 + 所属课程（SR-F5.4 / T-C12）：`course_name` 由后端查名字给出，
+    # 列表卡片因此不必先拉一遍课程表；课程已删 → None（界面显示「课程已删」，任务不受影响）
+    task_type: str = tm.DEFAULT_TASK_TYPE
+    course_id: str | None = None
+    course_name: str | None = None
 
 
 # 会**在本机打开文件/程序**或改服务端设置的接口，只接受本机页面调用。
@@ -140,6 +148,9 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
         attach=[dict(i) for i in t.attach],
         remind_at=t.remind_at,
         reminder_state=tm.reminder_state(t),
+        task_type=t.task_type,
+        course_id=t.course_id,
+        course_name=tm.course_name(conn, t.course_id),
     )
 
 
@@ -353,6 +364,8 @@ def create_app(db_path: str | None = None) -> FastAPI:
                 flagged=payload.flagged,
                 attach=[dict(i) for i in payload.attach],
                 remind_at=payload.remind_at,
+                task_type=payload.task_type,
+                course_id=payload.course_id,
             )
             if payload.groups:
                 tm.set_task_groups(conn, t.id, payload.groups)

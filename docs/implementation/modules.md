@@ -28,6 +28,10 @@
 - **提醒**（SR-F1.4 / T-B5）：`tasks.remind_at`（本地时间，schema **v10**）+
   `reminder_state()`（`over/today/soon/later`，完成/取消/归档/已删=不再催）+ `due_reminders(now)`（只读数据源）；
   `GET /api/reminders/due`、`GET /api/reminders`；前端详情可设、卡片/详情标注、今日页「该提醒了」区。
+- **类型 + 所属课程**（SR-F5.4 / T-C12）：`tasks.task_type`（普通/作业/考试/论文/小测，默认普通）
+  + `tasks.course_id`（→ `courses.id`，schema **v11**）；校验在 `_check_course_pair`（**「普通」不挂课程**、
+  按改完后的状态判、课程必须存在）；`TaskOut.course_name` 由 `course_name()` 查好给前端；
+  前端编辑态两个下拉 + 卡片/详情「课程 · 类型」徽标 + **学业页课程卡反向列出该课任务**。详见 F5 段。
   **到点系统通知**（用户选 B′）在 `core/remind.py`：注册 `schtasks` 计划任务 `timeflow-reminders`
   （每分钟跑 `pythonw src/timeflow/app/remind.py`，`pythonw` 不闪控制台窗口、脚本与库都用绝对路径）；
   `show_notification()` 走 PowerShell WinRT 系统通知（失败退 `msg`，再不行如实报错）；
@@ -73,9 +77,11 @@
 
 ## SR-F5 学业追踪 → `core/academic/`
 - 课程档案（学分/考核/任课）+ 考核项 + GPA（4.0/5.0 可切换）。
-- **学校任务"同构"的现状**（2026-09-18 审计如实化）：可以做到"学校任务与普通任务用同一套 CRUD/My Day/子任务"，
-  但 **`tasks` 表没有 `course_id`** —— 无法把任务字段级挂到课程，现只能用**分组名当课程标签**。
-  规格要求的「课程标签 + 硬约束元数据」只实现了"用分组当标签"这一半（契约 OP-24 未做）。
+- **学校任务"同构"的现状**（2026-09-19 更新 · T-C12）：学校任务与普通任务用同一套 CRUD/My Day/子任务，
+  并且 **`tasks` 已经有 `course_id` + `task_type`** —— 任务能字段级挂到课程（契约 OP-24 已落地）。
+  口径：类型 ∈ 普通/作业/考试/论文/小测（默认「普通」），**只有非「普通」才允许挂课程**（校验在领域层
+  `_check_course_pair`，按"改完之后的状态"判）；课程是**弱关联**（不建外键、删除不级联）。
+  **分组仍可用**，但不再需要拿分组名充当课程标签。
 - **可视化**（第 9 步）：`GET /api/grades`（`all_grade_rows`）供前端「学业多维概览」（GPA 4.0/5.0、平均分、
   学分、课程覆盖的雷达 + 条形）；各轴各自归一到本图最大值，**只用于看均衡，不跨人比较**。
 - **考核提醒与增删**（第 10 步）：`upcoming_assessments()`（只提醒未录成绩的；`days_until` 负=逾期/None=无截止日）
@@ -83,7 +89,7 @@
 - **加权平均成绩 + 制式切换**（第 11 步，用户要求）：`weighted_average()` =
   `Σ(学分×成绩)/Σ学分`（百分制原始分加权，学分为 0/负 不参与），与 `gpa()`（绩点加权）并存；
   `GET /api/gpa?scale=` 一次返回两个口径；前端学业页可在 4.0/5.0 制之间**切换查看**（写死默认值仍在 config.toml）。
-- **未实现**：学校任务↔课程的字段级合流（OP-24，见上）。
+- **未实现**：无（OP-24 合流已落地，见上）。
   **要求备注 + 跳转要求已落地**（SR-F5.3 / T-B4）：`course_assessments.note`（要求备注）+
   `course_assessments.attach`（要求网页/本地路径，与任务附件共用 `core/attach.py` 的打开规则）；
   学业页「考核项」区可就近挂/点开（此前考核项只在 14 天临期窗口里看得到）。
