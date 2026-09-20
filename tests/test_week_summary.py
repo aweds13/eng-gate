@@ -187,6 +187,52 @@ def test_steady_note_describes_without_pressure(conn: sqlite3.Connection) -> Non
         assert banned not in w.steady_note
 
 
+# ---- 均衡度：波动 / 空档（T-C3 / SR-F2.6）----
+
+def test_week_rhythm_reports_variation_and_gap(conn: sqlite3.Connection) -> None:
+    """波动 = 逐日专注分钟的**标准差**（分钟，不折算）；空档 = 最长连续 0 天。"""
+    _focus(conn, 3600.0, "2026-09-14")  # 周一 60 分钟
+    _focus(conn, 1800.0, "2026-09-18")  # 周五 30 分钟（周二~周四空着）
+
+    w = ledger.weekly_summary(conn, week_of="2026-09-16")
+    assert w.active_days == 2
+    assert w.longest_gap_days == 3, "周二~周四连续 3 天 0"
+    assert w.focus_variation_minutes == pytest.approx(21.9, abs=0.2)
+    assert "空档" in w.rhythm_note and "3 天" in w.rhythm_note
+    for banned in ("目标", "应该", "警告", "失败", "落后", "必须"):
+        assert banned not in w.rhythm_note
+
+
+def test_week_rhythm_steady_week(conn: sqlite3.Connection) -> None:
+    """每天都动、且时长接近 → 波动小、无空档，措辞是"比较平稳"。"""
+    for day in ("2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17",
+                "2026-09-18", "2026-09-19", "2026-09-20"):
+        _focus(conn, 1800.0, day)
+    w = ledger.weekly_summary(conn, week_of="2026-09-18")
+    assert w.longest_gap_days == 0
+    assert w.focus_variation_minutes == 0.0
+    assert w.rhythm_note == "这周投入比较平稳。"
+
+
+def test_week_rhythm_high_variation_wording(conn: sqlite3.Connection) -> None:
+    """忽多忽少但没断：措辞只说事实（"长短差得多"），不评价、不催。"""
+    _focus(conn, 18000.0, "2026-09-14")  # 300 分钟
+    for day in ("2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18",
+                "2026-09-19", "2026-09-20"):
+        _focus(conn, 60.0, day)  # 每天 1 分钟 → 每天都动、但差别很大
+    w = ledger.weekly_summary(conn, week_of="2026-09-18")
+    assert w.longest_gap_days == 0 and w.focus_variation_minutes >= 45
+    assert "长短" in w.rhythm_note
+    for banned in ("目标", "应该", "警告", "失败", "落后"):
+        assert banned not in w.rhythm_note
+
+
+def test_week_rhythm_empty_week(conn: sqlite3.Connection) -> None:
+    w = ledger.weekly_summary(conn, week_of="2026-09-18")
+    assert (w.focus_variation_minutes, w.longest_gap_days) == (0.0, 7)
+    assert "随时" in w.rhythm_note  # 空态温和，不施压
+
+
 # ---- API ----
 
 def test_api_weekly_summary(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -198,6 +244,9 @@ def test_api_weekly_summary(tmp_path) -> None:  # type: ignore[no-untyped-def]
     assert w["focus_hours"] == 0.5
     assert len(w["days"]) == 7
     assert w["steady_note"]
+    # 均衡度三个字段（T-C3）也要经 API 出来，界面才有得用；只算今天一天 → 波动 10.5 分钟（30÷√…）
+    assert w["focus_variation_minutes"] == pytest.approx(10.5, abs=0.2)
+    assert w["longest_gap_days"] >= 0 and w["rhythm_note"]
 
 
 def test_api_weekly_summary_bad_date(tmp_path) -> None:  # type: ignore[no-untyped-def]

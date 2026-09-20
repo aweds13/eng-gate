@@ -62,6 +62,12 @@ class WeekSummary(BaseModel):
     steady_note: str  # 一句温和提示（不施压）
     # 本周习惯打卡次数（T-C1）：同 LedgerSummary.habit_count —— 只报次数，不折算成小时
     habits_done: int = 0
+    # 均衡度指标（T-C3 / SR-F2.6「波动/空档」）：**只出数字 + 一句温和描述**，不设目标、不告警。
+    # 波动 = 逐日专注分钟的**标准差**（与 `days[].focus_minutes` 同单位，分钟；全 0 时为 0）；
+    # 空档 = 本周**最长连续 0 天**数（0 = 每天都动了）。
+    focus_variation_minutes: float = 0.0
+    longest_gap_days: int = 0
+    rhythm_note: str = ""
 
 
 def week_start(day: str) -> str:
@@ -100,6 +106,7 @@ def weekly_summary(conn: sqlite3.Connection, week_of: str | None = None) -> Week
     manual_sec = sum(_manual_seconds(conn, day) for day in days)
     debt = len(tm.overdue_tasks(conn, end))
     active_days = sum(1 for p in points if p.focus_minutes > 0)
+    variation, gap = _rhythm(points)
 
     return WeekSummary(
         start=start,
@@ -113,7 +120,41 @@ def weekly_summary(conn: sqlite3.Connection, week_of: str | None = None) -> Week
         active_days=active_days,
         steady_note=_steady_note(active_days, len(points)),
         habits_done=sum(_habit_done_count(conn, day) for day in days),
+        focus_variation_minutes=variation,
+        longest_gap_days=gap,
+        rhythm_note=_rhythm_note(variation, gap, active_days),
     )
+
+
+def _rhythm(points: list[DayPoint]) -> tuple[float, int]:
+    """均衡度（T-C3）：`(逐日专注分钟的总体标准差, 最长连续 0 天)`。
+
+    为什么用标准差 + 最长空档这两个：**波动**回答"是不是忽多忽少"，**空档**回答"断没断过"。
+    都用分钟/天数这类**不折算**的原始单位（守「不折算时间」的红线）；全 0 周返回 (0.0, 7)。
+    """
+    minutes = [p.focus_minutes for p in points]
+    if not minutes:
+        return 0.0, 0
+    mean = sum(minutes) / len(minutes)
+    variation = (sum((m - mean) ** 2 for m in minutes) / len(minutes)) ** 0.5
+    longest = run = 0
+    for m in minutes:
+        run = run + 1 if m <= 0 else 0
+        longest = max(longest, run)
+    return round(variation, 1), longest
+
+
+def _rhythm_note(variation: float, gap: int, active_days: int) -> str:
+    """把波动/空档说成一句**温和**的话：描述事实、不评价、不设目标、不告警（约定「温和不施压」）。"""
+    if active_days == 0:
+        return "这周还没有专注记录，随时可以从一小段开始。"
+    if gap >= 2:
+        return f"这周最长有连续 {gap} 天没有专注；空档也照实记，不必补课。"
+    if variation >= 45:
+        return "这周每天都动了，只是每天长短差得多 —— 长有长的样子，短也算数。"
+    if variation >= 15:
+        return "这周投入有点起伏，总体是接着的。"
+    return "这周投入比较平稳。"
 
 
 def _steady_note(active_days: int, total_days: int) -> str:

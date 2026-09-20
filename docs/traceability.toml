@@ -22,6 +22,7 @@ acknowledged_routes = []
 # 条目如实保持 partial。前端接上后删掉这两条豁免。
 T-C5 = "后端已落地（review_items.task_id + POST /api/tasks/{id}/to-review + GET /api/tasks/{id}/review-cards + PATCH/GET /api/review/items/{id}）；**任务详情里的「升级为复习卡」按钮待前端批次**"
 T-C7 = "后端已落地（ref_handle 可 PATCH 写入/清空，带校验）；**复习卡详情里填句柄的界面待前端批次**"
+T-C3 = "后端已落地（focus_variation_minutes / longest_gap_days / rhythm_note）；**界面上显示这三个数字与那句话待前端批次**"
 
 [entries."T-00"]
 id = "T-00"
@@ -255,8 +256,14 @@ id = "SR-F2.6"
 title = "周结算 + 均衡度指标（波动/空档）+ 温和呈现"
 group = "F2"
 status = "partial"
-evidence = ["text:src/timeflow/core/ledger/ledger.py::def weekly_summary", "route:GET /api/summary/weekly", "test:test_week_summary.py"]
-gaps = "无「波动/空档」指标（GAP-F2-03）"
+evidence = [
+  "text:src/timeflow/core/ledger/ledger.py::def weekly_summary",
+  "text:src/timeflow/core/ledger/ledger.py::def _rhythm",
+  "text:src/timeflow/core/ledger/ledger.py::def _rhythm_note",
+  "route:GET /api/summary/weekly",
+  "test:test_week_summary.py",
+]
+gaps = "后端已落地（T-C3：`focus_variation_minutes` 逐日专注分钟的**标准差**（分钟）+ `longest_gap_days` 最长连续 0 天 + `rhythm_note` 一句温和描述；**不折算时间、不设目标、不告警**）；**界面上把这三个数字/一句话显示出来待前端批次**（同 T-C3，[exceptions] 留痕）"
 
 [entries."SR-F2.7"]
 id = "SR-F2.7"
@@ -1170,6 +1177,20 @@ evidence = [
   "test:test_task_course_line.py",
 ]
 gaps = ""
+
+[entries."T-C3"]
+id = "T-C3"
+title = "C 批：均衡度指标（波动 / 空档，温和呈现）"
+group = "PROCESS"
+status = "partial"
+evidence = [
+  "text:src/timeflow/core/ledger/ledger.py::focus_variation_minutes",
+  "text:src/timeflow/core/ledger/ledger.py::def _rhythm",
+  "text:src/timeflow/core/ledger/ledger.py::def _rhythm_note",
+  "route:GET /api/summary/weekly",
+  "test:test_week_summary.py",
+]
+gaps = "后端已落地（标准差 + 最长空档 + 温和一句话，全部**不折算、不告警**）；**界面显示待前端批次**（[exceptions] 留痕）"
 
 [entries."T-C5"]
 id = "T-C5"

@@ -51,6 +51,9 @@
 - **旧表 `ledger_entries`**：已降级为**兼容/迁移来源**（手动投入与产出都走事实层），解读层不读它。
 - **周结算**（SR-F2.5 / OP-15，第 6 步）：`ledger.weekly_summary()` —— 周=周一→周日、只读 facts、
   债务取周日快照、7 天逐日专注 + `steady_note`（如实描述，不设目标不告警）；`GET /api/summary/weekly`。
+- **均衡度：波动 / 空档**（T-C3 / SR-F2.6，2026-09-20）：`_rhythm()` 出 `focus_variation_minutes`
+  （逐日专注分钟的**标准差**，分钟）、`longest_gap_days`（最长连续 0 天）；`_rhythm_note()` 把它们说成
+  **一句温和的话**（不设目标、不告警、不折算）。**界面显示待前端批次**。
 - **可视化数据底座**（SR-F2.7 / SR-NF3，第 7 步）：`core/insights.py` —— `daily_insights()`（逐日专注/手动/复习/
   产出/习惯/债务快照）、`group_insights()`（按任务分组的投入分布；未绑定专注不计入、多分组如实重复计数）、
   `heatmap()`（**近一年时间热力图**逐日多指标：专注分钟/手动分钟/复习/产出/债务快照）；
