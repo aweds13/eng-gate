@@ -7,10 +7,14 @@ from timeflow.core.review.review import (
     STATE_DUE,
     create_item,
     due_items,
+    get_item,
+    items_for_task,
+    meta,
     myday_entries,
     review,
     reviewed_today,
     undo_review,
+    update_item,
 )
 
 __all__ = [
@@ -25,4 +29,8 @@ __all__ = [
     "review",
     "reviewed_today",
     "undo_review",
+    "get_item",
+    "update_item",
+    "items_for_task",
+    "meta",
 ]

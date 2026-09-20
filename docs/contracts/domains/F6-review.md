@@ -11,6 +11,17 @@
 - 可逆：可删除。
 - 反馈：卡片出现。
 - 边界：空标题拒绝；非法 form/source 拒绝。
+- **实现（T-C5/C6/C7，2026-09-20）**：
+  - 任务 → 复习卡升级：`POST /api/tasks/{id}/to-review`（`{title?, form?, source?, ref_handle?}`），
+    卡的 `task_id` 挂上来源任务（**弱关联**：不建外键、删任务不级联）；
+    **幂等** —— 同一任务已经升级过就返回已有那张卡（`created=false`），不会越点越多张；
+    任务侧反查：`GET /api/tasks/{id}/review-cards`。
+  - 字段：`review_items.form`（`cloze` 挖空 / `qa` 问答卡 / `exam` 真题，v2 起就有）+ `task_id`（schema **v12**）；
+    词表与中文标签只在后端一处，界面用 `GET /api/review/meta` 渲染。
+  - 改定义类字段：`PATCH /api/review/items/{id}`（标题/形式/执行源/引用句柄）+ `GET /api/review/items/{id}`；
+    **排期字段（due_date/interval/ease/reps）不给人手改** —— 那是 FSRS 的记忆状态。
+  - 升级动作**不发事实、不动账本**；账目只来自真正的「复习完成」（OP-27）。
+  - **界面入口（任务详情里的「升级为复习卡」按钮 / 卡详情里填句柄选形式）待前端批次**。
 
 ## OP-27 三态反馈
 
@@ -46,6 +57,9 @@
 - 可逆：可清除。
 - 反馈：引用显示。
 - 边界：不直接读写外部文件。
+- **实现（T-C7，2026-09-20）**：`ref_handle` 可经 `PATCH /api/review/items/{id}` 写入或清空
+  （空串 = 清成 NULL，不写空串；非法值拒绝）；`GET /api/review/meta` 无需句柄。
+  **界面入口待前端批次**（写入已就绪）。
 
 ## OP-30 外部 app 完成
 

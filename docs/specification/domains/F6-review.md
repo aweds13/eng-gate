@@ -22,6 +22,11 @@
 - **R3 到期排序**：重要度 + 最久未复习；到期优先建议进 My Day。
 - **R4 外部 app**：只做调度中枢；用户手动点完成；带执行源标签。
 - **R5 升级**：学习任务可升级为复习任务；保留关联引用句柄。
+  - 落地（T-C5/C6/C7，2026-09-20）：`review_items.task_id`（schema **v12**，弱关联、删任务不级联）
+    + `POST /api/tasks/{id}/to-review`（**幂等**：重复升级返回已有那张卡，不越点越多）；
+    `form`（挖空/问答卡/真题）与 `ref_handle` 可经 `PATCH /api/review/items/{id}` 改，
+    词表与中文标签在 `GET /api/review/meta`（只在后端一处，界面不自己写死）。
+    **排期字段不给人手改**（FSRS 的记忆状态）；升级本身**不发事实、不动账本**。界面入口随前端批次。
 - **R6 投入**：复习完成发 `review.completed` 事实（第 2 步子任务 3 已接线）。
   事实形态：`subject_type=review_item`、`subject_id=卡片 id`、`value_num=0`（不折算时间）、
   `extra={title, feedback, reps, next_due, reviewed_on}`；同时广播同名事件。

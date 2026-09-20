@@ -33,6 +33,28 @@ RATING_FORGOT = "forgot"      # 忘了 → Again
 _FORMATS = ("cloze", "qa", "exam")
 _SOURCES = ("internal", "external")
 
+# 复习形式的界面标签（口径**只在后端定一处**：前端拿 meta 渲染，不自己写死一份中文，
+# 免得两边词表分叉）。`form` 字段本身早在 v2 就建好了（SR-F6.7），这里补的是"能被选择/被读到"。
+FORM_LABELS: dict[str, str] = {
+    "cloze": "挖空",
+    "qa": "问答卡",
+    "exam": "真题",
+}
+SOURCE_LABELS: dict[str, str] = {
+    "internal": "本应用内",
+    "external": "外部 app（只做调度中枢）",
+}
+
+
+def meta() -> dict[str, object]:
+    """复习的可选项（形式 / 执行源）与默认值 —— 供界面渲染，避免中文词表在前后端各写一份。"""
+    return {
+        "forms": [{"value": v, "label": FORM_LABELS[v]} for v in _FORMATS],
+        "sources": [{"value": v, "label": SOURCE_LABELS[v]} for v in _SOURCES],
+        "default_form": "qa",
+        "default_source": "internal",
+    }
+
 
 def _uid() -> str:
     return uuid.uuid4().hex[:12]
@@ -54,8 +76,12 @@ def create_item(
     form: str = "qa",
     source: str = "internal",
     ref_handle: str | None = None,
+    task_id: str | None = None,
 ) -> str:
-    """新建复习卡（SR-F6.2：可由学习任务升级或手动建）。"""
+    """新建复习卡（SR-F6.2：可由学习任务升级或手动建）。
+
+    `task_id`（T-C5）：不为空时这张卡是"从某个任务升级来的"（弱关联，删任务不级联）。
+    """
     title = title.strip()
     if not title:
         raise ValueError("复习卡标题不能为空")
@@ -63,16 +89,77 @@ def create_item(
         raise ValueError(f"非法复习形式: {form}")
     if source not in _SOURCES:
         raise ValueError(f"非法执行源: {source}")
+    if task_id is not None:
+        task_id = _check_task(conn, task_id)
     rid = _uid()
     conn.execute(
         "INSERT INTO review_items (id, title, form, source, due_date, interval_days, "
-        "ease, reps, lapses, state, ref_handle, created_at) "
-        "VALUES (?,?,?,?,?,?,2.5,0,0,?,?,?)",
+        "ease, reps, lapses, state, ref_handle, task_id, created_at) "
+        "VALUES (?,?,?,?,?,?,2.5,0,0,?,?,?,?)",
         (rid, title, form, source, _now().date().isoformat(), 0.0, STATE_DUE, ref_handle,
-         _now().date().isoformat()),
+         task_id, _now().date().isoformat()),
     )
     conn.commit()
     return rid
+
+
+def _check_task(conn: sqlite3.Connection, task_id: object) -> str | None:
+    """校验"来源任务"存在（拒绝拼错的 id，不写进库）；空值 = 不是从任务升上来的。"""
+    if task_id is None:
+        return None
+    text = str(task_id).strip()
+    if not text:
+        return None
+    row = conn.execute("SELECT 1 FROM tasks WHERE id = ?", (text,)).fetchone()
+    if row is None:
+        raise ValueError(f"任务不存在: {text}")
+    return text
+
+
+def items_for_task(conn: sqlite3.Connection, task_id: str) -> list[dict[str, object]]:
+    """某任务升级出来的复习卡（按创建时间正序）——"这件事我做成卡了吗"。"""
+    rows = conn.execute(
+        "SELECT * FROM review_items WHERE task_id = ? ORDER BY created_at", (task_id,)
+    ).fetchall()
+    return [_item_dict(r) for r in rows]
+
+
+def get_item(conn: sqlite3.Connection, item_id: str) -> dict[str, object]:
+    """单张复习卡（不存在 → KeyError，由 API 转 404）。"""
+    row = conn.execute("SELECT * FROM review_items WHERE id = ?", (item_id,)).fetchone()
+    if row is None:
+        raise KeyError(f"复习卡不存在: {item_id}")
+    return _item_dict(row)
+
+
+def update_item(conn: sqlite3.Connection, item_id: str, **fields: object) -> dict[str, object]:
+    """改复习卡的**定义类字段**：标题 / 形式 / 执行源 / 引用句柄（T-C6 + T-C7）。
+
+    只允许这四个（排期字段由 FSRS 管，不给人手改 —— 手改会与调度器的记忆状态打架）；
+    非法值一律拒绝（不静默回落），空句柄 = 清除（存 NULL）。
+    """
+    allowed = {"title", "form", "source", "ref_handle"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    get_item(conn, item_id)  # 不存在 → KeyError
+    if not updates:
+        return get_item(conn, item_id)
+    if "title" in updates:
+        title = str(updates["title"] or "").strip()
+        if not title:
+            raise ValueError("复习卡标题不能为空")
+        updates["title"] = title
+    if "form" in updates and updates["form"] not in _FORMATS:
+        raise ValueError(f"非法复习形式: {updates['form']}")
+    if "source" in updates and updates["source"] not in _SOURCES:
+        raise ValueError(f"非法执行源: {updates['source']}")
+    if "ref_handle" in updates:
+        raw = updates["ref_handle"]
+        text = "" if raw is None else str(raw).strip()
+        updates["ref_handle"] = text or None  # 空 = 清除（存 NULL，不写空串）
+    sets = ", ".join(f"{k} = ?" for k in updates)
+    conn.execute(f"UPDATE review_items SET {sets} WHERE id = ?", (*updates.values(), item_id))
+    conn.commit()
+    return get_item(conn, item_id)
 
 
 def _card_from_row(row: sqlite3.Row) -> Card:
@@ -366,6 +453,7 @@ def myday_entries(
 
 
 def _item_dict(row: sqlite3.Row) -> dict[str, object]:
+    keys = set(row.keys())
     return {
         "id": row["id"],
         "title": row["title"],
@@ -375,4 +463,6 @@ def _item_dict(row: sqlite3.Row) -> dict[str, object]:
         "reps": row["reps"],
         "interval_days": row["interval_days"],
         "ref_handle": row["ref_handle"],
+        # 来源任务（T-C5）：老库/老行没有这一列或为 NULL → None（**不猜**）
+        "task_id": row["task_id"] if "task_id" in keys else None,
     }

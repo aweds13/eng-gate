@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -124,6 +124,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v10(conn)  # 任务提醒 remind_at（F1 段2 · T-B5 前半）
     if current < 11:
         _migrate_v11(conn)  # 任务类型 + 所属课程（F1/F5 · T-C12）
+    if current < 12:
+        _migrate_v12(conn)  # 复习卡挂任务血缘（F6 · T-C5）
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
@@ -139,6 +141,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v9(conn)  # 新库也要走一遍：attach 两列与 app_settings 表
     _migrate_v10(conn)  # 同上：remind_at 由本版加列
     _migrate_v11(conn)  # 同上：task_type / course_id 由本版加列
+    _migrate_v12(conn)  # 同上：review_items.task_id 由本版加列
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -677,3 +680,14 @@ def _migrate_v11(conn: sqlite3.Connection) -> None:
     """
     _add_column_if_missing(conn, "tasks", "task_type", "task_type TEXT DEFAULT '普通'")
     _add_column_if_missing(conn, "tasks", "course_id", "course_id TEXT")
+
+
+def _migrate_v12(conn: sqlite3.Connection) -> None:
+    """v12：复习卡挂**任务血缘** `review_items.task_id`（SR-F6.6「由学习任务升级为复习卡」· T-C5）。
+
+    口径：
+    - 弱关联（不建外键、删任务不级联）：任务删了，复习卡照旧存在（它已经是独立的一张卡）；
+    - 老行一律 NULL（不是从任务升上来的），**不猜**；
+    - 幂等加列，缺表跳过不失败。
+    """
+    _add_column_if_missing(conn, "review_items", "task_id", "task_id TEXT")

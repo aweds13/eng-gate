@@ -882,15 +882,80 @@ def create_app(db_path: str | None = None) -> FastAPI:
         return {"deleted": grade_id}
 
     # ---- SR-F6 复习间隔重复 ----
+    @app.get("/api/review/meta")
+    def review_meta() -> dict[str, object]:
+        """复习的可选项（形式 / 执行源）—— 中文词表只在后端一处，界面拿它渲染。"""
+        return rv.meta()
+
     @app.post("/api/review/items")
     def create_review(payload: dict[str, Any]) -> dict[str, str]:
-        return {"id": rv.create_item(
-            conn,
-            title=payload["title"],
-            form=payload.get("form", "qa"),
-            source=payload.get("source", "internal"),
-            ref_handle=payload.get("ref_handle"),
-        )}
+        try:
+            return {"id": rv.create_item(
+                conn,
+                title=payload["title"],
+                form=payload.get("form", "qa"),
+                source=payload.get("source", "internal"),
+                ref_handle=payload.get("ref_handle"),
+                task_id=payload.get("task_id"),
+            )}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.patch("/api/review/items/{item_id}")
+    def update_review(item_id: str, payload: dict[str, Any]) -> dict[str, object]:
+        """改复习卡的**定义类字段**（T-C6 形式 / T-C7 引用句柄 / 标题、执行源）。
+
+        排期字段（due_date/interval/ease/reps）不给人手改 —— 那是 FSRS 的记忆状态。
+        """
+        try:
+            return rv.update_item(conn, item_id, **payload)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="复习卡不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/review/items/{item_id}")
+    def get_review(item_id: str) -> dict[str, object]:
+        try:
+            return rv.get_item(conn, item_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="复习卡不存在") from None
+
+    @app.post("/api/tasks/{task_id}/to-review")
+    def task_to_review(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        """把任务**升级成复习卡**（T-C5 / SR-F6.6）：卡的标题默认取任务标题。
+
+        幂等：同一个任务已经升级过 → 返回已有的那张卡（`created=false`），不会越点越多张。
+        """
+        try:
+            task = tm.get_task(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        body = payload or {}
+        existing = rv.items_for_task(conn, task_id)
+        if existing:
+            return {"created": False, "card": existing[0], "cards": existing}
+        try:
+            item_id = rv.create_item(
+                conn,
+                title=str(body.get("title") or task.title),
+                form=body.get("form", "qa"),
+                source=body.get("source", "internal"),
+                ref_handle=body.get("ref_handle"),
+                task_id=task_id,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"created": True, "card": rv.get_item(conn, item_id), "cards": []}
+
+    @app.get("/api/tasks/{task_id}/review-cards")
+    def task_review_cards(task_id: str) -> list[dict[str, object]]:
+        """某任务升级出来的复习卡（只读）：详情面板据此显示"已做成卡"。"""
+        try:
+            tm.get_task(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        return rv.items_for_task(conn, task_id)
 
     @app.get("/api/review/due")
     def review_due() -> list[dict[str, object]]:

@@ -100,8 +100,12 @@
 ## SR-F6 复习间隔重复 → `core/review/`
 - FSRS 调度（SR-F6.1）用现成 Python `fsrs` 库；到期按「最久未复习 + 低 reps」排序；外部 app 只做调度中枢。
 - 反馈三态（记得/模糊/忘了 → Good/Hard/Again）；完成发 `review.completed`（当日同卡去重）。
-- **未实现**（2026-09-18 审计）：由学习任务升级为复习卡（SR-F6.2）、复习形式字段（SR-F6.5）、
-  复习卡挂引用句柄（SR-F8.3）—— 见审计报告 GAP-F6-01/02/03。
+- **任务 → 复习卡升级 / 形式 / 句柄**（T-C5/C6/C7，2026-09-20）：schema **v12** 加 `review_items.task_id`
+  （弱关联）；`items_for_task()` 反查、`POST /api/tasks/{id}/to-review`（**幂等**，重复升级返回已有卡）、
+  `PATCH/GET /api/review/items/{id}`（改标题/形式/执行源/引用句柄；**排期字段不给人手改**）、
+  `GET /api/review/meta`（形式与执行源词表 + 中文标签，只在后端一处）。升级不发事实、不动账本。
+- **仍未做**：这三条的**界面入口**（任务详情「升级为复习卡」、卡详情里选形式/填句柄）随前端批次
+  —— 后端已就绪，见 `../../docs/traceability.toml` 的 `[exceptions]`（前端接上后删豁免）。
 - **撤销本次反馈**（第 5 步）：`review.completed` 的 `extra.before` 存复习前快照，`undo_review()` 回退 FSRS 字段
   并追加 `review.undone`；`reviewed_today()` = 当日完成 − 当日已撤销。
 

@@ -17,6 +17,11 @@ acknowledged_routes = []
 
 [exceptions]
 # T-B5 的豁免已删除（2026-09-18）：用户选 B′ 后通知通道已落地，条目转 done —— 修一条删一条。
+# T-C5 / T-C7 的豁免（2026-09-20 加）：**有意拆分** —— 后端（字段/领域/接口）已随本批落地，
+# 但"界面入口"（任务详情里点「升级为复习卡」、复习卡详情里填句柄/选形式）要等前端批次，
+# 条目如实保持 partial。前端接上后删掉这两条豁免。
+T-C5 = "后端已落地（review_items.task_id + POST /api/tasks/{id}/to-review + GET /api/tasks/{id}/review-cards + PATCH/GET /api/review/items/{id}）；**任务详情里的「升级为复习卡」按钮待前端批次**"
+T-C7 = "后端已落地（ref_handle 可 PATCH 写入/清空，带校验）；**复习卡详情里填句柄的界面待前端批次**"
 
 [entries."T-00"]
 id = "T-00"
@@ -454,25 +459,44 @@ gaps = ""
 id = "SR-F6.6"
 title = "由学习任务升级为复习任务"
 group = "F6"
-status = "todo"
-evidence = []
-gaps = "只能手动建卡（GAP-F6-01）"
+status = "partial"
+evidence = [
+  "column:review_items.task_id",
+  "text:src/timeflow/core/review/review.py::def items_for_task",
+  "route:POST /api/tasks/{task_id}/to-review",
+  "route:GET /api/tasks/{task_id}/review-cards",
+  "test:test_review_link_line.py",
+]
+gaps = "后端已落地（T-C5：弱关联 + **幂等**，同一任务重复升级只留一张卡；标题默认取任务名）；**任务详情里的「升级为复习卡」按钮待前端批次**（已写进 [exceptions]，前端接上后删除该豁免）"
 
 [entries."SR-F6.7"]
 id = "SR-F6.7"
 title = "复习形式字段（挖空/真题/问答卡）"
 group = "F6"
-status = "todo"
-evidence = []
-gaps = "review_items 无形式字段（GAP-F6-02）"
+status = "done"
+evidence = [
+  "column:review_items.form",
+  "text:src/timeflow/core/review/review.py::_FORMATS",
+  "text:src/timeflow/core/review/review.py::FORM_LABELS",
+  "route:GET /api/review/meta",
+  "route:GET /api/review/items/{item_id}",
+  "route:PATCH /api/review/items/{item_id}",
+  "test:test_review_link_line.py",
+]
+gaps = ""
 
 [entries."SR-F6.8"]
 id = "SR-F6.8"
 title = "复习卡挂引用句柄（Vault/KB-ID）"
 group = "F6"
-status = "todo"
-evidence = []
-gaps = "review_items 无句柄字段（GAP-F6-03）"
+status = "partial"
+evidence = [
+  "column:review_items.ref_handle",
+  "text:src/timeflow/core/review/review.py::def update_item",
+  "route:PATCH /api/review/items/{item_id}",
+  "test:test_review_link_line.py",
+]
+gaps = "后端已落地（T-C7：`ref_handle` 可写可清空、非法值拒绝、句柄只在库里存引用不存正文）；**复习卡详情里填句柄的界面待前端批次**（已写进 [exceptions]，前端接上后删除该豁免）"
 
 [entries."SR-F7.1"]
 id = "SR-F7.1"
@@ -526,9 +550,14 @@ gaps = ""
 id = "SR-F8.3"
 title = "复习卡挂引用句柄（Vault/KB-ID）"
 group = "F8"
-status = "todo"
-evidence = []
-gaps = "review_items 无句柄字段（GAP-F6-03）"
+status = "partial"
+evidence = [
+  "column:review_items.ref_handle",
+  "route:PATCH /api/review/items/{item_id}",
+  "text:src/timeflow/core/review/review.py::def update_item",
+  "test:test_review_link_line.py",
+]
+gaps = "与 SR-F6.8 同一条缺口（GAP-F6-03）：后端已能写/清句柄（T-C7）；**界面入口待前端批次**"
 
 [entries."SR-F8.4"]
 id = "SR-F8.4"
@@ -1141,6 +1170,47 @@ evidence = [
   "test:test_task_course_line.py",
 ]
 gaps = ""
+
+[entries."T-C5"]
+id = "T-C5"
+title = "C 批：任务 → 复习卡升级（GAP-F6-01）"
+group = "PROCESS"
+status = "partial"
+evidence = [
+  "column:review_items.task_id",
+  "text:src/timeflow/core/review/review.py::def items_for_task",
+  "route:POST /api/tasks/{task_id}/to-review",
+  "text:src/timeflow/core/review/review.py::def _check_task",
+  "test:test_review_link_line.py",
+]
+gaps = "后端已落地（schema v12 + 幂等升级 + 任务侧反查）；**界面按钮待前端批次**（[exceptions] 留痕）"
+
+[entries."T-C6"]
+id = "T-C6"
+title = "C 批：复习形式字段可选（GAP-F6-02）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "column:review_items.form",
+  "text:src/timeflow/core/review/review.py::FORM_LABELS",
+  "route:GET /api/review/meta",
+  "route:PATCH /api/review/items/{item_id}",
+  "test:test_review_link_line.py",
+]
+gaps = ""
+
+[entries."T-C7"]
+id = "T-C7"
+title = "C 批：复习卡挂引用句柄（GAP-F6-03）"
+group = "PROCESS"
+status = "partial"
+evidence = [
+  "column:review_items.ref_handle",
+  "text:src/timeflow/core/review/review.py::def update_item",
+  "route:PATCH /api/review/items/{item_id}",
+  "test:test_review_link_line.py",
+]
+gaps = "后端已落地（可写可清空、非法拒绝）；**界面入口待前端批次**（[exceptions] 留痕）"
 
 [entries."STEP-17"]
 id = "STEP-17"
