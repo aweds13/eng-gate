@@ -32,6 +32,11 @@ class LedgerSummary(BaseModel):
     # （"习惯折算成分钟"是已砍概念，见 复盘/C批口径定案.md §二）；想让它真的占投入时间，
     # 走手动补记（invest.manual，kind 可填「习惯」）。
     habit_count: int = 0
+    # 产出**按两类分开报**（T-C4 / 2026-09-19 用户决定："分两行显示"）：数据里本来就有 `kind`
+    # （`kpi`=学校 KPI / `asset`=知识资产），只是以前被合成一个总数。**不拆轴、不折算**，
+    # 只把同一份产出事实分组显示；`output_count` 仍是总数（三者的关系在 today_done 里同源）。
+    output_kpi: int = 0
+    output_asset: int = 0
 
 
 class DayPoint(BaseModel):
@@ -249,6 +254,13 @@ def summary(
     output_entries = {
         row["subject_id"] or row["id"] for row in outputs_today
     } - retracted
+    # 产出的两类（T-C4）：只按 `value_text` 的 kind 分组统计**有效**条目（已撤销的不算）
+    kpi_set = {
+        row["subject_id"] or row["id"] for row in outputs_today if row["value_text"] == "kpi"
+    } - retracted
+    asset_set = {
+        row["subject_id"] or row["id"] for row in outputs_today if row["value_text"] == "asset"
+    } - retracted
     # 手动投入（第 5 步物化）：invest.manual（秒）− invest.retracted；单列，不并入 invest_hours
     manual_sec = sum(_num(row["value_num"]) for row in _manual_invests_today(conn, t))
     # 习惯打卡（T-C1）：只报**次数**，与投入并排显示；**不折算成小时**（已砍概念）
@@ -261,4 +273,152 @@ def summary(
         output_count=len(output_entries),
         manual_hours=round(manual_sec / 3600.0, 2),
         habit_count=habits,
+        output_kpi=len(kpi_set),
+        output_asset=len(asset_set),
+    )
+
+
+# ---------------------------------------------------------------- 今天做成了什么（T-C11）
+# 用户要求（2026-09-19 原话要点）：
+#   "大任务很难一天之内全部推进完……所以我感觉你突出我完成那些步骤也是很重要，
+#    希望能看到自己完成哪些子步骤。"
+# 所以这里给的不是"还剩多少"，而是**已经做成了什么**：完成的任务 / 完成的步骤（按父任务分组
+# 并带父任务进度）/ 产出按两类分组。**全部只读事实层**，数字与明细同源（不新造派生表）。
+class DoneTask(BaseModel):
+    id: str
+    title: str
+    completed_at: str
+
+
+class DoneStep(BaseModel):
+    id: str
+    title: str
+    parent_id: str
+    parent_title: str | None
+    completed_at: str
+
+
+class DoneParent(BaseModel):
+    """完成步骤所属的父任务 + 进度（"大任务推进到哪了"）。"""
+
+    id: str
+    title: str | None
+    done_today: int  # 今天完成的步数
+    done_total: int  # 该父任务已完成的步数（含以前）
+    total_steps: int  # 该父任务共几步
+
+
+class DoneOutput(BaseModel):
+    entry_id: str
+    kind: str
+    value: float
+    note: str | None
+    occurred_at: str
+    retracted: bool
+
+
+class TodayDone(BaseModel):
+    date: str
+    tasks: list[DoneTask]
+    steps: list[DoneStep]
+    parents: list[DoneParent]
+    outputs: list[DoneOutput]
+    output_kpi: int
+    output_asset: int
+
+
+def _title_of(conn: sqlite3.Connection, task_id: str) -> str | None:
+    """任务标题（宽进严出）：查不到就 None —— 父任务被硬删了也不该让整页报错。"""
+    row = conn.execute("SELECT title FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    return None if row is None else str(row["title"])
+
+
+def _step_progress(conn: sqlite3.Connection, parent_id: str) -> tuple[int, int]:
+    """父任务的步骤进度 `(已完成, 共几步)`。"""
+    rows = conn.execute(
+        "SELECT status FROM tasks WHERE parent_id = ?", (parent_id,)
+    ).fetchall()
+    total = len(rows)
+    done = sum(1 for r in rows if r["status"] == tm.STATUS_DONE)
+    return done, total
+
+
+def today_done(conn: sqlite3.Connection, day: str | None = None) -> TodayDone:
+    """今天做成了什么（T-C11）：完成的**任务** / 完成的**步骤**（按父任务分组+进度）/ 产出分两类。
+
+    口径（**只读**，一处定义，界面不自己算）：
+    - 任务与步骤都来自今日 `task.completed` 事实，**按 task id 去重**（完成→撤销→再完成只算一条）；
+    - 只算**现在仍是「完成」**的：今天完成又被撤销的，不算"做成了"（数字不许比明细多）；
+    - 有 `parent_id` 的进 `steps`（子步骤），没有的进 `tasks`；
+    - `parents` 是这些步骤所属的父任务（含"今天完成几步 / 已推进几步 / 共几步"）；
+    - `outputs` 来自今日 `output.manual`（已撤销的**如实列出并标记**，但不计入两类条数）。
+    """
+    d = day or date.today().isoformat()
+    rows = facts_mod.query(
+        conn, kind="task.completed", since=f"{d}T00:00:00", until=f"{d}T23:59:59"
+    )
+    seen: dict[str, str] = {}  # task_id → 最近一次完成时刻
+    for row in rows:
+        tid = str(row["subject_id"] or "")
+        if tid:
+            seen[tid] = str(row["occurred_at"] or "")
+
+    tasks: list[DoneTask] = []
+    steps: list[DoneStep] = []
+    parents: dict[str, DoneParent] = {}
+    for tid, when in sorted(seen.items(), key=lambda kv: kv[1]):
+        row = conn.execute(
+            "SELECT id, title, parent_id, status FROM tasks WHERE id = ?", (tid,)
+        ).fetchone()
+        if row is None or row["status"] != tm.STATUS_DONE:
+            continue  # 已撤销完成 / 任务已被硬删：不算"今天做成了"
+        parent_id = row["parent_id"]
+        if not parent_id:
+            tasks.append(DoneTask(id=tid, title=str(row["title"]), completed_at=when))
+            continue
+        pid = str(parent_id)
+        steps.append(
+            DoneStep(
+                id=tid,
+                title=str(row["title"]),
+                parent_id=pid,
+                parent_title=_title_of(conn, pid),
+                completed_at=when,
+            )
+        )
+        done_total, total_steps = _step_progress(conn, pid)
+        entry = parents.get(pid)
+        if entry is None:
+            parents[pid] = DoneParent(
+                id=pid,
+                title=_title_of(conn, pid),
+                done_today=1,
+                done_total=done_total,
+                total_steps=total_steps,
+            )
+        else:
+            entry.done_today += 1
+
+    from timeflow.core import memo as memo_mod
+
+    outputs = [
+        DoneOutput(
+            entry_id=str(o["entry_id"]),
+            kind=str(o["kind"] or ""),
+            value=_num(o["value"]),
+            note=None if o["note"] is None else str(o["note"]),
+            occurred_at=str(o["occurred_at"]),
+            retracted=bool(o["retracted"]),
+        )
+        for o in memo_mod.list_outputs(conn, d)
+    ]
+    live = [o for o in outputs if not o.retracted]
+    return TodayDone(
+        date=d,
+        tasks=tasks,
+        steps=steps,
+        parents=list(parents.values()),
+        outputs=outputs,
+        output_kpi=sum(1 for o in live if o.kind == "kpi"),
+        output_asset=sum(1 for o in live if o.kind == "asset"),
     )

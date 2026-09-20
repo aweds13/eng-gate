@@ -625,6 +625,22 @@ def create_app(db_path: str | None = None) -> FastAPI:
                 raise HTTPException(status_code=400, detail="非法日期") from None
         return ledger.weekly_summary(conn, week_of=week_of)
 
+    @app.get("/api/today/done")
+    def today_done(day: str | None = None) -> ledger.TodayDone:
+        """**今天做成了什么**（T-C11 / 契约 OP-48）：完成任务 / 完成步骤 / 产出分两类。
+
+        只读事实层，供今日页那张可展开的「今天做成了什么」用它 —— 数字与明细同源。
+        `day` 可用 `YYYY-MM-DD` 覆盖（便于测试/回看某天）。
+        """
+        if day is not None:
+            from datetime import date as _date
+
+            try:
+                _date.fromisoformat(day)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="非法日期") from None
+        return ledger.today_done(conn, day)
+
     @app.post("/api/tasks/{task_id}/myday")
     def toggle_myday(task_id: str) -> TaskOut:
         task = tm.get_task(conn, task_id)

@@ -1080,9 +1080,15 @@ gaps = ""
 id = "T-C4"
 title = "C 批：产出分两行显示（学校 KPI / 知识资产）+ 可展开明细"
 group = "PROCESS"
-status = "partial"
-evidence = ["file:复盘/C批口径定案.md"]
-gaps = "口径已定（用户：分两行 + 可点开展开）；**界面还没改** —— 与 T-C11（今日完成明细）一批做"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/ledger/ledger.py::output_kpi",
+  "text:src/timeflow/core/ledger/ledger.py::output_asset",
+  "text:src/web/index.html::function summaryLine(",
+  "text:src/web/index.html::按两类分开看（T-C4）",
+  "test:test_today_done_line.py",
+]
+gaps = ""
 
 [entries."T-C8"]
 id = "T-C8"
@@ -1108,9 +1114,16 @@ gaps = ""
 id = "T-C11"
 title = "C 批：今日完成明细（可展开：完成任务 / 完成步骤 / 产出分两类）"
 group = "PROCESS"
-status = "partial"
-evidence = ["file:复盘/C批口径定案.md"]
-gaps = "待做：只读接口（今天完成的任务/子步骤 + 按父任务分组与进度 + 产出按 kind 分组）+ 今日页可展开选项卡。用户要求：大任务一天推不完，**完成了哪些子步骤要看得见**"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/ledger/ledger.py::def today_done",
+  "text:src/timeflow/core/ledger/ledger.py::class TodayDone",
+  "route:GET /api/today/done",
+  "text:src/web/index.html::function doneSection(",
+  "ui:data-action=done-toggle",
+  "test:test_today_done_line.py",
+]
+gaps = ""
 
 [entries."T-C12"]
 id = "T-C12"

@@ -163,6 +163,8 @@ const ACTIONS = {
   'task-detail':    el => showDetail(el.dataset.id),
   'task-open':      el => showDetail(el.dataset.id),   // 从别的视图（如学业页课程卡）打开任务详情
   'task-close':     () => { detailTaskId=null; render(current); },
+  // 今天做成了什么（T-C11）：展开/收起某一项（原地展开，不用弹窗）
+  'done-toggle':    el => { doneOpen[el.dataset.key]=!doneOpen[el.dataset.key]; render(current); },
   // 分组（OP-11）
   'group-add':      () => addGroup(),
   'group-rename':   el => renameGroup(el.dataset.id, el.dataset.name || ''),
@@ -1011,18 +1013,71 @@ function weekCard(w){
 }
 
 function summaryLine(s){
-  // 习惯只报**次数**、与投入并排（T-C1：不折算成时间）；产出按两类分两行显示（T-C4）
+  // 习惯只报**次数**、与投入并排（T-C1：不折算成时间）；产出**按两类分开报**（T-C4：学校 KPI / 知识资产）
   const parts=[`债务 ${s.debt_count} 项`,`投入 ${s.invest_hours}h`];
   if(s.manual_hours)parts.push(`手动投入 ${s.manual_hours}h`);
   if(s.habit_count)parts.push(`习惯 ${s.habit_count} 次`);
   if(s.review_count)parts.push(`复习 ${s.review_count} 张`);
-  if(s.output_count)parts.push(`产出 ${s.output_count} 条`);
+  if(s.output_kpi)parts.push(`学校 KPI ${s.output_kpi} 条`);
+  if(s.output_asset)parts.push(`知识资产 ${s.output_asset} 条`);
   return parts.join(' · ');
 }
+// ---- 今天做成了什么（T-C11 / 契约 OP-48）----
+// 用户点名："大任务一天推不完，完成了哪些子步骤也要看得见。"
+// 三个可点开的项（默认收起，点一下原地展开 —— 不用弹窗，手机上也不挡别的信息）。
+// 数字与明细**同源**（都来自后端 /api/today/done 的同一次只读统计）。
+let doneOpen={tasks:false,steps:false,outputs:false};
+const OUT_LABEL={kpi:'学校 KPI',asset:'知识资产'};
+function doneChip(key,label,colour){
+  const open=doneOpen[key];
+  return `<button class="${open?'':'ghost'}" data-action="done-toggle" data-key="${key}">${open?'收起':'展开'} · ${label}</button>`;
+}
+function doneSection(d){
+  const taskCount=d.tasks.length, stepCount=d.steps.length, parentCount=d.parents.length;
+  const outCount=d.output_kpi+d.output_asset;
+  if(!taskCount&&!stepCount&&!outCount)return '';
+  const tasksHtml=doneOpen.tasks?`<div style="margin-top:8px">
+    ${d.tasks.map(t=>`<div class="fact"><span class="grow" style="flex:1">${esc(t.title)}</span>
+      <span class="sub">完成于 ${humanTime(t.completed_at)}</span>
+      <button class="ghost" data-action="task-open" data-id="${t.id}">打开</button></div>`).join('')
+    ||'<div class="sub">今天还没有整件完成的任务 —— 完成步骤同样算进展。</div>'}</div>`:'';
+  // 步骤**按父任务分组缩进**，并显示父任务进度（"大任务推进到哪了"）
+  const byParent=d.parents.map(p=>{
+    const mine=d.steps.filter(s=>s.parent_id===p.id);
+    const prog=p.total_steps?` ${p.done_total}/${p.total_steps} 步`:'';
+    return `<div style="margin-top:8px">
+      <div class="fact"><span class="badge">${p.done_today} 步</span>
+        <span class="grow" style="flex:1">${esc(p.title||'（父任务已不在）')}</span>
+        <span class="sub">该任务进度${prog}</span>
+        ${p.title?`<button class="ghost" data-action="task-open" data-id="${p.id}">打开</button>`:''}</div>
+      ${mine.map(s=>`<div class="fact" style="padding-left:18px"><span class="sub">└</span>
+        <span class="grow" style="flex:1">${esc(s.title)}</span>
+        <span class="sub">${humanTime(s.completed_at)}</span></div>`).join('')}
+    </div>`;
+  }).join('');
+  const stepsHtml=doneOpen.steps?`<div style="margin-top:4px">${
+    byParent||'<div class="sub">今天还没有完成步骤。</div>'}</div>`:'';
+  const outputsHtml=doneOpen.outputs?`<div style="margin-top:8px">
+    ${d.outputs.map(o=>`<div class="fact" style="${o.retracted?'opacity:.55':''}">
+      <span class="badge">${OUT_LABEL[o.kind]||esc(o.kind||'产出')}</span>
+      <span class="grow" style="flex:1">${esc(o.note||'（没写备注）')} ×${o.value}</span>
+      <span class="sub">${humanTime(o.occurred_at)}${o.retracted?' · 已撤销（不计入条数）':''}</span></div>`).join('')
+    ||'<div class="sub">今天还没有产出记录。</div>'}</div>`:'';
+  return `<div class="section-title" id="set-done">今天做成了什么（只读事实层，点开看明细）</div>
+  <div class="card panel-card">
+    <div class="row">
+      ${doneChip('tasks',`完成任务 ${taskCount} 项`)}
+      ${doneChip('steps',`完成步骤 ${stepCount} 个（属于 ${parentCount} 个任务）`)}
+      ${doneChip('outputs',`产出 ${outCount} 条（学校 KPI ${d.output_kpi} · 知识资产 ${d.output_asset}）`)}
+    </div>
+    ${tasksHtml}${stepsHtml}${outputsHtml}
+    <div class="sub">数据来自已完成/已产出的**事实**：完成又被撤销的不算，撤销的产出如实标出。</div>
+  </div>`;
+}
 async function renderToday(m){
-  const [mydays,overdue,summary,due,deleted,all,reminders]=await Promise.all([
+  const [mydays,overdue,summary,due,deleted,all,reminders,done]=await Promise.all([
     api('/api/mydays'),api('/api/overdue'),api('/api/summary'),api('/api/review/due'),
-    api('/api/tasks/deleted'),api('/api/tasks'),api('/api/reminders/due')]);
+    api('/api/tasks/deleted'),api('/api/tasks'),api('/api/reminders/due'),api('/api/today/done')]);
   el('summary',summaryLine(summary));
   // 到点的提醒（T-B5）：界面自己标出来 —— 没接系统通知通道也不瞎（口径由后端 reminder_state 定）
   const remind=reminders.length?`<div class="section-title">该提醒了（${reminders.length}）</div>
@@ -1048,6 +1103,7 @@ async function renderToday(m){
   ${remind}
   <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||'<div class="empty">没有逾期，很好</div>'}</div>
   <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||'<div class="empty">今天还没有任务，挑一件加进来吧</div>'}
+  ${doneSection(done)}
   ${due.length?`<div class="section-title">今天该复习（${due.length}）</div>${due.map(r=>reviewCard(r)).join('')}`:''}
   ${trash}
   ${debt}`;
@@ -1326,6 +1382,7 @@ async function renderMemo(m){
     <input id="outValue" type="number" step="0.5" value="1" style="width:90px" title="数量">
     <input id="outNote" placeholder="备注，如：数学笔记#3">
     <button data-action="output-add">记一笔产出</button></div>
+  <div class="meta">按两类分开看（T-C4）：学校 KPI ${outputs.filter(o=>o.kind==='kpi'&&!o.retracted).length} 条 · 知识资产 ${outputs.filter(o=>o.kind==='asset'&&!o.retracted).length} 条 —— 同一份产出事实，只是分组显示（不拆轴、不折算）。</div>
   ${outputs.map(o=>`<div class="card ${o.retracted?'done':''}"><div style="flex:1"><div class="title">${esc(o.note||o.kind)} ×${o.value}</div>
     <div class="meta">${o.kind==='kpi'?'学校 KPI':'知识资产'}${o.retracted?' · 已撤销':''}</div></div>
     ${o.retracted?'':`<button class="ghost" data-action="output-retract" data-id="${o.entry_id}">撤销</button>`}</div>`).join('')||'<div class="empty">今天还没有产出记录</div>'}`;

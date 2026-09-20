@@ -109,7 +109,21 @@ const DB = {
   },
   '/api/tasks/t1/facts': [],
   '/api/tasks/t1/subtasks': [],
-  '/api/summary': { debt_count: 0, invest_hours: 0, manual_hours: 0, review_count: 0, output_count: 0 },
+  '/api/summary': { debt_count: 0, invest_hours: 0, manual_hours: 0, review_count: 0, output_count: 0,
+    output_kpi: 2, output_asset: 3 },
+  // 今天做成了什么（T-C11）：三个可展开项都要真渲染一遍（含父任务分组与进度）
+  '/api/today/done': {
+    date: '2026-09-19',
+    tasks: [{ id: 't1', title: '背单词', completed_at: '2026-09-19T10:00:00' }],
+    steps: [
+      { id: 's1', title: '第 1 题', parent_id: 'p1', parent_title: '高数作业', completed_at: '2026-09-19T11:00:00' },
+      { id: 's2', title: '第 2 题', parent_id: 'p1', parent_title: '高数作业', completed_at: '2026-09-19T11:20:00' }],
+    parents: [{ id: 'p1', title: '高数作业', done_today: 2, done_total: 2, total_steps: 5 }],
+    outputs: [
+      { entry_id: 'o1', kind: 'kpi', value: 1, note: '数学卷子', occurred_at: '2026-09-19T12:00:00', retracted: false },
+      { entry_id: 'o2', kind: 'asset', value: 2, note: '笔记#3', occurred_at: '2026-09-19T13:00:00', retracted: true }],
+    output_kpi: 1, output_asset: 1,
+  },
   '/api/summary/weekly': { start: '2026-09-14', end: '2026-09-20', days: [], focus_hours: 0, steady_note: '—' },
   '/api/focus/today': { focus_minutes: 0 }, '/api/focus/active': null,
   '/api/habits': [], '/api/selfcheck': { week_focus_minutes: 0, week_habit_done: 0, debt_count: 0 },
@@ -149,7 +163,8 @@ console.warn = (...a) => problems.push('warn: ' + a.join(' '));
 
 try {
   new Function(code + '\n;globalThis.__view=view;globalThis.__showDetail=showDetail;'
-    + 'globalThis.__render=render;globalThis.__setEdit=v=>{detailEditing=v};')();
+    + 'globalThis.__render=render;globalThis.__setEdit=v=>{detailEditing=v};'
+    + 'globalThis.__setDoneOpen=v=>{doneOpen=v};')();
 } catch (e) {
   console.log(`❌ 脚本求值就抛错：${e.message}`);
   process.exit(1);
@@ -160,6 +175,7 @@ const views = ['today', 'tasks', 'important', 'planned', 'flagged', 'focus', 'st
   'academic', 'review', 'memo', 'setting'];
 let bad = 0;
 let detailBad = 0;
+let doneBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -209,6 +225,28 @@ for (const editing of [false, true]) {
 }
 globalThis.__setEdit(false);
 
+// 今天做成了什么（T-C11）：三个选项卡**默认收起**，视图循环只覆盖收起态 ——
+// 这里把三项全展开再渲染一遍（父任务分组、父任务进度、已撤销产出都必须真渲染出来）。
+const doneChecks = [];
+try {
+  globalThis.__setDoneOpen({ tasks: true, steps: true, outputs: true });
+  byId.get('main')._html = '';
+  await globalThis.__view('today');
+  await sleep(30);
+  const html = byId.get('main')._html;
+  const needs = ['今天做成了什么', '第 1 题', '高数作业', '该任务进度 2/5 步', '已撤销（不计入条数）'];
+  const missing = needs.filter((n) => !html.includes(n));
+  const rendered = missing.length === 0;
+  if (!rendered) doneBad++;
+  doneChecks.push({ rendered, missing });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 今日·完成明细展开 main ${String(html.length).padStart(6)}B`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  doneBad++;
+  doneChecks.push({ error: e.message });
+  console.log(`  ❌ 今日·完成明细展开 渲染抛错: ${e.message}`);
+}
+
 try {
   const body = code.split('const ACTIONS')[1];
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
@@ -218,7 +256,7 @@ try {
 console.warn = realWarn;
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
-    { views: results, detail: detailChecks, problems, unregistered: unused }, null, 2));
+    { views: results, detail: detailChecks, done: doneChecks, problems, unregistered: unused }, null, 2));
 }
 if (unused.length) {
   console.log(`  ❌ 模板里用到但未注册的动作：${unused.join(', ')}`);
@@ -226,8 +264,9 @@ if (unused.length) {
 if (problems.length) {
   console.log(`  ⚠️  运行时告警/异常：${problems.slice(0, 5).join(' | ')}`);
 }
-const failed = bad > 0 || detailBad > 0 || unused.length > 0 || problems.length > 0;
+const failed = bad > 0 || detailBad > 0 || doneBad > 0 || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
+  + `，今日完成明细展开 ${doneChecks.length - doneBad}/${doneChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

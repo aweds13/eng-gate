@@ -456,6 +456,31 @@ def test_task_type_and_course_are_wired_in_frontend() -> None:
     assert "tasksOfCourse" in html, "课程卡没显示关联任务"
 
 
+def test_today_done_section_is_expandable_inline() -> None:
+    """T-C4 + T-C11：产出分两类；「今天做成了什么」三个项**原地展开**看明细（不用弹窗）。
+
+    用户点名："大任务一天推不完，完成了哪些子步骤也要看得见" —— 所以步骤要**按父任务分组**并
+    显示父任务进度；撤销的产出要如实标出。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    # T-C4：摘要行与备忘录页都按两类分开报
+    assert "学校 KPI ${s.output_kpi} 条" in html and "知识资产 ${s.output_asset} 条" in html
+    assert "output_kpi" in html and "output_asset" in html
+    # T-C11：三个可点开的项 + 原地展开
+    assert "function doneSection(" in html and "done-toggle" in html
+    assert "'done-toggle':" in html
+    assert "今天做成了什么" in html and "/api/today/done" in html
+    assert "完成任务 ${taskCount} 项" in html
+    assert "完成步骤 ${stepCount} 个" in html
+    # 步骤按父任务分组 + 显示父任务进度（"该任务进度 2/5 步"）
+    assert "该任务进度" in html and "p.total_steps" in html
+    # 就地展开：不许用弹窗/confirm 展示明细
+    done = html.split("function doneSection(d){", 1)[1].split("\n}", 1)[0]
+    assert "confirm(" not in done and "ask(" not in done, "明细要就地展开，不要弹窗"
+    # 撤销的产出如实标注
+    assert "已撤销（不计入条数）" in html
+
+
 def test_subtask_flow_is_wired_in_frontend() -> None:
     """F1 段1（OP-12）：建步骤、勾完成、脱离父任务都要有界面入口。"""
     html = WEB_INDEX.read_text(encoding="utf-8")
