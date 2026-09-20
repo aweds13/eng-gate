@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 if TYPE_CHECKING:
     import sqlite3
 
+import time
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Request
@@ -20,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from timeflow import logs
 from timeflow.config import load_settings
 from timeflow.core import academic as ac
 from timeflow.core import attach as attach_mod
@@ -167,6 +169,10 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     focus_subscribers.register(conn)
 
+    # 结构化日志 + 调试开关（SR-NF13）：一行一条 JSON；**只记事件与关键字段，不记正文**
+    log_file = logs.setup_logging()
+    logs.log_event("app_start", db_path=str(db_path), schema_version=db.SCHEMA_VERSION)
+
     app = FastAPI(title="timeflow", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
@@ -175,11 +181,46 @@ def create_app(db_path: str | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def log_key_paths(request: Request, call_next: Any) -> Any:
+        """关键路径日志：**改动类请求**（POST/PATCH/PUT/DELETE）记一条（方法/路径/状态/耗时）。
+
+        为什么不记 GET：读接口量最大、信息最少，记了只会把日志淹掉；
+        为什么不记请求正文：那是用户写的内容（隐私最小化，见 `timeflow/logs.py` 的约定）。
+        """
+        started = time.perf_counter()
+        response = await call_next(request)
+        if request.method != "GET":
+            logs.log_event(
+                "api_write",
+                method=request.method,
+                path=request.url.path,
+                status=response.status_code,
+                ms=round((time.perf_counter() - started) * 1000, 1),
+            )
+        return response
+
     web_dir = Path(__file__).resolve().parent.parent.parent / "web"
 
     @app.get("/api/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    def health() -> dict[str, Any]:
+        """健康检查（SR-NF13）：只报**能自证的事实** —— 库通不通、schema 版本、几张表的条数。
+
+        刻意不报"一切正常"这种空话：`database_ok=false` 时把错误原因带出来。
+        """
+        info: dict[str, Any] = {"status": "ok", "schema_version": None, "database_ok": True}
+        try:
+            row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+            info["schema_version"] = None if row is None else int(row["version"])
+            info["tasks"] = int(conn.execute("SELECT COUNT(*) AS n FROM tasks").fetchone()["n"])
+            info["facts"] = int(conn.execute("SELECT COUNT(*) AS n FROM facts").fetchone()["n"])
+        except Exception as exc:  # noqa: BLE001 —— 健康检查必须"永远能回答"，不能自己 500
+            info["status"] = "degraded"
+            info["database_ok"] = False
+            info["error"] = str(exc)[-200:]
+        info["debug"] = logs.debug_enabled()
+        info["log_file"] = None if log_file is None else str(log_file)
+        return info
 
     @app.get("/api/config")
     def config() -> dict[str, Any]:

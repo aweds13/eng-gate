@@ -4,6 +4,7 @@
     python -X utf8 tools/serve.py            # 用默认库 data/timeflow.db
     python -X utf8 tools/serve.py --port 8530
     python -X utf8 tools/serve.py --fresh     # 用临时空库（演示/试验用，不动真实数据）
+    python -X utf8 tools/serve.py --debug     # 开调试日志（logs/timeflow.jsonl 记更细）
 
 为什么不是直接一句 uvicorn：项目默认库是真实数据，升级代码后首次连接会跑 schema 迁移；
 先自动备份一份 `.bak-<时间戳>` 更稳妥（对齐 conventions「重要数据可备份、可回滚」）。
@@ -12,6 +13,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sqlite3
 import sys
@@ -54,7 +56,16 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--fresh", action="store_true", help="用临时空库，不动真实数据")
     parser.add_argument("--no-backup", action="store_true")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="开调试日志（logs/timeflow.jsonl 记更细；等价 TF_DEBUG=1）",
+    )
     args = parser.parse_args()
+
+    if args.debug:
+        # 调试开关只影响日志级别，不改变任何业务行为（见 src/timeflow/logs.py 的约定）
+        os.environ["TF_DEBUG"] = "1"
 
     if args.host not in ("127.0.0.1", "localhost"):
         print("[拒绝] 本项目本地优先：只允许绑定回环地址", file=sys.stderr)

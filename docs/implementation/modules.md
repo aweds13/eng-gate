@@ -144,6 +144,16 @@
 - 与 ledger 的关系：业务线只发事实，ledger 读事实按当前心智模型算账；换心智模型只改解读层。
 - **订阅者接入点**：`core/focus/subscribers.py`（当前唯一订阅器；跨线联动都写在各线自己的 `subscribers.py`）。
 
+## 可观测（SR-NF13）→ `src/timeflow/logs.py`
+- **结构化日志**：一行一条 JSON（`logs/timeflow.jsonl`，gitignore 的本机产物）；`setup_logging()` 幂等，
+  写不进文件就退回控制台（**日志失败不挡启动**）；`log_event(事件名, **字段)` 是唯一写入口。
+- **关键路径**：`api/app.py` 的 `log_key_paths` 中间件记**改动类请求**（方法/路径/状态/耗时）+ 启动事件；
+  GET 不记（读了就记会把日志淹掉）。
+- **调试开关**：`TF_DEBUG=1`（或 `tools/serve.py --debug`）只把级别降到 DEBUG，**不改变业务行为**。
+- **隐私最小化**（守 SR-NF16）：不记请求正文/备注/标题；`log_event` 刻意只接受机器可读字段。
+- **健康检查**：`GET /api/health` → `{status, database_ok, schema_version, tasks, facts, debug, log_file}`；
+  库坏了报 `degraded` + 原因，**自己不许 500**。
+
 ## 事实 kind 总表（便于查「谁发了什么」）
 
 | kind | 发出方 | value_num | 反向/配套 |

@@ -706,9 +706,17 @@ gaps = "无 PR 模板文件（GAP-NF-10）；worktree 由「强制」改「可�
 id = "SR-NF13"
 title = "关键路径日志 + 健康检查/调试开关"
 group = "NF"
-status = "partial"
-evidence = ["route:GET /api/health"]
-gaps = "无结构化日志、无调试开关（GAP-NF-07）"
+status = "done"
+evidence = [
+  "text:src/timeflow/logs.py::def setup_logging",
+  "text:src/timeflow/logs.py::def log_event",
+  "text:src/timeflow/logs.py::def debug_enabled",
+  "text:src/timeflow/api/app.py::log_key_paths",
+  "route:GET /api/health",
+  "text:tools/serve.py::--debug",
+  "test:test_health_logs.py",
+]
+gaps = ""
 
 [entries."SR-NF14"]
 id = "SR-NF14"

@@ -27,6 +27,9 @@ backups/
 # 探查用外部 skill 工具（勿入库）
 .uiux-skill-probe/
 
+# 结构化日志（SR-NF13：logs/timeflow.jsonl 是本机运行产物，不入库）
+logs/
+
 # 重构对照快照（按需从 git 历史导出，用于人工并排 diff；不属于源码）
 snapshots/
 

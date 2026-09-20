@@ -521,6 +521,23 @@
   实测查清：那条报错是**环境问题**（用户当时看的应用是我在 DSH 沙箱里启动的，沙箱屏蔽了任务计划程序/WMI），
   用更宽权限重跑同一条命令**成功创建并删除**了探针任务 → 命令构造本身没问题。
 
+### 工程 · SR-NF13 结构化日志 + 健康检查 + 调试开关（GAP-NF-07 收口）
+
+- **新增 `src/timeflow/logs.py`**（基础设施层，不属于任何业务域）：
+  - 日志**一行一条 JSON** → `logs/timeflow.jsonl`（本机产物，已进 `.gitignore`；可用 `TF_LOG_PATH` 改路径、
+    设 `off` 关掉）；`setup_logging()` **幂等**（重复调用不叠 handler）；写不进文件就退回控制台并说明原因，
+    **日志失败绝不挡启动、也不改业务结果**；
+  - `log_event(事件名, **字段)` 是唯一写入口，刻意**只接受机器可读字段**；
+  - **隐私最小化**（守 SR-NF16）：**不记请求正文/备注/标题**等用户写的内容（有单测钉住）。
+- **关键路径日志**：`api/app.py` 加 `log_key_paths` 中间件 —— 记**改动类请求**（方法/路径/状态/耗时）
+  + `app_start`；**GET 不记**（读接口量最大、信息最少，记了只会把日志淹掉）。
+- **调试开关**：`TF_DEBUG=1` 或 `python -X utf8 tools/serve.py --debug`（**只改日志级别，不改业务行为**）。
+- **健康检查**（`GET /api/health` 从 `{"status":"ok"}` 变成能自证的事实）：
+  `{status, database_ok, schema_version, tasks, facts, debug, log_file}`；库读不了时报 `degraded` + 原因，
+  **健康检查自己不许 500**（有单测模拟库损坏）。
+- 测试：新增 `tests/test_health_logs.py`（8 项：JSON 行、幂等与 off、开关只改级别、写文件失败不抛、
+  健康检查事实与降级、改动记日志而 GET 不记、日志不含用户正文）。
+
 ### C 批 · T-C3 均衡度指标：波动 / 空档（后端，SR-F2.6 / GAP-F2-03）
 
 - `weekly_summary()` 增三个字段（`GET /api/summary/weekly` 一并返回）：

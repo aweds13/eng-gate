@@ -49,6 +49,12 @@
 
 ## SR-NF13 · 可观测/日志审计（N42）——一版
 - 必须：关键路径留日志+计数；提供健康检查/调试开关（坏了能定位）。
+  - **落地（2026-09-20）**：`src/timeflow/logs.py` —— 日志**一行一条 JSON**（`logs/timeflow.jsonl`，
+    本机产物、gitignore）；**关键路径** = 改动类请求（POST/PATCH/PUT/DELETE，记方法/路径/状态/耗时）
+    + 启动事件；**调试开关** `TF_DEBUG=1` 或 `tools/serve.py --debug`（**只改日志级别，不改业务行为**）。
+  - **隐私最小化**（守 SR-NF16）：**不记请求正文/备注/标题**等用户写的内容（有单测钉住）。
+  - `/api/health` 报能自证的事实（`database_ok` / `schema_version` / 任务与事实条数 / 日志路径），
+    库坏了如实报 `degraded` + 原因，**自己不许 500**。
 
 ## SR-NF14 · 配置工程化（N43）——一版
 - 必须：config.example.toml 模板入库→本地 config.toml 且 gitignore；Pydantic 校验+env 覆盖；敏感信息只存本机（不入 Git/PR/日志/截图）；新增配置项同步文档。
