@@ -23,6 +23,7 @@ acknowledged_routes = []
 T-C5 = "后端已落地（review_items.task_id + POST /api/tasks/{id}/to-review + GET /api/tasks/{id}/review-cards + PATCH/GET /api/review/items/{id}）；**任务详情里的「升级为复习卡」按钮待前端批次**"
 T-C7 = "后端已落地（ref_handle 可 PATCH 写入/清空，带校验）；**复习卡详情里填句柄的界面待前端批次**"
 T-C3 = "后端已落地（focus_variation_minutes / longest_gap_days / rhythm_note）；**界面上显示这三个数字与那句话待前端批次**"
+SR-NF12 = "PR 模板已入库（`.github/pull_request_template.md`），但**条目标题编号错位**（实际描述的是规格 `SR-NF11 Git 工作流`）→ 保持 partial，等 T-D1 校正编号时一并处理（见 `复盘/文档债务-NF编号错位.md`）"
 
 [entries."T-00"]
 id = "T-00"
@@ -696,11 +697,14 @@ gaps = "无 2–3 个由浅入深扩展示例（GAP-NF-06）"
 
 [entries."SR-NF12"]
 id = "SR-NF12"
-title = "Worktree + Conventional Commits + PR 清单"
+title = "Worktree + Conventional Commits + PR 清单（★ 台账编号与规格错位，见 gaps）"
 group = "NF"
 status = "partial"
-evidence = ["file:docs/CODING_GUIDELINES.md"]
-gaps = "无 PR 模板文件（GAP-NF-10）；worktree 由「强制」改「可选」"
+evidence = [
+  "file:docs/CODING_GUIDELINES.md",
+  "file:.github/pull_request_template.md",
+]
+gaps = "**编号错位（2026-09-20 发现）**：本条标题/证据实际对应规格的 `SR-NF11 Git 工作流`（PR 模板已入库，GAP-NF-10 可收口）；而规格的 `SR-NF12` 是「数据迁移与备份」，台账里没有对应条目。同一错位影响 SR-NF2~NF12（台账条目描述的是规格的**前一条**），错误来源与逐条映射见 `复盘/文档债务-NF编号错位.md`；**校正属独立任务 T-D1（待做）**，本轮不擅自重编号（会连带改证据与其它文档引用）"
 
 [entries."SR-NF13"]
 id = "SR-NF13"
@@ -754,9 +758,14 @@ gaps = "无 IndexedDB、无离线队列、无跨端对齐（GAP-F9-02）"
 id = "SR-NF18"
 title = "轻量：启动快/内存低/大数据量流畅（可验证）"
 group = "NF"
-status = "todo"
-evidence = []
-gaps = "无任何基准测试（GAP-NF-09）"
+status = "done"
+evidence = [
+  "file:tools/bench.py",
+  "text:tools/bench.py::BUDGET_MS",
+  "text:tools/bench.py::tracemalloc",
+  "test:test_bench_tool.py",
+]
+gaps = ""
 
 [entries."OP-1"]
 id = "OP-1"
@@ -1240,6 +1249,22 @@ evidence = [
   "test:test_review_link_line.py",
 ]
 gaps = "后端已落地（可写可清空、非法拒绝）；**界面入口待前端批次**（[exceptions] 留痕）"
+
+[entries."T-D1"]
+id = "T-D1"
+title = "文档债务：台账 SR-NF2~NF12 编号错位校正（含给审计加标题级检查）"
+group = "PROCESS"
+status = "todo"
+evidence = ["file:复盘/文档债务-NF编号错位.md"]
+gaps = "台账 SR-NF2~NF12 描述的是规格的**前一条**（整体错位一格），且规格 SR-NF12「数据迁移与备份」在台账里没有条目；逐条映射与完成标准见 `复盘/文档债务-NF编号错位.md`。**本轮只登记不动手**（不是纯改标题：证据与状态都要按新含义重判，属一次 NF 层小型再审；且会牵连引用 NF 编号的其它文档）。附带一件：给 `scripts/audit_progress.py` 加**标题级**检查，免得同类错位再躲过审计"
+
+[entries."T-D2"]
+id = "T-D2"
+title = "文档债务：审计脚本加「标题级」规格覆盖检查（可与 T-D1 合并）"
+group = "PROCESS"
+status = "todo"
+evidence = ["file:复盘/文档债务-NF编号错位.md"]
+gaps = "现在审计的「规格覆盖」只按**编号**核对（`sr_ids - set(entries)`），编号在、含义错也算通过；已在 `复盘/文档债务-NF编号错位.md` §三 记录。待加：台账 `title` 与规格标题的关键词比对（或加 `spec_title` 字段强制一致）"
 
 [entries."STEP-17"]
 id = "STEP-17"
