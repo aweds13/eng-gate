@@ -5,7 +5,7 @@
 - 开关语义：打开 = 写设置 + 注册任务；关闭 = 写设置 + 删除任务；
   **注册失败设置不落库**（不谎报已开）；
 - 通知去重：同一条提醒（同 remind_at）只弹一次；改了提醒时间会重新弹；**弹失败不标记**（下次重试）；
-- 防轰炸：一次到点太多（>3 条）合并成一条汇总；
+- 防轰炸：一次到点太多合并成一条汇总（T-B5c 起**一次只弹一条**：闹钟式堆多条会同时循环响）；
 - 到点脚本入口 `src/timeflow/app/remind.py` 能独立跑（计划任务的工作目录不是项目根）；
 - API：状态可读、开关可切（本机来源）、**跨站被 403**、测试通知接口；
 - 默认关闭：不启用就不注册任何系统任务。
@@ -388,3 +388,74 @@ def test_no_system_task_is_created_by_default(tmp_path) -> None:  # type: ignore
     assert [t.title for t in tm.due_reminders(conn, now)] == ["任务"]
     assert rm.status(conn)["last_notify_at"] is None
     conn.close()
+
+
+# ---------------------------------------------------------------- 响铃收口（T-B5c）
+# 背景（用户实测反馈）：闹钟式通知**一直响到被关掉**，而它没有"最多一条"的约束 ——
+# 开发/试弹积累出 14 条同时在循环响，用户听到的是"电脑怎么一直在响"。三条护栏：
+#   ① 弹新的先清旧的（同一时刻最多一条）；② 一次只弹一条（多条合并）；③ 界面上能「停止响铃」。
+
+def test_toast_replaces_previous_one() -> None:
+    """① 弹之前先清掉本通道已有通知 —— 否则闹钟式会越堆越响。"""
+    ps = rm.powershell_toast_script("标题", "正文")
+    assert "[Windows.UI.Notifications.ToastNotificationManager]::History.Clear($id)" in ps
+    # 清要用**同一个 AUMID**，否则清了个寂寞（弹与清必须同 id）
+    assert rm.TOAST_APP_ID in ps
+    assert f"$toast.Tag='{rm.TOAST_TAG}'" in ps and f"$toast.Group='{rm.TOAST_GROUP}'" in ps
+    # 显式关掉时不清（留给需要"并排多条"的场景/测试）
+    assert "History.Clear" not in rm.powershell_toast_script("标题", "正文", clear_first=False)
+
+
+def test_clear_script_and_clear_notifications() -> None:
+    """③ 停止响铃：清通知的脚本与调用（用注入的 run，不真的弹/真清）。"""
+    ps = rm.powershell_clear_script()
+    assert "History.Clear($id)" in ps and rm.TOAST_APP_ID in ps
+
+    calls: list[list[str]] = []
+
+    def run(args: list[str], env: dict[str, str] | None = None) -> tuple[bool, str]:
+        calls.append(list(args))
+        return True, ""
+
+    ok, detail = rm.clear_notifications(run=run)
+    assert ok and "已清掉" in detail and calls, "没有真的去清"
+    assert any("powershell" in c[0].lower() or "pwsh" in c[0].lower() for c in calls)
+
+    ok2, detail2 = rm.clear_notifications(run=lambda a, e=None: (False, "拒绝访问"))
+    assert ok2 is False and "拒绝访问" in detail2, "清不掉要如实说，不许静默"
+
+
+def test_notify_due_never_stacks_two_alarms(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """② 一次只弹一条：两条同时到点 → 合并成一条（闹钟式堆两条就是两个循环响铃）。"""
+    conn = db_mod.connect(str(tmp_path / "stack.db"))
+    now = datetime(2026, 9, 20, 12, 0)
+    tm.create_task(conn, "甲", remind_at="2026-09-20T09:00")
+    tm.create_task(conn, "乙", remind_at="2026-09-20T09:30")
+
+    sent: list[str] = []
+
+    def sender(title: str, body: str) -> tuple[bool, str]:
+        sent.append(title)
+        return True, "已弹出系统通知"
+
+    got = rm.notify_due(conn, now, sender=sender)
+    assert len(sent) == 1, f"一次弹了 {len(sent)} 条，会同时响好几个闹钟"
+    assert "2 条提醒到点了" in sent[0]
+    assert len(got) == 2 and all(r["sent"] for r in got)
+    conn.close()
+
+
+def test_api_stop_ringing(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """停止响铃接口：本机可用、跨站 403、失败如实回报原因。"""
+    client = _client(tmp_path, "stop.db")
+    monkeypatch.setattr(rm, "clear_notifications", lambda: (True, "已清掉提醒"))
+    got = client.post("/api/reminders/stop").json()
+    assert got["ok"] is True and "已清掉" in got["detail"]
+
+    monkeypatch.setattr(rm, "clear_notifications", lambda: (False, "找不到 powershell"))
+    bad = client.post("/api/reminders/stop").json()
+    assert bad["ok"] is False and "powershell" in bad["detail"]
+
+    assert client.post(
+        "/api/reminders/stop", headers={"Origin": "https://evil.example"}
+    ).status_code == 403

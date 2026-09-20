@@ -194,6 +194,7 @@ const ACTIONS = {
   'set-remind-notify': el => setRemindNotify(el.dataset.on === 'true'),
   'set-remind-style': el => setRemindStyle(el.dataset.style),
   'remind-test':    () => testRemindNotify(),
+  'remind-stop':    () => stopRinging(),
   'task-myday':     el => toggleMyDay(el.dataset.id, true),
   'task-delete':    el => removeTask(el.dataset.id),
   'task-restore':   el => restoreTask(el.dataset.id),
@@ -1425,10 +1426,13 @@ async function renderSetting(m){
     <div class="settings-sub">提醒方式（到点时怎么叫你）</div>
     <div class="row">${(remindCfg.styles||[]).map(x=>
       `<button class="${remindCfg.style===x.value?'':'ghost'}" data-action="set-remind-style" data-style="${x.value}">${esc(x.label)}</button>`).join('')}
-      <button class="ghost" data-action="remind-test">试一下</button></div>
+      <button class="ghost" data-action="remind-test">试一下</button>
+      <button class="ghost" data-action="remind-stop">停止响铃</button></div>
     <div class="sub">「闹钟式」用 Windows 的**警报通知**：预先展开、**留在屏幕上直到你手动关掉**、循环播放闹钟音，
       并能突破「专注助手/免打扰」—— 这才是"提得住人"的效果；「温和通知」只在右下角浮几秒。
       两种都不引第三方依赖。</div>
+    <div class="sub">**闹钟式会一直响到你把它关掉** —— 关掉的办法有两个：点通知上的 ✕，或点上面的「停止响铃」。
+      同一条提醒**同一时刻只会有一条**（弹新的之前会自动清掉旧的），不会越堆越吵。</div>
     <div class="settings-sub">到点自动提醒（关掉应用也响）</div>
     <div class="row">
       <button class="${remindCfg.enabled?'':'ghost'}" data-action="set-remind-notify" data-on="true">开启</button>
@@ -1499,6 +1503,12 @@ async function setRemindNotify(on){
 async function testRemindNotify(){
   const r=await api('/api/reminders/test',{method:'POST'});
   toast(r.ok?'已弹出测试通知 —— 看到就说明能用':`弹不出来：${r.detail}`);
+  view(current);
+}
+// 停止响铃（T-B5c）：闹钟式会一直响到被关掉 —— 给了 ✕ 之外的第二条路：在应用里点一下
+async function stopRinging(){
+  const r=await api('/api/reminders/stop',{method:'POST'});
+  toast(r.ok?'已停止响铃（通知也清掉了）':`停不下来：${r.detail}`);
   view(current);
 }
 // 提醒方式（用户反馈"普通通知效果很差"后加）：闹钟式 = 留在屏幕上 + 循环响铃；温和 = 几秒消失

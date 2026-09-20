@@ -337,6 +337,10 @@ def test_reminder_ui_and_notify_switch() -> None:
     assert "function setRemindStyle(" in html
     assert "留在屏幕上" in setting, "必须写清闹钟式的效果（留在屏幕上 + 循环响铃）"
     assert "默认关闭" in setting, "必须标出默认是关的"
+    # T-B5c 响铃收口（用户实测"电脑一直在响"后加的）：界面上必须能停，且写清"会一直响到你关掉"
+    assert 'data-action="remind-stop"' in setting, "缺少「停止响铃」按钮"
+    assert "function stopRinging(" in html and "/api/reminders/stop" in html
+    assert "一直响到你把它关掉" in setting, "必须写清闹钟式会一直响到被关掉"
     assert "注销/关机时不响" in setting, "必须写明真实边界（不谎报）"
     assert "计划任务" in setting
     assert 'data-target="set-remind"' in html, "常用区没有提醒快捷入口"

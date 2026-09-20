@@ -60,6 +60,15 @@ STYLE_LABELS = {
     STYLE_GENTLE: "温和通知（几秒后消失）",
 }
 
+# 通知的 tag / group（T-B5c）：Windows 允许按 (tag, group, AUMID) **精确移除**一条通知。
+# 为什么要给它们：闹钟式会**一直响到被关掉**，所以必须能"点名清掉自己弹的那条"。
+TOAST_TAG = "timeflow"
+TOAST_GROUP = "reminders"
+
+# 借用 Windows PowerShell 已注册的 AUMID（未打包程序没有自己的 AUMID 时的通行做法，见下）。
+# 抽成常量：**弹通知**与**清通知**必须用同一个 id，否则清不掉（这条踩过）。
+TOAST_APP_ID = "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe"
+
 # 项目里的脚本入口（计划任务直接跑它，不依赖 PYTHONPATH）
 REMIND_SCRIPT = Path(__file__).resolve().parent.parent / "app" / "remind.py"
 
@@ -296,12 +305,23 @@ def build_toast_xml(title: str, body: str, style: str = DEFAULT_STYLE) -> str:
     )
 
 
-def powershell_toast_script(title: str, body: str, style: str = DEFAULT_STYLE) -> str:
+def powershell_toast_script(
+    title: str, body: str, style: str = DEFAULT_STYLE, clear_first: bool = True
+) -> str:
     """生成弹通知的 PowerShell 脚本（XML 与环境变量传入，避免转义地狱）。
 
     注意：`title`/`body` 在这里只用于**校验参数**（真正的 XML 由调用方放进 `TF_XML`），
     所以这里不重复拼 XML。
+
+    `clear_first=True`（默认）：**弹新的之前先清掉本通道上已有的通知** —— 闹钟式通知会一直响到
+    被关掉，若不管，几次之后就会**同时有好几条在循环响**（实测堆过 14 条，用户反馈"电脑一直在响"）。
+    这条通道（Windows PowerShell 的 AUMID）是我们借来专门发提醒的，清掉它不影响别的应用。
     """
+    clear = (
+        "[Windows.UI.Notifications.ToastNotificationManager]::History.Clear($id)\n"
+        if clear_first
+        else ""
+    )
     return (
         "$ErrorActionPreference='Stop'\n"
         "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
@@ -312,10 +332,49 @@ def powershell_toast_script(title: str, body: str, style: str = DEFAULT_STYLE) -
         "$doc.LoadXml($env:TF_XML)\n"
         # AppId 用 Windows PowerShell 已注册的 AUMID：未打包程序没有自己的 AUMID 时，
         # 这是"不额外注册系统组件也能弹通知"的通行做法。
-        "$id='{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe'\n"
+        f"$id='{TOAST_APP_ID}'\n"
+        f"{clear}"
         "$toast=[Windows.UI.Notifications.ToastNotification]::new($doc)\n"
+        f"$toast.Tag='{TOAST_TAG}'\n"
+        f"$toast.Group='{TOAST_GROUP}'\n"
         "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($id).Show($toast)\n"
     )
+
+
+def powershell_clear_script() -> str:
+    """生成"清掉本通道通知"的 PowerShell 脚本（纯函数，可单测）。
+
+    用于「停止响铃」：闹钟式通知会一直循环响，用户点一下就该能停 —— 而不是只能去通知中心里找 ✕。
+    `History.Clear($id)` 把该 AUMID 下的通知全部清掉（本通道只发 timeflow 的提醒）。
+    """
+    return (
+        "$ErrorActionPreference='Stop'\n"
+        "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
+        "ContentType=WindowsRuntime] > $null\n"
+        f"$id='{TOAST_APP_ID}'\n"
+        "[Windows.UI.Notifications.ToastNotificationManager]::History.Clear($id)\n"
+    )
+
+
+def clear_notifications(run: Any = None) -> tuple[bool, str]:
+    """清掉还在屏幕上/通知中心里的提醒（**停止响铃**）。幂等：本来没有也算成功。
+
+    失败**不静默**：返回 `(False, 原因)`，由界面原样显示（可能是找不到 powershell）。
+    """
+    if not sys.platform.startswith("win"):
+        return False, "当前平台未实现系统通知"
+    ps = shutil.which("powershell") or shutil.which("pwsh")
+    if not ps:
+        return False, "找不到 powershell，无法清掉通知（请在通知中心里点 ✕ 关掉）"
+    runner: Any = run or _run_env
+    cmd = [
+        ps, "-NoProfile", "-NonInteractive",
+        "-EncodedCommand", _encode_ps(powershell_clear_script()),
+    ]
+    ok, detail = runner(cmd, {})
+    if ok:
+        return True, "已清掉提醒（还在响的闹钟式通知也停了）"
+    return False, f"清掉通知失败：{detail}"
 
 
 def _encode_ps(script: str) -> str:
@@ -324,12 +383,13 @@ def _encode_ps(script: str) -> str:
 
 
 def show_notification(
-    title: str, body: str, style: str = DEFAULT_STYLE, run: Any = None
+    title: str, body: str, style: str = DEFAULT_STYLE, run: Any = None, replace: bool = True
 ) -> tuple[bool, str]:
     """弹一条系统通知。Windows 走 WinRT toast（按 `style` 决定闹钟式/温和），失败再退 `msg`。
 
     `run` 是注入点，签名固定为 `(args, env) -> (ok, detail)`（默认 `_run_env`）——
     测试里替换它就不会真的弹窗。
+    `replace=True`（默认）先清掉上一条，保证**同一时刻最多一条提醒在响**（T-B5c）。
     """
     if not sys.platform.startswith("win"):
         return False, "当前平台未实现系统通知（Windows 之外的平台请用界面标注）"
@@ -341,7 +401,8 @@ def show_notification(
         xml = build_toast_xml(title, body, style)
         cmd = [
             ps, "-NoProfile", "-NonInteractive",
-            "-EncodedCommand", _encode_ps(powershell_toast_script(title, body, style)),
+            "-EncodedCommand",
+            _encode_ps(powershell_toast_script(title, body, style, clear_first=replace)),
         ]
         ok, detail = runner(cmd, {"TF_XML": xml})
         if ok:
@@ -381,9 +442,10 @@ def _fired_mark(conn: sqlite3.Connection, task_id: str) -> str | None:
     return _get(conn, KEY_FIRED_PREFIX + task_id)
 
 
-# 一次最多弹几条：关机/离线几天后回来，一下弹 20 条比不提醒还烦 ——
-# 超过就合并成一条汇总（温和口径：说清有几条、让人自己去看，而不是轰炸）。
-MAX_NOTIFICATIONS_PER_RUN = 3
+# 一次只弹**一条**（T-B5c）：闹钟式通知会一直响到被关掉，弹多条就会**同时有几条在循环响** ——
+# 用户实测反馈"电脑怎么一直在响"就是堆了 14 条。所以超过 1 条一律**合并成一条汇总**：
+# 说清有几条、让人自己去看，而不是轰炸（温和口径）。
+MAX_NOTIFICATIONS_PER_RUN = 1
 
 
 def notify_due(

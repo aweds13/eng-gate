@@ -301,6 +301,17 @@ def create_app(db_path: str | None = None) -> FastAPI:
         remind_mod.record_result(conn, ok, detail)
         return {"ok": ok, "detail": detail, **remind_mod.status(conn)}
 
+    @app.post("/api/reminders/stop")
+    def stop_ringing(request: Request) -> dict[str, Any]:
+        """**停止响铃**（T-B5c）：清掉还在屏幕上/通知中心里的闹钟式提醒。
+
+        为什么需要这个接口：闹钟式通知是"一直响到你关掉"，而关掉的入口只有通知上的 ✕ ——
+        用户在应用里应当也有一个"别响了"的按钮。幂等（本来没有也算成功）；失败**不静默**，原样返回原因。
+        """
+        require_local_origin(request)
+        ok, detail = remind_mod.clear_notifications()
+        return {"ok": ok, "detail": detail}
+
     # ---- 提醒（SR-F1.4 / T-B5）：字段与"该提醒了"的只读数据源 ----
     @app.get("/api/reminders/due")
     def due_reminders(now: str | None = None) -> list[TaskOut]:

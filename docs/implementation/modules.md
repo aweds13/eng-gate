@@ -35,7 +35,10 @@
   **到点系统通知**（用户选 B′）在 `core/remind.py`：注册 `schtasks` 计划任务 `timeflow-reminders`
   （每分钟跑 `pythonw src/timeflow/app/remind.py`，`pythonw` 不闪控制台窗口、脚本与库都用绝对路径）；
   `show_notification()` 走 PowerShell WinRT 系统通知（失败退 `msg`，再不行如实报错）；
-  **默认关**、开关可逆（关掉即删任务）、同一条提醒只弹一次、失败不标记下次重试、>3 条合并成一条汇总。
+  **默认关**、开关可逆（关掉即删任务）、同一条提醒只弹一次、失败不标记下次重试、多条合并成一条汇总。
+  **响铃收口（T-B5c）**：闹钟式会一直响到被关掉 → ① `clear_first` 弹前先 `History.Clear`（最多一条在响）
+  ② `MAX_NOTIFICATIONS_PER_RUN = 1`（多条合并，绝不堆成好几个闹钟）③ `clear_notifications()` +
+  `POST /api/reminders/stop` + 设置页「停止响铃」。**弹与清共用同一个 AUMID**（`TOAST_APP_ID`），否则清不掉。
 - **未实现**（以 `../../复盘/全量审计报告-五层一致性与缺口登记.md` §四 F1 为准）：拖拽排序（段2 决策明确不做）、
   任务存档（尝试记录+关联笔记）、三类任务区分。
 - **Repeat 触发**（第 5 步）：完成时调 `process_repeats`；以 `task.repeat.generated` 事实去重 ⇒ 同一任务只生成一次。
