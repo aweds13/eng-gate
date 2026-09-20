@@ -28,6 +28,10 @@ class LedgerSummary(BaseModel):
     review_count: int = 0
     output_count: int = 0
     manual_hours: float = 0.0
+    # 习惯打卡次数（T-C1 / 2026-09-19 用户决定）：**只报次数、与投入并排显示，不折算成时间**
+    # （"习惯折算成分钟"是已砍概念，见 复盘/C批口径定案.md §二）；想让它真的占投入时间，
+    # 走手动补记（invest.manual，kind 可填「习惯」）。
+    habit_count: int = 0
 
 
 class DayPoint(BaseModel):
@@ -51,6 +55,8 @@ class WeekSummary(BaseModel):
     days: list[DayPoint]  # 7 天逐日专注（含 0，便于画走势）
     active_days: int  # 有专注记录的天数
     steady_note: str  # 一句温和提示（不施压）
+    # 本周习惯打卡次数（T-C1）：同 LedgerSummary.habit_count —— 只报次数，不折算成小时
+    habits_done: int = 0
 
 
 def week_start(day: str) -> str:
@@ -101,6 +107,7 @@ def weekly_summary(conn: sqlite3.Connection, week_of: str | None = None) -> Week
         days=points,
         active_days=active_days,
         steady_note=_steady_note(active_days, len(points)),
+        habits_done=sum(_habit_done_count(conn, day) for day in days),
     )
 
 
@@ -139,6 +146,14 @@ def _output_entries(conn: sqlite3.Connection, day: str) -> set[str]:
         )
     }
     return {row["subject_id"] or row["id"] for row in outputs} - retracted
+
+
+def _habit_done_count(conn: sqlite3.Connection, day: str) -> int:
+    """当天打卡次数（**只报次数**，不折算投入时间 —— T-C1 口径）。"""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM habit_logs WHERE date = ? AND done = 1", (day,)
+    ).fetchone()
+    return int(row["n"] or 0)
 
 
 def _manual_seconds(conn: sqlite3.Connection, day: str) -> float:
@@ -236,6 +251,8 @@ def summary(
     } - retracted
     # 手动投入（第 5 步物化）：invest.manual（秒）− invest.retracted；单列，不并入 invest_hours
     manual_sec = sum(_num(row["value_num"]) for row in _manual_invests_today(conn, t))
+    # 习惯打卡（T-C1）：只报**次数**，与投入并排显示；**不折算成小时**（已砍概念）
+    habits = _habit_done_count(conn, t)
     return LedgerSummary(
         debt_count=len(items),
         debt_items=items,
@@ -243,4 +260,5 @@ def summary(
         review_count=len(review_subjects),
         output_count=len(output_entries),
         manual_hours=round(manual_sec / 3600.0, 2),
+        habit_count=habits,
     )

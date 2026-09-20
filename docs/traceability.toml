@@ -154,9 +154,9 @@ gaps = "无「学校硬考核强提醒 vs 普通温和」分级（GAP-F1-06）"
 id = "SR-F1.11"
 title = "三类任务区分（指标/作业/竞赛）"
 group = "F1"
-status = "todo"
-evidence = []
-gaps = "无分类字段、无界面（GAP-F1-07）"
+status = "deferred"
+evidence = ["file:复盘/C批口径定案.md", "text:docs/specification/functional.md::不做任务分类字段"]
+gaps = "**一版不做**（2026-09-19 用户决定）：不加 `tasks.category`；「哪件事不能拖」用「优先级（高）+ 学校硬考核强提醒（T-C8）」表达；分类字段与「指标可重规划」留二版（N4/SR-F2.8 同为二版）"
 
 [entries."SR-F1.12"]
 id = "SR-F1.12"
@@ -1032,6 +1032,56 @@ evidence = [
   "test:test_remind_channel.py",
 ]
 gaps = ""
+
+[entries."T-C1"]
+id = "T-C1"
+title = "C 批：习惯只报次数、与投入并排显示（不折算时间）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/ledger/ledger.py::habit_count",
+  "text:src/timeflow/core/ledger/ledger.py::def _habit_done_count",
+  "file:复盘/C批口径定案.md",
+  "test:test_ledger_summary.py",
+  "test:test_week_summary.py",
+]
+gaps = ""
+
+[entries."T-C4"]
+id = "T-C4"
+title = "C 批：产出分两行显示（学校 KPI / 知识资产）+ 可展开明细"
+group = "PROCESS"
+status = "partial"
+evidence = ["file:复盘/C批口径定案.md"]
+gaps = "口径已定（用户：分两行 + 可点开展开）；**界面还没改** —— 与 T-C11（今日完成明细）一批做"
+
+[entries."T-C8"]
+id = "T-C8"
+title = "C 批：强弱提醒分级（学校硬考核更强呈现）"
+group = "PROCESS"
+status = "partial"
+evidence = ["file:复盘/C批口径定案.md"]
+gaps = "待做：学校硬考核（考核项有 due_date 且未录成绩）界面更强呈现；普通逾期保持温和。T-C9 决策把这条变成落地项"
+
+[entries."T-C9"]
+id = "T-C9"
+title = "C 批：三类任务口径定案（不加字段、改规格，用优先级 + 强提醒表达）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/C批口径定案.md",
+  "text:docs/specification/functional.md::不做任务分类字段",
+  "text:docs/specification/domains/F1-tasks.md::R5b 三类任务",
+]
+gaps = ""
+
+[entries."T-C11"]
+id = "T-C11"
+title = "C 批：今日完成明细（可展开：完成任务 / 完成步骤 / 产出分两类）"
+group = "PROCESS"
+status = "partial"
+evidence = ["file:复盘/C批口径定案.md"]
+gaps = "待做：只读接口（今天完成的任务/子步骤 + 按父任务分组与进度 + 产出按 kind 分组）+ 今日页可展开选项卡。用户要求：大任务一天推不完，**完成了哪些子步骤要看得见**"
 
 [entries."STEP-17"]
 id = "STEP-17"

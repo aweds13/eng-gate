@@ -945,6 +945,7 @@ function weekCard(w){
   }).join('');
   const nums=[`专注 ${w.focus_hours}h`];
   if(w.manual_hours)nums.push(`手动 ${w.manual_hours}h`);
+  if(w.habits_done)nums.push(`习惯 ${w.habits_done} 次`);   // T-C1：只报次数，不折算成小时
   if(w.review_count)nums.push(`复习 ${w.review_count} 张`);
   if(w.output_count)nums.push(`产出 ${w.output_count} 条`);
   if(w.debt_count)nums.push(`债务 ${w.debt_count} 项`);
@@ -955,8 +956,10 @@ function weekCard(w){
 }
 
 function summaryLine(s){
+  // 习惯只报**次数**、与投入并排（T-C1：不折算成时间）；产出按两类分两行显示（T-C4）
   const parts=[`债务 ${s.debt_count} 项`,`投入 ${s.invest_hours}h`];
   if(s.manual_hours)parts.push(`手动投入 ${s.manual_hours}h`);
+  if(s.habit_count)parts.push(`习惯 ${s.habit_count} 次`);
   if(s.review_count)parts.push(`复习 ${s.review_count} 张`);
   if(s.output_count)parts.push(`产出 ${s.output_count} 条`);
   return parts.join(' · ');
@@ -1052,7 +1055,9 @@ async function renderHabit(m){
       </div>
       <div style="margin-top:10px">${heatmap(h.logs)}</div></div>`;
   }).join('');
-  m.innerHTML=`<div class="card"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div></div>
+  m.innerHTML=`<div class="card"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div>
+    <div class="sub">习惯打卡**只记次数**，不折算成投入时间（时间折算只在有真实时长时才算）。想让它占用投入时间，
+      去备忘录页「今日手动投入」按真实分钟补一笔（类型可选「习惯」）。</div></div>
   <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡" data-enter="habit-add"><button data-action="habit-add">新建</button></div>
   ${cards||'<div class="empty">还没有习惯；建一个，明天就能看到热力图</div>'}
   <div class="section-title">每日反馈（计划 vs 执行）</div>

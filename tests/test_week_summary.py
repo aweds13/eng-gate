@@ -40,6 +40,20 @@ def _focus(conn: sqlite3.Connection, seconds: float, day: str) -> None:
     )
 
 
+def test_week_counts_habits_but_does_not_convert(conn: sqlite3.Connection) -> None:
+    """T-C1：周结算**并列显示习惯次数**，但**不折算成小时**（不并入 focus_hours/manual_hours）。"""
+    from timeflow.core import feedback as fb
+
+    hid = fb.create_habit(conn, "早睡")
+    fb.toggle_habit_log(conn, hid, "2026-09-14")
+    fb.toggle_habit_log(conn, hid, "2026-09-16")
+    fb.toggle_habit_log(conn, hid, "2026-09-21")  # 下周，不算
+
+    w = ledger.weekly_summary(conn, week_of="2026-09-18")
+    assert w.habits_done == 2
+    assert w.focus_hours == 0.0 and w.manual_hours == 0.0  # 计数不折算成投入
+
+
 # ---- 周边界 ----
 
 def test_week_start_is_monday() -> None:

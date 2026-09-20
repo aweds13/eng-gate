@@ -295,6 +295,20 @@ def test_task_note_is_editable_in_detail_only() -> None:
     assert "note" not in card, "备注不该出现在列表卡片里（渐进聚焦）"
 
 
+def test_habit_count_shown_alongside_investment() -> None:
+    """T-C1（用户口径）：习惯**只报次数**、与投入并排显示，**不折算成小时**；习惯页指路"手动补记"。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    summary = html.split("function summaryLine(s){", 1)[1].split("\n}", 1)[0]
+    assert "s.habit_count" in summary and "习惯 ${s.habit_count} 次" in summary
+    week = html.split("function weekCard(w){", 1)[1].split("\n}", 1)[0]
+    assert "w.habits_done" in week and "习惯 ${w.habits_done} 次" in week
+    # 不折算：习惯次数绝不能进"投入小时"那个字段（invest_hours 只由专注构成）
+    assert "habit_count}h" not in html and "habits_done}h" not in html
+    habit_view = html.split("async function renderHabit(", 1)[1]
+    habit_view = habit_view.split("async function addHabit(", 1)[0]
+    assert "手动投入" in habit_view, "习惯页要指路「想计入投入就手动补记真实分钟」"
+
+
 def test_reminder_ui_and_notify_switch() -> None:
     """T-B5（SR-F1.4 提醒）：能设、能标出来；通知通道（B′ 计划任务）有开关且**默认关**。
 
