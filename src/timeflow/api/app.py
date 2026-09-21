@@ -89,6 +89,10 @@ class TaskOut(BaseModel):
     # 子任务进度（SR-F1.6）：父任务卡片上直接显示「2/3 步已完成」，不必点进去数
     subtask_done: int = 0
     subtask_total: int = 0
+    # 「当前该做哪一步」（N10 / F 批 · T-F4）：第一个未完成子任务的标题与截止日（没有 → None）。
+    # 用户原话：「子步骤完成前，它变成主任务的一个显现（任务卡里显示一个子步骤）」。
+    current_step: str | None = None
+    current_step_due: str | None = None
     # 备注（SR-F1.4 / T-B1）：卡片列表不渲染，只在详情面板显示/编辑（渐进聚焦）
     note: str | None = None
     # 优先级（SR-F1.2 / T-B2）：卡片上是小色标；三档 高/中/低
@@ -146,7 +150,7 @@ def _out(
 ) -> TaskOut:
     """任务 → 接口对象。三个关键字参数只有档案接口会传（见 `TaskOut` 那段注释）。"""
     groups = tm.get_task_groups(conn, t.id)
-    progress = tm.subtask_progress(conn, t.id)
+    progress, current = tm.subtask_view(conn, t.id)
     return TaskOut(
         id=t.id,
         title=t.title,
@@ -166,6 +170,9 @@ def _out(
         ],
         subtask_done=progress["done"],
         subtask_total=progress["total"],
+        # 「当前该做哪一步」（N10 / T-F4）：给任务卡用 —— 大任务卡上看一步，不是把所有步骤堆出来
+        current_step=current.title if current else None,
+        current_step_due=current.due_date if current else None,
         note=t.note,
         priority=t.priority,
         flagged=t.flagged,

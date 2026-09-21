@@ -96,8 +96,10 @@ def web_source() -> str:
     return (ROOT / "src" / "web" / "index.html").read_text(encoding="utf-8")
 
 
-def declared_actions() -> set[str]:
-    return set(re.findall(r'data-action="([a-z-]+)"', web_source()))
+def declared_actions(attr: str = "data-action") -> set[str]:
+    """页面里声明过的动作（三种触发属性**共用一张 ACTIONS 注册表**）：
+    `data-action`（点击）/ `data-enter`（回车）/ `data-change`（下拉·开关·日期框）。"""
+    return set(re.findall(rf'{attr}="([a-z-]+)"', web_source()))
 
 
 def registered_actions() -> set[str]:
@@ -134,9 +136,12 @@ def eval_assertion(assertion: str) -> tuple[bool, str]:
         return col in columns(table), f"列 {table}.{col}"
     if kind == "ui":
         key, _, val = rest.partition("=")
-        if key == "data-action":
-            ok = val in declared_actions() and val in registered_actions()
-            return ok, f"界面动作 {val}"
+        if key in ("data-action", "data-enter", "data-change"):
+            # 三种触发属性共用一张注册表（R2 事件委托）：被引用 + 已注册，缺一不可。
+            # 为什么三种都要能断言：界面里"改一下就落库"的控件（下拉/日期框）走 data-change，
+            # 只认 data-action 的话，这类交互在台账里**没法如实登记**。
+            ok = val in declared_actions(key) and val in registered_actions()
+            return ok, f"界面动作 {key}={val}"
         if key == "view":
             return val in views(), f"视图 {val}"
         return False, f"未知 ui 断言 {rest}"

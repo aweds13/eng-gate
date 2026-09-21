@@ -1525,9 +1525,27 @@ gaps = ""
 id = "T-F4"
 title = "F 批：子步骤可设截止日 + 可推迟 + 主任务卡显示当前步骤"
 group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/core/tasks/manager.py::def current_step",
+  "text:src/timeflow/core/tasks/manager.py::def subtask_view",
+  "text:src/timeflow/api/app.py::current_step=current.title if current else None",
+  "text:src/web/index.html::async function setSubtaskDue",
+  "text:src/web/index.html::id=\"subtaskDue\"",
+  "text:src/web/index.html::当前：${esc(t.current_step)}",
+  "ui:data-change=subtask-due",
+  "test:test_task_step_line.py",
+]
+gaps = ""
+
+[entries."T-F9"]
+id = "T-F9"
+title = "F 批（待定口径）：带截止日的子步骤算不算独立一笔债"
+group = "PROCESS"
 status = "todo"
 evidence = ["file:复盘/口径定案-待定清单.md"]
-gaps = "**口径已定**：子步骤本来就是任务（`parent_id`）、`due_date` 字段已有，缺的是界面入口；「推到明天 / 尝试失败」对子步骤可用；任务卡显示「当前该做哪一步」（第一个未完成子步骤）。**待实现**"
+gaps = "T-F4 让子步骤能设截止日之后暴露出来的口径问题：`overdue_tasks()` **不过滤 `parent_id`**，所以一个带过期截止日的子步骤会**单独进逾期栏、单独算一笔债**（`debt_count`），而它所属的父任务可能也有截止日 → 同一件事在债务里可能出现两次（父任务 + 这一步）。**属产品判断**：A 算（它确实是「该做的一件事」，而且父任务经常没有截止日，步骤的日期就是唯一的日期）／B 不算（债务只算顶层任务，子步骤只在父任务卡上体现）／C 只出现在逾期栏但不计入 `debt_count`。**不替用户定**，登记待定。"
 
 [entries."T-F5"]
 id = "T-F5"

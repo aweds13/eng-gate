@@ -229,6 +229,7 @@ const ACTIONS = {
   'task-group':     el => toggleTaskGroup(el.dataset.id, el.dataset.name || '', el.dataset.on === 'true'),
   // 子任务（OP-12）
   'subtask-add':    () => addSubtask(),
+  'subtask-due':    el => setSubtaskDue(el.dataset.id, el.value),
   'task-parent':    el => setTaskParent(el.dataset.id, el.dataset.parent || null),
   // 任务编辑（OP-9）
   'task-edit':      () => { detailEditing=true; render(current); },
@@ -491,16 +492,28 @@ async function toggleTaskGroup(taskId,name,on){
   await api(`/api/tasks/${taskId}/group`,{method:'POST',body:JSON.stringify({name,on})});
   toast(on?`已加入分组「${name}」`:`已移出分组「${name}」`);view(current);
 }
-/* ---------- 子任务（OP-12 / SR-F1.6）：拆步 + 联动完成 ----------
+/* ---------- 子任务（OP-12 / SR-F1.6 / F 批 · T-F4）：拆步 + 联动完成 + 步骤自己的截止日 ----------
  * 联动在后端：最后一个子任务完成时父任务自动完成（已由测试钉住），前端只负责显示与刷新。
- */
+ * T-F4 补的三件事（用户原话）：「子步骤也能加 deadline」「对子步骤有一个拖延推迟的效果」
+ * 「子步骤完成前，它变成主任务的一个显现（任务卡里显示一个子步骤）」：
+ * - 加步骤时可以**直接给截止日**；列表里每一步都有日期框，改一下就落库（空 = 取消截止日）；
+ * - 「明天」= 推到明天（与逾期卡的「推到明天」同一个动作、同一个口径：只改 `due_date`）；
+ * - 步骤卡上显示**当前该做的那一步**（后端算好 `current_step`，前端不自己挑）。
+ * 「尝试失败」对步骤同样可用 —— 步骤本来就是任务（`parent_id`），这个动作本来就是按任务 id 走的。 */
 async function addSubtask(){
   const input=document.getElementById('subtaskTitle');
+  const dueEl=document.getElementById('subtaskDue');
   const title=(input&&input.value||'').trim();
   if(!title){toast('步骤名不能为空');return}
   if(!detailTaskId){toast('先打开一个任务的详情');return}
-  await api(`/api/tasks/${detailTaskId}/subtasks`,{method:'POST',body:JSON.stringify({title})});
+  const due_date=(dueEl&&dueEl.value)||null;
+  await api(`/api/tasks/${detailTaskId}/subtasks`,{method:'POST',body:JSON.stringify({title,due_date})});
   toast('已加一步；完成最后一步时父任务会自动完成');view(current);
+}
+// 改某一步的截止日（T-F4）：空值 = 取消截止日 → 传 null（传空串会被当成一个非法日期）
+async function setSubtaskDue(id,value){
+  await api(`/api/tasks/${id}`,{method:'PATCH',body:JSON.stringify({due_date:value||null})});
+  toast(value?`这一步的截止日改成 ${value}`:'这一步的截止日已取消');view(current);
 }
 async function setTaskParent(taskId,parentId){
   await api(`/api/tasks/${taskId}/parent`,{method:'POST',body:JSON.stringify({parent_id:parentId})});
@@ -608,7 +621,12 @@ function renderDetail(el,t,facts,kids,cards,attempts){
       <button class="check ${sDone?'on':''}" title="${sDone?'撤销完成':'标记完成'}"
         data-action="task-done" data-id="${s.id}" data-done="${sDone}"></button>
       <span class="grow" style="flex:1;${sDone?'text-decoration:line-through;color:var(--muted)':''}">${esc(s.title)}</span>
-      ${s.due_date?`<span class="sub">${s.due_date}</span>`:''}
+      ${s.status!=='未开始'?`<span class="badge">${esc(s.status)}</span>`:''}
+      <input type="date" value="${s.due_date||''}" title="这一步的截止日（空 = 取消）"
+        data-change="subtask-due" data-id="${s.id}">
+      <button class="ghost" data-action="task-tomorrow" data-id="${s.id}">明天</button>
+      <button class="ghost" data-action="task-attempt" data-id="${s.id}">尝试失败</button>
+      <button class="ghost" data-action="task-detail" data-id="${s.id}">详情</button>
       <button class="ghost" data-action="task-parent" data-id="${s.id}" data-parent="">脱离</button>
     </div>`;
   }).join('');
@@ -636,6 +654,7 @@ function renderDetail(el,t,facts,kids,cards,attempts){
     <div class="settings-sub">步骤（子任务）${progress}</div>
     <div id="subtaskList">${subtaskList||'<div class="sub">还没有步骤。拆成小步，完成到最后一个时父任务会自动完成。</div>'}</div>
     <div class="new"><input id="subtaskTitle" placeholder="添加一个步骤…" data-enter="subtask-add">
+      <input id="subtaskDue" type="date" title="这一步的截止日（可留空；留空 = 不设）">
       <button class="ghost" data-action="subtask-add">添加</button></div>
     <div class="row" style="margin-top:10px">
       ${detailEditing?`
@@ -783,10 +802,15 @@ function taskCard(t,isOverdue){
     : (STATUS_BADGE[t.status]||'<span class="badge todo">未完成</span>');
   const sub=(t.subtask_total>0)
     ? `<span class="badge">步骤 ${t.subtask_done}/${t.subtask_total}</span>` : '';
+  // 「当前该做哪一步」（N10 / T-F4）：大任务卡上只显一步 —— 选哪一步由后端定（`current_step`），
+  // 前端不自己挑（否则"第一个未完成"这套顺序会在两处各写一遍）。
+  const cur=t.current_step
+    ? `<div class="sub">当前：${esc(t.current_step)}${t.current_step_due?`（${esc(t.current_step_due)} 前）`:''}</div>`
+    : '';
   return `<div class="card ${isDone?'done':''} ${late?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div></div>
+    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}</div>
     <div class="row">
       ${doingButtonHTML(t)}
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}

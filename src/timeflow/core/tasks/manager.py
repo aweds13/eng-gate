@@ -728,13 +728,42 @@ def subtask_progress(conn: sqlite3.Connection, task_id: str) -> dict[str, int]:
 
 
 def subtasks(conn: sqlite3.Connection, task_id: str) -> list[Task]:
-    """列出子任务：未完成在前，再按截止日（无截止日最后）；同状态按创建时间。"""
+    """列出子任务：未完成在前，再按截止日（无截止日最后）；同状态按创建时间。
+
+    「未完成在前」这条顺序就是 **T-F4 的「当前该做哪一步」** 的依据：
+    列表第一个未完成的，就是这一步。
+    """
     rows = conn.execute(
         "SELECT * FROM tasks WHERE parent_id = ? "
         "ORDER BY (status = ?) ASC, due_date IS NULL, due_date, created_at",
         (task_id, STATUS_DONE),
     ).fetchall()
     return [_row_to_task(r) for r in rows]
+
+
+def current_step(conn: sqlite3.Connection, task_id: str) -> Task | None:
+    """**当前该做的那一步**（N10 / T-F4）：第一个未完成的子任务；没有子任务/全做完了 → None。
+
+    用户原话：「子步骤完成前，它变成主任务的一个显现（任务卡里显示一个子步骤）」——
+    所以主任务卡上只显示**一步**（不是把所有步骤堆出来），显示的就是这一个。
+    """
+    for child in subtasks(conn, task_id):
+        if child.status != STATUS_DONE:
+            return child
+    return None
+
+
+def subtask_view(conn: sqlite3.Connection, task_id: str) -> tuple[dict[str, int], Task | None]:
+    """一次查询同时给出「进度 + 当前该做哪一步」（列表接口每张卡都要这两个读数）。
+
+    为什么合成一个函数：`_out()` 给每张卡都要这两样，分两次查就是白白多一倍查询；
+    而且两者必须**同一份子任务顺序/口径** —— 分开写迟早会出现"进度说剩 2 步、
+    当前步骤却显示已完成那一步"这种自相矛盾。
+    """
+    kids = subtasks(conn, task_id)
+    done = sum(1 for k in kids if k.status == STATUS_DONE)
+    current = next((k for k in kids if k.status != STATUS_DONE), None)
+    return {"done": done, "total": len(kids)}, current
 
 
 def _would_cycle(conn: sqlite3.Connection, task_id: str, parent_id: str) -> bool:

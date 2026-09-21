@@ -111,7 +111,9 @@ const DB = {
   '/api/mydays': [], '/api/overdue': [], '/api/tasks/deleted': [],
   // 状态机（F 批 · T-F1）：三段都要真渲染出来 ——
   // 「全部任务」主列表 + 搁置区（待定/取消）+ 档案区（手动归档，可撤销）
-  '/api/tasks': [probeTask({ id: 't2', title: '普通任务', is_myday: false }),
+  '/api/tasks': [probeTask({ id: 't2', title: '普通任务', is_myday: false,
+      subtask_done: 1, subtask_total: 3, current_step: '第 2 步：写解答',
+      current_step_due: '2026-09-25' }),
     probeTask({ id: 'p1', title: '待定的事', status: '待定' }),
     probeTask({ id: 'x1', title: '取消的事', status: '取消' })],
   // 「正在做」：**可以同时多个**，各带自己的顺序号（↑↓ 用 `doing_rank` 排）
@@ -148,7 +150,13 @@ const DB = {
       { target: 'D:\\课件\\第3章.pdf', title: null }],
   },
   '/api/tasks/t1/facts': [],
-  '/api/tasks/t1/subtasks': [],
+  // 子步骤（F 批 · T-F4）：每一步有自己的截止日 + 「明天 / 尝试失败 / 详情 / 脱离」；
+  // 第一张卡（t2）带「当前该做哪一步」，用来看主任务卡是不是真的显示了**一步**
+  '/api/tasks/t1/subtasks': [
+    probeTask({ id: 's1', title: '第 1 步：读题', status: '完成', parent_id: 't1',
+      due_date: '2026-09-18' }),
+    probeTask({ id: 's2', title: '第 2 步：写解答', parent_id: 't1', due_date: '2026-09-25' }),
+  ],
   // 派生逾期（T-F7）：字段状态还是「未开始」、后端算出"已逾期 12 天" —— 详情面板要**两个都显示**，
   // 不能再出现"列在逾期栏里、面板却写未开始"的自相矛盾
   '/api/tasks/t9': probeTask({
@@ -259,6 +267,7 @@ let stateBad = 0;
 let overdueBad = 0;
 let attemptBad = 0;
 let archiveBad = 0;
+let stepBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -473,6 +482,39 @@ for (const [view, needs] of [
   }
 }
 
+// 子步骤（F 批 · T-F4）：主任务卡上显示「当前该做哪一步」；
+// 详情里每一步都有截止日输入框与「明天 / 尝试失败 / 详情 / 脱离」，添加步骤那一行也有日期框。
+const stepChecks = [];
+for (const [where, needs] of [
+  ['tasks', ['步骤 1/3', '当前：第 2 步：写解答', '2026-09-25 前']],
+  ['detail', ['第 2 步：写解答', 'subtask-due', 'id="subtaskDue"', '尝试失败', '脱离']],
+]) {
+  try {
+    let html = '';
+    if (where === 'tasks') {
+      byId.get('main')._html = '';
+      await globalThis.__view('tasks');
+      await sleep(30);
+      html = byId.get('main')._html;
+    } else {
+      byId.get('detailRail')._html = '';
+      await globalThis.__showDetail('t1');
+      await sleep(30);
+      html = byId.get('detailRail')._html;
+    }
+    const missing = needs.filter((n) => !html.includes(n));
+    const rendered = missing.length === 0;
+    if (!rendered) stepBad++;
+    stepChecks.push({ where, rendered, missing });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} ${where}·子步骤 ${String(html.length).padStart(5)}B`
+      + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+  } catch (e) {
+    stepBad++;
+    stepChecks.push({ where, error: e.message });
+    console.log(`  ❌ ${where}·子步骤 渲染抛错: ${e.message}`);
+  }
+}
+
 // 「尝试失败」（F 批 · T-F3）：详情要显示「试了 N 回」+ 历次说明 + 入口按钮。
 // 只认显式点击这件事在领域层/接口层有测试钉住，这里只管"界面真的把它渲染出来了"。
 const attemptChecks = [];
@@ -504,7 +546,7 @@ if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
     { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
-      attempt: attemptChecks, archive: archiveChecks,
+      attempt: attemptChecks, archive: archiveChecks, step: stepChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -516,6 +558,7 @@ if (problems.length) {
 }
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
   || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0 || archiveBad > 0
+  || stepBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -527,5 +570,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，派生逾期 ${overdueChecks.length - overdueBad}/${overdueChecks.length} 正常`
   + `，尝试失败 ${attemptChecks.length - attemptBad}/${attemptChecks.length} 正常`
   + `，档案视图 ${archiveChecks.length - archiveBad}/${archiveChecks.length} 正常`
+  + `，子步骤 ${stepChecks.length - stepBad}/${stepChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);
