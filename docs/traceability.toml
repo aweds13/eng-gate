@@ -1484,9 +1484,24 @@ gaps = "**口径已定**：N 进配置（默认 3 天）；判定做成**派生*
 id = "T-F3"
 title = "F 批：新增动作「尝试失败」（N11 的「过去尝试」）"
 group = "PROCESS"
-status = "todo"
-evidence = ["file:复盘/口径定案-待定清单.md"]
-gaps = "**口径已定**：只认**显式点击**（不自动从「推到明天/取消」推断 —— 数字要可信）；写事实 `task.attempt.failed`（可带一句说明，将来进 Markdown 存档）；详情显示「试了 N 回」；失败后给三选：取消 / 待定 / 推到明天。**待实现**"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/core/tasks/manager.py::ATTEMPT_FAILED = ",
+  "text:src/timeflow/core/tasks/manager.py::def attempt_failed",
+  "text:src/timeflow/core/tasks/manager.py::def attempt_count",
+  "text:src/timeflow/core/tasks/manager.py::def attempt_notes",
+  "route:GET /api/tasks/{task_id}/attempts",
+  "route:POST /api/tasks/{task_id}/attempt-failed",
+  "text:src/web/index.html::async function failAttempt",
+  "text:src/web/index.html::function toastChoices",
+  "text:src/web/index.html::task.attempt.failed'?'尝试失败'",
+  "text:src/web/index.html::过去尝试留下的说明",
+  "ui:data-action=task-attempt",
+  "ui:data-action=toast-choice",
+  "test:test_task_attempt_line.py",
+]
+gaps = ""
 
 [entries."T-F4"]
 id = "T-F4"

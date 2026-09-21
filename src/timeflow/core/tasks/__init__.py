@@ -13,6 +13,7 @@ from timeflow.core.tasks.groups import (
     toggle_task_group,
 )
 from timeflow.core.tasks.manager import (
+    ATTEMPT_FAILED,
     COURSE_TASK_TYPES,
     DEFAULT_PRIORITY,
     DEFAULT_TASK_TYPE,
@@ -41,6 +42,9 @@ from timeflow.core.tasks.manager import (
     add_attachment,
     archive_task,
     archived_tasks,
+    attempt_count,
+    attempt_failed,
+    attempt_notes,
     cancel_task,
     complete_task,
     course_name,
@@ -128,6 +132,10 @@ __all__ = [
     "move_doing",
     "resting_status",
     "overdue_days",
+    "attempt_failed",
+    "attempt_count",
+    "attempt_notes",
+    "ATTEMPT_FAILED",
     "VALID_PRIORITIES",
     "PRIORITY_HIGH",
     "PRIORITY_MID",

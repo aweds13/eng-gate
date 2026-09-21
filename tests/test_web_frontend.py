@@ -24,6 +24,16 @@ WEB_INDEX = Path(__file__).resolve().parent.parent / "src" / "web" / "index.html
 WEB_CSS = Path(__file__).resolve().parent.parent / "src" / "web" / "app.css"
 
 
+def _fn_body(html: str, name: str) -> str:
+    """取页面里某个函数的函数体（从 `function 名字(` 到下一行单独的 `}`）。
+
+    为什么按名字切而不是把签名抄进测试：签名会随功能加参数
+    （`renderDetail` 就加过 `attempts`），抄签名等于**每加一个参数就崩一批无关测试** ——
+    那些测试要断言的是"函数体里有什么"，不是"参数列表长什么样"。
+    """
+    return html.split(f"function {name}(", 1)[1].split("\n}", 1)[0]
+
+
 def _html(tmp_path) -> str:  # type: ignore[no-untyped-def]
     client = TestClient(create_app(str(tmp_path / "f.db")))
     resp = client.get("/")
@@ -271,7 +281,7 @@ def test_task_detail_panel_shows_readable_history() -> None:
     并（F1 段1 起）要能看到/添加**步骤（子任务）**与所属分组。
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
-    detail = html.split("function renderDetail(el,t,facts,kids,cards){", 1)[1].split("\n}", 1)[0]
+    detail = _fn_body(html, "renderDetail")
     for need in ("humanTime(f.occurred_at)", "建于 ", "更新于 ", "步骤（子任务）", "subtaskTitle"):
         assert need in detail, f"详情面板缺少 {need}"
     assert "任务详情" in detail and "记录（最近" in detail
@@ -289,7 +299,7 @@ def test_task_note_is_editable_in_detail_only() -> None:
     assert 'id="editNote"' in edit, "编辑态缺少备注输入（备注就只能靠 API 写了）"
     save = html.split("async function saveTaskEdit(){", 1)[1].split("\n}", 1)[0]
     assert "editNote" in save and "note:" in save, "保存时没把备注带上"
-    detail = html.split("function renderDetail(el,t,facts,kids,cards){", 1)[1].split("\n}", 1)[0]
+    detail = _fn_body(html, "renderDetail")
     assert "t.note" in detail, "详情面板没有显示备注"
     card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
     assert "note" not in card, "备注不该出现在列表卡片里（渐进聚焦）"
@@ -356,7 +366,7 @@ def test_attach_open_flow_is_wired_and_never_silent() -> None:
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
     # ① 任务详情：附件区（列表 + 添加 + 打开 + 删除）
-    detail = html.split("function renderDetail(el,t,facts,kids,cards){", 1)[1].split("\n}", 1)[0]
+    detail = _fn_body(html, "renderDetail")
     assert "taskAttachHTML(t)" in detail, "详情面板没有附件区"
     for needle in ("function attachRowsHTML(", "function taskAttachHTML(",
                    "function addAttachment(", "function removeAttachment("):
@@ -719,7 +729,7 @@ def test_task_can_be_upgraded_to_review_card_from_detail() -> None:
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
     assert 'data-action="task-to-review"' in html and "'task-to-review':" in html
-    detail = html.split("function renderDetail(el,t,facts,kids,cards){", 1)[1].split("\n}", 1)[0]
+    detail = _fn_body(html, "renderDetail")
     assert "rcards.length" in detail, "详情面板没根据「已有复习卡」改变呈现"
     assert "复习卡（" in detail, "详情面板没列出已升级出来的复习卡"
     fn = html.split("async function toReview(id){", 1)[1].split("\n}", 1)[0]

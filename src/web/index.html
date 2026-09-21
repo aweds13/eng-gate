@@ -157,6 +157,19 @@ function toastAction(msg,label,fn){
   t.innerHTML=`${esc(msg)} <button class="ghost" style="margin-left:8px;padding:4px 10px" data-action="toast-run" id="toastAct">${esc(label)}</button>`;
   t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),6000);
 }
+/* 右下角多选（F 批 · T-F3）：「尝试失败」之后要让人选**接下来怎么办** ——
+   取消 / 待定 / 推到明天三选（用户 2026-09-21 的设计："然后我选择把这个任务取消、
+   还是待定、或者推到明天"）。单按钮的 `toastAction` 装不下三个，所以另开一个：
+   **只多一个按钮数组**，其余（位置、样式、事件委托、非内联）与 toastAction 完全一致。
+   超时给长一点（8s）：这是要动脑的选择，不是"已保存"那种一眼确认。 */
+let toastChoiceRun=null;
+function toastChoices(msg,choices){
+  const t=document.getElementById('toast');
+  toastChoiceRun=choices;
+  t.innerHTML=`${esc(msg)} `+choices.map((c,i)=>
+    `<button class="ghost" style="margin-left:8px;padding:4px 10px" data-action="toast-choice" data-index="${i}">${esc(c.label)}</button>`).join('');
+  t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),8000);
+}
 function view(name){
   if(name!==current)detailTaskId=null;          // 切视图：右栏详情不再适用（计时器不受影响）
   detailEditing=false;                          // 切视图也退出编辑态，避免残留半截表单
@@ -181,6 +194,8 @@ const ACTIONS = {
   'modal-ok':       () => closeModal(modalMode==='confirm'?true:document.getElementById('modalInput').value),
   'modal-cancel':   () => closeModal(null),
   'toast-run':      () => { const fn=toastRun; toastRun=null; if(fn) fn(); },
+  'toast-choice':   el => { const list=toastChoiceRun; toastChoiceRun=null;
+                            const c=list&&list[Number(el.dataset.index)]; if(c) c.fn(); },
   'set-heatmap':    el => setHeatmap(el.dataset.metric),
   'set-gpa':        el => setGpa(el.dataset.scale),
   'set-theme':      el => setTheme(el.dataset.themeChoice),
@@ -253,6 +268,7 @@ const ACTIONS = {
   'task-facts':     el => showFacts(el.dataset.id),
   'task-focus':     el => startFocusFor(el.dataset.id),
   'task-tomorrow':  el => pushToTomorrow(el.dataset.id),
+  'task-attempt':   el => failAttempt(el.dataset.id),
   'task-cancel':    el => cancelTask(el.dataset.id),
   'task-assign':    el => assignTask(el.dataset.id),
   'task-add':       () => addTask(),
@@ -399,12 +415,12 @@ function paintRail(mySeq){
   if(!detailTaskId){box.innerHTML='';return}
   Promise.all([api(`/api/tasks/${detailTaskId}`),api(`/api/tasks/${detailTaskId}/facts`),
     api('/api/groups'),api(`/api/tasks/${detailTaskId}/subtasks`),api('/api/courses'),
-    api(`/api/tasks/${detailTaskId}/review-cards`)])   // 详情还要显示"升级出来的复习卡"
-    .then(([t,facts,groups,kids,courses,cards])=>{
+    api(`/api/tasks/${detailTaskId}/review-cards`),api(`/api/tasks/${detailTaskId}/attempts`)])
+    .then(([t,facts,groups,kids,courses,cards,attempts])=>{
       if(mySeq!==renderSeq)return;
       groupCache=groups||[];
       courseCache=courses||[];     // 每次打开详情都刷新：新建课程后立刻可选
-      renderDetail(box,t,facts||[],kids||[],cards||[]);
+      renderDetail(box,t,facts||[],kids||[],cards||[],attempts||{count:0,notes:[]});
     })
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
 }
@@ -421,7 +437,8 @@ async function showDetail(id){
 function factLabel(kind){
   return kind==='task.completed'?'完成':kind==='task.uncompleted'?'撤销完成':kind==='task.deleted'?'删除'
     :kind==='task.restored'?'恢复':kind==='task.repeat.generated'?'生成下一次':kind==='task.assigned'?'分配'
-    :kind==='task.assignment.status'?'进展':kind==='task.status_changed'?'状态改为':kind;
+    :kind==='task.assignment.status'?'进展':kind==='task.status_changed'?'状态改为'
+    :kind==='task.attempt.failed'?'尝试失败':kind;
 }
 /* ---------- 分组（OP-11）：管理 + 任务归属 ----------
  * 分组是"组织维度"，只影响分类与查找，不改变任务执行逻辑（contracts/domains/F1-tasks.md OP-11）。
@@ -572,8 +589,11 @@ function stateButtonsHTML(t){
   btns.push(`<button class="ghost" data-action="task-archive" data-id="${t.id}">归档</button>`);
   return btns.join('');
 }
-function renderDetail(el,t,facts,kids,cards){
+function renderDetail(el,t,facts,kids,cards,attempts){
   const isDone=t.status==='完成';
+  const att=attempts||{count:0,notes:[]};
+  // 「尝试失败」只对**还在手上**的任务开放：完成/搁置/归档/已删记失败没有意义（后端也会 400）
+  const canFail=!['完成','取消','待定','归档','已删'].includes(t.status);
   const rcards=cards||[];
   const asg=(t.assignments||[]).map(a=>
     `<div class="meta"><span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span></div>`).join('');
@@ -595,7 +615,7 @@ function renderDetail(el,t,facts,kids,cards){
   el.innerHTML=`<div class="panel-title">任务详情${detailEditing?' · 编辑中':''}</div>
     <div class="title">${esc(t.title)}</div>
     ${detailEditing?editForm(t):`<div class="meta">${isDone?`<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
-      状态 ${esc(t.status)}${t.status==='进行中'&&t.doing_rank?` · 顺序 ${t.doing_rank}`:''}${overdueBadge(t)}</div>
+      状态 ${esc(t.status)}${t.status==='进行中'&&t.doing_rank?` · 顺序 ${t.doing_rank}`:''}${overdueBadge(t)}${att.count?` · 试了 ${att.count} 回`:''}</div>
     ${detailEditing?'':`<div class="row tight">${stateButtonsHTML(t)}</div>`}
     <div class="meta">截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
     <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'} · 优先级 ${prioBadge(t.priority)} ${flagBadge(t)}</div>
@@ -625,6 +645,7 @@ function renderDetail(el,t,facts,kids,cards){
       <button class="ghost" data-action="task-flag" data-id="${t.id}">${t.flagged?'取消标记':'标记'}</button>
       <button class="ghost" data-action="task-to-review" data-id="${t.id}">${rcards.length?'再看复习卡':'升级为复习卡'}</button>
       <button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
+      ${canFail?`<button class="ghost" data-action="task-attempt" data-id="${t.id}">尝试失败</button>`:''}
       <button class="ghost" data-action="task-edit">编辑</button>
       <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
       ${teamButtonsHTML(t.assignments||[])}
@@ -632,6 +653,8 @@ function renderDetail(el,t,facts,kids,cards){
       <button class="ghost" data-action="task-delete" data-id="${t.id}">删除</button>
       <button class="ghost" data-action="task-close">收起</button>`}</div>
     <div class="section-title">记录（最近 ${Math.min((facts||[]).length,12)} 条）</div>
+    ${att.notes.length?`<div class="settings-sub">过去尝试留下的说明（新的在前）</div>
+      ${att.notes.slice(0,5).map(n=>`<div class="fact"><span class="sub" style="white-space:pre-wrap">${esc(n)}</span></div>`).join('')}`:''}
     ${lines||'<div class="sub">还没有记录（完成、撤销、删除、生成下一次都会留下记录）。</div>'}`;
 }
 
@@ -871,6 +894,23 @@ async function archiveTask(id){
 async function moveDoing(id,dir){
   await api(`/api/tasks/${id}/doing-move`,{method:'POST',body:JSON.stringify({direction:dir})});
   view(current);      // 排序即时可见，不额外弹提示（连着点两下不该被提示刷屏）
+}
+/* ---------- 「尝试失败」（N11 / F 批 · T-F3）----------
+   口径（用户 2026-09-21）：**只认显式点击**「尝试失败」，绝不从"推到明天/取消"推断 ——
+   「试了 N 回」是给自己的读数，数字要可信。
+   流程：点「尝试失败」→ 先问一句"这次试到哪儿了"（可留空；**点取消 = 不记这次**，
+   这同时是误点的闸）→ 记一条事实 → 右下角给三选：取消 / 待定 / 推到明天。
+   它**不改任务状态**：失败之后怎么办是下一步的选择，这一步只把"试过、没成"记下来。 */
+async function failAttempt(id){
+  const note=await ask('这次试到哪儿了？（可留空；将来会进 md 存档）');
+  if(note===null)return;                       // 取消 = 这次不算
+  const r=await api(`/api/tasks/${id}/attempt-failed`,{method:'POST',body:JSON.stringify({note:note||''})});
+  view(current);                               // 详情里的「试了 N 回」跟着更新
+  toastChoices(`已记下这次失败（第 ${r.count} 回）—— 接下来？`,[
+    {label:'取消任务',fn:()=>cancelTask(id)},
+    {label:'待定',fn:()=>parkTask(id)},
+    {label:'推到明天',fn:()=>pushToTomorrow(id)},
+  ]);
 }
 async function addTask(){
   const titleEl=document.getElementById('newTitle');

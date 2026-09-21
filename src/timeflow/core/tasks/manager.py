@@ -1025,6 +1025,85 @@ def move_doing(conn: sqlite3.Connection, task_id: str, direction: str) -> Task:
     return get_task(conn, task_id)
 
 
+# ---------------------------------------------------------------- 「尝试失败」（N11 / T-F3）
+# 事实类型名单独抽成常量：领域层与档案视图（T-F2 的「过去尝试」）都按它计数，
+# 名字散落在两处字符串里迟早会分叉。
+ATTEMPT_FAILED = "task.attempt.failed"
+
+
+def attempt_failed(conn: sqlite3.Connection, task_id: str, note: str = "") -> Task:
+    """记一次「尝试失败」（N11 / T-F3）：**只认显式点击**，绝不从别的动作推断。
+
+    为什么只认显式（用户 2026-09-21 决定）：「试了 N 回」是给自己的读数，**数字要可信** ——
+    如果它由"推到明天/取消"推断出来，那它记的就是我的猜测，不是事实。
+
+    - 一次点击 = 一条 `task.attempt.failed` 事实（同一天失败两次就是两条，如实计数）；
+    - `note` 是可选的一句说明（"试到哪儿了/为什么不成"），存 `value_text`，将来进 md 存档；
+    - **不改状态**：失败之后要做什么是下一步的选择（取消 / 待定 / 推到明天 / 先不动），
+      这个动作只负责把"试过、没成"记下来 —— 所以它也不动账本、不动 `updated_at` 之外的任何字段。
+    - 边界：完成 / 搁置（取消·待定）/ 归档 / 已删 → ValueError。这些任务已不在"手上"，
+      记"尝试失败"没有意义（要记就先撤销完成/取回/撤销归档）。
+    """
+    current = get_task(conn, task_id)
+    if current.status == STATUS_DONE:
+        raise ValueError("已完成的任务不记「尝试失败」（先撤销完成）")
+    if current.status in PARKED_STATUSES:
+        raise ValueError(f"「{current.status}」的任务不记「尝试失败」（先取回）")
+    if current.status in HIDDEN_STATUSES:
+        raise ValueError(f"「{current.status}」的任务不记「尝试失败」（先撤销归档/删除）")
+    from timeflow.core import facts as facts_mod
+
+    text = (note or "").strip()
+    facts_mod.record(
+        conn,
+        kind=ATTEMPT_FAILED,
+        subject_type="task",
+        subject_id=current.id,
+        value_text=text or None,
+        extra={"title": current.title, "note": text, "failed_on": _today()},
+        source="desktop",
+    )
+    facts_mod.publish(
+        ATTEMPT_FAILED, {"task_id": current.id, "title": current.title, "note": text}
+    )
+    return current
+
+
+def attempt_count(conn: sqlite3.Connection, task_id: str) -> int:
+    """这个任务「试了几回」（T-F3）：数 `task.attempt.failed` 事实。
+
+    为什么数事实、不在 `tasks` 上加一个计数字段：N11 要的是"过去做过的尝试"，
+    那是**历史**（将来还要进 md 存档、要能审计）；事实层就是干这个的（R1：只读事实层）。
+    """
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM facts WHERE kind = ? AND subject_id = ?",
+        (ATTEMPT_FAILED, task_id),
+    ).fetchone()
+    return int(row["n"] or 0)
+
+
+def attempt_notes(conn: sqlite3.Connection, task_id: str, limit: int = 20) -> list[str]:
+    """历次失败留下的说明（**新的在前**，只取有字的，最多 `limit` 条）。
+
+    没写说明的那几次不在这里出现（它们只体现在 `attempt_count` 里）——
+    空字符串塞进"过去尝试"列表只会变成一排空行。
+    """
+    rows = conn.execute(
+        "SELECT value_text FROM facts WHERE kind = ? AND subject_id = ? "
+        "ORDER BY occurred_at DESC, recorded_at DESC",
+        (ATTEMPT_FAILED, task_id),
+    ).fetchall()
+    notes: list[str] = []
+    for row in rows:
+        text = str(row["value_text"] or "").strip()
+        if not text:
+            continue
+        notes.append(text)
+        if len(notes) >= limit:
+            break
+    return notes
+
+
 # ---------------------------------------------------------------- 附件 / 要求链接（SR-F1.4 / T-B4）
 def add_attachment(
     conn: sqlite3.Connection,

@@ -151,6 +151,9 @@ const DB = {
   '/api/tasks/t9': probeTask({
     id: 't9', title: '拖了很久的事', status: '未开始', due_date: '2020-01-01', overdue_days: 12,
   }),
+  // 「尝试失败」（F 批 · T-F3）：详情面板要显示「试了 N 回」+ 历次留下的说明 + 「尝试失败」入口
+  '/api/tasks/t1/attempts': { count: 0, notes: [] },
+  '/api/tasks/t9/attempts': { count: 3, notes: ['试了前两章，卡在第 3 题', '换了本参考书还是不行'] },
   // 任务 → 复习卡（T-C5）：详情面板要显示"这张任务升级出来的卡"
   '/api/tasks/t1/review-cards': [{ id: 'r1', title: '探针复习卡', due_date: '2026-09-20T00:00:00',
     form: 'qa', source: 'internal', ref_handle: 'notes/数学.md', task_id: 't1' }],
@@ -248,6 +251,7 @@ let hardBad = 0;
 let guardBad = 0;
 let stateBad = 0;
 let overdueBad = 0;
+let attemptBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -435,16 +439,38 @@ try {
   console.log(`  ❌ 详情·派生逾期 渲染抛错: ${e.message}`);
 }
 
+// 「尝试失败」（F 批 · T-F3）：详情要显示「试了 N 回」+ 历次说明 + 入口按钮。
+// 只认显式点击这件事在领域层/接口层有测试钉住，这里只管"界面真的把它渲染出来了"。
+const attemptChecks = [];
+try {
+  byId.get('detailRail')._html = '';
+  await globalThis.__showDetail('t9');
+  await sleep(30);
+  const rail = byId.get('detailRail')._html;
+  const needs = ['试了 3 回', '过去尝试留下的说明', '试了前两章，卡在第 3 题',
+    'data-action="task-attempt"'];
+  const missing = needs.filter((n) => !rail.includes(n));
+  const rendered = missing.length === 0;
+  if (!rendered) attemptBad++;
+  attemptChecks.push({ rendered, missing });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 详情·尝试失败 rail ${String(rail.length).padStart(5)}B`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  attemptBad++;
+  attemptChecks.push({ error: e.message });
+  console.log(`  ❌ 详情·尝试失败 渲染抛错: ${e.message}`);
+}
+
 try {
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
   for (const a of new Set(CLICK_ACTIONS)) if (!registered.has(a)) unused.push(a);
 } catch { /* 模板里没有 data-action 也不该失败 */ }
-
 console.warn = realWarn;
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
     { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
+      attempt: attemptChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -455,7 +481,8 @@ if (problems.length) {
   console.log(`  ⚠️  运行时告警/异常：${problems.slice(0, 5).join(' | ')}`);
 }
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
-  || guardBad > 0 || stateBad > 0 || overdueBad > 0 || unused.length > 0 || problems.length > 0;
+  || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0
+  || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
   + `，今日完成明细展开 ${doneChecks.length - doneBad}/${doneChecks.length} 正常`
@@ -464,5 +491,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，白名单勿扰 ${guardChecks.length - guardBad}/${guardChecks.length} 正常`
   + `，状态机 ${stateChecks.length - stateBad}/${stateChecks.length} 正常`
   + `，派生逾期 ${overdueChecks.length - overdueBad}/${overdueChecks.length} 正常`
+  + `，尝试失败 ${attemptChecks.length - attemptBad}/${attemptChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

@@ -657,6 +657,37 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+    # ---- 「尝试失败」显式计次（N11 / F 批 · T-F3）----
+    # 口径（`复盘/口径定案-待定清单.md` §1）：**只认显式点击**，不自动从"推到明天/取消"推断
+    # —— 这个数字要可信。一次点击一条事实；`note` 可选（将来进 md 存档）。
+    def _attempt_body(task_id: str) -> dict[str, Any]:
+        """试了几回 + 历次说明：GET 与 POST 用同一份读法，免得两处各算一套。"""
+        return {"count": tm.attempt_count(conn, task_id), "notes": tm.attempt_notes(conn, task_id)}
+
+    @app.get("/api/tasks/{task_id}/attempts")
+    def list_attempts(task_id: str) -> dict[str, Any]:
+        """「试了几回」（T-F3）：`{count, notes}`。任务不存在 404。"""
+        try:
+            tm.get_task(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        return _attempt_body(task_id)
+
+    @app.post("/api/tasks/{task_id}/attempt-failed")
+    def attempt_failed(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """记一次「尝试失败」（T-F3）：`{note?}` 可选；返回记完之后的 `{task, count, notes}`。
+
+        这里**不改状态**：失败之后做什么（取消 / 待定 / 推到明天）是用户下一步的选择。
+        """
+        note = str((payload or {}).get("note", "") or "")
+        try:
+            task = tm.attempt_failed(conn, task_id, note)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"task": _out(task, conn), **_attempt_body(task_id)}
+
     @app.get("/api/tasks/{task_id}/subtasks")
     def list_subtasks(task_id: str) -> list[TaskOut]:
         """子任务列表（未完成在前）。任务不存在 404。"""
