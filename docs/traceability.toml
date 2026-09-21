@@ -633,9 +633,13 @@ gaps = ""
 id = "SR-NF7"
 title = "可扩展：插件/自定义机制 + 预留扩展点 +「如何加一个功能」模板"
 group = "NF"
-status = "todo"
-evidence = []
-gaps = "只有配置层定制；无扩展模板（GAP-NF-04）"
+status = "partial"
+evidence = [
+  "text:src/timeflow/core/facts/store.py::kind：事实类型，自由字符串",
+  "file:docs/EXTENDING.md",
+  "file:examples/03_add_a_ledger_view.py",
+]
+gaps = "「如何加一个功能」模板已落地（`docs/EXTENDING.md`）+ 三个可跑示例（`examples/`）；已有的扩展点是**事实 kind 自由字符串**（加事实类型不改表）、配置驱动、契约层界面动作。**仍没有真正的「插件注册机制」**：加复习形式/可视化/集成仍要改核心代码（如 `review._FORMATS` 是固定元组）—— 这一条属产品决策，**待定**"
 
 [entries."SR-NF8"]
 id = "SR-NF8"
@@ -657,9 +661,17 @@ gaps = ""
 id = "SR-NF10"
 title = "零基础定制友好：常见定制改配置/填模板 + 2–3 个由浅入深扩展示例 + 中文注释"
 group = "NF"
-status = "todo"
-evidence = ["file:config.example.toml"]
-gaps = "无 2–3 个由浅入深扩展示例（GAP-NF-06）"
+status = "done"
+evidence = [
+  "file:config.example.toml",
+  "file:docs/EXTENDING.md",
+  "file:examples/README.md",
+  "file:examples/01_add_a_fact_kind.py",
+  "file:examples/02_add_a_config_option.py",
+  "file:examples/03_add_a_ledger_view.py",
+  "test:test_examples.py",
+]
+gaps = ""
 
 [entries."SR-NF11"]
 id = "SR-NF11"

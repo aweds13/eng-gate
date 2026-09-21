@@ -47,16 +47,23 @@ contracts/        怎么才算真的做成（操作闭环 + 动线）
 implementation/   哪个模块负责（模块名+职责+取舍，SR→模块）
   coverage.md       SR→操作/动线→验收→测试 覆盖矩阵
 taste/            技术品味与红线（已重写为项目专属）
-README.md / ACCEPTANCE.md / CODING_GUIDELINES.md / changelog.md   总入口·验收·护栏·日志
+README.md / ACCEPTANCE.md / CODING_GUIDELINES.md / EXTENDING.md / changelog.md   总入口·验收·护栏·如何加功能·日志
 ```
 
 **仓库根（代码与配置）**：
 ```
 src/    源码（timeflow/：app · api · core · storage · getaways · config）
 tests/  单元测试 + tests/acceptance/（可执行验收，B4）
+examples/  三个由浅入深的**可跑**扩展示例（加事实 kind / 加配置项 / 加解读层口径）
 scripts/  护栏脚本（check_layers.py：五层对齐检查）
 config.example.toml / pyproject.toml
 ```
+
+## 想加一个功能 / 想自己定制？
+- **照着填**：`EXTENDING.md`（「如何加一个功能」五步模板 + 三条红线 + 反模式清单）。
+- **照着跑**：`../examples/`（三个示例都是可直接执行的脚本，跑在临时库上，不碰你的真实数据；
+  有 `tests/test_examples.py` 兜着，示例跑不通 = 门禁红）。
+- **只想调参数**：抄 `config.example.toml` 成 `config.toml`，或设 `TIMEFLOW_<段>__<键>` 环境变量。
 
 > **文档读法（防"做一半"）**：实现任一功能前，依次读
 > ① `specification/conventions.md`（不能违反什么）→
@@ -68,8 +75,9 @@ config.example.toml / pyproject.toml
 - ✅ **第一版功能域已落地（存在级）**：任务管理 + B 记账 + 专注(F3) + 反馈/习惯(F4) + 学业/GPA(F5) + 复习FSRS(F6) + 团队/AI(F7) + 备忘录(F8) + 同步(F9) + **GPA 4.0/5.0 切换**。
 - ✅ **重构第 0 / 0.1 / 1 步已完成**：事实层（facts + 总线）→ 事实语义分 kind + v4 历史回填 → `ledger.summary()` 改读 facts（完成日口径）。详见 `changelog.md`。
 - ⚠️ **已知断层**：契约层 `contracts/` 揭示多项"操作闭环/模块联动"缺口（详见 `../复盘/三层断裂诊断-实现与交互复盘.md`），存在 ≠ 完成，LC-1~LC-8 多数仍 ❌。
-- ✅ 质量门：pytest 68 passed + 2 deselected / ruff 0 / mypy 0（32 文件）/ 五层对齐 PASS / 护栏自测 PASS / 覆盖率 82.54%（门 70%）。
+- ✅ 质量门：`scripts/run_gates.py` **十一项阻断门**全绿（pytest 501 passed / 验收 2 / ruff 0 / mypy 0（38 文件）/ 五层对齐 PASS / 护栏自测 PASS / DOM 探针 / 台账审计 / 台账↔规格标题对账 / 两项真机自检）；覆盖率门 70%（写在 `pyproject.toml`）。
 - ✅ **可执行验收层（B4）**：`../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）。
+- ✅ **可扩展/易上手**：`EXTENDING.md`（加功能的五步模板）+ `../examples/` 三个可跑示例（SR-NF7 / SR-NF10）。
 - ⏭️ 后置（第二版）：重规划/债务重组(F2.8)、AI 接口写/改/删、学校通知监测脚本(F10)、移动端 PWA 深联动。
 
 > 工程规范见 `CODING_GUIDELINES.md`；功能验收见 `ACCEPTANCE.md`；变更日志见 `changelog.md`。

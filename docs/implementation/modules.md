@@ -146,7 +146,19 @@
 - 与 ledger 的关系：业务线只发事实，ledger 读事实按当前心智模型算账；换心智模型只改解读层。
 - **订阅者接入点**：`core/focus/subscribers.py`（当前唯一订阅器；跨线联动都写在各线自己的 `subscribers.py`）。
 
+## 扩展（SR-NF7 / SR-NF10）→ `docs/EXTENDING.md` + `examples/`
+
+- **「如何加一个功能」模板**：`docs/EXTENDING.md` —— 先判层（事实/解读/操作/配置/界面）→
+  五步（意图→规格→契约→实现→台账）每步的产出物与检查 → 三条红线 → 反模式清单。
+- **三个可跑示例**（`examples/`，由浅入深）：加事实 kind / 加配置项 / 加解读层口径；
+  每个都跑在**临时库**上、不碰真实数据，并且有 `tests/test_examples.py` **当子进程真跑一遍**兜着
+  （示例跑不通 = 测试红 = 门禁拦人），免得文档里的示例随接口漂移而腐烂。
+- **已有的扩展点**：`kind` 自由字符串（加事实类型不改表）、配置驱动（`config.py` + env 覆盖）、
+  契约层的界面动作（`data-action` + `ACTIONS` 两处声明）。
+- **仍没有的**：「插件注册机制」—— 加复习形式/可视化/集成仍需改核心代码，属产品决策（SR-NF7 保持 `partial`）。
+
 ## 可观测（SR-NF13）→ `src/timeflow/logs.py`
+
 - **结构化日志**：一行一条 JSON（`logs/timeflow.jsonl`，gitignore 的本机产物）；`setup_logging()` 幂等，
   写不进文件就退回控制台（**日志失败不挡启动**）；`log_event(事件名, **字段)` 是唯一写入口。
 - **关键路径**：`api/app.py` 的 `log_key_paths` 中间件记**改动类请求**（方法/路径/状态/耗时）+ 启动事件；

@@ -14,12 +14,14 @@
 - [ ] 台账里对应条目的 `status` 已更新（`done` 要有**能跑通的证据断言**）
 - [ ] 文档与代码**同一个提交**：`docs/traceability.toml` + `docs/changelog.md` + CHECKPOINT（`复盘/长任务执行协议.md` 或 `复盘/交接-重构进度.md`）
 
-## 门禁（十项全绿）
+## 门禁（十一项全绿）
 
 - [ ] `python -X utf8 scripts/run_gates.py` 通过（pytest / 验收 / ruff / mypy / check_layers / 自测 /
-      DOM 探针 / audit / LF-1 真机 / 前端自检）
+      DOM 探针 / audit / 台账↔规格标题对账 / LF-1 真机 / 前端自检）
 - [ ] `gates/last.json` **已随提交入库**（审计按它核对 `Gates:` trailer 的真伪）
 - [ ] 新增/改了路由 → 台账里被引用（或写进 `meta.acknowledged_routes`）
+- [ ] 新条目的编号合法（`docs/CODING_GUIDELINES.md` §9.1：`SR-Fx.y` 只给规格条目；拆卡加 `a/b` 后缀；
+      自造卡用 `T-*`/`STEP-*`/`OP-*`；标题以规格原词开头）
 - [ ] 声称与证据的差欠**逐条**写进 `[exceptions]` 并写明理由（修一条删一条，不许静默豁免）
 
 ## 口径与边界

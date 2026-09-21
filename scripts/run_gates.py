@@ -32,7 +32,7 @@ COMMON = [
     ("pytest", [PY, "-m", "pytest"]),
     # 验收层只跑 2 个用例，必须关掉全局 addopts 里的覆盖率门，否则"覆盖率不达标"会误判验收失败
     ("acceptance", [PY, "-m", "pytest", "-m", "acceptance", "--no-cov"]),
-    ("ruff", [PY, "-m", "ruff", "check", "src/", "tests/", "scripts/", "tools/"]),
+    ("ruff", [PY, "-m", "ruff", "check", "src/", "tests/", "scripts/", "tools/", "examples/"]),
     ("mypy", [PY, "-m", "mypy", "src/"]),
     ("check_layers", [PY, "-X", "utf8", "scripts/check_layers.py"]),
     ("check_layers_selftest", [PY, "-X", "utf8", "scripts/test_check_layers.py"]),
