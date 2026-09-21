@@ -1,10 +1,10 @@
 {
-  "rev": "2bc807f",
-  "tree": "ec87cb14bba6c6f9bc0a15c3f642a51f5d713c4b",
-  "parent": "2bc807f",
+  "rev": "0feb056",
+  "tree": "ae405ee477089f995f6e4575c610601b45e10d23",
+  "parent": "0feb056",
   "branch": "line/impl-v1",
   "dirty": true,
-  "at": "2026-09-21T12:45:03",
+  "at": "2026-09-21T12:49:36",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
@@ -13,55 +13,55 @@
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 60.2,
-      "summary": "493 passed, 2 deselected, 1 xfailed, 520 warnings in 59.20s"
+      "seconds": 60.23,
+      "summary": "493 passed, 2 deselected, 1 xfailed, 520 warnings in 59.23s"
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 3.09,
-      "summary": "2 passed, 494 deselected, 2 warnings in 1.41s"
+      "seconds": 2.99,
+      "summary": "2 passed, 494 deselected, 2 warnings in 1.31s"
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 0.25,
+      "seconds": 0.16,
       "summary": "All checks passed!"
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 1.46,
+      "seconds": 1.55,
       "summary": "Success: no issues found in 38 source files"
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 0.29,
+      "seconds": 0.26,
       "summary": "LAYER CHECKS: PASS ✅"
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 5.91,
+      "seconds": 6.09,
       "summary": "SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）"
     },
     {
       "name": "ui_dom_probe",
       "exit_code": 0,
-      "seconds": 0.6,
+      "seconds": 0.59,
       "summary": "✅ 假 DOM 渲染探针：12/12 个视图正常渲染，详情面板 2/2 正常，今日完成明细展开 1/1 正常，未注册动作 0 个，运行时告警 0 条"
     },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 0.71,
-      "summary": "审计通过 ✅（豁免 3 项已知欠账）"
+      "seconds": 0.62,
+      "summary": "审计通过 ✅（豁免 4 项已知欠账）"
     },
     {
       "name": "lf1_live",
       "exit_code": 0,
-      "seconds": 1.96,
+      "seconds": 2.01,
       "summary": "LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）"
     },
     {
@@ -73,11 +73,11 @@
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 1.11,
+      "seconds": 1.19,
       "summary": "共 29 条要处理：**15 条确定错位** + 14 条需人核对",
       "blocking": false,
       "note": "信息性：台账↔规格 标题对账；T-D1 完成后改成阻断项（audit_titles.py --check）"
     }
   ],
-  "trailer": "pytest 493 passed, 2 deselected, 1 xfailed, 520 warnings in 59.20s; acceptance 2 passed, 494 deselected, 2 warnings in 1.41s; ruff All checks passed!; mypy Success: no issues found in 38 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; ui_dom_probe ✅ 假 DOM 渲染探针：12/12 个视图正常渲染，详情面板 2/2 正常，今日完成明细展开 1/1 正常，未注册动作 0 个，运行时告警 0 条; audit 审计通过 ✅（豁免 3 项已知欠账）; lf1_live LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）; web_live [OK ] 健康检查报能自证的事实"
+  "trailer": "pytest 493 passed, 2 deselected, 1 xfailed, 520 warnings in 59.23s; acceptance 2 passed, 494 deselected, 2 warnings in 1.31s; ruff All checks passed!; mypy Success: no issues found in 38 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; ui_dom_probe ✅ 假 DOM 渲染探针：12/12 个视图正常渲染，详情面板 2/2 正常，今日完成明细展开 1/1 正常，未注册动作 0 个，运行时告警 0 条; audit 审计通过 ✅（豁免 4 项已知欠账）; lf1_live LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）; web_live [OK ] 健康检查报能自证的事实"
 }
