@@ -56,6 +56,23 @@ class HeatmapCell(BaseModel):
     debt_count: int = 0
 
 
+class AcademicSplit(BaseModel):
+    """学业投入 vs 自学投入（SR-F5.1b / T-C10：与自学时间线对照）。
+
+    口径（2026-09-20 用户定）：**只统计"绑定了任务"的专注** ——
+    挂了课程的任务 = 学业投入，挂了任务但没挂课程 = 自学投入，
+    未绑定任务（或任务已被彻底清理）的专注**单列** —— 不猜它算哪一类（不制造假归因）。
+    手动投入不参与（它按口径就不绑定任务，见 `group_insights`）。
+    """
+
+    days: int
+    academic_hours: float
+    self_hours: float
+    unbound_hours: float = 0.0
+    academic_tasks: int = 0
+    self_tasks: int = 0
+
+
 def heatmap(conn: sqlite3.Connection, days: int = DEFAULT_HEATMAP_DAYS) -> list[HeatmapCell]:
     """近 `days` 天的**逐日多指标**（时间热力图的原始数据）。
 
@@ -96,6 +113,53 @@ def daily_insights(
             )
         )
     return out
+
+
+def academic_vs_self(
+    conn: sqlite3.Connection, days: int = DEFAULT_TREND_DAYS
+) -> AcademicSplit:
+    """近 `days` 天「学业投入 vs 自学投入」（SR-F5.1b / T-C10）。
+
+    为什么这样切：**"学业"不等于"任何学习"** —— 只有明确挂到某门课上的任务才算学业投入；
+    其余挂任务的专注算自学；没绑定任务的专注**单列**（如实、不归因，与 `group_insights` 同一取向）。
+    不折算、不设目标、不做"学业应占多少"的建议（守温和红线）。
+    """
+    total = max(1, min(int(days), MAX_TREND_DAYS))
+    start = (date.today() - timedelta(days=total - 1)).isoformat()
+    rows = facts_mod.query(conn, kind="focus.finished", since=f"{start}T00:00:00")
+
+    per_task: dict[str, float] = {}
+    unbound = 0.0
+    for row in rows:
+        seconds = _num(row["value_num"])
+        if row["subject_type"] != "task" or not row["subject_id"]:
+            unbound += seconds          # 没绑定任务：不归入任何一类
+            continue
+        tid = str(row["subject_id"])
+        per_task[tid] = per_task.get(tid, 0.0) + seconds
+
+    academic = self_study = 0.0
+    academic_tasks = self_tasks = 0
+    for tid, seconds in per_task.items():
+        try:
+            task = tm.get_task(conn, tid)
+        except KeyError:               # 任务被彻底清理：不猜它属于哪一类
+            unbound += seconds
+            continue
+        if task.course_id:
+            academic += seconds
+            academic_tasks += 1
+        else:
+            self_study += seconds
+            self_tasks += 1
+    return AcademicSplit(
+        days=total,
+        academic_hours=round(academic / 3600.0, 2),
+        self_hours=round(self_study / 3600.0, 2),
+        unbound_hours=round(unbound / 3600.0, 2),
+        academic_tasks=academic_tasks,
+        self_tasks=self_tasks,
+    )
 
 
 def group_insights(

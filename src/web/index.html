@@ -930,23 +930,36 @@ function renderStats(m){
     const peak=Math.max(0,...daily.map(d=>d.focus_minutes));
     return api('/api/insights/groups?days=30').then(groups=>api('/api/insights/heatmap?days=371').then(cells=>{
       hmCells=cells;
-      return api('/api/summary/weekly').then(week=>{
+      return api('/api/insights/academic-vs-self?days=90').then(split=>api('/api/summary/weekly').then(week=>{
       const curve=`<div class="card" style="display:block">
         <div class="meta">近 ${days} 天专注走势（分钟）· 合计 ${focusTotal} 分钟 · 有投入 ${activeDays} 天 · 单日最高 ${Math.round(peak)}</div>
         <div style="margin-top:10px">${lineChart(daily,d=>d.focus_minutes)}</div>
         <div class="sub" style="display:flex;justify-content:space-between"><span>${daily.length?daily[0].date.slice(5):''}</span><span>今天</span></div></div>`;
       const dist=groups.length?barList(groups.map(g=>({
         label:g.group,value:g.focus_hours,display:`${g.focus_hours}h · ${g.task_count} 个任务`}))):'<div class="empty">这段时间还没有绑定任务的专注</div>';
+      // 学业投入 vs 自学投入（SR-F5.1b / T-C10）：口径见后端 `insights.academic_vs_self`
+      const acSplit=`<div class="section-title">学业投入 vs 自学投入（近 ${split.days} 天）</div>
+        <div class="card" style="display:block">
+        ${barList([
+          {label:'学业：挂了课程的任务',value:split.academic_hours,
+            display:`${split.academic_hours}h · ${split.academic_tasks} 个任务`},
+          {label:'自学：没挂课程的任务',value:split.self_hours,
+            display:`${split.self_hours}h · ${split.self_tasks} 个任务`},
+        ])}
+        <div class="sub">只算「绑定了任务」的专注：挂课程 = 学业、没挂课程 = 自学；
+          未绑定任务的专注另有 ${split.unbound_hours}h，单列、不归入任何一边（不猜它算哪一类）。
+          手动投入不参与这张图。这里只如实对照，不做「学业该占多少」的建议。</div></div>`;
       m.innerHTML=curve+`<div class="section-title">投入分布（按任务分组 · 近 ${days} 天）</div>
         <div class="card" style="display:block">${dist}
         <div class="sub">任务可属多个分组，各组之和可能大于总投入；未绑定任务的专注不计入分组。当前债务 ${debtNow} 项。</div></div>
+      ${acSplit}
       <div class="section-title">本周投入</div>${weekCard(week)}
       <div class="section-title">时间热力图（近一年）</div>
         <div class="card" style="display:block">
           <div class="row" id="hmRow">${hmButtons('focus')}</div>
           <div id="hmBox" style="margin-top:10px">${valueHeatmap(cells,'focus')}</div>
           <div class="sub" id="hmNote">${hmNote(cells,'focus')}</div></div>`;
-      });
+      }));
     }));
   });
 }
@@ -1223,15 +1236,21 @@ async function renderAcademic(m){
     api('/api/assessments'),api('/api/tasks')]);      // 任务：课程卡上显示"这门课挂了哪些作业"
   courseCache=courses||[];                             // 顺带刷新课程缓存（任务编辑的下拉要用）
   const tasksOfCourse=id=>(allTasks||[]).filter(t=>t.course_id===id);
-  const soon=upcoming.filter(a=>a.days_until!==null&&a.days_until<=14);
   const courseName=id=>{const c=courses.find(x=>x.id===id);return c?c.name:'未关联课程'};
-  const upcomingHtml=soon.length?`<div class="section-title">临期与逾期（14 天内）</div>
+  const soon=upcoming.filter(a=>a.days_until!==null&&a.days_until<=14)
+    .slice().sort((a,b)=>a.days_until-b.days_until);   // 逾期在前、其次按剩余天数（硬考核置顶）
+  // 学校硬考核（T-C8 / SR-F1.8 的"强"侧）：`upcoming_assessments()` 只返回**未录成绩**的考核项，
+  // 所以这张列表里的每一项都是"逾期不候"的硬考核 —— 比普通任务逾期呈现得更明显
+  // （置顶 + 左边条更粗 + 角标 + 一句说明）；但**只是如实标出来**：不加声音、不弹窗、不催。
+  const upcomingHtml=soon.length?`<div class="section-title">硬考核：临期与逾期（14 天内，未录成绩）</div>
+    <div class="sub">这类是「逾期不候」的：交了就计成绩，没交就没了 —— 所以单独放前面、标出来。
+      不催你，只是别让它被忘掉。</div>
     ${soon.map(a=>{
       const d=a.days_until;
       const when=d<0?`已逾期 ${-d} 天`:d===0?'今天到期':`还有 ${d} 天`;
-      return `<div class="card ${d<0?'overdue':''}"><div style="flex:1">
-        <div class="title">${esc(a.name)}</div>
-        <div class="meta">${esc(a.course_name||'未关联课程')} · ${a.due_date} · ${when}${a.weight?` · 占 ${a.weight}`:''}</div>
+      return `<div class="card hard ${d<0?'overdue':''}"><div style="flex:1">
+        <div class="title"><span class="badge hard">硬考核</span> ${esc(a.name)}</div>
+        <div class="meta">${esc(a.course_name||'未关联课程')} · ${a.due_date} · ${when}${a.weight?` · 占 ${a.weight}`:''} · 未录成绩</div>
         ${(a.attach||[]).length?`<div class="meta">${attachRowsHTML(a.attach,'assessment-attach-del',a.id)}</div>`:''}
         </div>
         <button class="ghost" data-action="assessment-del" data-id="${a.id}">删除</button></div>`;}).join('')}`:'';
@@ -1423,7 +1442,16 @@ async function renderReview(m){
 async function addReview(){const title=document.getElementById('rvTitle').value.trim();if(!title)return;
   await api('/api/review/items',{method:'POST',body:JSON.stringify({title})});view(current)}
 async function review(id,fb){await api(`/api/review/${id}/review`,{method:'POST',body:JSON.stringify({feedback:fb})});
-  toast('复习已记录，下次到期已由 FSRS 排好');view(current)}
+  // 温故知新 → 额外一笔产出（SR-F2.2 / T-C2）：用户定「**想记才点**」—— 不自动弹、不打断复习，
+  // 所以放在 toast 上给一个按钮（6 秒内可点），而不是弹窗拦一下。
+  toastAction('复习已记录，下次到期已由 FSRS 排好 —— 温故知新的话可以顺手记一笔产出','记一笔产出',()=>reviewOutput(id));
+  view(current)}
+async function reviewOutput(id){
+  const note=await ask('记一笔产出：这次温故知新记下了什么？（计入知识资产）','');
+  if(!note)return;
+  await api('/api/ledger/output',{method:'POST',body:JSON.stringify({kind:'asset',value:1,note})});
+  toast('已记一笔「知识资产」产出（备忘录页可看到、可撤销）');view('memo');
+}
 
 async function renderMemo(m){
   const [memos,outputs,invests]=await Promise.all([

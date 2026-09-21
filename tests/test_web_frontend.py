@@ -664,6 +664,8 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
         ("get", "/api/feedback", None),
         ("get", "/api/selfcheck", None),
         ("get", "/api/review/due", None),
+        ("get", "/api/review/meta", None),
+        ("get", "/api/insights/academic-vs-self?days=90", None),
         ("get", "/api/memos", None),
         ("get", "/api/courses", None),
         ("get", "/api/config", None),
@@ -788,3 +790,55 @@ def test_week_rhythm_is_displayed() -> None:
         assert needle in row, f"均衡度少了字段 {needle}"
     for bad in ("达标", "未达标", "目标", "警告", "落后"):
         assert bad not in row, f"均衡度措辞不许出现「{bad}」（温和不施压）"
+
+
+def test_hard_assessment_is_marked_more_strongly() -> None:
+    """T-C8（SR-F1.8 的"强"侧 / GAP-F1-06）：学校硬考核要比普通逾期**呈现得更明显**。
+
+    口径（`复盘/C批口径定案.md` §四）：硬考核 = 考核项**有 due_date 且未录成绩**
+    （`upcoming_assessments()` 本来就只返回这一类）。要做到：置顶 + 更粗的左边条 + 角标 + 一句说明；
+    **但只做视觉** —— 不加声音、不弹窗（温和不施压），所以这里也断言界面没说"催/警告"。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    academic = html.split("async function renderAcademic(m){", 1)[1].split("\n}", 1)[0]
+    assert "card hard" in academic and 'class="badge hard"' in academic, "硬考核卡片没用强呈现的类"
+    assert "硬考核：临期与逾期" in academic, "硬考核区没有单独的小标题"
+    assert "未录成绩" in academic and "逾期不候" in academic, "没说明为什么它被单独标出来"
+    assert "days_until-b.days_until" in academic, "硬考核没有按剩余天数排（逾期优先）"
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert ".card.hard" in css and ".badge.hard" in css, "app.css 缺硬考核样式（颜色只能住这里）"
+    for bad in ("alert(", "confirm(", "Notification"):
+        assert bad not in academic, f"硬考核不该用 {bad}（不加声音、不弹窗）"
+
+
+def test_review_completion_offers_output_entry() -> None:
+    """T-C2（SR-F2.2）：复习完**想记才点**「记一笔产出」—— 不自动弹窗、不打断复习。
+
+    用户 2026-09-20 定的形态：入口挂在 toast 上（6 秒内可点），产出入知识资产（`kind=asset`）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    # 注意：`review()` 结尾是 `view(current)}`（闭括号不单独成行）→ 按"下一个函数"切，别按 "\n}"
+    head, tail = html.split("async function review(id,fb){", 1)
+    fn = tail.split("async function reviewOutput", 1)[0]
+    assert "toastAction(" in fn and "记一笔产出" in fn, "复习完成没给「记一笔产出」入口"
+    assert "await ask(" not in fn, "不可以在完成复习时立刻弹窗拦住用户（形态是「想记才点」）"
+    out = html.split("async function reviewOutput(id){", 1)[1].split("\n}", 1)[0]
+    assert "/api/ledger/output" in out and "kind:'asset'" in out, "温故知新产出应入知识资产"
+    assert "'/api/review/meta'" not in out, "记产出不该再拉复习词表"
+
+
+def test_academic_vs_self_chart_is_wired() -> None:
+    """T-C10（SR-F5.1b / GAP-F5-03）：统计页要有「学业投入 vs 自学投入」对照。
+
+    口径（用户 2026-09-20 定）：**只算挂了课程的任务专注**；没挂课程的算自学；
+    未绑定任务的专注**单列、不归入任何一边** —— 界面必须把这条写出来（否则读数会被误解）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "/api/insights/academic-vs-self?days=90" in html, "统计页没取对照数据"
+    stats = html.split("function renderStats(m){", 1)[1].split("\n}\n", 1)[0]
+    assert "split" in stats and "acSplit" in stats, "对照图没接进统计页"
+    assert "学业：挂了课程的任务" in stats and "自学：没挂课程的任务" in stats
+    assert "不归入任何一边" in stats, "必须说明未绑定专注单列（不制造假归因）"
+    assert "手动投入不参与这张图" in stats, "必须说明手动投入不参与（与分组图同口径）"
+    for bad in ("应该", "达标", "落后"):
+        assert bad not in stats.split("acSplit=", 1)[1][:1200], f"对照图措辞不许出现「{bad}」"

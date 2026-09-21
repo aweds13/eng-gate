@@ -804,6 +804,18 @@ def create_app(db_path: str | None = None) -> FastAPI:
             )
         return insights.group_insights(conn, days=days)
 
+    @app.get("/api/insights/academic-vs-self")
+    def insights_academic_vs_self(
+        days: int = insights.DEFAULT_TREND_DAYS,
+    ) -> insights.AcademicSplit:
+        """学业投入 vs 自学投入（SR-F5.1b / T-C10）：只统计**绑定了任务**的专注 ——
+        挂课程 = 学业、没挂课程 = 自学、未绑定（或任务已清理）**单列**；手动投入不参与。"""
+        if not 1 <= days <= insights.MAX_TREND_DAYS:
+            raise HTTPException(
+                status_code=400, detail=f"days 需在 1~{insights.MAX_TREND_DAYS} 之间"
+            )
+        return insights.academic_vs_self(conn, days=days)
+
     @app.get("/api/insights/heatmap")
     def insights_heatmap(days: int = insights.DEFAULT_HEATMAP_DAYS) -> list[insights.HeatmapCell]:
         """近 N 天逐日多指标（时间热力图：投入/手动/复习/产出/债务快照）；1≤days≤400。"""

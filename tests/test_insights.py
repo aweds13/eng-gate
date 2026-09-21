@@ -293,3 +293,69 @@ def test_api_habits_list(tmp_path) -> None:  # type: ignore[no-untyped-def]
     rows = client.get("/api/habits").json()
     assert [r["name"] for r in rows] == ["早睡"]
     assert rows[0]["streak"] == 1
+
+
+# ---- 学业投入 vs 自学投入（SR-F5.1b / T-C10，2026-09-20 用户定口径）----
+# 口径：**只统计"绑定了任务"的专注** —— 挂课程 = 学业、没挂课程 = 自学、
+# 未绑定（或任务已被彻底清理）**单列**（不猜它算哪一类）。手动投入不参与。
+
+
+def test_academic_vs_self_splits_by_course_link(conn: sqlite3.Connection) -> None:
+    course = conn.execute(
+        "INSERT INTO courses (id, name, credits) VALUES ('c1', '高等数学', 4)"
+    )
+    course.fetchone()
+    conn.commit()
+    today = date.today().isoformat()
+    school = tm.create_task(conn, title="高数作业", task_type="作业", course_id="c1")
+    selfstudy = tm.create_task(conn, title="读闲书")
+    _focus_on(conn, today, 3600.0, school.id)      # 1h 学业
+    _focus_on(conn, today, 1800.0, selfstudy.id)   # 0.5h 自学
+
+    split = insights.academic_vs_self(conn, days=7)
+    assert split.academic_hours == 1.0 and split.self_hours == 0.5
+    assert (split.academic_tasks, split.self_tasks) == (1, 1)
+    assert split.unbound_hours == 0.0, "都绑了任务，不该有未绑定那部分"
+
+
+def test_academic_vs_self_keeps_unbound_separate(conn: sqlite3.Connection) -> None:
+    """没绑定任务的专注**不归入任何一边** —— 不制造假归因（与 group_insights 同一取向）。"""
+    today = date.today().isoformat()
+    _focus_on(conn, today, 900.0)                  # 未绑定任务
+    split = insights.academic_vs_self(conn, days=7)
+    assert split.academic_hours == 0.0 and split.self_hours == 0.0
+    assert split.unbound_hours == 0.25, "未绑定专注应单列，别偷偷算进自学"
+
+
+def test_academic_vs_self_task_purged_counts_as_unbound(conn: sqlite3.Connection) -> None:
+    """任务被**彻底清理**后，历史专注仍在、但不猜它属于哪一类 → 计入未绑定。"""
+    today = date.today().isoformat()
+    task = tm.create_task(conn, title="临时任务")
+    _focus_on(conn, today, 600.0, task.id)
+    conn.execute("DELETE FROM tasks WHERE id = ?", (task.id,))
+    conn.commit()
+    split = insights.academic_vs_self(conn, days=7)
+    assert split.academic_hours == 0.0 and split.self_hours == 0.0
+    assert split.unbound_hours == round(600.0 / 3600.0, 2)
+
+
+def test_academic_vs_self_ignores_manual_invest(conn: sqlite3.Connection) -> None:
+    """手动投入按口径就不绑定任务 → 不参与这张图（否则会和分组图口径打架）。"""
+    today = date.today().isoformat()
+    facts_mod.record(
+        conn, kind="invest.manual", subject_type="invest", subject_id="i1",
+        value_num=7200.0, occurred_at=f"{today}T09:00:00",
+    )
+    split = insights.academic_vs_self(conn, days=7)
+    assert (split.academic_hours, split.self_hours, split.unbound_hours) == (0.0, 0.0, 0.0)
+
+
+def test_api_academic_vs_self_days_bounds(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    client = TestClient(create_app(str(tmp_path / "avs.db")))
+    got = client.get("/api/insights/academic-vs-self?days=30")
+    assert got.status_code == 200, got.text
+    assert set(got.json()) >= {
+        "days", "academic_hours", "self_hours", "unbound_hours", "academic_tasks", "self_tasks"
+    }
+    assert client.get("/api/insights/academic-vs-self?days=0").status_code == 400
+    assert client.get("/api/insights/academic-vs-self?days=91").status_code == 400

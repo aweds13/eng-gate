@@ -54,11 +54,14 @@
 - **均衡度：波动 / 空档**（T-C3 / SR-F2.5，2026-09-20）：`_rhythm()` 出 `focus_variation_minutes`
   （逐日专注分钟的**标准差**，分钟）、`longest_gap_days`（最长连续 0 天）；`_rhythm_note()` 把它们说成
   **一句温和的话**（不设目标、不告警、不折算）。前端专注页「本周投入」卡片显示成一行（`rhythmRow()`）。
-- **可视化数据底座**（SR-F2.7 / SR-NF3，第 7 步）：`core/insights.py` —— `daily_insights()`（逐日专注/手动/复习/
-  产出/习惯/债务快照）、`group_insights()`（按任务分组的投入分布；未绑定专注不计入、多分组如实重复计数）、
+- **温故知新 → 记一笔产出**（SR-F2.2 / T-C2，2026-09-20）：复习完成时把入口挂在 **toast** 上
+  （`toastAction(...)` → `reviewOutput()`）—— 用户定「**想记才点**」：不自动弹窗、不打断复习；
+  产出入**知识资产**（`POST /api/ledger/output`，`kind=asset`），可在备忘录页撤销。
+- **可视化数据底座**（SR-F2.7 / SR-NF3，第 7 步）：`core/insights.py` —— `daily_insights()`（逐日专注/手动/复习/产出/习惯/债务快照）、`group_insights()`（按任务分组的投入分布；未绑定专注不计入、多分组如实重复计数）、
+  `academic_vs_self()`（**学业 vs 自学**投入对照，见 F5 段）；
   `heatmap()`（**近一年时间热力图**逐日多指标：专注分钟/手动分钟/复习/产出/债务快照）；
-  `GET /api/insights/daily`、`/api/insights/groups`（days 1~90）、`/api/insights/heatmap`（days 1~400）。
-  前端：统计页曲线 + 分组条 + 可切换维度的时间热力图（专注/手动/复习/产出/债务）。
+  `GET /api/insights/daily`、`/api/insights/groups`、`/api/insights/academic-vs-self`（days 1~90）、`/api/insights/heatmap`（days 1~400）。
+  前端：统计页曲线 + 分组条 + 对照条 + 可切换维度的时间热力图（专注/手动/复习/产出/债务）。
 
 ## SR-F3 计时与专注 → `core/focus/`
 - 番茄/普通计时（SR-F3.1/3.2）：`timer.py`；`status=进行中` 为真实中间态（未结束不计投入）；
@@ -95,8 +98,15 @@
 - **加权平均成绩 + 制式切换**（第 11 步，用户要求）：`weighted_average()` =
   `Σ(学分×成绩)/Σ学分`（百分制原始分加权，学分为 0/负 不参与），与 `gpa()`（绩点加权）并存；
   `GET /api/gpa?scale=` 一次返回两个口径；前端学业页可在 4.0/5.0 制之间**切换查看**（写死默认值仍在 config.toml）。
-- **未实现**：**「与自学时间线对照」的视图**（SR-F5.1b / GAP-F5-03，规格 F5.1 的后半句）；
-  其余（OP-24 学校任务↔课程字段级合流）已落地，见上。
+- **硬考核「强」呈现**（T-C8，2026-09-20）：`upcoming_assessments()` 返回的本就是「有截止日 + 未录成绩」
+  的硬考核，前端学业页因此把它**视觉上升级**（区标题写明"硬考核/未录成绩/逾期不候"、按剩余天数排序、
+  `card hard` + `badge hard` 样式）；**只做视觉** —— 不加声音、不弹窗（守温和红线）。
+- **学业投入 vs 自学投入**（SR-F5.1b / T-C10，2026-09-20）：`insights.academic_vs_self()` +
+  `GET /api/insights/academic-vs-self`（1~90 天）—— 只算**绑定了任务**的专注：挂课程=学业、
+  没挂课程=自学；未绑定（或任务已彻底清理）**单列**（不归因）；手动投入不参与；
+  前端统计页出两条条形 + 一行口径说明。**口径决策见 `../../复盘/C批口径定案.md` §7.3**。
+- **未实现**：无（SR-F5.1b 的对照视图与 OP-24 合流都已落地；`course_assessments` 与任务的互链
+  按 §六 的决定**不做**）。
   **要求备注 + 跳转要求已落地**（SR-F5.3 / T-B4）：`course_assessments.note`（要求备注）+
   `course_assessments.attach`（要求网页/本地路径，与任务附件共用 `core/attach.py` 的打开规则）；
   学业页「考核项」区可就近挂/点开（此前考核项只在 14 天临期窗口里看得到）。

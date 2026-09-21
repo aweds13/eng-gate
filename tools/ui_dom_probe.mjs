@@ -143,7 +143,15 @@ const DB = {
   '/api/focus/today': { focus_minutes: 0 }, '/api/focus/active': null,
   '/api/habits': [], '/api/selfcheck': { week_focus_minutes: 0, week_habit_done: 0, debt_count: 0 },
   '/api/feedback': null, '/api/courses': [{ id: 'c1', name: '高等数学', credits: 4, teacher: '张老师' }],
-  '/api/grades': [], '/api/assessments/upcoming': [],
+  '/api/grades': [],
+  // 学校硬考核（T-C8）：`upcoming_assessments()` 只返回**未录成绩**的考核项 —— 学业页要把这类
+  // 呈现得比普通逾期更明显（置顶 + 粗左边条 + 角标 + 一句说明），这里给一条让它真渲染出来。
+  '/api/assessments/upcoming': [{ id: 'a1', name: '期中考试', course_id: 'c1',
+    course_name: '高等数学', due_date: '2026-09-21', days_until: 1, weight: 0.3,
+    attach: [], score: null }],
+  // 学业投入 vs 自学投入（SR-F5.1b / T-C10）：统计页那张对照图要用它
+  '/api/insights/academic-vs-self': { days: 90, academic_hours: 2.0, self_hours: 1.5,
+    unbound_hours: 0.5, academic_tasks: 2, self_tasks: 1 },
   // 全部考核项（T-B4 起学业页用它列表 + 挂要求链接）与附件打开方式设置
   '/api/assessments': [],
   '/api/settings/attach': {
@@ -192,6 +200,7 @@ let bad = 0;
 let detailBad = 0;
 let doneBad = 0;
 let reviewBad = 0;
+let hardBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -288,6 +297,26 @@ try {
 }
 globalThis.__setReviewEdit({ id: null, item: null, meta: null });
 
+// 学校硬考核（T-C8）：视图循环只覆盖"有没有渲染"，这里断言**强呈现的要素真的在**。
+const hardChecks = [];
+try {
+  byId.get('main')._html = '';
+  await globalThis.__view('academic');
+  await sleep(30);
+  const html = byId.get('main')._html;
+  const needs = ['card hard', 'badge hard', '硬考核', '未录成绩', '逾期不候'];
+  const missing = needs.filter((n) => !html.includes(n));
+  const rendered = missing.length === 0;
+  if (!rendered) hardBad++;
+  hardChecks.push({ rendered, missing });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 学业·硬考核强呈现 main ${String(html.length).padStart(6)}B`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  hardBad++;
+  hardChecks.push({ error: e.message });
+  console.log(`  ❌ 学业·硬考核强呈现 渲染抛错: ${e.message}`);
+}
+
 try {
   const body = code.split('const ACTIONS')[1];
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
@@ -297,8 +326,8 @@ try {
 console.warn = realWarn;
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
-    { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks, problems,
-      unregistered: unused }, null, 2));
+    { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
+      hard: hardChecks, problems, unregistered: unused }, null, 2));
 }
 if (unused.length) {
   console.log(`  ❌ 模板里用到但未注册的动作：${unused.join(', ')}`);
@@ -306,11 +335,12 @@ if (unused.length) {
 if (problems.length) {
   console.log(`  ⚠️  运行时告警/异常：${problems.slice(0, 5).join(' | ')}`);
 }
-const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0
+const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
   + `，今日完成明细展开 ${doneChecks.length - doneBad}/${doneChecks.length} 正常`
   + `，复习卡编辑态 ${reviewChecks.length - reviewBad}/${reviewChecks.length} 正常`
+  + `，硬考核强呈现 ${hardChecks.length - hardBad}/${hardChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

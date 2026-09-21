@@ -135,6 +135,11 @@ main { max-width: 820px; margin: 0 auto; padding: 0 24px 90px }
 .card .title { flex: 1 }
 .card .meta { color: var(--muted); font-size: 12px }
 .card.overdue { border-left: 3px solid var(--danger) }
+/* 学校硬考核（T-C8）：逾期不候的那类，比普通逾期更显眼（左边条更粗 + 角标）。
+   刻意**只做视觉**：不加声音、不弹窗、不闪烁 —— 约定层「温和不施压」。 */
+.card.hard { border-left: 5px solid var(--danger) }
+.card.hard.overdue { border-left-width: 7px }
+.badge.hard { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger) }
 .card.done .title { text-decoration: line-through; color: var(--muted) }
 .card .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
 /* 卡片里放表单/长内容时（默认 .card 是 flex 行，块内容会被挤） */

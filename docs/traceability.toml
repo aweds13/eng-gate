@@ -183,9 +183,15 @@ gaps = "无 attempt/关联笔记字段；无存档视图（GAP-F1-05）"
 id = "SR-F1.8"
 title = "逾期任务留 My Day 并标红；可推到明天 / 改 ddl / 标逾期 / 取消；学校硬考核→强提醒，普通→温和"
 group = "F1"
-status = "partial"
-evidence = ["ui:data-action=task-tomorrow", "ui:data-action=task-cancel", "text:src/web/app.css::card.overdue"]
-gaps = "无「学校硬考核强提醒 vs 普通温和」分级（GAP-F1-06）"
+status = "done"
+evidence = [
+  "ui:data-action=task-tomorrow",
+  "ui:data-action=task-cancel",
+  "text:src/web/app.css::card.overdue",
+  "text:src/web/index.html::硬考核：临期与逾期",
+  "text:src/web/app.css::.card.hard",
+]
+gaps = ""
 
 [entries."SR-F1.9"]
 id = "SR-F1.9"
@@ -215,9 +221,13 @@ gaps = ""
 id = "SR-F2.2"
 title = "复习完成=投入（维持）；温故知新可额外记一笔产出"
 group = "F2"
-status = "partial"
-evidence = []
-gaps = "复习完成=投入已按「维持」口径落为 `review_count`；**缺「复习 → 产出」入口**（GAP-F2-02）"
+status = "done"
+evidence = [
+  "text:src/web/index.html::async function reviewOutput(id){",
+  "route:POST /api/ledger/output",
+  "test:test_web_frontend.py",
+]
+gaps = ""
 
 [entries."SR-F2.3"]
 id = "SR-F2.3"
@@ -348,11 +358,17 @@ gaps = ""
 
 [entries."SR-F5.1b"]
 id = "SR-F5.1b"
-title = "GPA 与自学时间线对照"
+title = "与自学时间线对照（学业投入 vs 自学投入）"
 group = "F5"
-status = "todo"
-evidence = []
-gaps = "无对照视图（GAP-F5-03）"
+status = "done"
+evidence = [
+  "route:GET /api/insights/academic-vs-self",
+  "text:src/timeflow/core/insights.py::def academic_vs_self",
+  "text:src/web/index.html::academic-vs-self?days=90",
+  "test:test_insights.py",
+  "test:test_web_frontend.py",
+]
+gaps = ""
 
 [entries."SR-F5.2a"]
 id = "SR-F5.2a"
@@ -1168,6 +1184,18 @@ evidence = [
 ]
 gaps = ""
 
+[entries."T-C2"]
+id = "T-C2"
+title = "温故知新 → 记一笔产出（用户定：想记才点）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "text:src/web/index.html::async function reviewOutput(id){",
+  "route:POST /api/ledger/output",
+  "test:test_web_frontend.py",
+]
+gaps = ""
+
 [entries."T-C3"]
 id = "T-C3"
 title = "C 批：均衡度指标（波动 / 空档，温和呈现）"
@@ -1247,11 +1275,15 @@ gaps = ""
 
 [entries."T-C8"]
 id = "T-C8"
-title = "C 批：强弱提醒分级（学校硬考核更强呈现）"
+title = "学校硬考核强提醒（T-C9 的落地：强/弱分级）"
 group = "PROCESS"
-status = "partial"
-evidence = ["file:复盘/C批口径定案.md"]
-gaps = "待做：学校硬考核（考核项有 due_date 且未录成绩）界面更强呈现；普通逾期保持温和。T-C9 决策把这条变成落地项"
+status = "done"
+evidence = [
+  "file:复盘/C批口径定案.md",
+  "text:src/web/index.html::硬考核：临期与逾期",
+  "text:src/web/app.css::.card.hard",
+]
+gaps = ""
 
 [entries."T-C9"]
 id = "T-C9"
@@ -1262,6 +1294,20 @@ evidence = [
   "file:复盘/C批口径定案.md",
   "text:docs/specification/functional.md::不做任务分类字段",
   "text:docs/specification/domains/F1-tasks.md::R5b 三类任务",
+]
+gaps = ""
+
+[entries."T-C10"]
+id = "T-C10"
+title = "学业↔自学时间线对照（学业投入 = 只算挂了课程的任务专注）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "route:GET /api/insights/academic-vs-self",
+  "text:src/timeflow/core/insights.py::def academic_vs_self",
+  "text:src/web/index.html::academic-vs-self?days=90",
+  "test:test_insights.py",
+  "test:test_web_frontend.py",
 ]
 gaps = ""
 
