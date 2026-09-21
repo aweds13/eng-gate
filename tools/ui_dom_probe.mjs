@@ -77,8 +77,10 @@ for (const v of ['today', 'tasks', 'focus', 'stats', 'habit', 'academic', 'revie
   navButtons.push(b);
 }
 
+const shellEl = new El('div', 'shell');
 globalThis.document = {
   getElementById: (id) => byId.get(id) || null,
+  querySelector: (sel) => (sel === '.shell' ? shellEl : null),
   querySelectorAll: (sel) => (sel.includes('nav button') ? navButtons : []),
   addEventListener() {},
   createElement: (t) => new El(t),
@@ -168,6 +170,11 @@ const DB = {
     task_name: 'timeflow-reminders', installed: false, interval_minutes: 1,
     last_notify_at: null, last_result: null, last_error: null,
   },
+  // 专注白名单 / 勿扰设置（SR-F3.3 / GAP-F3-02）：设置页要能渲染已有条目（可增删）
+  '/api/focus/guard': {
+    block_by_default: true, whitelist: ['vscode', '微信'], do_not_disturb: ['22:00-07:00'],
+    note: '白名单 = 专注时允许用的来源。', window_format: 'HH:MM-HH:MM', max_items: 50,
+  },
   '/api/gpa': { gpa: 0, credits: 0, scale: '4.0', weighted_average: 0, weighted_credits: 0 },
   '/api/memos': [], '/api/ledger/outputs': [], '/api/ledger/invests': [],
   '/api/insights/daily': [], '/api/insights/groups': [], '/api/insights/heatmap': [],
@@ -201,6 +208,7 @@ let detailBad = 0;
 let doneBad = 0;
 let reviewBad = 0;
 let hardBad = 0;
+let guardBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -259,7 +267,9 @@ try {
   await globalThis.__view('today');
   await sleep(30);
   const html = byId.get('main')._html;
-  const needs = ['今天做成了什么', '第 1 题', '高数作业', '该任务进度 2/5 步', '已撤销（不计入条数）'];
+  const needs = ['今天做成了什么', '第 1 题', '高数作业', '该任务进度 2/5 步', '已撤销（不计入条数）',
+    // 新手引导（SR-NF2 / R5）：探针的 localStorage 返回 null → 首屏应出引导卡片且可关
+    '第一次用，按这三步走就行', 'guide-start', 'guide-done'];
   const missing = needs.filter((n) => !html.includes(n));
   const rendered = missing.length === 0;
   if (!rendered) doneBad++;
@@ -317,6 +327,27 @@ try {
   console.log(`  ❌ 学业·硬考核强呈现 渲染抛错: ${e.message}`);
 }
 
+// 专注白名单 / 勿扰设置（SR-F3.3 / GAP-F3-02）：设置页要真的把已有条目渲染出来（可增删）。
+const guardChecks = [];
+try {
+  byId.get('main')._html = '';
+  await globalThis.__view('setting');
+  await sleep(30);
+  const html = byId.get('main')._html;
+  const needs = ['set-focus-guard', 'guard-block', 'guard-wl-del', 'guard-dnd-del',
+    'guard-wl-add', 'guard-dnd-add', 'vscode', '22:00-07:00'];
+  const missing = needs.filter((n) => !html.includes(n));
+  const rendered = missing.length === 0;
+  if (!rendered) guardBad++;
+  guardChecks.push({ rendered, missing });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 设置·白名单勿扰 main ${String(html.length).padStart(6)}B`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  guardBad++;
+  guardChecks.push({ error: e.message });
+  console.log(`  ❌ 设置·白名单勿扰 渲染抛错: ${e.message}`);
+}
+
 try {
   const body = code.split('const ACTIONS')[1];
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
@@ -327,7 +358,7 @@ console.warn = realWarn;
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
     { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
-      hard: hardChecks, problems, unregistered: unused }, null, 2));
+      hard: hardChecks, guard: guardChecks, problems, unregistered: unused }, null, 2));
 }
 if (unused.length) {
   console.log(`  ❌ 模板里用到但未注册的动作：${unused.join(', ')}`);
@@ -336,11 +367,12 @@ if (problems.length) {
   console.log(`  ⚠️  运行时告警/异常：${problems.slice(0, 5).join(' | ')}`);
 }
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
-  || unused.length > 0 || problems.length > 0;
+  || guardBad > 0 || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
   + `，今日完成明细展开 ${doneChecks.length - doneBad}/${doneChecks.length} 正常`
   + `，复习卡编辑态 ${reviewChecks.length - reviewBad}/${reviewChecks.length} 正常`
   + `，硬考核强呈现 ${hardChecks.length - hardBad}/${hardChecks.length} 正常`
+  + `，白名单勿扰 ${guardChecks.length - guardBad}/${guardChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

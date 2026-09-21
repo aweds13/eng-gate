@@ -35,6 +35,7 @@ from timeflow.core import review as rv
 from timeflow.core import sync as sync_mod
 from timeflow.core import tasks as tm
 from timeflow.core import team as team
+from timeflow.core.focus import guard as fg
 from timeflow.core.ledger import ledger
 from timeflow.storage import db
 
@@ -163,6 +164,16 @@ def create_app(db_path: str | None = None) -> FastAPI:
     # 并发约定（见 storage/db.py）：HTTP 服务多线程共享 conn 变量，但底层**每线程一个连接**，
     # 否则一个请求的 commit() 会打断另一个请求的事务（表现为「快速点击 → 操作未完成」）。
     conn = db.thread_local(db_path)
+
+    def _guard_defaults() -> fg.GuardConfig:
+        """专注白名单/勿扰的**装机默认值**（来自 config.toml 的 [focus]）。
+
+        界面没改过就用它；改过则以 `app_settings` 里的为准（逐项独立，见 guard.get_settings）。
+        """
+        return fg.GuardConfig(
+            block_by_default=settings.focus.block_by_default,
+            dnd_windows=list(settings.focus.do_not_disturb),
+        )
 
     # 第 2 步：各线只发事实，跨线联动由订阅器接线（幂等，重复建 app 不叠加）
     from timeflow.core.focus import subscribers as focus_subscribers
@@ -726,11 +737,30 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.get("/api/focus/guard")
     def focus_guard() -> dict[str, object]:
-        cfg = settings.focus
-        return {
-            "block_by_default": cfg.block_by_default,
-            "do_not_disturb": cfg.do_not_disturb,
-        }
+        """专注白名单 / 勿扰时段（当前值 + 口径说明）。
+
+        GAP-F3-02 收口：以前只回读 config.toml、**没有任何写入口**；现在默认值仍来自 config.toml，
+        但本机在设置页改过的值存在 `app_settings` 里并优先（见 `core/focus/guard.py`）。
+        """
+        return {**fg.get_settings(conn, _guard_defaults()), **fg.describe_rules()}
+
+    @app.put("/api/settings/focus-guard")
+    def put_focus_guard(payload: dict[str, Any], request: Request) -> dict[str, object]:
+        """改专注白名单 / 勿扰时段。与附件打开方式一样**服务端持有 + 只接受本机页面**。
+
+        非法值 400（不静默落默认值、不静默清空）；`block_by_default` 必须是真布尔。
+        """
+        require_local_origin(request)
+        try:
+            return fg.set_settings(
+                conn,
+                defaults=_guard_defaults(),
+                block_by_default=payload.get("block_by_default"),
+                whitelist=payload.get("whitelist"),
+                do_not_disturb=payload.get("do_not_disturb"),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     # ---- SR-F4 反馈/习惯/自检 ----
     @app.post("/api/feedback")

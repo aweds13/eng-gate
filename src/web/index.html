@@ -29,6 +29,7 @@
       <button data-action="view" data-view="memo">备忘录</button>
       <button data-action="view" data-view="setting">设置</button>
       <button id="refresh" class="ghost" data-action="refresh">刷新</button>
+      <button id="railToggle" class="ghost" data-action="rail-toggle">收起右栏</button>
     </nav>
   </aside>
   <main id="main"></main>
@@ -38,13 +39,16 @@
   </aside>
 </div>
 <div class="toast" id="toast"></div>
+<!-- 壳级模态（R2/R5）：既做「问一句话」（ask），也做「危险动作二次确认」（confirmAsk）。
+     为什么不用原生 prompt/confirm：原生弹窗挡不住、和温和基调不符，也没法测。
+     confirm 态把输入框藏起来、把确定按钮改成动作名（如「删除」）—— 让人看清自己在确认什么。 -->
 <div class="modal" id="modal" hidden>
   <div class="modal-box">
     <div class="title" id="modalTitle"></div>
     <input id="modalInput" data-enter="modal-ok">
     <div class="row" style="justify-content:flex-end">
       <button class="ghost" data-action="modal-cancel">取消</button>
-      <button data-action="modal-ok">确定</button>
+      <button id="modalOk" data-action="modal-ok">确定</button>
     </div>
   </div>
 </div>
@@ -95,6 +99,10 @@ async function api(path,opts={}){
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function el(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
+/* 空态统一走这里（R5 收口）：**一处措辞、一处样式**。
+   约定：空态不写"失败/没有完成"，只如实说"这里还没有东西"（温和基调，见约定层）。
+   文案由调用点给（各页自己的话更贴切），组件只保证标记与转义一致。 */
+function emptyState(text){return `<div class="empty">${esc(text)}</div>`}
 // 本机今天（日期默认值 / 「推到明天」用）；按本地时区拼，避免 toISOString 的 UTC 偏移
 function todayISO(d){const x=d||new Date();return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`}
 // 事实时间戳 → 人话：「完成于 2026年09月18日 17:31」（后端存的是本地时间，用 "T" 分隔）
@@ -110,16 +118,35 @@ function defaultDateFields(ids){
 }
 let toastTimer=null;
 let modalResolve=null;
-/* 壳级模态：替代 prompt（温和、可键盘、可测试）。返回 Promise<string|null>。 */
+/* 壳级模态：替代 prompt（温和、可键盘、可测试）。返回 Promise<string|null>。
+   两种模式：`ask` 问一句（返回字符串或 null）/ `confirmAsk` 危险动作确认（返回 true/false）。
+   为什么要有 confirm 模式：原生 `confirm` 是浏览器的弹窗 —— 挡不住、样式与主题无关、
+   文案不能带动作名（"确定"看不出在确认什么），也没法在护栏里测。 */
+let modalMode='ask';
 function ask(title,value=''){
   const box=document.getElementById('modal'),input=document.getElementById('modalInput');
+  modalMode='ask';
   document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalOk').textContent='确定';
+  input.hidden=false;
   input.value=value;box.hidden=false;input.focus();input.select();
+  return new Promise(resolve=>{modalResolve=resolve});
+}
+/** 危险动作二次确认（R5 收口）：返回 Promise<boolean>。`okLabel` 写清动作（如「删除」）。 */
+function confirmAsk(title,okLabel='确定'){
+  const box=document.getElementById('modal'),input=document.getElementById('modalInput');
+  modalMode='confirm';
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalOk').textContent=okLabel;
+  input.hidden=true;                       // confirm 态不让人打字，只让人选
+  box.hidden=false;document.getElementById('modalOk').focus();
   return new Promise(resolve=>{modalResolve=resolve});
 }
 function closeModal(result){
   const box=document.getElementById('modal');if(box)box.hidden=true;
-  const r=modalResolve;modalResolve=null;if(r)r(result);
+  const r=modalResolve;modalResolve=null;
+  if(!r)return;
+  r(modalMode==='confirm'?result===true:result);   // confirm 态归一成 true/false
 }
 function toast(msg){const t=document.getElementById('toast');t.innerHTML=esc(msg);t.classList.add('show');
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
@@ -151,13 +178,24 @@ const ACTIONS = {
                             if(ACTIONS[k]){ACTIONS[k](el);return}
                             view(k); },
   'refresh':        () => view(current),
-  'modal-ok':       () => closeModal(document.getElementById('modalInput').value),
+  'modal-ok':       () => closeModal(modalMode==='confirm'?true:document.getElementById('modalInput').value),
   'modal-cancel':   () => closeModal(null),
   'toast-run':      () => { const fn=toastRun; toastRun=null; if(fn) fn(); },
   'set-heatmap':    el => setHeatmap(el.dataset.metric),
   'set-gpa':        el => setGpa(el.dataset.scale),
   'set-theme':      el => setTheme(el.dataset.themeChoice),
   'set-accent':     el => setAccent(el.dataset.color),
+  // 右栏折叠（SR-NF4 / GAP-NF-03）与新手引导（SR-NF2 / GAP-NF-02）—— R5 收口
+  'rail-toggle':    () => toggleRail(),
+  'guide-start':    () => guideStart(),
+  'guide-done':     () => { guideFinish(); render(current); },
+  'guide-replay':   () => guideReplay(),
+  // 专注白名单 / 勿扰（SR-F3.3 / GAP-F3-02）：口径与判定在后端，界面只负责配置
+  'guard-block':    el => setGuardBlock(el.dataset.on === 'true'),
+  'guard-wl-add':   () => addGuardWhitelist(),
+  'guard-wl-del':   el => delGuardWhitelist(el.dataset.name || ''),
+  'guard-dnd-add':  () => addGuardDnd(),
+  'guard-dnd-del':  el => delGuardDnd(el.dataset.win || ''),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -390,7 +428,7 @@ async function renderGroupAdmin(el){
         <span class="grow" style="flex:1">${esc(g.name)}</span>
         <button class="ghost" data-action="group-rename" data-id="${g.id}" data-name="${esc(g.name)}">改名</button>
         <button class="ghost" data-action="group-delete" data-id="${g.id}" data-name="${esc(g.name)}">删除</button>
-      </div>`).join('')||'<div class="empty">还没有分组</div>'}`;
+      </div>`).join('')||emptyState('还没有分组')}`;
 }
 async function addGroup(){
   const input=document.getElementById('groupName');
@@ -407,7 +445,7 @@ async function renameGroup(id,oldName){
   toast('分组已改名');view(current);
 }
 async function deleteGroup(id,name){
-  if(!confirm(`删除分组「${name}」？任务会保留，只是不再归到这个分组。`))return;
+  if(!await confirmAsk(`删除分组「${name}」？任务会保留，只是不再归到这个分组。`,'删除分组'))return;
   const r=await api(`/api/groups/${id}`,{method:'DELETE'});
   toast(`已删除分组（${r.unbound_tasks} 个任务解除归类）`);view(current);
 }
@@ -714,7 +752,7 @@ async function toggleMyDay(id,toMyDay){
 }
 async function removeTask(id){
   const t=await api(`/api/tasks/${id}`);
-  if(!confirm(`删除「${t.title}」？可在提示条里撤销。`))return;
+  if(!await confirmAsk(`删除「${t.title}」？可在提示条里撤销。`,'删除'))return;
   await api(`/api/tasks/${id}`,{method:'DELETE'});
   toastAction('已删除，可撤销',"撤销",async()=>{await api(`/api/tasks/${id}/restore`,{method:'POST'});toast('已恢复');view(current)});
   view(current);
@@ -724,13 +762,13 @@ async function restoreTask(id){
 }
 // 彻底删除（不可逆）：二次确认，措辞直白（软删除的「删除」按钮不吓人，这两个才吓人）
 async function purgeTask(id){
-  if(!confirm('彻底删除？这一步不可恢复，记录也会一起消失。'))return;
+  if(!await confirmAsk('彻底删除？这一步不可恢复，记录也会一起消失。','彻底删除'))return;
   await api(`/api/tasks/${id}/purge`,{method:'DELETE'});
   toast('已彻底删除');view(current);
 }
 async function emptyTrash(){
-  if(!confirm('清空回收站？里面的任务会被永久删除，不可恢复。'))return;
-  if(!confirm('再确认一次：真的永久删除回收站里的全部任务？'))return;
+  if(!await confirmAsk('清空回收站？里面的任务会被永久删除，不可恢复。','清空回收站'))return;
+  if(!await confirmAsk('再确认一次：真的永久删除回收站里的全部任务？','全部永久删除'))return;
   const r=await api('/api/tasks/purge-deleted',{method:'POST'});
   toast(`回收站已清空（${r.purged} 项永久删除）`);view(current);
 }
@@ -746,7 +784,7 @@ async function pushToTomorrow(id){
   toast('已推到明天，债务随之重算');view(current);
 }
 async function cancelTask(id){
-  if(!confirm('取消这个任务？取消后不再计入债务。'))return;
+  if(!await confirmAsk('取消这个任务？取消后不再计入债务。','取消任务'))return;
   await api(`/api/tasks/${id}`,{method:'PATCH',body:JSON.stringify({status:'取消'})});
   toast('已取消');view(current);
 }
@@ -771,7 +809,7 @@ async function renderTasks(m){
       <button data-action="task-add-here">添加</button></div>
     ${smartViewNavHTML('')}
     <div class="section-title">全部任务（${all.length}）</div>
-    ${all.map(t=>taskCard(t)).join('')||'<div class="empty">还没有任务</div>'}
+    ${all.map(t=>taskCard(t)).join('')||emptyState('还没有任务')}
     <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项；删除的任务在「今日 · 回收站」里可恢复或彻底删除。</div>`;
   defaultDateFields(['allDue']);
 }
@@ -798,7 +836,7 @@ async function renderSmart(m,view){
   m.innerHTML=`<div class="section-title">${esc(meta.title)}（${list.length}）</div>
     <div class="sub">${meta.note}</div>
     ${smartViewNavHTML(view)}
-    ${list.map(t=>taskCard(t)).join('')||'<div class="empty">这个视图下暂时没有任务</div>'}`;
+    ${list.map(t=>taskCard(t)).join('')||emptyState('这个视图下暂时没有任务')}`;
 }
 // 三个智能视图之间的互跳行：也让"手机端（左栏导航被隐藏）"有入口 —— 它挂在「全部任务」页与各视图自己头上。
 function smartViewNavHTML(active){
@@ -810,7 +848,7 @@ function smartViewNavHTML(active){
 // ---- 更细可视化（SR-F2.7 / SR-F4.2）：后端出数据，这里只出图形 ----
 function lineChart(points,valueOf,height){
   const pts=points.map(valueOf);
-  if(!pts.length)return '<div class="empty">暂无数据</div>';
+  if(!pts.length)return emptyState('暂无数据');
   const w=600,h=height||120,max=Math.max(1,...pts);
   const step=pts.length>1?w/(pts.length-1):0;
   const xy=pts.map((v,i)=>[i*step,h-(v/max)*(h-14)-4]);
@@ -936,7 +974,7 @@ function renderStats(m){
         <div style="margin-top:10px">${lineChart(daily,d=>d.focus_minutes)}</div>
         <div class="sub" style="display:flex;justify-content:space-between"><span>${daily.length?daily[0].date.slice(5):''}</span><span>今天</span></div></div>`;
       const dist=groups.length?barList(groups.map(g=>({
-        label:g.group,value:g.focus_hours,display:`${g.focus_hours}h · ${g.task_count} 个任务`}))):'<div class="empty">这段时间还没有绑定任务的专注</div>';
+        label:g.group,value:g.focus_hours,display:`${g.focus_hours}h · ${g.task_count} 个任务`}))):emptyState('这段时间还没有绑定任务的专注');
       // 学业投入 vs 自学投入（SR-F5.1b / T-C10）：口径见后端 `insights.academic_vs_self`
       const acSplit=`<div class="section-title">学业投入 vs 自学投入（近 ${split.days} 天）</div>
         <div class="card" style="display:block">
@@ -1128,15 +1166,15 @@ async function renderToday(m){
     <div class="row"><button class="ghost" data-action="task-restore" data-id="${t.id}">恢复</button>
     <button class="ghost" data-action="task-purge" data-id="${t.id}">彻底删除</button></div></div>`).join('')}
     <div class="new"><button class="ghost" data-action="trash-empty">清空回收站（${deleted.length} 项，不可恢复）</button></div>`:'';
-  m.innerHTML=`<div class="new">
+  m.innerHTML=`${guideCard()}<div class="new">
     <input id="newTitle" placeholder="今天要做什么？回车添加…" data-enter="task-add">
     <input id="newDue" type="date" title="截止日（默认今天，可改）">
     <label class="sub"><input type="checkbox" id="newMyDay" checked>也放进今天的清单</label>
     <button data-action="task-add">添加</button></div>
   ${todayCard(doneTasks,pendingTasks)}
   ${remind}
-  <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||'<div class="empty">没有逾期，很好</div>'}</div>
-  <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||'<div class="empty">今天还没有任务，挑一件加进来吧</div>'}
+  <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||emptyState('没有逾期，很好')}</div>
+  <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||emptyState('今天还没有任务，挑一件加进来吧')}
   ${doneSection(done)}
   ${due.length?`<div class="section-title">今天该复习（${due.length}）</div>${due.map(r=>reviewCard(r)).join('')}`:''}
   ${trash}
@@ -1204,7 +1242,7 @@ async function renderHabit(m){
     <div class="sub">习惯打卡**只记次数**，不折算成投入时间（时间折算只在有真实时长时才算）。想让它占用投入时间，
       去备忘录页「今日手动投入」按真实分钟补一笔（类型可选「习惯」）。</div></div>
   <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡" data-enter="habit-add"><button data-action="habit-add">新建</button></div>
-  ${cards||'<div class="empty">还没有习惯；建一个，明天就能看到热力图</div>'}
+  ${cards||emptyState('还没有习惯；建一个，明天就能看到热力图')}
   <div class="section-title">每日反馈（计划 vs 执行）</div>
   <textarea class="textarea" id="fbPlan" placeholder="计划：">${esc(fb&&fb.plan_note||'')}</textarea><br>
   <textarea class="textarea" id="fbGap" placeholder="差距/复盘：">${esc(fb&&fb.gap_note||'')}</textarea><br>
@@ -1222,7 +1260,7 @@ async function renameHabit(id,oldName){
   toast('已改名');view(current);
 }
 async function deleteHabit(id,name){
-  if(!confirm(`删除习惯「${name}」？它的打卡记录也会一起删掉，且不可恢复。`))return;
+  if(!await confirmAsk(`删除习惯「${name}」？它的打卡记录也会一起删掉，且不可恢复。`,'删除习惯'))return;
   await api(`/api/habits/${id}`,{method:'DELETE'});toast('已删除');view(current);
 }
 async function saveFeedback(){await api('/api/feedback',{method:'POST',body:JSON.stringify({plan_note:document.getElementById('fbPlan').value,gap_note:document.getElementById('fbGap').value})});
@@ -1296,7 +1334,7 @@ async function renderAcademic(m){
       ${open.length>5?`<div class="sub">还有 ${open.length-5} 项未完成；任务页可见全部。</div>`:''}
       ${ts.length&&!open.length?'<div class="sub">挂在这门课上的任务都已做完。</div>':''}
       ${ts.length?'':'<div class="sub">还没有挂到这门课的任务：在任务详情里把「类型」改成 作业/考试/论文/小测，再选这门课。</div>'}
-    </div>`}).join('')||'<div class="empty">暂无课程</div>'}
+    </div>`}).join('')||emptyState('暂无课程')}
   <div class="section-title">添加考核项（考试/作业/论文/小测）</div>
   <div class="card panel-card">
     <div class="form">
@@ -1339,7 +1377,7 @@ async function addAssessment(){
   toast('已添加考核项，临期会出现在提醒里');view(current);
 }
 async function delAssessment(id){
-  if(!confirm('删除这个考核项？'))return;
+  if(!await confirmAsk('删除这个考核项？','删除考核项'))return;
   await api(`/api/assessments/${id}`,{method:'DELETE'});toast('已删除');view(current);
 }
 // ---- 考核项的「要求链接」（SR-F5.3 / T-B4）：与任务附件同一个字段、同一套打开规则 ----
@@ -1362,7 +1400,7 @@ async function removeAssessmentAttachment(assessmentId,index){
   toast('已移除要求链接');view(current);
 }
 async function delGrade(id){
-  if(!confirm('删除这条成绩？GPA 会重新计算。'))return;
+  if(!await confirmAsk('删除这条成绩？GPA 会重新计算。','删除成绩'))return;
   await api(`/api/grades/${id}`,{method:'DELETE'});toast('已删除，GPA 已重算');view(current);
 }
 async function addCourse(){const name=document.getElementById('cName').value.trim();if(!name)return;
@@ -1437,7 +1475,7 @@ async function renderReview(m){
     <div class="sub" style="margin-top:6px">${total?`还剩 ${due.length} 张；点了「记得/模糊/忘了」就会计入进度。`:'今天没有到期的复习卡。'}</div></div>
   <div class="new"><input id="rvTitle" placeholder="新建复习卡内容"><button data-action="review-add">新建</button></div>
   <div class="section-title">到期复习（${due.length}）</div>
-  ${due.map(r=>reviewCard(r)).join('')||'<div class="empty">没有到期复习，轻松一下</div>'}`;
+  ${due.map(r=>reviewCard(r)).join('')||emptyState('没有到期复习，轻松一下')}`;
 }
 async function addReview(){const title=document.getElementById('rvTitle').value.trim();if(!title)return;
   await api('/api/review/items',{method:'POST',body:JSON.stringify({title})});view(current)}
@@ -1459,7 +1497,7 @@ async function renderMemo(m){
   m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…" data-enter="memo-add"><button data-action="memo-add">记录</button></div>
   ${memos.map(x=>`<div class="card"><div style="flex:1"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge">${esc(x.ref_handle)}</span>`:''}${x.task_id?'<span class="badge">已转任务</span>':''}</div></div>
     <div class="row">${x.task_id?'':`<button class="ghost" data-action="memo-to-task" data-id="${x.id}">转为任务</button>`}
-    <button class="ghost" data-action="memo-delete" data-id="${x.id}">删除</button></div></div>`).join('')||'<div class="empty">暂无备忘录</div>'}
+    <button class="ghost" data-action="memo-delete" data-id="${x.id}">删除</button></div></div>`).join('')||emptyState('暂无备忘录')}
   <div class="section-title">今日手动投入（独立于专注投入）</div>
   <div class="new">
     <select id="inKind"><option value="focus">专注补记</option><option value="habit">习惯</option><option value="other">其它</option></select>
@@ -1469,7 +1507,7 @@ async function renderMemo(m){
     <button data-action="invest-add">记一笔投入</button></div>
   ${invests.map(i=>`<div class="card ${i.retracted?'done':''}"><div style="flex:1"><div class="title">${esc(i.note||i.kind)} · ${i.minutes} 分钟</div>
     <div class="meta">${i.kind}${i.retracted?' · 已撤销':''}</div></div>
-    ${i.retracted?'':`<button class="ghost" data-action="invest-retract" data-id="${i.entry_id}">撤销</button>`}</div>`).join('')||'<div class="empty">今天还没有手动投入</div>'}
+    ${i.retracted?'':`<button class="ghost" data-action="invest-retract" data-id="${i.entry_id}">撤销</button>`}</div>`).join('')||emptyState('今天还没有手动投入')}
   <div class="section-title">今日产出（独立于投入轴）</div>
   <div class="new">
     <select id="outKind"><option value="asset">知识资产</option><option value="kpi">学校 KPI</option></select>
@@ -1479,7 +1517,7 @@ async function renderMemo(m){
   <div class="meta">按两类分开看（T-C4）：学校 KPI ${outputs.filter(o=>o.kind==='kpi'&&!o.retracted).length} 条 · 知识资产 ${outputs.filter(o=>o.kind==='asset'&&!o.retracted).length} 条 —— 同一份产出事实，只是分组显示（不拆轴、不折算）。</div>
   ${outputs.map(o=>`<div class="card ${o.retracted?'done':''}"><div style="flex:1"><div class="title">${esc(o.note||o.kind)} ×${o.value}</div>
     <div class="meta">${o.kind==='kpi'?'学校 KPI':'知识资产'}${o.retracted?' · 已撤销':''}</div></div>
-    ${o.retracted?'':`<button class="ghost" data-action="output-retract" data-id="${o.entry_id}">撤销</button>`}</div>`).join('')||'<div class="empty">今天还没有产出记录</div>'}`;
+    ${o.retracted?'':`<button class="ghost" data-action="output-retract" data-id="${o.entry_id}">撤销</button>`}</div>`).join('')||emptyState('今天还没有产出记录')}`;
 }
 async function addMemo(){const text=document.getElementById('memoTxt').value.trim();if(!text)return;
   await api('/api/memos',{method:'POST',body:JSON.stringify({text})});view(current)}
@@ -1488,7 +1526,7 @@ async function memoToTask(id){
   toast(`已建成任务并加入今天（${r.task_id.slice(0,6)}…）`);view(current);
 }
 async function deleteMemo(id){
-  if(!confirm('删除这条备忘录？关联的任务会保留。'))return;
+  if(!await confirmAsk('删除这条备忘录？关联的任务会保留。','删除备忘录'))return;
   await api(`/api/memos/${id}`,{method:'DELETE'});toast('已删除');view(current);
 }
 async function addInvest(){
@@ -1515,14 +1553,50 @@ async function retractOutput(entryId){
   await api(`/api/ledger/output/${entryId}`,{method:'DELETE'});toast('已撤销该笔产出');view(current);
 }
 
+// ---- 专注白名单 / 勿扰设置（SR-F3.3 / GAP-F3-02）----
+// 口径与判定只在后端一处（`core/focus/guard.py`；`/api/focus/guard` 连口径说明一起返回，
+// 界面不复述规则）。非法值后端 400，原话由 api() 弹出来 —— **不静默降级、不静默清空**。
+let guardCache=null;
+function guardNow(){return guardCache||{block_by_default:true,whitelist:[],do_not_disturb:[]}}
+async function setGuard(body,okMsg){
+  await api('/api/settings/focus-guard',{method:'PUT',body:JSON.stringify(body)});
+  toast(okMsg);view(current);
+}
+async function setGuardBlock(on){
+  await setGuard({block_by_default:on},on?'专注时只放行白名单':'已改为一律放行（白名单仍优先）');
+}
+async function addGuardWhitelist(){
+  const el=document.getElementById('guardWl');const v=(el&&el.value||'').trim();
+  if(!v){toast('先写一个来源名（如 vscode / 微信）');return}
+  const cur=guardNow().whitelist||[];
+  if(cur.includes(v)){toast('这条已经在白名单里了');return}
+  await setGuard({whitelist:[...cur,v]},`已加入白名单：${v}`);
+}
+async function delGuardWhitelist(name){
+  await setGuard({whitelist:(guardNow().whitelist||[]).filter(x=>x!==name)},`已移出白名单：${name}`);
+}
+async function addGuardDnd(){
+  const el=document.getElementById('guardDnd');const v=(el&&el.value||'').trim();
+  if(!v){toast('按 HH:MM-HH:MM 写一个时段，例如 22:00-07:00');return}
+  const cur=guardNow().do_not_disturb||[];
+  if(cur.includes(v)){toast('这个时段已经加过了');return}
+  await setGuard({do_not_disturb:[...cur,v]},`已加上勿扰时段：${v}`);
+}
+async function delGuardDnd(win){
+  await setGuard({do_not_disturb:(guardNow().do_not_disturb||[]).filter(x=>x!==win)},
+    `已移除勿扰时段：${win}`);
+}
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups,attachCfg,remindCfg]=await Promise.all([
+  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg]=await Promise.all([
     api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach'),
-    api('/api/settings/reminder')]);
+    api('/api/settings/reminder'),api('/api/focus/guard')]);
   groupCache=groups||[];
+  guardCache=guardCfg||null;
   const off=!navigator.onLine;
+  const guard=guardCache||{block_by_default:true,whitelist:[],do_not_disturb:[],
+    note:'',window_format:'HH:MM-HH:MM',max_items:50};
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
     `<button class="swatch ${sameColor(accentChoice,c)?'on':''}" data-action="set-accent" data-color="${c}"
@@ -1545,6 +1619,30 @@ async function renderSetting(m){
     <div class="row">${swatches}
       <button class="ghost" data-action="set-accent" data-color="">恢复默认（配置：${esc(cfg.accent_color||'—')}）</button></div>
     <div class="sub">强调色在本机记住；想改成别的颜色，改 config.toml 的 app.accent_color 后会作为默认值出现。</div>
+    <div class="settings-sub">右栏（宽屏才有）</div>
+    <div class="row"><button class="ghost" data-action="rail-toggle">${railOff?'展开右栏':'收起右栏'}</button></div>
+    <div class="sub">收起后中列更宽；计时器与任务详情在右栏里，收起时它们一起藏起来（再点一次就回来）。选择记在本机。</div>
+    <div class="settings-sub">新手引导</div>
+    <div class="row"><button class="ghost" data-action="guide-replay">再看一遍新手引导</button></div>
+    <div class="sub">引导只在今日页出现、可一键关掉，不再打扰；这里可以随时重新打开。</div>
+  </div>
+  <div class="section-title" id="set-focus-guard">专注（白名单 / 勿扰）</div>
+  <div class="card panel-card">
+    <div class="settings-sub">非白名单来源</div>
+    <div class="row">
+      <button class="${guard.block_by_default?'':'ghost'}" data-action="guard-block" data-on="true">专注时阻止</button>
+      <button class="${guard.block_by_default?'ghost':''}" data-action="guard-block" data-on="false">一律放行</button></div>
+    <div class="settings-sub">白名单（专注时允许用的来源）</div>
+    <div class="row tight">${guard.whitelist.length?guard.whitelist.map(x=>
+      `<button class="ghost" data-action="guard-wl-del" data-name="${esc(x)}" title="点一下移出白名单">${esc(x)} ✕</button>`).join(''):'<span class="sub">还没有白名单条目</span>'}</div>
+    <div class="new"><input id="guardWl" placeholder="来源名，如 vscode / 微信" data-enter="guard-wl-add">
+      <button class="ghost" data-action="guard-wl-add">加入白名单</button></div>
+    <div class="settings-sub">勿扰时段</div>
+    <div class="row tight">${guard.do_not_disturb.length?guard.do_not_disturb.map(x=>
+      `<button class="ghost" data-action="guard-dnd-del" data-win="${esc(x)}" title="点一下移除">${esc(x)} ✕</button>`).join(''):'<span class="sub">还没有勿扰时段</span>'}</div>
+    <div class="new"><input id="guardDnd" placeholder="22:00-07:00（24 小时制，可跨午夜）" data-enter="guard-dnd-add">
+      <button class="ghost" data-action="guard-dnd-add">加上时段</button></div>
+    <div class="sub">${esc(guard.note||'')} 时段写成 ${esc(guard.window_format||'HH:MM-HH:MM')}，最多 ${guard.max_items||50} 条。</div>
   </div>
   <div class="section-title" id="set-academic">学业</div>
   <div class="card panel-card">
@@ -1731,6 +1829,56 @@ function initTheme(){
   }catch(e){}
 }
 initTheme();
+
+/* ---------- 右栏可折叠（SR-NF4 / GAP-NF-03）----------
+ * 宽屏用户可以把右栏收起，换更宽的中列；选择记在本机（localStorage），刷新后保持。
+ * 窄屏右栏本来是堆叠的，收起同样有效（`.shell.rail-off .sidebar` 直接 display:none）。
+ * 入口两处：左栏按钮 + 设置页「外观」区 —— 手机端左栏 nav 是隐藏的，只放那里等于进不去。 */
+const RAIL_KEY='tf_rail';
+let railOff=false;
+function applyRail(){
+  const shell=document.querySelector('.shell');
+  if(shell)shell.classList.toggle('rail-off',railOff);
+  const b=document.getElementById('railToggle');
+  if(b)b.textContent=railOff?'展开右栏':'收起右栏';
+}
+function toggleRail(){
+  railOff=!railOff;
+  try{localStorage.setItem(RAIL_KEY,railOff?'off':'on')}catch(e){}
+  applyRail();
+  toast(railOff?'已收起右栏（中列更宽）':'已展开右栏');
+}
+
+/* ---------- 新手引导（SR-NF2 / GAP-NF-02）----------
+ * 需求：打开就要知道"先干什么"（建任务 → 开专注 → 记反馈），但**不许拦路** ——
+ * 所以它不是遮罩弹窗，而是今日页顶部一张卡片：可一键关掉、之后不再出现，设置页留「再看一遍」。
+ * 状态只存本机；没读到设置时按"看过"处理（避免任何情况下突然多出一块东西）。 */
+const GUIDE_KEY='tf_guide';
+let guideDone=true;
+function guideSeen(){try{return localStorage.getItem(GUIDE_KEY)==='done'}catch(e){return true}}
+function guideCard(){
+  if(guideDone)return '';
+  return `<div class="card panel-card" id="guideCard">
+    <div class="title">第一次用，按这三步走就行</div>
+    <div class="sub">① 在下面的输入框写下一件要做的事（回车即可）→ ② 点「专注」开始计时，正常结束时会计入今天的投入 →
+      ③ 晚上在专注页跟一句「今天计划 vs 实际」。</div>
+    <div class="sub">不用一次做全，这只是个起点；随时可以关掉，之后想再看就在设置页点「再看一遍新手引导」。</div>
+    <div class="row" style="margin-top:8px">
+      <button data-action="guide-start">好，先写第一件事</button>
+      <button class="ghost" data-action="guide-done">知道了，不再显示</button>
+    </div></div>`;
+}
+function guideFinish(){guideDone=true;try{localStorage.setItem(GUIDE_KEY,'done')}catch(e){}}
+function guideStart(){
+  guideFinish();view('today');
+  const i=document.getElementById('newTitle');if(i)i.focus();
+}
+function guideReplay(){
+  guideDone=false;try{localStorage.removeItem(GUIDE_KEY)}catch(e){}
+  toast('新手引导已重新打开');view('today');
+}
+try{railOff=localStorage.getItem(RAIL_KEY)==='off';guideDone=guideSeen()}catch(e){}
+applyRail();
 
 // PWA：注册 service worker（仅 secure context，如 https 或 localhost）
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}

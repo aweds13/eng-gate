@@ -194,8 +194,8 @@ def test_main_stays_bounded_and_padded_on_wide_screens() -> None:
         assert need in rule, f"宽屏 main 规则缺 {need}（会被后面的基础规则覆盖）→ {rule.strip()}"
     # 中列同时受"宽度上限"与"自身 max-width"约束，且整体居中
     assert "justify-content: center" in wide
-    # 窄屏才需要给底部固定 Tab 留 90px；宽屏不该白留一条
-    assert "@media (min-width: 980px)" in css and "padding: 0 24px" in wide
+    # 窄屏才需要给底部固定 Tab 留出空间；宽屏不该白留一条（R5 起这个尺寸是令牌 --nav-clearance）
+    assert "@media (min-width: 980px)" in css and "padding: 0 var(--sp-10)" in wide
 
 
 def test_focus_timer_has_single_owner() -> None:
@@ -252,7 +252,7 @@ def test_check_circle_is_a_real_circle() -> None:
     css = WEB_CSS.read_text(encoding="utf-8")
     check = css.split(".check {", 1)[1].split("}", 1)[0]
     for need in ("appearance: none", "width: 22px", "height: 22px", "min-width: 22px",
-                 "border-radius: 999px", "padding: 0"):
+                 "border-radius: var(--r-pill)", "padding: 0"):
         assert need in check, f"完成圈缺少 {need}（会变椭圆/被压扁）→ {check.strip()}"
 
 
@@ -661,6 +661,7 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
         ("get", "/api/sync/status", None),
         ("get", "/api/focus/today", None),
         ("get", "/api/focus/active", None),
+        ("get", "/api/focus/guard", None),
         ("get", "/api/feedback", None),
         ("get", "/api/selfcheck", None),
         ("get", "/api/review/due", None),
@@ -842,3 +843,112 @@ def test_academic_vs_self_chart_is_wired() -> None:
     assert "手动投入不参与这张图" in stats, "必须说明手动投入不参与（与分组图同口径）"
     for bad in ("应该", "达标", "落后"):
         assert bad not in stats.split("acSplit=", 1)[1][:1200], f"对照图措辞不许出现「{bad}」"
+
+
+# ------------------------------------------------------- 前端批次③（R5 收口 / 折叠 / 引导）
+
+def test_no_native_confirm_left_on_the_page() -> None:
+    """R5（SR-NF5「不可逆操作二次确认」）：二次确认必须走**壳级模态**，不许再叫原生 `confirm`。
+
+    理由：原生弹窗样式与主题无关、挡不住、文案里写不清"在确认什么"（永远是"确定"），
+    也没法在护栏里测。壳级模态给了 `confirmAsk(title, okLabel)`：确定按钮写上动作名，
+    取消/ESC/点外面都归成 false。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "confirm(" not in html, "还有原生 confirm（应换成 confirmAsk）"
+    assert "function confirmAsk(" in html and "let modalMode='ask'" in html
+    assert "'modal-ok':       () => closeModal(modalMode==='confirm'?true:" in html, \
+        "确定按钮没按模式归一（confirm 态必须给 true/false，不能给输入框的空串）"
+    assert "modalMode==='confirm'?result===true:result" in html, "closeModal 没按模式归一返回值"
+    # 二次确认的"动作名"要写上（否则用户看不出在确认什么）
+    for label in ("'删除分组'", "'彻底删除'", "'清空回收站'", "'全部永久删除'", "'取消任务'"):
+        assert label in html, f"确认按钮缺动作名 {label}"
+
+
+def test_empty_states_go_through_one_helper() -> None:
+    """R5（SR-NF1b 视觉统一）：空态只有**一处**标记与措辞入口（`emptyState()`）。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    # 唯一允许出现字面量空态标记的地方就是 emptyState() 自己（它把标记收在一处）
+    assert html.count('<div class="empty">') == 1, "还有直接写死的空态（应收进 emptyState）"
+    assert "function emptyState(text)" in html
+    assert html.count("emptyState('") >= 12, "空态用得这么少，多半是没收干净"
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert ".empty {" in css, "app.css 缺空态样式"
+
+
+def test_right_rail_is_collapsible() -> None:
+    """SR-NF4 / GAP-NF-03：右栏可折叠（宽屏换更宽中列），选择记在本机，两处入口。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert ".shell.rail-off .sidebar { display: none }" in css, "缺折叠样式"
+    assert "function applyRail(" in html and "function toggleRail(" in html
+    assert "'rail-toggle':" in html and 'data-action="rail-toggle"' in html
+    assert "const RAIL_KEY='tf_rail'" in html, "折叠选择没记在本机（刷新就丢）"
+    assert "railOff?'展开右栏':'收起右栏'" in html, "按钮文案没跟着状态走"
+    setting = html.split('data-action="rail-toggle">', 1)[1][:80]
+    assert "收起右栏" in setting or "展开右栏" in setting, "设置页缺折叠入口（手机端左栏是隐藏的）"
+
+
+def test_first_run_guide_is_skippable_and_replayable() -> None:
+    """SR-NF2 / GAP-NF-02：新手引导（三步）可跳过、可重看，**且不拦路**（不是遮罩弹窗）。"""
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "function guideCard(" in html and "function guideReplay(" in html
+    assert "const GUIDE_KEY='tf_guide'" in html, "引导状态没记在本机（每次打开都弹）"
+    for action in ("guide-start", "guide-done", "guide-replay"):
+        assert f"'{action}':" in html, f"动作 {action} 没注册"
+    today = html.split("async function renderToday(m){", 1)[1].split("\n}", 1)[0]
+    assert "${guideCard()}" in today, "引导卡片没进今日页"
+    guide = html.split("function guideCard(){", 1)[1].split("\n}", 1)[0]
+    for step in ("①", "②", "③"):
+        assert step in guide, "三步要写全（建任务 → 开专注 → 记反馈）"
+    assert "不再显示" in guide, "必须有一键关掉（不许拦路）"
+    assert "box.hidden=false" not in guide, "引导不该用遮罩弹窗"
+    assert 'data-action="guide-replay"' in html, "设置页缺「再看一遍」入口"
+
+
+def test_r5_scale_tokens_are_the_only_way_to_write_sizes() -> None:
+    """R5（SR-NF1b「字体/间距/圆角/阴影统一」）：组件只写**令牌**，不写裸像素。
+
+    为什么值得一条护栏：R5 的验收标准是"统一"，而"统一"如果只写在文档里，下一轮就漂了。
+    有了令牌 + 这条断言，"48 种间距取值"这类事会被挡住。
+    白名单只留发丝级内缩（1~3px：描边/内衬，不是间距档位）。
+    """
+    css = WEB_CSS.read_text(encoding="utf-8")
+    for token, value in (("--sp-1", "4px"), ("--sp-5", "12px"), ("--sp-11", "30px"),
+                         ("--r-xs", "6px"), ("--r-lg", "12px"), ("--r-pill", "999px"),
+                         ("--fs-xs", "11px"), ("--fs-xl", "18px"),
+                         ("--nav-clearance", "90px"), ("--page-bottom", "60px")):
+        assert f"{token}: {value};" in css, f"尺度令牌 {token} 缺失或值变了"
+    assert not re.findall(r"border-radius:\s*[^;{}]*\d+px", css), "圆角还有裸像素"
+    assert not re.findall(r"font-size:\s*[^;{}]*\d+px", css), "字号还有裸像素"
+    spacing = re.findall(
+        r"((?:padding|margin|gap)(?:-(?:top|right|bottom|left))?):\s*([^;{}]+)", css
+    )
+    bad = [f"{p}: {v.strip()}" for p, v in spacing
+           if re.search(r"(?<![\w-])(?!1px\b|2px\b|3px\b)\d+px", v)]
+    assert bad == [], f"间距还有裸像素（用令牌，或进白名单并说明理由）：{bad}"
+    # 状态色只走语义令牌：完成=--ok、到期债务=--danger、专注=--accent
+    assert ".card.overdue { border-left: 3px solid var(--danger) }" in css
+    assert ".card.hard { border-left: 5px solid var(--danger) }" in css
+    assert "var(--ok) 18%" in css and "var(--danger) 18%" in css
+    # 阴影也走令牌（亮/暗各一处定义）
+    assert css.count("--shadow:") == 2 and "box-shadow: var(--shadow)" in css
+
+
+def test_guard_settings_are_editable_from_the_setting_page() -> None:
+    """SR-F3.3 / GAP-F3-02：白名单与勿扰时段能在设置页增删 —— 以前只有只读的 GET。
+
+    界面只发 `{block_by_default|whitelist|do_not_disturb}`；**规则与判定在后端一处**
+    （`/api/focus/guard` 连口径说明一起返回，界面不复述）。非法值由后端 400 + api() 弹原话。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "'/api/focus/guard'" in html and "set-focus-guard" in html
+    for action in ("guard-block", "guard-wl-add", "guard-wl-del", "guard-dnd-add", "guard-dnd-del"):
+        assert f"'{action}':" in html, f"动作 {action} 没注册"
+    setting = html.split("async function renderSetting(m){", 1)[1].split("\n}", 1)[0]
+    assert "api('/api/focus/guard')" in setting, "设置页没取 guard 当前值"
+    put = html.split("async function setGuard(body,okMsg){", 1)[1].split("\n}", 1)[0]
+    assert "/api/settings/focus-guard" in put and "method:'PUT'" in put
+    assert "guardNow()" in html, "增删要以当前值为基准（否则并发改会互相覆盖）"
+    # 口径说明来自后端，界面不复述规则
+    assert "guard.note" in setting and "guard.window_format" in setting

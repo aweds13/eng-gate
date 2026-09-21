@@ -69,7 +69,11 @@
 - **业务线订阅器**（第 2 步）：`subscribers.py` —— `focus.finished` → 当日反馈自动累加（跨线联动只在这里接线，
   业务线之间不直接调用）。
 - **白名单/勿扰**（SR-F3.3）：`guard.py` 默认阻止非白名单、勿扰时段（含跨午夜）。
-  ⚠️ **前端没有设置界面**（只有后端判定），见 `../../复盘/全量审计报告-五层一致性与缺口登记.md` GAP-F3-02。
+  **设置界面已接上（前端批次③，2026-09-20 / GAP-F3-02 收口）**：默认值来自 `config.toml` 的 `[focus]`，
+  本机改过的存 `app_settings`（`focus_block_by_default` / `focus_whitelist` / `focus_dnd`）并优先，
+  **逐项独立**；`GET /api/focus/guard` 连口径说明一起返回，`PUT /api/settings/focus-guard`
+  服务端持有 + 只接受本机页面；`to_config()` 让判定与界面**共用同一份口径**。
+  边界：**只做配置与判定，不做系统级屏蔽**（那需要桌面壳能力）。
 - **多设备同步专注**（SR-F3.4）：**未实现**。`core/sync.py` 只有 LWW 合并语义与冲突日志，
   **没有专注状态（或任何数据）的跨端推拉传输**；`GET /api/sync/status` 如实返回 `enabled=false`。
   （旧文案写"靠 storage 的同步转发专注状态"是**文档失真**，2026-09-18 审计修正。）
@@ -198,8 +202,10 @@
 
 | SR-NF | 实现关键 |
 |---|---|
-| NF1 美感 | 前端 CSS（自定义强调色/主题）；`src/web/index.html` 单文件、无构建步骤 |
-| NF2 交互低门槛 | 前端默认 My Day、一键操作、温和 toast（不弹窗施压） |
+| NF1 美感 | 前端 CSS（自定义强调色/主题）；`src/web/index.html` 单文件、无构建步骤。**R5 起有尺度令牌**：间距 `--sp-1..11` / 圆角 `--r-*` / 字号 `--fs-*` / 布局常量 `--nav-clearance`、`--page-bottom` —— 组件**只写令牌不写裸像素**（护栏强制），空态统一走 `emptyState()` |
+| NF2 交互低门槛 | 前端默认 My Day、一键操作、温和 toast（不弹窗施压）。**新手引导**（R5）：今日页三步卡片，可一键关掉/设置页可重看，**不用遮罩弹窗**（不拦路） |
+| NF4 一屏到底 | 三栏（左导航/中列表/右详情）+ 渐进聚焦；**右栏可折叠**（`.shell.rail-off`，选择记本机 `tf_rail`，左栏与设置页两处入口） |
+| NF5 反馈与可回退 | 完成划线 / toast / 删除可撤销；**不可逆操作二次确认走壳级模态** `confirmAsk(title, 动作名)`（R5 起页面里**没有原生 `confirm`**，护栏断言） |
 | NF6 可维护 | 模块化分层 + 局部错误隔离（订阅者异常记入 `facts.errors`，不崩全局） |
 | NF14 配置 | `config.py` pydantic 校验 + `config.example.toml` + `TIMEFLOW_*` env 覆盖 |
 | NF15 测试 | 覆盖矩阵见 `coverage.md`（测试文件数不写死在这里，避免随代码漂移）+ `tests/acceptance/` 可执行验收 + `tools/lf1_live_check.py` 真机。覆盖率门槛**已写进 `pyproject`**（`--cov-fail-under=70`）；未做的是规格写的 `integration` marker（现由真机自检脚本替代），见 `traceability.toml` 的 SR-NF15 |

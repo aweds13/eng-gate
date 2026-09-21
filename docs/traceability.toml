@@ -310,11 +310,17 @@ gaps = ""
 
 [entries."SR-F3.3"]
 id = "SR-F3.3"
-title = "白名单/勿扰判定 + 设置界面"
+title = "专注白名单（默认阻止非白名单）+ 勿扰时段 + 设置界面"
 group = "F3"
-status = "partial"
-evidence = ["text:src/timeflow/core/focus/guard.py::白名单", "route:GET /api/focus/guard"]
-gaps = "后端判定有；**前端无任何设置界面**（GAP-F3-02）"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/focus/guard.py::白名单",
+  "route:GET /api/focus/guard",
+  "route:PUT /api/settings/focus-guard",
+  "text:src/web/index.html::set-focus-guard",
+  "test:test_focus_guard_line.py",
+]
+gaps = ""
 
 [entries."SR-F3.4"]
 id = "SR-F3.4"
@@ -601,19 +607,31 @@ gaps = ""
 
 [entries."SR-NF1b"]
 id = "SR-NF1b"
-title = "视觉美感：状态色（完成/到期债务/专注/复盘差距）+ 字体/间距/圆角/阴影统一"
+title = "视觉美感：状态色（完成/到期债务/专注）+ 字体/间距/圆角/阴影统一（尺度令牌）"
 group = "NF"
-status = "partial"
-evidence = ["text:src/web/app.css::--danger", "text:src/web/app.css::--ok"]
-gaps = "状态色刚接入 2 处；间距 48 种取值未收敛（GAP-NF-01，随 R5）"
+status = "done"
+evidence = [
+  "text:src/web/app.css::--danger",
+  "text:src/web/app.css::--ok",
+  "text:src/web/app.css::--sp-1: 4px",
+  "text:src/web/index.html::function emptyState(",
+  "test:test_web_frontend.py",
+]
+gaps = ""
 
 [entries."SR-NF2"]
 id = "SR-NF2"
-title = "交互低门槛：打开即 My Day + 一键操作 + 可撤销 + 空态友好（新手引导未做）"
+title = "交互低门槛：打开即 My Day + 一键操作 + 可撤销 + 空态友好 + 新手引导"
 group = "NF"
-status = "partial"
-evidence = ["text:src/web/index.html::view('today')", "ui:data-action=toast-run"]
-gaps = "无新手引导（GAP-NF-02）"
+status = "done"
+evidence = [
+  "text:src/web/index.html::view('today')",
+  "ui:data-action=toast-run",
+  "text:src/web/index.html::function guideCard(",
+  "text:src/web/index.html::const GUIDE_KEY=",
+  "test:test_web_frontend.py",
+]
+gaps = ""
 
 [entries."SR-NF3"]
 id = "SR-NF3"
@@ -625,18 +643,29 @@ gaps = ""
 
 [entries."SR-NF4"]
 id = "SR-NF4"
-title = "一屏到底、不淹没：左导航 + 中列表 + 右详情（可折叠）+ 渐进式聚焦"
+title = "一屏到底、不淹没：左导航 + 中列表 + 右详情（**可折叠**）+ 渐进式聚焦"
 group = "NF"
-status = "partial"
-evidence = ["text:src/web/index.html::class=\"rail\"", "text:src/web/index.html::class=\"sidebar\"", "test:test_web_frontend.py"]
-gaps = "三栏已落地；右栏无折叠开关（GAP-NF-03）"
+status = "done"
+evidence = [
+  "text:src/web/index.html::class=\"rail\"",
+  "text:src/web/index.html::class=\"sidebar\"",
+  "test:test_web_frontend.py",
+  "text:src/web/app.css::.shell.rail-off .sidebar",
+  "text:src/web/index.html::function toggleRail(",
+]
+gaps = ""
 
 [entries."SR-NF5"]
 id = "SR-NF5"
 title = "反馈与可回退：完成划线 / 保存 toast / 删除可撤销 / 不可逆操作二次确认"
 group = "NF"
 status = "done"
-evidence = ["text:src/web/index.html::toastAction", "text:src/web/index.html::confirm("]
+evidence = [
+  "text:src/web/index.html::toastAction",
+  "text:src/web/index.html::function confirmAsk(",
+  "text:src/web/index.html::function confirmAsk(",
+  "test:test_web_frontend.py",
+]
 gaps = ""
 
 [entries."SR-NF6"]
