@@ -1,4 +1,4 @@
-"""F1/F5 主线 · 段2 · T-B4：附件 / 要求链接（SR-F1.4「附件」+ SR-F5.3「跳转本地文件/网站」）。
+"""F1/F5 主线 · 段2 · T-B4：附件 / 要求链接（SR-F1.4a「附件」+ SR-F5.3「跳转本地文件/网站」）。
 
 覆盖：
 - schema v8 → v9：`tasks.attach` 与 `course_assessments.attach` 两列 + `app_settings` 表

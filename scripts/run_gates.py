@@ -38,16 +38,17 @@ COMMON = [
     ("check_layers_selftest", [PY, "-X", "utf8", "scripts/test_check_layers.py"]),
     ("ui_dom_probe", []),          # 占位：下面按 node 是否可用来填
     ("audit", [PY, "-X", "utf8", "scripts/audit_progress.py", "--all"]),
+    # 台账↔规格 标题对账（T-D2）：`--check` 一发现「确定错位」或「无规格对应的 SR 卡」就退 1。
+    # 2026-09-20 校正前它挂的是"信息性"（blocking=false）—— 因为台账里 F/NF 两层编号错位还没修，
+    # 一接进来就会 FAIL。T-D1 校正完（见 `复盘/台账编号校正-方案A落地.md`）后转正为阻断项。
+    ("audit_titles", [PY, "-X", "utf8", "scripts/audit_titles.py", "--check"]),
 ]
 REAL = [
     ("lf1_live", [PY, "-X", "utf8", "tools/lf1_live_check.py"]),
     ("web_live", [PY, "-X", "utf8", "tools/web_live_check.py"]),
 ]
-# 信息性检查（**暂不阻断**）：台账↔规格 标题对账。
-# 为什么现在不阻断：台账里 F/NF 两层的编号错位还没校正（任务卡 T-D1），一接进来就会 FAIL。
-# 但**要让它每次跑门禁都露一次脸** —— 否则这份欠账又会被忘掉（这正是它当初躲过审计的原因）。
-# T-D1 做完后：把这里换成 audit_titles.py --check（有"确定错位"即退出码 1），并改成阻断项。
-INFO_GATES = [("audit_titles", [PY, "-X", "utf8", "scripts/audit_titles.py"])]
+# 信息性检查（只报告、不阻断）—— 当前为空：`audit_titles` 已转正为阻断项（T-D2 收口）。
+INFO_GATES: list[tuple[str, list[str]]] = []
 SUCCESS_HINTS = ("passed", "failed", "error", "PASS", "Success", "checks passed", "OK")
 
 

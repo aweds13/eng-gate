@@ -44,15 +44,15 @@
 ## SR-NF11 · Git 工作流（N40）——一版
 - 必须：新功能用 Worktree 独立分支；提交按 Conventional Commits；PR 说明含变更摘要+测试命令与结果。
   - **落地（2026-09-20）**：`.github/pull_request_template.md`（合入清单，逐条对应**机器检查**：
-    `Task:/Refs:/Ledger:/Gates:` trailer、`run_gates.py` 十项、`gates/last.json` 入库、
+    `Task:/Refs:/Ledger:/Gates:` trailer、`run_gates.py` 十一项、`gates/last.json` 入库、
     台账证据与 `[exceptions]` 留痕、约定层红线、前端零依赖护栏）。Worktree 按用户 2026-09-18 的决定是**可选**。
-  - ⚠️ **台账编号错位**：`docs/traceability.toml` 里对应条目现在挂在 `SR-NF12` 名下（错位一格），
-    校正见 `../../复盘/文档债务-NF编号错位.md` 与任务卡 T-D1。
 
 ## SR-NF12 · 数据迁移与备份（N41）——一版
 - 必须：schema 版本化+升级迁移；重要数据可备份、可回滚。（落点见 SR-F9.3）
-  - ⚠️ **台账缺条目**：`docs/traceability.toml` 里 `SR-NF12` 名下写的是「Git 工作流」（编号错位），
-    本条的落点（`storage/db.py` 的版本化迁移 + `tools/serve.py` 启前备份 + 快照/回滚）**待 T-D1 校正时补登记**。
+  - **落地（2026-09-20）**：`src/timeflow/storage/db.py` 的 `SCHEMA_VERSION` + 幂等迁移链、
+    `tools/serve.py` 启动前**自动备份**（`.bak-<时间戳>`）。
+  - ⚠️ **仍缺「回滚」**：没有"选备份恢复/一键回滚"入口，要人工把 `.bak` 复制回去 ——
+    台账条目如实保持 `partial`（同 SR-F9.3）。
 
 ## SR-NF13 · 可观测/日志审计（N42）——一版
 - 必须：关键路径留日志+计数；提供健康检查/调试开关（坏了能定位）。

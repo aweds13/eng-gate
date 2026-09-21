@@ -4,7 +4,7 @@
 > **路径约定**：实现包根为 `src/timeflow/`；下文中的 `core/`、`api/`、`storage/` 等均指 `src/timeflow/` 下的子包。
 
 ## SR-F1 任务管理 → `core/tasks/`
-- **My Day / 逾期栏 / 状态机 / 子任务 / Repeat**（SR-F1.1/1.2/1.5/1.6/1.8）：都在 `manager.py`。
+- **My Day / 逾期栏 / 状态机 / 子任务 / Repeat**（SR-F1.1a / SR-F1.4b / SR-F1.5a / SR-F1.6）：都在 `manager.py`。
   取舍：**昨日未完成自动进逾期栏而非静默消失**（如实、不假装）；逾期与否由截止日+今天判定，**不强推**；
   **软删除**（`status=已删`）而非物理删行，默认视图统一隐藏（`HIDDEN_STATUSES`）。
 - **分组 / 多标签**（SR-F1.3）：`groups.py`；取舍：分组只是「组织维度」，不改变任务执行逻辑（避免割裂）。
@@ -20,12 +20,12 @@
   幂等翻转；三个视图在左栏、全部任务页、设置页都有入口（手机端左栏被隐藏，故不能只靠左栏）。
 - **界面收口**（F1 段1，2026-09-18）：分组增删改 + 任务归属（T-A1）、子任务树与联动（T-A2）、任务编辑（T-A3）
   都已有入口；`purge_task` 收紧为「只能删回收站里的任务」。
-- **附件 / 要求链接**（SR-F1.4 + SR-F5.3 / T-B4）：字段是 `tasks.attach` 与 `course_assessments.attach`
+- **附件 / 要求链接**（SR-F1.4a + SR-F5.3 / T-B4）：字段是 `tasks.attach` 与 `course_assessments.attach`
   （同一个形状：JSON 数组 `{target, title}`，只存引用）；**打开规则集中在 `core/attach.py`** ——
   模式（`folder` 默认 / `direct` / `auto`）与直接打开白名单存 `app_settings`（**服务端**，不由请求参数决定），
   可执行/脚本类永不直接打开；失败返回 `action="copy"` 让界面复制路径 + 提示。
   执行本机动作的接口（`POST /api/attach/open`、`PUT /api/settings/attach`）带**来源守卫**（只接受本机页面）。
-- **提醒**（SR-F1.4 / T-B5）：`tasks.remind_at`（本地时间，schema **v10**）+
+- **提醒**（SR-F1.4a / T-B5）：`tasks.remind_at`（本地时间，schema **v10**）+
   `reminder_state()`（`over/today/soon/later`，完成/取消/归档/已删=不再催）+ `due_reminders(now)`（只读数据源）；
   `GET /api/reminders/due`、`GET /api/reminders`；前端详情可设、卡片/详情标注、今日页「该提醒了」区。
 - **类型 + 所属课程**（SR-F5.4 / T-C12）：`tasks.task_type`（普通/作业/考试/论文/小测，默认普通）
@@ -51,7 +51,7 @@
 - **旧表 `ledger_entries`**：已降级为**兼容/迁移来源**（手动投入与产出都走事实层），解读层不读它。
 - **周结算**（SR-F2.5 / OP-15，第 6 步）：`ledger.weekly_summary()` —— 周=周一→周日、只读 facts、
   债务取周日快照、7 天逐日专注 + `steady_note`（如实描述，不设目标不告警）；`GET /api/summary/weekly`。
-- **均衡度：波动 / 空档**（T-C3 / SR-F2.6，2026-09-20）：`_rhythm()` 出 `focus_variation_minutes`
+- **均衡度：波动 / 空档**（T-C3 / SR-F2.5，2026-09-20）：`_rhythm()` 出 `focus_variation_minutes`
   （逐日专注分钟的**标准差**，分钟）、`longest_gap_days`（最长连续 0 天）；`_rhythm_note()` 把它们说成
   **一句温和的话**（不设目标、不告警、不折算）。**界面显示待前端批次**。
 - **可视化数据底座**（SR-F2.7 / SR-NF3，第 7 步）：`core/insights.py` —— `daily_insights()`（逐日专注/手动/复习/
@@ -95,7 +95,8 @@
 - **加权平均成绩 + 制式切换**（第 11 步，用户要求）：`weighted_average()` =
   `Σ(学分×成绩)/Σ学分`（百分制原始分加权，学分为 0/负 不参与），与 `gpa()`（绩点加权）并存；
   `GET /api/gpa?scale=` 一次返回两个口径；前端学业页可在 4.0/5.0 制之间**切换查看**（写死默认值仍在 config.toml）。
-- **未实现**：无（OP-24 合流已落地，见上）。
+- **未实现**：**「与自学时间线对照」的视图**（SR-F5.1b / GAP-F5-03，规格 F5.1 的后半句）；
+  其余（OP-24 学校任务↔课程字段级合流）已落地，见上。
   **要求备注 + 跳转要求已落地**（SR-F5.3 / T-B4）：`course_assessments.note`（要求备注）+
   `course_assessments.attach`（要求网页/本地路径，与任务附件共用 `core/attach.py` 的打开规则）；
   学业页「考核项」区可就近挂/点开（此前考核项只在 14 天临期窗口里看得到）。
@@ -109,7 +110,7 @@
   `GET /api/review/meta`（形式与执行源词表 + 中文标签，只在后端一处）。升级不发事实、不动账本。
 - **仍未做**：这三条的**界面入口**（任务详情「升级为复习卡」、卡详情里选形式/填句柄）随前端批次
   —— 后端已就绪，见 `../../docs/traceability.toml` 的 `[exceptions]`（前端接上后删豁免）。
-- **撤销本次反馈**（第 5 步）：`review.completed` 的 `extra.before` 存复习前快照，`undo_review()` 回退 FSRS 字段
+- **撤销本次反馈**（第 5 步 / 契约 OP-27 的可逆部分）：`review.completed` 的 `extra.before` 存复习前快照，`undo_review()` 回退 FSRS 字段
   并追加 `review.undone`；`reviewed_today()` = 当日完成 − 当日已撤销。
 
 ## SR-F7 团队/AI → `core/team/`
@@ -117,7 +118,7 @@
 - **分配可见性**（第 10 步）：`assignments_for_task()` 让 `TaskOut.assignments` 直接带回分配 ——
   任务卡片显示「谁负责 / 进展到哪」，并按状态给「开始 / 完成 / 恢复」下一步动作；
   `assign_task` 校验任务存在（404）与执行者非空（400）。
-- **未实现**：独立的管理者/执行者视角切换页（OP-33）。
+- **未实现**：独立的管理者/执行者**视角切换页**（SR-F7.1 / OP-33）与跨端集成。
 
 ## SR-F8 备忘录/知识资产 → `core/memo/`
 - 备忘录本地记录（可带引用句柄与任务关联）。
@@ -128,8 +129,9 @@
 - `getaways/`：外部集成（知识资产/学校通知）**预留占位**，尚无实现。
 
 ## SR-F9 存储/同步 → `storage/`
-- SQLite（标准库 `sqlite3`，非 ORM）+ schema 版本化迁移（当前 **v5**：v3 facts、v4 focus 回填、v5 已完成任务回填）；
-  LWW 同步（时间戳+version，不静默覆盖）；跨端去重（来源标记）。
+- SQLite（标准库 `sqlite3`，非 ORM）+ schema 版本化迁移（当前 **v12**：v3 facts、v4 focus 回填、v5 已完成任务回填、
+  v6 note、v7 priority、v8 flagged、v9 attach+app_settings、v10 remind_at、v11 task_type+course_id、v12 review_items.task_id）；
+  LWW 同步（时间戳+version，不静默覆盖）；跨端**同 id 去重**（来源标记尚未落库，见 `traceability.toml` 的 SR-F2.6b）。
 - **并发连接（第 11 步修）**：`db.thread_local()` 代理按线程各持一个连接（`create_app` 用它）。
   原因：`sqlite3.Connection` 非线程安全，共享时一个请求的 `commit()` 会打断另一个请求的事务
   （真机表现：快速点击顶部导航 → 「操作未完成」）；实测并发 180 请求由 33 次 500 降到 0。
@@ -176,5 +178,5 @@
 | NF2 交互低门槛 | 前端默认 My Day、一键操作、温和 toast（不弹窗施压） |
 | NF6 可维护 | 模块化分层 + 局部错误隔离（订阅者异常记入 `facts.errors`，不崩全局） |
 | NF14 配置 | `config.py` pydantic 校验 + `config.example.toml` + `TIMEFLOW_*` env 覆盖 |
-| NF15 测试 | 覆盖矩阵见 `coverage.md`（测试文件数不写死在这里，避免随代码漂移）+ `tests/acceptance/` 可执行验收 + `tools/lf1_live_check.py` 真机。⚠️ **覆盖率门槛尚未写进 `pyproject`**（只在文档与手敲命令里），见审计报告 GAP-NF-08 |
+| NF15 测试 | 覆盖矩阵见 `coverage.md`（测试文件数不写死在这里，避免随代码漂移）+ `tests/acceptance/` 可执行验收 + `tools/lf1_live_check.py` 真机。覆盖率门槛**已写进 `pyproject`**（`--cov-fail-under=70`）；未做的是规格写的 `integration` marker（现由真机自检脚本替代），见 `traceability.toml` 的 SR-NF15 |
 | NF16 本地隐私 | 数据本地 SQLite；敏感只存本机 |

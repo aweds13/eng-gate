@@ -1,4 +1,4 @@
-"""F1 主线 · 段2 · T-B3：三视图 Important / Planned / Flagged（SR-F1.3）。
+"""F1 主线 · 段2 · T-B3：三视图 Important / Planned / Flagged（SR-F1.2「提供视图」）。
 
 覆盖：
 - schema v7 → v8 加列：`flagged` 布尔位（幂等、老行默认 0=未标记、缺 tasks 表的残缺库不失败）；

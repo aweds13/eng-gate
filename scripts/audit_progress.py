@@ -168,9 +168,22 @@ def check_shape(data: dict) -> list[str]:
     for path in spec_files:
         sr_ids |= set(re.findall(r"SR-(?:F\d+(?:\.\d+)?|NF\d+)", path.read_text(encoding="utf-8")))
     domain_headers = {f"SR-F{i}" for i in range(1, 11)}
-    missing = sorted(sr_ids - set(entries) - domain_headers)
+    # 编号规则 A（2026-09-20）：一条规格被拆成多张卡时加小写后缀（`SR-F1.1a`），
+    # 后缀卡算**同一个规格条目** —— 所以覆盖检查按**去掉后缀的基号**比。
+    def _base(eid: str) -> str:
+        m = re.match(r"^(SR-(?:F\d+(?:\.\d+)?|NF\d+))[a-z]$", eid)
+        return m.group(1) if m else eid
+
+    entry_bases = {_base(e) for e in entries}
+    missing = sorted(sr_ids - entry_bases - domain_headers)
     if missing:
         errs.append(f"规格里有 {len(missing)} 条 SR 未登记台账：{missing}")
+    # 反向：台账里不许出现规格没有的 `SR-*` 编号（自造卡请用 T-*/STEP-*/OP-*）
+    unmapped = sorted(e for e in entries if e.startswith("SR-") and _base(e) not in sr_ids)
+    if unmapped:
+        errs.append(
+            f"台账有 {len(unmapped)} 条 SR 卡在规格里找不到同号条目（违反编号规则 A）：{unmapped}"
+        )
     cited = set()
     for e in entries.values():
         for item in e.get("evidence", []):

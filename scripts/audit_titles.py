@@ -10,18 +10,27 @@
 - 重叠度 = 交集 ÷ 并集（Jaccard）；
 - **`shifted`（确定错位）**：与**相邻编号**的规格标题重叠明显高于与自己的 —— 这就是
   「条目写的是前一条/后一条的要求」，可以直接当失败用；
+- **`unmapped`（无规格对应）**：台账里出现了规格里没有的 `SR-*` 编号 —— 违反 2026-09-20
+  定下的编号规则 A（**规格号只属于规格**），也是失败；
 - `needs_review`（需人核对）：与自己那条几乎不重合，但也不像邻居 —— 多半是"缩写式改写"
   （规格标题很短时如「视觉美感」「配置工程化」，台账写的是具体做法），**也可能是真错**，要人看一眼；
 - 其它 → 通过。
 
+## 编号规则 A（2026-09-20 用户定，本脚本按它判）
+
+1. `SR-Fx.y` / `SR-NFnn` —— **规格条目**，台账条目的含义必须与规格一致（标题建议以规格原词开头）；
+2. 一条规格被拆成多张卡 → 加小写后缀（`SR-F1.1a` / `SR-F1.1b`），后缀卡算**同一个规格条目**；
+3. 不属于任何规格条目的**实现层自造卡** → 只用 `T-*` / `STEP-*` / `OP-*`，**不许**用 `SR-` 前缀。
+
+落地经过见 `复盘/台账编号校正-方案A落地.md`。
+
 用法
   python -X utf8 scripts/audit_titles.py            # 打印对账表（人类可读）
   python -X utf8 scripts/audit_titles.py --json     # 机器可读
-  python -X utf8 scripts/audit_titles.py --check    # 有「确定错位」就退出码 1
+  python -X utf8 scripts/audit_titles.py --check    # 有「确定错位」或「无规格对应」就退出码 1
 
-**现状（2026-09-20）**：本检查**尚未接进 `run_gates.py`** —— 因为台账里 F/NF 两层的错位
-还没校正（任务卡 T-D1），接进去会立刻 FAIL。**T-D1 做完后把它加成门禁第 11 项**，
-并把 `--check` 写进 `scripts/run_gates.py`。这条说明本身就是"没接进去"的留痕，别悄悄删掉。
+**已接进门禁（2026-09-20，T-D2 收口）**：`scripts/run_gates.py` 的 `audit_titles` 步骤
+（阻断项，`--check`）。校正前它挂的是"信息性"（`blocking=false`）—— 那段历史见上面提到的复盘文档。
 """
 
 from __future__ import annotations
@@ -45,7 +54,14 @@ STOP_CHARS = set(
 )
 # 规格标题里的括注（N 编号、一版/二版、口径调整说明）先剥掉
 _PAREN = re.compile(r"[（(][^）)]*[）)]")
-_JACCARD_PASS = 0.15
+# 拆卡后缀：一条规格被拆成多张卡时用（规则 A）
+_SUFFIX = re.compile(r"^(SR-(?:F\d+(?:\.\d+)?|NF\d+))[a-z]$")
+
+
+def base_id(eid: str) -> str:
+    """去掉拆卡后缀，得到规格条目的基号（`SR-F1.1a` → `SR-F1.1`）。"""
+    m = _SUFFIX.match(eid)
+    return m.group(1) if m else eid
 
 
 def extract_spec_titles() -> dict[str, str]:
@@ -127,21 +143,35 @@ def _sort_key(eid: str) -> tuple[int, int]:
 
 
 def compare() -> list[dict[str, object]]:
-    """逐条对账，返回 `[{id, status, overlap, level, ...}]`（按重叠度升序）。
+    """逐条对账，返回 `[{id, base, status, overlap, level, ...}]`。
 
-    `level`：`shifted`（与相邻编号更像 → 确定错位）/ `needs_review`（与自己的规格标题几乎不重合，
-    但也不像邻居）/ `ok`。
+    `level`：`shifted`（与相邻编号更像 → 确定错位）/ `unmapped`（规格里没有这个 `SR-*` 编号
+    → 违反规则 A）/ `needs_review`（与自己的规格标题几乎不重合，但也不像邻居）/ `ok`。
     """
     spec = extract_spec_titles()
     data = tomllib.load(LEDGER.open("rb"))
     entries = data.get("entries", {})
-    same_layer = sorted((e for e in spec if e in entries), key=_sort_key)
+    sr_entries = sorted((e for e in entries if str(e).startswith("SR-")), key=_sort_key)
+    # 参与"邻居"比较的规格基号：台账里真有卡的才算
+    bases = sorted({base_id(e) for e in sr_entries if base_id(e) in spec}, key=_sort_key)
     rows: list[dict[str, object]] = []
-    for eid in same_layer:
+    for eid in sr_entries:
         title = str(entries[eid].get("title", ""))
-        own = overlap(title, spec[eid])
+        base = base_id(eid)
+        row: dict[str, object] = {
+            "id": eid,
+            "base": base,
+            "status": entries[eid].get("status"),
+            "ledger_title": title,
+            "spec_title": spec.get(base),
+        }
+        if base not in spec:
+            row.update(overlap=0.0, level="unmapped", looks_like=None, looks_like_overlap=None)
+            rows.append(row)
+            continue
+        own = overlap(title, spec[base])
         near: list[tuple[str, float]] = [
-            (n, overlap(title, spec[n])) for n in _neighbours(same_layer, eid)
+            (n, overlap(title, spec[n])) for n in _neighbours(bases, base)
         ]
         best_near = max(near, key=lambda x: x[1]) if near else ("", 0.0)
         shifted = best_near[1] >= 0.2 and best_near[1] - own >= 0.15
@@ -151,35 +181,39 @@ def compare() -> list[dict[str, object]]:
             level = "needs_review"
         else:
             level = "ok"
-        rows.append(
-            {
-                "id": eid,
-                "status": entries[eid].get("status"),
-                "overlap": own,
-                "level": level,
-                "looks_like": best_near[0] if shifted else None,
-                "looks_like_overlap": best_near[1] if shifted else None,
-                "ledger_title": title,
-                "spec_title": spec[eid],
-            }
+        row.update(
+            overlap=own,
+            level=level,
+            looks_like=best_near[0] if shifted else None,
+            looks_like_overlap=best_near[1] if shifted else None,
         )
-    rows.sort(key=lambda r: (0 if r["level"] == "shifted" else 1, r["overlap"], str(r["id"])))  # type: ignore[arg-type,return-value]
+        rows.append(row)
+    order = {"unmapped": 0, "shifted": 1, "needs_review": 2, "ok": 3}
+    rows.sort(key=lambda r: (order[str(r["level"])], float(str(r["overlap"])), str(r["id"])))
     return rows
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="台账 ↔ 规格 标题对账")
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--check", action="store_true", help="有「疑似错位」就退出码 1")
+    parser.add_argument("--check", action="store_true", help="有「确定错位/无规格对应」就退出码 1")
     parser.add_argument("--all", action="store_true", help="连通过的一起打印")
     args = parser.parse_args()
 
     rows = compare()
     bad = [r for r in rows if r["level"] != "ok"]
     shifted = [r for r in rows if r["level"] == "shifted"]
+    unmapped = [r for r in rows if r["level"] == "unmapped"]
+    review = [r for r in rows if r["level"] == "needs_review"]
     if args.json:
         print(json.dumps(
-            {"rows": rows, "problems": len(bad), "shifted": len(shifted)},
+            {
+                "rows": rows,
+                "problems": len(bad),
+                "shifted": len(shifted),
+                "unmapped": len(unmapped),
+                "needs_review": len(review),
+            },
             ensure_ascii=False,
             indent=2,
         ))
@@ -188,26 +222,28 @@ def main() -> int:
         shown = rows if args.all else bad
         for r in shown:
             if r["level"] == "shifted":
-                mark = f"❌ 确定错位（更像 {r['looks_like']}，重叠 {r['looks_like_overlap']:.2f}）"
+                near = float(str(r["looks_like_overlap"]))
+                mark = f"❌ 确定错位（更像 {r['looks_like']}，重叠 {near:.2f}）"
+            elif r["level"] == "unmapped":
+                mark = "❌ 无规格对应（违反规则 A：SR- 只给规格条目用）"
             elif r["level"] == "needs_review":
                 mark = "❓ 需人核对（与自己那条 0 重合）"
             else:
                 mark = "✅"
-            print(f"  {mark} {r['id']:<9} 重叠 {r['overlap']:.2f}  [{r['status']}]")
+            print(f"  {mark} {r['id']:<10} 重叠 {float(str(r['overlap'])):.2f}  [{r['status']}]")
             print(f"        台账「{r['ledger_title']}」")
-            print(f"        规格「{r['spec_title']}」")
+            print(f"        规格「{r['spec_title'] or '（规格里没有这个编号）'}」")
         if not bad:
             print("  ✅ 全部对得上（标题含义与规格一致）")
+            print(f"  OK 规则 A 对账通过：{len(rows)} 条 SR 卡全部有同号规格，0 条错位")
         else:
-            review = [r for r in bad if r["level"] == "needs_review"]
-            total, review_n = len(bad), len(review)
-            print(f"\n共 {total} 条要处理：**{len(shifted)} 条确定错位** + {review_n} 条需人核对")
+            print(f"\n共 {len(bad)} 条要处理：**{len(shifted)} 条确定错位** + "
+                  f"{len(unmapped)} 条无规格对应 + {len(review)} 条需人核对")
             print("  说明：「需人核对」里有**假阳性**（规格标题很短时，如「视觉美感」"
                   "「配置工程化」，台账写的是具体做法，看着 0 重合其实对得上）"
-                  "—— 要人看一眼，别当失败。")
-            print("→ 校正计划见 `复盘/文档债务-NF编号错位.md`（任务卡 T-D1）；"
-                  "修完把本检查接进 run_gates（T-D2）")
-    return 1 if (args.check and shifted) else 0
+                  "—— 要人看一眼，别当失败（`--check` 不因它退 1）。")
+            print("→ 编号规则与落地经过见 `复盘/台账编号校正-方案A落地.md`")
+    return 1 if (args.check and (shifted or unmapped)) else 0
 
 
 if __name__ == "__main__":

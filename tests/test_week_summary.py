@@ -187,7 +187,7 @@ def test_steady_note_describes_without_pressure(conn: sqlite3.Connection) -> Non
         assert banned not in w.steady_note
 
 
-# ---- 均衡度：波动 / 空档（T-C3 / SR-F2.6）----
+# ---- 均衡度：波动 / 空档（T-C3 / SR-F2.5）----
 
 def test_week_rhythm_reports_variation_and_gap(conn: sqlite3.Connection) -> None:
     """波动 = 逐日专注分钟的**标准差**（分钟，不折算）；空档 = 最长连续 0 天。"""

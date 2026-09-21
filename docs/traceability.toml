@@ -6,6 +6,14 @@
 #           table:表 | column:表.列 | ui:data-action=x | ui:view=x | test:文件名
 # 规则：status=done 必须至少 1 条证据；partial/todo/deferred 必须写 gaps（说明缺什么）
 #
+# ★ 编号规则 A（2026-09-20 用户定，全部条目按它校正过；见 `复盘/台账编号校正-方案A落地.md`）：
+#   ① `SR-Fx.y` / `SR-NFnn` = **规格条目**，台账条目的含义必须与规格里同号的条目一致
+#      （标题约定以规格原词开头，让"这张卡属于哪条规格"一眼可见）；
+#   ② 一条规格被拆成多张卡 → 加小写后缀（`SR-F1.1a` / `SR-F1.1b`），后缀卡算同一个规格条目
+#      （`scripts/audit_progress.py` 覆盖检查、`scripts/audit_titles.py` 对账都按**基号**判）；
+#   ③ 不属于任何规格条目的**实现层自造卡** → 只用 `T-*` / `STEP-*` / `OP-*`，**不许**用 `SR-` 前缀
+#      （`audit_progress` 会 FAIL，`audit_titles` 的 `--check` 会 FAIL）。
+#
 # [exceptions]：已知欠账（**逐条留痕、修一条删一条**），不许静默豁免。两种用法：
 #   ① 声称 done 但某条断言暂时不成立（③ 声称=证据 会打印为"已豁免"）；
 #   ② **有意拆分的任务**：Task 提交只覆盖了条目的一部分（如 T-B5 前半字段+界面、后半等用户选型），
@@ -17,15 +25,14 @@ acknowledged_routes = []
 
 [exceptions]
 # T-B5 的豁免已删除（2026-09-18）：用户选 B′ 后通知通道已落地，条目转 done —— 修一条删一条。
+# 删掉的三条豁免（2026-09-20，编号校正 T-D1 时）：SR-NF12（编号错位已修，条目转 done）、
+# T-D1（校正已完成）、T-D2（门禁已转阻断）—— 修一条删一条。
 # T-C5 / T-C7 的豁免（2026-09-20 加）：**有意拆分** —— 后端（字段/领域/接口）已随本批落地，
 # 但"界面入口"（任务详情里点「升级为复习卡」、复习卡详情里填句柄/选形式）要等前端批次，
 # 条目如实保持 partial。前端接上后删掉这两条豁免。
 T-C5 = "后端已落地（review_items.task_id + POST /api/tasks/{id}/to-review + GET /api/tasks/{id}/review-cards + PATCH/GET /api/review/items/{id}）；**任务详情里的「升级为复习卡」按钮待前端批次**"
 T-C7 = "后端已落地（ref_handle 可 PATCH 写入/清空，带校验）；**复习卡详情里填句柄的界面待前端批次**"
 T-C3 = "后端已落地（focus_variation_minutes / longest_gap_days / rhythm_note）；**界面上显示这三个数字与那句话待前端批次**"
-SR-NF12 = "PR 模板已入库（`.github/pull_request_template.md`），但**条目标题编号错位**（实际描述的是规格 `SR-NF11 Git 工作流`）→ 保持 partial，等 T-D1 校正编号时一并处理（见 `复盘/文档债务-NF编号错位.md`）"
-T-D1 = "**受阻且已登记**（2026-09-20）：查明根因是「台账把拆出来的卡也用了规格编号」，修法取决于一条命名规则（拆卡编号怎么给，见 `复盘/文档债务-NF编号错位.md` §五）→ **等用户点头**。本轮提交只写文档（根因 + 两方案），**没有实现校正**，条目如实保持 todo"
-T-D2 = "工具与门禁的**信息性**一步已落地（`scripts/audit_titles.py` + `run_gates` 的 `blocking=false` 步骤）；**待 T-D1 校正完后换成 `--check` 并接成阻断项**（档口在这一条上，不是在 T-D2 没做）"
 
 [entries."T-00"]
 id = "T-00"
@@ -42,25 +49,25 @@ evidence = [
 ]
 gaps = ""
 
-[entries."SR-F1.1"]
-id = "SR-F1.1"
-title = "My Day 语义 + 昨日未完成进逾期栏"
+[entries."SR-F1.1a"]
+id = "SR-F1.1a"
+title = "My Day：昨日未完成自动移入逾期栏（用户可手动移除）"
 group = "F1"
 status = "done"
 evidence = ["text:src/timeflow/core/tasks/manager.py::def myday_tasks", "text:src/timeflow/core/tasks/manager.py::def overdue_tasks", "route:GET /api/mydays", "route:GET /api/overdue", "ui:data-action=task-myday", "test:test_tasks.py"]
 gaps = ""
 
-[entries."SR-F1.2"]
-id = "SR-F1.2"
-title = "排序 = 截止日 → 优先级 → 手动拖拽"
+[entries."SR-F1.1b"]
+id = "SR-F1.1b"
+title = "My Day 排序 = 截止时间 → 优先级（手动拖拽未做）"
 group = "F1"
 status = "partial"
 evidence = ["column:tasks.priority", "text:src/timeflow/core/tasks/manager.py::_ORDER_BY", "test:test_task_priority_line.py"]
-gaps = "已实现 **截止日 → 优先级 → 创建时间**，且 `list_tasks/myday_tasks/overdue_tasks` 三处同口径（T-B2）；**拖拽排序按段2 决策明确不做**（需要前端持久化顺序，属独立任务、未排期）"
+gaps = "已实现 **截止时间 → 优先级 → 创建时间**，且 `list_tasks/myday_tasks/overdue_tasks` 三处同口径（T-B2）；**拖拽排序按段2 决策明确不做**（需要前端持久化顺序，属独立任务、未排期）"
 
-[entries."SR-F1.3"]
-id = "SR-F1.3"
-title = "视图 My Day / Important / Planned / Flagged / 逾期栏"
+[entries."SR-F1.2"]
+id = "SR-F1.2"
+title = "提供视图 My Day / Important / Planned / Flagged / 逾期栏；显示全局总任务数；不提供 Assigned to me"
 group = "F1"
 status = "done"
 evidence = [
@@ -69,6 +76,7 @@ evidence = [
   "route:GET /api/tasks",
   "column:tasks.flagged",
   "text:src/timeflow/core/tasks/manager.py::def tasks_in_view",
+  "text:src/web/index.html::全部任务（${all.length}）",
   "ui:view=important",
   "ui:view=planned",
   "ui:view=flagged",
@@ -76,100 +84,9 @@ evidence = [
 ]
 gaps = ""
 
-[entries."SR-F1.4"]
-id = "SR-F1.4"
-title = "任务字段：子步骤/备注/提醒/附件"
-group = "F1"
-status = "done"
-evidence = [
-  "column:tasks.due_date",
-  "column:tasks.repeat_days",
-  "column:tasks.parent_id",
-  "column:tasks.note",
-  "column:tasks.attach",
-  "column:tasks.remind_at",
-  "text:src/timeflow/core/remind.py::def notify_due",
-  "route:GET /api/settings/reminder",
-  "route:POST /api/reminders/test",
-  "test:test_task_note_line.py",
-  "test:test_attach_line.py",
-  "test:test_remind_line.py",
-  "test:test_remind_channel.py",
-]
-gaps = ""
-
-[entries."SR-F1.5"]
-id = "SR-F1.5"
-title = "状态机 未开始/进行中/完成/逾期/取消/归档"
-group = "F1"
-status = "done"
-evidence = ["text:src/timeflow/core/tasks/manager.py::未开始", "text:src/timeflow/core/tasks/manager.py::归档", "text:src/timeflow/core/tasks/manager.py::VALID_STATUS"]
-gaps = ""
-
-[entries."SR-F1.6"]
-id = "SR-F1.6"
-title = "Repeat 按上次完成时间生成下一次（幂等）"
-group = "F1"
-status = "done"
-evidence = ["text:src/timeflow/core/tasks/manager.py::def process_repeats", "text:src/timeflow/core/tasks/manager.py::task.repeat.generated", "test:test_task_repeat.py"]
-gaps = ""
-
-[entries."SR-F1.7"]
-id = "SR-F1.7"
-title = "重复节奏用热力图管理"
-group = "F1"
-status = "partial"
-evidence = ["text:src/timeflow/core/insights.py::def heatmap", "route:GET /api/insights/heatmap"]
-gaps = "热力图是「天 × 指标」，没有按任务/重复节奏的视图"
-
-[entries."SR-F1.8"]
-id = "SR-F1.8"
-title = "子任务：任务树/折叠 + 添加子任务入口"
-group = "F1"
-status = "done"
-evidence = [
-  "column:tasks.parent_id",
-  "text:src/timeflow/core/tasks/manager.py::def create_subtask",
-  "text:src/timeflow/core/tasks/manager.py::def subtasks",
-  "text:src/timeflow/core/tasks/manager.py::def set_task_parent",
-  "text:src/timeflow/core/tasks/manager.py::def _autocomplete_parent",
-  "route:GET /api/tasks/{task_id}/subtasks",
-  "route:POST /api/tasks/{task_id}/subtasks",
-  "route:POST /api/tasks/{task_id}/parent",
-  "ui:data-action=subtask-add",
-  "ui:data-action=task-parent",
-  "text:src/web/index.html::步骤（子任务）",
-  "test:test_task_subtasks_line.py",
-]
-gaps = ""
-
-[entries."SR-F1.9"]
-id = "SR-F1.9"
-title = "任务存档：尝试记录 + 关联笔记 + 存档视图"
-group = "F1"
-status = "todo"
-evidence = ["text:src/timeflow/core/tasks/manager.py::归档"]
-gaps = "无 attempt/关联笔记字段；无存档视图（GAP-F1-05）"
-
-[entries."SR-F1.10"]
-id = "SR-F1.10"
-title = "逾期处置：推到明天/改ddl/取消 + 强弱提醒分级"
-group = "F1"
-status = "partial"
-evidence = ["ui:data-action=task-tomorrow", "ui:data-action=task-cancel", "text:src/web/app.css::card.overdue"]
-gaps = "无「学校硬考核强提醒 vs 普通温和」分级（GAP-F1-06）"
-
-[entries."SR-F1.11"]
-id = "SR-F1.11"
-title = "三类任务区分（指标/作业/竞赛）"
-group = "F1"
-status = "deferred"
-evidence = ["file:复盘/C批口径定案.md", "text:docs/specification/functional.md::不做任务分类字段"]
-gaps = "**一版不做**（2026-09-19 用户决定）：不加 `tasks.category`；「哪件事不能拖」用「优先级（高）+ 学校硬考核强提醒（T-C8）」表达；分类字段与「指标可重规划」留二版（N4/SR-F2.8 同为二版）"
-
-[entries."SR-F1.12"]
-id = "SR-F1.12"
-title = "分组：多分组 + 计数 + 增删改（OP-11）"
+[entries."SR-F1.3"]
+id = "SR-F1.3"
+title = "按项目/领域自定义分组，显示分组计数；任务可归多分组（增删改入口见 OP-11）"
 group = "F1"
 status = "done"
 evidence = [
@@ -191,72 +108,140 @@ evidence = [
 ]
 gaps = ""
 
-[entries."SR-F1.13"]
-id = "SR-F1.13"
-title = "任务编辑（契约 OP-9）"
+[entries."SR-F1.4a"]
+id = "SR-F1.4a"
+title = "任务字段：子步骤 / 备注 / 加入 My Day / 截止日 / 提醒 / 重复 / 附件"
 group = "F1"
 status = "done"
 evidence = [
-  "route:PATCH /api/tasks/{task_id}",
-  "text:src/web/index.html::function saveTaskEdit(",
-  "text:src/web/index.html::function editForm(",
-  "ui:data-action=task-edit",
-  "ui:data-action=task-save",
-  "test:test_task_edit_line.py",
+  "column:tasks.due_date",
+  "column:tasks.repeat_days",
+  "column:tasks.parent_id",
+  "column:tasks.note",
+  "column:tasks.attach",
+  "column:tasks.remind_at",
+  "text:src/timeflow/core/remind.py::def notify_due",
+  "route:GET /api/settings/reminder",
+  "route:POST /api/reminders/test",
+  "test:test_task_note_line.py",
+  "test:test_attach_line.py",
+  "test:test_remind_line.py",
+  "test:test_remind_channel.py",
 ]
 gaps = ""
 
-[entries."SR-F1.14"]
-id = "SR-F1.14"
-title = "任务删除 = 软删除 + 回收站 + 彻底删除/清空"
+[entries."SR-F1.4b"]
+id = "SR-F1.4b"
+title = "状态流转：未开始/进行中/完成/逾期/取消/归档"
 group = "F1"
 status = "done"
-evidence = ["text:src/timeflow/core/tasks/manager.py::STATUS_DELETED", "route:POST /api/tasks/{task_id}/restore", "route:DELETE /api/tasks/{task_id}/purge", "route:POST /api/tasks/purge-deleted", "test:test_task_delete.py"]
+evidence = ["text:src/timeflow/core/tasks/manager.py::未开始", "text:src/timeflow/core/tasks/manager.py::归档", "text:src/timeflow/core/tasks/manager.py::VALID_STATUS"]
 gaps = ""
 
-[entries."SR-F2.1"]
-id = "SR-F2.1"
-title = "两轴记账：投入（专注）与产出（KPI/知识资产）分开"
+[entries."SR-F1.5a"]
+id = "SR-F1.5a"
+title = "重复任务到点按上次完成自动生成下一次（幂等 + 血缘）"
+group = "F1"
+status = "done"
+evidence = ["text:src/timeflow/core/tasks/manager.py::def process_repeats", "text:src/timeflow/core/tasks/manager.py::task.repeat.generated", "test:test_task_repeat.py"]
+gaps = ""
+
+[entries."SR-F1.5b"]
+id = "SR-F1.5b"
+title = "重复节奏用时间热力图管理"
+group = "F1"
+status = "partial"
+evidence = ["text:src/timeflow/core/insights.py::def heatmap", "route:GET /api/insights/heatmap"]
+gaps = "热力图是「天 × 指标」，没有按任务/重复节奏的视图"
+
+[entries."SR-F1.6"]
+id = "SR-F1.6"
+title = "子任务：任务树/折叠 + 子任务全完成父任务自动完成"
+group = "F1"
+status = "done"
+evidence = [
+  "column:tasks.parent_id",
+  "text:src/timeflow/core/tasks/manager.py::def create_subtask",
+  "text:src/timeflow/core/tasks/manager.py::def subtasks",
+  "text:src/timeflow/core/tasks/manager.py::def set_task_parent",
+  "text:src/timeflow/core/tasks/manager.py::def _autocomplete_parent",
+  "route:GET /api/tasks/{task_id}/subtasks",
+  "route:POST /api/tasks/{task_id}/subtasks",
+  "route:POST /api/tasks/{task_id}/parent",
+  "ui:data-action=subtask-add",
+  "ui:data-action=task-parent",
+  "text:src/web/index.html::步骤（子任务）",
+  "test:test_task_subtasks_line.py",
+]
+gaps = ""
+
+[entries."SR-F1.7"]
+id = "SR-F1.7"
+title = "任务存档：当前状态 + 过去尝试（简版）+ 关联笔记 + 存档视图"
+group = "F1"
+status = "todo"
+evidence = ["text:src/timeflow/core/tasks/manager.py::归档"]
+gaps = "无 attempt/关联笔记字段；无存档视图（GAP-F1-05）"
+
+[entries."SR-F1.8"]
+id = "SR-F1.8"
+title = "逾期任务留 My Day 并标红；可推到明天 / 改 ddl / 标逾期 / 取消；学校硬考核→强提醒，普通→温和"
+group = "F1"
+status = "partial"
+evidence = ["ui:data-action=task-tomorrow", "ui:data-action=task-cancel", "text:src/web/app.css::card.overdue"]
+gaps = "无「学校硬考核强提醒 vs 普通温和」分级（GAP-F1-06）"
+
+[entries."SR-F1.9"]
+id = "SR-F1.9"
+title = "区分三类任务（指标 / 逾期不候·作业考核 / 逾期不候·竞赛活动）——一版不做分类字段"
+group = "F1"
+status = "deferred"
+evidence = ["file:复盘/C批口径定案.md", "text:docs/specification/functional.md::不做任务分类字段"]
+gaps = "**一版不做**（2026-09-19 用户决定）：不加 `tasks.category`；「哪件事不能拖」用「优先级（高）+ 学校硬考核强提醒（T-C8）」表达；分类字段与「指标可重规划」留二版（SR-F2.8 同为二版）"
+
+[entries."SR-F2.1a"]
+id = "SR-F2.1a"
+title = "记两轴：投入轴（专注时长为主）与产出轴（学校 KPI / 知识资产）"
 group = "F2"
 status = "done"
 evidence = ["text:src/timeflow/core/ledger/ledger.py::focus.finished", "text:src/timeflow/core/ledger/ledger.py::output.manual", "route:GET /api/summary", "test:test_ledger_summary.py"]
 gaps = ""
 
+[entries."SR-F2.1b"]
+id = "SR-F2.1b"
+title = "投入轴：习惯保持计入（口径已改：只报次数、不折算时间）"
+group = "F2"
+status = "done"
+evidence = ["text:src/timeflow/core/ledger/ledger.py::habit_count", "file:复盘/C批口径定案.md"]
+gaps = ""
+
 [entries."SR-F2.2"]
 id = "SR-F2.2"
-title = "习惯保持计入投入轴"
+title = "复习完成=投入（维持）；温故知新可额外记一笔产出"
 group = "F2"
-status = "todo"
+status = "partial"
 evidence = []
-gaps = "ledger 里无 habit（GAP-F2-01）"
+gaps = "复习完成=投入已按「维持」口径落为 `review_count`；**缺「复习 → 产出」入口**（GAP-F2-02）"
 
 [entries."SR-F2.3"]
 id = "SR-F2.3"
-title = "温故知新可额外记一笔产出"
-group = "F2"
-status = "todo"
-evidence = []
-gaps = "无「复习 → 产出」入口（GAP-F2-02）"
-
-[entries."SR-F2.4"]
-id = "SR-F2.4"
-title = "债务 = 逾期清单 + 天数/程度（不折算时间）"
+title = "债务 = 逾期清单 + 逾期天数/程度（轻≤3d / 中≤7d / 重>7d），不折算精确时间"
 group = "F2"
 status = "done"
 evidence = ["text:src/timeflow/core/ledger/ledger.py::_degree", "test:test_ledger_summary.py"]
 gaps = ""
 
-[entries."SR-F2.5"]
-id = "SR-F2.5"
-title = "学校 KPI 与知识资产分开记录与展示"
+[entries."SR-F2.4"]
+id = "SR-F2.4"
+title = "学校 KPI 与个人知识资产独立记账、分开展示"
 group = "F2"
 status = "partial"
 evidence = ["text:src/timeflow/core/memo/memo.py::kpi"]
 gaps = "实现为同一产出轴内 kind=asset/kpi；规格字面要求「独立记账、分开展示」（GAP-F2-04，待用户定）"
 
-[entries."SR-F2.6"]
-id = "SR-F2.6"
-title = "周结算 + 均衡度指标（波动/空档）+ 温和呈现"
+[entries."SR-F2.5"]
+id = "SR-F2.5"
+title = "周结算；不设「目标」实体；均衡度指标（波动/空档），温和呈现不告警"
 group = "F2"
 status = "partial"
 evidence = [
@@ -268,25 +253,33 @@ evidence = [
 ]
 gaps = "后端已落地（T-C3：`focus_variation_minutes` 逐日专注分钟的**标准差**（分钟）+ `longest_gap_days` 最长连续 0 天 + `rhythm_note` 一句温和描述；**不折算时间、不设目标、不告警**）；**界面上把这三个数字/一句话显示出来待前端批次**（同 T-C3，[exceptions] 留痕）"
 
-[entries."SR-F2.7"]
-id = "SR-F2.7"
-title = "债务生命周期：完成清零 / 取消计完 / 推到累计"
+[entries."SR-F2.6a"]
+id = "SR-F2.6a"
+title = "债务生命周期：完成→当天清零 / 取消→按已过天数计完 / 推到→随天数累计"
 group = "F2"
 status = "done"
 evidence = ["text:src/timeflow/core/tasks/manager.py::HIDDEN_STATUSES"]
 gaps = ""
 
-[entries."SR-F2.8"]
-id = "SR-F2.8"
-title = "曲线 + 时间热力图 + 分组分布 + 顶部摘要"
+[entries."SR-F2.6b"]
+id = "SR-F2.6b"
+title = "未绑定专注也计投入（手动补记）；跨端同 id 去重（来源标记 + LWW）"
+group = "F2"
+status = "partial"
+evidence = ["route:POST /api/ledger/invest", "text:src/timeflow/core/sync.py::同 id 去重", "test:test_invest_axis.py"]
+gaps = "「未绑定专注也计投入」有手动补记入口；**来源标记未落库**；跨端推拉传输也未做（见 SR-F9.2）"
+
+[entries."SR-F2.7"]
+id = "SR-F2.7"
+title = "曲线 + 时间热力图呈现债务/储蓄；按任务分组查看投入/产出分布；顶部轻量摘要"
 group = "F2"
 status = "done"
 evidence = ["text:src/timeflow/core/insights.py::def heatmap", "text:src/timeflow/core/insights.py::def group_insights", "ui:data-action=set-heatmap", "test:test_insights.py"]
 gaps = ""
 
-[entries."SR-F2.9"]
-id = "SR-F2.9"
-title = "重规划 / 债务重组（规格标二版）"
+[entries."SR-F2.8"]
+id = "SR-F2.8"
+title = "重规划 / 债务重组（保留教训记录；学校硬考核逾期不可重组清零）——规格标二版"
 group = "F2"
 status = "deferred"
 evidence = []
@@ -338,7 +331,7 @@ title = "习惯打卡 + 热力图 + 纳入 B 系统可视化"
 group = "F4"
 status = "partial"
 evidence = ["text:src/timeflow/core/feedback/feedback.py::habit", "text:src/timeflow/core/insights.py::habit", "route:GET /api/habits"]
-gaps = "打卡/streak/热力图都有；**未计入投入轴**（与 SR-F2.2 同一缺口）"
+gaps = "打卡/streak/热力图都有；**未计入投入轴**（与 SR-F2.1b 同一缺口）"
 
 [entries."SR-F4.3"]
 id = "SR-F4.3"
@@ -348,28 +341,36 @@ status = "done"
 evidence = ["route:GET /api/selfcheck", "text:src/timeflow/core/feedback/feedback.py::self_check"]
 gaps = ""
 
-[entries."SR-F4.4"]
-id = "SR-F4.4"
-title = "习惯改名/删除"
-group = "F4"
-status = "done"
-evidence = ["route:PATCH /api/habits/{habit_id}", "route:DELETE /api/habits/{habit_id}", "test:test_habit_memo_line.py"]
-gaps = ""
-
-[entries."SR-F5.1"]
-id = "SR-F5.1"
-title = "GPA/学分手动录入 + 制式切换 + 加权平均"
+[entries."SR-F5.1a"]
+id = "SR-F5.1a"
+title = "GPA 与学分追踪：手动录入 + 制式切换 + 加权平均"
 group = "F5"
 status = "done"
 evidence = ["text:src/timeflow/core/academic/academic.py::def gpa", "text:src/timeflow/core/academic/academic.py::def weighted_average", "route:GET /api/gpa", "test:test_academic_line.py"]
 gaps = ""
 
-[entries."SR-F5.2"]
-id = "SR-F5.2"
-title = "按课程建档（学分/考核/任课）+ 课程与考核增删"
+[entries."SR-F5.1b"]
+id = "SR-F5.1b"
+title = "GPA 与自学时间线对照"
+group = "F5"
+status = "todo"
+evidence = []
+gaps = "无对照视图（GAP-F5-03）"
+
+[entries."SR-F5.2a"]
+id = "SR-F5.2a"
+title = "按课程建档（学分/考核方式/任课）+ 课程与考核增删"
 group = "F5"
 status = "done"
 evidence = ["route:POST /api/courses", "route:POST /api/assessments", "route:DELETE /api/assessments/{assessment_id}", "route:DELETE /api/grades/{grade_id}"]
+gaps = ""
+
+[entries."SR-F5.2b"]
+id = "SR-F5.2b"
+title = "按课追踪与提醒：考核临期/逾期提醒（防漏考/漏交）"
+group = "F5"
+status = "done"
+evidence = ["text:src/timeflow/core/academic/academic.py::def upcoming_assessments", "route:GET /api/assessments/upcoming"]
 gaps = ""
 
 [entries."SR-F5.3"]
@@ -409,22 +410,6 @@ evidence = [
 ]
 gaps = ""
 
-[entries."SR-F5.5"]
-id = "SR-F5.5"
-title = "考核临期/逾期提醒"
-group = "F5"
-status = "done"
-evidence = ["text:src/timeflow/core/academic/academic.py::def upcoming_assessments", "route:GET /api/assessments/upcoming"]
-gaps = ""
-
-[entries."SR-F5.6"]
-id = "SR-F5.6"
-title = "与自学时间线对照"
-group = "F5"
-status = "todo"
-evidence = []
-gaps = "无对照视图（GAP-F5-03）"
-
 [entries."SR-F6.1"]
 id = "SR-F6.1"
 title = "FSRS 调度 + 兼容字段"
@@ -435,39 +420,7 @@ gaps = ""
 
 [entries."SR-F6.2"]
 id = "SR-F6.2"
-title = "到期按最久未复习排序 + 优先进 My Day"
-group = "F6"
-status = "done"
-evidence = ["route:GET /api/review/due", "text:src/timeflow/api/app.py::include_reviews"]
-gaps = ""
-
-[entries."SR-F6.3"]
-id = "SR-F6.3"
-title = "外部 app 只做调度中枢 + 执行源标签"
-group = "F6"
-status = "done"
-evidence = ["text:src/timeflow/core/review/review.py::external"]
-gaps = ""
-
-[entries."SR-F6.4"]
-id = "SR-F6.4"
-title = "三态反馈（记得/模糊/忘了）"
-group = "F6"
-status = "done"
-evidence = ["text:src/timeflow/core/review/review.py::remember", "text:src/timeflow/core/review/review.py::fuzzy", "text:src/timeflow/core/review/review.py::forgot"]
-gaps = ""
-
-[entries."SR-F6.5"]
-id = "SR-F6.5"
-title = "复习撤销（可逆）"
-group = "F6"
-status = "done"
-evidence = ["text:src/timeflow/core/review/review.py::def undo_review", "route:POST /api/review/{item_id}/undo"]
-gaps = ""
-
-[entries."SR-F6.6"]
-id = "SR-F6.6"
-title = "由学习任务升级为复习任务"
+title = "可由「学习任务升级为复习任务」或手动建"
 group = "F6"
 status = "partial"
 evidence = [
@@ -479,9 +432,25 @@ evidence = [
 ]
 gaps = "后端已落地（T-C5：弱关联 + **幂等**，同一任务重复升级只留一张卡；标题默认取任务名）；**任务详情里的「升级为复习卡」按钮待前端批次**（已写进 [exceptions]，前端接上后删除该豁免）"
 
-[entries."SR-F6.7"]
-id = "SR-F6.7"
-title = "复习形式字段（挖空/真题/问答卡）"
+[entries."SR-F6.3"]
+id = "SR-F6.3"
+title = "复习到期多时按算法排序（重要度 + 最久未复习），优先计入 My Day"
+group = "F6"
+status = "done"
+evidence = ["route:GET /api/review/due", "text:src/timeflow/api/app.py::include_reviews"]
+gaps = ""
+
+[entries."SR-F6.4"]
+id = "SR-F6.4"
+title = "对「不背单词」等外部 app 只做调度中枢（用户手动点完成）+ 执行源标签"
+group = "F6"
+status = "done"
+evidence = ["text:src/timeflow/core/review/review.py::external"]
+gaps = ""
+
+[entries."SR-F6.5"]
+id = "SR-F6.5"
+title = "预留「复习形式」字段（挖空/真题/问答卡）与扩展口子"
 group = "F6"
 status = "done"
 evidence = [
@@ -495,50 +464,45 @@ evidence = [
 ]
 gaps = ""
 
-[entries."SR-F6.8"]
-id = "SR-F6.8"
-title = "复习卡挂引用句柄（Vault/KB-ID）"
+[entries."SR-F6.6"]
+id = "SR-F6.6"
+title = "FSRS 反馈三态（记得/模糊/忘了）作为与复习工具的联动接口"
 group = "F6"
-status = "partial"
-evidence = [
-  "column:review_items.ref_handle",
-  "text:src/timeflow/core/review/review.py::def update_item",
-  "route:PATCH /api/review/items/{item_id}",
-  "test:test_review_link_line.py",
-]
-gaps = "后端已落地（T-C7：`ref_handle` 可写可清空、非法值拒绝、句柄只在库里存引用不存正文）；**复习卡详情里填句柄的界面待前端批次**（已写进 [exceptions]，前端接上后删除该豁免）"
+status = "done"
+evidence = ["text:src/timeflow/core/review/review.py::remember", "text:src/timeflow/core/review/review.py::fuzzy", "text:src/timeflow/core/review/review.py::forgot"]
+gaps = ""
 
 [entries."SR-F7.1"]
 id = "SR-F7.1"
-title = "任务分配 + 进展回报可见"
+title = "管理者（建/分配）与执行者（接收/执行）两视角可切换（OP-33）+ 跨端集成"
+group = "F7"
+status = "todo"
+evidence = []
+gaps = "只有角色常量，无视角接口与页面（GAP-F7-01）；跨端集成也未做"
+
+[entries."SR-F7.2"]
+id = "SR-F7.2"
+title = "不强制执行者装本软件：知道谁负责什么、进展到哪（第一版手动为主 + AI 接口）"
 group = "F7"
 status = "done"
 evidence = ["route:POST /api/team/assign", "route:PATCH /api/team/assign/{assignment_id}", "text:src/timeflow/api/app.py::assignments", "test:test_team_line.py"]
 gaps = ""
 
-[entries."SR-F7.2"]
-id = "SR-F7.2"
-title = "分配出去不计个人投入"
-group = "F7"
-status = "done"
-evidence = ["text:src/web/index.html::团队任务不计个人投入"]
-gaps = ""
-
 [entries."SR-F7.3"]
 id = "SR-F7.3"
-title = "管理者/执行者两视角可切换（OP-33）"
-group = "F7"
-status = "todo"
-evidence = []
-gaps = "只有角色常量，无视角接口与页面（GAP-F7-01）"
-
-[entries."SR-F7.4"]
-id = "SR-F7.4"
-title = "AI 接口第一版只读 + 新增（有边界）"
+title = "为 AI 提供读写任务的本地 API：第一版只读 + 新增（不改不删）"
 group = "F7"
 status = "partial"
 evidence = ["route:POST /api/sync/tasks"]
 gaps = "无独立 AI 接口与权限边界；对外 REST 含 PATCH/DELETE（GAP-F7-02）"
+
+[entries."SR-F7.4"]
+id = "SR-F7.4"
+title = "分配出去的任务不计个人投入；只记「协调/分配完成」+ AI 回报单独记"
+group = "F7"
+status = "done"
+evidence = ["text:src/web/index.html::团队任务不计个人投入"]
+gaps = ""
 
 [entries."SR-F8.1"]
 id = "SR-F8.1"
@@ -558,7 +522,7 @@ gaps = ""
 
 [entries."SR-F8.3"]
 id = "SR-F8.3"
-title = "复习卡挂引用句柄（Vault/KB-ID）"
+title = "复习卡片/笔记可用引用句柄关联（Vault 路径 / KB ID），复习完标记并推进下一间隔"
 group = "F8"
 status = "partial"
 evidence = [
@@ -567,7 +531,7 @@ evidence = [
   "text:src/timeflow/core/review/review.py::def update_item",
   "test:test_review_link_line.py",
 ]
-gaps = "与 SR-F6.8 同一条缺口（GAP-F6-03）：后端已能写/清句柄（T-C7）；**界面入口待前端批次**"
+gaps = "与 SR-F6.8 同一条缺口（GAP-F6-03）：后端已能写/清句柄（T-C7）；**界面入口待前端批次**（已写进 [exceptions]）"
 
 [entries."SR-F8.4"]
 id = "SR-F8.4"
@@ -587,19 +551,19 @@ gaps = ""
 
 [entries."SR-F9.2"]
 id = "SR-F9.2"
-title = "schema 版本化迁移 + 备份/回滚"
-group = "F9"
-status = "done"
-evidence = ["text:src/timeflow/storage/db.py::SCHEMA_VERSION", "file:tools/snapshot.py", "text:tools/serve.py::backup"]
-gaps = ""
-
-[entries."SR-F9.3"]
-id = "SR-F9.3"
-title = "跨端同步 LWW + 推拉传输"
+title = "跨端同步用「修改时间戳 + version」LWW（不静默覆盖）+ 同 id 去重"
 group = "F9"
 status = "partial"
 evidence = ["text:src/timeflow/core/sync.py::def", "route:GET /api/sync/status"]
 gaps = "只有 LWW 合并语义与冲突日志；**无推拉传输**（GAP-F9-01）"
+
+[entries."SR-F9.3"]
+id = "SR-F9.3"
+title = "schema 版本化 + 升级迁移；重要数据可备份、可回滚"
+group = "F9"
+status = "partial"
+evidence = ["text:src/timeflow/storage/db.py::SCHEMA_VERSION", "text:src/timeflow/storage/db.py::def _add_column_if_missing", "text:tools/serve.py::def backup", "test:test_facts.py"]
+gaps = "备份有（`tools/serve.py` 启前自动 `.bak`）；**没有回滚入口/命令**（要人工把 `.bak` 复制回去）—— 与 SR-NF12 同一缺口"
 
 [entries."SR-F10.1"]
 id = "SR-F10.1"
@@ -609,105 +573,118 @@ status = "deferred"
 evidence = []
 gaps = "规格自标「后置」"
 
-[entries."SR-NF1"]
-id = "SR-NF1"
-title = "中性底色 + 单一强调色 + 亮暗双主题 + 强调色可配"
+[entries."SR-NF1a"]
+id = "SR-NF1a"
+title = "视觉美感：中性底色 + 单一强调色 + 支持亮/暗双主题 + 强调色可自定义"
 group = "NF"
 status = "done"
 evidence = ["text:src/web/app.css::[data-theme=\"dark\"]", "text:src/web/index.html::accentPalette", "ui:data-action=set-theme"]
 gaps = ""
 
-[entries."SR-NF2"]
-id = "SR-NF2"
-title = "状态色 + 字体/间距/圆角/阴影统一"
+[entries."SR-NF1b"]
+id = "SR-NF1b"
+title = "视觉美感：状态色（完成/到期债务/专注/复盘差距）+ 字体/间距/圆角/阴影统一"
 group = "NF"
 status = "partial"
 evidence = ["text:src/web/app.css::--danger", "text:src/web/app.css::--ok"]
 gaps = "状态色刚接入 2 处；间距 48 种取值未收敛（GAP-NF-01，随 R5）"
 
-[entries."SR-NF3"]
-id = "SR-NF3"
-title = "打开即 My Day + 一键 + 可撤销 + 空态友好 + 新手引导"
+[entries."SR-NF2"]
+id = "SR-NF2"
+title = "交互低门槛：打开即 My Day + 一键操作 + 可撤销 + 空态友好（新手引导未做）"
 group = "NF"
 status = "partial"
 evidence = ["text:src/web/index.html::view('today')", "ui:data-action=toast-run"]
 gaps = "无新手引导（GAP-NF-02）"
 
-[entries."SR-NF4"]
-id = "SR-NF4"
-title = "六类可视化形态"
+[entries."SR-NF3"]
+id = "SR-NF3"
+title = "信息可视化：六类形态（债务曲线+热力图 / 习惯日历热力图 / 复习卡片+进度条 / 计划-执行柱状 / GPA 雷达 / 今日完成度环）"
 group = "NF"
 status = "done"
 evidence = ["text:src/web/index.html::function lineChart", "text:src/web/index.html::function heatmap", "text:src/web/index.html::function progressBar", "text:src/web/index.html::function radar", "text:src/web/index.html::function ring", "text:src/web/index.html::function barList"]
 gaps = ""
 
-[entries."SR-NF5"]
-id = "SR-NF5"
-title = "左导航 + 中列表 + 右详情（可折叠）+ 渐进聚焦"
+[entries."SR-NF4"]
+id = "SR-NF4"
+title = "一屏到底、不淹没：左导航 + 中列表 + 右详情（可折叠）+ 渐进式聚焦"
 group = "NF"
 status = "partial"
 evidence = ["text:src/web/index.html::class=\"rail\"", "text:src/web/index.html::class=\"sidebar\"", "test:test_web_frontend.py"]
 gaps = "三栏已落地；右栏无折叠开关（GAP-NF-03）"
 
-[entries."SR-NF6"]
-id = "SR-NF6"
-title = "完成划线 / toast / 撤销 / 不可逆二次确认"
+[entries."SR-NF5"]
+id = "SR-NF5"
+title = "反馈与可回退：完成划线 / 保存 toast / 删除可撤销 / 不可逆操作二次确认"
 group = "NF"
 status = "done"
 evidence = ["text:src/web/index.html::toastAction", "text:src/web/index.html::confirm("]
 gaps = ""
 
-[entries."SR-NF7"]
-id = "SR-NF7"
-title = "模块化分层 + 局部错误隔离 + 配置驱动"
+[entries."SR-NF6"]
+id = "SR-NF6"
+title = "可维护：模块化分层 + 局部错误隔离 + 数据与逻辑分离 + 配置驱动"
 group = "NF"
 status = "done"
 evidence = ["text:src/timeflow/core/facts/bus.py::订阅者", "text:src/timeflow/api/app.py::load_settings"]
 gaps = ""
 
-[entries."SR-NF8"]
-id = "SR-NF8"
-title = "插件/自定义机制 + 「如何加一个功能」模板"
+[entries."SR-NF7"]
+id = "SR-NF7"
+title = "可扩展：插件/自定义机制 + 预留扩展点 +「如何加一个功能」模板"
 group = "NF"
 status = "todo"
 evidence = []
 gaps = "只有配置层定制；无扩展模板（GAP-NF-04）"
 
-[entries."SR-NF9"]
-id = "SR-NF9"
-title = "shadow + 一键回退开关"
+[entries."SR-NF8"]
+id = "SR-NF8"
+title = "可测试、可回退：模块单测 + 回归；敏感改动 shadow + 一键回退开关"
 group = "NF"
 status = "todo"
 evidence = []
 gaps = "只有单测/快照，无 shadow 与回退开关（GAP-NF-05）"
 
-[entries."SR-NF10"]
-id = "SR-NF10"
-title = "README / 架构 / CODING_GUIDELINES（DESIGN/LEARN 已撤回）"
+[entries."SR-NF9"]
+id = "SR-NF9"
+title = "开源文档完整：README / 架构文档 / CODING_GUIDELINES（DESIGN/LEARN 经用户决定撤回）"
 group = "NF"
 status = "done"
 evidence = ["file:docs/CODING_GUIDELINES.md", "file:docs/implementation/architecture.md"]
 gaps = ""
 
-[entries."SR-NF11"]
-id = "SR-NF11"
-title = "配置化 + 2–3 个扩展示例 + 中文注释"
+[entries."SR-NF10"]
+id = "SR-NF10"
+title = "零基础定制友好：常见定制改配置/填模板 + 2–3 个由浅入深扩展示例 + 中文注释"
 group = "NF"
 status = "todo"
 evidence = ["file:config.example.toml"]
 gaps = "无 2–3 个由浅入深扩展示例（GAP-NF-06）"
 
+[entries."SR-NF11"]
+id = "SR-NF11"
+title = "Git 工作流：Conventional Commits + PR 说明（含变更摘要与测试命令结果）；Worktree 按用户决定为可选"
+group = "NF"
+status = "done"
+evidence = [
+  "file:docs/CODING_GUIDELINES.md",
+  "text:docs/CODING_GUIDELINES.md::Conventional Commits",
+  "file:.github/pull_request_template.md",
+]
+gaps = ""
+
 [entries."SR-NF12"]
 id = "SR-NF12"
-title = "Worktree + Conventional Commits + PR 清单（★ 台账编号与规格错位，见 gaps）"
+title = "数据迁移与备份：schema 版本化 + 升级迁移；重要数据可备份、可回滚"
 group = "NF"
 status = "partial"
 evidence = [
-  "file:docs/CODING_GUIDELINES.md",
-  "file:.github/pull_request_template.md",
+  "text:src/timeflow/storage/db.py::SCHEMA_VERSION",
+  "text:src/timeflow/storage/db.py::def _add_column_if_missing",
+  "text:tools/serve.py::def backup",
+  "test:test_facts.py",
 ]
-gaps = "**编号错位（2026-09-20 发现）**：本条标题/证据实际对应规格的 `SR-NF11 Git 工作流`（PR 模板已入库，GAP-NF-10 可收口）；而规格的 `SR-NF12` 是「数据迁移与备份」，台账里没有对应条目。同一错位影响 SR-NF2~NF12（台账条目描述的是规格的**前一条**），错误来源与逐条映射见 `复盘/文档债务-NF编号错位.md`；**校正属独立任务 T-D1（待做）**，本轮不擅自重编号（会连带改证据与其它文档引用）"
-
+gaps = "schema 版本化迁移与启前自动备份已落地；**没有回滚入口/命令**（要人工把 `backup()` 出来的 `.bak` 复制回去）"
 [entries."SR-NF13"]
 id = "SR-NF13"
 title = "关键路径日志 + 健康检查/调试开关"
@@ -726,7 +703,7 @@ gaps = ""
 
 [entries."SR-NF14"]
 id = "SR-NF14"
-title = "config.example.toml + Pydantic 校验 + env 覆盖"
+title = "配置工程化：config.example.toml 模板 + Pydantic 校验 + env 覆盖"
 group = "NF"
 status = "done"
 evidence = ["file:config.example.toml", "text:src/timeflow/config.py::TIMEFLOW_"]
@@ -734,15 +711,19 @@ gaps = ""
 
 [entries."SR-NF15"]
 id = "SR-NF15"
-title = "单测 + 覆盖率门槛（写进配置）+ 合入 checklist"
+title = "测试闭环：单测 + 覆盖率门槛 + 合入前 checklist"
 group = "NF"
 status = "partial"
-evidence = ["file:docs/CODING_GUIDELINES.md", "text:pyproject.toml::testpaths"]
-gaps = "覆盖率门槛未写进 pyproject（GAP-NF-08）—— 本次框架一并修"
+evidence = [
+  "file:docs/CODING_GUIDELINES.md",
+  "text:pyproject.toml::--cov-fail-under=70",
+  "file:.github/pull_request_template.md",
+]
+gaps = "覆盖率门槛已写进 `pyproject`（GAP-NF-08 收口）；**规格写的「真实/外部调用拆可 mock 单测 + integration marker」未加 marker** —— 现用 `tools/lf1_live_check.py` / `tools/web_live_check.py` 真机自检替代（口径偏离，待定）"
 
 [entries."SR-NF16"]
 id = "SR-NF16"
-title = "数据不出本地"
+title = "本地优先、隐私最小：数据本地存储、不出本地"
 group = "NF"
 status = "done"
 evidence = ["text:src/timeflow/app/main.py::127.0.0.1", "text:tools/serve.py::回环"]
@@ -750,7 +731,7 @@ gaps = ""
 
 [entries."SR-NF17"]
 id = "SR-NF17"
-title = "PWA + IndexedDB 离线 + 异步对齐 + 响应式底部 Tab"
+title = "移动端（跨端）：PWA + IndexedDB 离线缓存 + 异步对齐 + 响应式底部 Tab"
 group = "NF"
 status = "partial"
 evidence = ["file:src/web/manifest.json", "file:src/web/sw.js", "ui:view=setting"]
@@ -758,7 +739,7 @@ gaps = "无 IndexedDB、无离线队列、无跨端对齐（GAP-F9-02）"
 
 [entries."SR-NF18"]
 id = "SR-NF18"
-title = "轻量：启动快/内存低/大数据量流畅（可验证）"
+title = "性能/轻量：启动快、内存低、数据量增长下查询与可视化仍流畅（可验证）"
 group = "NF"
 status = "done"
 evidence = [
@@ -814,7 +795,15 @@ id = "OP-6"
 title = "删除（软删除 + 撤销 + 彻底删除）"
 group = "OP"
 status = "done"
-evidence = ["route:DELETE /api/tasks/{task_id}", "route:POST /api/tasks/{task_id}/restore", "route:DELETE /api/tasks/{task_id}/purge", "ui:data-action=task-purge"]
+evidence = [
+  "route:DELETE /api/tasks/{task_id}",
+  "route:POST /api/tasks/{task_id}/restore",
+  "route:DELETE /api/tasks/{task_id}/purge",
+  "route:POST /api/tasks/purge-deleted",
+  "text:src/timeflow/core/tasks/manager.py::STATUS_DELETED",
+  "ui:data-action=task-purge",
+  "test:test_task_delete.py",
+]
 gaps = ""
 
 [entries."OP-7"]
@@ -840,6 +829,7 @@ group = "OP"
 status = "done"
 evidence = [
   "route:PATCH /api/tasks/{task_id}",
+  "text:src/web/index.html::function saveTaskEdit(",
   "ui:data-action=task-edit",
   "ui:data-action=task-save",
   "ui:data-action=task-edit-cancel",
@@ -895,6 +885,19 @@ evidence = [
 ]
 gaps = ""
 
+[entries."OP-27"]
+id = "OP-27"
+title = "三态反馈（记得/模糊/忘了）+ 撤销本次反馈"
+group = "OP"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/review/review.py::def undo_review",
+  "route:POST /api/review/{item_id}/review",
+  "route:POST /api/review/{item_id}/undo",
+  "route:GET /api/review/{item_id}/facts",
+]
+gaps = ""
+
 [entries."OP-45"]
 id = "OP-45"
 title = "智能视图筛选 Important / Planned / Flagged（入口：左栏 + 全部任务页 + 设置页）"
@@ -908,6 +911,58 @@ evidence = [
   "ui:view=planned",
   "ui:view=flagged",
   "test:test_task_views_line.py",
+]
+gaps = ""
+
+[entries."OP-46"]
+id = "OP-46"
+title = "附件 / 要求链接：挂上 → 点开（三层规则 + 白名单 + 失败必提示）"
+group = "OP"
+status = "done"
+evidence = [
+  "route:POST /api/attach/open",
+  "route:PUT /api/settings/attach",
+  "text:src/timeflow/core/attach.py::DANGEROUS_EXTENSIONS",
+  "text:src/timeflow/core/attach.py::def check_whitelist_entry",
+  "text:src/timeflow/api/app.py::def require_local_origin",
+  "ui:data-action=attach-open",
+  "test:test_attach_line.py",
+]
+gaps = ""
+
+[entries."OP-47"]
+id = "OP-47"
+title = "到点通知开关（计划任务 + 系统通知，默认关）"
+group = "OP"
+status = "done"
+evidence = [
+  "route:PUT /api/settings/reminder",
+  "route:POST /api/reminders/test",
+  "text:src/timeflow/core/remind.py::def install_task",
+  "text:src/timeflow/core/remind.py::TASK_NAME",
+  "ui:data-action=set-remind-notify",
+  "ui:data-action=remind-test",
+  "test:test_remind_channel.py",
+]
+gaps = ""
+
+[entries."OP-18"]
+id = "OP-18"
+title = "习惯打卡 / 取消 + 改名 / 删除"
+group = "OP"
+status = "done"
+evidence = ["route:PATCH /api/habits/{habit_id}", "route:DELETE /api/habits/{habit_id}", "test:test_habit_memo_line.py"]
+gaps = ""
+
+[entries."STEP-17"]
+id = "STEP-17"
+title = "段2 口径定案（提醒 / 附件打开方式 / 优先级）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/段2设计决策-提醒与附件打开方式.md",
+  "text:复盘/任务重规划-剩余工作.md::T-B5",
+  "text:复盘/新窗口交接卡.md::F1 主线·段2",
 ]
 gaps = ""
 
@@ -1028,22 +1083,6 @@ evidence = [
 ]
 gaps = ""
 
-[entries."OP-46"]
-id = "OP-46"
-title = "附件 / 要求链接：挂上 → 点开（三层规则 + 白名单 + 失败必提示）"
-group = "OP"
-status = "done"
-evidence = [
-  "route:POST /api/attach/open",
-  "route:PUT /api/settings/attach",
-  "text:src/timeflow/core/attach.py::DANGEROUS_EXTENSIONS",
-  "text:src/timeflow/core/attach.py::def check_whitelist_entry",
-  "text:src/timeflow/api/app.py::def require_local_origin",
-  "ui:data-action=attach-open",
-  "test:test_attach_line.py",
-]
-gaps = ""
-
 [entries."T-B5"]
 id = "T-B5"
 title = "F1 主线·段2：提醒 remind_at + 到点系统通知（计划任务方案 B′）"
@@ -1101,22 +1140,6 @@ evidence = [
 ]
 gaps = ""
 
-[entries."OP-47"]
-id = "OP-47"
-title = "到点通知开关（计划任务 + 系统通知，默认关）"
-group = "OP"
-status = "done"
-evidence = [
-  "route:PUT /api/settings/reminder",
-  "route:POST /api/reminders/test",
-  "text:src/timeflow/core/remind.py::def install_task",
-  "text:src/timeflow/core/remind.py::TASK_NAME",
-  "ui:data-action=set-remind-notify",
-  "ui:data-action=remind-test",
-  "test:test_remind_channel.py",
-]
-gaps = ""
-
 [entries."T-C1"]
 id = "T-C1"
 title = "C 批：习惯只报次数、与投入并排显示（不折算时间）"
@@ -1131,6 +1154,20 @@ evidence = [
 ]
 gaps = ""
 
+[entries."T-C3"]
+id = "T-C3"
+title = "C 批：均衡度指标（波动 / 空档，温和呈现）"
+group = "PROCESS"
+status = "partial"
+evidence = [
+  "text:src/timeflow/core/ledger/ledger.py::focus_variation_minutes",
+  "text:src/timeflow/core/ledger/ledger.py::def _rhythm",
+  "text:src/timeflow/core/ledger/ledger.py::def _rhythm_note",
+  "route:GET /api/summary/weekly",
+  "test:test_week_summary.py",
+]
+gaps = "后端已落地（标准差 + 最长空档 + 温和一句话，全部**不折算、不告警**）；**界面显示待前端批次**（[exceptions] 留痕）"
+
 [entries."T-C4"]
 id = "T-C4"
 title = "C 批：产出分两行显示（学校 KPI / 知识资产）+ 可展开明细"
@@ -1144,6 +1181,47 @@ evidence = [
   "test:test_today_done_line.py",
 ]
 gaps = ""
+
+[entries."T-C5"]
+id = "T-C5"
+title = "C 批：任务 → 复习卡升级（GAP-F6-01）"
+group = "PROCESS"
+status = "partial"
+evidence = [
+  "column:review_items.task_id",
+  "text:src/timeflow/core/review/review.py::def items_for_task",
+  "route:POST /api/tasks/{task_id}/to-review",
+  "text:src/timeflow/core/review/review.py::def _check_task",
+  "test:test_review_link_line.py",
+]
+gaps = "后端已落地（schema v12 + 幂等升级 + 任务侧反查）；**界面按钮待前端批次**（[exceptions] 留痕）"
+
+[entries."T-C6"]
+id = "T-C6"
+title = "C 批：复习形式字段可选（GAP-F6-02）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "column:review_items.form",
+  "text:src/timeflow/core/review/review.py::FORM_LABELS",
+  "route:GET /api/review/meta",
+  "route:PATCH /api/review/items/{item_id}",
+  "test:test_review_link_line.py",
+]
+gaps = ""
+
+[entries."T-C7"]
+id = "T-C7"
+title = "C 批：复习卡挂引用句柄（GAP-F6-03）"
+group = "PROCESS"
+status = "partial"
+evidence = [
+  "column:review_items.ref_handle",
+  "text:src/timeflow/core/review/review.py::def update_item",
+  "route:PATCH /api/review/items/{item_id}",
+  "test:test_review_link_line.py",
+]
+gaps = "后端已落地（可写可清空、非法拒绝）；**界面入口待前端批次**（[exceptions] 留痕）"
 
 [entries."T-C8"]
 id = "T-C8"
@@ -1197,94 +1275,29 @@ evidence = [
 ]
 gaps = ""
 
-[entries."T-C3"]
-id = "T-C3"
-title = "C 批：均衡度指标（波动 / 空档，温和呈现）"
-group = "PROCESS"
-status = "partial"
-evidence = [
-  "text:src/timeflow/core/ledger/ledger.py::focus_variation_minutes",
-  "text:src/timeflow/core/ledger/ledger.py::def _rhythm",
-  "text:src/timeflow/core/ledger/ledger.py::def _rhythm_note",
-  "route:GET /api/summary/weekly",
-  "test:test_week_summary.py",
-]
-gaps = "后端已落地（标准差 + 最长空档 + 温和一句话，全部**不折算、不告警**）；**界面显示待前端批次**（[exceptions] 留痕）"
-
-[entries."T-C5"]
-id = "T-C5"
-title = "C 批：任务 → 复习卡升级（GAP-F6-01）"
-group = "PROCESS"
-status = "partial"
-evidence = [
-  "column:review_items.task_id",
-  "text:src/timeflow/core/review/review.py::def items_for_task",
-  "route:POST /api/tasks/{task_id}/to-review",
-  "text:src/timeflow/core/review/review.py::def _check_task",
-  "test:test_review_link_line.py",
-]
-gaps = "后端已落地（schema v12 + 幂等升级 + 任务侧反查）；**界面按钮待前端批次**（[exceptions] 留痕）"
-
-[entries."T-C6"]
-id = "T-C6"
-title = "C 批：复习形式字段可选（GAP-F6-02）"
+[entries."T-D1"]
+id = "T-D1"
+title = "文档债务：台账 SR 编号/标题校正（规则 A：规格号只属于规格）"
 group = "PROCESS"
 status = "done"
 evidence = [
-  "column:review_items.form",
-  "text:src/timeflow/core/review/review.py::FORM_LABELS",
-  "route:GET /api/review/meta",
-  "route:PATCH /api/review/items/{item_id}",
-  "test:test_review_link_line.py",
+  "file:复盘/台账编号校正-方案A落地.md",
+  "file:scripts/audit_titles.py",
+  "text:scripts/audit_titles.py::base_id",
+  "text:scripts/audit_progress.py::编号规则 A",
+  "test:test_audit_titles.py",
 ]
 gaps = ""
 
-[entries."T-C7"]
-id = "T-C7"
-title = "C 批：复习卡挂引用句柄（GAP-F6-03）"
-group = "PROCESS"
-status = "partial"
-evidence = [
-  "column:review_items.ref_handle",
-  "text:src/timeflow/core/review/review.py::def update_item",
-  "route:PATCH /api/review/items/{item_id}",
-  "test:test_review_link_line.py",
-]
-gaps = "后端已落地（可写可清空、非法拒绝）；**界面入口待前端批次**（[exceptions] 留痕）"
-
-[entries."T-D1"]
-id = "T-D1"
-title = "文档债务：台账 SR 编号/标题错位校正（F + NF 两层；含补 NF12 条目与门禁阻断）"
-group = "PROCESS"
-status = "todo"
-evidence = [
-  "file:复盘/文档债务-NF编号错位.md",
-  "file:scripts/audit_titles.py",
-]
-gaps = "工具实测：**15 条确定错位**（F1.2/F1.3/F1.5/F1.6/F2.3/F2.4/F2.5/F2.6/F2.8/F6.2/F6.3/F7.4/F9.2/F9.3/NF4 —— 各自「更像」相邻编号那条规格）+ **14 条需人核对**（含假阳性）。**根因已查明：台账把「拆分出来的卡」也用了规格编号**（规格 F1.1 在台账里是 F1.1+F1.2、F1.5 在台账里是 F1.6+F1.7 …，于是同号不同义）。**所以 T-D1 卡在一条规则上，需要用户点头**：拆卡时编号怎么给（A 规格号只属于规格 + 拆卡加 `a/b` 后缀；B 台账自编号 + 给每张卡加 `covers=[...]` 字段）——两方案的代价见 `复盘/文档债务-NF编号错位.md` §五。规则定了之后：校正标题/证据/状态、补规格 `SR-NF12`「数据迁移与备份」条目、把门禁里的 `audit_titles` 换成 `--check` 并改成**阻断项**、删掉 `tests/test_audit_titles.py` 上那个 `xfail(strict)`"
-
 [entries."T-D2"]
 id = "T-D2"
-title = "文档债务：审计加「标题级」规格覆盖检查（工具已就位，待接成阻断项）"
-group = "PROCESS"
-status = "partial"
-evidence = [
-  "file:scripts/audit_titles.py",
-  "text:scripts/run_gates.py::audit_titles",
-  "text:scripts/run_gates.py::blocking",
-  "test:test_audit_titles.py",
-]
-gaps = "工具与门禁的**信息性**一步已落地（`scripts/audit_titles.py` + `run_gates` 里 `blocking=false` 的 `audit_titles` 步骤 + `gates/last.json` 记录说明 + `xfail(strict)` 闹钟）；**还没接成阻断项** —— 因为编号校正未做（T-D1），挡了就完全无法提交。T-D1 完成后换 `--check` 并改 blocking"
-
-[entries."STEP-17"]
-id = "STEP-17"
-title = "段2 口径定案（提醒 / 附件打开方式 / 优先级）"
+title = "文档债务：审计加「标题级」规格对账（已接成门禁阻断项）"
 group = "PROCESS"
 status = "done"
 evidence = [
-  "file:复盘/段2设计决策-提醒与附件打开方式.md",
-  "text:复盘/任务重规划-剩余工作.md::T-B5",
-  "text:复盘/新窗口交接卡.md::F1 主线·段2",
+  "file:scripts/audit_titles.py",
+  "text:scripts/run_gates.py::audit_titles.py --check",
+  "test:test_audit_titles.py",
 ]
 gaps = ""
 
@@ -1295,4 +1308,3 @@ group = "DELIVERY"
 status = "partial"
 evidence = ["route:GET /api/tasks", "route:GET /api/memos", "route:POST /api/memos", "route:GET /api/habits", "route:POST /api/feedback", "route:GET /api/insights/daily", "route:GET /api/assessments", "route:POST /api/grades", "route:GET /api/team/assignments", "route:GET /api/ledger/outputs", "route:POST /api/ledger/invest", "route:POST /api/review/items", "route:GET /api/focus/today", "route:GET /api/tasks/{task_id}/facts", "route:GET /api/courses", "route:GET /api/config", "route:GET /api/feedback", "route:GET /api/focus/tasks/{task_id}", "route:DELETE /api/ledger/invest/{entry_id}", "route:DELETE /api/ledger/output/{entry_id}", "route:DELETE /api/memos/{memo_id}", "route:GET /api/grades", "route:GET /api/habits/{habit_id}", "route:GET /api/insights/groups", "route:GET /api/ledger/invests", "route:GET /api/review/{item_id}/facts", "route:GET /api/sync/logs", "route:GET /api/tasks/deleted", "route:GET /api/tasks/{task_id}", "route:POST /api/habits", "route:POST /api/habits/{habit_id}/toggle", "route:POST /api/ledger/output", "route:POST /api/review/{item_id}/review", "route:POST /api/grades", "route:GET /api/groups/{group_id}/tasks", "route:POST /api/tasks/{task_id}/group"]
 gaps = "白名单/勿扰配置（SR-F3.3）、子任务（OP-12）、AI 边界（SR-F7.4）等仍无界面入口；**分组管理已在本轮接通（T-A1）**"
-

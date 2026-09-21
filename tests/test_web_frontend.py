@@ -283,7 +283,7 @@ def test_task_detail_panel_shows_readable_history() -> None:
 
 
 def test_task_note_is_editable_in_detail_only() -> None:
-    """T-B1（SR-F1.4 备注）：详情面板能读能写，**列表卡片不显示**（渐进聚焦）。"""
+    """T-B1（SR-F1.4a 备注）：详情面板能读能写，**列表卡片不显示**（渐进聚焦）。"""
     html = WEB_INDEX.read_text(encoding="utf-8")
     edit = html.split("function editForm(t){", 1)[1].split("\n}", 1)[0]
     assert 'id="editNote"' in edit, "编辑态缺少备注输入（备注就只能靠 API 写了）"
@@ -310,7 +310,7 @@ def test_habit_count_shown_alongside_investment() -> None:
 
 
 def test_reminder_ui_and_notify_switch() -> None:
-    """T-B5（SR-F1.4 提醒）：能设、能标出来；通知通道（B′ 计划任务）有开关且**默认关**。
+    """T-B5（SR-F1.4a 提醒）：能设、能标出来；通知通道（B′ 计划任务）有开关且**默认关**。
 
     设置页不许谎报：要写明会注册 Windows 计划任务、以及"注销/关机不响"这条真实边界。
     """
@@ -349,7 +349,7 @@ def test_reminder_ui_and_notify_switch() -> None:
 
 
 def test_attach_open_flow_is_wired_and_never_silent() -> None:
-    """T-B4（SR-F1.4 附件 / SR-F5.3 跳转要求）：能挂、能点开、**打不开必出声**。
+    """T-B4（SR-F1.4a 附件 / SR-F5.3 跳转要求）：能挂、能点开、**打不开必出声**。
 
     规则在后端（`core/attach.py`），前端只负责把三种结果分开处理：
     网址→新标签、本机动作→已执行、其余→**复制路径 + 提示**（不许静默失败）。
@@ -389,7 +389,7 @@ def test_attach_open_flow_is_wired_and_never_silent() -> None:
 
 
 def test_smart_views_are_reachable_at_every_breakpoint() -> None:
-    """T-B3（SR-F1.3）：三个智能视图要真的进得去 —— 左栏、全部任务页、设置页都有入口。
+    """T-B3（SR-F1.2「提供视图」）：三个智能视图要真的进得去 —— 左栏、全部任务页、设置页都有入口。
 
     为什么强调"处处"：手机端（≤640px）CSS 把 `.rail nav` 隐藏了，只留底部 Tab；
     只把入口放在左栏 = 手机上根本进不去（这正是"规格有、界面没有"的老毛病）。
@@ -417,7 +417,7 @@ def test_smart_views_are_reachable_at_every_breakpoint() -> None:
 
 
 def test_task_priority_badge_and_edit() -> None:
-    """T-B2（SR-F1.2）：卡片有优先级色标、编辑态能改优先级，颜色只住 app.css。"""
+    """T-B2（SR-F1.1b 排序）：卡片有优先级色标、编辑态能改优先级，颜色只住 app.css。"""
     html = WEB_INDEX.read_text(encoding="utf-8")
     assert "function prioBadge(" in html, "缺少优先级色标组件"
     card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]

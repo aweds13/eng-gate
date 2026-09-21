@@ -1,4 +1,4 @@
-"""F1 主线 · 段2 · T-B5（前半）：任务提醒 `remind_at`（SR-F1.4「Remind me」）。
+"""F1 主线 · 段2 · T-B5（前半）：任务提醒 `remind_at`（SR-F1.4a「Remind me」）。
 
 覆盖：
 - schema v9 → v10 加列：幂等、老行 NULL（不提醒）、缺 tasks 表的残缺库不失败；
