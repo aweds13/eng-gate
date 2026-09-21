@@ -723,9 +723,22 @@ gaps = "**口径已定（2026-09-21 用户拍板）**：做**复习形式可配�
 id = "SR-NF8"
 title = "可测试、可回退：模块单测 + 回归；敏感改动 shadow + 一键回退开关"
 group = "NF"
-status = "todo"
-evidence = []
-gaps = "只有单测/快照，无 shadow 与回退开关（GAP-NF-05）"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/core/behavior.py::def register_compare",
+  "text:src/timeflow/core/behavior.py::def shadow",
+  "text:src/timeflow/core/behavior.py::def reset_variant",
+  "text:src/timeflow/core/tasks/manager.py::def compare_debt_undated_myday",
+  "text:src/timeflow/core/tasks/manager.py::behavior.register_compare",
+  "route:GET /api/settings/behavior",
+  "route:PUT /api/settings/behavior",
+  "route:POST /api/settings/behavior/reset",
+  "ui:data-action=set-behavior",
+  "ui:data-action=behavior-reset",
+  "test:test_behavior_rollback_line.py",
+]
+gaps = ""
 
 [entries."SR-NF9"]
 id = "SR-NF9"
@@ -1434,6 +1447,40 @@ evidence = [
   "file:scripts/audit_titles.py",
   "text:scripts/run_gates.py::audit_titles.py --check",
   "test:test_audit_titles.py",
+]
+gaps = ""
+
+[entries."T-D11"]
+id = "T-D11"
+title = "D 批：口径开关 + 影子对比（「敏感改动 shadow + 一键回退」）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "file:复盘/任务重规划-剩余工作.md",
+  "text:src/timeflow/core/behavior.py::def register_compare",
+  "text:src/timeflow/core/behavior.py::def undated_myday_counted",
+  "text:src/timeflow/core/tasks/manager.py::behavior.undated_myday_counted",
+  "route:GET /api/settings/behavior",
+  "route:PUT /api/settings/behavior",
+  "route:POST /api/settings/behavior/reset",
+  "ui:data-action=set-behavior",
+  "ui:data-action=behavior-reset",
+  "test:test_behavior_rollback_line.py",
+]
+gaps = ""
+
+[entries."T-D12"]
+id = "T-D12"
+title = "缺陷：复习卡的日期口径从 UTC 改回本地日历（门禁跨午夜暴露）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/门禁跨午夜暴露的时区口径缺陷-T-D12.md",
+  "text:src/timeflow/core/review/review.py::def _local_date",
+  "text:src/timeflow/core/review/review.py::created_on = date.today().isoformat()",
+  "text:src/timeflow/core/review/review.py::next_due = _local_date(new_card.due)",
+  "test:test_review_local_date_line.py",
 ]
 gaps = ""
 

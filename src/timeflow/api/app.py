@@ -25,10 +25,10 @@ from timeflow import logs
 from timeflow.config import load_settings
 from timeflow.core import academic as ac
 from timeflow.core import attach as attach_mod
+from timeflow.core import behavior, insights
 from timeflow.core import facts as facts_mod
 from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
-from timeflow.core import insights
 from timeflow.core import memo as memo
 from timeflow.core import remind as remind_mod
 from timeflow.core import review as rv
@@ -381,6 +381,34 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return tm.archive_settings(conn, settings.tasks.archive_after_days)
+
+    # ---- 口径与一键回退（SR-NF8 / D 批 · T-D11）----
+    # 口径（2026-09-21 用户选 B 案）：机制前向 + 拿 T-F8 的计债口径当样板对比。
+    # 三条路由：读整表（含影子差异）/ 切一条口径 / 回默认位（一键回退）。
+    @app.get("/api/settings/behavior")
+    def get_behavior() -> dict[str, Any]:
+        """每条口径的当前做法 + 默认位 + **影子差异**（纯读，不改任何东西）。"""
+        return behavior.report(conn)
+
+    @app.put("/api/settings/behavior")
+    def put_behavior(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """切换一条口径。非法 key / 非法做法 → 400（**不静默落默认值**）。只接受本机页面。"""
+        require_local_origin(request)
+        try:
+            behavior.set_variant(conn, payload.get("key"), payload.get("variant"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return behavior.report(conn)
+
+    @app.post("/api/settings/behavior/reset")
+    def post_behavior_reset(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """一键回退：删掉本机那条设置，回到**默认位**（不是把当前值再写一遍）。"""
+        require_local_origin(request)
+        try:
+            behavior.reset_variant(conn, payload.get("key"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return behavior.report(conn)
 
     # ---- 备份与恢复（SR-NF12 / SR-F9.3）----
     # 口径（2026-09-21 用户定）：设置页列出最近几个备份，点一个就能恢复。

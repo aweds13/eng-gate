@@ -184,6 +184,30 @@ const DB = {
   // 「完成 N 天后进档案」的 N（F 批 · T-F2）：设置页要渲染出天数输入框与口径说明
   '/api/settings/archive': { after_days: 3, default_after_days: 3, max_after_days: 365,
     note: '完成之后不是立刻收走：满 N 天自动进档案（0 = 当天就收）。' },
+  // 口径与一键回退（SR-NF8 / D 批 · T-D11）：设置页要渲染出"当前做法 / 另一种做法 /
+  // 影子差异（含样例）/ 回到默认位"。这里给一条真口径 + 1 处影子差异，看它是不是真按
+  // "当前 → 影子"渲染，而不是只把说明文字抄一遍。
+  '/api/settings/behavior': {
+    max_samples: 3,
+    note: '这里只有可重算的派生口径；改数据的事走上面的「备份与恢复」。',
+    switch_note: '开关默认停在现状位（没动过 = 什么都没变）；影子只是拿另一套口径试算。',
+    items: [{
+      key: 'tasks.debt_undated_myday',
+      title: '债务：无截止日的 My Day 老账',
+      question: '「昨天没做完、又没有截止日」的 My Day 任务，算不算一笔债？',
+      kind: 'derived',
+      current: 'from_created', current_label: '算：天数从创建日算起',
+      current_note: '现在的做法（F 批 · T-F8 定案 A）',
+      default: 'from_created', is_default: true,
+      variants: [
+        { id: 'from_created', label: '算：天数从创建日算起', note: '现在的做法', is_default: true },
+        { id: 'uncounted', label: '不算：不进债务卡', note: 'T-F8 之前的表现', is_default: false },
+      ],
+      shadow: { available: true, variant: 'uncounted', label: '不算：不进债务卡', diff_count: 1,
+        samples: [{ label: '债务卡「高数作业」', current: '9 天', shadow: '不在债务里' }],
+        summary: '影子跑「不算：不进债务卡」：1 处不同，下面列前 1 条。' },
+    }],
+  },
   // 任务 → 复习卡（T-C5）：详情面板要显示"这张任务升级出来的卡"
   '/api/tasks/t1/review-cards': [{ id: 'r1', title: '探针复习卡', due_date: '2026-09-20T00:00:00',
     form: 'qa', source: 'internal', ref_handle: 'notes/数学.md', task_id: 't1' }],
@@ -289,6 +313,7 @@ let attemptBad = 0;
 let archiveBad = 0;
 let stepBad = 0;
 let debtBad = 0;
+let behaviorBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -503,6 +528,32 @@ for (const [view, needs] of [
   }
 }
 
+// 口径与一键回退（D 批 · T-D11）：设置页那一节要真渲染出"当前做法 / 另一种做法 /
+// 影子差异（连样例的『当前 → 影子』都要有）/ 一键回到默认位"。
+const behaviorChecks = [];
+for (const [view, needs] of [
+  ['setting', ['口径与回退', '债务：无截止日的 My Day 老账', '算：天数从创建日算起',
+    '不算：不进债务卡', 'set-behavior', 'behavior-reset', '回到默认位', '默认位',
+    '影子跑「不算：不进债务卡」：1 处不同', '债务卡「高数作业」：9 天 → 不在债务里']],
+]) {
+  try {
+    byId.get('main')._html = '';
+    await globalThis.__view(view);
+    await sleep(30);
+    const html = byId.get('main')._html;
+    const missing = needs.filter((n) => !html.includes(n));
+    const rendered = missing.length === 0;
+    if (!rendered) behaviorBad++;
+    behaviorChecks.push({ view, rendered, missing });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} ${view}·口径回退 main ${String(html.length).padStart(6)}B`
+      + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+  } catch (e) {
+    behaviorBad++;
+    behaviorChecks.push({ view, error: e.message });
+    console.log(`  ❌ ${view}·口径回退 渲染抛错: ${e.message}`);
+  }
+}
+
 // 子步骤（F 批 · T-F4）：主任务卡上显示「当前该做哪一步」；
 // 详情里每一步都有截止日输入框与「明天 / 尝试失败 / 详情 / 脱离」，添加步骤那一行也有日期框。
 const stepChecks = [];
@@ -599,6 +650,7 @@ if (process.argv.includes('--json')) {
     { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
+      behavior: behaviorChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -610,7 +662,7 @@ if (problems.length) {
 }
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
   || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0 || archiveBad > 0
-  || stepBad > 0 || debtBad > 0
+  || stepBad > 0 || debtBad > 0 || behaviorBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -624,5 +676,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，档案视图 ${archiveChecks.length - archiveBad}/${archiveChecks.length} 正常`
   + `，子步骤 ${stepChecks.length - stepBad}/${stepChecks.length} 正常`
   + `，债务卡 ${debtChecks.length - debtBad}/${debtChecks.length} 正常`
+  + `，口径回退 ${behaviorChecks.length - behaviorBad}/${behaviorChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

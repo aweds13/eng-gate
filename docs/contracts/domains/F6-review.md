@@ -37,6 +37,8 @@
 - 可逆：可撤销本次反馈（回退 interval/reps 与事实）——**第 5 步已实现**（`POST /api/review/{id}/undo`）。
 - 反馈：下一间隔/到期时间即时更新。
 - 边界：非法 rating 拒绝；同一天同卡只记一条投入事实（重复完成幂等）；已撤销的那次不阻止重新复习入账。
+  **日期一律本地日历**（`specification/behaviors.md`：日界 00:00）—— 到期日/创建日/下次到期
+  都按本地日期落库与返回，**不拿 FSRS 时刻的 UTC 日期**（T-D12 修：东八区凌晨曾会差一天）。
 - API（第 2 步实现）：`POST /api/review/{id}/review`、`GET /api/review/{id}/facts`（事实流水）。
   撤销：`POST /api/review/{id}/undo`（当日最近一次；回退到事实里存的 before 快照 + 追加 `review.undone`）。
 

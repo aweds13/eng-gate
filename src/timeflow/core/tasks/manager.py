@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     import sqlite3
 
 from timeflow.core import attach as attach_mod
+from timeflow.core import behavior
 
 STATUS_TODO = "未开始"
 STATUS_DOING = "进行中"
@@ -1457,7 +1458,12 @@ def _debt_root(conn: sqlite3.Connection, task: Task) -> Task:
     return root
 
 
-def debt_groups(conn: sqlite3.Connection, today: str | None = None) -> list[DebtGroup]:
+def debt_groups(
+    conn: sqlite3.Connection,
+    today: str | None = None,
+    *,
+    undated_counts: bool | None = None,
+) -> list[DebtGroup]:
     """债务卡（T-F9）：把逾期的东西**归到还活着的父任务上**，按"欠得最狠"的排前面。
 
     口径（用户 2026-09-21 定）：债务里建**父任务状态卡**，逾期的子孙**挂在卡下面** ——
@@ -1466,11 +1472,20 @@ def debt_groups(conn: sqlite3.Connection, today: str | None = None) -> list[Debt
 
     逾期的判定本身仍走 `overdue_tasks()` / `overdue_days()`（一处口径）——
     本函数只负责"归到哪张卡上"，不改"算不算逾期"。
+
+    `undated_counts`（T-D11）就是那条**口径开关**：无截止日的 My Day 老账算不算债。
+    `None`（默认）= 跟着本机当前口径走（读 `core/behavior.py`）；显式传值是**影子对比**在用
+    —— 同一份库、两套口径各算一遍，就得到"切过去会变成什么样"。
+    开关只动**债务**这一侧：逾期栏的天数照旧（T-F9 定过"逾期栏是工作清单、债务是阅读清单"，
+    两套读法不互相牵动）。
     """
     t = today or _today()
+    counted = behavior.undated_myday_counted(conn) if undated_counts is None else undated_counts
     groups: dict[str, DebtGroup] = {}
     for task in overdue_tasks(conn, t):
         days = overdue_days(task, t)
+        if task.due_date is None and not counted:
+            days = 0  # 老口径（T-F8 之前）：没截止日的老账列在逾期栏，但不算债
         if days <= 0:
             continue
         root = _debt_root(conn, task)
@@ -1492,6 +1507,52 @@ def debt_groups(conn: sqlite3.Connection, today: str | None = None) -> list[Debt
 def debt_count(conn: sqlite3.Connection, today: str | None = None) -> int:
     """债务卡张数（T-F9）—— 账本 / 洞察 / 周结算**共用这一个**，免得三处各算一套。"""
     return len(debt_groups(conn, today))
+
+
+def compare_debt_undated_myday(
+    conn: sqlite3.Connection,
+    current: str,
+    today: str | None = None,
+) -> list[behavior.DiffRow]:
+    """T-D11 的样板对比：**同一份库、两套口径各算一遍债务**，列出会变的地方（只读）。
+
+    为什么拿这条当样板：它最容易让人觉得"数字怎么突然变了"—— 无截止日的 My Day 老账
+    从"不计债"改成"从创建日算起"之后，债务卡可能**多出几张**、卡的**天数会变大**。
+
+    `current` 是当前做法（`core/behavior.py` 传进来）：**现在用哪一侧，哪一侧就摆在
+    "当前"那一列** —— 开关翻过之后两侧对调，不能写死。
+    """
+    t = today or _today()
+    counted = {c.root.id: c for c in debt_groups(conn, t, undated_counts=True)}
+    uncounted = {c.root.id: c for c in debt_groups(conn, t, undated_counts=False)}
+    if current == behavior.VARIANT_UNCOUNTED:
+        now, other = uncounted, counted
+    else:
+        now, other = counted, uncounted
+
+    def label_of(card_id: str) -> str:
+        card = now.get(card_id) or other.get(card_id)
+        return card.root.title if card is not None else card_id
+
+    rows: list[behavior.DiffRow] = []
+    for cid in sorted(set(now) | set(other), key=label_of):
+        mine, theirs = now.get(cid), other.get(cid)
+        mine_days = mine.overdue_days if mine is not None else None
+        theirs_days = theirs.overdue_days if theirs is not None else None
+        if mine_days == theirs_days:
+            continue  # 两套口径下这张卡没差别 → 不是"会变的地方"
+        rows.append(
+            behavior.DiffRow(
+                label=f"债务卡「{label_of(cid)}」",
+                current="不在债务里" if mine_days is None else f"{mine_days} 天",
+                shadow="不在债务里" if theirs_days is None else f"{theirs_days} 天",
+            )
+        )
+    return rows
+
+
+# 注册给 `core/behavior.py`：加一条新口径 = 一条 Rule + 一个 compare + 这一行（见模块开头）。
+behavior.register_compare(behavior.KEY_DEBT_UNDATED_MYDAY, compare_debt_undated_myday)
 
 
 # ---------------------------------------------------------------- 附件 / 要求链接（SR-F1.4 / T-B4）

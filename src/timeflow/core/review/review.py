@@ -64,6 +64,18 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _local_date(moment: datetime) -> str:
+    """把一个时刻落成**本地日历日期**（T-D12）。
+
+    规格层写着「一律本地时区、本地日期；日界 00:00」（`specification/behaviors.md`），
+    而本模块原来是全项目**唯一**用 UTC 落日期的地方（`_now().date()`）：东八区凌晨 0:00~8:00
+    建的卡，到期日会存成"昨天" —— 同一个 `review()` 里 `reviewed_on` 用的却是本地
+    `date.today()`，自相矛盾。**FSRS 的时刻照旧按 UTC 走**（它算的是"哪个瞬间"），
+    **落库的日期一律换成我的日历**。
+    """
+    return moment.astimezone().date().isoformat()
+
+
 def _scheduler() -> Scheduler:
     from fsrs import Scheduler
 
@@ -92,12 +104,13 @@ def create_item(
     if task_id is not None:
         task_id = _check_task(conn, task_id)
     rid = _uid()
+    created_on = date.today().isoformat()  # 本地日历日（T-D12：原来用 UTC 日期，见 `_local_date`）
     conn.execute(
         "INSERT INTO review_items (id, title, form, source, due_date, interval_days, "
         "ease, reps, lapses, state, ref_handle, task_id, created_at) "
         "VALUES (?,?,?,?,?,?,2.5,0,0,?,?,?,?)",
-        (rid, title, form, source, _now().date().isoformat(), 0.0, STATE_DUE, ref_handle,
-         task_id, _now().date().isoformat()),
+        (rid, title, form, source, created_on, 0.0, STATE_DUE, ref_handle,
+         task_id, created_on),
     )
     conn.commit()
     return rid
@@ -167,8 +180,8 @@ def _card_from_row(row: sqlite3.Row) -> Card:
     from fsrs import Card, State
 
     due = datetime.combine(
-        date.fromisoformat(row["due_date"]), time.min, tzinfo=timezone.utc
-    )
+        date.fromisoformat(row["due_date"]), time.min
+    ).astimezone(timezone.utc)  # 落库的是本地日历日（T-D12）→ 还原成本地零点再交给 FSRS
     # state: 已复习过=Review(3)，否则 Learning(1)
     state_int = 3 if int(row["reps"] or 0) > 0 else 1
     return Card(
@@ -206,11 +219,12 @@ def review(
     new_card, _log = sched.review_card(card, Rating(mapping[feedback]), _now())
     reps = int(row["reps"] or 0) + 1
     lapses = int(row["lapses"] or 0) + (1 if feedback == RATING_FORGOT else 0)
+    next_due = _local_date(new_card.due)  # 本地日历日（T-D12）
     conn.execute(
         "UPDATE review_items SET due_date=?, interval_days=?, ease=?, reps=?, lapses=?, "
         "state=? WHERE id=?",
         (
-            new_card.due.date().isoformat(),
+            next_due,
             round(float(new_card.stability or 2.5), 4),
             round(float(new_card.difficulty or 2.5), 4),
             reps,
@@ -224,12 +238,12 @@ def review(
     reviewed_on = date.today().isoformat()
     _record_completed_fact(
         conn, item_id=item_id, title=str(row["title"]), feedback=feedback,
-        reps=reps, next_due=new_card.due.date().isoformat(), reviewed_on=reviewed_on,
+        reps=reps, next_due=next_due, reviewed_on=reviewed_on,
         before=before,
     )
     return {
         "id": item_id,
-        "due_date": new_card.due.date().isoformat(),
+        "due_date": next_due,
         "interval_days": round(float(new_card.stability or 2.5), 4),
         "reps": reps,
         "lapses": lapses,

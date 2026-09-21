@@ -215,6 +215,9 @@ const ACTIONS = {
   'restore-backup': el => restoreBackup(el.dataset.name || ''),
   // 「完成 N 天后进档案」的 N（F 批 · T-F2）：改的是后端设置，改完重渲染让档案区跟着变
   'set-archive-days': () => setArchiveDays(),
+  // 口径与一键回退（SR-NF8 / D 批 · T-D11）：切换一条口径 / 回到默认位（都是后端设置）
+  'set-behavior':   el => setBehavior(el.dataset.key||'', el.dataset.variant||'', el.dataset.label||''),
+  'behavior-reset': el => resetBehavior(el.dataset.key||''),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -1904,10 +1907,10 @@ async function restoreBackup(name){
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg]=await Promise.all([
+  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg]=await Promise.all([
     api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach'),
     api('/api/settings/reminder'),api('/api/focus/guard'),api('/api/settings/backups'),
-    api('/api/settings/archive')]);
+    api('/api/settings/archive'),api('/api/settings/behavior')]);
   groupCache=groups||[];
   guardCache=guardCfg||null;
   backupCache=backups||null;
@@ -1916,6 +1919,8 @@ async function renderSetting(m){
     note:'',window_format:'HH:MM-HH:MM',max_items:50};
   // 「完成 N 天后进档案」（T-F2）：缺字段就退回默认值 —— 设置页不该因为一个字段没到就整页空掉
   const arch=archCfg||{after_days:3,default_after_days:3,max_after_days:365,note:''};
+  // 口径与一键回退（T-D11）：缺字段就当"没有可回退的口径"，不让整页空掉
+  const beh=behaviorCfg||{items:[],note:'',switch_note:''};
   const bk=backupCache||{db:'',dir:'',items:[],note:''};
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
@@ -1928,6 +1933,7 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-academic">GPA 制式</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-attach">附件打开方式</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-tasks">任务</button>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-behavior">口径与回退</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-remind">提醒</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-sync">数据与同步</button></div>
   </div>
@@ -1975,6 +1981,24 @@ async function renderSetting(m){
       <button data-action="set-archive-days">保存</button>
       <span class="sub">默认 ${Number(arch.default_after_days)||3} 天 · 上限 ${Number(arch.max_after_days)||365} 天</span></div>
     <div class="sub">${esc(arch.note||'')}</div>
+  </div>
+  <div class="section-title" id="set-behavior">口径与回退</div>
+  <div class="card panel-card">
+    <div class="sub">${esc(beh.switch_note||'')}</div>
+    ${(beh.items||[]).length?(beh.items||[]).map(r=>`
+      <div class="settings-sub">${esc(r.title)}
+        <span class="badge">${r.is_default?'默认位':'已改过'}</span></div>
+      <div class="meta">${esc(r.question)}</div>
+      <div class="row">${(r.variants||[]).map(v=>
+        `<button class="${r.current===v.id?'':'ghost'}" data-action="set-behavior" data-key="${esc(r.key)}"
+          data-variant="${esc(v.id)}" data-label="${esc(v.label)}"
+          title="${esc(v.note||'')}">${esc(v.label)}${v.is_default?'（默认）':''}</button>`).join('')}
+        <button class="ghost" data-action="behavior-reset" data-key="${esc(r.key)}">回到默认位</button></div>
+      <div class="meta">${esc(shadowLine(r.shadow))}</div>
+      ${shadowSamples(r)}
+      <div class="sub">${esc(r.current_note||'')}</div>`).join('')
+      :'<div class="sub">还没有登记任何口径。</div>'}
+    <div class="sub">${esc(beh.note||'')}</div>
   </div>
   <div class="section-title" id="set-academic">学业</div>
   <div class="card panel-card">
@@ -2061,6 +2085,35 @@ async function renderSetting(m){
   if(box)renderGroupAdmin(box);
 }
 // GPA 制式切换：只改查看口径（写死配置是后端职责），立即重渲染
+/* 口径与一键回退（SR-NF8 / D 批 · T-D11）：切换与「回到默认位」都写后端设置，
+   改完重渲染 —— 界面上的数字必须立刻体现"你现在用的口径"，不能等下次刷新。
+   影子只报差异（`shadowLine`/`shadowSamples`），不做逐条审批。 */
+async function setBehavior(key, variant, label){
+  try{
+    await api('/api/settings/behavior',{method:'PUT',body:JSON.stringify({key,variant})});
+    toast(label?`已切到「${label}」`:'口径已切换');view(current);
+  }catch(e){/* api() 已经弹过后端原话（非法 key / 非法做法） */}
+}
+async function resetBehavior(key){
+  try{
+    await api('/api/settings/behavior/reset',{method:'POST',body:JSON.stringify({key})});
+    toast('已回到默认位');view(current);
+  }catch(e){/* 同上 */}
+}
+// 影子那一行（T-D11）：有差异就点出来，没有就明说"没区别"
+function shadowLine(sh){
+  const s=sh||{};
+  if(!s.available) return s.summary||'这条口径暂时没有对比实现。';
+  return (s.diff_count>0?'⚠️ ':'✅ ')+(s.summary||'');
+}
+// 影子的样例（最多几条，由后端截）：只读展示"当前 → 影子"，不是待办清单
+function shadowSamples(r){
+  const s=(r&&r.shadow)||{};
+  if(!s.available||!(s.samples||[]).length) return '';
+  return `<div class="row tight">${s.samples.map(x=>
+    `<span class="badge" title="当前 → 影子">${esc(x.label)}：${esc(x.current)} → ${esc(x.shadow)}</span>`
+  ).join('')}</div>`;
+}
 // ---- 附件打开方式设置（T-B4）：模式与白名单存服务端 ----
 async function setAttachMode(mode){
   await api('/api/settings/attach',{method:'PUT',body:JSON.stringify({mode})});
