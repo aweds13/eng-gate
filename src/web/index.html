@@ -1066,6 +1066,7 @@ function weekCard(w){
       <div class="sub" style="margin-top:4px">${label}</div></div>`;
   }).join('');
   const nums=[`专注 ${w.focus_hours}h`];
+  if(w.gain_count)nums.push(`完成收益 ${w.gain_count} 项`);   // T-F6：完成悬赏=收益（N3 口径）
   if(w.manual_hours)nums.push(`手动 ${w.manual_hours}h`);
   if(w.habits_done)nums.push(`习惯 ${w.habits_done} 次`);   // T-C1：只报次数，不折算成小时
   if(w.review_count)nums.push(`复习 ${w.review_count} 张`);
@@ -1087,8 +1088,9 @@ function rhythmRow(w){
 }
 
 function summaryLine(s){
-  // 习惯只报**次数**、与投入并排（T-C1：不折算成时间）；产出**按两类分开报**（T-C4：学校 KPI / 知识资产）
-  const parts=[`债务 ${s.debt_count} 项`,`投入 ${s.invest_hours}h`];
+  // 习惯只报**次数**、与投入并排（T-C1：不折算成时间）；产出**按两类分开报**（T-C4：学校 KPI / 知识资产）；
+  // 完成收益（T-F6）与债务并排 —— 这一对就是 N3 那条贯穿口径「逾期=债务 / 完成悬赏=收益」。
+  const parts=[`债务 ${s.debt_count} 项`,`完成收益 ${s.gain_count||0} 项`,`投入 ${s.invest_hours}h`];
   if(s.manual_hours)parts.push(`手动投入 ${s.manual_hours}h`);
   if(s.habit_count)parts.push(`习惯 ${s.habit_count} 次`);
   if(s.review_count)parts.push(`复习 ${s.review_count} 张`);

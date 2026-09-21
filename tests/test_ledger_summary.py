@@ -83,3 +83,51 @@ def test_habit_count_api(tmp_path) -> None:  # type: ignore[no-untyped-def]
     client.post(f"/api/habits/{hid}/toggle")
     got = client.get("/api/summary").json()
     assert got["habit_count"] == 1 and got["invest_hours"] == 0.0
+
+
+# ---- 完成收益（T-F6 / N3 口径「完成悬赏 = 收益/储蓄」）----
+# 用户 2026-09-21 问「我怎么没看到你开发这个系统」时查出来的缺口：这条口径一直在约定层
+# （`conventions.md:20`：储蓄 = 完成悬赏 / 复习完成），但**账本里没有收益读数**。
+
+
+def test_gain_count_counts_completed_tasks_once(conn) -> None:  # type: ignore[no-untyped-def]
+    from timeflow.core import tasks as tm
+
+    a = tm.create_task(conn, title="做成一件")
+    tm.complete_task(conn, a.id)
+    tm.complete_task(conn, a.id)      # 重复完成（幂等）：只算一笔
+    assert ledger.summary(conn).gain_count == 1
+
+
+def test_gain_count_drops_uncompleted(conn) -> None:  # type: ignore[no-untyped-def]
+    """完成又被撤销 → **不算收益**（撤销照扣，与 today_done 同一口径）。"""
+    from timeflow.core import tasks as tm
+
+    t = tm.create_task(conn, title="做完又反悔")
+    tm.complete_task(conn, t.id)
+    tm.uncomplete_task(conn, t.id)
+    assert ledger.summary(conn).gain_count == 0
+
+
+def test_gain_count_ignores_steps(conn) -> None:  # type: ignore[no-untyped-def]
+    """**只算任务、不算子步骤**：完成一步是"推进"，不是"收了一笔悬赏"。
+
+    注意：**只有一个步骤时，完成它会把父任务也带成完成**（N10 的联动），所以这里给两个步骤 ——
+    只完成其中一个时，父任务还没完成，收益必须是 0。
+    """
+    from timeflow.core import tasks as tm
+
+    parent = tm.create_task(conn, title="大任务")
+    step_a = tm.create_task(conn, title="第一步", parent_id=parent.id)
+    tm.create_task(conn, title="第二步", parent_id=parent.id)
+    tm.complete_task(conn, step_a.id)
+    assert ledger.summary(conn).gain_count == 0, "只完成子步骤不该记成收益"
+    assert tm.get_task(conn, parent.id).status != tm.STATUS_DONE, "还剩一步，父任务不该完成"
+
+
+def test_gain_count_api_and_weekly(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    client = TestClient(create_app(str(tmp_path / "gain.db")))
+    tid = client.post("/api/tasks", json={"title": "一件事"}).json()["id"]
+    client.post(f"/api/tasks/{tid}/complete")
+    assert client.get("/api/summary").json()["gain_count"] == 1
+    assert client.get("/api/summary/weekly").json()["gain_count"] == 1

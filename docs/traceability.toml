@@ -206,7 +206,15 @@ id = "SR-F2.1a"
 title = "记两轴：投入轴（专注时长为主）与产出轴（学校 KPI / 知识资产）"
 group = "F2"
 status = "done"
-evidence = ["text:src/timeflow/core/ledger/ledger.py::focus.finished", "text:src/timeflow/core/ledger/ledger.py::output.manual", "route:GET /api/summary", "test:test_ledger_summary.py"]
+evidence = [
+  "text:src/timeflow/core/ledger/ledger.py::focus.finished",
+  "text:src/timeflow/core/ledger/ledger.py::output.manual",
+  "route:GET /api/summary",
+  "test:test_ledger_summary.py",
+  "text:src/timeflow/core/ledger/ledger.py::gain_count",
+  "text:src/timeflow/core/ledger/ledger.py::def _gained_subjects",
+  "text:src/web/index.html::完成收益",
+]
 gaps = ""
 
 [entries."SR-F2.1b"]
@@ -1417,6 +1425,68 @@ evidence = [
   "test:test_audit_titles.py",
 ]
 gaps = ""
+
+[entries."T-F1"]
+id = "T-F1"
+title = "F 批：状态机 —— 新增「待定」+ 补「归档」「进行中」入口"
+group = "PROCESS"
+status = "todo"
+evidence = ["file:复盘/口径定案-待定清单.md"]
+gaps = "**口径已定**（`复盘/口径定案-待定清单.md` §1）：加「待定」进状态词表（**不计债**、不提醒、默认视图可见 —— 行为同「取消」）；「归档」「进行中」现在**代码里从来没有任何地方会写**，要补动作与入口。改约定层状态词表（那次是人定的，已写进决策记录）。**待实现**"
+
+[entries."T-F2"]
+id = "T-F2"
+title = "F 批：完成 N 天后进档案 + 存档视图（N11 任务存档）"
+group = "PROCESS"
+status = "todo"
+evidence = ["file:复盘/口径定案-待定清单.md"]
+gaps = "**口径已定**：N 进配置（默认 3 天）；判定做成**派生**（`完成` 且完成时间 ≤ 今天−N ⇒ 默认视图不显示），避免定时任务；档案视图列出派生归档 + 显式归档，每条显示「过去尝试」次数与关联笔记。**待实现**"
+
+[entries."T-F3"]
+id = "T-F3"
+title = "F 批：新增动作「尝试失败」（N11 的「过去尝试」）"
+group = "PROCESS"
+status = "todo"
+evidence = ["file:复盘/口径定案-待定清单.md"]
+gaps = "**口径已定**：只认**显式点击**（不自动从「推到明天/取消」推断 —— 数字要可信）；写事实 `task.attempt.failed`（可带一句说明，将来进 Markdown 存档）；详情显示「试了 N 回」；失败后给三选：取消 / 待定 / 推到明天。**待实现**"
+
+[entries."T-F4"]
+id = "T-F4"
+title = "F 批：子步骤可设截止日 + 可推迟 + 主任务卡显示当前步骤"
+group = "PROCESS"
+status = "todo"
+evidence = ["file:复盘/口径定案-待定清单.md"]
+gaps = "**口径已定**：子步骤本来就是任务（`parent_id`）、`due_date` 字段已有，缺的是界面入口；「推到明天 / 尝试失败」对子步骤可用；任务卡显示「当前该做哪一步」（第一个未完成子步骤）。**待实现**"
+
+[entries."T-F5"]
+id = "T-F5"
+title = "F 批：大任务三层嵌套 + 分组可嵌套"
+group = "PROCESS"
+status = "todo"
+evidence = ["file:复盘/口径定案-待定清单.md"]
+gaps = "**口径已定**：嵌套（大任务→子任务→子步骤）走 `parent_id` 自引用（**禁成环已有**），要定最多几层并做界面；分组 `groups` 加 `parent_id` **可嵌套**，并**保留「任务可属多个分组」**（不动 SR-F1.3 —— 那条是为了承接被砍掉的「目标」概念，见 needs.md N3）。**待实现**"
+
+[entries."T-F6"]
+id = "T-F6"
+title = "F 批：账本补「完成收益」读数（N3 口径）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/core/ledger/ledger.py::gain_count",
+  "text:src/timeflow/core/ledger/ledger.py::def _gained_subjects",
+  "text:src/web/index.html::完成收益",
+  "test:test_ledger_summary.py",
+]
+gaps = ""
+
+[entries."T-F7"]
+id = "T-F7"
+title = "F 批：修「派生逾期 vs 字段状态」不一致（顺手）"
+group = "PROCESS"
+status = "todo"
+evidence = ["file:复盘/口径定案-待定清单.md"]
+gaps = "本轮查出的缺陷：**只有「新建时截止日已过」才会把 `逾期` 写进 status**；之后过期是派生显示（进逾期栏 + 标红），但详情面板里状态仍写着「未开始」→ 自相矛盾。修法二选一（写回状态 / 详情也走派生）。**待实现**"
 
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"

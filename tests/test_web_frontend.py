@@ -973,3 +973,19 @@ def test_backup_restore_is_wired_in_settings() -> None:
     assert "恢复到这个备份" in fn, "确认按钮要写清在确认什么（不是笼统的「确定」）"
     assert "newer_than_app" in fn, "备份比程序新时要如实提示（降级场景）"
     assert "function sizeLabel(" in html, "备份要显示大小（不然看不出哪份是完整的）"
+
+
+def test_gain_metric_is_shown_next_to_debt() -> None:
+    """T-F6（N3 贯穿口径「**完成悬赏 = 收益/储蓄**」）：摘要行与周结算要显示「完成收益」。
+
+    这条口径一直在 `conventions.md:20`（储蓄 = 完成悬赏 / 复习完成），但**账本里一直没有读数** ——
+    是用户 2026-09-21 问「我怎么没看到你开发这个系统」时查出来的缺口。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    line = html.split("function summaryLine(s){", 1)[1].split("\n}", 1)[0]
+    assert "完成收益" in line and "gain_count" in line, "摘要行没显示完成收益"
+    # 只看真正拼摘要的那一行（函数体里的注释也提到了"完成收益"，别被它骗了）
+    parts = next(ln for ln in line.splitlines() if "const parts=" in ln)
+    assert parts.index("债务") < parts.index("完成收益"), "债务→收益是一对，要排在一起（N3 口径）"
+    week = html.split("function weekCard(w){", 1)[1].split("\n}", 1)[0]
+    assert "完成收益" in week and "gain_count" in week, "周结算没显示完成收益"

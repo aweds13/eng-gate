@@ -44,9 +44,13 @@
 - **Repeat 触发**（第 5 步）：完成时调 `process_repeats`；以 `task.repeat.generated` 事实去重 ⇒ 同一任务只生成一次。
 
 ## SR-F2 B 系统记账 → `core/ledger/`
-- **两轴记账**（SR-F2.1）：`ledger.py` 投入轴与产出轴分开；**逾期=债务、专注=投入、复习完成=投入（维持）**。
+- **两轴记账**（SR-F2.1）：`ledger.py` 投入轴与产出轴分开；**逾期=债务、专注=投入、复习完成=投入（维持）、
+  完成悬赏=收益（T-F6）**。
 - **只读事实层**（R1）：`summary()` 全部数据来自 `facts`——`focus.finished`（小时）、`review.completed`（张数）、
   `output.manual − output.retracted`（条数）、`invest.manual − invest.retracted`（单列小时）；`focus_sessions` 仅作原始记录/回填来源。
+- **完成收益**（T-F6 / N3 口径「完成悬赏 = 收益/储蓄」，2026-09-21 补）：`_gained_subjects()` ——
+  当日 `task.completed` 去重、且任务**现在仍是「完成」**（撤销照扣）、**只算任务不算子步骤**；
+  `summary.gain_count` / `weekly_summary.gain_count`，界面上与**债务并排**（债↔收益是一对）。
 - **债务口径**（SR-F2.3）：在 `ledger.py` 内按逾期天数给档（轻≤3 / 中≤7 / 重>7），**不折算时间**。
 - **旧表 `ledger_entries`**：已降级为**兼容/迁移来源**（手动投入与产出都走事实层），解读层不读它。
 - **周结算**（SR-F2.5 / OP-15，第 6 步）：`ledger.weekly_summary()` —— 周=周一→周日、只读 facts、

@@ -28,15 +28,19 @@ class LedgerSummary(BaseModel):
     review_count: int = 0
     output_count: int = 0
     manual_hours: float = 0.0
-    # 习惯打卡次数（T-C1 / 2026-09-19 用户决定）：**只报次数、与投入并排显示，不折算成时间**
-    # （"习惯折算成分钟"是已砍概念，见 复盘/C批口径定案.md §二）；想让它真的占投入时间，
-    # 走手动补记（invest.manual，kind 可填「习惯」）。
     habit_count: int = 0
     # 产出**按两类分开报**（T-C4 / 2026-09-19 用户决定："分两行显示"）：数据里本来就有 `kind`
     # （`kpi`=学校 KPI / `asset`=知识资产），只是以前被合成一个总数。**不拆轴、不折算**，
     # 只把同一份产出事实分组显示；`output_count` 仍是总数（三者的关系在 today_done 里同源）。
     output_kpi: int = 0
     output_asset: int = 0
+    # 完成收益（T-F6 / 2026-09-21 用户决定：补上这个读数）。
+    # 口径来自 `needs.md:34` 的贯穿口径「**完成悬赏 = 收益/储蓄**」与 `conventions.md:20`
+    # 「储蓄 = 完成悬赏 / 复习完成（维持）」—— 但直到这次之前，账本里**只有债务/投入/复习/产出**，
+    # 没有"收益"这个读数**（用户问"我怎么没看到你开发这个系统"时查出来的缺口）。
+    # 口径：当日 `task.completed` 事实按 task id 去重、且任务**现在仍是「完成」**（撤销照扣）、
+    # **只算任务不算子步骤**（完成一步是推进，不是"收了一笔悬赏"）。
+    gain_count: int = 0
 
 
 class DayPoint(BaseModel):
@@ -62,6 +66,8 @@ class WeekSummary(BaseModel):
     steady_note: str  # 一句温和提示（不施压）
     # 本周习惯打卡次数（T-C1）：同 LedgerSummary.habit_count —— 只报次数，不折算成小时
     habits_done: int = 0
+    # 本周完成收益（T-F6）：同 LedgerSummary.gain_count 的口径（去重 + 撤销照扣 + 只算任务）
+    gain_count: int = 0
     # 均衡度指标（T-C3 / SR-F2.6「波动/空档」）：**只出数字 + 一句温和描述**，不设目标、不告警。
     # 波动 = 逐日专注分钟的**标准差**（与 `days[].focus_minutes` 同单位，分钟；全 0 时为 0）；
     # 空档 = 本周**最长连续 0 天**数（0 = 每天都动了）。
@@ -103,6 +109,10 @@ def weekly_summary(conn: sqlite3.Connection, week_of: str | None = None) -> Week
     for day in days:
         outputs |= _output_entries(conn, day)
 
+    gains: set[str] = set()          # 完成收益（T-F6）：完成悬赏 = 收益/储蓄（N3 口径）
+    for day in days:
+        gains |= _gained_subjects(conn, day)
+
     manual_sec = sum(_manual_seconds(conn, day) for day in days)
     debt = len(tm.overdue_tasks(conn, end))
     active_days = sum(1 for p in points if p.focus_minutes > 0)
@@ -120,6 +130,7 @@ def weekly_summary(conn: sqlite3.Connection, week_of: str | None = None) -> Week
         active_days=active_days,
         steady_note=_steady_note(active_days, len(points)),
         habits_done=sum(_habit_done_count(conn, day) for day in days),
+        gain_count=len(gains),
         focus_variation_minutes=variation,
         longest_gap_days=gap,
         rhythm_note=_rhythm_note(variation, gap, active_days),
@@ -179,6 +190,31 @@ def _review_subjects(conn: sqlite3.Connection, day: str) -> set[str]:
     from timeflow.core import review as rv
 
     return rv.reviewed_today(conn, day)
+
+
+def _gained_subjects(conn: sqlite3.Connection, day: str) -> set[str]:
+    """当日「完成收益」的主体（T-F6；N3 口径：**完成悬赏 = 收益/储蓄**）。
+
+    口径与 `today_done()` **同一处**（避免两处各算各的）：
+    - 当日 `task.completed` 事实，**按 task id 去重**（完成→撤销→再完成只算一笔）；
+    - 只算任务**现在仍是「完成」**的 —— 完成又被撤销的**不算收益**（撤销照扣）；
+    - **只算任务、不算子步骤**：完成一个步骤是"推进"，不是"收了一笔悬赏"。
+    """
+    rows = facts_mod.query(
+        conn, kind="task.completed", since=f"{day}T00:00:00", until=f"{day}T23:59:59"
+    )
+    out: set[str] = set()
+    for row in rows:
+        tid = str(row["subject_id"] or "")
+        if not tid:
+            continue
+        info = conn.execute(
+            "SELECT parent_id, status FROM tasks WHERE id = ?", (tid,)
+        ).fetchone()
+        if info is None or info["status"] != tm.STATUS_DONE or info["parent_id"]:
+            continue
+        out.add(tid)
+    return out
 
 
 def _output_entries(conn: sqlite3.Connection, day: str) -> set[str]:
@@ -316,6 +352,7 @@ def summary(
         habit_count=habits,
         output_kpi=len(kpi_set),
         output_asset=len(asset_set),
+        gain_count=len(_gained_subjects(conn, t)),
     )
 
 
