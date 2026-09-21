@@ -113,6 +113,12 @@ class TaskOut(BaseModel):
     course_name: str | None = None
     # 「进行中」的显式顺序（F 批 · T-F1）：只在「进行中」时有值；界面按它排上/下
     doing_rank: int | None = None
+    # 下面三项**只有档案接口（`GET /api/tasks/archived`）会填**（F 批 · T-F2）：
+    # 档案视图是一屏列表，得一次把"自动/手动归档 + 完成日 + 试了几回"都算好（各一次聚合查询），
+    # 不能给每张卡各查一遍（那是 N+1）；别的接口保持默认值，页面也不读它们。
+    auto_archived: bool = False  # True = 完成满 N 天自动收入；False = 手动归档/不在档案里
+    completed_on: str | None = None  # 完成日（来自 `task.completed` 事实；没有就退回 updated_at）
+    attempt_count: int = 0  # 「试了几回」（T-F3 的事实）
 
 
 # 会**在本机打开文件/程序**或改服务端设置的接口，只接受本机页面调用。
@@ -130,7 +136,15 @@ def require_local_origin(request: Request) -> None:
         raise HTTPException(status_code=403, detail="这个接口只允许本机页面调用")
 
 
-def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
+def _out(
+    t: tm.Task,
+    conn: sqlite3.Connection,
+    *,
+    auto_archived: bool = False,
+    completed_on: str | None = None,
+    attempt_count: int = 0,
+) -> TaskOut:
+    """任务 → 接口对象。三个关键字参数只有档案接口会传（见 `TaskOut` 那段注释）。"""
     groups = tm.get_task_groups(conn, t.id)
     progress = tm.subtask_progress(conn, t.id)
     return TaskOut(
@@ -163,6 +177,9 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
         course_id=t.course_id,
         course_name=tm.course_name(conn, t.course_id),
         doing_rank=t.doing_rank,
+        auto_archived=auto_archived,
+        completed_on=completed_on,
+        attempt_count=attempt_count,
     )
 
 
@@ -321,6 +338,26 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def get_attach_settings() -> dict[str, Any]:
         """附件打开方式（当前值 + 可选值 + 规则说明；规则只有一份，前端不复述）。"""
         return {**attach_mod.get_settings(conn), **attach_mod.describe_rules()}
+
+    # ---- 「完成 N 天后进档案」的 N（N11 / F 批 · T-F2）----
+    # 口径（用户 2026-09-21）：「过几天再归档」—— "几天"是习惯问题，所以可配置；
+    # 默认值来自 config.toml（`[tasks] archive_after_days = 3`），本机改过的存 app_settings 并优先
+    # （与专注白名单/勿扰同一套机制，不另造一套配置）。
+    @app.get("/api/settings/archive")
+    def get_archive_settings() -> dict[str, Any]:
+        """`{after_days, default_after_days, max_after_days, note}`（只读口径说明也在里面）。"""
+        return tm.archive_settings(conn, settings.tasks.archive_after_days)
+
+    @app.put("/api/settings/archive")
+    def put_archive_settings(payload: dict[str, Any]) -> dict[str, Any]:
+        """改 N（0~365 的整数，0 = 完成当天就收走）。非法值 400，**不静默落默认值**。"""
+        try:
+            tm.set_archive_after_days(
+                conn, payload.get("after_days"), settings.tasks.archive_after_days
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return tm.archive_settings(conn, settings.tasks.archive_after_days)
 
     # ---- 备份与恢复（SR-NF12 / SR-F9.3）----
     # 口径（2026-09-21 用户定）：设置页列出最近几个备份，点一个就能恢复。
@@ -501,12 +538,27 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.get("/api/tasks/archived")
     def archived_tasks() -> list[TaskOut]:
-        """显式归档的任务（F 批 · T-F1，最近归档在前）。
+        """档案视图（F 批 · T-F1 + T-F2，最近进档案的在前）：
+        **手动归档的 + 完成满 N 天自动收入的**。
 
-        注意：只含 `status = 归档` 的；**完成 N 天后自动进档案是派生的**（T-F2），
-        不写回状态 —— 档案视图会把两拨合起来看。本路由同样必须排在 `/{task_id}` 之前。
+        两种来源都在这里（档案的用法是"回头看"，分两处看会漏掉一半），
+        界面用 `auto_archived` 区分并分别显示「完成 N 天后自动收入」/「手动归档」。
+        "试了几回"（T-F3）与完成日也在这条接口里一次算好（各一次聚合查询，不给卡片各查一遍）。
+
+        注意：本路由必须声明在 `/api/tasks/{task_id}` 之前，否则 "archived" 会被当成 task_id。
         """
-        return [_out(t, conn) for t in tm.archived_tasks(conn)]
+        entries = tm.archive_entries(conn)
+        counts = tm.attempt_counts(conn, [e.task.id for e in entries])
+        return [
+            _out(
+                e.task,
+                conn,
+                auto_archived=e.auto,
+                completed_on=e.completed_on,
+                attempt_count=counts.get(e.task.id, 0),
+            )
+            for e in entries
+        ]
 
     @app.get("/api/tasks/{task_id}", response_model=TaskOut)
     def get_task(task_id: str) -> TaskOut:

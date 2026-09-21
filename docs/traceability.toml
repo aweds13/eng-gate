@@ -1476,9 +1476,27 @@ gaps = ""
 id = "T-F2"
 title = "F 批：完成 N 天后进档案 + 存档视图（N11 任务存档）"
 group = "PROCESS"
-status = "todo"
-evidence = ["file:复盘/口径定案-待定清单.md"]
-gaps = "**口径已定**：N 进配置（默认 3 天）；判定做成**派生**（`完成` 且完成时间 ≤ 今天−N ⇒ 默认视图不显示），避免定时任务；档案视图列出派生归档 + 显式归档，每条显示「过去尝试」次数与关联笔记。**待实现**"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/core/tasks/manager.py::DEFAULT_ARCHIVE_AFTER_DAYS = 3",
+  "text:src/timeflow/core/tasks/manager.py::def archive_after_days",
+  "text:src/timeflow/core/tasks/manager.py::def completion_dates",
+  "text:src/timeflow/core/tasks/manager.py::def auto_filed",
+  "text:src/timeflow/core/tasks/manager.py::def archive_entries",
+  "text:src/timeflow/core/tasks/manager.py::class ArchiveEntry",
+  "text:src/timeflow/config.py::class TasksConfig",
+  "text:config.example.toml::archive_after_days = 3",
+  "route:GET /api/tasks/archived",
+  "route:GET /api/settings/archive",
+  "route:PUT /api/settings/archive",
+  "text:src/web/index.html::function archiveCard",
+  "text:src/web/index.html::async function setArchiveDays",
+  "text:src/web/index.html::完成几天后进档案",
+  "ui:data-action=set-archive-days",
+  "test:test_task_archive_line.py",
+]
+gaps = ""
 
 [entries."T-F3"]
 id = "T-F3"

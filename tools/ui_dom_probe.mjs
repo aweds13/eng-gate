@@ -117,7 +117,10 @@ const DB = {
   // 「正在做」：**可以同时多个**，各带自己的顺序号（↑↓ 用 `doing_rank` 排）
   '/api/tasks/doing': [probeTask({ id: 'd1', title: '写高数作业', status: '进行中', doing_rank: 1 }),
     probeTask({ id: 'd2', title: '背单词', status: '进行中', doing_rank: 2 })],
-  '/api/tasks/archived': [probeTask({ id: 'a9', title: '归档的事', status: '归档' })],
+  '/api/tasks/archived': [probeTask({ id: 'a9', title: '归档的事', status: '归档' }),
+    // 档案的**另一半**（T-F2）：完成满 N 天自动收入的 —— 徽标、「试了几回」、备注都要真渲染出来
+    probeTask({ id: 'af1', title: '自动收走的事', status: '完成', auto_archived: true,
+      completed_on: '2026-09-17', attempt_count: 3, note: '笔记：第三章的推导' })],
   // 到点提醒（T-B5）：今日页「该提醒了」区用它
   '/api/reminders/due': [],
   // 复习线（SR-F6.2 / SR-F6.5 / SR-F8.3）：到期卡非空 —— 卡片态要渲染出「改形式/句柄」按钮
@@ -154,6 +157,9 @@ const DB = {
   // 「尝试失败」（F 批 · T-F3）：详情面板要显示「试了 N 回」+ 历次留下的说明 + 「尝试失败」入口
   '/api/tasks/t1/attempts': { count: 0, notes: [] },
   '/api/tasks/t9/attempts': { count: 3, notes: ['试了前两章，卡在第 3 题', '换了本参考书还是不行'] },
+  // 「完成 N 天后进档案」的 N（F 批 · T-F2）：设置页要渲染出天数输入框与口径说明
+  '/api/settings/archive': { after_days: 3, default_after_days: 3, max_after_days: 365,
+    note: '完成之后不是立刻收走：满 N 天自动进档案（0 = 当天就收）。' },
   // 任务 → 复习卡（T-C5）：详情面板要显示"这张任务升级出来的卡"
   '/api/tasks/t1/review-cards': [{ id: 'r1', title: '探针复习卡', due_date: '2026-09-20T00:00:00',
     form: 'qa', source: 'internal', ref_handle: 'notes/数学.md', task_id: 't1' }],
@@ -252,6 +258,7 @@ let guardBad = 0;
 let stateBad = 0;
 let overdueBad = 0;
 let attemptBad = 0;
+let archiveBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -439,6 +446,33 @@ try {
   console.log(`  ❌ 详情·派生逾期 渲染抛错: ${e.message}`);
 }
 
+// 档案视图（F 批 · T-F2）：一屏里两种来源都要真渲染出来 ——
+// 手动归档（撤销归档）与"完成满 N 天自动收入"（撤销完成回到列表），外加「试了几回」与备注；
+// 设置页要能改那个 N。
+const archiveChecks = [];
+for (const [view, needs] of [
+  ['tasks', ['自动归档', '手动归档', '撤销完成（回到列表）', '试了 3 回', '笔记：第三章的推导',
+    'task-unarchive', '自动收走的事']],
+  ['setting', ['完成几天后进档案', 'archiveDays', 'set-archive-days', '上限 365 天']],
+]) {
+  try {
+    byId.get('main')._html = '';
+    await globalThis.__view(view);
+    await sleep(30);
+    const html = byId.get('main')._html;
+    const missing = needs.filter((n) => !html.includes(n));
+    const rendered = missing.length === 0;
+    if (!rendered) archiveBad++;
+    archiveChecks.push({ view, rendered, missing });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} ${view}·档案 main ${String(html.length).padStart(6)}B`
+      + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+  } catch (e) {
+    archiveBad++;
+    archiveChecks.push({ view, error: e.message });
+    console.log(`  ❌ ${view}·档案 渲染抛错: ${e.message}`);
+  }
+}
+
 // 「尝试失败」（F 批 · T-F3）：详情要显示「试了 N 回」+ 历次说明 + 入口按钮。
 // 只认显式点击这件事在领域层/接口层有测试钉住，这里只管"界面真的把它渲染出来了"。
 const attemptChecks = [];
@@ -470,7 +504,7 @@ if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
     { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
-      attempt: attemptChecks,
+      attempt: attemptChecks, archive: archiveChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -481,7 +515,7 @@ if (problems.length) {
   console.log(`  ⚠️  运行时告警/异常：${problems.slice(0, 5).join(' | ')}`);
 }
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
-  || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0
+  || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0 || archiveBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -492,5 +526,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，状态机 ${stateChecks.length - stateBad}/${stateChecks.length} 正常`
   + `，派生逾期 ${overdueChecks.length - overdueBad}/${overdueChecks.length} 正常`
   + `，尝试失败 ${attemptChecks.length - attemptBad}/${attemptChecks.length} 正常`
+  + `，档案视图 ${archiveChecks.length - archiveBad}/${archiveChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

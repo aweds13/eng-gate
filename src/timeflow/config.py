@@ -40,12 +40,20 @@ class AcademicConfig(BaseModel):
     gpa_scale: str = "4.0"
 
 
+class TasksConfig(BaseModel):
+    # 「完成 N 天后进档案」（N11 / T-F2）：默认 3 天。
+    # 这里是**默认值**：本机在设置页改过的存 `app_settings` 并优先
+    # （与专注白名单/勿扰同一套机制，不另造一套配置）。
+    archive_after_days: int = 3
+
+
 class Settings(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     app: AppConfig = Field(default_factory=AppConfig)
     ledger: LedgerConfig = Field(default_factory=LedgerConfig)
     focus: FocusConfig = Field(default_factory=FocusConfig)
     academic: AcademicConfig = Field(default_factory=AcademicConfig)
+    tasks: TasksConfig = Field(default_factory=TasksConfig)
 
 
 def _read_toml(config_path: Path | None) -> dict[str, Any]:

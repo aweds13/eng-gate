@@ -404,7 +404,8 @@ def get_task(conn: sqlite3.Connection, task_id: str) -> Task:
 def list_tasks(conn: sqlite3.Connection, active_only: bool = True) -> list[Task]:
     """任务列表（**按统一口径排序**：截止日 → 优先级 → 创建时间）。
 
-    `active_only=True` 时排除「归档 / 已删（软删除）」。
+    `active_only=True` 时排除「归档 / 已删（软删除）」**以及"完成满 N 天、已自动进档案"的**
+    （T-F2：派生归档也算"不在默认视图里"，否则"过几天收走"这件事在列表上根本看不见）。
     回收站（`active_only=False`）也走同一排序，让"最近该处理的"排前面。
     """
     sql = "SELECT * FROM tasks"
@@ -413,7 +414,8 @@ def list_tasks(conn: sqlite3.Connection, active_only: bool = True) -> list[Task]
         sql += " WHERE status NOT IN (?,?)"
         params = HIDDEN_STATUSES
     rows = conn.execute(sql + _ORDER_BY, params).fetchall()
-    return [_row_to_task(r) for r in rows]
+    tasks = [_row_to_task(r) for r in rows]
+    return _hide_auto_filed(conn, tasks) if active_only else tasks
 
 
 def tasks_in_view(conn: sqlite3.Connection, view: str) -> list[Task]:
@@ -423,7 +425,8 @@ def tasks_in_view(conn: sqlite3.Connection, view: str) -> list[Task]:
     - `important` = 优先级「高」（T-B2 的字段）；
     - `planned`   = **有截止日**（Planned 的本义是"排进日历的事"）；
     - `flagged`   = **手动标记位**（用户自己按的，不是自动推断"重要"）。
-    基线同「全部任务」：只隐藏**归档 / 已删**（完成的仍如实显示），排序同统一口径。
+    基线同「全部任务」：只隐藏**归档 / 已删**（完成的仍如实显示；但**完成满 N 天已自动进档案的
+    也不显示** —— 那也是"归档了"，见 T-F2），排序同统一口径。
     未知视图名 → ValueError（由 API 转 400），**不静默返回全部**（那会让人以为筛选生效了）。
     """
     if view not in _VIEW_WHERE:
@@ -433,7 +436,7 @@ def tasks_in_view(conn: sqlite3.Connection, view: str) -> list[Task]:
         f"SELECT * FROM tasks WHERE status NOT IN (?,?) AND {where}" + _ORDER_BY,  # noqa: S608
         HIDDEN_STATUSES,
     ).fetchall()
-    return [_row_to_task(r) for r in rows]
+    return _hide_auto_filed(conn, [_row_to_task(r) for r in rows])
 
 
 def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Task:
@@ -1000,6 +1003,177 @@ def archived_tasks(conn: sqlite3.Connection) -> list[Task]:
     return [_row_to_task(r) for r in rows]
 
 
+# ---------------------------------------------------------------- 完成 N 天后进档案（N11 / T-F2）
+# 口径（用户 2026-09-21）：完成**不是立刻**进档案，而是「过几天再归档」——
+# 「归档是说我完成某个任务之后，他就进入档案中，方便我后期以后的查阅」。
+# 落地为**派生**判定（完成日 + N ≤ 今天 ⇒ 默认视图不再显示、档案视图里出现），
+# 不写回 `status`：写回就需要一个定时器/惰性写入点，而本项目明确避免定时任务
+# （与 T-F7 的逾期同一套理由：一处口径，一处判定）。
+DEFAULT_ARCHIVE_AFTER_DAYS = 3
+MAX_ARCHIVE_AFTER_DAYS = 365
+KEY_ARCHIVE_AFTER_DAYS = "tasks_archive_after_days"
+_COMPLETED_KIND = "task.completed"
+
+
+def _setting_raw(conn: sqlite3.Connection, key: str) -> str | None:
+    """读一条本机设置（`app_settings` 通用 key/value 表；与附件/专注设置同一处）。"""
+    row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    return None if row is None else str(row["value"])
+
+
+def _put_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES (?,?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+
+
+def _valid_archive_days(days: object) -> int:
+    """N 必须是 0..365 的整数（0 = 完成当天就收走）。非法一律 ValueError，**不静默落默认值**。"""
+    if isinstance(days, bool) or not isinstance(days, (int, str)):
+        raise ValueError("after_days 只能是 0~365 的整数")
+    try:
+        value = int(str(days).strip())
+    except ValueError:
+        raise ValueError("after_days 只能是 0~365 的整数") from None
+    if value < 0 or value > MAX_ARCHIVE_AFTER_DAYS:
+        raise ValueError(f"after_days 要在 0~{MAX_ARCHIVE_AFTER_DAYS} 之间")
+    return value
+
+
+def archive_after_days(conn: sqlite3.Connection, default: int | None = None) -> int:
+    """「完成几天后进档案」的当前值（T-F2）：本机改过用表里的，否则用配置默认（3 天）。
+
+    读的时候**容错**：表里是坏数据（手工改过/老版本写的）→ 退回默认值，
+    不让一条坏设置把整个任务列表打挂。（写的时候相反：非法值直接拒绝。）
+    """
+    fallback = DEFAULT_ARCHIVE_AFTER_DAYS if default is None else int(default)
+    raw = _setting_raw(conn, KEY_ARCHIVE_AFTER_DAYS)
+    if raw is None:
+        return fallback
+    try:
+        return _valid_archive_days(raw)
+    except ValueError:
+        return fallback
+
+
+def set_archive_after_days(
+    conn: sqlite3.Connection, days: object, default: int | None = None
+) -> int:
+    """改「完成几天后进档案」（T-F2）。返回改完之后的值；非法值 ValueError（400，不静默）。"""
+    value = _valid_archive_days(days)
+    _put_setting(conn, KEY_ARCHIVE_AFTER_DAYS, str(value))
+    conn.commit()
+    return archive_after_days(conn, default)
+
+
+def archive_settings(conn: sqlite3.Connection, default: int | None = None) -> dict[str, object]:
+    """给界面用的设置读数（当前值 / 默认值 / 上限 / 口径说明）—— 规则只有一份，前端不复述。"""
+    fallback = DEFAULT_ARCHIVE_AFTER_DAYS if default is None else int(default)
+    return {
+        "after_days": archive_after_days(conn, fallback),
+        "default_after_days": fallback,
+        "max_after_days": MAX_ARCHIVE_AFTER_DAYS,
+        "note": "完成之后不是立刻收走：满 N 天自动进档案（0 = 当天就收）。"
+                "档案里仍能看见，撤销完成就会回到列表。",
+    }
+
+
+def completion_dates(conn: sqlite3.Connection, task_ids: list[str]) -> dict[str, str]:
+    """一次查出这些任务各自的「完成日」（`YYYY-MM-DD`）；没记录的不出现在结果里。
+
+    为什么取事实 `task.completed` 而不是 `updated_at`：`updated_at` 是"最后一次改动"——
+    完成之后**随手补一句备注就会把它推后**，归档倒计时于是被重置，
+    「完成 N 天后进档案」就永远不触发（那正是本卡要的"过几天再归档"，不能被编辑搅黄）。
+    事实记的是**完成那一刻**；撤销完成再完成会再来一条，取最新那条（= 现在这次完成）。
+    查不到事实（老库 / 手工造的数据）→ 调用方退回 `updated_at`，**不猜、不报错**。
+    """
+    if not task_ids:
+        return {}
+    marks = ",".join("?" * len(task_ids))
+    rows = conn.execute(
+        f"SELECT subject_id, MAX(occurred_at) AS done_at FROM facts "
+        f"WHERE kind = ? AND subject_id IN ({marks}) GROUP BY subject_id",
+        (_COMPLETED_KIND, *task_ids),
+    ).fetchall()
+    return {str(r["subject_id"]): str(r["done_at"])[:10] for r in rows}
+
+
+def completed_on(conn: sqlite3.Connection, task: Task) -> str | None:
+    """单个任务的完成日（取不到事实时退回 `updated_at` 的日期部分，见 `completion_dates`）。"""
+    if task.status != STATUS_DONE:
+        return None
+    found = completion_dates(conn, [task.id]).get(task.id)
+    return found or task.updated_at[:10]
+
+
+def auto_filed(task: Task, done_on: str | None, today: str, days: int) -> bool:
+    """**派生**判定：这个任务是不是"完成满 N 天、已经自动进档案"了（T-F2）。
+
+    - 只有「完成」态才有这回事（手动归档是另一条路，`archived_tasks`）；
+    - 判据是**完成日 + N ≤ 今天**（没有完成日就不判：宁可不收，也不把没收走的东西藏起来）；
+    - **不写回状态**：`status` 还是「完成」，档案视图里如实标"完成 N 天后自动收入"。
+    """
+    if task.status != STATUS_DONE or not done_on:
+        return False
+    cutoff = (date.fromisoformat(today) - timedelta(days=days)).isoformat()
+    return done_on <= cutoff
+
+
+def _hide_auto_filed(conn: sqlite3.Connection, tasks: list[Task]) -> list[Task]:
+    """从默认视图里去掉"已经自动进档案的"完成件（T-F2）。
+
+    只对**完成态**做一次聚合查询（`completion_dates`），不给每个任务各查一次 ——
+    列表接口不该因为加了个派生判定就变成 N+1 次查询。
+    """
+    done = [t for t in tasks if t.status == STATUS_DONE]
+    if not done:
+        return tasks
+    today = _today()
+    days = archive_after_days(conn)
+    dates = completion_dates(conn, [t.id for t in done])
+    filed = {t.id for t in done if auto_filed(t, dates.get(t.id) or t.updated_at[:10], today, days)}
+    return [t for t in tasks if t.id not in filed]
+
+
+@dataclass
+class ArchiveEntry:
+    """档案里的一条（T-F2）：`auto=True` 是"完成 N 天后自动收入"，`False` 是手动归档。"""
+
+    task: Task
+    auto: bool
+    completed_on: str | None
+
+
+def archive_entries(
+    conn: sqlite3.Connection, today: str | None = None, days: int | None = None
+) -> list[ArchiveEntry]:
+    """档案视图（N11 / T-F2）：**手动归档的** + **完成满 N 天自动收入的**，两拨合起来看。
+
+    为什么要合：档案的用法是"回头看"（用户原话「方便我后期以后的查阅」）——
+    分两个地方看会让人漏掉一半；两种来源在界面里用徽标分开标明。
+    排序：按"进档案的那天"降序（完成件看完成日，手动归档看最后改动），新的先看。
+    """
+    t = today or _today()
+    n = archive_after_days(conn) if days is None else days
+    rows = conn.execute(
+        "SELECT * FROM tasks WHERE status IN (?, ?)", (STATUS_ARCHIVED, STATUS_DONE)
+    ).fetchall()
+    tasks = [_row_to_task(r) for r in rows]
+    dates = completion_dates(conn, [x.id for x in tasks])
+    entries: list[ArchiveEntry] = []
+    for task in tasks:
+        fallback = task.updated_at[:10] if task.status == STATUS_DONE else None
+        done_on = dates.get(task.id) or fallback
+        if task.status == STATUS_ARCHIVED:
+            entries.append(ArchiveEntry(task=task, auto=False, completed_on=done_on))
+        elif auto_filed(task, done_on, t, n):
+            entries.append(ArchiveEntry(task=task, auto=True, completed_on=done_on))
+    entries.sort(key=lambda e: e.completed_on or e.task.updated_at[:10], reverse=True)
+    return entries
+
+
 def move_doing(conn: sqlite3.Connection, task_id: str, direction: str) -> Task:
     """调「进行中」的先后（T-F1）：`direction` = `up` / `down`，与相邻的一条换序号。
 
@@ -1080,6 +1254,22 @@ def attempt_count(conn: sqlite3.Connection, task_id: str) -> int:
         (ATTEMPT_FAILED, task_id),
     ).fetchone()
     return int(row["n"] or 0)
+
+
+def attempt_counts(conn: sqlite3.Connection, task_ids: list[str]) -> dict[str, int]:
+    """一次查出这些任务各自「试了几回」（T-F3）—— 没有失败记录的不出现在结果里。
+
+    为什么要有批版：档案视图是一屏列表，逐张卡调 `attempt_count` 就是 N+1 次查询。
+    """
+    if not task_ids:
+        return {}
+    marks = ",".join("?" * len(task_ids))
+    rows = conn.execute(
+        f"SELECT subject_id, COUNT(*) AS n FROM facts "
+        f"WHERE kind = ? AND subject_id IN ({marks}) GROUP BY subject_id",
+        (ATTEMPT_FAILED, *task_ids),
+    ).fetchall()
+    return {str(r["subject_id"]): int(r["n"] or 0) for r in rows}
 
 
 def attempt_notes(conn: sqlite3.Connection, task_id: str, limit: int = 20) -> list[str]:

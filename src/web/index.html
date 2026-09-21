@@ -213,6 +213,8 @@ const ACTIONS = {
   'guard-dnd-del':  el => delGuardDnd(el.dataset.win || ''),
   // 备份与恢复（SR-NF12 / SR-F9.3）：恢复不可逆 → confirmAsk 写清时间点
   'restore-backup': el => restoreBackup(el.dataset.name || ''),
+  // 「完成 N 天后进档案」的 N（F 批 · T-F2）：改的是后端设置，改完重渲染让档案区跟着变
+  'set-archive-days': () => setArchiveDays(),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -923,12 +925,15 @@ async function addTask(){
 }
 
 // ---- 全部任务（OP-2：未进 My Day 的任务也要看得见）----
-/* 三段分开列（F 批 · T-F1）：
+/* 三段分开列（F 批 · T-F1 + T-F2）：
    - 主列表：还在推进的任务（未开始/逾期/进行中/完成）；
    - 搁置：待定 + 取消 —— "先放着"和"不做了"都留痕，能取回；
-   - 档案：显式归档的（完成 N 天后自动进档案是派生的，属 T-F2，届时并到这里）。 */
+   - 档案：**手动归档的 + 完成满 N 天自动收入的**（T-F2）—— 两种来源都在这一屏，
+     用徽标分开标明；每条带「试了几回」（T-F3）与备注（N11 的"详情写在本子、列表记笔记名"）。 */
 async function renderTasks(m){
-  const [all,archived]=await Promise.all([api('/api/tasks'),api('/api/tasks/archived')]);
+  const [all,archived,archCfg]=await Promise.all([api('/api/tasks'),api('/api/tasks/archived'),
+    api('/api/settings/archive')]);
+  const afterDays=archCfg?archCfg.after_days:3;
   const parked=all.filter(t=>PARKED.includes(t.status));
   const live=all.filter(t=>!PARKED.includes(t.status));
   const notMyDay=live.filter(t=>!t.is_myday&&t.status!=='完成');
@@ -937,11 +942,9 @@ async function renderTasks(m){
     <div class="sub">待定 = 挂在那儿、没放弃，**不计债**；取消 = 打错了或没必要了。两者都能「取回」。</div>
     ${parked.map(t=>taskCard(t)).join('')}`:'';
   const archivedHtml=archived.length?`<div class="section-title">档案（${archived.length}）</div>
-    <div class="sub">归档的任务不在默认列表里，但随时能翻出来（这里只列**手动归档**的；「完成 N 天后自动进档案」随后补）。</div>
-    ${archived.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div>
-      <div class="meta">归档 · 更新于 ${humanTime(t.updated_at)}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}</div></div>
-      <div class="row"><button class="ghost" data-action="task-unarchive" data-id="${t.id}">撤销归档</button>
-      <button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button></div></div>`).join('')}`:'';
+    <div class="sub">归档的任务不在默认列表里，但随时能翻出来。**手动归档**的可以「撤销归档」；
+    **完成满 ${afterDays} 天自动收入**的，撤销完成就会回到列表（它是按完成日算出来的，不是存下来的状态）。</div>
+    ${archived.map(archiveCard).join('')}`:'';
   m.innerHTML=`<div class="new">
       <input id="allTitle" placeholder="新任务（默认不进今天）" data-enter="task-add-here">
       <input id="allDue" type="date" title="截止日（默认今天，可改）">
@@ -949,9 +952,28 @@ async function renderTasks(m){
     ${smartViewNavHTML('')}
     <div class="section-title">全部任务（${live.length}）</div>
     ${live.map(t=>taskCard(t)).join('')||emptyState('还没有任务')}
-    <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项；删除的任务在「今日 · 回收站」里可恢复或彻底删除。</div>
+    <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项（完成满 ${afterDays} 天自动进档案）；删除的任务在「今日 · 回收站」里可恢复或彻底删除。</div>
     ${parkedHtml}${archivedHtml}`;
   defaultDateFields(['allDue']);
+}
+/* 档案卡片（F 批 · T-F2）：一屏里同时有可能来自两条路 ——
+   `auto_archived` 为 true 的是"完成满 N 天自动收入"（撤销完成才能回列表），
+   false 的是手动归档（撤销归档）。徽标必须写清是哪一种，否则"撤销"该点哪个会让人猜。 */
+function archiveCard(t){
+  const auto=!!t.auto_archived;
+  const when=auto?(t.completed_on?`完成于 ${esc(t.completed_on)}`:'完成满 N 天自动收入')
+                 :`归档于 ${humanTime(t.updated_at)}`;
+  const tries=t.attempt_count?` · <span class="badge">试了 ${t.attempt_count} 回</span>`:'';
+  return `<div class="card" style="align-items:flex-start"><div style="flex:1">
+      <div class="title">${esc(t.title)}</div>
+      <div class="meta">${auto?'<span class="badge">自动归档</span>':'<span class="badge">手动归档</span>'}
+        ${when}${tries}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}</div>
+      ${t.note?`<div class="sub" style="white-space:pre-wrap">${esc(t.note)}</div>`:''}
+    </div>
+    <div class="row">${auto
+      ?`<button class="ghost" data-action="task-undo-done" data-id="${t.id}">撤销完成（回到列表）</button>`
+      :`<button class="ghost" data-action="task-unarchive" data-id="${t.id}">撤销归档</button>`}
+      <button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button></div></div>`;
 }
 async function addTaskHere(){
   const titleEl=document.getElementById('allTitle');
@@ -1776,15 +1798,18 @@ async function restoreBackup(name){
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups]=await Promise.all([
+  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg]=await Promise.all([
     api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach'),
-    api('/api/settings/reminder'),api('/api/focus/guard'),api('/api/settings/backups')]);
+    api('/api/settings/reminder'),api('/api/focus/guard'),api('/api/settings/backups'),
+    api('/api/settings/archive')]);
   groupCache=groups||[];
   guardCache=guardCfg||null;
   backupCache=backups||null;
   const off=!navigator.onLine;
   const guard=guardCache||{block_by_default:true,whitelist:[],do_not_disturb:[],
     note:'',window_format:'HH:MM-HH:MM',max_items:50};
+  // 「完成 N 天后进档案」（T-F2）：缺字段就退回默认值 —— 设置页不该因为一个字段没到就整页空掉
+  const arch=archCfg||{after_days:3,default_after_days:3,max_after_days:365,note:''};
   const bk=backupCache||{db:'',dir:'',items:[],note:''};
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
@@ -1796,6 +1821,7 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-appearance">主题 / 强调色</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-academic">GPA 制式</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-attach">附件打开方式</button>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-tasks">任务</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-remind">提醒</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-sync">数据与同步</button></div>
   </div>
@@ -1832,6 +1858,17 @@ async function renderSetting(m){
     <div class="new"><input id="guardDnd" placeholder="22:00-07:00（24 小时制，可跨午夜）" data-enter="guard-dnd-add">
       <button class="ghost" data-action="guard-dnd-add">加上时段</button></div>
     <div class="sub">${esc(guard.note||'')} 时段写成 ${esc(guard.window_format||'HH:MM-HH:MM')}，最多 ${guard.max_items||50} 条。</div>
+  </div>
+  <div class="section-title" id="set-tasks">任务</div>
+  <div class="card panel-card">
+    <div class="settings-sub">完成几天后进档案</div>
+    <div class="row tight">
+      <input id="archiveDays" type="number" min="0" max="${Number(arch.max_after_days)||365}"
+        value="${Number.isFinite(Number(arch.after_days))?Number(arch.after_days):3}"
+        style="max-width:90px" data-enter="set-archive-days">
+      <button data-action="set-archive-days">保存</button>
+      <span class="sub">默认 ${Number(arch.default_after_days)||3} 天 · 上限 ${Number(arch.max_after_days)||365} 天</span></div>
+    <div class="sub">${esc(arch.note||'')}</div>
   </div>
   <div class="section-title" id="set-academic">学业</div>
   <div class="card panel-card">
@@ -1961,6 +1998,17 @@ async function setRemindStyle(style){
   await api('/api/settings/reminder',{method:'PUT',body:JSON.stringify({style})});
   toast(style==='alarm'?'已切到闹钟式提醒（会留在屏幕上，需手动关掉）':'已切到温和通知（几秒后消失）');
   view(current);
+}
+/* 「完成 N 天后进档案」的 N（F 批 · T-F2）：写进后端设置（`app_settings`，本机生效）。
+   非法值由后端拒绝并把原话弹出来（`api()` 已经负责提示），这里只管把空值/非数字先挡下来。 */
+async function setArchiveDays(){
+  const el=document.getElementById('archiveDays');
+  const raw=((el&&el.value)||'').trim();
+  if(!/^\d+$/.test(raw)){toast('填一个 0~365 的整数（0 = 完成当天就收走）');return}
+  try{
+    const r=await api('/api/settings/archive',{method:'PUT',body:JSON.stringify({after_days:Number(raw)})});
+    toast(`已设为「完成 ${r.after_days} 天后进档案」`);view(current);
+  }catch(e){/* api() 已经弹过后端原话（上限 365 天） */}
 }
 // GPA 制式切换：只改查看口径（写死配置是后端职责），立即重渲染
 async function setGpa(scale){
