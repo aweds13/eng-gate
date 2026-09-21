@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -171,6 +171,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v11(conn)  # 同上：task_type / course_id 由本版加列
     _migrate_v12(conn)  # 同上：review_items.task_id 由本版加列
     _migrate_v13(conn)  # 同上：tasks.doing_rank 由本版加列
+    _migrate_v14(conn)  # 同上：groups.parent_id 由本版加列（分组可嵌套）
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -733,3 +734,20 @@ def _migrate_v13(conn: sqlite3.Connection) -> None:
     - 幂等加列，缺表跳过不失败；老数据全为 NULL（界面按"没排过序"排在最后，不猜）。
     """
     _add_column_if_missing(conn, "tasks", "doing_rank", "doing_rank INTEGER")
+
+
+def _migrate_v14(conn: sqlite3.Connection) -> None:
+    """v14：**分组可嵌套** `groups.parent_id`（N8/N3 + F 批 · T-F5）。
+
+    口径（用户 2026-09-21：「大任务 → 子任务 → 子步骤」
+    「或者程序里像文件夹那样，可以嵌套、归在一起」）：
+    - `parent_id` 自引用，NULL = 顶层分组；**最多三层**（与任务的嵌套深度同一个上限，
+      免得界面里出现无限缩进）；
+    - **任务仍可属多个分组**（`task_groups` 不动，SR-F1.3 那条不变）；
+    - **分组名仍然全局唯一**（`groups.name` 的 UNIQUE 约束保留）：成员关系本来就是**按名字**存的
+      （`get_task_groups` 返回名字、界面按 `data-name` 勾选），如果允许"高数/作业"和"英语/作业"
+      同名，同一个名字就指不回是哪一个 —— 要放开得先把成员关系改成按 id，那是另一张卡的事。
+      所以子分组名也要唯一，界面里显示**路径**（`高数 / 第三章`）避免歧义；
+    - 老数据全为 NULL（都是顶层分组，行为不变）；幂等加列，缺表跳过不失败。
+    """
+    _add_column_if_missing(conn, "groups", "parent_id", "parent_id TEXT")

@@ -114,7 +114,7 @@ const DB = {
   '/api/tasks': [probeTask({ id: 't2', title: '普通任务', is_myday: false,
       subtask_done: 1, subtask_total: 3, current_step: '第 2 步：写解答',
       current_step_due: '2026-09-25' }),
-    probeTask({ id: 'p1', title: '待定的事', status: '待定' }),
+    probeTask({ id: 'p1', title: '待定的事', status: '待定', depth: 2, groups: ['第三章'] }),
     probeTask({ id: 'x1', title: '取消的事', status: '取消' })],
   // 「正在做」：**可以同时多个**，各带自己的顺序号（↑↓ 用 `doing_rank` 排）
   '/api/tasks/doing': [probeTask({ id: 'd1', title: '写高数作业', status: '进行中', doing_rank: 1 }),
@@ -128,7 +128,7 @@ const DB = {
   // 复习线（SR-F6.2 / SR-F6.5 / SR-F8.3）：到期卡非空 —— 卡片态要渲染出「改形式/句柄」按钮
   '/api/review/due': [{ id: 'r1', title: '探针复习卡', reps: 2, interval_days: 3,
     source: 'internal', ref_handle: 'notes/数学.md', form: 'qa', due_date: '2026-09-20', task_id: 't1' }],
-  '/api/review/items': [], '/api/groups': [],
+  '/api/review/items': [],
   // 复习卡的定义类字段（T-C6·C7）：词表来自后端，编辑态要渲染形式/执行源下拉 + 句柄输入
   '/api/review/meta': {
     forms: [{ value: 'cloze', label: '挖空' }, { value: 'qa', label: '问答卡' },
@@ -150,12 +150,20 @@ const DB = {
       { target: 'D:\\课件\\第3章.pdf', title: null }],
   },
   '/api/tasks/t1/facts': [],
-  // 子步骤（F 批 · T-F4）：每一步有自己的截止日 + 「明天 / 尝试失败 / 详情 / 脱离」；
-  // 第一张卡（t2）带「当前该做哪一步」，用来看主任务卡是不是真的显示了**一步**
+  // 子步骤（F 批 · T-F4 + T-F5）：整棵子树一次给出（前序 + 绝对层数），
+  // 每一步有自己的截止日 + 「明天 / 尝试失败 / 详情 / 脱离」；第 2 层那步自己还有一层（看折叠按钮）。
   '/api/tasks/t1/subtasks': [
     probeTask({ id: 's1', title: '第 1 步：读题', status: '完成', parent_id: 't1',
       due_date: '2026-09-18' }),
     probeTask({ id: 's2', title: '第 2 步：写解答', parent_id: 't1', due_date: '2026-09-25' }),
+  ],
+  '/api/tasks/t1/tree': [
+    { task: probeTask({ id: 's1', title: '第 1 步：读题', status: '完成', parent_id: 't1',
+      due_date: '2026-09-18', depth: 2 }), depth: 2 },
+    { task: probeTask({ id: 's2', title: '第 2 步：写解答', parent_id: 't1',
+      due_date: '2026-09-25', depth: 2 }), depth: 2 },
+    { task: probeTask({ id: 's3', title: '第 2 步的第 1 小问', parent_id: 's2', depth: 3 }),
+      depth: 3 },
   ],
   // 派生逾期（T-F7）：字段状态还是「未开始」、后端算出"已逾期 12 天" —— 详情面板要**两个都显示**，
   // 不能再出现"列在逾期栏里、面板却写未开始"的自相矛盾
@@ -165,6 +173,11 @@ const DB = {
   // 「尝试失败」（F 批 · T-F3）：详情面板要显示「试了 N 回」+ 历次留下的说明 + 「尝试失败」入口
   '/api/tasks/t1/attempts': { count: 0, notes: [] },
   '/api/tasks/t9/attempts': { count: 3, notes: ['试了前两章，卡在第 3 题', '换了本参考书还是不行'] },
+  // 分组可嵌套（F 批 · T-F5）：树序（父在子前）+ 路径 + 层数，设置页按它缩进渲染
+  '/api/groups': [
+    { id: 'g1', name: '高数', parent_id: null, depth: 1, path: '高数', task_count: 2 },
+    { id: 'g2', name: '第三章', parent_id: 'g1', depth: 2, path: '高数 / 第三章', task_count: 1 },
+  ],
   // 「完成 N 天后进档案」的 N（F 批 · T-F2）：设置页要渲染出天数输入框与口径说明
   '/api/settings/archive': { after_days: 3, default_after_days: 3, max_after_days: 365,
     note: '完成之后不是立刻收走：满 N 天自动进档案（0 = 当天就收）。' },
@@ -486,8 +499,10 @@ for (const [view, needs] of [
 // 详情里每一步都有截止日输入框与「明天 / 尝试失败 / 详情 / 脱离」，添加步骤那一行也有日期框。
 const stepChecks = [];
 for (const [where, needs] of [
-  ['tasks', ['步骤 1/3', '当前：第 2 步：写解答', '2026-09-25 前']],
-  ['detail', ['第 2 步：写解答', 'subtask-due', 'id="subtaskDue"', '尝试失败', '脱离']],
+  ['tasks', ['步骤 1/3', '当前：第 2 步：写解答', '2026-09-25 前', '子任务', '高数 / 第三章']],
+  ['detail', ['第 2 步：写解答', 'subtask-due', 'id="subtaskDue"', '尝试失败', '脱离',
+    '第 2 步的第 1 小问', '子步骤', 'step-toggle']],
+  ['group', ['高数 / 第三章', 'group-sub', 'group-parent', 'id="groupParent"']],
 ]) {
   try {
     let html = '';
@@ -496,6 +511,14 @@ for (const [where, needs] of [
       await globalThis.__view('tasks');
       await sleep(30);
       html = byId.get('main')._html;
+    } else if (where === 'group') {
+      // 分组管理是设置页里**异步渲染进 #groupAdmin 那一块**的（不在 main 的 HTML 里），
+      // 所以要读它自己的节点 —— 这也是这段检查存在的意义：那条异步路径以前没人测。
+      byId.get('main')._html = '';
+      byId.get('groupAdmin')._html = '';
+      await globalThis.__view('setting');
+      await sleep(60);
+      html = byId.get('groupAdmin')._html;
     } else {
       byId.get('detailRail')._html = '';
       await globalThis.__showDetail('t1');

@@ -1551,9 +1551,25 @@ gaps = "T-F4 让子步骤能设截止日之后暴露出来的口径问题：`ove
 id = "T-F5"
 title = "F 批：大任务三层嵌套 + 分组可嵌套"
 group = "PROCESS"
-status = "todo"
-evidence = ["file:复盘/口径定案-待定清单.md"]
-gaps = "**口径已定**：嵌套（大任务→子任务→子步骤）走 `parent_id` 自引用（**禁成环已有**），要定最多几层并做界面；分组 `groups` 加 `parent_id` **可嵌套**，并**保留「任务可属多个分组」**（不动 SR-F1.3 —— 那条是为了承接被砍掉的「目标」概念，见 needs.md N3）。**待实现**"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/core/tasks/manager.py::MAX_TASK_DEPTH = 3",
+  "text:src/timeflow/core/tasks/manager.py::def task_depth",
+  "text:src/timeflow/core/tasks/manager.py::def task_tree",
+  "text:src/timeflow/core/tasks/groups.py::def set_group_parent",
+  "text:src/timeflow/core/tasks/groups.py::def group_path",
+  "text:src/timeflow/storage/db.py::def _migrate_v14",
+  "route:GET /api/tasks/{task_id}/tree",
+  "route:POST /api/groups/{group_id}/parent",
+  "text:src/web/index.html::function toggleStep",
+  "text:src/web/index.html::data-change=\"group-parent\"",
+  "ui:data-action=step-toggle",
+  "ui:data-action=group-sub",
+  "ui:data-change=group-parent",
+  "test:test_task_nesting_line.py",
+]
+gaps = ""
 
 [entries."T-F6"]
 id = "T-F6"

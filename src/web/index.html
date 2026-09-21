@@ -226,10 +226,14 @@ const ACTIONS = {
   'group-add':      () => addGroup(),
   'group-rename':   el => renameGroup(el.dataset.id, el.dataset.name || ''),
   'group-delete':   el => deleteGroup(el.dataset.id, el.dataset.name || ''),
+  'group-sub':      el => addSubgroup(el.dataset.id, el.dataset.name || ''),
+  // 分组换父（T-F5 嵌套）：下拉改一下就落库，成环/超层数由后端 400 带原话
+  'group-parent':   el => setGroupParent(el.dataset.id, el.value),
   'task-group':     el => toggleTaskGroup(el.dataset.id, el.dataset.name || '', el.dataset.on === 'true'),
   // 子任务（OP-12）
   'subtask-add':    () => addSubtask(),
   'subtask-due':    el => setSubtaskDue(el.dataset.id, el.value),
+  'step-toggle':    el => toggleStep(el.dataset.id),
   'task-parent':    el => setTaskParent(el.dataset.id, el.dataset.parent || null),
   // 任务编辑（OP-9）
   'task-edit':      () => { detailEditing=true; render(current); },
@@ -417,13 +421,15 @@ function paintRail(mySeq){
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
   if(!detailTaskId){box.innerHTML='';return}
   Promise.all([api(`/api/tasks/${detailTaskId}`),api(`/api/tasks/${detailTaskId}/facts`),
-    api('/api/groups'),api(`/api/tasks/${detailTaskId}/subtasks`),api('/api/courses'),
+    api('/api/groups'),api(`/api/tasks/${detailTaskId}/tree`),api('/api/courses'),
     api(`/api/tasks/${detailTaskId}/review-cards`),api(`/api/tasks/${detailTaskId}/attempts`)])
-    .then(([t,facts,groups,kids,courses,cards,attempts])=>{
+    .then(([t,facts,groups,tree,courses,cards,attempts])=>{
       if(mySeq!==renderSeq)return;
       groupCache=groups||[];
       courseCache=courses||[];     // 每次打开详情都刷新：新建课程后立刻可选
-      renderDetail(box,t,facts||[],kids||[],cards||[],attempts||{count:0,notes:[]});
+      // 整棵子树（T-F5）一次性拿来：直接子步骤由它推出来（`depth = 自己+1`），
+      // 不再单独请求 `/subtasks` —— 两处都取会得到两份可能不一致的同一批数据。
+      renderDetail(box,t,facts||[],tree||[],cards||[],attempts||{count:0,notes:[]});
     })
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
 }
@@ -443,29 +449,63 @@ function factLabel(kind){
     :kind==='task.assignment.status'?'进展':kind==='task.status_changed'?'状态改为'
     :kind==='task.attempt.failed'?'尝试失败':kind;
 }
-/* ---------- 分组（OP-11）：管理 + 任务归属 ----------
+/* ---------- 分组（OP-11 + F 批 · T-F5 可嵌套）：管理 + 任务归属 ----------
  * 分组是"组织维度"，只影响分类与查找，不改变任务执行逻辑（contracts/domains/F1-tasks.md OP-11）。
  * 管理放在设置页（配置类）；任务归属放在详情面板（就地改）。
+ * T-F5 之后分组可以像文件夹一样嵌套（最多三层，与「大任务 → 子任务 → 子步骤」同一个上限）：
+ * - 列表按**后端给的树序**（父在子前）渲染，缩进看 `depth`，显示**路径**（`高数 / 第三章`）
+ *   —— 分组名仍然全局唯一（成员关系是按名字存的，同名就指不回是哪一个），所以路径是消歧义的唯一办法；
+ * - 新建时可以选父（顶层或已有分组）；每一行可以把分组**移到**别处（顶层 / 任意分组）；
+ * - 成环、超层数、删有子分组的分组：后端 400 带原话，界面照原样弹出来（不静默）。
  */
 async function renderGroupAdmin(el){
   const groups=await api('/api/groups');
+  const options=g=>g.map(x=>`<option value="${x.id}">${esc(x.path)}</option>`).join('');
+  const parentSelect=(id,current,label)=>`<select data-change="group-parent" data-id="${id}"
+      title="${esc(label)}"><option value="">顶层</option>${options(groups)}
+      ${groups.filter(g=>g.id!==id).map(g=>`<option value="${g.id}" ${g.id===current?'selected':''}>${esc(g.path)}</option>`).join('')}</select>`;
   el.innerHTML=`<div class="settings-sub">分组管理</div>
-    <div class="sub">分组用来按项目/领域归类任务（如「高数」「自媒体」）。删除分组**不会删任务**，只解除归类。</div>
+    <div class="sub">分组用来按项目/领域归类任务（如「高数」「高数 / 第三章」）。可以像文件夹一样嵌套
+    （层数上限由后端拦，超了会说明原因 —— 界面不自己复述那个数字）；删除分组**不会删任务**，只解除归类。</div>
     <div class="new"><input id="groupName" placeholder="新建分组，如：高数" data-enter="group-add">
+      <select id="groupParent" title="建在哪个分组下（默认顶层）"><option value="">顶层</option>${options(groups)}</select>
       <button data-action="group-add">新建</button></div>
-    ${groups.map(g=>`<div class="row tight" style="margin:6px 0">
+    ${groups.map(g=>`<div class="row tight" style="margin:6px 0;padding-left:${(Number(g.depth)||1)-1}em">
         <span class="badge">${g.task_count} 项</span>
-        <span class="grow" style="flex:1">${esc(g.name)}</span>
+        <span class="grow" style="flex:1">${esc(g.path)}</span>
+        <button class="ghost" data-action="group-sub" data-id="${g.id}" data-name="${esc(g.name)}"
+          title="在这个分组下建一个子分组">＋子分组</button>
+        ${parentSelect(g.id,g.parent_id,'移到别的分组下（顶层 = 移出来）')}
         <button class="ghost" data-action="group-rename" data-id="${g.id}" data-name="${esc(g.name)}">改名</button>
         <button class="ghost" data-action="group-delete" data-id="${g.id}" data-name="${esc(g.name)}">删除</button>
       </div>`).join('')||emptyState('还没有分组')}`;
 }
 async function addGroup(){
   const input=document.getElementById('groupName');
+  const parentEl=document.getElementById('groupParent');
   const name=(input.value||'').trim();
   if(!name){toast('分组名不能为空');return}
-  await api('/api/groups',{method:'POST',body:JSON.stringify({name})});
-  toast(`已新建分组「${name}」`);view(current);
+  const parent_id=(parentEl&&parentEl.value)||null;
+  try{
+    await api('/api/groups',{method:'POST',body:JSON.stringify({name,parent_id})});
+    toast(parent_id?`已在所选分组下新建「${name}」`:`已新建顶层分组「${name}」`);view(current);
+  }catch(e){/* api() 已经弹过后端原话（重名 / 超过层数） */}
+}
+// 在某个分组下建子分组：把父预选好，让人只填名字（不用自己去下面那张表里找）
+async function addSubgroup(parentId,parentName){
+  const name=await ask(`在「${parentName}」下新建子分组，名字是？`);
+  if(name===null)return;
+  if(!name.trim()){toast('分组名不能为空');return}
+  try{
+    await api('/api/groups',{method:'POST',body:JSON.stringify({name:name.trim(),parent_id:parentId})});
+    toast(`已新建子分组「${name.trim()}」`);view(current);
+  }catch(e){/* api() 已经弹过后端原话 */}
+}
+async function setGroupParent(id,parentId){
+  try{
+    const g=await api(`/api/groups/${id}/parent`,{method:'POST',body:JSON.stringify({parent_id:parentId||null})});
+    toast(parentId?`已移到「${g.path}」下`:'已移到顶层');view(current);
+  }catch(e){/* api() 已经弹过后端原话（成环 / 超层数） */}
 }
 async function renameGroup(id,oldName){
   const name=await ask('分组改名：',oldName||'');
@@ -476,17 +516,25 @@ async function renameGroup(id,oldName){
 }
 async function deleteGroup(id,name){
   if(!await confirmAsk(`删除分组「${name}」？任务会保留，只是不再归到这个分组。`,'删除分组'))return;
-  const r=await api(`/api/groups/${id}`,{method:'DELETE'});
-  toast(`已删除分组（${r.unbound_tasks} 个任务解除归类）`);view(current);
+  try{
+    const r=await api(`/api/groups/${id}`,{method:'DELETE'});
+    toast(`已删除分组（${r.unbound_tasks} 个任务解除归类）`);view(current);
+  }catch(e){/* api() 已经弹过后端原话（下面还有子分组，先处理它们） */}
 }
-// 任务详情里勾选/取消所属分组：按钮显示当前是否属于该分组
+// 任务详情里勾选/取消所属分组：按钮显示当前是否属于该分组。
+// 显示**路径**（T-F5）—— 嵌套之后光看名字分不清是哪一层的分组；勾选仍按名字（老口径不变）。
 function groupChips(groups,assigned){
   const inGroup=new Set(assigned||[]);
   return groups.map(g=>{
     const on=inGroup.has(g.name);
     return `<button class="${on?'':'ghost'}" data-action="task-group" data-id="${detailTaskId}"
-      data-name="${esc(g.name)}" data-on="${on}">${on?'✓ ':''}${esc(g.name)}</button>`;
+      data-name="${esc(g.name)}" data-on="${on}">${on?'✓ ':''}${esc(g.path||g.name)}</button>`;
   }).join('');
+}
+// 分组名 → 路径（列表卡片上的徽标用；缓存里没有就退回名字本身，绝不编一个路径出来）
+function groupPath(name){
+  const hit=(groupCache||[]).find(g=>g.name===name);
+  return hit&&hit.path?hit.path:name;
 }
 async function toggleTaskGroup(taskId,name,on){
   await api(`/api/tasks/${taskId}/group`,{method:'POST',body:JSON.stringify({name,on})});
@@ -514,6 +562,13 @@ async function addSubtask(){
 async function setSubtaskDue(id,value){
   await api(`/api/tasks/${id}`,{method:'PATCH',body:JSON.stringify({due_date:value||null})});
   toast(value?`这一步的截止日改成 ${value}`:'这一步的截止日已取消');view(current);
+}
+// 收起/展开步骤树的一支（T-F5）：纯前端状态（不该为了一次折叠去改后端数据），
+// 换任务详情时保留（同一次会话里连着看几个大任务时，收起过的分支不会自己弹开）。
+const collapsedSteps=new Set();
+function toggleStep(id){
+  if(collapsedSteps.has(id))collapsedSteps.delete(id);else collapsedSteps.add(id);
+  view(current);
 }
 async function setTaskParent(taskId,parentId){
   await api(`/api/tasks/${taskId}/parent`,{method:'POST',body:JSON.stringify({parent_id:parentId})});
@@ -604,23 +659,42 @@ function stateButtonsHTML(t){
   btns.push(`<button class="ghost" data-action="task-archive" data-id="${t.id}">归档</button>`);
   return btns.join('');
 }
-function renderDetail(el,t,facts,kids,cards,attempts){
+function renderDetail(el,t,facts,tree,cards,attempts){
   const isDone=t.status==='完成';
   const att=attempts||{count:0,notes:[]};
   // 「尝试失败」只对**还在手上**的任务开放：完成/搁置/归档/已删记失败没有意义（后端也会 400）
   const canFail=!['完成','取消','待定','归档','已删'].includes(t.status);
   const rcards=cards||[];
+  // 整棵子树（T-F5）：**直接子步骤**由 `depth = 自己+1` 推出来 —— 进度口径与后端
+  // `subtask_progress`（只数直接子任务）保持一致，也与"全完成 → 父任务自动完成"同一条规则。
+  const nodes=(tree||[]).filter(n=>n&&n.task);
+  const myDepth=Number(t.depth)||1;
+  const kids=nodes.filter(n=>Number(n.depth)===myDepth+1).map(n=>n.task);
+  const collapsed=collapsedSteps;
   const asg=(t.assignments||[]).map(a=>
     `<div class="meta"><span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span></div>`).join('');
   const lines=(facts||[]).slice(-12).reverse().map(f=>
     `<div class="fact"><span>${esc(factLabel(f.kind))}</span>
       <span class="sub">${humanTime(f.occurred_at)}</span></div>`).join('');
-  const subtaskList=(kids||[]).map(s=>{
-    const sDone=s.status==='完成';
-    return `<div class="fact">
+  // 步骤树（T-F4 + T-F5）：**前序**渲染，靠 `depth` 缩进、靠「收起」折叠一整支。
+  // 折叠口径就一句话：某个节点收起后，它后面所有"比它更深"的节点都不画，直到出现同层或更浅的。
+  const rows=[];
+  let cut=null;
+  for(const n of nodes){
+    if(cut!==null&&Number(n.depth)>cut)continue;
+    cut=null;
+    const s=n.task, sDone=s.status==='完成';
+    const hasKids=nodes.some(x=>x.task.parent_id===s.id);
+    const off=collapsed.has(s.id);
+    if(off)cut=Number(n.depth);
+    const indent=(Number(n.depth)-myDepth-1)*16;
+    rows.push(`<div class="fact" style="margin-left:${indent}px">
       <button class="check ${sDone?'on':''}" title="${sDone?'撤销完成':'标记完成'}"
         data-action="task-done" data-id="${s.id}" data-done="${sDone}"></button>
+      ${hasKids?`<button class="ghost" data-action="step-toggle" data-id="${s.id}"
+        title="${off?'展开这一支':'收起这一支'}">${off?'▸':'▾'}</button>`:''}
       <span class="grow" style="flex:1;${sDone?'text-decoration:line-through;color:var(--muted)':''}">${esc(s.title)}</span>
+      <span class="badge">${Number(n.depth)===2?'子任务':'子步骤'}</span>
       ${s.status!=='未开始'?`<span class="badge">${esc(s.status)}</span>`:''}
       <input type="date" value="${s.due_date||''}" title="这一步的截止日（空 = 取消）"
         data-change="subtask-due" data-id="${s.id}">
@@ -628,10 +702,11 @@ function renderDetail(el,t,facts,kids,cards,attempts){
       <button class="ghost" data-action="task-attempt" data-id="${s.id}">尝试失败</button>
       <button class="ghost" data-action="task-detail" data-id="${s.id}">详情</button>
       <button class="ghost" data-action="task-parent" data-id="${s.id}" data-parent="">脱离</button>
-    </div>`;
-  }).join('');
-  const doneCount=(kids||[]).filter(s=>s.status==='完成').length;
-  const progress=(kids||[]).length?`<span class="badge">${doneCount}/${kids.length}</span>`:'';
+    </div>`);
+  }
+  const subtaskList=rows.join('');
+  const doneCount=kids.filter(s=>s.status==='完成').length;
+  const progress=kids.length?`<span class="badge">${doneCount}/${kids.length}</span>`:'';
   el.innerHTML=`<div class="panel-title">任务详情${detailEditing?' · 编辑中':''}</div>
     <div class="title">${esc(t.title)}</div>
     ${detailEditing?editForm(t):`<div class="meta">${isDone?`<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
@@ -652,7 +727,7 @@ function renderDetail(el,t,facts,kids,cards,attempts){
         <span class="grow" style="flex:1">${esc(c.title)}</span>
         <span class="sub">到期 ${esc(String(c.due_date).slice(0,10))}</span></div>`).join('')}`:''}
     <div class="settings-sub">步骤（子任务）${progress}</div>
-    <div id="subtaskList">${subtaskList||'<div class="sub">还没有步骤。拆成小步，完成到最后一个时父任务会自动完成。</div>'}</div>
+    <div id="subtaskList">${subtaskList||'<div class="sub">还没有步骤。拆成小步，完成到最后一个时父任务会自动完成；子步骤下面还能再拆一层（最多三层）。</div>'}</div>
     <div class="new"><input id="subtaskTitle" placeholder="添加一个步骤…" data-enter="subtask-add">
       <input id="subtaskDue" type="date" title="这一步的截止日（可留空；留空 = 不设）">
       <button class="ghost" data-action="subtask-add">添加</button></div>
@@ -807,10 +882,14 @@ function taskCard(t,isOverdue){
   const cur=t.current_step
     ? `<div class="sub">当前：${esc(t.current_step)}${t.current_step_due?`（${esc(t.current_step_due)} 前）`:''}</div>`
     : '';
+  // 嵌套层数（T-F5）：2 = 子任务、3 = 子步骤。列表仍是"平铺的一张张卡"（不藏东西），
+  // 但每张卡自己说清它是哪一层 —— 树形呈现放在详情面板里（那里能折叠）。
+  const depthBadge=Number(t.depth)>1
+    ? `<span class="badge">${Number(t.depth)===2?'子任务':'子步骤'}</span>` : '';
   return `<div class="card ${isDone?'done':''} ${late?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}</div>
+    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(groupPath(g))}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}</div>
     <div class="row">
       ${doingButtonHTML(t)}
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}

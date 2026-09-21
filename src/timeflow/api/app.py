@@ -117,6 +117,9 @@ class TaskOut(BaseModel):
     course_name: str | None = None
     # 「进行中」的显式顺序（F 批 · T-F1）：只在「进行中」时有值；界面按它排上/下
     doing_rank: int | None = None
+    # 嵌套层数（N10 / F 批 · T-F5）：1 = 大任务（顶层）、2 = 子任务、3 = 子步骤。
+    # 界面据此显示「子任务 / 子步骤」徽标与缩进；上限 3 层由领域层拦。
+    depth: int = 1
     # 下面三项**只有档案接口（`GET /api/tasks/archived`）会填**（F 批 · T-F2）：
     # 档案视图是一屏列表，得一次把"自动/手动归档 + 完成日 + 试了几回"都算好（各一次聚合查询），
     # 不能给每张卡各查一遍（那是 N+1）；别的接口保持默认值，页面也不读它们。
@@ -147,10 +150,17 @@ def _out(
     auto_archived: bool = False,
     completed_on: str | None = None,
     attempt_count: int = 0,
+    depth: int | None = None,
 ) -> TaskOut:
-    """任务 → 接口对象。三个关键字参数只有档案接口会传（见 `TaskOut` 那段注释）。"""
+    """任务 → 接口对象。三个关键字参数只有档案接口会传（见 `TaskOut` 那段注释）。
+
+    `depth`（T-F5）：不传就现算（**只在真有父任务时才查** —— 绝大多数任务是顶层的，
+    不该为了一个显示字段给每张卡都走一遍父链）；树的接口已经知道层数，直接传进来。
+    """
     groups = tm.get_task_groups(conn, t.id)
     progress, current = tm.subtask_view(conn, t.id)
+    if depth is None:
+        depth = tm.task_depth(conn, t.id) if t.parent_id else 1
     return TaskOut(
         id=t.id,
         title=t.title,
@@ -187,6 +197,7 @@ def _out(
         auto_archived=auto_archived,
         completed_on=completed_on,
         attempt_count=attempt_count,
+        depth=depth,
     )
 
 
@@ -756,6 +767,19 @@ def create_app(db_path: str | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="任务不存在") from None
         return [_out(t, conn) for t in tm.subtasks(conn, task_id)]
 
+    @app.get("/api/tasks/{task_id}/tree")
+    def task_tree(task_id: str) -> list[TaskOut]:
+        """整棵子树（F 批 · T-F5）：**前序**（父在子前），每条带绝对 `depth`（2/3…）。
+
+        N10/SR-F1.6 的「任务树/折叠呈现」用这一份：三层都能摆出来，
+        界面不必自己"先取子、再逐个取孙子"。任务不存在 404。
+        """
+        try:
+            tm.get_task(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        return [_out(n.task, conn, depth=n.depth) for n in tm.task_tree(conn, task_id)]
+
     @app.post("/api/tasks/{task_id}/subtasks", response_model=TaskOut, status_code=201)
     def add_subtask(task_id: str, payload: dict[str, Any]) -> TaskOut:
         """新建子任务（OP-12）。父任务不存在 404；标题空 400。
@@ -812,24 +836,42 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.get("/api/groups")
     def groups() -> list[dict[str, Any]]:
-        """分组列表（含任务计数）。"""
+        """分组列表（含任务计数 / `parent_id` / `depth` / `path`）—— **按树的前序**（父在子前）。
+
+        F 批 · T-F5：分组可嵌套。界面靠这一份数据做缩进与路径显示，
+        不在前端另拼一遍树（"父在子前"这套顺序只写一处）。
+        """
         return tm.list_groups(conn)
 
     @app.post("/api/groups", status_code=201)
     def create_group(payload: dict[str, Any]) -> dict[str, Any]:
-        """新建分组（OP-11）。空名 400；**重名 400**（不允许静默复用，免得用户以为建了新组）。"""
+        """新建分组（OP-11）。空名 400；**重名 400**（不允许静默复用，免得用户以为建了新组）。
+
+        `{parent_id}` 可选：给了就建成那个分组的**子分组**（T-F5）；
+        父不存在 404、超过层数上限 400（都不静默）。
+        """
         name = str(payload.get("name", "")).strip()
         if not name:
             raise HTTPException(status_code=400, detail="分组名不能为空") from None
         existing = {str(g["name"]) for g in tm.list_groups(conn)}
         if name in existing:
             raise HTTPException(status_code=400, detail=f"分组「{name}」已存在") from None
-        gid = tm.create_group(conn, name)
+        parent_id = payload.get("parent_id")
+        try:
+            gid = tm.create_group(conn, name, None if parent_id is None else str(parent_id))
+        except KeyError:
+            raise HTTPException(status_code=404, detail="父分组不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         return tm.get_group(conn, gid)
 
     @app.patch("/api/groups/{group_id}")
     def rename_group(group_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """重命名分组（OP-11）。空名 400；不存在 404；改到已有名字 = 与那个分组合并（幂等）。"""
+        """重命名分组（OP-11）。空名 400；不存在 404；改到已有名字 = 与那个分组合并（幂等）。
+
+        嵌套之后多两条边界（T-F5）：**有子分组时不能合并**、**不能合并进自己的子孙** ——
+        都 400 带原话，不静默把子分组甩到顶层或造出一个环。
+        """
         if "name" not in payload:
             raise HTTPException(status_code=400, detail="缺少 name") from None
         try:
@@ -839,14 +881,37 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+    @app.post("/api/groups/{group_id}/parent")
+    def set_group_parent(group_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """把分组移到另一个分组下（`{parent_id}`，null = 移到顶层）—— T-F5 的"移进去/移出来"。
+
+        成环 / 超层数 / 父不存在：400·404 带原话（不静默）。
+        """
+        parent_id = payload.get("parent_id")
+        try:
+            return tm.set_group_parent(
+                conn, group_id, None if parent_id is None else str(parent_id)
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="分组不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     @app.delete("/api/groups/{group_id}")
     def delete_group(group_id: str) -> dict[str, Any]:
-        """删除分组（OP-11）：**只删分组与关联，任务本身保留**。不存在 404。"""
+        """删除分组（OP-11）：**只删分组与关联，任务本身保留**。不存在 404。
+
+        T-F5：**有子分组时 400**（要求先把子分组移走或删掉）—— 一次点击悄悄级联删掉
+        看不见的几层，比让人多走一步更容易出事。
+        """
         try:
             tm.get_group(conn, group_id)
         except KeyError:
             raise HTTPException(status_code=404, detail="分组不存在") from None
-        unbound = tm.delete_group(conn, group_id)
+        try:
+            unbound = tm.delete_group(conn, group_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         return {"deleted": group_id, "unbound_tasks": unbound}
 
     @app.get("/api/groups/{group_id}/tasks")

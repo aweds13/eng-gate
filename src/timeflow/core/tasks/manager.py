@@ -719,6 +719,12 @@ def overdue_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Ta
 
 
 # ---------------------------------------------------------------- 子任务（SR-F1.6 / OP-12）
+# 嵌套的最大层数（F 批 · T-F5）：用户定的形状是「大任务 → 子任务 → 子步骤」三层。
+# 分组用同一个上限（`groups.MAX_GROUP_DEPTH`）—— 两处都是"分类/拆解"的深度，
+# 各写一个数字迟早会互相矛盾。
+MAX_TASK_DEPTH = 3
+
+
 def subtask_progress(conn: sqlite3.Connection, task_id: str) -> dict[str, int]:
     """子任务进度：{done, total}（没有子任务时 total=0）。"""
     rows = conn.execute("SELECT status FROM tasks WHERE parent_id = ?", (task_id,)).fetchall()
@@ -779,6 +785,61 @@ def _would_cycle(conn: sqlite3.Connection, task_id: str, parent_id: str) -> bool
     return False
 
 
+def task_depth(conn: sqlite3.Connection, task_id: str) -> int:
+    """任务层数：顶层（大任务）= 1，子任务 = 2，子步骤 = 3（沿 `parent_id` 上溯）。
+
+    上限 `MAX_TASK_DEPTH` 是用户定的形状：「大任务 → 子任务 → 子步骤」。
+    坏数据成环时停在 `MAX_TASK_DEPTH+1`，不空转（`_would_cycle` 负责不让新的环产生）。
+    """
+    depth = 1
+    row = conn.execute("SELECT parent_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    cursor = str(row["parent_id"]) if row and row["parent_id"] else None
+    seen = {task_id}
+    while cursor and cursor not in seen and depth <= MAX_TASK_DEPTH:
+        seen.add(cursor)
+        depth += 1
+        up = conn.execute("SELECT parent_id FROM tasks WHERE id = ?", (cursor,)).fetchone()
+        cursor = str(up["parent_id"]) if up and up["parent_id"] else None
+    return depth
+
+
+def _subtree_height(conn: sqlite3.Connection, task_id: str) -> int:
+    """以 task_id 为根的子树有几层（只算自己 = 1）。"""
+    kids = conn.execute("SELECT id FROM tasks WHERE parent_id = ?", (task_id,)).fetchall()
+    if not kids:
+        return 1
+    return 1 + max(_subtree_height(conn, str(k["id"])) for k in kids)
+
+
+@dataclass
+class TaskNode:
+    """子树里的一个节点（F 批 · T-F5）：任务 + **绝对层数**
+    （1 = 大任务、2 = 子任务、3 = 子步骤）。"""
+
+    task: Task
+    depth: int
+
+
+def task_tree(conn: sqlite3.Connection, root_id: str) -> list[TaskNode]:
+    """整棵子树（**前序**：父在子前），每个节点带绝对层数。
+
+    N10/SR-F1.6 的「任务树/折叠呈现」用这一份数据：三层都要摆得出来，
+    所以界面**不必**自己递归（先取子、再逐个取孙子 = 界面里再写一遍树）。
+    坏数据成环时跳过重复节点，不无限递归。
+    """
+    out: list[TaskNode] = []
+
+    def walk(parent_id: str, depth: int, guard: set[str]) -> None:
+        for child in subtasks(conn, parent_id):
+            if child.id in guard:
+                continue
+            out.append(TaskNode(task=child, depth=depth))
+            walk(child.id, depth + 1, guard | {child.id})
+
+    walk(root_id, task_depth(conn, root_id) + 1, {root_id})
+    return out
+
+
 def _autocomplete_parent(conn: sqlite3.Connection, parent_id: str | None) -> Task | None:
     """子任务全完成时**自动完成父任务**（OP-12 联动）。
 
@@ -806,10 +867,17 @@ def create_subtask(
 
     继承父任务的 My Day 归属（子任务跟着父任务出现在今天的清单里）；
     建完若父任务的子任务已全部完成 → 自动完成父任务。
+    **第三层封顶**（T-F5）：父任务已经是第三层（子步骤）时拒绝 ——
+    用户的形状是「大任务 → 子任务 → 子步骤」三层，再往下界面就没地方摆了。
     """
     parent = get_task(conn, parent_id)
     if not title.strip():
         raise ValueError("子任务标题不能为空")
+    if task_depth(conn, parent_id) >= MAX_TASK_DEPTH:
+        raise ValueError(
+            f"任务最多 {MAX_TASK_DEPTH} 层（大任务 → 子任务 → 子步骤）："
+            "「子步骤」下面不能再拆了"
+        )
     child = create_task(
         conn,
         title.strip(),
@@ -824,13 +892,23 @@ def create_subtask(
 def set_task_parent(
     conn: sqlite3.Connection, task_id: str, parent_id: str | None
 ) -> Task:
-    """改父任务（OP-12 边界：**禁止成环**）。`parent_id=None` 表示脱离父任务。"""
+    """改父任务（OP-12 边界：**禁止成环** + **最多 `MAX_TASK_DEPTH` 层**）。
+
+    `parent_id=None` 表示脱离父任务。三层上限是用户定的（「大任务 → 子任务 → 子步骤」）：
+    超过就 ValueError（带现有层数），**不静默截断**（悄悄把孙子挂成儿子比报错更难查）。
+    """
     if parent_id is not None:
         if parent_id == task_id:
             raise ValueError("任务不能作为自己的子任务")
         get_task(conn, parent_id)  # 父任务不存在 → KeyError
         if _would_cycle(conn, task_id, parent_id):
             raise ValueError("不能把任务挂到它自己的子任务下（会成环）")
+        height = _subtree_height(conn, task_id)
+        if task_depth(conn, parent_id) + height > MAX_TASK_DEPTH:
+            raise ValueError(
+                f"任务最多 {MAX_TASK_DEPTH} 层（大任务 → 子任务 → 子步骤）："
+                f"这棵子树有 {height} 层，挂到「{get_task(conn, parent_id).title}」下就超了"
+            )
     return update_task(conn, task_id, parent_id=parent_id)
 
 
