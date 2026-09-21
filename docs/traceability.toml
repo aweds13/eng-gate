@@ -24,6 +24,7 @@ T-C5 = "后端已落地（review_items.task_id + POST /api/tasks/{id}/to-review 
 T-C7 = "后端已落地（ref_handle 可 PATCH 写入/清空，带校验）；**复习卡详情里填句柄的界面待前端批次**"
 T-C3 = "后端已落地（focus_variation_minutes / longest_gap_days / rhythm_note）；**界面上显示这三个数字与那句话待前端批次**"
 SR-NF12 = "PR 模板已入库（`.github/pull_request_template.md`），但**条目标题编号错位**（实际描述的是规格 `SR-NF11 Git 工作流`）→ 保持 partial，等 T-D1 校正编号时一并处理（见 `复盘/文档债务-NF编号错位.md`）"
+T-D2 = "工具与门禁的**信息性**一步已落地（`scripts/audit_titles.py` + `run_gates` 的 `blocking=false` 步骤）；**待 T-D1 校正完后换成 `--check` 并接成阻断项**（档口在这一条上，不是在 T-D2 没做）"
 
 [entries."T-00"]
 id = "T-00"
@@ -1252,19 +1253,27 @@ gaps = "后端已落地（可写可清空、非法拒绝）；**界面入口待�
 
 [entries."T-D1"]
 id = "T-D1"
-title = "文档债务：台账 SR-NF2~NF12 编号错位校正（含给审计加标题级检查）"
+title = "文档债务：台账 SR 编号/标题错位校正（F + NF 两层；含补 NF12 条目与门禁阻断）"
 group = "PROCESS"
 status = "todo"
-evidence = ["file:复盘/文档债务-NF编号错位.md"]
-gaps = "台账 SR-NF2~NF12 描述的是规格的**前一条**（整体错位一格），且规格 SR-NF12「数据迁移与备份」在台账里没有条目；逐条映射与完成标准见 `复盘/文档债务-NF编号错位.md`。**本轮只登记不动手**（不是纯改标题：证据与状态都要按新含义重判，属一次 NF 层小型再审；且会牵连引用 NF 编号的其它文档）。附带一件：给 `scripts/audit_progress.py` 加**标题级**检查，免得同类错位再躲过审计"
+evidence = [
+  "file:复盘/文档债务-NF编号错位.md",
+  "file:scripts/audit_titles.py",
+]
+gaps = "工具实测：**15 条确定错位**（F1.2/F1.3/F1.5/F1.6/F2.3/F2.4/F2.5/F2.6/F2.8/F6.2/F6.3/F7.4/F9.2/F9.3/NF4 —— 各自「更像」相邻编号那条规格）+ **14 条需人核对**（含假阳性）；完整清单与完成标准见 `复盘/文档债务-NF编号错位.md`。**本轮只登记 + 造好检测工具**（不擅自重编号：证据与 status 都要按新含义重判，且牵连引用编号的其它文档）。收尾四件事：校正标题/证据/状态、补规格 `SR-NF12`「数据迁移与备份」条目、把门禁里的 `audit_titles` 换成 `--check` 并改成**阻断项**、删掉 `tests/test_audit_titles.py` 上那个 `xfail(strict)` 闹钟"
 
 [entries."T-D2"]
 id = "T-D2"
-title = "文档债务：审计脚本加「标题级」规格覆盖检查（可与 T-D1 合并）"
+title = "文档债务：审计加「标题级」规格覆盖检查（工具已就位，待接成阻断项）"
 group = "PROCESS"
-status = "todo"
-evidence = ["file:复盘/文档债务-NF编号错位.md"]
-gaps = "现在审计的「规格覆盖」只按**编号**核对（`sr_ids - set(entries)`），编号在、含义错也算通过；已在 `复盘/文档债务-NF编号错位.md` §三 记录。待加：台账 `title` 与规格标题的关键词比对（或加 `spec_title` 字段强制一致）"
+status = "partial"
+evidence = [
+  "file:scripts/audit_titles.py",
+  "text:scripts/run_gates.py::audit_titles",
+  "text:scripts/run_gates.py::blocking",
+  "test:test_audit_titles.py",
+]
+gaps = "工具与门禁的**信息性**一步已落地（`scripts/audit_titles.py` + `run_gates` 里 `blocking=false` 的 `audit_titles` 步骤 + `gates/last.json` 记录说明 + `xfail(strict)` 闹钟）；**还没接成阻断项** —— 因为编号校正未做（T-D1），挡了就完全无法提交。T-D1 完成后换 `--check` 并改 blocking"
 
 [entries."STEP-17"]
 id = "STEP-17"

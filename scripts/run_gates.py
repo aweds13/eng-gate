@@ -43,6 +43,11 @@ REAL = [
     ("lf1_live", [PY, "-X", "utf8", "tools/lf1_live_check.py"]),
     ("web_live", [PY, "-X", "utf8", "tools/web_live_check.py"]),
 ]
+# 信息性检查（**暂不阻断**）：台账↔规格 标题对账。
+# 为什么现在不阻断：台账里 F/NF 两层的编号错位还没校正（任务卡 T-D1），一接进来就会 FAIL。
+# 但**要让它每次跑门禁都露一次脸** —— 否则这份欠账又会被忘掉（这正是它当初躲过审计的原因）。
+# T-D1 做完后：把这里换成 audit_titles.py --check（有"确定错位"即退出码 1），并改成阻断项。
+INFO_GATES = [("audit_titles", [PY, "-X", "utf8", "scripts/audit_titles.py"])]
 SUCCESS_HINTS = ("passed", "failed", "error", "PASS", "Success", "checks passed", "OK")
 
 
@@ -203,8 +208,34 @@ def main() -> int:
         mark = "[OK ]" if proc.returncode == 0 else "[FAIL]"
         print(f"{mark} {name:<22} exit={proc.returncode}  {item['seconds']}s  {item['summary']}")
 
-    ok = ok_docs and all(int(str(r["exit_code"])) == 0 for r in results)
-    passed = [r for r in results if int(str(r["exit_code"])) == 0]
+    # 信息性检查：只报告、不阻断（blocking=False，不计进 ok）
+    for name, cmd in ([] if args.quick else INFO_GATES):
+        t0 = time.time()
+        proc = subprocess.run(
+            cmd, cwd=ROOT, env=env(), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", check=False,
+        )
+        out = (proc.stdout or "") + (proc.stderr or "")
+        tail = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        summary = next(
+            (ln[:160] for ln in reversed(tail) if ln.startswith("共 ") or "全部对得上" in ln), ""
+        )
+        summary = summary or (tail[-1][:160] if tail else "")
+        item = {
+            "name": name,
+            "exit_code": proc.returncode,
+            "seconds": round(time.time() - t0, 2),
+            "summary": summary,
+            "blocking": False,
+            "note": "信息性：台账↔规格 标题对账；T-D1 完成后改成阻断项（audit_titles.py --check）",
+        }
+        results.append(item)
+        mark = "[OK ]" if proc.returncode == 0 else "[WARN]"
+        print(f"{mark} {name:<22} exit={proc.returncode}  {item['seconds']}s  {summary}（不阻断）")
+
+    blocking = [r for r in results if r.get("blocking", True)]
+    ok = ok_docs and all(int(str(r["exit_code"])) == 0 for r in blocking)
+    passed = [r for r in blocking if int(str(r["exit_code"])) == 0]
     payload = {
         "rev": git("rev-parse", "--short", "HEAD"),
         # 注意：**不要**把 tree 当"这一版代码"的凭据 —— gates/last.json 自己也在那棵树里，
