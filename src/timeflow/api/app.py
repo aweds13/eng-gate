@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from timeflow import logs
+from timeflow import logs, vocab
 from timeflow.config import load_settings
 from timeflow.core import academic as ac
 from timeflow.core import attach as attach_mod
@@ -409,6 +409,48 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return behavior.report(conn)
+
+    # ---- 可配置词表（SR-NF7 / G 批 · T-G1）：复习形式 / 热力图维度 ----
+    # 口径（2026-09-21 用户定，见 `复盘/口径定案-待定清单.md` §6）：**能不改核心就加的只有词表**；
+    # 加字段（要 schema 迁移）与加功能（要领域函数+路由+界面）如实标注做不到。
+    # 三条路由**通用**：加一张新词表 = 在 `timeflow/vocab.py` 加一条声明，路由与界面都不用改。
+    def _vocab_defaults() -> dict[str, dict[str, str]]:
+        """config.toml 里的文件级默认（本机在设置页改过的存 `app_settings` 并优先）。"""
+        return {
+            vocab.REVIEW_FORMS.key: dict(settings.review.forms),
+            vocab.HEATMAP_DIMENSIONS.key: dict(settings.insights.heatmap_dimensions),
+        }
+
+    @app.get("/api/settings/vocab")
+    def get_vocab() -> dict[str, Any]:
+        """所有词表 + 各自的默认值与说明（界面通用渲染，前端不写死任何中文词表）。"""
+        return vocab.report(conn, _vocab_defaults())
+
+    @app.put("/api/settings/vocab")
+    def put_vocab(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """改一张词表（整张替换）。非法 id/标签/条数 → 400 带后端原话（**不静默回落**）。"""
+        require_local_origin(request)
+        try:
+            table = vocab.by_key(payload.get("key"))
+            vocab.set_items(conn, table, payload.get("items"), _vocab_defaults().get(table.key))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return vocab.report(conn, _vocab_defaults())
+
+    @app.post("/api/settings/vocab/reset")
+    def post_vocab_reset(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """回到配置/内置默认（删掉本机那条设置，而不是把当前值再写一遍）。"""
+        require_local_origin(request)
+        try:
+            vocab.reset(conn, vocab.by_key(payload.get("key")))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return vocab.report(conn, _vocab_defaults())
+
+    @app.get("/api/insights/heatmap-dimensions")
+    def heatmap_dimensions() -> dict[str, Any]:
+        """热力图现在有哪些维度可看（顺序 = 界面按钮顺序）+ 单位/种类（G 批 · T-G1）。"""
+        return insights.heatmap_dimensions(conn, settings.insights.heatmap_dimensions)
 
     # ---- 备份与恢复（SR-NF12 / SR-F9.3）----
     # 口径（2026-09-21 用户定）：设置页列出最近几个备份，点一个就能恢复。
@@ -1295,8 +1337,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
     # ---- SR-F6 复习间隔重复 ----
     @app.get("/api/review/meta")
     def review_meta() -> dict[str, object]:
-        """复习的可选项（形式 / 执行源）—— 中文词表只在后端一处，界面拿它渲染。"""
-        return rv.meta()
+        """复习的可选项（形式 / 执行源）—— 中文词表只在后端一处，界面拿它渲染。
+
+        形式词表可配置（G 批 · T-G1）：默认来自 config.toml `[review] forms`，
+        本机在设置页改过的存 `app_settings` 并优先。
+        """
+        return rv.meta(conn, settings.review.forms)
 
     @app.post("/api/review/items")
     def create_review(payload: dict[str, Any]) -> dict[str, str]:
@@ -1304,10 +1350,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
             return {"id": rv.create_item(
                 conn,
                 title=payload["title"],
-                form=payload.get("form", "qa"),
+                form=payload.get("form"),
                 source=payload.get("source", "internal"),
                 ref_handle=payload.get("ref_handle"),
                 task_id=payload.get("task_id"),
+                forms_defaults=settings.review.forms,
             )}
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1317,9 +1364,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
         """改复习卡的**定义类字段**（T-C6 形式 / T-C7 引用句柄 / 标题、执行源）。
 
         排期字段（due_date/interval/ease/reps）不给人手改 —— 那是 FSRS 的记忆状态。
+        `EDITABLE_FIELDS` 同时用来**过滤请求体**：领域层的参数名不会被 body 里的同名键撞上。
         """
+        body = {k: v for k, v in payload.items() if k in rv.EDITABLE_FIELDS}
         try:
-            return rv.update_item(conn, item_id, **payload)
+            return rv.update_item(conn, item_id, forms_defaults=settings.review.forms, **body)
         except KeyError:
             raise HTTPException(status_code=404, detail="复习卡不存在") from None
         except ValueError as e:
@@ -1350,10 +1399,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
             item_id = rv.create_item(
                 conn,
                 title=str(body.get("title") or task.title),
-                form=body.get("form", "qa"),
+                form=body.get("form"),
                 source=body.get("source", "internal"),
                 ref_handle=body.get("ref_handle"),
                 task_id=task_id,
+                forms_defaults=settings.review.forms,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e

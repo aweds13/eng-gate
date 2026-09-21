@@ -1,12 +1,16 @@
 """复习间隔重复子包：re-export 领域逻辑。"""
 from timeflow.core.review.review import (
+    EDITABLE_FIELDS,
     RATING_FORGOT,
     RATING_FUZZY,
     RATING_REMEMBER,
     STATE_DONE,
     STATE_DUE,
     create_item,
+    default_form,
     due_items,
+    forms,
+    forms_settings,
     get_item,
     items_for_task,
     meta,
@@ -18,13 +22,17 @@ from timeflow.core.review.review import (
 )
 
 __all__ = [
+    "EDITABLE_FIELDS",
     "RATING_REMEMBER",
     "RATING_FUZZY",
     "RATING_FORGOT",
     "STATE_DUE",
     "STATE_DONE",
     "create_item",
+    "default_form",
     "due_items",
+    "forms",
+    "forms_settings",
     "myday_entries",
     "review",
     "reviewed_today",

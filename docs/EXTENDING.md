@@ -81,9 +81,43 @@
 |---|---|---|
 | 记一件新发生的事 | `../examples/01_add_a_fact_kind.py` | `kind` 自由字符串、`record` + `publish` 分开、订阅者拿 `payload["conn"]` |
 | 让用户能调一个值 | `../examples/02_add_a_config_option.py` | 四处落点（config.py / example.toml / 读它的模块 / 文档） |
+| **让用户自己加"选项"（不改核心）** | `src/timeflow/vocab.py` 的 `REVIEW_FORMS` | 加一条 `Vocabulary` 声明即可：配置校验、默认值、API、设置页界面全都自动跟着走（见 §3.1） |
 | 加一个数字或图表 | `../examples/03_add_a_ledger_view.py` + 本文 §四 | 只读事实层、按 `subject_id` 去重、**撤销照扣** |
 | 加一个用户动作 | `docs/contracts/domains/F1-tasks.md` 的 `OP-9` | 六要素齐 + 路由 + `data-action` 两处 + 测试 |
 | 加一个字段 | `storage/db.py` 的 `_migrate_v12` | 新版本号 + 幂等 `_add_column_if_missing` + 同步 `TaskOut`/`sync.merge_task` |
+
+### 3.1 可配置词表：**用户自己就能加**的那一类（SR-NF7 / T-G1）
+
+先把话说清楚 —— `N36` 要的是"用户能加**功能/字段/复习形式/可视化/集成**，不改核心"。逐项看下来：
+
+| N36 说的 | 不改核心能做到吗 | 怎么做 |
+|---|---|---|
+| 复习形式 | ✅ | 词表：`vocab.REVIEW_FORMS`（用户可以自己加"菜谱卡"这种形式） |
+| 可视化维度 | ✅ **换一个维度看已有的数** | 词表：`vocab.HEATMAP_DIMENSIONS`（**算一个全新的维度仍要改核心**） |
+| 集成 | ✅ | 外部脚本直接调 REST（**怎么写见本文最后一节**） |
+| **字段** | ❌ | 加字段必须走 **schema 迁移**（`storage/db.py` + 版本号 + 同步读出口） |
+| **功能** | ❌ | 新功能 = **领域函数 + 路由 + 界面**（本文 §一~§五 那五步） |
+
+**加一张新词表 = 三步，不用碰路由和界面**：
+
+1. 在 `src/timeflow/vocab.py` 里加一条声明：
+   ```python
+   MY_TABLE = Vocabulary(
+       key="my_table", title="界面上叫什么", question="这张表管什么？",
+       builtin=(("first", "第一项"),),      # 没配置时的兜底
+       allowed=None,                        # None = id 用户随便起；给了名单就只能从名单里选
+   )
+   ```
+   然后把它加进文件末尾的 `ALL` 元组。
+2. 如果它需要"配置文件里的默认值"：在 `src/timeflow/config.py` 加一个 pydantic 字段 +
+   `field_validator` 调 `vocab.parse(...)`（**写错当场报错**，不静默回落），并在
+   `config.example.toml` 写上示例。
+3. 想读到它就 `vocab.get(conn, MY_TABLE, defaults)`；从界面改由 `GET/PUT /api/settings/vocab`
+   与 `POST /api/settings/vocab/reset` 通用路由负责，设置页那一节是**通用渲染**的。
+
+`allowed` 的用法举例：热力图维度必须对应**真的算得出来的数据字段**（`insights.HEATMAP_FIELDS`），
+所以它的 `allowed` 就是那五个字段名 —— 用户能改"用哪些、叫什么、排第几"，但**配不出算不出来的东西**。
+`tests/test_vocab_line.py` 里有一条断言把 `allowed` 与 `HEATMAP_FIELDS` 钉在一起（多一个少一个都会红）。
 
 ---
 

@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Any
 
 import tomllib
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from timeflow import vocab
 
 ROOT = Path(__file__).resolve().parent.parent.parent  # 项目根（src/timeflow/config.py -> 根）
 
@@ -47,6 +49,30 @@ class TasksConfig(BaseModel):
     archive_after_days: int = 3
 
 
+class ReviewConfig(BaseModel):
+    # 复习形式词表（SR-NF7 / G 批 · T-G1）：默认 = 内置那三种。
+    # **校验和默认值都来自 `timeflow/vocab.py` 一处声明** —— 配置里写错了当场报错（不静默回落），
+    # 本机在设置页改过的存 `app_settings` 并优先。
+    forms: dict[str, str] = Field(default_factory=lambda: dict(vocab.REVIEW_FORMS.builtin))
+
+    @field_validator("forms")
+    @classmethod
+    def _check_forms(cls, value: dict[str, str]) -> dict[str, str]:
+        return vocab.parse(value, vocab.REVIEW_FORMS)
+
+
+class InsightsConfig(BaseModel):
+    # 时间热力图的维度词表（SR-NF7 / G 批 · T-G2）：改的是"用哪些维度看、排第几、叫什么"。
+    heatmap_dimensions: dict[str, str] = Field(
+        default_factory=lambda: dict(vocab.HEATMAP_DIMENSIONS.builtin)
+    )
+
+    @field_validator("heatmap_dimensions")
+    @classmethod
+    def _check_dimensions(cls, value: dict[str, str]) -> dict[str, str]:
+        return vocab.parse(value, vocab.HEATMAP_DIMENSIONS)
+
+
 class Settings(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     app: AppConfig = Field(default_factory=AppConfig)
@@ -54,6 +80,8 @@ class Settings(BaseModel):
     focus: FocusConfig = Field(default_factory=FocusConfig)
     academic: AcademicConfig = Field(default_factory=AcademicConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
+    review: ReviewConfig = Field(default_factory=ReviewConfig)
+    insights: InsightsConfig = Field(default_factory=InsightsConfig)
 
 
 def _read_toml(config_path: Path | None) -> dict[str, Any]:

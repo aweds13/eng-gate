@@ -16,8 +16,11 @@ import uuid
 from datetime import date, datetime, time, timezone
 from typing import TYPE_CHECKING, Any
 
+from timeflow import vocab
+
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Mapping
 
     from fsrs import Card, Scheduler
 
@@ -30,28 +33,62 @@ RATING_REMEMBER = "remember"  # 记得 → Good
 RATING_FUZZY = "fuzzy"        # 模糊 → Hard
 RATING_FORGOT = "forgot"      # 忘了 → Again
 
-_FORMATS = ("cloze", "qa", "exam")
 _SOURCES = ("internal", "external")
 
-# 复习形式的界面标签（口径**只在后端定一处**：前端拿 meta 渲染，不自己写死一份中文，
-# 免得两边词表分叉）。`form` 字段本身早在 v2 就建好了（SR-F6.7），这里补的是"能被选择/被读到"。
-FORM_LABELS: dict[str, str] = {
-    "cloze": "挖空",
-    "qa": "问答卡",
-    "exam": "真题",
-}
+# 复习形式的**内置兜底**（SR-NF7 / G 批 · T-G1）：真正的词表在 `timeflow/vocab.py` 一处声明 ——
+# 用户能在 config.toml 或设置页里加自己的形式（形式只是标签，不改调度、不改卡片长相），
+# 所以这里不再是"唯一合法名单"，只是"没配置时的那三种"。
+FORM_LABELS: dict[str, str] = dict(vocab.REVIEW_FORMS.builtin)
+
+# 改复习卡时**允许动的字段**（T-C6/T-C7）：排期字段由 FSRS 管，不给人手改。
+# 这份名单同时被 API 用来过滤请求体 —— 于是领域里那些"带默认值的参数名"不会被 body 撞上。
+EDITABLE_FIELDS = frozenset({"title", "form", "source", "ref_handle"})
+
 SOURCE_LABELS: dict[str, str] = {
     "internal": "本应用内",
     "external": "外部 app（只做调度中枢）",
 }
 
 
-def meta() -> dict[str, object]:
-    """复习的可选项（形式 / 执行源）与默认值 —— 供界面渲染，避免中文词表在前后端各写一份。"""
+# 建卡时的**默认形式**（T-G1）：问答卡最通用，所以没特别指定就用它。
+# 用户若把它从词表里删掉 → 退回"词表第一项"（把想要的排最前就是默认；不猜、不崩）。
+DEFAULT_FORM = "qa"
+
+
+def forms(
+    conn: sqlite3.Connection, defaults: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """**现在生效**的复习形式词表：本机改过 → config.toml → 内置（见 `vocab.get`）。"""
+    return vocab.get(conn, vocab.REVIEW_FORMS, defaults)
+
+
+def default_form(
+    conn: sqlite3.Connection, defaults: Mapping[str, str] | None = None
+) -> str:
+    """默认形式：`qa` 还在词表里就用它，否则用词表第一项。"""
+    current = forms(conn, defaults)
+    return DEFAULT_FORM if DEFAULT_FORM in current else next(iter(current))
+
+
+def forms_settings(
+    conn: sqlite3.Connection, defaults: Mapping[str, str] | None = None
+) -> dict[str, Any]:
+    """给设置页的形式词表描述（现在长什么样 + 能怎么改）。"""
+    return vocab.describe(conn, vocab.REVIEW_FORMS, defaults)
+
+
+def meta(
+    conn: sqlite3.Connection, defaults: Mapping[str, str] | None = None
+) -> dict[str, object]:
+    """复习的可选项（形式 / 执行源）与默认值 —— 供界面渲染，避免中文词表在前后端各写一份。
+
+    `defaults` = config.toml 里的文件级默认（由 API 层传进来，域层不读全局配置）。
+    """
+    current = forms(conn, defaults)
     return {
-        "forms": [{"value": v, "label": FORM_LABELS[v]} for v in _FORMATS],
+        "forms": [{"value": k, "label": v} for k, v in current.items()],
         "sources": [{"value": v, "label": SOURCE_LABELS[v]} for v in _SOURCES],
-        "default_form": "qa",
+        "default_form": default_form(conn, defaults),
         "default_source": "internal",
     }
 
@@ -85,20 +122,26 @@ def _scheduler() -> Scheduler:
 def create_item(
     conn: sqlite3.Connection,
     title: str,
-    form: str = "qa",
+    form: str | None = None,
     source: str = "internal",
     ref_handle: str | None = None,
     task_id: str | None = None,
+    forms_defaults: Mapping[str, str] | None = None,
 ) -> str:
     """新建复习卡（SR-F6.2：可由学习任务升级或手动建）。
 
     `task_id`（T-C5）：不为空时这张卡是"从某个任务升级来的"（弱关联，删任务不级联）。
+    `form`（G 批 · T-G1）：合法取值 = **现在生效的形式词表**（用户能自己加），
+    不传则用 `default_form()`；不在词表里就拒绝（不静默换成默认形式）。
     """
     title = title.strip()
     if not title:
         raise ValueError("复习卡标题不能为空")
-    if form not in _FORMATS:
-        raise ValueError(f"非法复习形式: {form}")
+    current = forms(conn, forms_defaults)
+    if form is None:
+        form = default_form(conn, forms_defaults)
+    if form not in current:
+        raise ValueError(f"非法复习形式: {form}（现在能用的：{'/'.join(current)}）")
     if source not in _SOURCES:
         raise ValueError(f"非法执行源: {source}")
     if task_id is not None:
@@ -145,14 +188,22 @@ def get_item(conn: sqlite3.Connection, item_id: str) -> dict[str, object]:
     return _item_dict(row)
 
 
-def update_item(conn: sqlite3.Connection, item_id: str, **fields: object) -> dict[str, object]:
+def update_item(
+    conn: sqlite3.Connection,
+    item_id: str,
+    *,
+    forms_defaults: Mapping[str, str] | None = None,
+    **fields: object,
+) -> dict[str, object]:
     """改复习卡的**定义类字段**：标题 / 形式 / 执行源 / 引用句柄（T-C6 + T-C7）。
 
-    只允许这四个（排期字段由 FSRS 管，不给人手改 —— 手改会与调度器的记忆状态打架）；
-    非法值一律拒绝（不静默回落），空句柄 = 清除（存 NULL）。
+    只允许 `EDITABLE_FIELDS` 这四个（排期字段由 FSRS 管，不给人手改 —— 手改会与调度器的
+    记忆状态打架）；非法值一律拒绝（不静默回落），空句柄 = 清除（存 NULL）。
+
+    `forms_defaults` 是**关键字专用参数**（不放进 `**fields`）：API 层用
+    `EDITABLE_FIELDS` 过滤请求体，所以 body 里不可能撞上这个名字。
     """
-    allowed = {"title", "form", "source", "ref_handle"}
-    updates = {k: v for k, v in fields.items() if k in allowed}
+    updates = {k: v for k, v in fields.items() if k in EDITABLE_FIELDS}
     get_item(conn, item_id)  # 不存在 → KeyError
     if not updates:
         return get_item(conn, item_id)
@@ -161,8 +212,12 @@ def update_item(conn: sqlite3.Connection, item_id: str, **fields: object) -> dic
         if not title:
             raise ValueError("复习卡标题不能为空")
         updates["title"] = title
-    if "form" in updates and updates["form"] not in _FORMATS:
-        raise ValueError(f"非法复习形式: {updates['form']}")
+    if "form" in updates:
+        current = forms(conn, forms_defaults)
+        if updates["form"] not in current:
+            raise ValueError(
+                f"非法复习形式: {updates['form']}（现在能用的：{'/'.join(current)}）"
+            )
     if "source" in updates and updates["source"] not in _SOURCES:
         raise ValueError(f"非法执行源: {updates['source']}")
     if "ref_handle" in updates:

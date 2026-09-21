@@ -8,15 +8,17 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
+from timeflow import vocab
 from timeflow.core import facts as facts_mod
 from timeflow.core import tasks as tm
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Mapping
 
 MAX_TREND_DAYS = 90
 DEFAULT_TREND_DAYS = 30
@@ -84,6 +86,36 @@ def heatmap(conn: sqlite3.Connection, days: int = DEFAULT_HEATMAP_DAYS) -> list[
     return [
         _cell(conn, (start + timedelta(days=i)).isoformat()) for i in range(total)
     ]
+
+
+# 时间热力图的**取值字段注册表**（SR-NF7 / G 批 · T-G1）：字段 → (单位, 种类)。
+# 种类只有两种，决定界面怎么念这个数、以及"颜色越深"是什么意思：
+#   minutes = 时长（投入类）；count = 条数（复习/产出/债务）。
+# ★ **新维度只能在这里加**（新算法 = 改核心）；词表能改的只是"用哪些、叫什么、排第几" ——
+#   这条边界如实写在 `docs/EXTENDING.md`（口径见 `复盘/口径定案-待定清单.md` §6）。
+HEATMAP_FIELDS: dict[str, tuple[str, str]] = {
+    "focus_minutes": ("分钟", "minutes"),
+    "manual_minutes": ("分钟", "minutes"),
+    "review_count": ("张", "count"),
+    "output_count": ("条", "count"),
+    "debt_count": ("项", "count"),
+}
+
+
+def heatmap_dimensions(
+    conn: sqlite3.Connection, defaults: Mapping[str, str] | None = None
+) -> dict[str, Any]:
+    """现在生效的热力图维度词表（顺序 = 界面按钮顺序）+ 每个维度的单位/种类。
+
+    词表本身在 `timeflow/vocab.py` 一处声明（用户能在设置页加/删/改名/调顺序），
+    这里把"能不能算得出来"（`HEATMAP_FIELDS`）贴上去 —— 界面照着渲染，不自己写死维度表。
+    """
+    current = vocab.get(conn, vocab.HEATMAP_DIMENSIONS, defaults)
+    items: list[dict[str, str]] = []
+    for field, label in current.items():
+        unit, kind = HEATMAP_FIELDS[field]
+        items.append({"id": field, "label": label, "unit": unit, "kind": kind})
+    return {"items": items, "note": vocab.HEATMAP_DIMENSIONS.note}
 
 
 def daily_insights(

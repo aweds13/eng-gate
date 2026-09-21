@@ -29,3 +29,13 @@ gpa_scale = "4.0"
 # 「完成 N 天后进档案」（N11）：完成的任务满 N 天自动收进档案（默认视图不再显示，档案里仍能翻到）。
 # 0 = 完成当天就收走。这里是**默认值**：在设置页「任务」里改过的以本机数据库里的为准。
 archive_after_days = 3
+
+[review]
+# 复习形式词表（SR-NF7 / T-G1）：形式只是标签，你可以自己加（id 用小写英文，标签随你写）。
+# 这里是**默认值**：在设置页「可配置词表」里改过的以本机数据库里的为准。至少要留一项。
+forms = { cloze = "挖空", qa = "问答卡", exam = "真题" }
+
+[insights]
+# 时间热力图的维度（SR-NF7 / T-G2）：改的是「用哪些维度看、排第几、叫什么」。
+# 可用的 id 见 docs/EXTENDING.md —— **要算一个全新的维度仍需改核心代码**（词表变不出新算法）。
+heatmap_dimensions = { focus_minutes = "专注", manual_minutes = "手动投入", review_count = "复习", output_count = "产出", debt_count = "债务（欠多少）" }

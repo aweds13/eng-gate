@@ -496,8 +496,8 @@ group = "F6"
 status = "done"
 evidence = [
   "column:review_items.form",
-  "text:src/timeflow/core/review/review.py::_FORMATS",
   "text:src/timeflow/core/review/review.py::FORM_LABELS",
+  "text:src/timeflow/core/review/review.py::def forms(",
   "route:GET /api/review/meta",
   "route:GET /api/review/items/{item_id}",
   "route:PATCH /api/review/items/{item_id}",
@@ -717,7 +717,7 @@ evidence = [
   "file:examples/03_add_a_ledger_view.py",
   "file:复盘/口径定案-待定清单.md",
 ]
-gaps = "**口径已定（2026-09-21 用户拍板）**：做**复习形式可配置** + **可视化维度可配置** + **集成写成文档**（外部脚本调 REST 本来就是集成）；**字段/新功能做不到「不改核心」**（加字段要走 schema 迁移、新功能=领域函数+路由+界面），如实标注、靠模板与示例降门槛。模板（`docs/EXTENDING.md`）与三个可跑示例已就位；**三项配置化待实现**（见 `复盘/口径定案-待定清单.md` §6）"
+gaps = "**口径已定（2026-09-21 用户拍板）**：做**复习形式可配置** + **可视化维度可配置** + **集成写成文档**（外部脚本调 REST 本来就是集成）；**字段/新功能做不到「不改核心」**（加字段要走 schema 迁移、新功能=领域函数+路由+界面），如实标注、靠模板与示例降门槛。模板（`docs/EXTENDING.md`）与三个可跑示例已就位；**前两项已落地（T-G1：词表在 `timeflow/vocab.py` 一处声明，配置校验/API/设置页全自动）**，**集成文档与可跑示例待 T-G2**（落地后本条转 done）"
 
 [entries."SR-NF8"]
 id = "SR-NF8"
@@ -1690,6 +1690,45 @@ evidence = [
   "route:POST /api/tasks/{task_id}/group",
   "ui:data-action=task-group",
   "test:test_task_group_names_line.py",
+]
+gaps = ""
+
+[entries."T-G1"]
+id = "T-G1"
+title = "G 批：可配置词表（复习形式 + 热力图维度）—— 不改核心就能加的扩展点"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:docs/EXTENDING.md",
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/vocab.py::def parse",
+  "text:src/timeflow/vocab.py::REVIEW_FORMS = Vocabulary",
+  "text:src/timeflow/vocab.py::HEATMAP_DIMENSIONS = Vocabulary",
+  "text:src/timeflow/core/review/review.py::def default_form",
+  "text:src/timeflow/core/insights.py::HEATMAP_FIELDS",
+  "text:src/timeflow/config.py::def _check_forms",
+  "route:GET /api/settings/vocab",
+  "route:PUT /api/settings/vocab",
+  "route:POST /api/settings/vocab/reset",
+  "route:GET /api/insights/heatmap-dimensions",
+  "ui:data-action=vocab-add",
+  "ui:data-action=vocab-del",
+  "ui:data-action=vocab-reset",
+  "test:test_vocab_line.py",
+]
+gaps = ""
+
+[entries."T-G3"]
+id = "T-G3"
+title = "缺陷：年历热力图一直渲染空（前端拿短 id 去取字段）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "text:src/web/index.html::let hmDims=[]",
+  "text:src/web/index.html::function hmDim(id)",
+  "route:GET /api/insights/heatmap-dimensions",
+  "text:tools/ui_dom_probe.mjs::stats·热力图有值渲染",
+  "test:test_vocab_line.py",
 ]
 gaps = ""
 

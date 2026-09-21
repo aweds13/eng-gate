@@ -275,7 +275,40 @@ const DB = {
   },
   '/api/gpa': { gpa: 0, credits: 0, scale: '4.0', weighted_average: 0, weighted_credits: 0 },
   '/api/memos': [], '/api/ledger/outputs': [], '/api/ledger/invests': [],
-  '/api/insights/daily': [], '/api/insights/groups': [], '/api/insights/heatmap': [],
+  '/api/insights/daily': [], '/api/insights/groups': [],
+  // 年历热力图（SR-NF7 / G 批 · T-G1 顺手修掉的缺陷）：**必须给非零值**。
+  // 老代码拿短 id（'focus'）去取字段，而真字段叫 `focus_minutes` → 取不到 → 每个格子都是 0 →
+  // 整张图永远灰。这里放一天有数的日子，就能靠"颜色到底出没出现过"把这条钉住。
+  '/api/insights/heatmap': [
+    { date: '2026-09-19', focus_minutes: 0, manual_minutes: 0, review_count: 0,
+      output_count: 0, debt_count: 0 },
+    { date: '2026-09-20', focus_minutes: 90, manual_minutes: 20, review_count: 3,
+      output_count: 1, debt_count: 1 },
+  ],
+  // 热力图维度（G 批 · T-G1）：按钮由**后端词表**渲染 —— 注意 id 就是数据字段名
+  '/api/insights/heatmap-dimensions': {
+    note: '要算一个全新的维度仍需改核心代码。',
+    items: [
+      { id: 'focus_minutes', label: '专注', unit: '分钟', kind: 'minutes' },
+      { id: 'review_count', label: '复习', unit: '张', kind: 'count' },
+    ],
+  },
+  // 可配置词表（SR-NF7 / G 批 · T-G1）：设置页要渲染出两张表（可加 / 可删 / 可回默认）
+  '/api/settings/vocab': {
+    note: '词表只决定「能选什么 / 叫什么」，不改计算。',
+    items: [
+      { key: 'review_forms', title: '复习形式',
+        question: '建复习卡时「形式」这一栏有哪几种？',
+        items: [{ id: 'cloze', label: '挖空' }, { id: 'qa', label: '问答卡' }],
+        defaults: [{ id: 'cloze', label: '挖空' }], is_default: true, allowed: [],
+        free_id: true, max_items: 20, note: '形式只是标签，所以你想起什么名字都行。' },
+      { key: 'heatmap_dimensions', title: '时间热力图的维度',
+        question: '统计页那张年历热力图，可以按哪些维度看、分别叫什么？',
+        items: [{ id: 'focus_minutes', label: '专注' }, { id: 'review_count', label: '复习' }],
+        defaults: [], is_default: false, allowed: ['focus_minutes', 'review_count'],
+        free_id: false, max_items: 8, note: '要算一个全新的维度仍需改核心代码。' },
+    ],
+  },
   '/api/sync/status': { enabled: false, conflict_logs: 0 },
 };
 globalThis.fetch = async (path) => {
@@ -314,6 +347,8 @@ let archiveBad = 0;
 let stepBad = 0;
 let debtBad = 0;
 let behaviorBad = 0;
+let vocabBad = 0;
+let heatmapBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -554,6 +589,58 @@ for (const [view, needs] of [
   }
 }
 
+// 可配置词表（SR-NF7 / G 批 · T-G1）：设置页那一节是**通用渲染** —— 后端给几张表就画几张，
+// 每张表都能加一项、删一项、回默认，且"只能从这些 id 里选"的表要把可选 id 写出来。
+const vocabChecks = [];
+for (const [view, needs] of [
+  ['setting', ['可配置词表', '复习形式', '时间热力图的维度', '建复习卡时「形式」这一栏有哪几种？',
+    '挖空', '问答卡', 'vocab-add', 'vocab-del', 'vocab-reset', '回到默认',
+    '只能从这些 id 里选：focus_minutes · review_count']],
+]) {
+  try {
+    byId.get('main')._html = '';
+    await globalThis.__view(view);
+    await sleep(30);
+    const html = byId.get('main')._html;
+    const missing = needs.filter((n) => !html.includes(n));
+    const rendered = missing.length === 0;
+    if (!rendered) vocabBad++;
+    vocabChecks.push({ view, rendered, missing });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} ${view}·可配置词表 main ${String(html.length).padStart(6)}B`
+      + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+  } catch (e) {
+    vocabBad++;
+    vocabChecks.push({ view, error: e.message });
+    console.log(`  ❌ ${view}·可配置词表 渲染抛错: ${e.message}`);
+  }
+}
+
+// 年历热力图（G 批 · T-G1 顺手修的缺陷）：维度按钮来自后端词表；**关键断言是"颜色真的出现过"** ——
+// 老代码按短 id（'focus'）取字段（真字段叫 focus_minutes）→ 取不到 → 全是 0 → 整张图永远灰，
+// 而"能渲染出按钮/说明"这种断言照样会绿。所以这里必须断言 SVG 里出现过 `var(--accent)`。
+const heatmapChecks = [];
+try {
+  byId.get('main')._html = '';
+  await globalThis.__view('stats');
+  await sleep(30);
+  const html = byId.get('main')._html;
+  const needs = ['时间热力图（近一年）', 'data-action="set-heatmap" data-metric="focus_minutes"',
+    'data-action="set-heatmap" data-metric="review_count"', '专注 · 颜色越深=当天投入越多',
+    'var(--accent)'];
+  const missing = needs.filter((n) => !html.includes(n));
+  // 反证：老代码那种"取不到值"的图里，所有格子都是 `--surface-2`，不会出现 accent
+  const hasAccent = html.includes('var(--accent)');
+  const rendered = missing.length === 0 && hasAccent;
+  if (!rendered) heatmapBad++;
+  heatmapChecks.push({ rendered, missing, hasAccent });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} stats·热力图有值渲染 main ${String(html.length).padStart(6)}B`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  heatmapBad++;
+  heatmapChecks.push({ error: e.message });
+  console.log(`  ❌ stats·热力图 渲染抛错: ${e.message}`);
+}
+
 // 子步骤（F 批 · T-F4）：主任务卡上显示「当前该做哪一步」；
 // 详情里每一步都有截止日输入框与「明天 / 尝试失败 / 详情 / 脱离」，添加步骤那一行也有日期框。
 const stepChecks = [];
@@ -650,7 +737,7 @@ if (process.argv.includes('--json')) {
     { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
-      behavior: behaviorChecks,
+      behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -662,7 +749,7 @@ if (problems.length) {
 }
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
   || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0 || archiveBad > 0
-  || stepBad > 0 || debtBad > 0 || behaviorBad > 0
+  || stepBad > 0 || debtBad > 0 || behaviorBad > 0 || vocabBad > 0 || heatmapBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -677,5 +764,7 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，子步骤 ${stepChecks.length - stepBad}/${stepChecks.length} 正常`
   + `，债务卡 ${debtChecks.length - debtBad}/${debtChecks.length} 正常`
   + `，口径回退 ${behaviorChecks.length - behaviorBad}/${behaviorChecks.length} 正常`
+  + `，可配置词表 ${vocabChecks.length - vocabBad}/${vocabChecks.length} 正常`
+  + `，热力图有值 ${heatmapChecks.length - heatmapBad}/${heatmapChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

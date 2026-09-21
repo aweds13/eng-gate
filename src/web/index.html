@@ -218,6 +218,10 @@ const ACTIONS = {
   // 口径与一键回退（SR-NF8 / D 批 · T-D11）：切换一条口径 / 回到默认位（都是后端设置）
   'set-behavior':   el => setBehavior(el.dataset.key||'', el.dataset.variant||'', el.dataset.label||''),
   'behavior-reset': el => resetBehavior(el.dataset.key||''),
+  // 可配置词表（SR-NF7 / G 批 · T-G1）：加/删/回默认都是整张写回后端（后端校验，非法值 400）
+  'vocab-add':      el => addVocabItem(el.dataset.key||''),
+  'vocab-del':      el => delVocabItem(el.dataset.key||'', el.dataset.id||''),
+  'vocab-reset':    el => resetVocab(el.dataset.key||''),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -1232,8 +1236,11 @@ function renderStats(m){
     const activeDays=daily.filter(d=>d.focus_minutes>0).length;
     const debtNow=days?daily[days-1].debt_count:0;
     const peak=Math.max(0,...daily.map(d=>d.focus_minutes));
-    return api('/api/insights/groups?days=30').then(groups=>api('/api/insights/heatmap?days=371').then(cells=>{
+    return api('/api/insights/groups?days=30').then(groups=>api('/api/insights/heatmap?days=371')
+      .then(cells=>api('/api/insights/heatmap-dimensions').then(dims=>{
       hmCells=cells;
+      hmDims=(dims&&dims.items)||[];
+      hmActive=(hmDims[0]||{}).id||'';
       return api('/api/insights/academic-vs-self?days=90').then(split=>api('/api/summary/weekly').then(week=>{
       const curve=`<div class="card" style="display:block">
         <div class="meta">近 ${days} 天专注走势（分钟）· 合计 ${focusTotal} 分钟 · 有投入 ${activeDays} 天 · 单日最高 ${Math.round(peak)}</div>
@@ -1260,32 +1267,33 @@ function renderStats(m){
       <div class="section-title">本周投入</div>${weekCard(week)}
       <div class="section-title">时间热力图（近一年）</div>
         <div class="card" style="display:block">
-          <div class="row" id="hmRow">${hmButtons('focus')}</div>
-          <div id="hmBox" style="margin-top:10px">${valueHeatmap(cells,'focus')}</div>
-          <div class="sub" id="hmNote">${hmNote(cells,'focus')}</div></div>`;
+          <div class="row" id="hmRow">${hmButtons(hmActive)}</div>
+          <div id="hmBox" style="margin-top:10px">${valueHeatmap(cells,hmActive)}</div>
+          <div class="sub" id="hmNote">${hmNote(hmActive)}</div></div>`;
       }));
-    }));
+    })));
   });
 }
 let hmCells=null;
-function fmtDay(v,metric){
-  if(metric==='debt_count')return v>0?`欠 ${v} 项`:'不欠';
-  if(metric==='review_count')return `${v} 张`;
-  if(metric==='output_count')return `${v} 条`;
-  return `${v} 分钟`;
+/* 热力图维度（SR-NF7 / G 批 · T-G1）：**词表从后端拿**（`/api/insights/heatmap-dimensions`）——
+   前端不再写死"专注/手动/复习/产出/债务"，所以你在设置页加/删/改名/调顺序，这里跟着变。
+   每个维度后端给 id / label / unit（分钟·张·条·项）/ kind（minutes|count）。 */
+let hmDims=[];
+let hmActive='';
+function hmDim(id){ return hmDims.find(d=>d.id===id)||hmDims[0]||null; }
+function fmtDay(v,dim){
+  if(!dim)return String(v);
+  return `${v} ${dim.unit}`;
 }
-const HM_METRICS=[
-  ['focus','专注','focus_minutes'],['manual','手动投入','manual_minutes'],
-  ['review','复习','review_count'],['output','产出','output_count'],
-  ['debt','债务（欠多少）','debt_count']];
 function hmButtons(active){
-  return HM_METRICS.map(([k,label])=>
-    `<button class="${k===active?'':'ghost'}" data-action="set-heatmap" data-metric="${k}">${label}</button>`).join('');
+  return hmDims.map(d=>
+    `<button class="${d.id===active?'':'ghost'}" data-action="set-heatmap" data-metric="${d.id}">${esc(d.label)}</button>`).join('');
 }
-function hmNote(cells,metric){
-  const label=(HM_METRICS.find(x=>x[0]===metric)||[])[1]||'';
-  const isCount=metric==='review_count'||metric==='output_count'||metric==='debt_count';
-  return `${label} · 颜色越深=${isCount?'当天越多':'当天投入越多'}；空=没有记录（不是失败，只是那天没记）。`;
+function hmNote(active){
+  const dim=hmDim(active);
+  if(!dim)return '还没有可看的维度 —— 去设置页「可配置词表」里加一个。';
+  const deeper=dim.kind==='count'?'当天越多':'当天投入越多';
+  return `${esc(dim.label)} · 颜色越深=${deeper}；空=没有记录（不是失败，只是那天没记）。`;
 }
 // 时间热力图：53 周 × 7 天（列=周、行=周一→周日），颜色深浅表示当天数值
 function valueHeatmap(cells,metric){
@@ -1313,10 +1321,11 @@ function valueHeatmap(cells,metric){
 }
 function setHeatmap(metric){
   const row=document.getElementById('hmRow'),box=document.getElementById('hmBox'),note=document.getElementById('hmNote');
-  if(!row||!box||!hmCells)return;
-  row.innerHTML=hmButtons(metric);
-  box.innerHTML=valueHeatmap(hmCells,metric);
-  note.textContent=hmNote(hmCells,metric);
+  if(!row||!box||!hmCells||!hmDim(metric))return;
+  hmActive=metric;
+  row.innerHTML=hmButtons(hmActive);
+  box.innerHTML=valueHeatmap(hmCells,hmActive);
+  note.textContent=hmNote(hmActive);
 }
 
 function weekCard(w){
@@ -1907,10 +1916,10 @@ async function restoreBackup(name){
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg]=await Promise.all([
+  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg,vocabCfg]=await Promise.all([
     api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach'),
     api('/api/settings/reminder'),api('/api/focus/guard'),api('/api/settings/backups'),
-    api('/api/settings/archive'),api('/api/settings/behavior')]);
+    api('/api/settings/archive'),api('/api/settings/behavior'),api('/api/settings/vocab')]);
   groupCache=groups||[];
   guardCache=guardCfg||null;
   backupCache=backups||null;
@@ -1921,6 +1930,8 @@ async function renderSetting(m){
   const arch=archCfg||{after_days:3,default_after_days:3,max_after_days:365,note:''};
   // 口径与一键回退（T-D11）：缺字段就当"没有可回退的口径"，不让整页空掉
   const beh=behaviorCfg||{items:[],note:'',switch_note:''};
+  // 可配置词表（T-G1）：同样是通用渲染 —— 后端给几张表就画几张
+  const vb=vocabCfg||{items:[],note:''};
   const bk=backupCache||{db:'',dir:'',items:[],note:''};
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
@@ -1999,6 +2010,25 @@ async function renderSetting(m){
       <div class="sub">${esc(r.current_note||'')}</div>`).join('')
       :'<div class="sub">还没有登记任何口径。</div>'}
     <div class="sub">${esc(beh.note||'')}</div>
+  </div>
+  <div class="section-title" id="set-vocab">可配置词表</div>
+  <div class="card panel-card">
+    <div class="sub">${esc(vb.note||'')}</div>
+    ${(vb.items||[]).map(t=>`
+      <div class="settings-sub">${esc(t.title)}
+        <span class="badge">${t.is_default?'默认':'已改过'}</span></div>
+      <div class="meta">${esc(t.question)}</div>
+      <div class="row tight">${(t.items||[]).map(x=>
+        `<button class="ghost" data-action="vocab-del" data-key="${esc(t.key)}" data-id="${esc(x.id)}"
+          title="点一下移除">${esc(x.label)} ✕</button>`).join('')}</div>
+      <div class="new">
+        <input id="vb_${esc(t.key)}_id" placeholder="${t.free_id?'id（小写英文，如 my_form）':'id'}">
+        <input id="vb_${esc(t.key)}_label" placeholder="显示名（随你写）">
+        <button class="ghost" data-action="vocab-add" data-key="${esc(t.key)}">加一项</button>
+        <button class="ghost" data-action="vocab-reset" data-key="${esc(t.key)}">回到默认</button></div>
+      ${(t.allowed&&t.allowed.length)?`<div class="meta">只能从这些 id 里选：${t.allowed.map(a=>esc(a)).join(' · ')}</div>`:''}
+      <div class="sub">${esc(t.note||'')}${t.max_items?` 最多 ${Number(t.max_items)||20} 项。`:''}</div>`).join('')
+      ||'<div class="sub">还没有可配置的词表。</div>'}
   </div>
   <div class="section-title" id="set-academic">学业</div>
   <div class="card panel-card">
@@ -2113,6 +2143,38 @@ function shadowSamples(r){
   return `<div class="row tight">${s.samples.map(x=>
     `<span class="badge" title="当前 → 影子">${esc(x.label)}：${esc(x.current)} → ${esc(x.shadow)}</span>`
   ).join('')}</div>`;
+}
+/* 可配置词表（SR-NF7 / G 批 · T-G1）：加/删/回默认都**整张写回后端**（后端校验并拒绝非法值）。
+   界面是通用的：后端 `vocab.report()` 给几张表就画几张 —— 加一整张新词表不用改这里。 */
+async function addVocabItem(key){
+  const idEl=document.getElementById(`vb_${key}_id`), labelEl=document.getElementById(`vb_${key}_label`);
+  const id=((idEl&&idEl.value)||'').trim(), label=((labelEl&&labelEl.value)||'').trim();
+  if(!id||!label){toast('id 和显示名都要填');return}
+  const cur=await api('/api/settings/vocab');
+  const t=(cur.items||[]).find(x=>x.key===key);
+  if(!t){toast('这张词表不见了，刷新一下再试');return}
+  const items={}; (t.items||[]).forEach(x=>{items[x.id]=x.label});
+  items[id]=label;   // 同一个 id 再加一次 = 改显示名（顺序保持在原位）
+  try{
+    await api('/api/settings/vocab',{method:'PUT',body:JSON.stringify({key,items})});
+    toast(`已加进「${t.title}」：${label}`);view(current);
+  }catch(e){/* api() 已经弹过后端原话（id 非法 / 超条数） */}
+}
+async function delVocabItem(key,id){
+  const cur=await api('/api/settings/vocab');
+  const t=(cur.items||[]).find(x=>x.key===key);
+  if(!t)return;
+  const items={}; (t.items||[]).forEach(x=>{if(x.id!==id)items[x.id]=x.label});
+  try{
+    await api('/api/settings/vocab',{method:'PUT',body:JSON.stringify({key,items})});
+    toast('已移除');view(current);
+  }catch(e){/* 删到一项不剩会被后端拒绝（至少要留一项） */}
+}
+async function resetVocab(key){
+  try{
+    await api('/api/settings/vocab/reset',{method:'POST',body:JSON.stringify({key})});
+    toast('已回到默认');view(current);
+  }catch(e){/* 同上 */}
 }
 // ---- 附件打开方式设置（T-B4）：模式与白名单存服务端 ----
 async function setAttachMode(mode){

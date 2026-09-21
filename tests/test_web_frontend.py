@@ -677,6 +677,8 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
         ("get", "/api/selfcheck", None),
         ("get", "/api/review/due", None),
         ("get", "/api/review/meta", None),
+        ("get", "/api/settings/vocab", None),
+        ("get", "/api/insights/heatmap-dimensions", None),
         ("get", "/api/insights/academic-vs-self?days=90", None),
         ("get", "/api/memos", None),
         ("get", "/api/courses", None),
