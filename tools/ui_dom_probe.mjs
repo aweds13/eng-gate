@@ -95,7 +95,19 @@ const DB = {
   '/api/mydays': [], '/api/overdue': [], '/api/tasks': [], '/api/tasks/deleted': [],
   // 到点提醒（T-B5）：今日页「该提醒了」区用它
   '/api/reminders/due': [],
-  '/api/review/due': [], '/api/review/items': [], '/api/groups': [],
+  // 复习线（SR-F6.2 / SR-F6.5 / SR-F8.3）：到期卡非空 —— 卡片态要渲染出「改形式/句柄」按钮
+  '/api/review/due': [{ id: 'r1', title: '探针复习卡', reps: 2, interval_days: 3,
+    source: 'internal', ref_handle: 'notes/数学.md', form: 'qa', due_date: '2026-09-20', task_id: 't1' }],
+  '/api/review/items': [], '/api/groups': [],
+  // 复习卡的定义类字段（T-C6·C7）：词表来自后端，编辑态要渲染形式/执行源下拉 + 句柄输入
+  '/api/review/meta': {
+    forms: [{ value: 'cloze', label: '挖空' }, { value: 'qa', label: '问答卡' },
+      { value: 'exam', label: '真题' }],
+    sources: [{ value: 'internal', label: '内置' }, { value: 'external', label: '外部 app' }],
+    default_form: 'qa', default_source: 'internal',
+  },
+  '/api/review/items/r1': { id: 'r1', title: '探针复习卡', form: 'qa', source: 'internal',
+    due_date: '2026-09-20', reps: 2, interval_days: 3, ref_handle: 'notes/数学.md', task_id: 't1' },
   // 任务详情（右栏 #detailRail）：T-B1 起详情面板带「备注」，编辑态渲染必须也跑一遍
   '/api/tasks/t1': {
     id: 't1', title: '探针任务', due_date: '2030-01-01', group_name: null, repeat_days: null,
@@ -109,6 +121,9 @@ const DB = {
   },
   '/api/tasks/t1/facts': [],
   '/api/tasks/t1/subtasks': [],
+  // 任务 → 复习卡（T-C5）：详情面板要显示"这张任务升级出来的卡"
+  '/api/tasks/t1/review-cards': [{ id: 'r1', title: '探针复习卡', due_date: '2026-09-20T00:00:00',
+    form: 'qa', source: 'internal', ref_handle: 'notes/数学.md', task_id: 't1' }],
   '/api/summary': { debt_count: 0, invest_hours: 0, manual_hours: 0, review_count: 0, output_count: 0,
     output_kpi: 2, output_asset: 3 },
   // 今天做成了什么（T-C11）：三个可展开项都要真渲染一遍（含父任务分组与进度）
@@ -164,7 +179,7 @@ console.warn = (...a) => problems.push('warn: ' + a.join(' '));
 try {
   new Function(code + '\n;globalThis.__view=view;globalThis.__showDetail=showDetail;'
     + 'globalThis.__render=render;globalThis.__setEdit=v=>{detailEditing=v};'
-    + 'globalThis.__setDoneOpen=v=>{doneOpen=v};')();
+    + 'globalThis.__setDoneOpen=v=>{doneOpen=v};globalThis.__setReviewEdit=v=>{reviewEdit=v};')();
 } catch (e) {
   console.log(`❌ 脚本求值就抛错：${e.message}`);
   process.exit(1);
@@ -176,6 +191,7 @@ const views = ['today', 'tasks', 'important', 'planned', 'flagged', 'focus', 'st
 let bad = 0;
 let detailBad = 0;
 let doneBad = 0;
+let reviewBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -247,6 +263,31 @@ try {
   console.log(`  ❌ 今日·完成明细展开 渲染抛错: ${e.message}`);
 }
 
+// 复习卡的定义类字段（SR-F6.5 形式 / SR-F8.3 引用句柄 / T-C6·C7）：
+// 视图循环只覆盖"卡片态" —— 这里把**编辑态**也渲染一遍：形式/执行源下拉、引用句柄输入、
+// 保存/取消按钮，以及"排期字段不给人手改"的说明。词表来自后端 `/api/review/meta`。
+const reviewChecks = [];
+try {
+  globalThis.__setReviewEdit({ id: 'r1', item: DB['/api/review/items/r1'], meta: DB['/api/review/meta'] });
+  byId.get('main')._html = '';
+  await globalThis.__view('review');
+  await sleep(30);
+  const html = byId.get('main')._html;
+  const needs = ['id="rvForm"', 'id="rvSource"', 'id="rvHandle"', '问答卡',
+    'review-save', 'review-edit-cancel', '不给人手改'];
+  const missing = needs.filter((n) => !html.includes(n));
+  const rendered = missing.length === 0;
+  if (!rendered) reviewBad++;
+  reviewChecks.push({ rendered, missing });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 复习·改形式填句柄 main ${String(html.length).padStart(6)}B`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  reviewBad++;
+  reviewChecks.push({ error: e.message });
+  console.log(`  ❌ 复习·改形式填句柄 渲染抛错: ${e.message}`);
+}
+globalThis.__setReviewEdit({ id: null, item: null, meta: null });
+
 try {
   const body = code.split('const ACTIONS')[1];
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
@@ -256,7 +297,8 @@ try {
 console.warn = realWarn;
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
-    { views: results, detail: detailChecks, done: doneChecks, problems, unregistered: unused }, null, 2));
+    { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks, problems,
+      unregistered: unused }, null, 2));
 }
 if (unused.length) {
   console.log(`  ❌ 模板里用到但未注册的动作：${unused.join(', ')}`);
@@ -264,9 +306,11 @@ if (unused.length) {
 if (problems.length) {
   console.log(`  ⚠️  运行时告警/异常：${problems.slice(0, 5).join(' | ')}`);
 }
-const failed = bad > 0 || detailBad > 0 || doneBad > 0 || unused.length > 0 || problems.length > 0;
+const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0
+  || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
   + `，今日完成明细展开 ${doneChecks.length - doneBad}/${doneChecks.length} 正常`
+  + `，复习卡编辑态 ${reviewChecks.length - reviewBad}/${reviewChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

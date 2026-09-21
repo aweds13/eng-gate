@@ -27,12 +27,8 @@ acknowledged_routes = []
 # T-B5 的豁免已删除（2026-09-18）：用户选 B′ 后通知通道已落地，条目转 done —— 修一条删一条。
 # 删掉的三条豁免（2026-09-20，编号校正 T-D1 时）：SR-NF12（编号错位已修，条目转 done）、
 # T-D1（校正已完成）、T-D2（门禁已转阻断）—— 修一条删一条。
-# T-C5 / T-C7 的豁免（2026-09-20 加）：**有意拆分** —— 后端（字段/领域/接口）已随本批落地，
-# 但"界面入口"（任务详情里点「升级为复习卡」、复习卡详情里填句柄/选形式）要等前端批次，
-# 条目如实保持 partial。前端接上后删掉这两条豁免。
-T-C5 = "后端已落地（review_items.task_id + POST /api/tasks/{id}/to-review + GET /api/tasks/{id}/review-cards + PATCH/GET /api/review/items/{id}）；**任务详情里的「升级为复习卡」按钮待前端批次**"
-T-C7 = "后端已落地（ref_handle 可 PATCH 写入/清空，带校验）；**复习卡详情里填句柄的界面待前端批次**"
-T-C3 = "后端已落地（focus_variation_minutes / longest_gap_days / rhythm_note）；**界面上显示这三个数字与那句话待前端批次**"
+# T-C3 / T-C5 / T-C7 的三条豁免已删除（2026-09-20 前端批次）：界面入口接上了
+# （升级为复习卡按钮 / 改形式填句柄表单 / 周结算波动空档），条目转 done —— 修一条删一条。
 
 [entries."T-00"]
 id = "T-00"
@@ -243,15 +239,16 @@ gaps = "实现为同一产出轴内 kind=asset/kpi；规格字面要求「独立
 id = "SR-F2.5"
 title = "周结算；不设「目标」实体；均衡度指标（波动/空档），温和呈现不告警"
 group = "F2"
-status = "partial"
+status = "done"
 evidence = [
   "text:src/timeflow/core/ledger/ledger.py::def weekly_summary",
   "text:src/timeflow/core/ledger/ledger.py::def _rhythm",
   "text:src/timeflow/core/ledger/ledger.py::def _rhythm_note",
   "route:GET /api/summary/weekly",
   "test:test_week_summary.py",
+  "text:src/web/index.html::function rhythmRow(w)",
 ]
-gaps = "后端已落地（T-C3：`focus_variation_minutes` 逐日专注分钟的**标准差**（分钟）+ `longest_gap_days` 最长连续 0 天 + `rhythm_note` 一句温和描述；**不折算时间、不设目标、不告警**）；**界面上把这三个数字/一句话显示出来待前端批次**（同 T-C3，[exceptions] 留痕）"
+gaps = ""
 
 [entries."SR-F2.6a"]
 id = "SR-F2.6a"
@@ -422,15 +419,18 @@ gaps = ""
 id = "SR-F6.2"
 title = "可由「学习任务升级为复习任务」或手动建"
 group = "F6"
-status = "partial"
+status = "done"
 evidence = [
   "column:review_items.task_id",
   "text:src/timeflow/core/review/review.py::def items_for_task",
   "route:POST /api/tasks/{task_id}/to-review",
   "route:GET /api/tasks/{task_id}/review-cards",
   "test:test_review_link_line.py",
+  "ui:data-action=task-to-review",
+  "text:src/web/index.html::async function toReview(id){",
+  "text:src/web/index.html::复习卡（",
 ]
-gaps = "后端已落地（T-C5：弱关联 + **幂等**，同一任务重复升级只留一张卡；标题默认取任务名）；**任务详情里的「升级为复习卡」按钮待前端批次**（已写进 [exceptions]，前端接上后删除该豁免）"
+gaps = ""
 
 [entries."SR-F6.3"]
 id = "SR-F6.3"
@@ -524,14 +524,16 @@ gaps = ""
 id = "SR-F8.3"
 title = "复习卡片/笔记可用引用句柄关联（Vault 路径 / KB ID），复习完标记并推进下一间隔"
 group = "F8"
-status = "partial"
+status = "done"
 evidence = [
   "column:review_items.ref_handle",
   "route:PATCH /api/review/items/{item_id}",
   "text:src/timeflow/core/review/review.py::def update_item",
   "test:test_review_link_line.py",
+  "ui:data-action=review-save",
+  "text:src/web/index.html::rvHandle",
 ]
-gaps = "与 SR-F6.8 同一条缺口（GAP-F6-03）：后端已能写/清句柄（T-C7）；**界面入口待前端批次**（已写进 [exceptions]）"
+gaps = ""
 
 [entries."SR-F8.4"]
 id = "SR-F8.4"
@@ -1170,15 +1172,17 @@ gaps = ""
 id = "T-C3"
 title = "C 批：均衡度指标（波动 / 空档，温和呈现）"
 group = "PROCESS"
-status = "partial"
+status = "done"
 evidence = [
   "text:src/timeflow/core/ledger/ledger.py::focus_variation_minutes",
   "text:src/timeflow/core/ledger/ledger.py::def _rhythm",
   "text:src/timeflow/core/ledger/ledger.py::def _rhythm_note",
   "route:GET /api/summary/weekly",
   "test:test_week_summary.py",
+  "text:src/web/index.html::function rhythmRow(w)",
+  "test:test_web_frontend.py",
 ]
-gaps = "后端已落地（标准差 + 最长空档 + 温和一句话，全部**不折算、不告警**）；**界面显示待前端批次**（[exceptions] 留痕）"
+gaps = ""
 
 [entries."T-C4"]
 id = "T-C4"
@@ -1198,15 +1202,17 @@ gaps = ""
 id = "T-C5"
 title = "C 批：任务 → 复习卡升级（GAP-F6-01）"
 group = "PROCESS"
-status = "partial"
+status = "done"
 evidence = [
   "column:review_items.task_id",
   "text:src/timeflow/core/review/review.py::def items_for_task",
   "route:POST /api/tasks/{task_id}/to-review",
   "text:src/timeflow/core/review/review.py::def _check_task",
   "test:test_review_link_line.py",
+  "ui:data-action=task-to-review",
+  "test:test_web_frontend.py",
 ]
-gaps = "后端已落地（schema v12 + 幂等升级 + 任务侧反查）；**界面按钮待前端批次**（[exceptions] 留痕）"
+gaps = ""
 
 [entries."T-C6"]
 id = "T-C6"
@@ -1219,6 +1225,8 @@ evidence = [
   "route:GET /api/review/meta",
   "route:PATCH /api/review/items/{item_id}",
   "test:test_review_link_line.py",
+  "ui:data-action=review-save",
+  "text:src/web/index.html::rvForm",
 ]
 gaps = ""
 
@@ -1226,14 +1234,16 @@ gaps = ""
 id = "T-C7"
 title = "C 批：复习卡挂引用句柄（GAP-F6-03）"
 group = "PROCESS"
-status = "partial"
+status = "done"
 evidence = [
   "column:review_items.ref_handle",
   "text:src/timeflow/core/review/review.py::def update_item",
   "route:PATCH /api/review/items/{item_id}",
   "test:test_review_link_line.py",
+  "ui:data-action=review-save",
+  "text:src/web/index.html::rvHandle",
 ]
-gaps = "后端已落地（可写可清空、非法拒绝）；**界面入口待前端批次**（[exceptions] 留痕）"
+gaps = ""
 
 [entries."T-C8"]
 id = "T-C8"

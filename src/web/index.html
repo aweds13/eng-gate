@@ -223,6 +223,11 @@ const ACTIONS = {
   'review-do':      el => review(el.dataset.id, el.dataset.feedback),
   'review-undo':    el => undoReview(el.dataset.id),
   'review-add':     () => addReview(),
+  // 复习卡的**定义类字段**（SR-F6.5 形式 / SR-F8.3 引用句柄 / T-C6·C7）与任务升级（SR-F6.2 / T-C5）
+  'review-edit':    el => editReview(el.dataset.id),
+  'review-edit-cancel': () => { reviewEdit={id:null,item:null,meta:null}; render(current); },
+  'review-save':    () => saveReviewEdit(),
+  'task-to-review': el => toReview(el.dataset.id || detailTaskId),
   // 学业
   'course-add':     () => addCourse(),
   'assessment-add': () => addAssessment(),
@@ -345,12 +350,13 @@ function paintRail(mySeq){
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
   if(!detailTaskId){box.innerHTML='';return}
   Promise.all([api(`/api/tasks/${detailTaskId}`),api(`/api/tasks/${detailTaskId}/facts`),
-    api('/api/groups'),api(`/api/tasks/${detailTaskId}/subtasks`),api('/api/courses')])   // 详情要显示分组可选项、子任务与课程可选项
-    .then(([t,facts,groups,kids,courses])=>{
+    api('/api/groups'),api(`/api/tasks/${detailTaskId}/subtasks`),api('/api/courses'),
+    api(`/api/tasks/${detailTaskId}/review-cards`)])   // 详情还要显示"升级出来的复习卡"
+    .then(([t,facts,groups,kids,courses,cards])=>{
       if(mySeq!==renderSeq)return;
       groupCache=groups||[];
       courseCache=courses||[];     // 每次打开详情都刷新：新建课程后立刻可选
-      renderDetail(box,t,facts||[],kids||[]);
+      renderDetail(box,t,facts||[],kids||[],cards||[]);
     })
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
 }
@@ -496,8 +502,9 @@ async function saveTaskEdit(){
   toast('已保存；逾期与债务已重算，优先级已参与排序');view(current);
 }
 // 右栏详情：任务字段 + 子任务 + 事实流水 + 与列表一致的动作（动作后由 view(current) 统一刷新）
-function renderDetail(el,t,facts,kids){
+function renderDetail(el,t,facts,kids,cards){
   const isDone=t.status==='完成';
+  const rcards=cards||[];
   const asg=(t.assignments||[]).map(a=>
     `<div class="meta"><span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span></div>`).join('');
   const lines=(facts||[]).slice(-12).reverse().map(f=>
@@ -529,6 +536,10 @@ function renderDetail(el,t,facts,kids){
     <div class="settings-sub">所属分组</div>
     <div class="row tight" id="detailGroups" data-task="${t.id}">${groupChips(groupsOf(t),(t.groups||[]))}</div>
     ${detailEditing?'':taskAttachHTML(t)}
+    ${rcards.length?`<div class="settings-sub">复习卡（${rcards.length}）</div>
+      ${rcards.map(c=>`<div class="fact"><span class="badge">复习卡</span>
+        <span class="grow" style="flex:1">${esc(c.title)}</span>
+        <span class="sub">到期 ${esc(String(c.due_date).slice(0,10))}</span></div>`).join('')}`:''}
     <div class="settings-sub">步骤（子任务）${progress}</div>
     <div id="subtaskList">${subtaskList||'<div class="sub">还没有步骤。拆成小步，完成到最后一个时父任务会自动完成。</div>'}</div>
     <div class="new"><input id="subtaskTitle" placeholder="添加一个步骤…" data-enter="subtask-add">
@@ -541,6 +552,7 @@ function renderDetail(el,t,facts,kids){
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
       <button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>
       <button class="ghost" data-action="task-flag" data-id="${t.id}">${t.flagged?'取消标记':'标记'}</button>
+      <button class="ghost" data-action="task-to-review" data-id="${t.id}">${rcards.length?'再看复习卡':'升级为复习卡'}</button>
       <button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
       <button class="ghost" data-action="task-edit">编辑</button>
       <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
@@ -1009,7 +1021,16 @@ function weekCard(w){
   return `<div class="card" style="display:block">
     <div class="meta">本周 ${w.start} ~ ${w.end} · ${nums.join(' · ')}</div>
     <div style="display:flex;gap:6px;align-items:flex-end;margin-top:12px">${bars}</div>
-    <div class="sub" style="margin-top:8px">${esc(w.steady_note)}</div></div>`;
+    <div class="sub" style="margin-top:8px">${esc(w.steady_note)}</div>
+    ${rhythmRow(w)}</div>`;
+}
+// 均衡度（T-C3 / SR-F2.5）：**波动** = 逐日专注分钟的**标准差**、**空档** = 本周**最长连续 0 天**。
+// 只用分钟/天数这类**不折算**的原始单位；那句话（rhythm_note）由后端拼、只描述事实 ——
+// 不设目标、不告警、不排名（守约定层"温和不施压"）。
+function rhythmRow(w){
+  if(w.focus_variation_minutes==null&&!w.rhythm_note)return '';
+  return `<div class="sub" style="margin-top:6px">波动 ${w.focus_variation_minutes} 分钟（逐日专注的长短差）·
+    本周最长空档 ${w.longest_gap_days} 天 —— ${esc(w.rhythm_note||'')}</div>`;
 }
 
 function summaryLine(s){
@@ -1331,16 +1352,61 @@ async function addGrade(){const score=parseFloat(document.getElementById('gScore
   if(isNaN(score))return;await api('/api/grades',{method:'POST',body:JSON.stringify({score,credits})});view(current)}
 
 function reviewCard(r){
+  if(reviewEdit.id===r.id) return reviewEditForm(reviewEdit.item,reviewEdit.meta);
+  const handle=r.ref_handle?`<div class="meta">引用 ${esc(r.ref_handle)}</div>`:'';
+  const fromTask=r.task_id?`<div class="meta">来自任务（弱关联）</div>`:'';
   return `<div class="card"><div style="flex:1"><div class="title">${esc(r.title)}</div>
-    <div class="meta">${r.reps}次 · ${r.interval_days}天${r.source==='external'?'<span class="badge">外部</span>':''}</div></div>
+    <div class="meta">${r.reps}次 · ${r.interval_days}天${r.source==='external'?'<span class="badge">外部</span>':''}</div>${handle}${fromTask}</div>
     <div class="row"><button data-action="review-do" data-id="${r.id}" data-feedback="remember">记得</button>
     <button class="ghost" data-action="review-do" data-id="${r.id}" data-feedback="fuzzy">模糊</button>
     <button class="ghost" data-action="review-do" data-id="${r.id}" data-feedback="forgot">忘了</button>
-    <button class="ghost" data-action="review-undo" data-id="${r.id}">撤销上次</button></div></div>`;
+    <button class="ghost" data-action="review-undo" data-id="${r.id}">撤销上次</button>
+    <button class="ghost" data-action="review-edit" data-id="${r.id}">改形式/句柄</button></div></div>`;
 }
 async function undoReview(id){
   await api(`/api/review/${id}/undo`,{method:'POST'});
   toast('已撤销当日最近一次复习（间隔与账目一并回退）');view(current);
+}
+/* ---------- 复习卡的定义类字段（SR-F6.5 / SR-F8.3 / T-C6·C7）----------
+ * 中文词表（形式 / 执行源）**只在后端一处**（`review.meta()` 的 `_FORMATS` / `SOURCE_LABELS`），
+ * 界面按需拉 `/api/review/meta` 渲染 —— 省得前后端各写一份、改一边就漂。
+ * **排期字段（到期/间隔/次数）不给手改**：那是 FSRS 的记忆状态，手改会与调度器打架。
+ */
+let reviewEdit={id:null,item:null,meta:null};
+async function editReview(id){
+  const [item,meta]=await Promise.all([api(`/api/review/items/${id}`),api('/api/review/meta')]);
+  reviewEdit={id,item,meta};
+  render(current);
+}
+function reviewEditForm(it,meta){
+  const forms=(meta&&meta.forms)||[], sources=(meta&&meta.sources)||[];
+  return `<div class="card" style="display:block">
+    <div class="settings-sub">形式（记录用，不做挖空渲染）</div>
+    <select id="rvForm">${forms.map(f=>`<option value="${f.value}" ${f.value===it.form?'selected':''}>${esc(f.label)}</option>`).join('')}</select>
+    <div class="settings-sub">执行源</div>
+    <select id="rvSource">${sources.map(s=>`<option value="${s.value}" ${s.value===it.source?'selected':''}>${esc(s.label)}</option>`).join('')}</select>
+    <div class="settings-sub">引用句柄（可选）</div>
+    <input id="rvHandle" placeholder="Vault 相对路径 / KB-ID" value="${esc(it.ref_handle||'')}">
+    <div class="sub">只存引用句柄，本软件**不碰**你的 Vault 文件；留空 = 清除。</div>
+    <div class="row" style="margin-top:10px">
+      <button data-action="review-save">保存</button>
+      <button class="ghost" data-action="review-edit-cancel">取消</button></div>
+    <div class="sub" style="margin-top:8px">到期时间 / 间隔 / 次数由 FSRS 管，**不给人手改**（那是记忆状态，不是设置项）。</div></div>`;
+}
+async function saveReviewEdit(){
+  const form=document.getElementById('rvForm').value;
+  const source=document.getElementById('rvSource').value;
+  const ref_handle=document.getElementById('rvHandle').value.trim();
+  await api(`/api/review/items/${reviewEdit.id}`,
+    {method:'PATCH',body:JSON.stringify({form,source,ref_handle})});
+  reviewEdit={id:null,item:null,meta:null};
+  toast('已保存（只改了定义类字段，排期没动）');view(current);
+}
+async function toReview(id){
+  const r=await api(`/api/tasks/${id}/to-review`,{method:'POST',body:JSON.stringify({})});
+  toast(r.created?'已升级为复习卡：到期时间由 FSRS 排好，去复习页就能看到'
+    :'这张任务已经有复习卡了（不会重复建）');
+  view('review');
 }
 async function renderReview(m){
   const [due,summary]=await Promise.all([api('/api/review/due'),api('/api/summary')]);

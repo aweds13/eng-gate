@@ -271,7 +271,7 @@ def test_task_detail_panel_shows_readable_history() -> None:
     并（F1 段1 起）要能看到/添加**步骤（子任务）**与所属分组。
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
-    detail = html.split("function renderDetail(el,t,facts,kids){", 1)[1].split("\n}", 1)[0]
+    detail = html.split("function renderDetail(el,t,facts,kids,cards){", 1)[1].split("\n}", 1)[0]
     for need in ("humanTime(f.occurred_at)", "建于 ", "更新于 ", "步骤（子任务）", "subtaskTitle"):
         assert need in detail, f"详情面板缺少 {need}"
     assert "任务详情" in detail and "记录（最近" in detail
@@ -289,7 +289,7 @@ def test_task_note_is_editable_in_detail_only() -> None:
     assert 'id="editNote"' in edit, "编辑态缺少备注输入（备注就只能靠 API 写了）"
     save = html.split("async function saveTaskEdit(){", 1)[1].split("\n}", 1)[0]
     assert "editNote" in save and "note:" in save, "保存时没把备注带上"
-    detail = html.split("function renderDetail(el,t,facts,kids){", 1)[1].split("\n}", 1)[0]
+    detail = html.split("function renderDetail(el,t,facts,kids,cards){", 1)[1].split("\n}", 1)[0]
     assert "t.note" in detail, "详情面板没有显示备注"
     card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
     assert "note" not in card, "备注不该出现在列表卡片里（渐进聚焦）"
@@ -356,7 +356,7 @@ def test_attach_open_flow_is_wired_and_never_silent() -> None:
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
     # ① 任务详情：附件区（列表 + 添加 + 打开 + 删除）
-    detail = html.split("function renderDetail(el,t,facts,kids){", 1)[1].split("\n}", 1)[0]
+    detail = html.split("function renderDetail(el,t,facts,kids,cards){", 1)[1].split("\n}", 1)[0]
     assert "taskAttachHTML(t)" in detail, "详情面板没有附件区"
     for needle in ("function attachRowsHTML(", "function taskAttachHTML(",
                    "function addAttachment(", "function removeAttachment("):
@@ -702,3 +702,89 @@ def test_frontend_main_chain_works_end_to_end(tmp_path) -> None:  # type: ignore
     assert any(i.get("kind") == "review" and i["id"] == rid for i in items)
     client.post(f"/api/review/{rid}/review", json={"feedback": "remember"})
     assert client.get("/api/summary").json()["review_count"] == 1
+
+
+# ---------------------------------------------------------------- 前端批次（2026-09-20）
+# 这一批是把"后端已就绪、界面没入口"的三件事接上：任务→复习卡、复习卡改形式/句柄、均衡度显示。
+# 每一条都同时钉两件：**界面接线**（模板 + ACTIONS 注册）与**后端契约**（真发一次请求）。
+
+def test_task_can_be_upgraded_to_review_card_from_detail() -> None:
+    """T-C5（SR-F6.2）：任务详情有「升级为复习卡」；升级过就在详情里列出已有的卡。
+
+    幂等由后端保证 —— 界面**不许**自己算"有没有升级过"（那样两处口径就会漂）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert 'data-action="task-to-review"' in html and "'task-to-review':" in html
+    detail = html.split("function renderDetail(el,t,facts,kids,cards){", 1)[1].split("\n}", 1)[0]
+    assert "rcards.length" in detail, "详情面板没根据「已有复习卡」改变呈现"
+    assert "复习卡（" in detail, "详情面板没列出已升级出来的复习卡"
+    fn = html.split("async function toReview(id){", 1)[1].split("\n}", 1)[0]
+    assert "to-review" in fn and "已升级为复习卡" in fn
+    # 也真的走一遍后端的幂等语义（界面按钮点两次只应有一张卡）
+    assert "created" in fn, "界面没有把「这张卡是不是新建的」如实说出来"
+
+
+def test_review_card_form_and_handle_are_editable() -> None:
+    """T-C6 + T-C7（SR-F6.5 形式 / SR-F8.3 引用句柄）：能选形式、能填/清句柄。
+
+    两条硬口径：
+    ① **词表只在后端一处** —— 界面按需拉 `/api/review/meta`，不许在前端再写一份中文表；
+    ② **排期字段不给人手改** —— 到期/间隔/次数是 FSRS 的记忆状态，界面上只能改定义类字段。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "function reviewEditForm(" in html and "async function editReview(" in html
+    assert "async function saveReviewEdit(" in html
+    assert "'/api/review/meta'" in html, "形式/执行源的中文词表必须从后端拿"
+    save = html.split("async function saveReviewEdit(){", 1)[1].split("\n}", 1)[0]
+    for key in ("form", "source", "ref_handle"):
+        assert key in save, f"保存时没把 {key} 带上"
+    form = html.split("function reviewEditForm(it,meta){", 1)[1].split("\n}", 1)[0]
+    assert 'id="rvForm"' in form and 'id="rvSource"' in form and 'id="rvHandle"' in form
+    assert "不给人手改" in form, "必须写明排期字段不给人手改（否则用户会以为能改到期时间）"
+    for action in ("review-edit", "review-save", "review-edit-cancel"):
+        assert f"'{action}':" in html, f"动作 {action} 没注册"
+
+
+def test_review_edit_roundtrip_via_api(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """前端实际发的那个 PATCH：改 form/source/ref_handle 生效，且**排期字段纹丝不动**。"""
+    client = TestClient(create_app(str(tmp_path / "rv.db")))
+    tid = client.post("/api/tasks", json={"title": "背单词"}).json()["id"]
+    up = client.post(f"/api/tasks/{tid}/to-review", json={}).json()
+    assert up["created"] is True and up["card"]["task_id"] == tid
+    rid = up["card"]["id"]
+    again = client.post(f"/api/tasks/{tid}/to-review", json={}).json()
+    assert again["created"] is False and again["card"]["id"] == rid, "重复升级不该再建卡"
+
+    before = client.get(f"/api/review/items/{rid}").json()
+    patched = client.patch(
+        f"/api/review/items/{rid}",
+        json={"form": "cloze", "source": "external", "ref_handle": "notes/英语.md"},
+    )
+    assert patched.status_code == 200, patched.text
+    after = client.get(f"/api/review/items/{rid}").json()
+    assert (after["form"], after["source"], after["ref_handle"]) == (
+        "cloze", "external", "notes/英语.md"
+    )
+    for key in ("due_date", "reps", "interval_days"):
+        assert after[key] == before[key], f"排期字段 {key} 被改了（FSRS 的记忆状态不该手改）"
+    # 空串 = 清除（存 NULL，不写空串）—— 界面留空就是这个意思
+    cleared = client.patch(f"/api/review/items/{rid}", json={"ref_handle": ""}).json()
+    assert cleared["ref_handle"] is None
+    assert client.get("/api/review/meta").json()["forms"], "词表接口不能为空"
+
+
+def test_week_rhythm_is_displayed() -> None:
+    """T-C3（SR-F2.5）：周结算卡片要显示**波动 / 空档**与那句温和的话。
+
+    呈现红线：只报分钟/天数这类不折算的原始单位，措辞只描述事实（不设目标、不告警）——
+    所以这里也顺手断言界面没有把它们包装成"达标/未达标"。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "function rhythmRow(w)" in html
+    week = html.split("function weekCard(w){", 1)[1].split("\n}", 1)[0]
+    assert "rhythmRow(w)" in week, "周结算卡片没显示均衡度"
+    row = html.split("function rhythmRow(w){", 1)[1].split("\n}", 1)[0]
+    for needle in ("focus_variation_minutes", "longest_gap_days", "rhythm_note"):
+        assert needle in row, f"均衡度少了字段 {needle}"
+    for bad in ("达标", "未达标", "目标", "警告", "落后"):
+        assert bad not in row, f"均衡度措辞不许出现「{bad}」（温和不施压）"
