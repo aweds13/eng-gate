@@ -196,6 +196,8 @@ const ACTIONS = {
   'guard-wl-del':   el => delGuardWhitelist(el.dataset.name || ''),
   'guard-dnd-add':  () => addGuardDnd(),
   'guard-dnd-del':  el => delGuardDnd(el.dataset.win || ''),
+  // 备份与恢复（SR-NF12 / SR-F9.3）：恢复不可逆 → confirmAsk 写清时间点
+  'restore-backup': el => restoreBackup(el.dataset.name || ''),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -1586,17 +1588,42 @@ async function delGuardDnd(win){
   await setGuard({do_not_disturb:(guardNow().do_not_disturb||[]).filter(x=>x!==win)},
     `已移除勿扰时段：${win}`);
 }
+// ---- 备份与恢复（SR-NF12 / SR-F9.3；2026-09-21 用户定：列出最近几个备份、点一下恢复）----
+// 恢复是**不可逆动作** → 走壳级二次确认，并且把"恢复到哪个时间点"写进标题（不是笼统的"确定吗"）。
+// 后端恢复前会**自动再备份一次现库**，所以这里可以如实告诉用户"选错了还能回去"。
+let backupCache=null;
+function sizeLabel(n){
+  const b=Number(n)||0;
+  return b<1024?`${b}B`:b<1048576?`${(b/1024).toFixed(0)}KB`:`${(b/1048576).toFixed(1)}MB`;
+}
+async function restoreBackup(name){
+  if(!name)return;
+  const when=String(name).split('.bak-')[1]||name;
+  const ok=await confirmAsk(
+    `把数据库整体恢复到「${when}」那一刻？（连设置一起；恢复前会自动再备份一次现库，选错了还能回去）`,
+    '恢复到这个备份');
+  if(!ok)return;
+  const r=await api('/api/settings/restore',{method:'POST',body:JSON.stringify({name})});
+  if(r&&r.newer_than_app){
+    toast(`已恢复 ${r.restored}，但这个备份比当前程序新（schema v${r.schema_after} > v${r.schema_now}），可能有字段读不出来`);
+  }else{
+    toast(`已恢复：${r?r.restored:name}${r&&r.safety_backup?`（恢复前的现库也留了一份：${r.safety_backup}）`:''}`);
+  }
+  view(current);
+}
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg]=await Promise.all([
+  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups]=await Promise.all([
     api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach'),
-    api('/api/settings/reminder'),api('/api/focus/guard')]);
+    api('/api/settings/reminder'),api('/api/focus/guard'),api('/api/settings/backups')]);
   groupCache=groups||[];
   guardCache=guardCfg||null;
+  backupCache=backups||null;
   const off=!navigator.onLine;
   const guard=guardCache||{block_by_default:true,whitelist:[],do_not_disturb:[],
     note:'',window_format:'HH:MM-HH:MM',max_items:50};
+  const bk=backupCache||{db:'',dir:'',items:[],note:''};
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
     `<button class="swatch ${sameColor(accentChoice,c)?'on':''}" data-action="set-accent" data-color="${c}"
@@ -1703,6 +1730,13 @@ async function renderSetting(m){
     <div class="title">${off?'当前离线':'当前在线'}</div>
     <div class="meta">跨端传输尚未实现：本机数据始终可用；同步一旦接上会在这里显示状态${sync.conflict_logs?` · 已有 ${sync.conflict_logs} 条冲突记录`:''}</div>
     <div class="sub">数字都来自本机数据库，不上传任何服务器。</div>
+    <div class="settings-sub" id="set-backup">备份与恢复</div>
+    <div class="meta">每次起服务/开窗口前会自动备份一份。库：${esc(bk.db||'—')}（目录 ${esc(bk.dir||'—')}）</div>
+    <div class="row tight" style="margin-top:var(--sp-2)">
+      ${(bk.items||[]).length?bk.items.map(b=>`<button class="ghost" data-action="restore-backup"
+        data-name="${esc(b.name)}" title="恢复到 ${esc(b.at)}">${esc(String(b.at).replace('T',' '))} · ${sizeLabel(b.size)}${b.parsed?'':'（名字被改过）'}</button>`).join('')
+        :'<span class="sub">还没有备份（起一次服务就会有一份）</span>'}</div>
+    <div class="sub">${esc(bk.note||'')} <b>点某个时间点 = 把库整体回到那一刻</b>，界面会让你再确认一次。</div>
   </div>
   <div class="section-title">入口</div>
   <div class="card panel-card">

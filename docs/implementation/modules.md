@@ -148,6 +148,12 @@
 - SQLite（标准库 `sqlite3`，非 ORM）+ schema 版本化迁移（当前 **v12**：v3 facts、v4 focus 回填、v5 已完成任务回填、
   v6 note、v7 priority、v8 flagged、v9 attach+app_settings、v10 remind_at、v11 task_type+course_id、v12 review_items.task_id）；
   LWW 同步（时间戳+version，不静默覆盖）；跨端**同 id 去重**（来源标记尚未落库，见 `traceability.toml` 的 SR-F2.6b）。
+- **备份与恢复**（`storage/backup.py`，2026-09-21 用户定：设置页列出最近几个备份、点一下恢复）：
+  `make_backup()` / `list_backups()` / `resolve_backup()`（**名字是唯一安全边界**）/ `restore()`；
+  **起服务前与开窗口前各自动备份一次**（都在 schema 迁移之前）；
+  恢复用 SQLite **在线备份 API** 写内容、**不替换文件**，且**恢复前先再备份一次现库**（可逆）；
+  老备份就地跑 `db.migrate()`；比程序新的备份如实报 `newer_than_app`。
+  配套：`db.raw_conn()`（拿到线程代理背后的真连接，`Connection.backup` 需要真连接）+ `db.migrate()`（公开的迁移入口）。
 - **并发连接（第 11 步修）**：`db.thread_local()` 代理按线程各持一个连接（`create_app` 用它）。
   原因：`sqlite3.Connection` 非线程安全，共享时一个请求的 `commit()` 会打断另一个请求的事务
   （真机表现：快速点击顶部导航 → 「操作未完成」）；实测并发 180 请求由 33 次 500 降到 0。

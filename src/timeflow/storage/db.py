@@ -89,6 +89,32 @@ def thread_local(db_path: str) -> sqlite3.Connection:
     return _ThreadLocalConn(db_path)  # type: ignore[return-value]
 
 
+def raw_conn(conn: object) -> sqlite3.Connection:
+    """拿到"线程代理"背后的**真连接**。
+
+    为什么需要：SQLite 的**在线备份 API**（`Connection.backup`）要求目标是真 Connection，
+    而 HTTP 服务里传下来的是 `_ThreadLocalConn` 代理（`_conn` 是个方法，不是属性）。
+    真连接原样返回；拿不到就抛错（**不猜、不静默降级**）。
+    """
+    inner = getattr(conn, "_conn", None)
+    if callable(inner):
+        real = inner()
+        if isinstance(real, sqlite3.Connection):
+            return real
+    if isinstance(conn, sqlite3.Connection):
+        return conn
+    raise TypeError(f"拿不到真连接：{type(conn)!r}")
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    """把库升到当前 `SCHEMA_VERSION`（**幂等**）。
+
+    公开版入口：恢复备份后要把老 schema 就地升上来（`storage/backup.py` 用它），
+    比在别的模块里直接调 `_migrate` 干净。
+    """
+    _migrate(conn)
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
     row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()

@@ -37,6 +37,7 @@ from timeflow.core import tasks as tm
 from timeflow.core import team as team
 from timeflow.core.focus import guard as fg
 from timeflow.core.ledger import ledger
+from timeflow.storage import backup as backup_mod
 from timeflow.storage import db
 
 
@@ -312,6 +313,33 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def get_attach_settings() -> dict[str, Any]:
         """附件打开方式（当前值 + 可选值 + 规则说明；规则只有一份，前端不复述）。"""
         return {**attach_mod.get_settings(conn), **attach_mod.describe_rules()}
+
+    # ---- 备份与恢复（SR-NF12 / SR-F9.3）----
+    # 口径（2026-09-21 用户定）：设置页列出最近几个备份，点一个就能恢复。
+    @app.get("/api/settings/backups")
+    def get_backups() -> dict[str, Any]:
+        """同目录下的备份（最新在前，最多 20 条）+ 口径说明。只读。"""
+        path = Path(str(db_path))
+        return {
+            "db": path.name,
+            "dir": str(path.parent),
+            "items": backup_mod.list_backups(path)[:20],
+            "note": "恢复会把整库回到那个时间点（**连设置一起**）；恢复前会先自动再备份一次现库，"
+                    "所以选错了还能回去。",
+        }
+
+    @app.post("/api/settings/restore")
+    def post_restore(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """从备份恢复（**不可逆动作** → 界面必须二次确认）。只接受本机页面调用。
+
+        实现见 `storage/backup.py`：在线备份 API 写内容（不替换文件）+ 恢复前先备份现库 +
+        老 schema 就地升级；备份比程序新时如实报 `newer_than_app`。
+        """
+        require_local_origin(request)
+        try:
+            return backup_mod.restore(db_path, str(payload.get("name") or ""), conn)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     # ---- 到点提醒的通知通道（T-B5 后半）：计划任务 + 系统通知（用户选 B′）----
     @app.get("/api/settings/reminder")

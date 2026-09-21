@@ -662,6 +662,7 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
         ("get", "/api/focus/today", None),
         ("get", "/api/focus/active", None),
         ("get", "/api/focus/guard", None),
+        ("get", "/api/settings/backups", None),
         ("get", "/api/feedback", None),
         ("get", "/api/selfcheck", None),
         ("get", "/api/review/due", None),
@@ -952,3 +953,23 @@ def test_guard_settings_are_editable_from_the_setting_page() -> None:
     assert "guardNow()" in html, "增删要以当前值为基准（否则并发改会互相覆盖）"
     # 口径说明来自后端，界面不复述规则
     assert "guard.note" in setting and "guard.window_format" in setting
+
+
+def test_backup_restore_is_wired_in_settings() -> None:
+    """SR-NF12 / SR-F9.3：设置页列出最近几个备份，点一个就能恢复（不可逆 → 必须二次确认）。
+
+    两条要在界面上说清的：
+    ① 恢复是**整库回到那一刻**（连设置一起）—— 不说清用户以为只回滚任务；
+    ② 恢复前会**自动再备份一次现库**，所以选错了还能回去 —— 这是"敢点"的前提。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    setting = html.split("async function renderSetting(m){", 1)[1].split("\n}", 1)[0]
+    assert "api('/api/settings/backups')" in setting, "设置页没取备份列表"
+    assert "set-backup" in setting and "备份与恢复" in setting
+    assert "restore-backup" in setting and "'restore-backup':" in html
+    fn = html.split("async function restoreBackup(name){", 1)[1].split("\n}", 1)[0]
+    assert "confirmAsk(" in fn, "恢复是不可逆动作，必须二次确认"
+    assert "/api/settings/restore" in fn and "method:'POST'" in fn
+    assert "恢复到这个备份" in fn, "确认按钮要写清在确认什么（不是笼统的「确定」）"
+    assert "newer_than_app" in fn, "备份比程序新时要如实提示（降级场景）"
+    assert "function sizeLabel(" in html, "备份要显示大小（不然看不出哪份是完整的）"

@@ -154,6 +154,15 @@ const DB = {
   // 学业投入 vs 自学投入（SR-F5.1b / T-C10）：统计页那张对照图要用它
   '/api/insights/academic-vs-self': { days: 90, academic_hours: 2.0, self_hours: 1.5,
     unbound_hours: 0.5, academic_tasks: 2, self_tasks: 1 },
+  // 备份与恢复（SR-NF12 / SR-F9.3）：设置页要列出备份、每个都能点「恢复」
+  '/api/settings/backups': {
+    db: 'timeflow.db', dir: 'D:/data',
+    note: '恢复会把整库回到那个时间点（连设置一起）。',
+    items: [
+      { name: 'timeflow.db.bak-20260921-090000', size: 204800, at: '2026-09-21T09:00:00', parsed: true },
+      { name: 'timeflow.db.bak-20260920-210000', size: 200704, at: '2026-09-20T21:00:00', parsed: true },
+    ],
+  },
   // 全部考核项（T-B4 起学业页用它列表 + 挂要求链接）与附件打开方式设置
   '/api/assessments': [],
   '/api/settings/attach': {
@@ -327,7 +336,8 @@ try {
   console.log(`  ❌ 学业·硬考核强呈现 渲染抛错: ${e.message}`);
 }
 
-// 专注白名单 / 勿扰设置（SR-F3.3 / GAP-F3-02）：设置页要真的把已有条目渲染出来（可增删）。
+// 设置页两块新东西：专注白名单/勿扰（SR-F3.3 / GAP-F3-02）+ 备份与恢复（SR-NF12 / SR-F9.3）。
+// 都要**真的把已有条目渲染出来**（可增删 / 可点恢复），而不是只画个标题。
 const guardChecks = [];
 try {
   byId.get('main')._html = '';
@@ -335,17 +345,19 @@ try {
   await sleep(30);
   const html = byId.get('main')._html;
   const needs = ['set-focus-guard', 'guard-block', 'guard-wl-del', 'guard-dnd-del',
-    'guard-wl-add', 'guard-dnd-add', 'vscode', '22:00-07:00'];
+    'guard-wl-add', 'guard-dnd-add', 'vscode', '22:00-07:00',
+    // 备份与恢复：列表里的时间点 + 每个都可点
+    'set-backup', 'restore-backup', '备份与恢复', '2026-09-21 09:00:00'];
   const missing = needs.filter((n) => !html.includes(n));
   const rendered = missing.length === 0;
   if (!rendered) guardBad++;
   guardChecks.push({ rendered, missing });
-  console.log(`  ${rendered ? '✅' : '⚠️ '} 设置·白名单勿扰 main ${String(html.length).padStart(6)}B`
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 设置·白名单勿扰+备份 main ${String(html.length).padStart(6)}B`
     + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
 } catch (e) {
   guardBad++;
   guardChecks.push({ error: e.message });
-  console.log(`  ❌ 设置·白名单勿扰 渲染抛错: ${e.message}`);
+  console.log(`  ❌ 设置·白名单勿扰+备份 渲染抛错: ${e.message}`);
 }
 
 try {

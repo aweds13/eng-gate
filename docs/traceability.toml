@@ -585,9 +585,20 @@ gaps = "只有 LWW 合并语义与冲突日志；**无推拉传输**（GAP-F9-01
 id = "SR-F9.3"
 title = "schema 版本化 + 升级迁移；重要数据可备份、可回滚"
 group = "F9"
-status = "partial"
-evidence = ["text:src/timeflow/storage/db.py::SCHEMA_VERSION", "text:src/timeflow/storage/db.py::def _add_column_if_missing", "text:tools/serve.py::def backup", "test:test_facts.py"]
-gaps = "备份有（`tools/serve.py` 启前自动 `.bak`）；**没有回滚入口/命令**（要人工把 `.bak` 复制回去）—— 与 SR-NF12 同一缺口"
+status = "done"
+evidence = [
+  "text:src/timeflow/storage/db.py::SCHEMA_VERSION",
+  "text:src/timeflow/storage/db.py::def _add_column_if_missing",
+  "text:tools/serve.py::def backup",
+  "test:test_facts.py",
+  "route:GET /api/settings/backups",
+  "route:POST /api/settings/restore",
+  "text:src/timeflow/storage/backup.py::def restore",
+  "text:src/timeflow/storage/backup.py::def resolve_backup",
+  "text:src/timeflow/app/main.py::make_backup",
+  "test:test_backup_restore_line.py",
+]
+gaps = ""
 
 [entries."SR-F10.1"]
 id = "SR-F10.1"
@@ -685,8 +696,9 @@ evidence = [
   "text:src/timeflow/core/facts/store.py::kind：事实类型，自由字符串",
   "file:docs/EXTENDING.md",
   "file:examples/03_add_a_ledger_view.py",
+  "file:复盘/口径定案-待定清单.md",
 ]
-gaps = "「如何加一个功能」模板已落地（`docs/EXTENDING.md`）+ 三个可跑示例（`examples/`）；已有的扩展点是**事实 kind 自由字符串**（加事实类型不改表）、配置驱动、契约层界面动作。**仍没有真正的「插件注册机制」**：加复习形式/可视化/集成仍要改核心代码（如 `review._FORMATS` 是固定元组）—— 这一条属产品决策，**待定**"
+gaps = "**口径已定（2026-09-21 用户拍板）**：做**复习形式可配置** + **可视化维度可配置** + **集成写成文档**（外部脚本调 REST 本来就是集成）；**字段/新功能做不到「不改核心」**（加字段要走 schema 迁移、新功能=领域函数+路由+界面），如实标注、靠模板与示例降门槛。模板（`docs/EXTENDING.md`）与三个可跑示例已就位；**三项配置化待实现**（见 `复盘/口径定案-待定清单.md` §6）"
 
 [entries."SR-NF8"]
 id = "SR-NF8"
@@ -736,14 +748,20 @@ gaps = ""
 id = "SR-NF12"
 title = "数据迁移与备份：schema 版本化 + 升级迁移；重要数据可备份、可回滚"
 group = "NF"
-status = "partial"
+status = "done"
 evidence = [
   "text:src/timeflow/storage/db.py::SCHEMA_VERSION",
   "text:src/timeflow/storage/db.py::def _add_column_if_missing",
   "text:tools/serve.py::def backup",
   "test:test_facts.py",
+  "route:GET /api/settings/backups",
+  "route:POST /api/settings/restore",
+  "text:src/timeflow/storage/backup.py::def restore",
+  "text:src/timeflow/storage/backup.py::def resolve_backup",
+  "text:src/timeflow/app/main.py::make_backup",
+  "test:test_backup_restore_line.py",
 ]
-gaps = "schema 版本化迁移与启前自动备份已落地；**没有回滚入口/命令**（要人工把 `backup()` 出来的 `.bak` 复制回去）"
+gaps = ""
 [entries."SR-NF13"]
 id = "SR-NF13"
 title = "关键路径日志 + 健康检查/调试开关"
@@ -772,13 +790,15 @@ gaps = ""
 id = "SR-NF15"
 title = "测试闭环：单测 + 覆盖率门槛 + 合入前 checklist"
 group = "NF"
-status = "partial"
+status = "done"
 evidence = [
   "file:docs/CODING_GUIDELINES.md",
   "text:pyproject.toml::--cov-fail-under=70",
   "file:.github/pull_request_template.md",
+  "text:复盘/口径定案-待定清单.md::保持现状",
+  "test:test_backup_restore_line.py",
 ]
-gaps = "覆盖率门槛已写进 `pyproject`（GAP-NF-08 收口）；**规格写的「真实/外部调用拆可 mock 单测 + integration marker」未加 marker** —— 现用 `tools/lf1_live_check.py` / `tools/web_live_check.py` 真机自检替代（口径偏离，待定）"
+gaps = ""
 
 [entries."SR-NF16"]
 id = "SR-NF16"
