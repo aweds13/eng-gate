@@ -130,6 +130,72 @@ def live_attach_checks(base: str, tmp: Path) -> dict[str, bool]:
     }
 
 
+def live_c_line_checks(base: str) -> dict[str, bool]:
+    """C 批新增能力的**真机**检查（跑在临时库上的真服务）：类型+课程 / 复习线 / 产出分两类 /
+    今天做成了什么 / 均衡度字段。
+
+    为什么放这里而不只放单测：单测验的是"函数对"，这里验的是"**装起来之后**这条链真的通"
+    （路由在场、字段真的顺着 JSON 出来、跨站仍被拒）。**刻意不碰真实数据**：库是临时目录里的。
+    """
+    tid = _json_call(base, "/api/tasks", "POST", {"title": "C 批检查用任务"})[1]["id"]
+    # 类型 + 所属课程（T-C12）：普通不挂课程；作业能挂；课程名由后端给出
+    cid = _json_call(base, "/api/courses", "POST", {"name": "检查用课程"})[1]["id"]
+    normal_with_course = _json_call(
+        base, "/api/tasks", "POST", {"title": "普通+课程", "course_id": cid}
+    )[0]
+    hw = _json_call(
+        base, "/api/tasks", "POST", {"title": "第三章习题", "task_type": "作业", "course_id": cid}
+    )[1]
+    patched = _json_call(
+        base, f"/api/tasks/{tid}", "PATCH", {"task_type": "考试", "course_id": cid}
+    )[1]
+    # 复习线（T-C5/C6/C7）：任务升级为复习卡（幂等）+ 词表 + 改形式/句柄
+    meta = _json_call(base, "/api/review/meta")[1]
+    up1 = _json_call(base, f"/api/tasks/{tid}/to-review", "POST", {"form": "exam"})[1]
+    up2 = _json_call(base, f"/api/tasks/{tid}/to-review", "POST", {})[1]
+    card_id = up1["card"]["id"]
+    card = _json_call(
+        base, f"/api/review/items/{card_id}", "PATCH", {"ref_handle": "Vault/x.md"}
+    )[1]
+    # 产出分两类 + 今天做成了什么 + 均衡度（T-C4 / T-C11 / T-C3）
+    _json_call(base, "/api/ledger/output", "POST", {"kind": "kpi", "value": 1, "note": "卷子"})
+    _json_call(base, "/api/ledger/output", "POST", {"kind": "asset", "value": 2, "note": "笔记"})
+    _json_call(base, f"/api/tasks/{tid}/complete", "POST", {})
+    summary = _json_call(base, "/api/summary")[1]
+    week = _json_call(base, "/api/summary/weekly")[1]
+    done = _json_call(base, "/api/today/done")[1]
+    health = _json_call(base, "/api/health")[1]
+
+    return {
+        "类型+课程：普通不挂课程被拒": normal_with_course == 400,
+        "类型+课程：作业挂上课、课程名后端给出": (
+            hw.get("task_type") == "作业" and hw.get("course_name") == "检查用课程"
+        ),
+        "类型+课程：PATCH 能改类型并带出课程": (
+            patched.get("task_type") == "考试" and patched.get("course_name") == "检查用课程"
+        ),
+        "复习词表从后端来（挖空/问答/真题）": [f["value"] for f in meta["forms"]]
+        == ["cloze", "qa", "exam"],
+        "任务→复习卡：升级成功且幂等": up1["created"] is True and up2["created"] is False,
+        "复习卡：句柄可写": card.get("ref_handle") == "Vault/x.md",
+        "产出分两类（KPI/资产各自计数）": (
+            summary.get("output_kpi") == 1 and summary.get("output_asset") == 1
+        ),
+        "今天做成了什么：完成的任务在列": any(t["id"] == tid for t in done["tasks"]),
+        "今天做成了什么：两类产出计数": (
+            done["output_kpi"] == 1 and done["output_asset"] == 1 and len(done["outputs"]) == 2
+        ),
+        "均衡度字段齐（波动/空档/温和话）": (
+            isinstance(week.get("focus_variation_minutes"), (int, float))
+            and isinstance(week.get("longest_gap_days"), int)
+            and bool(week.get("rhythm_note"))
+        ),
+        "健康检查报能自证的事实": (
+            health.get("database_ok") is True and health.get("tasks", 0) >= 1
+        ),
+    }
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="r2_"))
     ok, detail = check_js_syntax(tmp)
@@ -197,6 +263,7 @@ def main() -> int:
         print(f"[提示] 以下 data-view 既不是视图也没注册动作：{unknown}")
     checks.update(live_attach_checks(base, tmp))
     checks.update(live_remind_checks(base))
+    checks.update(live_c_line_checks(base))
     for name, passed in checks.items():
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")
     server.should_exit = True
