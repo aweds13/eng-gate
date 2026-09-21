@@ -114,7 +114,8 @@ const DB = {
   '/api/tasks': [probeTask({ id: 't2', title: '普通任务', is_myday: false,
       subtask_done: 1, subtask_total: 3, current_step: '第 2 步：写解答',
       current_step_due: '2026-09-25' }),
-    probeTask({ id: 'p1', title: '待定的事', status: '待定', depth: 2, groups: ['第三章'] }),
+    probeTask({ id: 'p1', title: '待定的事', status: '待定', depth: 2,
+      groups: ['高数 / 第三章'], group_ids: ['g2'] }),
     probeTask({ id: 'x1', title: '取消的事', status: '取消' })],
   // 「正在做」：**可以同时多个**，各带自己的顺序号（↑↓ 用 `doing_rank` 排）
   '/api/tasks/doing': [probeTask({ id: 'd1', title: '写高数作业', status: '进行中', doing_rank: 1 }),
@@ -142,8 +143,10 @@ const DB = {
   '/api/tasks/t1': {
     id: 't1', title: '探针任务', due_date: '2030-01-01', group_name: null, repeat_days: null,
     parent_id: null, is_myday: true, status: '未开始', created_at: '2026-09-18T10:00:00',
-    updated_at: '2026-09-18T10:00:00', version: 1, groups: [], assignments: [],
+    updated_at: '2026-09-18T10:00:00', version: 1, assignments: [],
     subtask_done: 0, subtask_total: 0, note: '备注也要渲染一遍', priority: '高', flagged: true,
+    // 分组（T-F10）：`groups` 是**路径**、`group_ids` 是勾选状态用的 id
+    groups: ['高数 / 第三章'], group_ids: ['g2'],
     // 类型 + 所属课程（T-C12）：编辑态要渲染课程下拉、只读态要渲染课程徽标
     task_type: '作业', course_id: 'c1', course_name: '高等数学',
     attach: [{ target: 'https://x.example/要求', title: '要求页' },
@@ -506,7 +509,7 @@ const stepChecks = [];
 for (const [where, needs] of [
   ['tasks', ['步骤 1/3', '当前：第 2 步：写解答', '2026-09-25 前', '子任务', '高数 / 第三章']],
   ['detail', ['第 2 步：写解答', 'subtask-due', 'id="subtaskDue"', '尝试失败', '脱离',
-    '第 2 步的第 1 小问', '子步骤', 'step-toggle']],
+    '第 2 步的第 1 小问', '子步骤', 'step-toggle', 'data-group="g2"']],
   ['group', ['高数 / 第三章', 'group-sub', 'group-parent', 'id="groupParent"']],
 ]) {
   try {

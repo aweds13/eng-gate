@@ -174,8 +174,10 @@ def test_group_insights_buckets_by_group(conn: sqlite3.Connection) -> None:
     today = date.today().isoformat()
     a = tm.create_task(conn, "写论文")
     b = tm.create_task(conn, "刷题")
-    tm.set_task_groups(conn, a.id, ["学业"])
-    tm.set_task_groups(conn, b.id, ["学业", "竞赛"])
+    study = tm.create_group(conn, "学业")
+    contest = tm.create_group(conn, "竞赛")
+    tm.set_task_groups(conn, a.id, [study])
+    tm.set_task_groups(conn, b.id, [study, contest])
     _focus_on(conn, today, 3600.0, task_id=a.id)
     _focus_on(conn, today, 1800.0, task_id=b.id)
 
@@ -206,7 +208,7 @@ def test_group_insights_ignores_unbound_focus(conn: sqlite3.Connection) -> None:
 def test_group_insights_excludes_old_facts(conn: sqlite3.Connection) -> None:
     today = date.today().isoformat()
     t = tm.create_task(conn, "老账")
-    tm.set_task_groups(conn, t.id, ["学业"])
+    tm.set_task_groups(conn, t.id, [tm.create_group(conn, "学业")])
     old = (date.today() - timedelta(days=30)).isoformat()
     _focus_on(conn, old, 3600.0, task_id=t.id)
     _focus_on(conn, today, 600.0, task_id=t.id)
@@ -219,8 +221,8 @@ def test_group_insights_sorted_desc(conn: sqlite3.Connection) -> None:
     today = date.today().isoformat()
     small = tm.create_task(conn, "小")
     big = tm.create_task(conn, "大")
-    tm.set_task_groups(conn, small.id, ["小类"])
-    tm.set_task_groups(conn, big.id, ["大类"])
+    tm.set_task_groups(conn, small.id, [tm.create_group(conn, "小类")])
+    tm.set_task_groups(conn, big.id, [tm.create_group(conn, "大类")])
     _focus_on(conn, today, 600.0, task_id=small.id)
     _focus_on(conn, today, 3600.0, task_id=big.id)
 
@@ -252,7 +254,8 @@ def test_list_habits_empty(conn: sqlite3.Connection) -> None:
 def test_api_insights_daily_and_groups(tmp_path) -> None:  # type: ignore[no-untyped-def]
     client = TestClient(create_app(str(tmp_path / "i.db")))
     tid = client.post("/api/tasks", json={"title": "写论文", "is_myday": True}).json()["id"]
-    client.patch(f"/api/tasks/{tid}", json={"groups": ["学业"]})
+    gid = client.post("/api/groups", json={"name": "学业"}).json()["id"]
+    client.patch(f"/api/tasks/{tid}", json={"groups": [gid]})
     sid = client.post("/api/focus/start", json={"kind": "plain", "task_id": tid}).json()["id"]
     client.post(f"/api/focus/{sid}/finish", json={"duration_sec": 1800})
 

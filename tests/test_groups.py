@@ -16,10 +16,13 @@ def conn(tmp_path):
 
 
 def test_task_multi_groups(conn) -> None:
-    """AC-6：任务可归多个分组，且分组计数正确。"""
+    """AC-6：任务可归多个分组，且分组计数正确（F 批 · T-F10 起关联**按 id**）。"""
     t = tm.create_task(conn, "数学视频", is_myday=True)
-    tm.set_task_groups(conn, t.id, ["主线", "自媒体"])
-    assert set(tm.get_task_groups(conn, t.id)) == {"主线", "自媒体"}
+    main = tm.create_group(conn, "主线")
+    media = tm.create_group(conn, "自媒体")
+    tm.set_task_groups(conn, t.id, [main, media])
+    assert set(tm.task_group_paths(conn, t.id)) == {"主线", "自媒体"}
+    assert set(tm.task_group_ids(conn, t.id)) == {main, media}
 
     groups = {g["name"]: g["task_count"] for g in tm.list_groups(conn)}
     assert groups["主线"] == 1
@@ -27,7 +30,7 @@ def test_task_multi_groups(conn) -> None:
 
 
 def test_group_name_unique_reuse(conn) -> None:
-    """同名分组不复建，复用同 id。"""
+    """同一个父下同名分组不复建，复用同 id（跨父则允许重名 —— 见 T-F10 的测试）。"""
     g1 = tm.create_group(conn, "财务")
     g2 = tm.create_group(conn, "财务")
     assert g1 == g2

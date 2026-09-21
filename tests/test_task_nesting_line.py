@@ -4,8 +4,8 @@
 - 任务：**「大任务 → 子任务 → 子步骤」三层封顶**（`MAX_TASK_DEPTH = 3`），禁成环（已有）；
 - 分组：`groups` 加 `parent_id`（schema **v14**）**可嵌套**，层数上限与任务同一个数字；
 - **保留「任务可属多个分组」**（`task_groups` 不动，SR-F1.3 那条不变）；
-- 分组名**仍然全局唯一** —— 成员关系本来就是按名字存的（`get_task_groups` 返回名字、
-  界面按名字勾选），同名就指不回是哪一个；所以界面显示**路径**消歧义。
+- 分组名**同一父下唯一**（T-F10 起允许跨父重名；成员关系按 id 存，
+  见 `test_task_group_names_line.py`）。
 
 覆盖：
 - v13→v14 迁移（加列 + 幂等 + 老数据 parent_id 为空 = 全是顶层，行为不变）；
@@ -217,14 +217,14 @@ def test_group_with_children_cannot_be_deleted_or_merged(conn) -> None:  # type:
 
 
 def test_nested_groups_keep_multi_membership(conn) -> None:  # type: ignore[no-untyped-def]
-    """嵌套不影响 SR-F1.3：一个任务仍可**同时**属于父分组与子分组（平的多对多）。"""
+    """嵌套不影响 SR-F1.3：一个任务仍可**同时**属于父分组与子分组（平的多对多，按 id）。"""
     g1 = tm.create_group(conn, "高数")
-    tm.create_group(conn, "第三章", parent_id=g1)
+    g2 = tm.create_group(conn, "第三章", parent_id=g1)
     task = tm.create_task(conn, "刷第三章习题")
 
-    tm.toggle_task_group(conn, task.id, "高数", True)
-    tm.toggle_task_group(conn, task.id, "第三章", True)
-    assert tm.get_task_groups(conn, task.id) == ["第三章", "高数"]
+    tm.toggle_task_group(conn, task.id, g1, True)
+    tm.toggle_task_group(conn, task.id, g2, True)
+    assert tm.task_group_paths(conn, task.id) == ["高数", "高数 / 第三章"]
 
     counts = {g["name"]: g["task_count"] for g in tm.list_groups(conn)}
     assert counts == {"高数": 1, "第三章": 1}  # 各算各的，不重复计

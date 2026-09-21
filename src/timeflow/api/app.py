@@ -83,7 +83,10 @@ class TaskOut(BaseModel):
     created_at: str
     updated_at: str
     version: int
+    # 分组**路径**列表（`高数 / 作业`）：重名放开后名字可能撞车，路径才是能认的那一个（T-F10）
     groups: list[str] = []
+    # 分组的 **id**：勾选/取消按 id 走（名字不再当标识）
+    group_ids: list[str] = []
     # 团队分配（SR-F7.1）：任务卡片上直接可见「谁负责 / 进展到哪」，不必另开页面
     assignments: list[AssigneeOut] = []
     # 子任务进度（SR-F1.6）：父任务卡片上直接显示「2/3 步已完成」，不必点进去数
@@ -157,7 +160,8 @@ def _out(
     `depth`（T-F5）：不传就现算（**只在真有父任务时才查** —— 绝大多数任务是顶层的，
     不该为了一个显示字段给每张卡都走一遍父链）；树的接口已经知道层数，直接传进来。
     """
-    groups = tm.get_task_groups(conn, t.id)
+    groups = tm.task_group_paths(conn, t.id)
+    group_ids = tm.task_group_ids(conn, t.id)
     progress, current = tm.subtask_view(conn, t.id)
     if depth is None:
         depth = tm.task_depth(conn, t.id) if t.parent_id else 1
@@ -174,6 +178,7 @@ def _out(
         updated_at=t.updated_at,
         version=t.version,
         groups=groups,
+        group_ids=group_ids,
         assignments=[
             AssigneeOut(**a)  # type: ignore[arg-type]
             for a in team.assignments_for_task(conn, t.id)
@@ -845,20 +850,26 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.post("/api/groups", status_code=201)
     def create_group(payload: dict[str, Any]) -> dict[str, Any]:
-        """新建分组（OP-11）。空名 400；**重名 400**（不允许静默复用，免得用户以为建了新组）。
+        """新建分组（OP-11）。空名 400；**同一个父下重名 400**（不静默复用，免得以为建了新组）。
 
         `{parent_id}` 可选：给了就建成那个分组的**子分组**（T-F5）；
         父不存在 404、超过层数上限 400（都不静默）。
+        T-F10：**跨父可以重名**（「高数 / 作业」与「英语 / 作业」都行），只有同层撞名才算重复。
         """
         name = str(payload.get("name", "")).strip()
         if not name:
             raise HTTPException(status_code=400, detail="分组名不能为空") from None
-        existing = {str(g["name"]) for g in tm.list_groups(conn)}
-        if name in existing:
-            raise HTTPException(status_code=400, detail=f"分组「{name}」已存在") from None
-        parent_id = payload.get("parent_id")
+        raw_parent = payload.get("parent_id")
+        parent_id = None if raw_parent is None else str(raw_parent)
+        sibling = [
+            g for g in tm.list_groups(conn)
+            if str(g["name"]) == name and str(g["parent_id"] or "") == (parent_id or "")
+        ]
+        if sibling:
+            where = str(sibling[0]["path"])
+            raise HTTPException(status_code=400, detail=f"分组「{where}」已存在") from None
         try:
-            gid = tm.create_group(conn, name, None if parent_id is None else str(parent_id))
+            gid = tm.create_group(conn, name, parent_id)
         except KeyError:
             raise HTTPException(status_code=404, detail="父分组不存在") from None
         except ValueError as e:
@@ -926,17 +937,27 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.post("/api/tasks/{task_id}/group")
     def toggle_task_group(task_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """把任务加入/移出某分组（`{name, on}`）。任务不存在 404；空名 400。"""
+        """把任务加入/移出某分组（`{group_id, on}`）。任务不存在 404；分组不存在 404。
+
+        T-F10 起**按分组 id**：分组名允许重名（「高数 / 作业」与「英语 / 作业」同名），
+        名字不再是能认的标识。返回改动后的**路径**列表（界面直接显示）。
+        """
         try:
             tm.get_task(conn, task_id)
         except KeyError:
             raise HTTPException(status_code=404, detail="任务不存在") from None
-        name = str(payload.get("name", ""))
+        group_id = str(payload.get("group_id", ""))
         try:
-            names = tm.toggle_task_group(conn, task_id, name, bool(payload.get("on", True)))
+            paths = tm.toggle_task_group(conn, task_id, group_id, bool(payload.get("on", True)))
+        except KeyError:
+            raise HTTPException(status_code=404, detail="分组不存在") from None
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        return {"task_id": task_id, "groups": names}
+        return {
+            "task_id": task_id,
+            "groups": paths,
+            "group_ids": tm.task_group_ids(conn, task_id),
+        }
 
     @app.get("/api/summary")
     def summary() -> ledger.LedgerSummary:

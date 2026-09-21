@@ -6,7 +6,10 @@
 嵌套口径（用户 2026-09-21：「或者程序里像文件夹那样，可以嵌套、归在一起」）：
 - `parent_id` NULL = 顶层分组；**最多 `MAX_GROUP_DEPTH`（3）层**；
 - **禁成环**（把父分组挂到自己的子分组下 → ValueError）；
-- **成员关系仍按名字**（`task_groups` 不动）→ 所以分组名**全局唯一**，界面显示**路径**消歧义。
+- **名字允许重名**（用户 2026-09-21 追加定案「允许重名」）：只要求**同一父下不重名**
+  —— 于是可以有「高数 / 作业」和「英语 / 作业」；
+  为了做到这件事，任务与分组的关联**改成按 id**（`task_groups.group_id` 本来就是 id，
+  变的是上面这层 API 不再用名字当标识）；界面显示**路径**（`高数 / 作业`）就够分辨了。
 """
 
 from __future__ import annotations
@@ -24,6 +27,15 @@ MAX_GROUP_DEPTH = 3
 
 def _now() -> str:
     return date.today().isoformat()
+
+
+def _find_sibling(conn: sqlite3.Connection, name: str, parent_id: str | None) -> str | None:
+    """同一个父下有没有同名分组（有 → 返回它的 id）。**跨父不算重名**（T-F10 允许重名）。"""
+    row = conn.execute(
+        "SELECT id FROM groups WHERE name = ? AND COALESCE(parent_id, '') = COALESCE(?, '')",
+        (name, parent_id),
+    ).fetchone()
+    return str(row["id"]) if row else None
 
 
 def _parent_of(conn: sqlite3.Connection, group_id: str) -> str | None:
@@ -77,8 +89,8 @@ def _would_cycle(conn: sqlite3.Connection, group_id: str, parent_id: str | None)
 def create_group(conn: sqlite3.Connection, name: str, parent_id: str | None = None) -> str:
     """新建分组（`parent_id=None` = 顶层），返回分组 id。
 
-    - 同名分组复用（UNIQUE）——**这是老行为**：按名字建分组本来就是"没有就建、有就用"
-      （界面勾选分组时会自动建）。若要挂到别的父下，用 `set_group_parent` 移过去。
+    - **同一个父下**同名分组复用（"没有就建、有就用"的老方便，界面勾选分组时会自动建）；
+      **换个父就是另一个分组**（T-F10 允许重名）——不会把别处的同名分组悄悄搬过来。
     - 父分组不存在 → KeyError；超过 `MAX_GROUP_DEPTH` 层 → ValueError（不静默截断）。
     """
     name = name.strip()
@@ -91,10 +103,9 @@ def create_group(conn: sqlite3.Connection, name: str, parent_id: str | None = No
                 f"分组最多 {MAX_GROUP_DEPTH} 层："
                 f"不能在「{group_path(conn, parent_id)}」下再建子分组"
             )
-    row = conn.execute("SELECT id FROM groups WHERE name = ?", (name,)).fetchone()
-    if row:
-        # 同名分组已存在 → 复用它（老口径"没有就建、有就用"），但**不偷偷改它的父**
-        return str(row["id"])
+    same = _find_sibling(conn, name, parent_id)
+    if same:
+        return same
     gid = uuid.uuid4().hex[:12]
     conn.execute(
         "INSERT INTO groups (id, name, parent_id, created_at) VALUES (?,?,?,?)",
@@ -206,9 +217,11 @@ def _subtree_height(conn: sqlite3.Connection, group_id: str) -> int:
 
 
 def rename_group(conn: sqlite3.Connection, group_id: str, name: str) -> dict[str, object]:
-    """重命名分组（OP-11）。改名到已有名字视为与那个分组合并（幂等，不报错）。
+    """重命名分组（OP-11）。改成**同一个父下**已有的名字 = 与那个分组合并（幂等，不报错）。
 
     改名为空 → ValueError；分组不存在 → KeyError。
+    T-F10（允许重名）之后：改成一个"别处（别的父下）已经有的名字"**是允许的**（就是重名），
+    只有**同层撞名**才触发合并。
     嵌套相关的两条边界：**有子分组的分组不能"合并"进别的组**（子分组会失去父，
     变成悄悄上浮）；**不能合并进自己的子孙**（成环）。两条都 ValueError，不静默乱改。
     """
@@ -218,9 +231,9 @@ def rename_group(conn: sqlite3.Connection, group_id: str, name: str) -> dict[str
     current = get_group(conn, group_id)  # 不存在就抛 KeyError
     if current["name"] == name:
         return current
-    dup = conn.execute("SELECT id FROM groups WHERE name = ?", (name,)).fetchone()
-    if dup and str(dup["id"]) != group_id:
-        target = str(dup["id"])
+    dup = _find_sibling(conn, name, current["parent_id"])  # type: ignore[arg-type]
+    if dup and dup != group_id:
+        target = dup
         if _would_cycle(conn, group_id, target):
             raise ValueError("不能合并进自己的子分组（会成环）")
         if _has_children(conn, group_id):
@@ -273,25 +286,29 @@ def delete_group(conn: sqlite3.Connection, group_id: str) -> int:
 
 
 def groups_of_task(conn: sqlite3.Connection, task_id: str) -> list[str]:
-    """任务所属分组名（`get_task_groups` 的别名，语义更直白）。"""
-    return get_task_groups(conn, task_id)
+    """任务所属分组的**路径**（`task_group_paths` 的别名，语义更直白）。"""
+    return task_group_paths(conn, task_id)
 
 
 def toggle_task_group(
-    conn: sqlite3.Connection, task_id: str, name: str, on: bool
+    conn: sqlite3.Connection, task_id: str, group_id: str, on: bool
 ) -> list[str]:
-    """把任务加入/移出某个分组（按名字，缺分组时自动建）。返回改动后的分组名列表。"""
-    name = name.strip()
-    if not name:
-        raise ValueError("分组名不能为空")
-    names = get_task_groups(conn, task_id)
+    """把任务加入/移出某个分组（**按分组 id** —— T-F10 起名字可以重名，名字不能再当标识）。
+
+    分组不存在 → KeyError（不静默建一个"差不多"的分组出来）。返回改动后的**路径**列表。
+    """
+    gid = str(group_id or "").strip()
+    if not gid:
+        raise ValueError("要指定分组 id")
+    get_group(conn, gid)  # 不存在就抛 KeyError
+    current = task_group_ids(conn, task_id)
     if on:
-        if name not in names:
-            names.append(name)
+        if gid not in current:
+            current.append(gid)
     else:
-        names = [n for n in names if n != name]
-    set_task_groups(conn, task_id, names)
-    return get_task_groups(conn, task_id)
+        current = [x for x in current if x != gid]
+    set_task_groups(conn, task_id, current)
+    return task_group_paths(conn, task_id)
 
 
 def tasks_in_group(conn: sqlite3.Connection, group_id: str) -> list[str]:
@@ -302,11 +319,22 @@ def tasks_in_group(conn: sqlite3.Connection, group_id: str) -> list[str]:
     return [str(r["task_id"]) for r in rows]
 
 
-def set_task_groups(conn: sqlite3.Connection, task_id: str, names: list[str]) -> None:
-    """把任务关联到一组分组名（按名字解析分组，自动建缺失的）。覆盖式。"""
+def set_task_groups(conn: sqlite3.Connection, task_id: str, group_ids: list[str]) -> None:
+    """把任务关联到一组分组（**按 id**，覆盖式）。
+
+    分组不存在 → KeyError（先 `create_group` 再关联是调用方的事 —— 不在这里偷偷建，
+    免得一个笔误就多出一个分组）。
+    """
+    ids: list[str] = []
+    for gid in group_ids:
+        key = str(gid or "").strip()
+        if not key:
+            continue
+        get_group(conn, key)  # 不存在就抛 KeyError
+        if key not in ids:
+            ids.append(key)
     conn.execute("DELETE FROM task_groups WHERE task_id = ?", (task_id,))
-    for name in names:
-        gid = create_group(conn, name)
+    for gid in ids:
         conn.execute(
             "INSERT OR IGNORE INTO task_groups (task_id, group_id) VALUES (?,?)",
             (task_id, gid),
@@ -314,11 +342,27 @@ def set_task_groups(conn: sqlite3.Connection, task_id: str, names: list[str]) ->
     conn.commit()
 
 
-def get_task_groups(conn: sqlite3.Connection, task_id: str) -> list[str]:
-    """返回任务关联的分组名列表。"""
+def task_group_ids(conn: sqlite3.Connection, task_id: str) -> list[str]:
+    """任务所属分组 id 列表（按路径排序）—— 界面勾选状态就靠它。"""
     rows = conn.execute(
-        "SELECT g.name FROM groups g JOIN task_groups tg ON tg.group_id = g.id "
-        "WHERE tg.task_id = ? ORDER BY g.name",
+        "SELECT g.id, g.name, g.parent_id FROM groups g JOIN task_groups tg ON tg.group_id = g.id "
+        "WHERE tg.task_id = ?",
         (task_id,),
     ).fetchall()
-    return [r["name"] for r in rows]
+    items = [(str(r["id"]), group_path(conn, str(r["id"]))) for r in rows]
+    return [gid for gid, _ in sorted(items, key=lambda x: x[1])]
+
+
+def task_group_paths(conn: sqlite3.Connection, task_id: str) -> list[str]:
+    """任务所属分组的**路径**列表（`高数 / 作业`）—— 重名之后名字分不清是哪一层，
+    路径才是能认的那一个（同一父下不重名 ⇒ 路径唯一）。"""
+    return [group_path(conn, gid) for gid in task_group_ids(conn, task_id)]
+
+
+def task_group_entries(conn: sqlite3.Connection, task_id: str) -> list[dict[str, object]]:
+    """任务所属分组：`[{id, name, path}]`（按路径排序）—— 界面同时要 id（勾选）与路径（显示）。"""
+    out: list[dict[str, object]] = []
+    for gid in task_group_ids(conn, task_id):
+        g = get_group(conn, gid)
+        out.append({"id": gid, "name": g["name"], "path": g["path"]})
+    return out

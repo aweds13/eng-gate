@@ -1627,6 +1627,25 @@ evidence = [
 ]
 gaps = ""
 
+[entries."T-F10"]
+id = "T-F10"
+title = "F 批：分组名允许重名（同层唯一）+ 任务归属改按 id（schema v15）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/storage/db.py::def _migrate_v15",
+  "text:src/timeflow/storage/db.py::idx_groups_sibling",
+  "text:src/timeflow/core/tasks/groups.py::def _find_sibling",
+  "text:src/timeflow/core/tasks/groups.py::def task_group_ids",
+  "text:src/timeflow/core/tasks/groups.py::def task_group_entries",
+  "text:src/timeflow/api/app.py::group_ids: list[str] = []",
+  "route:POST /api/tasks/{task_id}/group",
+  "ui:data-action=task-group",
+  "test:test_task_group_names_line.py",
+]
+gaps = ""
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"

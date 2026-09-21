@@ -191,10 +191,12 @@ def group_insights(
     buckets: dict[str, dict[str, float]] = {}
     for tid, seconds in per_task.items():
         try:
-            names = tm.get_task_groups(conn, tid)
+            # 按分组的**路径**归集（T-F10 起分组可重名："作业" 可能出现在两处，
+            # 名字当桶键会把两个不同的分组混成一格）
+            paths = tm.task_group_paths(conn, tid)
         except KeyError:  # 任务被彻底清理：仍如实计入「未分组」
-            names = []
-        for name in names or ["未分组"]:
+            paths = []
+        for name in paths or ["未分组"]:
             slot = buckets.setdefault(name, {"sec": 0.0, "tasks": 0.0})
             slot["sec"] += seconds
             slot["tasks"] += 1

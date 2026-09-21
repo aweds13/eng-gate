@@ -229,7 +229,7 @@ const ACTIONS = {
   'group-sub':      el => addSubgroup(el.dataset.id, el.dataset.name || ''),
   // 分组换父（T-F5 嵌套）：下拉改一下就落库，成环/超层数由后端 400 带原话
   'group-parent':   el => setGroupParent(el.dataset.id, el.value),
-  'task-group':     el => toggleTaskGroup(el.dataset.id, el.dataset.name || '', el.dataset.on === 'true'),
+  'task-group':     el => toggleTaskGroup(el.dataset.id, el.dataset.group || '', el.dataset.on === 'true'),
   // 子任务（OP-12）
   'subtask-add':    () => addSubtask(),
   'subtask-due':    el => setSubtaskDue(el.dataset.id, el.value),
@@ -434,9 +434,11 @@ function paintRail(mySeq){
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
 }
 // 详情面板用的分组列表：优先用缓存，没缓存过就退回"任务已有的分组"
+// （`groups` 是路径、`group_ids` 是 id，两者同序 —— 后端都按路径排序；退回时至少还能显示，勾选靠 id）
 function groupsOf(t){
   if(groupCache.length)return groupCache;
-  return (t.groups||[]).map(name=>({id:'',name,task_count:0}));
+  const paths=t.groups||[], ids=t.group_ids||[];
+  return paths.map((path,i)=>({id:ids[i]||'',name:path,path,task_count:0}));
 }
 async function showDetail(id){
   detailTaskId=id;
@@ -522,23 +524,19 @@ async function deleteGroup(id,name){
   }catch(e){/* api() 已经弹过后端原话（下面还有子分组，先处理它们） */}
 }
 // 任务详情里勾选/取消所属分组：按钮显示当前是否属于该分组。
-// 显示**路径**（T-F5）—— 嵌套之后光看名字分不清是哪一层的分组；勾选仍按名字（老口径不变）。
-function groupChips(groups,assigned){
-  const inGroup=new Set(assigned||[]);
+// 显示**路径**（T-F5）、勾选按**id**（T-F10：名字允许重名，光看名字分不清是哪一层的分组）。
+function groupChips(groups,assignedIds){
+  const inGroup=new Set(assignedIds||[]);
   return groups.map(g=>{
-    const on=inGroup.has(g.name);
+    const on=!!g.id&&inGroup.has(g.id);
     return `<button class="${on?'':'ghost'}" data-action="task-group" data-id="${detailTaskId}"
-      data-name="${esc(g.name)}" data-on="${on}">${on?'✓ ':''}${esc(g.path||g.name)}</button>`;
+      data-group="${esc(g.id||'')}" data-on="${on}"
+      ${g.id?'':'disabled title="分组列表还没加载出来，刷新一下就能勾选"'}>${on?'✓ ':''}${esc(g.path||g.name)}</button>`;
   }).join('');
 }
-// 分组名 → 路径（列表卡片上的徽标用；缓存里没有就退回名字本身，绝不编一个路径出来）
-function groupPath(name){
-  const hit=(groupCache||[]).find(g=>g.name===name);
-  return hit&&hit.path?hit.path:name;
-}
-async function toggleTaskGroup(taskId,name,on){
-  await api(`/api/tasks/${taskId}/group`,{method:'POST',body:JSON.stringify({name,on})});
-  toast(on?`已加入分组「${name}」`:`已移出分组「${name}」`);view(current);
+async function toggleTaskGroup(taskId,groupId,on){
+  await api(`/api/tasks/${taskId}/group`,{method:'POST',body:JSON.stringify({group_id:groupId,on})});
+  toast(on?'已加入该分组':'已移出该分组');view(current);
 }
 /* ---------- 子任务（OP-12 / SR-F1.6 / F 批 · T-F4）：拆步 + 联动完成 + 步骤自己的截止日 ----------
  * 联动在后端：最后一个子任务完成时父任务自动完成（已由测试钉住），前端只负责显示与刷新。
@@ -720,7 +718,7 @@ function renderDetail(el,t,facts,tree,cards,attempts){
     ${t.note?`<div class="settings-sub">备注</div><div class="sub" style="white-space:pre-wrap">${esc(t.note)}</div>`:''}`}
     ${asg}
     <div class="settings-sub">所属分组</div>
-    <div class="row tight" id="detailGroups" data-task="${t.id}">${groupChips(groupsOf(t),(t.groups||[]))}</div>
+    <div class="row tight" id="detailGroups" data-task="${t.id}">${groupChips(groupsOf(t),(t.group_ids||[]))}</div>
     ${detailEditing?'':taskAttachHTML(t)}
     ${rcards.length?`<div class="settings-sub">复习卡（${rcards.length}）</div>
       ${rcards.map(c=>`<div class="fact"><span class="badge">复习卡</span>
@@ -889,7 +887,7 @@ function taskCard(t,isOverdue){
   return `<div class="card ${isDone?'done':''} ${late?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(groupPath(g))}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}</div>
+    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}</div>
     <div class="row">
       ${doingButtonHTML(t)}
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}

@@ -132,7 +132,7 @@ def test_purge_deleted_tasks_clears_recycle_bin(conn: sqlite3.Connection) -> Non
 
 def test_purge_also_clears_group_links(conn: sqlite3.Connection) -> None:
     t = tm.create_task(conn, "带分组的任务")
-    tm.set_task_groups(conn, t.id, ["学习"])
+    tm.set_task_groups(conn, t.id, [tm.create_group(conn, "学习")])
     tm.delete_task(conn, t.id)
     tm.purge_task(conn, t.id)
 

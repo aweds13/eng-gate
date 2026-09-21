@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -172,6 +172,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v12(conn)  # 同上：review_items.task_id 由本版加列
     _migrate_v13(conn)  # 同上：tasks.doing_rank 由本版加列
     _migrate_v14(conn)  # 同上：groups.parent_id 由本版加列（分组可嵌套）
+    _migrate_v15(conn)  # 同上：groups 去掉全局 UNIQUE(name)（允许重名），改按"同父下唯一"
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -749,5 +750,55 @@ def _migrate_v14(conn: sqlite3.Connection) -> None:
       同名，同一个名字就指不回是哪一个 —— 要放开得先把成员关系改成按 id，那是另一张卡的事。
       所以子分组名也要唯一，界面里显示**路径**（`高数 / 第三章`）避免歧义；
     - 老数据全为 NULL（都是顶层分组，行为不变）；幂等加列，缺表跳过不失败。
+
+    ⚠️ 上面那条"全局唯一"已被 **v15 放开**（用户 2026-09-21 定「允许重名」）：
+    成员关系改按 id 存之后，重名不再有歧义，只保留"同一父下不能重名"。
     """
     _add_column_if_missing(conn, "groups", "parent_id", "parent_id TEXT")
+
+
+def _migrate_v15(conn: sqlite3.Connection) -> None:
+    """v15：分组名**允许重名**（同一父下仍唯一）—— 重建 `groups` 表，去掉全局 `UNIQUE(name)`。
+
+    口径（用户 2026-09-21 定：「允许重名」）：要能有「高数 / 作业」和「英语 / 作业」。
+    老约束是 `name TEXT NOT NULL UNIQUE`（全局唯一），而"任务属于哪些分组"当时是**按名字**存的
+    （`get_task_groups` 返回名字、界面按 `data-name` 勾选）—— 名字一重复就指不回是哪一个。
+    所以这一版**两件事一起做**：去掉全局唯一 + 成员关系改按 **id**（见 `groups.py`）。
+    保留下来的约束是**同一父下不能重名**（`COALESCE(parent_id,'')` 上的唯一索引）：
+    同层两个一模一样的名字没有任何用处，只会让人选错。
+
+    怎么做：SQLite 改不了约束，只能重建表（`ALTER ... RENAME` + 建新表 + 拷数据 + 删旧表）。
+    - 幂等判据：`PRAGMA index_list(groups)` 里还有没有**由 UNIQUE 约束自动生成的索引**
+      （`origin='u'`）；重建之后只剩我们自己建的表达式索引（`origin='c'`）→ 再跑一次会跳过。
+    - 先确保 `parent_id` 存在（v14 已加；残缺库可能没有），免得拷数据时列不存在。
+    - 没有外键约束引用 groups（`task_groups` 只存 id 字符串），重建不影响别处。
+    """
+    _add_column_if_missing(conn, "groups", "parent_id", "parent_id TEXT")
+    auto = [
+        str(r["name"])
+        for r in conn.execute("PRAGMA index_list(groups)").fetchall()
+        if str(r["origin"]) == "u"
+    ]
+    if auto:
+        conn.execute("ALTER TABLE groups RENAME TO groups_old_v15")
+        conn.execute(
+            """
+            CREATE TABLE groups (
+                id          TEXT PRIMARY KEY,
+                name        TEXT NOT NULL,
+                parent_id   TEXT,
+                created_at  TEXT
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO groups (id, name, parent_id, created_at) "
+            "SELECT id, name, parent_id, created_at FROM groups_old_v15"
+        )
+        conn.execute("DROP TABLE groups_old_v15")
+    # 同层不重名（`COALESCE` 是因为 SQLite 的唯一索引把多个 NULL 当互不相同 ——
+    # 不套 COALESCE 的话"两个同名顶层分组"就漏过去了）
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_sibling "
+        "ON groups(COALESCE(parent_id, ''), name)"
+    )
