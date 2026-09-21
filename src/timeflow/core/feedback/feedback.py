@@ -208,10 +208,11 @@ def self_check(conn: sqlite3.Connection, today: str | None = None) -> dict[str, 
     week_minutes = sum(
         fc.focus_minutes_from_facts(conn, d) for d in days if d <= t
     )
-    # 逾期任务数（债务）
+    # 逾期任务数（债务）—— T-F9 起是**卡的张数**（父任务一张卡、逾期的子孙挂在下面），
+    # 与账本/洞察同一个读数，免得周结算说 3 项、顶部摘要说 5 项
     from timeflow.core import tasks as tm
 
-    debt = len(tm.overdue_tasks(conn, t))
+    debt = tm.debt_count(conn, t)
     # 本周习惯打卡数
     habit_done = conn.execute(
         "SELECT COUNT(*) FROM habit_logs WHERE date >= ? AND done = 1", (week_start,)

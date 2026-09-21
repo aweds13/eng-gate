@@ -1541,11 +1541,23 @@ gaps = ""
 
 [entries."T-F9"]
 id = "T-F9"
-title = "F 批（待定口径）：带截止日的子步骤算不算独立一笔债"
+title = "F 批：债务里建「父任务状态卡」，逾期的子孙挂在卡下面"
 group = "PROCESS"
-status = "todo"
-evidence = ["file:复盘/口径定案-待定清单.md"]
-gaps = "T-F4 让子步骤能设截止日之后暴露出来的口径问题：`overdue_tasks()` **不过滤 `parent_id`**，所以一个带过期截止日的子步骤会**单独进逾期栏、单独算一笔债**（`debt_count`），而它所属的父任务可能也有截止日 → 同一件事在债务里可能出现两次（父任务 + 这一步）。**属产品判断**：A 算（它确实是「该做的一件事」，而且父任务经常没有截止日，步骤的日期就是唯一的日期）／B 不算（债务只算顶层任务，子步骤只在父任务卡上体现）／C 只出现在逾期栏但不计入 `debt_count`。**不替用户定**，登记待定。"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/core/tasks/manager.py::class DebtGroup",
+  "text:src/timeflow/core/tasks/manager.py::def _debt_root",
+  "text:src/timeflow/core/tasks/manager.py::def debt_groups",
+  "text:src/timeflow/core/tasks/manager.py::def debt_count",
+  "text:src/timeflow/core/ledger/ledger.py::class DebtStep",
+  "text:src/timeflow/core/ledger/ledger.py::for card in tm.debt_groups(conn, t)",
+  "text:src/timeflow/core/insights.py::debt_count=tm.debt_count(conn, day)",
+  "text:src/timeflow/core/feedback/feedback.py::debt = tm.debt_count(conn, t)",
+  "text:src/web/index.html::const debtRow=",
+  "test:test_task_debt_card_line.py",
+]
+gaps = ""
 
 [entries."T-F5"]
 id = "T-F5"
@@ -1610,7 +1622,7 @@ evidence = [
   "text:src/timeflow/core/tasks/manager.py::def _is_stale_undated_myday",
   "text:src/timeflow/core/tasks/manager.py::if _is_stale_undated_myday(task, t_date)",
   "text:src/timeflow/core/tasks/manager.py::return (today_d - created).days",
-  "text:src/timeflow/core/ledger/ledger.py::逾期栏里**每一条**都算得出天数",
+  "text:src/timeflow/core/ledger/ledger.py::debt_count=len(items)",
   "test:test_task_overdue_line.py",
 ]
 gaps = ""

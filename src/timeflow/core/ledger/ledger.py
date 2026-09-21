@@ -14,11 +14,26 @@ if TYPE_CHECKING:
     import sqlite3
 
 
-class DebtItem(BaseModel):
+class DebtStep(BaseModel):
+    """挂在债务卡下面的一步（T-F9）：标题 + 逾期天数 + 程度分档。"""
+
     title: str
-    due_date: str  # 无截止日的债务为 ""（My Day 老账，天数从创建日算起，T-F8）
     overdue_days: int
     degree: str  # 轻 / 中 / 重
+
+
+class DebtItem(BaseModel):
+    """债务里的一张卡（T-F9）：**父任务**一张卡，逾期的子孙挂在 `steps` 下面。
+
+    `overdue_days` = 这张卡欠得最狠的那一项（父任务自己的天数与挂着的步取最大，
+    **不做折算** —— 约定层：债务 = 逾期天数/程度）。
+    """
+
+    title: str
+    due_date: str  # 无截止日的债务为 ""（My Day 老账 / 天数来自挂着的步骤）
+    overdue_days: int
+    degree: str  # 轻 / 中 / 重
+    steps: list[DebtStep] = []  # 挂在这一卡下面的逾期子孙（按天数降序）
 
 
 class LedgerSummary(BaseModel):
@@ -114,7 +129,8 @@ def weekly_summary(conn: sqlite3.Connection, week_of: str | None = None) -> Week
         gains |= _gained_subjects(conn, day)
 
     manual_sec = sum(_manual_seconds(conn, day) for day in days)
-    debt = len(tm.overdue_tasks(conn, end))
+    # 债务 = **卡的张数**（T-F9：父任务一张卡、逾期的子孙挂在下面），不是逾期条目的条数
+    debt = tm.debt_count(conn, end)
     active_days = sum(1 for p in points if p.focus_minutes > 0)
     variation, gap = _rhythm(points)
 
@@ -292,24 +308,32 @@ def summary(
     事实来源：`facts` 表；按 occurred_at 归属当日，只读事实层（R1）。
     """
     t = today or date.today().isoformat()
+    # 债务明细 = **一张张卡**（T-F9，用户 2026-09-21 定：「可以在债务那里，
+    # 建个父任务状态卡，然后挂」）：逾期的东西归到还活着的父任务上，
+    # 父任务一张卡、逾期的子孙挂在 `steps` 下面。
+    # 于是"大任务 + 它的某一步"只占一张卡（不再父一条、子一条），
+    # `debt_count` = 卡的张数 = `len(debt_items)`，计数与明细仍然同源（T-F8 立的规矩）。
     items: list[DebtItem] = []
-    for task in tm.overdue_tasks(conn, t):
-        # 逾期天数**只在领域层算一处**（T-F7）：这里以前自己再减一次日期，
-        # 于是"详情面板说未开始、账本说逾期 3 天"这种口径分叉就有机会发生。
-        # T-F8 起逾期栏里**每一条**都算得出天数（无截止日的 My Day 老账从创建日算起），
-        # 所以「`debt_count` = 明细条数」成立；这个 `<= 0` 只是防御（真触发就是两者又分叉了）。
-        days = tm.overdue_days(task, t)
+    for card in tm.debt_groups(conn, t):
+        days = card.overdue_days
         if days <= 0:
-            continue
+            continue  # 防御：真触发就是"归卡"与"算天数"两处又分叉了
         items.append(
             DebtItem(
-                title=task.title,
-                due_date=task.due_date or "",
+                title=card.root.title,
+                due_date=card.root.due_date or "",
                 overdue_days=days,
                 degree=_degree(days, mild, medium),
+                steps=[
+                    DebtStep(
+                        title=step.task.title,
+                        overdue_days=step.overdue_days,
+                        degree=_degree(step.overdue_days, mild, medium),
+                    )
+                    for step in card.steps
+                ],
             )
         )
-    items.sort(key=lambda x: x.overdue_days, reverse=True)
     # 投入：今日已完成的专注事实（第 1 步：读 facts，按完成时刻归属当日）
     finished_today = facts_mod.query(
         conn,

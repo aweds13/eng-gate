@@ -228,7 +228,9 @@ def _cell(conn: sqlite3.Connection, day: str) -> HeatmapCell:
         manual_minutes=round(_manual_seconds(conn, day) / 60.0, 1),
         review_count=len(_review_subjects(conn, day)),
         output_count=len(_output_entries(conn, day)),
-        debt_count=len(tm.overdue_tasks(conn, day)),
+        # 债务 = **卡的张数**（T-F9：父任务一张卡、逾期的子孙挂在下面）——
+        # 与账本/周结算同一个读数（`tm.debt_count`），三处各算一套就会互相打脸
+        debt_count=tm.debt_count(conn, day),
     )
 
 

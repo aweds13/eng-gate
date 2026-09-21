@@ -184,8 +184,12 @@ const DB = {
   // 任务 → 复习卡（T-C5）：详情面板要显示"这张任务升级出来的卡"
   '/api/tasks/t1/review-cards': [{ id: 'r1', title: '探针复习卡', due_date: '2026-09-20T00:00:00',
     form: 'qa', source: 'internal', ref_handle: 'notes/数学.md', task_id: 't1' }],
-  '/api/summary': { debt_count: 0, invest_hours: 0, manual_hours: 0, review_count: 0, output_count: 0,
-    output_kpi: 2, output_asset: 3 },
+  // 债务卡（F 批 · T-F9）：数字 = 卡的张数；每张卡是**还活着的父任务**，逾期的子孙挂在它后面。
+  // 这里造一张"父任务 9 天 + 挂着的第 2 题 4 天"的卡，看界面是不是真按"卡 + 挂"渲染。
+  '/api/summary': { debt_count: 1, invest_hours: 0, manual_hours: 0, review_count: 0, output_count: 0,
+    output_kpi: 2, output_asset: 3,
+    debt_items: [{ title: '高数作业', due_date: '2026-09-10', overdue_days: 9, degree: '重',
+      steps: [{ title: '第 2 题', overdue_days: 4, degree: '中' }] }] },
   // 今天做成了什么（T-C11）：三个可展开项都要真渲染一遍（含父任务分组与进度）
   '/api/today/done': {
     date: '2026-09-19',
@@ -281,6 +285,7 @@ let overdueBad = 0;
 let attemptBad = 0;
 let archiveBad = 0;
 let stepBad = 0;
+let debtBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -538,6 +543,27 @@ for (const [where, needs] of [
   }
 }
 
+// 债务卡（F 批 · T-F9）：日常视图里 "逾期共 N 项" 后面要是**父任务卡 + 挂在它下面的步**，
+// 而不是把每一步都当成一条独立债务（那是用户明确不要的）。
+const debtChecks = [];
+try {
+  byId.get('main')._html = '';
+  await globalThis.__view('today');
+  await sleep(30);
+  const html = byId.get('main')._html;
+  const needs = ['逾期共 1 项', '高数作业(重·9天)', '第 2 题(中·4天)'];
+  const missing = needs.filter((n) => !html.includes(n));
+  const rendered = missing.length === 0;
+  if (!rendered) debtBad++;
+  debtChecks.push({ rendered, missing });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 今日·债务卡 main ${String(html.length).padStart(6)}B`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  debtBad++;
+  debtChecks.push({ error: e.message });
+  console.log(`  ❌ 今日·债务卡 渲染抛错: ${e.message}`);
+}
+
 // 「尝试失败」（F 批 · T-F3）：详情要显示「试了 N 回」+ 历次说明 + 入口按钮。
 // 只认显式点击这件事在领域层/接口层有测试钉住，这里只管"界面真的把它渲染出来了"。
 const attemptChecks = [];
@@ -569,7 +595,7 @@ if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
     { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
-      attempt: attemptChecks, archive: archiveChecks, step: stepChecks,
+      attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -581,7 +607,7 @@ if (problems.length) {
 }
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
   || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0 || archiveBad > 0
-  || stepBad > 0
+  || stepBad > 0 || debtBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -594,5 +620,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，尝试失败 ${attemptChecks.length - attemptBad}/${attemptChecks.length} 正常`
   + `，档案视图 ${archiveChecks.length - archiveBad}/${archiveChecks.length} 正常`
   + `，子步骤 ${stepChecks.length - stepBad}/${stepChecks.length} 正常`
+  + `，债务卡 ${debtChecks.length - debtBad}/${debtChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

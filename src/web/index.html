@@ -1448,7 +1448,12 @@ async function renderToday(m){
   // 今日完成度：已完成 + 仍在手（取消/归档/已删不算）——只统计"今天的清单与今天完成的"
   const doneTasks=all.filter(t=>t.status==='完成').length;
   const pendingTasks=all.filter(t=>t.status!=='完成').length;
-  const debt=summary.debt_count?`<div class="sub">逾期共 ${summary.debt_count} 项（轻≤3天 / 中≤7天 / 重>7天）：${(summary.debt_items||[]).map(d=>`${esc(d.title)}(${d.degree}·${d.overdue_days}天)`).join('、')}</div>`:'';
+  /* 债务（F 批 · T-F9，用户定："建个父任务状态卡，然后挂"）：
+     数字是**卡的张数**，每一张卡是一个还活着的父任务；它逾期的子孙**挂在卡后面**。
+     所以这里渲染成"父卡（程度·天数）：子步骤（程度·天数）、…" —— 同一件事只占一张卡。 */
+  const debtRow=d=>`${esc(d.title)}(${d.degree}·${d.overdue_days}天)`
+    +((d.steps||[]).length?`：${(d.steps||[]).map(s=>`${esc(s.title)}(${s.degree}·${s.overdue_days}天)`).join('、')}`:'');
+  const debt=summary.debt_count?`<div class="sub">逾期共 ${summary.debt_count} 项（轻≤3天 / 中≤7天 / 重>7天）：${(summary.debt_items||[]).map(debtRow).join('；')}</div>`:'';
   const trash=deleted.length?`<div class="section-title">回收站（软删除，可恢复或彻底删除）</div>
     ${deleted.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div><div class="meta">已删 · 删除于 ${humanTime(t.updated_at)}</div></div>
     <div class="row"><button class="ghost" data-action="task-restore" data-id="${t.id}">恢复</button>

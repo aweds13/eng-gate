@@ -1401,6 +1401,99 @@ def attempt_notes(conn: sqlite3.Connection, task_id: str, limit: int = 20) -> li
     return notes
 
 
+@dataclass
+class DebtStep:
+    """挂在债务卡下面的一步（T-F9）：它自己逾期几天 + 属于哪个任务。"""
+
+    task: Task
+    overdue_days: int
+
+
+@dataclass
+class DebtGroup:
+    """债务里的一张卡（T-F9，用户 2026-09-21 定）：
+
+    「可以在债务那里，建个**父任务状态卡**，然后挂」—— 逾期的东西不再一条条平铺，
+    而是**归到"还在手上的那个父任务"上**：父任务一张卡，它逾期的子孙**挂在卡下面**。
+
+    - `root`：这张卡的父任务（沿父链上溯到**最高一层还活着的祖先**，见 `_debt_root`）；
+    - `own_days`：父任务**自己**逾期几天（0 = 它自己没到点 / 没截止日，天数全来自挂着的步）；
+    - `steps`：挂在它下面的逾期子孙（按天数降序）—— 每一层都挂（子任务、子步骤都算）。
+    """
+
+    root: Task
+    own_days: int
+    steps: list[DebtStep]
+
+    @property
+    def overdue_days(self) -> int:
+        """这张卡"欠了多少天" = 父任务自己的天数与挂着的步里**最狠的那个**（取最大值）。
+
+        为什么取最大而不是相加：卡代表的是"这件事"欠了多久，不是"把几条加起来折算成一条"
+        （约定层：债务 = 逾期天数/程度，**不做折算**）。
+        """
+        return max([self.own_days, *(s.overdue_days for s in self.steps), 0])
+
+
+def _debt_root(conn: sqlite3.Connection, task: Task) -> Task:
+    """沿父链上溯到**最高一层"还在手上"的祖先**（T-F9 的"父任务状态卡"就是它）。
+
+    完成 / 搁置（取消·待定）/ 归档 / 已删的祖先**不配当卡**（"搁置不计债"这条不能被绕过去）——
+    遇到就停在它下面那一层：项目已经取消了，但那一步还欠着，那一张卡就是这一步自己。
+    """
+    root = task
+    guard = {task.id}
+    while root.parent_id and root.parent_id not in guard:
+        guard.add(root.parent_id)
+        try:
+            parent = get_task(conn, root.parent_id)
+        except KeyError:  # 父任务被硬删了：就当它是顶层，不炸
+            break
+        if parent.status == STATUS_DONE or parent.status in PARKED_STATUSES:
+            break
+        if parent.status in HIDDEN_STATUSES:
+            break
+        root = parent
+    return root
+
+
+def debt_groups(conn: sqlite3.Connection, today: str | None = None) -> list[DebtGroup]:
+    """债务卡（T-F9）：把逾期的东西**归到还活着的父任务上**，按"欠得最狠"的排前面。
+
+    口径（用户 2026-09-21 定）：债务里建**父任务状态卡**，逾期的子孙**挂在卡下面** ——
+    于是同一件事（大任务 + 它的某一步过期）在债务里只占**一张卡**，而不是父一条、子一条。
+    `debt_count` = **卡的张数**（不是逾期条目的条数），与明细天然同源。
+
+    逾期的判定本身仍走 `overdue_tasks()` / `overdue_days()`（一处口径）——
+    本函数只负责"归到哪张卡上"，不改"算不算逾期"。
+    """
+    t = today or _today()
+    groups: dict[str, DebtGroup] = {}
+    for task in overdue_tasks(conn, t):
+        days = overdue_days(task, t)
+        if days <= 0:
+            continue
+        root = _debt_root(conn, task)
+        card = groups.get(root.id)
+        if card is None:
+            card = DebtGroup(root=root, own_days=0, steps=[])
+            groups[root.id] = card
+        if root.id == task.id:
+            card.own_days = max(card.own_days, days)
+        else:
+            card.steps.append(DebtStep(task=task, overdue_days=days))
+    cards = list(groups.values())
+    for card in cards:
+        card.steps.sort(key=lambda s: s.overdue_days, reverse=True)
+    cards.sort(key=lambda c: c.overdue_days, reverse=True)
+    return cards
+
+
+def debt_count(conn: sqlite3.Connection, today: str | None = None) -> int:
+    """债务卡张数（T-F9）—— 账本 / 洞察 / 周结算**共用这一个**，免得三处各算一套。"""
+    return len(debt_groups(conn, today))
+
+
 # ---------------------------------------------------------------- 附件 / 要求链接（SR-F1.4 / T-B4）
 def add_attachment(
     conn: sqlite3.Connection,
