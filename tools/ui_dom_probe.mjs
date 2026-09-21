@@ -92,9 +92,30 @@ globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} }
 globalThis.getComputedStyle = () => ({ getPropertyValue: (k) => PALETTE[k] || '' });
 globalThis.AbortController = class { constructor() { this.signal = {}; } abort() {} };
 
+// 假后端里的任务对象：字段与 `TaskOut` 对齐（缺字段会让渲染拿到 undefined，探针就抓不到了）
+function probeTask(over = {}) {
+  return {
+    id: 't0', title: '探针任务', due_date: null, group_name: null, repeat_days: null,
+    parent_id: null, is_myday: false, status: '未开始', created_at: '2026-09-18T10:00:00',
+    updated_at: '2026-09-18T10:00:00', version: 1, groups: [], assignments: [],
+    subtask_done: 0, subtask_total: 0, note: null, priority: '中', flagged: false, attach: [],
+    remind_at: null, reminder_state: null, task_type: '普通', course_id: null, course_name: null,
+    doing_rank: null, ...over,
+  };
+}
+
 const DB = {
   '/api/config': { accent_color: '#3b82f6', theme: 'light', gpa_scale: '4.0' },
-  '/api/mydays': [], '/api/overdue': [], '/api/tasks': [], '/api/tasks/deleted': [],
+  '/api/mydays': [], '/api/overdue': [], '/api/tasks/deleted': [],
+  // 状态机（F 批 · T-F1）：三段都要真渲染出来 ——
+  // 「全部任务」主列表 + 搁置区（待定/取消）+ 档案区（手动归档，可撤销）
+  '/api/tasks': [probeTask({ id: 't2', title: '普通任务', is_myday: false }),
+    probeTask({ id: 'p1', title: '待定的事', status: '待定' }),
+    probeTask({ id: 'x1', title: '取消的事', status: '取消' })],
+  // 「正在做」：**可以同时多个**，各带自己的顺序号（↑↓ 用 `doing_rank` 排）
+  '/api/tasks/doing': [probeTask({ id: 'd1', title: '写高数作业', status: '进行中', doing_rank: 1 }),
+    probeTask({ id: 'd2', title: '背单词', status: '进行中', doing_rank: 2 })],
+  '/api/tasks/archived': [probeTask({ id: 'a9', title: '归档的事', status: '归档' })],
   // 到点提醒（T-B5）：今日页「该提醒了」区用它
   '/api/reminders/due': [],
   // 复习线（SR-F6.2 / SR-F6.5 / SR-F8.3）：到期卡非空 —— 卡片态要渲染出「改形式/句柄」按钮
@@ -218,6 +239,7 @@ let doneBad = 0;
 let reviewBad = 0;
 let hardBad = 0;
 let guardBad = 0;
+let stateBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -360,8 +382,32 @@ try {
   console.log(`  ❌ 设置·白名单勿扰+备份 渲染抛错: ${e.message}`);
 }
 
+// 状态机（F 批 · T-F1）：三块新界面各渲染一遍并断言要素真的在 ——
+// 今日「正在做」（多个 + 顺序号 + ↑↓ + 停止）、全部任务「搁置」（待定/取消 + 取回）、「档案」（撤销归档）。
+const stateChecks = [];
+for (const [view, needs] of [
+  ['today', ['正在做（2）', '写高数作业', 'doing-move', 'data-dir="up"', 'data-dir="down"', 'task-stop']],
+  ['tasks', ['搁置', '待定的事', '取消的事', 'task-unpark', '档案', '归档的事', 'task-unarchive']],
+]) {
+  try {
+    byId.get('main')._html = '';
+    await globalThis.__view(view);
+    await sleep(30);
+    const html = byId.get('main')._html;
+    const missing = needs.filter((n) => !html.includes(n));
+    const rendered = missing.length === 0;
+    if (!rendered) stateBad++;
+    stateChecks.push({ view, rendered, missing });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} ${view}·状态机 main ${String(html.length).padStart(6)}B`
+      + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+  } catch (e) {
+    stateBad++;
+    stateChecks.push({ view, error: e.message });
+    console.log(`  ❌ ${view}·状态机 渲染抛错: ${e.message}`);
+  }
+}
+
 try {
-  const body = code.split('const ACTIONS')[1];
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
   for (const a of new Set(CLICK_ACTIONS)) if (!registered.has(a)) unused.push(a);
 } catch { /* 模板里没有 data-action 也不该失败 */ }
@@ -370,7 +416,8 @@ console.warn = realWarn;
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
     { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
-      hard: hardChecks, guard: guardChecks, problems, unregistered: unused }, null, 2));
+      hard: hardChecks, guard: guardChecks, state: stateChecks, problems, unregistered: unused },
+    null, 2));
 }
 if (unused.length) {
   console.log(`  ❌ 模板里用到但未注册的动作：${unused.join(', ')}`);
@@ -379,12 +426,13 @@ if (problems.length) {
   console.log(`  ⚠️  运行时告警/异常：${problems.slice(0, 5).join(' | ')}`);
 }
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
-  || guardBad > 0 || unused.length > 0 || problems.length > 0;
+  || guardBad > 0 || stateBad > 0 || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
   + `，今日完成明细展开 ${doneChecks.length - doneBad}/${doneChecks.length} 正常`
   + `，复习卡编辑态 ${reviewChecks.length - reviewBad}/${reviewChecks.length} 正常`
   + `，硬考核强呈现 ${hardChecks.length - hardBad}/${hardChecks.length} 正常`
   + `，白名单勿扰 ${guardChecks.length - guardBad}/${guardChecks.length} 正常`
+  + `，状态机 ${stateChecks.length - stateBad}/${stateChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

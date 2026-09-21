@@ -3,7 +3,8 @@
 覆盖：
 - 完成/撤销各发一条事实，且主体指向任务；
 - 幂等：重复完成、重复撤销不重复发；
-- 只对「完成 ↔ 非完成」跃迁发事实（普通状态流转不记账）；
+- 只对「完成 ↔ 非完成」跃迁发**账本**事实；普通状态流转只留 `task.status_changed`（T-F1 起，
+  为「任务存档/过去尝试」留痕，但**不进账本**）；
 - 完成不折算时间（value_num 为空），投入口径仍由专注事实承担（SR-F2 R2）；
 - 账本只从 facts 读，任务事实不得干扰投入口径；
 - API 路径 `/complete`、`/uncomplete`、`/facts` 全链路。
@@ -105,13 +106,22 @@ def test_uncomplete_rejects_done_restore(conn: sqlite3.Connection) -> None:
         tm.uncomplete_task(conn, t.id, restore_status=tm.STATUS_DONE)
 
 
-def test_other_status_changes_do_not_record_facts(conn: sqlite3.Connection) -> None:
+def test_other_status_changes_record_status_fact_only(conn: sqlite3.Connection) -> None:
+    """搁置类状态变化只留 `task.status_changed`，**不进账本**（T-F1 改的口径）。
+
+    口径变更说明（2026-09-21，F 批 · T-F1）：本条以前断言"其它状态变化**一条事实都不记**"。
+    用户给的状态机设计要求「过去做过什么/什么时候搁置的要能追溯」（N11 任务存档），
+    所以现在会记一条状态变化事实（`task.status_changed`，带 from/to）——
+    但**账本口径没变**：债务只看 `overdue_tasks`，这些动作不产生任何账目；
+    改普通字段（如 `is_myday`）依旧什么都不记。
+    """
     t = tm.create_task(conn, "G")
     tm.update_task(conn, t.id, status=tm.STATUS_DOING)
     tm.update_task(conn, t.id, status=tm.STATUS_CANCELLED)
     tm.update_task(conn, t.id, is_myday=True)
 
-    assert facts_mod.count(conn, kind="task.") == 0
+    rows = facts_mod.query(conn, kind="task.", subject_type="task", subject_id=t.id)
+    assert [f["kind"] for f in rows] == ["task.status_changed", "task.status_changed"]
 
 
 def test_publish_task_completed_event(conn: sqlite3.Connection) -> None:

@@ -72,7 +72,7 @@ evidence = [
   "route:GET /api/tasks",
   "column:tasks.flagged",
   "text:src/timeflow/core/tasks/manager.py::def tasks_in_view",
-  "text:src/web/index.html::全部任务（${all.length}）",
+  "text:src/web/index.html::全部任务（${live.length}）",
   "ui:view=important",
   "ui:view=planned",
   "ui:view=flagged",
@@ -131,7 +131,18 @@ id = "SR-F1.4b"
 title = "状态流转：未开始/进行中/完成/逾期/取消/归档"
 group = "F1"
 status = "done"
-evidence = ["text:src/timeflow/core/tasks/manager.py::未开始", "text:src/timeflow/core/tasks/manager.py::归档", "text:src/timeflow/core/tasks/manager.py::VALID_STATUS"]
+evidence = [
+  "text:src/timeflow/core/tasks/manager.py::VALID_STATUS",
+  "text:src/timeflow/core/tasks/manager.py::def start_task",
+  "text:src/timeflow/core/tasks/manager.py::def park_task",
+  "text:src/timeflow/core/tasks/manager.py::def archive_task",
+  "text:src/timeflow/core/tasks/manager.py::def unarchive_task",
+  "route:POST /api/tasks/{task_id}/start",
+  "route:POST /api/tasks/{task_id}/archive",
+  "text:src/web/index.html::function stateButtonsHTML(",
+  "file:复盘/口径定案-待定清单.md",
+  "test:test_task_status_line.py",
+]
 gaps = ""
 
 [entries."SR-F1.5a"]
@@ -1430,9 +1441,36 @@ gaps = ""
 id = "T-F1"
 title = "F 批：状态机 —— 新增「待定」+ 补「归档」「进行中」入口"
 group = "PROCESS"
-status = "todo"
-evidence = ["file:复盘/口径定案-待定清单.md"]
-gaps = "**口径已定**（`复盘/口径定案-待定清单.md` §1）：加「待定」进状态词表（**不计债**、不提醒、默认视图可见 —— 行为同「取消」）；「归档」「进行中」现在**代码里从来没有任何地方会写**，要补动作与入口。改约定层状态词表（那次是人定的，已写进决策记录）。**待实现**"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "column:tasks.doing_rank",
+  "text:src/timeflow/core/tasks/manager.py::def start_task",
+  "text:src/timeflow/core/tasks/manager.py::def park_task",
+  "text:src/timeflow/core/tasks/manager.py::def archive_task",
+  "text:src/timeflow/core/tasks/manager.py::def move_doing",
+  "text:src/timeflow/core/tasks/manager.py::PARKED_STATUSES",
+  "text:src/timeflow/storage/db.py::def _migrate_v13",
+  "text:docs/specification/conventions.md::任务状态 = 未开始/进行中/完成/逾期/取消/归档/待定",
+  "route:GET /api/tasks/doing",
+  "route:GET /api/tasks/archived",
+  "route:POST /api/tasks/{task_id}/start",
+  "route:POST /api/tasks/{task_id}/stop",
+  "route:POST /api/tasks/{task_id}/park",
+  "route:POST /api/tasks/{task_id}/unpark",
+  "route:POST /api/tasks/{task_id}/cancel",
+  "route:POST /api/tasks/{task_id}/archive",
+  "route:POST /api/tasks/{task_id}/unarchive",
+  "route:POST /api/tasks/{task_id}/doing-move",
+  "text:src/web/index.html::function doingSection(",
+  "text:src/web/index.html::function stateButtonsHTML(",
+  "ui:data-action=task-start",
+  "ui:data-action=task-park",
+  "ui:data-action=task-archive",
+  "ui:data-action=doing-move",
+  "test:test_task_status_line.py",
+]
+gaps = ""
 
 [entries."T-F2"]
 id = "T-F2"

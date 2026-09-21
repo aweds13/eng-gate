@@ -220,6 +220,14 @@ const ACTIONS = {
   'task-done':      el => toggleDone(el.dataset.id, el.dataset.done === 'true'),
   'task-undo-done': el => undoDone(el.dataset.id),
   'task-flag':      el => toggleFlag(el.dataset.id),
+  // 状态机（F 批 · T-F1）：进行中 / 待定 / 取消 / 归档 —— 口径见「口径定案-待定清单」§1
+  'task-start':     el => startDoing(el.dataset.id),
+  'task-stop':      el => stopDoing(el.dataset.id),
+  'task-park':      el => parkTask(el.dataset.id),
+  'task-unpark':    el => unparkTask(el.dataset.id),
+  'task-archive':   el => archiveTask(el.dataset.id),
+  'task-unarchive': el => unarchiveTask(el.dataset.id),
+  'doing-move':     el => moveDoing(el.dataset.id, el.dataset.dir || ''),
   // 任务「类型 ↔ 所属课程」（SR-F5.4 / T-C12）：切换类型时同步课程下拉可用性
   'type-course':    () => syncTypeCourse(),
   // 附件 / 要求链接（T-B4）：任务与考核项共用打开规则
@@ -413,7 +421,7 @@ async function showDetail(id){
 function factLabel(kind){
   return kind==='task.completed'?'完成':kind==='task.uncompleted'?'撤销完成':kind==='task.deleted'?'删除'
     :kind==='task.restored'?'恢复':kind==='task.repeat.generated'?'生成下一次':kind==='task.assigned'?'分配'
-    :kind==='task.assignment.status'?'进展':kind;
+    :kind==='task.assignment.status'?'进展':kind==='task.status_changed'?'状态改为':kind;
 }
 /* ---------- 分组（OP-11）：管理 + 任务归属 ----------
  * 分组是"组织维度"，只影响分类与查找，不改变任务执行逻辑（contracts/domains/F1-tasks.md OP-11）。
@@ -542,6 +550,28 @@ async function saveTaskEdit(){
   toast('已保存；逾期与债务已重算，优先级已参与排序');view(current);
 }
 // 右栏详情：任务字段 + 子任务 + 事实流水 + 与列表一致的动作（动作后由 view(current) 统一刷新）
+/* 详情面板里的状态机按钮（T-F1）：这里是"完整入口"，卡片上只放最常用的一两个。
+   已完成的只给「归档」（那是完成的归宿）；**不给「取消」** —— 对已完成的任务按取消
+   等于"撤销完成 + 取消"两件事一起做，会连带回退收益读数，得先撤销完成（后端口径一致）。 */
+function stateButtonsHTML(t){
+  const isDone=t.status==='完成';
+  if(t.status==='归档')
+    return `<button class="ghost" data-action="task-unarchive" data-id="${t.id}">撤销归档</button>`;
+  if(isDone)
+    return `<button class="ghost" data-action="task-archive" data-id="${t.id}">归档</button>`;
+  const btns=[];
+  btns.push(t.status==='进行中'
+    ? `<button class="ghost" data-action="task-stop" data-id="${t.id}">移出进行中</button>`
+    : `<button class="ghost" data-action="task-start" data-id="${t.id}">放进进行中</button>`);
+  if(PARKED.includes(t.status)){
+    btns.push(`<button class="ghost" data-action="task-unpark" data-id="${t.id}">取回</button>`);
+  }else{
+    btns.push(`<button class="ghost" data-action="task-park" data-id="${t.id}">待定</button>`);
+    btns.push(`<button class="ghost" data-action="task-cancel" data-id="${t.id}">取消</button>`);
+  }
+  btns.push(`<button class="ghost" data-action="task-archive" data-id="${t.id}">归档</button>`);
+  return btns.join('');
+}
 function renderDetail(el,t,facts,kids,cards){
   const isDone=t.status==='完成';
   const rcards=cards||[];
@@ -565,7 +595,8 @@ function renderDetail(el,t,facts,kids,cards){
   el.innerHTML=`<div class="panel-title">任务详情${detailEditing?' · 编辑中':''}</div>
     <div class="title">${esc(t.title)}</div>
     ${detailEditing?editForm(t):`<div class="meta">${isDone?`<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
-      状态 ${esc(t.status)}</div>
+      状态 ${esc(t.status)}${t.status==='进行中'&&t.doing_rank?` · 顺序 ${t.doing_rank}`:''}</div>
+    ${detailEditing?'':`<div class="row tight">${stateButtonsHTML(t)}</div>`}
     <div class="meta">截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
     <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'} · 优先级 ${prioBadge(t.priority)} ${flagBadge(t)}</div>
     <div class="meta">类型 ${esc(t.task_type||'普通')}${t.course_id?` · 课程 ${t.course_name?esc(t.course_name):'课程已删'}`:''}</div>
@@ -694,6 +725,20 @@ function syncTypeCourse(){
     ? '「普通」= 与课程无关，不挂课程；要挂课程请把类型改成 作业/考试/论文/小测。'
     : '选了课程就等于说「这件事属于这门课」；课程在学业页新建。';
 }
+// 状态徽标（T-F1）：只有「进行中 / 待定 / 取消 / 归档」才单独标出来 ——
+// 「未开始 / 逾期」由卡片自己的样式（红边 + 逾期栏）表达，不必再挂一枚徽标。
+const STATUS_BADGE={'进行中':'<span class="badge doing">进行中</span>',
+  '待定':'<span class="badge">待定</span>','取消':'<span class="badge">已取消</span>',
+  '归档':'<span class="badge">档案</span>'};
+const PARKED=['待定','取消'];
+/* 卡片上的「在做 / 停止 / 取回」：状态机（T-F1）的快捷入口。
+   「进行中」是**用户自己标的**（可以同时多个），不是系统猜的 —— 所以按钮就摆在卡片上。 */
+function doingButtonHTML(t){
+  if(t.status==='完成'||t.status==='归档')return '';
+  if(t.status==='进行中')return `<button class="ghost" data-action="task-stop" data-id="${t.id}" title="移出「进行中」">停止</button>`;
+  if(PARKED.includes(t.status))return `<button class="ghost" data-action="task-unpark" data-id="${t.id}" title="取回：回到未开始/逾期">取回</button>`;
+  return `<button class="ghost" data-action="task-start" data-id="${t.id}" title="放进「进行中」，方便看清现在在做什么">在做</button>`;
+}
 function taskCard(t,isOverdue){
   const isDone=t.status==='完成';
   const asg=(t.assignments||[]);
@@ -701,7 +746,7 @@ function taskCard(t,isOverdue){
   const asgButtons=asg.map(a=>TEAM_NEXT[a.status]?`<button class="ghost" data-action="team-status" data-id="${a.id}" data-status="${TEAM_NEXT[a.status][0]}">${TEAM_NEXT[a.status][1]}</button>`:'').join('');
   const badge=t.status==='完成'
     ? `<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`
-    : `<span class="badge todo">未完成</span>`;
+    : (STATUS_BADGE[t.status]||'<span class="badge todo">未完成</span>');
   const sub=(t.subtask_total>0)
     ? `<span class="badge">步骤 ${t.subtask_done}/${t.subtask_total}</span>` : '';
   return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''} ${t.id===detailTaskId?'selected':''}">
@@ -709,6 +754,7 @@ function taskCard(t,isOverdue){
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
     <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div></div>
     <div class="row">
+      ${doingButtonHTML(t)}
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
       ${isOverdue?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
         <button class="ghost" data-action="task-cancel" data-id="${t.id}">取消</button>`:''}
@@ -785,10 +831,37 @@ async function pushToTomorrow(id){
   await api(`/api/tasks/${id}`,{method:'PATCH',body:JSON.stringify({due_date:tomorrow()})});
   toast('已推到明天，债务随之重算');view(current);
 }
+/* ---------- 状态机（F 批 · T-F1）：进行中 / 待定 / 取消 / 归档 ----------
+ * 口径（`复盘/口径定案-待定清单.md` §1，用户 2026-09-21）：
+ * - 「进行中」= 我自己标"现在在做这个"，**可以同时多个**，先后用上/下按钮自己排（不做拖拽）；
+ * - 「待定」= 挂在那儿、没放弃、**不计债**（不提醒、不进 My Day，但仍在全部任务里看得见）；
+ * - 「取消」= 打错了/没必要了 —— ≈删除但留痕；
+ * - 「归档」= 收进档案，方便以后查阅（可撤销）。
+ * 这四个都**不动账本**：它们说的是"我怎么安排这件事"，不是"我做成了什么"。
+ */
+async function statusAction(id,action,msg){
+  const t=await api(`/api/tasks/${id}/${action}`,{method:'POST'});
+  toast(typeof msg==='function'?msg(t):msg);view(current);
+}
+function startDoing(id){return statusAction(id,'start','已放进「进行中」—— 今天的「正在做」里能看到它')}
+function stopDoing(id){return statusAction(id,'stop','已移出「进行中」')}
+function parkTask(id){return statusAction(id,'park','已搁置为「待定」：不计债、不提醒，仍在全部任务里')}
+function unparkTask(id){return statusAction(id,'unpark','已取回')}
+function unarchiveTask(id){return statusAction(id,'unarchive','已撤销归档，回到列表里')}
 async function cancelTask(id){
-  if(!await confirmAsk('取消这个任务？取消后不再计入债务。','取消任务'))return;
-  await api(`/api/tasks/${id}`,{method:'PATCH',body:JSON.stringify({status:'取消'})});
-  toast('已取消');view(current);
+  if(!await confirmAsk('取消这个任务？取消后不再计入债务（可在「全部任务 · 搁置」里取回）。','取消任务'))return;
+  await statusAction(id,'cancel','已取消');
+}
+// 归档可撤销 → 不给吓人的二次确认，直接给「撤销」（对齐软删除的做法）
+async function archiveTask(id){
+  await api(`/api/tasks/${id}/archive`,{method:'POST'});
+  toastAction('已归档（默认列表不再显示，可在「全部任务 · 档案」里查阅）','撤销',async()=>{
+    await api(`/api/tasks/${id}/unarchive`,{method:'POST'});toast('已撤销归档');view(current)});
+  view(current);
+}
+async function moveDoing(id,dir){
+  await api(`/api/tasks/${id}/doing-move`,{method:'POST',body:JSON.stringify({direction:dir})});
+  view(current);      // 排序即时可见，不额外弹提示（连着点两下不该被提示刷屏）
 }
 async function addTask(){
   const titleEl=document.getElementById('newTitle');
@@ -801,18 +874,34 @@ async function addTask(){
 }
 
 // ---- 全部任务（OP-2：未进 My Day 的任务也要看得见）----
+/* 三段分开列（F 批 · T-F1）：
+   - 主列表：还在推进的任务（未开始/逾期/进行中/完成）；
+   - 搁置：待定 + 取消 —— "先放着"和"不做了"都留痕，能取回；
+   - 档案：显式归档的（完成 N 天后自动进档案是派生的，属 T-F2，届时并到这里）。 */
 async function renderTasks(m){
-  const all=await api('/api/tasks');
-  const notMyDay=all.filter(t=>!t.is_myday&&t.status!=='完成');
-  const done=all.filter(t=>t.status==='完成');
+  const [all,archived]=await Promise.all([api('/api/tasks'),api('/api/tasks/archived')]);
+  const parked=all.filter(t=>PARKED.includes(t.status));
+  const live=all.filter(t=>!PARKED.includes(t.status));
+  const notMyDay=live.filter(t=>!t.is_myday&&t.status!=='完成');
+  const done=live.filter(t=>t.status==='完成');
+  const parkedHtml=parked.length?`<div class="section-title">搁置（待定 ${parked.filter(t=>t.status==='待定').length} · 取消 ${parked.filter(t=>t.status==='取消').length}）</div>
+    <div class="sub">待定 = 挂在那儿、没放弃，**不计债**；取消 = 打错了或没必要了。两者都能「取回」。</div>
+    ${parked.map(t=>taskCard(t)).join('')}`:'';
+  const archivedHtml=archived.length?`<div class="section-title">档案（${archived.length}）</div>
+    <div class="sub">归档的任务不在默认列表里，但随时能翻出来（这里只列**手动归档**的；「完成 N 天后自动进档案」随后补）。</div>
+    ${archived.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div>
+      <div class="meta">归档 · 更新于 ${humanTime(t.updated_at)}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}</div></div>
+      <div class="row"><button class="ghost" data-action="task-unarchive" data-id="${t.id}">撤销归档</button>
+      <button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button></div></div>`).join('')}`:'';
   m.innerHTML=`<div class="new">
       <input id="allTitle" placeholder="新任务（默认不进今天）" data-enter="task-add-here">
       <input id="allDue" type="date" title="截止日（默认今天，可改）">
       <button data-action="task-add-here">添加</button></div>
     ${smartViewNavHTML('')}
-    <div class="section-title">全部任务（${all.length}）</div>
-    ${all.map(t=>taskCard(t)).join('')||emptyState('还没有任务')}
-    <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项；删除的任务在「今日 · 回收站」里可恢复或彻底删除。</div>`;
+    <div class="section-title">全部任务（${live.length}）</div>
+    ${live.map(t=>taskCard(t)).join('')||emptyState('还没有任务')}
+    <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项；删除的任务在「今日 · 回收站」里可恢复或彻底删除。</div>
+    ${parkedHtml}${archivedHtml}`;
   defaultDateFields(['allDue']);
 }
 async function addTaskHere(){
@@ -1150,10 +1239,31 @@ function doneSection(d){
     <div class="sub">数据来自已完成/已产出的**事实**：完成又被撤销的不算，撤销的产出如实标出。</div>
   </div>`;
 }
+/* 「正在做」（F 批 · T-F1）：我自己标的"现在在做这些"，可以同时多个。
+   顺序用上/下按钮调（序号就是先后）——**不做拖拽**：段2 决策（触屏/键鼠/可测性都不划算），
+   而且显式序号在刷新后是稳定的、也能被测试。
+   为什么单独一栏而不是只靠徽标：用户原话是"方便我看到底自己在做什么任务" —— 要一眼看全。 */
+function doingSection(items){
+  if(!items.length)return '';
+  return `<div class="section-title">正在做（${items.length}）</div>
+  <div class="card panel-card">
+    <div class="sub">这是你自己标的先后：↑↓ 调顺序，「停止」表示这件现在不做了（回到未开始/逾期）。</div>
+    ${items.map((t,i)=>`<div class="fact">
+      <span class="badge doing">${i+1}</span>
+      <span class="grow" style="flex:1">${esc(t.title)}</span>
+      ${t.due_date?`<span class="sub">${esc(t.due_date)}</span>`:''}
+      <button class="ghost" data-action="doing-move" data-id="${t.id}" data-dir="up" ${i===0?'disabled':''} title="上移">↑</button>
+      <button class="ghost" data-action="doing-move" data-id="${t.id}" data-dir="down" ${i===items.length-1?'disabled':''} title="下移">↓</button>
+      <button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button>
+      <button class="ghost" data-action="task-stop" data-id="${t.id}">停止</button>
+    </div>`).join('')}
+  </div>`;
+}
 async function renderToday(m){
-  const [mydays,overdue,summary,due,deleted,all,reminders,done]=await Promise.all([
+  const [mydays,overdue,summary,due,deleted,all,reminders,done,doing]=await Promise.all([
     api('/api/mydays'),api('/api/overdue'),api('/api/summary'),api('/api/review/due'),
-    api('/api/tasks/deleted'),api('/api/tasks'),api('/api/reminders/due'),api('/api/today/done')]);
+    api('/api/tasks/deleted'),api('/api/tasks'),api('/api/reminders/due'),api('/api/today/done'),
+    api('/api/tasks/doing')]);
   el('summary',summaryLine(summary));
   // 到点的提醒（T-B5）：界面自己标出来 —— 没接系统通知通道也不瞎（口径由后端 reminder_state 定）
   const remind=reminders.length?`<div class="section-title">该提醒了（${reminders.length}）</div>
@@ -1177,6 +1287,7 @@ async function renderToday(m){
     <button data-action="task-add">添加</button></div>
   ${todayCard(doneTasks,pendingTasks)}
   ${remind}
+  ${doingSection(doing)}
   <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||emptyState('没有逾期，很好')}</div>
   <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||emptyState('今天还没有任务，挑一件加进来吧')}
   ${doneSection(done)}

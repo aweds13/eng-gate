@@ -161,6 +161,9 @@ main { max-width: 820px; margin: 0 auto; padding: 0 var(--sp-10) var(--nav-clear
 .row.tight { gap: var(--sp-2) }
 /* 列表里当前正在右栏查看的那张卡：加一圈，别让人找不到"我在看哪个" */
 .card.selected { box-shadow: 0 0 0 2px var(--accent), var(--shadow) }
+/* 到了头/尾的排序按钮要看得见地"按不动"（T-F1）：不要只靠"点了没反应"，
+   那样像是坏了；置灰 = 如实说"这边到头了"。 */
+button[disabled] { opacity: .4; cursor: default }
 
 /* ---------- 控件 ---------- */
 /* 完成勾选圈：必须是**正圆**。按钮默认外观（各浏览器给的内边距/最小尺寸）会让圆压成椭圆，
@@ -276,6 +279,8 @@ select {
 /* 状态徽标（SR-NF1 状态色）：完成=绿、未完成=中性 */
 .badge.done { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok) }
 .badge.todo { background: var(--surface-2); color: var(--muted) }
+/* 「进行中」（T-F1）：这是**我自己标的**"现在在做这个" —— 用强调色，一眼看得见 */
+.badge.doing { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent) }
 /* 右栏事实流水的一行：左边是事，右边是时间 */
 .fact { display: flex; justify-content: space-between; gap: var(--sp-4); padding: 3px 0 }
 .fact .sub { margin-top: 0 }

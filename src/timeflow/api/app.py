@@ -107,6 +107,8 @@ class TaskOut(BaseModel):
     task_type: str = tm.DEFAULT_TASK_TYPE
     course_id: str | None = None
     course_name: str | None = None
+    # 「进行中」的显式顺序（F 批 · T-F1）：只在「进行中」时有值；界面按它排上/下
+    doing_rank: int | None = None
 
 
 # 会**在本机打开文件/程序**或改服务端设置的接口，只接受本机页面调用。
@@ -155,6 +157,7 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
         task_type=t.task_type,
         course_id=t.course_id,
         course_name=tm.course_name(conn, t.course_id),
+        doing_rank=t.doing_rank,
     )
 
 
@@ -483,6 +486,23 @@ def create_app(db_path: str | None = None) -> FastAPI:
         """
         return {"purged": tm.purge_deleted_tasks(conn)}
 
+    @app.get("/api/tasks/doing")
+    def doing_tasks() -> list[TaskOut]:
+        """「进行中」清单（F 批 · T-F1）：可以同时多个，顺序由用户自己定（`doing_rank`）。
+
+        注意：本路由必须声明在 `/api/tasks/{task_id}` 之前，否则 "doing" 会被当成 task_id。
+        """
+        return [_out(t, conn) for t in tm.doing_tasks(conn)]
+
+    @app.get("/api/tasks/archived")
+    def archived_tasks() -> list[TaskOut]:
+        """显式归档的任务（F 批 · T-F1，最近归档在前）。
+
+        注意：只含 `status = 归档` 的；**完成 N 天后自动进档案是派生的**（T-F2），
+        不写回状态 —— 档案视图会把两拨合起来看。本路由同样必须排在 `/{task_id}` 之前。
+        """
+        return [_out(t, conn) for t in tm.archived_tasks(conn)]
+
     @app.get("/api/tasks/{task_id}", response_model=TaskOut)
     def get_task(task_id: str) -> TaskOut:
         try:
@@ -556,6 +576,77 @@ def create_app(db_path: str | None = None) -> FastAPI:
         restore = (payload or {}).get("restore_status", tm.STATUS_TODO)
         try:
             return _out(tm.uncomplete_task(conn, task_id, restore_status=restore), conn)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # ---- 状态机：进行中 / 待定 / 取消 / 归档（F 批 · T-F1）----
+    # 口径见 `复盘/口径定案-待定清单.md` §1。这些动作**都不动账本**
+    # （债务只看 `overdue_tasks`，与"我在怎么安排这件事"无关），只留 `task.status_changed` 事实。
+    def _status_action(task_id: str, action: str) -> TaskOut:
+        """状态动作共用一条错误口径：任务不存在 → 404，非法跃迁 → 400（不静默）。"""
+        try:
+            return _out(status_actions[action](conn, task_id), conn)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    status_actions: dict[str, Any] = {
+        "start": tm.start_task,
+        "stop": tm.stop_task,
+        "park": tm.park_task,
+        "unpark": tm.un_park_task,
+        "cancel": tm.cancel_task,
+        "archive": tm.archive_task,
+        "unarchive": tm.unarchive_task,
+    }
+
+    @app.post("/api/tasks/{task_id}/start", response_model=TaskOut)
+    def start_task(task_id: str) -> TaskOut:
+        """放进「进行中」（T-F1）：**可以同时多个**，序号自动排到最后。"""
+        return _status_action(task_id, "start")
+
+    @app.post("/api/tasks/{task_id}/stop", response_model=TaskOut)
+    def stop_task(task_id: str) -> TaskOut:
+        """移出「进行中」（T-F1）：回到「未开始」；截止日已过则回到「逾期」。"""
+        return _status_action(task_id, "stop")
+
+    @app.post("/api/tasks/{task_id}/park", response_model=TaskOut)
+    def park_task(task_id: str) -> TaskOut:
+        """搁置为「待定」（T-F1）：闲置/挂在那儿、没放弃、**不计债**、不提醒、不进 My Day。"""
+        return _status_action(task_id, "park")
+
+    @app.post("/api/tasks/{task_id}/unpark", response_model=TaskOut)
+    def unpark_task(task_id: str) -> TaskOut:
+        """把「待定 / 取消」取回（T-F1）。"""
+        return _status_action(task_id, "unpark")
+
+    @app.post("/api/tasks/{task_id}/cancel", response_model=TaskOut)
+    def cancel_task(task_id: str) -> TaskOut:
+        """取消任务（T-F1）：打错了 / 没必要做了 —— ≈删除但留痕。"""
+        return _status_action(task_id, "cancel")
+
+    @app.post("/api/tasks/{task_id}/archive", response_model=TaskOut)
+    def archive_task(task_id: str) -> TaskOut:
+        """收进档案（T-F1）：默认视图不再显示，可在「档案」里查阅（可撤销）。"""
+        return _status_action(task_id, "archive")
+
+    @app.post("/api/tasks/{task_id}/unarchive", response_model=TaskOut)
+    def unarchive_task(task_id: str) -> TaskOut:
+        """撤销归档（T-F1）。"""
+        return _status_action(task_id, "unarchive")
+
+    @app.post("/api/tasks/{task_id}/doing-move", response_model=TaskOut)
+    def move_doing(task_id: str, payload: dict[str, Any] | None = None) -> TaskOut:
+        """调「进行中」的先后（T-F1）：`{direction: up|down}`，与相邻一条换序号。
+
+        为什么不做拖拽：段2 决策（触屏/键鼠/可测性都不划算）—— 上/下按钮 + 显式序号。
+        """
+        direction = str((payload or {}).get("direction", ""))
+        try:
+            return _out(tm.move_doing(conn, task_id, direction), conn)
         except KeyError:
             raise HTTPException(status_code=404, detail="任务不存在") from None
         except ValueError as e:

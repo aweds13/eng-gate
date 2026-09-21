@@ -22,6 +22,10 @@ STATUS_OVERDUE = "逾期"
 STATUS_CANCELLED = "取消"
 STATUS_ARCHIVED = "归档"
 STATUS_DELETED = "已删"
+# 「待定」（F 批 · T-F1；用户 2026-09-21 定的新状态）：
+# 「闲置或者挂在那儿、没放弃、不计债」—— **不叫「悬赏」**（那个词在约定层已经是"完成收益"的意思，
+# 不能一词两义）。行为同「取消」：不进 My Day、不提醒、不参与债务，但仍在「全部任务」里看得见。
+STATUS_PENDING = "待定"
 
 VALID_STATUS = {
     STATUS_TODO,
@@ -31,10 +35,19 @@ VALID_STATUS = {
     STATUS_CANCELLED,
     STATUS_ARCHIVED,
     STATUS_DELETED,
+    STATUS_PENDING,
 }
 
 # 默认视图（列表 / My Day / 逾期 / 债务）不可见的状态：归档 + 已删（软删除）。
 HIDDEN_STATUSES = (STATUS_ARCHIVED, STATUS_DELETED)
+
+# 「搁置类」状态：**不计债、不进 My Day、不提醒**，但仍在「全部任务」里看得见（留痕，不是消失）。
+# 依据：`复盘/口径定案-待定清单.md` §1 —— 用户 2026-09-21 定「待定」计债务吗 → 不计债，
+# 行为同「取消」。债务由 `overdue_tasks` 派生（`ledger.summary`），所以在这里排除就等于不计债。
+PARKED_STATUSES = (STATUS_CANCELLED, STATUS_PENDING)
+
+# 「进行中」的排序号口径（T-F1）：序号小的排前面；没排过序的（NULL）排最后。
+_DOING_ORDER_BY = " ORDER BY doing_rank IS NULL, doing_rank, updated_at"
 
 # 优先级（SR-F1.2 / 段2 决策）：只有三档，**默认「中」**；不做 1–5 数字分级，也不做拖拽排序。
 PRIORITY_HIGH = "高"
@@ -102,6 +115,9 @@ class Task:
     task_type: str = DEFAULT_TASK_TYPE
     # 所属课程（SR-F5.4 / T-C12）：指向 `courses.id`；只有非「普通」才能挂（`_check_course_pair`）。
     course_id: str | None = None
+    # 「进行中」的显式顺序（F 批 · T-F1）：序号小的排前面；非「进行中」一律 NULL。
+    # 由领域层维护（`start_task` / `move_doing`），不走 `update_task` 的字段白名单。
+    doing_rank: int | None = None
 
 
 def _row_to_task(row: sqlite3.Row) -> Task:
@@ -128,6 +144,7 @@ def _row_to_task(row: sqlite3.Row) -> Task:
             row["task_type"] if "task_type" in keys and row["task_type"] else DEFAULT_TASK_TYPE
         ),
         course_id=row["course_id"] if "course_id" in keys else None,
+        doing_rank=row["doing_rank"] if "doing_rank" in keys else None,
     )
 
 
@@ -246,8 +263,8 @@ def due_reminders(conn: sqlite3.Connection, now: datetime | None = None) -> list
     moment = (now or datetime.now()).strftime("%Y-%m-%dT%H:%M")
     rows = conn.execute(
         "SELECT * FROM tasks WHERE remind_at IS NOT NULL AND remind_at <= ? "
-        "AND status NOT IN (?,?,?,?) ORDER BY remind_at",
-        (moment, STATUS_DONE, STATUS_CANCELLED, *HIDDEN_STATUSES),
+        "AND status NOT IN (?,?,?,?,?) ORDER BY remind_at",
+        (moment, STATUS_DONE, *PARKED_STATUSES, *HIDDEN_STATUSES),
     ).fetchall()
     return [_row_to_task(r) for r in rows]
 
@@ -397,6 +414,14 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
         # 提醒时间：空值=清除（NULL）；非法格式拒绝（不静默忽略）
         updates["remind_at"] = _check_remind_at(updates["remind_at"])
     before = get_task(conn, task_id)
+    if "status" in updates:
+        # 「进行中」的排序号（F 批 · T-F1）由领域层维护，**不由调用方直接写**：
+        # 进去给一个末尾序号、离开就清成 NULL —— 免得留下"停在进行中"的幽灵序号
+        # （序号是"我正在做的先后"，任务不在进行中了，序号就没有意义）。
+        if updates["status"] == STATUS_DOING and before.status != STATUS_DOING:
+            updates["doing_rank"] = _next_doing_rank(conn)
+        elif updates["status"] != STATUS_DOING and before.status == STATUS_DOING:
+            updates["doing_rank"] = None
     if "task_type" in updates or "course_id" in updates:
         # 类型与课程是一对：**按改完之后的状态**校验（只传 course_id 时也要看当前类型，
         # 只传 task_type='普通' 时也要看当前课程）—— 单看某一列会放过"普通 + 挂课程"这种组合。
@@ -420,7 +445,12 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
 
 
 def _publish_status_facts(conn: sqlite3.Connection, before: Task, after: Task) -> None:
-    """状态跃迁 → 事实（仅「完成 ↔ 非完成」与软删除/恢复有跨线语义；其它状态变化不记账）。"""
+    """状态跃迁 → 事实（完成/撤销、软删除/恢复、以及 T-F1 的搁置类状态变化）。
+
+    为什么要记「搁置类」状态变化（进行中/待定/取消/归档）：N11 要求**过去做过的事可追溯**，
+    而事实层正是"发生了什么"的地方 —— 归档时间、什么时候搁置的，都要能查（档案视图读它）。
+    注意：`先做/搁置` 都**不动账本**（债务只看 `overdue_tasks`，与这里的记账无关）。
+    """
     from timeflow.core import facts as facts_mod
 
     if after.status == STATUS_DONE and before.status != STATUS_DONE:
@@ -484,6 +514,33 @@ def _publish_status_facts(conn: sqlite3.Connection, before: Task, after: Task) -
             "task.restored",
             {"task_id": after.id, "title": after.title, "to_status": after.status},
         )
+    elif after.status != STATUS_DONE and before.status != STATUS_DONE:
+        # 其余状态变化（进行中 / 待定 / 取消 / 归档 …）：只留一条「状态改了」的事实。
+        # **不动账本**（债务、投入都不看它）—— 这些动作是"我在怎么安排这件事"，不是"做成了什么"。
+        # 上面「完成 / 撤销完成」两条已经各自记过事实，这里用状态条件排掉，免得一条变化记两笔。
+        facts_mod.record(
+            conn,
+            kind="task.status_changed",
+            subject_type="task",
+            subject_id=after.id,
+            value_text=after.title,
+            extra={
+                "title": after.title,
+                "from_status": before.status,
+                "to_status": after.status,
+                "changed_on": _today(),
+            },
+            source="desktop",
+        )
+        facts_mod.publish(
+            "task.status_changed",
+            {
+                "task_id": after.id,
+                "title": after.title,
+                "from_status": before.status,
+                "to_status": after.status,
+            },
+        )
 
 
 def delete_task(conn: sqlite3.Connection, task_id: str) -> Task:
@@ -540,10 +597,10 @@ def purge_deleted_tasks(conn: sqlite3.Connection) -> int:
 
 
 def myday_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Task]:
-    """My Day 集合（AC-4）：is_myday=1 且非完成/取消/归档/已删；**按统一口径排序**。"""
+    """My Day 集合（AC-4）：is_myday=1 且非完成/搁置（取消·待定）/归档/已删；**按统一口径排序**。"""
     rows = conn.execute(
-        "SELECT * FROM tasks WHERE is_myday = 1 AND status NOT IN (?,?,?,?)" + _ORDER_BY,
-        (STATUS_DONE, STATUS_CANCELLED, *HIDDEN_STATUSES),
+        "SELECT * FROM tasks WHERE is_myday = 1 AND status NOT IN (?,?,?,?,?)" + _ORDER_BY,
+        (STATUS_DONE, *PARKED_STATUSES, *HIDDEN_STATUSES),
     ).fetchall()
     return [_row_to_task(r) for r in rows]
 
@@ -567,20 +624,22 @@ def overdue_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Ta
 
     AC-4 补充：无截止日但**昨日仍未完成的 My Day 任务**也自动移入逾期栏
     （My Day=今天要做的集合，没做完不假装消失）。
+
+    「待定 / 取消」不出现在这里 —— 搁置的东西**不计债**（T-F1）。
     """
     t = today or _today()
     t_date = date.fromisoformat(t)
     rows = conn.execute(
         "SELECT * FROM tasks WHERE due_date IS NOT NULL AND due_date < ? "
-        "AND status NOT IN (?,?,?,?)" + _ORDER_BY,
-        (t, STATUS_DONE, STATUS_CANCELLED, *HIDDEN_STATUSES),
+        "AND status NOT IN (?,?,?,?,?)" + _ORDER_BY,
+        (t, STATUS_DONE, *PARKED_STATUSES, *HIDDEN_STATUSES),
     ).fetchall()
     overdue = [_row_to_task(r) for r in rows]
 
     # 无 due 但过期的 My Day 任务：加入 My Day 的日期早于今天（用 created_at 日期近似）
     myday_rows = conn.execute(
-        "SELECT * FROM tasks WHERE due_date IS NULL AND is_myday = 1 AND status NOT IN (?,?,?,?)",
-        (STATUS_DONE, STATUS_CANCELLED, *HIDDEN_STATUSES),
+        "SELECT * FROM tasks WHERE due_date IS NULL AND is_myday = 1 AND status NOT IN (?,?,?,?,?)",
+        (STATUS_DONE, *PARKED_STATUSES, *HIDDEN_STATUSES),
     ).fetchall()
     for r in myday_rows:
         task = _row_to_task(r)
@@ -723,6 +782,182 @@ def toggle_flag(conn: sqlite3.Connection, task_id: str) -> Task:
     """
     current = get_task(conn, task_id)
     return update_task(conn, task_id, flagged=not current.flagged)
+
+
+# ---------------------------------------------------------------- 状态机（F 批 · T-F1）
+# 口径来源：`复盘/口径定案-待定清单.md` §1（用户 2026-09-21 给出的完整设计）。
+# 这一段补的是**代码里从来没有入口**的几个状态：进行中 / 归档（此前谁也不会写它们），
+# 以及约定层新加的「待定」。所有动作都**不发账本事实**，只留 `task.status_changed`。
+
+
+def _next_doing_rank(conn: sqlite3.Connection) -> int:
+    """下一个「进行中」的排序号：排在现有最后（没人排过 → 1）。"""
+    row = conn.execute(
+        "SELECT COALESCE(MAX(doing_rank), 0) + 1 AS n FROM tasks WHERE status = ?",
+        (STATUS_DOING,),
+    ).fetchone()
+    return int(row["n"]) if row else 1
+
+
+def _write_doing_rank(conn: sqlite3.Connection, task_id: str, rank: int | None) -> None:
+    """只改排序号：**不动 `updated_at`**（换顺序不是"这条内容变了"，别把完成时间/重复基准弄歪），
+    版本号照加（并发口径一致）。"""
+    conn.execute(
+        "UPDATE tasks SET doing_rank = ?, version = version + 1 WHERE id = ?", (rank, task_id)
+    )
+    conn.commit()
+
+
+def resting_status(task: Task, today: str | None = None) -> str:
+    """「停下来」之后回到哪个状态：截止日已过 → `逾期`，否则 → `未开始`。
+
+    为什么要有这条：`create_task` 建任务时就是按这个口径写状态的（截止日已过直接标逾期），
+    「移出进行中 / 撤销归档」也得回到同一个口径，否则同一个任务会有两套说法。
+    """
+    if task.due_date and task.due_date < (today or _today()):
+        return STATUS_OVERDUE
+    return STATUS_TODO
+
+
+def doing_tasks(conn: sqlite3.Connection) -> list[Task]:
+    """「进行中」清单（T-F1）：**可以同时多个**，顺序由用户自己定。
+
+    「方便我看到底自己在做什么任务」（用户原话）——所以这是一份"我现在手上有什么"的读数，
+    不是"只能做一件"的锁。排序键：`doing_rank`（没排过序的排最后）。
+    """
+    rows = conn.execute(
+        "SELECT * FROM tasks WHERE status = ?" + _DOING_ORDER_BY, (STATUS_DOING,)
+    ).fetchall()
+    return [_row_to_task(r) for r in rows]
+
+
+def start_task(conn: sqlite3.Connection, task_id: str) -> Task:
+    """把任务放进「进行中」（幂等）。**可以同时多个**；序号自动排到末尾。
+
+    边界：已完成 / 已归档 / 已删 / 已取消 / 待定的任务不能直接"在做" ——
+    先撤销完成、或撤销归档，否则会出现"已完成 + 进行中"同时成立的怪状态。
+    """
+    current = get_task(conn, task_id)
+    if current.status == STATUS_DOING:
+        return current
+    if current.status == STATUS_DONE:
+        raise ValueError("已完成的任务不能置为进行中（先撤销完成）")
+    if current.status in HIDDEN_STATUSES:
+        raise ValueError(f"「{current.status}」的任务不能置为进行中（先撤销归档/删除）")
+    if current.status in PARKED_STATUSES:
+        raise ValueError(f"「{current.status}」的任务不能置为进行中（先取回）")
+    return update_task(conn, task_id, status=STATUS_DOING)
+
+
+def stop_task(conn: sqlite3.Connection, task_id: str) -> Task:
+    """移出「进行中」（幂等）：回到 `resting_status`（截止日已过则回到「逾期」）。"""
+    current = get_task(conn, task_id)
+    if current.status != STATUS_DOING:
+        return current
+    return update_task(conn, task_id, status=resting_status(current))
+
+
+def park_task(conn: sqlite3.Connection, task_id: str) -> Task:
+    """搁置为「待定」（幂等）：闲置 / 挂在那儿、**没放弃、不计债**。
+
+    行为同「取消」（T-F1 决策）：不进 My Day、不提醒、不参与债务；
+    但**仍在「全部任务」里看得见**（它是"先放着"，不是"没了"）。
+    已完成的任务不给置待定（先撤销完成）——避免"完成了又待定"这种自相矛盾。
+    """
+    current = get_task(conn, task_id)
+    if current.status == STATUS_PENDING:
+        return current
+    if current.status == STATUS_DONE:
+        raise ValueError("已完成的任务不置为待定（先撤销完成）")
+    if current.status == STATUS_DELETED:
+        raise ValueError("已删除的任务不置为待定（先恢复）")
+    return update_task(conn, task_id, status=STATUS_PENDING)
+
+
+def cancel_task(conn: sqlite3.Connection, task_id: str) -> Task:
+    """取消任务（幂等）：打错了 / 没必要做了 —— ≈删除但**留痕**（不进默认的逾期与债务）。
+
+    已完成的任务不能直接取消：那等于"**撤销完成 + 取消**"两件事一起做，
+    而撤销完成会连带回退收益读数（`task.uncompleted`）—— 不该在一次点击里偷偷发生。
+    要这样处理就分两步：先撤销完成，再取消。
+    """
+    current = get_task(conn, task_id)
+    if current.status == STATUS_CANCELLED:
+        return current
+    if current.status == STATUS_DONE:
+        raise ValueError("已完成的任务不能直接取消（先撤销完成）")
+    if current.status == STATUS_DELETED:
+        raise ValueError("已删除的任务不能取消（先恢复）")
+    return update_task(conn, task_id, status=STATUS_CANCELLED)
+
+
+def un_park_task(conn: sqlite3.Connection, task_id: str) -> Task:
+    """把「待定 / 取消」取回（幂等）：回到 `resting_status`（截止日已过则回到「逾期」）。"""
+    current = get_task(conn, task_id)
+    if current.status not in PARKED_STATUSES:
+        return current
+    return update_task(conn, task_id, status=resting_status(current))
+
+
+def archive_task(conn: sqlite3.Connection, task_id: str) -> Task:
+    """收进档案（幂等）：默认视图不再显示，可在「档案」里查阅（可撤销）。
+
+    口径：档案主要是**完成后**的归宿（用户原话：「完成某个任务之后，他就进入档案中，
+    方便我后期以后的查阅」），但**手动归档不强制先完成** ——
+    取消掉的、搁置的也该有地方收，否则"整理一下列表"这件事没法做。
+    自动归档（完成 N 天后）是另一条路（T-F2），两条都会出现在档案视图里。
+    """
+    current = get_task(conn, task_id)
+    if current.status == STATUS_ARCHIVED:
+        return current
+    if current.status == STATUS_DELETED:
+        raise ValueError("已删除的任务不能归档（先恢复）")
+    return update_task(conn, task_id, status=STATUS_ARCHIVED)
+
+
+def unarchive_task(conn: sqlite3.Connection, task_id: str) -> Task:
+    """撤销归档（幂等）：回到 `resting_status`（截止日已过则回到「逾期」）。"""
+    current = get_task(conn, task_id)
+    if current.status != STATUS_ARCHIVED:
+        return current
+    return update_task(conn, task_id, status=resting_status(current))
+
+
+def archived_tasks(conn: sqlite3.Connection) -> list[Task]:
+    """显式归档的任务（`status = 归档`），最近归档的排前面。
+
+    注意：这只是档案的一半 —— **完成 N 天后自动进档案**是**派生**的（T-F2），
+    不写回状态；档案视图要把两拨合起来看。
+    """
+    rows = conn.execute(
+        "SELECT * FROM tasks WHERE status = ? ORDER BY updated_at DESC", (STATUS_ARCHIVED,)
+    ).fetchall()
+    return [_row_to_task(r) for r in rows]
+
+
+def move_doing(conn: sqlite3.Connection, task_id: str, direction: str) -> Task:
+    """调「进行中」的先后（T-F1）：`direction` = `up` / `down`，与相邻的一条换序号。
+
+    为什么是"上/下按钮"而不是拖拽：段2 决策**不做拖拽排序**（触屏/键鼠/可测性都不划算），
+    序号就是这一件事的顺序。已在头/尾 → 原地不动（幂等，不报错）；
+    非「进行中」的任务 → ValueError（排序对不在进行中的任务没有意义）。
+    """
+    if direction not in ("up", "down"):
+        raise ValueError("方向只能是 up / down")
+    current = get_task(conn, task_id)
+    if current.status != STATUS_DOING:
+        raise ValueError("只有「进行中」的任务能调顺序")
+    items = doing_tasks(conn)
+    # 先规整成 1..N（老数据可能没序号/序号重复）：顺序保持现状，再把相邻两条换过来。
+    for i, item in enumerate(items, start=1):
+        _write_doing_rank(conn, item.id, i)
+    index = next(i for i, item in enumerate(items) if item.id == task_id)
+    swap = index - 1 if direction == "up" else index + 1
+    if swap < 0 or swap >= len(items):
+        return get_task(conn, task_id)
+    _write_doing_rank(conn, task_id, swap + 1)
+    _write_doing_rank(conn, items[swap].id, index + 1)
+    return get_task(conn, task_id)
 
 
 # ---------------------------------------------------------------- 附件 / 要求链接（SR-F1.4 / T-B4）

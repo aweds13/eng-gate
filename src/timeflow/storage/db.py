@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -152,6 +152,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v11(conn)  # 任务类型 + 所属课程（F1/F5 · T-C12）
     if current < 12:
         _migrate_v12(conn)  # 复习卡挂任务血缘（F6 · T-C5）
+    if current < 13:
+        _migrate_v13(conn)  # 「进行中」的显式顺序（F 批 · T-F1）
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 
 
@@ -168,6 +170,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v10(conn)  # 同上：remind_at 由本版加列
     _migrate_v11(conn)  # 同上：task_type / course_id 由本版加列
     _migrate_v12(conn)  # 同上：review_items.task_id 由本版加列
+    _migrate_v13(conn)  # 同上：tasks.doing_rank 由本版加列
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -717,3 +720,16 @@ def _migrate_v12(conn: sqlite3.Connection) -> None:
     - 幂等加列，缺表跳过不失败。
     """
     _add_column_if_missing(conn, "review_items", "task_id", "task_id TEXT")
+
+
+def _migrate_v13(conn: sqlite3.Connection) -> None:
+    """v13：「进行中」的**显式顺序** `tasks.doing_rank`（F 批 · T-F1）。
+
+    口径（用户 2026-09-21：「我可以自由选择某些任务在进行中……**同时**（多个），可以自己标顺序」）：
+    - 「进行中」可以同时有多条，先后由**用户自己定的序号**决定（`1` 最小 = 最靠前）；
+    - **不做拖拽**（守段2 决策）：界面用上/下按钮交换序号，数值就是这一件事的顺序；
+    - 只有「进行中」的任务才有序号，离开这个状态一律清成 NULL（不留幽灵序号）；
+    - 序号由领域层维护（`manager.start_task` / `move_doing`），**不是内容字段**，不暴露给 PATCH；
+    - 幂等加列，缺表跳过不失败；老数据全为 NULL（界面按"没排过序"排在最后，不猜）。
+    """
+    _add_column_if_missing(conn, "tasks", "doing_rank", "doing_rank INTEGER")
