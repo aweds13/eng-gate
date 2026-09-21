@@ -160,7 +160,83 @@ Gates: <run_gates 的结论行>
 
 ---
 
-## 六、反模式（这几件都踩过，别再来一次）
+## 六、怎么写外部脚本（集成）—— 不改 timeflow 一行代码
+
+> SR-NF7 里"集成"那一项（G 批 · T-G2）。可跑示例：`../examples/04_external_script.py`。
+
+**核心一句话**：timeflow 跑起来就是一个**本机 HTTP 服务**，`/api/...` 就是它的全部能力 ——
+你的脚本、手机快捷指令、Obsidian 按钮、定时任务都能直接调，**不用改它的代码**。
+
+```powershell
+# ① 起服务（桌面窗口同理；这一步是你的程序与 timeflow 的唯一接口）
+python -X utf8 tools/serve.py            # → http://127.0.0.1:8000
+
+# ② 读：健康检查给出"能自证的事实"（schema 版本 / 表条数），不报"一切正常"这种空话
+Invoke-RestMethod http://127.0.0.1:8000/api/health
+
+# ③ 写：建一个任务 → 完成它（成对动作，随时可撤）
+$t = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/tasks `
+      -ContentType 'application/json; charset=utf-8' `
+      -Body (@{ title = '外部脚本建的任务'; is_myday = $true } | ConvertTo-Json)
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/tasks/$($t.id)/complete"
+
+# ④ 读账本：数字来自事实层（完成收益 +1）
+(Invoke-RestMethod http://127.0.0.1:8000/api/summary).gain_count
+
+# ⑤ 撤销也走接口：账本自己回退（别自己去改数字）
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/tasks/$($t.id)/uncomplete"
+```
+
+Python 版（与示例同构；示例用 `TestClient` 只是为了**不占端口、不依赖先起服务**，
+请求与响应的形状和真机完全一致）：
+
+```python
+import json, urllib.request
+
+BASE = "http://127.0.0.1:8000"
+
+def call(method: str, path: str, body: dict | None = None) -> object:
+    data = None if body is None else json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(  # noqa: S310 —— 只连本机
+        BASE + path, data=data, method=method,
+        headers={"Content-Type": "application/json; charset=utf-8"})
+    with urllib.request.urlopen(req) as resp:   # noqa: S310
+        return json.loads(resp.read().decode("utf-8"))
+
+print(call("GET", "/api/health"))
+print(call("POST", "/api/tasks", {"title": "外部脚本建的任务", "is_myday": True}))
+```
+
+### 五条规矩（外部脚本也守）
+
+1. **别直接改 SQLite 库**。账本/债务/洞察这些数字都由**事实层**算出来；绕过接口直接 `UPDATE`
+   会让"事实"和"状态"对不上（下次迁移或回填时打架）。要写就走 `/api/...`。
+2. **动作是成对的**：`complete`/`uncomplete`、`POST /api/ledger/invest` 与
+   `DELETE /api/ledger/invest/{id}`、`POST /api/ledger/output` 与对应 `DELETE` ——
+   别自己造一套"删除"，否则撤销口径就分叉了。
+3. **日期一律本地日历、日界 00:00**（`specification/behaviors.md`）：传 `YYYY-MM-DD`，
+   别传 UTC 时间戳（否则东八区凌晨会差一天 —— 这个坑真踩过，见 `../复盘/门禁跨午夜暴露的时区口径缺陷-T-D12.md`）。
+4. **只监听本机**：服务默认绑 `127.0.0.1`；写类接口还额外要求"本机页面来源"（`require_local_origin`）。
+   要让别的机器访问，请自己想清楚暴露面 —— 这不是本项目的默认姿势。
+5. **出错会说话**：非法值给 4xx + 中文原话（不静默回落、不写脏数据）。照原话改，别猜。
+
+### 边界（用户 2026-09-21 定，如实标注）
+
+| 你想加什么 | 不改核心能做到吗 | 怎么做 |
+|---|---|---|
+| 集成（外部程序跟它打交道） | ✅ | 就是本文这一节 |
+| 复习形式 / 可视化维度这类**选项** | ✅ | 可配置词表（§3.1），界面上自己加 |
+| 记一件新发生的事 | ✅ | 新事实 `kind`（§3 表第 1 行） |
+| **加字段** | ❌ | 必须走 **schema 迁移**（`storage/db.py` + 版本号 + 同步读出口） |
+| **加功能** | ❌ | 必须写**领域函数 + 路由 + 界面**（§一~§五 那五步） |
+
+"插件化"到"能加功能/字段而不改核心"这一层**本项目没做到**，也不假装能做到 ——
+`SR-NF7` 的口径是：**能加的（词表 / 集成 / 事实 kind）都让它能加，加不了的（字段 / 功能）如实写明** ——
+不假装插件化。
+
+---
+
+## 七、反模式（这几件都踩过，别再来一次）
 
 | 反模式 | 为什么坏 | 正确的做法 |
 |---|---|---|

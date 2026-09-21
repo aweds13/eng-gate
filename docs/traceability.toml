@@ -710,14 +710,21 @@ gaps = ""
 id = "SR-NF7"
 title = "可扩展：插件/自定义机制 + 预留扩展点 +「如何加一个功能」模板"
 group = "NF"
-status = "partial"
+status = "done"
 evidence = [
   "text:src/timeflow/core/facts/store.py::kind：事实类型，自由字符串",
   "file:docs/EXTENDING.md",
   "file:examples/03_add_a_ledger_view.py",
+  "file:examples/04_external_script.py",
   "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/vocab.py::class Vocabulary",
+  "text:src/timeflow/vocab.py::REVIEW_FORMS = Vocabulary",
+  "route:GET /api/settings/vocab",
+  "route:PUT /api/settings/vocab",
+  "test:test_vocab_line.py",
+  "test:test_examples.py",
 ]
-gaps = "**口径已定（2026-09-21 用户拍板）**：做**复习形式可配置** + **可视化维度可配置** + **集成写成文档**（外部脚本调 REST 本来就是集成）；**字段/新功能做不到「不改核心」**（加字段要走 schema 迁移、新功能=领域函数+路由+界面），如实标注、靠模板与示例降门槛。模板（`docs/EXTENDING.md`）与三个可跑示例已就位；**前两项已落地（T-G1：词表在 `timeflow/vocab.py` 一处声明，配置校验/API/设置页全自动）**，**集成文档与可跑示例待 T-G2**（落地后本条转 done）"
+gaps = ""
 
 [entries."SR-NF8"]
 id = "SR-NF8"
@@ -1715,6 +1722,19 @@ evidence = [
   "ui:data-action=vocab-del",
   "ui:data-action=vocab-reset",
   "test:test_vocab_line.py",
+]
+gaps = ""
+
+[entries."T-G2"]
+id = "T-G2"
+title = "G 批：集成写成文档 + 可跑示例（外部脚本调 REST）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:docs/EXTENDING.md",
+  "file:examples/04_external_script.py",
+  "text:docs/EXTENDING.md::怎么写外部脚本（集成）",
+  "test:test_examples.py",
 ]
 gaps = ""
 

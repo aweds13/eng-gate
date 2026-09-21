@@ -17,7 +17,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "examples"
-NAMES = ["01_add_a_fact_kind.py", "02_add_a_config_option.py", "03_add_a_ledger_view.py"]
+NAMES = [
+    "01_add_a_fact_kind.py",
+    "02_add_a_config_option.py",
+    "03_add_a_ledger_view.py",
+    "04_external_script.py",
+]
 
 
 def run_example(name: str) -> subprocess.CompletedProcess[str]:
@@ -66,3 +71,11 @@ def test_examples_are_in_chinese_and_documented() -> None:
     template = (ROOT / "docs" / "EXTENDING.md").read_text(encoding="utf-8")
     for needle in ("五步模板", "三条红线", "反模式", "如何加一个功能"):
         assert needle in template, f"docs/EXTENDING.md 缺 {needle}"
+
+
+def test_integration_doc_covers_the_honest_boundary() -> None:
+    """SR-NF7 的**集成**那一项（G 批 · T-G2）：文档要写清"怎么从外部脚本调"，
+    并且**如实写明加字段/加功能做不到不改核心** —— 这是用户 2026-09-21 定的口径。"""
+    doc = (ROOT / "docs" / "EXTENDING.md").read_text(encoding="utf-8")
+    for needle in ("怎么写外部脚本", "127.0.0.1", "别直接改", "字段", "做不到"):
+        assert needle in doc, f"docs/EXTENDING.md 的集成章节缺 {needle}"

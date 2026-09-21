@@ -3,13 +3,14 @@
 > 配套文档：**`docs/EXTENDING.md`（「如何加一个功能」模板）** —— 这里只放能跑的东西。
 > 规格依据：`SR-NF10`（零基础定制友好：2–3 个由浅入深扩展示例）、`SR-NF7`（预留扩展点 + 模板）。
 
-三个示例都是**可以直接跑的脚本**，跑在**临时库**上，不碰你的真实数据：
+四个示例都是**可以直接跑的脚本**，跑在**临时库**上，不碰你的真实数据：
 
 ```powershell
 cd "D:/repo/engineering"
 python -X utf8 examples/01_add_a_fact_kind.py
 python -X utf8 examples/02_add_a_config_option.py
 python -X utf8 examples/03_add_a_ledger_view.py
+python -X utf8 examples/04_external_script.py
 ```
 
 | # | 示例 | 难度 | 你学到 | 碰了哪一层 |
@@ -17,6 +18,11 @@ python -X utf8 examples/03_add_a_ledger_view.py
 | 1 | `01_add_a_fact_kind.py` | 浅 | 加一个**新事实类型**（不建表、不改 schema）+ 订阅联动 | 事实层 |
 | 2 | `02_add_a_config_option.py` | 中 | 加一个**配置项**的四处落点 + env 覆盖 | 配置层 |
 | 3 | `03_add_a_ledger_view.py` | 深 | 加一条**解读层口径**（去重 + 撤销照扣），以及接进产品还差哪三步 | 解读层 → API → 界面 → 台账 |
+| 4 | `04_external_script.py` | 集成 | **从外部脚本调 REST**（读/写/撤销都走接口，不改 timeflow 一行代码） | API（外部） |
+
+`examples/` 与 「可配置词表」（`src/timeflow/vocab.py`）是 SR-NF7 的两半：
+**能不改核心就加的**（词表 / 外部脚本集成）走这两条路；**加字段 / 加功能**做不到不改核心，
+如实写在 `docs/EXTENDING.md`。
 
 ## 为什么这些示例**必须是能跑的**
 
