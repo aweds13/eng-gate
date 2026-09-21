@@ -595,7 +595,7 @@ function renderDetail(el,t,facts,kids,cards){
   el.innerHTML=`<div class="panel-title">任务详情${detailEditing?' · 编辑中':''}</div>
     <div class="title">${esc(t.title)}</div>
     ${detailEditing?editForm(t):`<div class="meta">${isDone?`<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
-      状态 ${esc(t.status)}${t.status==='进行中'&&t.doing_rank?` · 顺序 ${t.doing_rank}`:''}</div>
+      状态 ${esc(t.status)}${t.status==='进行中'&&t.doing_rank?` · 顺序 ${t.doing_rank}`:''}${overdueBadge(t)}</div>
     ${detailEditing?'':`<div class="row tight">${stateButtonsHTML(t)}</div>`}
     <div class="meta">截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
     <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'} · 优先级 ${prioBadge(t.priority)} ${flagBadge(t)}</div>
@@ -739,8 +739,17 @@ function doingButtonHTML(t){
   if(PARKED.includes(t.status))return `<button class="ghost" data-action="task-unpark" data-id="${t.id}" title="取回：回到未开始/逾期">取回</button>`;
   return `<button class="ghost" data-action="task-start" data-id="${t.id}" title="放进「进行中」，方便看清现在在做什么">在做</button>`;
 }
+/* 逾期徽标（T-F7）：天数由**后端派生**（`TaskOut.overdue_days`），前端不自己拿今天去减
+   —— 否则又是"一处一套口径"。字段状态照原样显示（它是"存下来的状态"），
+   派生逾期单独标出来：这样"列在逾期栏里、面板却写未开始"的矛盾就不存在了。 */
+function overdueBadge(t){
+  return t.overdue_days>0?` · <span class="badge hard">已逾期 ${t.overdue_days} 天</span>`:'';
+}
 function taskCard(t,isOverdue){
   const isDone=t.status==='完成';
+  // 逾期**按派生天数为准**（T-F7）：以前只有"逾期栏里那一次调用"会传 isOverdue=true，
+  // 于是同一个任务在「全部任务」「重要」等视图里不标红、在逾期栏里标红 —— 同一件事两种长相。
+  const late=isOverdue||(t.overdue_days>0);
   const asg=(t.assignments||[]);
   const asgMeta=asg.map(a=>`<span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span>`).join('');
   const asgButtons=asg.map(a=>TEAM_NEXT[a.status]?`<button class="ghost" data-action="team-status" data-id="${a.id}" data-status="${TEAM_NEXT[a.status][0]}">${TEAM_NEXT[a.status][1]}</button>`:'').join('');
@@ -749,14 +758,14 @@ function taskCard(t,isOverdue){
     : (STATUS_BADGE[t.status]||'<span class="badge todo">未完成</span>');
   const sub=(t.subtask_total>0)
     ? `<span class="badge">步骤 ${t.subtask_done}/${t.subtask_total}</span>` : '';
-  return `<div class="card ${isDone?'done':''} ${isOverdue?'overdue':''} ${t.id===detailTaskId?'selected':''}">
+  return `<div class="card ${isDone?'done':''} ${late?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
     <div class="meta">${t.due_date||''} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div></div>
     <div class="row">
       ${doingButtonHTML(t)}
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
-      ${isOverdue?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
+      ${late?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
         <button class="ghost" data-action="task-cancel" data-id="${t.id}">取消</button>`:''}
       ${asgButtons}
       ${isDone?`<button class="ghost" data-action="task-undo-done" data-id="${t.id}">撤销完成</button>`

@@ -1522,9 +1522,24 @@ gaps = ""
 id = "T-F7"
 title = "F 批：修「派生逾期 vs 字段状态」不一致（顺手）"
 group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/core/tasks/manager.py::def overdue_days",
+  "text:src/timeflow/api/app.py::overdue_days=tm.overdue_days(t)",
+  "text:src/web/index.html::function overdueBadge(",
+  "text:src/web/index.html::const late=isOverdue||(t.overdue_days>0)",
+  "test:test_task_overdue_line.py",
+]
+gaps = ""
+
+[entries."T-F8"]
+id = "T-F8"
+title = "F 批：债务计数与债务明细口径不一致（无截止日的 My Day 老任务）"
+group = "PROCESS"
 status = "todo"
 evidence = ["file:复盘/口径定案-待定清单.md"]
-gaps = "本轮查出的缺陷：**只有「新建时截止日已过」才会把 `逾期` 写进 status**；之后过期是派生显示（进逾期栏 + 标红），但详情面板里状态仍写着「未开始」→ 自相矛盾。修法二选一（写回状态 / 详情也走派生）。**待实现**"
+gaps = "T-F7 顺手查出来的缺陷：`ledger.summary` 的 `debt_count` 取 `len(overdue_tasks())`（**包含**无截止日但昨天就该做的 My Day 任务），而 `debt_items` 跳过它们（没有截止日就算不出「几天」）→ 摘要行可能写「逾期共 1 项」而后面一条都列不出来。**修法要先定口径**（这类任务算不算一笔债务？天数从创建日算还是只列不计数）——属产品判断，登记待定，不在 T-F7 里替用户决定。"
 
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"

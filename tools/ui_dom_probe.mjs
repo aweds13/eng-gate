@@ -100,7 +100,9 @@ function probeTask(over = {}) {
     updated_at: '2026-09-18T10:00:00', version: 1, groups: [], assignments: [],
     subtask_done: 0, subtask_total: 0, note: null, priority: '中', flagged: false, attach: [],
     remind_at: null, reminder_state: null, task_type: '普通', course_id: null, course_name: null,
-    doing_rank: null, ...over,
+    doing_rank: null,
+    // 派生逾期天数（T-F7）：界面不自己拿今天去减，后端算好再给
+    overdue_days: 0, ...over,
   };
 }
 
@@ -144,6 +146,11 @@ const DB = {
   },
   '/api/tasks/t1/facts': [],
   '/api/tasks/t1/subtasks': [],
+  // 派生逾期（T-F7）：字段状态还是「未开始」、后端算出"已逾期 12 天" —— 详情面板要**两个都显示**，
+  // 不能再出现"列在逾期栏里、面板却写未开始"的自相矛盾
+  '/api/tasks/t9': probeTask({
+    id: 't9', title: '拖了很久的事', status: '未开始', due_date: '2020-01-01', overdue_days: 12,
+  }),
   // 任务 → 复习卡（T-C5）：详情面板要显示"这张任务升级出来的卡"
   '/api/tasks/t1/review-cards': [{ id: 'r1', title: '探针复习卡', due_date: '2026-09-20T00:00:00',
     form: 'qa', source: 'internal', ref_handle: 'notes/数学.md', task_id: 't1' }],
@@ -240,6 +247,7 @@ let reviewBad = 0;
 let hardBad = 0;
 let guardBad = 0;
 let stateBad = 0;
+let overdueBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -407,6 +415,26 @@ for (const [view, needs] of [
   }
 }
 
+// 派生逾期（F 批 · T-F7）：字段状态 + 派生天数**两个都要在**，且不打架。
+const overdueChecks = [];
+try {
+  byId.get('detailRail')._html = '';
+  await globalThis.__showDetail('t9');
+  await sleep(30);
+  const rail = byId.get('detailRail')._html;
+  const needs = ['状态 未开始', '已逾期 12 天', 'badge hard'];
+  const missing = needs.filter((n) => !rail.includes(n));
+  const rendered = missing.length === 0;
+  if (!rendered) overdueBad++;
+  overdueChecks.push({ rendered, missing });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 详情·派生逾期 rail ${String(rail.length).padStart(5)}B`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  overdueBad++;
+  overdueChecks.push({ error: e.message });
+  console.log(`  ❌ 详情·派生逾期 渲染抛错: ${e.message}`);
+}
+
 try {
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
   for (const a of new Set(CLICK_ACTIONS)) if (!registered.has(a)) unused.push(a);
@@ -416,7 +444,8 @@ console.warn = realWarn;
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
     { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
-      hard: hardChecks, guard: guardChecks, state: stateChecks, problems, unregistered: unused },
+      hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
+      problems, unregistered: unused },
     null, 2));
 }
 if (unused.length) {
@@ -426,7 +455,7 @@ if (problems.length) {
   console.log(`  ⚠️  运行时告警/异常：${problems.slice(0, 5).join(' | ')}`);
 }
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
-  || guardBad > 0 || stateBad > 0 || unused.length > 0 || problems.length > 0;
+  || guardBad > 0 || stateBad > 0 || overdueBad > 0 || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
   + `，今日完成明细展开 ${doneChecks.length - doneBad}/${doneChecks.length} 正常`
@@ -434,5 +463,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，硬考核强呈现 ${hardChecks.length - hardBad}/${hardChecks.length} 正常`
   + `，白名单勿扰 ${guardChecks.length - guardBad}/${guardChecks.length} 正常`
   + `，状态机 ${stateChecks.length - stateBad}/${stateChecks.length} 正常`
+  + `，派生逾期 ${overdueChecks.length - overdueBad}/${overdueChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

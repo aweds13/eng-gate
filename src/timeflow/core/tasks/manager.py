@@ -234,10 +234,10 @@ def reminder_state(task: Task, now: datetime | None = None) -> str | None:
     - `today` = 今天稍后；
     - `soon`  = 7 天内；
     - `later` = 更远；
-    - `None`  = 没设提醒 / 任务已完成（完成后不再催——**不打扰**是基调）。
+    - `None`  = 没设提醒 / 任务已完成或已搁置（完成后不再催——**不打扰**是基调）。
     为什么放领域层：这是"什么时候算该提醒"的**口径**，写在前端就会和通知通道各算一套。
     """
-    if not task.remind_at or task.status in (STATUS_DONE, STATUS_CANCELLED, *HIDDEN_STATUSES):
+    if not task.remind_at or task.status in (STATUS_DONE, *PARKED_STATUSES, *HIDDEN_STATUSES):
         return None
     now = now or datetime.now()
     try:
@@ -254,8 +254,32 @@ def reminder_state(task: Task, now: datetime | None = None) -> str | None:
     return "later"
 
 
+def overdue_days(task: Task, today: str | None = None) -> int:
+    """**派生**的逾期天数（F 批 · T-F7）：`0` = 没逾期，否则 = 已逾期多少天。
+
+    为什么要派生、而不是把 `逾期` 写回 `status`（T-F7 的修法选择）：
+    - `overdue_tasks()` 早就是**派生**的（AC-4/AC-5：截止日过了就进逾期栏），
+      「完成 N 天后进档案」也是派生的（T-F2）—— 再搞一套"到点改状态"的写入 = 两套真相，
+      还要一个定时器/惰性写入点（本项目明确避免定时任务）；
+    - 真正的问题是**详情面板自相矛盾**：字段写着「未开始」、界面却把它列在逾期栏里标红。
+      修法是让**显示也走同一个派生口径**（`TaskOut.overdue_days`），而不是把 6 个地方写状态。
+    - 口径：已完成 / 已搁置（取消·待定）/ 归档 / 已删 → 0（逾期只对"还在手上的事"有意义）；
+      没截止日 → 0；截止日 < 今天 → 相差天数。**不计折算**，只报天数（债务=天数/程度）。
+    """
+    if task.due_date is None:
+        return 0
+    if task.status == STATUS_DONE or task.status in PARKED_STATUSES:
+        return 0
+    if task.status in HIDDEN_STATUSES:
+        return 0
+    t = today or _today()
+    if task.due_date >= t:
+        return 0
+    return (date.fromisoformat(t) - date.fromisoformat(task.due_date)).days
+
+
 def due_reminders(conn: sqlite3.Connection, now: datetime | None = None) -> list[Task]:
-    """到点该提醒的任务（T-B5）：`remind_at <= now` 且任务还"活着"（非完成/取消/归档/已删）。
+    """到点该提醒的任务（T-B5）：`remind_at <= now` 且任务还"活着"（非完成/搁置/归档/已删）。
 
     按提醒时间正序 —— 越早该提醒的越靠前。**只读**：不改任务、不发事实
     （通知只是"把已知时间说出来"，不改变任何账目）。

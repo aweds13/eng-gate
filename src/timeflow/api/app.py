@@ -102,6 +102,10 @@ class TaskOut(BaseModel):
     # 提醒的界面口径（`over`/`today`/`soon`/`later`；None=没设或已完成）——
     # **由领域层算**（`tm.reminder_state`），前端不自己拿当前时间去比（免得口径分叉）
     reminder_state: str | None = None
+    # 派生逾期天数（F 批 · T-F7）：**0 = 没逾期**。字段里的 `status` 是"存下来的状态"
+    # （新建时截止日已过才写「逾期」），这里是"按今天算出来的逾期" ——
+    # 详情面板两个都显示，就不会再出现"列在逾期栏里、面板却写未开始"的自相矛盾。
+    overdue_days: int = 0
     # 任务类型 + 所属课程（SR-F5.4 / T-C12）：`course_name` 由后端查名字给出，
     # 列表卡片因此不必先拉一遍课程表；课程已删 → None（界面显示「课程已删」，任务不受影响）
     task_type: str = tm.DEFAULT_TASK_TYPE
@@ -154,6 +158,7 @@ def _out(t: tm.Task, conn: sqlite3.Connection) -> TaskOut:
         attach=[dict(i) for i in t.attach],
         remind_at=t.remind_at,
         reminder_state=tm.reminder_state(t),
+        overdue_days=tm.overdue_days(t),
         task_type=t.task_type,
         course_id=t.course_id,
         course_name=tm.course_name(conn, t.course_id),

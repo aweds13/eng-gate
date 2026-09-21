@@ -294,13 +294,15 @@ def summary(
     t = today or date.today().isoformat()
     items: list[DebtItem] = []
     for task in tm.overdue_tasks(conn, t):
-        if task.due_date is None:
-            continue
-        days = (date.fromisoformat(t) - date.fromisoformat(task.due_date)).days
+        # 逾期天数**只在领域层算一处**（T-F7）：这里以前自己再减一次日期，
+        # 于是"详情面板说未开始、账本说逾期 3 天"这种口径分叉就有机会发生。
+        days = tm.overdue_days(task, t)
+        if days <= 0:
+            continue  # 无截止日（但昨天就该做的 My Day 任务）：列在逾期栏，但没有"几天"可算
         items.append(
             DebtItem(
                 title=task.title,
-                due_date=task.due_date,
+                due_date=task.due_date or "",
                 overdue_days=days,
                 degree=_degree(days, mild, medium),
             )
