@@ -1537,9 +1537,16 @@ gaps = ""
 id = "T-F8"
 title = "F 批：债务计数与债务明细口径不一致（无截止日的 My Day 老任务）"
 group = "PROCESS"
-status = "todo"
-evidence = ["file:复盘/口径定案-待定清单.md"]
-gaps = "T-F7 顺手查出来的缺陷：`ledger.summary` 的 `debt_count` 取 `len(overdue_tasks())`（**包含**无截止日但昨天就该做的 My Day 任务），而 `debt_items` 跳过它们（没有截止日就算不出「几天」）→ 摘要行可能写「逾期共 1 项」而后面一条都列不出来。**修法要先定口径**（这类任务算不算一笔债务？天数从创建日算还是只列不计数）——属产品判断，登记待定，不在 T-F7 里替用户决定。"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/core/tasks/manager.py::def _is_stale_undated_myday",
+  "text:src/timeflow/core/tasks/manager.py::if _is_stale_undated_myday(task, t_date)",
+  "text:src/timeflow/core/tasks/manager.py::return (today_d - created).days",
+  "text:src/timeflow/core/ledger/ledger.py::逾期栏里**每一条**都算得出天数",
+  "test:test_task_overdue_line.py",
+]
+gaps = ""
 
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"

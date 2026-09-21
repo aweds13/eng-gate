@@ -254,8 +254,40 @@ def reminder_state(task: Task, now: datetime | None = None) -> str | None:
     return "later"
 
 
+def _created_date(task: Task) -> date | None:
+    """任务创建日（只取 `created_at` 的日期部分）；解析不出来返回 `None`（不猜、不崩）。"""
+    try:
+        return date.fromisoformat(task.created_at[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_stale_undated_myday(task: Task, today: date) -> bool:
+    """**无截止日、但昨天（或更早）就该做的 My Day 任务** —— AC-4 补充口径里的那种"老账"。
+
+    T-F8（用户 2026-09-21 定案 A）：这类任务**算一笔债务**，天数**从创建日算起**
+    —— 它本来就是"昨天没做完"才进逾期栏的，`created_at` 是它身上唯一可用的日期。
+
+    这个判定被 `overdue_tasks()`（要不要列进逾期栏）和 `overdue_days()`（算几天）
+    **共用**：T-F8 的缺陷正是这两处各判各的 —— 列进去了、天数字段却硬返回 0，
+    于是摘要行写「逾期共 1 项」而明细一条都列不出来。
+
+    注意 `created_at` 只是**近似**（近似"它什么时候进的 My Day"）：`tasks` 表没有记
+    "哪天被放进 My Day"，这是 AC-4 落地时就有的近似，本卡只是让天数与"是否入选"同源。
+    """
+    if task.due_date is not None or not task.is_myday:
+        return False
+    if task.status == STATUS_DONE or task.status in PARKED_STATUSES:
+        return False
+    if task.status in HIDDEN_STATUSES:
+        return False
+    created = _created_date(task)
+    return created is not None and created < today
+
+
 def overdue_days(task: Task, today: str | None = None) -> int:
-    """**派生**的逾期天数（F 批 · T-F7）：`0` = 没逾期，否则 = 已逾期多少天。
+    """**派生**的逾期天数（F 批 · T-F7；无截止日的 My Day 老账见 T-F8）：
+    `0` = 没逾期，否则 = 已逾期多少天。
 
     为什么要派生、而不是把 `逾期` 写回 `status`（T-F7 的修法选择）：
     - `overdue_tasks()` 早就是**派生**的（AC-4/AC-5：截止日过了就进逾期栏），
@@ -264,18 +296,26 @@ def overdue_days(task: Task, today: str | None = None) -> int:
     - 真正的问题是**详情面板自相矛盾**：字段写着「未开始」、界面却把它列在逾期栏里标红。
       修法是让**显示也走同一个派生口径**（`TaskOut.overdue_days`），而不是把 6 个地方写状态。
     - 口径：已完成 / 已搁置（取消·待定）/ 归档 / 已删 → 0（逾期只对"还在手上的事"有意义）；
-      没截止日 → 0；截止日 < 今天 → 相差天数。**不计折算**，只报天数（债务=天数/程度）。
+      截止日 < 今天 → 相差天数；**没截止日的 My Day 老账 → 从创建日算起**（T-F8 定案 A），
+      其它没截止日的 → 0。**不计折算**，只报天数（债务=天数/程度）。
+
+    不变式（T-F8 要保的就是这条）：`overdue_days(t) > 0` ⟺ `t` 在 `overdue_tasks()(t)` 里。
     """
-    if task.due_date is None:
-        return 0
     if task.status == STATUS_DONE or task.status in PARKED_STATUSES:
         return 0
     if task.status in HIDDEN_STATUSES:
         return 0
     t = today or _today()
-    if task.due_date >= t:
-        return 0
-    return (date.fromisoformat(t) - date.fromisoformat(task.due_date)).days
+    today_d = date.fromisoformat(t)
+    if task.due_date is not None:
+        if task.due_date >= t:
+            return 0
+        return (today_d - date.fromisoformat(task.due_date)).days
+    if _is_stale_undated_myday(task, today_d):
+        created = _created_date(task)
+        if created is not None:
+            return (today_d - created).days
+    return 0
 
 
 def due_reminders(conn: sqlite3.Connection, now: datetime | None = None) -> list[Task]:
@@ -647,7 +687,9 @@ def overdue_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Ta
     """逾期任务（AC-5）：未完成且 due_date < 今天（不强推，只如实列出）；**按统一口径排序**。
 
     AC-4 补充：无截止日但**昨日仍未完成的 My Day 任务**也自动移入逾期栏
-    （My Day=今天要做的集合，没做完不假装消失）。
+    （My Day=今天要做的集合，没做完不假装消失）；这类"老账"的天数从 `created_at`
+    算起（T-F8 定案 A），判定由 `_is_stale_undated_myday()` 与 `overdue_days()` **共用**，
+    保证"列在栏里的"就是"算得出天数的"。
 
     「待定 / 取消」不出现在这里 —— 搁置的东西**不计债**（T-F1）。
     """
@@ -667,8 +709,7 @@ def overdue_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Ta
     ).fetchall()
     for r in myday_rows:
         task = _row_to_task(r)
-        created = date.fromisoformat(task.created_at[:10])
-        if created < t_date:
+        if _is_stale_undated_myday(task, t_date):
             overdue.append(task)
     overdue.sort(key=_sort_key)
     return overdue

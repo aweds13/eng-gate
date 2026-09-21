@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 class DebtItem(BaseModel):
     title: str
-    due_date: str
+    due_date: str  # 无截止日的债务为 ""（My Day 老账，天数从创建日算起，T-F8）
     overdue_days: int
     degree: str  # 轻 / 中 / 重
 
@@ -296,9 +296,11 @@ def summary(
     for task in tm.overdue_tasks(conn, t):
         # 逾期天数**只在领域层算一处**（T-F7）：这里以前自己再减一次日期，
         # 于是"详情面板说未开始、账本说逾期 3 天"这种口径分叉就有机会发生。
+        # T-F8 起逾期栏里**每一条**都算得出天数（无截止日的 My Day 老账从创建日算起），
+        # 所以「`debt_count` = 明细条数」成立；这个 `<= 0` 只是防御（真触发就是两者又分叉了）。
         days = tm.overdue_days(task, t)
         if days <= 0:
-            continue  # 无截止日（但昨天就该做的 My Day 任务）：列在逾期栏，但没有"几天"可算
+            continue
         items.append(
             DebtItem(
                 title=task.title,

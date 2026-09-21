@@ -17,8 +17,9 @@
 - 「新建时截止日已过」与「后来才过期」两条路**算出来的天数一样**（不再分两套口径）；
 - 账本 `debt_items` 与领域层同源（顺手修掉这里自己减日期的那份重复算法）；
 - API：`GET /api/tasks` 带 `overdue_days`；
-- 未完成但无截止日的 My Day 老任务：列在逾期栏、但天数算不出来 → **不进 `debt_items`**
-  （计数与明细的口径不一致已登记 T-F8，不在本卡里偷偷定口径）。
+- **T-F8（2026-09-21 用户定案 A）**：未完成、无截止日的 My Day 老任务**算一笔债务**，
+  天数**从创建日算起** —— 于是"列进逾期栏的"就一定能算出天数，
+  `debt_count == len(debt_items)` 这个不变式成立（以前计数含它、明细跳过它）。
 """
 
 from __future__ import annotations
@@ -50,6 +51,12 @@ def _client(tmp_path, name: str = "overdue_api.db") -> TestClient:  # type: igno
 
 def _days_ago(n: int) -> str:
     return (date.today() - timedelta(days=n)).isoformat()
+
+
+def _backdate(conn, task_id: str, stamp: str) -> None:  # type: ignore[no-untyped-def]
+    """直接改 `created_at`：`update_task` 的字段白名单里没有它（"什么时候建的"不该被编辑）。"""
+    conn.execute("UPDATE tasks SET created_at = ? WHERE id = ?", (stamp, task_id))
+    conn.commit()
 
 
 # ---------------------------------------------------------------- 天数口径
@@ -120,20 +127,77 @@ def test_ledger_debt_items_use_the_same_helper(conn) -> None:  # type: ignore[no
     assert summary.debt_count == 2
 
 
-def test_undated_old_myday_task_is_listed_but_has_no_days(conn) -> None:  # type: ignore[no-untyped-def]
-    """无截止日的 My Day 老任务：进逾期栏（AC-4），但**天数算不出来** → 不进债务明细。
+def test_undated_old_myday_debt_counts_from_created_at(conn) -> None:  # type: ignore[no-untyped-def]
+    """无截止日的 My Day 老账**算一笔债务**，天数**从创建日算起**（T-F8 定案 A）。
 
-    （"逾期栏里有 1 条、债务明细 0 条"这个计数/明细口径不一致已登记 **T-F8**，
-    本卡不在这里偷偷替用户定口径。）
+    它进逾期栏的原因本来就是"昨天没做完"（AC-4），`created_at` 是它身上唯一可用的日期；
+    以前这里硬返回 0 → 逾期栏里 1 条、债务明细 0 条（T-F8 登记的那个不一致）。
     """
     old = tm.create_task(conn, "昨天没做完的", is_myday=True)
-    # 直接改 created_at：`update_task` 的字段白名单里没有它（那是"什么时候建的"，不该被编辑）
-    conn.execute("UPDATE tasks SET created_at = ? WHERE id = ?", ("2020-01-01T09:00:00", old.id))
-    conn.commit()
-    assert [t.id for t in tm.overdue_tasks(conn)] == [old.id]
+    _backdate(conn, old.id, _days_ago(4) + "T09:00:00")
 
-    assert tm.overdue_days(tm.get_task(conn, old.id)) == 0
-    assert ledger.summary(conn).debt_items == []
+    assert [t.id for t in tm.overdue_tasks(conn)] == [old.id]
+    assert tm.overdue_days(tm.get_task(conn, old.id)) == 4
+
+    summary = ledger.summary(conn)
+    assert [(i.title, i.due_date, i.overdue_days) for i in summary.debt_items] == [
+        ("昨天没做完的", "", 4)
+    ]
+    assert summary.debt_count == len(summary.debt_items) == 1
+
+
+def test_created_at_days_only_for_stale_myday(conn) -> None:  # type: ignore[no-untyped-def]
+    """"从创建日算天数"只给"昨天该做没做"的老账：今天才进 My Day 的、根本不在 My Day 的都 → 0。
+
+    否则每条老的无截止日任务都会挂着"逾期几百天"（那是把"建得早"当成了"欠得久"）。
+    """
+    fresh = tm.create_task(conn, "今天刚加进 My Day 的", is_myday=True)
+    assert tm.overdue_days(fresh) == 0
+
+    old_plain = tm.create_task(conn, "老、但不在 My Day 里")
+    _backdate(conn, old_plain.id, "2020-01-01T09:00:00")
+    assert tm.overdue_days(tm.get_task(conn, old_plain.id)) == 0
+    assert tm.overdue_tasks(conn) == []
+    assert ledger.summary(conn).debt_count == 0
+
+
+def test_parked_stale_myday_stops_being_debt(conn) -> None:  # type: ignore[no-untyped-def]
+    """老账挂成「待定」之后就不是债务了（T-F1 的"搁置不计债"对这类任务同样成立）。"""
+    task = tm.create_task(conn, "挂着不做的", is_myday=True)
+    _backdate(conn, task.id, "2020-01-01T09:00:00")
+    assert tm.overdue_days(tm.get_task(conn, task.id)) > 0
+
+    tm.park_task(conn, task.id)
+    assert tm.overdue_days(tm.get_task(conn, task.id)) == 0
+    assert tm.overdue_tasks(conn) == []
+
+
+def test_overdue_days_positive_iff_listed(conn) -> None:  # type: ignore[no-untyped-def]
+    """**T-F8 不变式**：`overdue_days > 0` ⟺ 在 `overdue_tasks()` 里；`debt_count` = 明细条数。
+
+    混一批各式各样的任务（有/无截止日、今天/过期、My Day/不在、完成/搁置）一起验，
+    免得只对着一种情形调好、换个组合又分叉。
+    """
+    today = date.today().isoformat()
+    late = tm.create_task(conn, "有截止日晚三天", due_date=_days_ago(3))
+    tm.create_task(conn, "有截止日还没到", due_date=(date.today() + timedelta(days=3)).isoformat())
+    tm.create_task(conn, "有截止日就是今天", due_date=today)
+    old_myday = tm.create_task(conn, "无截止日的 My Day 老账", is_myday=True)
+    tm.create_task(conn, "无截止日、今天才进 My Day", is_myday=True)
+    tm.create_task(conn, "无截止日、不在 My Day")
+    done = tm.create_task(conn, "完成了的", due_date=_days_ago(3))
+    tm.complete_task(conn, done.id)
+    parked = tm.create_task(conn, "搁置了的", due_date=_days_ago(3))
+    tm.park_task(conn, parked.id)
+    _backdate(conn, old_myday.id, "2020-01-01T09:00:00")
+
+    listed = {t.id for t in tm.overdue_tasks(conn)}
+    positive = {t.id for t in tm.list_tasks(conn) if tm.overdue_days(t) > 0}
+    assert positive == listed == {late.id, old_myday.id}
+
+    summary = ledger.summary(conn)
+    assert summary.debt_count == len(summary.debt_items) == 2
+    assert [i.title for i in summary.debt_items] == ["无截止日的 My Day 老账", "有截止日晚三天"]
 
 
 # ---------------------------------------------------------------- API
