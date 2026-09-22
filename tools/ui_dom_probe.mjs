@@ -293,6 +293,16 @@ const DB = {
       { id: 'review_count', label: '复习', unit: '张', kind: 'count' },
     ],
   },
+  // 导出 markdown（SR-F8 / G 批 · T-G4）：设置页要显示目录、今天那份的状态、错误与口径说明。
+  // 夹具里**同时**给"已写出"和"上次失败"—— 两条都该渲染出来（错误不许静默消失）。
+  '/api/settings/export': {
+    dir: 'D:/timeflow-export', default_dir: 'export', configured: true, exists: true,
+    today: '2026-09-21', note_path: 'D:/timeflow-export/2026-09-21.md', note_exists: true,
+    note_bytes: 512, last_written_at: '2026-09-21T21:10:00',
+    last_error: '建不了导出目录：D:/nope（拒绝访问）',
+    note: '数据库是权威，md 是产物：手改不会被读回，下次导出会覆盖。',
+    where: '写在你自己指定的独立目录里（默认项目下 export/）—— 不写进 Obsidian 的笔记目录。',
+  },
   // 可配置词表（SR-NF7 / G 批 · T-G1）：设置页要渲染出两张表（可加 / 可删 / 可回默认）
   '/api/settings/vocab': {
     note: '词表只决定「能选什么 / 叫什么」，不改计算。',
@@ -349,6 +359,7 @@ let debtBad = 0;
 let behaviorBad = 0;
 let vocabBad = 0;
 let heatmapBad = 0;
+let exportBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -641,6 +652,33 @@ try {
   console.log(`  ❌ stats·热力图 渲染抛错: ${e.message}`);
 }
 
+// 导出 markdown（SR-F8 / G 批 · T-G4）：设置页要显示目录输入框、今天那份的状态、**上次的错误**，
+// 以及两条口径说明（数据库权威 / 不写进 Obsidian 笔记目录）—— 后者是红线，写在界面上才算数。
+const exportChecks = [];
+for (const [view, needs] of [
+  ['setting', ['导出（Markdown）', 'id="exportDir"', 'set-export-dir', 'export-day', '打开目录',
+    '2026-09-21.md', '已写出', 'D:/timeflow-export',
+    '上次导出失败：建不了导出目录：D:/nope（拒绝访问）',
+    '数据库是权威，md 是产物', '不写进 Obsidian 的笔记目录']],
+]) {
+  try {
+    byId.get('main')._html = '';
+    await globalThis.__view(view);
+    await sleep(30);
+    const html = byId.get('main')._html;
+    const missing = needs.filter((n) => !html.includes(n));
+    const rendered = missing.length === 0;
+    if (!rendered) exportBad++;
+    exportChecks.push({ view, rendered, missing });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} ${view}·导出 markdown main ${String(html.length).padStart(6)}B`
+      + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+  } catch (e) {
+    exportBad++;
+    exportChecks.push({ view, error: e.message });
+    console.log(`  ❌ ${view}·导出 markdown 渲染抛错: ${e.message}`);
+  }
+}
+
 // 子步骤（F 批 · T-F4）：主任务卡上显示「当前该做哪一步」；
 // 详情里每一步都有截止日输入框与「明天 / 尝试失败 / 详情 / 脱离」，添加步骤那一行也有日期框。
 const stepChecks = [];
@@ -738,6 +776,7 @@ if (process.argv.includes('--json')) {
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
+      export: exportChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -749,7 +788,7 @@ if (problems.length) {
 }
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
   || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0 || archiveBad > 0
-  || stepBad > 0 || debtBad > 0 || behaviorBad > 0 || vocabBad > 0 || heatmapBad > 0
+  || stepBad > 0 || debtBad > 0 || behaviorBad > 0 || vocabBad > 0 || heatmapBad > 0 || exportBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -766,5 +805,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，口径回退 ${behaviorChecks.length - behaviorBad}/${behaviorChecks.length} 正常`
   + `，可配置词表 ${vocabChecks.length - vocabBad}/${vocabChecks.length} 正常`
   + `，热力图有值 ${heatmapChecks.length - heatmapBad}/${heatmapChecks.length} 正常`
+  + `，导出 markdown ${exportChecks.length - exportBad}/${exportChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

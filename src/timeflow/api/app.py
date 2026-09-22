@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     import sqlite3
 
 import time
+from dataclasses import asdict
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Request
@@ -25,7 +26,7 @@ from timeflow import logs, vocab
 from timeflow.config import load_settings
 from timeflow.core import academic as ac
 from timeflow.core import attach as attach_mod
-from timeflow.core import behavior, insights
+from timeflow.core import behavior, insights, vault
 from timeflow.core import facts as facts_mod
 from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
@@ -452,6 +453,33 @@ def create_app(db_path: str | None = None) -> FastAPI:
         """热力图现在有哪些维度可看（顺序 = 界面按钮顺序）+ 单位/种类（G 批 · T-G1）。"""
         return insights.heatmap_dimensions(conn, settings.insights.heatmap_dimensions)
 
+    # ---- 沉淀型 markdown（SR-F8 / G 批 · T-G4）----
+    # 口径（2026-09-21 用户定，见 `复盘/口径定案-待定清单.md` §7）：**数据库是权威、md 是产物**；
+    # 每天一个 md；目录可配置；**不写进 Obsidian 笔记目录**（红线 SR-F8.2）。
+    # 自动导出是"产物"：失败只记错（`export.last_error`），**不挡完成/记备忘这些主流程**。
+    @app.get("/api/settings/export")
+    def get_export_settings() -> dict[str, Any]:
+        """导出目录现状 + 今天那份在不在 + 上次写的时间/错误（说明由后端给，界面不复述）。"""
+        return vault.describe(conn, settings.export.dir)
+
+    @app.put("/api/settings/export")
+    def put_export_settings(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """改导出目录（**当场确保建得出来**，建不了 400 带原话，并把配置回滚）。"""
+        require_local_origin(request)
+        try:
+            return vault.set_dir(conn, payload.get("dir"), settings.export.dir)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/export/day")
+    def export_day(payload: dict[str, Any]) -> dict[str, Any]:
+        """手动导出某一天（不传 `day` = 今天）。失败 400 带原话（手动动作要当场看到问题）。"""
+        try:
+            result = vault.export_day(conn, payload.get("day"), settings.export.dir)
+        except (OSError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e) or e.__class__.__name__) from e
+        return {"ok": True, **asdict(result)}
+
     # ---- 备份与恢复（SR-NF12 / SR-F9.3）----
     # 口径（2026-09-21 用户定）：设置页列出最近几个备份，点一个就能恢复。
     @app.get("/api/settings/backups")
@@ -714,22 +742,28 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.post("/api/tasks/{task_id}/complete", response_model=TaskOut)
     def complete_task(task_id: str) -> TaskOut:
         try:
-            return _out(tm.complete_task(conn, task_id), conn)
+            task = tm.complete_task(conn, task_id)
         except KeyError:
             raise HTTPException(status_code=404, detail="任务不存在") from None
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        # md 是产物（T-G4）：写完最好，写不成只记错 —— 不许因为磁盘/路径问题让"完成"失败
+        vault.try_export(conn, None, settings.export.dir)
+        return _out(task, conn)
 
     @app.post("/api/tasks/{task_id}/uncomplete", response_model=TaskOut)
     def uncomplete_task(task_id: str, payload: dict[str, Any] | None = None) -> TaskOut:
         """撤销完成（OP-5 可逆）：发 task.uncompleted 反向事实并恢复状态。"""
         restore = (payload or {}).get("restore_status", tm.STATUS_TODO)
         try:
-            return _out(tm.uncomplete_task(conn, task_id, restore_status=restore), conn)
+            task = tm.uncomplete_task(conn, task_id, restore_status=restore)
         except KeyError:
             raise HTTPException(status_code=404, detail="任务不存在") from None
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        # 撤销之后**重新导出**：md 跟着回到"这一天没做成它"（数据库权威，md 是产物）
+        vault.try_export(conn, None, settings.export.dir)
+        return _out(task, conn)
 
     # ---- 状态机：进行中 / 待定 / 取消 / 归档（F 批 · T-F1）----
     # 口径见 `复盘/口径定案-待定清单.md` §1。这些动作**都不动账本**
@@ -1484,14 +1518,17 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.post("/api/memos")
     def create_memo(payload: dict[str, Any]) -> dict[str, str]:
         try:
-            return {"id": memo.create_memo(
+            memo_id = memo.create_memo(
                 conn,
                 text=payload["text"],
                 ref_handle=payload.get("ref_handle"),
                 task_id=payload.get("task_id"),
-            )}
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        # 备忘录是**沉淀型内容**（约定层）：写完自动落一份 md（失败只记错，见 T-G4）
+        vault.try_export(conn, None, settings.export.dir)
+        return {"id": memo_id}
 
     @app.get("/api/memos")
     def list_memos() -> list[dict[str, object]]:
@@ -1499,8 +1536,9 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.delete("/api/memos/{memo_id}")
     def delete_memo(memo_id: str) -> dict[str, str]:
-        """删除备忘录（幂等）；关联任务不自动删除。"""
+        """删除备忘录（幂等）；关联任务不自动删除。删完重新导出（md 跟着数据库走）。"""
         memo.delete_memo(conn, memo_id)
+        vault.try_export(conn, None, settings.export.dir)
         return {"deleted": memo_id}
 
     @app.post("/api/memos/{memo_id}/to-task")
@@ -1522,12 +1560,15 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.post("/api/ledger/output")
     def ledger_output(payload: dict[str, Any]) -> dict[str, str]:
         try:
-            return {"id": memo.add_output_entry(
+            entry_id = memo.add_output_entry(
                 conn, value=payload["value"], kind=payload.get("kind", "asset"),
                 note=payload.get("note"), ref_handle=payload.get("ref_handle"),
-            )}
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        # 产出（温故知新那类沉淀）也落 md（T-G4）
+        vault.try_export(conn, None, settings.export.dir)
+        return {"id": entry_id}
 
     @app.get("/api/ledger/outputs")
     def ledger_outputs(date_str: str | None = None) -> list[dict[str, object]]:
@@ -1536,11 +1577,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.delete("/api/ledger/output/{entry_id}")
     def ledger_output_retract(entry_id: str) -> dict[str, object]:
-        """撤销一条产出（追加 `output.retracted` 反向事实，不删历史）。"""
+        """撤销一条产出（追加 `output.retracted` 反向事实，不删历史）。撤完重新导出。"""
         try:
             changed = memo.retract_output_entry(conn, entry_id)
         except KeyError:
             raise HTTPException(status_code=404, detail="产出记录不存在") from None
+        vault.try_export(conn, None, settings.export.dir)
         return {"entry_id": entry_id, "retracted": changed}
 
     @app.post("/api/ledger/invest")

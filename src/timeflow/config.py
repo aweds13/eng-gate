@@ -73,6 +73,14 @@ class InsightsConfig(BaseModel):
         return vocab.parse(value, vocab.HEATMAP_DIMENSIONS)
 
 
+class ExportConfig(BaseModel):
+    # 沉淀型 markdown 的落盘目录（SR-F8 / G 批 · T-G4）：默认项目下 `export/`。
+    # **相对路径一律相对项目根**（与调用方的工作目录无关）；本机在设置页改过的存
+    # `app_settings` 并优先。红线 SR-F8.2：这里**不该指到 Obsidian 的笔记目录**
+    # （只写独立共享目录）。
+    dir: str = "export"
+
+
 class Settings(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     app: AppConfig = Field(default_factory=AppConfig)
@@ -82,6 +90,7 @@ class Settings(BaseModel):
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     insights: InsightsConfig = Field(default_factory=InsightsConfig)
+    export: ExportConfig = Field(default_factory=ExportConfig)
 
 
 def _read_toml(config_path: Path | None) -> dict[str, Any]:

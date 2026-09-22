@@ -1725,6 +1725,36 @@ evidence = [
 ]
 gaps = ""
 
+[entries."T-G4"]
+id = "T-G4"
+title = "G 批：沉淀型内容写 Markdown（每天一个 md + 目录可配置，数据库权威）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/口径定案-待定清单.md",
+  "text:src/timeflow/core/vault.py::def render_day",
+  "text:src/timeflow/core/vault.py::def export_day",
+  "text:src/timeflow/core/vault.py::def try_export",
+  "text:src/timeflow/core/vault.py::HEADER_NOTE",
+  "text:src/timeflow/config.py::class ExportConfig",
+  "text:src/timeflow/core/insights.py::def day_cell",
+  "route:GET /api/settings/export",
+  "route:PUT /api/settings/export",
+  "route:POST /api/export/day",
+  "ui:data-action=set-export-dir",
+  "ui:data-action=export-day",
+  "test:test_export_md_line.py",
+]
+gaps = ""
+
+[entries."T-G5"]
+id = "T-G5"
+title = "G 批：Obsidian Vault 根路径 + obsidian:// 打开引用句柄"
+group = "PROCESS"
+status = "todo"
+evidence = []
+gaps = "口径已定（2026-09-21 用户定，见 `复盘/口径定案-待定清单.md` §7）：加 Vault 根路径配置，用 `obsidian://open?vault=…&file=…` 打开引用句柄（现在只能复制路径）；**只读跳转、不写 vault**（红线 SR-F8.2）"
+
 [entries."T-G2"]
 id = "T-G2"
 title = "G 批：集成写成文档 + 可跑示例（外部脚本调 REST）"

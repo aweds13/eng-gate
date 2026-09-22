@@ -254,6 +254,15 @@ def _focus_seconds(conn: sqlite3.Connection, day: str) -> float:
     return sum(_num(row["value_num"]) for row in rows)
 
 
+def day_cell(conn: sqlite3.Connection, day: str) -> HeatmapCell:
+    """**某一天**的多指标（公开读法；`_cell` 只给本模块内部用，见下）。
+
+    谁在用：markdown 导出（G 批 · T-G4）要写"这一天投入多少、复习几张、产出几条、债务几项" ——
+    它必须与热力图/趋势图**同一个口径**，所以走这一个函数，别在导出里另算一套。
+    """
+    return _cell(conn, day)
+
+
 def _cell(conn: sqlite3.Connection, day: str) -> HeatmapCell:
     """一天的多指标（`daily_insights` 与 `heatmap` 共用，避免口径分叉）。"""
     return HeatmapCell(

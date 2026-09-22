@@ -39,3 +39,10 @@ forms = { cloze = "挖空", qa = "问答卡", exam = "真题" }
 # 时间热力图的维度（SR-NF7 / T-G2）：改的是「用哪些维度看、排第几、叫什么」。
 # 可用的 id 见 docs/EXTENDING.md —— **要算一个全新的维度仍需改核心代码**（词表变不出新算法）。
 heatmap_dimensions = { focus_minutes = "专注", manual_minutes = "手动投入", review_count = "复习", output_count = "产出", debt_count = "债务（欠多少）" }
+
+[export]
+# 沉淀型 markdown（任务完成记录 / 备忘 / 产出）写到哪（SR-F8 / T-G4）。
+# 每天一个文件（如 2026-09-21.md）；相对路径相对**项目根**，也可写绝对路径。
+# ⚠ 红线 SR-F8.2：**别指到 Obsidian 的笔记目录** —— 这里只写"独立共享目录"。
+# 这里是默认值：在设置页「导出（Markdown）」里改过的以本机数据库为准。
+dir = "export"

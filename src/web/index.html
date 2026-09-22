@@ -222,6 +222,9 @@ const ACTIONS = {
   'vocab-add':      el => addVocabItem(el.dataset.key||''),
   'vocab-del':      el => delVocabItem(el.dataset.key||'', el.dataset.id||''),
   'vocab-reset':    el => resetVocab(el.dataset.key||''),
+  // 导出 markdown（SR-F8 / G 批 · T-G4）：改目录 / 立即导出今天（「打开目录」复用 attach-open）
+  'set-export-dir': () => setExportDir(),
+  'export-day':     () => exportDay(),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -1916,10 +1919,11 @@ async function restoreBackup(name){
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg,vocabCfg]=await Promise.all([
+  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg,vocabCfg,expCfg]=await Promise.all([
     api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach'),
     api('/api/settings/reminder'),api('/api/focus/guard'),api('/api/settings/backups'),
-    api('/api/settings/archive'),api('/api/settings/behavior'),api('/api/settings/vocab')]);
+    api('/api/settings/archive'),api('/api/settings/behavior'),api('/api/settings/vocab'),
+    api('/api/settings/export')]);
   groupCache=groups||[];
   guardCache=guardCfg||null;
   backupCache=backups||null;
@@ -1932,6 +1936,8 @@ async function renderSetting(m){
   const beh=behaviorCfg||{items:[],note:'',switch_note:''};
   // 可配置词表（T-G1）：同样是通用渲染 —— 后端给几张表就画几张
   const vb=vocabCfg||{items:[],note:''};
+  // 导出 markdown（T-G4）：缺字段就退回默认值（整页不空）
+  const ex=expCfg||{dir:'',default_dir:'export',note:'',where:'',note_exists:false,last_error:''};
   const bk=backupCache||{db:'',dir:'',items:[],note:''};
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
@@ -2029,6 +2035,25 @@ async function renderSetting(m){
       ${(t.allowed&&t.allowed.length)?`<div class="meta">只能从这些 id 里选：${t.allowed.map(a=>esc(a)).join(' · ')}</div>`:''}
       <div class="sub">${esc(t.note||'')}${t.max_items?` 最多 ${Number(t.max_items)||20} 项。`:''}</div>`).join('')
       ||'<div class="sub">还没有可配置的词表。</div>'}
+  </div>
+  <div class="section-title" id="set-export">导出（Markdown）</div>
+  <div class="card panel-card">
+    <div class="settings-sub">写到哪个目录</div>
+    <div class="row tight">
+      <input id="exportDir" value="${esc(ex.dir||'')}" style="min-width:240px" data-enter="set-export-dir">
+      <button data-action="set-export-dir">保存</button>
+      <button class="ghost" data-action="export-day">导出今天</button>
+      <button class="ghost" data-action="attach-open" data-target="${esc(ex.dir||'')}">打开目录</button></div>
+    <div class="meta">默认 ${esc(ex.default_dir||'export')}（相对项目根）·
+      ${ex.configured?'本机已改过（优先于配置文件）':'用配置文件的默认值'} ·
+      文件名就是日期：<code>${esc(ex.today||'')}.md</code>，一天一个</div>
+    <div class="meta">今天这份：${ex.note_exists
+      ? `已写出 ${sizeLabel(ex.note_bytes)}${ex.last_written_at?` · ${esc(String(ex.last_written_at).replace('T',' '))}`:''}`
+      : '还没写（完成一个任务、记一条备忘就会自动写；也可以点上面的「导出今天」）'}</div>
+    ${ex.last_error?`<div class="meta" style="color:var(--danger)">上次导出失败：${esc(ex.last_error)}
+      —— 不影响你用软件，修好目录后再点「导出今天」</div>`:''}
+    <div class="sub">${esc(ex.note||'')}</div>
+    <div class="sub">${esc(ex.where||'')}</div>
   </div>
   <div class="section-title" id="set-academic">学业</div>
   <div class="card panel-card">
@@ -2175,6 +2200,24 @@ async function resetVocab(key){
     await api('/api/settings/vocab/reset',{method:'POST',body:JSON.stringify({key})});
     toast('已回到默认');view(current);
   }catch(e){/* 同上 */}
+}
+/* 导出 markdown（SR-F8 / G 批 · T-G4）：目录存后端（写前会确保建得出来，建不了 400 带原话）；
+   "导出今天"是手动补写 —— 平时完成一个任务/记一条备忘就会自动写。 */
+async function setExportDir(){
+  const el=document.getElementById('exportDir');
+  const dir=((el&&el.value)||'').trim();
+  if(!dir){toast('填一个目录，如 export 或 D:/timeflow-export');return}
+  try{
+    const r=await api('/api/settings/export',{method:'PUT',body:JSON.stringify({dir})});
+    toast(`导出目录已设为：${r.dir}`);view(current);
+  }catch(e){/* api() 已经弹过后端原话（建不了目录等） */}
+}
+async function exportDay(){
+  try{
+    const r=await api('/api/export/day',{method:'POST',body:JSON.stringify({})});
+    toast(`已写出 ${String(r.path).split(/[\\/]/).pop()}：完成 ${r.tasks} 项 · 步骤 ${r.steps} 项 · 备忘 ${r.memos} 条`);
+    view(current);
+  }catch(e){/* api() 已经弹过后端原话 */}
 }
 // ---- 附件打开方式设置（T-B4）：模式与白名单存服务端 ----
 async function setAttachMode(mode){

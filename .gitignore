@@ -33,6 +33,9 @@ logs/
 # 重构对照快照（按需从 git 历史导出，用于人工并排 diff；不属于源码）
 snapshots/
 
+# 沉淀型 markdown 的默认落盘目录（SR-F8 / T-G4：**产物**，不是源码；用户可改到别处）
+export/
+
 # 界面比对用的临时截图（tools/ui_ab.py + 无头浏览器产出）
 .debug-ui/
 
