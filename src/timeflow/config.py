@@ -80,6 +80,12 @@ class ExportConfig(BaseModel):
     # （只写独立共享目录）。
     dir: str = "export"
 
+    # Obsidian 跳转（SR-F8.2 / G 批 · T-G5）：`vault` 是**库的名字**（`obsidian://` 协议用，
+    # 不一定等于文件夹名）；`vault_dir` 是库的根目录（可选）—— 只用来把绝对路径句柄换算成
+    # Vault 内的位置。**只读跳转**：软件不往 Vault 里写东西，也不替你在里面建目录。
+    vault: str = ""
+    vault_dir: str = ""
+
 
 class Settings(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)

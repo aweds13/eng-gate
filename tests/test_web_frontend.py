@@ -678,6 +678,7 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
         ("get", "/api/review/due", None),
         ("get", "/api/review/meta", None),
         ("get", "/api/settings/vocab", None),
+        ("get", "/api/settings/export", None),
         ("get", "/api/insights/heatmap-dimensions", None),
         ("get", "/api/insights/academic-vs-self?days=90", None),
         ("get", "/api/memos", None),
@@ -1001,3 +1002,39 @@ def test_gain_metric_is_shown_next_to_debt() -> None:
     assert parts.index("债务") < parts.index("完成收益"), "债务→收益是一对，要排在一起（N3 口径）"
     week = html.split("function weekCard(w){", 1)[1].split("\n}", 1)[0]
     assert "完成收益" in week and "gain_count" in week, "周结算没显示完成收益"
+
+
+def test_obsidian_jump_is_wired_and_read_only() -> None:
+    """T-G5（SR-F8.2 / 约定层第 11 行）：引用句柄能一键跳进 Obsidian，**只读**、失败必出声。
+
+    三条口径：
+    ① **URL 只在后端拼**（编码/相对路径换算都在 `core/vault.py`）—— 界面里不许出现 `obsidian://`
+       字面量，否则两处各拼一份、编码口径早晚不一致；
+    ② **没配 Vault 就不摆按钮**（`ref_url` 为空时不渲染）—— 不做"点了没用"的按钮；
+    ③ 调不起来 → **复制链接 + 提示**（与附件打开同一条兜底，不许静默）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    setting = html.split("async function renderSetting(m){", 1)[1].split("\n}", 1)[0]
+    assert 'id="vaultName"' in setting and 'id="vaultDir"' in setting, "设置页缺少 Vault 两栏"
+    assert "api('/api/settings/export')" in setting, "Vault 状态与导出目录同源（一次请求读出来）"
+    for action in ("set-vault", "vault-open"):
+        assert f"'{action}':" in html, f"动作 {action} 没注册"
+
+    save = html.split("async function saveVault(){", 1)[1].split("\n}", 1)[0]
+    assert "/api/settings/vault" in save and "method:'PUT'" in save
+
+    open_fn = html.split("async function openInVault(handle){", 1)[1].split("\n}", 1)[0]
+    assert "/api/vault/open" in open_fn and "method:'POST'" in open_fn
+    for needle in ("r.executed", "copyText(", "toast("):
+        assert needle in open_fn, f"openInVault 缺少 {needle}（打不开不许静默）"
+
+    card = html.split("function reviewCard(r){", 1)[1].split("\n}", 1)[0]
+    assert "r.ref_url" in card and "在 Obsidian 打开" in card, "复习卡没有跳转入口"
+    memo = html.split("async function renderMemo(m){", 1)[1]
+    memo = memo.split("async function addMemo(", 1)[0]
+    assert "x.ref_url" in memo, "备忘录没有跳转入口（T-G5 的主要场景就是备忘/复习卡）"
+    # 「只读」这句口径由**后端一处给**（`vault_note`），界面只负责显示 ——
+    # 原文见 tests/test_vault_obsidian_line.py 的 test_describe_states_the_read_only_note
+    assert "Obsidian（只读跳转）" in setting and "ex.vault_note" in setting, "界面没显示只读口径"
+    # URL **只在后端拼**：界面里不许出现现成的链接（注释里提一下协议名没关系，拼出来才算漏口径）
+    assert "obsidian://open?" not in html, "URL 只能在后端拼（编码口径一处）"

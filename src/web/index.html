@@ -98,6 +98,9 @@ async function api(path,opts={}){
   return text?JSON.parse(text):null;
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+/* 后端给的说明文字里用 `**重点**` 标重点（说明由后端一处写，界面只负责显示）。
+   先转义再只认 `**`：**不许**把原文里的 `<`/`>` 变成标签（说明文字也走防注入那条路）。 */
+function noteHTML(text){return esc(text).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')}
 function el(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
 /* 空态统一走这里（R5 收口）：**一处措辞、一处样式**。
    约定：空态不写"失败/没有完成"，只如实说"这里还没有东西"（温和基调，见约定层）。
@@ -225,6 +228,9 @@ const ACTIONS = {
   // 导出 markdown（SR-F8 / G 批 · T-G4）：改目录 / 立即导出今天（「打开目录」复用 attach-open）
   'set-export-dir': () => setExportDir(),
   'export-day':     () => exportDay(),
+  // Obsidian 跳转（SR-F8.2 / G 批 · T-G5）：存 Vault 设置 / 拿引用句柄跳进 Obsidian（**只读**）
+  'set-vault':      () => saveVault(),
+  'vault-open':     el => openInVault(el.dataset.handle||''),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -1717,7 +1723,8 @@ async function addGrade(){const score=parseFloat(document.getElementById('gScore
 
 function reviewCard(r){
   if(reviewEdit.id===r.id) return reviewEditForm(reviewEdit.item,reviewEdit.meta);
-  const handle=r.ref_handle?`<div class="meta">引用 ${esc(r.ref_handle)}</div>`:'';
+  const handle=r.ref_handle?`<div class="meta" title="${esc(r.ref_reason||'')}">引用 ${esc(r.ref_handle)}
+    ${r.ref_url?`<button class="ghost" data-action="vault-open" data-handle="${esc(r.ref_handle)}">在 Obsidian 打开</button>`:''}</div>`:'';
   const fromTask=r.task_id?`<div class="meta">来自任务（弱关联）</div>`:'';
   return `<div class="card"><div style="flex:1"><div class="title">${esc(r.title)}</div>
     <div class="meta">${r.reps}次 · ${r.interval_days}天${r.source==='external'?'<span class="badge">外部</span>':''}</div>${handle}${fromTask}</div>
@@ -1802,8 +1809,8 @@ async function renderMemo(m){
   const [memos,outputs,invests]=await Promise.all([
     api('/api/memos'),api('/api/ledger/outputs'),api('/api/ledger/invests')]);
   m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…" data-enter="memo-add"><button data-action="memo-add">记录</button></div>
-  ${memos.map(x=>`<div class="card"><div style="flex:1"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge">${esc(x.ref_handle)}</span>`:''}${x.task_id?'<span class="badge">已转任务</span>':''}</div></div>
-    <div class="row">${x.task_id?'':`<button class="ghost" data-action="memo-to-task" data-id="${x.id}">转为任务</button>`}
+  ${memos.map(x=>`<div class="card"><div style="flex:1"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge" title="${esc(x.ref_reason||'')}">${esc(x.ref_handle)}</span>`:''}${x.task_id?'<span class="badge">已转任务</span>':''}</div></div>
+    <div class="row">${x.ref_url?`<button class="ghost" data-action="vault-open" data-handle="${esc(x.ref_handle)}">在 Obsidian 打开</button>`:''}${x.task_id?'':`<button class="ghost" data-action="memo-to-task" data-id="${x.id}">转为任务</button>`}
     <button class="ghost" data-action="memo-delete" data-id="${x.id}">删除</button></div></div>`).join('')||emptyState('暂无备忘录')}
   <div class="section-title">今日手动投入（独立于专注投入）</div>
   <div class="new">
@@ -1936,8 +1943,9 @@ async function renderSetting(m){
   const beh=behaviorCfg||{items:[],note:'',switch_note:''};
   // 可配置词表（T-G1）：同样是通用渲染 —— 后端给几张表就画几张
   const vb=vocabCfg||{items:[],note:''};
-  // 导出 markdown（T-G4）：缺字段就退回默认值（整页不空）
-  const ex=expCfg||{dir:'',default_dir:'export',note:'',where:'',note_exists:false,last_error:''};
+  // 导出 markdown（T-G4）+ Obsidian 跳转设置（T-G5）：缺字段就退回默认值（整页不空）
+  const ex=expCfg||{dir:'',default_dir:'export',note:'',where:'',note_exists:false,last_error:'',
+    vault:'',vault_dir:'',vault_configured:false,vault_overlap:'',vault_note:''};
   const bk=backupCache||{db:'',dir:'',items:[],note:''};
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
@@ -2052,8 +2060,20 @@ async function renderSetting(m){
       : '还没写（完成一个任务、记一条备忘就会自动写；也可以点上面的「导出今天」）'}</div>
     ${ex.last_error?`<div class="meta" style="color:var(--danger)">上次导出失败：${esc(ex.last_error)}
       —— 不影响你用软件，修好目录后再点「导出今天」</div>`:''}
-    <div class="sub">${esc(ex.note||'')}</div>
-    <div class="sub">${esc(ex.where||'')}</div>
+    <div class="settings-sub" id="set-vault">Obsidian（只读跳转）</div>
+    <div class="row tight">
+      <input id="vaultName" value="${esc(ex.vault||'')}" style="min-width:160px"
+        placeholder="Vault 名字（Obsidian 里的库名）" data-enter="set-vault">
+      <input id="vaultDir" value="${esc(ex.vault_dir||'')}" style="min-width:220px"
+        placeholder="Vault 根目录（可留空）" data-enter="set-vault">
+      <button data-action="set-vault">保存</button></div>
+    <div class="meta">${ex.vault_configured
+      ? `已填：<b>${esc(ex.vault||'')}</b>${ex.vault_dir?` · 根目录 ${esc(ex.vault_dir)}`:' （没填根目录 → 只认 Vault 相对路径的句柄）'}`
+      : '还没填 —— 填上「Vault 名字」后，复习卡/备忘里挂的引用句柄就能一键跳进 Obsidian'}</div>
+    ${ex.vault_overlap?`<div class="meta" style="color:var(--danger)">${esc(ex.vault_overlap)}</div>`:''}
+    <div class="sub">${noteHTML(ex.vault_note||'')}</div>
+    <div class="sub">${noteHTML(ex.note||'')}</div>
+    <div class="sub">${noteHTML(ex.where||'')}</div>
   </div>
   <div class="section-title" id="set-academic">学业</div>
   <div class="card panel-card">
@@ -2217,6 +2237,29 @@ async function exportDay(){
     const r=await api('/api/export/day',{method:'POST',body:JSON.stringify({})});
     toast(`已写出 ${String(r.path).split(/[\\/]/).pop()}：完成 ${r.tasks} 项 · 步骤 ${r.steps} 项 · 备忘 ${r.memos} 条`);
     view(current);
+  }catch(e){/* api() 已经弹过后端原话 */}
+}
+/* Obsidian（SR-F8.2 / G 批 · T-G5）：两件事分开 ——
+   ① 设置：Vault 名字（跳转的前提）+ 可选根目录（换算绝对路径句柄）；
+   ② 跳转：拿引用句柄让后端拼 `obsidian://` 并由系统打开，**只读**、不写 Vault。
+   校验都在后端（不存在/包住导出目录 → 400 带原话），界面不自己造规则。 */
+async function saveVault(){
+  const nameEl=document.getElementById('vaultName'),dirEl=document.getElementById('vaultDir');
+  const vault=((nameEl&&nameEl.value)||'').trim();
+  const vault_dir=((dirEl&&dirEl.value)||'').trim();
+  try{
+    const r=await api('/api/settings/vault',{method:'PUT',body:JSON.stringify({vault,vault_dir})});
+    toast(r.vault_configured?`已保存：Vault「${r.vault}」—— 引用句柄现在能一键跳转`:'已清空 Vault 设置（跳转关着）');
+    view(current);
+  }catch(e){/* api() 已经弹过后端原话（目录不存在 / 会把导出目录包进去） */}
+}
+async function openInVault(handle){
+  try{
+    const r=await api('/api/vault/open',{method:'POST',body:JSON.stringify({handle})});
+    if(r.executed){toast(r.executed_detail||'已在 Obsidian 打开');return}
+    // 打不开（没配 Vault / 路径不在库里 / 协议没注册）：**不许静默** —— 说清原因 + 给出链接
+    const copied=r.url?await copyText(r.url):false;
+    toast(copied?`打不开（${r.reason}）；链接已复制`:`打不开（${r.reason}）`);
   }catch(e){/* api() 已经弹过后端原话 */}
 }
 // ---- 附件打开方式设置（T-B4）：模式与白名单存服务端 ----

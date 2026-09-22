@@ -126,9 +126,11 @@ const DB = {
       completed_on: '2026-09-17', attempt_count: 3, note: '笔记：第三章的推导' })],
   // 到点提醒（T-B5）：今日页「该提醒了」区用它
   '/api/reminders/due': [],
-  // 复习线（SR-F6.2 / SR-F6.5 / SR-F8.3）：到期卡非空 —— 卡片态要渲染出「改形式/句柄」按钮
+  // 复习线（SR-F6.2 / SR-F6.5 / SR-F8.3）：到期卡非空 —— 卡片态要渲染出「改形式/句柄」按钮，
+  // 外加 T-G5 的「在 Obsidian 打开」（后端拼好的 `obsidian://` 链接 —— 界面不自己拼 URL）
   '/api/review/due': [{ id: 'r1', title: '探针复习卡', reps: 2, interval_days: 3,
-    source: 'internal', ref_handle: 'notes/数学.md', form: 'qa', due_date: '2026-09-20', task_id: 't1' }],
+    source: 'internal', ref_handle: 'notes/数学.md', form: 'qa', due_date: '2026-09-20', task_id: 't1',
+    ref_url: 'obsidian://open?vault=MyVault&file=notes/%E6%95%B0%E5%AD%A6.md', ref_reason: '' }],
   '/api/review/items': [],
   // 复习卡的定义类字段（T-C6·C7）：词表来自后端，编辑态要渲染形式/执行源下拉 + 句柄输入
   '/api/review/meta': {
@@ -274,7 +276,10 @@ const DB = {
     note: '白名单 = 专注时允许用的来源。', window_format: 'HH:MM-HH:MM', max_items: 50,
   },
   '/api/gpa': { gpa: 0, credits: 0, scale: '4.0', weighted_average: 0, weighted_credits: 0 },
-  '/api/memos': [], '/api/ledger/outputs': [], '/api/ledger/invests': [],
+  '/api/memos': [{ id: 'm1', text: '记一条带引用的备忘', ref_handle: 'notes/数学.md', task_id: null,
+    created_at: '2026-09-21T20:00:00', ref_reason: '',
+    ref_url: 'obsidian://open?vault=MyVault&file=notes/%E6%95%B0%E5%AD%A6.md' }],
+  '/api/ledger/outputs': [], '/api/ledger/invests': [],
   '/api/insights/daily': [], '/api/insights/groups': [],
   // 年历热力图（SR-NF7 / G 批 · T-G1 顺手修掉的缺陷）：**必须给非零值**。
   // 老代码拿短 id（'focus'）去取字段，而真字段叫 `focus_minutes` → 取不到 → 每个格子都是 0 →
@@ -300,6 +305,11 @@ const DB = {
     today: '2026-09-21', note_path: 'D:/timeflow-export/2026-09-21.md', note_exists: true,
     note_bytes: 512, last_written_at: '2026-09-21T21:10:00',
     last_error: '建不了导出目录：D:/nope（拒绝访问）',
+    // Obsidian 跳转（SR-F8.2 / G 批 · T-G5）：名字 + 根目录都填了 —— 设置页要渲染出这两栏，
+    // 以及"只读跳转、不往 Vault 里写"这句口径（红线写在界面上才算数）。
+    vault: 'MyVault', vault_dir: 'D:/Notes/MyVault', default_vault: '', default_vault_dir: '',
+    vault_configured: true, vault_overlap: '',
+    vault_note: '填上 Vault 名字，引用句柄就能一键跳进 Obsidian（只读跳转）；软件不往 Vault 里写任何东西。',
     note: '数据库是权威，md 是产物：手改不会被读回，下次导出会覆盖。',
     where: '写在你自己指定的独立目录里（默认项目下 export/）—— 不写进 Obsidian 的笔记目录。',
   },
@@ -357,6 +367,7 @@ let archiveBad = 0;
 let stepBad = 0;
 let debtBad = 0;
 let behaviorBad = 0;
+let obsidianBad = 0;
 let vocabBad = 0;
 let heatmapBad = 0;
 let exportBad = 0;
@@ -765,6 +776,54 @@ try {
   console.log(`  ❌ 详情·尝试失败 渲染抛错: ${e.message}`);
 }
 
+// Obsidian 跳转（SR-F8.2 / G 批 · T-G5）：三处都要真渲染出来 ——
+// 设置页的 Vault 两栏（名字/根目录）+「只读跳转」口径；复习卡与备忘录上的「在 Obsidian 打开」
+// （**按钮只在后端给了链接时才出现** —— 没配 Vault 时不该摆个点了没用的按钮）。
+const obsidianChecks = [];
+for (const [where, needs] of [
+  ['setting', ['id="vaultName"', 'id="vaultDir"', 'set-vault', 'Obsidian（只读跳转）',
+    'value="MyVault"', 'value="D:/Notes/MyVault"', '已填：', '不往 Vault 里写任何东西']],
+  ['review', ['data-action="vault-open"', 'data-handle="notes/数学.md"', '在 Obsidian 打开']],
+  ['memo', ['data-action="vault-open"', 'data-handle="notes/数学.md"', '在 Obsidian 打开']],
+]) {
+  try {
+    byId.get('main')._html = '';
+    await globalThis.__view(where);
+    await sleep(30);
+    const html = byId.get('main')._html;
+    const missing = needs.filter((n) => !html.includes(n));
+    const rendered = missing.length === 0;
+    if (!rendered) obsidianBad++;
+    obsidianChecks.push({ where, rendered, missing });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} ${where}·Obsidian 跳转 main ${String(html.length).padStart(6)}B`
+      + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+  } catch (e) {
+    obsidianBad++;
+    obsidianChecks.push({ where, error: e.message });
+    console.log(`  ❌ ${where}·Obsidian 跳转 渲染抛错: ${e.message}`);
+  }
+}
+
+// 没配 Vault 时**不许**出现那个按钮（否则用户点了只会得到一句"还没填 Vault 名字"）：
+// 把夹具换成一个没有 ref_url 的卡，同一个视图再渲染一遍，按钮必须消失。
+try {
+  DB['/api/review/due'][0] = { ...DB['/api/review/due'][0], ref_url: '' };
+  byId.get('main')._html = '';
+  await globalThis.__view('review');
+  await sleep(30);
+  const html = byId.get('main')._html;
+  const ok = !html.includes('data-action="vault-open"') && html.includes('引用 notes/数学.md');
+  if (!ok) obsidianBad++;
+  obsidianChecks.push({ where: 'no-vault', rendered: ok });
+  console.log(`  ${ok ? '✅' : '⚠️ '} review·没配 Vault 时不摆按钮`);
+  DB['/api/review/due'][0] = { ...DB['/api/review/due'][0],
+    ref_url: 'obsidian://open?vault=MyVault&file=notes/%E6%95%B0%E5%AD%A6.md' };
+} catch (e) {
+  obsidianBad++;
+  obsidianChecks.push({ where: 'no-vault', error: e.message });
+  console.log(`  ❌ review·没配 Vault 时不摆按钮 渲染抛错: ${e.message}`);
+}
+
 try {
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
   for (const a of new Set(CLICK_ACTIONS)) if (!registered.has(a)) unused.push(a);
@@ -776,7 +835,7 @@ if (process.argv.includes('--json')) {
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
-      export: exportChecks,
+      export: exportChecks, obsidian: obsidianChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -789,6 +848,7 @@ if (problems.length) {
 const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
   || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0 || archiveBad > 0
   || stepBad > 0 || debtBad > 0 || behaviorBad > 0 || vocabBad > 0 || heatmapBad > 0 || exportBad > 0
+  || obsidianBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -806,5 +866,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，可配置词表 ${vocabChecks.length - vocabBad}/${vocabChecks.length} 正常`
   + `，热力图有值 ${heatmapChecks.length - heatmapBad}/${heatmapChecks.length} 正常`
   + `，导出 markdown ${exportChecks.length - exportBad}/${exportChecks.length} 正常`
+  + `，Obsidian 跳转 ${obsidianChecks.filter((c) => c.rendered).length}/${obsidianChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

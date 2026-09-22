@@ -460,14 +460,28 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.get("/api/settings/export")
     def get_export_settings() -> dict[str, Any]:
         """导出目录现状 + 今天那份在不在 + 上次写的时间/错误（说明由后端给，界面不复述）。"""
-        return vault.describe(conn, settings.export.dir)
+        return vault.describe(
+            conn,
+            settings.export.dir,
+            default_vault=settings.export.vault,
+            default_vault_dir=settings.export.vault_dir,
+        )
 
     @app.put("/api/settings/export")
     def put_export_settings(payload: dict[str, Any], request: Request) -> dict[str, Any]:
-        """改导出目录（**当场确保建得出来**，建不了 400 带原话，并把配置回滚）。"""
+        """改导出目录（**当场确保建得出来**，建不了 400 带原话，并把配置回滚）。
+
+        导出目录落在 Obsidian 的 Vault 里 → 400 拒绝（红线 SR-F8.2 机器化）。
+        """
         require_local_origin(request)
         try:
-            return vault.set_dir(conn, payload.get("dir"), settings.export.dir)
+            return vault.set_dir(
+                conn,
+                payload.get("dir"),
+                settings.export.dir,
+                default_vault=settings.export.vault,
+                default_vault_dir=settings.export.vault_dir,
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -475,10 +489,67 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def export_day(payload: dict[str, Any]) -> dict[str, Any]:
         """手动导出某一天（不传 `day` = 今天）。失败 400 带原话（手动动作要当场看到问题）。"""
         try:
-            result = vault.export_day(conn, payload.get("day"), settings.export.dir)
+            result = vault.export_day(
+                conn,
+                payload.get("day"),
+                settings.export.dir,
+                default_vault_dir=settings.export.vault_dir,
+            )
         except (OSError, ValueError) as e:
             raise HTTPException(status_code=400, detail=str(e) or e.__class__.__name__) from e
         return {"ok": True, **asdict(result)}
+
+    # ---- Obsidian 跳转（SR-F8.2 / G 批 · T-G5）----
+    # 口径（2026-09-21 用户定，见 `复盘/口径定案-待定清单.md` §7）：引用句柄能**一键调出 Obsidian**
+    # （`obsidian://open?vault=…&file=…`），**只读跳转** —— 软件不往 Vault 里写任何东西。
+    # 名字是跳转的前提；根目录只用来把**绝对路径**句柄换算成 Vault 内的位置
+    # （顺带才校验得了"这个句柄在不在库里"）。
+    def _ref_url(item: dict[str, Any]) -> dict[str, Any]:
+        """给一条带 `ref_handle` 的记录补上跳转信息（`ref_url` + 不能跳时的 `ref_reason`）。"""
+        handle = item.get("ref_handle")
+        if handle:
+            info = vault.link(
+                conn,
+                handle,
+                default_vault=settings.export.vault,
+                default_vault_dir=settings.export.vault_dir,
+            )
+            item["ref_url"] = info["url"]
+            item["ref_reason"] = info["reason"]
+        return item
+
+    def _with_ref_url(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [_ref_url(item) for item in items]
+
+    @app.put("/api/settings/vault")
+    def put_vault_settings(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """改 Obsidian 设置（Vault 名字 + 可选根目录）。非法/不存在/包住导出目录 → 400 带原话。"""
+        require_local_origin(request)
+        try:
+            return vault.set_vault(
+                conn,
+                payload.get("vault"),
+                payload.get("vault_dir"),
+                default_vault=settings.export.vault,
+                default_vault_dir=settings.export.vault_dir,
+                default_dir=settings.export.dir,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/vault/open")
+    def open_in_vault(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """跳进 Obsidian 打开一个引用句柄（**只读**：不写 Vault，也不在里面建东西）。
+
+        调不起 Obsidian 时 `ok=false` 且 `reason` 给原话，界面退回"复制链接 + 提示"（不许静默）。
+        """
+        require_local_origin(request)
+        return vault.open_handle(
+            conn,
+            payload.get("handle"),
+            default_vault=settings.export.vault,
+            default_vault_dir=settings.export.vault_dir,
+        )
 
     # ---- 备份与恢复（SR-NF12 / SR-F9.3）----
     # 口径（2026-09-21 用户定）：设置页列出最近几个备份，点一个就能恢复。
@@ -748,7 +819,9 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         # md 是产物（T-G4）：写完最好，写不成只记错 —— 不许因为磁盘/路径问题让"完成"失败
-        vault.try_export(conn, None, settings.export.dir)
+        vault.try_export(
+            conn, None, settings.export.dir, default_vault_dir=settings.export.vault_dir
+        )
         return _out(task, conn)
 
     @app.post("/api/tasks/{task_id}/uncomplete", response_model=TaskOut)
@@ -762,7 +835,9 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         # 撤销之后**重新导出**：md 跟着回到"这一天没做成它"（数据库权威，md 是产物）
-        vault.try_export(conn, None, settings.export.dir)
+        vault.try_export(
+            conn, None, settings.export.dir, default_vault_dir=settings.export.vault_dir
+        )
         return _out(task, conn)
 
     # ---- 状态机：进行中 / 待定 / 取消 / 归档（F 批 · T-F1）----
@@ -1411,7 +1486,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.get("/api/review/items/{item_id}")
     def get_review(item_id: str) -> dict[str, object]:
         try:
-            return rv.get_item(conn, item_id)
+            return _ref_url(rv.get_item(conn, item_id))
         except KeyError:
             raise HTTPException(status_code=404, detail="复习卡不存在") from None
 
@@ -1450,11 +1525,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
             tm.get_task(conn, task_id)
         except KeyError:
             raise HTTPException(status_code=404, detail="任务不存在") from None
-        return rv.items_for_task(conn, task_id)
+        return _with_ref_url(rv.items_for_task(conn, task_id))
 
     @app.get("/api/review/due")
     def review_due() -> list[dict[str, object]]:
-        return rv.due_items(conn)
+        return _with_ref_url(rv.due_items(conn))
 
     @app.post("/api/review/{item_id}/review")
     def do_review(item_id: str, payload: dict[str, Any]) -> dict[str, object]:
@@ -1527,18 +1602,23 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         # 备忘录是**沉淀型内容**（约定层）：写完自动落一份 md（失败只记错，见 T-G4）
-        vault.try_export(conn, None, settings.export.dir)
+        vault.try_export(
+            conn, None, settings.export.dir, default_vault_dir=settings.export.vault_dir
+        )
         return {"id": memo_id}
 
     @app.get("/api/memos")
     def list_memos() -> list[dict[str, object]]:
-        return memo.list_memos(conn)
+        # 备忘录挂着引用句柄时给一条**能直接跳 Obsidian** 的链接（T-G5，只读）
+        return _with_ref_url(memo.list_memos(conn))
 
     @app.delete("/api/memos/{memo_id}")
     def delete_memo(memo_id: str) -> dict[str, str]:
         """删除备忘录（幂等）；关联任务不自动删除。删完重新导出（md 跟着数据库走）。"""
         memo.delete_memo(conn, memo_id)
-        vault.try_export(conn, None, settings.export.dir)
+        vault.try_export(
+            conn, None, settings.export.dir, default_vault_dir=settings.export.vault_dir
+        )
         return {"deleted": memo_id}
 
     @app.post("/api/memos/{memo_id}/to-task")
@@ -1567,7 +1647,9 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         # 产出（温故知新那类沉淀）也落 md（T-G4）
-        vault.try_export(conn, None, settings.export.dir)
+        vault.try_export(
+            conn, None, settings.export.dir, default_vault_dir=settings.export.vault_dir
+        )
         return {"id": entry_id}
 
     @app.get("/api/ledger/outputs")
@@ -1582,7 +1664,9 @@ def create_app(db_path: str | None = None) -> FastAPI:
             changed = memo.retract_output_entry(conn, entry_id)
         except KeyError:
             raise HTTPException(status_code=404, detail="产出记录不存在") from None
-        vault.try_export(conn, None, settings.export.dir)
+        vault.try_export(
+            conn, None, settings.export.dir, default_vault_dir=settings.export.vault_dir
+        )
         return {"entry_id": entry_id, "retracted": changed}
 
     @app.post("/api/ledger/invest")

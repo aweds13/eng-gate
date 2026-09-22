@@ -1749,11 +1749,25 @@ gaps = ""
 
 [entries."T-G5"]
 id = "T-G5"
-title = "G 批：Obsidian Vault 根路径 + obsidian:// 打开引用句柄"
+title = "G 批：Obsidian Vault 根路径 + obsidian:// 打开引用句柄（只读跳转 + 红线机器化）"
 group = "PROCESS"
-status = "todo"
-evidence = []
-gaps = "口径已定（2026-09-21 用户定，见 `复盘/口径定案-待定清单.md` §7）：加 Vault 根路径配置，用 `obsidian://open?vault=…&file=…` 打开引用句柄（现在只能复制路径）；**只读跳转、不写 vault**（红线 SR-F8.2）"
+status = "done"
+evidence = [
+  "file:复盘/Obsidian跳转与红线机器化-T-G5.md",
+  "text:src/timeflow/core/vault.py::OURI_PREFIX = \"obsidian://open\"",
+  "text:src/timeflow/core/vault.py::def obsidian_url",
+  "text:src/timeflow/core/vault.py::def to_vault_file",
+  "text:src/timeflow/core/vault.py::def open_handle",
+  "text:src/timeflow/core/vault.py::def _reject_export_in_vault",
+  "text:src/timeflow/core/vault.py::def set_vault",
+  "text:src/timeflow/config.py::vault_dir: str = \"\"",
+  "route:PUT /api/settings/vault",
+  "route:POST /api/vault/open",
+  "ui:data-action=set-vault",
+  "ui:data-action=vault-open",
+  "test:test_vault_obsidian_line.py",
+]
+gaps = ""
 
 [entries."T-G2"]
 id = "T-G2"
