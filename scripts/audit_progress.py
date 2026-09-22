@@ -61,6 +61,45 @@ def routes() -> set[str]:
     }
 
 
+# 交接文档里那行分布（`台账进度：done a / partial b / todo c / deferred d（共 N 条）`）
+_HANDOFF_NUM = re.compile(
+    r"台账进度：\s*done\s*(\d+)\s*/\s*partial\s*(\d+)\s*/\s*todo\s*(\d+)"
+    r"\s*/\s*deferred\s*(\d+)\s*（共\s*(\d+)\s*条"
+)
+
+
+def check_handoff_numbers(counts: dict[str, int], total: int) -> list[str]:
+    """交接文档里那行「台账进度：done a / partial b / …」必须与台账**算出来的**一致。
+
+    为什么要查：这行数字一直是**手写**的，而手写就会漂 —— 本轮真漂过一次
+    （T-G10 那次漏算了 SR-NF17 的 partial→done，写成 124/7/5/4，实际是 126/6/5/4）。
+    文档里写错数字属于"文档失真"，机器能查的别靠人眼。
+    拿不准就跳过：**找不到那行不算失败**（宁可漏查，也别因为改了措辞就挡提交）。
+    """
+    fails: list[str] = []
+    for name in CHECKPOINTS:
+        path = ROOT / name
+        if not path.exists():
+            continue
+        m = _HANDOFF_NUM.search(path.read_text(encoding="utf-8"))
+        if not m:
+            continue
+        want = {
+            "done": counts.get("done", 0), "partial": counts.get("partial", 0),
+            "todo": counts.get("todo", 0), "deferred": counts.get("deferred", 0),
+        }
+        keys = ("done", "partial", "todo", "deferred")
+        got = dict(zip(keys, (int(x) for x in m.groups()[:4]), strict=True))
+        got_total = int(m.group(5))
+        if got != want or got_total != total:
+            fails.append(
+                f"{name} 里写的分布对不上台账：写的是 "
+                + " / ".join(f"{k}={v}" for k, v in got.items()) + f"（共 {got_total} 条），"
+                + "实际是 " + " / ".join(f"{k}={v}" for k, v in want.items()) + f"（共 {total} 条）"
+            )
+    return fails
+
+
 def tables() -> set[str]:
     db = (ROOT / "src" / "timeflow" / "storage" / "db.py").read_text(encoding="utf-8")
     return set(re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)", db))
@@ -295,6 +334,13 @@ def main() -> int:
         print(f"  {FAIL} {line}")
     if not fails:
         print(f"  {OK} 所有 status=done 的断言都成立（{counts.get('done', 0)} 条）")
+    # ⑦ 交接文档里手写的那行分布（能查就查，查不到不失败）
+    num_fails = check_handoff_numbers(counts, len(entries))
+    print("\n=== ⑦ 交接文档的分布数字 ===")
+    for line in num_fails:
+        print(f"  {FAIL} {line}")
+    if not num_fails:
+        print(f"  {OK} 与台账一致（或文档里没写这行）")
 
     git_fails: list[str] = []
     git_exempt: list[str] = []
@@ -361,7 +407,7 @@ def main() -> int:
         for line in warn:
             print(f"  {WARN} {line}")
 
-    all_fails = shape + fails + git_fails
+    all_fails = shape + fails + num_fails + git_fails
     n_exempt = len(exempted) + len(git_exempt)
     print("\n" + "=" * 72)
     if all_fails:
