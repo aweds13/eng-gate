@@ -619,7 +619,7 @@ evidence = [
   "route:POST /api/sync/import",
   "test:test_sync_pack_line.py",
 ]
-gaps = "**场景 ③ 已落地**（2026-09-22，T-G8）：同步包格式 + LWW/去重/冲突留痕 + 导出/导入入口 + 删除墓碑。**仍缺传输层**：① 手机离线队列（GAP-F9-02）与 ② 同一 WiFi 直连（GAP-F9-01）—— 口径已定（③→①→②），按顺序做"
+gaps = "**场景 ③ 已落地**（2026-09-22，T-G8）：同步包格式 + LWW/去重/冲突留痕 + 导出/导入入口 + 删除墓碑。**场景 ① 也已落地**（2026-09-23，T-G10）：手机离线队列 + 同格式包导出（仍走文件、由电脑合并）。**仍缺 ②**：同一 WiFi 直连（GAP-F9-01，默认关 + 配对码）—— 口径已定（③→①→②），按顺序做"
 
 [entries."SR-F9.3"]
 id = "SR-F9.3"
@@ -872,9 +872,21 @@ gaps = ""
 id = "SR-NF17"
 title = "移动端（跨端）：PWA + IndexedDB 离线缓存 + 异步对齐 + 响应式底部 Tab"
 group = "NF"
-status = "partial"
-evidence = ["file:src/web/manifest.json", "file:src/web/sw.js", "ui:view=setting"]
-gaps = "无 IndexedDB、无离线队列、无跨端对齐（GAP-F9-02）"
+status = "done"
+evidence = [
+  "file:src/web/manifest.json",
+  "file:src/web/sw.js",
+  "text:src/web/sw.js::/offline.js",
+  "text:src/web/offline.js::TFOffline",
+  "text:src/web/offline.js::indexedDB",
+  "text:src/web/index.html::function renderOffline(m)",
+  "text:src/web/index.html::function paintOfflineBar()",
+  "ui:view=offline",
+  "ui:data-action=offline-export",
+  "test:test_offline_phone_line.py",
+  "test:test_web_frontend.py",
+]
+gaps = ""
 
 [entries."SR-NF18"]
 id = "SR-NF18"
@@ -1816,6 +1828,47 @@ evidence = [
   "test:test_vocab_line.py",
 ]
 gaps = ""
+
+[entries."T-G10b"]
+id = "T-G10b"
+title = "跨端 ②：同一 WiFi 直连（服务显式开局域网 + 配对码，默认关）"
+group = "PROCESS"
+status = "todo"
+evidence = [
+  "file:复盘/手机离线记-T-G10.md",
+]
+gaps = "口径已定（定案 §3 场景 ②）：服务支持**显式开启**局域网访问（默认关，口径同 N16「默认收严、用户再放宽」）+ **配对码**；开启时明确提示「同一 WiFi 下其他设备也可能访问到」。边界：只在同一个 WiFi 里管用，不涉及公网。**这一条不做，手机就打不开这个应用**（服务现在只监听回环）—— ① 的离线队列只能先在电脑浏览器的 Offline 模式里验。技术要点：`tools/serve.py` 目前只允许回环（`SR-NF14` 的守卫），要加一条显式开关 + 提示，别把默认放开"
+
+[entries."T-G11"]
+id = "T-G11"
+title = "缺陷（P2，界面）：静态文案里的 `**重点**` 在页面上原样显示成星号"
+group = "PROCESS"
+status = "todo"
+evidence = [
+  "file:复盘/手机离线记-T-G10.md",
+]
+gaps = "`noteHTML()` 只对**后端给来的**文字生效（`${noteHTML(...)}`）；`index.html` 里大量**静态模板文案**直接写 `**重点**`，页面上就是字面的星号。实测（临时在假 DOM 探针里数过渲染结果）：today / tasks / planned / habit / setting 五个视图都有，共 6 处以上（全量 30+ 处）。修法二选一：① 逐处改成 `<b>`（机械但安全）；② 渲染后跑一遍 DOM 文本节点处理（一处生效、但要小心不要碰到后端正文与用户输入）。本卡只登记，**T-G10 里自己新加的文案已经全部用 `<b>`**"
+
+[entries."T-G10"]
+id = "T-G10"
+title = "G 批：跨端 ① —— 手机离线记（IndexedDB 队列 + 同格式包导出；无新后端）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/手机离线记-T-G10.md",
+  "text:src/web/offline.js::TFOffline",
+  "text:src/web/offline.js::function buildPack",
+  "text:src/web/offline.js::function completeTask",
+  "text:src/web/sw.js::/offline.js",
+  "text:src/web/index.html::function renderOffline(m)",
+  "text:src/web/index.html::async function writeOrQueue(",
+  "text:src/web/index.html::t.status=isDone?'未开始':'完成'",
+  "ui:view=offline",
+  "ui:data-action=offline-export",
+  "ui:data-action=offline-task-add",
+  "file:tools/phone_check.mjs",
+  "test:test_offline_phone_line.py",
+]
 
 [entries."T-G8b"]
 id = "T-G8b"

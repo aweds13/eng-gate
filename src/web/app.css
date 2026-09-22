@@ -303,6 +303,26 @@ select {
 .ring-track { stroke: var(--surface-2) }
 .ring-text { fill: var(--text) }
 
+/* ---------- 离线提示条（SR-NF17 / G 批 · T-G10）----------
+ * 只在「断网」或「队列里还有没同步的东西」时出现；手机上没有左栏，「离线记」靠它进得去。
+ * 用语义令牌 + 温和配色（离线不是错误，不告警）。
+ */
+.offline-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-7);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 15;
+}
+.offline-bar[hidden] { display: none }
+.offline-bar .meta { margin: 0 }
+
 /* ---------- toast ---------- */
 .toast {
   position: fixed;

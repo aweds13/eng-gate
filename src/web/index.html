@@ -28,6 +28,7 @@
       <button data-action="view" data-view="review">复习</button>
       <button data-action="view" data-view="memo">备忘录</button>
       <button data-action="view" data-view="setting">设置</button>
+      <button data-action="view" data-view="offline">离线记</button>
       <button id="refresh" class="ghost" data-action="refresh">刷新</button>
       <button id="railToggle" class="ghost" data-action="rail-toggle">收起右栏</button>
     </nav>
@@ -60,6 +61,12 @@
   <button data-action="view" data-view="stats"><span class="ic">📈</span>统计</button>
   <button data-action="view" data-view="setting"><span class="ic">⚙️</span>设置</button>
 </nav>
+<!-- 离线提示条（SR-NF17 / G 批 · T-G10）：断网或队列里还有没同步的东西时才出现。
+     手机上没有左栏，「离线记」就靠这条进得去。 -->
+<div class="offline-bar" id="offlineBar" hidden></div>
+<!-- 手机离线记的引擎（SR-NF17 / 场景 ①）：纯函数 + IndexedDB 队列 + 同格式包导出。
+     单独一个文件是为了**能在 Node 里真跑一遍**（tools/phone_check.mjs），不是造型。 -->
+<script src="/offline.js"></script>
 <script>
 /* 应用外壳：视图路由 + 顶部摘要 + 通用反馈（R2 会把调度收敛到这里） */
 let current='today';
@@ -72,7 +79,7 @@ let detailEditing=false;     // OP-9：详情面板是否处于「编辑」态�
 let groupCache=[];           // 分组列表缓存（渲染任务详情的"所属分组"用，避免每张卡都请求一次）
 let courseCache=[];          // 课程列表缓存（任务编辑里的"所属课程"下拉 + 学业页关联任务用）
 // 合法视图名（render 的白名单：写错的视图名会被立刻发现，而不是静默空屏）
-const VIEWS=['today','tasks','important','planned','flagged','focus','stats','habit','academic','review','memo','setting'];
+const VIEWS=['today','tasks','important','planned','flagged','focus','stats','habit','academic','review','memo','setting','offline'];
 
 /* 同步强调色到 CSS 变量（本地缓存先应用，避免首屏闪默认色） */
 function applyAccent(color){if(color)document.documentElement.style.setProperty('--accent',color)}
@@ -86,8 +93,13 @@ async function api(path,opts={}){
     r=await fetch(path,init);
   }catch(err){
     if(err&&err.name==='AbortError')throw err;   // 取消不是错误：静默抛出，不打扰用户
-    toast('网络请求失败，稍后再试');throw err;
+    // 「连不上」与「后端说不行」要分得开：只有前者才允许离线兜底（后者是后端说了算，兜底就是骗人）
+    try{err.__offline=true}catch(e){}
+    netDown=true;paintOfflineBar();
+    toast('连不上电脑（断网或服务没开）—— 这一笔可以先记在手机上');
+    throw err;
   }
+  netDown=false;
   if(!r.ok){
     let detail='';try{detail=(await r.json()).detail||''}catch(e){}
     toast(detail?`操作未完成：${detail}`:'操作未完成，请稍后再试');
@@ -95,7 +107,9 @@ async function api(path,opts={}){
   }
   if(r.status===204)return null;
   const text=await r.text();
-  return text?JSON.parse(text):null;
+  const data=text?JSON.parse(text):null;
+  rememberForOffline(path,opts,data);          // 读过的清单留一份：离线时还看得见（见 renderOffline）
+  return data;
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 /* 后端给的说明文字里用 `**重点**` 标重点（说明由后端一处写，界面只负责显示）。
@@ -118,6 +132,305 @@ function humanTime(iso){
 function defaultDateFields(ids){
   const t=todayISO();
   ids.forEach(id=>{const e=document.getElementById(id);if(e&&!e.value)e.value=t});
+}
+
+/* ---------- 手机离线记（SR-NF17 / G 批 · T-G10 = 跨端场景 ①）----------
+ * 口径来源：`复盘/口径定案-待定清单.md` §3（用户 2026-09-21 定顺序 ③ → ① → ②）。
+ * ① = 手机离线记 → 回家**导出文件** → 电脑导入；包格式与电脑↔电脑（③）**是同一个**
+ * （`src/web/offline.js` 生成、`core/syncpack.py` 合并）——手机**不自己判谁新谁旧**：
+ * 合并规则、冲突留痕、幂等只有一处实现（在电脑上），这样两边永远不会各说各话。
+ *
+ * 这里只负责三件事：
+ *   ① 连不上/断网时把这一笔**存进本机队列**（不把记录丢掉，也不假装成功）；
+ *   ② 把读过的清单缓存一份，离线还能看（"看上次同步的样子"，不是"实时"）；
+ *   ③ 导出一份同格式的包。
+ * 边界（界面上也写着）：只采集、不删、不改字段；导出**不清空**队列；重复导入安全。
+ *
+ * 为什么不用 `navigator.onLine` 一个条件判断"能不能写"：它只说明"有没有网卡"，
+ * 说明不了"电脑那台服务开着没有" —— 所以真正的判据是**请求有没有连上**（见 api() 的 `__offline`）。
+ */
+let netDown=false;                        // 上一次请求是不是"连不上"（断网或服务没开）
+const offlineCache={tasks:[],habits:[],memos:[],feedback:null};   // 离线能看的几份（持久那份在 IndexedDB）
+const OFFLINE_CACHE_PATHS={'/api/tasks':'tasks','/api/habits':'habits','/api/memos':'memos',
+  '/api/feedback':'feedback'};
+function offlineEngine(){return (typeof TFOffline!=='undefined')?TFOffline:null}
+function offlineReady(){const o=offlineEngine();try{return !!(o&&o.available())}catch(e){return false}}
+function offlineNow(){return netDown||!navigator.onLine}
+function offlineDevice(){const o=offlineEngine();return o?o.deviceId():'—'}
+/* 读过的清单留一份：断网时「离线记」页还能把要勾的任务列出来（只记这几条读路径）。 */
+function rememberForOffline(path,opts,data){
+  const method=String((opts&&opts.method)||'GET').toUpperCase();
+  if(method!=='GET'||data===null||data===undefined)return;
+  const key=OFFLINE_CACHE_PATHS[String(path).split('?')[0]];
+  if(!key)return;
+  offlineCache[key]=data;
+  if(offlineReady()){try{TFOffline.putCache(key,data).catch(()=>{})}catch(e){}}
+  paintOfflineBar();
+}
+/* 能连上就走接口；**连不上**才入队。后端说不行（400/404）不兜底 —— 那是它说了算。 */
+async function writeOrQueue(path,opts,plan,queuedMsg){
+  if(!offlineNow()){
+    try{return {queued:false,data:await api(path,opts)}}
+    catch(e){if(e&&e.__offline){/* 连不上 → 落到下面入队 */}else{return null}}
+  }
+  const o=offlineEngine();
+  if(!o||!offlineReady()){
+    toast('这个浏览器不支持离线存储（IndexedDB）—— 这一笔存不到手机上，先联网再记');
+    return null;
+  }
+  try{
+    const entry=await plan(o);
+    toast(queuedMsg);
+    paintOfflineBar();
+    return {queued:true,entry};
+  }catch(e){
+    toast('存到手机上失败：'+((e&&e.message)||e));
+    return null;
+  }
+}
+function cachedOfflineTask(id){return (offlineCache.tasks||[]).find(t=>t.id===id)||null}
+function cachedOfflineHabit(id){return (offlineCache.habits||[]).find(h=>h.id===id)||null}
+async function offlineQueueNewTask(o,input){
+  const row=o.PURE.taskRow(input);
+  await o.enqueue('tasks',row);
+  return row;
+}
+async function offlineQueueDone(o,task,isDone){
+  // 完成 / 撤销完成 = 一行任务 + 一条事实（**事实才是账本的依据**，只改状态电脑那边不算数）
+  const at=o.PURE.localNow();
+  const r=isDone?o.PURE.uncompleteTask(task,at):o.PURE.completeTask(task,at);
+  await o.enqueue('tasks',r.row);
+  await o.enqueue('facts',r.fact);
+  return r;
+}
+async function offlineTaskAdd(){
+  const titleEl=document.getElementById('offTitle');
+  const title=((titleEl&&titleEl.value)||'').trim();
+  if(!title){toast('先写一句要做什么');return}
+  const due=(document.getElementById('offDue')||{}).value||null;
+  const prio=(document.getElementById('offPrio')||{}).value||'中';
+  const myday=!!(document.getElementById('offMyDay')||{}).checked;
+  const note=((document.getElementById('offNote')||{}).value||'').trim()||null;
+  const r=await writeOrQueue('/api/tasks',
+    {method:'POST',body:JSON.stringify({title,due_date:due,is_myday:myday,priority:prio,note})},
+    o=>offlineQueueNewTask(o,{title,due_date:due,is_myday:myday,priority:prio,note}),
+    '连不上电脑：这一条先存在手机上（回电脑导出同步包导入）');
+  if(!r)return;
+  if(titleEl)titleEl.value='';
+  const n=document.getElementById('offNote');if(n)n.value='';
+  if(!r.queued)toast(myday?'已加入今天':'已记入任务（未进 My Day）');
+  // 刚记下的这条**立刻进缓存清单**：于是"离线新建 → 离线勾完成"这一串在同一个页面上走得通
+  // （否则要等下次联网刷新才看得见它，会让人以为没记上）
+  else if(r.entry)offlineCache.tasks=[r.entry,...(offlineCache.tasks||[])];
+  view(current);
+}
+async function offlineMemoAdd(){
+  const el2=document.getElementById('offMemo');
+  const text=((el2&&el2.value)||'').trim();
+  if(!text){toast('先写一句');return}
+  const r=await writeOrQueue('/api/memos',{method:'POST',body:JSON.stringify({text})},
+    o=>o.enqueue('memos',o.PURE.memoRow({text})),
+    '连不上电脑：这条备忘先存在手机上');
+  if(!r)return;
+  if(el2)el2.value='';
+  if(!r.queued)toast('已记下');
+  view(current);
+}
+async function offlineFeedbackSave(){
+  const plan=((document.getElementById('offPlan')||{}).value||'');
+  const gap=((document.getElementById('offGap')||{}).value||'');
+  const r=await writeOrQueue('/api/feedback',{method:'POST',body:JSON.stringify({plan_note:plan,gap_note:gap})},
+    o=>o.enqueue('feedback_logs',o.PURE.feedbackRow({plan_note:plan,gap_note:gap,
+      date:todayISO(),prev:offlineCache.feedback||{}})),
+    '连不上电脑：今天这两句先存在手机上');
+  if(!r)return;
+  if(!r.queued)toast('反馈已保存（专注分钟由事实层自动计）');
+  view(current);
+}
+async function offlineHabitToggle(id){
+  const h=cachedOfflineHabit(id);
+  const day=todayISO();
+  // 缓存里今天已经打过卡 → 这一下是**取消**（电脑那边也是把 done 改 0，不是删行）
+  const on=!!(h&&(h.logs||[]).includes(day));
+  const next=!on;
+  const r=await writeOrQueue(`/api/habits/${id}/toggle`,{method:'POST'},
+    o=>o.enqueue('habit_logs',o.PURE.habitRow(id,day,next)),
+    `连不上电脑：${h?'「'+h.name+'」':''}${next?'今天的打卡':'取消打卡'}先存在手机上`);
+  if(!r)return;
+  if(!r.queued)toast(next?'已打卡':'已取消打卡');
+  else if(h){   // 让界面立刻反映（不然连点两次看不出区别）
+    h.logs=next?[...(h.logs||[]),day].filter((d,i,a)=>a.indexOf(d)===i).sort():(h.logs||[]).filter(d=>d!==day);
+    if(offlineReady()){try{TFOffline.putCache('habits',offlineCache.habits).catch(()=>{})}catch(e){}}
+  }
+  view(current);
+}
+async function toggleDone(id,isDone){
+  const t=cachedOfflineTask(id);
+  if(offlineNow()&&!t){
+    toast('这条任务不在手机缓存里 —— 联网时打开一次任务列表，之后就能离线勾了');
+    return;
+  }
+  const r=await writeOrQueue(`/api/tasks/${id}/${isDone?'uncomplete':'complete'}`,{method:'POST'},
+    o=>offlineQueueDone(o,t,isDone),
+    isDone?'连不上电脑：撤销完成先存在手机上':'连不上电脑：完成先存在手机上');
+  if(!r)return;
+  if(!r.queued)toast(isDone?'已撤销完成，投入账同步回退':'已完成 · 记入事实与账本');
+  // 存进队列之后**就地改一下缓存里的那一行**：不然"离线勾完成"列表看上去没反应，
+  // 人会以为没记上再点一次（点两次不会错账 —— 账本按 task id 去重 —— 但界面不该骗人）。
+  else if(t){t.status=isDone?'未开始':'完成'}
+  view(current);
+}
+async function offlineExport(){
+  const o=offlineEngine();
+  if(!o||!offlineReady()){toast('这个浏览器不支持离线存储，导不了');return}
+  try{
+    const r=await o.exportPack();
+    if(!r.rows){toast('队列还是空的 —— 先在上面记点什么');return}
+    toast(r.downloaded
+      ? `已导出 ${r.rows} 条（${r.filename}）—— 拷到电脑，在设置页「跨端同步」里导入`
+      : `浏览器没让直接下载（${r.filename}）—— 已生成，用下面的「复制包文本」兜底`);
+    if(!r.downloaded){
+      const copied=await copyText(r.text);
+      toast(copied?'包文本已复制到剪贴板，粘到电脑上的一个 .json 文件里就行':'复制也没成功，请手动重试');
+    }
+    view(current);
+  }catch(e){toast('导出失败：'+((e&&e.message)||e))}
+}
+async function offlineCopy(){
+  const o=offlineEngine();
+  if(!o||!offlineReady()){toast('这个浏览器不支持离线存储，导不了');return}
+  try{
+    const r=await o.packOnce();
+    if(!r.rows){toast('队列还是空的');return}
+    const copied=await copyText(r.text);
+    toast(copied?`已复制 ${r.rows} 条：粘成电脑上的一个 .json 文件，再去「跨端同步」导入`
+      :'复制失败（浏览器可能不给剪贴板权限）');
+  }catch(e){toast('打包失败：'+((e&&e.message)||e))}
+}
+async function offlineClear(){
+  const o=offlineEngine();
+  if(!o||!offlineReady())return;
+  const n=await o.pendingCount().catch(()=>0);
+  if(!n){toast('队列已经是空的');return}
+  const ok=await confirmAsk(`清空手机上这 ${n} 条待同步记录？\n清空前请确认电脑那边已经导入过了 —— 清掉就找不回来了。`,'清空队列');
+  if(!ok)return;
+  try{await o.clearQueue();toast('队列已清空');paintOfflineBar();view(current)}
+  catch(e){toast('清空失败：'+((e&&e.message)||e))}
+}
+/* 顶部提示条：断网 或 队列里还有没同步的东西 时才出现（手机上没有左栏，靠它进「离线记」）。 */
+async function paintOfflineBar(){
+  const bar=document.getElementById('offlineBar');
+  if(!bar)return;
+  let n=0;
+  try{if(offlineReady())n=await TFOffline.pendingCount()}catch(e){}
+  const off=offlineNow();
+  if(!off&&!n){bar.hidden=true;bar.innerHTML='';return}
+  bar.hidden=false;
+  bar.innerHTML=`<span class="meta">${off?'离线中：现在记的东西会先存在这台设备上':'有 '+n+' 条还没同步到电脑'}</span>
+    <button class="ghost" data-action="view" data-view="offline">${off?'离线记一笔':'去导出同步包'}</button>`;
+}
+/* 离线记（视图名 `offline`）：一屏说清"现在记什么、攒了多少、怎么回电脑"。
+   刻意做成**独立一页**而不是把每个视图都改造成"离线可用"：范围小、看得清边界、也不动既有页面。 */
+async function renderOffline(m){
+  const o=offlineEngine();
+  const ready=offlineReady();
+  const off=offlineNow();
+  let entries=[],last=null,err='';
+  if(o&&ready){
+    try{entries=await o.pending()}catch(e){err=String((e&&e.message)||e)}
+    try{last=o.lastExport()}catch(e){}
+    if(!err){
+      for(const k of ['tasks','habits','memos','feedback']){
+        try{const got=await o.getCache(k);if(got&&got.rows!==undefined)offlineCache[k]=got.rows}catch(e){}
+      }
+    }
+  }
+  const tasks=offlineCache.tasks||[];
+  const habits=offlineCache.habits||[];
+  const openTasks=tasks.filter(t=>t.status!=='完成');
+  const doneTasks=tasks.filter(t=>t.status==='完成');
+  const notReady=`<div class="card panel-card" id="offlineUnsupported"><div class="title">这台设备用不了离线存储</div>
+    <div class="meta">${esc(err||'这个浏览器不支持 IndexedDB，或在隐私模式下被禁用了')}。
+    离线记要靠它把队列存在本机；换成 Chrome / Edge / Safari 的普通（非隐私）窗口就能用。
+    这一页其余部分不需要它也能看。</div></div>`;
+  const capture=!ready?'':`
+  <div class="section-title">离线记一笔</div>
+  <div class="card panel-card">
+    <div class="settings-sub">新建任务</div>
+    <div class="form">
+      <div class="field wide"><label>标题</label>
+        <input id="offTitle" placeholder="要做什么" data-enter="offline-task-add"></div>
+      <div class="field narrow"><label>截止日</label><input id="offDue" type="date"></div>
+      <div class="field narrow"><label>优先级</label>
+        <select id="offPrio"><option value="中">中</option><option value="高">高</option><option value="低">低</option></select></div>
+      <div class="field narrow"><label>放进今天</label><input type="checkbox" id="offMyDay" checked></div>
+      <div class="field wide"><label>备注（可留空）</label><input id="offNote" placeholder="想到了就写一句"></div>
+      <div class="actions"><button data-action="offline-task-add">记下来</button></div>
+    </div>
+    <div class="settings-sub">一句备忘</div>
+    <div class="new"><input id="offMemo" class="grow" placeholder="随手记一条…" data-enter="offline-memo-add">
+      <button data-action="offline-memo-add">记下</button></div>
+    <div class="settings-sub">今天卡在哪 / 打算做什么</div>
+    <div class="form">
+      <div class="field wide"><label>计划</label><input id="offPlan" placeholder="今天打算做点什么"></div>
+      <div class="field wide"><label>差距 / 复盘</label><input id="offGap" placeholder="卡在哪儿了"></div>
+      <div class="actions"><button data-action="offline-feedback-save">保存反馈</button></div>
+    </div>
+    <div class="settings-sub">习惯打卡（只列手机上缓存过的习惯）</div>
+    <div class="row tight">${habits.length?habits.map(h=>
+      `<button class="ghost" data-action="offline-habit" data-id="${esc(h.id)}">${esc(h.name)} · 打卡</button>`).join('')
+      :'<span class="sub">还没有缓存到习惯：联网时打开一次「习惯」页，这里就会出现。</span>'}</div>
+  </div>
+  <div class="section-title">离线勾完成（缓存里最近看到的那份清单）</div>
+  <div class="card panel-card">
+    ${openTasks.length?openTasks.slice(0,30).map(t=>`<div class="card"><div style="flex:1">
+        <div class="title">${esc(t.title)}</div>
+        <div class="meta">${esc(t.status)}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}${t.is_myday?' · 今天':''}</div></div>
+        <button class="ghost" data-action="offline-done" data-id="${esc(t.id)}" data-done="true">完成</button>
+      </div>`).join(''):emptyState('缓存里没有还能勾的任务（联网打开一次任务列表就会缓存下来）')}
+    ${doneTasks.length?`<div class="sub">已完成（点一下撤销）：${doneTasks.slice(0,10).map(t=>
+      `<button class="ghost" data-action="offline-done" data-id="${esc(t.id)}" data-done="false">${esc(t.title)}</button>`).join('')}</div>`:''}
+    <div class="sub">这份清单是<b>上次联网时看到的样子</b>，只看不改：离线能改的只有「完成 / 撤销完成」，
+      改字段（截止日、优先级…）留给电脑（手机上判不准电脑那边有没有更新过）。</div>
+  </div>`;
+  const queue=entries.length?entries.map(e=>`<div class="card"><div style="flex:1">
+      <div class="title">${esc(e.label||e.table)}</div>
+      <div class="meta">${esc(e.table)} · ${esc(String(e.at||'').replace('T',' '))}</div></div></div>`).join('')
+    :emptyState('队列是空的 —— 断网时记的东西会攒在这里');
+  m.innerHTML=`
+  <div class="card panel-card" id="offlineStatus">
+    <div class="title">${off?'离线中':'在线'} · 手机离线记</div>
+    <div class="meta">这台设备的设备号 <code>${esc(offlineDevice())}</code> · 待同步 <b>${entries.length}</b> 条${
+      last?` · 上次导出 ${esc(String(last.at).replace('T',' '))}（${last.rows||0} 条）`:''}</div>
+    <div class="meta">${off
+      ? '现在记下的东西先存在这台设备里；回到电脑前 <b>导出同步包</b>，在电脑的设置页「跨端同步」里导入。'
+      : '这台设备现在连得上电脑：记的东西直接进库；下面这份队列是之前离线时攒下的，<b>不会自动上传</b>。'}</div>
+  </div>
+  ${notReady}${capture}
+  <div class="section-title">待同步（${entries.length}）</div>
+  <div class="card panel-card" id="offlineQueue">
+    <div class="row tight">
+      <button data-action="offline-export">导出同步包</button>
+      <button class="ghost" data-action="offline-copy">复制包文本</button>
+      <button class="ghost" data-action="offline-clear">清空（我已导入电脑）</button></div>
+    <div class="sub">包与电脑↔电脑用的是<b>同一个格式</b>（<code>timeflow-sync</code> v1）：拷到电脑上，
+      在「设置 → 数据与同步 → 跨端同步」里先预览再导入。设备号（<code>${esc(offlineDevice())}</code>）会写进包里，
+      电脑据此认出这份包从哪来。</div>
+    <div class="sub">导出<b>不会清空</b>队列（文件丢了不至于丢数据）；<b>重复导入是安全的</b> —— 电脑那边合并是幂等的。
+      清空得自己点上面那颗按钮并再确认一次。</div>
+    ${queue}
+  </div>
+  <div class="card panel-card">
+    <div class="settings-sub">这一版能做什么、不做什么</div>
+    <div class="sub">能做：新建任务 / 勾完成与撤销完成 / 习惯打卡 / 一句备忘 / 每日反馈（都先存在本机队列）。</div>
+    <div class="sub">不做：离线<b>删除</b>（删要动电脑上的墓碑，手机上判不准）、离线<b>改字段</b>（会覆盖电脑上更新的那份）、
+      从电脑<b>回传</b>到手机（手机没有库，不做反向合并）、离线<b>专注计时</b>（它会牵动电脑那边的派生账目，单独做）。</div>
+    <div class="sub">还有一件事：手机现在<b>打不开这个应用</b>（服务只监听本机）——
+      要让手机真的能打开，得先做「同一 WiFi 直连」（场景 ②，默认关）。在那之前，
+      可以先用电脑浏览器的开发者工具切到 Offline 模式，把这一页走一遍。</div>
+  </div>`;
+  defaultDateFields(['offDue']);
+  paintOfflineBar();
 }
 let toastTimer=null;
 let modalResolve=null;
@@ -238,6 +551,15 @@ const ACTIONS = {
   'sync-export':    () => exportSyncPack(),
   'sync-preview':   () => previewSyncPack(),
   'sync-import':    () => importSyncPack(),
+  // 手机离线记（SR-NF17 / G 批 · T-G10，场景 ①）：离线时记一笔 / 勾完成 / 导出同格式包
+  'offline-task-add':      () => offlineTaskAdd(),
+  'offline-memo-add':      () => offlineMemoAdd(),
+  'offline-feedback-save': () => offlineFeedbackSave(),
+  'offline-habit':  el => offlineHabitToggle(el.dataset.id||''),
+  'offline-done':   el => toggleDone(el.dataset.id||'', el.dataset.done==='false'),
+  'offline-export': () => offlineExport(),
+  'offline-copy':   () => offlineCopy(),
+  'offline-clear':  () => offlineClear(),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -374,6 +696,13 @@ async function render(name){
   clearInterval(focusTimer);focusTimer=null;    // 计时器由右栏（paintRail）重新接管
   paintRail(mySeq);                             // 右栏：计时器常驻 + 详情面板（与视图无关）
   const m=document.getElementById('main');
+  // 「离线记」这一页**不依赖后端**：断网 / 服务没起时它是唯一还能打开的一页，
+  // 所以放在 `/api/config` 之前（否则配置拉不到 → 整页空白，正好在最需要它的时候失效）。
+  if(name==='offline'){
+    if(accentChoice)applyAccent(accentChoice);
+    try{if(mySeq===renderSeq)await renderOffline(m)}catch(e){console.error(e)}
+    return;
+  }
   try{
     const cfg=await api('/api/config');
     if(mySeq!==renderSeq)return;                 // 已被更新的点击取代：不做任何写入
@@ -394,6 +723,7 @@ async function render(name){
     if(name==='review')return paint(renderReview);
     if(name==='memo')return paint(renderMemo);
     if(name==='setting')return paint(renderSetting);
+    if(name==='offline')return paint(renderOffline);
   }catch(err){
     if(err&&err.name==='AbortError')return;      // 被下一次点击取消：不是错误
     console.error(err);
@@ -439,6 +769,12 @@ function teamButtonsHTML(asg){
 function paintRail(mySeq){
   const rail=document.getElementById('focusRail'),box=document.getElementById('detailRail');
   if(!rail||!box)return;
+  if(offlineNow()){
+    // 离线时别去问：问一次弹一次"连不上"，而且这一页本来就是给断网用的 —— 最需要它的时候最吵
+    rail.innerHTML=`<div class="panel-title">专注计时</div>
+      <div class="sub">离线中：这时看不到进行中的专注（回到电脑前会同步）。</div>`;
+    box.innerHTML='';return;
+  }
   api('/api/focus/active')
     .then(a=>{if(mySeq===renderSeq)renderActive(rail,a)})
     .catch(err=>{if(!(err&&err.name==='AbortError'))console.error(err)});
@@ -943,11 +1279,6 @@ async function teamStatus(assignmentId,status){
   await api(`/api/team/assign/${assignmentId}`,{method:'PATCH',body:JSON.stringify({status})});
   toast(`进展已记为「${TEAM_STATUS[status]||status}」`);view(current);
 }
-async function toggleDone(id,isDone){
-  await api(`/api/tasks/${id}/${isDone?'uncomplete':'complete'}`,{method:'POST'});
-  toast(isDone?'已撤销完成，投入账同步回退':'已完成 · 记入事实与账本');
-  view(current);
-}
 async function undoDone(id){await toggleDone(id,true)}
 // 手动标记（SR-F1.3 / T-B3）：翻转 Flagged。后端幂等（按一次翻一次），这里只负责提示与刷新。
 async function toggleFlag(id){
@@ -1046,9 +1377,15 @@ async function addTask(){
   const title=(titleEl.value||'').trim();if(!title)return;
   const due=document.getElementById('newDue').value||null;
   const myday=document.getElementById('newMyDay').checked;
-  await api('/api/tasks',{method:'POST',body:JSON.stringify({title,due_date:due,is_myday:myday})});
+  // 连不上电脑时不弹"请求失败"了事：这一条**存进手机队列**（口径见 renderOffline 上面那段注释）
+  const r=await writeOrQueue('/api/tasks',
+    {method:'POST',body:JSON.stringify({title,due_date:due,is_myday:myday})},
+    o=>offlineQueueNewTask(o,{title,due_date:due,is_myday:myday}),
+    '连不上电脑：这一条先存在手机上（回电脑导出同步包导入）');
+  if(!r)return;
   titleEl.value='';document.getElementById('newDue').value='';titleEl.focus();
-  toast(myday?'已加入今天':'已记入任务（未进 My Day）');view(current);
+  if(!r.queued)toast(myday?'已加入今天':'已记入任务（未进 My Day）');
+  view(current);
 }
 
 // ---- 全部任务（OP-2：未进 My Day 的任务也要看得见）----
@@ -1574,7 +1911,21 @@ async function renderHabit(m){
 async function addHabit(){const name=document.getElementById('habitName').value.trim();if(!name)return;
   await api('/api/habits',{method:'POST',body:JSON.stringify({name})});
   toast('习惯已建好，打卡后热力图会亮起来');view(current)}
-async function toggleHabit(id){await api(`/api/habits/${id}/toggle`,{method:'POST'});view(current)}
+async function toggleHabit(id){
+  const h=cachedOfflineHabit(id);
+  const day=todayISO();
+  const on=!!(h&&(h.logs||[]).includes(day));
+  const next=!on;
+  const r=await writeOrQueue(`/api/habits/${id}/toggle`,{method:'POST'},
+    o=>o.enqueue('habit_logs',o.PURE.habitRow(id,day,next)),
+    `连不上电脑：${h?'「'+h.name+'」':''}${next?'今天的打卡':'取消打卡'}先存在手机上`);
+  if(!r)return;
+  if(!r.queued)toast(next?'已打卡':'已取消打卡');
+  else if(h){
+    h.logs=next?[...(h.logs||[]),day].filter((d,i,a)=>a.indexOf(d)===i).sort():(h.logs||[]).filter(d=>d!==day);
+  }
+  view(current);
+}
 async function renameHabit(id,oldName){
   const name=await ask('习惯改名：',oldName||'');
   if(name===null)return;
@@ -1586,8 +1937,15 @@ async function deleteHabit(id,name){
   if(!await confirmAsk(`删除习惯「${name}」？它的打卡记录也会一起删掉，且不可恢复。`,'删除习惯'))return;
   await api(`/api/habits/${id}`,{method:'DELETE'});toast('已删除');view(current);
 }
-async function saveFeedback(){await api('/api/feedback',{method:'POST',body:JSON.stringify({plan_note:document.getElementById('fbPlan').value,gap_note:document.getElementById('fbGap').value})});
-  toast('反馈已保存（专注分钟由事实层自动计）');view(current)}
+async function saveFeedback(){
+  const plan=document.getElementById('fbPlan').value,gap=document.getElementById('fbGap').value;
+  const r=await writeOrQueue('/api/feedback',{method:'POST',body:JSON.stringify({plan_note:plan,gap_note:gap})},
+    o=>o.enqueue('feedback_logs',o.PURE.feedbackRow({plan_note:plan,gap_note:gap,date:todayISO(),
+      prev:offlineCache.feedback||{}})),
+    '连不上电脑：今天这两句先存在手机上');
+  if(!r)return;
+  if(!r.queued)toast('反馈已保存（专注分钟由事实层自动计）');
+  view(current)}
 
 async function renderAcademic(m){
   const scale=gpaScale;
@@ -1844,7 +2202,12 @@ async function renderMemo(m){
     ${o.retracted?'':`<button class="ghost" data-action="output-retract" data-id="${o.entry_id}">撤销</button>`}</div>`).join('')||emptyState('今天还没有产出记录')}`;
 }
 async function addMemo(){const text=document.getElementById('memoTxt').value.trim();if(!text)return;
-  await api('/api/memos',{method:'POST',body:JSON.stringify({text})});view(current)}
+  const r=await writeOrQueue('/api/memos',{method:'POST',body:JSON.stringify({text})},
+    o=>o.enqueue('memos',o.PURE.memoRow({text})),
+    '连不上电脑：这条备忘先存在手机上');
+  if(!r)return;
+  if(!r.queued)toast('已记下');
+  view(current)}
 async function memoToTask(id){
   const r=await api(`/api/memos/${id}/to-task`,{method:'POST',body:JSON.stringify({is_myday:true})});
   toast(`已建成任务并加入今天（${r.task_id.slice(0,6)}…）`);view(current);
@@ -1976,7 +2339,8 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-tasks">任务</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-behavior">口径与回退</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-remind">提醒</button>
-      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-sync">数据与同步</button></div>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-sync">数据与同步</button>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-offline">手机离线记</button></div>
   </div>
   <div class="section-title" id="set-appearance">外观</div>
   <div class="card panel-card">
@@ -2178,6 +2542,13 @@ async function renderSetting(m){
       · 上次导入：${sync.last_import?`${esc(String(sync.last_import.at).replace('T',' '))} · 新增 ${(sync.last_import.totals||{}).inserted||0} / 覆盖 ${(sync.last_import.totals||{}).updated||0}`:'还没导入过'}</div>
     <div class="sub">包里<b>不含</b>这台机器的设置（导出目录 / Vault / AI 开关 / 口径开关）、本机冲突日志与 schema 版本 ——
       拷过去不会改掉另一台的设置。同名文件不会互相覆盖（同一秒导出两次会加 -2）。</div>
+    <div class="settings-sub" id="set-offline">手机离线记（从手机往电脑带）</div>
+    <div class="meta">在手机上断网记的东西（任务 / 勾完成 / 习惯打卡 / 备忘 / 每日反馈）先存在手机里，
+      导出的是<b>同一个格式</b>的包 —— 拿回来在这里「先预览再导入」就行。</div>
+    <div class="row tight">
+      <button class="ghost" data-action="view" data-view="offline">打开「离线记」这一页</button></div>
+    <div class="sub">这一页在断网时也能打开（它就是为断网准备的）；手机上要真的打开这个应用，
+      还得先做「同一 WiFi 直连」（默认关，还没做）——现在可以在电脑浏览器的离线模式里用它。</div>
     <div class="settings-sub" id="set-backup">备份与恢复</div>
     <div class="meta">每次起服务/开窗口前会自动备份一份。库：${esc(bk.db||'—')}（目录 ${esc(bk.dir||'—')}）</div>
     <div class="row tight" style="margin-top:var(--sp-2)">
@@ -2537,8 +2908,21 @@ applyRail();
 // PWA：注册 service worker（仅 secure context，如 https 或 localhost）
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}
 
-// 首屏渲染（此前只在点击导航时才渲染，页面会一直空白）
-view('today');
+/* 离线/在线的切换（SR-NF17 / 场景 ①）：断网那一刻起，记的东西存进手机队列；
+   回到网络时说清楚「还有几条没同步」——**不会自动上传**（走文件，或等 ② 同一 WiFi 直连）。 */
+window.addEventListener('offline',()=>{
+  netDown=true;paintOfflineBar();
+  toast('断网了：现在记的东西会先存在手机上，回电脑后导出同步包导入');
+});
+window.addEventListener('online',()=>{
+  netDown=false;paintOfflineBar();
+  if(current==='offline')view('offline');
+});
+
+// 首屏渲染（此前只在点击导航时才渲染，页面会一直空白）。
+// 离线时直接进「离线记」：今日页要联网才有数据，断网打开它只会是一串报错 —— 那一页才是有用的那一页。
+paintOfflineBar();
+view(offlineNow()?'offline':'today');
 </script>
 </body>
 </html>

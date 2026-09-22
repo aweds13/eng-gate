@@ -23,7 +23,7 @@
 | 模块 | 一句话职责 | 对应 SR |
 |---|---|---|
 | `src/timeflow/app/` | 桌面壳（pywebview 窗口，不可用时回退浏览器） | SR-NF1/2/4 |
-| `src/web/` | Web 前端单文件界面（`index.html`，无构建步骤） | SR-NF1/2 |
+| `src/web/` | Web 前端界面（`index.html` 主壳 + `app.css` + `sw.js` + **`offline.js` 手机离线引擎**，无构建步骤） | SR-NF1/2/4, SR-NF17 |
 | `src/timeflow/api/` | FastAPI REST（供前端 + 外部/AI 接口） | SR-F7.3, SR-NF16 |
 | `src/timeflow/core/tasks/` | 任务管理（CRUD/My Day/逾期/Repeat/子任务/软删除） | SR-F1 |
 | `src/timeflow/core/facts/` | 事实层：只记「发生了什么」+ 同步事件总线（事实与解读解耦） | —（重构地基） |
@@ -35,7 +35,9 @@
 | `src/timeflow/core/review/` | 复习间隔重复（FSRS 调度 + 三态反馈 + 撤销反馈） | SR-F6 |
 | `src/timeflow/core/team/` | 团队/执行者/AI 协作 | SR-F7 |
 | `src/timeflow/core/memo/` | 备忘录 + 知识资产引用句柄 + 产出/手动投入事实 | SR-F8 |
-| `src/timeflow/storage/` | SQLite 数据层 + schema 迁移（v5） + 同步(LWW) | SR-F9 |
+| `src/timeflow/storage/` | SQLite 数据层 + schema 迁移（v17） + 备份/恢复 | SR-F9 |
+| `src/timeflow/core/syncpack.py` | 跨端同步包（`timeflow-sync` v1）+ **先规划后执行**的合并 + 冲突留痕 | SR-F9.2 |
+| `src/timeflow/core/ai.py` | AI 接口的边界与守卫（只读 + 新增 + 只能勾自己建的；默认关） | SR-F7.3 |
 | `src/timeflow/config.py` | 配置加载 + 校验（pydantic / env 覆盖） | SR-NF14 |
 | `src/timeflow/getaways/` | 知识资产/学校通知等外部集成（**预留占位**） | SR-F8.2, SR-F10 |
 

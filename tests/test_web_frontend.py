@@ -22,6 +22,9 @@ from timeflow.api.app import create_app
 
 WEB_INDEX = Path(__file__).resolve().parent.parent / "src" / "web" / "index.html"
 WEB_CSS = Path(__file__).resolve().parent.parent / "src" / "web" / "app.css"
+# 手机离线记的引擎与 service worker（G 批 · T-G10）：都是独立文件，护栏直接读它们
+WEB_ENGINE = Path(__file__).resolve().parent.parent / "src" / "web" / "offline.js"
+WEB_SW = Path(__file__).resolve().parent.parent / "src" / "web" / "sw.js"
 
 
 def _fn_body(html: str, name: str) -> str:
@@ -136,7 +139,11 @@ def test_race_guard_exists() -> None:
         "name==='AbortError'",
     ):
         assert needle in html, f"缺少竞态防护：{needle}"
-    assert "toast('网络请求失败，稍后再试')" in html, "非取消类网络错误仍应提示"
+    assert "连不上电脑" in html and "toast('连不上电脑" in html, "非取消类网络错误仍应提示"
+    # 提示换了措辞（T-G10 起要顺带告诉人"可以记在手机上"），但两件事都还在：
+    # ① 提示不许省；② 只有网络失败才标 `__offline`（后端拒绝不许被当成离线）。
+    api_fn = _fn_body(html, "api")
+    assert "err.__offline=true" in api_fn and "paintOfflineBar()" in api_fn
 
 
 def test_gpa_scale_is_switchable_in_page() -> None:
@@ -1095,3 +1102,77 @@ def test_sync_pack_is_wired_and_non_destructive() -> None:
     assert "dry_run:true" in fn and "confirmAsk(" in fn, "导入必须先预览再二次确认"
     export_fn = html.split("async function exportSyncPack(){", 1)[1].split("\n}", 1)[0]
     assert "/api/sync/export" in export_fn and "copyText(" in export_fn
+
+
+def test_mobile_offline_capture_is_wired_and_honest() -> None:
+    """T-G10（SR-NF17 场景 ①）：断网时能记（进本机队列）、能导出同格式包、并且把话说清楚。
+
+    五条口径（每一条都对应一个"看起来能用其实是坑"的写法）：
+    ① **连不上 ≠ 后端拒绝**：只有网络失败（`fetch` 抛）才允许入队兜底；
+       后端回 400/404 是它说了算 —— 那时候"帮你存起来"就是骗人（`writeOrQueue` 里就这一条分支）；
+    ② 「离线记」这一页**不依赖后端**：它排在 `/api/config` 之前 —— 断网时配置拉不到，
+       排在后面就等于"最需要它的时候整页空白"；
+    ③ 包与电脑↔电脑（场景 ③）**同一个格式**，且导出**不清空**队列（"重复导入安全"靠这个前提）；
+    ④ 边界写在界面上（能做/不做），包括"手机现在打不开这个应用"这句实话；
+    ⑤ 手机侧引擎是**独立文件**（Node 里能真跑，见 `tests/test_offline_phone_line.py`），
+       页面真引它、service worker 真预缓存它（不然离线时它自己就取不到）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    engine = WEB_ENGINE.read_text(encoding="utf-8")
+    sw = WEB_SW.read_text(encoding="utf-8")
+
+    # ⑤ 引擎是独立文件，页面引它、sw 预缓存它
+    assert "TFOffline" in engine and "'timeflow-sync'" in engine
+    assert "indexedDB" in engine and "putCache" in engine and "clearQueue" in engine
+    assert '<script src="/offline.js"></script>' in html, "页面没引离线引擎"
+    assert '"/offline.js"' in sw and "timeflow-v2" in sw, "service worker 没预缓存离线引擎"
+
+    # ② 离线页排在 /api/config 之前（断网时它是唯一还能打开的一页）
+    render_fn = _fn_body(html, "render")
+    assert "name==='offline'" in render_fn and "renderOffline" in render_fn
+    assert render_fn.index("name==='offline'") < render_fn.index("api('/api/config')"), \
+        "离线页必须在拉配置之前处理（否则断网时它渲染不出来）"
+
+    # ① 只有网络失败才兜底
+    api_fn = _fn_body(html, "api")
+    assert "__offline=true" in api_fn, "api() 没标出「连不上」"
+    assert "rememberForOffline(path,opts,data)" in api_fn, "读过的清单没留一份给离线看"
+    wq = html.split("async function writeOrQueue(", 1)[1].split("\n}\n", 1)[0]
+    assert "e.__offline" in wq, "入队兜底必须只认「连不上」"
+    assert "method:'POST'" not in wq, "兜底逻辑里不该出现具体接口（它只负责决定走哪条路）"
+
+    # ③ 同一个格式 + 导出不清空 + 幂等
+    offline_view = html.split("async function renderOffline(m){", 1)[1]
+    assert "timeflow-sync" in offline_view, "界面上要说明包与电脑↔电脑同格式"
+    assert "<b>不会清空</b>" in offline_view and "<b>重复导入是安全的</b>" in offline_view
+    clear_fn = html.split("async function offlineClear(){", 1)[1].split("\n}", 1)[0]
+    assert "confirmAsk(" in clear_fn, "清空队列是不可逆动作，必须二次确认"
+    assert "offline-export" in offline_view and "offline-copy" in offline_view, \
+        "下载失败要有兜底（复制包文本）"
+    # 入队之后要**就地改缓存**：界面读的是缓存那份清单，不改它就会"看着没反应"
+    # （点两次不会错账 —— 账本按 task id 去重 —— 但界面不该骗人）。任务与习惯各一处。
+    toggle = html.split("async function toggleDone(id,isDone){", 1)[1].split("\n}", 1)[0]
+    assert "t.status=isDone?'未开始':'完成'" in toggle, "离线勾完成后没更新缓存那一行"
+    habit_fn = html.split("async function offlineHabitToggle(id){", 1)[1].split("\n}", 1)[0]
+    assert "h.logs=" in habit_fn, "离线打卡后没更新缓存（连点两次分不出打卡/取消）"
+
+    # ④ 边界说在界面上
+    for needle in ("不做：离线", "同一 WiFi 直连", "缓存里最近看到的那份清单"):
+        assert needle in offline_view, f"离线页缺少边界说明：{needle}"
+
+    # 入口与动作：视图名在 VIEWS、左栏有入口、动作都注册了
+    views = re.search(r"const VIEWS=\[([^\]]*)\]", html)
+    assert views and "'offline'" in views.group(1), "offline 不在视图白名单里"
+    rail = html.split('class="rail"', 1)[1].split("</nav>", 1)[0]
+    assert 'data-view="offline"' in rail, "左栏没有「离线记」入口"
+    for action in ("offline-task-add", "offline-memo-add", "offline-feedback-save",
+                   "offline-habit", "offline-done", "offline-export", "offline-copy",
+                   "offline-clear"):
+        assert f"'{action}':" in html, f"动作 {action} 没注册"
+    # 提示条（手机上没有左栏，靠它进得去）与断网/回网两个监听
+    assert 'id="offlineBar"' in html and "function paintOfflineBar()" in html
+    assert "addEventListener('offline'" in html and "addEventListener('online'" in html
+    assert "view(offlineNow()?'offline':'today')" in html, "断网首屏没落到离线页"
+    # 样式只住 app.css（R1）
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert ".offline-bar {" in css and ".offline-bar[hidden]" in css

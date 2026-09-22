@@ -81,6 +81,7 @@
 | 分层 | 目录 |
 |---|---|
 | 交互/壳 | `src/timeflow/app/`（pywebview 启动器，未安装时回退浏览器）+ `src/web/`（手写 HTML/CSS/JS，**无构建步骤、无打包器**，由服务端直出） |
+| 手机离线 | `src/web/offline.js`（浏览器侧：IndexedDB 队列 + 缓存 + 打包）→ 导出 `timeflow-sync` v1 包 → 由电脑侧的 `core/syncpack.py` 合并（**判断只在一处**；手机不自己判新旧） |
 | API | `src/timeflow/api/` |
 | 核心领域 | `src/timeflow/core/`（tasks/ledger/focus/feedback/academic/review/team/memo/facts） |
 | 存储 | `src/timeflow/storage/` |

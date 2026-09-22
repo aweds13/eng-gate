@@ -25,10 +25,17 @@ from timeflow.api.app import create_app
 
 ROOT = Path(__file__).resolve().parent.parent
 INDEX = ROOT / "src" / "web" / "index.html"
+SCRIPTS = (ROOT / "src" / "web" / "offline.js", ROOT / "src" / "web" / "sw.js")
+PHONE_CHECK = ROOT / "tools" / "phone_check.mjs"
 SCRIPT = re.compile(r"<script>(.*?)</script>", re.S)
 
 
 def check_js_syntax(tmp: Path) -> tuple[bool, str]:
+    """页面脚本 + 手机离线引擎 + service worker 都过一遍 `node --check`。
+
+    `offline.js` 与 `sw.js` 是**独立文件**（不是页面里那段内联脚本），所以各查一次 ——
+    一个语法错就能让离线记整块失效，而字符串护栏看不出来。
+    """
     node = shutil.which("node")
     m = SCRIPT.search(INDEX.read_text(encoding="utf-8"))
     if not m:
@@ -38,11 +45,24 @@ def check_js_syntax(tmp: Path) -> tuple[bool, str]:
     if not node:
         return True, "跳过：环境没有 node，无法做语法解析（未验证）"
     proc = subprocess.run(
-        [node, "--check", str(js_file)], capture_output=True, text=True, timeout=60
+        [node, "--check", str(js_file)], capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=60,
     )
     if proc.returncode != 0:
         return False, (proc.stderr or proc.stdout).strip()[:500]
-    return True, f"node --check 通过（{js_file.name}）"
+    names = [js_file.name]
+    for path in SCRIPTS:
+        # 复制成 .mjs 再查：`node --check` 对 `.js` 会按 CommonJS 解析，`.mjs` 才是我们实际用的形态
+        target = tmp / (path.stem + "_check.mjs")
+        target.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        got = subprocess.run(
+            [node, "--check", str(target)], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=60,
+        )
+        if got.returncode != 0:
+            return False, f"{path.name}: " + (got.stderr or got.stdout).strip()[:500]
+        names.append(target.name)
+    return True, f"node --check 通过（{' / '.join(names)}）"
 
 
 def _rail_nav(html: str) -> str:
@@ -291,6 +311,49 @@ def live_sync_checks(base: str, tmp: Path) -> dict[str, bool]:
     }
 
 
+def live_offline_checks(base: str, tmp: Path) -> dict[str, bool]:
+    """T-G10 真机自检：**手机侧的那份真包**在真服务上走一遍导入（跨端场景 ① 的后半程）。
+
+    链路的完整形态是"手机的浏览器 → 导出文件 → 电脑导入"，本环境没有浏览器，
+    但中间那两个文件都是真的：这里用 `tools/phone_check.mjs` 跑**页面用的同一个 offline.js**
+    造一份包，再通过真 HTTP 打 `/api/sync/import`。于是"手机造的包电脑吃不下"这类错这里就能拦住。
+    """
+    node = shutil.which("node")
+    checks: dict[str, bool] = {}
+    offline_js = urllib.request.urlopen(f"{base}/offline.js", timeout=10).read().decode("utf-8")
+    sw = urllib.request.urlopen(f"{base}/sw.js", timeout=10).read().decode("utf-8")
+    html = urllib.request.urlopen(f"{base}/", timeout=10).read().decode("utf-8")
+    checks["离线引擎真的发得出来"] = "TFOffline" in offline_js and "timeflow-sync" in offline_js
+    checks["页面引了离线引擎"] = '<script src="/offline.js">' in html
+    checks["离线页在导航里可达"] = 'data-view="offline"' in html
+    checks["service worker 预缓存离线引擎"] = '"/offline.js"' in sw and 'timeflow-v2' in sw
+    if not node:
+        checks["手机包自检（缺 node，未验证）"] = False
+        return checks
+    pack = tmp / "phone.json"
+    proc = subprocess.run(
+        [str(node), str(PHONE_CHECK), str(pack)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=120, cwd=str(ROOT),
+    )
+    checks["手机侧造包自检通过"] = proc.returncode == 0 and pack.is_file()
+    if not checks["手机侧造包自检通过"]:
+        return checks
+    first = _json_call(base, "/api/sync/import", "POST", {"path": str(pack)})
+    tasks = _json_call(base, "/api/tasks")[1] or []
+    second = _json_call(base, "/api/sync/import", "POST", {"path": str(pack)})
+    totals = (first[1] or {}).get("totals", {}) if first[0] == 200 else {}
+    checks["手机包能在真服务上导入"] = first[0] == 200 and totals.get("inserted", 0) >= 5
+    checks["手机记的任务真的进了库"] = any(t.get("title") == "手机上记的" for t in tasks)
+    checks["再导一次是幂等的（不重复计数）"] = second[0] == 200 and (
+        (second[1] or {}).get("totals", {}).get("inserted", 0) == 0
+    )
+    checks["导入后账本还答得上来"] = _json_call(base, "/api/summary")[0] == 200
+    src_dev = str((first[1] or {}).get("from_device", ""))
+    checks["设备号写进了包（认得出来源）"] = src_dev.startswith("ph-")
+    return checks
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="r2_"))
     ok, detail = check_js_syntax(tmp)
@@ -363,6 +426,7 @@ def main() -> int:
     checks.update(live_c_line_checks(base))
     checks.update(live_ai_checks(base))
     checks.update(live_sync_checks(base, tmp))
+    checks.update(live_offline_checks(base, tmp))
     for name, passed in checks.items():
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")
     server.should_exit = True

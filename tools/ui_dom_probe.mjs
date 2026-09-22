@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const INDEX = join(HERE, '..', 'src', 'web', 'index.html');
+const OFFLINE = join(HERE, '..', 'src', 'web', 'offline.js');
 const src = readFileSync(INDEX, 'utf8');
 const m = src.match(/<script>([\s\S]*?)<\/script>/);
 if (!m) {
@@ -66,7 +67,7 @@ class El {
 }
 
 const byId = new Map();
-for (const id of ['main', 'summary', 'toast', 'modal', 'modalInput', 'modalTitle',
+for (const id of ['main', 'summary', 'toast', 'modal', 'modalInput', 'modalTitle', 'offlineBar',
   'focusRail', 'detailRail', 'refresh', 'clock', 'hmRow', 'hmBox', 'hmNote', 'groupAdmin']) {
   byId.set(id, new El('div', id));
 }
@@ -91,6 +92,50 @@ Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, config
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.getComputedStyle = () => ({ getPropertyValue: (k) => PALETTE[k] || '' });
 globalThis.AbortController = class { constructor() { this.signal = {}; } abort() {} };
+
+/* 内存版 IndexedDB（只实现 offline.js 用到的那几个方法：open / transaction / put / get /
+   getAll / count / clear）。**为什么值得写这个桩**：手机离线记的真身就在 IndexedDB 里，
+   没有浏览器就只剩"字符串在不在"可查；有了它，探针能真的入队、真的渲染、真的打包一份包出来。 */
+function makeIndexedDbStub() {
+  const dbs = new Map();   // name → Map(store → Map(k → v))
+  const req = (result) => {
+    const r = { result, error: null, onsuccess: null, onerror: null, onupgradeneeded: null };
+    queueMicrotask(() => { if (r.onsuccess) r.onsuccess(); });
+    return r;
+  };
+  return {
+    open(name) {
+      const fresh = !dbs.has(name);
+      if (fresh) dbs.set(name, new Map());
+      const stores = dbs.get(name);
+      const r = { result: null, error: null, onsuccess: null, onerror: null, onupgradeneeded: null };
+      r.result = {
+        objectStoreNames: { contains: (s) => stores.has(s) },
+        createObjectStore: (s) => { stores.set(s, new Map()); return {}; },
+        transaction(store) {
+          if (!stores.has(store)) stores.set(store, new Map());
+          const data = stores.get(store);
+          const t = { error: null, oncomplete: null, onerror: null, onabort: null,
+            objectStore: () => ({
+              put: (v) => { data.set(v.k, v); return req(v.k); },
+              get: (k) => req(data.get(k)),
+              getAll: () => req([...data.values()]),
+              count: () => req(data.size),
+              clear: () => { data.clear(); return req(undefined); },
+            }) };
+          queueMicrotask(() => { if (t.oncomplete) t.oncomplete(); });
+          return t;
+        },
+      };
+      queueMicrotask(() => {
+        if (fresh && r.onupgradeneeded) r.onupgradeneeded();
+        if (r.onsuccess) r.onsuccess();
+      });
+      return r;
+    },
+  };
+}
+globalThis.indexedDB = makeIndexedDbStub();
 
 // 假后端里的任务对象：字段与 `TaskOut` 对齐（缺字段会让渲染拿到 undefined，探针就抓不到了）
 function probeTask(over = {}) {
@@ -366,6 +411,15 @@ const realWarn = console.warn;
 console.warn = (...a) => problems.push('warn: ' + a.join(' '));
 
 try {
+  // 手机离线记的引擎（页面里是 `<script src="/offline.js">`）：先求值，再把它挂成全局 ——
+  // 页面脚本里是**裸 `TFOffline`**（真浏览器里它就是全局），这里的假 window 只是普通对象。
+  new Function('window', readFileSync(OFFLINE, 'utf8')
+    + '\n;globalThis.TFOffline=window.TFOffline;')(globalThis.window);
+} catch (e) {
+  console.log(`❌ offline.js 求值就抛错：${e.message}`);
+  process.exit(1);
+}
+try {
   new Function(code + '\n;globalThis.__view=view;globalThis.__showDetail=showDetail;'
     + 'globalThis.__render=render;globalThis.__setEdit=v=>{detailEditing=v};'
     + 'globalThis.__setDoneOpen=v=>{doneOpen=v};globalThis.__setReviewEdit=v=>{reviewEdit=v};')();
@@ -376,7 +430,7 @@ try {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const views = ['today', 'tasks', 'important', 'planned', 'flagged', 'focus', 'stats', 'habit',
-  'academic', 'review', 'memo', 'setting'];
+  'academic', 'review', 'memo', 'setting', 'offline'];
 let bad = 0;
 let detailBad = 0;
 let doneBad = 0;
@@ -396,6 +450,7 @@ let syncBad = 0;
 let vocabBad = 0;
 let heatmapBad = 0;
 let exportBad = 0;
+let offlineBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -921,6 +976,50 @@ for (const [where, needs] of [
   }
 }
 
+/* 手机离线记（SR-NF17 / G 批 · T-G10，场景 ①）：这一档不只查"渲染出来了"，而是
+   **真的往（内存版）IndexedDB 里入队 → 页面真渲染 → 真的打出一份包**。
+   为什么必须真跑：手机侧的错（入队键错、包结构错）在字符串层面完全看不出来，
+   真要等拷到手机才发现。打出来的包结构与"能被电脑吃下去"由
+   `tests/test_offline_phone_line.py` 接着验（那边把它真导进一个真库）。 */
+const offlineChecks = [];
+try {
+  const OFF = globalThis.TFOffline;
+  if (!OFF) throw new Error('页面里没有 TFOffline（offline.js 没被加载？）');
+  await OFF.enqueue('memos', OFF.PURE.memoRow({ text: '探针离线记一条', at: '2026-09-23T20:15:00' }));
+  await OFF.enqueue('habit_logs', OFF.PURE.habitRow('h1', '2026-09-23', true));
+  const pending = await OFF.pendingCount();
+  byId.get('main')._html = '';
+  await globalThis.__view('offline');
+  await sleep(40);
+  const html = byId.get('main')._html;
+  const needs = ['手机离线记', 'id="offlineStatus"', 'id="offlineQueue"', '离线记一笔',
+    'offline-task-add', 'offline-memo-add', 'offline-feedback-save', 'offline-export',
+    'offline-copy', 'offline-clear', '待同步（2）', '备忘 · 探针离线记一条',
+    '习惯打卡 · 2026-09-23', '<b>不会清空</b>队列', '<b>重复导入是安全的</b>', '同一 WiFi 直连',
+    '会写进包里'];
+  const missing = needs.filter((n) => !html.includes(n));
+  const packed = await OFF.packOnce();
+  const parsed = JSON.parse(packed.text);
+  const packOk = parsed.format === 'timeflow-sync' && parsed.format_version === 1
+    && parsed.device_id.startsWith('ph-')
+    && parsed.tables.memos.length === 1 && parsed.tables.habit_logs.length === 1
+    && (parsed.tables.habit_logs[0] || {}).done === 1
+    && packed.rows === 2 && Array.isArray(parsed.tombstones) && parsed.tombstones.length === 0;
+  // 反证：包文本里**不许**出现这台设备的设置（那是"这台机器的事"，不跟着包走）
+  const noSettings = !packed.text.includes('app_settings');
+  const rendered = missing.length === 0 && packOk && noSettings && pending === 2;
+  if (!rendered) offlineBad++;
+  offlineChecks.push({ rendered, missing, packOk, noSettings, pending });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} offline·手机离线记 main ${String(html.length).padStart(6)}B`
+    + `（队列 ${pending} 条 · 包 ${packed.rows} 行 · ${packOk ? '结构对' : '结构不对'}`
+    + `${noSettings ? '' : ' · 混进了设置表'}）`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  offlineBad++;
+  offlineChecks.push({ error: e.message });
+  console.log(`  ❌ offline·手机离线记 渲染抛错: ${e.message}`);
+}
+
 try {
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
   for (const a of new Set(CLICK_ACTIONS)) if (!registered.has(a)) unused.push(a);
@@ -933,6 +1032,7 @@ if (process.argv.includes('--json')) {
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
       export: exportChecks, obsidian: obsidianChecks, ai: aiChecks, sync: syncChecks,
+      offline: offlineChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -948,6 +1048,7 @@ const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardB
   || obsidianBad > 0
   || aiBad > 0
   || syncBad > 0
+  || offlineBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -968,5 +1069,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，Obsidian 跳转 ${obsidianChecks.filter((c) => c.rendered).length}/${obsidianChecks.length} 正常`
   + `，AI 接口 ${aiChecks.filter((c) => c.rendered).length}/${aiChecks.length} 正常`
   + `，跨端同步 ${syncChecks.filter((c) => c.rendered).length}/${syncChecks.length} 正常`
+  + `，手机离线记 ${offlineChecks.filter((c) => c.rendered).length}/${offlineChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

@@ -78,9 +78,12 @@
   **逐项独立**；`GET /api/focus/guard` 连口径说明一起返回，`PUT /api/settings/focus-guard`
   服务端持有 + 只接受本机页面；`to_config()` 让判定与界面**共用同一份口径**。
   边界：**只做配置与判定，不做系统级屏蔽**（那需要桌面壳能力）。
-- **多设备同步专注**（SR-F3.4）：**未实现**。`core/sync.py` 只有 LWW 合并语义与冲突日志，
-  **没有专注状态（或任何数据）的跨端推拉传输**；`GET /api/sync/status` 如实返回 `enabled=false`。
-  （旧文案写"靠 storage 的同步转发专注状态"是**文档失真**，2026-09-18 审计修正。）
+- **多设备同步专注**（SR-F3.4）：**未实现**。跨端现在能做的是**走文件**的同步包
+  （`core/syncpack.py`，T-G8 / 场景 ③）与**手机离线采集**（`src/web/offline.js`，T-G10 / 场景 ①），
+  但**没有专注状态的实时推拉**（手机侧也刻意不做离线专注计时 —— 它会牵动电脑侧的派生账目，
+  而导入是直接写行、不过订阅器）。
+  （旧文案写"靠 storage 的同步转发专注状态"是**文档失真**，2026-09-18 审计修正；
+  旧文案说 `enabled=false` 也是**旧口径** —— 现在分开报 `file_sync` / `network_sync`。）
 
 ## SR-F4 反馈/习惯/自检 → `core/feedback/`
 - 每日反馈（SR-F4.1）、习惯打卡与连续天数（SR-F4.2）、自检（SR-F4.3，消费 B 数据）。
@@ -148,10 +151,25 @@
   （`output.manual` / `invest.manual`），并支持 `retract_*` 反向事实；**知识资产只存引用句柄**（Vault 路径/KB-ID）。
 - `getaways/`：外部集成（知识资产/学校通知）**预留占位**，尚无实现。
 
-## SR-F9 存储/同步 → `storage/`
-- SQLite（标准库 `sqlite3`，非 ORM）+ schema 版本化迁移（当前 **v12**：v3 facts、v4 focus 回填、v5 已完成任务回填、
-  v6 note、v7 priority、v8 flagged、v9 attach+app_settings、v10 remind_at、v11 task_type+course_id、v12 review_items.task_id）；
+## SR-F9 存储/同步 → `storage/` + `core/syncpack.py` + `src/web/offline.js`
+- SQLite（标准库 `sqlite3`，非 ORM）+ schema 版本化迁移（当前 **v17**：v3 facts、v4 focus 回填、
+  v5 已完成任务回填、v6 note、v7 priority、v8 flagged、v9 attach+app_settings、v10 remind_at、
+  v11 task_type+course_id、v12 review_items.task_id、v13 doing_rank、v14 groups.parent_id、
+  v15 分组同层唯一 + 按 id 归属、v16 tasks.created_by、**v17 跨端（六张表 updated_at 触发器 +
+  `sync_tombstones` 删除墓碑 + `sync_logs.result/note`）**）；
   LWW 同步（时间戳+version，不静默覆盖）；跨端**同 id 去重**（来源标记尚未落库，见 `traceability.toml` 的 SR-F2.6b）。
+- **跨端同步包（`core/syncpack.py`，G 批 · T-G8 = 场景 ③）**：`timeflow-sync` v1 的 JSON 包
+  （`build_pack`/`export_pack`/`load_pack`/`check_pack`）+ **先规划后执行**的合并
+  （`plan_merge` → `merge_pack`，所以"预览"与"真导入"是同一套判断）；三类表三套规则
+  （LWW 行 / 只增行 / 关系行）；每次导入逐条记 `sync_logs`（`result` + "差在哪"），**不静默**；
+  **v1 边界：导入永不删本地数据**（远程墓碑只防复活 + 继续传播）。
+- **手机离线记（`src/web/offline.js`，G 批 · T-G10 = 场景 ①）**：浏览器侧 IndexedDB 队列与缓存 +
+  纯函数造行/打包（**拆成独立文件就是为了能在 Node 里用同一份代码真跑**，见 `tools/phone_check.mjs`）；
+  断网时记下（任务/完成与撤销/习惯打卡/备忘/每日反馈）→ 导出一份**同格式**的包 → 回电脑导入。
+  **判断不在这里**（手机没有库、没有领域层，不做"半套合并"）。契约 OP-49，复盘 `复盘/手机离线记-T-G10.md`。
+- **还没做的传输层**：场景 ②（同一 WiFi 直连，默认关 + 配对码）—— `tools/serve.py` 仍只监听回环，
+  所以手机目前打不开这个应用。`GET /api/sync/status` 分开报 `file_sync=true` / `network_sync=false`，
+  **不拿一个布尔糊过去**。
 - **备份与恢复**（`storage/backup.py`，2026-09-21 用户定：设置页列出最近几个备份、点一下恢复）：
   `make_backup()` / `list_backups()` / `resolve_backup()`（**名字是唯一安全边界**）/ `restore()`；
   **起服务前与开窗口前各自动备份一次**（都在 schema 迁移之前）；
@@ -162,8 +180,9 @@
   原因：`sqlite3.Connection` 非线程安全，共享时一个请求的 `commit()` 会打断另一个请求的事务
   （真机表现：快速点击顶部导航 → 「操作未完成」）；实测并发 180 请求由 33 次 500 降到 0。
   回归守卫：`tests/test_concurrency.py`。
-- **同步状态**（第 10 步）：`sync.status()` + `GET /api/sync/status` —— 只报告事实
-  （冲突日志条数/最近时间），**跨端传输未实现时 `enabled=false`，不谎报"已同步"**。
+- **同步状态**（第 10 步；T-G8 起改口径）：`sync.status()` + `syncpack.status()` + `GET /api/sync/status` ——
+  只报告事实（**分开报** `file_sync` / `network_sync`、设备号、墓碑数、冲突条数、上次导出/导入），
+  **不谎报"已同步"**。
 - **已修 bug**（第 10 步）：`log_conflict` 原用秒级时间戳当主键，同一秒两次冲突会 `IntegrityError` —— 改随机 id。
 
 ## 重构地基（非 SR）→ `core/facts/`
@@ -213,12 +232,17 @@
 | `invest.manual` | `memo/memo.py` | **秒** | `invest.retracted` |
 
 > 说明：`focus.started` 曾预留但**未使用**（开始不是投入事实）；如需前端联动再引入。
+>
+> **从手机来的事实**（G 批 · T-G10）：`task.completed` / `task.uncompleted` 也可能是
+> **手机离线记**在断网时写下的（`src/web/offline.js`），随同步包导入落到电脑的 `facts` 表，
+> `source="phone"`、`occurred_at` = 手机上那一刻。**注意**：导入是**直接写行**，不过订阅器 ——
+> 所以 `focus.finished` 这类会牵动派生缓存的 kind **不在**离线可记范围内（见 `复盘/手机离线记-T-G10.md` §六）。
 
 ## 质量属性（SR-NF）落点
 
 | SR-NF | 实现关键 |
 |---|---|
-| NF1 美感 | 前端 CSS（自定义强调色/主题）；`src/web/index.html` 单文件、无构建步骤。**R5 起有尺度令牌**：间距 `--sp-1..11` / 圆角 `--r-*` / 字号 `--fs-*` / 布局常量 `--nav-clearance`、`--page-bottom` —— 组件**只写令牌不写裸像素**（护栏强制），空态统一走 `emptyState()` |
+| NF1 美感 | 前端 CSS（自定义强调色/主题）；`src/web/index.html` 主壳（无构建步骤）+ `app.css` 令牌区 + `offline.js` 离线引擎。**R5 起有尺度令牌**：间距 `--sp-1..11` / 圆角 `--r-*` / 字号 `--fs-*` / 布局常量 `--nav-clearance`、`--page-bottom` —— 组件**只写令牌不写裸像素**（护栏强制），空态统一走 `emptyState()` |
 | NF2 交互低门槛 | 前端默认 My Day、一键操作、温和 toast（不弹窗施压）。**新手引导**（R5）：今日页三步卡片，可一键关掉/设置页可重看，**不用遮罩弹窗**（不拦路） |
 | NF4 一屏到底 | 三栏（左导航/中列表/右详情）+ 渐进聚焦；**右栏可折叠**（`.shell.rail-off`，选择记本机 `tf_rail`，左栏与设置页两处入口） |
 | NF5 反馈与可回退 | 完成划线 / toast / 删除可撤销；**不可逆操作二次确认走壳级模态** `confirmAsk(title, 动作名)`（R5 起页面里**没有原生 `confirm`**，护栏断言） |
