@@ -1796,6 +1796,22 @@ evidence = [
 ]
 gaps = ""
 
+[entries."T-G7"]
+id = "T-G7"
+title = "工程：质量门提速 —— pytest 并行（pytest-xdist），判定不变、只变快慢"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/质量门提速-pytest并行-T-G7.md",
+  "text:scripts/run_gates.py::def pytest_cmd",
+  "text:scripts/run_gates.py::def xdist_available",
+  "text:scripts/run_gates.py::--serial",
+  "text:scripts/run_gates.py::pytest 跑法",
+  "text:tests/conftest.py::PYTEST_XDIST_WORKER",
+  "text:pyproject.toml::pytest-xdist",
+]
+gaps = ""
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"

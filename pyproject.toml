@@ -18,6 +18,9 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-cov",
+    # 并行跑测试（T-G7）：每个用例都起真 app + 真库，串行是门禁唯一的瓶颈。
+    # 没装也能跑（`scripts/run_gates.py` 会退回串行并**如实说明**，不谎报）。
+    "pytest-xdist",
     "mypy",
     "ruff",
 ]

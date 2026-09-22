@@ -7,6 +7,11 @@
 用法
     python -X utf8 scripts/run_gates.py            # 全套（含真机脚本）
     python -X utf8 scripts/run_gates.py --quick    # 跳过真机脚本（只跑 pytest/ruff/mypy/护栏/审计）
+    python -X utf8 scripts/run_gates.py --serial   # pytest 单进程（对照并行下的偶发失败）
+
+pytest 会**并行**跑（装了 `pytest-xdist` 时 `-n auto`）：用例之间没有共享状态（各自 tmp 库 +
+各自进程内的事实总线），而每个用例都要起真 app + 真库 —— 串行是这里唯一的瓶颈。
+覆盖率照旧判 70% 那道门（pytest-cov 会合并各 worker 的数据）。
 
 约定（与用户确认）：**门禁或审计任一不通过 → 退出码非零 → 不许提交**。
 """
@@ -29,7 +34,7 @@ GATES = ROOT / "gates" / "last.json"
 PY = sys.executable
 
 COMMON = [
-    ("pytest", [PY, "-m", "pytest"]),
+    ("pytest", []),                # 占位：按有没有 pytest-xdist 决定并行/串行（见 pytest_cmd）
     # 验收层只跑 2 个用例，必须关掉全局 addopts 里的覆盖率门，否则"覆盖率不达标"会误判验收失败
     ("acceptance", [PY, "-m", "pytest", "-m", "acceptance", "--no-cov"]),
     ("ruff", [PY, "-m", "ruff", "check", "src/", "tests/", "scripts/", "tools/", "examples/"]),
@@ -56,6 +61,29 @@ def dom_probe_cmd() -> list[str] | None:
     """假 DOM 渲染探针：真跑 9 个视图。node 不在就跳过（不谎报通过）。"""
     node = shutil.which("node")
     return [node, str(ROOT / "tools" / "ui_dom_probe.mjs")] if node else None
+
+
+def xdist_available() -> bool:
+    """装了 `pytest-xdist` 吗？没装就串行跑 —— **不谎报**，也不因为缺插件把门禁弄红。"""
+    probe = subprocess.run(
+        [PY, "-c", "import xdist"], capture_output=True, text=True, check=False
+    )
+    return probe.returncode == 0
+
+
+def pytest_cmd(serial: bool = False) -> list[str]:
+    """pytest 那条命令：装了 xdist 就 `-n auto` 并行，否则串行。
+
+    为什么可以并行（T-G7 实测的结论）：每个用例都起**真 app + 真库**（单次 `create_app()` ≈ 190ms、
+    `connect + 迁移` ≈ 26ms），757 个用例串行要 3~4 分钟，而**用例之间没有共享状态** ——
+    各自 `tmp_path` 一个库、各自进程内的 facts 总线，所以这是"安全的那一类提速"。
+    覆盖率不受影响：pytest-cov 会把各 worker 的数据合并后，再判 `--cov-fail-under=70`。
+    `--serial` 是给"并行下偶发失败"用的对照跑法（同一条命令、单进程）。
+    """
+    cmd = [PY, "-m", "pytest"]
+    if not serial and xdist_available():
+        cmd += ["-n", "auto"]
+    return cmd
 
 
 def env() -> dict[str, str]:
@@ -171,6 +199,7 @@ def seal() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--serial", action="store_true", help="pytest 单进程跑（对照并行下的偶发失败）")
     ap.add_argument("--seal", action="store_true", help="提交前封存：只更新 tree 字段")
     args = ap.parse_args()
     if args.seal:
@@ -183,6 +212,14 @@ def main() -> int:
     else:
         print(f"  [FAIL] 改了源码但还没同步：{missing}")
 
+    if args.serial:
+        mode = "串行（--serial）"
+    elif xdist_available():
+        mode = "并行（pytest-xdist，-n auto）"
+    else:
+        mode = "串行（环境里没装 pytest-xdist）"
+    print(f"=== pytest 跑法：{mode} ===")
+
     results: list[dict[str, object]] = []
     jobs = COMMON + ([] if args.quick else REAL)
     for name, cmd in jobs:
@@ -192,6 +229,8 @@ def main() -> int:
                 print("[WARN] ui_dom_probe        跳过：环境里没有 node（未验证，不算通过）")
                 continue
             cmd = filled
+        elif name == "pytest":
+            cmd = pytest_cmd(serial=args.serial)
         t0 = time.time()
         # errors="replace"：Windows 下子进程输出可能是 GBK/混合编码，不能让门禁脚本自己因解码崩掉
         proc = subprocess.run(
