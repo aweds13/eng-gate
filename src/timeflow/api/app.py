@@ -27,7 +27,7 @@ from timeflow.config import load_settings
 from timeflow.core import academic as ac
 from timeflow.core import ai as ai_mod
 from timeflow.core import attach as attach_mod
-from timeflow.core import behavior, insights, vault
+from timeflow.core import behavior, insights, syncpack, vault
 from timeflow.core import facts as facts_mod
 from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
@@ -1884,17 +1884,59 @@ def create_app(db_path: str | None = None) -> FastAPI:
         results = [sync_mod.merge_task(conn, r) for r in records]
         return {"merged": results}
 
+    # ---- 跨端同步：同步包（导出/导入）（SR-F9.2 / SR-NF17；G 批 · T-G8 = 场景 ③）----
+    # 口径（2026-09-21 用户定，见 `复盘/口径定案-待定清单.md` §3）：**③ 先做**（走文件的合并机制，
+    # 它是 ① 的地基）；规则与措辞都在 `core/syncpack.py` 一处。两条硬边界写在这里：
+    #   - **导入永不删你本地的东西**（远程墓碑只防复活 + 继续传给下一台）；
+    #   - 覆盖/保留**逐条记进冲突日志**（不静默覆盖），界面能看见"为什么动了这一行"。
+    @app.post("/api/sync/export")
+    def sync_export(request: Request) -> dict[str, Any]:
+        """导出一份同步包到**数据库同目录**（原子写），返回路径与条数。
+
+        位置选在库旁边：与 `.bak-*` 备份同一个地方，用户找得到、也能"打开目录"。
+        """
+        require_local_origin(request)
+        try:
+            result = syncpack.export_pack(conn, Path(str(db_path)).parent)
+        except (OSError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e) or e.__class__.__name__) from e
+        return {"ok": True, **asdict(result)}
+
+    @app.post("/api/sync/import")
+    def sync_import(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """导入一份同步包（`dry_run=true` 只预览、一个字节都不写）。
+
+        非法包 / 不是我们的格式 / 来自更新版本 → **400 带原话**（不许"尽力猜"）。
+        """
+        require_local_origin(request)
+        dry = bool(payload.get("dry_run"))
+        try:
+            pack = payload.get("pack")
+            if pack is None:
+                pack = syncpack.load_pack(str(payload.get("path") or ""))
+            report = syncpack.merge_pack(conn, pack, dry_run=dry)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"ok": True, **report.as_dict()}
+
     @app.get("/api/sync/status")
     def sync_status() -> dict[str, object]:
-        """同步状态（OP-40/OP-41）：只报告事实，跨端传输未实现时 `enabled=false`（不谎报）。"""
-        return sync_mod.status(conn)
+        """同步现状（OP-40/OP-41）：**只报事实** —— 走文件能用、走网络还没做（不谎报）。"""
+        return {**sync_mod.status(conn), **syncpack.status(conn)}
 
     @app.get("/api/sync/logs")
     def sync_logs() -> list[dict[str, object]]:
-        rows = conn.execute("SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 50").fetchall()
+        """最近的冲突/覆盖记录（**不静默覆盖**的可视面）：含结果与一句"差在哪"。"""
+        rows = conn.execute(
+            "SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 50"
+        ).fetchall()
+        keys = set(rows[0].keys()) if rows else set()
         return [
             {"id": r["id"], "entity": r["entity"], "entity_id": r["entity_id"],
-             "local_ts": r["local_ts"], "remote_ts": r["remote_ts"]}
+             "local_ts": r["local_ts"], "remote_ts": r["remote_ts"],
+             "result": (r["result"] if "result" in keys else None),
+             "note": (r["note"] if "note" in keys else None),
+             "created_at": r["created_at"]}
             for r in rows
         ]
 

@@ -1070,3 +1070,28 @@ def test_ai_boundary_is_wired_and_explained() -> None:
     assert "t.created_by==='ai'" in detail, "详情面板没显示归属"
     css = WEB_CSS.read_text(encoding="utf-8")
     assert ".ai-example {" in css, "示例命令块缺样式（R1：样式只住 app.css）"
+
+
+def test_sync_pack_is_wired_and_non_destructive() -> None:
+    """T-G8（SR-F9.2 场景 ③）：设置页能导出/预览/导入同步包，并把**不删你数据**这条写在界面上。
+
+    三条口径：
+    ① 导入前必须能**预览**（`dry_run`）——"覆盖"是真会改东西的，不能点了就干；
+    ② 界面上要写明包里**不含**本机设置（否则用户会以为设置也跟着同步）；
+    ③ 三个动作都注册在 `ACTIONS` 里（点了没反应比报错更难查）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    setting = html.split("async function renderSetting(m){", 1)[1].split("\n}", 1)[0]
+    assert 'id="set-syncpack"' in setting and "跨端同步（走文件）" in setting
+    for action in ("sync-export", "sync-preview", "sync-import"):
+        assert f'data-action="{action}"' in setting, f"缺少 {action} 入口"
+        assert f"'{action}':" in html, f"动作 {action} 没注册"
+    assert 'id="syncPath"' in setting, "导入要有路径输入框"
+    assert "导入不会删你本地的任何东西" in setting, "`不删你数据`这条口径要写在界面上"
+    assert "不含" in setting and "schema 版本" in setting, "要写明包里不含什么"
+    assert "sync.device_id" in setting, "要显示设备号（判断两份包谁是谁）"
+
+    fn = html.split("async function importSyncPack(){", 1)[1].split("\n}", 1)[0]
+    assert "dry_run:true" in fn and "confirmAsk(" in fn, "导入必须先预览再二次确认"
+    export_fn = html.split("async function exportSyncPack(){", 1)[1].split("\n}", 1)[0]
+    assert "/api/sync/export" in export_fn and "copyText(" in export_fn

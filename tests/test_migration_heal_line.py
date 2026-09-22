@@ -239,7 +239,10 @@ def test_heal_writes_a_structured_log(tmp_path, monkeypatch) -> None:  # type: i
     assert healed[0]["to_version"] == db_mod.SCHEMA_VERSION
     added = healed[0]["added"]
     assert isinstance(added, list)
-    assert "tasks.doing_rank" in added and "groups.parent_id" in added
+    # 日志里的 `added` 是**样例**（有上限），真实条数在 `added_count` ——
+    # 所以这里断言"补齐了该补的、条数对得上"，而不是逐条比对（那会随迁移条数变脆）。
+    assert "groups.parent_id" in added
+    assert healed[0]["added_count"] >= len(added) >= 3
 
 
 def test_fresh_db_does_not_log_a_heal(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

@@ -204,17 +204,26 @@ def _remote_attach(remote_task: dict[str, object]) -> str:
 
 
 def log_conflict(
-    conn: sqlite3.Connection, entity: str, entity_id: str, local_ts: str, remote_ts: str
+    conn: sqlite3.Connection,
+    entity: str,
+    entity_id: str,
+    local_ts: str,
+    remote_ts: str,
+    *,
+    result: str = "",
+    note: str = "",
 ) -> None:
     """记录一次同步冲突（供日志/提示，不静默覆盖）。
 
     主键用随机 id，**不用秒级时间戳** —— 否则同一秒内的两次冲突会撞主键
     （第 10 步由测试发现：原实现 `_now_iso()` 作 id 会 IntegrityError）。
+    `result` / `note`（T-G8 起）：说清这次是"覆盖了"还是"保留了本地"、差在哪 ——
+    **不静默覆盖**这条要求，光有时间戳是看不出来的。
     """
     conn.execute(
-        "INSERT INTO sync_logs (id, entity, entity_id, local_ts, remote_ts, created_at) "
-        "VALUES (?,?,?,?,?,?)",
-        (_uid(), entity, entity_id, local_ts, remote_ts, _now_iso()),
+        "INSERT INTO sync_logs (id, entity, entity_id, local_ts, remote_ts, created_at, "
+        "result, note) VALUES (?,?,?,?,?,?,?,?)",
+        (_uid(), entity, entity_id, local_ts, remote_ts, _now_iso(), result, note[:400]),
     )
     conn.commit()
 
@@ -222,15 +231,17 @@ def log_conflict(
 def status(conn: sqlite3.Connection) -> dict[str, object]:
     """同步状态摘要（OP-40/OP-41 的可观测面）。
 
-    **诚实声明**：本软件提供的是「接受远端记录 + LWW 合并 + 冲突留痕」的语义；
-    真正的跨端传输流程（谁在何时推拉、频率、鉴权）**尚未实现**，
-    因此 `enabled` 恒为 False，不谎报"已同步"。这里只报告事实：冲突日志条数与最近时间。
+    **诚实声明**：这一版能用的是**走文件**的跨端同步（导出/导入同步包，场景 ③，见
+    `core/syncpack.py`）；**走网络**的推拉传输（同一 WiFi 直连 ②、手机离线 ①）**尚未实现** ——
+    所以这里只报事实，`network_sync` 恒为 False，不谎报"已同步"。
     """
     row = conn.execute(
         "SELECT COUNT(*) AS n, MAX(created_at) AS last FROM sync_logs"
     ).fetchone()
     return {
-        "enabled": False,
+        "enabled": True,          # 兼容旧字段：文件同步（③）确实可用了
+        "file_sync": True,
+        "network_sync": False,
         "conflict_logs": int(row["n"] or 0),
         "last_conflict_at": row["last"],
     }

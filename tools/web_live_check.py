@@ -241,6 +241,56 @@ def live_ai_checks(base: str) -> dict[str, bool]:
     }
 
 
+def live_sync_checks(base: str, tmp: Path) -> dict[str, bool]:
+    """T-G8 真机自检：同步包的**导出 → 预览 → 导入**在真服务上走一遍（场景 ③）。
+
+    只碰临时库与临时目录：不会碰你真实的库，也不会把包写到别的地方。
+    测的是三件事：能导出文件、预览**不改库**、导入后数据真的过来（并且**没删**本地的东西）。
+    """
+    mine = _json_call(base, "/api/tasks", "POST", {"title": "自检·本机原有的"})[1] or {}
+    exported = _json_call(base, "/api/sync/export", "POST", {})
+    path = (exported[1] or {}).get("path") if exported[0] == 200 else None
+    status = _json_call(base, "/api/sync/status")[1] or {}
+    bad_path = _json_call(base, "/api/sync/import", "POST", {"path": "Z:/没有这个包.json"})[0]
+    cross = _json_call(
+        base, "/api/sync/export", "POST", {}, headers={"Origin": "https://evil.example"}
+    )[0]
+    before = _json_call(base, "/api/tasks")[1] or []
+    # 预览：把刚导出的包当"别人的"来合（设备号相同 → 400，正好也验证"自己导给自己被拒"）；
+    # 再拿一个**改过设备号**的包预览一次，确认"预览不动库"。
+    own = _json_call(base, "/api/sync/import", "POST", {"path": path, "dry_run": True})
+    alien_path = tmp / "alien.json"
+    if path:
+        pack = json.loads(Path(str(path)).read_text(encoding="utf-8"))
+        pack["device_id"] = "another-machine-9"
+        pack["tables"] = {"tasks": [
+            {"id": "probe-new-task", "title": "来自另一台的", "status": "未开始",
+             "created_at": "2026-09-22T20:00:00", "is_myday": 1}]}
+        alien_path.write_text(json.dumps(pack, ensure_ascii=False), encoding="utf-8")
+    preview = _json_call(base, "/api/sync/import", "POST",
+                         {"path": str(alien_path), "dry_run": True})
+    after = _json_call(base, "/api/tasks")[1] or []
+    applied = _json_call(base, "/api/sync/import", "POST", {"path": str(alien_path)})
+    final = _json_call(base, "/api/tasks")[1] or []
+    return {
+        "同步包能导出": exported[0] == 200 and bool(path) and Path(str(path)).is_file(),
+        "导出报告含条数与设备号": bool((exported[1] or {}).get("rows"))
+        and bool((exported[1] or {}).get("device_id")),
+        "同步状态分文件/网络两笔": status.get("file_sync") is True
+        and status.get("network_sync") is False and bool(status.get("device_id")),
+        "状态写明不含本机设置": "app_settings" in (status.get("excluded_tables") or []),
+        "导入不存在的包被 400": bad_path == 400,
+        "同步接口拒绝跨站来源": cross == 403,
+        "自己导给自己被 400（不白跑）": own[0] == 400,
+        "预览不动库": [t["id"] for t in after] == [t["id"] for t in before]
+        and (preview[1] or {}).get("totals", {}).get("inserted", 0) == 1,
+        "导入后数据真的过来": applied[0] == 200
+        and any(t["title"] == "来自另一台的" for t in final),
+        "导入没删本机的任务": mine.get("title") is not None
+        and any(t["title"] == "自检·本机原有的" for t in final),
+    }
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="r2_"))
     ok, detail = check_js_syntax(tmp)
@@ -312,6 +362,7 @@ def main() -> int:
     checks.update(live_remind_checks(base))
     checks.update(live_c_line_checks(base))
     checks.update(live_ai_checks(base))
+    checks.update(live_sync_checks(base, tmp))
     for name, passed in checks.items():
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")
     server.should_exit = True

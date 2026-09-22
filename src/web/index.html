@@ -234,6 +234,10 @@ const ACTIONS = {
   // AI 接口（SR-F7.3 / G 批 · T-G6）：开关（默认关）+ 复制示例命令
   'set-ai':         el => setAiEnabled(el.dataset.on==='true'),
   'ai-copy':        () => copyAiExample(),
+  // 跨端同步（SR-F9.2 / G 批 · T-G8，场景 ③）：导出同步包 / 先预览 / 确认导入
+  'sync-export':    () => exportSyncPack(),
+  'sync-preview':   () => previewSyncPack(),
+  'sync-import':    () => importSyncPack(),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -2159,8 +2163,21 @@ async function renderSetting(m){
   <div class="section-title">数据与同步</div>
   <div class="card panel-card" id="set-sync">
     <div class="title">${off?'当前离线':'当前在线'}</div>
-    <div class="meta">跨端传输尚未实现：本机数据始终可用；同步一旦接上会在这里显示状态${sync.conflict_logs?` · 已有 ${sync.conflict_logs} 条冲突记录`:''}</div>
-    <div class="sub">数字都来自本机数据库，不上传任何服务器。</div>
+    <div class="meta">${noteHTML(sync.note||'')}${sync.conflict_logs?` · 已有 ${sync.conflict_logs} 条冲突/覆盖记录`:''}</div>
+    <div class="sub">设备号 <code>${esc(sync.device_id||'—')}</code> · 数字都来自本机数据库，不上传任何服务器。</div>
+    <div class="settings-sub" id="set-syncpack">跨端同步（走文件）</div>
+    <div class="meta">在一台机器**导出同步包** → 拷到另一台（U 盘 / 网盘 / 局域网共享）→ 在那台**先预览再导入**。
+      合并按 <b>version → 更新时间</b> 判谁新；覆盖与保留都记进冲突日志（不静默）；
+      <b>导入不会删你本地的任何东西</b>。</div>
+    <div class="row tight">
+      <button data-action="sync-export">导出同步包</button>
+      <input id="syncPath" placeholder="要导入的包路径（后端会把完整路径给你）" style="min-width:260px">
+      <button class="ghost" data-action="sync-preview">先预览</button>
+      <button class="ghost" data-action="sync-import">导入</button></div>
+    <div class="meta">上次导出：${sync.last_export?`${esc(String(sync.last_export.at).replace('T',' '))} · ${sync.last_export.rows||0} 行`:'还没导出过'}
+      · 上次导入：${sync.last_import?`${esc(String(sync.last_import.at).replace('T',' '))} · 新增 ${(sync.last_import.totals||{}).inserted||0} / 覆盖 ${(sync.last_import.totals||{}).updated||0}`:'还没导入过'}</div>
+    <div class="sub">包里<b>不含</b>这台机器的设置（导出目录 / Vault / AI 开关 / 口径开关）、本机冲突日志与 schema 版本 ——
+      拷过去不会改掉另一台的设置。同名文件不会互相覆盖（同一秒导出两次会加 -2）。</div>
     <div class="settings-sub" id="set-backup">备份与恢复</div>
     <div class="meta">每次起服务/开窗口前会自动备份一份。库：${esc(bk.db||'—')}（目录 ${esc(bk.dir||'—')}）</div>
     <div class="row tight" style="margin-top:var(--sp-2)">
@@ -2306,6 +2323,47 @@ async function copyAiExample(){
   if(!text){toast('还没有示例可复制');return}
   const copied=await copyText(text);
   toast(copied?'示例命令已复制（把 127.0.0.1:8000 换成你实际的端口）':'复制不了，请手动选中那段命令');
+}
+/* 跨端同步（SR-F9.2 / G 批 · T-G8，场景 ③）：**走文件**。
+   后端把包写在库目录旁边（与备份同一个地方），所以这里只显示路径 + 复制；
+   导入要先**预览**（dry_run 一个字节都不写），再让你确认 —— 覆盖是有的，所以不能点了就干。 */
+function syncSummary(t){
+  return `新增 ${t.inserted||0} · 覆盖 ${t.updated||0} · 保留本地 ${t.kept||0}`
+    + (t.tombstoned?` · 按墓碑跳过 ${t.tombstoned||0}`:'')
+    + (t.tombstone_added?` · 记下远程墓碑 ${t.tombstone_added||0}`:'');
+}
+async function exportSyncPack(){
+  try{
+    const r=await api('/api/sync/export',{method:'POST',body:JSON.stringify({})});
+    const copied=await copyText(r.path);
+    toast(`同步包已写出（${r.rows} 行，${sizeLabel(r.bytes)}）：${String(r.path).split(/[\\/]/).pop()}`
+      + (copied?'（完整路径已复制）':''));
+    view(current);
+  }catch(e){/* api() 已经弹过后端原话 */}
+}
+async function previewSyncPack(){
+  const path=((document.getElementById('syncPath')||{}).value||'').trim();
+  if(!path){toast('先把要导入的包路径粘进来（导出时完整路径已复制到剪贴板）');return}
+  try{
+    const r=await api('/api/sync/import',{method:'POST',body:JSON.stringify({path,dry_run:true})});
+    toast(`预览：${syncSummary(r.totals)}${r.conflict_count?` · 冲突/覆盖 ${r.conflict_count} 条`:''}（还没动库）`);
+  }catch(e){/* api() 已经弹过后端原话 */}
+}
+async function importSyncPack(){
+  const path=((document.getElementById('syncPath')||{}).value||'').trim();
+  if(!path){toast('先把要导入的包路径粘进来');return}
+  try{
+    const pre=await api('/api/sync/import',{method:'POST',body:JSON.stringify({path,dry_run:true})});
+    const ok=await confirmAsk(
+      `把这份包合进来？来自设备 ${pre.from_device}（导出于 ${String(pre.pack_created_at).replace('T',' ')}）\n`
+      + `${syncSummary(pre.totals)}`
+      + (pre.conflict_count?`\n其中 ${pre.conflict_count} 条两边都改过/不一致，会逐条记进冲突日志`:''),
+      '导入同步包');
+    if(!ok)return;
+    const r=await api('/api/sync/import',{method:'POST',body:JSON.stringify({path})});
+    toast(`已导入：${syncSummary(r.totals)}`);
+    view(current);
+  }catch(e){/* api() 已经弹过后端原话 */}
 }
 // ---- 附件打开方式设置（T-B4）：模式与白名单存服务端 ----
 async function setAttachMode(mode){

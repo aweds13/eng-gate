@@ -344,7 +344,15 @@ const DB = {
     ],
     example: 'curl http://127.0.0.1:8000/api/ai/ping',
   },
-  '/api/sync/status': { enabled: false, conflict_logs: 0 },
+  '/api/sync/status': {
+    file_sync: true, network_sync: false, device_id: 'probe-device-1', tombstones: 2,
+    conflict_logs: 3,
+    last_export: { at: '2026-09-22T21:00:00', path: 'D:/data/sync-x-1.json', rows: 12 },
+    last_import: { at: '2026-09-22T21:05:00', from_device: 'other',
+      totals: { inserted: 4, updated: 1, kept: 2, tombstoned: 0, tombstone_added: 1 },
+      conflict_count: 1 },
+    note: '走文件的跨端同步：在一台机器导出同步包，拷到另一台导入。导入不会删你本地的任何东西。',
+  },
 };
 globalThis.fetch = async (path) => {
   const key = String(path).split('?')[0];
@@ -384,6 +392,7 @@ let debtBad = 0;
 let behaviorBad = 0;
 let obsidianBad = 0;
 let aiBad = 0;
+let syncBad = 0;
 let vocabBad = 0;
 let heatmapBad = 0;
 let exportBad = 0;
@@ -885,6 +894,33 @@ try {
   console.log(`  ❌ tasks·徽标反证 渲染抛错: ${e.message}`);
 }
 
+// 跨端同步（SR-F9.2 / G 批 · T-G8，场景 ③）：设置页要真渲染出 **导出/预览/导入三个入口 +
+// 设备号 + 上次导出/导入的读数 + 边界说明**（"导入不会删你本地的任何东西"这句必须在界面上）。
+const syncChecks = [];
+for (const [where, needs] of [
+  ['setting', ['set-syncpack', '跨端同步（走文件）', 'sync-export', 'sync-preview', 'sync-import',
+    'id="syncPath"', 'probe-device-1', '上次导出：2026-09-22 21:00:00 · 12 行',
+    '上次导入：2026-09-22 21:05:00 · 新增 4 / 覆盖 1',
+    '导入不会删你本地的任何东西', '不含', 'schema 版本']],
+]) {
+  try {
+    byId.get('main')._html = '';
+    await globalThis.__view(where);
+    await sleep(30);
+    const html = byId.get('main')._html;
+    const missing = needs.filter((n) => !html.includes(n));
+    const rendered = missing.length === 0;
+    if (!rendered) syncBad++;
+    syncChecks.push({ where, rendered, missing });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} ${where}·跨端同步 main ${String(html.length).padStart(6)}B`
+      + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+  } catch (e) {
+    syncBad++;
+    syncChecks.push({ where, error: e.message });
+    console.log(`  ❌ ${where}·跨端同步 渲染抛错: ${e.message}`);
+  }
+}
+
 try {
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
   for (const a of new Set(CLICK_ACTIONS)) if (!registered.has(a)) unused.push(a);
@@ -896,7 +932,7 @@ if (process.argv.includes('--json')) {
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
-      export: exportChecks, obsidian: obsidianChecks, ai: aiChecks,
+      export: exportChecks, obsidian: obsidianChecks, ai: aiChecks, sync: syncChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -911,6 +947,7 @@ const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardB
   || stepBad > 0 || debtBad > 0 || behaviorBad > 0 || vocabBad > 0 || heatmapBad > 0 || exportBad > 0
   || obsidianBad > 0
   || aiBad > 0
+  || syncBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -930,5 +967,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，导出 markdown ${exportChecks.length - exportBad}/${exportChecks.length} 正常`
   + `，Obsidian 跳转 ${obsidianChecks.filter((c) => c.rendered).length}/${obsidianChecks.length} 正常`
   + `，AI 接口 ${aiChecks.filter((c) => c.rendered).length}/${aiChecks.length} 正常`
+  + `，跨端同步 ${syncChecks.filter((c) => c.rendered).length}/${syncChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

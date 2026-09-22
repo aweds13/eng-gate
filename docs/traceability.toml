@@ -609,11 +609,17 @@ title = "跨端同步用「修改时间戳 + version」LWW（不静默覆盖）+
 group = "F9"
 status = "partial"
 evidence = [
-  "text:src/timeflow/core/sync.py::def",
+  "text:src/timeflow/core/sync.py::def newer_is_win",
+  "text:src/timeflow/core/sync.py::def log_conflict",
+  "text:src/timeflow/core/syncpack.py::def merge_pack",
+  "text:src/timeflow/core/syncpack.py::def export_pack",
   "route:GET /api/sync/status",
   "route:POST /api/sync/tasks",
+  "route:POST /api/sync/export",
+  "route:POST /api/sync/import",
+  "test:test_sync_pack_line.py",
 ]
-gaps = "只有 LWW 合并语义与冲突日志；**无推拉传输**（GAP-F9-01）—— 合并机制这一版先以「同步包 / 导入合并」落地（T-G8 起）"
+gaps = "**场景 ③ 已落地**（2026-09-22，T-G8）：同步包格式 + LWW/去重/冲突留痕 + 导出/导入入口 + 删除墓碑。**仍缺传输层**：① 手机离线队列（GAP-F9-02）与 ② 同一 WiFi 直连（GAP-F9-01）—— 口径已定（③→①→②），按顺序做"
 
 [entries."SR-F9.3"]
 id = "SR-F9.3"
@@ -1808,6 +1814,39 @@ evidence = [
   "route:GET /api/insights/heatmap-dimensions",
   "text:tools/ui_dom_probe.mjs::stats·热力图有值渲染",
   "test:test_vocab_line.py",
+]
+gaps = ""
+
+[entries."T-G8b"]
+id = "T-G8b"
+title = "跨端：删除是否跨端传播（产品决策，等用户点头）"
+group = "PROCESS"
+status = "deferred"
+evidence = [
+  "file:复盘/跨端同步合并机制-T-G8.md",
+]
+gaps = "现状（T-G8 v1 边界）：**导入永不删本地数据** —— 远程墓碑只防复活 + 继续传播，于是**删除不跨端传播**（A 删掉的，B 那边还在）。要改成「删除也传播」必须允许导入侧按墓碑删行，风险是旧包删掉你本地更新的东西 → 属产品决策，等用户定；用户不定就保持现状（这条边界已经写在界面与复盘里）"
+
+[entries."T-G8"]
+id = "T-G8"
+title = "G 批：跨端同步 ③ —— 同步包格式 + 合并机制（LWW/去重/冲突留痕）+ 导出导入入口"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/跨端同步合并机制-T-G8.md",
+  "text:src/timeflow/core/syncpack.py::FORMAT = \"timeflow-sync\"",
+  "text:src/timeflow/core/syncpack.py::def build_pack",
+  "text:src/timeflow/core/syncpack.py::def merge_pack",
+  "text:src/timeflow/core/syncpack.py::def plan_merge",
+  "text:src/timeflow/core/syncpack.py::PRIMARY_KEYS",
+  "text:src/timeflow/storage/db.py::def _migrate_v17",
+  "text:src/timeflow/storage/db.py::SYNC_TOMBSTONE_KEYS",
+  "route:POST /api/sync/export",
+  "route:POST /api/sync/import",
+  "ui:data-action=sync-export",
+  "ui:data-action=sync-preview",
+  "ui:data-action=sync-import",
+  "test:test_sync_pack_line.py",
 ]
 gaps = ""
 

@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -194,7 +194,7 @@ def _log_schema_healed(
         level=30,
         was_version=was,
         to_version=SCHEMA_VERSION,
-        added=added[:12],
+        added=added[:24],          # 日志给**样例**（够看出补了什么），真实条数在 added_count
         added_count=len(added),
     )
 
@@ -220,6 +220,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     _migrate_v14(conn)  # 加列：groups.parent_id
     _migrate_v15(conn)  # 重建：groups 去掉全局 UNIQUE(name)，改"同父下唯一"
     _migrate_v16(conn)  # 加列：tasks.created_by（谁建的：我 / AI）
+    _migrate_v17(conn)  # 跨端：六张表的 updated_at + 删除墓碑（触发器，幂等）
 
 
 def _upgrade(conn: sqlite3.Connection, current: int) -> None:
@@ -258,6 +259,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v15(conn)  # 分组名允许重名（F 批 · T-F10）
     if current < 16:
         _migrate_v16(conn)  # 谁建的：我 / AI（G 批 · T-G6）
+    if current < 17:
+        _migrate_v17(conn)  # 跨端合并所需的 modified 标记 + 删除墓碑（G 批 · T-G8）
 
 
 
@@ -278,6 +281,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v14(conn)  # 同上：groups.parent_id 由本版加列（分组可嵌套）
     _migrate_v15(conn)  # 同上：groups 去掉全局 UNIQUE(name)（允许重名），改按"同父下唯一"
     _migrate_v16(conn)  # 同上：tasks.created_by 由本版加列（谁建的：我 / AI）
+    _migrate_v17(conn)  # 同上：updated_at 六列 + sync_tombstones 表 + 触发器
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -924,4 +928,121 @@ def _migrate_v16(conn: sqlite3.Connection) -> None:
     - 幂等加列（`_add_column_if_missing`），缺表跳过不失败 —— 与 v6 起各版同一套做法。
     """
     _add_column_if_missing(conn, "tasks", "created_by", "created_by TEXT DEFAULT 'me'")
+
+
+# 「会被改的表」——v17 给它们补 `updated_at`（跨端合并要靠它判谁新）。
+# 为什么是这几张：其余表要么**只增不改**（facts / focus_sessions / grades / courses / memos 的内容
+# 没有更新入口 / ledger_entries），要么是**关系行**（task_groups / habit_logs：只有"在不在"，
+# 没有"什么时候改的"）；`tasks` 本来就有 `updated_at` + `version`（且它故意维护得更精细：
+# 换「进行中」顺序**不动** updated_at，见 T-F1 —— 所以**不给 tasks 加触碰触发器**）。
+SYNC_TOUCHED_TABLES = (
+    "habits",
+    "groups",
+    "course_assessments",
+    "review_items",
+    "team_assignments",
+    "feedback_logs",
+)
+
+# 「删了就删了」的表 —— v17 给它们挂**删除墓碑触发器**：任何一行被硬删就留一条墓碑，
+# 于是"从另一台机器的旧包导入"不会把它**复活**（这是用户最容易觉得"同步在骗我"的一类事）。
+# 关系表用复合键（`task_groups` / `habit_logs` 主键是两列），墓碑的 `entity_id` 用 `|` 拼起来。
+SYNC_TOMBSTONE_KEYS: dict[str, str] = {
+    "tasks": "OLD.id",
+    "memos": "OLD.id",
+    "habits": "OLD.id",
+    "habit_logs": "OLD.habit_id || '|' || OLD.date",
+    "groups": "OLD.id",
+    "task_groups": "OLD.task_id || '|' || OLD.group_id",
+    "course_assessments": "OLD.id",
+    "grades": "OLD.id",
+    "review_items": "OLD.id",
+    "team_assignments": "OLD.id",
+}
+
+
+def _migrate_v17(conn: sqlite3.Connection) -> None:
+    """v17：跨端合并要的两样东西 —— **「什么时候改的」** 与 **「什么时候删的」**（G 批 · T-G8）。
+
+    背景（口径见 `复盘/口径定案-待定清单.md` §3：先做 ③ 合并机制）：跨端合并的判据是
+    "谁新谁旧"，而全库只有 `tasks` 有 `updated_at`/`version` —— 别的表改了名字、改了成绩、
+    复习推进了间隔，**库里没有任何痕迹说明它变过**。于是 v17 补两件事：
+
+    1. **`updated_at`**（六张会被改的表，`SYNC_TOUCHED_TABLES`）：
+       - 老行回填 `COALESCE(created_at, 现在)`（**不猜**：能考证的最早时间就是它）；
+       - 之后由**触发器**在每次 UPDATE 后自动写当前时间 —— 为什么用触发器而不是逐个改代码：
+         更新入口散在 habits/groups/review/team/feedback 五六个模块里（十几处），
+         **靠"记得每处都加"必然漏**（T-G9 刚教过这一课：判据要能自证，不能靠记性）；
+         一个声明式的地方管全部，而且**将来新加的更新路径自动也被管住**。
+       - **不给 `tasks` 挂触碰触发器**：它自己维护 `updated_at` + `version`，而且有一条**故意**的
+         例外 —— 调整「进行中」顺序**不动** `updated_at`（T-F1："换顺序不是内容变了"）。
+       2. **`sync_tombstones`**（删除墓碑）+ 各表的 **DELETE 触发器**：硬删一行就留一条墓碑。
+          没有它的话，"在 A 机器上彻底删掉的东西"会被 B 机器的旧包**原样带回来** ——
+          用户只会觉得同步在骗他。
+
+    **触发器不会自激**：SQLite 的 `recursive_triggers` 默认关闭，但这里**显式**把它关掉
+    （`PRAGMA recursive_triggers = OFF`）—— 不把正确性押在"默认值大概是关的"上面。
+    """
+    conn.execute("PRAGMA recursive_triggers = OFF")
+    # ① 加列 + 回填（**必须在建触发器之前**：否则回填那次 UPDATE 会被触发器改写成"现在"）
+    for table in SYNC_TOUCHED_TABLES:
+        _add_column_if_missing(conn, table, "updated_at", "updated_at TEXT")
+        if _table_exists(conn, table):
+            conn.execute(
+                f"UPDATE {table} SET updated_at = COALESCE(created_at, updated_at, "
+                "strftime('%Y-%m-%dT%H:%M:%S','now','localtime')) "
+                "WHERE updated_at IS NULL OR updated_at = ''"
+            )
+    # ② 墓碑表 + 冲突日志的两个说明列（**不静默覆盖**要写清"为什么"：
+    #    旧表只有 local_ts/remote_ts，看不出这次是"覆盖了"还是"保留了本地"）
+    _add_column_if_missing(conn, "sync_logs", "result", "result TEXT")
+    _add_column_if_missing(conn, "sync_logs", "note", "note TEXT")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sync_tombstones (
+            entity      TEXT NOT NULL,          -- 表名（'tasks' / 'habit_logs' / …）
+            entity_id   TEXT NOT NULL,          -- 主键；关系表用 'a|b' 拼两列
+            deleted_at  TEXT NOT NULL,
+            PRIMARY KEY (entity, entity_id)
+        )
+        """
+    )
+    # ③ 触碰触发器（改了就算改过；**新插入的行也要有值** —— 否则新建的 habit/成绩
+    #    在跨端比较里是"没有时间"，只能当最旧处理）
+    for table in SYNC_TOUCHED_TABLES:
+        if not _table_exists(conn, table):
+            continue
+        conn.execute(
+            f"CREATE TRIGGER IF NOT EXISTS trg_{table}_touch_insert "
+            f"AFTER INSERT ON {table} FOR EACH ROW "
+            "BEGIN "
+            f"  UPDATE {table} SET updated_at = "
+            "COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%S','now','localtime')) "
+            "  WHERE rowid = NEW.rowid AND (NEW.updated_at IS NULL OR NEW.updated_at = ''); "
+            "END"
+        )
+        conn.execute(
+            f"CREATE TRIGGER IF NOT EXISTS trg_{table}_touch "
+            f"AFTER UPDATE ON {table} FOR EACH ROW "
+            "BEGIN "
+            f"  UPDATE {table} SET updated_at = "
+            "strftime('%Y-%m-%dT%H:%M:%S','now','localtime') "
+            "  WHERE rowid = NEW.rowid; "
+            "END"
+        )
+    # ④ 删除墓碑触发器（删了就留痕，免得被旧包复活）
+    for table, key_expr in SYNC_TOMBSTONE_KEYS.items():
+        if not _table_exists(conn, table):
+            continue
+        conn.execute(
+            f"CREATE TRIGGER IF NOT EXISTS trg_{table}_tombstone "
+            f"AFTER DELETE ON {table} FOR EACH ROW "
+            "BEGIN "
+            "  INSERT INTO sync_tombstones (entity, entity_id, deleted_at) "
+            f"  VALUES ('{table}', {key_expr}, "
+            "strftime('%Y-%m-%dT%H:%M:%S','now','localtime')) "
+            "  ON CONFLICT(entity, entity_id) DO UPDATE SET "
+            "    deleted_at = excluded.deleted_at; "
+            "END"
+        )
 
