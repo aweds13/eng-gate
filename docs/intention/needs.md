@@ -143,7 +143,7 @@
   - *知识资产联动（参考 toolkit 6 技能）*：**本软件只存「引用句柄」**——Vault 相对路径 / `KB-...` 资源 ID；**读/写 Obsidian、接 PDF 库交给「知识资产项目」**（obsidian-vault-notes 受控读写 + manage-personal-knowledge 的 KB ID/PDF 库），本软件不直接碰 Vault 文件。
   - *衍生*：备忘录本地存储 + 预留「知识资产句柄」契约（spec 层定）；移动端快速记录进这里。
 - **N25** 数据具体怎么存（需设计）：本地优先、可跨端同步、可被 AI 读写、可扩展（习惯/专注/学业/备忘录多域）
-  - *衍生*：存储方案是 design 层关键权衡点。**已决（见 `../specification/conventions.md`）**：采用**混合模式**——Markdown（frontmatter+正文）为共享真源，结构化索引供软件高效计算；沉淀型走 Markdown、计算型走结构化。
+  - *衍生*：存储方案是 design 层关键权衡点。**已决（见 `../specification/conventions.md`）**：采用**混合模式**——**结构化索引为权威、Markdown 是产物**（md 手改不读回、下次导出覆盖；2026-09-21 用户定）；沉淀型内容按天导出成 Markdown、计算型走结构化索引。
 
 ## H. 复习与间隔重复（spaced repetition）
 - **N26** 复习任务的**间隔重复调度**（追踪 + 提醒 + FSRS 曲线）；**可由学习任务「升级为复习任务」或手动建**（相当于特殊子栏目）；**到期多时按算法排序（重要度 + 最久未复习）优先进 My Day**
