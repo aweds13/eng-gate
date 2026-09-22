@@ -50,6 +50,19 @@ PARKED_STATUSES = (STATUS_CANCELLED, STATUS_PENDING)
 # 「进行中」的排序号口径（T-F1）：序号小的排前面；没排过序的（NULL）排最后。
 _DOING_ORDER_BY = " ORDER BY doing_rank IS NULL, doing_rank, updated_at"
 
+# **谁建的**（G 批 · T-G6，口径见 `复盘/口径定案-待定清单.md` §2 乙案）：
+# `me` = 你（界面/手工建的，也是**默认**）；`ai` = 只有 `/api/ai/*` 那条路会写。
+# 判据是"**动的是不是你亲手写的东西**"：AI 只能勾自己建的，不许碰你建的 —— 所以这个值
+# 必须落在字段上（约定拦不住代码），但不参与任何排序/统计，只做归属与边界判断。
+CREATOR_ME = "me"
+CREATOR_AI = "ai"
+VALID_CREATORS = (CREATOR_ME, CREATOR_AI)
+CREATOR_LABELS = {CREATOR_ME: "我建的", CREATOR_AI: "AI 建的"}
+
+# 事实的 `source` 口径（T-G6）：「这件事是谁做的」——人做的沿用历史值 `desktop`（**不改历史含义**），
+# AI 接口做的记 `ai`。于是"AI 干过什么"在事实层一次查询就能捞出来，而不是只能看当前状态。
+ACTOR_SOURCES = {CREATOR_ME: "desktop", CREATOR_AI: "ai"}
+
 # 优先级（SR-F1.2 / 段2 决策）：只有三档，**默认「中」**；不做 1–5 数字分级，也不做拖拽排序。
 PRIORITY_HIGH = "高"
 PRIORITY_MID = "中"
@@ -119,6 +132,10 @@ class Task:
     # 「进行中」的显式顺序（F 批 · T-F1）：序号小的排前面；非「进行中」一律 NULL。
     # 由领域层维护（`start_task` / `move_doing`），不走 `update_task` 的字段白名单。
     doing_rank: int | None = None
+    # **谁建的**（G 批 · T-G6）：`me`（你）/ `ai`（AI 接口建的）。
+    # 这是 AI 边界的**判据**（用户 2026-09-21 乙案：AI 只能动它自己建的东西），
+    # 不是界面装饰 —— 所以它由创建路径写死，**不给人手改**、也不进 PATCH 白名单。
+    created_by: str = CREATOR_ME
 
 
 def _row_to_task(row: sqlite3.Row) -> Task:
@@ -146,6 +163,12 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         ),
         course_id=row["course_id"] if "course_id" in keys else None,
         doing_rank=row["doing_rank"] if "doing_rank" in keys else None,
+        # 缺列兜底：v16 之前建的库没有这列 —— 那些行都是"我建的"（不猜成 AI）
+        created_by=(
+            str(row["created_by"])
+            if "created_by" in keys and row["created_by"] in VALID_CREATORS
+            else CREATOR_ME
+        ),
     )
 
 
@@ -155,6 +178,20 @@ def _now() -> str:
 
 def _today() -> str:
     return date.today().isoformat()
+
+
+def _check_creator(value: object) -> str:
+    """`created_by` 只有两档（我 / AI）—— 别的一律拒绝。
+
+    不静默当"我建的"：那会**悄悄放宽 AI 边界**（AI 传个怪值就被当成自己的东西）。
+    """
+    text = str(value or "").strip()
+    if text not in VALID_CREATORS:
+        raise ValueError(
+            f"created_by 只能是 {VALID_CREATORS[0]}（我建的）"
+            f"或 {VALID_CREATORS[1]}（AI 建的）：{value!r}"
+        )
+    return text
 
 
 def _check_priority(value: object) -> str:
@@ -349,11 +386,17 @@ def create_task(
     remind_at: str | None = None,
     task_type: str = DEFAULT_TASK_TYPE,
     course_id: str | None = None,
+    created_by: str = CREATOR_ME,
 ) -> Task:
-    """新建任务（AC-1）。校验标题非空；若 due 过去且未完成，初始状态标逾期。"""
+    """新建任务（AC-1）。校验标题非空；若 due 过去且未完成，初始状态标逾期。
+
+    `created_by`（T-G6）只有两条路会传 `ai`：`core/ai.py` 的建任务/加步骤。界面与手工调用
+    一律默认 `me` —— **默认值就是"你建的"**，这样"忘了传"只会更严（AI 边界不会因为漏传而放宽）。
+    """
     title = title.strip()
     if not title:
         raise ValueError("任务标题不能为空")
+    created_by = _check_creator(created_by)
     priority = _check_priority(priority)
     remind_at = _check_remind_at(remind_at)
     task_type = _check_task_type(task_type)
@@ -368,8 +411,8 @@ def create_task(
         INSERT INTO tasks
         (id, title, due_date, group_name, repeat_days, parent_id, is_myday, status,
          created_at, updated_at, version, note, priority, flagged, attach, remind_at,
-         task_type, course_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?)
+         task_type, course_id, created_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?)
         """,
         (
             task_id,
@@ -389,6 +432,7 @@ def create_task(
             remind_at,
             task_type,
             course_id,
+            created_by,
         ),
     )
     conn.commit()
@@ -440,11 +484,15 @@ def tasks_in_view(conn: sqlite3.Connection, view: str) -> list[Task]:
     return _hide_auto_filed(conn, [_row_to_task(r) for r in rows])
 
 
-def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Task:
+def update_task(
+    conn: sqlite3.Connection, task_id: str, *, actor: str = CREATOR_ME, **fields: object
+) -> Task:
     """更新任务字段（AC-2/AC-3）。只允许白名单字段，version+1，刷新 updated_at。
 
     第 2 步子任务 2：状态在「完成 ↔ 非完成」之间切换时发事实
     （完成发 `task.completed`，撤销发 `task.uncompleted`），使账本/联动只依赖事实层。
+    `actor`（T-G6）：**谁做的**这件事 —— 只影响事实的 `source`（`ai` 就是 AI 接口做的），
+    不影响任何字段与账本口径（同一条路、同一套规则，AI 不享受第二套算法）。
     """
     allowed = {
         "title",
@@ -467,6 +515,7 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return get_task(conn, task_id)
+    actor = _check_creator(actor)
     if "status" in updates and updates["status"] not in VALID_STATUS:
         raise ValueError(f"非法状态: {updates['status']}")
     if "priority" in updates:
@@ -508,11 +557,13 @@ def update_task(conn: sqlite3.Connection, task_id: str, **fields: object) -> Tas
     conn.commit()
     after = get_task(conn, task_id)
     if before.status != after.status:
-        _publish_status_facts(conn, before, after)
+        _publish_status_facts(conn, before, after, actor)
     return after
 
 
-def _publish_status_facts(conn: sqlite3.Connection, before: Task, after: Task) -> None:
+def _publish_status_facts(
+    conn: sqlite3.Connection, before: Task, after: Task, actor: str = CREATOR_ME
+) -> None:
     """状态跃迁 → 事实（完成/撤销、软删除/恢复、以及 T-F1 的搁置类状态变化）。
 
     为什么要记「搁置类」状态变化（进行中/待定/取消/归档）：N11 要求**过去做过的事可追溯**，
@@ -534,7 +585,7 @@ def _publish_status_facts(conn: sqlite3.Connection, before: Task, after: Task) -
                 "from_status": before.status,
                 "completed_on": _today(),
             },
-            source="desktop",
+            source=ACTOR_SOURCES[actor],
         )
         facts_mod.publish(
             "task.completed",
@@ -548,7 +599,7 @@ def _publish_status_facts(conn: sqlite3.Connection, before: Task, after: Task) -
             subject_id=after.id,
             value_text=after.title,
             extra={"title": after.title, "to_status": after.status, "reverted_on": _today()},
-            source="desktop",
+            source=ACTOR_SOURCES[actor],
         )
         facts_mod.publish(
             "task.uncompleted",
@@ -562,7 +613,7 @@ def _publish_status_facts(conn: sqlite3.Connection, before: Task, after: Task) -
             subject_id=after.id,
             value_text=after.title,
             extra={"title": after.title, "from_status": before.status, "deleted_on": _today()},
-            source="desktop",
+            source=ACTOR_SOURCES[actor],
         )
         facts_mod.publish(
             "task.deleted",
@@ -576,7 +627,7 @@ def _publish_status_facts(conn: sqlite3.Connection, before: Task, after: Task) -
             subject_id=after.id,
             value_text=after.title,
             extra={"title": after.title, "to_status": after.status, "restored_on": _today()},
-            source="desktop",
+            source=ACTOR_SOURCES[actor],
         )
         facts_mod.publish(
             "task.restored",
@@ -598,7 +649,7 @@ def _publish_status_facts(conn: sqlite3.Connection, before: Task, after: Task) -
                 "to_status": after.status,
                 "changed_on": _today(),
             },
-            source="desktop",
+            source=ACTOR_SOURCES[actor],
         )
         facts_mod.publish(
             "task.status_changed",
@@ -841,11 +892,15 @@ def task_tree(conn: sqlite3.Connection, root_id: str) -> list[TaskNode]:
     return out
 
 
-def _autocomplete_parent(conn: sqlite3.Connection, parent_id: str | None) -> Task | None:
+def _autocomplete_parent(
+    conn: sqlite3.Connection, parent_id: str | None, actor: str = CREATOR_ME
+) -> Task | None:
     """子任务全完成时**自动完成父任务**（OP-12 联动）。
 
     父任务若还有别的未完成子任务，`complete_task` 会抛 ValueError —— 那不是错误，
     只是"还没到时候"，这里静默忽略。
+    `actor` 原样往下传（T-G6）：**联动导致的完成算系统行为**，但事实的 `source` 如实记
+    "这次是谁触发的" —— 于是"AI 勾掉最后一个步骤、把父任务带完成"这种情况查得出来。
     """
     if not parent_id:
         return None
@@ -853,7 +908,7 @@ def _autocomplete_parent(conn: sqlite3.Connection, parent_id: str | None) -> Tas
     if progress["total"] == 0 or progress["done"] < progress["total"]:
         return None
     try:
-        return complete_task(conn, parent_id)
+        return complete_task(conn, parent_id, actor=actor)
     except (KeyError, ValueError):
         return None
 
@@ -863,6 +918,8 @@ def create_subtask(
     parent_id: str,
     title: str,
     due_date: str | None = None,
+    *,
+    created_by: str = CREATOR_ME,
 ) -> Task:
     """新建子任务（OP-12）。父任务不存在 → KeyError；标题空 → ValueError。
 
@@ -870,6 +927,7 @@ def create_subtask(
     建完若父任务的子任务已全部完成 → 自动完成父任务。
     **第三层封顶**（T-F5）：父任务已经是第三层（子步骤）时拒绝 ——
     用户的形状是「大任务 → 子任务 → 子步骤」三层，再往下界面就没地方摆了。
+    `created_by`（T-G6）：AI 加步骤走这条路，归属跟着写 `ai`（边界判据就是它）。
     """
     parent = get_task(conn, parent_id)
     if not title.strip():
@@ -885,6 +943,7 @@ def create_subtask(
         due_date=due_date,
         parent_id=parent_id,
         is_myday=parent.is_myday,
+        created_by=created_by,
     )
     _autocomplete_parent(conn, parent_id)
     return get_task(conn, child.id)
@@ -913,26 +972,31 @@ def set_task_parent(
     return update_task(conn, task_id, parent_id=parent_id)
 
 
-def complete_task(conn: sqlite3.Connection, task_id: str) -> Task:
+def complete_task(
+    conn: sqlite3.Connection, task_id: str, *, actor: str = CREATOR_ME
+) -> Task:
     """完成任务（AC-7 联动）：若为父任务，仅当全部子任务完成才自动完成；否则标记完成。
 
     第 2 步：完成时发 `task.completed` 事实（幂等——已完成的重复调用不再发）。
     第 5 步（OP-8）：完成设了重复的任务后，自动生成下一次（只生成一次）。
+    `actor`（T-G6）：AI 接口勾步骤时传 `ai`，事实的 `source` 如实记 —— 账本口径不变
+    （完成就是完成，不因为"谁做的"而算法不同）。
     """
+    actor = _check_creator(actor)  # 先校验：任务已经完成也**不放过**非法 actor（不静默）
     current = get_task(conn, task_id)
     if current.status == STATUS_DONE:
         return current
     children = conn.execute("SELECT * FROM tasks WHERE parent_id = ?", (task_id,)).fetchall()
     if children and any(_row_to_task(c).status != STATUS_DONE for c in children):
         raise ValueError("存在未完成的子任务，父任务不能自动完成")
-    done = update_task(conn, task_id, status=STATUS_DONE)
+    done = update_task(conn, task_id, status=STATUS_DONE, actor=actor)
     if done.repeat_days is not None:
         process_repeats(conn)
     # 子任务全完成 → 父任务自动完成（OP-12 联动）。
     # 放在最后、并且只在"确实还有父任务"时递归一层 —— 链式向上（子→父→祖父）不会无限递归：
     # 每上一层，`complete_task` 都会先检查那一层的子任务是否全完成。
     if done.parent_id:
-        _autocomplete_parent(conn, done.parent_id)
+        _autocomplete_parent(conn, done.parent_id, actor)
     return done
 
 

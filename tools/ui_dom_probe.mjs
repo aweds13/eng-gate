@@ -116,7 +116,9 @@ const DB = {
       current_step_due: '2026-09-25' }),
     probeTask({ id: 'p1', title: '待定的事', status: '待定', depth: 2,
       groups: ['高数 / 第三章'], group_ids: ['g2'] }),
-    probeTask({ id: 'x1', title: '取消的事', status: '取消' })],
+    probeTask({ id: 'x1', title: '取消的事', status: '取消' }),
+    // 谁建的（T-G6）：AI 建的卡要带「AI 建的」徽标 —— 这是"可回溯"在界面上的那一半
+    probeTask({ id: 'a1', title: 'AI 加的步骤', created_by: 'ai', status: '未开始' })],
   // 「正在做」：**可以同时多个**，各带自己的顺序号（↑↓ 用 `doing_rank` 排）
   '/api/tasks/doing': [probeTask({ id: 'd1', title: '写高数作业', status: '进行中', doing_rank: 1 }),
     probeTask({ id: 'd2', title: '背单词', status: '进行中', doing_rank: 2 })],
@@ -329,6 +331,19 @@ const DB = {
         free_id: false, max_items: 8, note: '要算一个全新的维度仍需改核心代码。' },
     ],
   },
+  // AI 接口（SR-F7.3 / G 批 · T-G6）：设置页要渲染出开关、边界、动作表与示例命令（可复制）；
+  // 夹具给"开着"这一态（关着那一态只差一个 bool，断言值不落在这里）。
+  '/api/settings/ai': {
+    enabled: true, default_enabled: false, configured: true,
+    boundary: '只读 + 新增 + 勾自己建的：AI 能读任务、能建任务与步骤，只能勾它自己建的。',
+    why: '为什么这么收：判据从改不改换成动的是不是你亲手写的东西。',
+    note: 'AI 的每一次状态变化都发事实（source=ai）；默认关。',
+    surface: [
+      { method: 'GET', path: '/api/ai/ping', what: '自证：接口开着吗、边界是什么' },
+      { method: 'POST', path: '/api/ai/tasks', what: '新增：建任务；给 parent_id 就是加一个步骤' },
+    ],
+    example: 'curl http://127.0.0.1:8000/api/ai/ping',
+  },
   '/api/sync/status': { enabled: false, conflict_logs: 0 },
 };
 globalThis.fetch = async (path) => {
@@ -368,6 +383,7 @@ let stepBad = 0;
 let debtBad = 0;
 let behaviorBad = 0;
 let obsidianBad = 0;
+let aiBad = 0;
 let vocabBad = 0;
 let heatmapBad = 0;
 let exportBad = 0;
@@ -824,6 +840,51 @@ try {
   console.log(`  ❌ review·没配 Vault 时不摆按钮 渲染抛错: ${e.message}`);
 }
 
+// AI 接口（SR-F7.3 / G 批 · T-G6）：设置页那一节要真渲染出 **开关（现在开着）+ 边界 + 动作表 +
+// 示例命令（可复制）**；任务卡上要出现「AI 建的」徽标（你建的**不**标 —— 反证在下面）。
+const aiChecks = [];
+for (const [where, needs] of [
+  ['setting', ['set-ai', 'data-on="true"', 'data-on="false"', 'AI 接口（只读 + 新增）',
+    '只读 + 新增 + 勾自己建的', 'GET /api/ai/ping', 'POST /api/ai/tasks',
+    'curl http://127.0.0.1:8000/api/ai/ping', 'ai-copy', '复制示例命令',
+    '动的是不是你亲手写的东西']],
+  ['tasks', ['AI 建的', 'AI 加的步骤']],
+]) {
+  try {
+    byId.get('main')._html = '';
+    await globalThis.__view(where);
+    await sleep(30);
+    const html = byId.get('main')._html;
+    const missing = needs.filter((n) => !html.includes(n));
+    const rendered = missing.length === 0;
+    if (!rendered) aiBad++;
+    aiChecks.push({ where, rendered, missing });
+    console.log(`  ${rendered ? '✅' : '⚠️ '} ${where}·AI 接口 main ${String(html.length).padStart(6)}B`
+      + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+  } catch (e) {
+    aiBad++;
+    aiChecks.push({ where, error: e.message });
+    console.log(`  ❌ ${where}·AI 接口 渲染抛错: ${e.message}`);
+  }
+}
+// 反证：**你建的**任务不许带那枚徽标（否则"AI 建的"这个标记就没意义了）
+try {
+  byId.get('main')._html = '';
+  await globalThis.__view('tasks');
+  await sleep(30);
+  const html = byId.get('main')._html;
+  const badgeCount = (html.match(/AI 建的/g) || []).length;
+  const titles = (html.match(/普通任务/g) || []).length;
+  const ok = badgeCount === 1 && titles >= 1;
+  if (!ok) aiBad++;
+  aiChecks.push({ where: 'badge-count', rendered: ok });
+  console.log(`  ${ok ? '✅' : '⚠️ '} tasks·只有 AI 建的那张带徽标（徽标 ${badgeCount} 个 / 普通任务 ${titles} 张）`);
+} catch (e) {
+  aiBad++;
+  aiChecks.push({ where: 'badge-count', error: e.message });
+  console.log(`  ❌ tasks·徽标反证 渲染抛错: ${e.message}`);
+}
+
 try {
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
   for (const a of new Set(CLICK_ACTIONS)) if (!registered.has(a)) unused.push(a);
@@ -835,7 +896,7 @@ if (process.argv.includes('--json')) {
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
-      export: exportChecks, obsidian: obsidianChecks,
+      export: exportChecks, obsidian: obsidianChecks, ai: aiChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -849,6 +910,7 @@ const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardB
   || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0 || archiveBad > 0
   || stepBad > 0 || debtBad > 0 || behaviorBad > 0 || vocabBad > 0 || heatmapBad > 0 || exportBad > 0
   || obsidianBad > 0
+  || aiBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -867,5 +929,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，热力图有值 ${heatmapChecks.length - heatmapBad}/${heatmapChecks.length} 正常`
   + `，导出 markdown ${exportChecks.length - exportBad}/${exportChecks.length} 正常`
   + `，Obsidian 跳转 ${obsidianChecks.filter((c) => c.rendered).length}/${obsidianChecks.length} 正常`
+  + `，AI 接口 ${aiChecks.filter((c) => c.rendered).length}/${aiChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

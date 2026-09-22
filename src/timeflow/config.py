@@ -87,6 +87,13 @@ class ExportConfig(BaseModel):
     vault_dir: str = ""
 
 
+class AiConfig(BaseModel):
+    # AI 接口（SR-F7.3 / G 批 · T-G6）：**默认关**（口径同 N16「默认收严、用户再放宽」）。
+    # 打开后本机程序可以调 `/api/ai/*`（只读 + 新增 + 勾自己建的）；关着时一律 403。
+    # 这里是默认值：设置页改过的以本机数据库（`app_settings`）为准。
+    enabled: bool = False
+
+
 class Settings(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     app: AppConfig = Field(default_factory=AppConfig)
@@ -97,6 +104,7 @@ class Settings(BaseModel):
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     insights: InsightsConfig = Field(default_factory=InsightsConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
+    ai: AiConfig = Field(default_factory=AiConfig)
 
 
 def _read_toml(config_path: Path | None) -> dict[str, Any]:

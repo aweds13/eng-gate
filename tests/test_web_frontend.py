@@ -679,6 +679,7 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
         ("get", "/api/review/meta", None),
         ("get", "/api/settings/vocab", None),
         ("get", "/api/settings/export", None),
+        ("get", "/api/settings/ai", None),
         ("get", "/api/insights/heatmap-dimensions", None),
         ("get", "/api/insights/academic-vs-self?days=90", None),
         ("get", "/api/memos", None),
@@ -1038,3 +1039,34 @@ def test_obsidian_jump_is_wired_and_read_only() -> None:
     assert "Obsidian（只读跳转）" in setting and "ex.vault_note" in setting, "界面没显示只读口径"
     # URL **只在后端拼**：界面里不许出现现成的链接（注释里提一下协议名没关系，拼出来才算漏口径）
     assert "obsidian://open?" not in html, "URL 只能在后端拼（编码口径一处）"
+
+
+def test_ai_boundary_is_wired_and_explained() -> None:
+    """T-G6（SR-F7.3 / OP-34）：设置页能开关 AI 接口，并把**边界、动作表、示例**显示出来。
+
+    三条口径：
+    ① 边界与动作表**由后端一处给**（`core/ai.py`）—— 界面只渲染，不复述规则（否则两处会漂）；
+    ② AI 建的任务/步骤在卡片与详情上带「AI 建的」徽标（"可回溯"在界面上的那一半）；
+    ③ 默认关这件事要**说在界面上**（不是靠用户去翻文档）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    setting = html.split("async function renderSetting(m){", 1)[1].split("\n}", 1)[0]
+    assert 'id="set-ai"' in setting and "AI 接口（只读 + 新增）" in setting, "设置页缺少 AI 一节"
+    assert 'data-action="set-ai"' in setting, "缺少开关"
+    assert 'data-on="true"' in setting and 'data-on="false"' in setting, "开关要能开也能关"
+    for needle in ("ai.boundary", "ai.surface", "ai.example", "ai.note"):
+        assert needle in setting, f"这一节没有用后端给的自述：{needle}"
+    assert "默认" in setting, "要写明默认是关的"
+    for action in ("set-ai", "ai-copy"):
+        assert f"'{action}':" in html, f"动作 {action} 没注册"
+    fn = html.split("async function setAiEnabled(on){", 1)[1].split("\n}", 1)[0]
+    assert "/api/settings/ai" in fn and "method:'PUT'" in fn
+    copy_fn = html.split("async function copyAiExample(){", 1)[1].split("\n}", 1)[0]
+    assert "copyText(" in copy_fn, "示例命令要能复制（不然只能手抄）"
+    # 归属徽标：卡片与详情都要有（只标 AI 建的，默认情形不标）
+    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    assert "t.created_by==='ai'" in card and "AI 建的" in card
+    detail = _fn_body(html, "renderDetail")
+    assert "t.created_by==='ai'" in detail, "详情面板没显示归属"
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert ".ai-example {" in css, "示例命令块缺样式（R1：样式只住 app.css）"

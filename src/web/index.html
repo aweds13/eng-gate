@@ -231,6 +231,9 @@ const ACTIONS = {
   // Obsidian 跳转（SR-F8.2 / G 批 · T-G5）：存 Vault 设置 / 拿引用句柄跳进 Obsidian（**只读**）
   'set-vault':      () => saveVault(),
   'vault-open':     el => openInVault(el.dataset.handle||''),
+  // AI 接口（SR-F7.3 / G 批 · T-G6）：开关（默认关）+ 复制示例命令
+  'set-ai':         el => setAiEnabled(el.dataset.on==='true'),
+  'ai-copy':        () => copyAiExample(),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -730,7 +733,7 @@ function renderDetail(el,t,facts,tree,cards,attempts){
     <div class="meta">分组 ${t.group_name?esc(t.group_name):'未分组'} · 重复 ${t.repeat_days?`每 ${t.repeat_days} 天`:'无'} · 优先级 ${prioBadge(t.priority)} ${flagBadge(t)}</div>
     <div class="meta">类型 ${esc(t.task_type||'普通')}${t.course_id?` · 课程 ${t.course_name?esc(t.course_name):'课程已删'}`:''}</div>
     <div class="meta">提醒 ${t.remind_at?`${esc(String(t.remind_at).replace('T',' '))}（${REMIND_LABEL[t.reminder_state]||'—'}）`:'未设'}</div>
-    <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}</div>
+    <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}${t.created_by==='ai'?' · <span class="badge">AI 建的</span>':''}</div>
     ${t.note?`<div class="settings-sub">备注</div><div class="sub" style="white-space:pre-wrap">${esc(t.note)}</div>`:''}`}
     ${asg}
     <div class="settings-sub">所属分组</div>
@@ -900,10 +903,13 @@ function taskCard(t,isOverdue){
   // 但每张卡自己说清它是哪一层 —— 树形呈现放在详情面板里（那里能折叠）。
   const depthBadge=Number(t.depth)>1
     ? `<span class="badge">${Number(t.depth)===2?'子任务':'子步骤'}</span>` : '';
+  // 谁建的（T-G6）：AI 建的任务/步骤带一枚徽标 —— 是"可回溯"在界面上的那一半
+  // （另一半是事实的 `source=ai`）。你建的不标（默认情形，不该满屏都是徽标）。
+  const whoBadge=t.created_by==='ai' ? '<span class="badge">AI 建的</span>' : '';
   return `<div class="card ${isDone?'done':''} ${late?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div style="flex:1"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}</div>
+    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${whoBadge}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}</div>
     <div class="row">
       ${doingButtonHTML(t)}
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
@@ -1904,6 +1910,8 @@ async function delGuardDnd(win){
 // 恢复是**不可逆动作** → 走壳级二次确认，并且把"恢复到哪个时间点"写进标题（不是笼统的"确定吗"）。
 // 后端恢复前会**自动再备份一次现库**，所以这里可以如实告诉用户"选错了还能回去"。
 let backupCache=null;
+// AI 接口（SR-F7.3 / G 批 · T-G6）：设置页那一节的数据缓存（开关状态 + 边界自述）
+let aiCfg=null;
 function sizeLabel(n){
   const b=Number(n)||0;
   return b<1024?`${b}B`:b<1048576?`${(b/1024).toFixed(0)}KB`:`${(b/1048576).toFixed(1)}MB`;
@@ -1926,14 +1934,15 @@ async function restoreBackup(name){
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg,vocabCfg,expCfg]=await Promise.all([
+  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg,vocabCfg,expCfg,aiData]=await Promise.all([
     api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach'),
     api('/api/settings/reminder'),api('/api/focus/guard'),api('/api/settings/backups'),
     api('/api/settings/archive'),api('/api/settings/behavior'),api('/api/settings/vocab'),
-    api('/api/settings/export')]);
+    api('/api/settings/export'),api('/api/settings/ai')]);
   groupCache=groups||[];
   guardCache=guardCfg||null;
   backupCache=backups||null;
+  aiCfg=aiData||null;
   const off=!navigator.onLine;
   const guard=guardCache||{block_by_default:true,whitelist:[],do_not_disturb:[],
     note:'',window_format:'HH:MM-HH:MM',max_items:50};
@@ -1947,6 +1956,9 @@ async function renderSetting(m){
   const ex=expCfg||{dir:'',default_dir:'export',note:'',where:'',note_exists:false,last_error:'',
     vault:'',vault_dir:'',vault_configured:false,vault_overlap:'',vault_note:''};
   const bk=backupCache||{db:'',dir:'',items:[],note:''};
+  // AI 接口（T-G6）：缺字段就退回"关着 + 空表"（整页不空）
+  const ai=aiCfg||{enabled:false,default_enabled:false,configured:false,surface:[],boundary:'',
+    why:'',note:'',example:''};
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
     `<button class="swatch ${sameColor(accentChoice,c)?'on':''}" data-action="set-accent" data-color="${c}"
@@ -2074,6 +2086,21 @@ async function renderSetting(m){
     <div class="sub">${noteHTML(ex.vault_note||'')}</div>
     <div class="sub">${noteHTML(ex.note||'')}</div>
     <div class="sub">${noteHTML(ex.where||'')}</div>
+  </div>
+  <div class="section-title" id="set-ai">AI 接口（只读 + 新增）</div>
+  <div class="card panel-card">
+    <div class="row">
+      <button class="${ai.enabled?'':'ghost'}" data-action="set-ai" data-on="true">打开</button>
+      <button class="${ai.enabled?'ghost':''}" data-action="set-ai" data-on="false">关闭</button>
+      <span class="sub">现在：${ai.enabled?'<b>开着</b>（本机程序可以调）':'<b>关着</b>（默认 —— 这一组接口一律 403）'}</span></div>
+    <div class="sub">${noteHTML(ai.boundary||'')}</div>
+    <div class="meta">${(ai.surface||[]).map(s=>
+      `<code>${esc(s.method)} ${esc(s.path)}</code> ${esc(s.what)}`).join('<br>')}</div>
+    <div class="sub">${noteHTML(ai.why||'')}</div>
+    <div class="sub">${noteHTML(ai.note||'')}</div>
+    <div class="settings-sub">照抄就能跑</div>
+    <pre class="ai-example">${esc(ai.example||'')}</pre>
+    <div class="row tight"><button class="ghost" data-action="ai-copy">复制示例命令</button></div>
   </div>
   <div class="section-title" id="set-academic">学业</div>
   <div class="card panel-card">
@@ -2261,6 +2288,24 @@ async function openInVault(handle){
     const copied=r.url?await copyText(r.url):false;
     toast(copied?`打不开（${r.reason}）；链接已复制`:`打不开（${r.reason}）`);
   }catch(e){/* api() 已经弹过后端原话 */}
+}
+/* AI 接口（SR-F7.3 / G 批 · T-G6）：**默认关**；开关存后端（本机设置优先于 config）。
+   边界与措辞全在后端 `core/ai.py` 一处 —— 界面只负责显示开关与自述，不复述规则。
+   为什么默认关：N16「默认收严、用户再放宽」——AI 能写你的任务清单，不该一开始就开着。 */
+async function setAiEnabled(on){
+  try{
+    const r=await api('/api/settings/ai',{method:'PUT',body:JSON.stringify({enabled:on})});
+    aiCfg=r;
+    toast(r.enabled?'AI 接口已打开（本机程序现在可以读任务、加步骤、勾它自己建的）'
+      :'AI 接口已关闭（这一组接口现在一律 403）');
+    view(current);
+  }catch(e){/* api() 已经弹过后端原话 */}
+}
+async function copyAiExample(){
+  const text=(aiCfg&&aiCfg.example)||'';
+  if(!text){toast('还没有示例可复制');return}
+  const copied=await copyText(text);
+  toast(copied?'示例命令已复制（把 127.0.0.1:8000 换成你实际的端口）':'复制不了，请手动选中那段命令');
 }
 // ---- 附件打开方式设置（T-B4）：模式与白名单存服务端 ----
 async function setAttachMode(mode){

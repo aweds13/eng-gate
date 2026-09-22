@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -219,6 +219,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     _migrate_v13(conn)  # 加列：tasks.doing_rank
     _migrate_v14(conn)  # 加列：groups.parent_id
     _migrate_v15(conn)  # 重建：groups 去掉全局 UNIQUE(name)，改"同父下唯一"
+    _migrate_v16(conn)  # 加列：tasks.created_by（谁建的：我 / AI）
 
 
 def _upgrade(conn: sqlite3.Connection, current: int) -> None:
@@ -255,6 +256,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v14(conn)  # 分组可嵌套：groups.parent_id（F 批 · T-F5）
     if current < 15:
         _migrate_v15(conn)  # 分组名允许重名（F 批 · T-F10）
+    if current < 16:
+        _migrate_v16(conn)  # 谁建的：我 / AI（G 批 · T-G6）
 
 
 
@@ -274,6 +277,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v13(conn)  # 同上：tasks.doing_rank 由本版加列
     _migrate_v14(conn)  # 同上：groups.parent_id 由本版加列（分组可嵌套）
     _migrate_v15(conn)  # 同上：groups 去掉全局 UNIQUE(name)（允许重名），改按"同父下唯一"
+    _migrate_v16(conn)  # 同上：tasks.created_by 由本版加列（谁建的：我 / AI）
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -905,3 +909,19 @@ def _migrate_v15(conn: sqlite3.Connection) -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_sibling "
         "ON groups(COALESCE(parent_id, ''), name)"
     )
+
+
+def _migrate_v16(conn: sqlite3.Connection) -> None:
+    """v16：任务/步骤的**归属** `tasks.created_by` —— 谁建的（`me` / `ai`）· G 批 · T-G6。
+
+    口径（用户 2026-09-21 定，见 `复盘/口径定案-待定清单.md` §2 的**乙案**）：
+    AI 接口第一版是**只读 + 新增**，判据从"改不改"换成"**动的是不是你亲手写的东西**"——
+    所以 AI **能勾它自己建的**步骤，**不许碰你建的**。这条边界要落成字段，不能靠约定：
+    `created_by` 就是那个"谁写的"事实（值域 `me` / `ai`，与 `core/ai.py` 的常量对齐）。
+
+    - 老行一律 `me`（**不猜**：这个库里的东西本来就是你自己建的；AI 接口在此之前不存在）；
+    - 默认 `me` 同样意味着"新建任务默认是你建的"，只有 `/api/ai/*` 那条路会写 `ai`；
+    - 幂等加列（`_add_column_if_missing`），缺表跳过不失败 —— 与 v6 起各版同一套做法。
+    """
+    _add_column_if_missing(conn, "tasks", "created_by", "created_by TEXT DEFAULT 'me'")
+

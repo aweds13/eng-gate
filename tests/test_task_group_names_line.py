@@ -64,7 +64,10 @@ def test_upgrade_v14_to_v15_drops_global_unique(tmp_path) -> None:  # type: igno
     c.close()
 
     c2 = db_mod.connect(path)
-    assert c2.execute("SELECT version FROM schema_version").fetchone()["version"] == 15
+    # 版本号用常量比（**别写死数字**：schema 每加一版就会红一次，纯噪声 —— T-G6 的 v16 踩到）
+    assert c2.execute("SELECT version FROM schema_version").fetchone()["version"] == (
+        db_mod.SCHEMA_VERSION
+    )
     # 跨父重名：现在能建了
     other = tm.create_group(c2, "英语")
     same_name = tm.create_group(c2, "第三章", parent_id=other)

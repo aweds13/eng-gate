@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from timeflow import logs, vocab
 from timeflow.config import load_settings
 from timeflow.core import academic as ac
+from timeflow.core import ai as ai_mod
 from timeflow.core import attach as attach_mod
 from timeflow.core import behavior, insights, vault
 from timeflow.core import facts as facts_mod
@@ -121,6 +122,9 @@ class TaskOut(BaseModel):
     course_name: str | None = None
     # 「进行中」的显式顺序（F 批 · T-F1）：只在「进行中」时有值；界面按它排上/下
     doing_rank: int | None = None
+    # **谁建的**（G 批 · T-G6）：`me` / `ai`。界面据此标「AI 建的」；它也是 AI 边界的判据
+    # （AI 只能勾 `ai` 的）。由创建路径写死，**接口不接受手改**（不在 `TaskIn`/PATCH 白名单里）。
+    created_by: str = tm.CREATOR_ME
     # 嵌套层数（N10 / F 批 · T-F5）：1 = 大任务（顶层）、2 = 子任务、3 = 子步骤。
     # 界面据此显示「子任务 / 子步骤」徽标与缩进；上限 3 层由领域层拦。
     depth: int = 1
@@ -200,6 +204,7 @@ def _out(
         course_id=t.course_id,
         course_name=tm.course_name(conn, t.course_id),
         doing_rank=t.doing_rank,
+        created_by=t.created_by,
         auto_archived=auto_archived,
         completed_on=completed_on,
         attempt_count=attempt_count,
@@ -550,6 +555,184 @@ def create_app(db_path: str | None = None) -> FastAPI:
             default_vault=settings.export.vault,
             default_vault_dir=settings.export.vault_dir,
         )
+
+    # ---- AI 接口（SR-F7.3 + OP-34 / N23 + N46；G 批 · T-G6）----
+    # 口径（2026-09-21 用户定，见 `复盘/口径定案-待定清单.md` §2 乙案）：**只读 + 新增 +
+    # 勾自己建的**；判据是"动的是不是你亲手写的东西"；**默认关**。规则与措辞都在
+    # `core/ai.py` 一处（这里只做 HTTP 落地：404/400/403 的翻译与来源校验）。
+    # 注意：**整组 `/api/ai/*` 都要求本机来源** —— 网页读不到也写不了，只有本机程序能调。
+    @app.get("/api/settings/ai")
+    def get_ai_settings() -> dict[str, Any]:
+        """AI 接口现状 + 边界自述（说明由后端给，界面不复述规则）。只读。"""
+        return ai_mod.describe(conn, settings.ai.enabled)
+
+    @app.put("/api/settings/ai")
+    def put_ai_settings(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """打开/关闭 AI 接口（**默认关**；非法值 400 带原话）。只接受本机页面调用。"""
+        require_local_origin(request)
+        try:
+            return ai_mod.set_enabled(conn, payload.get("enabled"), settings.ai.enabled)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    def _ai_guard(request: Request) -> None:
+        """AI 组统一的入口闸：**本机来源** + **开关开着**，不过就 403 带原话。"""
+        require_local_origin(request)
+        try:
+            ai_mod.require_enabled(conn, settings.ai.enabled)
+        except ValueError as e:
+            raise HTTPException(status_code=403, detail=str(e)) from e
+
+    @app.get("/api/ai/ping")
+    def ai_ping(request: Request) -> dict[str, Any]:
+        """自证：接口开着、边界是什么、能给的动作有哪些（**不读你的数据**）。"""
+        _ai_guard(request)
+        body = ai_mod.describe(conn, settings.ai.enabled)
+        body["ok"] = True
+        body["note"] = "这是边界自述，不含你的任务内容。"
+        return body
+
+    @app.get("/api/ai/tasks")
+    def ai_tasks(
+        request: Request,
+        view: str | None = None,
+        assignee: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """读任务列表（只读）。`view` 与人侧三视图同口径（important/planned/flagged）。
+
+        `assignee` 过滤「分配给我/某人」的任务（N46 的"接收任务"）；默认只给活动任务。
+        """
+        _ai_guard(request)
+        try:
+            tasks = tm.tasks_in_view(conn, view) if view else tm.list_tasks(conn)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        if assignee:
+            tasks = [
+                t
+                for t in tasks
+                if any(
+                    str(a["assignee"]) == assignee
+                    for a in team.assignments_for_task(conn, t.id)
+                )
+            ]
+        capped = max(1, min(int(limit), 200))
+        return {
+            "count": len(tasks[:capped]),
+            "total": len(tasks),
+            "items": [_out(t, conn) for t in tasks[:capped]],
+            "boundary": ai_mod.BOUNDARY,
+        }
+
+    @app.get("/api/ai/tasks/{task_id}")
+    def ai_task(task_id: str, request: Request) -> dict[str, Any]:
+        """读一个任务 + 它的步骤树（只读；前序 + 层数，与人侧树接口同口径）。"""
+        _ai_guard(request)
+        try:
+            task = tm.get_task(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        nodes = tm.task_tree(conn, task_id)
+        return {
+            "task": _out(task, conn),
+            "steps": [
+                {"task": _out(n.task, conn, depth=n.depth), "depth": n.depth} for n in nodes
+            ],
+        }
+
+    @app.post("/api/ai/tasks")
+    def ai_create_task(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """**新增**：建任务；给了 `parent_id` 就是**给那个任务加一个步骤**（= 回报进展）。
+
+        归属写 `created_by='ai'`（AI 只能勾它自己建的，所以这个标记是边界的前提）。
+        只认下面这几个字段：多传的字段**明确拒绝**（不静默忽略 —— 否则 AI 以为设上了）。
+        """
+        _ai_guard(request)
+        allowed = {"title", "parent_id", "due_date", "is_myday", "note", "priority"}
+        extra = sorted(set(payload) - allowed)
+        if extra:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不认识的字段：{extra}（这一版只支持 {sorted(allowed)}）—— "
+                "改/删字段没有接口，这是 AI 边界的一部分。",
+            )
+        title = str(payload.get("title") or "").strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="任务标题不能为空")
+        try:
+            if payload.get("parent_id"):
+                task = tm.create_subtask(
+                    conn,
+                    str(payload["parent_id"]),
+                    title,
+                    due_date=payload.get("due_date"),
+                    created_by=tm.CREATOR_AI,
+                )
+            else:
+                task = tm.create_task(
+                    conn,
+                    title,
+                    due_date=payload.get("due_date"),
+                    is_myday=bool(payload.get("is_myday", False)),
+                    note=payload.get("note"),
+                    priority=payload.get("priority") or tm.DEFAULT_PRIORITY,
+                    created_by=tm.CREATOR_AI,
+                )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="父任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"ok": True, "task": _out(task, conn), "created_by": task.created_by}
+
+    @app.post("/api/ai/tasks/{task_id}/complete")
+    def ai_complete_task(task_id: str, request: Request) -> dict[str, Any]:
+        """**勾完成**：只允许勾 AI 自己建的（你建的 → 400 带原话）。
+
+        走的是和人**完全同一条**路（`tm.complete_task(..., actor="ai")`）：账本、联动、
+        重复任务生成全都一致，只是事实的 `source` 记 `ai`（可审计）。
+        """
+        _ai_guard(request)
+        try:
+            task = ai_mod.require_own(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        try:
+            done = tm.complete_task(conn, task.id, actor=tm.CREATOR_AI)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        # 与人侧同一套：完成之后把当天那份 md 写出来（失败只记错，不挡这次调用）
+        vault.try_export(
+            conn, None, settings.export.dir, default_vault_dir=settings.export.vault_dir
+        )
+        return {"ok": True, "task": _out(done, conn)}
+
+    # 边界兜底：这一版**没有**改/删接口。被显式调用时给一句能看懂的原话，
+    # 而不是一个含义不明的 404（规格 R4：「AI 调用写/改/删：明确拒绝，不静默改」）。
+    def _ai_refuse(method: str) -> HTTPException:
+        listing = "；".join(f"{m} {p}" for m, p, _ in ai_mod.SURFACE)
+        return HTTPException(
+            status_code=403 if method != "GET" else 404,
+            detail=f"AI 接口这一版只有：{listing}。"
+            f"{'改/删' if method != 'GET' else '这个路径'}没有接口 —— "
+            "边界是「只读 + 新增 + 勾自己建的」（见设置页「AI 接口」）。",
+        )
+
+    @app.api_route(
+        "/api/ai/{rest:path}", methods=["PATCH", "PUT", "DELETE"], include_in_schema=False
+    )
+    def ai_refuse_write(rest: str, request: Request) -> dict[str, Any]:
+        _ai_guard(request)
+        raise _ai_refuse(request.method)
+
+    @app.api_route(
+        "/api/ai/{rest:path}", methods=["GET", "POST"], include_in_schema=False
+    )
+    def ai_refuse_unknown(rest: str, request: Request) -> dict[str, Any]:
+        _ai_guard(request)
+        raise _ai_refuse(request.method)
 
     # ---- 备份与恢复（SR-NF12 / SR-F9.3）----
     # 口径（2026-09-21 用户定）：设置页列出最近几个备份，点一个就能恢复。

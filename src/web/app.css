@@ -402,3 +402,18 @@ select {
   .bottom-nav button.active { color: var(--accent); font-weight: 700 }
   .bottom-nav button .ic { display: block; font-size: var(--fs-xl)}
 }
+
+/* ---------- AI 接口的示例命令（T-G6） ----------
+   只读展示（不是输入框）：等宽、可横向滚动、长命令不折行 —— 照抄就能跑。
+   颜色与尺度一律走令牌（R1/R5 那两条护栏管这里）。 */
+.ai-example {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-5);
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: var(--fs-xs);
+  color: var(--text);
+}

@@ -19,8 +19,12 @@ from timeflow.core.tasks.groups import (
     toggle_task_group,
 )
 from timeflow.core.tasks.manager import (
+    ACTOR_SOURCES,
     ATTEMPT_FAILED,
     COURSE_TASK_TYPES,
+    CREATOR_AI,
+    CREATOR_LABELS,
+    CREATOR_ME,
     DEFAULT_ARCHIVE_AFTER_DAYS,
     DEFAULT_PRIORITY,
     DEFAULT_TASK_TYPE,
@@ -41,6 +45,7 @@ from timeflow.core.tasks.manager import (
     STATUS_PENDING,
     STATUS_TODO,
     TASK_TYPE_NORMAL,
+    VALID_CREATORS,
     VALID_PRIORITIES,
     VALID_STATUS,
     VALID_TASK_TYPES,
@@ -212,4 +217,9 @@ __all__ = [
     "DEFAULT_TASK_TYPE",
     "COURSE_TASK_TYPES",
     "course_name",
+    "CREATOR_ME",
+    "CREATOR_AI",
+    "VALID_CREATORS",
+    "CREATOR_LABELS",
+    "ACTOR_SOURCES",
 ]

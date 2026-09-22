@@ -197,6 +197,50 @@ def live_c_line_checks(base: str) -> dict[str, bool]:
     }
 
 
+def live_ai_checks(base: str) -> dict[str, bool]:
+    """T-G6 真机自检：AI 接口的**边界**在真实服务上成立（开着/关着两条路都走一遍）。
+
+    刻意按"关 → 开 → 用完再关"来做，与用户实际用法一致；这里只碰**临时库**，
+    不会动你真实的任务清单。测的是边界，不是"AI 能不能用"：
+    - 默认关时整组 403（读也拦）；
+    - 打开后能读、能新增（归属 `ai`）；
+    - **勾你建的 → 400**（这一条是整张卡的核心）；
+    - 勾它自己建的 → 200，且事实里留下 `source=ai`；
+    - 改/删方法 → 403 带原话；
+    - 跨站 Origin → 403（读写都拦）。
+    """
+    evil = {"Origin": "https://evil.example"}
+    off_read = _json_call(base, "/api/ai/tasks")[0]
+    off_write = _json_call(base, "/api/ai/tasks", "POST", {"title": "x"})[0]
+    turned_on = _json_call(base, "/api/settings/ai", "PUT", {"enabled": True})[0]
+    ping = _json_call(base, "/api/ai/ping")
+    mine_code, mine = _json_call(base, "/api/tasks", "POST", {"title": "真机自检·你建的"})
+    ai_code, ai = _json_call(base, "/api/ai/tasks", "POST", {"title": "真机自检·AI 建的"})
+    ai_task = (ai or {}).get("task", {}) if ai_code == 200 else {}
+    own = _json_call(base, f"/api/ai/tasks/{ai_task.get('id')}/complete", "POST", {})[0]
+    yours = _json_call(base, f"/api/ai/tasks/{(mine or {}).get('id')}/complete", "POST", {})
+    refused = _json_call(base, f"/api/ai/tasks/{ai_task.get('id')}", "PATCH", {"title": "改"})[0]
+    cross_read = _json_call(base, "/api/ai/tasks", headers=evil)[0]
+    cross_write = _json_call(base, "/api/ai/tasks", "POST", {"title": "x"}, headers=evil)[0]
+    facts = _json_call(base, f"/api/tasks/{ai_task.get('id')}/facts")[1] or []
+    _json_call(base, "/api/settings/ai", "PUT", {"enabled": False})
+    after_off = _json_call(base, "/api/ai/tasks")[0]
+    return {
+        "AI 默认关时整组 403": off_read == 403 and off_write == 403,
+        "AI 开关能打开": turned_on == 200,
+        "AI ping 自证边界": ping[0] == 200 and isinstance(ping[1], dict)
+        and bool(ping[1].get("boundary")) and bool(ping[1].get("surface")),
+        "AI 能新增（归属 ai）": ai_code == 200 and ai_task.get("created_by") == "ai"
+        and (mine or {}).get("created_by") == "me",
+        "AI 能勾自己建的": own == 200,
+        "AI 勾你建的被 400 拦下": yours[0] == 400,
+        "AI 改/删被明确拒绝": refused == 403,
+        "AI 跨站读写都拦": cross_read == 403 and cross_write == 403,
+        "AI 的动作在事实里可回溯": any(str(f.get("source")) == "ai" for f in facts),
+        "AI 关掉后又回到 403": after_off == 403,
+    }
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="r2_"))
     ok, detail = check_js_syntax(tmp)
@@ -267,6 +311,7 @@ def main() -> int:
     checks.update(live_attach_checks(base, tmp))
     checks.update(live_remind_checks(base))
     checks.update(live_c_line_checks(base))
+    checks.update(live_ai_checks(base))
     for name, passed in checks.items():
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")
     server.should_exit = True

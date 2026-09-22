@@ -533,9 +533,20 @@ gaps = ""
 id = "SR-F7.3"
 title = "为 AI 提供读写任务的本地 API：第一版只读 + 新增（不改不删）"
 group = "F7"
-status = "partial"
-evidence = ["route:POST /api/sync/tasks"]
-gaps = "无独立 AI 接口与权限边界；对外 REST 含 PATCH/DELETE（GAP-F7-02）"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/ai.py::def require_own",
+  "text:src/timeflow/core/ai.py::BOUNDARY =",
+  "text:src/timeflow/storage/db.py::def _migrate_v16",
+  "text:src/timeflow/core/tasks/manager.py::CREATOR_AI = \"ai\"",
+  "route:GET /api/ai/ping",
+  "route:GET /api/ai/tasks",
+  "route:POST /api/ai/tasks",
+  "route:POST /api/ai/tasks/{task_id}/complete",
+  "route:PUT /api/settings/ai",
+  "test:test_ai_line.py",
+]
+gaps = ""
 
 [entries."SR-F7.4"]
 id = "SR-F7.4"
@@ -597,8 +608,12 @@ id = "SR-F9.2"
 title = "跨端同步用「修改时间戳 + version」LWW（不静默覆盖）+ 同 id 去重"
 group = "F9"
 status = "partial"
-evidence = ["text:src/timeflow/core/sync.py::def", "route:GET /api/sync/status"]
-gaps = "只有 LWW 合并语义与冲突日志；**无推拉传输**（GAP-F9-01）"
+evidence = [
+  "text:src/timeflow/core/sync.py::def",
+  "route:GET /api/sync/status",
+  "route:POST /api/sync/tasks",
+]
+gaps = "只有 LWW 合并语义与冲突日志；**无推拉传输**（GAP-F9-01）—— 合并机制这一版先以「同步包 / 导入合并」落地（T-G8 起）"
 
 [entries."SR-F9.3"]
 id = "SR-F9.3"
@@ -1796,6 +1811,35 @@ evidence = [
 ]
 gaps = ""
 
+[entries."T-G6"]
+id = "T-G6"
+title = "G 批：AI 接口（只读 + 新增 + 勾自己建的；schema v16 created_by；默认关）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/AI接口边界-T-G6.md",
+  "text:src/timeflow/core/ai.py::def require_own",
+  "text:src/timeflow/core/ai.py::def require_enabled",
+  "text:src/timeflow/core/ai.py::SURFACE: tuple",
+  "text:src/timeflow/storage/db.py::def _migrate_v16",
+  "text:src/timeflow/core/tasks/manager.py::ACTOR_SOURCES",
+  "text:src/timeflow/core/tasks/__init__.py::\"CREATOR_AI\"",
+  "text:src/timeflow/api/app.py::def _ai_guard",
+  "text:src/timeflow/api/app.py::def ai_refuse_write",
+  "text:src/timeflow/config.py::class AiConfig",
+  "route:GET /api/settings/ai",
+  "route:PUT /api/settings/ai",
+  "route:GET /api/ai/ping",
+  "route:GET /api/ai/tasks",
+  "route:GET /api/ai/tasks/{task_id}",
+  "route:POST /api/ai/tasks",
+  "route:POST /api/ai/tasks/{task_id}/complete",
+  "ui:data-action=set-ai",
+  "ui:data-action=ai-copy",
+  "test:test_ai_line.py",
+]
+gaps = ""
+
 [entries."T-G9"]
 id = "T-G9"
 title = "缺陷：迁移漏档（版本号撒谎）—— 结构补齐 + 从任何版本升级的结构不变式"
@@ -1834,4 +1878,4 @@ title = "后端能力都要有界面入口（可达性）"
 group = "DELIVERY"
 status = "partial"
 evidence = ["route:GET /api/tasks", "route:GET /api/memos", "route:POST /api/memos", "route:GET /api/habits", "route:POST /api/feedback", "route:GET /api/insights/daily", "route:GET /api/assessments", "route:POST /api/grades", "route:GET /api/team/assignments", "route:GET /api/ledger/outputs", "route:POST /api/ledger/invest", "route:POST /api/review/items", "route:GET /api/focus/today", "route:GET /api/tasks/{task_id}/facts", "route:GET /api/courses", "route:GET /api/config", "route:GET /api/feedback", "route:GET /api/focus/tasks/{task_id}", "route:DELETE /api/ledger/invest/{entry_id}", "route:DELETE /api/ledger/output/{entry_id}", "route:DELETE /api/memos/{memo_id}", "route:GET /api/grades", "route:GET /api/habits/{habit_id}", "route:GET /api/insights/groups", "route:GET /api/ledger/invests", "route:GET /api/review/{item_id}/facts", "route:GET /api/sync/logs", "route:GET /api/tasks/deleted", "route:GET /api/tasks/{task_id}", "route:POST /api/habits", "route:POST /api/habits/{habit_id}/toggle", "route:POST /api/ledger/output", "route:POST /api/review/{item_id}/review", "route:POST /api/grades", "route:GET /api/groups/{group_id}/tasks", "route:POST /api/tasks/{task_id}/group"]
-gaps = "白名单/勿扰配置（SR-F3.3）、子任务（OP-12）、AI 边界（SR-F7.4）等仍无界面入口；**分组管理已在本轮接通（T-A1）**"
+gaps = "白名单/勿扰配置（SR-F3.3）、子任务（OP-12）等仍无界面入口；**分组管理已在本轮接通（T-A1）**；**AI 接口（T-G6）不在此列**（它是给本机程序的接口，用户侧只有设置页那个开关与边界说明，已接）"
