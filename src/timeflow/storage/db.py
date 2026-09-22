@@ -116,20 +116,117 @@ def migrate(conn: sqlite3.Connection) -> None:
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
+    """把库升到当前 `SCHEMA_VERSION`（**幂等**）。
+
+    两条路一起走（T-G9 起）：
+    1. **版本链**（`_upgrade`）：按 `schema_version` 逐版补齐 —— **数据回填**（v4/v5 把历史
+       专注/已完成任务回填成事实）只在这里跑，因为它们"跑一次就够"且比加列贵；
+    2. **结构补齐**（`_ensure_schema`）：v1~v3 与 v6 起的**加列/建表**类迁移**不看版本号**，每次都跑
+       （全部幂等、成本是一次 `PRAGMA table_info`）。
+
+    为什么要有第 2 条（这一条是 T-G9 的教训）：`schema_version` 只是**记录**，"列到底在不在"才是
+    **事实** —— 老代码的 `_upgrade` 漏了 `if current < 14` / `< 15`，于是 v12 的库升级后表结构缺
+    `groups.parent_id`，版本号却已经被写成 15：**版本号撒了谎，而没人看得出来**。
+    现在改成"每次连接都按结构清单核一遍"，版本号只用来决定"数据回填跑没跑过"。
+    """
     conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
     row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
     if row is None:
         conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
         _create_all(conn)
-    else:
-        current = int(row["version"])
-        if current < SCHEMA_VERSION:
-            _upgrade(conn, current)
+        conn.commit()
+        return
+    current = int(row["version"])
+    if current > SCHEMA_VERSION:
+        # 比程序还新的库（升级程序后又打开旧程序 / 恢复了"未来版本"的备份）：
+        # **什么都不动** —— 不补列、不改版本号。它比我新，我"顺手修一下"只会破坏它的结构；
+        # 该做的事是**如实报出来**（界面按 schema_version 提示"备份比程序新"）。
+        conn.commit()
+        return
+    before = _schema_fingerprint(conn)
+    if current < SCHEMA_VERSION:
+        _upgrade(conn, current)
+    _ensure_schema(conn)
+    if current != SCHEMA_VERSION:
+        conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+    after = _schema_fingerprint(conn)
+    if after != before:
+        _log_schema_healed(conn, current, before, after)
     conn.commit()
 
 
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    return (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+        is not None
+    )
+
+
+def _schema_fingerprint(conn: sqlite3.Connection) -> tuple[str, ...]:
+    """结构指纹：**所有表的所有列** + 所有表/索引对象名（排序后）。
+
+    用途只有一个：判断"这次连接有没有真的补上什么东西" —— 补了就**如实记一条日志**
+    （`schema_healed`），而不是默默改库。指纹不含数据，所以便宜且与内容无关。
+    """
+    objects = conn.execute(
+        "SELECT type, name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+    ).fetchall()
+    parts = [f"{r['type']}:{r['name']}" for r in objects]
+    for name in [str(r["name"]) for r in objects if str(r["type"]) == "table"]:
+        parts += [f"{name}.{c['name']}" for c in conn.execute(f"PRAGMA table_info({name})")]
+    return tuple(sorted(parts))
+
+
+def _log_schema_healed(
+    conn: sqlite3.Connection,
+    was: int,
+    before: tuple[str, ...],
+    after: tuple[str, ...],
+) -> None:
+    """结构被补齐了 → 记一条结构化日志（**不静默**）。日志写不进去也不该挡住启动。"""
+    from timeflow import logs
+
+    added = [item for item in after if item not in set(before)]
+    logs.log_event(
+        "schema_healed",
+        level=30,
+        was_version=was,
+        to_version=SCHEMA_VERSION,
+        added=added[:12],
+        added_count=len(added),
+    )
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    """**结构补齐**：把"表/列必须在"这件事每次都核一遍（全部幂等、跳过的极快）。
+
+    顺序与新建库一致（建表 → 加列 → 重建约束），这样"从任何历史版本升上来的库"与"新建的库"
+    结构相同 —— 这条不变式有测试钉着（`tests/test_migration_heal_line.py`）。
+    **不含数据回填**（v4/v5 留在版本链里）。
+    """
+    _migrate_v1(conn)   # 建表：tasks
+    _migrate_v2(conn)   # 建表：groups / task_groups / 各域基础表
+    _migrate_v3(conn)   # 建表：facts
+    _migrate_v6(conn)   # 加列：tasks.note
+    _migrate_v7(conn)   # 加列：tasks.priority
+    _migrate_v8(conn)   # 加列：tasks.flagged
+    _migrate_v9(conn)   # 加列：attach 两列 + app_settings 表
+    _migrate_v10(conn)  # 加列：tasks.remind_at
+    _migrate_v11(conn)  # 加列：tasks.task_type / course_id
+    _migrate_v12(conn)  # 加列：review_items.task_id
+    _migrate_v13(conn)  # 加列：tasks.doing_rank
+    _migrate_v14(conn)  # 加列：groups.parent_id
+    _migrate_v15(conn)  # 重建：groups 去掉全局 UNIQUE(name)，改"同父下唯一"
+
+
 def _upgrade(conn: sqlite3.Connection, current: int) -> None:
-    """逐版本迁移到 SCHEMA_VERSION。每版只做增量、幂等（CREATE IF NOT EXISTS）。"""
+    """**版本链**（历史路径）：只跑"当年那一版"的迁移 —— 数据回填只在这里。
+
+    注意它**不再自己写版本号**（T-G9 起由 `_migrate` 在结构补齐之后统一写），
+    免得出现"版本号已经 15、结构还停在 12"这种谎报。
+    """
     if current < 2:
         _migrate_v2(conn)  # 多分组 + F3–F8 基础表
     if current < 3:
@@ -154,7 +251,11 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v12(conn)  # 复习卡挂任务血缘（F6 · T-C5）
     if current < 13:
         _migrate_v13(conn)  # 「进行中」的显式顺序（F 批 · T-F1）
-    conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+    if current < 14:
+        _migrate_v14(conn)  # 分组可嵌套：groups.parent_id（F 批 · T-F5）
+    if current < 15:
+        _migrate_v15(conn)  # 分组名允许重名（F 批 · T-F10）
+
 
 
 def _create_all(conn: sqlite3.Connection) -> None:
@@ -773,6 +874,8 @@ def _migrate_v15(conn: sqlite3.Connection) -> None:
     - 先确保 `parent_id` 存在（v14 已加；残缺库可能没有），免得拷数据时列不存在。
     - 没有外键约束引用 groups（`task_groups` 只存 id 字符串），重建不影响别处。
     """
+    if not _table_exists(conn, "groups"):
+        return  # 残缺库：连 groups 表都没有（v2 会建，这里不替它建）
     _add_column_if_missing(conn, "groups", "parent_id", "parent_id TEXT")
     auto = [
         str(r["name"])
