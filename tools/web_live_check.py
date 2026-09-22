@@ -424,10 +424,13 @@ def live_lan_checks(tmp: Path, port: int = 8531) -> dict[str, bool]:
     ok_code, health = _lan_json(reachable, "/api/health", headers=auth)
     seen_code = (_lan_json(reachable, "/api/settings/lan", headers=auth)[1] or {}).get("code")
     local_ok = _json_call(local, "/api/health")[0] == 200   # 本机自己不受影响（关服务之前问）
+    # 本机自检（T-G10c）：服务真的绑在 0.0.0.0 上时，它应当报"本机可达"
+    _sc_code, self_check = _json_call(local, "/api/lan/selfcheck", "POST", {})
     server.should_exit = True
     thread.join(timeout=10)
 
     detail = (blocked or {}).get("detail", "") if isinstance(blocked, dict) else ""
+    sc = self_check if isinstance(self_check, dict) else {}
     return {
         "局域网：静态壳能打开（否则手机没处输配对码）": shell == 200,
         "局域网：没配对读不到数据（401 + 原话）": blocked_code == 401 and "配对码" in str(detail),
@@ -436,6 +439,10 @@ def live_lan_checks(tmp: Path, port: int = 8531) -> dict[str, bool]:
         "局域网：配对后能读数据": ok_code == 200 and isinstance(health, dict),
         "局域网：配对码不会通过局域网漏出去": seen_code == "",
         "局域网：本机自己不受影响": local_ok,
+        "局域网：自检说得出本机可达": sc.get("self_reachable") is True
+        and bool(sc.get("addresses")),
+        "局域网：自检把校园网/热点写进排查顺序": "校园网" in str(sc.get("hint", ""))
+        and "移动热点" in str(sc.get("hint", "")),
     }
 
 

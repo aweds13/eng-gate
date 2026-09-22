@@ -261,9 +261,11 @@ def status(
         "code": code(conn) if loopback else "",   # ← 非本机请求永远是空串
         "code_visible": bool(loopback),
         "header": HEADER,
-        "note": "局域网访问只在**同一个 WiFi 里**管用，不涉及公网；"
-                "开着的时候，同一 WiFi 下的其他设备也可能扫到这个地址 —— 配对码是那道门。"
-                "它是防「随手连一下」的，**不是加密、也不挡同 WiFi 抓包**。"
+        "note": "局域网访问只在**同一个局域网**里管用（同一个 WiFi，或**你自己开的热点**），"
+                "不涉及公网；开着的时候，同一网段的其他设备也可能扫到这个地址 —— 配对码是那道门。"
+                "⚠️ **校园网 / 公共 WiFi 常开了客户端隔离**（看着同一个 WiFi，设备之间其实不通），"
+                "那种情况请改走**热点**（见下面的自检与排查顺序）。"
+                "配对码防的是「随手连一下」，**不是加密、也不挡同 WiFi 抓包**。"
                 "要开/关：改 config.toml 的 `[net] allow_lan` 后重启服务，"
                 "或临时用 `python tools/serve.py --lan` 起一次。",
         "how_to_change": "改 config.toml 的 [net] allow_lan 后重启；或 python tools/serve.py --lan",
@@ -276,6 +278,66 @@ def read_code_from(request: Request) -> str | None:
     if got:
         return got
     return request.query_params.get("pair")
+
+
+# ---------------------------------------------------------------- 本机自检（T-G10c）
+def reach(base: str, path: str = "/", timeout: float = 1.2) -> bool:
+    """从**这个进程**能不能访问到 `base`（默认打静态壳 `/`，不需要配对码）。
+
+    看到 200 说明：地址在、服务确实绑在这张网卡上、**而且本机防火墙没拦**
+    （拦了会超时或被拒）。这是"手机为什么连不上"里**能在电脑上查的那一半**。
+    """
+    import urllib.error
+    import urllib.request
+
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({})   # 别走系统代理：否则 192.168.x 会被丢给代理，白测一场
+    )
+    try:
+        with opener.open(f"{base}{path}", timeout=timeout) as resp:
+            return int(resp.status) == 200
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def selfcheck(
+    port: int, *, lan_open: bool, probe: Any = None
+) -> dict[str, Any]:
+    """本机网络自检：**能查的查清楚，查不到的直说**。
+
+    查得了的：这台服务开没开局域网、有哪些局域网地址、**本机能不能经那些地址访问自己**
+    （＝地址在不在、防火墙拦没拦）。
+    **查不了**：校园网 / 公共 WiFi 的**客户端隔离** —— 那是"手机 → 电脑"的事，
+    在电脑上无论怎么试都试不出来。所以这里不假装能判，直接把排查顺序写进 `hint`。
+    """
+    fn = probe or reach
+    addrs = local_addresses(port)
+    results = [{"url": a, "reachable": bool(fn(a))} for a in addrs[:3]]
+    ok = any(r["reachable"] for r in results)
+    if not lan_open:
+        verdict = "这台服务只监听本机（没开 `--lan`）—— 手机连不上是正常的，先开着它再试"
+    elif not addrs:
+        verdict = "没查到局域网地址：确认这台电脑连着 WiFi / 网线（连手机热点也算）"
+    elif ok:
+        verdict = ("从这台机器自己访问局域网地址是通的 —— 地址在、服务绑上了、防火墙没拦本机自连。"
+                   "接着在手机上试；若手机还是打不开，多半是网络侧的隔离")
+    else:
+        verdict = ("从这台机器自己都访问不到局域网地址 —— 先看防火墙有没有放行 Python"
+                   "（Windows「允许应用通过防火墙」，**公用**那一列也要勾）")
+    return {
+        "lan_open": lan_open,
+        "addresses": results,
+        "self_reachable": ok,
+        "verdict": verdict,
+        "hint": "按顺序试：① 电脑开「移动热点」让手机连它"
+                "（地址通常是 192.168.137.1 —— 自己开的小网，没有客户端隔离，最省事）；"
+                "② 手机开热点 / USB 共享，电脑连它（纯本地流量，不花流量费）；"
+                "③ 都不方便就用「离线记」（手机记 → 导文件 → 电脑导入，不需要两台设备互相看见）。"
+                "校园网 / 公共 WiFi 常开客户端隔离（同 WiFi 但设备之间不通），"
+                "而且同网段人很多 —— **按公共网络对待**：要用就先开配对码、用完关掉。",
+        "caveat": "自检只证明「这台机器经局域网地址访问自己」这一件事；"
+                  "它**不能**证明手机那头能不能过来（那是网络策略，电脑上查不出）。",
+    }
 
 
 def banner(port: int, code: str) -> list[str]:
@@ -294,7 +356,13 @@ def banner(port: int, code: str) -> list[str]:
         "这台电脑的「设置 → 局域网访问」里也能看到）",
         "[提醒] 同一 WiFi 下的其他设备也可能访问到这个地址 —— 配对码是那道门，别念给别人；",
         "       它防的是「随手连一下」，**不是加密、也不挡同 WiFi 抓包**。",
-        "       只在同一个 WiFi 里管用，不涉及公网。",
+        "       只在同一个局域网里管用（同一个 WiFi，或你自己开的热点），不涉及公网。",
+        "[校园网] 校园网 / 公共 WiFi 常开了**客户端隔离**（看着同一个 WiFi，设备之间其实不通），",
+        "       那是网络策略、不是本软件的问题 → 改用**热点**最省事：",
+        "       电脑开「移动热点」让手机连（地址通常 192.168.137.1），",
+        "       或手机开热点 / USB 共享让电脑连。",
+        "       连不上也可以先用「离线记」：手机记 → 导文件 → 电脑导入"
+        "（不需要两台设备互相看见）。",
         "[关闭] 去掉 --lan（或把 config.toml 的 [net] allow_lan 改成 false）后重启即可。",
     ]
     return lines

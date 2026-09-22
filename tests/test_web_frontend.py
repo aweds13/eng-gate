@@ -1220,6 +1220,18 @@ def test_lan_pairing_is_wired_and_the_code_stays_home() -> None:
     for action in ("pair-ask", "pair-clear", "copy-lan", "lan-rotate"):
         assert f"'{action}':" in html, f"动作 {action} 没注册"
 
+    # ⑤ 校园网/热点场景（T-G10c，用户就是校园网）：排查顺序要**热点在前**，
+    #    并且有一支"本机自检"（查得到的查、查不到的直说）
+    assert "怎么让手机连上（按顺序试）" in setting
+    assert "移动热点" in setting and "192.168.137.1" in setting
+    assert "客户端隔离" in setting and "校园网" in setting, "要主动提校园网，别让人自己猜"
+    assert setting.index("移动热点") < setting.index("客户端隔离"), "先给能通的那条"
+    assert 'data-action="lan-selfcheck"' in setting and 'id="lanSelfCheck"' in setting
+    assert "'lan-selfcheck':" in html, "动作 lan-selfcheck 没注册"
+    check_fn = html.split("async function runLanSelfCheck(){", 1)[1].split("\n}", 1)[0]
+    assert "/api/lan/selfcheck" in check_fn and "r.hint" in check_fn and "r.caveat" in check_fn, \
+        "自检要把后端说的（hint/caveat）原样显示，不自己编结论"
+
     # ④ 代价写在界面上（离线页 + 设置页）：
     #    "不是加密、也不挡同 WiFi 抓包"这句由**后端一处给**（`core/lan.py` 的 note）——
     #    界面只负责显示，不复述规则（否则两处会漂）。后端那句由 test_lan_pairing_line.py 钉。

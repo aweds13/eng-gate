@@ -244,6 +244,58 @@ def test_banner_says_the_price_out_loud() -> None:
     for needle in ("局域网", "123456", "同一个 WiFi", "其他设备也可能", "配对码是那道门",
                    "不是加密", "不挡同 WiFi 抓包", "不涉及公网", "--lan"):
         assert needle in lines, f"横幅少了一句：{needle}"
+    # T-G10c（用户说他用的是校园网）：横幅要**提前把校园网那条讲清楚**，别让人白折腾半天
+    for needle in ("校园网", "客户端隔离", "移动热点", "离线记"):
+        assert needle in lines, f"横幅没提校园网怎么办：{needle}"
+
+
+# ---------------------------------------------------------------- 四、本机自检（T-G10c）
+def test_selfcheck_says_what_it_can_and_cannot_prove() -> None:
+    """自检只报**能在电脑上查的那一半**，查不到的（网络隔离）直说，不假装能判。"""
+    ok = lan_mod.selfcheck(8520, lan_open=True, probe=lambda url: True)
+    assert ok["self_reachable"] is True and ok["addresses"]
+    assert "防火墙" in ok["verdict"] or "通的" in ok["verdict"]
+    assert "不能" in ok["caveat"] and "手机" in ok["caveat"]
+
+    bad = lan_mod.selfcheck(8520, lan_open=True, probe=lambda url: False)
+    assert bad["self_reachable"] is False and "防火墙" in bad["verdict"]
+
+    off = lan_mod.selfcheck(8520, lan_open=False, probe=lambda url: False)
+    assert "--lan" in off["verdict"], "没开局域网时要说清是这件事，别让人去查防火墙"
+
+
+def test_selfcheck_hint_puts_the_hotspot_first() -> None:
+    """排查顺序要**先热点后校园网**：校园网多半连不通，先把省事且一定能通的那条说在前面。"""
+    hint = lan_mod.selfcheck(8520, lan_open=True, probe=lambda url: True)["hint"]
+    assert hint.index("移动热点") < hint.index("校园网")
+    for needle in ("192.168.137.1", "USB", "离线记", "客户端隔离"):
+        assert needle in hint, f"排查顺序里少了一句：{needle}"
+
+
+def test_selfcheck_endpoint_answers(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """接口层也要能问：形状齐全（lan_open / addresses / self_reachable / verdict / hint）。
+
+    它是 `/api/` 下面的一条，所以**没配对的设备会被门挡住** —— 界面也只在
+    "本机能看见配对码"时摆这颗按钮（两头一致）。
+    """
+    phone = _client(tmp_path, lan=True, name="self.db")
+    assert phone.post("/api/lan/selfcheck", json={}).status_code == 401
+    mine = TestClient(phone.app, client=MINE)
+    r = mine.post("/api/lan/selfcheck", json={})
+    assert r.status_code == 200
+    got = r.json()
+    for key in ("lan_open", "addresses", "self_reachable", "verdict", "hint", "caveat"):
+        assert key in got, f"自检少了一个字段：{key}"
+    assert got["lan_open"] is True
+
+
+def test_status_note_warns_about_campus_networks(conn) -> None:  # type: ignore[no-untyped-def]
+    """设置页显示的那段边界要**主动提校园网**（用户就是校园网，别让他自己猜）。"""
+    st = lan_mod.status(
+        conn, lan_open=True, config_allow_lan=True, port=8520, loopback=True
+    )
+    for needle in ("客户端隔离", "校园网", "热点", "不是加密"):
+        assert needle in st["note"], f"边界说明里少了一句：{needle}"
 
 
 # ---------------------------------------------------------------- 四、serve.py 真的照做

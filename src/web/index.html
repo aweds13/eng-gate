@@ -510,6 +510,27 @@ async function rotateLanCode(){
     toast('已换一个新的配对码');view(current);
   }catch(e){/* api() 已经弹过后端原话 */}
 }
+/* 本机网络自检（T-G10c）：查"手机为什么连不上"里**能在电脑上查的那一半** ——
+   有没有局域网地址、本机能不能经它访问自己（≈防火墙拦没拦）。
+   **查不到的**（校园网客户端隔离）后端会写在 `hint` 里，界面照原话显示，不自己编结论。 */
+async function runLanSelfCheck(){
+  const box=document.getElementById('lanSelfCheck');
+  if(box)box.innerHTML='<span class="meta">正在查…</span>';
+  try{
+    const r=await api('/api/lan/selfcheck',{method:'POST',body:JSON.stringify({})});
+    const rows=(r.addresses||[]).map(a=>
+      `${a.reachable?'✅':'❌'} <code>${esc(a.url)}</code>`).join(' · ');
+    if(box){
+      box.innerHTML=`<b>${r.self_reachable?'✅ 本机可达':'❌ 本机不可达'}</b>：${noteHTML(r.verdict||'')}`
+        + (rows?`<br>${rows}`:'')
+        + `<br>${noteHTML(r.hint||'')}`
+        + `<br><span class="meta">${esc(r.caveat||'')}</span>`;
+    }
+    toast(r.self_reachable
+      ? '自检：本机经局域网地址可达 ✅（手机那头还要看网络策略）'
+      : '自检：本机经局域网地址不可达 ❌ —— 多半是防火墙，或没开 --lan');
+  }catch(e){if(box)box.innerHTML='';}
+}
 let toastTimer=null;
 let modalResolve=null;
 /* 壳级模态：替代 prompt（温和、可键盘、可测试）。返回 Promise<string|null>。
@@ -644,6 +665,7 @@ const ACTIONS = {
   'pair-clear':     () => clearPair(),
   'copy-lan':       () => copyLanAddress(),
   'lan-rotate':     () => rotateLanCode(),
+  'lan-selfcheck':  () => runLanSelfCheck(),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -2658,6 +2680,14 @@ async function renderSetting(m){
       ${lan.lan_open?`<button class="ghost" data-action="copy-lan">复制手机地址</button>`:''}
       ${lan.code_visible?`<button class="ghost" data-action="lan-rotate">换一个配对码</button>`:''}</div>
     <div class="sub">${noteHTML(lan.note||'')}</div>
+    <div class="settings-sub">怎么让手机连上（按顺序试）</div>
+    <div class="sub">① <b>电脑开「移动热点」</b>，手机连它（地址通常 <code>192.168.137.1</code>）——
+      自己开的小网、没有客户端隔离，最省事；② 手机开热点 / USB 共享，电脑连它（纯本地流量，不花流量费）；
+      ③ 都不方便就用<b>「离线记」</b>（手机记 → 导文件 → 电脑导入，不需要两台设备互相看见）。</div>
+    <div class="sub">⚠️ <b>校园网 / 公共 WiFi 常开「客户端隔离」</b>：看着连的是同一个 WiFi，设备之间其实不通 ——
+      那是网络策略，不是本软件的问题；而且同网段人很多，请<b>按公共网络对待</b>（要用才开、用完就关）。</div>
+    <div class="row tight"><button class="ghost" data-action="lan-selfcheck">网络自检（在这台电脑上查）</button></div>
+    <div class="sub" id="lanSelfCheck"></div>
     <div class="settings-sub" id="set-backup">备份与恢复</div>
     <div class="meta">每次起服务/开窗口前会自动备份一份。库：${esc(bk.db||'—')}（目录 ${esc(bk.dir||'—')}）</div>
     <div class="row tight" style="margin-top:var(--sp-2)">

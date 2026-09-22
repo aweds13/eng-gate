@@ -1847,6 +1847,23 @@ evidence = [
 ]
 gaps = ""
 
+[entries."T-G10c"]
+id = "T-G10c"
+title = "G 批：校园网 / 热点场景 —— 界面按场景说实话 + 本机网络自检"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/局域网访问与配对码-T-G10b.md",
+  "text:src/timeflow/core/lan.py::def selfcheck",
+  "text:src/timeflow/core/lan.py::def reach",
+  "text:src/timeflow/core/lan.py::客户端隔离",
+  "route:POST /api/lan/selfcheck",
+  "text:src/web/index.html::怎么让手机连上（按顺序试）",
+  "text:src/web/index.html::async function runLanSelfCheck()",
+  "ui:data-action=lan-selfcheck",
+  "test:test_lan_pairing_line.py",
+]
+
 [entries."T-G10b"]
 id = "T-G10b"
 title = "G 批：跨端 ② —— 局域网访问 + 配对码（默认关；手机在同一 WiFi 下能用）"

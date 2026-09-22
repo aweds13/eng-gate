@@ -1042,7 +1042,10 @@ try {
   const setting = byId.get('main')._html;
   const needs = ['局域网访问（手机连电脑）', 'id="set-lan"', '对局域网开着',
     'http://192.168.1.23:8520', '246810', 'data-action="copy-lan"', 'data-action="lan-rotate"',
-    '只在这台电脑上显示', '同一个 WiFi'];
+    '只在这台电脑上显示', '同一个 WiFi',
+    // T-G10c（校园网/热点场景）：排查顺序与自检按钮都要真的渲染出来
+    '怎么让手机连上（按顺序试）', '移动热点', '192.168.137.1', '客户端隔离',
+    'data-action="lan-selfcheck"', 'id="lanSelfCheck"'];
   const missing = needs.filter((n) => !setting.includes(n));
 
   const wall = globalThis.__pairWall();

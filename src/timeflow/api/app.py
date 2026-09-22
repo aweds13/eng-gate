@@ -382,6 +382,17 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return _lan_status(request)
 
+    @app.post("/api/lan/selfcheck")
+    def lan_selfcheck() -> dict[str, Any]:
+        """本机网络自检（T-G10c）：把"手机为什么连不上"里**能在电脑上查的那一半**查出来。
+
+        查：这台服务开没开局域网、有哪些局域网地址、**从这台机器自己**能不能经那些地址访问自己
+        （能 = 地址在、绑定对、防火墙至少没拦本机自连）。
+        **查不到**：校园网 / 公共 WiFi 的**客户端隔离**（那是"手机 → 电脑"的事，电脑上试不出来）——
+        所以这里不假装能判，直接把排查顺序（热点优先）写进 `hint`。
+        """
+        return lan_mod.selfcheck(port, lan_open=lan_open)
+
     @app.post("/api/lan/pair")
     def pair(payload: dict[str, Any], request: Request) -> dict[str, Any]:
         """配对：拿配对码换"能读数据"。
