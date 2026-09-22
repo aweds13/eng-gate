@@ -87,6 +87,9 @@ try{applyAccent(localStorage.getItem('tf_accent'))}catch(e){}
 
 async function api(path,opts={}){
   const init={headers:{'Content-Type':'application/json'},...opts};
+  // 局域网（②）：这台设备配对过就把配对码带在头上（后端说了算，前端不自己判对错）
+  const pair=pairCode();
+  if(pair)init.headers={'Content-Type':'application/json','X-Timeflow-Pair':pair,...(opts.headers||{})};
   if(abortCtl)init.signal=abortCtl.signal;      // 同一次渲染的请求共享取消信号
   let r;
   try{
@@ -102,9 +105,17 @@ async function api(path,opts={}){
   netDown=false;
   if(!r.ok){
     let detail='';try{detail=(await r.json()).detail||''}catch(e){}
+    // 局域网这道门（②）：单独的走法 —— 不是"操作失败"，而是"这台设备还没配对"，
+    // 所以要说清去哪看配对码，并给一个输入的地方（配对接口自己不算，免得递归）
+    const isPairCall=String(path).split('?')[0]==='/api/lan/pair';
+    if(!isPairCall&&(r.status===401||r.status===429)&&String(detail).includes('配对码')){
+      pairNeeded=true;pairDetail=String(detail);
+      toast(detail);throw new Error(`${r.status} ${path}`);
+    }
     toast(detail?`操作未完成：${detail}`:'操作未完成，请稍后再试');
     throw new Error(`${r.status} ${path}`);
   }
+  if(pairNeeded){pairNeeded=false;pairDetail=''}   // 这一轮通了 → 墙可以撤了
   if(r.status===204)return null;
   const text=await r.text();
   const data=text?JSON.parse(text):null;
@@ -425,12 +436,79 @@ async function renderOffline(m){
     <div class="sub">能做：新建任务 / 勾完成与撤销完成 / 习惯打卡 / 一句备忘 / 每日反馈（都先存在本机队列）。</div>
     <div class="sub">不做：离线<b>删除</b>（删要动电脑上的墓碑，手机上判不准）、离线<b>改字段</b>（会覆盖电脑上更新的那份）、
       从电脑<b>回传</b>到手机（手机没有库，不做反向合并）、离线<b>专注计时</b>（它会牵动电脑那边的派生账目，单独做）。</div>
-    <div class="sub">还有一件事：手机现在<b>打不开这个应用</b>（服务只监听本机）——
-      要让手机真的能打开，得先做「同一 WiFi 直连」（场景 ②，默认关）。在那之前，
-      可以先用电脑浏览器的开发者工具切到 Offline 模式，把这一页走一遍。</div>
+    <div class="sub">手机要<b>打开</b>这个应用，得先在电脑上<b>显式开</b>局域网访问
+      （<code>python tools/serve.py --lan</code>，默认关）—— 第一次打开会问<b>配对码</b>
+      （在电脑的设置页「局域网访问」里看）。只在同一个 WiFi 里管用，不涉及公网。</div>
   </div>`;
   defaultDateFields(['offDue']);
   paintOfflineBar();
+}
+
+/* ---------- 局域网访问 + 配对码（SR-NF17 / G 批 · T-G10b = 跨端场景 ②）----------
+ * 口径来源：`复盘/口径定案-待定清单.md` §3 —— 服务**显式开启**局域网访问（默认关）+ **配对码**；
+ * 边界：**只在同一个 WiFi 里管用**，不涉及公网。
+ *
+ * 界面这边只有两件事：
+ *   ① 把配对码带在每个请求头上（`X-Timeflow-Pair`）—— **对不对由后端说了算**，前端不自己判；
+ *   ② 被那道门拒了（401）时，**说清"去哪看配对码"并给一个输入的地方** ——
+ *      不要只说一句"操作未完成"（那会让人以为是软件坏了）。
+ *
+ * 为什么是"配对墙 + 按钮"而不是开机就弹输入框：没配对时整页本来就拉不到数据（会空），
+ * 空页上再弹一个框最像故障；先把"发生了什么、码在哪"写在页面上，再让人点。
+ */
+const PAIR_KEY='tf_pair';
+let pairNeeded=false;      // 上一次请求是被那道门拒的（不是操作失败）
+let pairDetail='';         // 后端给的原话（界面不复述规则，只转述）
+let pairAsking=false;      // 防止重复弹（并发请求会一起 401）
+function pairCode(){try{return localStorage.getItem(PAIR_KEY)||''}catch(e){return ''}}
+function setPairCode(v){try{v?localStorage.setItem(PAIR_KEY,v):localStorage.removeItem(PAIR_KEY)}catch(e){}}
+function pairWallHTML(){
+  return `<div class="card panel-card" id="pairWall">
+    <div class="title">这台设备还没和电脑配对</div>
+    <div class="meta">${esc(pairDetail||'电脑那边开着局域网访问，但没收到这台设备的配对码。')}</div>
+    <div class="sub">配对码在<b>那台电脑</b>的「设置 → 局域网访问」里（起服务时也打印在电脑屏幕上）。
+      它<b>只在那台电脑上显示、不通过网络发过来</b> —— 所以只能手敲一次；敲对了以后不再问。</div>
+    <div class="row tight"><button data-action="pair-ask">输入配对码</button>
+      <button class="ghost" data-action="pair-clear">清掉本机记住的配对码</button></div>
+  </div>`;
+}
+/** 问一次配对码并**用真请求验证**：验过才算数（错的不留在本机）。 */
+async function askPair(){
+  if(pairAsking)return;
+  pairAsking=true;
+  try{
+    const got=await ask('输入电脑上显示的配对码：',pairCode());
+    if(got===null)return;
+    const code=String(got).trim();
+    if(!code){toast('配对码不能是空的');return}
+    try{
+      await api('/api/lan/pair',{method:'POST',body:JSON.stringify({code})});
+      setPairCode(code);pairNeeded=false;pairDetail='';
+      toast('配对成功 —— 这台设备可以用了');
+      view(current);
+    }catch(e){
+      // 后端说不对（401/429）→ 不留一个错的码在本机；断网则先记着，等能连上再试
+      if(!(e&&e.__offline))setPairCode('');
+      view(current);
+    }
+  } finally{pairAsking=false}
+}
+function clearPair(){setPairCode('');pairNeeded=true;pairDetail='';toast('已清掉本机记住的配对码');view(current)}
+/** 复制手机该敲的地址（打错一个字符就连不上，所以让它可复制）。 */
+async function copyLanAddress(){
+  const list=(lanCfg&&lanCfg.addresses)||[];
+  if(!list.length){toast('没查到局域网地址：确认这台电脑连着 WiFi / 网线');return}
+  const ok=await copyText(list[0]);
+  toast(ok?`已复制：${list[0]}`:`地址是 ${list[0]}（复制没成功，手抄一下）`);
+}
+/** 换一个配对码（**只有那台电脑能换** —— 手机上调会 403，界面上不摆这个按钮）。 */
+async function rotateLanCode(){
+  const ok=await confirmAsk('换一个配对码？\n换完，已经配对过的设备要重新输入新码。','换一个');
+  if(!ok)return;
+  try{
+    await api('/api/settings/lan',{method:'PUT',body:JSON.stringify({pairing_code:''})});
+    toast('已换一个新的配对码');view(current);
+  }catch(e){/* api() 已经弹过后端原话 */}
 }
 let toastTimer=null;
 let modalResolve=null;
@@ -560,6 +638,12 @@ const ACTIONS = {
   'offline-export': () => offlineExport(),
   'offline-copy':   () => offlineCopy(),
   'offline-clear':  () => offlineClear(),
+  // 局域网访问 + 配对码（SR-NF17 / G 批 · T-G10b = 场景 ②）：配对墙上的两个动作 +
+  // 复制手机地址 / 换配对码（后者只有那台电脑能调，手机上调会 403）
+  'pair-ask':       () => askPair(),
+  'pair-clear':     () => clearPair(),
+  'copy-lan':       () => copyLanAddress(),
+  'lan-rotate':     () => rotateLanCode(),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -726,6 +810,8 @@ async function render(name){
     if(name==='offline')return paint(renderOffline);
   }catch(err){
     if(err&&err.name==='AbortError')return;      // 被下一次点击取消：不是错误
+    // 没配对（局域网那道门）：整页拉不到数据 —— 那就把"墙"画出来，而不是留一片空白
+    if(pairNeeded&&mySeq===renderSeq){m.innerHTML=pairWallHTML();return}
     console.error(err);
   }
 }
@@ -2279,6 +2365,9 @@ async function delGuardDnd(win){
 let backupCache=null;
 // AI 接口（SR-F7.3 / G 批 · T-G6）：设置页那一节的数据缓存（开关状态 + 边界自述）
 let aiCfg=null;
+// 局域网访问（SR-NF17 / G 批 · T-G10b · 场景 ②）：设置页那一节的数据缓存
+// （这台服务开没开、手机该敲哪个地址、配对码 —— 配对码只有本机请求才拿得到）
+let lanCfg=null;
 function sizeLabel(n){
   const b=Number(n)||0;
   return b<1024?`${b}B`:b<1048576?`${(b/1024).toFixed(0)}KB`:`${(b/1048576).toFixed(1)}MB`;
@@ -2301,15 +2390,16 @@ async function restoreBackup(name){
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg,vocabCfg,expCfg,aiData]=await Promise.all([
+  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg,vocabCfg,expCfg,aiData,lanData]=await Promise.all([
     api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach'),
     api('/api/settings/reminder'),api('/api/focus/guard'),api('/api/settings/backups'),
     api('/api/settings/archive'),api('/api/settings/behavior'),api('/api/settings/vocab'),
-    api('/api/settings/export'),api('/api/settings/ai')]);
+    api('/api/settings/export'),api('/api/settings/ai'),api('/api/settings/lan')]);
   groupCache=groups||[];
   guardCache=guardCfg||null;
   backupCache=backups||null;
   aiCfg=aiData||null;
+  lanCfg=lanData||null;
   const off=!navigator.onLine;
   const guard=guardCache||{block_by_default:true,whitelist:[],do_not_disturb:[],
     note:'',window_format:'HH:MM-HH:MM',max_items:50};
@@ -2326,6 +2416,9 @@ async function renderSetting(m){
   // AI 接口（T-G6）：缺字段就退回"关着 + 空表"（整页不空）
   const ai=aiCfg||{enabled:false,default_enabled:false,configured:false,surface:[],boundary:'',
     why:'',note:'',example:''};
+  // 局域网访问（T-G10b / 场景 ②）：缺字段就退回"只监听本机"（整页不空）
+  const lan=lanCfg||{lan_open:false,config_allow_lan:false,pairing_required:false,addresses:[],
+    code:'',code_visible:false,note:''};
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
     `<button class="swatch ${sameColor(accentChoice,c)?'on':''}" data-action="set-accent" data-color="${c}"
@@ -2340,7 +2433,8 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-behavior">口径与回退</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-remind">提醒</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-sync">数据与同步</button>
-      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-offline">手机离线记</button></div>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-offline">手机离线记</button>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-lan">局域网访问</button></div>
   </div>
   <div class="section-title" id="set-appearance">外观</div>
   <div class="card panel-card">
@@ -2549,6 +2643,21 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="offline">打开「离线记」这一页</button></div>
     <div class="sub">这一页在断网时也能打开（它就是为断网准备的）；手机上要真的打开这个应用，
       还得先做「同一 WiFi 直连」（默认关，还没做）——现在可以在电脑浏览器的离线模式里用它。</div>
+    <div class="settings-sub" id="set-lan">局域网访问（手机连电脑）</div>
+    <div class="title">${lan.lan_open?'这台服务已对局域网开着':'这台服务只监听本机（手机连不上）'}</div>
+    <div class="meta">${lan.lan_open
+      ? `手机 / 平板打开下面这个地址，第一次会让你输配对码：${(lan.addresses||[]).length
+          ? (lan.addresses||[]).map(a=>`<code>${esc(a)}</code>`).join(' · ') : '（没查到局域网地址：确认这台电脑连着 WiFi / 网线）'}`
+      : '要让它能被手机打开：在电脑上用 <code>python tools/serve.py --lan</code> 起一次，或把 config.toml 的 <code>[net] allow_lan</code> 改成 true 后重启。'}</div>
+    <div class="meta">配置里写的是：${lan.config_allow_lan?'开':'关'}（和上面"这台服务"可能不一致 —— 以服务为准）</div>
+    <div class="settings-sub">配对码</div>
+    <div class="meta">${lan.code_visible&&lan.code
+      ? `本机配对码 <code>${esc(lan.code)}</code>（<b>只在这台电脑上显示</b>，手机上看不到）`
+      : '只在那台电脑上显示（这台设备看不到 —— 这是故意的）'}</div>
+    <div class="row tight">
+      ${lan.lan_open?`<button class="ghost" data-action="copy-lan">复制手机地址</button>`:''}
+      ${lan.code_visible?`<button class="ghost" data-action="lan-rotate">换一个配对码</button>`:''}</div>
+    <div class="sub">${noteHTML(lan.note||'')}</div>
     <div class="settings-sub" id="set-backup">备份与恢复</div>
     <div class="meta">每次起服务/开窗口前会自动备份一份。库：${esc(bk.db||'—')}（目录 ${esc(bk.dir||'—')}）</div>
     <div class="row tight" style="margin-top:var(--sp-2)">

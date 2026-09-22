@@ -19,6 +19,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -31,6 +32,7 @@ from timeflow.core import behavior, insights, syncpack, vault
 from timeflow.core import facts as facts_mod
 from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
+from timeflow.core import lan as lan_mod
 from timeflow.core import memo as memo
 from timeflow.core import remind as remind_mod
 from timeflow.core import review as rv
@@ -143,12 +145,26 @@ _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "0.0.0.0"}
 
 
 def require_local_origin(request: Request) -> None:
+    """只接受本机页面调用（**或已配对的同一 WiFi 设备** —— 跨端场景 ②）。
+
+    为什么需要这道守卫：服务开着 CORS，若不看来源，随便一个网页都能让本机去开文件 / 改设置
+    （localhost 服务被跨站调用的经典风险。跨站页面**发不出**配对码，所以配对过的来源是可信的）。
+    为什么"配对过就当作本机页面"：局域网开着时，手机就是"你在用这个工具"的另一只手；
+    该问的是"你是不是本人"，而配对码已经回答了（见 `core/lan.py`）。
+    """
     origin = request.headers.get("origin")
     if not origin:
         return  # 无 Origin：本机脚本 / curl / 同源 GET —— 放行
     host = urlsplit(origin).hostname
-    if host not in _LOOPBACK_HOSTS:
-        raise HTTPException(status_code=403, detail="这个接口只允许本机页面调用")
+    if host in _LOOPBACK_HOSTS:
+        return
+    if getattr(request.state, "paired", False):
+        return  # 已配对（配对码对过）：当作本机页面
+    if getattr(request.state, "lan_open", False):
+        raise HTTPException(
+            status_code=403, detail="这个接口只允许本机页面调用（这台设备还没和电脑配对）"
+        )
+    raise HTTPException(status_code=403, detail="这个接口只允许本机页面调用")
 
 
 def _out(
@@ -212,8 +228,19 @@ def _out(
     )
 
 
-def create_app(db_path: str | None = None) -> FastAPI:
+def create_app(
+    db_path: str | None = None, *, allow_lan: bool | None = None, port: int = 8520
+) -> FastAPI:
+    """建应用。
+
+    `allow_lan`（跨端场景 ②）：**这台服务是否对局域网开着**。
+    默认取 `[net] allow_lan`（默认 false）。由**启动方**
+    （`tools/serve.py` / `app/main.py`）传进来 —— 因为它和"绑哪个地址"必须是**同一个决定**：
+    只有真的绑了 `0.0.0.0`，配对门才有意义；反过来，门开着但只绑回环，也谈不上风险。
+    `port` 只用于界面上拼"手机该敲哪个地址"。
+    """
     settings = load_settings()
+    lan_open = settings.net.allow_lan if allow_lan is None else bool(allow_lan)
     # 解析后的库路径：计划任务的 `--db` 要用**绝对路径**（任务的工作目录不是项目根）
     db_path = db_path or settings.database.path
     # 并发约定（见 storage/db.py）：HTTP 服务多线程共享 conn 变量，但底层**每线程一个连接**，
@@ -246,6 +273,29 @@ def create_app(db_path: str | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def lan_gate(request: Request, call_next: Any) -> Any:
+        """局域网（②）的门：**开着时**非本机请求必须带配对码；关着时这段是空操作。
+
+        判定本身是纯函数（`core/lan.gate`），所以能用真值表一条条测（见
+        `tests/test_lan_pairing_line.py`）。这里只负责：取客户端地址 → 问门 → 要么放行
+        （并把 `paired` 记进 `request.state`，给 `require_local_origin` 用）要么回原文。
+        """
+        request.state.lan_open = lan_open
+        request.state.paired = False
+        if lan_open:
+            host = request.client.host if request.client else None
+            decision = lan_mod.gate(
+                conn, host, request.url.path, lan_mod.read_code_from(request)
+            )
+            if not decision["ok"]:
+                return JSONResponse(
+                    {"detail": str(decision.get("detail") or "")},
+                    status_code=int(decision["status"]),
+                )
+            request.state.paired = bool(decision.get("paired"))
+        return await call_next(request)
 
     @app.middleware("http")
     async def log_key_paths(request: Request, call_next: Any) -> Any:
@@ -295,6 +345,63 @@ def create_app(db_path: str | None = None) -> FastAPI:
             "theme": settings.app.theme,
             "gpa_scale": settings.academic.gpa_scale,
         }
+
+    # ---- 局域网访问 + 配对码（SR-NF17 / G 批 · T-G10b = 跨端场景 ②）----
+    # 三条接口，口径都是一处：`core/lan.py`。
+    def _lan_status(request: Request) -> dict[str, Any]:
+        host = request.client.host if request.client else None
+        return lan_mod.status(
+            conn,
+            lan_open=lan_open,
+            config_allow_lan=settings.net.allow_lan,
+            port=port,
+            loopback=lan_mod.is_loopback(host),
+        )
+
+    @app.get("/api/settings/lan")
+    def get_lan(request: Request) -> dict[str, Any]:
+        """局域网现状。★ **配对码只在回环请求里出现** —— 这是这道门的底线。
+
+        局域网设备能读数据，但读不到"钥匙"本身（否则随便谁配一次就把它传出去了）。
+        非本机请求时 `code` 是空串、`code_visible=false`，界面据此显示
+        「配对码只能在那台电脑上看」。
+        """
+        return _lan_status(request)
+
+    @app.put("/api/settings/lan")
+    def put_lan(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """改配对码（**只有那台电脑能改**）：传 `pairing_code` = 换成它；传空 = 换一个新的。"""
+        require_local_origin(request)
+        host = request.client.host if request.client else None
+        if not lan_mod.is_loopback(host):
+            raise HTTPException(status_code=403, detail="配对码只能在那台电脑上改（这是故意的）")
+        raw = payload.get("pairing_code")
+        try:
+            lan_mod.rotate(conn, None if raw in (None, "") else str(raw))
+        except ValueError as exc:  # 非法值 → 400 带原话，不静默回落
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _lan_status(request)
+
+    @app.post("/api/lan/pair")
+    def pair(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """配对：拿配对码换"能读数据"。
+
+        这个接口**没有** origin 守卫（它就是给"还没配对的设备"用的），
+        但有失败节流（连续错太多次锁一会儿）—— 见 `core/lan.py`。
+        """
+        if not lan_open:
+            raise HTTPException(
+                status_code=409,
+                detail="这台服务没有开局域网访问（本机自己不需要配对）—— "
+                       "在电脑上用 `python tools/serve.py --lan` 起，或把 config.toml 的 "
+                       "[net] allow_lan 改成 true。",
+            )
+        host = request.client.host if request.client else None
+        got = payload.get("code")
+        out = lan_mod.check_pair(conn, host, None if got is None else str(got))
+        if not out["ok"]:
+            raise HTTPException(status_code=int(out["status"]), detail=str(out["detail"]))
+        return {"ok": True, "detail": out["detail"], "header": lan_mod.HEADER}
 
     @app.get("/api/tasks")
     def list_tasks(view: str | None = None) -> list[TaskOut]:

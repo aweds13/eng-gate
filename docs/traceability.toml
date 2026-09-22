@@ -607,19 +607,24 @@ gaps = ""
 id = "SR-F9.2"
 title = "跨端同步用「修改时间戳 + version」LWW（不静默覆盖）+ 同 id 去重"
 group = "F9"
-status = "partial"
+status = "done"
 evidence = [
   "text:src/timeflow/core/sync.py::def newer_is_win",
   "text:src/timeflow/core/sync.py::def log_conflict",
   "text:src/timeflow/core/syncpack.py::def merge_pack",
   "text:src/timeflow/core/syncpack.py::def export_pack",
+  "text:src/web/offline.js::TFOffline",
+  "text:src/timeflow/core/lan.py::def gate",
   "route:GET /api/sync/status",
   "route:POST /api/sync/tasks",
   "route:POST /api/sync/export",
   "route:POST /api/sync/import",
+  "route:POST /api/lan/pair",
   "test:test_sync_pack_line.py",
+  "test:test_offline_phone_line.py",
+  "test:test_lan_pairing_line.py",
 ]
-gaps = "**场景 ③ 已落地**（2026-09-22，T-G8）：同步包格式 + LWW/去重/冲突留痕 + 导出/导入入口 + 删除墓碑。**场景 ① 也已落地**（2026-09-23，T-G10）：手机离线队列 + 同格式包导出（仍走文件、由电脑合并）。**仍缺 ②**：同一 WiFi 直连（GAP-F9-01，默认关 + 配对码）—— 口径已定（③→①→②），按顺序做"
+gaps = ""
 
 [entries."SR-F9.3"]
 id = "SR-F9.3"
@@ -865,7 +870,12 @@ id = "SR-NF16"
 title = "本地优先、隐私最小：数据本地存储、不出本地"
 group = "NF"
 status = "done"
-evidence = ["text:src/timeflow/app/main.py::127.0.0.1", "text:tools/serve.py::回环"]
+evidence = [
+  "text:src/timeflow/app/main.py::127.0.0.1",
+  "text:tools/serve.py::回环",
+  "text:src/timeflow/config.py::allow_lan: bool = False",
+  "test:test_lan_pairing_line.py",
+]
 gaps = ""
 
 [entries."SR-NF17"]
@@ -881,6 +891,14 @@ evidence = [
   "text:src/web/offline.js::indexedDB",
   "text:src/web/index.html::function renderOffline(m)",
   "text:src/web/index.html::function paintOfflineBar()",
+  "text:src/web/index.html::function pairWallHTML()",
+  "text:src/timeflow/core/lan.py::def gate",
+  "text:src/timeflow/core/lan.py::code_visible",
+  "route:GET /api/settings/lan",
+  "route:PUT /api/settings/lan",
+  "route:POST /api/lan/pair",
+  "ui:data-action=pair-ask",
+  "test:test_lan_pairing_line.py",
   "ui:view=offline",
   "ui:data-action=offline-export",
   "test:test_offline_phone_line.py",
@@ -1831,13 +1849,27 @@ gaps = ""
 
 [entries."T-G10b"]
 id = "T-G10b"
-title = "跨端 ②：同一 WiFi 直连（服务显式开局域网 + 配对码，默认关）"
+title = "G 批：跨端 ② —— 局域网访问 + 配对码（默认关；手机在同一 WiFi 下能用）"
 group = "PROCESS"
-status = "todo"
+status = "done"
 evidence = [
-  "file:复盘/手机离线记-T-G10.md",
+  "file:复盘/局域网访问与配对码-T-G10b.md",
+  "text:src/timeflow/core/lan.py::def gate",
+  "text:src/timeflow/core/lan.py::def banner",
+  "text:src/timeflow/config.py::class NetConfig",
+  "text:src/timeflow/api/app.py::async def lan_gate",
+  "text:tools/serve.py::--lan",
+  "text:src/timeflow/app/main.py::allow_lan=lan",
+  "text:config.example.toml::allow_lan = false",
+  "text:src/web/index.html::function pairWallHTML()",
+  "route:GET /api/settings/lan",
+  "route:PUT /api/settings/lan",
+  "route:POST /api/lan/pair",
+  "ui:data-action=pair-ask",
+  "ui:data-action=lan-rotate",
+  "test:test_lan_pairing_line.py",
+  "test:test_web_frontend.py",
 ]
-gaps = "口径已定（定案 §3 场景 ②）：服务支持**显式开启**局域网访问（默认关，口径同 N16「默认收严、用户再放宽」）+ **配对码**；开启时明确提示「同一 WiFi 下其他设备也可能访问到」。边界：只在同一个 WiFi 里管用，不涉及公网。**这一条不做，手机就打不开这个应用**（服务现在只监听回环）—— ① 的离线队列只能先在电脑浏览器的 Offline 模式里验。技术要点：`tools/serve.py` 目前只允许回环（`SR-NF14` 的守卫），要加一条显式开关 + 提示，别把默认放开"
 
 [entries."T-G11"]
 id = "T-G11"

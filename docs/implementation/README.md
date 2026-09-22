@@ -37,6 +37,7 @@
 | `src/timeflow/core/memo/` | 备忘录 + 知识资产引用句柄 + 产出/手动投入事实 | SR-F8 |
 | `src/timeflow/storage/` | SQLite 数据层 + schema 迁移（v17） + 备份/恢复 | SR-F9 |
 | `src/timeflow/core/syncpack.py` | 跨端同步包（`timeflow-sync` v1）+ **先规划后执行**的合并 + 冲突留痕 | SR-F9.2 |
+| `src/timeflow/core/lan.py` | 局域网访问的开关、**配对码**与那道门（判定是纯函数；默认关） | SR-NF17 / SR-NF16 |
 | `src/timeflow/core/ai.py` | AI 接口的边界与守卫（只读 + 新增 + 只能勾自己建的；默认关） | SR-F7.3 |
 | `src/timeflow/config.py` | 配置加载 + 校验（pydantic / env 覆盖） | SR-NF14 |
 | `src/timeflow/getaways/` | 知识资产/学校通知等外部集成（**预留占位**） | SR-F8.2, SR-F10 |

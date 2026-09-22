@@ -354,6 +354,91 @@ def live_offline_checks(base: str, tmp: Path) -> dict[str, bool]:
     return checks
 
 
+def _lan_json(base: str, path: str, method: str = "GET",
+              payload: dict | None = None, headers: dict | None = None, timeout: int = 3):
+    """打局域网地址用的 HTTP（**绕开系统代理** —— 否则 192.168.x 会被丢给代理，白测一场）。"""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(f"{base}{path}", data=data, method=method)
+    req.add_header("Content-Type", "application/json")
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
+    def _body(raw: bytes) -> object:
+        try:
+            return json.loads(raw.decode("utf-8") or "null")
+        except (ValueError, UnicodeDecodeError):
+            return None      # 静态壳回的是 HTML —— 这一路只看状态码
+
+    try:
+        with opener.open(req, timeout=timeout) as resp:
+            return resp.status, _body(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, _body(e.read())
+    except (urllib.error.URLError, OSError):
+        return 0, None      # 连不上（防火墙 / 没有局域网地址）—— 由调用方决定怎么报
+
+
+def live_lan_checks(tmp: Path, port: int = 8531) -> dict[str, bool]:
+    """T-G10b 真机自检：**真起一个绑 0.0.0.0 的服务**，再从本机的**局域网地址**访问它。
+
+    本环境没有第二台设备，所以拿"本机局域网 IP"当"别人" —— 这已经够了：
+    服务看到的**来源地址不是回环**，走的就是手机那条路（静态壳能开 → 数据要配对码 →
+    配对后能读 → 配对码不会通过局域网漏出去）。
+
+    连不上自己的局域网地址（没连网 / 防火墙拦了）→ 打印 `[SKIP]` **明说跳过**，
+    不谎报"通过"（`checks` 里不加条目，退出码不受影响）。
+    """
+    from timeflow.core import lan as lan_mod
+
+    app = create_app(str(tmp / "lan_live.db"), allow_lan=True, port=port)
+    server = uvicorn.Server(
+        uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")  # noqa: S104
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+
+    local = f"http://127.0.0.1:{port}"
+    code = (_json_call(local, "/api/settings/lan")[1] or {}).get("code") or ""
+    addrs = [a for a in lan_mod.local_addresses(port) if "127." not in a]
+    reachable = ""
+    for addr in addrs:
+        if _lan_json(addr, "/")[0] == 200:
+            reachable = addr
+            break
+    if not reachable:
+        print(f"  [SKIP] 局域网真机检查：这台机器连不上自己的局域网地址"
+              f"（{addrs or '没查到地址'}）—— 本机防火墙/网络原因，未验证（不算通过）")
+        server.should_exit = True
+        thread.join(timeout=10)
+        return {}
+
+    shell = _lan_json(reachable, "/")[0]
+    blocked_code, blocked = _lan_json(reachable, "/api/health")
+    pair_bad = _lan_json(reachable, "/api/lan/pair", "POST", {"code": "000000"})[0]
+    paired = _lan_json(reachable, "/api/lan/pair", "POST", {"code": code})[0]
+    auth = {"X-Timeflow-Pair": code}
+    ok_code, health = _lan_json(reachable, "/api/health", headers=auth)
+    seen_code = (_lan_json(reachable, "/api/settings/lan", headers=auth)[1] or {}).get("code")
+    local_ok = _json_call(local, "/api/health")[0] == 200   # 本机自己不受影响（关服务之前问）
+    server.should_exit = True
+    thread.join(timeout=10)
+
+    detail = (blocked or {}).get("detail", "") if isinstance(blocked, dict) else ""
+    return {
+        "局域网：静态壳能打开（否则手机没处输配对码）": shell == 200,
+        "局域网：没配对读不到数据（401 + 原话）": blocked_code == 401 and "配对码" in str(detail),
+        "局域网：错码被拒": pair_bad == 401,
+        "局域网：对码配对成功": paired == 200,
+        "局域网：配对后能读数据": ok_code == 200 and isinstance(health, dict),
+        "局域网：配对码不会通过局域网漏出去": seen_code == "",
+        "局域网：本机自己不受影响": local_ok,
+    }
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="r2_"))
     ok, detail = check_js_syntax(tmp)
@@ -427,6 +512,7 @@ def main() -> int:
     checks.update(live_ai_checks(base))
     checks.update(live_sync_checks(base, tmp))
     checks.update(live_offline_checks(base, tmp))
+    checks.update(live_lan_checks(tmp))
     for name, passed in checks.items():
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")
     server.should_exit = True

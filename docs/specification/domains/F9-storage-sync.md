@@ -40,6 +40,12 @@
     范围（v1）：新建任务 / 勾完成与撤销完成 / 习惯打卡 / 备忘 / 每日反馈；
     **不做**：离线删除、离线改字段、从电脑回传到手机、离线专注计时（会牵动电脑侧派生账目，单独一张卡）。
     手机要**打开**这个应用仍需场景 ②（同一 WiFi 直连，默认关）。见 `契约 OP-49`。
+  - **落地（2026-09-23，G 批 · T-G10b = 场景 ②：同一 WiFi 直连 + 配对码）**：服务**显式开启**
+    局域网访问（`[net] allow_lan`，默认 false；或 `python tools/serve.py --lan`）→ 绑 `0.0.0.0`
+    + 装**配对码那道门**（非本机请求要带 `X-Timeflow-Pair`，否则 401 带原话；
+    静态壳与 `/api/lan/pair` 免检）。**配对码只在本机（回环）响应里出现**，换码也只允许本机。
+    边界：只在同一个 WiFi 里管用、不涉及公网；**不是加密、也不挡同 WiFi 抓包**。见 `契约 OP-50`；
+    复盘 `../../../复盘/局域网访问与配对码-T-G10b.md`。**至此 ③①② 三步全部落地。**
 - **R4 去重**：同 id + 来源标记；重复导入幂等。
   - **落地**：三类表三套规则 —— **LWW 行**（tasks/habits/groups/course_assessments/review_items/
     team_assignments/feedback_logs/memos）、**只增行**（facts/focus_sessions/courses/grades/

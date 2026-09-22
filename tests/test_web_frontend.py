@@ -1176,3 +1176,55 @@ def test_mobile_offline_capture_is_wired_and_honest() -> None:
     # 样式只住 app.css（R1）
     css = WEB_CSS.read_text(encoding="utf-8")
     assert ".offline-bar {" in css and ".offline-bar[hidden]" in css
+
+
+def test_lan_pairing_is_wired_and_the_code_stays_home() -> None:
+    """T-G10b（SR-NF17 场景 ②）：局域网访问 + 配对码在界面上的那一半。
+
+    四条口径：
+    ① 配对码带在每个请求的**头上**（`X-Timeflow-Pair`），**对不对由后端说了算** ——
+       前端不自己判、更不把"看起来对的码"留在本机；
+    ② 没配对时不是"空页 + 一句操作失败"，而是**整页的配对墙**：说清发生了什么、码在哪；
+    ③ 设置页那一节要**跟着后端的事实**走：开着才给地址、**本机才显示配对码**
+       （非本机时界面上必须写"看不到，这是故意的"，且不摆"换一个"那颗只有本机才该有的按钮）；
+    ④ 代价写在界面上（同一 WiFi 下别的设备也可能访问到 / 不是加密）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+
+    # ① 头上带码 + 只有"配对码"这一类 401 才走配对流程
+    api_fn = _fn_body(html, "api")
+    assert "function pairCode()" in html and "PAIR_KEY='tf_pair'" in html
+    assert "X-Timeflow-Pair" in api_fn and "pairCode()" in api_fn
+    assert "isPairCall" in api_fn, "配对接口自己不能再触发配对流程（会递归）"
+    assert "pairNeeded=true" in api_fn and "pairNeeded=false" in api_fn
+    # ② 配对墙 + 输入 + 清掉本机记的码
+    render_fn = _fn_body(html, "render")
+    assert "pairNeeded&&mySeq===renderSeq" in render_fn and "pairWallHTML()" in render_fn
+    wall = html.split("function pairWallHTML(){", 1)[1].split("\n}", 1)[0]
+    for needle in ('id="pairWall"', "pair-ask", "pair-clear", "只在那台电脑上显示"):
+        assert needle in wall, f"配对墙缺少 {needle}"
+    ask_fn = html.split("async function askPair(){", 1)[1].split("\n}", 1)[0]
+    assert "/api/lan/pair" in ask_fn, "验码必须问后端（前端不自己判）"
+    assert "setPairCode('')" in ask_fn, "后端说不对就不该把错的码留在本机"
+
+    # ③ 设置页那一节：跟后端事实走
+    setting = html.split("async function renderSetting(m){", 1)[1].split("\n}", 1)[0]
+    assert 'id="set-lan"' in setting and "局域网访问（手机连电脑）" in setting
+    assert "api('/api/settings/lan')" in setting, "这一节的数据要来自后端"
+    assert "lan.code_visible" in setting and "lan.code_visible?'':" not in setting
+    for needle in ("这是故意的", "copy-lan", "lan-rotate", "lan.lan_open"):
+        assert needle in setting, f"设置页那一节缺少 {needle}"
+    # 不是本机就不摆"换一个"（后端也会 403 —— 两头一致）
+    assert re.search(r"lan\.code_visible\?`<button[^`]*lan-rotate", setting), \
+        "「换一个配对码」只该在本机出现"
+    for action in ("pair-ask", "pair-clear", "copy-lan", "lan-rotate"):
+        assert f"'{action}':" in html, f"动作 {action} 没注册"
+
+    # ④ 代价写在界面上（离线页 + 设置页）：
+    #    "不是加密、也不挡同 WiFi 抓包"这句由**后端一处给**（`core/lan.py` 的 note）——
+    #    界面只负责显示，不复述规则（否则两处会漂）。后端那句由 test_lan_pairing_line.py 钉。
+    assert "同一个 WiFi" in html and "不涉及公网" in html
+    assert "noteHTML(lan.note" in setting, "设置页要显示后端给的边界说明"
+    offline_view = html.split("async function renderOffline(m){", 1)[1]
+    assert "--lan" in offline_view, "离线页要告诉人：手机能打开它靠的是 --lan（默认关）"
+

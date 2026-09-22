@@ -389,6 +389,13 @@ const DB = {
     ],
     example: 'curl http://127.0.0.1:8000/api/ai/ping',
   },
+  // 局域网访问 + 配对码（SR-NF17 / G 批 · T-G10b / 场景 ②）
+  '/api/settings/lan': {
+    lan_open: true, config_allow_lan: true, pairing_required: true,
+    addresses: ['http://192.168.1.23:8520'], code: '246810', code_visible: true,
+    header: 'X-Timeflow-Pair',
+    note: '局域网访问只在**同一个 WiFi 里**管用，不涉及公网；配对码是那道门。',
+  },
   '/api/sync/status': {
     file_sync: true, network_sync: false, device_id: 'probe-device-1', tombstones: 2,
     conflict_logs: 3,
@@ -422,7 +429,8 @@ try {
 try {
   new Function(code + '\n;globalThis.__view=view;globalThis.__showDetail=showDetail;'
     + 'globalThis.__render=render;globalThis.__setEdit=v=>{detailEditing=v};'
-    + 'globalThis.__setDoneOpen=v=>{doneOpen=v};globalThis.__setReviewEdit=v=>{reviewEdit=v};')();
+    + 'globalThis.__setDoneOpen=v=>{doneOpen=v};globalThis.__setReviewEdit=v=>{reviewEdit=v};'
+    + 'globalThis.__pairWall=pairWallHTML;')();
 } catch (e) {
   console.log(`❌ 脚本求值就抛错：${e.message}`);
   process.exit(1);
@@ -451,6 +459,7 @@ let vocabBad = 0;
 let heatmapBad = 0;
 let exportBad = 0;
 let offlineBad = 0;
+let lanBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -995,7 +1004,7 @@ try {
   const needs = ['手机离线记', 'id="offlineStatus"', 'id="offlineQueue"', '离线记一笔',
     'offline-task-add', 'offline-memo-add', 'offline-feedback-save', 'offline-export',
     'offline-copy', 'offline-clear', '待同步（2）', '备忘 · 探针离线记一条',
-    '习惯打卡 · 2026-09-23', '<b>不会清空</b>队列', '<b>重复导入是安全的</b>', '同一 WiFi 直连',
+    '习惯打卡 · 2026-09-23', '<b>不会清空</b>队列', '<b>重复导入是安全的</b>', '同一个 WiFi',
     '会写进包里'];
   const missing = needs.filter((n) => !html.includes(n));
   const packed = await OFF.packOnce();
@@ -1020,6 +1029,71 @@ try {
   console.log(`  ❌ offline·手机离线记 渲染抛错: ${e.message}`);
 }
 
+/* 局域网访问 + 配对码（SR-NF17 / G 批 · T-G10b / 场景 ②）：两块都要真渲染 ——
+   ① 设置页那一节（开着时给地址 + 本机可见的配对码 + 两个按钮）；
+   ② **配对墙**：把 fetch 换成"回 401 说没配对"，看整页是不是真变成那面墙，
+      再把 fetch 换回来，看墙是不是自己撤了（这一串就是手机上第一次连电脑的走法）。
+   ③ 反证：非本机请求拿不到配对码时，那一节**不许**显示码、也不许摆"换一个"（那是本机才有的动作）。 */
+const lanChecks = [];
+try {
+  byId.get('main')._html = '';
+  await globalThis.__view('setting');
+  await sleep(40);
+  const setting = byId.get('main')._html;
+  const needs = ['局域网访问（手机连电脑）', 'id="set-lan"', '对局域网开着',
+    'http://192.168.1.23:8520', '246810', 'data-action="copy-lan"', 'data-action="lan-rotate"',
+    '只在这台电脑上显示', '同一个 WiFi'];
+  const missing = needs.filter((n) => !setting.includes(n));
+
+  const wall = globalThis.__pairWall();
+  const wallNeeds = ['id="pairWall"', '这台设备还没和电脑配对', '输入配对码', 'pair-ask',
+    'pair-clear', '只在那台电脑上显示'];
+  const wallMissing = wallNeeds.filter((n) => !wall.includes(n));
+
+  // 真走一次：所有请求都回 401（没配对）→ 整页应当是那面墙；换回正常 fetch → 应当恢复
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: false, status: 401,
+    json: async () => ({ detail: '这台设备还没和电脑配对：请在那台电脑的「设置 → 局域网访问」里看配对码' }),
+    text: async () => '',
+  });
+  byId.get('main')._html = '';
+  await globalThis.__view('today');
+  await sleep(40);
+  const blocked = byId.get('main')._html;
+  const wallShown = blocked.includes('id="pairWall"');
+  globalThis.fetch = realFetch;
+  byId.get('main')._html = '';
+  await globalThis.__view('today');
+  await sleep(40);
+  const recoveredHtml = byId.get('main')._html;
+  const recovered = !recoveredHtml.includes('id="pairWall"') && recoveredHtml.length > 300;
+
+  // 反证：非本机请求（code 为空 / code_visible=false）→ 不显示码、不摆「换一个」
+  const saved = DB['/api/settings/lan'];
+  DB['/api/settings/lan'] = { ...saved, code: '', code_visible: false };
+  byId.get('main')._html = '';
+  await globalThis.__view('setting');
+  await sleep(40);
+  const phoneSide = byId.get('main')._html;
+  DB['/api/settings/lan'] = saved;
+  const hiddenOk = phoneSide.includes('这是故意的') && !phoneSide.includes('lan-rotate');
+
+  const rendered = missing.length === 0 && wallMissing.length === 0 && wallShown && recovered
+    && hiddenOk;
+  if (!rendered) lanBad++;
+  lanChecks.push({ rendered, missing, wallMissing, wallShown, recovered, hiddenOk });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} setting·局域网配对 main ${String(setting.length).padStart(6)}B`
+    + `（墙 ${wallShown ? '出现' : '没出现'}·${recovered ? '已撤' : '没撤'}`
+    + `·非本机看不到码 ${hiddenOk ? '对' : '不对'}）`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : '')
+    + (wallMissing.length ? `  墙缺: ${wallMissing.join(', ')}` : ''));
+} catch (e) {
+  lanBad++;
+  lanChecks.push({ error: e.message });
+  console.log(`  ❌ setting·局域网配对 渲染抛错: ${e.message}`);
+}
+
 try {
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
   for (const a of new Set(CLICK_ACTIONS)) if (!registered.has(a)) unused.push(a);
@@ -1032,7 +1106,7 @@ if (process.argv.includes('--json')) {
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
       export: exportChecks, obsidian: obsidianChecks, ai: aiChecks, sync: syncChecks,
-      offline: offlineChecks,
+      offline: offlineChecks, lan: lanChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -1049,6 +1123,7 @@ const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardB
   || aiBad > 0
   || syncBad > 0
   || offlineBad > 0
+  || lanBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -1070,5 +1145,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，AI 接口 ${aiChecks.filter((c) => c.rendered).length}/${aiChecks.length} 正常`
   + `，跨端同步 ${syncChecks.filter((c) => c.rendered).length}/${syncChecks.length} 正常`
   + `，手机离线记 ${offlineChecks.filter((c) => c.rendered).length}/${offlineChecks.length} 正常`
+  + `，局域网配对 ${lanChecks.filter((c) => c.rendered).length}/${lanChecks.length} 正常`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

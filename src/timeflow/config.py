@@ -94,6 +94,22 @@ class AiConfig(BaseModel):
     enabled: bool = False
 
 
+class NetConfig(BaseModel):
+    # 局域网访问（SR-NF17 / G 批 · T-G10b = 跨端场景 ②）：
+    # **默认关**（口径同 N16「默认收严、用户再放宽」）。
+    #
+    # 为什么它是**启动期**开关而不是设置页里的一个按钮：开 = 服务绑到 `0.0.0.0`，
+    # 而"绑哪个地址"是进程起来那一刻定的，运行期改不了（那需要一个重启才行，
+    # 假装能改就会让人以为已经生效了）。所以这里只放默认值，真正的动作有两个：
+    # `python tools/serve.py --lan`（显式开一次）或本文件 `allow_lan = true`。
+    allow_lan: bool = False
+
+    # 配对码（开着局域网时的**那道门**）：非本机设备必须带上它才能读数据。
+    # 留空 = 由程序生成一个 6 位数字并记在本机库里（`app_settings`，重启不变）。
+    # **它只在本机的设置页里显示**（不发给局域网设备）—— 见 `core/lan.py`。
+    pairing_code: str = ""
+
+
 class Settings(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     app: AppConfig = Field(default_factory=AppConfig)
@@ -105,6 +121,7 @@ class Settings(BaseModel):
     insights: InsightsConfig = Field(default_factory=InsightsConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
     ai: AiConfig = Field(default_factory=AiConfig)
+    net: NetConfig = Field(default_factory=NetConfig)
 
 
 def _read_toml(config_path: Path | None) -> dict[str, Any]:
