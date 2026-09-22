@@ -460,6 +460,7 @@ let heatmapBad = 0;
 let exportBad = 0;
 let offlineBad = 0;
 let lanBad = 0;
+let boldBad = 0;
 const results = [];
 for (const v of views) {
   byId.get('main')._html = '';
@@ -1097,6 +1098,141 @@ try {
   console.log(`  ❌ setting·局域网配对 渲染抛错: ${e.message}`);
 }
 
+/* 字面星号（T-G11 缺陷）：**渲染结果里不许出现 `**重点**`**。
+   背景：`noteHTML()` 只把**后端给来的**文字里的 `**x**` 转成 `<b>`；而静态模板里若直接写 `**x**`，
+   浏览器就把星号原样显示出来（用户看到的是一堆 `**`）。实测 today/tasks/planned/habit/setting 都有。
+   两层查：
+   ① **按输出查**（下面这段）：把 13 个视图 + 详情/展开态都渲染一遍，扫渲染结果 —— 有就 FAIL；
+   ② **按源码查**（`scanBoldInSource`）：把脚本里的**字符串字面量**（含模板串）扫一遍 ——
+      静态文案只要写了 `**` 就报，**不依赖探针的桩数据**（① 会漏掉"桩里没有数据所以没渲染"的分支）。
+   为什么不用"grep 整个文件"：`**` 大量出现在 JS/HTML 注释里（那些不影响界面），
+   而且我第一次写的行级分类器把块注释判错了 —— 所以这里用**状态机**过一遍真正的字符串。 */
+function scanBoldInSource(code) {
+  const hits = [];
+  let i = 0;
+  let line = 1;
+  let mode = 'code';           // code | line | block | single | double | template | regex
+  const stack = [];            // 模板串嵌套（` 里出现 ${ 时要回到 code，遇 } 再回来）
+  const literal = [];          // 当前字符串/模板里已扫到的内容
+  const lineOf = [];
+  const prev = [];             // 最近的非空字符（判断 `/` 是除法还是正则字面量）
+  let inClass = false;         // 正则里的 [...] 字符组（其中的 / 不结束正则）
+  let brace = 0;               // ${ ... } 里的花括号深度（里面有对象字面量，不能见 } 就回模板）
+  const bump = (ch) => { if (ch === '\n') line += 1; };
+  const push = (ch) => { literal.push(ch); lineOf.push(line); };
+  const flush = (kind) => {
+    const text = literal.join('');
+    const re = /\*\*[^*\n]{1,60}\*\*/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      hits.push({ line: lineOf[m.index] || 0, kind, text: m[0] });
+    }
+    literal.length = 0;
+    lineOf.length = 0;
+  };
+  // `/` 前面是这些字符/位置时，它是**正则字面量**而不是除号（否则 `/[&<>"']/g` 里那些引号会把扫描带偏）
+  const REGEX_OK = new Set(['(', ',', '=', ':', '[', '!', '&', '|', '?', '{', '}', ';', '+',
+    '-', '*', '%', '~', '^', '<', '>', '\n']);
+  while (i < code.length) {
+    const ch = code[i];
+    const two = code.slice(i, i + 2);
+    if (mode === 'code') {
+      if (two === '//') { mode = 'line'; i += 2; continue; }
+      if (two === '/*') { mode = 'block'; i += 2; continue; }
+      if (ch === "'") { mode = 'single'; i += 1; continue; }
+      if (ch === '"') { mode = 'double'; i += 1; continue; }
+      if (ch === '`') { mode = 'template'; i += 1; continue; }
+      if (ch === '{') { stack.push('brace'); bump(ch); i += 1; continue; }
+      if (ch === '}') {
+        if (stack[stack.length - 1] === 'brace') { stack.pop(); bump(ch); i += 1; continue; }
+        if (stack[stack.length - 1] === 'tpl') { stack.pop(); mode = 'template'; i += 1; continue; }
+        bump(ch); i += 1; continue;
+      }
+      if (ch === '/' && (!prev.length || REGEX_OK.has(prev[prev.length - 1]))) {
+        mode = 'regex'; inClass = false; i += 1; continue;
+      }
+      if (!/\s/.test(ch)) { prev.push(ch); if (prev.length > 8) prev.shift(); }
+      bump(ch); i += 1; continue;
+    }
+    if (mode === 'line') { if (ch === '\n') { mode = 'code'; } bump(ch); i += 1; continue; }
+    if (mode === 'block') {
+      if (two === '*/') { mode = 'code'; i += 2; continue; }
+      bump(ch); i += 1; continue;
+    }
+    if (mode === 'regex') {
+      if (ch === '\\') { i += 2; continue; }
+      if (ch === '[') inClass = true;
+      else if (ch === ']') inClass = false;
+      else if (ch === '/' && !inClass) {
+        mode = 'code';
+        prev.length = 0;            // 正则后面是标识符（flags）→ 下一个 / 一定不是正则
+        i += 1; continue;
+      }
+      bump(ch); i += 1; continue;
+    }
+    // 字符串/模板内部
+    if (ch === '\\') { push(ch); push(code[i + 1] || ''); i += 2; continue; }
+    if ((mode === 'single' && ch === "'") || (mode === 'double' && ch === '"')) {
+      flush(mode); mode = 'code'; i += 1; continue;
+    }
+    if (mode === 'template') {
+      if (ch === '`') { flush(mode); mode = 'code'; i += 1; continue; }
+      if (two === '${') { flush('template+expr'); stack.push('tpl'); mode = 'code'; i += 2; continue; }
+    }
+    push(ch); bump(ch); i += 1;
+  }
+  return hits;
+}
+const boldChecks = [];
+let boldSource = [];
+try {
+  boldSource = scanBoldInSource(code);
+} catch (e) {
+  boldChecks.push({ where: 'source', error: e.message });
+}
+if (boldSource.length) {
+  boldBad++;
+  boldChecks.push({ where: 'source', frags: boldSource.map((h) => `${h.line}:${h.text}`) });
+  console.log(`  ❌ 源码里的字符串字面量含字面星号 ${boldSource.length} 处：`);
+  for (const h of boldSource.slice(0, 40)) console.log(`       ${h.line}: ${h.text}`);
+}
+try {
+  const cases = [];
+  for (const v of views) cases.push([v, async () => { await globalThis.__view(v); }]);
+  cases.push(['detail·只读', async () => { await globalThis.__showDetail('t1'); }]);
+  cases.push(['detail·编辑态', async () => {
+    await globalThis.__showDetail('t1'); globalThis.__setEdit(true); await globalThis.__render('today');
+  }]);
+  cases.push(['today·明细展开', async () => {
+    globalThis.__setDoneOpen(true); await globalThis.__view('today');
+  }]);
+  const dirty = [];
+  for (const [label, run] of cases) {
+    byId.get('main')._html = '';
+    byId.get('detailRail')._html = '';
+    byId.get('groupAdmin')._html = '';
+    try {
+      await run();
+      await sleep(30);
+      const html = (byId.get('main')._html || '') + (byId.get('detailRail')._html || '')
+        + (byId.get('groupAdmin')._html || '');
+      const frags = [...new Set(html.match(/\*\*[^*\n]{1,40}\*\*/g) || [])];
+      if (frags.length) dirty.push([label, frags]);
+    } catch (e) {
+      dirty.push([label, [`渲染抛错: ${e.message}`]]);
+    }
+  }
+  if (dirty.length) boldBad++;
+  for (const [label, frags] of dirty) {
+    boldChecks.push({ label, frags });
+    console.log(`  ❌ ${label} 渲染结果里有字面星号：${frags.join(' , ')}`);
+  }
+  if (!dirty.length) console.log('  ✅ 13 个视图 + 详情/展开态：渲染结果里没有字面 `**`');
+} catch (e) {
+  boldBad++;
+  console.log(`  ❌ 字面星号检查本身抛错: ${e.message}`);
+}
+
 try {
   const registered = new Set([...body.matchAll(/'([a-z-]+)':\s*(?:el\s*=>|\()/g)].map((x) => x[1]));
   for (const a of new Set(CLICK_ACTIONS)) if (!registered.has(a)) unused.push(a);
@@ -1109,7 +1245,7 @@ if (process.argv.includes('--json')) {
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
       export: exportChecks, obsidian: obsidianChecks, ai: aiChecks, sync: syncChecks,
-      offline: offlineChecks, lan: lanChecks,
+      offline: offlineChecks, lan: lanChecks, bold: boldChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -1127,6 +1263,7 @@ const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardB
   || syncBad > 0
   || offlineBad > 0
   || lanBad > 0
+  || boldBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
@@ -1149,5 +1286,6 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，跨端同步 ${syncChecks.filter((c) => c.rendered).length}/${syncChecks.length} 正常`
   + `，手机离线记 ${offlineChecks.filter((c) => c.rendered).length}/${offlineChecks.length} 正常`
   + `，局域网配对 ${lanChecks.filter((c) => c.rendered).length}/${lanChecks.length} 正常`
+  + `，字面星号 ${boldBad === 0 ? '0' : '有'}（源码 + 渲染两遍查）`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

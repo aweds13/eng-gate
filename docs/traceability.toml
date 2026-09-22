@@ -1892,11 +1892,16 @@ evidence = [
 id = "T-G11"
 title = "缺陷（P2，界面）：静态文案里的 `**重点**` 在页面上原样显示成星号"
 group = "PROCESS"
-status = "todo"
+status = "done"
 evidence = [
-  "file:复盘/手机离线记-T-G10.md",
+  "file:复盘/界面字面星号缺陷-T-G11.md",
+  "text:tools/ui_dom_probe.mjs::function scanBoldInSource",
+  "text:tools/ui_dom_probe.mjs::渲染结果里有字面星号",
+  "text:src/web/index.html::<b>不计债</b>",
+  "text:src/web/index.html::<b>不给人手改</b>",
+  "text:src/web/index.html::<b>设了截止日</b>",
 ]
-gaps = "`noteHTML()` 只对**后端给来的**文字生效（`${noteHTML(...)}`）；`index.html` 里大量**静态模板文案**直接写 `**重点**`，页面上就是字面的星号。实测（临时在假 DOM 探针里数过渲染结果）：today / tasks / planned / habit / setting 五个视图都有，共 6 处以上（全量 30+ 处）。修法二选一：① 逐处改成 `<b>`（机械但安全）；② 渲染后跑一遍 DOM 文本节点处理（一处生效、但要小心不要碰到后端正文与用户输入）。本卡只登记，**T-G10 里自己新加的文案已经全部用 `<b>`**"
+gaps = ""
 
 [entries."T-G10"]
 id = "T-G10"

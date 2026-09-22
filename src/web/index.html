@@ -935,7 +935,7 @@ async function renderGroupAdmin(el){
       ${groups.filter(g=>g.id!==id).map(g=>`<option value="${g.id}" ${g.id===current?'selected':''}>${esc(g.path)}</option>`).join('')}</select>`;
   el.innerHTML=`<div class="settings-sub">分组管理</div>
     <div class="sub">分组用来按项目/领域归类任务（如「高数」「高数 / 第三章」）。可以像文件夹一样嵌套
-    （层数上限由后端拦，超了会说明原因 —— 界面不自己复述那个数字）；删除分组**不会删任务**，只解除归类。</div>
+    （层数上限由后端拦，超了会说明原因 —— 界面不自己复述那个数字）；删除分组<b>不会删任务</b>，只解除归类。</div>
     <div class="new"><input id="groupName" placeholder="新建分组，如：高数" data-enter="group-add">
       <select id="groupParent" title="建在哪个分组下（默认顶层）"><option value="">顶层</option>${options(groups)}</select>
       <button data-action="group-add">新建</button></div>
@@ -1511,11 +1511,11 @@ async function renderTasks(m){
   const notMyDay=live.filter(t=>!t.is_myday&&t.status!=='完成');
   const done=live.filter(t=>t.status==='完成');
   const parkedHtml=parked.length?`<div class="section-title">搁置（待定 ${parked.filter(t=>t.status==='待定').length} · 取消 ${parked.filter(t=>t.status==='取消').length}）</div>
-    <div class="sub">待定 = 挂在那儿、没放弃，**不计债**；取消 = 打错了或没必要了。两者都能「取回」。</div>
+    <div class="sub">待定 = 挂在那儿、没放弃，<b>不计债</b>；取消 = 打错了或没必要了。两者都能「取回」。</div>
     ${parked.map(t=>taskCard(t)).join('')}`:'';
   const archivedHtml=archived.length?`<div class="section-title">档案（${archived.length}）</div>
-    <div class="sub">归档的任务不在默认列表里，但随时能翻出来。**手动归档**的可以「撤销归档」；
-    **完成满 ${afterDays} 天自动收入**的，撤销完成就会回到列表（它是按完成日算出来的，不是存下来的状态）。</div>
+    <div class="sub">归档的任务不在默认列表里，但随时能翻出来。<b>手动归档</b>的可以「撤销归档」；
+    <b>完成满 ${afterDays} 天自动收入</b>的，撤销完成就会回到列表（它是按完成日算出来的，不是存下来的状态）。</div>
     ${archived.map(archiveCard).join('')}`:'';
   m.innerHTML=`<div class="new">
       <input id="allTitle" placeholder="新任务（默认不进今天）" data-enter="task-add-here">
@@ -1561,7 +1561,7 @@ async function addTaskHere(){
 // 基线同「全部任务」：只隐藏归档/已删（完成的仍显示）。
 const SMART_VIEWS={
   important:{title:'重要',note:'优先级为「高」的任务。优先级在任务详情里改；这里不重新定义"什么算重要"。'},
-  planned:{title:'有计划',note:'**设了截止日**的任务，越近越靠前（无截止日的不算"有计划"）。'},
+  planned:{title:'有计划',note:'<b>设了截止日</b>的任务，越近越靠前（无截止日的不算"有计划"）。'},
   flagged:{title:'已标记',note:'你自己按了标记的任务（卡片上的「标记」按钮）。标记只是提醒自己，不代表重要。'},
 };
 async function renderSmart(m,view){
@@ -1884,7 +1884,7 @@ function doneSection(d){
       ${doneChip('outputs',`产出 ${outCount} 条（学校 KPI ${d.output_kpi} · 知识资产 ${d.output_asset}）`)}
     </div>
     ${tasksHtml}${stepsHtml}${outputsHtml}
-    <div class="sub">数据来自已完成/已产出的**事实**：完成又被撤销的不算，撤销的产出如实标出。</div>
+    <div class="sub">数据来自已完成/已产出的<b>事实</b>：完成又被撤销的不算，撤销的产出如实标出。</div>
   </div>`;
 }
 /* 「正在做」（F 批 · T-F1）：我自己标的"现在在做这些"，可以同时多个。
@@ -2007,7 +2007,7 @@ async function renderHabit(m){
       <div style="margin-top:10px">${heatmap(h.logs)}</div></div>`;
   }).join('');
   m.innerHTML=`<div class="card"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div>
-    <div class="sub">习惯打卡**只记次数**，不折算成投入时间（时间折算只在有真实时长时才算）。想让它占用投入时间，
+    <div class="sub">习惯打卡<b>只记次数</b>，不折算成投入时间（时间折算只在有真实时长时才算）。想让它占用投入时间，
       去备忘录页「今日手动投入」按真实分钟补一笔（类型可选「习惯」）。</div></div>
   <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡" data-enter="habit-add"><button data-action="habit-add">新建</button></div>
   ${cards||emptyState('还没有习惯；建一个，明天就能看到热力图')}
@@ -2234,11 +2234,11 @@ function reviewEditForm(it,meta){
     <select id="rvSource">${sources.map(s=>`<option value="${s.value}" ${s.value===it.source?'selected':''}>${esc(s.label)}</option>`).join('')}</select>
     <div class="settings-sub">引用句柄（可选）</div>
     <input id="rvHandle" placeholder="Vault 相对路径 / KB-ID" value="${esc(it.ref_handle||'')}">
-    <div class="sub">只存引用句柄，本软件**不碰**你的 Vault 文件；留空 = 清除。</div>
+    <div class="sub">只存引用句柄，本软件<b>不碰</b>你的 Vault 文件；留空 = 清除。</div>
     <div class="row" style="margin-top:10px">
       <button data-action="review-save">保存</button>
       <button class="ghost" data-action="review-edit-cancel">取消</button></div>
-    <div class="sub" style="margin-top:8px">到期时间 / 间隔 / 次数由 FSRS 管，**不给人手改**（那是记忆状态，不是设置项）。</div></div>`;
+    <div class="sub" style="margin-top:8px">到期时间 / 间隔 / 次数由 FSRS 管，<b>不给人手改</b>（那是记忆状态，不是设置项）。</div></div>`;
 }
 async function saveReviewEdit(){
   const form=document.getElementById('rvForm').value;
@@ -2603,7 +2603,7 @@ async function renderSetting(m){
     <div class="row">${(attachCfg.modes||[]).map(x=>
       `<button class="${attachCfg.mode===x.value?'':'ghost'}" data-action="set-attach-mode" data-mode="${x.value}">${esc(x.label)}</button>`).join('')}</div>
     <div class="sub">网址始终在浏览器新标签打开；目录总是打开该目录。默认最保守（只到文件夹）；
-      可执行/脚本类（.exe/.bat/.lnk 等）**任何设置下都只到文件夹**，不会直接运行。</div>
+      可执行/脚本类（.exe/.bat/.lnk 等）<b>任何设置下都只到文件夹</b>，不会直接运行。</div>
     <div class="settings-sub">直接打开白名单（扩展名）</div>
     <div class="row tight">${(attachCfg.whitelist||[]).map(e=>
       `<button class="ghost" data-action="wl-del" data-ext="${esc(e)}">${esc(e)} ✕</button>`).join('')
@@ -2619,11 +2619,11 @@ async function renderSetting(m){
       `<button class="${remindCfg.style===x.value?'':'ghost'}" data-action="set-remind-style" data-style="${x.value}">${esc(x.label)}</button>`).join('')}
       <button class="ghost" data-action="remind-test">试一下</button>
       <button class="ghost" data-action="remind-stop">停止响铃</button></div>
-    <div class="sub">「闹钟式」用 Windows 的**警报通知**：预先展开、**留在屏幕上直到你手动关掉**、循环播放闹钟音，
+    <div class="sub">「闹钟式」用 Windows 的<b>警报通知</b>：预先展开、<b>留在屏幕上直到你手动关掉</b>、循环播放闹钟音，
       并能突破「专注助手/免打扰」—— 这才是"提得住人"的效果；「温和通知」只在右下角浮几秒。
       两种都不引第三方依赖。</div>
-    <div class="sub">**闹钟式会一直响到你把它关掉** —— 关掉的办法有两个：点通知上的 ✕，或点上面的「停止响铃」。
-      同一条提醒**同一时刻只会有一条**（弹新的之前会自动清掉旧的），不会越堆越吵。</div>
+    <div class="sub"><b>闹钟式会一直响到你把它关掉</b> —— 关掉的办法有两个：点通知上的 ✕，或点上面的「停止响铃」。
+      同一条提醒<b>同一时刻只会有一条</b>（弹新的之前会自动清掉旧的），不会越堆越吵。</div>
     <div class="settings-sub">到点自动提醒（关掉应用也响）</div>
     <div class="row">
       <button class="${remindCfg.enabled?'':'ghost'}" data-action="set-remind-notify" data-on="true">开启</button>
@@ -2632,11 +2632,11 @@ async function renderSetting(m){
       ${remindCfg.installed?'<span class="badge">计划任务已注册</span>':'<span class="badge">未注册计划任务</span>'}
     </div>
     <div class="meta">在任务详情里设「提醒」时间；到点后：① 今日页出现「该提醒了」、卡片上标出（不用开通知也能用）；
-      ② 开启后会注册一个 Windows 计划任务（每 ${remindCfg.interval_minutes} 分钟检查一次），**关掉应用也会响**。</div>
+      ② 开启后会注册一个 Windows 计划任务（每 ${remindCfg.interval_minutes} 分钟检查一次），<b>关掉应用也会响</b>。</div>
     <div class="meta">上次通知：${remindCfg.last_notify_at?esc(String(remindCfg.last_notify_at).replace('T',' ')):'（还没有）'}
       ${remindCfg.last_result?` · ${esc(remindCfg.last_result)}`:''}</div>
     ${remindCfg.last_error?`<div class="meta" style="color:var(--danger)">上次出错：${esc(remindCfg.last_error)}（弹不出来不会静默，下次自动重试）</div>`:''}
-    <div class="sub">诚实边界：计划任务以**当前用户、交互式**运行 —— 应用关掉也响，但**注销/关机时不响**
+    <div class="sub">诚实边界：计划任务以<b>当前用户、交互式</b>运行 —— 应用关掉也响，但<b>注销/关机时不响</b>
       （要做到"注销也响"得改系统层权限，不擅自做）。开启/关闭都是可逆的：关闭会把计划任务删掉、不留痕。
       移动端只做界面标注，不发系统通知。</div>
   </div>
@@ -2646,7 +2646,7 @@ async function renderSetting(m){
     <div class="meta">${noteHTML(sync.note||'')}${sync.conflict_logs?` · 已有 ${sync.conflict_logs} 条冲突/覆盖记录`:''}</div>
     <div class="sub">设备号 <code>${esc(sync.device_id||'—')}</code> · 数字都来自本机数据库，不上传任何服务器。</div>
     <div class="settings-sub" id="set-syncpack">跨端同步（走文件）</div>
-    <div class="meta">在一台机器**导出同步包** → 拷到另一台（U 盘 / 网盘 / 局域网共享）→ 在那台**先预览再导入**。
+    <div class="meta">在一台机器<b>导出同步包</b> → 拷到另一台（U 盘 / 网盘 / 局域网共享）→ 在那台<b>先预览再导入</b>。
       合并按 <b>version → 更新时间</b> 判谁新；覆盖与保留都记进冲突日志（不静默）；
       <b>导入不会删你本地的任何东西</b>。</div>
     <div class="row tight">
