@@ -131,6 +131,9 @@ def run(n_tasks: int, n_facts: int) -> dict[str, Any]:
     # **不改业务行为**（日志级别与业务无关）。
     os.environ.setdefault("TF_LOG_PATH", "off")
     tmp = Path(tempfile.mkdtemp(prefix="timeflow_bench_"))
+    # 基准也走**临时库**：markdown 落盘目录一并指到临时目录
+    # （别往仓库 `export/` 写合成数据，见 T-G4）
+    os.environ.setdefault("TIMEFLOW_EXPORT__DIR", str(tmp / "export"))
     db_path = str(tmp / "bench.db")
     build_db(db_path, n_tasks, n_facts)
 

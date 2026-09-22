@@ -86,7 +86,11 @@ def main() -> int:
     from timeflow.config import load_settings
 
     if args.fresh:
-        db_path = Path(tempfile.mkdtemp(prefix="timeflow_fresh_")) / "timeflow.db"
+        fresh_dir = Path(tempfile.mkdtemp(prefix="timeflow_fresh_"))
+        db_path = fresh_dir / "timeflow.db"
+        # 「新鲜库」就该是干净的：markdown 落盘目录也指到临时目录，
+        # 否则演示数据会写进仓库的 `export/`（T-G4 的自动导出）
+        os.environ.setdefault("TIMEFLOW_EXPORT__DIR", str(fresh_dir / "export"))
         print(f"[临时库] {db_path}")
     else:
         settings = load_settings()

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import socket
@@ -201,6 +202,8 @@ def main() -> int:
     ok, detail = check_js_syntax(tmp)
     print(f"[{'OK ' if ok else 'FAIL'}] JS 语法：{detail}")
 
+    # 临时库 → markdown 也写临时目录（别往仓库 `export/` 里写合成数据，见 T-G4）
+    os.environ.setdefault("TIMEFLOW_EXPORT__DIR", str(tmp / "export"))
     app = create_app(str(tmp / "r2.db"))
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))

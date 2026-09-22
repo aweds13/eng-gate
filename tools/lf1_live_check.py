@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import sys
 import tempfile
@@ -69,6 +70,9 @@ def main() -> int:
     base = f"http://127.0.0.1:{port}"
     workdir = Path(tempfile.mkdtemp(prefix="lf1_"))
     db_path = str(workdir / "live.db")
+    # 自检用的是**临时库**：把 markdown 落盘目录也指到临时目录 —— 否则真机自检会往仓库的
+    # `export/` 里写一份合成数据、盖掉你当天真实那份（T-G4 的自动导出带来的副作用）。
+    os.environ.setdefault("TIMEFLOW_EXPORT__DIR", str(workdir / "export"))
 
     app = create_app(db_path)
     server = uvicorn.Server(
