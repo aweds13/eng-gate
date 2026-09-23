@@ -1642,6 +1642,18 @@ def remove_attachment(conn: sqlite3.Connection, task_id: str, index: int) -> Tas
     return update_task(conn, task_id, attach=items)
 
 
+def repeat_tasks(conn: sqlite3.Connection) -> list[Task]:
+    """所有设了重复周期的任务行，按排期日排序（`SR-F1.5b` 的重复节奏视图用）。
+
+    为什么放在任务域：`repeat_days` 的含义、以及"每完成一轮生成下一轮"的规则都属于这里 ——
+    `insights` 只负责把它画成节奏，不该自己写 SQL 猜字段。
+    """
+    rows = conn.execute(
+        "SELECT * FROM tasks WHERE repeat_days IS NOT NULL ORDER BY due_date, created_at"
+    ).fetchall()
+    return [_row_to_task(row) for row in rows]
+
+
 def process_repeats(conn: sqlite3.Connection) -> int:
     """Repeat（AC-8 / OP-8）：为「已完成且设了重复」的任务生成下一次。返回本次生成数。
 

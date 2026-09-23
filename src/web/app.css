@@ -265,6 +265,10 @@ select {
 .swatch.on { border-color: var(--text) }
 
 /* ---------- 展示元件 ---------- */
+/* 重复节奏（SR-F1.5b / T-G25）：一个重复事项一块（标题 + 逐日格子）。
+   样式只用令牌：颜色与间距都不写裸值（R1/R5 纪律，视觉重构时一处改全局）。 */
+.rhythm-row { padding: var(--sp-4) 0; border-top: 1px solid var(--line); }
+.rhythm-row:first-child { border-top: none; padding-top: 0; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4) }
 .big { font-size: var(--fs-num); font-weight: 700; color: var(--accent) }
 .badge {

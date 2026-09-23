@@ -1833,7 +1833,8 @@ function renderStats(m){
       hmCells=cells;
       hmDims=(dims&&dims.items)||[];
       hmActive=(hmDims[0]||{}).id||'';
-      return api('/api/insights/academic-vs-self?days=90').then(split=>api('/api/summary/weekly').then(week=>{
+      return api('/api/insights/academic-vs-self?days=90').then(split=>api('/api/summary/weekly').then(week=>
+        api('/api/insights/repeat-rhythm?days=56').then(rhythm=>{
       const curve=`<div class="card" style="display:block">
         <div class="meta">近 ${days} 天专注走势（分钟）· 合计 ${focusTotal} 分钟 · 有投入 ${activeDays} 天 · 单日最高 ${Math.round(peak)}</div>
         <div style="margin-top:10px">${lineChart(daily,d=>d.focus_minutes)}</div>
@@ -1856,15 +1857,40 @@ function renderStats(m){
         <div class="card" style="display:block">${dist}
         <div class="sub">任务可属多个分组，各组之和可能大于总投入；未绑定任务的专注不计入分组。当前债务 ${debtNow} 项。</div></div>
       ${acSplit}
+      <div class="section-title">重复节奏（近 ${rhythm.days} 天）</div>
+        <div class="card" style="display:block">
+        ${rhythm.series.length?rhythm.series.map(repeatRhythmRow).join(''):emptyState('还没有重复任务：给一件事设个「每 N 天」的重复，这里就会长出它的节奏')}
+        <div class="sub">${esc(rhythm.note)}</div></div>
       <div class="section-title">本周投入</div>${weekCard(week)}
       <div class="section-title">时间热力图（近一年）</div>
         <div class="card" style="display:block">
           <div class="row" id="hmRow">${hmButtons(hmActive)}</div>
           <div id="hmBox" style="margin-top:10px">${valueHeatmap(cells,hmActive)}</div>
           <div class="sub" id="hmNote">${hmNote(hmActive)}</div></div>`;
-      }));
+      })));
     })));
   });
+}
+/* 重复节奏（SR-F1.5b / T-G25）：一个重复事项一行 —— 标题 + 周期 + 逐日格子 + 「完成 / 排期」两个数。
+   格子只画**真实排过**的日子（周期是"每 N 天"，锚点会漂，推到未来算日历就是编数字）；
+   三种状态用形状+颜色区分（实心/空心/淡灰），不只靠颜色 —— 色觉差异也能读。
+   这里**不给百分比、不给"达标率"、不设目标**（约定层：温和不施压，只描述事实）。 */
+function repeatRhythmRow(s){
+  const cell=13,gap=3,per=7;   // 一行 = 一周（7 格）
+  const list=s.cells||[];
+  const w=per*(cell+gap),rows=Math.max(1,Math.ceil(list.length/per));
+  let marks='';
+  list.forEach((c,i)=>{
+    const col=i%per, row=Math.floor(i/per);
+    const fill=c.state==='done'?'var(--accent)':c.state==='off'?'var(--line)':'none';
+    marks+=`<rect x="${col*(cell+gap)}" y="${row*(cell+gap)}" width="${cell}" height="${cell}" rx="2.5"
+      fill="${fill}" stroke="${c.state==='missed'?'var(--accent)':'none'}" stroke-width="1.5">
+      <title>${c.date} ${c.state==='done'?'做完了':c.state==='off'?'取消/搁置/归档未完成':'排了没做'}</title></rect>`;
+  });
+  const h=rows*(cell+gap);
+  return `<div class="rhythm-row">
+    <div class="meta">${esc(s.title)} · 每 ${s.repeat_days} 天 · 完成 ${s.done} / 排期 ${s.planned}</div>
+    <svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:${w}px;height:auto;display:block;margin-top:6px">${marks}</svg></div>`;
 }
 let hmCells=null;
 /* 热力图维度（SR-NF7 / G 批 · T-G1）：**词表从后端拿**（`/api/insights/heatmap-dimensions`）——

@@ -209,9 +209,17 @@ gaps = ""
 id = "SR-F1.5b"
 title = "重复节奏用时间热力图管理"
 group = "F1"
-status = "partial"
-evidence = ["text:src/timeflow/core/insights.py::def heatmap", "route:GET /api/insights/heatmap"]
-gaps = "热力图是「天 × 指标」，没有按任务/重复节奏的视图"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/insights.py::def repeat_rhythm",
+  "text:src/timeflow/core/tasks/manager.py::def repeat_tasks",
+  "route:GET /api/insights/repeat-rhythm",
+  "text:src/web/index.html::function repeatRhythmRow",
+  "text:src/web/index.html::重复节奏（近 ${rhythm.days} 天）",
+  "test:test_repeat_rhythm_line.py",
+  "test:test_web_frontend.py",
+]
+gaps = "**2026-09-23 落地（T-G25）**：原 gaps「热力图是「天 × 指标」，没有按任务/重复节奏的视图」已消除 —— 统计页新增「重复节奏」一段：**一条 = 一个重复事项**（同一标题 + 同一周期；每完成一轮生成下一行，所以库里是一串），格子按**排期日**画（实心=做完了 / 空心=排了没做 / 淡灰=取消·搁置·归档未完成），只给「完成 K / 排期 M」两个数。**刻意不做的**：不推算「以后该哪天」（周期是「每 N 天」，锚点会漂，算出来的日历是假的）；无排期日的轮次不猜它落在哪天；不给百分比/达标率（温和不施压）。"
 
 [entries."SR-F1.6"]
 id = "SR-F1.6"
@@ -443,6 +451,22 @@ evidence = [
   "test:test_focus_mirror_line.py",
 ]
 gaps = "**口径（用户 2026-09-23 定，T-G19）已按它落地（T-G20）**：实时启动 + 结束时再同步 —— 任一台开始专注，另一台**当场**看到只读镜像（右栏 `#clockPeer` + 专注页文案），**不重复记账、也不许停对面的计时**；结束不做实时推，记录各自入库后走已有同步包。**边界（不是缺口，是刻意的）**：① 只在**同一局域网且已配对**时有效（跨端那道门，默认关）；② 老数据 `device_id` 为 NULL 时算「我开的」（保住「重开页面恢复计时」）；③ 勿扰只是**状态可见**，不是系统级屏蔽（与 OP-3c 同口径）。"
+
+[entries."T-G25"]
+id = "T-G25"
+title = "重复节奏视图（SR-F1.5b / N9）：`insights.repeat_rhythm` + `/api/insights/repeat-rhythm` + 统计页那一段（一条 = 一个重复事项，格子按排期日）"
+group = "F1"
+status = "done"
+evidence = [
+  "file:复盘/重复节奏视图-T-G25.md",
+  "text:src/timeflow/core/insights.py::class RepeatSeries",
+  "text:src/timeflow/core/tasks/manager.py::def repeat_tasks",
+  "route:GET /api/insights/repeat-rhythm",
+  "text:src/web/index.html::function repeatRhythmRow",
+  "text:src/web/app.css::.rhythm-row",
+  "test:test_repeat_rhythm_line.py",
+]
+gaps = "三条刻意的边界（都写进领域层 docstring 与界面说明）：① **只画真实排过的日子**（不推算未来排期）；② 归档只有**带 `task.completed` 事实**才算做完（归档 ≠ 做完，未完成的也能归档）；③ 被彻底删除的轮次不进图。**没做的**：跨设备合并后的重复链没有专门处理（同步包按行搬，标题+周期一样仍会归到一条 ✅，但「不同设备各生成一轮」的情况没单独验）；样式待视觉重构那轮统一（本卡复用现有 SVG 方格与令牌）。"
 
 [entries."T-G24"]
 id = "T-G24"
@@ -2102,6 +2126,7 @@ status = "done"
 evidence = [
   "text:src/web/index.html::let hmDims=[]",
   "text:src/web/index.html::function hmDim(id)",
+  "route:GET /api/insights/heatmap",
   "route:GET /api/insights/heatmap-dimensions",
   "text:tools/ui_dom_probe.mjs::stats·热力图有值渲染",
   "test:test_vocab_line.py",

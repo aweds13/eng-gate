@@ -1284,6 +1284,31 @@ def test_lan_pairing_is_wired_and_the_code_stays_home() -> None:
     assert "--lan" in offline_view, "离线页要告诉人：手机能打开它靠的是 --lan（默认关）"
 
 
+def test_repeat_rhythm_view_is_wired_and_kind() -> None:
+    """T-G25（SR-F1.5b）：重复任务的节奏要看得到 —— 规格原话「节奏可用时间热力图管理」。
+
+    四条口径：
+    ① 统计页真接这个投影（`/api/insights/repeat-rhythm`），空的时候给空态而不是空白；
+    ② 三种格子状态**形状+颜色都不同**（实心/空心/淡灰）—— 只靠颜色区分，色觉差异就读不出来；
+    ③ 数字只给「完成 K / 排期 M」，**不给百分比、不设目标**（约定层：温和不施压）；
+    ④ 说明用**后端给的那句**（`note`），界面不复述规则（改口径只改一处）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    stats = html.split("function renderStats(m){", 1)[1].split("\nlet hmCells", 1)[0]
+    assert "api('/api/insights/repeat-rhythm?days=56')" in stats, "统计页没接重复节奏投影"
+    assert "重复节奏（近 ${rhythm.days} 天）" in stats
+    assert "emptyState('还没有重复任务" in stats, "没有重复任务时要有空态，不是一片空白"
+    assert "esc(rhythm.note)" in stats, "说明要用后端给的那句（别在界面复述口径）"
+
+    row = html.split("function repeatRhythmRow(s){", 1)[1].split("\n}", 1)[0]
+    assert "'var(--accent)'" in row and "none" in row and "'var(--line)'" in row, \
+        "三种状态要三种画法（实心 / 空心 / 淡灰）"
+    assert "stroke-width=\"1.5\"" in row, "空心格要有描边（不只靠颜色）"
+    assert "完成 ${s.done} / 排期 ${s.planned}" in row, "只给这两个数"
+    for bad in ("达标", "目标", "比例"):
+        assert bad not in row, f"重复节奏不该出现「{bad}」（温和不施压，只描述事实）"
+
+
 def test_pomodoro_length_comes_from_config_and_only_notifies() -> None:
     """T-G23（FLOW-3 验收第 1 条）：番茄钟要能**倒计时**、到点要**提示**，而且**不自动结束**。
 

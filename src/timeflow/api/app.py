@@ -1694,6 +1694,19 @@ def create_app(
             )
         return insights.daily_insights(conn, days=days)
 
+    @app.get("/api/insights/repeat-rhythm")
+    def insights_repeat_rhythm(days: int = insights.DEFAULT_RHYTHM_DAYS) -> insights.RepeatRhythm:
+        """近 N 天的重复任务节奏（SR-F1.5b / T-G25）；1≤days≤180，默认 8 周。
+
+        每条 = 一个重复事项（同一标题 + 同一周期）；格子按**排期日**画 —— 口径在领域层，
+        连说明一起返回（`note`），界面不复述规则。
+        """
+        if not 1 <= days <= insights.MAX_RHYTHM_DAYS:
+            raise HTTPException(
+                status_code=400, detail=f"days 需在 1~{insights.MAX_RHYTHM_DAYS} 之间"
+            )
+        return insights.repeat_rhythm(conn, days=days)
+
     @app.get("/api/insights/groups")
     def insights_groups(days: int = insights.DEFAULT_TREND_DAYS) -> list[insights.GroupInsight]:
         """近 N 天投入按任务分组（领域）分布；任务可属多分组，各组之和可能大于总投入。"""

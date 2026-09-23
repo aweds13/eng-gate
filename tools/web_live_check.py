@@ -17,6 +17,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from datetime import date, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -363,6 +364,49 @@ def live_focus_mirror_checks(base: str) -> dict[str, bool]:
         "跨端专注：空白 device_id 归一成 null": blank_active.get("device_id") is None
             and blank_active.get("id") == blank_sid.get("id"),
         "跨端专注：结束后镜像消失且只记一笔": after is None and done.get("focus_minutes") == 25.0,
+    }
+
+
+def _day(offset: int = 0) -> str:
+    """相对今天第 N 天的日期（自检里造"排期日"用；别写死日期，否则过几天就假红）。"""
+    return (date.today() + timedelta(days=offset)).isoformat()
+
+
+def live_repeat_rhythm_checks(base: str) -> dict[str, bool]:
+    """T-G25 真机自检：重复节奏投影在**真服务**上的行为（只碰临时库）。
+
+    这一卡最容易做假的地方是"把没排过的日子也画出来"（周期是"每 N 天"，锚点会漂）——
+    所以真跑一遍：只完成一轮，图里就**只有那一格**；再补一轮没做的，那是"排了没做"。
+    """
+    empty = _json_call(base, "/api/insights/repeat-rhythm")[1] or {}
+    first = _json_call(
+        base, "/api/tasks", "POST",
+        {"title": "真机自检·背单词", "due_date": _day(-2), "repeat_days": 1, "is_myday": True},
+    )[1]
+    _json_call(base, f"/api/tasks/{first['id']}/complete", "POST")
+    missed = _json_call(
+        base, "/api/tasks", "POST",
+        {"title": "真机自检·背单词", "due_date": _day(-1), "repeat_days": 1, "is_myday": True},
+    )[1]
+    got = _json_call(base, "/api/insights/repeat-rhythm")[1] or {}
+    series = [s for s in (got.get("series") or []) if s.get("title") == "真机自检·背单词"]
+    states = [c.get("state") for s in series for c in (s.get("cells") or [])]
+    other = _json_call(
+        base, "/api/tasks", "POST", {"title": "真机自检·不重复的活儿", "due_date": _day(-1)}
+    )[1]
+    after = _json_call(base, "/api/insights/repeat-rhythm")[1] or {}
+    return {
+        "重复节奏：空的时候是空表不是报错": empty.get("series") == [] and bool(empty.get("note")),
+        "重复节奏：一轮做完 = 一格 done": states.count("done") == 1,
+        "重复节奏：排了没做 = 一格 missed": states.count("missed") == 1,
+        "重复节奏：只画真实排过的日子": len(states) == 2,
+        "重复节奏：不重复的任务不进图": all(
+            s.get("title") != "真机自检·不重复的活儿" for s in (after.get("series") or [])
+        )
+        and bool(other.get("id") and missed.get("id")),
+        "重复节奏：窗口非法被 400 拦下": _json_call(
+            base, "/api/insights/repeat-rhythm?days=0"
+        )[0] == 400,
     }
 
 
@@ -820,6 +864,7 @@ def main() -> int:
     checks.update(live_c_line_checks(base))
     checks.update(live_ai_checks(base))
     checks.update(live_team_checks(base))
+    checks.update(live_repeat_rhythm_checks(base))
     checks.update(live_focus_mirror_checks(base))
     checks.update(live_regrade_checks(base))
     checks.update(live_notify_checks(base))

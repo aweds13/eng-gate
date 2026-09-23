@@ -297,6 +297,22 @@ const DB = {
   },
   '/api/summary/weekly': { start: '2026-09-14', end: '2026-09-20', days: [], focus_hours: 0, steady_note: '—' },
   '/api/focus/today': { focus_minutes: 0 }, '/api/focus/active': null,
+  // 重复节奏（SR-F1.5b / T-G25）：统计页那一段要有真数据才渲染得出来 ——
+  // 三种格子状态都要出现在桩里（实心/空心/淡灰），否则"只画了完成格"这种错看不出来。
+  '/api/insights/repeat-rhythm': {
+    days: 56, start: '2026-08-01', end: '2026-09-25',
+    note: '每条 = 一个重复事项（同一标题 + 同一周期）。格子按「排期日」画：'
+      + '实心 = 那一轮做完了，空心 = 还活着但没做，灰 = 取消/搁置/归档未完成。'
+      + '周期是「每 N 天」，所以不推算以后该哪天 —— 只画真实排过的日子。',
+    series: [
+      { title: '背单词', repeat_days: 1, planned: 3, done: 1, cells: [
+        { date: '2026-09-20', state: 'done' },
+        { date: '2026-09-21', state: 'missed' },
+        { date: '2026-09-22', state: 'off' }] },
+      { title: '周复盘', repeat_days: 7, planned: 1, done: 1, cells: [
+        { date: '2026-09-21', state: 'done' }] },
+    ],
+  },
   '/api/habits': [], '/api/selfcheck': { week_focus_minutes: 0, week_habit_done: 0, debt_count: 0 },
   '/api/feedback': null, '/api/courses': [{ id: 'c1', name: '高等数学', credits: 4, teacher: '张老师' }],
   '/api/grades': [],
@@ -871,7 +887,11 @@ try {
   const html = byId.get('main')._html;
   const needs = ['时间热力图（近一年）', 'data-action="set-heatmap" data-metric="focus_minutes"',
     'data-action="set-heatmap" data-metric="review_count"', '专注 · 颜色越深=当天投入越多',
-    'var(--accent)'];
+    'var(--accent)',
+    // 重复节奏（SR-F1.5b / T-G25）：那一段要真渲染出来，且**三种格子状态都在**
+    // ——只画"完成格"会把"排了没做"和"取消/搁置"悄悄丢掉，而"能渲染"这种断言照样绿。
+    '重复节奏（近 56 天）', '背单词 · 每 1 天 · 完成 1 / 排期 3', '周复盘 · 每 7 天 · 完成 1 / 排期 1',
+    '做完了', '排了没做', '取消/搁置/归档未完成', '不推算以后该哪天'];
   const missing = needs.filter((n) => !html.includes(n));
   // 反证：老代码那种"取不到值"的图里，所有格子都是 `--surface-2`，不会出现 accent
   const hasAccent = html.includes('var(--accent)');

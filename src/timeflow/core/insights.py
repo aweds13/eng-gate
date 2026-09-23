@@ -24,6 +24,8 @@ MAX_TREND_DAYS = 90
 DEFAULT_TREND_DAYS = 30
 MAX_HEATMAP_DAYS = 400  # 一年多一点（含闰年与对齐周一起点）
 DEFAULT_HEATMAP_DAYS = 365
+MAX_RHYTHM_DAYS = 180   # 重复节奏窗口：半年（8 周 × 3 也够看节奏了）
+DEFAULT_RHYTHM_DAYS = 56  # 默认 8 周
 
 
 class DayInsight(BaseModel):
@@ -56,6 +58,47 @@ class HeatmapCell(BaseModel):
     review_count: int = 0
     output_count: int = 0
     debt_count: int = 0
+
+
+class RepeatCell(BaseModel):
+    """重复节奏里的一格 = **那一天有排期** 的那一轮（`SR-F1.5b` / N9）。"""
+
+    date: str
+    state: str  # done=做完了 / missed=还活着但没做 / off=取消·搁置·归档未完成
+
+
+class RepeatSeries(BaseModel):
+    """一条「重复节奏」= 同一个重复事项的那些轮次（`SR-F1.5b` / N9）。"""
+
+    title: str
+    repeat_days: int
+    planned: int  # 窗口内排过几轮
+    done: int     # 其中做完了几轮
+    cells: list[RepeatCell]
+
+
+class RepeatRhythm(BaseModel):
+    """近 N 天的重复任务节奏（`SR-F1.5b`：规格写「重复节奏可用时间热力图管理」）。
+
+    为什么是"一串"而不是"一行"：重复任务每完成一次就**生成下一轮**（`process_repeats`），
+    所以一个重复事项在库里是一串任务行；这里按 **标题 + 周期** 把它们归成一条节奏。
+
+    口径（每条都不靠猜）：
+    - 格子的日期 = 那一轮的 `due_date`（**排期日**，不是完成日）—— 节奏问的是"该做的那天做没做"；
+    - `done` = 那一轮**现在**是「完成」；手工归档过的若**有 `task.completed` 事实**也算完成
+      （归档本身不代表做完 —— 未完成的也能归档，所以只认事实）；
+    - `off` = 取消 / 搁置 / 归档且没完成 —— 如实标出来，**不算完成、也不算"没做"**；
+    - `missed` = 还活着但没做；
+    - **不推算"下次该哪天"**：周期是"每 N 天"，锚点会漂，算出来的日历是假的 ——
+      只画**真实排过**的日子（这是这一条规格里最容易做假的地方）；
+    - 被彻底删掉（已删）的轮次不进图（它已经不是排期了）。
+    """
+
+    days: int
+    start: str
+    end: str
+    series: list[RepeatSeries]
+    note: str
 
 
 class AcademicSplit(BaseModel):
@@ -245,6 +288,63 @@ def group_insights(
     ]
     result.sort(key=lambda g: g.focus_hours, reverse=True)
     return result
+
+
+def repeat_rhythm(conn: sqlite3.Connection, days: int = DEFAULT_RHYTHM_DAYS) -> RepeatRhythm:
+    """近 `days` 天的重复任务节奏（`SR-F1.5b`：规格写「重复节奏可用时间热力图管理」）。
+
+    实现要点（口径写在 `RepeatRhythm` 的 docstring 里，这里只说"怎么算"）：
+    - 取所有 `repeat_days IS NOT NULL` 的任务行（每完成一轮就生成下一行）；
+    - 按 `(title, repeat_days)` 归成一条节奏（生成的下一轮**继承**这两样，所以同一事项自然归到一起；
+      中途改过标题的会被拆成两条 —— 这是如实反映，不猜"这俩是不是同一个"）；
+    - 只要 `due_date` 落在窗口内的轮次占一格；被彻底删掉的轮次不进图；
+    - `done` 认「现在状态是完成」，或「归档 + 有 `task.completed` 事实」
+      （归档 ≠ 做完：未完成的也能归档，所以只认事实）。
+    """
+    total = max(1, min(int(days), MAX_RHYTHM_DAYS))
+    end_day = date.today()
+    start_day = end_day - timedelta(days=total - 1)
+    start, end = start_day.isoformat(), end_day.isoformat()
+    rows = tm.repeat_tasks(conn)
+    grouped: dict[tuple[str, int], list[RepeatCell]] = {}
+    for task in rows:
+        if task.status == tm.STATUS_DELETED:
+            continue
+        due = (task.due_date or "")[:10]
+        if not due or not (start <= due <= end):
+            continue
+        has_fact = bool(tm.completion_dates(conn, [task.id]).get(task.id))
+        if task.status == tm.STATUS_DONE or (task.status == tm.STATUS_ARCHIVED and has_fact):
+            state = "done"
+        elif task.status in (tm.STATUS_CANCELLED, tm.STATUS_ARCHIVED, tm.STATUS_PENDING):
+            state = "off"
+        else:
+            state = "missed"
+        key = (task.title, int(task.repeat_days or 0))
+        grouped.setdefault(key, []).append(RepeatCell(date=due, state=state))
+
+    series = [
+        RepeatSeries(
+            title=title,
+            repeat_days=every,
+            planned=len(cells),
+            done=sum(1 for c in cells if c.state == "done"),
+            cells=sorted(cells, key=lambda c: c.date),
+        )
+        for (title, every), cells in grouped.items()
+    ]
+    series.sort(key=lambda s: (-s.planned, s.title))
+    return RepeatRhythm(
+        days=total,
+        start=start,
+        end=end,
+        series=series,
+        note=(
+            "每条 = 一个重复事项（同一标题 + 同一周期）。格子按「排期日」画："
+            "实心 = 那一轮做完了，空心 = 还活着但没做，灰 = 取消/搁置/归档未完成。"
+            "周期是「每 N 天」，所以不推算以后该哪天 —— 只画真实排过的日子。"
+        ),
+    )
 
 
 def _focus_seconds(conn: sqlite3.Connection, day: str) -> float:
