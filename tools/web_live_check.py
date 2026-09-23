@@ -292,6 +292,24 @@ def live_sync_checks(base: str, tmp: Path) -> dict[str, bool]:
     after = _json_call(base, "/api/tasks")[1] or []
     applied = _json_call(base, "/api/sync/import", "POST", {"path": str(alien_path)})
     final = _json_call(base, "/api/tasks")[1] or []
+    # T-G8b：删除是**可选项** —— 先确认默认不删，再确认勾上能删（真服务上走完整接口）
+    victim = _json_call(base, "/api/tasks", "POST", {"title": "自检·会被对方删掉的"})[1] or {}
+    del_pack = tmp / "del.json"
+    del_pack.write_text(json.dumps({
+        "format": "timeflow-sync", "format_version": 1,
+        "schema_version": 17, "device_id": "another-machine-9",
+        "created_at": "2026-09-23T10:00:00", "tables": {}, "counts": {},
+        # 删除时刻取**远期**：这条包要证明"勾上就删"，而判据是"本地行有没有比删除时刻更新"
+        # —— 写一个固定日期会变成**定时炸弹**（本用例第一版写的 2026-09-23T10:00:00，
+        #   当天 10:00 一过，本地行就"比删除更新"→ 规则正确地不删 → 用例开始红）。
+        "tombstones": [{"entity": "tasks", "entity_id": victim.get("id"),
+                        "deleted_at": "2099-01-01T00:00:00"}],
+    }, ensure_ascii=False), encoding="utf-8")
+    keep = _json_call(base, "/api/sync/import", "POST", {"path": str(del_pack)})
+    after_keep = _json_call(base, "/api/tasks")[1] or []
+    gone = _json_call(base, "/api/sync/import", "POST",
+                      {"path": str(del_pack), "apply_deletions": True})
+    after_gone = _json_call(base, "/api/tasks")[1] or []
     return {
         "同步包能导出": exported[0] == 200 and bool(path) and Path(str(path)).is_file(),
         "导出报告含条数与设备号": bool((exported[1] or {}).get("rows"))
@@ -308,6 +326,15 @@ def live_sync_checks(base: str, tmp: Path) -> dict[str, bool]:
         and any(t["title"] == "来自另一台的" for t in final),
         "导入没删本机的任务": mine.get("title") is not None
         and any(t["title"] == "自检·本机原有的" for t in final),
+        # T-G8b：默认不删 / 勾上才删（同一个包、同一个接口，只有那个开关不同）
+        "删除默认不生效": keep[0] == 200
+        and (keep[1] or {}).get("totals", {}).get("deleted", 0) == 0
+        and any(t["id"] == victim.get("id") for t in after_keep),
+        "勾上才真的删": gone[0] == 200
+        and (gone[1] or {}).get("totals", {}).get("deleted", 0) == 1
+        and not any(t["id"] == victim.get("id") for t in after_gone),
+        "删了也留痕": bool((gone[1] or {}).get("conflicts"))
+        and any("本地也删了" in str(c.get("result")) for c in (gone[1] or {}).get("conflicts", [])),
     }
 
 

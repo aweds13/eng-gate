@@ -1086,6 +1086,7 @@ def test_sync_pack_is_wired_and_non_destructive() -> None:
     ① 导入前必须能**预览**（`dry_run`）——"覆盖"是真会改东西的，不能点了就干；
     ② 界面上要写明包里**不含**本机设置（否则用户会以为设置也跟着同步）；
     ③ 三个动作都注册在 `ACTIONS` 里（点了没反应比报错更难查）。
+    ④（T-G8b 起）：**删不删由勾选框当场决定、默认不删**，且这个选择要**看得见**（不是隐藏设置）。
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
     setting = html.split("async function renderSetting(m){", 1)[1].split("\n}", 1)[0]
@@ -1094,12 +1095,22 @@ def test_sync_pack_is_wired_and_non_destructive() -> None:
         assert f'data-action="{action}"' in setting, f"缺少 {action} 入口"
         assert f"'{action}':" in html, f"动作 {action} 没注册"
     assert 'id="syncPath"' in setting, "导入要有路径输入框"
-    assert "导入不会删你本地的任何东西" in setting, "`不删你数据`这条口径要写在界面上"
     assert "不含" in setting and "schema 版本" in setting, "要写明包里不含什么"
     assert "sync.device_id" in setting, "要显示设备号（判断两份包谁是谁）"
+    # T-G8b：默认不删 + 勾选框 + 勾上之后的代价写清楚
+    assert 'id="syncDel"' in setting and 'data-change="sync-del-toggle"' in setting, \
+        "要有「同时应用删除」那颗勾选框"
+    assert "默认不删" in setting, "要说明默认不删"
+    assert "不可撤销" in setting and "本地在那之后又改过它" in setting, \
+        "勾上之后的代价与例外要写在界面上"
+    assert "'sync-del-toggle':" in html, "勾选框的变化动作没注册"
+    assert "function syncApplyDeletions()" in html and "function syncDelHint()" in html
 
     fn = html.split("async function importSyncPack(){", 1)[1].split("\n}", 1)[0]
     assert "dry_run:true" in fn and "confirmAsk(" in fn, "导入必须先预览再二次确认"
+    assert "apply_deletions:applyDel" in fn, "真导入要把勾选状态传下去"
+    assert fn.count("apply_deletions:applyDel") >= 2, "预览与真导入必须传**同一个**选择"
+    assert "会删掉本机" in fn, "勾了删的时候，确认框要写明会删几行"
     export_fn = html.split("async function exportSyncPack(){", 1)[1].split("\n}", 1)[0]
     assert "/api/sync/export" in export_fn and "copyText(" in export_fn
 

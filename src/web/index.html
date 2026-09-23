@@ -650,6 +650,7 @@ const ACTIONS = {
   'sync-export':    () => exportSyncPack(),
   'sync-preview':   () => previewSyncPack(),
   'sync-import':    () => importSyncPack(),
+  'sync-del-toggle': () => syncDelHint(),
   // 手机离线记（SR-NF17 / G 批 · T-G10，场景 ①）：离线时记一笔 / 勾完成 / 导出同格式包
   'offline-task-add':      () => offlineTaskAdd(),
   'offline-memo-add':      () => offlineMemoAdd(),
@@ -2654,6 +2655,11 @@ async function renderSetting(m){
       <input id="syncPath" placeholder="要导入的包路径（后端会把完整路径给你）" style="min-width:260px">
       <button class="ghost" data-action="sync-preview">先预览</button>
       <button class="ghost" data-action="sync-import">导入</button></div>
+    <div class="row tight" style="margin-top:var(--sp-3)">
+      <label class="sub"><input type="checkbox" id="syncDel" data-change="sync-del-toggle"> 同时应用对方的删除</label>
+      <span class="sub" id="syncDelHint">（默认不删：只记墓碑，保留你本地的行）</span></div>
+    <div class="sub">勾上之后，对方<b>删掉过</b>的东西也会在本机删掉 —— <b>不可撤销</b>（要回退用「备份与恢复」）。
+      两种例外仍然不删：本机没有那一行；或者<b>你本地在那之后又改过它</b>（那时会逐条记进冲突日志）。</div>
     <div class="meta">上次导出：${sync.last_export?`${esc(String(sync.last_export.at).replace('T',' '))} · ${sync.last_export.rows||0} 行`:'还没导出过'}
       · 上次导入：${sync.last_import?`${esc(String(sync.last_import.at).replace('T',' '))} · 新增 ${(sync.last_import.totals||{}).inserted||0} / 覆盖 ${(sync.last_import.totals||{}).updated||0}`:'还没导入过'}</div>
     <div class="sub">包里<b>不含</b>这台机器的设置（导出目录 / Vault / AI 开关 / 口径开关）、本机冲突日志与 schema 版本 ——
@@ -2663,8 +2669,9 @@ async function renderSetting(m){
       导出的是<b>同一个格式</b>的包 —— 拿回来在这里「先预览再导入」就行。</div>
     <div class="row tight">
       <button class="ghost" data-action="view" data-view="offline">打开「离线记」这一页</button></div>
-    <div class="sub">这一页在断网时也能打开（它就是为断网准备的）；手机上要真的打开这个应用，
-      还得先做「同一 WiFi 直连」（默认关，还没做）——现在可以在电脑浏览器的离线模式里用它。</div>
+    <div class="sub">这一页在断网时也能打开（它就是为断网准备的）。手机要真的打开这个应用，
+      得先在电脑上<b>显式开</b>局域网访问（<code>--lan</code>，默认关）+ 配对码 —— 见下面那一节；
+      在那之前可以在电脑浏览器的离线模式里用它。</div>
     <div class="settings-sub" id="set-lan">局域网访问（手机连电脑）</div>
     <div class="title">${lan.lan_open?'这台服务已对局域网开着':'这台服务只监听本机（手机连不上）'}</div>
     <div class="meta">${lan.lan_open
@@ -2836,9 +2843,15 @@ async function copyAiExample(){
 }
 /* 跨端同步（SR-F9.2 / G 批 · T-G8，场景 ③）：**走文件**。
    后端把包写在库目录旁边（与备份同一个地方），所以这里只显示路径 + 复制；
-   导入要先**预览**（dry_run 一个字节都不写），再让你确认 —— 覆盖是有的，所以不能点了就干。 */
+   导入要先**预览**（dry_run 一个字节都不写），再让你确认 —— 覆盖是有的，所以不能点了就干。
+   T-G8b（用户定「覆盖，可以选择是否删除」）：删不删由**那颗勾选框**当场决定（默认不删），
+   预览与真导入都把同一个 `apply_deletions` 传下去 —— 于是"预览说会删几行"与"真删几行"是同一个数。 */
 function syncSummary(t){
+  // 注意：这段文字是给 **toast / confirmAsk**（纯文本，会被转义）看的 —— 所以只用普通字，
+  // 不能写 `**加粗**` 也不能写 `<b>`（前者会显示成星号，后者会显示成标签）。
   return `新增 ${t.inserted||0} · 覆盖 ${t.updated||0} · 保留本地 ${t.kept||0}`
+    + (t.deleted?` · 删除 ${t.deleted||0} 行`:'')
+    + (t.kept_after_delete?` · 本地改过没删 ${t.kept_after_delete||0}`:'')
     + (t.tombstoned?` · 按墓碑跳过 ${t.tombstoned||0}`:'')
     + (t.tombstone_added?` · 记下远程墓碑 ${t.tombstone_added||0}`:'');
 }
@@ -2855,25 +2868,46 @@ async function previewSyncPack(){
   const path=((document.getElementById('syncPath')||{}).value||'').trim();
   if(!path){toast('先把要导入的包路径粘进来（导出时完整路径已复制到剪贴板）');return}
   try{
-    const r=await api('/api/sync/import',{method:'POST',body:JSON.stringify({path,dry_run:true})});
+    const r=await api('/api/sync/import',
+      {method:'POST',body:JSON.stringify({path,dry_run:true,apply_deletions:syncApplyDeletions()})});
     toast(`预览：${syncSummary(r.totals)}${r.conflict_count?` · 冲突/覆盖 ${r.conflict_count} 条`:''}（还没动库）`);
   }catch(e){/* api() 已经弹过后端原话 */}
 }
 async function importSyncPack(){
   const path=((document.getElementById('syncPath')||{}).value||'').trim();
   if(!path){toast('先把要导入的包路径粘进来');return}
+  const applyDel=syncApplyDeletions();
   try{
-    const pre=await api('/api/sync/import',{method:'POST',body:JSON.stringify({path,dry_run:true})});
+    const pre=await api('/api/sync/import',
+      {method:'POST',body:JSON.stringify({path,dry_run:true,apply_deletions:applyDel})});
     const ok=await confirmAsk(
       `把这份包合进来？来自设备 ${pre.from_device}（导出于 ${String(pre.pack_created_at).replace('T',' ')}）\n`
       + `${syncSummary(pre.totals)}`
+      + (applyDel&&(pre.totals.deleted||0)
+          ? `\n\n⚠️ 你勾了「同时应用删除」：**会删掉本机 ${pre.totals.deleted} 行**（不可撤销）`
+          : '')
       + (pre.conflict_count?`\n其中 ${pre.conflict_count} 条两边都改过/不一致，会逐条记进冲突日志`:''),
-      '导入同步包');
+      applyDel&&(pre.totals.deleted||0)?'导入并删除':'导入同步包');
     if(!ok)return;
-    const r=await api('/api/sync/import',{method:'POST',body:JSON.stringify({path})});
+    const r=await api('/api/sync/import',
+      {method:'POST',body:JSON.stringify({path,apply_deletions:applyDel})});
     toast(`已导入：${syncSummary(r.totals)}`);
     view(current);
   }catch(e){/* api() 已经弹过后端原话 */}
+}
+/** 勾选框读值（T-G8b）：**默认不删**；这个选择每次都看得见，不做成"记住了的隐藏设置"。 */
+function syncApplyDeletions(){
+  const box=document.getElementById('syncDel');
+  return !!(box&&box.checked);
+}
+/** 勾选框变化：把提示改成人话（勾上时要说清"这会删东西、不可撤销"）。 */
+function syncDelHint(){
+  const box=document.getElementById('syncDel');
+  const hint=document.getElementById('syncDelHint');
+  if(!hint)return;
+  hint.innerHTML=box&&box.checked
+    ? '这次导入会把对方删过的行也在本机删掉（<b>不可撤销</b>；你本地改过的那种仍然不删）'
+    : '（默认不删：只记墓碑，保留你本地的行）';
 }
 // ---- 附件打开方式设置（T-B4）：模式与白名单存服务端 ----
 async function setAttachMode(mode){

@@ -12,8 +12,9 @@
    没有 `schema_version`（结构由迁移管）。于是"把包拷到另一台机器"不会改掉对方的设置。
 2. **合并不静默**：谁新谁旧按 **version → updated_at** 判（`sync.newer_is_win`，与既有语义一致）；
    覆盖、保留本地、按墓碑跳过**逐条记进 `sync_logs`**（带 `result` 与一句"差在哪"），界面看得见。
-3. **导入永不删你的东西**：远程墓碑（"那边删过这个"）只用于**防止复活**与**继续传给下一台**，
-   **不删本地已有的行** —— 默认保守（这条是 v1 明确边界，见复盘文档）。
+3. **导入默认不删你的东西**，但**可以选**（T-G8b，用户 2026-09-23 定「覆盖，可以选择是否删除」）：
+   远程墓碑（"那边删过这个"）默认只用于**防止复活**与**继续传给下一台**，**不删本地已有的行**；
+   导入时开「同时应用删除」才会连本地那一行一起删 —— 且**本地更新过的不删**（见 `plan_merge`）。
 
 **三类表，三套合并规则**（表的性质不同，不能一刀切）：
 
@@ -156,7 +157,8 @@ def build_pack(conn: sqlite3.Connection, *, device: str | None = None) -> dict[s
         "tombstones": tombstones,
         "counts": {name: len(rows) for name, rows in tables.items()},
         "note": "同步的是你的数据；**不含**本机设置（导出目录 / Vault / AI 开关 / 口径开关）、"
-                "本机的冲突日志与 schema 版本。导入**不会删**你本地的任何东西。",
+                "本机的冲突日志与 schema 版本。导入**默认不删**你本地的任何东西"
+                "（可选「同时应用删除」，那时才会把对方删掉的行也在本机删掉）。",
     }
 
 
@@ -280,10 +282,11 @@ def check_pack(pack: object) -> dict[str, Any]:
 class Action:
     """一条待执行的动作（**先规划、后执行**：于是"预览"与实际导入是同一套判断）。"""
 
-    kind: str            # insert / update / tombstone_add / keep
+    kind: str            # insert / update / delete / tombstone_add / keep
     table: str
     entity_id: str
     reason: str = ""     # 'remote_newer' / 'tombstoned' / 'content_differs' / 'remote_deleted'
+                         # / 'local_newer_than_delete'
     local: dict[str, Any] = field(default_factory=dict)
     remote: dict[str, Any] = field(default_factory=dict)
 
@@ -355,12 +358,21 @@ def _local_tombstones(conn: sqlite3.Connection) -> set[tuple[str, str]]:
 
 
 def plan_merge(
-    conn: sqlite3.Connection, pack: dict[str, Any], *, device: str | None = None
+    conn: sqlite3.Connection,
+    pack: dict[str, Any],
+    *,
+    device: str | None = None,
+    apply_deletions: bool = False,
 ) -> tuple[list[Action], list[dict[str, Any]]]:
     """**纯读**地算出这次导入要做什么，返回 `(动作列表, 冲突/说明列表)`。
 
     规划与执行分开的好处：界面能"先预览再确认"（同一套判断，不会预览说一套、执行做另一套），
     dry-run 也就不用"跑一半回滚"这种危险做法。
+
+    `apply_deletions`（T-G8b，用户 2026-09-23 定「覆盖，可以选择是否删除」）：
+    **要不要把"对方删过的东西"也在这边删掉** —— 默认 **False**（保守：只记墓碑、不删你的行）。
+    开了之后也不是无条件删：**本地那一行若在"对方删除之后"又改过 → 不删**（记一条冲突说明），
+    因为"你后来还动过它"比"对方删了它"更能说明你的意图。
     """
     check_pack(pack)
     local_dev = device or peek_device_id(conn) or ""
@@ -429,22 +441,64 @@ def plan_merge(
                 "note": _diff_note(here, remote),
             })
 
-    # 远程墓碑：**并入本地**（好继续传给下一台），但**不删本地已有的行**（v1 边界）
+    # 远程墓碑：**并入本地**（好继续传给下一台）。要不要**顺手把本地那一行也删掉**，
+    # 由 `apply_deletions` 决定（T-G8b，用户定「覆盖，可以选择是否删除」）——
+    # 默认 False（保守：只记墓碑、不删你的行）。
+    #
+    # ★ 判据是**本地那一行还在不在**，不是"这条墓碑我见没见过"：
+    #   先按默认导过一次（只记了墓碑、行留着），之后再勾「同时应用删除」导一次 —— 那一次**也该删**
+    #   （否则用户会觉得"我勾了却没删"）。这条是实测踩出来的：原本
+    #   `if (entity, eid) in tombstones: continue` 会把第二次导入整个跳过。
+    deletions: list[Action] = []
+    local_cache: dict[str, dict[str, dict[str, Any]]] = {}
     for tomb in pack.get("tombstones") or []:
         if not isinstance(tomb, dict):
             continue
         entity, eid = str(tomb.get("entity") or ""), str(tomb.get("entity_id") or "")
         if not entity or not eid:
             continue
-        if (entity, eid) in tombstones:
-            continue
-        actions.append(Action("tombstone_add", entity, eid, "remote_deleted",
-                              remote={"deleted_at": tomb.get("deleted_at")}))
-        conflicts.append({
-            "entity": entity, "entity_id": eid, "result": "远程已删（本地保留）",
-            "note": "那边删过它；这里**不替你删**（v1 导入不删任何本地数据），只记下墓碑",
-        })
-    return actions, conflicts
+        known = (entity, eid) in tombstones
+        deleted_at = str(tomb.get("deleted_at") or "")
+        local_row: dict[str, Any] | None = None
+        if apply_deletions and entity in SYNCED_TABLES:
+            if entity not in local_cache:
+                local_cache[entity] = _local_rows(conn, entity)
+            local_row = local_cache[entity].get(eid)
+        acted = False
+        if local_row is not None:
+            acted = True
+            local_ts = _pack_row_ts(local_row)
+            # 本地那一行在这之后又改过 → **不删**（"你后来还动过它"比"对方删了它"更能说明意图）
+            if deleted_at and local_ts > deleted_at:
+                actions.append(
+                    Action("keep", entity, eid, "local_newer_than_delete", local=local_row)
+                )
+                conflicts.append({
+                    "entity": entity, "entity_id": eid,
+                    "result": "远程已删，但本地更新过（没删）",
+                    "local_ts": local_ts, "remote_ts": deleted_at,
+                    "note": f"那边在 {deleted_at} 删的，你这边 {local_ts} 还改过它 → 保留本地",
+                })
+            else:
+                deletions.append(Action("delete", entity, eid, "remote_deleted",
+                                        local=local_row, remote={"deleted_at": deleted_at}))
+                conflicts.append({
+                    "entity": entity, "entity_id": eid, "result": "远程已删（本地也删了）",
+                    "local_ts": local_ts, "remote_ts": deleted_at,
+                    "note": "按你的选择：对方的删除也应用过来了（这一行本机也删掉）",
+                })
+        if not known:
+            actions.append(Action("tombstone_add", entity, eid, "remote_deleted",
+                                  remote={"deleted_at": deleted_at}))
+            if not acted:
+                conflicts.append({
+                    "entity": entity, "entity_id": eid, "result": "远程已删（本地保留）",
+                    "note": "那边删过它；这里不替你删（本机要么没有这一行，"
+                            "要么你没开「同时应用删除」），只记下墓碑",
+                })
+    # 删除排在**墓碑之前**执行：删的时候 DELETE 触发器会写一条"此刻"的墓碑，
+    # 紧接着写远程那条（ON CONFLICT 覆盖）→ 最终留下的是**对方删除的时刻**（更如实）。
+    return [*actions, *deletions], conflicts
 
 
 def _diff_note(local: dict[str, Any], remote: dict[str, Any]) -> str:
@@ -471,6 +525,9 @@ class MergeReport:
     kept: int
     tombstoned: int
     tombstone_added: int
+    # T-G8b：**应用对方的删除**（可选择）删掉了多少本地行、以及多少条因为"本地更新过"而免删
+    deleted: int
+    kept_after_delete: int
     conflicts: list[dict[str, Any]]      # **样例**（最多 `MAX_CONFLICT_SAMPLES` 条，界面看）
     conflict_count: int                  # 真实条数（日志里是全部）
     notes: list[str]
@@ -489,6 +546,8 @@ class MergeReport:
                 "kept": self.kept,
                 "tombstoned": self.tombstoned,
                 "tombstone_added": self.tombstone_added,
+                "deleted": self.deleted,
+                "kept_after_delete": self.kept_after_delete,
             },
             "conflicts": self.conflicts,
             "conflict_count": self.conflict_count,
@@ -507,12 +566,14 @@ def summarize(
     tables: dict[str, dict[str, int]] = {}
     for a in actions:
         bucket = tables.setdefault(
-            a.table, {"inserted": 0, "updated": 0, "kept": 0, "tombstoned": 0}
+            a.table, {"inserted": 0, "updated": 0, "kept": 0, "tombstoned": 0, "deleted": 0}
         )
         if a.kind == "insert":
             bucket["inserted"] += 1
         elif a.kind == "update":
             bucket["updated"] += 1
+        elif a.kind == "delete":
+            bucket["deleted"] += 1
         elif a.kind == "keep" and a.reason == "tombstoned":
             bucket["tombstoned"] += 1
         elif a.kind == "keep":
@@ -522,6 +583,8 @@ def summarize(
     kept = sum(b["kept"] for b in tables.values())
     tombstoned = sum(b["tombstoned"] for b in tables.values())
     tombstone_added = sum(1 for a in actions if a.kind == "tombstone_add")
+    deleted = sum(b["deleted"] for b in tables.values())
+    kept_after_delete = sum(1 for a in actions if a.reason == "local_newer_than_delete")
     notes: list[str] = []
     if inserted:
         notes.append(f"新增 {inserted} 行（本地没有的）")
@@ -531,8 +594,13 @@ def summarize(
         notes.append(f"保留本地 {kept} 行（本地不旧或这类行只增不改）")
     if tombstoned:
         notes.append(f"按墓碑跳过 {tombstoned} 行（本机删过，不被旧包复活）")
+    if deleted:
+        notes.append(f"**按对方的删除删掉 {deleted} 行**"
+                     "（你开着「同时应用删除」；不可撤销，要回退用备份）")
+    if kept_after_delete:
+        notes.append(f"{kept_after_delete} 条对方删过、但你本地更新过 → 没删（逐条记在冲突日志里）")
     if tombstone_added:
-        notes.append(f"记下 {tombstone_added} 条远程墓碑（继续传给下一台；**不删本地数据**）")
+        notes.append(f"记下 {tombstone_added} 条远程墓碑（继续传给下一台）")
     if not actions:
         notes.append("没有需要合并的东西（两边的这些表已经一致）")
     return MergeReport(
@@ -546,6 +614,8 @@ def summarize(
         kept=kept,
         tombstoned=tombstoned,
         tombstone_added=tombstone_added,
+        deleted=deleted,
+        kept_after_delete=kept_after_delete,
         conflicts=conflicts[:MAX_CONFLICT_SAMPLES],
         conflict_count=len(conflicts),
         notes=notes,
@@ -600,18 +670,36 @@ def _where_pk(table: str, key: str) -> tuple[str, list[str]]:
     return " AND ".join(f"{c} = ?" for c in pk), parts
 
 
+def _delete_row(conn: sqlite3.Connection, table: str, key: str) -> int:
+    """按主键删一行（T-G8b：只有 `apply_deletions=True` 时才会走到这里）。
+
+    删之前先把**关系行**清掉吗？—— 不用：对方删这张表的行时，它那边的触发器已经给
+    关系行各留了一条墓碑，那些墓碑也在同一个包里 → 这里会一条条删过去（与桌面上的
+    `purge_task` 先删 `task_groups` 是同一个结果）。
+    返回删掉的行数（0 = 本地其实没有它，正常情况）。
+    """
+    where, values = _where_pk(table, key)
+    cursor = conn.execute(f"DELETE FROM {table} WHERE {where}", tuple(values))
+    return int(cursor.rowcount or 0)
+
+
 def merge_pack(
     conn: sqlite3.Connection,
     pack: dict[str, Any],
     *,
     dry_run: bool = False,
     device: str | None = None,
+    apply_deletions: bool = False,
 ) -> MergeReport:
     """把一份同步包合并进本地（`dry_run=True` 只算不动）。
 
-    规则见模块开头那张表。**导入不删本地任何数据**；覆盖与保留都逐条记进 `sync_logs`。
+    规则见模块开头那张表。默认**不删本地任何数据**；覆盖与保留都逐条记进 `sync_logs`。
+    `apply_deletions=True`（T-G8b，用户选的口径）时才把"对方删过的东西"也在这边删掉 ——
+    本地更新过的那种仍保留（见 `plan_merge`）。
     """
-    actions, conflicts = plan_merge(conn, pack, device=device)
+    actions, conflicts = plan_merge(
+        conn, pack, device=device, apply_deletions=apply_deletions
+    )
     report = summarize(actions, conflicts, pack, dry_run=dry_run)
     if dry_run:
         return report
@@ -621,6 +709,8 @@ def merge_pack(
             _insert_row(conn, a.table, a.remote)
         elif a.kind == "update":
             _update_row(conn, a.table, a.entity_id, a.remote)
+        elif a.kind == "delete":
+            _delete_row(conn, a.table, a.entity_id)
         elif a.kind == "tombstone_add":
             conn.execute(
                 f"INSERT INTO {TOMBSTONE_TABLE} (entity, entity_id, deleted_at) VALUES (?,?,?) "
@@ -688,7 +778,9 @@ def status(conn: sqlite3.Connection) -> dict[str, Any]:
 
     return {
         # `file_sync` 是**真的能用了**（③ 落地）：导出/导入同步包。
-        # `network_sync` 仍然没有（①②未做）——分开报，不拿一个布尔糊过去。
+        # `network_sync` **仍然是 False**：② 让手机能**打开**这个服务（同一局域网直连），
+        # 但"把手机的队列**通过网络**传上来"没做 —— 它还是导出成文件再导入。
+        # 所以这里不把"能连上"说成"能同步"（一个布尔说不清就分开报）。
         "file_sync": True,
         "network_sync": False,
         "device_id": device_id(conn),
@@ -698,8 +790,10 @@ def status(conn: sqlite3.Connection) -> dict[str, Any]:
         "last_import": _parsed(KEY_LAST_IMPORT),
         "synced_tables": list(SYNCED_TABLES),
         "excluded_tables": list(EXCLUDED_TABLES),
-        "note": "**走文件**的跨端同步：在一台机器导出同步包，拷到另一台导入。"
+        "note": "跨端同步：一台机器导出同步包，拷到另一台导入"
+                "（手机也可以走同一局域网直连来用这个服务）。"
                 "合并按 **version → updated_at** 判谁新；覆盖与保留都记进冲突日志（不静默）；"
-                "**导入不会删你本地的任何东西**（远程删过的只记墓碑，不替你删）。"
-                "同一 WiFi 直连（②）与手机离线（①）还没做。",
+                "**导入默认不删你本地的任何东西** —— 要连「对方删掉的」也一起删，"
+                "导入时勾「同时应用删除」（本地更新过的那种仍然不删）。"
+                "把手机的队列**通过网络**直接传上来还没做（现在仍走文件）。",
     }

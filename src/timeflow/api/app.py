@@ -2005,8 +2005,11 @@ def create_app(
     # ---- 跨端同步：同步包（导出/导入）（SR-F9.2 / SR-NF17；G 批 · T-G8 = 场景 ③）----
     # 口径（2026-09-21 用户定，见 `复盘/口径定案-待定清单.md` §3）：**③ 先做**（走文件的合并机制，
     # 它是 ① 的地基）；规则与措辞都在 `core/syncpack.py` 一处。两条硬边界写在这里：
-    #   - **导入永不删你本地的东西**（远程墓碑只防复活 + 继续传给下一台）；
-    #   - 覆盖/保留**逐条记进冲突日志**（不静默覆盖），界面能看见"为什么动了这一行"。
+    #   - **导入默认不删你本地的东西**（远程墓碑只防复活 + 继续传给下一台）；
+    #     要连「对方删掉的」也一起删，导入时传 `apply_deletions=true`
+    #     （T-G8b，用户 2026-09-23 定的口径：「覆盖，可以选择是否删除」）——
+    #     那时**本地更新过的那种仍然不删**；
+    #   - 覆盖/保留/删除**逐条记进冲突日志**（不静默覆盖），界面能看见"为什么动了这一行"。
     @app.post("/api/sync/export")
     def sync_export(request: Request) -> dict[str, Any]:
         """导出一份同步包到**数据库同目录**（原子写），返回路径与条数。
@@ -2024,18 +2027,25 @@ def create_app(
     def sync_import(payload: dict[str, Any], request: Request) -> dict[str, Any]:
         """导入一份同步包（`dry_run=true` 只预览、一个字节都不写）。
 
+        `apply_deletions`（T-G8b）：要不要把"对方删过的东西"也在这边删掉 —— **默认 false**。
+        预览与真导入走**同一套判断**（`plan_merge` → 执行），所以预览里 `totals.deleted`
+        就是真导入会删掉的行数。
+
         非法包 / 不是我们的格式 / 来自更新版本 → **400 带原话**（不许"尽力猜"）。
         """
         require_local_origin(request)
         dry = bool(payload.get("dry_run"))
+        apply_del = bool(payload.get("apply_deletions"))
         try:
             pack = payload.get("pack")
             if pack is None:
                 pack = syncpack.load_pack(str(payload.get("path") or ""))
-            report = syncpack.merge_pack(conn, pack, dry_run=dry)
+            report = syncpack.merge_pack(
+                conn, pack, dry_run=dry, apply_deletions=apply_del
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        return {"ok": True, **report.as_dict()}
+        return {"ok": True, "apply_deletions": apply_del, **report.as_dict()}
 
     @app.get("/api/sync/status")
     def sync_status() -> dict[str, object]:

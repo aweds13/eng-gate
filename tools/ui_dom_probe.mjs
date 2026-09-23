@@ -966,7 +966,9 @@ for (const [where, needs] of [
   ['setting', ['set-syncpack', '跨端同步（走文件）', 'sync-export', 'sync-preview', 'sync-import',
     'id="syncPath"', 'probe-device-1', '上次导出：2026-09-22 21:00:00 · 12 行',
     '上次导入：2026-09-22 21:05:00 · 新增 4 / 覆盖 1',
-    '导入不会删你本地的任何东西', '不含', 'schema 版本']],
+    '不含', 'schema 版本',
+    // T-G8b：删除是**可选项**（默认不删 + 勾选框 + 代价写在界面上）
+    'id="syncDel"', 'data-change="sync-del-toggle"', '同时应用对方的删除', '默认不删', '不可撤销']],
 ]) {
   try {
     byId.get('main')._html = '';
