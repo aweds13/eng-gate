@@ -452,6 +452,20 @@ evidence = [
 ]
 gaps = "**口径（用户 2026-09-23 定，T-G19）已按它落地（T-G20）**：实时启动 + 结束时再同步 —— 任一台开始专注，另一台**当场**看到只读镜像（右栏 `#clockPeer` + 专注页文案），**不重复记账、也不许停对面的计时**；结束不做实时推，记录各自入库后走已有同步包。**边界（不是缺口，是刻意的）**：① 只在**同一局域网且已配对**时有效（跨端那道门，默认关）；② 老数据 `device_id` 为 NULL 时算「我开的」（保住「重开页面恢复计时」）；③ 勿扰只是**状态可见**，不是系统级屏蔽（与 OP-3c 同口径）。"
 
+[entries."T-G26"]
+id = "T-G26"
+title = "设计基线（SR-NF1 / N30）：装上两个审美 skill 并钉住 workbench 判据 + 第一次拿它量自己（亮色 9 对不达 AA；emoji 当图标）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/设计基线-workbench与去AI味-T-G26.md",
+  "text:复盘/设计基线-workbench与去AI味-T-G26.md::钉成这条线的判据",
+  "text:复盘/设计基线-workbench与去AI味-T-G26.md::亮色主题 9 对不到 AA",
+  "text:复盘/设计基线-workbench与去AI味-T-G26.md::不许在产品 UI 里用 emoji",
+  "text:docs/specification/nonfunctional.md::现钉住 **workbench 风格包**",
+]
+gaps = "**没动任何样式**（一字节 CSS/HTML 都没改）—— 视觉重构那条线用户还没开（T-G24 §9）。装的两个 skill 落在**用户级 skill 根**（`~/.dsh/skills/`，149 文件），**不进本仓库**：`.gitignore` 没忽略 `.dsh/`，项目级会污染「工作区干净 + 台账↔git 对账」。生效是**当场确认**的（skill 目录出现两条 + 用 `skill` 工具真读进来），不是「写进磁盘就算」。**没做的**：① 没把对比度做成护栏（脚本能算、不需要浏览器，是本项目第一条能自动验的审美门，属新阻断项，已登记交接待批）；② 没装 `.uiux-skill-probe/` 里那 7 个外部 skill；③ 没有截图/视觉基线（沙箱无浏览器 GUI）—— 对比度不受此限。workbench 是 **core contract** 包：组件状态/首屏/响应式/签名元素四段它**刻意不管**，是我们要自己定并且**必须说出声**的半边。"
+
 [entries."T-G25"]
 id = "T-G25"
 title = "重复节奏视图（SR-F1.5b / N9）：`insights.repeat_rhythm` + `/api/insights/repeat-rhythm` + 统计页那一段（一条 = 一个重复事项，格子按排期日）"
