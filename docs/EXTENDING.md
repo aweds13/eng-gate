@@ -149,11 +149,16 @@ python -X utf8 examples/01_add_a_fact_kind.py # 改过示例就跑一遍（tests
 门禁全绿之后提交，提交信息带四段 trailer（写法见 `../.github/pull_request_template.md`）：
 
 ```
-Task: T-xN          # 必填：任务卡编号（台账里必须有这一条）
+Task: T-xN          # 必填：任务卡编号（台账里必须有这一条）—— **只写一个卡号**
 Refs: SR-Fx.y, OP-nn
 Ledger: <台账状态怎么变的>
 Gates: <run_gates 的结论行>
 ```
+
+> ⚠️ **`Task:` 只写一个卡号**：审计把这一行当成**恰好一个台账编号**（既用它做严格校验，
+> 也用它做"台账 ↔ git"对账）。写成 `T-G13 / F6 OP-27 延伸` 这种，两处都认不出来 ——
+> 严格模式会 FAIL，对账则**误报**"台账 done 但 git 里没有挂 Task:T-G13 的提交"。
+> 牵扯到的 SR/OP 编号请写进 `Refs:`（血泪教训见 `../复盘/提交标签写错-T-G17.md`）。
 
 **审计不通过就别提交** —— 这道闸门是 `scripts/audit_progress.py`（六项检查），
 它挡的正是"改了代码忘了改文档 / 声称做了但证据不成立"这两件事。
