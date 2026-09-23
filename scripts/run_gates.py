@@ -66,7 +66,13 @@ REAL = [
     # 退出码 3 = 起不了真浏览器 → 记 `not_run`：**NOT RUN 不是 PASS**（last.json 单列一栏 +
     # trailer 里写 NOT RUN）。
     ("render", []),                # 占位：下面按 node 可用来填
+    # 行为流层（T-G34）：真浏览器 + 真点击 + 真按键，把「待人工确认」里功能性的那些搬给机器。
+    # 每轮默认**跑两遍**（各自新库 + 新浏览器）比对断言指纹，不一致同样退 4。
+    # 退出码 3（起不了浏览器）与 2（fixture 坏了）都不算通过 —— 同上记 `not_run`。
+    ("ui_flow", []),               # 占位：下面按 node 可用来填
 ]
+# 这些门是 **node 脚本**：环境里没有 node 时就跑不了 —— 统一记 `not_run`（不许静默跳过当通过）。
+NODE_TOOLS = ("ui_dom_probe", "render", "ui_flow")
 # 信息性检查（只报告、不阻断）—— 当前为空：`audit_titles` 已转正为阻断项（T-D2 收口）。
 INFO_GATES: list[tuple[str, list[str]]] = []
 SUCCESS_HINTS = ("passed", "failed", "error", "PASS", "Success", "checks passed", "OK")
@@ -82,6 +88,20 @@ def render_cmd() -> list[str] | None:
     """渲染验证层：真浏览器采几何清单与黄金比。node 不在就跳过（不谎报通过）。"""
     node = shutil.which("node")
     return [node, str(ROOT / "tools" / "render_check.mjs")] if node else None
+
+
+def ui_flow_cmd() -> list[str] | None:
+    """行为流层（T-G34）：真浏览器真点真按，验功能性的验收项。node 不在就跳过。"""
+    node = shutil.which("node")
+    return [node, str(ROOT / "tools" / "ui_flow_check.mjs")] if node else None
+
+
+# 这三门都是 **node 脚本**：环境里没有 node 就跑不了 —— 统一记 `not_run`（不许静默跳过当通过）。
+NODE_CMD = {
+    "ui_dom_probe": dom_probe_cmd,
+    "render": render_cmd,
+    "ui_flow": ui_flow_cmd,
+}
 
 
 def xdist_available() -> bool:
@@ -245,17 +265,13 @@ def main() -> int:
     not_run: list[str] = []
     jobs = COMMON + ([] if args.quick else REAL)
     for name, cmd in jobs:
-        if name == "ui_dom_probe":
-            filled = dom_probe_cmd()
+        if name in NODE_CMD:
+            filled = NODE_CMD[name]()
             if filled is None:
-                print("[WARN] ui_dom_probe        跳过：环境里没有 node（未验证，不算通过）")
-                continue
-            cmd = filled
-        elif name == "render":
-            filled = render_cmd()
-            if filled is None:
-                print("[WARN] render             跳过：环境里没有 node（未验证，不算通过）")
-                not_run.append("render")
+                # 没有 node = 这一门**没跑**。以前 ui_dom_probe 只打一句 WARN 就走，
+                # 那样 last.json 里看不出"这次没验证它" —— 统一记进 not_run（NOT RUN 不是 PASS）。
+                print(f"[WARN] {name:<22} 跳过：环境里没有 node（未验证，不算通过）")
+                not_run.append(name)
                 continue
             cmd = filled
         elif name == "pytest":
@@ -273,13 +289,13 @@ def main() -> int:
             "seconds": round(time.time() - t0, 2),
             "summary": summarize(out),
         }
-        # 渲染层专有：退出码 3 = 起不了真浏览器。**NOT RUN 不是 PASS** —— 它不进 blocking，
+        # 真浏览器那两层专有：退出码 3 = 起不了真浏览器。**NOT RUN 不是 PASS** —— 它不进 blocking，
         # 但只要它出现就会被记进 `not_run` 并在 trailer 里写出来（想假装没跑过也藏不住）。
-        if name == "render" and proc.returncode == 3:
+        if name in NODE_CMD and proc.returncode == 3:
             item["blocking"] = False
             item["status"] = "NOT RUN"
-            item["note"] = "起不了真浏览器：渲染这一层**没有验证**，不算通过"
-            not_run.append("render")
+            item["note"] = "起不了真浏览器：这一层**没有验证**，不算通过"
+            not_run.append(name)
         results.append(item)
         mark = "[OK ]" if proc.returncode == 0 else ("[SKIP]" if proc.returncode == 3 else "[FAIL]")
         print(f"{mark} {name:<22} exit={proc.returncode}  {item['seconds']}s  {item['summary']}")

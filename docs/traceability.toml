@@ -495,6 +495,35 @@ evidence = [
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。"
 
 
+[entries."T-G34"]
+id = "T-G34"
+title = "行为流层（SR-NF1 / N30）：真浏览器真点真按，把「待人工确认 28 项」里功能性的搬给机器（9 条流 / 63 项断言；每轮跑两遍比断言指纹），接进门禁"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/功能验收机器化-T-G34.md",
+  "text:复盘/功能验收机器化-T-G34.md::## §4 ★ 建成当天抓到的那一族",
+  "text:复盘/功能验收机器化-T-G34.md::每条流都声明「我替掉哪条人工项」",
+  "text:复盘/功能验收机器化-T-G34.md::## §5 建层时踩到的坑",
+  "text:复盘/功能验收机器化-T-G34.md::这一层**不**假装能做到的事",
+  "text:复盘/功能验收机器化-T-G34.md::空集永远满足",
+  "file:tools/ui_flow_check.mjs",
+  "text:tools/ui_flow_check.mjs::真点击做**命中测试**",
+  "text:tools/ui_flow_check.mjs::两遍断言指纹",
+  "text:tools/ui_flow_check.mjs::NOT RUN 不是 PASS",
+  "file:tools/tf_browser.mjs",
+  "text:tools/tf_browser.mjs::一处实现，两个工具都用它",
+  "file:tests/test_ui_flow_check.py",
+  "text:tests/test_ui_flow_check.py::必须**报错**，而不是",
+  "text:tests/test_ui_flow_check.py::必须真的还在交接文档的清单里",
+  "text:scripts/run_gates.py::(\"ui_flow\", [])",
+  "text:scripts/run_gates.py::NODE_TOOLS",
+  "text:src/web/index.html::什么时候用它（T-G34 补的规矩",
+  "text:src/web/index.html::function noteHTML(text)",
+]
+gaps = "**搬走的 9 条**（一条流一条人工项，`--list` 与 `tests/test_ui_flow_check.py` 逐条回查交接文档里那个编号还在不在）：⑦ 新手引导 / ⑧ 收起右栏 / ⑨ 白名单勿扰增删（含非法时段被后端拦下并原话透传）/ ⑩ 危险动作走站内二次确认 / ① 升级为复习卡（第二次不重复建）/ ③ 波动空档那行只描述事实 / ⑥ 学业 vs 自学口径 / ④ 硬考核区（角标 + 5px 左边条 + 逾期不候）/ ㉑ 字面星号。合计 **63 项断言**，一遍 ≈70s、两遍 148s。**做法上的三条硬规矩**：① 真点击 = 先 `scrollIntoView` → `elementFromPoint` **命中测试**（被浮层盖住/挤出视口的按钮，`el.click()` 会「成功」而用户点不到）→ 再发真鼠标事件；② 真按键 = `Input.dispatchKeyEvent` 逐字符 + 真回车（`data-enter` 那条键盘通路），重填输入框先 Ctrl+A 全选；③ **每轮跑两遍**（各自新库 + 新浏览器）比对**断言指纹**，不一致 = 工具自己不可信（退出码 4）。★ **建成当天抓到一族真缺陷并修掉**：设置页里**字面的星号**（`**重点**`）—— 后端 `describe()` 的说明文字有 6 处在界面里是用 `esc()` 画的（guard / behavior note+switch_note+current_note / vocab / ai.surface / 通知字段与路由 / 备份说明），于是源码里的重点标记被原样画出来；T-G11 那两层护栏看不见它们（第一层只扫 `index.html` 的字符串字面量、第二层的桩数据里没有这些 note —— 那条边界 T-G11 复盘 §五自己写着）。修法 = 那 **10 个渲染口**统一走 `noteHTML()`（**一个字没改**，只是让重点真的变粗体、不再画出星号），并把规矩写死在 `noteHTML` 定义处（后端说明文字 → `noteHTML`；**用户自己写的**备注/要求/产出 → 一律 `esc`；属性里只能 `esc`）。**改动范围由黄金层证明**：只动 3 份黄金（setting × 3 档宽度，每份 -7/+16 行，字重 400→700），其余 39 份逐字节不变。**底座抽共用**：`tools/tf_browser.mjs`（起临时库 / 起真浏览器 / 钉滚动条与设备号），抽完跑渲染层 **42/42 逐字节一致**证明没抽坏。**诚实边界**：① 判不了「好不好看」，也判不了「这句话说得对不对」；② 物理场景（两台设备 / 热点 / 校园网隔离 / 计划任务 / 桌面窗口 / 跨端镜像的双窗口版）仍留人工栏；③ 断言是我写的 —— 写错就给我一个**错的绿灯**（建层时四条坑里三条正是这类）；④ 扫文本那条流用更弱的等待（`settle()` 3 拍 ≈0.6s，更晚才到的东西会漏），真验行为的流一律强等待；⑤ 门禁从 15 道 → **16 道**、整轮 ≈190s → **≈340s**（这是明码标价的代价）。**还没搬的**：⑪ 备份恢复（不可逆，要单独设计临时库走法）/ ⑬ 导出 md / ⑭ 词表 / ⑮ Obsidian / ⑯ AI 边界 / ⑰ 同步自导自 / ㉒ 删除可选 / ㉓ 团队视角 / ㉔ 复习改判 / ㉕ 学校通知 / ㉗ 离线只读区。"
+
+
 [entries."T-G31"]
 id = "T-G31"
 title = "命令表（SR-NF6 / N35）：把界面/⌘K/CLI/AI·MCP 四个面收敛到一张表（54 条 OP ↔ 路由 ↔ 界面入口）+ 检查器接进门禁"

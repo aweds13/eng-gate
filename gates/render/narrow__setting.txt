@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=narrow 820x900 view=setting rows=381 accent=#3b82f6 device=ph-000000000000
+# render-manifest v1 viewport=narrow 820x900 view=setting rows=390 accent=#3b82f6 device=ph-000000000000
 html>body>div.shell		0,0,820,6447	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,820,122	16/normal/400	#1e293b/#000000@0.00	0;14px 24px 0px
 div.shell>aside.rail>h1>span.accent	·	105,14,5,24	18/normal/700	#3b82f6/#000000@0.00	0;0px
@@ -76,7 +76,8 @@ main#main>div.card.panel-card:nth-child(6)>div.row.tight:nth-child(7)>span.sub	�
 div.shell>main#main>div.card.panel-card:nth-child(6)>div.new:nth-child(8)		40,1053,740,38	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(6)>div.new:nth-child(8)>input#guardDnd	(text)22:00-07:00（24 小时制，可跨午夜）	40,1053,648,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
 main#main>div.card.panel-card:nth-child(6)>div.new:nth-child(8)>button.ghost	加上时段	698,1054,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(6)>div.sub	白名单 = 专注时允许用的来源；勿扰时段内不打扰。**只做配置与判定**，不做系统级屏蔽（那需要桌面壳能力）。 时段写成 HH:MM-HH:MM，最多 50 条。	40,1107,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(6)>div.sub		40,1107,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(6)>div.sub>b	只做配置与判定	319,1107,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div#set-tasks	任务	24,1173,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.panel-card:nth-child(8)		24,1200,772,108	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card:nth-child(8)>div.settings-sub	完成几天后进档案	40,1214,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
@@ -87,7 +88,9 @@ main#main>div.card.panel-card:nth-child(8)>div.row.tight>span.sub	默认 3 天 �
 div.shell>main#main>div.card.panel-card:nth-child(8)>div.sub	完成之后不是立刻收走：满 N 天自动进档案（0 = 当天就收）。档案里仍能看见，撤销完成就会回到列表。	40,1278,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div#set-behavior	口径与回退	24,1328,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.panel-card:nth-child(10)		24,1355,772,219	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(1)	开关默认停在**现状位**（没动过 = 什么都没变）；「影子」只是拿另一套口径**试算**，不改任何数据、也不改你现在看到的数字。	40,1373,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(1)		40,1373,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(1)>b:nth-child(1)	现状位	112,1373,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(1)>b:nth-child(2)	试算	439,1373,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div.card.panel-card:nth-child(10)>div.settings-sub		40,1407,740,20	13/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(10)>div.settings-sub>span.badge	默认位	230,1407,52,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
 div.shell>main#main>div.card.panel-card:nth-child(10)>div.meta:nth-child(3)	「昨天没做完、又没有截止日」的 My Day 任务，算不算一笔债？	40,1435,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
@@ -97,7 +100,9 @@ main#main>div.card.panel-card:nth-child(10)>div.row>button.ghost:nth-child(2)	�
 main#main>div.card.panel-card:nth-child(10)>div.row>button.ghost:nth-child(3)	回到默认位	400,1451,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(10)>div.meta:nth-child(5)	✅ 影子跑「不算：不进债务卡」：没有区别（切过去数字不变）。	40,1488,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(6)	现在的做法（F 批 · T-F8 定案 A：计数和明细都是它）	40,1508,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(7)	这里只有**可重算的派生口径**（天数怎么算、谁排前面这类）：换一套算法重算一遍就行，所以能一键回退。**改数据的事**（换 schema、改状态、删东西）旧口径算不回来 —— 那	40,1528,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(7)		40,1528,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(7)>b:nth-child(1)	可重算的派生口径	88,1528,96,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(7)>b:nth-child(2)	改数据的事	604,1528,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div#set-vocab	可配置词表	24,1594,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.panel-card:nth-child(12)		24,1621,772,470	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(1)	词表只决定「能选什么 / 叫什么」，不改计算；配置文件里的默认值在这里改过之后以本机为准。	40,1639,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
@@ -129,7 +134,8 @@ main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>input#vb_heatm
 main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>button.ghost:nth-child(3)	加一项	619,1972,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>button.ghost:nth-child(4)	回到默认	698,1972,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(12)>div.meta:nth-child(11)	只能从这些 id 里选：focus_minutes · manual_minutes · review_count · output_count · debt_count	40,2025,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(12)	这里能改的是「用哪些维度看、它们排第几、叫什么」；**要算一个全新的维度仍需改核心代码**（新字段/新算法不是词表能变出来的）。 最多 8 项。	40,2045,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(12)		40,2045,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(12)>b	要算一个全新的维度仍需改核心代码	340,2045,192,16	12/normal/700	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div#set-export	导出（Markdown）	24,2111,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.panel-card:nth-child(14)		24,2138,772,340	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card:nth-child(14)>div.settings-sub	写到哪个目录	40,2152,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
@@ -171,7 +177,9 @@ main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(1)	GET /api/
 main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(3)	GET /api/ai/tasks	40,2631,102,12	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(5)	GET /api/ai/tasks/{id}	40,2647,132,12	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(7)	POST /api/ai/tasks	40,2663,108,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(9)	POST /api/ai/tasks/{id}/complete	40,2679,192,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>b:nth-child(8)	加一个步骤	327,2660,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(10)	POST /api/ai/tasks/{id}/complete	40,2679,192,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>b:nth-child(11)	只能勾 AI 自己建的	283,2676,103,16	12/normal/700	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)		40,2696,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)>b:nth-child(1)	子步骤	488,2696,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)>b:nth-child(2)	动的是不是你亲手写的东西	126,2712,144,16	12/normal/700	#64748b/#000000@0.00	0;0px
@@ -363,7 +371,8 @@ div.shell>main#main>div#set-sync>div.meta:nth-child(29)	每次起服务/开窗�
 div.shell>main#main>div#set-sync>div.row.tight:nth-child(30)		40,5970,740,20	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div#set-sync>div.row.tight:nth-child(30)>span.sub	还没有备份（起一次服务就会有一份）	40,5974,204,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div#set-sync>div.sub:nth-child(31)		40,5994,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(31)>b	点某个时间点 = 把库整体回到那一刻	40,5994,734,32	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(31)>b:nth-child(1)	连设置一起	208,5994,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(31)>b:nth-child(2)	点某个时间点 = 把库整体回到那一刻	40,5994,738,32	12/normal/700	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(31)	入口	24,6060,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.panel-card:nth-child(32)		24,6087,772,65	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card:nth-child(32)>div.row.tight		40,6101,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px

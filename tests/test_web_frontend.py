@@ -1298,7 +1298,8 @@ def test_repeat_rhythm_view_is_wired_and_kind() -> None:
     assert "api('/api/insights/repeat-rhythm?days=56')" in stats, "统计页没接重复节奏投影"
     assert "重复节奏（近 ${rhythm.days} 天）" in stats
     assert "emptyState('还没有重复任务" in stats, "没有重复任务时要有空态，不是一片空白"
-    assert "esc(rhythm.note)" in stats, "说明要用后端给的那句（别在界面复述口径）"
+    # T-G34 起这句要走 `noteHTML`（后端说明文字里用 `**重点**` 标重点，`esc` 会把它原样画成星号）
+    assert "noteHTML(rhythm.note)" in stats, "说明要用后端给的那句（别在界面复述口径）"
 
     row = html.split("function repeatRhythmRow(s){", 1)[1].split("\n}", 1)[0]
     assert "'var(--accent)'" in row and "none" in row and "'var(--line)'" in row, \

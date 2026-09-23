@@ -75,11 +75,14 @@ config.example.toml / pyproject.toml
 - ✅ **第一版功能域已落地（存在级）**：任务管理 + B 记账 + 专注(F3) + 反馈/习惯(F4) + 学业/GPA(F5) + 复习FSRS(F6) + 团队/AI(F7) + 备忘录(F8) + 同步(F9) + **GPA 4.0/5.0 切换**。
 - ✅ **重构第 0 / 0.1 / 1 步已完成**：事实层（facts + 总线）→ 事实语义分 kind + v4 历史回填 → `ledger.summary()` 改读 facts（完成日口径）。详见 `changelog.md`。
 - ⚠️ **已知断层**：契约层 `contracts/` 揭示多项"操作闭环/模块联动"缺口（详见 `../复盘/三层断裂诊断-实现与交互复盘.md`），存在 ≠ 完成，LC-1~LC-8 多数仍 ❌。
-- ✅ 质量门：`scripts/run_gates.py` **阻断门**（pytest / 验收 / ruff / mypy / 五层对齐 / 护栏自测 / **对比度门** / **一致性门** / 命令表 / DOM 探针 / 台账审计 / 台账↔规格标题对账 / 两项真机自检 / **渲染验证层**）；覆盖率门 70%（写在 `pyproject.toml`）。
+- ✅ 质量门：`scripts/run_gates.py` **阻断门**（pytest / 验收 / ruff / mypy / 五层对齐 / 护栏自测 / **对比度门** / **一致性门** / 命令表 / DOM 探针 / 台账审计 / 台账↔规格标题对账 / 两项真机自检 / **渲染验证层** / **行为流层**）；覆盖率门 70%（写在 `pyproject.toml`）。
   **项数与逐项数字一律以 `gates/last.json` 为准**（每轮落盘，别再往这里抄数 —— 抄过三次都漂了）。
 - ✅ **渲染验证层**（`../tools/render_check.mjs`，T-G32）：**真浏览器**把 3 档宽度 × 14 个视图采成
   「几何清单」与 `gates/render/*.txt` 的黄金**逐字节比**；每轮采两遍做确定性自检；
   起不了浏览器记 **NOT RUN**（**不是通过**）。改黄金要 `--update --reason`，理由落 `gates/render/LAST_UPDATE.md`。
+- ✅ **行为流层**（`../tools/ui_flow_check.mjs`，T-G34）：**真浏览器 + 真点击（带命中测试）+ 真按键**，
+  「待人工确认」里功能性的那些搬给机器；每条流登记「我替掉哪条人工项」（`--list` 可看），
+  每轮跑两遍比断言指纹（不一致 = 工具自己不可信）；底座与渲染层共用 `../tools/tf_browser.mjs`。
 - ✅ **可执行验收层（B4）**：`../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）。
 - ✅ **可扩展/易上手**：`EXTENDING.md`（加功能的五步模板）+ `../examples/` 三个可跑示例（SR-NF7 / SR-NF10）。
 - ⏭️ 后置（第二版）：重规划/债务重组(F2.8)、AI 接口写/改/删、学校通知监测脚本(F10)、移动端 PWA 深联动。

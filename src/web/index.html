@@ -126,7 +126,14 @@ async function api(path,opts={}){
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 /* 后端给的说明文字里用 `**重点**` 标重点（说明由后端一处写，界面只负责显示）。
-   先转义再只认 `**`：**不许**把原文里的 `<`/`>` 变成标签（说明文字也走防注入那条路）。 */
+   先转义再只认 `**`：**不许**把原文里的 `<`/`>` 变成标签（说明文字也走防注入那条路）。
+   ★ 什么时候用它（T-G34 补的规矩，因为漏用会在界面上画出字面的星号）：
+     · **后端 describe() 那类"讲口径"的说明文字** → `noteHTML()`（它认得 `**`）；
+     · **用户自己写的内容**（任务备注 / 考核要求 / 备忘 / 产出说明）→ 一律 `esc()` ——
+       用户写的 `**` 就是两个星号，不是重点；
+     · **属性里**（`title=` 这类）只能 `esc()`：属性里塞不进 `<b>`。
+   这条规矩以前只是"看人记不记得"，漏了就一直画星号（T-G11 修了 19 处静态文案，
+   T-G34 又在**后端**那几个 note 上抓到同一族 —— 现在由行为流层每轮扫 14 个视图兜底）。 */
 function noteHTML(text){return esc(text).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')}
 function el(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
 /* 空态统一走这里（R5 收口）：**一处措辞、一处样式**。
@@ -1864,7 +1871,7 @@ function renderStats(m){
       <div class="section-title">重复节奏（近 ${rhythm.days} 天）</div>
         <div class="card" style="display:block">
         ${rhythm.series.length?rhythm.series.map(repeatRhythmRow).join(''):emptyState('还没有重复任务：给一件事设个「每 N 天」的重复，这里就会长出它的节奏')}
-        <div class="sub">${esc(rhythm.note)}</div></div>
+        <div class="sub">${noteHTML(rhythm.note)}</div></div>
       <div class="section-title">本周投入</div>${weekCard(week)}
       <div class="section-title">时间热力图（近一年）</div>
         <div class="card" style="display:block">
@@ -1970,7 +1977,7 @@ function weekCard(w){
   return `<div class="card" style="display:block">
     <div class="meta">本周 ${w.start} ~ ${w.end} · ${nums.join(' · ')}</div>
     <div style="display:flex;gap:6px;align-items:flex-end;margin-top:12px">${bars}</div>
-    <div class="sub" style="margin-top:8px">${esc(w.steady_note)}</div>
+    <div class="sub" style="margin-top:8px">${noteHTML(w.steady_note)}</div>
     ${rhythmRow(w)}</div>`;
 }
 // 均衡度（T-C3 / SR-F2.5）：**波动** = 逐日专注分钟的**标准差**、**空档** = 本周**最长连续 0 天**。
@@ -1979,7 +1986,7 @@ function weekCard(w){
 function rhythmRow(w){
   if(w.focus_variation_minutes==null&&!w.rhythm_note)return '';
   return `<div class="sub" style="margin-top:6px">波动 ${w.focus_variation_minutes} 分钟（逐日专注的长短差）·
-    本周最长空档 ${w.longest_gap_days} 天 —— ${esc(w.rhythm_note||'')}</div>`;
+    本周最长空档 ${w.longest_gap_days} 天 —— ${noteHTML(w.rhythm_note||'')}</div>`;
 }
 
 function summaryLine(s){
@@ -2521,7 +2528,7 @@ async function renderTeam(m){
     :(b.me?'这个视角下没有任务（换个状态筛选看看）。':'先在上面填「我是谁」，再看分给你的那几件。');
   m.innerHTML=`<div class="card panel-card">
     <div class="row">${viewBtns}</div>
-    <div class="sub" style="margin-top:6px">${esc(b.note)}</div>
+    <div class="sub" style="margin-top:6px">${noteHTML(b.note)}</div>
     ${meRow}
     <div class="row" style="margin-top:8px">${chips}</div></div>
   <div class="meta" style="margin-top:8px">这一页是<b>分配关系的两种看法</b>，不是两套数据：切视角只是换个看法（共 ${b.shown} 件）。</div>
@@ -2794,7 +2801,7 @@ async function renderSetting(m){
       `<button class="ghost" data-action="guard-dnd-del" data-win="${esc(x)}" title="点一下移除">${esc(x)} ✕</button>`).join(''):'<span class="sub">还没有勿扰时段</span>'}</div>
     <div class="new"><input id="guardDnd" placeholder="22:00-07:00（24 小时制，可跨午夜）" data-enter="guard-dnd-add">
       <button class="ghost" data-action="guard-dnd-add">加上时段</button></div>
-    <div class="sub">${esc(guard.note||'')} 时段写成 ${esc(guard.window_format||'HH:MM-HH:MM')}，最多 ${guard.max_items||50} 条。</div>
+    <div class="sub">${noteHTML(guard.note||'')} 时段写成 ${esc(guard.window_format||'HH:MM-HH:MM')}，最多 ${guard.max_items||50} 条。</div>
   </div>
   <div class="section-title" id="set-tasks">任务</div>
   <div class="card panel-card">
@@ -2805,11 +2812,11 @@ async function renderSetting(m){
         style="max-width:90px" data-enter="set-archive-days">
       <button data-action="set-archive-days">保存</button>
       <span class="sub">默认 ${Number(arch.default_after_days)||3} 天 · 上限 ${Number(arch.max_after_days)||365} 天</span></div>
-    <div class="sub">${esc(arch.note||'')}</div>
+    <div class="sub">${noteHTML(arch.note||'')}</div>
   </div>
   <div class="section-title" id="set-behavior">口径与回退</div>
   <div class="card panel-card">
-    <div class="sub">${esc(beh.switch_note||'')}</div>
+    <div class="sub">${noteHTML(beh.switch_note||'')}</div>
     ${(beh.items||[]).length?(beh.items||[]).map(r=>`
       <div class="settings-sub">${esc(r.title)}
         <span class="badge">${r.is_default?'默认位':'已改过'}</span></div>
@@ -2821,13 +2828,13 @@ async function renderSetting(m){
         <button class="ghost" data-action="behavior-reset" data-key="${esc(r.key)}">回到默认位</button></div>
       <div class="meta">${esc(shadowLine(r.shadow))}</div>
       ${shadowSamples(r)}
-      <div class="sub">${esc(r.current_note||'')}</div>`).join('')
+      <div class="sub">${noteHTML(r.current_note||'')}</div>`).join('')
       :'<div class="sub">还没有登记任何口径。</div>'}
-    <div class="sub">${esc(beh.note||'')}</div>
+    <div class="sub">${noteHTML(beh.note||'')}</div>
   </div>
   <div class="section-title" id="set-vocab">可配置词表</div>
   <div class="card panel-card">
-    <div class="sub">${esc(vb.note||'')}</div>
+    <div class="sub">${noteHTML(vb.note||'')}</div>
     ${(vb.items||[]).map(t=>`
       <div class="settings-sub">${esc(t.title)}
         <span class="badge">${t.is_default?'默认':'已改过'}</span></div>
@@ -2841,7 +2848,7 @@ async function renderSetting(m){
         <button class="ghost" data-action="vocab-add" data-key="${esc(t.key)}">加一项</button>
         <button class="ghost" data-action="vocab-reset" data-key="${esc(t.key)}">回到默认</button></div>
       ${(t.allowed&&t.allowed.length)?`<div class="meta">只能从这些 id 里选：${t.allowed.map(a=>esc(a)).join(' · ')}</div>`:''}
-      <div class="sub">${esc(t.note||'')}${t.max_items?` 最多 ${Number(t.max_items)||20} 项。`:''}</div>`).join('')
+      <div class="sub">${noteHTML(t.note||'')}${t.max_items?` 最多 ${Number(t.max_items)||20} 项。`:''}</div>`).join('')
       ||'<div class="sub">还没有可配置的词表。</div>'}
   </div>
   <div class="section-title" id="set-export">导出（Markdown）</div>
@@ -2883,7 +2890,7 @@ async function renderSetting(m){
       <span class="sub">现在：${ai.enabled?'<b>开着</b>（本机程序可以调）':'<b>关着</b>（默认 —— 这一组接口一律 403）'}</span></div>
     <div class="sub">${noteHTML(ai.boundary||'')}</div>
     <div class="meta">${(ai.surface||[]).map(s=>
-      `<code>${esc(s.method)} ${esc(s.path)}</code> ${esc(s.what)}`).join('<br>')}</div>
+      `<code>${esc(s.method)} ${esc(s.path)}</code> ${noteHTML(s.what)}`).join('<br>')}</div>
     <div class="sub">${noteHTML(ai.why||'')}</div>
     <div class="sub">${noteHTML(ai.note||'')}</div>
     <div class="settings-sub">照抄就能跑</div>
@@ -2898,9 +2905,9 @@ async function renderSetting(m){
       <span class="sub">现在：${nf.enabled?'<b>开着</b>（你的脚本可以投递）':'<b>关着</b>（默认 —— 投递一律 403，这叫"未接入"）'}</span></div>
     <div class="sub">${noteHTML(nf.boundary||'')}</div>
     <div class="meta">认这些字段（其它字段会原样存下来，不丢）：${(nf.fields||[]).map(f=>
-      `<code>${esc(f.name)}</code>${f.required?'<b>必填</b>':''} ${esc(f.what)}`).join('<br>')}</div>
+      `<code>${esc(f.name)}</code>${f.required?'<b>必填</b>':''} ${noteHTML(f.what)}`).join('<br>')}</div>
     <div class="meta">${(nf.surface||[]).map(s=>
-      `<code>${esc(s.method)} ${esc(s.path)}</code> ${esc(s.what)}`).join('<br>')}</div>
+      `<code>${esc(s.method)} ${esc(s.path)}</code> ${noteHTML(s.what)}`).join('<br>')}</div>
     <div class="sub">${noteHTML(nf.why||'')}</div>
     <div class="sub">${noteHTML(nf.note||'')}</div>
     <div class="settings-sub">照抄就能跑（脚本里就这么调）</div>
@@ -3024,7 +3031,7 @@ async function renderSetting(m){
       ${(bk.items||[]).length?bk.items.map(b=>`<button class="ghost" data-action="restore-backup"
         data-name="${esc(b.name)}" title="恢复到 ${esc(b.at)}">${esc(String(b.at).replace('T',' '))} · ${sizeLabel(b.size)}${b.parsed?'':'（名字被改过）'}</button>`).join('')
         :'<span class="sub">还没有备份（起一次服务就会有一份）</span>'}</div>
-    <div class="sub">${esc(bk.note||'')} <b>点某个时间点 = 把库整体回到那一刻</b>，界面会让你再确认一次。</div>
+    <div class="sub">${noteHTML(bk.note||'')} <b>点某个时间点 = 把库整体回到那一刻</b>，界面会让你再确认一次。</div>
   </div>
   <div class="section-title">入口</div>
   <div class="card panel-card">

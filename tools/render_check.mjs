@@ -32,14 +32,18 @@
  * 退出码：0 通过 / 1 与黄金不一致或其它失败 / 2 fixture（种子数据）坏了 /
  *         3 起不了真浏览器（NOT RUN）/ 4 采集本身不确定（自检失败）。
  */
-import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-const HERE = dirname(fileURLToPath(import.meta.url))
-const ROOT = join(HERE, '..')
+// 起服务 / 起真浏览器 / 把渲染环境钉成确定的 —— 这些**两个工具都要**的事在
+// `tools/tf_browser.mjs`（T-G34 抽出来的共用底座）。行为流层（`ui_flow_check.mjs`）
+// 用的是同一套：一处实现、两处使用，免得两份慢慢长歪。
+import {
+  Cdp, FIXED_DEVICE, MASK_PATHS, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
+  bootApp, findBrowser, seedFixture, setViewport, startServer, waitHealth, waitQuiet,
+} from './tf_browser.mjs'
+
 const GOLDEN_DIR = join(ROOT, 'gates', 'render')
 const SHOTS_DIR = join(GOLDEN_DIR, 'shots')
 const UPDATE_LOG = join(GOLDEN_DIR, 'LAST_UPDATE.md')
@@ -72,243 +76,17 @@ function parseArgs(argv) {
 
 const ARGS = parseArgs(process.argv.slice(2))
 
-/* ------------------------------------------------- 视口 / 视图（与 CSS 断点对齐） */
+/* ------------------------------------------------- 视口 / 视图 */
 
-// app.css 的三条断点：≥980 有左栏（桌面三栏）、641–979 单列+宽底栏、≤640 手机。
-// 所以取三档：只要覆盖到"左栏在不在"和"手机那条断点"，就不会有断点带没人看过。
-const VIEWPORTS = [
-  { name: 'desktop', width: 1280, height: 900 },
-  { name: 'narrow', width: 820, height: 900 },
-  { name: 'phone', width: 390, height: 844 },
-]
-const VIEWS = ['today', 'tasks', 'important', 'planned', 'flagged', 'focus', 'stats',
-  'habit', 'academic', 'review', 'memo', 'team', 'setting', 'offline']
-// 采集时钉住的"这台设备是谁"（`offline.js` 的 `tf_device`，正常是随机生成的）
-const FIXED_DEVICE = 'ph-000000000000'
-// 采集时钉住的强调色（默认取 `/api/config` 里的那个；见 `pinLocalState` 的注释）
-let CFG_ACCENT = '#3b82f6'
-// 采集时钉住的导出目录（`serve.py --fresh` 默认用 mkdtemp 的随机名，见 `startServer`）
-const EXPORT_DIR = join(process.env.TEMP ?? process.env.TMP ?? '/tmp', 'tf-render-export')
-// 清单里要把这些**字面前缀**换成 `<path>`：本机临时目录（导出目录、临时库都在它下面）。
-// 机器路径不是设计，写进黄金只会泄露用户名、还会让黄金换机器就红。
-const MASK_PATHS = [process.env.TEMP ?? process.env.TMP ?? '/tmp', EXPORT_DIR]
+// 三档宽度（desktop / narrow / phone，与 app.css 三条断点对齐）、14 个视图名，
+// 以及采集时要钉住的常量（设备号 / 导出目录 / 要归一化的本机路径）都住在 `tf_browser.mjs`。
 
 /* ---------------------------------------------------------------- 工具 */
 
 const log = (...m) => { if (!ARGS.quiet) console.log(...m) }
 const nowISO = () => new Date().toISOString().replace('T', ' ').slice(0, 19)
-
-function iso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
-function dayOffset(n) { const d = new Date(); d.setDate(d.getDate() + n); return iso(d) }
-
-/* ---------------------------------------------------------------- 起服务 */
-
-function startServer(port) {
-  const python = process.env.PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3')
-  const env = { ...process.env }
-  const shim = join(ROOT, 'tools', 'sandbox_shim')
-  env.PYTHONPATH = existsSync(shim) ? shim + (env.PYTHONPATH ? ';' + env.PYTHONPATH : '') : env.PYTHONPATH
-  // 导出目录**钉成固定路径**（`serve.py --fresh` 默认用 mkdtemp 的随机名，
-  // 于是设置页那句「默认 <路径> · 文件名就是日期：…」在不同轮次换长度，
-  // 在 820px 这个换行临界宽度上会把折行位置也换掉 —— 实测只有 narrow/setting 会红）。
-  // `serve.py` 用的是 `os.environ.setdefault`，所以我们先设就能盖住它。
-  env.TIMEFLOW_EXPORT__DIR = EXPORT_DIR
-  const child = spawn(python, ['-X', 'utf8', 'tools/serve.py', '--fresh', '--port', String(port)], {
-    cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  let out = ''
-  child.stdout.on('data', (b) => { out += b.toString() })
-  child.stderr.on('data', (b) => { out += b.toString() })
-  return { child, dump: () => out }
-}
-
-async function waitHealth(port, timeoutMs = 30000) {
-  const t0 = Date.now()
-  while (Date.now() - t0 < timeoutMs) {
-    try {
-      const r = await fetch(`http://127.0.0.1:${port}/api/health`)
-      if (r.ok) return true
-    } catch { /* 还没起来 */ }
-    await sleep(300)
-  }
-  return false
-}
-
-/* ---------------------------------------------------------------- 种子数据 */
-
-/** 用**真 HTTP 接口**造一份确定性的 fixture（不直接写库：走界面一样的路）。
- *
- * 日期一律**相对今天**算：这样「今天 / 明天 / 已逾期 N 天」这类相对标签永远稳定，
- * 黄金不会因为"明天再跑一次"就整片变红。绝对时间戳由采集端归一化。
- * 不用/不碰的东西：正在跑的专注计时（每秒都在变）、软删除的回收站（带删除时刻）、
- * 「刚刚/N 分钟前」这类会自己走的文本。
- */
-async function seed(port) {
-  const base = `http://127.0.0.1:${port}`
-  const problems = []
-  async function call(method, path, body) {
-    const r = await fetch(base + path, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
-    const text = await r.text()
-    if (!r.ok) { problems.push(`${method} ${path} → ${r.status} ${text.slice(0, 120)}`); return null }
-    try { return JSON.parse(text) } catch { return null }
-  }
-
-  // 分组（两级：路径显示用）。注意 `set_task_groups` 收的是**分组 id** 不是路径 ——
-  // 这正是建这一层时撞出 T-G33 的地方（当时传了一个不存在的分组，接口直接 500；
-  // 现在不存在的分组会干净地 404 并说清是哪个 id，见 `复盘/接口500-分组不存在-T-G33.md`）。
-  const g1 = await call('POST', '/api/groups', { name: '高数' })
-  const g2 = g1 ? await call('POST', '/api/groups', { name: '作业', parent_id: g1.id }) : null
-  const groupIds = g2 ? [g2.id] : []
-
-  // 课程 → 作业/考试要挂在课程上
-  const course = await call('POST', '/api/courses', { name: '高等数学', credits: 5, teacher: '王老师' })
-  const courseId = course?.id ?? null
-
-  // 任务：覆盖 逾期 / 今天 / 有计划 / 重要 / 已标记 / 完成 / 子步骤 / 尝试失败
-  // 优先级只有 高/中/低 三档（中文，领域层定的），任务类型只有 普通/作业/考试/论文/小测。
-  const overdue = await call('POST', '/api/tasks', { title: '补交上周的实验报告', due_date: dayOffset(-2), priority: '高', groups: groupIds })
-  const todayTask = await call('POST', '/api/tasks', { title: '把第三章习题做完', due_date: dayOffset(0), is_myday: true, priority: '高', flagged: true, note: '重点是 3.4 的证明题' })
-  const planned = await call('POST', '/api/tasks', { title: '预习下周的线性代数', due_date: dayOffset(4), priority: '中' })
-  const parent = await call('POST', '/api/tasks', { title: '写课程设计报告', due_date: dayOffset(6), priority: '低' })
-  if (parent) {
-    const s1 = await call('POST', `/api/tasks/${parent.id}/subtasks`, { title: '列提纲', due_date: dayOffset(2) })
-    await call('POST', `/api/tasks/${parent.id}/subtasks`, { title: '写正文', due_date: dayOffset(5) })
-    if (s1) await call('POST', `/api/tasks/${s1.id}/complete`)
-  }
-  const tried = await call('POST', '/api/tasks', { title: '重装打印机驱动', due_date: dayOffset(1), priority: '中' })
-  if (tried) {
-    await call('POST', `/api/tasks/${tried.id}/attempt-failed`, { note: '换了 USB 口也不行' })
-    await call('POST', `/api/tasks/${tried.id}/attempt-failed`, { note: '官网驱动装到一半报错' })
-  }
-  const done = await call('POST', '/api/tasks', { title: '交英语作业', due_date: dayOffset(0), is_myday: true })
-  if (done) await call('POST', `/api/tasks/${done.id}/complete`)
-  const assignment = await call('POST', '/api/tasks', { title: '把数据整理成表', due_date: dayOffset(3), priority: '中' })
-
-  void overdue; void todayTask; void planned
-
-  // 学业：课程 + 考核 + 成绩
-  if (courseId) {
-    await call('POST', '/api/assessments', { course_id: courseId, name: '期中考试', due_date: dayOffset(9), weight: 0.4 })
-    await call('POST', '/api/grades', { course_id: courseId, term: '2026 秋', score: 86, credits: 5 })
-    const hw = await call('POST', '/api/tasks', { title: '第三章习题', due_date: dayOffset(8), task_type: '作业', course_id: courseId })
-    void hw
-  }
-
-  // 习惯：一个做过、一个没做（两种状态都要进黄金）
-  const h1 = await call('POST', '/api/habits', { name: '早睡' })
-  const h2 = await call('POST', '/api/habits', { name: '跑步' })
-  if (h1) await call('POST', `/api/habits/${h1.id}/toggle`)
-  void h2
-
-  // 复习卡（due 与否都行，页面本身要能渲染）
-  await call('POST', '/api/review/items', { title: '拉格朗日中值定理', ref_handle: '高数 · 第三章' })
-
-  // 备忘录（注意：`--fresh` 已把 markdown 落盘目录指到临时目录，不会写进仓库 export/ 或 Vault）
-  await call('POST', '/api/memos', { text: '问老师期中考试的题型分布' })
-
-  // 团队分配（谁负责 / 进展到哪）
-  if (assignment) await call('POST', '/api/team/assign', { task_id: assignment.id, assignee: '小李', assigner: '我' })
-
-  // 账本一条手动投入（**单位：秒**）：让统计页有非零内容
-  await call('POST', '/api/ledger/invest', { value: 2700, kind: 'focus', note: '专注写报告' })
-
-  return problems
-}
-
-/* ---------------------------------------------------------------- 浏览器 */
-
-const EDGE_CANDIDATES = [
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  '/usr/bin/microsoft-edge',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-]
-
-function findBrowser() {
-  if (process.env.TF_CHROME && existsSync(process.env.TF_CHROME)) return process.env.TF_CHROME
-  for (const p of EDGE_CANDIDATES) if (existsSync(p)) return p
-  return null
-}
-
-class Cdp {
-  constructor(ws) { this.ws = ws; this.id = 0; this.pending = new Map() }
-
-  static async attach(browserPath, port, profileDir) {
-    rmSync(profileDir, { recursive: true, force: true })
-    const child = spawn(browserPath, [
-      '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-      '--disable-crash-reporter', '--disable-extensions', '--hide-scrollbars',
-      `--remote-debugging-port=${port}`, `--user-data-dir=${profileDir}`, 'about:blank',
-    ], { stdio: 'ignore' })
-    let page = null
-    for (let i = 0; i < 60 && !page; i++) {
-      try {
-        const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
-        page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl)
-      } catch { /* 还没起来 */ }
-      if (!page) await sleep(400)
-    }
-    if (!page) { child.kill(); return null }
-    const ws = new WebSocket(page.webSocketDebuggerUrl)
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej })
-    const cdp = new Cdp(ws)
-    cdp.child = child
-    ws.onmessage = (ev) => {
-      const m = JSON.parse(ev.data)
-      if (m.id && cdp.pending.has(m.id)) { cdp.pending.get(m.id)(m); cdp.pending.delete(m.id) }
-    }
-    await cdp.send('Page.enable')
-    await cdp.send('Runtime.enable')
-    // 把滚动条**显式**藏掉：设置页有 6000px 高，一条竖滚动条会吃掉 15px 内容宽，
-    // 于是"同一份清单"在不同轮次里宽度差 13px（实测踩到）。`--hide-scrollbars` 那个启动参数
-    // 不够硬 —— 这里用 CDP 再钉一次。**这不是"把差异涂掉"，是把渲染环境钉成确定的。**
-    await cdp.send('Emulation.setScrollbarsHidden', { hidden: true })
-    return cdp
-  }
-
-  send(method, params = {}) {
-    return new Promise((res) => {
-      const id = ++this.id
-      this.pending.set(id, res)
-      this.ws.send(JSON.stringify({ id, method, params }))
-    })
-  }
-
-  async eval(expression) {
-    const out = await this.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
-    if (out.result?.exceptionDetails) {
-      throw new Error('页面里抛错：' + JSON.stringify(out.result.exceptionDetails).slice(0, 400))
-    }
-    return out.result?.result?.value
-  }
-
-  async navigate(url) {
-    const done = new Promise((res) => {
-      const prev = this.ws.onmessage
-      this.ws.onmessage = (ev) => {
-        const m = JSON.parse(ev.data)
-        if (m.method === 'Page.loadEventFired') res()
-        prev(ev)
-      }
-    })
-    await this.send('Page.navigate', { url })
-    await Promise.race([done, sleep(20000)])
-  }
-
-  async shot(path) {
-    const r = await this.send('Page.captureScreenshot', { format: 'png' })
-    const data = r.result?.data
-    if (data) writeFileSync(path, Buffer.from(data, 'base64'))
-    return Boolean(data)
-  }
-
-  close() { try { this.ws.close() } catch { /* ignore */ } try { this.child?.kill() } catch { /* ignore */ } }
-}
+// 采集时钉住的强调色（默认取 `/api/config` 里的那个；见 `bootApp` 的注释）
+let CFG_ACCENT = '#3b82f6'
 
 /* ---------------------------------------------------------------- 采集 */
 
@@ -413,28 +191,11 @@ const COLLECT = /* js */ `
 })()
 `
 
-// 装一个"页面还在动吗"的计数器：**用 DOM 变动计数**，不用 innerHTML 长度。
-// 为什么（第一版踩到）：设置页的强调色色板是等 `/api/config` 回来之后才补上 `on` 类的 ——
-// 那一刻 innerHTML 只长了 3 个字符、且发生在"连续三次长度不变"之后，于是被当成"渲染完了"，
-// 两遍采集结果不一致。**这个自检救了这条线**：黄金要是建在这种状态上，以后每次都会随机变红。
-// 空转（transitions/动画）不改 DOM，不用管；`#clock` 每秒改一次文本，**必须排除**，否则永远不安静。
-const SETUP_MUTATION_WATCH = `
-(() => {
-  if (window.__tfobs) return true;
-  window.__tfmut = 0;
-  window.__tfobs = new MutationObserver((recs) => {
-    for (const r of recs) {
-      const t = r.target.nodeType === 1 ? r.target : r.target.parentElement;
-      if (t && t.closest && t.closest('#clock')) continue;
-      window.__tfmut++;
-    }
-  });
-  window.__tfobs.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
-  return true;
-})()`
+// "页面还在动吗"的计数器（`MUTATION_WATCH`）与"等它安静下来"（`waitQuiet`）都在 `tf_browser.mjs`：
+// 行为流层点完一个按钮之后要等的东西**跟这里一模一样**，所以那一份实现是共用的。
 
 async function collectView(cdp, vp, view) {
-  await cdp.eval(SETUP_MUTATION_WATCH)
+  await cdp.eval(MUTATION_WATCH)
   const clicked = await cdp.eval(`(() => {
     const btns = [...document.querySelectorAll('[data-view="${view}"]')];
     const vis = btns.find((b) => b.offsetParent !== null) || btns[0];
@@ -444,14 +205,7 @@ async function collectView(cdp, vp, view) {
   })()`)
   if (!clicked) throw new Error(`界面上找不到视图 ${view} 的入口`)
   // 等"页面安静下来"：DOM 变动计数连续 6 拍（≈0.7s）不再增长，且至少等够一拍渲染
-  let last = -1
-  let quiet = 0
-  for (let i = 0; i < 80 && quiet < 6; i++) {
-    await sleep(120)
-    const n = await cdp.eval(`window.__tfmut`)
-    if (n === last) quiet++
-    else { quiet = 0; last = n }
-  }
+  await waitQuiet(cdp)
   return cdp.eval(`window.__tfvp = {name:${JSON.stringify(vp.name)}, view:${JSON.stringify(view)}, paths:${JSON.stringify(MASK_PATHS)}}; ${COLLECT}`)
 }
 
@@ -464,35 +218,10 @@ function manifestText(res) {
 async function collectAll(cdp, url, port) {
   const out = new Map()
   for (const vp of VIEWPORTS) {
-    await cdp.send('Emulation.setDeviceMetricsOverride', {
-      width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false,
-    })
-    // 必须在**每次** setDeviceMetricsOverride 之后再钉一遍：那一次调用会把滚动条可见性一起重置，
-    // 于是"这一轮有 15px 滚动条、下一轮没有"（内容宽 725 ↔ 740，实测差 13px，黄金每轮都红）。
-    await cdp.send('Emulation.setScrollbarsHidden', { hidden: true })
-    // ② 每档宽度都从**同一个已知的本机存储**起步，否则比的不是界面而是"这台设备的历史"：
-    //    · 强调色的"当前选择"是**页面加载那一刻**从 localStorage 读进内存的（`initTheme`，
-    //      `index.html:3397`），以后再写 localStorage 也不会改它 —— 所以只清不写，就会采到
-    //      「色板一个都没选中」的中间态，而且它跟首屏时序有关、会来回翻（实测两份都翻过）；
-    //    · 手机设备号 `ph-xxxxxxxxxxxx` 是 `offline.js` 首次运行时**随机生成**再存下的
-    //      （`tf_device`）—— 清掉之后每次加载都换一个，离线页那两处 `code` 就会随机变。
-    //    所以：清空 + **把这两个值钉成常量**。钉住比"从清单里涂掉"更好 —— 值本身照比。
-    await cdp.navigate(url)
-    await cdp.eval(`(() => { try {
-      localStorage.clear(); sessionStorage.clear();
-      localStorage.setItem('tf_device', ${JSON.stringify(FIXED_DEVICE)});
-      localStorage.setItem('tf_accent', ${JSON.stringify(CFG_ACCENT)});
-    } catch (e) {} return true })()`)
-    await cdp.navigate(url)
-    // 等**应用启动完成**再采：铺完配置才算这一页真的起来了。
-    let booted = false
-    for (let i = 0; i < 60 && !booted; i++) {
-      await sleep(120)
-      booted = Boolean(await cdp.eval(`document.querySelectorAll('.rail nav button').length > 0 && !!document.querySelector('#main').innerHTML.length`))
-    }
+    // 换宽度（每次都重钉滚动条）+ 从**同一个已知的本机存储**起步 —— 这两件事在 `tf_browser.mjs` 里。
+    await setViewport(cdp, vp)
+    const booted = await bootApp(cdp, url, { accent: CFG_ACCENT })
     if (!booted) throw new Error('应用没有启动完成（左栏没渲染出来）—— 界面可能根本没起来')
-    await sleep(300)
-    await cdp.eval(`document.readyState`) // 触一次，确保上下文活着
     for (const view of VIEWS) {
       if (ARGS.only && ARGS.only !== view) continue
       const res = await collectView(cdp, vp, view)
@@ -562,7 +291,7 @@ async function main() {
       result.code = 2
       return result
     }
-    const problems = await seed(ARGS.port)
+    const problems = await seedFixture(ARGS.port)
     if (problems.length) {
       console.log('❌ fixture（种子数据）没造全 —— 半份数据生成的黄金不可信，先修 seed：')
       for (const p of problems) console.log('   · ' + p)
