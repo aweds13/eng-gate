@@ -301,6 +301,149 @@ def progress(data: dict, exc: set[str]) -> tuple[list[str], list[str], list[str]
     return warn, fail, exempted
 
 
+# ---------------------------------------------------------------- ⑧⑨⑩ 收紧项（T-G22）
+# 三条都是"机器本来能查、以前没人查"的东西，2026-09-23 用户点了名才加上。
+# 上阻断前都在真实历史上跑过一遍，确认**当前 0 假红**（见 `复盘/门禁收紧三条-T-G22.md`）。
+BASELINE_FALLBACK = "593ea6c"  # 强制框架那次提交（此前的历史没有 trailer，不追责）
+_CONTRACT_FILES = ROOT / "docs" / "contracts"
+
+
+def parse_task_trailers(text: str, ids: set[str]) -> list[str]:
+    """把 `git log --format=%h%x1f%s%x1f%(trailers:key=Task,valueonly)%x1e` 的输出判一遍。
+
+    单独拆出来是为了能**喂假数据测试**（真仓库里造不出一条错提交来验）。
+    判据：`Task:` 必须**恰好一个**台账编号。
+    """
+    fails: list[str] = []
+    for record in text.split("\x1e"):
+        if not record.strip():
+            continue
+        parts = record.strip("\n").split("\x1f")
+        if len(parts) < 3:
+            continue
+        sha, subject, task = parts[0].strip(), parts[1].strip(), parts[2].strip()
+        if not task:
+            fails.append(f"{sha} 没有 `Task:` trailer（{subject[:44]}）")
+            continue
+        tokens = [t for t in re.split(r"[\s,/、+]+", task) if t]
+        if len(tokens) != 1 or tokens[0] not in ids:
+            fails.append(
+                f"{sha} 的 `Task:` 不是「恰好一个台账编号」：{task!r}（{subject[:36]}）"
+                " —— 多余编号请写进 `Refs:`"
+            )
+    return fails
+
+
+def check_commit_trailers(baseline: str, ids: set[str]) -> list[str]:
+    """⑧ 逐条提交的 `Task:` 必须**恰好一个台账编号**（T-G17 那类错不再靠人眼）。
+
+    为什么要它：审计原来只在**单条模式**（`--rev`）看当前这条提交，而门禁跑的是 `--all`
+    （整段对账）—— 于是 `Task: T-G13 / F6 OP-27 延伸` 这种格式错一路没红。
+    老历史（框架落地前）没有 trailer，所以从 `[meta.trailer_baseline]` 往后逐条查。
+    """
+    out = git("log", "--format=%h%x1f%s%x1f%(trailers:key=Task,valueonly)%x1e", f"{baseline}..HEAD")
+    return parse_task_trailers(out, ids)
+
+
+def collect_contract_ops() -> set[str]:
+    """契约层定义成条目的操作（`## OP-nn` / 表格首列 / `- **OP-nn**`）。"""
+    ops: set[str] = set()
+    for path in sorted(_CONTRACT_FILES.rglob("*.md")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            m = (
+                re.match(r"^#{2,4}\s*(OP-\d+[a-z]?)\b", line)
+                or re.match(r"^\|\s*(OP-\d+[a-z]?)\s*\|", line)
+                or re.match(r"^-\s*\*\*(OP-\d+[a-z]?)\*\*", line)
+            )
+            if m:
+                ops.add(m.group(1))
+    return ops
+
+
+def check_contract_ops(data: dict, ops: set[str] | None = None) -> list[str]:
+    """⑨ 契约层的每条操作要么挂在某张台账卡上，要么明写"为什么先不挂"。
+
+    为什么：契约层是「怎样才算真的做成」那一层，但台账全文只提到 18/53 条
+    （其余功能其实做了，只写在交接文档的**手写行**里）→ 新窗口读契约以为有 53 件事排着。
+    落法：`[contract_ops]`（卡 → 操作列表）+ `[acknowledged_ops]`（操作 → 理由）；
+    **契约操作自己就是一张台账卡**（`OP-1`…`OP-12` 那些）时算自动覆盖。
+    """
+    errs: list[str] = []
+    if ops is None:
+        ops = collect_contract_ops()
+    mapping = data.get("contract_ops", {})
+    ack = data.get("acknowledged_ops", {})
+    entries = data.get("entries", {})
+    covered: dict[str, str] = {op: "（自己就是一张卡）" for op in ops if op in entries}
+    for eid in sorted(mapping):
+        if eid not in entries:
+            errs.append(f"[contract_ops] 里的 {eid} 不是台账条目（挂错卡了）")
+        for op in mapping[eid]:
+            if op not in ops:
+                errs.append(f"[contract_ops] {eid} 挂了契约里没有的 {op}")
+            if op in covered:
+                errs.append(f"{op} 被重复登记：{covered[op]} 与 {eid}（一条操作只该挂一张卡）")
+            covered[op] = eid
+    for op in sorted(ack):
+        if op not in ops:
+            errs.append(f"[acknowledged_ops] 里的 {op} 契约里没有")
+        covered.setdefault(op, "（acknowledged）")
+    missing = sorted(ops - set(covered), key=lambda s: (int(re.search(r"\d+", s).group()), s))
+    if missing:
+        errs.append(
+            f"契约里有 {len(missing)} 条操作既没挂台账卡、也没进 [acknowledged_ops]：{missing}"
+        )
+    return errs
+
+
+def spec_n_to_srs(trace: str | None = None) -> dict[str, set[str]]:
+    """规格追踪表 → `{N 号: {SR 基号}}`（`docs/specification/traceability.md`）。"""
+    if trace is None:
+        trace = (ROOT / "docs" / "specification" / "traceability.md").read_text(encoding="utf-8")
+    n2sr: dict[str, set[str]] = {}
+    for line in trace.splitlines():
+        m = re.match(r"\|\s*N(\d+)[^|]*\|([^|]*)\|", line)
+        if m:
+            n2sr[m.group(1)] = set(re.findall(r"SR-(?:F\d+\.\d+|NF\d+)", m.group(2)))
+    return n2sr
+
+
+def check_spec_child_cards(data: dict, n2sr: dict[str, set[str]] | None = None) -> list[str]:
+    """⑩ 规格条目还是 `todo`，但引用同一个 N 的实现卡**全 done** → 母条该收口了。
+
+    为什么：T-G18 抓到的 `SR-F1.7`（子卡 T-F2/T-F3 都 done，母条还挂 todo + 过期 gaps）。
+    只查 `todo` 不查 `partial`：partial 可以合法地"卡片都完了、但还剩一句不靠卡片的缺口"
+    （`SR-F1.7` 更正后就是这种：关联笔记口径待定）—— 查它必然假红。
+    """
+    errs: list[str] = []
+    if n2sr is None:
+        n2sr = spec_n_to_srs()
+    entries = data.get("entries", {})
+    for eid in sorted(entries):
+        if not eid.startswith("SR-") or entries[eid].get("status") != "todo":
+            continue
+        base = re.match(r"SR-(?:F\d+\.\d+|NF\d+)", eid)
+        if not base:
+            continue
+        ns = {n for n, srs in n2sr.items() if base.group(0) in srs}
+        if not ns:
+            continue
+        cards: list[tuple[str, str]] = []
+        for cid, card in entries.items():
+            if cid.startswith("SR-"):
+                continue
+            title = str(card.get("title", ""))
+            if any(re.search(rf"N{n}\b", title) for n in ns):
+                cards.append((cid, str(card.get("status"))))
+        if cards and all(status == "done" for _, status in cards):
+            names = "、".join(cid for cid, _ in cards)
+            errs.append(
+                f"{eid} 仍挂 todo，但引用同一 N 的实现卡全都是 done（{names}）"
+                " → 母条该收口，或把缺口写清楚（`partial` + 非目标）"
+            )
+    return errs
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rev", default="HEAD")
@@ -407,7 +550,42 @@ def main() -> int:
         for line in warn:
             print(f"  {WARN} {line}")
 
-    all_fails = shape + fails + num_fails + git_fails
+    # ⑧⑨⑩ 收紧项（T-G22）：都是"机器本来能查、以前没人查"的
+    tighten_fails: list[str] = []
+    print("\n=== ⑨ 契约层覆盖（每条 OP 要么挂台账卡，要么写明先不挂）===")
+    contract = check_contract_ops(data)
+    if contract:
+        for line in contract:
+            print(f"  {FAIL} {line}")
+        tighten_fails.extend(contract)
+    else:
+        ops = collect_contract_ops()
+        ack = data.get("acknowledged_ops", {})
+        print(f"  {OK} 契约 {len(ops)} 条操作全部有归属（其中 {len(ack)} 条已写明先不挂）")
+
+    print("\n=== ⑩ 母条/子卡一致性（规格仍 todo 但子卡全 done）===")
+    child = check_spec_child_cards(data)
+    if child:
+        for line in child:
+            print(f"  {FAIL} {line}")
+        tighten_fails.extend(child)
+    else:
+        print(f"  {OK} 没有「子卡全 done、母条还挂 todo」的规格条目")
+
+    if not args.no_git:
+        baseline = str(data.get("meta", {}).get("trailer_baseline", BASELINE_FALLBACK))
+        print(f"\n=== ⑧ 提交信息逐条（{baseline}..HEAD 的 `Task:` 必须恰好一个台账编号）===")
+        trailer = check_commit_trailers(baseline, set(entries))
+        if trailer:
+            for line in trailer:
+                print(f"  {FAIL} {line}")
+            tighten_fails.extend(trailer)
+        else:
+            log = git("log", "--format=%h", f"{baseline}..HEAD")
+            n = len([ln for ln in log.splitlines() if ln])
+            print(f"  {OK} {n} 条提交全部合格（多余编号写进 `Refs:` 的那条规矩，机器也会拦了）")
+
+    all_fails = shape + fails + num_fails + git_fails + tighten_fails
     n_exempt = len(exempted) + len(git_exempt)
     print("\n" + "=" * 72)
     if all_fails:

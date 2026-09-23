@@ -19,9 +19,60 @@
 #   ② **有意拆分的任务**：Task 提交只覆盖了条目的一部分（如 T-B5 前半字段+界面、后半等用户选型），
 #      条目如实保持 partial，但 ⑥ 进度对账不再报"台账漏更新"（同样打印理由）。
 # [meta.acknowledged_routes]：确认过但暂不单独登记的运维/根路径。
+#
+# ★ 门禁收紧三条（T-G22，2026-09-23 用户点名加的，都在 scripts/audit_progress.py 里）：
+#   ⑧ [meta.trailer_baseline]：从这条提交往后，**每条提交的 `Task:` 必须恰好一个台账编号**
+#      （多余编号写 `Refs:`）。基线之前的历史没有 trailer（框架落地前），不追责。
+#   ⑨ [contract_ops] + [acknowledged_ops]：`docs/contracts/**` 里每条 `OP-nn` 必须挂在**一张**台账卡上；
+#      操作自己就是一张卡（`OP-1`…`OP-12`）时算自动覆盖；实在没法挂的写进 [acknowledged_ops] **带理由**。
+#   ⑩ 母条/子卡一致性：规格条目仍 `todo`、但引用同一个 `N` 的实现卡**全都 done** → FAIL
+#      （T-G18 抓到的 `SR-F1.7` 就是这种）。只查 `todo`：`partial` 可以合法地"卡片都完了、
+#      还剩一句不靠卡片的缺口"。
 
 [meta]
 acknowledged_routes = []
+# ⑧ 提交信息逐条检查的**基线**（T-G22）：从这条提交往后，每条提交的 `Task:` 必须恰好
+# 一个台账编号。基线之前的历史没有 trailer（框架落地前），不追责。
+trailer_baseline = "593ea6c"
+
+# ⑨ 契约层覆盖（T-G22）：`docs/contracts/**` 里每条 `OP-nn` 必须挂在**一张**台账卡上。
+# 写法：卡号 = ["OP-nn", …]；一条操作只能挂一张卡。实在没法挂的写进 [acknowledged_ops] 并写明理由。
+[contract_ops]
+"SR-F2.6b" = ["OP-13"]   # 手动记投入（目标态）
+"SR-F2.2" = ["OP-14"]    # 手动记产出（目标态）
+"SR-F2.5" = ["OP-15"]    # 周结算
+"SR-F2.3" = ["OP-16"]    # 逾期债务展示
+"SR-F3.2" = ["OP-3b", "OP-4b"]  # 暂停/继续、放弃/记中断
+"SR-F3.3" = ["OP-3c"]    # 白名单 / 勿扰配置
+"SR-F4.1" = ["OP-17"]    # 保存每日反馈
+"SR-F4.2" = ["OP-19"]    # 查看习惯热力图
+"SR-F4.3" = ["OP-20"]    # 自检
+"SR-F5.1a" = ["OP-23"]   # 录成绩 / GPA
+"SR-F5.2a" = ["OP-21", "OP-22"]  # 建课程、录考核项
+"SR-F5.2b" = ["OP-25"]   # 课程提醒
+"SR-F5.4" = ["OP-24"]    # 学校任务合流
+"SR-F6.2" = ["OP-26"]    # 建复习卡 / 升级
+"SR-F6.3" = ["OP-28"]    # 到期列表 / 进 My Day
+"SR-F6.4" = ["OP-30"]    # 外部 app 完成
+"SR-F7.2" = ["OP-31"]    # 分配任务
+"SR-F7.3" = ["OP-34"]    # AI 只读 + 新增接口
+"SR-F8.1" = ["OP-35", "OP-36"]  # 新建备忘录、顺手建任务
+"SR-F8.2" = ["OP-37"]    # 备忘录关联引用句柄
+"SR-F8.3" = ["OP-29"]    # 复习卡关联引用句柄
+"SR-F9.2" = ["OP-40", "OP-41"]  # 同步数据、冲突处理
+"SR-F9.3" = ["OP-39"]    # 启动迁移
+"SR-NF12" = ["OP-42"]    # 备份 / 回滚
+"SR-NF14" = ["OP-43"]    # 配置加载
+"SR-F10.1" = ["OP-44"]   # 外部通知导入（合作接口）
+"T-C11" = ["OP-48"]      # 今天做成了什么（可展开的完成明细）
+"T-G12" = ["OP-33"]      # 团队视角切换（这张卡的标题里就写着 OP-33）
+"T-G10" = ["OP-49"]      # 手机离线记（跨端场景 ①）
+"T-G10b" = ["OP-50"]     # 局域网访问 + 配对（跨端场景 ②）
+
+# ⑨ 的例外：**明写"先不挂"**，每条必须带理由（不是"忘了"）。
+[acknowledged_ops]
+"OP-32" = "N46「回报进展」：口径已定（AI 只写事实，T-G19），实现 = T-G21（未开工）"
+"OP-38" = "产出评价器接口 = SR-F8.4（todo）：规格自写「合同待知识管理项目对齐」，等外部口径"
 
 [exceptions]
 # T-B5 的豁免已删除（2026-09-18）：用户选 B′ 后通知通道已落地，条目转 done —— 修一条删一条。
@@ -966,6 +1017,22 @@ evidence = [
   "test:test_web_frontend.py",
 ]
 gaps = ""
+
+[entries."T-G22"]
+id = "T-G22"
+title = "门禁收紧三条：`Task:` 逐条严查（基线 593ea6c）/ 契约层覆盖（[contract_ops] + [acknowledged_ops]）/ 母条-子卡一致性"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/门禁收紧三条-T-G22.md",
+  "text:scripts/audit_progress.py::def check_commit_trailers",
+  "text:scripts/audit_progress.py::def check_contract_ops",
+  "text:scripts/audit_progress.py::def check_spec_child_cards",
+  "text:docs/traceability.toml::trailer_baseline = \"593ea6c\"",
+  "text:docs/traceability.toml::[acknowledged_ops]",
+  "test:test_audit_tightening.py",
+]
+gaps = "三条都已上**阻断**（跟着门禁里的 `audit` 一道跑，门禁仍是 11 项）。当前 0 假红：⑧ 71 条提交全合格；⑨ 契约 53 条全部有归属（其中 2 条 [acknowledged_ops] 写明先不挂：OP-32 等 T-G21、OP-38 等外部口径）；⑩ 0 命中。**没做的**：① ⑩ 只查 `todo` 不查 `partial`（partial 可以合法地「卡片全 done + 一句非卡片缺口」，查它必假红，见复盘 §四）；② `flows.md` 的动线自查表仍是空的（那是文档回填，不属本条）。"
 
 [entries."T-G19"]
 id = "T-G19"
