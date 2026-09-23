@@ -1283,3 +1283,55 @@ def test_lan_pairing_is_wired_and_the_code_stays_home() -> None:
     offline_view = html.split("async function renderOffline(m){", 1)[1]
     assert "--lan" in offline_view, "离线页要告诉人：手机能打开它靠的是 --lan（默认关）"
 
+
+def test_cross_device_focus_mirror_is_read_only() -> None:
+    """T-G20（SR-F3.4 / N17）：跨端同步专注 = **实时启动 + 结束时再同步**。
+
+    口径与两条硬边界（都是"看起来能用其实是坑"的写法）：
+    ① 判断"这是不是我开的"靠 `device_id`（我自己发的那份客户端号），
+       老数据（None）必须算"我开的" —— 否则「重开页面恢复计时」这条既有行为会退化成"别处正在专注"；
+    ② 镜像**只读**：镜像卡里一个 `data-action` 都不许有（加"结束"= 让这台设备去停另一台；
+       加"我也开始"= 同一段时间记两笔投入）；
+    ③ 实时性靠**轮询**（本地单机没有服务器可推）：间隔是常量、只在页面可见且在线时问、失败静默；
+    ④ 结束**不做实时推**：只发既有 finish 请求，记录各自入库后走同步包 —— 这里不新增任何推送。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+
+    # ① 客户端身份：自己发的号（不是数据库主人号、也不是手机包号）
+    assert "const CLIENT_KEY='tf_client'" in html and "function clientId()" in html
+    assert "TFOffline.deviceId" in html, "手机（局域网打开的页面）要沿用它自己的 ph- 号"
+    start_body = _fn_body(html, "startFocus")
+    assert "device_id:clientId()" in start_body, "开始专注必须带上「谁在计时」"
+    start_for = html.split("async function startFocusFor(taskId){", 1)[1].split("\n}", 1)[0]
+    assert "device_id:clientId()" in start_for, "从任务开始专注也要带（两条入口都要）"
+
+    # ①' 老数据算"我开的"（`device_id` 为假值 → 走自己那一支）
+    active_fn = html.split("function renderActive(el,active){", 1)[1]
+    active_fn = active_fn.split("\nfunction teamButtonsHTML", 1)[0]
+    guard = "if(active.device_id&&active.device_id!==clientId())"
+    assert f"{guard}{{renderActiveMirror(el,active);return}}" in active_fn, \
+        "镜像判定必须是「有来源 且 不是我自己」——空白/None 仍归自己"
+
+    # ② 镜像只读：抽出来单独看，里面不许有任何动作按钮
+    mirror = html.split("function renderActiveMirror(el,active){", 1)[1]
+    mirror = mirror.split("\nfunction teamButtonsHTML", 1)[0]
+    assert "别处正在专注" in mirror and "只看不动" in mirror
+    assert "data-action" not in mirror, f"镜像卡里不许有按钮：{mirror[:200]}"
+    assert "renderActiveMirror" in active_fn
+    # `#clock` 的唯一主人仍是本机计时器（R3 护栏）：镜像用另一个 id 照对面的秒数
+    assert 'id="clockPeer"' in mirror and 'id="clock"' not in mirror
+    assert html.count('id="clock"') == 1, "镜像不该再引入一个 #clock"
+
+    # ③ 轮询：常量 + 只在可见且在线时问 + 失败静默 + 变了才重画
+    assert "const FOCUS_POLL_MS=10000" in html
+    poll = html.split("function startFocusPoll(){", 1)[1].split("\n}", 1)[0]
+    assert "document.hidden" in poll and "offlineNow()" in poll, "后台/离线时不问"
+    assert "catch(e){return}" in poll, "轮询失败要静默（别每 10 秒弹一次错）"
+    assert "focusSeenKey" in poll and "return;" in poll, "指纹没变就别重画"
+    assert "startFocusPoll();" in html, "首屏之后要真的把它开起来"
+
+    # ④ 结束不做实时推：只有既有的 finish 请求，没有新增推送/轮询上报
+    finish_fn = _fn_body(html, "finishFocus")
+    assert "${active.id}/finish" in finish_fn and "device_id" not in finish_fn
+    assert "EventSource" not in html and "WebSocket" not in html, "别为这件事引入推送通道"
+

@@ -318,6 +318,50 @@ def live_team_checks(base: str) -> dict[str, bool]:
     }
 
 
+def live_focus_mirror_checks(base: str) -> dict[str, bool]:
+    """T-G20 真机自检：跨端同步专注的**数据那一半**（走真 HTTP，只碰临时库）。
+
+    界面那一半（只读镜像、0 个按钮、10 秒轮询）在 DOM 探针里验；这里验"镜子后面那面墙"：
+    ① `device_id` 真的落库、真能从 `/api/focus/active` 回传（不然界面判不出"谁开的"）；
+    ② 另一台设备**只读**看几眼：会话不被改、投入不增加（镜像不重复记账的前提）；
+    ③ 另一台设备想"我也开一个" → 被 400 拦（同一时间只允许一条）；
+    ④ 结束之后 active 变 null（对面那台设备的镜像随之消失）、投入只记一笔。
+    """
+    mine = {"kind": "plain", "device_id": "cl-live-a"}
+    started = _json_call(base, "/api/focus/start", "POST", mine)[1]
+    active = _json_call(base, "/api/focus/active")[1] or {}
+    peeks = [_json_call(base, "/api/focus/active")[1] or {} for _ in range(3)]
+    during = _json_call(base, "/api/focus/today")[1] or {}
+    parallel = _json_call(
+        base, "/api/focus/start", "POST", {"kind": "plain", "device_id": "ph-live-b"}
+    )[0]
+    _json_call(
+        base, f"/api/focus/{started['id']}/finish", "POST",
+        {"duration_sec": 1500, "status": "finished"},
+    )
+    after = _json_call(base, "/api/focus/active")[1]
+    done = _json_call(base, "/api/focus/today")[1] or {}
+    # 空白 device_id 要在**干净状态**下验（否则会被"已有进行中的专注"抢先拦掉，验了个寂寞）
+    blank = {"kind": "plain", "device_id": "   "}
+    blank_sid = _json_call(base, "/api/focus/start", "POST", blank)[1]
+    blank_active = _json_call(base, "/api/focus/active")[1] or {}
+    _json_call(
+        base, f"/api/focus/{blank_sid['id']}/finish", "POST",
+        {"duration_sec": 0, "status": "abandoned"},
+    )
+    return {
+        "跨端专注：device_id 落库并回传": active.get("device_id") == "cl-live-a"
+            and active.get("id") == started.get("id"),
+        "跨端专注：只读查询不改任何东西": all(
+            p.get("id") == started.get("id") and p.get("device_id") == "cl-live-a" for p in peeks
+        ) and during.get("focus_minutes") == 0,
+        "跨端专注：并行开第二个被 400 拦下": parallel == 400,
+        "跨端专注：空白 device_id 归一成 null": blank_active.get("device_id") is None
+            and blank_active.get("id") == blank_sid.get("id"),
+        "跨端专注：结束后镜像消失且只记一笔": after is None and done.get("focus_minutes") == 25.0,
+    }
+
+
 def live_regrade_checks(base: str) -> dict[str, bool]:
     """T-G13 真机自检：复习「改判」在**真服务**上的行为（走真 HTTP，只碰临时库）。
 
@@ -772,6 +816,7 @@ def main() -> int:
     checks.update(live_c_line_checks(base))
     checks.update(live_ai_checks(base))
     checks.update(live_team_checks(base))
+    checks.update(live_focus_mirror_checks(base))
     checks.update(live_regrade_checks(base))
     checks.update(live_notify_checks(base))
     checks.update(live_phone_view_checks(base))

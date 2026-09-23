@@ -86,8 +86,14 @@ globalThis.document = {
   addEventListener() {},
   createElement: (t) => new El(t),
   documentElement: new El('html'),
+  // 探针不测"定时器在后台该不该跑"（那是源码级断言的事）：把 hidden 置真，
+  // 跨端专注的 10 秒轮询就直接返回，免得它在我们断言之后偷偷重画右栏。
+  hidden: true,
 };
 globalThis.window = { matchMedia: () => ({ matches: false, addEventListener() {} }), addEventListener() {} };
+// 真浏览器里一定有 `location`；跨端专注的 `clientId()` 用它判断"这页是不是从局域网地址打开的"
+// （是 → 沿用手上的 `ph-` 号）。探针按**回环地址**模拟：也就是"电脑 UI"那一种。
+globalThis.location = { hostname: 'localhost' };
 Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.getComputedStyle = () => ({ getPropertyValue: (k) => PALETTE[k] || '' });
@@ -543,6 +549,7 @@ let offlineBad = 0;
 let lanBad = 0;
 let teamBad = 0;
 let noticeBad = 0;
+let mirrorBad = 0;
 let boldBad = 0;
 const results = [];
 for (const v of views) {
@@ -1297,6 +1304,66 @@ try {
   console.log(`  ❌ 团队·视角切换 渲染抛错: ${e.message}`);
 }
 
+/* 跨端同步专注（SR-F3.4 / N17 / T-G20）：**镜像只读**。
+   口径 = 实时启动 + 结束时再同步。这里钉三件事：
+   ① 别处开的（`device_id` 不是我）→ 右栏是「别处正在专注」，且**一个 data-action 都没有**
+      （加"结束"= 让这台设备去停另一台；加"我也开始"= 同一段时间记两笔投入）；
+   ② 我开的（`device_id` == 我）→ 正常的「专注进行中」+ 三个结束动作；
+   ③ 老数据（`device_id` 为 null）→ 仍算"我开的"（保住「重开页面恢复计时」这条既有行为）。
+   `clientId()` 会缓存，所以这一段先把 localStorage 换成带 `tf_client` 的内存实现。 */
+const mirrorChecks = [];
+try {
+  const realLocalStorage = globalThis.localStorage;
+  const mem = { tf_client: 'cl-probe' };
+  globalThis.localStorage = {
+    getItem: (k) => (k in mem ? mem[k] : null),
+    setItem: (k, v) => { mem[k] = String(v); },
+    removeItem: (k) => { delete mem[k]; },
+  };
+  const savedActive = DB['/api/focus/active'];
+  const renderRail = async () => {
+    byId.get('focusRail')._html = ''; byId.get('main')._html = '';
+    await globalThis.__view('focus');
+    await sleep(40);
+  };
+  const session = (id, device) => ({
+    id, task_id: null, kind: 'tomato', started_at: '2026-09-23T09:00:00', device_id: device,
+  });
+
+  DB['/api/focus/active'] = session('s-peer', 'ph-peer');
+  await renderRail();
+  const peerRail = byId.get('focusRail')._html;
+  const peerMain = byId.get('main')._html;
+  const peerOk = peerRail.includes('别处正在专注') && peerRail.includes('只看不动')
+    && peerRail.includes('id="clockPeer"') && !peerRail.includes('data-action')
+    && !peerRail.includes('id="clock"')
+    && peerMain.includes('别处正在专注') && !peerMain.includes('都在右侧常驻面板里');
+
+  DB['/api/focus/active'] = session('s-mine', 'cl-probe');
+  await renderRail();
+  const mineRail = byId.get('focusRail')._html;
+  const mineOk = mineRail.includes('专注进行中') && mineRail.includes('data-action="focus-finish"')
+    && !mineRail.includes('别处正在专注');
+
+  DB['/api/focus/active'] = session('s-legacy', null);
+  await renderRail();
+  const legacyRail = byId.get('focusRail')._html;
+  const legacyOk = legacyRail.includes('专注进行中') && legacyRail.includes('data-action="focus-finish"')
+    && !legacyRail.includes('别处正在专注');
+
+  DB['/api/focus/active'] = savedActive;
+  globalThis.localStorage = realLocalStorage;
+  const rendered = peerOk && mineOk && legacyOk;
+  if (!rendered) mirrorBad++;
+  mirrorChecks.push({ rendered, peerOk, mineOk, legacyOk });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 专注·跨端镜像（别处只读 ${peerOk ? '对' : '不对'}`
+    + `·自己可停 ${mineOk ? '对' : '不对'}·老数据算自己 ${legacyOk ? '对' : '不对'}）`);
+} catch (e) {
+  mirrorBad++;
+  mirrorChecks.push({ error: e.message });
+  console.log(`  ❌ 专注·跨端镜像 渲染抛错: ${e.message}`);
+}
+
 /* 局域网访问 + 配对码（SR-NF17 / G 批 · T-G10b / 场景 ②）：两块都要真渲染 ——
    ① 设置页那一节（开着时给地址 + 本机可见的配对码 + 两个按钮）；
    ② **配对墙**：把 fetch 换成"回 401 说没配对"，看整页是不是真变成那面墙，
@@ -1514,6 +1581,7 @@ if (process.argv.includes('--json')) {
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
       export: exportChecks, obsidian: obsidianChecks, ai: aiChecks, sync: syncChecks,
       offline: offlineChecks, lan: lanChecks, team: teamChecks, notice: noticeChecks,
+      mirror: mirrorChecks,
       bold: boldChecks,
       problems, unregistered: unused },
     null, 2));
@@ -1533,6 +1601,7 @@ const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || regra
   || lanBad > 0
   || teamBad > 0
   || noticeBad > 0
+  || mirrorBad > 0
   || boldBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
@@ -1559,6 +1628,7 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，局域网配对 ${lanChecks.filter((c) => c.rendered).length}/${lanChecks.length} 正常`
   + `，团队视角 ${teamChecks.filter((c) => c.rendered).length}/${teamChecks.length} 正常`
   + `，学校通知 ${noticeChecks.filter((c) => c.rendered).length}/${noticeChecks.length} 正常`
+  + `，跨端专注镜像 ${mirrorChecks.filter((c) => c.rendered).length}/${mirrorChecks.length} 正常`
   + `，字面星号 ${boldBad === 0 ? '0' : '有'}（源码 + 渲染两遍查）`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

@@ -7,6 +7,7 @@ from timeflow.core.focus.guard import (
 from timeflow.core.focus.timer import (
     KIND_PLAIN,
     KIND_TOMATO,
+    MAX_DEVICE_LEN,
     STATUS_ABANDONED,
     STATUS_ACTIVE,
     STATUS_FINISHED,
@@ -26,6 +27,7 @@ __all__ = [
     "is_do_not_disturb",
     "KIND_TOMATO",
     "KIND_PLAIN",
+    "MAX_DEVICE_LEN",
     "STATUS_ACTIVE",
     "STATUS_FINISHED",
     "STATUS_PAUSED",

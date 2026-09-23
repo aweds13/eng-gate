@@ -930,11 +930,15 @@ async function render(name){
  */
 function renderActive(el,active){
   if(!active){
+    focusSeenKey='none';
     el.innerHTML=`<div class="panel-title">专注计时</div>
       <div class="sub">当前没有进行中的专注。去「专注」页或任务上点「专注」开始。</div>`;
     clearInterval(focusTimer);focusTimer=null;
     return;
   }
+  focusSeenKey=focusKey(active);
+  // 别处开的（T-G20）：只读镜像 —— 不重复记账、也不给"停止"按钮
+  if(active.device_id&&active.device_id!==clientId()){renderActiveMirror(el,active);return}
   const started=new Date(String(active.started_at).replace(' ','T')).getTime();
   el.innerHTML=`<div class="panel-title">专注进行中</div>
     <div class="timer" id="clock">--:--</div>
@@ -949,6 +953,27 @@ function renderActive(el,active){
   if(active.task_id){
     api(`/api/tasks/${active.task_id}`).then(t=>{     // 只负责把标题补进右栏
       const e=document.getElementById('focusTask');if(e)e.textContent=`归属任务：${t.title}`;
+    }).catch(()=>{});
+  }
+}
+/* 跨端镜像（T-G20）：**只读**。
+ * 这里一个 `data-action` 都不许有 —— 加"结束"按钮等于让这台设备去停另一台的计时，
+ * 加"我也开始"等于同一段时间记两笔投入。数字只来自后端那一行 focus_sessions，界面是镜子。 */
+function renderActiveMirror(el,active){
+  const who=String(active.device_id||'').indexOf('ph-')===0?'手机':'另一台设备';
+  el.innerHTML=`<div class="panel-title">别处正在专注</div>
+    <div class="timer" id="clockPeer">--:--</div>
+    <div class="meta">${active.kind==='tomato'?'番茄钟':'普通计时'} · 来自${who}</div>
+    <div class="sub" id="focusTask">${active.task_id?'（正在取任务名）':'未绑定任务'}</div>
+    <div class="sub">这边<b>只看不动</b>：结束请去那边，这里不会重复记一笔投入，也不会打断它。</div>`;
+  const started=new Date(String(active.started_at).replace(' ','T')).getTime();
+  // 读数用**另一个 id**（`clockPeer`）：`#clock` 永远是"本机那一支计时器"的唯一主人（R3 护栏），
+  // 镜像不是本机计时器 —— 它只是把对面的秒数照出来。
+  const tick=()=>{const e=document.getElementById('clockPeer');if(e)e.textContent=fmt((Date.now()-started)/1000)};
+  tick();clearInterval(focusTimer);focusTimer=setInterval(tick,1000);
+  if(active.task_id){
+    api(`/api/tasks/${active.task_id}`).then(t=>{
+      const e=document.getElementById('focusTask');if(e)e.textContent=`归属任务：${t.title}（那边）`;
     }).catch(()=>{});
   }
 }
@@ -2037,9 +2062,56 @@ async function renderToday(m){
 
 // ---- 专注：计时器常驻右栏（R3），本页只负责开始与「今日/本周」读数（OP-3 / OP-4）----
 let focusTimer=null;
+
+/* ---------- 跨端同步专注（SR-F3.4 / N17 / T-G20）----------
+ * 口径（用户 2026-09-23 定）：**实时启动 + 结束时再同步**。
+ *   · 实时启动：任一台开始专注，另一台**当场**看到「别处正在专注」并进入专注态（只读镜像）；
+ *   · 结束时再同步：结束**不做实时推**，记录各自入库，之后走已有的同步包通道合并。
+ * 两条硬边界（都别改）：
+ *   ① 镜像**只读**：不重复记账（同一段时间记两笔投入 = 数字失真），也不许停对面的计时；
+ *   ② 判断"是不是我开的"靠 `device_id`；老数据（None）算"我开的"，保证「重开页面恢复计时」不变。
+ * 为什么轮询：本地单机、没有服务器可推；每 10 秒一条只读查询最省，也正好对上"结束再同步"。
+ */
+const FOCUS_POLL_MS=10000;
+const CLIENT_KEY='tf_client';
+let focusClient=null,focusSeenKey='',focusPollTimer=null;
+function clientId(){
+  /* 这台**客户端**的身份。为什么不复用别的号：
+     · 服务端的 `sync.device_id` 是"数据库主人"，两个客户端读到同一个值 → 区分不了；
+     · `tf_device`（offline.js）是**手机同步包**的号（`ph-` 前缀），电脑浏览器用它会得到一个说谎的前缀。
+     所以：手机（从局域网地址打开的页面）沿用自己的 `ph-` 号（与它的同步包同号，排障时一眼对得上），
+     电脑 UI 用 `cl-` 开头的本机号。两者都只是"谁在计时"的标识，不参与记账。 */
+  if(focusClient)return focusClient;
+  const host=location.hostname||'';
+  const lan=host!==''&&host!=='localhost'&&host!=='127.0.0.1'&&host!=='::1';
+  if(lan&&window.TFOffline&&TFOffline.deviceId){focusClient=TFOffline.deviceId();return focusClient}
+  try{focusClient=localStorage.getItem(CLIENT_KEY)}catch(e){}
+  if(!focusClient){focusClient='cl-'+Math.random().toString(16).slice(2,10);try{localStorage.setItem(CLIENT_KEY,focusClient)}catch(e){}}
+  return focusClient;
+}
+// 「谁在计时」的指纹：只有它变了才重画右栏（免得每 10 秒把界面刷一遍）
+function focusKey(a){return a?`${a.id}:${a.device_id||''}`:'none'}
+function startFocusPoll(){
+  if(focusPollTimer)return;
+  focusPollTimer=setInterval(async()=>{
+    if(document.hidden||offlineNow())return;      // 页面在后台/离线时别问
+    let a=null;
+    try{a=await api('/api/focus/active')}catch(e){return}   // 轮询失败静默：不打扰
+    if(focusKey(a)===focusSeenKey)return;
+    focusSeenKey=focusKey(a);
+    if(current==='focus')view('focus');else paintRail(renderSeq);
+  },FOCUS_POLL_MS);
+}
 function fmt(sec){const s=Math.max(0,Math.floor(sec));const h=Math.floor(s/3600),mm=String(Math.floor(s%3600/60)).padStart(2,'0'),ss=String(s%60).padStart(2,'0');return h?`${h}:${mm}:${ss}`:`${mm}:${ss}`}
 async function renderFocus(m){
   const [today,active,cfg]=await Promise.all([api('/api/focus/today'),api('/api/focus/active'),api('/api/config')]);
+  if(active&&active.device_id&&active.device_id!==clientId()){   // 别处开的：这一页也只说实话（T-G20）
+    m.innerHTML=`<div class="card" style="display:block">
+      <div class="title">别处正在专注</div>
+      <div class="meta">另一台设备（或另一个窗口）正在计时。这边只显示、不改动 —— 要结束请去那边。</div>
+      <div class="sub">同一段时间不会在这边重复记一笔投入。今日已计入 ${today.focus_minutes} 分钟（只算正常结束的）。</div></div>`;
+    return;
+  }
   if(active){   // 计时态在右栏；这里只说明「去哪里结束」，避免两处计时器对不上
     m.innerHTML=`<div class="card" style="display:block">
       <div class="title">专注进行中</div>
@@ -2059,12 +2131,12 @@ async function renderFocus(m){
 }
 async function startFocus(kind){
   const sel=document.getElementById('focusTaskSel');
-  const body={kind};if(sel&&sel.value)body.task_id=sel.value;
+  const body={kind,device_id:clientId()};if(sel&&sel.value)body.task_id=sel.value;
   await api('/api/focus/start',{method:'POST',body:JSON.stringify(body)});
   toast('开始专注，计时进行中');view('focus');
 }
 async function startFocusFor(taskId){
-  await api('/api/focus/start',{method:'POST',body:JSON.stringify({kind:'plain',task_id:taskId})});
+  await api('/api/focus/start',{method:'POST',body:JSON.stringify({kind:'plain',task_id:taskId,device_id:clientId()})});
   toast('已从任务开始专注');view('focus');
 }
 async function finishFocus(status){
@@ -3353,6 +3425,10 @@ window.addEventListener('online',()=>{
 // 离线时直接进「离线记」：今日页要联网才有数据，断网打开它只会是一串报错 —— 那一页才是有用的那一页。
 paintOfflineBar();
 view(offlineNow()?'offline':'today');
+
+// 跨端"实时启动"（T-G20 / SR-F3.4）：每 10 秒问一次"别处有没有在计时"，变了才重画右栏。
+// 放在首屏渲染之后 —— 先让用户看到界面，再开始这个只读轮询。
+startFocusPoll();
 </script>
 </body>
 </html>

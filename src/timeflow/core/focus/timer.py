@@ -40,10 +40,12 @@ def _now() -> str:
 def active_session(conn: sqlite3.Connection) -> dict[str, object] | None:
     """当前进行中的专注（同一时间只允许一个）；无则 None。
 
-    供前端「重开页面恢复计时」使用（SR-F3 边界：应用关闭/重开可恢复）。
+    供前端「重开页面恢复计时」使用（SR-F3 边界：应用关闭/重开可恢复）；
+    `device_id` 一并回传，供**跨端镜像**判断"这条是不是我自己开的"（T-G20 / SR-F3.4）——
+    老数据这里可能是 None，界面按"自己开的"处理（保持可恢复），不按"别处"处理。
     """
     row = conn.execute(
-        "SELECT id, task_id, kind, started_at FROM focus_sessions "
+        "SELECT id, task_id, kind, started_at, device_id FROM focus_sessions "
         "WHERE status = ? ORDER BY started_at DESC LIMIT 1",
         (STATUS_ACTIVE,),
     ).fetchone()
@@ -54,7 +56,25 @@ def active_session(conn: sqlite3.Connection) -> dict[str, object] | None:
         "task_id": row["task_id"],
         "kind": row["kind"],
         "started_at": row["started_at"],
+        "device_id": row["device_id"],
     }
+
+
+# 客户端身份（谁在计时）最长长度：它只是标识，超长没有意义（T-G20）
+MAX_DEVICE_LEN = 40
+
+
+def _clean_device(device_id: object) -> str | None:
+    """规整客户端身份：去空格、截断、空白 → None。
+
+    为什么在这层收口：它会被写进库，也会被界面拿来判断"这是不是我自己开的" ——
+    脏值（多余空格）或超长值只会让判断出错。这里**不报错**是有意的：
+    它是客户端标识，不是用户填的业务字段，拒绝开始专注对用户毫无意义。
+    """
+    if device_id is None:
+        return None
+    text = str(device_id).strip()[:MAX_DEVICE_LEN]
+    return text or None
 
 
 def start_session(
@@ -67,6 +87,8 @@ def start_session(
 
     - 落库状态为 `进行中`（OP-3：**不得**直接置 finished，否则未结束的专注会被算进投入）。
     - 已有进行中 session 时拒绝（OP-3 边界：不产生两条并行）。
+    - `device_id` = **哪个客户端**在计时（T-G20）：跨端镜像靠它区分"我开的"与"别处开的"。
+      注意这不是"数据库主人"那个设备号 —— 两个客户端读到的是同一个主人号，区分不了。
     """
     if kind not in (KIND_TOMATO, KIND_PLAIN):
         raise ValueError(f"非法专注类型: {kind}")
@@ -78,7 +100,7 @@ def start_session(
     conn.execute(
         "INSERT INTO focus_sessions (id, task_id, kind, started_at, status, device_id, created_at) "
         "VALUES (?,?,?,?,?,?,?)",
-        (sid, task_id, kind, now, STATUS_ACTIVE, device_id, now),
+        (sid, task_id, kind, now, STATUS_ACTIVE, _clean_device(device_id), now),
     )
     conn.commit()
     # 开始**不发事实**：投入事实只在结束时产生（focus.finished 等）。

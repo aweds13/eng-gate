@@ -44,6 +44,7 @@ trailer_baseline = "593ea6c"
 "SR-F2.3" = ["OP-16"]    # 逾期债务展示
 "SR-F3.2" = ["OP-3b", "OP-4b"]  # 暂停/继续、放弃/记中断
 "SR-F3.3" = ["OP-3c"]    # 白名单 / 勿扰配置
+"T-G20" = ["OP-51"]      # 跨端同步专注（只读镜像）
 "SR-F4.1" = ["OP-17"]    # 保存每日反馈
 "SR-F4.2" = ["OP-19"]    # 查看习惯热力图
 "SR-F4.3" = ["OP-20"]    # 自检
@@ -422,9 +423,35 @@ gaps = ""
 id = "SR-F3.4"
 title = "多设备同步专注"
 group = "F3"
-status = "todo"
-evidence = []
-gaps = "**口径已定（2026-09-23 用户定，T-G19）：实时启动 + 结束时再同步** —— 任一台开始专注，另一台**当场**进入专注态/勿扰（只读镜像）；结束**不做实时推**，记录各自入库、之后走已有的同步包通道合并。**实现还没做**(GAP-F3-01)，但路线已经不用再定：① 后端 `GET /api/focus/active` 已存在（含 task_id/kind/started_at/device_id），局域网配对后天然可访问，**不需要新表**；② 前端加只读镜像态（轮询对方 active，建议 10 秒）；③ 边界：只在同一局域网且已配对时有效、明文、轮询失败静默退回本机态、镜像态不能停对面的计时；④ 设计草案与待你点头的两点见 `复盘/口径落档-T-G19.md` §3.1（对应新卡 **T-G20**）。"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/focus/timer.py::MAX_DEVICE_LEN = 40",
+  "text:src/timeflow/core/focus/timer.py::def _clean_device",
+  "text:src/timeflow/core/focus/timer.py::\"device_id\": row[\"device_id\"]",
+  "text:src/web/index.html::const FOCUS_POLL_MS=10000",
+  "text:src/web/index.html::function renderActiveMirror",
+  "text:src/web/index.html::别处正在专注",
+  "text:docs/contracts/domains/F3-focus.md::OP-51 跨端同步专注",
+  "test:test_focus_mirror_line.py",
+]
+gaps = "**口径（用户 2026-09-23 定，T-G19）已按它落地（T-G20）**：实时启动 + 结束时再同步 —— 任一台开始专注，另一台**当场**看到只读镜像（右栏 `#clockPeer` + 专注页文案），**不重复记账、也不许停对面的计时**；结束不做实时推，记录各自入库后走已有同步包。**边界（不是缺口，是刻意的）**：① 只在**同一局域网且已配对**时有效（跨端那道门，默认关）；② 老数据 `device_id` 为 NULL 时算「我开的」（保住「重开页面恢复计时」）；③ 勿扰只是**状态可见**，不是系统级屏蔽（与 OP-3c 同口径）。"
+
+[entries."T-G20"]
+id = "T-G20"
+title = "跨端同步专注（SR-F3.4 / N17 / OP-51）：device_id 落库 + 10 秒轮询 + **只读镜像**（不重复记账、不许停对面的）"
+group = "F3"
+status = "done"
+evidence = [
+  "file:复盘/跨端实时专注-T-G20.md",
+  "text:src/timeflow/core/focus/timer.py::def _clean_device",
+  "text:src/web/index.html::function renderActiveMirror",
+  "text:src/web/index.html::这边<b>只看不动</b>",
+  "text:src/web/index.html::startFocusPoll();",
+  "text:docs/contracts/domains/F3-focus.md::OP-51 跨端同步专注",
+  "test:test_focus_mirror_line.py",
+  "test:test_web_frontend.py",
+]
+gaps = "**没有新表、没有新接口**（镜像只是把既有那一行 `focus_sessions` 读出来）；**没有实时推**（用户口径：结束时再同步）。**刻意不做的**：镜像态不能停对面的计时、也不能「这边也开一个」（后端 400 拦着，界面连按钮都不给）；勿扰不做系统级屏蔽；不做云端/离线队列。**待你真机试**：手机与电脑各开一个页面，一边点开始 → 另一边 10 秒内应出现「别处正在专注」（交接 §二 待人工确认 ㉘）。"
 
 [entries."SR-F4.1"]
 id = "SR-F4.1"
