@@ -86,7 +86,9 @@ def test_every_declared_item_still_exists_in_handover() -> None:
             continue
         item = row.split("\t")[2].removeprefix("← ")
         # 声明形如「前端批次③ ⑦ 今日页新手引导卡片」——取其中的编号/关键词去文档里找
-        for token in ("⑦", "⑧", "⑨", "⑩", "①", "③", "⑥", "④", "⑬", "⑯", "㉔", "㉑"):
+        tokens = ("⑦", "⑧", "⑨", "⑩", "①", "③", "⑥", "④",
+                  "⑬", "⑯", "⑰", "㉓", "㉔", "㉕", "㉑")
+        for token in tokens:
             if token in item:
                 assert token in text, f"交接文档里已经没有人工项 {token} 了（{item}）"
                 break

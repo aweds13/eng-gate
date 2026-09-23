@@ -32,7 +32,7 @@
  * 退出码：0 全通过 / 1 有流失败 / 2 fixture（种子数据）坏了 / 3 起不了真浏览器（NOT RUN）/
  *         4 两遍断言指纹不一致（工具自己不可信）。
  */
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
@@ -42,6 +42,33 @@ import {
 } from './tf_browser.mjs'
 
 const SHOTS_DIR = join(ROOT, 'gates', 'render', 'shots')  // 证据与黄金层放一起（同样不进仓库）
+const TEMP_DIR = process.env.TEMP ?? process.env.TMP ?? '/tmp'
+
+/** 最新那个同步包在哪（⑰ 用）。
+ *
+ * 为什么要从**磁盘**上找：界面只说"完整路径已复制到剪贴板"，路径本身不在 DOM 里；
+ * 而这一条流要证明的第一件事正是"**包真的写出来了**" —— 那就直接去看磁盘。
+ * `serve.py --fresh` 把库放在 `TEMP/timeflow_fresh_*` 下，包写在库旁边（同目录）。
+ */
+function newestSyncPack() {
+  let best = null
+  let dirs = []
+  try { dirs = readdirSync(TEMP_DIR) } catch { return null }
+  for (const d of dirs) {
+    if (!d.startsWith('timeflow_fresh_')) continue
+    const dir = join(TEMP_DIR, d)
+    let files = []
+    try { files = readdirSync(dir) } catch { continue }
+    for (const f of files) {
+      if (!/^sync-.*\.json$/.test(f)) continue
+      const p = join(dir, f)
+      let mtime = 0
+      try { mtime = statSync(p).mtimeMs } catch { continue }
+      if (!best || mtime > best.mtime) best = { path: p, mtime }
+    }
+  }
+  return best
+}
 
 /* ---------------------------------------------------------------- 参数 */
 
@@ -230,6 +257,13 @@ class T {
       return e ? e.getAttribute(${JSON.stringify(name)}) : null })()`)
   }
 
+  /** 输入框**当前的值**（property，不是 attribute —— 打字改的是 property，不是 attribute；
+   *  第一版拿 `attr(sel,'value')` 验"粘进去了没有"，永远拿到 null）。 */
+  value(selector) {
+    return this.cdp.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)});
+      return e ? e.value : null })()`)
+  }
+
   ls(key) { return this.cdp.eval(`(() => { try { return localStorage.getItem(${JSON.stringify(key)}) } catch (e) { return null } })()`) }
 
   /** 右下角提示条的**当前**文字（没显示时返回空串 —— 过场提示本来就会自己消失）。 */
@@ -238,13 +272,17 @@ class T {
       return t && t.classList.contains('show') ? (t.innerText || '').replace(/\\s+/g, ' ').trim() : '' })()`)
   }
 
-  /** 等提示条里出现某句话（操作是异步的：点了之后要等后端回话）。 */
+  /** 等提示条里出现某句话（操作是异步的：点了之后要等后端回话）。
+   *  ★ 失败时回的是**最后一句非空的**提示条，不是"最后一次采样" ——
+   *  第一版回最后一次采样，而提示条 2.2 秒后就自己消失了，于是失败信息永远是『（空）』，
+   *  看着像"点了没反应"，其实它明明说过一句别的（T-G35 就这么被误导过一次）。 */
   async waitToast(needle, ms = 5000) {
     const t0 = Date.now()
     let last = ''
     while (Date.now() - t0 < ms) {
-      last = await this.toast()
-      if (last.includes(needle)) return { ok: true, text: last }
+      const now = await this.toast()
+      if (now) last = now
+      if (now.includes(needle)) return { ok: true, text: now }
       await sleep(100)
     }
     return { ok: false, text: last }
@@ -637,6 +675,146 @@ flow({
     t.ok('改判成功', done.ok, `提示条里是：${done.text || '（空）'}`)
     t.has('那行变成「忘了」', await t.bodyText(), '今天记的是 忘了')
     t.eq('★ 进度仍是 1（改判不重复计）', await doneCount(), 1)
+  },
+})
+
+flow({
+  id: '⑰', name: '跨端同步：导出的包真写出来了，自己导给自己被明说没有意义',
+  item: 'G 批 ⑰ 跨端同步（没有第二台也能验一半）',
+  vp: 'desktop',
+  async run(t) {
+    await t.start('setting')
+    t.has('这一节写着怎么用（导到另一台、先预览再导入）', await t.bodyText(), '先预览再导入')
+    t.eq('「同时应用对方的删除」默认是不勾的（㉒ 的第一半）',
+      await t.attr('#syncDel', 'checked'), null)
+    t.has('旁边写着默认不删的理由', await t.text('#syncDelHint'), '默认不删')
+
+    // ① 导出：真点界面上的按钮 → 提示条说"已写出 + 完整路径已复制" → ★ 文件**真的在磁盘上**
+    await t.pressAction('sync-export')
+    const wrote = await t.waitToast('同步包已写出')
+    t.ok('点「导出同步包」有回话', wrote.ok, `提示条里是：${wrote.text || '（空）'}`)
+    t.has('回话里说了包名与行数', wrote.text, 'sync-')
+    t.has('也说了行数', wrote.text, '行')
+    const pack = newestSyncPack()
+    t.ok('★ 磁盘上真的多了一个同步包（不是嘴上说说）', Boolean(pack), `在 ${TEMP_DIR} 下没找到 sync-*.json`)
+
+    // ② 把它粘回去预览 —— **这台机器导出的包**，所以后端应当拒绝并说清为什么
+    if (pack) {
+      // 先问后端一次（Node 侧）：它认这个包、但拒绝"自己导给自己" —— 这样界面那一步若没反应，
+      // 是界面的事，而不是"包本身有问题"（不然两种失败分不开）。
+      const apiRes = await t.api('POST', '/api/sync/import', { path: pack.path, dry_run: true })
+      t.eq('后端认得这个包（只是拒绝自己导给自己）', apiRes.status, 400)
+      t.has('后端原话就是「自己导给自己没有意义」', JSON.stringify(apiRes.json), '自己导给自己没有意义')
+
+      await t.type('#syncPath', pack.path)
+      t.eq('路径粘进去了（读的是 property，不是 attribute）', await t.value('#syncPath'), pack.path)
+      await t.pressAction('sync-preview')
+      const self = await t.waitToast('自己导给自己没有意义')
+      t.ok('★ 界面上也明说了（把后端原话透出来）', self.ok, `提示条里说的是：${self.text || '（空）'}`)
+      t.has('还告诉你该怎么做（在另一台导出、在这台导入）', self.text, '另一台机器')
+      t.lacks('提示条里不画星号', self.text, '**')
+    }
+
+    // ③ 预览是**纯读**：一个字节都不该写（比对"上次导入"那行还在不在"还没导入过"）
+    t.has('预览之后仍然写着「还没导入过」', await t.bodyText(), '上次导入：还没导入过')
+  },
+})
+
+flow({
+  id: '㉓', name: '团队视角：管理者/执行者两种看法，不填名字就不猜你是谁',
+  item: 'T-G12 ㉓ 团队视角页',
+  vp: 'desktop',
+  async run(t) {
+    await t.start('team')
+    const body = () => t.bodyText()
+    // ① 默认是管理者视角：按执行者分组（种子里"把数据整理成表"分配给了小李）
+    t.has('默认是管理者视角（按执行者分组）', await body(), '小李 · 1 件')
+    t.ok('管理者视角**不要**你填名字（分配记录本来就是你建的）', await t.count('#teamMe') === 0)
+    t.has('页面上写着这是两种看法、不是两套数据', await body(), '不是两套数据')
+
+    // ② 切到执行者视角：先要一个名字 —— 没填就**什么都看不到**（工具不猜你是谁）
+    await t.pressAction('team-view', { text: '执行者' })
+    t.ok('执行者视角要一个名字', await t.count('#teamMe') === 1)
+    t.has('没填名字时明说"先填我是谁"', await body(), '先在上面填「我是谁」')
+
+    // ③ 填分配记录里写过的那个名字 → 只看到分给这个人的
+    await t.type('#teamMe', '小李')
+    await t.pressAction('team-me')
+    const named = await t.waitToast('执行者视角：你是「小李」')
+    t.ok('名字记在这台设备上', named.ok, `提示条里是：${named.text || '（空）'}`)
+    t.has('看到的就是分给小李的那件', await body(), '把数据整理成表')
+    t.eq('本机记下了这个名字', await t.ls('tf_team_me'), '小李')
+
+    // ④ 换一个名字 → 分给别人的一件都没有（**不制造假归因**）
+    await t.type('#teamMe', '王五')
+    await t.pressAction('team-me')
+    await t.waitToast('执行者视角：你是「王五」')
+    t.has('换一个名字就什么都看不到（不猜、也不硬塞）', await body(), '这个视角下没有任务')
+
+    // ⑤ 视角与名字都活过刷新
+    await t.reload()
+    await t.view('team')
+    t.eq('刷新之后还是执行者视角', await t.ls('tf_team_view'), 'executor')
+    t.eq('刷新之后名字还在（本机记着）', await t.attr('#teamMe', 'value'), '王五')
+  },
+})
+
+flow({
+  id: '㉕', name: '学校通知合作接口：默认关 → 投递去重 → 转成任务 → 关掉后 403',
+  item: 'G 批 ㉕ 学校通知合作接口',
+  vp: 'desktop',
+  async run(t) {
+    await t.start('setting')
+    t.has('默认是关的（并说清这叫「未接入」）', await t.bodyText(), '这叫"未接入"')
+
+    // ① 关着的时候：投递一律 403（这是"未接入"，不是坏掉）
+    const note = { source: '教务处', external_id: 'N-2026-001', title: '期中考试安排已发布',
+      url: 'https://example.edu/x', summary: '高数期中在第十周周三' }
+    const off = await t.api('POST', '/api/notify/school', note)
+    t.eq('关着时投递被 403 拒绝', off.status, 403)
+    t.has('原话说明这是「没接入」不是故障', JSON.stringify(off.json), '没接入')
+    t.has('也点明了默认收严这条口径', JSON.stringify(off.json), '默认收严')
+
+    // ② 打开（真点按钮），投递一条 → 收件箱里出现
+    await t.pressAction('set-notify', { text: '打开' })
+    const opened = await t.waitToast('合作接口已打开')
+    t.ok('开关能打开', opened.ok, `提示条里是：${opened.text || '（空）'}`)
+    const first = await t.api('POST', '/api/notify/school', note)
+    t.eq('打开后投递成功', first.status, 200)
+    t.eq('这是新收下的一条', first.json && first.json.created, true)
+
+    // ③ 同一条**再投一次** → 去重：不新增行、返回 duplicate
+    const again = await t.api('POST', '/api/notify/school', note)
+    t.eq('重复投递不算错', again.status, 200)
+    t.eq('★ 去重：同一来源同一条只留一行', again.json && again.json.duplicate, true)
+    const inbox = await t.api('GET', '/api/notify/school')
+    t.eq('收件箱里仍然只有一条', inbox.json && inbox.json.count, 1)
+
+    // ④ 回设置页刷新 → 收件箱看得见，点「转成任务」
+    await t.view('setting')
+    t.has('设置页收件箱里出现了这条通知', await t.bodyText(), '期中考试安排已发布')
+    await t.pressAction('notice-to-task', { text: '转成任务' })
+    const made = await t.waitToast('已转成任务')
+    t.ok('点一下才转成任务（人始终在环里）', made.ok, `提示条里是：${made.text || '（空）'}`)
+
+    // ⑤ 转出来的任务**看得出从哪来**（来源 + 链接 + 摘要都写进备注）
+    await t.view('tasks')
+    const card = await t.mark('[data-action="task-detail"]', { inCard: '期中考试安排已发布' })
+    if (t.ok('任务列表里出现了这条任务', card.ok)) {
+      await t.press(HIT, '打开它看备注')
+      const detail = await t.text('#detailRail')
+      t.has('★ 备注里写着「来自学校通知」（可回溯）', detail, '来自学校通知：教务处')
+      t.has('链接也在备注里', detail, 'https://example.edu/x')
+    }
+
+    // ⑥ 关回去：新投递又被 403，但**已有的那条照样能处理**（收件箱是你的数据）
+    await t.view('setting')
+    await t.pressAction('set-notify', { text: '关闭' })
+    t.eq('能关回去', (await t.waitToast('合作接口已关闭')).ok, true)
+    const closed = await t.api('POST', '/api/notify/school', { source: '教务处', external_id: 'N-2026-002', title: '又一条' })
+    t.eq('关掉之后投递又被 403', closed.status, 403)
+    const still = await t.api('GET', '/api/notify/school')
+    t.eq('收件箱里那条还在（读不要求接口开着）', still.json && still.json.count, 1)
   },
 })
 

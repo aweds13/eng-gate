@@ -323,13 +323,24 @@ export class Cdp {
 
   /** 逐字符**真打字**（keydown + char + keyup），不是 `value = '…'`。
    *  为什么要这样：`data-enter` / 输入校验 / 大小写与标点都只有真打字才经过；
-   *  直接改 value 会绕过事件，测出来的"能用"是假的。 */
+   *  直接改 value 会绕过事件，测出来的"能用"是假的。
+   *
+   *  ★ 标点**只发 `char` 事件**（不发明文键码）。踩过的坑（T-G35）：第一版给每个字符都填
+   *  `windowsVirtualKeyCode = charCode`，而 `.` 的 charCode 是 **46 = VK_DELETE** ——
+   *  Chromium 照虚拟键码当"删除"处理，于是路径里的点**被静默吃掉**
+   *  （`…205321.json` 变成 `…205321json`，后端回"找不到这个文件"）。
+   *  字母数字的 VK 码与 ASCII 一致，照旧走按下/抬起；其余标点一律只发 `char`。 */
   async typeText(text) {
     for (const ch of text) {
-      const base = { key: ch, text: ch, unmodifiedText: ch, windowsVirtualKeyCode: ch.charCodeAt(0) }
-      await this.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base })
-      await this.send('Input.dispatchKeyEvent', { type: 'char', ...base })
-      await this.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base })
+      const base = { key: ch, text: ch, unmodifiedText: ch }
+      if (/[0-9A-Za-z]/.test(ch)) {
+        const vk = ch.toUpperCase().charCodeAt(0)
+        await this.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk })
+        await this.send('Input.dispatchKeyEvent', { type: 'char', ...base })
+        await this.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk })
+      } else {
+        await this.send('Input.dispatchKeyEvent', { type: 'char', ...base })
+      }
     }
   }
 
