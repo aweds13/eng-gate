@@ -850,6 +850,38 @@ def test_review_completion_offers_output_entry() -> None:
     assert "'/api/review/meta'" not in out, "记产出不该再拉复习词表"
 
 
+def test_review_regrade_is_wired_and_labels_come_from_backend() -> None:
+    """T-G13（F6 OP-27 可逆的延伸）：「今天复习过的」里能**改判**，三档中文来自后端。
+
+    三条硬口径：
+    ① 三态中文（记得/模糊/忘了）**只在后端一处**（`meta.ratings`）—— 界面不许自己再写一份；
+    ② 「改判」只给**另外两档**的按钮（改成一样的没有意义，后端也会 400）；
+    ③ 改判是**撤销 + 按新档重来**，所以界面上要明说代价（排期重算、原来那次留痕、投入不重复计）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "function reviewDoneCard(r,ratings){" in html, "复习页没有「今天复习过的」那一段"
+    assert "api('/api/review/today')" in html and "'/api/review/meta'" in html
+    assert "reviewRatings=meta.ratings||[]" in html, "三档中文必须从后端 meta 拿"
+    # ① 后端给的词表渲染三态按钮 → reviewCard 里不该再出现硬编码的档位中文
+    card = html.split("function reviewCard(r,ratings){", 1)[1].split("\n}", 1)[0]
+    assert "ratings.map(" in card, "三态按钮没从 ratings 渲染"
+    for hard in ("data-feedback=\"remember\">记得", "data-feedback=\"forgot\">忘了"):
+        assert hard not in card, "界面又自己写了一份档位中文（词表应只在后端一处）"
+    # ② 只给另外两档
+    done = html.split("function reviewDoneCard(r,ratings){", 1)[1].split("\n}", 1)[0]
+    assert "ratings.filter(x=>x.value!==r.feedback)" in done, "改判必须排除「和现在一样」的那一档"
+    assert 'data-action="review-regrade"' in done
+    assert "'review-regrade':" in html and "async function regradeReview(" in html
+    # ③ 说清代价
+    fn = html.split("async function regradeReview(id,feedback){", 1)[1].split("\n}", 1)[0]
+    assert "/regrade" in fn and "confirmAsk(" in fn
+    assert "重算" in fn and "不会重复计" in fn, "改判前必须说清排期重算与投入不重复计"
+    # 复习完成后的提示里要告诉用户「记错了去哪改判」（否则这个入口没人找得到）
+    review_fn = html.split("async function review(id,fb){", 1)[1]
+    review_fn = review_fn.split("async function reviewOutput", 1)[0]
+    assert "改判" in review_fn
+
+
 def test_academic_vs_self_chart_is_wired() -> None:
     """T-C10（SR-F5.1b / GAP-F5-03）：统计页要有「学业投入 vs 自学投入」对照。
 
@@ -1036,7 +1068,7 @@ def test_obsidian_jump_is_wired_and_read_only() -> None:
     for needle in ("r.executed", "copyText(", "toast("):
         assert needle in open_fn, f"openInVault 缺少 {needle}（打不开不许静默）"
 
-    card = html.split("function reviewCard(r){", 1)[1].split("\n}", 1)[0]
+    card = html.split("function reviewCard(r,ratings){", 1)[1].split("\n}", 1)[0]
     assert "r.ref_url" in card and "在 Obsidian 打开" in card, "复习卡没有跳转入口"
     memo = html.split("async function renderMemo(m){", 1)[1]
     memo = memo.split("async function addMemo(", 1)[0]

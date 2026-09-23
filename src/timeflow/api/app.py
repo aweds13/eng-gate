@@ -1850,6 +1850,22 @@ def create_app(
         except KeyError:
             raise HTTPException(status_code=404, detail="复习卡不存在") from None
 
+    @app.get("/api/review/today")
+    def review_today() -> list[dict[str, object]]:
+        """**今天复习过的卡**（带这次记的是哪一档）—— 界面「今天复习过的」那一段与「改判」入口。"""
+        return rv.reviewed_today_items(conn)
+
+    @app.post("/api/review/{item_id}/regrade")
+    def regrade_review(item_id: str, payload: dict[str, Any]) -> dict[str, object]:
+        """把当日最近一次反馈改成另一档（T-G13）= 撤销 + 按新档重来：排期按同一快照重算、
+        投入不重复计、原来那次留在流水里（`review.undone` + `review.regraded`）。"""
+        try:
+            return rv.regrade(conn, item_id, payload["feedback"])
+        except KeyError:
+            raise HTTPException(status_code=404, detail="复习卡不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     @app.get("/api/review/{item_id}/facts")
     def review_facts(item_id: str) -> list[dict[str, Any]]:
         """某复习卡的事实流水（复习完成），供前端展示与验收核对。"""

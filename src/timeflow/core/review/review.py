@@ -33,6 +33,18 @@ RATING_REMEMBER = "remember"  # 记得 → Good
 RATING_FUZZY = "fuzzy"        # 模糊 → Hard
 RATING_FORGOT = "forgot"      # 忘了 → Again
 
+# 三档反馈的**中文标签与顺序**只在后端一处：界面（三态按钮 + 「改判」）
+# 从 `GET /api/review/meta` 的 `ratings` 拿，不再各写一份中文表。
+RATINGS: tuple[str, ...] = (RATING_REMEMBER, RATING_FUZZY, RATING_FORGOT)
+RATING_LABELS: dict[str, str] = {
+    RATING_REMEMBER: "记得",
+    RATING_FUZZY: "模糊",
+    RATING_FORGOT: "忘了",
+}
+
+# 反馈三态 → fsrs.Rating 的数值（Good / Hard / Again）—— `rating_to_fsrs` 一处映射
+_RATING_TO_FSRS: dict[str, int] = {RATING_REMEMBER: 3, RATING_FUZZY: 2, RATING_FORGOT: 1}
+
 _SOURCES = ("internal", "external")
 
 # 复习形式的**内置兜底**（SR-NF7 / G 批 · T-G1）：真正的词表在 `timeflow/vocab.py` 一处声明 ——
@@ -88,6 +100,8 @@ def meta(
     return {
         "forms": [{"value": k, "label": v} for k, v in current.items()],
         "sources": [{"value": v, "label": SOURCE_LABELS[v]} for v in _SOURCES],
+        # 三档反馈（记得/模糊/忘了）：界面用它渲染三态按钮与「改判」按钮（T-G13）
+        "ratings": [{"value": k, "label": RATING_LABELS[k]} for k in RATINGS],
         "default_form": default_form(conn, defaults),
         "default_source": "internal",
     }
@@ -260,9 +274,9 @@ def review(
     返回新卡状态、下次到期日、以及给前端展示的 reps/lapses。
     事实 extra 里带**复习前的卡片快照**，供「撤销本次反馈」精确回退（F6 OP-27 可逆）。
     """
-    mapping = {"remember": 3, "fuzzy": 2, "forgot": 1}  # Good / Hard / Again
+    mapping = _RATING_TO_FSRS
     if feedback not in mapping:
-        raise ValueError(f"非法反馈: {feedback}")
+        raise ValueError(f"非法反馈: {feedback}（能用的：{'/'.join(RATINGS)}）")
     row = conn.execute("SELECT * FROM review_items WHERE id = ?", (item_id,)).fetchone()
     if row is None:
         raise KeyError(f"复习卡不存在: {item_id}")
@@ -306,6 +320,25 @@ def review(
     }
 
 
+def _pending_last(
+    conn: sqlite3.Connection, item_id: str, day: str
+) -> dict[str, Any] | None:
+    """某卡**当日最近一次「还没被撤销」**的完成事实（没有则 None）。
+
+    撤销（OP-27）与改判（T-G13）用**同一套判据**找"要动的那一次" ——
+    分成两份实现就会有一天两边对不上（一个认为有、一个认为没有）。
+    """
+    undone_ids = {
+        str((row["extra"] or {}).get("fact_id")) for row in _undone_facts_for(conn, item_id)
+    }
+    pending = [
+        row
+        for row in _completed_facts_for(conn, item_id)
+        if str(row["occurred_at"] or "")[:10] == day and str(row["id"]) not in undone_ids
+    ]
+    return pending[-1] if pending else None
+
+
 def undo_review(
     conn: sqlite3.Connection, item_id: str, on_date: str | None = None
 ) -> dict[str, object]:
@@ -316,24 +349,12 @@ def undo_review(
     幂等：无当日完成事实、或该次已被撤销 → 直接返回当前卡片状态。
     """
     day = on_date or date.today().isoformat()
-    rows = [
-        row
-        for row in _completed_facts_for(conn, item_id)
-        if str(row["occurred_at"] or "")[:10] == day
-    ]
     item = conn.execute("SELECT * FROM review_items WHERE id = ?", (item_id,)).fetchone()
     if item is None:
         raise KeyError(f"复习卡不存在: {item_id}")
-    done_ids = {str(row["id"]) for row in rows}
-    undone_ids = {
-        str((row["extra"] or {}).get("fact_id"))
-        for row in _undone_facts_for(conn, item_id)
-        if str(row["occurred_at"] or "")[:10] == day
-    }
-    pending = [row for row in rows if str(row["id"]) not in undone_ids]
-    if not pending:
+    target = _pending_last(conn, item_id, day)
+    if target is None:
         return _item_state(item)
-    target = pending[-1]
     before = (target["extra"] or {}).get("before") or {}
     if before:
         conn.execute(
@@ -377,8 +398,115 @@ def undo_review(
         source="desktop",
     )
     facts_mod.publish("review.undone", {"item_id": item_id, "fact_id": str(target["id"]), **extra})
-    assert done_ids  # 显式表达：仅在确认存在当日完成事实后才写撤销事实
+    assert target is not None  # 到这里一定有"要撤销的那一次"（没有的话上面已经返回了）
     return state
+
+
+def regrade(
+    conn: sqlite3.Connection, item_id: str, feedback: str, on_date: str | None = None
+) -> dict[str, object]:
+    """把**当日最近一次**复习反馈改成另一档（F6 OP-27 的延伸 · T-G13）。
+
+    做法就是「**撤销这一次** + **按新档重来**」，两步都走**既有的**路径
+    （`undo_review` → `review`）：
+
+    - FSRS 从**同一个复习前快照**重新算 —— 于是"改判"与"当时就点另一档"是同一个结果，
+      排期不会因为改判而漂移（自己再写一套重算逻辑，两边迟早对不上）；
+    - 事实按老规矩留痕：原来那条 `review.completed` **不删**，追加 `review.undone` 指回它，
+      再写一条新的 `review.completed` —— 流水上看得出"改过"，不是偷偷抹掉重写；
+    - 投入**不会重复计**：账本按「当日有效完成事实（同一张卡只算一次）」计数（`reviewed_today`）；
+    - 另记一条 `review.regraded`（从哪一档改到哪一档），便于事后核对。
+
+    拒绝的情况（都是 400 带原话，不静默）：
+    - 今天还没复习过这张卡 → "没有可以改判的反馈"；
+    - 给的档和原来一样 → "不用改判"（界面上也不会给出同一个档的按钮）。
+    """
+    day = on_date or date.today().isoformat()
+    if feedback not in RATINGS:
+        raise ValueError(f"非法反馈: {feedback}（能用的：{'/'.join(RATINGS)}）")
+    row = conn.execute("SELECT * FROM review_items WHERE id = ?", (item_id,)).fetchone()
+    if row is None:
+        raise KeyError(f"复习卡不存在: {item_id}")
+    target = _pending_last(conn, item_id, day)
+    if target is None:
+        raise ValueError("今天还没有复习过这张卡，没有可以改判的反馈")
+    old = str((target["extra"] or {}).get("feedback") or "")
+    if old == feedback:
+        raise ValueError(f"和刚才记的一样（{RATING_LABELS.get(feedback, feedback)}），不用改判")
+    undo_review(conn, item_id, on_date=day)          # ① 退回复习前的卡片状态（留痕）
+    state = review(conn, item_id, feedback)          # ② 按新档走**完全相同**的复习路径
+    from timeflow.core import facts as facts_mod
+
+    facts_mod.record(
+        conn,
+        kind="review.regraded",
+        subject_type="review_item",
+        subject_id=item_id,
+        value_num=0.0,  # 改判不是又一次复习：不折算时间，也不进账目
+        value_text=str(row["title"]),
+        extra={
+            "from": old,
+            "to": feedback,
+            "fact_id": str(target["id"]),
+            "regraded_on": day,
+            "next_due": state["due_date"],
+        },
+        source="desktop",
+    )
+    facts_mod.publish(
+        "review.regraded", {"item_id": item_id, "from": old, "to": feedback, "regraded_on": day}
+    )
+    return {**state, "regraded_from": old, "regraded_to": feedback}
+
+
+def reviewed_today_items(
+    conn: sqlite3.Connection, day: str | None = None
+) -> list[dict[str, object]]:
+    """**今天复习过的卡**（带这次记的是哪一档）—— 界面上「改判」的入口靠它。
+
+    只报事实：一张卡一条（当日最近一次"未被撤销"的那次），最近复习的排最前。
+    卡被删掉了就不列（不留幽灵条目）。
+    """
+    from timeflow.core import facts as facts_mod
+
+    d = day or date.today().isoformat()
+    completed = facts_mod.query(
+        conn, kind="review.completed", since=f"{d}T00:00:00", until=f"{d}T23:59:59"
+    )
+    undone_ids = {
+        str((row["extra"] or {}).get("fact_id"))
+        for row in facts_mod.query(
+            conn, kind="review.undone", since=f"{d}T00:00:00", until=f"{d}T23:59:59"
+        )
+    }
+    latest: dict[str, dict[str, Any]] = {}
+    for fact in completed:  # 查询按 occurred_at 正序 → 后写的覆盖先写的 = 最近一次
+        if str(fact["id"]) in undone_ids:
+            continue
+        latest[str(fact["subject_id"] or "")] = fact
+    out: list[dict[str, object]] = []
+    for item_id, fact in latest.items():
+        item = conn.execute("SELECT * FROM review_items WHERE id = ?", (item_id,)).fetchone()
+        if item is None:
+            continue  # 卡已删：不列
+        extra = fact["extra"] or {}
+        got = str(extra.get("feedback") or "")
+        keys = set(item.keys())
+        out.append(
+            {
+                **_item_state(item),
+                "title": item["title"],
+                "form": item["form"],
+                "source": item["source"],
+                "task_id": item["task_id"] if "task_id" in keys else None,
+                "feedback": got,
+                "feedback_label": RATING_LABELS.get(got, ""),
+                "reviewed_at": fact["occurred_at"],
+                "fact_id": str(fact["id"]),
+            }
+        )
+    out.sort(key=lambda i: str(i["reviewed_at"]), reverse=True)
+    return out
 
 
 def _item_snapshot(row: sqlite3.Row) -> dict[str, object]:

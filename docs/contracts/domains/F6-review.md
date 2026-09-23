@@ -41,6 +41,15 @@
   都按本地日期落库与返回，**不拿 FSRS 时刻的 UTC 日期**（T-D12 修：东八区凌晨曾会差一天）。
 - API（第 2 步实现）：`POST /api/review/{id}/review`、`GET /api/review/{id}/facts`（事实流水）。
   撤销：`POST /api/review/{id}/undo`（当日最近一次；回退到事实里存的 before 快照 + 追加 `review.undone`）。
+- **改判（T-G13，2026-09-23）**：「记错了想改成另一档」不只是"撤销再点一次"——
+  `POST /api/review/{item_id}/regrade`（body `{feedback}`）= **撤销这一次 + 按新档重来**，两步都走既有路径：
+  - FSRS 从**同一个复习前快照**重算 → "改判"与"当时就点另一档"结果**逐项相同**；
+  - 原事实**不删**（追加 `review.undone` 指回它 + 新的 `review.completed` + 一条 `review.regraded`）；
+  - **投入不重复计**（账本按"当日有效完成事实、同卡只算一次"）；
+  - 拒绝都 **400 带原话**：今天没复习过 / 跟原来一样 / 非法档；卡不存在 404；
+  - `GET /api/review/today` 给界面「今天复习过的」那一段（含这次记的是哪一档）；
+    三档中文由 `GET /api/review/meta` 的 `ratings` 给（**词表只在后端一处**）。
+  - 验证：`../../tests/test_review_regrade_line.py`（11 条）+ 真机自检 9 条 + DOM 探针「复习·改判」1 档。
 
 ## OP-28 到期列表 / 进 My Day
 
@@ -91,3 +100,5 @@
 
 - 对应 AC-20。
 - 测试：`../../tests/test_academic_review.py`；B4 补全链路。
+- 改判（T-G13）：`../../tests/test_review_regrade_line.py` + `../../tests/test_web_frontend.py`
+  （三档中文来自后端 / 只给另外两档 / 说清代价）+ 真机自检 `../../tools/web_live_check.py`。

@@ -318,6 +318,47 @@ def live_team_checks(base: str) -> dict[str, bool]:
     }
 
 
+def live_regrade_checks(base: str) -> dict[str, bool]:
+    """T-G13 真机自检：复习「改判」在**真服务**上的行为（走真 HTTP，只碰临时库）。
+
+    这一卡最容易骗过自己的地方是"投入重复计"和"改判后从错的起点重算" —— 所以真跑一遍：
+    先记「记得」→ 改判成「忘了」→ 账本里**还是 1 张**、卡片的次数没有翻倍、
+    流水里原事实留着（`review.undone` + `review.regraded`）。
+    """
+    rid = _json_call(base, "/api/review/items", "POST", {"title": "真机自检·改判"})[1]["id"]
+    before = _json_call(base, f"/api/review/{rid}/review", "POST", {"feedback": "remember"})[1]
+    listed = _json_call(base, "/api/review/today")[1] or []
+    same = _json_call(base, f"/api/review/{rid}/regrade", "POST", {"feedback": "remember"})[0]
+    got = _json_call(base, f"/api/review/{rid}/regrade", "POST", {"feedback": "forgot"})[1] or {}
+    after = _json_call(base, "/api/review/today")[1] or []
+    summary = _json_call(base, "/api/summary")[1] or {}
+    # 这一路只回 `review.completed`（撤销/改判那两类事实没有 HTTP 出口，由单元测试直接查库兜着），
+    # 但"原来那次没被抹掉"正好可以从这里看出来：改判后应当是**两条** completed。
+    facts = _json_call(base, f"/api/review/{rid}/facts")[1] or []
+    never = _json_call(base, "/api/review/items", "POST", {"title": "真机自检·没复习过"})[1]
+    refuse = _json_call(
+        base, f"/api/review/{never['id']}/regrade", "POST", {"feedback": "fuzzy"}
+    )[0]
+    missing = _json_call(base, "/api/review/nope/regrade", "POST", {"feedback": "fuzzy"})[0]
+    meta = _json_call(base, "/api/review/meta")[1] or {}
+    return {
+        "复习三档中文由后端给": [r.get("value") for r in (meta.get("ratings") or [])]
+            == ["remember", "fuzzy", "forgot"],
+        "今天复习过的带档位": any(
+            i.get("id") == rid and i.get("feedback_label") == "记得" for i in listed
+        ),
+        "改判真的改了那一档": got.get("regraded_from") == "remember"
+            and got.get("regraded_to") == "forgot"
+            and any(i.get("id") == rid and i.get("feedback_label") == "忘了" for i in after),
+        "改判不改排期起点（次数不翻倍）": got.get("reps") == before.get("reps") == 1,
+        "改判不重复计投入": summary.get("review_count") == 1,
+        "改判留痕（原来那次没被抹掉）": len(facts) == 2,
+        "改成同一档被 400 拦下": same == 400,
+        "没复习过就改判被 400 拦下": refuse == 400,
+        "改判不存在的卡 404": missing == 404,
+    }
+
+
 def live_sync_checks(base: str, tmp: Path) -> dict[str, bool]:
     """T-G8 真机自检：同步包的**导出 → 预览 → 导入**在真服务上走一遍（场景 ③）。
 
@@ -607,6 +648,7 @@ def main() -> int:
     checks.update(live_c_line_checks(base))
     checks.update(live_ai_checks(base))
     checks.update(live_team_checks(base))
+    checks.update(live_regrade_checks(base))
     checks.update(live_sync_checks(base, tmp))
     checks.update(live_offline_checks(base, tmp))
     checks.update(live_lan_checks(tmp))

@@ -751,6 +751,7 @@ const ACTIONS = {
   // 复习
   'review-do':      el => review(el.dataset.id, el.dataset.feedback),
   'review-undo':    el => undoReview(el.dataset.id),
+  'review-regrade': el => regradeReview(el.dataset.id, el.dataset.feedback),
   'review-add':     () => addReview(),
   // 复习卡的**定义类字段**（SR-F6.5 形式 / SR-F8.3 引用句柄 / T-C6·C7）与任务升级（SR-F6.2 / T-C5）
   'review-edit':    el => editReview(el.dataset.id),
@@ -1916,10 +1917,10 @@ function doingSection(items){
   </div>`;
 }
 async function renderToday(m){
-  const [mydays,overdue,summary,due,deleted,all,reminders,done,doing]=await Promise.all([
+  const [mydays,overdue,summary,due,deleted,all,reminders,done,doing,rmeta]=await Promise.all([
     api('/api/mydays'),api('/api/overdue'),api('/api/summary'),api('/api/review/due'),
     api('/api/tasks/deleted'),api('/api/tasks'),api('/api/reminders/due'),api('/api/today/done'),
-    api('/api/tasks/doing')]);
+    api('/api/tasks/doing'),api('/api/review/meta')]);   // 三态中文（T-G13）只在后端一处
   el('summary',summaryLine(summary));
   // 到点的提醒（T-B5）：界面自己标出来 —— 没接系统通知通道也不瞎（口径由后端 reminder_state 定）
   const remind=reminders.length?`<div class="section-title">该提醒了（${reminders.length}）</div>
@@ -1952,7 +1953,7 @@ async function renderToday(m){
   <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||emptyState('没有逾期，很好')}</div>
   <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||emptyState('今天还没有任务，挑一件加进来吧')}
   ${doneSection(done)}
-  ${due.length?`<div class="section-title">今天该复习（${due.length}）</div>${due.map(r=>reviewCard(r)).join('')}`:''}
+  ${due.length?`<div class="section-title">今天该复习（${due.length}）</div>${due.map(r=>reviewCard(r,rmeta.ratings||[])).join('')}`:''}
   ${trash}
   ${debt}`;
   defaultDateFields(['newDue']);   // 默认截止日=今天（可点进去改），省掉每天手选
@@ -2205,22 +2206,41 @@ async function addCourse(){const name=document.getElementById('cName').value.tri
 async function addGrade(){const score=parseFloat(document.getElementById('gScore').value);const credits=parseFloat(document.getElementById('gCredits').value);
   if(isNaN(score))return;await api('/api/grades',{method:'POST',body:JSON.stringify({score,credits})});view(current)}
 
-function reviewCard(r){
+function reviewCard(r,ratings){
   if(reviewEdit.id===r.id) return reviewEditForm(reviewEdit.item,reviewEdit.meta);
   const handle=r.ref_handle?`<div class="meta" title="${esc(r.ref_reason||'')}">引用 ${esc(r.ref_handle)}
     ${r.ref_url?`<button class="ghost" data-action="vault-open" data-handle="${esc(r.ref_handle)}">在 Obsidian 打开</button>`:''}</div>`:'';
   const fromTask=r.task_id?`<div class="meta">来自任务（弱关联）</div>`:'';
+  // 三态按钮的中文来自后端 `meta.ratings`（词表一处，界面不再自己写一份）
+  const doBtns=ratings.map((x,i)=>`<button class="${i?'ghost':''}" data-action="review-do" data-id="${r.id}" data-feedback="${x.value}">${esc(x.label)}</button>`).join('');
   return `<div class="card"><div style="flex:1"><div class="title">${esc(r.title)}</div>
     <div class="meta">${r.reps}次 · ${r.interval_days}天${r.source==='external'?'<span class="badge">外部</span>':''}</div>${handle}${fromTask}</div>
-    <div class="row"><button data-action="review-do" data-id="${r.id}" data-feedback="remember">记得</button>
-    <button class="ghost" data-action="review-do" data-id="${r.id}" data-feedback="fuzzy">模糊</button>
-    <button class="ghost" data-action="review-do" data-id="${r.id}" data-feedback="forgot">忘了</button>
+    <div class="row">${doBtns}
     <button class="ghost" data-action="review-undo" data-id="${r.id}">撤销上次</button>
     <button class="ghost" data-action="review-edit" data-id="${r.id}">改形式/句柄</button></div></div>`;
+}
+/* 今天**已经复习过**的卡（T-G13）：把"记错了"接上 —— 直接改判成另一档。
+   只给**另外两档**的按钮（同一个档不给，改判成一样没有意义，后端也会拒）；
+   「改判」= 撤销这一次 + 按新档重来，排期从同一个复习前快照重算、投入不重复计（见 review.py::regrade）。 */
+function reviewDoneCard(r,ratings){
+  const others=ratings.filter(x=>x.value!==r.feedback);
+  return `<div class="card"><div style="flex:1"><div class="title">${esc(r.title)}</div>
+    <div class="meta">今天记的是 <span class="badge done">${esc(r.feedback_label||r.feedback)}</span>
+    · 下次到期 ${esc(r.due_date)}${r.reps?' · 第 '+r.reps+' 次':''}</div></div>
+    <div class="row"><span class="sub">改判为</span>
+      ${others.map(x=>`<button class="ghost" data-action="review-regrade" data-id="${r.id}" data-feedback="${x.value}">${esc(x.label)}</button>`).join('')}
+      <button class="ghost" data-action="review-undo" data-id="${r.id}">撤销这次</button></div></div>`;
 }
 async function undoReview(id){
   await api(`/api/review/${id}/undo`,{method:'POST'});
   toast('已撤销当日最近一次复习（间隔与账目一并回退）');view(current);
+}
+async function regradeReview(id,feedback){
+  const label=reviewRatings.find(x=>x.value===feedback);
+  const name=label?label.label:feedback;
+  if(!await confirmAsk(`把今天这次反馈改成「${name}」？排期会从复习前的状态按新的一档重算，原来那次留在流水里，投入不会重复计。`,'改判'))return;
+  const r=await api(`/api/review/${id}/regrade`,{method:'POST',body:JSON.stringify({feedback})});
+  toast(`已改判为「${name}」，下次到期 ${r.due_date}`);view(current);
 }
 /* ---------- 复习卡的定义类字段（SR-F6.5 / SR-F8.3 / T-C6·C7）----------
  * 中文词表（形式 / 执行源）**只在后端一处**（`review.meta()` 的 `_FORMATS` / `SOURCE_LABELS`），
@@ -2228,6 +2248,9 @@ async function undoReview(id){
  * **排期字段（到期/间隔/次数）不给手改**：那是 FSRS 的记忆状态，手改会与调度器打架。
  */
 let reviewEdit={id:null,item:null,meta:null};
+// 三态反馈的「值 → 中文」由后端给（`meta.ratings`）；渲染复习页时存一份，供「改判」按钮复用。
+// 为什么不留成空数组的兜底文案：词表缺失时按钮会变少而不是显示错字（宁可少，不可错）。
+let reviewRatings=[];
 async function editReview(id){
   const [item,meta]=await Promise.all([api(`/api/review/items/${id}`),api('/api/review/meta')]);
   reviewEdit={id,item,meta};
@@ -2324,7 +2347,9 @@ function teamItemHTML(it,view){
 }
 
 async function renderReview(m){
-  const [due,summary]=await Promise.all([api('/api/review/due'),api('/api/summary')]);
+  const [due,summary,meta,today]=await Promise.all([
+    api('/api/review/due'),api('/api/summary'),api('/api/review/meta'),api('/api/review/today')]);
+  reviewRatings=meta.ratings||[];               // 三态中文只在后端一处：这里拿一份给下面用
   const doneToday=summary.review_count||0;
   const total=due.length+doneToday;  // 今天该复习的 = 还没做的 + 今天已做的
   m.innerHTML=`<div class="card" style="display:block">
@@ -2333,14 +2358,17 @@ async function renderReview(m){
     <div class="sub" style="margin-top:6px">${total?`还剩 ${due.length} 张；点了「记得/模糊/忘了」就会计入进度。`:'今天没有到期的复习卡。'}</div></div>
   <div class="new"><input id="rvTitle" placeholder="新建复习卡内容"><button data-action="review-add">新建</button></div>
   <div class="section-title">到期复习（${due.length}）</div>
-  ${due.map(r=>reviewCard(r)).join('')||emptyState('没有到期复习，轻松一下')}`;
+  ${due.map(r=>reviewCard(r,reviewRatings)).join('')||emptyState('没有到期复习，轻松一下')}
+  <div class="section-title">今天复习过的（${today.length}）</div>
+  ${today.map(r=>reviewDoneCard(r,reviewRatings)).join('')
+    ||emptyState('今天还没复习过卡。点上面的「记得/模糊/忘了」，这里就会出现，记错了还能改判。')}`;
 }
 async function addReview(){const title=document.getElementById('rvTitle').value.trim();if(!title)return;
   await api('/api/review/items',{method:'POST',body:JSON.stringify({title})});view(current)}
 async function review(id,fb){await api(`/api/review/${id}/review`,{method:'POST',body:JSON.stringify({feedback:fb})});
   // 温故知新 → 额外一笔产出（SR-F2.2 / T-C2）：用户定「**想记才点**」—— 不自动弹、不打断复习，
   // 所以放在 toast 上给一个按钮（6 秒内可点），而不是弹窗拦一下。
-  toastAction('复习已记录，下次到期已由 FSRS 排好 —— 温故知新的话可以顺手记一笔产出','记一笔产出',()=>reviewOutput(id));
+  toastAction('复习已记录，下次到期已由 FSRS 排好 —— 记错了可以在下面「今天复习过的」里改判；温故知新的话可以顺手记一笔产出','记一笔产出',()=>reviewOutput(id));
   view(current)}
 async function reviewOutput(id){
   const note=await ask('记一笔产出：这次温故知新记下了什么？（计入知识资产）','');

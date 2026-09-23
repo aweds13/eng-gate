@@ -184,8 +184,17 @@ const DB = {
     forms: [{ value: 'cloze', label: '挖空' }, { value: 'qa', label: '问答卡' },
       { value: 'exam', label: '真题' }],
     sources: [{ value: 'internal', label: '内置' }, { value: 'external', label: '外部 app' }],
+    // 三档反馈的中文（T-G13）：界面用它渲染三态按钮与「改判」按钮 —— 探针里也得给，
+    // 否则渲染出来的是一排没有字的按钮（"没有字"在断言里很难看出来，所以要真给）。
+    ratings: [{ value: 'remember', label: '记得' }, { value: 'fuzzy', label: '模糊' },
+      { value: 'forgot', label: '忘了' }],
     default_form: 'qa', default_source: 'internal',
   },
+  // 今天复习过的卡（T-G13）：复习页下半段 + 「改判」入口（只给另外两档）
+  '/api/review/today': [{ id: 'r2', title: '今天复习过的卡', form: 'qa', source: 'internal',
+    due_date: '2026-10-01', reps: 3, lapses: 0, interval_days: 9, state: 'done', task_id: null,
+    feedback: 'remember', feedback_label: '记得', reviewed_at: '2026-09-23T09:10:00',
+    fact_id: 'fact-r2' }],
   '/api/review/items/r1': { id: 'r1', title: '探针复习卡', form: 'qa', source: 'internal',
     due_date: '2026-09-20', reps: 2, interval_days: 3, ref_handle: 'notes/数学.md', task_id: 't1' },
   // 任务详情（右栏 #detailRail）：T-B1 起详情面板带「备注」，编辑态渲染必须也跑一遍
@@ -488,6 +497,7 @@ let bad = 0;
 let detailBad = 0;
 let doneBad = 0;
 let reviewBad = 0;
+let regradeBad = 0;
 let hardBad = 0;
 let guardBad = 0;
 let stateBad = 0;
@@ -602,6 +612,47 @@ try {
   reviewBad++;
   reviewChecks.push({ error: e.message });
   console.log(`  ❌ 复习·改形式填句柄 渲染抛错: ${e.message}`);
+}
+
+/* 复习·改判（T-G13）：复习页下半段「今天复习过的」——
+   ① 卡片上要写明**今天记的是哪一档**（否则改判时不知道从哪改到哪）；
+   ② 「改判为」只给**另外两档**（同一个档不给按钮）；
+   ③ 反证：那一段里不许出现"和现在一样"的那一档按钮（否则用户点了会吃 400）；
+   ④ 空态：今天还没复习过时给一句带路的说明（不是干巴巴「暂无数据」）。 */
+const regradeChecks = [];
+try {
+  globalThis.__setReviewEdit({ id: null, item: null, meta: null });
+  byId.get('main')._html = '';
+  await globalThis.__view('review');
+  await sleep(30);
+  const html = byId.get('main')._html;
+  // 切两段：`[0]` = 标题之前，`[1]` = 「今天复习过的」之后的那一段（要查的内容都在里面）。
+  const done = html.split('今天复习过的（1）')[1] || '';
+  const needs = ['今天记的是', '记得', '改判为',
+    'data-action="review-regrade"', 'data-feedback="fuzzy"', 'data-feedback="forgot"',
+    '撤销这次'];
+  const missing = needs.filter((n) => !done.includes(n));
+  const pure = !done.includes('data-feedback="remember"');   // 当前那一档不该给按钮
+
+  const saved = DB['/api/review/today'];
+  DB['/api/review/today'] = [];
+  byId.get('main')._html = '';
+  await globalThis.__view('review');
+  await sleep(30);
+  const emptyHtml = byId.get('main')._html;
+  DB['/api/review/today'] = saved;
+  const emptyOk = emptyHtml.includes('今天还没复习过卡') && emptyHtml.includes('还能改判');
+
+  const rendered = missing.length === 0 && pure && emptyOk;
+  if (!rendered) regradeBad++;
+  regradeChecks.push({ rendered, missing, pure, emptyOk });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 复习·改判 main ${String(html.length).padStart(6)}B`
+    + `（只给另外两档 ${pure ? '对' : '不对'}·空态 ${emptyOk ? '带路' : '没带路'}）`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  regradeBad++;
+  regradeChecks.push({ error: e.message });
+  console.log(`  ❌ 复习·改判 渲染抛错: ${e.message}`);
 }
 globalThis.__setReviewEdit({ id: null, item: null, meta: null });
 
@@ -1346,6 +1397,7 @@ if (process.argv.includes('--json')) {
   console.log(JSON.stringify(
     { views: results, detail: detailChecks, done: doneChecks, review: reviewChecks,
       hard: hardChecks, guard: guardChecks, state: stateChecks, overdue: overdueChecks,
+      regrade: regradeChecks,
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
       export: exportChecks, obsidian: obsidianChecks, ai: aiChecks, sync: syncChecks,
@@ -1359,8 +1411,7 @@ if (unused.length) {
 if (problems.length) {
   console.log(`  ⚠️  运行时告警/异常：${problems.slice(0, 5).join(' | ')}`);
 }
-const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardBad > 0
-  || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0 || archiveBad > 0
+const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || regradeBad > 0 || hardBad > 0  || guardBad > 0 || stateBad > 0 || overdueBad > 0 || attemptBad > 0 || archiveBad > 0
   || stepBad > 0 || debtBad > 0 || behaviorBad > 0 || vocabBad > 0 || heatmapBad > 0 || exportBad > 0
   || obsidianBad > 0
   || aiBad > 0
@@ -1374,6 +1425,7 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，详情面板 ${detailChecks.length - detailBad}/${detailChecks.length} 正常`
   + `，今日完成明细展开 ${doneChecks.length - doneBad}/${doneChecks.length} 正常`
   + `，复习卡编辑态 ${reviewChecks.length - reviewBad}/${reviewChecks.length} 正常`
+  + `，复习改判 ${regradeChecks.filter((c) => c.rendered).length}/${regradeChecks.length} 正常`
   + `，硬考核强呈现 ${hardChecks.length - hardBad}/${hardChecks.length} 正常`
   + `，白名单勿扰 ${guardChecks.length - guardBad}/${guardChecks.length} 正常`
   + `，状态机 ${stateChecks.length - stateBad}/${stateChecks.length} 正常`

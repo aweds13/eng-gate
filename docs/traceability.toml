@@ -1934,6 +1934,27 @@ evidence = [
   "test:test_offline_phone_line.py",
 ]
 
+[entries."T-G13"]
+id = "T-G13"
+title = "实现复习「改判」：把当日最近一次反馈改成另一档（= 撤销 + 按新档重来，排期重算/留痕/不重复计）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/复习改判-T-G13.md",
+  "text:src/timeflow/core/review/review.py::def regrade",
+  "text:src/timeflow/core/review/review.py::def _pending_last",
+  "text:src/timeflow/core/review/review.py::def reviewed_today_items",
+  "text:src/timeflow/core/review/review.py::RATING_LABELS",
+  "route:POST /api/review/{item_id}/regrade",
+  "route:GET /api/review/today",
+  "text:src/web/index.html::function reviewDoneCard(r,ratings)",
+  "text:src/web/index.html::async function regradeReview(id,feedback)",
+  "ui:data-action=review-regrade",
+  "test:test_review_regrade_line.py",
+  "test:test_web_frontend.py",
+]
+gaps = ""
+
 [entries."T-G12"]
 id = "T-G12"
 title = "实现 OP-33：团队视角切换页（管理者/执行者两视角；一份记录两种看法，不引入账号）"
