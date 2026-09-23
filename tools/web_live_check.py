@@ -18,6 +18,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import quote
 
 import uvicorn
 
@@ -258,6 +259,62 @@ def live_ai_checks(base: str) -> dict[str, bool]:
         "AI 跨站读写都拦": cross_read == 403 and cross_write == 403,
         "AI 的动作在事实里可回溯": any(str(f.get("source")) == "ai" for f in facts),
         "AI 关掉后又回到 403": after_off == 403,
+    }
+
+
+def live_team_checks(base: str) -> dict[str, bool]:
+    """T-G12 真机自检：团队视角页（OP-33）在**真服务**上成立 —— 两个视角 + 四条边界。
+
+    走真 HTTP 而不是只看函数返回值：验的是"界面上那两个按钮打到的接口"到底怎么答。
+    只碰**临时库**（`web_live_check` 起的一次性库），不动你真实的任务清单。
+    - 默认视角 = 管理者；按执行者分组（不是相邻同名归组）；
+    - 执行者视角只给这个名字的（中文名字要 URL 编码才能进 query）；
+    - **没填"我是谁"就不猜**：空列表 + 说明，不报错；
+    - 非法视角 / 非法状态 → 400（不静默回落成默认值）；
+    - 任务进回收站（软删）后分配记录**留着**并标明"在回收站"。
+    """
+    t1 = _json_call(
+        base, "/api/tasks", "POST", {"title": "真机自检·甲", "due_date": "2030-01-01"}
+    )[1]
+    t2 = _json_call(base, "/api/tasks", "POST", {"title": "真机自检·乙"})[1]
+    a1 = _json_call(base, "/api/team/assign", "POST",
+                    {"task_id": t1["id"], "assignee": "小王", "note": "周五前"})[1]
+    _json_call(base, "/api/team/assign", "POST", {"task_id": t2["id"], "assignee": "小李"})
+    _json_call(base, f"/api/team/assign/{a1['id']}", "PATCH", {"status": "blocked"})
+
+    mgr = _json_call(base, "/api/team/board")[1] or {}
+    exe = _json_call(base, f"/api/team/board?view=executor&me={quote('小王')}")[1] or {}
+    nobody = _json_call(base, "/api/team/board?view=executor")[1] or {}
+    bad_view = _json_call(base, "/api/team/board?view=boss")[0]
+    bad_status = _json_call(base, "/api/team/board?status=sleeping")[0]
+
+    groups = mgr.get("groups") or []
+    names = [g.get("assignee") for g in groups]
+    wang = next((g for g in groups if g.get("assignee") == "小王"), {})
+    exe_items = [i for g in (exe.get("groups") or []) for i in (g.get("items") or [])]
+
+    _json_call(base, f"/api/tasks/{t2['id']}", "DELETE")          # 软删 = 进回收站
+    after = _json_call(base, "/api/team/board")[1] or {}
+    recycled = next(
+        (i for g in (after.get("groups") or []) for i in (g.get("items") or [])
+         if i.get("task_id") == t2["id"]),
+        {},
+    )
+
+    return {
+        "团队默认视角是管理者": mgr.get("view") == "manager" and mgr.get("total") == 2,
+        "团队按执行者分组（交替分配也合成一组）":
+            names == sorted(names, key=str.casefold) and set(names) == {"小王", "小李"}
+            and wang.get("count") == 1
+            and (wang.get("items") or [{}])[0].get("status") == "blocked",
+        "执行者视角只给自己的": bool(exe_items) and all(
+            i.get("assignee") == "小王" for i in exe_items) and exe.get("total") == 1,
+        "执行者视角没填名字就不猜": nobody.get("total") == 0 and nobody.get("groups") == []
+            and "我是谁" in str(nobody.get("note")),
+        "团队非法视角/状态被 400 拦下": bad_view == 400 and bad_status == 400,
+        "任务进回收站后分配记录留着并标明": recycled.get("task_deleted") is True
+            and recycled.get("task_missing") is False
+            and recycled.get("task_title") == "真机自检·乙",
     }
 
 
@@ -530,6 +587,11 @@ def main() -> int:
             f'data-view="{v}"' in _rail_nav(html) and f'data-view="{v}"' in html
             for v in ("important", "planned", "flagged")
         ) and html.count("smartViewNavHTML(") >= 3,
+        # 团队视角页（T-G12 / OP-33）：宽屏走左栏、手机走底栏（≤1023px 左栏被 CSS 藏起来）
+        # —— 只挂一边就等于有一类设备进不去，所以两边都要有。
+        "团队视角可达（左栏 + 手机底栏）":
+            'data-view="team"' in _rail_nav(html)
+            and 'data-view="team"' in html.split('class="bottom-nav"', 1)[1].split("</nav>", 1)[0],
     }
     # 视图路由自检：每个 data-view 要么是合法视图，要么是已注册的动作（点了没反应最难查）
     views = set(re.findall(r"const VIEWS=\[([^\]]*)\]", html)[0].replace("'", "").split(","))
@@ -544,6 +606,7 @@ def main() -> int:
     checks.update(live_remind_checks(base))
     checks.update(live_c_line_checks(base))
     checks.update(live_ai_checks(base))
+    checks.update(live_team_checks(base))
     checks.update(live_sync_checks(base, tmp))
     checks.update(live_offline_checks(base, tmp))
     checks.update(live_lan_checks(tmp))

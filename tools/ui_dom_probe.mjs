@@ -406,8 +406,53 @@ const DB = {
     note: '走文件的跨端同步：在一台机器导出同步包，拷到另一台导入。导入不会删你本地的任何东西。',
   },
 };
+// 团队视角页（SR-F7.1 / OP-33 / T-G12）：**同一份记录两种看法**，所以要按 query 回不同形状 ——
+// 探针这里只演"界面拿到这两种数据会渲染成什么"，真正的归组/过滤规则由后端负责，
+// 后端那一侧由 `tests/test_team_view_line.py` + `tools/web_live_check.py` 真跑兜着。
+const TEAM_ITEM_ASSIGNED = { id: 'as1', task_id: 't1', assignee: '小王', assigner: 'me',
+  note: '周五前给初稿', status: 'assigned', task_title: '探针任务', task_due: '2030-01-01',
+  task_status: '未开始', task_missing: false, task_deleted: false, created_at: '2026-09-22' };
+const TEAM_ITEM_BLOCKED = { id: 'as2', task_id: 'gone-task', assignee: '小王', assigner: 'me',
+  note: null, status: 'blocked', task_title: null, task_due: null, task_status: null,
+  task_missing: true, task_deleted: false, created_at: '2026-09-22' };
+// 软删（进回收站）与彻底删除**不是一回事**：软删的任务还在，标题照显示、后面注明"在回收站"
+const TEAM_ITEM_RECYCLED = { id: 'as3', task_id: 'trash-task', assignee: '小王', assigner: 'me',
+  note: null, status: 'done', task_title: '扔进回收站的事', task_due: null, task_status: '已删',
+  task_missing: false, task_deleted: true, created_at: '2026-09-22' };
+const TEAM_VIEWS = [{ value: 'manager', label: '管理者（我分配的）' },
+  { value: 'executor', label: '执行者（分配给我的）' }];
+const TEAM_STATUSES = [{ value: 'assigned', label: '已分配', count: 1 },
+  { value: 'in_progress', label: '进行中', count: 0 }, { value: 'done', label: '已完成', count: 1 },
+  { value: 'blocked', label: '受阻', count: 1 }];
+const TEAM_BOARD = {
+  manager: {
+    view: 'manager', me: '', status_filter: '', views: TEAM_VIEWS, statuses: TEAM_STATUSES,
+    groups: [{ assignee: '小王', count: 3,
+      items: [TEAM_ITEM_ASSIGNED, TEAM_ITEM_BLOCKED, TEAM_ITEM_RECYCLED] }],
+    total: 3, shown: 3,
+    note: '你分配出去的任务都在这里：谁手上有什么、进展到哪。分配出去的任务不计个人投入（只记协调这件事本身）。',
+  },
+  executor: {
+    view: 'executor', me: '小王', status_filter: '', views: TEAM_VIEWS, statuses: TEAM_STATUSES,
+    groups: [{ assignee: '小王', count: 1, items: [TEAM_ITEM_ASSIGNED] }],
+    total: 1, shown: 1,
+    note: '分给「小王」的任务：进展由你自己回报（点下一步动作）。不强制对方装这个软件。',
+  },
+  executor_no_me: {
+    view: 'executor', me: '', status_filter: '', views: TEAM_VIEWS, statuses: TEAM_STATUSES,
+    groups: [], total: 0, shown: 0,
+    note: '执行者视角要先说「我是谁」—— 分配记录里的名字是你自己填的自由文本，工具没有账号体系，不猜你是谁。填一个名字，就能看分给你的那几件。',
+  },
+};
 globalThis.fetch = async (path) => {
   const key = String(path).split('?')[0];
+  if (key === '/api/team/board') {
+    const q = new URL(String(path), 'http://probe').searchParams;
+    const view = q.get('view') === 'executor' ? 'executor' : 'manager';
+    const me = q.get('me') || '';
+    const body = view === 'executor' && !me ? TEAM_BOARD.executor_no_me : TEAM_BOARD[view];
+    return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+  }
   const body = key in DB ? DB[key] : null;
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
 };
@@ -438,7 +483,7 @@ try {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const views = ['today', 'tasks', 'important', 'planned', 'flagged', 'focus', 'stats', 'habit',
-  'academic', 'review', 'memo', 'setting', 'offline'];
+  'academic', 'review', 'memo', 'team', 'setting', 'offline'];
 let bad = 0;
 let detailBad = 0;
 let doneBad = 0;
@@ -460,6 +505,7 @@ let heatmapBad = 0;
 let exportBad = 0;
 let offlineBad = 0;
 let lanBad = 0;
+let teamBad = 0;
 let boldBad = 0;
 const results = [];
 for (const v of views) {
@@ -1032,6 +1078,62 @@ try {
   console.log(`  ❌ offline·手机离线记 渲染抛错: ${e.message}`);
 }
 
+/* 团队视角页（SR-F7.1 / OP-33 / T-G12）：两个视角都要真渲染 + 三处反证 ——
+   ① 管理者视角：按执行者分组、标「我分配」、能点"下一步"、任务被删的那条如实标"保留审计"；
+   ② 执行者视角（说了名字）：标「分配给我」、只留这个人的；
+   ③ 执行者视角（**没说名字**）：不猜 —— 出输入框 + 空态说明，且不许冒出"分配给我"的条目；
+   ④ 反证：管理者视角里不许出现「分配给我」（两个视角是**两种看法**，不是同一坨文字）。
+   视角与名字存在本机 localStorage 里，所以这一段临时换成能真存的内存实现，跑完还原。 */
+const teamChecks = [];
+try {
+  const realLocalStorage = globalThis.localStorage;
+  const mem = {};
+  const useStore = (init) => {
+    for (const k of Object.keys(mem)) delete mem[k];
+    Object.assign(mem, init || {});
+    globalThis.localStorage = {
+      getItem: (k) => (k in mem ? mem[k] : null),
+      setItem: (k, v) => { mem[k] = String(v); },
+      removeItem: (k) => { delete mem[k]; },
+    };
+  };
+  const renderTeam = async () => { byId.get('main')._html = ''; await globalThis.__view('team'); await sleep(40); return byId.get('main')._html; };
+
+  useStore({});
+  const mgr = await renderTeam();
+  const mgrMissing = ['data-action="team-view"', '管理者（我分配的）', '执行者（分配给我的）',
+    '小王 · 3 件', '我分配 · ', 'data-action="team-status"', 'data-status="in_progress"',
+    '任务已删除（分配记录保留下来做审计）', '（已删除 · 在回收站）', '全部 3', '受阻 1',
+    '已完成 1'].filter((n) => !mgr.includes(n));  // 「两种看法」的判据不看那两个字（切视角的按钮标签里本来就有"分配给我"），
+  // 而是看**这一页的内容**：管理者页里有"你分配出去的…"这句、且没有执行者那份条目。
+  const mgrPure = mgr.includes('你分配出去的任务都在这里') && !mgr.includes('分给「小王」的任务');
+
+  useStore({ tf_team_view: 'executor', tf_team_me: '小王' });
+  const exe = await renderTeam();
+  const exeMissing = ['分配给我', '小王 · 1 件', '分给「小王」的任务'].filter((n) => !exe.includes(n));
+  const exePure = exe.includes('分给「小王」的任务') && !exe.includes('你分配出去的任务都在这里')
+    && !exe.includes('任务已删除');
+
+  useStore({ tf_team_view: 'executor' });
+  const noMe = await renderTeam();
+  // 没填名字 = 一行都不给看（不是"猜一个人"）：只有输入框与说明，没有任何"下一步"按钮
+  const noMeOk = noMe.includes('id="teamMe"') && noMe.includes('data-action="team-me"')
+    && noMe.includes('先在上面填「我是谁」') && !noMe.includes('data-action="team-status"');
+  globalThis.localStorage = realLocalStorage;
+
+  const rendered = mgrMissing.length === 0 && exeMissing.length === 0 && mgrPure && exePure && noMeOk;
+  if (!rendered) teamBad++;
+  teamChecks.push({ rendered, mgrMissing, exeMissing, mgrPure, exePure, noMeOk });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 团队·视角切换 管理者 ${String(mgr.length).padStart(6)}B`
+    + `（两个视角 ${mgrPure && exePure ? '分得开' : '混了'}·没填名字 ${noMeOk ? '不猜' : '猜了'}）`
+    + (mgrMissing.length ? `  管理者缺: ${mgrMissing.join(', ')}` : '')
+    + (exeMissing.length ? `  执行者缺: ${exeMissing.join(', ')}` : ''));
+} catch (e) {
+  teamBad++;
+  teamChecks.push({ error: e.message });
+  console.log(`  ❌ 团队·视角切换 渲染抛错: ${e.message}`);
+}
+
 /* 局域网访问 + 配对码（SR-NF17 / G 批 · T-G10b / 场景 ②）：两块都要真渲染 ——
    ① 设置页那一节（开着时给地址 + 本机可见的配对码 + 两个按钮）；
    ② **配对墙**：把 fetch 换成"回 401 说没配对"，看整页是不是真变成那面墙，
@@ -1247,7 +1349,7 @@ if (process.argv.includes('--json')) {
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
       export: exportChecks, obsidian: obsidianChecks, ai: aiChecks, sync: syncChecks,
-      offline: offlineChecks, lan: lanChecks, bold: boldChecks,
+      offline: offlineChecks, lan: lanChecks, team: teamChecks, bold: boldChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -1265,6 +1367,7 @@ const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || hardB
   || syncBad > 0
   || offlineBad > 0
   || lanBad > 0
+  || teamBad > 0
   || boldBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
@@ -1288,6 +1391,7 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，跨端同步 ${syncChecks.filter((c) => c.rendered).length}/${syncChecks.length} 正常`
   + `，手机离线记 ${offlineChecks.filter((c) => c.rendered).length}/${offlineChecks.length} 正常`
   + `，局域网配对 ${lanChecks.filter((c) => c.rendered).length}/${lanChecks.length} 正常`
+  + `，团队视角 ${teamChecks.filter((c) => c.rendered).length}/${teamChecks.length} 正常`
   + `，字面星号 ${boldBad === 0 ? '0' : '有'}（源码 + 渲染两遍查）`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

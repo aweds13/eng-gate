@@ -1,10 +1,10 @@
 {
-  "rev": "9025578",
-  "tree": "be2e44ede6293eeb73b3bfbc8e94eea34a0f83f1",
-  "parent": "9025578",
+  "rev": "2aa805d",
+  "tree": "423d0832c9b23b182d97e497a8067d0d043a1887",
+  "parent": "2aa805d",
   "branch": "line/impl-v1",
   "dirty": true,
-  "at": "2026-09-23T10:15:47",
+  "at": "2026-09-23T10:45:21",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
@@ -13,69 +13,69 @@
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 55.07,
-      "summary": "877 passed, 862 warnings in 53.07s"
+      "seconds": 56.54,
+      "summary": "890 passed, 867 warnings in 54.16s"
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 7.14,
-      "summary": "2 passed, 877 deselected, 2 warnings in 5.63s"
+      "seconds": 7.76,
+      "summary": "2 passed, 890 deselected, 2 warnings in 6.07s"
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 0.5,
+      "seconds": 0.77,
       "summary": "All checks passed!"
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 2.57,
+      "seconds": 2.29,
       "summary": "Success: no issues found in 45 source files"
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 0.88,
+      "seconds": 1.05,
       "summary": "LAYER CHECKS: PASS ✅"
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 10.28,
+      "seconds": 9.55,
       "summary": "SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）"
     },
     {
       "name": "ui_dom_probe",
       "exit_code": 0,
-      "seconds": 2.31,
-      "summary": "at api (eval at <anonymous> (file:///D:/%E6%96%87%E6%A1%A3/jelly_ware/program/engineering/tools/ui_dom_probe.mjs:430:3), <anonymous>:46:27)"
+      "seconds": 2.5,
+      "summary": "at api (eval at <anonymous> (file:///D:/%E6%96%87%E6%A1%A3/jelly_ware/program/engineering/tools/ui_dom_probe.mjs:475:3), <anonymous>:46:27)"
     },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 2.4,
+      "seconds": 3.25,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）"
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 1.61,
+      "seconds": 1.3,
       "summary": "OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位"
     },
     {
       "name": "lf1_live",
       "exit_code": 0,
-      "seconds": 2.51,
+      "seconds": 2.57,
       "summary": "LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）"
     },
     {
       "name": "web_live",
       "exit_code": 0,
-      "seconds": 5.9,
+      "seconds": 6.05,
       "summary": "[OK ] 局域网：自检把校园网/热点写进排查顺序"
     }
   ],
-  "trailer": "pytest 877 passed, 862 warnings in 53.07s; acceptance 2 passed, 877 deselected, 2 warnings in 5.63s; ruff All checks passed!; mypy Success: no issues found in 45 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; ui_dom_probe at api (eval at <anonymous> (file:///D:/%E6%96%87%E6%A1%A3/jelly_ware/program/engineering/tools/ui_dom_probe.mjs:430:3), <anonymous>:46:27); audit 审计通过 ✅（豁免 0 项已知欠账）; audit_titles OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位; lf1_live LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）; web_live [OK ] 局域网：自检把校园网/热点写进排查顺序"
+  "trailer": "pytest 890 passed, 867 warnings in 54.16s; acceptance 2 passed, 890 deselected, 2 warnings in 6.07s; ruff All checks passed!; mypy Success: no issues found in 45 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; ui_dom_probe at api (eval at <anonymous> (file:///D:/%E6%96%87%E6%A1%A3/jelly_ware/program/engineering/tools/ui_dom_probe.mjs:475:3), <anonymous>:46:27); audit 审计通过 ✅（豁免 0 项已知欠账）; audit_titles OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位; lf1_live LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）; web_live [OK ] 局域网：自检把校园网/热点写进排查顺序"
 }

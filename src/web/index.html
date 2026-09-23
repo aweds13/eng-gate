@@ -27,6 +27,7 @@
       <button data-action="view" data-view="academic">学业</button>
       <button data-action="view" data-view="review">复习</button>
       <button data-action="view" data-view="memo">备忘录</button>
+      <button data-action="view" data-view="team">团队</button>
       <button data-action="view" data-view="setting">设置</button>
       <button data-action="view" data-view="offline">离线记</button>
       <button id="refresh" class="ghost" data-action="refresh">刷新</button>
@@ -57,6 +58,7 @@
   <button data-action="view" data-view="today" class="active"><span class="ic">📅</span>今日</button>
   <button data-action="view" data-view="tasks"><span class="ic">🗂️</span>任务</button>
   <button data-action="view" data-view="focus"><span class="ic">⏱️</span>专注</button>
+  <button data-action="view" data-view="team"><span class="ic">👥</span>团队</button>
   <button data-action="view" data-view="habit"><span class="ic">🔥</span>习惯</button>
   <button data-action="view" data-view="stats"><span class="ic">📈</span>统计</button>
   <button data-action="view" data-view="setting"><span class="ic">⚙️</span>设置</button>
@@ -79,7 +81,7 @@ let detailEditing=false;     // OP-9：详情面板是否处于「编辑」态�
 let groupCache=[];           // 分组列表缓存（渲染任务详情的"所属分组"用，避免每张卡都请求一次）
 let courseCache=[];          // 课程列表缓存（任务编辑里的"所属课程"下拉 + 学业页关联任务用）
 // 合法视图名（render 的白名单：写错的视图名会被立刻发现，而不是静默空屏）
-const VIEWS=['today','tasks','important','planned','flagged','focus','stats','habit','academic','review','memo','setting','offline'];
+const VIEWS=['today','tasks','important','planned','flagged','focus','stats','habit','academic','review','memo','team','setting','offline'];
 
 /* 同步强调色到 CSS 变量（本地缓存先应用，避免首屏闪默认色） */
 function applyAccent(color){if(color)document.documentElement.style.setProperty('--accent',color)}
@@ -733,6 +735,10 @@ const ACTIONS = {
   'task-add':       () => addTask(),
   'task-add-here':  () => addTaskHere(),
   'team-status':    el => teamStatus(el.dataset.id, el.dataset.status),
+  // 团队视角页（SR-F7.1 / OP-33）：切视角 / 筛状态 / 说"我是谁"
+  'team-view':      el => setTeamView(el.dataset.view),
+  'team-filter':    el => setTeamFilter(el.dataset.status||''),
+  'team-me':        () => saveTeamMe(),
   // 专注
   'focus-start':    el => startFocus(el.dataset.kind),
   'focus-finish':   el => finishFocus(el.dataset.status),
@@ -829,6 +835,7 @@ async function render(name){
     if(name==='academic')return paint(renderAcademic);
     if(name==='review')return paint(renderReview);
     if(name==='memo')return paint(renderMemo);
+    if(name==='team')return paint(renderTeam);
     if(name==='setting')return paint(renderSetting);
     if(name==='offline')return paint(renderOffline);
   }catch(err){
@@ -2256,6 +2263,66 @@ async function toReview(id){
     :'这张任务已经有复习卡了（不会重复建）');
   view('review');
 }
+/* ---------- 团队视角页（SR-F7.1 / OP-33 = G 批 · T-G12）----------
+ * 口径：**同一份分配记录，两种看法**（不是两套数据、也不复制一份）——
+ *   管理者 = 我分配出去的（按执行者分组）；执行者 = 分给我的（按名字过滤）。
+ * "我是谁"存在**这台设备**上（localStorage）：执行者是自由文本，本工具没有账号体系，
+ * 所以由你说，工具不猜（没填就说没填，不硬塞一个人进去）。视角同样存在本机。
+ * 后端返回的 `views` / `statuses` 带中文标签 —— 中文只写在后端一处，界面不自己造句。
+ */
+const TEAM_VIEW_KEY='tf_team_view',TEAM_ME_KEY='tf_team_me';
+let teamFilter='';   // 状态筛选（空 = 全部）；只在本次会话里记，避免"上次筛过就再也看不见别的"
+function teamView(){try{return localStorage.getItem(TEAM_VIEW_KEY)==='executor'?'executor':'manager'}catch(e){return 'manager'}}
+function teamMe(){try{return localStorage.getItem(TEAM_ME_KEY)||''}catch(e){return ''}}
+function setTeamView(v){try{localStorage.setItem(TEAM_VIEW_KEY,v==='executor'?'executor':'manager')}catch(e){}teamFilter='';view('team')}
+function setTeamFilter(s){teamFilter=s;view('team')}
+function saveTeamMe(){const e=document.getElementById('teamMe');const name=(e&&e.value||'').trim();
+  try{localStorage.setItem(TEAM_ME_KEY,name)}catch(err){}
+  toast(name?`执行者视角：你是「${name}」（只记在这台设备上）`:'已清空「我是谁」');
+  view('team')}
+async function renderTeam(m){
+  const qs=new URLSearchParams({view:teamView(),me:teamMe()});
+  if(teamFilter)qs.set('status',teamFilter);
+  const b=await api(`/api/team/board?${qs.toString()}`);
+  const viewBtns=b.views.map(v=>`<button class="${v.value===b.view?'':'ghost'}" data-action="team-view" data-view="${v.value}">${esc(v.label)}</button>`).join('');
+  // 执行者视角要一个名字（管理者视角不需要 —— 分配出去的记录本来就是你建的）
+  const meRow=b.view==='executor'
+    ?`<div class="new" style="margin:6px 0 0"><input id="teamMe" class="grow" placeholder="我是谁？（分配记录里写的那个人名）" value="${esc(b.me)}">
+      <button data-action="team-me">就用这个名字</button></div>`
+    :'';
+  const chips=[{value:'',label:'全部',count:b.total}].concat(b.statuses)
+    .map(c=>`<button class="${(b.status_filter||'')===c.value?'':'ghost'}" data-action="team-filter" data-status="${c.value}">${esc(c.label)} ${c.count}</button>`).join('');
+  const body=b.groups.map(g=>`<div class="section-title">${esc(g.assignee)} · ${g.count} 件</div>
+    ${g.items.map(it=>teamItemHTML(it,b.view)).join('')}`).join('');
+  const empty=b.view==='manager'
+    ?'还没有分配出去的任务。在任务卡片或详情里点「分配」，把人名填上，这里就出现了。'
+    :(b.me?'这个视角下没有任务（换个状态筛选看看）。':'先在上面填「我是谁」，再看分给你的那几件。');
+  m.innerHTML=`<div class="card panel-card">
+    <div class="row">${viewBtns}</div>
+    <div class="sub" style="margin-top:6px">${esc(b.note)}</div>
+    ${meRow}
+    <div class="row" style="margin-top:8px">${chips}</div></div>
+  <div class="meta" style="margin-top:8px">这一页是<b>分配关系的两种看法</b>，不是两套数据：切视角只是换个看法（共 ${b.shown} 件）。</div>
+  ${body||emptyState(empty)}`;
+}
+function teamItemHTML(it,view){
+  const label=it.task_missing?'任务已删除（分配记录保留下来做审计）'
+    :(it.task_deleted?`${it.task_title}（已删除 · 在回收站）`:it.task_title);
+  const next=TEAM_NEXT[it.status];
+  const bits=[view==='manager'?'我分配':'分配给我'];
+  if(it.note)bits.push(it.note);
+  if(it.task_due)bits.push(`截止 ${it.task_due}`);
+  if(it.task_status&&!it.task_missing)bits.push(`任务状态 ${it.task_status}`);
+  return `<div class="card">
+    <div style="flex:1"><div class="title">${esc(label)}</div>
+      <div class="meta">${esc(bits.join(' · '))}</div></div>
+    <div class="row">
+      <span class="badge ${it.status==='blocked'?'hard':''}">${esc(TEAM_STATUS[it.status]||it.status)}</span>
+      ${next?`<button class="ghost" data-action="team-status" data-id="${it.id}" data-status="${next[0]}">${next[1]}</button>`:''}
+      ${it.task_missing?'':`<button class="ghost" data-action="task-detail" data-id="${it.task_id}">看任务</button>`}
+    </div></div>`;
+}
+
 async function renderReview(m){
   const [due,summary]=await Promise.all([api('/api/review/due'),api('/api/summary')]);
   const doneToday=summary.review_count||0;

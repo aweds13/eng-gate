@@ -1890,6 +1890,20 @@ def create_app(
     def team_assignments(assignee: str | None = None) -> list[dict[str, object]]:
         return team.assignments(conn, assignee)
 
+    @app.get("/api/team/board")
+    def team_board(
+        view: str = team.VIEW_MANAGER, me: str = "", status: str | None = None
+    ) -> dict[str, object]:
+        """团队视角页（SR-F7.1 / OP-33）：管理者 / 执行者两种看法，**同一份分配记录**。
+
+        执行者视角要你给一个名字（`me`）—— 执行者是自由文本、本工具没有账号体系，
+        所以"我是谁"由你说，工具不猜（没填 → 空列表 + 一句说明，不报错）。
+        """
+        try:
+            return team.board(conn, view=view, me=me, status=status or None)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     # ---- SR-F8 备忘录/知识资产 ----
     @app.post("/api/memos")
     def create_memo(payload: dict[str, Any]) -> dict[str, str]:

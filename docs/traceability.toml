@@ -517,9 +517,19 @@ gaps = ""
 id = "SR-F7.1"
 title = "管理者（建/分配）与执行者（接收/执行）两视角可切换（OP-33）+ 跨端集成"
 group = "F7"
-status = "todo"
-evidence = []
-gaps = "只有角色常量，无视角接口与页面（GAP-F7-01）；跨端集成也未做"
+status = "done"
+evidence = [
+  "route:GET /api/team/board",
+  "text:src/timeflow/core/team/team.py::def board",
+  "text:src/timeflow/core/team/team.py::VIEW_LABELS",
+  "text:src/web/index.html::async function renderTeam(m)",
+  "text:src/web/index.html::function setTeamView(v)",
+  "ui:view=team",
+  "ui:data-action=team-view",
+  "ui:data-action=team-me",
+  "test:test_team_view_line.py",
+]
+gaps = ""
 
 [entries."SR-F7.2"]
 id = "SR-F7.2"
@@ -1923,6 +1933,27 @@ evidence = [
   "file:tools/phone_check.mjs",
   "test:test_offline_phone_line.py",
 ]
+
+[entries."T-G12"]
+id = "T-G12"
+title = "实现 OP-33：团队视角切换页（管理者/执行者两视角；一份记录两种看法，不引入账号）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/团队视角页-T-G12.md",
+  "text:src/timeflow/core/team/team.py::def board",
+  "text:src/timeflow/core/team/team.py::def _board_note",
+  "text:src/timeflow/core/team/team.py::task_deleted",
+  "route:GET /api/team/board",
+  "text:src/web/index.html::async function renderTeam(m)",
+  "text:src/web/index.html::function teamItemHTML(it,view)",
+  "ui:view=team",
+  "ui:data-action=team-view",
+  "ui:data-action=team-filter",
+  "ui:data-action=team-me",
+  "test:test_team_view_line.py",
+]
+gaps = ""
 
 [entries."T-G8b"]
 id = "T-G8b"
