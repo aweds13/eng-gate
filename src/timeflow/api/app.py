@@ -137,6 +137,14 @@ class TaskOut(BaseModel):
     auto_archived: bool = False  # True = 完成满 N 天自动收入；False = 手动归档/不在档案里
     completed_on: str | None = None  # 完成日（来自 `task.completed` 事实；没有就退回 updated_at）
     attempt_count: int = 0  # 「试了几回」（T-F3 的事实）
+    # 「AI 报告进展」（N46 / OP-32；G 批 · T-G21）：卡片与详情都显示**最新一条**——
+    # 所以这三个字段是"最新一条报告"的三件套 + 有效条数，**不是**任务自己的字段
+    # （AI 一个字都没改任务，它只往事实层追加）。中文前缀由后端给（`progress_label`），
+    # 界面不自己写一份 —— 同 OP-33 的视角名/状态名。
+    progress_count: int = 0
+    progress_note: str | None = None
+    progress_at: str | None = None
+    progress_label: str | None = None
 
 
 # 会**在本机打开文件/程序**或改服务端设置的接口，只接受本机页面调用。
@@ -185,6 +193,11 @@ def _out(
     groups = tm.task_group_paths(conn, t.id)
     group_ids = tm.task_group_ids(conn, t.id)
     progress, current = tm.subtask_view(conn, t.id)
+    # AI 报告进展（T-G21）：卡片徽标要"最新一条 + 条数"，所以在 `_out` 里现算。
+    # 这与 `_out` 既有的几处（分组/分配/步骤）同一取向：一次算好、界面只管画；
+    # 代价是每张卡多两次小查询（同 `attempt_counts` 那条注释说的 N+1 顾虑的反面取舍）。
+    reports = tm.progress_reports(conn, t.id)
+    head = reports[0] if reports else None
     if depth is None:
         depth = tm.task_depth(conn, t.id) if t.parent_id else 1
     return TaskOut(
@@ -225,6 +238,10 @@ def _out(
         auto_archived=auto_archived,
         completed_on=completed_on,
         attempt_count=attempt_count,
+        progress_count=len(reports),
+        progress_note=head.note if head else None,
+        progress_at=head.at if head else None,
+        progress_label=head.label if head else None,
         depth=depth,
     )
 
@@ -832,6 +849,48 @@ def create_app(
         )
         return {"ok": True, "task": _out(done, conn)}
 
+    @app.post("/api/ai/tasks/{task_id}/progress")
+    def ai_report_progress(
+        request: Request, task_id: str, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """**回报进展**（N46 / OP-32；口径见 `复盘/口径落档-T-G19.md` §3.2）：记一条事实。
+
+        `{"note": "读完第 3 章，做了课后 1–5"}` → 一条 `task.progress.reported`
+        （`source=ai`，`extra` 记 actor/device）。
+
+        **它与你建的/它建的无关**：报告是**新增一条事实**，不碰任务的任何字段
+        （标题/状态/截止日/备注一个字节都不动），所以**不需要** `created_by='ai'` ——
+        AI 往**你建的任务**上报进展正是这条链的本意。要不要据此勾完成，**仍然是你的事**
+        （我建议不自动标 —— 你看到再勾，数字才可信；见设计文档 §3.2 待你点头的第 ① 条）。
+        """
+        _ai_guard(request)
+        allowed = {"note"}
+        extra = sorted(set(payload or {}) - allowed)
+        if extra:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不认识的字段：{extra}（这一版只支持 {sorted(allowed)}）—— "
+                "报告只写一句话，改字段没有接口，这是 AI 边界的一部分。",
+            )
+        try:
+            report = tm.report_progress(conn, task_id, str((payload or {}).get("note") or ""))
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {
+            "ok": True,
+            "task": _out(tm.get_task(conn, task_id), conn),
+            "report": {
+                "fact_id": report.fact_id,
+                "note": report.note,
+                "at": report.at,
+                "actor": report.actor,
+                "label": report.label,
+            },
+            "boundary": ai_mod.BOUNDARY,
+        }
+
     # 边界兜底：这一版**没有**改/删接口。被显式调用时给一句能看懂的原话，
     # 而不是一个含义不明的 404（规格 R4：「AI 调用写/改/删：明确拒绝，不静默改」）。
     def _ai_refuse(method: str) -> HTTPException:
@@ -1362,6 +1421,26 @@ def create_app(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return {"task": _out(task, conn), **_attempt_body(task_id)}
+
+    # ---- 「AI 报告进展」的撤销（N46 / OP-32；G 批 · T-G21）----
+    # 报告本身是 **AI 那条路**写进来的（`POST /api/ai/tasks/{id}/progress`，默认关）；
+    # 这一条是**人**的反悔入口：撤销最近一条 —— 追加一条 `task.progress.retracted` 指回它，
+    # 原事实一个字不删（同 `review.undone` 的留痕口径）。为什么只撤"最近一条"：
+    # 界面上就一颗按钮，连点两下 = 一层层往回撤，不需要给每条事实配一个入口。
+    @app.post("/api/tasks/{task_id}/progress/retract")
+    def retract_progress(task_id: str) -> dict[str, Any]:
+        """撤销最近一条「AI 报告」（T-G21）。没有可撤的 → 400 带原话（**不静默当成功**）。"""
+        try:
+            gone = tm.retract_progress(conn, task_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {
+            "ok": True,
+            "note": gone.note,
+            "task": _out(tm.get_task(conn, task_id), conn),
+        }
 
     @app.get("/api/tasks/{task_id}/subtasks")
     def list_subtasks(task_id: str) -> list[TaskOut]:

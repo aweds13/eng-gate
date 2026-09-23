@@ -309,7 +309,10 @@ def test_task_note_is_editable_in_detail_only() -> None:
     detail = _fn_body(html, "renderDetail")
     assert "t.note" in detail, "详情面板没有显示备注"
     card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
-    assert "note" not in card, "备注不该出现在列表卡片里（渐进聚焦）"
+    # 断言的是"**任务自己的备注**不上卡"，所以认字段访问 `t.note` —— 不是裸子串 `note`：
+    # T-G21 加了一枚「AI 报告」徽标（`t.progress_note` = AI 记的那一句话，**该**显示在卡上），
+    # 裸子串会把那个诚实的字段一起判红（过宽的护栏会罚老实人，同 T-G11 的教训）。
+    assert "t.note" not in card, "备注不该出现在列表卡片里（渐进聚焦）"
 
 
 def test_habit_count_shown_alongside_investment() -> None:
@@ -324,6 +327,60 @@ def test_habit_count_shown_alongside_investment() -> None:
     habit_view = html.split("async function renderHabit(", 1)[1]
     habit_view = habit_view.split("async function addHabit(", 1)[0]
     assert "手动投入" in habit_view, "习惯页要指路「想计入投入就手动补记真实分钟」"
+
+
+def _strip_js_comments(body: str) -> str:
+    """去掉 JS 注释（`//…` 与 `/*…*/`）—— 判"代码里怎么写"，不判注释里怎么解释。
+
+    为什么必须先剥注释（这条教训在 T-G39 刚吃过一次：`contrast_audit.py` 抽令牌不剥注释，
+    把注释里那句形状像声明的示例吞了进去）：修 T-G41 时我在函数里写了
+    "别用 `toISOString()`，它拿的是 UTC 日期" —— 不剥注释的话，**这句解释会被当成违规**，
+    而下一个人最自然的反应就是把解释删掉（护栏把文档赶走了）。
+    """
+    out: list[str] = []
+    for line in body.split("\n"):
+        line = re.sub(r"/\*.*?\*/", "", line)
+        out.append(re.sub(r"//.*$", "", line))
+    return "\n".join(out)
+
+
+def _utc_date_misuse(html: str) -> list[str]:
+    """找出"把 UTC 日期当本地今天"的写法（空列表 = 干净）。
+
+    抽成**纯函数**是为了能用合成数据证明这条护栏真的咬得住（同 `test_flows_selfcheck.py` 的做法）——
+    只对真文件断言的话，"护栏到底在不在工作"永远没人验过。
+    """
+    bad: list[str] = []
+    if "new Date().toISOString()" in html:
+        bad.append("裸的 new Date().toISOString()（那是 UTC 日期，不是本地今天）")
+    for name in ("renderHabit", "heatmap"):
+        if f"function {name}(" not in html:
+            bad.append(f"找不到 {name}（切函数的方式过期了？）")
+            continue
+        if "toISOString" in _strip_js_comments(_fn_body(html, name)):
+            bad.append(f"{name} 里出现 toISOString（要 UTC 必须先显式做时区换算）")
+    return bad
+
+
+def test_today_is_local_not_utc() -> None:
+    """T-G41：习惯页的「今天」按**本地**时区算（`todayISO()`），不许用 `toISOString()`。
+
+    为什么值得单独立一条：`new Date().toISOString()` 给的是 **UTC** 日期 —— 本机 UTC+8，
+    本地凌晨 0–8 点算出的是**昨天**，于是"今天已打卡"显示成「打卡」，
+    而点下去（服务端按本地今天翻转）会把今天那次打卡**取消**掉（真缺陷，
+    见 `复盘/习惯页今天差一天-T-G41.md`）。热力图那边同族：格子按本地构造、日期却取 UTC
+    → 整张图差一天。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert _utc_date_misuse(html) == [], "日期的「今天」一律走 todayISO()（本地时区）"
+    assert "todayISO()" in _fn_body(html, "renderHabit")
+    assert "todayISO(" in _fn_body(html, "heatmap")
+    # 负样例（合成数据）：两种写法都必须被抓出来，否则这条护栏只是"看起来在管"
+    assert _utc_date_misuse("const today=new Date().toISOString().slice(0,10);")
+    assert _utc_date_misuse(
+        "async function renderHabit(m){\n  const t=d.toISOString().slice(0,10);\n}"
+        "\nfunction heatmap(l){\n  return '';\n}"
+    )
 
 
 def test_reminder_ui_and_notify_switch() -> None:
@@ -1109,6 +1166,32 @@ def test_ai_boundary_is_wired_and_explained() -> None:
     assert "t.created_by==='ai'" in detail, "详情面板没显示归属"
     css = WEB_CSS.read_text(encoding="utf-8")
     assert ".ai-example {" in css, "示例命令块缺样式（R1：样式只住 app.css）"
+
+
+def test_ai_progress_report_is_wired_and_reversible() -> None:
+    """T-G21（N46 / OP-32）：AI 记的那句进展要**看得见**（卡片 + 详情），并且能**撤销**。
+
+    四条口径：
+    ① 卡片上就要有 —— 报告的意义是"你看见了"，藏进详情等于没回报；
+    ② 中文前缀由后端给（`progress_label`）—— 界面不自己写一份「AI 报告」（同 OP-33 的视角名）；
+    ③ 撤销按钮走**追加撤销事实**那条路（后缀 `progress/retract`），不是删事实；
+    ④ 详情里要写明"报告 ≠ 状态"（要不要勾完成仍由你决定）—— 这是这张卡最容易误解的地方。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    assert "t.progress_count" in card and "t.progress_note" in card and "t.progress_label" in card
+    assert "'AI 报告'" not in card, "中文前缀由后端给，界面不许自己写一份"
+    detail = _fn_body(html, "renderDetail")
+    assert "t.progress_count" in detail and "t.progress_note" in detail
+    assert "不是状态" in detail, "详情要写明「报告 ≠ 状态」（不然会被当成 AI 帮你标了完成）"
+    assert 'data-action="progress-retract"' in detail, "缺撤销入口"
+    assert "'progress-retract':" in html, "动作没注册（点了没反应比报错更难查）"
+    fn = html.split("async function retractProgress(id){", 1)[1].split("\n}", 1)[0]
+    assert "/progress/retract" in fn and "method:'POST'" in fn
+    assert "/api/tasks/${id}/progress/retract" in fn, "撤销打到的是人侧那条路由"
+    # 事实流里的人话映射（记录区按 kind 显示，缺了就会漏出英文 kind）
+    labels = html.split("function factLabel(kind){", 1)[1].split("\n}", 1)[0]
+    assert "task.progress.reported" in labels and "task.progress.retracted" in labels
 
 
 def test_sync_pack_is_wired_and_non_destructive() -> None:

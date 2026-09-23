@@ -19,6 +19,8 @@
  *   · 起不了浏览器 → 退出码 3（NOT RUN），**NOT RUN 不是 PASS**（`run_gates.py` 单列一栏）。
  *   · 它只验"行为对不对"，**不验好看**，也**不验口味**（文案好不好、版式美不美）。
  *   · 要人工准备的物理场景（两台设备 / 手机连热点 / 校园网隔离 / 计划任务）它做不了，仍在人工那一栏。
+ *   · ★ "等闲下来" = **DOM 不动 + 手上没有在飞的请求**（`waitIdle`，T-G40）：只等 DOM 会在
+ *     "请求还在路上、页面一动不动"那一段提前收工，然后拿**上一个画面**去断言（黄金层就被这么坑过）。
  *
  * 用法
  *     node tools/ui_flow_check.mjs                 # 跑全部（**默认一遍**；见下面"最小验证法则"）
@@ -43,8 +45,8 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 import {
-  Cdp, EXPORT_DIR, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
-  bootApp, findBrowser, iso, seedFixture, setViewport, startServer, waitApp, waitHealth, waitQuiet,
+  Cdp, EXPORT_DIR, FETCH_WATCH, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
+  bootApp, findBrowser, iso, seedFixture, setViewport, startServer, waitApp, waitHealth, waitIdle,
 } from './tf_browser.mjs'
 
 const SHOTS_DIR = join(ROOT, 'gates', 'render', 'shots')  // 证据与黄金层放一起（同样不进仓库）
@@ -141,11 +143,15 @@ class T {
     if (!booted) throw new Error('应用没启动起来（左栏没渲染）—— 界面可能根本没起来')
     await this.arm()
     if (view) await this.view(view)
-    await waitQuiet(this.cdp)
+    await waitIdle(this.cdp)
   }
 
-  /** 装"页面还在动吗"的计数器。**每次导航之后都要重装**（页面上下文是新的）。 */
-  async arm() { await this.cdp.eval(MUTATION_WATCH) }
+  /** 装两个计数器：**页面还在动吗**（`MUTATION_WATCH`）与**还有没有请求在飞**（`FETCH_WATCH`）。
+   *  每次导航之后都要重装（页面上下文是新的）；`bootApp` 里也会装一遍（那条路不经过这里）。 */
+  async arm() {
+    await this.cdp.eval(MUTATION_WATCH)
+    await this.cdp.eval(FETCH_WATCH)
+  }
 
   /** 只看不点地重新加载（保留本机状态 —— 验"刷新后还保持着吗"要用它）。 */
   async reload() {
@@ -153,20 +159,20 @@ class T {
     const booted = await waitApp(this.cdp)
     if (!booted) throw new Error('刷新之后应用没起来')
     await this.arm()
-    await waitQuiet(this.cdp)
+    await waitIdle(this.cdp)
   }
 
   async view(name, { quiet = true } = {}) {
     const m = await this.mark(`[data-view="${name}"]`)
     if (!m.ok) throw new Error(`界面上找不到视图 ${name} 的入口`)
     await this.press(HIT, `视图 ${name}`, { quiet })
-    if (quiet) await waitQuiet(this.cdp)
+    if (quiet) await waitIdle(this.cdp)
     else await this.settle()
   }
 
   /** 只等**这一屏画出来**（`#main` 连续 3 拍不变，≈0.6s），不等整页安静（那要 ~0.7s+）。
    *  给"扫文本"这类用途：它不需要"整页不再变"的强保证，代价是**更晚才到的东西会漏** ——
-   *  所以取 3 拍而不是 1 拍。真正验行为的那几条流一律用默认的 `waitQuiet`。 */
+   *  所以取 3 拍而不是 1 拍。真正验行为的那几条流一律用默认的 `waitIdle`。 */
   async settle(taps = 3, step = 200, max = 40) {
     let last = ''
     let same = 0
@@ -214,7 +220,7 @@ class T {
     const hit = await this.cdp.hitTest(selector, r.cx, r.cy)
     if (!hit.ok) { this.ok(`点得到：${label}（没被别的东西挡住）`, false, hit.why); return false }
     await this.cdp.clickAt(r.cx, r.cy)
-    if (quiet) await waitQuiet(this.cdp)
+    if (quiet) await waitIdle(this.cdp)
     return true
   }
 
@@ -232,11 +238,11 @@ class T {
     if (!focused) return false
     await this.cdp.selectAll()
     await this.cdp.typeText(text)
-    await waitQuiet(this.cdp)
+    await waitIdle(this.cdp)
     return true
   }
 
-  async key(name) { await this.cdp.key(name); await waitQuiet(this.cdp) }
+  async key(name) { await this.cdp.key(name); await waitIdle(this.cdp) }
 
   /** 清空一个输入框（真点 → Ctrl+A → 真按退格）。
    *  ★ 别拿 `type(sel, '')` 当清空：那是"一个字符都不打"，原来的内容**原样留着**（T-G37 踩到）。 */
@@ -245,7 +251,7 @@ class T {
     if (!focused) return false
     await this.cdp.selectAll()
     await this.cdp.key('Backspace')
-    await waitQuiet(this.cdp)
+    await waitIdle(this.cdp)
     return true
   }
 

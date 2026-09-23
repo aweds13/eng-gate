@@ -1466,6 +1466,153 @@ def attempt_notes(conn: sqlite3.Connection, task_id: str, limit: int = 20) -> li
     return notes
 
 
+# ------------------------------------------------- 「AI 报告进展」（N46 / OP-32；G 批 · T-G21）
+# 用户 2026-09-23 定的口径（见 `复盘/口径落档-T-G19.md` §3.2）：**AI 只写「事实」** ——
+# 干完/干到一半就记一条 `task.progress.reported`（一句话），**状态由解读层算**、AI 不改任何字段。
+# 于是"不改不删"那条约定**一个字不用松**：松的只是"新增"的范围（新增的是**事实**，不是任务）。
+PROGRESS_REPORTED = "task.progress.reported"
+PROGRESS_RETRACTED = "task.progress.retracted"
+
+# 报告前缀的中文由**后端一处给**（界面不自己写一份 —— 同 OP-33 的视角名/状态名）。
+PROGRESS_ACTOR_LABELS = {CREATOR_AI: "AI 报告", CREATOR_ME: "手工报告"}
+
+
+@dataclass
+class ProgressReport:
+    """一条进展报告（T-G21）：`fact_id` 是它的身份（撤销要指回它），`note` 是那句话。"""
+
+    fact_id: str
+    note: str
+    at: str
+    actor: str
+
+    @property
+    def label(self) -> str:
+        return PROGRESS_ACTOR_LABELS.get(self.actor, "进展报告")
+
+
+def report_progress(
+    conn: sqlite3.Connection,
+    task_id: str,
+    note: str,
+    *,
+    actor: str = CREATOR_AI,
+    device_id: str | None = None,
+) -> ProgressReport:
+    """记一条进展报告（N46「回报进展」）：**只追加一条事实，任务字段一个字节不动**。
+
+    为什么它**不需要** `require_own`（与「勾完成」那条边界不同）：勾完成是**改**你的东西，
+    所以只许勾 AI 自己建的；而报告进展是**新增一条事实** —— 它不碰你的标题/状态/截止日，
+    你看到之后要不要勾完成仍然是你的事。这正是"AI 当执行者"这条链的落点：
+    AI 干完一段就往**你建的那个任务**上记一句，而不是去改它。
+
+    - `note` 必填（一句话）—— 空话不是进展（宁可不记，也不记一条空行）；
+    - 边界：任务不存在 → `KeyError`；**已删（回收站）→ `ValueError`**（那张卡已经不在你手上了，
+      报告没人会看到 —— 同 `attempt_failed` 的理由）。完成/搁置的任务**允许**报：
+      "AI 说它做完了"是一条**真事实**，不该由状态去否决；
+    - 事实的 `source` 按 `actor` 记（`ai` / `desktop`），所以"AI 报过什么"一条查询就能捞出来。
+    """
+    current = get_task(conn, task_id)  # 不存在 → KeyError
+    if current.status == STATUS_DELETED:
+        raise ValueError("已删除（回收站）的任务不记进展报告（先恢复它）")
+    if actor not in VALID_CREATORS:
+        raise ValueError(f"actor 只能是 {VALID_CREATORS}：{actor!r}")
+    text = (note or "").strip()
+    if not text:
+        raise ValueError("进展报告要有一句话（note 不能为空）")
+    from timeflow.core import facts as facts_mod
+
+    fid = facts_mod.record(
+        conn,
+        kind=PROGRESS_REPORTED,
+        subject_type="task",
+        subject_id=current.id,
+        value_text=text,
+        extra={"title": current.title, "note": text, "actor": actor, "reported_on": _today()},
+        source=ACTOR_SOURCES[actor],
+        device_id=device_id,
+    )
+    facts_mod.publish(
+        PROGRESS_REPORTED,
+        {"task_id": current.id, "title": current.title, "note": text, "actor": actor},
+    )
+    row = conn.execute("SELECT occurred_at FROM facts WHERE id = ?", (fid,)).fetchone()
+    return ProgressReport(
+        fact_id=fid, note=text, at=str(row["occurred_at"]), actor=actor
+    )
+
+
+def _retracted_ids(conn: sqlite3.Connection, task_id: str) -> set[str]:
+    """这条任务上**已被撤销**的报告 id（撤销 = 追加一条 `task.progress.retracted` 指回它）。"""
+    from timeflow.core import facts as facts_mod
+
+    return {
+        str((f.get("extra") or {}).get("fact_id"))
+        for f in facts_mod.query(
+            conn, kind=PROGRESS_RETRACTED, subject_type="task", subject_id=task_id
+        )
+    }
+
+
+def progress_reports(conn: sqlite3.Connection, task_id: str) -> list[ProgressReport]:
+    """这条任务**有效**的进展报告（**新的在前**；被撤销的不算，原事实也不删）。
+
+    卡片与详情都读它：卡片用 `[0]` 与 `len()`（最新一条 + 条数），详情列全部。
+    """
+    from timeflow.core import facts as facts_mod
+
+    gone = _retracted_ids(conn, task_id)
+    reports = [
+        ProgressReport(
+            fact_id=str(f["id"]),
+            note=str(f["value_text"] or ""),
+            at=str(f["occurred_at"]),
+            actor=str((f.get("extra") or {}).get("actor") or ""),
+        )
+        for f in facts_mod.query(
+            conn, kind=PROGRESS_REPORTED, subject_type="task", subject_id=task_id
+        )
+        if str(f["id"]) not in gone
+    ]
+    reports.reverse()  # `query` 按发生时间升序 → 新的在前
+    return reports
+
+
+def retract_progress(conn: sqlite3.Connection, task_id: str) -> ProgressReport:
+    """撤销**最近一条**进展报告（OP-32 可逆）：追加一条 `task.progress.retracted` 指回它，
+    **原事实一个字不删** —— 与 `review.undone` 同款（留痕，不是抹掉）。
+
+    为什么是"最近一条"而不是"点哪条撤哪条"：同 `review.undone` 的用法（撤销 = 反悔刚发生的那一下），
+    界面上也就一颗按钮，不需要给每条事实配一个入口；连点两下 = 一层层往回撤。
+    为什么撤销的是**人**、AI 没有这个接口：撤销是"我对界面上的读数负责"的动作；
+    多一条 AI 撤销的路，就多一处会漂的边界（AI 真要改口，在**下一条**报告里说清就够了）。
+    """
+    get_task(conn, task_id)  # 不存在 → KeyError
+    reports = progress_reports(conn, task_id)
+    if not reports:
+        raise ValueError("这条任务上没有可撤销的进展报告")
+    target = reports[0]
+    from timeflow.core import facts as facts_mod
+
+    facts_mod.record(
+        conn,
+        kind=PROGRESS_RETRACTED,
+        subject_type="task",
+        subject_id=task_id,
+        value_text=target.note,
+        extra={
+            "fact_id": target.fact_id,
+            "note": target.note,
+            "retracted_on": _today(),
+        },
+        source=ACTOR_SOURCES[CREATOR_ME],
+    )
+    facts_mod.publish(
+        PROGRESS_RETRACTED, {"task_id": task_id, "fact_id": target.fact_id, "note": target.note}
+    )
+    return target
+
+
 @dataclass
 class DebtStep:
     """挂在债务卡下面的一步（T-F9）：它自己逾期几天 + 属于哪个任务。"""

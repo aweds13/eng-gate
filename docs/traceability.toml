@@ -57,6 +57,7 @@ trailer_baseline = "593ea6c"
 "SR-F6.4" = ["OP-30"]    # 外部 app 完成
 "SR-F7.2" = ["OP-31"]    # 分配任务
 "SR-F7.3" = ["OP-34"]    # AI 只读 + 新增接口
+"T-G21" = ["OP-32"]      # AI 写事实回报进展（N46「回报进展」的 AI 那一路）
 "SR-F8.1" = ["OP-35", "OP-36"]  # 新建备忘录、顺手建任务
 "SR-F8.2" = ["OP-37"]    # 备忘录关联引用句柄
 "SR-F8.3" = ["OP-29"]    # 复习卡关联引用句柄
@@ -72,8 +73,8 @@ trailer_baseline = "593ea6c"
 
 # ⑨ 的例外：**明写"先不挂"**，每条必须带理由（不是"忘了"）。
 [acknowledged_ops]
-"OP-32" = "N46「回报进展」：口径已定（AI 只写事实，T-G19），实现 = T-G21（未开工）"
 "OP-38" = "产出评价器接口 = SR-F8.4（todo）：规格自写「合同待知识管理项目对齐」，等外部口径"
+# OP-32 的例外已在 T-G21 销掉（2026-09-24）：AI 写事实回报进展落地，那条操作挂上卡了。
 
 [exceptions]
 # T-B5 的豁免已删除（2026-09-18）：用户选 B′ 后通知通道已落地，条目转 done —— 修一条删一条。
@@ -1395,7 +1396,60 @@ evidence = [
   "text:docs/traceability.toml::[acknowledged_ops]",
   "test:test_audit_tightening.py",
 ]
-gaps = "三条都已上**阻断**（跟着门禁里的 `audit` 一道跑，门禁仍是 11 项）。当前 0 假红：⑧ 71 条提交全合格；⑨ 契约 53 条全部有归属（其中 2 条 [acknowledged_ops] 写明先不挂：OP-32 等 T-G21、OP-38 等外部口径）；⑩ 0 命中。**没做的**：① ⑩ 只查 `todo` 不查 `partial`（partial 可以合法地「卡片全 done + 一句非卡片缺口」，查它必假红，见复盘 §四）；② `flows.md` 的动线自查表仍是空的（那是文档回填，不属本条）。"
+gaps = "三条都已上**阻断**（跟着门禁里的 `audit` 一道跑，门禁仍是 11 项）。当前 0 假红：⑧ 71 条提交全合格；⑨ 契约 53 条全部有归属（其中 1 条 [acknowledged_ops] 写明先不挂：OP-38 等外部口径 —— OP-32 已在 T-G21 销账）；⑩ 0 命中。**没做的**：① ⑩ 只查 `todo` 不查 `partial`（partial 可以合法地「卡片全 done + 一句非卡片缺口」，查它必假红，见复盘 §四）；② `flows.md` 的动线自查表仍是空的（那是文档回填，不属本条）。"
+
+[entries."T-G40"]
+id = "T-G40"
+title = "验证层两个漂移源：采集竞态（`stats` 的黄金一直是上一个视图的内容）+ fixture 日期与**星期几**相关"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/渲染采集漂移与星期相关-T-G40.md",
+  "text:tools/tf_browser.mjs::export const FETCH_WATCH",
+  "text:tools/tf_browser.mjs::export async function waitIdle",
+  "text:tools/tf_browser.mjs::due_date: dayOffset(7)",
+  "text:tools/render_check.mjs::await waitIdle(cdp)",
+  "text:tools/render_check.mjs::['title', 'desc'].includes",
+  "text:tools/ui_flow_check.mjs::await waitIdle(this.cdp)",
+  "text:gates/render/LAST_UPDATE.md::采集竞态",
+  "test:test_ui_flow_check.py",
+]
+gaps = "**两条漂移源都堵上了**，四条实测记录：① **采集竞态** —— `waitQuiet` 只看 DOM 变动，而「点视图 → 请求在飞 → 最后一次 innerHTML」中间**一段 DOM 都不动**；`stats` 视图 7 个接口串行（含 371 天热力图），冷启动时这一段超过 0.72s → 采到的是**上一个视图（focus）的残留画面**（两份黄金逐字节同大小、同 rows=51 是旁证）。修法 `FETCH_WATCH` + `waitIdle`（DOM 静 + **没有在飞请求**），两个工具共用。② **fixture 与星期几相关** —— 周结算的债务是**周日快照**，而「周日离今天几天」随星期几变；未完成任务的偏移 0…+6 会让读数变 → **没有代码改动、换个星期几黄金就红**。修法：未完成的偏移只留 ≤ -1 与 ≥ +7；真库上把 7 个候选周日各算一遍，全是 1（证明不假红）。③ 顺带补了采集器一个盲区：嵌 `title` 的 SVG 图元（热力图/节奏图的每一格）被「匿名容器」规则整类跳过 → 点亮状态从来没进过黄金；改成 `title`/`desc` 不算真孩子（黄金因此长大，归一化计数 129 → 3441，**照实报数**）。④ 行为流层的同一个等待也换成 `waitIdle`，17 条流复跑全绿。**没做**：「每个视图采到的内容必须与它自己有关」这道保险（防「三方一致地错」）—— 记在这里当下一张卡；`waitIdle` 也不覆盖 setTimeout 里以后再发请求那种写法。"
+
+[entries."T-G41"]
+id = "T-G41"
+title = "缺陷：习惯页的「今天」用了 UTC 日期（凌晨差一天；点一下反而把打卡取消掉）+ 热力图同族差一天"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/习惯页今天差一天-T-G41.md",
+  "text:src/web/index.html::const today=todayISO();",
+  "text:src/web/index.html::const iso=todayISO(d);",
+  "test:test_web_frontend.py",
+]
+gaps = "**修了发现的两处**：`renderHabit` 的今天、`heatmap` 的格子日期（都改走 `todayISO()`，本机时区）。**它为什么会伤人**：`new Date().toISOString()` 给的是 UTC 日期，本机 UTC+8 → **本地 0–8 点算出来是昨天**：界面把「今天已打卡」显示成「打卡」，而点下去（服务端按本地今天翻转）会把那次打卡**取消**掉，提示还写着「已打卡」。**护栏两层**（都在 `test_web_frontend.py`）：全文件级不许出现裸的 `new Date().toISOString()`；函数级 `renderHabit`/`heatmap` 里不许出现 `toISOString` —— 判的是**剥掉注释后的代码**（不剥注释会把「别这么写」那句解释也判红，同 T-G39 的教训），并用合成数据证明它咬得住。**没做**：全仓的「日期取法」清点（`docs/` / `tools/` / 别的 `.js`）；护栏只扫 `index.html`。"
+
+[entries."T-G21"]
+id = "T-G21"
+title = "AI 写事实回报进展（N46 / OP-32）：新事实 `task.progress.reported` / `task.progress.retracted` + AI 报告路由 + 卡片与详情看得见 + 撤销（人不撤 AI）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/AI写事实回报进展-T-G21.md",
+  "text:src/timeflow/core/tasks/manager.py::def report_progress",
+  "text:src/timeflow/core/tasks/manager.py::def retract_progress",
+  "text:src/timeflow/core/tasks/manager.py::def progress_reports",
+  "text:src/timeflow/core/tasks/manager.py::PROGRESS_REPORTED = \"task.progress.reported\"",
+  "text:src/timeflow/core/ai.py::**回报进展**：往任务上记一条事实",
+  "text:src/timeflow/api/app.py::def ai_report_progress",
+  "text:src/web/index.html::progress-retract",
+  "route:POST /api/ai/tasks/{task_id}/progress",
+  "route:POST /api/tasks/{task_id}/progress/retract",
+  "ui:data-action=progress-retract",
+  "test:test_ai_line.py",
+  "test:test_web_frontend.py",
+]
+gaps = "**实现已落地**（2026-09-24），四处**故意不做**记在这里：① **不自动标完成** —— AI 报告只显示，`status` 要你勾（口径：数字要可信）；② **AI 没有撤销接口** —— 撤销在人这一侧（撤最近一条、连点下钻），少一条路就少一处会漂的边界；③ **只追加不修正** —— 不做 `revision`/`supersedes` 那套预留机制（MVP 不做修正机制，见 T-G19 §3.2 第 4 条）；④ **手机离线只读面不显示 AI 报告** —— 那一页是 T-G16 的缓存行（只列任务/提醒/复习），字段跟着缓存走但没画出来。**实测边界**：报告落在**你建的任务**上（这正是本意，报告 ≠ 改）；真机自检多了 4 条（含「报告之后那条任务的状态/版本/备注一个字节不动」）。**顺带修**：`test_web_frontend.py` 里一条过宽的护栏（`\"note\" not in card` 撞上诚实的 `progress_note`，改成认字段访问 `t.note`）。"
 
 [entries."T-G19"]
 id = "T-G19"
@@ -1408,7 +1462,7 @@ evidence = [
   "text:docs/traceability.toml::分开报数就算独立记账",
   "text:docs/traceability.toml::来源标记一直在落",
 ]
-gaps = "落档完成，**实现未做**：`SR-F3.4`（新卡 T-G20，路线已定、代码未动）与 AI 写事实回报进展（新卡 T-G21，需先改 `conventions.md` 第 34 行措辞 —— 那是用户拥有的文档，待批）。另有两条待用户拍板：5 条无界面路由里 1/2（提醒列表 / 冲突日志）待定、5 号（`POST /api/sync/tasks`）删不删待确认。"
+gaps = "落档完成。**两条新卡的实现状态（2026-09-24 更新）**：`SR-F3.4`（T-G20 跨端实时专注）**代码未动**；AI 写事实回报进展 = **T-G21 已落地**（`conventions.md` 第 34 行的措辞在 T-G39 改齐，路由/界面/撤销都在）。另两条路由的去向也已定（T-G39）：1（全量提醒列表）/ 2（冲突日志）**接进设置页**、5 号（`POST /api/sync/tasks`）标**弃用但不删** —— 落地排在视觉线那一步。"
 
 [entries."T-G18"]
 id = "T-G18"

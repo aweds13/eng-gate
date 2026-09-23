@@ -373,11 +373,16 @@ ai = ["none"]
 
 [commands."OP-32"]
 title = "回报进展"
-routes = ["PATCH /api/team/assign/{assignment_id}"]
-ui = ["data-action=team-status"]
+routes = [
+  "PATCH /api/team/assign/{assignment_id}",
+  "POST /api/ai/tasks/{task_id}/progress",
+  "POST /api/tasks/{task_id}/progress/retract",
+]
+ui = ["data-action=team-status", "data-action=progress-retract"]
 kind = "write"
-reversible = "可修正状态（留痕）"
-ai = ["none"]
+reversible = "可修正状态（留痕）；AI 那条报告可撤销（追加 task.progress.retracted，原事实不删）"
+ai = ["create"]
+note = "一条操作两条路：执行者卡片（PATCH，人）与 AI 报告进展（POST，写一条事实，T-G21）—— 所以 `ai` 是 `create`（只有 AI 那一条路可被 AI 调，PATCH 不是）。撤回那条是人侧路由。"
 
 [commands."OP-33"]
 title = "视角切换"
@@ -399,7 +404,7 @@ ui = ["data-action=set-ai", "data-action=ai-copy"]
 kind = "write"
 reversible = "新增的任务/步骤在界面上删 / 取消即可（AI 自己没有删接口）；勾完成可撤销（OP-5）"
 ai = ["read", "create"]
-note = "契约同时含只读与新增/勾完成，所以 ai 是**两个值**；另两条 `@app.api_route(\"/api/ai/{rest:path}\")` 是明确的拒写兜底（403/404），**不是功能路由**，故不进这张表。"
+note = "契约同时含只读与新增/勾完成，所以 ai 是**两个值**；报告进展那条路由挂在 OP-32（N46），这里不重复列。另两条 `@app.api_route(\"/api/ai/{rest:path}\")` 是明确的拒写兜底（403/404），**不是功能路由**，故不进这张表。"
 
 [commands."OP-35"]
 title = "新建备忘录"

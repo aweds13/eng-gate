@@ -16,6 +16,12 @@
 - 联动：AI 勾掉最后一个步骤把父任务带完成 —— 系统联动照常，事实如实记 `source=ai`；
 - 改/删：`PATCH/PUT/DELETE /api/ai/**` → 403 带原话；未知 GET/POST 路径 → 404 带原话；
 - 来源：跨站 Origin 调不了（读写都 403）；关掉之后已建的 AI 项仍在（归属字段不变）；
+- **回报进展**（T-G21，N46 / OP-32）：AI 往**你建的**任务上记一条 `task.progress.reported`
+  （`source=ai`）→ 200 且**任务字段一个字节不动**（状态/版本号/备注都不变）—— 报告是新增事实，
+  所以它**不需要** `created_by='ai'`（与「勾完成」那条边界正相反）；空话 / 多传字段 400、
+  任务不存在 404、已删（回收站）400；撤销 = **追加** `task.progress.retracted` 指回原事实、
+  原事实不删、一层层往回撤（没有可撤的 → 400 不静默）；卡片/详情要的
+  `progress_count / progress_note / progress_at / progress_label` 由人侧接口带出；
 - 账本口径不变：AI 完成的也照记（同一条路，不享受第二套算法）；
 - 迁移 v16：老行 `created_by='me'`（不猜）、幂等、`_ensure_schema` 认它、新建库第一次连接就有这列；
 - 人侧接口带出 `created_by`（界面徽标用）；非法 `created_by` 拒绝。
@@ -76,6 +82,7 @@ def test_everything_is_403_until_you_turn_it_on(tmp_path) -> None:  # type: igno
         ("get", "/api/ai/ping"),
         ("get", "/api/ai/tasks"),
         ("post", "/api/ai/tasks"),
+        ("post", "/api/ai/tasks/x/progress"),
     ):
         call = getattr(client, method)
         resp = call(path, json={}) if method == "post" else call(path)
@@ -294,6 +301,137 @@ def test_ownership_field_is_not_user_writable(tmp_path) -> None:  # type: ignore
     task = client.post("/api/tasks", json={"title": "你建的"}).json()
     patched = client.patch(f"/api/tasks/{task['id']}", json={"created_by": "ai"}).json()
     assert patched["created_by"] == "me"
+
+
+# ---------------------------------------------------------------- 报告进展（T-G21）
+
+
+def _progress_facts(conn) -> list[tuple[str, str | None, str | None]]:  # type: ignore[no-untyped-def]
+    """`(kind, source, value_text)`，按发生时间 —— 报告与撤销都留痕，所以两条都要看得见。"""
+    return [
+        (str(r["kind"]), r["source"], r["value_text"])
+        for r in conn.execute(
+            "SELECT kind, source, value_text FROM facts "
+            "WHERE kind LIKE 'task.progress.%' ORDER BY occurred_at, recorded_at"
+        ).fetchall()
+    ]
+
+
+def test_progress_report_is_a_fact_not_a_field_change(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """**这一卡的核心**：AI 往**你建的**任务上报进展 → 200，而且任务**一个字节没变**。
+
+    为什么它跟"勾完成"不一样（那条是 400）：报告是**新增一条事实**，不碰你的任何字段 ——
+    所以它不需要 `created_by='ai'`。这也正是"AI 当执行者"的落点：它干完一段就记一句，
+    要不要据此勾完成仍然是**你**的事（后端**不自动标完成**）。
+    """
+    client = _client(tmp_path, "progress.db")
+    _open(client)
+    mine = client.post("/api/tasks", json={"title": "你建的大任务", "note": "我的备注"}).json()
+    before = client.get(f"/api/tasks/{mine['id']}").json()
+
+    resp = client.post(
+        f"/api/ai/tasks/{mine['id']}/progress", json={"note": "读完第 3 章，第 6 题卡住"}
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is True and body["boundary"]
+    assert body["report"]["note"] == "读完第 3 章，第 6 题卡住"
+    assert body["report"]["actor"] == "ai" and body["report"]["label"] == "AI 报告"
+
+    after = client.get(f"/api/tasks/{mine['id']}").json()
+    assert after["status"] == before["status"] == "未开始", "报告不该动状态"
+    assert after["version"] == before["version"], "报告不该动版本号（它没改任务）"
+    assert after["note"] == "我的备注", "报告不该碰你的备注"
+    assert after["progress_count"] == 1
+    assert after["progress_note"] == "读完第 3 章，第 6 题卡住"
+    assert after["progress_at"] and after["progress_label"] == "AI 报告"
+
+    raw = db_mod.connect(str(tmp_path / "progress.db"))
+    assert _progress_facts(raw) == [("task.progress.reported", "ai", "读完第 3 章，第 6 题卡住")]
+    raw.close()
+
+
+def test_progress_report_rejects_empty_and_unknown_and_deleted(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """**不静默**：空话 400、多传字段 400、任务不存在 404、回收站里的任务 400。
+
+    已删那条的理由同「尝试失败」：那张卡已经不在你手上，报告没人会看到（先恢复再报）。
+    """
+    client = _client(tmp_path, "badprogress.db")
+    _open(client)
+    task = client.post("/api/tasks", json={"title": "你建的"}).json()
+    empty = client.post(f"/api/ai/tasks/{task['id']}/progress", json={"note": "   "})
+    assert empty.status_code == 400 and "一句话" in empty.json()["detail"]
+    assert client.post(f"/api/ai/tasks/{task['id']}/progress").status_code == 400
+    extra = client.post(
+        f"/api/ai/tasks/{task['id']}/progress", json={"note": "x", "status": "完成"}
+    )
+    assert extra.status_code == 400 and "不认识的字段" in extra.json()["detail"]
+    assert client.post("/api/ai/tasks/nope/progress", json={"note": "x"}).status_code == 404
+
+    client.delete(f"/api/tasks/{task['id']}")  # 软删 → 回收站
+    gone = client.post(f"/api/ai/tasks/{task['id']}/progress", json={"note": "x"})
+    assert gone.status_code == 400 and "回收站" in gone.json()["detail"]
+
+    raw = db_mod.connect(str(tmp_path / "badprogress.db"))
+    assert _progress_facts(raw) == [], "被拦下的报告一条事实都不该留"
+    raw.close()
+
+
+def test_progress_report_on_a_done_task_is_still_a_fact(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """完成之后报进展**允许**：那也是一条真事实（"AI 说它做完了"），不该由状态去否决。"""
+    client = _client(tmp_path, "doneprog.db")
+    _open(client)
+    task = client.post("/api/tasks", json={"title": "已经完成的事"}).json()
+    client.post(f"/api/tasks/{task['id']}/complete")
+    assert client.post(
+        f"/api/ai/tasks/{task['id']}/progress", json={"note": "补做完了附带的一节"}
+    ).status_code == 200
+    assert client.get(f"/api/tasks/{task['id']}").json()["progress_count"] == 1
+
+
+def test_retract_is_append_only_and_peels_one_at_a_time(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """撤销 = **追加** `task.progress.retracted` 指回原事实（原事实不删）+ 一层层往回撤。
+
+    与「复习改判」（`review.undone`）同款：留痕，不是抹掉。撤完就没有可撤的了 → **400 带原话**
+    （不静默当成功 —— 否则界面会告诉你"撤了"，而事实层什么都没有）。
+    """
+    client = _client(tmp_path, "retract.db")
+    _open(client)
+    task = client.post("/api/tasks", json={"title": "你建的"}).json()
+    client.post(f"/api/ai/tasks/{task['id']}/progress", json={"note": "第一条"})
+    client.post(f"/api/ai/tasks/{task['id']}/progress", json={"note": "第二条"})
+    assert client.get(f"/api/tasks/{task['id']}").json()["progress_count"] == 2
+
+    first = client.post(f"/api/tasks/{task['id']}/progress/retract")
+    assert first.status_code == 200 and first.json()["note"] == "第二条", "撤的是**最近一条**"
+    shown = client.get(f"/api/tasks/{task['id']}").json()
+    assert shown["progress_count"] == 1 and shown["progress_note"] == "第一条", "更早那条露出来"
+
+    assert client.post(f"/api/tasks/{task['id']}/progress/retract").status_code == 200
+    assert client.get(f"/api/tasks/{task['id']}").json()["progress_count"] == 0
+    none_left = client.post(f"/api/tasks/{task['id']}/progress/retract")
+    assert none_left.status_code == 400 and "没有可撤销" in none_left.json()["detail"]
+    assert client.post("/api/tasks/nope/progress/retract").status_code == 404
+
+    raw = db_mod.connect(str(tmp_path / "retract.db"))
+    assert _progress_facts(raw) == [
+        ("task.progress.reported", "ai", "第一条"),
+        ("task.progress.reported", "ai", "第二条"),
+        ("task.progress.retracted", "desktop", "第二条"),
+        ("task.progress.retracted", "desktop", "第一条"),
+    ], "两条原事实都还在（只是被指回去了）；撤销本身也留痕"
+    raw.close()
+
+
+def test_progress_reports_are_readable_over_the_ai_surface(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """AI 报过什么，AI 自己下一次读任务时看得见（`progress_*` 在只读接口上就带出来了）。"""
+    client = _client(tmp_path, "airead.db")
+    _open(client)
+    task = client.post("/api/ai/tasks", json={"title": "AI 建的任务"}).json()["task"]
+    client.post(f"/api/ai/tasks/{task['id']}/progress", json={"note": "写到一半"})
+    one = client.get(f"/api/ai/tasks/{task['id']}").json()["task"]
+    assert one["progress_count"] == 1 and one["progress_note"] == "写到一半"
+    assert client.get("/api/ai/tasks").json()["items"][0]["progress_note"] == "写到一半"
 
 
 # ---------------------------------------------------------------- 改 / 删：明确拒绝

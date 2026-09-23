@@ -228,6 +228,9 @@ def live_ai_checks(base: str) -> dict[str, bool]:
     - 打开后能读、能新增（归属 `ai`）；
     - **勾你建的 → 400**（这一条是整张卡的核心）；
     - 勾它自己建的 → 200，且事实里留下 `source=ai`；
+    - **报告进展（T-G21）**：往**你建的**任务上报一句 → 200 且那条任务的
+      状态/版本/备注**一个字节不动**，报告出现在卡片字段上；空话 400；
+      撤销之后**原事实还在**（只是被指回去了）；
     - 改/删方法 → 403 带原话；
     - 跨站 Origin → 403（读写都拦）。
     """
@@ -242,6 +245,16 @@ def live_ai_checks(base: str) -> dict[str, bool]:
     own = _json_call(base, f"/api/ai/tasks/{ai_task.get('id')}/complete", "POST", {})[0]
     yours = _json_call(base, f"/api/ai/tasks/{(mine or {}).get('id')}/complete", "POST", {})
     refused = _json_call(base, f"/api/ai/tasks/{ai_task.get('id')}", "PATCH", {"title": "改"})[0]
+    # 报告进展（T-G21）：整张卡的新那一段 —— 往**你建的**任务上报一句，任务字段一个都不许动。
+    # 走真 HTTP 才验得出的正是"它改没改你那条任务"（单元测试里读的是同一个进程里的对象）。
+    mine_id = (mine or {}).get("id")
+    before_prog = _json_call(base, f"/api/tasks/{mine_id}")[1] or {}
+    prog = _json_call(base, f"/api/ai/tasks/{mine_id}/progress", "POST",
+                      {"note": "真机自检·AI 报了一句话"})
+    after_prog = _json_call(base, f"/api/tasks/{mine_id}")[1] or {}
+    blank = _json_call(base, f"/api/ai/tasks/{mine_id}/progress", "POST", {"note": "   "})[0]
+    undo = _json_call(base, f"/api/tasks/{mine_id}/progress/retract", "POST", {})
+    prog_facts = _json_call(base, f"/api/tasks/{mine_id}/facts")[1] or []
     cross_read = _json_call(base, "/api/ai/tasks", headers=evil)[0]
     cross_write = _json_call(base, "/api/ai/tasks", "POST", {"title": "x"}, headers=evil)[0]
     facts = _json_call(base, f"/api/tasks/{ai_task.get('id')}/facts")[1] or []
@@ -257,6 +270,16 @@ def live_ai_checks(base: str) -> dict[str, bool]:
         "AI 能勾自己建的": own == 200,
         "AI 勾你建的被 400 拦下": yours[0] == 400,
         "AI 改/删被明确拒绝": refused == 403,
+        "AI 报告进展不改你的任务": prog[0] == 200
+        and (after_prog.get("status"), after_prog.get("version"), after_prog.get("note"))
+        == (before_prog.get("status"), before_prog.get("version"), before_prog.get("note")),
+        "AI 报告落到卡片字段上": after_prog.get("progress_count") == 1
+        and after_prog.get("progress_note") == "真机自检·AI 报了一句话"
+        and after_prog.get("progress_label") == "AI 报告",
+        "AI 空话报告被 400 拦下": blank == 400,
+        "撤销报告后原事实还在": undo[0] == 200
+        and ((undo[1] or {}).get("task", {}) or {}).get("progress_count") == 0
+        and any(str(f.get("kind")) == "task.progress.reported" for f in prog_facts),
         "AI 跨站读写都拦": cross_read == 403 and cross_write == 403,
         "AI 的动作在事实里可回溯": any(str(f.get("source")) == "ai" for f in facts),
         "AI 关掉后又回到 403": after_off == 403,

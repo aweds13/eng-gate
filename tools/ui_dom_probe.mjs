@@ -168,7 +168,10 @@ const DB = {
   // 「全部任务」主列表 + 搁置区（待定/取消）+ 档案区（手动归档，可撤销）
   '/api/tasks': [probeTask({ id: 't2', title: '普通任务', is_myday: false,
       subtask_done: 1, subtask_total: 3, current_step: '第 2 步：写解答',
-      current_step_due: '2026-09-25' }),
+      current_step_due: '2026-09-25',
+      // 「AI 报告进展」（N46 / OP-32；T-G21）：卡片上要真渲染出"谁报的 + 那句话 + 时间"
+      progress_count: 1, progress_note: '读完第 3 章，第 6 题卡住',
+      progress_at: '2026-09-23T21:00:00', progress_label: 'AI 报告' }),
     probeTask({ id: 'p1', title: '待定的事', status: '待定', depth: 2,
       groups: ['高数 / 第三章'], group_ids: ['g2'] }),
     probeTask({ id: 'x1', title: '取消的事', status: '取消' }),
@@ -217,6 +220,9 @@ const DB = {
     groups: ['高数 / 第三章'], group_ids: ['g2'],
     // 类型 + 所属课程（T-C12）：编辑态要渲染课程下拉、只读态要渲染课程徽标
     task_type: '作业', course_id: 'c1', course_name: '高等数学',
+    // 「AI 报告进展」（T-G21）：详情里要有那句话 + 撤销入口（撤销走**追加撤销事实**那条路）
+    progress_count: 2, progress_note: '读完第 3 章，第 6 题卡住',
+    progress_at: '2026-09-23T21:00:00', progress_label: 'AI 报告',
     attach: [{ target: 'https://x.example/要求', title: '要求页' },
       { target: 'D:\\课件\\第3章.pdf', title: null }],
   },
@@ -606,7 +612,9 @@ for (const editing of [false, true]) {
     // 只读态：显示任务字段（含备注、优先级色标）；编辑态：两个可写控件都在
     const needs = editing
       ? ['id="editNote"', 'id="editPriority"']
-      : ['备注也要渲染一遍', 'prio', 'attach-open', '要求页'];
+      : ['备注也要渲染一遍', 'prio', 'attach-open', '要求页',
+        // T-G21：AI 报告那一块（谁报的 + 那句话 + 撤销入口 + "报告≠状态"那句说明）
+        'AI 报告', 'progress-retract', '撤销这一条', '不是状态'];
     const missing = needs.filter((n) => !rail.includes(n));
     const rendered = rail.includes('任务详情') && missing.length === 0;
     if (!rendered) detailBad++;
@@ -1078,7 +1086,8 @@ for (const [where, needs] of [
     '只读 + 新增 + 勾自己建的', 'GET /api/ai/ping', 'POST /api/ai/tasks',
     'curl http://127.0.0.1:8000/api/ai/ping', 'ai-copy', '复制示例命令',
     '动的是不是你亲手写的东西']],
-  ['tasks', ['AI 建的', 'AI 加的步骤']],
+  ['tasks', ['AI 建的', 'AI 加的步骤', 'AI 报告', '读完第 3 章，第 6 题卡住',
+    '2026年09月23日 21:00']],
 ]) {
   try {
     byId.get('main')._html = '';
@@ -1113,6 +1122,22 @@ try {
   aiBad++;
   aiChecks.push({ where: 'badge-count', error: e.message });
   console.log(`  ❌ tasks·徽标反证 渲染抛错: ${e.message}`);
+}
+// 反证：**没有报告**的任务不许挂出那一行（"有才显示"，否则满屏空行 —— 徽标反证的同款做法）
+try {
+  byId.get('main')._html = '';
+  await globalThis.__view('tasks');
+  await sleep(30);
+  const html = byId.get('main')._html;
+  const reports = (html.match(/AI 报告/g) || []).length;
+  const ok = reports === 1 && html.includes('待定的事');
+  if (!ok) aiBad++;
+  aiChecks.push({ where: 'report-count', rendered: ok });
+  console.log(`  ${ok ? '✅' : '⚠️ '} tasks·只有有报告的那张挂「AI 报告」（出现 ${reports} 次）`);
+} catch (e) {
+  aiBad++;
+  aiChecks.push({ where: 'report-count', error: e.message });
+  console.log(`  ❌ tasks·AI 报告反证 渲染抛错: ${e.message}`);
 }
 
 // 跨端同步（SR-F9.2 / G 批 · T-G8，场景 ③）：设置页要真渲染出 **导出/预览/导入三个入口 +

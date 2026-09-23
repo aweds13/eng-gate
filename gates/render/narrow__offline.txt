@@ -80,17 +80,17 @@ div.card.panel-card:nth-child(5)>div.card:nth-child(2)>div.card-body>div.meta	�
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(2)>button.ghost	完成	708,888,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(3)		40,950,740,67	16/normal/400	#1e293b/#ffffff	12;14px 16px
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(3)>div.card-body		56,964,640,39	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(5)>div.card:nth-child(3)>div.card-body>div.title	重装打印机驱动	56,964,640,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(3)>div.card-body>div.title	第三章习题	56,964,640,21	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(5)>div.card:nth-child(3)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	56,987,640,16	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(3)>button.ghost	完成	708,965,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(4)		40,1027,740,67	16/normal/400	#1e293b/#ffffff	12;14px 16px
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(4)>div.card-body		56,1041,640,39	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(5)>div.card:nth-child(4)>div.card-body>div.title	把数据整理成表	56,1041,640,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(4)>div.card-body>div.title	预习下周的线性代数	56,1041,640,21	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(5)>div.card:nth-child(4)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	56,1064,640,16	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(4)>button.ghost	完成	708,1042,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(5)		40,1104,740,67	16/normal/400	#1e293b/#ffffff	12;14px 16px
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(5)>div.card-body		56,1118,640,39	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(5)>div.card:nth-child(5)>div.card-body>div.title	预习下周的线性代数	56,1118,640,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(5)>div.card-body>div.title	重装打印机驱动	56,1118,640,21	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(5)>div.card:nth-child(5)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	56,1141,640,16	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(5)>button.ghost	完成	708,1119,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(6)		40,1181,740,67	16/normal/400	#1e293b/#ffffff	12;14px 16px
@@ -100,12 +100,12 @@ div.card.panel-card:nth-child(5)>div.card:nth-child(6)>div.card-body>div.meta	�
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(6)>button.ghost	完成	708,1196,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(7)		40,1258,740,67	16/normal/400	#1e293b/#ffffff	12;14px 16px
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(7)>div.card-body		56,1272,640,39	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(5)>div.card:nth-child(7)>div.card-body>div.title	写课程设计报告	56,1272,640,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(7)>div.card-body>div.title	把数据整理成表	56,1272,640,21	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(5)>div.card:nth-child(7)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	56,1295,640,16	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(7)>button.ghost	完成	708,1273,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(8)		40,1335,740,67	16/normal/400	#1e293b/#ffffff	12;14px 16px
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(8)>div.card-body		56,1349,640,39	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(5)>div.card:nth-child(8)>div.card-body>div.title	第三章习题	56,1349,640,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(8)>div.card-body>div.title	写课程设计报告	56,1349,640,21	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(5)>div.card:nth-child(8)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	56,1372,640,16	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(8)>button.ghost	完成	708,1350,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(5)>div.sub:nth-child(9)		40,1412,740,37	12/normal/400	#64748b/#000000@0.00	0;0px

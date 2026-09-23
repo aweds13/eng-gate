@@ -746,6 +746,8 @@ const ACTIONS = {
   // AI 接口（SR-F7.3 / G 批 · T-G6）：开关（默认关）+ 复制示例命令
   'set-ai':         el => setAiEnabled(el.dataset.on==='true'),
   'ai-copy':        () => copyAiExample(),
+  // 「AI 报告进展」的撤销（N46 / OP-32；G 批 · T-G21）：撤最近一条（追加撤销事实，原事实不删）
+  'progress-retract': el => retractProgress(el.dataset.id),
   // 学校通知的合作接口（SR-F10.1 / G 批 · T-G14）：开关 / 复制示例 / 转任务 / 忽略
   'set-notify':     el => setNotifyEnabled(el.dataset.on==='true'),
   'notify-copy':    () => copyNotifyExample(),
@@ -1072,7 +1074,10 @@ function factLabel(kind){
   return kind==='task.completed'?'完成':kind==='task.uncompleted'?'撤销完成':kind==='task.deleted'?'删除'
     :kind==='task.restored'?'恢复':kind==='task.repeat.generated'?'生成下一次':kind==='task.assigned'?'分配'
     :kind==='task.assignment.status'?'进展':kind==='task.status_changed'?'状态改为'
-    :kind==='task.attempt.failed'?'尝试失败':kind;
+    :kind==='task.attempt.failed'?'尝试失败'
+    // 「AI 报告进展」（N46 / OP-32；T-G21）：报告/撤销成对出现，记录里两条都看得见
+    :kind==='task.progress.reported'?'报告进展':kind==='task.progress.retracted'?'撤销报告'
+    :kind;
 }
 /* ---------- 分组（OP-11 + F 批 · T-F5 可嵌套）：管理 + 任务归属 ----------
  * 分组是"组织维度"，只影响分类与查找，不改变任务执行逻辑（contracts/domains/F1-tasks.md OP-11）。
@@ -1347,6 +1352,12 @@ function renderDetail(el,t,facts,tree,cards,attempts){
       ${rcards.map(c=>`<div class="fact"><span class="badge">复习卡</span>
         <span class="grow" style="flex:1">${esc(c.title)}</span>
         <span class="sub">到期 ${esc(String(c.due_date).slice(0,10))}</span></div>`).join('')}`:''}
+    ${t.progress_count?`<div class="settings-sub">${esc(t.progress_label||'进展报告')}（${t.progress_count}）</div>
+      <div class="fact"><span class="grow" style="flex:1">${esc(t.progress_note||'')}</span>
+        <span class="sub">${humanTime(t.progress_at)}</span>
+        <button class="ghost" data-action="progress-retract" data-id="${t.id}">撤销这一条</button></div>
+      <div class="sub">报告 = 一句话事实，<b>不是状态</b>：要不要标完成仍然由你勾。
+        ${t.progress_count>1?'撤销这一条会露出更早的一条（一层层往回撤）。':''}</div>`:''}
     <div class="settings-sub">步骤（子任务）${progress}</div>
     <div id="subtaskList">${subtaskList||'<div class="sub">还没有步骤。拆成小步，完成到最后一个时父任务会自动完成；子步骤下面还能再拆一层（最多三层）。</div>'}</div>
     <div class="new"><input id="subtaskTitle" placeholder="添加一个步骤…" data-enter="subtask-add">
@@ -1510,10 +1521,16 @@ function taskCard(t,isOverdue){
   // 谁建的（T-G6）：AI 建的任务/步骤带一枚徽标 —— 是"可回溯"在界面上的那一半
   // （另一半是事实的 `source=ai`）。你建的不标（默认情形，不该满屏都是徽标）。
   const whoBadge=t.created_by==='ai' ? '<span class="badge">AI 建的</span>' : '';
+  // 「AI 报告进展」（N46 / OP-32；T-G21）：AI 往这个任务上记的一句话 —— 摆在**卡片上**
+  // （不用点进详情才看得见，这是"回报"的意义所在）。中文前缀由后端给（`progress_label`）。
+  // 它**不是**状态：状态那一枚徽标仍在旁边，要不要勾完成是你的事。
+  const aiReport=t.progress_count
+    ? `<div class="sub"><span class="badge">${esc(t.progress_label||'')}</span> ${esc(t.progress_note||'')}${t.progress_at?`（${humanTime(t.progress_at)}）`:''}${t.progress_count>1?` · 另有 ${t.progress_count-1} 条`:''}</div>`
+    : '';
   return `<div class="card ${isDone?'done':''} ${late?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div class="card-body"><div class="title">${esc(t.title)}</div>
-    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${whoBadge}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}</div>
+    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${whoBadge}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}${aiReport}</div>
     <div class="row">
       ${doingButtonHTML(t)}
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
@@ -1770,7 +1787,7 @@ function heatmap(logs){
     for(let r=0;r<7;r++){
       const d=new Date(monday);d.setDate(monday.getDate()-(cols-1-c)*7+r);
       if(d>today)continue;
-      const iso=d.toISOString().slice(0,10);
+      const iso=todayISO(d);
       const on=done.has(iso);
       cells+=`<rect x="${c*(cell+gap)}" y="${r*(cell+gap)}" width="${cell}" height="${cell}" rx="2.5"
         fill="${on?'var(--accent)':'var(--surface-2)'}" opacity="${on?1:0.9}"><title>${iso}${on?' 已打卡':''}</title></rect>`;
@@ -2225,7 +2242,10 @@ async function finishFocus(status){
 async function renderHabit(m){
   const [sc,habits,fb]=await Promise.all([
     api('/api/selfcheck'),api('/api/habits'),api('/api/feedback')]);
-  const today=new Date().toISOString().slice(0,10);
+  // 「今天」必须按**本地时区**拼（`todayISO()`）—— 用 `toISOString()` 会拿 UTC 日期：
+  // 本机 UTC+8，凌晨 0–8 点算出的是**昨天**，于是"今天已打卡"显示成「打卡」，
+  // 而且点下去是把今天那次**取消**掉（后端按本地日期记）。T-G41 实测抓到。
+  const today=todayISO();
   const cards=habits.map(h=>{
     const doneToday=(h.logs||[]).includes(today);
     return `<div class="card" style="display:block">
@@ -3177,7 +3197,7 @@ async function setAiEnabled(on){
   try{
     const r=await api('/api/settings/ai',{method:'PUT',body:JSON.stringify({enabled:on})});
     aiCfg=r;
-    toast(r.enabled?'AI 接口已打开（本机程序现在可以读任务、加步骤、勾它自己建的）'
+    toast(r.enabled?'AI 接口已打开（本机程序现在可以读任务、加步骤、报告进展、勾它自己建的）'
       :'AI 接口已关闭（这一组接口现在一律 403）');
     view(current);
   }catch(e){/* api() 已经弹过后端原话 */}
@@ -3187,6 +3207,14 @@ async function copyAiExample(){
   if(!text){toast('还没有示例可复制');return}
   const copied=await copyText(text);
   toast(copied?'示例命令已复制（把 127.0.0.1:8000 换成你实际的端口）':'复制不了，请手动选中那段命令');
+}
+/* 「AI 报告进展」的撤销（N46 / OP-32；G 批 · T-G21）：**只撤最近一条**，连点两下一层层往回撤。
+   撤销不是"删掉那条事实"，而是往事实层再追加一条 `task.progress.retracted` 指回它
+   —— 与「改判」同款（留痕）。所以这个按钮**不会**改动任务本身，也不会让记录里的原话消失。 */
+async function retractProgress(id){
+  const r=await api(`/api/tasks/${id}/progress/retract`,{method:'POST'});
+  view(current);
+  toast(`已撤销这一条报告${r&&r.note?`：${r.note}`:''}`);
 }
 /* 学校通知的合作接口（SR-F10.1 / G 批 · T-G14）：**默认关**；开关与措辞全在后端
    `core/notify.py` 一处（界面只显示开关、字段表、自述与收件箱，不复述规则）。

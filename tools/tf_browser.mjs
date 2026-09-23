@@ -122,23 +122,31 @@ export async function seedFixture(port) {
 
   // 任务：覆盖 逾期 / 今天 / 有计划 / 重要 / 已标记 / 完成 / 子步骤 / 尝试失败
   // 优先级只有 高/中/低 三档（中文，领域层定的），任务类型只有 普通/作业/考试/论文/小测。
+  //
+  // ★ 日期偏移有**硬约束**（T-G40 实测抓到的第二个坑）：周结算的债务取的是**周日快照**
+  //   （`weekly_summary` 的 `end` = 本周日），而"周日离今天几天"随**星期几**变（周一 6 天、周日 0 天）。
+  //   于是**未完成**任务的偏移只有两类是稳的：**≤ -1**（哪一天看都已经逾期，恒计债）
+  //   与 **≥ +7**（永远落在周日之后，恒不计债）；偏移 0…+6 会让债务读数随星期几变 ——
+  //   黄金就"没有任何代码改动、第二天自己变红"（那正是用户最恨的漂移）。
+  //   下面一律照这条摆：逾期那条 -2，其余**未完成**的全部 ≥ +7（已完成的不影响债务：按状态排除）。
   const overdue = await call('POST', '/api/tasks', { title: '补交上周的实验报告', due_date: dayOffset(-2), priority: '高', groups: groupIds })
-  const todayTask = await call('POST', '/api/tasks', { title: '把第三章习题做完', due_date: dayOffset(0), is_myday: true, priority: '高', flagged: true, note: '重点是 3.4 的证明题' })
-  const planned = await call('POST', '/api/tasks', { title: '预习下周的线性代数', due_date: dayOffset(4), priority: '中' })
-  const parent = await call('POST', '/api/tasks', { title: '写课程设计报告', due_date: dayOffset(6), priority: '低' })
+  const todayTask = await call('POST', '/api/tasks', { title: '把第三章习题做完', due_date: dayOffset(7), is_myday: true, priority: '高', flagged: true, note: '重点是 3.4 的证明题' })
+  const planned = await call('POST', '/api/tasks', { title: '预习下周的线性代数', due_date: dayOffset(9), priority: '中' })
+  const parent = await call('POST', '/api/tasks', { title: '写课程设计报告', due_date: dayOffset(14), priority: '低' })
   if (parent) {
-    const s1 = await call('POST', `/api/tasks/${parent.id}/subtasks`, { title: '列提纲', due_date: dayOffset(2) })
-    await call('POST', `/api/tasks/${parent.id}/subtasks`, { title: '写正文', due_date: dayOffset(5) })
+    const s1 = await call('POST', `/api/tasks/${parent.id}/subtasks`, { title: '列提纲', due_date: dayOffset(11) })
+    await call('POST', `/api/tasks/${parent.id}/subtasks`, { title: '写正文', due_date: dayOffset(12) })
     if (s1) await call('POST', `/api/tasks/${s1.id}/complete`)
   }
-  const tried = await call('POST', '/api/tasks', { title: '重装打印机驱动', due_date: dayOffset(1), priority: '中' })
+  const tried = await call('POST', '/api/tasks', { title: '重装打印机驱动', due_date: dayOffset(10), priority: '中' })
   if (tried) {
     await call('POST', `/api/tasks/${tried.id}/attempt-failed`, { note: '换了 USB 口也不行' })
     await call('POST', `/api/tasks/${tried.id}/attempt-failed`, { note: '官网驱动装到一半报错' })
   }
+  // 已完成的那条**可以**用 0：债务按状态排除，它的日期不参与任何读数（"今天"这个日期本身照旧被渲染出来）
   const done = await call('POST', '/api/tasks', { title: '交英语作业', due_date: dayOffset(0), is_myday: true })
   if (done) await call('POST', `/api/tasks/${done.id}/complete`)
-  const assignment = await call('POST', '/api/tasks', { title: '把数据整理成表', due_date: dayOffset(3), priority: '中' })
+  const assignment = await call('POST', '/api/tasks', { title: '把数据整理成表', due_date: dayOffset(13), priority: '中' })
 
   void overdue; void todayTask; void planned
 
@@ -394,6 +402,45 @@ export async function waitQuiet(cdp, { quiet = 6, step = 120, max = 80 } = {}) {
   }
 }
 
+/* 装一个"手上还有没有请求"的计数器（钩在 `fetch` 上）。
+   为什么**必须**有它（T-G40，实测抓到的真缺陷）：`waitQuiet` 只看 DOM 变动，而"点一个视图"
+   到"数据回来、`innerHTML` 被换掉"之间**一段 DOM 都不动** —— 于是它会在半路上宣布"安静了"。
+   ★ 统计页就栽在这里（7 个接口串起来，含 371 天热力图）：**`stats` 的黄金一直是上一个视图
+   （`focus`）的内容**（`desktop__stats.txt` 与 `desktop__focus.txt` 逐字节同大小、同 rows），
+   两遍采集一遍冷一遍热才会红。装了它之后：**请求没落地就不算安静**。 */
+export const FETCH_WATCH = `
+(() => {
+  if (window.__tffetch) return true;
+  const st = { pending: 0, done: 0 };
+  window.__tffetch = st;
+  const orig = window.fetch;
+  window.fetch = function (...args) {
+    st.pending++;
+    let p;
+    try { p = orig.apply(this, args) } catch (e) { st.pending--; throw e }
+    return p.finally(() => { st.pending--; st.done++; });
+  };
+  return true;
+})()`
+
+/** 等**真的闲下来**：DOM 连续 `quiet` 拍不变，**并且手上没有在飞的请求**。
+ *
+ *  两件事必须一起判 —— 只看 DOM 会撞上"请求在路上、页面一动不动"那个空档（T-G40 的缺陷）；
+ *  只看请求也不行（`MUTATION_WATCH` 那条注释里的色板/`#clock` 都靠 DOM 计数才判得对）。
+ *  没装 `FETCH_WATCH` 时按"没有请求"算（退化成 `waitQuiet`，不会假装更严）。 */
+export async function waitIdle(cdp, { quiet = 6, step = 120, max = 120 } = {}) {
+  let lastMut = -1
+  let q = 0
+  for (let i = 0; i < max && q < quiet; i++) {
+    await sleep(step)
+    const s = await cdp.eval(
+      '({mut: window.__tfmut || 0, pending: window.__tffetch ? window.__tffetch.pending : 0})'
+    )
+    if (s.pending === 0 && s.mut === lastMut) q++
+    else { q = 0; lastMut = s.mut }
+  }
+}
+
 /** 等**应用启动完成**再动手：铺完配置、左栏渲染出来才算这一页真的起来了。 */
 export async function waitApp(cdp, { tries = 60, step = 120 } = {}) {
   for (let i = 0; i < tries; i++) {
@@ -426,6 +473,8 @@ export async function bootApp(cdp, url, { device = FIXED_DEVICE, accent = null, 
   const ok = await waitApp(cdp)
   await sleep(300)
   await cdp.eval('document.readyState') // 触一次，确保上下文活着
+  // 装上"请求计数器"：**必须在第一次点视图之前**（T-G40）—— 之后每次渲染都能等到请求落地。
+  await cdp.eval(FETCH_WATCH)
   return ok
 }
 

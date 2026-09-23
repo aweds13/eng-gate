@@ -29,7 +29,7 @@ div.shell>main#main>div.new>button	番茄钟 25 分	180,223,102,35	13/normal/400
 div.shell>main#main>div.new>button.ghost	普通计时	292,222,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title	本周投入	24,279,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card:nth-child(4)		24,306,772,128	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card:nth-child(4)>div.meta	本周 YYYY-MM-DD ~ YYYY-MM-DD · 专注 0h · 完成收益 1 项 · 手动 0.75h · 习惯 1 次 · 债务 4 项	40,320,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card:nth-child(4)>div.meta	本周 YYYY-MM-DD ~ YYYY-MM-DD · 专注 0h · 完成收益 1 项 · 手动 0.75h · 习惯 1 次 · 债务 1 项	40,320,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card:nth-child(4)>div>div:nth-child(1)>div		40,348,101,6	16/normal/400	#1e293b/#e2e8f0	4;0px
 div.card:nth-child(4)>div>div:nth-child(1)>div.sub	21	40,358,101,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card:nth-child(4)>div>div:nth-child(2)>div		147,348,101,6	16/normal/400	#1e293b/#e2e8f0	4;0px

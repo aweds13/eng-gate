@@ -41,7 +41,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 // 用的是同一套：一处实现、两处使用，免得两份慢慢长歪。
 import {
   Cdp, FIXED_DEVICE, MASK_PATHS, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
-  bootApp, findBrowser, seedFixture, setViewport, startServer, waitHealth, waitQuiet,
+  bootApp, findBrowser, seedFixture, setViewport, startServer, waitHealth, waitIdle,
 } from './tf_browser.mjs'
 
 const GOLDEN_DIR = join(ROOT, 'gates', 'render')
@@ -176,7 +176,13 @@ const COLLECT = /* js */ `
     if (Number(cs.opacity) === 0) continue;
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) continue;
-    const hasElKids = el.children.length > 0;
+    // 「有元素孩子」= 有**真**孩子：title/desc 只是 SVG 的提示/说明（挂在图形里面），
+    // 图形自己**是叶子**。为什么必须这么判（T-G41 实测撞到）：柱/格一类图元长这样 ——
+    // rect 里嵌一个 title（"2026-09-24 已打卡"）；按老写法它是"匿名容器"被整类跳过，
+    // 于是**热力图/节奏图的点亮状态根本没进过黄金**（习惯热力图那处差一天的缺陷就是这么漏掉的）。
+    const hasElKids = [...el.children].some(
+      (c) => !['title', 'desc'].includes(c.tagName.toLowerCase()),
+    );
     const hasName = Boolean(el.id) || (el.classList && el.classList.length > 0);
     // 采两类：叶子（文本/控件在哪、多大、什么颜色）+ 有名字的容器（版式骨架）。
     // 匿名容器不单独采 —— 它的几何变化一定会反映到叶子的位置/尺寸上。
@@ -202,7 +208,8 @@ const COLLECT = /* js */ `
 })()
 `
 
-// "页面还在动吗"的计数器（`MUTATION_WATCH`）与"等它安静下来"（`waitQuiet`）都在 `tf_browser.mjs`：
+// "页面还在动吗"的计数器（`MUTATION_WATCH`）、"还有没有请求在飞"（`FETCH_WATCH`）与
+// "等它真的闲下来"（`waitIdle`）都在 `tf_browser.mjs`：
 // 行为流层点完一个按钮之后要等的东西**跟这里一模一样**，所以那一份实现是共用的。
 
 async function collectView(cdp, vp, view) {
@@ -215,8 +222,10 @@ async function collectView(cdp, vp, view) {
     return true;
   })()`)
   if (!clicked) throw new Error(`界面上找不到视图 ${view} 的入口`)
-  // 等"页面安静下来"：DOM 变动计数连续 6 拍（≈0.7s）不再增长，且至少等够一拍渲染
-  await waitQuiet(cdp)
+  // 等"真的闲下来"（T-G40）：DOM 连续 6 拍（≈0.7s）不再变，**且没有在飞的请求**。
+  // 后半句是必须的 —— 只等 DOM 会在"请求还在路上、页面一动不动"那一段提前宣布安静，
+  // 于是采到的是**上一个视图**的内容（统计页就这么被漏采了很久，见 `waitIdle` 那段注释）。
+  await waitIdle(cdp)
   return cdp.eval(`window.__tfvp = {name:${JSON.stringify(vp.name)}, view:${JSON.stringify(view)}, paths:${JSON.stringify(MASK_PATHS)}}; ${COLLECT}`)
 }
 

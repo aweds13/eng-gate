@@ -113,3 +113,30 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/team`
 - `phone/today`
 
+
+## 2026-09-23 17:08:05 · 21 份改动
+
+> 理由：四个原因（都在 T-G40 / T-G41 两张卡里）：① 采集竞态 —— 装上请求计数器后等请求落地（以前 stats 采到的是上一个视图 focus 的残留内容）；② fixture 日期改成星期无关（未完成任务的偏移只留 <=-1 与 >=+7，周结算的债务读数不再随星期几变）；③ 习惯页的今天改成按本地时区（原 toISOString 会拿 UTC 日期：凌晨会显示成没打卡、点一下反而取消掉）+ 热力图格子差一天一并修；④ 采集器不再把嵌了 title 的 SVG 图元当匿名容器跳过（热力图/节奏图的点亮状态以前根本没进黄金）。另：设置页多一行 AI 路由（T-G21）。
+
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/offline`
+- `desktop/planned`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/offline`
+- `narrow/planned`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `phone/focus`
+- `phone/habit`
+- `phone/offline`
+- `phone/planned`
+- `phone/setting`
+- `phone/stats`
+- `phone/tasks`
+
