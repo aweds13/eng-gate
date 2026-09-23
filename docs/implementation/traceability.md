@@ -13,11 +13,11 @@
 | SR-F3.1~F3.4 | `src/timeflow/core/focus/`（`timer.py`/`guard.py`/`subscribers.py`） | 计时/中断三选/白名单/勿扰/多设备同步/事实联动 |
 | SR-F4.1~F4.3 | `src/timeflow/core/feedback/` | 每日反馈/习惯打卡与 streak/自检（读 facts） |
 | SR-F5.1~F5.4 | `src/timeflow/core/academic/` | GPA/课程档案/考核项/同构合流 |
-| SR-F6.1~F6.6 | `src/timeflow/core/review/` | FSRS 调度/创建/排序/外部 app/形式/反馈三态（**撤销本次反馈**是契约 OP-27） |
-| SR-F7.1~F7.4 | `src/timeflow/core/team/` + `src/timeflow/api/` | 管理者执行者/团队原则/AI 接口 |
+| SR-F6.1~F6.6 | `src/timeflow/core/review/` | FSRS 调度/创建/排序/外部 app/形式/反馈三态（**撤销本次反馈**是契约 OP-27；**改判**是其延伸，T-G13） |
+| SR-F7.1~F7.4 | `src/timeflow/core/team/` + `src/timeflow/api/` | 管理者/执行者两视角（**视角页** OP-33 / T-G12：`team.board()`）/团队原则/AI 接口 |
 | SR-F8.1~F8.4 | `src/timeflow/core/memo/`（+ `getaways/` 预留） | 备忘录/引用句柄/产出与手动投入事实（含撤销） |
-| SR-F9.1~F9.3 | `src/timeflow/storage/` | SQLite/schema 版本化迁移（当前 **v12**）/LWW 同步/启前备份（回滚入口未做，SR-F9.3 与 SR-NF12 同缺口） |
-| SR-F10.1 | `src/timeflow/getaways/`（预留） | 学校通知接口（后置） |
+| SR-F9.1~F9.3 | `src/timeflow/storage/` | SQLite/schema 版本化迁移（当前 **v18**）/LWW 同步/启前备份（回滚入口未做，SR-F9.3 与 SR-NF12 同缺口） |
+| SR-F10.1 | `src/timeflow/core/notify.py`（+ `src/web/index.html` 设置页一节） | 学校通知的**合作接口**（收件箱：投递/去重/来源标记/转任务；**抓取仍不做**，规格划给独立脚本）—— T-G14 |
 | SR-NF1~NF5 | `src/timeflow/app/` + `src/web/` | 界面/交互/可视化/一屏/可回退 |
 | SR-NF6~NF8,NF13~NF15 | 各模块 + `tests/` + `src/timeflow/config.py` + `tools/lf1_live_check.py` | 可维护/可扩展/可测试/可观测/配置/测试闭环 |
 | SR-NF11 | 全仓库 | Git 工作流（分支/commits；worktree 见 CODING_GUIDELINES §6） |
@@ -29,7 +29,7 @@
 ## 五层闭合校验
 | 维度 | 结果 |
 |---|---|
-| 每条 SR 是否都有实现落点 | ✅ 是（SR-F1~F10、SR-NF1~NF18 均有模块）。**残留未实现项**（均已显式标注）：OP-33 团队视角切换页、复习「改判」、跨端同步传输、F10 学校通知、~~沉淀型内容迁 Markdown~~（**一版已落地**，T-G4：每天一个 md + 目录可配置，数据库权威；Obsidian 跳转见 T-G5）、前端 R5 收尾（**OP-24 学校任务↔课程字段级合流已于 2026-09-19 落地，T-C12**）。**另有「后端已具备、前端界面未做」的两项**：任务详情/编辑（OP-9）、子任务管理（OP-12）—— 已登记 `../../复盘/使用体验问题与修改台账.md` §四。 |
+| 每条 SR 是否都有实现落点 | ✅ 是（SR-F1~F10、SR-NF1~NF18 均有模块）。**残留未实现项**（均已显式标注）：跨端同步传输（手机**直接上传**同步包 / 手机上更完整的看与提醒）、~~OP-33 团队视角切换页~~（**已落地**，T-G12）、~~复习「改判」~~（**已落地**，T-G13）、~~F10 学校通知~~（**合作接口已落地**，T-G14；**抓取**按规格由独立脚本做，主工具不代劳）、~~沉淀型内容迁 Markdown~~（**一版已落地**，T-G4：每天一个 md + 目录可配置，数据库权威；Obsidian 跳转见 T-G5）、前端 R5 收尾（**OP-24 学校任务↔课程字段级合流已于 2026-09-19 落地，T-C12**）。**另有「后端已具备、前端界面未做」的两项**：任务详情/编辑（OP-9）、子任务管理（OP-12）—— 已登记 `../../复盘/使用体验问题与修改台账.md` §四。 |
 | 每个模块是否都能回溯到规格与需求 | ✅ 是（按模块名可回溯到 SR→N） |
 | 五层闭环 | intention → specification(+conventions) → contracts → implementation → taste 闭合；`docs/taste/` 已于 2026-09-18 从空壳重写 |
 | 实现文档与代码一致性 | ✅ 2026-09-18 复核：路径、模块落点、数据流已按当前代码（含第 2/3/5 步）对齐，见 `../../复盘/文档债务清理-实现层对齐.md` |

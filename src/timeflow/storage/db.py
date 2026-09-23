@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -221,6 +221,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     _migrate_v15(conn)  # 重建：groups 去掉全局 UNIQUE(name)，改"同父下唯一"
     _migrate_v16(conn)  # 加列：tasks.created_by（谁建的：我 / AI）
     _migrate_v17(conn)  # 跨端：六张表的 updated_at + 删除墓碑（触发器，幂等）
+    _migrate_v18(conn)  # 建表：school_notices（学校通知的**合作接口**收件箱）
 
 
 def _upgrade(conn: sqlite3.Connection, current: int) -> None:
@@ -261,6 +262,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v16(conn)  # 谁建的：我 / AI（G 批 · T-G6）
     if current < 17:
         _migrate_v17(conn)  # 跨端合并所需的 modified 标记 + 删除墓碑（G 批 · T-G8）
+    if current < 18:
+        _migrate_v18(conn)  # 学校通知的合作接口收件箱（G 批 · T-G14）
 
 
 
@@ -282,6 +285,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v15(conn)  # 同上：groups 去掉全局 UNIQUE(name)（允许重名），改按"同父下唯一"
     _migrate_v16(conn)  # 同上：tasks.created_by 由本版加列（谁建的：我 / AI）
     _migrate_v17(conn)  # 同上：updated_at 六列 + sync_tombstones 表 + 触发器
+    _migrate_v18(conn)  # 同上：school_notices 表（学校通知的合作接口收件箱）
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -1045,4 +1049,47 @@ def _migrate_v17(conn: sqlite3.Connection) -> None:
             "    deleted_at = excluded.deleted_at; "
             "END"
         )
+
+
+def _migrate_v18(conn: sqlite3.Connection) -> None:
+    """v18：**学校通知的合作接口**收件箱（SR-F10.1 / G 批 · T-G14）。
+
+    规格 `docs/specification/domains/F10-notify.md` 的定位是：监测（网站/公众号/群聊/考试网站）
+    由**独立脚本**去做，**主工具只提供合作接口**、不抓取、不新增对外依赖。所以这一版建的是
+    一张**收件箱**：外部脚本把抓到的通知投递进来（`POST /api/notify/school`），
+    主工具负责去重、来源标记、看、以及"转成任务/提醒"——**不负责去网上拿**。
+
+    两处刻意的设计：
+    - `fingerprint` **唯一**：去重靠数据库约束，不靠调用方自觉（同一个来源同一条通知重复投递
+      只留一行；带了 `external_id` 的就是"对方系统里的那一条"，标题改了也只更新同一行）；
+    - `extra` 存**不认识的多余字段**（JSON）：规格写着"接口契约未定、字段保持扩展位，不写死"——
+      于是脚本先多加一个字段不会丢，等哪天真需要再提升成正式列。
+
+    `updated_at` 也一并给上（第一版只有 status/task_id 会变）—— 将来若要跨端同步，
+    判新旧的那一列已经在了，不必再来一次迁移。
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS school_notices (
+            id           TEXT PRIMARY KEY,
+            source       TEXT NOT NULL,
+            external_id  TEXT,
+            fingerprint  TEXT NOT NULL UNIQUE,
+            title        TEXT NOT NULL,
+            url          TEXT,
+            summary      TEXT,
+            at           TEXT,
+            due_date     TEXT,
+            received_at  TEXT NOT NULL,
+            status       TEXT NOT NULL DEFAULT 'new',
+            task_id      TEXT,
+            extra        TEXT,
+            updated_at   TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_school_notices_received "
+        "ON school_notices(received_at)"
+    )
 

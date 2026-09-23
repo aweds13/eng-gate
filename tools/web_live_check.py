@@ -359,6 +359,69 @@ def live_regrade_checks(base: str) -> dict[str, bool]:
     }
 
 
+def live_notify_checks(base: str) -> dict[str, bool]:
+    """T-G14 真机自检：学校通知的合作接口在**真服务**上的行为（只碰临时库）。
+
+    "未接入"与"参数错"必须**分得开**（403 vs 400）：调用方是用户自己写的脚本，
+    这两种情况的处理方式完全不同（一个去设置页点开关，一个改脚本）。
+    另外验去重真的靠库约束（重复投递不产生第二行）、转任务走的是普通任务路径。
+    """
+    off = _json_call(base, "/api/settings/notify")[1] or {}
+    off_post = _json_call(
+        base, "/api/notify/school", "POST", {"source": "真机自检", "title": "未接入时投递"}
+    )
+    cross = _json_call(
+        base, "/api/notify/school", "POST", {"source": "x", "title": "y"},
+        headers={"Origin": "https://evil.example"},
+    )[0]
+    _json_call(base, "/api/settings/notify", "PUT", {"enabled": True})
+    bad = _json_call(base, "/api/notify/school", "POST", {"title": "少了来源"})[0]
+    first = _json_call(base, "/api/notify/school", "POST", {
+        "source": "教务处网站", "title": "真机自检·期中考试安排", "external_id": "LIVE-1",
+        "url": "https://example.edu/x", "due_date": "2030-01-08", "批次": "第 1 批",
+    })[1] or {}
+    again = _json_call(base, "/api/notify/school", "POST", {
+        "source": "教务处网站", "title": "真机自检·期中考试安排", "external_id": "LIVE-1",
+    })[1] or {}
+    listing = _json_call(base, "/api/notify/school")[1] or {}
+    task = _json_call(
+        base, f"/api/notify/school/{first.get('id')}/to-task", "POST", {"is_myday": True}
+    )[1] or {}
+    made = _json_call(base, f"/api/tasks/{task.get('task_id')}")[1] or {}
+    second = _json_call(base, "/api/notify/school", "POST", {
+        "source": "班级群", "title": "真机自检·可以忽略的那条",
+    })[1] or {}
+    ignored = _json_call(
+        base, f"/api/notify/school/{second.get('id')}/ignore", "POST", {"ignored": True}
+    )[1] or {}
+    converted_ignore = _json_call(
+        base, f"/api/notify/school/{first.get('id')}/ignore", "POST", {"ignored": True}
+    )[0]
+    export = _json_call(base, "/api/sync/export", "POST", {})[1] or {}
+    return {
+        "学校通知默认关且投递 403": off.get("enabled") is False and off_post[0] == 403,
+        "学校通知跨站投递被拦": cross == 403,
+        "学校通知参数错是 400（与未接入分得开）": bad == 400,
+        "学校通知能收下一条（带来源与扩展字段）": first.get("created") is True
+            and (first.get("notice") or {}).get("source") == "教务处网站"
+            and (first.get("notice") or {}).get("extra") == {"批次": "第 1 批"},
+        "学校通知重复投递不产生第二行": again.get("duplicate") is True
+            and again.get("id") == first.get("id")
+            and (again.get("notice") or {}).get("url") == "https://example.edu/x",
+        "学校通知收件箱看得到": any(
+            i.get("id") == first.get("id") for i in (listing.get("items") or [])
+        ),
+        "学校通知转任务是普通任务（带来源备注与截止）": task.get("created") is True
+            and made.get("title") == "真机自检·期中考试安排"
+            and made.get("due_date") == "2030-01-08"
+            and "来自学校通知" in str(made.get("note") or ""),
+        "学校通知可忽略、已转任务的不许忽略": ignored.get("status") == "ignored"
+            and converted_ignore == 400,
+        "学校通知不进同步包（是收件箱，不是你的数据）":
+            "school_notices" not in (export.get("tables") or {}),
+    }
+
+
 def live_sync_checks(base: str, tmp: Path) -> dict[str, bool]:
     """T-G8 真机自检：同步包的**导出 → 预览 → 导入**在真服务上走一遍（场景 ③）。
 
@@ -649,6 +712,7 @@ def main() -> int:
     checks.update(live_ai_checks(base))
     checks.update(live_team_checks(base))
     checks.update(live_regrade_checks(base))
+    checks.update(live_notify_checks(base))
     checks.update(live_sync_checks(base, tmp))
     checks.update(live_offline_checks(base, tmp))
     checks.update(live_lan_checks(tmp))

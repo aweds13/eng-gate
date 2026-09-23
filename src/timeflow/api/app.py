@@ -34,6 +34,7 @@ from timeflow.core import feedback as fb
 from timeflow.core import focus as fc
 from timeflow.core import lan as lan_mod
 from timeflow.core import memo as memo
+from timeflow.core import notify as notify_mod
 from timeflow.core import remind as remind_mod
 from timeflow.core import review as rv
 from timeflow.core import sync as sync_mod
@@ -851,6 +852,90 @@ def create_app(
     def ai_refuse_unknown(rest: str, request: Request) -> dict[str, Any]:
         _ai_guard(request)
         raise _ai_refuse(request.method)
+
+    # ---- 学校通知的合作接口（SR-F10.1 / G 批 · T-G14）----
+    # 规格 `docs/specification/domains/F10-notify.md` 的定位：**监测由独立脚本做，主工具只提供
+    # 合作接口**。这一版落地的是**收件箱**：脚本投递 → 去重/来源标记 → 你点一下转任务/提醒。
+    # **不抓取**（主工具不去连学校网站）；**默认关**（同 AI 接口的"默认收严"）；
+    # 投递入口要求本机来源（跨站网页偷着投递会被拦）。
+    @app.get("/api/settings/notify")
+    def get_notify_settings() -> dict[str, Any]:
+        """合作接口现状 + 认哪些字段 + 收件箱计数（说明由后端给，界面不复述规则）。只读。"""
+        return notify_mod.describe(conn, settings.notify.school_enabled)
+
+    @app.put("/api/settings/notify")
+    def put_notify_settings(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """打开/关闭学校通知的合作接口（**默认关**；非法值 400 带原话）。只接受本机页面调用。"""
+        require_local_origin(request)
+        try:
+            return notify_mod.set_enabled(
+                conn, payload.get("enabled"), settings.notify.school_enabled
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/notify/school")
+    def list_school_notices(status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        """读收件箱（新的在前 + 三个状态计数）。**读不要求接口开着**：收到的东西是你的数据。"""
+        try:
+            items = notify_mod.notices(conn, status=status or None, limit=limit)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {
+            "items": items,
+            "count": len(items),
+            "settings": notify_mod.describe(conn, settings.notify.school_enabled),
+        }
+
+    @app.post("/api/notify/school")
+    def receive_school_notice(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        """**外部脚本投递一条通知**（F10 的合作接口本体）。
+
+        要求：本机来源 + 开关开着（否则 403 带原话 —— "未接入"不是故障）。
+        重复投递不会新增行：返回 `duplicate=True`；只带上标题的那种重复投递
+        **不会**把上次的链接/摘要/截止日抹掉。
+        """
+        require_local_origin(request)
+        try:
+            return notify_mod.receive(conn, payload, default_enabled=settings.notify.school_enabled)
+        except notify_mod.NotConnectedError as e:
+            # 「没接入」≠「参数错」：前者要用户去设置页点开关，后者要脚本改代码 → 两种状态码
+            raise HTTPException(status_code=403, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/notify/school/{notice_id}/to-task")
+    def school_notice_to_task(
+        notice_id: str, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """把某条通知转成任务/提醒（**你点一下才发生**；走和人手建任务完全相同的路径）。幂等。"""
+        body = payload or {}
+        try:
+            return notify_mod.to_task(
+                conn,
+                notice_id,
+                is_myday=bool(body.get("is_myday", False)),
+                remind_at=body.get("remind_at"),
+                due_date=body.get("due_date"),
+                priority=body.get("priority"),
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="通知不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/notify/school/{notice_id}/ignore")
+    def school_notice_ignore(
+        notice_id: str, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """标成已忽略 / 改回待看（不删行：删了下次投递又回来，反而像"没收到过"）。"""
+        body = payload or {}
+        try:
+            return notify_mod.ignore(conn, notice_id, ignored=bool(body.get("ignored", True)))
+        except KeyError:
+            raise HTTPException(status_code=404, detail="通知不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     # ---- 备份与恢复（SR-NF12 / SR-F9.3）----
     # 口径（2026-09-21 用户定）：设置页列出最近几个备份，点一个就能恢复。

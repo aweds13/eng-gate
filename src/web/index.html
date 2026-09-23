@@ -648,6 +648,11 @@ const ACTIONS = {
   // AI 接口（SR-F7.3 / G 批 · T-G6）：开关（默认关）+ 复制示例命令
   'set-ai':         el => setAiEnabled(el.dataset.on==='true'),
   'ai-copy':        () => copyAiExample(),
+  // 学校通知的合作接口（SR-F10.1 / G 批 · T-G14）：开关 / 复制示例 / 转任务 / 忽略
+  'set-notify':     el => setNotifyEnabled(el.dataset.on==='true'),
+  'notify-copy':    () => copyNotifyExample(),
+  'notice-to-task': el => noticeToTask(el.dataset.id, el.dataset.myday==='1'),
+  'notice-ignore':  el => noticeIgnore(el.dataset.id, el.dataset.ignored!=='0'),
   // 跨端同步（SR-F9.2 / G 批 · T-G8，场景 ③）：导出同步包 / 先预览 / 确认导入
   'sync-export':    () => exportSyncPack(),
   'sync-preview':   () => previewSyncPack(),
@@ -2486,6 +2491,9 @@ let aiCfg=null;
 // 局域网访问（SR-NF17 / G 批 · T-G10b · 场景 ②）：设置页那一节的数据缓存
 // （这台服务开没开、手机该敲哪个地址、配对码 —— 配对码只有本机请求才拿得到）
 let lanCfg=null;
+// 学校通知的合作接口（SR-F10.1 / G 批 · T-G14）：设置页那一节的缓存
+// （开关 + 认哪些字段 + 收件箱）。**默认关**；关着 = "未接入"，主工具不抓取也不报错。
+let notifyCfg=null;
 function sizeLabel(n){
   const b=Number(n)||0;
   return b<1024?`${b}B`:b<1048576?`${(b/1024).toFixed(0)}KB`:`${(b/1048576).toFixed(1)}MB`;
@@ -2508,16 +2516,19 @@ async function restoreBackup(name){
 // ---- 统一设置页（宽屏左栏最后一格 / 移动端底部 Tab 都有入口）----
 // 收拢「外观」与「数据」：主题、强调色、GPA 制式、存储位置；学业页的制式切换保留（就近改，两处一致）
 async function renderSetting(m){
-  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg,vocabCfg,expCfg,aiData,lanData]=await Promise.all([
+  const [cfg,sync,groups,attachCfg,remindCfg,guardCfg,backups,archCfg,behaviorCfg,vocabCfg,expCfg,aiData,lanData,notifyData,noticeData]=await Promise.all([
     api('/api/config'),api('/api/sync/status'),api('/api/groups'),api('/api/settings/attach'),
     api('/api/settings/reminder'),api('/api/focus/guard'),api('/api/settings/backups'),
     api('/api/settings/archive'),api('/api/settings/behavior'),api('/api/settings/vocab'),
-    api('/api/settings/export'),api('/api/settings/ai'),api('/api/settings/lan')]);
+    api('/api/settings/export'),api('/api/settings/ai'),api('/api/settings/lan'),
+    api('/api/settings/notify'),api('/api/notify/school')]);
   groupCache=groups||[];
   guardCache=guardCfg||null;
   backupCache=backups||null;
   aiCfg=aiData||null;
   lanCfg=lanData||null;
+  notifyCfg=notifyData||null;
+  noticeItems=(noticeData&&noticeData.items)||[];
   const off=!navigator.onLine;
   const guard=guardCache||{block_by_default:true,whitelist:[],do_not_disturb:[],
     note:'',window_format:'HH:MM-HH:MM',max_items:50};
@@ -2537,6 +2548,9 @@ async function renderSetting(m){
   // 局域网访问（T-G10b / 场景 ②）：缺字段就退回"只监听本机"（整页不空）
   const lan=lanCfg||{lan_open:false,config_allow_lan:false,pairing_required:false,addresses:[],
     code:'',code_visible:false,note:''};
+  // 学校通知（T-G14）：缺字段就退回"关着 + 空收件箱"（整页不空）
+  const nf=notifyCfg||{enabled:false,default_enabled:false,configured:false,surface:[],fields:[],
+    statuses:[],total:0,boundary:'',why:'',note:'',example:''};
   const themeBtn=(k,label)=>`<button class="${themeChoice===k?'':'ghost'}" data-action="set-theme" data-theme-choice="${k}">${label}</button>`;
   const swatches=accentPalette().map(c=>
     `<button class="swatch ${sameColor(accentChoice,c)?'on':''}" data-action="set-accent" data-color="${c}"
@@ -2682,6 +2696,26 @@ async function renderSetting(m){
     <pre class="ai-example">${esc(ai.example||'')}</pre>
     <div class="row tight"><button class="ghost" data-action="ai-copy">复制示例命令</button></div>
   </div>
+  <div class="section-title" id="set-notify">学校通知（合作接口）</div>
+  <div class="card panel-card">
+    <div class="row">
+      <button class="${nf.enabled?'':'ghost'}" data-action="set-notify" data-on="true">打开</button>
+      <button class="${nf.enabled?'ghost':''}" data-action="set-notify" data-on="false">关闭</button>
+      <span class="sub">现在：${nf.enabled?'<b>开着</b>（你的脚本可以投递）':'<b>关着</b>（默认 —— 投递一律 403，这叫"未接入"）'}</span></div>
+    <div class="sub">${noteHTML(nf.boundary||'')}</div>
+    <div class="meta">认这些字段（其它字段会原样存下来，不丢）：${(nf.fields||[]).map(f=>
+      `<code>${esc(f.name)}</code>${f.required?'<b>必填</b>':''} ${esc(f.what)}`).join('<br>')}</div>
+    <div class="meta">${(nf.surface||[]).map(s=>
+      `<code>${esc(s.method)} ${esc(s.path)}</code> ${esc(s.what)}`).join('<br>')}</div>
+    <div class="sub">${noteHTML(nf.why||'')}</div>
+    <div class="sub">${noteHTML(nf.note||'')}</div>
+    <div class="settings-sub">照抄就能跑（脚本里就这么调）</div>
+    <pre class="ai-example">${esc(nf.example||'')}</pre>
+    <div class="row tight"><button class="ghost" data-action="notify-copy">复制示例命令</button></div>
+  </div>
+  <div class="settings-sub">收件箱（${noticeItems.length}）${nf.statuses?(` · ${nf.statuses.map(s=>`${esc(s.label)} ${s.count}`).join(' / ')}`):''}</div>
+  ${noticeItems.map(n=>noticeCard(n)).join('')
+    ||emptyState(nf.enabled?'接口开着，但还没有通知投递进来（脚本跑一次就有了）':'接口关着，收件箱是空的 —— 打开后你的脚本才能投递')}
   <div class="section-title" id="set-academic">学业</div>
   <div class="card panel-card">
     <div class="settings-sub">GPA 制式</div>
@@ -2935,6 +2969,63 @@ async function copyAiExample(){
   if(!text){toast('还没有示例可复制');return}
   const copied=await copyText(text);
   toast(copied?'示例命令已复制（把 127.0.0.1:8000 换成你实际的端口）':'复制不了，请手动选中那段命令');
+}
+/* 学校通知的合作接口（SR-F10.1 / G 批 · T-G14）：**默认关**；开关与措辞全在后端
+   `core/notify.py` 一处（界面只显示开关、字段表、自述与收件箱，不复述规则）。
+   为什么默认关：N16「默认收严、用户再放宽」——这条口子外面是**别人写的脚本**。
+   收件箱里的东西**不会自动变成任务**：转任务要在这里点一下（人始终在环里）。 */
+let noticeItems=[];
+function noticeCard(n){
+  const bits=[n.source];
+  if(n.at)bits.push(`通知时间 ${n.at}`);
+  if(n.due_date)bits.push(`截止 ${n.due_date}`);
+  if(n.external_id)bits.push(`对方编号 ${n.external_id}`);
+  bits.push(n.status_label);
+  const extra=Object.keys(n.extra||{}).length;
+  return `<div class="card">
+    <div style="flex:1"><div class="title">${esc(n.title)}</div>
+      <div class="meta">${esc(bits.join(' · '))}${extra?` · 另有 ${extra} 个额外字段`:''}${n.task_id?` · 已转任务 ${esc(String(n.task_id).slice(0,6))}…`:''}</div>
+      ${n.summary?`<div class="sub">${esc(n.summary)}</div>`:''}</div>
+    <div class="row">
+      ${n.status==='converted'?'':`<button data-action="notice-to-task" data-id="${n.id}" data-myday="0">转成任务</button>
+      <button class="ghost" data-action="notice-to-task" data-id="${n.id}" data-myday="1">转成任务（加入今天）</button>`}
+      ${n.url?`<button class="ghost" data-action="attach-open" data-target="${esc(n.url)}">打开原文</button>`:''}
+      ${n.status==='converted'?''
+        :(n.status==='ignored'
+          ?`<button class="ghost" data-action="notice-ignore" data-id="${n.id}" data-ignored="0">改回待看</button>`
+          :`<button class="ghost" data-action="notice-ignore" data-id="${n.id}" data-ignored="1">忽略</button>`)}
+    </div></div>`;
+}
+async function setNotifyEnabled(on){
+  try{
+    const r=await api('/api/settings/notify',{method:'PUT',body:JSON.stringify({enabled:on})});
+    notifyCfg=r;
+    toast(r.enabled?'合作接口已打开（你的脚本现在可以投递学校通知了）'
+      :'合作接口已关闭（投递会被 403；收件箱里已有的通知还是你的，照样能处理）');
+    view(current);
+  }catch(e){/* api() 已经弹过后端原话 */}
+}
+async function copyNotifyExample(){
+  const text=(notifyCfg&&notifyCfg.example)||'';
+  if(!text){toast('还没有示例可复制');return}
+  const copied=await copyText(text);
+  toast(copied?'示例命令已复制（把 127.0.0.1:8000 换成你实际的端口）':'复制不了，请手动选中那段命令');
+}
+async function noticeToTask(id,isMyDay){
+  try{
+    const r=await api(`/api/notify/school/${id}/to-task`,{method:'POST',
+      body:JSON.stringify({is_myday:!!isMyDay})});
+    toast(r.created?`已转成任务${isMyDay?'并加入今天':''}（任务里记着来自哪条通知）`
+      :'这条通知之前已经转成任务了，不再重复建');
+    view(current);
+  }catch(e){/* api() 已经弹过后端原话 */}
+}
+async function noticeIgnore(id,ignored){
+  try{
+    await api(`/api/notify/school/${id}/ignore`,{method:'POST',body:JSON.stringify({ignored:!!ignored})});
+    toast(ignored?'已忽略这条（不删行 —— 下次投递同一来源还会归到这条）':'已改回待看');
+    view(current);
+  }catch(e){/* api() 已经弹过后端原话 */}
 }
 /* 跨端同步（SR-F9.2 / G 批 · T-G8，场景 ③）：**走文件**。
    后端把包写在库目录旁边（与备份同一个地方），所以这里只显示路径 + 复制；

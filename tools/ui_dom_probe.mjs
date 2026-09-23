@@ -405,6 +405,32 @@ const DB = {
     header: 'X-Timeflow-Pair',
     note: '局域网访问只在**同一个 WiFi 里**管用，不涉及公网；配对码是那道门。',
   },
+  // 学校通知的合作接口（SR-F10.1 / G 批 · T-G14）：开关 + 字段表 + 收件箱
+  '/api/settings/notify': {
+    enabled: true, default_enabled: false, configured: true, total: 3,
+    surface: [{ method: 'POST', path: '/api/notify/school', what: '投递一条通知（脚本用）' }],
+    fields: [{ name: 'source', required: true, what: '来源标记（哪个网站/群）' },
+      { name: 'title', required: true, what: '标题（任务就用它当标题）' }],
+    statuses: [{ value: 'new', label: '待看', count: 1 },
+      { value: 'converted', label: '已转任务', count: 1 },
+      { value: 'ignored', label: '已忽略', count: 1 }],
+    boundary: '主工具**不去网上抓**：监测由你自己的独立脚本做，这里只是收件箱。',
+    why: '为什么不抓：规格把抓取划给独立脚本。',
+    note: '转任务要你点一下。',
+    example: 'curl -X POST http://127.0.0.1:8000/api/notify/school \\\n  -d \'{"source":"教务处","title":"期中安排"}\'',
+  },
+  '/api/notify/school': { count: 3, items: [
+    { id: 'n1', source: '教务处网站', external_id: 'A-1', title: '期中考试安排已发布',
+      url: 'https://example.edu/x', summary: '考场在第 3 教学楼', at: '2026-09-17T09:30:00',
+      due_date: '2026-10-08', received_at: '2026-09-17T10:00:00', status: 'new',
+      status_label: '待看', task_id: null, extra: { 批次: '第 1 批' } },
+    { id: 'n2', source: '班级群', title: '实验报告提交时间改了', url: null, summary: null,
+      at: null, due_date: null, received_at: '2026-09-17T09:00:00', status: 'converted',
+      status_label: '已转任务', task_id: 't1', extra: {} },
+    { id: 'n3', source: '公众号', title: '某个不相关的讲座', url: null, summary: null,
+      at: null, due_date: null, received_at: '2026-09-16T09:00:00', status: 'ignored',
+      status_label: '已忽略', task_id: null, extra: {} },
+  ] },
   '/api/sync/status': {
     file_sync: true, network_sync: false, device_id: 'probe-device-1', tombstones: 2,
     conflict_logs: 3,
@@ -516,6 +542,7 @@ let exportBad = 0;
 let offlineBad = 0;
 let lanBad = 0;
 let teamBad = 0;
+let noticeBad = 0;
 let boldBad = 0;
 const results = [];
 for (const v of views) {
@@ -1129,6 +1156,59 @@ try {
   console.log(`  ❌ offline·手机离线记 渲染抛错: ${e.message}`);
 }
 
+/* 设置·学校通知（SR-F10.1 / G 批 · T-G14）：合作接口那一节 + 收件箱 ——
+   ① 开关、边界实话、字段表、示例命令、（其它字段不丢）都要真渲染出来；
+   ② 收件箱三种状态各一条，**按钮要跟着状态变**：
+      待看 → 「转成任务」(×2) + 「忽略」；已转任务 → 只有「打开原文」（不许再给"转成任务"）；
+      已忽略 → 「改回待看」；
+   ③ 反证：接口关着 + 空收件箱时，那句话是"接口关着…"而不是"接口开着…"（两种空态分得开）。 */
+const noticeChecks = [];
+try {
+  byId.get('main')._html = '';
+  await globalThis.__view('setting');
+  await sleep(40);
+  const html = byId.get('main')._html;
+  const inbox = html.split('收件箱（', 2)[1] || '';
+  const needs = ['id="set-notify"', 'data-action="set-notify"', 'data-action="notify-copy"',
+    '不去网上抓', 'source', 'title', 'data-action="notice-to-task"', '转成任务（加入今天）',
+    'data-action="notice-ignore"', 'data-action="attach-open"',
+    '期中考试安排已发布', '另有 1 个额外字段', '待看 1', '已转任务 1', '已忽略 1'];
+  const missing = needs.filter((n) => !html.includes(n));
+  // 三种状态的按钮各不相同：已转任务那条不许再出现「转成任务」
+  const converted = inbox.split('实验报告提交时间改了')[1] || '';
+  const convertedCard = converted.split('</div></div>')[0];
+  const convertedOk = !convertedCard.includes('notice-to-task');
+  const ignored = inbox.split('某个不相关的讲座')[1] || '';
+  const ignoredCard = ignored.split('</div></div>')[0];
+  const ignoredOk = ignoredCard.includes('改回待看') && ignoredCard.includes('data-ignored="0"');
+
+  // 空态：关着 + 空收件箱 → 说的是"接口关着"，不是"接口开着"
+  const savedCfg = DB['/api/settings/notify'];
+  const savedList = DB['/api/notify/school'];
+  DB['/api/settings/notify'] = { ...savedCfg, enabled: false, total: 0,
+    statuses: savedCfg.statuses.map((s) => ({ ...s, count: 0 })) };
+  DB['/api/notify/school'] = { count: 0, items: [] };
+  byId.get('main')._html = '';
+  await globalThis.__view('setting');
+  await sleep(40);
+  const emptyHtml = byId.get('main')._html;
+  DB['/api/settings/notify'] = savedCfg;
+  DB['/api/notify/school'] = savedList;
+  const emptyOk = emptyHtml.includes('接口关着，收件箱是空的')
+    && !emptyHtml.includes('接口开着，但还没有通知投递进来');
+
+  const rendered = missing.length === 0 && convertedOk && ignoredOk && emptyOk;
+  if (!rendered) noticeBad++;
+  noticeChecks.push({ rendered, missing, convertedOk, ignoredOk, emptyOk });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 设置·学校通知 main ${String(html.length).padStart(6)}B`
+    + `（按钮随状态变 ${convertedOk && ignoredOk ? '对' : '不对'}·空态 ${emptyOk ? '分得开' : '混了'}）`
+    + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
+} catch (e) {
+  noticeBad++;
+  noticeChecks.push({ error: e.message });
+  console.log(`  ❌ 设置·学校通知 渲染抛错: ${e.message}`);
+}
+
 /* 团队视角页（SR-F7.1 / OP-33 / T-G12）：两个视角都要真渲染 + 三处反证 ——
    ① 管理者视角：按执行者分组、标「我分配」、能点"下一步"、任务被删的那条如实标"保留审计"；
    ② 执行者视角（说了名字）：标「分配给我」、只留这个人的；
@@ -1401,7 +1481,8 @@ if (process.argv.includes('--json')) {
       attempt: attemptChecks, archive: archiveChecks, step: stepChecks, debt: debtChecks,
       behavior: behaviorChecks, vocab: vocabChecks, heatmap: heatmapChecks,
       export: exportChecks, obsidian: obsidianChecks, ai: aiChecks, sync: syncChecks,
-      offline: offlineChecks, lan: lanChecks, team: teamChecks, bold: boldChecks,
+      offline: offlineChecks, lan: lanChecks, team: teamChecks, notice: noticeChecks,
+      bold: boldChecks,
       problems, unregistered: unused },
     null, 2));
 }
@@ -1419,6 +1500,7 @@ const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || regra
   || offlineBad > 0
   || lanBad > 0
   || teamBad > 0
+  || noticeBad > 0
   || boldBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
@@ -1444,6 +1526,7 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，手机离线记 ${offlineChecks.filter((c) => c.rendered).length}/${offlineChecks.length} 正常`
   + `，局域网配对 ${lanChecks.filter((c) => c.rendered).length}/${lanChecks.length} 正常`
   + `，团队视角 ${teamChecks.filter((c) => c.rendered).length}/${teamChecks.length} 正常`
+  + `，学校通知 ${noticeChecks.filter((c) => c.rendered).length}/${noticeChecks.length} 正常`
   + `，字面星号 ${boldBad === 0 ? '0' : '有'}（源码 + 渲染两遍查）`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

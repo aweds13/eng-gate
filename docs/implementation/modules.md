@@ -135,13 +135,24 @@
   排期字段不给人手改 —— 表单里明写了这一条，省得用户以为能改到期时间。
 - **撤销本次反馈**（第 5 步 / 契约 OP-27 的可逆部分）：`review.completed` 的 `extra.before` 存复习前快照，`undo_review()` 回退 FSRS 字段
   并追加 `review.undone`；`reviewed_today()` = 当日完成 − 当日已撤销。
+- **改判**（T-G13，2026-09-23）：`regrade()` = **撤销这一次 + 按新档重来**（两步都走既有路径 ——
+  FSRS 从**同一个复习前快照**重算，所以"改判"与"当时就点另一档"逐项相同）；原事实不删
+  （`review.undone` 指回它 + 新的 `review.completed` + 一条 `review.regraded` 留痕），
+  **投入不重复计**。`_pending_last()` 抽出来给撤销与改判**共用**（一套判据）。
+  接口 `POST /api/review/{id}/regrade`、`GET /api/review/today`（今天复习过的 + 档位）；
+  三档中文（记得/模糊/忘了）下沉到 `GET /api/review/meta` 的 `ratings`（界面不再自己写一份）。
+  界面：复习页「今天复习过的」一段，**只给另外两档**的「改判为」按钮。复盘 `复盘/复习改判-T-G13.md`。
 
 ## SR-F7 团队/AI → `core/team/`
 - 管理者/执行者两视角；不强制执行者装软件（状态手动为主）；AI 接口（`api/`）第一版只读+新增；团队任务不计个人投入。
 - **分配可见性**（第 10 步）：`assignments_for_task()` 让 `TaskOut.assignments` 直接带回分配 ——
   任务卡片显示「谁负责 / 进展到哪」，并按状态给「开始 / 完成 / 恢复」下一步动作；
   `assign_task` 校验任务存在（404）与执行者非空（400）。
-- **未实现**：独立的管理者/执行者**视角切换页**（SR-F7.1 / OP-33）与跨端集成。
+- **视角切换页**（SR-F7.1 / OP-33 / T-G12，2026-09-23）：`team.board()` + `GET /api/team/board`
+  —— **一份分配记录、两种看法**（管理者=我分配出去的、按执行者分组；执行者=分给这个名字的），
+  切视角不复制数据。执行者是自由文本、**没有账号体系**：执行者视角的"我是谁"由用户给（记本机），
+  **没填就不猜**。任务被删后分配记录留着（软删标"在回收站"、彻底删标"保留审计"）。
+  界面：新视图「团队」（左栏 + 手机底栏都进得去）。复盘 `复盘/团队视角页-T-G12.md`。
 
 ## SR-F8 备忘录/知识资产 → `core/memo/`
 - 备忘录本地记录（可带引用句柄与任务关联）。
@@ -149,20 +160,23 @@
   另有 `delete_memo()`（删备忘录不连坐任务）。
 - **产出/投入手动入口**（SR-F8.4）：`add_output_entry` / `add_invest_entry` 同时落旧表（兼容）与事实
   （`output.manual` / `invest.manual`），并支持 `retract_*` 反向事实；**知识资产只存引用句柄**（Vault 路径/KB-ID）。
-- `getaways/`：外部集成（知识资产/学校通知）**预留占位**，尚无实现。
+- `getaways/`：**出站**外部集成的预留位（知识资产句柄等）；学校通知的**入站**合作接口在
+  `core/notify.py`（见下 SR-F10）。
 
 ## SR-F9 存储/同步 → `storage/` + `core/syncpack.py` + `src/web/offline.js`
 - SQLite（标准库 `sqlite3`，非 ORM）+ schema 版本化迁移（当前 **v17**：v3 facts、v4 focus 回填、
   v5 已完成任务回填、v6 note、v7 priority、v8 flagged、v9 attach+app_settings、v10 remind_at、
   v11 task_type+course_id、v12 review_items.task_id、v13 doing_rank、v14 groups.parent_id、
   v15 分组同层唯一 + 按 id 归属、v16 tasks.created_by、**v17 跨端（六张表 updated_at 触发器 +
-  `sync_tombstones` 删除墓碑 + `sync_logs.result/note`）**）；
+  `sync_tombstones` 删除墓碑 + `sync_logs.result/note`）**、**v18 `school_notices`（学校通知的
+  合作接口收件箱）**）；
   LWW 同步（时间戳+version，不静默覆盖）；跨端**同 id 去重**（来源标记尚未落库，见 `traceability.toml` 的 SR-F2.6b）。
 - **跨端同步包（`core/syncpack.py`，G 批 · T-G8 = 场景 ③）**：`timeflow-sync` v1 的 JSON 包
   （`build_pack`/`export_pack`/`load_pack`/`check_pack`）+ **先规划后执行**的合并
   （`plan_merge` → `merge_pack`，所以"预览"与"真导入"是同一套判断）；三类表三套规则
   （LWW 行 / 只增行 / 关系行）；每次导入逐条记 `sync_logs`（`result` + "差在哪"），**不静默**；
-  **v1 边界：导入永不删本地数据**（远程墓碑只防复活 + 继续传播）。
+  **删除默认不传播、导入时可以选择是否传播**（T-G8b：那颗勾选框默认不勾；两种例外永远不删 ——
+  本机没有那一行 / 本地在对方删除之后又改过）。收件箱 `school_notices` **不进包**（不属于"你自己写的东西"）。
 - **手机离线记（`src/web/offline.js`，G 批 · T-G10 = 场景 ①）**：浏览器侧 IndexedDB 队列与缓存 +
   纯函数造行/打包（**拆成独立文件就是为了能在 Node 里用同一份代码真跑**，见 `tools/phone_check.mjs`）；
   断网时记下（任务/完成与撤销/习惯打卡/备忘/每日反馈）→ 导出一份**同格式**的包 → 回电脑导入。
@@ -189,6 +203,19 @@
   只报告事实（**分开报** `file_sync` / `network_sync`、设备号、墓碑数、冲突条数、上次导出/导入），
   **不谎报"已同步"**。
 - **已修 bug**（第 10 步）：`log_conflict` 原用秒级时间戳当主键，同一秒两次冲突会 `IntegrityError` —— 改随机 id。
+
+## SR-F10 学校通知 → `core/notify.py` + 设置页一节（T-G14）
+- **只做合作接口，不做抓取**（规格定位：监测由独立脚本做，主工具不直接抓外部网站）。
+- schema **v18** `school_notices`：**收件箱**。`fingerprint` 唯一（去重靠数据库约束，不靠调用方自觉）；
+  `extra` 存认不出的字段（规格"字段保持扩展位，不写死"）；`status` ∈ 待看/已转任务/已忽略。
+- `receive()`（投递：开关没开 **403 带原话**、参数错 **400**、重复投递只覆盖"这次真的带了"的字段）、
+  `notices()`、`to_task()`（**你点一下才发生**，走 `tasks.create_task` 同一条路；**幂等**）、
+  `ignore()`（不删行，可改回待看；已转任务的不许忽略）、`describe()`（给设置页的自述）。
+- **开关默认关**（同 N16「默认收严」与 AI 接口）：没接入时主工具什么都不做（不抓取、不轮询、不报错）。
+- 界面：设置页「学校通知（合作接口）」= 开关 + 字段表 + **照抄就能跑的示例** + 收件箱
+  （三种状态三种按钮；转出来的任务备注里记着来源/时间/链接/摘要）。
+- **不进同步包**（`syncpack.EXCLUDED_TABLES`）：是外部送进来的收件箱，不是你自己写的东西；
+  转成**任务**之后任务照常跨端。复盘 `复盘/学校通知合作接口-T-G14.md`。
 
 ## 重构地基（非 SR）→ `core/facts/`
 - 事实层：`store.py` 读写 `facts` 表；`bus.py` 同步发布-订阅、通配匹配、订阅者异常隔离。
@@ -232,7 +259,7 @@
 | `task.completed` | `tasks/manager.py` | 无（不估时） | `task.uncompleted` |
 | `task.deleted` | `tasks/manager.py` | 无 | `task.restored` |
 | `task.repeat.generated` | `tasks/manager.py` | 周期天数 | —（幂等依据 + 血缘） |
-| `review.completed` | `review/review.py` | 0（不折算时间） | `review.undone` |
+| `review.completed` | `review/review.py` | 0（不折算时间） | `review.undone`（撤销）/ `review.regraded`（改判，T-G13） |
 | `output.manual` | `memo/memo.py` | 数量 | `output.retracted` |
 | `invest.manual` | `memo/memo.py` | **秒** | `invest.retracted` |
 

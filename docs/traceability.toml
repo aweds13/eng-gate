@@ -659,9 +659,26 @@ gaps = ""
 id = "SR-F10.1"
 title = "学校通知监测（独立脚本 + 合作接口，规格标后置）"
 group = "F10"
-status = "deferred"
-evidence = []
-gaps = "规格自标「后置」"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/notify.py::def receive",
+  "text:src/timeflow/core/notify.py::def to_task",
+  "text:src/timeflow/core/notify.py::class NotConnected",
+  "text:src/timeflow/storage/db.py::def _migrate_v18",
+  "text:src/timeflow/config.py::class NotifyConfig",
+  "route:GET /api/settings/notify",
+  "route:PUT /api/settings/notify",
+  "route:GET /api/notify/school",
+  "route:POST /api/notify/school",
+  "route:POST /api/notify/school/{notice_id}/to-task",
+  "route:POST /api/notify/school/{notice_id}/ignore",
+  "text:src/web/index.html::function noticeCard(n)",
+  "text:src/web/index.html::async function setNotifyEnabled(on)",
+  "ui:data-action=set-notify",
+  "ui:data-action=notice-to-task",
+  "test:test_school_notify_line.py",
+]
+gaps = "只做**合作接口**（收件箱：投递/去重/转任务），**不做抓取** —— 规格第 2 条明确把监测划给独立脚本（主工具不直接抓外部网站、不新增对外依赖），这一条不是缺口。第一版也不设 AC（F10 不是第一版验收项）。"
 
 [entries."SR-NF1a"]
 id = "SR-NF1a"
@@ -1933,6 +1950,32 @@ evidence = [
   "file:tools/phone_check.mjs",
   "test:test_offline_phone_line.py",
 ]
+
+[entries."T-G14"]
+id = "T-G14"
+title = "实现 SR-F10 合作接口：学校通知收件箱（投递/去重/来源标记/转任务；不抓取；默认关）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/学校通知合作接口-T-G14.md",
+  "text:src/timeflow/core/notify.py::def receive",
+  "text:src/timeflow/core/notify.py::def notices",
+  "text:src/timeflow/core/notify.py::def describe",
+  "text:src/timeflow/core/notify.py::fingerprint",
+  "text:src/timeflow/storage/db.py::def _migrate_v18",
+  "text:src/timeflow/core/syncpack.py::school_notices",
+  "route:GET /api/notify/school",
+  "route:POST /api/notify/school",
+  "route:POST /api/notify/school/{notice_id}/to-task",
+  "route:POST /api/notify/school/{notice_id}/ignore",
+  "route:PUT /api/settings/notify",
+  "text:src/web/index.html::function noticeCard(n)",
+  "ui:data-action=set-notify",
+  "ui:data-action=notice-to-task",
+  "ui:data-action=notice-ignore",
+  "test:test_school_notify_line.py",
+]
+gaps = ""
 
 [entries."T-G13"]
 id = "T-G13"

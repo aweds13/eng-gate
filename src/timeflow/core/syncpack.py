@@ -79,7 +79,11 @@ TOMBSTONE_TABLE = "sync_tombstones"
 SYNCED_TABLES: tuple[str, ...] = LWW_TABLES + APPEND_TABLES + RELATION_TABLES
 
 # 明确**不同步**的（写进包里当自我说明，也写进界面）
-EXCLUDED_TABLES: tuple[str, ...] = ("app_settings", "sync_logs", "schema_version")
+# `school_notices`（学校通知收件箱，T-G14）：它是**外部脚本送进来的东西**，不是你自己写的；
+# 而且"收到过什么"本来就是那台跑脚本的机器上的事。转成**任务**之后，任务本身照常跨端。
+EXCLUDED_TABLES: tuple[str, ...] = (
+    "app_settings", "sync_logs", "schema_version", "school_notices",
+)
 
 # 判"内容是否一样"时忽略的列：本机自己的记账列（设备号/版本/时间），不算内容
 _IGNORED_COLUMNS = frozenset({"updated_at", "version", "device_id"})

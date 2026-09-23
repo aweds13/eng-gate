@@ -16,7 +16,7 @@
 | SR-F7 团队 / AI | `../specification/domains/F7-team.md` | OP-31/32 | AC-21（历史） | `../../tests/test_team_memo.py`、`../../tests/test_team_line.py` | ✅ 规格/契约（OP-33 视角页未实现） |
 | SR-F8 备忘录 | `../specification/domains/F8-memo.md` | OP-35/36/38 | AC-22（历史） | `../../tests/test_team_memo.py`、`../../tests/test_output_axis.py`、`../../tests/test_habit_memo_line.py` | ✅ 规格/契约 |
 | SR-F9 存储 / 同步 | `../specification/domains/F9-storage-sync.md` | OP-39–43 | AC-23（历史） | `../../tests/test_sync.py`、`../../tests/test_facts.py`（含 v4/v5 迁移）、`../../tests/test_concurrency.py`（每线程连接） | ✅ 规格/契约（跨端传输未实现） |
-| SR-F10 学校通知 | `../specification/domains/F10-notify.md` | 后置 | 后置 | ⬜ 待补 | 后置 |
+| SR-F10 学校通知 | `../specification/domains/F10-notify.md` | OP-44（合作接口 / 收件箱） | 不纳入第一版 AC（F10 是给外部脚本留的口子） | `../../tests/test_school_notify_line.py` | ✅ **合作接口已落地**（T-G14，schema v18）；**抓取不做**（规格划给独立脚本，主工具不代劳） |
 | 前端交互层（第 4/5 步 → R1–R5） | `../contracts/interactions.md`（OP-1–OP-8 自查表）+ `../../复盘/前端现状评估与接缝重构方案.md` | 六要素齐备 | LC-1–LC-8 / LF-1–LF-4 | `../../tests/test_web_frontend.py`、真机 `../../tools/lf1_live_check.py`、`../../tools/web_live_check.py` | ✅ 全闭环（SR-NF4 三栏 = R3、SR-NF1 双主题/强调色 + 统一设置页 = R4 已做；R5 收尾待做） |
 
 > 契约文件在 `../contracts/domains/`；可执行验收见 `../../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）；

@@ -94,6 +94,16 @@ class AiConfig(BaseModel):
     enabled: bool = False
 
 
+class NotifyConfig(BaseModel):
+    # 学校通知的**合作接口**（SR-F10.1 / G 批 · T-G14）：**默认关**
+    # （口径同 N16「默认收严、用户再放宽」）。
+    #
+    # 关着时 `POST /api/notify/school` 一律 400/403 带原话（"未接入"不是故障：主工具本来就不抓取）。
+    # 打开后你自己的脚本可以把抓到的通知投递进来（收件箱），转任务/提醒仍然要你点一下。
+    # 这里是默认值：设置页改过的以本机数据库（`app_settings`）为准。
+    school_enabled: bool = False
+
+
 class NetConfig(BaseModel):
     # 局域网访问（SR-NF17 / G 批 · T-G10b = 跨端场景 ②）：
     # **默认关**（口径同 N16「默认收严、用户再放宽」）。
@@ -121,6 +131,7 @@ class Settings(BaseModel):
     insights: InsightsConfig = Field(default_factory=InsightsConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
     ai: AiConfig = Field(default_factory=AiConfig)
+    notify: NotifyConfig = Field(default_factory=NotifyConfig)
     net: NetConfig = Field(default_factory=NetConfig)
 
 
