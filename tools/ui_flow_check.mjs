@@ -232,6 +232,17 @@ class T {
 
   async key(name) { await this.cdp.key(name); await waitQuiet(this.cdp) }
 
+  /** 清空一个输入框（真点 → Ctrl+A → 真按退格）。
+   *  ★ 别拿 `type(sel, '')` 当清空：那是"一个字符都不打"，原来的内容**原样留着**（T-G37 踩到）。 */
+  async clear(selector) {
+    const focused = await this.press(selector, `输入框 ${selector}`)
+    if (!focused) return false
+    await this.cdp.selectAll()
+    await this.cdp.key('Backspace')
+    await waitQuiet(this.cdp)
+    return true
+  }
+
   /* ---- 读 ---- */
 
   text(selector) {
@@ -397,6 +408,8 @@ flow({
     // ① 非法时段：`25:00-07:00`。前端只判"非空/重复"，所以**必须由后端拦下**，
     //    界面把后端那句原话透出来（不是自己编一句"格式错误"）。
     await t.type('#guardDnd', '25:00-07:00')
+    t.eq('真点过之后焦点确实在输入框里（不是"看起来聚焦"）',
+      await t.cdp.activeElement(), 'input#guardDnd')
     await t.key('Enter')
     const bad = await t.waitToast('操作未完成')
     t.ok('非法时段被拦下了', bad.ok, `提示条里是：${bad.text || '（空）'}`)
@@ -815,6 +828,98 @@ flow({
     t.eq('关掉之后投递又被 403', closed.status, 403)
     const still = await t.api('GET', '/api/notify/school')
     t.eq('收件箱里那条还在（读不要求接口开着）', still.json && still.json.count, 1)
+  },
+})
+
+flow({
+  id: '㉗', name: '离线只读区：联网逛过之后断网，那一区看得见、且一个按钮都没有',
+  item: 'T-G16 ㉗ 手机上看得更全（离线只读区）',
+  vp: 'phone',
+  async run(t) {
+    // ① 联网时先逛一遍（手机档宽度 —— 这正是"手机上看得更全"那条人工项的场景）
+    //    注意手机上没有左栏：底栏只有 7 个入口，复习/学业/备忘录那些**从设置页那一节进**
+    //    （左栏 nav 在 ≤640px 是 `display:none`，所以"点得到"这件事在手机档是真的要挑入口的）。
+    await t.start('today')
+    await t.view('tasks')
+    await t.view('setting')
+    await t.view('review')
+
+    // ② 断网前先确认**壳已经被 Service Worker 接管** —— 不然"断网还能打开"根本无从谈起
+    //    （这一步是把前提说出来，不是把失败藏起来：壳没接管，下面那条断言会直接红）
+    const swReady = await t.waitFor(async () => Boolean(await t.cdp.eval(
+      '!!(navigator.serviceWorker && navigator.serviceWorker.controller)')), 10000)
+    t.ok('壳已经装进 Service Worker（断网才可能打开这一页）', swReady)
+
+    // ③ 断网（DevTools 那个 Offline 开关就是这条 CDP：`navigator.onLine` 与 online/offline 事件都会跟着变）
+    await t.cdp.setOffline(true)
+    t.eq('断网之后浏览器自己知道', await t.cdp.eval('navigator.onLine'), false)
+
+    // ④ ★ 断网**刷新** —— 应自动落到「离线记」（壳从缓存里拿出来，见 `offlineNow()?'offline':'today'`）
+    await t.reload()
+    t.ok('★ 断网刷新之后自动落在「离线记」这一页', await t.count('#offlineSeen') > 0,
+      `页面上看到的是：${(await t.bodyText()).slice(0, 120)}`)
+
+    // ⑤ ★ 只读区四段都要在（数据是**上次联网时**那几份接口的响应，原样缓存、不在这里重算）
+    const seen = await t.text('#offlineSeen')
+    if (t.ok('★ 断网后看得到「上次看到的（只读）」那一区', Boolean(seen))) {
+      t.has('有「该提醒了」那一段', seen, '该提醒了（')
+      t.has('有「今天该复习」那一段', seen, '今天该复习（')
+      t.has('有「逾期」那一段', seen, '逾期（')
+      t.has('有今日摘要那一行', seen, '今日摘要（上次联网时）')
+      t.has('★ 如实写着"不是实时的"', seen, '上次联网时看到的样子')
+      t.has('★ 也写着提醒只标不通知', seen, '只标出来、不发系统通知')
+      // ★ 反证：这一区**一个能改数据的动作都没有**（提醒是"标出来"，不是"点掉"）
+      t.eq('★ 只读区里一个按钮/动作都没有', await t.count('#offlineSeen [data-action]'), 0)
+    }
+
+    // ⑥ 页面上还写着"怎么回电脑"（离线包只有一个格式，见结构约定）
+    t.has('页面上写着回电脑的路', await t.bodyText(), '同步包')
+
+    // ⑦ 收拾干净：把网接回来（下一条流不该继承"断网"这个状态）
+    await t.cdp.setOffline(false)
+    t.eq('网接回来了', await t.cdp.eval('navigator.onLine'), true)
+  },
+})
+
+flow({
+  id: '⑮', name: 'Obsidian 只读跳转：红线真的拦得住（导出目录不许放进 Vault）',
+  item: 'G 批 ⑮ Obsidian（只读跳转）+ 红线 400',
+  vp: 'desktop',
+  async run(t) {
+    await t.start('setting')
+    const vault = join(EXPORT_DIR, 'flow-vault')
+    mkdirSync(vault, { recursive: true })
+    t.has('界面写着这是只读跳转（不往 Vault 里写东西）', await t.bodyText(), '只读')
+
+    // ① 存 Vault（名字 + 根目录）——根目录**必须真的存在**（软件不会替你在 Vault 里建目录）
+    await t.type('#vaultName', '我的笔记库')
+    await t.type('#vaultDir', vault)
+    await t.pressAction('set-vault')
+    const saved = await t.waitToast('已保存：Vault')
+    t.ok('Vault 设置能存下', saved.ok, `提示条里是：${saved.text || '（空）'}`)
+
+    // ② ★ 红线：把导出目录填成 Vault 里的子目录 → 后端 400 带原话
+    await t.type('#exportDir', join(vault, 'timeflow-export'))
+    await t.key('Enter')
+    const red = await t.waitToast('操作未完成')
+    t.ok('★ 把导出目录放进 Vault 被拦下了', red.ok, `提示条里说的是：${red.text || '（空）'}`)
+    t.has('原话点明了红线（导出目录不能放在 Vault 里）', red.text, '导出目录不能放在 Obsidian 的 Vault 里')
+    t.lacks('原话进了提示条也不画星号', red.text, '**')
+
+    // ③ 拦下之后**后端那边的设置没有被偷偷改掉**（不然就是"报错了但已经写进去"）
+    const after = await t.api('GET', '/api/settings/export')
+    t.has('导出目录在后端还是原来那个', JSON.stringify(after.json), 'tf-render-export')
+
+    // ④ 只有"真的跳过去"这件事**故意不验** —— 那一下会真的把 Obsidian 拉起来
+    //    （人要看见的是"点一下能跳过去"，机器没法在不启动外部程序的前提下证明它）。
+    t.has('设置页写着这是只读跳转（不往笔记库里写东西）', await t.bodyText(), '只读跳转')
+
+    // ⑤ 收拾干净：清空 Vault 设置（跳转关着）
+    await t.clear('#vaultName')
+    await t.clear('#vaultDir')
+    t.eq('名字真被清空了', await t.value('#vaultName'), '')
+    await t.pressAction('set-vault')
+    t.eq('能关掉跳转', (await t.waitToast('已清空 Vault 设置')).ok, true)
   },
 })
 
