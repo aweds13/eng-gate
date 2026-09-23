@@ -57,9 +57,9 @@ gaps = ""
 id = "SR-F1.1b"
 title = "My Day 排序 = 截止时间 → 优先级（手动拖拽未做）"
 group = "F1"
-status = "partial"
+status = "deferred"
 evidence = ["column:tasks.priority", "text:src/timeflow/core/tasks/manager.py::_ORDER_BY", "test:test_task_priority_line.py"]
-gaps = "已实现 **截止时间 → 优先级 → 创建时间**，且 `list_tasks/myday_tasks/overdue_tasks` 三处同口径（T-B2）；**拖拽排序按段2 决策明确不做**（需要前端持久化顺序，属独立任务、未排期）"
+gaps = "已实现 **截止时间 → 优先级 → 创建时间**，且 `list_tasks/myday_tasks/overdue_tasks` 三处同口径（T-B2）—— 排序这一半是 done 的。**拖拽排序：2026-09-23 用户定「放后面待定」**（此前段2 决策是「不做」；现在改成「后置」，不是缺口、是排期）。代价写在案：需要前端持久化顺序（`doing_rank` 那套做法可复用）+ 三处排序口径要同时改，属独立任务。"
 
 [entries."SR-F1.2"]
 id = "SR-F1.2"
@@ -270,9 +270,16 @@ gaps = ""
 id = "SR-F2.4"
 title = "学校 KPI 与个人知识资产独立记账、分开展示"
 group = "F2"
-status = "partial"
-evidence = ["text:src/timeflow/core/memo/memo.py::kpi"]
-gaps = "实现为同一产出轴内 kind=asset/kpi；规格字面要求「独立记账、分开展示」（GAP-F2-04，待用户定）"
+status = "done"
+evidence = [
+  "text:src/timeflow/core/ledger/ledger.py::output_kpi",
+  "text:src/timeflow/core/ledger/ledger.py::output_asset",
+  "text:src/web/index.html::学校 KPI ${s.output_kpi} 条",
+  "text:src/web/index.html::知识资产 ${s.output_asset} 条",
+  "route:GET /api/ledger/outputs",
+  "test:test_output_axis.py",
+]
+gaps = "**口径（2026-09-23 用户定，T-G19）**：「**分开报数就算独立记账**」—— 同一产出轴内 `kind=asset`/`kind=kpi`，账本两个字段（`output_kpi`/`output_asset`）、摘要行分两行报、统计与「今天做成了什么」都按两类分开；**不拆轴、不折算** —— 于是 `GAP-F2-04` 收口。**规格后半句「成绩达标=产出」走手动**：录成绩不会自动记一笔产出，得手动记一条 `kind=kpi`（与 `SR-F8.4`「第一版手动粗颗粒入口」同口径，不做自动联动 —— 若以后要自动，另开卡）。"
 
 [entries."SR-F2.5"]
 id = "SR-F2.5"
@@ -301,9 +308,18 @@ gaps = ""
 id = "SR-F2.6b"
 title = "未绑定专注也计投入（手动补记）；跨端同 id 去重（来源标记 + LWW）"
 group = "F2"
-status = "partial"
-evidence = ["route:POST /api/ledger/invest", "text:src/timeflow/core/sync.py::同 id 去重", "test:test_invest_axis.py"]
-gaps = "「未绑定专注也计投入」有手动补记入口；**来源标记未落库**；跨端推拉传输也未做（见 SR-F9.2）"
+status = "done"
+evidence = [
+  "route:POST /api/ledger/invest",
+  "text:src/timeflow/core/sync.py::同 id 去重",
+  "text:src/timeflow/core/sync.py::来源标记 device_id",
+  "text:src/timeflow/core/facts/store.py::device_id: str | None = None",
+  "text:src/timeflow/core/focus/timer.py::device_id=device_id",
+  "test:test_invest_axis.py",
+  "test:test_offline_phone_line.py",
+  "test:test_sync_pack_line.py",
+]
+gaps = "**2026-09-23 更正（T-G19）**：原 gaps 写「**来源标记未落库**」是**写错了** —— 来源标记一直在落：① `facts.source`（`desktop`/`internal`/`ai`，五处写入点）② `focus_sessions.device_id`（谁在计时）③ 同步包里每行的 `device_id` ④ 导入状态里的 `from_device`（哪台机器、什么时候导的）⑤ `sync.py` 的「同 id 去重」docstring 与用例。**「逐条事实都记 `device_id`」明确不做**（用户 2026-09-23 定：包一级来源 + 导入日志够用，为此动数据格式不划算）—— 这是**非目标**，不是缺口。"
 
 [entries."SR-F2.7"]
 id = "SR-F2.7"
@@ -357,7 +373,7 @@ title = "多设备同步专注"
 group = "F3"
 status = "todo"
 evidence = []
-gaps = "无专注状态推拉传输（GAP-F3-01）"
+gaps = "**口径已定（2026-09-23 用户定，T-G19）：实时启动 + 结束时再同步** —— 任一台开始专注，另一台**当场**进入专注态/勿扰（只读镜像）；结束**不做实时推**，记录各自入库、之后走已有的同步包通道合并。**实现还没做**(GAP-F3-01)，但路线已经不用再定：① 后端 `GET /api/focus/active` 已存在（含 task_id/kind/started_at/device_id），局域网配对后天然可访问，**不需要新表**；② 前端加只读镜像态（轮询对方 active，建议 10 秒）；③ 边界：只在同一局域网且已配对时有效、明文、轮询失败静默退回本机态、镜像态不能停对面的计时；④ 设计草案与待你点头的两点见 `复盘/口径落档-T-G19.md` §3.1（对应新卡 **T-G20**）。"
 
 [entries."SR-F4.1"]
 id = "SR-F4.1"
@@ -950,6 +966,19 @@ evidence = [
   "test:test_web_frontend.py",
 ]
 gaps = ""
+
+[entries."T-G19"]
+id = "T-G19"
+title = "口径落档：独立记账（SR-F2.4 done）/ 来源标记更正+逐条不做（SR-F2.6b done）/ 拖拽后置（SR-F1.1b deferred）/ AI 只写事实 / 跨端专注实时启动+结束同步（SR-F3.4 路线）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/口径落档-T-G19.md",
+  "text:复盘/口径定案-待定清单.md::## 10. 第二轮落档",
+  "text:docs/traceability.toml::分开报数就算独立记账",
+  "text:docs/traceability.toml::来源标记一直在落",
+]
+gaps = "落档完成，**实现未做**：`SR-F3.4`（新卡 T-G20，路线已定、代码未动）与 AI 写事实回报进展（新卡 T-G21，需先改 `conventions.md` 第 34 行措辞 —— 那是用户拥有的文档，待批）。另有两条待用户拍板：5 条无界面路由里 1/2（提醒列表 / 冲突日志）待定、5 号（`POST /api/sync/tasks`）删不删待确认。"
 
 [entries."T-G18"]
 id = "T-G18"
