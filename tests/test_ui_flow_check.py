@@ -36,6 +36,18 @@ def run_tool(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_determinism_check_is_opt_in() -> None:
+    """★ 最小验证法则（T-G38）：这条流**默认只跑一遍**，两遍指纹自检用 `--twice` 按需开。
+
+    为什么要钉住"默认一遍"：它会悄悄变回两遍（改代码时顺手加回来），而两遍把门禁时间翻倍 ——
+    这笔账必须是**有意花**的。这里用一条最短路径证明 `--twice` 仍然认（`--only` 没匹配到时
+    在起浏览器之前就退，所以这条测试不花时间）。
+    """
+    proc = run_tool("--twice", "--only", "这条流不存在")
+    assert proc.returncode == 1
+    assert "一条流都没匹配上" in proc.stdout + proc.stderr
+
+
 def test_unknown_argument_is_refused() -> None:
     """打错的参数要当场说，不许被当成"没传"静默吞掉。"""
     proc = run_tool("--no-such-flag")

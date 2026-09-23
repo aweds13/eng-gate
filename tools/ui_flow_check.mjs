@@ -9,12 +9,11 @@
  *   「能点开吗 / 关掉之后还来吗 / 填个非法值会不会被拦 / 二次确认是不是站内弹窗」。
  *   **搬不动的（喜欢不喜欢、这句话说得对不对）照旧留给人** —— 那不叫验证，叫决策。
  *
- * 三条纪律（跟黄金层同一套道理，一条都不能少）：
+ * 三条纪律（最小验证法则下保留的那三条 —— 其余"为了更全"的想法一律不进这张卡）：
  *   ① 每条流都**声明它替掉哪一条人工项**（打印出来 + 测试钉住），"搬走了哪几条"有据可查；
- *   ② 每轮默认**跑两遍**（各自新库 + 新浏览器），两遍的断言指纹必须一致 ——
- *      不一致 = **这个工具自己不可信**（退出码 4），不当成"界面坏了"；
- *   ③ 真点击做**命中测试**（`elementFromPoint`）：被浮层盖住、被挤出视口的按钮，
- *      `el.click()` 会"成功"，而用户点不到 —— 所以这里一律真按坐标，且先验"那个点上是不是它"。
+ *   ② 真点击做**命中测试**（`elementFromPoint`）：被浮层盖住、被挤出视口的按钮，
+ *      `el.click()` 会"成功"，而用户点不到 —— 所以这里一律真按坐标，且先验"那个点上是不是它"；
+ *   ③ **不做"全覆盖"**：够用的条数就停（现在 17 条）。要加一条，得先说明它替掉哪条人工项。
  *
  * 已知边界（**不谎报**）：
  *   · 起不了浏览器 → 退出码 3（NOT RUN），**NOT RUN 不是 PASS**（`run_gates.py` 单列一栏）。
@@ -22,15 +21,22 @@
  *   · 要人工准备的物理场景（两台设备 / 手机连热点 / 校园网隔离 / 计划任务）它做不了，仍在人工那一栏。
  *
  * 用法
- *     node tools/ui_flow_check.mjs                 # 跑全部（两遍，含确定性自检）
- *     node tools/ui_flow_check.mjs --once          # 只跑一遍（调试用；**没有**确定性自检）
+ *     node tools/ui_flow_check.mjs                 # 跑全部（**默认一遍**；见下面"最小验证法则"）
+ *     node tools/ui_flow_check.mjs --twice         # 跑两遍并比断言指纹（**按需**：改这套流本身时用）
  *     node tools/ui_flow_check.mjs --only 新手引导  # 只跑名字/编号里含这几个字的那条
  *     node tools/ui_flow_check.mjs --list          # 列出所有流与它们替掉的人工项
  *     node tools/ui_flow_check.mjs --json          # 机器可读结果
  *     node tools/ui_flow_check.mjs --port 8541 --keep   # 换端口 / 跑完不杀服务
  *
+ * ★ 最小验证法则（T-G38，用户交代"别在验证上花那么多时间"之后定的）：
+ *   ① **默认只跑一遍**。确定性自检（`--twice`）是"改这套流本身"时才需要的工具 ——
+ *      流失败只是红一下、**不会污染任何持久数据**（黄金层不一样：那里的两遍自检是常开的，
+ *      因为一份抖出来的清单会被写进黄金，那是真的污染）。两处的取舍不同，就按不同对待。
+ *   ② 这条线**不再扩**：够用的条数就停，不为"把 225 个动作都盖住"再加流。
+ *   ③ 时间预算：这条流的目标是**一遍 ≲3 分钟**；超了就砍条数，不许悄悄变慢。
+ *
  * 退出码：0 全通过 / 1 有流失败 / 2 fixture（种子数据）坏了 / 3 起不了真浏览器（NOT RUN）/
- *         4 两遍断言指纹不一致（工具自己不可信）。
+ *         4 两遍断言指纹不一致（只在 `--twice` 时可能出现）。
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -73,12 +79,12 @@ function newestSyncPack() {
 /* ---------------------------------------------------------------- 参数 */
 
 function parseArgs(argv) {
-  const a = { json: false, keep: false, once: false, quiet: false, list: false, port: 8541, only: '' }
+  const a = { json: false, keep: false, twice: false, quiet: false, list: false, port: 8541, only: '' }
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]
     if (k === '--json') a.json = true
     else if (k === '--keep') a.keep = true
-    else if (k === '--once') a.once = true
+    else if (k === '--twice') a.twice = true
     else if (k === '--quiet') a.quiet = true
     else if (k === '--list') a.list = true
     else if (k === '--shots') a.shots = true
@@ -1035,8 +1041,14 @@ async function main() {
     return { ...result, code: 1, notes: ['--only 没匹配到任何流'] }
   }
 
-  const passes = ARGS.once || ARGS.only ? 1 : 2
+  // ★ 最小验证法则（T-G38）：**默认一遍**。`--twice` 是"改这套流本身"时的按需工具 ——
+  //   流失败只是红一下，不会污染任何持久数据；而黄金层的两遍自检是常开的（那里抖一次就会被写进黄金）。
+  const passes = ARGS.twice && !ARGS.only ? 2 : 1
   log(`=== 行为流层：真浏览器 ${browserPath.split(/[\\/]/).pop()}，${FLOWS.length} 条流，跑 ${passes} 遍 ===`)
+  if (passes === 1) {
+    log('[note] 只跑了一遍（最小验证法则）—— 这一轮**没有**做"两遍指纹"自检；')
+    log('       改这套流本身时用 `--twice` 开一次。黄金层那边的两遍自检是常开的（那里抖一次会写进黄金）。')
+  }
   const prints = []
   let last = []
   for (let pass = 1; pass <= passes; pass++) {

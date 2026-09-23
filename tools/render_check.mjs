@@ -100,8 +100,19 @@ const COLLECT = /* js */ `
   const norm = (s) => String(s == null ? '' : s).replace(/\\s+/g, ' ').trim().slice(0, 90);
   const hex = (c) => {
     if (!c) return '';
-    const m = String(c).match(/^rgba?\\(([^)]+)\\)$/);
-    if (!m) return String(c);
+    const s = String(c);
+    // ★ 「color-mix()」算出来的颜色 Chromium 回的是**现代颜色函数**「color(srgb r g b / a)」，
+    //   第一版只认「rgb()/rgba()」，于是那 15 行（几个徽标的底色）**原样存进黄金**：
+    //   人读不懂，而且换个浏览器版本字符串就可能不一样（黄金最怕这个）。这里一并归一。
+    const cm = s.match(/^color\\(srgb\\s+([\\d.]+)\\s+([\\d.]+)\\s+([\\d.]+)(?:\\s*\\/\\s*([\\d.]+))?\\)$/);
+    if (cm) {
+      const [r, g, b] = cm.slice(1, 4).map((v) => Math.round(Number(v) * 255));
+      const a = cm[4] === undefined ? 1 : Number(cm[4]);
+      const h = '#' + [r, g, b].map((v) => Number(v).toString(16).padStart(2, '0')).join('');
+      return a >= 1 ? h : h + '@' + a.toFixed(2);
+    }
+    const m = s.match(/^rgba?\\(([^)]+)\\)$/);
+    if (!m) return s;
     const p = m[1].split(',').map((x) => x.trim());
     const [r, g, b] = p.slice(0, 3).map(Number);
     const a = p.length > 3 ? Number(p[3]) : 1;

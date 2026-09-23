@@ -26,7 +26,7 @@ div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-chil
 div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(3)>select#offPrio	中	174,365,130,40	14/normal/400	#1e293b/#ffffff	10;10px 12px
 main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(4)		30,417,130,41	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(4)>label	放进今天	30,417,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(4)>input#offMyDay	(checkbox)on	34,442,123,13	13.3/normal/400	#000000/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(4)>input#offMyDay	(checkbox)on	34,442,13,13	13.3/normal/400	#000000/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(5)		30,470,330,60	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(5)>label	备注（可留空）	30,470,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(5)>input#offNote	(text)想到了就写一句	30,492,330,38	14/normal/400	#1e293b/#ffffff	10;10px 12px

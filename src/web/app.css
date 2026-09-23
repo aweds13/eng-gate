@@ -259,6 +259,11 @@ select {
   background: var(--card);
   color: var(--text);
 }
+/* 复选框在 `.field` 里还要躲**第二刀**（T-G38 复验现有界面时量出来的）：
+   `.field` 是 `flex-direction: column`，默认 `align-items: stretch` 会把勾选框**横向拉满** ——
+   离线页的「放进今天」就这么被画成 `123×13`（T-G32 只改了文本框那套样式，没管 flex 拉伸，
+   于是同一个毛病在离线页留了下来）。勾选框一律按自身尺寸靠左站。 */
+.field input[type="checkbox"], .field input[type="radio"] { align-self: flex-start; flex: none }
 .field .hint { font-size: var(--fs-sm)}
 .form .actions { display: flex; align-items: flex-end; flex: none }
 .card.panel-card .form { margin: var(--sp-5) 0 var(--sp-1) }

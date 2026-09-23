@@ -47,3 +47,21 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `narrow/setting`
 - `phone/setting`
 
+
+## 2026-09-23 13:53:58 · 12 份改动
+
+> 理由：T-G38 两处：① 离线页「放进今天」的勾选框被 .field 的 flex 列默认为 stretch 横向拉满（123x13），加一条 align-self:flex-start → 13x13；② 采集器原来只认 rgb()，color-mix() 算出来的底色（#22c55e/#ef4444@0.18 那 15 行）被原样存成 color(srgb ...) —— 归一成 hex，人读得懂、也不怕浏览器版本换字符串。
+
+- `desktop/academic`
+- `desktop/offline`
+- `desktop/planned`
+- `desktop/tasks`
+- `narrow/academic`
+- `narrow/offline`
+- `narrow/planned`
+- `narrow/tasks`
+- `phone/academic`
+- `phone/offline`
+- `phone/planned`
+- `phone/tasks`
+

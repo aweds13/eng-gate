@@ -40,7 +40,7 @@ body>div.shell>main#main>div.sub	这类是「逾期不候」的：交了就计�
 body>div.shell>main#main>div.card.hard		240,230,668,66	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.hard>div.card-body		261,244,563,38	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.hard>div.card-body>div.title		261,244,563,22	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.hard>div.card-body>div.title>span.badge.hard	硬考核	267,246,52,20	12/normal/400	#ef4444/color(srgb 0.937255 0.266667 0.266667 / 0.18)	6;2px 8px
+div.card.hard>div.card-body>div.title>span.badge.hard	硬考核	267,246,52,20	12/normal/400	#ef4444/#ef4444@0.18	6;2px 8px
 main#main>div.card.hard>div.card-body>div.meta	高等数学 · YYYY-MM-DD · 还有 9 天 · 占 0.4 · 未录成绩	261,266,563,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div.card.hard>button.ghost	删除	836,245,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title:nth-child(6)	考核项（1）	240,316,668,17	13/normal/400	#64748b/#000000@0.00	0;0px

@@ -55,7 +55,7 @@ div.shell>main#main>div.card.done:nth-child(6)>div.card-body		64,866,128,73	16/n
 main#main>div.card.done:nth-child(6)>div.card-body>div.title	交英语作业	64,866,128,21	16/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div.card.done:nth-child(6)>div.card-body>div.meta		64,887,128,52	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.done:nth-child(6)>div.card-body>div.meta>span.prio.mid	中	129,886,29,19	11/normal/400	#3b82f6/#000000@0.00	999;1px 8px
-div.card.done:nth-child(6)>div.card-body>div.meta>span.badge.done	完成于 YYYY年MM月DD日 HH:MM	70,903,122,36	12/normal/400	#22c55e/color(srgb 0.133333 0.772549 0.368627 / 0.18)	6;2px 8px
+div.card.done:nth-child(6)>div.card-body>div.meta>span.badge.done	完成于 YYYY年MM月DD日 HH:MM	70,903,122,36	12/normal/400	#22c55e/#22c55e@0.18	6;2px 8px
 div.shell>main#main>div.card.done:nth-child(6)>div.row		204,839,156,127	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.done:nth-child(6)>div.row>button.ghost:nth-child(1)	撤销完成	204,839,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div.card.done:nth-child(6)>div.row>button.ghost:nth-child(2)	标记	294,839,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
@@ -86,7 +86,7 @@ main#main>div.card.done:nth-child(8)>div.card-body>div.title	列提纲	64,1276,1
 main#main>div.card.done:nth-child(8)>div.card-body>div.meta		64,1297,128,72	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.done:nth-child(8)>div.card-body>div.meta>span.badge	子任务	135,1297,52,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
 div.card.done:nth-child(8)>div.card-body>div.meta>span.prio.mid	中	64,1316,29,19	11/normal/400	#3b82f6/#000000@0.00	999;1px 8px
-div.card.done:nth-child(8)>div.card-body>div.meta>span.badge.done	完成于 YYYY年MM月DD日 HH:MM	70,1333,122,36	12/normal/400	#22c55e/color(srgb 0.133333 0.772549 0.368627 / 0.18)	6;2px 8px
+div.card.done:nth-child(8)>div.card-body>div.meta>span.badge.done	完成于 YYYY年MM月DD日 HH:MM	70,1333,122,36	12/normal/400	#22c55e/#22c55e@0.18	6;2px 8px
 div.shell>main#main>div.card.done:nth-child(8)>div.row		204,1259,156,127	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.done:nth-child(8)>div.row>button.ghost:nth-child(1)	撤销完成	204,1259,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div.card.done:nth-child(8)>div.row>button.ghost:nth-child(2)	标记	294,1259,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
