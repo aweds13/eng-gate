@@ -452,6 +452,44 @@ evidence = [
 ]
 gaps = "**口径（用户 2026-09-23 定，T-G19）已按它落地（T-G20）**：实时启动 + 结束时再同步 —— 任一台开始专注，另一台**当场**看到只读镜像（右栏 `#clockPeer` + 专注页文案），**不重复记账、也不许停对面的计时**；结束不做实时推，记录各自入库后走已有同步包。**边界（不是缺口，是刻意的）**：① 只在**同一局域网且已配对**时有效（跨端那道门，默认关）；② 老数据 `device_id` 为 NULL 时算「我开的」（保住「重开页面恢复计时」）；③ 勿扰只是**状态可见**，不是系统级屏蔽（与 OP-3c 同口径）。"
 
+[entries."T-G32"]
+id = "T-G32"
+title = "渲染验证层（SR-NF1 / N30）：真浏览器把 3 档宽度 × 14 个视图采成几何清单当黄金（每轮两遍做确定性自检 + 改黄金必须写理由），接进门禁"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/渲染验证层-T-G32.md",
+  "text:复盘/渲染验证层-T-G32.md::它建成的当天抓到的三类真缺陷",
+  "text:复盘/渲染验证层-T-G32.md::建这一层时踩到的 6 个",
+  "text:复盘/渲染验证层-T-G32.md::验证责任怎么重新分",
+  "text:复盘/渲染验证层-T-G32.md::这一层**不**假装能做到的事",
+  "file:tools/render_check.mjs",
+  "text:tools/render_check.mjs::确定性自检",
+  "text:tools/render_check.mjs::NOT RUN 不是 PASS",
+  "file:gates/render/LAST_UPDATE.md",
+  "file:gates/render/desktop__today.txt",
+  "file:gates/render/phone__today.txt",
+  "text:src/web/app.css::.card-body { flex: 1 1 240px; min-width: 8em }",
+  "text:src/web/app.css::.new input:not([type=\"checkbox\"]):not([type=\"radio\"])",
+  "text:src/web/index.html::const notReady=ready?'':",
+  "text:scripts/run_gates.py::(\"render\", [])",
+  "text:scripts/run_gates.py::\"not_run\": not_run,",
+]
+gaps = "**回答用户那句「为什么是要我来验证？你不能验证吗？」** —— 结论：以前**没验过界面**，不是不能：把「沙箱不让我起浏览器」当成了「这台机器没有浏览器」。**做出来的东西**：`tools/render_check.mjs` 起临时库 + 种子数据（走真 HTTP 接口）+ 真浏览器（CDP），采 3 档宽度（1280/820/390，跨过 app.css 三条断点）× 14 个视图的**几何清单**（选择器/文本/盒子/字号·行高·字重/前景·背景/圆角·内边距），与 `gates/render/*.txt` 42 份黄金**逐字节比**；**每轮把同一份清单采两遍**做确定性自检（不一致 = 工具自己不可信，退出码 4，不当成「界面变了」）；改黄金必须 `--update --reason`，理由落进 `LAST_UPDATE.md`；**起不了浏览器 = NOT RUN**（退出码 3 → `gates/last.json` 的 `not_run` 栏 + trailer 写 `render NOT RUN`，**不算通过**）。★ **建成当天抓到三类真缺陷，都修了**：① **卡片正文被一排动作按钮挤成「一列一个字」**（行内 `flex:1` 基宽 0 + 中文 min-content = 一个字宽；标题实测 34×105，24 个元素横跨 5 个视图 × 3 档宽度；修法 = 19 处行内 `flex:1` → `.card-body`「真实基宽 240px + 下限 8em」，扫描 24→1，important 页整页高 791→450）；② **复选框被当文本框画**（`.new input` / `.field input` 命中 checkbox，`#newMyDay` 76×13 白盒子、标签被挤成 122×64 竖排；修法 = 加 `:not([type=checkbox]):not([type=radio])`，修后 13×13 / 122×19）；③ **离线页那张「这台设备用不了离线存储」永远挂着**（`notReady` 无条件拼进去、而 `capture` 按 `ready` 判断 —— 同屏自相矛盾，只有渲染出来才看得见；修法 = `ready ? '' : …`）。**建层时踩到 6 个确定性坑（全部由自检抓出）：选中态随首屏时序翻 / 随机设备号 / 滚动条吃 15px（且改视口尺寸后会重置）/ mkdtemp 随机目录名在换行临界宽度上换折行 / 字面日期明天就变 / 元素 id 拼数据 uuid**。**没做的**：① 真实交互（真点击/真按键/断网/窄屏溢出/触摸目标）还没接进来 —— 那 28 条「待人工确认」里属于功能性的部分要靠它逐条搬；② 顺手抓到但**没修**（登记在复盘 §7 与 T-G33）：手机版习惯页文字与按钮被压（68×80）—— 那是**版式选择**归视觉线，已钉进黄金；③ 归一是取舍：日期/时刻/机器路径归一之后，那一类值**变错它不会红**（归 pytest 管），分工写在复盘 §6；④ 黄金与机器绑定（字体/路径），换机器第一次跑要先看 diff 是不是只有字体度量差异。"
+
+[entries."T-G33"]
+id = "T-G33"
+title = "接口健壮性（缺陷）：分组不存在时 `POST /api/tasks` 返回 500（应 400/404 并说清是哪个分组）"
+group = "PROCESS"
+status = "todo"
+evidence = [
+  "file:复盘/渲染验证层-T-G32.md",
+  "text:src/timeflow/core/tasks/groups.py::get_group(conn, key)  # 不存在就抛 KeyError",
+  "text:src/timeflow/api/app.py::tm.set_task_groups(conn, t.id, payload.groups)",
+]
+gaps = "**2026-09-23 建渲染层的种子数据时当场撞到**：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500 Internal Server Error**。链路：`core/tasks/groups.py::set_task_groups` 对不存在的分组抛 `KeyError`，而 `api/app.py::create_task` 只接 `ValueError`。**为什么值得单独开卡**：① 500 是「本工具崩了」的意思，实际是**调用方给错了**（该 400/404 + 说清哪个分组不存在）；② 这是**唯一一类**会从真机路径上冒出来的 500（分组是界面里能勾的），口径要一次定清而不是就地打补丁；③ 修它要顺带决定「输入是 id 还是路径」（现在 `TaskIn.groups` 收 id、`TaskOut.groups` 回路径，名字一样、含义不同 —— 容易再踩）。**范围**：改成 400/404 + 中文原话 + 一条用例；**顺带检查**同类「KeyError 逃出路由」的地方有没有第二处。"
+
+
 [entries."T-G31"]
 id = "T-G31"
 title = "命令表（SR-NF6 / N35）：把界面/⌘K/CLI/AI·MCP 四个面收敛到一张表（54 条 OP ↔ 路由 ↔ 界面入口）+ 检查器接进门禁"

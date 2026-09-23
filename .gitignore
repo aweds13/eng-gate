@@ -65,6 +65,10 @@ um2/
 gates/last.json.tmp
 .pytest_tmp/
 
+# 渲染验证层的**截图**（T-G32）：`gates/render/*.txt` 是黄金（入库），
+# `shots/*.png` 是给人看的证据（按需 `node tools/render_check.mjs --shots` 重出，2.5 MB，不入库）
+gates/render/shots/
+
 # 前端构建产物（如需）
 src/web/dist/
 node_modules/

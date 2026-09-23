@@ -152,6 +152,16 @@ main { max-width: 820px; margin: 0 auto; padding: 0 var(--sp-10) var(--nav-clear
   gap: var(--sp-5);
 }
 .card .title { flex: 1 }
+/* 卡片正文（标题 + 元信息）。**这一条是渲染层第一天抓到的真缺陷的修复**（T-G32）：
+ * 原来这里是行内 `style="flex:1"`，也就是 `flex: 1 1 0` —— 基宽为 0、只在"有剩余空间"时才长。
+ * 可右边那排动作按钮的**自动基宽是 max-content**（一张逾期卡 10 个按钮 ≈ 540px），
+ * 于是自由空间是负的 → 正文一点长不到，只能缩到 `min-width:auto` 的下限，
+ * 而中文**处处可断行**，那个下限就是"一个字宽"。实测：标题 34×105（一列一个字）、
+ * 卡片高 317，右边一大片空白 ——「打开首页第一眼」就能看见，却穿过了此前 14 道门。
+ * 现在：给正文一个**真实基宽**（240px）+ 一个**下限**（8em），按钮挤不下就自己换行。
+ * 注意：行内 `flex:1` 的优先级高于任何选择器，所以这条规则要生效，**必须同时把行内样式拿掉**
+ * （标记层已改成 `class="card-body"`）。 */
+.card-body { flex: 1 1 240px; min-width: 8em }
 .card .meta { color: var(--muted); font-size: var(--fs-sm)}
 .card.overdue { border-left: 3px solid var(--danger) }
 /* 学校硬考核（T-C8）：逾期不候的那类，比普通逾期更显眼（左边条更粗 + 角标）。
@@ -204,7 +214,12 @@ button.ghost { background: transparent; color: var(--muted); border: 1px solid v
  * 现在：允许换行 + 输入框有最小宽度 + 按钮永不收缩 → 挤不下就整块换到下一行，不再互相压。
  */
 .new { display: flex; gap: var(--sp-4); margin: var(--sp-7) 0; flex-wrap: wrap; align-items: center }
-.new input {
+/* 注意 `:not([type=checkbox]):not([type=radio])`：**复选框/单选框不是文本框**。
+ * 原来这条（以及下面的 `.field input`）会一起命中它们 —— 于是勾选框被当成输入框画：
+ * 拿到 `flex:1 1 220px` 的基宽、被拉成 76×13 的白方块，还把同一行里的说明文字
+ * （「也放进今天的清单」）挤成竖排三行。实测两处：`#newMyDay`（今日页，76×13）、
+ * `#offMyDay`（离线页，130×13）。这是渲染层第一天抓到的第二类真缺陷。 */
+.new input:not([type="checkbox"]):not([type="radio"]) {
   flex: 1 1 220px;
   min-width: 0;
   padding: var(--sp-4) var(--sp-5);
@@ -234,7 +249,8 @@ select {
 .field.wide { flex: 2 1 300px }
 .field.narrow { flex: 0 1 130px }
 .field label { font-size: var(--fs-sm); color: var(--muted) }
-.field input, .field select {
+/* 同 `.new input`：复选框不套文本框那套（否则「放进今天」的勾选框会被画成整行的白输入框） */
+.field input:not([type="checkbox"]):not([type="radio"]), .field select {
   width: 100%;
   padding: var(--sp-4) var(--sp-5);
   border: 1px solid var(--line);

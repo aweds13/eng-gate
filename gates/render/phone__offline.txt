@@ -1,0 +1,161 @@
+# render-manifest v1 viewport=phone 390x844 view=offline rows=160 accent=#3b82f6 device=ph-000000000000
+html>body>div.shell		0,0,390,3338	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
+html>body>div.shell>aside.rail		0,0,390,66	16/normal/400	#1e293b/#000000@0.00	0;12px 14px 0px
+div.shell>aside.rail>h1>span.accent	·	95,12,5,24	18/normal/700	#3b82f6/#000000@0.00	0;0px
+body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	14,46,356,20	13/19.5/400	#64748b/#000000@0.00	0;0px
+html>body>div.shell>main#main		0,66,390,2995	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 24px
+body>div.shell>main#main>div#offlineStatus		14,66,362,115	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div#offlineStatus>div.title	在线 · 手机离线记	30,80,330,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineStatus>div.meta:nth-child(2)		30,103,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#offlineStatus>div.meta:nth-child(2)>code	‹code:15›	129,106,90,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#offlineStatus>div.meta:nth-child(2)>b	0	268,103,7,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineStatus>div.meta:nth-child(3)		30,119,330,48	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#offlineStatus>div.meta:nth-child(3)>b	直接传到电脑	165,135,72,16	12/normal/700	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(2)	离线记一笔	14,201,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(3)		14,228,362,758	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(3)>div.settings-sub:nth-child(1)	新建任务	30,242,330,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)		30,271,330,306	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(1)		30,271,330,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(1)>label	标题	30,271,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(1)>input#offTitle	(text)要做什么	30,293,330,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(2)		30,343,130,62	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(2)>label	截止日	30,343,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(2)>input#offDue	(date)YYYY-MM-DD	30,365,130,40	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(3)		174,343,130,62	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(3)>label	优先级	174,343,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(3)>select#offPrio	中	174,365,130,40	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(4)		30,417,130,41	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(4)>label	放进今天	30,417,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.narrow:nth-child(4)>input#offMyDay	(checkbox)on	34,442,123,13	13.3/normal/400	#000000/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(5)		30,470,330,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(5)>label	备注（可留空）	30,470,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(5)>input#offNote	(text)想到了就写一句	30,492,330,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.actions		30,542,67,35	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.actions>button	记下来	30,542,67,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(3)>div.settings-sub:nth-child(3)	一句备忘	30,595,330,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(3)>div.new		30,628,330,38	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(3)>div.new>input#offMemo	(text)随手记一条…	30,628,266,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(3)>div.new>button	记下	306,629,54,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(3)>div.settings-sub:nth-child(5)	今天卡在哪 / 打算做什么	30,684,330,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(6)		30,713,330,179	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.field.wide:nth-child(1)		30,713,330,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.field.wide:nth-child(1)>label	计划	30,713,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.field.wide:nth-child(1)>input#offPlan	(text)今天打算做点什么	30,735,330,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.field.wide:nth-child(2)		30,785,330,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.field.wide:nth-child(2)>label	差距 / 复盘	30,785,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.field.wide:nth-child(2)>input#offGap	(text)卡在哪儿了	30,807,330,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.actions		30,857,80,35	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.actions>button	保存反馈	30,857,80,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(3)>div.settings-sub:nth-child(7)	习惯打卡（只列手机上缓存过的习惯）	30,910,330,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(3)>div.row.tight		30,935,330,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(3)>div.row.tight>button.ghost:nth-child(1)	早睡 · 打卡	30,935,94,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(3)>div.row.tight>button.ghost:nth-child(2)	跑步 · 打卡	130,935,94,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div.section-title:nth-child(4)	离线勾完成（缓存里最近看到的那份清单）	14,1006,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(5)		14,1033,362,869	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(1)		30,1047,330,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(1)>div.card-body		46,1069,231,39	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(1)>div.card-body>div.title	补交上周的实验报告	46,1069,231,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(1)>div.card-body>div.meta	逾期 · 截止 YYYY-MM-DD	46,1092,231,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(1)>button.ghost	完成	289,1061,55,56	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(2)		30,1141,330,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(2)>div.card-body		46,1163,231,39	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(2)>div.card-body>div.title	把第三章习题做完	46,1163,231,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(2)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD · 今天	46,1186,231,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(2)>button.ghost	完成	289,1155,55,56	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(3)		30,1235,330,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(3)>div.card-body		46,1257,231,39	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(3)>div.card-body>div.title	重装打印机驱动	46,1257,231,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(3)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	46,1280,231,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(3)>button.ghost	完成	289,1249,55,56	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(4)		30,1329,330,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(4)>div.card-body		46,1351,231,39	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(4)>div.card-body>div.title	把数据整理成表	46,1351,231,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(4)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	46,1374,231,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(4)>button.ghost	完成	289,1343,55,56	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(5)		30,1423,330,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(5)>div.card-body		46,1445,231,39	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(5)>div.card-body>div.title	预习下周的线性代数	46,1445,231,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(5)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	46,1468,231,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(5)>button.ghost	完成	289,1437,55,56	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(6)		30,1517,330,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(6)>div.card-body		46,1539,231,39	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(6)>div.card-body>div.title	写正文	46,1539,231,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(6)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	46,1562,231,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(6)>button.ghost	完成	289,1531,55,56	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(7)		30,1611,330,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(7)>div.card-body		46,1633,231,39	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(7)>div.card-body>div.title	写课程设计报告	46,1633,231,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(7)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	46,1656,231,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(7)>button.ghost	完成	289,1625,55,56	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(8)		30,1705,330,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(8)>div.card-body		46,1727,231,39	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(8)>div.card-body>div.title	第三章习题	46,1727,231,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(5)>div.card:nth-child(8)>div.card-body>div.meta	未开始 · 截止 YYYY-MM-DD	46,1750,231,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(5)>div.card:nth-child(8)>button.ghost	完成	289,1719,55,56	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(5)>div.sub:nth-child(9)		30,1799,330,37	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(5)>div.sub:nth-child(9)>button.ghost:nth-child(1)	交英语作业	162,1799,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(5)>div.sub:nth-child(9)>button.ghost:nth-child(2)	列提纲	257,1799,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(5)>div.sub:nth-child(10)		30,1840,330,48	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(5)>div.sub:nth-child(10)>b	上次联网时看到的样子	90,1840,120,16	12/normal/700	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(6)	上次看到的（只读）	14,1922,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div#offlineSeen		14,1949,362,423	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div#offlineSeen>div.meta	今日摘要（上次联网时）：债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	30,1963,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineSeen>div.settings-sub:nth-child(2)	该提醒了（0）	30,2013,330,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineSeen>div.sub:nth-child(3)	上次联网时没有到点的提醒。	30,2038,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineSeen>div.sub:nth-child(4)		30,2058,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#offlineSeen>div.sub:nth-child(4)>b	只标出来、不发系统通知	66,2058,132,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineSeen>div.settings-sub:nth-child(5)	今天该复习（1）	30,2108,330,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineSeen>div.card:nth-child(6)		30,2133,330,67	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div#offlineSeen>div.card:nth-child(6)>div.card-body		46,2147,298,39	16/normal/400	#1e293b/#000000@0.00	0;0px
+div#offlineSeen>div.card:nth-child(6)>div.card-body>div.title	拉格朗日中值定理	46,2147,298,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div#offlineSeen>div.card:nth-child(6)>div.card-body>div.meta	到期 YYYY-MM-DD · 已复习 0 次	46,2170,298,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineSeen>div.settings-sub:nth-child(7)	逾期（1）	30,2224,330,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineSeen>div.card:nth-child(8)		30,2249,330,67	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div#offlineSeen>div.card:nth-child(8)>div.card-body		46,2263,298,39	16/normal/400	#1e293b/#000000@0.00	0;0px
+div#offlineSeen>div.card:nth-child(8)>div.card-body>div.title	补交上周的实验报告	46,2263,298,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div#offlineSeen>div.card:nth-child(8)>div.card-body>div.meta	逾期 2 天 · 截止 YYYY-MM-DD	46,2286,298,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineSeen>div.sub:nth-child(9)		30,2326,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#offlineSeen>div.sub:nth-child(9)>b	上次联网时看到的样子	78,2326,120,16	12/normal/700	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(8)	待同步（0）	14,2392,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div#offlineQueue		14,2419,362,377	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div#offlineQueue>div.row.tight		30,2433,330,80	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#offlineQueue>div.row.tight>button	直接传到电脑	30,2434,106,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+main#main>div#offlineQueue>div.row.tight>button.ghost:nth-child(2)	导出同步包	142,2433,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#offlineQueue>div.row.tight>button.ghost:nth-child(3)	复制包文本	243,2433,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#offlineQueue>div.row.tight>button.ghost:nth-child(4)	清空（我已导入电脑）	30,2476,160,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div#offlineQueue>div.sub:nth-child(2)		30,2517,330,64	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#offlineQueue>div.sub:nth-child(2)>b:nth-child(1)	直接传到电脑	30,2517,72,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#offlineQueue>div.sub:nth-child(2)>b:nth-child(2)	失败绝不清空	210,2549,72,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineQueue>div.sub:nth-child(3)		30,2585,330,64	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#offlineQueue>div.sub:nth-child(3)>b	同一个格式	148,2585,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#offlineQueue>div.sub:nth-child(3)>code:nth-child(2)	‹code:13›	220,2588,78,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#offlineQueue>div.sub:nth-child(3)>code:nth-child(3)	‹code:15›	114,2620,90,12	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineQueue>div.sub:nth-child(4)		30,2653,330,48	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#offlineQueue>div.sub:nth-child(4)>b:nth-child(1)	不会清空	54,2653,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#offlineQueue>div.sub:nth-child(4)>b:nth-child(2)	重复导入是安全的	30,2653,324,32	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#offlineQueue>div.empty	队列是空的 —— 断网时记的东西会攒在这里	30,2701,330,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
+body>div.shell>main#main>div.card.panel-card:nth-child(10)		14,2806,362,221	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.settings-sub	这一版能做什么、不做什么	30,2820,330,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(2)	能做：新建任务 / 勾完成与撤销完成 / 习惯打卡 / 一句备忘 / 每日反馈（都先存在本机队列）。	30,2845,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(3)		30,2881,330,64	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(3)>b:nth-child(1)	删除	90,2881,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(3)>b:nth-child(2)	改字段	42,2897,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(3)>b:nth-child(3)	回传	285,2897,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(3)>b:nth-child(4)	专注计时	234,2913,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(4)		30,2949,330,64	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(4)>b:nth-child(1)	打开	66,2949,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(4)>b:nth-child(2)	显式开	222,2949,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(4)>code	python tools/serve.py --lan	42,2968,162,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(4)>b:nth-child(4)	配对码	54,2981,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
+html>body>div.shell>aside.sidebar		0,3061,390,187	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 90px
+body>div.shell>aside.sidebar>div#focusRail		14,3061,362,85	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	30,3075,330,17	13/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	30,3100,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
+html>body>nav.bottom-nav		0,770,390,74	16/normal/400	#1e293b/#ffffff	0;6px 0px
+body>nav.bottom-nav>button:nth-child(1)>span.ic	📅	4,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(2)>span.ic	🗂️	61,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(3)>span.ic	⏱️	117,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(4)>span.ic	👥	174,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(5)>span.ic	🔥	230,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(6)>span.ic	📈	287,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(7)>span.ic	⚙️	343,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px

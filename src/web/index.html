@@ -409,25 +409,29 @@ async function renderOffline(m){
   <div class="card panel-card" id="offlineSeen">
     ${seenSummary?`<div class="meta">今日摘要（上次联网时）：${esc(summaryLine(seenSummary))}</div>`:''}
     <div class="settings-sub">该提醒了（${seenReminders.length}）</div>
-    ${seenCard(seenReminders,t=>`<div class="card"><div style="flex:1">
+    ${seenCard(seenReminders,t=>`<div class="card"><div class="card-body">
         <div class="title">${esc(t.title)}</div>
         <div class="meta">提醒时间 ${esc(String(t.remind_at||'').replace('T',' '))}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}</div></div></div>`,
       '上次联网时没有到点的提醒。')}
     <div class="sub">手机上<b>只标出来、不发系统通知</b>（与电脑端同口径：移动端只标不通知）。</div>
     <div class="settings-sub">今天该复习（${seenReview.length}）</div>
-    ${seenCard(seenReview,r=>`<div class="card"><div style="flex:1">
+    ${seenCard(seenReview,r=>`<div class="card"><div class="card-body">
         <div class="title">${esc(r.title)}</div>
         <div class="meta">到期 ${esc(r.due_date||'—')} · 已复习 ${r.reps||0} 次</div></div></div>`,
       '上次联网时没有到期的复习卡。')}
     <div class="settings-sub">逾期（${seenOverdue.length}）</div>
-    ${seenCard(seenOverdue,t=>`<div class="card"><div style="flex:1">
+    ${seenCard(seenOverdue,t=>`<div class="card"><div class="card-body">
         <div class="title">${esc(t.title)}</div>
         <div class="meta">${t.overdue_days?`逾期 ${t.overdue_days} 天`:''}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}</div></div></div>`,
       '上次联网时没有逾期。')}
     <div class="sub">这几份是<b>上次联网时看到的样子</b>（不是实时的），只看不改 ——
       手机上能改的只有「完成 / 撤销完成」与习惯打卡。</div>
   </div>`;
-  const notReady=`<div class="card panel-card" id="offlineUnsupported"><div class="title">这台设备用不了离线存储</div>
+  // 只有**真的用不了**离线存储时，才挂这张说明卡（T-G32 修）。
+  // 原来它是无条件拼进去的：于是"能用的浏览器"打开这一页，顶上永远挂着
+  // 「这台设备用不了离线存储 / 这个浏览器不支持 IndexedDB」—— 而下面那半页能用的功能照常渲染，
+  // 自己打自己的脸。这种「同屏自相矛盾」静态检查（字符串护栏）看不出来，只有渲染出来才看得见。
+  const notReady=ready?'':`<div class="card panel-card" id="offlineUnsupported"><div class="title">这台设备用不了离线存储</div>
     <div class="meta">${esc(err||'这个浏览器不支持 IndexedDB，或在隐私模式下被禁用了')}。
     离线记要靠它把队列存在本机；换成 Chrome / Edge / Safari 的普通（非隐私）窗口就能用。
     这一页其余部分不需要它也能看。</div></div>`;
@@ -461,7 +465,7 @@ async function renderOffline(m){
   </div>
   <div class="section-title">离线勾完成（缓存里最近看到的那份清单）</div>
   <div class="card panel-card">
-    ${openTasks.length?openTasks.slice(0,30).map(t=>`<div class="card"><div style="flex:1">
+    ${openTasks.length?openTasks.slice(0,30).map(t=>`<div class="card"><div class="card-body">
         <div class="title">${esc(t.title)}</div>
         <div class="meta">${esc(t.status)}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}${t.is_myday?' · 今天':''}${t.remind_at?` · 提醒 ${esc(String(t.remind_at).replace('T',' '))}`:''}</div></div>
         <button class="ghost" data-action="offline-done" data-id="${esc(t.id)}" data-done="true">完成</button>
@@ -471,7 +475,7 @@ async function renderOffline(m){
     <div class="sub">这份清单是<b>上次联网时看到的样子</b>，只看不改：离线能改的只有「完成 / 撤销完成」，
       改字段（截止日、优先级…）留给电脑（手机上判不准电脑那边有没有更新过）。</div>
   </div>`;
-  const queue=entries.length?entries.map(e=>`<div class="card"><div style="flex:1">
+  const queue=entries.length?entries.map(e=>`<div class="card"><div class="card-body">
       <div class="title">${esc(e.label||e.table)}</div>
       <div class="meta">${esc(e.table)} · ${esc(String(e.at||'').replace('T',' '))}</div></div></div>`).join('')
     :emptyState('队列是空的 —— 断网时记的东西会攒在这里');
@@ -1484,7 +1488,7 @@ function taskCard(t,isOverdue){
   const whoBadge=t.created_by==='ai' ? '<span class="badge">AI 建的</span>' : '';
   return `<div class="card ${isDone?'done':''} ${late?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
-    <div style="flex:1"><div class="title">${esc(t.title)}</div>
+    <div class="card-body"><div class="title">${esc(t.title)}</div>
     <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${whoBadge}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}</div>
     <div class="row">
       ${doingButtonHTML(t)}
@@ -1664,7 +1668,7 @@ function archiveCard(t){
   const when=auto?(t.completed_on?`完成于 ${esc(t.completed_on)}`:'完成满 N 天自动收入')
                  :`归档于 ${humanTime(t.updated_at)}`;
   const tries=t.attempt_count?` · <span class="badge">试了 ${t.attempt_count} 回</span>`:'';
-  return `<div class="card" style="align-items:flex-start"><div style="flex:1">
+  return `<div class="card" style="align-items:flex-start"><div class="card-body">
       <div class="title">${esc(t.title)}</div>
       <div class="meta">${auto?'<span class="badge">自动归档</span>':'<span class="badge">手动归档</span>'}
         ${when}${tries}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}</div>
@@ -2069,7 +2073,7 @@ async function renderToday(m){
   el('summary',summaryLine(summary));
   // 到点的提醒（T-B5）：界面自己标出来 —— 没接系统通知通道也不瞎（口径由后端 reminder_state 定）
   const remind=reminders.length?`<div class="section-title">该提醒了（${reminders.length}）</div>
-    ${reminders.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div>
+    ${reminders.map(t=>`<div class="card"><div class="card-body"><div class="title">${esc(t.title)}</div>
       <div class="meta">提醒时间 ${esc(String(t.remind_at).replace('T',' '))}${t.due_date?` · 截止 ${t.due_date}`:''}</div></div>
       <div class="row"><button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button>
       <button class="ghost" data-action="task-done" data-id="${t.id}" data-done="false">完成</button></div></div>`).join('')}`:'';
@@ -2083,7 +2087,7 @@ async function renderToday(m){
     +((d.steps||[]).length?`：${(d.steps||[]).map(s=>`${esc(s.title)}(${s.degree}·${s.overdue_days}天)`).join('、')}`:'');
   const debt=summary.debt_count?`<div class="sub">逾期共 ${summary.debt_count} 项（轻≤3天 / 中≤7天 / 重>7天）：${(summary.debt_items||[]).map(debtRow).join('；')}</div>`:'';
   const trash=deleted.length?`<div class="section-title">回收站（软删除，可恢复或彻底删除）</div>
-    ${deleted.map(t=>`<div class="card"><div style="flex:1"><div class="title">${esc(t.title)}</div><div class="meta">已删 · 删除于 ${humanTime(t.updated_at)}</div></div>
+    ${deleted.map(t=>`<div class="card"><div class="card-body"><div class="title">${esc(t.title)}</div><div class="meta">已删 · 删除于 ${humanTime(t.updated_at)}</div></div>
     <div class="row"><button class="ghost" data-action="task-restore" data-id="${t.id}">恢复</button>
     <button class="ghost" data-action="task-purge" data-id="${t.id}">彻底删除</button></div></div>`).join('')}
     <div class="new"><button class="ghost" data-action="trash-empty">清空回收站（${deleted.length} 项，不可恢复）</button></div>`:'';
@@ -2202,7 +2206,7 @@ async function renderHabit(m){
     const doneToday=(h.logs||[]).includes(today);
     return `<div class="card" style="display:block">
       <div style="display:flex;align-items:center;gap:10px">
-        <div style="flex:1"><div class="title">${esc(h.name)}</div>
+        <div class="card-body"><div class="title">${esc(h.name)}</div>
           <div class="meta">连续 ${h.streak} 天 · 近一年打卡 ${(h.logs||[]).length} 天</div></div>
         <button class="${doneToday?'':'ghost'}" data-action="habit-toggle" data-id="${h.id}">${doneToday?'已打卡（点此取消）':'打卡'}</button>
         <button class="ghost" data-action="habit-rename" data-id="${h.id}" data-name="${esc(h.name)}">改名</button>
@@ -2279,7 +2283,7 @@ async function renderAcademic(m){
     ${soon.map(a=>{
       const d=a.days_until;
       const when=d<0?`已逾期 ${-d} 天`:d===0?'今天到期':`还有 ${d} 天`;
-      return `<div class="card hard ${d<0?'overdue':''}"><div style="flex:1">
+      return `<div class="card hard ${d<0?'overdue':''}"><div class="card-body">
         <div class="title"><span class="badge hard">硬考核</span> ${esc(a.name)}</div>
         <div class="meta">${esc(a.course_name||'未关联课程')} · ${a.due_date} · ${when}${a.weight?` · 占 ${a.weight}`:''} · 未录成绩</div>
         ${(a.attach||[]).length?`<div class="meta">${attachRowsHTML(a.attach,'assessment-attach-del',a.id)}</div>`:''}
@@ -2353,7 +2357,7 @@ async function renderAcademic(m){
     </div>
   </div>
   ${grades.length?`<div class="section-title">成绩明细（${grades.length} 条）</div>
-    ${grades.slice().reverse().map(g=>`<div class="card"><div style="flex:1"><div class="title">${g.score} 分</div>
+    ${grades.slice().reverse().map(g=>`<div class="card"><div class="card-body"><div class="title">${g.score} 分</div>
       <div class="meta">${g.credits} 学分 ${g.term?`· ${esc(g.term)}`:''}</div></div>
       <button class="ghost" data-action="grade-del" data-id="${g.id}">删除</button></div>`).join('')}`:''}`;
 }
@@ -2408,7 +2412,7 @@ function reviewCard(r,ratings){
   const fromTask=r.task_id?`<div class="meta">来自任务（弱关联）</div>`:'';
   // 三态按钮的中文来自后端 `meta.ratings`（词表一处，界面不再自己写一份）
   const doBtns=ratings.map((x,i)=>`<button class="${i?'ghost':''}" data-action="review-do" data-id="${r.id}" data-feedback="${x.value}">${esc(x.label)}</button>`).join('');
-  return `<div class="card"><div style="flex:1"><div class="title">${esc(r.title)}</div>
+  return `<div class="card"><div class="card-body"><div class="title">${esc(r.title)}</div>
     <div class="meta">${r.reps}次 · ${r.interval_days}天${r.source==='external'?'<span class="badge">外部</span>':''}</div>${handle}${fromTask}</div>
     <div class="row">${doBtns}
     <button class="ghost" data-action="review-undo" data-id="${r.id}">撤销上次</button>
@@ -2419,7 +2423,7 @@ function reviewCard(r,ratings){
    「改判」= 撤销这一次 + 按新档重来，排期从同一个复习前快照重算、投入不重复计（见 review.py::regrade）。 */
 function reviewDoneCard(r,ratings){
   const others=ratings.filter(x=>x.value!==r.feedback);
-  return `<div class="card"><div style="flex:1"><div class="title">${esc(r.title)}</div>
+  return `<div class="card"><div class="card-body"><div class="title">${esc(r.title)}</div>
     <div class="meta">今天记的是 <span class="badge done">${esc(r.feedback_label||r.feedback)}</span>
     · 下次到期 ${esc(r.due_date)}${r.reps?' · 第 '+r.reps+' 次':''}</div></div>
     <div class="row"><span class="sub">改判为</span>
@@ -2532,7 +2536,7 @@ function teamItemHTML(it,view){
   if(it.task_due)bits.push(`截止 ${it.task_due}`);
   if(it.task_status&&!it.task_missing)bits.push(`任务状态 ${it.task_status}`);
   return `<div class="card">
-    <div style="flex:1"><div class="title">${esc(label)}</div>
+    <div class="card-body"><div class="title">${esc(label)}</div>
       <div class="meta">${esc(bits.join(' · '))}</div></div>
     <div class="row">
       <span class="badge ${it.status==='blocked'?'hard':''}">${esc(TEAM_STATUS[it.status]||it.status)}</span>
@@ -2576,7 +2580,7 @@ async function renderMemo(m){
   const [memos,outputs,invests]=await Promise.all([
     api('/api/memos'),api('/api/ledger/outputs'),api('/api/ledger/invests')]);
   m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…" data-enter="memo-add"><button data-action="memo-add">记录</button></div>
-  ${memos.map(x=>`<div class="card"><div style="flex:1"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge" title="${esc(x.ref_reason||'')}">${esc(x.ref_handle)}</span>`:''}${x.task_id?'<span class="badge">已转任务</span>':''}</div></div>
+  ${memos.map(x=>`<div class="card"><div class="card-body"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge" title="${esc(x.ref_reason||'')}">${esc(x.ref_handle)}</span>`:''}${x.task_id?'<span class="badge">已转任务</span>':''}</div></div>
     <div class="row">${x.ref_url?`<button class="ghost" data-action="vault-open" data-handle="${esc(x.ref_handle)}">在 Obsidian 打开</button>`:''}${x.task_id?'':`<button class="ghost" data-action="memo-to-task" data-id="${x.id}">转为任务</button>`}
     <button class="ghost" data-action="memo-delete" data-id="${x.id}">删除</button></div></div>`).join('')||emptyState('暂无备忘录')}
   <div class="section-title">今日手动投入（独立于专注投入）</div>
@@ -2586,7 +2590,7 @@ async function renderMemo(m){
     <span class="sub">分钟</span>
     <input id="inNote" placeholder="备注，如：番茄补记">
     <button data-action="invest-add">记一笔投入</button></div>
-  ${invests.map(i=>`<div class="card ${i.retracted?'done':''}"><div style="flex:1"><div class="title">${esc(i.note||i.kind)} · ${i.minutes} 分钟</div>
+  ${invests.map(i=>`<div class="card ${i.retracted?'done':''}"><div class="card-body"><div class="title">${esc(i.note||i.kind)} · ${i.minutes} 分钟</div>
     <div class="meta">${i.kind}${i.retracted?' · 已撤销':''}</div></div>
     ${i.retracted?'':`<button class="ghost" data-action="invest-retract" data-id="${i.entry_id}">撤销</button>`}</div>`).join('')||emptyState('今天还没有手动投入')}
   <div class="section-title">今日产出（独立于投入轴）</div>
@@ -2596,7 +2600,7 @@ async function renderMemo(m){
     <input id="outNote" placeholder="备注，如：数学笔记#3">
     <button data-action="output-add">记一笔产出</button></div>
   <div class="meta">按两类分开看（T-C4）：学校 KPI ${outputs.filter(o=>o.kind==='kpi'&&!o.retracted).length} 条 · 知识资产 ${outputs.filter(o=>o.kind==='asset'&&!o.retracted).length} 条 —— 同一份产出事实，只是分组显示（不拆轴、不折算）。</div>
-  ${outputs.map(o=>`<div class="card ${o.retracted?'done':''}"><div style="flex:1"><div class="title">${esc(o.note||o.kind)} ×${o.value}</div>
+  ${outputs.map(o=>`<div class="card ${o.retracted?'done':''}"><div class="card-body"><div class="title">${esc(o.note||o.kind)} ×${o.value}</div>
     <div class="meta">${o.kind==='kpi'?'学校 KPI':'知识资产'}${o.retracted?' · 已撤销':''}</div></div>
     ${o.retracted?'':`<button class="ghost" data-action="output-retract" data-id="${o.entry_id}">撤销</button>`}</div>`).join('')||emptyState('今天还没有产出记录')}`;
 }
@@ -3173,7 +3177,7 @@ function noticeCard(n){
   bits.push(n.status_label);
   const extra=Object.keys(n.extra||{}).length;
   return `<div class="card">
-    <div style="flex:1"><div class="title">${esc(n.title)}</div>
+    <div class="card-body"><div class="title">${esc(n.title)}</div>
       <div class="meta">${esc(bits.join(' · '))}${extra?` · 另有 ${extra} 个额外字段`:''}${n.task_id?` · 已转任务 ${esc(String(n.task_id).slice(0,6))}…`:''}</div>
       ${n.summary?`<div class="sub">${esc(n.summary)}</div>`:''}</div>
     <div class="row">

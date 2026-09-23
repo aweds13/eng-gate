@@ -61,6 +61,11 @@ COMMON = [
 REAL = [
     ("lf1_live", [PY, "-X", "utf8", "tools/lf1_live_check.py"]),
     ("web_live", [PY, "-X", "utf8", "tools/web_live_check.py"]),
+    # 渲染验证层（T-G32）：真浏览器把 3 档宽度 × 14 个视图各渲染一遍，采成"几何清单"与黄金逐字节比。
+    # 那一层里**每次采两遍**做确定性自检：不一致 = 工具自己不可信（退出码 4），不当成"界面变了"。
+    # 退出码 3 = 起不了真浏览器 → 记 `not_run`：**NOT RUN 不是 PASS**（last.json 单列一栏 +
+    # trailer 里写 NOT RUN）。
+    ("render", []),                # 占位：下面按 node 可用来填
 ]
 # 信息性检查（只报告、不阻断）—— 当前为空：`audit_titles` 已转正为阻断项（T-D2 收口）。
 INFO_GATES: list[tuple[str, list[str]]] = []
@@ -71,6 +76,12 @@ def dom_probe_cmd() -> list[str] | None:
     """假 DOM 渲染探针：真跑 9 个视图。node 不在就跳过（不谎报通过）。"""
     node = shutil.which("node")
     return [node, str(ROOT / "tools" / "ui_dom_probe.mjs")] if node else None
+
+
+def render_cmd() -> list[str] | None:
+    """渲染验证层：真浏览器采几何清单与黄金比。node 不在就跳过（不谎报通过）。"""
+    node = shutil.which("node")
+    return [node, str(ROOT / "tools" / "render_check.mjs")] if node else None
 
 
 def xdist_available() -> bool:
@@ -231,12 +242,20 @@ def main() -> int:
     print(f"=== pytest 跑法：{mode} ===")
 
     results: list[dict[str, object]] = []
+    not_run: list[str] = []
     jobs = COMMON + ([] if args.quick else REAL)
     for name, cmd in jobs:
         if name == "ui_dom_probe":
             filled = dom_probe_cmd()
             if filled is None:
                 print("[WARN] ui_dom_probe        跳过：环境里没有 node（未验证，不算通过）")
+                continue
+            cmd = filled
+        elif name == "render":
+            filled = render_cmd()
+            if filled is None:
+                print("[WARN] render             跳过：环境里没有 node（未验证，不算通过）")
+                not_run.append("render")
                 continue
             cmd = filled
         elif name == "pytest":
@@ -254,8 +273,15 @@ def main() -> int:
             "seconds": round(time.time() - t0, 2),
             "summary": summarize(out),
         }
+        # 渲染层专有：退出码 3 = 起不了真浏览器。**NOT RUN 不是 PASS** —— 它不进 blocking，
+        # 但只要它出现就会被记进 `not_run` 并在 trailer 里写出来（想假装没跑过也藏不住）。
+        if name == "render" and proc.returncode == 3:
+            item["blocking"] = False
+            item["status"] = "NOT RUN"
+            item["note"] = "起不了真浏览器：渲染这一层**没有验证**，不算通过"
+            not_run.append("render")
         results.append(item)
-        mark = "[OK ]" if proc.returncode == 0 else "[FAIL]"
+        mark = "[OK ]" if proc.returncode == 0 else ("[SKIP]" if proc.returncode == 3 else "[FAIL]")
         print(f"{mark} {name:<22} exit={proc.returncode}  {item['seconds']}s  {item['summary']}")
 
     # 信息性检查：只报告、不阻断（blocking=False，不计进 ok）
@@ -300,7 +326,12 @@ def main() -> int:
         "docs_sync_missing": missing,
         "ok": ok,
         "gates": results,
-        "trailer": "; ".join(f"{r['name']} {r['summary']}" for r in passed) or "（无通过项）",
+        # 没验证成的门（当前只有渲染层会遇到：起不了真浏览器）。**不是"通过"**，
+        # 单列一栏 + 写进 trailer，让"这次提交哪些东西没被验证过"有据可查。
+        "not_run": not_run,
+        "trailer": "; ".join(
+            [f"{r['name']} {r['summary']}" for r in passed] + [f"{n} NOT RUN" for n in not_run]
+        ) or "（无通过项）",
     }
     GATES.parent.mkdir(parents=True, exist_ok=True)
     GATES.write_text(
