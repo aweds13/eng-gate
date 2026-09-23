@@ -1,0 +1,596 @@
+# 命令表（T-G31）—— 「四个面集中到一个点」里的那个点
+#
+# ## 这张表是什么
+#
+# 用户 2026-09-23 说：「最好就是 4 个面集中到一个点，然后调用同一个点的东西，可以吗？」
+# 本项目的**业务点**早就有了（`src/timeflow/core/` + `api/app.py` 那道边界），缺的是**一层元数据**：
+# 每个操作叫什么、改不改数据、可不可逆、对应哪条路由、界面上哪个入口、AI 能不能碰。
+# 有了它，四个面全部变成**投影**，不用各写一遍：
+#
+#       界面按钮 / ⌘K 面板 / CLI / AI·MCP   ←   都读这张表
+#
+# ## 它凭什么不会变成「第二份手抄」
+#
+# 因为三个字段有**已有的真源**，`scripts/check_commands.py` 会机器核对：
+#   · `title`  ↔ `docs/contracts/**` 的 `## OP-n 标题`（每条 OP 必须有行，行不许有契约里没有的）
+#   · `routes` ↔ `src/timeflow/api/app.py` 的 `@app.<method>("/path")`（**必须真的存在**）
+#   · `ui`     ↔ `src/web/index.html` 的 `ACTIONS` / `VIEWS`（**必须真的注册过**）
+# 只有 `kind` / `ai` 是判断，而它们直接对应已经定过的口径（AI 那条 = 用户选的方案 3）。
+#
+# ## 字段
+#   title      契约里的正名（机器核对；同号有「基础篇 + 领域篇」两节时取不带（扩展）的那个）
+#   routes     实现这条操作的路由，写成 "METHOD /path"（机器核对）
+#   ui         界面入口，写成 "data-action=<名>" 或 "view=<名>"（机器核对）；**空数组是合法的**
+#   kind       write（改数据）| read（只读）| derive（纯计算）
+#   reversible 契约里 `可逆` 那条的原话（判断"要不要二次确认"就靠它）
+#   ai         AI 接口能做什么：read | create | none（列表；一条操作可以既只读又新增）
+#   note       这条为什么这么填（尤其是"没有路由/没有入口"这类判断）
+#
+# ## 「洞」是进度，不是错误
+#
+# 有些行 `routes` 或 `ui` 是空的 —— 那是**如实记录**（这条操作没有 HTTP 路由、或界面里没有入口）。
+# 检查器会把它们数出来：**那个数字下降就是这张表在长**。跟两道审美门的登记表一个思路。
+
+[commands."OP-1"]
+title = "新建任务"
+routes = ["POST /api/tasks"]
+ui = ["data-action=task-add", "data-action=task-add-here"]
+kind = "write"
+reversible = "可删除（见 OP-6）"
+ai = ["none"]
+note = "全量任务页的 task-add-here 走同一条路由。"
+
+[commands."OP-2"]
+title = "把已有任务加入 My Day"
+routes = ["POST /api/tasks/{task_id}/myday"]
+ui = ["data-action=task-myday"]
+kind = "write"
+reversible = "是（同一按钮反向操作）"
+ai = ["none"]
+
+[commands."OP-3"]
+title = "开始专注"
+routes = ["POST /api/focus/start", "GET /api/focus/active"]
+ui = ["data-action=focus-start", "data-action=task-focus"]
+kind = "write"
+reversible = "可放弃（见 OP-4）"
+ai = ["none"]
+note = "GET /api/focus/active 是重开页面恢复用的读路由，不是写入。"
+
+[commands."OP-3b"]
+title = "暂停 / 继续"
+routes = []
+ui = []
+kind = "write"
+reversible = "可继续"
+ai = ["none"]
+note = "app.py 里没有暂停/继续路由（只有 focus/start、focus/{id}/finish），前端 ACTIONS 也没有对应动作 —— 这条契约**没有实现**。"
+
+[commands."OP-3c"]
+title = "白名单 / 勿扰配置"
+routes = ["GET /api/focus/guard", "PUT /api/settings/focus-guard"]
+ui = [
+  "data-action=guard-block", "data-action=guard-wl-add", "data-action=guard-wl-del",
+  "data-action=guard-dnd-add", "data-action=guard-dnd-del",
+]
+kind = "write"
+reversible = "可改回；空列表 = 明确清空（与「没传这个字段」是两件事，后者保持原值）"
+ai = ["none"]
+
+[commands."OP-4"]
+title = "结束专注（MVP 最关键）"
+routes = [
+  "POST /api/focus/{session_id}/finish", "GET /api/focus/today",
+  "GET /api/tasks/{task_id}/facts", "GET /api/summary",
+]
+ui = ["data-action=focus-finish"]
+kind = "write"
+reversible = "否。但「放弃」不计入投入（时长不入账）"
+ai = ["none"]
+note = "四步后续（投入/反馈/任务时长/摘要）由事实层联动，没有独立路由；摘要靠读 GET /api/summary。"
+
+[commands."OP-4b"]
+title = "放弃 / 记中断"
+routes = ["POST /api/focus/{session_id}/finish"]
+ui = ["data-action=focus-finish"]
+kind = "write"
+reversible = "否"
+ai = ["none"]
+note = "与 OP-4 共用同一条 finish 路由，区别只在 body 的 status=abandoned|interrupted。"
+
+[commands."OP-5"]
+title = "完成任务"
+routes = [
+  "POST /api/tasks/{task_id}/complete", "POST /api/tasks/{task_id}/uncomplete",
+  "GET /api/tasks/{task_id}/facts",
+]
+ui = ["data-action=task-done", "data-action=task-undo-done", "data-action=step-toggle"]
+kind = "write"
+reversible = "是 —— 可「取消完成」，撤销后回到原状态，并撤销该次投入记账"
+ai = ["create"]
+note = "AI 只能勾**自己建的**任务（`POST /api/ai/tasks/{task_id}/complete`）；子步骤 step-toggle 走同一条 complete 路由。"
+
+[commands."OP-6"]
+title = "删除任务"
+routes = [
+  "DELETE /api/tasks/{task_id}", "POST /api/tasks/{task_id}/restore", "GET /api/tasks/deleted",
+  "DELETE /api/tasks/{task_id}/purge", "POST /api/tasks/purge-deleted",
+]
+ui = [
+  "data-action=task-delete", "data-action=task-restore", "data-action=task-purge",
+  "data-action=trash-empty",
+]
+kind = "write"
+reversible = "删除本身不可逆，故必须二次确认；有条件时提供短时撤销"
+ai = ["none"]
+
+[commands."OP-7"]
+title = "查看今日摘要"
+routes = ["GET /api/summary", "GET /api/focus/today", "GET /api/review/today"]
+ui = []
+kind = "read"
+reversible = "—（只读）"
+ai = ["none"]
+note = "顶部摘要区是**常驻渲染区、不是按钮**，所以没有 data-action 也没有对应 view。"
+
+[commands."OP-8"]
+title = "重复任务生成下一次（联动项）"
+routes = []
+ui = []
+kind = "write"
+reversible = "生成后可删除"
+ai = ["none"]
+note = "没有独立路由与界面入口 —— 由 `complete_task` 内部调 `process_repeats`（manager.py）实现，效果经 `POST /api/tasks/{id}/complete` 触发。"
+
+[commands."OP-9"]
+title = "编辑任务"
+routes = ["PATCH /api/tasks/{task_id}"]
+ui = ["data-action=task-save", "data-action=task-edit", "data-action=task-edit-cancel"]
+kind = "write"
+reversible = "再次编辑回原值（可撤销到上次保存）"
+ai = ["none"]
+note = "备注/优先级/附件/提醒/类型课程都在同一个 PATCH 白名单里，所以只列这一条编辑路由。"
+
+[commands."OP-10"]
+title = "逾期处理"
+routes = [
+  "PATCH /api/tasks/{task_id}", "POST /api/tasks/{task_id}/cancel",
+  "POST /api/tasks/{task_id}/attempt-failed", "POST /api/tasks/{task_id}/unpark",
+]
+ui = ["data-action=task-tomorrow", "data-action=task-cancel", "data-action=task-attempt"]
+kind = "write"
+reversible = "改 ddl 可再改；取消需确认"
+ai = ["none"]
+note = "「推到明天」= PATCH due_date；「标逾期」没有显式路由（状态由 due_date 推导）；PATCH 与 OP-9 共用。"
+
+[commands."OP-11"]
+title = "分组管理"
+routes = [
+  "GET /api/groups", "POST /api/groups", "PATCH /api/groups/{group_id}",
+  "DELETE /api/groups/{group_id}", "POST /api/groups/{group_id}/parent",
+  "GET /api/groups/{group_id}/tasks", "POST /api/tasks/{task_id}/group",
+]
+ui = [
+  "data-action=group-add", "data-action=group-rename", "data-action=group-delete",
+  "data-action=group-sub", "data-action=group-parent", "data-action=task-group",
+]
+kind = "write"
+reversible = "删除分组需快照或二次确认"
+ai = ["none"]
+
+[commands."OP-12"]
+title = "子任务管理"
+routes = [
+  "POST /api/tasks/{task_id}/subtasks", "GET /api/tasks/{task_id}/subtasks",
+  "GET /api/tasks/{task_id}/tree", "POST /api/tasks/{task_id}/parent",
+]
+ui = ["data-action=subtask-add", "data-action=step-toggle"]
+kind = "write"
+reversible = "删除子任务不影响父任务历史"
+ai = ["none"]
+note = "「子任务全完成 → 父任务自动完成」的联动在 complete 路由内（见 OP-5），不另列。"
+
+[commands."OP-13"]
+title = "手动记投入（目标态）"
+routes = ["POST /api/ledger/invest", "GET /api/ledger/invests", "DELETE /api/ledger/invest/{entry_id}"]
+ui = ["data-action=invest-add", "data-action=invest-retract"]
+kind = "write"
+reversible = "撤销 / 反向事实"
+ai = ["none"]
+
+[commands."OP-14"]
+title = "手动记产出（目标态）"
+routes = ["POST /api/ledger/output", "GET /api/ledger/outputs", "DELETE /api/ledger/output/{entry_id}"]
+ui = ["data-action=output-add", "data-action=output-retract"]
+kind = "write"
+reversible = "撤销"
+ai = ["none"]
+note = "与 OP-38 共用同一组路由。"
+
+[commands."OP-15"]
+title = "周结算"
+routes = [
+  "GET /api/summary/weekly", "GET /api/insights/daily", "GET /api/insights/groups",
+  "GET /api/insights/heatmap", "GET /api/insights/repeat-rhythm",
+]
+ui = []
+kind = "read"
+reversible = "只读"
+ai = ["none"]
+note = "入口是专注页「本周投入」区 / 统计页的常驻卡片，没有 data-action。"
+
+[commands."OP-16"]
+title = "逾期债务展示"
+routes = ["GET /api/overdue", "GET /api/summary"]
+ui = []
+kind = "read"
+reversible = "只读"
+ai = ["none"]
+note = "摘要 / 逾期栏都是常驻渲染区，没有 data-action；债务项数在 GET /api/summary 的响应里。"
+
+[commands."OP-17"]
+title = "保存每日反馈"
+routes = ["POST /api/feedback", "GET /api/feedback"]
+ui = ["data-action=feedback-save"]
+kind = "write"
+reversible = "再次保存覆盖；可清空备注"
+ai = ["none"]
+
+[commands."OP-18"]
+title = "习惯打卡 / 取消"
+routes = [
+  "POST /api/habits/{habit_id}/toggle", "POST /api/habits", "GET /api/habits",
+  "PATCH /api/habits/{habit_id}", "DELETE /api/habits/{habit_id}", "GET /api/habits/{habit_id}",
+]
+ui = [
+  "data-action=habit-toggle", "data-action=habit-add", "data-action=habit-rename",
+  "data-action=habit-delete",
+]
+kind = "write"
+reversible = "再次点击取消"
+ai = ["none"]
+note = "后四条来自契约「实现补充（第 10 步）」的新建/改名/删除。"
+
+[commands."OP-19"]
+title = "查看习惯热力图"
+routes = ["GET /api/habits", "GET /api/habits/{habit_id}"]
+ui = []
+kind = "read"
+reversible = "只读"
+ai = ["none"]
+note = "习惯页热力图是常驻渲染，没有专门 data-action。"
+
+[commands."OP-20"]
+title = "自检"
+routes = ["GET /api/selfcheck"]
+ui = []
+kind = "read"
+reversible = "只读"
+ai = ["none"]
+note = "契约明写「自检页（B4 前可无 UI，API 已有）」，所以 ui 为空是**契约允许**的。"
+
+[commands."OP-21"]
+title = "建课程"
+routes = ["POST /api/courses", "GET /api/courses"]
+ui = ["data-action=course-add"]
+kind = "write"
+reversible = "可编辑 / 删除（删除需确认）"
+ai = ["none"]
+note = "app.py 只有建课与列课，**没有**课程的 PATCH/DELETE 路由 —— 契约里的「可编辑/删除」在路由层未实现。"
+
+[commands."OP-22"]
+title = "录考核项"
+routes = [
+  "POST /api/assessments", "GET /api/assessments", "DELETE /api/assessments/{assessment_id}",
+  "POST /api/assessments/{assessment_id}/attachments",
+  "DELETE /api/assessments/{assessment_id}/attachments/{index}",
+]
+ui = [
+  "data-action=assessment-add", "data-action=assessment-del",
+  "data-action=assessment-attach-add", "data-action=assessment-attach-del",
+]
+kind = "write"
+reversible = "可编辑 / 删除"
+ai = ["none"]
+note = "app.py 没有考核项的编辑（PATCH）路由。"
+
+[commands."OP-23"]
+title = "录成绩 / GPA"
+routes = ["POST /api/grades", "GET /api/grades", "DELETE /api/grades/{grade_id}", "GET /api/gpa"]
+ui = ["data-action=grade-add", "data-action=grade-del", "data-action=set-gpa"]
+kind = "write"
+reversible = "可修改 / 删除成绩"
+ai = ["none"]
+note = "GET /api/gpa 的 ?scale= 只切制式（读）；改成绩用 POST /api/grades。"
+
+[commands."OP-24"]
+title = "学校任务合流"
+routes = ["POST /api/tasks", "PATCH /api/tasks/{task_id}", "GET /api/courses"]
+ui = ["data-action=type-course", "data-action=task-open"]
+kind = "write"
+reversible = "可改回「普通」（同时清空课程）或换课程；清空 = 存 NULL"
+ai = ["none"]
+note = "task_type / course_id 是任务属性，**没有专用端点**；task-open 是学业页课程卡的反向列出。"
+
+[commands."OP-25"]
+title = "课程提醒"
+routes = ["GET /api/assessments/upcoming"]
+ui = []
+kind = "read"
+reversible = "可关闭提醒"
+ai = ["none"]
+note = "入口是学业页「临期与逾期（14 天内）」常驻区；契约里「建议进 My Day」在这张列表上**没有按钮**。"
+
+[commands."OP-26"]
+title = "建复习卡 / 升级"
+routes = [
+  "POST /api/review/items", "POST /api/tasks/{task_id}/to-review",
+  "PATCH /api/review/items/{item_id}", "GET /api/review/items/{item_id}",
+  "GET /api/tasks/{task_id}/review-cards", "GET /api/review/meta", "GET /api/review/due",
+]
+ui = ["data-action=review-add", "data-action=task-to-review", "data-action=review-edit"]
+kind = "write"
+reversible = "可删除"
+ai = ["none"]
+
+[commands."OP-27"]
+title = "三态反馈"
+routes = [
+  "POST /api/review/{item_id}/review", "POST /api/review/{item_id}/undo",
+  "POST /api/review/{item_id}/regrade", "GET /api/review/today",
+  "GET /api/review/{item_id}/facts", "GET /api/review/due",
+]
+ui = ["data-action=review-do", "data-action=review-undo", "data-action=review-regrade"]
+kind = "write"
+reversible = "可撤销本次反馈（回退 interval/reps 与事实）——第 5 步已实现"
+ai = ["none"]
+
+[commands."OP-28"]
+title = "到期列表 / 进 My Day"
+routes = ["GET /api/mydays", "GET /api/review/due"]
+ui = ["view=review"]
+kind = "read"
+reversible = "可移出"
+ai = ["none"]
+note = "契约只给了 `GET /api/mydays?include_reviews=1`（**查询参数不算路径差异**）。"
+
+[commands."OP-29"]
+title = "关联引用句柄"
+routes = ["PATCH /api/review/items/{item_id}", "POST /api/vault/open"]
+ui = ["data-action=vault-open", "data-action=review-edit"]
+kind = "write"
+reversible = "可清除"
+ai = ["none"]
+note = "写句柄走 PATCH（与 OP-26 共用）；T-G5 的「卡面 obsidian:// 只读跳转」= POST /api/vault/open。"
+
+[commands."OP-30"]
+title = "外部 app 完成"
+routes = ["POST /api/review/{item_id}/review", "POST /api/review/{item_id}/undo"]
+ui = ["data-action=review-do"]
+kind = "write"
+reversible = "可撤销"
+ai = ["none"]
+note = "契约未点名路由；execution_source=external 的卡仍走同一个三态反馈路由。"
+
+[commands."OP-31"]
+title = "分配任务"
+routes = ["POST /api/team/assign"]
+ui = ["data-action=task-assign"]
+kind = "write"
+reversible = "可取消分配 / 改派"
+ai = ["none"]
+
+[commands."OP-32"]
+title = "回报进展"
+routes = ["PATCH /api/team/assign/{assignment_id}"]
+ui = ["data-action=team-status"]
+kind = "write"
+reversible = "可修正状态（留痕）"
+ai = ["none"]
+
+[commands."OP-33"]
+title = "视角切换"
+routes = ["GET /api/team/board", "GET /api/team/assignments"]
+ui = ["data-action=team-view", "data-action=team-filter", "data-action=team-me", "view=team"]
+kind = "read"
+reversible = "随时切换"
+ai = ["none"]
+note = "契约明写「这一页**不新增写接口**」；GET /api/team/assignments 是旧列表读接口。"
+
+[commands."OP-34"]
+title = "AI 只读 + 新增接口"
+routes = [
+  "GET /api/ai/ping", "GET /api/ai/tasks", "GET /api/ai/tasks/{task_id}",
+  "POST /api/ai/tasks", "POST /api/ai/tasks/{task_id}/complete",
+  "GET /api/settings/ai", "PUT /api/settings/ai",
+]
+ui = ["data-action=set-ai", "data-action=ai-copy"]
+kind = "write"
+reversible = "新增的任务/步骤在界面上删 / 取消即可（AI 自己没有删接口）；勾完成可撤销（OP-5）"
+ai = ["read", "create"]
+note = "契约同时含只读与新增/勾完成，所以 ai 是**两个值**；另两条 `@app.api_route(\"/api/ai/{rest:path}\")` 是明确的拒写兜底（403/404），**不是功能路由**，故不进这张表。"
+
+[commands."OP-35"]
+title = "新建备忘录"
+routes = ["POST /api/memos", "DELETE /api/memos/{memo_id}"]
+ui = ["data-action=memo-add", "data-action=memo-delete"]
+kind = "write"
+reversible = "可删除（确认）"
+ai = ["none"]
+note = "删除路由来自契约「实现补充（第 10 步）」，一并列在本条。"
+
+[commands."OP-36"]
+title = "顺手建任务"
+routes = ["POST /api/memos/{memo_id}/to-task"]
+ui = ["data-action=memo-to-task"]
+kind = "write"
+reversible = "可取消关联 / 删除任务"
+ai = ["none"]
+
+[commands."OP-37"]
+title = "关联引用句柄"
+routes = ["POST /api/memos", "PATCH /api/review/items/{item_id}", "POST /api/vault/open"]
+ui = ["data-action=vault-open", "data-action=review-edit"]
+kind = "write"
+reversible = "可清除"
+ai = ["none"]
+note = "T-G4/T-G5：备忘录句柄随 POST /api/memos 的 ref_handle 落库；跳转与 OP-29 共用。"
+
+[commands."OP-38"]
+title = "产出评价器接口（第一版手动）"
+routes = ["POST /api/ledger/output", "GET /api/ledger/outputs", "DELETE /api/ledger/output/{entry_id}"]
+ui = ["data-action=output-add", "data-action=output-retract"]
+kind = "write"
+reversible = "可撤销"
+ai = ["none"]
+note = "与 OP-14 共用同一组路由（契约自己写「见 F2 契约 OP-14」）—— 这张表如实反映「同一个点」。"
+
+[commands."OP-39"]
+title = "启动迁移"
+routes = []
+ui = []
+kind = "write"
+reversible = "迁移前备份；失败回滚"
+ai = ["none"]
+note = "入口是应用启动 / `connect`（`storage/db.py` 的 `migrate()`），**不是 HTTP 路由**；`GET /api/health` 只暴露 schema_version 而不执行迁移。"
+
+[commands."OP-40"]
+title = "同步数据"
+routes = [
+  "POST /api/sync/export", "POST /api/sync/import", "POST /api/sync/tasks",
+  "GET /api/sync/status", "GET /api/sync/logs",
+]
+ui = ["data-action=sync-export", "data-action=sync-preview", "data-action=sync-import"]
+kind = "write"
+reversible = "包是文件；勾了「同时应用删除」删掉的行不可撤销 —— 要回退用备份与恢复（OP-42）"
+ai = ["none"]
+note = "预览与导入是同一条 POST /api/sync/import（body 里 dry_run=true）；POST /api/sync/tasks 是旧的行级合并入口。"
+
+[commands."OP-41"]
+title = "冲突处理"
+routes = ["GET /api/sync/logs", "GET /api/sync/status"]
+ui = ["view=setting"]
+kind = "read"
+reversible = "可手动改回；导入前的状态可用备份与恢复回退（OP-42）"
+ai = ["none"]
+note = "入口是设置页里的一节而不是按钮，所以只给 view=setting。"
+
+[commands."OP-42"]
+title = "备份 / 回滚"
+routes = ["GET /api/settings/backups", "POST /api/settings/restore"]
+ui = ["data-action=restore-backup"]
+kind = "write"
+reversible = "恢复前会先自动再备份一次现库，所以这一步是可逆的（界面上必须写明，否则用户不敢点）"
+ai = ["none"]
+note = "「起服务前自动备份」在 tools/serve.py / app/main.py，不在 app.py，故未列路由。"
+
+[commands."OP-43"]
+title = "配置加载"
+routes = []
+ui = []
+kind = "read"
+reversible = "改配置重启"
+ai = ["none"]
+note = "入口是启动时的 Pydantic 校验与注入，不是路由；GET /api/config 只把个别配置项暴露给界面，不是「加载」动作。"
+
+[commands."OP-44"]
+title = "外部通知导入（合作接口）"
+routes = [
+  "GET /api/settings/notify", "PUT /api/settings/notify", "GET /api/notify/school",
+  "POST /api/notify/school", "POST /api/notify/school/{notice_id}/to-task",
+  "POST /api/notify/school/{notice_id}/ignore",
+]
+ui = [
+  "data-action=set-notify", "data-action=notify-copy", "data-action=notice-to-task",
+  "data-action=notice-ignore",
+]
+kind = "write"
+reversible = "忽略可改回待看（不删行：删了下次投递又回来，反而像没收到过）；转出来的任务按任务自己的规矩删 / 取消"
+ai = ["none"]
+
+[commands."OP-45"]
+title = "智能视图筛选（Important / Planned / Flagged）"
+routes = ["GET /api/tasks", "POST /api/tasks/{task_id}/flag"]
+ui = ["data-action=task-flag", "view=important", "view=planned", "view=flagged"]
+kind = "read"
+reversible = "随时切回「全部任务」"
+ai = ["none"]
+note = "视图筛选走同一路由的 ?view= 参数；flag 开关是同条契约里的写动作。"
+
+[commands."OP-46"]
+title = "附件 / 要求链接（挂上 → 点开）"
+routes = [
+  "POST /api/tasks/{task_id}/attachments", "DELETE /api/tasks/{task_id}/attachments/{index}",
+  "POST /api/attach/open", "POST /api/assessments/{assessment_id}/attachments",
+  "DELETE /api/assessments/{assessment_id}/attachments/{index}",
+  "GET /api/settings/attach", "PUT /api/settings/attach",
+]
+ui = [
+  "data-action=attach-add", "data-action=attach-del", "data-action=attach-open",
+  "data-action=assessment-attach-add", "data-action=assessment-attach-del",
+  "data-action=set-attach-mode", "data-action=wl-add", "data-action=wl-del",
+]
+kind = "write"
+reversible = "DELETE /api/tasks/{id}/attachments/{index}（越界 400）；附件只是引用，删掉不动原文件"
+ai = ["none"]
+
+[commands."OP-47"]
+title = "到点通知开关（计划任务 + 系统通知）"
+routes = [
+  "GET /api/settings/reminder", "PUT /api/settings/reminder", "POST /api/reminders/test",
+  "POST /api/reminders/stop", "GET /api/reminders/due", "GET /api/reminders",
+]
+ui = [
+  "data-action=set-remind-notify", "data-action=set-remind-style",
+  "data-action=remind-test", "data-action=remind-stop",
+]
+kind = "write"
+reversible = "随时关闭（删任务）；任务注册失败时设置不落库"
+ai = ["none"]
+note = "后两条是只读的「该提醒了」数据源；提醒时间字段本身在 PATCH /api/tasks/{id} 写。"
+
+[commands."OP-48"]
+title = "今天做成了什么（可展开的完成明细）"
+routes = ["GET /api/today/done"]
+ui = ["data-action=done-toggle"]
+kind = "read"
+reversible = "点「收起」即折叠（纯界面状态）"
+ai = ["none"]
+
+[commands."OP-49"]
+title = "手机离线记（跨端场景 ①）"
+routes = []
+ui = [
+  "data-action=offline-task-add", "data-action=offline-done", "data-action=offline-habit",
+  "data-action=offline-memo-add", "data-action=offline-feedback-save",
+  "data-action=offline-export", "data-action=offline-upload", "data-action=offline-clear",
+  "view=offline",
+]
+kind = "write"
+reversible = "导出不清空队列；清空要显式点「清空（我已导入电脑）」+ 二次确认；重复导入是安全的"
+ai = ["none"]
+note = "契约明写「**没有新 API** —— 这一版全在浏览器侧」，故 routes 为空（队列在 IndexedDB）。"
+
+[commands."OP-50"]
+title = "局域网访问 + 配对（跨端场景 ②）"
+routes = [
+  "GET /api/settings/lan", "PUT /api/settings/lan", "POST /api/lan/pair",
+  "POST /api/lan/selfcheck",
+]
+ui = [
+  "data-action=pair-ask", "data-action=pair-clear", "data-action=copy-lan",
+  "data-action=lan-rotate", "data-action=lan-selfcheck",
+]
+kind = "write"
+reversible = "去掉 --lan（或把 allow_lan 改回 false）重启即恢复只监听本机；换码 = 电脑上「换一个配对码」"
+ai = ["none"]
+note = "契约里的启动方式（tools/serve.py --lan / config.toml）不在 app.py，故只列四条路由。"
+
+[commands."OP-51"]
+title = "跨端同步专注（只读镜像，T-G20）"
+routes = ["GET /api/focus/active"]
+ui = []
+kind = "read"
+reversible = "镜像随对面结束自动消失（界面侧靠 10 秒轮询；数据侧不做推送）"
+ai = ["none"]
+note = "契约明写**没有新接口**（镜像只读既有那一行）；也明写镜像卡里一个 data-action 都不许有 —— 所以 ui 为空是**正确的**，不是漏填。"

@@ -419,7 +419,7 @@ title = "中断三选（暂停/放弃/记中断）"
 group = "F3"
 status = "done"
 evidence = ["text:src/timeflow/core/focus/timer.py::abandoned", "text:src/timeflow/core/focus/timer.py::interrupted"]
-gaps = ""
+gaps = "**★ 2026-09-23（T-G31）建命令表时当场抓到：三选里的「暂停」没有可走通路。** 规格写「中断三选（暂停 / 放弃 / 记中断）」，但：① `app.py` 没有暂停/继续路由；② 界面**0 处** pause/resume —— 那三个按钮实际是「**结束（计入投入）** / 记中断 / 放弃（不入账）」；③ `STATUS_PAUSED = \"paused\"` 在领域层存在、`finish` 也接受它，**但没有任何调用方发过它**（死状态）；④「继续」半条路都没有（要继续只能重新开一段）。**这不是缺口而是「规格没跟上实现」的疑似**：过程中的第 3 项很可能被「结束」替代了。**待用户定**：① 把规格/契约改成「结束 / 放弃 / 记中断」（承认现状）；② 真做「暂停 + 继续」（加路由、加按钮、加回到原段落的状态回退）。**顺带一笔弱证据的教训**：本条证据只有 `abandoned` 与 `interrupted` **两个词** —— 三选里的第三个词「暂停」就靠这个滑过去了，与 T-G23 抓到的番茄钟同一类毛病：挑证据要挑「这个名字没了它就说不通」的那种。"
 
 [entries."SR-F3.3"]
 id = "SR-F3.3"
@@ -451,6 +451,23 @@ evidence = [
   "test:test_focus_mirror_line.py",
 ]
 gaps = "**口径（用户 2026-09-23 定，T-G19）已按它落地（T-G20）**：实时启动 + 结束时再同步 —— 任一台开始专注，另一台**当场**看到只读镜像（右栏 `#clockPeer` + 专注页文案），**不重复记账、也不许停对面的计时**；结束不做实时推，记录各自入库后走已有同步包。**边界（不是缺口，是刻意的）**：① 只在**同一局域网且已配对**时有效（跨端那道门，默认关）；② 老数据 `device_id` 为 NULL 时算「我开的」（保住「重开页面恢复计时」）；③ 勿扰只是**状态可见**，不是系统级屏蔽（与 OP-3c 同口径）。"
+
+[entries."T-G31"]
+id = "T-G31"
+title = "命令表（SR-NF6 / N35）：把界面/⌘K/CLI/AI·MCP 四个面收敛到一张表（54 条 OP ↔ 路由 ↔ 界面入口）+ 检查器接进门禁"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/命令表-四个面一个点-T-G31.md",
+  "text:复盘/命令表-四个面一个点-T-G31.md::建表当场抓到的一个真问题",
+  "text:复盘/命令表-四个面一个点-T-G31.md::空不等于漏",
+  "file:docs/commands.toml",
+  "text:docs/commands.toml::界面按钮 / ⌘K 面板 / CLI / AI·MCP",
+  "file:scripts/check_commands.py",
+  "text:scripts/run_gates.py::(\"commands\", [PY, \"-X\", \"utf8\", \"scripts/check_commands.py\", \"--check\"])",
+  "test:test_check_commands.py",
+]
+gaps = "**只建了表与检查器，没有做 CLI/MCP**（用户定：命令表先做，CLI/MCP **排最后**）。**结果**：契约 54 条 OP → 表 54 行，一条不漏；写的每条路由都在 `app.py` 里真存在、每个界面动作都在 `ACTIONS` 里真注册过（硬冲突 0）；`app.py` 152 条路由 + 2 条 `@app.api_route` 通配兜底（故意不做事，不进表）。**洞如实记下**：还没填出路由 5 条（OP-3b/8/39/43/49）、还没填出界面入口 11 条 —— **空不等于漏**，每条都写了 note 说明为什么空（如 OP-20 契约明写「B4 前可无 UI」、OP-51 契约明写「一个 data-action 都不许有」）。★ **建表当场抓到一个真问题：`OP-3b`「暂停/继续」没有可走通路**（规格 `SR-F3.2` 写「中断三选（暂停/放弃/记中断）」、台账 done，但路由没有、界面 0 处 pause/resume、实际三个按钮是「结束/记中断/放弃」、`STATUS_PAUSED` 无人调用、也没有「继续」）→ **待用户定**：改规格承认现状，还是真做暂停+继续。**没做的**：① 没给命令表加「参数 schema」（CLI/MCP 真正需要的那一列，等做 CLI 时再补）；② 没做界面动作与「真操作」的区分标记（125→139 个 ACTIONS 里不少是纯界面动作如切视图/开面板，CLI 只该暴露后者）。"
 
 [entries."T-G30"]
 id = "T-G30"
