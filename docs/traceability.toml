@@ -930,12 +930,32 @@ evidence = [
   "ui:data-action=offline-export",
   "ui:data-action=offline-upload",
   "text:src/web/index.html::async function offlineUpload()",
+  "text:src/web/index.html::id=\"offlineSeen\"",
+  "text:src/web/index.html::上次看到的（只读）",
+  "text:src/web/index.html::只标出来、不发系统通知",
   "route:POST /api/sync/import",
   "test:test_offline_phone_line.py",
   "test:test_phone_upload_line.py",
+  "test:test_phone_view_line.py",
   "test:test_web_frontend.py",
 ]
 gaps = ""
+
+[entries."T-G16"]
+id = "T-G16"
+title = "跨端：手机上更完整的**看**（离线缓存上的今日/逾期/该提醒了/今天该复习 + 摘要；只读、只标不通知）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/手机看得更全-T-G16.md",
+  "text:src/web/index.html::const OFFLINE_CACHE_PATHS=",
+  "text:src/web/index.html::const OFFLINE_CACHE_KEYS=[",
+  "text:src/web/index.html::上次看到的（只读）",
+  "text:src/web/index.html::只标出来、不发系统通知",
+  "text:src/web/index.html::summaryLine(seenSummary)",
+  "test:test_phone_view_line.py",
+]
+gaps = "看的是**上次联网时看到的样子**（缓存，不是实时）；**提醒仍只在界面标注、不发系统通知** —— 与 T-B5 的移动端口径一致，不是缺口。缓存有多旧（`at`）没有显示出来，属下一张卡。"
 
 [entries."T-G15"]
 id = "T-G15"

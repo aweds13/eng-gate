@@ -1124,18 +1124,45 @@ try {
   await OFF.enqueue('memos', OFF.PURE.memoRow({ text: '探针离线记一条', at: '2026-09-23T20:15:00' }));
   await OFF.enqueue('habit_logs', OFF.PURE.habitRow('h1', '2026-09-23', true));
   const pending = await OFF.pendingCount();
+  // 「上次看到的」（T-G16）：先把**联网时看一遍**这件事真的做出来 —— 临时换上有内容的桩，
+  // 渲染今日页（它会拉 mydays/overdue/reminders/summary），那几份响应会被 rememberForOffline 缓存；
+  // 再渲染离线页，那几段就该有东西。跑完把桩还原（别的档还要用空列表）。
+  const saved = {
+    mydays: DB['/api/mydays'], overdue: DB['/api/overdue'],
+    reminders: DB['/api/reminders/due'], summary: DB['/api/summary'],
+  };
+  DB['/api/mydays'] = [probeTask({ id: 't1', title: '今天要做的', is_myday: true,
+    remind_at: '2026-09-23T21:00', reminder_state: 'today' })];
+  DB['/api/overdue'] = [probeTask({ id: 't2', title: '欠着的事', due_date: '2026-09-20',
+    overdue_days: 3, status: '逾期' })];
+  DB['/api/reminders/due'] = [probeTask({ id: 't3', title: '该提醒的事',
+    remind_at: '2026-09-23T08:30', reminder_state: 'over' })];
+  DB['/api/summary'] = { ...saved.summary, debt_count: 2, invest_hours: 1.5, review_count: 3 };
+  byId.get('main')._html = '';
+  await globalThis.__view('today');
+  await sleep(40);
   byId.get('main')._html = '';
   await globalThis.__view('offline');
   await sleep(40);
   const html = byId.get('main')._html;
+  Object.assign(DB, { '/api/mydays': saved.mydays, '/api/overdue': saved.overdue,
+    '/api/reminders/due': saved.reminders, '/api/summary': saved.summary });
   const needs = ['手机离线记', 'id="offlineStatus"', 'id="offlineQueue"', '离线记一笔',
     'offline-task-add', 'offline-memo-add', 'offline-feedback-save', 'offline-export',
     'offline-copy', 'offline-clear', '待同步（2）', '备忘 · 探针离线记一条',
     '习惯打卡 · 2026-09-23', '<b>不会清空</b>队列', '<b>重复导入是安全的</b>', '同一个 WiFi',
     '会写进包里',
     // T-G15（直接传到电脑）：按钮 + 那段实话（合并规则在电脑那边、失败绝不清空）
-    'offline-upload', '直接传到电脑', '合并规则仍然只在电脑那边', '<b>失败绝不清空</b>'];
+    'offline-upload', '直接传到电脑', '合并规则仍然只在电脑那边', '<b>失败绝不清空</b>',
+    // T-G16（更完整的"看"）：四段只读清单 + 今日摘要 + 提醒时间的口径
+    'id="offlineSeen"', '上次看到的（只读）', '今日摘要（上次联网时）',
+    '该提醒了（1）', '该提醒的事', '提醒时间 2026-09-23 08:30',
+    '今天该复习（', '逾期（1）', '欠着的事', '逾期 3 天',
+    '<b>只标出来、不发系统通知</b>', '<b>上次联网时看到的样子</b>'];
   const missing = needs.filter((n) => !html.includes(n));
+  // 反证：只读区里**不许**出现"只看不改"以外能改数据的东西（提醒是"标出来"，不是"点掉"）
+  const seenBlock = html.split('id="offlineSeen"', 2)[1] || '';
+  const seenPure = !seenBlock.includes('offline-done') && !seenBlock.includes('offline-habit');
   const packed = await OFF.packOnce();
   const parsed = JSON.parse(packed.text);
   const packOk = parsed.format === 'timeflow-sync' && parsed.format_version === 1
@@ -1147,12 +1174,13 @@ try {
     && JSON.stringify(packed.pack) === JSON.stringify(parsed);
   // 反证：包文本里**不许**出现这台设备的设置（那是"这台机器的事"，不跟着包走）
   const noSettings = !packed.text.includes('app_settings');
-  const rendered = missing.length === 0 && packOk && noSettings && pending === 2;
+  const rendered = missing.length === 0 && packOk && noSettings && pending === 2 && seenPure;
   if (!rendered) offlineBad++;
-  offlineChecks.push({ rendered, missing, packOk, noSettings, pending });
+  offlineChecks.push({ rendered, missing, packOk, noSettings, pending, seenPure });
   console.log(`  ${rendered ? '✅' : '⚠️ '} offline·手机离线记 main ${String(html.length).padStart(6)}B`
     + `（队列 ${pending} 条 · 包 ${packed.rows} 行 · ${packOk ? '结构对' : '结构不对'}`
-    + `${noSettings ? '' : ' · 混进了设置表'}）`
+    + `${noSettings ? '' : ' · 混进了设置表'}`
+    + ` · 只读区${seenPure ? '干净' : '混进了能改数据的东西'}）`
     + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
 } catch (e) {
   offlineBad++;

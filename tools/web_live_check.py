@@ -422,6 +422,35 @@ def live_notify_checks(base: str) -> dict[str, bool]:
     }
 
 
+def live_phone_view_checks(base: str) -> dict[str, bool]:
+    """T-G16 真机自检：手机要"**看**"的那几份清单在真服务上答得上来，而且**口径由后端算好**。
+
+    为什么强调后半句：手机上不做计算（没有库、没有领域层），它显示什么就是后端给什么 ——
+    所以"逾期几天""该不该提醒"必须由接口算完，不能让界面自己拿今天去减。
+    这里建一条**早就过期还带提醒**的任务，看这两样是不是都算好了。
+    """
+    made = _json_call(base, "/api/tasks", "POST", {
+        "title": "真机自检·逾期与提醒", "due_date": "2020-01-01",
+        "remind_at": "2020-01-01T08:00", "is_myday": True,
+    })[1] or {}
+    mydays = _json_call(base, "/api/mydays")[1]
+    overdue = _json_call(base, "/api/overdue")[1]
+    reminders = _json_call(base, "/api/reminders/due")[1]
+    review = _json_call(base, "/api/review/due")[1]
+    summary = _json_call(base, "/api/summary")[1] or {}
+    got = next((x for x in (overdue or []) if x.get("id") == made.get("id")), {})
+    rem = next((x for x in (reminders or []) if x.get("id") == made.get("id")), {})
+    return {
+        "手机要看的四份清单在真服务上都答得上来": all(
+            isinstance(x, list) for x in (mydays, overdue, reminders, review)
+        ) and isinstance(summary, dict),
+        "手机看的口径由后端算好（逾期天数 / 提醒状态）": got.get("overdue_days", 0) > 0
+            and rem.get("reminder_state") == "over" and bool(rem.get("remind_at")),
+        "摘要字段够拼一句话（手机不自己算）":
+            {"debt_count", "invest_hours", "review_count"} <= set(summary),
+    }
+
+
 def live_sync_checks(base: str, tmp: Path) -> dict[str, bool]:
     """T-G8 真机自检：同步包的**导出 → 预览 → 导入**在真服务上走一遍（场景 ③）。
 
@@ -745,6 +774,7 @@ def main() -> int:
     checks.update(live_team_checks(base))
     checks.update(live_regrade_checks(base))
     checks.update(live_notify_checks(base))
+    checks.update(live_phone_view_checks(base))
     checks.update(live_sync_checks(base, tmp))
     checks.update(live_offline_checks(base, tmp))
     checks.update(live_lan_checks(tmp))

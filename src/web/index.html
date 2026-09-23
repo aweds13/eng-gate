@@ -163,9 +163,16 @@ function defaultDateFields(ids){
  * 说明不了"电脑那台服务开着没有" —— 所以真正的判据是**请求有没有连上**（见 api() 的 `__offline`）。
  */
 let netDown=false;                        // 上一次请求是不是"连不上"（断网或服务没开）
-const offlineCache={tasks:[],habits:[],memos:[],feedback:null};   // 离线能看的几份（持久那份在 IndexedDB）
+// 离线能看的几份（持久那份在 IndexedDB）。T-G16 起"看"的部分补齐：今日 / 逾期 / 该提醒了 /
+// 今天该复习 / 今日摘要 —— 手机上不只用来"记"，也能**看上次联网时的样子**。
+const offlineCache={tasks:[],habits:[],memos:[],feedback:null,
+  mydays:[],overdue:[],reminders:[],reviewDue:[],summary:null};
 const OFFLINE_CACHE_PATHS={'/api/tasks':'tasks','/api/habits':'habits','/api/memos':'memos',
-  '/api/feedback':'feedback'};
+  '/api/feedback':'feedback','/api/mydays':'mydays','/api/overdue':'overdue',
+  '/api/reminders/due':'reminders','/api/review/due':'reviewDue','/api/summary':'summary'};
+// 缓存键（IndexedDB 里存的那几份）—— 与上面一一对应；列表类都当"行的数组"读，摘要是对象。
+const OFFLINE_CACHE_KEYS=['tasks','habits','memos','feedback','mydays','overdue','reminders',
+  'reviewDue','summary'];
 function offlineEngine(){return (typeof TFOffline!=='undefined')?TFOffline:null}
 function offlineReady(){const o=offlineEngine();try{return !!(o&&o.available())}catch(e){return false}}
 function offlineNow(){return netDown||!navigator.onLine}
@@ -380,7 +387,7 @@ async function renderOffline(m){
     try{entries=await o.pending()}catch(e){err=String((e&&e.message)||e)}
     try{last=o.lastExport()}catch(e){}
     if(!err){
-      for(const k of ['tasks','habits','memos','feedback']){
+      for(const k of OFFLINE_CACHE_KEYS){
         try{const got=await o.getCache(k);if(got&&got.rows!==undefined)offlineCache[k]=got.rows}catch(e){}
       }
     }
@@ -389,6 +396,37 @@ async function renderOffline(m){
   const habits=offlineCache.habits||[];
   const openTasks=tasks.filter(t=>t.status!=='完成');
   const doneTasks=tasks.filter(t=>t.status==='完成');
+  // 「上次看到的」（只读，T-G16）：手机上也能**看**今天该做什么、欠了什么、什么时候该动。
+  // 数据就是上次联网时那几份接口的响应（**原样缓存**，不在这里重算任何口径）：
+  // 提醒状态/逾期天数都是后端算好的字段（`reminder_state` / `overdue_days`）。
+  const seenReminders=offlineCache.reminders||[];
+  const seenReview=offlineCache.reviewDue||[];
+  const seenOverdue=offlineCache.overdue||[];
+  const seenSummary=offlineCache.summary||null;
+  const seenCard=(rows,row,empty)=>
+    rows.length?rows.map(row).join(''):`<div class="sub">${esc(empty)}</div>`;
+  const seen=`<div class="section-title">上次看到的（只读）</div>
+  <div class="card panel-card" id="offlineSeen">
+    ${seenSummary?`<div class="meta">今日摘要（上次联网时）：${esc(summaryLine(seenSummary))}</div>`:''}
+    <div class="settings-sub">该提醒了（${seenReminders.length}）</div>
+    ${seenCard(seenReminders,t=>`<div class="card"><div style="flex:1">
+        <div class="title">${esc(t.title)}</div>
+        <div class="meta">提醒时间 ${esc(String(t.remind_at||'').replace('T',' '))}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}</div></div></div>`,
+      '上次联网时没有到点的提醒。')}
+    <div class="sub">手机上<b>只标出来、不发系统通知</b>（与电脑端同口径：移动端只标不通知）。</div>
+    <div class="settings-sub">今天该复习（${seenReview.length}）</div>
+    ${seenCard(seenReview,r=>`<div class="card"><div style="flex:1">
+        <div class="title">${esc(r.title)}</div>
+        <div class="meta">到期 ${esc(r.due_date||'—')} · 已复习 ${r.reps||0} 次</div></div></div>`,
+      '上次联网时没有到期的复习卡。')}
+    <div class="settings-sub">逾期（${seenOverdue.length}）</div>
+    ${seenCard(seenOverdue,t=>`<div class="card"><div style="flex:1">
+        <div class="title">${esc(t.title)}</div>
+        <div class="meta">${t.overdue_days?`逾期 ${t.overdue_days} 天`:''}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}</div></div></div>`,
+      '上次联网时没有逾期。')}
+    <div class="sub">这几份是<b>上次联网时看到的样子</b>（不是实时的），只看不改 ——
+      手机上能改的只有「完成 / 撤销完成」与习惯打卡。</div>
+  </div>`;
   const notReady=`<div class="card panel-card" id="offlineUnsupported"><div class="title">这台设备用不了离线存储</div>
     <div class="meta">${esc(err||'这个浏览器不支持 IndexedDB，或在隐私模式下被禁用了')}。
     离线记要靠它把队列存在本机；换成 Chrome / Edge / Safari 的普通（非隐私）窗口就能用。
@@ -425,7 +463,7 @@ async function renderOffline(m){
   <div class="card panel-card">
     ${openTasks.length?openTasks.slice(0,30).map(t=>`<div class="card"><div style="flex:1">
         <div class="title">${esc(t.title)}</div>
-        <div class="meta">${esc(t.status)}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}${t.is_myday?' · 今天':''}</div></div>
+        <div class="meta">${esc(t.status)}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}${t.is_myday?' · 今天':''}${t.remind_at?` · 提醒 ${esc(String(t.remind_at).replace('T',' '))}`:''}</div></div>
         <button class="ghost" data-action="offline-done" data-id="${esc(t.id)}" data-done="true">完成</button>
       </div>`).join(''):emptyState('缓存里没有还能勾的任务（联网打开一次任务列表就会缓存下来）')}
     ${doneTasks.length?`<div class="sub">已完成（点一下撤销）：${doneTasks.slice(0,10).map(t=>
@@ -447,6 +485,7 @@ async function renderOffline(m){
       : '这台设备现在连得上电脑：记的东西直接进库；下面这份队列是之前离线时攒下的，点 <b>直接传到电脑</b> 就能合并过去（不会自动传 —— 你说传才传）。'}</div>
   </div>
   ${notReady}${capture}
+  ${seen}
   <div class="section-title">待同步（${entries.length}）</div>
   <div class="card panel-card" id="offlineQueue">
     <div class="row tight">
