@@ -158,7 +158,8 @@ async function seed(port) {
   }
 
   // 分组（两级：路径显示用）。注意 `set_task_groups` 收的是**分组 id** 不是路径 ——
-  // 传路径会 500（顺手抓到的接口缺陷，已登记台账，不在本轮修）。
+  // 这正是建这一层时撞出 T-G33 的地方（当时传了一个不存在的分组，接口直接 500；
+  // 现在不存在的分组会干净地 404 并说清是哪个 id，见 `复盘/接口500-分组不存在-T-G33.md`）。
   const g1 = await call('POST', '/api/groups', { name: '高数' })
   const g2 = g1 ? await call('POST', '/api/groups', { name: '作业', parent_id: g1.id }) : null
   const groupIds = g2 ? [g2.id] : []

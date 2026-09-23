@@ -479,15 +479,20 @@ gaps = "**回答用户那句「为什么是要我来验证？你不能验证吗�
 
 [entries."T-G33"]
 id = "T-G33"
-title = "接口健壮性（缺陷）：分组不存在时 `POST /api/tasks` 返回 500（应 400/404 并说清是哪个分组）"
+title = "接口缺陷：分组不存在时建/改任务返回 500 与「指错对象的 404」（T-G32 建种子数据时撞到）"
 group = "PROCESS"
-status = "todo"
+status = "done"
 evidence = [
-  "file:复盘/渲染验证层-T-G32.md",
-  "text:src/timeflow/core/tasks/groups.py::get_group(conn, key)  # 不存在就抛 KeyError",
-  "text:src/timeflow/api/app.py::tm.set_task_groups(conn, t.id, payload.groups)",
+  "file:复盘/接口500-分组不存在-T-G33.md",
+  "text:复盘/接口500-分组不存在-T-G33.md::把输入**先验干净**",
+  "text:复盘/接口500-分组不存在-T-G33.md::证明不假红",
+  "text:src/timeflow/api/app.py::def _require_groups(group_ids: list[str]) -> None:",
+  "text:src/timeflow/api/app.py::_require_groups(payload.groups)",
+  "text:src/timeflow/api/app.py::_require_groups(payload[\"groups\"])",
+  "test:test_task_groups_line.py",
+  "text:src/timeflow/core/tasks/groups.py::分组不存在 → KeyError",
 ]
-gaps = "**2026-09-23 建渲染层的种子数据时当场撞到**：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500 Internal Server Error**。链路：`core/tasks/groups.py::set_task_groups` 对不存在的分组抛 `KeyError`，而 `api/app.py::create_task` 只接 `ValueError`。**为什么值得单独开卡**：① 500 是「本工具崩了」的意思，实际是**调用方给错了**（该 400/404 + 说清哪个分组不存在）；② 这是**唯一一类**会从真机路径上冒出来的 500（分组是界面里能勾的），口径要一次定清而不是就地打补丁；③ 修它要顺带决定「输入是 id 还是路径」（现在 `TaskIn.groups` 收 id、`TaskOut.groups` 回路径，名字一样、含义不同 —— 容易再踩）。**范围**：改成 400/404 + 中文原话 + 一条用例；**顺带检查**同类「KeyError 逃出路由」的地方有没有第二处。"
+gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。"
 
 
 [entries."T-G31"]

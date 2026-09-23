@@ -1066,9 +1066,35 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(e)) from e
         return {**attach_mod.get_settings(conn), **attach_mod.describe_rules()}
 
+    def _require_groups(group_ids: list[str]) -> None:
+        """任务上要挂的每个分组都必须**已经存在**（T-G33）。
+
+        为什么单独先验一遍，而不是等 `set_task_groups` 抛错：关联发生在**任务建完/改完之后**，
+        等它抛错时那条任务**已经落库** —— 客户端看到报错、库里却多一条（重试就多两条）。
+        所以把输入先验干净：这一类的"半成品"就不存在了。
+
+        口径与 `POST /api/tasks/{task_id}/group` 那条路由**一致**：分组不存在 = **404**，
+        并把是哪个 id 说出来（照抄领域层 `get_group` 的原话，别自己另造一句）。
+
+        （残留边界，如实写：验证通过之后若再出数据库级错误，任务仍然留下 —— 两个 core 函数
+        各自 commit，没有跨函数事务。要彻底解决得动事务边界，不在这一卡里做。）
+        """
+        missing: list[str] = []
+        for gid in group_ids:
+            key = str(gid or "").strip()
+            if not key or key in missing:
+                continue
+            try:
+                tm.get_group(conn, key)
+            except KeyError as e:
+                missing.append(str(e.args[0]) if e.args else key)
+        if missing:
+            raise HTTPException(status_code=404, detail="；".join(missing))
+
     @app.post("/api/tasks", response_model=TaskOut)
     def create_task(payload: TaskIn) -> TaskOut:
         try:
+            _require_groups(payload.groups)
             t = tm.create_task(
                 conn,
                 title=payload.title,
@@ -1155,8 +1181,13 @@ def create_app(
 
         `KeyError` = 任务不存在 → **404**（以前被 `(KeyError, ValueError)` 一起吞成 400，
         还会把 `str(KeyError)` 的引号一起显示出来 —— 实测踩到）。
+
+        `groups` 先验（T-G33）：不存在的分组 → **404「分组不存在」**。以前这里两种 404 混成一句 ——
+        分组不存在也报「任务不存在」，**指错了对象**（任务好好的）。
         """
         fields = {k: v for k, v in payload.items() if k != "groups"}
+        if "groups" in payload:
+            _require_groups(payload["groups"])
         try:
             t = tm.update_task(conn, task_id, **fields)
             if "groups" in payload:

@@ -148,6 +148,35 @@ def test_api_task_group_toggle_and_group_tasks(tmp_path) -> None:  # type: ignor
     assert client.post(f"/api/tasks/{tid}/group", json={"group_id": ""}).status_code == 400
 
 
+def test_api_task_create_or_update_with_unknown_group_is_404(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """任务上的 `groups` 给了不存在的分组 → **404「分组不存在」**，而且**任务不许被留下**（T-G33）。
+
+    这是建渲染验证层的种子数据时当场撞到的：`POST /api/tasks` 带一个不存在的分组 id（传**路径**
+    也一样）直接 **500** —— `set_task_groups` 对不存在的分组抛 `KeyError`，而那条路由只接了
+    `ValueError`。顺带查出**同族第二处**：`PATCH /api/tasks/{id}` 也抛 `KeyError`，但被
+    "任务不存在"那一条接住了 → 明明任务好好的，却报「任务不存在」（**指错对象**）。
+    """
+    client = TestClient(create_app(str(tmp_path / "g33.db")))
+    gid = client.post("/api/groups", json={"name": "学习"}).json()["id"]
+
+    # ① 建任务：不存在的分组 id → 404，且说清是哪个 id
+    r = client.post("/api/tasks", json={"title": "写作业", "groups": [gid, "nope"]})
+    assert r.status_code == 404, r.text
+    assert "分组不存在" in r.json()["detail"] and "nope" in r.json()["detail"]
+
+    # ② 任务**不许**被留下（否则客户端看到报错、库里却多一条，重试就多两条）
+    assert [t["title"] for t in client.get("/api/tasks").json()] == []
+
+    # ③ 改任务：同样 404，但**不能**再说"任务不存在"（那是两件事）
+    tid = client.post("/api/tasks", json={"title": "写作业", "groups": [gid]}).json()["id"]
+    r2 = client.patch(f"/api/tasks/{tid}", json={"groups": ["nope"]})
+    assert r2.status_code == 404 and "分组不存在" in r2.json()["detail"]
+
+    # ④ 真的任务不存在时，仍然是老口径（别把两种 404 混成一句）
+    r3 = client.patch("/api/tasks/nope", json={"groups": [gid]})
+    assert r3.status_code == 404 and r3.json()["detail"] == "任务不存在"
+
+
 def test_api_group_counts_match_tasks(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """分组计数与真实归属一致（AC-6）。"""
     client = TestClient(create_app(str(tmp_path / "c.db")))
