@@ -32,13 +32,13 @@
  * 退出码：0 全通过 / 1 有流失败 / 2 fixture（种子数据）坏了 / 3 起不了真浏览器（NOT RUN）/
  *         4 两遍断言指纹不一致（工具自己不可信）。
  */
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 import {
-  Cdp, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
-  bootApp, findBrowser, seedFixture, setViewport, startServer, waitApp, waitHealth, waitQuiet,
+  Cdp, EXPORT_DIR, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
+  bootApp, findBrowser, iso, seedFixture, setViewport, startServer, waitApp, waitHealth, waitQuiet,
 } from './tf_browser.mjs'
 
 const SHOTS_DIR = join(ROOT, 'gates', 'render', 'shots')  // 证据与黄金层放一起（同样不进仓库）
@@ -270,6 +270,21 @@ class T {
 
   nativeDialogs() { return this.cdp.eval('window.__tfNative || []') }
 
+  /** 从 **Node 侧**直接打接口（不带 Origin）—— 两条用途：
+   *  ① 验"界面上看不见的那一半"（AI 合作接口的边界、403 原话）；
+   *  ② 给界面准备一点它自己要用的数据（如"我自己建的那个任务"的 id）。
+   *  注意：**能走界面的一律走界面**（那才是这一层要验的东西），这里只补界面做不到的部分。 */
+  async api(method, path, body) {
+    const res = await fetch(this.url.replace(/\/$/, '') + path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    let json = null
+    try { json = await res.json() } catch { /* 可能没有 body */ }
+    return { status: res.status, json }
+  }
+
   async shot(name) {
     mkdirSync(SHOTS_DIR, { recursive: true })
     await this.cdp.shot(join(SHOTS_DIR, `flow-${name}.png`))
@@ -349,6 +364,9 @@ flow({
     t.ok('非法时段被拦下了', bad.ok, `提示条里是：${bad.text || '（空）'}`)
     t.has('透出来的是后端原话（哪一条、错在哪）', bad.text,
       '勿扰时段要写成 HH:MM-HH:MM（24 小时制）：25:00-07:00')
+    // 后端原话是**直接显示在提示条上**的，所以它也得过"界面上不许有字面星号"这一关。
+    // （这是**抽样**不是保证：只有走过提示条的那些原话会被这一条看见，见复盘 §6 边界。）
+    t.lacks('后端原话进了提示条也不许画星号', bad.text, '**')
     t.eq('非法时段没有被记进列表', await t.count('[data-action="guard-dnd-del"]'), 0)
 
     // ② 合法时段：真打字 + 真回车（走的是 `data-enter` 那条键盘通路，不是点按钮）
@@ -476,6 +494,149 @@ flow({
     t.has('单独放在前面并说明了', body, '硬考核：临期与逾期')
     t.has('写明了这类是「逾期不候」', body, '逾期不候')
     t.has('没有把已录成绩的算进来（说明里写着未录成绩）', body, '未录成绩')
+  },
+})
+
+flow({
+  id: '⑬', name: '导出 Markdown：目录能改，导出今天真的写出文件',
+  item: 'G 批 ⑬ 设置页「导出（Markdown）」',
+  vp: 'desktop',
+  async run(t) {
+    await t.start('setting')
+    const shown = await t.attr('#exportDir', 'value')
+    t.has('设置页显示的是这台机器上的导出目录', shown, 'tf-render-export')
+
+    // ① 目录能改（改成临时目录下的一个子目录 —— 这根线**真写盘**，所以必须钉在一个确定的地方）
+    const sub = join(EXPORT_DIR, 'flow-export')
+    await t.type('#exportDir', sub)
+    await t.key('Enter')
+    const set = await t.waitToast('导出目录已设为')
+    t.ok('目录能改', set.ok, `提示条里是：${set.text || '（空）'}`)
+    t.has('改完回话里说的是新目录', set.text, 'flow-export')
+
+    // ② 导出今天 → 文件**真的**落在磁盘上（这一条不看界面看文件系统）
+    await t.pressAction('export-day')
+    const wrote = await t.waitToast('已写出')
+    t.ok('点「导出今天」有回话', wrote.ok, `提示条里是：${wrote.text || '（空）'}`)
+    const day = iso(new Date())
+    const file = join(sub, `${day}.md`)
+    if (t.ok(`文件真的写出来了：${day}.md`, existsSync(file), `磁盘上没有 ${file}`)) {
+      const md = readFileSync(file, 'utf8')
+      t.has('标题就是那一天（一天一个文件）', md, `# ${day}`)
+      t.has('有「完成」那一段', md, '## 完成')
+      t.has('有「投入」那一段', md, '## 投入')
+      t.has('有「备忘」那一段', md, '## 备忘')
+      // **注意**：md 是给 Obsidian 看的 **markdown 产物**，里面的 `**加粗**` 是**对的** ——
+      // 这正是 §㉑ 那条流要区分开的：**界面文字**不许画星号，**markdown 产物**本来就该有。
+    }
+
+    // ③ 收拾干净：把目录改回去（不给后面的流留状态）
+    await t.type('#exportDir', EXPORT_DIR)
+    await t.key('Enter')
+    t.eq('目录改回原样', (await t.waitToast('导出目录已设为')).ok, true)
+    t.has('「打开目录」那个按钮在（会真的弹出资源管理器窗口 —— **故意不点**）',
+      await t.bodyText(), '打开目录')
+  },
+})
+
+flow({
+  id: '⑯', name: 'AI 接口边界：默认关 → 打开能加步骤 → 你建的它碰不了',
+  item: 'G 批 ⑯ 设置页「AI 接口（只读 + 新增）」',
+  vp: 'desktop',
+  async run(t) {
+    await t.start('setting')
+    t.has('界面明说默认是关的', await t.bodyText(), '现在：关着（默认 —— 这一组接口一律 403）')
+
+    // ① 关着的时候：**整组一律 403**，而且原话告诉你先去哪打开
+    const off = await t.api('POST', '/api/ai/tasks', { title: 'AI 建的任务' })
+    t.eq('关着时 AI 接口一律 403（读也拦）', off.status, 403)
+    t.has('403 的原话指向设置页那个开关', String(off.json && off.json.detail), 'AI 接口默认是')
+
+    // ② 打开（真点界面上的按钮）
+    await t.pressAction('set-ai', { text: '打开' })
+    const opened = await t.waitToast('AI 接口已打开')
+    t.ok('开关能打开', opened.ok, `提示条里是：${opened.text || '（空）'}`)
+    const ping = await t.api('GET', '/api/ai/ping')
+    t.eq('打开后 ping 能自证', ping.status, 200)
+    t.has('自述里写着这一版是只读 + 新增', JSON.stringify(ping.json), '只读')
+
+    // ③ AI 给一个**我建的**任务加步骤 = 「回报进展」的正规形式 → 那张卡要带「AI 建的」徽标
+    const list = await t.api('GET', '/api/tasks')
+    const mine = (Array.isArray(list.json) ? list.json : []).find((x) => x.title === '把第三章习题做完')
+    if (!t.ok('拿得到我自己建的那个任务', Boolean(mine))) return
+    const added = await t.api('POST', '/api/ai/tasks', { title: 'AI 加的步骤', parent_id: mine.id })
+    t.eq('AI 能加步骤（这就是"回报进展"）', added.status, 200)
+    await t.view('tasks')
+    const body = await t.bodyText()
+    t.has('任务列表里出现了它', body, 'AI 加的步骤')
+    t.has('★ 那张卡上带「AI 建的」徽标（可回溯）', body, 'AI 建的')
+
+    // ④ 边界：拿**我自己建的**任务去勾完成 → 400 带原话，而且**状态一个字节不动**
+    const before = await t.api('GET', `/api/tasks/${mine.id}`)
+    const bad = await t.api('POST', `/api/ai/tasks/${mine.id}/complete`, {})
+    t.eq('勾你建的 → 400（这就是那道边界）', bad.status, 400)
+    t.has('原话点明「是你亲手建的」', String(bad.json && bad.json.detail), '你亲手建的')
+    // 别写死状态值（那是领域层的中文口径，会变）：**比"拒前拒后一不一样"**才是不变式
+    const after = await t.api('GET', `/api/tasks/${mine.id}`)
+    t.eq('被拒之后状态没被动过', after.json && after.json.status, before.json && before.json.status)
+    t.eq('也没被写上完成时间', after.json && after.json.completed_at, before.json && before.json.completed_at)
+
+    // ⑤ 收拾干净：关回去
+    await t.view('setting')
+    await t.pressAction('set-ai', { text: '关闭' })
+    t.eq('能关回去', (await t.waitToast('AI 接口已关闭')).ok, true)
+  },
+})
+
+flow({
+  id: '㉔', name: '复习改判：记得 → 改判为忘了，进度不重复计（顺带 ⑤ toast 上那个「记一笔产出」）',
+  item: 'T-G13 ㉔ 复习改判（同一趟顺带覆盖前端批次② ⑤）',
+  vp: 'desktop',
+  async run(t) {
+    await t.start('review')
+    /** 进度条上那个 **done 数**（`今日复习进度 0/2`）。**不写死总数** ——
+     *  总数取决于"这一趟之前有没有别的流又建了一张复习卡"（① 就会），
+     *  而这一条流真正要证明的是**改判不会重复计**：done 从 0 → 1，改判后**仍是 1**。
+     *  （第一版写死了 `0/1`，单独跑绿、跟着整套跑红 —— **"两遍一致"抓不到这种错**，
+     *    因为两遍都是按同一个顺序跑的。见复盘 §5-⑤。） */
+    const doneCount = async () => {
+      const row = await t.cdp.eval(`(() => {
+        const e = [...document.querySelectorAll('.sub')].find((x) => x.textContent.includes('今日复习进度'));
+        return e ? e.textContent.replace(/\\s+/g, '') : null })()`)
+      const hit = /今日复习进度(\d+)\//.exec(String(row))
+      return hit ? Number(hit[1]) : null
+    }
+    const TITLE = '拉格朗日中值定理'
+    t.eq('一开始还没复习过（done=0）', await doneCount(), 0)
+    t.has('到期那一节列着它', await t.bodyText(), `到期复习（`)
+
+    // ① 点「记得」（**钉在那张卡里**点：这一页可能不止一张到期卡）
+    const rate = await t.mark('[data-action="review-do"]', { inCard: TITLE, text: '记得' })
+    if (!t.ok('到期卡上有「记得」', rate.ok)) return
+    await t.press(HIT, '点「记得」')
+    const rec = await t.waitToast('复习已记录')
+    t.ok('记下来了', rec.ok, `提示条里是：${rec.text || '（空）'}`)
+    t.has('★ 提示条上出现「记一笔产出」（前端批次② ⑤）', rec.text, '记一笔产出')
+    t.eq('这一次计入进度（done=1）', await doneCount(), 1)
+    t.has('「今天复习过的」里出现它、并写着今天记的是哪一档', await t.bodyText(), '今天记的是 记得')
+    // ⑤ 的另一半：**不点会自己消失**（赖着不走就不叫"过场提示"了）
+    t.ok('不去点它的话，提示条会自己消失', await t.waitFor(async () => (await t.toast()) === '', 9000))
+
+    // ② 改判：同一档不给（改了没意义），只给另外两档
+    const same = await t.mark('[data-action="review-regrade"]', { inCard: TITLE, text: '记得' })
+    t.ok('不会给「改判为 记得」自己那一档（那是无效动作）', !same.ok)
+    const amend = await t.mark('[data-action="review-regrade"]', { inCard: TITLE, text: '忘了' })
+    if (!t.ok('已经复习过的卡上给了「改判为 忘了」', amend.ok)) return
+    await t.press(HIT, '点「改判为 忘了」')
+    t.has('二次确认说清了排期怎么重算', await t.text('#modalTitle'), '按新的一档重算')
+    t.has('也说清了「投入不会重复计」', await t.text('#modalTitle'), '投入不会重复计')
+    t.eq('确认按钮上写的是动作名', await t.text('#modalOk'), '改判')
+
+    await t.pressAction('modal-ok')
+    const done = await t.waitToast('已改判为「忘了」')
+    t.ok('改判成功', done.ok, `提示条里是：${done.text || '（空）'}`)
+    t.has('那行变成「忘了」', await t.bodyText(), '今天记的是 忘了')
+    t.eq('★ 进度仍是 1（改判不重复计）', await doneCount(), 1)
   },
 })
 
