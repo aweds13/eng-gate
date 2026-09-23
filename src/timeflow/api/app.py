@@ -345,6 +345,10 @@ def create_app(
             "accent_color": settings.app.accent_color,
             "theme": settings.app.theme,
             "gpa_scale": settings.academic.gpa_scale,
+            # 番茄钟时长（T-G23）：界面拿它做**倒计时**与到点提示。
+            # 以前这里没暴露，界面只能 `cfg.pomodoro_minutes||25` —— 于是 config.toml 里改过的
+            # 值一直不生效（按钮上永远写 25 分），属于"配置项是死的"。
+            "pomodoro_minutes": settings.focus.pomodoro_minutes,
         }
 
     # ---- 局域网访问 + 配对码（SR-NF17 / G 批 · T-G10b = 跨端场景 ②）----

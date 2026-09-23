@@ -1284,6 +1284,45 @@ def test_lan_pairing_is_wired_and_the_code_stays_home() -> None:
     assert "--lan" in offline_view, "离线页要告诉人：手机能打开它靠的是 --lan（默认关）"
 
 
+def test_pomodoro_length_comes_from_config_and_only_notifies() -> None:
+    """T-G23（FLOW-3 验收第 1 条）：番茄钟要能**倒计时**、到点要**提示**，而且**不自动结束**。
+
+    起因（回头看查出来的）：`flows.md` 的 FLOW-3 验收写着「番茄钟能倒计时并在结束时自动提示
+    或结束」—— 而这条**从来没成立过**：计时器一直正计时（`fmt(elapsed)`），
+    `pomodoro_minutes` 只在按钮
+    文案里出现；更要命的是 `/api/config` **根本没暴露**这个配置项，界面只能
+    `cfg.pomodoro_minutes||25`，于是 config.toml 里改过的值永远不生效（配置项是死的）。
+    这里钉四件事：
+    ① 倒计时用配置里的分钟数（番茄钟），到点后显示"已继续多久"（`+MM:SS`）；
+    ② 普通计时仍是正计时（倒着数对"随便计一会儿"没意义）；
+    ③ 到点**只提示一次**（按 session id 记），并且提示里写明"不会替你停"；
+    ④ 到点**不改任何数据**：不自动发 finish、不发新请求（配置那次拉取除外）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    # 只取"我开的"那一支（镜像函数排在它后面，别混进来）
+    active_fn = html.split("function renderActive(el,active){", 1)[1]
+    active_fn = active_fn.split("function renderActiveMirror", 1)[0]
+    assert "focusCfg*60" in active_fn, "倒计时要用配置里的番茄钟分钟数"
+    assert "sec<total?fmt(total-sec):'+'+fmt(sec-total)" in active_fn, \
+        "到点前倒计时、到点后显示已继续多久"
+    assert "pomoNotified!==active.id" in active_fn, "一轮只提示一次（按 session id 记）"
+    assert "不会替你停" in active_fn and "到点了（${focusCfg} 分）" in active_fn
+    assert "api('/api/config')" in active_fn, "分钟数从 /api/config 来（不写死在界面里）"
+    # ④ 到点这一支不许碰数据：提示块里没有请求、没有 POST（不自动结束、不改状态）
+    notice = active_fn.split("if(total&&sec>=total&&pomoNotified!==active.id){", 1)[1]
+    notice = notice.split("};", 1)[0]
+    assert "api(" not in notice and "method:'POST'" not in notice, f"到点提示不该发请求：{notice}"
+    assert active_fn.count("api(") == 2, \
+        f"这一段只该有两次只读请求（配置 + 任务名）：{active_fn.count('api(')}"
+
+    # ①' 后端必须真的暴露它（否则界面拿不到配置值，`||25` 会把自定义时长吃掉）
+    root = Path(__file__).resolve().parent.parent
+    api_src = (root / "src" / "timeflow" / "api" / "app.py").read_text(encoding="utf-8")
+    assert '"pomodoro_minutes": settings.focus.pomodoro_minutes' in api_src
+    assert "pomodoro_minutes = 25" in (root / "config.example.toml").read_text(encoding="utf-8"), \
+        "配置项要在模板里（否则没人知道有它）"
+
+
 def test_cross_device_focus_mirror_is_read_only() -> None:
     """T-G20（SR-F3.4 / N17）：跨端同步专注 = **实时启动 + 结束时再同步**。
 

@@ -68,7 +68,8 @@ class El {
 
 const byId = new Map();
 for (const id of ['main', 'summary', 'toast', 'modal', 'modalInput', 'modalTitle', 'offlineBar',
-  'focusRail', 'detailRail', 'refresh', 'clock', 'hmRow', 'hmBox', 'hmNote', 'groupAdmin']) {
+  'focusRail', 'detailRail', 'refresh', 'clock', 'clockPeer', 'pomoNote',
+  'hmRow', 'hmBox', 'hmNote', 'groupAdmin']) {
   byId.set(id, new El('div', id));
 }
 const navButtons = [];
@@ -550,6 +551,7 @@ let lanBad = 0;
 let teamBad = 0;
 let noticeBad = 0;
 let mirrorBad = 0;
+let pomoBad = 0;
 let boldBad = 0;
 const results = [];
 for (const v of views) {
@@ -1364,6 +1366,71 @@ try {
   console.log(`  ❌ 专注·跨端镜像 渲染抛错: ${e.message}`);
 }
 
+/* 番茄钟倒计时与到点提示（FLOW-3 验收第 1 条 / T-G23）：契约写「番茄钟能倒计时并在结束时
+   自动提示**或**结束」—— 这里选**提示**（不自动结束：那一轮还想再做一会儿是常事，别替用户决定）。
+   查三件事：① 番茄钟到点前显示**还剩多久**；② 到点后显示「已继续多久」（`+MM:SS`）并给一次提示；
+   ③ 普通计时不受影响（仍正计时、不提示）。时间戳按**本地时间**造（`new Date(...)`），
+   别用 `toISOString()` —— 那是 UTC，减出来的秒数会差好几个小时。 */
+const pomoChecks = [];
+try {
+  const stamp = (msAgo) => {
+    const d = new Date(Date.now() - msAgo);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} `
+      + `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  };
+  const savedActive = DB['/api/focus/active'];
+  // 假 DOM 的 `getElementById` 只认登记过的那几个 id；秒数与提示是**挂到元素上**的
+  // （`textContent` → `_text`），所以要把它们登记上，并且每次渲染前清掉上一次的读数。
+  const readRail = () => ({
+    html: byId.get('focusRail')._html || '',
+    clock: byId.get('clock')._text || '',
+    note: byId.get('pomoNote')._text || '',
+  });
+  const renderRail = async () => {
+    byId.get('focusRail')._html = ''; byId.get('main')._html = '';
+    byId.get('clock')._text = ''; byId.get('pomoNote')._text = '';
+    await globalThis.__view('focus');
+    await sleep(60);   // 等 `/api/config`（番茄钟时长）回来
+  };
+
+  DB['/api/focus/active'] = { id: 's-count', task_id: null, kind: 'tomato',
+    started_at: stamp(60 * 1000), device_id: null };
+  await renderRail();
+  const counting = readRail();
+  // 25 分钟的番茄钟、已经走了 1 分钟 → 还剩 23~24 分（倒计时，不是正计时；读到 23:59 是因为
+  // 断言本身也花了几百毫秒 —— 所以这里看区间，不钉死那一秒）
+  const countdownOk = /^2[34]:\d\d$/.test(counting.clock) && !counting.note
+    && counting.html.includes('番茄钟');
+
+  DB['/api/focus/active'] = { id: 's-pomo', task_id: null, kind: 'tomato',
+    started_at: stamp(40 * 60 * 1000), device_id: null };
+  await renderRail();
+  const overdue = readRail();
+  const noticeOk = overdue.clock.startsWith('+') && overdue.note.includes('到点了（25 分）')
+    && overdue.note.includes('不会替你停')
+    && overdue.html.includes('data-action="focus-finish"');   // 到点也不自动结束：动作还在
+
+  DB['/api/focus/active'] = { id: 's-plain', task_id: null, kind: 'plain',
+    started_at: stamp(40 * 60 * 1000), device_id: null };
+  await renderRail();
+  const plain = readRail();
+  // 普通计时：40 分钟就是 40 分钟（正计时，没有 '+'、也没有到点提示）
+  const plainOk = /^(39|40):\d\d$/.test(plain.clock) && !plain.note
+    && plain.html.includes('普通计时') && plain.html.includes('id="pomoNote"></div>');
+
+  DB['/api/focus/active'] = savedActive;
+  const rendered = countdownOk && noticeOk && plainOk;
+  if (!rendered) pomoBad++;
+  pomoChecks.push({ rendered, countdownOk, noticeOk, plainOk });
+  console.log(`  ${rendered ? '✅' : '⚠️ '} 专注·番茄钟（倒计时 ${countdownOk ? '对' : '不对'}`
+    + `·到点提示且不自动停 ${noticeOk ? '对' : '不对'}·普通计时不受影响 ${plainOk ? '对' : '不对'}）`);
+} catch (e) {
+  pomoBad++;
+  pomoChecks.push({ error: e.message });
+  console.log(`  ❌ 专注·番茄钟 渲染抛错: ${e.message}`);
+}
+
 /* 局域网访问 + 配对码（SR-NF17 / G 批 · T-G10b / 场景 ②）：两块都要真渲染 ——
    ① 设置页那一节（开着时给地址 + 本机可见的配对码 + 两个按钮）；
    ② **配对墙**：把 fetch 换成"回 401 说没配对"，看整页是不是真变成那面墙，
@@ -1582,6 +1649,7 @@ if (process.argv.includes('--json')) {
       export: exportChecks, obsidian: obsidianChecks, ai: aiChecks, sync: syncChecks,
       offline: offlineChecks, lan: lanChecks, team: teamChecks, notice: noticeChecks,
       mirror: mirrorChecks,
+      pomo: pomoChecks,
       bold: boldChecks,
       problems, unregistered: unused },
     null, 2));
@@ -1602,6 +1670,7 @@ const failed = bad > 0 || detailBad > 0 || doneBad > 0 || reviewBad > 0 || regra
   || teamBad > 0
   || noticeBad > 0
   || mirrorBad > 0
+  || pomoBad > 0
   || boldBad > 0
   || unused.length > 0 || problems.length > 0;
 console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length - bad}/${views.length} 个视图正常渲染`
@@ -1629,6 +1698,7 @@ console.log(`\n${failed ? '❌' : '✅'} 假 DOM 渲染探针：${views.length -
   + `，团队视角 ${teamChecks.filter((c) => c.rendered).length}/${teamChecks.length} 正常`
   + `，学校通知 ${noticeChecks.filter((c) => c.rendered).length}/${noticeChecks.length} 正常`
   + `，跨端专注镜像 ${mirrorChecks.filter((c) => c.rendered).length}/${mirrorChecks.length} 正常`
+  + `，番茄钟倒计时与到点提示 ${pomoChecks.filter((c) => c.rendered).length}/${pomoChecks.length} 正常`
   + `，字面星号 ${boldBad === 0 ? '0' : '有'}（源码 + 渲染两遍查）`
   + `，未注册动作 ${unused.length} 个，运行时告警 ${problems.length} 条`);
 process.exit(failed ? 1 : 0);

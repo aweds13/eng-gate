@@ -394,8 +394,16 @@ id = "SR-F3.1"
 title = "番茄/普通计时 + 绑定任务计入"
 group = "F3"
 status = "done"
-evidence = ["text:src/timeflow/core/focus/timer.py::tomato", "route:POST /api/focus/start", "test:test_focus_line.py"]
-gaps = ""
+evidence = [
+  "text:src/timeflow/core/focus/timer.py::tomato",
+  "route:POST /api/focus/start",
+  "route:GET /api/config",
+  "text:src/web/index.html::sec<total?fmt(total-sec)",
+  "text:src/web/index.html::到点了（${focusCfg} 分）",
+  "test:test_focus_line.py",
+  "test:test_web_frontend.py",
+]
+gaps = "**2026-09-23（T-G23）补强证据**：原来这条的证据只有 `text:…timer.py::tomato`（只证明「有个 kind 常量」）—— 而「番茄钟」真正的行为（倒计时 + 到点）**从来没做过**，直到 FLOW-3 自查回填时才被抓出来（计时器一直正计时、`pomodoro_minutes` 只在按钮文案里、`/api/config` 还没暴露它）。现在证据换成能真证行为的那几条。**教训**：`text:文件::一个短词` 这种证据可以很弱 —— 声称 done 时挑证据要挑「这个名字没了它就说不通」的那种。"
 
 [entries."SR-F3.2"]
 id = "SR-F3.2"
@@ -435,6 +443,22 @@ evidence = [
   "test:test_focus_mirror_line.py",
 ]
 gaps = "**口径（用户 2026-09-23 定，T-G19）已按它落地（T-G20）**：实时启动 + 结束时再同步 —— 任一台开始专注，另一台**当场**看到只读镜像（右栏 `#clockPeer` + 专注页文案），**不重复记账、也不许停对面的计时**；结束不做实时推，记录各自入库后走已有同步包。**边界（不是缺口，是刻意的）**：① 只在**同一局域网且已配对**时有效（跨端那道门，默认关）；② 老数据 `device_id` 为 NULL 时算「我开的」（保住「重开页面恢复计时」）；③ 勿扰只是**状态可见**，不是系统级屏蔽（与 OP-3c 同口径）。"
+
+[entries."T-G23"]
+id = "T-G23"
+title = "flows.md 动线自查表回填（4 条动线 11 项逐条实测）+ 补上唯一不成立的那条：番茄钟倒计时/到点提示（顺手修 `/api/config` 没暴露 `pomodoro_minutes`）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/动线自查回填与番茄钟-T-G23.md",
+  "text:docs/contracts/flows.md::2026-09-23 回填（T-G23）",
+  "text:src/web/index.html::pomoNotified",
+  "text:src/web/index.html::不会替你停",
+  "text:src/timeflow/api/app.py::\"pomodoro_minutes\": settings.focus.pomodoro_minutes",
+  "text:config.example.toml::pomodoro_minutes = 25",
+  "test:test_web_frontend.py",
+]
+gaps = "**FLOW-3 验收第 1 条已成立**（倒计时 + 到点提示一次），用的是契约允许的「自动提示**或**结束」里的**提示**那一支 —— **不自动结束**（那一轮还想再做一会儿是常事，别替用户决定；到点后读数显示「已继续多久」）。**顺手修的真缺陷**：`pomodoro_minutes` 在 `config.py` 里存在、`/api/config` 却没暴露 → 界面只能 `||25`，配置里改过的时长永远不生效、连 `config.example.toml` 都没写这个键（配置项是死的）。**仍没做的**：FLOW-4 传导契约里「任务完成/未完成 → 反馈的执行侧」**不自动**（没进贯通验收清单，属产品判断，已登记交接待定清单）。"
 
 [entries."T-G20"]
 id = "T-G20"

@@ -349,9 +349,13 @@ def live_focus_mirror_checks(base: str) -> dict[str, bool]:
         base, f"/api/focus/{blank_sid['id']}/finish", "POST",
         {"duration_sec": 0, "status": "abandoned"},
     )
+    cfg = _json_call(base, "/api/config")[1] or {}
     return {
         "跨端专注：device_id 落库并回传": active.get("device_id") == "cl-live-a"
             and active.get("id") == started.get("id"),
+        # T-G23：番茄钟时长必须由配置给（以前 `/api/config` 没暴露，界面只能 `||25`，
+        # config.toml 里改过的值永远不生效）
+        "番茄钟时长由 /api/config 给": cfg.get("pomodoro_minutes") == 25,
         "跨端专注：只读查询不改任何东西": all(
             p.get("id") == started.get("id") and p.get("device_id") == "cl-live-a" for p in peeks
         ) and during.get("focus_minutes") == 0,

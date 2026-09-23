@@ -944,12 +944,30 @@ function renderActive(el,active){
     <div class="timer" id="clock">--:--</div>
     <div class="meta">${active.kind==='tomato'?'番茄钟':'普通计时'}</div>
     <div class="sub" id="focusTask">${active.task_id?'已绑定任务':'未绑定任务'}</div>
+    <div class="sub" id="pomoNote"></div>
     <div class="row" style="margin-top:10px">
       <button data-action="focus-finish" data-status="finished">结束（计入投入）</button>
       <button class="ghost" data-action="focus-finish" data-status="interrupted">记中断</button>
       <button class="ghost" data-action="focus-finish" data-status="abandoned">放弃（不入账）</button></div>`;
-  const tick=()=>{const e=document.getElementById('clock');if(e)e.textContent=fmt((Date.now()-started)/1000)};
+  const tick=()=>{
+    const e=document.getElementById('clock');if(!e)return;
+    const sec=(Date.now()-started)/1000;
+    const total=active.kind==='tomato'&&focusCfg?focusCfg*60:0;
+    // 番茄钟**倒计时**（FLOW-3 验收第 1 条）：到点前显示"还剩多久"，到点后显示"已继续多久"。
+    // 普通计时仍是正计时（那是"随便计一会儿"的用法，倒着数没意义）。
+    e.textContent=total?(sec<total?fmt(total-sec):'+'+fmt(sec-total)):fmt(sec);
+    if(total&&sec>=total&&pomoNotified!==active.id){
+      pomoNotified=active.id;      // 一轮只提示一次（按 session id 记）
+      const note=document.getElementById('pomoNote');
+      if(note)note.textContent=`到点了（${focusCfg} 分）—— 结束或继续都行，不会替你停。`;
+      toast(`番茄钟到点了（${focusCfg} 分）：结束或继续都行`);
+    }
+  };
   tick();clearInterval(focusTimer);focusTimer=setInterval(tick,1000);
+  if(active.kind==='tomato'&&focusCfg===null){
+    // 番茄钟时长来自配置（`/api/config`）：拉到之前先按"没倒计时"渲染，拿到就立刻改过来。
+    api('/api/config').then(c=>{focusCfg=Number(c.pomodoro_minutes)||25;tick()}).catch(()=>{focusCfg=25});
+  }
   if(active.task_id){
     api(`/api/tasks/${active.task_id}`).then(t=>{     // 只负责把标题补进右栏
       const e=document.getElementById('focusTask');if(e)e.textContent=`归属任务：${t.title}`;
@@ -2075,6 +2093,9 @@ let focusTimer=null;
 const FOCUS_POLL_MS=10000;
 const CLIENT_KEY='tf_client';
 let focusClient=null,focusSeenKey='',focusPollTimer=null;
+// 番茄钟时长（分钟）：来自 `/api/config`（`[focus] pomodoro_minutes`），null = 还没拉到。
+// `pomoNotified` 记"这一轮已经提示过到点了"的 session id —— 提示一次就够，不重复弹。
+let focusCfg=null,pomoNotified=null;
 function clientId(){
   /* 这台**客户端**的身份。为什么不复用别的号：
      · 服务端的 `sync.device_id` 是"数据库主人"，两个客户端读到同一个值 → 区分不了；

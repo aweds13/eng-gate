@@ -145,12 +145,41 @@
 
 ## 动线自查表（实现后逐条回填）
 
+> **2026-09-23 回填（T-G23）**：这张表空了半年，而"空着"比"写错"更坏 ——
+> 它让人以为动线没验过。现在逐条实测过一遍，每条给**证据指针**（哪个脚本真跑、哪条断言钉着）。
+> 回填时抓到**一条真的没成立过**：FLOW-3 验收第 1 条（番茄钟倒计时/到点提示）——
+> 计时器一直正计时，`pomodoro_minutes` 只在按钮文案里出现，而且 `/api/config` **根本没暴露**它，
+> 所以 config.toml 改过的时长永远不生效（配置项是死的）。已随 T-G23 补上（倒计时 + 到点提示一次，
+> **不自动结束**；到点后显示"已继续多久"）。其余各条实测成立，只是没人回填过。
+
 | 动线 | 贯通验收第1条 | 第2条 | 第3条 | 第4条 |
 |---|---|---|---|---|
-| FLOW-1 把一件事做完 | ☐ | ☐ | ☐ | ☐ |
-| FLOW-2 逾期处理 | ☐ | ☐ | ☐ | — |
-| FLOW-3 专注闭环 | ☐ | ☐ | ☐ | — |
-| FLOW-4 反馈闭环 | ☐ | ☐ | — | — |
+| FLOW-1 把一件事做完 | ✅ | ✅ | ✅ | ✅ |
+| FLOW-2 逾期处理 | ✅ | ✅ | ✅ | — |
+| FLOW-3 专注闭环 | ✅ | ✅ | ✅ | — |
+| FLOW-4 反馈闭环 | ✅ | ✅ | — | — |
+
+**逐条证据**（"实测"= 有脚本真跑过，不是读代码）：
+
+| 动线·第几条 | 实测方式 |
+|---|---|
+| FLOW-1 ① 新建→专注→结束→摘要有投入 | `tools/lf1_live_check.py`（真服务 8 步）+ `tests/acceptance/` 的 MVP 主链验收 |
+| FLOW-1 ② 结束专注后当日反馈自动加（未经手输） | `tests/test_focus_line.py`（`focus.finished` → `feedback.focus_minutes`）+ 真机自检 |
+| FLOW-1 ③ 绑定任务后任务累计时长增加 | `tests/test_focus_line.py`（`sessions_by_task` 读 facts）+ `tests/test_web_frontend.py` 详情面板那条 |
+| FLOW-1 ④ 勾选完成后投入账多一条 | `tests/test_task_line.py`（`task.completed` → 投入账）+ `tools/lf1_live_check.py` |
+| FLOW-2 ① 逾期显示程度分档且温和 | `tests/test_task_debt_card_line.py`（`degree` 中）+ `tests/test_task_edit_line.py::test_edit_due_date_uses_ledger_degree`（`degree` 重）+ `tests/test_web_frontend.py` 的措辞红线（不许出现「达标/落后/警告」） |
+| FLOW-2 ② 能「推到明天」且逾期消失 | `tests/test_tasks.py` + 真机自检的逾期处置那几条 |
+| FLOW-2 ③ 完成后债务项数减少 | `tests/test_task_overdue_line.py::test_overdue_days_is_zero_for_closed_and_parked`（完成/取消/搁置 → 逾期 0）+ 同文件 `test_overdue_days_positive_iff_listed`（T-F8 不变式：`debt_count` = 明细条数） |
+| FLOW-3 ① 番茄钟倒计时 + 到点提示 | **T-G23 补上**：`tests/test_web_frontend.py::test_pomodoro_length_comes_from_config_and_only_notifies` + DOM 探针「专注·番茄钟」三档 + 真机自检"番茄钟时长由 /api/config 给" |
+| FLOW-3 ② 放弃不产生投入 | `tests/test_focus_line.py::test_abandoned_session_visible_but_not_invested` + `tests/test_facts.py`（kind 映射表） |
+| FLOW-3 ③ 记中断产生带标记的记录 | `tests/test_facts.py`（`focus.interrupted` 映射）+ `tests/test_focus_feedback.py`（`finish_session(..., STATUS_INTERRUPTED)`） |
+| FLOW-4 ① 只做专注也有反馈值 | `tests/test_focus_line.py`（订阅器真跑） |
+| FLOW-4 ② 能记录「计划」与「差距」两侧 | `tests/test_focus_feedback.py`（`plan_note` / `gap_note` 两栏）+ `renderHabit` 的表单 |
+
+**仍然没做到的（如实写在表外，别当成"已验过"）**：FLOW-4 传导契约里的
+「任务完成/未完成 → 反映到反馈的**执行侧**」目前**不自动**（反馈页是"计划 + 差距"两栏 +
+今日专注分钟数，完成情况要看任务列表）。这条**没有**进贯通验收清单，属产品判断
+（"反馈是给人写的，还是系统替我填执行侧"）→ 登记在 `复盘/交接-重构进度.md` 的待定清单里。
 
 ---
 
