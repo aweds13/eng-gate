@@ -45,6 +45,9 @@ COMMON = [
     # 但"没登记过的新欠账"和"比登记值更差"会 FAIL。为什么是棘轮而不是硬门、怎么收紧成硬门，
     # 见 `tools/contrast_audit.py` 的模块 docstring 与 `复盘/审美门-对比度-T-G27.md`。
     ("contrast", [PY, "-X", "utf8", "tools/contrast_audit.py", "--check"]),
+    # 风格一致性体检（T-G29）：「融洽」里**能机器判**的那一半 —— 同形状重复 / 一次性裸值 /
+    # 缺 :hover·:focus-visible / 动效越界。它只证明「体系里没有新的破例」，**不证明好看**。
+    ("style", [PY, "-X", "utf8", "tools/style_audit.py", "--check"]),
     ("ui_dom_probe", []),          # 占位：下面按 node 是否可用来填
     ("audit", [PY, "-X", "utf8", "scripts/audit_progress.py", "--all"]),
     # 台账↔规格 标题对账（T-D2）：`--check` 一发现「确定错位」或「无规格对应的 SR 卡」就退 1。

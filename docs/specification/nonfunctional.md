@@ -64,7 +64,7 @@
 ## SR-NF11 · Git 工作流（N40）——一版
 - 必须：新功能用 Worktree 独立分支；提交按 Conventional Commits；PR 说明含变更摘要+测试命令与结果。
   - **落地（2026-09-20）**：`.github/pull_request_template.md`（合入清单，逐条对应**机器检查**：
-    `Task:/Refs:/Ledger:/Gates:` trailer、`run_gates.py` 十二项、`gates/last.json` 入库、
+    `Task:/Refs:/Ledger:/Gates:` trailer、`run_gates.py` 的阻断门（**项数以 `gates/last.json` 为准**）、`gates/last.json` 入库、
     台账证据与 `[exceptions]` 留痕、约定层红线、前端零依赖护栏）。Worktree 按用户 2026-09-18 的决定是**可选**。
 
 ## SR-NF12 · 数据迁移与备份（N41）——一版
