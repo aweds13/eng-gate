@@ -142,7 +142,7 @@
 ```powershell
 cd "D:/repo/engineering"   # 换成你的真实路径
 $env:PYTHONPATH="$PWD\tools\sandbox_shim"     # 本仓沙箱需要这个垫片（run_gates 已内置）
-python -X utf8 scripts/run_gates.py           # 十一项阻断门：测试/验收/lint/类型/分层/护栏审计/真机自检
+python -X utf8 scripts/run_gates.py           # 十二项阻断门：测试/验收/lint/类型/分层/护栏审计/对比度/真机自检
 python -X utf8 examples/01_add_a_fact_kind.py # 改过示例就跑一遍（tests/test_examples.py 也会跑）
 ```
 

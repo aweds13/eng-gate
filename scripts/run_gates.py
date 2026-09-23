@@ -41,6 +41,10 @@ COMMON = [
     ("mypy", [PY, "-m", "mypy", "src/"]),
     ("check_layers", [PY, "-X", "utf8", "scripts/check_layers.py"]),
     ("check_layers_selftest", [PY, "-X", "utf8", "scripts/test_check_layers.py"]),
+    # 对比度审美门（T-G27）：令牌层的 WCAG 对比度**棘轮** —— 已登记的 18 条欠账不算通过，
+    # 但"没登记过的新欠账"和"比登记值更差"会 FAIL。为什么是棘轮而不是硬门、怎么收紧成硬门，
+    # 见 `tools/contrast_audit.py` 的模块 docstring 与 `复盘/审美门-对比度-T-G27.md`。
+    ("contrast", [PY, "-X", "utf8", "tools/contrast_audit.py", "--check"]),
     ("ui_dom_probe", []),          # 占位：下面按 node 是否可用来填
     ("audit", [PY, "-X", "utf8", "scripts/audit_progress.py", "--all"]),
     # 台账↔规格 标题对账（T-D2）：`--check` 一发现「确定错位」或「无规格对应的 SR 卡」就退 1。

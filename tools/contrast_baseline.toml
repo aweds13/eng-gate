@@ -1,0 +1,50 @@
+# 对比度审美门的「已知欠账」登记表（T-G27）
+#
+# 规则（跟台账 [exceptions] 一个精神：**逐条留痕、修一条删一条，不许静默豁免**）：
+#   - 这里登记的每一条，都是 `tools/contrast_audit.py` 从 `src/web/app.css` 真算出来、
+#     当前**没到 WCAG AA**的「字/底」组合。登记了不算通过，只是"不许再变坏"。
+#   - **没登记过**的不足 → 门禁 FAIL（新欠账必须写明理由才能进这张表）。
+#   - **比登记的还差** → 门禁 FAIL（悄悄改坏了会被抓）。
+#   - **已经达标了** → 门禁提示"可以删掉这一行"（修一条删一条，最后这张表清空）。
+#   - 视觉重构那条线开工时，这份表就是它的第一批工单（见 `复盘/审美门-对比度-T-G27.md`）。
+#
+# 为什么本卡不直接改：改令牌值 = 改视觉，而视觉线用户还没开（T-G24 §9）。
+# 唯一例外是 `.toast` —— 那一条不是"欠账"而是**字完全看不见的缺陷**（1.0:1，暗色主题），
+# 已在 T-G27 修掉（补上从来没定义过的 `--toast-bg`），所以它不在这张表里。
+#
+# 三条根因（18 条全部来自这三条）：
+#   ① 亮色下**强调色/状态色当正文小字**：「#3b82f6 / #ef4444 / #22c55e」这一档颜色，
+#      当 12–14px 文字时只有 2.18–3.76，达不到 4.5。workbench 包对这件事有明文规矩：
+#      **强调色不做小字**（色由填充/标记承担，字用正文色）。徽标 11px 也属这一类。
+#   ② **色块里用同一个颜色写字**（.badge.done/.doing/.hard）：底是 18% 同色浅底、字又是同色，
+#      最糟 1.96。workbench 给的解法是**芯片里的状态词改用正文色**、状态色由点或底承担。
+#   ③ **`--accent-on` 只有一个值，但强调色有 6 个预设**：白字在 6 个预设上没有一个过 4.5
+#      （最差 #f59e0b 2.15）—— 设置页换个颜色就等于把按钮文字弄糊。
+
+[known]
+
+# ---------- ① 强调色当小字（亮色）----------
+"light:--accent on --bg" = { ratio = 3.52, kind = "debt", fix = "强调色不做小字：字改用 --text，颜色由色块/下划线/点在承担" }
+"light:--accent on --card" = { ratio = 3.68, kind = "debt", fix = "同上（.prio.mid / 底栏选中 / 卡片内小字）" }
+"light:--danger on --bg" = { ratio = 3.6, kind = "debt", fix = "危险色当文字改用更深的 --danger（如 #b91c1c = 6.18）或配底色块" }
+"light:--danger on --card" = { ratio = 3.76, kind = "debt", fix = "同上" }
+"light:--ok on --bg" = { ratio = 2.18, kind = "debt", fix = "完成色当文字改用更深的 --ok（如 #15803d = 4.79）" }
+"light:--ok on --card" = { ratio = 2.28, kind = "debt", fix = "同上" }
+
+# ---------- ①′ 次级文字落在浅底上（亮色，差得不多）----------
+"light:--muted on --surface-2" = { ratio = 4.23, kind = "debt", fix = ".badge.todo：把 --muted 换成 --text，或把底提亮一档" }
+"light:--muted on --accent-soft" = { ratio = 4.34, kind = "debt", fix = ".badge 默认底：同上；顺带把 --accent-soft 这个名字与它的值对齐（它其实是个中性灰，不是强调浅底）" }
+
+# ---------- ② 色块里用同一个颜色写字（亮色最糟的一类）----------
+"light:--ok on mix(--ok 18% over --card)" = { ratio = 1.96, kind = "debt", fix = ".badge.done：状态词改用 --text（实测 12.57 达标），绿色由底/圆点承担" }
+"light:--accent on mix(--accent 18% over --card)" = { ratio = 3.0, kind = "debt", fix = ".badge.doing：同上（改用 --text 实测 11.92）" }
+"light:--danger on mix(--danger 18% over --card)" = { ratio = 2.96, kind = "debt", fix = ".badge.hard：同上（改用 --text 实测 11.51）" }
+
+# ---------- ③ --accent-on 单值 vs 6 个强烈色预设（亮色）----------
+"light:--accent-on on --accent" = { ratio = 3.68, kind = "debt", fix = "实心强调底上的字：要么把 --accent 换成够深的值（workbench 的 #2f6feb 白字 4.57），要么按预设各给一个 on 色" }
+"light:--accent-on on --accent-1" = { ratio = 3.68, kind = "debt", fix = "预设 #3b82f6：见上" }
+"light:--accent-on on --accent-2" = { ratio = 4.23, kind = "debt", fix = "预设 #8b5cf6：见上" }
+"light:--accent-on on --accent-3" = { ratio = 2.54, kind = "debt", fix = "预设 #10b981：见上（相差最远）" }
+"light:--accent-on on --accent-4" = { ratio = 2.15, kind = "debt", fix = "预设 #f59e0b：见上（全表最差）" }
+"light:--accent-on on --accent-5" = { ratio = 3.76, kind = "debt", fix = "预设 #ef4444：见上" }
+"light:--accent-on on --accent-6" = { ratio = 2.77, kind = "debt", fix = "预设 #0ea5e9：见上" }

@@ -75,7 +75,8 @@ config.example.toml / pyproject.toml
 - ✅ **第一版功能域已落地（存在级）**：任务管理 + B 记账 + 专注(F3) + 反馈/习惯(F4) + 学业/GPA(F5) + 复习FSRS(F6) + 团队/AI(F7) + 备忘录(F8) + 同步(F9) + **GPA 4.0/5.0 切换**。
 - ✅ **重构第 0 / 0.1 / 1 步已完成**：事实层（facts + 总线）→ 事实语义分 kind + v4 历史回填 → `ledger.summary()` 改读 facts（完成日口径）。详见 `changelog.md`。
 - ⚠️ **已知断层**：契约层 `contracts/` 揭示多项"操作闭环/模块联动"缺口（详见 `../复盘/三层断裂诊断-实现与交互复盘.md`），存在 ≠ 完成，LC-1~LC-8 多数仍 ❌。
-- ✅ 质量门：`scripts/run_gates.py` **十一项阻断门**全绿（pytest 501 passed / 验收 2 / ruff 0 / mypy 0（38 文件）/ 五层对齐 PASS / 护栏自测 PASS / DOM 探针 / 台账审计 / 台账↔规格标题对账 / 两项真机自检）；覆盖率门 70%（写在 `pyproject.toml`）。
+- ✅ 质量门：`scripts/run_gates.py` **十二项阻断门**（pytest / 验收 / ruff / mypy / 五层对齐 / 护栏自测 / **对比度审美门** / DOM 探针 / 台账审计 / 台账↔规格标题对账 / 两项真机自检）；覆盖率门 70%（写在 `pyproject.toml`）。
+  **逐项数字以 `gates/last.json` 为准**（每轮落盘，别再往这里抄数 —— 抄过两次都漂了）。
 - ✅ **可执行验收层（B4）**：`../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）。
 - ✅ **可扩展/易上手**：`EXTENDING.md`（加功能的五步模板）+ `../examples/` 三个可跑示例（SR-NF7 / SR-NF10）。
 - ⏭️ 后置（第二版）：重规划/债务重组(F2.8)、AI 接口写/改/删、学校通知监测脚本(F10)、移动端 PWA 深联动。

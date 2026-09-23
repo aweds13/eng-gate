@@ -18,6 +18,11 @@
   --line-strong: #cbd5e1;   /* 分隔线（暗色 toast 按钮边框等） */
   --text: #1e293b;
   --text-on-dark: #fff;     /* toast 上的文字 */
+  --toast-bg: var(--text);  /* toast 底。★ 必须是**令牌**（T-G27 修）：
+                               原来 `.toast` 写的是 `var(--toast-bg, var(--text))` 而全项目从没定义过
+                               `--toast-bg` —— 亮色下侥幸对（--text 是深色），**暗色下 `--text` 变成浅色、
+                               文字色 `--text-on-dark` 也是浅色 → 1.0:1，toast 上的字完全看不见**。
+                               亮色这里仍等于 `--text`（视觉零变化），暗色见下面那块。 */
   --muted: #64748b;
   --danger: #ef4444;
   --ok: #22c55e;
@@ -55,6 +60,7 @@
   --line-strong: #334155;
   --text: #e6edf7;
   --text-on-dark: #e6edf7;
+  --toast-bg: var(--surface-2);  /* 暗色必须另给（T-G27）：跟 --text 走会和文字同色，字看不见 */
   --muted: #94a3b8;
   --danger: #f87171;
   --ok: #4ade80;
@@ -333,7 +339,7 @@ select {
   left: 50%;
   bottom: 84px;
   transform: translateX(-50%);
-  background: var(--toast-bg, var(--text));
+  background: var(--toast-bg);
   color: var(--text-on-dark);
   padding: var(--sp-3) var(--sp-7);
   border-radius: var(--r-md);

@@ -16,6 +16,12 @@
   （前端零依赖是既有约定，`app.css` + `emptyState()/toast()/card` 就是我们的组件层）。
   完整记录与实测见 `复盘/设计基线-workbench与去AI味-T-G26.md`（含**亮色 9 对不达 AA 的实测数字**——
   那 9 对属**缺陷**、不属审美，是这条线开工的第一批工单）。
+- **可自动验的一半（2026-09-23，T-G27）**：对比度进了门禁 —— `tools/contrast_audit.py`
+  从令牌区现读颜色算 **42 条「字/底」组合**（亮/暗各 21，含强调色预设与徽标合成底），
+  **亮色 18 条**不达 AA 逐条登记在 `tools/contrast_baseline.toml`（分三条根因，带 why/fix）。
+  判定是**棘轮**：登记的不算通过，只拦**没登记过的新欠账**与**变差**；修一条删一条，
+  删空后加 `--strict` 即成为硬门。**它是本项目第一条不需要浏览器的审美门槛。**
+  详见 `复盘/审美门-对比度-T-G27.md`。
 
 ## SR-NF2 · 交互低门槛（N31）——一版
 - 必须：打开即 My Day 今日清单；新建一键回车/加入 My Day 一键/完成点一下；提供新手引导（建任务→开专注→记反馈）；操作可撤销；空状态友好。
@@ -58,7 +64,7 @@
 ## SR-NF11 · Git 工作流（N40）——一版
 - 必须：新功能用 Worktree 独立分支；提交按 Conventional Commits；PR 说明含变更摘要+测试命令与结果。
   - **落地（2026-09-20）**：`.github/pull_request_template.md`（合入清单，逐条对应**机器检查**：
-    `Task:/Refs:/Ledger:/Gates:` trailer、`run_gates.py` 十一项、`gates/last.json` 入库、
+    `Task:/Refs:/Ledger:/Gates:` trailer、`run_gates.py` 十二项、`gates/last.json` 入库、
     台账证据与 `[exceptions]` 留痕、约定层红线、前端零依赖护栏）。Worktree 按用户 2026-09-18 的决定是**可选**。
 
 ## SR-NF12 · 数据迁移与备份（N41）——一版

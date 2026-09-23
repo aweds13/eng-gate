@@ -452,6 +452,23 @@ evidence = [
 ]
 gaps = "**口径（用户 2026-09-23 定，T-G19）已按它落地（T-G20）**：实时启动 + 结束时再同步 —— 任一台开始专注，另一台**当场**看到只读镜像（右栏 `#clockPeer` + 专注页文案），**不重复记账、也不许停对面的计时**；结束不做实时推，记录各自入库后走已有同步包。**边界（不是缺口，是刻意的）**：① 只在**同一局域网且已配对**时有效（跨端那道门，默认关）；② 老数据 `device_id` 为 NULL 时算「我开的」（保住「重开页面恢复计时」）；③ 勿扰只是**状态可见**，不是系统级屏蔽（与 OP-3c 同口径）。"
 
+[entries."T-G27"]
+id = "T-G27"
+title = "对比度审美门（SR-NF1 / N30）：令牌层 WCAG 棘轮 + 18 条欠账登记表；顺手修掉暗色 toast 字看不见的缺陷"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/审美门-对比度-T-G27.md",
+  "text:复盘/审美门-对比度-T-G27.md::暗色主题的 toast 看不见",
+  "text:复盘/审美门-对比度-T-G27.md::什么时候能收紧成硬门",
+  "file:tools/contrast_audit.py",
+  "file:tools/contrast_baseline.toml",
+  "text:src/web/app.css::--toast-bg: var(--surface-2)",
+  "text:scripts/run_gates.py::(\"contrast\", [PY, \"-X\", \"utf8\", \"tools/contrast_audit.py\", \"--check\"])",
+  "test:test_contrast_audit.py",
+]
+gaps = "**是棘轮不是硬门**：亮色现状有 **18 条**不达 AA（全表 42 条组合，暗色全过），一接硬门就永远红、而本项目铁律是「门禁不过不许提交」；所以如实登记进 `tools/contrast_baseline.toml`（三条根因、每条带 why/fix），门只拦**没登记过的新欠账**与**比登记值更差**。**没做的**：① 18 条一条没修（改令牌=改视觉，视觉线用户还没开）；② 没覆盖 hover/focus/disabled/选中态，也没覆盖**非文字图形**（图标 vs 底、图表线条、边框 —— WCAG 对非文字要 3.0）；③ 没有渲染基线（沙箱无浏览器）—— 但对比度是纯计算，不需要浏览器。**收紧三步**写在复盘 §7：视觉线修完 → 逐条删登记行 → 加 `--strict`（现在就能跑，只会告诉你还剩 18 条）。**顺手修的缺陷**：`.toast` 的 `--toast-bg` 全项目从没定义过 → 暗色下底与字同为 `#e6edf7`（**1.0:1，字完全看不见**，而 toast 被调用 161 处）；补上该令牌（亮色 = 原值逐字节相同、暗色用 `--surface-2`）并去掉回退写法。这是**缺陷不是欠账**，所以不进登记表。"
+
 [entries."T-G26"]
 id = "T-G26"
 title = "设计基线（SR-NF1 / N30）：装上两个审美 skill 并钉住 workbench 判据 + 第一次拿它量自己（亮色 9 对不达 AA；emoji 当图标）"
