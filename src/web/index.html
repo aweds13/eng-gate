@@ -330,6 +330,33 @@ async function offlineClear(){
   try{await o.clearQueue();toast('队列已清空');paintOfflineBar();view(current)}
   catch(e){toast('清空失败：'+((e&&e.message)||e))}
 }
+/* 直接传到电脑（G 批 · T-G15）：手机不再只靠"导出文件 → 拷过去"。
+   走的是**同一条合并路径**（电脑上的 `POST /api/sync/import` → `sync.plan_merge`）——
+   手机依旧**不判谁新谁旧**（那套规则只有一处实现，在电脑上）。所以：
+   - 前提：这台设备**连得上电脑**（在线 + 已配对；离线时按钮会说清为什么不行）；
+   - 传的是**同一个格式的包**（`timeflow-sync` v1），只是不经手文件；
+   - **传成功之后再问你**要不要清队列（数据已经在电脑库里了）；**传失败绝不清空**；
+   - 重复传是安全的（电脑那边合并幂等），但每次都会在冲突日志里留一行。 */
+async function offlineUpload(){
+  const o=offlineEngine();
+  if(!o||!offlineReady()){toast('这个浏览器不支持离线存储，传不了');return}
+  if(offlineNow()){toast('现在连不上电脑（离线）—— 先「导出同步包」，等连上再点这里');return}
+  let r;
+  try{r=await o.packOnce()}catch(e){toast('打包失败：'+((e&&e.message)||e));return}
+  if(!r.rows){toast('队列是空的 —— 没有要传的');return}
+  const ack=await confirmAsk(`把这 ${r.rows} 条传到电脑并合并？\n合并规则在电脑那边（手机不判新旧）；包只是换个路子过去，不会动你电脑上的其他数据。`,'传到电脑');
+  if(!ack)return;
+  let report=null;
+  try{report=await api('/api/sync/import',{method:'POST',body:JSON.stringify({pack:r.pack})})}
+  catch(e){return}   // api() 已经弹过后端原话（"自己的包""不是我们的包"都会说清）
+  if(!report)return;
+  toast(`已传到电脑：${syncSummary(report.totals||{})}${report.conflict_count?` · 冲突 ${report.conflict_count} 条（电脑上可查）`:''}`);
+  const n=await o.pendingCount().catch(()=>0);
+  if(n&&await confirmAsk(`这 ${n} 条已经合并进电脑的库了。现在清空手机上的队列吗？\n清掉就找不回来了（想留着也行）。`,'清空队列')){
+    try{await o.clearQueue()}catch(e){toast('清空失败：'+((e&&e.message)||e))}
+  }
+  paintOfflineBar();view(current);
+}
 /* 顶部提示条：断网 或 队列里还有没同步的东西 时才出现（手机上没有左栏，靠它进「离线记」）。 */
 async function paintOfflineBar(){
   const bar=document.getElementById('offlineBar');
@@ -416,16 +443,20 @@ async function renderOffline(m){
     <div class="meta">这台设备的设备号 <code>${esc(offlineDevice())}</code> · 待同步 <b>${entries.length}</b> 条${
       last?` · 上次导出 ${esc(String(last.at).replace('T',' '))}（${last.rows||0} 条）`:''}</div>
     <div class="meta">${off
-      ? '现在记下的东西先存在这台设备里；回到电脑前 <b>导出同步包</b>，在电脑的设置页「跨端同步」里导入。'
-      : '这台设备现在连得上电脑：记的东西直接进库；下面这份队列是之前离线时攒下的，<b>不会自动上传</b>。'}</div>
+      ? '现在记下的东西先存在这台设备里；回到电脑前点下面的 <b>直接传到电脑</b>（连得上时）或 <b>导出同步包</b>。'
+      : '这台设备现在连得上电脑：记的东西直接进库；下面这份队列是之前离线时攒下的，点 <b>直接传到电脑</b> 就能合并过去（不会自动传 —— 你说传才传）。'}</div>
   </div>
   ${notReady}${capture}
   <div class="section-title">待同步（${entries.length}）</div>
   <div class="card panel-card" id="offlineQueue">
     <div class="row tight">
-      <button data-action="offline-export">导出同步包</button>
+      <button data-action="offline-upload">直接传到电脑</button>
+      <button class="ghost" data-action="offline-export">导出同步包</button>
       <button class="ghost" data-action="offline-copy">复制包文本</button>
       <button class="ghost" data-action="offline-clear">清空（我已导入电脑）</button></div>
+    <div class="sub"><b>直接传到电脑</b>：连得上电脑时最快的一条路 —— 传的是同一个格式的包，
+      合并规则仍然只在电脑那边（手机不判新旧）；传成功后会问你要不要清空队列，<b>失败绝不清空</b>。
+      连不上（离线 / 没配对）时它会说清原因，改用下面两条。</div>
     <div class="sub">包与电脑↔电脑用的是<b>同一个格式</b>（<code>timeflow-sync</code> v1）：拷到电脑上，
       在「设置 → 数据与同步 → 跨端同步」里先预览再导入。设备号（<code>${esc(offlineDevice())}</code>）会写进包里，
       电脑据此认出这份包从哪来。</div>
@@ -665,6 +696,7 @@ const ACTIONS = {
   'offline-habit':  el => offlineHabitToggle(el.dataset.id||''),
   'offline-done':   el => toggleDone(el.dataset.id||'', el.dataset.done==='false'),
   'offline-export': () => offlineExport(),
+  'offline-upload': () => offlineUpload(),
   'offline-copy':   () => offlineCopy(),
   'offline-clear':  () => offlineClear(),
   // 局域网访问 + 配对码（SR-NF17 / G 批 · T-G10b = 场景 ②）：配对墙上的两个动作 +

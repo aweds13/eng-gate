@@ -2147,6 +2147,13 @@ def create_app(
         就是真导入会删掉的行数。
 
         非法包 / 不是我们的格式 / 来自更新版本 → **400 带原话**（不许"尽力猜"）。
+
+        **局域网设备只能传内容、不能指路径**（T-G15）：手机直接上传走的是 `pack`（包内容），
+        `path` 是"在电脑上读一个文件"的便利口子。判据看的是**页面的来源**（Origin），
+        不是 TCP 来源 —— 本机脚本/命令行**没有 Origin**，照旧可以指路径；
+        而从**局域网地址**打开的那个页面（手机、或别人电脑上的浏览器）不行：
+        配对码证明的是"你是本人"，不是"你可以让这台电脑去读盘上任意一个路径"。
+        两条路合并的是**同一套规则**。
         """
         require_local_origin(request)
         dry = bool(payload.get("dry_run"))
@@ -2154,6 +2161,14 @@ def create_app(
         try:
             pack = payload.get("pack")
             if pack is None:
+                origin = request.headers.get("origin")
+                host = urlsplit(origin).hostname if origin else None
+                if origin and not lan_mod.is_loopback(host):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="从局域网地址打开的这个页面不能指定电脑上的文件路径："
+                        "请把包的内容（pack）直接发过来（手机上的「直接传到电脑」就是这么做的）。",
+                    )
                 pack = syncpack.load_pack(str(payload.get("path") or ""))
             report = syncpack.merge_pack(
                 conn, pack, dry_run=dry, apply_deletions=apply_del

@@ -499,6 +499,23 @@ def live_sync_checks(base: str, tmp: Path) -> dict[str, bool]:
     }
 
 
+def _phone_pack(tmp: Path, name: str = "phone.json") -> Path | None:
+    """跑 `tools/phone_check.mjs` 造一份**真手机包**（用的是页面里同一个 `offline.js`）。
+
+    没有 node、或造包脚本失败 → 返回 None（调用方如实报"未验证"，不谎报通过）。
+    """
+    node = shutil.which("node")
+    if not node:
+        return None
+    pack = tmp / name
+    proc = subprocess.run(
+        [str(node), str(PHONE_CHECK), str(pack)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=120, cwd=str(ROOT),
+    )
+    return pack if proc.returncode == 0 and pack.is_file() else None
+
+
 def live_offline_checks(base: str, tmp: Path) -> dict[str, bool]:
     """T-G10 真机自检：**手机侧的那份真包**在真服务上走一遍导入（跨端场景 ① 的后半程）。
 
@@ -506,7 +523,6 @@ def live_offline_checks(base: str, tmp: Path) -> dict[str, bool]:
     但中间那两个文件都是真的：这里用 `tools/phone_check.mjs` 跑**页面用的同一个 offline.js**
     造一份包，再通过真 HTTP 打 `/api/sync/import`。于是"手机造的包电脑吃不下"这类错这里就能拦住。
     """
-    node = shutil.which("node")
     checks: dict[str, bool] = {}
     offline_js = urllib.request.urlopen(f"{base}/offline.js", timeout=10).read().decode("utf-8")
     sw = urllib.request.urlopen(f"{base}/sw.js", timeout=10).read().decode("utf-8")
@@ -515,17 +531,9 @@ def live_offline_checks(base: str, tmp: Path) -> dict[str, bool]:
     checks["页面引了离线引擎"] = '<script src="/offline.js">' in html
     checks["离线页在导航里可达"] = 'data-view="offline"' in html
     checks["service worker 预缓存离线引擎"] = '"/offline.js"' in sw and 'timeflow-v2' in sw
-    if not node:
-        checks["手机包自检（缺 node，未验证）"] = False
-        return checks
-    pack = tmp / "phone.json"
-    proc = subprocess.run(
-        [str(node), str(PHONE_CHECK), str(pack)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=120, cwd=str(ROOT),
-    )
-    checks["手机侧造包自检通过"] = proc.returncode == 0 and pack.is_file()
-    if not checks["手机侧造包自检通过"]:
+    pack = _phone_pack(tmp)
+    checks["手机侧造包自检通过"] = pack is not None
+    if pack is None:
         return checks
     first = _json_call(base, "/api/sync/import", "POST", {"path": str(pack)})
     tasks = _json_call(base, "/api/tasks")[1] or []
@@ -614,6 +622,29 @@ def live_lan_checks(tmp: Path, port: int = 8531) -> dict[str, bool]:
     local_ok = _json_call(local, "/api/health")[0] == 200   # 本机自己不受影响（关服务之前问）
     # 本机自检（T-G10c）：服务真的绑在 0.0.0.0 上时，它应当报"本机可达"
     _sc_code, self_check = _json_call(local, "/api/lan/selfcheck", "POST", {})
+
+    # 手机**直接上传**同步包（G 批 · T-G15）：走的就是手机那条路 —— 包里带上内容（不是路径），
+    # 从局域网地址打过来，带着配对码。没配对必须传不进来（这是那道门的意义）。
+    upload: dict[str, bool] = {}
+    pack_path = _phone_pack(tmp, "phone-lan.json")
+    if pack_path is None:
+        print("  [SKIP] 手机直传：造不出手机包（缺 node？）—— 未验证（不算通过）")
+    else:
+        body = {"pack": json.loads(pack_path.read_text(encoding="utf-8"))}
+        nopair = _lan_json(reachable, "/api/sync/import", "POST", body)
+        up = _lan_json(reachable, "/api/sync/import", "POST", body, headers=auth)
+        again = _lan_json(reachable, "/api/sync/import", "POST", body, headers=auth)
+        up_totals = (up[1] or {}).get("totals", {}) if up[0] == 200 else {}
+        again_totals = (again[1] or {}).get("totals", {}) if again[0] == 200 else {}
+        upload = {
+            "手机直传：没配对传不进来（401）": nopair[0] == 401,
+            "手机直传：配对后能把包传上来并合并": up[0] == 200
+            and up_totals.get("inserted", 0) >= 5,
+            "手机直传：同一份包再传一次是幂等的": again[0] == 200
+            and again_totals.get("inserted", 0) == 0,
+            "手机直传：认得出来源设备（ph-）":
+                str((up[1] or {}).get("from_device", "")).startswith("ph-"),
+        }
     server.should_exit = True
     thread.join(timeout=10)
 
@@ -631,6 +662,7 @@ def live_lan_checks(tmp: Path, port: int = 8531) -> dict[str, bool]:
         and bool(sc.get("addresses")),
         "局域网：自检把校园网/热点写进排查顺序": "校园网" in str(sc.get("hint", ""))
         and "移动热点" in str(sc.get("hint", "")),
+        **upload,
     }
 
 

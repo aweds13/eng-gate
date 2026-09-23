@@ -1132,7 +1132,9 @@ try {
     'offline-task-add', 'offline-memo-add', 'offline-feedback-save', 'offline-export',
     'offline-copy', 'offline-clear', '待同步（2）', '备忘 · 探针离线记一条',
     '习惯打卡 · 2026-09-23', '<b>不会清空</b>队列', '<b>重复导入是安全的</b>', '同一个 WiFi',
-    '会写进包里'];
+    '会写进包里',
+    // T-G15（直接传到电脑）：按钮 + 那段实话（合并规则在电脑那边、失败绝不清空）
+    'offline-upload', '直接传到电脑', '合并规则仍然只在电脑那边', '<b>失败绝不清空</b>'];
   const missing = needs.filter((n) => !html.includes(n));
   const packed = await OFF.packOnce();
   const parsed = JSON.parse(packed.text);
@@ -1140,7 +1142,9 @@ try {
     && parsed.device_id.startsWith('ph-')
     && parsed.tables.memos.length === 1 && parsed.tables.habit_logs.length === 1
     && (parsed.tables.habit_logs[0] || {}).done === 1
-    && packed.rows === 2 && Array.isArray(parsed.tombstones) && parsed.tombstones.length === 0;
+    && packed.rows === 2 && Array.isArray(parsed.tombstones) && parsed.tombstones.length === 0
+    // 上传走的就是这个 `pack` 对象（不再从文本里反解一遍）—— 它必须跟 text 是同一份
+    && JSON.stringify(packed.pack) === JSON.stringify(parsed);
   // 反证：包文本里**不许**出现这台设备的设置（那是"这台机器的事"，不跟着包走）
   const noSettings = !packed.text.includes('app_settings');
   const rendered = missing.length === 0 && packOk && noSettings && pending === 2;

@@ -928,8 +928,28 @@ evidence = [
   "test:test_lan_pairing_line.py",
   "ui:view=offline",
   "ui:data-action=offline-export",
+  "ui:data-action=offline-upload",
+  "text:src/web/index.html::async function offlineUpload()",
+  "route:POST /api/sync/import",
   "test:test_offline_phone_line.py",
+  "test:test_phone_upload_line.py",
   "test:test_web_frontend.py",
+]
+gaps = ""
+
+[entries."T-G15"]
+id = "T-G15"
+title = "跨端：手机**直接上传**同步包（配对后把包内容传到电脑合并；失败不清队列；path 只留给本机）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/手机直传同步包-T-G15.md",
+  "text:src/web/index.html::async function offlineUpload()",
+  "text:src/web/offline.js::return { pack: pack, text: packText(pack)",
+  "text:src/timeflow/api/app.py::从局域网地址打开的这个页面不能指定电脑上的文件路径",
+  "route:POST /api/sync/import",
+  "ui:data-action=offline-upload",
+  "test:test_phone_upload_line.py",
 ]
 gaps = ""
 

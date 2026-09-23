@@ -469,12 +469,13 @@
     });
   }
 
-  /** 打包成文本但不下载（复制兜底 / 自检用）。 */
+  /** 打包成文本但不下载（复制兜底 / 自检 / **直接上传**用）。 */
   function packOnce() {
     var device = deviceId();
     var at = localNow();
     return pending().then(function (entries) {
-      return { text: packText(buildPack(device, entries, at)), rows: entries.length,
+      var pack = buildPack(device, entries, at);
+      return { pack: pack, text: packText(pack), rows: entries.length,
         device_id: device, at: at };
     });
   }
