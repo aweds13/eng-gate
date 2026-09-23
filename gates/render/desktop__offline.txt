@@ -1,7 +1,7 @@
-# render-manifest v1 viewport=desktop 1280x900 view=offline rows=168 accent=#3b82f6 device=ph-000000000000
+# render-manifest v1 viewport=desktop 1280x900 view=offline rows=168 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,1280,2398	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
 html>body>div.shell>aside.rail		24,0,168,731	16/normal/400	#1e293b/#000000@0.00	0;18px 0px
-div.shell>aside.rail>h1>span.accent	·	105,18,5,24	18/normal/700	#3b82f6/#000000@0.00	0;0px
+div.shell>aside.rail>h1>span.accent	·	105,18,5,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	24,48,167,59	13/19.5/400	#64748b/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,119,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(2)	全部任务	24,156,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
@@ -16,7 +16,7 @@ div.shell>aside.rail>nav>button:nth-child(10)	复习	24,452,167,35	13/normal/400
 div.shell>aside.rail>nav>button:nth-child(11)	备忘录	24,489,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(12)	团队	24,526,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(13)	设置	24,563,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button.active	离线记	24,600,167,35	13/normal/400	#ffffff/#3b82f6	8;8px 12px
+div.shell>aside.rail>nav>button.active	离线记	24,600,167,35	13/normal/400	#ffffff/#2f6feb	8;8px 12px
 div.shell>aside.rail>nav>button#refresh	刷新	24,637,167,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button#railToggle	收起右栏	24,676,167,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 html>body>div.shell>main#main		216,0,716,2398	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
@@ -47,11 +47,11 @@ main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:
 div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(5)>label	备注（可留空）	400,263,411,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.field.wide:nth-child(5)>input#offNote	(text)想到了就写一句	400,285,411,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
 main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.actions		825,263,67,60	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.actions>button	记下来	825,288,67,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+div.card.panel-card:nth-child(3)>div.form:nth-child(2)>div.actions>button	记下来	825,288,67,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(3)>div.settings-sub:nth-child(3)	一句备忘	256,341,636,17	13/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.card.panel-card:nth-child(3)>div.new		256,374,636,38	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(3)>div.new>input#offMemo	(text)随手记一条…	256,374,572,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(3)>div.new>button	记下	838,376,54,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+main#main>div.card.panel-card:nth-child(3)>div.new>button	记下	838,376,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(3)>div.settings-sub:nth-child(5)	今天卡在哪 / 打算做什么	256,430,636,17	13/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(6)		256,459,636,107	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.field.wide:nth-child(1)		256,459,311,60	16/normal/400	#1e293b/#000000@0.00	0;0px
@@ -61,7 +61,7 @@ main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.field.wide:
 div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.field.wide:nth-child(2)>label	差距 / 复盘	581,459,311,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.field.wide:nth-child(2)>input#offGap	(text)卡在哪儿了	581,481,311,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
 main#main>div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.actions		256,531,80,35	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.actions>button	保存反馈	256,531,80,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+div.card.panel-card:nth-child(3)>div.form:nth-child(6)>div.actions>button	保存反馈	256,531,80,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 div.shell>main#main>div.card.panel-card:nth-child(3)>div.settings-sub:nth-child(7)	习惯打卡（只列手机上缓存过的习惯）	256,584,636,17	13/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.card.panel-card:nth-child(3)>div.row.tight		256,609,636,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(3)>div.row.tight>button.ghost:nth-child(1)	早睡 · 打卡	256,609,94,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
@@ -135,7 +135,7 @@ main#main>div#offlineSeen>div.sub:nth-child(9)>b	上次联网时看到的样子	
 body>div.shell>main#main>div.section-title:nth-child(8)	待同步（0）	240,1866,668,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div#offlineQueue		240,1893,668,254	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div#offlineQueue>div.row.tight		256,1907,636,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#offlineQueue>div.row.tight>button	直接传到电脑	256,1908,106,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+main#main>div#offlineQueue>div.row.tight>button	直接传到电脑	256,1908,106,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 main#main>div#offlineQueue>div.row.tight>button.ghost:nth-child(2)	导出同步包	368,1907,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div#offlineQueue>div.row.tight>button.ghost:nth-child(3)	复制包文本	469,1907,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div#offlineQueue>div.row.tight>button.ghost:nth-child(4)	清空（我已导入电脑）	570,1907,160,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px

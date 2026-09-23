@@ -1,7 +1,7 @@
-# render-manifest v1 viewport=desktop 1280x900 view=memo rows=55 accent=#3b82f6 device=ph-000000000000
+# render-manifest v1 viewport=desktop 1280x900 view=memo rows=55 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,1280,731	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
 html>body>div.shell>aside.rail		24,0,168,731	16/normal/400	#1e293b/#000000@0.00	0;18px 0px
-div.shell>aside.rail>h1>span.accent	·	105,18,5,24	18/normal/700	#3b82f6/#000000@0.00	0;0px
+div.shell>aside.rail>h1>span.accent	·	105,18,5,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	24,48,167,59	13/19.5/400	#64748b/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,119,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(2)	全部任务	24,156,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
@@ -13,7 +13,7 @@ div.shell>aside.rail>nav>button:nth-child(7)	统计	24,341,167,35	13/normal/400	
 div.shell>aside.rail>nav>button:nth-child(8)	习惯	24,378,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(9)	学业	24,415,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(10)	复习	24,452,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button.active	备忘录	24,489,167,35	13/normal/400	#ffffff/#3b82f6	8;8px 12px
+div.shell>aside.rail>nav>button.active	备忘录	24,489,167,35	13/normal/400	#ffffff/#2f6feb	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(12)	团队	24,526,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(13)	设置	24,563,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,600,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
@@ -22,7 +22,7 @@ div.shell>aside.rail>nav>button#railToggle	收起右栏	24,676,167,37	13/normal/
 html>body>div.shell>main#main		216,0,716,672	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
 body>div.shell>main#main>div.new:nth-child(1)		240,16,668,38	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.new:nth-child(1)>input#memoTxt	(text)随手记一条…	240,16,604,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-div.shell>main#main>div.new:nth-child(1)>button	记录	854,18,54,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+div.shell>main#main>div.new:nth-child(1)>button	记录	854,18,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 body>div.shell>main#main>div.card:nth-child(2)		240,70,668,65	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card:nth-child(2)>div.card-body		256,84,478,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card:nth-child(2)>div.card-body>div.title	问老师期中考试的题型分布	256,84,478,21	16/normal/400	#1e293b/#000000@0.00	0;0px
@@ -36,7 +36,7 @@ div.shell>main#main>div.new:nth-child(4)>select#inKind	专注补记	240,190,94,3
 div.shell>main#main>div.new:nth-child(4)>input#inMinutes	(number)25	344,188,260,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
 div.shell>main#main>div.new:nth-child(4)>span.sub	分钟	614,201,24,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div.new:nth-child(4)>input#inNote	(text)备注，如：番茄补记	648,188,260,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-div.shell>main#main>div.new:nth-child(4)>button	记一笔投入	240,236,93,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+div.shell>main#main>div.new:nth-child(4)>button	记一笔投入	240,236,93,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 body>div.shell>main#main>div.card:nth-child(5)		240,287,668,65	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card:nth-child(5)>div.card-body		256,301,568,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card:nth-child(5)>div.card-body>div.title	专注写报告 · 45 分钟	256,301,568,21	16/normal/400	#1e293b/#000000@0.00	0;0px
@@ -47,7 +47,7 @@ body>div.shell>main#main>div.new:nth-child(7)		240,405,668,38	16/normal/400	#1e2
 div.shell>main#main>div.new:nth-child(7)>select#outKind	知识资产	240,407,94,35	13/normal/400	#1e293b/#ffffff	10;8px 10px
 div.shell>main#main>div.new:nth-child(7)>input#outValue	(number)1	344,405,226,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
 div.shell>main#main>div.new:nth-child(7)>input#outNote	(text)备注，如：数学笔记#3	580,405,226,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-div.shell>main#main>div.new:nth-child(7)>button	记一笔产出	815,407,93,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+div.shell>main#main>div.new:nth-child(7)>button	记一笔产出	815,407,93,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 body>div.shell>main#main>div.meta	按两类分开看（T-C4）：学校 KPI 0 条 · 知识资产 0 条 —— 同一份产出事实，只是分组显示（不拆轴、不折算）。	240,459,668,42	16/normal/400	#1e293b/#000000@0.00	0;0px
 body>div.shell>main#main>div.empty	今天还没有产出记录	240,501,668,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
 html>body>div.shell>aside.sidebar		956,0,300,133	16/normal/400	#1e293b/#000000@0.00	0;18px 0px

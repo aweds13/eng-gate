@@ -51,7 +51,10 @@ class El {
         return set.has(c);
       },
     };
-    this.style = { setProperty() {} };
+    // 假 DOM 的 style 桩：**真 DOM 有的方法这里也得有** —— 少一个 `removeProperty`，
+    // 页面里凡是用它清变量的分支都会在探针里抛 TypeError（T-G39 实测：14 个视图只剩 1 个正常渲染）。
+    // 这不是页面写错了，是**桩不全**：桩要比被测代码更宽容，不能比它更窄。
+    this.style = { setProperty() {}, removeProperty() {} };
     this.scrollIntoView = () => {};
   }
   set innerHTML(v) { this._html = String(v); }

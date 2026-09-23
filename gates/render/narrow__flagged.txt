@@ -1,13 +1,13 @@
-# render-manifest v1 viewport=narrow 820x900 view=flagged rows=48 accent=#3b82f6 device=ph-000000000000
+# render-manifest v1 viewport=narrow 820x900 view=flagged rows=48 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,820,647	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,820,122	16/normal/400	#1e293b/#000000@0.00	0;14px 24px 0px
-div.shell>aside.rail>h1>span.accent	·	105,14,5,24	18/normal/700	#3b82f6/#000000@0.00	0;0px
+div.shell>aside.rail>h1>span.accent	·	105,14,5,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	120,16,356,20	13/19.5/400	#64748b/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(2)	全部任务	76,48,76,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(3)	重要	154,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(4)	有计划	206,48,63,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button.active	已标记	271,48,63,35	13/normal/400	#ffffff/#3b82f6	8;8px 12px
+div.shell>aside.rail>nav>button.active	已标记	271,48,63,35	13/normal/400	#ffffff/#2f6feb	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(6)	专注	336,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(7)	统计	388,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(8)	习惯	440,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
@@ -25,14 +25,14 @@ body>div.shell>main#main>div.sub	你自己按了标记的任务（卡片上的�
 body>div.shell>main#main>div.row.tight		24,195,772,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.row.tight>button.ghost:nth-child(1)	重要	24,195,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.row.tight>button.ghost:nth-child(2)	有计划	80,195,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.row.tight>button	已标记	149,196,67,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+div.shell>main#main>div.row.tight>button	已标记	149,196,67,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 body>div.shell>main#main>div.card		24,242,772,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card>button.check		40,286,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px
 div.shell>main#main>div.card>div.card-body		74,277,204,41	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card>div.card-body>div.title	把第三章习题做完	74,277,204,21	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card>div.card-body>div.meta		74,298,204,20	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card>div.card-body>div.meta>span.prio.high	高	139,299,29,19	11/normal/400	#ffffff/#3b82f6	999;1px 8px
-div.card>div.card-body>div.meta>span.flag	⚑ 已标记	168,300,48,16	12/normal/400	#3b82f6/#000000@0.00	0;0px
+div.card>div.card-body>div.meta>span.prio.high	高	139,299,29,19	11/normal/400	#ffffff/#2f6feb	999;1px 8px
+div.card>div.card-body>div.meta>span.flag	⚑ 已标记	168,300,48,16	12/normal/400	#2f6feb/#000000@0.00	0;0px
 div.card>div.card-body>div.meta>span.badge.todo	未完成	222,298,52,20	12/normal/400	#64748b/#eef2f7	6;2px 8px
 div.shell>main#main>div.card>div.row		290,256,490,82	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card>div.row>button.ghost:nth-child(1)	在做	290,256,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px

@@ -83,8 +83,25 @@ let courseCache=[];          // 课程列表缓存（任务编辑里的"所属�
 // 合法视图名（render 的白名单：写错的视图名会被立刻发现，而不是静默空屏）
 const VIEWS=['today','tasks','important','planned','flagged','focus','stats','habit','academic','review','memo','team','setting','offline'];
 
-/* 同步强调色到 CSS 变量（本地缓存先应用，避免首屏闪默认色） */
-function applyAccent(color){if(color)document.documentElement.style.setProperty('--accent',color)}
+/* 同步强调色到 CSS 变量（本地缓存先应用，避免首屏闪默认色）
+ * ★ on 色跟着走（T-G39）：6 个预设**各自带 on 色**（颜色仍只住在 app.css 令牌区，这里只读不写色值）。
+ *   原来全项目只有一个白色 on 色，而白字在 6 个预设上没有一个过 4.5（最差那个只有 2.15）——
+ *   换预设就等于让用户自己把按钮文字弄糊。不是预设（config 里的默认色）就交回样式表那个值。 */
+function accentOnFor(color){
+  const cs=getComputedStyle(document.documentElement);
+  for(let i=1;i<=6;i++){
+    const c=cs.getPropertyValue('--accent-'+i).trim();
+    if(c&&sameColor(c,color))return cs.getPropertyValue('--accent-'+i+'-on').trim();
+  }
+  return '';
+}
+function applyAccent(color){
+  const root=document.documentElement;
+  if(!color){root.style.removeProperty('--accent');root.style.removeProperty('--accent-on');return}
+  root.style.setProperty('--accent',color);
+  const on=accentOnFor(color);
+  if(on)root.style.setProperty('--accent-on',on);else root.style.removeProperty('--accent-on');
+}
 try{applyAccent(localStorage.getItem('tf_accent'))}catch(e){}
 
 async function api(path,opts={}){

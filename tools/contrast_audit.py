@@ -132,18 +132,25 @@ def mix_over(color: str, base: str, pct: float) -> str:
 
 # ------------------------------------------------------------------ 令牌解析
 def token_blocks(css: str) -> dict[str, dict[str, str]]:
-    """从 `app.css` 抽两个令牌区（亮 `:root` / 暗 `[data-theme="dark"]`）。"""
+    """从 `app.css` 抽两个令牌区（亮 `:root` / 暗 `[data-theme="dark"]`）。
+
+    ★ **先剥注释再抽**（T-G39 踩到）：`_TOKEN` 是"从头到第一个 `;`"的正则，而注释里只要出现
+    「`--某令牌: 某个值`」这种形状（写文档句时很容易），它就会把注释当声明吞下去 ——
+    实测把 `--accent-on` 的值污染成一大段说明文字，门禁报「看不懂的颜色」。
+    `badge_pairs` 早就因为同一类原因剥过注释，这里补上（别再靠"注释别那么写"这种记性）。
+    """
     light_m = re.search(r":root\s*\{(.*?)\n\}", css, re.S)
     dark_m = re.search(r'\[data-theme="dark"\]\s*\{(.*?)\n\}', css, re.S)
     if light_m is None or dark_m is None:
         raise SystemExit("contrast_audit：app.css 里找不到 :root / [data-theme=\"dark\"] 令牌区")
+    strip = lambda block: re.sub(r"/\*.*?\*/", "", block, flags=re.S)  # noqa: E731
     light = {
         m.group(1): m.group(2).split("/*")[0].strip()
-        for m in _TOKEN.finditer(light_m.group(1))
+        for m in _TOKEN.finditer(strip(light_m.group(1)))
     }
     dark_delta = {
         m.group(1): m.group(2).split("/*")[0].strip()
-        for m in _TOKEN.finditer(dark_m.group(1))
+        for m in _TOKEN.finditer(strip(dark_m.group(1)))
     }
     return {"light": light, "dark": {**light, **dark_delta}}
 
@@ -192,11 +199,14 @@ def declared_pairs() -> list[Pair]:
         for fg, bg, minimum, where in TOKEN_PAIRS:
             out.append(Pair(theme, fg, bg, minimum, where))
         if theme == "light":  # 预设只在设置页给亮色挑（暗色另有一套 on 色）
-            for preset in PRESET_TOKENS:
+            # ★ T-G39 起每个预设**各自带 on 色**：原来一律配那唯一的白色 on，
+            #   而白字在 6 个预设上没有一个过 4.5（最差 #f59e0b 2.15）。这里改成配它自己那个，
+            #   才是界面上真正会出现的搭配（不然门禁量的是一对**不存在**的组合）。
+            for idx, preset in enumerate(PRESET_TOKENS, start=1):
                 out.append(
                     Pair(
                         theme,
-                        "--accent-on",
+                        f"--accent-{idx}-on",
                         preset,
                         AA_NORMAL,
                         "设置页换成这个预设后，实心强调底上的字（.prio.high / 主按钮）",

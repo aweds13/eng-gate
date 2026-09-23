@@ -57,15 +57,6 @@ reversible = "可放弃（见 OP-4）"
 ai = ["none"]
 note = "GET /api/focus/active 是重开页面恢复用的读路由，不是写入。"
 
-[commands."OP-3b"]
-title = "暂停 / 继续"
-routes = []
-ui = []
-kind = "write"
-reversible = "可继续"
-ai = ["none"]
-note = "app.py 里没有暂停/继续路由（只有 focus/start、focus/{id}/finish），前端 ACTIONS 也没有对应动作 —— 这条契约**没有实现**。"
-
 [commands."OP-3c"]
 title = "白名单 / 勿扰配置"
 routes = ["GET /api/focus/guard", "PUT /api/settings/focus-guard"]

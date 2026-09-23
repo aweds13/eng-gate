@@ -20,12 +20,16 @@
 #      最糟 1.96。workbench 给的解法是**芯片里的状态词改用正文色**、状态色由点或底承担。
 #   ③ **`--accent-on` 只有一个值，但强调色有 6 个预设**：白字在 6 个预设上没有一个过 4.5
 #      （最差 #f59e0b 2.15）—— 设置页换个颜色就等于把按钮文字弄糊。
+#      ★ **2026-09-23（T-G39）用户已定并已修**：① 默认强调色换成 workbench 的 `#2f6feb`（白字 4.57 过）；
+#      ② **每个预设各配自己的 on 色**（`--accent-1-on` … `--accent-6-on`，门禁逐对儿算）。
+#      ③ 现在这条**已销账**（原来 7 行全删）—— 见本文件末尾的销账记录。
 
 [known]
 
 # ---------- ① 强调色当小字（亮色）----------
-"light:--accent on --bg" = { ratio = 3.52, kind = "debt", fix = "强调色不做小字：字改用 --text，颜色由色块/下划线/点在承担" }
-"light:--accent on --card" = { ratio = 3.68, kind = "debt", fix = "同上（.prio.mid / 底栏选中 / 卡片内小字）" }
+# 注意：换上 #2f6feb 之后这一条的实测从 3.52 升到 **4.37**（还是没到 4.5，所以仍登记），
+# 登记值跟着收紧到 4.37 —— 棘轮只许往好的方向走，不然"悄悄退回 3.6"就抓不到了。
+"light:--accent on --bg" = { ratio = 4.37, kind = "debt", fix = "强调色不做小字：字改用 --text，颜色由色块/下划线/点在承担（#2f6feb 当 12px 小字仍是 4.37）" }
 "light:--danger on --bg" = { ratio = 3.6, kind = "debt", fix = "危险色当文字改用更深的 --danger（如 #b91c1c = 6.18）或配底色块" }
 "light:--danger on --card" = { ratio = 3.76, kind = "debt", fix = "同上" }
 "light:--ok on --bg" = { ratio = 2.18, kind = "debt", fix = "完成色当文字改用更深的 --ok（如 #15803d = 4.79）" }
@@ -37,14 +41,13 @@
 
 # ---------- ② 色块里用同一个颜色写字（亮色最糟的一类）----------
 "light:--ok on mix(--ok 18% over --card)" = { ratio = 1.96, kind = "debt", fix = ".badge.done：状态词改用 --text（实测 12.57 达标），绿色由底/圆点承担" }
-"light:--accent on mix(--accent 18% over --card)" = { ratio = 3.0, kind = "debt", fix = ".badge.doing：同上（改用 --text 实测 11.92）" }
+"light:--accent on mix(--accent 18% over --card)" = { ratio = 3.61, kind = "debt", fix = ".badge.doing：同上（改用 --text 实测 11.92）。换 #2f6feb 后实测从 3.0 升到 3.61，登记值跟着收紧" }
 "light:--danger on mix(--danger 18% over --card)" = { ratio = 2.96, kind = "debt", fix = ".badge.hard：同上（改用 --text 实测 11.51）" }
 
-# ---------- ③ --accent-on 单值 vs 6 个强烈色预设（亮色）----------
-"light:--accent-on on --accent" = { ratio = 3.68, kind = "debt", fix = "实心强调底上的字：要么把 --accent 换成够深的值（workbench 的 #2f6feb 白字 4.57），要么按预设各给一个 on 色" }
-"light:--accent-on on --accent-1" = { ratio = 3.68, kind = "debt", fix = "预设 #3b82f6：见上" }
-"light:--accent-on on --accent-2" = { ratio = 4.23, kind = "debt", fix = "预设 #8b5cf6：见上" }
-"light:--accent-on on --accent-3" = { ratio = 2.54, kind = "debt", fix = "预设 #10b981：见上（相差最远）" }
-"light:--accent-on on --accent-4" = { ratio = 2.15, kind = "debt", fix = "预设 #f59e0b：见上（全表最差）" }
-"light:--accent-on on --accent-5" = { ratio = 3.76, kind = "debt", fix = "预设 #ef4444：见上" }
-"light:--accent-on on --accent-6" = { ratio = 2.77, kind = "debt", fix = "预设 #0ea5e9：见上" }
+# ---------- ③ 已销账（T-G39）----------
+# 这 7 行原来在表里：
+#   light:--accent-on on --accent           3.68 → **4.57 达标**（强调色换 #2f6feb）
+#   light:--accent on --card                3.68 → **4.57 达标**（同上）
+#   light:--accent-on on --accent-1 … --accent-6   2.15~4.23 → **4.96~8.72 全达标**
+#     （每个预设配了自己的 on 色；门禁也跟着改成按 `--accent-N-on` 配对，量的是界面上真会出现的那一对）
+# 销账记录进 `复盘/门禁收紧三条-T-G22.md` 之后的台账卡 `T-G39`。

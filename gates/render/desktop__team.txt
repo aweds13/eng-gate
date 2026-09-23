@@ -1,7 +1,7 @@
-# render-manifest v1 viewport=desktop 1280x900 view=team rows=47 accent=#3b82f6 device=ph-000000000000
+# render-manifest v1 viewport=desktop 1280x900 view=team rows=47 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,1280,731	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
 html>body>div.shell>aside.rail		24,0,168,731	16/normal/400	#1e293b/#000000@0.00	0;18px 0px
-div.shell>aside.rail>h1>span.accent	·	105,18,5,24	18/normal/700	#3b82f6/#000000@0.00	0;0px
+div.shell>aside.rail>h1>span.accent	·	105,18,5,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	24,48,167,59	13/19.5/400	#64748b/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,119,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(2)	全部任务	24,156,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
@@ -14,7 +14,7 @@ div.shell>aside.rail>nav>button:nth-child(8)	习惯	24,378,167,35	13/normal/400	
 div.shell>aside.rail>nav>button:nth-child(9)	学业	24,415,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(10)	复习	24,452,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(11)	备忘录	24,489,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button.active	团队	24,526,167,35	13/normal/400	#ffffff/#3b82f6	8;8px 12px
+div.shell>aside.rail>nav>button.active	团队	24,526,167,35	13/normal/400	#ffffff/#2f6feb	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(13)	设置	24,563,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,600,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button#refresh	刷新	24,637,167,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
@@ -22,11 +22,11 @@ div.shell>aside.rail>nav>button#railToggle	收起右栏	24,676,167,37	13/normal/
 html>body>div.shell>main#main		216,0,716,375	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
 body>div.shell>main#main>div.card.panel-card		240,0,668,132	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card>div.row:nth-child(1)		256,14,636,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card>div.row:nth-child(1)>button	管理者（我分配的）	256,15,145,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+main#main>div.card.panel-card>div.row:nth-child(1)>button	管理者（我分配的）	256,15,145,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 main#main>div.card.panel-card>div.row:nth-child(1)>button.ghost	执行者（分配给我的）	409,14,160,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.card.panel-card>div.sub	你分配出去的任务都在这里：谁手上有什么、进展到哪。分配出去的任务不计个人投入（只记协调这件事本身）。	256,57,636,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div.card.panel-card>div.row:nth-child(3)		256,81,636,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card>div.row:nth-child(3)>button	全部 1	256,82,65,35	13/normal/400	#ffffff/#3b82f6	10;8px 14px
+main#main>div.card.panel-card>div.row:nth-child(3)>button	全部 1	256,82,65,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 main#main>div.card.panel-card>div.row:nth-child(3)>button.ghost:nth-child(2)	已分配 1	329,81,80,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div.card.panel-card>div.row:nth-child(3)>button.ghost:nth-child(3)	进行中 0	417,81,80,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div.card.panel-card>div.row:nth-child(3)>button.ghost:nth-child(4)	已完成 0	505,81,80,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px

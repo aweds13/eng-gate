@@ -19,6 +19,10 @@ KIND_PLAIN = "plain"
 
 STATUS_ACTIVE = "进行中"
 STATUS_FINISHED = "finished"
+# ★ 预留、**没有任何入口**：`finish` 接受它、事实表里也有 `focus.paused` 映射，
+#   但 app.py 从来没有暂停/继续路由、界面也 0 处 pause/resume —— OP-3b 曾是它的契约，
+#   2026-09-23 按用户决定把规格改成现实（中断三选 = 结束 / 放弃 / 记中断），那条契约已删（T-G39）。
+#   留着这个常量只为兼容既有数据；真要"暂停/恢复"就新开一张卡（要动计时分段与账目口径）。
 STATUS_PAUSED = "paused"
 STATUS_ABANDONED = "abandoned"
 STATUS_INTERRUPTED = "interrupted"

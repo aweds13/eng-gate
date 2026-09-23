@@ -22,7 +22,10 @@ class DatabaseConfig(BaseModel):
 
 
 class AppConfig(BaseModel):
-    accent_color: str = "#3b82f6"
+    # 默认强调色（T-G39 用户定）：跟 workbench 包的 `#2f6feb`（白字 4.57 过 AA）。
+    # 原来是 `#3b82f6`（白字 3.68 不过）—— 这里与 `src/web/app.css` 的 `--accent` **必须一致**，
+    # 否则"样式表里的默认"与"/api/config 给界面钉的默认"会两个样（黄金头部会写 accent=）。
+    accent_color: str = "#2f6feb"
     theme: str = "light"
 
 

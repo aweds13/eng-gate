@@ -65,3 +65,51 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/planned`
 - `phone/tasks`
 
+
+## 2026-09-23 14:30:35 · 42 份改动
+
+> 理由：T-G39：默认强调色按用户决定换成 workbench 包的 #2f6feb（白字 4.57 过 AA，原来 #3b82f6 只有 3.68）。42 份清单里只有'底色/字色带强调色的那些行'变了（按钮/选中导航/大写数字/色板头部 accent=），几何一个像素没动 —— 这是纯换色。另：本次采集遇到过**一次** stats 视图两遍不一致（自检当场拦下、重跑即稳定），成因未定，已记进 T-G39 的 gaps。
+
+- `desktop/academic`
+- `desktop/flagged`
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/important`
+- `desktop/memo`
+- `desktop/offline`
+- `desktop/planned`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `desktop/team`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/flagged`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/important`
+- `narrow/memo`
+- `narrow/offline`
+- `narrow/planned`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `narrow/team`
+- `narrow/today`
+- `phone/academic`
+- `phone/flagged`
+- `phone/focus`
+- `phone/habit`
+- `phone/important`
+- `phone/memo`
+- `phone/offline`
+- `phone/planned`
+- `phone/review`
+- `phone/setting`
+- `phone/stats`
+- `phone/tasks`
+- `phone/team`
+- `phone/today`
+

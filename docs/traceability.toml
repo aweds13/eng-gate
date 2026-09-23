@@ -42,7 +42,7 @@ trailer_baseline = "593ea6c"
 "SR-F2.2" = ["OP-14"]    # 手动记产出（目标态）
 "SR-F2.5" = ["OP-15"]    # 周结算
 "SR-F2.3" = ["OP-16"]    # 逾期债务展示
-"SR-F3.2" = ["OP-3b", "OP-4b"]  # 暂停/继续、放弃/记中断
+"SR-F3.2" = ["OP-4b"]   # 放弃/记中断（原 OP-3b「暂停/继续」按用户决定删除 —— 从没人实现过，见 T-G39）
 "SR-F3.3" = ["OP-3c"]    # 白名单 / 勿扰配置
 "T-G20" = ["OP-51"]      # 跨端同步专注（只读镜像）
 "SR-F4.1" = ["OP-17"]    # 保存每日反馈
@@ -246,7 +246,7 @@ gaps = ""
 id = "SR-F1.7"
 title = "任务存档：当前状态 + 过去尝试（简版）+ 关联笔记 + 存档视图"
 group = "F1"
-status = "partial"
+status = "done"
 evidence = [
   "text:src/timeflow/core/tasks/manager.py::def archived_tasks",
   "text:src/timeflow/core/tasks/manager.py::def auto_filed",
@@ -255,10 +255,13 @@ evidence = [
   "route:GET /api/tasks/archived",
   "route:GET /api/tasks/{task_id}/attempts",
   "route:POST /api/tasks/{task_id}/attempt-failed",
+  "text:src/web/index.html::attachRowsHTML",
   "test:test_task_archive_line.py",
   "test:test_task_attempt_line.py",
+  "test:test_attach_line.py",
 ]
-gaps = "**2026-09-23 更正（T-G18）**：原文 `todo` + 「无 attempt/关联笔记字段；无存档视图（GAP-F1-05）」**已过期** —— F 批 T-F2 做了**存档视图**（`archived_tasks` / `GET /api/tasks/archived` / 完成满 N 天 `auto_filed` 自动收入），T-F3 做了**过去尝试**（`attempt_failed` / `attempt_count` / `attempt_notes` + 界面「试了 N 回」），两张卡各自 done，**母条却没回头改**（机器只查「done 必须有证据」，不查「todo 的理由还在不在」）。**真正剩的**：规格后半句「可关联笔记名/链接」没有**笔记语义**的字段/口径 —— 任务现在能挂 `attach`（链接/路径）与 `note`（备注），算不算「关联了笔记」要用户一句话（待定 ㉘）。"
+gaps = "**2026-09-23 更正（T-G18）**：原文 `todo` + 「无 attempt/关联笔记字段；无存档视图（GAP-F1-05）」**已过期** —— F 批 T-F2 做了**存档视图**（`archived_tasks` / `GET /api/tasks/archived` / 完成满 N 天 `auto_filed` 自动收入），T-F3 做了**过去尝试**（`attempt_failed` / `attempt_count` / `attempt_notes` + 界面「试了 N 回」）。**★ 2026-09-23（T-G39）用户裁定「关联笔记」这一句算满足 → partial 转 done**：规格原话是「可关联笔记名/链接」，而 ① 任务的**附件**（`attach`）能挂网址/本地路径并点开、② **备注**（`note`）能写笔记名、③ 域文件那句「只存引用句柄、不存正文」也对得上（附件就是引用而不是正文），④ 规格自己写了「Obsidian 深联动**后置**」。**没做的**（如实留档，不假装）：任务这一侧**没有**「引用句柄」字段，所以任务不能像复习卡那样一键跳 Obsidian —— 真想要就另开一张卡（schema + 路由 + 详情面板一行），属「更好用」而不是「没满足」。"
+
 
 [entries."SR-F1.8"]
 id = "SR-F1.8"
@@ -415,11 +418,18 @@ gaps = "**2026-09-23（T-G23）补强证据**：原来这条的证据只有 `tex
 
 [entries."SR-F3.2"]
 id = "SR-F3.2"
-title = "中断三选（暂停/放弃/记中断）"
+title = "中断三选（结束（计入投入）/ 放弃 / 记中断）"
 group = "F3"
 status = "done"
-evidence = ["text:src/timeflow/core/focus/timer.py::abandoned", "text:src/timeflow/core/focus/timer.py::interrupted"]
-gaps = "**★ 2026-09-23（T-G31）建命令表时当场抓到：三选里的「暂停」没有可走通路。** 规格写「中断三选（暂停 / 放弃 / 记中断）」，但：① `app.py` 没有暂停/继续路由；② 界面**0 处** pause/resume —— 那三个按钮实际是「**结束（计入投入）** / 记中断 / 放弃（不入账）」；③ `STATUS_PAUSED = \"paused\"` 在领域层存在、`finish` 也接受它，**但没有任何调用方发过它**（死状态）；④「继续」半条路都没有（要继续只能重新开一段）。**这不是缺口而是「规格没跟上实现」的疑似**：过程中的第 3 项很可能被「结束」替代了。**待用户定**：① 把规格/契约改成「结束 / 放弃 / 记中断」（承认现状）；② 真做「暂停 + 继续」（加路由、加按钮、加回到原段落的状态回退）。**顺带一笔弱证据的教训**：本条证据只有 `abandoned` 与 `interrupted` **两个词** —— 三选里的第三个词「暂停」就靠这个滑过去了，与 T-G23 抓到的番茄钟同一类毛病：挑证据要挑「这个名字没了它就说不通」的那种。"
+evidence = [
+  "text:src/timeflow/core/focus/timer.py::abandoned",
+  "text:src/timeflow/core/focus/timer.py::interrupted",
+  "text:src/timeflow/core/focus/timer.py::预留、**没有任何入口**",
+  "text:docs/specification/functional.md::结束（计入投入）/ 放弃 / 记中断",
+  "text:docs/contracts/domains/F3-focus.md::被打断时三选",
+]
+gaps = "**★ 2026-09-23（T-G31）建命令表时当场抓到「三选里的暂停没有可走通路」，当天按用户决定销账（T-G39）。** 当时的实测：① `app.py` 没有暂停/继续路由；② 界面**0 处** pause/resume —— 那三个按钮实际是「**结束（计入投入）** / 记中断 / 放弃（不入账）」；③ `STATUS_PAUSED` 在领域层存在、`finish` 也接受它，**但没有任何调用方发过它**（死状态）；④「继续」半条路都没有。**处置（用户 2026-09-23 选①）**：规格 `SR-F3.2` 与契约 `OP-4` 改成「**结束（计入投入）/ 放弃 / 记中断**」（承认现状）；契约里那条 `OP-3b 暂停 / 继续` **整条删掉**（`[contract_ops]` 与 `docs/commands.toml` 同步删，命令表 54 → 53 条）；`STATUS_PAUSED` 在 `timer.py` 里写明**预留、无入口**（留着只为兼容既有数据）。**教训（写进复盘）**：本条证据当初只有 `abandoned` 与 `interrupted` **两个词**，第三个词「暂停」就靠这个滑过去了 —— 挑证据要挑「这个名字没了它就说不通」的那种。"
+
 
 [entries."SR-F3.3"]
 id = "SR-F3.3"
@@ -493,6 +503,27 @@ evidence = [
   "text:src/timeflow/core/tasks/groups.py::分组不存在 → KeyError",
 ]
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。"
+
+
+[entries."T-G39"]
+id = "T-G39"
+title = "B 表一次落地（用户 2026-09-23「按你想的来」）：AI 口径落进约定层 / 关联笔记判满足 / OP-3b 规格改成现实 / 强调色换 #2f6feb + 6 预设各配 on 色（销 7 条对比度欠账）/ 动线自查表上机器闸"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "text:docs/specification/conventions.md::第一版**只读 + 新增**（新增含「记一条事实」）",
+  "text:src/timeflow/core/focus/timer.py::预留、**没有任何入口**",
+  "text:docs/specification/functional.md::结束（计入投入）/ 放弃 / 记中断",
+  "text:src/web/app.css::--accent: #2f6feb",
+  "text:src/web/app.css::--accent-2-on: #000",
+  "text:src/timeflow/config.py::accent_color: str = \"#2f6feb\"",
+  "text:tools/contrast_audit.py::先剥注释再抽",
+  "text:tools/contrast_baseline.toml::已销账（T-G39）",
+  "file:tests/test_flows_selfcheck.py",
+  "text:tests/test_flows_selfcheck.py::证明这道闸咬得住",
+  "text:gates/render/LAST_UPDATE.md::T-G39",
+]
+gaps = "**用户 2026-09-23 交代「按你想的来」→ B 表（14 条待定）一次落地。** 逐条处置：**①`conventions.md` 第 34 行**按已选方案 3 的替换文本改了（AI 的进展以**事实**回报、不改不删用户数据）—— **T-G21 的唯一关卡解除**。**②`SR-F1.7`「关联笔记」判满足 → partial 转 done**（附件能挂链接/路径、备注能写笔记名、规格自己写着「Obsidian 深联动后置」；**没做**的如实留档：任务侧没有「引用句柄」字段，所以不能像复习卡那样一键跳）。**③FLOW-4 执行侧**：决定**不自动填**（反馈是给人写的）—— 契约那句本来就是「目标态」、`flows.md` 表外已有如实记录，故**未动正文**。**④`OP-3b`**：规格与契约改成「结束（计入投入）/ 放弃 / 记中断」，**删掉**契约里那条 `OP-3b 暂停 / 继续`（`[contract_ops]` 同步、`docs/commands.toml` 同步 → 命令表 54 → 53 条），`STATUS_PAUSED` 在 `timer.py` 写明**预留、无入口**。**⑤强调色换 `#2f6feb`**（workbench 包自己的值，白字 4.57 过 AA；原来 `#3b82f6` 只有 3.68）+ 立规矩「强调色不做小字」；`config.py` 的默认值与 `app.css` **必须一致**（黄金头部写着 accent=，不一致就是两个默认）。**⑥令牌改名**：**没做**（91 处机械替换、零用户可见收益、还会撞上 `--text` / `--text-on-dark` 这种前缀；留给视觉线第 1 步「建映射表」时一起做 —— 那一步正好要用这张表）。**⑦6 个预设各配 on 色**（`--accent-N-on`，紫色单独用纯黑因为 `#0b1220` 只有 4.42）→ **对比度门：达标 24 → 32、欠账 18 → 10、新欠账 0**，7 行销账记录留在 `contrast_baseline.toml`；门禁也跟着改成按 `--accent-N-on` 配对（以前量的是界面上**不会出现**的那一对）。**⑧AI 面**并进视觉线、排最后。**⑨动线自查表上机器闸**（用户点头）：新 pytest 查空框 / ✅ 无证据 / 证据指不着东西，并用合成数据证明它咬得住。★ **过程中两个真发现**：① `contrast_audit.py` 抽令牌时**不先剥注释**，而注释里出现「--某令牌: 某值」这种形状就会被当成声明吞掉（实测把 `--accent-on` 的值污染成一大段文字）→ 已修（先剥注释再抽）；② 渲染层采集遇到**一次** `stats` 视图两遍不一致（自检当场拦下、重跑即稳定，成因未定）—— 如实记在这里：**如果再出现，要把它当成真问题查**（当前不排除是采集时序）。"
 
 
 [entries."T-G38"]
