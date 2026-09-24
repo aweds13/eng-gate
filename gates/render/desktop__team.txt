@@ -1,7 +1,7 @@
 # render-manifest v1 viewport=desktop 1280x900 view=team rows=47 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,1280,731	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
 html>body>div.shell>aside.rail		24,0,168,731	16/normal/400	#1e293b/#000000@0.00	0;18px 0px
-div.shell>aside.rail>h1>span.accent	·	105,18,5,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
+body>div.shell>aside.rail>h1	timeflow ·	24,18,167,24	18/normal/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	24,48,167,59	13/19.5/400	#64748b/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,119,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(2)	全部任务	24,156,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
@@ -35,11 +35,11 @@ body>div.shell>main#main>div.meta		240,142,668,21	16/normal/400	#1e293b/#000000@
 div.shell>main#main>div.meta>b	分配关系的两种看法	304,142,144,21	16/normal/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title	小李 · 1 件	240,183,668,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card		240,210,668,65	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card>div.card-body		256,224,425,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.title	把数据整理成表	256,224,425,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.meta	我分配 · 截止 YYYY-MM-DD · 任务状态 未开始	256,245,425,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card>div.row		693,224,199,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.row>span.badge	已分配	699,233,52,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
+div.shell>main#main>div.card>div.card-body		256,224,426,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.title	把数据整理成表	256,224,426,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta	我分配 · 截止 YYYY-MM-DD · 任务状态 未开始	256,245,426,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card>div.row		694,224,198,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.row>span.badge	已分配	700,232,51,21	11/normal/400	#64748b/#ffffff	999;2px 8px
 main#main>div.card>div.row>button.ghost:nth-child(2)	开始	759,224,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div.card>div.row>button.ghost:nth-child(3)	看任务	823,224,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 html>body>div.shell>aside.sidebar		956,0,300,133	16/normal/400	#1e293b/#000000@0.00	0;18px 0px

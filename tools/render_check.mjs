@@ -180,9 +180,15 @@ const COLLECT = /* js */ `
     // 图形自己**是叶子**。为什么必须这么判（T-G41 实测撞到）：柱/格一类图元长这样 ——
     // rect 里嵌一个 title（"2026-09-24 已打卡"）；按老写法它是"匿名容器"被整类跳过，
     // 于是**热力图/节奏图的点亮状态根本没进过黄金**（习惯热力图那处差一天的缺陷就是这么漏掉的）。
-    const hasElKids = [...el.children].some(
-      (c) => !['title', 'desc'].includes(c.tagName.toLowerCase()),
-    );
+    const kids = [...el.children].filter((c) => !['title', 'desc'].includes(c.tagName.toLowerCase()));
+    const hasElKids = kids.length > 0;
+    // ★ 「有**带字**的孩子」才不采自己的文本：孩子全是**空壳**时（典型：徽标里那个 8px 状态点
+    //   i.dot），元素自己仍然是"写着字的那一层"。为什么必须这么判（T-G42 实测撞到）：
+    //   徽标一加装饰点，它就从"叶子"变成"容器"，于是**徽标上的字（「完成于…」/「未完成」）
+    //   从清单里静默消失** —— 视图级再没人钉着它，正是 T-G40 记的那一类盲区（采不到 = 没验过）。
+    //   注意顺序：仍然**有真孩子时不采自己**（否则卡片会把整棵子树的文字重复采一遍），
+    //   title/desc 依旧不算真孩子（T-G41 那处热力图就是靠这一条才进得了清单）。
+    const hasTextKids = kids.some((c) => norm(c.textContent) !== '');
     const hasName = Boolean(el.id) || (el.classList && el.classList.length > 0);
     // 采两类：叶子（文本/控件在哪、多大、什么颜色）+ 有名字的容器（版式骨架）。
     // 匿名容器不单独采 —— 它的几何变化一定会反映到叶子的位置/尺寸上。
@@ -190,8 +196,8 @@ const COLLECT = /* js */ `
     let text = '';
     if (tag === 'input') text = '(' + (el.type || 'text') + ')' + norm(el.placeholder || el.value || '');
     else if (tag === 'select') text = norm(el.selectedOptions && el.selectedOptions[0] ? el.selectedOptions[0].textContent : '');
-    else if (!hasElKids) text = norm(el.textContent);
-    else if (el.getAttribute('aria-label')) text = norm(el.getAttribute('aria-label'));
+    else if (hasTextKids) text = norm(el.getAttribute('aria-label') || '');
+    else text = norm(el.textContent);
     if (tag === 'code' && isCodeToken(text)) { text = '‹code:' + text.length + '›'; masked++ }
     const px = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? Math.round(n * 10) / 10 : (v || '') };
     rows.push([

@@ -41,10 +41,11 @@ COMMON = [
     ("mypy", [PY, "-m", "mypy", "src/"]),
     ("check_layers", [PY, "-X", "utf8", "scripts/check_layers.py"]),
     ("check_layers_selftest", [PY, "-X", "utf8", "scripts/test_check_layers.py"]),
-    # 对比度审美门（T-G27）：令牌层的 WCAG 对比度**棘轮** —— 已登记的 18 条欠账不算通过，
-    # 但"没登记过的新欠账"和"比登记值更差"会 FAIL。为什么是棘轮而不是硬门、怎么收紧成硬门，
-    # 见 `tools/contrast_audit.py` 的模块 docstring 与 `复盘/审美门-对比度-T-G27.md`。
-    ("contrast", [PY, "-X", "utf8", "tools/contrast_audit.py", "--check"]),
+    # 对比度审美门（T-G27 建 → T-G42 收紧）：令牌层的 WCAG 对比度。
+    # T-G42 把登记表清空了，所以这里换成 **--strict** —— 它从"棘轮"变成**硬门**：
+    # 任何一条不达 AA 都当场红（连"登记一下先欠着"这条退路也一并关掉）。
+    # 来由见 `复盘/视觉线第0.5步-对比度与状态色-T-G42.md`，边界见该工具的 docstring。
+    ("contrast", [PY, "-X", "utf8", "tools/contrast_audit.py", "--strict"]),
     # 风格一致性体检（T-G29）：「融洽」里**能机器判**的那一半 —— 同形状重复 / 一次性裸值 /
     # 缺 :hover·:focus-visible / 动效越界。它只证明「体系里没有新的破例」，**不证明好看**。
     ("style", [PY, "-X", "utf8", "tools/style_audit.py", "--check"]),

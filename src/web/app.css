@@ -13,7 +13,8 @@
      "自己把它调深一点"是**发明一个包不拥有的颜色**，所以宁可跟包的默认值。 */
   --accent: #2f6feb;
   --accent-on: #fff;        /* 默认强调色底上的文字（与暗色块同一约定：底浅就用深墨、底深就用白） */
-  --accent-soft: #f1f5f9;   /* 浅强调底（badge / 条形底） */
+  --accent-soft: #f1f5f9;   /* 浅底（进度条槽）。★ 这名字与它的值对不上（它其实是个中性灰，不是强调浅底）——
+                               T-G42 之后徽标不再用它，只剩 `.bar-track` 一处；改名/归位排在视觉线第 1 步的令牌映射表里 */
   --bg: #f8fafc;
   --card: #fff;
   --surface-2: #eef2f7;     /* 更浅的底：热力图空格、进度环底、雷达网格 */
@@ -27,8 +28,13 @@
                                文字色 `--text-on-dark` 也是浅色 → 1.0:1，toast 上的字完全看不见**。
                                亮色这里仍等于 `--text`（视觉零变化），暗色见下面那块。 */
   --muted: #64748b;
-  --danger: #ef4444;
-  --ok: #22c55e;
+  /* ★ 2026-09-24（T-G42）状态色跟 workbench 包的值 —— 与 T-G39 对强调色做的是同一件事。
+     我们原来用 `#ef4444` / `#22c55e`：那一档颜色**当色块可以、当字和点不行** ——
+     当 12px 小字是 3.60 / 2.18，当 8px 状态点是 3.76 / 2.28（连非文字的 3.0 都不到）。
+     包自己的 `#d1242f` / `#1a7f37` 是**当文字也够**的深色（在卡片上 5.24 / 5.08，都过 AA），
+     而"把 #ef4444 自己调深一点"就是发明一个包不拥有的颜色 —— 所以跟包，不自己调。 */
+  --danger: #d1242f;
+  --ok: #1a7f37;
   --shadow-rgb: 0, 0, 0;
   --shadow: 0 1px 2px rgba(var(--shadow-rgb), .04);
 
@@ -74,8 +80,9 @@
   --text-on-dark: #e6edf7;
   --toast-bg: var(--surface-2);  /* 暗色必须另给（T-G27）：跟 --text 走会和文字同色，字看不见 */
   --muted: #94a3b8;
-  --danger: #f87171;
-  --ok: #4ade80;
+  /* 状态色同样跟包（亮暗同源：一个语义角色一个值，两套主题各自取包给的那一个） */
+  --danger: #e5534b;
+  --ok: #3fb960;
   --shadow-rgb: 0, 0, 0;
   --shadow: 0 1px 2px rgba(var(--shadow-rgb), .35);
 }
@@ -135,7 +142,11 @@ body {
 .panel .section-title { margin: var(--sp-5) 0 var(--sp-2) }
 
 /* ---------- 导航（左栏；窄屏时仍是主区上方的一行） ---------- */
-.accent { color: var(--accent) }
+/* ★ T-G42：原来这里有一条 `.accent { color: var(--accent) }`，全项目唯一的用处是 h1 里那个
+   装饰性的 `·`，而"强调色当小字落在页面底上"只有 **4.37**（对比度门登记的第 9 条）。
+   装饰文字本来就不受 WCAG 1.4.3 管，所以这条不是"修不清"而是**没有存在的理由** ——
+   类与用法一起删掉（`index.html` 的 h1 现在是个普通的 `·`，继承正文色 13.98）。
+   规矩不变、且更强了：**强调色不做小字**（颜色由色块/点/边条承担）。 */
 nav { display: flex; gap: var(--sp-2); flex-wrap: wrap }
 nav button {
   border: none;
@@ -180,7 +191,8 @@ main { max-width: 820px; margin: 0 auto; padding: 0 var(--sp-10) var(--nav-clear
    刻意**只做视觉**：不加声音、不弹窗、不闪烁 —— 约定层「温和不施压」。 */
 .card.hard { border-left: 5px solid var(--danger) }
 .card.hard.overdue { border-left-width: 7px }
-.badge.hard { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger) }
+/* （状态徽标 `.badge.hard` 不在这里写：T-G42 起徽标统一在「展示元件」那块的原语里，
+   状态由 8px 圆点承担 —— 一个原子只写一遍。） */
 .card.done .title { text-decoration: line-through; color: var(--muted) }
 .card .row { display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap }
 /* 卡片里放表单/长内容时（默认 .card 是 flex 行，块内容会被挤） */
@@ -310,20 +322,51 @@ select {
 .rhythm-row:first-child { border-top: none; padding-top: 0; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4) }
 .big { font-size: var(--fs-num); font-weight: 700; color: var(--accent) }
+/* ---------- 徽标原语（T-G42）= workbench 的 chip + StatusDot ----------
+ * 一个原子只写一遍：几何在这里，状态在下面那张**映射表**里。
+ *
+ * 为什么整块重写（原来是一个原子抄了四份，且是两张工单的共同来源）：
+ *  - 中性徽标的底原来是 `--accent-soft` / `--surface-2` 这类浅灰，字是 `--muted` ——
+ *    `--muted` 落在那种底上只有 **4.34 / 4.23**，过不了 AA。包的芯片原语是
+ *    **panel 底 + 1px 边框**（"层次=1px 边框，不是阴影"），`--muted` 落在卡片底上是 **4.76**，达标。
+ *  - 状态徽标原来各自手写 `color-mix(… 18% …)` 的浅底 + **再用同一个状态色写字**
+ *    （完成徽标 **1.96**，全表最差）—— 包对这件事的解法是"状态由**点或底**承担、字用正文色"，
+ *    而它自己的状态词汇就叫 **StatusDot**（8px 一个点，一个状态一个色相，永不装饰）。
+ *    于是这里照它做：**点承担颜色，字一律是芯片色** —— 顺带满足"状态绝不只用颜色"
+ *    （点旁边永远有字："完成于…" / "未完成" / "进行中" / "硬考核"）。
+ *  - `.badge.todo`（未完成）不再需要自己的规则：它和中性就是同一种，"未完成"由字说出来。
+ *    （类名保留在模板里当状态钩子，只是不再有样式 —— 少一条规则、少一个形状。）
+ *  - 圆点用的是状态色**本身**，所以"点够不够看得见"是被上面那张令牌级组合表兜住的：
+ *    `--ok` / `--danger` / `--accent` 落在 `--card` 上都 ≥4.5（非文字只要 3.0），
+ *    令牌一旦被改浅，对比度门会比这里先红。
+ *  - 点是**真元素** `<i class="dot">`，不是 `::before` —— 伪元素**采不进渲染清单**
+ *    （T-G32 那一层只走真元素），于是"这个点还在不在、什么颜色"就会没有任何一层能验，
+ *    而那正是 T-G40 抓到的同一类盲区（"采不到的东西等于没验过"）。真元素在黄金里是一行
+ *    `span.badge.done>i.dot  8×8  #1a7f37` —— 每个视图都钉着它。
+ */
 .badge {
-  display: inline-block;
-  background: var(--accent-soft);
-  color: var(--muted);
-  border-radius: var(--r-xs);
-  padding: 2px var(--sp-3);
-  font-size: var(--fs-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
   margin-left: var(--sp-2);
+  padding: 2px var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--card);
+  color: var(--muted);
+  font-size: var(--fs-xs);
 }
-/* 状态徽标（SR-NF1 状态色）：完成=绿、未完成=中性 */
-.badge.done { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok) }
-.badge.todo { background: var(--surface-2); color: var(--muted) }
-/* 「进行中」（T-F1）：这是**我自己标的**"现在在做这个" —— 用强调色，一眼看得见 */
-.badge.doing { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent) }
+/* 状态点：一个状态一个色相，只表状态（映射表就这四行） */
+.badge .dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--muted);
+}
+.badge.done .dot { background: var(--ok) }
+.badge.doing .dot { background: var(--accent) }
+.badge.hard .dot { background: var(--danger) }
 /* 右栏事实流水的一行：左边是事，右边是时间 */
 .fact { display: flex; justify-content: space-between; gap: var(--sp-4); padding: 3px 0 }
 .fact .sub { margin-top: 0 }

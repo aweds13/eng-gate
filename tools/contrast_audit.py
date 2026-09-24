@@ -25,9 +25,14 @@
 
 - 阈值：正文 ≥ 4.5、大字（≥18.66px 粗体 或 ≥24px）≥ 3.0（WCAG AA）。
   应用里强调色**既当 44px 计时器又当 12px 小字**，所以按**最小的那个用法**取 4.5 —— 保守取法。
-- 徽标（`.badge.*`）的底是 `color-mix(in srgb, <色> 18%, transparent)`，
-  要**先合成再算**：合成底 = 18% 状态色 + 82% 卡片底色。合成比例从 CSS 里读，不写死。
+- 徽标（`.badge.*`）里的「底 + 字」**从 CSS 真读**：`color-mix(...)` 合成的底要先合成再算，
+  直接写 `background: var(--某令牌)` 的也算（T-G42 之后状态徽标改用令牌底/圆点了）——
+  这个函数存在的意义是**别漏抓**：一个原子换了个写法就整条从表里消失，那是最坏的一种"绿"。
 - 令牌值只从 `src/web/app.css` 的令牌区读，**不抄表**；`var(--x)` 递归解析。
+- ★ T-G42 起状态徽标把颜色交给 **8px 圆点**（workbench 的 StatusDot），点是**非文字**（3.0 即可）。
+  它没有被单列成一对组合，而是**借令牌级组合的地板**：`--ok` / `--danger` / `--accent`
+  落在 `--card` 上都按 4.5 登记着 —— 令牌一旦被改浅，先把那三条打红，圆点自然也不够。
+  （"非文字图形"这个维度本身仍未系统覆盖，这一点如实写在 `复盘/审美门-对比度-T-G27.md` §6。）
 
 用法
   python -X utf8 tools/contrast_audit.py            # 人读（全表 + 结论）
@@ -60,6 +65,8 @@ _VAR = re.compile(r"var\(\s*(--[a-z0-9-]+)\s*\)")
 _RULE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.S)
 _MIX = re.compile(r"color-mix\(\s*in\s+srgb\s*,\s*var\(\s*(--[a-z0-9-]+)\s*\)\s*([\d.]+)%")
 _COLOR = re.compile(r"color\s*:\s*var\(\s*(--[a-z0-9-]+)\s*\)")
+# `.badge { background: var(--card); color: var(--muted) }` —— T-G42 起的令牌底
+_BG_VAR = re.compile(r"background\s*:\s*var\(\s*(--[a-z0-9-]+)\s*\)")
 
 
 @dataclass(frozen=True)
@@ -172,21 +179,26 @@ def resolve(name: str, tokens: dict[str, str], depth: int = 4) -> str:
 
 # ------------------------------------------------------------------ 组合清单
 # 令牌级组合：只登记**样式表里真出现**的搭配，`where` 写明是哪些规则造出来的。
+# ★ T-G42 撤掉了三行（都写在 `contrast_baseline.toml` 的销账记录里）：
+#   - `--muted on --surface-2` / `--muted on --accent-soft`：那是旧徽标的底，
+#     徽标改用"卡片底 + 1px 边框"之后，**这两种搭配在样式表里已经不存在了**（僵尸行必须删，
+#     `tests/test_contrast_audit.py` 有一条"登记表不许有对不上的行"钉着）。
+#   - `--accent on --bg`：唯一实现处是 h1 里那个装饰性 `·`（4.37，过不了 4.5），
+#     T-G42 把那个类连用法一起删了 —— **样式表里没有"强调色当小字"这种搭配了**。
+#     ⚠️ 残留风险如实记在 `复盘/视觉线第0.5步-对比度与状态色-T-G42.md`：静态表看不见
+#        "以后有人又写一处强调色小字在页面底上"（那要有渲染层才知道谁坐在什么底上）。
 TOKEN_PAIRS: tuple[tuple[str, str, float, str], ...] = (
     ("--text", "--bg", AA_NORMAL, "body 继承色 / 页面底"),
     ("--text", "--card", AA_NORMAL, "卡片内正文"),
     ("--text", "--surface-2", AA_NORMAL, "浅底上的正文（热力图空格外 等）"),
     ("--muted", "--bg", AA_NORMAL, ".sub / .hint / .empty 在页面底"),
-    ("--muted", "--card", AA_NORMAL, ".sub / .hint 在卡片里"),
-    ("--muted", "--surface-2", AA_NORMAL, ".badge.todo（底 --surface-2、字 --muted）"),
-    ("--muted", "--accent-soft", AA_NORMAL, ".badge 默认（底 --accent-soft、字 --muted）"),
-    ("--accent", "--bg", AA_NORMAL, ".accent / .flag（12px 小字）在页面底"),
-    ("--accent", "--card", AA_NORMAL, ".prio.mid / 底栏选中 / 卡片内强调色小字"),
+    ("--muted", "--card", AA_NORMAL, ".sub / .hint / 徽标（芯片底是 --card）在卡片里"),
+    ("--accent", "--card", AA_NORMAL, ".prio.mid / .flag（12px 小字）与状态点：都在卡片底上"),
     ("--accent-on", "--accent", AA_NORMAL, ".prio.high 与主按钮：实心强调底上的字"),
-    ("--danger", "--bg", AA_NORMAL, "危险色当文字（.badge.hard 的字、逾期提示）"),
-    ("--danger", "--card", AA_NORMAL, "卡片里的危险色文字"),
+    ("--danger", "--bg", AA_NORMAL, "危险色当文字（设置页「上次导出失败」那几行）"),
+    ("--danger", "--card", AA_NORMAL, "卡片里的危险色文字 / 硬考核状态点"),
     ("--ok", "--bg", AA_NORMAL, "完成色当文字"),
-    ("--ok", "--card", AA_NORMAL, "卡片里的完成色文字"),
+    ("--ok", "--card", AA_NORMAL, "卡片里的完成色文字 / 完成状态点"),
     ("--text-on-dark", "--toast-bg", AA_NORMAL, ".toast：toast 底上的字"),
 )
 PRESET_TOKENS = ("--accent-1", "--accent-2", "--accent-3", "--accent-4", "--accent-5", "--accent-6")
@@ -216,7 +228,14 @@ def declared_pairs() -> list[Pair]:
 
 
 def badge_pairs(css: str) -> list[Pair]:
-    """从 `.badge.*` 规则里读出「浅底 + 同色字」这种搭配（合成底要算，不能只看令牌）。"""
+    """从 `.badge.*` 规则里读出「底 + 字」这种搭配。
+
+    两种底都认：
+      - `color-mix(in srgb, <状态色> N%, transparent)` —— 合成底（T-G27 的第一版配方）；
+      - `background: var(--某令牌)` —— 令牌底（T-G42 起的配方）。
+    ★ **为什么要两种都认**：这个函数是"别漏抓"的那道保险。一个原子换了写法就整条从表里消失，
+      门会显得是绿的 —— 那正是最坏的一种绿（T-G27 自己就在注释被吃进选择器上栽过一次）。
+    """
     out: list[Pair] = []
     # 先把注释去掉：否则注释会被算进选择器里（`.badge.done` 头上正好有一行注释，
     # 第一版就是这么漏掉 done/doing 的 —— 只抓到 .hard，因为只有它头上没有注释）。
@@ -225,20 +244,22 @@ def badge_pairs(css: str) -> list[Pair]:
         sel = selector.strip().split(",")[-1].strip().replace("\n", " ")
         if not re.fullmatch(r"\.badge\.[a-z-]+", sel):
             continue
-        m_mix, m_color = _MIX.search(body), _COLOR.search(body)
-        if m_mix is None or m_color is None:
+        m_color = _COLOR.search(body)
+        if m_color is None:
             continue
-        pct = float(m_mix.group(2))
+        m_mix = _MIX.search(body)
+        m_bg = _BG_VAR.search(body)
+        if m_mix is not None:
+            pct = float(m_mix.group(2))
+            bg = f"mix({m_mix.group(1)} {m_mix.group(2)}% over --card)"
+            where = f"{sel}：底是 {pct:.0f}% 状态色合成的浅底，字却用同一个状态色"
+        elif m_bg is not None:
+            bg = m_bg.group(1)
+            where = f"{sel}：底是令牌 {m_bg.group(1)}，字用 {m_color.group(1)}"
+        else:
+            continue
         for theme in ("light", "dark"):
-            out.append(
-                Pair(
-                    theme,
-                    m_color.group(1),
-                    f"mix({m_mix.group(1)} {m_mix.group(2)}% over --card)",
-                    AA_NORMAL,
-                    f"{sel}：底是 {pct:.0f}% 状态色合成的浅底，字却用同一个状态色",
-                )
-            )
+            out.append(Pair(theme, m_color.group(1), bg, AA_NORMAL, where))
     return out
 
 

@@ -1,14 +1,13 @@
-"""对比度审美门（T-G27）的测试 —— 给"新加的护栏"也上护栏。
+"""对比度审美门（T-G27 建 → T-G42 收紧）的测试 —— 给"新加的护栏"也上护栏。
 
 门是什么：`tools/contrast_audit.py` + `tools/contrast_baseline.toml`。
 它量的是**字在底上看不看得清**（WCAG 对比度），是本项目第一条**不需要浏览器**的审美门。
-判定是**棘轮**：现状已登记的 18 条欠账不算通过；出现**没登记过**的不足、
-或登记过的**变差**，才 FAIL。
+判定一开始是**棘轮**（登记在案的 18 条欠账不算通过，只拦增量和变差）；
+**T-G42 把欠账修完、登记表清空，`run_gates.py` 换成 `--strict`** —— 现在是一把真门。
 
 测试分两层：
 1. **零件层**：喂合成数据，钉住"什么样的输入该判成什么"（真仓库里造不出"变差"来验）；
-2. **数据层**：拿**真 `app.css` + 真登记表**跑一遍，断言当前没有新欠账 —— 顺带把
-   "这张表与真组合一一对应、没有僵尸行"也钉住，以后谁改令牌把字改糊，这里先红。
+2. **数据层**：拿**真 `app.css` + 真登记表**跑一遍，断言 0 条不达标、且登记表里没有僵尸行。
 """
 
 from __future__ import annotations
@@ -139,15 +138,48 @@ def test_dark_theme_is_fully_clean() -> None:
 
 
 def test_badge_shortfalls_are_actually_detected() -> None:
-    """回归守卫：`.badge.done/.doing/.hard` 那三条「色块里同色写字」必须被抓到。
+    """回归守卫：徽标里「浅底 + 同一个状态色写字」必须被抓到 —— 喂**合成 CSS**，不绑当前配方。
 
     第一版漏掉了 done/doing —— 因为选择器正则把**注释**也算进了选择器
     （`.badge.done` 头上正好有一行注释，`.badge.hard` 头上没有，所以只抓到它）。
     这条用例钉住"三块都要在"，不然那种漏抓会静悄悄地回来。
+    ★ T-G42 改成喂合成 CSS：真 `app.css` 现在**已经没有**这种搭配了（徽标改成"圆点承担颜色"），
+      可这个函数是"别漏抓"的那道保险，它得能对**任何**配方报警 —— 绑着当前配方就等于
+      "配方一换，守卫跟着换"，那它守的就不是这个能力了。
     """
-    pairs, tokens, known = _real()
-    keys = {p.key for p in pairs}
+    css = (
+        "/* 头上有一行注释，注释不许被吃进选择器 */\n"
+        ".badge.done { background: color-mix(in srgb, var(--ok) 18%, transparent);"
+        " color: var(--ok) }\n"
+        ".badge.doing { background: color-mix(in srgb, var(--accent) 18%, transparent);"
+        " color: var(--accent) }\n"
+        ".badge.hard { background: color-mix(in srgb, var(--danger) 18%, transparent);"
+        " color: var(--danger) }\n"
+    )
+    keys = {p.key for p in ca.badge_pairs(css)}
     for token in ("--ok", "--accent", "--danger"):
         assert f"light:{token} on mix({token} 18% over --card)" in keys
-    ratios = {r.pair.key: r.ratio for r in ca.evaluate(pairs, tokens, known)}
-    assert ratios["light:--ok on mix(--ok 18% over --card)"] < 2.0  # 最糟的那条，1.96
+
+
+def test_badge_shortfalls_are_detected_with_token_backgrounds_too() -> None:
+    """T-G42 泛化：底写成 `background: var(--某令牌)` 时**也要**量到。
+
+    为什么值得一条：这个函数是"别漏抓"的保险。一个原子换了个写法（合成底 → 令牌底）
+    就整条从表里消失，门会显得是绿的 —— 那是最坏的一种绿。
+    """
+    css = ".badge.done { background: var(--ok-weak); color: var(--ok) }\n"
+    keys = {p.key for p in ca.badge_pairs(css)}
+    assert "light:--ok on --ok-weak" in keys
+    assert "dark:--ok on --ok-weak" in keys
+
+
+def test_every_declared_pair_now_meets_aa() -> None:
+    """T-G42 之后这张表**一条欠账都没有**了，所以门禁跑的是 `--strict`（真门，不是棘轮）。
+
+    这条用例就是"收紧"这件事的护栏：谁把某条组合改回不达标，这里先红 ——
+    而且**不能靠登记表糊过去**（登记表是空的；要登记就得改这条用例的注释所描述的口径）。
+    """
+    pairs, tokens, known = _real()
+    assert known == {}, f"登记表应该已经清空了，还剩：{sorted(known)}"
+    short = [r.pair.key for r in ca.evaluate(pairs, tokens, known) if r.ratio < r.pair.minimum]
+    assert short == [], f"还有不达 AA 的组合（--strict 会红）：{short}"

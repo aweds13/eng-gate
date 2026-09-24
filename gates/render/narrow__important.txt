@@ -1,7 +1,7 @@
 # render-manifest v1 viewport=narrow 820x900 view=important rows=67 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,820,767	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,820,122	16/normal/400	#1e293b/#000000@0.00	0;14px 24px 0px
-div.shell>aside.rail>h1>span.accent	·	105,14,5,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
+body>div.shell>aside.rail>h1	timeflow ·	24,14,86,24	18/normal/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	120,16,356,20	13/19.5/400	#64748b/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(2)	全部任务	76,48,76,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
@@ -28,12 +28,12 @@ div.shell>main#main>div.row.tight>button.ghost:nth-child(2)	有计划	78,195,69,
 div.shell>main#main>div.row.tight>button.ghost:nth-child(3)	已标记	147,195,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.card.overdue		24,242,772,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.overdue>button.check		43,286,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px
-div.shell>main#main>div.card.overdue>div.card-body		77,267,175,61	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.overdue>div.card-body>div.title	补交上周的实验报告	77,267,175,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.overdue>div.card-body>div.meta		77,288,175,40	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.overdue>div.card-body>div.meta>span.badge	高数 / 作业	148,288,75,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
-div.card.overdue>div.card-body>div.meta>span.prio.high	高	223,289,29,19	11/normal/400	#ffffff/#2f6feb	999;1px 8px
-div.card.overdue>div.card-body>div.meta>span.badge.todo	未完成	83,308,52,20	12/normal/400	#64748b/#eef2f7	6;2px 8px
+div.shell>main#main>div.card.overdue>div.card-body		77,266,175,63	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.overdue>div.card-body>div.title	补交上周的实验报告	77,266,175,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.overdue>div.card-body>div.meta		77,287,175,42	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.overdue>div.card-body>div.meta>span.badge	高数 / 作业	148,287,72,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+div.card.overdue>div.card-body>div.meta>span.prio.high	高	220,288,29,19	11/normal/400	#ffffff/#2f6feb	999;1px 8px
+div.card.overdue>div.card-body>div.meta>span.badge.todo	未完成	83,308,51,21	11/normal/400	#64748b/#ffffff	999;2px 8px
 div.shell>main#main>div.card.overdue>div.row		264,256,516,82	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.overdue>div.row>button.ghost:nth-child(1)	在做	264,256,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div.card.overdue>div.row>button.ghost:nth-child(2)	专注	328,256,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
@@ -47,12 +47,12 @@ main#main>div.card.overdue>div.row>button.ghost:nth-child(9)	记录	328,301,56,3
 main#main>div.card.overdue>div.row>button.ghost:nth-child(10)	删除	392,301,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.card		24,362,772,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card>button.check		40,406,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px
-div.shell>main#main>div.card>div.card-body		74,397,204,41	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.title	把第三章习题做完	74,397,204,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.meta		74,418,204,20	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card>div.card-body>div.meta>span.prio.high	高	139,419,29,19	11/normal/400	#ffffff/#2f6feb	999;1px 8px
-div.card>div.card-body>div.meta>span.flag	⚑ 已标记	168,420,48,16	12/normal/400	#2f6feb/#000000@0.00	0;0px
-div.card>div.card-body>div.meta>span.badge.todo	未完成	222,418,52,20	12/normal/400	#64748b/#eef2f7	6;2px 8px
+div.shell>main#main>div.card>div.card-body		74,396,204,42	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.title	把第三章习题做完	74,396,204,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta		74,417,204,21	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card>div.card-body>div.meta>span.prio.high	高	139,418,29,19	11/normal/400	#ffffff/#2f6feb	999;1px 8px
+div.card>div.card-body>div.meta>span.flag	⚑ 已标记	168,419,48,16	12/normal/400	#2f6feb/#000000@0.00	0;0px
+div.card>div.card-body>div.meta>span.badge.todo	未完成	222,417,51,21	11/normal/400	#64748b/#ffffff	999;2px 8px
 div.shell>main#main>div.card>div.row		290,376,490,82	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card>div.row>button.ghost:nth-child(1)	在做	290,376,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div.card>div.row>button.ghost:nth-child(2)	专注	354,376,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px

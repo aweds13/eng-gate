@@ -1,7 +1,7 @@
 # render-manifest v1 viewport=narrow 820x900 view=setting rows=395 accent=#2f6feb device=ph-000000000000
-html>body>div.shell		0,0,820,6547	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
+html>body>div.shell		0,0,820,6550	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,820,122	16/normal/400	#1e293b/#000000@0.00	0;14px 24px 0px
-div.shell>aside.rail>h1>span.accent	·	105,14,5,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
+body>div.shell>aside.rail>h1	timeflow ·	24,14,86,24	18/normal/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	120,16,356,20	13/19.5/400	#64748b/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button:nth-child(2)	全部任务	76,48,76,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
@@ -19,7 +19,7 @@ div.shell>aside.rail>nav>button.active	设置	713,48,50,35	13/normal/400	#ffffff
 div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,85,63,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button#refresh	刷新	89,85,52,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button#railToggle	收起右栏	143,85,78,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-html>body>div.shell>main#main		0,142,820,6144	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
+html>body>div.shell>main#main		0,142,820,6147	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
 body>div.shell>main#main>div.section-title:nth-child(1)	常用	24,142,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.panel-card:nth-child(2)		24,169,772,108	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card:nth-child(2)>div.row.tight		40,183,740,80	16/normal/400	#1e293b/#000000@0.00	0;0px
@@ -87,310 +87,310 @@ main#main>div.card.panel-card:nth-child(8)>div.row.tight>button	保存	119,1239,
 main#main>div.card.panel-card:nth-child(8)>div.row.tight>span.sub	默认 3 天 · 上限 365 天	179,1251,120,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div.card.panel-card:nth-child(8)>div.sub	完成之后不是立刻收走：满 N 天自动进档案（0 = 当天就收）。档案里仍能看见，撤销完成就会回到列表。	40,1278,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div#set-behavior	口径与回退	24,1328,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(10)		24,1355,772,219	16/normal/400	#1e293b/#ffffff	12;14px 16px
+body>div.shell>main#main>div.card.panel-card:nth-child(10)		24,1355,772,220	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(1)		40,1373,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(1)>b:nth-child(1)	现状位	112,1373,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(1)>b:nth-child(2)	试算	439,1373,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(10)>div.settings-sub		40,1407,740,20	13/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(10)>div.settings-sub>span.badge	默认位	230,1407,52,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
-div.shell>main#main>div.card.panel-card:nth-child(10)>div.meta:nth-child(3)	「昨天没做完、又没有截止日」的 My Day 任务，算不算一笔债？	40,1435,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(10)>div.row		40,1451,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(10)>div.row>button	算：天数从创建日算起（默认）	40,1452,210,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.panel-card:nth-child(10)>div.row>button.ghost:nth-child(2)	不算：不进债务卡	258,1451,134,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(10)>div.row>button.ghost:nth-child(3)	回到默认位	400,1451,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(10)>div.meta:nth-child(5)	✅ 影子跑「不算：不进债务卡」：没有区别（切过去数字不变）。	40,1488,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(6)	现在的做法（F 批 · T-F8 定案 A：计数和明细都是它）	40,1508,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(7)		40,1528,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(7)>b:nth-child(1)	可重算的派生口径	88,1528,96,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(7)>b:nth-child(2)	改数据的事	604,1528,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div#set-vocab	可配置词表	24,1594,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(12)		24,1621,772,470	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(1)	词表只决定「能选什么 / 叫什么」，不改计算；配置文件里的默认值在这里改过之后以本机为准。	40,1639,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.settings-sub:nth-child(2)		40,1673,740,20	13/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(12)>div.settings-sub:nth-child(2)>span.badge	默认	102,1673,40,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.meta:nth-child(3)	建复习卡时「形式」这一栏有哪几种？	40,1701,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(4)		40,1717,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(1)	挖空 ✕	40,1717,70,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(2)	问答卡 ✕	116,1717,83,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(3)	真题 ✕	205,1717,70,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(5)		40,1770,740,38	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(5)>input#vb_review_forms_id	(text)id（小写英文，如 my_form）	40,1770,280,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(5)>input#vb_review_forms_label	(text)显示名（随你写）	330,1770,280,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(5)>button.ghost:nth-child(3)	加一项	619,1771,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(5)>button.ghost:nth-child(4)	回到默认	698,1771,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(6)	形式只是标签（不改调度、不改卡片长相），所以你想起什么名字都行 —— 中文标签随你写，id 用小写英文（它进 URL 与配置）。 最多 20 项。	40,1824,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.settings-sub:nth-child(7)		40,1874,740,20	13/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(12)>div.settings-sub:nth-child(7)>span.badge	默认	154,1874,40,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.meta:nth-child(8)	统计页那张年历热力图，可以按哪些维度看、分别叫什么？	40,1902,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)		40,1918,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(1)	专注 ✕	40,1918,70,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(2)	手动投入 ✕	116,1918,96,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(3)	复习 ✕	218,1918,70,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(4)	产出 ✕	295,1918,70,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(5)	债务（欠多少） ✕	371,1918,135,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)		40,1971,740,38	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>input#vb_heatmap_dimensions_id	(text)id	40,1971,280,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>input#vb_heatmap_dimensions_label	(text)显示名（随你写）	330,1971,280,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>button.ghost:nth-child(3)	加一项	619,1972,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>button.ghost:nth-child(4)	回到默认	698,1972,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.meta:nth-child(11)	只能从这些 id 里选：focus_minutes · manual_minutes · review_count · output_count · debt_count	40,2025,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(12)		40,2045,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(12)>b	要算一个全新的维度仍需改核心代码	340,2045,192,16	12/normal/700	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div#set-export	导出（Markdown）	24,2111,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(14)		24,2138,772,340	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div.settings-sub	写到哪个目录	40,2152,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(2)		40,2177,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(2)>input#exportDir	(text)<path>\tf-render-export	40,2185,240,21	13.3/normal/400	#000000/#ffffff	0;1px 2px
-main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(2)>button	保存	286,2178,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(2)>button.ghost:nth-child(3)	导出今天	346,2177,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(2)>button.ghost:nth-child(4)	打开目录	434,2177,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div.meta:nth-child(3)		40,2214,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(14)>div.meta:nth-child(3)>code	‹code:13›	648,2217,78,12	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div.meta:nth-child(4)	今天这份：已写出 491B · YYYY-MM-DD HH:MM	40,2246,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div#set-vault	Obsidian（只读跳转）	40,2280,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(6)		40,2305,740,35	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(6)>input#vaultName	(text)Vault 名字（Obsidian 里的库名）	40,2312,177,21	13.3/normal/400	#000000/#ffffff	0;1px 2px
-main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(6)>input#vaultDir	(text)Vault 根目录（可留空）	223,2312,220,21	13.3/normal/400	#000000/#ffffff	0;1px 2px
-main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(6)>button	保存	449,2305,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div.meta:nth-child(7)	还没填 —— 填上「Vault 名字」后，复习卡/备忘里挂的引用句柄就能一键跳进 Obsidian	40,2340,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(8)		40,2360,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(8)>b:nth-child(1)	只读跳转	519,2360,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(8)>b:nth-child(2)	不往 Vault 里写任何东西	229,2376,132,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(9)		40,2396,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(9)>b:nth-child(1)	数据库是权威，md 是产物	40,2396,142,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(9)>b:nth-child(2)	不会被读回	76,2412,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(10)		40,2432,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(10)>b:nth-child(1)	你自己指定的独立目录	64,2432,120,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(10)>b:nth-child(2)	不写进 Obsidian 的笔记目录	356,2432,152,16	12/normal/700	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div#set-ai	AI 接口（只读 + 新增）	24,2498,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(16)		24,2525,772,602	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(16)>div.row		40,2539,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.row>button.ghost	打开	40,2539,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(16)>div.row>button	关闭	104,2540,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.panel-card:nth-child(16)>div.row>span.sub		166,2552,245,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(16)>div.row>span.sub>b	关着	202,2552,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(2)		40,2580,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(2)>b:nth-child(1)	只读 + 新增 + 勾自己建的	40,2580,138,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(2)>b:nth-child(2)	记一条进展事实	444,2580,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(2)>b:nth-child(3)	只能勾它自己建的	540,2580,96,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(16)>div.meta		40,2612,740,96	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(1)	GET /api/ai/ping	40,2615,96,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(3)	GET /api/ai/tasks	40,2631,102,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(5)	GET /api/ai/tasks/{id}	40,2647,132,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(7)	POST /api/ai/tasks	40,2663,108,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.meta>b:nth-child(8)	加一个步骤	327,2660,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(10)	POST /api/ai/tasks/{id}/progress	40,2679,192,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.meta>b:nth-child(11)	回报进展	235,2676,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(13)	POST /api/ai/tasks/{id}/complete	40,2695,192,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.meta>b:nth-child(14)	只能勾 AI 自己建的	283,2692,103,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)		40,2712,740,48	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)>b:nth-child(1)	加一个步骤	572,2712,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)>b:nth-child(2)	记一条进展事实	692,2712,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)>b:nth-child(3)	动的是不是你亲手写的东西	562,2728,144,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(5)		40,2764,740,48	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(5)>b:nth-child(1)	回报进展	685,2764,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(5)>b:nth-child(2)	默认关	691,2780,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(16)>div.settings-sub	照抄就能跑	40,2830,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(16)>pre.ai-example	# 先看边界（不会读你的数据） curl http://127.0.0.1:8000/api/ai/ping # 读任务列表 / 读一个任务与它的步骤 curl http://12	40,2855,740,221	11/normal/400	#1e293b/#eef2f7	8;12px
-div.shell>main#main>div.card.panel-card:nth-child(16)>div.row.tight		40,3076,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.row.tight>button.ghost	复制示例命令	40,3076,108,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-body>div.shell>main#main>div#set-notify	学校通知（合作接口）	24,3147,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(18)		24,3174,772,620	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(18)>div.row		40,3188,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.row>button.ghost	打开	40,3188,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(18)>div.row>button	关闭	104,3189,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.panel-card:nth-child(18)>div.row>span.sub		166,3201,291,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(18)>div.row>span.sub>b	关着	202,3201,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(2)		40,3229,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(2)>b:nth-child(1)	不去网上抓	76,3229,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(2)>b:nth-child(2)	收件箱	352,3229,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(2)>b:nth-child(3)	不会自动变成任务	484,3229,96,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(2)>b:nth-child(4)	默认关	112,3245,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)		40,3261,740,128	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(1)	‹code:6›	292,3264,36,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>b:nth-child(2)	必填	328,3261,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(4)	title	40,3280,30,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>b:nth-child(5)	必填	70,3277,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(7)	‹code:11›	40,3296,66,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(9)	url	40,3312,18,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(11)	‹code:7›	40,3328,42,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(13)	at	40,3344,12,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(15)	‹code:8›	40,3360,48,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(17)	(其它)	40,3376,36,12	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)		40,3389,740,96	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(1)	GET /api/settings/notify	40,3392,144,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(3)	PUT /api/settings/notify	40,3408,144,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(5)	GET /api/notify/school	40,3424,132,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(7)	POST /api/notify/school	40,3440,138,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(9)	POST /api/notify/school/{id}/to-task	40,3456,216,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(11)	POST /api/notify/school/{id}/ignore	40,3472,210,12	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(5)	为什么这么做：规格把抓取划给独立脚本，主工具越界抓取等于替你新增对外依赖；而"外部内容自动变任务"会替你决定什么算你的事 —— 那是产品口径，这一版不擅自定。	40,3489,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(6)		40,3525,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(6)>b	你自己的脚本	76,3525,72,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(18)>div.settings-sub	照抄就能跑（脚本里就这么调）	40,3575,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(18)>pre.ai-example	# 先看接口开着没有（不读你的数据） curl http://127.0.0.1:8000/api/settings/notify # 投递一条通知（脚本里就这么调；重复投递不会产	40,3600,740,143	11/normal/400	#1e293b/#eef2f7	8;12px
-div.shell>main#main>div.card.panel-card:nth-child(18)>div.row.tight		40,3743,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(18)>div.row.tight>button.ghost	复制示例命令	40,3743,108,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-body>div.shell>main#main>div.settings-sub	收件箱（0） · 待看 0 / 已转任务 0 / 已忽略 0	24,3818,772,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-body>div.shell>main#main>div.empty	接口关着，收件箱是空的 —— 打开后你的脚本才能投递	24,3843,772,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
-body>div.shell>main#main>div#set-academic	学业	24,3944,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(22)		24,3971,772,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(22)>div.settings-sub	GPA 制式	40,3985,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(22)>div.row		40,4010,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(22)>div.row>button	4.0 制	40,4011,63,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.panel-card:nth-child(22)>div.row>button.ghost:nth-child(2)	5.0 制	111,4010,65,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(22)>div.row>button.ghost:nth-child(3)	去学业页	183,4010,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(22)>div.sub	配置默认值来自 config.toml 的 [academic] gpa_scale；这里切的是查看口径。	40,4051,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(23)	分组管理	24,4101,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div#groupAdmin		24,4128,772,241	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div#groupAdmin>div.settings-sub	分组管理	40,4142,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#groupAdmin>div.sub		40,4167,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#groupAdmin>div.sub>b	不会删任务	220,4183,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#groupAdmin>div.new		40,4215,740,38	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#groupAdmin>div.new>input#groupName	(text)新建分组，如：高数	40,4215,561,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div#groupAdmin>div.new>select#groupParent	顶层	611,4217,105,35	13/normal/400	#1e293b/#ffffff	10;8px 10px
-main#main>div#groupAdmin>div.new>button	新建	726,4217,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-div.shell>main#main>div#groupAdmin>div.row.tight:nth-child(4)		40,4269,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#groupAdmin>div.row.tight:nth-child(4)>span.badge	0 项	46,4278,38,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
-main#main>div#groupAdmin>div.row.tight:nth-child(4)>span.grow	高数	90,4277,367,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#groupAdmin>div.row.tight:nth-child(4)>button.ghost:nth-child(3)	＋子分组	463,4269,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div#groupAdmin>div.row.tight:nth-child(4)>button.ghost:nth-child(5)	改名	662,4269,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div#groupAdmin>div.row.tight:nth-child(4)>button.ghost:nth-child(6)	删除	724,4269,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div#groupAdmin>div.row.tight:nth-child(5)		40,4312,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 0px 16px
-main#main>div#groupAdmin>div.row.tight:nth-child(5)>span.badge	1 项	62,4321,38,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
-main#main>div#groupAdmin>div.row.tight:nth-child(5)>span.grow	高数 / 作业	106,4320,351,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#groupAdmin>div.row.tight:nth-child(5)>button.ghost:nth-child(3)	＋子分组	463,4312,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div#groupAdmin>div.row.tight:nth-child(5)>button.ghost:nth-child(5)	改名	662,4312,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div#groupAdmin>div.row.tight:nth-child(5)>button.ghost:nth-child(6)	删除	724,4312,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-body>div.shell>main#main>div#set-attach	附件打开方式	24,4389,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(26)		24,4416,772,275	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(26)>div.settings-sub:nth-child(1)	本地文件怎么打开	40,4430,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(26)>div.row		40,4455,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(26)>div.row>button	打开所在文件夹	40,4456,119,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.panel-card:nth-child(26)>div.row>button.ghost:nth-child(2)	直接用默认程序打开	167,4455,147,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(26)>div.row>button.ghost:nth-child(3)	按格式自动	322,4455,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(26)>div.sub:nth-child(3)		40,4496,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(26)>div.sub:nth-child(3)>b	任何设置下都只到文件夹	40,4496,739,32	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(26)>div.settings-sub:nth-child(4)	直接打开白名单（扩展名）	40,4546,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(26)>div.row.tight		40,4571,740,20	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(26)>div.row.tight>span.sub	空 —— 白名单里的扩展名会直接用默认程序打开	40,4575,259,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(26)>div.new		40,4607,740,38	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(26)>div.new>input#wlExt	(text)加扩展名，如 .pdf	40,4607,635,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(26)>div.new>button.ghost	加入白名单	685,4608,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(26)>div.sub:nth-child(7)	打开方式与白名单存在本机数据库（服务端），不由页面参数决定 —— 免得任何网页都能要求"直接打开"。	40,4661,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div#set-remind	提醒	24,4711,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(28)		24,4738,772,326	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(28)>div.settings-sub:nth-child(1)	提醒方式（到点时怎么叫你）	40,4752,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(2)		40,4777,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(2)>button	闹钟式（留在屏幕上 + 循环响铃）	40,4778,225,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(2)>button.ghost:nth-child(2)	温和通知（几秒后消失）	273,4777,173,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(2)>button.ghost:nth-child(3)	试一下	454,4777,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(2)>button.ghost:nth-child(4)	停止响铃	531,4777,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(3)		40,4818,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(3)>b:nth-child(1)	警报通知	179,4818,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(3)>b:nth-child(2)	留在屏幕上直到你手动关掉	299,4818,144,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(4)		40,4854,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(4)>b:nth-child(1)	闹钟式会一直响到你把它关掉	40,4854,156,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(4)>b:nth-child(2)	同一时刻只会有一条	627,4854,108,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(28)>div.settings-sub:nth-child(5)	到点自动提醒（关掉应用也响）	40,4904,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(6)		40,4929,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(6)>button.ghost	开启	40,4929,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(6)>button	关闭	104,4930,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(6)>span.badge:nth-child(3)	默认关闭	172,4938,64,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
-main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(6)>span.badge:nth-child(4)	未注册计划任务	250,4938,100,20	12/normal/400	#64748b/#f1f5f9	6;2px 8px
-div.shell>main#main>div.card.panel-card:nth-child(28)>div.meta:nth-child(7)		40,4966,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(28)>div.meta:nth-child(7)>b	关掉应用也会响	221,4982,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(28)>div.meta:nth-child(8)	上次通知：（还没有）	40,4998,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(9)		40,5018,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(9)>b:nth-child(1)	当前用户、交互式	160,5018,96,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(9)>b:nth-child(2)	注销/关机时不响	407,5018,89,16	12/normal/700	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(29)	数据与同步	24,5084,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div#set-sync		24,5111,772,1029	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div#set-sync>div.title:nth-child(1)	当前在线	40,5125,740,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.meta:nth-child(2)		40,5148,740,48	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(2)>b:nth-child(1)	version → updated_at	607,5148,121,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(2)>b:nth-child(2)	导入默认不删你本地的任何东西	256,5164,168,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(2)>b:nth-child(3)	通过网络	292,5180,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.sub:nth-child(3)		40,5200,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(3)>code	‹code:12›	79,5203,72,12	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div#set-syncpack	跨端同步（走文件）	40,5234,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.meta:nth-child(5)		40,5259,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(5)>b:nth-child(1)	导出同步包	100,5259,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(5)>b:nth-child(2)	先预览再导入	441,5259,72,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(5)>b:nth-child(3)	version → 更新时间	567,5259,106,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(5)>b:nth-child(4)	导入不会删你本地的任何东西	211,5275,156,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.row.tight:nth-child(6)		40,5291,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight:nth-child(6)>button	导出同步包	40,5292,93,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div#set-sync>div.row.tight:nth-child(6)>input#syncPath	(text)要导入的包路径（后端会把完整路径给你）	139,5299,260,21	13.3/normal/400	#000000/#ffffff	0;1px 2px
-main#main>div#set-sync>div.row.tight:nth-child(6)>button.ghost:nth-child(3)	先预览	405,5291,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div#set-sync>div.row.tight:nth-child(6)>button.ghost:nth-child(4)	导入	480,5291,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div#set-sync>div.row.tight:nth-child(7)		40,5336,740,23	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight:nth-child(7)>label.sub		40,5340,131,19	12/normal/400	#64748b/#000000@0.00	0;0px
-div#set-sync>div.row.tight:nth-child(7)>label.sub>input#syncDel	(checkbox)on	44,5343,13,13	13.3/normal/400	#000000/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight:nth-child(7)>span#syncDelHint	（默认不删：只记墓碑，保留你本地的行）	177,5342,228,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.sub:nth-child(8)		40,5363,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(8)>b:nth-child(1)	删掉过	124,5363,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(8)>b:nth-child(2)	不可撤销	311,5363,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(8)>b:nth-child(3)	你本地在那之后又改过它	40,5363,730,32	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.meta:nth-child(9)	上次导出：还没导出过 · 上次导入：还没导入过	40,5395,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.sub:nth-child(10)		40,5415,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(10)>b	不含	64,5415,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div#set-offline	手机离线记（从手机往电脑带）	40,5465,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.meta:nth-child(12)		40,5490,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(12)>b	同一个格式	544,5490,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.row.tight:nth-child(13)		40,5522,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight:nth-child(13)>button.ghost	打开「离线记」这一页	40,5522,160,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div#set-sync>div.sub:nth-child(14)		40,5563,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(14)>b	显式开	535,5563,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(14)>code	--lan	643,5566,30,12	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div#set-lan	局域网访问（手机连电脑）	40,5613,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.title:nth-child(16)	这台服务只监听本机（手机连不上）	40,5638,740,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.meta:nth-child(17)		40,5661,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(17)>code:nth-child(1)	python tools/serve.py --lan	223,5664,162,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(17)>code:nth-child(2)	[net] allow_lan	542,5664,90,12	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.meta:nth-child(18)	配置里写的是：关（和上面"这台服务"可能不一致 —— 以服务为准）	40,5677,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.settings-sub:nth-child(19)	配对码	40,5711,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.meta:nth-child(20)		40,5736,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(20)>code	‹code:6›	103,5739,36,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.meta:nth-child(20)>b	只在这台电脑上显示	151,5736,108,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.row.tight:nth-child(21)		40,5752,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight:nth-child(21)>button.ghost	换一个配对码	40,5752,108,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div#set-sync>div.sub:nth-child(22)		40,5793,740,64	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(22)>b:nth-child(1)	同一个局域网	124,5793,72,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(22)>b:nth-child(2)	你自己开的热点	330,5793,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(22)>b:nth-child(3)	校园网 / 公共 WiFi 常开了客户端隔离	210,5809,200,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(22)>b:nth-child(4)	热点	724,5809,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(22)>b:nth-child(5)	不是加密、也不挡同 WiFi 抓包	352,5825,164,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.settings-sub:nth-child(23)	怎么让手机连上（按顺序试）	40,5875,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.sub:nth-child(24)		40,5900,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(24)>b:nth-child(1)	电脑开「移动热点」	55,5900,108,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(24)>code	‹code:13›	287,5903,78,12	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(24)>b:nth-child(3)	「离线记」	347,5916,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.sub:nth-child(25)		40,5936,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(25)>b:nth-child(1)	校园网 / 公共 WiFi 常开「客户端隔离」	60,5936,212,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(25)>b:nth-child(2)	按公共网络对待	124,5952,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.row.tight:nth-child(26)		40,5968,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight:nth-child(26)>button.ghost	网络自检（在这台电脑上查）	40,5968,199,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div#set-sync>div#set-backup	备份与恢复	40,6023,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.meta:nth-child(29)	每次起服务/开窗口前会自动备份一份。库：timeflow.db（目录 <path>\timeflow_fresh_<tmp>	40,6048,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.row.tight:nth-child(30)		40,6070,740,20	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight:nth-child(30)>span.sub	还没有备份（起一次服务就会有一份）	40,6074,204,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.sub:nth-child(31)		40,6094,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(31)>b:nth-child(1)	连设置一起	208,6094,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
-main#main>div#set-sync>div.sub:nth-child(31)>b:nth-child(2)	点某个时间点 = 把库整体回到那一刻	40,6094,738,32	12/normal/700	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(31)	入口	24,6160,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(32)		24,6187,772,65	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(32)>div.row.tight		40,6201,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(1)	全部任务	40,6201,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(2)	重要	128,6201,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(3)	有计划	190,6201,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(4)	已标记	265,6201,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(5)	统计	340,6201,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(6)	习惯	402,6201,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(7)	复习	464,6201,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(8)	备忘录	526,6201,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(9)	学业	601,6201,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-html>body>div.shell>aside.sidebar		0,6286,820,171	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
-body>div.shell>aside.sidebar>div#focusRail		24,6286,772,69	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	40,6300,740,17	13/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	40,6325,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.settings-sub		40,1407,740,21	13/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.settings-sub>span.badge	默认位	230,1407,51,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.meta:nth-child(3)	「昨天没做完、又没有截止日」的 My Day 任务，算不算一笔债？	40,1436,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.row		40,1452,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.row>button	算：天数从创建日算起（默认）	40,1453,210,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.panel-card:nth-child(10)>div.row>button.ghost:nth-child(2)	不算：不进债务卡	258,1452,134,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(10)>div.row>button.ghost:nth-child(3)	回到默认位	400,1452,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.meta:nth-child(5)	✅ 影子跑「不算：不进债务卡」：没有区别（切过去数字不变）。	40,1489,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(6)	现在的做法（F 批 · T-F8 定案 A：计数和明细都是它）	40,1509,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(7)		40,1529,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(7)>b:nth-child(1)	可重算的派生口径	88,1529,96,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(7)>b:nth-child(2)	改数据的事	604,1529,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div#set-vocab	可配置词表	24,1595,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(12)		24,1622,772,472	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(1)	词表只决定「能选什么 / 叫什么」，不改计算；配置文件里的默认值在这里改过之后以本机为准。	40,1640,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.settings-sub:nth-child(2)		40,1674,740,21	13/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(12)>div.settings-sub:nth-child(2)>span.badge	默认	102,1674,40,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.meta:nth-child(3)	建复习卡时「形式」这一栏有哪几种？	40,1703,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(4)		40,1719,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(1)	挖空 ✕	40,1719,70,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(2)	问答卡 ✕	116,1719,83,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(3)	真题 ✕	205,1719,70,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(5)		40,1772,740,38	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(5)>input#vb_review_forms_id	(text)id（小写英文，如 my_form）	40,1772,280,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(5)>input#vb_review_forms_label	(text)显示名（随你写）	330,1772,280,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(5)>button.ghost:nth-child(3)	加一项	619,1773,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(5)>button.ghost:nth-child(4)	回到默认	698,1773,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(6)	形式只是标签（不改调度、不改卡片长相），所以你想起什么名字都行 —— 中文标签随你写，id 用小写英文（它进 URL 与配置）。 最多 20 项。	40,1826,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.settings-sub:nth-child(7)		40,1876,740,21	13/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(12)>div.settings-sub:nth-child(7)>span.badge	默认	154,1876,40,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.meta:nth-child(8)	统计页那张年历热力图，可以按哪些维度看、分别叫什么？	40,1905,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)		40,1921,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(1)	专注 ✕	40,1921,70,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(2)	手动投入 ✕	116,1921,96,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(3)	复习 ✕	218,1921,70,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(4)	产出 ✕	295,1921,70,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(5)	债务（欠多少） ✕	371,1921,135,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)		40,1974,740,38	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>input#vb_heatmap_dimensions_id	(text)id	40,1974,280,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>input#vb_heatmap_dimensions_label	(text)显示名（随你写）	330,1974,280,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>button.ghost:nth-child(3)	加一项	619,1975,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(12)>div.new:nth-child(10)>button.ghost:nth-child(4)	回到默认	698,1975,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.meta:nth-child(11)	只能从这些 id 里选：focus_minutes · manual_minutes · review_count · output_count · debt_count	40,2028,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(12)		40,2048,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(12)>div.sub:nth-child(12)>b	要算一个全新的维度仍需改核心代码	340,2048,192,16	12/normal/700	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div#set-export	导出（Markdown）	24,2114,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(14)		24,2141,772,340	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div.settings-sub	写到哪个目录	40,2155,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(2)		40,2180,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(2)>input#exportDir	(text)<path>\tf-render-export	40,2188,240,21	13.3/normal/400	#000000/#ffffff	0;1px 2px
+main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(2)>button	保存	286,2181,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(2)>button.ghost:nth-child(3)	导出今天	346,2180,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(2)>button.ghost:nth-child(4)	打开目录	434,2180,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div.meta:nth-child(3)		40,2217,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(14)>div.meta:nth-child(3)>code	‹code:13›	648,2220,78,12	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div.meta:nth-child(4)	今天这份：已写出 491B · YYYY-MM-DD HH:MM	40,2249,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div#set-vault	Obsidian（只读跳转）	40,2283,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(6)		40,2308,740,35	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(6)>input#vaultName	(text)Vault 名字（Obsidian 里的库名）	40,2315,177,21	13.3/normal/400	#000000/#ffffff	0;1px 2px
+main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(6)>input#vaultDir	(text)Vault 根目录（可留空）	223,2315,220,21	13.3/normal/400	#000000/#ffffff	0;1px 2px
+main#main>div.card.panel-card:nth-child(14)>div.row.tight:nth-child(6)>button	保存	449,2308,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div.meta:nth-child(7)	还没填 —— 填上「Vault 名字」后，复习卡/备忘里挂的引用句柄就能一键跳进 Obsidian	40,2343,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(8)		40,2363,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(8)>b:nth-child(1)	只读跳转	519,2363,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(8)>b:nth-child(2)	不往 Vault 里写任何东西	229,2379,132,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(9)		40,2399,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(9)>b:nth-child(1)	数据库是权威，md 是产物	40,2399,142,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(9)>b:nth-child(2)	不会被读回	76,2415,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(10)		40,2435,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(10)>b:nth-child(1)	你自己指定的独立目录	64,2435,120,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(14)>div.sub:nth-child(10)>b:nth-child(2)	不写进 Obsidian 的笔记目录	356,2435,152,16	12/normal/700	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div#set-ai	AI 接口（只读 + 新增）	24,2501,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(16)		24,2528,772,602	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(16)>div.row		40,2542,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.row>button.ghost	打开	40,2542,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(16)>div.row>button	关闭	104,2543,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.panel-card:nth-child(16)>div.row>span.sub		166,2555,245,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(16)>div.row>span.sub>b	关着	202,2555,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(2)		40,2583,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(2)>b:nth-child(1)	只读 + 新增 + 勾自己建的	40,2583,138,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(2)>b:nth-child(2)	记一条进展事实	444,2583,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(2)>b:nth-child(3)	只能勾它自己建的	540,2583,96,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(16)>div.meta		40,2615,740,96	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(1)	GET /api/ai/ping	40,2618,96,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(3)	GET /api/ai/tasks	40,2634,102,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(5)	GET /api/ai/tasks/{id}	40,2650,132,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(7)	POST /api/ai/tasks	40,2666,108,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>b:nth-child(8)	加一个步骤	327,2663,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(10)	POST /api/ai/tasks/{id}/progress	40,2682,192,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>b:nth-child(11)	回报进展	235,2679,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>code:nth-child(13)	POST /api/ai/tasks/{id}/complete	40,2698,192,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.meta>b:nth-child(14)	只能勾 AI 自己建的	283,2695,103,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)		40,2715,740,48	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)>b:nth-child(1)	加一个步骤	572,2715,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)>b:nth-child(2)	记一条进展事实	692,2715,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(4)>b:nth-child(3)	动的是不是你亲手写的东西	562,2731,144,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(5)		40,2767,740,48	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(5)>b:nth-child(1)	回报进展	685,2767,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.sub:nth-child(5)>b:nth-child(2)	默认关	691,2783,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(16)>div.settings-sub	照抄就能跑	40,2833,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(16)>pre.ai-example	# 先看边界（不会读你的数据） curl http://127.0.0.1:8000/api/ai/ping # 读任务列表 / 读一个任务与它的步骤 curl http://12	40,2858,740,221	11/normal/400	#1e293b/#eef2f7	8;12px
+div.shell>main#main>div.card.panel-card:nth-child(16)>div.row.tight		40,3079,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.row.tight>button.ghost	复制示例命令	40,3079,108,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div#set-notify	学校通知（合作接口）	24,3150,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(18)		24,3177,772,620	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(18)>div.row		40,3191,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.row>button.ghost	打开	40,3191,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(18)>div.row>button	关闭	104,3192,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.panel-card:nth-child(18)>div.row>span.sub		166,3204,291,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(18)>div.row>span.sub>b	关着	202,3204,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(2)		40,3232,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(2)>b:nth-child(1)	不去网上抓	76,3232,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(2)>b:nth-child(2)	收件箱	352,3232,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(2)>b:nth-child(3)	不会自动变成任务	484,3232,96,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(2)>b:nth-child(4)	默认关	112,3248,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)		40,3264,740,128	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(1)	‹code:6›	292,3267,36,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>b:nth-child(2)	必填	328,3264,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(4)	title	40,3283,30,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>b:nth-child(5)	必填	70,3280,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(7)	‹code:11›	40,3299,66,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(9)	url	40,3315,18,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(11)	‹code:7›	40,3331,42,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(13)	at	40,3347,12,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(15)	‹code:8›	40,3363,48,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(3)>code:nth-child(17)	(其它)	40,3379,36,12	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)		40,3392,740,96	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(1)	GET /api/settings/notify	40,3395,144,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(3)	PUT /api/settings/notify	40,3411,144,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(5)	GET /api/notify/school	40,3427,132,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(7)	POST /api/notify/school	40,3443,138,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(9)	POST /api/notify/school/{id}/to-task	40,3459,216,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.meta:nth-child(4)>code:nth-child(11)	POST /api/notify/school/{id}/ignore	40,3475,210,12	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(5)	为什么这么做：规格把抓取划给独立脚本，主工具越界抓取等于替你新增对外依赖；而"外部内容自动变任务"会替你决定什么算你的事 —— 那是产品口径，这一版不擅自定。	40,3492,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(6)		40,3528,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.sub:nth-child(6)>b	你自己的脚本	76,3528,72,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(18)>div.settings-sub	照抄就能跑（脚本里就这么调）	40,3578,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(18)>pre.ai-example	# 先看接口开着没有（不读你的数据） curl http://127.0.0.1:8000/api/settings/notify # 投递一条通知（脚本里就这么调；重复投递不会产	40,3603,740,143	11/normal/400	#1e293b/#eef2f7	8;12px
+div.shell>main#main>div.card.panel-card:nth-child(18)>div.row.tight		40,3746,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(18)>div.row.tight>button.ghost	复制示例命令	40,3746,108,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div.settings-sub	收件箱（0） · 待看 0 / 已转任务 0 / 已忽略 0	24,3821,772,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+body>div.shell>main#main>div.empty	接口关着，收件箱是空的 —— 打开后你的脚本才能投递	24,3846,772,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
+body>div.shell>main#main>div#set-academic	学业	24,3947,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(22)		24,3974,772,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(22)>div.settings-sub	GPA 制式	40,3988,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(22)>div.row		40,4013,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(22)>div.row>button	4.0 制	40,4014,63,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.panel-card:nth-child(22)>div.row>button.ghost:nth-child(2)	5.0 制	111,4013,65,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(22)>div.row>button.ghost:nth-child(3)	去学业页	183,4013,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(22)>div.sub	配置默认值来自 config.toml 的 [academic] gpa_scale；这里切的是查看口径。	40,4054,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(23)	分组管理	24,4104,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div#groupAdmin		24,4131,772,241	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div#groupAdmin>div.settings-sub	分组管理	40,4145,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#groupAdmin>div.sub		40,4170,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#groupAdmin>div.sub>b	不会删任务	220,4186,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#groupAdmin>div.new		40,4218,740,38	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#groupAdmin>div.new>input#groupName	(text)新建分组，如：高数	40,4218,561,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div#groupAdmin>div.new>select#groupParent	顶层	611,4220,105,35	13/normal/400	#1e293b/#ffffff	10;8px 10px
+main#main>div#groupAdmin>div.new>button	新建	726,4220,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+div.shell>main#main>div#groupAdmin>div.row.tight:nth-child(4)		40,4272,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#groupAdmin>div.row.tight:nth-child(4)>span.badge	0 项	46,4280,38,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+main#main>div#groupAdmin>div.row.tight:nth-child(4)>span.grow	高数	90,4280,367,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#groupAdmin>div.row.tight:nth-child(4)>button.ghost:nth-child(3)	＋子分组	463,4272,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#groupAdmin>div.row.tight:nth-child(4)>button.ghost:nth-child(5)	改名	662,4272,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#groupAdmin>div.row.tight:nth-child(4)>button.ghost:nth-child(6)	删除	724,4272,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div#groupAdmin>div.row.tight:nth-child(5)		40,4315,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 0px 16px
+main#main>div#groupAdmin>div.row.tight:nth-child(5)>span.badge	1 项	62,4323,38,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+main#main>div#groupAdmin>div.row.tight:nth-child(5)>span.grow	高数 / 作业	106,4323,351,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#groupAdmin>div.row.tight:nth-child(5)>button.ghost:nth-child(3)	＋子分组	463,4315,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#groupAdmin>div.row.tight:nth-child(5)>button.ghost:nth-child(5)	改名	662,4315,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#groupAdmin>div.row.tight:nth-child(5)>button.ghost:nth-child(6)	删除	724,4315,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div#set-attach	附件打开方式	24,4392,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(26)		24,4419,772,275	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(26)>div.settings-sub:nth-child(1)	本地文件怎么打开	40,4433,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(26)>div.row		40,4458,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(26)>div.row>button	打开所在文件夹	40,4459,119,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.panel-card:nth-child(26)>div.row>button.ghost:nth-child(2)	直接用默认程序打开	167,4458,147,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(26)>div.row>button.ghost:nth-child(3)	按格式自动	322,4458,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(26)>div.sub:nth-child(3)		40,4499,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(26)>div.sub:nth-child(3)>b	任何设置下都只到文件夹	40,4499,739,32	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(26)>div.settings-sub:nth-child(4)	直接打开白名单（扩展名）	40,4549,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(26)>div.row.tight		40,4574,740,20	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(26)>div.row.tight>span.sub	空 —— 白名单里的扩展名会直接用默认程序打开	40,4578,259,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(26)>div.new		40,4610,740,38	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(26)>div.new>input#wlExt	(text)加扩展名，如 .pdf	40,4610,635,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(26)>div.new>button.ghost	加入白名单	685,4611,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(26)>div.sub:nth-child(7)	打开方式与白名单存在本机数据库（服务端），不由页面参数决定 —— 免得任何网页都能要求"直接打开"。	40,4664,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div#set-remind	提醒	24,4714,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(28)		24,4741,772,326	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(28)>div.settings-sub:nth-child(1)	提醒方式（到点时怎么叫你）	40,4755,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(2)		40,4780,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(2)>button	闹钟式（留在屏幕上 + 循环响铃）	40,4781,225,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(2)>button.ghost:nth-child(2)	温和通知（几秒后消失）	273,4780,173,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(2)>button.ghost:nth-child(3)	试一下	454,4780,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(2)>button.ghost:nth-child(4)	停止响铃	531,4780,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(3)		40,4821,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(3)>b:nth-child(1)	警报通知	179,4821,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(3)>b:nth-child(2)	留在屏幕上直到你手动关掉	299,4821,144,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(4)		40,4857,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(4)>b:nth-child(1)	闹钟式会一直响到你把它关掉	40,4857,156,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(4)>b:nth-child(2)	同一时刻只会有一条	627,4857,108,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(28)>div.settings-sub:nth-child(5)	到点自动提醒（关掉应用也响）	40,4907,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(6)		40,4932,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(6)>button.ghost	开启	40,4932,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(6)>button	关闭	104,4933,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(6)>span.badge:nth-child(3)	默认关闭	172,4940,62,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+main#main>div.card.panel-card:nth-child(28)>div.row:nth-child(6)>span.badge:nth-child(4)	未注册计划任务	248,4940,95,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+div.shell>main#main>div.card.panel-card:nth-child(28)>div.meta:nth-child(7)		40,4969,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(28)>div.meta:nth-child(7)>b	关掉应用也会响	221,4985,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(28)>div.meta:nth-child(8)	上次通知：（还没有）	40,5001,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(9)		40,5021,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(9)>b:nth-child(1)	当前用户、交互式	160,5021,96,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(28)>div.sub:nth-child(9)>b:nth-child(2)	注销/关机时不响	407,5021,89,16	12/normal/700	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(29)	数据与同步	24,5087,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div#set-sync		24,5114,772,1029	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div#set-sync>div.title:nth-child(1)	当前在线	40,5128,740,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.meta:nth-child(2)		40,5151,740,48	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(2)>b:nth-child(1)	version → updated_at	607,5151,121,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(2)>b:nth-child(2)	导入默认不删你本地的任何东西	256,5167,168,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(2)>b:nth-child(3)	通过网络	292,5183,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.sub:nth-child(3)		40,5203,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(3)>code	‹code:12›	79,5206,72,12	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div#set-syncpack	跨端同步（走文件）	40,5237,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.meta:nth-child(5)		40,5262,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(5)>b:nth-child(1)	导出同步包	100,5262,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(5)>b:nth-child(2)	先预览再导入	441,5262,72,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(5)>b:nth-child(3)	version → 更新时间	567,5262,106,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(5)>b:nth-child(4)	导入不会删你本地的任何东西	211,5278,156,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.row.tight:nth-child(6)		40,5294,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight:nth-child(6)>button	导出同步包	40,5295,93,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div#set-sync>div.row.tight:nth-child(6)>input#syncPath	(text)要导入的包路径（后端会把完整路径给你）	139,5302,260,21	13.3/normal/400	#000000/#ffffff	0;1px 2px
+main#main>div#set-sync>div.row.tight:nth-child(6)>button.ghost:nth-child(3)	先预览	405,5294,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#set-sync>div.row.tight:nth-child(6)>button.ghost:nth-child(4)	导入	480,5294,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div#set-sync>div.row.tight:nth-child(7)		40,5339,740,23	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight:nth-child(7)>label.sub	同时应用对方的删除	40,5343,131,19	12/normal/400	#64748b/#000000@0.00	0;0px
+div#set-sync>div.row.tight:nth-child(7)>label.sub>input#syncDel	(checkbox)on	44,5346,13,13	13.3/normal/400	#000000/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight:nth-child(7)>span#syncDelHint	（默认不删：只记墓碑，保留你本地的行）	177,5345,228,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.sub:nth-child(8)		40,5366,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(8)>b:nth-child(1)	删掉过	124,5366,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(8)>b:nth-child(2)	不可撤销	311,5366,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(8)>b:nth-child(3)	你本地在那之后又改过它	40,5366,730,32	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.meta:nth-child(9)	上次导出：还没导出过 · 上次导入：还没导入过	40,5398,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.sub:nth-child(10)		40,5418,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(10)>b	不含	64,5418,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div#set-offline	手机离线记（从手机往电脑带）	40,5468,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.meta:nth-child(12)		40,5493,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(12)>b	同一个格式	544,5493,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.row.tight:nth-child(13)		40,5525,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight:nth-child(13)>button.ghost	打开「离线记」这一页	40,5525,160,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div#set-sync>div.sub:nth-child(14)		40,5566,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(14)>b	显式开	535,5566,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(14)>code	--lan	643,5569,30,12	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div#set-lan	局域网访问（手机连电脑）	40,5616,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.title:nth-child(16)	这台服务只监听本机（手机连不上）	40,5641,740,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.meta:nth-child(17)		40,5664,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(17)>code:nth-child(1)	python tools/serve.py --lan	223,5667,162,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(17)>code:nth-child(2)	[net] allow_lan	542,5667,90,12	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.meta:nth-child(18)	配置里写的是：关（和上面"这台服务"可能不一致 —— 以服务为准）	40,5680,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.settings-sub:nth-child(19)	配对码	40,5714,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.meta:nth-child(20)		40,5739,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(20)>code	‹code:6›	103,5742,36,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.meta:nth-child(20)>b	只在这台电脑上显示	151,5739,108,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.row.tight:nth-child(21)		40,5755,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight:nth-child(21)>button.ghost	换一个配对码	40,5755,108,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div#set-sync>div.sub:nth-child(22)		40,5796,740,64	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(22)>b:nth-child(1)	同一个局域网	124,5796,72,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(22)>b:nth-child(2)	你自己开的热点	330,5796,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(22)>b:nth-child(3)	校园网 / 公共 WiFi 常开了客户端隔离	210,5812,200,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(22)>b:nth-child(4)	热点	724,5812,24,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(22)>b:nth-child(5)	不是加密、也不挡同 WiFi 抓包	352,5828,164,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.settings-sub:nth-child(23)	怎么让手机连上（按顺序试）	40,5878,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.sub:nth-child(24)		40,5903,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(24)>b:nth-child(1)	电脑开「移动热点」	55,5903,108,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(24)>code	‹code:13›	287,5906,78,12	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(24)>b:nth-child(3)	「离线记」	347,5919,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.sub:nth-child(25)		40,5939,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(25)>b:nth-child(1)	校园网 / 公共 WiFi 常开「客户端隔离」	60,5939,212,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(25)>b:nth-child(2)	按公共网络对待	124,5955,84,16	12/normal/700	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.row.tight:nth-child(26)		40,5971,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight:nth-child(26)>button.ghost	网络自检（在这台电脑上查）	40,5971,199,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div#set-sync>div#set-backup	备份与恢复	40,6026,740,17	13/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.meta:nth-child(29)	每次起服务/开窗口前会自动备份一份。库：timeflow.db（目录 <path>\timeflow_fresh_<tmp>	40,6051,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.row.tight:nth-child(30)		40,6073,740,20	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight:nth-child(30)>span.sub	还没有备份（起一次服务就会有一份）	40,6077,204,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.sub:nth-child(31)		40,6097,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(31)>b:nth-child(1)	连设置一起	208,6097,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.sub:nth-child(31)>b:nth-child(2)	点某个时间点 = 把库整体回到那一刻	40,6097,738,32	12/normal/700	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(31)	入口	24,6163,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(32)		24,6190,772,65	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(32)>div.row.tight		40,6204,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(1)	全部任务	40,6204,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(2)	重要	128,6204,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(3)	有计划	190,6204,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(4)	已标记	265,6204,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(5)	统计	340,6204,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(6)	习惯	402,6204,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(7)	复习	464,6204,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(8)	备忘录	526,6204,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card:nth-child(32)>div.row.tight>button.ghost:nth-child(9)	学业	601,6204,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+html>body>div.shell>aside.sidebar		0,6289,820,171	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
+body>div.shell>aside.sidebar>div#focusRail		24,6289,772,69	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	40,6303,740,17	13/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	40,6328,740,16	12/normal/400	#64748b/#000000@0.00	0;0px

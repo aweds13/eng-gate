@@ -709,10 +709,10 @@ evidence = [
   "file:tools/contrast_audit.py",
   "file:tools/contrast_baseline.toml",
   "text:src/web/app.css::--toast-bg: var(--surface-2)",
-  "text:scripts/run_gates.py::(\"contrast\", [PY, \"-X\", \"utf8\", \"tools/contrast_audit.py\", \"--check\"])",
+  "text:scripts/run_gates.py::(\"contrast\", [PY, \"-X\", \"utf8\", \"tools/contrast_audit.py\"",
   "test:test_contrast_audit.py",
 ]
-gaps = "**是棘轮不是硬门**：亮色现状有 **18 条**不达 AA（全表 42 条组合，暗色全过），一接硬门就永远红、而本项目铁律是「门禁不过不许提交」；所以如实登记进 `tools/contrast_baseline.toml`（三条根因、每条带 why/fix），门只拦**没登记过的新欠账**与**比登记值更差**。**没做的**：① 18 条一条没修（改令牌=改视觉，视觉线用户还没开）；② 没覆盖 hover/focus/disabled/选中态，也没覆盖**非文字图形**（图标 vs 底、图表线条、边框 —— WCAG 对非文字要 3.0）；③ 没有渲染基线（沙箱无浏览器）—— 但对比度是纯计算，不需要浏览器。**收紧三步**写在复盘 §7：视觉线修完 → 逐条删登记行 → 加 `--strict`（现在就能跑，只会告诉你还剩 18 条）。**顺手修的缺陷**：`.toast` 的 `--toast-bg` 全项目从没定义过 → 暗色下底与字同为 `#e6edf7`（**1.0:1，字完全看不见**，而 toast 被调用 161 处）；补上该令牌（亮色 = 原值逐字节相同、暗色用 `--surface-2`）并去掉回退写法。这是**缺陷不是欠账**，所以不进登记表。"
+gaps = "**是棘轮不是硬门**：亮色现状有 **18 条**不达 AA（全表 42 条组合，暗色全过），一接硬门就永远红、而本项目铁律是「门禁不过不许提交」；所以如实登记进 `tools/contrast_baseline.toml`（三条根因、每条带 why/fix），门只拦**没登记过的新欠账**与**比登记值更差**。**没做的**：① 18 条一条没修（改令牌=改视觉，视觉线用户还没开）；② 没覆盖 hover/focus/disabled/选中态，也没覆盖**非文字图形**（图标 vs 底、图表线条、边框 —— WCAG 对非文字要 3.0）；③ 没有渲染基线（沙箱无浏览器）—— 但对比度是纯计算，不需要浏览器。**收紧三步**写在复盘 §7：视觉线修完 → 逐条删登记行 → 加 `--strict`（现在就能跑，只会告诉你还剩 18 条）。**顺手修的缺陷**：`.toast` 的 `--toast-bg` 全项目从没定义过 → 暗色下底与字同为 `#e6edf7`（**1.0:1，字完全看不见**，而 toast 被调用 161 处）；补上该令牌（亮色 = 原值逐字节相同、暗色用 `--surface-2`）并去掉回退写法。这是**缺陷不是欠账**，所以不进登记表。★ **2026-09-24（T-G42）**：这里写的「收紧三步」**走完了** —— 登记表清空、`run_gates.py` 换成 `--strict`，棘轮变成硬门（组合 42 → 30 条；撤掉的三行是「搭配不存在了」而不是「改好了」，理由留在 `contrast_baseline.toml`）。`--check` 那个字面已经不在命令里了，所以本条的断言指针改成不带旗标的那半句。"
 
 [entries."T-G26"]
 id = "T-G26"
@@ -1428,6 +1428,25 @@ evidence = [
   "test:test_web_frontend.py",
 ]
 gaps = "**修了发现的两处**：`renderHabit` 的今天、`heatmap` 的格子日期（都改走 `todayISO()`，本机时区）。**它为什么会伤人**：`new Date().toISOString()` 给的是 UTC 日期，本机 UTC+8 → **本地 0–8 点算出来是昨天**：界面把「今天已打卡」显示成「打卡」，而点下去（服务端按本地今天翻转）会把那次打卡**取消**掉，提示还写着「已打卡」。**护栏两层**（都在 `test_web_frontend.py`）：全文件级不许出现裸的 `new Date().toISOString()`；函数级 `renderHabit`/`heatmap` 里不许出现 `toISOString` —— 判的是**剥掉注释后的代码**（不剥注释会把「别这么写」那句解释也判红，同 T-G39 的教训），并用合成数据证明它咬得住。**没做**：全仓的「日期取法」清点（`docs/` / `tools/` / 别的 `.js`）；护栏只扫 `index.html`。"
+
+[entries."T-G42"]
+id = "T-G42"
+title = "视觉线第 0 步 · 可用性与状态色（SR-NF1 / N30）：对比度 10 条欠账清零（徽标抽成 chip 原语 + 8px 状态点、状态色跟 workbench）、对比度门从棘轮收紧成硬门"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/视觉线第0.5步-对比度与状态色-T-G42.md",
+  "text:src/web/app.css::--danger: #d1242f;",
+  "text:src/web/app.css::.badge.done .dot { background: var(--ok) }",
+  "text:src/web/app.css::.badge .dot {",
+  "text:src/web/index.html::<i class=\"dot\"></i>",
+  "text:scripts/run_gates.py::tools/contrast_audit.py\", \"--strict\"",
+  "file:tools/contrast_baseline.toml",
+  "file:tools/style_baseline.toml",
+  "test:test_contrast_audit.py",
+  "test:test_web_frontend.py",
+]
+gaps = "**对比度门从棘轮变成硬门**：`tools/contrast_baseline.toml` 清空、`run_gates.py` 换成 `--strict` —— 组合 42 → 30 条（撤掉 3 对 × 两套主题：旧徽标那两种底 + 一个不再存在的搭配），**达标 30 / 欠账 0 / 新欠账 0**。**修法是「跟包」而不是「自己调色」**（与 T-G39 对强调色同一件事）：① `--danger`/`--ok` 换成 workbench 的值（亮 `#d1242f`/`#1a7f37`、暗 `#e5534b`/`#3fb960`）—— 原来那档是「当色块可以、当字和点不行」（2.18–3.76）；② 徽标抽成 **chip 原语**（卡片底 + 1px 边框 + `--muted` 11px 字）+ **8px 状态点**（workbench 的 StatusDot：点承担颜色、字用芯片色）—— 一次解决对比度 3 条 **和** 一致性门「`.badge` 同形状抄 4 份」那 1 条；③ 中性徽标的底从 `--surface-2`/`--accent-soft` 换成 `--card`（`--muted` 4.23/4.34 → **4.76**）。**点为什么是「真元素」`<i class=dot>` 而不是 `::before`**：伪元素采不进渲染清单（T-G32 那层只走真元素），「点还在不在、什么颜色」就会没有任何一层能验 —— 现在黄金里每个视图都有一行 `span.badge.done>i.dot 8×8 #1a7f37`。**顺手纠正两处语义误用**：计划步骤的序号、复习「今天记的是」的档位原来借了 `badge doing`/`badge done` 的状态色（语义色不做装饰），改回中性 chip。**撤掉的三行不是「改好了」而是搭配不存在了**：旧徽标底两种 + `.accent`（h1 的装饰点，4.37 过不了 4.5，而装饰文字本就不受 1.4.3 管 —— 连类带用法一起删）。**残留风险**（如实记）：以后谁再写一处「强调色小字落在页面底」，静态表看不见（那要知道谁坐在什么底上，得靠渲染层）。**这一步没做**（都排在后面）：`--accent-weak` 与底栏选中态（T-G30 已定）、`:hover`/`:focus-visible`（一致性门还剩 7 条欠账）、一次性裸值收口、令牌改名映射表、排版节奏（`--fw-*`/`--lh-*`）、图标系统、`SR-F1.5b` 热力图。"
 
 [entries."T-G21"]
 id = "T-G21"

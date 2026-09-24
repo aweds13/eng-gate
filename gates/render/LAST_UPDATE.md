@@ -140,3 +140,87 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/stats`
 - `phone/tasks`
 
+
+## 2026-09-24 03:14:55 · 42 份改动
+
+> 理由：T-G42 徽标原语换成 chip + 8px 状态点（对比度 10 条清零）：徽标几何（pill / 11px / 1px 边）与状态点都进了清单，所以 42 份黄金整体重采；除徽标外无改动
+
+- `desktop/academic`
+- `desktop/flagged`
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/important`
+- `desktop/memo`
+- `desktop/offline`
+- `desktop/planned`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `desktop/team`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/flagged`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/important`
+- `narrow/memo`
+- `narrow/offline`
+- `narrow/planned`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `narrow/team`
+- `narrow/today`
+- `phone/academic`
+- `phone/flagged`
+- `phone/focus`
+- `phone/habit`
+- `phone/important`
+- `phone/memo`
+- `phone/offline`
+- `phone/planned`
+- `phone/review`
+- `phone/setting`
+- `phone/stats`
+- `phone/tasks`
+- `phone/team`
+- `phone/today`
+
+
+## 2026-09-24 03:18:06 · 9 份改动
+
+> 理由：T-G42 徽标原语（chip + 8px 状态点）：点改成真元素 <i class=dot> 所以进了清单；状态徽标不再用合成底 + 同色字。其余视图无改动
+
+- `desktop/academic`
+- `desktop/planned`
+- `desktop/tasks`
+- `narrow/academic`
+- `narrow/planned`
+- `narrow/tasks`
+- `phone/academic`
+- `phone/planned`
+- `phone/tasks`
+
+
+## 2026-09-24 03:30:14 · 15 份改动
+
+> 理由：T-G42 采集器补回一处覆盖：徽标加了 8px 状态点之后它从叶子变成容器，徽标上的字就从清单里静默消失了 —— 改成「孩子全是空壳时仍采自己的字」
+
+- `desktop/academic`
+- `desktop/planned`
+- `desktop/setting`
+- `desktop/tasks`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/planned`
+- `narrow/setting`
+- `narrow/tasks`
+- `narrow/today`
+- `phone/academic`
+- `phone/planned`
+- `phone/setting`
+- `phone/tasks`
+- `phone/today`
+

@@ -1041,7 +1041,34 @@ def test_r5_scale_tokens_are_the_only_way_to_write_sizes() -> None:
     # 状态色只走语义令牌：完成=--ok、到期债务=--danger、专注=--accent
     assert ".card.overdue { border-left: 3px solid var(--danger) }" in css
     assert ".card.hard { border-left: 5px solid var(--danger) }" in css
-    assert "var(--ok) 18%" in css and "var(--danger) 18%" in css
+    # ★ T-G42：徽标里的状态由 **8px 圆点**承担（workbench 的 StatusDot），**不再拿状态色写字** ——
+    # 原来那三条 `color-mix(… 18% …) + 同色字` 是全表最差的三条对比度（最糟 1.96）。
+    # 点是 `<i class="dot">`（真元素，不是 ::before）：伪元素采不进渲染清单，
+    # 那就等于"这个点还在不在、什么颜色"没有任何一层能验 —— 见 `tools/render_check.mjs`。
+    assert ".badge.done .dot { background: var(--ok) }" in css
+    assert ".badge.doing .dot { background: var(--accent) }" in css
+    assert ".badge.hard .dot { background: var(--danger) }" in css
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    for state in ("done", "doing", "hard"):
+        hits = re.findall(rf'<span class="badge {state}">', html)
+        assert hits, f"模板里找不到 .badge.{state}（状态徽标被改名了？）"
+        for m in re.finditer(rf'<span class="badge {state}">', html):
+            assert html[m.end():m.end() + len('<i class="dot"></i>')] == '<i class="dot"></i>', (
+                f".badge.{state} 忘了带状态点 —— 那这一枚就没有任何颜色信号了"
+            )
+    # 徽标本体不许再"同色写字"：剥掉注释后，`.badge*` 的规则体里既不该有 color-mix，
+    # 也不该自己定 color（判的是**剥掉注释后的代码** —— T-G39/T-G41 都栽在
+    # "护栏咬到自己的说明文字"上）
+    bare = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    badge_rules = [(s.strip(), b) for s, b in re.findall(r"([^{}]+)\{([^{}]*)\}", bare)
+                   if s.strip().startswith(".badge")]
+    assert badge_rules, "找不到徽标规则（选择器换名字了？）"
+    for sel, body in badge_rules:
+        assert "color-mix" not in body, f"徽标又用合成底了（{sel}）：{body.strip()}"
+        # 基座 `.badge` 定字色是它的职责（芯片字色）；**状态变体不许再自己定字色** ——
+        # 那正是"色块里用同一个颜色写字"的入口（原来那三条最差组合就是这么来的）。
+        if sel != ".badge":
+            assert not re.search(r"(?<![-\w])color\s*:", body), f"{sel} 又自己定字色了"
     # 阴影也走令牌（亮/暗各一处定义）
     assert css.count("--shadow:") == 2 and "box-shadow: var(--shadow)" in css
 

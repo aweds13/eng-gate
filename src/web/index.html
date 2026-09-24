@@ -13,7 +13,7 @@
      骨架在这里，样式在 app.css，渲染在下面的脚本；窄屏（≤1023px）折回单列 + 底部 Tab。 -->
 <div class="shell">
   <aside class="rail">
-    <h1>timeflow <span class="accent">·</span></h1>
+    <h1>timeflow ·</h1>
     <div id="summary" class="hint rail-summary"></div>
     <nav>
       <button data-action="view" data-view="today" class="active">今日</button>
@@ -1335,7 +1335,7 @@ function renderDetail(el,t,facts,tree,cards,attempts){
   const progress=kids.length?`<span class="badge">${doneCount}/${kids.length}</span>`:'';
   el.innerHTML=`<div class="panel-title">任务详情${detailEditing?' · 编辑中':''}</div>
     <div class="title">${esc(t.title)}</div>
-    ${detailEditing?editForm(t):`<div class="meta">${isDone?`<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
+    ${detailEditing?editForm(t):`<div class="meta">${isDone?`<span class="badge done"><i class="dot"></i>完成于 ${humanTime(t.updated_at)}</span>`:'<span class="badge todo">未完成</span>'}
       状态 ${esc(t.status)}${t.status==='进行中'&&t.doing_rank?` · 顺序 ${t.doing_rank}`:''}${overdueBadge(t)}${att.count?` · 试了 ${att.count} 回`:''}</div>
     ${detailEditing?'':`<div class="row tight">${stateButtonsHTML(t)}</div>`}
     <div class="meta">截止 ${t.due_date||'未设'}${t.is_myday?' · 在今天':''}</div>
@@ -1478,7 +1478,7 @@ function syncTypeCourse(){
 }
 // 状态徽标（T-F1）：只有「进行中 / 待定 / 取消 / 归档」才单独标出来 ——
 // 「未开始 / 逾期」由卡片自己的样式（红边 + 逾期栏）表达，不必再挂一枚徽标。
-const STATUS_BADGE={'进行中':'<span class="badge doing">进行中</span>',
+const STATUS_BADGE={'进行中':'<span class="badge doing"><i class="dot"></i>进行中</span>',
   '待定':'<span class="badge">待定</span>','取消':'<span class="badge">已取消</span>',
   '归档':'<span class="badge">档案</span>'};
 const PARKED=['待定','取消'];
@@ -1494,7 +1494,7 @@ function doingButtonHTML(t){
    —— 否则又是"一处一套口径"。字段状态照原样显示（它是"存下来的状态"），
    派生逾期单独标出来：这样"列在逾期栏里、面板却写未开始"的矛盾就不存在了。 */
 function overdueBadge(t){
-  return t.overdue_days>0?` · <span class="badge hard">已逾期 ${t.overdue_days} 天</span>`:'';
+  return t.overdue_days>0?` · <span class="badge hard"><i class="dot"></i>已逾期 ${t.overdue_days} 天</span>`:'';
 }
 function taskCard(t,isOverdue){
   const isDone=t.status==='完成';
@@ -1505,7 +1505,7 @@ function taskCard(t,isOverdue){
   const asgMeta=asg.map(a=>`<span class="badge">${esc(a.assignee)} · ${TEAM_STATUS[a.status]||a.status}</span>`).join('');
   const asgButtons=asg.map(a=>TEAM_NEXT[a.status]?`<button class="ghost" data-action="team-status" data-id="${a.id}" data-status="${TEAM_NEXT[a.status][0]}">${TEAM_NEXT[a.status][1]}</button>`:'').join('');
   const badge=t.status==='完成'
-    ? `<span class="badge done">完成于 ${humanTime(t.updated_at)}</span>`
+    ? `<span class="badge done"><i class="dot"></i>完成于 ${humanTime(t.updated_at)}</span>`
     : (STATUS_BADGE[t.status]||'<span class="badge todo">未完成</span>');
   const sub=(t.subtask_total>0)
     ? `<span class="badge">步骤 ${t.subtask_done}/${t.subtask_total}</span>` : '';
@@ -2096,7 +2096,7 @@ function doingSection(items){
   <div class="card panel-card">
     <div class="sub">这是你自己标的先后：↑↓ 调顺序，「停止」表示这件现在不做了（回到未开始/逾期）。</div>
     ${items.map((t,i)=>`<div class="fact">
-      <span class="badge doing">${i+1}</span>
+      <span class="badge">${i+1}</span>
       <span class="grow" style="flex:1">${esc(t.title)}</span>
       ${t.due_date?`<span class="sub">${esc(t.due_date)}</span>`:''}
       <button class="ghost" data-action="doing-move" data-id="${t.id}" data-dir="up" ${i===0?'disabled':''} title="上移">↑</button>
@@ -2328,7 +2328,7 @@ async function renderAcademic(m){
       const d=a.days_until;
       const when=d<0?`已逾期 ${-d} 天`:d===0?'今天到期':`还有 ${d} 天`;
       return `<div class="card hard ${d<0?'overdue':''}"><div class="card-body">
-        <div class="title"><span class="badge hard">硬考核</span> ${esc(a.name)}</div>
+        <div class="title"><span class="badge hard"><i class="dot"></i>硬考核</span> ${esc(a.name)}</div>
         <div class="meta">${esc(a.course_name||'未关联课程')} · ${a.due_date} · ${when}${a.weight?` · 占 ${a.weight}`:''} · 未录成绩</div>
         ${(a.attach||[]).length?`<div class="meta">${attachRowsHTML(a.attach,'assessment-attach-del',a.id)}</div>`:''}
         </div>
@@ -2468,7 +2468,7 @@ function reviewCard(r,ratings){
 function reviewDoneCard(r,ratings){
   const others=ratings.filter(x=>x.value!==r.feedback);
   return `<div class="card"><div class="card-body"><div class="title">${esc(r.title)}</div>
-    <div class="meta">今天记的是 <span class="badge done">${esc(r.feedback_label||r.feedback)}</span>
+    <div class="meta">今天记的是 <span class="badge">${esc(r.feedback_label||r.feedback)}</span>
     · 下次到期 ${esc(r.due_date)}${r.reps?' · 第 '+r.reps+' 次':''}</div></div>
     <div class="row"><span class="sub">改判为</span>
       ${others.map(x=>`<button class="ghost" data-action="review-regrade" data-id="${r.id}" data-feedback="${x.value}">${esc(x.label)}</button>`).join('')}
