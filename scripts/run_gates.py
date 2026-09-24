@@ -428,6 +428,20 @@ def main() -> int:
         else:
             print(f"  [FAIL] 改了源码但还没同步：{missing}")
 
+    # ★ ⓪ TOML 语法预检（T-G52）：台账是唯一真源，而「正文里写了 ASCII 双引号」这条坑
+    #   已经在同一个会话里踩了 8 次 —— 一踩就是整份台账解析不了、`audit` 与 `audit_titles` 双红，
+    #   而报的是 tomllib 的原始错误（还得自己去数第几行第几列）。这里先花 0.1 秒说清楚，
+    #   既不让两道门白跑一趟，也不用我去数列号。
+    pre = subprocess.run(
+        [PY, "-X", "utf8", str(ROOT / "scripts" / "check_toml.py")],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
+    if pre.returncode != 0:
+        print("=== ⓪ TOML 语法预检（门禁开跑之前）===")
+        print((pre.stdout or pre.stderr).rstrip())
+        print("\nTOML 有问题，门禁**没有跑** —— 先修上面那一行，再跑一次。")
+        return 2
+
     if args.serial:
         mode = "串行（--serial）"
     elif xdist_available():

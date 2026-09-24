@@ -150,13 +150,19 @@ def main() -> int:
         ok = False
     else:
         rule_lines = [
-            ln for ln in conv_text.splitlines()
+            (i + 1, ln) for i, ln in enumerate(conv_text.splitlines())
             if ln.strip().startswith("- ") and not ln.strip().startswith("- *")
         ]
-        unlabeled = [ln for ln in rule_lines if not extract_n(ln)]
+        unlabeled = [(i, ln) for i, ln in rule_lines if not extract_n(ln)]
         if unlabeled:
             n = len(unlabeled)
-            print(f"[FAIL] 约定层有 {n} 条规则未标注来源 N（示例: {unlabeled[0][:40]}…）")
+            # ★ 报**行号**而不是只报一条示例（T-G52）：这条红每次都是"我新写的规则忘了标来源"，
+            #   而原来的输出只说"有 1 条未标注 + 前 40 个字"，还得自己去文件里找 —— 白花两分钟。
+            print(f"[FAIL] 约定层有 {n} 条规则未标注来源 N：")
+            for i, ln in unlabeled[:5]:
+                print(f"         conventions.md:{i}  {ln.strip()[:70]}")
+            if n > 5:
+                print(f"         …另有 {n - 5} 条")
             ok = False
 
     # --- 4. 契约层存在性与 SR 可追溯 ---
