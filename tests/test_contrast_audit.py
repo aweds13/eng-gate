@@ -107,7 +107,8 @@ def test_eps_tolerates_rounding_noise() -> None:
 
 def _real() -> tuple[list[ca.Pair], dict[str, dict[str, str]], dict[str, dict[str, object]]]:
     css = ca.CSS.read_text(encoding="utf-8")
-    return ca.declared_pairs() + ca.badge_pairs(css), ca.token_blocks(css), ca.load_baseline()
+    pairs = ca.dedupe(ca.declared_pairs() + ca.badge_pairs(css) + ca.state_pairs(css))
+    return pairs, ca.token_blocks(css), ca.load_baseline()
 
 
 def test_real_stylesheet_has_no_new_or_worse_contrast_shortfall() -> None:
@@ -171,6 +172,45 @@ def test_badge_shortfalls_are_detected_with_token_backgrounds_too() -> None:
     keys = {p.key for p in ca.badge_pairs(css)}
     assert "light:--ok on --ok-weak" in keys
     assert "dark:--ok on --ok-weak" in keys
+
+
+def test_hover_states_are_read_from_css_not_from_a_hand_kept_table() -> None:
+    """T-G45：悬停态必须**从 CSS 真读**（`state_pairs`），不许只活在别人的记忆里。
+
+    合成三种写法，各钉一件事：
+      1. 底是两令牌 `color-mix` + 字从**基础规则**继承 → 算得出来（这正是主按钮的写法）；
+      2. 同一条规则里自己写了 `color`（不是继承）→ 也要认（toast 的动作按钮就是这样）；
+      3. `…%, transparent` 的合成底 → **算不了**（得知道它铺在什么上面，那要渲染层）→ 如实不报，
+         而不是猜一个底出来 —— 猜出来的绿比红更坏。
+    """
+    css = (
+        ":root { --a: #000; --b: #fff }\n"
+        "button { color: var(--accent-ink) }\n"
+        "button:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)) }\n"
+        ".toast button:hover { color: var(--toast-ink);"
+        " background: color-mix(in srgb, var(--toast-ink) 14%, var(--toast-bg)) }\n"
+        ".x:hover { color: var(--danger);"
+        " background: color-mix(in srgb, var(--danger) 18%, transparent) }\n"
+    )
+    keys = {p.key for p in ca.state_pairs(css)}
+    assert "light:--accent-ink on mix(--accent 88% over --ink)" in keys, (
+        "字没从基础规则继承 —— 悬停只换底，字是继承来的，那才是真会出现的搭配"
+    )
+    assert "light:--toast-ink on mix(--toast-ink 14% over --toast-bg)" in keys
+    assert not {k for k in keys if "--danger" in k}, (
+        "带 transparent 的合成底算不了：不许凭空猜一个底出来（猜出来的绿是最坏的一种绿）"
+    )
+
+
+def test_dedupe_keeps_one_row_per_pair() -> None:
+    """三条规则落在同一个组合上（`.ghost:hover` / `nav button:hover` / 底部 Tab）只报一条：
+    不去重的话条数虚高，`where` 说明还会互相盖掉。"""
+    pairs = [
+        ca.Pair("light", "--ink", "--panel-2", 4.5, "第一条"),
+        ca.Pair("light", "--ink", "--panel-2", 4.5, "第二条"),
+        ca.Pair("light", "--ink", "--panel", 4.5, "第三条"),
+    ]
+    assert [p.where for p in ca.dedupe(pairs)] == ["第一条", "第三条"]
 
 
 def test_every_declared_pair_now_meets_aa() -> None:

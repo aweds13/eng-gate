@@ -1077,6 +1077,28 @@ def test_r5_scale_tokens_are_the_only_way_to_write_sizes() -> None:
     assert css.count("--shadow:") == 2 and "box-shadow: var(--shadow)" in css
 
 
+def test_layout_containers_that_hold_buttons_allow_wrapping() -> None:
+    """T-G45 修「中文被压碎」的三处 —— 病根是同一个：**不换行的 flex 容器 + 中文处处可断行**。
+
+    flex 的默认行为是「先压缩、压不动才换行」，而中文的下限能低到**一个字宽**：
+    实测 390px 下习惯页的标题列被压到 128px（两行）、三个按钮压成 43×56（「改名」两个字各占一行），
+    摘要卡那一行更惨（68×80）。**别把这三条修好的路再堵回去** —— 它们是量出来的，不是猜的：
+
+      · `.habit-head` 必须允许换行（它是唯一漏掉 wrap 的动作行；`.card .row` / `.new` /
+        `.offline-bar` / `.gpa-head` 早就有）；
+      · 习惯页的摘要卡必须是**块内容卡**（两个块级孩子并排挤在一行里就是那个 68×80）；
+      · 分组名必须带宽度下限（否则右边那个长 `select` 会把它压到 19px）。
+    """
+    css = re.sub(r"/\*.*?\*/", "", WEB_CSS.read_text(encoding="utf-8"), flags=re.S)
+    head = ".habit-head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap }"
+    assert head in css, ".habit-head 又不允许换行了（中文会被压成一行一个字）"
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert '<div class="card block"><div class="meta">本周专注' in html
+    assert '<span class="grow minw-160">${esc(g.path)}</span>' in html
+    # `.minw-160` 得真在（别把它当"没人用的工具类"删了）
+    assert ".minw-160 { min-width: 160px }" in css
+
+
 def test_guard_settings_are_editable_from_the_setting_page() -> None:
     """SR-F3.3 / GAP-F3-02：白名单与勿扰时段能在设置页增删 —— 以前只有只读的 GET。
 

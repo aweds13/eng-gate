@@ -14,22 +14,33 @@
 
 [known]
 
-# ---------- 互动态：整张样式表里一条都没有（最要紧的两条）----------
-"interaction:hover" = { why = "全表 `:hover` 规则数 = 0。界面没有「手放上去」的回应 —— 这是「每个元素各过各的」最大的来源，也正是用户点的『Raycast 的交互反馈』要补的那一层。修法：给可交互类统一加 hover 底（`--panel-2`；选中行用 workbench 的 `--accent-weak` fill + 2px accent indicator），workbench 的原话是 hover on rows/nav → `--panel-2` fill" }
-"interaction:focus-visible" = { why = "全表 `:focus-visible` 规则数 = 0。键盘用户**看不见焦点**（WCAG 2.4.7 要求可见焦点）—— 而用户正好提了「键盘优先做成附加功能」，所以这条是那个附加功能的**前置条件**，不是可选项。修法：一条全局 `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }`（workbench：focus-visible on everything）" }
-
 # ---------- 一次性值：只出现一次＝没进体系 ----------
-"literal:border-radius:50%" = { why = "`.swatch` 的圆形色块。这是**形状语义**（画一个圆），不是圆角档位 —— 可以保留，但更好的做法是给它一个语义令牌（如 `--r-circle`），免得「圆角 7 档」里混进一个不是圆角的东西" }
-"literal:gap:2px" = { why = "`.rail nav` 的 2px 落在最小档 `--sp-1: 4px` **之下** —— 要么并进 4px，要么承认需要一档更细的节奏（4px 网格允许 2px 作为半档，但那要写成令牌）" }
-"literal:line-height:1.5" = { why = "全文**唯一**一处行高（`.rail-summary`）。正是 T-G24 §5-3 说的『行距靠默认』：字号有 9 档、行高只有 1 档。修法：步 2 建 `--lh-*`（标题紧凑 / 正文舒适）" }
-"literal:margin-bottom:2px" = { why = "`.card.panel-card .title` 的 2px，同上：网格外的一次性值" }
-"literal:padding:3px 0" = { why = "`.fact` 的 `3px 0`，同上：网格外的一次性值" }
+# 就剩这一条，而且它**不是漏网**、是按计划留给步 3（排版节奏）的：
+# 修它 = 建整条 `--lh-*`（标题紧凑 / 正文舒适）并决定每个元素用哪一档 —— 那是改视觉，
+# 得跟 `--fw-*` / 字号一起做给人看。**先做半截**（把这一处换成令牌）反而是把债洗白：
+# 全表其余地方仍然"行距靠浏览器默认"，登记表却空了。
+"literal:line-height:1.5" = { why = "全文**唯一**一处行高（`.rail-summary`）。正是 T-G24 §5-3 说的『行距靠默认』：字号有 9 档、行高只有 1 档。修法：步 3 建 `--lh-*`（标题紧凑 / 正文舒适），与 `--fw-*`、字号档位一起定（那几步是「改视觉」，要一次给人看）。" }
 
-# ---------- 同形状重复：一个原子抄了 N 份 ----------
+# ---------- 销账记录（不参与判定，只留痕） ----------
 # ★ 2026-09-24（T-G42）**已销账**（这一行原来在表里）：
 #   "shape:.badge:color" —— `.badge.done` / `.doing` / `.hard` / `.todo` 四个变体都是
 #   `background` + `color`、只有令牌不同（一个原子抄 4 份，而且最糟的三个正是对比度那三条）。
 #   修法与它建议的一模一样：**抽成一个原语 + 一张状态映射表** —— 几何只写在 `.badge` 一处，
-#   状态改用 `::before` 的 **8px 圆点**承担（workbench 的 StatusDot）。
+#   状态改用**真元素** `<i class="dot">` 的 **8px 圆点**承担（workbench 的 StatusDot）。
 #   副产品：`.badge.*` 那几条规则只剩伪元素，形状重复这条**真的消失了**（不是登记成"已知"）。
 #   一处口径一起改掉了：对比度门那三条最差组合（1.96 / 2.96 / 3.61）随之清零。
+#
+# ★ 2026-09-24（T-G45）**销账 6 条**（这六行原来都在表里）—— 视觉线「不需要新决定」的那批：
+#   "interaction:hover" / "interaction:focus-visible"
+#     全表 `:hover` 与 `:focus-visible` 各 0 条 → 现在 `:hover` 6 条、`:focus-visible` 1 条
+#     （`src/web/app.css` 末节「互动态」）。修法与登记时写的一致：浅底 hover（`--panel-2`）、
+#     实心强调底往墨色挪一步、以及**一条全局焦点环**（`outline: 2px solid var(--accent)`）。
+#     副产品：对比度门从此**真读悬停态**（`tools/contrast_audit.py` 的 `state_pairs`），
+#     新增两对组合都是实测出来的（5.22 / 9.37 亮、8.13 / 8.73 暗）。
+#   "literal:border-radius:50%"（`.swatch`）→ `var(--r-pill)`：方形元素上 `50%` 与 `999px`
+#     是同一个圆，而包对圆角只有三档（6 / 10 / 999）——`50%` 只是多出来的一种写法。
+#   "literal:gap:2px"（`.rail nav`）→ `var(--sp-1)`（4px）。
+#   "literal:margin-bottom:2px"（`.card.panel-card .title`）→ `var(--sp-1)`。
+#   "literal:padding:3px 0"（`.fact`）→ `var(--sp-1) 0`。
+#     这三处都是"低于最小档 / 网格外的一次性值"，收敛到最近的档 —— 会动 2px 的版式，
+#     所以逐视图重生渲染黄金并**逐行点名**（见 `复盘/视觉线互动态-T-G45.md`）。

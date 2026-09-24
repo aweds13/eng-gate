@@ -1,49 +1,49 @@
 # render-manifest v1 viewport=narrow 820x900 view=flagged rows=48 accent=#2f6feb device=ph-000000000000
-html>body>div.shell		0,0,820,647	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
-html>body>div.shell>aside.rail		0,0,820,122	16/normal/400	#1e293b/#000000@0.00	0;14px 24px 0px
+html>body>div.shell		0,0,820,649	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
+html>body>div.shell>aside.rail		0,0,820,124	16/normal/400	#1e293b/#000000@0.00	0;14px 24px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,14,86,24	18/normal/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	120,16,356,20	13/19.5/400	#64748b/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(2)	全部任务	76,48,76,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(3)	重要	154,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(4)	有计划	206,48,63,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button.active	已标记	271,48,63,35	13/normal/400	#ffffff/#2f6feb	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(6)	专注	336,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(7)	统计	388,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(8)	习惯	440,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(9)	学业	492,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(10)	复习	544,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(11)	备忘录	596,48,63,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(12)	团队	661,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(13)	设置	713,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,85,63,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button#refresh	刷新	89,85,52,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button#railToggle	收起右栏	143,85,78,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-html>body>div.shell>main#main		0,142,820,244	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
-body>div.shell>main#main>div.section-title	已标记（1）	24,142,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.sub	你自己按了标记的任务（卡片上的「标记」按钮）。标记只是提醒自己，不代表重要。	24,169,772,16	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.row.tight.mv-4		24,195,772,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(1)	重要	24,195,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(2)	有计划	80,195,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.row.tight.mv-4>button	已标记	149,196,67,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-body>div.shell>main#main>div.card		24,242,772,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card>button.check		40,286,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px
-div.shell>main#main>div.card>div.card-body		74,276,204,42	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.title	把第三章习题做完	74,276,204,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.meta		74,297,204,21	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card>div.card-body>div.meta>span.prio.high	高	139,298,29,19	11/normal/400	#ffffff/#2f6feb	999;1px 8px
-div.card>div.card-body>div.meta>span.flag	⚑ 已标记	168,299,48,16	12/normal/400	#2f6feb/#000000@0.00	0;0px
-div.card>div.card-body>div.meta>span.badge.todo	未完成	222,297,51,21	11/normal/400	#64748b/#ffffff	999;2px 8px
-div.shell>main#main>div.card>div.row		290,256,490,82	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.row>button.ghost:nth-child(1)	在做	290,256,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card>div.row>button.ghost:nth-child(2)	专注	354,256,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card>div.row>button.ghost:nth-child(3)	移出 My Day	418,256,104,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card>div.row>button.ghost:nth-child(4)	取消标记	529,256,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card>div.row>button.ghost:nth-child(5)	分配	619,256,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card>div.row>button.ghost:nth-child(6)	详情	683,256,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card>div.row>button.ghost:nth-child(7)	记录	290,301,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card>div.row>button.ghost:nth-child(8)	删除	354,301,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-html>body>div.shell>aside.sidebar		0,386,820,171	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
-body>div.shell>aside.sidebar>div#focusRail		24,386,772,69	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	40,400,740,17	13/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	40,425,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>aside.rail>nav>button:nth-child(2)	全部任务	78,48,76,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(3)	重要	158,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(4)	有计划	212,48,63,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button.active	已标记	279,48,63,35	13/normal/400	#ffffff/#2f6feb	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(6)	专注	346,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(7)	统计	400,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(8)	习惯	454,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(9)	学业	508,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(10)	复习	562,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(11)	备忘录	616,48,63,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(12)	团队	683,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(13)	设置	737,48,50,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,87,63,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button#refresh	刷新	91,87,52,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button#railToggle	收起右栏	147,87,78,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+html>body>div.shell>main#main		0,144,820,244	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
+body>div.shell>main#main>div.section-title	已标记（1）	24,144,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.sub	你自己按了标记的任务（卡片上的「标记」按钮）。标记只是提醒自己，不代表重要。	24,171,772,16	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.row.tight.mv-4		24,197,772,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(1)	重要	24,197,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(2)	有计划	80,197,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.row.tight.mv-4>button	已标记	149,198,67,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+body>div.shell>main#main>div.card		24,244,772,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card>button.check		40,288,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px
+div.shell>main#main>div.card>div.card-body		74,278,204,42	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.title	把第三章习题做完	74,278,204,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta		74,299,204,21	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card>div.card-body>div.meta>span.prio.high	高	139,300,29,19	11/normal/400	#ffffff/#2f6feb	999;1px 8px
+div.card>div.card-body>div.meta>span.flag	⚑ 已标记	168,301,48,16	12/normal/400	#2f6feb/#000000@0.00	0;0px
+div.card>div.card-body>div.meta>span.badge.todo	未完成	222,299,51,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+div.shell>main#main>div.card>div.row		290,258,490,82	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.row>button.ghost:nth-child(1)	在做	290,258,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(2)	专注	354,258,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(3)	移出 My Day	418,258,104,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(4)	取消标记	529,258,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(5)	分配	619,258,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(6)	详情	683,258,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(7)	记录	290,303,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(8)	删除	354,303,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+html>body>div.shell>aside.sidebar		0,388,820,171	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
+body>div.shell>aside.sidebar>div#focusRail		24,388,772,69	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	40,402,740,17	13/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	40,427,740,16	12/normal/400	#64748b/#000000@0.00	0;0px

@@ -130,11 +130,21 @@ def test_baseline_rows_all_match_a_real_finding() -> None:
     assert set(known) <= keys, f"登记表里有对不上现状的行：{sorted(set(known) - keys)}"
 
 
-def test_hover_and_focus_are_the_registered_headline() -> None:
-    """两条最要紧的（互动态全缺）必须在登记表里 —— 它们正是"键盘附加功能"的前置条件。"""
+def test_hover_and_focus_are_no_longer_the_registered_headline() -> None:
+    """T-G45 销账：`:hover` / `:focus-visible` 已经**真有**了 —— 不许再登记回去。
+
+    方向是反着钉的：登记表只能变短。这两条曾经是"每个元素各过各的"最大的来源，
+    也是「键盘优先做成附加功能」的前置条件（没有可见焦点，键盘用户根本不知道自己走到哪）。
+    所以一旦退回去，这里要红 —— 不是靠人记得。
+    """
+    css = sa.CSS.read_text(encoding="utf-8")
+    findings = {f.key: f.verdict for f in sa.collect(css)}
+    for key in ("interaction:hover", "interaction:focus-visible"):
+        assert findings.get(key) == "OK", f"{key} 又缺了（互动态那节被删了？）"
     _, known = _real()
-    assert "interaction:hover" in known
-    assert "interaction:focus-visible" in known
+    assert not {"interaction:hover", "interaction:focus-visible"} & set(known), (
+        "已经修好的互动态又被登记成欠账了 —— 登记表只能变短"
+    )
 
 
 def test_tool_says_it_cannot_judge_beauty() -> None:

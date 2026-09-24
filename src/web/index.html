@@ -1102,7 +1102,7 @@ async function renderGroupAdmin(el){
       <button data-action="group-add">新建</button></div>
     ${groups.map(g=>`<div class="row tight mv-2" style="padding-left:${(Number(g.depth)||1)-1}em">
         <span class="badge">${g.task_count} 项</span>
-        <span class="grow">${esc(g.path)}</span>
+        <span class="grow minw-160">${esc(g.path)}</span>
         <button class="ghost" data-action="group-sub" data-id="${g.id}" data-name="${esc(g.name)}"
           title="在这个分组下建一个子分组">＋子分组</button>
         ${parentSelect(g.id,g.parent_id,'移到别的分组下（顶层 = 移出来）')}
@@ -2258,7 +2258,7 @@ async function renderHabit(m){
       </div>
       <div class="mt-4">${heatmap(h.logs)}</div></div>`;
   }).join('');
-  m.innerHTML=`<div class="card"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div>
+  m.innerHTML=`<div class="card block"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div>
     <div class="sub">习惯打卡<b>只记次数</b>，不折算成投入时间（时间折算只在有真实时长时才算）。想让它占用投入时间，
       去备忘录页「今日手动投入」按真实分钟补一笔（类型可选「习惯」）。</div></div>
   <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡" data-enter="habit-add"><button data-action="habit-add">新建</button></div>

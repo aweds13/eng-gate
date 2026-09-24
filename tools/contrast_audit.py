@@ -29,6 +29,10 @@
   直接写 `background: var(--某令牌)` 的也算（T-G42 之后状态徽标改用令牌底/圆点了）——
   这个函数存在的意义是**别漏抓**：一个原子换了个写法就整条从表里消失，那是最坏的一种"绿"。
 - 令牌值只从 `src/web/app.css` 的令牌区读，**不抄表**；`var(--x)` 递归解析。
+- ★ T-G45 起**悬停态也真读**（`state_pairs`）：`:hover` 规则里的「底 + 字」从 CSS 现算 ——
+  底认 `var(--x)` 与两令牌 `color-mix(…)` 两种写法，字优先取同一条规则、否则取基础选择器那条。
+  为什么必须自动读：悬停就是"同一条规则换个背景"，最容易加了没人算（T-G42 的同一类教训）。
+  带 `transparent` 的合成底**算不了**（得知道它铺在什么上面）—— 如实跳过，不猜。
 - ★ T-G42 起状态徽标把颜色交给 **8px 圆点**（workbench 的 StatusDot），点是**非文字**（3.0 即可）。
   它没有被单列成一对组合，而是**借令牌级组合的地板**：`--ok` / `--danger` / `--accent`
   落在 `--panel` 上都按 4.5 登记着 —— 令牌一旦被改浅，先把那三条打红，圆点自然也不够。
@@ -263,6 +267,78 @@ def badge_pairs(css: str) -> list[Pair]:
     return out
 
 
+# `color-mix(in srgb, var(--a) N%, var(--b))` —— **两个令牌**的合成（T-G45 的悬停底）。
+# 与上面 `_MIX` 的区别：那种写法带 `transparent`，得知道它铺在什么上面才算得出来（要渲染层）；
+# 这种是两个不透明色相掺，**自己就是最终颜色**，所以静态算得了。
+_MIX2 = re.compile(
+    r"color-mix\(\s*in\s+srgb\s*,\s*var\(\s*(--[a-z0-9-]+)\s*\)\s*([\d.]+)%\s*,"
+    r"\s*var\(\s*(--[a-z0-9-]+)\s*\)\s*\)"
+)
+_STATE_SUFFIX = re.compile(r":hover|:focus-visible|:not\([^)]*\)")
+
+
+def _selectors(rule_selector: str) -> list[str]:
+    """一条规则可能写了好几个选择器（`,` 分组）—— 拆开逐个看，别当成一个怪名字。"""
+    return [s.strip().replace("\n", " ") for s in rule_selector.split(",") if s.strip()]
+
+
+def state_pairs(css: str) -> list[Pair]:
+    """从 `:hover` 规则里读出「悬停态的字 / 底」组合（T-G45）。
+
+    为什么要有这个函数、而不是再手写一张表：**T-G42 的血泪** —— 一个原子换个写法就整条从
+    表里消失，门会显得是绿的（那是最坏的一种绿）。悬停态恰恰是"同一条规则里换个背景"，
+    最容易加了没人算。所以这里**从 CSS 真读**：
+
+      - 底只认两种写法：`background: var(--x)`，或 `color-mix(in srgb, var(--a) N%, var(--b))`
+        （两令牌 = 不透明，算得了）。`…%, transparent` 那种算不了 —— 如实跳过，不假装看过。
+      - 字优先取**同一条规则**里的 `color`；没写就取**基础选择器**（剥掉 `:hover` / `:not(...)`）
+        那条规则的字 —— 因为悬停只换底、字是从基础规则继承来的，那正是真正会出现的搭配。
+    """
+    stripped = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    parsed = [(s, body) for sel, body in _RULE.findall(stripped) for s in _selectors(sel)]
+
+    base_fg: dict[str, str] = {}
+    for sel, body in parsed:
+        if ":hover" in sel:
+            continue
+        m = _COLOR.search(body)
+        if m is not None:
+            base_fg.setdefault(_STATE_SUFFIX.sub("", sel).strip(), m.group(1))
+
+    out: list[Pair] = []
+    for sel, body in parsed:
+        if ":hover" not in sel:
+            continue
+        m_color = _COLOR.search(body)
+        fg = m_color.group(1) if m_color else base_fg.get(_STATE_SUFFIX.sub("", sel).strip())
+        if fg is None:
+            continue
+        m_mix, m_bg = _MIX2.search(body), _BG_VAR.search(body)
+        if m_mix is not None:
+            bg = f"mix({m_mix.group(1)} {m_mix.group(2)}% over {m_mix.group(3)})"
+        elif m_bg is not None:
+            bg = m_bg.group(1)
+        else:
+            continue
+        for theme in ("light", "dark"):
+            out.append(Pair(theme, fg, bg, AA_NORMAL, f"{sel}：悬停时的字 / 底"))
+    return out
+
+
+def dedupe(pairs: list[Pair]) -> list[Pair]:
+    """同一对「字 / 底」只留一条：悬停那一组里有三条规则落在同一个组合上
+    （`.ghost:hover` / `nav button:hover` / `.bottom-nav button:hover` 都是 `--ink on --panel-2`），
+    不去重的话 `where` 说明会互相盖掉，报出来的条数也会虚高。"""
+    seen: set[str] = set()
+    out: list[Pair] = []
+    for pair in pairs:
+        if pair.key in seen:
+            continue
+        seen.add(pair.key)
+        out.append(pair)
+    return out
+
+
 # ------------------------------------------------------------------ 求值
 def load_baseline() -> dict[str, dict[str, object]]:
     if not BASELINE.exists():
@@ -330,7 +406,7 @@ def main() -> int:
     css = CSS.read_text(encoding="utf-8")
     tokens = token_blocks(css)
     known = load_baseline()
-    pairs = declared_pairs() + badge_pairs(css)
+    pairs = dedupe(declared_pairs() + badge_pairs(css) + state_pairs(css))
     rows = evaluate(pairs, tokens, known)
     counts = summarize(rows)
 

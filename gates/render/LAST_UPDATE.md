@@ -290,3 +290,52 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/review`
 - `phone/stats`
 
+
+## 2026-09-24 09:51:44 · 31 份改动
+
+> 理由：T-G45：4 处一次性裸值收敛到最近的档（.rail nav gap 2→4、.fact padding 3→4、panel-card .title 下边距 2→4、.swatch 圆角 50%→--r-pill）；互动态（hover/focus）本身零像素变化
+
+- `desktop/academic`
+- `desktop/flagged`
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/important`
+- `desktop/memo`
+- `desktop/offline`
+- `desktop/planned`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `desktop/team`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/flagged`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/important`
+- `narrow/memo`
+- `narrow/offline`
+- `narrow/planned`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `narrow/team`
+- `narrow/today`
+- `phone/academic`
+- `phone/offline`
+- `phone/setting`
+
+
+## 2026-09-24 10:10:50 · 6 份改动
+
+> 理由：T-G45：修「中文被压碎」三处（.habit-head 允许换行 / 习惯页摘要卡改块内容卡 / 分组名给宽度下限 minw-160）—— 只影响原本被挤的那几个视图
+
+- `desktop/habit`
+- `desktop/setting`
+- `narrow/habit`
+- `narrow/setting`
+- `phone/habit`
+- `phone/setting`
+

@@ -1,24 +1,24 @@
 # render-manifest v1 viewport=desktop 1280x900 view=flagged rows=48 accent=#2f6feb device=ph-000000000000
-html>body>div.shell		0,0,1280,731	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
-html>body>div.shell>aside.rail		24,0,168,731	16/normal/400	#1e293b/#000000@0.00	0;18px 0px
+html>body>div.shell		0,0,1280,761	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
+html>body>div.shell>aside.rail		24,0,168,761	16/normal/400	#1e293b/#000000@0.00	0;18px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,18,167,24	18/normal/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	24,48,167,59	13/19.5/400	#64748b/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,119,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(2)	全部任务	24,156,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(3)	重要	24,193,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(4)	有计划	24,230,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button.active	已标记	24,267,167,35	13/normal/400	#ffffff/#2f6feb	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(6)	专注	24,304,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(7)	统计	24,341,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(8)	习惯	24,378,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(9)	学业	24,415,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(10)	复习	24,452,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(11)	备忘录	24,489,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(12)	团队	24,526,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(13)	设置	24,563,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,600,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button#refresh	刷新	24,637,167,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
-div.shell>aside.rail>nav>button#railToggle	收起右栏	24,676,167,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(2)	全部任务	24,158,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(3)	重要	24,197,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(4)	有计划	24,236,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button.active	已标记	24,275,167,35	13/normal/400	#ffffff/#2f6feb	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(6)	专注	24,314,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(7)	统计	24,353,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(8)	习惯	24,392,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(9)	学业	24,431,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(10)	复习	24,470,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(11)	备忘录	24,509,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(12)	团队	24,548,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(13)	设置	24,587,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,626,167,35	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button#refresh	刷新	24,665,167,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
+div.shell>aside.rail>nav>button#railToggle	收起右栏	24,706,167,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 html>body>div.shell>main#main		216,0,716,330	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
 body>div.shell>main#main>div.section-title	已标记（1）	240,20,668,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.sub	你自己按了标记的任务（卡片上的「标记」按钮）。标记只是提醒自己，不代表重要。	240,47,668,16	12/normal/400	#64748b/#000000@0.00	0;0px

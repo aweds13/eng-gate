@@ -1429,6 +1429,36 @@ evidence = [
 ]
 gaps = "**修了发现的两处**：`renderHabit` 的今天、`heatmap` 的格子日期（都改走 `todayISO()`，本机时区）。**它为什么会伤人**：`new Date().toISOString()` 给的是 UTC 日期，本机 UTC+8 → **本地 0–8 点算出来是昨天**：界面把「今天已打卡」显示成「打卡」，而点下去（服务端按本地今天翻转）会把那次打卡**取消**掉，提示还写着「已打卡」。**护栏两层**（都在 `test_web_frontend.py`）：全文件级不许出现裸的 `new Date().toISOString()`；函数级 `renderHabit`/`heatmap` 里不许出现 `toISOString` —— 判的是**剥掉注释后的代码**（不剥注释会把「别这么写」那句解释也判红，同 T-G39 的教训），并用合成数据证明它咬得住。**没做**：全仓的「日期取法」清点（`docs/` / `tools/` / 别的 `.js`）；护栏只扫 `index.html`。"
 
+[entries."T-G46"]
+id = "T-G46"
+title = "视觉线·待办：5 个输入框「没穿衣服」—— `input` 只有上下文样式、缺元素级基础规则（T-G45 量挤压时顺带量到的，未修）"
+group = "PROCESS"
+status = "todo"
+evidence = []
+gaps = "**现象**（渲染清单里一直在，只是没有一层判它）：`#exportDir` / `#vaultName` / `#vaultDir` / `#syncPath` / `#archiveDays` 这 5 个输入框是**浏览器默认外观** —— 21px 高、`#ffffff` 底、`1px 2px` 内边距、无圆角；而全站其它输入框是 `--panel` 底 + 1px `--border` + `--r-md` 圆角 + 10/12 内边距。证据：`gates/render/desktop__setting.txt` 里 `input#exportDir` 那一行（`… 260,2082,240,21 … #000000/#ffffff 0;1px 2px`）与 `phone__setting.txt` 的 `input#syncPath`。**根因**：我们把输入框按**上下文**上样式（`.new input` / `.field input` / `.modal-box input`），而 `select` 有**元素级**基础规则 —— 于是任何落在这三种容器之外的输入框就是裸的（这 5 个正好都在 `.row.tight` 里）。**改法（很小）**：① 补一条元素级规则 `input:not([type=checkbox]):not([type=radio])`（照 `select` 那条写，复选框必须排除，否则会被画成整行白块 —— T-G32/T-G38 踩过两次）；② `.modal-box input` 那条要跟着补 `:not(...)`，否则会被新基础规则按权重盖掉（它是 (0,1,1)，新规则是 (0,2,1)）；③ `#archiveDays` 顺手给个宽度类（`.w-90`）。**为什么没并进 T-G45**：那轮的口径是「挤压」（读不出来），这条是「没穿衣服」（不像设计系统），两件事；而且它要动一条**元素级**规则，属于「组件层」的活（步 2 会一并定）。"
+
+[entries."T-G45"]
+id = "T-G45"
+title = "视觉线·无需新决定的两件小活（SR-NF1 / N30）：互动态补齐（`:hover` 0→6、`:focus-visible` 0→1）+ 4 条一次性裸值收敛到档位 + 「中文被压碎」三处（挤压 11 处 → 0），一致性门登记表 7 → 1 条"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/视觉线互动态-T-G45.md",
+  "text:src/web/app.css::--------- 互动态（T-G45）",
+  "text:src/web/app.css:::focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }",
+  "text:src/web/app.css::color-mix(in srgb, var(--accent) 88%, var(--ink))",
+  "text:src/web/app.css::--dur-hover: .12s;",
+  "text:src/web/app.css::.habit-head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap }",
+  "text:src/web/index.html::<div class=\"card block\"><div class=\"meta\">本周专注",
+  "text:src/web/index.html::<span class=\"grow minw-160\">",
+  "text:tools/contrast_audit.py::def state_pairs(css: str) -> list[Pair]:",
+  "text:tools/squeeze_scan.py::诊断工具，不是门禁",
+  "test:test_style_audit.py",
+  "test:test_contrast_audit.py",
+  "test:test_web_frontend.py",
+]
+gaps = "**补的是「每个元素各过各的」最大的那一层**：整张样式表里 `:hover` 与 `:focus-visible` 各 0 条（一致性门登记表的头两条）。三条口径照 workbench 抄，不自创：① 悬停**只动 background / border-color / color**（包原话：Hover moves background/border/colour only），一个语速（`--dur-hover: .12s` + `--motion-ease`，并跟随系统 `prefers-reduced-motion` 归零）；② 实心强调底**往墨色挪一步**（`color-mix(in srgb, var(--accent) 88%, var(--ink))`）—— 亮色变深、暗色变浅，两边对比度都**上升**（5.22 / 8.13），而「自己发明第二个强调色」正是包明确拒绝的做法；幽灵/导航 hover 用 `--panel-2` 浅底 + `--ink` 字；③ **焦点环一条全局规则**（`outline: 2px solid var(--accent)` + `outline-offset: 2px`，只在 `:focus-visible` 生效）。**四处必须分开写而不能靠继承**（都写进代码注释）：`:not([disabled])` 会带进一个属性选择器的权重（`button:not([disabled]):hover` = 0,2,1 **高过** `.ghost:hover` = 0,2,0），所以 hover 一律一条条写全、放在全表最后；已勾选的圈不能被「未勾选才给浅底」那条洗掉；当前页的底部 Tab **不给底**（它的颜色就是「你在这一页」的信号，而强调色小字只允许落在 `--panel` 上）；toast 里的按钮**不能套 `--panel-2`**（亮色下那是浅灰、toast 的字却是白的）→ 改成往横幅里掺 14% 字色（**不透明**，所以对比度门算得了）。**副产品（比补 hover 更重要）**：对比度门从此**真读悬停态** —— `state_pairs` 从 CSS 现算「底 + 字」，底认 `var(--x)` 与两令牌 `color-mix` 两种写法，字优先取同一条规则、否则取基础选择器那条；组合数 30 → **34**，两对新组合全部达标。带 `transparent` 的合成底**算不了**（得知道它铺在什么上面）→ 如实跳过，不猜一个底出来（「猜出来的绿比红更坏」）。**同时销账 4 条一次性裸值**（收敛到最近的档，都会动 2px 版式，逐视图重生黄金并逐行点名）：`.swatch` 圆角 `50%` → `var(--r-pill)`（方形元素上两者同一个圆，而包只有三档圆角）、`.rail nav` gap `2px` → `var(--sp-1)`、`.card.panel-card .title` `margin-bottom: 2px` → `var(--sp-1)`、`.fact` `padding: 3px 0` → `var(--sp-1) 0`。**没做**：`literal:line-height:1.5` **故意留着**（它是步 3 排版节奏的工单：只把这一处换成令牌、而全表其余仍「行距靠默认」，那是把债洗白）；`.card.selected` 的 `box-shadow` 圈、`.card` 的 `--shadow` 仍待步 2 定（包的规矩是「层次=1px 边框」）；非文字（状态点/描边）仍只靠令牌级 4.5 地板兜着，没有单独的 3.0 组合表。**同一张卡的第二件（挤压）**：病根是「**不换行的 flex 容器 + 中文处处可断行**」—— flex 先压缩、压不动才换行，而中文的 min-content 低到**一个字宽**，于是文本被压成竖排、按钮被压成两行字，而右边其实还有地方（实测 390px：习惯卡标题列 128×32、『已打卡（点此取消）』86×73、『改名』43×56、摘要卡那行 68×80、分组名 19×42）。三处改法都是「**让它换行**」而不是「把它调宽」：`.habit-head` 补 `flex-wrap: wrap`（它是唯一漏掉 wrap 的动作行）、习惯页摘要卡 `<div class=\"card\">`→`<div class=\"card block\">`（卡里是两个块级孩子，却被渲染成 flex 行；三档宽度都受影响）、分组名 `<span class=\"grow\">`→`<span class=\"grow minw-160\">`（右边那个 select 按内容撑宽，把名字压到 19px → 给名字一个宽度下限，行就换行）。**凭证是量出来的**：先补了一把尺子 `tools/squeeze_scan.py`（从 42 份渲染清单里找「文字一行放不下 + 真的换行了 + 拿到的宽 < 容器 70%」——**诊断工具，不进门禁**，因为字宽是估算、硬门迟早被误报写进白名单），修复前 **11 处**（5 个视图）→ 修复后 **0 处**；黄金改 6 份（habit × 3 + setting × 3，其中 desktop/narrow 的 setting 只有选择器字符串多了 `.minw-160`、几何逐行相同）。**顺带量到、这次不动**：① 手机任务卡标题列被 10 个动作按钮压到 128px（改法涉及「手机要不要把动作收进…菜单」，属产品口径）；② **5 个输入框没穿衣服**（`#exportDir`/`#vaultName`/`#vaultDir`/`#syncPath`/`#archiveDays` 是浏览器默认外观）—— 根因是我们按上下文给 `input` 上样式而 `select` 有元素级规则，**已单独立卡 T-G46**，不塞进这一条。"
+
 [entries."T-G44"]
 id = "T-G44"
 title = "视觉线步 1（SR-NF1 / N30）：颜色令牌改名对齐 workbench（118 处、值不变）+ 映射表进规格 + `--accent-soft` 并进 `--panel-2`"
