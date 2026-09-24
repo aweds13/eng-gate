@@ -49,6 +49,14 @@ const SHOTS_DIR = join(GOLDEN_DIR, 'shots')
 const UPDATE_LOG = join(GOLDEN_DIR, 'LAST_UPDATE.md')
 const SCHEMA = 'v1'
 
+/* 浮层伪视图（T-G61）：它们**默认不出现**，所以采法不是"点视图按钮"而是"点开它的入口"。
+   `over` = 打开之前先站到哪一页 —— 必须写死，不能顺手用"上一轮停在哪"：
+   T-G51 的教训（`offline` 那页会读别人写的缓存）就是**视图之间不独立**，采错一次会留下假黄金。
+   它们不进 `VIEWS`（那是"界面上的视图"白名单，别的工具也读它）：伪视图只服务这一层。 */
+const PSEUDO_VIEWS = {
+  palette: { open: '[data-action="palette-open"]', over: 'today' },
+}
+
 /* ---------------------------------------------------------------- 参数 */
 
 function parseArgs(argv) {
@@ -236,8 +244,24 @@ const COLLECT = /* js */ `
 
 async function collectView(cdp, vp, view) {
   await cdp.eval(MUTATION_WATCH)
+  const pseudo = PSEUDO_VIEWS[view]
+  const openSel = pseudo ? pseudo.open : `[data-view="${view}"]`
+  if (pseudo) {
+    // 浮层（T-G61 的 ⌘K 命令面板）默认不出现 —— 那就**先站到它要盖住的那一页**再打开它。
+    // 这一步不是为了好看：`offline` 那页的黄金教训（T-G51）是**视图之间不独立**，
+    // 若顺手从"上一轮停在的那一页"打开面板，采到的就是另一页的版式（第二天自己红）。
+    const base = await cdp.eval(`(() => {
+      const btns = [...document.querySelectorAll('[data-view="${pseudo.over}"]')];
+      const vis = btns.find((b) => b.offsetParent !== null) || btns[0];
+      if (!vis) return false;
+      vis.click();
+      return true;
+    })()`)
+    if (!base) throw new Error(`界面上找不到浮层底下那一页：${pseudo.over}`)
+    await waitIdle(cdp)
+  }
   const clicked = await cdp.eval(`(() => {
-    const btns = [...document.querySelectorAll('[data-view="${view}"]')];
+    const btns = [...document.querySelectorAll(${JSON.stringify(openSel)})];
     const vis = btns.find((b) => b.offsetParent !== null) || btns[0];
     if (!vis) return false;
     vis.click();
@@ -264,7 +288,7 @@ async function collectAll(cdp, url, port) {
     await setViewport(cdp, vp)
     const booted = await bootApp(cdp, url, { accent: CFG_ACCENT })
     if (!booted) throw new Error('应用没有启动完成（左栏没渲染出来）—— 界面可能根本没起来')
-    for (const view of VIEWS) {
+    for (const view of [...VIEWS, ...Object.keys(PSEUDO_VIEWS)]) {
       if (ARGS.only && ARGS.only !== view) continue
       const res = await collectView(cdp, vp, view)
       out.set(`${vp.name}/${view}`, { header: res, text: manifestText(res) })
@@ -457,7 +481,8 @@ async function main() {
       return result
     }
 
-    log(`[OK ] ${pass1.size} 份清单与黄金逐字节一致（${VIEWPORTS.length} 档宽度 × ${VIEWS.length} 个视图）`)
+    log(`[OK ] ${pass1.size} 份清单与黄金逐字节一致（${VIEWPORTS.length} 档宽度 × ${VIEWS.length} 个视图`
+      + `${Object.keys(PSEUDO_VIEWS).length ? ` + ${Object.keys(PSEUDO_VIEWS).length} 个浮层` : ''}）`)
     result.ok = true
     result.code = 0
     return result

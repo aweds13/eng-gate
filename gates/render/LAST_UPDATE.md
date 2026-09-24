@@ -553,3 +553,52 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `narrow/setting`
 - `phone/setting`
 
+
+## 2026-09-24 15:53:15 · 31 份改动
+
+> 理由：T-G61 键盘附加层：左栏多一个带键位徽标的「命令」入口（14 个视图的清单都会动一行）+ 新增浮层伪视图 palette 的 3 份黄金（⌘K 面板：--panel 底 / --r-md / --shadow 只给浮层 / 行是 div 不抢 Tab）；同一提交还改了 --fast 新增命令面板对账那一节
+
+- `desktop/academic`
+- `desktop/flagged`
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/important`
+- `desktop/memo`
+- `desktop/offline`
+- `desktop/palette`（新增）
+- `desktop/planned`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `desktop/team`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/flagged`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/important`
+- `narrow/memo`
+- `narrow/offline`
+- `narrow/palette`（新增）
+- `narrow/planned`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `narrow/team`
+- `narrow/today`
+- `phone/palette`（新增）
+
+
+## 2026-09-24 16:09:44 · 6 份改动
+
+> 理由：T-G61 键盘附加层（第二次重采，同一张卡）：上一轮采于 2026-09-24 23:5x，跨过午夜后 habit/stats 两个视图按'今天'锚定，格子数与窗口首日标签各差一天 —— 本轮在 2026-09-25 重采，把它们对齐到新的一天（这恰好证明黄金层还有一处跨天漂移，已立卡 T-G62）
+
+- `desktop/habit`
+- `desktop/stats`
+- `narrow/habit`
+- `narrow/stats`
+- `phone/habit`
+- `phone/stats`
+

@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=narrow 820x900 view=flagged rows=49 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=narrow 820x900 view=flagged rows=51 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,820,676	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,820,126	16/normal/400	#1e293b/#000000@0.00	0;16px 24px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,16,86,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
@@ -19,6 +19,8 @@ div.shell>aside.rail>nav>button:nth-child(13)	设置	737,50,50,35	13/normal/400	
 div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,89,63,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
 div.shell>aside.rail>nav>button#refresh	刷新	91,89,52,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
 div.shell>aside.rail>nav>button#railToggle	收起右栏	147,89,78,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button#cmdBtn	命令	229,89,99,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+aside.rail>nav>button#cmdBtn>kbd.kbd	Ctrl K	272,103,43,13	11/13.2/400	#5b6472/#000000@0.00	6;0px 4px
 html>body>div.shell>main#main		0,150,820,259	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
 body>div.shell>main#main>div.section-title	已标记（1）	24,150,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.sub	只提醒自己	24,177,772,18	12/18/400	#5b6472/#000000@0.00	0;0px

@@ -244,6 +244,9 @@ class T {
 
   async key(name) { await this.cdp.key(name); await waitIdle(this.cdp) }
 
+  /** 组合键（`Ctrl/⌘ + 字母`）—— T-G61 的键盘层要用它打 ⌘K。 */
+  async chord(letter, opts) { await this.cdp.chord(letter, opts); await waitIdle(this.cdp) }
+
   /** 清空一个输入框（真点 → Ctrl+A → 真按退格）。
    *  ★ 别拿 `type(sel, '')` 当清空：那是"一个字符都不打"，原来的内容**原样留着**（T-G37 踩到）。 */
   async clear(selector) {
@@ -988,9 +991,103 @@ flow({
   },
 })
 
+flow({
+  id: 'K', name: '命令面板（键盘附加层）：真按键打开、真打字过滤、↑↓ 换选中、Enter 跑、Esc 关',
+  item: '新增（不是搬移项）：T-G61 键盘附加层 ②③④ —— 它本来就还没有人工项可搬',
+  vp: 'desktop',
+  async run(t) {
+    await t.start('today')
+    // ① 默认不在；入口上写着键位（键盘那半的"可学习性"—— 借的是 Raycast 的"快捷键可学习"，
+    //    不是"一切都靠键盘"）
+    t.eq('一开始没有面板', await t.attr('#palette', 'hidden'), '')
+    t.has('左栏那个入口把键位写在自己身上', await t.text('#cmdBtn'), 'Ctrl K')
+
+    // ② 真按 Ctrl+K（走浏览器真正的事件管线，不是调函数）
+    await t.chord('k')
+    t.eq('Ctrl+K 打开了面板', await t.attr('#palette', 'hidden'), null)
+    t.eq('焦点落在过滤框里（不是别处）', await t.cdp.activeElement(), 'input#paletteInput')
+    const box = await t.geom('.palette-box')
+    t.ok('面板在视口里（没被推到屏幕外）', box && box.x >= 0 && box.y >= 0 && box.w > 0, JSON.stringify(box))
+    t.ok('它是个小浮层、没盖满宽度', box && box.w <= 640, JSON.stringify(box))
+    const backdrop = await t.geom('.palette-backdrop')
+    t.ok('遮罩铺满视口（点空白处能关）', backdrop && backdrop.w > 600 && backdrop.h > 400, JSON.stringify(backdrop))
+    const rows0 = await t.count('.palette-row')
+    t.ok('列出的命令够多（动作 + 视图）', rows0 >= 15, `只有 ${rows0} 条`)
+    t.has('列表按组分节', await t.text('#paletteList'), '视图')
+    t.eq('开局选中的正好一条', await t.count('.palette-row.on'), 1)
+    t.eq('选中的是第一条', await t.attr('.palette-row.on', 'data-index'), '0')
+
+    // ③ ↑↓ 换选中（真方向键；此时还是全表）
+    await t.key('ArrowDown')
+    t.eq('↓ 之后选中的是第二条', await t.attr('.palette-row.on', 'data-index'), '1')
+    await t.key('ArrowUp')
+    t.eq('↑ 回到第一条', await t.attr('.palette-row.on', 'data-index'), '0')
+
+    // ④ 真打字过滤（界面走的是 `input` 事件 —— 中文输入法选字时不发 keydown，只有这条路抓得到），
+    //    然后 Enter 跑筛出来的那一条：**面板不是摆设**，它真的切了视图
+    await t.type('#paletteInput', '复习')
+    const rows1 = await t.count('.palette-row')
+    t.ok('打字就筛（剩下的比全表少）', rows1 >= 1 && rows1 < rows0, `${rows0} → ${rows1}`)
+    t.has('筛出来的就是「复习」', await t.text('#paletteList'), '复习')
+    t.lacks('没关的视图被筛掉了', await t.text('#paletteList'), '备忘录')
+    await t.key('Enter')
+    t.eq('Enter 之后面板自己关掉', await t.attr('#palette', 'hidden'), '')
+    t.ok('真的到了复习页', (await t.count('[data-view="review"].active')) >= 1)
+
+    // ⑤ 单字母快捷键：**没在打字**时生效
+    await t.key('t')
+    t.ok('单字母 t 回今日页', (await t.count('[data-view="today"].active')) >= 1)
+    await t.key('h')
+    t.ok('单字母 h 去习惯页', (await t.count('[data-view="habit"].active')) >= 1)
+    //    而**在打字**时一个字都不抢（这是"附加层"不惹麻烦的关键）
+    await t.key('t')
+    await t.press('#newTitle', '今日页的新建输入框')
+    await t.cdp.typeText('h')
+    t.has('输入框里的 h 就是 h（没被当成快捷键）', await t.value('#newTitle'), 'h')
+    t.ok('还站在今日页（没被 h 切去习惯页）', (await t.count('[data-view="today"].active')) >= 1)
+
+    // ⑥ 再开一次：面板里那条「设置」Enter 过去（顺带证明每次打开都是**全表、选第一条**）
+    await t.chord('k')
+    await t.eq('再按 Ctrl+K 又开', await t.attr('#palette', 'hidden'), null)
+    t.eq('重新打开是全表（不是上次筛剩的）', await t.count('.palette-row'), rows0)
+    await t.type('#paletteInput', '设置')
+    await t.key('Enter')
+    t.ok('从面板回车能到设置页', (await t.count('[data-view="setting"].active')) >= 1)
+
+    // ⑦ 那条「新建任务」把光标送进输入框（不造第二个创建路径）
+    await t.chord('k')
+    await t.key('Enter')                       // 选中态是全表第一条 = 新建任务
+    t.eq('跑完自己关掉', await t.attr('#palette', 'hidden'), '')
+    t.eq('光标落进了今日页那个输入框', await t.cdp.activeElement(), 'input#newTitle')
+
+    // ⑧ Esc：关掉最上面那一层。两条都验 —— 面板，以及**一直关不掉的模态**
+    //    （模态的注释里写着"可键盘"，但从 R2 建起来到这次之前，Esc 对它没有任何作用）
+    await t.chord('k')
+    await t.key('Escape')
+    t.eq('Esc 关掉面板', await t.attr('#palette', 'hidden'), '')
+    const made = await t.api('POST', '/api/tasks', { title: 'ESC 取消删除用', is_myday: true })
+    const tid = made.json && made.json.id
+    t.ok('（准备）建了一张待删的任务', Boolean(tid), JSON.stringify(made).slice(0, 120))
+    await t.view('today')
+    await t.pressAction('task-delete', { inCard: 'ESC 取消删除用' })
+    t.eq('删除弹出了站内确认框', await t.attr('#modal', 'hidden'), null)
+    await t.key('Escape')
+    t.eq('Esc 关得掉确认框', await t.attr('#modal', 'hidden'), '')
+    t.has('任务还在（Esc 是取消，不是确认）', await t.bodyText(), 'ESC 取消删除用')
+    if (tid) await t.api('DELETE', `/api/tasks/${tid}`)
+
+    // ⑨ 鼠标那半：点「命令」开、点空白关（附加层也要能用鼠标发现它）
+    await t.pressAction('palette-open')
+    t.eq('点左栏「命令」也能开', await t.attr('#palette', 'hidden'), null)
+    await t.pressAction('palette-close')
+    t.eq('点空白处关掉', await t.attr('#palette', 'hidden'), '')
+  },
+})
+
 /* ---------------------------------------------------------------- 跑 */
 
 function fingerprint(results) {
+
   return JSON.stringify(results.map((r) => [r.id, r.error ?? '', r.checks.map((c) => [c.label, c.ok])]))
 }
 

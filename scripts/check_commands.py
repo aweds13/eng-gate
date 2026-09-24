@@ -19,6 +19,7 @@
 | **契约层操作** | `docs/contracts/**` 的 `## OP-n 标题` | 每条 OP 必须有行；行不许有契约里没有的 |
 | **HTTP 路由** | `app.py` 的 `@app.<method>("/path")` | 表里每条路由必须**真的存在** |
 | **界面入口** | `index.html` 的 `ACTIONS` / `VIEWS` | `data-action=x` / `view=y` 必须**真注册过** |
+| **命令面板**（T-G61） | `index.html` 的 `COMMANDS` | 动作注册、键位不重复、挂的 OP 入口里真有它 |
 
 **洞是允许的、也是要报的**：现在还有多少行没填出路由/界面入口，脚本会数出来 ——
 那就是"这张表还差多少"的进度条，也是下一步的工单（跟两道审美门的登记表一个思路）。
@@ -123,6 +124,116 @@ def load_commands() -> dict[str, dict[str, object]]:
     return dict(table) if isinstance(table, dict) else {}
 
 
+def _skip_literal(text: str, i: int) -> int:
+    """如果 `text[i]` 是字符串或注释的开头，返回它**之后**的下标；否则原样返回 `i`。
+
+    这三样必须跳：字符串里的括号/引号、注释里的 `{` 与 `'`。
+    不跳会怎样（真踩到过）：注释里那个 `{` 被当成"一条命令的开头"，
+    接着配对到**别处**的 `}`，于是从中间开始错位，最后报"括号没配对"。
+    """
+    ch = text[i]
+    n = len(text)
+    if ch in "'\"`":
+        i += 1
+        while i < n and text[i] != ch:
+            i += 2 if text[i] == "\\" else 1
+        return i + 1
+    if ch == "/" and i + 1 < n and text[i + 1] == "/":
+        while i < n and text[i] != "\n":
+            i += 1
+        return i
+    if ch == "/" and i + 1 < n and text[i + 1] == "*":
+        end = text.find("*/", i)
+        return n if end < 0 else end + 2
+    return i
+
+
+def _balanced(text: str, start: int) -> str:
+    """从 `text[start]` 那个 `[`（或 `{`）开始，返回**配对括号里面**的那段文本。
+
+    为什么要手写配对而不是正则：命令面板那张表里每条都带嵌套的 `data:{view:'today'}`
+    —— 正则很容易把"下一条的开头"一起吃进来。这**正是 `ACTIONS` 第一版踩过的坑**
+    （用 `split("};")` 截段，遇到函数体里的 `};` 就断，报出 15 条假冲突，见 `ui_names` 的注释）。
+    """
+    close = {"[": "]", "{": "}"}[text[start]]
+    depth = 0
+    i = start
+    while i < len(text):
+        nxt = _skip_literal(text, i)
+        if nxt != i:
+            i = nxt
+            continue
+        if text[i] == text[start]:
+            depth += 1
+        elif text[i] == close:
+            depth -= 1
+            if depth == 0:
+                return text[start + 1 : i]
+        i += 1
+    raise ValueError("命令面板那张表的括号没配对（`const COMMANDS = [` 之后找不到收尾的 `]`）")
+
+
+def _split_entries(body: str) -> list[str]:
+    """把 `[ … ]` 里面切成一条条 `{ … }`（同一个扫描器负责跳字符串/注释与配对）。
+
+    为什么不"找第一个 `{` 再配对"：注释或字符串里的 `{` 会被当成条目开头（见 `_skip_literal`）。
+    """
+    out: list[str] = []
+    depth = 0
+    start = -1
+    i = 0
+    while i < len(body):
+        nxt = _skip_literal(body, i)
+        if nxt != i:
+            i = nxt
+            continue
+        ch = body[i]
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                out.append(body[start + 1 : i])
+                start = -1
+        i += 1
+    return out
+
+
+def _field(text: str, name: str) -> str:
+    m = re.search(rf"\b{name}\s*:\s*'([^']*)'", text)
+    return m.group(1) if m else ""
+
+
+def ui_commands() -> list[dict[str, str]]:
+    """从 `index.html` 的 `const COMMANDS = [ … ]` 读**命令面板那张表**（T-G61）。
+
+    它是「⌘K 面板」这份投影的真源：每条命令写了标题 / 分组 / 键位 / 跑哪个已注册动作 /
+    对应哪条契约 OP。这里只负责**读出来**，判定在 `main()` 里 —— 读法必须稳（见 `_balanced`）。
+    """
+    html = INDEX.read_text(encoding="utf-8")
+    if "const COMMANDS" not in html:
+        return []
+    head = html.index("const COMMANDS")
+    start = html.index("[", head)
+    rows: list[dict[str, str]] = []
+    for chunk in _split_entries(_balanced(html, start)):
+        view = re.search(r"data\s*:\s*\{\s*view\s*:\s*'([^']*)'", chunk)
+        rows.append(
+            {
+                "id": _field(chunk, "id"),
+                "title": _field(chunk, "title"),
+                "group": _field(chunk, "group"),
+                "keys": _field(chunk, "keys"),
+                "action": _field(chunk, "action"),
+                "op": _field(chunk, "op"),
+                "view": view.group(1) if view else "",
+            }
+        )
+    return rows
+
+
 def as_list(value: object) -> list[str]:
     if isinstance(value, list):
         return [str(v) for v in value]
@@ -191,6 +302,57 @@ def main() -> int:
     if missing:
         problems.append(f"契约里有 {len(missing)} 条 OP 还没进命令表：{missing}")
 
+    # ---- 命令面板（T-G61）：⌘K 那份投影必须与前三者一致 ----
+    # 这一节是"四个面共用一个点"从口号变成判定的地方：面板里的每条命令都要
+    #   ① 跑一个**真注册过**的动作（否则点了没反应，是空壳）；
+    #   ② 键位不重复（抢键是键盘层最常见的隐性缺陷）；
+    #   ③ 声称对应某条 OP 时，那条 OP 的界面入口里**真的有**这个动作/视图。
+    palette = ui_commands()
+    seen_ids: dict[str, str] = {}
+    seen_keys: dict[str, str] = {}
+    palette_with_op = 0
+    palette_ops: set[str] = set()
+    for cmd in palette:
+        cid = cmd["id"] or "（没写 id）"
+        if cmd["id"]:
+            if cmd["id"] in seen_ids:
+                problems.append(f"命令面板 {cid}：id 与 {seen_ids[cmd['id']]} 重复")
+            seen_ids[cmd["id"]] = cid
+        action = cmd["action"]
+        if not action:
+            problems.append(f"命令面板 {cid}：没写 action（面板只能跑已注册的动作）")
+        elif action not in actions:
+            problems.append(f"命令面板 {cid}：动作 {action!r} 没在 ACTIONS 注册")
+        key = cmd["keys"]
+        if key:
+            if len(key) != 1:
+                problems.append(f"命令面板 {cid}：键位 {key!r} 不是单个字符")
+            if key in seen_keys:
+                problems.append(f"命令面板：键位 {key!r} 被 {seen_keys[key]} 与 {cid} 抢了")
+            seen_keys[key] = cid
+        view = cmd["view"]
+        if view and view not in views:
+            problems.append(f"命令面板 {cid}：视图 {view!r} 不在 VIEWS 里")
+        op = cmd["op"]
+        if not op:
+            continue
+        if op not in ops:
+            problems.append(f"命令面板 {cid}：契约层里没有 {op}")
+            continue
+        if op not in table:
+            problems.append(f"命令面板 {cid}：{op} 还没进命令表")
+            continue
+        row_ui = as_list(table[op].get("ui"))
+        want = f"view={view}" if view else f"data-action={action}"
+        if want not in row_ui:
+            problems.append(
+                f"命令面板 {cid}：声称对应 {op}，但 {op} 的界面入口里没有 {want}"
+                "（要么补进命令表的 ui，要么这条命令不该挂这条 OP）"
+            )
+        else:
+            palette_with_op += 1
+            palette_ops.add(op)
+
     report = {
         "contract_ops": len(ops),
         "rows": len(table),
@@ -200,6 +362,10 @@ def main() -> int:
         "views": len(views),
         "rows_without_route": no_route,
         "rows_without_ui": no_ui,
+        "palette_commands": len(palette),
+        "palette_with_op": palette_with_op,
+        "palette_keys": sorted(seen_keys),
+        "ops_with_palette_entry": sorted(palette_ops),
         "problems": problems,
     }
 
@@ -223,6 +389,10 @@ def main() -> int:
         print(f"\n  还没填出路由的：{len(no_route)} 条 → {no_route}")
     if no_ui:
         print(f"\n  还没填出界面入口的：{len(no_ui)} 条 → {no_ui}")
+    print(
+        f"\n  命令面板（⌘K）：{len(palette)} 条命令 · {len(seen_keys)} 个键位"
+        f" · 其中 {palette_with_op} 条对得上契约 OP（{len(palette_ops)} 条 OP 有面板入口）"
+    )
     if problems:
         print(f"\n=== 硬冲突 {len(problems)} 条（必须修）===")
         for p in problems:
@@ -230,6 +400,7 @@ def main() -> int:
         return 1 if args.check else 0
     print("\n命令表与三个真源一致 ✅（没有硬冲突）")
     print("说明：洞（没填出的路由/入口）是**进度**不是错误 —— 数量下降就是这张表在长。")
+    print("说明：命令面板那一节证明「⌘K 不是第二套命令系统」—— 它只是这张表的又一份投影。")
     return 0
 
 

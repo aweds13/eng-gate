@@ -618,6 +618,69 @@ button.ghost svg, .flag svg { width: 16px; height: 16px; vertical-align: -3px }
 }
 .modal-box .row { display: flex; gap: var(--sp-2); margin-top: var(--sp-3) }
 
+/* ---------- 命令面板（T-G61：「键盘优先」做成附加层）----------
+   浮层那几样照 `.modal` 抄（同一个语速、同一条 `--shadow` —— 包只给真浮层用它）。
+   位置放**上三分之一**而不是正中：它是"召唤出来看一眼就走"的东西，贴顶更顺手，
+   也不会把下面要看的列表整块盖住（模态是"必须回答"，面板是"路过"）。 */
+.palette {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--sp-6) var(--sp-4);
+  z-index: 40;
+}
+.palette[hidden] { display: none }
+.palette-backdrop { position: absolute; inset: 0; background: rgba(var(--shadow-rgb), .38) }
+.palette-box {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.palette-box input:not([type="checkbox"]):not([type="radio"]) {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: var(--fs-base);
+  background: var(--bg);
+  color: var(--ink);
+}
+/* 列表是滚动容器（19 条放不下就滚），`gap` 走 --sp-1：行与行贴得像一张表，不是一叠卡 */
+.palette-list { display: flex; flex-direction: column; gap: var(--sp-1); max-height: 320px; overflow-y: auto }
+.palette-group { font-size: var(--fs-sm); color: var(--muted); padding: var(--sp-2) var(--sp-2) 0; line-height: var(--lh-tight) }
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-md);
+  line-height: var(--lh-tight);
+  cursor: pointer;
+}
+.palette-row.on { background: var(--panel-2) }
+.palette-keys { font-size: var(--fs-xs); color: var(--muted); text-align: right }
+/* 键位徽标（T-G61）：一个**小原语** —— 底栏那个「命令 Ctrl K」和面板里每一行都用同一份，
+   后面要给别的按钮标快捷键也复用它（每处再写一遍"边框+字号+内边距"就是同形状抄 N 份）。 */
+.kbd {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0 var(--sp-1);
+  line-height: var(--lh-tight);
+}
+
 /* ---------- 移动端（A 档） ---------- */
 /* 中屏（<980px，与上面三栏块互斥）：退回单列 —— 左栏变成主区上方的一条横向导航，右栏落到主区下方 */
 @media (max-width: 979px) {
@@ -816,6 +879,10 @@ nav button:not([disabled]):hover,
 /* 色块取样：它的底是**数据**（行内写死的那个颜色，不能让 hover 盖掉），所以只动那圈描边。
    灰阶三档：默认 `--border` → 悬停 `--border-strong` → 选中 `--ink`（选中的态压过悬停）。 */
 .swatch:not(.on):not([disabled]):hover { border-color: var(--border-strong) }
+/* 命令面板的行（T-G61）：它是**列表项**不是按钮，所以 hover 与"当前选中"共用同一层浅底
+   （都交给 `--panel-2`）；上面那条"实心强调底"是给主按钮的，套到行上会变成一列蓝块。
+   行是 div（焦点留在过滤框），所以这条规则得单写 —— 它不匹配 `button:hover`。 */
+.palette-row:hover { background: var(--panel-2) }
 /* toast 上的动作按钮（模板里是 `.ghost`）：**不能套 `--panel-2`** ——
    亮色下那是浅灰、而 toast 的字是白的；往横幅里掺一点字色才是可见又安全的一层亮光。
    （乘出来的底是**不透明**的，所以对比度门算得了它；`…%, transparent` 那种写法算不了。） */

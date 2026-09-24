@@ -1715,3 +1715,58 @@ def test_group_admin_can_open_a_group_and_see_its_tasks() -> None:
     assert "async function toggleGroupTasks(id){" in html
     assert "api(`/api/groups/${encodeURIComponent(id)}/tasks`)" in html, "没走那条孤儿路由"
     assert 'data-action="task-' not in admin, "分组管理里出现了改任务的动作（这一节只管分组）"
+
+
+def test_command_palette_is_an_additive_keyboard_layer() -> None:
+    """T-G61：⌘K 命令面板 —— 键盘做成**附加层**（用户 2026-09-23 的原话）。
+
+    这一条钉的是"附加层"这个说法里最容易被违反的三件事：
+    ① **不碰鼠标路径**：它是新加的一层，原来那些按钮一个都没动（下面的断言全是"多出来的东西"，
+       没有一条要求删/改既有动作）；
+    ② **行不是按钮**：焦点留在过滤框里（`aria-activedescendant` 那套），否则 Tab 要在这十几行里
+       走一遍 —— 那就不是"键盘优先"是"键盘折磨"。这条最容易被"顺手改成 button"破坏；
+    ③ **不抢键**：单字母只在**没在打字**时生效，模态开着时不生效。
+
+    数据那半（每条命令的动作必须注册、键位不许重复、挂的 OP 入口里真有它）
+    由 `scripts/check_commands.py` 逐条对账（它的测试在 `tests/test_check_commands.py`）——
+    这里只钉标记层与那条"别抢键"的分支。真按键的那一遍在行为流层第 K 条。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    # ① 面板与它的三件套 + 入口本身（入口带键位徽标：借 Raycast 的"快捷键可学习"）
+    for needle in ('id="palette"', 'id="paletteInput"', 'id="paletteList"',
+                   'data-action="palette-open"', 'data-action="palette-close"',
+                   'data-action="palette-run"'):
+        assert needle in html, f"命令面板缺了：{needle}"
+    assert '<kbd class="kbd">Ctrl K</kbd>' in html, "入口上没写键位（新人不会知道有这层）"
+    assert 'aria-label="命令"' in html
+    # ② 行是 div（不是 button）：Tab 不许在行里走一遍
+    assert '<div class="palette-row' in html, "命令行不是 div"
+    assert '<button class="palette-row' not in html, "命令行被写成 button 了（Tab 会走一遍十几行）"
+    # ③ 遮罩必须是**兄弟**节点：若它是父节点，点面板里的输入框会冒泡命中父节点的 palette-close
+    palette = html.split('<div class="palette" id="palette"', 1)[1].split("</div>\n<nav", 1)[0]
+    assert palette.index("palette-backdrop") < palette.index("palette-box"), "遮罩与盒子是同级的"
+    assert 'class="palette-backdrop" data-action="palette-close"' in palette
+    assert "closest('[data-action]')" in html, "面板里的点击还得走同一条委托（别另开一套）"
+    # ④ 不抢键：打字时直接返回；模态开着时直接返回；单字母只在无修饰键时认
+    #    文件里有两条 keydown 监听（老的那条是 `data-enter` 回车），所以按**最后一条**切
+    keydown = html.rsplit("document.addEventListener('keydown', ev => {", 1)[1].split("\n});", 1)[0]
+    typing_guard = "closest('input,textarea,select,[contenteditable=\"true\"]')"
+    assert typing_guard in keydown, "在输入框里也抢键"
+    assert "if(m&&!m.hidden)return" in keydown, "模态开着时单字母快捷键还在生效"
+    assert "ev.ctrlKey||ev.metaKey||ev.altKey" in keydown, "带修饰键的也当单字母快捷键处理"
+    assert "ev.ctrlKey||ev.metaKey" in keydown and "ev.key==='k'" in keydown, "⌘K 没认两个平台"
+    # ⑤ Esc 关"最上面那一层"三档齐全（面板 → 模态 → 详情）
+    for needle in ("closePalette()", "closeModal(null)", "ACTIONS['task-close']()"):
+        assert needle in keydown, f"Esc 少了一档：{needle}"
+    # ⑥ 过滤走 input 事件（中文输入法选字不发 keydown —— 只有这条路抓得到）
+    assert "addEventListener('input'" in html, "过滤没挂 input 事件（中文输入会筛不出来）"
+    # ⑦ 「新建任务」不造第二个创建路径：切到今天 + 聚焦那个输入框（OP-1 的入口本来就是它）
+    fn = html.split("function paletteNewTask(){", 1)[1].split("\n}", 1)[0]
+    assert "view('today')" in fn and "getElementById('newTitle')" in fn, "它自己另写了一条创建路径"
+    assert "/api/tasks" not in fn, "命令面板里的「新建任务」不该自己打接口"
+    # ⑧ 面板跑命令一律**复用 ACTIONS**（不是第二套实现）
+    run = html.split("async function runCommand(cmd){", 1)[1].split("\n}", 1)[0]
+    assert "ACTIONS[cmd.action]" in run, "面板没有复用动作注册表"
+    css = WEB_CSS.read_text(encoding="utf-8")
+    for needle in (".palette {", ".palette-box", ".palette-row.on", ".kbd {"):
+        assert needle in css, f"app.css 缺了：{needle}"

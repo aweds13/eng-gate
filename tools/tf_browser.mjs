@@ -306,15 +306,24 @@ export class Cdp {
     await this.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...p, buttons: 0 })
   }
 
-  /** 真按键（`Input.dispatchKeyEvent`）—— 走的是浏览器真正的事件管线，会触发 keydown/keyup。 */
+  /** 真按键（`Input.dispatchKeyEvent`）—— 走的是浏览器真正的事件管线，会触发 keydown/keyup。
+   *  ★ 单字母也认（T-G61）：键盘层的快捷键就是字母（`t`/`f`/`r`/`n`…），
+   *  一个个登记进表里只会让"加个键位"变成改工具 —— 字母的 VK 码与 ASCII 大写一致，可以直接算。 */
   async key(name) {
     const table = {
       Enter: { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 },
       Tab: { key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 },
       Escape: { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 },
       Backspace: { key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8, nativeVirtualKeyCode: 8 },
+      // 方向键（T-G61：命令面板用 ↑↓ 换选中）
+      ArrowDown: { key: 'ArrowDown', code: 'ArrowDown', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40 },
+      ArrowUp: { key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 },
     }
-    const k = table[name]
+    const k = table[name] || (/^[a-zA-Z]$/.test(name)
+      ? { key: name.toLowerCase(), code: 'Key' + name.toUpperCase(),
+          windowsVirtualKeyCode: name.toUpperCase().charCodeAt(0),
+          nativeVirtualKeyCode: name.toUpperCase().charCodeAt(0) }
+      : null)
     if (!k) throw new Error(`没有登记这个键：${name}（要用就往 Cdp.key 的表里加一条）`)
     await this.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...k })
     await this.send('Input.dispatchKeyEvent', { type: 'keyUp', ...k })
@@ -325,6 +334,19 @@ export class Cdp {
    *  于是"合法时段加不上"伪装成了界面缺陷）。 */
   async selectAll() {
     const base = { key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65, modifiers: 2 }
+    await this.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base })
+    await this.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base })
+  }
+
+  /** 组合键（`Ctrl/⌘ + 字母`）—— 键盘层要用（T-G61：⌘K 命令面板）。
+   *  CDP 的 `modifiers` 是位掩码：Alt=1 / Ctrl=2 / Meta=4 / Shift=8。
+   *  界面认的是 `ev.ctrlKey || ev.metaKey`（两个平台各一套），默认发 **Ctrl**（这台机器是 Windows）；
+   *  要验另一半就传 `{meta:true, ctrl:false}`。 */
+  async chord(letter, { ctrl = true, meta = false, shift = false } = {}) {
+    const up = String(letter).toUpperCase()
+    const vk = up.charCodeAt(0)
+    const modifiers = (ctrl ? 2 : 0) | (meta ? 4 : 0) | (shift ? 8 : 0)
+    const base = { key: letter, code: 'Key' + up, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers }
     await this.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base })
     await this.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base })
   }

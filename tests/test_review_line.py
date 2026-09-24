@@ -9,7 +9,8 @@
 
 from __future__ import annotations
 
-from datetime import date
+import importlib
+from datetime import date, datetime, time, timezone
 from typing import TYPE_CHECKING
 
 import pytest
@@ -32,6 +33,31 @@ def conn(tmp_path):  # type: ignore[no-untyped-def]
     yield c
     c.close()
     facts_mod.clear()
+
+
+@pytest.fixture(autouse=True)
+def frozen_review_clock(monkeypatch):  # type: ignore[no-untyped-def]
+    """本文件所有用例的复习线「现在」都钉在**今天本地正午**（返回值可被用例覆盖）。
+
+    为什么要钉（2026-09-24 23:53 那次全量门禁红的根因）：FSRS 的学习步长是**分钟级**
+    （学习中的卡「记得」→ +10 分钟），而落库只存**本地日历日**（`_local_date`）。
+    于是"复习完这张卡还算不算今天到期"会随跑门禁的时刻变：
+
+    - 23:57 跑：下一步落在 00:07 → 存成明天 → 卡不在今天的 My Day 里 → 用例红；
+    - 过了午夜再跑：又是绿的（「忘了」那档的间隔回到今天之内）。
+
+    同一族问题 T-G40 记过一次（判据依赖墙上时钟，那次是"星期几"），修法一样：
+    **把时钟钉住**，不去改产品行为（凌晨复习、下一步落在明天，本来就是 SRS 的正常语义）。
+    ★ 只钉 FSRS 用到的那个时刻：`date.today()` 仍是真实日期，所以"今天"没有被伪造。
+    没做：`date.today()` 跨午夜那一瞬（写 23:59:59.9、读 00:00:00.1）仍是 1 秒窗口。
+    """
+    moment = datetime.combine(date.today(), time(12, 0)).astimezone(timezone.utc)
+    # ★ 必须拿到**实现模块**再 setattr：包的 `__init__` 把同名函数 `review` 重新绑进了包命名空间，
+    #   于是 `from timeflow.core.review import review` 拿到的是**函数**，
+    #   而 monkeypatch 的"点号路径"写法也会走到函数上去（它逐段 getattr）→ AttributeError。
+    impl = importlib.import_module("timeflow.core.review.review")
+    monkeypatch.setattr(impl, "_now", lambda: moment)
+    return moment
 
 
 # ---- 事实 ----
@@ -114,12 +140,37 @@ def test_due_items_to_myday_entries(conn: sqlite3.Connection) -> None:
 
 
 def test_learning_card_stays_due_until_graduated(conn: sqlite3.Connection) -> None:
-    """FSRS 学习阶段的卡当天仍到期（会继续留在 My Day），但账目只计一次。"""
+    """FSRS 学习阶段的卡当天仍到期（会继续留在 My Day），但账目只计一次。
+
+    ★ 时钟由上面那条 autouse fixture 钉在正午：步长是分钟级，结论随"离午夜多久"变。
+    """
     rid = rv.create_item(conn, "格林公式")
     rv.review(conn, rid, rv.RATING_REMEMBER)
 
     assert [e["id"] for e in rv.myday_entries(conn)] == [rid]
     assert ledger.summary(conn).review_count == 1
+
+
+def test_learning_step_crossing_midnight_lands_tomorrow(
+    conn: sqlite3.Connection, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    """把"跨午夜"这条行为钉住（2026-09-24 23:57 那次门禁红查出来的事实）。
+
+    学习中的卡在本地 23:57「记得」→ FSRS 的下一步 +10 分钟落在 00:07（明天）→
+    存成明天的日期 → 它**正确地**离开今天的 My Day。这不是缺陷、是 SRS 的正常语义，
+    所以修的是**依赖墙上时钟的用例**（上面那条 autouse fixture 钉到正午），
+    而这里把行为本身写死：谁想"顺手改成留在今天"，得先回答为什么。
+    """
+    late = datetime.combine(date.today(), time(23, 57)).astimezone(timezone.utc)
+    impl = importlib.import_module("timeflow.core.review.review")
+    monkeypatch.setattr(impl, "_now", lambda: late)
+    rid = rv.create_item(conn, "跨午夜的下一步")
+    rv.review(conn, rid, rv.RATING_REMEMBER)
+
+    tomorrow = date.fromordinal(date.today().toordinal() + 1).isoformat()
+    assert rv.get_item(conn, rid)["due_date"] == tomorrow
+    assert rv.myday_entries(conn) == []
+    assert ledger.summary(conn).review_count == 1  # 今天复习过，账目照记
 
 
 def test_graduated_card_leaves_myday(conn: sqlite3.Connection) -> None:

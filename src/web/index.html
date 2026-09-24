@@ -32,6 +32,12 @@
       <button data-action="view" data-view="offline">离线记</button>
       <button id="refresh" class="ghost" data-action="refresh">刷新</button>
       <button id="railToggle" class="ghost" data-action="rail-toggle">收起右栏</button>
+      <!-- 命令面板的入口（T-G61）。**这是鼠标那半的「可学习性」**：键位得有个地方写着，
+           否则"键盘附加层"只有已经知道的人用得上（T-G28 从 Raycast 借的就这一条，不是键盘优先）。
+           徽标写死 `Ctrl K`（不按系统切成 ⌘K）：渲染黄金是逐字节比的，按平台变的标签
+           会让同一份黄金在两台机器上不一样 —— 而按键是**两个都认**（见下面的 keydown）。 -->
+      <button id="cmdBtn" class="ghost" data-action="palette-open" aria-label="命令"
+              title="命令面板（Ctrl+K / ⌘K）">命令 <kbd class="kbd">Ctrl K</kbd></button>
     </nav>
   </aside>
   <main id="main"></main>
@@ -52,6 +58,24 @@
       <button class="ghost" data-action="modal-cancel">取消</button>
       <button id="modalOk" data-action="modal-ok">确定</button>
     </div>
+  </div>
+</div>
+<!-- 命令面板（T-G61：「键盘优先」做成附加层）—— 默认不出现，Ctrl/⌘+K 打开。
+     四条为什么（每一条都是踩过的地方）：
+     ① **它不碰鼠标路径**：原有按钮一个没改、一个没删，这只是多一条通路；移动端不受影响（没键盘）。
+     ② 列表内容来自 `COMMANDS` 这张表 —— 它是 `ACTIONS`（+ `docs/commands.toml` 的契约口径）的**投影**，
+        不另写一套"命令"：`scripts/check_commands.py` 会逐条核对（动作必须注册、键位不重、OP 对得上）。
+     ③ **行是 div 不是 button**：焦点始终留在输入框（`aria-activedescendant` 那套），
+        否则 Tab 会在这十几行里走一遍 —— 那就不是"键盘优先"，是"键盘折磨"。
+     ④ 遮罩是 `.palette-box` 的**兄弟节点**（不是父节点）：这样"点空白处关掉"不会把
+        "点面板里的东西"一起命中（`closest('[data-action]')` 会往上找到父节点的 data-action）。 -->
+<div class="palette" id="palette" hidden>
+  <div class="palette-backdrop" data-action="palette-close"></div>
+  <div class="palette-box">
+    <input id="paletteInput" placeholder="命令或视图" aria-label="命令"
+           aria-controls="paletteList" autocomplete="off">
+    <div class="palette-list" id="paletteList" role="listbox" aria-label="命令"></div>
+    <div class="palette-keys">↑ ↓ Enter Esc</div>
   </div>
 </div>
 <nav class="bottom-nav">
@@ -758,6 +782,13 @@ const ACTIONS = {
                             if(ACTIONS[k]){ACTIONS[k](el);return}
                             view(k); },
   'refresh':        () => view(current),
+  // 命令面板（T-G61）：开 / 关 / 跑第几条 /「新建任务」那一条。
+  // 这四个都是**薄壳** —— 真正干活的是 ACTIONS 里已有的动作（`runCommand` 照 `COMMANDS` 那张表调用它们），
+  // 所以面板不是"第二套命令系统"，而是同一张注册表的另一个入口。
+  'palette-open':   () => openPalette(),
+  'palette-close':  () => closePalette(),
+  'palette-run':    el => runCommand(paletteMatches()[Number(el.dataset.index)]),
+  'palette-new-task': () => paletteNewTask(),
   'modal-ok':       () => closeModal(modalMode==='confirm'?true:document.getElementById('modalInput').value),
   'modal-cancel':   () => closeModal(null),
   'toast-run':      () => { const fn=toastRun; toastRun=null; if(fn) fn(); },
@@ -958,6 +989,143 @@ document.addEventListener('change', ev => {
   if (!el) return;
   const fn = ACTIONS[el.dataset.change];
   if (fn) fn(el); else console.warn('未注册的变化动作:', el.dataset.change);
+});
+
+/* ---------- 命令面板（T-G61：「键盘优先」做成附加层）----------
+ * 用户 2026-09-23：「键盘优先可以做成一种**附加功能**吗？就是我有些东西是要靠键盘的。」
+ * 所以这一层的第一条规矩是**不碰鼠标路径**：一个按钮都没改、没删，这只是**多一条通路**。
+ *
+ * 顺序是 T-G30 定的（理由见 `复盘/视觉续议-键盘与CLI-T-G30.md`）：
+ *   ① 一条全局焦点环（T-G45 已完成 —— 没有可见焦点，键盘优先是空话）
+ *   ② 界面命令表（T-G31 已完成 —— `docs/commands.toml` 是四个面共用的那个"点"）
+ *   ③ **本卡：⌘K 面板 + 首批快捷键**      ④ 再往后：CLI / MCP 读同一张表
+ *
+ * `COMMANDS` 就是这张面板的那份投影，每条四样东西：去哪看（group/title）、按什么键（keys）、
+ * 跑哪个**已注册**的动作（action/data）、对应哪条契约操作（op）。
+ * ★ `op` 不是装饰：`scripts/check_commands.py` 拿它去对 `docs/commands.toml` ——
+ *   要求"这条 OP 的界面入口里**真的有**这个动作/视图"。对不上就是漂移，门禁当场红。
+ *
+ * 键位生效的**三条边界**（"附加层"不惹麻烦的关键）：
+ *   · 只在**没在打字**时生效（`input/textarea/select/contenteditable` 里一概不抢键）；
+ *   · 模态开着时不生效（一次只服务一层浮层）；
+ *   · 只认**单字母**、不带 Ctrl/⌘/Alt（⌘K 自己除外）—— 不跟浏览器与系统快捷键抢。
+ */
+const COMMANDS = [
+  // 动作
+  { id:'new-task',    group:'动作', title:'新建任务',            keys:'n', action:'palette-new-task', op:'OP-1' },
+  { id:'focus-start', group:'动作', title:'开始专注（不绑任务）', keys:'',  action:'focus-start',      op:'OP-3' },
+  { id:'refresh',     group:'动作', title:'刷新当前页',           keys:'',  action:'refresh' },
+  { id:'rail-toggle', group:'动作', title:'收起 / 展开右栏',      keys:'',  action:'rail-toggle' },
+  // 去（视图）
+  { id:'today',     group:'视图', title:'今日',     keys:'t', action:'view', data:{view:'today'},     op:'OP-7' },
+  { id:'tasks',     group:'视图', title:'全部任务', keys:'',  action:'view', data:{view:'tasks'} },
+  { id:'important', group:'视图', title:'重要',     keys:'',  action:'view', data:{view:'important'}, op:'OP-45' },
+  { id:'planned',   group:'视图', title:'有计划',   keys:'',  action:'view', data:{view:'planned'},   op:'OP-45' },
+  { id:'flagged',   group:'视图', title:'已标记',   keys:'',  action:'view', data:{view:'flagged'},   op:'OP-45' },
+  { id:'focus',     group:'视图', title:'专注',     keys:'f', action:'view', data:{view:'focus'},     op:'OP-3' },
+  { id:'stats',     group:'视图', title:'统计',     keys:'s', action:'view', data:{view:'stats'} },
+  { id:'habit',     group:'视图', title:'习惯',     keys:'h', action:'view', data:{view:'habit'},     op:'OP-19' },
+  { id:'academic',  group:'视图', title:'学业',     keys:'',  action:'view', data:{view:'academic'},  op:'OP-25' },
+  { id:'review',    group:'视图', title:'复习',     keys:'r', action:'view', data:{view:'review'},    op:'OP-28' },
+  { id:'memo',      group:'视图', title:'备忘录',   keys:'',  action:'view', data:{view:'memo'},      op:'OP-35' },
+  { id:'team',      group:'视图', title:'团队',     keys:'',  action:'view', data:{view:'team'},      op:'OP-33' },
+  { id:'setting',   group:'视图', title:'设置',     keys:'p', action:'view', data:{view:'setting'},   op:'OP-41' },
+  { id:'offline',   group:'视图', title:'离线记',   keys:'',  action:'view', data:{view:'offline'},   op:'OP-49' },
+];
+let palFilter='', palActive=0;
+function paletteEl(){return document.getElementById('palette')}
+function paletteIsOpen(){const p=paletteEl();return !!p&&!p.hidden}
+function paletteMatches(){
+  const q=palFilter.trim().toLowerCase();
+  if(!q)return COMMANDS;
+  return COMMANDS.filter(c=>c.title.toLowerCase().includes(q)
+    ||(c.group||'').toLowerCase().includes(q)||c.id.includes(q));
+}
+function paintPalette(){
+  const list=document.getElementById('paletteList');if(!list)return;
+  const rows=paletteMatches();
+  if(palActive>=rows.length)palActive=rows.length-1;
+  if(palActive<0)palActive=0;
+  let html='',group=null;
+  rows.forEach((c,i)=>{
+    if(c.group!==group){group=c.group;html+=`<div class="palette-group">${esc(group||'')}</div>`}
+    html+=`<div class="palette-row${i===palActive?' on':''}" data-action="palette-run" data-index="${i}"`
+      +` role="option" aria-selected="${i===palActive}"><span class="grow">${esc(c.title)}</span>`
+      +(c.keys?`<kbd class="kbd">${esc(c.keys)}</kbd>`:'')+`</div>`;
+  });
+  list.innerHTML=html||emptyState('没找到');
+  const on=list.querySelector('.palette-row.on');
+  if(on&&on.scrollIntoView)on.scrollIntoView({block:'nearest'});
+}
+function openPalette(){
+  const p=paletteEl();if(!p)return;
+  const m=document.getElementById('modal');
+  if(m&&!m.hidden)return;                        // 一次只服务一层浮层：模态开着就不叠面板
+  p.hidden=false;palFilter='';palActive=0;
+  const i=document.getElementById('paletteInput');if(i)i.value='';
+  paintPalette();
+  if(i){i.focus();i.select()}                    // 焦点留在过滤框：直接打字母就是筛
+}
+function closePalette(){const p=paletteEl();if(p)p.hidden=true}
+/** 跑一条命令 —— **复用 ACTIONS**（面板是入口，不是第二套实现）。
+ *  合成一个只带 `data-*` 的元素传进去：与真按钮走的是同一条路（都读 `el.dataset.…`）。 */
+async function runCommand(cmd){
+  if(!cmd)return;
+  closePalette();
+  const el=document.createElement('span');
+  if(cmd.data)for(const k of Object.keys(cmd.data))el.dataset[k]=cmd.data[k];
+  const fn=ACTIONS[cmd.action];
+  if(!fn){console.warn('命令表里的动作没注册:',cmd.action);return}
+  await fn(el);
+}
+/** 「新建任务」这一条**不造第二个创建路径**：切到今日页、把光标放进那个输入框，
+ *  剩下的（写标题、回车）与鼠标走的是同一处 —— OP-1 的入口本来就写着那个输入框。
+ *  为什么要轮询：`view()` 要先等一次 `/api/config` 才画，画之前 `#newTitle` 还不存在。 */
+function paletteNewTask(){
+  view('today');
+  let n=0;
+  const timer=setInterval(()=>{
+    const i=document.getElementById('newTitle');
+    if(i){i.focus();clearInterval(timer);return}
+    if(++n>20)clearInterval(timer);              // 1 秒还不出来就放弃（不无限轮询）
+  },50);
+}
+/* 过滤必须走 `input` 事件：中文输入法选字时不发 keydown，最终文本只在 input/change 上。
+   这是全页唯一一个"直接挂在元素上"的监听（其余全走事件委托），因为它只服务这一个输入框。 */
+{const pi=document.getElementById('paletteInput');
+ if(pi)pi.addEventListener('input',ev=>{palFilter=ev.target.value||'';palActive=0;paintPalette()})}
+/* 键盘层：⌘K 面板、Esc 关最上面那层、7 个单字母快捷键。
+ * 为什么不挤进 `data-enter` 那条路：那条是"输入框回车 = 点同名按钮"，而这里要的是**全局**键位。 */
+document.addEventListener('keydown', ev => {
+  if((ev.ctrlKey||ev.metaKey)&&!ev.altKey&&(ev.key==='k'||ev.key==='K')){
+    ev.preventDefault();openPalette();return;
+  }
+  if(ev.key==='Escape'){
+    if(paletteIsOpen()){ev.preventDefault();closePalette();return}
+    const m=document.getElementById('modal');
+    if(m&&!m.hidden){ev.preventDefault();closeModal(null);return}   // 确认框：Esc = 取消（不动数据）
+    if(detailTaskId){ev.preventDefault();ACTIONS['task-close']();return}
+    return;
+  }
+  if(paletteIsOpen()){
+    // 面板开着时键位归面板：↑↓ 换选中、Enter 跑；**其余一概不抢**（留给过滤框）
+    if(ev.key==='ArrowDown'||ev.key==='ArrowUp'){
+      const n=paletteMatches().length;if(!n)return;
+      ev.preventDefault();
+      palActive=(palActive+(ev.key==='ArrowDown'?1:n-1))%n;
+      paintPalette();return;
+    }
+    if(ev.key==='Enter'){ev.preventDefault();runCommand(paletteMatches()[palActive]);return}
+    return;
+  }
+  if(ev.ctrlKey||ev.metaKey||ev.altKey)return;   // 单字母之外的一律不碰
+  const t=ev.target;
+  if(t&&t.closest&&t.closest('input,textarea,select,[contenteditable="true"]'))return;  // 在打字就不抢
+  const m=document.getElementById('modal');
+  if(m&&!m.hidden)return;
+  const key=String(ev.key||'').toLowerCase();
+  const cmd=COMMANDS.find(c=>c.keys&&c.keys===key);
+  if(cmd){ev.preventDefault();runCommand(cmd)}
 });
 
 async function render(name){

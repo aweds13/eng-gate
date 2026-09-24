@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=phone 390x844 view=habit rows=794 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=phone 390x844 view=habit rows=796 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,390,1165	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,390,65	16/normal/400	#1e293b/#000000@0.00	0;12px 16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	16,12,86,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
@@ -388,7 +388,8 @@ div.card.block:nth-child(3)>div.mt-4>svg.chart>rect.chart-cell-off:nth-child(364
 div.card.block:nth-child(3)>div.mt-4>svg.chart>rect.chart-cell-off:nth-child(365)	YYYY-MM-DD	351,337,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block:nth-child(3)>div.mt-4>svg.chart>rect.chart-cell-off:nth-child(366)	YYYY-MM-DD	351,343,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block:nth-child(3)>div.mt-4>svg.chart>rect.chart-cell-off:nth-child(367)	YYYY-MM-DD	351,349,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(3)>div.mt-4>svg.chart>rect.chart-cell-on	YYYY-MM-DD 已打卡	351,355,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(3)>div.mt-4>svg.chart>rect.chart-cell-off:nth-child(368)	YYYY-MM-DD	351,355,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(3)>div.mt-4>svg.chart>rect.chart-cell-on	YYYY-MM-DD 已打卡	351,362,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block:nth-child(3)>div.mt-4>div.sub.mt-2	近一年打卡（列=周，行=周一→周日）	33,388,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.block:nth-child(4)		16,435,358,210	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>main#main>div.card.block:nth-child(4)>div.habit-head		33,452,324,95	16/normal/400	#1e293b/#000000@0.00	0;0px
@@ -768,6 +769,7 @@ div.card.block:nth-child(4)>div.mt-4>svg.chart>rect.chart-cell-off:nth-child(365
 div.card.block:nth-child(4)>div.mt-4>svg.chart>rect.chart-cell-off:nth-child(366)	YYYY-MM-DD	351,565,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block:nth-child(4)>div.mt-4>svg.chart>rect.chart-cell-off:nth-child(367)	YYYY-MM-DD	351,571,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block:nth-child(4)>div.mt-4>svg.chart>rect.chart-cell-off:nth-child(368)	YYYY-MM-DD	351,577,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(4)>div.mt-4>svg.chart>rect.chart-cell-off:nth-child(369)	YYYY-MM-DD	351,583,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block:nth-child(4)>div.mt-4>div.sub.mt-2	近一年打卡（列=周，行=周一→周日）	33,610,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title	每日反馈（计划 vs 执行）	16,669,358,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>textarea#fbPlan		16,696,358,58	14/normal/400	#000000/#ffffff	10;12px

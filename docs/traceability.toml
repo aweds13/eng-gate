@@ -1038,6 +1038,14 @@ evidence = [
 ]
 gaps = ""
 
+[entries."T-G62"]
+id = "T-G62"
+title = "工程债（验证层）：渲染黄金里有两个视图锚在服务器的「今天」上（`habit` / `stats`）—— 跨午夜自己变红，要钉住「今天」才稳"
+group = "PROCESS"
+status = "todo"
+evidence = []
+gaps = "**现象（2026-09-25 00:0x 实测，T-G61 那轮重采黄金时暴露）**：上一轮黄金采于 2026-09-24 23:5x，跨过午夜再跑 `render` 就红了 —— **恰好 6 份**（`habit` × 3 档宽度 + `stats` × 3 档宽度），差异是热力图**格子数**少/多一格（`nth-child(368)` → `(369)`）与统计页窗口首日标签 `08-26` → `08-27`。**根因**：习惯热力图窗口是「53 周、到今天为止」，而**未来几天不渲染**（T-G55 的「未来留白」）→ 同一个星期内每过一天就多一个格子；窗口首日标签同样是「今天 - 370 天」。**为什么现在才发现**：这几轮黄金采得很勤（一张卡一采），跨天的差异被「当天采、当天提交」盖住了 —— 它是**慢漂移**，不是随机。**修法（下一张卡的施工图）**：给产品层加一个**可注入的「今天」**（`core/clock.py` 的 `today()` / `now()`，读环境变量 `TIMEFLOW_FAKE_TODAY`，默认仍是真实时钟），把 27 处 `date.today()`（10 个文件）+ `review._now()` 收敛过去；`tools/serve.py` 接 `--today`；两个采集工具（`render_check` / `ui_flow_check`）起服务时传一个**固定的今天**，`seedFixture` 也按那个今天算偏移 —— 这样「今天」在**服务器与 fixture 两侧同时钉住**，黄金跨天不再漂。**边界**：这是测试基础设施 + 一个小 seam，**不改任何用户可见行为**（默认走真实时钟）；代价是 27 处调用点要一起改，且 `ui_flow` 里那些依赖「真今天」的流要跟着复核（第 ㉗ 条离线缓存、跨端那几条）。**没做**：本卡只是记账 —— 发现它的是 T-G61（同日重采黄金时撞到），当天先按「重采一次」过关并把现象留档。"
+
 [entries."SR-F8.4"]
 id = "SR-F8.4"
 title = "预留产出评价器接口"
@@ -1428,6 +1436,33 @@ evidence = [
   "test:test_web_frontend.py",
 ]
 gaps = "**修了发现的两处**：`renderHabit` 的今天、`heatmap` 的格子日期（都改走 `todayISO()`，本机时区）。**它为什么会伤人**：`new Date().toISOString()` 给的是 UTC 日期，本机 UTC+8 → **本地 0–8 点算出来是昨天**：界面把「今天已打卡」显示成「打卡」，而点下去（服务端按本地今天翻转）会把那次打卡**取消**掉，提示还写着「已打卡」。**护栏两层**（都在 `test_web_frontend.py`）：全文件级不许出现裸的 `new Date().toISOString()`；函数级 `renderHabit`/`heatmap` 里不许出现 `toISOString` —— 判的是**剥掉注释后的代码**（不剥注释会把「别这么写」那句解释也判红，同 T-G39 的教训），并用合成数据证明它咬得住。**没做**：全仓的「日期取法」清点（`docs/` / `tools/` / 别的 `.js`）；护栏只扫 `index.html`。"
+
+[entries."T-G61"]
+id = "T-G61"
+title = "键盘附加层（SR-NF1 / N30）：⌘K 命令面板 + 首批快捷键（命令表驱动：`COMMANDS` ↔ `ACTIONS` ↔ `docs/commands.toml` 三方对账）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/键盘附加层-命令面板-T-G61.md",
+  "text:src/web/index.html::const COMMANDS = [",
+  "text:src/web/index.html::'palette-open':   () => openPalette(),",
+  "text:src/web/index.html::<div class=\"palette\" id=\"palette\" hidden>",
+  "text:src/web/index.html::async function runCommand(cmd){",
+  "text:src/web/index.html::closest('input,textarea,select,[contenteditable=\"true\"]')",
+  "text:src/web/app.css::.palette-box {",
+  "text:src/web/app.css::.kbd {",
+  "text:scripts/check_commands.py::def ui_commands() -> list[dict[str, str]]:",
+  "text:scripts/check_commands.py::命令面板 {cid}：声称对应 {op}，但 {op} 的界面入口里没有 {want}",
+  "text:tools/render_check.mjs::const PSEUDO_VIEWS = {",
+  "text:tools/ui_flow_check.mjs::id: 'K', name: '命令面板（键盘附加层）",
+  "text:docs/commands.toml::data-action=palette-new-task",
+  "text:docs/specification/nonfunctional.md::键盘附加层（2026-09-25，T-G61）",
+  "test:test_check_commands.py",
+  "test:test_web_frontend.py",
+  "test:test_ui_flow_check.py",
+  "test:test_review_line.py",
+]
+gaps = "**用户 2026-09-23 要的「键盘优先做成附加功能」，按 T-G30 排的顺序做到第 ③ 步**（① 焦点环 T-G45 ✅ / ② 命令表 T-G31 ✅ / ③ 面板 + 快捷键 = 本卡 / ④ CLI·MCP 待做）。**三件东西**：① `index.html` 的 `const COMMANDS`（18 条 × 7 键位：`n` 新建任务 · `t/f/r/s/h/p` 六视图）；② ⌘K 面板（`Ctrl/⌘+K` 开、打字筛、`↑↓` 换选中、`Enter` 跑、`Esc` 关；鼠标点左栏「命令」也能开、点空白关）；③ Esc 三层（面板 → 模态 → 右栏详情）。**顺手补的真缺口**：模态从 R2 建起来那天的注释就写着「可键盘」，但 **`Esc` 对它一直没有作用**（现在 `Esc` = 取消，确认框不动数据 —— 流层第 K 条拿「任务还在」证明这一点）。**四条口径**：只加不改（原按钮一个没删没改）；行是 `div` 不是 `button`（焦点留在过滤框，否则 Tab 要走十几行）；不抢键（打字时/模态开着时/带修饰键时一概不认）；面板里没有一行自己打接口（「新建任务」只做「切今日 + 聚焦输入框」，创建路径仍只有 OP-1 那一条）。**「不是第二套命令系统」是机器判的**：`check_commands.py` 新增一节 —— 每条命令的动作必须真注册、键位不许重复、视图在 `VIEWS` 里、**声称对应的 OP 的 `ui` 里真有这个动作/视图**（第一次跑就报出 6 条对不上）；顺带把 6 条一直空着的 `ui` 补上（OP-1 加 `palette-new-task`，OP-7/OP-3/OP-19/OP-25/OP-35 各加一个 `view=`），**「还没填出界面入口的」10 条 → 7 条**。**新增采集能力**：浮层默认不出现，渲染层加 `PSEUDO_VIEWS`（`open` + `over`）——`over` 写死「先回今日页」，否则会重演 T-G51 那个「采到别的页版式」的假黄金；黄金 42 → **45 份**（3 档宽度 × 15）。**踩到的两个坑**：① 读那张表**不能用正则、也不能「找第一个 `{` 再配对」** —— 注释里的 `{` 会被当成条目开头，然后配到别处的 `}`，报「括号没配对」；改成「一个扫描器同时跳字符串/注释与配对」，并把「注释里放 `{` 与 `'`」钉成测试。② `ruff` 的 E501 按**显示宽度**算（中日韩字符算 2 列）—— 一行 80 个字符可能已经 107，中文表格行要按宽度留余量。**顺带修的两条（都不属本卡功能面）**：① 面板的「没找到」第一版直接写 `<div class=\"empty\">`，被 R5 那条「空态只有一个出口」的护栏当场拦下 → 改走 `emptyState()`；② **一条门禁午夜红** —— 2026-09-24 23:53 起 `pytest` 红两条复习线用例、**过了午夜又自己变绿**：FSRS 学习步长是分钟级、落库只存本地日历日，23:57 复习「记得」的下一步落在 00:07，卡「正确地」离开今天的 My Day 而用例假设它还在（同族问题 T-G40 记过，那次是「星期几」）。**修的是用例不是产品**：`tests/test_review_line.py` 加 autouse fixture 把「现在」钉在本地正午（只钉 FSRS 那一刻，`date.today()` 仍是真日期）+ 新增一条**把跨午夜行为写死**的用例；补丁要用 `importlib.import_module` 拿实现模块（包 `__init__` 把同名函数 `review` 重绑进了包命名空间，点号路径会走到函数上）。**边界（不许假装验证过）**：只认单字母 + ⌘K（没做可配置键位/键位表浮层）；面板只有 18 条命令（`ACTIONS` 有 147 个，绝大多数是必须带 id 的上下文动作，**有意**不进面板）；`Ctrl K` 徽标**写死**不按平台换成 `⌘K`（黄金逐字节比，按平台变的标签会让同一份黄金在两台机器上不一样；按键两个都认）；移动端不受益（≤640px 没键盘、左栏隐藏）；AI/MCP 读同一张表属第 ④ 步，未做。"
 
 [entries."T-G60"]
 id = "T-G60"

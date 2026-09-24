@@ -34,7 +34,7 @@
 [commands."OP-1"]
 title = "新建任务"
 routes = ["POST /api/tasks"]
-ui = ["data-action=task-add", "data-action=task-add-here"]
+ui = ["data-action=task-add", "data-action=task-add-here", "data-action=palette-new-task"]
 kind = "write"
 reversible = "可删除（见 OP-6）"
 ai = ["none"]
@@ -51,7 +51,7 @@ ai = ["none"]
 [commands."OP-3"]
 title = "开始专注"
 routes = ["POST /api/focus/start", "GET /api/focus/active"]
-ui = ["data-action=focus-start", "data-action=task-focus"]
+ui = ["data-action=focus-start", "data-action=task-focus", "view=focus"]
 kind = "write"
 reversible = "可放弃（见 OP-4）"
 ai = ["none"]
@@ -118,11 +118,11 @@ ai = ["none"]
 [commands."OP-7"]
 title = "查看今日摘要"
 routes = ["GET /api/summary", "GET /api/focus/today", "GET /api/review/today"]
-ui = []
+ui = ["view=today"]
 kind = "read"
 reversible = "—（只读）"
 ai = ["none"]
-note = "顶部摘要区是**常驻渲染区、不是按钮**，所以没有 data-action 也没有对应 view。"
+note = "摘要区本身是**常驻渲染区、不是按钮**（所以没有 data-action）；它的入口是**今日页** —— 左栏「今日」与命令面板都走 `view=today`。"
 
 [commands."OP-8"]
 title = "重复任务生成下一次（联动项）"
@@ -245,7 +245,7 @@ note = "后四条来自契约「实现补充（第 10 步）」的新建/改名/
 [commands."OP-19"]
 title = "查看习惯热力图"
 routes = ["GET /api/habits", "GET /api/habits/{habit_id}"]
-ui = []
+ui = ["view=habit"]
 kind = "read"
 reversible = "只读"
 ai = ["none"]
@@ -306,7 +306,7 @@ note = "task_type / course_id 是任务属性，**没有专用端点**；task-op
 [commands."OP-25"]
 title = "课程提醒"
 routes = ["GET /api/assessments/upcoming"]
-ui = []
+ui = ["view=academic"]
 kind = "read"
 reversible = "可关闭提醒"
 ai = ["none"]
@@ -409,7 +409,7 @@ note = "契约同时含只读与新增/勾完成，所以 ai 是**两个值**；
 [commands."OP-35"]
 title = "新建备忘录"
 routes = ["POST /api/memos", "DELETE /api/memos/{memo_id}"]
-ui = ["data-action=memo-add", "data-action=memo-delete"]
+ui = ["data-action=memo-add", "data-action=memo-delete", "view=memo"]
 kind = "write"
 reversible = "可删除（确认）"
 ai = ["none"]

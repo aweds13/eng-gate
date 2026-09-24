@@ -2,12 +2,14 @@
 
 两层：
 1. **零件层**：喂合成文件（临时目录里放极小的 contracts / app.py / index.html），
-   钉住"基础篇 + 领域篇双节怎么取正名""路由怎么解析""ACTIONS/VIEWS 怎么读"；
-2. **数据层**：拿**真仓库**跑一遍，断言 0 条硬冲突（表与三个真源同步）+ 表覆盖全部 OP。
+   钉住"基础篇 + 领域篇双节怎么取正名""路由怎么解析""ACTIONS/VIEWS 怎么读""命令面板那张表怎么读"；
+2. **数据层**：拿**真仓库**跑一遍，断言 0 条硬冲突（表与三个真源同步）+ 表覆盖全部 OP
+   + 命令面板那份投影与 ACTIONS / 契约对得上。
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -73,6 +75,37 @@ def test_ui_names_reads_actions_and_views(tmp_path, monkeypatch) -> None:  # typ
     assert views == {"today", "tasks"}
 
 
+def test_ui_commands_reads_the_palette_table(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """命令面板那张表（T-G61）要能读出来，而且**不被嵌套结构或注释带偏**。
+
+    ★ 这一段特意放了三种"会让正则翻车"的东西：注释里成对的 `{` 与单引号、
+    每条里嵌套的 `data:{view:'…'}`、以及结尾那个 `];` 后面还有别的代码。
+    第一版 `ACTIONS` 就是被"函数体里的 `};`"截断过（报出 15 条假冲突），
+    所以这里用**括号配对**读，并把这个失败模式钉成一条测试。
+    """
+    html = _write(
+        tmp_path,
+        "index.html",
+        "const VIEWS=['today','review'];\n"
+        "const COMMANDS = [\n"
+        "  // 注释里写 { 和 ' 也要能跳过（不然括号配对会数错）\n"
+        "  { id:'new-task', group:'动作', title:'新建任务', keys:'n',"
+        " action:'palette-new-task', op:'OP-1' },\n"
+        "  { id:'review', group:'视图', title:'复习', keys:'r', action:'view',"
+        " data:{view:'review'}, op:'OP-28' },\n"
+        "];\n"
+        "const ACTIONS = { 'view': el => x, 'palette-new-task': () => y };\n",
+    )
+    monkeypatch.setattr(cc, "INDEX", html)
+    cmds = cc.ui_commands()
+    assert [c["id"] for c in cmds] == ["new-task", "review"], cmds
+    assert cmds[0]["keys"] == "n" and cmds[0]["op"] == "OP-1"
+    assert cmds[0]["action"] == "palette-new-task" and cmds[0]["view"] == ""
+    assert cmds[1]["action"] == "view" and cmds[1]["view"] == "review"
+    assert [c["group"] for c in cmds] == ["动作", "视图"]
+    assert cc.ui_commands.__doc__ is not None
+
+
 # ------------------------------------------------------------------ 数据层（真仓库）
 
 
@@ -112,3 +145,53 @@ def test_real_table_columns_are_valid_enums() -> None:
         assert kind in cc.KINDS or kind == "", f"{oid} 的 kind 非法：{kind!r}"
         for scope in cc.as_list(row.get("ai", [])):
             assert scope in cc.AI_SCOPES, f"{oid} 的 ai 非法：{scope!r}"
+
+
+def test_real_palette_is_a_projection_not_a_second_system() -> None:
+    """T-G61：命令面板那张表必须与 ACTIONS / 契约命令表**逐条对得上**。
+
+    "⌘K 只是同一张表的另一个入口"这句话如果没人判，第三轮就会变成"面板自己有一份命令" ——
+    所以逐条钉：动作真注册过、视图在 VIEWS 里、键位不重复、声称对应的 OP 的界面入口里真有它。
+    """
+    actions, views = cc.ui_names()
+    table = cc.load_commands()
+    ops, _ = cc.contract_ops()
+    cmds = cc.ui_commands()
+    assert len(cmds) >= 15, f"命令面板只有 {len(cmds)} 条命令，像是表被删了"
+    ids = [c["id"] for c in cmds]
+    assert all(ids), f"有命令没写 id：{ids}"
+    assert len(set(ids)) == len(ids), f"命令 id 有重复：{ids}"
+    keys = [c["keys"] for c in cmds if c["keys"]]
+    assert len(set(keys)) == len(keys), f"键位有重复（会抢键）：{keys}"
+    assert len(keys) >= 5, f"只有 {len(keys)} 个键位 —— 那就不叫快捷键层了"
+    with_op = 0
+    for c in cmds:
+        assert c["action"] in actions, f"{c['id']} 的动作 {c['action']} 没在 ACTIONS 注册"
+        if c["view"]:
+            assert c["view"] in views, f"{c['id']} 的视图 {c['view']} 不在 VIEWS 里"
+        if not c["op"]:
+            continue
+        assert c["op"] in ops, f"{c['id']} 挂了契约里没有的 {c['op']}"
+        assert c["op"] in table, f"{c['id']} 挂了还没进命令表的 {c['op']}"
+        want = f"view={c['view']}" if c["view"] else f"data-action={c['action']}"
+        got = cc.as_list(table[c["op"]].get("ui"))
+        assert want in got, (
+            f"{c['id']} 声称对应 {c['op']}，但那条 OP 的入口里没有 {want}（现在：{got}）"
+        )
+        with_op += 1
+    assert with_op >= 10, f"只有 {with_op} 条对得上契约 OP —— 面板正在与契约脱钩"
+
+
+def test_checker_main_is_green_on_the_real_repo(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """真仓库跑一遍**门禁那条判定**（`--check --json`）：0 条硬冲突才算过。
+
+    为什么不只测零件：门禁跑的是 `main()`，如果只在测试里重写一遍判定，
+    两边可以各自演化 —— 那正是"我测的是我以为的规则"。
+    """
+    monkeypatch.setattr(sys, "argv", ["check_commands.py", "--check", "--json"])
+    assert cc.main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["problems"] == []
+    assert report["palette_commands"] >= 15
+    assert report["palette_with_op"] >= 10
+    assert len(report["palette_keys"]) == len(set(report["palette_keys"]))

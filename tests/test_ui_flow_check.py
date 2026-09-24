@@ -89,6 +89,10 @@ def test_every_declared_item_still_exists_in_handover() -> None:
 
     口径：人工项清单散在 `§二 待人工确认` 那一段（编号 ①…㉘ 与 `T-G11 ㉑`）。
     这里只断言"编号在这个文档里出现过"（宽松但够用：它拦的是**凭空编号**）。
+
+    ★ **例外（T-G61）**：新加的面（如 ⌘K 命令面板）本来就**没有**人工项可搬 ——
+    那一列写「新增（不是搬移项）：…」时不做编号对账。这一列不许留空（这是本节的全部意义）：
+    要么指回一条人工项，要么明说它是新增的。
     """
     proc = run_tool("--list")
     assert proc.returncode == 0
@@ -97,6 +101,8 @@ def test_every_declared_item_still_exists_in_handover() -> None:
         if "\t" not in row:
             continue
         item = row.split("\t")[2].removeprefix("← ")
+        if item.startswith("新增"):
+            continue
         # 声明形如「前端批次③ ⑦ 今日页新手引导卡片」——取其中的编号/关键词去文档里找
         tokens = ("⑦", "⑧", "⑨", "⑩", "①", "③", "⑥", "④", "⑬", "⑮", "⑯", "⑰",
                   "㉓", "㉔", "㉕", "㉗", "㉑")

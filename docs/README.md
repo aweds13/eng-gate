@@ -79,7 +79,8 @@ config.example.toml / pyproject.toml
 - ⚠️ **已知断层**：契约层 `contracts/` 揭示多项"操作闭环/模块联动"缺口（详见 `../复盘/三层断裂诊断-实现与交互复盘.md`），存在 ≠ 完成，LC-1~LC-8 多数仍 ❌。
 - ✅ 质量门：`scripts/run_gates.py` **阻断门**（pytest / 验收 / ruff / mypy / 五层对齐 / 护栏自测 / **对比度门** / **一致性门** / 命令表 / DOM 探针 / 台账审计 / 台账↔规格标题对账 / 两项真机自检 / **渲染验证层** / **行为流层**）；覆盖率门 70%（写在 `pyproject.toml`）。
   **项数与逐项数字一律以 `gates/last.json` 为准**（每轮落盘，别再往这里抄数 —— 抄过三次都漂了）。
-- ✅ **渲染验证层**（`../tools/render_check.mjs`，T-G32）：**真浏览器**把 3 档宽度 × 14 个视图采成
+- ✅ **渲染验证层**（`../tools/render_check.mjs`，T-G32）：**真浏览器**把 3 档宽度 × 14 个视图
+  （**+ 浮层**：⌘K 命令面板这类默认不出现的面，用 `PSEUDO_VIEWS` 先站到它盖住的那一页再打开）采成
   「几何清单」与 `gates/render/*.txt` 的黄金**逐字节比**；每轮采两遍做确定性自检；
   起不了浏览器记 **NOT RUN**（**不是通过**）。改黄金要 `--update --reason`，理由落 `gates/render/LAST_UPDATE.md`。
 - ✅ **行为流层**（`../tools/ui_flow_check.mjs`，T-G34）：**真浏览器 + 真点击（带命中测试）+ 真按键**，

@@ -1,6 +1,6 @@
-# render-manifest v1 viewport=desktop 1280x900 view=stats rows=458 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=desktop 1280x900 view=stats rows=461 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,1280,1297	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
-html>body>div.shell>aside.rail		24,0,168,756	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
+html>body>div.shell>aside.rail		24,0,168,797	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,16,167,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	24,46,167,59	13/19.5/400	#5b6472/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,116,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
@@ -19,6 +19,8 @@ div.shell>aside.rail>nav>button:nth-child(13)	设置	24,584,167,35	13/normal/400
 div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,623,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
 div.shell>aside.rail>nav>button#refresh	刷新	24,662,167,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
 div.shell>aside.rail>nav>button#railToggle	收起右栏	24,703,167,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button#cmdBtn	命令	24,744,167,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+aside.rail>nav>button#cmdBtn>kbd.kbd	Ctrl K	67,758,43,13	11/13.2/400	#5b6472/#000000@0.00	6;0px 4px
 html>body>div.shell>main#main		216,0,716,1297	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
 body>div.shell>main#main>div.card.block:nth-child(1)		240,0,668,206	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>main#main>div.card.block:nth-child(1)>div.meta	近 30 天专注走势（分钟）· 合计 0 分钟 · 有投入 0 天 · 单日最高 0	257,17,634,18	12/18/400	#5b6472/#000000@0.00	0;0px
@@ -26,7 +28,7 @@ div.shell>main#main>div.card.block:nth-child(1)>div.mt-4		257,47,634,120	16/norm
 main#main>div.card.block:nth-child(1)>div.mt-4>svg.chart		257,47,634,120	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block:nth-child(1)>div.mt-4>svg.chart>polygon.chart-area		257,163,634,4	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.card.block:nth-child(1)>div.sub.split		257,171,634,18	12/18/400	#5b6472/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(1)>div.sub.split>span:nth-child(1)	08-26	257,171,31,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(1)>div.sub.split>span:nth-child(1)	08-27	257,171,31,18	12/18/400	#5b6472/#000000@0.00	0;0px
 main#main>div.card.block:nth-child(1)>div.sub.split>span:nth-child(2)	今天	867,171,24,18	12/18/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(2)	投入分布（按任务分组 · 近 30 天）	240,230,668,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.block:nth-child(3)		240,258,668,122	16/normal/400	#1e293b/#ffffff	10;16px
@@ -452,6 +454,7 @@ div.card.block:nth-child(11)>div#hmBox>svg.chart>rect.chart-cell-off:nth-child(3
 div.card.block:nth-child(11)>div#hmBox>svg.chart>rect.chart-cell-off:nth-child(366)	YYYY-MM-DD	879,1084,10,10	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block:nth-child(11)>div#hmBox>svg.chart>rect.chart-cell-off:nth-child(367)	YYYY-MM-DD	879,1096,10,10	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block:nth-child(11)>div#hmBox>svg.chart>rect.chart-cell-off:nth-child(368)	YYYY-MM-DD	879,1108,10,10	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect.chart-cell-off:nth-child(369)	YYYY-MM-DD	879,1120,10,10	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.card.block:nth-child(11)>div#hmNote	专注 · 颜色越深=当天投入越多；空=没有记录（不是失败，只是那天没记）。	257,1160,634,18	12/18/400	#5b6472/#000000@0.00	0;0px
 html>body>div.shell>aside.sidebar		956,0,300,138	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
 body>div.shell>aside.sidebar>div#focusRail		956,16,300,94	16/normal/400	#1e293b/#ffffff	10;16px
