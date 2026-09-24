@@ -1,9 +1,9 @@
-# render-manifest v1 viewport=phone 390x844 view=academic rows=152 accent=#2f6feb device=ph-000000000000
-html>body>div.shell		0,0,390,2471	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
+# render-manifest v1 viewport=phone 390x844 view=academic rows=151 accent=#2f6feb device=ph-000000000000
+html>body>div.shell		0,0,390,2435	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,390,66	16/normal/400	#1e293b/#000000@0.00	0;12px 14px 0px
 body>div.shell>aside.rail>h1	timeflow ·	14,12,86,24	18/normal/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	14,46,356,20	13/19.5/400	#64748b/#000000@0.00	0;0px
-html>body>div.shell>main#main		0,66,390,2129	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 24px
+html>body>div.shell>main#main		0,66,390,2093	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 24px
 body>div.shell>main#main>div.grid		14,66,362,166	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.grid>div.card:nth-child(1)		14,66,362,68	16/normal/400	#1e293b/#ffffff	12;14px 16px
 main#main>div.grid>div.card:nth-child(1)>div.big	86	30,80,35,40	30/normal/700	#2f6feb/#000000@0.00	0;0px
@@ -40,7 +40,7 @@ div.card.block:nth-child(7)>div.meta.mt-2>div.new.mv-2>button.ghost	挂上	304,6
 div.shell>main#main>div.card.block:nth-child(7)>div.row.mt-2		30,697,330,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block:nth-child(7)>div.row.mt-2>button.ghost	删除考核项	30,697,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title:nth-child(8)	学业概览（多维）	14,768,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.block:nth-child(9)		14,795,362,492	16/normal/400	#1e293b/#ffffff	12;14px 16px
+body>div.shell>main#main>div.card.block:nth-child(9)		14,795,362,456	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.block:nth-child(9)>div.gpa-head		30,809,330,428	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block:nth-child(9)>div.gpa-head>div>svg.chart.radar		30,809,260,236	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.gpa-head>div>svg.chart.radar>polygon.axis-line:nth-child(1)		133,899,53,51	16/normal/400	#1e293b/#000000@0.00	0;0px
@@ -92,57 +92,56 @@ div.stat-label>div.mb-3:nth-child(5)>div.sub.split>span:nth-child(1)	课程覆�
 div.stat-label>div.mb-3:nth-child(5)>div.sub.split>span:nth-child(2)	1/1	342,1203,18,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.gpa-head>div.stat-label>div.mb-3:nth-child(5)>div.bar-track.tall		30,1219,330,10	16/normal/400	#1e293b/#eef2f7	6;0px
 div.stat-label>div.mb-3:nth-child(5)>div.bar-track.tall>div.bar-fill		30,1219,330,10	16/normal/400	#1e293b/#2f6feb	0;0px
-div.shell>main#main>div.card.block:nth-child(9)>div.sub	各轴各自归一到本图最大值，只看「是否均衡」，不用于跨人比较；成绩录得越多，覆盖越满。	30,1241,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(10)	课程	14,1307,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.new		14,1340,362,38	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.new>input#cName	(text)新建课程，如：高数	14,1340,272,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-div.shell>main#main>div.new>button	新建课程	296,1342,80,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-body>div.shell>main#main>div.card.block:nth-child(12)		14,1394,362,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.block:nth-child(12)>div.title	高等数学	30,1408,330,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block:nth-child(12)>div.meta	5学分 王老师 · 关联任务 1（未完成 1）	30,1429,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block:nth-child(12)>div.fact		30,1445,330,45	16/normal/400	#1e293b/#000000@0.00	0;4px 0px
-main#main>div.card.block:nth-child(12)>div.fact>span.badge	作业	36,1449,40,37	11/normal/400	#64748b/#ffffff	999;2px 8px
-main#main>div.card.block:nth-child(12)>div.fact>span.grow	第三章习题	86,1449,137,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(12)>div.fact>span.sub	YYYY-MM-DD	233,1449,61,37	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(12)>div.fact>button.ghost	打开	304,1449,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-body>div.shell>main#main>div.section-title:nth-child(13)	添加考核项（考试/作业/论文/小测）	14,1524,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(14)		14,1551,362,299	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(14)>div.form		30,1577,330,255	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(14)>div.form>div.field		30,1577,330,62	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(14)>div.form>div.field>label	课程	30,1577,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(14)>div.form>div.field>select#aCourse	选课程	30,1599,330,40	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(14)>div.form>div.field.wide		30,1651,330,60	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(14)>div.form>div.field.wide>label	名称	30,1651,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(14)>div.form>div.field.wide>input#aName	(text)如：期中考试	30,1673,330,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(3)		30,1723,130,62	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(3)>label	截止日（可选）	30,1723,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(3)>input#aDue	(date)	30,1745,130,40	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(4)		174,1723,130,62	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(4)>label	权重（可选）	174,1723,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(4)>input#aWeight	(number)如 0.3	174,1745,130,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(14)>div.form>div.actions		30,1797,93,35	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(14)>div.form>div.actions>button	添加考核项	30,1797,93,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-body>div.shell>main#main>div.section-title:nth-child(15)	录入成绩	14,1870,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.panel-card:nth-child(16)		14,1897,362,151	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card:nth-child(16)>div.form		30,1923,330,107	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(1)		30,1923,130,60	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(1)>label	成绩（百分制）	30,1923,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(1)>input#gScore	(number)如 88	30,1945,130,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(2)		174,1923,130,60	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(2)>label	学分	174,1923,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(2)>input#gCredits	(number)2	174,1945,130,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-main#main>div.card.panel-card:nth-child(16)>div.form>div.actions		30,1995,80,35	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.panel-card:nth-child(16)>div.form>div.actions>button	录入成绩	30,1995,80,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-body>div.shell>main#main>div.section-title:nth-child(17)	成绩明细（1 条）	14,2068,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card		14,2095,362,65	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card>div.card-body		30,2109,262,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.title	86 分	30,2109,262,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.meta	5 学分 · 2026 秋	30,2130,262,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card>button.ghost	删除	304,2109,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-html>body>div.shell>aside.sidebar		0,2194,390,187	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 90px
-body>div.shell>aside.sidebar>div#focusRail		14,2194,362,85	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	30,2208,330,17	13/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	30,2233,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(10)	课程	14,1271,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.new		14,1304,362,38	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.new>input#cName	(text)新建课程，如：高数	14,1304,272,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+div.shell>main#main>div.new>button	新建课程	296,1306,80,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+body>div.shell>main#main>div.card.block:nth-child(12)		14,1358,362,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.block:nth-child(12)>div.title	高等数学	30,1372,330,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block:nth-child(12)>div.meta	5学分 王老师 · 关联任务 1（未完成 1）	30,1393,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block:nth-child(12)>div.fact		30,1409,330,45	16/normal/400	#1e293b/#000000@0.00	0;4px 0px
+main#main>div.card.block:nth-child(12)>div.fact>span.badge	作业	36,1413,40,37	11/normal/400	#64748b/#ffffff	999;2px 8px
+main#main>div.card.block:nth-child(12)>div.fact>span.grow	第三章习题	86,1413,137,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(12)>div.fact>span.sub	YYYY-MM-DD	233,1413,61,37	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(12)>div.fact>button.ghost	打开	304,1413,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div.section-title:nth-child(13)	添加考核项（考试/作业/论文/小测）	14,1488,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(14)		14,1515,362,299	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(14)>div.form		30,1541,330,255	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(14)>div.form>div.field		30,1541,330,62	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(14)>div.form>div.field>label	课程	30,1541,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(14)>div.form>div.field>select#aCourse	选课程	30,1563,330,40	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(14)>div.form>div.field.wide		30,1615,330,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(14)>div.form>div.field.wide>label	名称	30,1615,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(14)>div.form>div.field.wide>input#aName	(text)如：期中考试	30,1637,330,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(3)		30,1687,130,62	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(3)>label	截止日（可选）	30,1687,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(3)>input#aDue	(date)	30,1709,130,40	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(4)		174,1687,130,62	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(4)>label	权重（可选）	174,1687,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(14)>div.form>div.field.narrow:nth-child(4)>input#aWeight	(number)如 0.3	174,1709,130,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(14)>div.form>div.actions		30,1761,93,35	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(14)>div.form>div.actions>button	添加考核项	30,1761,93,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+body>div.shell>main#main>div.section-title:nth-child(15)	录入成绩	14,1834,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.panel-card:nth-child(16)		14,1861,362,151	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.panel-card:nth-child(16)>div.form		30,1887,330,107	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(1)		30,1887,130,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(1)>label	成绩（百分制）	30,1887,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(1)>input#gScore	(number)如 88	30,1909,130,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(2)		174,1887,130,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(2)>label	学分	174,1887,130,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(2)>input#gCredits	(number)2	174,1909,130,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+main#main>div.card.panel-card:nth-child(16)>div.form>div.actions		30,1959,80,35	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.panel-card:nth-child(16)>div.form>div.actions>button	录入成绩	30,1959,80,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+body>div.shell>main#main>div.section-title:nth-child(17)	成绩明细（1 条）	14,2032,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card		14,2059,362,65	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card>div.card-body		30,2073,262,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.title	86 分	30,2073,262,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta	5 学分 · 2026 秋	30,2094,262,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card>button.ghost	删除	304,2073,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+html>body>div.shell>aside.sidebar		0,2158,390,187	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 90px
+body>div.shell>aside.sidebar>div#focusRail		14,2158,362,85	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	30,2172,330,17	13/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	30,2197,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
 html>body>nav.bottom-nav		0,770,390,74	16/normal/400	#1e293b/#ffffff	0;6px 0px
 body>nav.bottom-nav>button:nth-child(1)>span.ic	📅	4,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
 body>nav.bottom-nav>button:nth-child(2)>span.ic	🗂️	61,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px

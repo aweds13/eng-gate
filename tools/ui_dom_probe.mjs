@@ -681,7 +681,8 @@ try {
    ① 卡片上要写明**今天记的是哪一档**（否则改判时不知道从哪改到哪）；
    ② 「改判为」只给**另外两档**（同一个档不给按钮）；
    ③ 反证：那一段里不许出现"和现在一样"的那一档按钮（否则用户点了会吃 400）；
-   ④ 空态：今天还没复习过时给一句带路的说明（不是干巴巴「暂无数据」）。 */
+   ④ 空态：**只留一句短事实**（T-G49 用户定：空的就让它空，不解释、不带路 —— 原来这里
+      要求"给一句带路的说明"，那是把产品当教学材料；断言改成"空态就是这几个字，没有别的"）。 */
 const regradeChecks = [];
 try {
   globalThis.__setReviewEdit({ id: null, item: null, meta: null });
@@ -704,13 +705,13 @@ try {
   await sleep(30);
   const emptyHtml = byId.get('main')._html;
   DB['/api/review/today'] = saved;
-  const emptyOk = emptyHtml.includes('今天还没复习过卡') && emptyHtml.includes('还能改判');
+  const emptyOk = emptyHtml.match(/<div class="empty">([^<]*)<\/div>/)?.[1] === '今天还没复习过卡';
 
   const rendered = missing.length === 0 && pure && emptyOk;
   if (!rendered) regradeBad++;
   regradeChecks.push({ rendered, missing, pure, emptyOk });
   console.log(`  ${rendered ? '✅' : '⚠️ '} 复习·改判 main ${String(html.length).padStart(6)}B`
-    + `（只给另外两档 ${pure ? '对' : '不对'}·空态 ${emptyOk ? '带路' : '没带路'}）`
+    + `（只给另外两档 ${pure ? '对' : '不对'}·空态 ${emptyOk ? '干净' : '带话'}）`
     + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
 } catch (e) {
   regradeBad++;

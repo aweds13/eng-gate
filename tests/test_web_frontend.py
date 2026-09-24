@@ -1536,3 +1536,51 @@ def test_cross_device_focus_mirror_is_read_only() -> None:
     assert "${active.id}/finish" in finish_fn and "device_id" not in finish_fn
     assert "EventSource" not in html and "WebSocket" not in html, "别为这件事引入推送通道"
 
+
+def test_ui_does_not_explain_itself() -> None:
+    """界面不解释（T-G49，用户 2026-09-24 定）—— 反向棘轮：那些"教用户怎么用/为什么这么设计"
+    的长句删了就**不许再回来**。
+
+    为什么要有这条：这类句子不是一次失误，是一个**习惯** —— 每加一个功能就顺手写一段
+    "为什么这么算"（「不折算成投入时间（时间折算只在有真实时长时才算）」）。逐个删完不留钉子，
+    下一个窗口会照着同一套直觉再写一遍。所以这里钉的是**具体句子**（不是长度阈值）：
+    长度阈值要等清理全部落地、允许表稳定之后再上（见 `复盘/界面不解释-T-G49.md` §5）。
+
+    规则本身写在 `docs/specification/conventions.md` 的「界面文案」一节。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+
+    # ① 空态：不写怎么用、不写为什么、不写评价。旁边就有输入框/按钮的两处 → 一个字的占位都不留
+    gone_empty_states = [
+        "还没有步骤。拆成小步",                      # 40 字（任务详情·步骤）
+        "还没有附件：可以挂作业要求网页",              # 26 字（任务详情·附件）
+        "还没有记录（完成、撤销、删除",                # 27 字（任务详情·记录）
+        "今天还没复习过卡。点上面的",                  # 33 字（复习）
+        "没有到期复习，轻松一下",                     # 评价词
+        "没有逾期，很好",                            # 评价词
+        "今天还没有任务，挑一件加进来吧",              # 劝告
+        "还没有习惯；建一个，明天就能看到热力图",       # 20 字
+        "还没有成绩记录：录入后",                     # 32 字
+        "还没有挂到这门课的任务：",                    # 35 字
+        "还没有重复任务：给一件事设个",                # 28 字
+        "还没有可看的维度 —— 去设置页",               # 24 字
+        "还没有分配出去的任务。在任务卡片或详情里点",   # 38 字
+        "还没有备份（起一次服务就会有一份）",           # 17 字
+    ]
+    for needle in gone_empty_states:
+        assert needle not in html, f"空态不许再解释：{needle!r}（见 conventions.md「界面文案」）"
+
+    # ② 旁边有控件的空态：整块占位都不留（不是"留一句短的"，是**不渲染**）
+    assert "subtaskList||''" in html or "subtaskList||" in html, "步骤空态：直接不渲染"
+    assert "还没有步骤" not in html and "还没有附件" not in html
+
+    # ③ 设计意图不强调（"我为什么这么设计"不是给用的人看的）
+    for needle in ["不用于跨人比较", "标记只是提醒自己", "不重新定义"]:
+        assert needle not in html, f"设计意图不许写进界面：{needle!r}"
+
+    # ④ 教学性引导语删掉，但那三步操作与两个按钮**留着**（用户选的是"留卡、删解释句"）
+    assert "第一次用，按这三步走就行" in html, "引导卡的标题留着"
+    assert 'data-action="guide-start"' in html and 'data-action="guide-done"' in html
+    assert "不用一次做全，这只是个起点" not in html, "引导卡里的解释句要删"
+
+

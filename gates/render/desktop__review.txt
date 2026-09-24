@@ -44,7 +44,7 @@ main#main>div.card>div.row>button.ghost:nth-child(3)	忘了	639,225,56,37	13/nor
 main#main>div.card>div.row>button.ghost:nth-child(4)	撤销上次	703,225,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div.card>div.row>button.ghost:nth-child(5)	改形式/句柄	793,225,99,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title:nth-child(5)	今天复习过的（0）	240,304,668,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.empty	今天还没复习过卡。点上面的「记得/模糊/忘了」，这里就会出现，记错了还能改判。	240,331,668,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
+body>div.shell>main#main>div.empty	今天还没复习过卡	240,331,668,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
 html>body>div.shell>aside.sidebar		956,0,300,133	16/normal/400	#1e293b/#000000@0.00	0;18px 0px
 body>div.shell>aside.sidebar>div#focusRail		956,18,300,85	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	972,32,268,17	13/normal/400	#64748b/#000000@0.00	0;0px

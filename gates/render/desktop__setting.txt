@@ -232,7 +232,7 @@ div.shell>main#main>div.card.panel-card:nth-child(18)>pre.ai-example	# 先看接
 div.shell>main#main>div.card.panel-card:nth-child(18)>div.row.tight		256,3640,636,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.panel-card:nth-child(18)>div.row.tight>button.ghost	复制示例命令	256,3640,108,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.settings-sub	收件箱（0） · 待看 0 / 已转任务 0 / 已忽略 0	240,3715,668,17	13/normal/400	#1e293b/#000000@0.00	0;0px
-body>div.shell>main#main>div.empty	接口关着，收件箱是空的 —— 打开后你的脚本才能投递	240,3740,668,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
+body>div.shell>main#main>div.empty	接口关着，收件箱是空的	240,3740,668,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
 body>div.shell>main#main>div#set-academic	学业	240,3841,668,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.panel-card:nth-child(22)		240,3868,668,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card:nth-child(22)>div.settings-sub	GPA 制式	256,3882,636,17	13/normal/400	#1e293b/#000000@0.00	0;0px
@@ -374,7 +374,7 @@ main#main>div#set-sync>div.row.tight:nth-child(26)>button.ghost	网络自检（�
 div.shell>main#main>div#set-sync>div#set-backup	备份与恢复	256,5972,636,17	13/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div#set-sync>div.meta:nth-child(29)	每次起服务/开窗口前会自动备份一份。库：timeflow.db（目录 <path>\timeflow_fresh_<tmp>	256,5997,636,32	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div#set-sync>div.row.tight.mt-2		256,6035,636,20	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight.mt-2>span.sub	还没有备份（起一次服务就会有一份）	256,6039,204,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight.mt-2>span.sub	还没有备份	256,6039,60,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div#set-sync>div.sub:nth-child(31)		256,6059,636,32	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div#set-sync>div.sub:nth-child(31)>b:nth-child(1)	连设置一起	424,6059,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
 main#main>div#set-sync>div.sub:nth-child(31)>b:nth-child(2)	点某个时间点 = 把库整体回到那一刻	256,6059,627,32	12/normal/700	#64748b/#000000@0.00	0;0px

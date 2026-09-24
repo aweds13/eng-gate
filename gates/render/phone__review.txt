@@ -1,9 +1,9 @@
 # render-manifest v1 viewport=phone 390x844 view=review rows=42 accent=#2f6feb device=ph-000000000000
-html>body>div.shell		0,0,390,829	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
+html>body>div.shell		0,0,390,808	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,390,66	16/normal/400	#1e293b/#000000@0.00	0;12px 14px 0px
 body>div.shell>aside.rail>h1	timeflow ·	14,12,86,24	18/normal/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	14,46,356,20	13/19.5/400	#64748b/#000000@0.00	0;0px
-html>body>div.shell>main#main		0,66,390,486	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 24px
+html>body>div.shell>main#main		0,66,390,465	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 24px
 body>div.shell>main#main>div.card.block		14,66,362,102	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.block>div.meta	复习完成计投入（维持），不折算时间	30,80,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div.card.block>div.mt-3		30,104,330,28	16/normal/400	#1e293b/#000000@0.00	0;0px
@@ -28,11 +28,11 @@ main#main>div.card>div.row>button.ghost:nth-child(3)	忘了	296,283,56,37	13/nor
 main#main>div.card>div.row>button.ghost:nth-child(4)	撤销上次	170,328,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div.card>div.row>button.ghost:nth-child(5)	改形式/句柄	260,328,99,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title:nth-child(5)	今天复习过的（0）	14,399,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.empty	今天还没复习过卡。点上面的「记得/模糊/忘了」，这里就会出现，记错了还能改判。	14,426,362,102	16/normal/400	#64748b/#000000@0.00	0;30px 0px
-html>body>div.shell>aside.sidebar		0,552,390,187	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 90px
-body>div.shell>aside.sidebar>div#focusRail		14,552,362,85	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	30,566,330,17	13/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	30,591,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.empty	今天还没复习过卡	14,426,362,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
+html>body>div.shell>aside.sidebar		0,531,390,187	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 90px
+body>div.shell>aside.sidebar>div#focusRail		14,531,362,85	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	30,545,330,17	13/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	30,570,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
 html>body>nav.bottom-nav		0,770,390,74	16/normal/400	#1e293b/#ffffff	0;6px 0px
 body>nav.bottom-nav>button:nth-child(1)>span.ic	📅	4,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
 body>nav.bottom-nav>button:nth-child(2)>span.ic	🗂️	61,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px

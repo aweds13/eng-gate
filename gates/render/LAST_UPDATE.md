@@ -339,3 +339,39 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/habit`
 - `phone/setting`
 
+
+## 2026-09-24 11:16:35 · 18 份改动
+
+> 理由：T-G49 界面不解释（第一轮）：空态不再解释怎么用，口径压到 8 字以内
+
+- `desktop/academic`
+- `desktop/offline`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/offline`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/today`
+- `phone/academic`
+- `phone/offline`
+- `phone/review`
+- `phone/setting`
+- `phone/stats`
+- `phone/today`
+
+
+## 2026-09-24 11:20:43 · 6 份改动
+
+> 理由：T-G49 界面不解释（收尾）：智能视图那三行 note 也按新口径改（重要型去掉解释、已标记只留「只提醒自己」）
+
+- `desktop/flagged`
+- `desktop/important`
+- `narrow/flagged`
+- `narrow/important`
+- `phone/flagged`
+- `phone/important`
+

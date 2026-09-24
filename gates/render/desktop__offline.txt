@@ -149,7 +149,7 @@ main#main>div#offlineQueue>div.sub:nth-child(3)>code:nth-child(3)	‹code:15›	
 div.shell>main#main>div#offlineQueue>div.sub:nth-child(4)		256,2042,636,32	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div#offlineQueue>div.sub:nth-child(4)>b:nth-child(1)	不会清空	280,2042,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
 main#main>div#offlineQueue>div.sub:nth-child(4)>b:nth-child(2)	重复导入是安全的	508,2042,96,16	12/normal/700	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#offlineQueue>div.empty	队列是空的 —— 断网时记的东西会攒在这里	256,2074,636,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
+div.shell>main#main>div#offlineQueue>div.empty	队列是空的	256,2074,636,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
 body>div.shell>main#main>div.card.panel-card:nth-child(10)		240,2179,668,141	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card:nth-child(10)>div.settings-sub	这一版能做什么、不做什么	256,2193,636,17	13/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.card.panel-card:nth-child(10)>div.sub:nth-child(2)	能做：新建任务 / 勾完成与撤销完成 / 习惯打卡 / 一句备忘 / 每日反馈（都先存在本机队列）。	256,2218,636,16	12/normal/400	#64748b/#000000@0.00	0;0px

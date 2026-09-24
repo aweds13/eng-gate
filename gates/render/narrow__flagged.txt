@@ -21,7 +21,7 @@ div.shell>aside.rail>nav>button#refresh	刷新	91,87,52,37	13/normal/400	#64748b
 div.shell>aside.rail>nav>button#railToggle	收起右栏	147,87,78,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 html>body>div.shell>main#main		0,144,820,244	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
 body>div.shell>main#main>div.section-title	已标记（1）	24,144,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.sub	你自己按了标记的任务（卡片上的「标记」按钮）。标记只是提醒自己，不代表重要。	24,171,772,16	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.sub	只提醒自己	24,171,772,16	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.row.tight.mv-4		24,197,772,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(1)	重要	24,197,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(2)	有计划	80,197,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px

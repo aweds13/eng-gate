@@ -47,7 +47,7 @@ main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.bar-track.tall		
 div.shell>main#main>div.card.block:nth-child(5)>div.sub	只算「绑定了任务」的专注：挂课程 = 学业、没挂课程 = 自学； 未绑定任务的专注另有 0h，单列、不归入任何一边（不猜它算哪一类）。 手动投入不参与这张图。这里只如实对照，不做「	40,627,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(6)	重复节奏（近 56 天）	24,693,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.block:nth-child(7)		24,720,772,145	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.block:nth-child(7)>div.empty	还没有重复任务：给一件事设个「每 N 天」的重复，这里就会长出它的节奏	40,734,740,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
+div.shell>main#main>div.card.block:nth-child(7)>div.empty	还没有重复任务	40,734,740,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
 div.shell>main#main>div.card.block:nth-child(7)>div.sub	每条 = 一个重复事项（同一标题 + 同一周期）。格子按「排期日」画：实心 = 那一轮做完了，空心 = 还活着但没做，灰 = 取消/搁置/归档未完成。周期是「每 N 天」，所以不推	40,819,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(8)	本周投入	24,885,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.block:nth-child(9)		24,912,772,128	16/normal/400	#1e293b/#ffffff	12;14px 16px

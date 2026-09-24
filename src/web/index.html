@@ -485,7 +485,7 @@ async function renderOffline(m){
     <div class="settings-sub">习惯打卡（只列手机上缓存过的习惯）</div>
     <div class="row tight">${habits.length?habits.map(h=>
       `<button class="ghost" data-action="offline-habit" data-id="${esc(h.id)}">${esc(h.name)} · 打卡</button>`).join('')
-      :'<span class="sub">还没有缓存到习惯：联网时打开一次「习惯」页，这里就会出现。</span>'}</div>
+      :'<span class="sub">还没有缓存到习惯</span>'}</div>
   </div>
   <div class="section-title">离线勾完成（缓存里最近看到的那份清单）</div>
   <div class="card panel-card">
@@ -493,7 +493,7 @@ async function renderOffline(m){
         <div class="title">${esc(t.title)}</div>
         <div class="meta">${esc(t.status)}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}${t.is_myday?' · 今天':''}${t.remind_at?` · 提醒 ${esc(String(t.remind_at).replace('T',' '))}`:''}</div></div>
         <button class="ghost" data-action="offline-done" data-id="${esc(t.id)}" data-done="true">完成</button>
-      </div>`).join(''):emptyState('缓存里没有还能勾的任务（联网打开一次任务列表就会缓存下来）')}
+      </div>`).join(''):emptyState('缓存里没有任务')}
     ${doneTasks.length?`<div class="sub">已完成（点一下撤销）：${doneTasks.slice(0,10).map(t=>
       `<button class="ghost" data-action="offline-done" data-id="${esc(t.id)}" data-done="false">${esc(t.title)}</button>`).join('')}</div>`:''}
     <div class="sub">这份清单是<b>上次联网时看到的样子</b>，只看不改：离线能改的只有「完成 / 撤销完成」，
@@ -502,7 +502,7 @@ async function renderOffline(m){
   const queue=entries.length?entries.map(e=>`<div class="card"><div class="card-body">
       <div class="title">${esc(e.label||e.table)}</div>
       <div class="meta">${esc(e.table)} · ${esc(String(e.at||'').replace('T',' '))}</div></div></div>`).join('')
-    :emptyState('队列是空的 —— 断网时记的东西会攒在这里');
+    :emptyState('队列是空的');
   m.innerHTML=`
   <div class="card panel-card" id="offlineStatus">
     <div class="title">${off?'离线中':'在线'} · 手机离线记</div>
@@ -1359,7 +1359,7 @@ function renderDetail(el,t,facts,tree,cards,attempts){
       <div class="sub">报告 = 一句话事实，<b>不是状态</b>：要不要标完成仍然由你勾。
         ${t.progress_count>1?'撤销这一条会露出更早的一条（一层层往回撤）。':''}</div>`:''}
     <div class="settings-sub">步骤（子任务）${progress}</div>
-    <div id="subtaskList">${subtaskList||'<div class="sub">还没有步骤。拆成小步，完成到最后一个时父任务会自动完成；子步骤下面还能再拆一层（最多三层）。</div>'}</div>
+    <div id="subtaskList">${subtaskList||''}</div>
     <div class="new"><input id="subtaskTitle" placeholder="添加一个步骤…" data-enter="subtask-add">
       <input id="subtaskDue" type="date" title="这一步的截止日（可留空；留空 = 不设）">
       <button class="ghost" data-action="subtask-add">添加</button></div>
@@ -1383,7 +1383,7 @@ function renderDetail(el,t,facts,tree,cards,attempts){
     <div class="section-title">记录（最近 ${Math.min((facts||[]).length,12)} 条）</div>
     ${att.notes.length?`<div class="settings-sub">过去尝试留下的说明（新的在前）</div>
       ${att.notes.slice(0,5).map(n=>`<div class="fact"><span class="sub pre">${esc(n)}</span></div>`).join('')}`:''}
-    ${lines||'<div class="sub">还没有记录（完成、撤销、删除、生成下一次都会留下记录）。</div>'}`;
+    ${lines||'<div class="sub">还没有记录</div>'}`;
 }
 
 // ---- 附件 / 要求链接（SR-F1.4「附件」+ SR-F5.3「跳转要求」/ T-B4）----
@@ -1412,7 +1412,7 @@ function attachRowsHTML(items,delAction,ownerId){
 }
 function taskAttachHTML(t){
   return `<div class="settings-sub">附件 / 要求链接</div>
-    ${attachRowsHTML(t.attach,'attach-del',t.id)||'<div class="sub">还没有附件：可以挂作业要求网页，或本地文件/文件夹路径。</div>'}
+    ${attachRowsHTML(t.attach,'attach-del',t.id)||''}
     <div class="new"><input id="attachTarget" placeholder="网址或本地路径" data-enter="attach-add">
       <input id="attachTitle" placeholder="标题（可选）">
       <button class="ghost" data-action="attach-add" data-id="${t.id}">添加</button></div>
@@ -1733,17 +1733,17 @@ async function addTaskHere(){
 // 口径在**后端**（`GET /api/tasks?view=`），这里只负责说明白"这个视图是什么"并渲染。
 // 基线同「全部任务」：只隐藏归档/已删（完成的仍显示）。
 const SMART_VIEWS={
-  important:{title:'重要',note:'优先级为「高」的任务。优先级在任务详情里改；这里不重新定义"什么算重要"。'},
-  planned:{title:'有计划',note:'<b>设了截止日</b>的任务，越近越靠前（无截止日的不算"有计划"）。'},
-  flagged:{title:'已标记',note:'你自己按了标记的任务（卡片上的「标记」按钮）。标记只是提醒自己，不代表重要。'},
+  important:{title:'重要',note:''},
+  planned:{title:'有计划',note:'<b>设了截止日</b>的任务，越近越靠前'},
+  flagged:{title:'已标记',note:'只提醒自己'},
 };
 async function renderSmart(m,view){
   const meta=SMART_VIEWS[view]||{title:view,note:''};
   const list=await api(`/api/tasks?view=${view}`);
   m.innerHTML=`<div class="section-title">${esc(meta.title)}（${list.length}）</div>
-    <div class="sub">${meta.note}</div>
+    ${meta.note?`<div class="sub">${meta.note}</div>`:''}
     ${smartViewNavHTML(view)}
-    ${list.map(t=>taskCard(t)).join('')||emptyState('这个视图下暂时没有任务')}`;
+    ${list.map(t=>taskCard(t)).join('')||emptyState('还没有任务')}`;
 }
 // 三个智能视图之间的互跳行：也让"手机端（左栏导航被隐藏）"有入口 —— 它挂在「全部任务」页与各视图自己头上。
 function smartViewNavHTML(active){
@@ -1863,7 +1863,7 @@ function gpaRadar(g4,g5,courses,grades){
       <div class="stat-label">
         ${barList(axes.map(a=>({label:a.label,value:a.ratio,display:String(a.value)})))}
       </div></div>
-    <div class="sub">各轴各自归一到本图最大值，只看「是否均衡」，不用于跨人比较；成绩录得越多，覆盖越满。</div></div>`;
+    </div>`;
 }
 
 function renderStats(m){
@@ -1904,7 +1904,7 @@ function renderStats(m){
       ${acSplit}
       <div class="section-title">重复节奏（近 ${rhythm.days} 天）</div>
         <div class="card block">
-        ${rhythm.series.length?rhythm.series.map(repeatRhythmRow).join(''):emptyState('还没有重复任务：给一件事设个「每 N 天」的重复，这里就会长出它的节奏')}
+        ${rhythm.series.length?rhythm.series.map(repeatRhythmRow).join(''):emptyState('还没有重复任务')}
         <div class="sub">${noteHTML(rhythm.note)}</div></div>
       <div class="section-title">本周投入</div>${weekCard(week)}
       <div class="section-title">时间热力图（近一年）</div>
@@ -1954,7 +1954,7 @@ function hmButtons(active){
 }
 function hmNote(active){
   const dim=hmDim(active);
-  if(!dim)return '还没有可看的维度 —— 去设置页「可配置词表」里加一个。';
+  if(!dim)return '还没有可看的维度';
   const deeper=dim.kind==='count'?'当天越多':'当天投入越多';
   return `${esc(dim.label)} · 颜色越深=${deeper}；空=没有记录（不是失败，只是那天没记）。`;
 }
@@ -2052,7 +2052,7 @@ function doneSection(d){
     ${d.tasks.map(t=>`<div class="fact"><span class="grow">${esc(t.title)}</span>
       <span class="sub">完成于 ${humanTime(t.completed_at)}</span>
       <button class="ghost" data-action="task-open" data-id="${t.id}">打开</button></div>`).join('')
-    ||'<div class="sub">今天还没有整件完成的任务 —— 完成步骤同样算进展。</div>'}</div>`:'';
+    ||'<div class="sub">今天还没有完成的任务</div>'}</div>`:'';
   // 步骤**按父任务分组缩进**，并显示父任务进度（"大任务推进到哪了"）
   const byParent=d.parents.map(p=>{
     const mine=d.steps.filter(s=>s.parent_id===p.id);
@@ -2140,8 +2140,8 @@ async function renderToday(m){
   ${todayCard(doneTasks,pendingTasks)}
   ${remind}
   ${doingSection(doing)}
-  <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||emptyState('没有逾期，很好')}</div>
-  <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||emptyState('今天还没有任务，挑一件加进来吧')}
+  <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||emptyState('没有逾期')}</div>
+  <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||emptyState('今天还没有任务')}
   ${doneSection(done)}
   ${due.length?`<div class="section-title">今天该复习（${due.length}）</div>${due.map(r=>reviewCard(r,rmeta.ratings||[])).join('')}`:''}
   ${trash}
@@ -2262,7 +2262,7 @@ async function renderHabit(m){
     <div class="sub">习惯打卡<b>只记次数</b>，不折算成投入时间（时间折算只在有真实时长时才算）。想让它占用投入时间，
       去备忘录页「今日手动投入」按真实分钟补一笔（类型可选「习惯」）。</div></div>
   <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡" data-enter="habit-add"><button data-action="habit-add">新建</button></div>
-  ${cards||emptyState('还没有习惯；建一个，明天就能看到热力图')}
+  ${cards||emptyState('还没有习惯')}
   <div class="section-title">每日反馈（计划 vs 执行）</div>
   <textarea class="textarea" id="fbPlan" placeholder="计划：">${esc(fb&&fb.plan_note||'')}</textarea><br>
   <textarea class="textarea" id="fbGap" placeholder="差距/复盘：">${esc(fb&&fb.gap_note||'')}</textarea><br>
@@ -2361,7 +2361,7 @@ async function renderAcademic(m){
   ${allAssessments}
   <div class="section-title">学业概览（多维）</div>
   ${gpaRadar(gpaG,{gpa:other.gpa},courses.length,grades)}
-  ${hasGrades?'':`<div class="sub">还没有成绩记录：录入后「加权平均成绩」与「GPA」会自动按学分加权计算。</div>`}
+  ${hasGrades?'':`<div class="sub">还没有成绩记录</div>`}
   <div class="section-title">课程</div>
   <div class="new"><input id="cName" placeholder="新建课程，如：高数" data-enter="course-add"><button data-action="course-add">新建课程</button></div>
   ${courses.map(c=>{const ts=tasksOfCourse(c.id);const open=ts.filter(t=>t.status!=='完成');
@@ -2374,7 +2374,7 @@ async function renderAcademic(m){
         <button class="ghost" data-action="task-open" data-id="${t.id}">打开</button></div>`).join('')}
       ${open.length>5?`<div class="sub">还有 ${open.length-5} 项未完成；任务页可见全部。</div>`:''}
       ${ts.length&&!open.length?'<div class="sub">挂在这门课上的任务都已做完。</div>':''}
-      ${ts.length?'':'<div class="sub">还没有挂到这门课的任务：在任务详情里把「类型」改成 作业/考试/论文/小测，再选这门课。</div>'}
+      ${ts.length?'':'<div class="sub">还没有挂到课的任务</div>'}
     </div>`}).join('')||emptyState('暂无课程')}
   <div class="section-title">添加考核项（考试/作业/论文/小测）</div>
   <div class="card panel-card">
@@ -2561,7 +2561,7 @@ async function renderTeam(m){
   const body=b.groups.map(g=>`<div class="section-title">${esc(g.assignee)} · ${g.count} 件</div>
     ${g.items.map(it=>teamItemHTML(it,b.view)).join('')}`).join('');
   const empty=b.view==='manager'
-    ?'还没有分配出去的任务。在任务卡片或详情里点「分配」，把人名填上，这里就出现了。'
+    ?'还没有分配出去的任务'
     :(b.me?'这个视角下没有任务（换个状态筛选看看）。':'先在上面填「我是谁」，再看分给你的那几件。');
   m.innerHTML=`<div class="card panel-card">
     <div class="row">${viewBtns}</div>
@@ -2601,10 +2601,10 @@ async function renderReview(m){
     <div class="sub mt-2">${total?`还剩 ${due.length} 张；点了「记得/模糊/忘了」就会计入进度。`:'今天没有到期的复习卡。'}</div></div>
   <div class="new"><input id="rvTitle" placeholder="新建复习卡内容"><button data-action="review-add">新建</button></div>
   <div class="section-title">到期复习（${due.length}）</div>
-  ${due.map(r=>reviewCard(r,reviewRatings)).join('')||emptyState('没有到期复习，轻松一下')}
+  ${due.map(r=>reviewCard(r,reviewRatings)).join('')||emptyState('没有到期复习')}
   <div class="section-title">今天复习过的（${today.length}）</div>
   ${today.map(r=>reviewDoneCard(r,reviewRatings)).join('')
-    ||emptyState('今天还没复习过卡。点上面的「记得/模糊/忘了」，这里就会出现，记错了还能改判。')}`;
+    ||emptyState('今天还没复习过卡')}`;
 }
 async function addReview(){const title=document.getElementById('rvTitle').value.trim();if(!title)return;
   await api('/api/review/items',{method:'POST',body:JSON.stringify({title})});view(current)}
@@ -2953,7 +2953,7 @@ async function renderSetting(m){
   </div>
   <div class="settings-sub">收件箱（${noticeItems.length}）${nf.statuses?(` · ${nf.statuses.map(s=>`${esc(s.label)} ${s.count}`).join(' / ')}`):''}</div>
   ${noticeItems.map(n=>noticeCard(n)).join('')
-    ||emptyState(nf.enabled?'接口开着，但还没有通知投递进来（脚本跑一次就有了）':'接口关着，收件箱是空的 —— 打开后你的脚本才能投递')}
+    ||emptyState(nf.enabled?'接口开着，还没有投递':'接口关着，收件箱是空的')}
   <div class="section-title" id="set-academic">学业</div>
   <div class="card panel-card">
     <div class="settings-sub">GPA 制式</div>
@@ -3067,7 +3067,7 @@ async function renderSetting(m){
     <div class="row tight mt-2">
       ${(bk.items||[]).length?bk.items.map(b=>`<button class="ghost" data-action="restore-backup"
         data-name="${esc(b.name)}" title="恢复到 ${esc(b.at)}">${esc(String(b.at).replace('T',' '))} · ${sizeLabel(b.size)}${b.parsed?'':'（名字被改过）'}</button>`).join('')
-        :'<span class="sub">还没有备份（起一次服务就会有一份）</span>'}</div>
+        :'<span class="sub">还没有备份</span>'}</div>
     <div class="sub">${noteHTML(bk.note||'')} <b>点某个时间点 = 把库整体回到那一刻</b>，界面会让你再确认一次。</div>
   </div>
   <div class="section-title">入口</div>
@@ -3492,7 +3492,6 @@ function guideCard(){
     <div class="title">第一次用，按这三步走就行</div>
     <div class="sub">① 在下面的输入框写下一件要做的事（回车即可）→ ② 点「专注」开始计时，正常结束时会计入今天的投入 →
       ③ 晚上在专注页跟一句「今天计划 vs 实际」。</div>
-    <div class="sub">不用一次做全，这只是个起点；随时可以关掉，之后想再看就在设置页点「再看一遍新手引导」。</div>
     <div class="row mt-3">
       <button data-action="guide-start">好，先写第一件事</button>
       <button class="ghost" data-action="guide-done">知道了，不再显示</button>
