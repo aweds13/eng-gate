@@ -904,7 +904,7 @@ try {
     '重复节奏（近 56 天）', '背单词 · 每 1 天 · 完成 1 / 排期 3', '周复盘 · 每 7 天 · 完成 1 / 排期 1',
     '做完了', '排了没做', '取消/搁置/归档未完成', '不推算以后该哪天'];
   const missing = needs.filter((n) => !html.includes(n));
-  // 反证：老代码那种"取不到值"的图里，所有格子都是 `--surface-2`，不会出现 accent
+  // 反证：老代码那种"取不到值"的图里，所有格子都是 `--panel-2`，不会出现 accent
   const hasAccent = html.includes('var(--accent)');
   const rendered = missing.length === 0 && hasAccent;
   if (!rendered) heatmapBad++;

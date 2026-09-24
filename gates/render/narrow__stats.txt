@@ -38,12 +38,12 @@ div.shell>main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(1)		40,557,74
 main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.sub.split		40,557,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.sub.split>span:nth-child(1)	学业：挂了课程的任务	40,557,120,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.sub.split>span:nth-child(2)	0h · 0 个任务	712,557,68,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.bar-track.tall		40,573,740,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.bar-track.tall		40,573,740,10	16/normal/400	#1e293b/#eef2f7	6;0px
 div.shell>main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)		40,591,740,26	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.sub.split		40,591,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.sub.split>span:nth-child(1)	自学：没挂课程的任务	40,591,120,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.sub.split>span:nth-child(2)	0h · 0 个任务	712,591,68,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.bar-track.tall		40,607,740,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.bar-track.tall		40,607,740,10	16/normal/400	#1e293b/#eef2f7	6;0px
 div.shell>main#main>div.card.block:nth-child(5)>div.sub	只算「绑定了任务」的专注：挂课程 = 学业、没挂课程 = 自学； 未绑定任务的专注另有 0h，单列、不归入任何一边（不猜它算哪一类）。 手动投入不参与这张图。这里只如实对照，不做「	40,625,740,32	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(6)	重复节奏（近 56 天）	24,691,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.block:nth-child(7)		24,718,772,145	16/normal/400	#1e293b/#ffffff	12;14px 16px

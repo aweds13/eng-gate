@@ -1,3 +1,8 @@
+# ★ 阅读提醒：下面**销账记录**里写的是**当时的令牌名** —— `--card` / `--surface-2` / `--accent-soft` /
+#   `--accent-on` 在 T-G44（视觉线步 1）已改成 workbench 的名字（`--panel` / `--panel-2` / 并入
+#   `--panel-2` / `--accent-ink`）。映射表见 `docs/specification/nonfunctional.md` 的 SR-NF1。
+#   这里保留旧名是**故意的**：它记的是"那时候发生了什么事"。
+#
 # 对比度审美门的「已知欠账」登记表（T-G27 建 → **T-G42 清空**）
 #
 # 规则（跟台账 [exceptions] 一个精神：**逐条留痕、修一条删一条，不许静默豁免**）：

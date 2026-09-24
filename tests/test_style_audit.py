@@ -66,12 +66,12 @@ def test_orphan_literal_detected_but_resets_and_tokens_are_not() -> None:
 
 def test_missing_interaction_states_are_detected() -> None:
     """整表没有 `:hover` / `:focus-visible` → 两条都要报（现在的真实现状）。"""
-    keys = _keys(".a { color: var(--text) }\n")
+    keys = _keys(".a { color: var(--ink) }\n")
     assert {"interaction:hover", "interaction:focus-visible"} <= keys
 
 
 def test_present_interaction_states_pass() -> None:
-    css = ".a:hover { color: var(--text) }\n.b:focus-visible { outline: 2px solid var(--accent) }\n"
+    css = ".a:hover { color: var(--ink) }\n.b:focus-visible { outline: 2px solid var(--accent) }\n"
     keys = _keys(css)
     assert "interaction:hover" not in keys
     assert "interaction:focus-visible" not in keys

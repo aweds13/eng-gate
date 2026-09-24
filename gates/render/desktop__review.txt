@@ -26,7 +26,7 @@ div.shell>main#main>div.card.block>div.mt-3		256,38,636,28	16/normal/400	#1e293b
 main#main>div.card.block>div.mt-3>div.sub.split		256,38,636,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.block>div.mt-3>div.sub.split>span:nth-child(1)	今日复习进度	256,38,72,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.card.block>div.mt-3>div.sub.split>span:nth-child(2)	0/1	874,38,18,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block>div.mt-3>div.bar-track.mini		256,58,636,8	16/normal/400	#1e293b/#f1f5f9	6;0px
+main#main>div.card.block>div.mt-3>div.bar-track.mini		256,58,636,8	16/normal/400	#1e293b/#eef2f7	6;0px
 div.shell>main#main>div.card.block>div.sub.mt-2	还剩 1 张；点了「记得/模糊/忘了」就会计入进度。	256,72,636,16	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.new		240,118,668,38	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.new>input#rvTitle	(text)新建复习卡内容	240,118,604,38	14/normal/400	#1e293b/#ffffff	10;10px 12px

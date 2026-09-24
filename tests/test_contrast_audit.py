@@ -41,7 +41,7 @@ def test_mix_over_composites_like_color_mix() -> None:
 
 
 def test_token_blocks_resolve_nested_var() -> None:
-    """`--toast-bg: var(--text)` 这种一层套一层要能解到字面色值（T-G27 修 `.toast` 就是靠它）。"""
+    """`--toast-bg: var(--ink)` 这种一层套一层要能解到字面色值（T-G27 修 `.toast` 就是靠它）。"""
     css = (
         ":root {\n  --a: #123456;\n  --b: var(--a);\n}\n\n"
         '[data-theme="dark"] {\n  --b: #ffffff;\n}\n'
@@ -158,7 +158,7 @@ def test_badge_shortfalls_are_actually_detected() -> None:
     )
     keys = {p.key for p in ca.badge_pairs(css)}
     for token in ("--ok", "--accent", "--danger"):
-        assert f"light:{token} on mix({token} 18% over --card)" in keys
+        assert f"light:{token} on mix({token} 18% over --panel)" in keys
 
 
 def test_badge_shortfalls_are_detected_with_token_backgrounds_too() -> None:

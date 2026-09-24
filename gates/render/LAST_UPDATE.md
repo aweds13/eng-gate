@@ -275,3 +275,18 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `narrow/academic`
 - `phone/academic`
 
+
+## 2026-09-24 04:26:30 · 9 份改动
+
+> 理由：T-G44 步 1：颜色令牌改名对齐 workbench（值不变）；唯一有意变化 = --accent-soft 并进 --panel-2，进度条槽 #f1f5f9→#eef2f7
+
+- `desktop/academic`
+- `desktop/review`
+- `desktop/stats`
+- `narrow/academic`
+- `narrow/review`
+- `narrow/stats`
+- `phone/academic`
+- `phone/review`
+- `phone/stats`
+

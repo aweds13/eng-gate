@@ -15,7 +15,7 @@
 [known]
 
 # ---------- 互动态：整张样式表里一条都没有（最要紧的两条）----------
-"interaction:hover" = { why = "全表 `:hover` 规则数 = 0。界面没有「手放上去」的回应 —— 这是「每个元素各过各的」最大的来源，也正是用户点的『Raycast 的交互反馈』要补的那一层。修法：给可交互类统一加 hover 底（`--accent-weak` / `--surface-2`），workbench 的原话是 hover on rows/nav → `--panel-2` fill" }
+"interaction:hover" = { why = "全表 `:hover` 规则数 = 0。界面没有「手放上去」的回应 —— 这是「每个元素各过各的」最大的来源，也正是用户点的『Raycast 的交互反馈』要补的那一层。修法：给可交互类统一加 hover 底（`--panel-2`；选中行用 workbench 的 `--accent-weak` fill + 2px accent indicator），workbench 的原话是 hover on rows/nav → `--panel-2` fill" }
 "interaction:focus-visible" = { why = "全表 `:focus-visible` 规则数 = 0。键盘用户**看不见焦点**（WCAG 2.4.7 要求可见焦点）—— 而用户正好提了「键盘优先做成附加功能」，所以这条是那个附加功能的**前置条件**，不是可选项。修法：一条全局 `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }`（workbench：focus-visible on everything）" }
 
 # ---------- 一次性值：只出现一次＝没进体系 ----------

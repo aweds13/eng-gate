@@ -31,7 +31,7 @@
 - 令牌值只从 `src/web/app.css` 的令牌区读，**不抄表**；`var(--x)` 递归解析。
 - ★ T-G42 起状态徽标把颜色交给 **8px 圆点**（workbench 的 StatusDot），点是**非文字**（3.0 即可）。
   它没有被单列成一对组合，而是**借令牌级组合的地板**：`--ok` / `--danger` / `--accent`
-  落在 `--card` 上都按 4.5 登记着 —— 令牌一旦被改浅，先把那三条打红，圆点自然也不够。
+  落在 `--panel` 上都按 4.5 登记着 —— 令牌一旦被改浅，先把那三条打红，圆点自然也不够。
   （"非文字图形"这个维度本身仍未系统覆盖，这一点如实写在 `复盘/审美门-对比度-T-G27.md` §6。）
 
 用法
@@ -65,7 +65,7 @@ _VAR = re.compile(r"var\(\s*(--[a-z0-9-]+)\s*\)")
 _RULE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.S)
 _MIX = re.compile(r"color-mix\(\s*in\s+srgb\s*,\s*var\(\s*(--[a-z0-9-]+)\s*\)\s*([\d.]+)%")
 _COLOR = re.compile(r"color\s*:\s*var\(\s*(--[a-z0-9-]+)\s*\)")
-# `.badge { background: var(--card); color: var(--muted) }` —— T-G42 起的令牌底
+# `.badge { background: var(--panel); color: var(--muted) }` —— T-G42 起的令牌底
 _BG_VAR = re.compile(r"background\s*:\s*var\(\s*(--[a-z0-9-]+)\s*\)")
 
 
@@ -143,7 +143,7 @@ def token_blocks(css: str) -> dict[str, dict[str, str]]:
 
     ★ **先剥注释再抽**（T-G39 踩到）：`_TOKEN` 是"从头到第一个 `;`"的正则，而注释里只要出现
     「`--某令牌: 某个值`」这种形状（写文档句时很容易），它就会把注释当声明吞下去 ——
-    实测把 `--accent-on` 的值污染成一大段说明文字，门禁报「看不懂的颜色」。
+    实测把 `--accent-ink` 的值污染成一大段说明文字，门禁报「看不懂的颜色」。
     `badge_pairs` 早就因为同一类原因剥过注释，这里补上（别再靠"注释别那么写"这种记性）。
     """
     light_m = re.search(r":root\s*\{(.*?)\n\}", css, re.S)
@@ -180,7 +180,7 @@ def resolve(name: str, tokens: dict[str, str], depth: int = 4) -> str:
 # ------------------------------------------------------------------ 组合清单
 # 令牌级组合：只登记**样式表里真出现**的搭配，`where` 写明是哪些规则造出来的。
 # ★ T-G42 撤掉了三行（都写在 `contrast_baseline.toml` 的销账记录里）：
-#   - `--muted on --surface-2` / `--muted on --accent-soft`：那是旧徽标的底，
+#   - `--muted on --panel-2` / `--muted on --panel-2`：那是旧徽标的底，
 #     徽标改用"卡片底 + 1px 边框"之后，**这两种搭配在样式表里已经不存在了**（僵尸行必须删，
 #     `tests/test_contrast_audit.py` 有一条"登记表不许有对不上的行"钉着）。
 #   - `--accent on --bg`：唯一实现处是 h1 里那个装饰性 `·`（4.37，过不了 4.5），
@@ -188,18 +188,18 @@ def resolve(name: str, tokens: dict[str, str], depth: int = 4) -> str:
 #     ⚠️ 残留风险如实记在 `复盘/视觉线第0.5步-对比度与状态色-T-G42.md`：静态表看不见
 #        "以后有人又写一处强调色小字在页面底上"（那要有渲染层才知道谁坐在什么底上）。
 TOKEN_PAIRS: tuple[tuple[str, str, float, str], ...] = (
-    ("--text", "--bg", AA_NORMAL, "body 继承色 / 页面底"),
-    ("--text", "--card", AA_NORMAL, "卡片内正文"),
-    ("--text", "--surface-2", AA_NORMAL, "浅底上的正文（热力图空格外 等）"),
+    ("--ink", "--bg", AA_NORMAL, "body 继承色 / 页面底"),
+    ("--ink", "--panel", AA_NORMAL, "卡片内正文"),
+    ("--ink", "--panel-2", AA_NORMAL, "浅底上的正文（热力图空格外 等）"),
     ("--muted", "--bg", AA_NORMAL, ".sub / .hint / .empty 在页面底"),
-    ("--muted", "--card", AA_NORMAL, ".sub / .hint / 徽标（芯片底是 --card）在卡片里"),
-    ("--accent", "--card", AA_NORMAL, ".prio.mid / .flag（12px 小字）与状态点：都在卡片底上"),
-    ("--accent-on", "--accent", AA_NORMAL, ".prio.high 与主按钮：实心强调底上的字"),
+    ("--muted", "--panel", AA_NORMAL, ".sub / .hint / 徽标（芯片底是 --panel）在卡片里"),
+    ("--accent", "--panel", AA_NORMAL, ".prio.mid / .flag（12px 小字）与状态点：都在卡片底上"),
+    ("--accent-ink", "--accent", AA_NORMAL, ".prio.high 与主按钮：实心强调底上的字"),
     ("--danger", "--bg", AA_NORMAL, "危险色当文字（设置页「上次导出失败」那几行）"),
-    ("--danger", "--card", AA_NORMAL, "卡片里的危险色文字 / 硬考核状态点"),
+    ("--danger", "--panel", AA_NORMAL, "卡片里的危险色文字 / 硬考核状态点"),
     ("--ok", "--bg", AA_NORMAL, "完成色当文字"),
-    ("--ok", "--card", AA_NORMAL, "卡片里的完成色文字 / 完成状态点"),
-    ("--text-on-dark", "--toast-bg", AA_NORMAL, ".toast：toast 底上的字"),
+    ("--ok", "--panel", AA_NORMAL, "卡片里的完成色文字 / 完成状态点"),
+    ("--toast-ink", "--toast-bg", AA_NORMAL, ".toast：toast 底上的字"),
 )
 PRESET_TOKENS = ("--accent-1", "--accent-2", "--accent-3", "--accent-4", "--accent-5", "--accent-6")
 
@@ -210,15 +210,15 @@ def declared_pairs() -> list[Pair]:
     for theme in ("light", "dark"):
         for fg, bg, minimum, where in TOKEN_PAIRS:
             out.append(Pair(theme, fg, bg, minimum, where))
-        if theme == "light":  # 预设只在设置页给亮色挑（暗色另有一套 on 色）
-            # ★ T-G39 起每个预设**各自带 on 色**：原来一律配那唯一的白色 on，
+        if theme == "light":  # 预设只在设置页给亮色挑（暗色另有一套 ink 色）
+            # ★ T-G39 起每个预设**各自带 ink 色**：原来一律配那唯一的白色，
             #   而白字在 6 个预设上没有一个过 4.5（最差 #f59e0b 2.15）。这里改成配它自己那个，
             #   才是界面上真正会出现的搭配（不然门禁量的是一对**不存在**的组合）。
             for idx, preset in enumerate(PRESET_TOKENS, start=1):
                 out.append(
                     Pair(
                         theme,
-                        f"--accent-{idx}-on",
+                        f"--accent-{idx}-ink",
                         preset,
                         AA_NORMAL,
                         "设置页换成这个预设后，实心强调底上的字（.prio.high / 主按钮）",
@@ -251,7 +251,7 @@ def badge_pairs(css: str) -> list[Pair]:
         m_bg = _BG_VAR.search(body)
         if m_mix is not None:
             pct = float(m_mix.group(2))
-            bg = f"mix({m_mix.group(1)} {m_mix.group(2)}% over --card)"
+            bg = f"mix({m_mix.group(1)} {m_mix.group(2)}% over --panel)"
             where = f"{sel}：底是 {pct:.0f}% 状态色合成的浅底，字却用同一个状态色"
         elif m_bg is not None:
             bg = m_bg.group(1)

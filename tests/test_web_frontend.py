@@ -70,13 +70,13 @@ def test_css_tokens_exist_and_cover_both_themes() -> None:
     assert ":root" in css
     assert '[data-theme="dark"]' in css
     for token in (
-        "--accent", "--accent-on", "--accent-soft", "--bg", "--card", "--surface-2",
-        "--line", "--text", "--muted", "--danger", "--ok", "--shadow",
+        "--accent", "--accent-ink", "--panel-2", "--bg", "--panel", "--panel-2",
+        "--border", "--ink", "--muted", "--danger", "--ok", "--shadow",
     ):
         assert token in css, f"缺少令牌 {token}"
     # 暗色块里也要有背景/文字/表面的覆盖（否则暗色会是半成品）
     dark = css.split('[data-theme="dark"]', 1)[1].split("}", 1)[0]
-    for token in ("--bg", "--card", "--surface-2", "--line", "--text"):
+    for token in ("--bg", "--panel", "--panel-2", "--border", "--ink"):
         assert token in dark, f"暗色令牌缺少 {token}"
 
 
@@ -1416,7 +1416,7 @@ def test_repeat_rhythm_view_is_wired_and_kind() -> None:
     assert "noteHTML(rhythm.note)" in stats, "说明要用后端给的那句（别在界面复述口径）"
 
     row = html.split("function repeatRhythmRow(s){", 1)[1].split("\n}", 1)[0]
-    assert "'var(--accent)'" in row and "none" in row and "'var(--line)'" in row, \
+    assert "'var(--accent)'" in row and "none" in row and "'var(--border)'" in row, \
         "三种状态要三种画法（实心 / 空心 / 淡灰）"
     assert "stroke-width=\"1.5\"" in row, "空心格要有描边（不只靠颜色）"
     assert "完成 ${s.done} / 排期 ${s.planned}" in row, "只给这两个数"

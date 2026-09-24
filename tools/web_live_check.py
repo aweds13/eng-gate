@@ -846,7 +846,7 @@ def main() -> int:
         "无 alert/prompt": "alert(" not in html and "prompt(" not in html,
         "模板用 data-action": html.count("data-action=") >= 40,
         "页面引用 app.css": "/app.css" in html,
-        "样式可取到": "--accent-soft" in css,
+        "样式可取到": "--panel-2" in css,
         "config 提供强调色": bool(cfg.get("accent_color")),
         # R3 三栏（SR-NF4）：壳里三个区域都在，且右栏计时器/详情挂载点存在
         "三栏骨架齐全": all(k in html for k in

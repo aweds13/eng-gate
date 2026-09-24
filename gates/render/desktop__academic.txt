@@ -82,31 +82,31 @@ div.card.block:nth-child(9)>div.gpa-head>div.stat-label>div.mb-3:nth-child(1)		5
 div.gpa-head>div.stat-label>div.mb-3:nth-child(1)>div.sub.split		530,617,362,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.stat-label>div.mb-3:nth-child(1)>div.sub.split>span:nth-child(1)	GPA(当前制)	530,617,65,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.stat-label>div.mb-3:nth-child(1)>div.sub.split>span:nth-child(2)	3.7	876,617,16,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.gpa-head>div.stat-label>div.mb-3:nth-child(1)>div.bar-track.tall		530,633,362,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(1)>div.bar-track.tall		530,633,362,10	16/normal/400	#1e293b/#eef2f7	6;0px
 div.stat-label>div.mb-3:nth-child(1)>div.bar-track.tall>div.bar-fill		530,633,335,10	16/normal/400	#1e293b/#2f6feb	0;0px
 div.card.block:nth-child(9)>div.gpa-head>div.stat-label>div.mb-3:nth-child(2)		530,651,362,26	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.gpa-head>div.stat-label>div.mb-3:nth-child(2)>div.sub.split		530,651,362,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.stat-label>div.mb-3:nth-child(2)>div.sub.split>span:nth-child(1)	加权平均	530,651,48,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.stat-label>div.mb-3:nth-child(2)>div.sub.split>span:nth-child(2)	86	879,651,13,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.gpa-head>div.stat-label>div.mb-3:nth-child(2)>div.bar-track.tall		530,667,362,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(2)>div.bar-track.tall		530,667,362,10	16/normal/400	#1e293b/#eef2f7	6;0px
 div.stat-label>div.mb-3:nth-child(2)>div.bar-track.tall>div.bar-fill		530,667,311,10	16/normal/400	#1e293b/#2f6feb	0;0px
 div.card.block:nth-child(9)>div.gpa-head>div.stat-label>div.mb-3:nth-child(3)		530,685,362,26	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.gpa-head>div.stat-label>div.mb-3:nth-child(3)>div.sub.split		530,685,362,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.stat-label>div.mb-3:nth-child(3)>div.sub.split>span:nth-child(1)	平均分	530,685,36,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.stat-label>div.mb-3:nth-child(3)>div.sub.split>span:nth-child(2)	86	879,685,13,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.gpa-head>div.stat-label>div.mb-3:nth-child(3)>div.bar-track.tall		530,701,362,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(3)>div.bar-track.tall		530,701,362,10	16/normal/400	#1e293b/#eef2f7	6;0px
 div.stat-label>div.mb-3:nth-child(3)>div.bar-track.tall>div.bar-fill		530,701,311,10	16/normal/400	#1e293b/#2f6feb	0;0px
 div.card.block:nth-child(9)>div.gpa-head>div.stat-label>div.mb-3:nth-child(4)		530,719,362,26	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.gpa-head>div.stat-label>div.mb-3:nth-child(4)>div.sub.split		530,719,362,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.stat-label>div.mb-3:nth-child(4)>div.sub.split>span:nth-child(1)	学分	530,719,24,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.stat-label>div.mb-3:nth-child(4)>div.sub.split>span:nth-child(2)	5	886,719,6,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.gpa-head>div.stat-label>div.mb-3:nth-child(4)>div.bar-track.tall		530,735,362,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(4)>div.bar-track.tall		530,735,362,10	16/normal/400	#1e293b/#eef2f7	6;0px
 div.stat-label>div.mb-3:nth-child(4)>div.bar-track.tall>div.bar-fill		530,735,362,10	16/normal/400	#1e293b/#2f6feb	0;0px
 div.card.block:nth-child(9)>div.gpa-head>div.stat-label>div.mb-3:nth-child(5)		530,753,362,26	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.gpa-head>div.stat-label>div.mb-3:nth-child(5)>div.sub.split		530,753,362,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.stat-label>div.mb-3:nth-child(5)>div.sub.split>span:nth-child(1)	课程覆盖	530,753,48,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.stat-label>div.mb-3:nth-child(5)>div.sub.split>span:nth-child(2)	1/1	874,753,18,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.gpa-head>div.stat-label>div.mb-3:nth-child(5)>div.bar-track.tall		530,769,362,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(5)>div.bar-track.tall		530,769,362,10	16/normal/400	#1e293b/#eef2f7	6;0px
 div.stat-label>div.mb-3:nth-child(5)>div.bar-track.tall>div.bar-fill		530,769,362,10	16/normal/400	#1e293b/#2f6feb	0;0px
 div.shell>main#main>div.card.block:nth-child(9)>div.sub	各轴各自归一到本图最大值，只看「是否均衡」，不用于跨人比较；成绩录得越多，覆盖越满。	256,824,636,16	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(10)	课程	240,874,668,17	13/normal/400	#64748b/#000000@0.00	0;0px

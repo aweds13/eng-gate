@@ -516,7 +516,7 @@ evidence = [
   "text:src/timeflow/core/focus/timer.py::预留、**没有任何入口**",
   "text:docs/specification/functional.md::结束（计入投入）/ 放弃 / 记中断",
   "text:src/web/app.css::--accent: #2f6feb",
-  "text:src/web/app.css::--accent-2-on: #000",
+  "text:src/web/app.css::--accent-2-ink: #000",
   "text:src/timeflow/config.py::accent_color: str = \"#2f6feb\"",
   "text:tools/contrast_audit.py::先剥注释再抽",
   "text:tools/contrast_baseline.toml::已销账（T-G39）",
@@ -708,7 +708,7 @@ evidence = [
   "text:复盘/审美门-对比度-T-G27.md::什么时候能收紧成硬门",
   "file:tools/contrast_audit.py",
   "file:tools/contrast_baseline.toml",
-  "text:src/web/app.css::--toast-bg: var(--surface-2)",
+  "text:src/web/app.css::--toast-bg: var(--panel-2)",
   "text:scripts/run_gates.py::(\"contrast\", [PY, \"-X\", \"utf8\", \"tools/contrast_audit.py\"",
   "test:test_contrast_audit.py",
 ]
@@ -1428,6 +1428,24 @@ evidence = [
   "test:test_web_frontend.py",
 ]
 gaps = "**修了发现的两处**：`renderHabit` 的今天、`heatmap` 的格子日期（都改走 `todayISO()`，本机时区）。**它为什么会伤人**：`new Date().toISOString()` 给的是 UTC 日期，本机 UTC+8 → **本地 0–8 点算出来是昨天**：界面把「今天已打卡」显示成「打卡」，而点下去（服务端按本地今天翻转）会把那次打卡**取消**掉，提示还写着「已打卡」。**护栏两层**（都在 `test_web_frontend.py`）：全文件级不许出现裸的 `new Date().toISOString()`；函数级 `renderHabit`/`heatmap` 里不许出现 `toISOString` —— 判的是**剥掉注释后的代码**（不剥注释会把「别这么写」那句解释也判红，同 T-G39 的教训），并用合成数据证明它咬得住。**没做**：全仓的「日期取法」清点（`docs/` / `tools/` / 别的 `.js`）；护栏只扫 `index.html`。"
+
+[entries."T-G44"]
+id = "T-G44"
+title = "视觉线步 1（SR-NF1 / N30）：颜色令牌改名对齐 workbench（118 处、值不变）+ 映射表进规格 + `--accent-soft` 并进 `--panel-2`"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/视觉线步1-令牌改名对齐-T-G44.md",
+  "text:docs/specification/nonfunctional.md::令牌映射表（2026-09-24，T-G44）",
+  "text:src/web/app.css::--panel: #fff;",
+  "text:src/web/app.css::--ink: #1e293b;",
+  "text:src/web/app.css::--accent-ink: #fff;",
+  "text:src/web/app.css::--border-strong: #cbd5e1;",
+  "text:src/web/app.css::--toast-ink: #fff;",
+  "text:tools/contrast_audit.py::f\"--accent-{idx}-ink\"",
+  "test:test_web_frontend.py",
+]
+gaps = "**颜色令牌全改、值一个没动**：`--card→--panel`、`--surface-2→--panel-2`、`--line→--border`、`--line-strong→--border-strong`、`--text→--ink`、`--accent-on→--accent-ink`、`--accent-N-on→--accent-N-ink`、`--text-on-dark→--toast-ink`（118 处，含 app.css / index.html / 门禁工具 / 测试）。**尺度令牌刻意不跟包**（`--sp-*`/`--r-*`/`--fs-*`）：我们是包的超集（11/5/9 档），把 11 档间距砍成包的 6 档、5 档圆角砍成 3 档是**改视觉**，必须与步 2「层次语言」、步 3「排版节奏」一起做 —— 映射表里写明了这条理由。**唯一有意变化**：`--accent-soft` 并进 `--panel-2`（值为中性灰 `#f1f5f9` 而名字写着强调浅底，T-G26 记过；T-G42 后只剩进度条槽一处）→ 24 行黄金的颜色 `#f1f5f9→#eef2f7`。**证明**：42 份渲染清单**逐行一致**（脚本一次性：旧行必须在新行里，唯一例外逐条点名「颜色变了的那 24 行」），所以「改名零变化」不是口号。**三条教训**：① **全仓替换必须配一次真跑** —— `f\"--accent-{idx}-on\"` 这种拼出来的名字字面替换抓不到，是跑测试喊出来的；② 台账两条 `text:app.css::…` 证据指针指着旧名 → 同提交改（否则 audit 红）；③ **历史文本不改**（复盘与 baseline 销账记录留旧名，baseline 顶上写明「这是当时的名字 + 映射表在哪」）。**没做**：`--shadow` 的归位（包只给真浮层用 `--shadow-1`，而我们把阴影用在卡片上 —— 属步 2 的决定）。"
 
 [entries."T-G43"]
 id = "T-G43"

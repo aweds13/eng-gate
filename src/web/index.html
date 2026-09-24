@@ -97,10 +97,10 @@ function accentOnFor(color){
 }
 function applyAccent(color){
   const root=document.documentElement;
-  if(!color){root.style.removeProperty('--accent');root.style.removeProperty('--accent-on');return}
+  if(!color){root.style.removeProperty('--accent');root.style.removeProperty('--accent-ink');return}
   root.style.setProperty('--accent',color);
   const on=accentOnFor(color);
-  if(on)root.style.setProperty('--accent-on',on);else root.style.removeProperty('--accent-on');
+  if(on)root.style.setProperty('--accent-ink',on);else root.style.removeProperty('--accent-ink');
 }
 try{applyAccent(localStorage.getItem('tf_accent'))}catch(e){}
 
@@ -1790,7 +1790,7 @@ function heatmap(logs){
       const iso=todayISO(d);
       const on=done.has(iso);
       cells+=`<rect x="${c*(cell+gap)}" y="${r*(cell+gap)}" width="${cell}" height="${cell}" rx="2.5"
-        fill="${on?'var(--accent)':'var(--surface-2)'}" opacity="${on?1:0.9}"><title>${iso}${on?' 已打卡':''}</title></rect>`;
+        fill="${on?'var(--accent)':'var(--panel-2)'}" opacity="${on?1:0.9}"><title>${iso}${on?' 已打卡':''}</title></rect>`;
     }
   }
   const w=cols*(cell+gap),h=7*(cell+gap);
@@ -1927,7 +1927,7 @@ function repeatRhythmRow(s){
   let marks='';
   list.forEach((c,i)=>{
     const col=i%per, row=Math.floor(i/per);
-    const fill=c.state==='done'?'var(--accent)':c.state==='off'?'var(--line)':'none';
+    const fill=c.state==='done'?'var(--accent)':c.state==='off'?'var(--border)':'none';
     marks+=`<rect x="${col*(cell+gap)}" y="${row*(cell+gap)}" width="${cell}" height="${cell}" rx="2.5"
       fill="${fill}" stroke="${c.state==='missed'?'var(--accent)':'none'}" stroke-width="1.5">
       <title>${c.date} ${c.state==='done'?'做完了':c.state==='off'?'取消/搁置/归档未完成':'排了没做'}</title></rect>`;
@@ -1976,7 +1976,7 @@ function valueHeatmap(cells,metric){
       const on=v>0;
       const ratio=on?0.25+0.75*(v/max):0;
       rects+=`<rect x="${c*(cell+gap)}" y="${r*(cell+gap)}" width="${cell}" height="${cell}" rx="2.5"
-        fill="${on?'var(--accent)':'var(--surface-2)'}" opacity="${on?ratio.toFixed(2):0.9}"><title>${iso}${on?' · '+fmtDay(v,metric):''}</title></rect>`;
+        fill="${on?'var(--accent)':'var(--panel-2)'}" opacity="${on?ratio.toFixed(2):0.9}"><title>${iso}${on?' · '+fmtDay(v,metric):''}</title></rect>`;
     }
   }
   const w=cols*(cell+gap),h=7*(cell+gap);
@@ -1996,7 +1996,7 @@ function weekCard(w){
   const bars=w.days.map(d=>{
     const h=Math.round(6+d.focus_minutes/max*34);           // 6~40px，0 也留一条底线
     const label=Number(d.date.slice(8,10));
-    const bg=d.focus_minutes>0?'var(--accent)':'var(--line)';
+    const bg=d.focus_minutes>0?'var(--accent)':'var(--border)';
     return `<div title="${d.date} ${d.focus_minutes} 分钟" class="bar-col">
       <div class="bar-v" style="height:${h}px;background:${bg}"></div>
       <div class="sub mt-1">${label}</div></div>`;
