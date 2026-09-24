@@ -69,6 +69,12 @@ gates/last.json.tmp
 # `shots/*.png` 是给人看的证据（按需 `node tools/render_check.mjs --shots` 重出，2.5 MB，不入库）
 gates/render/shots/
 
+# 视觉线的**候选预演**（T-G49 起）：候选 CSS 是"覆盖层"，选定后并进 `app.css` 才算数，
+# 截图与数字表同理（`tools/candidate_shots.mjs` 按需重出）。入库会让"样式只有一份真源"
+# 变成两份，而且候选在选定那一刻就过期了 —— 决策本身记在 `复盘/` 与 app.css 的注释里。
+gates/candidates/
+gates/render/candidates/
+
 # 前端构建产物（如需）
 src/web/dist/
 node_modules/
