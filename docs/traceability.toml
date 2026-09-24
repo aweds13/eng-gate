@@ -1429,11 +1429,19 @@ evidence = [
 ]
 gaps = "**修了发现的两处**：`renderHabit` 的今天、`heatmap` 的格子日期（都改走 `todayISO()`，本机时区）。**它为什么会伤人**：`new Date().toISOString()` 给的是 UTC 日期，本机 UTC+8 → **本地 0–8 点算出来是昨天**：界面把「今天已打卡」显示成「打卡」，而点下去（服务端按本地今天翻转）会把那次打卡**取消**掉，提示还写着「已打卡」。**护栏两层**（都在 `test_web_frontend.py`）：全文件级不许出现裸的 `new Date().toISOString()`；函数级 `renderHabit`/`heatmap` 里不许出现 `toISOString` —— 判的是**剥掉注释后的代码**（不剥注释会把「别这么写」那句解释也判红，同 T-G39 的教训），并用合成数据证明它咬得住。**没做**：全仓的「日期取法」清点（`docs/` / `tools/` / 别的 `.js`）；护栏只扫 `index.html`。"
 
+[entries."T-G51"]
+id = "T-G51"
+title = "视觉线·步 2 落地：把用户选的 **C 静音层** 并进 `app.css`（1px 边框做层次 + 阴影归位浮层 + 尺度收敛到包的 4px 网格与 3 档圆角 + 读数卡退到 `--panel-2` + `--muted` 跟包）"
+group = "PROCESS"
+status = "todo"
+evidence = []
+gaps = "**用户 2026-09-24 选 C**（三个嵌套候选里最全套的那个），候选与数字在 `复盘/视觉线步2层次语言-T-G50.md` 与 `gates/render/candidates/NUMBERS.md`。落地清单（逐条，别漏）：① `app.css` —— `.card` / `.panel` 补 `1px solid var(--border)`、`box-shadow: none`，`--shadow` 改成包的浮层值（`.wb-card` 有边框、阴影注释写着 `overlays only`），`.card.selected` 只留 2px 环；② 尺度收敛 —— 间距 **11 档 → 6 档**（4/8/12/16/24/32，就近并档 `6→8 8→8 10→12 12→12 14→16 16→16 18→16 20→24 24→24 30→32`，并把 `--sp-7..--sp-11` 这五个**名字**也一并收掉：用法改指最近的档，**别再留 11 个名字装 6 个值**）；圆角 **5 档 → 3 档**（`--r-sm:8→6`、`--r-lg:12→10`）；③ 两对同义卡片类合并（`.card.block` 与 `.card.panel-card`，29 处标记改名，含 `.title` 下边距与 `.form` 外边距那两条）；④ 读数卡静音面 —— 预演用的是 `:has()`，落地要换成**标记层的显式类名**（环/条形/大数字/雷达这 4 类卡），这样渲染黄金才钉得住它；⑤ `--muted` 跟包（亮 `#5b6472` / 暗 `#8a93a6`）—— ★ **它是「静音层」的另一半**：不跟包的话 `--muted` 落在 `--panel-2` 上只有 **4.23（不过 AA）**（候选预演算过），而且**新增的这对搭配要补进 `contrast_audit.py` 的 `TOKEN_PAIRS`**（T-G42 曾把 `--muted on --panel-2` 当僵尸行删掉 —— 现在它真的会出现了，门必须看得见它）。**风险与代价**：42 份黄金预计**全动**（每张卡多 2px 边框 + 尺度变化），要逐视图点名；`squeeze_scan` 前后各跑一次（间距放宽可能减轻挤压、但卡片变浅底后轨道/网格线的可见性要靠 `stroke: var(--border)` 那条保住）；暗色主题**渲染层采不到**（只采亮色），要手工核一遍。"
+
 [entries."T-G50"]
 id = "T-G50"
 title = "视觉线·步 2「层次语言」的候选预演机制（用户 2026-09-24 选 **C 静音层**）：往真界面注入候选 CSS → 截图 + 量数 + 用门自己的算法预演对比度；★ 预演当场抓到「浅底当形状」消失这个真缺陷"
 group = "PROCESS"
-status = "todo"
+status = "done"
 evidence = [
   "file:tools/candidate_shots.mjs",
   "file:tools/candidate_contrast.py",
