@@ -52,6 +52,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 GATES = ROOT / "gates" / "last.json"
 REUSE = ROOT / "gates" / "reuse.json"
+LOG_DIR = ROOT / "gates" / "logs"   # 每道门的全量输出（T-G58；不进仓库）
 PY = sys.executable
 
 COMMON = [
@@ -362,6 +363,17 @@ def finish_gate(name: str, proc: subprocess.Popen[str], t0: float) -> dict[str, 
         item["blocking"] = False
         item["status"] = "NOT RUN"
         item["note"] = "起不了真浏览器：这一层**没有验证**，不算通过"
+    # ★ T-G58：**失败时把这道门的输出留下**。原来只印一行摘要、输出直接丢掉 —— 于是
+    # 「全量跑红了」之后唯一的办法是**把这道门单独再跑一遍**（render 110 秒、ui_flow 176 秒），
+    # 而它往往是随机的，重跑还未必复现（T-G51 就在这上面白花了两轮）。现在：全量输出落
+    # `gates/logs/<门名>.log`（不进仓库），**并且**当场印尾部若干行 —— 红的时候立刻能看到原因。
+    failed = proc.returncode not in (0, 3)
+    if out:
+        try:
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+            (LOG_DIR / f"{name}.log").write_text(out, encoding="utf-8")
+        except OSError:  # 写不了日志不该把门禁也带走
+            pass
     with PRINT_LOCK:
         tag = f"{name:<22} exit={proc.returncode}  {item['seconds']}s"
         if item.get("status") == "NOT RUN":
@@ -369,6 +381,11 @@ def finish_gate(name: str, proc: subprocess.Popen[str], t0: float) -> dict[str, 
         else:
             mark = "[OK ]" if proc.returncode == 0 else "[FAIL]"
             print(f"{mark} {tag}  {item['summary']}")
+        if failed and out:
+            tail = [ln.rstrip() for ln in out.splitlines() if ln.strip()][-12:]
+            print(f"       ↳ 这道门的输出尾部（全量在 gates/logs/{name}.log）：")
+            for ln in tail:
+                print(f"         {ln[:160]}")
     return item
 
 

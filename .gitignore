@@ -65,6 +65,11 @@ um2/
 gates/last.json.tmp
 .pytest_tmp/
 
+# 每道门的**全量输出**（T-G58）：失败时不用把门单独再跑一遍才能看原因（render 110s / ui_flow 176s）。
+# 它是本机诊断产物，不入库 —— 入库的只有 last.json（结论）与渲染黄金（判据）。
+gates/logs/
+gates/diag/
+
 # 渲染验证层的**截图**（T-G32）：`gates/render/*.txt` 是黄金（入库），
 # `shots/*.png` 是给人看的证据（按需 `node tools/render_check.mjs --shots` 重出，2.5 MB，不入库）
 gates/render/shots/

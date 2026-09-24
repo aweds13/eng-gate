@@ -52,7 +52,7 @@ const SCHEMA = 'v1'
 /* ---------------------------------------------------------------- 参数 */
 
 function parseArgs(argv) {
-  const a = { update: false, shots: false, json: false, keep: false, port: 8531, reason: '', quiet: false }
+  const a = { update: false, shots: false, json: false, keep: false, port: 8531, reason: '', quiet: false, force: false }
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]
     if (k === '--update') a.update = true
@@ -60,6 +60,7 @@ function parseArgs(argv) {
     else if (k === '--json') a.json = true
     else if (k === '--keep') a.keep = true
     else if (k === '--quiet') a.quiet = true
+    else if (k === '--force') a.force = true
     else if (k === '--port') a.port = Number(argv[++i])
     else if (k === '--reason') a.reason = argv[++i] ?? ''
     else if (k === '--only') a.only = argv[++i]
@@ -70,6 +71,21 @@ function parseArgs(argv) {
     console.error('❌ --update 必须带 --reason "<一句话说明为什么这次改动是对的>"')
     console.error('   （黄金是判据，改判据必须留下理由 —— 跟台账登记、棘轮销账一个道理）')
     process.exit(1)
+  }
+  // ★ T-G51 实测：`--update --only <视图>` 会**采到错的黄金**，默认禁止。
+  // 根因是"视图之间不是独立的"：离线页那半页「上次联网时看到的样子」读的是**别的页面联网时写下的缓存**
+  // （`src/web/index.html` 的 `rememberForOffline` → IndexedDB），而 `--only` 根本不访问那些页面 →
+  // 缓存为空 → 采到的是**退化版式**。当时它"改 3 份、16.4 秒"看着很划算，结果下一次全量跑立刻红：
+  // 那不是界面变了，是**判据采错了**（比慢 110 秒坏得多）。
+  // 所以：改黄金一律全量跑；确实与其它视图无状态耦合的视图（如 setting）可以 `--force` 显式放行。
+  if (a.update && a.only && !a.force) {
+    console.error('❌ `--update` 不能和 `--only` 合用（除非 `--force`）：**视图之间不是独立的**。')
+    console.error('   证据（T-G51）：`--only offline --update` 采到的是「离线缓存为空」的退化版式 ——')
+    console.error('   离线页那份「上次联网时看到的样子」是**其它页面联网时**写下的缓存，')
+    console.error('   而 `--only` 不访问那些页面。下次全量跑就会红，而那不是界面变了、是判据采错了。')
+    console.error('   改黄金请跑全量：`node tools/render_check.mjs --update --reason "…"`（约 110 秒）。')
+    console.error('   确实与其它视图无状态耦合的视图，可以加 `--force` 显式放行。')
+    process.exit(2)
   }
   return a
 }
@@ -422,7 +438,16 @@ async function main() {
         const minus = d.filter((x) => x[0] === '-').length
         const plus = d.filter((x) => x[0] === '+').length
         console.log(`\n  · ${c.key}  -${minus} +${plus}${c.prev === null ? '（新增黄金）' : ''}`)
-        for (const [sign, line] of d.slice(0, 8)) console.log(`      ${sign} ${line.slice(0, 150)}`)
+        // ★ 只印"前 8 行"会把**坐标位移**当成全部差异（整页往下挪一格时，开头几行全是坐标），
+        //   真正的原因（多出来/少了的是**哪一行**）在中间 —— T-G51 就在这里误诊过一次。
+        //   所以改成：**优先印文字列非空的行**（行格式 `选择器 \t 文字 \t …`，文字非空＝这行有内容），
+        //   没有再退回按顺序印；并且末尾如实说还剩多少行没印（不装作印全了）。
+        const informative = d.filter(([sign, line]) => sign !== ' ' && (line.split('\t')[1] ?? '').trim() !== '')
+        const shown = (informative.length ? informative : d).slice(0, 10)
+        for (const [sign, line] of shown) console.log(`      ${sign} ${line.slice(0, 150)}`)
+        if (d.length > shown.length) {
+          console.log(`      …（共 ${d.length} 行差异，上面 ${shown.length} 行是${informative.length ? '有文字内容的' : '最前面的'}）`)
+        }
       }
       if (changed.length > 6) console.log(`  …另有 ${changed.length - 6} 份不同`)
       console.log('\n  若这次改动**是有意的**：node tools/render_check.mjs --update --reason "一句话为什么"')

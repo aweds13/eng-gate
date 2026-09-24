@@ -52,6 +52,24 @@ def test_unknown_argument_is_refused() -> None:
     assert "未知参数" in proc.stdout + proc.stderr
 
 
+def test_update_with_only_is_refused_without_force() -> None:
+    """`--update --only <视图>` 默认拒绝（T-G51 实测**采到过错黄金**，不是理论担忧）。
+
+    为什么这条值得钉：它看起来是"最划算的优化" —— 改一处版式只重采 3 份、**16 秒**（全量 110 秒）。
+    可**视图之间不是独立的**：离线页那半页「上次联网时看到的样子」读的是**别的页面联网时**写下的缓存
+    （`src/web/index.html` 的 `rememberForOffline` → IndexedDB），而 `--only` 根本不访问那些页面 →
+    缓存为空 → 采到的是**退化版式**。下一次全量跑立刻红，而那不是界面变了、是**判据采错了** ——
+    比慢 110 秒坏得多（假红会让人去"修"一个没坏的东西）。
+
+    改黄金一律全量跑；确实与其它视图无状态耦合的视图（如 `setting`）可以 `--force` 显式放行。
+    """
+    proc = run_tool("--update", "--only", "offline", "--reason", "试试快路")
+    assert proc.returncode == 2
+    out = proc.stdout + proc.stderr
+    assert "视图之间不是独立的" in out
+    assert "--force" in out
+
+
 def test_golden_files_are_readable_manifests() -> None:
     """黄金的格式护栏：缺文件 / 头部对不上 / 行字段数不对 —— 现在就说清，别等门禁里报一堆 diff。
 
