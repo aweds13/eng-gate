@@ -1452,11 +1452,18 @@ gaps = "**范围（T-G49 第一轮剩下的，别重做已删的那批）**：�
 
 [entries."T-G56"]
 id = "T-G56"
-title = "视觉线·第一层收尾②：5 条无界面路由里的 1/2 接进设置页（`GET /api/reminders` 全量提醒列表 + `GET /api/sync/logs` 冲突日志，**只读展示 + 刷新**）"
+title = "视觉线·第一层收尾②：5 条无界面路由里的 1/2 接进设置页（`GET /api/reminders` 全量提醒列表 + `GET /api/sync/logs` 冲突日志，**只读展示 + 一个「读一次」按钮**）"
 group = "PROCESS"
-status = "todo"
-evidence = []
-gaps = "**为什么是设置页**：契约早就这么写 —— OP-47 的入口是设置页「提醒」一节；OP-41 写「入口：同步结果 / 冲突日志（设置页显示条数）」，且 `docs/commands.toml` 的 `ui` 已经写着 `view=setting`。挂两节比开新视图便宜得多（新视图要动 `VIEWS` + `view()` + 命令表 + 新增一份黄金）。**落点**：提醒卡内加一个 `settings-sub` + 空容器 + 按钮（在 `index.html` 提醒卡收尾之前）；`#set-sync` 里跨端同步小节之后加同样一节。数据**点一下拉**（照 `runLanSelfCheck` 那套），**不进首屏 `Promise.all`**（两条都是「看时才要」，而且它们会变 —— 点一下天然就是刷新）。**口径：只读展示**（不删、不改、不选边、不给提醒加「已读/忽略」）—— 契约对冲突日志的输入写的就是「无（自动）或用户选择保留哪版（改回即可）」，界面上不摆选边按钮就不引入新语义，所以**不需要用户再拍板**。**唯一的旧账**：第 5 条 `POST /api/sync/tasks` 代码还在、也**没有任何弃用标记**（2026-09-23 定的是「标弃用但不删，怕有外部脚本」）—— 这条要问用户一句。**代价**：设置页 3 档宽度的黄金必变（`narrow__setting` 是 820px 换行临界宽度，新行按「按钮不收缩、输入框可收缩带最小宽」那条约定写）；`tools/ui_dom_probe.mjs` 的假数据要补这两个 key，否则渲染成空、看着接上了其实没验；落地后要同时改台账 `DELIVERY.READY` 那条盘点。"
+status = "done"
+evidence = [
+  "text:src/web/index.html::id=\"set-remind-list\"",
+  "text:src/web/index.html::id=\"set-conflict-log\"",
+  "text:src/web/index.html::async function loadRemindList(){",
+  "text:src/web/index.html::async function loadSyncLog(){",
+  "text:src/web/index.html::'remind-list':    () => loadRemindList(),",
+  "test:test_web_frontend.py",
+]
+gaps = "**为什么是设置页**：契约早就这么写 —— OP-47 的入口是设置页「提醒」一节；OP-41 写「入口：同步结果 / 冲突日志（设置页显示条数）」，且 `docs/commands.toml` 的 `ui` 已经写着 `view=setting`。挂两节比开新视图便宜得多（新视图要动 `VIEWS` + `view()` + 命令表 + 新增一份黄金）。**落地**：提醒卡内加「全部提醒（含哪天到点）」+ 空容器 + 「读一次」按钮；`#set-sync` 里加「冲突日志（最近 50 条）」同样一节；「常用」区加一条到冲突日志的锚点跳转。**口径：只读展示** —— 不删、不改、**不摆「选边」按钮**、不给提醒加「已读/忽略」（契约对冲突日志的输入写的就是「无（自动）或用户选择保留哪版（改回即可）」，不引入新语义，所以不需要用户再拍板）；提醒的 `state` 由后端一处算（卡片/详情/通知通道共用同一份判断），界面只把它说成人话（`已过期/今天/快了/以后`，≤8 字）。**数据是点一下拉的**（照设置页已有的 `runLanSelfCheck` 那套）：两条都是「看时才要」，**不进首屏 `Promise.all`**（首屏那两个容器是空的），而且它们会变、点一下天然就是刷新。**覆盖**：这两条路由补进 `test_backend_contracts_used_by_frontend` 的清单（它们**从没被界面调用过**，所以从来没被这张表覆盖）；新增 `tests/test_web_frontend.py::test_orphan_routes_are_shown_in_the_setting_page` 钉标记层落点（两节的 id、两个动作、两条路径）。★ **边界（不许假装验证过）**：那只钉**标记层**，点下去之后的渲染要真浏览器才验得了 —— 目前只有人工/后续流层覆盖。**代价**：设置页 3 档宽度的黄金重采（`narrow__setting` 是 820px 换行临界宽度）。**没做**：第 3 条（团队分配记录，界面走 `/api/team/board`）、第 4 条（分组任务，已定并入后续）、第 5 条 `POST /api/sync/tasks` —— 代码还在、**没有任何弃用标记**，2026-09-23 定的是「标弃用但不删（怕有外部脚本）」，**这条还欠用户一句确认**。"
 
 [entries."T-G55"]
 id = "T-G55"

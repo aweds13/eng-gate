@@ -498,3 +498,12 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/stats`
 - `phone/today`
 
+
+## 2026-09-24 14:30:28 · 3 份改动
+
+> 理由：T-G56：设置页接进两条无界面路由（全量提醒列表 OP-47 / 冲突日志 OP-40·OP-41）—— 只读展示 + 各一个「读一次」按钮，不开新视图；setting 3 档宽度因此变化
+
+- `desktop/setting`
+- `narrow/setting`
+- `phone/setting`
+

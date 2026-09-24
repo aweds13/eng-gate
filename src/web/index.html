@@ -642,6 +642,36 @@ async function rotateLanCode(){
 /* 本机网络自检（T-G10c）：查"手机为什么连不上"里**能在电脑上查的那一半** ——
    有没有局域网地址、本机能不能经它访问自己（≈防火墙拦没拦）。
    **查不到的**（校园网客户端隔离）后端会写在 `hint` 里，界面照原话显示，不自己编结论。 */
+/* 全量提醒列表（T-G56 / OP-47）：**只读**展示 —— 不删、不改、不给"已读/忽略"。
+   状态由后端一处算（`reminders()` 的 docstring：卡片、详情、将来的通知通道共用同一份判断），
+   界面只负责把 state 说成人话（≤8 字，见 conventions.md「界面文案」）。 */
+const REMIND_STATE={over:'已过期',today:'今天',soon:'快了',later:'以后'};
+async function loadRemindList(){
+  const box=document.getElementById('remindList');
+  if(box)box.innerHTML='<span class="meta">正在读…</span>';
+  try{
+    const rows=await api('/api/reminders');
+    if(!box)return;
+    box.innerHTML=(rows||[]).length?rows.map(r=>`<div class="fact">
+      <span>${esc(r.title)}</span>
+      <span class="sub">${esc(REMIND_STATE[r.state]||r.state)} · ${esc(String(r.remind_at||'—').replace('T',' '))}</span>
+    </div>`).join(''):emptyState('还没有提醒');
+  }catch(e){ if(box)box.innerHTML=''; }
+}
+/* 冲突日志（T-G56 / OP-40 + OP-41）：**只读**展示 —— 契约对它的输入写的是
+   「无（自动）或用户选择保留哪版（改回即可）」，界面不摆"选边"按钮就不引入新语义。 */
+async function loadSyncLog(){
+  const box=document.getElementById('syncLog');
+  if(box)box.innerHTML='<span class="meta">正在读…</span>';
+  try{
+    const rows=await api('/api/sync/logs');
+    if(!box)return;
+    box.innerHTML=(rows||[]).length?rows.map(r=>`<div class="fact">
+      <span>${esc(r.entity)} · ${esc(String(r.result||''))}</span>
+      <span class="sub">${esc(String(r.created_at||'').replace('T',' '))}</span>
+    </div>`).join(''):emptyState('还没有冲突');
+  }catch(e){ if(box)box.innerHTML=''; }
+}
 async function runLanSelfCheck(){
   const box=document.getElementById('lanSelfCheck');
   if(box)box.innerHTML='<span class="meta">正在查…</span>';
@@ -804,6 +834,8 @@ const ACTIONS = {
   'copy-lan':       () => copyLanAddress(),
   'lan-rotate':     () => rotateLanCode(),
   'lan-selfcheck':  () => runLanSelfCheck(),
+  'remind-list':    () => loadRemindList(),
+  'sync-log':       () => loadSyncLog(),
   'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
@@ -2849,6 +2881,7 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-behavior">口径与回退</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-remind">提醒</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-sync">数据与同步</button>
+      <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-conflict-log">冲突日志</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-offline">手机离线记</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-lan">局域网访问</button></div>
   </div>
@@ -3053,6 +3086,9 @@ async function renderSetting(m){
     <div class="sub">诚实边界：计划任务以<b>当前用户、交互式</b>运行 —— 应用关掉也响，但<b>注销/关机时不响</b>
       （要做到"注销也响"得改系统层权限，不擅自做）。开启/关闭都是可逆的：关闭会把计划任务删掉、不留痕。
       移动端只做界面标注，不发系统通知。</div>
+    <div class="settings-sub" id="set-remind-list">全部提醒（含哪天到点）</div>
+    <div class="row tight"><button class="ghost" data-action="remind-list">读一次</button></div>
+    <div id="remindList"></div>
   </div>
   <div class="section-title">数据与同步</div>
   <div class="card block" id="set-sync">
@@ -3077,6 +3113,9 @@ async function renderSetting(m){
       · 上次导入：${sync.last_import?`${esc(String(sync.last_import.at).replace('T',' '))} · 新增 ${(sync.last_import.totals||{}).inserted||0} / 覆盖 ${(sync.last_import.totals||{}).updated||0}`:'还没导入过'}</div>
     <div class="sub">包里<b>不含</b>这台机器的设置（导出目录 / Vault / AI 开关 / 口径开关）、本机冲突日志与 schema 版本 ——
       拷过去不会改掉另一台的设置。同名文件不会互相覆盖（同一秒导出两次会加 -2）。</div>
+    <div class="settings-sub" id="set-conflict-log">冲突日志（最近 50 条）</div>
+    <div class="row tight"><button class="ghost" data-action="sync-log">读一次</button></div>
+    <div id="syncLog"></div>
     <div class="settings-sub" id="set-offline">手机离线记（从手机往电脑带）</div>
     <div class="meta">在手机上断网记的东西（任务 / 勾完成 / 习惯打卡 / 备忘 / 每日反馈）先存在手机里，
       导出的是<b>同一个格式</b>的包 —— 拿回来在这里「先预览再导入」就行。</div>

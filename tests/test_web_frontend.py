@@ -733,6 +733,10 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
         ("get", "/api/grades", None),
         ("get", "/api/assessments/upcoming?days=14", None),
         ("get", "/api/sync/status", None),
+        # T-G56：5 条「无界面路由」里的 1/2 接进设置页（只读展示 + 一个"读一次"按钮）——
+        # 这两条以前**从没被界面调用过**，所以也从来没被这张表覆盖。
+        ("get", "/api/sync/logs", None),
+        ("get", "/api/reminders", None),
         ("get", "/api/focus/today", None),
         ("get", "/api/focus/active", None),
         ("get", "/api/focus/guard", None),
@@ -1666,3 +1670,23 @@ def test_ui_does_not_explain_itself() -> None:
     assert "不用一次做全，这只是个起点" not in html, "引导卡里的解释句要删"
 
 
+
+
+def test_orphan_routes_are_shown_in_the_setting_page() -> None:
+    """T-G56：5 条「无界面路由」里的 1/2 接进设置页 —— **只读展示 + 一个"读一次"按钮**。
+
+    为什么钉它：这两条路由（全量提醒列表 OP-47 / 冲突日志 OP-40·OP-41）在契约里早就写着
+    「入口：设置页」，却一直没有界面入口 —— 于是它们既不被门禁覆盖，也没人知道它们存在。
+    这里钉三件事：① 两节真在设置页里（各带锚点 id，好在「常用」区做跳转）；
+    ② 各有一个动作按钮（`remind-list` / `sync-log`）—— 注册那半由上面那条通用断言兜着；
+    ③ 两条路由的路径真在模板里（数据是**点一下拉**的，不进首屏 `Promise.all`：
+    它们都是"看时才要"、而且会变，点一下天然就是刷新）。
+
+    ★ 边界（不许假装验证过）：这里只钉**标记层**。点下去之后的渲染要真浏览器才验得了 ——
+    目前靠人工/后续的流层覆盖，别把它说成"已经机器验过"。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    for needle in ('id="set-remind-list"', 'data-action="remind-list"', 'id="remindList"',
+                   'id="set-conflict-log"', 'data-action="sync-log"', 'id="syncLog"'):
+        assert needle in html, f"设置页缺了 T-G56 的落点：{needle}"
+    assert "/api/reminders" in html and "/api/sync/logs" in html
