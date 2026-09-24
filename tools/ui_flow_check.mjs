@@ -433,18 +433,20 @@ flow({
     t.eq('非法时段没有被记进列表', await t.count('[data-action="guard-dnd-del"]'), 0)
 
     // ② 合法时段：真打字 + 真回车（走的是 `data-enter` 那条键盘通路，不是点按钮）
+    // ★ 判据用**持久信号**（列表里真多出一行），不拿提示条当唯一证据：
+    //   提示条 2.2 秒就自己消失，而满负载的一轮里一次 CDP 采样可能要几百毫秒 ——
+    //   于是"操作其实成功了"会被记成失败（T-G60 那轮撞到过一次假红，单跑两次都过）。
+    //   提示条本身仍在①那条路上验（那里验的是"后端原话透传"，是它存在的理由）。
     await t.type('#guardDnd', '22:00-07:00')
     await t.key('Enter')
-    const good = await t.waitToast('已加上勿扰时段：22:00-07:00')
-    t.ok('合法时段加上了', good.ok, `提示条里是：${good.text || '（空）'}`)
-    t.ok('列表里出现了它', await t.waitFor(async () => (await t.count('[data-action="guard-dnd-del"]')) === 1))
+    t.ok('合法时段加上了（列表里真出现）',
+      await t.waitFor(async () => (await t.count('[data-action="guard-dnd-del"]')) === 1, 8000))
     t.has('列表里写的就是它', await t.text('[data-action="guard-dnd-del"]'), '22:00-07:00')
 
-    // ③ 能删掉（自己收拾干净，不给后面的流留状态）
+    // ③ 能删掉（自己收拾干净，不给后面的流留状态）—— 同样以列表为准
     await t.pressAction('guard-dnd-del')
-    const gone = await t.waitToast('已移除勿扰时段：22:00-07:00')
-    t.ok('能删掉', gone.ok, `提示条里是：${gone.text || '（空）'}`)
-    t.eq('删完列表空了', await t.count('[data-action="guard-dnd-del"]'), 0)
+    t.ok('能删掉（列表里真没了）',
+      await t.waitFor(async () => (await t.count('[data-action="guard-dnd-del"]')) === 0, 8000))
   },
 })
 
@@ -474,6 +476,23 @@ flow({
     await t.pressAction('modal-cancel')
     t.eq('取消之后模态关掉了', await t.attr('#modal', 'hidden'), '')
     t.eq('取消之后分组一个没少（没动手）', await t.count('[data-action="group-delete"]'), groupsBefore)
+
+    // ★ T-G60 补的一半（不在 ⑩ 原来替掉的那条人工项里，但同一页同一批控件，顺手钉住）：
+    //   **点开一个分组看它的任务**（只读列表，走那条以前没有入口的路由），再点一次收起。
+    const gt = await t.mark('[data-action="group-tasks"]')
+    if (t.ok('分组行上有「看任务」', gt.ok)) {
+      const gid = await t.attr(HIT, 'data-id')
+      await t.press(HIT, '点「看任务」')
+      const box = `#groupTasks-${gid}`
+      const opened = await t.waitFor(async () => (await t.count(`${box} > *`)) > 0, 6000)
+      t.ok('展开了那个分组的任务（或如实说它还没有任务）', opened)
+      const close = await t.mark(`${box} [data-action="group-tasks"]`)
+      if (close.ok) {
+        await t.press(HIT, '点「收起」')
+        await sleep(200)
+        t.eq('再点一次收起（挂载点空了）', await t.count(`${box} > *`), 0)
+      }
+    }
   },
 })
 

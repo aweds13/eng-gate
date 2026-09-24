@@ -1693,3 +1693,25 @@ def test_orphan_routes_are_shown_in_the_setting_page() -> None:
                    'id="set-conflict-log"', 'data-action="sync-log"', 'id="syncLog"'):
         assert needle in html, f"设置页缺了 T-G56 的落点：{needle}"
     assert "/api/reminders" in html and "/api/sync/logs" in html
+
+
+def test_group_admin_can_open_a_group_and_see_its_tasks() -> None:
+    """T-G60：分组管理里能**点开一个分组看它的任务**（补上 OP-11 那句「点分组看任务」）。
+
+    为什么要一条：那条路由（`GET /api/groups/{group_id}/tasks`）在契约里写着「点分组看任务」，
+    却一直只有后端、没有界面入口 —— 它既不被任何一层覆盖，也没人知道它存在。
+    这里钉**标记层**四件事：按钮、每个分组自己的挂载点、动作注册、以及真的打了那条路由。
+    点下去之后的展开/收起由行为流层第 ⑩ 条在真浏览器里覆盖。
+
+    也钉住"只读"：分组管理只管分组本身，这一节里不许出现改任务的动作
+    （改任务都在任务页/详情面板 —— 一处一套口径）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    admin = html.split("async function renderGroupAdmin(el){", 1)[1]
+    admin = admin.split("\nasync function addGroup", 1)[0]
+    assert 'data-action="group-tasks"' in admin, "分组行上没有「看任务」按钮"
+    assert "groupTasks-${g.id}" in admin, "没有给每个分组留挂载点"
+    assert "'group-tasks':" in html, "动作没注册（点了没反应比报错更难查）"
+    assert "async function toggleGroupTasks(id){" in html
+    assert "api(`/api/groups/${encodeURIComponent(id)}/tasks`)" in html, "没走那条孤儿路由"
+    assert 'data-action="task-' not in admin, "分组管理里出现了改任务的动作（这一节只管分组）"

@@ -544,3 +544,12 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/stats`
 - `phone/today`
 
+
+## 2026-09-24 15:22:22 · 3 份改动
+
+> 理由：T-G60：分组管理里每个分组加「看任务」按钮（点开在该分组下面行内展开它的任务，只读；再点收起）—— 分组行外层多了一层包裹容器，setting 3 档宽度因此变化
+
+- `desktop/setting`
+- `narrow/setting`
+- `phone/setting`
+

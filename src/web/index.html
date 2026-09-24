@@ -841,6 +841,7 @@ const ACTIONS = {
   'group-rename':   el => renameGroup(el.dataset.id, el.dataset.name || ''),
   'group-delete':   el => deleteGroup(el.dataset.id, el.dataset.name || ''),
   'group-sub':      el => addSubgroup(el.dataset.id, el.dataset.name || ''),
+  'group-tasks':    el => toggleGroupTasks(el.dataset.id),
   // 分组换父（T-F5 嵌套）：下拉改一下就落库，成环/超层数由后端 400 带原话
   'group-parent':   el => setGroupParent(el.dataset.id, el.value),
   'task-group':     el => toggleTaskGroup(el.dataset.id, el.dataset.group || '', el.dataset.on === 'true'),
@@ -1153,15 +1154,41 @@ async function renderGroupAdmin(el){
     <div class="new"><input id="groupName" placeholder="新建分组，如：高数" data-enter="group-add">
       <select id="groupParent" title="建在哪个分组下（默认顶层）"><option value="">顶层</option>${options(groups)}</select>
       <button data-action="group-add">新建</button></div>
-    ${groups.map(g=>`<div class="row tight mv-2" style="padding-left:${(Number(g.depth)||1)-1}em">
+    ${groups.map(g=>`<div class="mv-2" style="padding-left:${(Number(g.depth)||1)-1}em">
+      <div class="row tight">
         <span class="badge">${g.task_count} 项</span>
         <span class="grow minw-160">${esc(g.path)}</span>
+        <button class="ghost" data-action="group-tasks" data-id="${g.id}" data-name="${esc(g.name)}">看任务</button>
         <button class="ghost" data-action="group-sub" data-id="${g.id}" data-name="${esc(g.name)}"
           title="在这个分组下建一个子分组">＋子分组</button>
         ${parentSelect(g.id,g.parent_id,'移到别的分组下（顶层 = 移出来）')}
         <button class="ghost" data-action="group-rename" data-id="${g.id}" data-name="${esc(g.name)}">改名</button>
         <button class="ghost" data-action="group-delete" data-id="${g.id}" data-name="${esc(g.name)}">删除</button>
-      </div>`).join('')||emptyState('还没有分组')}`;
+      </div>
+      <div id="groupTasks-${g.id}"></div>
+    </div>`).join('')||emptyState('还没有分组')}`;
+}
+/* 点开一个分组看它的任务（T-G60 —— 补上 OP-11 那句「点分组看任务」与第 4 条孤儿路由）：
+   **只读**列表，走 `GET /api/groups/{id}/tasks`（分组不在就 404，界面照实说）；再点一次收起。
+   为什么放在分组管理里而不是新开一页：分组本来就管在这一节里，多开一页只是把一个点击换成一次导航。
+   列表只放事实（状态徽标 + 标题 + 截止日），不写解释 —— 见 `conventions.md`「界面文案」。 */
+async function toggleGroupTasks(id){
+  const box=document.getElementById(`groupTasks-${id}`);
+  if(!box)return;
+  if(box.dataset.open==='1'){ box.innerHTML=''; box.dataset.open='0'; return }
+  box.dataset.open='1';
+  box.innerHTML='<span class="meta">正在读…</span>';
+  try{
+    const rows=await api(`/api/groups/${encodeURIComponent(id)}/tasks`);
+    // 「收起」**两种情况都给**（哪怕这个分组还没有任务）：不然展开一个空分组之后就没法关掉它。
+    box.innerHTML=((rows||[]).length
+      ? rows.map(t=>`<div class="fact">
+          <span>${STATUS_BADGE[t.status]||'<span class="badge todo">未完成</span>'} ${esc(t.title)}</span>
+          <span class="sub">${t.due_date?`截止 ${esc(t.due_date)}`:''}</span>
+        </div>`).join('')
+      : emptyState('这个分组还没有任务'))
+      +`<div class="row tight"><button class="ghost" data-action="group-tasks" data-id="${id}">收起</button></div>`;
+  }catch(e){ box.innerHTML=''; box.dataset.open='0'; }
 }
 async function addGroup(){
   const input=document.getElementById('groupName');

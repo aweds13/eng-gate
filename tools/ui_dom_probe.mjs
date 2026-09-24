@@ -957,7 +957,9 @@ for (const [where, needs] of [
   ['tasks', ['步骤 1/3', '当前：第 2 步：写解答', '2026-09-25 前', '子任务', '高数 / 第三章']],
   ['detail', ['第 2 步：写解答', 'subtask-due', 'id="subtaskDue"', '尝试失败', '脱离',
     '第 2 步的第 1 小问', '子步骤', 'step-toggle', 'data-group="g2"']],
-  ['group', ['高数 / 第三章', 'group-sub', 'group-parent', 'id="groupParent"']],
+  ['group', ['高数 / 第三章', 'group-sub', 'group-parent', 'id="groupParent"',
+    // T-G60：每个分组行要有一个「看任务」按钮 + 它自己的挂载点（点开看该分组的任务，只读）
+    'data-action="group-tasks"', 'id="groupTasks-']],
 ]) {
   try {
     let html = '';
