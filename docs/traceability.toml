@@ -483,7 +483,7 @@ evidence = [
   "text:src/web/app.css::.card-body { flex: 1 1 240px; min-width: 8em }",
   "text:src/web/app.css::.new input:not([type=\"checkbox\"]):not([type=\"radio\"])",
   "text:src/web/index.html::const notReady=ready?'':",
-  "text:scripts/run_gates.py::(\"render\", [])",
+  "text:scripts/run_gates.py::def render_cmd() -> list[str] | None:",
   "text:scripts/run_gates.py::\"not_run\": not_run,",
 ]
 gaps = "**回答用户那句「为什么是要我来验证？你不能验证吗？」** —— 结论：以前**没验过界面**，不是不能：把「沙箱不让我起浏览器」当成了「这台机器没有浏览器」。**做出来的东西**：`tools/render_check.mjs` 起临时库 + 种子数据（走真 HTTP 接口）+ 真浏览器（CDP），采 3 档宽度（1280/820/390，跨过 app.css 三条断点）× 14 个视图的**几何清单**（选择器/文本/盒子/字号·行高·字重/前景·背景/圆角·内边距），与 `gates/render/*.txt` 42 份黄金**逐字节比**；**每轮把同一份清单采两遍**做确定性自检（不一致 = 工具自己不可信，退出码 4，不当成「界面变了」）；改黄金必须 `--update --reason`，理由落进 `LAST_UPDATE.md`；**起不了浏览器 = NOT RUN**（退出码 3 → `gates/last.json` 的 `not_run` 栏 + trailer 写 `render NOT RUN`，**不算通过**）。★ **建成当天抓到三类真缺陷，都修了**：① **卡片正文被一排动作按钮挤成「一列一个字」**（行内 `flex:1` 基宽 0 + 中文 min-content = 一个字宽；标题实测 34×105，24 个元素横跨 5 个视图 × 3 档宽度；修法 = 19 处行内 `flex:1` → `.card-body`「真实基宽 240px + 下限 8em」，扫描 24→1，important 页整页高 791→450）；② **复选框被当文本框画**（`.new input` / `.field input` 命中 checkbox，`#newMyDay` 76×13 白盒子、标签被挤成 122×64 竖排；修法 = 加 `:not([type=checkbox]):not([type=radio])`，修后 13×13 / 122×19）；③ **离线页那张「这台设备用不了离线存储」永远挂着**（`notReady` 无条件拼进去、而 `capture` 按 `ready` 判断 —— 同屏自相矛盾，只有渲染出来才看得见；修法 = `ready ? '' : …`）。**建层时踩到 6 个确定性坑（全部由自检抓出）：选中态随首屏时序翻 / 随机设备号 / 滚动条吃 15px（且改视口尺寸后会重置）/ mkdtemp 随机目录名在换行临界宽度上换折行 / 字面日期明天就变 / 元素 id 拼数据 uuid**。**没做的**：① 真实交互（真点击/真按键/断网/窄屏溢出/触摸目标）还没接进来 —— 那 28 条「待人工确认」里属于功能性的部分要靠它逐条搬；② 顺手抓到但**没修**（登记在复盘 §7 与 T-G33）：手机版习惯页文字与按钮被压（68×80）—— 那是**版式选择**归视觉线，已钉进黄金；③ 归一是取舍：日期/时刻/机器路径归一之后，那一类值**变错它不会红**（归 pytest 管），分工写在复盘 §6；④ 黄金与机器绑定（字体/路径），换机器第一次跑要先看 diff 是不是只有字体度量差异。"
@@ -625,7 +625,7 @@ evidence = [
   "file:tests/test_ui_flow_check.py",
   "text:tests/test_ui_flow_check.py::必须**报错**，而不是",
   "text:tests/test_ui_flow_check.py::必须真的还在交接文档的清单里",
-  "text:scripts/run_gates.py::(\"ui_flow\", [])",
+  "text:scripts/run_gates.py::def ui_flow_cmd() -> list[str] | None:",
   "text:scripts/run_gates.py::NODE_TOOLS",
   "text:src/web/index.html::什么时候用它（T-G34 补的规矩",
   "text:src/web/index.html::function noteHTML(text)",
@@ -1428,6 +1428,24 @@ evidence = [
   "test:test_web_frontend.py",
 ]
 gaps = "**修了发现的两处**：`renderHabit` 的今天、`heatmap` 的格子日期（都改走 `todayISO()`，本机时区）。**它为什么会伤人**：`new Date().toISOString()` 给的是 UTC 日期，本机 UTC+8 → **本地 0–8 点算出来是昨天**：界面把「今天已打卡」显示成「打卡」，而点下去（服务端按本地今天翻转）会把那次打卡**取消**掉，提示还写着「已打卡」。**护栏两层**（都在 `test_web_frontend.py`）：全文件级不许出现裸的 `new Date().toISOString()`；函数级 `renderHabit`/`heatmap` 里不许出现 `toISOString` —— 判的是**剥掉注释后的代码**（不剥注释会把「别这么写」那句解释也判红，同 T-G39 的教训），并用合成数据证明它咬得住。**没做**：全仓的「日期取法」清点（`docs/` / `tools/` / 别的 `.js`）；护栏只扫 `index.html`。"
+
+[entries."T-G47"]
+id = "T-G47"
+title = "工具链提速（SR-NF13 / 工程件）：门禁三层速度（--fast 7.4s / --quick / 全量）+ 两条泳道并行（412s → 184s）+ 输入没变就复用判定 + 视觉线地图"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/门禁提速-T-G47.md",
+  "file:复盘/视觉线地图.md",
+  "text:scripts/run_gates.py::--fast：开发内循环（ruff / 护栏 / 审计；**不是提交闸，不落盘**）",
+  "text:scripts/run_gates.py::REUSE_INPUTS: dict[str, tuple[str, ...]] = {",
+  "text:scripts/run_gates.py::def start_gate(name: str, cmd: list[str]) -> tuple[subprocess.Popen[str] | None, float, str]:",
+  "text:scripts/run_gates.py::★ **pytest 永不复用**",
+  "text:tools/web_live_check.py::def _free_port() -> int:",
+  "text:gates/reuse.json::what",
+  "test:test_web_frontend.py",
+]
+gaps = "**用户问「按你这种开发形态，后面还要开发多久？有没有更好的方法？」** —— 量出来的事实：一轮全量门禁 **412s**（render 107 + ui_flow 184 占 71%），而真正贵的是**颗粒度**：改 3 行 CSS 要配一轮 7 分钟门禁 + 一份复盘 + 三处文档。于是先改造工具链，**判定不变、只消掉重复**：① **三层速度** —— `--fast`（**实测 7.4 秒**：ruff + 对比度 + 一致性 + 命令表 + 两道审计）/ `--quick`（~90 秒，含 pytest）/ 全量（~3 分钟）；★ `--fast` **不写 `gates/last.json`**，因为它不是提交闸 —— 写了就会让审计第 ⑤ 条（门禁产物与提交一致）失效，那是拿半轮结果冒充一轮。② **两条泳道并行**（轻门 12~14 道 ∥ 真机浏览器 2 道）：安全性逐条查过 —— 端口互不相同（render 8531/8532、ui_flow 8541~8544）、各自 `serve.py --fresh` 临时库、各自浏览器 profile 目录；顺带把 `web_live` 局域网自检里**写死的 8531** 改成自动挑空闲端口（那正好和渲染层默认端口撞车：串行时看不出来，并行就是抢端口式的随机失败）。③ **输入没变就复用**（`gates/reuse.json` 带输入哈希）：只有 render / ui_flow / lf1_live / web_live / ui_dom_probe 可复用，输入清单写死 `REUSE_INPUTS`（改 `src/**`、门自己的脚本、或渲染黄金 → 哈希变 → 必真跑），`last.json` 单列 `reused` 一栏 + trailer 里写出来；★ **pytest 永不复用**（它是唯一从行为上证明功能还在的那层，省它 66 秒等于把安全网摘掉）。**实测：全量 412s → 184s**（受最长的 ui_flow 177s 决定，轻门 pytest 64s 与之并行）。④ 新增 `复盘/视觉线地图.md`（改一类东西动哪几处 / 哪道门判什么 / 12 条踩过的陷阱 / 事实在哪），把「每个新窗口都要重读 app.css 三段 + 两个审计工具 775 行」这笔税一次沉下来。**过程中撞到的两件事都留了痕**：① 我自己写的 `resolve_cmd` 先看 `name in cmds` → 空占位命令 `[]` 被当成真命令 → `Popen([])` 在 Windows 上抛 `WinError 87`（正好命中 4 道占位门）；顺手把「起不来的门」改成记一条 FAIL 而不是让整轮脚本崩掉（崩掉会把其余门的结论一起丢掉）。② 重构 `run_gates.py` 挪动了那两个**空占位命令**的字面量 → **审计当场抓到 T-G32/T-G34 的证据指针烂了**（「证据会烂」这条铁律在起作用），两条指针改成 `def render_cmd()` / `def ui_flow_cmd()`。**没做**：把「改版式前后的挤压体检」接进门（`tools/squeeze_scan.py` 仍是诊断工具 —— 判据是估算，硬门迟早被一次误报写进白名单）；`--quick`（~90s）里 pytest 66s 仍是大头，没动（那是安全网本身）。"
 
 [entries."T-G46"]
 id = "T-G46"

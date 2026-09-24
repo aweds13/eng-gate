@@ -4,10 +4,27 @@
 现在门禁由脚本执行、结果结构化写到 `gates/last.json` 并随代码提交 ——
 提交里的 `Gates:` trailer 就有产物支撑，换个人/换个窗口复跑也能得到同样判断。
 
-用法
-    python -X utf8 scripts/run_gates.py            # 全套（含真机脚本）
-    python -X utf8 scripts/run_gates.py --quick    # 跳过真机脚本（只跑 pytest/ruff/mypy/护栏/审计）
-    python -X utf8 scripts/run_gates.py --serial   # pytest 单进程（对照并行下的偶发失败）
+用法（**三层速度，按需要挑**）
+    python -X utf8 scripts/run_gates.py --fast   # ① 十几秒：ruff/护栏/审计（内循环，不落盘）
+    python -X utf8 scripts/run_gates.py --quick  # ② ~90 秒：跳过真机层（提交前够用）
+    python -X utf8 scripts/run_gates.py          # ③ 全量（三层一起，~3 分钟；验收/封版前用它）
+    python -X utf8 scripts/run_gates.py --no-reuse   # 不信复用记录，全部真跑一遍
+    python -X utf8 scripts/run_gates.py --serial     # 全串行（对照"并行下偶发失败"用）
+
+★ T-G47 提速（判定不变，只是不再"一个速度用到底"）
+  1. **三层**：`--fast`（十几秒）→ `--quick`（~90 秒）→ 全量（~3 分钟）。
+     `--fast` **不写 `gates/last.json`** —— 它不是提交闸，写了就会让"门禁产物与提交一致"
+     这条审计失效（那才是最坏的：用半轮结果冒充一轮）。
+  2. **两条泳道并行**：轻门（pytest / ruff / mypy / 三道护栏 / 两道审计 / 两个真机 HTTP 检查）
+     与浏览器层（render / ui_flow）**同时跑**。这两层互不依赖：
+     各自 `serve.py --fresh`（临时库）、各自浏览器 profile（按端口分目录）、端口互不相同
+     （render 8531/8532、ui_flow 8541~8544，`web_live` 的局域网自检改成自动挑空闲端口）。
+     实测 412s → **~185s**（受最长的那条 ui_flow 决定，32 核机器上不构成 CPU 争用）。
+  3. **输入没变就复用上次判定**（`gates/reuse.json`，**带输入哈希留痕**）：
+     render / ui_flow 这类真机层的**输入是"网页资源 + 服务端 + 门上自己的脚本 + 黄金"** ——
+     这些都没动时，判定**不可能**变（不是"懒得跑"，是"跑的是同一件事"）。
+     ★ **pytest 永不复用**：它是唯一"从行为上证明功能还在"的那层，也是唯一能发现
+       "谁动了 `src/` 却以为无关"的那层。跳过它省 66 秒，代价是把整条安全网摘掉。
 
 pytest 会**并行**跑（装了 `pytest-xdist` 时 `-n auto`）：用例之间没有共享状态（各自 tmp 库 +
 各自进程内的事实总线），而每个用例都要起真 app + 真库 —— 串行是这里唯一的瓶颈。
@@ -19,18 +36,22 @@ pytest 会**并行**跑（装了 `pytest-xdist` 时 `-n auto`）：用例之间�
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 GATES = ROOT / "gates" / "last.json"
+REUSE = ROOT / "gates" / "reuse.json"
 PY = sys.executable
 
 COMMON = [
@@ -59,24 +80,70 @@ COMMON = [
     # 一接进来就会 FAIL。T-D1 校正完（见 `复盘/台账编号校正-方案A落地.md`）后转正为阻断项。
     ("audit_titles", [PY, "-X", "utf8", "scripts/audit_titles.py", "--check"]),
 ]
-REAL = [
+# 真机层：起真服务 / 真浏览器。轻的那两个（HTTP 层）跟轻门同一泳道，重的两个自己一条泳道。
+REAL_PY = [
     ("lf1_live", [PY, "-X", "utf8", "tools/lf1_live_check.py"]),
     ("web_live", [PY, "-X", "utf8", "tools/web_live_check.py"]),
-    # 渲染验证层（T-G32）：真浏览器把 3 档宽度 × 14 个视图各渲染一遍，采成"几何清单"与黄金逐字节比。
-    # 那一层里**每次采两遍**做确定性自检：不一致 = 工具自己不可信（退出码 4），不当成"界面变了"。
-    # 退出码 3 = 起不了真浏览器 → 记 `not_run`：**NOT RUN 不是 PASS**（last.json 单列一栏 +
-    # trailer 里写 NOT RUN）。
-    ("render", []),                # 占位：下面按 node 可用来填
-    # 行为流层（T-G34）：真浏览器 + 真点击 + 真按键，把「待人工确认」里功能性的那些搬给机器。
-    # 每轮默认**跑两遍**（各自新库 + 新浏览器）比对断言指纹，不一致同样退 4。
-    # 退出码 3（起不了浏览器）与 2（fixture 坏了）都不算通过 —— 同上记 `not_run`。
-    ("ui_flow", []),               # 占位：下面按 node 可用来填
 ]
+# 渲染验证层（T-G32）：真浏览器把 3 档宽度 × 14 个视图各渲染一遍，采成"几何清单"与黄金逐字节比。
+# 那一层里**每次采两遍**做确定性自检：不一致 = 工具自己不可信（退出码 4），不当成"界面变了"。
+# 退出码 3 = 起不了真浏览器 → 记 `not_run`：**NOT RUN 不是 PASS**（last.json 单列一栏 +
+# trailer 里写 NOT RUN）。
+# 行为流层（T-G34）：真浏览器 + 真点击 + 真按键，把「待人工确认」里功能性的那些搬给机器。
+# 每轮默认**跑两遍**（各自新库 + 新浏览器）比对断言指纹，不一致同样退 4。
+BROWSER = ("render", "ui_flow")
+# ① --fast：开发内循环用。挑的是"**改一行就能犯、且十几秒内查得出来**"的那几道 ——
+# 尤其 audit（TOML/台账语法，实测犯过 5 次）与 contrast/style（照抄包时最容易抄错的令牌层）。
+FAST = ("ruff", "contrast", "style", "commands", "audit", "audit_titles")
 # 这些门是 **node 脚本**：环境里没有 node 时就跑不了 —— 统一记 `not_run`（不许静默跳过当通过）。
 NODE_TOOLS = ("ui_dom_probe", "render", "ui_flow")
 # 信息性检查（只报告、不阻断）—— 当前为空：`audit_titles` 已转正为阻断项（T-D2 收口）。
 INFO_GATES: list[tuple[str, list[str]]] = []
 SUCCESS_HINTS = ("passed", "failed", "error", "PASS", "Success", "checks passed", "OK")
+
+# ---------------------------------------------------------------- 复用（T-G47）
+# 每道真机门的**输入**：这些文件一动，判定就可能变 → 必须真跑。
+# 刻意写宽一点（宁可多跑一次，也不要"以为无关"）：`src/**` 一律算输入。
+REUSE_INPUTS: dict[str, tuple[str, ...]] = {
+    "render": ("src/**", "tools/render_check.mjs", "tools/tf_browser.mjs", "tools/serve.py",
+               "gates/render/*.txt"),
+    "ui_flow": ("src/**", "tools/ui_flow_check.mjs", "tools/tf_browser.mjs", "tools/serve.py"),
+    "lf1_live": ("src/**", "tools/lf1_live_check.py", "tools/serve.py"),
+    "web_live": ("src/**", "tools/web_live_check.py", "tools/serve.py"),
+    "ui_dom_probe": ("src/web/**", "tools/ui_dom_probe.mjs"),
+}
+REUSABLE = tuple(REUSE_INPUTS)
+
+
+def input_hash(patterns: tuple[str, ...]) -> str:
+    """把一组 glob 命中的**文件内容**哈希起来（路径 + 内容，稳定排序）。"""
+    digest = hashlib.sha256()
+    files: list[Path] = []
+    for pattern in patterns:
+        files.extend(p for p in ROOT.glob(pattern) if p.is_file())
+    for path in sorted(set(files), key=lambda p: p.as_posix()):
+        digest.update(path.relative_to(ROOT).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()[:16]
+
+
+def load_reuse() -> dict[str, dict[str, str]]:
+    if not REUSE.exists():
+        return {}
+    try:
+        data = json.loads(REUSE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_reuse(records: dict[str, dict[str, str]]) -> None:
+    REUSE.parent.mkdir(parents=True, exist_ok=True)
+    REUSE.write_text(
+        json.dumps(records, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8", newline="\n",
+    )
 
 
 def dom_probe_cmd() -> list[str] | None:
@@ -234,25 +301,132 @@ def seal() -> int:
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
     )
     print(f"[封存] gates/last.json tree: {old[:12]} → {payload['tree'][:12]}")
-    print("[提示] 现在 `git add gates/last.json && git commit` 后，产物与提交的 tree 会一致")
+    print("[提示] 现在 `git add gates/last.json && git commit` 后，产物与提交的树会一致")
     return 0
+
+
+# ---------------------------------------------------------------- 跑一道门
+PRINT_LOCK = threading.Lock()
+
+
+def resolve_cmd(name: str, cmds: dict[str, list[str]], serial: bool) -> list[str] | None:
+    """把占位命令填实（node 不在 → None = 这一门没跑，记 `not_run`，不算通过）。
+
+    ★ 顺序有讲究（T-G47 实测踩到）：**先**看"是不是占位门"，**再**从 `cmds` 取字面命令。
+    反过来写的话（第一版就是），`jobs` 里 `("pytest", [])` / `("render", [])` 这些**空占位**
+    会先被 `name in cmds` 命中 → 返回 `[]` → `Popen([])` 在 Windows 上抛
+    `OSError: [WinError 87]`（"参数错误"，看不出跟命令有关）→ 那 4 道门全记成"起不来"。
+    """
+    if name in NODE_CMD:
+        return NODE_CMD[name]()
+    if name == "pytest":
+        return pytest_cmd(serial=serial)
+    loaded = cmds.get(name)
+    return loaded if loaded else None
+
+
+def start_gate(name: str, cmd: list[str]) -> tuple[subprocess.Popen[str] | None, float, str]:
+    """**在主线程里**把门起起来（返回进程 + 起始时刻 + 错误文本）。
+
+    ★ 为什么"起进程"必须串行、不能放在线程池里（T-G47 实测踩到）：
+    多个线程**同时** `subprocess.Popen` 在 Windows 上会随机抛
+    `OSError: [WinError 87] 参数错误`（CPython 在 Windows 上创建子进程不是线程安全的：
+    句柄继承与 startupinfo 会互相踩）。而"并行"真正需要的是**等输出**那一段 ——
+    进程起完就各自在跑了，等待完全可以在线程里做。于是拆成 start / finish 两步。
+
+    一道门**起不来**（解释器不在、命令写错）也如实记成一条 FAIL，而不是让整个门禁脚本崩掉
+    —— 崩掉会丢掉其余门的结论，"失败要留下证据"这条先于"这次跑得顺"。
+    """
+    t0 = time.time()
+    try:
+        proc = subprocess.Popen(  # noqa: S603
+            cmd, cwd=ROOT, env=env(),
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace",
+        )
+    except OSError as exc:  # 起不来：记 FAIL，别把整轮门禁带走
+        return None, t0, f"{type(exc).__name__}: {exc}"
+    return proc, t0, ""
+
+
+def finish_gate(name: str, proc: subprocess.Popen[str], t0: float) -> dict[str, object]:
+    """等一道门跑完，汇成它的结果条目（这一半可以放心并行）。"""
+    out, _ = proc.communicate()
+    item: dict[str, object] = {
+        "name": name,
+        "exit_code": proc.returncode,
+        "seconds": round(time.time() - t0, 2),
+        "summary": summarize(out or ""),
+    }
+    if name in NODE_CMD and proc.returncode == 3:
+        item["blocking"] = False
+        item["status"] = "NOT RUN"
+        item["note"] = "起不了真浏览器：这一层**没有验证**，不算通过"
+    with PRINT_LOCK:
+        tag = f"{name:<22} exit={proc.returncode}  {item['seconds']}s"
+        if item.get("status") == "NOT RUN":
+            print(f"[SKIP] {tag}  （起不了真浏览器）")
+        else:
+            mark = "[OK ]" if proc.returncode == 0 else "[FAIL]"
+            print(f"{mark} {tag}  {item['summary']}")
+    return item
+
+
+def dead_gate(name: str, t0: float, why: str) -> dict[str, object]:
+    """起不来的门：记一条 FAIL（宁可红，也不要"看起来没这回事"）。"""
+    with PRINT_LOCK:
+        print(f"[FAIL] {name:<22} 起不来：{why}")
+    return {
+        "name": name,
+        "exit_code": -1,
+        "seconds": round(time.time() - t0, 2),
+        "summary": f"起不来：{why}",
+    }
+
+
+def skip_reused(name: str, records: dict[str, dict[str, str]], no_reuse: bool) -> str | None:
+    """输入没变且上次是通过 → 返回那条记录里的哈希（调用方据此记 `reused`）；否则 None。"""
+    if no_reuse or name not in REUSE_INPUTS:
+        return None
+    record = records.get(name)
+    if not record or record.get("verdict") != "pass":
+        return None
+    current = input_hash(REUSE_INPUTS[name])
+    return current if record.get("hash") == current else None
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--quick", action="store_true")
-    ap.add_argument("--serial", action="store_true", help="pytest 单进程跑（对照并行下的偶发失败）")
+    ap.add_argument("--quick", action="store_true", help="跳过真机层（提交前够用）")
+    ap.add_argument("--fast", action="store_true", help="只跑十几秒那几道（内循环；不落盘）")
+    ap.add_argument("--serial", action="store_true", help="全串行（对照并行下的偶发失败）")
+    ap.add_argument("--no-reuse", action="store_true", help="不信复用记录，真机层全部重跑")
     ap.add_argument("--seal", action="store_true", help="提交前封存：只更新 tree 字段")
     args = ap.parse_args()
     if args.seal:
         return seal()
 
-    ok_docs, missing = docs_sync_precheck()
-    print("=== ④ 文档与代码同提交（提交前检查）===")
-    if ok_docs:
-        print("  [OK ] 源码有改动时，台账/changelog/CHECKPOINT 都在改动清单里（或本轮没改源码）")
+    jobs: list[tuple[str, list[str]]] = [*COMMON, *REAL_PY]
+    if args.fast:
+        jobs = [j for j in jobs if j[0] in FAST]
+    elif not args.quick:
+        jobs += [(n, []) for n in BROWSER]
+    cmds = dict(jobs)
+
+    ok_docs: bool = True                     # --fast 不判"文档同提交"（那是提交闸的事）
+    missing: list[str] = []
+    if args.fast:
+        # ★ 这一档**不写 gates/last.json**：它不是提交闸。写了就会让
+        # "门禁产物与提交一致"（审计第 ⑤ 条）失效 —— 那是拿半轮结果冒充一轮。
+        print("=== --fast：开发内循环（ruff / 护栏 / 审计；**不是提交闸，不落盘**）===")
     else:
-        print(f"  [FAIL] 改了源码但还没同步：{missing}")
+        ok_docs, missing = docs_sync_precheck()
+        print("=== ④ 文档与代码同提交（提交前检查）===")
+        if ok_docs:
+            print("  [OK ] 源码有改动时，台账/changelog/CHECKPOINT 都在改动清单里"
+                  "（或本轮没改源码）")
+        else:
+            print(f"  [FAIL] 改了源码但还没同步：{missing}")
 
     if args.serial:
         mode = "串行（--serial）"
@@ -260,55 +434,82 @@ def main() -> int:
         mode = "并行（pytest-xdist，-n auto）"
     else:
         mode = "串行（环境里没装 pytest-xdist）"
-    print(f"=== pytest 跑法：{mode} ===")
+    if not args.fast:
+        print(f"=== pytest 跑法：{mode} ===")
 
-    results: list[dict[str, object]] = []
+    # 复用判定：只对"输入确实是那几样"的真机门做（--quick 里本来就没有真机层，--fast 更不碰）。
+    records = load_reuse()
+    reused: dict[str, str] = {}
+    todo: list[tuple[str, list[str]]] = []
     not_run: list[str] = []
-    jobs = COMMON + ([] if args.quick else REAL)
-    for name, cmd in jobs:
-        if name in NODE_CMD:
-            filled = NODE_CMD[name]()
-            if filled is None:
-                # 没有 node = 这一门**没跑**。以前 ui_dom_probe 只打一句 WARN 就走，
-                # 那样 last.json 里看不出"这次没验证它" —— 统一记进 not_run（NOT RUN 不是 PASS）。
-                print(f"[WARN] {name:<22} 跳过：环境里没有 node（未验证，不算通过）")
-                not_run.append(name)
-                continue
-            cmd = filled
-        elif name == "pytest":
-            cmd = pytest_cmd(serial=args.serial)
-        t0 = time.time()
-        # errors="replace"：Windows 下子进程输出可能是 GBK/混合编码，不能让门禁脚本自己因解码崩掉
-        proc = subprocess.run(
-            cmd, cwd=ROOT, env=env(), capture_output=True, text=True,
-            encoding="utf-8", errors="replace", check=False,
-        )
-        out = (proc.stdout or "") + (proc.stderr or "")
-        item: dict[str, object] = {
-            "name": name,
-            "exit_code": proc.returncode,
-            "seconds": round(time.time() - t0, 2),
-            "summary": summarize(out),
-        }
-        # 真浏览器那两层专有：退出码 3 = 起不了真浏览器。**NOT RUN 不是 PASS** —— 它不进 blocking，
-        # 但只要它出现就会被记进 `not_run` 并在 trailer 里写出来（想假装没跑过也藏不住）。
-        if name in NODE_CMD and proc.returncode == 3:
-            item["blocking"] = False
-            item["status"] = "NOT RUN"
-            item["note"] = "起不了真浏览器：这一层**没有验证**，不算通过"
+    for name, _ in jobs:
+        mark = None if args.fast else skip_reused(name, records, args.no_reuse)
+        if mark is not None:
+            reused[name] = mark
+            print(f"[REUSE] {name:<22} 输入未变（{mark}）→ 复用上次通过判定")
+            continue
+        cmd = resolve_cmd(name, cmds, args.serial)
+        if cmd is None:
+            print(f"[WARN] {name:<22} 跳过：环境里没有 node（未验证，不算通过）")
             not_run.append(name)
-        results.append(item)
-        mark = "[OK ]" if proc.returncode == 0 else ("[SKIP]" if proc.returncode == 3 else "[FAIL]")
-        print(f"{mark} {name:<22} exit={proc.returncode}  {item['seconds']}s  {item['summary']}")
+            continue
+        todo.append((name, cmd))
+
+    order = {name: i for i, (name, _) in enumerate(jobs)}
+    results: list[dict[str, object]] = []
+
+    if args.serial:
+        # 全串行：给"并行下的偶发失败"当对照跑法（本文件自己的老路径）
+        for name, cmd in todo:
+            proc, t0, why = start_gate(name, cmd)
+            results.append(dead_gate(name, t0, why) if proc is None
+                           else finish_gate(name, proc, t0))
+    else:
+        # **两条泳道并行**：轻门一路、真机浏览器一路（浏览器层 2 条互不依赖：端口 / 临时库 /
+        # profile 目录都分开）。
+        # ★ 起进程一律在**主线程依次**做（见 start_gate 的注释：多线程同时 Popen 在 Windows 上
+        # 会 WinError 87）；并行只发生在"等输出"这一半 —— 而墙钟时间恰恰由等待决定。
+        light = [(n, c) for n, c in todo if n not in BROWSER]
+        heavy = [(n, c) for n, c in todo if n in BROWSER]
+        print(f"=== 泳道：轻门 {len(light)} 道 ∥ 真机浏览器 {len(heavy)} 道（各自内部并行）===")
+        started: list[tuple[str, subprocess.Popen[str] | None, float, str]] = []
+        for name, cmd in [*heavy, *light]:        # 长的那两条先起，让它俩先跑起来
+            proc, t0, why = start_gate(name, cmd)
+            started.append((name, proc, t0, why))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [
+                pool.submit(dead_gate, n, t0, why) if proc is None
+                else pool.submit(finish_gate, n, proc, t0)
+                for n, proc, t0, why in started
+            ]
+            results = [f.result() for f in futures]
+
+    for name, mark in reused.items():
+        results.append({
+            "name": name,
+            "exit_code": 0,
+            "seconds": 0,
+            "summary": f"复用上次通过判定（输入未变 {mark}）",
+            "reused": True,
+            "inputs_hash": mark,
+        })
+    for name in not_run:
+        results.append({
+            "name": name, "exit_code": 3, "seconds": 0,
+            "summary": "环境里没有 node：未验证，不算通过",
+            "blocking": False, "status": "NOT RUN",
+        })
+    # 结果按**固定顺序**排（而不是完成顺序）：last.json 要能逐字节比较，trailer 也要稳定
+    results.sort(key=lambda r: order.get(str(r["name"]), 99))
 
     # 信息性检查：只报告、不阻断（blocking=False，不计进 ok）
-    for name, cmd in ([] if args.quick else INFO_GATES):
+    for name, cmd in ([] if (args.quick or args.fast) else INFO_GATES):
         t0 = time.time()
-        proc = subprocess.run(
+        info_proc = subprocess.run(
             cmd, cwd=ROOT, env=env(), capture_output=True, text=True,
             encoding="utf-8", errors="replace", check=False,
         )
-        out = (proc.stdout or "") + (proc.stderr or "")
+        out = (info_proc.stdout or "") + (info_proc.stderr or "")
         tail = [ln.strip() for ln in out.splitlines() if ln.strip()]
         summary = next(
             (ln[:160] for ln in reversed(tail) if ln.startswith("共 ") or "全部对得上" in ln), ""
@@ -316,19 +517,31 @@ def main() -> int:
         summary = summary or (tail[-1][:160] if tail else "")
         item = {
             "name": name,
-            "exit_code": proc.returncode,
+            "exit_code": info_proc.returncode,
             "seconds": round(time.time() - t0, 2),
             "summary": summary,
             "blocking": False,
             "note": "信息性：台账↔规格 标题对账；T-D1 完成后改成阻断项（audit_titles.py --check）",
         }
         results.append(item)
-        mark = "[OK ]" if proc.returncode == 0 else "[WARN]"
-        print(f"{mark} {name:<22} exit={proc.returncode}  {item['seconds']}s  {summary}（不阻断）")
+        mark = "[OK ]" if info_proc.returncode == 0 else "[WARN]"
+        print(f"{mark} {name:<22} exit={info_proc.returncode}  {item['seconds']}s  "
+              f"{summary}（不阻断）")
 
     blocking = [r for r in results if r.get("blocking", True)]
-    ok = ok_docs and all(int(str(r["exit_code"])) == 0 for r in blocking)
+    ok = all(int(str(r["exit_code"])) == 0 for r in blocking)
+    if not args.fast:
+        ok = ok and ok_docs
     passed = [r for r in blocking if int(str(r["exit_code"])) == 0]
+
+    if args.fast:
+        bad = [r for r in blocking if int(str(r["exit_code"])) != 0]
+        if bad:
+            print(f"\n[FAIL] --fast 里 {len(bad)} 道不通过：{[r['name'] for r in bad]}")
+            return 1
+        print("\n--fast 全过 ✅（只覆盖「改一行就能犯」那几类；提交前仍要 --quick 或全量）")
+        return 0
+
     payload = {
         "rev": git("rev-parse", "--short", "HEAD"),
         # 注意：**不要**把 tree 当"这一版代码"的凭据 —— gates/last.json 自己也在那棵树里，
@@ -346,15 +559,36 @@ def main() -> int:
         # 没验证成的门（当前只有渲染层会遇到：起不了真浏览器）。**不是"通过"**，
         # 单列一栏 + 写进 trailer，让"这次提交哪些东西没被验证过"有据可查。
         "not_run": not_run,
+        # 复用了上次判定的门（T-G47）：单列一栏 + 带上输入哈希。**不是"通过"的同义词** ——
+        # 它是"这一层的输入一个字节都没变，所以上次那个判定仍然成立"，写出来才禁得住问。
+        "reused": {k: v for k, v in reused.items()},
         "trailer": "; ".join(
-            [f"{r['name']} {r['summary']}" for r in passed] + [f"{n} NOT RUN" for n in not_run]
+            [f"{r['name']} {r['summary']}" for r in passed]
+            + [f"{n} NOT RUN" for n in not_run]
         ) or "（无通过项）",
     }
     GATES.parent.mkdir(parents=True, exist_ok=True)
     GATES.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
     )
+    # 复用记录只在**这一轮真跑且通过**时更新（复用过的门保持原记录：哈希本来就一样）
+    for name in REUSABLE:
+        if name in reused:
+            continue
+        entry = next((r for r in results if r["name"] == name), None)
+        if entry is None or int(str(entry["exit_code"])) != 0:
+            continue
+        if name in REUSE_INPUTS:
+            records[name] = {
+                "hash": input_hash(REUSE_INPUTS[name]),
+                "verdict": "pass",
+                "at": datetime.now().isoformat(timespec="seconds"),
+                "what": "输入哈希一致时可复用这条判定（T-G47）",
+            }
+    save_reuse(records)
     print(f"\n[落盘] gates/last.json  ok={ok}  rev={payload['rev']}")
+    used = ", ".join(f"{k}({v})" for k, v in reused.items()) or "无"
+    print(f"[复用] {used}")
     print(f"[建议 trailer] Gates: {str(payload['trailer'])[:200]}")
     if not ok:
         print("\n质量门或文档同步未通过 —— **不许提交**（用户约定）。")

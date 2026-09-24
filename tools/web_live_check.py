@@ -718,18 +718,31 @@ def _lan_json(base: str, path: str, method: str = "GET",
         return 0, None      # 连不上（防火墙 / 没有局域网地址）—— 由调用方决定怎么报
 
 
-def live_lan_checks(tmp: Path, port: int = 8531) -> dict[str, bool]:
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+def live_lan_checks(tmp: Path, port: int | None = None) -> dict[str, bool]:
     """T-G10b 真机自检：**真起一个绑 0.0.0.0 的服务**，再从本机的**局域网地址**访问它。
 
     本环境没有第二台设备，所以拿"本机局域网 IP"当"别人" —— 这已经够了：
     服务看到的**来源地址不是回环**，走的就是手机那条路（静态壳能开 → 数据要配对码 →
     配对后能读 → 配对码不会通过局域网漏出去）。
 
+    ★ T-G47：端口改成**自动挑空闲的**（原来钉死 8531）。两个理由，都不是洁癖：
+      ① 8531 正好是**渲染层默认的服务端口** —— 门禁串行跑时看不出来，一旦把两层并起来跑
+         就是"两个服务抢同一个端口"，而表现为**随机失败**（最难查的那种）；
+      ② 用户机器上 8531 被别的东西占着时，这里会假红。
+    端口下面每一处都从同一个变量取（`lan.local_addresses(port)` 也是），所以换端口不影响断言。
+
     连不上自己的局域网地址（没连网 / 防火墙拦了）→ 打印 `[SKIP]` **明说跳过**，
     不谎报"通过"（`checks` 里不加条目，退出码不受影响）。
     """
     from timeflow.core import lan as lan_mod
 
+    port = port or _free_port()
     app = create_app(str(tmp / "lan_live.db"), allow_lan=True, port=port)
     server = uvicorn.Server(
         uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")  # noqa: S104
