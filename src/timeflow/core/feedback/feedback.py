@@ -23,6 +23,13 @@ def _now() -> str:
     return date.today().isoformat()
 
 
+# 习惯热力图的窗口（T-G55）：371 = 53 周 × 7 天，与前端 `heatmap()` 铺的日历格子**逐个对齐**。
+# 放这个常量而不是散一个 `days=371`，是为了让"前端画几周"和"后端给几天"只有一处能改：
+# 以前是 90 天（13 周），左边 3/4 恒空，看着像"这个人三个月前才开始"。
+# 上界与 `core/insights.py` 的 `MAX_HEATMAP_DAYS = 400`（年历热力图口径）兼容。
+HABIT_HEATMAP_DAYS = 371
+
+
 # ---- 每日反馈（SR-F4.1）----
 def set_daily_feedback(
     conn: sqlite3.Connection,
@@ -160,13 +167,20 @@ def delete_habit(conn: sqlite3.Connection, habit_id: str) -> None:
 
 
 def list_habits(conn: sqlite3.Connection, today: str | None = None) -> list[dict[str, object]]:
-    """全部习惯 + 连续天数 + 最近 90 天打卡日期（供列表与日历热力图，SR-F4.2 / OP-19）。
+    """全部习惯 + 连续天数 + 最近 HABIT_HEATMAP_DAYS 天的打卡日期（SR-F4.2 / OP-19）。
 
     之前只有「按 id 查单个」，前端只能把 id 存在 sessionStorage 里，刷新即丢；
     这里补上列表，使习惯在界面上可稳定呈现与切换。
+
+    ★ 窗口从 90 天放到 371 天（T-G55 修的真缺口）：热力图是前端按 **53 周 × 7 天** 铺的日历
+    （`heatmap()`，列=周、行=周一→周日），而 90 天只够 13 周 —— 左边 3/4 永远没有数据，
+    看着像"这个人三个月前才开始打卡"。371 = 53×7，与前端画的周数逐个对齐；
+    这个天数也落在后端 `core/insights.py` 的 `MAX_HEATMAP_DAYS = 400` 口径里
+    （那条注释写的是"一年多一点（含闰年与对齐周一起点）"）。
+    这里**只放窗口**：算法、接口形状、`streak` 的算法一个都不动。
     """
     t = today or _today()
-    since = (date.fromisoformat(t) - timedelta(days=89)).isoformat()
+    since = (date.fromisoformat(t) - timedelta(days=HABIT_HEATMAP_DAYS - 1)).isoformat()
     rows = conn.execute("SELECT id, name, created_at FROM habits ORDER BY created_at").fetchall()
     out: list[dict[str, object]] = []
     for row in rows:

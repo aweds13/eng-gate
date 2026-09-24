@@ -6,7 +6,7 @@
 - 分组分布 `group_insights`：只统计绑定任务的专注，按 task_groups 摊到分组；
   多分组会重复计数（如实）；
 - 习惯列表 `list_habits`：补上此前缺失的列表接口（前端不再靠 sessionStorage 记 id）；
-- API 与 days 边界（1~90）。
+- API 与 days 边界（1~400，见 `insights.MAX_HEATMAP_DAYS`）。
 """
 
 from __future__ import annotations
@@ -247,6 +247,26 @@ def test_list_habits_with_streak_and_logs(conn: sqlite3.Connection) -> None:
 
 def test_list_habits_empty(conn: sqlite3.Connection) -> None:
     assert fb.list_habits(conn) == []
+
+
+def test_list_habits_logs_window_matches_the_53_week_heatmap(conn: sqlite3.Connection) -> None:
+    """T-G55：`logs` 的窗口必须够前端那张 **53 周 × 7 天** 的日历铺满。
+
+    以前窗口是 90 天（13 周），而前端按 53 周铺格子 —— 左边 3/4 恒空，
+    看上去像"这个人三个月前才开始打卡"，而不是"这三个月没打卡"。
+    这条钉住窗口的两端：200 天前的打卡**要在**、371 天前的**也要在**、再往前的不给。
+    """
+    hid = fb.create_habit(conn, "早睡")
+    today = date.today()
+    far = (today - timedelta(days=200)).isoformat()   # 旧窗口（90 天）会丢掉它
+    edge = (today - timedelta(days=370)).isoformat()  # 窗口第一格（含今天共 371 天）
+    out = (today - timedelta(days=400)).isoformat()   # 窗口外（比 371 早一个月）
+    for d in (far, edge, out):
+        fb.toggle_habit_log(conn, hid, d)
+
+    logs = list(fb.list_habits(conn)[0]["logs"])
+    assert logs == [edge, far], f"窗口边界不对：{logs}"
+    assert fb.HABIT_HEATMAP_DAYS == 371, "371 = 53 周 × 7 天，与前端 `heatmap()` 对齐"
 
 
 # ---- API ----

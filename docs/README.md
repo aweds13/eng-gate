@@ -48,6 +48,8 @@ implementation/   哪个模块负责（模块名+职责+取舍，SR→模块）
   coverage.md       SR→操作/动线→验收→测试 覆盖矩阵
 taste/            技术品味与红线（已重写为项目专属）
 README.md / ACCEPTANCE.md / CODING_GUIDELINES.md / EXTENDING.md / changelog.md   总入口·验收·护栏·如何加功能·日志
+user-guide.md     ★ **给用户看的**一页说明（怎么用 + 口径一句话 + 已知局限）
+                 —— 界面上不写"怎么用/为什么"，那些话住在这里（T-G57）
 ```
 
 **仓库根（代码与配置）**：

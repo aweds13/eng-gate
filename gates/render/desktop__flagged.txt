@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=desktop 1280x900 view=flagged rows=48 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=desktop 1280x900 view=flagged rows=49 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,1280,756	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
 html>body>div.shell>aside.rail		24,0,168,756	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,16,167,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
@@ -32,7 +32,8 @@ div.shell>main#main>div.card>div.card-body		291,156,166,65	16/24/400	#1e293b/#00
 main#main>div.card>div.card-body>div.title	把第三章习题做完	291,156,166,24	16/24/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card>div.card-body>div.meta		291,180,166,41	12/18/400	#5b6472/#000000@0.00	0;0px
 div.card>div.card-body>div.meta>span.prio.high	高	356,180,29,19	11/16.5/400	#ffffff/#2f6feb	999;1px 8px
-div.card>div.card-body>div.meta>span.flag	⚑ 已标记	385,181,48,16	12/18/400	#2f6feb/#000000@0.00	0;0px
+div.card>div.card-body>div.meta>span.flag	已标记	385,181,55,16	12/18/400	#2f6feb/#000000@0.00	0;0px
+div.meta>span.flag>svg>path		389,184,7,11	12/18/400	#2f6feb/#000000@0.00	0;0px
 div.card>div.card-body>div.meta>span.badge.todo	未完成	299,199,51,23	11/16.5/400	#5b6472/#ffffff	999;2px 8px
 div.shell>main#main>div.card>div.row		469,148,422,82	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card>div.row>button.ghost:nth-child(1)	在做	469,148,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px

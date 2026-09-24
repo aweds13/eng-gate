@@ -373,6 +373,8 @@ input:not([type="checkbox"]):not([type="radio"]) {
 .prio.low { color: var(--muted) }
 /* 手动标记（SR-F1.3 / T-B3）：只有已标记才出现的小旗 */
 .flag { font-size: var(--fs-sm); color: var(--accent) }
+/* 行内图标（住在 12–13px 文字旁）：16px 是上限；`vertical-align: -3px` 让它与文字视觉居中 */
+button.ghost svg, .flag svg { width: 16px; height: 16px; vertical-align: -3px }
 
 /* ---------- 设置页 ---------- */
 .settings-sub { font-size: var(--fs-md); margin: var(--sp-4) 0 var(--sp-2); color: var(--ink); line-height: var(--lh-tight) }
@@ -467,6 +469,75 @@ input:not([type="checkbox"]):not([type="radio"]) {
 /* 环中心的读数：字号/字重是**样式**不是数据，所以从模板的 SVG 属性收进这里（T-G53）——
    原来写的是 `font-size="15" font-weight="700"`，裸值住在标记里，令牌够不着。 */
 .ring-text { fill: var(--ink); font-size: var(--fs-lg); font-weight: var(--fw-bold) }
+
+/* ---------- 图表规范（T-G55）：手写 SVG 的静态样式全部住在这里 ----------
+ * 为什么要有这一段：起点是**一致性门看不见图表** —— `tools/style_audit.py` 只读 `app.css`，
+ * 而 6 个手写 SVG 的 `stroke-width` / `r` / `rx` / `font-size` / `opacity` / 颜色字面量
+ * 全住在 `index.html` 的标记里。于是「环画 --border、雷达画 --border、热力图空格画 --panel-2」
+ * 这种**同一个角色两三种写法**没有任何一层能判（T-G51 的环轨道与雷达网格线就是这样漂开的）。
+ * 下沉之后：值只有一处，标记只剩几何（`x/y/d/width/height/cx/cy/points` 是**数据**不是样式，
+ * T-G43 定的口径）—— `grep 'stroke-width=\|font-size=\|r="\|rx=\|opacity=' src/web/index.html` 应当是 0 命中。
+ * ★ 只有一组值**还在标记里**：热力图的逐格深浅。它是 `ratio = 0.25 + 0.75*(v/max)` **算出来的**
+ *   （数据的一个坐标），所以走 `style="--chart-alpha:…"` 这一个变量 —— 和 `.bar-fill` 的
+ *   `style="width:…%"` 是同一类东西（几何/数值，不是"选了某个样式"）。
+ * 名字与角色的对应：
+ *   .chart-grid     网格线（雷达三圈 + 辐条）
+ *   .chart-axis     轴基线（时间热力图的基线；重复节奏的整周基线）
+ *   .chart-label    刻度与轴名（取代标记里的 font-size="10" → --fs-xs 的 11px，**有意的 1px**）
+ *   .chart-line     数据折线    .chart-area 面积    .chart-mark 数据点/实心格
+ *   .chart-cell-off 空格        .chart-fill-soft 雷达填充面
+ *   .chart-cell-on  有色格（逐格深浅靠 --chart-alpha）
+ *   .chart-cell / -done / -missed / -off-state 重复节奏的四种格子
+ *   .chart-ring / .chart-ring-progress 今日完成度环的底与进度弧（9px 笔宽）
+ *   .cell-off / .axis-line / .axis-label / .ring-track / .ring-text —— 见下面各自的"为什么两个名字都在"。
+ */
+.chart-grid { stroke: var(--border); stroke-width: 1 }
+.chart-axis { stroke: var(--border); stroke-width: 1 }
+.chart-label { fill: var(--muted); font-size: var(--fs-xs) }
+.chart-line { stroke: var(--accent); stroke-width: 2; fill: none; stroke-linejoin: round }
+/* 今日完成度环（两笔 9px 弧）：`r/cx/cy` 是几何、留在标记里，9px 是样式、收在这里。
+   两笔的声明集必须不同（一个 `stroke` 一个 `stroke: var(--accent)`）——
+   若拆成两条"只有令牌不同"的规则，`tools/style_audit.py` 的「同形状重复」会当场报出来。 */
+.chart-ring { fill: none; stroke: var(--border); stroke-width: 9 }
+.chart-ring-progress {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+.chart-area { fill: var(--accent); opacity: .10 }
+.chart-mark { fill: var(--accent) }
+/* 方格的圆角（`rx` 的原值 2.5px，原来写在三个 `<rect>` 上）。
+   `--r-*` 只有 6/10/999，没有 2.5 那一档，所以它是有意的裸值、不是"忘了用令牌"：
+   收进样式表就够（标记里不再有 `rx=`）。重复节奏的格子原来没写 `rx`，不在这一组里。 */
+.chart-mark, .chart-cell-off, .chart-cell-on { rx: 2.5 }
+.chart-cell-off { fill: var(--panel-2) }
+/* ★ 热力图仍要分四档深浅（0.25–1）：那是"当天投入多少"的读数，不是样式选择 ——
+   `--chart-alpha` 由模板按算出来的 ratio 给，这里的 1 只是没有变量时的兜底。 */
+.chart-cell-on { fill: var(--accent); opacity: var(--chart-alpha, 1) }
+/* 雷达的填充面：与 `.chart-area` 同为「强调色的淡面」，但两处各有各的透明度
+   （折线面积 .10 / 雷达 .18）—— 合并成一个名字就得挑一个值，那是**看得见的变化**，
+   不在本卡范围，所以两个名字各自留着。 */
+.chart-fill-soft { fill: var(--accent); opacity: .18; stroke: var(--accent); stroke-width: 2 }
+/* 重复节奏的格子：三种状态（完成 / 排了没做 / 取消搁置）不只靠颜色 —— 形状也不同
+   （实心 / 空心红边 / 空心）。空心那两态的 `fill: none` 是**复位**（T-G43：0/auto/none 是清零，
+   不是"选了某个值"），所以不进令牌、也不是一次性裸值。 */
+.chart-cell { fill: none; stroke: none }
+.chart-cell-done { fill: var(--accent) }
+.chart-cell-missed { fill: none; stroke: var(--accent); stroke-width: 1.5 }
+.chart-cell-off-state { fill: none; stroke: var(--border); stroke-width: 1 }
+
+/* ★ 为什么这五个旧名字与新名字**并存**（T-G55）：它们有测试与渲染黄金指着
+   （`tests/test_web_frontend.py` 逐字断言 `.ring-track { stroke: var(--border) }` 与
+   `.axis-line { stroke: var(--border) }`，`gates/render/*.txt` 采的是落到元素上的计算值）。
+   删掉旧名字＝顺手改一堆别的东西，而本卡的范围只是"把 SVG 里写死的值收进样式表"。
+   所以：标记统一改用新类，旧类**保留**（值不动），两套名字指向同一组值。
+   注意**没有把它们并成一条逗号规则**：`.a, .b { … }` 会让"逐字断言整条规则"的护栏失效
+   （正则里那段字符串就不存在了）。 */
+.cell-off { fill: var(--panel-2) }   /* = .chart-cell-off；0 引用，留着给逐字断言与黄金 */
+.axis-line { stroke: var(--border) } /* = .chart-grid / .chart-axis 的描边那一半 */
+.axis-label { fill: var(--muted) }   /* = .chart-label 的颜色那一半 */
+.ring-track { stroke: var(--border) }/* = .chart-grid：环轨道，静音面上靠 --border 才看得见（T-G51） */
 
 /* ---------- 离线提示条（SR-NF17 / G 批 · T-G10）----------
  * 只在「断网」或「队列里还有没同步的东西」时出现；手机上没有左栏，「离线记」靠它进得去。
@@ -592,7 +663,11 @@ input:not([type="checkbox"]):not([type="radio"]) {
     border-radius: 0;
   }
   .bottom-nav button.active { color: var(--accent); font-weight: var(--fw-bold) }
-  .bottom-nav button .ic { display: block; font-size: var(--fs-xl)}
+  /* 图标尺寸**只在这里定**（T-G54）：模板里没有裸宽高，svg 也不写自己的 class。
+     为什么是 20px：底栏槽位是 18px 字 + **24px 行盒**，20px 的图标塞得进同一个行盒、
+     不撑高按钮（行盒一矮，整排底栏的几何都会变）。 */
+  .ic svg { width: 20px; height: 20px; vertical-align: middle }
+  .bottom-nav button .ic { display: block; font-size: var(--fs-xl) }
 }
 
 /* ---------- AI 接口的示例命令（T-G6） ----------

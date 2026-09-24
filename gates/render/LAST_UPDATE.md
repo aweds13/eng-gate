@@ -448,3 +448,53 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `narrow/offline`
 - `phone/offline`
 
+
+## 2026-09-24 14:00:26 · 26 份改动
+
+> 理由：T-G54 图标系统：底栏 7 个 emoji + 标记/删除/折叠/上下移/勾选共 15 处字形换成内联 SVG（24 网格、只描边、currentColor，颜色随状态走）；底栏行盒 24→21px（图标不再撑高行盒）
+
+- `desktop/flagged`
+- `desktop/important`
+- `desktop/planned`
+- `desktop/setting`
+- `desktop/tasks`
+- `desktop/today`
+- `narrow/flagged`
+- `narrow/important`
+- `narrow/planned`
+- `narrow/setting`
+- `narrow/tasks`
+- `narrow/today`
+- `phone/academic`
+- `phone/flagged`
+- `phone/focus`
+- `phone/habit`
+- `phone/important`
+- `phone/memo`
+- `phone/offline`
+- `phone/planned`
+- `phone/review`
+- `phone/setting`
+- `phone/stats`
+- `phone/tasks`
+- `phone/team`
+- `phone/today`
+
+
+## 2026-09-24 14:18:41 · 12 份改动
+
+> 理由：T-G55 图表规范：6 个手写 SVG 的静态尺寸/颜色下沉成 app.css 的 .chart-* 类（一致性门从此看得见图表）+ 习惯热力图窗口 90→371 天（左 3/4 恒空的真缺口）+ 空态/数字口径按约定改短；同轮含 T-G54 图标系统（15 处字形→内联 SVG，底栏行盒 24→21px）
+
+- `desktop/academic`
+- `desktop/habit`
+- `desktop/stats`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/habit`
+- `narrow/stats`
+- `narrow/today`
+- `phone/academic`
+- `phone/habit`
+- `phone/stats`
+- `phone/today`
+

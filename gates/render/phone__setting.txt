@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=phone 390x844 view=setting rows=388 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=phone 390x844 view=setting rows=403 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,390,9667	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,390,65	16/normal/400	#1e293b/#000000@0.00	0;12px 16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	16,12,86,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
@@ -94,9 +94,12 @@ div.shell>main#main>div.card.block:nth-child(12)>div.settings-sub:nth-child(2)		
 main#main>div.card.block:nth-child(12)>div.settings-sub:nth-child(2)>span.badge	默认	97,2129,40,19	11/13.2/400	#5b6472/#ffffff	999;2px 8px
 div.shell>main#main>div.card.block:nth-child(12)>div.meta:nth-child(3)	建复习卡时「形式」这一栏有哪几种？	33,2156,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
 div.shell>main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(4)		33,2174,324,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(1)	挖空 ✕	33,2174,74,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(2)	问答卡 ✕	115,2174,87,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(3)	真题 ✕	210,2174,74,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(1)	挖空	33,2174,80,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div.row.tight:nth-child(4)>button.ghost:nth-child(1)>svg>path		84,2189,8,8	13/normal/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(2)	问答卡	121,2174,93,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div.row.tight:nth-child(4)>button.ghost:nth-child(2)>svg>path		184,2189,8,8	13/normal/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(4)>button.ghost:nth-child(3)	真题	221,2174,80,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div.row.tight:nth-child(4)>button.ghost:nth-child(3)>svg>path		272,2189,8,8	13/normal/400	#5b6472/#000000@0.00	0;0px
 div.shell>main#main>div.card.block:nth-child(12)>div.new:nth-child(5)		33,2227,324,145	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block:nth-child(12)>div.new:nth-child(5)>input#vb_review_forms_id	(text)id（小写英文，如 my_form）	33,2227,324,42	14/normal/400	#1e293b/#ffffff	10;12px
 main#main>div.card.block:nth-child(12)>div.new:nth-child(5)>input#vb_review_forms_label	(text)显示名（随你写）	33,2281,239,42	14/normal/400	#1e293b/#ffffff	10;12px
@@ -107,11 +110,16 @@ div.shell>main#main>div.card.block:nth-child(12)>div.settings-sub:nth-child(7)		
 main#main>div.card.block:nth-child(12)>div.settings-sub:nth-child(7)>span.badge	默认	149,2458,40,19	11/13.2/400	#5b6472/#ffffff	999;2px 8px
 div.shell>main#main>div.card.block:nth-child(12)>div.meta:nth-child(8)	统计页那张年历热力图，可以按哪些维度看、分别叫什么？	33,2485,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
 div.shell>main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)		33,2503,324,82	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(1)	专注 ✕	33,2503,74,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(2)	手动投入 ✕	115,2503,100,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(3)	复习 ✕	223,2503,74,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(4)	产出 ✕	33,2548,74,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(5)	债务（欠多少） ✕	115,2548,139,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(1)	专注	33,2503,80,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div.row.tight:nth-child(9)>button.ghost:nth-child(1)>svg>path		84,2518,8,8	13/normal/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(2)	手动投入	121,2503,106,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div.row.tight:nth-child(9)>button.ghost:nth-child(2)>svg>path		197,2518,8,8	13/normal/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(3)	复习	234,2503,80,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div.row.tight:nth-child(9)>button.ghost:nth-child(3)>svg>path		285,2518,8,8	13/normal/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(4)	产出	33,2548,80,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div.row.tight:nth-child(9)>button.ghost:nth-child(4)>svg>path		84,2563,8,8	13/normal/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(12)>div.row.tight:nth-child(9)>button.ghost:nth-child(5)	债务（欠多少）	121,2548,145,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div.row.tight:nth-child(9)>button.ghost:nth-child(5)>svg>path		236,2563,8,8	13/normal/400	#5b6472/#000000@0.00	0;0px
 div.shell>main#main>div.card.block:nth-child(12)>div.new:nth-child(10)		33,2601,324,145	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block:nth-child(12)>div.new:nth-child(10)>input#vb_heatmap_dimensions_id	(text)id	33,2601,324,42	14/normal/400	#1e293b/#ffffff	10;12px
 main#main>div.card.block:nth-child(12)>div.new:nth-child(10)>input#vb_heatmap_dimensions_label	(text)显示名（随你写）	33,2655,239,42	14/normal/400	#1e293b/#ffffff	10;12px
@@ -378,12 +386,19 @@ html>body>div.shell>aside.sidebar		0,9381,390,196	16/normal/400	#1e293b/#000000@
 body>div.shell>aside.sidebar>div#focusRail		16,9381,358,94	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	33,9398,324,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
 div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	33,9422,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
-html>body>nav.bottom-nav		0,762,390,82	16/normal/400	#1e293b/#ffffff	0;8px 0px
-body>nav.bottom-nav>button:nth-child(1)>span.ic	📅	4,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(2)>span.ic	🗂️	61,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(3)>span.ic	⏱️	118,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(4)>span.ic	👥	175,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(5)>span.ic	🔥	231,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(6)>span.ic	📈	288,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-html>body>nav.bottom-nav>button.active		341,771,49,65	12/normal/700	#2f6feb/#2f6feb	0;12px 4px
-body>nav.bottom-nav>button.active>span.ic	⚙️	345,783,41,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
+html>body>nav.bottom-nav		0,765,390,79	16/normal/400	#1e293b/#ffffff	0;8px 0px
+body>nav.bottom-nav>button:nth-child(1)>span.ic		4,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(1)>span.ic>svg>path		18,790,13,14	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(2)>span.ic		61,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(2)>span.ic>svg>path		74,790,15,14	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(3)>span.ic		118,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(3)>span.ic>svg>path		131,790,15,15	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(4)>span.ic		175,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(4)>span.ic>svg>path		187,791,17,13	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(5)>span.ic		231,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(5)>span.ic>svg>path		248,790,8,12	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(6)>span.ic		288,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(6)>span.ic>svg>path		300,790,17,13	18/normal/400	#5b6472/#000000@0.00	0;0px
+html>body>nav.bottom-nav>button.active	设置	341,774,49,62	12/normal/700	#2f6feb/#2f6feb	0;12px 4px
+body>nav.bottom-nav>button.active>span.ic		345,786,41,21	18/normal/700	#2f6feb/#000000@0.00	0;0px
+button.active>span.ic>svg>path		359,790,14,15	18/normal/700	#2f6feb/#000000@0.00	0;0px

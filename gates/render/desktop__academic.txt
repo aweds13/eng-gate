@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=desktop 1280x900 view=academic rows=159 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=desktop 1280x900 view=academic rows=154 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,1280,1784	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
 html>body>div.shell>aside.rail		24,0,168,756	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,16,167,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
@@ -59,24 +59,19 @@ body>div.shell>main#main>div.section-title:nth-child(8)	学业概览（多维）
 body>div.shell>main#main>div.card.block.quiet		240,627,668,274	16/normal/400	#1e293b/#eef2f7	10;16px
 div.shell>main#main>div.card.block.quiet>div.gpa-head		257,644,634,240	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block.quiet>div.gpa-head>div>svg.chart.radar		257,644,260,236	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>polygon.axis-line:nth-child(1)		360,734,53,51	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>polygon.axis-line:nth-child(2)		334,706,107,102	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>polygon.axis-line:nth-child(3)		306,677,162,154	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>line.axis-line:nth-child(5)		387,736,81,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>line.axis-line:nth-child(6)		387,762,50,69	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>line.axis-line:nth-child(7)		337,762,50,69	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>line.axis-line:nth-child(8)		306,736,81,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>polygon		306,684,151,147	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>circle:nth-child(10)		383,680,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>circle:nth-child(11)		453,736,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>circle:nth-child(12)		426,818,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>circle:nth-child(13)		333,827,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>circle:nth-child(14)		302,732,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>text.axis-label:nth-child(15)	GPA(当前制)	355,649,65,16	10/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>text.axis-label:nth-child(16)	加权平均	461,721,48,16	10/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>text.axis-label:nth-child(17)	平均分	430,837,37,16	10/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>text.axis-label:nth-child(18)	学分	314,837,25,16	10/normal/400	#1e293b/#000000@0.00	0;0px
-div.gpa-head>div>svg.chart.radar>text.axis-label:nth-child(19)	课程覆盖	264,721,49,16	10/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>polygon.chart-grid:nth-child(1)		360,734,53,51	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>polygon.chart-grid:nth-child(2)		334,706,107,102	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>polygon.chart-grid:nth-child(3)		306,677,162,154	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>line.chart-grid:nth-child(5)		387,736,81,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>line.chart-grid:nth-child(6)		387,762,50,69	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>line.chart-grid:nth-child(7)		337,762,50,69	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>line.chart-grid:nth-child(8)		306,736,81,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>polygon.chart-fill-soft		306,684,151,147	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>text.axis-label.chart-label:nth-child(15)	GPA(当前制)	352,648,71,17	11/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>text.axis-label.chart-label:nth-child(16)	加权平均	459,720,53,17	11/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>text.axis-label.chart-label:nth-child(17)	平均分	428,836,40,17	11/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>text.axis-label.chart-label:nth-child(18)	学分	313,836,27,17	11/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>text.axis-label.chart-label:nth-child(19)	课程覆盖	261,720,54,17	11/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block.quiet>div.gpa-head>div.stat-label		533,667,358,194	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block.quiet>div.gpa-head>div.stat-label>div.mb-3:nth-child(1)		533,671,358,30	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.gpa-head>div.stat-label>div.mb-3:nth-child(1)>div.sub.split		533,671,358,18	12/18/400	#5b6472/#000000@0.00	0;0px

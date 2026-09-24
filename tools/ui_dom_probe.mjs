@@ -899,18 +899,23 @@ try {
   const html = byId.get('main')._html;
   const needs = ['时间热力图（近一年）', 'data-action="set-heatmap" data-metric="focus_minutes"',
     'data-action="set-heatmap" data-metric="review_count"', '专注 · 颜色越深=当天投入越多',
-    'var(--accent)',
+    'chart-cell-on', '--chart-alpha',
     // 重复节奏（SR-F1.5b / T-G25）：那一段要真渲染出来，且**三种格子状态都在**
     // ——只画"完成格"会把"排了没做"和"取消/搁置"悄悄丢掉，而"能渲染"这种断言照样绿。
     '重复节奏（近 56 天）', '背单词 · 每 1 天 · 完成 1 / 排期 3', '周复盘 · 每 7 天 · 完成 1 / 排期 1',
     '做完了', '排了没做', '取消/搁置/归档未完成', '不推算以后该哪天'];
   const missing = needs.filter((n) => !html.includes(n));
-  // 反证：老代码那种"取不到值"的图里，所有格子都是 `--panel-2`，不会出现 accent
-  const hasAccent = html.includes('var(--accent)');
+  // 反证：老代码那种"取不到值"的图里，所有格子都是 `--panel-2`（即 `.chart-cell-off`），
+  // 不会出现有色格。★ T-G55 起"有没有色"判的是**类名**而不是 `var(--accent)` 字面量：
+  // 颜色已经下沉进 `app.css`（`.chart-cell-on`），标记里只剩几何与类名 ——
+  // 再拿 `var(--accent)` 当路标会变成"图形对了但断言看不见"的假红。
+  const onCells = (html.match(/chart-cell-on/g) || []).length;
+  const hasAccent = onCells > 0;
   const rendered = missing.length === 0 && hasAccent;
   if (!rendered) heatmapBad++;
-  heatmapChecks.push({ rendered, missing, hasAccent });
+  heatmapChecks.push({ rendered, missing, hasAccent, onCells });
   console.log(`  ${rendered ? '✅' : '⚠️ '} stats·热力图有值渲染 main ${String(html.length).padStart(6)}B`
+    + `  有色格: ${onCells}`
     + (missing.length ? `  缺: ${missing.join(', ')}` : ''));
 } catch (e) {
   heatmapBad++;

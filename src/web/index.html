@@ -55,13 +55,13 @@
   </div>
 </div>
 <nav class="bottom-nav">
-  <button data-action="view" data-view="today" class="active"><span class="ic">📅</span>今日</button>
-  <button data-action="view" data-view="tasks"><span class="ic">🗂️</span>任务</button>
-  <button data-action="view" data-view="focus"><span class="ic">⏱️</span>专注</button>
-  <button data-action="view" data-view="team"><span class="ic">👥</span>团队</button>
-  <button data-action="view" data-view="habit"><span class="ic">🔥</span>习惯</button>
-  <button data-action="view" data-view="stats"><span class="ic">📈</span>统计</button>
-  <button data-action="view" data-view="setting"><span class="ic">⚙️</span>设置</button>
+  <button data-action="view" data-view="today" class="active" aria-label="今日"><span class="ic"></span>今日</button>
+  <button data-action="view" data-view="tasks" aria-label="任务"><span class="ic"></span>任务</button>
+  <button data-action="view" data-view="focus" aria-label="专注"><span class="ic"></span>专注</button>
+  <button data-action="view" data-view="team" aria-label="团队"><span class="ic"></span>团队</button>
+  <button data-action="view" data-view="habit" aria-label="习惯"><span class="ic"></span>习惯</button>
+  <button data-action="view" data-view="stats" aria-label="统计"><span class="ic"></span>统计</button>
+  <button data-action="view" data-view="setting" aria-label="设置"><span class="ic"></span>设置</button>
 </nav>
 <!-- 离线提示条（SR-NF17 / G 批 · T-G10）：断网或队列里还有没同步的东西时才出现。
      手机上没有左栏，「离线记」就靠这条进得去。 -->
@@ -151,6 +151,35 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
      · **属性里**（`title=` 这类）只能 `esc()`：属性里塞不进 `<b>`。
    这条规矩以前只是"看人记不记得"，漏了就一直画星号（T-G11 修了 19 处静态文案，
    T-G34 又在**后端**那几个 note 上抓到同一族 —— 现在由行为流层每轮扫 14 个视图兜底）。 */
+/* ---------- 图标（T-G54）----------
+ * 为什么是内联 SVG 而不是 emoji：emoji 是**彩色字体**、不吃 `currentColor` —— 选中态改不了它的颜色、
+ * 也看不到"这个图标现在是次要色还是强调色"；而且它随系统字体变样子（同一个界面在三台机器上三种气质）。
+ * 规矩（每一条都有理由）：
+ *   · **24 网格、单 path、只描边**（`fill="none"` + `1.75`），尺寸与颜色全在 CSS；
+ *   · **不给 svg 加 class** —— 加了它会被渲染黄金当"有名字的容器"多采一行；
+ *   · **不加 `<title>`** —— 与按钮标签重复，还会把文字塞进底栏那个 `span.ic` 的 textContent；
+ *   · svg 一律在 `button` **内部**、自己不注册动作：点击靠 `ev.target.closest('[data-action]')` 冒泡命中。
+ */
+const ICONS = {
+  today: 'M4 7h16M8 3.5v3M16 3.5v3M6 5.5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z',
+  tasks: 'M3 6h18v14H3zM3 10h18M8 6V3M16 6V3',
+  focus: 'M12 3a9 9 0 1 0 9 9M12 7v5l4 2',
+  team: 'M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6M2 20c0-3 2.7-5 6-5s6 2 6 5M17 11a3 3 0 1 0 0-6M16 15c3 0 6 2 6 5',
+  habit: 'M12 3c2 3 5 4 5 8a5 5 0 0 1-10 0c0-4 3-5 5-8M12 12v5',
+  stats: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  setting: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L6.1 11a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6c.1-.3.1-.7.1-1Z',
+  flag: 'M6 21V4h11l-2 4 2 4H6',
+  close: 'M6 6l12 12M18 6L6 18',
+  caret: 'M9 6l6 6-6 6',
+  caretOpen: 'M6 9l6 6 6-6',
+  check: 'M5 13l4 4 10-10',
+  up: 'M12 19V5M6 11l6-6 6 6',
+  down: 'M12 5v14M6 13l6 6 6-6',
+}
+function icon(name){
+  const d = ICONS[name]; if(!d) return '';
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${d}"/></svg>`;
+}
 function noteHTML(text){return esc(text).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')}
 function el(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
 /* 空态统一走这里（R5 收口）：**一处措辞、一处样式**。
@@ -1159,7 +1188,7 @@ function groupChips(groups,assignedIds){
     const on=!!g.id&&inGroup.has(g.id);
     return `<button class="${on?'':'ghost'}" data-action="task-group" data-id="${detailTaskId}"
       data-group="${esc(g.id||'')}" data-on="${on}"
-      ${g.id?'':'disabled title="分组列表还没加载出来，刷新一下就能勾选"'}>${on?'✓ ':''}${esc(g.path||g.name)}</button>`;
+      ${g.id?'':'disabled title="分组列表还没加载出来，刷新一下就能勾选"'}>${on?icon('check')+' ':''}${esc(g.path||g.name)}</button>`;
   }).join('');
 }
 async function toggleTaskGroup(taskId,groupId,on){
@@ -1318,7 +1347,7 @@ function renderDetail(el,t,facts,tree,cards,attempts){
       <button class="check ${sDone?'on':''}" title="${sDone?'撤销完成':'标记完成'}"
         data-action="task-done" data-id="${s.id}" data-done="${sDone}"></button>
       ${hasKids?`<button class="ghost" data-action="step-toggle" data-id="${s.id}"
-        title="${off?'展开这一支':'收起这一支'}">${off?'▸':'▾'}</button>`:''}
+        title="${off?'展开这一支':'收起这一支'}">${icon(off?'caret':'caretOpen')}</button>`:''}
       <span class="grow ${sDone?'is-done':''}">${esc(s.title)}</span>
       <span class="badge">${Number(n.depth)===2?'子任务':'子步骤'}</span>
       ${s.status!=='未开始'?`<span class="badge">${esc(s.status)}</span>`:''}
@@ -1435,7 +1464,7 @@ async function removeAttachment(taskId,index){
 const PRIO_CLASS={'高':'high','中':'mid','低':'low'};
 function prioBadge(p){const v=p||'中';return `<span class="prio ${PRIO_CLASS[v]||'mid'}">${esc(v)}</span>`}
 // 手动标记（SR-F1.3 / T-B3）：只有"已标记"才显示一面小旗（没标记就不占位置）
-function flagBadge(t){return t.flagged?'<span class="flag" title="你自己标记的">⚑ 已标记</span>':''}
+function flagBadge(t){return t.flagged?`<span class="flag" title="你自己标记的">${icon('flag')} 已标记</span>`:''}
 // 提醒（SR-F1.4 / T-B5）：状态由**后端**算（`reminder_state`：over/today/soon/later），这里只翻译成人话
 const REMIND_LABEL={over:'提醒已到',today:'今天提醒',soon:'临期提醒',later:'以后提醒'};
 function remindBadge(t){
@@ -1761,10 +1790,12 @@ function lineChart(points,valueOf,height){
   const xy=pts.map((v,i)=>[i*step,h-(v/max)*(h-14)-4]);
   const line=xy.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
   const area=`0,${h} ${line} ${w},${h}`;
-  const marks=xy.map((p,i)=>pts[i]>0?`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" fill="var(--accent)"/>`:'').join('');
+  // 尺寸/颜色一律由 CSS 类给（T-G55「图表规范」）：`r` 已下沉成 `.chart-mark` 的 `r` 属性选择器，
+  // 标记里只剩几何（`cx/cy` 与折线 `points`）。
+  const marks=xy.map((p,i)=>pts[i]>0?`<circle class="chart-mark" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}"/>`:'').join('');
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="chart" style="height:${h}px">
-    <polygon points="${area}" fill="var(--accent)" opacity="0.10"/>
-    <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+    <polygon class="chart-area" points="${area}"/>
+    <polyline class="chart-line" points="${line}"/>
     ${marks}</svg>`;
 }
 function barList(rows){
@@ -1789,8 +1820,10 @@ function heatmap(logs){
       if(d>today)continue;
       const iso=todayISO(d);
       const on=done.has(iso);
-      cells+=`<rect x="${c*(cell+gap)}" y="${r*(cell+gap)}" width="${cell}" height="${cell}" rx="2.5"
-        fill="${on?'var(--accent)':'var(--panel-2)'}" opacity="${on?1:0.9}"><title>${iso}${on?' 已打卡':''}</title></rect>`;
+      // 打卡格：颜色/圆角/透明度全由类给（`.chart-cell-on` / `.chart-cell-off`）。
+      // 空格原来是"淡一点"的浅底格，而 `--panel-2` 本身就是静音面（T-G51），所以实心即等价观感。
+      cells+=`<rect class="${on?'chart-cell-on':'chart-cell-off'}" x="${c*(cell+gap)}" y="${r*(cell+gap)}"
+        width="${cell}" height="${cell}"><title>${iso}${on?' 已打卡':''}</title></rect>`;
     }
   }
   const w=cols*(cell+gap),h=7*(cell+gap);
@@ -1804,20 +1837,26 @@ function ring(done,pending){
   const ratio=total?done/total:0;
   const r=30,c=2*Math.PI*r,on=c*ratio;
   const label=total?`${done}/${total}`:'—';
+  // 两笔 9px 弧的笔宽/颜色是**样式**，收在 `.chart-ring` / `.chart-ring-progress`（T-G55）；
+  // `r/cx/cy` 与 `stroke-dasharray`（=按 done/total 算出来的读数）是**几何**，留在标记里。
   return `<svg viewBox="0 0 80 80" class="chart ring">
-    <circle class="ring-track" cx="40" cy="40" r="${r}" fill="none" stroke-width="9"/>
-    <circle cx="40" cy="40" r="${r}" fill="none" stroke="var(--accent)" stroke-width="9"
-      stroke-linecap="round" stroke-dasharray="${on.toFixed(1)} ${(c-on).toFixed(1)}"
+    <circle class="chart-ring" cx="40" cy="40" r="${r}"/>
+    <circle class="chart-ring-progress" cx="40" cy="40" r="${r}"
+      stroke-dasharray="${on.toFixed(1)} ${(c-on).toFixed(1)}"
       transform="rotate(-90 40 40)"/>
     <text class="ring-text" x="40" y="44" text-anchor="middle">${label}</text>
   </svg>`;
 }
 function todayCard(done,pending){
+  // T-G55：这里原来还有一句长长的**数字口径解释**（环只统计今天那一句），已按
+  // `docs/specification/conventions.md`「界面文案」删掉（口径 ≤8 字、更长的进用户文档；
+  // 纯读数区不留解释句）。口径本身没变（见 renderToday 的注释与
+  // `docs/contracts/interactions.md`），只是不再写在界面上。
   const note=pending?`还有 ${pending} 项在手`:'今天的清单是空的';
   return `<div class="card quiet"><div class="ring-head">
     ${ring(done,pending)}
     <div><div class="title">今日完成度</div><div class="meta">已完成 ${done} 项 · ${note}</div>
-    <div class="sub">只统计今天的清单与今天完成的，不翻旧账。</div></div></div></div>`;
+      <div class="sub">只算今天</div></div></div></div>`;
 }
 // 复习进度条：今天该复习的里面，已完成多少张
 function progressBar(done,total,label){
@@ -1834,16 +1873,18 @@ function radar(axes){
   const pt=(i,ratio)=>{const a=-Math.PI/2+i*2*Math.PI/n;return [cx+Math.cos(a)*R*ratio,cy+Math.sin(a)*R*ratio]};
   const rings=[0.33,0.66,1].map(k=>{
     const p=Array.from({length:n},(_,i)=>pt(i,k).map(v=>v.toFixed(1)).join(',')).join(' ');
-    return `<polygon class="axis-line" points="${p}" fill="none" stroke-width="1"/>`;
+    return `<polygon class="chart-grid" points="${p}"/>`;
   }).join('');
   const spokes=Array.from({length:n},(_,i)=>{
-    const [x,y]=pt(i,1);return `<line class="axis-line" x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke-width="1"/>`;
+    const [x,y]=pt(i,1);return `<line class="chart-grid" x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"/>`;
   }).join('');
   const poly=axes.map((a,i)=>pt(i,Math.min(1,a.ratio)).map(v=>v.toFixed(1)).join(',')).join(' ');
-  const dots=axes.map((a,i)=>{const [x,y]=pt(i,Math.min(1,a.ratio));return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="var(--accent)"/>`}).join('');
-  const labels=axes.map((a,i)=>{const [x,y]=pt(i,1.22);return `<text class="axis-label" x="${x.toFixed(1)}" y="${(y+3).toFixed(1)}" text-anchor="middle" font-size="10">${esc(a.label)}</text>`}).join('');
+  const dots=axes.map((a,i)=>{const [x,y]=pt(i,Math.min(1,a.ratio));return `<circle class="chart-mark" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}"/>`}).join('');
+  // 轴名：字号收进 `.chart-label`（`--fs-xs` = 11px）—— 有意的 1px 变化，
+  // 原来的 10px 不在字号档位上（`--fs-*` 是 11/12/13/14/15/18/30/34/44）。
+  const labels=axes.map((a,i)=>{const [x,y]=pt(i,1.22);return `<text class="axis-label chart-label" x="${x.toFixed(1)}" y="${(y+3).toFixed(1)}" text-anchor="middle">${esc(a.label)}</text>`}).join('');
   return `<svg viewBox="0 0 220 200" class="chart radar">
-    ${rings}${spokes}<polygon points="${poly}" fill="var(--accent)" opacity="0.18" stroke="var(--accent)" stroke-width="2"/>${dots}${labels}</svg>`;
+    ${rings}${spokes}<polygon class="chart-fill-soft" points="${poly}"/>${dots}${labels}</svg>`;
 }
 function gpaRadar(g4,g5,courses,grades){
   const credits=(g4.credits||0);
@@ -1871,7 +1912,6 @@ function renderStats(m){
     const days=daily.length;
     const focusTotal=Math.round(daily.reduce((a,d)=>a+d.focus_minutes,0));
     const activeDays=daily.filter(d=>d.focus_minutes>0).length;
-    const debtNow=days?daily[days-1].debt_count:0;
     const peak=Math.max(0,...daily.map(d=>d.focus_minutes));
     return api('/api/insights/groups?days=30').then(groups=>api('/api/insights/heatmap?days=371')
       .then(cells=>api('/api/insights/heatmap-dimensions').then(dims=>{
@@ -1886,7 +1926,10 @@ function renderStats(m){
         <div class="sub split"><span>${daily.length?daily[0].date.slice(5):''}</span><span>今天</span></div></div>`;
       const dist=groups.length?barList(groups.map(g=>({
         label:g.group,value:g.focus_hours,display:`${g.focus_hours}h · ${g.task_count} 个任务`}))):emptyState('这段时间还没有绑定任务的专注');
-      // 学业投入 vs 自学投入（SR-F5.1b / T-C10）：口径见后端 `insights.academic_vs_self`
+      // 学业投入 vs 自学投入（SR-F5.1b / T-C10）：口径见后端 `insights.academic_vs_self`。
+      // T-G55 删掉了这里那一段口径解释（"只算绑定了任务的专注…"那一整段）：它是**口径解释**
+      // （>8 字），按 `conventions.md`「界面文案」该住用户文档；两张条的标签本身已经写明
+      // 是"挂了课程的任务 / 没挂课程的任务"。
       const acSplit=`<div class="section-title">学业投入 vs 自学投入（近 ${split.days} 天）</div>
         <div class="card block">
         ${barList([
@@ -1895,12 +1938,10 @@ function renderStats(m){
           {label:'自学：没挂课程的任务',value:split.self_hours,
             display:`${split.self_hours}h · ${split.self_tasks} 个任务`},
         ])}
-        <div class="sub">只算「绑定了任务」的专注：挂课程 = 学业、没挂课程 = 自学；
-          未绑定任务的专注另有 ${split.unbound_hours}h，单列、不归入任何一边（不猜它算哪一类）。
-          手动投入不参与这张图。这里只如实对照，不做「学业该占多少」的建议。</div></div>`;
+        <div class="sub">手动投入不计入</div></div>`;
       m.innerHTML=curve+`<div class="section-title">投入分布（按任务分组 · 近 ${days} 天）</div>
         <div class="card block">${dist}
-        <div class="sub">任务可属多个分组，各组之和可能大于总投入；未绑定任务的专注不计入分组。当前债务 ${debtNow} 项。</div></div>
+        <div class="sub">任务可属多组</div></div>
       ${acSplit}
       <div class="section-title">重复节奏（近 ${rhythm.days} 天）</div>
         <div class="card block">
@@ -1927,9 +1968,11 @@ function repeatRhythmRow(s){
   let marks='';
   list.forEach((c,i)=>{
     const col=i%per, row=Math.floor(i/per);
-    const fill=c.state==='done'?'var(--accent)':c.state==='off'?'var(--border)':'none';
-    marks+=`<rect x="${col*(cell+gap)}" y="${row*(cell+gap)}" width="${cell}" height="${cell}" rx="2.5"
-      fill="${fill}" stroke="${c.state==='missed'?'var(--accent)':'none'}" stroke-width="1.5">
+    // 状态 → 类：完成=实心 / 排了没做=空心红边 / 取消搁置=空心灰边。
+    // 原来三态写成 `fill`+`stroke`+`stroke-width` 三个内联属性（还带 `none` 字面量），
+    // 现在一个类名说完（T-G55）。
+    const cls=c.state==='done'?'chart-cell-done':c.state==='off'?'chart-cell-off-state':'chart-cell-missed';
+    marks+=`<rect class="chart-cell ${cls}" x="${col*(cell+gap)}" y="${row*(cell+gap)}" width="${cell}" height="${cell}">
       <title>${c.date} ${c.state==='done'?'做完了':c.state==='off'?'取消/搁置/归档未完成':'排了没做'}</title></rect>`;
   });
   const h=rows*(cell+gap);
@@ -1975,8 +2018,11 @@ function valueHeatmap(cells,metric){
       const v=map.has(iso)?Number(map.get(iso)[metric])||0:0;
       const on=v>0;
       const ratio=on?0.25+0.75*(v/max):0;
-      rects+=`<rect x="${c*(cell+gap)}" y="${r*(cell+gap)}" width="${cell}" height="${cell}" rx="2.5"
-        fill="${on?'var(--accent)':'var(--panel-2)'}" opacity="${on?ratio.toFixed(2):0.9}"><title>${iso}${on?' · '+fmtDay(v,metric):''}</title></rect>`;
+      // 逐格深浅是**算出来的读数**（ratio ∈ [.25,1]），不是"选了某个样式"，
+      // 所以走 `--chart-alpha` 一个变量；颜色与 `var()` 的用法住在 `.chart-cell-on`。
+      // ★ 这里**不改**这条渲染逻辑（含"按 53 周自己铺日期"）：本卡只做下沉，见 T-G55 报告。
+      rects+=`<rect class="${on?'chart-cell-on':'chart-cell-off'}" x="${c*(cell+gap)}" y="${r*(cell+gap)}"
+        width="${cell}" height="${cell}"${on?` style="--chart-alpha:${ratio.toFixed(2)}"`:''}><title>${iso}${on?' · '+fmtDay(v,metric):''}</title></rect>`;
     }
   }
   const w=cols*(cell+gap),h=7*(cell+gap);
@@ -2099,8 +2145,8 @@ function doingSection(items){
       <span class="badge">${i+1}</span>
       <span class="grow">${esc(t.title)}</span>
       ${t.due_date?`<span class="sub">${esc(t.due_date)}</span>`:''}
-      <button class="ghost" data-action="doing-move" data-id="${t.id}" data-dir="up" ${i===0?'disabled':''} title="上移">↑</button>
-      <button class="ghost" data-action="doing-move" data-id="${t.id}" data-dir="down" ${i===items.length-1?'disabled':''} title="下移">↓</button>
+      <button class="ghost" data-action="doing-move" data-id="${t.id}" data-dir="up" ${i===0?'disabled':''} title="上移">${icon('up')}</button>
+      <button class="ghost" data-action="doing-move" data-id="${t.id}" data-dir="down" ${i===items.length-1?'disabled':''} title="下移">${icon('down')}</button>
       <button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button>
       <button class="ghost" data-action="task-stop" data-id="${t.id}">停止</button>
     </div>`).join('')}
@@ -2830,12 +2876,12 @@ async function renderSetting(m){
       <button class="${guard.block_by_default?'ghost':''}" data-action="guard-block" data-on="false">一律放行</button></div>
     <div class="settings-sub">白名单（专注时允许用的来源）</div>
     <div class="row tight">${guard.whitelist.length?guard.whitelist.map(x=>
-      `<button class="ghost" data-action="guard-wl-del" data-name="${esc(x)}" title="点一下移出白名单">${esc(x)} ✕</button>`).join(''):'<span class="sub">还没有白名单条目</span>'}</div>
+      `<button class="ghost" data-action="guard-wl-del" data-name="${esc(x)}" title="点一下移出白名单">${esc(x)} ${icon('close')}</button>`).join(''):'<span class="sub">还没有白名单条目</span>'}</div>
     <div class="new"><input id="guardWl" placeholder="来源名，如 vscode / 微信" data-enter="guard-wl-add">
       <button class="ghost" data-action="guard-wl-add">加入白名单</button></div>
     <div class="settings-sub">勿扰时段</div>
     <div class="row tight">${guard.do_not_disturb.length?guard.do_not_disturb.map(x=>
-      `<button class="ghost" data-action="guard-dnd-del" data-win="${esc(x)}" title="点一下移除">${esc(x)} ✕</button>`).join(''):'<span class="sub">还没有勿扰时段</span>'}</div>
+      `<button class="ghost" data-action="guard-dnd-del" data-win="${esc(x)}" title="点一下移除">${esc(x)} ${icon('close')}</button>`).join(''):'<span class="sub">还没有勿扰时段</span>'}</div>
     <div class="new"><input id="guardDnd" placeholder="22:00-07:00（24 小时制，可跨午夜）" data-enter="guard-dnd-add">
       <button class="ghost" data-action="guard-dnd-add">加上时段</button></div>
     <div class="sub">${noteHTML(guard.note||'')} 时段写成 ${esc(guard.window_format||'HH:MM-HH:MM')}，最多 ${guard.max_items||50} 条。</div>
@@ -2878,7 +2924,7 @@ async function renderSetting(m){
       <div class="meta">${esc(t.question)}</div>
       <div class="row tight">${(t.items||[]).map(x=>
         `<button class="ghost" data-action="vocab-del" data-key="${esc(t.key)}" data-id="${esc(x.id)}"
-          title="点一下移除">${esc(x.label)} ✕</button>`).join('')}</div>
+          title="点一下移除">${esc(x.label)} ${icon('close')}</button>`).join('')}</div>
       <div class="new">
         <input id="vb_${esc(t.key)}_id" placeholder="${t.free_id?'id（小写英文，如 my_form）':'id'}">
         <input id="vb_${esc(t.key)}_label" placeholder="显示名（随你写）">
@@ -2974,7 +3020,7 @@ async function renderSetting(m){
       可执行/脚本类（.exe/.bat/.lnk 等）<b>任何设置下都只到文件夹</b>，不会直接运行。</div>
     <div class="settings-sub">直接打开白名单（扩展名）</div>
     <div class="row tight">${(attachCfg.whitelist||[]).map(e=>
-      `<button class="ghost" data-action="wl-del" data-ext="${esc(e)}">${esc(e)} ✕</button>`).join('')
+      `<button class="ghost" data-action="wl-del" data-ext="${esc(e)}">${esc(e)} ${icon('close')}</button>`).join('')
       ||'<span class="sub">空 —— 白名单里的扩展名会直接用默认程序打开</span>'}</div>
     <div class="new"><input id="wlExt" placeholder="加扩展名，如 .pdf" data-enter="wl-add">
       <button class="ghost" data-action="wl-add">加入白名单</button></div>
@@ -3531,6 +3577,13 @@ view(offlineNow()?'offline':'today');
 // 跨端"实时启动"（T-G20 / SR-F3.4）：每 10 秒问一次"别处有没有在计时"，变了才重画右栏。
 // 放在首屏渲染之后 —— 先让用户看到界面，再开始这个只读轮询。
 startFocusPoll();
+
+// 底栏图标（T-G54）：那 7 个槽位是**静态壳**，填不了模板串 ——
+// 于是在启动时一次性把图标塞进去（图标表只有一份，模板里不留 SVG 副本）。
+document.querySelectorAll('.bottom-nav button[data-view] .ic').forEach((slot) => {
+  const btn = slot.closest('button');
+  slot.innerHTML = icon(btn ? btn.dataset.view : '');
+});
 </script>
 </body>
 </html>

@@ -1,10 +1,10 @@
 {
-  "rev": "acc5bab",
-  "tree": "983596b4c58fdd92c9d1eead555344fcaeaadc3d",
-  "parent": "acc5bab",
+  "rev": "2548fc2",
+  "tree": "6c7fe4870dba1d9e6a7472b8c8d6baaab5f04783",
+  "parent": "2548fc2",
   "branch": "line/impl-v1",
   "dirty": true,
-  "at": "2026-09-24T21:50:54",
+  "at": "2026-09-24T22:25:32",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
@@ -13,117 +13,123 @@
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 64.79,
-      "summary": "1050 passed, 948 warnings in 61.29s (0:01:01)"
+      "seconds": 64.28,
+      "summary": "1054 passed, 937 warnings in 60.62s (0:01:00)"
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 11.62,
-      "summary": "2 passed, 1050 deselected, 1 warning in 7.84s"
+      "seconds": 11.11,
+      "summary": "2 passed, 1054 deselected, 1 warning in 7.45s"
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 7.47,
+      "seconds": 7.05,
       "summary": "All checks passed!"
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 6.42,
+      "seconds": 6.01,
       "summary": "Success: no issues found in 46 source files"
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 5.35,
+      "seconds": 4.97,
       "summary": "LAYER CHECKS: PASS ✅"
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 12.79,
+      "seconds": 11.82,
       "summary": "SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）"
     },
     {
       "name": "contrast",
       "exit_code": 0,
-      "seconds": 0.32,
+      "seconds": 0.35,
       "summary": "对比度审美门 PASS（达标 36 / 已登记欠账 0 / 新欠账或变差 0；共 36 条组合）"
     },
     {
       "name": "style",
       "exit_code": 0,
-      "seconds": 0.32,
+      "seconds": 0.35,
       "summary": "风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）"
+    },
+    {
+      "name": "ui_text",
+      "exit_code": 0,
+      "seconds": 0.35,
+      "summary": "[OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）"
     },
     {
       "name": "commands",
       "exit_code": 0,
-      "seconds": 0.33,
+      "seconds": 0.37,
       "summary": "说明：洞（没填出的路由/入口）是**进度**不是错误 —— 数量下降就是这张表在长。"
     },
     {
       "name": "ui_dom_probe",
       "exit_code": 0,
       "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 aede0b2c8ab3a44c）",
+      "summary": "复用上次通过判定（输入未变 3b53f3fb1885779d）",
       "reused": true,
-      "inputs_hash": "aede0b2c8ab3a44c"
+      "inputs_hash": "3b53f3fb1885779d"
     },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 8.28,
+      "seconds": 7.19,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）"
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 0.37,
+      "seconds": 0.38,
       "summary": "OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位"
     },
     {
       "name": "lf1_live",
       "exit_code": 0,
       "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 6726a83f6cd70ce0）",
+      "summary": "复用上次通过判定（输入未变 a12f5e813f6bf31e）",
       "reused": true,
-      "inputs_hash": "6726a83f6cd70ce0"
+      "inputs_hash": "a12f5e813f6bf31e"
     },
     {
       "name": "web_live",
       "exit_code": 0,
       "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 a19ecbeb5210687f）",
+      "summary": "复用上次通过判定（输入未变 a365b337b934806a）",
       "reused": true,
-      "inputs_hash": "a19ecbeb5210687f"
+      "inputs_hash": "a365b337b934806a"
     },
     {
       "name": "render",
       "exit_code": 0,
       "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 d188167593d334be）",
+      "summary": "复用上次通过判定（输入未变 58ba7b91e7ade530）",
       "reused": true,
-      "inputs_hash": "d188167593d334be"
+      "inputs_hash": "58ba7b91e7ade530"
     },
     {
       "name": "ui_flow",
       "exit_code": 0,
       "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 f38dab87839b611b）",
+      "summary": "复用上次通过判定（输入未变 270d5c65a6769d58）",
       "reused": true,
-      "inputs_hash": "f38dab87839b611b"
+      "inputs_hash": "270d5c65a6769d58"
     }
   ],
   "not_run": [],
   "reused": {
-    "ui_dom_probe": "aede0b2c8ab3a44c",
-    "lf1_live": "6726a83f6cd70ce0",
-    "web_live": "a19ecbeb5210687f",
-    "render": "d188167593d334be",
-    "ui_flow": "f38dab87839b611b"
+    "ui_dom_probe": "3b53f3fb1885779d",
+    "lf1_live": "a12f5e813f6bf31e",
+    "web_live": "a365b337b934806a",
+    "render": "58ba7b91e7ade530",
+    "ui_flow": "270d5c65a6769d58"
   },
-  "trailer": "pytest 1050 passed, 948 warnings in 61.29s (0:01:01); acceptance 2 passed, 1050 deselected, 1 warning in 7.84s; ruff All checks passed!; mypy Success: no issues found in 46 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; contrast 对比度审美门 PASS（达标 36 / 已登记欠账 0 / 新欠账或变差 0；共 36 条组合）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; commands 说明：洞（没填出的路由/入口）是**进度**不是错误 —— 数量下降就是这张表在长。; ui_dom_probe 复用上次通过判定（输入未变 aede0b2c8ab3a44c）; audit 审计通过 ✅（豁免 0 项已知欠账）; audit_titles OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位; lf1_live 复用上次通过判定（输入未变 6726a83f6cd70ce0）; web_live 复用上次通过判定（输入未变 a19ecbeb5210687f）; render 复用上次通过判定（输入未变 d188167593d334be）; ui_flow 复用上次通过判定（输入未变 f38dab87839b611b）"
+  "trailer": "pytest 1054 passed, 937 warnings in 60.62s (0:01:00); acceptance 2 passed, 1054 deselected, 1 warning in 7.45s; ruff All checks passed!; mypy Success: no issues found in 46 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; contrast 对比度审美门 PASS（达标 36 / 已登记欠账 0 / 新欠账或变差 0；共 36 条组合）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：洞（没填出的路由/入口）是**进度**不是错误 —— 数量下降就是这张表在长。; ui_dom_probe 复用上次通过判定（输入未变 3b53f3fb1885779d）; audit 审计通过 ✅（豁免 0 项已知欠账）; audit_titles OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位; lf1_live 复用上次通过判定（输入未变 a12f5e813f6bf31e）; web_live 复用上次通过判定（输入未变 a365b337b934806a）; render 复用上次通过判定（输入未变 58ba7b91e7ade530）; ui_flow 复用上次通过判定（输入未变 270d5c65a6769d58）"
 }

@@ -1,5 +1,6 @@
 """反馈/习惯/自检子包：re-export 领域逻辑。"""
 from timeflow.core.feedback.feedback import (
+    HABIT_HEATMAP_DAYS,
     create_habit,
     delete_habit,
     get_feedback,
@@ -14,6 +15,7 @@ from timeflow.core.feedback.feedback import (
 )
 
 __all__ = [
+    "HABIT_HEATMAP_DAYS",
     "set_daily_feedback",
     "get_feedback",
     "create_habit",

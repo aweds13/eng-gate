@@ -943,15 +943,16 @@ def test_academic_vs_self_chart_is_wired() -> None:
     """T-C10（SR-F5.1b / GAP-F5-03）：统计页要有「学业投入 vs 自学投入」对照。
 
     口径（用户 2026-09-20 定）：**只算挂了课程的任务专注**；没挂课程的算自学；
-    未绑定任务的专注**单列、不归入任何一边** —— 界面必须把这条写出来（否则读数会被误解）。
+    未绑定任务的专注**单列、不归入任何一边**。★ T-G55 起这条口径由**后端契约**
+    （`tests/test_insights.py` 的 `academic_vs_self` 那一组）与 `docs/user-guide.md` 承担，
+    **不再**在界面上写一整段解释 —— 按 `conventions.md`「界面文案」，界面上只留
+    「学业：挂了课程的任务 / 自学：没挂课程的任务」这两条**数据标签**（它们自己就说清了归因）。
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
     assert "/api/insights/academic-vs-self?days=90" in html, "统计页没取对照数据"
     stats = html.split("function renderStats(m){", 1)[1].split("\n}\n", 1)[0]
     assert "split" in stats and "acSplit" in stats, "对照图没接进统计页"
     assert "学业：挂了课程的任务" in stats and "自学：没挂课程的任务" in stats
-    assert "不归入任何一边" in stats, "必须说明未绑定专注单列（不制造假归因）"
-    assert "手动投入不参与这张图" in stats, "必须说明手动投入不参与（与分组图同口径）"
     for bad in ("应该", "达标", "落后"):
         assert bad not in stats.split("acSplit=", 1)[1][:1200], f"对照图措辞不许出现「{bad}」"
 
@@ -1499,9 +1500,16 @@ def test_repeat_rhythm_view_is_wired_and_kind() -> None:
     assert "noteHTML(rhythm.note)" in stats, "说明要用后端给的那句（别在界面复述口径）"
 
     row = html.split("function repeatRhythmRow(s){", 1)[1].split("\n}", 1)[0]
-    assert "'var(--accent)'" in row and "none" in row and "'var(--border)'" in row, \
-        "三种状态要三种画法（实心 / 空心 / 淡灰）"
-    assert "stroke-width=\"1.5\"" in row, "空心格要有描边（不只靠颜色）"
+    # ★ T-G55 改了口径：三种状态的**画法**从标记里的内联属性搬进了 `app.css` 的类
+    # （`.chart-cell-done` / `-missed` / `-off-state`）。所以这里判"标记有没有把三态分开"
+    # + "样式表有没有给出三种不同的画法" —— 而不是判标记里还写着 `stroke-width="1.5"`
+    # （那正是 T-G55 要消灭的东西：值住在标记里，令牌与一致性门都够不着）。
+    assert ("chart-cell-done" in row and "chart-cell-missed" in row
+            and "chart-cell-off-state" in row), "三种状态要三种类（实心 / 空心红边 / 空心灰边）"
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert ".chart-cell-missed { fill: none; stroke: var(--accent); stroke-width: 1.5 }" in css, \
+        "空心格要有描边（不只靠颜色）—— 这条笔宽现在住在样式表里"
+    assert ".chart-cell-off-state { fill: none; stroke: var(--border); stroke-width: 1 }" in css
     assert "完成 ${s.done} / 排期 ${s.planned}" in row, "只给这两个数"
     for bad in ("达标", "目标", "比例"):
         assert bad not in row, f"重复节奏不该出现「{bad}」（温和不施压，只描述事实）"
@@ -1627,9 +1635,22 @@ def test_ui_does_not_explain_itself() -> None:
         "还没有可看的维度 —— 去设置页",               # 24 字
         "还没有分配出去的任务。在任务卡片或详情里点",   # 38 字
         "还没有备份（起一次服务就会有一份）",           # 17 字
+        # T-G55 补的三条**图表口径解释句**（不是空态，是同一条规则里"数字口径 ≤8 字"那一半）：
+        # 用户 2026-09-24 对数字口径选的是 **≤8 字**（三选一：也全删 / ≤8 字 / 留着），
+        # 所以这三句是**改短**、不是删掉 —— 长句从此不许回来（下面这三条钉的就是"长句不许回来"），
+        # 短句必须真的在（⑤ 段）。改动前它们各自钉在 `tools/ui_flow_check.mjs` 第 ⑥ 条流、
+        # 本文件 `test_academic_vs_self_chart_is_wired` 以及 6 份渲染黄金（today ×3 / stats ×3）。
+        # ★ 这几条钉的是**整句**，所以代码注释里也不许把整句抄回去（抄了就是红 —— 故此处不写全句）。
+        "只统计今天的清单与今天完成的",
+        "任务可属多个分组，各组之和可能大于总投入",
+        "手动投入不参与这张图",
     ]
     for needle in gone_empty_states:
         assert needle not in html, f"空态不许再解释：{needle!r}（见 conventions.md「界面文案」）"
+
+    # ⑤ 数字口径：**短的那一版必须在**（≤8 字，用户选的那一档 —— 不是"删掉"）
+    for needle in ("只算今天", "任务可属多组", "手动投入不计入"):
+        assert needle in html, f"数字口径改短后没了：{needle!r}"
 
     # ② 旁边有控件的空态：整块占位都不留（不是"留一句短的"，是**不渲染**）
     assert "subtaskList||''" in html or "subtaskList||" in html, "步骤空态：直接不渲染"

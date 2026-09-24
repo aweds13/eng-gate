@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=phone 390x844 view=review rows=42 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=phone 390x844 view=review rows=49 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,390,901	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,390,65	16/normal/400	#1e293b/#000000@0.00	0;12px 16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	16,12,86,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
@@ -33,11 +33,18 @@ html>body>div.shell>aside.sidebar		0,615,390,196	16/normal/400	#1e293b/#000000@0
 body>div.shell>aside.sidebar>div#focusRail		16,615,358,94	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	33,632,324,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
 div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	33,656,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
-html>body>nav.bottom-nav		0,762,390,82	16/normal/400	#1e293b/#ffffff	0;8px 0px
-body>nav.bottom-nav>button:nth-child(1)>span.ic	📅	4,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(2)>span.ic	🗂️	61,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(3)>span.ic	⏱️	118,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(4)>span.ic	👥	175,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(5)>span.ic	🔥	231,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(6)>span.ic	📈	288,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(7)>span.ic	⚙️	345,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+html>body>nav.bottom-nav		0,765,390,79	16/normal/400	#1e293b/#ffffff	0;8px 0px
+body>nav.bottom-nav>button:nth-child(1)>span.ic		4,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(1)>span.ic>svg>path		18,790,13,14	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(2)>span.ic		61,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(2)>span.ic>svg>path		74,790,15,14	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(3)>span.ic		118,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(3)>span.ic>svg>path		131,790,15,15	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(4)>span.ic		175,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(4)>span.ic>svg>path		187,791,17,13	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(5)>span.ic		231,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(5)>span.ic>svg>path		248,790,8,12	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(6)>span.ic		288,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(6)>span.ic>svg>path		300,790,17,13	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(7)>span.ic		345,786,41,21	18/normal/400	#5b6472/#000000@0.00	0;0px
+button:nth-child(7)>span.ic>svg>path		359,790,14,15	18/normal/400	#5b6472/#000000@0.00	0;0px

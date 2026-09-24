@@ -71,6 +71,10 @@ COMMON = [
     # 风格一致性体检（T-G29）：「融洽」里**能机器判**的那一半 —— 同形状重复 / 一次性裸值 /
     # 缺 :hover·:focus-visible / 动效越界。它只证明「体系里没有新的破例」，**不证明好看**。
     ("style", [PY, "-X", "utf8", "tools/style_audit.py", "--check"]),
+    # 界面文案上限门（T-G57）：≥30 汉字一条都不许、≥20 只许减不许增（棘轮）。
+    # 与 contrast/style 同一套精神：清理靠人做一次，但**得有一层拦着它长回来** ——
+    # 用户两次说的「界面上不该有没必要的解释」只写在文档里的话，第三轮必漂。
+    ("ui_text", [PY, "-X", "utf8", "tools/ui_text_audit.py", "--check"]),
     # 命令表检查（T-G31）：四个面（界面/⌘K/CLI/AI·MCP）共用的那一个源，必须与三个真源对得上 ——
     # 契约层的 OP、app.py 的路由、界面 ACTIONS/VIEWS。"洞"（没填出路由/入口的行）是进度不是错误。
     ("commands", [PY, "-X", "utf8", "scripts/check_commands.py", "--check"]),
@@ -95,7 +99,7 @@ REAL_PY = [
 BROWSER = ("render", "ui_flow")
 # ① --fast：开发内循环用。挑的是"**改一行就能犯、且十几秒内查得出来**"的那几道 ——
 # 尤其 audit（TOML/台账语法，实测犯过 5 次）与 contrast/style（照抄包时最容易抄错的令牌层）。
-FAST = ("ruff", "contrast", "style", "commands", "audit", "audit_titles")
+FAST = ("ruff", "contrast", "style", "ui_text", "commands", "audit", "audit_titles")
 # 这些门是 **node 脚本**：环境里没有 node 时就跑不了 —— 统一记 `not_run`（不许静默跳过当通过）。
 NODE_TOOLS = ("ui_dom_probe", "render", "ui_flow")
 # 信息性检查（只报告、不阻断）—— 当前为空：`audit_titles` 已转正为阻断项（T-D2 收口）。

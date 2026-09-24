@@ -1460,19 +1460,36 @@ gaps = "**为什么是设置页**：契约早就这么写 —— OP-47 的入口
 
 [entries."T-G55"]
 id = "T-G55"
-title = "视觉线·第一层收尾①：图表规范 —— 6 个手写 SVG 统一（网格/轴/标注/空态/尺寸公约下沉成 `app.css` 的类）+ 习惯热力图的真缺口（前端按 53 周画、后端只给 90 天）"
+title = "视觉线·图表规范：6 个手写 SVG 的静态尺寸/颜色下沉成 `app.css` 的 `.chart-*` 类（一致性门从此看得见图表）+ 习惯热力图窗口 90 → 371 天（「画 53 周只给 90 天」那个真缺口）"
 group = "PROCESS"
-status = "todo"
-evidence = []
-gaps = "**盘点结论（先量后改）**：6 个手写 SVG 全在 `index.html` 1756–1984（折线+面积 / 习惯打卡热力 / 完成度环 / GPA 雷达 / 重复节奏方格 / 多指标热力），**颜色已经 100% 走令牌、图表里 0 处裸色**；真欠账是「各图自定尺寸、无网格无刻度无轴标注」+ `font-size`、`stroke-width`、`r`、`rx`、格径这类**裸值住在标记里**。**关键结构事实**：一致性门（`tools/style_audit.py`）**只读 `app.css`**，所以它**结构上看不见任何 SVG** —— 规范要能被门看见，就必须**下沉成类**（`.chart-grid` / `.chart-axis` / `.chart-label` / `.chart-line` / `.chart-cell-off` 等，颜色只用已有令牌），这同时把 `.cell-off` 那个**已 0 引用**的死类收编成「空格」语义类。**真缺口只有一条**：习惯热力图画 53 周、文案写「近一年」，而后端 `core/feedback/feedback.py` 只回**近 90 天** → 左 3/4 恒空。修法二选一：放开那条窗口（仍直读 `habit_logs`、不改算法）或新增 `core/insights.py::habit_heatmap` + `GET /api/insights/habit-heatmap`（走 `facts`、天数上限对齐 `MAX_HEATMAP_DAYS=400`）。**纪律**：不许前端自己拼 53 周日期再判「没记录」（现在的 `valueHeatmap` 就是这么算的）。**别做两遍**：`SR-F1.5b` 在台账里**已是 done**（T-G25 消除了缺口），T-G24 留的话是「并进图表规范这一步」，不是「欠一个热力图」。**黄金代价**：有 svg 的 4 视图 × 3 断点 = 12 份清单会动（habit 738 行、stats 371 行是最重的两块）；★ 另外 `desktop__stats.txt` 里**没有 `polyline` 也没有 `circle`**（那一轮专注全 0，零高度的数据折线被采集器跳过）—— **曲线本身没有任何护栏**，这轮该顺手加一条带非零数据的 fixture。"
+status = "done"
+evidence = [
+  "file:复盘/视觉线图标与图表-T-G54.md",
+  "text:src/web/app.css::.chart-grid { stroke: var(--border); stroke-width: 1 }",
+  "text:src/web/app.css::.chart-cell-off { fill: var(--panel-2) }",
+  "text:src/timeflow/core/feedback/feedback.py::HABIT_HEATMAP_DAYS = 371",
+  "text:tools/ui_flow_check.mjs::手动投入不计入",
+  "text:tests/test_web_frontend.py::只算今天",
+  "test:test_insights.py",
+]
+gaps = "**先量后改（盘点结论）**：6 个手写 SVG 全在 `index.html`，**颜色已经 100% 走令牌、图表里 0 处裸色**；真欠账是「各图自定尺寸」+ `stroke-width` / `r` / `rx` / `font-size` / `opacity` 这类**裸值住在标记里**。**关键结构事实**（这张卡存在的理由）：一致性门（`tools/style_audit.py`）**只读 `app.css`** —— 它**结构上看不见任何 SVG**，所以图表样式一直没有任何一层管。**做法**：把静态尺寸/颜色**下沉成类**（`.chart-grid` / `.chart-axis` / `.chart-label` / `.chart-line` / `.chart-area` / `.chart-mark` / `.chart-cell-off` / `.chart-cell-on` / `.chart-fill-soft` / `.chart-ring`），颜色只用已有令牌，标记里只留**几何**（`x/y/d/points/w/h/cx/cy` 是数据不是样式，T-G43 的口径）；顺带把**已 0 引用**的死类 `.cell-off` 收编成「空格」语义类。一处有意的 1px 变化：轴标签 10px → `var(--fs-xs)`（11px，10px 不在字号档位上）。**真缺口**：热力图前端按 **53 周 × 7 天**铺、文案写「近一年」，而后端 `feedback.list_habits` 只回 **90 天**（13 周）→ 左边 3/4 恒空（看着像「这个人三个月前才开始」）。修法：`HABIT_HEATMAP_DAYS = 371`（53×7，与前端格子逐个对齐），**只放窗口**、算法与接口形状一个不动，上界与 `insights.MAX_HEATMAP_DAYS = 400` 兼容；**机器证明** `tests/test_insights.py::test_list_habits_logs_window_matches_the_53_week_heatmap`（200 天前要在、370 天前也要在、400 天前不给）。★ **一处回落（诚实记）**：这张卡在「空态/口径统一」里顺手**删掉**了三句数字口径解释句，而用户 2026-09-24 在「也全删 / ≤8 字 / 留着」里选的是 **≤8 字** —— 落地时改成短句（`只算今天` / `手动投入不计入` / `任务可属多组`），并同步改了三处钉着长句的断言（`tools/ui_flow_check.mjs` 第 ⑥ 条流 + `tests/test_web_frontend.py` 的长句反向清单/短句正向清单 + 6 份黄金）。教训进地图 §6：**用户选过的那一档要写在卡的 gaps 里**，否则下一只手会替他做另一个决定。**没做**：① 不给折线图/热力图新增网格线与刻度（那是「看得见的变化」，要单独出预演图）；② 热力格的 `rx: 2.5` 没并进圆角档位（最小档 6px，11px 格子上会成药丸）—— 它现在至少住在 CSS 里、门看得见；③ 暗色渲染基线（老账）。"
+
 
 [entries."T-G54"]
 id = "T-G54"
-title = "视觉线·第一层收尾④：图标系统 —— 手机底栏 7 个 emoji + ⚑/✕/▸▾/↑↓/✓ 共 15 处字形换成内联 SVG（24 网格、单 path、只描边、`currentColor`、`aria-hidden`）"
+title = "视觉线·图标系统：15 处字形（底栏 7 个 emoji + ⚑/✕/▸▾/↑↓/✓）换成内联 SVG（24 网格、单 path、只描边、`currentColor`、`aria-hidden`）"
 group = "PROCESS"
-status = "todo"
-evidence = []
-gaps = "**盘点数字**：15 处真图标字形 / 14 种字形，**全在 `index.html`**（底栏 7 个 emoji、分组选中前缀 ✓、折叠树 ▸▾、标记 ⚑、上移下移 ↑↓、四处删除 ✕）；另有 10 处「当标点/状态用」的（✅❌⚠️）不在本卡范围。**门禁侧现状**：**没有任何测试或工具断言这些字形**（`tools/*.mjs` 与 `tests/*.py` 里的 ✅❌⚠ 是工具自己的控制台输出）—— 会动的只有渲染黄金的**文字列**。**尺寸理由**：底栏槽位是 18px 字 + **24px 行盒**（黄金 `43×24`），所以图标 20px 塞得进同一行盒、不撑高按钮；行内图标（住在 12–13px 文字旁）一律 16px。**黄金影响**：nav 7 个字形 **+98 行**（仅 14 份 `phone__*.txt`）、⚑ **+15**、✕ **+24**，合计约 **+137 行** → 必须 `--update --reason`。**陷阱**：`.ic svg` 一旦用 `display:block` 会把 `span.ic` 的行盒从 24px 压到 18px（底栏按钮 61 → 55、整排几何都变）→ 用 `vertical-align:middle` 保住行盒；**故意不给 svg 加 class**（加了会被黄金当「有名字的容器」多采一行）；**不给 svg 加 `<title>`**（与按钮标签重复，还会把文字塞进 `span.ic` 的 textContent）。**事件安全**：svg 必须在 `button` **内部**，靠 `ev.target.closest('[data-action]')` 冒泡命中，不许自己带 `data-action`、不许 `stopPropagation`。**顺带**：底栏 7 个按钮加 `aria-label`，让「今日/任务/…」这些标签重新进黄金（现在它们取 aria-label 而为空）。"
+status = "done"
+evidence = [
+  "file:复盘/视觉线图标与图表-T-G54.md",
+  "text:src/web/index.html::const ICONS = {",
+  "text:src/web/index.html::function icon(name){",
+  "text:src/web/app.css::.bottom-nav button .ic { display: block; font-size: var(--fs-xl) }",
+  "test:test_web_frontend.py",
+]
+gaps = "**先量后改**：全仓只有 **15 处真图标字形**（14 种），全在 `src/web/index.html` —— 底栏 7 个 emoji、标记 ⚑、删除 ✕ ×4、折叠 ▸▾、上移下移 ↑↓、分组勾选 ✓；另有 10 处「当标点/状态用」的（✅❌⚠️）不在本卡范围。**门禁侧现状**：**没有任何测试或工具断言过这些字形**（工具控制台里的 ✅❌ 是它们自己的输出），会动的只有渲染黄金的**文字列**。**换的理由**：emoji 是**彩色字体**、不吃 `currentColor` —— 选中态改不了它的颜色、也看不出「这个图标现在是次要色还是强调色」，而且它随系统字体变样子。四条规矩（写进 `index.html` 注释）：尺寸与颜色只在 CSS 定（底栏 20px / 行内 16px）；**不给 `svg` 加 class**（加了会被黄金当「有名字的容器」多采一行）；**不加 `<title>`**；svg 在 `button` **内部**、自己不注册动作（靠 `closest('[data-action]')` 冒泡）。底栏 7 个按钮同时补 `aria-label`（黄金对「有真元素孩子的容器」取 aria-label 当文字列，不补那 7 行的标签就从黄金里消失）。**三个当场踩到的坑**（进地图 §6）：① 底栏是**静态壳**，`${icon(...)}` 写在 HTML 里只会当字面文字渲染 → 改成启动时填槽位；② 把 `⚑ 已标记` 换成模板串时忘了原来那对是**单引号字符串** → 引号提前闭合、整页起不来（`ui_dom_probe` 一句 `Unexpected identifier 'flag'` 指到了）；③ **底栏矮了 3px**（65 → 62）：emoji 字形行盒 24px、20px 图标 21px —— 这是想要的（图标不该撑高行盒），没有为凑 3px 写 `line-height: 24px` 那种裸值。**代价**：渲染黄金 26 份动（nav 7 字形 +98 行、⚑ +15、✕ +24），理由落 `gates/render/LAST_UPDATE.md`。"
+
+
 
 [entries."T-G53"]
 id = "T-G53"

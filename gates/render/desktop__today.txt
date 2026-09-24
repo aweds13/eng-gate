@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=desktop 1280x900 view=today rows=106 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=desktop 1280x900 view=today rows=107 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,1280,1171	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
 html>body>div.shell>aside.rail		24,0,168,756	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,16,167,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
@@ -33,14 +33,14 @@ div.shell>main#main>div.new>label.sub	也放进今天的清单	714,171,124,19	12
 main#main>div.new>label.sub>input#newMyDay	(checkbox)on	718,174,13,13	13.3/normal/400	#000000/#000000@0.00	0;0px
 div.shell>main#main>div.new>button	添加	850,161,58,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
 body>div.shell>main#main>div.card.quiet		240,216,668,114	16/normal/400	#1e293b/#eef2f7	10;16px
-div.shell>main#main>div.card.quiet>div.ring-head		257,233,336,80	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.quiet>div.ring-head		257,233,239,80	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.quiet>div.ring-head>svg.chart.ring		257,233,80,80	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>svg.chart.ring>circle.ring-track		267,243,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>svg.chart.ring>circle		267,243,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>svg.chart.ring>circle.chart-ring		267,243,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>svg.chart.ring>circle.chart-ring-progress		267,243,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.quiet>div.ring-head>svg.chart.ring>text.ring-text	2/10	281,261,33,20	15/normal/700	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>div>div.title	今日完成度	353,243,240,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>div>div.meta	已完成 2 项 · 还有 8 项在手	353,264,240,18	12/18/400	#5b6472/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>div>div.sub	只统计今天的清单与今天完成的，不翻旧账。	353,286,240,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>div>div.title	今日完成度	353,243,143,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>div>div.meta	已完成 2 项 · 还有 8 项在手	353,264,143,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>div>div.sub	只算今天	353,286,143,18	12/18/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(4)	逾期（债务）	240,354,668,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div#ov		240,382,668,145	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div#ov>div.card.overdue		240,382,668,145	16/normal/400	#1e293b/#ffffff	10;16px
@@ -69,7 +69,8 @@ div.shell>main#main>div.card:nth-child(7)>div.card-body		291,604,166,65	16/24/40
 main#main>div.card:nth-child(7)>div.card-body>div.title	把第三章习题做完	291,604,166,24	16/24/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card:nth-child(7)>div.card-body>div.meta		291,628,166,41	12/18/400	#5b6472/#000000@0.00	0;0px
 div.card:nth-child(7)>div.card-body>div.meta>span.prio.high	高	356,628,29,19	11/16.5/400	#ffffff/#2f6feb	999;1px 8px
-div.card:nth-child(7)>div.card-body>div.meta>span.flag	⚑ 已标记	385,629,48,16	12/18/400	#2f6feb/#000000@0.00	0;0px
+div.card:nth-child(7)>div.card-body>div.meta>span.flag	已标记	385,629,55,16	12/18/400	#2f6feb/#000000@0.00	0;0px
+div.meta>span.flag>svg>path		389,631,7,11	12/18/400	#2f6feb/#000000@0.00	0;0px
 div.card:nth-child(7)>div.card-body>div.meta>span.badge.todo	未完成	299,646,51,23	11/16.5/400	#5b6472/#ffffff	999;2px 8px
 div.shell>main#main>div.card:nth-child(7)>div.row		469,595,422,82	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card:nth-child(7)>div.row>button.ghost:nth-child(1)	在做	469,595,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
