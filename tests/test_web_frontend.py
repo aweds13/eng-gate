@@ -212,7 +212,7 @@ def test_main_stays_bounded_and_padded_on_wide_screens() -> None:
     # 中列同时受"宽度上限"与"自身 max-width"约束，且整体居中
     assert "justify-content: center" in wide
     # 窄屏才需要给底部固定 Tab 留出空间；宽屏不该白留一条（R5 起这个尺寸是令牌 --nav-clearance）
-    assert "@media (min-width: 980px)" in css and "padding: 0 var(--sp-10)" in wide
+    assert "@media (min-width: 980px)" in css and "padding: 0 var(--sp-5)" in wide
 
 
 def test_focus_timer_has_single_owner() -> None:
@@ -1029,11 +1029,18 @@ def test_r5_scale_tokens_are_the_only_way_to_write_sizes() -> None:
     日期护栏各栽过一次。注释不是代码，护栏该看代码。
     """
     css = re.sub(r"/\*.*?\*/", "", WEB_CSS.read_text(encoding="utf-8"), flags=re.S)
-    for token, value in (("--sp-1", "4px"), ("--sp-5", "12px"), ("--sp-11", "30px"),
-                         ("--r-xs", "6px"), ("--r-lg", "12px"), ("--r-pill", "999px"),
+    for token, value in (("--sp-1", "4px"), ("--sp-2", "8px"), ("--sp-6", "32px"),
+                         ("--r-sm", "6px"), ("--r-md", "10px"), ("--r-pill", "999px"),
                          ("--fs-xs", "11px"), ("--fs-xl", "18px"),
+                         ("--lh-tight", "1.2"), ("--lh-base", "1.5"),
+                         ("--fw-semi", "600"), ("--fw-bold", "700"),
                          ("--nav-clearance", "90px"), ("--page-bottom", "60px")):
         assert f"{token}: {value};" in css, f"尺度令牌 {token} 缺失或值变了"
+    # ★ T-G51：档位收敛的**棘轮** —— 并到包的网格之后只许是 6 档间距 / 3 档圆角。
+    # 这条断言是"收敛过"的凭证（`tools/style_audit.py` 的档数报告按**令牌名**数，
+    # 所以"同值两个名字"也算两档）：再有人加第 7 档间距、第 4 档圆角，这里先红。
+    assert sorted(re.findall(r"--sp-(\d+):", css)) == ["1", "2", "3", "4", "5", "6"]
+    assert sorted(re.findall(r"--r-([a-z]+):", css)) == ["md", "pill", "sm"]
     assert not re.findall(r"border-radius:\s*[^;{}]*\d+px", css), "圆角还有裸像素"
     assert not re.findall(r"font-size:\s*[^;{}]*\d+px", css), "字号还有裸像素"
     spacing = re.findall(
@@ -1077,6 +1084,60 @@ def test_r5_scale_tokens_are_the_only_way_to_write_sizes() -> None:
     assert css.count("--shadow:") == 2 and "box-shadow: var(--shadow)" in css
 
 
+def test_cards_have_two_levels_and_the_quiet_one_keeps_its_shapes() -> None:
+    """T-G51（用户 2026-09-24 选的候选 C「静音层」）：卡片分**两级**。
+
+    为什么值得一条护栏：这是"平/丑"最直接的病根 —— 66 张卡权重完全相同（白底 + 同圆角 + 同内距），
+    层次全靠 1px 边框，而全表唯一那条阴影又淡到看不见。包的答案是两级：`.wb-card` 抬升面
+    （一条**事**）与 `.wb-stat` 静音面（一个**读数**）。护栏钉三件事：
+
+      · 读数卡真的挂着 `.card.quiet`（**显式类名**，不是候选里那个 `:has()` ——
+        预演用 `:has()` 只是"不必先改标记就能出图"）；
+      · 静音面上**靠浅底当形状**的两笔必须画 `--border`：预演当场抓到过真缺陷 ——
+        卡片一退到 `--panel-2`，同色的环轨道与雷达网格线**直接消失**（环只剩一段弧）；
+      · 同义类 `.card.panel-card` 不许回来（它与 `.card.block` 都只写 `display: block`）。
+    """
+    css = re.sub(r"/\*.*?\*/", "", WEB_CSS.read_text(encoding="utf-8"), flags=re.S)
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert ".card.quiet { background: var(--panel-2) }" in css
+    assert ".ring-track { stroke: var(--border) }" in css, (
+        "环轨道又画回 --panel-2 了（静音面上会消失）"
+    )
+    assert ".axis-line { stroke: var(--border) }" in css, "雷达网格线又画回 --panel-2 了"
+    assert "panel-card" not in css and "panel-card" not in html, "同义类 .card.panel-card 又回来了"
+    assert ".card.block .title { margin-bottom: var(--sp-1) }" in css
+    assert ".card.block .form { margin: var(--sp-3) 0 var(--sp-1) }" in css
+    assert '<div class="card quiet"><div class="ring-head">' in html
+    assert html.count('class="card quiet"') == 4, (
+        "单读数卡（环 / 今日专注 / 两个 GPA 读数）数量变了"
+    )
+    assert html.count('class="card block quiet"') == 2, "块内容读数卡（雷达 / 本周柱状）数量变了"
+
+
+def test_typography_and_bare_inputs_go_through_tokens() -> None:
+    """T-G53（视觉线步 3 排版节奏）+ T-G46（5 个没穿衣服的输入框）。
+
+    合成一条护栏是因为它们是同一种病：**样式不住在体系里**。
+
+      · 行高：全表原来**只有一处**行高（`.rail-summary` 的 `line-height: 1.5`，还是
+        `tools/style_baseline.toml` 里最后一条欠账），等于"行距靠浏览器默认"。
+        现在两档令牌（`--lh-tight` 标题与读数 / `--lh-base` 正文与多行说明）——
+        **行高只许写令牌**，这就是"字号 9 档、行高 1 档"那件事的修法。
+      · 输入框：`.new input` 与 `.field input` 都是**上下文样式**，于是不住在那两种容器里的输入框
+        （导出目录 / Vault 名 / Vault 根目录 / 离线包路径 / 归档天数）只有浏览器默认外观 ——
+        渲染清单里它们长这样：`圆角 0;内边距 1px 2px`。元素级那条规则照 `select` 写，并同样
+        **排除勾选框**（勾选框不是文本框：T-G32 与 T-G38 各栽过一回）。
+    """
+    css = re.sub(r"/\*.*?\*/", "", WEB_CSS.read_text(encoding="utf-8"), flags=re.S)
+    heights = [v.strip() for v in re.findall(r"line-height:\s*([^;{}]+)", css)]
+    assert heights and all(v.startswith("var(--lh-") for v in heights), f"还有裸行高：{heights}"
+    assert len(heights) >= 10, "行高档位被撤掉了？"
+    assert 'input:not([type="checkbox"]):not([type="radio"]) {' in css
+    assert '.modal-box input:not([type="checkbox"]):not([type="radio"]) {' in css
+    # 元素级规则（0,2,1）比 `.modal-box input`（0,1,1）**权重高** —— 那一条不排除勾选框就会被盖掉
+    assert ".modal-box input {" not in css
+
+
 def test_layout_containers_that_hold_buttons_allow_wrapping() -> None:
     """T-G45 修「中文被压碎」的三处 —— 病根是同一个：**不换行的 flex 容器 + 中文处处可断行**。
 
@@ -1090,7 +1151,7 @@ def test_layout_containers_that_hold_buttons_allow_wrapping() -> None:
       · 分组名必须带宽度下限（否则右边那个长 `select` 会把它压到 19px）。
     """
     css = re.sub(r"/\*.*?\*/", "", WEB_CSS.read_text(encoding="utf-8"), flags=re.S)
-    head = ".habit-head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap }"
+    head = ".habit-head { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap }"
     assert head in css, ".habit-head 又不允许换行了（中文会被压成一行一个字）"
     html = WEB_INDEX.read_text(encoding="utf-8")
     assert '<div class="card block"><div class="meta">本周专注' in html

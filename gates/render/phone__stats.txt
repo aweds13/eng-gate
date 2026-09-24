@@ -1,454 +1,454 @@
 # render-manifest v1 viewport=phone 390x844 view=stats rows=453 accent=#2f6feb device=ph-000000000000
-html>body>div.shell		0,0,390,1667	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
-html>body>div.shell>aside.rail		0,0,390,66	16/normal/400	#1e293b/#000000@0.00	0;12px 14px 0px
-body>div.shell>aside.rail>h1	timeflow ·	14,12,86,24	18/normal/700	#1e293b/#000000@0.00	0;0px
-body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	14,46,356,20	13/19.5/400	#64748b/#000000@0.00	0;0px
-html>body>div.shell>main#main		0,66,390,1325	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 24px
-body>div.shell>main#main>div.card.block:nth-child(1)		14,66,362,210	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.block:nth-child(1)>div.meta	近 30 天专注走势（分钟）· 合计 0 分钟 · 有投入 0 天 · 单日最高 0	30,80,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block:nth-child(1)>div.mt-4		30,122,330,120	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(1)>div.mt-4>svg.chart		30,122,330,120	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(1)>div.mt-4>svg.chart>polygon		30,238,330,4	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block:nth-child(1)>div.sub.split		30,246,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(1)>div.sub.split>span:nth-child(1)	08-26	30,246,31,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(1)>div.sub.split>span:nth-child(2)	今天	336,246,24,16	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(2)	投入分布（按任务分组 · 近 30 天）	14,296,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.block:nth-child(3)		14,323,362,145	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.block:nth-child(3)>div.empty	这段时间还没有绑定任务的专注	30,337,330,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
-div.shell>main#main>div.card.block:nth-child(3)>div.sub	任务可属多个分组，各组之和可能大于总投入；未绑定任务的专注不计入分组。当前债务 1 项。	30,422,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(4)	学业投入 vs 自学投入（近 90 天）	14,488,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.block:nth-child(5)		14,515,362,164	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(1)		30,533,330,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.sub.split		30,533,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.sub.split>span:nth-child(1)	学业：挂了课程的任务	30,533,120,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.sub.split>span:nth-child(2)	0h · 0 个任务	292,533,68,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.bar-track.tall		30,549,330,10	16/normal/400	#1e293b/#eef2f7	6;0px
-div.shell>main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)		30,567,330,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.sub.split		30,567,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.sub.split>span:nth-child(1)	自学：没挂课程的任务	30,567,120,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.sub.split>span:nth-child(2)	0h · 0 个任务	292,567,68,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.bar-track.tall		30,583,330,10	16/normal/400	#1e293b/#eef2f7	6;0px
-div.shell>main#main>div.card.block:nth-child(5)>div.sub	只算「绑定了任务」的专注：挂课程 = 学业、没挂课程 = 自学； 未绑定任务的专注另有 0h，单列、不归入任何一边（不猜它算哪一类）。 手动投入不参与这张图。这里只如实对照，不做「	30,601,330,64	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(6)	重复节奏（近 56 天）	14,699,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.block:nth-child(7)		14,726,362,177	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.block:nth-child(7)>div.empty	还没有重复任务	30,740,330,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
-div.shell>main#main>div.card.block:nth-child(7)>div.sub	每条 = 一个重复事项（同一标题 + 同一周期）。格子按「排期日」画：实心 = 那一轮做完了，空心 = 还活着但没做，灰 = 取消/搁置/归档未完成。周期是「每 N 天」，所以不推	30,825,330,64	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(8)	本周投入	14,923,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.block:nth-child(9)		14,950,362,160	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.block:nth-child(9)>div.meta	本周 YYYY-MM-DD ~ YYYY-MM-DD · 专注 0h · 完成收益 1 项 · 手动 0.75h · 习惯 1 次 · 债务 1 项	30,964,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block:nth-child(9)>div.bar-row		30,1008,330,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(1)		30,1008,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(1)>div.bar-v		30,1008,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(1)>div.sub.mt-1	21	30,1018,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(2)		78,1008,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(2)>div.bar-v		78,1008,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(2)>div.sub.mt-1	22	78,1018,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(3)		126,1008,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(3)>div.bar-v		126,1008,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(3)>div.sub.mt-1	23	126,1018,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(4)		174,1008,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(4)>div.bar-v		174,1008,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(4)>div.sub.mt-1	24	174,1018,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(5)		222,1008,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(5)>div.bar-v		222,1008,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(5)>div.sub.mt-1	25	222,1018,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(6)		270,1008,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(6)>div.bar-v		270,1008,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(6)>div.sub.mt-1	26	270,1018,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(7)		318,1008,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(7)>div.bar-v		318,1008,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block:nth-child(9)>div.bar-row>div.bar-col:nth-child(7)>div.sub.mt-1	27	318,1018,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block:nth-child(9)>div.sub.mt-3	这周还没有专注记录，随时可以从一小段开始。	30,1042,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block:nth-child(9)>div.sub.mt-2	波动 0 分钟（逐日专注的长短差）· 本周最长空档 7 天 —— 这周还没有专注记录，随时可以从一小段开始。	30,1064,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(10)	时间热力图（近一年）	14,1130,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.block:nth-child(11)		14,1157,362,200	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.block:nth-child(11)>div#hmRow		30,1171,330,82	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(11)>div#hmRow>button	专注	30,1172,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.block:nth-child(11)>div#hmRow>button.ghost:nth-child(2)	手动投入	92,1171,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.block:nth-child(11)>div#hmRow>button.ghost:nth-child(3)	复习	182,1171,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.block:nth-child(11)>div#hmRow>button.ghost:nth-child(4)	产出	246,1171,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.block:nth-child(11)>div#hmRow>button.ghost:nth-child(5)	债务（欠多少）	30,1216,121,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.block:nth-child(11)>div#hmBox		30,1263,330,44	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block:nth-child(11)>div#hmBox>svg.chart		30,1263,330,44	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(1)	YYYY-MM-DD	30,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(2)	YYYY-MM-DD	30,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(3)	YYYY-MM-DD	30,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(4)	YYYY-MM-DD	30,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(5)	YYYY-MM-DD	30,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(6)	YYYY-MM-DD	30,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(7)	YYYY-MM-DD	30,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(8)	YYYY-MM-DD	36,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(9)	YYYY-MM-DD	36,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(10)	YYYY-MM-DD	36,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(11)	YYYY-MM-DD	36,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(12)	YYYY-MM-DD	36,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(13)	YYYY-MM-DD	36,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(14)	YYYY-MM-DD	36,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(15)	YYYY-MM-DD	42,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(16)	YYYY-MM-DD	42,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(17)	YYYY-MM-DD	42,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(18)	YYYY-MM-DD	42,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(19)	YYYY-MM-DD	42,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(20)	YYYY-MM-DD	42,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(21)	YYYY-MM-DD	42,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(22)	YYYY-MM-DD	49,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(23)	YYYY-MM-DD	49,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(24)	YYYY-MM-DD	49,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(25)	YYYY-MM-DD	49,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(26)	YYYY-MM-DD	49,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(27)	YYYY-MM-DD	49,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(28)	YYYY-MM-DD	49,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(29)	YYYY-MM-DD	55,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(30)	YYYY-MM-DD	55,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(31)	YYYY-MM-DD	55,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(32)	YYYY-MM-DD	55,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(33)	YYYY-MM-DD	55,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(34)	YYYY-MM-DD	55,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(35)	YYYY-MM-DD	55,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(36)	YYYY-MM-DD	61,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(37)	YYYY-MM-DD	61,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(38)	YYYY-MM-DD	61,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(39)	YYYY-MM-DD	61,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(40)	YYYY-MM-DD	61,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(41)	YYYY-MM-DD	61,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(42)	YYYY-MM-DD	61,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(43)	YYYY-MM-DD	67,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(44)	YYYY-MM-DD	67,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(45)	YYYY-MM-DD	67,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(46)	YYYY-MM-DD	67,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(47)	YYYY-MM-DD	67,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(48)	YYYY-MM-DD	67,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(49)	YYYY-MM-DD	67,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(50)	YYYY-MM-DD	74,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(51)	YYYY-MM-DD	74,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(52)	YYYY-MM-DD	74,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(53)	YYYY-MM-DD	74,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(54)	YYYY-MM-DD	74,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(55)	YYYY-MM-DD	74,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(56)	YYYY-MM-DD	74,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(57)	YYYY-MM-DD	80,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(58)	YYYY-MM-DD	80,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(59)	YYYY-MM-DD	80,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(60)	YYYY-MM-DD	80,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(61)	YYYY-MM-DD	80,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(62)	YYYY-MM-DD	80,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(63)	YYYY-MM-DD	80,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(64)	YYYY-MM-DD	86,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(65)	YYYY-MM-DD	86,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(66)	YYYY-MM-DD	86,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(67)	YYYY-MM-DD	86,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(68)	YYYY-MM-DD	86,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(69)	YYYY-MM-DD	86,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(70)	YYYY-MM-DD	86,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(71)	YYYY-MM-DD	92,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(72)	YYYY-MM-DD	92,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(73)	YYYY-MM-DD	92,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(74)	YYYY-MM-DD	92,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(75)	YYYY-MM-DD	92,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(76)	YYYY-MM-DD	92,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(77)	YYYY-MM-DD	92,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(78)	YYYY-MM-DD	99,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(79)	YYYY-MM-DD	99,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(80)	YYYY-MM-DD	99,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(81)	YYYY-MM-DD	99,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(82)	YYYY-MM-DD	99,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(83)	YYYY-MM-DD	99,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(84)	YYYY-MM-DD	99,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(85)	YYYY-MM-DD	105,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(86)	YYYY-MM-DD	105,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(87)	YYYY-MM-DD	105,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(88)	YYYY-MM-DD	105,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(89)	YYYY-MM-DD	105,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(90)	YYYY-MM-DD	105,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(91)	YYYY-MM-DD	105,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(92)	YYYY-MM-DD	111,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(93)	YYYY-MM-DD	111,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(94)	YYYY-MM-DD	111,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(95)	YYYY-MM-DD	111,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(96)	YYYY-MM-DD	111,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(97)	YYYY-MM-DD	111,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(98)	YYYY-MM-DD	111,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(99)	YYYY-MM-DD	117,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(100)	YYYY-MM-DD	117,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(101)	YYYY-MM-DD	117,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(102)	YYYY-MM-DD	117,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(103)	YYYY-MM-DD	117,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(104)	YYYY-MM-DD	117,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(105)	YYYY-MM-DD	117,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(106)	YYYY-MM-DD	123,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(107)	YYYY-MM-DD	123,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(108)	YYYY-MM-DD	123,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(109)	YYYY-MM-DD	123,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(110)	YYYY-MM-DD	123,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(111)	YYYY-MM-DD	123,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(112)	YYYY-MM-DD	123,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(113)	YYYY-MM-DD	130,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(114)	YYYY-MM-DD	130,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(115)	YYYY-MM-DD	130,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(116)	YYYY-MM-DD	130,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(117)	YYYY-MM-DD	130,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(118)	YYYY-MM-DD	130,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(119)	YYYY-MM-DD	130,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(120)	YYYY-MM-DD	136,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(121)	YYYY-MM-DD	136,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(122)	YYYY-MM-DD	136,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(123)	YYYY-MM-DD	136,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(124)	YYYY-MM-DD	136,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(125)	YYYY-MM-DD	136,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(126)	YYYY-MM-DD	136,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(127)	YYYY-MM-DD	142,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(128)	YYYY-MM-DD	142,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(129)	YYYY-MM-DD	142,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(130)	YYYY-MM-DD	142,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(131)	YYYY-MM-DD	142,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(132)	YYYY-MM-DD	142,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(133)	YYYY-MM-DD	142,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(134)	YYYY-MM-DD	148,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(135)	YYYY-MM-DD	148,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(136)	YYYY-MM-DD	148,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(137)	YYYY-MM-DD	148,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(138)	YYYY-MM-DD	148,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(139)	YYYY-MM-DD	148,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(140)	YYYY-MM-DD	148,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(141)	YYYY-MM-DD	155,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(142)	YYYY-MM-DD	155,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(143)	YYYY-MM-DD	155,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(144)	YYYY-MM-DD	155,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(145)	YYYY-MM-DD	155,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(146)	YYYY-MM-DD	155,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(147)	YYYY-MM-DD	155,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(148)	YYYY-MM-DD	161,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(149)	YYYY-MM-DD	161,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(150)	YYYY-MM-DD	161,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(151)	YYYY-MM-DD	161,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(152)	YYYY-MM-DD	161,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(153)	YYYY-MM-DD	161,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(154)	YYYY-MM-DD	161,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(155)	YYYY-MM-DD	167,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(156)	YYYY-MM-DD	167,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(157)	YYYY-MM-DD	167,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(158)	YYYY-MM-DD	167,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(159)	YYYY-MM-DD	167,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(160)	YYYY-MM-DD	167,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(161)	YYYY-MM-DD	167,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(162)	YYYY-MM-DD	173,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(163)	YYYY-MM-DD	173,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(164)	YYYY-MM-DD	173,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(165)	YYYY-MM-DD	173,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(166)	YYYY-MM-DD	173,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(167)	YYYY-MM-DD	173,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(168)	YYYY-MM-DD	173,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(169)	YYYY-MM-DD	179,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(170)	YYYY-MM-DD	179,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(171)	YYYY-MM-DD	179,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(172)	YYYY-MM-DD	179,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(173)	YYYY-MM-DD	179,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(174)	YYYY-MM-DD	179,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(175)	YYYY-MM-DD	179,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(176)	YYYY-MM-DD	186,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(177)	YYYY-MM-DD	186,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(178)	YYYY-MM-DD	186,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(179)	YYYY-MM-DD	186,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(180)	YYYY-MM-DD	186,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(181)	YYYY-MM-DD	186,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(182)	YYYY-MM-DD	186,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(183)	YYYY-MM-DD	192,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(184)	YYYY-MM-DD	192,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(185)	YYYY-MM-DD	192,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(186)	YYYY-MM-DD	192,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(187)	YYYY-MM-DD	192,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(188)	YYYY-MM-DD	192,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(189)	YYYY-MM-DD	192,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(190)	YYYY-MM-DD	198,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(191)	YYYY-MM-DD	198,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(192)	YYYY-MM-DD	198,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(193)	YYYY-MM-DD	198,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(194)	YYYY-MM-DD	198,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(195)	YYYY-MM-DD	198,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(196)	YYYY-MM-DD	198,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(197)	YYYY-MM-DD	204,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(198)	YYYY-MM-DD	204,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(199)	YYYY-MM-DD	204,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(200)	YYYY-MM-DD	204,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(201)	YYYY-MM-DD	204,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(202)	YYYY-MM-DD	204,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(203)	YYYY-MM-DD	204,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(204)	YYYY-MM-DD	211,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(205)	YYYY-MM-DD	211,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(206)	YYYY-MM-DD	211,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(207)	YYYY-MM-DD	211,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(208)	YYYY-MM-DD	211,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(209)	YYYY-MM-DD	211,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(210)	YYYY-MM-DD	211,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(211)	YYYY-MM-DD	217,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(212)	YYYY-MM-DD	217,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(213)	YYYY-MM-DD	217,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(214)	YYYY-MM-DD	217,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(215)	YYYY-MM-DD	217,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(216)	YYYY-MM-DD	217,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(217)	YYYY-MM-DD	217,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(218)	YYYY-MM-DD	223,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(219)	YYYY-MM-DD	223,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(220)	YYYY-MM-DD	223,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(221)	YYYY-MM-DD	223,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(222)	YYYY-MM-DD	223,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(223)	YYYY-MM-DD	223,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(224)	YYYY-MM-DD	223,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(225)	YYYY-MM-DD	229,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(226)	YYYY-MM-DD	229,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(227)	YYYY-MM-DD	229,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(228)	YYYY-MM-DD	229,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(229)	YYYY-MM-DD	229,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(230)	YYYY-MM-DD	229,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(231)	YYYY-MM-DD	229,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(232)	YYYY-MM-DD	235,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(233)	YYYY-MM-DD	235,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(234)	YYYY-MM-DD	235,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(235)	YYYY-MM-DD	235,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(236)	YYYY-MM-DD	235,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(237)	YYYY-MM-DD	235,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(238)	YYYY-MM-DD	235,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(239)	YYYY-MM-DD	242,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(240)	YYYY-MM-DD	242,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(241)	YYYY-MM-DD	242,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(242)	YYYY-MM-DD	242,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(243)	YYYY-MM-DD	242,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(244)	YYYY-MM-DD	242,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(245)	YYYY-MM-DD	242,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(246)	YYYY-MM-DD	248,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(247)	YYYY-MM-DD	248,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(248)	YYYY-MM-DD	248,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(249)	YYYY-MM-DD	248,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(250)	YYYY-MM-DD	248,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(251)	YYYY-MM-DD	248,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(252)	YYYY-MM-DD	248,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(253)	YYYY-MM-DD	254,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(254)	YYYY-MM-DD	254,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(255)	YYYY-MM-DD	254,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(256)	YYYY-MM-DD	254,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(257)	YYYY-MM-DD	254,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(258)	YYYY-MM-DD	254,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(259)	YYYY-MM-DD	254,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(260)	YYYY-MM-DD	260,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(261)	YYYY-MM-DD	260,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(262)	YYYY-MM-DD	260,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(263)	YYYY-MM-DD	260,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(264)	YYYY-MM-DD	260,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(265)	YYYY-MM-DD	260,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(266)	YYYY-MM-DD	260,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(267)	YYYY-MM-DD	267,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(268)	YYYY-MM-DD	267,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(269)	YYYY-MM-DD	267,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(270)	YYYY-MM-DD	267,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(271)	YYYY-MM-DD	267,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(272)	YYYY-MM-DD	267,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(273)	YYYY-MM-DD	267,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(274)	YYYY-MM-DD	273,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(275)	YYYY-MM-DD	273,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(276)	YYYY-MM-DD	273,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(277)	YYYY-MM-DD	273,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(278)	YYYY-MM-DD	273,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(279)	YYYY-MM-DD	273,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(280)	YYYY-MM-DD	273,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(281)	YYYY-MM-DD	279,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(282)	YYYY-MM-DD	279,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(283)	YYYY-MM-DD	279,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(284)	YYYY-MM-DD	279,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(285)	YYYY-MM-DD	279,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(286)	YYYY-MM-DD	279,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(287)	YYYY-MM-DD	279,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(288)	YYYY-MM-DD	285,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(289)	YYYY-MM-DD	285,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(290)	YYYY-MM-DD	285,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(291)	YYYY-MM-DD	285,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(292)	YYYY-MM-DD	285,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(293)	YYYY-MM-DD	285,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(294)	YYYY-MM-DD	285,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(295)	YYYY-MM-DD	291,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(296)	YYYY-MM-DD	291,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(297)	YYYY-MM-DD	291,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(298)	YYYY-MM-DD	291,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(299)	YYYY-MM-DD	291,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(300)	YYYY-MM-DD	291,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(301)	YYYY-MM-DD	291,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(302)	YYYY-MM-DD	298,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(303)	YYYY-MM-DD	298,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(304)	YYYY-MM-DD	298,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(305)	YYYY-MM-DD	298,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(306)	YYYY-MM-DD	298,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(307)	YYYY-MM-DD	298,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(308)	YYYY-MM-DD	298,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(309)	YYYY-MM-DD	304,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(310)	YYYY-MM-DD	304,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(311)	YYYY-MM-DD	304,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(312)	YYYY-MM-DD	304,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(313)	YYYY-MM-DD	304,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(314)	YYYY-MM-DD	304,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(315)	YYYY-MM-DD	304,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(316)	YYYY-MM-DD	310,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(317)	YYYY-MM-DD	310,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(318)	YYYY-MM-DD	310,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(319)	YYYY-MM-DD	310,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(320)	YYYY-MM-DD	310,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(321)	YYYY-MM-DD	310,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(322)	YYYY-MM-DD	310,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(323)	YYYY-MM-DD	316,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(324)	YYYY-MM-DD	316,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(325)	YYYY-MM-DD	316,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(326)	YYYY-MM-DD	316,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(327)	YYYY-MM-DD	316,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(328)	YYYY-MM-DD	316,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(329)	YYYY-MM-DD	316,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(330)	YYYY-MM-DD	323,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(331)	YYYY-MM-DD	323,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(332)	YYYY-MM-DD	323,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(333)	YYYY-MM-DD	323,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(334)	YYYY-MM-DD	323,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(335)	YYYY-MM-DD	323,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(336)	YYYY-MM-DD	323,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(337)	YYYY-MM-DD	329,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(338)	YYYY-MM-DD	329,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(339)	YYYY-MM-DD	329,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(340)	YYYY-MM-DD	329,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(341)	YYYY-MM-DD	329,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(342)	YYYY-MM-DD	329,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(343)	YYYY-MM-DD	329,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(344)	YYYY-MM-DD	335,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(345)	YYYY-MM-DD	335,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(346)	YYYY-MM-DD	335,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(347)	YYYY-MM-DD	335,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(348)	YYYY-MM-DD	335,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(349)	YYYY-MM-DD	335,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(350)	YYYY-MM-DD	335,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(351)	YYYY-MM-DD	341,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(352)	YYYY-MM-DD	341,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(353)	YYYY-MM-DD	341,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(354)	YYYY-MM-DD	341,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(355)	YYYY-MM-DD	341,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(356)	YYYY-MM-DD	341,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(357)	YYYY-MM-DD	341,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(358)	YYYY-MM-DD	348,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(359)	YYYY-MM-DD	348,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(360)	YYYY-MM-DD	348,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(361)	YYYY-MM-DD	348,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(362)	YYYY-MM-DD	348,1287,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(363)	YYYY-MM-DD	348,1294,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(364)	YYYY-MM-DD	348,1300,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(365)	YYYY-MM-DD	354,1263,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(366)	YYYY-MM-DD	354,1269,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(367)	YYYY-MM-DD	354,1275,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(368)	YYYY-MM-DD	354,1281,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block:nth-child(11)>div#hmNote	专注 · 颜色越深=当天投入越多；空=没有记录（不是失败，只是那天没记）。	30,1310,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-html>body>div.shell>aside.sidebar		0,1390,390,187	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 90px
-body>div.shell>aside.sidebar>div#focusRail		14,1390,362,85	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	30,1404,330,17	13/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	30,1429,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-html>body>nav.bottom-nav		0,770,390,74	16/normal/400	#1e293b/#ffffff	0;6px 0px
-body>nav.bottom-nav>button:nth-child(1)>span.ic	📅	4,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(2)>span.ic	🗂️	61,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(3)>span.ic	⏱️	117,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(4)>span.ic	👥	174,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(5)>span.ic	🔥	230,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
-html>body>nav.bottom-nav>button.active		283,777,51,61	12/normal/700	#2f6feb/#2f6feb	0;10px 4px
-body>nav.bottom-nav>button.active>span.ic	📈	287,787,43,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(7)>span.ic	⚙️	343,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
+html>body>div.shell		0,0,390,1805	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
+html>body>div.shell>aside.rail		0,0,390,65	16/normal/400	#1e293b/#000000@0.00	0;12px 16px 0px
+body>div.shell>aside.rail>h1	timeflow ·	16,12,86,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
+body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	16,46,356,20	13/19.5/400	#5b6472/#000000@0.00	0;0px
+html>body>div.shell>main#main		0,65,390,1455	16/normal/400	#1e293b/#000000@0.00	0;0px 16px 24px
+body>div.shell>main#main>div.card.block:nth-child(1)		16,65,358,224	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>main#main>div.card.block:nth-child(1)>div.meta	近 30 天专注走势（分钟）· 合计 0 分钟 · 有投入 0 天 · 单日最高 0	33,82,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card.block:nth-child(1)>div.mt-4		33,130,324,120	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(1)>div.mt-4>svg.chart		33,130,324,120	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(1)>div.mt-4>svg.chart>polygon		33,246,324,4	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block:nth-child(1)>div.sub.split		33,254,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(1)>div.sub.split>span:nth-child(1)	08-26	33,254,31,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(1)>div.sub.split>span:nth-child(2)	今天	333,254,24,18	12/18/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(2)	投入分布（按任务分组 · 近 30 天）	16,313,358,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block:nth-child(3)		16,341,358,162	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>main#main>div.card.block:nth-child(3)>div.empty	这段时间还没有绑定任务的专注	33,358,324,88	16/24/400	#5b6472/#000000@0.00	0;32px 0px
+div.shell>main#main>div.card.block:nth-child(3)>div.sub	任务可属多个分组，各组之和可能大于总投入；未绑定任务的专注不计入分组。当前债务 1 项。	33,450,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(4)	学业投入 vs 自学投入（近 90 天）	16,527,358,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block:nth-child(5)		16,554,358,186	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(1)		33,575,324,30	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.sub.split		33,575,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.sub.split>span:nth-child(1)	学业：挂了课程的任务	33,575,120,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.sub.split>span:nth-child(2)	0h · 0 个任务	289,575,68,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(1)>div.bar-track.tall		33,593,324,12	16/normal/400	#1e293b/#eef2f7	6;0px
+div.shell>main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)		33,613,324,30	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.sub.split		33,613,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.sub.split>span:nth-child(1)	自学：没挂课程的任务	33,613,120,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.sub.split>span:nth-child(2)	0h · 0 个任务	289,613,68,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(5)>div.mb-3:nth-child(2)>div.bar-track.tall		33,631,324,12	16/normal/400	#1e293b/#eef2f7	6;0px
+div.shell>main#main>div.card.block:nth-child(5)>div.sub	只算「绑定了任务」的专注：挂课程 = 学业、没挂课程 = 自学； 未绑定任务的专注另有 0h，单列、不归入任何一边（不猜它算哪一类）。 手动投入不参与这张图。这里只如实对照，不做「	33,651,324,72	12/18/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(6)	重复节奏（近 56 天）	16,764,358,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block:nth-child(7)		16,792,358,198	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>main#main>div.card.block:nth-child(7)>div.empty	还没有重复任务	33,809,324,88	16/24/400	#5b6472/#000000@0.00	0;32px 0px
+div.shell>main#main>div.card.block:nth-child(7)>div.sub	每条 = 一个重复事项（同一标题 + 同一周期）。格子按「排期日」画：实心 = 那一轮做完了，空心 = 还活着但没做，灰 = 取消/搁置/归档未完成。周期是「每 N 天」，所以不推	33,901,324,72	12/18/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(8)	本周投入	16,1014,358,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block.quiet		16,1041,358,180	16/normal/400	#1e293b/#eef2f7	10;16px
+div.shell>main#main>div.card.block.quiet>div.meta	本周 YYYY-MM-DD ~ YYYY-MM-DD · 专注 0h · 完成收益 1 项 · 手动 0.75h · 习惯 1 次 · 债务 1 项	33,1058,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card.block.quiet>div.bar-row		33,1106,324,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(1)		33,1106,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(1)>div.bar-v		33,1106,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(1)>div.sub.mt-1	21	33,1116,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(2)		80,1106,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(2)>div.bar-v		80,1106,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(2)>div.sub.mt-1	22	80,1116,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(3)		128,1106,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(3)>div.bar-v		128,1106,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(3)>div.sub.mt-1	23	128,1116,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(4)		175,1106,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(4)>div.bar-v		175,1106,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(4)>div.sub.mt-1	24	175,1116,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(5)		223,1106,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(5)>div.bar-v		223,1106,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(5)>div.sub.mt-1	25	223,1116,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(6)		270,1106,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(6)>div.bar-v		270,1106,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(6)>div.sub.mt-1	26	270,1116,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(7)		318,1106,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(7)>div.bar-v		318,1106,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(7)>div.sub.mt-1	27	318,1116,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card.block.quiet>div.sub.mt-3	这周还没有专注记录，随时可以从一小段开始。	33,1142,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card.block.quiet>div.sub.mt-2	波动 0 分钟（逐日专注的长短差）· 本周最长空档 7 天 —— 这周还没有专注记录，随时可以从一小段开始。	33,1168,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(10)	时间热力图（近一年）	16,1245,358,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block:nth-child(11)		16,1273,358,211	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>main#main>div.card.block:nth-child(11)>div#hmRow		33,1290,324,82	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(11)>div#hmRow>button	专注	33,1291,58,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
+main#main>div.card.block:nth-child(11)>div#hmRow>button.ghost:nth-child(2)	手动投入	99,1290,86,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card.block:nth-child(11)>div#hmRow>button.ghost:nth-child(3)	复习	193,1290,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card.block:nth-child(11)>div#hmRow>button.ghost:nth-child(4)	产出	261,1290,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card.block:nth-child(11)>div#hmRow>button.ghost:nth-child(5)	债务（欠多少）	33,1335,125,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div.shell>main#main>div.card.block:nth-child(11)>div#hmBox		33,1384,324,43	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(11)>div#hmBox>svg.chart		33,1384,324,43	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(1)	YYYY-MM-DD	33,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(2)	YYYY-MM-DD	33,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(3)	YYYY-MM-DD	33,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(4)	YYYY-MM-DD	33,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(5)	YYYY-MM-DD	33,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(6)	YYYY-MM-DD	33,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(7)	YYYY-MM-DD	33,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(8)	YYYY-MM-DD	39,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(9)	YYYY-MM-DD	39,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(10)	YYYY-MM-DD	39,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(11)	YYYY-MM-DD	39,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(12)	YYYY-MM-DD	39,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(13)	YYYY-MM-DD	39,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(14)	YYYY-MM-DD	39,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(15)	YYYY-MM-DD	45,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(16)	YYYY-MM-DD	45,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(17)	YYYY-MM-DD	45,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(18)	YYYY-MM-DD	45,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(19)	YYYY-MM-DD	45,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(20)	YYYY-MM-DD	45,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(21)	YYYY-MM-DD	45,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(22)	YYYY-MM-DD	51,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(23)	YYYY-MM-DD	51,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(24)	YYYY-MM-DD	51,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(25)	YYYY-MM-DD	51,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(26)	YYYY-MM-DD	51,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(27)	YYYY-MM-DD	51,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(28)	YYYY-MM-DD	51,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(29)	YYYY-MM-DD	57,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(30)	YYYY-MM-DD	57,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(31)	YYYY-MM-DD	57,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(32)	YYYY-MM-DD	57,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(33)	YYYY-MM-DD	57,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(34)	YYYY-MM-DD	57,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(35)	YYYY-MM-DD	57,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(36)	YYYY-MM-DD	64,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(37)	YYYY-MM-DD	64,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(38)	YYYY-MM-DD	64,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(39)	YYYY-MM-DD	64,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(40)	YYYY-MM-DD	64,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(41)	YYYY-MM-DD	64,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(42)	YYYY-MM-DD	64,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(43)	YYYY-MM-DD	70,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(44)	YYYY-MM-DD	70,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(45)	YYYY-MM-DD	70,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(46)	YYYY-MM-DD	70,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(47)	YYYY-MM-DD	70,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(48)	YYYY-MM-DD	70,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(49)	YYYY-MM-DD	70,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(50)	YYYY-MM-DD	76,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(51)	YYYY-MM-DD	76,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(52)	YYYY-MM-DD	76,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(53)	YYYY-MM-DD	76,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(54)	YYYY-MM-DD	76,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(55)	YYYY-MM-DD	76,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(56)	YYYY-MM-DD	76,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(57)	YYYY-MM-DD	82,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(58)	YYYY-MM-DD	82,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(59)	YYYY-MM-DD	82,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(60)	YYYY-MM-DD	82,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(61)	YYYY-MM-DD	82,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(62)	YYYY-MM-DD	82,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(63)	YYYY-MM-DD	82,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(64)	YYYY-MM-DD	88,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(65)	YYYY-MM-DD	88,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(66)	YYYY-MM-DD	88,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(67)	YYYY-MM-DD	88,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(68)	YYYY-MM-DD	88,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(69)	YYYY-MM-DD	88,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(70)	YYYY-MM-DD	88,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(71)	YYYY-MM-DD	94,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(72)	YYYY-MM-DD	94,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(73)	YYYY-MM-DD	94,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(74)	YYYY-MM-DD	94,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(75)	YYYY-MM-DD	94,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(76)	YYYY-MM-DD	94,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(77)	YYYY-MM-DD	94,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(78)	YYYY-MM-DD	100,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(79)	YYYY-MM-DD	100,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(80)	YYYY-MM-DD	100,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(81)	YYYY-MM-DD	100,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(82)	YYYY-MM-DD	100,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(83)	YYYY-MM-DD	100,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(84)	YYYY-MM-DD	100,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(85)	YYYY-MM-DD	106,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(86)	YYYY-MM-DD	106,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(87)	YYYY-MM-DD	106,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(88)	YYYY-MM-DD	106,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(89)	YYYY-MM-DD	106,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(90)	YYYY-MM-DD	106,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(91)	YYYY-MM-DD	106,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(92)	YYYY-MM-DD	112,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(93)	YYYY-MM-DD	112,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(94)	YYYY-MM-DD	112,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(95)	YYYY-MM-DD	112,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(96)	YYYY-MM-DD	112,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(97)	YYYY-MM-DD	112,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(98)	YYYY-MM-DD	112,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(99)	YYYY-MM-DD	119,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(100)	YYYY-MM-DD	119,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(101)	YYYY-MM-DD	119,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(102)	YYYY-MM-DD	119,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(103)	YYYY-MM-DD	119,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(104)	YYYY-MM-DD	119,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(105)	YYYY-MM-DD	119,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(106)	YYYY-MM-DD	125,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(107)	YYYY-MM-DD	125,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(108)	YYYY-MM-DD	125,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(109)	YYYY-MM-DD	125,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(110)	YYYY-MM-DD	125,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(111)	YYYY-MM-DD	125,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(112)	YYYY-MM-DD	125,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(113)	YYYY-MM-DD	131,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(114)	YYYY-MM-DD	131,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(115)	YYYY-MM-DD	131,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(116)	YYYY-MM-DD	131,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(117)	YYYY-MM-DD	131,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(118)	YYYY-MM-DD	131,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(119)	YYYY-MM-DD	131,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(120)	YYYY-MM-DD	137,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(121)	YYYY-MM-DD	137,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(122)	YYYY-MM-DD	137,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(123)	YYYY-MM-DD	137,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(124)	YYYY-MM-DD	137,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(125)	YYYY-MM-DD	137,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(126)	YYYY-MM-DD	137,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(127)	YYYY-MM-DD	143,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(128)	YYYY-MM-DD	143,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(129)	YYYY-MM-DD	143,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(130)	YYYY-MM-DD	143,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(131)	YYYY-MM-DD	143,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(132)	YYYY-MM-DD	143,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(133)	YYYY-MM-DD	143,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(134)	YYYY-MM-DD	149,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(135)	YYYY-MM-DD	149,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(136)	YYYY-MM-DD	149,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(137)	YYYY-MM-DD	149,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(138)	YYYY-MM-DD	149,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(139)	YYYY-MM-DD	149,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(140)	YYYY-MM-DD	149,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(141)	YYYY-MM-DD	155,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(142)	YYYY-MM-DD	155,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(143)	YYYY-MM-DD	155,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(144)	YYYY-MM-DD	155,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(145)	YYYY-MM-DD	155,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(146)	YYYY-MM-DD	155,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(147)	YYYY-MM-DD	155,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(148)	YYYY-MM-DD	161,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(149)	YYYY-MM-DD	161,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(150)	YYYY-MM-DD	161,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(151)	YYYY-MM-DD	161,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(152)	YYYY-MM-DD	161,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(153)	YYYY-MM-DD	161,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(154)	YYYY-MM-DD	161,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(155)	YYYY-MM-DD	167,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(156)	YYYY-MM-DD	167,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(157)	YYYY-MM-DD	167,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(158)	YYYY-MM-DD	167,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(159)	YYYY-MM-DD	167,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(160)	YYYY-MM-DD	167,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(161)	YYYY-MM-DD	167,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(162)	YYYY-MM-DD	174,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(163)	YYYY-MM-DD	174,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(164)	YYYY-MM-DD	174,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(165)	YYYY-MM-DD	174,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(166)	YYYY-MM-DD	174,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(167)	YYYY-MM-DD	174,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(168)	YYYY-MM-DD	174,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(169)	YYYY-MM-DD	180,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(170)	YYYY-MM-DD	180,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(171)	YYYY-MM-DD	180,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(172)	YYYY-MM-DD	180,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(173)	YYYY-MM-DD	180,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(174)	YYYY-MM-DD	180,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(175)	YYYY-MM-DD	180,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(176)	YYYY-MM-DD	186,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(177)	YYYY-MM-DD	186,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(178)	YYYY-MM-DD	186,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(179)	YYYY-MM-DD	186,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(180)	YYYY-MM-DD	186,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(181)	YYYY-MM-DD	186,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(182)	YYYY-MM-DD	186,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(183)	YYYY-MM-DD	192,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(184)	YYYY-MM-DD	192,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(185)	YYYY-MM-DD	192,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(186)	YYYY-MM-DD	192,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(187)	YYYY-MM-DD	192,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(188)	YYYY-MM-DD	192,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(189)	YYYY-MM-DD	192,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(190)	YYYY-MM-DD	198,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(191)	YYYY-MM-DD	198,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(192)	YYYY-MM-DD	198,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(193)	YYYY-MM-DD	198,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(194)	YYYY-MM-DD	198,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(195)	YYYY-MM-DD	198,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(196)	YYYY-MM-DD	198,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(197)	YYYY-MM-DD	204,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(198)	YYYY-MM-DD	204,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(199)	YYYY-MM-DD	204,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(200)	YYYY-MM-DD	204,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(201)	YYYY-MM-DD	204,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(202)	YYYY-MM-DD	204,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(203)	YYYY-MM-DD	204,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(204)	YYYY-MM-DD	210,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(205)	YYYY-MM-DD	210,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(206)	YYYY-MM-DD	210,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(207)	YYYY-MM-DD	210,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(208)	YYYY-MM-DD	210,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(209)	YYYY-MM-DD	210,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(210)	YYYY-MM-DD	210,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(211)	YYYY-MM-DD	216,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(212)	YYYY-MM-DD	216,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(213)	YYYY-MM-DD	216,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(214)	YYYY-MM-DD	216,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(215)	YYYY-MM-DD	216,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(216)	YYYY-MM-DD	216,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(217)	YYYY-MM-DD	216,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(218)	YYYY-MM-DD	223,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(219)	YYYY-MM-DD	223,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(220)	YYYY-MM-DD	223,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(221)	YYYY-MM-DD	223,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(222)	YYYY-MM-DD	223,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(223)	YYYY-MM-DD	223,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(224)	YYYY-MM-DD	223,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(225)	YYYY-MM-DD	229,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(226)	YYYY-MM-DD	229,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(227)	YYYY-MM-DD	229,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(228)	YYYY-MM-DD	229,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(229)	YYYY-MM-DD	229,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(230)	YYYY-MM-DD	229,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(231)	YYYY-MM-DD	229,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(232)	YYYY-MM-DD	235,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(233)	YYYY-MM-DD	235,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(234)	YYYY-MM-DD	235,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(235)	YYYY-MM-DD	235,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(236)	YYYY-MM-DD	235,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(237)	YYYY-MM-DD	235,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(238)	YYYY-MM-DD	235,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(239)	YYYY-MM-DD	241,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(240)	YYYY-MM-DD	241,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(241)	YYYY-MM-DD	241,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(242)	YYYY-MM-DD	241,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(243)	YYYY-MM-DD	241,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(244)	YYYY-MM-DD	241,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(245)	YYYY-MM-DD	241,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(246)	YYYY-MM-DD	247,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(247)	YYYY-MM-DD	247,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(248)	YYYY-MM-DD	247,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(249)	YYYY-MM-DD	247,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(250)	YYYY-MM-DD	247,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(251)	YYYY-MM-DD	247,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(252)	YYYY-MM-DD	247,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(253)	YYYY-MM-DD	253,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(254)	YYYY-MM-DD	253,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(255)	YYYY-MM-DD	253,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(256)	YYYY-MM-DD	253,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(257)	YYYY-MM-DD	253,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(258)	YYYY-MM-DD	253,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(259)	YYYY-MM-DD	253,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(260)	YYYY-MM-DD	259,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(261)	YYYY-MM-DD	259,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(262)	YYYY-MM-DD	259,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(263)	YYYY-MM-DD	259,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(264)	YYYY-MM-DD	259,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(265)	YYYY-MM-DD	259,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(266)	YYYY-MM-DD	259,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(267)	YYYY-MM-DD	265,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(268)	YYYY-MM-DD	265,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(269)	YYYY-MM-DD	265,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(270)	YYYY-MM-DD	265,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(271)	YYYY-MM-DD	265,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(272)	YYYY-MM-DD	265,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(273)	YYYY-MM-DD	265,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(274)	YYYY-MM-DD	271,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(275)	YYYY-MM-DD	271,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(276)	YYYY-MM-DD	271,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(277)	YYYY-MM-DD	271,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(278)	YYYY-MM-DD	271,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(279)	YYYY-MM-DD	271,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(280)	YYYY-MM-DD	271,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(281)	YYYY-MM-DD	278,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(282)	YYYY-MM-DD	278,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(283)	YYYY-MM-DD	278,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(284)	YYYY-MM-DD	278,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(285)	YYYY-MM-DD	278,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(286)	YYYY-MM-DD	278,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(287)	YYYY-MM-DD	278,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(288)	YYYY-MM-DD	284,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(289)	YYYY-MM-DD	284,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(290)	YYYY-MM-DD	284,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(291)	YYYY-MM-DD	284,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(292)	YYYY-MM-DD	284,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(293)	YYYY-MM-DD	284,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(294)	YYYY-MM-DD	284,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(295)	YYYY-MM-DD	290,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(296)	YYYY-MM-DD	290,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(297)	YYYY-MM-DD	290,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(298)	YYYY-MM-DD	290,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(299)	YYYY-MM-DD	290,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(300)	YYYY-MM-DD	290,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(301)	YYYY-MM-DD	290,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(302)	YYYY-MM-DD	296,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(303)	YYYY-MM-DD	296,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(304)	YYYY-MM-DD	296,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(305)	YYYY-MM-DD	296,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(306)	YYYY-MM-DD	296,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(307)	YYYY-MM-DD	296,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(308)	YYYY-MM-DD	296,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(309)	YYYY-MM-DD	302,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(310)	YYYY-MM-DD	302,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(311)	YYYY-MM-DD	302,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(312)	YYYY-MM-DD	302,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(313)	YYYY-MM-DD	302,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(314)	YYYY-MM-DD	302,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(315)	YYYY-MM-DD	302,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(316)	YYYY-MM-DD	308,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(317)	YYYY-MM-DD	308,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(318)	YYYY-MM-DD	308,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(319)	YYYY-MM-DD	308,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(320)	YYYY-MM-DD	308,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(321)	YYYY-MM-DD	308,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(322)	YYYY-MM-DD	308,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(323)	YYYY-MM-DD	314,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(324)	YYYY-MM-DD	314,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(325)	YYYY-MM-DD	314,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(326)	YYYY-MM-DD	314,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(327)	YYYY-MM-DD	314,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(328)	YYYY-MM-DD	314,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(329)	YYYY-MM-DD	314,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(330)	YYYY-MM-DD	320,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(331)	YYYY-MM-DD	320,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(332)	YYYY-MM-DD	320,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(333)	YYYY-MM-DD	320,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(334)	YYYY-MM-DD	320,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(335)	YYYY-MM-DD	320,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(336)	YYYY-MM-DD	320,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(337)	YYYY-MM-DD	326,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(338)	YYYY-MM-DD	326,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(339)	YYYY-MM-DD	326,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(340)	YYYY-MM-DD	326,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(341)	YYYY-MM-DD	326,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(342)	YYYY-MM-DD	326,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(343)	YYYY-MM-DD	326,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(344)	YYYY-MM-DD	333,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(345)	YYYY-MM-DD	333,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(346)	YYYY-MM-DD	333,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(347)	YYYY-MM-DD	333,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(348)	YYYY-MM-DD	333,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(349)	YYYY-MM-DD	333,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(350)	YYYY-MM-DD	333,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(351)	YYYY-MM-DD	339,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(352)	YYYY-MM-DD	339,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(353)	YYYY-MM-DD	339,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(354)	YYYY-MM-DD	339,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(355)	YYYY-MM-DD	339,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(356)	YYYY-MM-DD	339,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(357)	YYYY-MM-DD	339,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(358)	YYYY-MM-DD	345,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(359)	YYYY-MM-DD	345,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(360)	YYYY-MM-DD	345,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(361)	YYYY-MM-DD	345,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(362)	YYYY-MM-DD	345,1409,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(363)	YYYY-MM-DD	345,1415,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(364)	YYYY-MM-DD	345,1421,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(365)	YYYY-MM-DD	351,1384,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(366)	YYYY-MM-DD	351,1390,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(367)	YYYY-MM-DD	351,1396,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(11)>div#hmBox>svg.chart>rect:nth-child(368)	YYYY-MM-DD	351,1402,5,5	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block:nth-child(11)>div#hmNote	专注 · 颜色越深=当天投入越多；空=没有记录（不是失败，只是那天没记）。	33,1431,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
+html>body>div.shell>aside.sidebar		0,1520,390,196	16/normal/400	#1e293b/#000000@0.00	0;0px 16px 90px
+body>div.shell>aside.sidebar>div#focusRail		16,1520,358,94	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	33,1537,324,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	33,1560,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
+html>body>nav.bottom-nav		0,762,390,82	16/normal/400	#1e293b/#ffffff	0;8px 0px
+body>nav.bottom-nav>button:nth-child(1)>span.ic	📅	4,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(2)>span.ic	🗂️	61,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(3)>span.ic	⏱️	118,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(4)>span.ic	👥	175,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(5)>span.ic	🔥	231,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+html>body>nav.bottom-nav>button.active		284,771,49,65	12/normal/700	#2f6feb/#2f6feb	0;12px 4px
+body>nav.bottom-nav>button.active>span.ic	📈	288,783,41,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(7)>span.ic	⚙️	345,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px

@@ -256,7 +256,7 @@ def check_motion(rules: list[Rule]) -> list[Finding]:
 def tier_report(rules: list[Rule]) -> list[tuple[str, int, int | None, list[str]]]:
     """档数报告（人类读的部分）：一个属性在这套样式里一共有几种写法。
 
-    ★ 多值的值里**只数令牌**（T-G43 修）：`border-radius: var(--r-xs) var(--r-xs) 0 0`
+    ★ 多值的值里**只数令牌**（T-G43 修）：`border-radius: var(--r-sm) var(--r-sm) 0 0`
     （只圆上沿的柱子）用的是一个**已有的档**，不该被报成"新的一档" —— 第一版把整串字面量
     当成一个档，于是"圆角 7 档"变成"8 档"，读的人会以为语言又散了一分。没有令牌的值
     （`0` / `50%`）仍按原样算一档。

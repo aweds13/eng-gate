@@ -1,53 +1,53 @@
 # render-manifest v1 viewport=phone 390x844 view=focus rows=52 accent=#2f6feb device=ph-000000000000
-html>body>div.shell		0,0,390,721	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
-html>body>div.shell>aside.rail		0,0,390,66	16/normal/400	#1e293b/#000000@0.00	0;12px 14px 0px
-body>div.shell>aside.rail>h1	timeflow ·	14,12,86,24	18/normal/700	#1e293b/#000000@0.00	0;0px
-body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	14,46,356,20	13/19.5/400	#64748b/#000000@0.00	0;0px
-html>body>div.shell>main#main		0,66,390,378	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 24px
-body>div.shell>main#main>div.card		14,66,362,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
-main#main>div.card>div>div.big	0	30,80,168,40	30/normal/700	#2f6feb/#000000@0.00	0;0px
-main#main>div.card>div>div.meta	今日专注分钟（只算正常结束）	30,120,168,16	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.new		14,166,362,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.new>select#focusTaskSel	不绑定任务	14,167,146,35	13/normal/400	#1e293b/#ffffff	10;8px 10px
-div.shell>main#main>div.new>button	番茄钟 25 分	170,167,102,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-div.shell>main#main>div.new>button.ghost	普通计时	282,166,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-body>div.shell>main#main>div.section-title	本周投入	14,223,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.block		14,250,362,160	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.block>div.meta	本周 YYYY-MM-DD ~ YYYY-MM-DD · 专注 0h · 完成收益 1 项 · 手动 0.75h · 习惯 1 次 · 债务 1 项	30,264,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block>div.bar-row		30,308,330,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block>div.bar-row>div.bar-col:nth-child(1)		30,308,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(1)>div.bar-v		30,308,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(1)>div.sub.mt-1	21	30,318,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block>div.bar-row>div.bar-col:nth-child(2)		78,308,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(2)>div.bar-v		78,308,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(2)>div.sub.mt-1	22	78,318,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block>div.bar-row>div.bar-col:nth-child(3)		126,308,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(3)>div.bar-v		126,308,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(3)>div.sub.mt-1	23	126,318,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block>div.bar-row>div.bar-col:nth-child(4)		174,308,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(4)>div.bar-v		174,308,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(4)>div.sub.mt-1	24	174,318,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block>div.bar-row>div.bar-col:nth-child(5)		222,308,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(5)>div.bar-v		222,308,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(5)>div.sub.mt-1	25	222,318,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block>div.bar-row>div.bar-col:nth-child(6)		270,308,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(6)>div.bar-v		270,308,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(6)>div.sub.mt-1	26	270,318,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card.block>div.bar-row>div.bar-col:nth-child(7)		318,308,42,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(7)>div.bar-v		318,308,42,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block>div.bar-row>div.bar-col:nth-child(7)>div.sub.mt-1	27	318,318,42,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block>div.sub.mt-3	这周还没有专注记录，随时可以从一小段开始。	30,342,330,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.block>div.sub.mt-2	波动 0 分钟（逐日专注的长短差）· 本周最长空档 7 天 —— 这周还没有专注记录，随时可以从一小段开始。	30,364,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-html>body>div.shell>aside.sidebar		0,444,390,187	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 90px
-body>div.shell>aside.sidebar>div#focusRail		14,444,362,85	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	30,458,330,17	13/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	30,483,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-html>body>nav.bottom-nav		0,770,390,74	16/normal/400	#1e293b/#ffffff	0;6px 0px
-body>nav.bottom-nav>button:nth-child(1)>span.ic	📅	4,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(2)>span.ic	🗂️	61,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
-html>body>nav.bottom-nav>button.active		113,777,51,61	12/normal/700	#2f6feb/#2f6feb	0;10px 4px
-body>nav.bottom-nav>button.active>span.ic	⏱️	117,787,43,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(4)>span.ic	👥	174,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(5)>span.ic	🔥	230,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(6)>span.ic	📈	287,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
-body>nav.bottom-nav>button:nth-child(7)>span.ic	⚙️	343,787,43,24	18/normal/400	#64748b/#000000@0.00	0;0px
+html>body>div.shell		0,0,390,806	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
+html>body>div.shell>aside.rail		0,0,390,65	16/normal/400	#1e293b/#000000@0.00	0;12px 16px 0px
+body>div.shell>aside.rail>h1	timeflow ·	16,12,86,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
+body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	16,46,356,20	13/19.5/400	#5b6472/#000000@0.00	0;0px
+html>body>div.shell>main#main		0,65,390,456	16/normal/400	#1e293b/#000000@0.00	0;0px 16px 24px
+body>div.shell>main#main>div.card.quiet		16,65,358,88	16/normal/400	#1e293b/#eef2f7	10;16px
+main#main>div.card.quiet>div>div.big	0	33,82,168,36	30/36/700	#2f6feb/#000000@0.00	0;0px
+main#main>div.card.quiet>div>div.meta	今日专注分钟（只算正常结束）	33,118,168,18	12/18/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.new		16,169,358,84	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.new>select#focusTaskSel	不绑定任务	16,169,150,35	13/normal/400	#1e293b/#ffffff	10;8px 12px
+div.shell>main#main>div.new>button	番茄钟 25 分	178,169,106,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
+div.shell>main#main>div.new>button.ghost	普通计时	16,216,86,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+body>div.shell>main#main>div.section-title	本周投入	16,277,358,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block.quiet		16,305,358,180	16/normal/400	#1e293b/#eef2f7	10;16px
+div.shell>main#main>div.card.block.quiet>div.meta	本周 YYYY-MM-DD ~ YYYY-MM-DD · 专注 0h · 完成收益 1 项 · 手动 0.75h · 习惯 1 次 · 债务 1 项	33,322,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card.block.quiet>div.bar-row		33,370,324,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(1)		33,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(1)>div.bar-v		33,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(1)>div.sub.mt-1	21	33,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(2)		80,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(2)>div.bar-v		80,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(2)>div.sub.mt-1	22	80,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(3)		128,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(3)>div.bar-v		128,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(3)>div.sub.mt-1	23	128,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(4)		175,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(4)>div.bar-v		175,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(4)>div.sub.mt-1	24	175,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(5)		223,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(5)>div.bar-v		223,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(5)>div.sub.mt-1	25	223,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(6)		270,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(6)>div.bar-v		270,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(6)>div.sub.mt-1	26	270,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(7)		318,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(7)>div.bar-v		318,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(7)>div.sub.mt-1	27	318,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card.block.quiet>div.sub.mt-3	这周还没有专注记录，随时可以从一小段开始。	33,406,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card.block.quiet>div.sub.mt-2	波动 0 分钟（逐日专注的长短差）· 本周最长空档 7 天 —— 这周还没有专注记录，随时可以从一小段开始。	33,432,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
+html>body>div.shell>aside.sidebar		0,521,390,196	16/normal/400	#1e293b/#000000@0.00	0;0px 16px 90px
+body>div.shell>aside.sidebar>div#focusRail		16,521,358,94	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	33,538,324,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	33,561,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
+html>body>nav.bottom-nav		0,762,390,82	16/normal/400	#1e293b/#ffffff	0;8px 0px
+body>nav.bottom-nav>button:nth-child(1)>span.ic	📅	4,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(2)>span.ic	🗂️	61,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+html>body>nav.bottom-nav>button.active		114,771,49,65	12/normal/700	#2f6feb/#2f6feb	0;12px 4px
+body>nav.bottom-nav>button.active>span.ic	⏱️	118,783,41,24	18/normal/700	#2f6feb/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(4)>span.ic	👥	175,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(5)>span.ic	🔥	231,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(6)>span.ic	📈	288,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px
+body>nav.bottom-nav>button:nth-child(7)>span.ic	⚙️	345,783,41,24	18/normal/400	#5b6472/#000000@0.00	0;0px

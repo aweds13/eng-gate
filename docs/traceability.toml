@@ -480,7 +480,7 @@ evidence = [
   "file:gates/render/LAST_UPDATE.md",
   "file:gates/render/desktop__today.txt",
   "file:gates/render/phone__today.txt",
-  "text:src/web/app.css::.card-body { flex: 1 1 240px; min-width: 8em }",
+  "text:src/web/app.css::.card-body { flex: 1 1 240px; min-width: 8em; line-height: var(--lh-base) }",
   "text:src/web/app.css::.new input:not([type=\"checkbox\"]):not([type=\"radio\"])",
   "text:src/web/index.html::const notReady=ready?'':",
   "text:scripts/run_gates.py::def render_cmd() -> list[str] | None:",
@@ -1429,6 +1429,66 @@ evidence = [
 ]
 gaps = "**修了发现的两处**：`renderHabit` 的今天、`heatmap` 的格子日期（都改走 `todayISO()`，本机时区）。**它为什么会伤人**：`new Date().toISOString()` 给的是 UTC 日期，本机 UTC+8 → **本地 0–8 点算出来是昨天**：界面把「今天已打卡」显示成「打卡」，而点下去（服务端按本地今天翻转）会把那次打卡**取消**掉，提示还写着「已打卡」。**护栏两层**（都在 `test_web_frontend.py`）：全文件级不许出现裸的 `new Date().toISOString()`；函数级 `renderHabit`/`heatmap` 里不许出现 `toISOString` —— 判的是**剥掉注释后的代码**（不剥注释会把「别这么写」那句解释也判红，同 T-G39 的教训），并用合成数据证明它咬得住。**没做**：全仓的「日期取法」清点（`docs/` / `tools/` / 别的 `.js`）；护栏只扫 `index.html`。"
 
+[entries."T-G58"]
+id = "T-G58"
+title = "门禁工具的两处诊断/防护缺陷（T-G51 落地时撞出来的）：`render --update --only` 会采到**错黄金**（视图之间不独立）→ 默认拒绝；全量门禁失败时把门自己的输出留下并当场印尾部"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tools/render_check.mjs",
+  "file:scripts/run_gates.py",
+  "text:tools/render_check.mjs::不能和 `--only` 合用",
+  "text:scripts/run_gates.py::LOG_DIR",
+  "test:test_render_check.py",
+]
+gaps = "**怎么撞出来的**：T-G51 修完「卡片里的按钮被压成两行」那处，我用当时以为最划算的一步重采黄金 —— `node tools/render_check.mjs --update --only offline`，**16.4 秒**（全量 110 秒）。下一次全量门禁立刻红，而且红在同一批 3 份上。**先猜错一次**（以为 `ui_flow` 并行污染）→ 起 `ui_flow` 并行复现，没复现。**真正的原因**：**视图之间不是独立的** —— 离线页那半页「上次联网时看到的样子」读的是**别的页面联网时**写下的缓存（`src/web/index.html` 的 `rememberForOffline` → IndexedDB 的 `STORE_CACHE`），而 `--only` 根本不访问那些页面 → 缓存为空 → 采到的是**退化版式**（`span.sub 还没有缓存到习惯`、少一行、卡片矮 15px）。全量跑按固定顺序访问全部视图，到 offline 时缓存已经有货。**所以这不是「慢了 110 秒」，是判据坏了**（假红会让人去修一个没坏的东西）。**① 默认拒绝** `--update --only`（退出码 2，说清根因 + 给 `--force` 口子 + 指向全量），并配一条 pytest。**② 顺带补上两个「看不见原因」的缺陷**：界面校验工具的差异原来只印**前 8 行** —— 整页往下挪一格时前 8 行全是坐标、真正的原因（多出来的是哪一行）在中间（我就在这上面误诊过），改成**优先印「文字列非空」的差异行**并如实说还剩多少行没印；全量门禁**失败时门自己的输出被直接丢掉**，想查原因只能把门单独再跑一遍（render 110s / ui_flow 176s，随机失败还未必复现）→ 现在每道门的全量输出落 `gates/logs/<门名>.log`（`gates/logs/` 进 `.gitignore`），失败时当场印尾部 12 行。**没做（工具判不了的事）**：`--only` 查出来的「通过」对这类与其它视图有状态耦合的视图仍然不可信 —— 工具无从知道哪个视图耦合了谁，所以**提交前一律全量**这条边界不变（地图 §3）。"
+[entries."T-G57"]
+id = "T-G57"
+title = "视觉线·第一层收尾③：界面文案清理剩余（≥30 字清零、20–29 字棘轮、剩下 3 条数字口径改到 ≤8 字）+ 小用户文档 `docs/user-guide.md` + 把 `tools/ui_text_scan.py` 升成上限门"
+group = "PROCESS"
+status = "todo"
+evidence = []
+gaps = "**范围（T-G49 第一轮剩下的，别重做已删的那批）**：① `≥30 字` 现在 **19 条**（`python -X utf8 tools/ui_text_scan.py --min 30`），全是设置/离线/复习页的说明段与教学句 —— 逐条按 `docs/specification/conventions.md` 的「界面文案」改短或删；② `20–29 字` **74 条**，其中约 **13 条是尺子自己的噪声**（整块注释的续行混进了统计）—— **先把噪声修掉再定基线**，否则基线是假的；③ 剩下 3 条数字口径：统计页「手动投入不参与这张图」（`tools/ui_flow_check.mjs` 的 marker+断言、`tests/test_web_frontend.py`、3 份渲染黄金三处都钉着）、团队页「分配出去的不计个人投入」（它在**后端** `src/timeflow/core/team/team.py`，`tests/test_team_view_line.py` 钉着 —— `ui_text_scan` 只扫 `index.html`，**扫不到它**）、习惯页「只记次数，不折算成投入时间」（只有黄金钉着、无 pytest 断言）；④ 新建 `docs/user-guide.md`：用户向单页，把界面里**删掉的那些「怎么用 / 为什么」搬过来**（界面上只留「用的时候要看到的」）；⑤ 新门 `tools/ui_text_audit.py` + `tools/ui_text_baseline.toml`（照 `contrast_baseline.toml` / `style_baseline.toml` 的棘轮做法：未登记的新长句 FAIL、登记项被改写也 FAIL、清掉了提示删行），口径建议 **≥30 硬门、20–29 先棘轮** —— 20–29 里混着报错原话、二次确认问句、契约 evidence，一刀切会逼人去删合法文案，那是**造假绿**。"
+
+[entries."T-G56"]
+id = "T-G56"
+title = "视觉线·第一层收尾②：5 条无界面路由里的 1/2 接进设置页（`GET /api/reminders` 全量提醒列表 + `GET /api/sync/logs` 冲突日志，**只读展示 + 刷新**）"
+group = "PROCESS"
+status = "todo"
+evidence = []
+gaps = "**为什么是设置页**：契约早就这么写 —— OP-47 的入口是设置页「提醒」一节；OP-41 写「入口：同步结果 / 冲突日志（设置页显示条数）」，且 `docs/commands.toml` 的 `ui` 已经写着 `view=setting`。挂两节比开新视图便宜得多（新视图要动 `VIEWS` + `view()` + 命令表 + 新增一份黄金）。**落点**：提醒卡内加一个 `settings-sub` + 空容器 + 按钮（在 `index.html` 提醒卡收尾之前）；`#set-sync` 里跨端同步小节之后加同样一节。数据**点一下拉**（照 `runLanSelfCheck` 那套），**不进首屏 `Promise.all`**（两条都是「看时才要」，而且它们会变 —— 点一下天然就是刷新）。**口径：只读展示**（不删、不改、不选边、不给提醒加「已读/忽略」）—— 契约对冲突日志的输入写的就是「无（自动）或用户选择保留哪版（改回即可）」，界面上不摆选边按钮就不引入新语义，所以**不需要用户再拍板**。**唯一的旧账**：第 5 条 `POST /api/sync/tasks` 代码还在、也**没有任何弃用标记**（2026-09-23 定的是「标弃用但不删，怕有外部脚本」）—— 这条要问用户一句。**代价**：设置页 3 档宽度的黄金必变（`narrow__setting` 是 820px 换行临界宽度，新行按「按钮不收缩、输入框可收缩带最小宽」那条约定写）；`tools/ui_dom_probe.mjs` 的假数据要补这两个 key，否则渲染成空、看着接上了其实没验；落地后要同时改台账 `DELIVERY.READY` 那条盘点。"
+
+[entries."T-G55"]
+id = "T-G55"
+title = "视觉线·第一层收尾①：图表规范 —— 6 个手写 SVG 统一（网格/轴/标注/空态/尺寸公约下沉成 `app.css` 的类）+ 习惯热力图的真缺口（前端按 53 周画、后端只给 90 天）"
+group = "PROCESS"
+status = "todo"
+evidence = []
+gaps = "**盘点结论（先量后改）**：6 个手写 SVG 全在 `index.html` 1756–1984（折线+面积 / 习惯打卡热力 / 完成度环 / GPA 雷达 / 重复节奏方格 / 多指标热力），**颜色已经 100% 走令牌、图表里 0 处裸色**；真欠账是「各图自定尺寸、无网格无刻度无轴标注」+ `font-size`、`stroke-width`、`r`、`rx`、格径这类**裸值住在标记里**。**关键结构事实**：一致性门（`tools/style_audit.py`）**只读 `app.css`**，所以它**结构上看不见任何 SVG** —— 规范要能被门看见，就必须**下沉成类**（`.chart-grid` / `.chart-axis` / `.chart-label` / `.chart-line` / `.chart-cell-off` 等，颜色只用已有令牌），这同时把 `.cell-off` 那个**已 0 引用**的死类收编成「空格」语义类。**真缺口只有一条**：习惯热力图画 53 周、文案写「近一年」，而后端 `core/feedback/feedback.py` 只回**近 90 天** → 左 3/4 恒空。修法二选一：放开那条窗口（仍直读 `habit_logs`、不改算法）或新增 `core/insights.py::habit_heatmap` + `GET /api/insights/habit-heatmap`（走 `facts`、天数上限对齐 `MAX_HEATMAP_DAYS=400`）。**纪律**：不许前端自己拼 53 周日期再判「没记录」（现在的 `valueHeatmap` 就是这么算的）。**别做两遍**：`SR-F1.5b` 在台账里**已是 done**（T-G25 消除了缺口），T-G24 留的话是「并进图表规范这一步」，不是「欠一个热力图」。**黄金代价**：有 svg 的 4 视图 × 3 断点 = 12 份清单会动（habit 738 行、stats 371 行是最重的两块）；★ 另外 `desktop__stats.txt` 里**没有 `polyline` 也没有 `circle`**（那一轮专注全 0，零高度的数据折线被采集器跳过）—— **曲线本身没有任何护栏**，这轮该顺手加一条带非零数据的 fixture。"
+
+[entries."T-G54"]
+id = "T-G54"
+title = "视觉线·第一层收尾④：图标系统 —— 手机底栏 7 个 emoji + ⚑/✕/▸▾/↑↓/✓ 共 15 处字形换成内联 SVG（24 网格、单 path、只描边、`currentColor`、`aria-hidden`）"
+group = "PROCESS"
+status = "todo"
+evidence = []
+gaps = "**盘点数字**：15 处真图标字形 / 14 种字形，**全在 `index.html`**（底栏 7 个 emoji、分组选中前缀 ✓、折叠树 ▸▾、标记 ⚑、上移下移 ↑↓、四处删除 ✕）；另有 10 处「当标点/状态用」的（✅❌⚠️）不在本卡范围。**门禁侧现状**：**没有任何测试或工具断言这些字形**（`tools/*.mjs` 与 `tests/*.py` 里的 ✅❌⚠ 是工具自己的控制台输出）—— 会动的只有渲染黄金的**文字列**。**尺寸理由**：底栏槽位是 18px 字 + **24px 行盒**（黄金 `43×24`），所以图标 20px 塞得进同一行盒、不撑高按钮；行内图标（住在 12–13px 文字旁）一律 16px。**黄金影响**：nav 7 个字形 **+98 行**（仅 14 份 `phone__*.txt`）、⚑ **+15**、✕ **+24**，合计约 **+137 行** → 必须 `--update --reason`。**陷阱**：`.ic svg` 一旦用 `display:block` 会把 `span.ic` 的行盒从 24px 压到 18px（底栏按钮 61 → 55、整排几何都变）→ 用 `vertical-align:middle` 保住行盒；**故意不给 svg 加 class**（加了会被黄金当「有名字的容器」多采一行）；**不给 svg 加 `<title>`**（与按钮标签重复，还会把文字塞进 `span.ic` 的 textContent）。**事件安全**：svg 必须在 `button` **内部**，靠 `ev.target.closest('[data-action]')` 冒泡命中，不许自己带 `data-action`、不许 `stopPropagation`。**顺带**：底栏 7 个按钮加 `aria-label`，让「今日/任务/…」这些标签重新进黄金（现在它们取 aria-label 而为空）。"
+
+[entries."T-G53"]
+id = "T-G53"
+title = "视觉线·步 3 排版节奏：建 `--lh-*`（1.2 单行 / 1.5 正文）与 `--fw-*`（600 标题 / 700 读数），销掉一致性登记表**最后一条欠账**（全文唯一一处行高）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/视觉线层次与节奏-T-G51.md",
+  "text:src/web/app.css::--lh-tight: 1.2;",
+  "text:src/web/app.css::--lh-base: 1.5;",
+  "text:src/web/app.css::--fw-semi: 600;",
+  "text:src/web/app.css::--fw-bold: 700;",
+  "text:tools/style_baseline.toml::（T-G53）起**空了**",
+  "test:test_web_frontend.py",
+]
+gaps = "**做了什么**：① 建两档行高 `--lh-tight: 1.2`（**单行**角色：页/面板/分区/模态标题、大读数、计时器）与 `--lh-base: 1.5`（正文与多行说明：`.card-body` / `.sub` / `.hint` / `.card .meta` / `.empty` / 侧栏摘要 / 代码示例），全表 **14 处**行高、**全部走令牌**；② 字重两档 `--fw-semi: 600` / `--fw-bold: 700`，`.panel .title` / `.big` / `.timer` / 底部 Tab 选中那几处手写值收进令牌；③ **销掉一致性登记表最后一条欠账**（`tools/style_baseline.toml` 的 `[known]` 现在是**空的**）—— 原来全表**唯一**一处行高就是 `.rail-summary` 的 `line-height: 1.5`，正是 T-G24 §5-3 说的「行距靠默认」：字号 9 档、行高 1 档。**一个刻意的例外**：`.card .title` 这类**可能换行**的条目标题**没压**（任务/备忘标题常常两行，两行中文挤在一起比省几像素难受）—— 压的是**单行**角色。**顺带**：环中心的读数原来写的是 SVG 属性里的 `font-size` 15 / `font-weight` 700（裸值住在标记里），收进 `.ring-text` 用令牌。**没做**：字号档位与包的对齐（14→15、18→20 之类）—— 见 T-G51 gaps 的第 ② 条，要单独一张卡 + 预演图。 **护栏**：`tests/test_web_frontend.py` 的 `test_cards_have_two_levels_and_the_quiet_one_keeps_its_shapes`（同义类不许回来、静音面上那两笔必须画 --border）与 `test_typography_and_bare_inputs_go_through_tokens`（行高只许令牌、输入框元素级规则）。"
 [entries."T-G52"]
 id = "T-G52"
 title = "流程优化（用户 2026-09-24 问「我们的流程可以继续优化吗」）：① 报错说清在哪一行（TOML 预检 + 约定层报行号 + 交接数字一键刷）② 教训只写一处 ③ 前端热表；另把「一次门禁覆盖多个提交」「边跑边写」定为习惯"
@@ -1448,12 +1508,19 @@ gaps = "**动机是量出来的**（本会话的时间账，逐项估）：改�
 
 [entries."T-G51"]
 id = "T-G51"
-title = "视觉线·步 2 落地：把用户选的 **C 静音层** 并进 `app.css`（1px 边框做层次 + 阴影归位浮层 + 尺度收敛到包的 4px 网格与 3 档圆角 + 读数卡退到 `--panel-2` + `--muted` 跟包）"
+title = "视觉线·步 2 落地：把用户选的 **C 静音层** 并进 `app.css`（1px 边框做层次 + 阴影归位浮层 + 尺度收敛到包的 6 档间距与 3 档圆角 + 读数卡退到 `--panel-2` + `--muted` 跟包）"
 group = "PROCESS"
-status = "todo"
-evidence = []
-gaps = "**用户 2026-09-24 选 C**（三个嵌套候选里最全套的那个），候选与数字在 `复盘/视觉线步2层次语言-T-G50.md` 与 `gates/render/candidates/NUMBERS.md`。落地清单（逐条，别漏）：① `app.css` —— `.card` / `.panel` 补 `1px solid var(--border)`、`box-shadow: none`，`--shadow` 改成包的浮层值（`.wb-card` 有边框、阴影注释写着 `overlays only`），`.card.selected` 只留 2px 环；② 尺度收敛 —— 间距 **11 档 → 6 档**（4/8/12/16/24/32，就近并档 `6→8 8→8 10→12 12→12 14→16 16→16 18→16 20→24 24→24 30→32`，并把 `--sp-7..--sp-11` 这五个**名字**也一并收掉：用法改指最近的档，**别再留 11 个名字装 6 个值**）；圆角 **5 档 → 3 档**（`--r-sm:8→6`、`--r-lg:12→10`）；③ 两对同义卡片类合并（`.card.block` 与 `.card.panel-card`，29 处标记改名，含 `.title` 下边距与 `.form` 外边距那两条）；④ 读数卡静音面 —— 预演用的是 `:has()`，落地要换成**标记层的显式类名**（环/条形/大数字/雷达这 4 类卡），这样渲染黄金才钉得住它；⑤ `--muted` 跟包（亮 `#5b6472` / 暗 `#8a93a6`）—— ★ **它是「静音层」的另一半**：不跟包的话 `--muted` 落在 `--panel-2` 上只有 **4.23（不过 AA）**（候选预演算过），而且**新增的这对搭配要补进 `contrast_audit.py` 的 `TOKEN_PAIRS`**（T-G42 曾把 `--muted on --panel-2` 当僵尸行删掉 —— 现在它真的会出现了，门必须看得见它）。**风险与代价**：42 份黄金预计**全动**（每张卡多 2px 边框 + 尺度变化），要逐视图点名；`squeeze_scan` 前后各跑一次（间距放宽可能减轻挤压、但卡片变浅底后轨道/网格线的可见性要靠 `stroke: var(--border)` 那条保住）；暗色主题**渲染层采不到**（只采亮色），要手工核一遍。"
-
+status = "done"
+evidence = [
+  "file:复盘/视觉线层次与节奏-T-G51.md",
+  "text:src/web/app.css::.card.quiet { background: var(--panel-2) }",
+  "text:src/web/app.css::.card > button { white-space: nowrap }",
+  "text:src/web/app.css::.card.block .form { margin: var(--sp-3) 0 var(--sp-1) }",
+  "text:src/web/app.css:::root {",
+  "text:tools/contrast_audit.py::静音面（读数卡，T-G51）",
+  "test:test_web_frontend.py",
+]
+gaps = "**落地完成（2026-09-25）**：用户 2026-09-24 选的候选 C 已全部并进 `app.css` 与标记层。① 层次 —— `.card` / `.panel` 补 `1px solid var(--border)`、去掉 `box-shadow`；`--shadow` 归位成**浮层专用**（只剩 `.modal-box` 用；包的原话就是 `overlays only`）；`.card.selected` 只留 2px 环。② 尺度收敛 —— 间距 **11 档 → 6 档**（4/8/12/16/24/32）、圆角 **5 档 → 3 档**（8→6、12→10），**名字也一并并掉**（同值两个名字＝同一档的两种写法；档数报告按**令牌名**数，见 `tools/style_audit.py`）：`app.css` **92 处引用改名** + 测试 2 处，另加一条**棘轮断言**（只许 6 档间距 / 3 档圆角）。③ 两类同义卡片归一 —— `.card.panel-card` 删除、**29 处标记改名**成 `.card.block`，并把原来只给面板卡的两条间距（`.title` 下边距、`.form` 外边距）摊给所有块内容卡。④ 读数卡静音面 —— 候选里用 `:has()` 只是**预演**，落地换成显式类名 `.card.quiet`（环 / 本周柱状 / 主读数 / 学业雷达 / 两个 GPA 读数，共 **6 张**），渲染黄金从此钉得住它。⑤ `--muted` 跟包（亮 `#5b6472` / 暗 `#8a93a6`）并把这一对补进 `contrast_audit.py` 的 `TOKEN_PAIRS`（组合 34 → **36**，全达标）。**★ 预演抓到的那条缺陷的正式修法**：`--panel-2` 当形状的两笔（`.ring-track` / `.axis-line`）改画 `--border`。**尺子与代价**：42 份黄金**全动**（属有意改版，理由已落 `gates/render/LAST_UPDATE.md`）；`squeeze_scan` 0 → **8 处**（1px 边框每边吃掉 1px 内容宽，把 `phone__offline` 的「完成」顶成两行）→ 补 `.card > button { white-space: nowrap }` 修掉（只限**直接孩子**：`.card .row` 里的按钮靠容器换行，用户数据类的长标签不许被 nowrap 顶出容器），再回 **0 处**。**没做（如实记）**：① 包的中性色阶整体搬（`--bg` / `--panel-2` / `--border` / `--ink` 都取包的值）—— 候选 C 的注释就把它留给了下一张卡：进度条槽、热力图空格这类「靠浅底当形状」的地方要一并补 1px 边框，是另一份工单；② **字号档位没动**（候选 B 的注释把 `--fs-*` 留给步 3，而步 3 的实际范围只写 `--fw-*`/`--lh-*`；字号一动全表重排、且没有出过预演图，所以不夹带）；③ **暗色主题没有渲染基线**（渲染层只采亮色）—— 暗色的 `--muted` / `--shadow` 按令牌级对比度门核过，但整页暗色版式仍是老账。 **护栏**：`tests/test_web_frontend.py` 的 `test_cards_have_two_levels_and_the_quiet_one_keeps_its_shapes`（同义类不许回来、静音面上那两笔必须画 --border）与 `test_typography_and_bare_inputs_go_through_tokens`（行高只许令牌、输入框元素级规则）。"
 [entries."T-G50"]
 id = "T-G50"
 title = "视觉线·步 2「层次语言」的候选预演机制（用户 2026-09-24 选 **C 静音层**）：往真界面注入候选 CSS → 截图 + 量数 + 用门自己的算法预演对比度；★ 预演当场抓到「浅底当形状」消失这个真缺陷"
@@ -1514,12 +1581,15 @@ gaps = "**用户问「按你这种开发形态，后面还要开发多久？有�
 
 [entries."T-G46"]
 id = "T-G46"
-title = "视觉线·待办：5 个输入框「没穿衣服」—— `input` 只有上下文样式、缺元素级基础规则（T-G45 量挤压时顺带量到的，未修）"
+title = "视觉线：5 个输入框「没穿衣服」—— 补元素级输入框规则（`input:not([type=checkbox]):not([type=radio])`）并把模态那条同步排除勾选框"
 group = "PROCESS"
-status = "todo"
-evidence = []
-gaps = "**现象**（渲染清单里一直在，只是没有一层判它）：`#exportDir` / `#vaultName` / `#vaultDir` / `#syncPath` / `#archiveDays` 这 5 个输入框是**浏览器默认外观** —— 21px 高、`#ffffff` 底、`1px 2px` 内边距、无圆角；而全站其它输入框是 `--panel` 底 + 1px `--border` + `--r-md` 圆角 + 10/12 内边距。证据：`gates/render/desktop__setting.txt` 里 `input#exportDir` 那一行（`… 260,2082,240,21 … #000000/#ffffff 0;1px 2px`）与 `phone__setting.txt` 的 `input#syncPath`。**根因**：我们把输入框按**上下文**上样式（`.new input` / `.field input` / `.modal-box input`），而 `select` 有**元素级**基础规则 —— 于是任何落在这三种容器之外的输入框就是裸的（这 5 个正好都在 `.row.tight` 里）。**改法（很小）**：① 补一条元素级规则 `input:not([type=checkbox]):not([type=radio])`（照 `select` 那条写，复选框必须排除，否则会被画成整行白块 —— T-G32/T-G38 踩过两次）；② `.modal-box input` 那条要跟着补 `:not(...)`，否则会被新基础规则按权重盖掉（它是 (0,1,1)，新规则是 (0,2,1)）；③ `#archiveDays` 顺手给个宽度类（`.w-90`）。**为什么没并进 T-G45**：那轮的口径是「挤压」（读不出来），这条是「没穿衣服」（不像设计系统），两件事；而且它要动一条**元素级**规则，属于「组件层」的活（步 2 会一并定）。"
-
+status = "done"
+evidence = [
+  "text:src/web/app.css::input:not([type=\"checkbox\"]):not([type=\"radio\"]) {",
+  "text:src/web/app.css::.modal-box input:not([type=\"checkbox\"]):not([type=\"radio\"]) {",
+  "test:test_web_frontend.py",
+]
+gaps = "**现象**（渲染清单里一直在，只是没有一层判它）：`#exportDir` / `#vaultName` / `#vaultDir` / `#syncPath` / `#archiveDays` 这 5 个输入框是**浏览器默认外观** —— 21px 高、白底、`1px 2px` 内边距、无圆角；而全站其它输入框是 `--panel` 底 + 1px `--border` + `--r-md` 圆角。**根因**：输入框按**上下文**上样式（`.new input` / `.field input` / `.modal-box input`），而 `select` 有**元素级**基础规则 —— 落在三种容器之外的输入框就是裸的（这 5 个正好都在 `.row.tight` 里）。**已修（2026-09-25）**：① 补元素级规则（照 `select` 写：`--panel` 底 + 1px `--border` + `--r-md` + 8/12 内边距 + 13px 字号）；② `.modal-box input` 同步补 `:not(...)` —— 元素级规则权重 (0,2,1) **高于**它 (0,1,1)，不补就会被盖掉（背景与内边距都会变）。**渲染清单作证**：5 个输入框从 `0;1px 2px`（21px 高）变成 `10;8px 12px`（33px 高）；`#archiveDays` 从 73×21 变 **90×33**。**一处与计划不同、如实记**：原计划写「顺手给 `#archiveDays` 加 `.w-90`」，实测它本来就带 `maxw-90`，穿上衣服后内在宽度超过 90，被 `max-width` 钉在 **90px**（正是想要的结果），所以**没动标记** —— 以量到的数为准，不为了对齐计划而改。"
 [entries."T-G45"]
 id = "T-G45"
 title = "视觉线·无需新决定的两件小活（SR-NF1 / N30）：互动态补齐（`:hover` 0→6、`:focus-visible` 0→1）+ 4 条一次性裸值收敛到档位 + 「中文被压碎」三处（挤压 11 处 → 0），一致性门登记表 7 → 1 条"
@@ -1531,7 +1601,7 @@ evidence = [
   "text:src/web/app.css:::focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }",
   "text:src/web/app.css::color-mix(in srgb, var(--accent) 88%, var(--ink))",
   "text:src/web/app.css::--dur-hover: .12s;",
-  "text:src/web/app.css::.habit-head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap }",
+  "text:src/web/app.css::.habit-head { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap }",
   "text:src/web/index.html::<div class=\"card block\"><div class=\"meta\">本周专注",
   "text:src/web/index.html::<span class=\"grow minw-160\">",
   "text:tools/contrast_audit.py::def state_pairs(css: str) -> list[Pair]:",
@@ -1571,7 +1641,7 @@ evidence = [
   "text:src/web/app.css::.grow { flex: 1 }",
   "text:src/web/app.css::.chart { width: 100%; height: auto; display: block }",
   "text:src/web/app.css::.chart.radar { display: inline; max-width: 260px }",
-  "text:src/web/app.css::.bar-v { border-radius: var(--r-xs) var(--r-xs) 0 0 }",
+  "text:src/web/app.css::.bar-v { border-radius: var(--r-sm) var(--r-sm) 0 0 }",
   "text:src/web/index.html::class=\"card block\"",
   "text:tools/style_audit.py::多值的值里**只数令牌**",
   "test:test_web_frontend.py",

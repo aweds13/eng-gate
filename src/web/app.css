@@ -15,7 +15,9 @@
   --accent-ink: #fff;        /* 默认强调色底上的文字（与暗色块同一约定：底浅就用深墨、底深就用白） */
   --bg: #f8fafc;
   --panel: #fff;
-  --panel-2: #eef2f7;     /* 更浅的底：热力图空格、进度环底、雷达网格 */
+  --panel-2: #eef2f7;     /* 更浅的底：热力图空格、**静音面**（读数卡，T-G51）。
+                                ★ 进度环底与雷达网格线原先也住这里，T-G51 起改画 `--border` ——
+                                形状不靠「比底深一点」，靠一条线（包 `.wb-progress__track` 的写法）。 */
   --border: #e2e8f0;          /* 分隔线 / 输入框边框 */
   --border-strong: #cbd5e1;   /* 分隔线（暗色 toast 按钮边框等） */
   --ink: #1e293b;
@@ -25,7 +27,11 @@
                                `--toast-bg` —— 亮色下侥幸对（--ink 是深色），**暗色下 `--ink` 变成浅色、
                                文字色 `--toast-ink` 也是浅色 → 1.0:1，toast 上的字完全看不见**。
                                亮色这里仍等于 `--ink`（视觉零变化），暗色见下面那块。 */
-  --muted: #64748b;
+  /* ★ 2026-09-24（T-G51 · 视觉线步 2「静音层」）次级文字色**跟包**（原来 #64748b → #5b6472）：
+     它与"读数卡退到 --panel-2 浅底"是**一件事的两半** —— 不跟包的话，`--muted` 落在 --panel-2 上
+     只有 4.23（不过 AA，T-G42 当场记过这条）；跟包之后是 5.32，而且它在 --bg / --panel / --panel-2
+     三种底上都比原来更好读。**跟包的值、不自己调**，与 T-G39（强调色）/T-G42（状态色）同一条理由。 */
+  --muted: #5b6472;
   /* ★ 2026-09-24（T-G42）状态色跟 workbench 包的值 —— 与 T-G39 对强调色做的是同一件事。
      我们原来用 `#ef4444` / `#22c55e`：那一档颜色**当色块可以、当字和点不行** ——
      当 12px 小字是 3.60 / 2.18，当 8px 状态点是 3.76 / 2.28（连非文字的 3.0 都不到）。
@@ -34,7 +40,12 @@
   --danger: #d1242f;
   --ok: #1a7f37;
   --shadow-rgb: 0, 0, 0;
-  --shadow: 0 1px 2px rgba(var(--shadow-rgb), .04);
+  /* ★ 2026-09-24（T-G51 · 视觉线步 2「层次语言」）阴影**归位**：它从"卡片抬起来一点"改成
+     **浮层专用**（包只有一条阴影，注释写着 `overlays only`）。理由是一个可以量的病：
+     原来给卡片用的 `0 1px 2px` / 4% 黑，落在近白的页面上**几乎看不见**（这就是"平"的直接来源），
+     而它同时是**唯一**的层次手段 —— 于是 66 张卡权重完全相同。
+     层次改由 **1px 边框**承担（包的 `.wb-card` 就是这么写的）；模态那种真压在上面的东西才用阴影。 */
+  --shadow: 0 4px 16px -8px rgba(var(--shadow-rgb), .18);
 
   /* 强调色预设（设置页取样用）：JS 通过 getComputedStyle 读取，避免在脚本里写色值 */
   --accent-1: #3b82f6;
@@ -54,12 +65,35 @@
      换纯黑 **4.96** 过 —— 这就是"每个预设各自一个 on 色"的意义（门禁逐对儿算，不是估的）。 */
   /* 尺度令牌（R5 收口）：间距 / 圆角 / 字号 —— **组件只写令牌，不写裸像素**，
      这样"统一"是可检查的（见 tests/test_web_frontend.py 的 R5 护栏），而不是靠自觉。
-     离群值（7/9/22px）已收敛到最近的档位。 */
-  --sp-1: 4px;  --sp-2: 6px;  --sp-3: 8px;  --sp-4: 10px; --sp-5: 12px;
-  --sp-6: 14px; --sp-7: 16px; --sp-8: 18px; --sp-9: 20px; --sp-10: 24px; --sp-11: 30px;
-  --r-xs: 6px;  --r-sm: 8px;  --r-md: 10px; --r-lg: 12px; --r-pill: 999px;
+     离群值（7/9/22px）已收敛到最近的档位。
+
+     ★ 2026-09-25（T-G51 · 视觉线步 2「尺度收敛」，用户选的候选 C 含 B）：档位**并到包的网格**。
+     包是 6 档间距（4/8/12/16/24/32）与 3 档圆角，我们原来是 11 档 / 5 档 ——
+     多出来的全是"差一点"：6 与 8、10 与 12、14 与 16、18 与 20、圆角 8 与 6、12 与 10。
+     网格的意义不是"好看"，是让"这两处间距不一样"变成**一眼可判**的事（原来要凑近看才知道）。
+     映射（就近并档，逐条列出来，不藏着）：
+       间距 4→4  6→8  8→8  10→12  12→12  14→16  16→16  18→16  20→24  24→24  30→32
+       圆角 6→6  8→6  10→10  12→10  999→999
+     **并完只剩 6 + 3 档，名字跟着并** —— 同值两个名字（`--sp-2`/`--sp-3` 都是 6px 那种）
+     是同一件事的两种写法，留着就还是"11 档"（档数报告按**令牌名**数，见 `tools/style_audit.py`）。
+     `--fs-*` 字号这一轮**不动**：候选 B 的注释把它留给步 3，而步 3 的实际范围（`T-G24 §8`）
+     只写 `--fw-*`/`--lh-*`；字号一动全表重排、且没有出过预演图，所以如实记成"没做"，不夹带。 */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;  --sp-4: 16px;  --sp-5: 24px;  --sp-6: 32px;
+  --r-sm: 6px;  --r-md: 10px; --r-pill: 999px;
   --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-base: 14px; --fs-lg: 15px; --fs-xl: 18px;
   --fs-num: 30px; --fs-num-lg: 34px; --fs-num-xl: 44px;
+  /* 排版节奏（T-G53 · 视觉线步 3）：全表原来**只有一处行高**（还被登记成一条欠账）、
+     字重靠手写。字号有 9 档而行高只有 1 档，等于"行距靠浏览器默认" —— 这就是节奏散。
+     现在两档行高、各有归属，字重两档：
+       · `--lh-tight` 标题与读数：单行、紧凑；
+       · `--lh-base`  正文与多行说明：舒适。
+     值取包里给标题的 `1.2` 与给正文的 `1.5`（包自己没有 `--lh-*` 令牌，是写死在规则里的）。
+     ★ 刻意**没压**的是「可能换行」的条目标题（`.card .title` 这类：任务/备忘标题常常两行）——
+     两行中文挤在一起，比省那几像素难受。压的是**单行**角色：页/面板/分区/模态标题、大读数。 */
+  --lh-tight: 1.2;
+  --lh-base: 1.5;
+  --fw-semi: 600;   /* 标题：`.panel .title` */
+  --fw-bold: 700;   /* 读数与"当前页"：`.timer` / `.big` / 底部 Tab 选中 */
   /* 动效（T-G45，跟 workbench 的 `--dur-*` / `--motion-ease` 同名同值）：**全表只有一个语速**。
      为什么值得令牌化：此前全表唯一的时长是 `.toast` 里手写的 `.2s`（"各走各的时长"就是节奏散，
      而一致性门正有一条"动效越界"要判 —— 见 `tools/style_audit.py`）。
@@ -84,12 +118,11 @@
   --ink: #e6edf7;
   --toast-ink: #e6edf7;
   --toast-bg: var(--panel-2);  /* 暗色必须另给（T-G27）：跟 --ink 走会和文字同色，字看不见 */
-  --muted: #94a3b8;
-  /* 状态色同样跟包（亮暗同源：一个语义角色一个值，两套主题各自取包给的那一个） */
+  --muted: #8a93a6;   /* 次级文字（T-G51 跟包，同亮色那条的理由） */  /* 状态色同样跟包（亮暗同源：一个语义角色一个值，两套主题各自取包给的那一个） */
   --danger: #e5534b;
   --ok: #3fb960;
   --shadow-rgb: 0, 0, 0;
-  --shadow: 0 1px 2px rgba(var(--shadow-rgb), .35);
+  --shadow: 0 6px 20px -8px rgba(var(--shadow-rgb), .55);
 }
 
 /* 跟随系统「减少动态效果」（T-G45；workbench 在同一处做同一件事）：
@@ -121,36 +154,36 @@ body {
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    gap: var(--sp-10);
-    padding: 0 var(--sp-10);
+    gap: var(--sp-5);
+    padding: 0 var(--sp-5);
   }
-  .rail { flex: 0 0 168px; position: sticky; top: 0; padding: var(--sp-8) 0; border-right: 1px solid var(--border) }
-  main { flex: 0 1 820px; max-width: 820px; min-width: 0; margin: 0; padding: var(--sp-8) 0 var(--page-bottom) }
-  .sidebar { flex: 0 0 300px; position: sticky; top: 0; padding: var(--sp-8) 0 }
+  .rail { flex: 0 0 168px; position: sticky; top: 0; padding: var(--sp-4) 0; border-right: 1px solid var(--border) }
+  main { flex: 0 1 820px; max-width: 820px; min-width: 0; margin: 0; padding: var(--sp-4) 0 var(--page-bottom) }
+  .sidebar { flex: 0 0 300px; position: sticky; top: 0; padding: var(--sp-4) 0 }
   .bottom-nav { display: none }
 }
 /* ---------- 左导航栏 ---------- */
-.rail h1 { font-size: var(--fs-xl); margin: 0 0 var(--sp-2) }
-.rail-summary { display: block; margin-bottom: var(--sp-5); line-height: 1.5 }
+.rail h1 { font-size: var(--fs-xl); margin: 0 0 var(--sp-2); line-height: var(--lh-tight) }
+.rail-summary { display: block; margin-bottom: var(--sp-3); line-height: var(--lh-base) }
 .rail nav { flex-direction: column; align-items: stretch; gap: var(--sp-1) }
-.rail nav button { text-align: left; padding: var(--sp-3) var(--sp-5) }
+.rail nav button { text-align: left; padding: var(--sp-2) var(--sp-3) }
 /* ---------- 右栏面板 ---------- */
 .panel {
   background: var(--panel);
-  border-radius: var(--r-lg);
-  padding: var(--sp-6) var(--sp-7);
-  margin-bottom: var(--sp-5);
-  box-shadow: var(--shadow);
+  border: 1px solid var(--border);   /* T-G51：层次 = 1px 边框（阴影留给浮层） */
+  border-radius: var(--r-md);
+  padding: var(--sp-4) var(--sp-4);
+  margin-bottom: var(--sp-3);
 }
 .panel:empty { display: none }
 /* 右栏可折叠（SR-NF4 / GAP-NF-03）：宽屏用户把右栏收起，换更宽的中列。
    折叠按钮在左栏（`#railToggle`）与设置页「外观」区都有入口（手机端左栏 nav 是隐藏的）。 */
 .shell.rail-off .sidebar { display: none }
-.panel-title { font-size: var(--fs-md); color: var(--muted); margin-bottom: var(--sp-3) }
+.panel-title { font-size: var(--fs-md); color: var(--muted); margin-bottom: var(--sp-2); line-height: var(--lh-tight) }
 .panel .timer { font-size: var(--fs-num-lg)}
-.panel .title { font-size: var(--fs-lg); font-weight: 600 }
+.panel .title { font-size: var(--fs-lg); font-weight: var(--fw-semi); line-height: var(--lh-tight) }
 .panel .row { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap }
-.panel .section-title { margin: var(--sp-5) 0 var(--sp-2) }
+.panel .section-title { margin: var(--sp-3) 0 var(--sp-2) }
 
 /* ---------- 导航（左栏；窄屏时仍是主区上方的一行） ---------- */
 /* ★ T-G42：原来这里有一条 `.accent { color: var(--accent) }`，全项目唯一的用处是 h1 里那个
@@ -162,7 +195,7 @@ nav { display: flex; gap: var(--sp-2); flex-wrap: wrap }
 nav button {
   border: none;
   background: transparent;
-  padding: var(--sp-3) var(--sp-6);
+  padding: var(--sp-2) var(--sp-4);
   border-radius: var(--r-sm);
   font-size: var(--fs-md);
   color: var(--muted);
@@ -171,19 +204,19 @@ nav button {
 nav button.active { background: var(--accent); color: var(--accent-ink) }
 
 /* ---------- 主区与分区 ---------- */
-main { max-width: 820px; margin: 0 auto; padding: 0 var(--sp-10) var(--nav-clearance) }
-.section-title { font-size: var(--fs-md); color: var(--muted); margin: var(--sp-9) 0 var(--sp-4) }
+main { max-width: 820px; margin: 0 auto; padding: 0 var(--sp-5) var(--nav-clearance) }
+.section-title { font-size: var(--fs-md); color: var(--muted); margin: var(--sp-5) 0 var(--sp-3); line-height: var(--lh-tight) }
 
 /* ---------- 卡片 ---------- */
 .card {
   background: var(--panel);
-  border-radius: var(--r-lg);
-  padding: var(--sp-6) var(--sp-7);
-  margin-bottom: var(--sp-4);
-  box-shadow: var(--shadow);
+  border: 1px solid var(--border);   /* T-G51：同上 —— 层次靠边框，不靠那条看不见的阴影 */
+  border-radius: var(--r-md);
+  padding: var(--sp-4) var(--sp-4);
+  margin-bottom: var(--sp-3);
   display: flex;
   align-items: center;
-  gap: var(--sp-5);
+  gap: var(--sp-3);
 }
 .card .title { flex: 1 }
 /* 卡片正文（标题 + 元信息）。**这一条是渲染层第一天抓到的真缺陷的修复**（T-G32）：
@@ -195,8 +228,8 @@ main { max-width: 820px; margin: 0 auto; padding: 0 var(--sp-10) var(--nav-clear
  * 现在：给正文一个**真实基宽**（240px）+ 一个**下限**（8em），按钮挤不下就自己换行。
  * 注意：行内 `flex:1` 的优先级高于任何选择器，所以这条规则要生效，**必须同时把行内样式拿掉**
  * （标记层已改成 `class="card-body"`）。 */
-.card-body { flex: 1 1 240px; min-width: 8em }
-.card .meta { color: var(--muted); font-size: var(--fs-sm)}
+.card-body { flex: 1 1 240px; min-width: 8em; line-height: var(--lh-base) }
+.card .meta { color: var(--muted); font-size: var(--fs-sm); line-height: var(--lh-base)}
 .card.overdue { border-left: 3px solid var(--danger) }
 /* 学校硬考核（T-C8）：逾期不候的那类，比普通逾期更显眼（左边条更粗 + 角标）。
    刻意**只做视觉**：不加声音、不弹窗、不闪烁 —— 约定层「温和不施压」。 */
@@ -205,13 +238,23 @@ main { max-width: 820px; margin: 0 auto; padding: 0 var(--sp-10) var(--nav-clear
 /* （状态徽标 `.badge.hard` 不在这里写：T-G42 起徽标统一在「展示元件」那块的原语里，
    状态由 8px 圆点承担 —— 一个原子只写一遍。） */
 .card.done .title { text-decoration: line-through; color: var(--muted) }
-.card .row { display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap }
-/* 卡片里放表单/长内容时（默认 .card 是 flex 行，块内容会被挤） */
-.card.panel-card { display: block }
-.card.panel-card .title { margin-bottom: var(--sp-1) }
+.card .row { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap }
+/* 卡片里放表单/长内容时（默认 .card 是 flex 行，块内容会被挤）。
+   ★ T-G51：`.card.panel-card` 与 `.card.block` 是**同义类**（两条都只写 `display: block`），
+   已并成一个名字（`.card.block`，见下面「组件类」那块）—— 一个意思只留一个名字，
+   否则「这两张卡不是一个东西」的错觉会一直留着。 */
+/* 卡片里**直接**放着的动作按钮：标签绝不断行（T-G51 量出来的）。
+ * 为什么值得一条规则：`.card` 是**不换行**的 flex 行，而按钮的自动最小尺寸是 min-content ——
+ * 中文处处可断行 → 下限低到「一个字宽」，于是「完成」被压成「完 / 成」两行（58×56）。
+ * 这次是 1px 边框（T-G51）每边吃掉 1px 内容宽、把本来刚好放得下的标签**顶过界**才暴露的
+ * （`phone__offline` 8 处，`squeeze_scan` 0 → 8），但病根一直都在。
+ * 只限**直接孩子**（`.card > button`）：`.card .row` 里的按钮靠容器换行解决（T-G45 那条口径），
+ * 而标签可能很长的按钮（用户自己的任务名/分组名）都住在 `.row` / `.sub` 里，
+ * 绝不能在这里被 nowrap 顶出容器。 */
+.card > button { white-space: nowrap }
 .row.tight { gap: var(--sp-2) }
 /* 列表里当前正在右栏查看的那张卡：加一圈，别让人找不到"我在看哪个" */
-.card.selected { box-shadow: 0 0 0 2px var(--accent), var(--shadow) }
+.card.selected { box-shadow: 0 0 0 2px var(--accent) }
 /* 到了头/尾的排序按钮要看得见地"按不动"（T-F1）：不要只靠"点了没反应"，
    那样像是坏了；置灰 = 如实说"这边到头了"。 */
 button[disabled] { opacity: .4; cursor: default }
@@ -236,7 +279,7 @@ button[disabled] { opacity: .4; cursor: default }
 button {
   border: none;
   border-radius: var(--r-md);
-  padding: var(--sp-3) var(--sp-6);
+  padding: var(--sp-2) var(--sp-4);
   font-size: var(--fs-md);
   cursor: pointer;
   background: var(--accent);
@@ -248,7 +291,7 @@ button.ghost { background: transparent; color: var(--muted); border: 1px solid v
  * 反馈修（2026-09-18）：原来标题输入 flex:1 + 日期/按钮不收缩，**总宽超出容器时按钮会被挤出卡片被遮住**。
  * 现在：允许换行 + 输入框有最小宽度 + 按钮永不收缩 → 挤不下就整块换到下一行，不再互相压。
  */
-.new { display: flex; gap: var(--sp-4); margin: var(--sp-7) 0; flex-wrap: wrap; align-items: center }
+.new { display: flex; gap: var(--sp-3); margin: var(--sp-4) 0; flex-wrap: wrap; align-items: center }
 /* 注意 `:not([type=checkbox]):not([type=radio])`：**复选框/单选框不是文本框**。
  * 原来这条（以及下面的 `.field input`）会一起命中它们 —— 于是勾选框被当成输入框画：
  * 拿到 `flex:1 1 220px` 的基宽、被拉成 76×13 的白方块，还把同一行里的说明文字
@@ -257,7 +300,7 @@ button.ghost { background: transparent; color: var(--muted); border: 1px solid v
 .new input:not([type="checkbox"]):not([type="radio"]) {
   flex: 1 1 220px;
   min-width: 0;
-  padding: var(--sp-4) var(--sp-5);
+  padding: var(--sp-3) var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   font-size: var(--fs-base);
@@ -271,7 +314,21 @@ button.ghost { background: transparent; color: var(--muted); border: 1px solid v
 .new label { flex: none; display: flex; align-items: center; gap: var(--sp-2) }
 .new .grow { flex: 1 1 220px; min-width: 0 }
 select {
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: var(--fs-md);
+  background: var(--panel);
+  color: var(--ink);
+}
+/* 输入框的**元素级**默认（T-G46「5 个输入框没穿衣服」）：上面 `.new input` 与 `.field input`
+   都是**上下文样式**，所以不住在那两种容器里的输入框（导出目录 / Vault 名 / Vault 根目录 /
+   离线包路径 / 归档天数）只有浏览器默认外观 —— 挤压那轮量出来的，跑 `--fast` 看不见。
+   这条照 `select` 写：元素级、与上下文无关，和 `select` 是同一套盒模型。
+   `:not([type=checkbox]):not([type=radio])` 的理由同 `.new input`（勾选框不是文本框）——
+   设置页里就有勾选框住在同样的行里（`#syncDel` 那种）。 */
+input:not([type="checkbox"]):not([type="radio"]) {
+  padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   font-size: var(--fs-md);
@@ -279,7 +336,7 @@ select {
   color: var(--ink);
 }
 /* ---------- 表单块（学业 / 设置这类条目多的表单用，避免一行塞太多） ---------- */
-.form { display: flex; flex-wrap: wrap; gap: var(--sp-5) var(--sp-6); margin: var(--sp-7) 0 }
+.form { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-4); margin: var(--sp-4) 0 }
 .field { display: flex; flex-direction: column; gap: var(--sp-2); flex: 1 1 200px; min-width: 0 }
 .field.wide { flex: 2 1 300px }
 .field.narrow { flex: 0 1 130px }
@@ -287,7 +344,7 @@ select {
 /* 同 `.new input`：复选框不套文本框那套（否则「放进今天」的勾选框会被画成整行的白输入框） */
 .field input:not([type="checkbox"]):not([type="radio"]), .field select {
   width: 100%;
-  padding: var(--sp-4) var(--sp-5);
+  padding: var(--sp-3) var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   font-size: var(--fs-base);
@@ -301,17 +358,16 @@ select {
 .field input[type="checkbox"], .field input[type="radio"] { align-self: flex-start; flex: none }
 .field .hint { font-size: var(--fs-sm)}
 .form .actions { display: flex; align-items: flex-end; flex: none }
-.card.panel-card .form { margin: var(--sp-5) 0 var(--sp-1) }
 .textarea {
   width: 100%;
-  padding: var(--sp-4) var(--sp-5);
+  padding: var(--sp-3) var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   font-size: var(--fs-base);
   resize: vertical;
 }
 /* 优先级色标（SR-F1.2 / T-B2）：高=实心强调色 / 中=描边 / 低=灰（颜色只住令牌区） */
-.prio { font-size: var(--fs-xs); padding: 1px var(--sp-3); border-radius: var(--r-pill); border: 1px solid var(--border); color: var(--muted) }
+.prio { font-size: var(--fs-xs); padding: 1px var(--sp-2); border-radius: var(--r-pill); border: 1px solid var(--border); color: var(--muted) }
 .prio.high { background: var(--accent); border-color: var(--accent); color: var(--accent-ink) }
 .prio.mid { border-color: var(--accent); color: var(--accent) }
 .prio.low { color: var(--muted) }
@@ -319,9 +375,9 @@ select {
 .flag { font-size: var(--fs-sm); color: var(--accent) }
 
 /* ---------- 设置页 ---------- */
-.settings-sub { font-size: var(--fs-md); margin: var(--sp-8) 0 var(--sp-3); color: var(--ink) }
+.settings-sub { font-size: var(--fs-md); margin: var(--sp-4) 0 var(--sp-2); color: var(--ink); line-height: var(--lh-tight) }
 .settings-sub:first-child { margin-top: 0 }
-.card + .settings-sub { margin-top: var(--sp-10) }
+.card + .settings-sub { margin-top: var(--sp-5) }
 /* 强调色取样：色块本身就是要展示的颜色，只能字面写色值（令牌区以外唯一豁免）。
    圆角走 `--r-pill`（T-G45）：原来写 `50%` —— 方形元素上 `50%` 与 `999px` 是同一个圆，
    而包对圆角只有三档（6 / 10 / 999），多出来的 `50%` 只是"第四种写法"。
@@ -332,10 +388,10 @@ select {
 /* ---------- 展示元件 ---------- */
 /* 重复节奏（SR-F1.5b / T-G25）：一个重复事项一块（标题 + 逐日格子）。
    样式只用令牌：颜色与间距都不写裸值（R1/R5 纪律，视觉重构时一处改全局）。 */
-.rhythm-row { padding: var(--sp-4) 0; border-top: 1px solid var(--border); }
+.rhythm-row { padding: var(--sp-3) 0; border-top: 1px solid var(--border); }
 .rhythm-row:first-child { border-top: none; padding-top: 0; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4) }
-.big { font-size: var(--fs-num); font-weight: 700; color: var(--accent) }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3) }
+.big { font-size: var(--fs-num); font-weight: var(--fw-bold); color: var(--accent); line-height: var(--lh-tight) }
 /* ---------- 徽标原语（T-G42）= workbench 的 chip + StatusDot ----------
  * 一个原子只写一遍：几何在这里，状态在下面那张**映射表**里。
  *
@@ -363,7 +419,7 @@ select {
   align-items: center;
   gap: var(--sp-1);
   margin-left: var(--sp-2);
-  padding: 2px var(--sp-3);
+  padding: 2px var(--sp-2);
   border: 1px solid var(--border);
   border-radius: var(--r-pill);
   background: var(--panel);
@@ -382,26 +438,35 @@ select {
 .badge.doing .dot { background: var(--accent) }
 .badge.hard .dot { background: var(--danger) }
 /* 右栏事实流水的一行：左边是事，右边是时间 */
-.fact { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-1) 0 }
+.fact { display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-1) 0 }
 .fact .sub { margin-top: 0 }
-.empty { color: var(--muted); text-align: center; padding: var(--sp-11) 0 }
-.sub { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--sp-1) }
-.hint { color: var(--muted); font-size: var(--fs-md)}
+/* 文字块的行高（T-G53 · 步 3）：多行的说明文字走**舒适**那一档 ——
+   「行距靠浏览器默认」就是节奏散的直接来源（「字号 9 档、行高 1 档」那条欠账）。 */
+.empty { color: var(--muted); text-align: center; padding: var(--sp-6) 0; line-height: var(--lh-base) }
+.sub { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--sp-1); line-height: var(--lh-base) }
+.hint { color: var(--muted); font-size: var(--fs-md); line-height: var(--lh-base) }
 .timer {
   font-size: var(--fs-num-xl);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 
 /* 条形与底色（可视化用；供 JS 引用，避免在模板里写死颜色） */
-.bar-track { background: var(--panel-2); border-radius: var(--r-xs); overflow: hidden }
+.bar-track { background: var(--panel-2); border-radius: var(--r-sm); overflow: hidden }
 .bar-fill { height: 100%; background: var(--accent) }
 .cell-off { fill: var(--panel-2) }
-.axis-line { stroke: var(--panel-2) }
+/* ★ T-G51：这两笔原来画 `--panel-2`（「比底深一点」当形状）—— 卡片自己一退到静音面，
+   它们就**消失**（预演当场从 PNG 里看出来：完成度环只剩一段弧、雷达只剩一个多边形）。
+   包的解法同一种：`.wb-progress__track` = 浅底 **+ 1px 边框**（形状靠一条线，不靠深浅差）。
+   SVG 里没有边框，等价物就是把它那一笔换成 `--border` 那一档。 */
+.axis-line { stroke: var(--border) }
 .axis-label { fill: var(--muted) }
-.ring-track { stroke: var(--panel-2) }
-.ring-text { fill: var(--ink) }
+.ring-track { stroke: var(--border) }
+/* 环中心的读数：字号/字重是**样式**不是数据，所以从模板的 SVG 属性收进这里（T-G53）——
+   原来写的是 `font-size="15" font-weight="700"`，裸值住在标记里，令牌够不着。 */
+.ring-text { fill: var(--ink); font-size: var(--fs-lg); font-weight: var(--fw-bold) }
 
 /* ---------- 离线提示条（SR-NF17 / G 批 · T-G10）----------
  * 只在「断网」或「队列里还有没同步的东西」时出现；手机上没有左栏，「离线记」靠它进得去。
@@ -411,9 +476,9 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
   flex-wrap: wrap;
-  padding: var(--sp-3) var(--sp-7);
+  padding: var(--sp-2) var(--sp-4);
   background: var(--panel-2);
   border-bottom: 1px solid var(--border);
   position: sticky;
@@ -431,7 +496,7 @@ select {
   transform: translateX(-50%);
   background: var(--toast-bg);
   color: var(--toast-ink);
-  padding: var(--sp-3) var(--sp-7);
+  padding: var(--sp-2) var(--sp-4);
   border-radius: var(--r-md);
   font-size: var(--fs-md);
   opacity: 0;
@@ -444,8 +509,8 @@ select {
   color: var(--toast-ink);
   border-color: var(--border-strong);
   /* T-G43：从模板收回来 —— toast 里的动作/选项按钮（原来每处内联 margin-left + padding） */
-  margin-left: var(--sp-3);
-  padding: var(--sp-1) var(--sp-4);
+  margin-left: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
 }
 @media (min-width: 641px) { .toast { bottom: 24px } }
 
@@ -458,28 +523,29 @@ select {
   align-items: center;
   justify-content: center;
   z-index: 30;
-  padding: var(--sp-7);
+  padding: var(--sp-4);
 }
 .modal[hidden] { display: none }
 .modal-box {
   background: var(--panel);
-  border-radius: var(--r-lg);
-  padding: var(--sp-7);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
   width: 100%;
   max-width: 340px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow);   /* ★ 这才是 `overlays only` 里的那个 overlays */
 }
-.modal-box .title { font-size: var(--fs-base); margin-bottom: var(--sp-4) }
-.modal-box input {
+.modal-box .title { font-size: var(--fs-base); margin-bottom: var(--sp-3); line-height: var(--lh-tight) }
+.modal-box input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
-  padding: var(--sp-3) var(--sp-5);
+  padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   font-size: var(--fs-base);
   background: var(--bg);
   color: var(--ink);
 }
-.modal-box .row { display: flex; gap: var(--sp-3); margin-top: var(--sp-5) }
+.modal-box .row { display: flex; gap: var(--sp-2); margin-top: var(--sp-3) }
 
 /* ---------- 移动端（A 档） ---------- */
 /* 中屏（<980px，与上面三栏块互斥）：退回单列 —— 左栏变成主区上方的一条横向导航，右栏落到主区下方 */
@@ -488,23 +554,23 @@ select {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--sp-4);
-    padding: var(--sp-6) var(--sp-10) 0;
+    gap: var(--sp-3);
+    padding: var(--sp-4) var(--sp-5) 0;
   }
   .rail h1 { margin: 0 }
   .rail-summary { margin: 0 }
   .rail nav { flex-direction: row; flex-wrap: wrap; flex: 1 1 100% }
   .rail nav button { text-align: center }
-  .sidebar { padding: 0 var(--sp-10) var(--nav-clearance) }
-  main { padding-bottom: var(--sp-10) }
+  .sidebar { padding: 0 var(--sp-5) var(--nav-clearance) }
+  main { padding-bottom: var(--sp-5) }
 }
 .bottom-nav { display: none }
 @media (max-width: 640px) {
   .grid { grid-template-columns: 1fr }
-  .rail { padding: var(--sp-5) var(--sp-6) 0 }
+  .rail { padding: var(--sp-3) var(--sp-4) 0 }
   .rail nav { display: none }
-  .sidebar { padding: 0 var(--sp-6) var(--nav-clearance) }
-  main { padding: 0 var(--sp-6) var(--sp-10) }
+  .sidebar { padding: 0 var(--sp-4) var(--nav-clearance) }
+  main { padding: 0 var(--sp-4) var(--sp-5) }
   .bottom-nav {
     display: flex;
     position: fixed;
@@ -521,11 +587,11 @@ select {
     border: none;
     background: transparent;
     color: var(--muted);
-    padding: var(--sp-4) var(--sp-1);
+    padding: var(--sp-3) var(--sp-1);
     font-size: var(--fs-sm);
     border-radius: 0;
   }
-  .bottom-nav button.active { color: var(--accent); font-weight: 700 }
+  .bottom-nav button.active { color: var(--accent); font-weight: var(--fw-bold) }
   .bottom-nav button .ic { display: block; font-size: var(--fs-xl)}
 }
 
@@ -534,9 +600,10 @@ select {
    颜色与尺度一律走令牌（R1/R5 那两条护栏管这里）。 */
 .ai-example {
   background: var(--panel-2);
+  line-height: var(--lh-base);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
-  padding: var(--sp-5);
+  padding: var(--sp-3);
   margin: 0;
   overflow-x: auto;
   white-space: pre;
@@ -564,12 +631,12 @@ select {
 .retracted { opacity: .55 }             /* 已撤销的那一条（改判/撤销留痕） */
 .mt-1 { margin-top: var(--sp-1) }
 .mt-2 { margin-top: var(--sp-2) }
-.mt-3 { margin-top: var(--sp-3) }
-.mt-4 { margin-top: var(--sp-4) }
-.mt-5 { margin-top: var(--sp-5) }
-.mb-3 { margin-bottom: var(--sp-3) }
+.mt-3 { margin-top: var(--sp-2) }
+.mt-4 { margin-top: var(--sp-3) }
+.mt-5 { margin-top: var(--sp-3) }
+.mb-3 { margin-bottom: var(--sp-2) }
 .mv-2 { margin: var(--sp-2) 0 }
-.mv-4 { margin: var(--sp-4) 0 }
+.mv-4 { margin: var(--sp-3) 0 }
 .w-90 { width: 90px }                   /* 数字框：固定宽，别把一行挤成两行 */
 .maxw-90 { max-width: 90px }
 .minw-160 { min-width: 160px }          /* 路径/名称：窄到看不清就不好核对了（输入框、分组名用它） */
@@ -578,28 +645,38 @@ select {
 .minw-260 { min-width: 260px }
 
 /* —— 组件类 —— */
-/* 卡片里放的是**块内容**（标题 + 若干行），不是一行控件。
-   与 `.panel-card` 的唯一区别：它不给 `.title` 加下边距（那 2px 是面板卡的既定外观，
-   在 style_baseline 里登记着）。两者合并属于步 2「层次语言」的活（那时间距会进令牌）。 */
+/* 卡片里放的是**块内容**（标题 + 若干行），不是一行控件 —— 默认 `.card` 是 flex 行，
+   块内容并排会互压（摘要卡 68×80 那次就是这么来的）。
+   ★ T-G51：`.card.panel-card` 与它**同义**（两条都只写 `display: block`），已并成一个名字；
+   原来只给「面板卡」的两条间距（`.title` / `.form` 的下边距）因此**摊给所有块内容卡** ——
+   那两条本来就不是「面板卡」的特征，是「块内容卡」的特征（候选预演里就是这么合的）。 */
 .card.block { display: block }
+.card.block .title { margin-bottom: var(--sp-1) }
+.card.block .form { margin: var(--sp-3) 0 var(--sp-1) }
+/* 读数卡 = 包的 `.wb-stat`「静音面」（T-G51 · 用户选的候选 C）：卡片从此有**两级** ——
+   `.card` 抬升面（一条**事**）/ `.card.quiet` 静音面（一个**读数**）。
+   原来 66 张卡权重完全相同，那就是「平」最直接的来源。
+   ★ 落地用**显式类名**而不是候选里的 `:has()`：`:has()` 只是预演用的选择器
+   （不必先改标记就能出图）；真改动要能一眼看出「哪几张是读数」，也要被黄金钉得住。 */
+.card.quiet { background: var(--panel-2) }
 .card.top { align-items: flex-start }   /* 正文多行时让内容从顶部排，而不是居中 */
 .row.end { justify-content: flex-end }
 .sub.split { display: flex; justify-content: space-between }   /* 条形图的两端标签 */
 .meta.err { color: var(--danger) }      /* 设置页的报错行（状态色当文字，值跟 workbench，5.01 过 AA） */
-.fact.indent { padding-left: var(--sp-8) }   /* 子任务缩进一级 */
-.bar-track.tall { height: var(--sp-4) }      /* 条形：10px */
-.bar-track.mini { height: var(--sp-3); margin-top: var(--sp-1) }   /* 迷你条：8px，紧跟标签 */
+.fact.indent { padding-left: var(--sp-4) }   /* 子任务缩进一级 */
+.bar-track.tall { height: var(--sp-3) }      /* 条形：10px */
+.bar-track.mini { height: var(--sp-2); margin-top: var(--sp-1) }   /* 迷你条：8px，紧跟标签 */
 /* 迷你柱状图的柱。★ **唯一一处有意的 2px 收敛**：模板里原来写的是「4px 4px 0 0」四值写法，
    而 4px **不在圆角档位上**（6/8/10/12/999）—— T-G24 §3 把这处裸像素记成"令牌化时的漏网"。
    收它要么造一档、要么并进最近的档；并进 `--r-xs` 是那个记在案的债的还法，
    所以这里如实承认：柱子顶角 4px → 6px（其余一切零变化，见复盘里的子集证明）。 */
-.bar-v { border-radius: var(--r-xs) var(--r-xs) 0 0 }
+.bar-v { border-radius: var(--r-sm) var(--r-sm) 0 0 }
 .chart { width: 100%; height: auto; display: block }    /* 手写 SVG 的统一外框 */
 .chart.ring { width: 80px; height: 80px; flex: none }
 /* 雷达图**必须是行内的**：它原先没写 display，放在普通 `<div>` 里 ——
    inline 的替换元素底下带一行基线空隙，改成 block 会把整页往下挪（步 0 的"零变化"证明当场抓到）。 */
 .chart.radar { display: inline; max-width: 260px }
-.ring-head { display: flex; align-items: center; gap: var(--sp-6) }    /* 今日完成度：环 + 文字 */
+.ring-head { display: flex; align-items: center; gap: var(--sp-4) }    /* 今日完成度：环 + 文字 */
 /* 习惯卡：打卡按钮 + 三个动作。
    ★ T-G45 修挤压：这个容器原来是**不换行**的 flex，于是窄屏上「标题的宽度」与「按钮的宽度」
    只能互相压 —— 实测 390px 下：标题列被压到 128px（两行）、三个按钮被压成 43×56
@@ -607,9 +684,9 @@ select {
    flex 的默认行为是**先压缩、压不动才换行**，而中文处处可断行 → 下限低到「一个字宽」，
    所以必须**显式允许换行**：让它换行，而不是把字压碎。
    （`.card .row` / `.new` / `.offline-bar` / `.gpa-head` 早就是 wrap 的，只有这里漏了。） */
-.habit-head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap }
-.gpa-head { display: flex; gap: var(--sp-6); align-items: center; flex-wrap: wrap }
-.bar-row { display: flex; gap: var(--sp-2); align-items: flex-end; margin-top: var(--sp-5) }
+.habit-head { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap }
+.gpa-head { display: flex; gap: var(--sp-4); align-items: center; flex-wrap: wrap }
+.bar-row { display: flex; gap: var(--sp-2); align-items: flex-end; margin-top: var(--sp-3) }
 .stat-label { flex: 1; min-width: 150px }   /* 统计页横条左边的标签 */
 .bar-col { flex: 1; text-align: center }    /* 迷你柱状图的一列 */
 

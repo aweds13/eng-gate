@@ -430,7 +430,7 @@ async function renderOffline(m){
   const seenCard=(rows,row,empty)=>
     rows.length?rows.map(row).join(''):`<div class="sub">${esc(empty)}</div>`;
   const seen=`<div class="section-title">上次看到的（只读）</div>
-  <div class="card panel-card" id="offlineSeen">
+  <div class="card block" id="offlineSeen">
     ${seenSummary?`<div class="meta">今日摘要（上次联网时）：${esc(summaryLine(seenSummary))}</div>`:''}
     <div class="settings-sub">该提醒了（${seenReminders.length}）</div>
     ${seenCard(seenReminders,t=>`<div class="card"><div class="card-body">
@@ -455,13 +455,13 @@ async function renderOffline(m){
   // 原来它是无条件拼进去的：于是"能用的浏览器"打开这一页，顶上永远挂着
   // 「这台设备用不了离线存储 / 这个浏览器不支持 IndexedDB」—— 而下面那半页能用的功能照常渲染，
   // 自己打自己的脸。这种「同屏自相矛盾」静态检查（字符串护栏）看不出来，只有渲染出来才看得见。
-  const notReady=ready?'':`<div class="card panel-card" id="offlineUnsupported"><div class="title">这台设备用不了离线存储</div>
+  const notReady=ready?'':`<div class="card block" id="offlineUnsupported"><div class="title">这台设备用不了离线存储</div>
     <div class="meta">${esc(err||'这个浏览器不支持 IndexedDB，或在隐私模式下被禁用了')}。
     离线记要靠它把队列存在本机；换成 Chrome / Edge / Safari 的普通（非隐私）窗口就能用。
     这一页其余部分不需要它也能看。</div></div>`;
   const capture=!ready?'':`
   <div class="section-title">离线记一笔</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="settings-sub">新建任务</div>
     <div class="form">
       <div class="field wide"><label>标题</label>
@@ -488,7 +488,7 @@ async function renderOffline(m){
       :'<span class="sub">还没有缓存到习惯</span>'}</div>
   </div>
   <div class="section-title">离线勾完成（缓存里最近看到的那份清单）</div>
-  <div class="card panel-card">
+  <div class="card block">
     ${openTasks.length?openTasks.slice(0,30).map(t=>`<div class="card"><div class="card-body">
         <div class="title">${esc(t.title)}</div>
         <div class="meta">${esc(t.status)}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}${t.is_myday?' · 今天':''}${t.remind_at?` · 提醒 ${esc(String(t.remind_at).replace('T',' '))}`:''}</div></div>
@@ -504,7 +504,7 @@ async function renderOffline(m){
       <div class="meta">${esc(e.table)} · ${esc(String(e.at||'').replace('T',' '))}</div></div></div>`).join('')
     :emptyState('队列是空的');
   m.innerHTML=`
-  <div class="card panel-card" id="offlineStatus">
+  <div class="card block" id="offlineStatus">
     <div class="title">${off?'离线中':'在线'} · 手机离线记</div>
     <div class="meta">这台设备的设备号 <code>${esc(offlineDevice())}</code> · 待同步 <b>${entries.length}</b> 条${
       last?` · 上次导出 ${esc(String(last.at).replace('T',' '))}（${last.rows||0} 条）`:''}</div>
@@ -515,7 +515,7 @@ async function renderOffline(m){
   ${notReady}${capture}
   ${seen}
   <div class="section-title">待同步（${entries.length}）</div>
-  <div class="card panel-card" id="offlineQueue">
+  <div class="card block" id="offlineQueue">
     <div class="row tight">
       <button data-action="offline-upload">直接传到电脑</button>
       <button class="ghost" data-action="offline-export">导出同步包</button>
@@ -531,7 +531,7 @@ async function renderOffline(m){
       清空得自己点上面那颗按钮并再确认一次。</div>
     ${queue}
   </div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="settings-sub">这一版能做什么、不做什么</div>
     <div class="sub">能做：新建任务 / 勾完成与撤销完成 / 习惯打卡 / 一句备忘 / 每日反馈（都先存在本机队列）。</div>
     <div class="sub">不做：离线<b>删除</b>（删要动电脑上的墓碑，手机上判不准）、离线<b>改字段</b>（会覆盖电脑上更新的那份）、
@@ -563,7 +563,7 @@ let pairAsking=false;      // 防止重复弹（并发请求会一起 401）
 function pairCode(){try{return localStorage.getItem(PAIR_KEY)||''}catch(e){return ''}}
 function setPairCode(v){try{v?localStorage.setItem(PAIR_KEY,v):localStorage.removeItem(PAIR_KEY)}catch(e){}}
 function pairWallHTML(){
-  return `<div class="card panel-card" id="pairWall">
+  return `<div class="card block" id="pairWall">
     <div class="title">这台设备还没和电脑配对</div>
     <div class="meta">${esc(pairDetail||'电脑那边开着局域网访问，但没收到这台设备的配对码。')}</div>
     <div class="sub">配对码在<b>那台电脑</b>的「设置 → 局域网访问」里（起服务时也打印在电脑屏幕上）。
@@ -1809,12 +1809,12 @@ function ring(done,pending){
     <circle cx="40" cy="40" r="${r}" fill="none" stroke="var(--accent)" stroke-width="9"
       stroke-linecap="round" stroke-dasharray="${on.toFixed(1)} ${(c-on).toFixed(1)}"
       transform="rotate(-90 40 40)"/>
-    <text class="ring-text" x="40" y="44" text-anchor="middle" font-size="15" font-weight="700">${label}</text>
+    <text class="ring-text" x="40" y="44" text-anchor="middle">${label}</text>
   </svg>`;
 }
 function todayCard(done,pending){
   const note=pending?`还有 ${pending} 项在手`:'今天的清单是空的';
-  return `<div class="card"><div class="ring-head">
+  return `<div class="card quiet"><div class="ring-head">
     ${ring(done,pending)}
     <div><div class="title">今日完成度</div><div class="meta">已完成 ${done} 项 · ${note}</div>
     <div class="sub">只统计今天的清单与今天完成的，不翻旧账。</div></div></div></div>`;
@@ -1857,7 +1857,7 @@ function gpaRadar(g4,g5,courses,grades){
     {label:'学分',value:credits,ratio:Math.min(1,credits/(credits||1))},
     {label:'课程覆盖',value:`${gradedCourses}/${courses}`,ratio:courses?gradedCourses/courses:0},
   ];
-  return `<div class="card block">
+  return `<div class="card block quiet">
     <div class="gpa-head">
       <div>${radar(axes)}</div>
       <div class="stat-label">
@@ -2008,7 +2008,7 @@ function weekCard(w){
   if(w.review_count)nums.push(`复习 ${w.review_count} 张`);
   if(w.output_count)nums.push(`产出 ${w.output_count} 条`);
   if(w.debt_count)nums.push(`债务 ${w.debt_count} 项`);
-  return `<div class="card block">
+  return `<div class="card block quiet">
     <div class="meta">本周 ${w.start} ~ ${w.end} · ${nums.join(' · ')}</div>
     <div class="bar-row">${bars}</div>
     <div class="sub mt-3">${noteHTML(w.steady_note)}</div>
@@ -2076,7 +2076,7 @@ function doneSection(d){
       <span class="sub">${humanTime(o.occurred_at)}${o.retracted?' · 已撤销（不计入条数）':''}</span></div>`).join('')
     ||'<div class="sub">今天还没有产出记录。</div>'}</div>`:'';
   return `<div class="section-title" id="set-done">今天做成了什么（只读事实层，点开看明细）</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="row">
       ${doneChip('tasks',`完成任务 ${taskCount} 项`)}
       ${doneChip('steps',`完成步骤 ${stepCount} 个（属于 ${parentCount} 个任务）`)}
@@ -2093,7 +2093,7 @@ function doneSection(d){
 function doingSection(items){
   if(!items.length)return '';
   return `<div class="section-title">正在做（${items.length}）</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="sub">这是你自己标的先后：↑↓ 调顺序，「停止」表示这件现在不做了（回到未开始/逾期）。</div>
     ${items.map((t,i)=>`<div class="fact">
       <span class="badge">${i+1}</span>
@@ -2213,7 +2213,7 @@ async function renderFocus(m){
   }
   const tasks=await api('/api/mydays');
   const week=await api('/api/summary/weekly');
-  m.innerHTML=`<div class="card"><div><div class="big">${today.focus_minutes}</div><div class="meta">今日专注分钟（只算正常结束）</div></div></div>
+  m.innerHTML=`<div class="card quiet"><div><div class="big">${today.focus_minutes}</div><div class="meta">今日专注分钟（只算正常结束）</div></div></div>
   <div class="new">
     <select id="focusTaskSel"><option value="">不绑定任务</option>${tasks.map(t=>`<option value="${t.id}">${esc(t.title)}</option>`).join('')}</select>
     <button data-action="focus-start" data-kind="tomato">番茄钟 ${cfg.pomodoro_minutes||25} 分</button>
@@ -2346,9 +2346,9 @@ async function renderAcademic(m){
   const otherScale=scale==='4.0'?'5.0':'4.0';
   const hasGrades=grades.length>0;
   m.innerHTML=`<div class="grid">
-   <div class="card"><div class="big">${gpaG.weighted_average||0}</div>
+   <div class="card quiet"><div class="big">${gpaG.weighted_average||0}</div>
      <div class="meta">加权平均成绩（百分制）<br><span class="sub">Σ(学分×成绩) ÷ Σ学分 · ${gpaG.weighted_credits||0} 学分计入</span></div></div>
-   <div class="card"><div class="big">${gpaG.gpa}</div>
+   <div class="card quiet"><div class="big">${gpaG.gpa}</div>
      <div class="meta">GPA（${scale} 制，${gpaG.credits} 学分）<br><span class="sub">切换制式：另 ${otherScale} 制为 ${other.gpa}</span></div></div></div>
   <div class="card block">
     <div class="meta">GPA 制式（切换后本页所有数值按该制式显示）</div>
@@ -2377,7 +2377,7 @@ async function renderAcademic(m){
       ${ts.length?'':'<div class="sub">还没有挂到课的任务</div>'}
     </div>`}).join('')||emptyState('暂无课程')}
   <div class="section-title">添加考核项（考试/作业/论文/小测）</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="form">
       <div class="field"><label>课程</label>
         <select id="aCourse" ${courses.length?'':'disabled'}><option value="">${courses.length?'选课程':'先建课程'}</option>${courseOpts}</select></div>
@@ -2391,7 +2391,7 @@ async function renderAcademic(m){
     </div>
   </div>
   <div class="section-title">录入成绩</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="form">
       <div class="field narrow"><label>成绩（百分制）</label>
         <input id="gScore" type="number" placeholder="如 88"></div>
@@ -2563,7 +2563,7 @@ async function renderTeam(m){
   const empty=b.view==='manager'
     ?'还没有分配出去的任务'
     :(b.me?'这个视角下没有任务（换个状态筛选看看）。':'先在上面填「我是谁」，再看分给你的那几件。');
-  m.innerHTML=`<div class="card panel-card">
+  m.innerHTML=`<div class="card block">
     <div class="row">${viewBtns}</div>
     <div class="sub mt-2">${noteHTML(b.note)}</div>
     ${meRow}
@@ -2794,7 +2794,7 @@ async function renderSetting(m){
     `<button class="swatch ${sameColor(accentChoice,c)?'on':''}" data-action="set-accent" data-color="${c}"
       style="background:${c}" title="强调色 ${c}"></button>`).join('');
   m.innerHTML=`<div class="section-title">常用</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="row tight">
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-appearance">主题 / 强调色</button>
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-academic">GPA 制式</button>
@@ -2807,7 +2807,7 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="settings-scroll" data-target="set-lan">局域网访问</button></div>
   </div>
   <div class="section-title" id="set-appearance">外观</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="settings-sub">主题</div>
     <div class="row">${themeBtn('light','亮色')}${themeBtn('dark','暗色')}${themeBtn('system','跟随系统')}</div>
     <div class="sub">当前：${{light:'亮色',dark:'暗色',system:'跟随系统'}[themeChoice]||themeChoice}${themeChoice==='system'?(systemDark()?' · 系统现在是暗色':' · 系统现在是亮色'):''}</div>
@@ -2823,7 +2823,7 @@ async function renderSetting(m){
     <div class="sub">引导只在今日页出现、可一键关掉，不再打扰；这里可以随时重新打开。</div>
   </div>
   <div class="section-title" id="set-focus-guard">专注（白名单 / 勿扰）</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="settings-sub">非白名单来源</div>
     <div class="row">
       <button class="${guard.block_by_default?'':'ghost'}" data-action="guard-block" data-on="true">专注时阻止</button>
@@ -2841,7 +2841,7 @@ async function renderSetting(m){
     <div class="sub">${noteHTML(guard.note||'')} 时段写成 ${esc(guard.window_format||'HH:MM-HH:MM')}，最多 ${guard.max_items||50} 条。</div>
   </div>
   <div class="section-title" id="set-tasks">任务</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="settings-sub">完成几天后进档案</div>
     <div class="row tight">
       <input id="archiveDays" type="number" min="0" max="${Number(arch.max_after_days)||365}"
@@ -2852,7 +2852,7 @@ async function renderSetting(m){
     <div class="sub">${noteHTML(arch.note||'')}</div>
   </div>
   <div class="section-title" id="set-behavior">口径与回退</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="sub">${noteHTML(beh.switch_note||'')}</div>
     ${(beh.items||[]).length?(beh.items||[]).map(r=>`
       <div class="settings-sub">${esc(r.title)}
@@ -2870,7 +2870,7 @@ async function renderSetting(m){
     <div class="sub">${noteHTML(beh.note||'')}</div>
   </div>
   <div class="section-title" id="set-vocab">可配置词表</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="sub">${noteHTML(vb.note||'')}</div>
     ${(vb.items||[]).map(t=>`
       <div class="settings-sub">${esc(t.title)}
@@ -2889,7 +2889,7 @@ async function renderSetting(m){
       ||'<div class="sub">还没有可配置的词表。</div>'}
   </div>
   <div class="section-title" id="set-export">导出（Markdown）</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="settings-sub">写到哪个目录</div>
     <div class="row tight">
       <input id="exportDir" value="${esc(ex.dir||'')}" class="minw-240" data-enter="set-export-dir">
@@ -2920,7 +2920,7 @@ async function renderSetting(m){
     <div class="sub">${noteHTML(ex.where||'')}</div>
   </div>
   <div class="section-title" id="set-ai">AI 接口（只读 + 新增）</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="row">
       <button class="${ai.enabled?'':'ghost'}" data-action="set-ai" data-on="true">打开</button>
       <button class="${ai.enabled?'ghost':''}" data-action="set-ai" data-on="false">关闭</button>
@@ -2935,7 +2935,7 @@ async function renderSetting(m){
     <div class="row tight"><button class="ghost" data-action="ai-copy">复制示例命令</button></div>
   </div>
   <div class="section-title" id="set-notify">学校通知（合作接口）</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="row">
       <button class="${nf.enabled?'':'ghost'}" data-action="set-notify" data-on="true">打开</button>
       <button class="${nf.enabled?'ghost':''}" data-action="set-notify" data-on="false">关闭</button>
@@ -2955,7 +2955,7 @@ async function renderSetting(m){
   ${noticeItems.map(n=>noticeCard(n)).join('')
     ||emptyState(nf.enabled?'接口开着，还没有投递':'接口关着，收件箱是空的')}
   <div class="section-title" id="set-academic">学业</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="settings-sub">GPA 制式</div>
     <div class="row">
       <button class="${gpaScale==='4.0'?'':'ghost'}" data-action="set-gpa" data-scale="4.0">4.0 制</button>
@@ -2964,9 +2964,9 @@ async function renderSetting(m){
     <div class="sub">配置默认值来自 config.toml 的 [academic] gpa_scale；这里切的是查看口径。</div>
   </div>
   <div class="section-title">分组管理</div>
-  <div class="card panel-card" id="groupAdmin"></div>
+  <div class="card block" id="groupAdmin"></div>
   <div class="section-title" id="set-attach">附件打开方式</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="settings-sub">本地文件怎么打开</div>
     <div class="row">${(attachCfg.modes||[]).map(x=>
       `<button class="${attachCfg.mode===x.value?'':'ghost'}" data-action="set-attach-mode" data-mode="${x.value}">${esc(x.label)}</button>`).join('')}</div>
@@ -2981,7 +2981,7 @@ async function renderSetting(m){
     <div class="sub">打开方式与白名单存在本机数据库（服务端），不由页面参数决定 —— 免得任何网页都能要求"直接打开"。</div>
   </div>
   <div class="section-title" id="set-remind">提醒</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="settings-sub">提醒方式（到点时怎么叫你）</div>
     <div class="row">${(remindCfg.styles||[]).map(x=>
       `<button class="${remindCfg.style===x.value?'':'ghost'}" data-action="set-remind-style" data-style="${x.value}">${esc(x.label)}</button>`).join('')}
@@ -3009,7 +3009,7 @@ async function renderSetting(m){
       移动端只做界面标注，不发系统通知。</div>
   </div>
   <div class="section-title">数据与同步</div>
-  <div class="card panel-card" id="set-sync">
+  <div class="card block" id="set-sync">
     <div class="title">${off?'当前离线':'当前在线'}</div>
     <div class="meta">${noteHTML(sync.note||'')}${sync.conflict_logs?` · 已有 ${sync.conflict_logs} 条冲突/覆盖记录`:''}</div>
     <div class="sub">设备号 <code>${esc(sync.device_id||'—')}</code> · 数字都来自本机数据库，不上传任何服务器。</div>
@@ -3071,7 +3071,7 @@ async function renderSetting(m){
     <div class="sub">${noteHTML(bk.note||'')} <b>点某个时间点 = 把库整体回到那一刻</b>，界面会让你再确认一次。</div>
   </div>
   <div class="section-title">入口</div>
-  <div class="card panel-card">
+  <div class="card block">
     <div class="row tight">
       <button class="ghost" data-action="view" data-view="tasks">全部任务</button>
       <button class="ghost" data-action="view" data-view="important">重要</button>
@@ -3488,7 +3488,7 @@ let guideDone=true;
 function guideSeen(){try{return localStorage.getItem(GUIDE_KEY)==='done'}catch(e){return true}}
 function guideCard(){
   if(guideDone)return '';
-  return `<div class="card panel-card" id="guideCard">
+  return `<div class="card block" id="guideCard">
     <div class="title">第一次用，按这三步走就行</div>
     <div class="sub">① 在下面的输入框写下一件要做的事（回车即可）→ ② 点「专注」开始计时，正常结束时会计入今天的投入 →
       ③ 晚上在专注页跟一句「今天计划 vs 实际」。</div>

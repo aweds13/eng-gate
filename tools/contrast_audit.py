@@ -197,6 +197,7 @@ TOKEN_PAIRS: tuple[tuple[str, str, float, str], ...] = (
     ("--ink", "--panel-2", AA_NORMAL, "浅底上的正文（热力图空格外 等）"),
     ("--muted", "--bg", AA_NORMAL, ".sub / .hint / .empty 在页面底"),
     ("--muted", "--panel", AA_NORMAL, ".sub / .hint / 徽标（芯片底是 --panel）在卡片里"),
+    ("--muted", "--panel-2", AA_NORMAL, "静音面（读数卡，T-G51）上的 .meta / .sub"),
     ("--accent", "--panel", AA_NORMAL, ".prio.mid / .flag（12px 小字）与状态点：都在卡片底上"),
     ("--accent-ink", "--accent", AA_NORMAL, ".prio.high 与主按钮：实心强调底上的字"),
     ("--danger", "--bg", AA_NORMAL, "危险色当文字（设置页「上次导出失败」那几行）"),

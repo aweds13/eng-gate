@@ -375,3 +375,76 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/flagged`
 - `phone/important`
 
+
+## 2026-09-24 13:19:05 · 42 份改动
+
+> 理由：T-G51 视觉线步2静音层落地：1px 边框做层次 + 阴影归位浮层 + 尺度收敛到包的 6 档间距/3 档圆角 + 读数卡退 --panel-2；同一轮带 T-G53 行高令牌与 T-G46 输入框元素级规则。42 份全动，属有意改版
+
+- `desktop/academic`
+- `desktop/flagged`
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/important`
+- `desktop/memo`
+- `desktop/offline`
+- `desktop/planned`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `desktop/team`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/flagged`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/important`
+- `narrow/memo`
+- `narrow/offline`
+- `narrow/planned`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `narrow/team`
+- `narrow/today`
+- `phone/academic`
+- `phone/flagged`
+- `phone/focus`
+- `phone/habit`
+- `phone/important`
+- `phone/memo`
+- `phone/offline`
+- `phone/planned`
+- `phone/review`
+- `phone/setting`
+- `phone/stats`
+- `phone/tasks`
+- `phone/team`
+- `phone/today`
+
+
+## 2026-09-24 13:21:34 · 3 份改动
+
+> 理由：T-G51 补一条 .card > button 标签不断行：1px 边框吃掉 2px 内容宽，把 phone/offline 的「完成」顶成两行（squeeze 0->8）；只影响这一份黄金
+
+- `desktop/offline`
+- `narrow/offline`
+- `phone/offline`
+
+
+## 2026-09-24 13:36:05 · 0 份改动
+
+> 理由：诊断用（并行条件下取数，稍后按结论回滚或重采）
+
+
+
+
+## 2026-09-24 13:43:05 · 3 份改动
+
+> 理由：T-G51 收口：offline 的 3 份黄金改用**全量跑**采（此前那 3 份是 --only 采的，而 --only 不访问在线页面 → 离线缓存为空 → 采到的是退化版式；视图之间不是独立的）
+
+- `desktop/offline`
+- `narrow/offline`
+- `phone/offline`
+
