@@ -24,14 +24,15 @@ import base64
 import shutil
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from timeflow import clock
 from timeflow.core import tasks as tm
 
 if TYPE_CHECKING:
     import sqlite3
+    from datetime import datetime
 
 # 计划任务名（卸载时按这个名字删；改名字要记得同时改这里和文档）
 TASK_NAME = "timeflow-reminders"
@@ -462,7 +463,7 @@ def notify_due(
     - 成功才标记（键 = 该条的 `remind_at`）→ 用户改了提醒时间会重新弹。
     - `style` 缺省用当前设置（闹钟式 / 温和）。
     """
-    moment = now or datetime.now()
+    moment = now or clock.now()
     use_style = style or get_style(conn)
     pending = [
         t for t in tm.due_reminders(conn, moment)

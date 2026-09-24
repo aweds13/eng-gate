@@ -16,7 +16,7 @@ import uuid
 from datetime import date, datetime, time, timezone
 from typing import TYPE_CHECKING, Any
 
-from timeflow import vocab
+from timeflow import clock, vocab
 
 if TYPE_CHECKING:
     import sqlite3
@@ -112,7 +112,7 @@ def _uid() -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return clock.now_utc()
 
 
 def _local_date(moment: datetime) -> str:
@@ -121,8 +121,8 @@ def _local_date(moment: datetime) -> str:
     规格层写着「一律本地时区、本地日期；日界 00:00」（`specification/behaviors.md`），
     而本模块原来是全项目**唯一**用 UTC 落日期的地方（`_now().date()`）：东八区凌晨 0:00~8:00
     建的卡，到期日会存成"昨天" —— 同一个 `review()` 里 `reviewed_on` 用的却是本地
-    `date.today()`，自相矛盾。**FSRS 的时刻照旧按 UTC 走**（它算的是"哪个瞬间"），
-    **落库的日期一律换成我的日历**。
+    `date.today()`（T-G62 起改走 `clock.today_iso()`），自相矛盾。**FSRS 的时刻按 UTC 走**
+    （它算的是"哪个瞬间"），**落库的日期一律换成我的日历**。
     """
     return moment.astimezone().date().isoformat()
 
@@ -161,7 +161,7 @@ def create_item(
     if task_id is not None:
         task_id = _check_task(conn, task_id)
     rid = _uid()
-    created_on = date.today().isoformat()  # 本地日历日（T-D12：原来用 UTC 日期，见 `_local_date`）
+    created_on = clock.today_iso()  # 本地日历日（T-D12：原来用 UTC 日期，见 `_local_date`）
     conn.execute(
         "INSERT INTO review_items (id, title, form, source, due_date, interval_days, "
         "ease, reps, lapses, state, ref_handle, task_id, created_at) "
@@ -304,7 +304,7 @@ def review(
     )
     conn.commit()
     # 复习完成 = 投入（维持，SR-F6 R6 / 约定「复习轴」）：发事实，账本只读事实层
-    reviewed_on = date.today().isoformat()
+    reviewed_on = clock.today_iso()
     _record_completed_fact(
         conn, item_id=item_id, title=str(row["title"]), feedback=feedback,
         reps=reps, next_due=next_due, reviewed_on=reviewed_on,
@@ -348,7 +348,7 @@ def undo_review(
     - 追加 `review.undone` 反向事实，不删历史；账本按「完成 − 撤销」计数（同卡当日回到 0）。
     幂等：无当日完成事实、或该次已被撤销 → 直接返回当前卡片状态。
     """
-    day = on_date or date.today().isoformat()
+    day = on_date or clock.today_iso()
     item = conn.execute("SELECT * FROM review_items WHERE id = ?", (item_id,)).fetchone()
     if item is None:
         raise KeyError(f"复习卡不存在: {item_id}")
@@ -421,7 +421,7 @@ def regrade(
     - 今天还没复习过这张卡 → "没有可以改判的反馈"；
     - 给的档和原来一样 → "不用改判"（界面上也不会给出同一个档的按钮）。
     """
-    day = on_date or date.today().isoformat()
+    day = on_date or clock.today_iso()
     if feedback not in RATINGS:
         raise ValueError(f"非法反馈: {feedback}（能用的：{'/'.join(RATINGS)}）")
     row = conn.execute("SELECT * FROM review_items WHERE id = ?", (item_id,)).fetchone()
@@ -469,7 +469,7 @@ def reviewed_today_items(
     """
     from timeflow.core import facts as facts_mod
 
-    d = day or date.today().isoformat()
+    d = day or clock.today_iso()
     completed = facts_mod.query(
         conn, kind="review.completed", since=f"{d}T00:00:00", until=f"{d}T23:59:59"
     )
@@ -593,7 +593,7 @@ def _record_completed_fact(
         value_num=0.0,  # 复习完成不折算时间（约定：不折算精确时间）
         value_text=title,
         extra=extra,
-        occurred_at=f"{reviewed_on}T{datetime.now().strftime('%H:%M:%S')}",
+        occurred_at=f"{reviewed_on}T{clock.now().strftime('%H:%M:%S')}",
         source="desktop",
     )
     facts_mod.publish(
@@ -607,7 +607,7 @@ def due_items(
     conn: sqlite3.Connection, today: str | None = None
 ) -> list[dict[str, object]]:
     """到期复习卡（SR-F6.3）：due_date <= 今天，按算法（重要度+最久未复习）排序。"""
-    t = today or date.today().isoformat()
+    t = today or clock.today_iso()
     rows = conn.execute(
         "SELECT * FROM review_items WHERE due_date IS NOT NULL AND due_date <= ? "
         "ORDER BY reps ASC, due_date ASC",

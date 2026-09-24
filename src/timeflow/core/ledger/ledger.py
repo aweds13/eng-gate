@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from timeflow import clock
 from timeflow.core import facts as facts_mod
 from timeflow.core import tasks as tm
 
@@ -104,7 +105,7 @@ def weekly_summary(conn: sqlite3.Connection, week_of: str | None = None) -> Week
     `output.manual` 去重减 `output.retracted` / `invest.manual` 减 `invest.retracted`）。
     债务取**周日快照**（周末仍逾期者），不折算时间。
     """
-    start = week_start(week_of or date.today().isoformat())
+    start = week_start(week_of or clock.today_iso())
     start_date = date.fromisoformat(start)
     days = [(start_date + timedelta(days=i)).isoformat() for i in range(7)]
     end = days[-1]
@@ -307,7 +308,7 @@ def summary(
     （产出轴独立，不折算成投入）。
     事实来源：`facts` 表；按 occurred_at 归属当日，只读事实层（R1）。
     """
-    t = today or date.today().isoformat()
+    t = today or clock.today_iso()
     # 债务明细 = **一张张卡**（T-F9，用户 2026-09-21 定：「可以在债务那里，
     # 建个父任务状态卡，然后挂」）：逾期的东西归到还活着的父任务上，
     # 父任务一张卡、逾期的子孙挂在 `steps` 下面。
@@ -459,7 +460,7 @@ def today_done(conn: sqlite3.Connection, day: str | None = None) -> TodayDone:
     - `parents` 是这些步骤所属的父任务（含"今天完成几步 / 已推进几步 / 共几步"）；
     - `outputs` 来自今日 `output.manual`（已撤销的**如实列出并标记**，但不计入两类条数）。
     """
-    d = day or date.today().isoformat()
+    d = day or clock.today_iso()
     rows = facts_mod.query(
         conn, kind="task.completed", since=f"{d}T00:00:00", until=f"{d}T23:59:59"
     )

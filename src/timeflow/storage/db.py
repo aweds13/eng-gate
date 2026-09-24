@@ -17,8 +17,9 @@ import json
 import sqlite3
 import threading
 import uuid
-from datetime import datetime
 from pathlib import Path
+
+from timeflow import clock
 
 SCHEMA_VERSION = 18
 
@@ -601,8 +602,8 @@ def _migrate_v4(conn: sqlite3.Connection) -> None:
                 float(row["duration_sec"] or 0),
                 None,
                 extra,
-                occurred_at or datetime.now().isoformat(timespec="seconds"),
-                datetime.now().isoformat(timespec="seconds"),
+                occurred_at or clock.now().isoformat(timespec="seconds"),
+                clock.now().isoformat(timespec="seconds"),
                 "migration:v4",
                 row["device_id"],
             ),
@@ -649,7 +650,7 @@ def _migrate_v5(conn: sqlite3.Connection) -> None:
     ).fetchall():
         if fact["subject_id"]:
             existing.add(str(fact["subject_id"]))
-    now = datetime.now().isoformat(timespec="seconds")
+    now = clock.now().isoformat(timespec="seconds")
     for row in rows:
         tid = str(row["id"])
         if tid in existing:

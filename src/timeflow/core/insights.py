@@ -7,12 +7,12 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from timeflow import vocab
+from timeflow import clock, vocab
 from timeflow.core import facts as facts_mod
 from timeflow.core import tasks as tm
 
@@ -125,7 +125,7 @@ def heatmap(conn: sqlite3.Connection, days: int = DEFAULT_HEATMAP_DAYS) -> list[
     与 `daily_insights()` 同口径（只读 facts；习惯不计入此处，习惯有独立的日历热力图）。
     """
     total = max(1, min(int(days), MAX_HEATMAP_DAYS))
-    start = date.today() - timedelta(days=total - 1)
+    start = clock.today() - timedelta(days=total - 1)
     return [
         _cell(conn, (start + timedelta(days=i)).isoformat()) for i in range(total)
     ]
@@ -171,7 +171,7 @@ def daily_insights(
     - 债务为**当日快照**：`overdue_tasks(day)` 的项数（已删/归档不计）。
     """
     total = max(1, min(int(days), MAX_TREND_DAYS))
-    start = date.today() - timedelta(days=total - 1)
+    start = clock.today() - timedelta(days=total - 1)
     out: list[DayInsight] = []
     for i in range(total):
         day = (start + timedelta(days=i)).isoformat()
@@ -200,7 +200,7 @@ def academic_vs_self(
     不折算、不设目标、不做"学业应占多少"的建议（守温和红线）。
     """
     total = max(1, min(int(days), MAX_TREND_DAYS))
-    start = (date.today() - timedelta(days=total - 1)).isoformat()
+    start = (clock.today() - timedelta(days=total - 1)).isoformat()
     rows = facts_mod.query(conn, kind="focus.finished", since=f"{start}T00:00:00")
 
     per_task: dict[str, float] = {}
@@ -250,7 +250,7 @@ def group_insights(
     - 未归任何分组的任务投入归入「未分组」桶。
     """
     total = max(1, min(int(days), MAX_TREND_DAYS))
-    start = (date.today() - timedelta(days=total - 1)).isoformat()
+    start = (clock.today() - timedelta(days=total - 1)).isoformat()
     rows = facts_mod.query(conn, kind="focus.finished", since=f"{start}T00:00:00")
     # task_id → 秒
     per_task: dict[str, float] = {}
@@ -302,7 +302,7 @@ def repeat_rhythm(conn: sqlite3.Connection, days: int = DEFAULT_RHYTHM_DAYS) -> 
       （归档 ≠ 做完：未完成的也能归档，所以只认事实）。
     """
     total = max(1, min(int(days), MAX_RHYTHM_DAYS))
-    end_day = date.today()
+    end_day = clock.today()
     start_day = end_day - timedelta(days=total - 1)
     start, end = start_day.isoformat(), end_day.isoformat()
     rows = tm.repeat_tasks(conn)

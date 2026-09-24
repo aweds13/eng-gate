@@ -14,8 +14,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
 from typing import TYPE_CHECKING
+
+from timeflow import clock
 
 if TYPE_CHECKING:
     import sqlite3
@@ -47,7 +48,7 @@ def _uid() -> str:
 
 
 def _today() -> str:
-    return date.today().isoformat()
+    return clock.today_iso()
 
 
 def assign_task(

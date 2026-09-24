@@ -11,16 +11,18 @@ import uuid
 from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
+from timeflow import clock
+
 if TYPE_CHECKING:
     import sqlite3
 
 
 def _today() -> str:
-    return date.today().isoformat()
+    return clock.today_iso()
 
 
 def _now() -> str:
-    return date.today().isoformat()
+    return clock.today_iso()
 
 
 # 习惯热力图的窗口（T-G55）：371 = 53 周 × 7 天，与前端 `heatmap()` 铺的日历格子**逐个对齐**。

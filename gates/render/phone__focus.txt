@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=phone 390x844 view=focus rows=59 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=phone 390x844 view=focus rows=59 accent=#2f6feb device=ph-000000000000 day=2026-06-15
 html>body>div.shell		0,0,390,806	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,390,65	16/normal/400	#1e293b/#000000@0.00	0;12px 16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	16,12,86,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
@@ -17,25 +17,25 @@ div.shell>main#main>div.card.block.quiet>div.meta	本周 YYYY-MM-DD ~ YYYY-MM-DD
 div.shell>main#main>div.card.block.quiet>div.bar-row		33,370,324,28	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(1)		33,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block.quiet>div.bar-row>div.bar-col:nth-child(1)>div.bar-v		33,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block.quiet>div.bar-row>div.bar-col:nth-child(1)>div.sub.mt-1	21	33,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(1)>div.sub.mt-1	15	33,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
 main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(2)		80,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block.quiet>div.bar-row>div.bar-col:nth-child(2)>div.bar-v		80,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block.quiet>div.bar-row>div.bar-col:nth-child(2)>div.sub.mt-1	22	80,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(2)>div.sub.mt-1	16	80,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
 main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(3)		128,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block.quiet>div.bar-row>div.bar-col:nth-child(3)>div.bar-v		128,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block.quiet>div.bar-row>div.bar-col:nth-child(3)>div.sub.mt-1	23	128,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(3)>div.sub.mt-1	17	128,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
 main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(4)		175,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block.quiet>div.bar-row>div.bar-col:nth-child(4)>div.bar-v		175,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block.quiet>div.bar-row>div.bar-col:nth-child(4)>div.sub.mt-1	24	175,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(4)>div.sub.mt-1	18	175,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
 main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(5)		223,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block.quiet>div.bar-row>div.bar-col:nth-child(5)>div.bar-v		223,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block.quiet>div.bar-row>div.bar-col:nth-child(5)>div.sub.mt-1	25	223,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(5)>div.sub.mt-1	19	223,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
 main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(6)		270,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block.quiet>div.bar-row>div.bar-col:nth-child(6)>div.bar-v		270,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block.quiet>div.bar-row>div.bar-col:nth-child(6)>div.sub.mt-1	26	270,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(6)>div.sub.mt-1	20	270,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
 main#main>div.card.block.quiet>div.bar-row>div.bar-col:nth-child(7)		318,370,39,28	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block.quiet>div.bar-row>div.bar-col:nth-child(7)>div.bar-v		318,370,39,6	16/normal/400	#1e293b/#e2e8f0	6;0px
-div.card.block.quiet>div.bar-row>div.bar-col:nth-child(7)>div.sub.mt-1	27	318,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block.quiet>div.bar-row>div.bar-col:nth-child(7)>div.sub.mt-1	21	318,380,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
 div.shell>main#main>div.card.block.quiet>div.sub.mt-3	这周还没有专注记录，随时可以从一小段开始。	33,406,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
 div.shell>main#main>div.card.block.quiet>div.sub.mt-2	波动 0 分钟（逐日专注的长短差）· 本周最长空档 7 天 —— 这周还没有专注记录，随时可以从一小段开始。	33,432,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
 html>body>div.shell>aside.sidebar		0,521,390,196	16/normal/400	#1e293b/#000000@0.00	0;0px 16px 90px

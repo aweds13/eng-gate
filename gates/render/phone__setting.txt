@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=phone 390x844 view=setting rows=409 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=phone 390x844 view=setting rows=409 accent=#2f6feb device=ph-000000000000 day=2026-06-15
 html>body>div.shell		0,0,390,9603	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,390,65	16/normal/400	#1e293b/#000000@0.00	0;12px 16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	16,12,86,22	18/21.6/700	#1e293b/#000000@0.00	0;0px

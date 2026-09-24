@@ -1040,11 +1040,27 @@ gaps = ""
 
 [entries."T-G62"]
 id = "T-G62"
-title = "工程债（验证层）：渲染黄金里有两个视图锚在服务器的「今天」上（`habit` / `stats`）—— 跨午夜自己变红，要钉住「今天」才稳"
+title = "工程债（验证层）：把「今天」收成一处并让采集能钉住它（`src/timeflow/clock.py` + `TIMEFLOW_FAKE_TODAY` + 采集侧三处一致）—— 修掉「黄金跨午夜自己变红 6 份」"
 group = "PROCESS"
-status = "todo"
-evidence = []
-gaps = "**现象（2026-09-25 00:0x 实测，T-G61 那轮重采黄金时暴露）**：上一轮黄金采于 2026-09-24 23:5x，跨过午夜再跑 `render` 就红了 —— **恰好 6 份**（`habit` × 3 档宽度 + `stats` × 3 档宽度），差异是热力图**格子数**少/多一格（`nth-child(368)` → `(369)`）与统计页窗口首日标签 `08-26` → `08-27`。**根因**：习惯热力图窗口是「53 周、到今天为止」，而**未来几天不渲染**（T-G55 的「未来留白」）→ 同一个星期内每过一天就多一个格子；窗口首日标签同样是「今天 - 370 天」。**为什么现在才发现**：这几轮黄金采得很勤（一张卡一采），跨天的差异被「当天采、当天提交」盖住了 —— 它是**慢漂移**，不是随机。**修法（下一张卡的施工图）**：给产品层加一个**可注入的「今天」**（`core/clock.py` 的 `today()` / `now()`，读环境变量 `TIMEFLOW_FAKE_TODAY`，默认仍是真实时钟），把 27 处 `date.today()`（10 个文件）+ `review._now()` 收敛过去；`tools/serve.py` 接 `--today`；两个采集工具（`render_check` / `ui_flow_check`）起服务时传一个**固定的今天**，`seedFixture` 也按那个今天算偏移 —— 这样「今天」在**服务器与 fixture 两侧同时钉住**，黄金跨天不再漂。**边界**：这是测试基础设施 + 一个小 seam，**不改任何用户可见行为**（默认走真实时钟）；代价是 27 处调用点要一起改，且 `ui_flow` 里那些依赖「真今天」的流要跟着复核（第 ㉗ 条离线缓存、跨端那几条）。**没做**：本卡只是记账 —— 发现它的是 T-G61（同日重采黄金时撞到），当天先按「重采一次」过关并把现象留档。"
+status = "done"
+evidence = [
+  "file:复盘/黄金跨天漂移-可注入的今天-T-G62.md",
+  "text:src/timeflow/clock.py::FAKE_TODAY_ENV = \"TIMEFLOW_FAKE_TODAY\"",
+  "text:src/timeflow/clock.py::def today() -> date:",
+  "text:src/timeflow/clock.py::def now_utc() -> datetime:",
+  "text:tools/tf_browser.mjs::export const CAPTURE_DAY = ",
+  "text:tools/tf_browser.mjs::export function clockShimSource(day) {",
+  "text:tools/tf_browser.mjs::export function setFixtureDay(day) {",
+  "text:tools/render_check.mjs::setFixtureDay(CAPTURE_DAY)",
+  "text:tools/render_check.mjs::await cdp.installClock(CAPTURE_DAY)",
+  "text:tools/render_check.mjs::day=${CAPTURE_DAY}",
+  "text:tools/serve.py::os.environ[\"TIMEFLOW_FAKE_TODAY\"] = args.today",
+  "text:docs/CODING_GUIDELINES.md::时间只问 `timeflow.clock`",
+  "text:docs/specification/nonfunctional.md::时间只有一个出口，且采集时可以钉住",
+  "test:test_clock.py",
+]
+gaps = "**现象（2026-09-25 00:0x 实测，T-G61 那轮重采黄金时暴露）**：上一轮黄金采于 2026-09-24 23:5x，跨过午夜再跑 `render` 就红了 —— **恰好 6 份**（`habit` × 3 档宽度 + `stats` × 3 档宽度），差异是热力图**格子数**少/多一格（`nth-child(368)` → `(369)`）与统计页窗口首日标签 `08-26` → `08-27`。**根因**：习惯热力图窗口是「53 周、到今天为止」，而**未来几天不渲染**（T-G55 的「未来留白」）→ 同一个星期内每过一天就多一个格子；窗口首日标签同样是「今天 - 370 天」；fixture 的打卡/复习数据又是**相对今天**种的。**为什么之前没发现**：这几轮黄金采得很勤（一张卡一采），「当天采、当天提交」正好把它盖住 —— 它是**慢漂移**，不是随机。**修法**：① 新增 `src/timeflow/clock.py`（全仓唯一的「今天/现在」出口，27 处调用点 + 19 个 import 收敛过来，默认行为与系统时钟**完全一致**）；② `TIMEFLOW_FAKE_TODAY=YYYY-MM-DD` 时四个函数落在**那一天的本地正午**（坏值当没设）；③ 采集侧**三处一起钉**：`serve.py --today`（服务器）+ `setFixtureDay`（fixture 基准日）+ 浏览器 `Date` 垫片（导航前注入，前端网格）—— 只钉一处就是「服务器以为 6-15、浏览器以为今天」的自相矛盾界面；④ 黄金头一行新增 `day=2026-06-15`（改了 `CAPTURE_DAY` 就 45 份一起红）；⑤ 渲染层每轮**当场自检**「页面是不是真的以为今天是采集日」，垫片不生效就报错（不许悄悄退回真时钟）。**验收**：`tests/test_clock.py` 8 条（默认=系统时钟 / 假时钟钉住日期与时刻 / 坏值当没设 / 时刻不随几点跑变 + 两条反悔闸：`src/timeflow/**` 除 clock.py 外不许出现裸的 `date.today()`·`datetime.now()`（判据剥掉注释与字符串）；用了 `clock.` 必须 import 了它）+ 标记层（采集侧三处接线 + 采集日只写一处）+ 真浏览器（45 份重采后再跑逐字节一致，每轮打印假时钟并在页面里自检）。**顺带把 T-G41 留下的那半做了**：「全仓日期取法清点」从一次性清点变成**一条护栏**。**边界**：**没做「真的跨午夜再跑一遍」**（要等到明天）—— 判据是机制 + 每轮自检；`ui_flow` **保持真实时钟**（它判行为、不存黄金，顺带覆盖 `clock.py` 的默认分支）；`date.today()` 跨午夜那一瞬（写 23:59:59.9、读 00:00:00.1）仍是 1 秒窗口，要消掉得连「今天」都假掉，代价比收益大。"
+
 
 [entries."SR-F8.4"]
 id = "SR-F8.4"
@@ -2480,7 +2496,7 @@ status = "done"
 evidence = [
   "file:复盘/门禁跨午夜暴露的时区口径缺陷-T-D12.md",
   "text:src/timeflow/core/review/review.py::def _local_date",
-  "text:src/timeflow/core/review/review.py::created_on = date.today().isoformat()",
+  "text:src/timeflow/core/review/review.py::created_on = clock.today_iso()",
   "text:src/timeflow/core/review/review.py::next_due = _local_date(new_card.due)",
   "test:test_review_local_date_line.py",
 ]

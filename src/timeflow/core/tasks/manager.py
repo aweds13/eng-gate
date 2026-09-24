@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import sqlite3
 
+from timeflow import clock
 from timeflow.core import attach as attach_mod
 from timeflow.core import behavior
 
@@ -173,11 +174,11 @@ def _row_to_task(row: sqlite3.Row) -> Task:
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return clock.now().isoformat(timespec="seconds")
 
 
 def _today() -> str:
-    return date.today().isoformat()
+    return clock.today_iso()
 
 
 def _check_creator(value: object) -> str:
@@ -277,7 +278,7 @@ def reminder_state(task: Task, now: datetime | None = None) -> str | None:
     """
     if not task.remind_at or task.status in (STATUS_DONE, *PARKED_STATUSES, *HIDDEN_STATUSES):
         return None
-    now = now or datetime.now()
+    now = now or clock.now()
     try:
         when = datetime.fromisoformat(task.remind_at)
     except ValueError:
@@ -362,7 +363,7 @@ def due_reminders(conn: sqlite3.Connection, now: datetime | None = None) -> list
     按提醒时间正序 —— 越早该提醒的越靠前。**只读**：不改任务、不发事实
     （通知只是"把已知时间说出来"，不改变任何账目）。
     """
-    moment = (now or datetime.now()).strftime("%Y-%m-%dT%H:%M")
+    moment = (now or clock.now()).strftime("%Y-%m-%dT%H:%M")
     rows = conn.execute(
         "SELECT * FROM tasks WHERE remind_at IS NOT NULL AND remind_at <= ? "
         "AND status NOT IN (?,?,?,?,?) ORDER BY remind_at",

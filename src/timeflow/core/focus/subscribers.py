@@ -18,9 +18,9 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
 from typing import Any
 
+from timeflow import clock
 from timeflow.core import facts as facts_mod
 from timeflow.core import feedback as fb
 from timeflow.core.focus import timer
@@ -54,7 +54,7 @@ def _on_focus_finished(payload: dict[str, Any]) -> None:
     if conn is None:
         return
     occurred = str(payload.get("occurred_at") or "")
-    day = occurred[:10] or datetime.now().date().isoformat()
+    day = occurred[:10] or clock.today_iso()
     minutes = timer.focus_minutes_from_facts(conn, day)
     fb.upsert_focus_minutes(conn, day, minutes)
 

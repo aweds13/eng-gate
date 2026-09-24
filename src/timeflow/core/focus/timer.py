@@ -8,8 +8,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import TYPE_CHECKING
+
+from timeflow import clock
 
 if TYPE_CHECKING:
     import sqlite3
@@ -38,7 +39,7 @@ _END_KIND = {
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return clock.now().isoformat(timespec="seconds")
 
 
 def active_session(conn: sqlite3.Connection) -> dict[str, object] | None:
@@ -181,7 +182,7 @@ def today_focus_minutes(conn: sqlite3.Connection, today: str | None = None) -> f
 
     保持原有返回精度（秒/60，不四舍五入）以免破坏既有调用方；需要落库/展示时再取整。
     """
-    return focus_minutes_from_facts(conn, today or datetime.now().date().isoformat())
+    return focus_minutes_from_facts(conn, today or clock.today_iso())
 
 
 def focus_minutes_from_facts(conn: sqlite3.Connection, day: str) -> float:

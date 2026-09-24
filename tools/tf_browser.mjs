@@ -43,16 +43,58 @@ export const MASK_PATHS = [process.env.TEMP ?? process.env.TMP ?? '/tmp', EXPORT
 export function iso(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-export function dayOffset(n) {
-  const d = new Date()
+/** 相对某个基准日偏移 n 天（不传基准 = 真今天，或采集层钉住的那一天）。
+ *
+ *  T-G62：验证层把「今天」钉在某一天（`CAPTURE_DAY`），fixture 必须**按那一天**算相对日期 ——
+ *  否则"服务器以为是 6-15、数据是按 9-25 造的"，两边对不上，采出来的就是自相矛盾的界面。
+ *  基准日由采集工具通过 `setFixtureDay()` 设；不设时行为与以前完全一样（真今天）。
+ */
+let FIXTURE_DAY = null
+export function setFixtureDay(day) { FIXTURE_DAY = day || null }
+export function dayOffset(n, base = FIXTURE_DAY) {
+  const d = base ? new Date(`${base}T12:00:00`) : new Date()
   d.setDate(d.getDate() + n)
   return iso(d)
+}
+
+/* ---------------------------------------------------------------- 假时钟（T-G62） */
+
+/** 采集时钉住的那一天：**必须是一个固定的日期常量**，不能算成"真今天"。
+ *
+ * 为什么（真实事故）：渲染黄金里有两个视图锚在「今天」上（`habit` / `stats` 的热力图窗口
+ * 是「53 周、到今天为止」且未来几天不渲染）→ 同一个星期内每过一天就多一个格子，
+ * 2026-09-25 00:0x 跨过午夜重跑，红 **6 份**。钉住它之后：黄金跨天、跨几点都不再变。
+ * 选 2026-06-15 只是"一个普通的日子"（周一，离任何边界都远）。
+ */
+export const CAPTURE_DAY = '2026-06-15'
+
+/** 钉住浏览器时钟的垫片（在页面脚本**之前**执行）。
+ *
+ * 为什么两边都要钉：`clock.py` 钉的是**服务器**的「今天」，而习惯热力图/统计页的网格
+ * 是**前端**用 `new Date()` 算的 —— 只钉一边，"服务器以为 6-15、浏览器以为今天"，
+ * 界面里的对账会自相矛盾（那不是验证，是伪造一个界面）。
+ * 只覆盖 `Date`（`Date.now()` 与无参构造）；`setTimeout` 之类与它无关，
+ * 而本层只做**静态采集**，不需要时间真的走。
+ */
+export function clockShimSource(day) {
+  return `(() => {
+    const FIXED = new Date(${JSON.stringify(`${day}T12:00:00`)}).getTime();
+    const Real = Date;
+    class FakeDate extends Real {
+      constructor(...args) { if (args.length === 0) super(FIXED); else super(...args); }
+      static now() { return FIXED; }
+    }
+    FakeDate.parse = Real.parse;
+    FakeDate.UTC = Real.UTC;
+    window.Date = FakeDate;
+  })()`
 }
 export { sleep }
 
 /* ---------------------------------------------------------------- 起服务 */
 
-/** 起一个**干净的**后端（`serve.py --fresh`：临时库 + 自动备份，只绑回环）。 */
+/** 起一个**干净的**后端（`serve.py --fresh`：临时库 + 自动备份，只绑回环）。
+ *  `extraEnv.TIMEFLOW_FAKE_TODAY` 就是 T-G62 的假时钟（采集层传 `CAPTURE_DAY`）。 */
 export function startServer(port, extraEnv = {}) {
   const python = process.env.PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3')
   const env = { ...process.env, ...extraEnv }
@@ -245,6 +287,17 @@ export class Cdp {
       throw new Error('页面里抛错：' + JSON.stringify(out.result.exceptionDetails).slice(0, 400))
     }
     return out.result?.result?.value
+  }
+
+  /** 钉住**浏览器**的「今天」（T-G62）—— 在页面脚本之前注入 `Date` 垫片。
+   *
+   *  为什么必须和服务器一起钉：热力图/统计页的网格是**前端**用 `new Date()` 算的，
+   *  只钉服务器会得到"服务器以为 6-15、浏览器以为今天"的自相矛盾界面。
+   *  用 `addScriptToEvaluateOnNewDocument`：每次导航都会先跑它（比"导航完再 eval"可靠 ——
+   *  后者跑在应用脚本之后，页面里第一次 `new Date()` 已经用了真时间）。
+   */
+  async installClock(day) {
+    await this.send('Page.addScriptToEvaluateOnNewDocument', { source: clockShimSource(day) })
   }
 
   async navigate(url) {

@@ -15,8 +15,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
 from typing import TYPE_CHECKING
+
+from timeflow import clock
 
 if TYPE_CHECKING:
     import sqlite3
@@ -26,7 +27,7 @@ MAX_GROUP_DEPTH = 3
 
 
 def _now() -> str:
-    return date.today().isoformat()
+    return clock.today_iso()
 
 
 def _find_sibling(conn: sqlite3.Connection, name: str, parent_id: str | None) -> str | None:

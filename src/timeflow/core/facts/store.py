@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
+
+from timeflow import clock
 
 if TYPE_CHECKING:
     import sqlite3
@@ -22,7 +23,7 @@ def _uid() -> str:
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return clock.now().isoformat(timespec="seconds")
 
 
 def record(

@@ -37,11 +37,10 @@ import json
 import os
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from timeflow import logs
+from timeflow import clock, logs
 from timeflow.core import sync as sync_mod
 
 if TYPE_CHECKING:
@@ -92,7 +91,7 @@ MAX_CONFLICT_SAMPLES = 20
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return clock.now().isoformat(timespec="seconds")
 
 
 # ---------------------------------------------------------------- 设置（设备号等）

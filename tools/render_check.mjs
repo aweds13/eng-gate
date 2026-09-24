@@ -40,8 +40,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 // `tools/tf_browser.mjs`（T-G34 抽出来的共用底座）。行为流层（`ui_flow_check.mjs`）
 // 用的是同一套：一处实现、两处使用，免得两份慢慢长歪。
 import {
-  Cdp, FIXED_DEVICE, MASK_PATHS, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
-  bootApp, findBrowser, seedFixture, setViewport, startServer, waitHealth, waitIdle,
+  CAPTURE_DAY, Cdp, FIXED_DEVICE, MASK_PATHS, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
+  bootApp, findBrowser, seedFixture, setFixtureDay, setViewport, startServer, waitHealth, waitIdle,
 } from './tf_browser.mjs'
 
 const GOLDEN_DIR = join(ROOT, 'gates', 'render')
@@ -276,7 +276,9 @@ async function collectView(cdp, vp, view) {
 }
 
 function manifestText(res) {
-  const lines = [`# render-manifest ${SCHEMA} viewport=${res.vp} ${res.w}x${res.h} view=${res.view} rows=${res.rows.length} accent=${CFG_ACCENT} device=${FIXED_DEVICE}`]
+  // `day=` 写进头一行（T-G62）：告诉读黄金的人"这份清单是按哪一天采的"。
+  // 它同时是一道保险 —— 谁改了 `CAPTURE_DAY`，45 份黄金会一起红，而不是悄悄换了口径。
+  const lines = [`# render-manifest ${SCHEMA} viewport=${res.vp} ${res.w}x${res.h} view=${res.view} rows=${res.rows.length} accent=${CFG_ACCENT} device=${FIXED_DEVICE} day=${CAPTURE_DAY}`]
   for (const row of res.rows) lines.push(row)
   return lines.join('\n') + '\n'
 }
@@ -288,6 +290,13 @@ async function collectAll(cdp, url, port) {
     await setViewport(cdp, vp)
     const booted = await bootApp(cdp, url, { accent: CFG_ACCENT })
     if (!booted) throw new Error('应用没有启动完成（左栏没渲染出来）—— 界面可能根本没起来')
+    // ★ 假时钟的**自检**（T-G62）：页面真的以为今天是 `CAPTURE_DAY` 吗？
+    //   为什么要当场问一句：垫片要是没生效（CDP 版本差异 / 注入点变了），
+    //   黄金会**悄悄**退回"按真今天采"—— 那就又变成"跨午夜自己变红"，而且没人会知道为什么。
+    const pageDay = await cdp.eval('new Date().toISOString().slice(0, 10)')
+    if (pageDay !== CAPTURE_DAY) {
+      throw new Error(`浏览器时钟没钉住：页面以为是 ${pageDay}，期望 ${CAPTURE_DAY}（垫片没生效）`)
+    }
     for (const view of [...VIEWS, ...Object.keys(PSEUDO_VIEWS)]) {
       if (ARGS.only && ARGS.only !== view) continue
       const res = await collectView(cdp, vp, view)
@@ -346,7 +355,12 @@ async function main() {
   }
 
   log(`=== 渲染验证层：真浏览器 ${browserPath.split(/[\\/]/).pop()} ===`)
-  const server = startServer(ARGS.port)
+  // ★ 假时钟（T-G62）：**服务器 + fixture + 浏览器**三处钉到同一天（`CAPTURE_DAY`）。
+  //   不钉的后果实测过：跨过午夜后 `habit`/`stats` 自己变红 6 份（热力图窗口锚在"今天"）。
+  //   三处必须一致 —— 只钉一处就是"服务器以为 6-15、数据按 9-25 造/浏览器以为今天"。
+  setFixtureDay(CAPTURE_DAY)
+  log(`[假时钟] 「今天」钉在 ${CAPTURE_DAY}（serve --today + fixture 基准日 + 浏览器 Date 垫片三处一致）`)
+  const server = startServer(ARGS.port, { TIMEFLOW_FAKE_TODAY: CAPTURE_DAY })
   const cdpPort = ARGS.port + 1
   const profileDir = join(process.env.TEMP ?? '/tmp', `tf-render-profile-${ARGS.port}`)
   let cdp = null
@@ -387,6 +401,8 @@ async function main() {
       result.code = 3
       return result
     }
+    // 浏览器那一半的假时钟（见上面 `setFixtureDay` 那段）：必须在**第一次导航之前**装。
+    await cdp.installClock(CAPTURE_DAY)
 
     const pass1 = await collectAll(cdp, url, ARGS.port)
     const pass2 = await collectAll(cdp, url, ARGS.port)

@@ -34,12 +34,12 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
-from timeflow import logs
+from timeflow import clock, logs
 from timeflow.core import feedback as fb
 from timeflow.core import insights as ins
 from timeflow.core import memo as memo_mod
@@ -481,7 +481,7 @@ def _feedback_lines(conn: sqlite3.Connection, day: str) -> list[str]:
 
 def render_day(conn: sqlite3.Connection, day: str) -> str:
     """某一天的 markdown（**纯函数式**：同一份数据渲染出同一份文本，除 `generated_at`）。"""
-    generated_at = datetime.now().isoformat(timespec="seconds")
+    generated_at = clock.now().isoformat(timespec="seconds")
     done = ledger.today_done(conn, day)
     parts: list[str] = [
         _frontmatter(day, generated_at),
@@ -527,7 +527,7 @@ def export_day(
     失败一律 ValueError / OSError 带原话 —— 调用方决定是"报错给用户"（手动导出）
     还是"记下来继续"（自动导出，见 `try_export`）。
     """
-    target_day = day or date.today().isoformat()
+    target_day = day or clock.today_iso()
     try:
         date.fromisoformat(target_day)
     except (TypeError, ValueError):
@@ -545,7 +545,7 @@ def export_day(
     os.replace(tmp, path)
 
     done = ledger.today_done(conn, target_day)
-    written_at = datetime.now().isoformat(timespec="seconds")
+    written_at = clock.now().isoformat(timespec="seconds")
     _put_raw(conn, KEY_LAST_AT, written_at)
     _put_raw(conn, KEY_LAST_ERROR, "")
     conn.commit()
@@ -582,7 +582,7 @@ def try_export(
 def status(conn: sqlite3.Connection, default_dir: str = DEFAULT_DIR_NAME) -> dict[str, Any]:
     """给界面的现状：目录、今天那份在不在、上次写的时间与错误（**错误不许静默消失**）。"""
     directory = resolve_dir(conn, default_dir)
-    today = date.today().isoformat()
+    today = clock.today_iso()
     path = directory / f"{today}.md"
     exists = path.is_file()
     return {

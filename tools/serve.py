@@ -7,6 +7,13 @@
     python -X utf8 tools/serve.py --fresh     # 用临时空库（演示/试验用，不动真实数据）
     python -X utf8 tools/serve.py --debug     # 开调试日志（logs/timeflow.jsonl 记更细）
     python -X utf8 tools/serve.py --lan       # **显式**开一次局域网访问（默认关；手机能连）
+    python -X utf8 tools/serve.py --today 2026-06-15   # **假时钟**：把"今天"钉住（只给验证层用）
+
+`--today` 是什么（T-G62）：把 `timeflow.clock` 的「今天」钉在某一天（那一年的本地正午）。
+渲染黄金里有两个视图锚在「今天」上（`habit` / `stats` 的热力图窗口与首日标签），
+不钉住的话它们**跨过午夜就自己变红**（2026-09-25 00:0x 实测红 6 份）。
+采集工具（`render_check.mjs` / `ui_flow_check.mjs`）起服务时传同一个日期，并给浏览器注入
+`Date` 垫片钉到同一天 —— 两边不一致就等于伪造了一个界面。**产品路径永远不传这个参数。**
 
 为什么不是直接一句 uvicorn：项目默认库是真实数据，升级代码后首次连接会跑 schema 迁移；
 先自动备份一份 `.bak-<时间戳>` 更稳妥（对齐 conventions「重要数据可备份、可回滚」）。
@@ -90,7 +97,18 @@ def main() -> int:
         action="store_true",
         help="显式开启局域网访问（默认关）：绑 0.0.0.0 + 装配对码那道门，手机才能连",
     )
+    parser.add_argument(
+        "--today",
+        default="",
+        help="假时钟：把「今天」钉在 YYYY-MM-DD（只给验证层用；产品路径不要传）",
+    )
     args = parser.parse_args()
+
+    if args.today:
+        # 假时钟（T-G62）：`timeflow.clock` 认这个环境变量；设了就落到那一天的本地正午。
+        # 起服务时设（而不是运行期改）—— 采集工具每次都起一个新服务，口径单一。
+        os.environ["TIMEFLOW_FAKE_TODAY"] = args.today
+        print(f"[假时钟] 「今天」被钉在 {args.today}（本地正午）—— 只给验证层用")
 
     if args.debug:
         # 调试开关只影响日志级别，不改变任何业务行为（见 src/timeflow/logs.py 的约定）

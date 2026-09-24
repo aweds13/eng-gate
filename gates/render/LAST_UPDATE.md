@@ -602,3 +602,54 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/habit`
 - `phone/stats`
 
+
+## 2026-09-24 16:34:19 · 45 份改动
+
+> 理由：T-G62 假时钟落地：黄金的「今天」钉在 CAPTURE_DAY=2026-06-15（serve --today + fixture 基准日 + 浏览器 Date 垫片三处一致），清单头一行新增 day= …；热力图/统计页的格子数与首日标签从此是固定值（以前随真今天/几点跑）。同勾：27 处 date.today()/datetime.now() 收敛到 timeflow.clock
+
+- `desktop/academic`
+- `desktop/flagged`
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/important`
+- `desktop/memo`
+- `desktop/offline`
+- `desktop/palette`
+- `desktop/planned`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `desktop/team`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/flagged`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/important`
+- `narrow/memo`
+- `narrow/offline`
+- `narrow/palette`
+- `narrow/planned`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `narrow/team`
+- `narrow/today`
+- `phone/academic`
+- `phone/flagged`
+- `phone/focus`
+- `phone/habit`
+- `phone/important`
+- `phone/memo`
+- `phone/offline`
+- `phone/palette`
+- `phone/planned`
+- `phone/review`
+- `phone/setting`
+- `phone/stats`
+- `phone/tasks`
+- `phone/team`
+- `phone/today`
+

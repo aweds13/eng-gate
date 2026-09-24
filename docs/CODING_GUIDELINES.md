@@ -46,6 +46,10 @@ python -m pytest --cov=timeflow --cov-fail-under=70  # 覆盖率门（目标 ≥
 - 新增功能**默认同时补单元测试**（`test_<behavior>`），并**在 `ACCEPTANCE.md` 登记该功能验收**。
 - 真实/外部调用（知识资产/网络）拆成**可 mock** 的单测；真实调用留给集成测试（标 `integration` marker）。
 - 覆盖率目标 ≥70%；提交前 `pytest` 全绿。
+- **时间只问 `timeflow.clock`**（T-G62，硬约束）：`src/timeflow/**` 里不许出现裸的
+  `date.today()` / `datetime.now()`（`tests/test_clock.py` 逐文件扫，判据是剥掉注释与字符串后的代码）。
+  要"今天"用 `clock.today()` / `clock.today_iso()`，要"现在"用 `clock.now()` / `clock.now_utc()`。
+  理由：每个调用点各自问系统时钟，"今天"就有了多个来源 —— 渲染黄金跨午夜自己变红 6 份就是这么来的。
 
 ## 6. 分支与开发约定
 - **当前实情（2026-09-18）**：单工作区在 `audit-snapshot` 分支上按「步骤级 checkpoint」推进（见 `复盘/长任务执行协议.md`），

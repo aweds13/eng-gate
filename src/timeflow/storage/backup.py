@@ -23,6 +23,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from timeflow import clock
 from timeflow.storage import db as db_mod
 
 SUFFIX = ".bak-"
@@ -32,7 +33,7 @@ _STAMP = "%Y%m%d-%H%M%S"
 def backup_name(db_path: Path | str, when: datetime | None = None) -> str:
     """备份文件名：`<库名>.bak-<YYYYmmdd-HHMMSS>`（与 `tools/serve.py` 一直以来的写法一致）。"""
     path = Path(db_path)
-    stamp = (when or datetime.now()).strftime(_STAMP)
+    stamp = (when or clock.now()).strftime(_STAMP)
     return f"{path.name}{SUFFIX}{stamp}"
 
 

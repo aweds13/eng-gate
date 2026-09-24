@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import sqlite3
 
+from timeflow import clock
 from timeflow.core import attach as attach_mod
 
 GPA_4_0 = 4.0
@@ -23,7 +24,7 @@ def _uid() -> str:
 
 
 def _today() -> str:
-    return date.today().isoformat()
+    return clock.today_iso()
 
 
 # ---- 课程档案（SR-F5.2）----

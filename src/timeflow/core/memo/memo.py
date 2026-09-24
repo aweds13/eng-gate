@@ -9,8 +9,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
 from typing import TYPE_CHECKING
+
+from timeflow import clock
 
 if TYPE_CHECKING:
     import sqlite3
@@ -21,7 +22,7 @@ def _uid() -> str:
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return clock.now().isoformat(timespec="seconds")
 
 
 def create_memo(
@@ -101,7 +102,7 @@ def add_output_entry(
     使产出与投入一样由事实层承载（F2 规格 §4 定案的新/旧两条路）。
     """
     eid = _uid()
-    today = date.today().isoformat()
+    today = clock.today_iso()
     conn.execute(
         "INSERT INTO ledger_entries (id, axis, kind, value, date, note, ref_handle, created_at) "
         "VALUES (?,?,?,?,?,?,?,?)",
@@ -183,7 +184,7 @@ def _output_facts(conn: sqlite3.Connection, day: str | None = None) -> list[dict
     """某日产出事实（默认今天，按发生时刻归属）。"""
     from timeflow.core import facts as facts_mod
 
-    d = day or date.today().isoformat()
+    d = day or clock.today_iso()
     return facts_mod.query(
         conn, kind="output.manual", since=f"{d}T00:00:00", until=f"{d}T23:59:59"
     )
@@ -249,7 +250,7 @@ def add_invest_entry(
     if value < 0:
         raise ValueError("投入值不能为负")
     eid = _uid()
-    today = date.today().isoformat()
+    today = clock.today_iso()
     conn.execute(
         "INSERT INTO ledger_entries (id, axis, kind, value, date, note, created_at) "
         "VALUES (?,?,?,?,?,?,?)",
@@ -321,7 +322,7 @@ def _invest_facts(conn: sqlite3.Connection, day: str | None = None) -> list[dict
     """某日手动投入事实（默认今天）。"""
     from timeflow.core import facts as facts_mod
 
-    d = day or date.today().isoformat()
+    d = day or clock.today_iso()
     return facts_mod.query(
         conn, kind="invest.manual", since=f"{d}T00:00:00", until=f"{d}T23:59:59"
     )
