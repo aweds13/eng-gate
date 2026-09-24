@@ -532,3 +532,15 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 
 
 
+
+## 2026-09-24 15:03:04 · 6 份改动
+
+> 理由：用户 2026-09-25 决定：三句数字口径**全删**（环下、学业vs自学、分组分布各删一个 .sub），事实搬进 docs/user-guide.md；today ×3 与 stats ×3 六份黄金因此变化
+
+- `desktop/stats`
+- `desktop/today`
+- `narrow/stats`
+- `narrow/today`
+- `phone/stats`
+- `phone/today`
+

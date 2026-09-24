@@ -2238,6 +2238,12 @@ def create_app(
         return {"entry_id": entry_id, "retracted": changed}
 
     # ---- SR-F9 跨端同步 (LWW + 去重) ----
+    # ★ **已弃用（deprecated，2026-09-25 用户确认）**：行级合并入口，被同步包那套取代
+    #   （导出 → 拷过去 → 先预览再导入；见下面 `syncpack` 那一节与 `core/syncpack.py`）。
+    #   **保留不删**：怕有外部脚本还在打它（删掉会静默破坏别人的自动化）；
+    #   界面**没有任何入口**（`tools/route_ui_gap.py` 把它列在"无界面路由"里），
+    #   命令表 `docs/commands.toml` 的 OP-40 也标了弃用。
+    #   新代码不要再调它 —— 要合并就导包/导入包。
     @app.post("/api/sync/tasks")
     def sync_tasks(payload: dict[str, Any]) -> dict[str, Any]:
         records = payload.get("records", [])

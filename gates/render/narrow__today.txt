@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=narrow 820x900 view=today rows=107 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=narrow 820x900 view=today rows=106 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,820,1403	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,820,126	16/normal/400	#1e293b/#000000@0.00	0;16px 24px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,16,86,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
@@ -38,9 +38,8 @@ main#main>div.card.quiet>div.ring-head>svg.chart.ring		41,359,80,80	16/normal/40
 div.card.quiet>div.ring-head>svg.chart.ring>circle.chart-ring		51,369,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.quiet>div.ring-head>svg.chart.ring>circle.chart-ring-progress		51,369,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.quiet>div.ring-head>svg.chart.ring>text.ring-text	2/10	65,387,33,20	15/normal/700	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>div>div.title	今日完成度	137,368,143,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>div>div.meta	已完成 2 项 · 还有 8 项在手	137,389,143,18	12/18/400	#5b6472/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>div>div.sub	只算今天	137,411,143,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>div>div.title	今日完成度	137,379,143,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>div>div.meta	已完成 2 项 · 还有 8 项在手	137,400,143,18	12/18/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(4)	逾期（债务）	24,480,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div#ov		24,507,772,116	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div#ov>div.card.overdue		24,507,772,116	16/normal/400	#1e293b/#ffffff	10;16px

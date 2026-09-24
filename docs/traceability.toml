@@ -802,9 +802,9 @@ gaps = ""
 id = "SR-F4.2"
 title = "习惯打卡 + 热力图 + 纳入 B 系统可视化"
 group = "F4"
-status = "partial"
+status = "done"
 evidence = ["text:src/timeflow/core/feedback/feedback.py::habit", "text:src/timeflow/core/insights.py::habit", "route:GET /api/habits"]
-gaps = "打卡/streak/热力图都有；**未计入投入轴**（与 SR-F2.1b 同一缺口）"
+gaps = "打卡/streak/日历热力图都有（窗口 2026-09-25 从 90 天修到 **371 天**，见 T-G55 —— 原来前端画 53 周、后端只给 13 周，左 3/4 恒空）。**「未计入投入轴」不是缺口，是口径**：用户定的是「习惯只记次数、不折算成投入时间」（`docs/user-guide.md` 的「几个口径」），原句里那句「与 SR-F2.1b 同一缺口」是**陈旧引用** —— SR-F2.1b 早已 done 且 gaps 为空。"
 
 [entries."SR-F4.3"]
 id = "SR-F4.3"
@@ -1429,6 +1429,17 @@ evidence = [
 ]
 gaps = "**修了发现的两处**：`renderHabit` 的今天、`heatmap` 的格子日期（都改走 `todayISO()`，本机时区）。**它为什么会伤人**：`new Date().toISOString()` 给的是 UTC 日期，本机 UTC+8 → **本地 0–8 点算出来是昨天**：界面把「今天已打卡」显示成「打卡」，而点下去（服务端按本地今天翻转）会把那次打卡**取消**掉，提示还写着「已打卡」。**护栏两层**（都在 `test_web_frontend.py`）：全文件级不许出现裸的 `new Date().toISOString()`；函数级 `renderHabit`/`heatmap` 里不许出现 `toISOString` —— 判的是**剥掉注释后的代码**（不剥注释会把「别这么写」那句解释也判红，同 T-G39 的教训），并用合成数据证明它咬得住。**没做**：全仓的「日期取法」清点（`docs/` / `tools/` / 别的 `.js`）；护栏只扫 `index.html`。"
 
+[entries."T-G59"]
+id = "T-G59"
+title = "第 5 条「孤儿路由」标弃用：`POST /api/sync/tasks`（行级合并入口）保留不删、界面无入口、新代码不要再用"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "text:src/timeflow/api/app.py::已弃用（deprecated，2026-09-25 用户确认）",
+  "text:docs/commands.toml::已弃用（deprecated，2026-09-25 用户确认）",
+]
+gaps = "**用户 2026-09-25 拍板**：这条（`POST /api/sync/tasks`，OP-40 里的旧行级合并入口）**加弃用标记**。做的事只有三处，一行代码都没删：① `src/timeflow/api/app.py` 的路由上方写明「已弃用 + 被同步包取代 + 保留不删的原因（怕有外部脚本）+ 界面无入口 + 新代码不要再调」；② `docs/commands.toml` 的 OP-40 `note` 标上弃用（命令表是四个面共用的那张源）；③ 台账这条卡收口。**为什么不删**：2026-09-23 起就一直定的是「标弃用但不删」（怕静默破坏别人的自动化）—— 这次只是把**当时没落地的那句标记**补上。**顺带**：`DELIVERY.READY` 那条盘点里的 ⑤ 从此有了处置（不再挂「接界面还是删接口」）。**没做**：契约域文档（`F9-storage-sync.md`）里没有这条路由的条目（它只挂 OP-40，没有逐路由小节），所以没地方加注释 —— 弃用标记落在**代码 + 命令表**两处（真源就这两处）。"
+
 [entries."T-G58"]
 id = "T-G58"
 title = "门禁工具的两处诊断/防护缺陷（T-G51 落地时撞出来的）：`render --update --only` 会采到**错黄金**（视图之间不独立）→ 默认拒绝；全量门禁失败时把门自己的输出留下并当场印尾部"
@@ -1456,7 +1467,7 @@ evidence = [
   "text:scripts/run_gates.py::界面文案上限门（T-G57）",
   "test:test_ui_text_line.py",
 ]
-gaps = "**清完了**：`≥30` 字从 **18 条 → 0 条**；`≥20` 字（含上一档）从 **66 → 43 条**（顺带带走 20–29 那一档的一批）。逐条做法只有三种：① **数字口径改到 ≤8 字**（`只算今天` / `手动投入不计入` / `任务可属多组` / `分配出去不计投入`）；② **删解释与教学句**（「为什么这么算」「点上面那颗按钮」这类 —— 用户原话：这是给人用的）；③ **清单搬进 `docs/user-guide.md`**（离线能做/不做、局域网怎么开、跨端包里不含什么、任务字段口径）。**尺子修过两次，都值得记**：第一版按「行首是不是注释符号」跳注释，注释的**续行**照样进统计（74 条 20–29 里约 13 条是噪声）；换成字符串/正则状态机之后**又被 `esc()` 里那个正则字面量弄错位**（它同时含单引号与双引号），整片注释被当字符串收进来 —— `≥30` 的命中当场从 19 涨到 **38**。最终版只做三件能确定的事（块注释**跨行**跟踪 / 行注释 / HTML 注释，`//` 前面是 `:` 的不算），并**证明新清单是旧清单的子集**（只有旧的 363 条、只有新的 **0** 条）。**上限门**：`tools/ui_text_audit.py` + `tools/ui_text_baseline.toml`（`[known]` 为**空**、`[ratchet] count = 43`），接进 `--fast` 与全量；判据与对比度/一致性那两张登记表同款（未登记的新长句 FAIL / 登记项被改写 FAIL / 清掉了提示删行）。★ **一条重要教训**（进地图 §6）：**改短时不许连带删掉被钉着的边界事实** —— 这一轮有 5 处钉子把我拦住了（包里不含什么 + schema 版本、注销/关机时不响、合并规则只在电脑那边 + 失败绝不清空、复习已记录这条 toast、离线能力边界 + 同一 WiFi 直连 + 设备号会写进包里 + 手动投入指路 + 改判要说明重算与不重复计）—— 它们是**二次确认的必要信息、能力边界、诚实披露**，不是解释句。**没做**：团队页那句口径在**后端**（`core/team/team.py`，界面直接显示），而 `ui_text_scan` 只扫 `index.html` —— **扫不到它**；这一轮顺手把它也改短了（同步改了测试与黄金），但它**不在门的覆盖里**（如实记）。"
+gaps = "**清完了**：`≥30` 字从 **18 条 → 0 条**；`≥20` 字（含上一档）从 **66 → 43 条**（顺带带走 20–29 那一档的一批）。逐条做法只有三种：① **数字口径全删**（用户 2026-09-25 的最终决定：先前选过「≤8 字」、按那版改短过，他随后改主意要**全删** —— 界面上这三句一个字都不留，事实搬进 `docs/user-guide.md`；团队页那句同理，改短保留）；② **删解释与教学句**（「为什么这么算」「点上面那颗按钮」这类 —— 用户原话：这是给人用的）；③ **清单搬进 `docs/user-guide.md`**（离线能做/不做、局域网怎么开、跨端包里不含什么、任务字段口径）。**尺子修过两次，都值得记**：第一版按「行首是不是注释符号」跳注释，注释的**续行**照样进统计（74 条 20–29 里约 13 条是噪声）；换成字符串/正则状态机之后**又被 `esc()` 里那个正则字面量弄错位**（它同时含单引号与双引号），整片注释被当字符串收进来 —— `≥30` 的命中当场从 19 涨到 **38**。最终版只做三件能确定的事（块注释**跨行**跟踪 / 行注释 / HTML 注释，`//` 前面是 `:` 的不算），并**证明新清单是旧清单的子集**（只有旧的 363 条、只有新的 **0** 条）。**上限门**：`tools/ui_text_audit.py` + `tools/ui_text_baseline.toml`（`[known]` 为**空**、`[ratchet] count = 43`），接进 `--fast` 与全量；判据与对比度/一致性那两张登记表同款（未登记的新长句 FAIL / 登记项被改写 FAIL / 清掉了提示删行）。★ **一条重要教训**（进地图 §6）：**改短时不许连带删掉被钉着的边界事实** —— 这一轮有 5 处钉子把我拦住了（包里不含什么 + schema 版本、注销/关机时不响、合并规则只在电脑那边 + 失败绝不清空、复习已记录这条 toast、离线能力边界 + 同一 WiFi 直连 + 设备号会写进包里 + 手动投入指路 + 改判要说明重算与不重复计）—— 它们是**二次确认的必要信息、能力边界、诚实披露**，不是解释句。**没做**：团队页那句口径在**后端**（`core/team/team.py`，界面直接显示），而 `ui_text_scan` 只扫 `index.html` —— **扫不到它**；这一轮顺手把它也改短了（同步改了测试与黄金），但它**不在门的覆盖里**（如实记）。"
 
 [entries."T-G56"]
 id = "T-G56"
@@ -2984,4 +2995,4 @@ title = "后端能力都要有界面入口（可达性）"
 group = "DELIVERY"
 status = "partial"
 evidence = ["route:GET /api/tasks", "route:GET /api/memos", "route:POST /api/memos", "route:GET /api/habits", "route:POST /api/feedback", "route:GET /api/insights/daily", "route:GET /api/assessments", "route:POST /api/grades", "route:GET /api/team/assignments", "route:GET /api/ledger/outputs", "route:POST /api/ledger/invest", "route:POST /api/review/items", "route:GET /api/focus/today", "route:GET /api/tasks/{task_id}/facts", "route:GET /api/courses", "route:GET /api/config", "route:GET /api/feedback", "route:GET /api/focus/tasks/{task_id}", "route:DELETE /api/ledger/invest/{entry_id}", "route:DELETE /api/ledger/output/{entry_id}", "route:DELETE /api/memos/{memo_id}", "route:GET /api/grades", "route:GET /api/habits/{habit_id}", "route:GET /api/insights/groups", "route:GET /api/ledger/invests", "route:GET /api/review/{item_id}/facts", "route:GET /api/sync/logs", "route:GET /api/tasks/deleted", "route:GET /api/tasks/{task_id}", "route:POST /api/habits", "route:POST /api/habits/{habit_id}/toggle", "route:POST /api/ledger/output", "route:POST /api/review/{item_id}/review", "route:POST /api/grades", "route:GET /api/groups/{group_id}/tasks", "route:POST /api/tasks/{task_id}/group"]
-gaps = "**2026-09-23 更正（T-G18）**：原文「白名单/勿扰配置（SR-F3.3）、子任务（OP-12）等仍无界面入口」**已过期** —— 两处界面都接上了（前端批次③ 设置页「专注（白名单 / 勿扰）」+ T-A2 详情面板「步骤（子任务）」）。这次不再靠人眼，写了报告工具 `tools/route_ui_gap.py`（后端 151 条路由逐条到 `src/web/` 里找，模板字符串与 `?query` 都归一化后按段比）。**核对结果：还剩 11 条后端路由前端一个字都没提** —— ① `GET /api/reminders`（全量提醒列表；界面用的是 `/api/reminders/due`）② `GET /api/sync/logs`（跨端冲突日志，界面只显示同步状态，没有日志页）③ `GET /api/team/assignments`（团队分配列表，界面走 `/api/team/board`）④ `GET /api/groups/{group_id}/tasks`（分组下任务列表）⑤ `POST /api/sync/tasks`（老的「推任务」端点，界面走同步包）⑥ 其余 6 条 = AI 接口 5 条 + `GET /api/health`，**按设计就不给界面**（给本机程序/运维用）。前 5 条接界面还是删接口属产品判断（未登记为卡，见 `复盘/交接与台账陈旧-T-G18.md` §五）。"
+gaps = "**2026-09-23 更正（T-G18）**：原文「白名单/勿扰配置（SR-F3.3）、子任务（OP-12）等仍无界面入口」**已过期** —— 两处界面都接上了（前端批次③ 设置页「专注（白名单 / 勿扰）」+ T-A2 详情面板「步骤（子任务）」）。核对工具 `tools/route_ui_gap.py`（后端路由逐条到 `src/web/` 里找）。**★ 2026-09-25 更新（T-G56 / T-G59 之后）**：原盘点「还剩 11 条后端路由前端一个字都没提」，现在逐条有了处置 —— ① `GET /api/reminders` **已接界面**（设置页「提醒」里的「全部提醒」一节，只读 + 读一次）；② `GET /api/sync/logs` **已接界面**（设置页「数据与同步」里的「冲突日志」一节，只读 + 读一次）；③ `GET /api/team/assignments` 界面走 `/api/team/board`（同一件事的另一种读法，团队视角页）；④ `GET /api/groups/{group_id}/tasks` **仍未接界面**（原定「并入视觉线那轮」，而那一轮已经收口且没包含它 —— 要不要在分组管理里点开一个分组看它的任务，属产品判断，**待用户定**）；⑤ `POST /api/sync/tasks` **已标弃用**（T-G59：保留不删、界面无入口、新代码不要再调）；⑥ 其余 6 条（AI 接口 5 条 + `GET /api/health`）**按设计就不给界面**（给本机程序/运维用）。所以这条**仍未收口**，但剩下的只有 ④ 一条，且已写明归属。"

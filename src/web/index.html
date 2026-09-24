@@ -1879,7 +1879,7 @@ function todayCard(done,pending){
   return `<div class="card quiet"><div class="ring-head">
     ${ring(done,pending)}
     <div><div class="title">今日完成度</div><div class="meta">已完成 ${done} 项 · ${note}</div>
-      <div class="sub">只算今天</div></div></div></div>`;
+      </div></div></div>`;
 }
 // 复习进度条：今天该复习的里面，已完成多少张
 function progressBar(done,total,label){
@@ -1961,10 +1961,9 @@ function renderStats(m){
           {label:'自学：没挂课程的任务',value:split.self_hours,
             display:`${split.self_hours}h · ${split.self_tasks} 个任务`},
         ])}
-        <div class="sub">手动投入不计入</div></div>`;
+        </div>`;
       m.innerHTML=curve+`<div class="section-title">投入分布（按任务分组 · 近 ${days} 天）</div>
-        <div class="card block">${dist}
-        <div class="sub">任务可属多组</div></div>
+        <div class="card block">${dist}</div>
       ${acSplit}
       <div class="section-title">重复节奏（近 ${rhythm.days} 天）</div>
         <div class="card block">

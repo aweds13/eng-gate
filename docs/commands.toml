@@ -460,7 +460,7 @@ ui = ["data-action=sync-export", "data-action=sync-preview", "data-action=sync-i
 kind = "write"
 reversible = "包是文件；勾了「同时应用删除」删掉的行不可撤销 —— 要回退用备份与恢复（OP-42）"
 ai = ["none"]
-note = "预览与导入是同一条 POST /api/sync/import（body 里 dry_run=true）；POST /api/sync/tasks 是旧的行级合并入口。"
+note = "预览与导入是同一条 POST /api/sync/import（body 里 dry_run=true）；★ POST /api/sync/tasks 是旧的行级合并入口，**已弃用（deprecated，2026-09-25 用户确认）**：保留不删（怕有外部脚本在打它）、界面无入口、新代码不要再用 —— 要合并就导包/导入包（见 app.py 那一处注释）。"
 
 [commands."OP-41"]
 title = "冲突处理"
