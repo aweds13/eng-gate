@@ -5,18 +5,18 @@ body>div.shell>aside.rail>h1	timeflow ·	14,12,86,24	18/normal/700	#1e293b/#0000
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	14,46,356,20	13/19.5/400	#64748b/#000000@0.00	0;0px
 html>body>div.shell>main#main		0,66,390,436	16/normal/400	#1e293b/#000000@0.00	0;0px 14px 24px
 body>div.shell>main#main>div.card.panel-card		14,66,362,193	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card.panel-card>div.row:nth-child(1)		30,80,330,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card>div.row:nth-child(1)>button	管理者（我分配的）	30,81,145,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.panel-card>div.row:nth-child(1)>button.ghost	执行者（分配给我的）	183,80,160,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card.panel-card>div.sub	你分配出去的任务都在这里：谁手上有什么、进展到哪。分配出去的任务不计个人投入（只记协调这件事本身）。	30,123,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card.panel-card>div.row:nth-child(3)		30,163,330,82	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.panel-card>div.row:nth-child(3)>button	全部 1	30,164,65,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card.panel-card>div.row:nth-child(3)>button.ghost:nth-child(2)	已分配 1	103,163,80,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card>div.row:nth-child(3)>button.ghost:nth-child(3)	进行中 0	191,163,80,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card>div.row:nth-child(3)>button.ghost:nth-child(4)	已完成 0	279,163,80,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card.panel-card>div.row:nth-child(3)>button.ghost:nth-child(5)	受阻 0	30,208,67,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-body>div.shell>main#main>div.meta		14,269,362,42	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.meta>b	分配关系的两种看法	78,269,144,21	16/normal/700	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card>div.row		30,80,330,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card>div.row>button	管理者（我分配的）	30,81,145,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.panel-card>div.row>button.ghost	执行者（分配给我的）	183,80,160,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.panel-card>div.sub.mt-2	你分配出去的任务都在这里：谁手上有什么、进展到哪。分配出去的任务不计个人投入（只记协调这件事本身）。	30,123,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.panel-card>div.row.mt-3		30,163,330,82	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.panel-card>div.row.mt-3>button	全部 1	30,164,65,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.panel-card>div.row.mt-3>button.ghost:nth-child(2)	已分配 1	103,163,80,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card>div.row.mt-3>button.ghost:nth-child(3)	进行中 0	191,163,80,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card>div.row.mt-3>button.ghost:nth-child(4)	已完成 0	279,163,80,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.panel-card>div.row.mt-3>button.ghost:nth-child(5)	受阻 0	30,208,67,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div.meta.mt-3		14,269,362,42	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.meta.mt-3>b	分配关系的两种看法	78,269,144,21	16/normal/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title	小李 · 1 件	14,331,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card		14,358,362,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card>div.card-body		30,386,174,53	16/normal/400	#1e293b/#000000@0.00	0;0px

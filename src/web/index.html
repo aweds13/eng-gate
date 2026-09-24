@@ -48,7 +48,7 @@
   <div class="modal-box">
     <div class="title" id="modalTitle"></div>
     <input id="modalInput" data-enter="modal-ok">
-    <div class="row" style="justify-content:flex-end">
+    <div class="row end">
       <button class="ghost" data-action="modal-cancel">取消</button>
       <button id="modalOk" data-action="modal-ok">确定</button>
     </div>
@@ -669,7 +669,7 @@ let toastRun=null;  // toast 上的「撤销」回调（由 ACTIONS['toast-run']
 function toastAction(msg,label,fn){
   const t=document.getElementById('toast');
   toastRun=fn;
-  t.innerHTML=`${esc(msg)} <button class="ghost" style="margin-left:8px;padding:4px 10px" data-action="toast-run" id="toastAct">${esc(label)}</button>`;
+  t.innerHTML=`${esc(msg)} <button class="ghost" data-action="toast-run" id="toastAct">${esc(label)}</button>`;
   t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),6000);
 }
 /* 右下角多选（F 批 · T-F3）：「尝试失败」之后要让人选**接下来怎么办** ——
@@ -682,7 +682,7 @@ function toastChoices(msg,choices){
   const t=document.getElementById('toast');
   toastChoiceRun=choices;
   t.innerHTML=`${esc(msg)} `+choices.map((c,i)=>
-    `<button class="ghost" style="margin-left:8px;padding:4px 10px" data-action="toast-choice" data-index="${i}">${esc(c.label)}</button>`).join('');
+    `<button class="ghost" data-action="toast-choice" data-index="${i}">${esc(c.label)}</button>`).join('');
   t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),8000);
 }
 function view(name){
@@ -975,7 +975,7 @@ function renderActive(el,active){
     <div class="meta">${active.kind==='tomato'?'番茄钟':'普通计时'}</div>
     <div class="sub" id="focusTask">${active.task_id?'已绑定任务':'未绑定任务'}</div>
     <div class="sub" id="pomoNote"></div>
-    <div class="row" style="margin-top:10px">
+    <div class="row mt-4">
       <button data-action="focus-finish" data-status="finished">结束（计入投入）</button>
       <button class="ghost" data-action="focus-finish" data-status="interrupted">记中断</button>
       <button class="ghost" data-action="focus-finish" data-status="abandoned">放弃（不入账）</button></div>`;
@@ -1100,9 +1100,9 @@ async function renderGroupAdmin(el){
     <div class="new"><input id="groupName" placeholder="新建分组，如：高数" data-enter="group-add">
       <select id="groupParent" title="建在哪个分组下（默认顶层）"><option value="">顶层</option>${options(groups)}</select>
       <button data-action="group-add">新建</button></div>
-    ${groups.map(g=>`<div class="row tight" style="margin:6px 0;padding-left:${(Number(g.depth)||1)-1}em">
+    ${groups.map(g=>`<div class="row tight mv-2" style="padding-left:${(Number(g.depth)||1)-1}em">
         <span class="badge">${g.task_count} 项</span>
-        <span class="grow" style="flex:1">${esc(g.path)}</span>
+        <span class="grow">${esc(g.path)}</span>
         <button class="ghost" data-action="group-sub" data-id="${g.id}" data-name="${esc(g.name)}"
           title="在这个分组下建一个子分组">＋子分组</button>
         ${parentSelect(g.id,g.parent_id,'移到别的分组下（顶层 = 移出来）')}
@@ -1319,7 +1319,7 @@ function renderDetail(el,t,facts,tree,cards,attempts){
         data-action="task-done" data-id="${s.id}" data-done="${sDone}"></button>
       ${hasKids?`<button class="ghost" data-action="step-toggle" data-id="${s.id}"
         title="${off?'展开这一支':'收起这一支'}">${off?'▸':'▾'}</button>`:''}
-      <span class="grow" style="flex:1;${sDone?'text-decoration:line-through;color:var(--muted)':''}">${esc(s.title)}</span>
+      <span class="grow ${sDone?'is-done':''}">${esc(s.title)}</span>
       <span class="badge">${Number(n.depth)===2?'子任务':'子步骤'}</span>
       ${s.status!=='未开始'?`<span class="badge">${esc(s.status)}</span>`:''}
       <input type="date" value="${s.due_date||''}" title="这一步的截止日（空 = 取消）"
@@ -1343,17 +1343,17 @@ function renderDetail(el,t,facts,tree,cards,attempts){
     <div class="meta">类型 ${esc(t.task_type||'普通')}${t.course_id?` · 课程 ${t.course_name?esc(t.course_name):'课程已删'}`:''}</div>
     <div class="meta">提醒 ${t.remind_at?`${esc(String(t.remind_at).replace('T',' '))}（${REMIND_LABEL[t.reminder_state]||'—'}）`:'未设'}</div>
     <div class="meta">建于 ${humanTime(t.created_at)} · 更新于 ${humanTime(t.updated_at)}${t.created_by==='ai'?' · <span class="badge">AI 建的</span>':''}</div>
-    ${t.note?`<div class="settings-sub">备注</div><div class="sub" style="white-space:pre-wrap">${esc(t.note)}</div>`:''}`}
+    ${t.note?`<div class="settings-sub">备注</div><div class="sub pre">${esc(t.note)}</div>`:''}`}
     ${asg}
     <div class="settings-sub">所属分组</div>
     <div class="row tight" id="detailGroups" data-task="${t.id}">${groupChips(groupsOf(t),(t.group_ids||[]))}</div>
     ${detailEditing?'':taskAttachHTML(t)}
     ${rcards.length?`<div class="settings-sub">复习卡（${rcards.length}）</div>
       ${rcards.map(c=>`<div class="fact"><span class="badge">复习卡</span>
-        <span class="grow" style="flex:1">${esc(c.title)}</span>
+        <span class="grow">${esc(c.title)}</span>
         <span class="sub">到期 ${esc(String(c.due_date).slice(0,10))}</span></div>`).join('')}`:''}
     ${t.progress_count?`<div class="settings-sub">${esc(t.progress_label||'进展报告')}（${t.progress_count}）</div>
-      <div class="fact"><span class="grow" style="flex:1">${esc(t.progress_note||'')}</span>
+      <div class="fact"><span class="grow">${esc(t.progress_note||'')}</span>
         <span class="sub">${humanTime(t.progress_at)}</span>
         <button class="ghost" data-action="progress-retract" data-id="${t.id}">撤销这一条</button></div>
       <div class="sub">报告 = 一句话事实，<b>不是状态</b>：要不要标完成仍然由你勾。
@@ -1363,7 +1363,7 @@ function renderDetail(el,t,facts,tree,cards,attempts){
     <div class="new"><input id="subtaskTitle" placeholder="添加一个步骤…" data-enter="subtask-add">
       <input id="subtaskDue" type="date" title="这一步的截止日（可留空；留空 = 不设）">
       <button class="ghost" data-action="subtask-add">添加</button></div>
-    <div class="row" style="margin-top:10px">
+    <div class="row mt-4">
       ${detailEditing?`
         <button data-action="task-save">保存</button>
         <button class="ghost" data-action="task-edit-cancel">取消</button>`:`
@@ -1382,7 +1382,7 @@ function renderDetail(el,t,facts,tree,cards,attempts){
       <button class="ghost" data-action="task-close">收起</button>`}</div>
     <div class="section-title">记录（最近 ${Math.min((facts||[]).length,12)} 条）</div>
     ${att.notes.length?`<div class="settings-sub">过去尝试留下的说明（新的在前）</div>
-      ${att.notes.slice(0,5).map(n=>`<div class="fact"><span class="sub" style="white-space:pre-wrap">${esc(n)}</span></div>`).join('')}`:''}
+      ${att.notes.slice(0,5).map(n=>`<div class="fact"><span class="sub pre">${esc(n)}</span></div>`).join('')}`:''}
     ${lines||'<div class="sub">还没有记录（完成、撤销、删除、生成下一次都会留下记录）。</div>'}`;
 }
 
@@ -1405,7 +1405,7 @@ async function openAttach(target){
 function attachRowsHTML(items,delAction,ownerId){
   return (items||[]).map((a,i)=>`<div class="fact">
     <span class="badge">${/^https?:\/\//i.test(a.target)?'网址':'本地'}</span>
-    <span style="flex:1;word-break:break-all">${esc(a.title||a.target)}</span>
+    <span class="grow break-all">${esc(a.title||a.target)}</span>
     <button class="ghost" data-action="attach-open" data-target="${esc(a.target)}">打开</button>
     <button class="ghost" data-action="${delAction}" data-id="${esc(ownerId)}" data-index="${i}">删除</button>
   </div>`).join('');
@@ -1709,11 +1709,11 @@ function archiveCard(t){
   const when=auto?(t.completed_on?`完成于 ${esc(t.completed_on)}`:'完成满 N 天自动收入')
                  :`归档于 ${humanTime(t.updated_at)}`;
   const tries=t.attempt_count?` · <span class="badge">试了 ${t.attempt_count} 回</span>`:'';
-  return `<div class="card" style="align-items:flex-start"><div class="card-body">
+  return `<div class="card top"><div class="card-body">
       <div class="title">${esc(t.title)}</div>
       <div class="meta">${auto?'<span class="badge">自动归档</span>':'<span class="badge">手动归档</span>'}
         ${when}${tries}${t.due_date?` · 截止 ${esc(t.due_date)}`:''}</div>
-      ${t.note?`<div class="sub" style="white-space:pre-wrap">${esc(t.note)}</div>`:''}
+      ${t.note?`<div class="sub pre">${esc(t.note)}</div>`:''}
     </div>
     <div class="row">${auto
       ?`<button class="ghost" data-action="task-undo-done" data-id="${t.id}">撤销完成（回到列表）</button>`
@@ -1747,7 +1747,7 @@ async function renderSmart(m,view){
 }
 // 三个智能视图之间的互跳行：也让"手机端（左栏导航被隐藏）"有入口 —— 它挂在「全部任务」页与各视图自己头上。
 function smartViewNavHTML(active){
-  return `<div class="row tight" style="margin:10px 0">
+  return `<div class="row tight mv-4">
     ${Object.keys(SMART_VIEWS).map(k=>`<button class="${k===active?'':'ghost'}" data-action="view" data-view="${k}">${esc(SMART_VIEWS[k].title)}</button>`).join('')}
   </div>`;
 }
@@ -1762,17 +1762,17 @@ function lineChart(points,valueOf,height){
   const line=xy.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
   const area=`0,${h} ${line} ${w},${h}`;
   const marks=xy.map((p,i)=>pts[i]>0?`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" fill="var(--accent)"/>`:'').join('');
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block">
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="chart" style="height:${h}px">
     <polygon points="${area}" fill="var(--accent)" opacity="0.10"/>
     <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
     ${marks}</svg>`;
 }
 function barList(rows){
   const max=Math.max(1,...rows.map(r=>r.value));
-  return rows.map(r=>`<div style="margin-bottom:8px">
-    <div class="sub" style="display:flex;justify-content:space-between">
+  return rows.map(r=>`<div class="mb-3">
+    <div class="sub split">
       <span>${esc(r.label)}</span><span>${r.display}</span></div>
-    <div class="bar-track" style="height:10px">
+    <div class="bar-track tall">
       <div class="bar-fill" style="width:${(r.value/max*100).toFixed(1)}%"></div></div>
   </div>`).join('');
 }
@@ -1794,8 +1794,8 @@ function heatmap(logs){
     }
   }
   const w=cols*(cell+gap),h=7*(cell+gap);
-  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block">${cells}</svg>
-    <div class="sub" style="margin-top:6px">近一年打卡（列=周，行=周一→周日）</div>`;
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}">${cells}</svg>
+    <div class="sub mt-2">近一年打卡（列=周，行=周一→周日）</div>`;
 }
 // ---- SR-NF3 其余形态：进度环 / 复习进度条 / GPA 多维 ----
 // 今日完成度进度环：已完成 ÷（已完成 + 仍在待办）
@@ -1804,7 +1804,7 @@ function ring(done,pending){
   const ratio=total?done/total:0;
   const r=30,c=2*Math.PI*r,on=c*ratio;
   const label=total?`${done}/${total}`:'—';
-  return `<svg viewBox="0 0 80 80" style="width:80px;height:80px;flex:none">
+  return `<svg viewBox="0 0 80 80" class="chart ring">
     <circle class="ring-track" cx="40" cy="40" r="${r}" fill="none" stroke-width="9"/>
     <circle cx="40" cy="40" r="${r}" fill="none" stroke="var(--accent)" stroke-width="9"
       stroke-linecap="round" stroke-dasharray="${on.toFixed(1)} ${(c-on).toFixed(1)}"
@@ -1814,7 +1814,7 @@ function ring(done,pending){
 }
 function todayCard(done,pending){
   const note=pending?`还有 ${pending} 项在手`:'今天的清单是空的';
-  return `<div class="card"><div style="display:flex;align-items:center;gap:14px">
+  return `<div class="card"><div class="ring-head">
     ${ring(done,pending)}
     <div><div class="title">今日完成度</div><div class="meta">已完成 ${done} 项 · ${note}</div>
     <div class="sub">只统计今天的清单与今天完成的，不翻旧账。</div></div></div></div>`;
@@ -1822,9 +1822,9 @@ function todayCard(done,pending){
 // 复习进度条：今天该复习的里面，已完成多少张
 function progressBar(done,total,label){
   const ratio=total?done/total:0;
-  return `<div style="margin-top:8px">
-    <div class="sub" style="display:flex;justify-content:space-between"><span>${esc(label)}</span><span>${done}/${total}</span></div>
-    <div class="bar-track" style="height:8px;margin-top:4px">
+  return `<div class="mt-3">
+    <div class="sub split"><span>${esc(label)}</span><span>${done}/${total}</span></div>
+    <div class="bar-track mini">
       <div class="bar-fill" style="width:${(ratio*100).toFixed(1)}%"></div></div></div>`;
 }
 // 学业多维（雷达）：把不同量纲各自归一到本图最大值，只用于看"是否均衡"，不跨人比较
@@ -1842,7 +1842,7 @@ function radar(axes){
   const poly=axes.map((a,i)=>pt(i,Math.min(1,a.ratio)).map(v=>v.toFixed(1)).join(',')).join(' ');
   const dots=axes.map((a,i)=>{const [x,y]=pt(i,Math.min(1,a.ratio));return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="var(--accent)"/>`}).join('');
   const labels=axes.map((a,i)=>{const [x,y]=pt(i,1.22);return `<text class="axis-label" x="${x.toFixed(1)}" y="${(y+3).toFixed(1)}" text-anchor="middle" font-size="10">${esc(a.label)}</text>`}).join('');
-  return `<svg viewBox="0 0 220 200" style="width:100%;max-width:260px;height:auto">
+  return `<svg viewBox="0 0 220 200" class="chart radar">
     ${rings}${spokes}<polygon points="${poly}" fill="var(--accent)" opacity="0.18" stroke="var(--accent)" stroke-width="2"/>${dots}${labels}</svg>`;
 }
 function gpaRadar(g4,g5,courses,grades){
@@ -1857,10 +1857,10 @@ function gpaRadar(g4,g5,courses,grades){
     {label:'学分',value:credits,ratio:Math.min(1,credits/(credits||1))},
     {label:'课程覆盖',value:`${gradedCourses}/${courses}`,ratio:courses?gradedCourses/courses:0},
   ];
-  return `<div class="card" style="display:block">
-    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+  return `<div class="card block">
+    <div class="gpa-head">
       <div>${radar(axes)}</div>
-      <div style="flex:1;min-width:150px">
+      <div class="stat-label">
         ${barList(axes.map(a=>({label:a.label,value:a.ratio,display:String(a.value)})))}
       </div></div>
     <div class="sub">各轴各自归一到本图最大值，只看「是否均衡」，不用于跨人比较；成绩录得越多，覆盖越满。</div></div>`;
@@ -1880,15 +1880,15 @@ function renderStats(m){
       hmActive=(hmDims[0]||{}).id||'';
       return api('/api/insights/academic-vs-self?days=90').then(split=>api('/api/summary/weekly').then(week=>
         api('/api/insights/repeat-rhythm?days=56').then(rhythm=>{
-      const curve=`<div class="card" style="display:block">
+      const curve=`<div class="card block">
         <div class="meta">近 ${days} 天专注走势（分钟）· 合计 ${focusTotal} 分钟 · 有投入 ${activeDays} 天 · 单日最高 ${Math.round(peak)}</div>
-        <div style="margin-top:10px">${lineChart(daily,d=>d.focus_minutes)}</div>
-        <div class="sub" style="display:flex;justify-content:space-between"><span>${daily.length?daily[0].date.slice(5):''}</span><span>今天</span></div></div>`;
+        <div class="mt-4">${lineChart(daily,d=>d.focus_minutes)}</div>
+        <div class="sub split"><span>${daily.length?daily[0].date.slice(5):''}</span><span>今天</span></div></div>`;
       const dist=groups.length?barList(groups.map(g=>({
         label:g.group,value:g.focus_hours,display:`${g.focus_hours}h · ${g.task_count} 个任务`}))):emptyState('这段时间还没有绑定任务的专注');
       // 学业投入 vs 自学投入（SR-F5.1b / T-C10）：口径见后端 `insights.academic_vs_self`
       const acSplit=`<div class="section-title">学业投入 vs 自学投入（近 ${split.days} 天）</div>
-        <div class="card" style="display:block">
+        <div class="card block">
         ${barList([
           {label:'学业：挂了课程的任务',value:split.academic_hours,
             display:`${split.academic_hours}h · ${split.academic_tasks} 个任务`},
@@ -1899,18 +1899,18 @@ function renderStats(m){
           未绑定任务的专注另有 ${split.unbound_hours}h，单列、不归入任何一边（不猜它算哪一类）。
           手动投入不参与这张图。这里只如实对照，不做「学业该占多少」的建议。</div></div>`;
       m.innerHTML=curve+`<div class="section-title">投入分布（按任务分组 · 近 ${days} 天）</div>
-        <div class="card" style="display:block">${dist}
+        <div class="card block">${dist}
         <div class="sub">任务可属多个分组，各组之和可能大于总投入；未绑定任务的专注不计入分组。当前债务 ${debtNow} 项。</div></div>
       ${acSplit}
       <div class="section-title">重复节奏（近 ${rhythm.days} 天）</div>
-        <div class="card" style="display:block">
+        <div class="card block">
         ${rhythm.series.length?rhythm.series.map(repeatRhythmRow).join(''):emptyState('还没有重复任务：给一件事设个「每 N 天」的重复，这里就会长出它的节奏')}
         <div class="sub">${noteHTML(rhythm.note)}</div></div>
       <div class="section-title">本周投入</div>${weekCard(week)}
       <div class="section-title">时间热力图（近一年）</div>
-        <div class="card" style="display:block">
+        <div class="card block">
           <div class="row" id="hmRow">${hmButtons(hmActive)}</div>
-          <div id="hmBox" style="margin-top:10px">${valueHeatmap(cells,hmActive)}</div>
+          <div id="hmBox" class="mt-4">${valueHeatmap(cells,hmActive)}</div>
           <div class="sub" id="hmNote">${hmNote(hmActive)}</div></div>`;
       })));
     })));
@@ -1935,7 +1935,7 @@ function repeatRhythmRow(s){
   const h=rows*(cell+gap);
   return `<div class="rhythm-row">
     <div class="meta">${esc(s.title)} · 每 ${s.repeat_days} 天 · 完成 ${s.done} / 排期 ${s.planned}</div>
-    <svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:${w}px;height:auto;display:block;margin-top:6px">${marks}</svg></div>`;
+    <svg viewBox="0 0 ${w} ${h}" class="chart mt-2" style="max-width:${w}px">${marks}</svg></div>`;
 }
 let hmCells=null;
 /* 热力图维度（SR-NF7 / G 批 · T-G1）：**词表从后端拿**（`/api/insights/heatmap-dimensions`）——
@@ -1980,7 +1980,7 @@ function valueHeatmap(cells,metric){
     }
   }
   const w=cols*(cell+gap),h=7*(cell+gap);
-  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block">${rects}</svg>`;
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}">${rects}</svg>`;
 }
 function setHeatmap(metric){
   const row=document.getElementById('hmRow'),box=document.getElementById('hmBox'),note=document.getElementById('hmNote');
@@ -1997,9 +1997,9 @@ function weekCard(w){
     const h=Math.round(6+d.focus_minutes/max*34);           // 6~40px，0 也留一条底线
     const label=Number(d.date.slice(8,10));
     const bg=d.focus_minutes>0?'var(--accent)':'var(--line)';
-    return `<div title="${d.date} ${d.focus_minutes} 分钟" style="flex:1;text-align:center">
-      <div style="height:${h}px;background:${bg};border-radius:4px 4px 0 0"></div>
-      <div class="sub" style="margin-top:4px">${label}</div></div>`;
+    return `<div title="${d.date} ${d.focus_minutes} 分钟" class="bar-col">
+      <div class="bar-v" style="height:${h}px;background:${bg}"></div>
+      <div class="sub mt-1">${label}</div></div>`;
   }).join('');
   const nums=[`专注 ${w.focus_hours}h`];
   if(w.gain_count)nums.push(`完成收益 ${w.gain_count} 项`);   // T-F6：完成悬赏=收益（N3 口径）
@@ -2008,10 +2008,10 @@ function weekCard(w){
   if(w.review_count)nums.push(`复习 ${w.review_count} 张`);
   if(w.output_count)nums.push(`产出 ${w.output_count} 条`);
   if(w.debt_count)nums.push(`债务 ${w.debt_count} 项`);
-  return `<div class="card" style="display:block">
+  return `<div class="card block">
     <div class="meta">本周 ${w.start} ~ ${w.end} · ${nums.join(' · ')}</div>
-    <div style="display:flex;gap:6px;align-items:flex-end;margin-top:12px">${bars}</div>
-    <div class="sub" style="margin-top:8px">${noteHTML(w.steady_note)}</div>
+    <div class="bar-row">${bars}</div>
+    <div class="sub mt-3">${noteHTML(w.steady_note)}</div>
     ${rhythmRow(w)}</div>`;
 }
 // 均衡度（T-C3 / SR-F2.5）：**波动** = 逐日专注分钟的**标准差**、**空档** = 本周**最长连续 0 天**。
@@ -2019,7 +2019,7 @@ function weekCard(w){
 // 不设目标、不告警、不排名（守约定层"温和不施压"）。
 function rhythmRow(w){
   if(w.focus_variation_minutes==null&&!w.rhythm_note)return '';
-  return `<div class="sub" style="margin-top:6px">波动 ${w.focus_variation_minutes} 分钟（逐日专注的长短差）·
+  return `<div class="sub mt-2">波动 ${w.focus_variation_minutes} 分钟（逐日专注的长短差）·
     本周最长空档 ${w.longest_gap_days} 天 —— ${noteHTML(w.rhythm_note||'')}</div>`;
 }
 
@@ -2048,8 +2048,8 @@ function doneSection(d){
   const taskCount=d.tasks.length, stepCount=d.steps.length, parentCount=d.parents.length;
   const outCount=d.output_kpi+d.output_asset;
   if(!taskCount&&!stepCount&&!outCount)return '';
-  const tasksHtml=doneOpen.tasks?`<div style="margin-top:8px">
-    ${d.tasks.map(t=>`<div class="fact"><span class="grow" style="flex:1">${esc(t.title)}</span>
+  const tasksHtml=doneOpen.tasks?`<div class="mt-3">
+    ${d.tasks.map(t=>`<div class="fact"><span class="grow">${esc(t.title)}</span>
       <span class="sub">完成于 ${humanTime(t.completed_at)}</span>
       <button class="ghost" data-action="task-open" data-id="${t.id}">打开</button></div>`).join('')
     ||'<div class="sub">今天还没有整件完成的任务 —— 完成步骤同样算进展。</div>'}</div>`:'';
@@ -2057,22 +2057,22 @@ function doneSection(d){
   const byParent=d.parents.map(p=>{
     const mine=d.steps.filter(s=>s.parent_id===p.id);
     const prog=p.total_steps?` ${p.done_total}/${p.total_steps} 步`:'';
-    return `<div style="margin-top:8px">
+    return `<div class="mt-3">
       <div class="fact"><span class="badge">${p.done_today} 步</span>
-        <span class="grow" style="flex:1">${esc(p.title||'（父任务已不在）')}</span>
+        <span class="grow">${esc(p.title||'（父任务已不在）')}</span>
         <span class="sub">该任务进度${prog}</span>
         ${p.title?`<button class="ghost" data-action="task-open" data-id="${p.id}">打开</button>`:''}</div>
-      ${mine.map(s=>`<div class="fact" style="padding-left:18px"><span class="sub">└</span>
-        <span class="grow" style="flex:1">${esc(s.title)}</span>
+      ${mine.map(s=>`<div class="fact indent"><span class="sub">└</span>
+        <span class="grow">${esc(s.title)}</span>
         <span class="sub">${humanTime(s.completed_at)}</span></div>`).join('')}
     </div>`;
   }).join('');
-  const stepsHtml=doneOpen.steps?`<div style="margin-top:4px">${
+  const stepsHtml=doneOpen.steps?`<div class="mt-1">${
     byParent||'<div class="sub">今天还没有完成步骤。</div>'}</div>`:'';
-  const outputsHtml=doneOpen.outputs?`<div style="margin-top:8px">
-    ${d.outputs.map(o=>`<div class="fact" style="${o.retracted?'opacity:.55':''}">
+  const outputsHtml=doneOpen.outputs?`<div class="mt-3">
+    ${d.outputs.map(o=>`<div class="fact ${o.retracted?'retracted':''}">
       <span class="badge">${OUT_LABEL[o.kind]||esc(o.kind||'产出')}</span>
-      <span class="grow" style="flex:1">${esc(o.note||'（没写备注）')} ×${o.value}</span>
+      <span class="grow">${esc(o.note||'（没写备注）')} ×${o.value}</span>
       <span class="sub">${humanTime(o.occurred_at)}${o.retracted?' · 已撤销（不计入条数）':''}</span></div>`).join('')
     ||'<div class="sub">今天还没有产出记录。</div>'}</div>`:'';
   return `<div class="section-title" id="set-done">今天做成了什么（只读事实层，点开看明细）</div>
@@ -2097,7 +2097,7 @@ function doingSection(items){
     <div class="sub">这是你自己标的先后：↑↓ 调顺序，「停止」表示这件现在不做了（回到未开始/逾期）。</div>
     ${items.map((t,i)=>`<div class="fact">
       <span class="badge">${i+1}</span>
-      <span class="grow" style="flex:1">${esc(t.title)}</span>
+      <span class="grow">${esc(t.title)}</span>
       ${t.due_date?`<span class="sub">${esc(t.due_date)}</span>`:''}
       <button class="ghost" data-action="doing-move" data-id="${t.id}" data-dir="up" ${i===0?'disabled':''} title="上移">↑</button>
       <button class="ghost" data-action="doing-move" data-id="${t.id}" data-dir="down" ${i===items.length-1?'disabled':''} title="下移">↓</button>
@@ -2198,14 +2198,14 @@ function fmt(sec){const s=Math.max(0,Math.floor(sec));const h=Math.floor(s/3600)
 async function renderFocus(m){
   const [today,active,cfg]=await Promise.all([api('/api/focus/today'),api('/api/focus/active'),api('/api/config')]);
   if(active&&active.device_id&&active.device_id!==clientId()){   // 别处开的：这一页也只说实话（T-G20）
-    m.innerHTML=`<div class="card" style="display:block">
+    m.innerHTML=`<div class="card block">
       <div class="title">别处正在专注</div>
       <div class="meta">另一台设备（或另一个窗口）正在计时。这边只显示、不改动 —— 要结束请去那边。</div>
       <div class="sub">同一段时间不会在这边重复记一笔投入。今日已计入 ${today.focus_minutes} 分钟（只算正常结束的）。</div></div>`;
     return;
   }
   if(active){   // 计时态在右栏；这里只说明「去哪里结束」，避免两处计时器对不上
-    m.innerHTML=`<div class="card" style="display:block">
+    m.innerHTML=`<div class="card block">
       <div class="title">专注进行中</div>
       <div class="meta">计时与「结束 / 记中断 / 放弃」都在右侧常驻面板里，切到任何页面都不会停。</div>
       <div class="sub">今日已计入 ${today.focus_minutes} 分钟（只算正常结束的）。</div></div>`;
@@ -2248,15 +2248,15 @@ async function renderHabit(m){
   const today=todayISO();
   const cards=habits.map(h=>{
     const doneToday=(h.logs||[]).includes(today);
-    return `<div class="card" style="display:block">
-      <div style="display:flex;align-items:center;gap:10px">
+    return `<div class="card block">
+      <div class="habit-head">
         <div class="card-body"><div class="title">${esc(h.name)}</div>
           <div class="meta">连续 ${h.streak} 天 · 近一年打卡 ${(h.logs||[]).length} 天</div></div>
         <button class="${doneToday?'':'ghost'}" data-action="habit-toggle" data-id="${h.id}">${doneToday?'已打卡（点此取消）':'打卡'}</button>
         <button class="ghost" data-action="habit-rename" data-id="${h.id}" data-name="${esc(h.name)}">改名</button>
         <button class="ghost" data-action="habit-delete" data-id="${h.id}" data-name="${esc(h.name)}">删除</button>
       </div>
-      <div style="margin-top:10px">${heatmap(h.logs)}</div></div>`;
+      <div class="mt-4">${heatmap(h.logs)}</div></div>`;
   }).join('');
   m.innerHTML=`<div class="card"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div>
     <div class="sub">习惯打卡<b>只记次数</b>，不折算成投入时间（时间折算只在有真实时长时才算）。想让它占用投入时间，
@@ -2335,12 +2335,12 @@ async function renderAcademic(m){
         <button class="ghost" data-action="assessment-del" data-id="${a.id}">删除</button></div>`;}).join('')}`:'';
   // 全部考核项（含 14 天以外的）：要求备注 + 要求链接（SR-F5.3）在这里就近可写可点
   const allAssessments=assessments.length?`<div class="section-title">考核项（${assessments.length}）</div>
-    ${assessments.map(a=>`<div class="card" style="display:block">
+    ${assessments.map(a=>`<div class="card block">
       <div class="title">${esc(a.name)}${a.score!==null&&a.score!==undefined?` <span class="badge">${a.score} 分</span>`:''}</div>
       <div class="meta">${esc(courseName(a.course_id))} · ${a.due_date||'没设截止日'}${a.weight?` · 占 ${a.weight}`:''}</div>
       ${a.note?`<div class="sub">要求：${esc(a.note)}</div>`:''}
       ${assessmentAttachHTML(a)}
-      <div class="row" style="margin-top:6px"><button class="ghost" data-action="assessment-del" data-id="${a.id}">删除考核项</button></div>
+      <div class="row mt-2"><button class="ghost" data-action="assessment-del" data-id="${a.id}">删除考核项</button></div>
     </div>`).join('')}`:'';
   const courseOpts=courses.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   const otherScale=scale==='4.0'?'5.0':'4.0';
@@ -2350,9 +2350,9 @@ async function renderAcademic(m){
      <div class="meta">加权平均成绩（百分制）<br><span class="sub">Σ(学分×成绩) ÷ Σ学分 · ${gpaG.weighted_credits||0} 学分计入</span></div></div>
    <div class="card"><div class="big">${gpaG.gpa}</div>
      <div class="meta">GPA（${scale} 制，${gpaG.credits} 学分）<br><span class="sub">切换制式：另 ${otherScale} 制为 ${other.gpa}</span></div></div></div>
-  <div class="card" style="display:block">
+  <div class="card block">
     <div class="meta">GPA 制式（切换后本页所有数值按该制式显示）</div>
-    <div class="row" style="margin-top:8px">
+    <div class="row mt-3">
       <button class="${scale==='4.0'?'':'ghost'}" data-action="set-gpa" data-scale="4.0">4.0 制</button>
       <button class="${scale==='5.0'?'':'ghost'}" data-action="set-gpa" data-scale="5.0">5.0 制</button>
       <span class="sub">配置默认值来自 config.toml 的 [academic] gpa_scale；这里只切当前查看口径。</span>
@@ -2365,11 +2365,11 @@ async function renderAcademic(m){
   <div class="section-title">课程</div>
   <div class="new"><input id="cName" placeholder="新建课程，如：高数" data-enter="course-add"><button data-action="course-add">新建课程</button></div>
   ${courses.map(c=>{const ts=tasksOfCourse(c.id);const open=ts.filter(t=>t.status!=='完成');
-    return `<div class="card" style="display:block">
+    return `<div class="card block">
       <div class="title">${esc(c.name)}</div>
       <div class="meta">${c.credits}学分 ${c.teacher||''} · 关联任务 ${ts.length}（未完成 ${open.length}）</div>
       ${open.slice(0,5).map(t=>`<div class="fact"><span class="badge">${esc(t.task_type||'普通')}</span>
-        <span class="grow" style="flex:1">${esc(t.title)}</span>
+        <span class="grow">${esc(t.title)}</span>
         ${t.due_date?`<span class="sub">${t.due_date}</span>`:''}
         <button class="ghost" data-action="task-open" data-id="${t.id}">打开</button></div>`).join('')}
       ${open.length>5?`<div class="sub">还有 ${open.length-5} 项未完成；任务页可见全部。</div>`:''}
@@ -2423,9 +2423,9 @@ async function delAssessment(id){
 }
 // ---- 考核项的「要求链接」（SR-F5.3 / T-B4）：与任务附件同一个字段、同一套打开规则 ----
 function assessmentAttachHTML(a){
-  return `<div class="meta" style="display:block;margin-top:6px">
+  return `<div class="meta mt-2">
     ${attachRowsHTML(a.attach,'assessment-attach-del',a.id)||'<span class="sub">还没挂要求链接</span>'}
-    <div class="new" style="margin:6px 0">
+    <div class="new mv-2">
       <input id="asTarget-${a.id}" placeholder="要求网页或本地路径" data-enter="assessment-attach-add" data-id="${a.id}">
       <button class="ghost" data-action="assessment-attach-add" data-id="${a.id}">挂上</button></div></div>`;
 }
@@ -2501,7 +2501,7 @@ async function editReview(id){
 }
 function reviewEditForm(it,meta){
   const forms=(meta&&meta.forms)||[], sources=(meta&&meta.sources)||[];
-  return `<div class="card" style="display:block">
+  return `<div class="card block">
     <div class="settings-sub">形式（记录用，不做挖空渲染）</div>
     <select id="rvForm">${forms.map(f=>`<option value="${f.value}" ${f.value===it.form?'selected':''}>${esc(f.label)}</option>`).join('')}</select>
     <div class="settings-sub">执行源</div>
@@ -2509,10 +2509,10 @@ function reviewEditForm(it,meta){
     <div class="settings-sub">引用句柄（可选）</div>
     <input id="rvHandle" placeholder="Vault 相对路径 / KB-ID" value="${esc(it.ref_handle||'')}">
     <div class="sub">只存引用句柄，本软件<b>不碰</b>你的 Vault 文件；留空 = 清除。</div>
-    <div class="row" style="margin-top:10px">
+    <div class="row mt-4">
       <button data-action="review-save">保存</button>
       <button class="ghost" data-action="review-edit-cancel">取消</button></div>
-    <div class="sub" style="margin-top:8px">到期时间 / 间隔 / 次数由 FSRS 管，<b>不给人手改</b>（那是记忆状态，不是设置项）。</div></div>`;
+    <div class="sub mt-3">到期时间 / 间隔 / 次数由 FSRS 管，<b>不给人手改</b>（那是记忆状态，不是设置项）。</div></div>`;
 }
 async function saveReviewEdit(){
   const form=document.getElementById('rvForm').value;
@@ -2553,7 +2553,7 @@ async function renderTeam(m){
   const viewBtns=b.views.map(v=>`<button class="${v.value===b.view?'':'ghost'}" data-action="team-view" data-view="${v.value}">${esc(v.label)}</button>`).join('');
   // 执行者视角要一个名字（管理者视角不需要 —— 分配出去的记录本来就是你建的）
   const meRow=b.view==='executor'
-    ?`<div class="new" style="margin:6px 0 0"><input id="teamMe" class="grow" placeholder="我是谁？（分配记录里写的那个人名）" value="${esc(b.me)}">
+    ?`<div class="new mt-2"><input id="teamMe" class="grow" placeholder="我是谁？（分配记录里写的那个人名）" value="${esc(b.me)}">
       <button data-action="team-me">就用这个名字</button></div>`
     :'';
   const chips=[{value:'',label:'全部',count:b.total}].concat(b.statuses)
@@ -2565,10 +2565,10 @@ async function renderTeam(m){
     :(b.me?'这个视角下没有任务（换个状态筛选看看）。':'先在上面填「我是谁」，再看分给你的那几件。');
   m.innerHTML=`<div class="card panel-card">
     <div class="row">${viewBtns}</div>
-    <div class="sub" style="margin-top:6px">${noteHTML(b.note)}</div>
+    <div class="sub mt-2">${noteHTML(b.note)}</div>
     ${meRow}
-    <div class="row" style="margin-top:8px">${chips}</div></div>
-  <div class="meta" style="margin-top:8px">这一页是<b>分配关系的两种看法</b>，不是两套数据：切视角只是换个看法（共 ${b.shown} 件）。</div>
+    <div class="row mt-3">${chips}</div></div>
+  <div class="meta mt-3">这一页是<b>分配关系的两种看法</b>，不是两套数据：切视角只是换个看法（共 ${b.shown} 件）。</div>
   ${body||emptyState(empty)}`;
 }
 function teamItemHTML(it,view){
@@ -2595,10 +2595,10 @@ async function renderReview(m){
   reviewRatings=meta.ratings||[];               // 三态中文只在后端一处：这里拿一份给下面用
   const doneToday=summary.review_count||0;
   const total=due.length+doneToday;  // 今天该复习的 = 还没做的 + 今天已做的
-  m.innerHTML=`<div class="card" style="display:block">
+  m.innerHTML=`<div class="card block">
     <div class="meta">复习完成计投入（维持），不折算时间</div>
     ${progressBar(doneToday,total,'今日复习进度')}
-    <div class="sub" style="margin-top:6px">${total?`还剩 ${due.length} 张；点了「记得/模糊/忘了」就会计入进度。`:'今天没有到期的复习卡。'}</div></div>
+    <div class="sub mt-2">${total?`还剩 ${due.length} 张；点了「记得/模糊/忘了」就会计入进度。`:'今天没有到期的复习卡。'}</div></div>
   <div class="new"><input id="rvTitle" placeholder="新建复习卡内容"><button data-action="review-add">新建</button></div>
   <div class="section-title">到期复习（${due.length}）</div>
   ${due.map(r=>reviewCard(r,reviewRatings)).join('')||emptyState('没有到期复习，轻松一下')}
@@ -2630,7 +2630,7 @@ async function renderMemo(m){
   <div class="section-title">今日手动投入（独立于专注投入）</div>
   <div class="new">
     <select id="inKind"><option value="focus">专注补记</option><option value="habit">习惯</option><option value="other">其它</option></select>
-    <input id="inMinutes" type="number" min="0" step="5" value="25" style="width:90px" title="分钟">
+    <input id="inMinutes" class="w-90" type="number" min="0" step="5" value="25" title="分钟">
     <span class="sub">分钟</span>
     <input id="inNote" placeholder="备注，如：番茄补记">
     <button data-action="invest-add">记一笔投入</button></div>
@@ -2640,7 +2640,7 @@ async function renderMemo(m){
   <div class="section-title">今日产出（独立于投入轴）</div>
   <div class="new">
     <select id="outKind"><option value="asset">知识资产</option><option value="kpi">学校 KPI</option></select>
-    <input id="outValue" type="number" step="0.5" value="1" style="width:90px" title="数量">
+    <input id="outValue" class="w-90" type="number" step="0.5" value="1" title="数量">
     <input id="outNote" placeholder="备注，如：数学笔记#3">
     <button data-action="output-add">记一笔产出</button></div>
   <div class="meta">按两类分开看（T-C4）：学校 KPI ${outputs.filter(o=>o.kind==='kpi'&&!o.retracted).length} 条 · 知识资产 ${outputs.filter(o=>o.kind==='asset'&&!o.retracted).length} 条 —— 同一份产出事实，只是分组显示（不拆轴、不折算）。</div>
@@ -2846,7 +2846,7 @@ async function renderSetting(m){
     <div class="row tight">
       <input id="archiveDays" type="number" min="0" max="${Number(arch.max_after_days)||365}"
         value="${Number.isFinite(Number(arch.after_days))?Number(arch.after_days):3}"
-        style="max-width:90px" data-enter="set-archive-days">
+        class="maxw-90" data-enter="set-archive-days">
       <button data-action="set-archive-days">保存</button>
       <span class="sub">默认 ${Number(arch.default_after_days)||3} 天 · 上限 ${Number(arch.max_after_days)||365} 天</span></div>
     <div class="sub">${noteHTML(arch.note||'')}</div>
@@ -2892,7 +2892,7 @@ async function renderSetting(m){
   <div class="card panel-card">
     <div class="settings-sub">写到哪个目录</div>
     <div class="row tight">
-      <input id="exportDir" value="${esc(ex.dir||'')}" style="min-width:240px" data-enter="set-export-dir">
+      <input id="exportDir" value="${esc(ex.dir||'')}" class="minw-240" data-enter="set-export-dir">
       <button data-action="set-export-dir">保存</button>
       <button class="ghost" data-action="export-day">导出今天</button>
       <button class="ghost" data-action="attach-open" data-target="${esc(ex.dir||'')}">打开目录</button></div>
@@ -2902,19 +2902,19 @@ async function renderSetting(m){
     <div class="meta">今天这份：${ex.note_exists
       ? `已写出 ${sizeLabel(ex.note_bytes)}${ex.last_written_at?` · ${esc(String(ex.last_written_at).replace('T',' '))}`:''}`
       : '还没写（完成一个任务、记一条备忘就会自动写；也可以点上面的「导出今天」）'}</div>
-    ${ex.last_error?`<div class="meta" style="color:var(--danger)">上次导出失败：${esc(ex.last_error)}
+    ${ex.last_error?`<div class="meta err">上次导出失败：${esc(ex.last_error)}
       —— 不影响你用软件，修好目录后再点「导出今天」</div>`:''}
     <div class="settings-sub" id="set-vault">Obsidian（只读跳转）</div>
     <div class="row tight">
-      <input id="vaultName" value="${esc(ex.vault||'')}" style="min-width:160px"
+      <input id="vaultName" value="${esc(ex.vault||'')}" class="minw-160"
         placeholder="Vault 名字（Obsidian 里的库名）" data-enter="set-vault">
-      <input id="vaultDir" value="${esc(ex.vault_dir||'')}" style="min-width:220px"
+      <input id="vaultDir" value="${esc(ex.vault_dir||'')}" class="minw-220"
         placeholder="Vault 根目录（可留空）" data-enter="set-vault">
       <button data-action="set-vault">保存</button></div>
     <div class="meta">${ex.vault_configured
       ? `已填：<b>${esc(ex.vault||'')}</b>${ex.vault_dir?` · 根目录 ${esc(ex.vault_dir)}`:' （没填根目录 → 只认 Vault 相对路径的句柄）'}`
       : '还没填 —— 填上「Vault 名字」后，复习卡/备忘里挂的引用句柄就能一键跳进 Obsidian'}</div>
-    ${ex.vault_overlap?`<div class="meta" style="color:var(--danger)">${esc(ex.vault_overlap)}</div>`:''}
+    ${ex.vault_overlap?`<div class="meta err">${esc(ex.vault_overlap)}</div>`:''}
     <div class="sub">${noteHTML(ex.vault_note||'')}</div>
     <div class="sub">${noteHTML(ex.note||'')}</div>
     <div class="sub">${noteHTML(ex.where||'')}</div>
@@ -3003,7 +3003,7 @@ async function renderSetting(m){
       ② 开启后会注册一个 Windows 计划任务（每 ${remindCfg.interval_minutes} 分钟检查一次），<b>关掉应用也会响</b>。</div>
     <div class="meta">上次通知：${remindCfg.last_notify_at?esc(String(remindCfg.last_notify_at).replace('T',' ')):'（还没有）'}
       ${remindCfg.last_result?` · ${esc(remindCfg.last_result)}`:''}</div>
-    ${remindCfg.last_error?`<div class="meta" style="color:var(--danger)">上次出错：${esc(remindCfg.last_error)}（弹不出来不会静默，下次自动重试）</div>`:''}
+    ${remindCfg.last_error?`<div class="meta err">上次出错：${esc(remindCfg.last_error)}（弹不出来不会静默，下次自动重试）</div>`:''}
     <div class="sub">诚实边界：计划任务以<b>当前用户、交互式</b>运行 —— 应用关掉也响，但<b>注销/关机时不响</b>
       （要做到"注销也响"得改系统层权限，不擅自做）。开启/关闭都是可逆的：关闭会把计划任务删掉、不留痕。
       移动端只做界面标注，不发系统通知。</div>
@@ -3019,10 +3019,10 @@ async function renderSetting(m){
       <b>导入不会删你本地的任何东西</b>。</div>
     <div class="row tight">
       <button data-action="sync-export">导出同步包</button>
-      <input id="syncPath" placeholder="要导入的包路径（后端会把完整路径给你）" style="min-width:260px">
+      <input id="syncPath" placeholder="要导入的包路径（后端会把完整路径给你）" class="minw-260">
       <button class="ghost" data-action="sync-preview">先预览</button>
       <button class="ghost" data-action="sync-import">导入</button></div>
-    <div class="row tight" style="margin-top:var(--sp-3)">
+    <div class="row tight mt-3">
       <label class="sub"><input type="checkbox" id="syncDel" data-change="sync-del-toggle"> 同时应用对方的删除</label>
       <span class="sub" id="syncDelHint">（默认不删：只记墓碑，保留你本地的行）</span></div>
     <div class="sub">勾上之后，对方<b>删掉过</b>的东西也会在本机删掉 —— <b>不可撤销</b>（要回退用「备份与恢复」）。
@@ -3064,7 +3064,7 @@ async function renderSetting(m){
     <div class="sub" id="lanSelfCheck"></div>
     <div class="settings-sub" id="set-backup">备份与恢复</div>
     <div class="meta">每次起服务/开窗口前会自动备份一份。库：${esc(bk.db||'—')}（目录 ${esc(bk.dir||'—')}）</div>
-    <div class="row tight" style="margin-top:var(--sp-2)">
+    <div class="row tight mt-2">
       ${(bk.items||[]).length?bk.items.map(b=>`<button class="ghost" data-action="restore-backup"
         data-name="${esc(b.name)}" title="恢复到 ${esc(b.at)}">${esc(String(b.at).replace('T',' '))} · ${sizeLabel(b.size)}${b.parsed?'':'（名字被改过）'}</button>`).join('')
         :'<span class="sub">还没有备份（起一次服务就会有一份）</span>'}</div>
@@ -3493,7 +3493,7 @@ function guideCard(){
     <div class="sub">① 在下面的输入框写下一件要做的事（回车即可）→ ② 点「专注」开始计时，正常结束时会计入今天的投入 →
       ③ 晚上在专注页跟一句「今天计划 vs 实际」。</div>
     <div class="sub">不用一次做全，这只是个起点；随时可以关掉，之后想再看就在设置页点「再看一遍新手引导」。</div>
-    <div class="row" style="margin-top:8px">
+    <div class="row mt-3">
       <button data-action="guide-start">好，先写第一件事</button>
       <button class="ghost" data-action="guide-done">知道了，不再显示</button>
     </div></div>`;

@@ -22,10 +22,10 @@ div.shell>aside.rail>nav>button#railToggle	收起右栏	143,85,78,37	13/normal/4
 html>body>div.shell>main#main		0,142,820,244	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
 body>div.shell>main#main>div.section-title	已标记（1）	24,142,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.sub	你自己按了标记的任务（卡片上的「标记」按钮）。标记只是提醒自己，不代表重要。	24,169,772,16	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.row.tight		24,195,772,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.row.tight>button.ghost:nth-child(1)	重要	24,195,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.row.tight>button.ghost:nth-child(2)	有计划	80,195,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.row.tight>button	已标记	149,196,67,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+body>div.shell>main#main>div.row.tight.mv-4		24,195,772,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(1)	重要	24,195,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(2)	有计划	80,195,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.row.tight.mv-4>button	已标记	149,196,67,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 body>div.shell>main#main>div.card		24,242,772,110	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card>button.check		40,286,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px
 div.shell>main#main>div.card>div.card-body		74,276,204,42	16/normal/400	#1e293b/#000000@0.00	0;0px

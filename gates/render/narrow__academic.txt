@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=narrow 820x900 view=academic rows=152 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=narrow 820x900 view=academic rows=160 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,820,1974	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,820,122	16/normal/400	#1e293b/#000000@0.00	0;14px 24px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,14,86,24	18/normal/700	#1e293b/#000000@0.00	0;0px
@@ -29,12 +29,12 @@ div.shell>main#main>div.grid>div.card:nth-child(2)		415,122,381,68	16/normal/400
 main#main>div.grid>div.card:nth-child(2)>div.big	3.7	431,136,43,40	30/normal/700	#2f6feb/#000000@0.00	0;0px
 main#main>div.grid>div.card:nth-child(2)>div.meta		486,140,137,32	12/normal/400	#64748b/#000000@0.00	0;0px
 div.grid>div.card:nth-child(2)>div.meta>span.sub	切换制式：另 5.0 制为 4.5	486,156,137,16	12/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card:nth-child(2)		24,200,772,89	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card:nth-child(2)>div.meta	GPA 制式（切换后本页所有数值按该制式显示）	40,214,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card:nth-child(2)>div.row		40,238,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card:nth-child(2)>div.row>button	4.0 制	40,239,63,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card:nth-child(2)>div.row>button.ghost	5.0 制	111,238,65,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card:nth-child(2)>div.row>span.sub	配置默认值来自 config.toml 的 [academic] gpa_scale；这里只切当前查看口径。	183,251,421,16	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block:nth-child(2)		24,200,772,89	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.block:nth-child(2)>div.meta	GPA 制式（切换后本页所有数值按该制式显示）	40,214,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block:nth-child(2)>div.row.mt-3		40,238,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(2)>div.row.mt-3>button	4.0 制	40,239,63,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card.block:nth-child(2)>div.row.mt-3>button.ghost	5.0 制	111,238,65,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card.block:nth-child(2)>div.row.mt-3>span.sub	配置默认值来自 config.toml 的 [academic] gpa_scale；这里只切当前查看口径。	183,251,421,16	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(3)	硬考核：临期与逾期（14 天内，未录成绩）	24,309,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.sub	这类是「逾期不候」的：交了就计成绩，没交就没了 —— 所以单独放前面、标出来。 不催你，只是别让它被忘掉。	24,336,772,16	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.hard		24,352,772,68	16/normal/400	#1e293b/#ffffff	12;14px 16px
@@ -45,74 +45,82 @@ div.card-body>div.title>span.badge.hard>i.dot		60,375,8,8	11/normal/400	#64748b/
 main#main>div.card.hard>div.card-body>div.meta	高等数学 · YYYY-MM-DD · 还有 9 天 · 占 0.4 · 未录成绩	45,390,667,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div.card.hard>button.ghost	删除	724,367,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title:nth-child(6)	考核项（1）	24,440,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card:nth-child(7)		24,467,772,174	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card:nth-child(7)>div.title	期中考试	40,481,740,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card:nth-child(7)>div.meta:nth-child(2)	高等数学 · YYYY-MM-DD · 占 0.4	40,502,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card:nth-child(7)>div.meta:nth-child(3)		40,524,740,60	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card:nth-child(7)>div.meta:nth-child(3)>span.sub	还没挂要求链接	40,524,84,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card:nth-child(7)>div.meta:nth-child(3)>div.new		40,546,740,38	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(7)>div.meta:nth-child(3)>div.new>input	(text)要求网页或本地路径	40,546,674,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
-div.card:nth-child(7)>div.meta:nth-child(3)>div.new>button.ghost	挂上	724,546,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.card:nth-child(7)>div.row		40,590,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card:nth-child(7)>div.row>button.ghost	删除考核项	40,590,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div.card.block:nth-child(7)		24,467,772,174	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.block:nth-child(7)>div.title	期中考试	40,481,740,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block:nth-child(7)>div.meta	高等数学 · YYYY-MM-DD · 占 0.4	40,502,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block:nth-child(7)>div.meta.mt-2		40,524,740,60	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(7)>div.meta.mt-2>span.sub	还没挂要求链接	40,524,84,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(7)>div.meta.mt-2>div.new.mv-2		40,546,740,38	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.block:nth-child(7)>div.meta.mt-2>div.new.mv-2>input	(text)要求网页或本地路径	40,546,674,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
+div.card.block:nth-child(7)>div.meta.mt-2>div.new.mv-2>button.ghost	挂上	724,546,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.card.block:nth-child(7)>div.row.mt-2		40,590,740,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(7)>div.row.mt-2>button.ghost	删除考核项	40,590,95,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title:nth-child(8)	学业概览（多维）	24,661,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card:nth-child(9)		24,688,772,288	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div>div:nth-child(1)>svg>polygon.axis-line:nth-child(1)		143,792,53,51	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>polygon.axis-line:nth-child(2)		117,764,107,102	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>polygon.axis-line:nth-child(3)		89,735,162,154	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>line.axis-line:nth-child(5)		170,793,81,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>line.axis-line:nth-child(6)		170,820,50,69	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>line.axis-line:nth-child(7)		120,820,50,69	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>line.axis-line:nth-child(8)		89,793,81,26	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>polygon		89,741,151,147	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>circle:nth-child(10)		166,737,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>circle:nth-child(11)		236,794,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>circle:nth-child(12)		209,875,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>circle:nth-child(13)		116,885,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>circle:nth-child(14)		85,790,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>text.axis-label:nth-child(15)	GPA(当前制)	138,706,65,16	10/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>text.axis-label:nth-child(16)	加权平均	244,778,48,16	10/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>text.axis-label:nth-child(17)	平均分	213,894,37,16	10/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>text.axis-label:nth-child(18)	学分	97,894,25,16	10/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(1)>svg>text.axis-label:nth-child(19)	课程覆盖	47,778,49,16	10/normal/400	#1e293b/#000000@0.00	0;0px
-div>div:nth-child(2)>div:nth-child(1)>div.sub		314,739,466,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div:nth-child(2)>div:nth-child(1)>div.sub>span:nth-child(1)	GPA(当前制)	314,739,65,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div:nth-child(2)>div:nth-child(1)>div.sub>span:nth-child(2)	3.7	764,739,16,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div>div:nth-child(2)>div:nth-child(1)>div.bar-track		314,755,466,10	16/normal/400	#1e293b/#f1f5f9	6;0px
-div:nth-child(2)>div:nth-child(1)>div.bar-track>div.bar-fill		314,755,431,10	16/normal/400	#1e293b/#2f6feb	0;0px
-div>div:nth-child(2)>div:nth-child(2)>div.sub		314,773,466,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div:nth-child(2)>div:nth-child(2)>div.sub>span:nth-child(1)	加权平均	314,773,48,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div:nth-child(2)>div:nth-child(2)>div.sub>span:nth-child(2)	86	767,773,13,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div>div:nth-child(2)>div:nth-child(2)>div.bar-track		314,789,466,10	16/normal/400	#1e293b/#f1f5f9	6;0px
-div:nth-child(2)>div:nth-child(2)>div.bar-track>div.bar-fill		314,789,401,10	16/normal/400	#1e293b/#2f6feb	0;0px
-div>div:nth-child(2)>div:nth-child(3)>div.sub		314,807,466,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div:nth-child(2)>div:nth-child(3)>div.sub>span:nth-child(1)	平均分	314,807,36,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div:nth-child(2)>div:nth-child(3)>div.sub>span:nth-child(2)	86	767,807,13,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div>div:nth-child(2)>div:nth-child(3)>div.bar-track		314,823,466,10	16/normal/400	#1e293b/#f1f5f9	6;0px
-div:nth-child(2)>div:nth-child(3)>div.bar-track>div.bar-fill		314,823,401,10	16/normal/400	#1e293b/#2f6feb	0;0px
-div>div:nth-child(2)>div:nth-child(4)>div.sub		314,841,466,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div:nth-child(2)>div:nth-child(4)>div.sub>span:nth-child(1)	学分	314,841,24,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div:nth-child(2)>div:nth-child(4)>div.sub>span:nth-child(2)	5	774,841,6,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div>div:nth-child(2)>div:nth-child(4)>div.bar-track		314,857,466,10	16/normal/400	#1e293b/#f1f5f9	6;0px
-div:nth-child(2)>div:nth-child(4)>div.bar-track>div.bar-fill		314,857,466,10	16/normal/400	#1e293b/#2f6feb	0;0px
-div>div:nth-child(2)>div:nth-child(5)>div.sub		314,875,466,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div:nth-child(2)>div:nth-child(5)>div.sub>span:nth-child(1)	课程覆盖	314,875,48,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div:nth-child(2)>div:nth-child(5)>div.sub>span:nth-child(2)	1/1	762,875,18,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div>div:nth-child(2)>div:nth-child(5)>div.bar-track		314,891,466,10	16/normal/400	#1e293b/#f1f5f9	6;0px
-div:nth-child(2)>div:nth-child(5)>div.bar-track>div.bar-fill		314,891,466,10	16/normal/400	#1e293b/#2f6feb	0;0px
-div.shell>main#main>div.card:nth-child(9)>div.sub	各轴各自归一到本图最大值，只看「是否均衡」，不用于跨人比较；成绩录得越多，覆盖越满。	40,946,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block:nth-child(9)		24,688,772,288	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.block:nth-child(9)>div.gpa-head		40,702,740,240	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(9)>div.gpa-head>div>svg.chart.radar		40,702,260,236	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>polygon.axis-line:nth-child(1)		143,792,53,51	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>polygon.axis-line:nth-child(2)		117,764,107,102	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>polygon.axis-line:nth-child(3)		89,735,162,154	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>line.axis-line:nth-child(5)		170,793,81,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>line.axis-line:nth-child(6)		170,820,50,69	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>line.axis-line:nth-child(7)		120,820,50,69	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>line.axis-line:nth-child(8)		89,793,81,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>polygon		89,741,151,147	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>circle:nth-child(10)		166,737,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>circle:nth-child(11)		236,794,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>circle:nth-child(12)		209,875,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>circle:nth-child(13)		116,885,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>circle:nth-child(14)		85,790,7,7	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>text.axis-label:nth-child(15)	GPA(当前制)	138,706,65,16	10/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>text.axis-label:nth-child(16)	加权平均	244,778,48,16	10/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>text.axis-label:nth-child(17)	平均分	213,894,37,16	10/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>text.axis-label:nth-child(18)	学分	97,894,25,16	10/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div>svg.chart.radar>text.axis-label:nth-child(19)	课程覆盖	47,778,49,16	10/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(9)>div.gpa-head>div.stat-label		314,735,466,174	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block:nth-child(9)>div.gpa-head>div.stat-label>div.mb-3:nth-child(1)		314,739,466,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(1)>div.sub.split		314,739,466,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.stat-label>div.mb-3:nth-child(1)>div.sub.split>span:nth-child(1)	GPA(当前制)	314,739,65,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.stat-label>div.mb-3:nth-child(1)>div.sub.split>span:nth-child(2)	3.7	764,739,16,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(1)>div.bar-track.tall		314,755,466,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.stat-label>div.mb-3:nth-child(1)>div.bar-track.tall>div.bar-fill		314,755,431,10	16/normal/400	#1e293b/#2f6feb	0;0px
+div.card.block:nth-child(9)>div.gpa-head>div.stat-label>div.mb-3:nth-child(2)		314,773,466,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(2)>div.sub.split		314,773,466,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.stat-label>div.mb-3:nth-child(2)>div.sub.split>span:nth-child(1)	加权平均	314,773,48,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.stat-label>div.mb-3:nth-child(2)>div.sub.split>span:nth-child(2)	86	767,773,13,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(2)>div.bar-track.tall		314,789,466,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.stat-label>div.mb-3:nth-child(2)>div.bar-track.tall>div.bar-fill		314,789,401,10	16/normal/400	#1e293b/#2f6feb	0;0px
+div.card.block:nth-child(9)>div.gpa-head>div.stat-label>div.mb-3:nth-child(3)		314,807,466,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(3)>div.sub.split		314,807,466,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.stat-label>div.mb-3:nth-child(3)>div.sub.split>span:nth-child(1)	平均分	314,807,36,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.stat-label>div.mb-3:nth-child(3)>div.sub.split>span:nth-child(2)	86	767,807,13,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(3)>div.bar-track.tall		314,823,466,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.stat-label>div.mb-3:nth-child(3)>div.bar-track.tall>div.bar-fill		314,823,401,10	16/normal/400	#1e293b/#2f6feb	0;0px
+div.card.block:nth-child(9)>div.gpa-head>div.stat-label>div.mb-3:nth-child(4)		314,841,466,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(4)>div.sub.split		314,841,466,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.stat-label>div.mb-3:nth-child(4)>div.sub.split>span:nth-child(1)	学分	314,841,24,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.stat-label>div.mb-3:nth-child(4)>div.sub.split>span:nth-child(2)	5	774,841,6,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(4)>div.bar-track.tall		314,857,466,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.stat-label>div.mb-3:nth-child(4)>div.bar-track.tall>div.bar-fill		314,857,466,10	16/normal/400	#1e293b/#2f6feb	0;0px
+div.card.block:nth-child(9)>div.gpa-head>div.stat-label>div.mb-3:nth-child(5)		314,875,466,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(5)>div.sub.split		314,875,466,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.stat-label>div.mb-3:nth-child(5)>div.sub.split>span:nth-child(1)	课程覆盖	314,875,48,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.stat-label>div.mb-3:nth-child(5)>div.sub.split>span:nth-child(2)	1/1	762,875,18,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.gpa-head>div.stat-label>div.mb-3:nth-child(5)>div.bar-track.tall		314,891,466,10	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.stat-label>div.mb-3:nth-child(5)>div.bar-track.tall>div.bar-fill		314,891,466,10	16/normal/400	#1e293b/#2f6feb	0;0px
+div.shell>main#main>div.card.block:nth-child(9)>div.sub	各轴各自归一到本图最大值，只看「是否均衡」，不用于跨人比较；成绩录得越多，覆盖越满。	40,946,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(10)	课程	24,996,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.new		24,1029,772,38	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.new>input#cName	(text)新建课程，如：高数	24,1029,682,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
 div.shell>main#main>div.new>button	新建课程	716,1030,80,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-body>div.shell>main#main>div.card:nth-child(12)		24,1083,772,108	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card:nth-child(12)>div.title	高等数学	40,1097,740,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.card:nth-child(12)>div.meta	5学分 王老师 · 关联任务 1（未完成 1）	40,1118,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card:nth-child(12)>div.fact		40,1134,740,43	16/normal/400	#1e293b/#000000@0.00	0;3px 0px
-main#main>div.card:nth-child(12)>div.fact>span.badge	作业	46,1137,40,37	11/normal/400	#64748b/#ffffff	999;2px 8px
-main#main>div.card:nth-child(12)>div.fact>span.grow	第三章习题	96,1137,547,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card:nth-child(12)>div.fact>span.sub	YYYY-MM-DD	653,1137,61,37	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card:nth-child(12)>div.fact>button.ghost	打开	724,1137,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div.card.block:nth-child(12)		24,1083,772,108	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.block:nth-child(12)>div.title	高等数学	40,1097,740,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block:nth-child(12)>div.meta	5学分 王老师 · 关联任务 1（未完成 1）	40,1118,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block:nth-child(12)>div.fact		40,1134,740,43	16/normal/400	#1e293b/#000000@0.00	0;3px 0px
+main#main>div.card.block:nth-child(12)>div.fact>span.badge	作业	46,1137,40,37	11/normal/400	#64748b/#ffffff	999;2px 8px
+main#main>div.card.block:nth-child(12)>div.fact>span.grow	第三章习题	96,1137,547,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(12)>div.fact>span.sub	YYYY-MM-DD	653,1137,61,37	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block:nth-child(12)>div.fact>button.ghost	打开	724,1137,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title:nth-child(13)	添加考核项（考试/作业/论文/小测）	24,1211,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.panel-card:nth-child(14)		24,1238,772,178	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card:nth-child(14)>div.form		40,1264,740,134	16/normal/400	#1e293b/#000000@0.00	0;0px
@@ -142,11 +150,11 @@ div.card.panel-card:nth-child(16)>div.form>div.field.narrow:nth-child(2)>input#g
 main#main>div.card.panel-card:nth-child(16)>div.form>div.actions		328,1489,80,60	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.panel-card:nth-child(16)>div.form>div.actions>button	录入成绩	328,1514,80,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 body>div.shell>main#main>div.section-title:nth-child(17)	成绩明细（1 条）	24,1587,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card:nth-child(18)		24,1614,772,65	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card:nth-child(18)>div.card-body		40,1628,672,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card:nth-child(18)>div.card-body>div.title	86 分	40,1628,672,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card:nth-child(18)>div.card-body>div.meta	5 学分 · 2026 秋	40,1649,672,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card:nth-child(18)>button.ghost	删除	724,1628,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div.card		24,1614,772,65	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card>div.card-body		40,1628,672,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.title	86 分	40,1628,672,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta	5 学分 · 2026 秋	40,1649,672,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card>button.ghost	删除	724,1628,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 html>body>div.shell>aside.sidebar		0,1713,820,171	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
 body>div.shell>aside.sidebar>div#focusRail		24,1713,772,69	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	40,1727,740,17	13/normal/400	#64748b/#000000@0.00	0;0px

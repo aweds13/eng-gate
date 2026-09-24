@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=narrow 820x900 view=review rows=49 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=narrow 820x900 view=review rows=50 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,820,819	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,820,122	16/normal/400	#1e293b/#000000@0.00	0;14px 24px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,14,86,24	18/normal/700	#1e293b/#000000@0.00	0;0px
@@ -20,28 +20,29 @@ div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,85,63,37	13/normal/40
 div.shell>aside.rail>nav>button#refresh	刷新	89,85,52,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button#railToggle	收起右栏	143,85,78,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 html>body>div.shell>main#main		0,122,820,436	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
-body>div.shell>main#main>div.card:nth-child(1)		24,122,772,102	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card:nth-child(1)>div.meta	复习完成计投入（维持），不折算时间	40,136,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card:nth-child(1)>div>div.sub		40,160,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(1)>div>div.sub>span:nth-child(1)	今日复习进度	40,160,72,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(1)>div>div.sub>span:nth-child(2)	0/1	762,160,18,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card:nth-child(1)>div>div.bar-track		40,180,740,8	16/normal/400	#1e293b/#f1f5f9	6;0px
-div.shell>main#main>div.card:nth-child(1)>div.sub	还剩 1 张；点了「记得/模糊/忘了」就会计入进度。	40,194,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block		24,122,772,102	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.block>div.meta	复习完成计投入（维持），不折算时间	40,136,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block>div.mt-3		40,160,740,28	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block>div.mt-3>div.sub.split		40,160,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.block>div.mt-3>div.sub.split>span:nth-child(1)	今日复习进度	40,160,72,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card.block>div.mt-3>div.sub.split>span:nth-child(2)	0/1	762,160,18,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block>div.mt-3>div.bar-track.mini		40,180,740,8	16/normal/400	#1e293b/#f1f5f9	6;0px
+div.shell>main#main>div.card.block>div.sub.mt-2	还剩 1 张；点了「记得/模糊/忘了」就会计入进度。	40,194,740,16	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.new		24,240,772,38	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.new>input#rvTitle	(text)新建复习卡内容	24,240,708,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
 div.shell>main#main>div.new>button	新建	742,242,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 body>div.shell>main#main>div.section-title:nth-child(3)	到期复习（1）	24,298,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card:nth-child(4)		24,325,772,81	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card:nth-child(4)>div.card-body		40,339,349,53	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card:nth-child(4)>div.card-body>div.title	拉格朗日中值定理	40,339,349,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card:nth-child(4)>div.card-body>div.meta:nth-child(2)	0次 · 0天	40,360,349,16	12/normal/400	#64748b/#000000@0.00	0;0px
-main#main>div.card:nth-child(4)>div.card-body>div.meta:nth-child(3)	引用 高数 · 第三章	40,376,349,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card:nth-child(4)>div.row		401,347,379,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card:nth-child(4)>div.row>button	记得	401,348,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div.card:nth-child(4)>div.row>button.ghost:nth-child(2)	模糊	463,347,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card:nth-child(4)>div.row>button.ghost:nth-child(3)	忘了	527,347,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card:nth-child(4)>div.row>button.ghost:nth-child(4)	撤销上次	591,347,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div.card:nth-child(4)>div.row>button.ghost:nth-child(5)	改形式/句柄	681,347,99,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div.card		24,325,772,81	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card>div.card-body		40,339,349,53	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.title	拉格朗日中值定理	40,339,349,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta:nth-child(2)	0次 · 0天	40,360,349,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta:nth-child(3)	引用 高数 · 第三章	40,376,349,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card>div.row		401,347,379,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.row>button	记得	401,348,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(2)	模糊	463,347,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(3)	忘了	527,347,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(4)	撤销上次	591,347,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div.card>div.row>button.ghost:nth-child(5)	改形式/句柄	681,347,99,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title:nth-child(5)	今天复习过的（0）	24,426,772,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.empty	今天还没复习过卡。点上面的「记得/模糊/忘了」，这里就会出现，记错了还能改判。	24,453,772,81	16/normal/400	#64748b/#000000@0.00	0;30px 0px
 html>body>div.shell>aside.sidebar		0,558,820,171	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px

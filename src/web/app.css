@@ -426,7 +426,13 @@ select {
   z-index: 20;
 }
 .toast.show { opacity: .94 }
-.toast button { color: var(--text-on-dark); border-color: var(--line-strong) }
+.toast button {
+  color: var(--text-on-dark);
+  border-color: var(--line-strong);
+  /* T-G43：从模板收回来 —— toast 里的动作/选项按钮（原来每处内联 margin-left + padding） */
+  margin-left: var(--sp-3);
+  padding: var(--sp-1) var(--sp-4);
+}
 @media (min-width: 641px) { .toast { bottom: 24px } }
 
 /* ---------- 模态（替代 prompt：温和、可键盘、可测试） ---------- */
@@ -523,3 +529,65 @@ select {
   font-size: var(--fs-xs);
   color: var(--text);
 }
+
+/* ---------- 内联样式归位（T-G43 · 视觉线步 0）：从 index.html 收回来的那一批 ----------
+ * 为什么要有这一节：改视觉时**一半的样式原先不住在 CSS 里**（99 处内联 `style`），
+ * 于是每改一处间距都得同时改 CSS 与模板两处 —— 这也是"统一"根本无法强制的根。
+ *
+ * 收与不收的判据只有一句：**这个值随数据变吗？**
+ *   · 变（SVG 的几何、进度条宽度、用户挑的强调色预演）→ **留在标记里**，那是数据不是样式；
+ *   · 不变 → 收到这里，写成**语义类**或**单属性工具类**。
+ * 工具类只在"同一件事在多个互不相关的组件里各出现一次"时才建（`.mt-*` / `.grow` 这种），
+ * 而且一律**单属性 + 令牌值**：多属性成组就会被一致性门的「同形状重复」盯上，
+ * 裸值会被它的「一次性裸值」与 R5 那条护栏盯上 —— 两道门一起逼着这里保持收敛。
+ */
+
+/* —— 通用小工具（单属性）—— */
+.grow { flex: 1 }                       /* 占满剩余宽度；`.new .grow` 另有更具体的规则（表单里要基宽） */
+.break-all { word-break: break-all }
+.pre { white-space: pre-wrap }          /* 用户自己敲的换行要留住（备注/说明） */
+.is-done { text-decoration: line-through; color: var(--muted) }
+.retracted { opacity: .55 }             /* 已撤销的那一条（改判/撤销留痕） */
+.mt-1 { margin-top: var(--sp-1) }
+.mt-2 { margin-top: var(--sp-2) }
+.mt-3 { margin-top: var(--sp-3) }
+.mt-4 { margin-top: var(--sp-4) }
+.mt-5 { margin-top: var(--sp-5) }
+.mb-3 { margin-bottom: var(--sp-3) }
+.mv-2 { margin: var(--sp-2) 0 }
+.mv-4 { margin: var(--sp-4) 0 }
+.w-90 { width: 90px }                   /* 数字框：固定宽，别把一行挤成两行 */
+.maxw-90 { max-width: 90px }
+.minw-160 { min-width: 160px }          /* 路径/目录输入框：窄到看不清就不好核对了 */
+.minw-220 { min-width: 220px }
+.minw-240 { min-width: 240px }
+.minw-260 { min-width: 260px }
+
+/* —— 组件类 —— */
+/* 卡片里放的是**块内容**（标题 + 若干行），不是一行控件。
+   与 `.panel-card` 的唯一区别：它不给 `.title` 加下边距（那 2px 是面板卡的既定外观，
+   在 style_baseline 里登记着）。两者合并属于步 2「层次语言」的活（那时间距会进令牌）。 */
+.card.block { display: block }
+.card.top { align-items: flex-start }   /* 正文多行时让内容从顶部排，而不是居中 */
+.row.end { justify-content: flex-end }
+.sub.split { display: flex; justify-content: space-between }   /* 条形图的两端标签 */
+.meta.err { color: var(--danger) }      /* 设置页的报错行（状态色当文字，值跟 workbench，5.01 过 AA） */
+.fact.indent { padding-left: var(--sp-8) }   /* 子任务缩进一级 */
+.bar-track.tall { height: var(--sp-4) }      /* 条形：10px */
+.bar-track.mini { height: var(--sp-3); margin-top: var(--sp-1) }   /* 迷你条：8px，紧跟标签 */
+/* 迷你柱状图的柱。★ **唯一一处有意的 2px 收敛**：模板里原来写的是「4px 4px 0 0」四值写法，
+   而 4px **不在圆角档位上**（6/8/10/12/999）—— T-G24 §3 把这处裸像素记成"令牌化时的漏网"。
+   收它要么造一档、要么并进最近的档；并进 `--r-xs` 是那个记在案的债的还法，
+   所以这里如实承认：柱子顶角 4px → 6px（其余一切零变化，见复盘里的子集证明）。 */
+.bar-v { border-radius: var(--r-xs) var(--r-xs) 0 0 }
+.chart { width: 100%; height: auto; display: block }    /* 手写 SVG 的统一外框 */
+.chart.ring { width: 80px; height: 80px; flex: none }
+/* 雷达图**必须是行内的**：它原先没写 display，放在普通 `<div>` 里 ——
+   inline 的替换元素底下带一行基线空隙，改成 block 会把整页往下挪（步 0 的"零变化"证明当场抓到）。 */
+.chart.radar { display: inline; max-width: 260px }
+.ring-head { display: flex; align-items: center; gap: var(--sp-6) }    /* 今日完成度：环 + 文字 */
+.habit-head { display: flex; align-items: center; gap: var(--sp-4) }   /* 习惯卡：打卡按钮 + 三个动作 */
+.gpa-head { display: flex; gap: var(--sp-6); align-items: center; flex-wrap: wrap }
+.bar-row { display: flex; gap: var(--sp-2); align-items: flex-end; margin-top: var(--sp-5) }
+.stat-label { flex: 1; min-width: 150px }   /* 统计页横条左边的标签 */
+.bar-col { flex: 1; text-align: center }    /* 迷你柱状图的一列 */

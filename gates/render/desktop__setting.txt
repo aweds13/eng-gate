@@ -250,18 +250,18 @@ div.shell>main#main>div#groupAdmin>div.new		256,4112,636,38	16/normal/400	#1e293
 main#main>div#groupAdmin>div.new>input#groupName	(text)新建分组，如：高数	256,4112,457,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
 main#main>div#groupAdmin>div.new>select#groupParent	顶层	723,4114,105,35	13/normal/400	#1e293b/#ffffff	10;8px 10px
 main#main>div#groupAdmin>div.new>button	新建	838,4114,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-div.shell>main#main>div#groupAdmin>div.row.tight:nth-child(4)		256,4166,636,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#groupAdmin>div.row.tight:nth-child(4)>span.badge	0 项	262,4174,38,21	11/normal/400	#64748b/#ffffff	999;2px 8px
-main#main>div#groupAdmin>div.row.tight:nth-child(4)>span.grow	高数	306,4174,263,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#groupAdmin>div.row.tight:nth-child(4)>button.ghost:nth-child(3)	＋子分组	575,4166,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div#groupAdmin>div.row.tight:nth-child(4)>button.ghost:nth-child(5)	改名	774,4166,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div#groupAdmin>div.row.tight:nth-child(4)>button.ghost:nth-child(6)	删除	836,4166,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div#groupAdmin>div.row.tight:nth-child(5)		256,4209,636,37	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 0px 16px
-main#main>div#groupAdmin>div.row.tight:nth-child(5)>span.badge	1 项	278,4217,38,21	11/normal/400	#64748b/#ffffff	999;2px 8px
-main#main>div#groupAdmin>div.row.tight:nth-child(5)>span.grow	高数 / 作业	322,4217,247,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#groupAdmin>div.row.tight:nth-child(5)>button.ghost:nth-child(3)	＋子分组	575,4209,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div#groupAdmin>div.row.tight:nth-child(5)>button.ghost:nth-child(5)	改名	774,4209,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-main#main>div#groupAdmin>div.row.tight:nth-child(5)>button.ghost:nth-child(6)	删除	836,4209,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(4)		256,4166,636,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(4)>span.badge	0 项	262,4174,38,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(4)>span.grow	高数	306,4174,263,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(4)>button.ghost:nth-child(3)	＋子分组	575,4166,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(4)>button.ghost:nth-child(5)	改名	774,4166,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(4)>button.ghost:nth-child(6)	删除	836,4166,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(5)		256,4209,636,37	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 0px 16px
+main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(5)>span.badge	1 项	278,4217,38,21	11/normal/400	#64748b/#ffffff	999;2px 8px
+main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(5)>span.grow	高数 / 作业	322,4217,247,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(5)>button.ghost:nth-child(3)	＋子分组	575,4209,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(5)>button.ghost:nth-child(5)	改名	774,4209,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+main#main>div#groupAdmin>div.row.tight.mv-2:nth-child(5)>button.ghost:nth-child(6)	删除	836,4209,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div#set-attach	附件打开方式	240,4286,668,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.panel-card:nth-child(26)		240,4313,668,275	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.panel-card:nth-child(26)>div.settings-sub:nth-child(1)	本地文件怎么打开	256,4327,636,17	13/normal/400	#1e293b/#000000@0.00	0;0px
@@ -324,10 +324,10 @@ main#main>div#set-sync>div.row.tight:nth-child(6)>button	导出同步包	256,520
 main#main>div#set-sync>div.row.tight:nth-child(6)>input#syncPath	(text)要导入的包路径（后端会把完整路径给你）	355,5212,260,21	13.3/normal/400	#000000/#ffffff	0;1px 2px
 main#main>div#set-sync>div.row.tight:nth-child(6)>button.ghost:nth-child(3)	先预览	621,5204,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 main#main>div#set-sync>div.row.tight:nth-child(6)>button.ghost:nth-child(4)	导入	696,5204,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div#set-sync>div.row.tight:nth-child(7)		256,5249,636,23	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight:nth-child(7)>label.sub	同时应用对方的删除	256,5253,131,19	12/normal/400	#64748b/#000000@0.00	0;0px
-div#set-sync>div.row.tight:nth-child(7)>label.sub>input#syncDel	(checkbox)on	260,5256,13,13	13.3/normal/400	#000000/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight:nth-child(7)>span#syncDelHint	（默认不删：只记墓碑，保留你本地的行）	393,5255,228,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.row.tight.mt-3		256,5249,636,23	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight.mt-3>label.sub	同时应用对方的删除	256,5253,131,19	12/normal/400	#64748b/#000000@0.00	0;0px
+div#set-sync>div.row.tight.mt-3>label.sub>input#syncDel	(checkbox)on	260,5256,13,13	13.3/normal/400	#000000/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight.mt-3>span#syncDelHint	（默认不删：只记墓碑，保留你本地的行）	393,5255,228,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div#set-sync>div.sub:nth-child(8)		256,5276,636,32	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div#set-sync>div.sub:nth-child(8)>b:nth-child(1)	删掉过	340,5276,36,16	12/normal/700	#64748b/#000000@0.00	0;0px
 main#main>div#set-sync>div.sub:nth-child(8)>b:nth-child(2)	不可撤销	527,5276,48,16	12/normal/700	#64748b/#000000@0.00	0;0px
@@ -373,8 +373,8 @@ div.shell>main#main>div#set-sync>div.row.tight:nth-child(26)		256,5913,636,37	16
 main#main>div#set-sync>div.row.tight:nth-child(26)>button.ghost	网络自检（在这台电脑上查）	256,5913,199,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 div.shell>main#main>div#set-sync>div#set-backup	备份与恢复	256,5968,636,17	13/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div#set-sync>div.meta:nth-child(29)	每次起服务/开窗口前会自动备份一份。库：timeflow.db（目录 <path>\timeflow_fresh_<tmp>	256,5993,636,32	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#set-sync>div.row.tight:nth-child(30)		256,6031,636,20	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#set-sync>div.row.tight:nth-child(30)>span.sub	还没有备份（起一次服务就会有一份）	256,6035,204,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div#set-sync>div.row.tight.mt-2		256,6031,636,20	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#set-sync>div.row.tight.mt-2>span.sub	还没有备份（起一次服务就会有一份）	256,6035,204,16	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div#set-sync>div.sub:nth-child(31)		256,6055,636,32	12/normal/400	#64748b/#000000@0.00	0;0px
 main#main>div#set-sync>div.sub:nth-child(31)>b:nth-child(1)	连设置一起	424,6055,60,16	12/normal/700	#64748b/#000000@0.00	0;0px
 main#main>div#set-sync>div.sub:nth-child(31)>b:nth-child(2)	点某个时间点 = 把库整体回到那一刻	256,6055,627,32	12/normal/700	#64748b/#000000@0.00	0;0px

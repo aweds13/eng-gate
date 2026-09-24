@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=desktop 1280x900 view=focus rows=51 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=desktop 1280x900 view=focus rows=59 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,1280,731	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
 html>body>div.shell>aside.rail		24,0,168,731	16/normal/400	#1e293b/#000000@0.00	0;18px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,18,167,24	18/normal/700	#1e293b/#000000@0.00	0;0px
@@ -20,32 +20,40 @@ div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,600,167,35	13/normal/
 div.shell>aside.rail>nav>button#refresh	刷新	24,637,167,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 div.shell>aside.rail>nav>button#railToggle	收起右栏	24,676,167,37	13/normal/400	#64748b/#000000@0.00	8;8px 12px
 html>body>div.shell>main#main		216,0,716,412	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
-body>div.shell>main#main>div.card:nth-child(1)		240,0,668,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
-main#main>div.card:nth-child(1)>div>div.big	0	256,14,168,40	30/normal/700	#2f6feb/#000000@0.00	0;0px
-main#main>div.card:nth-child(1)>div>div.meta	今日专注分钟（只算正常结束）	256,54,168,16	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card		240,0,668,84	16/normal/400	#1e293b/#ffffff	12;14px 16px
+main#main>div.card>div>div.big	0	256,14,168,40	30/normal/700	#2f6feb/#000000@0.00	0;0px
+main#main>div.card>div>div.meta	今日专注分钟（只算正常结束）	256,54,168,16	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.new		240,100,668,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.new>select#focusTaskSel	不绑定任务	240,101,146,35	13/normal/400	#1e293b/#ffffff	10;8px 10px
 div.shell>main#main>div.new>button	番茄钟 25 分	396,101,102,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 div.shell>main#main>div.new>button.ghost	普通计时	508,100,82,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title	本周投入	240,157,668,17	13/normal/400	#64748b/#000000@0.00	0;0px
-body>div.shell>main#main>div.card:nth-child(4)		240,184,668,128	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.shell>main#main>div.card:nth-child(4)>div.meta	本周 YYYY-MM-DD ~ YYYY-MM-DD · 专注 0h · 完成收益 1 项 · 手动 0.75h · 习惯 1 次 · 债务 1 项	256,198,636,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(4)>div>div:nth-child(1)>div		256,226,86,6	16/normal/400	#1e293b/#e2e8f0	4;0px
-div.card:nth-child(4)>div>div:nth-child(1)>div.sub	21	256,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(4)>div>div:nth-child(2)>div		348,226,86,6	16/normal/400	#1e293b/#e2e8f0	4;0px
-div.card:nth-child(4)>div>div:nth-child(2)>div.sub	22	348,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(4)>div>div:nth-child(3)>div		439,226,86,6	16/normal/400	#1e293b/#e2e8f0	4;0px
-div.card:nth-child(4)>div>div:nth-child(3)>div.sub	23	439,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(4)>div>div:nth-child(4)>div		531,226,86,6	16/normal/400	#1e293b/#e2e8f0	4;0px
-div.card:nth-child(4)>div>div:nth-child(4)>div.sub	24	531,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(4)>div>div:nth-child(5)>div		623,226,86,6	16/normal/400	#1e293b/#e2e8f0	4;0px
-div.card:nth-child(4)>div>div:nth-child(5)>div.sub	25	623,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(4)>div>div:nth-child(6)>div		715,226,86,6	16/normal/400	#1e293b/#e2e8f0	4;0px
-div.card:nth-child(4)>div>div:nth-child(6)>div.sub	26	715,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(4)>div>div:nth-child(7)>div		806,226,86,6	16/normal/400	#1e293b/#e2e8f0	4;0px
-div.card:nth-child(4)>div>div:nth-child(7)>div.sub	27	806,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card:nth-child(4)>div.sub:nth-child(3)	这周还没有专注记录，随时可以从一小段开始。	256,260,636,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div.card:nth-child(4)>div.sub:nth-child(4)	波动 0 分钟（逐日专注的长短差）· 本周最长空档 7 天 —— 这周还没有专注记录，随时可以从一小段开始。	256,282,636,16	12/normal/400	#64748b/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block		240,184,668,128	16/normal/400	#1e293b/#ffffff	12;14px 16px
+div.shell>main#main>div.card.block>div.meta	本周 YYYY-MM-DD ~ YYYY-MM-DD · 专注 0h · 完成收益 1 项 · 手动 0.75h · 习惯 1 次 · 债务 1 项	256,198,636,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block>div.bar-row		256,226,636,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block>div.bar-row>div.bar-col:nth-child(1)		256,226,86,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(1)>div.bar-v		256,226,86,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(1)>div.sub.mt-1	21	256,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block>div.bar-row>div.bar-col:nth-child(2)		348,226,86,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(2)>div.bar-v		348,226,86,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(2)>div.sub.mt-1	22	348,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block>div.bar-row>div.bar-col:nth-child(3)		439,226,86,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(3)>div.bar-v		439,226,86,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(3)>div.sub.mt-1	23	439,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block>div.bar-row>div.bar-col:nth-child(4)		531,226,86,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(4)>div.bar-v		531,226,86,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(4)>div.sub.mt-1	24	531,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block>div.bar-row>div.bar-col:nth-child(5)		623,226,86,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(5)>div.bar-v		623,226,86,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(5)>div.sub.mt-1	25	623,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block>div.bar-row>div.bar-col:nth-child(6)		715,226,86,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(6)>div.bar-v		715,226,86,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(6)>div.sub.mt-1	26	715,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
+main#main>div.card.block>div.bar-row>div.bar-col:nth-child(7)		806,226,86,26	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(7)>div.bar-v		806,226,86,6	16/normal/400	#1e293b/#e2e8f0	6;0px
+div.card.block>div.bar-row>div.bar-col:nth-child(7)>div.sub.mt-1	27	806,236,86,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block>div.sub.mt-3	这周还没有专注记录，随时可以从一小段开始。	256,260,636,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card.block>div.sub.mt-2	波动 0 分钟（逐日专注的长短差）· 本周最长空档 7 天 —— 这周还没有专注记录，随时可以从一小段开始。	256,282,636,16	12/normal/400	#64748b/#000000@0.00	0;0px
 html>body>div.shell>aside.sidebar		956,0,300,133	16/normal/400	#1e293b/#000000@0.00	0;18px 0px
 body>div.shell>aside.sidebar>div#focusRail		956,18,300,85	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	972,32,268,17	13/normal/400	#64748b/#000000@0.00	0;0px

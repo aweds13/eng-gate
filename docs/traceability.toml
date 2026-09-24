@@ -1429,6 +1429,24 @@ evidence = [
 ]
 gaps = "**修了发现的两处**：`renderHabit` 的今天、`heatmap` 的格子日期（都改走 `todayISO()`，本机时区）。**它为什么会伤人**：`new Date().toISOString()` 给的是 UTC 日期，本机 UTC+8 → **本地 0–8 点算出来是昨天**：界面把「今天已打卡」显示成「打卡」，而点下去（服务端按本地今天翻转）会把那次打卡**取消**掉，提示还写着「已打卡」。**护栏两层**（都在 `test_web_frontend.py`）：全文件级不许出现裸的 `new Date().toISOString()`；函数级 `renderHabit`/`heatmap` 里不许出现 `toISOString` —— 判的是**剥掉注释后的代码**（不剥注释会把「别这么写」那句解释也判红，同 T-G39 的教训），并用合成数据证明它咬得住。**没做**：全仓的「日期取法」清点（`docs/` / `tools/` / 别的 `.js`）；护栏只扫 `index.html`。"
 
+[entries."T-G43"]
+id = "T-G43"
+title = "视觉线步 0（SR-NF1 / N30）：99 处内联 style 收进 app.css（静态 → 语义类/工具类，动态留在标记里）+ 逐视图证明视觉零变化"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/视觉线步0-内联样式归位-T-G43.md",
+  "text:src/web/app.css::.card.block { display: block }",
+  "text:src/web/app.css::.grow { flex: 1 }",
+  "text:src/web/app.css::.chart { width: 100%; height: auto; display: block }",
+  "text:src/web/app.css::.chart.radar { display: inline; max-width: 260px }",
+  "text:src/web/app.css::.bar-v { border-radius: var(--r-xs) var(--r-xs) 0 0 }",
+  "text:src/web/index.html::class=\"card block\"",
+  "text:tools/style_audit.py::多值的值里**只数令牌**",
+  "test:test_web_frontend.py",
+]
+gaps = "**99 处 → 8 处**（那 8 处**全是动态的**：SVG 几何、进度条宽度、用户挑的强调色预演 ——「值随数据变吗」就是收与不收的判据）。做法：静态的一律换成类 —— 能复用语义就复用（`.card.block` / `.sub.split` / `.meta.err` / `.bar-track.tall` / `.toast button`），只在「同一件事在多个互不相关的组件里各出现一次」时才建**单属性工具类**（`.mt-*` / `.grow` / `.pre` / `.minw-*`），因为多属性成组会被一致性门的「同形状重复」盯上、裸值会被「一次性裸值」与 R5 那条护栏盯上。**证据是逐视图的清单证明**（脚本一次性）：把清单的**选择器列去掉**之后，旧行必须是新行的**子集** —— 42 份全过；新增 **156 行**（原来匿名的容器有了名字 → 被采进清单，覆盖面变大）；**唯一一处有意收敛**：迷你柱的顶角 4px → `--r-xs`（6px，T-G24 §3 记的那处「令牌化时的漏网」），42 行、逐条点名。**三个顺手修**：① 雷达图**必须是行内的**（我第一版给它加了 `display:block`，证明当场抓到整页下移 —— inline 替换元素底下那行基线空隙）；② R5 那条护栏**咬到了自己的说明文字**（注释里原文引用裸像素）→ 改成判「剥掉注释后的代码」（同 T-G39/T-G41 的教训，这是第三次）；③ 一致性门的**档数报告**把 `var(--r-xs) var(--r-xs) 0 0` 当成「新的一档」（圆角 7→8）→ 改成多值只数令牌。**没做**：8 处动态内联仍是内联（那是数据）；`.card.block` 与 `.card.panel-card` 暂时同义（差别只有 `.title` 下边距那 2px，合并属步 2）；手机习惯页被挤、`:hover`/`:focus-visible`（一致性门剩 7 条）都还在后面。"
+
 [entries."T-G42"]
 id = "T-G42"
 title = "视觉线第 0 步 · 可用性与状态色（SR-NF1 / N30）：对比度 10 条欠账清零（徽标抽成 chip 原语 + 8px 状态点、状态色跟 workbench）、对比度门从棘轮收紧成硬门"

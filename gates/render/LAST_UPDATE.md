@@ -224,3 +224,54 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/tasks`
 - `phone/today`
 
+
+## 2026-09-24 04:08:48 · 36 份改动
+
+> 理由：T-G43 视觉线步 0：99 处内联 style 收进 app.css（只改选择器列；原匿名容器有名字后进了清单，覆盖面变大）。已用「旧行是新行子集」的脚本逐视图证明视觉零变化
+
+- `desktop/academic`
+- `desktop/flagged`
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/important`
+- `desktop/planned`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `desktop/team`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/flagged`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/important`
+- `narrow/planned`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `narrow/team`
+- `narrow/today`
+- `phone/academic`
+- `phone/flagged`
+- `phone/focus`
+- `phone/habit`
+- `phone/important`
+- `phone/planned`
+- `phone/review`
+- `phone/setting`
+- `phone/stats`
+- `phone/tasks`
+- `phone/team`
+- `phone/today`
+
+
+## 2026-09-24 04:11:31 · 3 份改动
+
+> 理由：T-G43 步 0 复采：雷达图改回行内（先前误加 display:block 会让整页下移）；柱子顶角 4px 并进 --r-xs（T-G24 记的裸像素，唯一一处有意收敛）
+
+- `desktop/academic`
+- `narrow/academic`
+- `phone/academic`
+

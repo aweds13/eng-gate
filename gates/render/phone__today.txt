@@ -1,4 +1,4 @@
-# render-manifest v1 viewport=phone 390x844 view=today rows=98 accent=#2f6feb device=ph-000000000000
+# render-manifest v1 viewport=phone 390x844 view=today rows=100 accent=#2f6feb device=ph-000000000000
 html>body>div.shell		0,0,390,1888	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,390,66	16/normal/400	#1e293b/#000000@0.00	0;12px 14px 0px
 body>div.shell>aside.rail>h1	timeflow ·	14,12,86,24	18/normal/700	#1e293b/#000000@0.00	0;0px
@@ -8,9 +8,9 @@ body>div.shell>main#main>div#guideCard		14,66,362,182	16/normal/400	#1e293b/#fff
 div.shell>main#main>div#guideCard>div.title	第一次用，按这三步走就行	30,80,330,21	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div#guideCard>div.sub:nth-child(2)	① 在下面的输入框写下一件要做的事（回车即可）→ ② 点「专注」开始计时，正常结束时会计入今天的投入 → ③ 晚上在专注页跟一句「今天计划 vs 实际」。	30,105,330,48	12/normal/400	#64748b/#000000@0.00	0;0px
 div.shell>main#main>div#guideCard>div.sub:nth-child(3)	不用一次做全，这只是个起点；随时可以关掉，之后想再看就在设置页点「再看一遍新手引导」。	30,157,330,32	12/normal/400	#64748b/#000000@0.00	0;0px
-div.shell>main#main>div#guideCard>div.row		30,197,330,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#guideCard>div.row>button	好，先写第一件事	30,198,132,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-main#main>div#guideCard>div.row>button.ghost	知道了，不再显示	170,197,134,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div#guideCard>div.row.mt-3		30,197,330,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#guideCard>div.row.mt-3>button	好，先写第一件事	30,198,132,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
+main#main>div#guideCard>div.row.mt-3>button.ghost	知道了，不再显示	170,197,134,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.new		14,264,362,133	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.new>input#newTitle	(text)今天要做什么？回车添加…	14,264,362,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
 div.shell>main#main>div.new>input#newDue	(date)YYYY-MM-DD	14,312,230,40	14/normal/400	#1e293b/#ffffff	10;10px 12px
@@ -18,12 +18,14 @@ div.shell>main#main>div.new>label.sub	也放进今天的清单	254,324,122,19	12
 main#main>div.new>label.sub>input#newMyDay	(checkbox)on	258,327,13,13	13.3/normal/400	#000000/#000000@0.00	0;0px
 div.shell>main#main>div.new>button	添加	14,362,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
 body>div.shell>main#main>div.card:nth-child(3)		14,413,362,108	16/normal/400	#1e293b/#ffffff	12;14px 16px
-div.card:nth-child(3)>div>svg>circle.ring-track		40,437,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card:nth-child(3)>div>svg>circle		40,437,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card:nth-child(3)>div>svg>text.ring-text	2/10	54,455,33,20	15/normal/700	#1e293b/#000000@0.00	0;0px
-div.card:nth-child(3)>div>div>div.title	今日完成度	124,430,236,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card:nth-child(3)>div>div>div.meta	已完成 2 项 · 还有 8 项在手	124,451,236,16	12/normal/400	#64748b/#000000@0.00	0;0px
-div.card:nth-child(3)>div>div>div.sub	只统计今天的清单与今天完成的，不翻旧账。	124,471,236,32	12/normal/400	#64748b/#000000@0.00	0;0px
+div.shell>main#main>div.card:nth-child(3)>div.ring-head		30,427,330,80	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card:nth-child(3)>div.ring-head>svg.chart.ring		30,427,80,80	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card:nth-child(3)>div.ring-head>svg.chart.ring>circle.ring-track		40,437,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card:nth-child(3)>div.ring-head>svg.chart.ring>circle		40,437,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card:nth-child(3)>div.ring-head>svg.chart.ring>text.ring-text	2/10	54,455,33,20	15/normal/700	#1e293b/#000000@0.00	0;0px
+div.card:nth-child(3)>div.ring-head>div>div.title	今日完成度	124,430,236,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card:nth-child(3)>div.ring-head>div>div.meta	已完成 2 项 · 还有 8 项在手	124,451,236,16	12/normal/400	#64748b/#000000@0.00	0;0px
+div.card:nth-child(3)>div.ring-head>div>div.sub	只统计今天的清单与今天完成的，不翻旧账。	124,471,236,32	12/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(4)	逾期（债务）	14,541,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div#ov		14,568,362,290	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div#ov>div.card.overdue		14,568,362,290	16/normal/400	#1e293b/#ffffff	12;14px 16px

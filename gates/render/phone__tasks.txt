@@ -8,10 +8,10 @@ body>div.shell>main#main>div.new		14,82,362,88	16/normal/400	#1e293b/#000000@0.0
 div.shell>main#main>div.new>input#allTitle	(text)新任务（默认不进今天）	14,82,362,38	14/normal/400	#1e293b/#ffffff	10;10px 12px
 div.shell>main#main>div.new>input#allDue	(date)YYYY-MM-DD	14,130,298,40	14/normal/400	#1e293b/#ffffff	10;10px 12px
 div.shell>main#main>div.new>button	添加	322,132,54,35	13/normal/400	#ffffff/#2f6feb	10;8px 14px
-body>div.shell>main#main>div.row.tight		14,186,362,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.row.tight>button.ghost:nth-child(1)	重要	14,186,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.row.tight>button.ghost:nth-child(2)	有计划	70,186,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
-div.shell>main#main>div.row.tight>button.ghost:nth-child(3)	已标记	139,186,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+body>div.shell>main#main>div.row.tight.mv-4		14,186,362,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(1)	重要	14,186,56,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(2)	有计划	70,186,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
+div.shell>main#main>div.row.tight.mv-4>button.ghost:nth-child(3)	已标记	139,186,69,37	13/normal/400	#64748b/#000000@0.00	10;8px 14px
 body>div.shell>main#main>div.section-title	全部任务（10）	14,243,362,17	13/normal/400	#64748b/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.overdue		14,270,362,290	16/normal/400	#1e293b/#ffffff	12;14px 16px
 div.shell>main#main>div.card.overdue>button.check		33,404,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px

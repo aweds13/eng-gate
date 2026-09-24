@@ -1023,8 +1023,12 @@ def test_r5_scale_tokens_are_the_only_way_to_write_sizes() -> None:
     为什么值得一条护栏：R5 的验收标准是"统一"，而"统一"如果只写在文档里，下一轮就漂了。
     有了令牌 + 这条断言，"48 种间距取值"这类事会被挡住。
     白名单只留发丝级内缩（1~3px：描边/内衬，不是间距档位）。
+
+    ★ **判的是"剥掉注释后的代码"**（T-G43 实测撞到）：注释里为了说明"原来那处裸像素是什么"
+    会**原文引用**它，第一版护栏就把自己的说明文字判红了 —— 同一类坑 T-G39 的令牌抽取、T-G41 的
+    日期护栏各栽过一次。注释不是代码，护栏该看代码。
     """
-    css = WEB_CSS.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", "", WEB_CSS.read_text(encoding="utf-8"), flags=re.S)
     for token, value in (("--sp-1", "4px"), ("--sp-5", "12px"), ("--sp-11", "30px"),
                          ("--r-xs", "6px"), ("--r-lg", "12px"), ("--r-pill", "999px"),
                          ("--fs-xs", "11px"), ("--fs-xl", "18px"),
