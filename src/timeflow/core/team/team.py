@@ -193,7 +193,7 @@ def _board_note(view: str, me: str, total: int) -> str:
     if view == VIEW_MANAGER:
         return (
             "你分配出去的任务都在这里：谁手上有什么、进展到哪。"
-            "分配出去的任务不计个人投入（只记协调这件事本身）。"
+            "分配出去不计投入。"
         )
     if not me:
         return (

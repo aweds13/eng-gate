@@ -95,8 +95,12 @@ def test_executor_view_note_says_no_match(conn: sqlite3.Connection) -> None:
 
 
 def test_manager_note_says_not_counted_as_my_invest(conn: sqlite3.Connection) -> None:
-    """管理者那句实话里必须写明"分配出去的不计个人投入"（约定层口径，不能只写在文档里）。"""
-    assert "不计个人投入" in str(team.board(conn)["note"])
+    """管理者那句实话里必须写明"分配出去的不计投入"（口径，不能只写在文档里）。
+
+    ★ T-G57 把这句话改短过：原来是「分配出去的任务不计个人投入（只记协调这件事本身）。」，
+    界面上算超标（≥20 字），现在是一句 8 字的实话 —— 断言跟着改，**口径本身没变**。
+    """
+    assert "分配出去不计投入" in str(team.board(conn)["note"])
 
 
 def test_status_filter_does_not_change_counts(conn: sqlite3.Connection) -> None:

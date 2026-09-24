@@ -24,7 +24,7 @@ body>div.shell>main#main>div.card.block		240,0,668,142	16/normal/400	#1e293b/#ff
 div.shell>main#main>div.card.block>div.row		257,17,634,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block>div.row>button	管理者（我分配的）	257,18,149,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
 main#main>div.card.block>div.row>button.ghost	执行者（分配给我的）	414,17,164,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-div.shell>main#main>div.card.block>div.sub.mt-2	你分配出去的任务都在这里：谁手上有什么、进展到哪。分配出去的任务不计个人投入（只记协调这件事本身）。	257,62,634,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card.block>div.sub.mt-2	你分配出去的任务都在这里：谁手上有什么、进展到哪。分配出去不计投入。	257,62,634,18	12/18/400	#5b6472/#000000@0.00	0;0px
 div.shell>main#main>div.card.block>div.row.mt-3		257,88,634,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block>div.row.mt-3>button	全部 1	257,89,69,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
 main#main>div.card.block>div.row.mt-3>button.ghost:nth-child(2)	已分配 1	334,88,84,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px

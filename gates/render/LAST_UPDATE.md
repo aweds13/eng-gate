@@ -507,3 +507,28 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `narrow/setting`
 - `phone/setting`
 
+
+## 2026-09-24 14:42:38 · 12 份改动
+
+> 理由：T-G57 界面文案清理：T-G49 第一轮剩下的 18 条 ≥30 字句子逐条清完（数字口径改到 ≤8 字、解释与教学句删掉、清单搬进 docs/user-guide.md），离线页保留能力边界与两条实话；团队页口径也改短（后端 core/team/team.py）
+
+- `desktop/habit`
+- `desktop/offline`
+- `desktop/setting`
+- `desktop/team`
+- `narrow/habit`
+- `narrow/offline`
+- `narrow/setting`
+- `narrow/team`
+- `phone/habit`
+- `phone/offline`
+- `phone/setting`
+- `phone/team`
+
+
+## 2026-09-24 14:50:08 · 0 份改动
+
+> 理由：T-G57 收尾：把被测试/探针/流钉着的边界事实补回精简版（离线能力边界 + 同一 WiFi + 设备号会写进包里、习惯页指路手动投入、改判确认拆两行保住「按新的一档重算 / 投入不会重复计」）
+
+
+

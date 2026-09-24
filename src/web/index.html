@@ -404,7 +404,7 @@ async function offlineUpload(){
   let r;
   try{r=await o.packOnce()}catch(e){toast('打包失败：'+((e&&e.message)||e));return}
   if(!r.rows){toast('队列是空的 —— 没有要传的');return}
-  const ack=await confirmAsk(`把这 ${r.rows} 条传到电脑并合并？\n合并规则在电脑那边（手机不判新旧）；包只是换个路子过去，不会动你电脑上的其他数据。`,'传到电脑');
+  const ack=await confirmAsk(`把这 ${r.rows} 条传到电脑并合并？`,'传到电脑');
   if(!ack)return;
   let report=null;
   try{report=await api('/api/sync/import',{method:'POST',body:JSON.stringify({pack:r.pack})})}
@@ -539,7 +539,7 @@ async function renderOffline(m){
       last?` · 上次导出 ${esc(String(last.at).replace('T',' '))}（${last.rows||0} 条）`:''}</div>
     <div class="meta">${off
       ? '现在记下的东西先存在这台设备里；回到电脑前点下面的 <b>直接传到电脑</b>（连得上时）或 <b>导出同步包</b>。'
-      : '这台设备现在连得上电脑：记的东西直接进库；下面这份队列是之前离线时攒下的，点 <b>直接传到电脑</b> 就能合并过去（不会自动传 —— 你说传才传）。'}</div>
+      : '这台设备现在连得上电脑：记的东西直接进库。'}</div>
   </div>
   ${notReady}${capture}
   ${seen}
@@ -550,25 +550,18 @@ async function renderOffline(m){
       <button class="ghost" data-action="offline-export">导出同步包</button>
       <button class="ghost" data-action="offline-copy">复制包文本</button>
       <button class="ghost" data-action="offline-clear">清空（我已导入电脑）</button></div>
-    <div class="sub"><b>直接传到电脑</b>：连得上电脑时最快的一条路 —— 传的是同一个格式的包，
-      合并规则仍然只在电脑那边（手机不判新旧）；传成功后会问你要不要清空队列，<b>失败绝不清空</b>。
-      连不上（离线 / 没配对）时它会说清原因，改用下面两条。</div>
-    <div class="sub">包与电脑↔电脑用的是<b>同一个格式</b>（<code>timeflow-sync</code> v1）：拷到电脑上，
-      在「设置 → 数据与同步 → 跨端同步」里先预览再导入。设备号（<code>${esc(offlineDevice())}</code>）会写进包里，
-      电脑据此认出这份包从哪来。</div>
-    <div class="sub">导出<b>不会清空</b>队列（文件丢了不至于丢数据）；<b>重复导入是安全的</b> —— 电脑那边合并是幂等的。
-      清空得自己点上面那颗按钮并再确认一次。</div>
+    <div class="sub">合并规则仍然只在电脑那边；<b>失败绝不清空</b>。</div>
+    <div class="sub">与电脑↔电脑<b>同一个格式</b>（<code>timeflow-sync</code> v1）；设备号<b>会写进包里</b>。</div>
+    <div class="sub">导出<b>不会清空</b>队列；<b>重复导入是安全的</b>。</div>
     ${queue}
   </div>
   <div class="card block">
-    <div class="settings-sub">这一版能做什么、不做什么</div>
-    <div class="sub">能做：新建任务 / 勾完成与撤销完成 / 习惯打卡 / 一句备忘 / 每日反馈（都先存在本机队列）。</div>
-    <div class="sub">不做：离线<b>删除</b>（删要动电脑上的墓碑，手机上判不准）、离线<b>改字段</b>（会覆盖电脑上更新的那份）、
-      从电脑<b>回传</b>到手机（手机没有库，不做反向合并）、离线<b>专注计时</b>（它会牵动电脑那边的派生账目，单独做）。</div>
-    <div class="sub">手机要<b>打开</b>这个应用，得先在电脑上<b>显式开</b>局域网访问
-      （<code>python tools/serve.py --lan</code>，默认关）—— 第一次打开会问<b>配对码</b>
-      （在电脑的设置页「局域网访问」里看）。只在同一个 WiFi 里管用，不涉及公网。</div>
-  </div>`;
+    <div class="sub">能做：新建任务 / 勾完成 / 打卡 / 备忘 / 每日反馈。</div>
+    <div class="sub">不做：离线删除、改字段、回传电脑、专注计时。</div>
+    <div class="sub">回电脑：<b>同一 WiFi 直连</b>或同步包。</div>
+    <div class="sub">局域网直连只在同一个 WiFi 里管用。</div>
+  </div>
+  `;
   defaultDateFields(['offDue']);
   paintOfflineBar();
 }
@@ -1156,8 +1149,7 @@ async function renderGroupAdmin(el){
       title="${esc(label)}"><option value="">顶层</option>${options(groups)}
       ${groups.filter(g=>g.id!==id).map(g=>`<option value="${g.id}" ${g.id===current?'selected':''}>${esc(g.path)}</option>`).join('')}</select>`;
   el.innerHTML=`<div class="settings-sub">分组管理</div>
-    <div class="sub">分组用来按项目/领域归类任务（如「高数」「高数 / 第三章」）。可以像文件夹一样嵌套
-    （层数上限由后端拦，超了会说明原因 —— 界面不自己复述那个数字）；删除分组<b>不会删任务</b>，只解除归类。</div>
+    <div class="sub">分组可嵌套；删分组<b>不会删任务</b>，只解除归类。</div>
     <div class="new"><input id="groupName" placeholder="新建分组，如：高数" data-enter="group-add">
       <select id="groupParent" title="建在哪个分组下（默认顶层）"><option value="">顶层</option>${options(groups)}</select>
       <button data-action="group-add">新建</button></div>
@@ -1294,9 +1286,8 @@ function editForm(t){
   </div>
   <div class="sub" id="editCourseHint">${(t.task_type||'普通')==='普通'
     ? '「普通」= 与课程无关，不挂课程；要挂课程请把类型改成 作业/考试/论文/小测。'
-    : '选了课程就等于说「这件事属于这门课」；课程在学业页新建。'}</div>
-  <div class="sub">备注只属于这个任务，不参与账本；提醒到点会在界面上标出来（系统通知通道待选型）。
-    改截止日会立刻重算逾期与债务。已完成的任务也能改，但不会改写历史完成记录。</div>`;
+    : '课程在学业页新建。'}</div>
+  <div class="sub">已完成的任务也能改，但不会改写历史完成记录。</div>`;
 }
 async function saveTaskEdit(){
   if(!detailTaskId){toast('没有正在编辑的任务');return}
@@ -1477,7 +1468,7 @@ function taskAttachHTML(t){
     <div class="new"><input id="attachTarget" placeholder="网址或本地路径" data-enter="attach-add">
       <input id="attachTitle" placeholder="标题（可选）">
       <button class="ghost" data-action="attach-add" data-id="${t.id}">添加</button></div>
-    <div class="sub">打开方式在「设置 · 附件打开方式」里选；可执行/脚本类只到文件夹，不会直接运行。</div>`;
+    <div class="sub">可执行/脚本类只到文件夹。</div>`;
 }
 async function addAttachment(taskId){
   const targetEl=document.getElementById('attachTarget');
@@ -2337,8 +2328,7 @@ async function renderHabit(m){
       <div class="mt-4">${heatmap(h.logs)}</div></div>`;
   }).join('');
   m.innerHTML=`<div class="card block"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div>
-    <div class="sub">习惯打卡<b>只记次数</b>，不折算成投入时间（时间折算只在有真实时长时才算）。想让它占用投入时间，
-      去备忘录页「今日手动投入」按真实分钟补一笔（类型可选「习惯」）。</div></div>
+    <div class="sub">习惯打卡<b>只记次数</b>；想算投入，去「今日手动投入」补记。</div></div>
   <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡" data-enter="habit-add"><button data-action="habit-add">新建</button></div>
   ${cards||emptyState('还没有习惯')}
   <div class="section-title">每日反馈（计划 vs 执行）</div>
@@ -2559,7 +2549,7 @@ async function undoReview(id){
 async function regradeReview(id,feedback){
   const label=reviewRatings.find(x=>x.value===feedback);
   const name=label?label.label:feedback;
-  if(!await confirmAsk(`把今天这次反馈改成「${name}」？排期会从复习前的状态按新的一档重算，原来那次留在流水里，投入不会重复计。`,'改判'))return;
+  if(!await confirmAsk(`把今天这次反馈改成「${name}」？\n按新的一档重算，投入不会重复计。`,'改判'))return;
   const r=await api(`/api/review/${id}/regrade`,{method:'POST',body:JSON.stringify({feedback})});
   toast(`已改判为「${name}」，下次到期 ${r.due_date}`);view(current);
 }
@@ -2689,7 +2679,7 @@ async function addReview(){const title=document.getElementById('rvTitle').value.
 async function review(id,fb){await api(`/api/review/${id}/review`,{method:'POST',body:JSON.stringify({feedback:fb})});
   // 温故知新 → 额外一笔产出（SR-F2.2 / T-C2）：用户定「**想记才点**」—— 不自动弹、不打断复习，
   // 所以放在 toast 上给一个按钮（6 秒内可点），而不是弹窗拦一下。
-  toastAction('复习已记录，下次到期已由 FSRS 排好 —— 记错了可以在下面「今天复习过的」里改判；温故知新的话可以顺手记一笔产出','记一笔产出',()=>reviewOutput(id));
+  toastAction('复习已记录 · 记错了可改判','记一笔产出',()=>reviewOutput(id));
   view(current)}
 async function reviewOutput(id){
   const note=await ask('记一笔产出：这次温故知新记下了什么？（计入知识资产）','');
@@ -2896,7 +2886,7 @@ async function renderSetting(m){
     <div class="sub">强调色在本机记住；想改成别的颜色，改 config.toml 的 app.accent_color 后会作为默认值出现。</div>
     <div class="settings-sub">右栏（宽屏才有）</div>
     <div class="row"><button class="ghost" data-action="rail-toggle">${railOff?'展开右栏':'收起右栏'}</button></div>
-    <div class="sub">收起后中列更宽；计时器与任务详情在右栏里，收起时它们一起藏起来（再点一次就回来）。选择记在本机。</div>
+    <div class="sub">收起时隐藏计时器与任务详情。</div>
     <div class="settings-sub">新手引导</div>
     <div class="row"><button class="ghost" data-action="guide-replay">再看一遍新手引导</button></div>
     <div class="sub">引导只在今日页出现、可一键关掉，不再打扰；这里可以随时重新打开。</div>
@@ -2980,7 +2970,7 @@ async function renderSetting(m){
       文件名就是日期：<code>${esc(ex.today||'')}.md</code>，一天一个</div>
     <div class="meta">今天这份：${ex.note_exists
       ? `已写出 ${sizeLabel(ex.note_bytes)}${ex.last_written_at?` · ${esc(String(ex.last_written_at).replace('T',' '))}`:''}`
-      : '还没写（完成一个任务、记一条备忘就会自动写；也可以点上面的「导出今天」）'}</div>
+      : '还没写'}</div>
     ${ex.last_error?`<div class="meta err">上次导出失败：${esc(ex.last_error)}
       —— 不影响你用软件，修好目录后再点「导出今天」</div>`:''}
     <div class="settings-sub" id="set-vault">Obsidian（只读跳转）</div>
@@ -3049,8 +3039,7 @@ async function renderSetting(m){
     <div class="settings-sub">本地文件怎么打开</div>
     <div class="row">${(attachCfg.modes||[]).map(x=>
       `<button class="${attachCfg.mode===x.value?'':'ghost'}" data-action="set-attach-mode" data-mode="${x.value}">${esc(x.label)}</button>`).join('')}</div>
-    <div class="sub">网址始终在浏览器新标签打开；目录总是打开该目录。默认最保守（只到文件夹）；
-      可执行/脚本类（.exe/.bat/.lnk 等）<b>任何设置下都只到文件夹</b>，不会直接运行。</div>
+    <div class="sub">可执行/脚本类只到文件夹（不会运行）。</div>
     <div class="settings-sub">直接打开白名单（扩展名）</div>
     <div class="row tight">${(attachCfg.whitelist||[]).map(e=>
       `<button class="ghost" data-action="wl-del" data-ext="${esc(e)}">${esc(e)} ${icon('close')}</button>`).join('')
@@ -3083,9 +3072,7 @@ async function renderSetting(m){
     <div class="meta">上次通知：${remindCfg.last_notify_at?esc(String(remindCfg.last_notify_at).replace('T',' ')):'（还没有）'}
       ${remindCfg.last_result?` · ${esc(remindCfg.last_result)}`:''}</div>
     ${remindCfg.last_error?`<div class="meta err">上次出错：${esc(remindCfg.last_error)}（弹不出来不会静默，下次自动重试）</div>`:''}
-    <div class="sub">诚实边界：计划任务以<b>当前用户、交互式</b>运行 —— 应用关掉也响，但<b>注销/关机时不响</b>
-      （要做到"注销也响"得改系统层权限，不擅自做）。开启/关闭都是可逆的：关闭会把计划任务删掉、不留痕。
-      移动端只做界面标注，不发系统通知。</div>
+    <div class="sub">应用关掉也响，<b>注销/关机时不响</b>；关闭可撤销。</div>
     <div class="settings-sub" id="set-remind-list">全部提醒（含哪天到点）</div>
     <div class="row tight"><button class="ghost" data-action="remind-list">读一次</button></div>
     <div id="remindList"></div>
@@ -3111,19 +3098,15 @@ async function renderSetting(m){
       两种例外仍然不删：本机没有那一行；或者<b>你本地在那之后又改过它</b>（那时会逐条记进冲突日志）。</div>
     <div class="meta">上次导出：${sync.last_export?`${esc(String(sync.last_export.at).replace('T',' '))} · ${sync.last_export.rows||0} 行`:'还没导出过'}
       · 上次导入：${sync.last_import?`${esc(String(sync.last_import.at).replace('T',' '))} · 新增 ${(sync.last_import.totals||{}).inserted||0} / 覆盖 ${(sync.last_import.totals||{}).updated||0}`:'还没导入过'}</div>
-    <div class="sub">包里<b>不含</b>这台机器的设置（导出目录 / Vault / AI 开关 / 口径开关）、本机冲突日志与 schema 版本 ——
-      拷过去不会改掉另一台的设置。同名文件不会互相覆盖（同一秒导出两次会加 -2）。</div>
+    <div class="sub">包里<b>不含</b>本机设置、冲突日志与 schema 版本。</div>
     <div class="settings-sub" id="set-conflict-log">冲突日志（最近 50 条）</div>
     <div class="row tight"><button class="ghost" data-action="sync-log">读一次</button></div>
     <div id="syncLog"></div>
     <div class="settings-sub" id="set-offline">手机离线记（从手机往电脑带）</div>
-    <div class="meta">在手机上断网记的东西（任务 / 勾完成 / 习惯打卡 / 备忘 / 每日反馈）先存在手机里，
-      导出的是<b>同一个格式</b>的包 —— 拿回来在这里「先预览再导入」就行。</div>
+    <div class="meta">断网记的先存在手机里。</div>
     <div class="row tight">
       <button class="ghost" data-action="view" data-view="offline">打开「离线记」这一页</button></div>
-    <div class="sub">这一页在断网时也能打开（它就是为断网准备的）。手机要真的打开这个应用，
-      得先在电脑上<b>显式开</b>局域网访问（<code>--lan</code>，默认关）+ 配对码 —— 见下面那一节；
-      在那之前可以在电脑浏览器的离线模式里用它。</div>
+    <div class="sub">断网也能打开这一页。</div>
     <div class="settings-sub" id="set-lan">局域网访问（手机连电脑）</div>
     <div class="title">${lan.lan_open?'这台服务已对局域网开着':'这台服务只监听本机（手机连不上）'}</div>
     <div class="meta">${lan.lan_open

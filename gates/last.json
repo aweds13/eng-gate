@@ -1,10 +1,10 @@
 {
-  "rev": "1b5b160",
-  "tree": "3c3b93e6b0a3240959292c469e9ccc904e2ff45f",
-  "parent": "1b5b160",
+  "rev": "eb66980",
+  "tree": "8f9d2d2661e0097bace7b4cbe030e9c835dda0a2",
+  "parent": "eb66980",
   "branch": "line/impl-v1",
   "dirty": true,
-  "at": "2026-09-24T22:34:12",
+  "at": "2026-09-24T22:53:24",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
@@ -13,107 +13,107 @@
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 69.23,
-      "summary": "1057 passed, 937 warnings in 66.59s (0:01:06)"
+      "seconds": 73.37,
+      "summary": "1057 passed, 970 warnings in 69.44s (0:01:09)"
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 8.93,
-      "summary": "2 passed, 1057 deselected, 1 warning in 3.99s"
+      "seconds": 21.37,
+      "summary": "2 passed, 1057 deselected, 1 warning in 17.11s"
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 5.02,
+      "seconds": 4.64,
       "summary": "All checks passed!"
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 4.21,
+      "seconds": 3.64,
       "summary": "Success: no issues found in 46 source files"
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 5.6,
+      "seconds": 7.75,
       "summary": "LAYER CHECKS: PASS ✅"
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 21.26,
+      "seconds": 23.74,
       "summary": "SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）"
     },
     {
       "name": "contrast",
       "exit_code": 0,
-      "seconds": 0.49,
+      "seconds": 0.69,
       "summary": "对比度审美门 PASS（达标 36 / 已登记欠账 0 / 新欠账或变差 0；共 36 条组合）"
     },
     {
       "name": "style",
       "exit_code": 0,
-      "seconds": 0.46,
+      "seconds": 0.62,
       "summary": "风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）"
     },
     {
       "name": "ui_text",
       "exit_code": 0,
-      "seconds": 0.43,
+      "seconds": 0.6,
       "summary": "[OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）"
     },
     {
       "name": "commands",
       "exit_code": 0,
-      "seconds": 0.46,
+      "seconds": 0.58,
       "summary": "说明：洞（没填出的路由/入口）是**进度**不是错误 —— 数量下降就是这张表在长。"
     },
     {
       "name": "ui_dom_probe",
       "exit_code": 0,
-      "seconds": 3.69,
+      "seconds": 3.71,
       "summary": "✅ 假 DOM 渲染探针：14/14 个视图正常渲染，详情面板 2/2 正常，今日完成明细展开 1/1 正常，复习卡编辑态 1/1 正常，复习改判 1/1 正常，硬考核强呈现 1/1 正常，白名单勿扰 1/1 正常，状态机 2/2 正常，派生逾期 1/1 正常，尝试失败 1/1 正常，档案视图 2/2 正常，子步骤 3"
     },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 10.29,
+      "seconds": 8.53,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）"
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 2.81,
+      "seconds": 3.57,
       "summary": "OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位"
     },
     {
       "name": "lf1_live",
       "exit_code": 0,
-      "seconds": 7.56,
+      "seconds": 6.06,
       "summary": "LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）"
     },
     {
       "name": "web_live",
       "exit_code": 0,
-      "seconds": 16.72,
+      "seconds": 15.98,
       "summary": "[OK ] 手机直传：认得出来源设备（ph-）"
     },
     {
       "name": "render",
       "exit_code": 0,
-      "seconds": 124.03,
+      "seconds": 127.6,
       "summary": "[OK ] 42 份清单与黄金逐字节一致（3 档宽度 × 14 个视图）"
     },
     {
       "name": "ui_flow",
       "exit_code": 0,
-      "seconds": 178.09,
-      "summary": "[OK ] ㉑ 14 个视图里都没有字面的星号（**）  1 项断言  15.8s"
+      "seconds": 179.99,
+      "summary": "[OK ] ㉑ 14 个视图里都没有字面的星号（**）  1 项断言  15.7s"
     }
   ],
   "not_run": [],
   "reused": {},
-  "trailer": "pytest 1057 passed, 937 warnings in 66.59s (0:01:06); acceptance 2 passed, 1057 deselected, 1 warning in 3.99s; ruff All checks passed!; mypy Success: no issues found in 46 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; contrast 对比度审美门 PASS（达标 36 / 已登记欠账 0 / 新欠账或变差 0；共 36 条组合）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：洞（没填出的路由/入口）是**进度**不是错误 —— 数量下降就是这张表在长。; ui_dom_probe ✅ 假 DOM 渲染探针：14/14 个视图正常渲染，详情面板 2/2 正常，今日完成明细展开 1/1 正常，复习卡编辑态 1/1 正常，复习改判 1/1 正常，硬考核强呈现 1/1 正常，白名单勿扰 1/1 正常，状态机 2/2 正常，派生逾期 1/1 正常，尝试失败 1/1 正常，档案视图 2/2 正常，子步骤 3; audit 审计通过 ✅（豁免 0 项已知欠账）; audit_titles OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位; lf1_live LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）; web_live [OK ] 手机直传：认得出来源设备（ph-）; render [OK ] 42 份清单与黄金逐字节一致（3 档宽度 × 14 个视图）; ui_flow [OK ] ㉑ 14 个视图里都没有字面的星号（**）  1 项断言  15.8s"
+  "trailer": "pytest 1057 passed, 970 warnings in 69.44s (0:01:09); acceptance 2 passed, 1057 deselected, 1 warning in 17.11s; ruff All checks passed!; mypy Success: no issues found in 46 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; contrast 对比度审美门 PASS（达标 36 / 已登记欠账 0 / 新欠账或变差 0；共 36 条组合）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：洞（没填出的路由/入口）是**进度**不是错误 —— 数量下降就是这张表在长。; ui_dom_probe ✅ 假 DOM 渲染探针：14/14 个视图正常渲染，详情面板 2/2 正常，今日完成明细展开 1/1 正常，复习卡编辑态 1/1 正常，复习改判 1/1 正常，硬考核强呈现 1/1 正常，白名单勿扰 1/1 正常，状态机 2/2 正常，派生逾期 1/1 正常，尝试失败 1/1 正常，档案视图 2/2 正常，子步骤 3; audit 审计通过 ✅（豁免 0 项已知欠账）; audit_titles OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位; lf1_live LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）; web_live [OK ] 手机直传：认得出来源设备（ph-）; render [OK ] 42 份清单与黄金逐字节一致（3 档宽度 × 14 个视图）; ui_flow [OK ] ㉑ 14 个视图里都没有字面的星号（**）  1 项断言  15.7s"
 }
