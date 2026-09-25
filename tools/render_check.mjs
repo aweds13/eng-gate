@@ -49,6 +49,40 @@ const SHOTS_DIR = join(GOLDEN_DIR, 'shots')
 const UPDATE_LOG = join(GOLDEN_DIR, 'LAST_UPDATE.md')
 const SCHEMA = 'v1'
 
+/* 每视图签名（T-G69 / T-G40 §六 那条残留）——**防「三方一致地错」**。
+
+   黄金层的判据是"与上次采的逐字节比"，盲区是：**如果黄金自己是在错的那一刻采的**
+   （视图串了 / 采集竞态 / 页面没画完），三层会**一致地**把错的当对。
+   这份表是独立的、手写的"这屏该有什么"：采完每一屏的**当场**核对，不成立就不许落成黄金。
+   语义四条（must / forbid / min_count / min_rows）写在 `tools/render_signatures.json` 的 `_why` 里
+   —— 那边是唯一一处解释，Python 侧（`tests/test_render_signatures.py`）按同一套语义判已提交的黄金。 */
+const SIGNATURES = JSON.parse(readFileSync(join(ROOT, 'tools', 'render_signatures.json'), 'utf8'))
+
+/** 签名不成立（采集到的不是这一屏该有的样子）——单独一类，好跟"起不了浏览器"之类分开报。 */
+class SignatureError extends Error {}
+
+/** 按签名核对一屏的清单，返回不成立的地方（空数组 = 成立）。 */
+function checkSignature(view, text) {
+  const sig = SIGNATURES.views[view]
+  if (!sig) return [`tools/render_signatures.json 里没有 ${view} 的签名（每一屏都要有）`]
+  const problems = []
+  const lines = text.split('\n').filter((l) => l.trim() && !l.startsWith('#'))
+  for (const pat of sig.must ?? []) {
+    if (!text.includes(pat)) problems.push(`找不到「${pat}」（这屏的签名元素）`)
+  }
+  for (const pat of sig.forbid ?? []) {
+    if (text.includes(pat)) problems.push(`不该出现的「${pat}」出现了（这屏变成了别的屏？）`)
+  }
+  for (const [pat, min] of Object.entries(sig.min_count ?? {})) {
+    const got = text.split(pat).length - 1
+    if (got < min) problems.push(`「${pat}」只有 ${got} 个（要 ≥ ${min}）`)
+  }
+  if (sig.min_rows && lines.length < sig.min_rows) {
+    problems.push(`清单只有 ${lines.length} 行（要 ≥ ${sig.min_rows}，像是没渲染出来）`)
+  }
+  return problems
+}
+
 /* 浮层伪视图（T-G61）：它们**默认不出现**，所以采法不是"点视图按钮"而是"点开它的入口"。
    `over` = 打开之前先站到哪一页 —— 必须写死，不能顺手用"上一轮停在哪"：
    T-G51 的教训（`offline` 那页会读别人写的缓存）就是**视图之间不独立**，采错一次会留下假黄金。
@@ -301,6 +335,17 @@ async function collectAll(cdp, url, port) {
       if (ARGS.only && ARGS.only !== view) continue
       const res = await collectView(cdp, vp, view)
       out.set(`${vp.name}/${view}`, { header: res, text: manifestText(res) })
+      // ★ 采完**当场**核对签名（T-G69）：不成立就抛，绝不让它落成黄金 ——
+      //   这是"三方一致地错"唯一能被挡住的时点（黄金一旦采错，后面三层都会说它对）。
+      const sigProblems = checkSignature(view, out.get(`${vp.name}/${view}`).text)
+      if (sigProblems.length) {
+        throw new SignatureError(
+          `${vp.name}/${view} 的**签名不成立**（采到的内容不像这一屏）：\n      - ` +
+          sigProblems.join('\n      - ') +
+          '\n    这一层防的是「三方一致地错」：采集串了/没画完时不许变成判据。' +
+          '\n    若确实是有意改版（这屏该有的东西变了），改 tools/render_signatures.json 并写清理由。'
+        )
+      }
       if (ARGS.shots) {
         mkdirSync(SHOTS_DIR, { recursive: true })
         await cdp.shot(join(SHOTS_DIR, `${vp.name}-${view}.png`))
@@ -404,8 +449,21 @@ async function main() {
     // 浏览器那一半的假时钟（见上面 `setFixtureDay` 那段）：必须在**第一次导航之前**装。
     await cdp.installClock(CAPTURE_DAY)
 
-    const pass1 = await collectAll(cdp, url, ARGS.port)
-    const pass2 = await collectAll(cdp, url, ARGS.port)
+    // 签名不成立时**当成采集失败**（不是"界面变了"）：给一句人话 + 退 1，不把栈丢出来。
+    let pass1
+    let pass2
+    try {
+      pass1 = await collectAll(cdp, url, ARGS.port)
+      pass2 = await collectAll(cdp, url, ARGS.port)
+    } catch (exc) {
+      if (exc instanceof SignatureError) {
+        console.log('\n❌ ' + exc.message)
+        result.notes.push('每视图签名不成立（采集到的不是这一屏该有的样子）')
+        result.code = 1
+        return result
+      }
+      throw exc
+    }
     result.views = pass1.size
 
     // ③ 确定性自检：同一个界面采两遍必须**一模一样**，否则是这个工具自己不可信

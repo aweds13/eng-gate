@@ -1,0 +1,99 @@
+{
+  "_why": [
+    "每视图签名（T-G69 / T-G40 §六 那条残留）——**防「三方一致地错」**。",
+    "",
+    "黄金层现在的判据是「与上一次采的逐字节比」：谁把没打算改的东西动了就红。但它有一个盲区：",
+    "**如果黄金自己是在错的那一刻采的**（视图渲染串了、采集竞态、页面还没画完），",
+    "那么渲染层、假 DOM 探针、行为流层会**一致地**把错的东西当成对 —— 三层都绿，界面是坏的。",
+    "（T-G40 就真抓到过一次：stats 视图冷启动时采到了 focus 的残留画面，两份黄金同大小、rows 都是 51。）",
+    "",
+    "这一份是**独立的、手写的**「这屏该有什么」：采集工具在采完每一屏的**当场**拿它核对，",
+    "不成立就不许落成黄金。所以它挡的不是「界面变了」，而是「这屏根本不是它该有的样子」。",
+    "★ 与 T-G62 的 `day=` 头一行、与「每轮自检页面是不是真以为今天是采集日」同一个思路：",
+    "**别让判据自己在错的时候被写下来。**",
+    "",
+    "## 为什么是 JSON 不是 TOML",
+    "这份表要在**采集的那一刻**被 Node 读（那才是它该在的位置），而 Node 没有内置 TOML 解析器、",
+    "本项目零依赖（不引 npm 包）。JSON 两种语言都能原样读，语义也不会两处解释。",
+    "",
+    "## 四条判据（语义只此一处，两边实现都照它）",
+    "  must       清单里必须出现的子串（≥1 次）—— 这屏的「签名元素」",
+    "  forbid     必须**不**出现的子串（0 次）—— 用来钉「这不是别的屏」（如今日页不该有全部任务页的输入框）",
+    "  min_count  子串出现次数的下限 —— 用来钉「网格真的铺出来了」（热力图格子成百上千）",
+    "  min_rows   清单非表头行数的下限 —— 挡「几乎没渲染出来的空白页」",
+    "",
+    "## 改动规矩",
+    "签名说错就改签名，但要说清理由（它是一句关于「这屏为什么存在」的声明）：",
+    "改它 = 承认这一屏该有的东西变了，那就跟改黄金一样要在复盘里写明。",
+    "★ `tests/test_render_signatures.py` 会同时判两件事：① 这份表本身合不合格（覆盖每一屏、",
+    "有辨识度、不空）；② **已提交的 45 份黄金**逐份满足自己的签名。"
+  ],
+  "views": {
+    "today": {
+      "must": ["circle.chart-ring-progress", "今天做成了什么"],
+      "forbid": ["input#allTitle"],
+      "min_rows": 60
+    },
+    "tasks": {
+      "must": ["input#allTitle"],
+      "forbid": ["circle.chart-ring-progress"],
+      "min_rows": 100
+    },
+    "important": {
+      "must": ["重要（"],
+      "forbid": ["input#allTitle"],
+      "min_rows": 35
+    },
+    "planned": {
+      "must": ["有计划（"],
+      "min_rows": 95
+    },
+    "flagged": {
+      "must": ["已标记（"],
+      "min_rows": 28
+    },
+    "focus": {
+      "must": ["select#focusTaskSel", "今日专注分钟"],
+      "min_rows": 38
+    },
+    "review": {
+      "must": ["input#rvTitle", "bar-track.mini"],
+      "min_rows": 30
+    },
+    "habit": {
+      "must": ["textarea#fbPlan"],
+      "min_count": { "rect.chart-cell": 300 },
+      "min_rows": 400
+    },
+    "stats": {
+      "must": ["div#hmBox", "polygon.chart-area"],
+      "min_count": { "rect.chart-cell": 200 },
+      "min_rows": 300
+    },
+    "academic": {
+      "must": ["gpa-head", "svg.chart.radar"],
+      "min_rows": 100
+    },
+    "memo": {
+      "must": ["input#memoTxt", "input#inMinutes"],
+      "min_rows": 35
+    },
+    "team": {
+      "must": ["管理者（我分配的）"],
+      "min_rows": 28
+    },
+    "setting": {
+      "must": ["div#set-appearance", "button.ghost.set-toggle", "现状："],
+      "min_rows": 100
+    },
+    "offline": {
+      "must": ["div#offlineQueue", "div#offlineStatus"],
+      "min_rows": 100
+    },
+    "palette": {
+      "must": ["div.palette"],
+      "min_count": { "palette": 50 },
+      "min_rows": 100
+    }
+  }
+}
