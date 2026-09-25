@@ -653,3 +653,30 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/team`
 - `phone/today`
 
+
+## 2026-09-25 00:22:26 · 21 份改动
+
+> 理由：T-G63 按钮瘦身（用户 2026-09-25：「不要那么多按钮」，选 A′）：① 任务卡动作行从「每卡 8-10 个同级按钮」收成「在做/开始 + 专注 + 「…」」（点开行内展开其余；删除在菜单里且是红边 ghost）；详情按钮换成点标题；② 设置页每节折成「标题 + 现状 + 展开」（91 个可见按钮 / 7099px → 4 个 / 1164px）。两个视图的全部黄金因此重采（卡上多了「…」、设置页只剩目录行）
+
+- `desktop/flagged`
+- `desktop/important`
+- `desktop/palette`
+- `desktop/planned`
+- `desktop/setting`
+- `desktop/tasks`
+- `desktop/today`
+- `narrow/flagged`
+- `narrow/important`
+- `narrow/palette`
+- `narrow/planned`
+- `narrow/setting`
+- `narrow/tasks`
+- `narrow/today`
+- `phone/flagged`
+- `phone/important`
+- `phone/palette`
+- `phone/planned`
+- `phone/setting`
+- `phone/tasks`
+- `phone/today`
+

@@ -1038,6 +1038,29 @@ evidence = [
 ]
 gaps = ""
 
+[entries."T-G63"]
+id = "T-G63"
+title = "按钮瘦身（SR-NF4 / N33）：任务卡只留「勾选圈 + 在做/开始 + 专注 + …」（其余进行内菜单）、设置页每节折成「标题 + 现状 + 展开」"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/按钮瘦身-卡片与设置页-T-G63.md",
+  "text:src/web/index.html::---------- 卡片动作行（T-G63：按钮瘦身）----------",
+  'text:src/web/index.html::data-action="task-more"',
+  'text:src/web/index.html::class="ghost danger" data-action="task-delete"',
+  'text:src/web/index.html::<span class="open" data-action="task-detail"',
+  "text:src/web/index.html::function foldSettingSections(root){",
+  "text:src/web/index.html::const BOUNDARY='.section-title, .settings-sub'",
+  "text:src/web/index.html::let setSummary={",
+  "text:src/web/app.css::.card-more { border-top: 1px solid var(--border)",
+  "text:src/web/app.css::.danger { color: var(--danger); border-color: var(--danger) }",
+  "text:src/web/app.css::.set-body[hidden] { display: none }",
+  "text:docs/specification/nonfunctional.md::按钮密度按「用的时候才出现」定（2026-09-25，T-G63）",
+  "test:test_web_frontend.py",
+  "test:test_ui_flow_check.py",
+]
+gaps = "**用户 2026-09-25**：「你过多地堆积各种按钮……不要那么多按钮，直接显现出来。你想一想。」→ 我先量（读的是每轮门禁已经采好的 45 份黄金，零额外耗时），**再按判据包定方案**（`sheleg-design/workbench` 是这条线的 core contract：`DataTable.md` 的「行 hover 只是底色、nothing else moves」、`Button.md` 的「primary 是这一屏存在就为了让它好按的那一个」、`DestructiveButton.md` 的「删除 = 红边小 ghost + 两步确认」、`workbench.md` 的 primary max one per view 与 keyboard-first），并查了同类产品的机制（Things/提醒：行上只剩勾选、动作在详情面板；Todoist/Linear/GitHub：hover 一个 `…` 或固定槽位的小图标；批量走「选中后出工具条」）。**先出预演图**（真界面注入 + 真种子数据 × 3 档宽度），用户在三个候选里选 **A′** 并要「设置页一起收」。**改了什么**：① 卡上只留「勾选圈 + 在做/开始 + 专注 + `…`」，`…` 点开**行内展开**（推到明天/取消/加入移出 My Day/标记/分配/详情/记录/**删除**）；删除是 `.danger`（红边红字，悬停不变回正文色）+ 二次确认；**「详情」按钮删掉 → 点标题开右栏**（键盘那条路留在 `…` 里）；② 设置页每节 = 「标题 + 现状 + 展开」，现状优先取「当前选中的那个按钮」、关键节有人写的短摘要，展开/收起是**真按钮**（`aria-expanded`/`aria-controls`），**就地切 DOM** 不重跑那页 15 个请求；常用区链接会叫开目标节；③ 折叠状态与「…」状态**同一屏重渲染保留、切视图重置**。**量到的**：全部任务 111 → **42** 个可见按钮（一张卡 8–10 → **2 +「…」**，动作行从两行变一行）、页高 1609 → 1284；设置页 117 → **13** 个、页高 7099 → **1164**（手机 9603 → 1584）。**验收**：pytest 两条（标记层：常显 ≤3、菜单里 9 个动作一个不少、`.danger` + 二次确认、点标题开详情、**没有**悬停显形规则；设置页：现状表/真按钮 + aria/就地切/边界规则/常用区叫开）+ 行为流第 K 条扩到 **38 项断言**（真量「一张卡 ≤3 个按钮」、`删除` 在卡上数不到、点 `…` 才出现、再点收起；设置页那一节默认折着、折着也有「现状：」）+ 受影响的 7 条流各加一次 `openSetting(...)`（那一下本身就是验证）+ 假 DOM 探针补齐 `querySelector(All)`/`matches`/`after` + 黄金 45 份重采（改 21 份）。**★ 预演否掉了我自己上一轮的 A+B 方案**：悬停显形会让动作行换行、卡片长高 = 包明令禁止的位移 —— 先出图就是为了让它当场暴露。**边界**：不做悬停显形（只保留「点开」）；手机没有悬停所以 `…` 是唯一入口（卡片标题因此从 128px 拿到 ~200px）；设置页少数节的现状摘要是通用兜底（抓第一节正文），不如手写那几节准 —— 已知粗糙处，不值得为它加后端字段；「常用」「入口」两节不折（导航不是动作列表）。"
+
 [entries."T-G62"]
 id = "T-G62"
 title = "工程债（验证层）：把「今天」收成一处并让采集能钉住它（`src/timeflow/clock.py` + `TIMEFLOW_FAKE_TODAY` + 采集侧三处一致）—— 修掉「黄金跨午夜自己变红 6 份」"

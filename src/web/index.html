@@ -103,6 +103,9 @@ let themeChoice='light';     // 主题选择（R4 接通暗色）
 let detailTaskId=null;       // R3：右栏正在查看的任务（跨视图保留；切视图时清空）
 let detailEditing=false;     // OP-9：详情面板是否处于「编辑」态（切任务/切视图即退出）
 let groupCache=[];           // 分组列表缓存（渲染任务详情的"所属分组"用，避免每张卡都请求一次）
+let cardMore={};             // 哪张卡上的「…」菜单是展开的（T-G63；切视图即清空）
+let setOpen={};              // 设置页哪些节是展开的（T-G63；切视图即清空）
+let setSummary={};           // 设置页每节的「现状」摘要（渲染时按当前配置算出来，T-G63）
 let courseCache=[];          // 课程列表缓存（任务编辑里的"所属课程"下拉 + 学业页关联任务用）
 // 合法视图名（render 的白名单：写错的视图名会被立刻发现，而不是静默空屏）
 const VIEWS=['today','tasks','important','planned','flagged','focus','stats','habit','academic','review','memo','team','setting','offline'];
@@ -762,8 +765,14 @@ function toastChoices(msg,choices){
   t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),8000);
 }
 function view(name){
-  if(name!==current)detailTaskId=null;          // 切视图：右栏详情不再适用（计时器不受影响）
-  detailEditing=false;                          // 切视图也退出编辑态，避免残留半截表单
+  // 切视图才清这些"跟着这一屏走"的状态；**同一屏的重渲染不清**（T-G63）——
+  // 否则在设置页点一下"加上时段"，那一节会自己折回去；卡上的「…」菜单同理。
+  if(name!==current){
+    detailTaskId=null;                          // 右栏详情不再适用（计时器不受影响）
+    cardMore={};                                // 卡上的「…」菜单收起
+    setOpen={};                                 // 设置页折叠状态重置（下次进来又是一屏目录）
+  }
+  detailEditing=false;                          // 退出编辑态，避免残留半截表单
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   render(name);
@@ -860,9 +869,18 @@ const ACTIONS = {
   'lan-selfcheck':  () => runLanSelfCheck(),
   'remind-list':    () => loadRemindList(),
   'sync-log':       () => loadSyncLog(),
-  'settings-scroll':el => { const t=document.getElementById(el.dataset.target); if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
+  'settings-scroll':el => { const t=document.getElementById(el.dataset.target);
+                            // T-G63：常用区那排链接要能**叫开**那一节 —— 它现在是折着的。
+                            // 只展开不收起（点"数据与同步"再点"提醒"，两节都开着是合理的）。
+                            openSettingSection(el.dataset.target);
+                            if(t)t.scrollIntoView({behavior:'smooth',block:'center'}); },
+  // 设置页每一节的展开/收起（T-G63）：**就地切 DOM**，不重跑那一页的 15 个请求
+  'set-fold':       el => toggleSettingSection(el.dataset.sec, el),
   // 任务
   'task-detail':    el => showDetail(el.dataset.id),
+  // 卡片上的「…」（T-G63）：点开在**同一张卡里**行内展开其余动作（与分组那套同一做法）。
+  // 为什么是行内展开而不是浮层：不动位置、不改数据流，手机与键盘都同一套；浮层是另一个原语。
+  'task-more':      el => { const id=el.dataset.id; cardMore[id]=!cardMore[id]; render(current); },
   'task-open':      el => showDetail(el.dataset.id),   // 从别的视图（如学业页课程卡）打开任务详情
   'task-close':     () => { detailTaskId=null; render(current); },
   // 今天做成了什么（T-C11）：展开/收起某一项（原地展开，不用弹窗）
@@ -1774,24 +1792,40 @@ function taskCard(t,isOverdue){
   const aiReport=t.progress_count
     ? `<div class="sub"><span class="badge">${esc(t.progress_label||'')}</span> ${esc(t.progress_note||'')}${t.progress_at?`（${humanTime(t.progress_at)}）`:''}${t.progress_count>1?` · 另有 ${t.progress_count-1} 条`:''}</div>`
     : '';
+  // ---------- 卡片动作行（T-G63：按钮瘦身）----------
+  // 一行里堆 8–10 个同级按钮，是"平/挤"最主要的来源，而且**违反判据包自己的话**：
+  //   · `DataTable.md`：行 hover 只是底色，**nothing else moves**（所以不做"悬停显形"）；
+  //   · `Button.md`：primary 是"这个屏幕存在就是为了让它好按"的那一个，其余动作穿 secondary/ghost；
+  //   · `DestructiveButton.md`：删除是**红边小 ghost + 两步确认**，不该跟"专注"长得一样。
+  // 所以卡上只留：勾选圈（完成/撤销）+ 在做/开始 + 专注 + 「…」；
+  // 其余进「…」的行内菜单，字段编辑与记录进右栏详情面板，全局动作用 ⌘K。
+  // 为什么不做"悬停显形"（用户提的 A+B）：鼠标扫过时那一行会从一行变两行 —— 正是上面那条禁止的位移。
+  const more=!!cardMore[t.id];
+  const moreItems=[
+    late?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>`:'',
+    late?`<button class="ghost" data-action="task-cancel" data-id="${t.id}">取消</button>`:'',
+    isDone?`<button class="ghost" data-action="task-undo-done" data-id="${t.id}">撤销完成</button>`
+          :`<button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>`,
+    `<button class="ghost" data-action="task-flag" data-id="${t.id}">${t.flagged?'取消标记':'标记'}</button>`,
+    asgButtons,
+    `<button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>`,
+    `<button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button>`,
+    `<button class="ghost" data-action="task-facts" data-id="${t.id}">记录</button>`,
+    `<button class="ghost danger" data-action="task-delete" data-id="${t.id}">删除</button>`,
+  ].join('');
   return `<div class="card ${isDone?'done':''} ${late?'overdue':''} ${t.id===detailTaskId?'selected':''}">
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
-    <div class="card-body"><div class="title">${esc(t.title)}</div>
+    <div class="card-body">
+    <div class="title"><span class="open" data-action="task-detail" data-id="${t.id}"
+      title="打开右栏详情（键盘用「…」里的「详情」）">${esc(t.title)}</span></div>
     <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${whoBadge}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}${aiReport}</div>
     <div class="row">
       ${doingButtonHTML(t)}
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
-      ${late?`<button class="ghost" data-action="task-tomorrow" data-id="${t.id}">推到明天</button>
-        <button class="ghost" data-action="task-cancel" data-id="${t.id}">取消</button>`:''}
-      ${asgButtons}
-      ${isDone?`<button class="ghost" data-action="task-undo-done" data-id="${t.id}">撤销完成</button>`
-              :`<button class="ghost" data-action="task-myday" data-id="${t.id}">${t.is_myday?'移出 My Day':'加入 My Day'}</button>`}
-      <button class="ghost" data-action="task-flag" data-id="${t.id}">${t.flagged?'取消标记':'标记'}</button>
-      <button class="ghost" data-action="task-assign" data-id="${t.id}">分配</button>
-      <button class="ghost" data-action="task-detail" data-id="${t.id}">详情</button>
-      <button class="ghost" data-action="task-facts" data-id="${t.id}">记录</button>
-      <button class="ghost" data-action="task-delete" data-id="${t.id}">删除</button>
-    </div></div>`;
+      <button class="ghost" data-action="task-more" data-id="${t.id}"
+        aria-expanded="${more?'true':'false'}" title="更多动作">…</button>
+    </div>
+    ${more?`<div class="row card-more">${moreItems}</div>`:''}</div>`;
 }
 // 团队分配的四种状态与「下一步」动作（SR-F7.2：进展回报）
 const TEAM_STATUS={assigned:'已分配',in_progress:'进行中',done:'已完成',blocked:'受阻'};
@@ -3345,9 +3379,103 @@ async function renderSetting(m){
       <button class="ghost" data-action="view" data-view="memo">备忘录</button>
       <button class="ghost" data-action="view" data-view="academic">学业</button></div>
   </div>`;
+  // 收成「标题 + 现状 + 展开」（T-G63）：整页 91 个按钮 / 7099px → 4 个按钮 / 1164px。
+  setSummary={
+    'set-appearance': `${themeChoice==='dark'?'暗色':themeChoice==='system'?'跟随系统':'亮色'} · 强调色 ${accentChoice?'自定义':'默认'}`,
+    'set-accent': accentChoice||cfg.accent_color||'默认',
+    'set-focus-guard': `${guard.block_by_default?'专注时阻止':'一律放行'} · 白名单 ${guard.whitelist.length} 条 · 勿扰 ${guard.do_not_disturb.length} 段`,
+    'set-tasks': `${arch.after_days} 天后进档案`,
+    'set-behavior': `${(beh.items||[]).length} 条口径可切`,
+    'set-vocab': `${(vb.items||[]).length} 类词表`,
+    'set-export': `${(ex.dir||ex.default_dir||'export').split(/[\\/]/).filter(Boolean).pop()||'export'}${ex.note_exists?' · 今天已写':''}`,
+    'set-vault': `${ex.vault_configured?'已配 Vault':'未配 Vault'} · 只读跳转`,
+    'set-ai': `${ai.enabled?'已打开':'关着'} · 只读 + 新增`,
+    'set-notify': `${nf.enabled?'已打开':'关着'} · 收件箱 ${nf.total||0} 条`,
+    'set-academic': `GPA ${gpaScale} 制`,
+    'set-attach': `${attachCfg.mode==='browser'?'按格式自动':attachCfg.mode==='folder'?'打开所在文件夹':'默认程序'} · 白名单 ${(attachCfg.whitelist||[]).length} 个`,
+    'set-remind': `${remindCfg.style==='alarm'?'闹钟式':'温和通知'} · ${remindCfg.notify_enabled?'已开':'关着'}`,
+    'set-remind-list': `${remindCfg.pending||0} 条待提醒`,
+    'set-syncpack': `${off?'当前离线':'在线'} · 最近导出 ${sync.last_export?'有':'无'}`,
+    'set-conflict-log': `${sync.conflict_logs||0} 条冲突记录`,
+    'set-offline': '手机记 → 导文件 → 电脑导入',
+    'set-lan': `${lan.lan_open?'已对局域网开着':'只监听本机'} · 配对码 ${lan.pairing_required?'需要':'不需要'}`,
+    'set-backup': `${(bk.items||[]).length} 份备份`,
+  };
+  foldSettingSections(m);
   // 分组管理单独渲染（它自己还要请求一次列表，且失败不该影响整页）
   const box=document.getElementById('groupAdmin');
   if(box)renderGroupAdmin(box);
+}
+/* ---------- 设置页分层（T-G63，「不要那么多按钮」的另一半）----------
+ * 用户 2026-09-25：「你过多地堆积各种按钮」。设置页是"想起来才进来"的一页，
+ * 原来 17 节全摊开：实测 91 个可见按钮 / 7099px 高（手机 9603px）。
+ * 三条口径：
+ *  ① **折叠是"目录"不是"藏起来"**：每节都留一行，标题 + **当前值**都在
+ *     （"用的时候要看到的东西"里，当前值就是那一个）；
+ *  ② 展开/收起是**真按钮**（Tab 可达 + `aria-expanded` + `aria-controls`）——
+ *     "收起来"不等于"键盘到不了"（workbench：每个主要动作都要键盘可达）；
+ *  ③ **就地切 DOM**：那一页要 15 个请求，折一下不该等网络。
+ * 实现在渲染之后一次性整理（而不是改 17 处模板）：一处规则所有节都吃到，后端加新节也不必再想一遍。
+ */
+function toggleSettingSection(id, btn){
+  const body=document.getElementById(`body-${id}`); if(!body)return;
+  const open=body.hidden;                        // 现在是收着的 → 展开
+  body.hidden=!open; setOpen[id]=open;
+  if(btn){btn.textContent=open?'收起':'展开';btn.setAttribute('aria-expanded',open?'true':'false')}
+  const sum=document.getElementById(`sum-${id}`); if(sum)sum.hidden=open;  // 展开后摘要让位给控件
+}
+/** 常用区那排链接要能**叫开**它指向的那一节（它现在是折着的）。只开不收：连点两节都开着是合理的。 */
+function openSettingSection(id){
+  const body=document.getElementById(`body-${id}`);
+  if(body&&body.hidden)toggleSettingSection(id, document.querySelector(`[data-action="set-fold"][data-sec="${id}"]`));
+}
+/** 一节的「现状」摘要：**优先取那一节里"当前选中"的那个按钮**（分段控件本身就是答案），
+ *  否则取第一句 title/meta/sub。截到 12 字 —— 它是"扫一眼"用的，不是解释句。 */
+function sectionSummary(id, body){
+  const custom=setSummary[id];
+  if(custom!==undefined)return custom;
+  const on=[...body.querySelectorAll('button')].find(b=>!b.className.includes('ghost'));
+  const node=body.querySelector('.title, .meta, .sub, .hint');
+  const raw=(on?on.textContent:(node?node.textContent:'')||'').replace(/\s+/g,' ').trim();
+  if(!raw)return '';
+  return raw.length>12?raw.slice(0,12)+'…':raw;
+}
+function foldSettingSections(root){
+  // 边界：**任何**小节标题都是边界（不管有没有 id）—— 否则"数据与同步"这种没有 id 的标题
+  // 会被上一节（提醒）连着它的卡片一起吞进折叠体里，于是它下面的每一节都是点不到的隐藏元素。
+  const BOUNDARY='.section-title, .settings-sub';
+  // 能折的（有 id + 位置正确）：
+  //   · 直接挂在视图根下的 `set-*` 小节标题；
+  //   · 设置在**带 id 的卡片**里的子节（`#set-sync` 那一坨：跨端同步 / 冲突日志 / 离线 / 局域网 / 备份）。
+  // 刻意不折的：卡片内没有 id 的子行（外观里的「强调色」、导出里的「Obsidian」、提醒里的「全部提醒」）
+  //   —— 它们跟着自己那一节一起开，少一层嵌套少一次点击。
+  const foldable=(h)=>{
+    if(!/^set-/.test(h.id||''))return false;
+    const p=h.parentElement;
+    if(!p||p===root)return true;
+    return Boolean(p.classList&&p.classList.contains('card')&&/^set-/.test(p.id||''));
+  };
+  for(const h of [...root.querySelectorAll('.section-title[id^="set-"], .settings-sub[id^="set-"]')]){
+    if(!foldable(h))continue;
+    const sibs=[]; let n=h.nextElementSibling;
+    while(n&&!(n.matches&&n.matches(BOUNDARY))){sibs.push(n);n=n.nextElementSibling}
+    if(!sibs.length)continue;                    // 空节不动它（凭空多一个"展开"按钮更怪）
+    const body=document.createElement('div');
+    body.className='set-body'; body.id=`body-${h.id}`;
+    h.after(body); sibs.forEach(s=>body.appendChild(s));
+    const open=!!setOpen[h.id]; body.hidden=!open;
+    const text=sectionSummary(h.id, body);
+    const sum=document.createElement('div');
+    sum.className='sub set-sum'; sum.id=`sum-${h.id}`;
+    sum.textContent=text?`现状：${text}`:'';
+    sum.hidden=open||!text;
+    const btn=document.createElement('button');
+    btn.className='ghost set-toggle'; btn.dataset.action='set-fold'; btn.dataset.sec=h.id;
+    btn.setAttribute('aria-expanded', open?'true':'false'); btn.setAttribute('aria-controls', `body-${h.id}`);
+    btn.textContent=open?'收起':'展开';
+    h.appendChild(btn); h.classList.add('set-head');
+    h.after(sum);
+  }
 }
 // GPA 制式切换：只改查看口径（写死配置是后端职责），立即重渲染
 /* 口径与一键回退（SR-NF8 / D 批 · T-D11）：切换与「回到默认位」都写后端设置，

@@ -247,6 +247,18 @@ class T {
   /** 组合键（`Ctrl/⌘ + 字母`）—— T-G61 的键盘层要用它打 ⌘K。 */
   async chord(letter, opts) { await this.cdp.chord(letter, opts); await waitIdle(this.cdp) }
 
+  /** 设置页分层（T-G63）：那一节默认是**折着**的 —— 先把 `set-xxx` 展开再操作。
+   *  幂等（已经开着就什么都不做），所以每条流在动那一节之前调一次就行。
+   *  ★ 这一条本身也是验证：如果哪天"折叠"被做成"删掉"，这里会**找不到那个展开按钮**而报错。 */
+  async openSetting(sec) {
+    const state = await this.cdp.eval(`(() => { const b = document.getElementById('body-${sec}');
+      return b ? (b.hidden ? 'closed' : 'open') : 'missing' })()`)
+    if (state === 'open') return true
+    const m = await this.mark(`[data-action="set-fold"][data-sec="${sec}"]`)
+    if (!m.ok) { this.ok(`设置页有「${sec}」这一节（可展开）`, false, `匹配到 ${m.all} 个`); return false }
+    return this.press(HIT, `展开设置里的「${sec}」`)
+  }
+
   /** 清空一个输入框（真点 → Ctrl+A → 真按退格）。
    *  ★ 别拿 `type(sel, '')` 当清空：那是"一个字符都不打"，原来的内容**原样留着**（T-G37 踩到）。 */
   async clear(selector) {
@@ -381,6 +393,7 @@ flow({
     await t.reload()
     t.eq('刷新之后不再出现（不是每次打开都弹）', await t.count('#guideCard'), 0)
     await t.view('setting')
+    await t.openSetting('set-appearance')      // T-G63：这一节现在是折着的
     await t.pressAction('guide-replay')
     t.eq('设置页「再看一遍新手引导」能把它叫回来', await t.count('#guideCard'), 1)
     t.ok('叫回来之后站的是今日页（不是停在设置里）', (await t.count('[data-view="today"].active')) >= 1)
@@ -418,6 +431,12 @@ flow({
   async run(t) {
     await t.start('setting')
     t.has('设置页有这一节', await t.bodyText(), '专注（白名单 / 勿扰）')
+    // T-G63（设置页分层）：折叠**不是藏起来** —— 折着的时候标题下就有"现状"，展开才出控件
+    t.eq('这一节默认是折着的', (await t.geom('#body-set-focus-guard')).display, 'none')
+    t.has('折着也看得见现状（不用点开就知道现在的口径）',
+      await t.text('#sum-set-focus-guard'), '现状：')
+    await t.openSetting('set-focus-guard')
+    t.ok('点「展开」之后控件才出来', (await t.geom('#body-set-focus-guard')).display !== 'none')
     t.eq('一开始没有勿扰时段', await t.count('[data-action="guard-dnd-del"]'), 0)
 
     // ① 非法时段：`25:00-07:00`。前端只判"非空/重复"，所以**必须由后端拦下**，
@@ -592,6 +611,7 @@ flow({
   vp: 'desktop',
   async run(t) {
     await t.start('setting')
+    await t.openSetting('set-export')          // T-G63：这一节现在是折着的
     const shown = await t.attr('#exportDir', 'value')
     t.has('设置页显示的是这台机器上的导出目录', shown, 'tf-render-export')
 
@@ -634,6 +654,7 @@ flow({
   vp: 'desktop',
   async run(t) {
     await t.start('setting')
+    await t.openSetting('set-ai')              // T-G63：这一节现在是折着的
     t.has('界面明说默认是关的', await t.bodyText(), '现在：关着（默认 —— 这一组接口一律 403）')
 
     // ① 关着的时候：**整组一律 403**，而且原话告诉你先去哪打开
@@ -672,6 +693,7 @@ flow({
 
     // ⑤ 收拾干净：关回去
     await t.view('setting')
+    await t.openSetting('set-ai')              // 中间去过别的视图 → 折叠状态被重置了（T-G63）
     await t.pressAction('set-ai', { text: '关闭' })
     t.eq('能关回去', (await t.waitToast('AI 接口已关闭')).ok, true)
   },
@@ -735,6 +757,7 @@ flow({
   vp: 'desktop',
   async run(t) {
     await t.start('setting')
+    await t.openSetting('set-syncpack')        // T-G63：这一节现在是折着的
     t.has('这一节写着怎么用（导到另一台、先预览再导入）', await t.bodyText(), '先预览再导入')
     t.eq('「同时应用对方的删除」默认是不勾的（㉒ 的第一半）',
       await t.attr('#syncDel', 'checked'), null)
@@ -816,6 +839,7 @@ flow({
   vp: 'desktop',
   async run(t) {
     await t.start('setting')
+    await t.openSetting('set-notify')          // T-G63：这一节现在是折着的
     t.has('默认是关的（并说清这叫「未接入」）', await t.bodyText(), '这叫"未接入"')
 
     // ① 关着的时候：投递一律 403（这是"未接入"，不是坏掉）
@@ -860,6 +884,7 @@ flow({
 
     // ⑥ 关回去：新投递又被 403，但**已有的那条照样能处理**（收件箱是你的数据）
     await t.view('setting')
+    await t.openSetting('set-notify')          // 中间去过别的视图 → 折叠状态被重置了（T-G63）
     await t.pressAction('set-notify', { text: '关闭' })
     t.eq('能关回去', (await t.waitToast('合作接口已关闭')).ok, true)
     const closed = await t.api('POST', '/api/notify/school', { source: '教务处', external_id: 'N-2026-002', title: '又一条' })
@@ -925,6 +950,7 @@ flow({
   vp: 'desktop',
   async run(t) {
     await t.start('setting')
+    await t.openSetting('set-export')           // T-G63：Vault 那一节住在「导出」这一节里
     const vault = join(EXPORT_DIR, 'flow-vault')
     mkdirSync(vault, { recursive: true })
     t.has('界面写着这是只读跳转（不往 Vault 里写东西）', await t.bodyText(), '只读')
@@ -937,6 +963,7 @@ flow({
     t.ok('Vault 设置能存下', saved.ok, `提示条里是：${saved.text || '（空）'}`)
 
     // ② ★ 红线：把导出目录填成 Vault 里的子目录 → 后端 400 带原话
+    await t.openSetting('set-export')          // T-G63：导出那一节也是折着的
     await t.type('#exportDir', join(vault, 'timeflow-export'))
     await t.key('Enter')
     const red = await t.waitToast('操作未完成')
@@ -1069,11 +1096,22 @@ flow({
     const tid = made.json && made.json.id
     t.ok('（准备）建了一张待删的任务', Boolean(tid), JSON.stringify(made).slice(0, 120))
     await t.view('today')
+    // ★ T-G63（按钮瘦身）：卡上不再是一排 8–10 个同级按钮 —— 先量一张卡，再走"删除在「…」里"这条路。
+    const rowBtns = await t.cdp.eval(`(() => { const c = document.querySelector('.card');
+      if (!c) return -1;
+      return [...c.querySelectorAll(':scope > .row > button')].filter((b) => b.getClientRects().length).length })()`)
+    t.ok('一张卡上常显的动作 ≤3 个（勾选圈在卡外，不计）', rowBtns >= 1 && rowBtns <= 3, `实测 ${rowBtns} 个`)
+    t.eq('删除不在卡上直接摆着（它在「…」里）', await t.count('[data-action="task-delete"]'), 0)
+    await t.pressAction('task-more', { inCard: 'ESC 取消删除用' })
+    t.eq('点「…」才展开菜单，删除在里面', await t.count('[data-action="task-delete"]'), 1)
     await t.pressAction('task-delete', { inCard: 'ESC 取消删除用' })
     t.eq('删除弹出了站内确认框', await t.attr('#modal', 'hidden'), null)
     await t.key('Escape')
     t.eq('Esc 关得掉确认框', await t.attr('#modal', 'hidden'), '')
     t.has('任务还在（Esc 是取消，不是确认）', await t.bodyText(), 'ESC 取消删除用')
+    // 菜单也能收起来（同一张卡再点一次）—— 不然展开一次就永远是展开的
+    await t.pressAction('task-more', { inCard: 'ESC 取消删除用' })
+    t.eq('再点一次「…」收起菜单', await t.count('[data-action="task-delete"]'), 0)
     if (tid) await t.api('DELETE', `/api/tasks/${tid}`)
 
     // ⑨ 鼠标那半：点「命令」开、点空白关（附加层也要能用鼠标发现它）

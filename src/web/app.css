@@ -39,6 +39,13 @@
      而"把 #ef4444 自己调深一点"就是发明一个包不拥有的颜色 —— 所以跟包，不自己调。 */
   --danger: #d1242f;
   --ok: #1a7f37;
+  /* ★ 2026-09-25（T-G63）：危险动作（卡片「…」里的「删除」）的**悬停底**。
+     - 暗色用包给的 `--danger-weak`（#2d1517）：红字落在它上面 4.61 ✓；
+     - 亮色**不用**它：包的 `#fde8e9` 上红字只有 **4.47**（差 0.03 过不了 AA，是包自己的那一档偏浅），
+       所以亮色退回通用 ghost 的 `--panel-2`（红字落上去 5.06 ✓）。
+     这一条是**量出来的**（对比度门当场拦下过两次），不是我挑的好看值。 */
+  --danger-hover-bg: var(--panel-2);
+  --danger-weak: #fde8e9;
   --shadow-rgb: 0, 0, 0;
   /* ★ 2026-09-24（T-G51 · 视觉线步 2「层次语言」）阴影**归位**：它从"卡片抬起来一点"改成
      **浮层专用**（包只有一条阴影，注释写着 `overlays only`）。理由是一个可以量的病：
@@ -121,6 +128,8 @@
   --muted: #8a93a6;   /* 次级文字（T-G51 跟包，同亮色那条的理由） */  /* 状态色同样跟包（亮暗同源：一个语义角色一个值，两套主题各自取包给的那一个） */
   --danger: #e5534b;
   --ok: #3fb960;
+  --danger-hover-bg: var(--danger-weak);  /* 暗色：包的 weak 底能让红字过 AA（亮色那档不行，见令牌区注释） */
+  --danger-weak: #2d1517;
   --shadow-rgb: 0, 0, 0;
   --shadow: 0 6px 20px -8px rgba(var(--shadow-rgb), .55);
 }
@@ -252,6 +261,17 @@ main { max-width: 820px; margin: 0 auto; padding: 0 var(--sp-5) var(--nav-cleara
  * 而标签可能很长的按钮（用户自己的任务名/分组名）都住在 `.row` / `.sub` 里，
  * 绝不能在这里被 nowrap 顶出容器。 */
 .card > button { white-space: nowrap }
+/* 卡上的「…」菜单（T-G63）：行内展开，与卡片内容之间用一条 1px 细线分开（层次靠边框，不靠阴影）。
+   它**只在用户点开时**出现，所以"展开时卡片变高"是"按需展开"，不是鼠标扫过就跳。
+   里面那一排仍是 ghost 按钮（包的三档按钮之一），删除用 `.danger`：红边 + 红字，
+   二次确认照旧（`DestructiveButton` 的做法：红色只承担"这一步会没东西"，不承担"更大更响"）。 */
+.card-more { border-top: 1px solid var(--border); margin-top: var(--sp-3); padding-top: var(--sp-3) }
+/* 危险动作（删除）：红边 + 红字的小 ghost（`DestructiveButton` 的做法）——
+   它要能跟旁边的"标记/分配"区分开，但不该更大更响；二次确认由 confirmAsk 照旧。 */
+.danger { color: var(--danger); border-color: var(--danger) }
+/* 标题可点 = 打开右栏详情（把动作绑到已有元素上，省掉一个「详情」按钮）。
+   键盘那条路不靠它 —— 「…」菜单里有「详情」（那里才是可 Tab 的按钮）。 */
+.card .title .open { cursor: pointer }
 .row.tight { gap: var(--sp-2) }
 /* 列表里当前正在右栏查看的那张卡：加一圈，别让人找不到"我在看哪个" */
 .card.selected { box-shadow: 0 0 0 2px var(--accent) }
@@ -380,6 +400,14 @@ button.ghost svg, .flag svg { width: 16px; height: 16px; vertical-align: -3px }
 .settings-sub { font-size: var(--fs-md); margin: var(--sp-4) 0 var(--sp-2); color: var(--ink); line-height: var(--lh-tight) }
 .settings-sub:first-child { margin-top: 0 }
 .card + .settings-sub { margin-top: var(--sp-5) }
+/* 设置页分层（T-G63）：每节 = 「标题 + 展开」+ 一行现状摘要，控件收进 `.set-body`。
+   标题行不用 `section-title` 的裸样式，而是 flex 两端对齐（标题在左、展开在右）——
+   `section-title` 的上下间距保持不变，所以"折叠只是把控件藏起来"这件事在版式上看得见。 */
+.set-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3) }
+.set-head .set-toggle { flex: none; font-size: var(--fs-sm); padding: var(--sp-1) var(--sp-2) }
+.settings-sub.set-head { font-size: var(--fs-md) }
+.set-sum { margin-top: 0 }
+.set-body[hidden] { display: none }
 /* 强调色取样：色块本身就是要展示的颜色，只能字面写色值（令牌区以外唯一豁免）。
    圆角走 `--r-pill`（T-G45）：原来写 `50%` —— 方形元素上 `50%` 与 `999px` 是同一个圆，
    而包对圆角只有三档（6 / 10 / 999），多出来的 `50%` 只是"第四种写法"。
@@ -883,6 +911,10 @@ nav button:not([disabled]):hover,
    （都交给 `--panel-2`）；上面那条"实心强调底"是给主按钮的，套到行上会变成一列蓝块。
    行是 div（焦点留在过滤框），所以这条规则得单写 —— 它不匹配 `button:hover`。 */
 .palette-row:hover { background: var(--panel-2) }
+/* 危险动作（T-G63）：悬停给 `--danger-hover-bg`（亮色 = --panel-2、暗色 = 包的 --danger-weak），
+   字保持红 —— 套通用 ghost 的 `--panel-2` 会在暗色下把"红字 on 浅底"压到 4.15；
+   而变回正文色又等于"鼠标一放上去，这个按钮看起来就不危险了"。两档底都是**量过**的（对比度门）。 */
+button.danger:not([disabled]):hover { background: var(--danger-hover-bg); color: var(--danger) }
 /* toast 上的动作按钮（模板里是 `.ghost`）：**不能套 `--panel-2`** ——
    亮色下那是浅灰、而 toast 的字是白的；往横幅里掺一点字色才是可见又安全的一层亮光。
    （乘出来的底是**不透明**的，所以对比度门算得了它；`…%, transparent` 那种写法算不了。） */

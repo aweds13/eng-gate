@@ -64,6 +64,15 @@ class El {
   addEventListener() {}
   removeEventListener() {}
   appendChild(c) { this.children.push(c); return c; }
+  // 假 DOM 的**查询/插入**接口（T-G63 补）：真 DOM 有的这里也得有 ——
+  // 页面上只要有一处"渲染完再整理 DOM"（设置页分层就是这么做的），缺了它整页就抛错。
+  // 桩要比被测代码更宽容，不能比它更窄（T-G39 那条教训）。
+  querySelector() { return null; }
+  querySelectorAll() { return []; }
+  matches() { return false; }
+  after() {}
+  before() {}
+  remove() {}
   closest() { return null; }
   focus() {}
   select() {}

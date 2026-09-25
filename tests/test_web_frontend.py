@@ -1770,3 +1770,83 @@ def test_command_palette_is_an_additive_keyboard_layer() -> None:
     css = WEB_CSS.read_text(encoding="utf-8")
     for needle in (".palette {", ".palette-box", ".palette-row.on", ".kbd {"):
         assert needle in css, f"app.css 缺了：{needle}"
+
+
+def test_cards_show_two_actions_and_the_rest_lives_in_the_overflow() -> None:
+    """T-G63：卡片动作瘦身 —— 用户 2026-09-25「不要那么多按钮」。
+
+    原来一张任务卡摆 8–10 个同级按钮（一屏 10 张 = 111 个可见按钮，动作行还折成两行）。
+    判据来自**项目自己的包**（`sheleg-design/workbench`）：
+    `DataTable.md` 行 hover 只是底色「nothing else moves」、`Button.md` 的 primary 是
+    「这一屏存在就为了让它好按的那一个」、`DestructiveButton.md` 的删除是
+    **红边小 ghost + 两步确认**。
+    所以：卡上只留 勾选圈 + 在做/开始 + 专注 + 「…」，其余进「…」的行内菜单。
+
+    ★ 这一条只钉**标记层**：真正的"点开/收起 / 一张卡几个按钮"由行为流第 K 条在真浏览器里量。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    # ① 卡上的常显动作只有这三种（勾选圈在卡外）——「…」里那些不算常显
+    assert 'data-action="task-more"' in card, "卡上没有「…」"
+    assert "function doingButtonHTML" in html
+    assert 'data-action="task-focus"' in card
+    always_row = card.split('<div class="row">', 1)[1].split("${more?", 1)[0]
+    n_always = always_row.count("data-action=")
+    assert n_always <= 3, f"常显的动作行还是太挤：{n_always} 个"
+    # ② 「…」里的那批（低频 + 危险）一个都不许少 —— 收起来 ≠ 功能没了
+    for action in ("task-tomorrow", "task-cancel", "task-myday", "task-undo-done",
+                   "task-flag", "task-assign", "task-detail", "task-facts", "task-delete"):
+        assert f'data-action="{action}"' in card, f"「…」里少了 {action}"
+    # ③ 删除是**红边 ghost**（`DestructiveButton` 那一类），而且二次确认照旧
+    assert 'class="ghost danger" data-action="task-delete"' in card, "删除不是红边 ghost"
+    assert "confirmAsk(" in html and "removeTask(" in html
+    css = WEB_CSS.read_text(encoding="utf-8")
+    assert ".danger { color: var(--danger); border-color: var(--danger) }" in css
+    assert "button.danger:not([disabled]):hover" in css, "危险按钮悬停时丢掉了危险线索"
+    # ④ 详情按钮消失 → 改成**点标题**（动作绑到已有元素上），键盘那条路在「…」里
+    assert 'class="title"><span class="open" data-action="task-detail"' in card
+    assert ".card .title .open { cursor: pointer }" in css
+    # ⑤ 不做"悬停显形"（鼠标扫过时卡片长高一行 = 位移，包明令禁止）
+    assert ":hover > .row > button" not in css, "又给卡片加了悬停显形"
+    assert ".card-more" in css
+    # ⑥ 菜单状态跟着视图走：同一屏重渲染不清，切视图才清
+    view = html.split("function view(name){", 1)[1].split("\n}", 1)[0]
+    assert "if(name!==current){" in view and "cardMore={}" in view
+
+
+def test_settings_page_folds_into_a_directory_with_current_values() -> None:
+    """T-G63：设置页分层 —— 每节 = 「标题 + 现状 + 展开」，17 节不再是 91 个按钮 / 7099px。
+
+    三条口径都要在代码里看得见：
+    ① 折叠是"目录"不是"藏起来"：每节都有**现状**（当前值），而且它优先取"当前选中的那个按钮"；
+    ② 展开/收起是**真按钮**（`set-fold` + `aria-expanded` + `aria-controls`）—— 键盘到得了；
+    ③ 就地切 DOM（不重渲染那一页的 15 个请求）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    assert "function foldSettingSections(root){" in html
+    assert "function toggleSettingSection(id, btn){" in html
+    assert "function openSettingSection(id){" in html
+    # ① 现状摘要 + 每节的覆盖表（关键几节必须有**人写过的**短摘要，不是抓第一句正文）
+    assert "let setSummary={" in html
+    #   （用 rsplit：文件顶上那条声明会先匹配到，取最后一处 = renderSetting 里那张表）
+    summary_table = html.rsplit("setSummary={", 1)[1].split("};", 1)[0]
+    for key in ("'set-appearance'", "'set-focus-guard'", "'set-tasks'", "'set-export'",
+                "'set-remind'", "'set-lan'", "'set-backup'"):
+        assert key in summary_table, f"少了 {key} 的现状摘要"
+    assert "function sectionSummary(id, body){" in html
+    assert "现状：" in html
+    # ② 真按钮 + aria（可键盘、可读屏）
+    assert "'set-fold':       el => toggleSettingSection(el.dataset.sec, el)" in html
+    assert "btn.setAttribute('aria-expanded'" in html and "btn.setAttribute('aria-controls'" in html
+    # ③ 就地切：不在 set-fold 里调 render
+    fold_action = html.split("'set-fold':", 1)[1].split("\n", 1)[0]
+    assert "render(" not in fold_action, "折一下就把整页 15 个请求重发一遍"
+    # ④ 边界规则：任何 .section-title / .settings-sub 都是边界（否则没 id 的那节会被上一节吞掉）
+    fold = html.split("function foldSettingSections(root){", 1)[1].split("\n}", 1)[0]
+    assert "const BOUNDARY='.section-title, .settings-sub'" in fold
+    assert "foldable" in fold and "p===root" in fold
+    # ⑤ 常用区那排链接要能叫开目标节
+    assert "openSettingSection(el.dataset.target)" in html
+    css = WEB_CSS.read_text(encoding="utf-8")
+    for needle in (".set-head {", ".set-body[hidden] { display: none }", ".set-sum {"):
+        assert needle in css, f"app.css 缺了：{needle}"
