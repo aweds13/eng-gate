@@ -20,8 +20,11 @@
 | **HTTP 路由** | `app.py` 的 `@app.<method>("/path")` | 表里每条路由必须**真的存在** |
 | **界面入口** | `index.html` 的 `ACTIONS` / `VIEWS` | `data-action=x` / `view=y` 必须**真注册过** |
 | **命令面板**（T-G61） | `index.html` 的 `COMMANDS` | 动作注册、键位不重复、挂的 OP 入口里真有它 |
-| **命令行**（T-G64） | `timeflow.cli.registry.COMMANDS` | 只读（GET）、路由是该 OP 的、`kind` 是
-  read/derive、`cli` 字段**双向**对得上 |
+| **命令行**（T-G64 → 写入 T-G65） | `timeflow.cli.registry` | 只读：GET + `kind=read/derive`；
+  **写**：方法非 GET + `kind=write` + **那条 OP 界面上已有入口**（「写只做界面上已有的那些」）；
+  `cli` 字段**双向**对得上 |
+| **MCP**（T-G65） | `timeflow.mcp.server.tool_list()` | 工具与表里 `mcp` 字段**双向**对得上；
+  写工具的 OP 同样要"界面上已有"；工具清单由 registry 现算（不手抄第二份） |
 
 **洞是允许的、也是要报的**：现在还有多少行没填出路由/界面入口/命令行入口，脚本会数出来 ——
 那就是"这张表还差多少"的进度条，也是下一步的工单（跟两道审美门的登记表一个思路）。
@@ -41,6 +44,7 @@ from pathlib import Path
 
 from timeflow.cli import registry as cli_registry
 from timeflow.cli import table as cli_table
+from timeflow.mcp import server as mcp_server
 
 ROOT = Path(__file__).resolve().parent.parent
 COMMANDS = ROOT / "docs" / "commands.toml"
@@ -59,6 +63,8 @@ VIEWS = re.compile(r"const VIEWS=\[([^\]]*)\]")
 KINDS = {"write", "read", "derive"}
 #: 只读命令只该挂在这两类操作上（`derive` 是纯计算，也没有写入）
 READ_KINDS = {"read", "derive"}
+#: 能改数据的方法（写命令的路由方法必须在这儿 —— 挡 `FETCH` 这种手滑）
+WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 AI_SCOPES = {"read", "create", "none"}
 
 
@@ -365,23 +371,23 @@ def main() -> int:
             palette_with_op += 1
             palette_ops.add(op)
 
-    # ---- 命令行（T-G64）：这份投影必须与命令表**双向**对得上 ----
+    # ---- 命令行（T-G64 只读 → T-G65 加写入）：这份投影必须与命令表**双向**对得上 ----
     # 这一节回答的是用户 2026-09-23 那个担心：「直接加一个 CLI 会不会让维护变差？」
     # 不会 —— 前提是 CLI **不许自己有一套命令清单**。所以逐条钉：
-    #   ① 只读：每条命令的路由必须是 GET，且挂在 kind=read/derive 的操作上
-    #      （写操作 CLI 是另一张卡，要等 AI 边界口径）；
-    #   ② 那条路由必须**真是**那条 OP 的路由（不是"我记得是这个路径"）；
-    #   ③ 表里的 `cli` 字段与代码里的命令**双向**一致 —— 表里写了命令名，代码里就得有；
-    #      代码里有这条命令，表里那条 OP 就得写上它。任一边漏了都是硬冲突。
+    #   ① 只读命令：路由必须是 GET，且挂在 kind=read/derive 的操作上；
+    #   ② **写命令**（T-G65，用户 2026-09-25 定的口径）：路由方法非 GET、挂在 kind=write 上，
+    #      而且那条 OP **界面上已经有入口**（`ui` 非空）——「写入只做界面上已有的那些」的机器形态；
+    #   ③ 那条路由必须**真是**那条 OP 的路由（不是"我记得是这个路径"）；
+    #   ④ 表里的 `cli` 字段与代码里的命令**双向**一致 —— 任一边漏了都是硬冲突；
+    #   ⑤ **默认关**：写命令要真的被 `--allow-write` 拦着 —— 那条由 pytest 判
+    #      （`tests/test_cli_writes.py`：不带开关退 4 且库一个字节没动），这里只证明"它是写命令"。
     cli_names: dict[str, cli_registry.Command] = {}
     cli_ops: set[str] = set()
-    for command in cli_registry.COMMANDS:
-        method, _, route_path = command.route.partition(" ")
+    cli_write_ops: set[str] = set()
+    for command in cli_registry.all_commands():
+        method, _, _route_path = command.route.partition(" ")
         cid = f"timeflow {command.name}"
-        if method != cli_registry.READ_METHOD:
-            problems.append(
-                f"CLI {cid}：只读 CLI 只许挂 {cli_registry.READ_METHOD}，这里写的是 {method}"
-            )
+        write = cli_registry.is_write(command)
         if command.name in cli_names:
             problems.append(f"CLI：命令名 {command.name!r} 重复")
         cli_names[command.name] = command
@@ -392,10 +398,24 @@ def main() -> int:
             problems.append(f"CLI {cid}：{command.op} 还没进命令表")
             continue
         row_kind = str(table[command.op].get("kind", ""))
-        if row_kind not in READ_KINDS:
+        if write:
+            if method not in WRITE_METHODS:
+                allowed = "/".join(sorted(WRITE_METHODS))
+                problems.append(f"CLI {cid}：路由方法 {method!r} 不是认识的写方法（{allowed}）")
+            if row_kind != "write":
+                problems.append(
+                    f"CLI {cid}：会改数据的命令必须挂在 kind=write 上，这里挂的是 {row_kind}"
+                )
+            if not as_list(table[command.op].get("ui")):
+                problems.append(
+                    f"CLI {cid}：{command.op} 在界面上没有入口 —— 写操作只做「界面上已有的那些」"
+                    "（用户 2026-09-25 的口径）：要么别开这条命令，要么先把界面入口补上"
+                )
+            cli_write_ops.add(command.op)
+        elif row_kind not in READ_KINDS:
             problems.append(
-                f"CLI {cid}：挂在 {command.op}（kind={row_kind}）上 —— 只读 CLI 只许挂 "
-                f"{sorted(READ_KINDS)}，写操作要单独一张卡"
+                f"CLI {cid}：挂在 {command.op}（kind={row_kind}）上 —— 只读命令只许挂 "
+                f"{sorted(READ_KINDS)}"
             )
         row_routes = as_list(table[command.op].get("routes"))
         if command.route not in row_routes:
@@ -423,7 +443,53 @@ def main() -> int:
     read_ops = {
         oid for oid, row in table.items() if str(row.get("kind", "")) in READ_KINDS
     }
+    write_ops = {oid for oid, row in table.items() if str(row.get("kind", "")) == "write"}
     no_cli = sorted(oid for oid in read_ops if not as_list(table[oid].get("cli")))
+    write_ops_without_cli = sorted(write_ops - cli_write_ops)
+
+    # ---- MCP（T-G65）：第四份投影 —— 工具清单由 registry 现算，这里证明它与命令表对得上 ----
+    # 「四个面集中到一个点」到这里闭合：界面 / ⌘K / CLI / MCP 全是同一张表的投影。
+    # 判据（与 CLI 那一节同一个精神，双向）：
+    #   ① 代码里每个工具 → 它挂的 OP 行里必须写着这个工具名；
+    #   ② 表里每个 `mcp` 工具名 → 代码里必须真有这个工具，且挂的就是那一行；
+    #   ③ 写工具的 OP 同样要"界面上已有入口"（与 CLI 同一条口径）；
+    #   ④ 只读/写与 `kind` 必须一致（读工具挂 read/derive、写工具挂 write）。
+    mcp_read = {tool["name"] for tool in mcp_server.tool_list(False)}
+    mcp_all = {tool["name"] for tool in mcp_server.tool_list(True)}
+    mcp_write = mcp_all - mcp_read
+    for name in sorted(mcp_all):
+        command = cli_registry.by_name().get(name)
+        if command is None:
+            problems.append(f"MCP 工具 {name!r}：registry 里没有这条命令（清单必须由它生成）")
+            continue
+        if command.op not in table:
+            problems.append(f"MCP 工具 {name!r}：{command.op} 还没进命令表")
+            continue
+        if name not in as_list(table[command.op].get("mcp")):
+            problems.append(
+                f"MCP 工具 {name!r}：代码里有它，但 {command.op} 的 mcp 字段里没写"
+            )
+        row_kind = str(table[command.op].get("kind", ""))
+        if name in mcp_write and row_kind != "write":
+            problems.append(f"MCP 工具 {name!r}：算成写工具但 {command.op} 的 kind={row_kind}")
+        if name in mcp_read and row_kind not in READ_KINDS:
+            problems.append(f"MCP 工具 {name!r}：算成只读工具但 {command.op} 的 kind={row_kind}")
+        if name in mcp_write and not as_list(table[command.op].get("ui")):
+            problems.append(
+                f"MCP 写工具 {name!r}：{command.op} 在界面上没有入口 —— 写只做「界面上已有的那些」"
+            )
+    for oid, row in sorted(table.items()):
+        for entry in as_list(row.get("mcp")):
+            if entry not in mcp_all:
+                problems.append(f"{oid}：mcp 写了 {entry!r}，但代码里没有这个工具")
+            elif cli_registry.by_name()[entry].op != oid:
+                owner = cli_registry.by_name()[entry].op
+                problems.append(f"{oid}：mcp 写了 {entry!r}，但那条命令挂的是 {owner}")
+    rows_with_mcp = sorted(oid for oid, row in table.items() if as_list(row.get("mcp")))
+    declared_mcp = {entry for row in table.values() for entry in as_list(row.get("mcp"))}
+    mcp_only = sorted(mcp_all - declared_mcp)
+    cli_read_names = [c.name for c in cli_registry.all_commands() if not cli_registry.is_write(c)]
+    cli_write_names = [c.name for c in cli_registry.all_commands() if cli_registry.is_write(c)]
 
     report = {
         "contract_ops": len(ops),
@@ -439,9 +505,18 @@ def main() -> int:
         "palette_keys": sorted(seen_keys),
         "ops_with_palette_entry": sorted(palette_ops),
         "cli_commands": len(cli_names),
+        "cli_read_commands": len(cli_read_names),
+        "cli_write_commands": cli_write_names,
         "ops_with_cli_entry": sorted(cli_ops),
         "rows_without_cli": no_cli,
+        "write_ops_without_cli": len(write_ops_without_cli),
         "cli_read_ops": sorted(read_ops),
+        "cli_write_ops": sorted(cli_write_ops),
+        "mcp_tools": len(mcp_all),
+        "mcp_read_tools": len(mcp_read),
+        "mcp_write_tools": sorted(mcp_write),
+        "mcp_rows": rows_with_mcp,
+        "mcp_tools_missing_from_table": mcp_only,
         "problems": problems,
     }
 
@@ -465,12 +540,22 @@ def main() -> int:
         print(f"\n  还没填出路由的：{len(no_route)} 条 → {no_route}")
     if no_ui:
         print(f"\n  还没填出界面入口的：{len(no_ui)} 条 → {no_ui}")
+    read_n, write_n = len(cli_read_names), len(cli_write_names)
     print(
-        f"\n  命令行（只读）：{len(cli_names)} 条命令"
-        f" · 覆盖 {len(cli_ops)}/{len(read_ops)} 条只读操作"
+        f"\n  命令行：{len(cli_names)} 条命令（只读 {read_n} + 写 {write_n}）"
+        f" · 覆盖 {len(cli_ops & read_ops)}/{len(read_ops)} 条只读操作"
+        f"（写操作开了 {len(cli_write_ops)}/{len(write_ops)} 条：写只做界面上已有的那些，"
+        f"所以这个数字会慢慢长）"
     )
     if no_cli:
-        print(f"  还没填出命令行入口的：{len(no_cli)} 条 → {no_cli}")
+        print(f"  还没填出命令行入口的（只读）：{len(no_cli)} 条 → {no_cli}")
+    print(
+        f"\n  MCP（第四份投影）：{len(mcp_all)} 个工具"
+        f"（只读 {len(mcp_read)} + 写 {len(mcp_write)}，写工具只在 --allow-write 时才列出）"
+        f" · 覆盖 {len(rows_with_mcp)} 条 OP，与表里的 mcp 字段双向核对"
+    )
+    if mcp_only:
+        print(f"  （提示）代码里有、表里没写的工具：{mcp_only}")
     print(
         f"\n  命令面板（⌘K）：{len(palette)} 条命令 · {len(seen_keys)} 个键位"
         f" · 其中 {palette_with_op} 条对得上契约 OP（{len(palette_ops)} 条 OP 有面板入口）"
@@ -480,10 +565,12 @@ def main() -> int:
         for p in problems:
             print(f"  [FAIL] {p}")
         return 1 if args.check else 0
-    print("\n命令表与三个真源一致 ✅（没有硬冲突）")
+    print("\n命令表与四个真源一致 ✅（没有硬冲突）")
     print("说明：洞（没填出的路由/入口/命令行）是**进度**不是错误 —— 数量下降就是这张表在长。")
     print("说明：命令面板那一节证明「⌘K 不是第二套命令系统」—— 它只是这张表的又一份投影。")
-    print("说明：命令行那一节证明「CLI 也不是第二套」—— 每条命令都挂在一条只读操作上。")
+    print("说明：命令行那一节证明「CLI 也不是第二套」—— 写命令同样挂在契约 OP 与那条真路由上，")
+    print("      而且「只做界面上已有的那些」（OP 的 ui 必须非空）。")
+    print("说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。")
     return 0
 
 

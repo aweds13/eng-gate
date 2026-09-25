@@ -26,7 +26,7 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from timeflow.api.app import create_app
 
@@ -79,11 +79,11 @@ def _as_environment_error(exc: BaseException, db_path: str) -> DatabaseError:
     )
 
 
-async def _exchange(app: Any, scope: dict[str, Any]) -> list[dict[str, Any]]:
+async def _exchange(app: Any, scope: dict[str, Any], body: bytes = b"") -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
 
     async def receive() -> dict[str, Any]:
-        return {"type": "http.request", "body": b"", "more_body": False}
+        return {"type": "http.request", "body": body, "more_body": False}
 
     async def send(message: dict[str, Any]) -> None:
         messages.append(message)
@@ -92,7 +92,13 @@ async def _exchange(app: Any, scope: dict[str, Any]) -> list[dict[str, Any]]:
     return messages
 
 
-def _scope(method: str, path: str, query: str) -> dict[str, Any]:
+def _scope(
+    method: str, path: str, query: str, body: bytes = b""
+) -> dict[str, Any]:
+    headers: list[tuple[bytes, bytes]] = [(b"host", b"127.0.0.1")]
+    if body:
+        headers += [(b"content-type", b"application/json")]
+        headers += [(b"content-length", str(len(body)).encode())]
     return {
         "type": "http",
         "asgi": {"version": "3.0", "spec_version": "2.3"},
@@ -105,7 +111,7 @@ def _scope(method: str, path: str, query: str) -> dict[str, Any]:
         "path": path,
         "raw_path": path.encode("utf-8"),
         "query_string": query.encode("utf-8"),
-        "headers": [(b"host", b"127.0.0.1")],
+        "headers": headers,
     }
 
 
@@ -133,30 +139,51 @@ def _detail(raw: bytes) -> str:
     return text
 
 
-def call_route(db_path: str, route: str, params: dict[str, str] | None = None) -> Any:
+def call_route(
+    db_path: str,
+    route: str,
+    params: dict[str, str] | None = None,
+    *,
+    path_params: dict[str, str] | None = None,
+    body: dict[str, Any] | None = None,
+) -> Any:
     """按命令表里的 `"GET /api/…"` 调一次，返回解析后的 JSON。
 
-    错误一律抛 `ApiError` / `DatabaseError` —— CLI 层把它们翻成稳定错误码与退出码。
+    三处参数各去各的地方（**不猜**）：`params` → query、`path_params` → URL 里的 `{名字}`、
+    `body` → JSON body（写操作用）。错误一律抛 `ApiError` / `DatabaseError` ——
+    CLI 层把它们翻成稳定错误码与退出码。
     """
-    method, _, path = route.partition(" ")
+    method, _, raw_path = route.partition(" ")
+    path = raw_path
+    for name, value in (path_params or {}).items():
+        path = path.replace("{" + name + "}", quote(str(value), safe=""))
+    if "{" in path:  # 路径参数没给全：这是**用法错**（在真发请求之前拦住）
+        missing = path[path.index("{") + 1 : path.index("}")]
+        raise ValueError(f"这条路由要一个路径参数 {missing}")
     query = urlencode({k: v for k, v in (params or {}).items() if v != ""})
+    payload = b""
+    if body is not None:
+        payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
     # ★ 只读命令**不许建库**：库不存在就说库不存在。
     #   不查这一下会怎样（T-G66 真踩到）：打错路径 → SQLite 默默建一个空库 →
     #   回一份"看起来正常"的空数据（0 分钟 / 0 项），而用户以为在看自己的账。
     #   一个"只读"命令还留下一个文件副作用 —— 两件都不该发生。
+    #   ★ T-G65：写命令**同样**要过这一关 —— "我要写"不等于"你可以替我建一个空库"：
+    #     路径打错时宁可退 3，也不要凭空造一份新数据出来。
     if not Path(db_path).is_file():
         raise DatabaseError(
             "db_missing",
             f"库文件不存在：{db_path} —— 先运行 timeflow 开一次窗口建库，或用 --db 指向已有的库。",
         )
-    # `allow_lan=False`：CLI 是本机读，不该因为库里开了局域网而变成"对外服务"
+    # `allow_lan=False`：CLI 是本机读写，不该因为库里开了局域网而变成"对外服务"
     # ★ 两处都要兜：库是**懒连接**的（`db.thread_local` 在第一次用到时才真打开），
     #   所以"文件不是数据库"这类错常常在**请求里**才炸出来，而不是在 create_app 那一步
     #   —— 第一版只兜了 create_app，实测照样把 `sqlite3.DatabaseError` 的栈丢给用户。
     messages: list[dict[str, Any]] = []
     try:
         app = create_app(db_path, allow_lan=False)
-        messages = asyncio.run(_exchange(app, _scope(method.upper(), path, query)))
+        scope = _scope(method.upper(), path, query, payload)
+        messages = asyncio.run(_exchange(app, scope, payload))
     except Exception as exc:  # noqa: BLE001 —— 只有 _is_environment_error 为真时才翻译
         if _is_environment_error(exc):
             raise _as_environment_error(exc, db_path) from exc

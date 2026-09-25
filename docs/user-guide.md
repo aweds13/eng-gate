@@ -89,9 +89,9 @@ python -X utf8 tools\serve.py          # 起服务（只绑回环；会自动备
 - 导出：Markdown 写到设置页「导出（Markdown）」里指定的目录（默认 `export/`，一天一个文件）。
 - 备份与恢复：设置页「数据与同步 → 备份与恢复」。
 
-## 命令行（可选，T-G64）
+## 命令行（可选，T-G64 → 写入 T-G65）
 
-不开窗口也能看今天的账（只读，不会改任何数据）：
+不开窗口也能看今天的账，也能记一条（**写操作默认关**，见下）：
 
 ```text
 timeflow                开窗口（默认，和以前一样）
@@ -106,9 +106,38 @@ timeflow sync           同步现状
 timeflow commands       我有哪些命令（`--table` 看整张契约命令表）
 ```
 
+写命令（**每条都要加 `--allow-write`**，不加就退 4、什么都不做）：
+
+```text
+timeflow add-task --title 写周报 [--due-date 2026-06-20] [--myday] [--priority 高] --allow-write
+timeflow myday    --task-id <id> --allow-write        放进 / 移出今天的清单（切换）
+timeflow complete --task-id <id> --allow-write        完成任务（和界面上那个勾同一条路）
+timeflow focus-start  [--kind tomato|plain] [--task-id <id>] --allow-write
+timeflow focus-finish --session-id <id> [--duration-sec 1500] [--status finished|abandoned|interrupted] --allow-write
+timeflow memo     --text "随手记一条" --allow-write    写完自动落一份 md
+```
+
 - 加 `--json` 得到机器读的原始数据（字段与界面完全同一份来源）；
 - 加 `--db 路径` 指向另一个库文件；`timeflow <命令> --help` 看参数；
-- 退出码：`0` 成功 / `1` 用法错 / `2` 接口错 / `3` 找不到命令表 —— 方便写脚本判断。
+- 退出码：`0` 成功 / `1` 用法错 / `2` 接口错 / `3` 环境错（库或命令表）/ `4` 写操作没开；
+- 写命令**只做界面上已有的那些操作**，语义与界面完全一样（打的是同一条路由）；
+  库文件不存在时写命令也**不会替你建库**（退 3）。
+
+## 接 AI 客户端（MCP，可选，T-G65）
+
+`timeflow mcp` 把同一批命令当 **MCP 工具**提供给 AI 客户端（stdio，一行一个 JSON-RPC）：
+
+```jsonc
+// 客户端配置（示例）
+{ "command": "timeflow", "args": ["mcp"] }                     // 只读工具 14 个
+{ "command": "timeflow", "args": ["mcp", "--allow-write"] }    // 连写工具一起（默认关）
+```
+
+- 工具清单**由命令表生成** —— AI 能做的事就是界面上能做的事，不另立一套；
+- 不给 `--allow-write` 时**写工具根本不出现在清单里**（凭记忆硬调会拿到一句"怎么开"）；
+- 日志在 stderr，`TF_LOG_PATH=off` 可关（stdout 只走协议）；
+- 诚实边界：协议是手写的（本项目零依赖），我们验的是"自己的客户端 ↔ 自己的服务端"；
+  **第三方客户端接一次要人眼看一下**（列在人工验收清单里）。
 
 ## 已知局限
 

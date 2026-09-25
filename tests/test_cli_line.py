@@ -1,10 +1,13 @@
-"""只读 CLI（T-G64）的测试 —— 「命令行是命令表的第四份投影」这句话的护栏。
+"""命令行（T-G64 只读 → T-G65 加写入 + MCP）的测试 —— 「命令行是命令表的投影」这句话的护栏。
 
 三层：
-1. **形状层**：自描述（`commands --json`）里有每条命令的 schema 与四个退出码；
+1. **形状层**：自描述（`commands --json`）里有每条命令的 schema 与五个退出码；
 2. **行为层**：拿真库跑每一条命令（`--json` 与人读两条路），错误路径给稳定退出码；
 3. **投影层**：`CLI 的输出 == 同一条路由的输出`（走真 HTTP 边界）、CLI 不许自己碰
    `core/`·`storage/`·`sqlite3`、也不许出现命令表里没有的命令。
+
+写命令那批的口径（默认关 / 只做界面上已有的那些 / 与界面同一条路）在
+`tests/test_cli_writes.py` 与 `tests/test_mcp_line.py` 里判，这个文件管"读"与"分派"。
 
 为什么"CLI 输出 == 接口输出"要单独钉一条：CLI 一旦自己算一遍数字，就变成第二套口径 ——
 而这个项目全部口径的价值就在"只有一处"。这条断言是那句话的机器形态。
@@ -82,8 +85,10 @@ def test_self_description_lists_every_command_with_schema(
     code, out, _ = _run(capsys, ["commands", "--json"])
     assert code == cli_mod.EXIT_OK
     payload = json.loads(out)
-    assert payload["read_only"] is True
-    assert set(payload["exit_codes"]) == {"0", "1", "2", "3"}
+    # T-G65：写命令进来了，所以"只读"这个总标记换成了"写操作怎么开"的说明
+    assert payload["write_gate"]["flag"] == cli_mod.WRITE_FLAG
+    assert "默认关" in payload["write_gate"]["rule"]
+    assert set(payload["exit_codes"]) == {"0", "1", "2", "3", "4"}
     assert set(payload["errors"]) == {
         "usage",
         "api_4xx",
@@ -91,16 +96,24 @@ def test_self_description_lists_every_command_with_schema(
         "db_unopenable",
         "table_missing",
         "table_broken",
+        "write_disabled",
     }
-    assert set(payload["errors"].values()) <= {1, 2, 3}
+    assert set(payload["errors"].values()) <= {1, 2, 3, 4}
     assert [c["name"] for c in payload["commands"]] == registry.names()
+    writes = 0
     for command in payload["commands"]:
         assert command["op"].startswith("OP-")
-        assert command["route"].startswith("GET ")
         assert command["title"]
+        if command["write"]:
+            writes += 1
+            assert not command["route"].startswith("GET "), command["name"]
+        else:
+            assert command["route"].startswith("GET "), command["name"]
         for param in command["params"]:
-            assert param["kind"] in {"int", "str"}
+            assert param["kind"] in {"int", "str", "bool"}
+            assert param["where"] in {"query", "path", "body"}
             assert param["help"]
+    assert writes == len(registry.WRITE_COMMANDS) >= 1, "写命令那一批要在自描述里"
 
 
 def test_table_flag_exposes_the_whole_contract_table(capsys: pytest.CaptureFixture[str]) -> None:
@@ -116,13 +129,18 @@ def test_table_flag_exposes_the_whole_contract_table(capsys: pytest.CaptureFixtu
         assert "reversible" in row
 
 
-def test_commands_kind_filter_only_keeps_read(capsys: pytest.CaptureFixture[str]) -> None:
+def test_commands_kind_filter_splits_read_and_write(capsys: pytest.CaptureFixture[str]) -> None:
+    """`--kind read|write` 各自只留那一批 —— 写命令从"没有"变成了"第一批 6 条"（T-G65）。"""
     code, out, _ = _run(capsys, ["commands", "--kind", "read", "--json"])
     assert code == cli_mod.EXIT_OK
-    assert len(json.loads(out)["commands"]) == len(registry.COMMANDS)
+    assert [c["name"] for c in json.loads(out)["commands"]] == [
+        c.name for c in registry.COMMANDS
+    ]
     code, out, _ = _run(capsys, ["commands", "--kind", "write", "--json"])
     assert code == cli_mod.EXIT_OK
-    assert json.loads(out)["commands"] == []
+    assert [c["name"] for c in json.loads(out)["commands"]] == [
+        c.name for c in registry.WRITE_COMMANDS
+    ]
 
 
 def test_help_lists_every_command(capsys: pytest.CaptureFixture[str]) -> None:
@@ -265,7 +283,7 @@ def test_default_db_is_the_desktop_one() -> None:
     """默认库与桌面端同源（不另开一份数据）。"""
     from timeflow.config import load_settings
 
-    assert cli_mod._default_db() == str(load_settings().database.path)
+    assert cli_mod.default_db() == str(load_settings().database.path)
 
 
 # ------------------------------------------------- 环境错：翻译成稳定码，不留副作用（T-G66）
@@ -388,26 +406,30 @@ def _imports(path: Path) -> set[str]:
     return names
 
 
-def test_cli_does_not_touch_the_database_or_the_domain_layer() -> None:
-    """CLI **只当投影**：不 import `core/`、不 import `storage/`、不直接碰 sqlite3。
+def test_cli_and_mcp_do_not_touch_the_database_or_the_domain_layer() -> None:
+    """CLI 与 MCP **只当投影**：不 import `core/`、不 import `storage/`、不直接碰 sqlite3。
 
-    真调用的那条路是 `timeflow.api.app`（唯一的边界）—— 少了它，CLI 就成了第二套口径。
+    真调用的那条路是 `timeflow.api.app`（唯一的边界）—— 少了它，CLI/MCP 就成了第二套口径。
+    （T-G65：MCP 也不许自己取数 —— 它连参数解析都走 CLI 那条路。）
     """
-    files = sorted((ROOT / "src" / "timeflow" / "cli").glob("*.py"))
-    assert len(files) >= 5, f"CLI 包的文件少了：{files}"
+    files = sorted((ROOT / "src" / "timeflow" / "cli").glob("*.py")) + sorted(
+        (ROOT / "src" / "timeflow" / "mcp").glob("*.py")
+    )
+    assert len(files) >= 8, f"CLI/MCP 包的文件少了：{files}"
     imported: set[str] = set()
     for path in files:
         imported |= _imports(path)
     assert "timeflow.api.app" in imported, "CLI 必须走 HTTP 边界，而不是自己取数"
     for forbidden in ("sqlite3", "timeflow.core", "timeflow.storage"):
         bad = {name for name in imported if name == forbidden or name.startswith(forbidden + ".")}
-        assert not bad, f"CLI 不许 import {forbidden}（那就成了第二套口径）：{sorted(bad)}"
+        assert not bad, f"CLI/MCP 不许 import {forbidden}（那就成了第二套口径）：{sorted(bad)}"
 
 
-def test_real_repo_cli_is_a_read_only_projection() -> None:
-    """真仓库：命令表 ↔ CLI 双向对得上，且**只读**（这是接进门禁的那条判定）。"""
+def test_real_repo_read_commands_are_a_read_only_projection() -> None:
+    """真仓库：只读命令 ↔ 命令表双向对得上（这是接进门禁的那条判定的一半）。"""
     rows = cc.load_commands()
     for command in registry.COMMANDS:
+        assert not registry.is_write(command), command.name
         assert command.op in rows, command.op
         row = rows[command.op]
         assert row["kind"] in {"read", "derive"}, f"{command.name} 挂在写操作上"
@@ -418,3 +440,25 @@ def test_real_repo_cli_is_a_read_only_projection() -> None:
     holes = sorted(oid for oid in read_ops if not cc.as_list(rows[oid].get("cli")))
     # 只读**全覆盖**（T-G30 §4.4 的口径）—— 唯一允许空的是 OP-43（它压根没有路由）
     assert holes == ["OP-43"], f"这些只读操作还没有命令行入口：{holes}"
+
+
+def test_real_repo_write_commands_only_do_what_the_ui_already_does() -> None:
+    """真仓库：写命令的三条口径（用户 2026-09-25 定，T-G65 落地）。
+
+    ① 方法与 `kind` 对得上（非 GET ↔ write）；
+    ② **只做界面上已有的那些** —— 那条 OP 的 `ui` 必须非空（这句话的机器形态）；
+    ③ 表里的 `cli` / `mcp` 两栏**双向**对得上（表说有这么条命令，代码里就得真有）。
+    """
+    rows = cc.load_commands()
+    assert registry.WRITE_COMMANDS, "写命令第一批不该是空的"
+    for command in registry.WRITE_COMMANDS:
+        assert registry.is_write(command), command.name
+        assert not command.route.startswith("GET "), command.name
+        row = rows[command.op]
+        assert row["kind"] == "write", f"{command.name} 挂在 {row['kind']} 上"
+        assert cc.as_list(row.get("ui")), (
+            f"{command.name} 的 {command.op} 在界面上没有入口 —— 写只做「界面上已有的那些」"
+        )
+        assert command.route in cc.as_list(row.get("routes")), command.route
+        assert f"timeflow {command.name}" in cc.as_list(row.get("cli"))
+        assert command.name in cc.as_list(row.get("mcp"))

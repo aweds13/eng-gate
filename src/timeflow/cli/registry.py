@@ -1,13 +1,21 @@
-"""CLI 的命令清单 —— **每条都挂到命令表里的一条只读操作上**。
+"""CLI 的命令清单 —— **每条都挂到命令表里的一条操作上**。
 
 这个文件是「CLI 也是那张表的投影」这句话的落点：一条命令 =
 `(名字, 契约 OP, 路由, 参数, 排版)`。`scripts/check_commands.py` 逐条核对：
-那条 OP **在**命令表里、那条路由**是**那条 OP 的、OP 的 `kind` **是** read/derive、
-路由方法**是** GET、名字不重复、表里的 `cli` 字段与这里**双向**对得上。
-对不上就门禁红 —— 所以这里不可能悄悄长出一套"命令表里没有的命令"。
+那条 OP **在**命令表里、那条路由**是**那条 OP 的、名字不重复、表里的 `cli` 字段
+与这里**双向**对得上。对不上就门禁红 —— 所以这里不可能悄悄长出一套"命令表里没有的命令"。
 
-**只读**是硬口径（T-G30 §4.3 第 2 步）：写操作 CLI 排最后，要等 AI 边界口径
-（用户已定"AI 只写事实"）。所以这里每条路由都必须是 `GET`。
+## 只读与写入（T-G64 建 → T-G65 加写入）
+
+- `COMMANDS`：**只读**那批（14 条），硬口径是「每条路由都是 `GET`」—— 在 T-G64 那一版里
+  写操作还排在后面等 AI 边界口径；
+- `WRITE_COMMANDS`：**写**那批（6 条，T-G65）。用户 2026-09-25 定的口径三条：
+  ① 只做**界面上已有的那些**（所以每条写命令的 OP 的 `ui` 必须非空，由门禁判）；
+  ② **默认关** —— 每次调用都要显式带 `--allow-write`（见 `main.py`，那里有机器判据）；
+  ③ 语义**与界面完全一样**（不发明第二套写法）。
+
+★ **"这条是不是写"没有第二个字段**：直接由**路由方法**算（`GET` 之外都是写）。
+   多一个 `write = true` 就是第二个真源，早晚与路由漂开 —— 门禁那边也是按方法判的。
 """
 
 from __future__ import annotations
@@ -20,18 +28,32 @@ from timeflow.cli import render
 if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解
     from collections.abc import Callable
 
-#: 路由方法白名单：只读 CLI 只认 GET（写操作 CLI 是另一张卡）
+#: 只读命令只认这个方法（写命令走别的方法，见 `is_write`）
 READ_METHOD = "GET"
 
 
 @dataclass(frozen=True)
 class Param:
-    """一个查询参数（也是 MCP 的 tool schema 里那一行）。"""
+    """一个参数（也是 MCP 的 tool schema 里那一行）。
+
+    `where` 决定它去哪儿 —— 这条是"边界原样"的一部分：路径参数进 URL、查询参数进 query、
+    别的进 JSON body。**不猜**：写在命令表里，由门禁核对（写命令的 body 参数必须真被那条路由收下）。
+    """
 
     name: str
-    kind: str  # "int" | "str"
+    kind: str  # "int" | "str" | "bool"
     help: str
     default: str | None = None
+    where: str = "query"  # "query" | "path" | "body"
+
+    @property
+    def required(self) -> bool:
+        """**路径参数**没有默认值就是必填（它是 URL 的一部分，缺了那条路根本不是那条路）。
+
+        为什么只对路径参数这么判：查询参数里有一批"边界自己有默认"的（`days` 默认 14、
+        `view` 默认普通视图），把它们标成必填就与边界打架了 —— 边界才是唯一的校验处。
+        """
+        return self.where == "path" and self.default is None
 
 
 @dataclass(frozen=True)
@@ -39,7 +61,7 @@ class Command:
     name: str
     op: str  # 契约 OP（机器核对：必须在 docs/commands.toml 里）
     route: str  # "GET /api/…"（机器核对：必须是那条 OP 的路由之一）
-    title: str  # 一句话（人读帮助 + 以后 MCP 的工具描述）
+    title: str  # 一句话（人读帮助 + MCP 的工具描述）
     human: Callable[[Any], list[str]]  # 人读排版（只排版）
     params: tuple[Param, ...] = field(default=())
 
@@ -155,9 +177,108 @@ COMMANDS: tuple[Command, ...] = (
 )
 
 
+WRITE_COMMANDS: tuple[Command, ...] = (
+    Command(
+        name="add-task",
+        op="OP-1",
+        route="POST /api/tasks",
+        title="新建任务（默认不进今天的清单）",
+        human=lambda data: render.receipt(data, "已新建任务"),
+        params=(
+            Param("title", "str", "任务标题（必填）", where="body"),
+            Param("due_date", "str", "截止日 YYYY-MM-DD", where="body"),
+            Param("group_name", "str", "分组名（不存在的分组会被边界拒）", where="body"),
+            Param("is_myday", "bool", "直接放进今天的清单", "false", where="body"),
+            Param("priority", "str", "优先级：高 / 中 / 低", "中", where="body"),
+            Param("note", "str", "备注", where="body"),
+            Param("flagged", "bool", "标星（重要）", "false", where="body"),
+        ),
+    ),
+    Command(
+        name="complete",
+        op="OP-5",
+        route="POST /api/tasks/{task_id}/complete",
+        title="完成任务（与界面上那个勾是同一条路）",
+        human=lambda data: render.receipt(data, "已完成任务"),
+        params=(Param("task_id", "str", "任务 id（见 timeflow tasks --json）", where="path"),),
+    ),
+    Command(
+        name="myday",
+        op="OP-2",
+        route="POST /api/tasks/{task_id}/myday",
+        title="把任务放进 / 移出今天的清单（同一条路由，来回切）",
+        human=lambda data: render.receipt(data, "已切换今天的清单"),
+        params=(Param("task_id", "str", "任务 id", where="path"),),
+    ),
+    Command(
+        name="focus-start",
+        op="OP-3",
+        route="POST /api/focus/start",
+        title="开始专注（回执里有这次专注的 id）",
+        human=lambda data: render.receipt(data, "专注已开始"),
+        params=(
+            Param("kind", "str", "tomato（番茄钟）/ plain（正计时）", "tomato", where="body"),
+            Param("task_id", "str", "挂到哪个任务上", where="body"),
+        ),
+    ),
+    Command(
+        name="focus-finish",
+        op="OP-4",
+        route="POST /api/focus/{session_id}/finish",
+        title="结束专注 / 放弃 / 记中断（status 决定，是同一条路）",
+        human=lambda data: render.receipt(data, "专注已结束"),
+        params=(
+            Param("session_id", "str", "专注 id（focus-start 回执里那个）", where="path"),
+            Param("duration_sec", "int", "这次专注多少秒", "0", where="body"),
+            Param(
+                "status",
+                "str",
+                "finished（结束，计入投入）/ abandoned（放弃）/ interrupted（记中断）",
+                "finished",
+                where="body",
+            ),
+        ),
+    ),
+    Command(
+        name="memo",
+        op="OP-35",
+        route="POST /api/memos",
+        title="随手记一条（沉淀型内容，写完自动落一份 md）",
+        human=lambda data: render.receipt(data, "已记下"),
+        params=(
+            Param("text", "str", "记什么（必填）", where="body"),
+            Param("task_id", "str", "挂到某个任务上", where="body"),
+            Param("ref_handle", "str", "引用句柄（Obsidian 跳转用）", where="body"),
+        ),
+    ),
+)
+
+
+def all_commands() -> tuple[Command, ...]:
+    """只读 + 写（顺序按契约表里的次序感：先读后写）。"""
+    return COMMANDS + WRITE_COMMANDS
+
+
+def is_write(command: Command) -> bool:
+    """写命令 = 路由方法不是 `GET`。★ 唯一真源就是路由本身（不加 `write = true` 那种字段）。"""
+    return not command.route.startswith(f"{READ_METHOD} ")
+
+
+def method_of(command: Command) -> str:
+    return command.route.partition(" ")[0]
+
+
 def by_name() -> dict[str, Command]:
-    return {command.name: command for command in COMMANDS}
+    return {command.name: command for command in all_commands()}
 
 
 def names() -> list[str]:
+    return [command.name for command in all_commands()]
+
+
+def read_names() -> list[str]:
     return [command.name for command in COMMANDS]
+
+
+def write_names() -> list[str]:
+    return [command.name for command in WRITE_COMMANDS]

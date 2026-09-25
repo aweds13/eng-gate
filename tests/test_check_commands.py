@@ -206,13 +206,24 @@ def test_real_checker_reports_cli_coverage(monkeypatch, capsys) -> None:  # type
     ★ 唯一允许没有命令行入口的只读操作是 `OP-43`「配置加载」—— 它**压根没有路由**
     （入口是启动时的校验与注入）。这一条把它钉成事实：以后要么补一条命令，
     要么改这里的断言 —— 不许悄悄变成"忘了填"。
+    ★ T-G65 起写命令也进来了，所以另外三件事一起钉：只读/写各自多少条、
+    **写操作还剩多少条没开**（那是进度条）、以及 MCP 那份投影与命令表对得上。
     """
     monkeypatch.setattr(sys, "argv", ["check_commands.py", "--json", "--check"])
     assert cc.main() == 0
     report = json.loads(capsys.readouterr().out)
-    assert report["cli_commands"] == len(cc.cli_registry.COMMANDS) >= 10
+    all_names = [c.name for c in cc.cli_registry.all_commands()]
+    assert report["cli_commands"] == len(all_names) >= 10
+    assert report["cli_read_commands"] == len(cc.cli_registry.COMMANDS)
+    assert report["cli_write_commands"] == [c.name for c in cc.cli_registry.WRITE_COMMANDS]
     assert report["rows_without_cli"] == ["OP-43"]
     assert len(report["ops_with_cli_entry"]) >= 10
+    # 写操作大部分还没开（"只做界面上已有的那些"是慢工），所以这里只钉"洞被报出来了"
+    assert report["write_ops_without_cli"] >= 1
+    # MCP：工具清单由 registry 现算，且**每一条**在表里都写着
+    assert report["mcp_tools"] == len(all_names)
+    assert sorted(report["mcp_write_tools"]) == sorted(report["cli_write_commands"])
+    assert report["mcp_tools_missing_from_table"] == []
 
 
 def test_broken_table_is_reported_as_a_problem_not_a_crash(
@@ -261,29 +272,110 @@ def test_cli_projection_conflict_is_reported(tmp_path, monkeypatch, capsys) -> N
     assert any("cli 字段里没写它" in p for p in problems), problems
 
 
-def test_cli_projection_rejects_write_commands(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
-    """只读 CLI 挂在写操作上、或用 POST → 两条都必须是硬冲突（写操作是另一张卡）。"""
+def _write_case(tmp_path, monkeypatch, capsys, table_text: str, fake) -> list[str]:  # type: ignore[no-untyped-def]
+    """搭一个"只有一条命令/一条 OP"的迷你仓库，跑检查器，回 problems。"""
     _write(tmp_path, "contracts/interactions.md", "## OP-1 新建任务\n\n正文\n")
-    _write(tmp_path, "app.py", '@app.post("/api/tasks")\ndef a(): ...\n')
+    _write(
+        tmp_path,
+        "app.py",
+        '@app.post("/api/tasks")\ndef a(): ...\n@app.get("/api/summary")\ndef b(): ...\n',
+    )
+    _write(tmp_path, "index.html", "const VIEWS=['today'];\nconst ACTIONS = { 'x': el => y };\n")
+    table_file = _write(tmp_path, "commands.toml", table_text)
+    monkeypatch.setattr(cc, "CONTRACTS", tmp_path / "contracts")
+    monkeypatch.setattr(cc, "APP", tmp_path / "app.py")
+    monkeypatch.setattr(cc, "INDEX", tmp_path / "index.html")
+    monkeypatch.setattr(cc, "COMMANDS", table_file)
+    monkeypatch.setattr(cc.cli_registry, "COMMANDS", ())
+    monkeypatch.setattr(cc.cli_registry, "WRITE_COMMANDS", (fake,))
+    monkeypatch.setattr(cc.mcp_server, "tool_list", lambda allow_write: [])
+    monkeypatch.setattr(sys, "argv", ["check_commands.py", "--json", "--check"])
+    assert cc.main() == 1
+    return json.loads(capsys.readouterr().out)["problems"]
+
+
+def test_cli_projection_rejects_a_write_command_the_ui_does_not_have(
+    tmp_path, monkeypatch, capsys  # type: ignore[no-untyped-def]
+) -> None:
+    """★ 写命令挂在**界面上没有入口**的写操作上 → 硬冲突（口径①「只做界面上已有的那些」）。"""
+    fake = cc.cli_registry.Command(
+        name="danger", op="OP-1", route="POST /api/tasks", title="偷偷写", human=lambda data: []
+    )
+    problems = _write_case(
+        tmp_path,
+        monkeypatch,
+        capsys,
+        '[commands."OP-1"]\ntitle = "新建任务"\nroutes = ["POST /api/tasks"]\n'
+        'ui = []\nkind = "write"\nreversible = "可删除"\nai = ["none"]\n'
+        'cli = ["timeflow danger"]\n',
+        fake,
+    )
+    assert any("界面上没有入口" in p for p in problems), problems
+
+
+def test_cli_projection_rejects_a_write_command_with_an_unknown_method(
+    tmp_path, monkeypatch, capsys  # type: ignore[no-untyped-def]
+) -> None:
+    """路由方法手滑（`FETCH`）也要硬红 —— 写命令的方法必须在认识的那几个里。"""
+    fake = cc.cli_registry.Command(
+        name="danger", op="OP-1", route="FETCH /api/tasks", title="手滑", human=lambda data: []
+    )
+    problems = _write_case(
+        tmp_path,
+        monkeypatch,
+        capsys,
+        '[commands."OP-1"]\ntitle = "新建任务"\nroutes = ["FETCH /api/tasks"]\n'
+        'ui = ["data-action=task-add"]\nkind = "write"\nreversible = "可删除"\n'
+        'ai = ["none"]\ncli = ["timeflow danger"]\n',
+        fake,
+    )
+    assert any("不是认识的写方法" in p for p in problems), problems
+
+
+def test_cli_projection_rejects_a_write_command_bound_to_a_read_op(
+    tmp_path, monkeypatch, capsys  # type: ignore[no-untyped-def]
+) -> None:
+    """写命令挂在 `kind=read` 的操作上 → 硬冲突（方法与元数据必须一致）。"""
+    fake = cc.cli_registry.Command(
+        name="danger", op="OP-1", route="POST /api/tasks", title="写错地方", human=lambda data: []
+    )
+    problems = _write_case(
+        tmp_path,
+        monkeypatch,
+        capsys,
+        '[commands."OP-1"]\ntitle = "新建任务"\nroutes = ["POST /api/tasks"]\n'
+        'ui = ["data-action=task-add"]\nkind = "read"\nreversible = "只读"\n'
+        'ai = ["none"]\ncli = ["timeflow danger"]\n',
+        fake,
+    )
+    assert any("必须挂在 kind=write 上" in p for p in problems), problems
+
+
+def test_mcp_projection_conflict_is_reported(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """MCP 那节的两条方向都要判：代码里有表里没写、表里写了代码里没有。"""
+    _write(tmp_path, "contracts/interactions.md", "## OP-7 查看今日摘要\n\n正文\n")
+    _write(tmp_path, "app.py", '@app.get("/api/summary")\ndef a(): ...\n')
     _write(tmp_path, "index.html", "const VIEWS=['today'];\nconst ACTIONS = { 'x': el => y };\n")
     table_file = _write(
         tmp_path,
         "commands.toml",
-        '[commands."OP-1"]\ntitle = "新建任务"\nroutes = ["POST /api/tasks"]\n'
-        'ui = []\nkind = "write"\nreversible = "可删除"\nai = ["none"]\n'
-        'cli = ["timeflow danger"]\n',
+        '[commands."OP-7"]\ntitle = "查看今日摘要"\nroutes = ["GET /api/summary"]\n'
+        'ui = ["view=today"]\nkind = "read"\nreversible = "只读"\nai = ["none"]\n'
+        'cli = ["timeflow today"]\nmcp = ["ghost"]\n',
     )
     fake = cc.cli_registry.Command(
-        name="danger", op="OP-1", route="POST /api/tasks", title="偷偷写", human=lambda data: []
+        name="today", op="OP-7", route="GET /api/summary", title="今日", human=lambda data: []
     )
     monkeypatch.setattr(cc, "CONTRACTS", tmp_path / "contracts")
     monkeypatch.setattr(cc, "APP", tmp_path / "app.py")
     monkeypatch.setattr(cc, "INDEX", tmp_path / "index.html")
     monkeypatch.setattr(cc, "COMMANDS", table_file)
     monkeypatch.setattr(cc.cli_registry, "COMMANDS", (fake,))
+    monkeypatch.setattr(cc.cli_registry, "WRITE_COMMANDS", ())
+    monkeypatch.setattr(cc.mcp_server, "tool_list", lambda allow_write: [{"name": "today"}])
     monkeypatch.setattr(sys, "argv", ["check_commands.py", "--json", "--check"])
 
     assert cc.main() == 1
     problems = json.loads(capsys.readouterr().out)["problems"]
-    assert any("只许挂 GET" in p for p in problems), problems
-    assert any("只读 CLI 只许挂" in p for p in problems), problems
+    assert any("mcp 字段里没写" in p for p in problems), problems
+    assert any("代码里没有这个工具" in p for p in problems), problems

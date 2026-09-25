@@ -712,7 +712,7 @@ evidence = [
   "text:scripts/run_gates.py::(\"contrast\", [PY, \"-X\", \"utf8\", \"tools/contrast_audit.py\"",
   "test:test_contrast_audit.py",
 ]
-gaps = "**是棘轮不是硬门**：亮色现状有 **18 条**不达 AA（全表 42 条组合，暗色全过），一接硬门就永远红、而本项目铁律是「门禁不过不许提交」；所以如实登记进 `tools/contrast_baseline.toml`（三条根因、每条带 why/fix），门只拦**没登记过的新欠账**与**比登记值更差**。**没做的**：① 18 条一条没修（改令牌=改视觉，视觉线用户还没开）；② 没覆盖 hover/focus/disabled/选中态，也没覆盖**非文字图形**（图标 vs 底、图表线条、边框 —— WCAG 对非文字要 3.0）；③ 没有渲染基线（沙箱无浏览器）—— 但对比度是纯计算，不需要浏览器。**收紧三步**写在复盘 §7：视觉线修完 → 逐条删登记行 → 加 `--strict`（现在就能跑，只会告诉你还剩 18 条）。**顺手修的缺陷**：`.toast` 的 `--toast-bg` 全项目从没定义过 → 暗色下底与字同为 `#e6edf7`（**1.0:1，字完全看不见**，而 toast 被调用 161 处）；补上该令牌（亮色 = 原值逐字节相同、暗色用 `--surface-2`）并去掉回退写法。这是**缺陷不是欠账**，所以不进登记表。★ **2026-09-24（T-G42）**：这里写的「收紧三步」**走完了** —— 登记表清空、`run_gates.py` 换成 `--strict`，棘轮变成硬门（组合 42 → 30 条；撤掉的三行是「搭配不存在了」而不是「改好了」，理由留在 `contrast_baseline.toml`）。`--check` 那个字面已经不在命令里了，所以本条的断言指针改成不带旗标的那半句。 ★ **2026-09-25（T-G70）**：这里写的「**没覆盖非文字图形**（图标 vs 底、图表线条、边框 —— WCAG 对非文字要 3.0）」**已经补上**：`tools/contrast_audit.py` 多了一张判据表 `AA_NONTEXT_PAIRS`（14 条 = 7 对 × 亮暗，逐对 ≥3.0，**没有登记表**：边界看不见是缺陷不是欠账，与本条对 toast 的同一句话）与一张纯装饰表 `AA_NONTEXT_EXEMPT`（11 条，**只量不判**、实测值照打）。做出来的当天抓到一条真缺陷：**输入框/下拉/文本域的边框只有 1.23（亮）/ 1.33（暗）** —— 框的底与卡片底同为 `--panel`，边框是「这里能输入」的唯一线索；拆出 `--border-control`（亮 `#7c8798` 3.64 / 暗 `#63738f` 3.55）后 7 条控件规则改用它，`--border` 继续当分隔线。同一条 ★ 也补在 T-G45 / T-G51 / T-G46 的 gaps 上。详见 `复盘/非文字对比度-T-G70.md`。"
+gaps = "**是棘轮不是硬门**：亮色现状有 **18 条**不达 AA（全表 42 条组合，暗色全过），一接硬门就永远红、而本项目铁律是「门禁不过不许提交」；所以如实登记进 `tools/contrast_baseline.toml`（三条根因、每条带 why/fix），门只拦**没登记过的新欠账**与**比登记值更差**。**没做的**：① 18 条一条没修（改令牌=改视觉，视觉线用户还没开）；② 没覆盖 hover/focus/disabled/选中态，也没覆盖**非文字图形**（图标 vs 底、图表线条、边框 —— WCAG 对非文字要 3.0）；③ 没有渲染基线（沙箱无浏览器）—— 但对比度是纯计算，不需要浏览器。**收紧三步**写在复盘 §7：视觉线修完 → 逐条删登记行 → 加 `--strict`（现在就能跑，只会告诉你还剩 18 条）。**顺手修的缺陷**：`.toast` 的 `--toast-bg` 全项目从没定义过 → 暗色下底与字同为 `#e6edf7`（**1.0:1，字完全看不见**，而 toast 被调用 161 处）；补上该令牌（亮色 = 原值逐字节相同、暗色用 `--surface-2`）并去掉回退写法。这是**缺陷不是欠账**，所以不进登记表。★ **2026-09-24（T-G42）**：这里写的「收紧三步」**走完了** —— 登记表清空、`run_gates.py` 换成 `--strict`，棘轮变成硬门（组合 42 → 30 条；撤掉的三行是「搭配不存在了」而不是「改好了」，理由留在 `contrast_baseline.toml`）。`--check` 那个字面已经不在命令里了，所以本条的断言指针改成不带旗标的那半句。"
 
 [entries."T-G26"]
 id = "T-G26"
@@ -1070,20 +1070,20 @@ evidence = [
   "file:复盘/只读CLI-命令表的第四份投影-T-G64.md",
   "text:src/timeflow/cli/__init__.py::这个包就是第二步，三条口径：",
   "text:src/timeflow/cli/table.py::class TableMissingError(RuntimeError):",
-  "text:src/timeflow/cli/call.py::messages = asyncio.run(_exchange(app, _scope(method.upper(), path, query)))",
+  "text:src/timeflow/cli/call.py::messages = asyncio.run(_exchange(app, scope, payload))",
   "text:src/timeflow/cli/registry.py::READ_METHOD = \"GET\"",
   "text:src/timeflow/cli/registry.py::name=\"today\"",
   "text:src/timeflow/cli/render.py::def board(data: Any) -> list[str]:",
-  "text:src/timeflow/cli/main.py::EXIT_ENV = 3  # 环境错（命令表找不到）",
+  "text:src/timeflow/cli/main.py::EXIT_ENV = 3  # 环境错（命令表找不到、库不存在/打不开）",
   "text:src/timeflow/app/main.py::if args and (args[0] in CLI_WORDS or args[0] in (\"-h\", \"--help\")):",
   'text:docs/commands.toml::cli = ["timeflow today"]',
-  "text:scripts/check_commands.py::---- 命令行（T-G64）：这份投影必须与命令表**双向**对得上 ----",
+  "text:scripts/check_commands.py::---- 命令行（T-G64 只读 → T-G65 加写入）：这份投影必须与命令表**双向**对得上 ----",
   "text:docs/specification/nonfunctional.md::命令行也是同一张表的投影（2026-09-25，T-G64）",
-  "text:docs/user-guide.md::## 命令行（可选，T-G64）",
+  "text:docs/user-guide.md::## 命令行（可选，T-G64 → 写入 T-G65）",
   "test:test_cli_line.py",
   "test:test_check_commands.py",
 ]
-gaps = "**用户 2026-09-23**：「AI 原生的 CLI 这个可以加进来吗？会不会更加方便后面的维护，以及功能的扩展」+「4 个面集中到一个点……**排最后，先做命令表**」。命令表 T-G31 与 ⌘K 面板 T-G61 之后，这是 T-G30 §4.3 的**第 2 步（只读 CLI）**。**这一步的验收标准不是「有没有 CLI」，而是「CLI 里有没有一行自己算出来的东西」** —— 有一行就是第二个口径（那正是本项目一路在消的东西）。**落点**：`src/timeflow/cli/` 七个小文件 —— `table.py` 读命令表（与 `check_commands.py` **共用同一个读法**）、`registry.py` 14 条命令 = (名字, 契约 OP, 路由, 参数, 排版)、`call.py` 取数、`render.py` 排版（**只排版不取数不算数**）、`main.py` 参数/输出/退出码/自描述。**★ 取数走进程内同一个 HTTP 边界**：不是直接调 `core/`（那要把 `api/app.py` 的参数校验与字段形状再写一遍 = 把「四个面各写一遍」从业务逻辑搬到校验逻辑上），而是 `create_app()` + 同一套路由与中间件，**只把 socket 换成一次 ASGI 调用** —— 不起服务、不占端口（不会和正在跑的窗口抢 8520），库路径与桌面端同源。**命令**：`today`/`plan`/`overdue`/`due`/`done`/`week`/`trend`/`habits`/`check`/`tasks`/`upcoming`/`focus`/`board`/`sync` + `commands`（自描述）。**入口只加不改**：`timeflow` 不带参数**仍然开窗口**，只有第一个词是已知子命令或 `-h/--help` 才走命令行。**AI 原生六条**逐条落地：结构化 JSON（边界原样，不重排不改名）/ 自带参数 schema（`commands --json` 的 params，正是 MCP tool schema 的原料）/ 非交互 / 稳定退出码 `0` 成功·`1` 用法错·`2` 接口错·`3` 找不到命令表（`--json` 时 stderr 上 `{error:{code,detail}}`）/ 幂等可逆破坏性随表（`commands --table`）/ 自描述；**stdout 只放数据、错误一律进 stderr**。**「它不是第二套命令」是机器判的**：`check_commands.py` 新增「命令行投影」一节，五条判定 —— ① 只读（路由必须 GET，且挂的 OP 的 `kind` 必须是 read/derive；写操作 CLI 是另一张卡，要等 AI 边界口径）；② 路由必须**真是**那条 OP 的路由（`GET /api/nope` 当场红）；③ 命令 ↔ 表里的 `cli` 字段**双向互相指认**；④ 命令名不重复；⑤ 覆盖率报出来（**洞是进度不是错误**）。**只读全覆盖**（T-G30 §4.4 的口径）：13 条只读操作 → **覆盖 12 条**，唯一空着的 `OP-43`「配置加载」**压根没有路由**（入口是启动时的校验与注入）—— 这一条写进表里的 `note`、也钉在测试里（`rows_without_cli == [\"OP-43\"]`），免得下一个人以为是漏填。**验收**：`tests/test_cli_line.py` **19 条**（最值钱的三条：① `test_every_command_is_a_projection_of_the_same_route` 逐条命令断言 **CLI 的 `--json` == TestClient 直接打同一条路由的 JSON** —— 这是「不自己算口径」的机器形态；② `test_cli_does_not_touch_the_database_or_the_domain_layer` 用 `ast` 读 import 语句，`src/timeflow/cli/**` 不许出现 `sqlite3`/`timeflow.core`/`timeflow.storage`，而 `timeflow.api.app` 必须在；③ 不带参数仍开窗口 —— 断 `SystemExit` 与「`uvicorn.Server` 有没有被构造」，不靠感觉）+ `tests/test_check_commands.py` **+3**（真仓库覆盖率 / 合成假命令的路由不匹配与「表里没写」/ 拒绝 POST 与写操作）。**顺带**：T-G62 那条时钟缝是产品层的，所以 `TIMEFLOW_FAKE_TODAY` 对 CLI **免费生效**（`timeflow today` 第一行就是假日子）—— 当初做成「一处出口」的回报。**没做 / 边界**：写操作 CLI（第 4 步，卡在「哪些操作必须在 CLI 里可达」这句口径）与 MCP（第 3 步，原料已备齐：`commands --table --json` + params）；**不连正在跑的服务**（每次自己开一个进程内 app，行为确定；代价约 0.3–0.5s 启动）；stderr 上会有一行 `app_start` 的 JSON（真发生的事；要干净就 `TF_LOG_PATH=off`）；局域网配对门在这条路上不判定（来源写死回环、`allow_lan=False`，**CLI 不是对外服务**）；`pip install` 出的包不一定带 `docs/commands.toml`，所以自描述找不到表时退 3，数据命令不受影响（路由绑定写在 registry，由门禁逐条核对 —— 与 ⌘K 面板同一个做法）。"
+gaps = "**用户 2026-09-23**：「AI 原生的 CLI 这个可以加进来吗？会不会更加方便后面的维护，以及功能的扩展」+「4 个面集中到一个点……**排最后，先做命令表**」。命令表 T-G31 与 ⌘K 面板 T-G61 之后，这是 T-G30 §4.3 的**第 2 步（只读 CLI）**。**这一步的验收标准不是「有没有 CLI」，而是「CLI 里有没有一行自己算出来的东西」** —— 有一行就是第二个口径（那正是本项目一路在消的东西）。**落点**：`src/timeflow/cli/` 七个小文件 —— `table.py` 读命令表（与 `check_commands.py` **共用同一个读法**）、`registry.py` 14 条命令 = (名字, 契约 OP, 路由, 参数, 排版)、`call.py` 取数、`render.py` 排版（**只排版不取数不算数**）、`main.py` 参数/输出/退出码/自描述。**★ 取数走进程内同一个 HTTP 边界**：不是直接调 `core/`（那要把 `api/app.py` 的参数校验与字段形状再写一遍 = 把「四个面各写一遍」从业务逻辑搬到校验逻辑上），而是 `create_app()` + 同一套路由与中间件，**只把 socket 换成一次 ASGI 调用** —— 不起服务、不占端口（不会和正在跑的窗口抢 8520），库路径与桌面端同源。**命令**：`today`/`plan`/`overdue`/`due`/`done`/`week`/`trend`/`habits`/`check`/`tasks`/`upcoming`/`focus`/`board`/`sync` + `commands`（自描述）。**入口只加不改**：`timeflow` 不带参数**仍然开窗口**，只有第一个词是已知子命令或 `-h/--help` 才走命令行。**AI 原生六条**逐条落地：结构化 JSON（边界原样，不重排不改名）/ 自带参数 schema（`commands --json` 的 params，正是 MCP tool schema 的原料）/ 非交互 / 稳定退出码 `0` 成功·`1` 用法错·`2` 接口错·`3` 找不到命令表（`--json` 时 stderr 上 `{error:{code,detail}}`）/ 幂等可逆破坏性随表（`commands --table`）/ 自描述；**stdout 只放数据、错误一律进 stderr**。**「它不是第二套命令」是机器判的**：`check_commands.py` 新增「命令行投影」一节，五条判定 —— ① 只读（路由必须 GET，且挂的 OP 的 `kind` 必须是 read/derive；写操作 CLI 是另一张卡，要等 AI 边界口径）；② 路由必须**真是**那条 OP 的路由（`GET /api/nope` 当场红）；③ 命令 ↔ 表里的 `cli` 字段**双向互相指认**；④ 命令名不重复；⑤ 覆盖率报出来（**洞是进度不是错误**）。**只读全覆盖**（T-G30 §4.4 的口径）：13 条只读操作 → **覆盖 12 条**，唯一空着的 `OP-43`「配置加载」**压根没有路由**（入口是启动时的校验与注入）—— 这一条写进表里的 `note`、也钉在测试里（`rows_without_cli == [\"OP-43\"]`），免得下一个人以为是漏填。**验收**：`tests/test_cli_line.py` **19 条**（最值钱的三条：① `test_every_command_is_a_projection_of_the_same_route` 逐条命令断言 **CLI 的 `--json` == TestClient 直接打同一条路由的 JSON** —— 这是「不自己算口径」的机器形态；② `test_cli_does_not_touch_the_database_or_the_domain_layer` 用 `ast` 读 import 语句，`src/timeflow/cli/**` 不许出现 `sqlite3`/`timeflow.core`/`timeflow.storage`，而 `timeflow.api.app` 必须在；③ 不带参数仍开窗口 —— 断 `SystemExit` 与「`uvicorn.Server` 有没有被构造」，不靠感觉）+ `tests/test_check_commands.py` **+3**（真仓库覆盖率 / 合成假命令的路由不匹配与「表里没写」/ 拒绝 POST 与写操作）。**顺带**：T-G62 那条时钟缝是产品层的，所以 `TIMEFLOW_FAKE_TODAY` 对 CLI **免费生效**（`timeflow today` 第一行就是假日子）—— 当初做成「一处出口」的回报。**没做 / 边界**：写操作 CLI（第 4 步，卡在「哪些操作必须在 CLI 里可达」这句口径）与 MCP（第 3 步，原料已备齐：`commands --table --json` + params）；**不连正在跑的服务**（每次自己开一个进程内 app，行为确定；代价约 0.3–0.5s 启动）；stderr 上会有一行 `app_start` 的 JSON（真发生的事；要干净就 `TF_LOG_PATH=off`）；局域网配对门在这条路上不判定（来源写死回环、`allow_lan=False`，**CLI 不是对外服务**）；`pip install` 出的包不一定带 `docs/commands.toml`，所以自描述找不到表时退 3，数据命令不受影响（路由绑定写在 registry，由门禁逐条核对 —— 与 ⌘K 面板同一个做法）。 ★ **2026-09-25（T-G65）**：本条写的「写操作 CLI 是另一张卡，要等 AI 边界口径」**已经开了**（用户口径：只做界面上已有的那些 + 默认关 + 与界面同一条路）。本条的只读口径**一个字没改**：`COMMANDS` 仍然每条都是 GET、`cli` 字段双向核对照旧；写命令是另一批（`WRITE_COMMANDS`），门禁的「命令行」一节现在两边分别判。"
 
 [entries."T-G69"]
 id = "T-G69"
@@ -1172,11 +1172,29 @@ gaps = "**触发**：用户 2026-09-25 问「有要修复的吗」。T-G64 落�
 
 [entries."T-G65"]
 id = "T-G65"
-title = "MCP 服务（T-G30 §4.3 第 3 步）与写操作 CLI（第 4 步）—— 两者都读同一张命令表"
+title = "MCP 服务（T-G30 §4.3 第 3 步）与写操作 CLI（第 4 步）—— 四个面全通，两者都读同一张命令表"
 group = "PROCESS"
-status = "todo"
-evidence = []
-gaps = "**为什么还没做**（不是漏，是排在后面）：T-G30 §4.3 定的顺序是 命令表（T-G31 ✅）→ 只读 CLI（T-G64 ✅）→ **MCP** → **写操作 CLI**。MCP 是 2026 年「AI 原生」的标准形态（DSH 自己就是 MCP 客户端），它要的元数据比 CLI 更多（参数 schema 必须精确）—— **原料 T-G64 已经备齐**（`timeflow commands --json` 的 params 与 `--table` 的整张表）。★ **口径已定（2026-09-25 用户当面答，本卡从此可开工）**：① **MCP 做**，并且**顺带把写操作也开**；② 写入口径 = **只读全覆盖 + 写入只做「和界面上一样的那些」**（复用同一套口径，不发明第三套语义）+ **默认关**（同 N16「默认收严、用户再放宽」）；③ 另：用户 2026-09-23 已定「**AI 只写事实**」（方案 3），写操作的边界照它来。**开工时要带的三件事**：`docs/commands.toml` 要新增「写命令的可用性」一栏（现在 `cli` 字段只登记了只读那批）、MCP 的工具清单必须**由那张表生成**（不许手抄第二份）、默认关要有机器判据（不是文档里写一句）。"
+status = "done"
+evidence = [
+  "file:复盘/MCP与写操作-T-G65.md",
+  "text:src/timeflow/mcp/__init__.py::用户 2026-09-23 那句话是这条线的起点",
+  "text:src/timeflow/mcp/server.py::PROTOCOL_VERSION = \"2025-06-18\"",
+  "text:src/timeflow/mcp/server.py::def tool_list(allow_write: bool) -> list[dict[str, Any]]:",
+  "text:src/timeflow/mcp/server.py::code = cli_main.main(_tool_argv(command, arguments or {}, db, allow_write))",
+  "text:src/timeflow/cli/registry.py::WRITE_COMMANDS: tuple[Command, ...] = (",
+  "text:src/timeflow/cli/registry.py::return not command.route.startswith(f\"{READ_METHOD} \")",
+  "text:src/timeflow/cli/main.py::EXIT_REFUSED = 4  # 被策略拒绝：写命令没带 --allow-write",
+  "text:src/timeflow/cli/call.py::path = path.replace(\"{\" + name + \"}\", quote(str(value), safe=\"\"))",
+  'text:docs/commands.toml::mcp = ["add-task"]',
+  "text:scripts/check_commands.py::---- MCP（T-G65）：第四份投影",
+  "text:src/timeflow/logs.py::class _CurrentStderrHandler(logging.StreamHandler[Any]):",
+  "text:tests/test_cli_writes.py::def test_every_write_command_is_refused_without_the_switch(",
+  "text:tests/test_mcp_line.py::def test_real_stdio_round_trip_lists_tools_and_writes_a_memo(",
+  "test:test_cli_writes.py",
+  "test:test_mcp_line.py",
+]
+gaps = "**T-G30 §4.3 的最后两步一起做**（顺序是 命令表 T-G31 → 只读 CLI T-G64 → **MCP** → **写操作 CLI**），用户 2026-09-23 要的「4 个面集中到一个点」到这里**四个面全通**：界面 / ⌘K / 命令行 / **AI·MCP**。三条口径（用户 2026-09-25 当面定）逐条落成机器判据：① **只做界面上已有的那些** —— 每条写命令/写工具的 OP 的 `ui` 必须非空（`check_commands.py` 判，`tests/test_cli_line.py` 再判一次）；② **默认关** —— 每次调用都要显式带 `--allow-write`，CLI 退 **4**（新退出码）+ 机器码 `write_disabled`，MCP 不给开关就**不列出**写工具、硬调回 `-32602`；③ **语义与界面完全一样** —— 写命令挂在同一条真路由上，`tests/test_cli_writes.py` 逐条比「走 CLI」与「直接打那条路由」的**可观察状态**。**做法**：`docs/commands.toml` 多一栏 `mcp`（与 `cli` 是**两份投影**，门禁分别核对）；`registry.py` 多一批 `WRITE_COMMANDS`（6 条：add-task / complete / myday / focus-start / focus-finish / memo），**「是不是写」由路由方法算**（不加 `write = true` 那种第二个真源）；`call.py` 支持路径参数与 JSON body；新增 `src/timeflow/mcp/`（stdio + JSON-RPC 2.0，零依赖：`initialize` / `tools/list` / `tools/call` / 通知不回 / `-32601` / `-32602` / `-32700`），**工具清单由 `registry` 现算**、`tools/call` **直接把参数翻成 argv 调 CLI**（所以「两边语义一样」不是承诺而是同一段代码）。**验收**：新增 `tests/test_cli_writes.py` **7 条** + `tests/test_mcp_line.py` **12 条** + `tests/test_check_commands.py` **+4**（三条写命令的硬冲突 + MCP 双向）+ `tests/test_cli_line.py` 改写 4 条；其中两条是「证明咬得住」的：不带开关跑**每一条**写命令都退 4 且**库一个字节没动**（快照逐条比）、以及**真起子进程走 stdio** 的端到端（stdout 上只有 JSON-RPC、写操作真落库、读回来对得上）。**★ 顺手修的一条基础设施缺陷**：`logs.setup_logging` 把 `sys.stderr` 在**配置那一刻**绑死，而 pytest 的 `capsys` 每个用例都会换掉它 —— 只要「第一次配置日志」发生在用了 capsys 的用例里，后面的用例一记日志就往**已关闭**的流写，logging 打出一段「--- Logging error --- + Traceback」混进别的用例的 stderr（症状是 `test_broken_database...` 断言「没有 Traceback」会**随跑的先后顺序**时红时绿）。修法是 `_CurrentStderrHandler`：每次 emit 现取 `sys.stderr`。**另一处**：检查器里两条「写命令不能是 GET / 只读命令必须是 GET」的判定是**恒真**的（`is_write` 本来就由方法算出来）—— 换成了真会失败的一条：写方法必须在 `POST/PUT/PATCH/DELETE` 里（挡 `FETCH` 这种手滑）。**边界与洞（如实记）**：① 写命令第一批 **6/40 条**写操作（「只做界面上已有的那些」是慢工，`check_commands.py` 把还差多少条报出来 —— 洞是进度）；② MCP 的协议是**手写**的（本项目零依赖），验的是「我们的客户端脚本 ↔ 我们的服务端」，**第三方客户端（DSH / Claude Desktop）接一次**是人工项（写进了交接的验收清单）；③ 传输只做 stdio，没有 `resources`/`prompts`/`logging`；④ 应用内那条 `/api/ai/*` 边界**没有放宽**（仍是「只写事实 + 只勾自己建的」）—— MCP 是**用户自己本机**的另一个出口、默认关，两者的关系写在 `复盘/MCP与写操作-T-G65.md` §6；⑤ 没做**持久开关 + 设置页 UI**（那属产品面）：现在的开关是「每次带上」，理由（持久开关开了就忘了关）也写在复盘里。"
+
 
 [entries."T-G62"]
 id = "T-G62"

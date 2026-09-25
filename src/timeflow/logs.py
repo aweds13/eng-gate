@@ -64,6 +64,24 @@ def _project_root() -> Path:
     return Path(ROOT)
 
 
+class _CurrentStderrHandler(logging.StreamHandler[Any]):
+    """每次 emit 都取**当前**的 `sys.stderr`，而不是配置那一刻的那个。
+
+    ★ 为什么要有这个类（T-G65 实测踩到）：`logging.StreamHandler(stream=sys.stderr)`
+    在**配置那一刻**就把流绑死了，而 pytest 的 `capsys` 每个用例都会换掉 `sys.stderr`（用完就关）。
+    于是只要"第一次配置日志"发生在某个用了 `capsys` 的用例里，**后面**的用例一记日志就抛
+    `ValueError: I/O operation on closed file`，logging 把它打成一段
+    「--- Logging error --- + Traceback」写进**当前** stderr —— 而那条 stderr
+    正是别的用例在断言的输出。症状很隐蔽：
+    `test_broken_database_gives_a_stable_code_not_a_traceback` 会**随跑的先后顺序**时红时绿
+    （单跑绿、按"先写命令再只读"的顺序跑就红）。绑死一个会被换掉的流本来就不对，这里改成每次现取。
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.stream = sys.stderr
+        super().emit(record)
+
+
 def setup_logging(
     debug: bool | None = None,
     log_path: str | Path | None = None,
@@ -87,7 +105,7 @@ def setup_logging(
         logger.removeHandler(handler)
 
     formatter = _JsonFormatter()
-    stream = logging.StreamHandler(stream=sys.stderr)
+    stream = _CurrentStderrHandler()  # 不绑死 stderr：见上面那个类的注释（T-G65）
     stream.setFormatter(formatter)
     stream.setLevel(level)
     logger.addHandler(stream)

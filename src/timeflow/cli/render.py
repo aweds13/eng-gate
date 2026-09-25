@@ -235,3 +235,23 @@ def board(data: Any) -> list[str]:
             title = _text(item, "task_title") or "（任务已删除）"
             lines.append("    · " + title + " [" + _text(item, "status") + "]")
     return lines
+
+
+# 写操作的回执里值得先看的那几栏（就是界面上写一次会变的那些）。
+# ★ 只列**回执里真有**的：不猜字段名（T-G64 的教训：展示层取一个不存在的字段，
+#   不报错、只是那行凭空消失）。一个都没有时如实把整个回执一行 JSON 打出来，不装作看懂了。
+_RECEIPT_KEYS = ("id", "title", "text", "status", "is_myday", "due_date", "group_name", "deleted")
+
+
+def receipt(data: Any, headline: str) -> list[str]:
+    """写命令的人读回执：一行 headline + 回执里那几个字段（**只排版**，不改写回来的东西）。"""
+    rec = _rec(data)
+    lines = [headline]
+    shown = 0
+    for key in _RECEIPT_KEYS:
+        if key in rec and rec[key] is not None:
+            lines.append(f"  {key}: {rec[key]}")
+            shown += 1
+    if not shown:
+        lines.append(f"  {data!r}")
+    return lines

@@ -251,17 +251,24 @@
   与加**功能**（领域函数 + 路由 + 界面）**做不到不改核心**，如实标注（`SR-NF7` → done：
   词表 + 集成 + 模板都到位，做不到的写明）。
 
-## 命令行（SR-NF6 / SR-NF7 · T-G64）→ `src/timeflow/cli/`
+## 命令行与 MCP（SR-NF6 / SR-NF7 · T-G64 → T-G65）→ `src/timeflow/cli/` + `src/timeflow/mcp/`
 
-- **它不是一个新层，是那张表的第四份投影**：`docs/commands.toml`（T-G31）里每条操作现在有
-  `ui`（界面）/ `cli`（命令行）两组入口，⌘K 面板与 CLI 都由 `scripts/check_commands.py` 逐条核对。
+- **它们不是一个新层，是那张表的投影**：`docs/commands.toml`（T-G31）里每条操作有
+  `ui`（界面）/ `cli`（命令行）/ `mcp`（AI 客户端）三组入口，⌘K 面板、CLI 与 MCP
+  都由 `scripts/check_commands.py` 逐条核对（**双向**）。
 - **入口**：`timeflow <子命令>`（`src/timeflow/app/main.py` 分派；**不带参数仍然开窗口**）。
-  14 条命令全是**只读**（`GET` + 挂在 `kind=read|derive` 的操作上）+ `commands`（自描述）。
+  14 条只读命令（`GET` + `kind=read|derive`）+ **6 条写命令**（T-G65，默认关：要 `--allow-write`）
+  + `commands`（自描述）+ `mcp`（把同一批命令当 MCP 工具）。
 - **取数**：`cli/call.py` 走**进程内同一个 HTTP 边界**（`create_app()` 的同一套路由与中间件，
   只把 socket 换成一次 ASGI 调用）—— 不起服务、不占端口，**一行业务逻辑都不复制**；
   `cli/render.py` 只排版；`cli/table.py` 与检查器**共用同一个读法**。
-- **边界**：写操作 CLI 与 MCP 还没做（T-G30 §4.3 的第 3、4 步）。
-  详见 `复盘/只读CLI-命令表的第四份投影-T-G64.md`。
+- **MCP**（`mcp/server.py`）：stdio + JSON-RPC 2.0（手写，零依赖）。`tools/list` 由
+  `cli/registry.py` 现算；`tools/call` **把参数翻成 argv 直接调 CLI** ——
+  所以"AI 做的和界面做的是一回事"是同一段代码，不是两套实现。
+  写工具默认**不列出**（要 `timeflow mcp --allow-write`）。
+- **写操作的三条口径**（用户 2026-09-25）：只做界面上已有的那些（OP 的 `ui` 非空，门禁判）/
+  默认关（退 4 或不列出）/ 语义与界面完全一样（同一条路由）。详见
+  `复盘/只读CLI-命令表的第四份投影-T-G64.md` 与 `复盘/MCP与写操作-T-G65.md`。
 
 ## 可观测（SR-NF13）→ `src/timeflow/logs.py`
 

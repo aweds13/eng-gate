@@ -9,11 +9,19 @@
 #
 #       界面按钮 / ⌘K 面板 / CLI / AI·MCP   ←   都读这张表
 #
-# 四份投影的现状（2026-09-25）：
+# 四份投影的现状（2026-09-25，T-G65 起**四个面都通了**）：
 #   · 界面按钮 —— `ui` 字段，124 处入口（46 条 OP 有界面入口）；
 #   · ⌘K 面板 —— `index.html` 的 `const COMMANDS`（18 条，T-G61），由检查器逐条核对；
-#   · 命令行  —— `timeflow.cli`（9 条只读命令，T-G64）+ 这里的 `cli` 字段，**双向**核对；
-#   · AI·MCP  —— 还没做（T-G30 §4.3 的第 3 步）。
+#   · 命令行  —— `timeflow.cli`：**14 条只读**（T-G64）+ **6 条写命令**（T-G65，默认关）；
+#   · AI·MCP  —— `timeflow.mcp`：`tools/list` 由 `registry` 现算（T-G65），
+#                只读工具随时可用，**写工具只在 `--allow-write` 时才列出**。
+#
+# ★ 写操作的三条口径（用户 2026-09-25 当面定，T-G65 落地）：
+#   ① **只做界面上已有的那些** —— 所以每条写命令/写工具的 OP，`ui` 必须非空（门禁判）；
+#   ② **默认关** —— 每次调用都要显式带 `--allow-write`（CLI 退 4、MCP 不列出写工具）；
+#   ③ **语义与界面完全一样** —— 走同一条路由，`check_commands.py` 逐条核对。
+#   写命令第一批只有 6 条是**口径①的结果**（界面有四十多条写入）：先开
+#   「记一条 / 勾一下 / 开一下专注」这条核心闭环，其余按需长（"洞是进度"照旧）。
 #
 # ## 它凭什么不会变成「第二份手抄」
 #
@@ -28,6 +36,8 @@
 #   routes     实现这条操作的路由，写成 "METHOD /path"（机器核对）
 #   ui         界面入口，写成 "data-action=<名>" 或 "view=<名>"（机器核对）；**空数组是合法的**
 #   cli        命令行入口，写成 "timeflow <子命令>"（机器核对，T-G64）；**空数组是合法的**
+#   mcp        MCP 工具名（机器核对，T-G65）；现在与 cli 同名同批，但**是两份投影** ——
+#              门禁分别核对，所以"只给 MCP 不给 CLI"这种决定以后可以直接在表里表达
 #   kind       write（改数据）| read（只读）| derive（纯计算）
 #   reversible 契约里 `可逆` 那条的原话（判断"要不要二次确认"就靠它）
 #   ai         AI 接口能做什么：read | create | none（列表；一条操作可以既只读又新增）
@@ -43,15 +53,19 @@
 title = "新建任务"
 routes = ["POST /api/tasks"]
 ui = ["data-action=task-add", "data-action=task-add-here", "data-action=palette-new-task"]
+cli = ["timeflow add-task"]
+mcp = ["add-task"]
 kind = "write"
 reversible = "可删除（见 OP-6）"
 ai = ["none"]
-note = "全量任务页的 task-add-here 走同一条路由。"
+note = "全量任务页的 task-add-here 走同一条路由。★ T-G65：**写命令默认关**（要 --allow-write）。"
 
 [commands."OP-2"]
 title = "把已有任务加入 My Day"
 routes = ["POST /api/tasks/{task_id}/myday"]
 ui = ["data-action=task-myday"]
+cli = ["timeflow myday"]
+mcp = ["myday"]
 kind = "write"
 reversible = "是（同一按钮反向操作）"
 ai = ["none"]
@@ -60,6 +74,8 @@ ai = ["none"]
 title = "开始专注"
 routes = ["POST /api/focus/start", "GET /api/focus/active"]
 ui = ["data-action=focus-start", "data-action=task-focus", "view=focus"]
+cli = ["timeflow focus-start"]
+mcp = ["focus-start"]
 kind = "write"
 reversible = "可放弃（见 OP-4）"
 ai = ["none"]
@@ -83,6 +99,8 @@ routes = [
   "GET /api/tasks/{task_id}/facts", "GET /api/summary",
 ]
 ui = ["data-action=focus-finish"]
+cli = ["timeflow focus-finish"]
+mcp = ["focus-finish"]
 kind = "write"
 reversible = "否。但「放弃」不计入投入（时长不入账）"
 ai = ["none"]
@@ -104,6 +122,8 @@ routes = [
   "GET /api/tasks/{task_id}/facts",
 ]
 ui = ["data-action=task-done", "data-action=task-undo-done", "data-action=step-toggle"]
+cli = ["timeflow complete"]
+mcp = ["complete"]
 kind = "write"
 reversible = "是 —— 可「取消完成」，撤销后回到原状态，并撤销该次投入记账"
 ai = ["create"]
@@ -128,6 +148,7 @@ title = "查看今日摘要"
 routes = ["GET /api/summary", "GET /api/focus/today", "GET /api/review/today"]
 ui = ["view=today"]
 cli = ["timeflow today"]
+mcp = ["today"]
 kind = "read"
 reversible = "—（只读）"
 ai = ["none"]
@@ -215,6 +236,7 @@ routes = [
 ]
 ui = []
 cli = ["timeflow week", "timeflow trend"]
+mcp = ["week", "trend"]
 kind = "read"
 reversible = "只读"
 ai = ["none"]
@@ -225,6 +247,7 @@ title = "逾期债务展示"
 routes = ["GET /api/overdue", "GET /api/summary"]
 ui = []
 cli = ["timeflow overdue"]
+mcp = ["overdue"]
 kind = "read"
 reversible = "只读"
 ai = ["none"]
@@ -258,6 +281,7 @@ title = "查看习惯热力图"
 routes = ["GET /api/habits", "GET /api/habits/{habit_id}"]
 ui = ["view=habit"]
 cli = ["timeflow habits"]
+mcp = ["habits"]
 kind = "read"
 reversible = "只读"
 ai = ["none"]
@@ -268,6 +292,7 @@ title = "自检"
 routes = ["GET /api/selfcheck"]
 ui = []
 cli = ["timeflow check"]
+mcp = ["check"]
 kind = "read"
 reversible = "只读"
 ai = ["none"]
@@ -321,6 +346,7 @@ title = "课程提醒"
 routes = ["GET /api/assessments/upcoming"]
 ui = ["view=academic"]
 cli = ["timeflow upcoming"]
+mcp = ["upcoming"]
 kind = "read"
 reversible = "可关闭提醒"
 ai = ["none"]
@@ -355,6 +381,7 @@ title = "到期列表 / 进 My Day"
 routes = ["GET /api/mydays", "GET /api/review/due"]
 ui = ["view=review"]
 cli = ["timeflow plan", "timeflow due"]
+mcp = ["plan", "due"]
 kind = "read"
 reversible = "可移出"
 ai = ["none"]
@@ -404,6 +431,7 @@ title = "视角切换"
 routes = ["GET /api/team/board", "GET /api/team/assignments"]
 ui = ["data-action=team-view", "data-action=team-filter", "data-action=team-me", "view=team"]
 cli = ["timeflow board"]
+mcp = ["board"]
 kind = "read"
 reversible = "随时切换"
 ai = ["none"]
@@ -426,6 +454,8 @@ note = "契约同时含只读与新增/勾完成，所以 ai 是**两个值**；
 title = "新建备忘录"
 routes = ["POST /api/memos", "DELETE /api/memos/{memo_id}"]
 ui = ["data-action=memo-add", "data-action=memo-delete", "view=memo"]
+cli = ["timeflow memo"]
+mcp = ["memo"]
 kind = "write"
 reversible = "可删除（确认）"
 ai = ["none"]
@@ -483,6 +513,7 @@ title = "冲突处理"
 routes = ["GET /api/sync/logs", "GET /api/sync/status"]
 ui = ["view=setting"]
 cli = ["timeflow sync"]
+mcp = ["sync"]
 kind = "read"
 reversible = "可手动改回；导入前的状态可用备份与恢复回退（OP-42）"
 ai = ["none"]
@@ -526,6 +557,7 @@ title = "智能视图筛选（Important / Planned / Flagged）"
 routes = ["GET /api/tasks", "POST /api/tasks/{task_id}/flag"]
 ui = ["data-action=task-flag", "view=important", "view=planned", "view=flagged"]
 cli = ["timeflow tasks"]
+mcp = ["tasks"]
 kind = "read"
 reversible = "随时切回「全部任务」"
 ai = ["none"]
@@ -568,6 +600,7 @@ title = "今天做成了什么（可展开的完成明细）"
 routes = ["GET /api/today/done"]
 ui = ["data-action=done-toggle"]
 cli = ["timeflow done"]
+mcp = ["done"]
 kind = "read"
 reversible = "点「收起」即折叠（纯界面状态）"
 ai = ["none"]
@@ -606,6 +639,7 @@ title = "跨端同步专注（只读镜像，T-G20）"
 routes = ["GET /api/focus/active"]
 ui = []
 cli = ["timeflow focus"]
+mcp = ["focus"]
 kind = "read"
 reversible = "镜像随对面结束自动消失（界面侧靠 10 秒轮询；数据侧不做推送）"
 ai = ["none"]
