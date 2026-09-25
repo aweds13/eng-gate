@@ -85,7 +85,9 @@ config.example.toml / pyproject.toml
   起不了浏览器记 **NOT RUN**（**不是通过**）。改黄金要 `--update --reason`，理由落 `gates/render/LAST_UPDATE.md`。
 - ✅ **行为流层**（`../tools/ui_flow_check.mjs`，T-G34）：**真浏览器 + 真点击（带命中测试）+ 真按键**，
   「待人工确认」里功能性的那些搬给机器；每条流登记「我替掉哪条人工项」（`--list` 可看），
-  每轮跑两遍比断言指纹（不一致 = 工具自己不可信）；底座与渲染层共用 `../tools/tf_browser.mjs`。
+  **默认跑一遍**（`--twice` 才比两遍断言指纹 —— 最小验证法则 T-G38：流失败只是红一下、不污染持久数据）；
+  底座与渲染层共用 `../tools/tf_browser.mjs`。T-G73 起，两条流还会**再起一个真进程**：
+  ㉒ 第二个库（当"另一台设备"）、㉘ 第二个真客户端（当"另一台手机/电脑"）。
 - ✅ **可执行验收层（B4）**：`../tests/acceptance/README.md`（默认排除，显式 `-m acceptance`）。
 - ✅ **可扩展/易上手**：`EXTENDING.md`（加功能的五步模板）+ `../examples/` 三个可跑示例（SR-NF7 / SR-NF10）。
 - ⏭️ 后置（第二版）：重规划/债务重组(F2.8)、AI 接口写/改/删、学校通知监测脚本(F10)、移动端 PWA 深联动。

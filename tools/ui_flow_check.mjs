@@ -13,12 +13,14 @@
  *   ① 每条流都**声明它替掉哪一条人工项**（打印出来 + 测试钉住），"搬走了哪几条"有据可查；
  *   ② 真点击做**命中测试**（`elementFromPoint`）：被浮层盖住、被挤出视口的按钮，
  *      `el.click()` 会"成功"，而用户点不到 —— 所以这里一律真按坐标，且先验"那个点上是不是它"；
- *   ③ **不做"全覆盖"**：够用的条数就停（现在 17 条）。要加一条，得先说明它替掉哪条人工项。
+ *   ③ **不做"全覆盖"**：够用的条数就停（现在 **22** 条）。要加一条，得先说明它替掉哪条人工项。
  *
  * 已知边界（**不谎报**）：
  *   · 起不了浏览器 → 退出码 3（NOT RUN），**NOT RUN 不是 PASS**（`run_gates.py` 单列一栏）。
  *   · 它只验"行为对不对"，**不验好看**，也**不验口味**（文案好不好、版式美不美）。
  *   · 要人工准备的物理场景（两台设备 / 手机连热点 / 校园网隔离 / 计划任务）它做不了，仍在人工那一栏。
+ *   · 第五批（T-G73）里"第二个库 / 第二个客户端"是**同一台机器上的**两个真进程/真浏览器 ——
+ *     真手机、真校园网、两个物理窗口仍然是人工项（`docs/人工验收-照着点.md` 里如实标着）。
  *   · ★ "等闲下来" = **DOM 不动 + 手上没有在飞的请求**（`waitIdle`，T-G40）：只等 DOM 会在
  *     "请求还在路上、页面一动不动"那一段提前收工，然后拿**上一个画面**去断言（黄金层就被这么坑过）。
  *
@@ -349,9 +351,12 @@ class T {
   /** 从 **Node 侧**直接打接口（不带 Origin）—— 两条用途：
    *  ① 验"界面上看不见的那一半"（AI 合作接口的边界、403 原话）；
    *  ② 给界面准备一点它自己要用的数据（如"我自己建的那个任务"的 id）。
-   *  注意：**能走界面的一律走界面**（那才是这一层要验的东西），这里只补界面做不到的部分。 */
-  async api(method, path, body) {
-    const res = await fetch(this.url.replace(/\/$/, '') + path, {
+   *  注意：**能走界面的一律走界面**（那才是这一层要验的东西），这里只补界面做不到的部分。
+   *
+   *  `base`（第 4 个参数，T-G73）：指向**另一个 base URL** —— ㉒ 要拿"一份别的设备的包"，
+   *  所以流里会**再起一个真服务**当那台设备；对它的那几个调用走这个参数，不改 `this.url`。 */
+  async api(method, path, body, base = this.url) {
+    const res = await fetch(base.replace(/\/$/, '') + path, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -1119,6 +1124,333 @@ flow({
     t.eq('点左栏「命令」也能开', await t.attr('#palette', 'hidden'), null)
     await t.pressAction('palette-close')
     t.eq('点空白处关掉', await t.attr('#palette', 'hidden'), '')
+  },
+})
+
+/* ------------------------------------------- 人工验收搬家 · 第五批（T-G73）-----------
+ *
+ * 搬的是 §二 清单里标着「下一批可搬的（工具已就位）」那四条：⑭ 词表 / ㉒ 删除可选 /
+ * ㉖ 手机上传 / ㉘ 跨端镜像（双窗口版）。
+ *
+ * 这一批和前三批（T-G34/35/36/37）的不同：那三批搬的是"一屏之内点几下"的项，
+ * 这四条**都要第二样东西**才验得了 —— 第二个库（㉒）、第二个客户端（㉘）、
+ * 断网那一半（㉖）、以及"加的一项在另一处真的生效"（⑭）。所以它们比前面的流慢，
+ * 这笔账照旧明码标价（每条的秒数由跑的时候打出来）。
+ *
+ * 仍然搬不动的（照旧留在人工那一栏，别假装搬了）：
+ *   · 真手机 / 真校园网 / 两个**物理**窗口 —— 这里是"同一台机器上的两个真浏览器"；
+ *   · 真把 Obsidian 拉起来（⑮ 那半）、桌面窗口长什么样（⑫）、备份恢复动真数据（⑪）。
+ */
+
+flow({
+  id: '⑭', name: '可配置词表：界面上加一项，复习卡的形式下拉里立刻选得到',
+  item: 'C 批 ⑭ 可配置词表（加一项 → 复习卡里选得到）',
+  vp: 'desktop',
+  async run(t) {
+    // 词表 key 是**后端**的（`vocab.REVIEW_FORMS.key`），界面按它拼元素 id：`vb_<key>_id/_label`
+    const KEY = 'review_forms'
+    const del = `[data-action="vocab-del"][data-key="${KEY}"]`
+    const add = `[data-action="vocab-add"][data-key="${KEY}"]`
+    const reset = `[data-action="vocab-reset"][data-key="${KEY}"]`
+    // 这张页上有好几张词表、每张一个「加一项」——`pressAction` 只按 data-action 挑会挑错，
+    // 所以这里按**带 data-key 的选择器**挑，再走同一条"真按 + 命中测试"的路。
+    const press = async (sel, label) => {
+      const m = await t.mark(sel)
+      if (!m.ok) { t.ok(`点得到：${label}`, false, `匹配到 ${m.all} 个`); return false }
+      return t.press(HIT, label)
+    }
+
+    // ① 先记下**没加之前**卡上那个下拉长什么样（下面要比"只多了这一项、别的没动"）
+    await t.start('review')
+    t.ok('界面上有可编辑的复习卡', await t.count('[data-action="review-edit"]') >= 1)
+    const cardId = await t.attr('[data-action="review-edit"]', 'data-id')
+    await t.pressAction('review-edit')
+    const opts0 = await t.count('#rvForm option')
+    const form0 = await t.value('#rvForm')
+    t.ok('（准备）卡上原来选的就是词表里的某一项', Boolean(form0), `实测 ${form0}`)
+    await t.pressAction('review-edit-cancel')
+
+    // ② 设置页：这一节折着（折着也写着现状），展开才出控件
+    await t.view('setting')
+    t.eq('「可配置词表」这一节默认折着', (await t.geom('#body-set-vocab')).display, 'none')
+    await t.openSetting('set-vocab')
+    t.has('折着也看得见现状', await t.text('#sum-set-vocab'), '现状：')
+    const before = await t.count(del)
+    t.ok('「复习形式」那张表本来就有几项', before >= 3, `实测 ${before} 项`)
+
+    // ③ 反证：两个框都空 → 界面自己拦（不拿空 id 去撞后端）
+    await press(add, '「复习形式」的加一项（空框）')
+    t.has('空框时说清了要填什么', (await t.waitToast('id 和显示名')).text, 'id 和显示名都要填')
+
+    // ④ 反证：非法 id → **后端原话**透出来，且那张表一个字节没变
+    await t.type(`#vb_${KEY}_id`, 'My Form')
+    await t.type(`#vb_${KEY}_label`, '口述复述')
+    await press(add, '「复习形式」的加一项（非法 id）')
+    const bad = await t.waitToast('id 只能')
+    t.has('非法 id 被拦下，且用的是后端自己的原话', bad.text, 'id 只能用小写英文')
+    t.eq('拦下之后那张表没多出东西', await t.count(del), before)
+
+    // ⑤ 真加一项（真打字；`type` 先 Ctrl+A，等于覆盖上次填的）
+    await t.type(`#vb_${KEY}_id`, 'my_form')
+    await t.type(`#vb_${KEY}_label`, '口述复述')
+    await press(add, '「复习形式」的加一项')
+    const okAdd = await t.waitToast('已加进')
+    t.has('加成功的回话里带那张表的名字与这一项', okAdd.text, '已加进「复习形式」：口述复述')
+    t.eq('表里只多了一项', await t.count(del), before + 1)
+
+    // ⑥ ★ 人工项的本体：复习卡的「形式」下拉里选得到刚加的那项
+    await t.view('review')
+    await t.pressAction('review-edit')
+    t.eq('★ 下拉里多了一项', await t.count('#rvForm option'), opts0 + 1)
+    t.has('★ 多的那一项就是刚加的', await t.text('#rvForm'), '口述复述')
+    t.eq('★ 已有卡片原来选的那一项没被顶掉', await t.value('#rvForm'), form0)
+    // 选它 → 保存：整条链走通（界面 → 词表生效 → 后端按**现在的**词表校验 → 落库）。
+    // 这里直接改 `value`：`review-save` 读的就是它，而这个 select 上没有任何 change 监听
+    //（`data-change` 没挂它）—— 用户选一下和这一句在浏览器里是同一件事。
+    await t.cdp.eval(`(() => { document.getElementById('rvForm').value = 'my_form'; return true })()`)
+    await t.pressAction('review-save')
+    t.ok('保存有回话', (await t.waitToast('已保存')).ok)
+    const back = cardId ? await t.api('GET', `/api/review/items/${cardId}`) : null
+    t.eq('★ 卡上那个新形式真的落库了', back && back.json && back.json.form, 'my_form')
+
+    // ⑦ 收尾：把卡改回原来的形式，再把词表回到默认 —— 别给后面的流留一个"词表里没有的形式"
+    if (cardId && form0) await t.api('PATCH', `/api/review/items/${cardId}`, { form: form0 })
+    await t.view('setting')
+    await t.openSetting('set-vocab')
+    await press(reset, '「复习形式」的回到默认')
+    t.ok('回默认有回话', (await t.waitToast('已回到默认')).ok)
+    t.eq('表回到原来的条数', await t.count(del), before)
+  },
+})
+
+flow({
+  id: '㉒', name: '删除可选：拿一份"别的设备的包"真导一次 —— 默认不删，勾了才删，取消不动库',
+  item: 'B 批 ㉒ 删除可选（剩下的那半：别的设备的包真导一次）',
+  vp: 'desktop',
+  async run(t) {
+    // 人工项的本体是"**拿一份别的设备的包**"——所以这一条里**真的**再起一个服务当那台设备：
+    // 它有自己的库、自己的 device_id、自己的包（不是自己导给自己，那种会被后端拒）。
+    const peerPort = Number(new URL(t.url).port) + 6
+    const peerUrl = `http://127.0.0.1:${peerPort}/`
+    const peer = startServer(peerPort)
+    try {
+      t.ok('（准备）另起一份真库当"另一台设备"', await waitHealth(peerPort))
+      const made = await t.api('POST', '/api/tasks', { title: '别的设备上彻底删掉的那条', is_myday: true }, peerUrl)
+      const yid = made.json && made.json.id
+      t.ok('（准备）那台上建了一条任务', Boolean(yid), JSON.stringify(made).slice(0, 120))
+      if (!yid) return
+      const p1 = await t.api('POST', '/api/sync/export', {}, peerUrl)
+      const path1 = p1.json && p1.json.path
+      t.ok('（准备）导出第一份包（那条行还在里面）', Boolean(path1), JSON.stringify(p1).slice(0, 140))
+      if (!path1) return
+
+      // ① 界面上把那份包导进来 —— 于是本机与"另一台"有了同一行（连 id 都一样）
+      await t.start('setting')
+      await t.openSetting('set-syncpack')
+      await t.type('#syncPath', path1)
+      await t.pressAction('sync-preview')
+      t.ok('先预览有回话', (await t.waitToast('预览：')).ok)
+      await t.pressAction('sync-import')
+      t.eq('导入前有站内二次确认', await t.attr('#modal', 'hidden'), null)
+      t.lacks('默认那一档的确认按钮上不写"删除"', await t.text('#modalOk'), '删除')
+      await t.pressAction('modal-ok')
+      t.ok('导入完成', (await t.waitToast('已导入：')).ok)
+      const listA = await t.api('GET', '/api/tasks')
+      t.ok('★ 那台设备上的行真的进来了（同一行 id 也带过来了）', (listA.json || []).some((x) => x.id === yid))
+      const stillThere = async () => (await t.api('GET', '/api/tasks')).json.some((x) => x.id === yid)
+
+      // ② 那台上**彻底删掉**它（软删进回收站 → 清空回收站 = 真删；墓碑是 DELETE 触发器写的）
+      await t.api('DELETE', `/api/tasks/${yid}`, undefined, peerUrl)
+      const purged = await t.api('DELETE', `/api/tasks/${yid}/purge`, undefined, peerUrl)
+      t.eq('（准备）那台上彻底删掉了它', purged.status, 200)
+      const p2 = await t.api('POST', '/api/sync/export', {}, peerUrl)
+      const path2 = p2.json && p2.json.path
+      t.ok('（准备）第二份包：只剩它的墓碑', Boolean(path2))
+      if (!path2) return
+
+      // ③ 默认那一档（不勾）：预览里不许出现"删除"，导完那一行**还在**
+      await t.type('#syncPath', path2)
+      await t.pressAction('sync-preview')
+      const prev = await t.waitToast('预览：')
+      t.has('预览里如实说明按墓碑跳过/记下墓碑', prev.text, '墓碑')
+      t.lacks('★ 默认那一档的预览里没有"删除"', prev.text, '删除')
+      await t.pressAction('sync-import')
+      t.lacks('默认那一档的确认按钮上也没写"删除"', await t.text('#modalOk'), '删除')
+      await t.pressAction('modal-ok')
+      t.ok('★ 反证：默认那一档导完，本地那一行还在', await stillThere())
+
+      // ④ 勾上「同时应用对方的删除」→ 提示改成人话（含不可撤销），预览说要删 1 行
+      //    注意：上一步导入成功后会 `view(current)` 重渲染 —— 输入框被**重建**（里面是空的），
+      //    那颗勾选框也回到默认。所以每碰一次"导入成功"，路径与勾选都要重新来一遍。
+      await t.type('#syncPath', path2)
+      await t.press('#syncDel', '「同时应用对方的删除」勾选框')
+      t.eq('勾上了', await t.cdp.eval('document.getElementById("syncDel").checked'), true)
+      const hint = await t.text('#syncDelHint')
+      t.has('★ 勾上之后把"这会删东西"说清楚', hint, '不可撤销')
+      t.has('也说了本地改过的那种仍然不删', hint, '本地改过的那种仍然不删')
+      await t.pressAction('sync-preview')
+      t.has('★ 预览明说会删 1 行', (await t.waitToast('预览：')).text, '删除 1 行')
+
+      // ⑤ 取消 = 什么都不动（★ 反证：确认框不是"点了就干"）
+      await t.pressAction('sync-import')
+      t.eq('确认按钮写的是「导入并删除」', await t.text('#modalOk'), '导入并删除')
+      t.has('确认框里带 ⚠️ 那半句（不可撤销）', await t.text('#modalTitle'), '不可撤销')
+      await t.key('Escape')
+      t.eq('Esc 关掉了确认框', await t.attr('#modal', 'hidden'), '')
+      t.ok('★ 反证：取消之后那一行还在', await stillThere())
+
+      // ⑥ 真删（同一个包、同一个勾选，这次点确认）
+      await t.pressAction('sync-import')
+      await t.pressAction('modal-ok')
+      t.has('导入报告里写了删了几行', (await t.waitToast('已导入：')).text, '删除 1')
+      t.ok('★ 勾了才真删：那一行不在了', !(await stillThere()))
+    } finally {
+      try { peer.child.kill() } catch { /* ignore */ }
+    }
+  },
+})
+
+flow({
+  id: '㉖', name: '手机直接上传：断网先记、离线点它给原话、连上才传、重复传不重复计数',
+  item: 'A 批 ㉖ 手机直接上传同步包',
+  vp: 'phone',
+  async run(t) {
+    const TITLE = '手机上断网记的一条'
+    // ① 联网时先逛一下（离线页那半"上次看到的"要有东西可看）
+    await t.start('today')
+    await t.view('tasks')
+
+    // ② ★ 断网**刷新** —— 壳从 Service Worker 里拿出来，自动落回「离线记」（同 ㉗ 那条流）
+    const swReady = await t.waitFor(async () => Boolean(await t.cdp.eval(
+      '!!(navigator.serviceWorker && navigator.serviceWorker.controller)')), 10000)
+    t.ok('壳已经装进 Service Worker（断网还能回到这一页）', swReady)
+    await t.cdp.setOffline(true)
+    t.eq('断网之后浏览器自己知道', await t.cdp.eval('navigator.onLine'), false)
+    await t.reload()
+    t.ok('★ 断网刷新落在「离线记」', await t.count('#offlineStatus') > 0)
+
+    // ③ 断网记一条 → **存进手机队列**，并且如实说"先存在手机上"
+    await t.type('#offTitle', TITLE)
+    await t.pressAction('offline-task-add')
+    t.has('★ 断网时如实说"先存在手机上"', (await t.waitToast('连不上电脑')).text, '先存在手机上')
+    t.has('队列里看得见这一条', await t.bodyText(), TITLE)
+    t.has('待同步计数是 1', await t.text('#offlineStatus'), '待同步 1 条')
+
+    // ④ ★ 反证：**离线时**点「直接传到电脑」→ 直说"等连上再点"，不许转圈再失败
+    await t.pressAction('offline-upload')
+    const off = await t.waitToast('现在连不上电脑')
+    t.has('★ 离线时点它就是这句话', off.text, '先「导出同步包」')
+    t.eq('也没有弹确认框（它一步都没走）', await t.attr('#modal', 'hidden'), '')
+    const notYet = await t.api('GET', '/api/tasks')
+    t.ok('★ 反证：这时候电脑库里没有那条（没有偷偷传）',
+      !(notYet.json || []).some((x) => x.title === TITLE))
+    t.has('队列还在（1 条）', await t.text('#offlineStatus'), '待同步 1 条')
+
+    // ⑤ 连上 → 真传（先问一句，再走电脑上那条**已有的合并路径**）
+    await t.cdp.setOffline(false)
+    t.eq('网接回来了', await t.cdp.eval('navigator.onLine'), true)
+    // ★ 界面自己也得知道网回来了：`netDown` 是"上一次请求有没有连上"那个标记
+    //   （`offlineNow()` 看的就是它 + `navigator.onLine`）。这不是"等一等"，而是**它说不说真话**的
+    //   一半 —— 在它还没发现之前，那个按钮本来就该继续说"连不上"。
+    //   ★ 实测（T-G73）：断网期间**正在飞**的那几个请求失败得晚，会把标记又打回"离线" ——
+    //   所以要"稳一下再判一次"，不然测到的是那一下竞态（不是界面错了）。
+    const stateOf = () => t.cdp.eval('({off: offlineNow(), down: netDown, net: navigator.onLine})')
+    const online = await t.waitFor(async () => {
+      const s = await stateOf()
+      if (!s || s.off !== false) return false
+      await sleep(400)
+      return (await stateOf()).off === false
+    }, 12000, 250)
+    t.ok('★ 界面自己稳当地认为网回来了（离线判据为假）', online, JSON.stringify(await stateOf()))
+    await t.pressAction('offline-upload')
+    t.has('先问一句要不要传', await t.text('#modalTitle'), '传到电脑')
+    await t.pressAction('modal-ok')
+    const sent = await t.waitToast('已传到电脑')
+    t.ok('★ 回话里带合并报告', sent.ok && sent.text.includes('新增'),
+      `提示条里是：${sent.text || '（空）'}`)
+    const inPc = async () => (await t.api('GET', '/api/tasks')).json.filter((x) => x.title === TITLE).length
+    t.eq('★ 电脑库里真的多了一条（就叫这个名字）', await inPc(), 1)
+
+    // ⑥ ★ 传完**再问一次**要不要清空手机队列；这次先不清（下面还要验重复传）
+    t.has('★ 传完又问了一次要不要清空队列', await t.text('#modalTitle'), '清空手机上的队列')
+    await t.pressAction('modal-cancel')
+    t.has('没清：队列还在（1 条）', await t.text('#offlineStatus'), '待同步 1 条')
+
+    // ⑦ ★ 反证：同一条**再传一次** —— 电脑那边不许多出一条（合并幂等）
+    await t.pressAction('offline-upload')
+    await t.pressAction('modal-ok')
+    const again = await t.waitToast('已传到电脑')
+    t.has('第二次的合并报告里没有"新增"', again.text, '新增 0')
+    t.eq('★ 反证：电脑库里还是只有一条（重复点不重复计数）', await inPc(), 1)
+    await t.pressAction('modal-cancel')        // 第二次那个"要不要清空"先留着不清
+
+    // ⑧ 收尾：走「清空（我已导入电脑）」那条路（清之前把后果说清楚）
+    await t.pressAction('offline-clear')
+    t.has('清空前把后果说清楚', await t.text('#modalTitle'), '清空手机上这')
+    await t.pressAction('modal-ok')
+    t.ok('清空有回话', (await t.waitToast('队列已清空')).ok)
+    t.has('待同步回到 0 条', await t.text('#offlineStatus'), '待同步 0 条')
+    t.eq('★ 反证：清队列不会把电脑上那条也清掉', await inPc(), 1)
+  },
+})
+
+flow({
+  id: '㉘', name: '跨端专注镜像：两个真客户端同开 —— 对面开始/结束都看得到，这面一个按钮都没有',
+  item: 'A 批 ㉘ 跨端专注镜像（双窗口版）',
+  vp: 'desktop',
+  async run(t) {
+    const serverPort = Number(new URL(t.url).port)
+    let peer = null
+    try {
+      await t.start('focus')
+      const m0 = (await t.api('GET', '/api/focus/today')).json.focus_minutes
+
+      // ① 第二个**真客户端**：独立浏览器 + 独立 profile（所以它有自己的 `tf_client`）
+      peer = await Cdp.attach(findBrowser(), serverPort + 4, join(TEMP_DIR, `tf-flow-peer-${serverPort}`))
+      t.ok('（准备）第二个真客户端起来了（独立浏览器 / 独立 profile）', Boolean(peer))
+      if (!peer) return
+      const t2 = new T(peer, t.url, 'desktop')
+      await t2.start('focus')
+      t2.has('第二台上：现在什么都没在跑', await t2.bodyText(), '不绑定任务')
+      // 镜像的判据就是"这台的 device_id 不是我" —— 两台要是同一个号，这条流什么都验不到
+      const meA = await t.cdp.eval('clientId()')
+      const meB = await t2.cdp.eval('clientId()')
+      t.ok('（准备）两台是两个**不同的**客户端', Boolean(meA) && Boolean(meB) && meA !== meB, `${meA} vs ${meB}`)
+
+      // ② 这一台开始专注 → 另一台**不用点任何东西**、在 10 秒那一档轮询里自己看到镜像
+      const t0 = Date.now()
+      await t.pressAction('focus-start', { text: '普通计时' })
+      t.has('本机开始计时（右栏是真计时器，带结束按钮）', await t.text('#focusRail'), '结束（计入投入）')
+      const seen = await t2.waitFor(async () => ((await t2.text('#focusRail')) || '').includes('别处正在专注'), 14000, 200)
+      const waitMs = Date.now() - t0
+      t.ok('★ 另一台不用点任何东西就看到「别处正在专注」', seen, `等了 ${waitMs}ms`)
+      t.ok('★ 而且是 10 秒那一档轮询该有的时间（≤12.5s）', waitMs <= 12500, `实测 ${waitMs}ms`)
+      const mirror = await t2.text('#focusRail')
+      t.has('镜像里写了这是哪来的', mirror, '来自另一台设备')
+      t.has('★ 也写了"只看不动"', mirror, '只看不动')
+      t.eq('镜像走的是**另一个**钟（#clockPeer），不是本机那支计时器', await t2.count('#clockPeer'), 1)
+      t.eq('★ 反证：镜像上一个按钮都没有', await t2.count('#focusRail button'), 0)
+      t.eq('★ 反证：也一个 data-action 都没有（不能停对面的、也没有"我也开始"）',
+        await t2.count('#focusRail [data-action]'), 0)
+
+      // ③ 这一台结束 → 另一台 10 秒内变回"没有进行中的专注"
+      const t1 = Date.now()
+      await t.pressAction('focus-finish', { text: '结束（计入投入）' })
+      const gone = await t2.waitFor(async () => !(((await t2.text('#focusRail')) || '').includes('别处正在专注')), 14000, 200)
+      const waitMs2 = Date.now() - t1
+      t.ok('★ 这一台结束后，另一台 10 秒内不再显示镜像', gone, `等了 ${waitMs2}ms`)
+      t.ok('★ 也是 10 秒那一档该有的时间（≤12.5s）', waitMs2 <= 12500, `实测 ${waitMs2}ms`)
+      t.has('另一台回到"当前没有进行中的专注"那一屏', await t2.text('#focusRail'), '当前没有进行中的专注')
+
+      // ④ ★ 反证：这段时间**只记了一笔**投入（镜像那台不会自己也记一笔）
+      const secs = Math.round((t1 - t0) / 1000)
+      const m1 = (await t.api('GET', '/api/focus/today')).json.focus_minutes
+      const grew = Math.round((m1 - m0) * 60)
+      t.ok(`★ 今日专注分钟只涨了一次的量（涨了 ${grew}s，会话约 ${secs}s）`,
+        grew >= secs - 4 && grew <= secs + 4, `涨了 ${grew}s，会话 ${secs}s —— 翻倍会明显超出去`)
+    } finally {
+      peer?.close()
+    }
   },
 })
 
