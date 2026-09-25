@@ -1045,10 +1045,14 @@ def create_app(
         """
         require_local_origin(request)
         try:
-            if "style" in payload:
-                remind_mod.set_style(conn, payload["style"])
-            if "enabled" in payload:
-                remind_mod.set_enabled(conn, bool(payload["enabled"]), db_path=db_path)
+            # ★ T-G71：两笔设置（方式 + 开关）是一件事 —— 一起落库或一起不落。
+            #   ⚠️ 事务盖住的是**数据库行**：`set_enabled` 还会注册 Windows 计划任务，
+            #   那个 SQLite 回滚不了（如实记在 `复盘/跨函数事务-T-G71.md`）。
+            with db.unit_of_work(conn, what="PUT /api/settings/reminder"):
+                if "style" in payload:
+                    remind_mod.set_style(conn, payload["style"])
+                if "enabled" in payload:
+                    remind_mod.set_enabled(conn, bool(payload["enabled"]), db_path=db_path)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except RuntimeError as e:
@@ -1154,24 +1158,27 @@ def create_app(
     def create_task(payload: TaskIn) -> TaskOut:
         try:
             _require_groups(payload.groups)
-            t = tm.create_task(
-                conn,
-                title=payload.title,
-                due_date=payload.due_date,
-                group_name=payload.group_name,
-                repeat_days=payload.repeat_days,
-                parent_id=payload.parent_id,
-                is_myday=payload.is_myday,
-                note=payload.note,
-                priority=payload.priority,
-                flagged=payload.flagged,
-                attach=[dict(i) for i in payload.attach],
-                remind_at=payload.remind_at,
-                task_type=payload.task_type,
-                course_id=payload.course_id,
-            )
-            if payload.groups:
-                tm.set_task_groups(conn, t.id, payload.groups)
+            # ★ T-G71（T-G33 的残留）：建任务与挂分组是**两条 core 调用**、各自 commit ——
+            #   合到一个事务里：中间出数据库级错误时不许留下"半条任务"。
+            with db.unit_of_work(conn, what="POST /api/tasks"):
+                t = tm.create_task(
+                    conn,
+                    title=payload.title,
+                    due_date=payload.due_date,
+                    group_name=payload.group_name,
+                    repeat_days=payload.repeat_days,
+                    parent_id=payload.parent_id,
+                    is_myday=payload.is_myday,
+                    note=payload.note,
+                    priority=payload.priority,
+                    flagged=payload.flagged,
+                    attach=[dict(i) for i in payload.attach],
+                    remind_at=payload.remind_at,
+                    task_type=payload.task_type,
+                    course_id=payload.course_id,
+                )
+                if payload.groups:
+                    tm.set_task_groups(conn, t.id, payload.groups)
             return _out(t, conn)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1248,9 +1255,11 @@ def create_app(
         if "groups" in payload:
             _require_groups(payload["groups"])
         try:
-            t = tm.update_task(conn, task_id, **fields)
-            if "groups" in payload:
-                tm.set_task_groups(conn, task_id, payload["groups"])
+            # ★ T-G71：改字段与改分组也是两条 core 调用 —— 一起成功或一起撤。
+            with db.unit_of_work(conn, what="PATCH /api/tasks/{task_id}"):
+                t = tm.update_task(conn, task_id, **fields)
+                if "groups" in payload:
+                    tm.set_task_groups(conn, task_id, payload["groups"])
         except KeyError:
             raise HTTPException(status_code=404, detail="任务不存在") from None
         except ValueError as e:

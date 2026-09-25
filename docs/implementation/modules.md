@@ -171,6 +171,13 @@
   `sync_tombstones` 删除墓碑 + `sync_logs.result/note`）**、**v18 `school_notices`（学校通知的
   合作接口收件箱）**）；
   LWW 同步（时间戳+version，不静默覆盖）；跨端**同 id 去重**（来源标记尚未落库，见 `traceability.toml` 的 SR-F2.6b）。
+- **跨函数事务（`storage/db.unit_of_work()`，T-G71）**：core 里 60 多个函数各自 `conn.commit()`，
+  而一个 HTTP 处理函数常要把**两条** core 调用当成一件事（建任务 + 挂分组）。缝开在
+  **连接代理层**：`_ThreadLocalConn.commit()` 在事务段里只记账，真提交在段退出时发生
+  （成功一次 `commit`、异常一次 `rollback`）—— core 一行没改。**边界**：只支持代理
+  （真 `Connection` 的 `commit` 拦不住 → 直接 `TypeError`，不静默降级）；**延迟标记住
+  `threading.local()`**（代理全进程一个，标记挂实例上会把别的线程的提交也扣下 —— 并发下
+  `database is locked`，T-G71 实测踩到）；事务盖的是数据库行，不盖系统副作用（如注册计划任务）。
 - **跨端同步包（`core/syncpack.py`，G 批 · T-G8 = 场景 ③）**：`timeflow-sync` v1 的 JSON 包
   （`build_pack`/`export_pack`/`load_pack`/`check_pack`）+ **先规划后执行**的合并
   （`plan_merge` → `merge_pack`，所以"预览"与"真导入"是同一套判断）；三类表三套规则

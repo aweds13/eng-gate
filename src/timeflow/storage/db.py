@@ -17,9 +17,14 @@ import json
 import sqlite3
 import threading
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from timeflow import clock
+
+if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解
+    from collections.abc import Iterator
 
 SCHEMA_VERSION = 18
 
@@ -38,11 +43,33 @@ class _ThreadLocalConn:
 
     这样既修掉并发下的事务互相打断，又不需要改动任何路由签名与测试（最小侵入）。
     用途限定在「多线程服务共享一个 conn 变量」的场景；单线程脚本用 `connect()` 即可。
+
+    ★ 为什么 `commit()` 不是简单转发（T-G71 跨函数事务）：core 里 60 多个函数各自
+    `conn.commit()`，而一个 HTTP 处理函数常常要把**两条** core 调用当成一件事
+    （建任务 + 挂分组）。所以这里加了一层**延迟提交**：在 `unit_of_work()` 里，
+    `commit()` 只记一笔「有写入」，真正提交发生在退出那段的时候 ——
+    这就是"跨函数事务"在这套代码里的落点（SQLite 的隐式事务从第一次写就开着）。
+
+    ★★ 延迟标记必须**跟着连接走**（本卡实测踩到，见 `复盘/跨函数事务-T-G71.md` §7）：
+    一开始把它当成实例属性（`self._defer`），可这个代理是**全进程一个**、被所有线程共用 ——
+    线程 A 进事务后，线程 B 的 `commit()` 也被记成"推迟"，而 A 退出时提交的是 **A 自己的连接**
+    （`_conn()` 按线程取），于是 B 那笔写**永远没人提交**：别的连接看不见它、写锁还一直攥着，
+    并发下直接 `database is locked`（`tests/test_concurrency.py` 当场抓到）。
+    所以它住在 `threading.local()` 里。
     """
 
     def __init__(self, db_path: str) -> None:
         self._db_path = db_path
         self._local = threading.local()
+
+    @property
+    def _defer(self) -> int:
+        """当前线程的"正在 unit_of_work 里"层数（>0 = commit 先记账）。"""
+        return int(getattr(self._local, "defer", 0))
+
+    @_defer.setter
+    def _defer(self, value: int) -> None:
+        self._local.defer = value
 
     def _conn(self) -> sqlite3.Connection:
         conn = getattr(self._local, "conn", None)
@@ -60,9 +87,13 @@ class _ThreadLocalConn:
         return cur
 
     def executescript(self, script: str) -> sqlite3.Cursor:
+        # ★ `executescript` 会**先隐式提交**（sqlite3 的规定）—— 在 unit_of_work 里用它
+        #   等于把事务撕开。本项目没有这样的调用点，所以这里不拦，只留一条实话。
         return self._conn().executescript(script)
 
     def commit(self) -> None:
+        if self._defer:
+            return  # 记账推迟到 unit_of_work 退出时（见类注释）
         self._conn().commit()
 
     def rollback(self) -> None:
@@ -105,6 +136,54 @@ def raw_conn(conn: object) -> sqlite3.Connection:
     if isinstance(conn, sqlite3.Connection):
         return conn
     raise TypeError(f"拿不到真连接：{type(conn)!r}")
+
+
+@contextmanager
+def unit_of_work(conn: object, *, what: str = "") -> Iterator[None]:
+    """把一段里的**多条 core 调用合成一次提交**（跨函数事务）—— T-G33 的残留在这里收口。
+
+    ## 为什么需要它
+
+    `POST /api/tasks` 是"先 `tm.create_task()`（自己 commit）、再 `tm.set_task_groups()`
+    （又自己 commit）"——中间那一步出数据库级错误时，**任务已经落库**：客户端看到报错、
+    库里却多一条，重试就多两条。T-G33 当时把"坏分组"这一类**输入错**先验掉了
+    （`_require_groups`），但"验完之后再出数据库级错误"这半句只能靠事务，记成了残留。
+
+    ## 它怎么做到
+
+    core 里 60 多个函数各自 `conn.commit()`，而 HTTP 那条路上的 `conn` 是
+    `_ThreadLocalConn` 代理 —— 所以在**代理层**把 `commit()` 记下来（`_defer`），
+    真正的提交发生在退出这段的时候：成功 → 一次 `commit`；抛异常 → 一次 `rollback`。
+    SQLite 的隐式事务从第一次写就开着，所以这几笔写天然是一件事。
+
+    ## 边界（不猜、不静默降级）
+
+    - **只支持 HTTP 那条路**（`thread_local()` 的代理）：真 `sqlite3.Connection` 的 `commit`
+      是 C 方法、拦不住 —— 拿它来调这里**直接报错**，不给你一个"以为有事务"的假象
+      （与 `raw_conn` 同一条规矩）。
+    - 事务覆盖的是**数据库行**，不覆盖系统副作用：`PUT /api/settings/reminder` 那条里
+      `set_enabled` 还会注册 Windows 计划任务 —— 那个 SQLite 回滚不了（如实记在复盘里）。
+    - `executescript()` 会先隐式提交，等于撕开事务（本项目没有这样的调用点）。
+    - 外面的 core 若自己 `rollback()`，回滚的是**整个** unit（这正是"有事就全撤"的语义）。
+    """
+    proxy = conn if isinstance(conn, _ThreadLocalConn) else None
+    if proxy is None:
+        raise TypeError(
+            "unit_of_work 只支持 HTTP 服务那条路（db.thread_local() 的代理）："
+            f"真 Connection 的 commit 拦不住，拿它当事务是假象（收到 {type(conn)!r}；{what}）"
+        )
+    proxy._defer += 1
+    try:
+        yield
+    except BaseException:
+        proxy._defer -= 1
+        if proxy._defer == 0:
+            proxy._conn().rollback()
+        raise
+    else:
+        proxy._defer -= 1
+        if proxy._defer == 0:
+            proxy._conn().commit()
 
 
 def migrate(conn: sqlite3.Connection) -> None:
