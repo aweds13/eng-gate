@@ -216,25 +216,38 @@ def test_serve_rejects_unknown_arguments(db_path: Path, capsys: pytest.CaptureFi
 # ------------------------------------------------------------------ 真 stdio（子进程）
 
 
-def _talk(messages: list[dict[str, Any]], args: list[str]) -> tuple[list[dict[str, Any]], str, int]:
-    """真起一个子进程，把消息一行一行喂进去，把回复一行一行读回来。"""
+def _talk(
+    messages: list[dict[str, Any] | bytes], args: list[str]
+) -> tuple[list[dict[str, Any]], bytes, str, int]:
+    """真起一个子进程，把消息一行一行喂进去，把回复一行一行读回来。
+
+    ★ **故意不加 `-X utf8`**（T-G74）：真 MCP 客户端就是照配置直接 spawn `timeflow mcp`，
+    不会替我们加解释器开关。原来这里带着 `-X utf8`，于是"服务端自己钉没钉编码"这件事
+    被整个藏起来了 —— 测试绿着，而真客户端看到的中文是乱码、发一条中文还会把服务端打崩。
+
+    所以这一版**按字节收发**：发 UTF-8、收回来也先按 UTF-8 解（解不开就是缺陷）。
+    `messages` 里的 `bytes` 就是**原样一行**（用它喂不是 UTF-8 / 不是 JSON 的坏行，
+    而且能插在**中间** —— 结尾追加证明不了"坏行之后还活着"）。
+    返回 `(回复列表, stdout 原始字节, stderr, 退出码)` —— 原始字节是给"编码"那条用的。
+    """
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "src")
     env["TF_LOG_PATH"] = "off"
     proc = subprocess.Popen(
-        [sys.executable, "-X", "utf8", "-c", SERVER_SNIPPET, *args],
+        [sys.executable, "-c", SERVER_SNIPPET, *args],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
         env=env,
         cwd=str(ROOT),
     )
-    payload = "".join(json.dumps(m, ensure_ascii=False) + "\n" for m in messages)
+    payload = b"".join(
+        m if isinstance(m, bytes) else (json.dumps(m, ensure_ascii=False) + "\n").encode("utf-8")
+        for m in messages
+    )
     out, err = proc.communicate(payload, timeout=180)
-    replies = [json.loads(line) for line in out.splitlines() if line.strip()]
-    return replies, err, proc.returncode
+    replies = [json.loads(line.decode("utf-8")) for line in out.split(b"\n") if line.strip()]
+    return replies, out, err.decode("utf-8", errors="replace"), proc.returncode
 
 
 def test_real_stdio_round_trip_lists_tools_and_writes_a_memo(db_path: Path) -> None:
@@ -248,7 +261,7 @@ def test_real_stdio_round_trip_lists_tools_and_writes_a_memo(db_path: Path) -> N
     listing = _req(2, "tools/list")
     call = _call("memo", {"text": "MCP 写的一条"})
     call["id"] = 3
-    replies, err, code = _talk([hello, listing, call], ["--db", str(db_path), "--allow-write"])
+    replies, _, err, code = _talk([hello, listing, call], ["--db", str(db_path), "--allow-write"])
     assert code == cli_mod.EXIT_OK, err
     assert [r["id"] for r in replies] == [1, 2, 3], replies
     names = [t["name"] for t in replies[1]["result"]["tools"]]
@@ -261,11 +274,69 @@ def test_real_stdio_round_trip_lists_tools_and_writes_a_memo(db_path: Path) -> N
     assert [m["text"] for m in memos] == ["MCP 写的一条"]
 
 
+def test_real_stdio_speaks_utf8_in_both_directions(db_path: Path) -> None:
+    """★ T-G74：stdio 两头都必须是 UTF-8（规范要求；实测踩过两个方向都坏）。
+
+    这条测试**按字节判**，不看人眼终端里像不像乱码：
+
+      ① **出去**：整个 stdout 必须能被 UTF-8 解码（原来这里解不开：中文按 cp936/GBK 写出去，
+         规范客户端看到乱码）；
+      ② **进来**：客户端发一条**中文标题**的 `add-task`，库里存的必须**一字不差**
+         （原来 cp936 会把 UTF-8 字节解成带孤立代理的怪字符 → `json.dumps(...).encode("utf-8")`
+         抛 `UnicodeEncodeError` → **整个服务端当场崩**，任务根本没建）。
+    """
+    title = "中文标题：把第三章习题做完"
+    hello = _req(1, "initialize", {"protocolVersion": "2025-06-18"})
+    call = _call("add-task", {"title": title, "is_myday": True})
+    call["id"] = 2
+    replies, raw, err, code = _talk([hello, call], ["--db", str(db_path), "--allow-write"])
+    assert code == cli_mod.EXIT_OK, err
+    raw.decode("utf-8")  # ① 解不开就是缺陷（UnicodeDecodeError 会让这条测试红）
+    assert [r["id"] for r in replies] == [1, 2], (replies, err)
+    text = replies[1]["result"]["content"][0]["text"]
+    assert title in text, text
+    assert replies[1]["result"]["isError"] is False, text
+
+    tasks = TestClient(create_app(str(db_path))).get("/api/tasks").json()  # ② 真落库、一字不差
+    assert [t["title"] for t in tasks].count(title) == 1
+
+
+def test_real_stdio_survives_a_bad_line(db_path: Path) -> None:
+    """★ T-G74：一条坏消息（不是 UTF-8 的字节 / 不是 JSON）**不许打死这个循环**。
+
+    与 T-G66"别把栈丢给用户"是同一件事，只是对面从人换成了客户端：客户端拿到一条 JSON-RPC
+    错误还能接着用；拿到 EOF 就只能以为"这个服务坏了"。
+
+    ★ 第一版修法（只把 `sys.stdin` 钉成 UTF-8）**不够**：实测一行坏字节之后，TextIOWrapper
+    整个进入坏状态 —— 连**它前面**那条正常请求的回话都拿不到（`mcp_badline_probe.py`）。
+    所以现在按字节逐行读、逐行解码。
+    """
+    replies, _, err, code = _talk(
+        [
+            _req(1, "initialize", {}),
+            b"\xff\xfe\x00 not utf-8\n",          # ① 不是 UTF-8 的字节
+            b"{not json at all\n",                # ② 不是 JSON
+            _req(4, "tools/list"),                # ③ 坏行**之后**的正常请求
+        ],
+        ["--db", str(db_path)],
+    )
+    assert code == cli_mod.EXIT_OK, err
+    assert len(replies) == 4, replies
+    ids = [r.get("id") for r in replies]
+    # 初始化（id=1）与最后那条正常请求都得有回话 —— 这正是"坏行没把流搞坏"的证据
+    assert ids == [1, None, None, 4], ids
+    assert "tools" in replies[3]["result"], replies[3]
+    bad = [r for r in replies if "error" in r and r["error"]["code"] == server.JSONRPC_PARSE_ERROR]
+    assert len(bad) == 2, replies
+    assert any("不是 UTF-8" in r["error"]["message"] for r in bad), bad
+    assert any("不是合法 JSON" in r["error"]["message"] for r in bad), bad
+
+
 def test_real_stdio_without_the_switch_has_no_write_tools_and_writes_nothing(
     db_path: Path,
 ) -> None:
     """同一个子进程，不给开关：清单里没有 `memo`，硬调它得到 `isError`，库里也没有它。"""
-    replies, err, code = _talk(
+    replies, _, err, code = _talk(
         [
             _req(1, "tools/list"),
             _call("memo", {"text": "不该出现"}),

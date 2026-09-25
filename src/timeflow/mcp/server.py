@@ -37,6 +37,11 @@
   这一条写进了盘点清单，不在这里声称"兼容"。
 - 传输只做 **stdio**（没做 HTTP/SSE 那种）：本地工具，够用且最省事。
 - `tools/list` 里**没有** `resources` / `prompts` / `logging`：只有工具。
+- ★ **stdio 的编码由我们自己钉成 UTF-8**（T-G74，见 `_pin_stdio_utf8`）：规范要求消息是 UTF-8，
+  而 Python 的 `sys.stdout` 在 Windows 上默认跟**控制台代码页**走（这台是 cp936）——
+  实测过：中文出去是 GBK（规范客户端看到乱码）、中文进来会把服务端**打崩**
+  （cp936 解出孤立代理 → `json.dumps(...).encode("utf-8")` 抛 `UnicodeEncodeError`）。
+  **只钉这里，不动交互式命令行**：命令行输出到老控制台，本地编码反而是对的。
 """
 
 from __future__ import annotations
@@ -47,6 +52,7 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any
 
+from timeflow import logs
 from timeflow.cli import main as cli_main
 from timeflow.cli import registry
 
@@ -61,8 +67,74 @@ SERVER_NAME = "timeflow"
 JSONRPC_PARSE_ERROR = -32700
 JSONRPC_METHOD_NOT_FOUND = -32601
 JSONRPC_INVALID_PARAMS = -32602
+JSONRPC_INTERNAL_ERROR = -32603
 
 _MODESTR = {"int": "integer", "bool": "boolean", "str": "string"}
+
+
+def _pin_stdio_utf8() -> None:
+    """把 stdio 三件套钉成 **UTF-8**（T-G74）。
+
+    为什么必须钉：MCP 的 stdio 传输规定消息是 UTF-8，而 Python 在 Windows 上的
+    `sys.stdin/stdout/stderr` 默认走**控制台代码页**（这台是 cp936）。不钉的实测后果：
+
+      · **出去**：中文按 GBK 写 → 规范客户端解出来是乱码（`mcp_encoding_probe.py` 读过原始字节）；
+      · **进来**：客户端发的 UTF-8 被按 cp936 解 → 字符串里出现孤立代理 →
+        `json.dumps(...).encode("utf-8")` 抛 `UnicodeEncodeError`，**整个服务端当场崩**。
+
+    **只钉这里，不动交互式命令行**：命令行是写给人看的、落在 Windows 老控制台上，
+    本地编码反而是对的（钉成 UTF-8 会让 `cmd.exe` 里全是乱码）。协议是机器对机器，才必须 UTF-8。
+
+    被换成 `StringIO`（测试里 redirect 过）时**不猜、不报错**：没有 `reconfigure` 就跳过。
+    """
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="strict", newline="\n")
+        except (ValueError, OSError):  # pragma: no cover —— 平台/流类型不给改时不至于炸
+            continue
+
+
+def _emit(payload: dict[str, Any]) -> None:
+    """把一条协议消息写出去（**一行一个 JSON-RPC**，只有这一处写 stdout）。
+
+    走**字节**：JSON 按 UTF-8 编码后直接写 `sys.stdout.buffer`，不经过文本层 ——
+    文本层的编码由 `_pin_stdio_utf8` 钉住，但"钉不住/被换掉"时这里也不受影响。
+    （测试里 `sys.stdout` 是 `StringIO`，没有 `.buffer`：那就退回文本写。）
+    """
+    data = json.dumps(payload, ensure_ascii=False) + "\n"
+    buffer = getattr(sys.stdout, "buffer", None)
+    if buffer is None:
+        sys.stdout.write(data)
+        sys.stdout.flush()
+        return
+    buffer.write(data.encode("utf-8"))
+    buffer.flush()
+
+
+def _read_line() -> str | None:
+    """读一行协议消息（**按字节读、自己解 UTF-8**）；`None` = EOF。
+
+    为什么不用 `for line in sys.stdin`：那条路是 TextIOWrapper 在解码，**一行坏字节会让整个流
+    进入坏状态** —— 实测（`gates/diag/probes/mcp_badline_probe.py`）：一行不是 UTF-8 的字节之后，
+    连它**前面**那条正常请求的回话都拿不到，循环直接 EOF 退出。按字节读、逐行解码，
+    坏行就只坏那一行。
+
+    坏字节**故意抛给调用方**（不在这里 `errors="replace"`）：替换符会把乱码当成合法内容
+    一路写进库里，静默改字比回一条错误坏得多。
+    """
+    buffer = getattr(sys.stdin, "buffer", None)
+    if buffer is None:  # 被换成文本流（测试里 redirect 过）：
+        text = sys.stdin.readline()
+        return None if text == "" else str(text)
+    # 注上类型：`getattr(sys.stdin, "buffer", None)` 拿到的是 `Any`，直接 `return ...decode()`
+    # mypy 会报 "Returning Any from function declared to return str | None"（门禁拦过一次）。
+    raw: bytes = buffer.readline()
+    if not raw:
+        return None
+    return raw.decode("utf-8")
 
 
 def _default_value(param: registry.Param) -> Any:
@@ -253,6 +325,14 @@ def serve(tail: list[str], *, as_json: bool = False) -> int:
 
     `--allow-write` 从 `tail` 里读 —— MCP 客户端的配置就是
     `command = timeflow` / `args = ["mcp", "--allow-write"]`，开关必须能从 args 里给。
+
+    两条防线（T-G74，都在这个循环里，缺一条就会真出事）：
+
+      1. **编码**：先 `_pin_stdio_utf8()` —— 不然中文出去是 GBK、进来把服务端打崩；
+      2. **一条坏消息不许打死循环**：客户端发来的任何东西（不是 UTF-8 的字节 / 不是 JSON /
+         处理时冒出来的异常）都只换**一条错误回话**，循环继续。
+         这一条与 T-G66 那句"别把栈丢给用户"是同一件事，只是对面从人换成了客户端：
+         客户端拿到一条 JSON-RPC 错误还能继续用，拿到 EOF 就只能以为"这个服务坏了"。
     """
     db = cli_main.default_db()  # 与 CLI 同一个默认库（同源，不另开一份数据）
     allow_write = cli_main.WRITE_FLAG in tail
@@ -276,7 +356,22 @@ def serve(tail: list[str], *, as_json: bool = False) -> int:
         )
         return cli_main.EXIT_USAGE
 
-    for line in sys.stdin:
+    # ★ 从这里起才是**协议**（前面那些 `--help` / 参数错是给人看的，走本地编码）。
+    _pin_stdio_utf8()
+
+    while True:
+        try:
+            line = _read_line()
+        except UnicodeDecodeError as exc:
+            # 不是 UTF-8 的字节 = 协议违规。**回一条错误、继续服务**（坏行只坏那一行）。
+            _emit({
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": JSONRPC_PARSE_ERROR, "message": f"这一行不是 UTF-8：{exc}"},
+            })
+            continue
+        if line is None:  # EOF：客户端走了
+            break
         text = line.strip()
         if not text:
             continue
@@ -288,18 +383,33 @@ def serve(tail: list[str], *, as_json: bool = False) -> int:
                 "id": None,
                 "error": {"code": JSONRPC_PARSE_ERROR, "message": f"不是合法 JSON：{exc}"},
             }
-        else:
-            if not isinstance(message, dict):
-                response = {
-                    "jsonrpc": "2.0",
-                    "id": None,
-                    "error": {"code": JSONRPC_PARSE_ERROR, "message": "消息必须是对象"},
-                }
-            else:
-                answer = handle(message, db=db, allow_write=allow_write)
-                if answer is None:
-                    continue
-                response = answer
-        sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
+            _emit(response)
+            continue
+        if not isinstance(message, dict):
+            _emit({
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": JSONRPC_PARSE_ERROR, "message": "消息必须是对象"},
+            })
+            continue
+        try:
+            answer = handle(message, db=db, allow_write=allow_write)
+        except Exception as exc:  # noqa: BLE001 —— 协议边界：任何异常都只换一条错误回话
+            logs.log_event(
+                "mcp_message_error",
+                method=str(message.get("method") or ""),
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            print(f"[mcp] 处理这条消息时出错：{type(exc).__name__}: {exc}", file=sys.stderr)
+            answer = {
+                "jsonrpc": "2.0",
+                "id": message.get("id"),
+                "error": {
+                    "code": JSONRPC_INTERNAL_ERROR,
+                    "message": f"服务端处理这条消息时出错：{type(exc).__name__}: {exc}",
+                },
+            }
+        if answer is None:
+            continue
+        _emit(answer)
     return cli_main.EXIT_OK

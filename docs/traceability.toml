@@ -525,6 +525,26 @@ evidence = [
 ]
 gaps = "**它收的是 T-G33 复盘里那句如实记下的残留**：「验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**」。现象是：`POST /api/tasks` 先 `create_task`（自己提交）再 `set_task_groups`（又自己提交），**第二笔一崩**，客户端看到报错、库里却躺着一条没有分组的任务，重试就两条。**做法（缝开在代理层，不动 core）**：HTTP 那条路上的 `conn` 是 `_ThreadLocalConn` 代理（T-G18 并发修复留下的），于是让它的 `commit()` 在 `unit_of_work()` 里**只记账**，真提交发生在退出那一刻（成功一次 `commit`、抛异常一次 `rollback`）—— SQLite 的隐式事务从第一次写就开着，所以这几笔写天然是一件事；**core 里 60 多个 `commit()` 一个都没改**，也没引框架。**★ 先量再改**：写了个 AST 扫描（判据搬进了 `tests/test_unit_of_work.py`）数「一个处理函数里调了几个会自己 commit 的 core 函数」，实测**只有 6 个**：3 个包事务（`create_task` / `update_task` / `put_reminder_settings`）、3 个进**带理由的豁免清单**（`create_memo` / `delete_memo` / `ledger_output` —— 第二笔是 `vault.try_export` 导出一份 md，是**派生**产物且必须在提交之后）。**清单进了 pytest**：多一个少一个都红、豁免理由短于 10 字也红、还有一条「扫描器真的看得到东西」的反空转判据 —— 以后新写一个多写处理函数会被当场拦下。**★ 边界（不假装）**：`unit_of_work` 只认代理，真 `sqlite3.Connection` 的 `commit` 拦不住，拿它来调**直接 `TypeError`** 并说清原因（与 `db.raw_conn()` 同一条规矩：不猜、不静默降级）；事务盖的是**数据库行**、不盖系统副作用（`PUT /api/settings/reminder` 还会注册 Windows 计划任务 —— 包事务仍然更好：两笔设置行现在同生共死，但「计划任务 vs 设置行」仍有一个极小窗口，如实记着）；`executescript()` 会先隐式提交（无调用点）；段内某笔失败被上层吞掉再继续时不会单独撤（没有 savepoint）。**验收**：`tests/test_unit_of_work.py` **11 条** —— 机制层（段里**另一条连接看不到**、退出才看得见）/ 回滚层（整段撤 + 嵌套只提交一次）/ 接口层（让第二笔**真抛** `sqlite3.OperationalError` → 断言第一笔**确实跑过**且库里空的；改任务那条连标题一起撤；对照组正常路径两笔都在）/ 拒绝层（真 Connection → TypeError）/ 清单层 3 条 / 并发层 1 条。**踩到的坑**：★★ **延迟标记第一版挂在实例上**（`self._defer`），可这个代理是**全进程一个**、所有线程共用 —— 线程 A 进事务后 B 的 `commit()` 也被推迟，而 A 退出时提交的是 A 自己的连接，B 那笔写于是**永远没人提交**（并发下 `database is locked`）；**抓到它的是 `tests/test_concurrency.py`**（T-G18 留下的老守卫），修法是标记住进 `threading.local()` + 补一条确定性最小复现。★ 另一条：第一版扫描器只解析包的 `__init__.py`，而 `timeflow.core.tasks` 是**包**（`set_task_groups` 真身在 `groups.py`）→ 量出来的清单是**假的**（只有 1 条）；扫包必须扫整棵树，并配一条「扫描器真看得到」的测试盯着它（与 T-G40/T-G69 同一族教训：判据自己也会撒谎）。**没动的**：core、界面、路由（一条都没加）、45 份黄金。**工程债三条至此全清**（`T-G40 §六` 签名 T-G69 / 非文字对比度 3.0 表 T-G70 / `T-G33` 残留 T-G71）。"
 
+[entries."T-G74"]
+id = "T-G74"
+title = "缺陷：MCP 的 stdio 编码 —— 规范要求 UTF-8，而中文出去是 GBK、进来直接把服务端打崩（两头钉 UTF-8 + 坏行不许打死循环）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/MCP编码缺陷-T-G74.md",
+  "text:src/timeflow/mcp/server.py::def _pin_stdio_utf8() -> None:",
+  "text:src/timeflow/mcp/server.py::def _read_line() -> str | None:",
+  "text:src/timeflow/mcp/server.py::JSONRPC_INTERNAL_ERROR = -32603",
+  "text:src/timeflow/mcp/server.py::buffer.write(data.encode(",
+  "text:src/timeflow/mcp/server.py::只钉这里，不动交互式命令行",
+  "text:tests/test_mcp_line.py::def test_real_stdio_speaks_utf8_in_both_directions(",
+  "text:tests/test_mcp_line.py::def test_real_stdio_survives_a_bad_line(",
+  "text:tests/test_mcp_line.py::故意不加 `-X utf8`",
+  "text:docs/人工验收-照着点.md::2026-09-25 补（T-G74）",
+  "test:test_mcp_line.py",
+]
+gaps = "**触发**：用户 2026-09-25 选「用 DSH 接一次」（D 组那条人工项）→ 要给他一条**能真用**的客户端配置，于是先按客户端真实的方式手动握了一次手（真子进程真 stdio，`timeflow.exe mcp`）→ 握手本身是通的（14 个只读工具、写工具不列出、`db_missing` 不建库），**但编码是坏的**。**怎么证的（不靠人眼看终端）**：三个探针读**原始字节** —— ① `mcp_encoding_probe.py`：那一行 `decode(\"utf-8\")` **失败**（invalid start byte @130）、`gbk` 成功 → stdout 上是 GBK；② `mcp_inbound_probe.py`：发一条**中文标题**的 `add-task`，服务端当场崩：`UnicodeEncodeError: 'utf-8' codec can't encode character '\\udcad' ... surrogates not allowed`，任务没建、客户端拿不到任何回话；③ `mcp_badline_probe.py`：一行坏字节之后 TextIOWrapper 整个进入坏状态（连它**前面**那条正常请求的回话都拿不到）。**根因**：`for line in sys.stdin` 与 `sys.stdout.write` 都按**语言环境编码**走（这台 cp936）—— 客户端按规范发 UTF-8，被 cp936 解成带**孤立代理**的怪字符（JSON 结构还在，所以**不报错、静默改字**），该字符串再被 `json.dumps(...).encode(\"utf-8\")` 编码时抛出，没兜住就整个进程退掉。**为什么以前的测试全绿（最该记的一条）**：`tests/test_mcp_line.py` 的\"真 stdio\"起子进程时带着 **`-X utf8`** 且 parent 侧 `encoding=\"utf-8\"` —— **正好把要验的那件事关掉了**；真客户端不会替我们加解释器开关（照配置直接 spawn `timeflow.exe mcp`）。与 T-G69/T-G71 同一族：**判据自己会在错的地方替被测者兜底**。**修法三件**：① `_pin_stdio_utf8()` 把 stdin/stdout/stderr 钉成 UTF-8 —— ★ **只钉 MCP 这条协议，不动交互式命令行**（命令行落在 Windows 老控制台上，本地编码反而是对的；`--help` 与参数错在钉之前就返回）；② ★ **协议数据走字节不走文本层**（`_read_line()` / `_emit()`：JSON 自己 `.encode(\"utf-8\")` 写 `sys.stdout.buffer`，读也从 `sys.stdin.buffer` **逐行解码**）—— **第一版只做第 ① 条实测不够**（坏行会把流搞坏），改完实测 id 序列 `[1, None, None, 4]`；③ **一条坏消息不许打死循环**：坏字节 / 坏 JSON / 处理时冒出来的异常一律只换一条 JSON-RPC 错误（`-32700` 与新增的 `-32603`），循环继续 —— 与 T-G66「别把栈丢给用户」同一件事，只是对面从人换成了客户端；★ 坏字节**故意不用** `errors=\"replace\"`（替换符会把乱码当合法内容写进库，**静默改字比回错误坏**）。**验收**：`tests/test_mcp_line.py` 14 条全过，新增两条最值钱 —— ① stdout 原始字节能被 UTF-8 解码 + 中文标题**一字不差**落库、回话里也是它；② 坏字节与坏 JSON 插在**中间**，回两条 `-32700` 而**后面那条正常请求照样有回话**。**顺带交付**：用户的 DSH 配置（`cordis.patch.yml` 的 `insert` 一条 `@deepseek-ai/dsh-mcp-client`，`command` 用装的 `.exe` 入口、`args: ['mcp']`、`cwd` 给死；插件包不用另装，它是 dsh 自己的依赖），写进 `docs/人工验收-照着点.md` D 组 —— **但那条人工项仍留着**：能证明的是协议层通、字节是对的、边界在，\"DSH 里真接上、模型真调到\"要人在界面上点一次。**边界**：仍没有第三方 MCP SDK（\"兼容\"只证到按规范手写的握手 + 真字节 UTF-8）；传输仍只做 stdio。**没动的**：CLI 输出编码、契约、命令表、界面、45 份黄金。教训进 `复盘/视觉线地图.md` §6。"
+
 [entries."T-G73"]
 id = "T-G73"
 title = "人工验收搬家·第五批（SR-NF1 / N30）：⑭ 词表 / ㉒ 删除可选 / ㉖ 手机上传 / ㉘ 跨端镜像 搬给行为流层（22 条流 / 292 项断言）—— 「另一台设备/另一个客户端」真起"
