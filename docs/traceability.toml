@@ -1085,6 +1085,20 @@ evidence = [
 ]
 gaps = "**用户 2026-09-23**：「AI 原生的 CLI 这个可以加进来吗？会不会更加方便后面的维护，以及功能的扩展」+「4 个面集中到一个点……**排最后，先做命令表**」。命令表 T-G31 与 ⌘K 面板 T-G61 之后，这是 T-G30 §4.3 的**第 2 步（只读 CLI）**。**这一步的验收标准不是「有没有 CLI」，而是「CLI 里有没有一行自己算出来的东西」** —— 有一行就是第二个口径（那正是本项目一路在消的东西）。**落点**：`src/timeflow/cli/` 七个小文件 —— `table.py` 读命令表（与 `check_commands.py` **共用同一个读法**）、`registry.py` 14 条命令 = (名字, 契约 OP, 路由, 参数, 排版)、`call.py` 取数、`render.py` 排版（**只排版不取数不算数**）、`main.py` 参数/输出/退出码/自描述。**★ 取数走进程内同一个 HTTP 边界**：不是直接调 `core/`（那要把 `api/app.py` 的参数校验与字段形状再写一遍 = 把「四个面各写一遍」从业务逻辑搬到校验逻辑上），而是 `create_app()` + 同一套路由与中间件，**只把 socket 换成一次 ASGI 调用** —— 不起服务、不占端口（不会和正在跑的窗口抢 8520），库路径与桌面端同源。**命令**：`today`/`plan`/`overdue`/`due`/`done`/`week`/`trend`/`habits`/`check`/`tasks`/`upcoming`/`focus`/`board`/`sync` + `commands`（自描述）。**入口只加不改**：`timeflow` 不带参数**仍然开窗口**，只有第一个词是已知子命令或 `-h/--help` 才走命令行。**AI 原生六条**逐条落地：结构化 JSON（边界原样，不重排不改名）/ 自带参数 schema（`commands --json` 的 params，正是 MCP tool schema 的原料）/ 非交互 / 稳定退出码 `0` 成功·`1` 用法错·`2` 接口错·`3` 找不到命令表（`--json` 时 stderr 上 `{error:{code,detail}}`）/ 幂等可逆破坏性随表（`commands --table`）/ 自描述；**stdout 只放数据、错误一律进 stderr**。**「它不是第二套命令」是机器判的**：`check_commands.py` 新增「命令行投影」一节，五条判定 —— ① 只读（路由必须 GET，且挂的 OP 的 `kind` 必须是 read/derive；写操作 CLI 是另一张卡，要等 AI 边界口径）；② 路由必须**真是**那条 OP 的路由（`GET /api/nope` 当场红）；③ 命令 ↔ 表里的 `cli` 字段**双向互相指认**；④ 命令名不重复；⑤ 覆盖率报出来（**洞是进度不是错误**）。**只读全覆盖**（T-G30 §4.4 的口径）：13 条只读操作 → **覆盖 12 条**，唯一空着的 `OP-43`「配置加载」**压根没有路由**（入口是启动时的校验与注入）—— 这一条写进表里的 `note`、也钉在测试里（`rows_without_cli == [\"OP-43\"]`），免得下一个人以为是漏填。**验收**：`tests/test_cli_line.py` **19 条**（最值钱的三条：① `test_every_command_is_a_projection_of_the_same_route` 逐条命令断言 **CLI 的 `--json` == TestClient 直接打同一条路由的 JSON** —— 这是「不自己算口径」的机器形态；② `test_cli_does_not_touch_the_database_or_the_domain_layer` 用 `ast` 读 import 语句，`src/timeflow/cli/**` 不许出现 `sqlite3`/`timeflow.core`/`timeflow.storage`，而 `timeflow.api.app` 必须在；③ 不带参数仍开窗口 —— 断 `SystemExit` 与「`uvicorn.Server` 有没有被构造」，不靠感觉）+ `tests/test_check_commands.py` **+3**（真仓库覆盖率 / 合成假命令的路由不匹配与「表里没写」/ 拒绝 POST 与写操作）。**顺带**：T-G62 那条时钟缝是产品层的，所以 `TIMEFLOW_FAKE_TODAY` 对 CLI **免费生效**（`timeflow today` 第一行就是假日子）—— 当初做成「一处出口」的回报。**没做 / 边界**：写操作 CLI（第 4 步，卡在「哪些操作必须在 CLI 里可达」这句口径）与 MCP（第 3 步，原料已备齐：`commands --table --json` + params）；**不连正在跑的服务**（每次自己开一个进程内 app，行为确定；代价约 0.3–0.5s 启动）；stderr 上会有一行 `app_start` 的 JSON（真发生的事；要干净就 `TF_LOG_PATH=off`）；局域网配对门在这条路上不判定（来源写死回环、`allow_lan=False`，**CLI 不是对外服务**）；`pip install` 出的包不一定带 `docs/commands.toml`，所以自描述找不到表时退 3，数据命令不受影响（路由绑定写在 registry，由门禁逐条核对 —— 与 ⌘K 面板同一个做法）。"
 
+[entries."T-G67"]
+id = "T-G67"
+title = "文档更正：AC-11「桌面形态」的状态已过期（pywebview 早已装上）—— 三处一起改，销掉一个幻影缺口"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/桌面形态状态更正-T-G67.md",
+  "text:docs/ACCEPTANCE.md::pywebview 6.2.1 已装",
+  "text:docs/implementation/architecture.md::**pywebview 已装（6.2.1）**",
+  "text:复盘/全量审计报告-五层一致性与缺口登记.md::2026-09-25 销账",
+  "text:src/timeflow/app/main.py::print(f\"[退回浏览器] 打不开窗口：import webview 失败（{exc}）\")",
+]
+gaps = "**怎么发现的**（不是特意找它，是「有要修复的吗」之后顺手扫的）：扫 `docs/ACCEPTANCE.md` 里所有 `⚠️/未验证` 标记，只有一条 —— AC-11「pywebview 未安装、实际回退浏览器（审计 GAP-NF-11）」。**实测**：`importlib.metadata.version('pywebview')` = **6.2.1**（2026-09-21 用户定「装 pywebview、走窗口形态」时就装了），`tools/serve.py --window` 与 `timeflow.app.main` 都在、都会在开不出窗口时**打印原因**再退回浏览器。**所以同一句过期的话漂在三处**：`docs/ACCEPTANCE.md`（AC-11 那格）、`docs/implementation/architecture.md`（形态现状那段）、`复盘/全量审计报告-五层一致性与缺口登记.md`（GAP-NF-11 那行 🟡）—— 而交接文档里它**早就写着「✅ 已办」**，两下自相矛盾。**改法**：三处都改成「依赖与入口就位（pywebview 6.2.1）；**无 GUI 的验证环境起不了窗口**，『窗口长什么样/手感』仍是人工验收项」，并把 GAP-NF-11 标成 **✅ 销账**（附更正日期与原因）。**特意保留**的那半句：「仍欠人眼」—— 环境起不了窗口是事实，不能因为「依赖装了」就说窗口验过了（那正是审计报告当初抓的那 6 处文档失真之一）。"
+
 [entries."T-G66"]
 id = "T-G66"
 title = "只读 CLI 的环境错加固（T-G64 的落地后自检）：库不存在不许建库、库/表打不开给稳定码而不是栈"
