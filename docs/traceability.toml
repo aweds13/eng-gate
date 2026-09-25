@@ -521,6 +521,21 @@ evidence = [
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。 ★ **2026-09-25（T-G71）这条残留收口了**：`db.unit_of_work()` 在连接**代理层**把 `commit()` 推迟到退出那一刻（core 一个 `commit()` 都没改），本条的 `create_task` / `update_task` 两条路都包了事务 —— 第二笔抛数据库级错误时**库里一个字节都不留**（`tests/test_unit_of_work.py` 逐条钉，且用「第一笔确实跑过」证明不是空转）。详见 `复盘/跨函数事务-T-G71.md`。"
 
 
+[entries."T-G85"]
+id = "T-G85"
+title = "外包链路接通真 CLI：改走**独立安装**的 CodeBuddy Code（2.158.0，带 TUI）—— 派活器优先它、加 `--permission-mode`、模型换成 `deepseek-v4.1-flash`；同轮交付卡 002 规格"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/外包卡-002-修T-G79幂等写库.md",
+  "text:tools/wb_dispatch.py::NPM_CLI_PARTS = (\"npm\", \"node_modules\", \"@tencent-ai\", \"codebuddy-code\", \"bin\", \"codebuddy\")",
+  "text:tools/wb_dispatch.py::DEFAULT_MODEL = \"deepseek-v4.1-flash\"",
+  "text:tools/wb_dispatch.py::DEFAULT_PERMISSION_MODE = \"bypassPermissions\"",
+  "text:复盘/外包-卡表与规矩.md::deepseek-v4.1-flash",
+  "test:test_wb_dispatch.py",
+]
+gaps = "**为什么有这张卡**：卡 001 的独立复核（T-G82 派出的第一张卡）证明链路成立，但**派不出去第二张** —— WorkBuddy 自带那份 CLI 是**无头版**（`cli/dist/` 只有 `codebuddy-headless.js` 与 `codebuddy-lite-wb.mjs`，**没有** `dist/codebuddy.js`；我读过 `app.asar` 目录表确认：不在包里也不在盘上），于是 `config` / `doctor` / `install` 全报 `Cannot find module '../dist/codebuddy'`，**没有 TUI 就没有 `/login` 可敲**（主控我先前让用户去敲 `/login` 是错的，已更正）。**做法（用户 2026-09-26 同意装独立版）**：`npm i -g @tencent-ai/codebuddy-code@latest` → **2.158.0**（bin 在 `%APPDATA%\\npm\\codebuddy.cmd`，含 `dist/codebuddy.js` 24.7MB = TUI 本体）；用户按 TUI 提示把仓库加入信任（`~/.codebuddy/settings.json` 的 `trustedDirectories` 已是 `D:/repo/engineering/**`，即「信任本目录及子目录」），登录走 **Chinese Site**（凭据域名 `copilot.tencent.com`）。主控三条实测：`--version` → 2.158.0；`-p 「回复四个字：连接成功」` → **连接成功**；★ **工具链**：Grep 可用（数出 `tools/*.mjs` = 6，正确）、Bash 跑 git 可用，但 **`python …` 被权限系统拒**（它自己提示改用 `--permission-mode bypassPermissions`）→ 所以派活器新增该参数并**默认 bypassPermissions**（否则工人跑不了 pytest，「修完自己验」就是空话）。**模型**：CLI 默认是 **`hy4-preview`（腾讯混元 4 preview）**，实测 JSON 回的是 `「model」: 「hy4-preview-f」`；2.158.0 的可用列表里**已经没有**旧的 `deepseek-v3-2-volc` —— 用户点名的 **`deepseek-v4.1-flash`** 在列表里，主控真打一句确认：回 `「model」: 「deepseek-v4.1-flash」`、`「text」: 「OK」`、`is_error: false` → 派活器默认值改成它（**不加就是混元在干**）。**顺带核过的配置**：`sandbox.enabled=false`、`allowUnsandboxedCommands=true`、`includeCoAuthoredBy=false`（不会多一条 co-author trailer）、`denyRead` 含 `~/.ssh/` 与授权目录、无 MCP、仓库里没有 `CODEBUDDY.md`/`AGENTS.md`/`.codebuddy`（所以规矩必须全写在卡规格里 —— 这正是我们那套「工人入口」的用意）；`codebuddy doctor` 300s 超时（网络/自更新检查，不影响派活）。**同轮交付**：卡 002 规格 `复盘/外包卡-002-修T-G79幂等写库.md`（第一张**真写代码**的外包卡：修 T-G79 那句「幂等=不写库」的错话 + 整表重写的根因；口径 6 条 / 改文件白名单 / 红线 / **必须先跑红再跑绿** / 四行 trailer / 台账号 T-G86）。**没做**：卡 002 还没派活（这张卡只到「链路可用 + 规格就位」）。"
+
 [entries."T-G84"]
 id = "T-G84"
 title = "主控复核器（`tools/wb_review.py`）：把「这一笔提交算不算数」做成一条命令 —— audit / 四个 trailer / 门禁为谁而跑 / 改动越界 / 工作区，五条一次过（12 条测试）"
@@ -560,7 +575,7 @@ evidence = [
   "file:tools/wb_dispatch.py",
   "file:复盘/外包派活脚本-T-G82.md",
   "file:复盘/外包卡-001-独立复核T-G79.md",
-  "text:tools/wb_dispatch.py::def preflight(card: str, spec: str, *, force: bool, check_auth: bool) -> tuple[list[str], Path]:",
+  "text:tools/wb_dispatch.py::def preflight(card: str, spec: str, *, force: bool, check_auth: bool,",
   "text:tools/wb_dispatch.py::AUTH_NEEDLE = \"Authentication required\"",
   "text:tools/wb_dispatch.py::\"--output-format\", \"stream-json\",",
   "text:复盘/外包-卡表与规矩.md::tools/wb_dispatch.py",

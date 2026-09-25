@@ -40,7 +40,7 @@ def sandbox(tmp_path: Path, monkeypatch) -> Path:
     node.write_text("", encoding="utf-8")
     cli.write_text("", encoding="utf-8")
     monkeypatch.setattr(wd, "ROOT", tmp_path)
-    monkeypatch.setattr(wd, "paths", lambda: (node, cli))
+    monkeypatch.setattr(wd, "paths", lambda *a, **k: (node, cli))
     monkeypatch.setattr(wd, "git_dirty", lambda: [])
     monkeypatch.setattr(wd, "auth_ok", lambda *a, **k: (True, "登录自检通过"))
     return tmp_path
@@ -52,15 +52,38 @@ def sandbox(tmp_path: Path, monkeypatch) -> Path:
 def test_build_command_carries_the_opening_and_the_stream(sandbox: Path) -> None:
     """派活的命令必须：带上"读哪几张文档 + 哪张卡"的开场白、要 stream-json、要 -y。"""
     node, cli = wd.paths()
-    cmd = wd.build_command(node, cli, "001", "spec.md", "deepseek-v3-2-volc")
+    cmd = wd.build_command(node, cli, "001", "spec.md", "deepseek-v4.1-flash")
     joined = " ".join(cmd)
     assert cmd[0] == str(node) and cmd[1] == str(cli)
     assert cmd[2] == "-p"
     for needle in ("复盘/交接-重构进度.md", "复盘/外包-卡表与规矩.md", "spec.md", "卡号 001"):
         assert needle in cmd[3]
     assert "--output-format stream-json" in joined
-    assert "--model deepseek-v3-2-volc" in joined
+    assert "--model deepseek-v4.1-flash" in joined
     assert "--no-session-persistence" in joined and " -y" in joined
+
+
+def test_build_command_grants_bypass_permissions_by_default(sandbox: Path) -> None:
+    """★ `-y` 不够：实测工人跑 `python …` 会被"非交互无法确认"挡回来 → 默认要 bypassPermissions。"""
+    node, cli = wd.paths()
+    cmd = wd.build_command(node, cli, "001", "spec.md", "m")
+    assert "--permission-mode" in cmd
+    assert cmd[cmd.index("--permission-mode") + 1] == "bypassPermissions"
+    tight = wd.build_command(node, cli, "001", "spec.md", "m", "acceptEdits")
+    assert tight[tight.index("--permission-mode") + 1] == "acceptEdits"
+
+
+def test_prefers_the_standalone_cli_and_honours_an_override(tmp_path: Path, monkeypatch) -> None:
+    """默认优先独立安装的 CLI（带 TUI 那份）；`--cli` 能覆盖；都没有才退回 WorkBuddy 自带那份。"""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    pkg = tmp_path / "npm" / "node_modules" / "@tencent-ai" / "codebuddy-code" / "bin"
+    pkg.mkdir(parents=True)
+    standalone = pkg / "codebuddy"
+    standalone.write_text("", encoding="utf-8")
+    _, picked = wd.paths()
+    assert picked == standalone
+    _, forced = wd.paths("D:/somewhere/else/codebuddy")
+    assert str(forced).replace("\\", "/") == "D:/somewhere/else/codebuddy"
 
 
 # ------------------------------------------------------------------ 四道前置检查

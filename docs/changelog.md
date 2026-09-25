@@ -4,6 +4,26 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 外包链路接通真 CLI（T-G85）：改走独立安装的 CodeBuddy Code，派活器带上权限模式与新模型
+
+WorkBuddy 自带的那份 CLI 是**无头版** —— `cli/dist/` 里只有 `codebuddy-headless.js` 与
+`codebuddy-lite-wb.mjs`，**没有** `dist/codebuddy.js`（TUI 本体；我读过 `app.asar` 的目录表确认），
+于是 `config`/`doctor`/`install` 全报 `Cannot find module '../dist/codebuddy'`，**也没有 `/login` 可敲**。
+用户 2026-09-26 同意装官方独立版，链路就此打通：
+
+- `npm i -g @tencent-ai/codebuddy-code@latest` → **2.158.0**（入口 `%APPDATA%\npm\…\bin\codebuddy`，
+  含 TUI）；TUI 里把仓库加入信任、走 **Chinese Site** 登录 → `-p` 无头调用直接可用（实测回「连接成功」）。
+- `tools/wb_dispatch.py`：**优先**用这份新 CLI（带 `--cli` 覆盖与回退）；★ 新增 `--permission-mode`
+  并**默认 `bypassPermissions`** —— 实测 `-y` 不够：`python …` 会被"非交互无法确认"挡回来，
+  工人跑不了 pytest 就等于"修完没验"。
+- 模型：CLI 默认是 **`hy4-preview`（混元 4 preview）**；旧列表里的 `deepseek-v3-2-volc` **已经没有了**，
+  用户点名的 **`deepseek-v4.1-flash`** 在列表里、真打一句验证过 → 派活器默认值改成它。
+- 工具链实测：**Grep 能用**（数出 `tools/*.mjs` = 6，正确）、Bash 跑 git 能用。
+- 同轮交付**第一张真写代码的外包卡规格** `复盘/外包卡-002-修T-G79幂等写库.md`
+  （修 T-G79 那句"幂等=不写库"的错话 + 整表重写的根因；口径 6 条 / 文件白名单 / 红线 /
+  **先跑红再跑绿** / 四行 trailer / 台账号 `T-G86`）。
+- 台账 `T-G85`；复盘 `复盘/外包-卡表与规矩.md` §10（更新块）。
+
 ### 主控复核器（T-G84）：把「这一笔提交算不算数」做成一条命令
 
 外包之后主控每轮都要复核工人的提交。手工复核有五件事，每次现查既慢又容易漏 —— 而**漏一条**

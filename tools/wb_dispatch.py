@@ -15,8 +15,17 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
 用法（默认 **dry-run**：只打印将要执行的命令，不派活）：
     python -X utf8 tools/wb_dispatch.py --card 001 --spec 复盘/外包卡-001-独立复核T-G79.md
     # 真想派活加 --execute；跑完会自动用 tools/wb_status.py 渲染时间线
-    # --model 默认 deepseek-v3-2-volc（用户 2026-09-26 定的那一档）
+    # --model 默认 deepseek-v4.1-flash（用户 2026-09-26 要的那一档；★ CLI 2.158.0 的可用列表里
+    # 已经没有 deepseek-v3-2-volc 了 —— 默认模型是 hy4-preview，实测 JSON 里回的是 hy4-preview-f）
+    # --cli 覆盖 CLI 入口；--permission-mode 默认 bypassPermissions（见下）
     # --no-preflight 跳过登录自检（省 10 秒，接口不改）
+
+★ 2026-09-26 实测两条（都写进 复盘/外包-卡表与规矩.md §10）：
+  · **CLI 入口优先独立安装的那份**（`%APPDATA%` 下 npm 装的 `@tencent-ai/codebuddy-code`）——
+    WorkBuddy 自带那份是**无头版**：缺 `dist/codebuddy.js`（TUI），`config`/`doctor`/`install`
+    全报 `Cannot find module '../dist/codebuddy'`，也没有 `/login` 可敲；
+  · **`-y` 不够**：工人要用 `python …` 跑测试时会被"非交互无法确认"挡回来（它自己提示改用
+    `--permission-mode bypassPermissions`）→ 这是默认值；想收紧就显式给别的模式。
 
 ★ 边界（如实写）：`--execute` 那条路**还没在真登录下跑过**（CLI 未登录，T-G80/T-G82 如实记）——
 现在被验证过的是四道前置检查与命令拼装（`tests/test_wb_dispatch.py`）。
@@ -35,9 +44,15 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（别写第二份）
 
-DEFAULT_MODEL = "deepseek-v3-2-volc"
+DEFAULT_MODEL = "deepseek-v4.1-flash"
 NODE_REL = r".workbuddy\binaries\node\versions\22.22.2-3\node.exe"
-CLI_REL = r"workbuddy\resources\app.asar.unpacked\cli\bin\codebuddy"
+# ★ 优先用**独立安装**的 CodeBuddy CLI（官方 npm 包，带 TUI、能登录）：
+#   WorkBuddy 自带那份是**无头版**（缺 dist/codebuddy.js，`config`/`doctor`/`install` 全废、
+#   也没有 `/login` 可敲）—— 2026-09-26 实测，见 复盘/外包-卡表与规矩.md §10。
+NPM_CLI_PARTS = ("npm", "node_modules", "@tencent-ai", "codebuddy-code", "bin", "codebuddy")
+FALLBACK_CLI_REL = r"workbuddy\resources\app.asar.unpacked\cli\bin\codebuddy"
+# 工人要跑 pytest / 脚本，`-y` 不够（实测 `python …` 会被"非交互无法确认"挡回来）
+DEFAULT_PERMISSION_MODE = "bypassPermissions"
 AUTH_NEEDLE = "Authentication required"
 
 OPENING = (
@@ -49,9 +64,17 @@ OPENING = (
 )
 
 
-def paths() -> tuple[Path, Path]:
+def paths(cli_override: str | None = None) -> tuple[Path, Path]:
+    """（内置 node, CLI 入口）—— 默认优先独立安装的那份，找不到才退回 WorkBuddy 自带的。"""
     home = Path(os.environ.get("USERPROFILE", str(Path.home())))
-    return home / NODE_REL, Path("D:/") / CLI_REL
+    node = home / NODE_REL
+    if cli_override:
+        return node, Path(cli_override)
+    appdata = Path(os.environ.get("APPDATA", str(home / "AppData" / "Roaming")))
+    npm_cli = appdata.joinpath(*NPM_CLI_PARTS)
+    if npm_cli.exists():
+        return node, npm_cli
+    return node, Path("D:/") / FALLBACK_CLI_REL
 
 
 def git_dirty() -> list[str]:
@@ -79,18 +102,21 @@ def auth_ok(node: Path, cli: Path, timeout: int = 180) -> tuple[bool, str]:
     return False, f"自检没拿到预期回话（退出码 {done.returncode}）：{wb_status._clip(body, 200)}"
 
 
-def build_command(node: Path, cli: Path, card: str, spec: str, model: str) -> list[str]:
+def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
+                  permission_mode: str = DEFAULT_PERMISSION_MODE) -> list[str]:
     return [
         str(node), str(cli), "-p", OPENING.format(spec=spec, card=card),
         "--model", model, "--output-format", "stream-json",
+        "--permission-mode", permission_mode,
         "--no-session-persistence", "-y",
     ]
 
 
-def preflight(card: str, spec: str, *, force: bool, check_auth: bool) -> tuple[list[str], Path]:
+def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
+              cli_override: str | None = None) -> tuple[list[str], Path]:
     """四道检查 —— 返回（问题清单, 日志路径）。问题非空就不许派活。"""
     problems: list[str] = []
-    node, cli = paths()
+    node, cli = paths(cli_override)
     log = ROOT / "gates" / "diag" / f"wb-{card}.jsonl"
     if not (ROOT / spec).exists():
         problems.append(f"卡规格文件不存在：{spec}（不许凭记忆派活）")
@@ -116,6 +142,10 @@ def main() -> int:
     parser.add_argument("--card", required=True, help="卡号（用来命名 log，如 001）")
     parser.add_argument("--spec", required=True, help="卡规格文件（相对仓库根）")
     parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--cli", default=None,
+                        help="CLI 入口覆盖（默认优先用独立安装的那份）")
+    parser.add_argument("--permission-mode", default=DEFAULT_PERMISSION_MODE,
+                        help="工人的权限模式（默认 bypassPermissions：否则 python 会被挡回来）")
     parser.add_argument("--execute", action="store_true",
                         help="真派活（默认只做前置检查 + 打印命令）")
     parser.add_argument("--force", action="store_true", help="允许覆盖已有 log")
@@ -125,9 +155,10 @@ def main() -> int:
 
     problems, log = preflight(
         args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
+        cli_override=args.cli,
     )
-    node, cli = paths()
-    cmd = build_command(node, cli, args.card, args.spec, args.model)
+    node, cli = paths(args.cli)
+    cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode)
 
     if problems:
         print("[FAIL] 不派活 —— 前置检查没过：", file=sys.stderr)
@@ -142,7 +173,8 @@ def main() -> int:
         done_checks += " / 登录通"
     print(f"[OK ] 前置检查全过（{done_checks}）")
     print(f"[log ] {log}")
-    print(f"[cmd ] {' '.join(cmd[:4])} … --model {args.model} --output-format stream-json")
+    print(f"[cmd ] {' '.join(cmd[:4])} … --model {args.model} --output-format stream-json "
+          f"--permission-mode {args.permission_mode}")
     if not args.execute:
         print("[dry ] 这是 dry-run；真想派活加 --execute")
         return 0
