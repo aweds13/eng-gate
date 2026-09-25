@@ -179,8 +179,24 @@ def test_real_ledger_has_no_stale_mother_entries() -> None:
     assert ap.check_spec_child_cards(_ledger()) == []
 
 
+def _blank_ack_reasons(data: dict[str, Any]) -> list[str]:
+    """`[acknowledged_ops]` 里**理由为空**的那些操作号（判据本身，喂合成数据也能用）。"""
+    return [
+        op for op, reason in (data.get("acknowledged_ops") or {}).items()
+        if not (isinstance(reason, str) and reason.strip())
+    ]
+
+
 def test_every_acknowledged_op_has_a_nonempty_reason() -> None:
-    acked = _ledger().get("acknowledged_ops", {})
-    assert acked, "两条'先不挂'的例外应该有理由（OP-32 / OP-38）"
-    for op, reason in acked.items():
-        assert str(reason).strip(), f"{op} 的例外没写理由"
+    """`[acknowledged_ops]` 里每一条都要写清"**为什么**先不挂"（不是"忘了"）。
+
+    ★ 2026-09-25（T-G75）：这一节**现在是空的** —— `OP-32` 在 T-G21 销账、`OP-38` 在 T-G75 销账
+    （两条都是"活儿其实做完了，只是没人回头销"）。原来那句 `assert acked` 因此过期了，
+    但它想防的东西没错：**空集永远满足"每一条都写了理由"** —— 那种绿灯比红更坏。
+    所以改成两条一起：① 留着的每一条理由都不许为空；② 用一条**合成数据**证明这个判据真的会红。
+    """
+    data = _ledger()
+    assert _blank_ack_reasons({"acknowledged_ops": {"OP-38": "   "}}) == ["OP-38"], \
+        "判据本身不会红 —— 那它在真台账上绿着也没有意义"
+    assert _blank_ack_reasons({"acknowledged_ops": {"OP-38": "理由在这儿"}}) == []
+    assert _blank_ack_reasons(data) == [], f"这些例外没写理由：{_blank_ack_reasons(data)}"
