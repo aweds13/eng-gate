@@ -521,6 +521,22 @@ evidence = [
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。 ★ **2026-09-25（T-G71）这条残留收口了**：`db.unit_of_work()` 在连接**代理层**把 `commit()` 推迟到退出那一刻（core 一个 `commit()` 都没改），本条的 `create_task` / `update_task` 两条路都包了事务 —— 第二笔抛数据库级错误时**库里一个字节都不留**（`tests/test_unit_of_work.py` 逐条钉，且用「第一笔确实跑过」证明不是空转）。详见 `复盘/跨函数事务-T-G71.md`。"
 
 
+[entries."T-G81"]
+id = "T-G81"
+title = "WorkBuddy 状态器（`tools/wb_status.py`）：把工人 CLI 的 stream-json 事件读成人能看的时间线（8 条测试）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tools/wb_status.py",
+  "file:复盘/WorkBuddy状态器-T-G81.md",
+  "text:tools/wb_status.py::def parse_events(lines: list[str]) -> tuple[list[str], dict]:",
+  "text:tools/wb_status.py::MAX_TEXT = 240",
+  "text:tools/wb_status.py::\"unknown_events\": unknown,",
+  "text:复盘/外包-卡表与规矩.md::python -X utf8 tools/wb_status.py",
+  "test:test_wb_status.py",
+]
+gaps = "**为什么要有**（用户 2026-09-26）：外包模式下工人（CodeBuddy CLI）在**另一个进程**里干活，主控与用户都看不见它做了什么 —— 用户的原话是「弄一个状态器，让我看看他干了啥」。CLI 自己会吐 `--output-format stream-json`（实时流），但那是给程序读的；这个脚本把它渲染成**时间线**（它在说什么 / 调了哪个工具、动了哪个文件 / 结果）+**摘要**（模型、工具调用分布、碰过的文件、工具报错数、最后一条结果），`--tail` 看进度、`--json` 给主控解析、`--repo` 附 git 状态。**三个取舍都是为了别骗人**：① **认不出来的一行也不丢**（对方会升级、事件形状会变 —— 状态器最坏的长相是「什么也没说」而工人其实干了一堆，**比没有窗更坏**；不认识的 type 原样截断打印并数进 `unknown_events`、半行 JSON 也记一句继续读完）；② **一行最多 240 字**（工具回话里可能塞着整个文件）；③ 顺手把 `init` 里的 `tools` 清单摆在第一行 —— 「它有没有 grep」这种问题看那一行。**验收**：`tests/test_wb_status.py` **8 条**（零件层：模型/工具清单/动了哪个文件/工具报错都渲染得出来、不认识的形状原样留一行、半行 JSON 不崩、5000 字输出被截到 400 以内、非对象事件不崩；CLI 层：`--tail` 只印最后几条、`--json` 可解析、文件不存在退 2 且不抛栈）。**★ 边界（不假装）**：事件形状**还没被真 log 钉住** —— 现在只有合成用例，**第一次真派活之后必须拿真 log 复钉**（这句话写在 `tools/wb_status.py` 的 docstring 里）；它只读 stdio 那一份输出，CLI 的内部日志（`~/.codebuddy/logs/`）不归它管。**顺带实测**：静态查 CLI bundle 确认它有 `Read/Write/Edit/Bash/Glob/Grep/WebFetch/WebSearch/Task/TodoWrite`（**大概率能调 grep**，真验要等登录）；登录仍是当前唯一阻塞（见 T-G80）。**没动的**：`src/` 一行没改、没加任何门（它是尺子不是门）。"
+
 [entries."T-G80"]
 id = "T-G80"
 title = "外包交接：把活交给 WorkBuddy/CodeBuddy CLI 那条线 —— 工人入口（规矩 + 卡表 + 已知坑）+ CLI 实测（**登录待用户完成**）"
