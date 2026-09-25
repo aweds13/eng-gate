@@ -20,6 +20,17 @@
                                 形状不靠「比底深一点」，靠一条线（包 `.wb-progress__track` 的写法）。 */
   --border: #e2e8f0;          /* 分隔线 / 输入框边框 */
   --border-strong: #cbd5e1;   /* 分隔线（暗色 toast 按钮边框等） */
+  /* ★ 2026-09-25（T-G70 · 非文字对比度 3.0 表）**「分隔线」与「控件边界」分成两个令牌**。
+     原来一个 `--border` 干两件事，而 WCAG 1.4.11 只对其中**一件**要 3.0：
+       · 分隔线（卡片/面板的边、左栏竖线、分组线、芯片描边）—— **纯装饰**，包给的就是这一档，跟包；
+       · **控件边界**（输入框 / 下拉 / 文本域）—— 边框是"这里能输入"的**唯一**线索（框的底与卡片底
+         同为 `--panel`），要 ≥3.0，而 `--border` 在这两个底上只有 **1.23 / 1.18** ——
+         一个 33px 高的框立在卡片里全靠这条线，1.23 等于没有。
+     值不是"挑的好看灰"，是**量出来的**（`tools/contrast_audit.py` 的非文字表逐对算）：
+     亮色 `#7c8798` 对 `--panel` **3.64**、对 `--bg` **3.47**、对 `--panel-2` **3.23**；
+     暗色 `#63738f` 对 `--panel` **3.55**、对 `--panel-2` **3.21**（暗色的 `--border` 是 1.33 ——
+     同一类病亮暗都有）。 */
+  --border-control: #7c8798;
   --ink: #1e293b;
   --toast-ink: #fff;     /* toast 上的文字 */
   --toast-bg: var(--ink);  /* toast 底。★ 必须是**令牌**（T-G27 修）：
@@ -122,6 +133,7 @@
   --panel-2: #1b2537;
   --border: #26324a;
   --border-strong: #334155;
+  --border-control: #63738f;  /* 控件边界（T-G70）：与令牌区上面那条同一个口径，值各自量过 */
   --ink: #e6edf7;
   --toast-ink: #e6edf7;
   --toast-bg: var(--panel-2);  /* 暗色必须另给（T-G27）：跟 --ink 走会和文字同色，字看不见 */
@@ -321,7 +333,7 @@ button.ghost { background: transparent; color: var(--muted); border: 1px solid v
   flex: 1 1 220px;
   min-width: 0;
   padding: var(--sp-3) var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);   /* T-G70：控件边界，不是分隔线 */
   border-radius: var(--r-md);
   font-size: var(--fs-base);
   background: var(--panel);
@@ -335,7 +347,7 @@ button.ghost { background: transparent; color: var(--muted); border: 1px solid v
 .new .grow { flex: 1 1 220px; min-width: 0 }
 select {
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);   /* T-G70 */
   border-radius: var(--r-md);
   font-size: var(--fs-md);
   background: var(--panel);
@@ -349,7 +361,7 @@ select {
    设置页里就有勾选框住在同样的行里（`#syncDel` 那种）。 */
 input:not([type="checkbox"]):not([type="radio"]) {
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);   /* T-G70 */
   border-radius: var(--r-md);
   font-size: var(--fs-md);
   background: var(--panel);
@@ -365,7 +377,7 @@ input:not([type="checkbox"]):not([type="radio"]) {
 .field input:not([type="checkbox"]):not([type="radio"]), .field select {
   width: 100%;
   padding: var(--sp-3) var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);   /* T-G70 */
   border-radius: var(--r-md);
   font-size: var(--fs-base);
   background: var(--panel);
@@ -381,7 +393,7 @@ input:not([type="checkbox"]):not([type="radio"]) {
 .textarea {
   width: 100%;
   padding: var(--sp-3) var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);   /* T-G70 */
   border-radius: var(--r-md);
   font-size: var(--fs-base);
   resize: vertical;
@@ -638,7 +650,7 @@ button.ghost svg, .flag svg { width: 16px; height: 16px; vertical-align: -3px }
 .modal-box input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);   /* T-G70：这个框的底是 --bg，边框要同时与 --panel 分得开 */
   border-radius: var(--r-md);
   font-size: var(--fs-base);
   background: var(--bg);
@@ -677,7 +689,7 @@ button.ghost svg, .flag svg { width: 16px; height: 16px; vertical-align: -3px }
 .palette-box input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);   /* T-G70：同 .modal-box */
   border-radius: var(--r-md);
   font-size: var(--fs-base);
   background: var(--bg);

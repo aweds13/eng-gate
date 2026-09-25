@@ -1,10 +1,10 @@
 {
-  "rev": "3b3b8c7",
-  "tree": "044911a4656cdbe7a6e6fc612e14fb0967119bca",
-  "parent": "3b3b8c7",
+  "rev": "b8d7fad",
+  "tree": "49ad607e8e7336e147b3d66d28df8613bfe4c611",
+  "parent": "b8d7fad",
   "branch": "line/impl-v1",
   "dirty": true,
-  "at": "2026-09-25T09:49:18",
+  "at": "2026-09-25T10:06:23",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
@@ -13,120 +13,124 @@
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 73.63,
-      "summary": "1106 passed, 1076 warnings in 70.61s (0:01:10)"
+      "seconds": 63.75,
+      "summary": "1115 passed, 1071 warnings in 59.93s"
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 16.51,
-      "summary": "2 passed, 1106 deselected, 1 warning in 11.99s"
+      "seconds": 11.27,
+      "summary": "2 passed, 1115 deselected, 1 warning in 8.31s"
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 4.91,
+      "seconds": 5.2,
       "summary": "All checks passed!"
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 4.34,
+      "seconds": 4.71,
       "summary": "Success: no issues found in 54 source files"
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 3.47,
+      "seconds": 2.81,
       "summary": "LAYER CHECKS: PASS ✅"
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 22.96,
+      "seconds": 14.15,
       "summary": "SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）"
     },
     {
       "name": "contrast",
       "exit_code": 0,
-      "seconds": 0.39,
-      "summary": "对比度审美门 PASS（达标 38 / 已登记欠账 0 / 新欠账或变差 0；共 38 条组合）"
+      "seconds": 0.35,
+      "summary": "对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 14 条全过 3.0；装饰 11 条只记录；共 38 条文字组合 + 14 条非文字）"
     },
     {
       "name": "style",
       "exit_code": 0,
-      "seconds": 0.4,
+      "seconds": 0.35,
       "summary": "风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）"
     },
     {
       "name": "ui_text",
       "exit_code": 0,
-      "seconds": 0.42,
+      "seconds": 0.36,
       "summary": "[OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）"
     },
     {
       "name": "commands",
       "exit_code": 0,
-      "seconds": 0.49,
+      "seconds": 0.39,
       "summary": "说明：命令行那一节证明「CLI 也不是第二套」—— 每条命令都挂在一条只读操作上。"
     },
     {
       "name": "ui_dom_probe",
       "exit_code": 0,
       "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 65c13840bd3adc3f）",
+      "summary": "复用上次通过判定（输入未变 24dba61f3b68996d）",
       "reused": true,
-      "inputs_hash": "65c13840bd3adc3f"
+      "inputs_hash": "24dba61f3b68996d"
     },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 8.61,
+      "seconds": 5.12,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）"
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 0.47,
+      "seconds": 0.4,
       "summary": "OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位"
     },
     {
       "name": "lf1_live",
       "exit_code": 0,
       "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 fd32906296663cca）",
+      "summary": "复用上次通过判定（输入未变 883973d7f1da67d8）",
       "reused": true,
-      "inputs_hash": "fd32906296663cca"
+      "inputs_hash": "883973d7f1da67d8"
     },
     {
       "name": "web_live",
       "exit_code": 0,
       "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 0cad5243f38f4d2f）",
+      "summary": "复用上次通过判定（输入未变 b88482ee99ae6a04）",
       "reused": true,
-      "inputs_hash": "0cad5243f38f4d2f"
+      "inputs_hash": "b88482ee99ae6a04"
     },
     {
       "name": "render",
       "exit_code": 0,
-      "seconds": 136.18,
-      "summary": "[OK ] 45 份清单与黄金逐字节一致（3 档宽度 × 14 个视图 + 1 个浮层）"
+      "seconds": 0,
+      "summary": "复用上次通过判定（输入未变 f188d8dd33f9f5d1）",
+      "reused": true,
+      "inputs_hash": "f188d8dd33f9f5d1"
     },
     {
       "name": "ui_flow",
       "exit_code": 0,
       "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 5a640500bc83cc97）",
+      "summary": "复用上次通过判定（输入未变 88b99752dc3d680b）",
       "reused": true,
-      "inputs_hash": "5a640500bc83cc97"
+      "inputs_hash": "88b99752dc3d680b"
     }
   ],
   "not_run": [],
   "reused": {
-    "ui_dom_probe": "65c13840bd3adc3f",
-    "lf1_live": "fd32906296663cca",
-    "web_live": "0cad5243f38f4d2f",
-    "ui_flow": "5a640500bc83cc97"
+    "ui_dom_probe": "24dba61f3b68996d",
+    "lf1_live": "883973d7f1da67d8",
+    "web_live": "b88482ee99ae6a04",
+    "render": "f188d8dd33f9f5d1",
+    "ui_flow": "88b99752dc3d680b"
   },
-  "trailer": "pytest 1106 passed, 1076 warnings in 70.61s (0:01:10); acceptance 2 passed, 1106 deselected, 1 warning in 11.99s; ruff All checks passed!; mypy Success: no issues found in 54 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; contrast 对比度审美门 PASS（达标 38 / 已登记欠账 0 / 新欠账或变差 0；共 38 条组合）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：命令行那一节证明「CLI 也不是第二套」—— 每条命令都挂在一条只读操作上。; ui_dom_probe 复用上次通过判定（输入未变 65c13840bd3adc3f）; audit 审计通过 ✅（豁免 0 项已知欠账）; audit_titles OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位; lf1_live 复用上次通过判定（输入未变 fd32906296663cca）; web_live 复用上次通过判定（输入未变 0cad5243f38f4d2f）; render [OK ] 45 份清单与黄金逐字节一致（3 档宽度 × 14 个视图 + 1 个浮层）; ui_flow 复用上次通过判定（输入未变 5a640500bc83cc97）"
+  "trailer": "pytest 1115 passed, 1071 warnings in 59.93s; acceptance 2 passed, 1115 deselected, 1 warning in 8.31s; ruff All checks passed!; mypy Success: no issues found in 54 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）; contrast 对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 14 条全过 3.0；装饰 11 条只记录；共 38 条文字组合 + 14 条非文字）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：命令行那一节证明「CLI 也不是第二套」—— 每条命令都挂在一条只读操作上。; ui_dom_probe 复用上次通过判定（输入未变 24dba61f3b68996d）; audit 审计通过 ✅（豁免 0 项已知欠账）; audit_titles OK 规则 A 对账通过：72 条 SR 卡全部有同号规格，0 条错位; lf1_live 复用上次通过判定（输入未变 883973d7f1da67d8）; web_live 复用上次通过判定（输入未变 b88482ee99ae6a04）; render 复用上次通过判定（输入未变 f188d8dd33f9f5d1）; ui_flow 复用上次通过判定（输入未变 88b99752dc3d680b）",
+  "sealed_at": "2026-09-25T10:07:04"
 }

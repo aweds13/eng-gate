@@ -33,10 +33,19 @@
   底认 `var(--x)` 与两令牌 `color-mix(…)` 两种写法，字优先取同一条规则、否则取基础选择器那条。
   为什么必须自动读：悬停就是"同一条规则换个背景"，最容易加了没人算（T-G42 的同一类教训）。
   带 `transparent` 的合成底**算不了**（得知道它铺在什么上面）—— 如实跳过，不猜。
-- ★ T-G42 起状态徽标把颜色交给 **8px 圆点**（workbench 的 StatusDot），点是**非文字**（3.0 即可）。
-  它没有被单列成一对组合，而是**借令牌级组合的地板**：`--ok` / `--danger` / `--accent`
-  落在 `--panel` 上都按 4.5 登记着 —— 令牌一旦被改浅，先把那三条打红，圆点自然也不够。
-  （"非文字图形"这个维度本身仍未系统覆盖，这一点如实写在 `复盘/审美门-对比度-T-G27.md` §6。）
+- ★ T-G42 起状态徽标把颜色交给 **8px 圆点**（workbench 的 StatusDot）。点是**非文字**
+  （WCAG 只要 3.0），它借令牌级组合的地板：`--ok` / `--danger` / `--accent` 落在 `--panel` 上
+  按 4.5 登记着 —— 令牌一旦被改浅，先把那三条打红，圆点自然也不够。
+- ★★ T-G70 起**非文字图形自己有一张 3.0 表**（`AA_NONTEXT_PAIRS`，WCAG 1.4.11）：控制边界（输入框 /
+  下拉 / 文本域的边框）、状态点、勾选圈、图表数据笔、逾期红条 —— 逐对 ≥3.0，**没有登记表**：
+  控制边界看不见是缺陷不是欠账（与 T-G27 对 toast 的说法一致）。
+  旁边还有一张 **`AA_NONTEXT_EXEMPT`（纯装饰）**：分隔线、卡片边、图表网格 / 环轨道 / 空格、
+  悬停描边、toast 按钮边框 —— **照样把实测值打出来**，但不当判据用，理由逐条写在表里
+  （`复盘/非文字对比度-T-G70.md` 列了"若用户不认，这几行是要复议的清单"）。
+  ⚠️ 仍然算不了的（如实记，不假装看过）：**半透明填充**（`.chart-area` 10% /
+  `.chart-fill-soft` 18% —— 合成结果取决于底下是什么，那要渲染层）、
+  **悬停/选中态下的非文字**、**浏览器自己画的 checkbox/radio**（黄金里它们的 fg/bg 是空的：
+  `#000000/#000000@0.00`），以及 `color-mix(…, transparent)` 那种底。
 
 用法
   python -X utf8 tools/contrast_audit.py            # 人读（全表 + 结论）
@@ -61,6 +70,7 @@ BASELINE = ROOT / "tools" / "contrast_baseline.toml"
 
 AA_NORMAL = 4.5
 AA_LARGE = 3.0
+AA_NONTEXT = 3.0  # WCAG 1.4.11「非文字对比度」：图形与控件边界的地板
 EPS = 0.02  # 四舍五入容忍：小于这个差不算"变坏"
 
 _TOKEN = re.compile(r"(--[a-z0-9-]+)\s*:\s*([^;]+);")
@@ -82,10 +92,17 @@ class Pair:
     bg: str
     minimum: float
     where: str
+    # `text` = 字在底上（4.5）；`图形` = 非文字图形与控件边界（3.0，T-G70）；
+    # `装饰` = 纯装饰（只量不判）
+    kind: str = "text"
 
     @property
     def key(self) -> str:
-        return f"{self.theme}:{self.fg} on {self.bg}"
+        """登记表与报错里的稳定标识。★ 文字的 key **不带前缀**（历史行与测试都按它写），
+        非文字那两类带前缀 —— 否则 `--accent on --panel` 这种"同一个令牌对既是文字又是图形"
+        会被去重掉一条（而这两条量的根本不是一回事）。"""
+        prefix = "" if self.kind == "text" else f"{self.kind} "
+        return f"{self.theme}:{prefix}{self.fg} on {self.bg}"
 
 
 @dataclass
@@ -326,10 +343,132 @@ def state_pairs(css: str) -> list[Pair]:
     return out
 
 
+# ---------------- 非文字图形（T-G70，WCAG 1.4.11）
+# 为什么单列一张表、而不是把阈值改成 3.0 混进上面那张：**管的东西不一样**。
+#   · 上面那张管「字读不读得出来」（1.4.3，4.5）；这张管「**不看字**能不能认出控件、
+#     读懂图形」（1.4.11，3.0）。
+#   · 同一对令牌可能两边都要（`--accent on --panel` 既是"强调色小字"又是"勾选圈的边"），
+#     而它们的**角色不同、失败后的修法也不同**，所以 `key` 带 `图形` 前缀、分开判、分开报。
+# ★ 这张表**没有登记表**：控制边界看不见是**缺陷**不是欠账（T-G27 对 toast 用的是同一句话）。
+AA_NONTEXT_PAIRS: tuple[tuple[str, str, str], ...] = (
+    (
+        "--border-control",
+        "--panel",
+        "输入框 / 下拉 / 文本域（`.new input` / 元素级 `input:not(...)` / `select` / "
+        "`.field input` / `.textarea`）：框的底与卡片底**同为 `--panel`**，"
+        "边框是「这里能输入」的**唯一**线索",
+    ),
+    (
+        "--border-control",
+        "--bg",
+        "模态与命令面板里的输入框（`.modal-box input` / `.palette-box input`）：底是 `--bg`，"
+        "边框要同时与外面的 `--panel` 分得开",
+    ),
+    (
+        "--accent",
+        "--panel",
+        "完成勾选圈 `.check`（2px 边 + 选中填充）、状态点 `.badge .dot`、"
+        "图表数据笔（`.chart-line` / `.chart-ring-progress` / `.chart-mark` / `.chart-cell-done`）",
+    ),
+    (
+        "--accent",
+        "--panel-2",
+        "落在静音面（读数卡）上的图表数据笔：`.chart-cell-done` / `.chart-cell-missed` / "
+        "`.chart-fill-soft` / `.bar-fill` 落在 `.bar-track` 上",
+    ),
+    ("--ok", "--panel", "「已完成」的 8px 状态点（`.badge.done .dot`）"),
+    (
+        "--danger",
+        "--panel",
+        "「逾期 / 硬考核」的左红条（`.card.overdue` / `.card.hard`）与危险按钮的边框（`.danger`）",
+    ),
+    ("--ink", "--panel", "已选中的强调色取样圈（`.swatch.on` 的 2px 描边）"),
+)
+
+# 纯装饰：**照样量、照样打印实测值，但不当判据**。
+# WCAG 1.4.11 明文把这些排在范围外（"pure decoration"）；而把它们全提到 3.0 会毁掉界面本身
+# （最直接的一例：把 365 个热力图空格画成 3.0 的灰）。**这一列是判断不是测量** ——
+# 每条的「为什么不算」都写在行里，`复盘/非文字对比度-T-G70.md` 里也列了复议清单。
+# ★ `tests/test_contrast_nontext.py` 有两条钉着它：① 条数被冻结（加一条必须动断言）；
+#   ② 每条**必须真的低于 3.0**（哪天它够了，就得从这张表里删掉，别留着当"假豁免"）。
+# ★★ 这张表比上面那张**多一栏 `themes`**：豁免是**逐条**的判断，而判断可能只在某一个主题成立。
+#    第一版就在这儿踩了一次 —— 亮色的 toast 底是 `--ink`（9.37，本来就过），只有**暗色**的 toast
+#    底才退到 `--panel-2`（1.48）；不写清主题，就会对着一个**亮色里不存在**的搭配写一行豁免
+#    （僵尸行的另一种长相：不是搭配没了，是**那个搭配在那一套主题里从来不存在**）。
+AA_NONTEXT_EXEMPT: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
+    (
+        "--border",
+        "--panel",
+        ("light", "dark"),
+        "卡片 / 面板 / 模态 / 命令面板 / 芯片（`.badge`）/ 键位徽标（`.kbd`）/ "
+        "ghost 按钮 的 1px 描边：内容自己说明这是什么，"
+        "边框只做分组 —— WCAG 说的 pure decoration",
+    ),
+    (
+        "--border",
+        "--bg",
+        ("light", "dark"),
+        "左栏右分隔线（`.rail`）/ 底部 Tab 上边 / 离线提示条底边：纯装饰分隔",
+    ),
+    (
+        "--border",
+        "--panel-2",
+        ("light", "dark"),
+        "图表网格与轴基线 / 环轨道 / 空格描边（`.chart-grid` / `.chart-axis` / `.ring-track` / "
+        "`.chart-cell-off-state`）：这些是**背景结构**，数据由 `--accent` 那几笔承担"
+        "（它们在 3.0 表里）",
+    ),
+    (
+        "--panel-2",
+        "--panel",
+        ("light", "dark"),
+        "热力图空格与条形体底（`.chart-cell-off` / `.cell-off` / `.bar-track`）："
+        "空格是「没有活动」，不是一个数据点；读数由有色格承担",
+    ),
+    (
+        "--border-strong",
+        "--toast-bg",
+        ("dark",),
+        "暗色 toast 里动作按钮的边框：按钮的**字**是识别线索（13.04），边界不承担识别"
+        "（亮色的 toast 底是 `--ink`，那条边框 9.37 本来就过，所以只有暗色这一行）",
+    ),
+    (
+        "--border-strong",
+        "--panel",
+        ("light", "dark"),
+        "取样圈的悬停描边（`.swatch:not(.on):hover`）：悬停是辅助线索，"
+        "静态下已经看得见（那条在 3.0 表里）",
+    ),
+)
+
+
+def nontext_pairs() -> list[Pair]:
+    """非文字图形的 3.0 表（两套主题各来一遍）。"""
+    return [
+        Pair(theme, fg, bg, AA_NONTEXT, where, kind="图形")
+        for theme in ("light", "dark")
+        for fg, bg, where in AA_NONTEXT_PAIRS
+    ]
+
+
+def exempt_pairs() -> list[Pair]:
+    """纯装饰：只量不判（判据是 `AA_NONTEXT_EXEMPT` 的行内理由，不是数字）。
+
+    每条只在自己声明的那几套主题上生成 —— 见上面 `themes` 那一栏的理由。
+    """
+    return [
+        Pair(theme, fg, bg, AA_NONTEXT, where, kind="装饰")
+        for fg, bg, themes, where in AA_NONTEXT_EXEMPT
+        for theme in themes
+    ]
+
+
 def dedupe(pairs: list[Pair]) -> list[Pair]:
     """同一对「字 / 底」只留一条：悬停那一组里有三条规则落在同一个组合上
     （`.ghost:hover` / `nav button:hover` / `.bottom-nav button:hover` 都是 `--ink on --panel-2`），
-    不去重的话 `where` 说明会互相盖掉，报出来的条数也会虚高。"""
+    不去重的话 `where` 说明会互相盖掉，报出来的条数也会虚高。
+    ★ T-G70 起 `key` 带 `图形` / `装饰` 前缀，所以"同一对令牌既是文字又是图形"的
+    **两条都留得住**（它们量的不是一回事）。"""
     seen: set[str] = set()
     out: list[Pair] = []
     for pair in pairs:
@@ -408,8 +547,13 @@ def main() -> int:
     tokens = token_blocks(css)
     known = load_baseline()
     pairs = dedupe(declared_pairs() + badge_pairs(css) + state_pairs(css))
+    nt_pairs = nontext_pairs()
+    ex_pairs = exempt_pairs()
     rows = evaluate(pairs, tokens, known)
+    nt_rows = evaluate(nt_pairs, tokens, {})
+    ex_rows = evaluate(ex_pairs, tokens, {})
     counts = summarize(rows)
+    text_keys = {(p.theme, p.fg, p.bg) for p in pairs}
 
     if args.json:
         print(
@@ -426,6 +570,21 @@ def main() -> int:
                             "recorded": r.known,
                         }
                         for r in rows
+                    ],
+                    "nontext": [
+                        {
+                            "key": r.pair.key,
+                            "where": r.pair.where,
+                            "ratio": r.ratio,
+                            "minimum": r.pair.minimum,
+                            "verdict": r.verdict,
+                            "text_table_covers": (r.pair.theme, r.pair.fg, r.pair.bg) in text_keys,
+                        }
+                        for r in nt_rows
+                    ],
+                    "exempt": [
+                        {"key": r.pair.key, "where": r.pair.where, "ratio": r.ratio}
+                        for r in ex_rows
                     ],
                 },
                 ensure_ascii=False,
@@ -446,20 +605,48 @@ def main() -> int:
                 f"{MARK[row.verdict]} {row.pair.fg} on {detail}"
             )
 
+        print(f"\n--- {label}：非文字图形（WCAG 1.4.11，阈值 3.0）---")
+        for row in [r for r in nt_rows if r.pair.theme == theme]:
+            same = (
+                "  ← 同一对在文字表里按 4.5 管着"
+                if (theme, row.pair.fg, row.pair.bg) in text_keys
+                else ""
+            )
+            print(
+                f"{row.ratio:>6} {row.pair.minimum:>5}  {MARK[row.verdict]} "
+                f"{row.pair.fg} on {row.pair.bg}：{row.pair.where}{same}"
+            )
+
+    print(
+        f"\n=== 纯装饰（WCAG 1.4.11 明文不适用；实测值只作记录，共 {len(ex_rows)} 条）==="
+    )
+    for row in ex_rows:
+        print(
+            f"{row.ratio:>6}     装饰  {row.pair.theme} {row.pair.fg}"
+            f" on {row.pair.bg}：{row.pair.where}"
+        )
+
     fixed = [r for r in rows if r.verdict == "FIXED"]
     if fixed:
         print("\n=== 这" + str(len(fixed)) + "条已经达标了 —— 从登记表里删掉 ===")
         for row in fixed:
             print(f"  {row.pair.key}（{row.ratio}）")
 
-    bad = [r for r in rows if r.verdict in {"NEW", "WORSE"}]
+    bad = [r for r in rows if r.verdict in {"NEW", "WORSE"}] + [
+        r for r in nt_rows if r.verdict in {"NEW", "WORSE"}
+    ]
     print(
-        f"\n合计：达标 {counts['PASS']} / 已登记欠账 {counts['KNOWN']} / "
-        f"可销账 {counts['FIXED']} / **新欠账或变差 {len(bad)}**（共 {len(rows)} 条组合）"
+        f"\n合计：文字达标 {counts['PASS']} / 已登记欠账 {counts['KNOWN']} / "
+        f"可销账 {counts['FIXED']} ｜ 非文字 {len(nt_rows)} 条 ｜ 装饰 {len(ex_rows)} 条（只记录）"
+        f" / **新欠账或变差 {len(bad)}**"
     )
     if bad:
         print("\n对比度审美门 FAIL —— 有没登记的不足、或比登记值更差（见上）。")
-        print("要么补进 tools/contrast_baseline.toml（写明为什么、打算怎么办），要么改回去：")
+        print(
+            "文字那档要么补进 tools/contrast_baseline.toml（写明为什么、打算怎么办），"
+            "要么改回去；"
+        )
+        print("非文字那档**没有登记表**：控制边界/图形看不见是缺陷，改令牌或者改这一行判据：")
         for row in bad:
             tag = (
                 "新欠账"
@@ -472,8 +659,9 @@ def main() -> int:
         print(f"\n--strict：还有 {counts['KNOWN']} 条登记欠账没修，不算通过。")
         return 1
     print(
-        f"对比度审美门 PASS（达标 {counts['PASS']} / 已登记欠账 {counts['KNOWN']} / "
-        f"新欠账或变差 0；共 {len(rows)} 条组合）"
+        f"对比度审美门 PASS（文字达标 {counts['PASS']} / 已登记欠账 {counts['KNOWN']} / "
+        f"新欠账或变差 0；非文字 {len(nt_rows)} 条全过 3.0；装饰 {len(ex_rows)} 条只记录；"
+        f"共 {len(rows)} 条文字组合 + {len(nt_rows)} 条非文字）"
     )
     return 0
 
