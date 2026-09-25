@@ -23,6 +23,16 @@ class TableMissingError(RuntimeError):
     """找不到命令表 —— CLI 不猜、不自己造一份。"""
 
 
+class TableBrokenError(RuntimeError):
+    """命令表在、但**语法坏了**（TOML 解析不了）。
+
+    为什么单独一类：这张表在本项目里已经写坏过 **9 次**（多是自己手写 TOML 时引号写错），
+    而"表在、只是我打不开"与"表不在"是**两件不同的事**（怎么办也不同）——
+    前者要的是文件里的行列号，后者要的是"去哪儿找"。
+    `tomllib` 的报错本身就带行列，原样带给用户比自己编一句有用。
+    """
+
+
 def _candidates() -> list[Path]:
     """按优先级列出可能的表位置：环境变量（**只认它**）→ 本文件往上 → 当前目录往上。
 
@@ -58,10 +68,16 @@ def find_table() -> Path:
 
 
 def load_file(path: Path) -> dict[str, dict[str, object]]:
-    """读一个具体的表文件；不存在或没有 `[commands]` 段就当空表（与检查器口径一致）。"""
+    """读一个具体的表文件；不存在或没有 `[commands]` 段就当空表（与检查器口径一致）。
+
+    语法坏了抛 `TableBrokenError`（带上 `tomllib` 的原文 —— 它已经说清第几行第几列）。
+    """
     if not path.is_file():
         return {}
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise TableBrokenError(f"命令表语法有问题：{path} —— {exc}") from exc
     table = data.get("commands", {})
     return {str(k): dict(v) for k, v in table.items()} if isinstance(table, dict) else {}
 

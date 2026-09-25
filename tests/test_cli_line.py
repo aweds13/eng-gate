@@ -84,6 +84,15 @@ def test_self_description_lists_every_command_with_schema(
     payload = json.loads(out)
     assert payload["read_only"] is True
     assert set(payload["exit_codes"]) == {"0", "1", "2", "3"}
+    assert set(payload["errors"]) == {
+        "usage",
+        "api_4xx",
+        "db_missing",
+        "db_unopenable",
+        "table_missing",
+        "table_broken",
+    }
+    assert set(payload["errors"].values()) <= {1, 2, 3}
     assert [c["name"] for c in payload["commands"]] == registry.names()
     for command in payload["commands"]:
         assert command["op"].startswith("OP-")
@@ -124,6 +133,18 @@ def test_help_lists_every_command(capsys: pytest.CaptureFixture[str]) -> None:
     code, out, _ = _run(capsys, ["today", "--help"])
     assert code == cli_mod.EXIT_OK
     assert "OP-7" in out and "GET /api/summary" in out
+
+
+def test_help_for_one_command_accepts_both_word_orders(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`timeflow help today` 与 `timeflow today --help` 是同一件事（T-G66）。"""
+    code, out, _ = _run(capsys, ["help", "today"])
+    assert code == cli_mod.EXIT_OK
+    assert "OP-7" in out and "GET /api/summary" in out
+    code, out, _ = _run(capsys, ["help"])
+    assert code == cli_mod.EXIT_OK
+    assert "timeflow today" in out  # 不带命令名时仍给总目录
 
 
 # ------------------------------------------------------------------ 投影层
@@ -245,6 +266,65 @@ def test_default_db_is_the_desktop_one() -> None:
     from timeflow.config import load_settings
 
     assert cli_mod._default_db() == str(load_settings().database.path)
+
+
+# ------------------------------------------------- 环境错：翻译成稳定码，不留副作用（T-G66）
+
+
+def test_missing_database_is_an_environment_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """★ 库不存在 → 退 3，而且**一个文件都不许留下**。
+
+    不查这一下会怎样（T-G66 真踩到）：SQLite 会默默建一个空库，于是打错路径的人
+    得到一份"看起来正常"的空数据（0 分钟 / 0 项）—— 一个只读命令还不该有文件副作用。
+    """
+    missing = tmp_path / "没有这个库.db"
+    code, out, err = _run(capsys, ["today", "--json", "--db", str(missing)])
+    assert code == cli_mod.EXIT_ENV
+    assert out == ""
+    assert json.loads(err.strip().splitlines()[-1])["error"]["code"] == "db_missing"
+    assert not missing.exists(), "只读命令不该建库"
+
+
+def test_directory_as_database_is_an_environment_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--db` 指到一个目录 → 同样是环境错（不是栈）。"""
+    code, out, _ = _run(capsys, ["today", "--json", "--db", str(tmp_path)])
+    assert code == cli_mod.EXIT_ENV
+    assert out == ""
+
+
+def test_broken_database_gives_a_stable_code_not_a_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """库文件在、但不是数据库 → `db_unopenable`。
+
+    ★ 这一条是"只兜 create_app 不够"的证据：库是**懒连接**的，这类错在**请求里**才炸出来。
+    """
+    bad = tmp_path / "坏.db"
+    bad.write_text("这不是一个数据库", encoding="utf-8")
+    code, out, err = _run(capsys, ["today", "--json", "--db", str(bad)])
+    assert code == cli_mod.EXIT_ENV
+    assert out == ""
+    assert "Traceback" not in err
+    assert json.loads(err.strip().splitlines()[-1])["error"]["code"] == "db_unopenable"
+
+
+def test_broken_table_gives_a_stable_code_with_line_and_column(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """命令表语法坏了 → `table_broken`，并把 `tomllib` 的行列号带给用户。"""
+    bad = tmp_path / "bad.toml"
+    bad.write_text('[commands."OP-7"\n', encoding="utf-8")
+    monkeypatch.setenv(table.TABLE_ENV, str(bad))
+    code, out, err = _run(capsys, ["commands", "--json"])
+    assert code == cli_mod.EXIT_ENV
+    assert out == ""
+    error = json.loads(err.strip().splitlines()[-1])["error"]
+    assert error["code"] == "table_broken"
+    assert "line" in error["detail"], error["detail"]
 
 
 # ------------------------------------------------------------------ 入口分派

@@ -23,6 +23,8 @@ timeflow <命令> --help
 | 自描述 | `timeflow commands`（读 `docs/commands.toml`，不另立一份） |
 
 **只读**是这一版的硬口径：每条命令都挂 `GET`，MCP 与写操作排后面（T-G30 §4.3）。
+"只读"还包括**不留副作用**：库文件不存在时拒绝工作（不替你建一个空库并回一份空数据），
+库/表打不开时给稳定错误码而不是栈（T-G66）。
 
 **命令表在运行时只被 `commands` 读**（自描述）。每条数据命令的路由绑定写在
 `registry.py` 里，由门禁（`scripts/check_commands.py` 的「CLI 投影」一节）逐条核对 ——
@@ -36,7 +38,7 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from timeflow.cli import registry, table
-from timeflow.cli.call import ApiError, call_route
+from timeflow.cli.call import ApiError, DatabaseError, call_route
 
 if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解
     from timeflow.cli.registry import Command
@@ -50,7 +52,18 @@ EXIT_CODES: dict[str, str] = {
     "0": "成功",
     "1": "用法错误（未知命令 / 未知参数 / 参数类型不对）",
     "2": "接口错误（HTTP 4xx/5xx）",
-    "3": "环境错误（找不到 docs/commands.toml）",
+    "3": "环境错误（库或命令表的问题）",
+}
+
+#: 稳定的机器码（`--json` 时 stderr 上的 `{"error":{"code":…}}`）—— 与退出码分开写，
+#: 因为"退 3"下面有好几件不同的事，脚本要能分辨（这也是 AI 原生六条里"稳定错误码"那条）。
+ERROR_CODES: dict[str, int] = {
+    "usage": EXIT_USAGE,
+    "api_4xx": EXIT_API,
+    "db_missing": EXIT_ENV,
+    "db_unopenable": EXIT_ENV,
+    "table_missing": EXIT_ENV,
+    "table_broken": EXIT_ENV,
 }
 
 KINDS = ("read", "write", "derive")
@@ -160,6 +173,7 @@ def _self_description() -> dict[str, Any]:
     return {
         "read_only": True,
         "exit_codes": EXIT_CODES,
+        "errors": ERROR_CODES,
         "commands": [
             {
                 "name": command.name,
@@ -209,6 +223,8 @@ def _run_commands(tail: list[str], as_json: bool) -> int:
         path = str(table.find_table())
     except table.TableMissingError as exc:
         return _fail(EXIT_ENV, "table_missing", str(exc), as_json)
+    except table.TableBrokenError as exc:
+        return _fail(EXIT_ENV, "table_broken", str(exc), as_json)
 
     if want_table:
         chosen = {oid: row for oid, row in rows.items() if not kind or row.get("kind") == kind}
@@ -248,7 +264,11 @@ def main(argv: list[str] | None = None) -> int:
         print(_usage(), file=sys.stderr)
         return EXIT_USAGE
     if rest[0] in ("-h", "--help", "help"):
-        print(_usage())
+        # `timeflow help today` 与 `timeflow today --help` 是同一件事：
+        # 自描述的命令行不该在"我想知道这条命令怎么用"时只回一份总目录
+        wanted = rest[1] if len(rest) > 1 else ""
+        target = registry.by_name().get(wanted)
+        print(_command_help(target) if target else _usage())
         return EXIT_OK
 
     name, tail = rest[0], rest[1:]
@@ -268,6 +288,8 @@ def main(argv: list[str] | None = None) -> int:
         data = call_route(db, command.route, params)
     except UsageError as exc:
         return _fail(EXIT_USAGE, "usage", str(exc), as_json)
+    except DatabaseError as exc:
+        return _fail(EXIT_ENV, exc.code, exc.detail, as_json)
     except ApiError as exc:
         return _fail(EXIT_API, f"api_{exc.status}", exc.detail, as_json)
 

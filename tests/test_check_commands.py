@@ -215,6 +215,22 @@ def test_real_checker_reports_cli_coverage(monkeypatch, capsys) -> None:  # type
     assert len(report["ops_with_cli_entry"]) >= 10
 
 
+def test_broken_table_is_reported_as_a_problem_not_a_crash(
+    tmp_path, monkeypatch, capsys  # type: ignore[no-untyped-def]
+) -> None:
+    """命令表语法坏了：门禁要**报一条硬冲突**（带行列），而不是把 tomllib 的栈丢出来。
+
+    这张表在本项目里写坏过 9 次 —— 每次跑门的人都要在栈里找那一行，纯浪费。
+    """
+    bad = _write(tmp_path, "commands.toml", '[commands."OP-7"\n')
+    monkeypatch.setattr(cc, "COMMANDS", bad)
+    monkeypatch.setattr(sys, "argv", ["check_commands.py", "--json", "--check"])
+
+    assert cc.main() == 1
+    problems = json.loads(capsys.readouterr().out)["problems"]
+    assert any("命令表语法坏了" in p for p in problems), problems
+
+
 def test_cli_projection_conflict_is_reported(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
     """合成一条"路由对不上、表里也没写"的 CLI 命令 → 检查器必须报硬冲突。
 

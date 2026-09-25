@@ -1085,6 +1085,24 @@ evidence = [
 ]
 gaps = "**用户 2026-09-23**：「AI 原生的 CLI 这个可以加进来吗？会不会更加方便后面的维护，以及功能的扩展」+「4 个面集中到一个点……**排最后，先做命令表**」。命令表 T-G31 与 ⌘K 面板 T-G61 之后，这是 T-G30 §4.3 的**第 2 步（只读 CLI）**。**这一步的验收标准不是「有没有 CLI」，而是「CLI 里有没有一行自己算出来的东西」** —— 有一行就是第二个口径（那正是本项目一路在消的东西）。**落点**：`src/timeflow/cli/` 七个小文件 —— `table.py` 读命令表（与 `check_commands.py` **共用同一个读法**）、`registry.py` 14 条命令 = (名字, 契约 OP, 路由, 参数, 排版)、`call.py` 取数、`render.py` 排版（**只排版不取数不算数**）、`main.py` 参数/输出/退出码/自描述。**★ 取数走进程内同一个 HTTP 边界**：不是直接调 `core/`（那要把 `api/app.py` 的参数校验与字段形状再写一遍 = 把「四个面各写一遍」从业务逻辑搬到校验逻辑上），而是 `create_app()` + 同一套路由与中间件，**只把 socket 换成一次 ASGI 调用** —— 不起服务、不占端口（不会和正在跑的窗口抢 8520），库路径与桌面端同源。**命令**：`today`/`plan`/`overdue`/`due`/`done`/`week`/`trend`/`habits`/`check`/`tasks`/`upcoming`/`focus`/`board`/`sync` + `commands`（自描述）。**入口只加不改**：`timeflow` 不带参数**仍然开窗口**，只有第一个词是已知子命令或 `-h/--help` 才走命令行。**AI 原生六条**逐条落地：结构化 JSON（边界原样，不重排不改名）/ 自带参数 schema（`commands --json` 的 params，正是 MCP tool schema 的原料）/ 非交互 / 稳定退出码 `0` 成功·`1` 用法错·`2` 接口错·`3` 找不到命令表（`--json` 时 stderr 上 `{error:{code,detail}}`）/ 幂等可逆破坏性随表（`commands --table`）/ 自描述；**stdout 只放数据、错误一律进 stderr**。**「它不是第二套命令」是机器判的**：`check_commands.py` 新增「命令行投影」一节，五条判定 —— ① 只读（路由必须 GET，且挂的 OP 的 `kind` 必须是 read/derive；写操作 CLI 是另一张卡，要等 AI 边界口径）；② 路由必须**真是**那条 OP 的路由（`GET /api/nope` 当场红）；③ 命令 ↔ 表里的 `cli` 字段**双向互相指认**；④ 命令名不重复；⑤ 覆盖率报出来（**洞是进度不是错误**）。**只读全覆盖**（T-G30 §4.4 的口径）：13 条只读操作 → **覆盖 12 条**，唯一空着的 `OP-43`「配置加载」**压根没有路由**（入口是启动时的校验与注入）—— 这一条写进表里的 `note`、也钉在测试里（`rows_without_cli == [\"OP-43\"]`），免得下一个人以为是漏填。**验收**：`tests/test_cli_line.py` **19 条**（最值钱的三条：① `test_every_command_is_a_projection_of_the_same_route` 逐条命令断言 **CLI 的 `--json` == TestClient 直接打同一条路由的 JSON** —— 这是「不自己算口径」的机器形态；② `test_cli_does_not_touch_the_database_or_the_domain_layer` 用 `ast` 读 import 语句，`src/timeflow/cli/**` 不许出现 `sqlite3`/`timeflow.core`/`timeflow.storage`，而 `timeflow.api.app` 必须在；③ 不带参数仍开窗口 —— 断 `SystemExit` 与「`uvicorn.Server` 有没有被构造」，不靠感觉）+ `tests/test_check_commands.py` **+3**（真仓库覆盖率 / 合成假命令的路由不匹配与「表里没写」/ 拒绝 POST 与写操作）。**顺带**：T-G62 那条时钟缝是产品层的，所以 `TIMEFLOW_FAKE_TODAY` 对 CLI **免费生效**（`timeflow today` 第一行就是假日子）—— 当初做成「一处出口」的回报。**没做 / 边界**：写操作 CLI（第 4 步，卡在「哪些操作必须在 CLI 里可达」这句口径）与 MCP（第 3 步，原料已备齐：`commands --table --json` + params）；**不连正在跑的服务**（每次自己开一个进程内 app，行为确定；代价约 0.3–0.5s 启动）；stderr 上会有一行 `app_start` 的 JSON（真发生的事；要干净就 `TF_LOG_PATH=off`）；局域网配对门在这条路上不判定（来源写死回环、`allow_lan=False`，**CLI 不是对外服务**）；`pip install` 出的包不一定带 `docs/commands.toml`，所以自描述找不到表时退 3，数据命令不受影响（路由绑定写在 registry，由门禁逐条核对 —— 与 ⌘K 面板同一个做法）。"
 
+[entries."T-G66"]
+id = "T-G66"
+title = "只读 CLI 的环境错加固（T-G64 的落地后自检）：库不存在不许建库、库/表打不开给稳定码而不是栈"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/只读CLI-环境错加固-T-G66.md",
+  "text:src/timeflow/cli/call.py::class DatabaseError(RuntimeError):",
+  "text:src/timeflow/cli/call.py::return isinstance(exc, OSError) or type(exc).__module__.split(\".\")[0] == \"sqlite3\"",
+  "text:src/timeflow/cli/call.py::if not Path(db_path).is_file():",
+  "text:src/timeflow/cli/table.py::class TableBrokenError(RuntimeError):",
+  "text:src/timeflow/cli/main.py::ERROR_CODES: dict[str, int] = {",
+  "text:scripts/check_commands.py::命令表语法坏了（先修它，下面的对账才有意义）",
+  "test:test_cli_line.py",
+  "test:test_check_commands.py",
+]
+gaps = "**触发**：用户 2026-09-25 问「有要修复的吗」。T-G64 落地后我没有等下一张卡，而是**按「用户会怎么用错」把刚做的东西探了一遍**（先跑现成的诊断尺子：`route_ui_gap` / `squeeze_scan` / `ui_text_scan` / `style_audit`，再拿四类环境错撞 CLI），**探出 3 处真缺陷**。**① 库不存在时静默建库**（真缺陷）：`timeflow today --db <打错的路径>` 会建一个空库、回「0 分钟 / 0 项」、退 0 —— 一个只会读的命令留下文件副作用，还让「打错路径」看起来像「我这周什么都没干」。修法：调边界前先 `Path(db_path).is_file()`，不是文件就 `db_missing` 退 3（顺带把 `--db <目录>` 一起挡掉）。**② 库打不开把栈丢给用户**（真缺陷）：★ **第一版只兜了 `create_app()` 那一步，实测照样漏** —— 库是**懒连接**的（`storage/db.thread_local` 第一次用到才真打开），「file is not a database」这类错在**请求里**才炸出来，所以 try 必须把 `asyncio.run(_exchange(...))` 一起罩住。**③ 命令表语法坏也是栈**（真缺陷，这张表在本项目**写坏过 9 次**）：`table_broken` 退 3 + 带 `tomllib` 原文的行列号；`check_commands.py` 同步改成报一条硬冲突（跑门的人要的是那一行，不是 traceback）。**判「环境坏」还是「代码 bug」**：只把 `OSError` 与 `sqlite3.*` 当环境错，其余**原样抛出**（代码 bug 不该伪装成「你的库有问题」）；判定走 `type(exc).__module__` 而**不是 import sqlite3** —— CLI 这层不许碰数据库（有源码级 import 护栏）。**顺带**：`help <命令>` 认命令（`help today` == `today --help`）；自描述里补 `errors`（退出码只区分到「退 3」，而退 3 下面有五件不同的事，脚本/AI 要能分辨）。**诊断尺子那边没有新东西**：`squeeze_scan` 0 处、`route_ui_gap` 剩的 9 条路由全是按设计不给界面、`ui_text_scan` 是 T-G57 已知的长文案尾巴、`style_audit` 的「圆角 4 档」里那个 `0` 是手机底栏的有意复位（工具早写明 `0`/`50%` 仍按一档计）—— **看着像缺陷、查过是报告口径，特意没动**（把尺子改宽之后它就不再拦真漂移了）。**边界**：库坏了只翻译不修（指路到设置页「备份与恢复」）；库不存在是**有意**的硬门槛（宁可说「库还没有」，也不给一份空账）；「库在但迁移失败」目前仍是 500，没预先发明错误码。**证据**：`tests/test_cli_line.py` +5（含「退 3 且一个文件都没留下」与 `Traceback not in err`）、`tests/test_check_commands.py` +1。"
+
 [entries."T-G65"]
 id = "T-G65"
 title = "MCP 服务（T-G30 §4.3 第 3 步）与写操作 CLI（第 4 步）—— 两者都读同一张命令表"

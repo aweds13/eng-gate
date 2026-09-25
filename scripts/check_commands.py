@@ -258,11 +258,17 @@ def main() -> int:
     real_routes = routes()
     wildcards = wildcard_routes()
     actions, views = ui_names()
-    table = load_commands()
 
     problems: list[str] = []
     no_route: list[str] = []
     no_ui: list[str] = []
+    # 表语法坏了：报**一句带行列的硬冲突**，而不是把 tomllib 的栈丢给跑门的人
+    # （这张表在本项目里写坏过 9 次，每次都要几秒钟才看明白是哪儿）
+    try:
+        table = load_commands()
+    except cli_table.TableBrokenError as exc:
+        table = {}
+        problems.append(f"命令表语法坏了（先修它，下面的对账才有意义）：{exc}")
 
     if not table:
         problems.append(
