@@ -10,10 +10,15 @@
 - **局域网访问（G 批 · T-G10b / 场景 ②）**：窗口模式也认 `[net] allow_lan` ——
   开了就绑 `0.0.0.0`（手机能连）、并打印地址与配对码；**窗口自己仍然走回环**。
   默认关（口径同 N16「默认收严、用户再放宽」）。
+
+★ **同一个入口也是命令行**（T-G64）：第一个词是已知子命令（`timeflow today`）或 `--help`
+时走 `timeflow.cli`（只读命令，**不开窗口、不起服务**）。**不带参数的行为一个没改** ——
+桌面用户怎么用还是怎么用；只有明确敲了子命令才走命令那条路。
 """
 
 from __future__ import annotations
 
+import sys
 import threading
 import webbrowser
 from pathlib import Path
@@ -21,13 +26,20 @@ from pathlib import Path
 import uvicorn
 
 from timeflow.api.app import create_app
+from timeflow.cli.main import CLI_WORDS
+from timeflow.cli.main import main as cli_main
 from timeflow.config import load_settings
 from timeflow.core import lan as lan_mod
 from timeflow.storage import backup as backup_mod
 from timeflow.storage import db as db_mod
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    args = [str(a) for a in (sys.argv[1:] if argv is None else argv)]
+    # 只加不改：只有**明确**敲了子命令（或 --help/-h）才走 CLI，其余一律开窗口
+    if args and (args[0] in CLI_WORDS or args[0] in ("-h", "--help")):
+        raise SystemExit(cli_main(args))
+
     settings = load_settings()
     db_path = Path(settings.database.path)
     made = backup_mod.make_backup(db_path)

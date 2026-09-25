@@ -1061,6 +1061,38 @@ evidence = [
 ]
 gaps = "**用户 2026-09-25**：「你过多地堆积各种按钮……不要那么多按钮，直接显现出来。你想一想。」→ 我先量（读的是每轮门禁已经采好的 45 份黄金，零额外耗时），**再按判据包定方案**（`sheleg-design/workbench` 是这条线的 core contract：`DataTable.md` 的「行 hover 只是底色、nothing else moves」、`Button.md` 的「primary 是这一屏存在就为了让它好按的那一个」、`DestructiveButton.md` 的「删除 = 红边小 ghost + 两步确认」、`workbench.md` 的 primary max one per view 与 keyboard-first），并查了同类产品的机制（Things/提醒：行上只剩勾选、动作在详情面板；Todoist/Linear/GitHub：hover 一个 `…` 或固定槽位的小图标；批量走「选中后出工具条」）。**先出预演图**（真界面注入 + 真种子数据 × 3 档宽度），用户在三个候选里选 **A′** 并要「设置页一起收」。**改了什么**：① 卡上只留「勾选圈 + 在做/开始 + 专注 + `…`」，`…` 点开**行内展开**（推到明天/取消/加入移出 My Day/标记/分配/详情/记录/**删除**）；删除是 `.danger`（红边红字，悬停不变回正文色）+ 二次确认；**「详情」按钮删掉 → 点标题开右栏**（键盘那条路留在 `…` 里）；② 设置页每节 = 「标题 + 现状 + 展开」，现状优先取「当前选中的那个按钮」、关键节有人写的短摘要，展开/收起是**真按钮**（`aria-expanded`/`aria-controls`），**就地切 DOM** 不重跑那页 15 个请求；常用区链接会叫开目标节；③ 折叠状态与「…」状态**同一屏重渲染保留、切视图重置**。**量到的**：全部任务 111 → **42** 个可见按钮（一张卡 8–10 → **2 +「…」**，动作行从两行变一行）、页高 1609 → 1284；设置页 117 → **13** 个、页高 7099 → **1164**（手机 9603 → 1584）。**验收**：pytest 两条（标记层：常显 ≤3、菜单里 9 个动作一个不少、`.danger` + 二次确认、点标题开详情、**没有**悬停显形规则；设置页：现状表/真按钮 + aria/就地切/边界规则/常用区叫开）+ 行为流第 K 条扩到 **38 项断言**（真量「一张卡 ≤3 个按钮」、`删除` 在卡上数不到、点 `…` 才出现、再点收起；设置页那一节默认折着、折着也有「现状：」）+ 受影响的 7 条流各加一次 `openSetting(...)`（那一下本身就是验证）+ 假 DOM 探针补齐 `querySelector(All)`/`matches`/`after` + 黄金 45 份重采（改 21 份）。**★ 预演否掉了我自己上一轮的 A+B 方案**：悬停显形会让动作行换行、卡片长高 = 包明令禁止的位移 —— 先出图就是为了让它当场暴露。**边界**：不做悬停显形（只保留「点开」）；手机没有悬停所以 `…` 是唯一入口（卡片标题因此从 128px 拿到 ~200px）；设置页少数节的现状摘要是通用兜底（抓第一节正文），不如手写那几节准 —— 已知粗糙处，不值得为它加后端字段；「常用」「入口」两节不折（导航不是动作列表）。"
 
+[entries."T-G64"]
+id = "T-G64"
+title = "只读 CLI（SR-NF6 / SR-NF7；键盘附加层第 ④ 步）：命令表的第四份投影 —— 14 条命令走同一个 HTTP 边界，不自己算口径"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/只读CLI-命令表的第四份投影-T-G64.md",
+  "text:src/timeflow/cli/__init__.py::这个包就是第二步，三条口径：",
+  "text:src/timeflow/cli/table.py::class TableMissingError(RuntimeError):",
+  "text:src/timeflow/cli/call.py::messages = asyncio.run(_exchange(app, _scope(method.upper(), path, query)))",
+  "text:src/timeflow/cli/registry.py::READ_METHOD = \"GET\"",
+  "text:src/timeflow/cli/registry.py::name=\"today\"",
+  "text:src/timeflow/cli/render.py::def board(data: Any) -> list[str]:",
+  "text:src/timeflow/cli/main.py::EXIT_ENV = 3  # 环境错（命令表找不到）",
+  "text:src/timeflow/app/main.py::if args and (args[0] in CLI_WORDS or args[0] in (\"-h\", \"--help\")):",
+  'text:docs/commands.toml::cli = ["timeflow today"]',
+  "text:scripts/check_commands.py::---- 命令行（T-G64）：这份投影必须与命令表**双向**对得上 ----",
+  "text:docs/specification/nonfunctional.md::命令行也是同一张表的投影（2026-09-25，T-G64）",
+  "text:docs/user-guide.md::## 命令行（可选，T-G64）",
+  "test:test_cli_line.py",
+  "test:test_check_commands.py",
+]
+gaps = "**用户 2026-09-23**：「AI 原生的 CLI 这个可以加进来吗？会不会更加方便后面的维护，以及功能的扩展」+「4 个面集中到一个点……**排最后，先做命令表**」。命令表 T-G31 与 ⌘K 面板 T-G61 之后，这是 T-G30 §4.3 的**第 2 步（只读 CLI）**。**这一步的验收标准不是「有没有 CLI」，而是「CLI 里有没有一行自己算出来的东西」** —— 有一行就是第二个口径（那正是本项目一路在消的东西）。**落点**：`src/timeflow/cli/` 七个小文件 —— `table.py` 读命令表（与 `check_commands.py` **共用同一个读法**）、`registry.py` 14 条命令 = (名字, 契约 OP, 路由, 参数, 排版)、`call.py` 取数、`render.py` 排版（**只排版不取数不算数**）、`main.py` 参数/输出/退出码/自描述。**★ 取数走进程内同一个 HTTP 边界**：不是直接调 `core/`（那要把 `api/app.py` 的参数校验与字段形状再写一遍 = 把「四个面各写一遍」从业务逻辑搬到校验逻辑上），而是 `create_app()` + 同一套路由与中间件，**只把 socket 换成一次 ASGI 调用** —— 不起服务、不占端口（不会和正在跑的窗口抢 8520），库路径与桌面端同源。**命令**：`today`/`plan`/`overdue`/`due`/`done`/`week`/`trend`/`habits`/`check`/`tasks`/`upcoming`/`focus`/`board`/`sync` + `commands`（自描述）。**入口只加不改**：`timeflow` 不带参数**仍然开窗口**，只有第一个词是已知子命令或 `-h/--help` 才走命令行。**AI 原生六条**逐条落地：结构化 JSON（边界原样，不重排不改名）/ 自带参数 schema（`commands --json` 的 params，正是 MCP tool schema 的原料）/ 非交互 / 稳定退出码 `0` 成功·`1` 用法错·`2` 接口错·`3` 找不到命令表（`--json` 时 stderr 上 `{error:{code,detail}}`）/ 幂等可逆破坏性随表（`commands --table`）/ 自描述；**stdout 只放数据、错误一律进 stderr**。**「它不是第二套命令」是机器判的**：`check_commands.py` 新增「命令行投影」一节，五条判定 —— ① 只读（路由必须 GET，且挂的 OP 的 `kind` 必须是 read/derive；写操作 CLI 是另一张卡，要等 AI 边界口径）；② 路由必须**真是**那条 OP 的路由（`GET /api/nope` 当场红）；③ 命令 ↔ 表里的 `cli` 字段**双向互相指认**；④ 命令名不重复；⑤ 覆盖率报出来（**洞是进度不是错误**）。**只读全覆盖**（T-G30 §4.4 的口径）：13 条只读操作 → **覆盖 12 条**，唯一空着的 `OP-43`「配置加载」**压根没有路由**（入口是启动时的校验与注入）—— 这一条写进表里的 `note`、也钉在测试里（`rows_without_cli == [\"OP-43\"]`），免得下一个人以为是漏填。**验收**：`tests/test_cli_line.py` **19 条**（最值钱的三条：① `test_every_command_is_a_projection_of_the_same_route` 逐条命令断言 **CLI 的 `--json` == TestClient 直接打同一条路由的 JSON** —— 这是「不自己算口径」的机器形态；② `test_cli_does_not_touch_the_database_or_the_domain_layer` 用 `ast` 读 import 语句，`src/timeflow/cli/**` 不许出现 `sqlite3`/`timeflow.core`/`timeflow.storage`，而 `timeflow.api.app` 必须在；③ 不带参数仍开窗口 —— 断 `SystemExit` 与「`uvicorn.Server` 有没有被构造」，不靠感觉）+ `tests/test_check_commands.py` **+3**（真仓库覆盖率 / 合成假命令的路由不匹配与「表里没写」/ 拒绝 POST 与写操作）。**顺带**：T-G62 那条时钟缝是产品层的，所以 `TIMEFLOW_FAKE_TODAY` 对 CLI **免费生效**（`timeflow today` 第一行就是假日子）—— 当初做成「一处出口」的回报。**没做 / 边界**：写操作 CLI（第 4 步，卡在「哪些操作必须在 CLI 里可达」这句口径）与 MCP（第 3 步，原料已备齐：`commands --table --json` + params）；**不连正在跑的服务**（每次自己开一个进程内 app，行为确定；代价约 0.3–0.5s 启动）；stderr 上会有一行 `app_start` 的 JSON（真发生的事；要干净就 `TF_LOG_PATH=off`）；局域网配对门在这条路上不判定（来源写死回环、`allow_lan=False`，**CLI 不是对外服务**）；`pip install` 出的包不一定带 `docs/commands.toml`，所以自描述找不到表时退 3，数据命令不受影响（路由绑定写在 registry，由门禁逐条核对 —— 与 ⌘K 面板同一个做法）。"
+
+[entries."T-G65"]
+id = "T-G65"
+title = "MCP 服务（T-G30 §4.3 第 3 步）与写操作 CLI（第 4 步）—— 两者都读同一张命令表"
+group = "PROCESS"
+status = "todo"
+evidence = []
+gaps = "**为什么没做**（不是漏，是排在后面）：T-G30 §4.3 定的顺序是 命令表（T-G31 ✅）→ 只读 CLI（T-G64 ✅）→ **MCP** → **写操作 CLI**。MCP 是 2026 年「AI 原生」的标准形态（DSH 自己就是 MCP 客户端），它要的元数据比 CLI 更多（参数 schema 必须精确）—— **原料 T-G64 已经备齐**（`timeflow commands --json` 的 params 与 `--table` 的整张表）。**写操作 CLI 卡在一句口径上**：T-G30 §4.4 写明「这是新的产品面，按项目规矩得你定口径 —— 只要一句：**哪些操作必须在 CLI 里可达**」；不定就会出现「有的操作能脚本化、有的不能」，**那比完全没有 CLI 更糟**（没法信任它）。我的建议仍是「**只读全覆盖 + 写入只做和界面上一样的那些**（复用同一套口径，不发明第三套语义），且写入默认关（同 N16「默认收严、用户再放宽」）」。另：用户 2026-09-23 已定「**AI 只写事实**」（方案 3），写操作 CLI 的边界要照它来。"
+
 [entries."T-G62"]
 id = "T-G62"
 title = "工程债（验证层）：把「今天」收成一处并让采集能钉住它（`src/timeflow/clock.py` + `TIMEFLOW_FAKE_TODAY` + 采集侧三处一致）—— 修掉「黄金跨午夜自己变红 6 份」"

@@ -9,6 +9,12 @@
 #
 #       界面按钮 / ⌘K 面板 / CLI / AI·MCP   ←   都读这张表
 #
+# 四份投影的现状（2026-09-25）：
+#   · 界面按钮 —— `ui` 字段，124 处入口（46 条 OP 有界面入口）；
+#   · ⌘K 面板 —— `index.html` 的 `const COMMANDS`（18 条，T-G61），由检查器逐条核对；
+#   · 命令行  —— `timeflow.cli`（9 条只读命令，T-G64）+ 这里的 `cli` 字段，**双向**核对；
+#   · AI·MCP  —— 还没做（T-G30 §4.3 的第 3 步）。
+#
 # ## 它凭什么不会变成「第二份手抄」
 #
 # 因为三个字段有**已有的真源**，`scripts/check_commands.py` 会机器核对：
@@ -21,6 +27,7 @@
 #   title      契约里的正名（机器核对；同号有「基础篇 + 领域篇」两节时取不带（扩展）的那个）
 #   routes     实现这条操作的路由，写成 "METHOD /path"（机器核对）
 #   ui         界面入口，写成 "data-action=<名>" 或 "view=<名>"（机器核对）；**空数组是合法的**
+#   cli        命令行入口，写成 "timeflow <子命令>"（机器核对，T-G64）；**空数组是合法的**
 #   kind       write（改数据）| read（只读）| derive（纯计算）
 #   reversible 契约里 `可逆` 那条的原话（判断"要不要二次确认"就靠它）
 #   ai         AI 接口能做什么：read | create | none（列表；一条操作可以既只读又新增）
@@ -28,8 +35,9 @@
 #
 # ## 「洞」是进度，不是错误
 #
-# 有些行 `routes` 或 `ui` 是空的 —— 那是**如实记录**（这条操作没有 HTTP 路由、或界面里没有入口）。
-# 检查器会把它们数出来：**那个数字下降就是这张表在长**。跟两道审美门的登记表一个思路。
+# 有些行 `routes` / `ui` / `cli` 是空的 —— 那是**如实记录**（这条操作没有 HTTP 路由、
+# 界面里没有入口、或命令行里还没有它）。检查器会把它们数出来：**那个数字下降就是这张表在长**。
+# 跟两道审美门的登记表一个思路。
 
 [commands."OP-1"]
 title = "新建任务"
@@ -119,6 +127,7 @@ ai = ["none"]
 title = "查看今日摘要"
 routes = ["GET /api/summary", "GET /api/focus/today", "GET /api/review/today"]
 ui = ["view=today"]
+cli = ["timeflow today"]
 kind = "read"
 reversible = "—（只读）"
 ai = ["none"]
@@ -205,6 +214,7 @@ routes = [
   "GET /api/insights/heatmap", "GET /api/insights/repeat-rhythm",
 ]
 ui = []
+cli = ["timeflow week", "timeflow trend"]
 kind = "read"
 reversible = "只读"
 ai = ["none"]
@@ -214,6 +224,7 @@ note = "入口是专注页「本周投入」区 / 统计页的常驻卡片，没
 title = "逾期债务展示"
 routes = ["GET /api/overdue", "GET /api/summary"]
 ui = []
+cli = ["timeflow overdue"]
 kind = "read"
 reversible = "只读"
 ai = ["none"]
@@ -246,6 +257,7 @@ note = "后四条来自契约「实现补充（第 10 步）」的新建/改名/
 title = "查看习惯热力图"
 routes = ["GET /api/habits", "GET /api/habits/{habit_id}"]
 ui = ["view=habit"]
+cli = ["timeflow habits"]
 kind = "read"
 reversible = "只读"
 ai = ["none"]
@@ -255,6 +267,7 @@ note = "习惯页热力图是常驻渲染，没有专门 data-action。"
 title = "自检"
 routes = ["GET /api/selfcheck"]
 ui = []
+cli = ["timeflow check"]
 kind = "read"
 reversible = "只读"
 ai = ["none"]
@@ -307,6 +320,7 @@ note = "task_type / course_id 是任务属性，**没有专用端点**；task-op
 title = "课程提醒"
 routes = ["GET /api/assessments/upcoming"]
 ui = ["view=academic"]
+cli = ["timeflow upcoming"]
 kind = "read"
 reversible = "可关闭提醒"
 ai = ["none"]
@@ -340,6 +354,7 @@ ai = ["none"]
 title = "到期列表 / 进 My Day"
 routes = ["GET /api/mydays", "GET /api/review/due"]
 ui = ["view=review"]
+cli = ["timeflow plan", "timeflow due"]
 kind = "read"
 reversible = "可移出"
 ai = ["none"]
@@ -388,6 +403,7 @@ note = "一条操作两条路：执行者卡片（PATCH，人）与 AI 报告进
 title = "视角切换"
 routes = ["GET /api/team/board", "GET /api/team/assignments"]
 ui = ["data-action=team-view", "data-action=team-filter", "data-action=team-me", "view=team"]
+cli = ["timeflow board"]
 kind = "read"
 reversible = "随时切换"
 ai = ["none"]
@@ -466,6 +482,7 @@ note = "预览与导入是同一条 POST /api/sync/import（body 里 dry_run=tru
 title = "冲突处理"
 routes = ["GET /api/sync/logs", "GET /api/sync/status"]
 ui = ["view=setting"]
+cli = ["timeflow sync"]
 kind = "read"
 reversible = "可手动改回；导入前的状态可用备份与恢复回退（OP-42）"
 ai = ["none"]
@@ -487,7 +504,7 @@ ui = []
 kind = "read"
 reversible = "改配置重启"
 ai = ["none"]
-note = "入口是启动时的 Pydantic 校验与注入，不是路由；GET /api/config 只把个别配置项暴露给界面，不是「加载」动作。"
+note = "入口是启动时的 Pydantic 校验与注入，不是路由；GET /api/config 只把个别配置项暴露给界面，不是「加载」动作。**命令行也进不来**（T-G64 的检查器会把它报成 1 条没填出命令行入口的洞 —— 那条洞是对的：没有路由就没有可投影的东西）。"
 
 [commands."OP-44"]
 title = "外部通知导入（合作接口）"
@@ -508,6 +525,7 @@ ai = ["none"]
 title = "智能视图筛选（Important / Planned / Flagged）"
 routes = ["GET /api/tasks", "POST /api/tasks/{task_id}/flag"]
 ui = ["data-action=task-flag", "view=important", "view=planned", "view=flagged"]
+cli = ["timeflow tasks"]
 kind = "read"
 reversible = "随时切回「全部任务」"
 ai = ["none"]
@@ -549,6 +567,7 @@ note = "后两条是只读的「该提醒了」数据源；提醒时间字段本
 title = "今天做成了什么（可展开的完成明细）"
 routes = ["GET /api/today/done"]
 ui = ["data-action=done-toggle"]
+cli = ["timeflow done"]
 kind = "read"
 reversible = "点「收起」即折叠（纯界面状态）"
 ai = ["none"]
@@ -586,6 +605,7 @@ note = "契约里的启动方式（tools/serve.py --lan / config.toml）不在 a
 title = "跨端同步专注（只读镜像，T-G20）"
 routes = ["GET /api/focus/active"]
 ui = []
+cli = ["timeflow focus"]
 kind = "read"
 reversible = "镜像随对面结束自动消失（界面侧靠 10 秒轮询；数据侧不做推送）"
 ai = ["none"]

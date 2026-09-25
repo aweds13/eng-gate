@@ -195,3 +195,79 @@ def test_checker_main_is_green_on_the_real_repo(monkeypatch, capsys) -> None:  #
     assert report["palette_commands"] >= 15
     assert report["palette_with_op"] >= 10
     assert len(report["palette_keys"]) == len(set(report["palette_keys"]))
+
+
+# ------------------------------------------------------------------ 命令行投影（T-G64）
+
+
+def test_real_checker_reports_cli_coverage(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """真仓库：命令行那份投影的覆盖率是**报出来的数**（洞是进度不是错误）。
+
+    ★ 唯一允许没有命令行入口的只读操作是 `OP-43`「配置加载」—— 它**压根没有路由**
+    （入口是启动时的校验与注入）。这一条把它钉成事实：以后要么补一条命令，
+    要么改这里的断言 —— 不许悄悄变成"忘了填"。
+    """
+    monkeypatch.setattr(sys, "argv", ["check_commands.py", "--json", "--check"])
+    assert cc.main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["cli_commands"] == len(cc.cli_registry.COMMANDS) >= 10
+    assert report["rows_without_cli"] == ["OP-43"]
+    assert len(report["ops_with_cli_entry"]) >= 10
+
+
+def test_cli_projection_conflict_is_reported(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """合成一条"路由对不上、表里也没写"的 CLI 命令 → 检查器必须报硬冲突。
+
+    这一条防的是"CLI 自己有一套命令"：命令表是唯一真源，两边要**互相指认**。
+    """
+    _write(tmp_path, "contracts/interactions.md", "## OP-7 查看今日摘要\n\n正文\n")
+    _write(tmp_path, "app.py", '@app.get("/api/summary")\ndef a(): ...\n')
+    _write(tmp_path, "index.html", "const VIEWS=['today'];\nconst ACTIONS = { 'x': el => y };\n")
+    table_file = _write(
+        tmp_path,
+        "commands.toml",
+        '[commands."OP-7"]\ntitle = "查看今日摘要"\nroutes = ["GET /api/summary"]\n'
+        'ui = []\nkind = "read"\nreversible = "只读"\nai = ["none"]\n',
+    )
+    fake = cc.cli_registry.Command(
+        name="fake", op="OP-7", route="GET /api/nope", title="假的", human=lambda data: []
+    )
+    monkeypatch.setattr(cc, "CONTRACTS", tmp_path / "contracts")
+    monkeypatch.setattr(cc, "APP", tmp_path / "app.py")
+    monkeypatch.setattr(cc, "INDEX", tmp_path / "index.html")
+    monkeypatch.setattr(cc, "COMMANDS", table_file)
+    monkeypatch.setattr(cc.cli_registry, "COMMANDS", (fake,))
+    monkeypatch.setattr(sys, "argv", ["check_commands.py", "--json", "--check"])
+
+    assert cc.main() == 1
+    problems = json.loads(capsys.readouterr().out)["problems"]
+    assert any("不是 OP-7 的路由" in p for p in problems), problems
+    assert any("cli 字段里没写它" in p for p in problems), problems
+
+
+def test_cli_projection_rejects_write_commands(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """只读 CLI 挂在写操作上、或用 POST → 两条都必须是硬冲突（写操作是另一张卡）。"""
+    _write(tmp_path, "contracts/interactions.md", "## OP-1 新建任务\n\n正文\n")
+    _write(tmp_path, "app.py", '@app.post("/api/tasks")\ndef a(): ...\n')
+    _write(tmp_path, "index.html", "const VIEWS=['today'];\nconst ACTIONS = { 'x': el => y };\n")
+    table_file = _write(
+        tmp_path,
+        "commands.toml",
+        '[commands."OP-1"]\ntitle = "新建任务"\nroutes = ["POST /api/tasks"]\n'
+        'ui = []\nkind = "write"\nreversible = "可删除"\nai = ["none"]\n'
+        'cli = ["timeflow danger"]\n',
+    )
+    fake = cc.cli_registry.Command(
+        name="danger", op="OP-1", route="POST /api/tasks", title="偷偷写", human=lambda data: []
+    )
+    monkeypatch.setattr(cc, "CONTRACTS", tmp_path / "contracts")
+    monkeypatch.setattr(cc, "APP", tmp_path / "app.py")
+    monkeypatch.setattr(cc, "INDEX", tmp_path / "index.html")
+    monkeypatch.setattr(cc, "COMMANDS", table_file)
+    monkeypatch.setattr(cc.cli_registry, "COMMANDS", (fake,))
+    monkeypatch.setattr(sys, "argv", ["check_commands.py", "--json", "--check"])
+
+    assert cc.main() == 1
+    problems = json.loads(capsys.readouterr().out)["problems"]
+    assert any("只许挂 GET" in p for p in problems), problems
+    assert any("只读 CLI 只许挂" in p for p in problems), problems

@@ -20,8 +20,10 @@
 | **HTTP 路由** | `app.py` 的 `@app.<method>("/path")` | 表里每条路由必须**真的存在** |
 | **界面入口** | `index.html` 的 `ACTIONS` / `VIEWS` | `data-action=x` / `view=y` 必须**真注册过** |
 | **命令面板**（T-G61） | `index.html` 的 `COMMANDS` | 动作注册、键位不重复、挂的 OP 入口里真有它 |
+| **命令行**（T-G64） | `timeflow.cli.registry.COMMANDS` | 只读（GET）、路由是该 OP 的、`kind` 是
+  read/derive、`cli` 字段**双向**对得上 |
 
-**洞是允许的、也是要报的**：现在还有多少行没填出路由/界面入口，脚本会数出来 ——
+**洞是允许的、也是要报的**：现在还有多少行没填出路由/界面入口/命令行入口，脚本会数出来 ——
 那就是"这张表还差多少"的进度条，也是下一步的工单（跟两道审美门的登记表一个思路）。
 
 用法
@@ -37,7 +39,8 @@ import json
 import re
 from pathlib import Path
 
-import tomllib
+from timeflow.cli import registry as cli_registry
+from timeflow.cli import table as cli_table
 
 ROOT = Path(__file__).resolve().parent.parent
 COMMANDS = ROOT / "docs" / "commands.toml"
@@ -54,6 +57,8 @@ ACTION_KEY = re.compile(r"'([a-z0-9-]+)':\s*(?:el\s*=>|\()")
 VIEWS = re.compile(r"const VIEWS=\[([^\]]*)\]")
 
 KINDS = {"write", "read", "derive"}
+#: 只读命令只该挂在这两类操作上（`derive` 是纯计算，也没有写入）
+READ_KINDS = {"read", "derive"}
 AI_SCOPES = {"read", "create", "none"}
 
 
@@ -117,11 +122,12 @@ def ui_names() -> tuple[set[str], set[str]]:
 
 
 def load_commands() -> dict[str, dict[str, object]]:
-    if not COMMANDS.exists():
-        return {}
-    data = tomllib.loads(COMMANDS.read_text(encoding="utf-8"))
-    table = data.get("commands", {})
-    return dict(table) if isinstance(table, dict) else {}
+    """读命令表 —— **与 CLI 共用同一个读法**（`timeflow.cli.table`）。
+
+    为什么要共用：门禁读得出来、CLI 读不出来（或反之）这种自相矛盾，
+    比"少读一个字段"严重得多 —— T-G52 那次把两处口径并成一处就是为这类事。
+    """
+    return cli_table.load_file(COMMANDS)
 
 
 def _skip_literal(text: str, i: int) -> int:
@@ -353,6 +359,66 @@ def main() -> int:
             palette_with_op += 1
             palette_ops.add(op)
 
+    # ---- 命令行（T-G64）：这份投影必须与命令表**双向**对得上 ----
+    # 这一节回答的是用户 2026-09-23 那个担心：「直接加一个 CLI 会不会让维护变差？」
+    # 不会 —— 前提是 CLI **不许自己有一套命令清单**。所以逐条钉：
+    #   ① 只读：每条命令的路由必须是 GET，且挂在 kind=read/derive 的操作上
+    #      （写操作 CLI 是另一张卡，要等 AI 边界口径）；
+    #   ② 那条路由必须**真是**那条 OP 的路由（不是"我记得是这个路径"）；
+    #   ③ 表里的 `cli` 字段与代码里的命令**双向**一致 —— 表里写了命令名，代码里就得有；
+    #      代码里有这条命令，表里那条 OP 就得写上它。任一边漏了都是硬冲突。
+    cli_names: dict[str, cli_registry.Command] = {}
+    cli_ops: set[str] = set()
+    for command in cli_registry.COMMANDS:
+        method, _, route_path = command.route.partition(" ")
+        cid = f"timeflow {command.name}"
+        if method != cli_registry.READ_METHOD:
+            problems.append(
+                f"CLI {cid}：只读 CLI 只许挂 {cli_registry.READ_METHOD}，这里写的是 {method}"
+            )
+        if command.name in cli_names:
+            problems.append(f"CLI：命令名 {command.name!r} 重复")
+        cli_names[command.name] = command
+        if command.op not in ops:
+            problems.append(f"CLI {cid}：契约层里没有 {command.op}")
+            continue
+        if command.op not in table:
+            problems.append(f"CLI {cid}：{command.op} 还没进命令表")
+            continue
+        row_kind = str(table[command.op].get("kind", ""))
+        if row_kind not in READ_KINDS:
+            problems.append(
+                f"CLI {cid}：挂在 {command.op}（kind={row_kind}）上 —— 只读 CLI 只许挂 "
+                f"{sorted(READ_KINDS)}，写操作要单独一张卡"
+            )
+        row_routes = as_list(table[command.op].get("routes"))
+        if command.route not in row_routes:
+            problems.append(
+                f"CLI {cid}：路由 {command.route!r} 不是 {command.op} 的路由（那条 OP 现在有"
+                f" {row_routes}）"
+            )
+        if cid not in as_list(table[command.op].get("cli")):
+            problems.append(
+                f"CLI {cid}：代码里有这条命令，但 {command.op} 的 cli 字段里没写它"
+                "（表是唯一真源，两边要互相指认）"
+            )
+        cli_ops.add(command.op)
+    for oid, row in sorted(table.items()):
+        for entry in as_list(row.get("cli")):
+            name = entry.removeprefix("timeflow ").strip()
+            if not entry.startswith("timeflow "):
+                problems.append(f"{oid}：cli 写法不认识 {entry!r}（应为 timeflow <子命令>）")
+            elif name not in cli_names:
+                problems.append(f"{oid}：cli 写了 {name!r}，但 CLI 里没有这条命令")
+            elif cli_names[name].op != oid:
+                problems.append(
+                    f"{oid}：cli 写了 {name!r}，但那条命令挂的是 {cli_names[name].op}"
+                )
+    read_ops = {
+        oid for oid, row in table.items() if str(row.get("kind", "")) in READ_KINDS
+    }
+    no_cli = sorted(oid for oid in read_ops if not as_list(table[oid].get("cli")))
+
     report = {
         "contract_ops": len(ops),
         "rows": len(table),
@@ -366,6 +432,10 @@ def main() -> int:
         "palette_with_op": palette_with_op,
         "palette_keys": sorted(seen_keys),
         "ops_with_palette_entry": sorted(palette_ops),
+        "cli_commands": len(cli_names),
+        "ops_with_cli_entry": sorted(cli_ops),
+        "rows_without_cli": no_cli,
+        "cli_read_ops": sorted(read_ops),
         "problems": problems,
     }
 
@@ -390,6 +460,12 @@ def main() -> int:
     if no_ui:
         print(f"\n  还没填出界面入口的：{len(no_ui)} 条 → {no_ui}")
     print(
+        f"\n  命令行（只读）：{len(cli_names)} 条命令"
+        f" · 覆盖 {len(cli_ops)}/{len(read_ops)} 条只读操作"
+    )
+    if no_cli:
+        print(f"  还没填出命令行入口的：{len(no_cli)} 条 → {no_cli}")
+    print(
         f"\n  命令面板（⌘K）：{len(palette)} 条命令 · {len(seen_keys)} 个键位"
         f" · 其中 {palette_with_op} 条对得上契约 OP（{len(palette_ops)} 条 OP 有面板入口）"
     )
@@ -399,8 +475,9 @@ def main() -> int:
             print(f"  [FAIL] {p}")
         return 1 if args.check else 0
     print("\n命令表与三个真源一致 ✅（没有硬冲突）")
-    print("说明：洞（没填出的路由/入口）是**进度**不是错误 —— 数量下降就是这张表在长。")
+    print("说明：洞（没填出的路由/入口/命令行）是**进度**不是错误 —— 数量下降就是这张表在长。")
     print("说明：命令面板那一节证明「⌘K 不是第二套命令系统」—— 它只是这张表的又一份投影。")
+    print("说明：命令行那一节证明「CLI 也不是第二套」—— 每条命令都挂在一条只读操作上。")
     return 0
 
 

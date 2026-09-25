@@ -251,6 +251,18 @@
   与加**功能**（领域函数 + 路由 + 界面）**做不到不改核心**，如实标注（`SR-NF7` → done：
   词表 + 集成 + 模板都到位，做不到的写明）。
 
+## 命令行（SR-NF6 / SR-NF7 · T-G64）→ `src/timeflow/cli/`
+
+- **它不是一个新层，是那张表的第四份投影**：`docs/commands.toml`（T-G31）里每条操作现在有
+  `ui`（界面）/ `cli`（命令行）两组入口，⌘K 面板与 CLI 都由 `scripts/check_commands.py` 逐条核对。
+- **入口**：`timeflow <子命令>`（`src/timeflow/app/main.py` 分派；**不带参数仍然开窗口**）。
+  14 条命令全是**只读**（`GET` + 挂在 `kind=read|derive` 的操作上）+ `commands`（自描述）。
+- **取数**：`cli/call.py` 走**进程内同一个 HTTP 边界**（`create_app()` 的同一套路由与中间件，
+  只把 socket 换成一次 ASGI 调用）—— 不起服务、不占端口，**一行业务逻辑都不复制**；
+  `cli/render.py` 只排版；`cli/table.py` 与检查器**共用同一个读法**。
+- **边界**：写操作 CLI 与 MCP 还没做（T-G30 §4.3 的第 3、4 步）。
+  详见 `复盘/只读CLI-命令表的第四份投影-T-G64.md`。
+
 ## 可观测（SR-NF13）→ `src/timeflow/logs.py`
 
 - **结构化日志**：一行一条 JSON（`logs/timeflow.jsonl`，gitignore 的本机产物）；`setup_logging()` 幂等，

@@ -89,6 +89,27 @@ python -X utf8 tools\serve.py          # 起服务（只绑回环；会自动备
 - 导出：Markdown 写到设置页「导出（Markdown）」里指定的目录（默认 `export/`，一天一个文件）。
 - 备份与恢复：设置页「数据与同步 → 备份与恢复」。
 
+## 命令行（可选，T-G64）
+
+不开窗口也能看今天的账（只读，不会改任何数据）：
+
+```text
+timeflow                开窗口（默认，和以前一样）
+timeflow today          今天的摘要：专注 / 手动投入 / 复习 / 产出 / 债务
+timeflow plan           今天的清单        timeflow overdue   逾期项
+timeflow due            到期复习卡        timeflow done      今天做成了什么
+timeflow week           本周结算          timeflow trend     近 N 天走势
+timeflow habits         习惯与连续天数    timeflow check     自检
+timeflow upcoming       临期/逾期考核项   timeflow focus     现在有没有在专注
+timeflow tasks          任务列表          timeflow board     团队视角
+timeflow sync           同步现状
+timeflow commands       我有哪些命令（`--table` 看整张契约命令表）
+```
+
+- 加 `--json` 得到机器读的原始数据（字段与界面完全同一份来源）；
+- 加 `--db 路径` 指向另一个库文件；`timeflow <命令> --help` 看参数；
+- 退出码：`0` 成功 / `1` 用法错 / `2` 接口错 / `3` 找不到命令表 —— 方便写脚本判断。
+
 ## 已知局限
 
 - **学校通知（F10）**：只做界面标注与合作接口；计划任务在「注销/关机」时不会响（那要系统层权限）。
