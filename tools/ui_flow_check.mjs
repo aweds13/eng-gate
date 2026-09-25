@@ -13,7 +13,7 @@
  *   ① 每条流都**声明它替掉哪一条人工项**（打印出来 + 测试钉住），"搬走了哪几条"有据可查；
  *   ② 真点击做**命中测试**（`elementFromPoint`）：被浮层盖住、被挤出视口的按钮，
  *      `el.click()` 会"成功"，而用户点不到 —— 所以这里一律真按坐标，且先验"那个点上是不是它"；
- *   ③ **不做"全覆盖"**：够用的条数就停（现在 **22** 条）。要加一条，得先说明它替掉哪条人工项。
+ *   ③ **不做"全覆盖"**：够用的条数就停（现在 **23** 条）。要加一条，得先说明它替掉哪条人工项。
  *
  * 已知边界（**不谎报**）：
  *   · 起不了浏览器 → 退出码 3（NOT RUN），**NOT RUN 不是 PASS**（`run_gates.py` 单列一栏）。
@@ -42,7 +42,7 @@
  * 退出码：0 全通过 / 1 有流失败 / 2 fixture（种子数据）坏了 / 3 起不了真浏览器（NOT RUN）/
  *         4 两遍断言指纹不一致（只在 `--twice` 时可能出现）。
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
@@ -53,6 +53,23 @@ import {
 
 const SHOTS_DIR = join(ROOT, 'gates', 'render', 'shots')  // 证据与黄金层放一起（同样不进仓库）
 const TEMP_DIR = process.env.TEMP ?? process.env.TMP ?? '/tmp'
+
+/** 备份名里的时间戳 / 界面上那个时间标签（⑪ 用）。
+ *
+ * 产品格式是 `<库名>.bak-YYYYmmdd-HHMMSS`（`storage/backup.py`，**本地时间**），
+ * 界面按钮上的字是 `YYYY-MM-DD HH:MM:SS · 大小`。两个都从同一个 Date 算，
+ * 免得"我算的时间戳"和"界面显示的时间"差一秒就点不中那个按钮。
+ */
+function stampOf(d) {
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`
+    + `-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+}
+function labelOf(d) {
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} `
+    + `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
 
 /** 最新那个同步包在哪（⑰ 用）。
  *
@@ -1464,6 +1481,99 @@ flow({
     } finally {
       peer?.close()
     }
+  },
+})
+
+/* ⑪ 备份与恢复（B 批里最后一条"要动真数据"的人工项）：**在临时库上**把恢复这条路真走一遍。
+ *
+ * 为什么这一条必须设计走法（T-G73 当时就是卡在这儿没搬）：恢复是**不可逆**动作，而备份就落在
+ * **库文件旁边**（`<库名>.bak-<时间戳>`，见 `storage/backup.py`）。这一层起服务用的是
+ * `serve.py --fresh` —— 库在 `%TEMP%/timeflow_fresh_*` 里，**它的备份也在那儿**：真实库与
+ * 真实备份目录一个字节都不会被碰（这一条本身也有断言，不是口头保证）。
+ *
+ * 一条流里没法重启服务去触发"启动前自动备份"，所以这份备份由流自己按**产品的命名规则**放一个
+ * —— 于是这一条验的是**恢复那条不可逆的路**：列表认不认得它、确认框有没有写清哪个时间点、
+ * 取消会不会动库、恢复有没有真把数据带回那一刻、恢复前的现库有没有留退路、**再点回去能不能回来**。
+ * `make_backup` 本身由 `tests/test_backup_restore_line.py`（14 条）盯着，这里不重复。
+ */
+flow({
+  id: '⑪', name: '备份与恢复：数据真回到那一刻、恢复前的现库也留一份、再点回去能回来、取消不动库',
+  item: 'B 批 ⑪ 备份与恢复',
+  vp: 'desktop',
+  async run(t) {
+    const TITLE = '恢复之后不该还在的任务'
+    // ① 设置页 →「备份与恢复」：先看清这一轮跑在哪儿（临时库）
+    await t.start('setting')
+    await t.openSetting('set-backup')
+    const info = (await t.api('GET', '/api/settings/backups')).json || {}
+    const dir = String(info.dir || ''), dbName = String(info.db || '')
+    t.ok('（准备）这一轮跑在**临时库**上（真实备份目录不会被碰）',
+      dir.includes('timeflow_fresh_') && !dir.startsWith(ROOT), `dir=${dir}`)
+    const dbPath = join(dir, dbName)
+    t.ok('（准备）库文件真在磁盘上', dbName.endsWith('.db') && existsSync(dbPath), dbPath)
+
+    // ② 按产品的命名规则放一份"旧备份"（时间戳取 1 分钟前 → 它排在最新那份之后）
+    const d0 = new Date(Date.now() - 60000)
+    const stamp = stampOf(d0)
+    const bakName = `${dbName}.bak-${stamp}`
+    copyFileSync(dbPath, join(dir, bakName))
+    await t.view('setting'); await t.openSetting('set-backup')
+    const bakSel = `[data-action="restore-backup"][data-name="${bakName}"]`
+    t.eq('★ 这份备份出现在列表里', await t.count(bakSel), 1)
+    const bakLabel = String((await t.text(bakSel)) || '')
+    t.ok('★ 界面把它当**正常备份**（时间戳解析得出来，没被标"名字被改过"）',
+      bakLabel.length > 0 && !bakLabel.includes('名字被改过'), bakLabel)
+
+    // ③ 改点东西 —— 恢复之后它必须不见
+    await t.view('tasks')
+    await t.type('#allTitle', TITLE)
+    await t.pressAction('task-add-here')
+    t.has('（准备）新加的任务在列表里', await t.bodyText(), TITLE)
+    const nBefore = (((await t.api('GET', '/api/settings/backups')).json || {}).items || []).length
+
+    // ④ 点它 → 二次确认（写清恢复到哪个时间点）→ **先按 Esc 取消**
+    await t.view('setting'); await t.openSetting('set-backup')
+    await t.pressAction('restore-backup', { text: labelOf(d0) })
+    const title = String((await t.text('#modalTitle')) || '')
+    t.has('★ 确认框写清恢复到**哪个时间点**', title, stamp)
+    t.has('★ 也写清"选错了还能回去"', title, '选错了还能回去')
+    await t.key('Escape')
+    t.eq('★ 反证：取消之后没有多出备份（它一步都没走）',
+      (((await t.api('GET', '/api/settings/backups')).json || {}).items || []).length, nBefore)
+    await t.view('tasks')
+    t.has('★ 反证：取消之后那条任务还在', await t.bodyText(), TITLE)
+
+    // ⑤ 再来一次，这次确认 → 数据真的回到那一刻
+    await t.view('setting'); await t.openSetting('set-backup')
+    await t.pressAction('restore-backup', { text: labelOf(d0) })
+    await t.pressAction('modal-ok')
+    const done = await t.waitToast('已恢复')
+    t.has('★ 回话里说清恢复了哪一份', done.text, bakName)
+    t.has('★ 也说清"恢复前的现库也留了一份"', done.text, '留了一份')
+    await t.view('tasks')
+    t.ok('★ 数据真的回到那一刻（那条后来才加的任务不在了）',
+      !(await t.bodyText()).includes(TITLE), '库应回到备份那一刻的样子')
+    const items = ((await t.api('GET', '/api/settings/backups')).json || {}).items || []
+    t.eq('★ 恢复前自动又备份了一份现库（多出一条）', items.length, nBefore + 1)
+    const safety = items.filter((x) => x.name !== bakName)[0]
+    t.ok('（准备）认出那份"恢复前的现库"', Boolean(safety), JSON.stringify(items.map((x) => x.name)))
+
+    // ⑥ ★ 可逆：点那份 safety → 数据回来（"选错了还能回去"不是一句空话）
+    await t.view('setting'); await t.openSetting('set-backup')
+    await t.pressAction('restore-backup', { text: String(safety.at).replace('T', ' ') })
+    await t.pressAction('modal-ok')
+    t.ok('回话里有恢复成功那几个字', (await t.waitToast('已恢复')).ok)
+    await t.view('tasks')
+    t.has('★ 点回去 → 那条任务又回来了（可逆）', await t.bodyText(), TITLE)
+
+    // ⑦ 收尾：再恢复那份旧备份一次 —— 世界回到这一遍开始时的样子（这条路也可以重复走）
+    await t.view('setting'); await t.openSetting('set-backup')
+    await t.pressAction('restore-backup', { text: labelOf(d0) })
+    await t.pressAction('modal-ok')
+    t.ok('同一条路可以再走一次', (await t.waitToast('已恢复')).ok)
+    await t.view('tasks')
+    t.ok('★ 收尾：库里没有留下这条任务（不污染后面那些流）',
+      !(await t.bodyText()).includes(TITLE), '这条流自己造的数据要自己收干净')
   },
 })
 

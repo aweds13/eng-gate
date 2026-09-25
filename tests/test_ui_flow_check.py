@@ -105,7 +105,7 @@ def test_every_declared_item_still_exists_in_handover() -> None:
             continue
         # 声明形如「前端批次③ ⑦ 今日页新手引导卡片」——取其中的编号/关键词去文档里找
         tokens = ("⑦", "⑧", "⑨", "⑩", "①", "③", "⑥", "④", "⑬", "⑮", "⑯", "⑰",
-                  "㉓", "㉔", "㉕", "㉗", "㉑", "⑭", "㉒", "㉖", "㉘")
+                  "㉓", "㉔", "㉕", "㉗", "㉑", "⑭", "㉒", "㉖", "㉘", "⑪")
         for token in tokens:
             if token in item:
                 assert token in text, f"交接文档里已经没有人工项 {token} 了（{item}）"
