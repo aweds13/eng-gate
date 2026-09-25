@@ -521,6 +521,23 @@ evidence = [
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。 ★ **2026-09-25（T-G71）这条残留收口了**：`db.unit_of_work()` 在连接**代理层**把 `commit()` 推迟到退出那一刻（core 一个 `commit()` 都没改），本条的 `create_task` / `update_task` 两条路都包了事务 —— 第二笔抛数据库级错误时**库里一个字节都不留**（`tests/test_unit_of_work.py` 逐条钉，且用「第一笔确实跑过」证明不是空转）。详见 `复盘/跨函数事务-T-G71.md`。"
 
 
+[entries."T-G82"]
+id = "T-G82"
+title = "外包派活脚本（`tools/wb_dispatch.py`）：把派活做成一条有护栏的命令 —— 四道前置检查 + dry-run 默认 + 跑完自动渲染时间线（9 条测试）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:复盘/外包派活脚本-T-G82.md",
+  "file:复盘/外包卡-001-独立复核T-G79.md",
+  "text:tools/wb_dispatch.py::def preflight(card: str, spec: str, *, force: bool, check_auth: bool) -> tuple[list[str], Path]:",
+  "text:tools/wb_dispatch.py::AUTH_NEEDLE = \"Authentication required\"",
+  "text:tools/wb_dispatch.py::\"--output-format\", \"stream-json\",",
+  "text:复盘/外包-卡表与规矩.md::tools/wb_dispatch.py",
+  "test:test_wb_dispatch.py",
+]
+gaps = "**为什么要有**（T-G82，目标轮 1）：派活 = **别人替我改工作区**，手工敲命令有三个坑，三个都真会咬：① 在**脏工作区**里派活 → 工人和我的未提交改动混在一起，事后分不清谁动了什么（**一写一读**当场失效）；② **没登录**就派 → 白等一轮只拿到 `Authentication required`（T-G80 实测）；③ 派活不留痕 / 覆盖上一轮 log → 之后没人说得清它干了什么。**做法**：四道前置检查放在**真跑之前**，任何一道不过就**不派活**并说清原因 —— ① `--spec` 指的卡规格文件必须存在（不许凭记忆派活）；② `git status --porcelain -uno` 必须空（**未跟踪文件不算**：那两个是别的窗口放的）；③ 真发一条极短请求做**登录自检**（认出那句 Authentication required 就提示去 TUI 敲 `/login`）；④ `gates/diag/wb-<卡号>.jsonl` 已存在就拒绝（要覆盖得显式 `--force`，证据不许被悄悄盖掉）。默认 **dry-run**（打印将要执行的命令），`--execute` 才真派；派活命令固定带 `--output-format stream-json`（实时留痕）+ `--no-session-persistence` + `-y`，**开场白写死在脚本里**（三份协议文件 + `复盘/外包-卡表与规矩.md` + 这一张卡的规格 —— 不是随便一句提示词）；跑完**自动调用状态器**（T-G81 的 `tools/wb_status.py`，同一个渲染器不写第二份）把时间线印出来。退出码 `0` 过 / `2` 前置检查没过 / `4` 工人自己失败。**验收**：`tests/test_wb_dispatch.py` **9 条**（命令拼装含开场白与 stream-json、缺规格拦下、脏工作区拦下且不白戳登录、log 已存在拦下且 `--force` 放行、登录失败拦下、`auth_ok` 真认那句 needle、dry-run **一个子进程都不派**、`--execute` 用假 runner 钉住「真派 + 落 log + 渲染时间线」、工人非 0 退 → 脚本退 4、`git_dirty` 走 `-uno`）；**dry-run 真机实测过**（真前置检查认出未登录并拒绝派活）。**★ 边界（不假装）**：`--execute` 那条路**还没在真登录下跑过**（CLI 未登录，见 T-G80）—— 被验证的是四道检查与命令拼装；它也不管工人的**内容质量**（那是主控复核的事）、不替工人写卡规格、不检查工人有没有偷偷提交（靠复核：`gates/last.json` + `git log` + audit）。**同轮交付**：外包链路的**第一张卡规格** `复盘/外包卡-001-独立复核T-G79.md`（只读复核：四条硬主张 + 必须真跑 + 至少 3 条新边界 + 唯一允许写的文件 + 禁区）。**没动的**：`src/` 一行没改。"
+
 [entries."T-G81"]
 id = "T-G81"
 title = "WorkBuddy 状态器（`tools/wb_status.py`）：把工人 CLI 的 stream-json 事件读成人能看的时间线（8 条测试）"
