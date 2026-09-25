@@ -521,6 +521,23 @@ evidence = [
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。 ★ **2026-09-25（T-G71）这条残留收口了**：`db.unit_of_work()` 在连接**代理层**把 `commit()` 推迟到退出那一刻（core 一个 `commit()` 都没改），本条的 `create_task` / `update_task` 两条路都包了事务 —— 第二笔抛数据库级错误时**库里一个字节都不留**（`tests/test_unit_of_work.py` 逐条钉，且用「第一笔确实跑过」证明不是空转）。详见 `复盘/跨函数事务-T-G71.md`。"
 
 
+[entries."T-G80"]
+id = "T-G80"
+title = "外包交接：把活交给 WorkBuddy/CodeBuddy CLI 那条线 —— 工人入口（规矩 + 卡表 + 已知坑）+ CLI 实测（**登录待用户完成**）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/外包-卡表与规矩.md",
+  "text:复盘/外包-卡表与规矩.md::一写一读",
+  "text:复盘/外包-卡表与规矩.md::Authentication required",
+  "text:复盘/外包-卡表与规矩.md::--output-format stream-json",
+  "file:docs/workbuddy-cli-使用指南.md",
+  "file:tools/workbuddy.ps1",
+  "text:复盘/交接-重构进度.md::外包交接",
+  "text:复盘/新窗口交接卡.md::外包交接",
+]
+gaps = "**用户 2026-09-25 定的模式**：主控（我）停手、把卡交给 **WorkBuddy 内置的 CodeBuddy Code CLI**（有完整 CLI、工作区与环境和我相同、也会读仓库文档）干，我当主控复核；**一写一读，不许两个 agent 同时写工作区**（两种安排写在 `复盘/外包-卡表与规矩.md` §6：独占模式 / 分支·工作树模式，每轮由主控指定一种）。**这张卡交付的是「工人入口」**：① `复盘/外包-卡表与规矩.md` —— 开场白（照抄那句，指向 `复盘/交接-重构进度.md` + `复盘/长任务执行协议.md` + `复盘/新窗口交接卡.md`，不是随便一句提示词）、铁律 8 条（一轮一张卡 / 门禁不过不许提交 / 台账+代码+文档同一条提交（四个 trailer）/ 不许伪造完成 / 不许碰真实库与真实备份目录 / 重活不许并发 / 一写一读 / 撞到产品决策停下）、一张卡干完必须齐的 7 样、回话六项格式、当前卡表、**12 条已知坑**（都是真踩过的：TOML 引号 / 管道吞输出 / 按名杀进程 / E501 按宽度 / `--update --only` / 提示条判据 / 两次求值 / 漏 commit / 属性名读写不一致 / 数字漂 / `--twice` 标签 / `test:` 写法）、开工前自检、主控复核什么。② **CLI 实测（2026-09-26）**：CLI 在（`D:\\workbuddy\\resources\\app.asar.unpacked\\cli\\bin\\codebuddy`），`--version` → **2.147.0**（指南写 2.137.1，**会漂**）；**可用模型里没有叫 `flash` 的** —— DeepSeek 那一档是 `deepseek-v3-2-volc`（另有 glm 系 / kimi-k2.5 / minimax-m2.7 / auto），**要用户点头选哪个**；★ **能边调边看**：`--output-format stream-json` 实时流、`--bg --name` + `ps`/`logs`/`attach`/`kill`/`respawn`/`agents`、`--serve` 起本机 Web UI —— 主控的用法是**把它当 DSH 后台 job 跑并流式回读**，于是工人的每一步都出现在这个 GUI 里。★ **当前唯一的阻塞**：`-p 「…」 -y` 现在回 **`Authentication required. Please use /login command to sign in to your account`**，而 CLI **没有 `login` 子命令**（登录要在交互式 TUI 里敲 `/login`）→ **这一步只能用户本人做**。**没做（如实记）**：一次真派活都没发生（登录没通）—— 所以本卡证明的是「入口与链路已备好、CLI 可用性已实测」，**不是**「外包已经在跑」。`docs/workbuddy-cli-使用指南.md` 与 `tools/workbuddy.ps1` 是**用户放进仓库的**（别人的产物，本卡只是登记与实测）。"
+
 [entries."T-G79"]
 id = "T-G79"
 title = "拖拽 B（真拖拽）：My Day 的先后由你拖出来 —— 新列 `tasks.myday_rank` + 一条转移路由 + 拖拽与 ↑↓ 两个入口（13 条 pytest / 行为流 M 13 项断言）"
