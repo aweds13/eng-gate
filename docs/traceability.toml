@@ -529,6 +529,26 @@ evidence = [
 ]
 gaps = "**它收的是 T-G33 复盘里那句如实记下的残留**：「验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**」。现象是：`POST /api/tasks` 先 `create_task`（自己提交）再 `set_task_groups`（又自己提交），**第二笔一崩**，客户端看到报错、库里却躺着一条没有分组的任务，重试就两条。**做法（缝开在代理层，不动 core）**：HTTP 那条路上的 `conn` 是 `_ThreadLocalConn` 代理（T-G18 并发修复留下的），于是让它的 `commit()` 在 `unit_of_work()` 里**只记账**，真提交发生在退出那一刻（成功一次 `commit`、抛异常一次 `rollback`）—— SQLite 的隐式事务从第一次写就开着，所以这几笔写天然是一件事；**core 里 60 多个 `commit()` 一个都没改**，也没引框架。**★ 先量再改**：写了个 AST 扫描（判据搬进了 `tests/test_unit_of_work.py`）数「一个处理函数里调了几个会自己 commit 的 core 函数」，实测**只有 6 个**：3 个包事务（`create_task` / `update_task` / `put_reminder_settings`）、3 个进**带理由的豁免清单**（`create_memo` / `delete_memo` / `ledger_output` —— 第二笔是 `vault.try_export` 导出一份 md，是**派生**产物且必须在提交之后）。**清单进了 pytest**：多一个少一个都红、豁免理由短于 10 字也红、还有一条「扫描器真的看得到东西」的反空转判据 —— 以后新写一个多写处理函数会被当场拦下。**★ 边界（不假装）**：`unit_of_work` 只认代理，真 `sqlite3.Connection` 的 `commit` 拦不住，拿它来调**直接 `TypeError`** 并说清原因（与 `db.raw_conn()` 同一条规矩：不猜、不静默降级）；事务盖的是**数据库行**、不盖系统副作用（`PUT /api/settings/reminder` 还会注册 Windows 计划任务 —— 包事务仍然更好：两笔设置行现在同生共死，但「计划任务 vs 设置行」仍有一个极小窗口，如实记着）；`executescript()` 会先隐式提交（无调用点）；段内某笔失败被上层吞掉再继续时不会单独撤（没有 savepoint）。**验收**：`tests/test_unit_of_work.py` **11 条** —— 机制层（段里**另一条连接看不到**、退出才看得见）/ 回滚层（整段撤 + 嵌套只提交一次）/ 接口层（让第二笔**真抛** `sqlite3.OperationalError` → 断言第一笔**确实跑过**且库里空的；改任务那条连标题一起撤；对照组正常路径两笔都在）/ 拒绝层（真 Connection → TypeError）/ 清单层 3 条 / 并发层 1 条。**踩到的坑**：★★ **延迟标记第一版挂在实例上**（`self._defer`），可这个代理是**全进程一个**、所有线程共用 —— 线程 A 进事务后 B 的 `commit()` 也被推迟，而 A 退出时提交的是 A 自己的连接，B 那笔写于是**永远没人提交**（并发下 `database is locked`）；**抓到它的是 `tests/test_concurrency.py`**（T-G18 留下的老守卫），修法是标记住进 `threading.local()` + 补一条确定性最小复现。★ 另一条：第一版扫描器只解析包的 `__init__.py`，而 `timeflow.core.tasks` 是**包**（`set_task_groups` 真身在 `groups.py`）→ 量出来的清单是**假的**（只有 1 条）；扫包必须扫整棵树，并配一条「扫描器真看得到」的测试盯着它（与 T-G40/T-G69 同一族教训：判据自己也会撒谎）。**没动的**：core、界面、路由（一条都没加）、45 份黄金。**工程债三条至此全清**（`T-G40 §六` 签名 T-G69 / 非文字对比度 3.0 表 T-G70 / `T-G33` 残留 T-G71）。"
 
+[entries."T-G78"]
+id = "T-G78"
+title = "独立实现的最小 MCP 客户端（tools/mcp_client.py）：换个实现来读，协议这一层才算验过 —— 不 import 本项目 + 按最挑的读法判（8 条 pytest）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/独立MCP客户端-T-G78.md",
+  "file:tools/mcp_client.py",
+  "text:tools/mcp_client.py::不 import 这个项目的任何东西",
+  "text:tools/mcp_client.py::def check_tool_result(result: object) -> dict:",
+  "text:tools/mcp_client.py::required 里每一项都真的在 properties 里",
+  "text:tools/mcp_client.py::KNOWN_PROTOCOLS = (\"2024-11-05\", \"2025-03-26\", \"2025-06-18\")",
+  "text:tests/test_mcp_client_independent.py::def test_client_does_not_import_the_product()",
+  "text:tests/test_mcp_client_independent.py::def test_the_clients_judgements_actually_bite(",
+  "text:src/timeflow/mcp/server.py::独立实现的客户端在盯",
+  "text:docs/人工验收-照着点.md::T-G78 起协议层有一个独立实现的客户端在盯",
+  "test:test_mcp_client_independent.py",
+]
+gaps = "**它补的盲区**：服务端是 T-G65 手写的，`tests/test_mcp_line.py` 也真起子进程走过 stdio —— 但那两边的**作者、假设、读法是同一套**：服务端把「我们理解的消息」当「规范的消息」，测试再把服务端的回话当成对的（T-G74 就是这一族发作的现场：stdout 中文是 GBK，而当时的「真 stdio」测试带着 `-X utf8`，**正好把要验的那件事关掉了**，一路全绿）。所以这一张卡**另写一个实现**去读它，并且**只在规范允许的地方让步**：① ★ **不 import 本项目的任何东西**（连常量都不借 —— 借一个常量就等于借来一套假设；有源码级护栏钉着，连服务端路径都不许出现）；② `id` 用**字符串**并断言类型也要一样（「整数 id 才管用」这种假设自家测试里永远看不见）；③ 回话**先按 UTF-8 解字节**，解不开就判违规（T-G74 就是编码上的病，「换个编码再试试」会把病盖住）；④ `required` 里每一项都要**真的在 properties 里**（规范的一致性要求）；⑤ 结果严格按 `{content:[{type:text,text}], isError}` 判；⑥ 一条消息必须**以换行结束**（stdio 的 framing 就是一行一条）。**验收**：`tests/test_mcp_client_independent.py` **8 条**，全走真子进程真 stdio：独立护栏 / 握手（版本·能力·身份·**stderr 干净**）/ 工具清单（≥14、写工具一个不列、`readOnlyHint` 全 true、逐条过 schema 自检）/ 字符串 id 原样回来 + 不认的方法 `-32601` / ★ **反空转两条**（拿两个**故意坏掉的服务端**证明判据真的会咬：把字符串 id 改成整数 → 判「id 没有原样回来」；`required` 写一个 properties 里没有的参数 → 当场拦下 —— 没有这两条，「通过自检」可能只是「它什么都没查」）/ 写工具默认关（`-32602` + 消息里写着怎么开 + **被拒的写操作不许留下库文件**）/ ★ **中文一字不差**（T-G74 的独立复核：用这个客户端建一条中文标题的任务，再从另一个只读工具读回来）/ 工具失败如实报（库不存在 → `isError` → 客户端退出码 4，且只读命令不许建库）。**顺带交付**：它同时是给人用的小工具（`handshake` / `list` / `call` / `raw`，退出码 0/2/3/4/5/6），服务端命令三选一（`--server-json` > env `TIMEFLOW_MCP_SERVER` > 默认 `timeflow mcp`）—— D 组那条人工项现在可以先自己看一眼再决定要不要配 DSH。**顺带更正一句代码里的诚实边界**：`src/timeflow/mcp/server.py` 原写「验的是我们的客户端脚本 ↔ 我们的服务端」，T-G78 之后不准确了，改成「第三方 SDK 仍然没有，但协议这一层有一个独立实现的客户端在盯；真正没验的还是**某个具体第三方客户端里接一次**」。**没动的**：服务端一行逻辑没改（只改了那段注释）、CLI、命令表、界面、45 份黄金。**边界**：它不是第三方 MCP SDK，**不能替代**「在真客户端里接一次」那条人工项；只做 stdio（没有 resources / prompts / sampling / 进度通知）；超时靠后台读线程 + 队列（Windows 上管道没法 `select`）。"
+
 [entries."T-G77"]
 id = "T-G77"
 title = "人工验收搬家·第六批：⑪ 备份与恢复搬给行为流层 —— 用「临时库 + 临时备份目录」把那条不可逆的路真走一遍（23 条流 / 312 项断言）"
