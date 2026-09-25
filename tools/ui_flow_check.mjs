@@ -13,7 +13,7 @@
  *   ① 每条流都**声明它替掉哪一条人工项**（打印出来 + 测试钉住），"搬走了哪几条"有据可查；
  *   ② 真点击做**命中测试**（`elementFromPoint`）：被浮层盖住、被挤出视口的按钮，
  *      `el.click()` 会"成功"，而用户点不到 —— 所以这里一律真按坐标，且先验"那个点上是不是它"；
- *   ③ **不做"全覆盖"**：够用的条数就停（现在 **23** 条）。要加一条，得先说明它替掉哪条人工项。
+ *   ③ **不做"全覆盖"**：够用的条数就停（现在 **24** 条）。要加一条，得先说明它替掉哪条人工项。
  *
  * 已知边界（**不谎报**）：
  *   · 起不了浏览器 → 退出码 3（NOT RUN），**NOT RUN 不是 PASS**（`run_gates.py` 单列一栏）。
@@ -248,6 +248,51 @@ class T {
     const m = await this.mark(`[data-action="${name}"]`, opts)
     if (!m.ok) { this.ok(`界面上有这个动作：${name}`, false, `匹配到 ${m.all} 个，可见 ${m.pool} 个`); return false }
     return this.press(HIT, `${name}${opts.text ? `（${opts.text}）` : ''}`)
+  }
+
+  /** 真拖（T-G79）：按住 `from` 拖到 `to`（`frac` 决定落在目标卡的哪个高度上）。
+   *
+   * ★ 三条都是被实测坑出来的（`gates/diag/probes/drag_probe.mjs`）：
+   *   ① **两个 rect 必须在同一次求值里读**：`rectOf()` 自己会 `scrollIntoView` —— 先读起点、
+   *      再读落点，第二次滚动会让第一组坐标失效。当时的症状特别像"拖了没反应"：按下的那个点
+   *      其实是**另一张卡的抓手**（坐标已经飘到它头上了），于是"拖丙"变成了"拖甲"。
+   *   ② **按之前先做命中测试**：坐标飘了就当场报"那个点上其实是 …"，而不是拖完发现顺序没变。
+   *   ③ `frac` 不是装饰：落点算的是"鼠标在目标卡中线的上面还是下面"，要验"插到这条前面"
+   *      就得落在它**上半部分**（默认 0.3）—— 落正中间会算成"插到它的下一条前面"。
+   */
+  async drag(fromSel, toSel, { frac = 0.3, steps = 10 } = {}) {
+    // 只借 `rectOf` 的 scrollIntoView（把起点那一列滚进视口），返回值不用
+    await this.cdp.rectOf(fromSel)
+    const both = await this.cdp.eval(`(() => {
+      const a = document.querySelector(${JSON.stringify(fromSel)});
+      const b = document.querySelector(${JSON.stringify(toSel)});
+      if (!a || !b) return null;
+      const box = (e) => { const r = e.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height, cx: r.x + r.width / 2,
+                 cy: r.y + r.height / 2 } };
+      const out = { a: box(a), b: box(b), vh: window.innerHeight };
+      out.offscreen = [out.a, out.b].some((r) => r.y < 0 || r.y + r.h > out.vh);
+      return out; })()`)
+    if (!both) { this.ok(`拖得动：${fromSel} → ${toSel}`, false, '起点或落点没找到'); return false }
+    if (both.a.w < 1 || both.a.h < 1 || both.b.w < 1 || both.b.h < 1) {
+      this.ok(`拖得动：${fromSel} → ${toSel}`, false,
+        `起点 ${both.a.w}×${both.a.h} / 落点 ${both.b.w}×${both.b.h}`)
+      return false
+    }
+    if (both.offscreen) {
+      this.ok(`拖得动：${fromSel} → ${toSel}`, false,
+        `起点或落点在视口外（视口高 ${both.vh}）—— 先把这一列滚进来再拖`)
+      return false
+    }
+    const hit = await this.cdp.hitTest(fromSel, both.a.cx, both.a.cy)
+    if (!hit.ok) {
+      this.ok(`按得住起点：${fromSel}`, false, `${hit.why}（${hit.hit || '空'}）`)
+      return false
+    }
+    await this.cdp.dragPath({ x: both.a.cx, y: both.a.cy },
+      { x: both.b.cx, y: both.b.y + both.b.h * frac }, { steps })
+    await waitIdle(this.cdp)
+    return true
   }
 
   /** 真打字（逐字符 keydown/char/keyup）——不是 `value = '…'`：输入事件、`data-enter` 都要真经过。
@@ -1574,6 +1619,79 @@ flow({
     await t.view('tasks')
     t.ok('★ 收尾：库里没有留下这条任务（不污染后面那些流）',
       !(await t.bodyText()).includes(TITLE), '这条流自己造的数据要自己收干净')
+  },
+})
+
+/* M 今天清单的拖拽排序（T-G79）—— 用户 2026-09-25 在两张预演图上选了 **B（真拖拽）**。
+ *
+ * 这一条与别条不同的地方：它按下去的是**鼠标**，中间**分十步移动**，再松开 —— 走的就是
+ * Chromium 把鼠标合成成 pointer 事件那条真路（`pointerdown/move/up`）。
+ * 三条判据：
+ *   ① **顺序真的变了**（界面上那三张卡的先后按 DOM 读出来）；
+ *   ② ★ **落库了**（刷新一次还是那个顺序 —— 这是"真拖拽"与"前端自己排一排"的分界线）；
+ *   ③ ↑↓ 是**等价入口**（键盘/读屏那条路），落到同一份序号上。
+ */
+flow({
+  id: 'M', name: '今天清单拖拽排序：真按住拖 → 顺序变了、刷新还在、↑↓ 也能调',
+  item: '新增（不是搬移项）：T-G79 今天清单的拖拽排序（用户 2026-09-25 在预演图上选的 B 真拖拽）',
+  vp: 'desktop',
+  async run(t) {
+    const A = '拖拽甲', B = '拖拽乙', C = '拖拽丙'
+    const mine = [A, B, C]
+    // ① 三张我有把握的卡（判据要能一眼看出"谁在前"）。
+    //    为什么中间 sleep 一秒多：`created_at` 只到**秒**，同一秒建的三条谁在前是不确定的 ——
+    //    那会让"拖之前是这个顺序"这条断言变成看运气（判据不许建在"同秒的任意顺序"上）。
+    const ids = {}
+    for (const title of mine) {
+      const made = await t.api('POST', '/api/tasks', { title, is_myday: true })
+      t.ok(`（准备）建了「${title}」并放进今天`, made.status === 200, JSON.stringify(made).slice(0, 120))
+      ids[title] = made.json && made.json.id
+      await sleep(1100)
+    }
+    await t.start('today')
+    await t.view('today')
+    const orderOf = () => t.cdp.eval(`(() => {
+      const want = ${JSON.stringify(mine)};
+      return [...document.querySelectorAll('#mydayList .card')]
+        .map((c) => ((c.querySelector('.title') || {}).textContent || '').trim())
+        .filter((x) => want.some((w) => x.includes(w))); })()`)
+    t.eq('（准备）三张卡按创建顺序排在今天清单里', JSON.stringify(await orderOf()),
+      JSON.stringify([A, B, C]))
+
+    // ② 只读的几件：抓手是"按住拖"的手势区（不是按钮、也不占 Tab），↑↓ 在卡片正文里
+    t.ok('★ 今天清单的卡都带拖拽抓手', await t.count('#mydayList [data-drag="myday"]') >= 3,
+      `实测 ${await t.count('#mydayList [data-drag="myday"]')} 个`)
+    t.eq('★ 抓手不是按钮（不混进"卡上动作"那笔账、也不占 Tab）',
+      await t.count('#mydayList button[data-drag]'), 0)
+    t.eq('★ 卡片本身不能拖（只能按住抓手拖 —— 不然点标题也会被当成拖）',
+      await t.count('#mydayList .card[data-drag]'), 0)
+    const rowBtns = await t.cdp.eval(`(() => { const c = document.querySelector('#mydayList .card');
+      return c ? [...c.querySelectorAll(':scope > .row > button')].length : -1 })()`)
+    t.ok('★ 卡片外层动作行没被撑大（↑↓ 在正文里，不在动作行）', rowBtns >= 1 && rowBtns <= 3,
+      `实测 ${rowBtns} 个`)
+    t.has('★ 卡上写着它在第几位（顺序是数据，界面得说清）', await t.text('#mydayList'), '第 ')
+
+    // ③ ★ 真拖：按住「丙」的抓手（按**任务 id** 找，不靠"第几张"），拖到「甲」的上半边 → 松手。
+    //    先把整列滚到视口顶：拖拽要求起点与落点**同时在视口里**（工具会当场判，不然报"在视口外"）。
+    await t.cdp.eval("(() => { const el = document.getElementById('mydayList');" +
+      " if (el) el.scrollIntoView({ block: 'start' }); return true })()")
+    const dragged = await t.drag(`#mydayList [data-drag="myday"][data-id="${ids[C]}"]`,
+      `#mydayList .card[data-myday-id="${ids[A]}"]`, { frac: 0.3 })
+    if (!dragged) return
+    t.eq('★ 拖完顺序变了（丙跑到最前）', JSON.stringify(await orderOf()), JSON.stringify([C, A, B]))
+
+    // ④ ★ 顺序是**数据**：刷新一次还在（前端自己排的那种会在这里打回原样）
+    await t.reload()
+    await t.view('today')
+    t.eq('★ 刷新之后还是那个顺序（落库了）', JSON.stringify(await orderOf()), JSON.stringify([C, A, B]))
+    const served = (await t.api('GET', '/api/tasks')).json.filter((x) => mine.includes(x.title))
+    t.ok('★ 库里也带着序号（不是只有界面记得）',
+      served.length === 3 && served.every((x) => typeof x.myday_rank === 'number'),
+      JSON.stringify(served.map((x) => [x.title, x.myday_rank])))
+
+    // ⑤ 键盘那条路：最后一张按 ↑ 往上挪一位（与拖拽落到同一份序号上）
+    await t.pressAction('myday-move', { inCard: B })
+    t.eq('★ ↑↓ 与拖拽落在同一份序号上', JSON.stringify(await orderOf()), JSON.stringify([C, B, A]))
   },
 })
 

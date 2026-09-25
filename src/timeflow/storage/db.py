@@ -26,7 +26,7 @@ from timeflow import clock
 if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解
     from collections.abc import Iterator
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -302,6 +302,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     _migrate_v16(conn)  # 加列：tasks.created_by（谁建的：我 / AI）
     _migrate_v17(conn)  # 跨端：六张表的 updated_at + 删除墓碑（触发器，幂等）
     _migrate_v18(conn)  # 建表：school_notices（学校通知的**合作接口**收件箱）
+    _migrate_v19(conn)  # 加列：tasks.myday_rank（今天清单的自定义顺序 · T-G79 拖拽）
 
 
 def _upgrade(conn: sqlite3.Connection, current: int) -> None:
@@ -344,6 +345,8 @@ def _upgrade(conn: sqlite3.Connection, current: int) -> None:
         _migrate_v17(conn)  # 跨端合并所需的 modified 标记 + 删除墓碑（G 批 · T-G8）
     if current < 18:
         _migrate_v18(conn)  # 学校通知的合作接口收件箱（G 批 · T-G14）
+    if current < 19:
+        _migrate_v19(conn)  # 今天清单的自定义顺序（T-G79 拖拽）
 
 
 
@@ -366,6 +369,7 @@ def _create_all(conn: sqlite3.Connection) -> None:
     _migrate_v16(conn)  # 同上：tasks.created_by 由本版加列（谁建的：我 / AI）
     _migrate_v17(conn)  # 同上：updated_at 六列 + sync_tombstones 表 + 触发器
     _migrate_v18(conn)  # 同上：school_notices 表（学校通知的合作接口收件箱）
+    _migrate_v19(conn)  # 同上：tasks.myday_rank 由本版加列（今天清单的顺序）
 
 
 def _migrate_v1(conn: sqlite3.Connection) -> None:
@@ -1172,4 +1176,23 @@ def _migrate_v18(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_school_notices_received "
         "ON school_notices(received_at)"
     )
+
+
+def _migrate_v19(conn: sqlite3.Connection) -> None:
+    """v19：**今天清单（My Day）的自定义顺序** `tasks.myday_rank`（T-G79）。
+
+    口径（用户 2026-09-25 在两张预演图上选了 **B 真拖拽**）：
+
+    - 「今天做什么」的先后由**用户自己拖**出来（`myday_rank` 小的排前面）；
+    - **没排过序的（NULL）排在排过序的后面**，它们之间仍按原来的统一口径
+      （截止日 → 优先级 → 创建时间）—— 也就是"你拖过的那几条按你排的走，
+      新加进今天的排在后面"，不猜顺序；
+    - 拖一次会把**当前清单整体规整成 1..N**（与 `doing_rank` 那套同一做法），
+      于是"先拖谁后拖谁"不会因为中间插进来一条而错位；
+    - 只有**在今天的**任务才有序号：移出今天一律清成 NULL（不留幽灵序号）；
+    - 序号由领域层维护（`manager.place_myday` / `manager.move_myday`），
+      **不是内容字段**，不进 `update_task` 的字段白名单；
+    - 幂等加列，缺表跳过不失败；老数据全为 NULL。
+    """
+    _add_column_if_missing(conn, "tasks", "myday_rank", "myday_rank INTEGER")
 

@@ -4,6 +4,28 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 拖拽 B（T-G79）：My Day 的先后由你拖出来 —— 拖一下定序、刷新还在，↑↓ 是同一份顺序的另一个入口
+
+清单的先后原来是**算**出来的（截止日 → 优先级 → 创建时间）。这一版把「摆」这件事做成真的。
+
+- **口径**：顺序**只由用户动作产生**（拖一下 / 按一次 ↑↓）。`tasks.myday_rank`（schema **v19**）小的在前；
+  **没拖过的排后面**（`NULL`）并按老口径（截止日 → 优先级 → 创建时间）—— 两份口径拼在**一处**
+  （`_MYDAY_ORDER_BY`）。**进「今天」= NULL**（新来的排最后，不抢你摆好的位置）、**离开「今天」= 清空**。
+- **拖拽落点是「放到那一条前面」**（`{"before": "<id>"}`，`{"before": null}` = 末尾），**不是第几格** ——
+  中间插队、或有条目被隐藏/完成，落点都不会错位。`POST /api/tasks/{task_id}/myday-move`
+  （两键要么给一个要么不给，都给 → 400；任务不存在 → 404 先于「不在今天」那一步），包在 `db.unit_of_work` 里。
+- **界面**：抓手是**非 button** 的手势区（`data-drag`），`pointerdown/move/up` 三件事 + 落点边框高亮 +
+  `touch-action:none`（触屏也能拖）；**键盘/读屏走 ↑↓ 那两个按钮** —— 两条路写的是**同一份** `myday_rank`。
+- **验收**：`tests/test_myday_order_line.py` **13 条** + 行为流 **M「今天清单拖拽排序」13 项断言**
+  （真按住、真移动、松手 → 顺序变了；**刷新页面顺序还在**；再按 ↑↓ 调一次）+
+  `test_web_frontend.py` 一条「抓手在且键盘可达」+ 对比度门补一对**非文字**判据。
+- ★ **两条坑都是探针先抓到的**：① `_write_myday_rank` 漏 `commit()` → 400/幂等那几条「先写再早退」的路
+  把写挂在事务里，**下一个读当场 `database is locked`**（`gates/diag/probes/myday_lock_probe.py` 定位到
+  「第 5 条连接 in_transaction=True」）；② 卡片写 `data-myday-id`、拖拽读 `dataset.id` →
+  **看着能拖、其实什么也没发生**（`gates/diag/probes/drag_probe.mjs` 接管 `fetch` 照出来）。
+- 黄金：本次动了卡片结构 → 渲染黄金**有意重采**（理由在 `gates/render/LAST_UPDATE.md`）。
+- 台账 `T-G79`（`SR-F1.1b` 从 deferred **转 done**）；复盘 `复盘/拖拽排序-T-G79.md`。
+
 ### 独立实现的最小 MCP 客户端（T-G78）：换个实现来读，协议这一层才算验过
 
 服务端是 T-G65 手写的，`tests/test_mcp_line.py` 也真起子进程走过 stdio —— 但那两边的

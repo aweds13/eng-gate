@@ -88,6 +88,14 @@ _ORDER_BY = (
     " created_at"
 )
 
+# 今天清单（My Day）的排序口径（T-G79 · 拖拽 B）：**拖过的按拖的顺序**（rank 小的在前），
+# 没拖过的排在后面，它们之间仍按上面那份统一口径（截止日 → 优先级 → 创建时间）。
+# 为什么复用 `_ORDER_BY` 的后半段：这样"没排过序的那一截"与别的视图**永远同一个口径**，
+# 不会因为多了一张拖拽卡而长出第二套排序说法（`_MYDAY_ORDER_BY` 必须定义在它之后）。
+_MYDAY_ORDER_BY = (
+    " ORDER BY myday_rank IS NULL, myday_rank," + _ORDER_BY.split(" ORDER BY ", 1)[1]
+)
+
 # 三个智能视图（SR-F1.3 / T-B3）：口径写在**领域层**，界面只负责显示
 # （免得同一套筛选在前端/后端/测试三处各写一遍）。
 VIEW_IMPORTANT = "important"
@@ -133,6 +141,9 @@ class Task:
     # 「进行中」的显式顺序（F 批 · T-F1）：序号小的排前面；非「进行中」一律 NULL。
     # 由领域层维护（`start_task` / `move_doing`），不走 `update_task` 的字段白名单。
     doing_rank: int | None = None
+    # 今天清单（My Day）的显式顺序（T-G79 · 拖拽 B）：序号小的排前面；不在今天的一律 NULL。
+    # 由领域层维护（`place_myday` / `move_myday`），**不给人手改**（同 `doing_rank`）。
+    myday_rank: int | None = None
     # **谁建的**（G 批 · T-G6）：`me`（你）/ `ai`（AI 接口建的）。
     # 这是 AI 边界的**判据**（用户 2026-09-21 乙案：AI 只能动它自己建的东西），
     # 不是界面装饰 —— 所以它由创建路径写死，**不给人手改**、也不进 PATCH 白名单。
@@ -164,6 +175,7 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         ),
         course_id=row["course_id"] if "course_id" in keys else None,
         doing_rank=row["doing_rank"] if "doing_rank" in keys else None,
+        myday_rank=row["myday_rank"] if "myday_rank" in keys else None,
         # 缺列兜底：v16 之前建的库没有这列 —— 那些行都是"我建的"（不猜成 AI）
         created_by=(
             str(row["created_by"])
@@ -540,6 +552,12 @@ def update_task(
             updates["doing_rank"] = _next_doing_rank(conn)
         elif updates["status"] != STATUS_DOING and before.status == STATUS_DOING:
             updates["doing_rank"] = None
+    # 今天清单的顺序号（T-G79）只由**用户的动作**产生（拖拽 / ↑↓ 各写一次完整排序）：
+    # **加进今天不排号**（NULL = 没排过序 → 排在排过序的那一截后面，"新加进来的在末尾"）；
+    # **移出今天要清成 NULL** —— 否则它下次再加回来会**带着旧号插回原来的位置**，
+    # 而它已经离开过今天了，那个位置不该留着（与 `doing_rank` 同一条规矩：不留幽灵序号）。
+    if "is_myday" in updates and not bool(updates["is_myday"]) and before.is_myday:
+        updates["myday_rank"] = None
     if "task_type" in updates or "course_id" in updates:
         # 类型与课程是一对：**按改完之后的状态**校验（只传 course_id 时也要看当前类型，
         # 只传 task_type='普通' 时也要看当前课程）—— 单看某一列会放过"普通 + 挂课程"这种组合。
@@ -717,9 +735,14 @@ def purge_deleted_tasks(conn: sqlite3.Connection) -> int:
 
 
 def myday_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Task]:
-    """My Day 集合（AC-4）：is_myday=1 且非完成/搁置（取消·待定）/归档/已删；**按统一口径排序**。"""
+    """My Day 集合（AC-4）：is_myday=1 且非完成/搁置（取消·待定）/归档/已删。
+
+    排序（T-G79）：**拖过的按拖的顺序**（`myday_rank`，小的在前），**没拖过的排在后面**并按
+    统一口径（截止日 → 优先级 → 创建时间）—— 两份口径拼在 `_MYDAY_ORDER_BY` 一处，
+    不在这里另写一遍 SQL。
+    """
     rows = conn.execute(
-        "SELECT * FROM tasks WHERE is_myday = 1 AND status NOT IN (?,?,?,?,?)" + _ORDER_BY,
+        "SELECT * FROM tasks WHERE is_myday = 1 AND status NOT IN (?,?,?,?,?)" + _MYDAY_ORDER_BY,
         (STATUS_DONE, *PARKED_STATUSES, *HIDDEN_STATUSES),
     ).fetchall()
     return [_row_to_task(r) for r in rows]
@@ -1345,6 +1368,91 @@ def archive_entries(
             entries.append(ArchiveEntry(task=task, auto=True, completed_on=done_on))
     entries.sort(key=lambda e: e.completed_on or e.task.updated_at[:10], reverse=True)
     return entries
+
+
+def _write_myday_rank(conn: sqlite3.Connection, task_id: str, rank: int | None) -> None:
+    """只改顺序号：**不动 `updated_at`**（换顺序不是"这条内容变了"），版本号照加。
+
+    ★ 这里必须自己提交（`move_doing` 里那份同样如此）：拖动/↑↓ 有**提前返回**的分支
+    （拖到自己前面、已经在边界上）和**抛错**的分支（落点不合法）—— 要是把提交留给最后那一步，
+    规整序号的那几笔写就会**留在未提交的事务里**：同一个连接上还攥着写锁，接下来任何一条
+    读/写都会 `database is locked`（T-G79 实测踩到，见 `复盘/拖拽排序-T-G79.md` §4）。
+    """
+    conn.execute(
+        "UPDATE tasks SET myday_rank = ?, version = version + 1 WHERE id = ?", (rank, task_id)
+    )
+    conn.commit()
+
+
+def _myday_sequence(conn: sqlite3.Connection) -> list[Task]:
+    """今天清单的当前顺序 + **规整成 1..N**（老数据可能没号/重号）。
+
+    为什么每次都规整：拖拽与 ↑↓ 都是"相对于别人"的操作，序号不连续时"往前挪一格"会挪不动或
+    跳过一串；先把当前**看到的**顺序写成 1..N，再按这一步的顺序改 —— 顺序保持现状，不猜。
+    """
+    items = myday_tasks(conn)
+    for i, item in enumerate(items, start=1):
+        _write_myday_rank(conn, item.id, i)
+    return items
+
+
+def _check_in_myday(items: list[Task], task_id: str) -> None:
+    if not any(item.id == task_id for item in items):
+        raise ValueError("只有「今天」清单里的任务能调顺序（先把它加进今天）")
+
+
+def _write_myday_order(conn: sqlite3.Connection, order: list[str]) -> None:
+    for i, item_id in enumerate(order, start=1):
+        _write_myday_rank(conn, item_id, i)
+
+
+def place_myday(conn: sqlite3.Connection, task_id: str, before_id: str | None) -> Task:
+    """**拖拽落点**（T-G79）：把 `task_id` 放到 `before_id` 那一条的**前面**；`None` = 放到末尾。
+
+    这是"拖"这一下的语义（"我把它拖到这一条上面"）—— 比"目标第几格"稳：中间插进来一条、
+    或者列表里有些条目被隐藏，都不会让落点错位。
+    边界：拖到自己前面 = 原地不动（幂等）；目标不在今天清单里 → ValueError（**不静默**，否则
+    用户会看到"拖了没反应"却不知道为什么）；任务不在今天清单里 → ValueError。
+    """
+    items = _myday_sequence(conn)
+    get_task(conn, task_id)                   # 不存在的任务先 404（与 `move_doing` 同一个次序）
+    _check_in_myday(items, task_id)
+    rest = [item.id for item in items if item.id != task_id]
+    if before_id is None:
+        target = len(rest)                        # 末尾
+    elif before_id == task_id:
+        return get_task(conn, task_id)            # 拖到自己前面 = 不动
+    elif before_id in rest:
+        target = rest.index(before_id)
+    else:
+        raise ValueError("落点不在「今天」清单里（那条可能已经完成 / 移出今天 / 被删了）")
+    order = rest[:target] + [task_id] + rest[target:]
+    _write_myday_order(conn, order)
+    conn.commit()
+    return get_task(conn, task_id)
+
+
+def move_myday(conn: sqlite3.Connection, task_id: str, direction: str) -> Task:
+    """**键盘那条路**（T-G79）：`direction` = `up` / `down`，与相邻的一条换位置。
+
+    拖拽是主路，↑↓ 是**不依赖指针**的等价入口（键盘 / 读屏 / 触屏不好拖的时候）——
+    两者都落到同一份 `myday_rank` 上，所以"拖过之后再按 ↑↓"仍然对得上。
+    已在头/尾 → 原地不动（幂等，不报错）。
+    """
+    if direction not in ("up", "down"):
+        raise ValueError("方向只能是 up / down")
+    items = _myday_sequence(conn)
+    get_task(conn, task_id)                   # 不存在的任务先 404（与 `move_doing` 同一个次序）
+    _check_in_myday(items, task_id)
+    ids = [item.id for item in items]
+    index = ids.index(task_id)
+    swap = index - 1 if direction == "up" else index + 1
+    if swap < 0 or swap >= len(ids):
+        return get_task(conn, task_id)
+    ids[index], ids[swap] = ids[swap], ids[index]
+    _write_myday_order(conn, ids)
+    conn.commit()
+    return get_task(conn, task_id)
 
 
 def move_doing(conn: sqlite3.Connection, task_id: str, direction: str) -> Task:

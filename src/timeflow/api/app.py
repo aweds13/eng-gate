@@ -124,7 +124,11 @@ class TaskOut(BaseModel):
     course_id: str | None = None
     course_name: str | None = None
     # 「进行中」的显式顺序（F 批 · T-F1）：只在「进行中」时有值；界面按它排上/下
+    # 「进行中」的显式顺序（F 批 · T-F1）：由领域层维护，不给人手改。
     doing_rank: int | None = None
+    # 今天清单的显式顺序（T-G79 · 拖拽 B）：序号小的排前面；不在今天的一律 NULL。
+    # 与 `doing_rank` 同一套：由领域层维护，不给人手改（所以不在 PATCH 白名单里）。
+    myday_rank: int | None = None
     # **谁建的**（G 批 · T-G6）：`me` / `ai`。界面据此标「AI 建的」；它也是 AI 边界的判据
     # （AI 只能勾 `ai` 的）。由创建路径写死，**接口不接受手改**（不在 `TaskIn`/PATCH 白名单里）。
     created_by: str = tm.CREATOR_ME
@@ -234,6 +238,7 @@ def _out(
         course_id=t.course_id,
         course_name=tm.course_name(conn, t.course_id),
         doing_rank=t.doing_rank,
+        myday_rank=t.myday_rank,
         created_by=t.created_by,
         auto_archived=auto_archived,
         completed_on=completed_on,
@@ -1680,6 +1685,45 @@ def create_app(
             except ValueError:
                 raise HTTPException(status_code=400, detail="非法日期") from None
         return ledger.today_done(conn, day)
+
+    @app.post("/api/tasks/{task_id}/myday-move", response_model=TaskOut)
+    def move_myday(task_id: str, payload: dict[str, Any] | None = None) -> TaskOut:
+        """调「今天清单」的先后（T-G79）：**拖拽**与**键盘**两条路共用一个入口。
+
+        - `{"before": "<任务 id>"}` —— 拖到**这一条前面**（拖拽落点）；
+        - `{"before": null}` —— 拖到**末尾**（显式 null；也可以干脆不带这个键 + 用 direction）；
+        - `{"direction": "up"|"down"}` —— 与相邻一条换位置（键盘 / 读屏那条路）。
+
+        为什么用"放到谁前面"而不是"放到第几格"：中间插进来一条、或者列表里有些条目被隐藏，
+        都不会让落点错位。两个键都给、或都不给 → **400 说清楚**（不静默挑一个执行）。
+        """
+        body = payload or {}
+        direction = str(body.get("direction") or "")
+        has_before = "before" in body
+        if has_before and direction:
+            raise HTTPException(status_code=400, detail="direction 与 before 只能给一个")
+        if not has_before and not direction:
+            raise HTTPException(
+                status_code=400,
+                detail="要么给 direction（up/down），要么给 before（拖到这一条前面；null = 末尾）",
+            )
+        try:
+            # ★ 包一个事务（T-G71 的扫描器会拦）：它数的是"这个处理函数里调了几个会自己 commit
+            #   的 core 函数"，而下面两个分支各调一个（`place_myday` / `move_myday`）—— 一次请求
+            #   只会走其中一条，所以这里其实是**单笔写**；包起来不为合并，只为与那条规矩一致
+            #   （一条命令一次提交，出异常自动回滚），也别让扫描器把这里记成一笔"新欠账"。
+            with db.unit_of_work(conn, what="POST /api/tasks/{task_id}/myday-move"):
+                if has_before:
+                    raw = body.get("before")
+                    before = None if raw in (None, "") else str(raw)
+                    moved = tm.place_myday(conn, task_id, before)
+                else:
+                    moved = tm.move_myday(conn, task_id, direction)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="任务不存在") from None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return _out(moved, conn)
 
     @app.post("/api/tasks/{task_id}/myday")
     def toggle_myday(task_id: str) -> TaskOut:

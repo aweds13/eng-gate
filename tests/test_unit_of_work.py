@@ -306,14 +306,15 @@ def _multi_write_handlers() -> dict[str, tuple[int, bool]]:
 def test_every_multi_write_handler_is_wrapped_or_explicitly_exempt() -> None:
     """★ 清单层：一个处理函数里 ≥2 笔会自己提交的 core 调用 → 要么包事务、要么写明理由豁免。
 
-    实测今天是 **6 个**：三个包了 `unit_of_work`（建任务 / 改任务 / 改提醒设置），
+    实测今天是 **7 个**：四个包了 `unit_of_work`（建任务 / 改任务 / 改提醒设置 /
+    **今天清单调顺序** —— T-G79 那条两个分支各调一个，一次请求只走一条，包起来只为一致），
     三个在豁免清单上（第二笔是导出一份 md）。**新写一个这样的处理函数会被这条拦住** ——
     这就是"残留不再长回来"的机器形态。
     """
     handlers = _multi_write_handlers()
-    assert set(handlers) == {"create_task", "update_task", "put_reminder_settings"} | set(
-        EXEMPT_MULTI_WRITE
-    ), f"多写处理函数的清单变了：{sorted(handlers)}"
+    assert set(handlers) == {"create_task", "update_task", "put_reminder_settings",
+                             "move_myday"} | set(EXEMPT_MULTI_WRITE), \
+        f"多写处理函数的清单变了：{sorted(handlers)}"
     for name, (count, wrapped) in handlers.items():
         if name in EXEMPT_MULTI_WRITE:
             assert not wrapped, f"{name} 已经包了事务，就该从豁免清单里删掉"

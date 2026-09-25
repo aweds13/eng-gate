@@ -359,6 +359,35 @@ export class Cdp {
     await this.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...p, buttons: 0 })
   }
 
+  /** 真拖拽（T-G79）：按下 → **分步**移动 → 松开。
+   *
+   * 为什么用鼠标事件就能验 pointer 事件：Chromium 会把鼠标输入**合成**成 pointer 事件
+   * （`pointerdown/move/up`，`pointerType='mouse'`），所以这条序列与"用户按住拖"走的是同一条路
+   * —— 不需要另发 `Input.dispatchTouchEvent`（那还要自己编 touch 序列，反而离真实更远）。
+   * 为什么要**分步**：一步到位只有一次 `pointermove`，那些"先走几像素才算拖""要看到落点提示线"
+   * 的实现（还有浏览器自己的拖拽阈值）一个都验不到。
+   */
+  async dragPath(from, to, { steps = 10, hold = 16 } = {}) {
+    const p = (x, y, extra) => ({ type: 'mouseMoved', x: Math.round(x), y: Math.round(y), ...extra })
+    await this.send('Input.dispatchMouseEvent', p(from.x, from.y, { buttons: 0 }))
+    await this.send('Input.dispatchMouseEvent', {
+      type: 'mousePressed', x: Math.round(from.x), y: Math.round(from.y),
+      button: 'left', buttons: 1, clickCount: 1,
+    })
+    for (let i = 1; i <= steps; i++) {
+      await this.send('Input.dispatchMouseEvent', p(
+        from.x + ((to.x - from.x) * i) / steps,
+        from.y + ((to.y - from.y) * i) / steps,
+        { button: 'left', buttons: 1 },
+      ))
+      await sleep(hold)
+    }
+    await this.send('Input.dispatchMouseEvent', {
+      type: 'mouseReleased', x: Math.round(to.x), y: Math.round(to.y),
+      button: 'left', buttons: 0, clickCount: 1,
+    })
+  }
+
   /** 真按键（`Input.dispatchKeyEvent`）—— 走的是浏览器真正的事件管线，会触发 keydown/keyup。
    *  ★ 单字母也认（T-G61）：键盘层的快捷键就是字母（`t`/`f`/`r`/`n`…），
    *  一个个登记进表里只会让"加个键位"变成改工具 —— 字母的 VK 码与 ASCII 大写一致，可以直接算。 */

@@ -112,11 +112,22 @@ gaps = ""
 
 [entries."SR-F1.1b"]
 id = "SR-F1.1b"
-title = "My Day 排序 = 截止时间 → 优先级（手动拖拽未做）"
+title = "My Day 排序 = 截止时间 → 优先级，顺序还能由用户拖出来（拖拽 + ↑↓ 两条路）"
 group = "F1"
-status = "deferred"
-evidence = ["column:tasks.priority", "text:src/timeflow/core/tasks/manager.py::_ORDER_BY", "test:test_task_priority_line.py"]
-gaps = "已实现 **截止时间 → 优先级 → 创建时间**，且 `list_tasks/myday_tasks/overdue_tasks` 三处同口径（T-B2）—— 排序这一半是 done 的。**拖拽排序：2026-09-23 用户定「放后面待定」**（此前段2 决策是「不做」；现在改成「后置」，不是缺口、是排期）。代价写在案：需要前端持久化顺序（`doing_rank` 那套做法可复用）+ 三处排序口径要同时改，属独立任务。"
+status = "done"
+evidence = [
+  "column:tasks.myday_rank",
+  "text:src/timeflow/core/tasks/manager.py::_MYDAY_ORDER_BY = (",
+  "text:src/timeflow/core/tasks/manager.py::def place_myday(conn: sqlite3.Connection, task_id: str, before_id: str | None) -> Task:",
+  "text:src/timeflow/core/tasks/manager.py::def move_myday(conn: sqlite3.Connection, task_id: str, direction: str) -> Task:",
+  "route:POST /api/tasks/{task_id}/myday-move",
+  "text:src/web/index.html::data-drag=\"myday\"",
+  "ui:data-action=myday-move",
+  "text:src/web/index.html::function placeMyDay(",
+  "test:test_myday_order_line.py",
+  "test:test_task_priority_line.py",
+]
+gaps = "**2026-09-25（T-G79）拖拽落地，本条从 deferred 转 done。** 排序那一半本来就是 done：**截止时间 → 优先级 → 创建时间**，且 `list_tasks/myday_tasks/overdue_tasks` 三处同口径（T-B2）。拖拽那一半 2026-09-23 用户定为「放后面待定」（此前段2 是「不做」），2026-09-25 说「一直干到拖拽 B 解决」→ 当天做完。**口径**：顺序**只由用户动作产生**（拖一下 / ↑↓）—— `tasks.myday_rank`（schema v19），数值小的在前；**没拖过的 `myday_rank IS NULL` 排在后面**、内部仍按老口径（截止日→优先级→创建时间），两份口径拼在 `_MYDAY_ORDER_BY` 一处；**进今天 = NULL**（新来的排最后，不抢你手动摆好的位置）、**离开今天清空**；拖拽落点是「放到**那一条**前面」（`before` 给 id；`null` = 放到末尾），不传「第几格」—— 中间插进来一条或列表里有隐藏项都不会让落点错位。**边界**：不做跨视图/跨栏拖拽（只排「今天」这一栏）；`myday_rank` **不是 PATCH 可写字段**（只能走那条路由，有测试钉着）；拖到自己前面 = 原地不动、已在头/尾按 ↑↓ = 原地不动（都幂等）。详见 `复盘/拖拽排序-T-G79.md`。"
 
 [entries."SR-F1.2"]
 id = "SR-F1.2"
@@ -508,6 +519,32 @@ evidence = [
   "text:src/timeflow/core/tasks/groups.py::分组不存在 → KeyError",
 ]
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。 ★ **2026-09-25（T-G71）这条残留收口了**：`db.unit_of_work()` 在连接**代理层**把 `commit()` 推迟到退出那一刻（core 一个 `commit()` 都没改），本条的 `create_task` / `update_task` 两条路都包了事务 —— 第二笔抛数据库级错误时**库里一个字节都不留**（`tests/test_unit_of_work.py` 逐条钉，且用「第一笔确实跑过」证明不是空转）。详见 `复盘/跨函数事务-T-G71.md`。"
+
+
+[entries."T-G79"]
+id = "T-G79"
+title = "拖拽 B（真拖拽）：My Day 的先后由你拖出来 —— 新列 `tasks.myday_rank` + 一条转移路由 + 拖拽与 ↑↓ 两个入口（13 条 pytest / 行为流 M 13 项断言）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/拖拽排序-T-G79.md",
+  "column:tasks.myday_rank",
+  "text:src/timeflow/core/tasks/manager.py::_MYDAY_ORDER_BY = (",
+  "text:src/timeflow/core/tasks/manager.py::def _write_myday_rank(",
+  "text:src/timeflow/core/tasks/manager.py::def place_myday(",
+  "text:src/timeflow/core/tasks/manager.py::def move_myday(",
+  "text:src/timeflow/api/app.py::@app.post(\"/api/tasks/{task_id}/myday-move\", response_model=TaskOut)",
+  "route:POST /api/tasks/{task_id}/myday-move",
+  "text:src/web/index.html::data-drag=\"myday\"",
+  "ui:data-action=myday-move",
+  "text:src/web/index.html::function placeMyDay(id,beforeId){",
+  "text:tools/ui_flow_check.mjs::id: 'M', name: '今天清单拖拽排序",
+  "text:tests/test_myday_order_line.py::def test_drag_puts_a_task_before_the_target_and_persists(",
+  "test:test_myday_order_line.py",
+  "test:test_unit_of_work.py",
+  "test:test_web_frontend.py",
+]
+gaps = "**为什么这张卡一直搁着**：段2 的决策是「不做拖拽排序」（触屏/键鼠/可测性都不划算，`move_doing` 的注释里还留着那句话），2026-09-23 用户改成「放后面待定」，2026-09-25 说「一直干到拖拽 B 解决」—— 于是把 **B（真拖拽）** 做完（A 是只做 ↑↓）。**做法**：① 领域层加 `tasks.myday_rank`（schema v18 → **v19**，用 `_add_column_if_missing` 加列、**不猜历史数据**），顺序**只由用户动作产生**；② 一个语义两个入口共用同一份顺序 —— `place_myday(before_id)` 是拖拽那一下（`before_id=None` = 放到末尾），`move_myday(direction)` 是 ↑↓，两者都写 `myday_rank`；③ 一份 `_MYDAY_ORDER_BY` 把「拖过的按 rank（小的在前）、没拖过的垫后并按老口径」拼出来，`myday_tasks` 只引用它、不另写一遍 SQL；④ 一条路由 `POST /api/tasks/{task_id}/myday-move`（两个键**要么给一个要么不给**，都给/给空 → 400；任务不存在 → 404 先于「不在今天」那一步），包在 `db.unit_of_work` 里（多写处理函数清单同步加一条）；⑤ 界面：抓手是**非 button** 元素（`data-drag` 是手势区、不是动作 —— 所以读屏与键盘走 ↑↓ 那两个按钮），`pointerdown/move/up` 三件事、落点画 `drop-before / drop-after`、抓手带 `touch-action:none` 让触屏也拖得动；⑥ `myday_rank` 进了离线字段表（手机只读面跟着字段走）。**边界（不假装）**：只排「今天」这一栏（不做跨视图/跨栏拖拽）；`myday_rank` **不是 PATCH 可写字段**（只能走那条路由，有测试钉着）；`before_id` 给的是**哪一条**不是第几格（中间插队/有隐藏项都不会错位）；拖到自己前面、已在头/尾按 ↑↓ 都原地不动（幂等）；不做撤销。**验收**：`tests/test_myday_order_line.py` **13 条**（拖到目标前 + 落库刷新还在、`null` 落末尾、拖自己与越界幂等、落点不在今天 → 拒绝、请求形状 400、↑↓ 与拖拽共用同一份顺序、**离开今天清空 + 再进来排最后**、没拖过的保持老顺序、`myday_rank` 写不进 PATCH、其它视图仍共用老口径、v18 → v19 升级不猜、manager 也拦不可见目标）+ 行为流 **M「今天清单拖拽排序」13 项断言**（真按住、真移动、松手 → 顺序变了，刷新页面顺序还在，最后用 ↑↓ 再调一次）+ `test_web_frontend.py` 一条「抓手在且键盘可达」+ 对比度门给抓手补了一对**非文字**判据（`--muted` on `--panel`，判据是 3.0 那档）。**★ 踩到的坑（两条都是探针先抓到、不是我看出来的）**：① **`database is locked`** —— `_write_myday_rank` 当初漏了 `commit()`，而 400 与幂等那几条路会先写一遍归一化顺序再早退 → 那笔写挂在事务里，**下一个读当场炸**；`gates/diag/probes/myday_lock_probe.py`（监视 `sqlite3.connect` 并打出 `in_transaction` 与创建栈）指出「第 5 条连接 `_myday_sequence` 处于事务中」，修法是**在 `_write_myday_rank` 里提交**，并补两条「400 / 边界动作之后再读一次」的回归断言（没有这两条，这个 bug 只会在真实使用里偶发）。② **属性名读写对不上** —— 卡片写的是 `data-myday-id`，拖拽代码读 `dataset.id` → 落点恒为 `undefined`，**看着能拖、其实什么也没发生**；`gates/diag/probes/drag_probe.mjs`（接管 `fetch` + 打 `__drop`）把它照了出来。★ **顺带修掉工具自己的一处假红**：`T.drag()` 原来分两次读两个元素的 rect，而 `rectOf()` 内部会 `scrollIntoView` —— 第二次读把第一次的坐标**作废**，于是抓手按在了另一张卡上（命中测试说「那个点上其实是路径」）；改成**只滚一次、在同一次求值里读两个 rect**，并在按下前做命中测试（零点/出屏直接报明确原因）。**没动的**：`_ORDER_BY` 本身（老口径一个字没改）、`move_doing`（进行中那套序号照旧）、离线包格式与合并规则。"
 
 
 [entries."T-G71"]

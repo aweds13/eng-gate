@@ -308,6 +308,30 @@ button[disabled] { opacity: .4; cursor: default }
   background: transparent;
 }
 .check.on { background: var(--accent) }
+/* 拖拽手柄（T-G79）：按住它拖今天清单里的卡。
+ * 为什么 `touch-action: none`：触屏上不加这条，手指一往下滑浏览器就去滚页面了，
+ * 拖拽手势根本收不到 `pointermove`（实测症状是"拖不动、页面在滚"）。
+ * 颜色用 `--muted`（≥3.0，见 tools/contrast_audit.py 的非文字表）：它是个**控件级**提示，
+ * 不是装饰 —— 看不见它就不知道这里能拖。 */
+.grab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--sp-1);
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+  flex: none;
+}
+.grab svg { width: 18px; height: 18px }
+.grab:hover { color: var(--ink) }
+.card.dragging { opacity: .85; box-shadow: var(--shadow) }
+/* 落点提示：一张卡的上沿一条蓝线（末位是最后一张卡的下沿）——"会插到哪儿"必须看得见 */
+.card.drop-before { border-top: 2px solid var(--accent) }
+.card.drop-after { border-bottom: 2px solid var(--accent) }
+.myday-order { margin-top: var(--sp-2) }
+.myday-order .sub { color: var(--muted); font-size: var(--fs-sm) }
+.myday-order button { padding: 0 var(--sp-2) }
+.myday-order button[disabled] { opacity: .4; cursor: default }
 button {
   border: none;
   border-radius: var(--r-md);

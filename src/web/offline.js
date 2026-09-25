@@ -53,7 +53,7 @@
   var FIELDS = {
     tasks: ['id', 'title', 'due_date', 'group_name', 'repeat_days', 'parent_id', 'is_myday',
       'status', 'created_at', 'updated_at', 'version', 'note', 'priority', 'flagged', 'attach',
-      'remind_at', 'task_type', 'course_id', 'doing_rank', 'created_by'],
+      'remind_at', 'task_type', 'course_id', 'doing_rank', 'myday_rank', 'created_by'],
     facts: ['id', 'kind', 'subject_type', 'subject_id', 'value_num', 'value_text', 'extra',
       'occurred_at', 'recorded_at', 'source', 'device_id', 'revision', 'supersedes'],
     habit_logs: ['habit_id', 'date', 'done'],
@@ -158,6 +158,7 @@
       task_type: TASK_TYPE_PLAIN,
       course_id: null,
       doing_rank: null,
+      myday_rank: null,
       created_by: 'me',
     };
   }

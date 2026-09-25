@@ -65,7 +65,8 @@ const cached = {
   // 以下是**只有接口才有**的派生字段：都不该进包
   groups: ['高数'], group_ids: ['g1'], assignments: [], subtask_done: 0, subtask_total: 0,
   current_step: null, current_step_due: null, reminder_state: null, overdue_days: 0,
-  course_name: null, doing_rank: null, depth: 1, auto_archived: false, completed_on: null,
+  course_name: null, doing_rank: null, myday_rank: null, depth: 1, auto_archived: false,
+  completed_on: null,
   attempt_count: 0, created_by: 'me',
 };
 

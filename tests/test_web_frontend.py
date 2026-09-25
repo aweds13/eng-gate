@@ -311,7 +311,7 @@ def test_task_note_is_editable_in_detail_only() -> None:
     assert "editNote" in save and "note:" in save, "保存时没把备注带上"
     detail = _fn_body(html, "renderDetail")
     assert "t.note" in detail, "详情面板没有显示备注"
-    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    card = _fn_body(html, "taskCard")   # ★ 别抄签名：T-G79 给 taskCard 加了第三个参数（顺序）
     # 断言的是"**任务自己的备注**不上卡"，所以认字段访问 `t.note` —— 不是裸子串 `note`：
     # T-G21 加了一枚「AI 报告」徽标（`t.progress_note` = AI 记的那一句话，**该**显示在卡上），
     # 裸子串会把那个诚实的字段一起判红（过宽的护栏会罚老实人，同 T-G11 的教训）。
@@ -397,7 +397,7 @@ def test_reminder_ui_and_notify_switch() -> None:
     save = html.split("async function saveTaskEdit(){", 1)[1].split("\n}", 1)[0]
     assert "remind_at" in save, "保存时没把提醒带上"
     # 卡片与详情都要标出来（口径来自后端 reminder_state，前端只翻译成人话）
-    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    card = _fn_body(html, "taskCard")   # ★ 别抄签名：T-G79 给 taskCard 加了第三个参数（顺序）
     assert "remindBadge(t)" in card, "任务卡片没有提醒标记"
     assert "REMIND_LABEL" in html and "function remindBadge(" in html
     # 今日页「该提醒了」区（不开通知也能用）
@@ -443,7 +443,7 @@ def test_attach_open_flow_is_wired_and_never_silent() -> None:
         assert f"'{action}':" in html, f"ACTIONS 里缺 {action}"
     assert "attachRowsHTML(t.attach,'attach-del',t.id)" in html, "附件行没有绑定删除动作"
     # ② 卡片上有附件数徽标（列表不展开内容，渐进聚焦）
-    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    card = _fn_body(html, "taskCard")   # ★ 别抄签名：T-G79 给 taskCard 加了第三个参数（顺序）
     assert "附件 ${t.attach.length}" in card, "任务卡片没有附件计数"
     # ③ 打开动作：三种分支齐全 + 复制兜底（不许静默）
     opener = html.split("async function openAttach(", 1)[1].split("\n}", 1)[0]
@@ -497,7 +497,7 @@ def test_task_priority_badge_and_edit() -> None:
     """T-B2（SR-F1.1b 排序）：卡片有优先级色标、编辑态能改优先级，颜色只住 app.css。"""
     html = WEB_INDEX.read_text(encoding="utf-8")
     assert "function prioBadge(" in html, "缺少优先级色标组件"
-    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    card = _fn_body(html, "taskCard")   # ★ 别抄签名：T-G79 给 taskCard 加了第三个参数（顺序）
     assert "prioBadge(t.priority)" in card, "任务卡片没显示优先级"
     edit = html.split("function editForm(t){", 1)[1].split("\n}", 1)[0]
     assert 'id="editPriority"' in edit, "编辑态不能改优先级"
@@ -518,7 +518,7 @@ def test_task_type_and_course_are_wired_in_frontend() -> None:
     assert "const TASK_TYPES=['普通','作业','考试','论文','小测']" in html, "类型词表要与后端同口径"
     assert "function courseBadge(" in html and "function taskTypeOptions(" in html
     assert "function courseOptions(" in html and "function syncTypeCourse(" in html
-    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    card = _fn_body(html, "taskCard")   # ★ 别抄签名：T-G79 给 taskCard 加了第三个参数（顺序）
     assert "courseBadge(t)" in card, "任务卡片没显示「课程 · 类型」"
     edit = html.split("function editForm(t){", 1)[1].split("\n}", 1)[0]
     assert 'id="editType"' in edit and 'id="editCourse"' in edit, "编辑态不能改类型/所属课程"
@@ -1284,7 +1284,7 @@ def test_ai_boundary_is_wired_and_explained() -> None:
     copy_fn = html.split("async function copyAiExample(){", 1)[1].split("\n}", 1)[0]
     assert "copyText(" in copy_fn, "示例命令要能复制（不然只能手抄）"
     # 归属徽标：卡片与详情都要有（只标 AI 建的，默认情形不标）
-    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    card = _fn_body(html, "taskCard")   # ★ 别抄签名：T-G79 给 taskCard 加了第三个参数（顺序）
     assert "t.created_by==='ai'" in card and "AI 建的" in card
     detail = _fn_body(html, "renderDetail")
     assert "t.created_by==='ai'" in detail, "详情面板没显示归属"
@@ -1302,7 +1302,7 @@ def test_ai_progress_report_is_wired_and_reversible() -> None:
     ④ 详情里要写明"报告 ≠ 状态"（要不要勾完成仍由你决定）—— 这是这张卡最容易误解的地方。
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
-    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    card = _fn_body(html, "taskCard")   # ★ 别抄签名：T-G79 给 taskCard 加了第三个参数（顺序）
     assert "t.progress_count" in card and "t.progress_note" in card and "t.progress_label" in card
     assert "'AI 报告'" not in card, "中文前缀由后端给，界面不许自己写一份"
     detail = _fn_body(html, "renderDetail")
@@ -1484,6 +1484,65 @@ def test_offline_verdict_is_a_hint_never_a_refusal() -> None:
     # 提示本身：文档口径跟着改（免得下一个人又拿它当判据）
     above = html.split("function offlineNow(){", 1)[0][-400:]
     assert "offlineConfirmed()" in above, "offlineNow() 上没写「它只是提示、要拒绝先探」"
+
+
+def test_myday_order_is_draggable_and_keyboard_reachable() -> None:
+    """T-G79：今天清单的顺序 —— **真拖拽**（Pointer Events）+ ↑↓（键盘那条路，等价入口）。
+
+    用户 2026-09-25 在两版预演图上选了 **B = 真拖拽**（此前段2 的决策是"不做拖拽"）。
+    每一条断言都对着一个"看起来能用其实是坑"的写法：
+
+    ① **Pointer Events，不是 HTML5 拖放**：`dragstart` 在触屏上根本不触发，而这条清单手机上也要用；
+    ② 抓手是 `data-drag` 而**不是** `data-action`：它是手势区，不该混进"卡上动作 ≤3 个"那笔账、
+       也不该占 Tab（键盘那条路是 ↑↓）；
+    ③ ★ **写的属性名与读的同一个**（`data-myday-id` → `dataset.mydayId`）：第一版写 `data-myday-id`
+       却读 `dataset.id`，于是落点永远是 `undefined` —— 拖动看着有反应（落点线都画了），
+       松手什么都不发生（T-G79 探针 `drag_probe.mjs` 当场量到）；
+    ④ 落点是「**放到谁前面**」（`before`，`null`=末尾），不是"第几格"：中间插进来一条也不会错位；
+    ⑤ 顺序**不在前端自己排**：拖完只发一条请求，然后以服务端回的顺序重画（前端自己排一份
+       "看起来对"的顺序，刷新就会打回原样 = 骗人）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    css = WEB_CSS.read_text(encoding="utf-8")
+
+    # ① 真拖拽走 pointer 事件（并证明没用 HTML5 拖放 —— 判的是**注册事件**，
+    #    不是"源码里出现过 dragstart 这几个字"：注释里正解释着"触屏不触发"那件事）
+    for needle in ("addEventListener('pointerdown'", "addEventListener('pointermove'",
+                   "addEventListener('pointerup'", "addEventListener('pointercancel'",
+                   "setPointerCapture("):
+        assert needle in html, f"拖拽缺了：{needle}"
+    assert "addEventListener('dragstart'" not in html and "ondragstart" not in html, \
+        "别用 HTML5 拖放（触屏不触发）"
+
+    # ② 抓手：手势区，不是动作
+    assert 'data-drag="myday"' in html
+    assert "data-action=\"myday-drag" not in html, \
+        "抓手不该注册成动作（那会算进卡片动作数、还占 Tab）"
+
+    # ③ ★ 读写同一个属性名（这一条就是那次真缺陷的守卫）
+    assert 'data-myday-id="${t.id}"' in html, "卡片上要写 data-myday-id"
+    assert "target.dataset.mydayId" in html, "落点要读 dataset.mydayId（别读成 dataset.id）"
+
+    # ④ 落点语义 + 走的是那条路由
+    assert "JSON.stringify({before:beforeId})" in html and "/api/tasks/${id}/myday-move" in html
+    assert "direction:dir" in html, "↑↓ 走同一个入口的 direction"
+
+    # ⑤ ↑↓ 是键盘那条路，且它在**卡片正文**里（动作行那条线数着"常显动作 ≤3 个"）
+    assert 'data-action="myday-move"' in html
+    assert 'data-dir="up"' in html and 'data-dir="down"' in html
+    assert "${cur}${aiReport}${orderRow}</div>" in html, "↑↓ 应当在卡片正文里，不在动作行"
+
+    # ⑥ 顺序不由前端自己排：拖完发请求 → 以服务端的顺序重画
+    up_fn = _fn_body(html, "mydayDragUp")
+    assert "placeMyDay(" in up_fn
+    for local in ("insertBefore", "appendChild", "after("):
+        assert local not in up_fn, f"别在前端自己重排 DOM（{local}）—— 顺序是数据，得由后端说了算"
+    place_fn = _fn_body(html, "placeMyDay")
+    assert "view(current)" in place_fn, "拖完要以服务端回的顺序重画"
+
+    # ⑦ 样式：触屏不滚页 + 落点看得见（颜色只住 app.css）
+    assert "touch-action: none" in css and ".grab {" in css
+    assert ".card.drop-before" in css and ".card.dragging" in css
 
 
 def test_health_route_the_probe_relies_on(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -1860,7 +1919,7 @@ def test_cards_show_two_actions_and_the_rest_lives_in_the_overflow() -> None:
     ★ 这一条只钉**标记层**：真正的"点开/收起 / 一张卡几个按钮"由行为流第 K 条在真浏览器里量。
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
-    card = html.split("function taskCard(t,isOverdue){", 1)[1].split("\n}", 1)[0]
+    card = _fn_body(html, "taskCard")   # ★ 别抄签名：T-G79 给 taskCard 加了第三个参数（顺序）
     # ① 卡上的常显动作只有这三种（勾选圈在卡外）——「…」里那些不算常显
     assert 'data-action="task-more"' in card, "卡上没有「…」"
     assert "function doingButtonHTML" in html

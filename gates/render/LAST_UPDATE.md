@@ -680,3 +680,15 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/tasks`
 - `phone/today`
 
+
+## 2026-09-25 15:51:49 · 6 份改动
+
+> 理由：My Day 卡片加拖拽抓手（span.grab）与顺序行、列表加 #mydayList 包裹（T-G79 真拖拽）
+
+- `desktop/palette`
+- `desktop/today`
+- `narrow/palette`
+- `narrow/today`
+- `phone/palette`
+- `phone/today`
+

@@ -165,6 +165,7 @@ function probeTask(over = {}) {
     subtask_done: 0, subtask_total: 0, note: null, priority: '中', flagged: false, attach: [],
     remind_at: null, reminder_state: null, task_type: '普通', course_id: null, course_name: null,
     doing_rank: null,
+    myday_rank: null,
     // 派生逾期天数（T-F7）：界面不自己拿今天去减，后端算好再给
     overdue_days: 0, ...over,
   };
@@ -172,7 +173,11 @@ function probeTask(over = {}) {
 
 const DB = {
   '/api/config': { accent_color: '#3b82f6', theme: 'light', gpa_scale: '4.0' },
-  '/api/mydays': [], '/api/overdue': [], '/api/tasks/deleted': [],
+  // 今天清单（T-G79）：顺序是**数据**（后端按 `myday_rank` 排），所以探针给两条真数据 ——
+  // 抓手与 ↑↓ 是"这一列才有"的控制，空列表根本渲染不出来（探针就什么都没验到）。
+  '/api/mydays': [probeTask({ id: 'm1', title: '今天第一件', is_myday: true, myday_rank: 1 }),
+    probeTask({ id: 'm2', title: '今天第二件', is_myday: true, myday_rank: 2 })],
+  '/api/overdue': [], '/api/tasks/deleted': [],
   // 状态机（F 批 · T-F1）：三段都要真渲染出来 ——
   // 「全部任务」主列表 + 搁置区（待定/取消）+ 档案区（手动归档，可撤销）
   '/api/tasks': [probeTask({ id: 't2', title: '普通任务', is_myday: false,
@@ -775,9 +780,13 @@ try {
 
 // 状态机（F 批 · T-F1）：三块新界面各渲染一遍并断言要素真的在 ——
 // 今日「正在做」（多个 + 顺序号 + ↑↓ + 停止）、全部任务「搁置」（待定/取消 + 取回）、「档案」（撤销归档）。
+// ★ T-G79 起这里还管「今天清单的顺序」：抓手（`data-drag`）+ ↑↓（`myday-move`）+ 序号读数。
 const stateChecks = [];
 for (const [view, needs] of [
-  ['today', ['正在做（2）', '写高数作业', 'doing-move', 'data-dir="up"', 'data-dir="down"', 'task-stop']],
+  ['today', ['正在做（2）', '写高数作业', 'doing-move', 'data-dir="up"', 'data-dir="down"',
+    'task-stop',
+    // 今天清单：拖拽抓手 + 键盘那条路 + "第 N / M"读数（顺序是数据，界面得说清自己在第几位）
+    'id="mydayList"', 'data-drag="myday"', 'myday-move', '第 1 / 2', '第 2 / 2']],
   ['tasks', ['搁置', '待定的事', '取消的事', 'task-unpark', '档案', '归档的事', 'task-unarchive']],
 ]) {
   try {

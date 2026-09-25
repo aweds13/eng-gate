@@ -205,6 +205,8 @@ const ICONS = {
   check: 'M5 13l4 4 10-10',
   up: 'M12 19V5M6 11l6-6 6 6',
   down: 'M12 5v14M6 13l6 6 6-6',
+  // 拖拽手柄（T-G79）：三根竖条 —— 只描边、跟随 currentColor（同上面那批的规矩）。
+  grab: 'M8 7v10M12 7v10M16 7v10',
 }
 function icon(name){
   const d = ICONS[name]; if(!d) return '';
@@ -966,6 +968,7 @@ const ACTIONS = {
   'task-archive':   el => archiveTask(el.dataset.id),
   'task-unarchive': el => unarchiveTask(el.dataset.id),
   'doing-move':     el => moveDoing(el.dataset.id, el.dataset.dir || ''),
+  'myday-move':     el => moveMyDay(el.dataset.id, el.dataset.dir || ''),
   // 任务「类型 ↔ 所属课程」（SR-F5.4 / T-C12）：切换类型时同步课程下拉可用性
   'type-course':    () => syncTypeCourse(),
   // 附件 / 要求链接（T-B4）：任务与考核项共用打开规则
@@ -1815,7 +1818,7 @@ function doingButtonHTML(t){
 function overdueBadge(t){
   return t.overdue_days>0?` · <span class="badge hard"><i class="dot"></i>已逾期 ${t.overdue_days} 天</span>`:'';
 }
-function taskCard(t,isOverdue){
+function taskCard(t,isOverdue,order){
   const isDone=t.status==='完成';
   // 逾期**按派生天数为准**（T-F7）：以前只有"逾期栏里那一次调用"会传 isOverdue=true，
   // 于是同一个任务在「全部任务」「重要」等视图里不标红、在逾期栏里标红 —— 同一件事两种长相。
@@ -1867,12 +1870,27 @@ function taskCard(t,isOverdue){
     `<button class="ghost" data-action="task-facts" data-id="${t.id}">记录</button>`,
     `<button class="ghost danger" data-action="task-delete" data-id="${t.id}">删除</button>`,
   ].join('');
-  return `<div class="card ${isDone?'done':''} ${late?'overdue':''} ${t.id===detailTaskId?'selected':''}">
+  /* 今天清单的顺序控制（T-G79）：只在 My Day 这一列给（`order` 有值时才画）。
+     · 抓手是**非 button**元素（`data-drag` 不是 `data-action`）：它是"按住拖"的手势区，
+       不该混进"卡上动作 ≤3 个"那笔账，也不占 Tab；
+     · ↑↓ 放在卡片正文里（**不是**外面那条动作行）：动作行那条线数着"常显动作 ≤3 个"，
+       而且键盘那条路本来就该贴着标题走。 */
+  const grab=order?`<span class="grab" data-drag="myday" data-id="${t.id}"
+      title="按住拖到别处" aria-hidden="true">${icon('grab')}</span>`:'';
+  const orderRow=order?`<div class="row tight myday-order">
+      <span class="sub">第 ${order.i+1} / ${order.n}</span>
+      <button class="ghost" data-action="myday-move" data-id="${t.id}" data-dir="up"
+        ${order.i===0?'disabled':''} title="上移一位（键盘也能用）">${icon('up')}</button>
+      <button class="ghost" data-action="myday-move" data-id="${t.id}" data-dir="down"
+        ${order.i===order.n-1?'disabled':''} title="下移一位（键盘也能用）">${icon('down')}</button></div>`:'';
+  return `<div class="card ${isDone?'done':''} ${late?'overdue':''} ${t.id===detailTaskId?'selected':''}"
+      data-myday-id="${t.id}">
+    ${grab}
     <button class="check ${isDone?'on':''}" title="${isDone?'撤销完成':'标记完成'}" data-action="task-done" data-id="${t.id}" data-done="${isDone}"></button>
     <div class="card-body">
     <div class="title"><span class="open" data-action="task-detail" data-id="${t.id}"
       title="打开右栏详情（键盘用「…」里的「详情」）">${esc(t.title)}</span></div>
-    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${whoBadge}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}${aiReport}</div>
+    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${whoBadge}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}${aiReport}${orderRow}</div>
     <div class="row">
       ${doingButtonHTML(t)}
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}
@@ -1971,6 +1989,95 @@ async function moveDoing(id,dir){
   await api(`/api/tasks/${id}/doing-move`,{method:'POST',body:JSON.stringify({direction:dir})});
   view(current);      // 排序即时可见，不额外弹提示（连着点两下不该被提示刷屏）
 }
+
+/* ---------- 今天清单的顺序：**真拖拽** + ↑↓（T-G79）----------
+ * 口径（用户 2026-09-25 在两版预演图上选了 **B = 真拖拽**）：
+ *   · **拖**是主路 —— 按住卡左边的抓手（`⠿` 那道），拖到别的位置松手；
+ *   · **↑↓** 是等价入口 —— 键盘 / 读屏 / 触屏不好拖的时候走它，落到同一份序号上；
+ *   · 顺序是**数据**（刷新、换设备要一样）：拖完只发一条请求，然后以服务端回的顺序重画 ——
+ *     前端不自己排一份"看起来对"的顺序（那会在刷新后打回原样，等于骗人）。
+ * 两个实现选择，都是被坑过的：
+ *   ① **Pointer Events，不用 HTML5 拖放**：HTML5 的 `dragstart` 在**触屏上根本不触发**
+ *      （手机浏览器不支持），而这条清单手机上也要用；Pointer Events 一条路覆盖鼠标/触屏/笔，
+ *      配 `setPointerCapture` 还能保住"手指滑出卡片之后"的移动事件。
+ *   ② 落点发的是「**放到谁前面**」而不是"第几格"：中间插进来一条、或者有卡片被隐藏，
+ *      都不会让落点错位（`before: null` = 放到末尾）。
+ * 边界：拖动**不改变**任务的任何字段（只改顺序），所以没有"撤销"提示 —— 拖回去就行。
+ */
+let mydayDrag=null;      // {id, card, list, y0, active, pointerId, drop, before}
+function mydayDragDown(ev,handle){
+  if(ev.button!==undefined&&ev.button!==0)return;          // 只认左键/单指
+  const card=handle.closest('.card');
+  if(!card)return;
+  mydayDrag={id:handle.dataset.id,card,y0:ev.clientY,active:false,pointerId:ev.pointerId,
+    list:[...document.querySelectorAll('#mydayList .card')],drop:null,before:undefined};
+  try{handle.setPointerCapture(ev.pointerId)}catch(e){}
+  ev.preventDefault();                                     // 别让触屏顺手把页面滚走
+}
+/* 手指/鼠标在哪张卡上 → 该插到谁前面（返回 null = 末尾）。 */
+function mydayDropTarget(clientY){
+  const d=mydayDrag; if(!d)return null;
+  const rest=d.list.filter(c=>c!==d.card);
+  for(const c of rest){
+    const r=c.getBoundingClientRect();
+    if(clientY<r.top+r.height/2)return c;
+  }
+  return null;
+}
+function mydayDragMove(ev){
+  const d=mydayDrag; if(!d)return;
+  if(!d.active){
+    if(Math.abs(ev.clientY-d.y0)<5)return;                 // 先走 5px 才算"拖"（不然点一下就重排）
+    d.active=true;d.card.classList.add('dragging');
+  }
+  const target=mydayDropTarget(ev.clientY);
+  // ★ 读的键必须与卡上写的**同一个**：卡上写的是 `data-myday-id` → 这里就得读 `dataset.mydayId`。
+  //   第一版读的是 `dataset.id`（那是抓手自己那个属性名），于是落点永远是 `undefined` ——
+  //   拖动看着有反应（落点线也画了），松手却什么都没发生（T-G79 探针当场量到）。
+  d.before=target?target.dataset.mydayId:null;
+  // 落点画在那张卡的**上沿**（末位则画在最后一张卡的下沿）：眼睛看得到会插到哪儿
+  document.querySelectorAll('.card.drop-before,.card.drop-after').forEach(c=>
+    c.classList.remove('drop-before','drop-after'));
+  if(target)target.classList.add('drop-before');
+  else if(d.list.length>1)d.list.filter(c=>c!==d.card).slice(-1)[0].classList.add('drop-after');
+}
+async function mydayDragUp(){
+  const d=mydayDrag; if(!d)return;
+  mydayDrag=null;
+  document.querySelectorAll('.card.dragging,.card.drop-before,.card.drop-after').forEach(c=>
+    c.classList.remove('dragging','drop-before','drop-after'));
+  if(!d.active||d.before===undefined)return;               // 没真拖动 = 什么都不做
+  const order=d.list.map(c=>c.dataset.mydayId);
+  const rest=order.filter(x=>x!==d.id);
+  const want=d.before===null?rest.length:rest.indexOf(d.before);
+  if(want<0)return;                                        // 落点不在这一列里（理论上到不了这儿）
+  if(want===rest.indexOf(d.id))return;                     // 落点没变 → 不发请求（省一次重画）
+  await placeMyDay(d.id,d.before);
+}
+async function placeMyDay(id,beforeId){
+  try{
+    await api(`/api/tasks/${id}/myday-move`,{method:'POST',body:JSON.stringify({before:beforeId})});
+  }catch(e){return}                                        // api() 已经弹过后端原话
+  view(current);
+}
+async function moveMyDay(id,dir){
+  try{
+    await api(`/api/tasks/${id}/myday-move`,{method:'POST',body:JSON.stringify({direction:dir})});
+  }catch(e){return}
+  view(current);
+}
+document.addEventListener('pointerdown',ev=>{
+  const h=ev.target.closest&&ev.target.closest('[data-drag="myday"]');
+  if(h)mydayDragDown(ev,h);
+});
+document.addEventListener('pointermove',ev=>{if(mydayDrag)mydayDragMove(ev)});
+document.addEventListener('pointerup',()=>{if(mydayDrag)mydayDragUp()});
+document.addEventListener('pointercancel',()=>{
+  const d=mydayDrag; if(!d)return;
+  mydayDrag=null;
+  document.querySelectorAll('.card.dragging,.card.drop-before,.card.drop-after').forEach(c=>
+    c.classList.remove('dragging','drop-before','drop-after'));
+});
 /* ---------- 「尝试失败」（N11 / F 批 · T-F3）----------
    口径（用户 2026-09-21）：**只认显式点击**「尝试失败」，绝不从"推到明天/取消"推断 ——
    「试了 N 回」是给自己的读数，数字要可信。
@@ -2492,7 +2599,8 @@ async function renderToday(m){
   ${remind}
   ${doingSection(doing)}
   <div class="section-title">逾期（债务）</div><div id="ov">${overdue.map(t=>taskCard(t,true)).join('')||emptyState('没有逾期')}</div>
-  <div class="section-title">今天（My Day）</div>${mydays.map(t=>taskCard(t)).join('')||emptyState('今天还没有任务')}
+  <div class="section-title">今天（My Day）</div>
+  <div id="mydayList">${mydays.length?mydays.map((t,i)=>taskCard(t,false,{i,n:mydays.length})).join(''):emptyState('今天还没有任务')}</div>
   ${doneSection(done)}
   ${due.length?`<div class="section-title">今天该复习（${due.length}）</div>${due.map(r=>reviewCard(r,rmeta.ratings||[])).join('')}`:''}
   ${trash}
