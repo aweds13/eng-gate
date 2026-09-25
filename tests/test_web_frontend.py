@@ -142,8 +142,11 @@ def test_race_guard_exists() -> None:
     assert "连不上电脑" in html and "toast('连不上电脑" in html, "非取消类网络错误仍应提示"
     # 提示换了措辞（T-G10 起要顺带告诉人"可以记在手机上"），但两件事都还在：
     # ① 提示不许省；② 只有网络失败才标 `__offline`（后端拒绝不许被当成离线）。
+    # T-G76 起"改标记 + 画提示条"从 api() 里挪进了 `markDown()/markUp()`（一处口径，见
+    # `test_offline_verdict_is_a_hint_never_a_refusal`），所以这里按新入口判。
     api_fn = _fn_body(html, "api")
-    assert "err.__offline=true" in api_fn and "paintOfflineBar()" in api_fn
+    assert "err.__offline=true" in api_fn and "markDown(startedAt)" in api_fn
+    assert "markUp()" in api_fn, "成功了要如实把标记改回来"
 
 
 def test_gpa_scale_is_switchable_in_page() -> None:
@@ -753,6 +756,8 @@ def test_index_calls_backend_contract_paths(tmp_path) -> None:  # type: ignore[n
         ("get", "/api/memos", None),
         ("get", "/api/courses", None),
         ("get", "/api/config", None),
+        # T-G76：离线探测（`probeServer`）读的就是这一条 —— 它得真的是条路
+        ("get", "/api/health", None),
     ],
 )
 def test_backend_contracts_used_by_frontend(
@@ -1421,6 +1426,76 @@ def test_mobile_offline_capture_is_wired_and_honest() -> None:
     # 样式只住 app.css（R1）
     css = WEB_CSS.read_text(encoding="utf-8")
     assert ".offline-bar {" in css and ".offline-bar[hidden]" in css
+
+
+def test_offline_verdict_is_a_hint_never_a_refusal() -> None:
+    """T-G76：「连不上」是**上一次请求的结论**，不许它替**现在**回答。
+
+    病症（T-G73 照实记下来的那条观察）：断网期间"在飞"的请求失败得晚 —— 回到在线之后它才回来，
+    界面于是还挂着"连不上"。而旧写法拿这个标记**直接拒绝**「直接传到电脑」：
+    一个明明能成的操作连试都不试（`writeOrQueue` 更糟 —— 能落库的记录被白白塞进手机队列）。
+
+    两条规矩各钉一处（缺一条都堵不住）：
+    ① **迟到的失败只代表它出发的那一刻**：`markDown(startedAt)` 必须拿出发时刻与最近一次成功比；
+    ② **要拒绝，先真探一次**：唯一入口 `offlineConfirmed()`（读的是 `/api/health` 这条真请求），
+       三个会拒绝人的地方一个都不许漏；轮询也不再让提示把它挡掉（它是唯一会自己重试的请求）。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+
+    # ① 迟到的失败不许改写更新的成功
+    assert "let lastOkAt=0" in html
+    api_fn = _fn_body(html, "api")
+    assert "const startedAt=Date.now()" in api_fn, "api() 没记下这条请求什么时候出发的"
+    assert "markDown(startedAt)" in api_fn, "网络失败没有把出发时刻交出去（过期结论就拦不住了）"
+    down_fn = _fn_body(html, "markDown")
+    assert "startedAt<lastOkAt" in down_fn, "markDown 没有排除「出发早于最近一次成功」的失败"
+
+    # ② 探的是**服务在不在**，不是缓存里有没有东西；回话（哪怕 401）也算连得上
+    probe_fn = _fn_body(html, "probeServer")
+    assert "'/api/health'" in probe_fn, "探测必须走 /api/health 这条真请求"
+    assert "markUp()" in probe_fn and "markDown()" in probe_fn, "探完要如实改标记"
+    assert "PROBE_TIMEOUT_MS" in probe_fn, "探不通不能把用户拖住（要有超时）"
+    assert (
+        "async function offlineConfirmed(){return offlineNow()&&!(await probeServer())}" in html
+    ), "「要拒绝先探一次」必须是唯一入口（否则又会有人各自看标记做判断）"
+    # 三个会拒绝人的地方
+    for fn, what in (
+        ("offlineUpload", "「直接传到电脑」"),
+        ("writeOrQueue", "写入 / 离线入队"),
+        ("toggleDone", "离线勾完成"),
+    ):
+        body = _fn_body(html, fn)
+        assert "offlineConfirmed()" in body, f"{fn}（{what}）还在拿离线提示直接拒绝"
+        assert "if(offlineNow()){" not in body, f"{fn}（{what}）还有一处「提示即判据」的写法"
+
+    # 轮询：唯一会自己周期性重试的请求，挡掉它就没人能推翻"连不上"
+    # （判的是**挡人的那个条件**本身，别被注释里提到函数名误伤）
+    poll = _fn_body(html, "startFocusPoll")
+    assert "if(document.hidden)return;" in poll, "后台别问（这条要留着）"
+    assert "offlineNow()||" not in poll and "||offlineNow()" not in poll, \
+        "轮询不被提示挡住，界面才可能自己走回在线"
+    assert "quiet:true" in poll, "轮询失败不能每 10 秒弹一次提示"
+    # 判断被推翻时**当场重画**（一处机制：判断变了 → 界面跟着变）
+    up_fn = _fn_body(html, "markUp")
+    assert "view(current)" in up_fn, "标记翻回来了却没人重画，界面会一直挂着「离线中」"
+    assert "return true" in up_fn and "return false" in up_fn, \
+        "markUp 要如实说它翻没翻（online 事件用它决定要不要补一次重画）"
+
+    # 提示本身：文档口径跟着改（免得下一个人又拿它当判据）
+    above = html.split("function offlineNow(){", 1)[0][-400:]
+    assert "offlineConfirmed()" in above, "offlineNow() 上没写「它只是提示、要拒绝先探」"
+
+
+def test_health_route_the_probe_relies_on(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """护栏：探测的**证据**必须真的存在（T-G76）。
+
+    拿一个不存在的路径去探，`fetch` 会因为 404 而"有回话" —— 于是**永远探得通**，
+    离线时界面会以为网回来了（判据自己把被测的事兜底了，同 T-G69/T-G74 那族）。
+    """
+    client = TestClient(create_app(str(tmp_path / "h.db")))
+    resp = client.get("/api/health")
+    assert resp.status_code == 200, "/api/health 不在（探测就成了恒真的假判据）"
+    assert resp.json().get("database_ok") is True
 
 
 def test_lan_pairing_is_wired_and_the_code_stays_home() -> None:

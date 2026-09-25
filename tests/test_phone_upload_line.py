@@ -141,7 +141,12 @@ def test_frontend_uploads_and_only_clears_after_success() -> None:
     assert "/api/sync/import" in fn and "pack:r.pack" in fn, (
         "上传必须走既有的合并接口、发的是包内容"
     )
-    assert "offlineNow()" in fn, "离线时要说清为什么传不了（而不是让请求失败后猜）"
+    # T-G76：拒绝之前必须**真探一次**（`offlineConfirmed()`），而不是拿"上一次请求的结论"
+    # （`offlineNow()`）直接挡住 —— 那个结论可能已经过期，会把一个能成的操作挡在门外。
+    # 这条断言原来钉的正是后者（"offlineNow() in fn"），是**旧口径**，随 T-G76 一起更正。
+    assert "offlineConfirmed()" in fn, "传之前要真探一次（不许拿过期的离线结论挡住）"
+    assert "现在连不上电脑" in fn, "探不通时要说清为什么传不了（而不是让请求失败后猜）"
+    assert "if(offlineNow()){" not in fn, "不许再拿提示当判据"
     assert "confirmAsk(" in fn, "传之前要说清代价（这条会合并进电脑的库）"
     # 清队列必须在成功之后、并且是**再问一次**：catch 里不许出现清空
     before, after = fn.split("await api('/api/sync/import'", 1)

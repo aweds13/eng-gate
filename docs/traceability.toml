@@ -529,6 +529,32 @@ evidence = [
 ]
 gaps = "**它收的是 T-G33 复盘里那句如实记下的残留**：「验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**」。现象是：`POST /api/tasks` 先 `create_task`（自己提交）再 `set_task_groups`（又自己提交），**第二笔一崩**，客户端看到报错、库里却躺着一条没有分组的任务，重试就两条。**做法（缝开在代理层，不动 core）**：HTTP 那条路上的 `conn` 是 `_ThreadLocalConn` 代理（T-G18 并发修复留下的），于是让它的 `commit()` 在 `unit_of_work()` 里**只记账**，真提交发生在退出那一刻（成功一次 `commit`、抛异常一次 `rollback`）—— SQLite 的隐式事务从第一次写就开着，所以这几笔写天然是一件事；**core 里 60 多个 `commit()` 一个都没改**，也没引框架。**★ 先量再改**：写了个 AST 扫描（判据搬进了 `tests/test_unit_of_work.py`）数「一个处理函数里调了几个会自己 commit 的 core 函数」，实测**只有 6 个**：3 个包事务（`create_task` / `update_task` / `put_reminder_settings`）、3 个进**带理由的豁免清单**（`create_memo` / `delete_memo` / `ledger_output` —— 第二笔是 `vault.try_export` 导出一份 md，是**派生**产物且必须在提交之后）。**清单进了 pytest**：多一个少一个都红、豁免理由短于 10 字也红、还有一条「扫描器真的看得到东西」的反空转判据 —— 以后新写一个多写处理函数会被当场拦下。**★ 边界（不假装）**：`unit_of_work` 只认代理，真 `sqlite3.Connection` 的 `commit` 拦不住，拿它来调**直接 `TypeError`** 并说清原因（与 `db.raw_conn()` 同一条规矩：不猜、不静默降级）；事务盖的是**数据库行**、不盖系统副作用（`PUT /api/settings/reminder` 还会注册 Windows 计划任务 —— 包事务仍然更好：两笔设置行现在同生共死，但「计划任务 vs 设置行」仍有一个极小窗口，如实记着）；`executescript()` 会先隐式提交（无调用点）；段内某笔失败被上层吞掉再继续时不会单独撤（没有 savepoint）。**验收**：`tests/test_unit_of_work.py` **11 条** —— 机制层（段里**另一条连接看不到**、退出才看得见）/ 回滚层（整段撤 + 嵌套只提交一次）/ 接口层（让第二笔**真抛** `sqlite3.OperationalError` → 断言第一笔**确实跑过**且库里空的；改任务那条连标题一起撤；对照组正常路径两笔都在）/ 拒绝层（真 Connection → TypeError）/ 清单层 3 条 / 并发层 1 条。**踩到的坑**：★★ **延迟标记第一版挂在实例上**（`self._defer`），可这个代理是**全进程一个**、所有线程共用 —— 线程 A 进事务后 B 的 `commit()` 也被推迟，而 A 退出时提交的是 A 自己的连接，B 那笔写于是**永远没人提交**（并发下 `database is locked`）；**抓到它的是 `tests/test_concurrency.py`**（T-G18 留下的老守卫），修法是标记住进 `threading.local()` + 补一条确定性最小复现。★ 另一条：第一版扫描器只解析包的 `__init__.py`，而 `timeflow.core.tasks` 是**包**（`set_task_groups` 真身在 `groups.py`）→ 量出来的清单是**假的**（只有 1 条）；扫包必须扫整棵树，并配一条「扫描器真看得到」的测试盯着它（与 T-G40/T-G69 同一族教训：判据自己也会撒谎）。**没动的**：core、界面、路由（一条都没加）、45 份黄金。**工程债三条至此全清**（`T-G40 §六` 签名 T-G69 / 非文字对比度 3.0 表 T-G70 / `T-G33` 残留 T-G71）。"
 
+[entries."T-G76"]
+id = "T-G76"
+title = "缺陷：过期的「连不上」替现在回答 —— 断网回在线那一两秒里（SR-NF17），提示会挡住一个明明能成的操作；改成「要拒绝先探一次」+ 迟到的失败不许改写更新的成功"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/断网判据过期-T-G76.md",
+  "text:src/web/index.html::function markDown(startedAt){",
+  "text:src/web/index.html::function markUp(){",
+  "text:src/web/index.html::async function probeServer(){",
+  "text:src/web/index.html::async function offlineConfirmed(){return offlineNow()&&!(await probeServer())}",
+  "text:src/web/index.html::只是提示",
+  "text:src/web/index.html::if(await offlineConfirmed()){toast('现在连不上电脑（离线）",
+  "text:src/web/index.html::if(!(await offlineConfirmed())){",
+  "text:src/web/index.html::不再拿 `offlineNow()` 挡住这个轮询（T-G76）",
+  "text:src/web/index.html::判断被推翻了",
+  "text:src/web/index.html::if(typeof view==='function'&&current)view(current);",
+  "text:tests/test_web_frontend.py::def test_offline_verdict_is_a_hint_never_a_refusal(",
+  "text:tests/test_web_frontend.py::def test_health_route_the_probe_relies_on(",
+  "text:tools/ui_flow_check.mjs::提示过期也照样试",
+  "text:tools/ui_flow_check.mjs::标签里**不许写测量值**",
+  "text:tools/ui_flow_check.mjs::两遍**断言清单**不同",
+  "test:test_web_frontend.py",
+]
+gaps = "**症状（T-G73 照实记下、用户点名顺手修的那条）**：断网期间「在飞」的请求失败得晚，回到在线之后它才回来 —— 界面于是还挂着「连不上」**一两秒**。**真正的病灶比那两秒重**：旧写法把 `offlineNow()`（= 上一次请求的结论）**当判据去拒绝**动作 —— `offlineUpload` 直接回一句「先导出同步包」连试都不试、`writeOrQueue` 把一条本来能落库的记录白白塞进手机队列、轮询被它挡掉之后**再没人能推翻这个结论**（自锁）。**两条规矩，缺一条都堵不住**：① **一条失败只代表它出发的那一刻**（`markDown(startedAt)`：出发早于 `lastOkAt`（最近一次成功）的失败不许改标记）—— 这半修的是「界面自己走回在线」；② **要拒绝，先探一次**（唯一入口 `offlineConfirmed()`：提示说离线时才真发一条 `GET /api/health`，探得通就照做）—— 这半修的是「不许拿上次替这次回答」；另加四处配套：`api(..., {quiet:true})`（探测/轮询失败不弹提示）、轮询不再被提示挡住（它是**唯一**会自己重试的请求）、`markUp()` 在判断被推翻时**当场重画**（一处机制：判断变了 → 界面跟着变）、`online` 事件用它的返回值决定要不要补一次重画（`navigator.onLine` 那半带来的离线标记没翻，得单独把那页叫回来）。**探的判据是「有没有回话」不是「回话是不是 200」**（401/429 是「后端说不行」，不是「连不上」）；超时 1.5 秒，探不通就照离线办、不拖住用户。**验收**：`tests/test_web_frontend.py` 两条新护栏（**三个会拒绝人的地方一个都不许看标记就拒**、`offlineNow()` 上必须写着「它只是提示」、轮询不许被它挡住；外加 `/api/health` 这条证据**必须真的存在** —— 拿一条不存在的路径去探会得到「有回话」→ 恒真假判据，同 T-G69/T-G74 那族）+ 行为流 ㉖ **25 项断言**；★ **那条判据是确定性的**：把「它以为是断的」与「点下去」放进**同一次求值**里（旧写法这一步必然被拒绝），不再靠「等那两秒过去」——T-G73 当时只能等着它稳下来，等的是竞态，不是产品。**★ 先量再改（第一版我猜错了原因）**：第一版判据分两次 CDP 求值 → 红了；我猜「有一条探测在飞」，**探针当场否掉**（`gates/diag/probes/stale_flag_probe.mjs`：断网时探测 **3~13ms** 就失败回来、`online` 事件 **2~10ms** 就到、干净启动下强制置位留得住），真凶是④量出来的调用栈 —— `markUp@3 ← online 事件处理器`、`view:offline@3 ← 同上`、`markUp@14 ← api()`：**回网事件触发的那次重画**里 `paintRail` 发的 `/api/focus/active` 在 14ms 后**成功**了 → 标记被正当清掉（那条请求确实成功了）、`#main` 被重画（判据打在按钮上的 `data-tfprobe` 标记随之消失 → 报「找不到元素」，**按钮其实还在**）。教训：**判据不许假设「两次求值之间世界没变」**；猜出来的因果没量过不算数。**没动的**：后端一行没改（`/api/health` 本来就在，只是从没人拿它当判据）、45 份黄金一份没动、离线包格式与合并规则一个字没改。**★ 顺带抓到并修掉一个工具缺陷**：`--twice` 比的是「每条流 × 每条断言的**标签** + 通过与否」，而 ㉘ 有一条把**测量秒数写进了标签**（`涨了 ${grew}s，会话约 ${secs}s`）→ 两遍差一秒就报「这是工具的问题」；T-G73 那次没红纯属两遍秒数**凑巧一样**（潜伏的假红）。修法：标签固定、数字搬进 `detail`（不进指纹）；同一次把那条报错变有用 —— 两边都全绿却指纹不同时，旧写法只印「第一遍 [] / 第二遍 []」（等于什么都不说），现在印**只在某一遍出现的断言标签**（本卡就是靠它一眼定位的）。"
+
 [entries."T-G75"]
 id = "T-G75"
 title = "口径更正：台账上唯一的 todo（SR-F8.4 产出评价器）原来是一半幽灵 —— 判 done + OP-38 销账 + 评价器另立 SR-F8.4b（deferred）"
@@ -582,7 +608,7 @@ evidence = [
   "text:tests/test_ui_flow_check.py::tokens = (",
   "text:docs/人工验收-照着点.md::【已搬给机器：T-G73 流 ⑭",
   "text:复盘/交接-重构进度.md::【**已搬给机器：T-G73 流 ㉘**",
-  "text:复盘/视觉线地图.md::22 条流 / 292 项断言",
+  "text:复盘/视觉线地图.md::T-G73 起有两条流会",
   "text:docs/ACCEPTANCE.md::2026-09-25 补（T-G73）",
   "test:test_ui_flow_check.py",
 ]

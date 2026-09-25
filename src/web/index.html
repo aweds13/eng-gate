@@ -132,11 +132,14 @@ function applyAccent(color){
 try{applyAccent(localStorage.getItem('tf_accent'))}catch(e){}
 
 async function api(path,opts={}){
-  const init={headers:{'Content-Type':'application/json'},...opts};
+  // `quiet` 是给"探一下/轮询"用的开关（失败不弹提示），不往 fetch 里塞（T-G76）
+  const {quiet,...rest}=opts;
+  const init={headers:{'Content-Type':'application/json'},...rest};
   // 局域网（②）：这台设备配对过就把配对码带在头上（后端说了算，前端不自己判对错）
   const pair=pairCode();
   if(pair)init.headers={'Content-Type':'application/json','X-Timeflow-Pair':pair,...(opts.headers||{})};
-  if(abortCtl)init.signal=abortCtl.signal;      // 同一次渲染的请求共享取消信号
+  if(abortCtl&&!rest.signal)init.signal=abortCtl.signal;   // 同一次渲染的请求共享取消信号
+  const startedAt=Date.now();                   // ★ 这条请求"出发的时刻"（见 markDown）
   let r;
   try{
     r=await fetch(path,init);
@@ -144,11 +147,11 @@ async function api(path,opts={}){
     if(err&&err.name==='AbortError')throw err;   // 取消不是错误：静默抛出，不打扰用户
     // 「连不上」与「后端说不行」要分得开：只有前者才允许离线兜底（后者是后端说了算，兜底就是骗人）
     try{err.__offline=true}catch(e){}
-    netDown=true;paintOfflineBar();
-    toast('连不上电脑（断网或服务没开）—— 这一笔可以先记在手机上');
+    markDown(startedAt);
+    if(!quiet)toast('连不上电脑（断网或服务没开）—— 这一笔可以先记在手机上');
     throw err;
   }
-  netDown=false;
+  markUp();
   if(!r.ok){
     let detail='';try{detail=(await r.json()).detail||''}catch(e){}
     // 局域网这道门（②）：单独的走法 —— 不是"操作失败"，而是"这台设备还没配对"，
@@ -243,6 +246,47 @@ function defaultDateFields(ids){
  * 说明不了"电脑那台服务开着没有" —— 所以真正的判据是**请求有没有连上**（见 api() 的 `__offline`）。
  */
 let netDown=false;                        // 上一次请求是不是"连不上"（断网或服务没开）
+let lastOkAt=0;                           // 最近一次**成功**的时刻（判断一条失败是不是"过期结论"）
+/* 「连不上」这个结论怎么记、怎么用（T-G76 —— 两条规矩，都是为了不让**过期**的结论替**现在**回答）：
+   ① `markDown(startedAt)`：一条请求失败只能代表**它出发的那一刻**。断网期间"在飞"的请求失败得晚，
+      回到在线之后它才回来 —— 那一下不许把已经恢复的状态又打回"离线"
+      （只有"出发晚于最近一次成功"的失败才算数，见用例 ㉖ 那两秒窗口）。
+   ② 结论只是**提示**，不是**拒绝的依据**：要拒绝一个动作，必须先用 `offlineConfirmed()` 真探一次。
+   ★ 为什么要有 ②：旧写法拿 `offlineNow()` 直接挡住「直接传到电脑」，于是一个过期的提示
+   能让一个**明明能成**的操作连试都不试 —— 用"上次"替"这次"回答，比慢一点坏得多。 */
+function markDown(startedAt){
+  if(typeof startedAt==='number'&&startedAt<lastOkAt)return;   // 过期结论：不改标记
+  if(!netDown){netDown=true;paintOfflineBar()}
+}
+/* 一条**请求回来了**：更新"最近一次成功"的时刻，并在标记真的翻过来时**当场重画一遍**。
+   为什么重画（T-G76）：界面此刻可能正挂着"离线中"（那一页的标题、右栏的话）—— 判断被推翻了，
+   显示就得跟着走，不能等人下次点一下。只在这一翻里发生一次：重画里的请求成功时 `netDown`
+   已经是假，`markUp` 直接返回，不会递归。
+   返回"标记翻没翻"：`online` 事件要用它判断还需不需要单独把停着的那一页叫回来。 */
+function markUp(){
+  lastOkAt=Date.now();
+  if(!netDown)return false;
+  netDown=false;paintOfflineBar();
+  if(typeof view==='function'&&current)view(current);
+  return true;
+}
+// 探一次"那台电脑的服务现在在不在"。**回话就算连得上**（哪怕 401/429 —— 那是"后端说不行"，
+// 不是"连不上"）；只有 fetch 自己没回来才算连不上。超时 1.5s：探不通就照连不上办，不拖着用户。
+const PROBE_TIMEOUT_MS=1500;
+async function probeServer(){
+  const ctl=(typeof AbortController!=='undefined')?new AbortController():null;
+  const timer=ctl?setTimeout(()=>{try{ctl.abort()}catch(e){}},PROBE_TIMEOUT_MS):null;
+  try{
+    const h={'Content-Type':'application/json'},pair=pairCode();
+    if(pair)h['X-Timeflow-Pair']=pair;
+    await fetch('/api/health',{headers:h,cache:'no-store',signal:ctl?ctl.signal:undefined});
+    markUp();return true;
+  }catch(e){markDown();return false}
+  finally{if(timer)clearTimeout(timer)}
+}
+/* 「要拒绝，先探一次」的唯一入口：提示说在线就直接信它（探错那边只会多一次白跑的请求、
+   不会拒绝用户）；提示说连不上才真探一次，探得通就照做。 */
+async function offlineConfirmed(){return offlineNow()&&!(await probeServer())}
 // 离线能看的几份（持久那份在 IndexedDB）。T-G16 起"看"的部分补齐：今日 / 逾期 / 该提醒了 /
 // 今天该复习 / 今日摘要 —— 手机上不只用来"记"，也能**看上次联网时的样子**。
 const offlineCache={tasks:[],habits:[],memos:[],feedback:null,
@@ -255,6 +299,8 @@ const OFFLINE_CACHE_KEYS=['tasks','habits','memos','feedback','mydays','overdue'
   'reviewDue','summary'];
 function offlineEngine(){return (typeof TFOffline!=='undefined')?TFOffline:null}
 function offlineReady(){const o=offlineEngine();try{return !!(o&&o.available())}catch(e){return false}}
+// 「现在大概是离线」——**只是提示**（用来说话、说清现在记的东西去哪了），
+// **不许**拿它当"这次不做"的判据：要拒绝先走 `offlineConfirmed()` 真探一次（T-G76）。
 function offlineNow(){return netDown||!navigator.onLine}
 function offlineDevice(){const o=offlineEngine();return o?o.deviceId():'—'}
 /* 读过的清单留一份：断网时「离线记」页还能把要勾的任务列出来（只记这几条读路径）。 */
@@ -269,9 +315,11 @@ function rememberForOffline(path,opts,data){
 }
 /* 能连上就走接口；**连不上**才入队。后端说不行（400/404）不兜底 —— 那是它说了算。 */
 async function writeOrQueue(path,opts,plan,queuedMsg){
-  if(!offlineNow()){
+  // ★ 判据是**这一次**的请求，不是上一次的结论（T-G76）：提示说连不上时也先探一次 ——
+  //   探通了就照写不误（否则一条本来能落库的记录会被白白塞进手机队列，还得人再去导出导入）。
+  if(!(await offlineConfirmed())){
     try{return {queued:false,data:await api(path,opts)}}
-    catch(e){if(e&&e.__offline){/* 连不上 → 落到下面入队 */}else{return null}}
+    catch(e){if(e&&e.__offline){/* 刚探还是通的，这一下又断了 → 落到下面入队 */}else{return null}}
   }
   const o=offlineEngine();
   if(!o||!offlineReady()){
@@ -366,7 +414,7 @@ async function offlineHabitToggle(id){
 }
 async function toggleDone(id,isDone){
   const t=cachedOfflineTask(id);
-  if(offlineNow()&&!t){
+  if(!t&&(await offlineConfirmed())){   // 真的连不上 + 缓存里也没有 → 才说这句话（T-G76）
     toast('这条任务不在手机缓存里 —— 联网时打开一次任务列表，之后就能离线勾了');
     return;
   }
@@ -427,7 +475,9 @@ async function offlineClear(){
 async function offlineUpload(){
   const o=offlineEngine();
   if(!o||!offlineReady()){toast('这个浏览器不支持离线存储，传不了');return}
-  if(offlineNow()){toast('现在连不上电脑（离线）—— 先「导出同步包」，等连上再点这里');return}
+  // ★ 离线判断不许挡在动作前面（T-G76）：先真探一次，探不通才说"等连上再点这里"。
+  //   旧写法拿离线标记直接拒绝 —— 一个过期的提示就能让这一下连试都不试。
+  if(await offlineConfirmed()){toast('现在连不上电脑（离线）—— 先「导出同步包」，等连上再点这里');return}
   let r;
   try{r=await o.packOnce()}catch(e){toast('打包失败：'+((e&&e.message)||e));return}
   if(!r.rows){toast('队列是空的 —— 没有要传的');return}
@@ -462,6 +512,8 @@ async function renderOffline(m){
   const o=offlineEngine();
   const ready=offlineReady();
   const off=offlineNow();
+  // 提示说过期了就由 `markUp()` 当场重画这一页（T-G76）—— 这里不自己探一次：
+  // "判断变了 → 界面跟着变"只留一处机制，省得两个地方各探各的、各画各的。
   let entries=[],last=null,err='';
   if(o&&ready){
     try{entries=await o.pending()}catch(e){err=String((e&&e.message)||e)}
@@ -1277,7 +1329,9 @@ function paintRail(mySeq){
   const rail=document.getElementById('focusRail'),box=document.getElementById('detailRail');
   if(!rail||!box)return;
   if(offlineNow()){
-    // 离线时别去问：问一次弹一次"连不上"，而且这一页本来就是给断网用的 —— 最需要它的时候最吵
+    // 离线时别去问：问一次弹一次"连不上"，而且这一页本来就是给断网用的 —— 最需要它的时候最吵。
+    // 提示可能过期，但**不在这里自己探**：轮询每 10 秒会试一次，成功时 `markUp` 当场重画
+    // （判断变了 → 界面跟着变，只有一处机制；T-G76）。
     rail.innerHTML=`<div class="panel-title">专注计时</div>
       <div class="sub">离线中：这时看不到进行中的专注（回到电脑前会同步）。</div>`;
     box.innerHTML='';return;
@@ -2483,9 +2537,12 @@ function focusKey(a){return a?`${a.id}:${a.device_id||''}`:'none'}
 function startFocusPoll(){
   if(focusPollTimer)return;
   focusPollTimer=setInterval(async()=>{
-    if(document.hidden||offlineNow())return;      // 页面在后台/离线时别问
+    if(document.hidden)return;                    // 页面在后台时别问
+    // ★ 不再拿 `offlineNow()` 挡住这个轮询（T-G76）：它是**唯一**会自己周期性重试的请求，
+    //   挡掉它，"连不上"这个结论就没人能推翻了（一条迟到的失败能把界面锁在离线态）。
+    //   改成静默地问（`quiet`）：真断网时只是每 10 秒一次白跑的失败，不弹任何提示。
     let a=null;
-    try{a=await api('/api/focus/active')}catch(e){return}   // 轮询失败静默：不打扰
+    try{a=await api('/api/focus/active',{quiet:true})}catch(e){return}   // 轮询失败静默：不打扰
     if(focusKey(a)===focusSeenKey)return;
     focusSeenKey=focusKey(a);
     if(current==='focus')view('focus');else paintRail(renderSeq);
@@ -3905,12 +3962,15 @@ if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.se
 /* 离线/在线的切换（SR-NF17 / 场景 ①）：断网那一刻起，记的东西存进手机队列；
    回到网络时说清楚「还有几条没同步」——**不会自动上传**（走文件，或等 ② 同一 WiFi 直连）。 */
 window.addEventListener('offline',()=>{
-  netDown=true;paintOfflineBar();
+  markDown();paintOfflineBar();
   toast('断网了：现在记的东西会先存在手机上，回电脑后导出同步包导入');
 });
 window.addEventListener('online',()=>{
-  netDown=false;paintOfflineBar();
-  if(current==='offline')view('offline');
+  // 标记翻过来时 `markUp` 自己会重画一遍；只有"我们没失败过请求、只是浏览器说断网了"
+  // 那种（`navigator.onLine` 那半带来的离线）标记没翻，才需要在这里把停着的那一页叫回来。
+  const flipped=markUp();
+  paintOfflineBar();
+  if(!flipped&&current==='offline')view('offline');
 });
 
 // 首屏渲染（此前只在点击导航时才渲染，页面会一直空白）。

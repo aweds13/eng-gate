@@ -1349,21 +1349,31 @@ flow({
     // ⑤ 连上 → 真传（先问一句，再走电脑上那条**已有的合并路径**）
     await t.cdp.setOffline(false)
     t.eq('网接回来了', await t.cdp.eval('navigator.onLine'), true)
-    // ★ 界面自己也得知道网回来了：`netDown` 是"上一次请求有没有连上"那个标记
-    //   （`offlineNow()` 看的就是它 + `navigator.onLine`）。这不是"等一等"，而是**它说不说真话**的
-    //   一半 —— 在它还没发现之前，那个按钮本来就该继续说"连不上"。
-    //   ★ 实测（T-G73）：断网期间**正在飞**的那几个请求失败得晚，会把标记又打回"离线" ——
-    //   所以要"稳一下再判一次"，不然测到的是那一下竞态（不是界面错了）。
+    // ★ T-G76 之一：**界面自己会走回在线**（不靠用户点、不靠刷新）—— 这是修好的那半。
+    //   T-G73 记的病症：断网期间"在飞"的请求失败得晚，网回来了它才回来、把标记又打回离线。
+    //   现在「出发早于最近一次成功」的失败不许再改标记（`markDown(startedAt)`），所以它会自己收敛。
     const stateOf = () => t.cdp.eval('({off: offlineNow(), down: netDown, net: navigator.onLine})')
-    const online = await t.waitFor(async () => {
-      const s = await stateOf()
-      if (!s || s.off !== false) return false
-      await sleep(400)
-      return (await stateOf()).off === false
-    }, 12000, 250)
-    t.ok('★ 界面自己稳当地认为网回来了（离线判据为假）', online, JSON.stringify(await stateOf()))
-    await t.pressAction('offline-upload')
-    t.has('先问一句要不要传', await t.text('#modalTitle'), '传到电脑')
+    const online = await t.waitFor(async () => (await stateOf()).off === false, 12000, 250)
+    t.ok('★ 界面自己走回在线（不靠用户点、不靠刷新）', online, JSON.stringify(await stateOf()))
+    // ★ T-G76 之二（**确定性的那一半**）：把"它以为是断的"和"点下去"放进**同一次求值**里 ——
+    //   JS 不会在中间插进别的任务，所以这一下必然走"提示说连不上"的那条分支
+    //   （T-G73 那两秒窗口里就是它）。旧写法在这里**直接拒绝**：一个明明能成的操作连试都不试。
+    //   为什么这一步允许合成 click：要验的是**决定**（拒绝之前探不探），不是"点得到" ——
+    //   后者 ④ 已经用真鼠标证过（真点击 → 真原话），往下的确认与上传也仍然走真鼠标。
+    const forced = await t.cdp.eval(`(() => {
+      netDown = true;
+      const b = document.querySelector('[data-action="offline-upload"]');
+      if (!b) return null;
+      const hint = offlineNow();          // 点下去那一刻，界面以为自己是离线的
+      b.click();
+      return { hint };
+    })()`)
+    t.ok('（准备）按回"以为是断的"，且那一刻确实是那个状态', Boolean(forced) && forced.hint === true,
+      JSON.stringify(forced))
+    const asked = await t.waitFor(
+      async () => String(await t.text('#modalTitle') || '').includes('传到电脑'), 8000)
+    t.ok('★ 提示过期也照样试：确认框出来了', asked, await t.text('#modalTitle'))
+    t.eq('★ 一探就自己更正了（标记回到假）', await t.cdp.eval('netDown'), false)
     await t.pressAction('modal-ok')
     const sent = await t.waitToast('已传到电脑')
     t.ok('★ 回话里带合并报告', sent.ok && sent.text.includes('新增'),
@@ -1446,8 +1456,11 @@ flow({
       const secs = Math.round((t1 - t0) / 1000)
       const m1 = (await t.api('GET', '/api/focus/today')).json.focus_minutes
       const grew = Math.round((m1 - m0) * 60)
-      t.ok(`★ 今日专注分钟只涨了一次的量（涨了 ${grew}s，会话约 ${secs}s）`,
-        grew >= secs - 4 && grew <= secs + 4, `涨了 ${grew}s，会话 ${secs}s —— 翻倍会明显超出去`)
+      // ★ 标签里**不许写测量值**（T-G76）：指纹比的就是"每条流 × 每条断言的标签 + 通过与否"，
+      //   秒数写进标签 → 两遍差一点就报"工具不可靠"（T-G73 那次没红纯属凑巧两遍一样）。
+      //   数字搬进 detail —— 它给人看，但不进指纹。
+      t.ok('★ 今日专注分钟只涨了一次的量', grew >= secs - 4 && grew <= secs + 4,
+        `涨了 ${grew}s，会话 ${secs}s —— 翻倍会明显超出去`)
     } finally {
       peer?.close()
     }
@@ -1572,8 +1585,21 @@ async function main() {
       const other = JSON.parse(prints[0]).find((x) => x[0] === rec.id)
       const mine = rec.checks.map((c) => [c.label, c.ok])
       if (other && JSON.stringify(other[2]) !== JSON.stringify(mine)) {
-        console.log(`   · ${rec.id} 两遍结果不同：第一遍 ${JSON.stringify(other[2].filter((x) => !x[1]))} / ` +
-          `第二遍 ${JSON.stringify(mine.filter((x) => !x[1]))}`)
+        const badA = other[2].filter((x) => !x[1])
+        const badB = mine.filter((x) => !x[1])
+        if (badA.length || badB.length) {
+          console.log(`   · ${rec.id} 两遍结果不同：第一遍 ${JSON.stringify(badA)} / ` +
+            `第二遍 ${JSON.stringify(badB)}`)
+        } else {
+          // ★ 两遍都全绿却指纹不同 → 差在**断言清单本身**（条数/顺序/标签），不在通过与否。
+          //   旧写法这时只会印「第一遍 [] / 第二遍 []」，等于什么都不说（T-G76 撞到）。
+          const la = other[2].map((x) => x[0])
+          const lb = mine.map((x) => x[0])
+          console.log(`   · ${rec.id} 两遍**断言清单**不同（两边都全绿）：` +
+            `第一遍 ${la.length} 条 / 第二遍 ${lb.length} 条；` +
+            `只在第一遍：${JSON.stringify(la.filter((x) => !lb.includes(x)))}；` +
+            `只在第二遍：${JSON.stringify(lb.filter((x) => !la.includes(x)))}`)
+        }
       }
     }
     result.fuzzy = true
