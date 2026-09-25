@@ -61,6 +61,10 @@ def test_build_command_carries_the_opening_and_the_stream(sandbox: Path) -> None
     assert "--output-format stream-json" in joined
     assert "--model deepseek-v4.1-flash" in joined
     assert "--no-session-persistence" in joined and " -y" in joined
+    # ★ 开场白**不许**写死某一张卡的约束（写卡要改文件/要提交，只读卡才不许）——
+    #   纪律由卡规格带，规格与开场白冲突时按规格执行
+    assert "以卡规格为准" in cmd[3]
+    assert "不许 git 提交" not in cmd[3]
 
 
 def test_build_command_grants_bypass_permissions_by_default(sandbox: Path) -> None:
