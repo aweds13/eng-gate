@@ -1,0 +1,218 @@
+"""工人状态面板（`tools/wb_dash.py`，台账号 T-G93）—— 原型 `gates/diag/wb_dash.proto.py` 转正。
+
+一句话：把 `gates/diag/wb-*` 那堆状态文件读成一块**会自动刷新的表**，让主控/用户一眼看到
+"每个工人在不在动、跑到哪了、有没有被掐"。读的全是文件，**不碰工人、不改任何被提交的东西**。
+
+    python -X utf8 tools/wb_dash.py                 # 默认 http://127.0.0.1:8787
+    python -X utf8 tools/wb_dash.py --port 8899 --host 127.0.0.1
+
+**只读**：只读 `gates/diag/wb-*.jsonl` / `*.heartbeat.txt` / `*.verdict.txt` / `*.session.txt`，
+绝不调用或杀工人、绝不写仓库里任何被跟踪的文件。
+
+**边界（如实写）**：它只报"在不在动、动到哪了"，**不判断内容对不对**（那是主控复核的事）；
+状态文件本身在 gitignored 目录里。多树只扫 `<仓库根>/gates/diag/` 与本仓库根下的
+`<仓库根>/.wt/*/gates/diag/`；从**某棵 worktree 内部**运行时，根是那棵 worktree，
+找得到它自己的 `gates/diag/`、找**不到**兄弟 worktree（面板的常规跑法是从主工作区起）。
+续跑日志（`wb-<卡>.r2.jsonl`）按文件各占一行，不按卡合并（合并口径未定）。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+# 根路径从**本文件位置**推出来（tools/ 的上一级），不硬编码盘符。
+TOOLS = Path(__file__).resolve().parent
+# 复用 `wb_status.py` 的时间线/摘要解析器 —— 不写第二份（卡 §2.5）。
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+
+import wb_status  # noqa: E402 —— 需要先把 tools/ 挂到 sys.path
+
+ROOT = TOOLS.parent
+
+STALL = 480          # 静默 ≥ 这么久 = 可能卡死（与派活器看门狗同一口径，秒）
+QUIET = 60           # 静默 ≥ 这么久 = "安静一下"（可能在长思考，也可能要出事，秒）
+
+
+def _state(age: float, finished: bool) -> tuple[str, str]:
+    """（状态字, 颜色）—— 顺序：有收工证据 = 结束；否则按日志静默多久分档。"""
+    if finished:
+        return "收工·结束", "done"
+    if age < QUIET:
+        return "在跑", "run"
+    if age < STALL:
+        return "安静", "quiet"
+    return f"静默 {age / 60:.1f} 分钟（可能卡死）", "stall"
+
+
+def _turns(lines: list[str]) -> int:
+    """回合数 = `assistant` 事件的 `message.id` 去重（与派活器同一口径）。"""
+    ids: set[str] = set()
+    for ln in lines:
+        try:
+            event = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("type") == "assistant":
+            mid = (event.get("message") or {}).get("id")
+            if mid:
+                ids.add(str(mid))
+    return len(ids)
+
+
+def _tree_dirs(root: Path) -> list[tuple[str, Path]]:
+    """要扫的 (树名, gates/diag 目录) —— 主树 + 每个 worktree（`.wt/*`）。
+
+    树名 `""` = 本仓库；`.wt/004` = 那一棵 worktree。并发跑多个工人时每棵树各有自己的
+    `gates/diag/`，少扫一棵就少一个工人（这正是做这块表的原因）。
+    """
+    trees: list[tuple[str, Path]] = [("", root / "gates" / "diag")]
+    wt = root / ".wt"
+    if wt.is_dir():
+        for child in sorted(wt.iterdir()):
+            if child.is_dir():
+                trees.append((f".wt/{child.name}", child / "gates" / "diag"))
+    return trees
+
+
+def discover_logs(root: Path) -> list[tuple[str, str, Path]]:
+    """(树名, 卡标识, log 路径) —— 多卡多树一次找齐。
+
+    卡标识 = 文件名里的卡号（含 `.r2` 这类续跑后缀，续跑按文件各占一行、不按卡合并）。
+    """
+    found: list[tuple[str, str, Path]] = []
+    for tree, diag in _tree_dirs(root):
+        if not diag.is_dir():
+            continue
+        for log in sorted(diag.glob("wb-*.jsonl"), key=lambda p: p.stat().st_ctime):
+            card = log.name.removeprefix("wb-").removesuffix(".jsonl")
+            found.append((tree, card, log))
+    return found
+
+
+def card_state(root: Path | None = None) -> list[dict]:
+    """每张卡一行 —— 多卡并发时就是多行。`root` 默认本文件推出来的仓库根。"""
+    root = Path(root) if root is not None else ROOT
+    now = time.time()
+    rows: list[dict] = []
+    for tree, card, log in discover_logs(root):
+        st = log.stat()
+        verdict = log.with_suffix(".verdict.txt")
+        heartbeat = log.with_suffix(".heartbeat.txt")
+        session = log.with_suffix(".session.txt")
+        age = now - st.st_mtime
+        lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+        timeline, summary = wb_status.parse_events(lines)
+        shown = [ln for ln in timeline if ln.strip()]
+        # ★ "收工"有两个来源：**判决文件**，**或日志里已经出现了 `result` 事件** ——
+        #   老卡没有判决文件，少了第二条就会把早已收工的卡误报成"静默 N 分钟（可能卡死）"。
+        state, color = _state(age, verdict.exists() or bool(summary["final"]))
+        models = list(dict.fromkeys(summary["models"]))
+        rows.append({
+            # 跨树时带上树名（如 `004@.wt/004`），免得两张卡同号时看串。
+            "card": f"{card}@{tree}" if tree else card,
+            "tree": tree,
+            "log": log.name,
+            "state": state,
+            "color": color,
+            "elapsed_min": round((now - st.st_ctime) / 60, 1),
+            "silent_s": round(age),
+            "events": len(lines),
+            "turns": _turns(lines),
+            "tool_calls": summary["tool_calls"],
+            "tools": summary["tools"],
+            "errors": summary["tool_errors"],
+            "files_total": summary["files_total"],
+            "model": ", ".join(models) or "（还没 init）",
+            "session": (session.read_text(encoding="utf-8").strip()[:8]
+                        if session.exists() else ""),
+            "heartbeat": (heartbeat.read_text(encoding="utf-8").strip()
+                          if heartbeat.exists() else ""),
+            "verdict": (verdict.read_text(encoding="utf-8").strip()
+                        if verdict.exists() else ""),
+            "last": shown[-1].strip() if shown else "",
+            "final": summary["final"] or "",
+            "size_kb": round(st.st_size / 1024, 1),
+        })
+    return rows
+
+
+def api_state(root: Path | None = None) -> dict:
+    """/api/state 的机器可读正文 —— 抽出来是为了能在测试里直接验结构（不起服务）。"""
+    return {"now": time.strftime("%H:%M:%S"), "cards": card_state(root)}
+
+
+PAGE = """<!doctype html><meta charset="utf-8"><title>工人状态</title>
+<style>
+ body{font:14px/1.5 ui-monospace,Consolas,monospace;background:#0f1117;
+      color:#e6e6e6;margin:0;padding:18px}
+ h1{font-size:16px;margin:0 0 12px;font-weight:600}
+ table{border-collapse:collapse;width:100%}
+ th,td{border-bottom:1px solid #23262f;padding:7px 9px;text-align:left;vertical-align:top}
+ th{color:#8b93a7;font-weight:600;font-size:12px}
+ .run{color:#3fb950}.done{color:#58a6ff}.quiet{color:#d29922}.stall{color:#f85149}
+ .pill{border-radius:10px;padding:1px 8px;background:#1b1f27}
+ .dim{color:#8b93a7}.small{font-size:12px}
+ pre{white-space:pre-wrap;margin:0;color:#c9d1d9}
+</style>
+<h1>工人状态 <span class="dim small" id="at"></span></h1>
+<div id="tbl">加载中…</div>
+<script>
+async function tick(){
+  const r = await fetch('/api/state'); const d = await r.json();
+  document.getElementById('at').textContent = '· ' + d.now;
+  if(!d.cards.length){document.getElementById('tbl').textContent='还没有任何 wb-*.jsonl';return}
+  let h='<table><tr><th>卡</th><th>状态</th><th>已跑</th><th>回合</th><th>工具</th><th>报错</th>'+
+        '<th>文件</th><th>静默</th><th>模型</th><th>最后一步</th></tr>';
+  for(const c of d.cards){
+    h += `<tr><td><b>${c.card}</b><div class="dim small">${c.log} · ${c.size_kb} KB`+
+         `${c.session?' · 会话 '+c.session:''}</div></td>`+
+         `<td class="${c.color}">${c.state}</td><td>${c.elapsed_min} 分</td><td>${c.turns}</td>`+
+         `<td>${c.tool_calls}</td><td>${c.errors}</td><td>${c.files_total}</td>`+
+         `<td>${c.silent_s} 秒</td><td class="small">${c.model}</td>`+
+         `<td class="small"><pre>${c.last}</pre>`+
+         `${c.heartbeat?'<div class="dim small">'+c.heartbeat+'</div>':''}`+
+         `${c.verdict?'<div class="small">'+c.verdict.split('\\n')[0]+'</div>':''}</td></tr>`;
+  }
+  document.getElementById('tbl').innerHTML = h+'</table>';
+}
+tick(); setInterval(tick, 2000);
+</script>"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:                       # noqa: N802 —— BaseHTTPRequestHandler 的约定
+        if self.path.startswith("/api/state"):
+            body = json.dumps(api_state(), ensure_ascii=False).encode("utf-8")
+            ctype = "application/json; charset=utf-8"
+        else:
+            body = PAGE.encode("utf-8")
+            ctype = "text/html; charset=utf-8"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args: object) -> None:
+        pass                                        # 别把每条请求都打到控制台
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="工人状态面板（只读 gates/diag 里的状态文件）")
+    ap.add_argument("--port", type=int, default=8787, help="监听端口（默认 8787）")
+    ap.add_argument("--host", default="127.0.0.1", help="监听地址（默认只绑回环）")
+    args = ap.parse_args()
+    srv = ThreadingHTTPServer((args.host, args.port), Handler)
+    print(f"工人状态面板：http://{args.host}:{args.port}  （Ctrl+C 停）", flush=True)
+    srv.serve_forever()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
