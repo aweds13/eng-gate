@@ -42,6 +42,7 @@ from timeflow.core import tasks as tm
 from timeflow.core import team as team
 from timeflow.core.focus import guard as fg
 from timeflow.core.ledger import ledger
+from timeflow.core.tasks.manager import MydayConflictError
 from timeflow.storage import backup as backup_mod
 from timeflow.storage import db
 
@@ -1732,6 +1733,10 @@ def create_app(
                     moved = tm.move_myday(conn, task_id, direction)
         except KeyError:
             raise HTTPException(status_code=404, detail="任务不存在") from None
+        except MydayConflictError as e:
+            # T-G109 乐观锁「重试一次仍撞」的载体：core 抛出的这条原是 RuntimeError 无人接
+            # → 显 500；卡 035（T-G126）补上映射 —— 409 + core 那句人话（照既有 str(e) 写法）。
+            raise HTTPException(status_code=409, detail=str(e)) from e
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return _out(moved, conn)

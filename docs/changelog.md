@@ -4,6 +4,19 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### `MydayConflictError` 经 HTTP 显 409（原 500）—— 接口层映射（T-G126）
+
+- T-G109 给 myday 排序焊上乐观锁后，「重试一次仍撞」的 `MydayConflictError` 冒泡成 **500**
+  （纯文本 `Internal Server Error`）—— 该卡的复盘如实记了这条边界，主控裁定另立本卡。
+- **修法**（`src/timeflow/api/app.py`，仅 5 行）：`move_myday` 端点 except 链插入
+  `except MydayConflictError` → `HTTPException(409, str(e))`（照既有 `detail=str(e)` 写法）；
+  异常类从 `manager` 模块直接导入（没被 `core/tasks/__init__` re-export，而那是 022 的禁区）。
+- **先红后绿 + 突变检验**：TestClient + 确定性桩（初写撞 + 重试仍撞）—— 加映射前 `500`、
+  加映射后 `409`（detail 为人话报错文案）；删掉映射三行 → 钉子用例红（`assert 500 == 409`）→
+  还原 `2 passed`。
+- **边界**：其它异常映射一个没动；装置是确定性桩不是真并发 HTTP（真并发钉子在 T-G109）；
+  UI 拿到 409 后显示什么没查没动。复盘：`复盘/myday撞击409映射-T-G126.md`。
+
 ### 工具收尾两小件：`route_ui_gap` 声明表 + `wb_status` 畸形 log 防御（T-G125）
 
 - **A 件**（`tools/route_ui_gap.py`）：加 `DECIDED` 声明表补两条**早有裁定**的路由
