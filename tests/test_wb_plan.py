@@ -458,3 +458,106 @@ def test_plan_command_prints_batches(tmp_path: Path, capsys: pytest.CaptureFixtu
     assert code == 0
     assert "4 张卡 → 2 批" in out
     assert "第 1 批" in out and "卡 007" in out
+
+# ================================================== T-G119：队列语义（done / depends / stats）
+
+
+def test_done_cards_do_not_conflict_with_pending() -> None:
+    """★ done 的卡占过的文件与树**已经释放** —— 它不该跟待派卡报冲突。"""
+    backlog = _backlog(
+        _card("001", files=("a.py",), tree="", status="done"),
+        _card("002", files=("a.py",), tree="", status="pending"),
+    )
+    assert wb_plan.validate(backlog) == []
+
+
+def test_done_card_fields_are_still_validated() -> None:
+    """★ 「跳过冲突」不是「跳过校验」—— done 的卡字段非法照样要报。"""
+    backlog = _backlog(_card("001", files=(), tree="", status="done"))
+    problems = wb_plan.validate(backlog)
+    assert any("files 为空" in item for item in problems), problems
+
+
+def test_overlapping_cards_need_a_dependency_path() -> None:
+    """同域两卡：**有依赖路径**才允许共存（会被分到不同层 → 不可能同批）。"""
+    no_dep = _backlog(_card("001", files=("a.py",), tree=".wt/x"),
+                      _card("002", files=("a.py",), tree=".wt/y"))
+    assert any("files 相交" in item for item in wb_plan.validate(no_dep))
+    with_dep = _backlog(_card("001", files=("a.py",), tree=".wt/x"),
+                        _card("002", files=("a.py",), tree=".wt/y", depends=("001",)))
+    assert wb_plan.validate(with_dep) == []
+
+
+def test_dependent_overlapping_cards_land_in_different_batches() -> None:
+    """依赖把同域两卡推到不同批，且**被依赖者在前**。"""
+    backlog = _backlog(_card("001", files=("a.py",), tree=".wt/x"),
+                       _card("002", files=("a.py",), tree=".wt/y", depends=("001",)))
+    assert [[c.id for c in b] for b in wb_plan.plan_batches(backlog, 4)] == [["001"], ["002"]]
+
+
+def test_transitive_dependency_also_allows_overlap() -> None:
+    """传递依赖同样算路径：001 → 002 → 003，001 与 003 同域也允许。"""
+    backlog = _backlog(_card("001", files=("a.py",), tree=".wt/x"),
+                       _card("002", files=("b.py",), tree=".wt/y", depends=("001",)),
+                       _card("003", files=("a.py",), tree=".wt/z", depends=("002",)))
+    assert wb_plan.validate(backlog) == []
+
+
+def test_plan_skips_done_cards() -> None:
+    """★ backlog 是**队列**：done 的卡不进批次。"""
+    backlog = _backlog(_card("001", files=("a.py",), tree=".wt/x", status="done"),
+                       _card("002", files=("b.py",), tree=".wt/y"))
+    assert [[c.id for c in b] for b in wb_plan.plan_batches(backlog, 4)] == [["002"]]
+
+
+def test_worktree_commands_skip_done_cards() -> None:
+    """建树只给待派的卡建。"""
+    backlog = _backlog(_card("001", files=("a.py",), tree=".wt/x", status="done"),
+                       _card("002", files=("b.py",), tree=".wt/y"))
+    assert [card.id for card, _ in wb_plan.worktree_commands(backlog, "abc1234")] == ["002"]
+
+
+def test_stats_reports_the_queue(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    """`stats`：一条命令看队列全貌（待派 / 其它 / 批数 / 最大一批 / 占用的树）。"""
+    body = """
+[base]
+reviewed = "abc1234"
+
+[[cards]]
+id = "001"
+task = "T-G9x"
+title = "已完成的样卡"
+tree = ".wt/x"
+spec = "s.md"
+files = ["a.py"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "002"
+task = "T-G9x"
+title = "待派样卡一"
+tree = ".wt/y"
+spec = "s.md"
+files = ["b.py"]
+depends = []
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "003"
+task = "T-G9x"
+title = "待派样卡二"
+tree = ".wt/z"
+spec = "s.md"
+files = ["c.py"]
+depends = []
+risk = "low"
+status = "pending"
+"""
+    backlog = wb_plan.load_backlog(_write(tmp_path, body))
+    assert wb_plan.cmd_stats(backlog, 2) == 0
+    out = capsys.readouterr().out
+    assert "待派 2" in out, out
+    assert "最大一批 2" in out, out

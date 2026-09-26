@@ -63,6 +63,9 @@ PROTECTED_FILES = frozenset({
 
 VALID_RISK = ("low", "mid", "high")          # high 才派对抗性复核
 VALID_STATUS = ("pending", "running", "done", "failed")
+# ★ T-G119：只有这两种参与「冲突判定」与「排批」—— done/failed 是历史，
+#   它们占过的文件与树都**已经释放**（backlog 是**队列**，不是「全部已排班」）。
+ACTIVE_STATUS = ("pending", "running")
 
 
 class BacklogError(Exception):
@@ -200,15 +203,48 @@ def find_cycle(cards: Sequence[Card]) -> list[str] | None:
     return None
 
 
+def _in_flight(card: Card) -> bool:
+    """这张卡还需不需要排班（`pending` / `running`）。"""
+    return card.status in ACTIVE_STATUS
+
+
+def _reachable(start: str, deps: dict[str, set[str]]) -> set[str]:
+    """从 `start` 沿 `depends` 走，能到达的所有卡号（含传递；有 `seen` 兜环）。"""
+    seen: set[str] = set()
+    stack = [start]
+    while stack:
+        for nxt in deps.get(stack.pop(), ()):
+            if nxt not in seen:
+                seen.add(nxt)
+                stack.append(nxt)
+    return seen
+
+
+def dependency_path(a: Card, b: Card, cards: Sequence[Card]) -> bool:
+    """`a`、`b` 之间有没有**依赖路径**（任一方向、含传递）。
+
+    ★ 为什么这能救「同域两卡」：有依赖路径时 `topo_layers()` 会把被依赖的那张放在**更早的层**，
+    而 `greedy_pack()` **不跨层**打包 → 两张卡**不可能落进同一批** → 同文件不会有两个同时的写者。
+    """
+    deps = {card.id: set(card.depends) for card in cards}
+    return b.id in _reachable(a.id, deps) or a.id in _reachable(b.id, deps)
+
+
 def validate(backlog: Backlog) -> list[str]:
-    """六类拒单 —— 返回问题清单（空 = 这份 backlog 能用）。
+    """拒单清单（空 = 这份 backlog 能用）。
 
-    ① 两卡 `files` 相交；② 某卡 `files` 含受保护共享文件；③ 两卡用同一棵树；
-    ④ `depends` 指向不存在的卡；⑤ 依赖成环；⑥ `files` 为空。
+    字段类（**所有卡都要过**）：② `files` 含受保护共享文件；④ `depends` 指向不存在的卡；
+    ⑤ 依赖成环；⑥ `files` 为空；⑦ `risk`/`status` 取值非法。
 
-    ★ `check` 把**整份 backlog 当作同一批**来判（卡 010 §3.2 把这几条列在「只校验、不输出批次」
-    的 `check` 里）—— 所以 ①③ 在这里是**全局**拒单；`greedy_pack()` 里那道"同批内两两不相交"
-    是运行时的**第二道**（防御：即使有人绕过 check 直接排批，也不会把冲突的卡放进同一批）。
+    冲突类（★ **只判"还在队列里"的卡**，即 `pending` / `running`）：
+    ① 两卡 `files` 相交 **且两者之间没有依赖路径**；③ 两卡用同一棵树。
+
+    ★ T-G119 的两处语义更正（两条都是真撞出来的）：
+      · **`done` / `failed` 不参与冲突判定** —— 它们占过的文件与树**已经释放**；
+        从前把整份 backlog 当「全部已排班」，于是**已完成的卡会与待派卡报「同一文件两个写者」**。
+      · **同域两卡只要**有依赖路径**就允许共存** —— `topo_layers()` 会把被依赖的放更早的层、
+        `greedy_pack()` 又不跨层，所以它们**不可能同批**；从前一律拒单，装不下
+        队列里的「同域串行」（例：024 与 029 都要改 `wb_dispatch.py`）。
     """
     problems: list[str] = []
     cards = backlog.cards
@@ -227,14 +263,16 @@ def validate(backlog: Backlog) -> list[str]:
             problems.append(f"卡 {card.id}：risk={card.risk!r} 不是 {VALID_RISK} 之一")
         if card.status not in VALID_STATUS:
             problems.append(f"卡 {card.id}：status={card.status!r} 不是 {VALID_STATUS} 之一")
-    for i, first in enumerate(cards):
-        for second in cards[i + 1:]:
+    active = [card for card in cards if _in_flight(card)]
+    for i, first in enumerate(active):
+        for second in active[i + 1:]:
             hit = files_intersect(first, second)
-            if hit:
+            if hit and not dependency_path(first, second, cards):
                 problems.append(
-                    f"卡 {first.id} 与 {second.id}：files 相交 {sorted(hit)}（同一文件两个写者）")
+                    f"卡 {first.id} 与 {second.id}：files 相交 {sorted(hit)}"
+                    f"（同一文件两个写者；要共存就给其中一张写 `depends`）")
     tree_owner: dict[str, str] = {}
-    for card in cards:
+    for card in active:
         owner = tree_owner.get(card.tree)
         if owner is not None:
             label = card.tree or "（主树）"
@@ -318,9 +356,14 @@ def greedy_pack(cards: Sequence[Card], limit: int) -> list[list[Card]]:
 
 
 def plan_batches(backlog: Backlog, limit: int = DEFAULT_CONCURRENCY) -> list[list[Card]]:
-    """整份 backlog 的批次 = 逐层贪心打包（批次不跨层：依赖靠层保证顺序）。"""
+    """**待派队列**的批次 = 逐层贪心打包（批次不跨层：依赖靠层保证顺序）。
+
+    ★ T-G119：只排 `pending` / `running` —— `done` / `failed` 是历史、不进批次。
+    （`depends` 指向已完成卡也没关系：`topo_layers()` 对"不在集合里的依赖"是忽略的。）
+    """
+    queue = [card for card in backlog.cards if _in_flight(card)]
     out: list[list[Card]] = []
-    for layer in topo_layers(backlog.cards):
+    for layer in topo_layers(queue):
         out.extend(greedy_pack(layer, limit))
     return out
 
@@ -342,7 +385,7 @@ def render_plan(batches: Sequence[Sequence[Card]]) -> str:
 def worktree_commands(backlog: Backlog, base: str) -> list[tuple[Card, str]]:
     """每张非主树卡的建树命令；主树那张卡**不建树**（卡 010 §3.2）。"""
     return [(card, f"git worktree add {card.tree} {base}")
-            for card in backlog.cards if card.tree]
+            for card in backlog.cards if card.tree and _in_flight(card)]
 
 
 def dispatch_argv(card: Card) -> list[str]:
@@ -375,6 +418,9 @@ def cmd_check(backlog: Backlog) -> int:
         return code
     print(f"[OK ] backlog 校验通过：{len(backlog.cards)} 张卡，无冲突"
           f"（基点 {backlog.reviewed}）")
+    active = [card for card in backlog.cards if _in_flight(card)]
+    print(f"[队列] 待派 {len(active)} 张 / 其它 {len(backlog.cards) - len(active)} 张"
+          f"（★ 只有待派的参与冲突判定与排批）")
     return 0
 
 
@@ -385,6 +431,25 @@ def cmd_plan(backlog: Backlog, limit: int) -> int:
     batches = plan_batches(backlog, limit)
     print(f"[计划] 并发上限 {limit}；{len(backlog.cards)} 张卡 → {len(batches)} 批")
     print(render_plan(batches))
+    return 0
+
+
+def cmd_stats(backlog: Backlog, limit: int) -> int:
+    """队列全貌（只读）：待派 / 其它 / 批次 / 最大一批 / 占用的树。
+
+    ★ 一条命令看全貌 —— 别让人去数文件（"少读"的精神）。
+    """
+    code = _problems_or_exit(backlog)
+    if code:
+        return code
+    active = [card for card in backlog.cards if _in_flight(card)]
+    batches = plan_batches(backlog, limit)
+    biggest = max((len(batch) for batch in batches), default=0)
+    trees = sorted({card.tree or "（主树）" for card in active})
+    print(f"[统计] 队列共 {len(backlog.cards)} 张：待派 {len(active)}"
+          f" / 其它（done/failed）{len(backlog.cards) - len(active)}")
+    print(f"[统计] 并发上限 {limit} → {len(batches)} 批；最大一批 {biggest} 张")
+    print(f"[统计] 待派占用的树：{'、'.join(trees) or '（无）'}")
     return 0
 
 
@@ -431,7 +496,8 @@ def cmd_dispatch(backlog: Backlog, limit: int, *, execute: bool) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="并发调度器：文件级冲突域 + 拓扑分层 + 同层打包（默认只打印）")
-    parser.add_argument("command", choices=("check", "plan", "worktrees", "dispatch"),
+    parser.add_argument("command",
+                        choices=("check", "plan", "stats", "worktrees", "dispatch"),
                         help="要做的动作")
     parser.add_argument("--backlog", default=str(DEFAULT_BACKLOG),
                         help=f"backlog 文件（默认 {DEFAULT_BACKLOG.name}）")
@@ -455,6 +521,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_check(backlog)
     if args.command == "plan":
         return cmd_plan(backlog, args.concurrency)
+    if args.command == "stats":
+        return cmd_stats(backlog, args.concurrency)
     if args.command == "worktrees":
         return cmd_worktrees(backlog, args.base or backlog.reviewed, execute=args.execute)
     return cmd_dispatch(backlog, args.concurrency, execute=args.execute)

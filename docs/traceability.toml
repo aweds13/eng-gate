@@ -646,6 +646,22 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：A11；复核-1969b46.md §7.2（383-385 行）「没跑，没验证」。**做了什么**：判据落在 tests/test_wb_dispatch.py 末尾 T-G111 一节（纯函数层两份合成 log + 真机层真起两轮子进程走 main() 重试循环）；真机续跑压缩阈值如实写（--timeout 6 / --stall-seconds 2 / --poll-seconds 0.2；第 1 轮 3600 秒调用把自己那轮阈值抬到封顶 → 第 1 轮靠超时掐，超时同样触发续跑）。**反证（先红后绿）**：把 run_worker 改坏成第 2 轮从第 1 轮 lines 起步 → 真机用例红（第 2 轮判决变「超时」而非「卡死」）；还原后 ruff 全过、81 passed（既有 79 一条没红）；原始输出见复盘 §5。**边界（如实写）**：实测不串（读代码的结论验过成立）；续跑由桩命令驱动，真 CLI 的 --resume 链路不在本卡；判决文本按 %.1f 分钟落盘、秒级阈值读作 0.0 分钟（断言按正则换算）；A10 封顶那一半不在本卡。**没动的**：阈值公式、wb_status.py、判据整段重解析的既定口径（run_worker docstring）、should_resume、共享文件。"
 
+[entries."T-G119"]
+id = "T-G119"
+title = "调度器补两个缺口：`check` 跳过 `status=done`（但**字段校验一条不松**）+ 同域卡靠 `depends` 排到不同批 —— 让 backlog 真能当**队列**"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/wb_plan缺口-T-G119.md",
+  "text:tools/wb_plan.py::ACTIVE_STATUS = (\"pending\", \"running\")",
+  "text:tools/wb_plan.py::def dependency_path(",
+  "text:tools/wb_plan.py::def cmd_stats(",
+  "text:tools/wb_plan.py::只有待派的参与冲突判定与排批",
+  "test:test_wb_plan.py",
+]
+gaps = "**为什么有这张卡**（T-G119，= 卡 032）：把 backlog 收敛成「待派队列」（T-G118）时**真撞出**调度器两个缺口 —— ① **`check` 忽略 `status`**，把整份 backlog 当「全部已排班」，于是**已完成的卡**（`done`）仍与待派卡报「同一文件两个写者」（实测 `007↔024` 都碰 `tools/wb_dispatch.py`、`009↔022` 都碰 `src/timeflow/core/tasks/manager.py`）；当时的「解法」是**把 11 张已完成的卡整块移出队列** —— 那是**绕过**不是解决。② **只要 `files` 相交就一律拒单、`depends` 救不了** → **装不下「队列里有同域串行」**这种正常情形（例：`024` 与 `029` 都要改 `tools/wb_dispatch.py`）。**怎么改**（`tools/wb_plan.py` 10 处）：新增 `ACTIVE_STATUS` + `_in_flight()`（「还在队列里」的定义一处收口）与 `dependency_path()`（含 `_reachable()`，传递、兜环）；`validate()` 的**冲突类**（`files` 相交 / 同树）**只判在队列里的卡**，且把「相交」改成「**相交且两者之间没有依赖路径**」（有路径 → `topo_layers()` 分到不同层、`greedy_pack()` 不跨层 → **不可能同批**）；`plan_batches()` / `worktree_commands()` **只处理 `pending`/`running`**；★ **新增只读子命令 `stats`**（一条命令看队列全貌：待派/其它/批数/最大一批/占用的树，不给任何卡建树、不派活）；`cmd_check()` **加一行**队列读数（★ **既有那行格式一个字没动** —— 主控的卡在照抄它）。★★ **字段类校验一条都没松**（`files` 为空 / 含受保护共享文件 / `depends` 指向不存在 / 成环 / `risk`·`status` 非法 —— **`done` 的卡照样要过**），有专门用例 `test_done_card_fields_are_still_validated` 钉着「跳过冲突 ≠ 跳过校验」。**反证（三条）**：① 突变「把跳过 done 改回全都算」→ `test_done_cards_do_not_conflict_with_pending` **红**；② 突变「去掉 `and not dependency_path(...)`」→ `test_overlapping_cards_need_a_dependency_path` 与 `test_transitive_dependency_also_allows_overlap` **红**；两条都**精确还原**（脚本逐字符核对 `after == good`），50 条测试全绿（42 → **50**）；③ **真机**：临时把已完成的 `007`（done、与 `024` 同域 `wb_dispatch.py`）塞回真 backlog → `check` 由「拒单」变成「**3 张卡，无冲突；待派 2 / 其它 1**」，还原后复绿。**边界（如实写）**：① **没有**把已完成的 11 张卡塞回 `workbacklog.toml` —— 那份文件的头注口径就是「只登记没编过的卡」、历史在 git 里；这一条保证的是「**若**有人把 done 卡登记进来，`check` 不再误报」；② 依赖必须**真的存在**才能靠它分批（同域且无 `depends` **照样拒单** —— 那才是真冲突）；③ `topo_layers()` 用**最长路径**分层，故 A→B→C 里 A 与 C 同域也允许；④ `check` 既有输出格式保留，队列读数**另起一行**。**没动的**：`PROTECTED_FILES`、四个既有子命令名与输出格式、`tools/wb_dispatch.py`、`tools/wb_dash.py`、`scripts/**`、`src/**`、台账、changelog、两张交接文档。"
+
+
 [entries."T-G118"]
 id = "T-G118"
 title = "backlog 收敛成**真正的待派队列**（完成的卡移出）+ 修掉产物占位名；并记下 `wb_plan.py check` 的两个缺口"
