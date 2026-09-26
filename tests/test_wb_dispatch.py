@@ -1361,3 +1361,372 @@ def test_retry_round_threshold_eats_only_its_own_log(
     assert "卡死" in v2, v2            # 第 2 轮：阈值很小 → 看门狗真掐（不是超时）
     hit = re.search(r"这一次的阈值 ([\d.]+) 分钟", v2)
     assert hit and float(hit.group(1)) * 60 < 60, v2         # 几秒级，不是 60 分钟
+
+
+# ================================================ 卡 029（T-G114）：模型白名单硬闸门（§2.4）
+#
+# 用户 2026-09-26 令：「黑名单锁死吧，就是只有白名单里面的模型，名字，带模型的名字，你才能调用」
+# → 默认拒绝：表外模型**拒单**（退出码 2、不起进程、不建 log、不改树）。拒单测试必须是
+# **可重复的用例**（卡 §7.5），不许只写「逻辑上会拒」。
+
+
+def test_model_whitelist_is_locked_and_default_is_the_first_entry() -> None:
+    """白名单只有两项、顺序 = 默认优先；DEFAULT_MODEL 取第 1 项（用户 2026-09-26 令）。"""
+    assert wd.MODEL_WHITELIST == ("deepseek-v4.1-flash", "glm-5.3-flash")
+    assert wd.DEFAULT_MODEL == wd.MODEL_WHITELIST[0] == "deepseek-v4.1-flash"
+    assert wd.next_whitelist_model("deepseek-v4.1-flash") == "glm-5.3-flash"
+    assert wd.next_whitelist_model("glm-5.3-flash") is None      # 最后一个 → 全挂就停的判据
+
+
+def test_model_gate_refuses_an_unknown_model_with_zero_side_effects(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★★ 拒单实测（可重复用例）：表外模型 → 退 2、**不起进程**、**不建 log**、**不写判决**。"""
+    record: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000",
+                                      "--model", "kimi-k3-1", "--execute"])
+    assert wd.main() == 2
+    err = capsys.readouterr().err
+    assert "未授权模型，已拒绝派活" in err and "kimi-k3-1" in err
+    assert "deepseek-v4.1-flash" in err and "glm-5.3-flash" in err, "要列出白名单"
+    assert record == [], "一个子进程都不许起"
+    assert not (sandbox / "gates" / "diag" / "wb-000.jsonl").exists(), "不许建 log"
+    assert not (sandbox / "gates" / "diag" / "wb-000.verdict.txt").exists(), "不许写判决"
+
+
+def test_model_gate_applies_to_resume_and_detached_too(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 所有入口都过闸：--resume / --detach 都要带 --model → 一并在 main() 门口拦下。"""
+    thrown: list[list[str]] = []
+    monkeypatch.setattr(wd, "spawn_detached",
+                        lambda argv, log: thrown.append(list(argv)) or 1)
+    for extra in (["--resume", "sid-1"], ["--detach", "--execute"]):
+        monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001",
+                                          "--spec", "spec.md", "--model", "hy4-preview", *extra])
+        assert wd.main() == 2, extra
+        capsys.readouterr()
+    assert thrown == [], "--detach 也要先过白名单闸"
+
+
+def test_model_gate_passes_both_whitelisted_models(sandbox: Path, monkeypatch, capsys) -> None:
+    """白名单里的两项都能真派出去，且命令里带的就是那个模型。"""
+    for model in wd.MODEL_WHITELIST:
+        record: list[list[str]] = []
+        monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
+        monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                          "--model", model, "--execute", "--force"])
+        assert wd.main() == 0
+        capsys.readouterr()
+        assert "--model" in record[0] and record[0][record[0].index("--model") + 1] == model
+
+
+# ================================================ 卡 029（T-G114）：429 / 额度三拍（§2.5）
+#
+# ★ 429 长得像成功：subtype=error_during_execution + 空回话 + **退出码 0** —— 判据必须读
+# result 事件本身，不许看退出码。限流（带重置时间）与余额耗尽（没有）**分开记**。
+
+
+def _quota_result_event(*, with_reset: bool) -> str:
+    errors = {"status": 429, "code": 6004, "category": "quota",
+              "message": "使用量已超出频率限制"}
+    if with_reset:
+        errors["message"] += "，将在 2026-09-27 07:38 重置"
+    return json.dumps({"type": "result", "subtype": "error_during_execution",
+                       "result": "", "errors": errors}, ensure_ascii=False)
+
+
+def test_quota_error_tells_rate_limit_from_exhaustion() -> None:
+    """限流（带「将在 <时间> 重置」）与余额耗尽（没有）分开记；健康 log → None。"""
+    limited = wd.quota_error([_quota_result_event(with_reset=True)])
+    assert limited is not None and limited["kind"] == "限流"
+    assert "2026-09-27 07:38" in limited["reset"]
+    broke = wd.quota_error([_quota_result_event(with_reset=False),
+                            json.dumps({"type": "result", "subtype": "error_during_execution",
+                                        "result": "额度已用尽"})])
+    assert broke is not None and broke["kind"] == "余额耗尽" and broke["reset"] == ""
+    assert wd.quota_error(EVENTS) is None, "健康的 result 不许误报"
+    assert wd.quota_error(["不是 JSON 的一行", "{}"]) is None    # 畸形 log 不许炸
+
+
+def test_quota_run_waits_probes_then_switches_to_the_next_whitelisted_model(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 三拍实测：429 → 等（--quota-wait 0）→ 探仍挂 → **按白名单顺序**换 ② 重派。"""
+    calls: list[list[str]] = []
+
+    def runner(cmd, log, errlog, **kwargs):          # noqa: ANN001, ANN202
+        calls.append(list(cmd))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        events = [_quota_result_event(with_reset=True)] if len(calls) == 1 else EVENTS
+        log.write_text("\n".join(events) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, "", "", f"sid-{len(calls)}"
+
+    probes: list[str] = []
+    monkeypatch.setattr(wd, "run_worker", runner)
+
+    def fake_probe(node, cli, model, timeout=120):   # noqa: ANN001, ANN202
+        probes.append(model)
+        return False, "额度仍挂（使用量已超出频率限制）"
+
+    monkeypatch.setattr(wd, "quota_probe_ok", fake_probe)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--quota-wait", "0"])
+    assert wd.main() == 0
+    captured = capsys.readouterr()
+    assert len(calls) == 2, "429 → 探挂 → 换模型重派，共两轮"
+    assert probes == ["deepseek-v4.1-flash"], "先探当前模型（极小代价），别拿整卡当探测"
+    m1 = calls[0][calls[0].index("--model") + 1]
+    m2 = calls[1][calls[1].index("--model") + 1]
+    assert (m1, m2) == ("deepseek-v4.1-flash", "glm-5.3-flash"), "按白名单顺序换，不许跳表外"
+    assert "检出 429" in captured.err and "限流" in captured.err, captured.err
+    assert "2026-09-27 07:38" in captured.err, "重置时间要原样带出来"
+
+
+def test_quota_probe_ok_continues_the_same_model(sandbox: Path, monkeypatch, capsys) -> None:
+    """等完探测通过 → **同一模型**接着干（刚才只是被限流了一会儿）。"""
+    calls: list[list[str]] = []
+
+    def runner(cmd, log, errlog, **kwargs):          # noqa: ANN001, ANN202
+        calls.append(list(cmd))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        events = [_quota_result_event(with_reset=True)] if len(calls) == 1 else EVENTS
+        log.write_text("\n".join(events) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, "", "", f"sid-{len(calls)}"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(wd, "quota_probe_ok", lambda *a, **k: (True, "探测通过"))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--quota-wait", "0"])
+    assert wd.main() == 0
+    assert len(calls) == 2
+    models = [c[c.index("--model") + 1] for c in calls]
+    assert models == ["deepseek-v4.1-flash"] * 2, "探测通过就不该换模型"
+
+
+def test_quota_all_exhausted_stops_with_exit_7(sandbox: Path, monkeypatch, capsys) -> None:
+    """★★ 全挂就停（用户原话：「都有问题的话，就直接把任务停下来」）→ 退 **7**、不再自动重试。
+
+    判决里要有**每个模型**的重置时间与这次烧掉的 token。就算 --retry 给到 5，也不许靠它续。"""
+    calls: list[list[str]] = []
+
+    def runner(cmd, log, errlog, **kwargs):          # noqa: ANN001, ANN202
+        calls.append(list(cmd))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join([
+            json.dumps({"type": "result", "subtype": "error_during_execution", "result": "",
+                        "usage": {"input_tokens": 1000, "output_tokens": 10},
+                        "errors": {"status": 429, "code": 6004, "category": "quota",
+                                   "message": "额度已用尽，将在 2026-09-27 07:38 重置"}}),
+        ]) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, "", "", f"sid-{len(calls)}"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(wd, "quota_probe_ok", lambda *a, **k: (False, "额度仍挂"))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--quota-wait", "0", "--retry", "5"])
+    assert wd.main() == 7
+    err = capsys.readouterr().err
+    assert "任务停下" in err and "退出码 7" in err
+    assert len(calls) == 2, "两个白名单模型各试一轮就停，不许靠 --retry 空撞"
+    stop = (sandbox / "gates" / "diag" / "wb-001.r2.verdict.txt").read_text(encoding="utf-8")
+    assert "额度判决" in stop and "deepseek-v4.1-flash" in stop and "glm-5.3-flash" in stop
+    assert "2,000" in stop and "input tokens" in stop, "要写这次一共烧了多少 token"
+
+
+# ================================================ 卡 029（T-G114）：用量落账 + 防空烧预算（§2.6）
+
+
+def test_usage_line_is_appended_and_status_shows_it(sandbox: Path, monkeypatch, capsys) -> None:
+    """每轮跑完往 wb-usage.jsonl 追加一行（数来自 CLI 的 result.usage）；--status 打本卡 + 累计。"""
+    events = [json.dumps({"type": "result", "subtype": "success", "result": "干完了",
+                          "usage": {"input_tokens": 1234, "output_tokens": 56,
+                                    "cache_read_input_tokens": 1200}}, ensure_ascii=False)]
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([], events=events))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+    rows = [json.loads(ln) for ln in (sandbox / "gates" / "diag" / "wb-usage.jsonl")
+            .read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(rows) == 1
+    row = rows[0]
+    for key in ("卡", "模型", "轮次", "开始", "结束", "用时分钟", "input_tokens",
+                "output_tokens", "cache_read", "退出码", "判决"):
+        assert key in row, key
+    assert row["input_tokens"] == 1234 and row["cache_read"] == 1200, "数要从 CLI 的 usage 拿"
+    said = wd.status_report("001")
+    assert "[用量]" in said and "本卡 1 轮" in said and "1,234" in said, said
+    assert "累计（所有卡）" in said, said
+
+
+def test_input_budget_stops_the_run_without_auto_resume(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 超预算 → 止损掐掉（这**不是**失败），就算 --retry 还有名额也不许自动续跑。"""
+    events = [json.dumps({"type": "result", "subtype": "success", "result": "干完了",
+                          "usage": {"input_tokens": 3_000_000}}, ensure_ascii=False)]
+    calls: list[list[str]] = []
+
+    def runner(cmd, log, errlog, **kwargs):          # noqa: ANN001, ANN202
+        calls.append(list(cmd))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(events) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, "", "", "sid-x"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--retry", "5",
+                                      "--input-budget", "1000000"])
+    assert wd.main() == 6
+    err = capsys.readouterr().err
+    assert "预算用尽" in err and "止损" in err
+    assert len(calls) == 1, "预算用尽不许自动续跑"
+    verdict = (sandbox / "gates" / "diag" / "wb-001.verdict.txt").read_text(encoding="utf-8")
+    assert "预算判决" in verdict
+
+
+# ================================================ 卡 029（T-G114）：过期判决 A+C（§2.1）
+
+
+def test_real_run_archives_stale_verdict_and_report_but_dry_run_does_not(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ A（根因）：真开跑那一刻旧判决/摘要改名 .stale（只归档不删）；★ dry-run 不许归档。"""
+    diag = sandbox / "gates" / "diag"
+    diag.mkdir(parents=True)
+    stale_verdict = diag / "wb-001.verdict.txt"
+    stale_report = diag / "wb-001.report.md"
+    stale_verdict.write_text("判决：前置检查没过 → 没派活\n", encoding="utf-8")
+    stale_report.write_text("# 卡 001 的交接摘要\n", encoding="utf-8")
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md"])
+    assert wd.main() == 0                                   # dry-run
+    assert stale_verdict.exists() and stale_report.exists(), "dry-run 不许归档"
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0                                   # 真开跑
+    stale = (diag / "wb-001.verdict.txt.stale")
+    assert stale.exists() and "前置检查没过" in stale.read_text(encoding="utf-8"), \
+        "只归档、不删（证据留档）"
+    assert (diag / "wb-001.report.md.stale").exists()
+    fresh = (diag / "wb-001.verdict.txt").read_text(encoding="utf-8")
+    assert "正常收工" in fresh, "新一轮的判决落在原位（归档的是旧的）"
+
+
+def test_status_warns_when_the_verdict_is_older_than_the_log(
+        tmp_path: Path, monkeypatch) -> None:
+    """★ C（兜底）：log 比最新判决新 → 醒目告警「它描述的不是当前这一轮」；判决新 → 不告警。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-042.jsonl"
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    verdict = wd.verdict_file_for(log)
+    verdict.write_text("判决：前置检查没过 → 没派活\n", encoding="utf-8")
+    _ageing(verdict, seconds=600)                           # 判决旧、log 新
+    assert "判决比日志旧" in wd.status_report("042")
+    _ageing(log, seconds=1200)                              # 对照：判决比 log 新 → 不告警
+    assert "判决比日志旧" not in wd.status_report("042")
+
+
+# ================================================ 卡 029（T-G114）：--status 串卡（§2.9）
+
+
+def test_status_does_not_confuse_card_42_with_card_421(tmp_path: Path, monkeypatch) -> None:
+    """★ R024 实测的既有 bug：宽 glob `wb-42*` 会把 wb-421.jsonl 当卡 42 的 → 必须精确匹配。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    mine = diag / "wb-42.jsonl"                             # 卡 42：还在跑（没有 result）
+    mine.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    other = diag / "wb-421.jsonl"                           # 卡 421：已收工，且更新
+    other.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+    (diag / "wb-421.verdict.txt").write_text("card=421 判决：正常收工\n", encoding="utf-8")
+    _ageing(mine, seconds=60)
+    said = wd.status_report("42")
+    assert "wb-421" not in said, f"串卡了：\n{said}"
+    assert "wb-42.jsonl" in said and "还没见到 result" in said, said
+
+
+# ================================================ 卡 029（T-G114）：规格指纹（§2.7）
+
+
+def test_resume_with_changed_spec_prepends_the_read_spec_notice(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 规格改过再续跑 → 提示词最前面硬塞「先读规格」+ 醒目告警 + 新指纹写回（不许拒单）。"""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(calls))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001",
+                                      "--spec", "spec.md", "--execute"])
+    assert wd.main() == 0                                   # 第 1 次真开跑 → 记指纹
+    capsys.readouterr()
+    spec_note = sandbox / "gates" / "diag" / "wb-001.spec.txt"
+    assert spec_note.exists() and "sha256=" in spec_note.read_text(encoding="utf-8")
+    (sandbox / "spec.md").write_text("卡规格（改过了：新增 §2.10）", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--force", "--resume", "sid-test"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert "规格已变" in out, out
+    prompt = calls[-1][calls[-1].index("-p") + 1]
+    assert "规格文件已更新" in prompt and "先用 Read 打开" in prompt, prompt
+    assert prompt.startswith("★★ 规格文件已更新"), "必须塞在提示词最前面"
+    assert "sha256=" in spec_note.read_text(encoding="utf-8"), "新指纹要写回"
+
+
+def test_resume_without_a_fingerprint_file_passes_the_old_way(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 边界：没有 wb-<卡>.spec.txt 的老卡 → 放行并提示「无指纹，按老规矩」，不许拒单。"""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(calls))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--resume", "sid-old"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert "无规格指纹" in out and "放行" in out, out
+    prompt = calls[-1][calls[-1].index("-p") + 1]
+    assert "规格文件已更新" not in prompt
+
+
+# ================================================ 卡 029（T-G114）：续跑放行脏工作区（§2.10）
+
+
+def test_fresh_dispatch_still_refuses_a_dirty_tree(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 非续跑保持原判据（必须干净）—— 那是「一写一读」的护栏，不许松。"""
+    monkeypatch.setattr(wd, "git_dirty",
+                        lambda: ["M src/a.py", "M docs/b.md", "?? 未跟踪的不算", " M docs/c.md"])
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 2
+    assert "工作区不干净" in capsys.readouterr().err
+
+
+def test_resume_allows_a_dirty_tree_prints_it_and_warns_outside_allow(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 续跑不适用「必须干净」：porcelain 原文照打 + 「★ 续跑：…继续」→ 放行；
+    不在 --allow 白名单里的脏文件 → 醒目告警（可能是别的卡串了树）。"""
+    dirty = [" M src/a.py", "M docs/b.md"]
+    monkeypatch.setattr(wd, "git_dirty", lambda: dirty)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(calls))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--resume", "sid-1", "--allow", "src/**"])
+    assert wd.main() == 0
+    err = capsys.readouterr().err
+    assert "★ 续跑：工作区带着 2 个未提交改动（上一轮的活），继续" in err
+    assert "M src/a.py" in err and "git status --porcelain 原文" in err, "原文要照打"
+    assert "不在 --allow 白名单" in err and "docs/b.md" in err, "越界的要醒目告警"
+    assert "工作区不干净" not in err, "续跑不许再按旧判据拒"
+
+
+# ================================================ 卡 029（T-G114）：时间戳解析健壮性（§2.3）
+
+
+def test_epoch_four_shapes_are_deterministic_and_never_raise() -> None:
+    """★ 四种形状行为确定、绝不抛：Z 串 → epoch；naive → None（保守）；非法 → None；缺 → None。"""
+    z = wd._epoch("2026-09-26T10:00:00Z")
+    assert z is not None
+    assert abs(z - wd._epoch("2026-09-26T10:00:00+00:00")) < 1, "Z 与 +00:00 同一个时刻"
+    assert wd._epoch("2026-09-26T10:00:00") is None, "naive → 保守退回（不猜时区）"
+    assert wd._epoch("不是时间") is None
+    assert wd._epoch("2026-13-99T99:00:00Z") is None, "越界字段 → None，不许抛"
+    assert wd._epoch("") is None and wd._epoch(None) is None and wd._epoch(12345) is None
+    assert wd._epoch("  2026-09-26T10:00:00Z  ") is not None, "首尾空白要容住"

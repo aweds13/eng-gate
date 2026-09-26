@@ -67,16 +67,19 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
 from __future__ import annotations
 
 import argparse
+import fnmatch
+import hashlib
 import json
 import locale
 import os
+import re
 import signal
 import subprocess
 import sys
 import threading
 import time
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -95,7 +98,28 @@ import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（
 NO_WINDOW: dict = ({"creationflags": subprocess.CREATE_NO_WINDOW}     # type: ignore[attr-defined]
                    if os.name == "nt" else {})
 
-DEFAULT_MODEL = "deepseek-v4.1-flash"
+# ★★ 模型白名单（用户 2026-09-26 明令：「黑名单锁死吧，就是只有白名单里面的模型，名字，
+#   带模型的名字，你才能调用」→ **默认拒绝**：不在名单里的模型一律调不动，这是代码里的
+#   硬闸门，不是一句叮嘱）。
+# ★★ 改这份名单必须先问用户（加名字 / 换顺序 / 改默认 → 只有用户能改；主控不许自作主张）。
+# ★ 顺序就是「默认优先」：① 默认；② ① 被限流/额度耗尽时的替补（轮换口径：
+#   换 ② 让它干一两张卡，然后再探 ①，恢复了换回来）。换模型只影响新派的卡，
+#   已经在某模型上跑的卡不许中途换。★ 不许做成读环境变量 / 读配置文件 / 命令行传一串的宽松形式。
+MODEL_WHITELIST: tuple[str, ...] = ("deepseek-v4.1-flash", "glm-5.3-flash")
+DEFAULT_MODEL = MODEL_WHITELIST[0]
+
+# ---------------------------------------------------------------- 429 / 额度（卡 029 §2.5）
+# ★ 429 长得像成功：CLI 给 `result.subtype = error_during_execution` + 空回话 + 退出码 0 ——
+#   只看退出码会把「额度烧干」读成「正常收工」（2026-09-26 真撞过）。所以判据读事件本身：
+#   `result.errors` / `errors_info` 里的 `status 429` / `code 6004` / `category quota`，
+#   或正文里的「额度已用尽」「使用量已超出频率限制」。两种分开记：
+#   限流（带「将在 <时间> 重置」）vs 余额耗尽（没有重置时间）。
+QUOTA_STATUS_NEEDLES = ("429", "6004", "quota")
+QUOTA_TEXT_NEEDLES = ("额度已用尽", "使用量已超出频率限制")
+DEFAULT_QUOTA_WAIT = 300         # 撞 429 → 先等 300 秒再探（用户 2026-09-26：「你先等一下」）
+DEFAULT_INPUT_BUDGET = 25_000_000  # 防空烧：单卡 input tokens 预算（实测单卡最高 18,400,724）
+
+
 NODE_REL = r".workbuddy\binaries\node\versions\22.22.2-3\node.exe"
 # ★ 优先用**独立安装**的 CodeBuddy CLI（官方 npm 包，带 TUI、能登录）：
 #   WorkBuddy 自带那份是**无头版**（缺 dist/codebuddy.js，`config`/`doctor`/`install` 全废、
@@ -173,6 +197,30 @@ def paths(cli_override: str | None = None) -> tuple[Path, Path]:
     return node, Path("D:/") / FALLBACK_CLI_REL
 
 
+def model_rejected(model: str) -> str:
+    """模型白名单硬闸门 —— 不在名单里 → 返回拒单理由（在名单里 → 空串）。
+
+    ★ 逐字比较（连大小写 / 连字符都不许含糊）；拒绝必须**零副作用**：不起进程、不建 log、
+    不改树。★ `--resume` / `--retry` / `--detach` 全都从 `main()` 过这道闸；续跑必须沿用
+    白名单里的那个模型，不许因为「原模型挂了」就换成表外的。
+    """
+    if model in MODEL_WHITELIST:
+        return ""
+    return (f"未授权模型，已拒绝派活：{model}\n"
+            f"  白名单（只有用户能改，见 tools/wb_dispatch.py 顶部 MODEL_WHITELIST 常量）："
+            f"{'、'.join(MODEL_WHITELIST)}\n"
+            "  默认拒绝：不在名单里的模型一律调不动（用户 2026-09-26 令：黑名单锁死）。")
+
+
+def next_whitelist_model(model: str) -> str | None:
+    """按清单顺序取下一个（429 三拍「按序换」用）；已经是最后一个 → None（全挂就停）。"""
+    try:
+        idx = MODEL_WHITELIST.index(model)
+    except ValueError:
+        return None
+    return MODEL_WHITELIST[idx + 1] if idx + 1 < len(MODEL_WHITELIST) else None
+
+
 def git_dirty() -> list[str]:
     """被跟踪文件里有没有未提交改动（未跟踪文件不算：那两个是别的窗口放的）。"""
     done = subprocess.run(
@@ -241,6 +289,47 @@ def resume_command(node: Path, cli: Path, session_id: str, prompt: str, model: s
 def session_file_for(log: Path) -> Path:
     """会话 id 落在哪里 —— 中断之后 `--resume auto` 就从这儿读。"""
     return log.with_suffix(".session.txt")
+
+
+def spec_file_for(log: Path) -> Path:
+    """规格指纹落哪里（卡 029 §2.7）：`wb-<卡>.jsonl` → `wb-<卡>.spec.txt`。"""
+    return log.with_suffix(".spec.txt")
+
+
+def spec_fingerprint(spec: str) -> str:
+    """卡规格的 sha256 —— 每次真开跑记一份；续跑时指纹变了 = 规格改过，必须硬塞「先读规格」。"""
+    return hashlib.sha256((ROOT / spec).read_bytes()).hexdigest()
+
+
+def read_spec_note(log: Path) -> str:
+    """读已落的规格指纹（没有 → 空串）。"""
+    note = spec_file_for(log)
+    try:
+        return note.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def spec_changed_notice(spec: str, log: Path) -> str:
+    """续跑前核对规格指纹（卡 029 §2.7）—— 返回要**塞进续跑提示词最前面**的那段话（没变 → 空串）。
+
+    ★ 边界：没有 `wb-<卡>.spec.txt` 的老卡**放行**并提示「无指纹，按老规矩」（不拒单）；
+    ★ 不许自动新开会话（那会偷偷烧钱）—— 只加告警 + 提示词硬要求。
+    ★ 为什么这么较真（§20.3 真撞过）：工人收到了新指令却没读新规格，白跑两轮 —— 而
+    「提示词原文不写进日志」，核对它读没读只能靠这个指纹 + 让它在回报里写出新小节标题。
+    """
+    digest = spec_fingerprint(spec)
+    stored = read_spec_note(log)
+    if stored and digest in stored:
+        return ""
+    if not stored:
+        print("[指纹] 无规格指纹记录（老卡）→ 按老规矩放行；本轮开跑补记", flush=True)
+        return ""
+    old_tail = stored.splitlines()[-1][:24]
+    print(f"[指纹] ★★ 规格已变（{spec}）→ 本轮续跑必须重读规格"
+          f"（旧指纹 {old_tail}… → 现在 {digest[:24]}…）", flush=True)
+    return (f"★★ 规格文件已更新：先用 Read 打开 `{spec}`，"
+            "在回报里写出新小节（如 §2.10）的标题，再动手。\n")
 
 
 def session_id_seen(lines: list[str]) -> str:
@@ -344,17 +433,34 @@ def spawn_detached(argv: list[str], log_path: Path) -> int:
     return proc.pid
 
 
+def card_artifacts(diag: Path, card: str, suffix: str) -> list[Path]:
+    """这一张卡自己的产物文件（精确匹配，按 mtime 升序）。
+
+    ★ 卡 029 §2.9（R024 实测挖出的**既有** bug）：宽 glob `wb-<卡>*` 会**串卡** ——
+    `fnmatch("wb-421.jsonl", "wb-42*.jsonl") == True`，卡 42 的 `--status` 可能拿卡 421 的
+    log 来判「收工/告警」。改成精确匹配：卡号后面**只能是** `.jsonl`（或该后缀本身）或
+    `.r<N>` + 后缀（同卡多轮），不许被更长的卡号前缀命中。保留「同卡多轮取最新一轮」的口径。
+    """
+    if not diag.exists():
+        return []
+    pat = re.compile(rf"^wb-{re.escape(card)}(\.r\d+)?{re.escape(suffix)}$")
+    return sorted((p for p in diag.iterdir() if pat.match(p.name)),
+                  key=lambda p: p.stat().st_mtime)
+
+
 def status_report(card: str) -> str:
     """一张卡现在到哪了 —— **只读文件**（心跳 / 判决 / 会话 / log 尾巴），不碰工人。
 
     长任务（尤其过夜跑）需要这条：新窗口、或者我半夜里，一条命令就知道"它还在跑吗 / 跑完没有"。
     ★ T-G112（架构 C，主控裁定）：心跳停滞超过阈值且没有判决 → 打**醒目告警**
     （见 `heartbeat_stall_alert`）—— 派活进程被系统杀掉后"没人盯"至少要**看得见**。
+    ★ 卡 029 §2.1（C 兜底）：「log 比最新判决新」→ 那份判决描述的不是当前这一轮，打醒目告警。
+    ★ 卡 029 §2.6：打出这张卡的 token 用量 + 全部卡的累计用量（只数 token，不做金额换算）。
     """
     diag = ROOT / "gates" / "diag"
     head = diag / f"wb-{card}"
     # 先把 log 读出来：告警判据（`heartbeat_stall_alert`）吃最新一轮的 log 与它的收工证据。
-    logs = sorted(diag.glob(f"wb-{card}*.jsonl"), key=lambda p: p.stat().st_mtime)
+    logs = card_artifacts(diag, card, ".jsonl")
     newest = logs[-1] if logs else None
     lines: list[str] = []
     summary: dict = {}
@@ -368,12 +474,12 @@ def status_report(card: str) -> str:
         alert = heartbeat_stall_alert(log=newest, finished=finished)
     out: list[str] = [f"=== 卡 {card} 的状态（{head}.*）==="]
     # ★ T-G95：有摘要就先把它指出来 —— 主控**先看它**，不必再翻原始 jsonl。
-    reports = sorted(diag.glob(f"wb-{card}*.report.md"), key=lambda p: p.stat().st_mtime)
+    reports = card_artifacts(diag, card, ".report.md")
     if reports:
         out.append(f"  [摘要] {reports[-1].relative_to(ROOT).as_posix()}（先看它）")
     # ★ T-G112：心跳**按轮落**（第 2 轮写 `wb-<卡>.r2.heartbeat.txt`）—— 取**最新**一份展示；
     #   旧写法只认第 1 轮那份，续跑时会把"还在跑"读成"心跳停在几点"。
-    hbs = sorted(diag.glob(f"wb-{card}*.heartbeat.txt"), key=lambda p: p.stat().st_mtime)
+    hbs = card_artifacts(diag, card, ".heartbeat.txt")
     if hbs:
         out.append(f"  [心跳] {hbs[-1].read_text(encoding='utf-8').strip() or '（空）'}")
     else:
@@ -381,17 +487,24 @@ def status_report(card: str) -> str:
     out.extend(alert)                        # 醒目告警紧跟心跳 —— 没人盯这事要一眼看见
     # ★ T-G96：判决**按轮落**（`wb-<卡>.verdict.txt` / `wb-<卡>.r2.verdict.txt`…）—— 这里取
     #   **最后一轮**的那一份（按 mtime），别因为按轮落就变成主控读不到。
-    verdicts = sorted(diag.glob(f"wb-{card}*.verdict.txt"), key=lambda p: p.stat().st_mtime)
+    verdicts = card_artifacts(diag, card, ".verdict.txt")
     if verdicts:
         newest_verdict = verdicts[-1]
         body = newest_verdict.read_text(encoding="utf-8").strip()
         out.append(f"  [判决] {newest_verdict.name}：{body}")
+        # ★ 卡 029 §2.1（C 兜底）：log 比最新判决新 = 判决说的不是当前这一轮（A 的归档是根因修法，
+        #   这条防"归档没跑成 / 派活进程半路死了"那类漏网）。
+        if newest is not None and newest.stat().st_mtime > newest_verdict.stat().st_mtime:
+            out.append("  [★告警] 判决比日志旧 —— 它描述的不是当前这一轮")
     else:
         out.append("  [判决] （还没有 —— 还在跑，或没跑完就断了）")
     sd = session_file_for(head.with_suffix(".jsonl"))
     if sd.exists():
         sid = sd.read_text(encoding="utf-8").strip()
         out.append(f"  [会话] {sid}（续跑：--resume {sid}）")
+    usage = usage_summary(card)
+    if usage:
+        out.append(f"  [用量] {usage}")
     if newest is None:
         out.append("  [log ] （一个都没有）")
         return "\n".join(out)
@@ -442,6 +555,151 @@ def heartbeat_stall_alert(*, log: Path, finished: bool,
         "  [★告警] 兜底：先 tools/wb_status.py <log> --tail 20 看现场，"
         "再 --resume auto 续跑或重派。",
     ]
+
+
+# ============================================ 过期判决的根因修法（卡 029 §2.1，原卡 028 裁定 A）
+
+def archive_stale_artifacts(card: str) -> list[str]:
+    """**真开跑那一刻**，把这张卡的旧判决 / 摘要**改名归档**（加 `.stale` 后缀）—— 只归档、不删。
+
+    为什么（主控 2026-09-26 真撞到）：一次被前置检查拒绝的派活会留下「前置检查没过 → 没派活」
+    的判决；同一张卡随后真跑时它不清掉 → `--status` 半小时里一直显示「没派活」，而工人其实在跑。
+    ★ 归档不删：`--force` 才让覆盖那条规矩的精神是**留证据**，归档兼容它、删除不兼容。
+    ★ dry-run 不许归档（没真跑）—— 调用点在 `main()` 的 dry-run 返回**之后**。
+    ★ 用 `card_artifacts`（精确匹配）—— 别把卡 421 的判决归档到卡 42 头上（§2.9 同源）。
+    """
+    diag = ROOT / "gates" / "diag"
+    moved: list[str] = []
+    for suffix in (".verdict.txt", ".report.md"):
+        for p in card_artifacts(diag, card, suffix):
+            target = p.with_name(p.name + ".stale")
+            try:
+                p.rename(target)
+                moved.append(target.name)
+            except OSError:
+                continue        # 归档失败不许挡住真跑 —— 如实留在返回里（少了就是没归成）
+    return moved
+
+
+# ============================================ token 用量落账（卡 029 §2.6）
+
+USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_read")
+
+
+def result_usage(lines: list[str]) -> dict[str, int]:
+    """最后一条 `result` 事件里的 `usage` —— 数从 **CLI 自己报的**拿，别自己估；读不到 → 全 0。"""
+    usage: dict = {}
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("type") == "result":
+            candidate = event.get("usage")
+            usage = candidate if isinstance(candidate, dict) else {}
+    def num(*keys: str) -> int:
+        for key in keys:
+            value = usage.get(key)
+            if isinstance(value, (int, float)):
+                return int(value)
+        return 0
+    return {field: num(field, *alias) for field, alias in (
+        ("input_tokens", ("input_tokens",)),
+        ("output_tokens", ("output_tokens",)),
+        ("cache_read", ("cache_read_input_tokens", "cache_read")),
+    )}
+
+
+def append_usage_line(*, card: str, model: str, attempt: int, started_at: float | None,
+                      usage: dict[str, int], code: int, reason: str) -> Path:
+    """每张卡每轮跑完（无论成败）往 `gates/diag/wb-usage.jsonl` 追加一行用量（只数 token，
+    **不做金额换算**——用户明说「不用太担心怎么计价」）。该文件在 gitignore 里，不脏树。"""
+    path = ROOT / "gates" / "diag" / "wb-usage.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    end = time.time()
+    began = end if started_at is None else started_at
+    row = {
+        "卡": card, "模型": model, "轮次": attempt,
+        "开始": _iso_local(began), "结束": _iso_local(end),
+        "用时分钟": round(max(end - began, 0.0) / 60, 1),
+        "input_tokens": usage["input_tokens"],
+        "output_tokens": usage["output_tokens"],
+        "cache_read": usage["cache_read"],
+        "退出码": code, "判决": reason or "正常收工",
+    }
+    with path.open("a", encoding="utf-8") as out:
+        out.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return path
+
+
+def usage_summary(card: str) -> str:
+    """`--status` 的用量一行：这张卡的 + 全部卡的累计（读不出来 / 没记录 → 空串，不显示）。"""
+    path = ROOT / "gates" / "diag" / "wb-usage.jsonl"
+    try:
+        rows = [json.loads(ln) for ln in
+                path.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
+    except (OSError, json.JSONDecodeError):
+        return ""
+    rows = [r for r in rows if isinstance(r, dict)]
+    mine = [r for r in rows if r.get("卡") == card]
+    if not mine:
+        return ""
+    def total(items: list[dict], field: str) -> int:
+        return sum(int(r.get(field) or 0) for r in items)
+    parts = [f"本卡 {len(mine)} 轮：input {total(mine, 'input_tokens'):,} / "
+             f"output {total(mine, 'output_tokens'):,} / cache_read {total(mine, 'cache_read'):,}",
+             f"累计（所有卡）：input {total(rows, 'input_tokens'):,} / "
+             f"output {total(rows, 'output_tokens'):,} / cache_read {total(rows, 'cache_read'):,}"]
+    return " ｜ ".join(parts)
+
+
+# ============================================ 429 / 额度三拍（卡 029 §2.5）：等 → 按序换 → 全挂就停
+
+def quota_error(lines: list[str]) -> dict | None:
+    """从 `result` 事件认 429 / 额度错误 —— 返回 `{kind, reset}`；不是额度问题 → None。
+
+    ★ 429 长得像成功（`subtype=error_during_execution` + 空回话 + **退出码 0**）—— 不许只看
+    退出码。判据：`result.errors` / `errors_info` 里的 `status 429` / `code 6004` /
+    `category quota`，或正文含「额度已用尽」「使用量已超出频率限制」。
+    ★ 两种**分开记**：限流（带「将在 <时间> 重置」）vs 余额耗尽（没有重置时间）。
+    """
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not (isinstance(event, dict) and event.get("type") == "result"):
+            continue
+        blob = json.dumps({key: event.get(key) for key in ("errors", "errors_info", "result")},
+                          ensure_ascii=False, default=str)
+        if not (any(n in blob for n in QUOTA_STATUS_NEEDLES)
+                or any(n in blob for n in QUOTA_TEXT_NEEDLES)):
+            continue
+        hit = re.search(r"将在\s*([^\n」\"']+?)\s*重置", blob)
+        return {"kind": "限流" if hit else "余额耗尽", "reset": hit.group(1) if hit else ""}
+    return None
+
+
+def quota_probe_ok(node: Path, cli: Path, model: str, timeout: int = 120) -> tuple[bool, str]:
+    """极小代价的可用性探测（429 三拍的第 ② 拍）—— ★ 别把整卡重跑当探测。"""
+    try:
+        done = subprocess.run(
+            [str(node), str(cli), "-p", "只回复四个字：连接成功", "--model", model,
+             "--output-format", "text", "--no-session-persistence", "-y"],
+            cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=timeout, **NO_WINDOW,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"探测跑不起来：{exc}"
+    body = f"{done.stdout or ''}\n{done.stderr or ''}"
+    if AUTH_NEEDLE in body:
+        return False, "登录没通（Authentication required）"
+    for needle in QUOTA_TEXT_NEEDLES:
+        if needle in body:
+            return False, f"额度仍挂（{needle}）"
+    if "连接成功" in body:
+        return True, "探测通过"
+    return False, f"探测没拿到预期回话（退出码 {done.returncode}）：{wb_status._clip(body, 120)}"
 
 
 # ============================================ 交接摘要（T-G95 = 外包卡 006）
@@ -733,6 +991,13 @@ def _epoch(raw: object) -> float | None:
 
     ★ 主控第一次就读错了键（读成 `timestamp`），得到"没有时间戳"的错误结论 —— 这里只认
     `__timestamp`，别的键一律当没有（宁可退回保守行为，不猜）。
+    ★ 卡 029 §2.3（盘点 A20）加固：四种形状行为**确定**且**绝不抛异常** ——
+      ① 带 `Z` 的串 → 把 `Z` 换成 `+00:00` 再解（旧解释器 3.10 不认 `Z`；3.11+ 两者都行）；
+      ② 朴素串（naive，没带时区）→ **退回 `None`**（保守：当作没有时间戳 —— 宁可早掐一次，
+         不因为猜错时区把卡死判成健康；旧行为是按 UTC 猜，已改）；
+      ③ 非法串 → `None`（不抛）；
+      ④ 缺字段 / 非字符串 / 空串 → `None`。
+    跨版本验证见 复盘/派活器三合一-T-G114.md §时间戳（本机 CPython 3.14 与 3.12 双跑）。
     """
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -741,10 +1006,10 @@ def _epoch(raw: object) -> float | None:
         text = text[:-1] + "+00:00"
     try:
         stamp = datetime.fromisoformat(text)
-    except ValueError:
+    except (ValueError, TypeError, OverflowError, OSError):
         return None
-    if stamp.tzinfo is None:                 # 没带时区 → 按 UTC 读（规范是 UTC）
-        stamp = stamp.replace(tzinfo=timezone.utc)
+    if stamp.tzinfo is None:                 # 朴素时间 → 保守退回「没有时间戳」（不猜时区）
+        return None
     return stamp.timestamp()
 
 
@@ -1072,9 +1337,30 @@ def _scene(lines: list[str]) -> str:
             + f"认不出的行 {summary['unknown_events']} 条")
 
 
+def _outside_allow(dirty: list[str], allow: list[str]) -> list[str]:
+    """脏文件里**不在** `--allow` 白名单里的那些（续跑时的串卡告警用）。
+
+    porcelain 行形如 `M src/x.py` / `?? file` —— 路径取第 3 列之后；glob 按 posix 风格比。
+    """
+    out: list[str] = []
+    for ln in dirty:
+        rel = (ln[3:].strip() if len(ln) > 3 else ln).replace("\\", "/")
+        if not any(fnmatch.fnmatch(rel, pat) for pat in allow):
+            out.append(ln)
+    return out
+
+
 def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
-              cli_override: str | None = None) -> tuple[list[str], Path]:
-    """四道检查 —— 返回（问题清单, 日志路径）。问题非空就不许派活。"""
+              cli_override: str | None = None, resuming: bool = False,
+              allow: list[str] | None = None) -> tuple[list[str], Path]:
+    """四道检查 —— 返回（问题清单, 日志路径）。问题非空就不许派活。
+
+    ★ 卡 029 §2.10（本轮真撞的）：**续跑**（`--resume <id>` / `--resume auto` 拿到了 id）时
+    「工作区必须干净」**不适用** —— 工人上一轮的未提交改动**正是要接着干的活**。但**不能不看**：
+    改成把 `git status --porcelain` 原文打出来 + 一行「★ 续跑：…继续」→ 放行；
+    脏文件里若有不在 `--allow` 白名单里的 → 醒目告警（可能是别的卡串了树）。
+    ★ **非续跑**（全新一轮）保持原判据（必须干净）—— 那是"一写一读"的护栏，不许松。
+    """
     problems: list[str] = []
     node, cli = paths(cli_override)
     log = ROOT / "gates" / "diag" / f"wb-{card}.jsonl"
@@ -1085,9 +1371,21 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
     if not cli.exists():
         problems.append(f"找不到 CLI：{cli}")
     dirty = git_dirty()
-    if dirty:
+    if dirty and not resuming:
         problems.append(f"工作区不干净（{len(dirty)} 个被跟踪文件有改动）→ 一写一读："
                         f"先提交或收起它们：{', '.join(dirty[:5])}")
+    elif dirty:
+        print("  续跑前核对 —— git status --porcelain 原文：", file=sys.stderr, flush=True)
+        for ln in dirty:
+            print(f"    {ln}", file=sys.stderr, flush=True)
+        print(f"★ 续跑：工作区带着 {len(dirty)} 个未提交改动（上一轮的活），继续",
+              file=sys.stderr, flush=True)
+        if allow:
+            outside = _outside_allow(dirty, allow)
+            if outside:
+                print(f"  [★告警] {len(outside)} 个脏文件不在 --allow 白名单里"
+                      f"（可能是别的卡串了树）：{', '.join(outside[:5])}",
+                      file=sys.stderr, flush=True)
     if log.exists() and not force:
         problems.append(f"这一轮的 log 已存在：{log}（要覆盖请 --force —— 证据不许被悄悄盖掉）")
     if check_auth and not problems:
@@ -1133,6 +1431,14 @@ def main() -> int:
                              "（默认 1；0 = 不续）")
     parser.add_argument("--resume", default="",
                         help="带着同一会话接着跑：给 sessionId，或 auto（读 wb-<卡>.session.txt）")
+    parser.add_argument("--allow", action="append", default=None,
+                        help="该卡的白名单 glob（续跑时脏文件越界告警用；可多次给）")
+    parser.add_argument("--quota-wait", type=int, default=DEFAULT_QUOTA_WAIT,
+                        help=f"撞 429 先等几秒再探（默认 {DEFAULT_QUOTA_WAIT}；用户 2026-09-26："
+                             "「你先等一下」；0 = 测试用）")
+    parser.add_argument("--input-budget", type=int, default=DEFAULT_INPUT_BUDGET,
+                        help=f"单卡 input tokens 预算（默认 {DEFAULT_INPUT_BUDGET:,}）—— "
+                             "超了就止损掐掉，不许自动续跑（防空烧）")
     parser.add_argument("--detach", action="store_true",
                         help="把这次派活**扔出去单独跑**（我的窗口关了它照样跑；过夜/长任务用）")
     parser.add_argument("--detach-done", action="store_true", help=argparse.SUPPRESS)
@@ -1143,13 +1449,29 @@ def main() -> int:
     if args.status:
         print(status_report(args.card), flush=True)
         return 0
+    # ★★ 模型白名单硬闸门（卡 029 §2.4，用户 2026-09-26 令：默认拒绝）—— 放在**一切之前**：
+    #   拒单必须**零副作用**：不起进程、不建 log、不写判决、不改树。--resume / --retry /
+    #   --detach 全都从这里过闸（它们都要带 --model）。
+    rejected = model_rejected(args.model)
+    if rejected:
+        print(f"[FAIL] {rejected}", file=sys.stderr, flush=True)
+        return 2
     if not args.spec:
         print("[FAIL] 派活得给 --spec（卡规格文件）；只看状态可以加 --status", file=sys.stderr,
               flush=True)
         return 2
+    # ★ 卡 029 §2.10：续跑与不续跑的「干净」判据不同 → 先把会话 id 定下来，再过前置检查。
+    log_guess = ROOT / "gates" / "diag" / f"wb-{args.card}.jsonl"
+    resume_sid = args.resume
+    if resume_sid == "auto":
+        side = session_file_for(log_guess)
+        resume_sid = side.read_text(encoding="utf-8").strip() if side.exists() else ""
+        if not resume_sid:
+            print(f"[FAIL] --resume auto 但没找到会话文件：{side}", file=sys.stderr)
+            return 2
     problems, log = preflight(
         args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
-        cli_override=args.cli,
+        cli_override=args.cli, resuming=bool(resume_sid), allow=args.allow,
     )
 
     if problems:
@@ -1188,15 +1510,7 @@ def main() -> int:
     initial_cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact)
 
-    resume_sid = args.resume
-    if resume_sid == "auto":
-        side = session_file_for(log)
-        resume_sid = side.read_text(encoding="utf-8").strip() if side.exists() else ""
-        if not resume_sid:
-            print(f"[FAIL] --resume auto 但没找到会话文件：{side}", file=sys.stderr)
-            return 2
-
-    done_checks = "规格在 / 工作区干净 / log 未占用"
+    done_checks = "规格在 / 工作区干净（续跑则核对后放行）/ log 未占用"
     if args.no_preflight:
         done_checks += " / **登录没查**（--no-preflight）"
     else:
@@ -1211,12 +1525,27 @@ def main() -> int:
               f"再按历史最长调用 ×{TOOL_DURATION_FACTOR} 自适应）或最近 {REPEAT_WINDOW} 次调用里"
               f"同一件事重复 {REPEAT_NEED} 次 → 掐")
     print(f"[盯 ] {guards}；心跳每 {args.heartbeat_seconds}s；超时 {args.timeout}s；"
-          f"中断自动续跑 {args.retry} 次", flush=True)
+          f"中断自动续跑 {args.retry} 次；input 预算 {args.input_budget:,}/卡；"
+          f"429 三拍（等 {args.quota_wait}s → 按序换 → 全挂停，退出码 7）", flush=True)
     if not args.execute:
         print("[dry ] 这是 dry-run；真想派活加 --execute", flush=True)
         return 0
 
+    # ★ 卡 029 §2.1（A 根因）：**真开跑**（过前置检查 + --execute）那一刻，把这张卡的旧
+    #   判决 / 摘要改名归档（加 .stale）—— 只归档、不删（证据留档）。dry-run 不会走到这里。
+    archived = archive_stale_artifacts(args.card)
+    if archived:
+        print(f"[归档] 旧判决/摘要已归档：{', '.join(archived)}", flush=True)
+    # ★ 卡 029 §2.7：每次真开跑记规格指纹；续跑且指纹变了 → 硬塞「先读规格」进续跑提示词。
+    spec_digest = spec_fingerprint(args.spec)
+    spec_preamble = "" if not resume_sid else spec_changed_notice(args.spec, log)
+    spec_file_for(log).parent.mkdir(parents=True, exist_ok=True)
+    spec_file_for(log).write_text(f"{args.spec}\nsha256={spec_digest}\n", encoding="utf-8")
+
     attempts, code, reason, scene, sid = 1, 0, "", "", resume_sid
+    model = args.model                       # 429 三拍会按序换（只换白名单里的）
+    quota_seen: dict[str, str] = {}          # 每个模型撞的额度错（全挂就停时写进判决）
+    usage_total = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0}
 
     def beat(line: str) -> None:
         """心跳：既打出来，也**落成文件** —— 过夜跑时读一个文件就知道它还在不在动。"""
@@ -1226,16 +1555,20 @@ def main() -> int:
     while True:
         log_k = log if attempts == 1 else log.with_name(f"wb-{args.card}.r{attempts}.jsonl")
         if attempts == 1 and not sid:
-            cmd = initial_cmd
+            cmd = build_command(node, cli, args.card, args.spec, model, args.permission_mode,
+                                max_turns=max_turns, autocompact=args.autocompact)
         elif sid:
-            cmd = resume_command(node, cli, sid,
-                                 continuation_prompt(reason=reason or "上次被中断", scene=scene,
-                                                     card=args.card),
-                                 args.model, args.permission_mode,
+            prompt = continuation_prompt(reason=reason or "上次被中断", scene=scene,
+                                         card=args.card)
+            # ★ 卡 029 §2.7：规格改过 → 「先读规格」硬塞在续跑提示词**最前面**（光说"规格改了"
+            #   它会锚在旧上下文里当没看见 —— 卡 022 白跑两轮的真因）。
+            cmd = resume_command(node, cli, sid, spec_preamble + prompt,
+                                 model, args.permission_mode,
                                  max_turns=max_turns, autocompact=args.autocompact)
         else:
             print("[续 ] 没拿到 session id，续不了 → 只能重开一轮", file=sys.stderr, flush=True)
-            cmd = initial_cmd
+            cmd = build_command(node, cli, args.card, args.spec, model, args.permission_mode,
+                                max_turns=max_turns, autocompact=args.autocompact)
         print(f"[跑 ] 第 {attempts} 次；log {log_k.name}", flush=True)
         attempt_started = time.time()
         code, reason, scene, new_sid = run_worker(
@@ -1248,6 +1581,12 @@ def main() -> int:
         if sid:                      # ★ 一拿到就落盘：这样中断之后 `--resume auto` 才用得上
             session_file_for(log).write_text(sid, encoding="utf-8")
         round_lines = log_k.read_text(encoding="utf-8", errors="replace").splitlines()
+        # ★ 卡 029 §2.6：用量落账（无论成败）—— 数从 CLI 的 result.usage 拿，别自己估。
+        usage = result_usage(round_lines)
+        for key in usage_total:
+            usage_total[key] += usage[key]
+        append_usage_line(card=args.card, model=model, attempt=attempts,
+                          started_at=attempt_started, usage=usage, code=code, reason=reason)
         # ★ T-G95：**每一条退出路径都落一份摘要**（含"被掐后再续跑"的每一轮），主控只读它。
         report = write_report(log_k, card=args.card, code=code, reason=reason, scene=scene,
                               sid=sid, attempts=attempts, lines=round_lines,
@@ -1260,6 +1599,54 @@ def main() -> int:
               flush=True)
         print(f"[摘 ] 已落盘：{report.relative_to(ROOT).as_posix()}", flush=True)
         print(f"[判决] 已落盘：{verdict.relative_to(ROOT).as_posix()}", flush=True)
+        # ★★ 卡 029 §2.5：429 三拍 —— **不许**走 `--retry` 自动续跑（那是拿仅剩的额度空撞）。
+        #   先等（--quota-wait）→ 探（极小代价）→ 还挂按白名单顺序换 → 全挂就停（退出码 7）。
+        quota = quota_error(round_lines)
+        if quota is not None:
+            note = quota["kind"] + (f"，将在 {quota['reset']} 重置" if quota["reset"]
+                                    else "，无重置时间（余额耗尽）")
+            quota_seen[model] = note
+            print(f"[额度] ★ 检出 429 / 额度错误：{model} —— {note}"
+                  f"（subtype=error_during_execution + 退出码 0，长得像成功 —— 别被骗）",
+                  file=sys.stderr, flush=True)
+            if args.quota_wait > 0:
+                print(f"[额度] 等 {args.quota_wait}s 再探（用户 2026-09-26：「你先等一下」）",
+                      flush=True)
+                time.sleep(args.quota_wait)
+            probe_ok, probe_why = quota_probe_ok(node, cli, model)
+            if probe_ok:
+                print(f"[额度] 探测通过（{probe_why}）→ 同一模型接着干", flush=True)
+            else:
+                nxt = next_whitelist_model(model)
+                if nxt is None:
+                    # ★ 全挂就停（用户原话：「都有问题的话，就直接把任务停下来」）——
+                    #   不是「换个模型接着干」；退出码 7，不再自动重试。
+                    stop = ["", "★★ 额度判决：白名单里的模型全部不可用 → 任务停下"
+                                "（退出码 7，不再自动重试）"]
+                    stop += [f"  · {m}：{n}" for m, n in quota_seen.items()]
+                    stop.append(f"  · 这次共烧 input tokens {usage_total['input_tokens']:,}"
+                                f"（output {usage_total['output_tokens']:,}）")
+                    with verdict.open("a", encoding="utf-8") as vf:
+                        vf.write("\n".join(stop) + "\n")
+                    print("\n".join(stop), file=sys.stderr, flush=True)
+                    print("[停 ] 白名单全部额度耗尽 → 任务停下（退出码 7）。"
+                          "恢复后由主控重派；不自动换表外模型。", file=sys.stderr, flush=True)
+                    return 7
+                print(f"[额度] 探测仍挂（{probe_why}）→ 按白名单顺序换：{model} → {nxt}"
+                      "（只换白名单里的，不许跳表外）", file=sys.stderr, flush=True)
+                model = nxt
+            attempts += 1
+            print(f"[续 ] 第 {attempts} 次：带同一会话接着干（原因：额度 {quota['kind']}）",
+                  file=sys.stderr, flush=True)
+            continue
+        # ★ 卡 029 §2.6：防空烧 —— input tokens 超预算 → 止损掐掉（这不是失败），不许自动续跑。
+        if args.input_budget and usage_total["input_tokens"] >= args.input_budget:
+            reason = (f"预算用尽：input tokens 累计 {usage_total['input_tokens']:,} "
+                      f"≥ 预算 {args.input_budget:,} → 止损，不自动续跑")
+            with verdict.open("a", encoding="utf-8") as vf:
+                vf.write(f"\n★★ 预算判决：{reason}（止损，不是失败）\n")
+            print(f"[掐 ] {reason}", file=sys.stderr, flush=True)
+            break
         if not should_resume(reason, attempts, args.retry):
             break
         attempts += 1
