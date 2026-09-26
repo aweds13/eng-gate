@@ -1153,6 +1153,39 @@ def test_stall_threshold_is_capped_at_one_hour() -> None:
                                       durations=[3600.0], **base) == 3600
 
 
+def test_threshold_decays_once_a_long_call_falls_out_of_the_window() -> None:
+    """★ T-G128（裁定 V2）：阈值只看最近 `REPEAT_WINDOW`(12) 次**已完成**调用里的最长那一次。
+
+    一次 600 秒的长调用**掉出窗口**（其后又完成 12 次短调用）→ 阈值必须回落到
+    480 底线，而不是永远按 2.5 × 600 = 1500 算（「一轮内不衰减」的漏杀，规矩 §15）；
+    长调用还在窗口内时照样抬得起来（自适应没有被整个删掉）。
+    ★ 既有口径一字不动：`ADAPTIVE_MAX_SECONDS`=3600 封顶、在飞抬到 1800、轮次边界照旧。
+    """
+    def _call(tid: str, *, use_ago: float, result_ago: float) -> list[str]:
+        return [_tool_use_event("Bash", tid=tid, ago=use_ago),
+                _tool_result_event(tid=tid, ago=result_ago)]
+
+    # 1 条 600s 长调用 + 12 条 ~1s 短调用（共 13 次已完成 —— 长调用刚好掉出最近 12 次）
+    lines = _call("long", use_ago=660, result_ago=60)
+    for i in range(12):
+        lines += _call(f"s{i}", use_ago=4 - 0.01 * i, result_ago=3 - 0.01 * i)
+    durations = wd.tool_durations(lines)
+    assert len(durations) == 13 and max(durations) >= 599, durations
+    threshold = wd.stall_threshold_seconds(stall_seconds=wd.STALL_SECONDS, inflight=None,
+                                           durations=durations)
+    assert threshold == float(wd.STALL_SECONDS), threshold    # 旧口径在这里 = 1500
+
+    # 对照：长调用还在窗口内（最近 12 次 = 11 短 + 1 长）→ 照样抬到 2.5 × 600 = 1500
+    lines_recent = [_tool_use_event("Bash", tid="s", ago=4),
+                    _tool_result_event(tid="s", ago=3)] * 11
+    lines_recent += _call("long", use_ago=660, result_ago=60)
+    durations_recent = wd.tool_durations(lines_recent)
+    assert len(durations_recent) == 12 and max(durations_recent) >= 599, durations_recent
+    recent = wd.stall_threshold_seconds(stall_seconds=wd.STALL_SECONDS, inflight=None,
+                                        durations=durations_recent)
+    assert recent == pytest.approx(wd.TOOL_DURATION_FACTOR * 600), recent  # 实测 ≈600.0001s
+
+
 @pytest.mark.skipif(os.name != "nt", reason="taskkill 是 Windows 的")
 def test_kill_tree_decodes_with_the_system_locale(monkeypatch) -> None:
     """★ §2.4：`kill_tree()` 读 `taskkill` 输出改用**系统区域编码**（这台机器 cp936）+ replace。

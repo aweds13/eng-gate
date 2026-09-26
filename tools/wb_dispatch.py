@@ -956,8 +956,11 @@ def stall_threshold_seconds(*, stall_seconds: int, inflight: tuple[str, float] |
     """这一次判卡死用哪个阈值 —— 两种放宽**只叠加放宽、不收紧**（T-G94）。
 
     ① **有工具在飞** → 静默是**预期**的 → 底线上抬到 `BUSY_STALL_SECONDS`（30 分钟）；
-    ② **按实测自适应** → `TOOL_DURATION_FACTOR × 历史最长一次已完成调用`（取**最长**而不是平均、
-       乘 2.5 是留余量：口径是宁可晚掐、不要误杀）。
+    ② **按实测自适应** → `TOOL_DURATION_FACTOR × 最近 REPEAT_WINDOW 次**已完成**调用里的最长`
+       （取**最长**而不是平均、乘 2.5 是留余量：口径是宁可晚掐、不要误杀）。
+    ★ **滑动窗口**（T-G128，裁定 V2）：只看最近 `REPEAT_WINDOW`(12) 次已完成调用 ——
+      长调用**掉出窗口就衰减**，修掉「一轮内不衰减」的漏杀（规矩 §15）；
+      窗口内最长 ≠ 全量历史最长，别把两者混回来（突变检验钉着）。
     两样都没有 → 就是 `stall_seconds`（老口径，一个字没变）。
     ★ 自适应的那一项**封顶** `ADAPTIVE_MAX_SECONDS`（T-G96）：`min(max(base, 2.5 × longest), 3600)`
     —— 不然一次 60 分钟的调用会把阈值抬到 150 分钟（复核 1969b46 §3 的「漏杀」风险）。
@@ -966,7 +969,8 @@ def stall_threshold_seconds(*, stall_seconds: int, inflight: tuple[str, float] |
     base = float(stall_seconds)
     if inflight:
         base = max(base, float(BUSY_STALL_SECONDS))
-    longest = max(durations) if durations else 0.0
+    window_durations = durations[-REPEAT_WINDOW:]   # ★ T-G128 滑窗：长调用掉出窗口就衰减
+    longest = max(window_durations) if window_durations else 0.0
     return min(max(base, TOOL_DURATION_FACTOR * longest), float(ADAPTIVE_MAX_SECONDS))
 
 
@@ -1421,7 +1425,7 @@ def main() -> int:
                         help="心跳行间隔（秒；0 = 不打）")
     parser.add_argument("--stall-seconds", type=int, default=STALL_SECONDS,
                         help=f"日志静默多久算卡死（秒，默认 {STALL_SECONDS}）—— ★ 这只是**底线**："
-                             "有工具在飞时抬到 BUSY_STALL_SECONDS，再按历史最长一次调用自适应")
+                             "有工具在飞时抬到 BUSY_STALL_SECONDS，再按最近 12 次里最长一次自适应")
     parser.add_argument("--poll-seconds", type=float, default=POLL_SECONDS,
                         help="看门狗多久醒一次（秒）")
     parser.add_argument("--no-watchdog", action="store_true",
@@ -1522,7 +1526,8 @@ def main() -> int:
           f"--autocompact {args.autocompact}", flush=True)
     guards = ("看门狗**关**（--no-watchdog）" if args.no_watchdog else
               f"看门狗：日志静默过久（底线 {args.stall_seconds}s；有工具在飞则 30 分钟，"
-              f"再按历史最长调用 ×{TOOL_DURATION_FACTOR} 自适应）或最近 {REPEAT_WINDOW} 次调用里"
+              f"再按最近 {REPEAT_WINDOW} 次调用里最长一次 ×{TOOL_DURATION_FACTOR} 自适应）或"
+              f"最近 {REPEAT_WINDOW} 次调用里"
               f"同一件事重复 {REPEAT_NEED} 次 → 掐")
     print(f"[盯 ] {guards}；心跳每 {args.heartbeat_seconds}s；超时 {args.timeout}s；"
           f"中断自动续跑 {args.retry} 次；input 预算 {args.input_budget:,}/卡；"
