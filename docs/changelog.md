@@ -4,6 +4,17 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### worktree 轻门「测的是哪棵树」—— 修导入口径 + 自身钉子（T-G134）
+
+- 根因：miniconda 的 editable `.pth`（2026-09-17 装）硬指主树 `src`，worktree 里跑轻门
+  `import timeflow` 拿到的是主树旧代码（R022 实测 5 failed，补本树 src 后 30 passed）
+  —— 既造假红也造假绿。修法：`tests/conftest.py` 只加一段，pytest session 起手把
+  本树 `src`（由 `__file__` 推出，不写死绝对路径）前置到 `sys.path` 最前；
+  新建钉子 `tests/test_src_import_line.py` 两条相对判据自证。
+- **先红后绿三贴**：改前 2 failed（读数可见导入主树）→ 改后 2 passed +
+  既有测试 1430 passed / 1 failed（基线预存在，非本卡倒退）→ 改坏注入点再红 → 还原。
+- 复盘：`复盘/worktree轻门导入口径-T-G134.md`。
+
 ### 额度检测不再被工人回话里的触发词骗（T-G136）
 
 - 根因：R029 回话正文提到「429」、卡 029 提交信息含「429 三拍」→ 探针通过仍被续跑 3 轮

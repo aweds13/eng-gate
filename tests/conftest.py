@@ -24,7 +24,9 @@ md 是产物（数据库才是权威），但"跑测试把我今天的记录冲�
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
+from pathlib import Path
 
 _TEST_EXPORT_DIR = tempfile.mkdtemp(prefix="timeflow-tests-export-")
 os.environ.setdefault("TIMEFLOW_EXPORT__DIR", _TEST_EXPORT_DIR)
@@ -34,3 +36,16 @@ if _WORKER:  # 只有 xdist 的分身进程才有这个变量
     os.environ.setdefault(
         "TF_LOG_PATH", os.path.join(_TEST_EXPORT_DIR, f"timeflow-{_WORKER}.jsonl")
     )
+
+## worktree 导入口径（T-G134）：测试必须 import **本树**的 src
+#
+# 背景：miniconda 的 editable 安装（`__editable__.timeflow-0.1.0.pth`）硬指主树的
+# `engineering\src` —— 在 `git worktree` 里跑 pytest，`import timeflow` 拿到的是
+# 主树的旧代码（既能造假红，也能造假绿：新测试跑在旧实现上照样通过）。
+# 修法：pytest session 一开始就把**本树**的 `src` 前置到 `sys.path` 最前，钉子在
+# `tests/test_src_import_line.py`（判据相对本树根，不写死任何绝对路径）。
+# 主树里语义不变：主树的本树 src 就是它自己，前置只是把 .pth 已做的事提前。
+
+_TREE_SRC = Path(__file__).resolve().parents[1] / "src"
+if _TREE_SRC.is_dir():
+    sys.path.insert(0, str(_TREE_SRC))

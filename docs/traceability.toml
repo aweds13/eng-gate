@@ -4129,6 +4129,18 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：R029 第 1 轮成功收工（pytest 104 passed）、回话正文提到「429」、探针通过仍被续跑 3 轮（wb-R029.jsonl + .r2 + .r3）；卡 029 自己的提交信息含「429 三拍」→ 任何 git log 都会中招（自毒）。**做了什么**：候选闸门三条（subtype=error_during_execution / is_error 为真 / 回话全空白，正常成功+非空回话一律不算额度错，wb_dispatch.py:683）；判据只认 errors/errors_info 的结构化字段，回话正文只许完整中文短语、裸 429/quota/6004 不许扫正文（wb_dispatch.py:688）；续跑封顶写在一行 if attempts > args.retry（wb_dispatch.py:1662），与中断续跑共用 --retry 这一个界，到界写判决退 7；探针优先 round_is_normal_success（wb_dispatch.py:708），矛盾时按成功收下（wb_dispatch.py:1684）；quota_error 返回 why（命中 needle 与字段，wb_dispatch.py:704）。**反证（先红后绿三贴）**：①改前钉子①红（成功回话含 429 被判余额耗尽，2 failed）②改后 109 passed + ruff 0 ③改坏回扫正文+裸 429 → 钉子①又红 → 还原 → 109 passed + git status 只有白名单文件；R029 真实回话形状直接喂 quota_error → None。**界线**：额度续跑总次数 ≤ --retry（默认 1，与中断续跑共用）；到界 → 判决含每模型撞了什么 + token 读数，退出码 7；全挂走原有退 7 路径不变。**没动的**：wb_dash / wb_status / 卡 037 滑窗（stall_threshold_seconds 一行没碰）/ scripts / src / docs / gates / 卡表与其它复盘 / 主树外来未跟踪文件。"
 
+[entries."T-G134"]
+id = "T-G134"
+title = "修 worktree 轻门的导入口径：editable .pth 硬指主树 src 导致「测的是旧代码」（能造假红也能造假绿）—— 前置本树 src + 自证钉子"
+group = "TEST"
+status = "done"
+evidence = [
+  "file:复盘/worktree轻门导入口径-T-G134.md",
+  "text:tests/conftest.py::sys.path.insert(0, str(_TREE_SRC))",
+  "test:test_src_import_line.py",
+]
+gaps = "**为什么有这张卡**：R022 实测字面轻门命令 5 failed / 补本树 src 后 30 passed；editable `__editable__.timeflow-0.1.0.pth`（2026-09-17 装）硬指主树 `engineering\\src`。**做了什么**：`tests/conftest.py` 只加一段 —— pytest session 起手把本树 `src`（由 conftest 的 `__file__` 往上 `parents[1]` 推出，不写死绝对路径）前置到 `sys.path` 最前；新建钉子 `tests/test_src_import_line.py` 两条相对判据（import timeflow 在本树之下 + 本树 src 先于一切树外 sys.path 条目）。**先红后绿三贴**：① 改前 2 failed（读数原样可见导入主树 `…\\engineering\\src\\timeflow\\__init__.py`）② 改后 2 passed，既有测试 1430 passed / 1 failed（唯一 failed 是底座自带的 `test_wb_review.py::test_current_head_passes_the_gate_evidence_check`，stash 验证干净底座同样红，非本卡倒退）③ 改坏 `parents[1]→parents[2]` 再红 → 还原后 git status 只剩白名单两文件、再跑 2 passed。**主树没倒退**：主树根同一命令仍指主树自己的 src。**边界（如实写）**：裸 `python -c` 导入仍指主树（注入只对 pytest 生效，卡 §2.2 裁定口径即如此）；`test:` 指针合法因文件在 `tests/` 下；若将来有测试故意经 PYTHONPATH 换包，前置会赢过它（现无此用法）。**没动的**：src/tools/scripts/docs/gates、卡 042 占着的卡表、其它 tests、交接文档、主树三个外来未跟踪文件。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
