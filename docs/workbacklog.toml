@@ -38,7 +38,7 @@ files = [
 ]
 depends = []
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "024"
@@ -54,7 +54,7 @@ files = [
 ]
 depends = []
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "029"
@@ -69,4 +69,4 @@ files = [
 ]
 depends = ["024"]
 risk = "high"
-status = "pending"
+status = "done"

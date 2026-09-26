@@ -297,9 +297,9 @@ gaps = ""
 id = "SR-F1.9"
 title = "区分三类任务（指标 / 逾期不候·作业考核 / 逾期不候·竞赛活动）——一版不做分类字段"
 group = "F1"
-status = "deferred"
+status = "partial"
 evidence = ["file:复盘/C批口径定案.md", "text:docs/specification/functional.md::不做任务分类字段"]
-gaps = "**一版不做**（2026-09-19 用户决定）：不加 `tasks.category`；「哪件事不能拖」用「优先级（高）+ 学校硬考核强提醒（T-C8）」表达；分类字段与「指标可重规划」留二版（SR-F2.8 同为二版）。2026-09-26 用户裁定：维持 deferred，先看代码现状再议（本轮不改口径）。"
+gaps = "**一版不做**（2026-09-19 用户决定）：不加 `tasks.category`；「哪件事不能拖」用「优先级（高）+ 学校硬考核强提醒（T-C8）」表达；分类字段与「指标可重规划」留二版（SR-F2.8 同为二版）。2026-09-26 用户裁定：维持 deferred，先看代码现状再议（本轮不改口径）。2026-09-26 状态更正（T-G140）：②③ 已能表达（②=T-C8 视觉信号；③=task_type 扩「竞赛/活动」取值 + 逾期不候轻标签）；① 按 N3 定案（不设目标实体）不做 → 由 deferred 改 partial。"
 
 [entries."SR-F2.1a"]
 id = "SR-F2.1a"
@@ -414,7 +414,7 @@ title = "重规划 / 债务重组（保留教训记录；学校硬考核逾期�
 group = "F2"
 status = "deferred"
 evidence = []
-gaps = "规格自标「二版」。2026-09-26 用户裁定：软件开发完成前暂时不做。"
+gaps = "规格自标「二版」。2026-09-26 用户裁定：软件开发完成前暂时不做。2026-09-26 用户定（T-G141）：软件开发完成前不做债务重组/重规划；本轮只加现状特征护栏测试（tests/test_debt_derived_line.py），功能保持不做 → 状态仍 deferred。"
 
 [entries."SR-F3.1"]
 id = "SR-F3.1"
@@ -2017,7 +2017,7 @@ title = "预留「产出评价器」接口 —— 评价器 / 打分器本身（
 group = "F8"
 status = "deferred"
 evidence = []
-gaps = "**规格与契约自己就把这一半划在范围外**：`functional.md` 写「合同待知识管理项目对齐**再定**」，契约 `OP-38` 的【边界】写「**不做打分器**；合同待对齐」。所以它不是「欠着的活」，是**等外部口径**。**为什么拆出来而不是继续挂在 SR-F8.4 上**（T-G75，用户 2026-09-25 定的处置）：一版的交付（手动粗颗粒产出入口）已经做完了，混在一条里会让台账永远显示一个假欠账 —— 拆开之后「done 的一版」与「等外部口径的评价器」各自如实。**要开工需要先定的口径**：评的是哪一类产出（学校 KPI / 知识资产 / 两者）、几档（粗/中/细）、结果进不进账本与统计、要不要与「完成收益」（`gain_count`）分开。**没做**：`src/` 一行没改（这一轮只动台账与文档口径）。2026-09-26 用户裁定：继续等外部（知识管理项目）对齐，维持 deferred。"
+gaps = "**规格与契约自己就把这一半划在范围外**：`functional.md` 写「合同待知识管理项目对齐**再定**」，契约 `OP-38` 的【边界】写「**不做打分器**；合同待对齐」。所以它不是「欠着的活」，是**等外部口径**。**为什么拆出来而不是继续挂在 SR-F8.4 上**（T-G75，用户 2026-09-25 定的处置）：一版的交付（手动粗颗粒产出入口）已经做完了，混在一条里会让台账永远显示一个假欠账 —— 拆开之后「done 的一版」与「等外部口径的评价器」各自如实。**要开工需要先定的口径**：评的是哪一类产出（学校 KPI / 知识资产 / 两者）、几档（粗/中/细）、结果进不进账本与统计、要不要与「完成收益」（`gain_count`）分开。**没做**：`src/` 一行没改（这一轮只动台账与文档口径）。2026-09-26 用户裁定：继续等外部（知识管理项目）对齐，维持 deferred。2026-09-26 用户定：继续等外部（评价器合同待知识管理项目对齐），本轮不动 → 状态仍 deferred。"
 
 [entries."SR-F9.1"]
 id = "SR-F9.1"
@@ -4361,3 +4361,18 @@ group = "DELIVERY"
 status = "done"
 evidence = ["route:GET /api/tasks", "route:GET /api/memos", "route:POST /api/memos", "route:GET /api/habits", "route:POST /api/feedback", "route:GET /api/insights/daily", "route:GET /api/assessments", "route:POST /api/grades", "route:GET /api/team/assignments", "route:GET /api/ledger/outputs", "route:POST /api/ledger/invest", "route:POST /api/review/items", "route:GET /api/focus/today", "route:GET /api/tasks/{task_id}/facts", "route:GET /api/courses", "route:GET /api/config", "route:GET /api/feedback", "route:GET /api/focus/tasks/{task_id}", "route:DELETE /api/ledger/invest/{entry_id}", "route:DELETE /api/ledger/output/{entry_id}", "route:DELETE /api/memos/{memo_id}", "route:GET /api/grades", "route:GET /api/habits/{habit_id}", "route:GET /api/insights/groups", "route:GET /api/ledger/invests", "route:GET /api/review/{item_id}/facts", "route:GET /api/sync/logs", "route:GET /api/tasks/deleted", "route:GET /api/tasks/{task_id}", "route:POST /api/habits", "route:POST /api/habits/{habit_id}/toggle", "route:POST /api/ledger/output", "route:POST /api/review/{item_id}/review", "route:POST /api/grades", "route:GET /api/groups/{group_id}/tasks", "route:POST /api/tasks/{task_id}/group"]
 gaps = "**2026-09-23 更正（T-G18）**：原文「白名单/勿扰配置（SR-F3.3）、子任务（OP-12）等仍无界面入口」**已过期** —— 两处界面都接上了（前端批次③ 设置页「专注（白名单 / 勿扰）」+ T-A2 详情面板「步骤（子任务）」）。核对工具 `tools/route_ui_gap.py`（后端路由逐条到 `src/web/` 里找）。**★ 2026-09-25 更新（T-G56 / T-G59 之后）**：原盘点「还剩 11 条后端路由前端一个字都没提」，现在逐条有了处置 —— ① `GET /api/reminders` **已接界面**（设置页「提醒」里的「全部提醒」一节，只读 + 读一次）；② `GET /api/sync/logs` **已接界面**（设置页「数据与同步」里的「冲突日志」一节，只读 + 读一次）；③ `GET /api/team/assignments` 界面走 `/api/team/board`（同一件事的另一种读法，团队视角页）；④ `GET /api/groups/{group_id}/tasks` **仍未接界面**（原定「并入视觉线那轮」，而那一轮已经收口且没包含它 —— 要不要在分组管理里点开一个分组看它的任务，属产品判断，**待用户定**）；⑤ `POST /api/sync/tasks` **已标弃用**（T-G59：保留不删、界面无入口、新代码不要再调）；⑥ 其余 6 条（AI 接口 5 条 + `GET /api/health`）**按设计就不给界面**（给本机程序/运维用）。**④ `GET /api/groups/{group_id}/tasks` 已于 2026-09-25 接进界面**（T-G60：分组管理里每个分组行「看任务」，行内只读展开）—— 至此**五条全部有了处置**，这条**收口**。"
+
+[entries."T-G148"]
+id = "T-G148"
+title = "收口卡 I-7：两篇交接现状段 + 工人规矩六处日期注与 §23 + 视觉线点名与实测数 + 协议补「通知驱动的自动推进」+ backlog 队列字段停旧 + 待用户清单一页纸"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/收口后待用户清单.md",
+  "text:复盘/新窗口交接卡.md::2026-09-26 收口",
+  "text:复盘/长任务执行协议.md::## 十二、通知驱动的自动推进",
+  "text:复盘/外包-卡表与规矩.md::## §23 轻门与流程八条",
+  "text:复盘/外包-卡表与规矩.md::卡 029 已集成，提交 ec2121e",
+  "text:复盘/视觉线地图.md::R029 复核实测 104，本次收口实测",
+]
+gaps = "**为什么有这张卡**：S-6 勘察 + 裁定簿（`gates/diag/裁定-S6六处待裁定.md`）把收口期全部文档/数据漂移并成一张卡，主树唯一写者一次做完。**做了什么**：① 新窗口交接卡 §二 顶部追加（2026-09-26 收口）现状段（HEAD/台账号=sha/台账分布/剩余项全部现算）+ §四 必读顺序追加面板一条；② 交接-重构进度顶部追加最终 CHECKPOINT；③ 工人规矩：§19.1 卡 029 句、§7 标题（队列真源）、§7 表下方（人工验收对账附录）三处日期注 + 文末新增 §23 八条；④ 视觉线地图「两份合并」点名两组 + 106 加日期注（实测六份 228 passed / check_layers SELF-TEST PASS）；⑤ 长任务执行协议文末新增 §十二；⑥ workbacklog 022/024/029 三条 status pending → done（台账 T-G110/T-G112/T-G114 均 done 逐条核过）；⑦ 新建 复盘/收口后待用户清单.md；⑧ 台账 SR-F1.9 deferred → partial + SR-F2.8 / SR-F8.4b gaps 追加（依据裁定簿 §三）。**边界（如实写）**：卡 1.1 说的「§五 必读清单」实为该文件 §四「必读顺序」（§五 是禁止事项），追加落在 §四；D3/D4 由 T-G130 已处理、P6/P7 核实属实未动、T-G101 证据锚只复核（数值锚 count = 4 与 baseline 一致）均未改；scripts/test_check_layers.py 用 pytest 收集为 0 条（独立脚本），数字取直跑 SELF-TEST PASS 读数；渲染黄金未采（本卡未碰 src/ 与界面）；三个外来未跟踪文件未碰。"
