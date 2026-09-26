@@ -14,186 +14,44 @@
 #
 # 口吻：这份文件**只登记没编过的卡**；下面 007/008/009/010 是当前在飞的四张。
 
+#
+# ★ 2026-09-26 收敛（T-G118）：这份文件是**待派队列** ——
+#   **已完成的卡要移出**（历史在 git 里）。原因：`wb_plan.py check` 目前**忽略 `status`**，
+#   把 backlog 当"全部已排班" → 已完成的卡会与待派卡报「同一文件两个写者」（实测 007↔024、009↔022）。
+#   ★ 已知缺口（候选卡）：`check` 应当① 跳过 `status = done` 的卡；② 允许**同域卡靠 `depends` 排到不同批**
+#   （现在只要 files 相交就一律拒单，装不下"队列里有同域串行关系"这种正常情形）。
+
 [base]
-reviewed = "1969b46"        # 已复核的基点提交（没登记过就不许建树）
+reviewed = "1f47c5f"        # 已复核的基点提交（没登记过就不许建树）
 
 [[cards]]
-id = "007"
-task = "T-G96"
-title = "看门狗护栏补强"
-tree = ""                       # 主树
-spec = "gates/diag/卡007-看门狗护栏补强.md"
+id = "022"
+task = "T-G110"
+title = "myday 稀疏序号：真拖只写换位那一行"
+tree = ".wt/sparse"
+spec = "gates/diag/卡022-myday稀疏序号.md"
+files = [
+  "src/timeflow/core/tasks/manager.py",
+  "src/timeflow/storage/db.py",
+  "tests/test_myday_sparse_line.py",
+  "复盘/myday稀疏序号-T-G110.md"
+]
+depends = []
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "024"
+task = "T-G112"
+title = "看门狗独立化：`--detach` 之后被系统杀掉就没人盯"
+tree = ".wt/watchdog"
+spec = "gates/diag/卡024-看门狗独立化.md"
 files = [
   "tools/wb_dispatch.py",
   "tests/test_wb_dispatch.py",
-  "复盘/看门狗护栏补强-T-G96.md",
+  "复盘/看门狗独立化-T-G112.md",
+  "tools/wb_watchdog.py"
 ]
 depends = []
 risk = "high"
-status = "pending"
-
-[[cards]]
-id = "008"
-task = "T-G97"
-title = "面板口径对齐"
-tree = ".wt/dash"
-spec = "gates/diag/卡008-面板口径.md"
-files = [
-  "tools/wb_dash.py",
-  "tests/test_wb_dash.py",
-  "复盘/面板口径对齐-T-G97.md",
-]
-depends = []
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "009"
-task = "T-G98"
-title = "myday序号根因"
-tree = ".wt/core"
-spec = "gates/diag/卡009-myday序号根因.md"
-files = [
-  "src/timeflow/core/tasks/manager.py",
-  "tests/test_myday_rank_line.py",
-  "复盘/myday序号根因-T-G98.md",
-]
-depends = []
-risk = "high"
-status = "pending"
-
-[[cards]]
-id = "010"
-task = "T-G99"
-title = "并发调度器"
-tree = ".wt/plan"
-spec = "gates/diag/卡010-并发调度器.md"
-files = [
-  "tools/wb_plan.py",
-  "tests/test_wb_plan.py",
-  "docs/workbacklog.toml",
-  "复盘/并发架构-T-G99.md",
-]
-depends = []
-risk = "low"
-status = "pending"
-
-# ================================================================ 第二批 · 外包卡 013 切出的域
-#
-# 来源：`gates/diag/盘点-20260926.md`（盘点卡 S-1）的 A 类 + D 类（`复盘/backlog扩建-T-G100.md`）。
-# 切法（卡 013 §2）：按**文件域**分组 —— 同一文件的活合成一张卡；两卡 `files` 相交就不同批。
-#
-# ★ 没进这里的 A 类条目（因为它们跟种子卡同域 → 立了必相交）：
-#   · 与种子 007 同域（`tools/wb_dispatch.py`）：A2 / A3 / A10 / A11 / A14 / A17 / A19 / A20 / A23；
-#   · 与种子 008 同域（`tools/wb_dash.py`）：A1 / A18 / D10；
-#   · 与种子 009 同域（`src/timeflow/core/tasks/manager.py`）：A6 / A7 / A8 / A9。
-#   ★ 它们的依赖关系（盘点报告里 A6「可并入 A9」、A9「先 A6/A7」）都在**种子卡内部**，故不写进新卡。
-#
-# ★ 没进这里的 D 类条目：D1-D8 / D11 / D17 —— 它们要改**受保护共享文件**
-#   （`复盘/交接-重构进度.md` / `复盘/新窗口交接卡.md` / `docs/traceability.toml`），
-#   作者一律不许碰 → 只能由主控串行收口（见复盘 §边界）。
-#
-# ★ 卡 020 是 D 类合卡：它改的全是**跨卡共享的复盘/文档**，按卡 013 §2.4 标「独占共享文档，必须单独跑」。
-#   （卡 013 §2.4 原写 `tree = ""`（主树），但主树 `""` 已被种子 007 占住、`check` 拒「一树两写者」，
-#    故改用独立树 `.wt/docs` 并在 `title` 里保留那句「独占…必须单独跑」——见复盘 §边界。）
-
-[[cards]]
-id = "014"
-task = "T-G101"
-title = "src/web/index.html：删 myday 拖拽死代码（落点没变也发请求）+ 压 ≥20 字界面文案棘轮（现 count=43）"
-tree = ".wt/web"
-spec = "gates/diag/卡014-前端死代码与长文案.md"
-files = [
-  "src/web/index.html",
-]
-depends = []
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "015"
-task = "T-G102"
-title = "myday-move 的空 before 口径：实现（静默当末尾）与契约（给空应 400）对齐 —— 改代码对齐文档并登记到一处"
-tree = ".wt/api"
-spec = "gates/diag/卡015-myday空before口径.md"
-files = [
-  "src/timeflow/api/app.py",
-  "docs/contracts/domains/F1-tasks.md",
-  "docs/commands.toml",
-]
-depends = []
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "016"
-task = "T-G103"
-title = "非文字对比度门补暗色悬停/选中态那一半（现在只补了静态）—— 判据表加 state_pairs + 一条反证"
-tree = ".wt/contrast"
-spec = "gates/diag/卡016-非文字悬停态判据.md"
-files = [
-  "tools/contrast_audit.py",
-  "tests/test_contrast_nontext.py",
-]
-depends = []
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "017"
-task = "T-G104"
-title = "字号档位令牌化（现 9 档裸字号无令牌，是视觉线第 3 步故意留的那一条）；动界面 → 需重采渲染黄金"
-tree = ".wt/css"
-spec = "gates/diag/卡017-字号令牌化.md"
-files = [
-  "src/web/app.css",
-]
-depends = []
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "018"
-task = "T-G105"
-title = "diag 目录清账：inspect.py 遮蔽标准库（改名/加 -P 说明）+ 删两份已完成使命的草稿（round-plan / T-G93-ledger-draft）"
-tree = ".wt/diag"
-spec = "gates/diag/卡018-diag目录清账.md"
-files = [
-  "gates/diag/inspect.py",
-  "gates/diag/round-plan-T-G92-G93.md",
-  "gates/diag/T-G93-ledger-draft.md",
-]
-depends = []
-risk = "low"
-status = "pending"
-
-[[cards]]
-id = "019"
-task = "T-G106"
-title = "核 gates/reuse.json 的复用判定本身对不对 —— 补一条能证明判据会咬的断言（现在没人核过判据）"
-tree = ".wt/gates"
-spec = "gates/diag/卡019-reuse判定自证.md"
-files = [
-  "scripts/run_gates.py",
-]
-depends = []
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "020"
-task = "T-G107"
-title = "★ 独占共享文档，必须单独跑：把过时的字改对 —— 视觉线地图 §8 / 任务重规划 T-D9·T-F5 / T-G20 §FLOW-3 / 使用体验台账 §四 / 外包卡表 §15 / contracts/flows.md"
-tree = ".wt/docs"
-spec = "gates/diag/卡020-共享文档漂移.md"
-files = [
-  "复盘/视觉线地图.md",
-  "复盘/任务重规划-剩余工作.md",
-  "复盘/跨端实时专注-T-G20.md",
-  "复盘/使用体验问题与修改台账.md",
-  "复盘/外包-卡表与规矩.md",
-  "docs/contracts/flows.md",
-]
-depends = []
-risk = "low"
 status = "pending"

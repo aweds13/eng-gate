@@ -348,7 +348,7 @@ def test_seed_backlog_loads_and_is_conflict_free() -> None:
     backlog = wb_plan.load_backlog(SEED)
     ids = [c.id for c in backlog.cards]
     assert len(ids) == len(set(ids)), f"卡号重复：{ids}"
-    assert set(ids) >= _SEED_IDS, f"四条种子必须都在：{sorted(_SEED_IDS - set(ids))}"
+    assert ids, "真 backlog 不该是空的（队列可以只剩一两张，但不能空）"
     assert wb_plan.validate(backlog) == []
 
 
@@ -362,7 +362,7 @@ def test_seed_toml_roundtrips_with_tomllib() -> None:
     assert data["base"]["reviewed"]
     raw_ids = [c["id"] for c in data["cards"]]
     assert raw_ids == [c.id for c in wb_plan.load_backlog(SEED).cards]
-    assert set(raw_ids) >= _SEED_IDS
+    assert raw_ids, "真 backlog 不该是空的"
     # 受保护文件一个都不在种子里（作者不许碰）
     for card in data["cards"]:
         assert not (set(card["files"]) & wb_plan.PROTECTED_FILES)
@@ -382,11 +382,23 @@ def test_seed_plan_with_concurrency_two(tmp_path: Path) -> None:
     assert [[c.id for c in batch] for batch in batches] == [["007", "008"], ["009", "010"]]
 
 
-def test_seed_high_risk_cards_are_seeded() -> None:
-    """高风险卡（high = 才派对抗性复核）照卡 §7 记录在案。"""
-    backlog = wb_plan.load_backlog(SEED)
+def test_seed_high_risk_cards_are_seeded(tmp_path: Path) -> None:
+    """高风险卡（high = 才派对抗性复核）在**冻结夹具**上记录在案（不认真文件 —— 队列会变）。"""
+    backlog = wb_plan.load_backlog(_seed_fixture(tmp_path))
     high = {c.id for c in backlog.cards if c.risk == "high"}
     assert high == {"007", "009"}
+
+
+def test_seed_fixture_keeps_the_four_seeds(tmp_path: Path) -> None:
+    """★ 四条种子在**冻结夹具**里必须在齐 —— 真文件那份是**待派队列**、完成的卡会移出。
+
+    （这条接替原来钉在真文件上的「四条种子必须都在」断言：**覆盖一点没丢**，只是宿主从
+    "会变的真文件"换成了"冻结夹具"。）
+    """
+    backlog = wb_plan.load_backlog(_seed_fixture(tmp_path))
+    ids = [c.id for c in backlog.cards]
+    assert set(ids) == set(_SEED_IDS), f"夹具里的种子应恰为四条：{sorted(ids)}"
+    assert wb_plan.validate(backlog) == []
 
 
 # ------------------------------------------------------------------ 命令拼装
