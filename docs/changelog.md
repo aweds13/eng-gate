@@ -4,6 +4,20 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 删掉 `POST /api/sync/tasks`（旧的行级合并入口）（T-G149）
+
+- **为什么**：用户 2026-09-27 当面裁定「删」—— 它不符合用户对跨端同步的原要求
+  （原要求 = 同步包 + 导出/导入 + 合并机制，见 `复盘/口径定案-待定清单.md` §3）；
+  这条是更早的「逐条推任务、按行合并」老实现（历史：09-25 标弃用保留不删，T-G59；现改判删除）。
+- `src/timeflow/api/app.py`：删掉 `@app.post("/api/sync/tasks")` 与三行实现，
+  原位置留一段历史注释（含「已于 2026-09-27 按用户裁定删除」）；`sync_mod` import 保留
+  （`sync/status` 仍在用）。`src/timeflow/core/**` 同步实现零改动。
+- `docs/commands.toml` OP-40：routes 去掉该路由，note 追加删除日期注。
+- `tools/route_ui_gap.py`：DECIDED 表删掉该路由那条声明（路由已不存在，声明是陈的）。
+- 证据指针同笔刷新：台账 `SR-F9.2` 删掉 `route:POST /api/sync/tasks`（同组仍有 export/import/status）；
+  `T-G59` 两条 `text:` 机械刷成「已于 2026-09-27 按用户裁定删除」+ gaps 末段日期注（不许换更松的锚）。
+- 复盘：`复盘/删sync-tasks路由-T-G149.md`。
+
 ### 面板顶部「完成度总览」：任务走到哪一眼可见（T-G147）
 
 - `tools/wb_dash.py` 顶部新增总览条：台账分布 + 主树 HEAD/今日集成笔数 + 在跑数 +

@@ -2307,17 +2307,10 @@ def create_app(
         return {"entry_id": entry_id, "retracted": changed}
 
     # ---- SR-F9 跨端同步 (LWW + 去重) ----
-    # ★ **已弃用（deprecated，2026-09-25 用户确认）**：行级合并入口，被同步包那套取代
-    #   （导出 → 拷过去 → 先预览再导入；见下面 `syncpack` 那一节与 `core/syncpack.py`）。
-    #   **保留不删**：怕有外部脚本还在打它（删掉会静默破坏别人的自动化）；
-    #   界面**没有任何入口**（`tools/route_ui_gap.py` 把它列在"无界面路由"里），
-    #   命令表 `docs/commands.toml` 的 OP-40 也标了弃用。
-    #   新代码不要再调它 —— 要合并就导包/导入包。
-    @app.post("/api/sync/tasks")
-    def sync_tasks(payload: dict[str, Any]) -> dict[str, Any]:
-        records = payload.get("records", [])
-        results = [sync_mod.merge_task(conn, r) for r in records]
-        return {"merged": results}
+    # ★ `POST /api/sync/tasks`（旧的行级合并入口）**已于 2026-09-27 按用户裁定删除**：
+    #   它不符合用户对跨端同步的原要求（原要求 = 同步包 + 导出/导入 + 合并规则，见
+    #   `复盘/口径定案-待定清单.md` §3）；历史：T-G59（2026-09-25）标弃用、保留不删
+    #   → T-G149（2026-09-27）按用户改判删除。要合并就导包 / 导入包（见下面 syncpack 那一节）。
 
     # ---- 跨端同步：同步包（导出/导入）（SR-F9.2 / SR-NF17；G 批 · T-G8 = 场景 ③）----
     # 口径（2026-09-21 用户定，见 `复盘/口径定案-待定清单.md` §3）：**③ 先做**（走文件的合并机制，

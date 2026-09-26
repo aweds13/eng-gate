@@ -37,8 +37,6 @@ FE_RE = re.compile(r"/api/[^\s\"'`)]*")
 DECIDED: dict[tuple[str, str], str] = {
     ("GET", "/api/team/assignments"):
         "保持现状（已被 /api/team/board 取代）—— 复盘/口径落档-T-G19.md",
-    ("POST", "/api/sync/tasks"):
-        "已弃用（deprecated，2026-09-25 用户确认）—— src/timeflow/api/app.py 注释",
 }
 
 

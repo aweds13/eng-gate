@@ -2040,7 +2040,6 @@ evidence = [
   "text:src/web/offline.js::TFOffline",
   "text:src/timeflow/core/lan.py::def gate",
   "route:GET /api/sync/status",
-  "route:POST /api/sync/tasks",
   "route:POST /api/sync/export",
   "route:POST /api/sync/import",
   "route:POST /api/lan/pair",
@@ -2449,10 +2448,10 @@ title = "第 5 条「孤儿路由」标弃用：`POST /api/sync/tasks`（行级�
 group = "PROCESS"
 status = "done"
 evidence = [
-  "text:src/timeflow/api/app.py::已弃用（deprecated，2026-09-25 用户确认）",
-  "text:docs/commands.toml::已弃用（deprecated，2026-09-25 用户确认）",
+  "text:src/timeflow/api/app.py::已于 2026-09-27 按用户裁定删除",
+  "text:docs/commands.toml::已于 2026-09-27 按用户裁定删除",
 ]
-gaps = "**用户 2026-09-25 拍板**：这条（`POST /api/sync/tasks`，OP-40 里的旧行级合并入口）**加弃用标记**。做的事只有三处，一行代码都没删：① `src/timeflow/api/app.py` 的路由上方写明「已弃用 + 被同步包取代 + 保留不删的原因（怕有外部脚本）+ 界面无入口 + 新代码不要再调」；② `docs/commands.toml` 的 OP-40 `note` 标上弃用（命令表是四个面共用的那张源）；③ 台账这条卡收口。**为什么不删**：2026-09-23 起就一直定的是「标弃用但不删」（怕静默破坏别人的自动化）—— 这次只是把**当时没落地的那句标记**补上。**顺带**：`DELIVERY.READY` 那条盘点里的 ⑤ 从此有了处置（不再挂「接界面还是删接口」）。**没做**：契约域文档（`F9-storage-sync.md`）里没有这条路由的条目（它只挂 OP-40，没有逐路由小节），所以没地方加注释 —— 弃用标记落在**代码 + 命令表**两处（真源就这两处）。"
+gaps = "**用户 2026-09-25 拍板**：这条（`POST /api/sync/tasks`，OP-40 里的旧行级合并入口）**加弃用标记**。做的事只有三处，一行代码都没删：① `src/timeflow/api/app.py` 的路由上方写明「已弃用 + 被同步包取代 + 保留不删的原因（怕有外部脚本）+ 界面无入口 + 新代码不要再调」；② `docs/commands.toml` 的 OP-40 `note` 标上弃用（命令表是四个面共用的那张源）；③ 台账这条卡收口。**为什么不删**：2026-09-23 起就一直定的是「标弃用但不删」（怕静默破坏别人的自动化）—— 这次只是把**当时没落地的那句标记**补上。**顺带**：`DELIVERY.READY` 那条盘点里的 ⑤ 从此有了处置（不再挂「接界面还是删接口」）。**没做**：契约域文档（`F9-storage-sync.md`）里没有这条路由的条目（它只挂 OP-40，没有逐路由小节），所以没地方加注释 —— 弃用标记落在**代码 + 命令表**两处（真源就这两处）。2026-09-27 用户改判：按用户当面裁定删除该路由（原 2026-09-25 定为「保留不删」）；证据指针同笔刷成「已删除」字样，见 T-G149。"
 
 [entries."T-G58"]
 id = "T-G58"
@@ -4376,3 +4375,16 @@ evidence = [
   "text:复盘/视觉线地图.md::R029 复核实测 104，本次收口实测",
 ]
 gaps = "**为什么有这张卡**：S-6 勘察 + 裁定簿（`gates/diag/裁定-S6六处待裁定.md`）把收口期全部文档/数据漂移并成一张卡，主树唯一写者一次做完。**做了什么**：① 新窗口交接卡 §二 顶部追加（2026-09-26 收口）现状段（HEAD/台账号=sha/台账分布/剩余项全部现算）+ §四 必读顺序追加面板一条；② 交接-重构进度顶部追加最终 CHECKPOINT；③ 工人规矩：§19.1 卡 029 句、§7 标题（队列真源）、§7 表下方（人工验收对账附录）三处日期注 + 文末新增 §23 八条；④ 视觉线地图「两份合并」点名两组 + 106 加日期注（实测六份 228 passed / check_layers SELF-TEST PASS）；⑤ 长任务执行协议文末新增 §十二；⑥ workbacklog 022/024/029 三条 status pending → done（台账 T-G110/T-G112/T-G114 均 done 逐条核过）；⑦ 新建 复盘/收口后待用户清单.md；⑧ 台账 SR-F1.9 deferred → partial + SR-F2.8 / SR-F8.4b gaps 追加（依据裁定簿 §三）。**边界（如实写）**：卡 1.1 说的「§五 必读清单」实为该文件 §四「必读顺序」（§五 是禁止事项），追加落在 §四；D3/D4 由 T-G130 已处理、P6/P7 核实属实未动、T-G101 证据锚只复核（数值锚 count = 4 与 baseline 一致）均未改；scripts/test_check_layers.py 用 pytest 收集为 0 条（独立脚本），数字取直跑 SELF-TEST PASS 读数；渲染黄金未采（本卡未碰 src/ 与界面）；三个外来未跟踪文件未碰。"
+
+[entries."T-G149"]
+id = "T-G149"
+title = "删掉 POST /api/sync/tasks（旧的行级合并入口）：用户 2026-09-27 裁定 —— 它不符跨端同步的原要求（同步只有包+导出/导入一条路）"
+group = "API"
+status = "done"
+evidence = [
+  "text:src/timeflow/api/app.py::已于 2026-09-27 按用户裁定删除",
+  "text:docs/commands.toml::已于 2026-09-27 按用户裁定删除",
+  "file:复盘/删sync-tasks路由-T-G149.md",
+]
+gaps = "**为什么有这张卡**：用户 2026-09-27 当面裁定「删」——原要求见 `复盘/口径定案-待定清单.md` §3（同步包+导出/导入+合并规则）；本路由是更早的逐条推任务老实现（`复盘/口径落档-T-G19.md:110`）。**做了什么**：删了 app.py 里 `@app.post` 装饰器（路径为旧的行级合并入口）与其下三行实现（`sync_tasks` 函数体），原位置留一段历史注释（含「已于 2026-09-27 按用户裁定删除」字样）；`docs/commands.toml` OP-40 的 routes 去掉该路由、note 末尾追加删除日期注；`tools/route_ui_gap.py` 的 DECIDED 表删掉该路由那条声明（GET /api/team/assignments 那条不动）。**证据指针**：SR-F9.2 删了 route: 那一行（同组仍有 export/import/status）；T-G59 两条 text: 刷成「已于 2026-09-27 按用户裁定删除」+ gaps 末段日期注。**读数**：pin_check 命中 2 颗钉子（即 T-G59 两条 evidence，卡 §2.3 预告的同笔刷新）；audit 0 失败豁免 0；check_commands 与 cli_line 通过；route_ui_gap 不再报该路由。**没动的**：src/timeflow/core/**（同步实现）、tests/**（零改动）、app.py 的 sync_mod import（2385 行 sync/status 仍在用）。"
+
