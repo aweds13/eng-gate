@@ -4254,6 +4254,19 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：S-6 清点的 P5（modules.md:173 写「来源标记尚未落库」而台账 SR-F2.6b 已 status done，复核读数 status 域取值 done、evidence 含 sync.py 的同 id 去重与来源标记 device_id 两条）与 D2（人工验收清单无对账表，卡表的「剩 6 项」没人对过）。**做了什么**：P5 = 按裁定只在原句句末加日期注（原句逐字保留）；D2 = 文末新增对账附录，共 20 条（A 组 7 / B 组 2 / C 组 3 / D 组 2 / E 组 6），结论分布：已机器覆盖 2（㉒、⑭）/ 未覆盖-需人点 18 / 台账已 done 0 / 无法判断 0。**只加不删的反证**：modules.md 的 numstat 是一删一加 —— 被删的是原 173 行整行、新行以逐字相同的原句开头仅句末追加（行尾追加在 -U0 里长这样）；人工验收-照着点.md 纯追加 0 删；逐行看过 -U0 的删除行，无其它删除。**判「不动」的两处**：P6（architecture.md:28 的 getaways 预留位）= 台账搜 getaway/adapter/出站 全 0 命中、且 src/timeflow/getaways 盘上只有 __init__.py 确为预留位 → 没证据说它过期，不动；P7（coverage.md:5 的 B0/B1-B4 状态行）= 台账搜 B0 与 B1-B4 全 0 命中 → 没有真源读数，不动。**没动的**：architecture.md、coverage.md、traceability.toml、changelog.md、docs 其它文件、复盘其它文件、tools/tests/scripts/src/gates 全部未碰；未跑全量门禁（卡 §0.3，集成时由主控跑）。"
 
+[entries."T-G110"]
+id = "T-G110"
+title = "myday 稀疏序号：真拖只写换位那一行（T-G86.gaps 说的「另一张卡」）—— 有间隙取号 + 间隙耗尽策略（主控定参）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/myday稀疏序号-T-G110.md",
+  "text:src/timeflow/core/tasks/manager.py::_MYDAY_RANK_FIRST = 1000",
+  "text:src/timeflow/core/tasks/manager.py::def _fit_run(",
+  "test:test_myday_sparse_line.py",
+]
+gaps = "**为什么有这张卡**：盘点 A9；T-G86.gaps / 复盘/幂等写库-T-G86.md §3（66-69 行）「那是另一张卡的事」。**做了什么**：稀疏参数照主控裁定（首号 1000、步长 1000、插入取中点、耗尽只局部 renormalize 且不动 version、reserved 保留协同、A7 库级断言并进）；真拖一次从「头里 m 行全写」变成「只写 1 行」的实测对照见复盘 §3（旧 3 行 → 新 1 行，附原始读数）。**反证（先红后绿）**：三条突变（关 reserved / 不清号 / 改回整截 1..m）各自改坏→红→还原→绿，原始输出贴复盘 §4.3；新用例 test_myday_sparse_line.py 钉住写入行数与取号口径。**边界（如实写）**：耗尽路径已真触发（稀疏中点收敛 + 旧版稠密号两场景）；#2 的「甲/乙 is None」与 #3 的「=最小值」字面不可满足、改相对判据（复盘 §6.1/6.2，待主控追认）；T-G86 头判定原样保留、全 NULL 首拖仍写 m 行（§6.3）；version_guard 两处稠密号段断言经裁定 V2 有限开白改相对判据、突变④验过牙口（§4.4/§4.5）；renorm 不动 version 与变号必抬 version 的判据不可同场景混用（§6.5）。**没动的**：排序口径与读函数、NULL 语义、三份既有测试的非点名断言、test_unit_of_work.py、storage/db.py、tools/scripts/docs/gates、共享文件（台账/changelog 由集成者收口）、真实库/备份、三个外来未跟踪文件。version_guard 的 :94/:152 两处经主控裁定 V2 有限开白改为相对判据（复盘 §4.4/§4.5），其余行未碰。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"

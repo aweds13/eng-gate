@@ -91,7 +91,13 @@ def test_sequential_moves_give_the_expected_order(tmp_path: Path) -> None:
 
     assert _order(path) == ["丁", "戊", "丙", "甲", "乙"]
     ranks = [r for r, _ in _snapshot(path).values() if r is not None]
-    assert sorted(ranks) == [1, 2, 3, 4, 5]
+    # 卡 022 裁定 V2：稀疏号不钉字面值 —— 五条都有号、互不相同、按清单次序严格递增
+    assert len(ranks) == 5, f"五条都要有号（实际非空 {len(ranks)} 枚）： {ranks}"
+    ranks_in_order = [_snapshot(path)[ids[t]][0] for t in ("丁", "戊", "丙", "甲", "乙")]
+    assert all(r is not None for r in ranks_in_order), f"有行被清了号： {ranks_in_order}"
+    assert len(set(ranks_in_order)) == len(ranks_in_order), f"重号： {ranks_in_order}"
+    assert all(a < b for a, b in zip(ranks_in_order, ranks_in_order[1:], strict=False)), \
+        f"号要按清单次序严格递增： {ranks_in_order}"
 
 
 # ------------------------------------------------------------------ 复现：读→算→写 交错
@@ -149,7 +155,12 @@ def test_concurrent_drags_do_not_lose_updates_or_duplicate_ranks(
     snap = _snapshot(path)
     ranks = [r for r, _ in snap.values() if r is not None]
     assert len(ranks) == len(set(ranks)), f"并发之后 myday_rank 撞出重号： {snap}"
-    assert sorted(ranks) == [1, 2, 3, 4, 5], f"并发之后号段残缺： {snap}"
+    # 卡 022 裁定 V2：稀疏号不钉字面值 —— 五条都有号、互不相同、按清单次序严格递增
+    assert len(ranks) == 5, f"并发之后五条都要有号（实际非空 {len(ranks)} 枚）： {snap}"
+    ranks_in_order = [snap[ids[t]][0] for t in ("丁", "戊", "丙", "甲", "乙")]
+    assert all(r is not None for r in ranks_in_order), f"并发之后有行被清了号： {snap}"
+    assert all(a < b for a, b in zip(ranks_in_order, ranks_in_order[1:], strict=False)), \
+        f"并发之后号要按清单次序严格递增： {ranks_in_order}"
     assert _order(path) == ["丁", "戊", "丙", "甲", "乙"], (
         f"两次移动都生效的串行正解（对照用例已钉）；实际： {_order(path)} / {snap}"
     )

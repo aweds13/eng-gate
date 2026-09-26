@@ -65,7 +65,15 @@ def test_drag_puts_a_task_before_the_target_and_persists(tmp_path: Path) -> None
     last = client.get("/api/mydays").json()[-1]["id"]
     moved = client.post(f"/api/tasks/{last}/myday-move", json={"before": first})
     assert moved.status_code == 200, moved.text
-    assert moved.json()["myday_rank"] == 1, "拖到最前面 → 序号 1"
+    moved_rank = moved.json()["myday_rank"]
+    other_ranks = [
+        client.get(f"/api/tasks/{t['id']}").json()["myday_rank"]
+        for t in client.get("/api/mydays").json()
+        if t["id"] != last
+    ]
+    assert moved_rank is not None, "拖到最前面 → 真换位的那条要拿到号"
+    assert all(r is None or moved_rank <= r for r in other_ranks), \
+        "拖到最前 → 它拿的是场景里最靠前的号（其余行没号或排在它后面）"
     assert _order(client) == ["丁", "甲", "乙", "丙"]
 
     # ★ 落库了：**新开一个客户端**（同一份库）读出来还是这个顺序
@@ -157,7 +165,10 @@ def test_leaving_today_clears_the_rank_and_coming_back_goes_last(tmp_path: Path)
     first, last = ids[0]["id"], ids[-1]["id"]              # 甲 / 丙
     client.post(f"/api/tasks/{last}/myday-move", json={"before": first})   # 丙 拖到最前（真换位置）
     assert _order(client) == ["丙", "甲", "乙"], "丙 拖到甲前面"
-    assert client.get(f"/api/tasks/{last}").json()["myday_rank"] == 1, "真换了位置才有号"
+    rank_bing = client.get(f"/api/tasks/{last}").json()["myday_rank"]
+    assert rank_bing is not None, "真换了位置才有号"
+    assert rank_bing < client.get(f"/api/tasks/{first}").json()["myday_rank"], \
+        "丙 拖到最前 → 拿到的是场景里最靠前的号（相对判据，不钉具体值）"
 
     assert client.post(f"/api/tasks/{last}/myday").json()["myday_rank"] is None, \
         "移出今天要清成 NULL（不留幽灵序号）"

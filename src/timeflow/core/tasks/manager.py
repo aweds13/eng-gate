@@ -1398,8 +1398,76 @@ class MydayConflictError(RuntimeError):
     """
 
 
+# 卡 022 §2.9 主控裁定：myday 序号改**稀疏**（有间隙），真拖只写真的换位的那一行。
+# 首号 1000、步长 1000；插入取中点；间隙耗尽 → 只对冲突那一小段局部 renormalize（不动 version）。
+_MYDAY_RANK_FIRST = 1000
+_MYDAY_RANK_STEP = 1000
+
+
+def _fit_run(
+    count: int, lo: int | None, hi: int | None, reserved: set[int]
+) -> list[int] | None:
+    """给**连续 count 行**在开区间 (lo, hi) 里挑一串严格递增的稀疏号；塞不下返回 `None`。
+
+    - 两侧都无界（`None` = 该侧没有已带号的邻居）：从**首号**起按步长往上取；
+    - 只有一侧有界：从那一侧按**步长**向外延伸（贴着邻居留一整段步长，不省着用）；
+      取号时避开 `reserved`（被隐藏条目占着的号，T-G98）；
+    - 两侧都有界：取**中点**（多行按比例均分）。中点用整数地板除 —— `hi - lo >= 2` 时
+      结果必然严格落在 (lo, hi) 内，负数也一样（卡 022 §7.1 的坑）。
+    返回 `None` = 间隙耗尽（区间里放不下 count 个不撞号的新号）→ 调用方走局部 renormalize。
+    """
+    if count <= 0:
+        return []
+    vals: list[int] = [0] * count
+    if lo is None and hi is None:
+        v = _MYDAY_RANK_FIRST
+        for i in range(count):
+            while v in reserved:
+                v += 1
+            vals[i] = v
+            v += _MYDAY_RANK_STEP
+        return vals
+    if lo is None:
+        assert hi is not None  # 「两侧都无界」已被上面的分支挡掉 —— 收窄给 mypy
+        upper = hi
+        for i in range(count - 1, -1, -1):
+            v = upper - _MYDAY_RANK_STEP
+            while v in reserved:
+                v -= 1
+            vals[i] = v
+            upper = v
+        return vals
+    if hi is None:
+        lower = lo
+        for i in range(count):
+            v = lower + _MYDAY_RANK_STEP
+            while v in reserved:
+                v += 1
+            vals[i] = v
+            lower = v
+        return vals
+    blocked = sum(1 for r in reserved if lo < r < hi)
+    if hi - lo - 1 - blocked < count:
+        return None
+    lower = lo
+    for i in range(count):
+        v = lo + (hi - lo) * (i + 1) // (count + 1)
+        if v <= lower:
+            v = lower + 1
+        while v in reserved:
+            v += 1
+        vals[i] = v
+        lower = v
+    return vals
+
+
 def _write_myday_rank(
-    conn: sqlite3.Connection, task_id: str, rank: int | None, expected_version: int
+    conn: sqlite3.Connection,
+    task_id: str,
+    rank: int | None,
+    expected_version: int,
+    *,
+    bump_version: bool = True,
 ) -> None:
     """只改顺序号：**不动 `updated_at`**（换顺序不是"这条内容变了"），版本号照加。
 
@@ -1415,9 +1483,16 @@ def _write_myday_rank(
     快照在写之前过期时这条 UPDATE **影响行数 0**，抛 `MydayConflictError` 交给
     `_write_myday_plan` 回滚、再由调用方重读重算。`version` 在这里只被**比较**、
     不会被额外多加（跨端合并按它判谁新，卡 021 §7-4）。
+
+    ★ `bump_version=False`（卡 022 §2.9）：**局部 renormalize** 的重排行走这条 —— 只改数字、
+    **不动 `version`**（那些行的顺序语义没变，抬 version 就是 T-G79/A7 那族「非换位行
+    version 白涨」的原病）；版本守卫 `AND version = ?` **仍然在**，撞并发照样抛。
     """
+    set_clause = (
+        "myday_rank = ?, version = version + 1" if bump_version else "myday_rank = ?"
+    )
     cur = conn.execute(
-        "UPDATE tasks SET myday_rank = ?, version = version + 1 WHERE id = ? AND version = ?",
+        f"UPDATE tasks SET {set_clause} WHERE id = ? AND version = ?",
         (rank, task_id, expected_version),
     )
     if cur.rowcount == 0:
@@ -1458,24 +1533,22 @@ def _myday_null_positions(items: list[Task]) -> dict[str, int]:
 
 def _myday_rank_plan(
     items: list[Task], order: list[str], reserved: set[int] | None = None
-) -> dict[str, int]:
-    """让 `order` 成为新顺序要写哪些号：`{id: 新号}`。
+) -> list[tuple[str, int, bool]]:
+    """让 `order` 成为新顺序要写哪些号：`[(id, 新号, 是否抬 version)]`（卡 022 稀疏版）。
 
-    头（要给号的一截）= `order` 里**最长的那段合法尾巴之前**的部分。合法尾巴三条：
-    ① **全是不带号的行** —— 带号的行必须留在头里（我们从不把号清掉）；
-    ② **位置没变**（在 `order` 里还是原来那一格）—— 换了位置的行必须进头、拿到新号；
-    ③ 它们在 `order` 里**仍是老口径次序** —— 否则读回来就不是 `order` 了。
+    头（要动号的一截）= `order` 里**最长的那段合法尾巴之前**的部分 —— 判定与 T-G86 完全一致：
+    ① 尾巴全是**不带号**的行；② **位置没变**；③ 仍是**老口径次序**。
+    头里**保留**的行（已带号、沿目标次序号值严格递增的最长一组）一个都不写（`version` 不白涨）。
 
-    这样"拖一下"只波及**真的动了的那几条**：离落点很远、没换过位置、还带着 `NULL` 的行
-    **一个都不写**（「不许把没动过的 `NULL` 冻结成序号」）；头里本来就等于目标号的行也跳过
-    （值没变 = `version` 也不涨）。★ 为什么尾巴要加条件 ②：像"拖一次 → 整份清单都写号"
-    那种整表归一化会把"没拖过 = NULL"抹掉 —— 而尾巴越短只会让**更多**行拿到号（仍然正确，
-    只是写得更多），所以这几个条件只影响"写多少"，不影响"对不对"。
-
-    ★ T-G98：号从 **1** 起按头里的次序往上取，但**跳过 `reserved`**（被隐藏条目占着的号）。
-    不然可见条目的新号会和隐藏条目的旧号撞 —— 就是"撤销完成幽灵归位"那一半。
+    ★ 稀疏取号（卡 022 §2.9 主控裁定）：首号 1000、步长 1000、插入取中点 —— 真拖一次从
+    「头里 m 行整截重排成 1..m」变成「只写真的换位的那一行（或最少几行）」。取号规则见
+    `_fit_run`；`reserved`（被隐藏条目占着的号，T-G98）**保留**、取号时绕开。
+    ★ 间隙耗尽（中点逼到相邻）→ **只对冲突那一小段局部 renormalize**：把两侧最近的已带号
+    邻居逐行拉进来一起重新拉开，塞得下就停 —— **不做全列重排**；被拉进来的行只改数字、
+    **不动 `version`**（返回元组的第三位 = False），版本守卫仍在。头两端之外无界，
+    拉到头必然塞得下，所以这个扩张必然终止。
     """
-    reserved = reserved or set()
+    reserved = set(reserved or ())
     by_id = {it.id: it for it in items}
     pos_now = {it.id: i for i, it in enumerate(items)}
     null_pos = _myday_null_positions(items)
@@ -1490,18 +1563,97 @@ def _myday_rank_plan(
             break
         prev = pos
         split = i
-    values: list[int] = []
-    nxt = 1
-    for _ in range(split):
-        while nxt in reserved:
-            nxt += 1
-        values.append(nxt)
-        nxt += 1
-    return {
-        tid: values[i]
-        for i, tid in enumerate(order[:split])
-        if by_id[tid].myday_rank != values[i]
-    }
+    head = order[:split]
+    target_pos = {tid: i for i, tid in enumerate(order)}
+    # ★ 保留集 = 头里**已带号**的行、沿目标次序号值严格递增的**最长**一组（LIS）。
+    # 保留集每多一行就少写一行 —— 这是「只写最少几行」的最优解；其余的行（真换位的、
+    # 新拿号的、挡了道的）按连续段重取号。
+    ranked: list[tuple[str, int]] = []
+    for tid in head:
+        rank_of = by_id[tid].myday_rank
+        if rank_of is not None:
+            ranked.append((tid, rank_of))
+    keep: set[str] = set()
+    if ranked:
+        n = len(ranked)
+        best = [1] * n
+        prev_at = [-1] * n  # LIS 回溯指针（不叫 prev：头检测上面已有一个 int | None 的 prev）
+        for k in range(n):
+            for m in range(k):
+                if ranked[m][1] < ranked[k][1] and best[m] + 1 > best[k]:
+                    best[k] = best[m] + 1
+                    prev_at[k] = m
+        end = max(range(n), key=lambda k: (best[k], k))
+        while end != -1:
+            keep.add(ranked[end][0])
+            end = prev_at[end]
+    eff: dict[str, int | None] = {tid: by_id[tid].myday_rank for tid in head}
+    plan: dict[str, int] = {}
+    renorm: set[str] = set()      # 只改数字、不动 version 的重排行（顺序语义没变）
+
+    def assigned_index(start: int, step: int) -> int | None:
+        j = start + step
+        while 0 <= j < len(head):
+            if eff[head[j]] is not None:
+                return j
+            j += step
+        return None
+
+    def assign_span(a: int, b: int, lo: int | None, hi: int | None) -> None:
+        """给头里 `head[a:b]` 这段定号（一段连续非保留的行）。
+
+        先按 `_fit_run` 直接取；塞不下 → 局部 renormalize（见函数 docstring）。
+        `lo` / `hi` 是这段两侧最近的已带号邻居（`None` = 该侧无界）。
+        """
+        count = b - a
+        vals = _fit_run(count, lo, hi, reserved)
+        w_lo, w_hi = a, b - 1
+        li2 = assigned_index(w_lo, -1)
+        rj2 = assigned_index(w_hi, +1)
+        while vals is None:
+            # 间隙耗尽：把两侧最近的已带号邻居拉进来一起重新拉开（拉到头必塞得下）。
+            if li2 is not None:
+                w_lo = li2
+                li2 = assigned_index(w_lo, -1)
+            elif rj2 is not None:
+                w_hi = rj2
+                rj2 = assigned_index(w_hi, +1)
+            else:
+                vals = _fit_run(w_hi - w_lo + 1, None, None, reserved)
+                # 两侧都无界时 _fit_run 必给出一串号（不会是 None）—— 收窄给 mypy
+                assert vals is not None
+                break
+            lo2 = eff[head[li2]] if li2 is not None else None
+            hi2 = eff[head[rj2]] if rj2 is not None else None
+            vals = _fit_run(w_hi - w_lo + 1, lo2, hi2, reserved)
+        for idx, v in zip(range(w_lo, w_hi + 1), vals, strict=True):
+            t = head[idx]
+            eff[t] = v
+            if by_id[t].myday_rank == v:
+                continue                      # 重取后落回原值的行不写
+            plan[t] = v
+            # 只改数字、位置没变的重排行不抬 version（顺序语义没变，卡 022 §2.9）；
+            # 真换了显示位置的行、以及第一次拿号的行，都是真改动 → 照常抬。
+            if by_id[t].myday_rank is not None and pos_now[t] == target_pos[t]:
+                renorm.add(t)
+
+    i = 0
+    while i < len(head):
+        if head[i] in keep:
+            i += 1
+            continue
+        j = i
+        while j < len(head) and head[j] not in keep:
+            j += 1
+        # 段两侧就是保留行（或头端 = 无界）：左锚是前一段的末行，右锚是停在的那一行。
+        lo = eff[head[i - 1]] if i > 0 else None
+        hi = eff[head[j]] if j < len(head) else None
+        assign_span(i, j, lo, hi)
+        i = j
+    return [
+        (tid, rank, tid not in renorm)
+        for tid, rank in plan.items()
+    ]
 
 
 def _myday_reserved_ranks(conn: sqlite3.Connection, items: list[Task]) -> set[int]:
@@ -1533,8 +1685,10 @@ def _write_myday_plan(conn: sqlite3.Connection, items: list[Task], order: list[s
     reserved = _myday_reserved_ranks(conn, items)
     by_id = {it.id: it for it in items}
     try:
-        for task_id, rank in _myday_rank_plan(items, order, reserved).items():
-            _write_myday_rank(conn, task_id, rank, by_id[task_id].version)
+        for task_id, rank, bump in _myday_rank_plan(items, order, reserved):
+            _write_myday_rank(
+                conn, task_id, rank, by_id[task_id].version, bump_version=bump
+            )
     except BaseException:
         conn.rollback()
         raise

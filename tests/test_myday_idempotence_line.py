@@ -148,7 +148,9 @@ def test_a_drag_leaves_the_untouched_null_tail_alone(tmp_path: Path) -> None:
     assert _order(client) == ["甲", "丁", "乙", "丙", "戊"], "落在「乙前面」= 夹在甲和乙之间"
     assert ids["戊"] not in _changed(before, after), "没动过的尾条不许被写"
     assert _rank(client, ids["戊"]) is None, "没动过的 NULL 不许被冻成序号"
-    assert _rank(client, ids["丁"]) == 2, "真换了位置的那条要拿到新号"
+    rank_ding = _rank(client, ids["丁"])
+    assert rank_ding is not None, "真换了位置的那条要拿到新号"
+    assert _rank(client, ids["甲"]) < rank_ding, "丁 的号要排在甲后面（相对判据，不钉具体值）"
     assert len(_changed(before, after)) < len(before), "不许整表归一化（每行都写一遍）"
 
 
@@ -174,7 +176,8 @@ def test_a_real_drag_does_not_bump_rows_it_did_not_change(tmp_path: Path) -> Non
     for title in ("戊", "甲"):
         assert before[ids[title]] == after[ids[title]], \
             f"「{title}」的号与位置都没变，却把它写了（version 白涨）"
-    assert _rank(client, ids["丁"]) == 3, "拖过去的那条要拿到新号"
+    assert _rank(client, ids["甲"]) < _rank(client, ids["丁"]) < _rank(client, ids["乙"]), \
+        "丁 的号要落在甲与乙之间（稀疏取号的本质，相对判据）"
 
 
 # ---------------------------------------------------------------- 幂等的另两种走法

@@ -154,7 +154,11 @@ def test_a_visible_renumber_never_collides_with_a_hidden_rank(tmp_path: Path) ->
     client = _client(tmp_path)
     ids = _three_with_numbers(client)
     path = tmp_path / "myday.db"
-    assert _snap(path)[ids["B2"]][0] == 1 and _snap(path)[ids["B3"]][0] == 3
+    ranks_setup = {t: _snap(path)[tid][0] for t, tid in ids.items()}
+    assert all(r is not None for r in ranks_setup.values()), "摆好现场：三条都要有号"
+    assert len(set(ranks_setup.values())) == 3, "摆好现场：三个号互不相同"
+    assert ranks_setup["B2"] < ranks_setup["B1"] < ranks_setup["B3"], "摆好现场：B2<B1<B3"
+    b2_before = ranks_setup["B2"]
 
     client.post(f"/api/tasks/{ids['B2']}/complete")           # B2 藏起来，留着号 1
     assert client.post(f"/api/tasks/{ids['B3']}/myday-move",
@@ -163,8 +167,10 @@ def test_a_visible_renumber_never_collides_with_a_hidden_rank(tmp_path: Path) ->
     ranks = _ranks(_snap(path))
     assert len(ranks) == len(set(ranks)), f"今天清单里出现了重号：{ranks}"
     assert _order(client) == ["B3", "B1"]
-    assert _rank(client, ids["B3"]) == 2, "可见条目要绕开被隐藏条目占着的号 1"
-    assert _rank(client, ids["B2"]) == 1, "藏起来的那条留着它的号（非排序动作没动它）"
+    assert _rank(client, ids["B3"]) is not None \
+        and _rank(client, ids["B3"]) != _rank(client, ids["B2"]), \
+        "可见条目要绕开被隐藏条目占着的号（不许重号）"
+    assert _rank(client, ids["B2"]) == b2_before, "藏起来的那条留着它的号（非排序动作没动它）"
 
 
 def test_uncompleting_goes_last_not_back_to_the_old_slot(tmp_path: Path) -> None:
