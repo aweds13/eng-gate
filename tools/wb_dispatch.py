@@ -273,11 +273,18 @@ def write_heartbeat(log: Path, line: str) -> None:
 
 
 def detached_argv(argv: list[str]) -> list[str]:
-    """给"脱离窗口"的子进程用的 argv：去掉 `--detach`，加上内部标记 `--detach-done`。
+    """给"脱离窗口"的子进程用：`python -X utf8 <脚本> <原参数> --no-preflight --detach-done`。
 
     为什么要这个标记：子进程再 detach 一次就会无限生小进程 —— 它是**内部**开关，不该给人用。
+    ★ 为什么补 `--no-preflight`（T-G92）：父进程**已经**做过四道前置检查了（其中登录自检是真发一条
+    CLI 请求，十几秒），子进程再查一遍纯属浪费；输入里已有的也要去掉，只留**恰好一个**。
+    ★ 为什么必须带**脚本自己**（T-G92 真机证据 (b) 逮到的第二个洞）：旧写法是
+    `[python, -X, utf8, *args]` —— 少了脚本路径，子进程其实是 `python --card 900 …`，
+    python 把 `--card` 当成**自己的**选项 → `Unknown option: --card`，**从来没真扔出去过**。
     """
-    return [sys.executable, "-X", "utf8", *[a for a in argv if a != "--detach"], "--detach-done"]
+    return [sys.executable, "-X", "utf8", str(Path(__file__).resolve()),
+            *[a for a in argv if a not in ("--detach", "--no-preflight")],
+            "--no-preflight", "--detach-done"]
 
 
 def spawn_detached(argv: list[str], log_path: Path) -> int:
@@ -659,29 +666,42 @@ def main() -> int:
     if not args.spec:
         print("[FAIL] 派活得给 --spec（卡规格文件）；只看状态可以加 --status", file=sys.stderr)
         return 2
-    if args.detach and not args.detach_done:
-        # ★ 长跑/过夜：把**自己**再启动成一个脱离窗口的进程，然后立刻返回
-        detach_log = ROOT / "gates" / "diag" / f"wb-{args.card}.dispatch.log"
-        pid = spawn_detached(detached_argv(sys.argv[1:]), detach_log)
-        print(f"[扔 ] 已扔出去单独跑（pid {pid}），我的窗口关了它照样跑")
-        print(f"[看 ] 进度：python -X utf8 tools/wb_dispatch.py --card {args.card} --status")
-        print(f"[log ] {detach_log}")
-        return 0
-
     problems, log = preflight(
         args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
         cli_override=args.cli,
     )
-    node, cli = paths(args.cli)
-    max_turns = args.max_turns or max_turns_default(args.read_only)
-    initial_cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode,
-                                max_turns=max_turns, autocompact=args.autocompact)
 
     if problems:
         print("[FAIL] 不派活 —— 前置检查没过：", file=sys.stderr)
         for item in problems:
             print(f"  · {item}", file=sys.stderr)
+        # ★ 没过也要留痕（T-G92）：过夜跑时「没跑」和「跑挂了」必须一眼分得清
+        #   —— `--status` 读的就是这个文件。旧写法在 detach 那条路上什么都不写。
+        verdict = verdict_file_for(log)
+        verdict.parent.mkdir(parents=True, exist_ok=True)
+        verdict.write_text(
+            f"card={args.card} 结束于={datetime.now().isoformat(timespec='seconds')}\n"
+            "判决：前置检查没过 → 没派活\n"
+            f"原因：{'；'.join(problems)}\n",
+            encoding="utf-8")
         return 2
+
+    if args.detach and not args.detach_done:
+        # ★ 长跑/过夜：**前置检查已全过**，才把**自己**再启动成一个脱离窗口的进程，然后立刻返回。
+        #   ★ T-G92 更正：检查必须在**父进程**里先做完 —— 旧写法先 detach（父进程退 0）、
+        #   检查在**子进程**里做，于是"扔出去"看起来成功、其实前置检查没过（也没留判决）。
+        #   子进程补 `--no-preflight`：父进程已经查过登录，省掉那次真发请求的自检。
+        detach_log = ROOT / "gates" / "diag" / f"wb-{args.card}.dispatch.log"
+        pid = spawn_detached(detached_argv(sys.argv[1:]), detach_log)
+        print(f"[OK ] 前置检查全过 → 扔出去单独跑（pid {pid}），我的窗口关了它照样跑")
+        print(f"[看 ] 进度：python -X utf8 tools/wb_dispatch.py --card {args.card} --status")
+        print(f"[log ] {detach_log}")
+        return 0
+
+    node, cli = paths(args.cli)
+    max_turns = args.max_turns or max_turns_default(args.read_only)
+    initial_cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode,
+                                max_turns=max_turns, autocompact=args.autocompact)
 
     resume_sid = args.resume
     if resume_sid == "auto":

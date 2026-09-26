@@ -486,10 +486,39 @@ def test_detached_argv_strips_the_flag_and_marks_the_child() -> None:
     assert "--detach" not in out
     assert out[-1] == "--detach-done"
     assert "--card" in out and "002" in out and sys.executable in out
+    # ★ T-G92：父进程已经查过登录了，子进程补 `--no-preflight`（恰好一次）
+    assert out.count("--no-preflight") == 1
 
 
-def test_detach_throws_the_work_out_and_returns_immediately(monkeypatch, capsys) -> None:
-    """★ 长任务/过夜：`--detach` 只负责**扔出去**就返回（我的窗口关了它照样跑）。"""
+def test_detached_argv_adds_no_preflight_exactly_once() -> None:
+    """★ T-G92：子进程补 `--no-preflight`（父进程已做登录自检，省十几秒）—— **恰好一次**。
+
+    输入里已有的（人可能手填）要先去重，否则命令行里会出现两个同名开关。
+    """
+    once = wd.detached_argv(["--card", "002", "--spec", "s.md", "--detach"])
+    assert once.count("--no-preflight") == 1
+    twice = wd.detached_argv(["--card", "002", "--no-preflight", "--no-preflight", "--detach"])
+    assert twice.count("--no-preflight") == 1
+    assert twice[-1] == "--detach-done" and "--detach" not in twice
+
+
+def test_detached_argv_keeps_the_script_so_the_child_actually_runs() -> None:
+    """★ T-G92 真机证据 (b) 逮到的**第二个洞**：argv 少了**脚本路径**。
+
+    `python -X utf8 --card 900 …` 里 python 把 `--card` 当成**自己的**选项 → 子进程其实什么都没跑
+    （`Unknown option: --card`）。旧写法只 `[python, -X, utf8, *args]`，**从来没能真扔出去过** ——
+    T-G91 的探针只验了 `spawn_detached()` 本身（用自造命令），没走 detach 这条 argv 拼装路。
+    """
+    out = wd.detached_argv(["--card", "900", "--detach"])
+    assert out[0] == sys.executable
+    assert out[1:3] == ["-X", "utf8"]
+    assert out[3] == str(Path(wd.__file__).resolve()), "解释器后面必须是脚本自己"
+    assert out[4:6] == ["--card", "900"]
+
+
+def test_detach_throws_the_work_out_and_returns_immediately(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 长任务/过夜：`--detach` 只需**扔出去**就返回（我的窗口关了它照样跑），前提是检查全过。"""
     seen: list[tuple[list[str], Path]] = []
 
     def fake_spawn(argv: list[str], log_path: Path) -> int:      # noqa: ANN001
@@ -504,8 +533,31 @@ def test_detach_throws_the_work_out_and_returns_immediately(monkeypatch, capsys)
     assert len(seen) == 1, "应当只扔一次"
     argv, log_path = seen[0]
     assert "--detach-done" in argv and "--detach" not in argv
+    assert argv.count("--no-preflight") == 1
     assert log_path.name == "wb-002.dispatch.log"
-    assert "4242" in out and "--status" in out
+    assert "4242" in out and "--status" in out and "前置检查全过" in out
+
+
+def test_detach_runs_preflight_in_the_parent_and_refuses_before_throwing(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★★ T-G92：`--detach` 的前置检查必须在**父进程**里先做完 —— 没过就退 2、绝不 detach。
+
+    旧写法先 detach 再（在子进程里）检查 → 父进程高高兴兴退 0，而检查其实没过；过夜之后
+    `--status` 只会说「判决：还没有」，**分不清"没跑"和"跑挂了"**。这一条就是那个洞的补丁。
+    """
+    thrown: list[list[str]] = []
+    monkeypatch.setattr(wd, "spawn_detached",
+                        lambda argv, log: thrown.append(list(argv)) or 4242)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "900",
+                                      "--spec", "没有这张卡.md", "--detach", "--execute"])
+    assert wd.main() == 2
+    assert thrown == [], "前置检查没过，一个子进程都不许扔"
+    err = capsys.readouterr().err
+    assert "前置检查没过" in err and "卡规格文件不存在" in err
+    verdict = sandbox / "gates" / "diag" / "wb-900.verdict.txt"
+    assert verdict.exists(), "没过也要留痕 —— 过夜后才分得清『没跑』和『跑挂了』"
+    body = verdict.read_text(encoding="utf-8")
+    assert "前置检查没过" in body and "没派活" in body and "卡规格文件不存在" in body
 
 
 def test_status_reads_files_only_and_needs_no_spec(tmp_path: Path, monkeypatch, capsys) -> None:
