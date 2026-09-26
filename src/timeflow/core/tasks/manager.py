@@ -1388,18 +1388,45 @@ def archive_entries(
     return entries
 
 
-def _write_myday_rank(conn: sqlite3.Connection, task_id: str, rank: int | None) -> None:
+class MydayConflictError(RuntimeError):
+    """myday 排序写撞上并发更新（乐观锁，T-G109）：快照里的 `version` 与库里的已不一致。
+
+    ★ 这是「报 409」的载体（卡 021 §2.9：重读重算重试一次仍撞 → 报 409 并带上原因）——
+    core 层不引 fastapi（全仓 core 不依赖 web 框架），「这个异常 → 409」的 HTTP 映射在
+    api 层做（卡 021 白名单只有本文件，映射那一行由集成者补，见复盘末尾的台账 gaps）。
+    语义照卡：**不许静默吞掉、不许无限重试** —— 内部只重读重算重试一次，再撞原样抛。
+    """
+
+
+def _write_myday_rank(
+    conn: sqlite3.Connection, task_id: str, rank: int | None, expected_version: int
+) -> None:
     """只改顺序号：**不动 `updated_at`**（换顺序不是"这条内容变了"），版本号照加。
 
-    ★ 这里必须自己提交（`move_doing` 里那份同样如此）：拖动/↑↓ 有**抛错**的分支
-    （落点不合法）—— 要是把提交留给最后那一步，那笔写就会**留在未提交的事务里**：
-    同一个连接上还攥着写锁，接下来任何一条读/写都会 `database is locked`
-    （T-G79 实测踩到，见 `复盘/拖拽排序-T-G79.md` §4）。
+    ★ T-G109 起这行 UPDATE **不再自己 commit**：整份调序计划（`_write_myday_plan`）是
+    一笔事务，任何一步抛错都整体 `rollback`（见那里的 docstring）—— 否则乐观锁在
+    半路咬中时，已写的那几行过期计划**已提交**、把号列写花（重号），重读重算拿到的
+    是被自己污染过的快照（卡 021 探针实测：leader=丙→甲前 时 follower 先写 丁/戊 两行
+    再撞，从脏快照重试算出 丙丁戊甲乙）。T-G79「写完不许早退」的防线**仍在**、只是
+    上移了一层：成功时 `place_myday` / `move_myday` 末尾 `commit()`，失败时
+    `_write_myday_plan` 里 `rollback()` —— 连接上始终不会挂着未提交的写。
+
+    ★ 乐观锁（卡 021 §2.9 裁定 ①）：`AND version = ?` 把「读→算→写」窗口焊死 ——
+    快照在写之前过期时这条 UPDATE **影响行数 0**，抛 `MydayConflictError` 交给
+    `_write_myday_plan` 回滚、再由调用方重读重算。`version` 在这里只被**比较**、
+    不会被额外多加（跨端合并按它判谁新，卡 021 §7-4）。
     """
-    conn.execute(
-        "UPDATE tasks SET myday_rank = ?, version = version + 1 WHERE id = ?", (rank, task_id)
+    cur = conn.execute(
+        "UPDATE tasks SET myday_rank = ?, version = version + 1 WHERE id = ? AND version = ?",
+        (rank, task_id, expected_version),
     )
-    conn.commit()
+    if cur.rowcount == 0:
+        row = conn.execute("SELECT version FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        actual = "（行已不在）" if row is None else str(row["version"])
+        raise MydayConflictError(
+            f"myday 排序撞上并发更新：写 {task_id} 时快照 version={expected_version}，"
+            f"库里已是 {actual} —— 这次拖拽建立在过期快照上"
+        )
 
 
 def _myday_sequence(conn: sqlite3.Connection) -> list[Task]:
@@ -1491,6 +1518,28 @@ def _myday_reserved_ranks(conn: sqlite3.Connection, items: list[Task]) -> set[in
     return {int(r["myday_rank"]) for r in rows if r["id"] not in visible}
 
 
+def _write_myday_plan(conn: sqlite3.Connection, items: list[Task], order: list[str]) -> None:
+    """把「要让顺序变成 `order`」的计划落库：**顺序没变就一个字节都不写**；变了只写排过号的那一截。
+
+    ★ T-G109：整份计划是**一笔事务** —— 任何一行写抛错（乐观锁咬中 / 数据库级错误）都
+    `rollback` 整笔撤掉再抛，已写的前几行**不留**（不然半路写下的过期计划已提交，
+    号列被写花、重试拿到的快照是被自己污染过的）。每一行都带版本守卫
+    （`_write_myday_rank` 的 `AND version = ?`，期望版本来自 `items` 这份快照）。
+    成功时不在这里提交 —— 由 `place_myday` / `move_myday` 末尾那一步 `commit()`
+    （与 T-G79「连接上不挂未提交的写」同一条防线，只是从逐行提交上移成整笔提交）。
+    """
+    if order == [it.id for it in items]:
+        return
+    reserved = _myday_reserved_ranks(conn, items)
+    by_id = {it.id: it for it in items}
+    try:
+        for task_id, rank in _myday_rank_plan(items, order, reserved).items():
+            _write_myday_rank(conn, task_id, rank, by_id[task_id].version)
+    except BaseException:
+        conn.rollback()
+        raise
+
+
 def _apply_myday_order(conn: sqlite3.Connection, items: list[Task], order: list[str]) -> None:
     """把今天清单调成 `order`：**顺序没变就一个字节都不写**；变了只写排过号的那一截。
 
@@ -1498,14 +1547,33 @@ def _apply_myday_order(conn: sqlite3.Connection, items: list[Task], order: list[
     把 `NULL` 变成显式 `1..N`，于是「没拖过」这一态被一次空转抹掉，跨端合并里 `version`
     白涨（真改动更容易输给空写）。详见 `复盘/幂等写库-T-G86.md`。
 
-    提交仍由调用方那一步做（与 `place_myday` / `move_myday` 的写法一致；
-    `_write_myday_rank` 自己也会提交，是"写完不许早退"那道防线，这里不冲突）。
+    提交由调用方那一步做（与 `place_myday` / `move_myday` 的写法一致；T-G109 起整份计划
+    是一笔事务，抛错整笔回滚，见 `_write_myday_plan`）。
+
+    ★ 本函数同时是**并发用例钉交错时机的接缝**（`tests/test_myday_version_guard_line.py`
+    把它换成带屏障的包装）：所以冲突重试（T-G109）不再过这里，直接调 `_write_myday_plan`。
     """
-    if order == [it.id for it in items]:
-        return
-    reserved = _myday_reserved_ranks(conn, items)
-    for task_id, rank in _myday_rank_plan(items, order, reserved).items():
-        _write_myday_rank(conn, task_id, rank)
+    _write_myday_plan(conn, items, order)
+
+
+def _place_myday_order(
+    items: list[Task], task_id: str, before_id: str | None
+) -> list[str] | None:
+    """由一份清单快照算出「把 `task_id` 拖到 `before_id` 前面」的目标顺序。
+
+    返回 `None` = 原地不动（拖到自己前面，幂等、一行都不写）；落点不在清单里 → ValueError。
+    """
+    _check_in_myday(items, task_id)
+    rest = [item.id for item in items if item.id != task_id]
+    if before_id is None:
+        target = len(rest)                        # 末尾
+    elif before_id == task_id:
+        return None                               # 拖到自己前面 = 不动（也不写）
+    elif before_id in rest:
+        target = rest.index(before_id)
+    else:
+        raise ValueError("落点不在「今天」清单里（那条可能已经完成 / 移出今天 / 被删了）")
+    return rest[:target] + [task_id] + rest[target:]
 
 
 def place_myday(conn: sqlite3.Connection, task_id: str, before_id: str | None) -> Task:
@@ -1515,23 +1583,40 @@ def place_myday(conn: sqlite3.Connection, task_id: str, before_id: str | None) -
     或者列表里有些条目被隐藏，都不会让落点错位。
     边界：拖到自己前面 = 原地不动（幂等，**一行都不写库**）；目标不在今天清单里 → ValueError
     （**不静默**，否则用户会看到"拖了没反应"却不知道为什么）；任务不在今天清单里 → ValueError。
+
+    ★ T-G109 乐观锁（卡 021 §2.9 裁定 ①）：「读→算→写」不是原子的，快照可能被另一路并发
+    拖拽顶过期 —— 写的时候 `_write_myday_rank` 用 `AND version = ?` 比较，撞了
+    （`MydayConflictError`）就**重读重算、重试一次**；再撞原样抛出（报 409 的载体，
+    **不静默吞、不无限重试**）。重试直接落新计划（`_write_myday_plan`）、不再过
+    `_apply_myday_order` —— 那是"照着已算好的顺序写"的入口、也是并发用例钉交错时机的
+    接缝，重进它没有语义差别，却会让那道为两方会合设计的屏障白等一个人。
     """
     items = _myday_sequence(conn)
     get_task(conn, task_id)                   # 不存在的任务先 404（与 `move_doing` 同一个次序）
-    _check_in_myday(items, task_id)
-    rest = [item.id for item in items if item.id != task_id]
-    if before_id is None:
-        target = len(rest)                        # 末尾
-    elif before_id == task_id:
-        return get_task(conn, task_id)            # 拖到自己前面 = 不动（也不写）
-    elif before_id in rest:
-        target = rest.index(before_id)
-    else:
-        raise ValueError("落点不在「今天」清单里（那条可能已经完成 / 移出今天 / 被删了）")
-    order = rest[:target] + [task_id] + rest[target:]
-    _apply_myday_order(conn, items, order)        # 顺序没变就不写；变了只写真变了的那几行
+    order = _place_myday_order(items, task_id, before_id)
+    if order is None:
+        return get_task(conn, task_id)
+    try:
+        _apply_myday_order(conn, items, order)        # 顺序没变就不写；变了只写真变了的那几行
+    except MydayConflictError:
+        items = _myday_sequence(conn)                 # 撞了 → 拿最新快照重算同一个落点意图
+        order = _place_myday_order(items, task_id, before_id)
+        if order is not None:
+            _write_myday_plan(conn, items, order)     # 再撞 → 原样抛给调用方（409 载体）
     conn.commit()
     return get_task(conn, task_id)
+
+
+def _swap_myday_order(items: list[Task], task_id: str, direction: str) -> list[str] | None:
+    """由一份清单快照算出「与相邻一条换位置」的目标顺序；`None` = 已在头/尾（幂等）。"""
+    _check_in_myday(items, task_id)
+    ids = [item.id for item in items]
+    index = ids.index(task_id)
+    swap = index - 1 if direction == "up" else index + 1
+    if swap < 0 or swap >= len(ids):
+        return None                               # 已在头/尾 = 不动（也不写）
+    ids[index], ids[swap] = ids[swap], ids[index]
+    return ids
 
 
 def move_myday(conn: sqlite3.Connection, task_id: str, direction: str) -> Task:
@@ -1540,19 +1625,24 @@ def move_myday(conn: sqlite3.Connection, task_id: str, direction: str) -> Task:
     拖拽是主路，↑↓ 是**不依赖指针**的等价入口（键盘 / 读屏 / 触屏不好拖的时候）——
     两者都落到同一份 `myday_rank` 上，所以"拖过之后再按 ↑↓"仍然对得上。
     已在头/尾 → 原地不动（幂等，不报错，**一行都不写库**）。
+
+    并发口径与 `place_myday` 相同（T-G109 乐观锁）：撞了重读重算重试一次，再撞抛
+    `MydayConflictError`（报 409 的载体）。
     """
     if direction not in ("up", "down"):
         raise ValueError("方向只能是 up / down")
     items = _myday_sequence(conn)
     get_task(conn, task_id)                   # 不存在的任务先 404（与 `move_doing` 同一个次序）
-    _check_in_myday(items, task_id)
-    ids = [item.id for item in items]
-    index = ids.index(task_id)
-    swap = index - 1 if direction == "up" else index + 1
-    if swap < 0 or swap >= len(ids):
-        return get_task(conn, task_id)        # 已在头/尾 = 不动（也不写）
-    ids[index], ids[swap] = ids[swap], ids[index]
-    _apply_myday_order(conn, items, ids)      # 只写真换了位置的那几行
+    order = _swap_myday_order(items, task_id, direction)
+    if order is None:
+        return get_task(conn, task_id)
+    try:
+        _apply_myday_order(conn, items, order)      # 只写真换了位置的那几行
+    except MydayConflictError:
+        items = _myday_sequence(conn)
+        order = _swap_myday_order(items, task_id, direction)
+        if order is not None:
+            _write_myday_plan(conn, items, order)   # 再撞 → 原样抛给调用方（409 载体）
     conn.commit()
     return get_task(conn, task_id)
 

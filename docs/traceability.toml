@@ -634,6 +634,42 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：A15（复核 `gates/diag/wb-review-T-G79.md` §2 尾注 183-186：文件名就叫 inspect.py，任何从该目录起跑的脚本 import fastapi 必炸 `cannot import name 'isasyncgen'`）+ A22/D18（两份草稿自身尾注自称已完成使命）。**做了什么**：① `inspect.py` 按主控裁定**改名** `diag_inspect.py`（内容一字未动，改名即消除遮蔽标准库这个根因）；② 两份草稿（`round-plan-T-G92-G93.md`、`T-G93-ledger-draft.md`）**删除**——删前核过 `复盘/并发两卡-T-G92T-G93.md` 已承接其教训（尤其「按文件复制、不是按分支合并」那条）。验证先红后绿：改名前后各跑一次同目录探针，`inspect.__file__` 从 `gates/diag/inspect.py` 变回标准库、`import fastapi` 从 ImportError 变 OK。改名先查引用：`grep inspect.py` 命中全是文档、无脚本按名引用。**边界（如实写）**：三个目标文件都在 gitignored 的 `gates/diag/` 下（`.gitignore:71`）→ 改动不进 git，本卡唯一被跟踪产物是本复盘；clone 后仍见旧状态，是预期。本卡不产生机器可验断言（纯清理），evidence 只钉复盘。**没动的**：`docs/**`、`tools/**`、`tests/**`、`scripts/**`、`src/**`、其它复盘（含 `复盘/并发两卡-T-G92T-G93.md`）、`gates/` 其它、真实库/备份、三个外来未跟踪文件。"
 
+[entries."T-G111"]
+id = "T-G111"
+title = "验续跑路径下 tool_durations 不跨轮串（每轮阈值只吃本轮 log）—— 补一条经过重试循环的判据 + 真机续跑证据"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/续跑跨轮耗时-T-G111.md",
+  "test:test_wb_dispatch.py",
+  "text:tools/wb_dispatch.py::lines: list[str] = []",
+]
+gaps = "**为什么有这张卡**：A11；复核-1969b46.md §7.2（383-385 行）「没跑，没验证」。**做了什么**：判据落在 tests/test_wb_dispatch.py 末尾 T-G111 一节（纯函数层两份合成 log + 真机层真起两轮子进程走 main() 重试循环）；真机续跑压缩阈值如实写（--timeout 6 / --stall-seconds 2 / --poll-seconds 0.2；第 1 轮 3600 秒调用把自己那轮阈值抬到封顶 → 第 1 轮靠超时掐，超时同样触发续跑）。**反证（先红后绿）**：把 run_worker 改坏成第 2 轮从第 1 轮 lines 起步 → 真机用例红（第 2 轮判决变「超时」而非「卡死」）；还原后 ruff 全过、81 passed（既有 79 一条没红）；原始输出见复盘 §5。**边界（如实写）**：实测不串（读代码的结论验过成立）；续跑由桩命令驱动，真 CLI 的 --resume 链路不在本卡；判决文本按 %.1f 分钟落盘、秒级阈值读作 0.0 分钟（断言按正则换算）；A10 封顶那一半不在本卡。**没动的**：阈值公式、wb_status.py、判据整段重解析的既定口径（run_worker docstring）、should_resume、共享文件。"
+
+[entries."T-G113"]
+id = "T-G113"
+title = "续跑日志的面板合并口径：wb-<卡>.r2.jsonl 从「一个文件一行、按 ctime 排」改成口径 B「一行一轮 + 按卡分组排序、行标识带第 N 轮」（T-G93.gaps「合并口径未定，故意没做」）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/续跑日志合并-T-G113.md",
+  "text:tools/wb_dash.py::_split_card",
+  "test:test_wb_dash.py",
+]
+gaps = "**为什么有这张卡**：盘点 A18；T-G93.gaps「合并口径未定，故意没做」+ wb_dash.py 文件头自注。**做了什么**：主控裁定的口径 B —— 新增 `_split_card` 按文件名后缀拆（卡号, 轮次），`discover_logs` 排序键从 st_ctime 改成 (卡号, 轮次)，行加 `round` 字段、页面加「第 N 轮」pill；「同一张卡」粒度 = 同卡号 + 同树，跨树同号仍分开。**反证（先红后绿）**：突变 1（退回 ctime 排序）与突变 2（轮次按字符串排）各 3 条新用例红，还原后 20 passed（既有 16 条没动）。**边界（如实写）**：没做旧轮回看（口径 B 一行一轮，旧轮本就有行，无需回看交互）；没做跨轮累加（口径 C，主控已裁定语义错误）；不同卡之间的次序从创建先后变成卡号序（有意）。**没动的**：只读原则、状态四档口径与顺序、import wb_dispatch 那条线、wb_dispatch.py、wb_status.py、只扫 .wt/<一层>/gates/diag/ 的边界。"
+
+[entries."T-G109"]
+id = "T-G109"
+title = "myday 拖拽无版本守卫：验证并发丢更新/重号（A8）成立，按主控裁定 ① 加乐观锁"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/myday版本守卫-T-G109.md",
+  "text:src/timeflow/core/tasks/manager.py::AND version = ?",
+  "test:test_myday_version_guard_line.py",
+]
+gaps = "**为什么有这张卡**：A8；wb-review-T-G79.md §3「只是怀疑，没验」。**做了什么**：屏障交错两线程各持独立连接直调 place_myday —— 复现成立（重号 {1,2,2,3,4} 与整段丢更新两形态）；按主控 §2.9 裁定 ① 落地乐观锁：UPDATE 加 AND version = ?、撞了重读重算重试一次、再撞抛 MydayConflictError（带原因）；另把整份调序计划原子化（半路撞守卫时逐行已提交的过期计划会把号列写花、重试拿脏快照 —— 探针实测逼出，rollback 整笔撤掉）。**反证（先红后绿）**：先红 1 failed（重号 {1,2,2,3,4}）→ 后绿 2 passed 且并发用例 10 连跑全绿；突变（删 AND version = ?）3 连跑全 FAILED，还原全绿；回归 25 passed、test_unit_of_work 11 passed、ruff 过。**边界（如实写）**：「报 409」只到 core 层 —— HTTP 映射要动 app.py（白名单外），映射未补前重试仍撞的路径经 HTTP 显 500，待主控定；跨端 LWW（A7）不在本卡；复现走 core 直调未走 HTTP；worktree 跑 pytest 需把本树 src 放 PYTHONPATH 最前（否则 editable 安装解析到主树、测的是主树的码）。**没动的**：tests/test_unit_of_work.py、三份既有 myday 测试断言、排序口径、reserved-rank 逻辑、version 语义、tools/**、真实库/备份、三个外来未跟踪文件。"
+
 [entries."T-G107"]
 id = "T-G107"
 title = "共享文档漂移：把 D12/D13/D14/D15/D16/D9 里过时的字改对（带日期与原因，不整条销账）"

@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import locale
 import os
+import re
 import subprocess
 import sys
 import time
@@ -1177,3 +1178,93 @@ def test_spawn_detached_keeps_detached_but_adds_no_window(tmp_path: Path, monkey
     flags = seen["creationflags"]
     assert flags & subprocess.DETACHED_PROCESS
     assert flags & subprocess.CREATE_NO_WINDOW
+
+
+# ====================================== 续跑跨轮耗时：每轮阈值只吃本轮 log（T-G111 = 外包卡 023）
+#
+# 为什么有这一段（盘点 A11 / 复核-1969b46 §7.2，383-385 行）：`--retry` / `--resume` 续跑时
+# 重试循环每轮给 `run_worker` 一份**新的** log（第 2 轮起 `wb-<卡>.r{n}.jsonl`），`run_worker`
+# 的 `lines` 只由本轮的 `_pump` 喂 —— 按读代码，旧轮的 389 秒长调用**不该**抬高新轮的
+# `stall_threshold_seconds`。但复核明说「没跑，没验证」—— 这一段就是把「经过重试循环」
+# 的这一层钉住：纯函数层（两份合成 log）+ 真机层（真起两轮子进程、真走 main() 的重试循环）。
+
+
+def _stub_literal(events: list[dict], sleep_after: float) -> list[str]:
+    """桩命令：把 `events` **按字面**吐出来（`__timestamp` 已是给好的值，**不**改写成现在），
+    然后装死。
+
+    ★ 与 `_stub_timestamped()`（全部打成「现在」）相对照 —— 要造「3600 秒前发起、刚完成
+    的长调用」这种**跨时间**的现场，两个 `__timestamp` 必须由调用方分别给好。
+    ★ 卡 023 §7 的坑：`tool_use` 必须带 `id`、事件必须带 `__timestamp`，否则走「认不出
+    在飞 / 算不出耗时」的保守路径 = 假绿（复核 1969b46 §2.2 点名过）。
+    """
+    payload = json.dumps(events, ensure_ascii=False)
+    code = "\n".join([
+        "import json, time",
+        f"events = json.loads({payload!r})",
+        "for ev in events:",
+        "    print(json.dumps(ev, ensure_ascii=False), flush=True)",
+        f"time.sleep({sleep_after})",
+        "",
+    ])
+    return [sys.executable, "-X", "utf8", "-c", code]
+
+
+def test_threshold_of_a_new_round_is_not_raised_by_the_previous_log() -> None:
+    """★ 纯函数层（§2.1）：两份合成 log —— 第 1 轮一次 3600 秒的**已完成**调用，
+    第 2 轮只有秒级短调用 → 第 2 轮的阈值**只反映第 2 轮**（几秒，不是 60 分钟封顶）。
+    """
+    r1 = [_tool_use_event("Bash", tid="old", ago=3600), _tool_result_event(tid="old", ago=1)]
+    assert abs(wd.tool_durations(r1)[0] - 3599) < 5          # 第 1 轮那条长调用真在
+    r2 = [_tool_use_event("Read", tid="n1", ago=2), _tool_result_event(tid="n1", ago=1)]
+    durations = wd.tool_durations(r2)
+    assert durations and max(durations) < 60, durations      # 旧轮的 3600 秒没串进来
+    threshold = wd.stall_threshold_seconds(stall_seconds=2, inflight=None, durations=durations)
+    assert threshold < 60, threshold                         # ≈ max(2, 2.5×1)
+    verdict = wd.watchdog_verdict(silent_seconds=600, signatures=[], stall_seconds=2, lines=r2)
+    assert "卡死" in verdict and "这一次的阈值 0." in verdict, verdict
+    # 对照（写清「串了会长什么样」，不是断言目标）：把旧轮并进 → 阈值顶到 60 分钟封顶
+    merged = wd.stall_threshold_seconds(stall_seconds=2, inflight=None,
+                                        durations=wd.tool_durations(r1 + r2))
+    assert merged == float(wd.ADAPTIVE_MAX_SECONDS)
+
+
+def test_retry_round_threshold_eats_only_its_own_log(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★★ 真机层（§2.1 + §2.2）：真起两轮子进程、真走 main() 的重试循环 ——
+    第 1 轮塞一条 **3600 秒的已完成调用**（它把**自己这一轮**的阈值抬到 60 分钟封顶，所以
+    第 1 轮用 `--timeout 6` 掐 —— 超时同样触发续跑，这是 T-G91 定的「超时不是失败」）
+    → 自动续跑第 2 轮 → 第 2 轮只有秒级调用，判决里的「这一次的阈值」必须**只反映
+    第 2 轮**（几秒级）；若被旧轮抬到 3600 秒，第 2 轮等不到「卡死」、只能再等一个超时。
+
+    ★ 突变检验的靶子（§2.3）：把 `run_worker` 改坏成「第 2 轮从第 1 轮的 lines 起步」
+    → 第 2 轮阈值被旧轮抬到 3600 秒 → 判决是「超时」不是「卡死」→ 本条**红**。
+    ★ 压缩阈值如实写（T-G94 先例）：`--timeout 6`、`--stall-seconds 2`、`--poll-seconds 0.2`。
+    """
+    r1_events = [
+        {"type": "system", "subtype": "init", "session_id": "sid-tg111"},
+        json.loads(_tool_use_event("Bash", tid="old", ago=3600)),
+        json.loads(_tool_result_event(tid="old", ago=1)),
+    ]
+    r2_events = [
+        json.loads(_tool_use_event("Read", tid="n1", ago=2)),
+        json.loads(_tool_result_event(tid="n1", ago=1)),
+    ]
+    monkeypatch.setattr(wd, "build_command", lambda *a, **k: _stub_literal(r1_events, 120))
+    monkeypatch.setattr(wd, "resume_command", lambda *a, **k: _stub_literal(r2_events, 120))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "023", "--spec", "spec.md",
+                                      "--execute", "--retry", "1", "--timeout", "6",
+                                      "--stall-seconds", "2", "--poll-seconds", "0.2",
+                                      "--heartbeat-seconds", "1"])
+    started = time.monotonic()
+    assert wd.main() == 6                                    # 第 2 轮被掐 → 退 6
+    elapsed = time.monotonic() - started
+    assert elapsed < 30, f"两轮合计应 ~10 秒（6 超时 + ~3 卡死），实际 {elapsed:.1f} 秒"
+    out = capsys.readouterr().out
+    assert "续跑" in out                                     # 真走了自动续跑
+    v1 = (sandbox / "gates" / "diag" / "wb-023.verdict.txt").read_text(encoding="utf-8")
+    v2 = (sandbox / "gates" / "diag" / "wb-023.r2.verdict.txt").read_text(encoding="utf-8")
+    assert "超时" in v1, v1            # 第 1 轮：阈值被自己的长调用抬着 → 只能靠超时掐
+    assert "卡死" in v2, v2            # 第 2 轮：阈值很小 → 看门狗真掐（不是超时）
+    hit = re.search(r"这一次的阈值 ([\d.]+) 分钟", v2)
+    assert hit and float(hit.group(1)) * 60 < 60, v2         # 几秒级，不是 60 分钟

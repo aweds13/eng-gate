@@ -13,7 +13,9 @@
 状态文件本身在 gitignored 目录里。多树只扫 `<仓库根>/gates/diag/` 与本仓库根下的
 `<仓库根>/.wt/*/gates/diag/`；从**某棵 worktree 内部**运行时，根是那棵 worktree，
 找得到它自己的 `gates/diag/`、找**不到**兄弟 worktree（面板的常规跑法是从主工作区起）。
-续跑日志（`wb-<卡>.r2.jsonl`）按文件各占一行，不按卡合并（合并口径未定）。
+续跑日志（`wb-<卡>.r2.jsonl`）**一行一轮，按卡分组排序**（T-G113，口径 B）：
+同一张卡的各轮挨着、按文件名里的轮次后缀（`r2`/`r3`）排，行里标注「第 N 轮」；
+行模型不变（不做跨轮合并/累加 —— 面板是状态面板，不是统计）。
 
 ★ 判卡死的阈值**不再硬写**（T-G97）：有工具在飞时静默是**预期**的（全量门禁 ~4 分钟、
 冷缓存 worktree 里 `ui_flow` 十几分钟），旧写法会把正常的长调用误标成「可能卡死」。
@@ -25,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -102,16 +105,34 @@ def _tree_dirs(root: Path) -> list[tuple[str, Path]]:
     return trees
 
 
+_ROUND_SUFFIX = re.compile(r"^(?P<card>.+?)\.r(?P<n>\d+)$")
+
+
+def _split_card(name: str) -> tuple[str, int]:
+    """文件名里的卡标识拆成 (卡号, 第几轮)：`004.r2` → (`004`, 2)；`004` → (`004`, 1)。
+
+    轮次只认文件名后缀（`r2`/`r3` 本来就是单调的）—— ★ 不拿 `st_ctime` 当"第几轮"：
+    Windows 上 ctime 是创建时间、复制/覆盖会重置（卡 §7-1）。
+    """
+    m = _ROUND_SUFFIX.match(name)
+    if m:
+        return m.group("card"), int(m.group("n"))
+    return name, 1
+
+
 def discover_logs(root: Path) -> list[tuple[str, str, Path]]:
     """(树名, 卡标识, log 路径) —— 多卡多树一次找齐。
 
-    卡标识 = 文件名里的卡号（含 `.r2` 这类续跑后缀，续跑按文件各占一行、不按卡合并）。
+    卡标识 = 文件名里的卡号（含 `.r2` 这类续跑后缀）。★ T-G113（口径 B）：
+    一棵树内按 (卡号, 轮次) 排 —— 同一张卡的各轮**挨着、按轮次排**，不再按 ctime。
     """
     found: list[tuple[str, str, Path]] = []
     for tree, diag in _tree_dirs(root):
         if not diag.is_dir():
             continue
-        for log in sorted(diag.glob("wb-*.jsonl"), key=lambda p: p.stat().st_ctime):
+        key = lambda p: _split_card(  # noqa: E731 —— 单行排序键，犯不上 def
+            p.name.removeprefix("wb-").removesuffix(".jsonl"))
+        for log in sorted(diag.glob("wb-*.jsonl"), key=key):
             card = log.name.removeprefix("wb-").removesuffix(".jsonl")
             found.append((tree, card, log))
     return found
@@ -123,6 +144,7 @@ def card_state(root: Path | None = None) -> list[dict]:
     now = time.time()
     rows: list[dict] = []
     for tree, card, log in discover_logs(root):
+        _base, rnd = _split_card(card)
         st = log.stat()
         verdict = log.with_suffix(".verdict.txt")
         heartbeat = log.with_suffix(".heartbeat.txt")
@@ -146,6 +168,8 @@ def card_state(root: Path | None = None) -> list[dict]:
             # 跨树时带上树名（如 `004@.wt/004`），免得两张卡同号时看串。
             "card": f"{card}@{tree}" if tree else card,
             "tree": tree,
+            # ★ T-G113（口径 B）：续跑第几轮（无 `.rN` 后缀 = 第 1 轮）；「第 N 轮」标识靠它。
+            "round": rnd,
             "log": log.name,
             "state": state,
             "color": color,
@@ -202,7 +226,8 @@ async function tick(){
   let h='<table><tr><th>卡</th><th>状态</th><th>已跑</th><th>回合</th><th>工具</th><th>报错</th>'+
         '<th>文件</th><th>静默</th><th>在跑 / 阈值</th><th>模型</th><th>最后一步</th></tr>';
   for(const c of d.cards){
-    h += `<tr><td><b>${c.card}</b><div class="dim small">${c.log} · ${c.size_kb} KB`+
+    h += `<tr><td><b>${c.card}</b> <span class="pill small">第 ${c.round} 轮</span>`+
+         `<div class="dim small">${c.log} · ${c.size_kb} KB`+
          `${c.session?' · 会话 '+c.session:''}</div></td>`+
          `<td class="${c.color}">${c.state}</td><td>${c.elapsed_min} 分</td><td>${c.turns}</td>`+
          `<td>${c.tool_calls}</td><td>${c.errors}</td><td>${c.files_total}</td>`+

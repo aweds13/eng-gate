@@ -11,6 +11,10 @@
 `inflight_tool()` / `tool_durations()` / `stall_threshold_seconds()` —— 本节后四条就是钉这个，
 **不许在面板里写第二份口径**（判据必须是派活器的：换掉它，面板结果要跟着变）。
 
+★ 台账号 T-G113（卡 025，口径 B）：续跑日志**一行一轮、按卡分组排序** —— 同一张卡的
+各轮挨着、按文件名里的轮次后缀（`r2`/`r3`）排（★ 不拿 ctime 排：Windows 上 ctime 是创建时间、
+复制/覆盖会重置），行里带 `round` 字段给「第 N 轮」标识用。行模型不变（不跨轮合并/累加）。
+
 ★ 只造假状态文件（`tmp_path`），**不起服务、不连网** —— 真机那一步是手工证据（卡 §5），不进测试。
 """
 
@@ -251,7 +255,8 @@ def test_api_state_json_shape(tmp_path: Path) -> None:
     for field in ("card", "tree", "log", "state", "color", "elapsed_min", "silent_s",
                   "events", "turns", "tool_calls", "tools", "errors", "files_total",
                   "model", "session", "heartbeat", "verdict", "last", "final", "size_kb",
-                  "inflight", "threshold_min"):     # ★ T-G97 新增两字段（只加不改）
+                  "inflight", "threshold_min",      # ★ T-G97 新增两字段（只加不改）
+                  "round"):                         # ★ T-G113 新增（只加不改）：续跑第几轮
         assert field in card
 
 
@@ -259,3 +264,54 @@ def test_no_cards_gives_empty_table_not_crash(tmp_path: Path) -> None:
     """一条 wb-*.jsonl 都没有（比如刚开工）→ 空表，不许崩。"""
     assert wb_dash.card_state(tmp_path) == []
     assert wb_dash.api_state(tmp_path)["cards"] == []
+
+
+# -------------------------------------- 续跑分组排序 + 第 N 轮（T-G113，口径 B）
+
+
+def test_rerun_rounds_grouped_by_card_and_sorted_by_round(tmp_path: Path) -> None:
+    """★ 本卡要点：同一张卡的各轮**挨着、按轮次排**，与创建先后无关。
+
+    故意按 005 → 004.r3 → 004 → 004.r2 的顺序造文件：若还按 ctime 排（旧口径），
+    顺序就是创建序 → 这条红；按 (卡号, 轮次) 排才是 004 的三轮挨着、升序、然后 005。
+    """
+    _card(tmp_path, "005")
+    _card(tmp_path, "004.r3")
+    _card(tmp_path, "004")
+    _card(tmp_path, "004.r2")
+    rows = wb_dash.card_state(tmp_path)
+    assert [r["card"] for r in rows] == ["004", "004.r2", "004.r3", "005"]
+    assert [r["round"] for r in rows] == [1, 2, 3, 1]
+
+
+def test_round_suffix_sorted_numerically_not_lexically(tmp_path: Path) -> None:
+    """轮次按**数字**排：r2 要在 r10 前面（按字符串排 'r10' < 'r2' → 这条红）。"""
+    _card(tmp_path, "007.r10")
+    _card(tmp_path, "007.r2")
+    rows = wb_dash.card_state(tmp_path)
+    assert [r["card"] for r in rows] == ["007.r2", "007.r10"]
+    assert [r["round"] for r in rows] == [2, 10]
+
+
+def test_round_defaults_to_one_and_unparsed_suffix_is_first_round(tmp_path: Path) -> None:
+    """无后缀 = 第 1 轮；形如 `.rx` 的怪后缀**不**当轮次解析（保守：整个当卡号、第 1 轮）。"""
+    _card(tmp_path, "008")
+    _card(tmp_path, "009.rx")
+    rows = {r["card"]: r for r in wb_dash.card_state(tmp_path)}
+    assert rows["008"]["round"] == 1
+    assert rows["009.rx"]["round"] == 1
+
+
+def test_same_card_number_in_different_trees_stays_separate(tmp_path: Path) -> None:
+    """★ 跨树的**同号卡不是同一张卡**（T-G93 立标识的原因）：分组只在**同一棵树内**发生。
+
+    主树 004 有两轮、`.wt/004` 里另有一张 004 —— 主树的两轮挨着在前，
+    worktree 那张带 `@.wt/004` 标识、自己一轮，绝不与主树的合并/插进去。
+    """
+    _card(tmp_path, "004.r2")
+    _card(tmp_path, "004")
+    _card(tmp_path, "004", tree=".wt/004")
+    rows = wb_dash.card_state(tmp_path)
+    assert [r["card"] for r in rows] == ["004", "004.r2", "004@.wt/004"]
+    assert [r["round"] for r in rows] == [1, 2, 1]
+    assert [r["tree"] for r in rows] == ["", "", ".wt/004"]
