@@ -44,6 +44,19 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
      让"它还在动"从猜测变成看得见的事实。
 两个默认值按用户 2026-09-26 的决定：`--autocompact 1m`（CLI 钳位 100k–1M）、
 `--effort` **不加**（保持默认 High）；两条都对着 CLI 2.158.0 的 `--help` 核过。
+
+★ 稳定化（T-G90，用户点名「尽量把活给 WorkBuddy，增强稳定性」）：外包最大的风险不是"干得慢"，
+而是**干到一半断了、然后从头再来**（卡 002 那轮花了 14.2M input tokens）。所以这里补三件：
+  ① **续跑**：不再传 `--no-session-persistence`，跑完把 `session_id` 落到
+     `gates/diag/wb-<卡>.session.txt`；`--resume <id>`（或 `--resume auto` 读那个文件）带着**同一个
+     会话**接着干 —— 实测首轮"记住 42"、`--resume` 后问它 → 回 `42`，`session_id` 不变；
+  ② **自动续跑**：`--retry N`（默认 1）—— 卡死 / 超时 / 没跑完时**自动**带同一会话再来一轮，
+     每轮一个 log（`wb-<卡>.r2.jsonl`…，证据不互相盖）；
+     ★ **只对"被打断"续，不对"空转"续**：空转是原地打转，续跑只会让它接着转（那正是看门狗要掐的）；
+  ③ **铁律进系统提示**：`--append-system-prompt` 把八条铁律钉进**系统提示**（不再只靠开场白那句 ——
+     开场白会随着上下文压缩越来越远，系统提示还在）；规矩与卡规格冲突时**以卡规格为准**。
+边界（如实写）：会话会落在 `~/.codebuddy/projects/` 下**慢慢堆积**（换来的是能续跑）；续跑时
+工人会重新看到之前的上下文（token 照花）—— 所以它省的是"重做一遍的活"，不是"重读一遍的钱"。
 """
 
 from __future__ import annotations
@@ -95,6 +108,23 @@ REPEAT_NEED = 5                  # 同一件事在里面出现几次算空转
 HEARTBEAT_SECONDS = 120          # 心跳行间隔
 POLL_SECONDS = 5.0               # 看门狗多久醒一次
 SCENE_LINES = 6                  # 掐掉时报最后几步
+DEFAULT_RETRIES = 1              # 被中断后自动带同一会话续跑几次
+
+# ---------------------------------------------------------------- 八条铁律（进**系统提示**，T-G90）
+# 为什么进系统提示而不是只写在开场白里：工人换轮次 / 上下文被自动压缩之后，开场白会越来越远，
+# 系统提示还在。★ 它与卡规格冲突时**以卡规格为准** —— 卡才是"这一轮的口径"。
+IRON_RULES = (
+    "你是这个仓库的外包工人：主控写卡、你干活、主控复核。八条铁律："
+    "① 以卡规格为准：能改哪些文件、要不要跑门禁、能不能提交，卡里写了就照卡办；"
+    "② 只在卡的白名单内改文件 —— 越界 = 这一轮作废；"
+    "③ 不许假完成：说「做完了」必须给出可复现的命令与输出（先跑红、再跑绿）；"
+    "④ 门禁不过不许提交；卡要求提交时，提交信息末尾四行 trailer 一行不许少"
+    "（Task/Refs/Ledger/Gates）；"
+    "⑤ 一写一读：工作区归你，别人的未提交改动一个字都不许碰；"
+    "⑥ 禁区：真实数据库、备份目录、别人的未跟踪文件；"
+    "⑦ 拿不准口径就停下、在回报里说明，别自己定产品决策；"
+    "⑧ 按卡的回报格式回报，边界（没做到的部分）如实写、不假装。"
+)
 
 OPENING = (
     "读 复盘/交接-重构进度.md + 复盘/长任务执行协议.md + 复盘/新窗口交接卡.md + "
@@ -154,8 +184,70 @@ def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
         "--max-turns", str(max_turns),
         # 用户 2026-09-26 定：上下文窗口按 1M 自动压缩（`--effort` 不加 = 保持默认 High）
         "--autocompact", autocompact,
-        "--no-session-persistence", "-y",
+        # ★ 八条铁律进**系统提示**（T-G90）：不再只靠开场白那句（压缩之后它就很远了）
+        "--append-system-prompt", IRON_RULES,
+        # ★ 不再传 `--no-session-persistence`（T-G90）：会话要留着，才能 `--resume` 续跑
+        "-y",
     ]
+
+
+def resume_command(node: Path, cli: Path, session_id: str, prompt: str, model: str,
+                   permission_mode: str = DEFAULT_PERMISSION_MODE, *,
+                   max_turns: int = DEFAULT_MAX_TURNS_WRITE,
+                   autocompact: str = DEFAULT_AUTOCOMPACT) -> list[str]:
+    """带着**同一个会话**接着跑（`--resume <sessionId>`）—— 中断不等于白干。
+
+    实测（T-G90 探针）：首轮 `-p 「请记住一个数字：42」` → 回「记下了」；
+    `--resume <同一个 id>` 再问「我刚才让你记的数字是多少」→ 回 **42**，且 session_id 没变。
+    """
+    return [
+        str(node), str(cli), "--resume", session_id, "-p", prompt,
+        "--model", model, "--output-format", "stream-json",
+        "--permission-mode", permission_mode,
+        "--max-turns", str(max_turns),
+        "--autocompact", autocompact,
+        "--append-system-prompt", IRON_RULES,
+        "-y",
+    ]
+
+
+def session_file_for(log: Path) -> Path:
+    """会话 id 落在哪里 —— 中断之后 `--resume auto` 就从这儿读。"""
+    return log.with_suffix(".session.txt")
+
+
+def session_id_seen(lines: list[str]) -> str:
+    """从事件里取 `session_id`（取最后一个）—— 存下来，中断了才续得上。"""
+    sid = ""
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("session_id"):
+            sid = str(event["session_id"])
+    return sid
+
+
+def continuation_prompt(*, reason: str, scene: str, card: str) -> str:
+    """续跑时对工人说的话：说明为什么断的 + **别重做** + 把中断现场给它。"""
+    return (
+        f"上一轮你被中断了（{reason}）。现在接着干**同一张卡**（卡号 {card}）："
+        "先看 git status 与工作区里已有的改动，判断哪些**已经做完** —— ★ 不要重做已完成的部分；"
+        "卡规格与八条铁律都不变。干完按卡的回报格式回报。"
+        f"\n上一次中断时的现场（最后几步）：\n{scene}"
+    )
+
+
+def should_resume(reason: str, attempts_done: int, retries: int) -> bool:
+    """该不该带着同一会话续跑。
+
+    ★ 只对「被打断」续跑（卡死 / 超时 / 没跑完），**不对「空转」续跑**：空转是在原地打转，
+    续跑只会让它接着转 —— 那正是看门狗要掐掉的东西。没拿到会话 id 时也续不了（调用方判）。
+    """
+    if not reason or attempts_done > retries:
+        return False
+    return not reason.startswith("空转")
 
 
 # ================================================================ 反空转三道（T-G88）
@@ -320,8 +412,10 @@ def _pump(stream, log: Path, lines: list[str], lock: threading.Lock,
 def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_turns: int,
                watchdog: bool = True, heartbeat_seconds: int = HEARTBEAT_SECONDS,
                stall_seconds: int = STALL_SECONDS, poll_seconds: float = POLL_SECONDS,
-               printer: Callable[[str], None] = print) -> tuple[int, str, str]:
-    """真跑工人并且**盯着它** —— 返回 `(退出码, 掐掉/超时/撞上限的原因, 现场)`。
+               printer: Callable[[str], None] = print) -> tuple[int, str, str, str]:
+    """真跑工人并且**盯着它** —— 返回 `(退出码, 掐掉/超时/撞上限的原因, 现场, 会话 id)`。
+
+    第 4 项是给"续跑"用的（T-G90）：中断之后带着同一个会话接着干，而不是从头再来。
 
     为什么不是一句 `subprocess.run(stdout=file)`（T-G82 的老写法）：那样主控在它跑的那一小时里
     **什么都看不见** —— 卡死了在等、空转烧时间也在等，而这两种"等"都不该发生。
@@ -391,9 +485,11 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
     with lock:
         snapshot = list(lines)
 
+    sid = session_id_seen(snapshot)
     if reason:
-        return code, f"{reason} → {killed}", _scene(snapshot)
-    return code, cap_verdict(turns_seen(snapshot), max_turns) or finish_verdict(snapshot), ""
+        return code, f"{reason} → {killed}", _scene(snapshot), sid
+    return (code, cap_verdict(turns_seen(snapshot), max_turns) or finish_verdict(snapshot),
+            "", sid)
 
 
 def _scene(lines: list[str]) -> str:
@@ -460,6 +556,11 @@ def main() -> int:
                         help="看门狗多久醒一次（秒）")
     parser.add_argument("--no-watchdog", action="store_true",
                         help="关掉看门狗（卡死/空转不再自动掐；心跳仍在）")
+    parser.add_argument("--retry", type=int, default=DEFAULT_RETRIES,
+                        help="被中断（卡死/超时/没跑完）后自动带同一会话续跑几次"
+                             "（默认 1；0 = 不续）")
+    parser.add_argument("--resume", default="",
+                        help="带着同一会话接着跑：给 sessionId，或 auto（读 wb-<卡>.session.txt）")
     args = parser.parse_args()
 
     problems, log = preflight(
@@ -468,14 +569,22 @@ def main() -> int:
     )
     node, cli = paths(args.cli)
     max_turns = args.max_turns or max_turns_default(args.read_only)
-    cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode,
-                        max_turns=max_turns, autocompact=args.autocompact)
+    initial_cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode,
+                                max_turns=max_turns, autocompact=args.autocompact)
 
     if problems:
         print("[FAIL] 不派活 —— 前置检查没过：", file=sys.stderr)
         for item in problems:
             print(f"  · {item}", file=sys.stderr)
         return 2
+
+    resume_sid = args.resume
+    if resume_sid == "auto":
+        side = session_file_for(log)
+        resume_sid = side.read_text(encoding="utf-8").strip() if side.exists() else ""
+        if not resume_sid:
+            print(f"[FAIL] --resume auto 但没找到会话文件：{side}", file=sys.stderr)
+            return 2
 
     done_checks = "规格在 / 工作区干净 / log 未占用"
     if args.no_preflight:
@@ -484,38 +593,66 @@ def main() -> int:
         done_checks += " / 登录通"
     print(f"[OK ] 前置检查全过（{done_checks}）")
     print(f"[log ] {log}")
-    print(f"[cmd ] {' '.join(cmd[:4])} … --model {args.model} --output-format stream-json "
+    print(f"[cmd ] {' '.join(initial_cmd[:4])} … --model {args.model} --output-format stream-json "
           f"--permission-mode {args.permission_mode} --max-turns {max_turns} "
           f"--autocompact {args.autocompact}")
     guards = ("看门狗**关**（--no-watchdog）" if args.no_watchdog else
               f"看门狗：日志静默 {args.stall_seconds}s 或最近 {REPEAT_WINDOW} 次调用里同一件事"
               f"重复 {REPEAT_NEED} 次 → 掐")
-    print(f"[盯 ] {guards}；心跳每 {args.heartbeat_seconds}s；超时 {args.timeout}s")
+    print(f"[盯 ] {guards}；心跳每 {args.heartbeat_seconds}s；超时 {args.timeout}s；"
+          f"中断自动续跑 {args.retry} 次")
     if not args.execute:
         print("[dry ] 这是 dry-run；真想派活加 --execute")
         return 0
 
-    errlog = log.with_suffix(".stderr.txt")
-    code, reason, scene = run_worker(
-        cmd, log, errlog, timeout=args.timeout, max_turns=max_turns,
-        watchdog=not args.no_watchdog, heartbeat_seconds=args.heartbeat_seconds,
-        stall_seconds=args.stall_seconds, poll_seconds=args.poll_seconds,
-    )
-    print(f"[done] 工人退出码 {code}；stderr 见 {errlog.name}")
-    lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+    attempts, code, reason, scene, sid = 1, 0, "", "", resume_sid
+    while True:
+        log_k = log if attempts == 1 else log.with_name(f"wb-{args.card}.r{attempts}.jsonl")
+        if attempts == 1 and not sid:
+            cmd = initial_cmd
+        elif sid:
+            cmd = resume_command(node, cli, sid,
+                                 continuation_prompt(reason=reason or "上次被中断", scene=scene,
+                                                     card=args.card),
+                                 args.model, args.permission_mode,
+                                 max_turns=max_turns, autocompact=args.autocompact)
+        else:
+            print("[续 ] 没拿到 session id，续不了 → 只能重开一轮", file=sys.stderr)
+            cmd = initial_cmd
+        print(f"[跑 ] 第 {attempts} 次；log {log_k.name}")
+        code, reason, scene, new_sid = run_worker(
+            cmd, log_k, log_k.with_suffix(".stderr.txt"), timeout=args.timeout,
+            max_turns=max_turns, watchdog=not args.no_watchdog,
+            heartbeat_seconds=args.heartbeat_seconds, stall_seconds=args.stall_seconds,
+            poll_seconds=args.poll_seconds,
+        )
+        sid = new_sid or sid
+        if sid:                      # ★ 一拿到就落盘：这样中断之后 `--resume auto` 才用得上
+            session_file_for(log).write_text(sid, encoding="utf-8")
+        print(f"[done] 第 {attempts} 次：工人退出码 {code}；stderr 见 {log_k.name[:-6]}.stderr.txt")
+        if not should_resume(reason, attempts, args.retry):
+            break
+        attempts += 1
+        print(f"[续 ] 第 {attempts} 次：带同一会话接着干（原因：{reason}）", file=sys.stderr)
+
+    print(f"[会话] {sid or '（没见到 session_id）'}"
+          f"（落盘 {session_file_for(log).name}；续跑：--resume auto）")
+    lines = log_k.read_text(encoding="utf-8", errors="replace").splitlines()
     timeline, summary = wb_status.parse_events(lines)
     for line in timeline:
         print(line)
-    print(f"[摘要] 回合 {turns_seen(lines)} 个（上限 {max_turns}）；"
+    print(f"[摘要] 第 {attempts} 次：回合 {turns_seen(lines)} 个（上限 {max_turns}）；"
           f"工具调用 {summary['tool_calls']} 次；碰过的文件 {summary['files_total']} 个；"
           f"认不出的行 {summary['unknown_events']} 条")
+    if attempts > 1:
+        print(f"[注 ] 这一轮跑了 {attempts} 次（前几次的 log：同目录 wb-{args.card}.r*.jsonl）")
     if reason:
         print(f"[掐 ] {reason}", file=sys.stderr)
         print(f"     现场（最后一次动作之后的几步）：\n{scene}", file=sys.stderr)
-        print(f"[复核] 先看现场再决定：python -X utf8 tools/wb_status.py {log} --tail 20 --repo",
+        print(f"[复核] 先看现场再决定：python -X utf8 tools/wb_status.py {log_k} --tail 20 --repo",
               file=sys.stderr)
         return 6
-    print(f"[复核] 主控现在去看报告与 git status：python -X utf8 tools/wb_status.py {log} --repo")
+    print(f"[复核] 主控现在去看报告与 git status：python -X utf8 tools/wb_status.py {log_k} --repo")
     return 0 if code == 0 else 4
 
 

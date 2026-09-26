@@ -61,7 +61,10 @@ def test_build_command_carries_the_opening_and_the_stream(sandbox: Path) -> None
         assert needle in cmd[3]
     assert "--output-format stream-json" in joined
     assert "--model deepseek-v4.1-flash" in joined
-    assert "--no-session-persistence" in joined and " -y" in joined
+    assert " -y" in joined
+    # ★ T-G90：不再关会话（关了就没法 `--resume` 续跑），八条铁律改走系统提示
+    assert "--no-session-persistence" not in joined
+    assert "--append-system-prompt" in joined and "以卡规格为准" in joined
     # ★ 开场白**不许**写死某一张卡的约束（写卡要改文件/要提交，只读卡才不许）——
     #   纪律由卡规格带，规格与开场白冲突时按规格执行
     assert "以卡规格为准" in cmd[3]
@@ -158,7 +161,8 @@ def _fake_runner(record: list[list[str]], events: list[str] | None = None, rc: i
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text("\n".join(events or EVENTS) + "\n", encoding="utf-8")
         errlog.write_text("", encoding="utf-8")
-        return rc, reason, scene
+        wd.session_file_for(log).write_text("sid-test", encoding="utf-8")
+        return rc, reason, scene, "sid-test"
     return run
 
 
@@ -327,7 +331,7 @@ def test_finish_verdict_catches_a_capped_run_though_the_exit_code_is_zero() -> N
 def test_runner_writes_the_log_and_reports_a_clean_finish(tmp_path: Path) -> None:
     """健康的一轮：逐行落盘、退出码照传、**不掐**（reason 空串 = 正常收工）。"""
     log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
-    code, reason, scene = wd.run_worker(_stub(2, 0.1), log, err, timeout=60, max_turns=150,
+    code, reason, scene, sid = wd.run_worker(_stub(2, 0.1), log, err, timeout=60, max_turns=150,
                                         watchdog=True, heartbeat_seconds=0)
     assert (code, reason, scene) == (0, "", "")
     # 2 条工具事件 + 1 条 result —— 真工人也是这么收尾的
@@ -343,7 +347,7 @@ def test_runner_kills_a_stalled_worker_and_reports_the_scene(tmp_path: Path) -> 
     log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
     beats: list[str] = []
     started = time.monotonic()
-    _, reason, scene = wd.run_worker(_stub(1, 60), log, err, timeout=120, max_turns=150,
+    _, reason, scene, _sid = wd.run_worker(_stub(1, 60), log, err, timeout=120, max_turns=150,
                                      watchdog=True, heartbeat_seconds=1, stall_seconds=2,
                                      poll_seconds=0.2, printer=beats.append)
     elapsed = time.monotonic() - started
@@ -356,9 +360,9 @@ def test_runner_kills_a_stalled_worker_and_reports_the_scene(tmp_path: Path) -> 
 def test_runner_kills_a_spinning_worker_even_though_it_is_not_silent(tmp_path: Path) -> None:
     """★ 空转也真掐：它**一直在动**（日志不静默），只是原地重复同一件事 —— 静默判据抓不到它。"""
     log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
-    _, reason, _ = wd.run_worker(_stub(wd.REPEAT_NEED + 1, 60), log, err, timeout=120,
-                                 max_turns=150, watchdog=True, heartbeat_seconds=0,
-                                 stall_seconds=120, poll_seconds=0.2)
+    _, reason, _, _sid = wd.run_worker(_stub(wd.REPEAT_NEED + 1, 60), log, err, timeout=120,
+                                       max_turns=150, watchdog=True, heartbeat_seconds=0,
+                                       stall_seconds=120, poll_seconds=0.2)
     assert "空转" in reason, reason
 
 
@@ -371,7 +375,103 @@ def test_runner_reports_a_truncated_run_as_unfinished(tmp_path: Path) -> None:
     code = ("import json\n"
             "print(json.dumps({'type': 'result', 'subtype': 'error_during_execution',"
             " 'result': ''}))\n")
-    rc, reason, _ = wd.run_worker([sys.executable, "-X", "utf8", "-c", code], log, err,
-                                  timeout=60, max_turns=240, watchdog=True, heartbeat_seconds=0)
+    rc, reason, _, _sid = wd.run_worker([sys.executable, "-X", "utf8", "-c", code], log, err,
+                                        timeout=60, max_turns=240, watchdog=True,
+                                        heartbeat_seconds=0)
     assert rc == 0, "这次就是故意让它退 0 的（真机撞上限时也是这样）"
     assert "没跑完" in reason, reason
+
+
+# ==================================================== 稳定化：续跑 + 铁律进系统提示（T-G90）
+
+
+def test_iron_rules_go_into_the_system_prompt_not_only_the_opening(sandbox: Path) -> None:
+    """★ 铁律走 `--append-system-prompt`：开场白会随上下文压缩越来越远，系统提示还在。"""
+    node, cli = wd.paths()
+    cmd = wd.build_command(node, cli, "002", "spec.md", "m")
+    rules = cmd[cmd.index("--append-system-prompt") + 1]
+    assert rules == wd.IRON_RULES
+    for needle in ("以卡规格为准", "越界", "不许假完成", "一写一读", "禁区", "不假装"):
+        assert needle in rules, rules
+
+
+def test_resume_command_continues_the_same_session() -> None:
+    """续跑命令：`--resume <id>` + "接着干"的指令 + 同一套铁律 + 别的口径不变。"""
+    cmd = wd.resume_command(Path("node"), Path("cli"), "sid-123", "接着干", "m")
+    assert cmd[cmd.index("--resume") + 1] == "sid-123"
+    assert cmd[cmd.index("-p") + 1] == "接着干"
+    assert "--append-system-prompt" in cmd and "--max-turns" in cmd
+    assert "--no-session-persistence" not in cmd
+
+
+def test_session_id_is_picked_up_from_the_events() -> None:
+    """会话 id 就在事件里 —— 存下来，中断了才续得上（取最后一个）。"""
+    lines = [json.dumps({"type": "system", "subtype": "init", "session_id": "aaaa"}),
+             json.dumps({"type": "result", "subtype": "success", "session_id": "bbbb"})]
+    assert wd.session_id_seen(lines) == "bbbb"
+    assert wd.session_id_seen(["不是 JSON 的一行"]) == ""
+    assert wd.session_file_for(Path("gates/diag/wb-002.jsonl")).name == "wb-002.session.txt"
+
+
+def test_continuation_prompt_tells_it_not_to_redo_finished_work() -> None:
+    """续跑时最贵的错是"重做一遍" —— 指令里必须明说，并把中断现场交给它。"""
+    said = wd.continuation_prompt(reason="卡死：8.0 分钟没有新事件", scene="    做 Read(a.py)",
+                                  card="002")
+    for needle in ("被中断", "同一张卡", "002", "不要重做", "Read(a.py)"):
+        assert needle in said, said
+
+
+def test_should_resume_continues_interruptions_but_not_spinning() -> None:
+    """★ 只对「被打断」续跑：空转是原地打转，续跑只会让它接着转（那正是看门狗要掐的）。"""
+    assert wd.should_resume("卡死：8 分钟没有新事件", attempts_done=1, retries=1) is True
+    assert wd.should_resume("超时：3600 秒到了", attempts_done=1, retries=1) is True
+    assert wd.should_resume("空转：最近 12 次里同一件事 9 次", attempts_done=1, retries=1) is False
+    assert wd.should_resume("", attempts_done=1, retries=1) is False         # 正常收工，不续
+    assert wd.should_resume("卡死", attempts_done=2, retries=1) is False      # 续跑次数用完了
+
+
+def test_execute_auto_resumes_an_interrupted_run(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 端到端：第 1 次被掐 → **自动带同一会话续跑** → 第 2 次成功。
+
+    这就是"中断不等于白干"：花的是续跑的钱，不是从头再来的钱。
+    """
+    calls: list[list[str]] = []
+    outcomes = [("卡死：8.0 分钟没有新事件 → 已掐", "    做 Read(a.py)"), ("", "")]
+
+    def runner(cmd, log, errlog, **kwargs):        # noqa: ANN001, ANN202
+        calls.append(list(cmd))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, outcomes[len(calls) - 1][0], outcomes[len(calls) - 1][1], "sid-abc"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert len(calls) == 2, "应当续跑一次（被掐 → 接着干）"
+    assert "--resume" in calls[1] and calls[1][calls[1].index("--resume") + 1] == "sid-abc"
+    assert "不要重做" in calls[1][calls[1].index("-p") + 1]
+    assert "续跑" in out
+    side = sandbox / "gates" / "diag" / "wb-001.session.txt"
+    assert side.read_text(encoding="utf-8") == "sid-abc"
+
+
+def test_execute_does_not_resume_a_spinning_run(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 空转**不许**自动续跑 —— 否则它就接着转下去，护栏等于没装。"""
+    calls: list[list[str]] = []
+
+    def runner(cmd, log, errlog, **kwargs):        # noqa: ANN001, ANN202
+        calls.append(list(cmd))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, "空转：最近 12 次工具调用里同一件事出现了 9 次", "    做 Read(a.py)", "sid-x"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 6
+    assert len(calls) == 1, "空转只能跑一次，不许自动续跑"
+    assert "空转" in capsys.readouterr().err

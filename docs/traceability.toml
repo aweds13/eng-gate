@@ -521,6 +521,23 @@ evidence = [
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。 ★ **2026-09-25（T-G71）这条残留收口了**：`db.unit_of_work()` 在连接**代理层**把 `commit()` 推迟到退出那一刻（core 一个 `commit()` 都没改），本条的 `create_task` / `update_task` 两条路都包了事务 —— 第二笔抛数据库级错误时**库里一个字节都不留**（`tests/test_unit_of_work.py` 逐条钉，且用「第一笔确实跑过」证明不是空转）。详见 `复盘/跨函数事务-T-G71.md`。"
 
 
+[entries."T-G90"]
+id = "T-G90"
+title = "稳定化：中断不等于白干 —— 会话续跑（`--resume <id>` / `--resume auto`）+ 自动重试（`--retry`，只对「被打断」不对「空转」）+ 八条铁律进**系统提示**（`--append-system-prompt`）；并写下「什么样的活能给工人」的判据"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/续跑与铁律-T-G90.md",
+  "text:tools/wb_dispatch.py::IRON_RULES = (",
+  "text:tools/wb_dispatch.py::def resume_command(node: Path, cli: Path, session_id: str, prompt: str, model: str,",
+  "text:tools/wb_dispatch.py::def session_id_seen(lines: list[str]) -> str:",
+  "text:tools/wb_dispatch.py::def continuation_prompt(*, reason: str, scene: str, card: str) -> str:",
+  "text:tools/wb_dispatch.py::def should_resume(reason: str, attempts_done: int, retries: int) -> bool:",
+  "text:docs/traceability.toml::T-G90",
+  "test:test_wb_dispatch.py",
+]
+gaps = "**为什么有这张卡**（T-G90，用户 2026-09-26：「能不能尽量把活给 WorkBuddy，增强稳定性」）：外包最大的风险不是慢，是**白干** —— 卡 002 那一轮花了 **14.2M input tokens** / 44 分钟才收工，它要是跑到第 80 分钟被卡死掐掉，这 14.2M 就全白花，而老做法是「从头再派一张」。所以先把「断了能接着干」做出来。**四件事**：① **续跑**：不再传 `--no-session-persistence`（当初加上是为了干净，代价正是续不上），跑完把 `session_id` 落到 `gates/diag/wb-<卡>.session.txt`，`--resume <id>` / `--resume auto` 带**同一个会话**接着干；续跑指令由 `continuation_prompt()` 生成，核心一句是「★ 不要重做已经做完的部分」+ 把中断现场（最后几步）交给它。② **自动重试** `--retry N`（默认 1）：卡死 / 超时 / 没跑完时自动带同一会话再来一轮，每轮一个 log（`wb-<卡>.r2.jsonl`，证据不互相盖）；★ **只对「被打断」续、不对「空转」续** —— 空转是原地打转，续跑只会让它接着转（`should_resume()` 一条判断，测试两个方向都钉了）。③ **八条铁律进系统提示**：工人换轮次 / 上下文被自动压缩之后开场白会越来越远，系统提示还在 —— 所以铁律走 `--append-system-prompt`；与卡规格冲突时以卡规格为准。④ **判据**：把「什么样的活能给工人」写成 `复盘/外包-卡表与规矩.md` §13（能给：能命令验收 / 白名单列得清 / 不需要产品口径 / 一张卡一件事 / 我能读懂 diff；不能给：产品决策、破坏性、需要这场对话的上下文、架构级改动、跨卡一致的收尾）—— **尽量给 ≠ 什么都给**。**证据**：真机探针（原样 argv）首轮带 `--append-system-prompt` → `subtype=success`、拿到 session_id；再用 `wd.resume_command()` 的输出原样续跑 → 回「7」（首轮让它记的数字）→ **续跑记得住**；`tests/test_wb_dispatch.py` **25 → 32 条**（新增：铁律进系统提示 / `resume_command` 形状 / `session_id_seen` / 「不要重做」那句话 / `should_resume` 两个方向 / 端到端「第 1 次被掐 → 自动续跑 → 第 2 次成功」/ 「空转只跑 1 次不许续跑」）。**边界（如实写）**：会话会落在 `~/.codebuddy/projects/` 下慢慢堆积（换来的是能续跑）；续跑时工人会重新看到之前的上下文，**token 照花** —— 它省的是「重做一遍的活」，不是「重读一遍的钱」；`--retry` 真跑上还没触发过（头几轮派活要盯一眼）。**没动的**：看门狗 / 心跳 / 回合上限的判据与阈值一个字没改（T-G88/T-G89 刚校准）；模型默认值与 `--autocompact 1m` 没改；顺带把卡表文档的节号补齐（§12 / §13，之前跳号）并同步了全仓引用。"
+
 [entries."T-G89"]
 id = "T-G89"
 title = "更正 T-G88 的回合上限标定与「跑完了没有」判据：`--max-turns` 数的是**工具调用回合**（卡 002 实测 111 次），不是 `result` 里的 `num_turns`(=319)；并新增 `finish_verdict()` 读 `result.subtype` 判腰斩（撞上限 = `error_during_execution` + 空回话 + **退出码 0**）"
