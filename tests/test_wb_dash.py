@@ -26,6 +26,13 @@ mtime **降序**（刚动过的卡在最上面，用户不用往下翻）；同�
 "我看不到它的判决"，不下"卡死"的结论；「可能卡死」只允许在有**在更新**的心跳
 （= 本该在跑）时用。★ 046 的成果（账本排除 / 非 UTF-8 容错 / 行序）一条不许弄回去。
 
+★ 台账号 T-G147（卡 055）：页面顶部「完成度总览」—— 每次刷新都从真源现算：
+台账分布（done/partial/deferred/共几条）+ 主树 HEAD/今日 `Task:` 提交笔数 + 在跑 worker 数
+（052 判据：有心跳才算）+ 一行人话结论 + 每卡走到哪一步（已集成/在跑/已交付待复核/
+已停/无法判断）。★ 已集成判据选**台账**这条：台账号在主树 `docs/traceability.toml`
+里且 `status = done`（不选 git log trailer）—— 判据原文显示在页面上，让人能自查；
+★ 数不出来（如台账读不到）必须如实写「数不出来」，不许编 0。
+
 ★ 只造假状态文件（`tmp_path`），**不起服务、不连网** —— 真机那一步是手工证据（卡 §5），不进测试。
 """
 
@@ -298,7 +305,7 @@ def test_api_state_json_shape(tmp_path: Path) -> None:
     """`/api/state` 的正文结构（不起服务，直接调那个抽出来的函数）。"""
     _card(tmp_path, "004")
     data = wb_dash.api_state(tmp_path)
-    assert set(data) == {"now", "cards"}
+    assert set(data) == {"now", "cards", "summary"}   # ★ T-G147 新增 summary（只加不改）
     assert isinstance(data["now"], str)
     card = data["cards"][0]
     for field in ("card", "tree", "log", "state", "color", "elapsed_min", "silent_s",
@@ -462,3 +469,169 @@ def test_utf8_log_parsing_unchanged(tmp_path: Path) -> None:
     assert row["state"] == "收工·结束"
     assert row["final"] == "做完了"
     assert row["model"] == "deepseek-v4.1-flash"
+
+
+# --------------------------- 页面顶部「完成度总览」（T-G147，卡 055）
+
+
+def _ledger(tmp_path: Path, statuses: dict[str, str]) -> Path:
+    """造假真源：tmp 里的 docs/traceability.toml（只造假数据，绝不碰主树台账）。"""
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    lines: list[str] = []
+    for eid, st in statuses.items():
+        lines += [f'[entries."{eid}"]', f'status = "{st}"', ""]
+    p = docs / "traceability.toml"
+    p.write_text("\n".join(lines), encoding="utf-8")
+    return p
+
+
+def _spec(tmp_path: Path, card: str, taid: str) -> Path:
+    """造假规格：gates/diag/卡<号>-xxx.md，标题行带台账号（总览从这里认卡）。"""
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True, exist_ok=True)
+    p = diag / f"卡{card}-测试规格.md"
+    p.write_text(f"# 工具作者卡 {card} · 测试（台账号 `{taid}`）\n", encoding="utf-8")
+    return p
+
+
+def test_overview_fake_truth_source_numbers_match(tmp_path: Path) -> None:
+    """★ 钉子①（T-G147）：造假真源 → done/共、「已集成 N 笔」、「在跑 M」必须与假数据吻合。
+
+    台账 4 条：T-G147/T-G144 done、T-G999 partial、T-G888 deferred；
+    卡 055 有规格（T-G147，在 done 里）+ 日志 → 已集成；卡 060 心跳新鲜 → 在跑。
+    """
+    _ledger(tmp_path, {"T-G147": "done", "T-G144": "done",
+                       "T-G999": "partial", "T-G888": "deferred"})
+    _spec(tmp_path, "055", "T-G147")
+    _card(tmp_path, "055", age=600)                 # 日志旧、无心跳无判决 —— 但已集成
+    _spec(tmp_path, "060", "T-G160")
+    log60 = _card(tmp_path, "060", age=600)
+    log60.with_suffix(".heartbeat.txt").write_text("[心跳] 刚跳过", encoding="utf-8")
+    s = wb_dash.overview(tmp_path)
+    assert s["ledger"] == {"done": 2, "partial": 1, "deferred": 1, "total": 4}
+    assert s["integrated"] == 1
+    assert s["running_workers"] == 1
+    assert s["statuses"]["055"] == "已集成"
+    assert s["statuses"]["060"] == "在跑"
+    assert s["line"] == "已集成 1 笔 · 在跑 1 · 已交付待复核 0 · 还剩 1 张卡"
+
+
+def test_overview_zero_running_says_zero(tmp_path: Path) -> None:
+    """★ 钉子②（T-G147）：零在跑必须说零 —— 心跳不在更新（或没有）→ 在跑 0，不许编。"""
+    _ledger(tmp_path, {"T-G147": "done"})
+    log70 = _card(tmp_path, "070", age=5)           # 日志刚动过，但没有心跳文件
+    stale = log70.with_suffix(".heartbeat.txt")     # 有心跳文件但早停了（mtime 600 秒前）
+    stale.write_text("[心跳] 早就停了", encoding="utf-8")
+    then = time.time() - 600
+    os.utime(stale, (then, then))
+    s = wb_dash.overview(tmp_path)
+    assert s["running_workers"] == 0
+    assert "在跑 0" in s["line"]
+
+
+def test_overview_delivered_pending_review(tmp_path: Path) -> None:
+    """有日志有 result 收工、台账号（T-G555）不在主树 done 里 → 已交付待复核。"""
+    _ledger(tmp_path, {"T-G147": "done"})
+    _spec(tmp_path, "080", "T-G555")
+    _card(tmp_path, "080", age=600,
+          lines=[_event(type="result", subtype="success", result="做完了")])
+    s = wb_dash.overview(tmp_path)
+    assert s["statuses"]["080"] == "已交付待复核"
+    assert s["delivered"] == 1
+
+
+def test_overview_stopped_no_verdict_no_heartbeat(tmp_path: Path) -> None:
+    """无判决 + 心跳不在更新 + 静默超阈值 → 已停（052 终态在总览里的样子）。"""
+    _ledger(tmp_path, {"T-G147": "done"})
+    _card(tmp_path, "090", age=600)
+    s = wb_dash.overview(tmp_path)
+    assert s["statuses"]["090"] == "已停"
+    assert s["stopped"] == 1
+
+
+def test_overview_cannot_judge_never_guesses(tmp_path: Path) -> None:
+    """★ 判不出来一律「无法判断」，不许猜成任何一种（T-G147 §2.7）。
+
+    - 有规格无日志（不知道派没派）；
+    - 日志还新但没有心跳也没有判决（不知道是不是直连 CLI 在跑）；
+    - 收工了但连台账号都没有（没法查它集没集成）。
+    """
+    _ledger(tmp_path, {"T-G147": "done"})
+    _spec(tmp_path, "099", "T-G777")                # 有规格、无日志
+    _card(tmp_path, "095", age=5)                   # 新日志、无心跳无判决、无规格
+    _card(tmp_path, "096", age=5,
+          lines=[_event(type="result", subtype="success", result="做完了")])
+    s = wb_dash.overview(tmp_path)
+    assert s["statuses"]["099"] == "无法判断"
+    assert s["statuses"]["095"] == "无法判断"
+    assert s["statuses"]["096"] == "无法判断"       # 没台账号 → 没法查集成 → 不猜「待复核」
+
+
+def test_overview_missing_ledger_says_cannot_count(tmp_path: Path) -> None:
+    """★ 台账读不到 → 已集成/待复核/还剩「数不出来」（判据写明），不许编 0（T-G147 §2.2）。"""
+    log60 = _card(tmp_path, "060", age=600)
+    log60.with_suffix(".heartbeat.txt").write_text("[心跳] 刚跳过", encoding="utf-8")
+    s = wb_dash.overview(tmp_path)                  # tmp 里没有 docs/traceability.toml
+    assert s["ledger"] is None
+    assert s["integrated"] is None
+    assert s["delivered"] is None
+    assert s["running_workers"] == 1                # 在跑不依赖台账，照说
+    assert "数不出来" in s["line"]
+    assert "在跑 1" in s["line"]
+
+
+def test_overview_criteria_are_on_page_and_summary(tmp_path: Path) -> None:
+    """★ 判据必须写在页面上（§2.3），且 summary 里带同一段（机器可验）。"""
+    s = wb_dash.overview(tmp_path)
+    for token in ("已集成", "在跑", "已交付待复核", "已停", "无法判断", "traceability.toml"):
+        assert token in s["criteria"]
+    page = wb_dash.PAGE
+    assert "ov" in page                             # 总览区块的挂载点在页面里
+    assert "summary" in page                        # tick() 读 d.summary 渲染总览
+
+
+def test_api_state_includes_summary(tmp_path: Path) -> None:
+    """★ /api/state 里要有结构化 summary（§2.4：别只画在选择器里，否则没法测）。"""
+    _ledger(tmp_path, {"T-G147": "done", "T-G1": "partial"})
+    _spec(tmp_path, "055", "T-G147")
+    _card(tmp_path, "055", age=600)
+    s = wb_dash.api_state(tmp_path)["summary"]
+    assert s["ledger"]["done"] == 1 and s["ledger"]["total"] == 2
+    assert s["integrated"] == 1
+    assert "已集成 1 笔" in s["line"]
+
+
+def test_overview_remaining_excludes_unmappable_meta_cards(tmp_path: Path) -> None:
+    """★ §8 钉子（T-G147 补）：没有台账号映射的元卡**不进「还剩」**，单独报 unmappable。
+
+    用户诉求是「还剩多少活」—— R*/S* 这类映射不到台账的元卡不是活，把它们算进
+    「还剩 35 张卡」会把「基本干完」说成「还欠 35 张」（工具显示得像真的）。
+    - 基线：台账 T-G147 done、卡 055 已集成 → 还剩 0；
+    - 造一张元卡（规格 卡R9-复核.md 无台账号 + 旧日志无判决无心跳 → 已停）：
+      ★ 还剩**必须仍是 0**，unmappable == 1，页面那一句要出现；
+    - 连「在跑/已停」的元卡也不算（判据是「有台账号且未集成」才进还剩）。
+    """
+    _ledger(tmp_path, {"T-G147": "done"})
+    _spec(tmp_path, "055", "T-G147")
+    _card(tmp_path, "055", age=600)
+    base = wb_dash.overview(tmp_path)
+    assert base["unmappable"] == 0
+    assert "还剩 0 张卡" in base["line"]
+    diag = tmp_path / "gates" / "diag"
+    (diag / "卡R9-复核.md").write_text(
+        "# 只读复核卡 R9 · 对抗性复核（无台账映射）\n", encoding="utf-8")
+    _card(tmp_path, "R9", age=600)                  # 旧日志：无判决、无心跳 → 已停
+    s = wb_dash.overview(tmp_path)
+    assert s["statuses"]["R9"] == "已停"
+    assert s["unmappable"] == 1
+    assert s["remaining"] == 0                      # ★ 已停的元卡也不许进还剩
+    assert "还剩 0 张卡" in s["line"]
+
+
+def test_overview_criteria_mentions_meta_card_rule(tmp_path: Path) -> None:
+    """★ §8 判据文字同步：CRITERIA 要写清「还剩」数什么、元卡去哪儿了（一字一致）。"""
+    s = wb_dash.overview(tmp_path)
+    assert "还剩" in s["criteria"]
+    assert "元卡" in s["criteria"]
+    assert "unmappable" in s["criteria"]

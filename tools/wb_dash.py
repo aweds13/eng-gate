@@ -29,6 +29,14 @@
 没有**在更新**的心跳 + 静默超过阈值 → 如实说"我看不到它的判决"（副文案不下结论）；
 「可能卡死」只在**有在更新的心跳**（= 本该在跑，派活器 120 秒一跳）时才允许用。
 心跳是否"在更新"只看本仓真有的证据：`wb-<卡>.heartbeat.txt` 的 mtime（不做进程级猜测）。
+
+★ 完成度总览（T-G147，卡 055）：页面顶部多一块「总览」—— 用户原话「不知道任务们完成情况，
+导致我要问你汇报」。每次刷新都**从真源现算**（不缓存、不写死）：台账分布（主树
+`docs/traceability.toml`）、主树 HEAD + 今天带 `Task:` trailer 的提交笔数、在跑 worker 数
+（052 判据：有心跳才算），加上一行人话结论与每卡走到哪一步（已集成 / 在跑 / 已交付待复核 /
+已停 / 无法判断）。★ 已集成判据选**台账**这条：台账号在主树 `docs/traceability.toml` 里且
+`status = done`（不选 git log trailer）；判据原文常量 `CRITERIA` 原样显示在页面上，让人能自查。
+★ 数不出来（比如台账读不到）必须如实写「数不出来（判据：…）」，**不许编 0**。
 """
 
 from __future__ import annotations
@@ -36,10 +44,13 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+import tomllib
 
 # 根路径从**本文件位置**推出来（tools/ 的上一级），不硬编码盘符。
 TOOLS = Path(__file__).resolve().parent
@@ -296,7 +307,192 @@ def card_state(root: Path | None = None) -> list[dict]:
 
 def api_state(root: Path | None = None) -> dict:
     """/api/state 的机器可读正文 —— 抽出来是为了能在测试里直接验结构（不起服务）。"""
-    return {"now": time.strftime("%H:%M:%S"), "cards": card_state(root)}
+    return {"now": time.strftime("%H:%M:%S"), "cards": card_state(root),
+            "summary": overview(root)}
+
+
+# ------------------------------------------------ 完成度总览（T-G147，卡 055）
+
+# ★ 判据原文（§2.3：判据必须写在页面上，让人能自查）—— 一处定义，页面与 summary 共用。
+#   ★ §8 补裁定：`还剩` 只数「在跑 + 已交付待复核 + 已停（都有台账号、未集成）」——
+#   映射不到台账的元卡（R*/S* 类）不是「还剩的活」，单独一句报 unmappable，不进还剩。
+CRITERIA = (
+    "已集成＝台账号在主树 docs/traceability.toml 里且 status=done（选台账，不选 git log trailer）；"
+    "在跑＝最新一轮的心跳在更新（052 判据）；"
+    "已交付待复核＝有判决文件或 result 收工、且台账号不在主树 done 里（没有台账号＝没法查，不猜）；"
+    "已停＝无判决＋心跳不在更新＋静默超过本次阈值（052 终态）；"
+    "其余（有规格无日志、日志还新但无心跳无判决等）＝无法判断，不猜。"
+    "还剩＝在跑＋已交付待复核＋已停里『有台账号且未集成』的那些；无法判断与映射不到台账的元卡不算。"
+    "元卡（R*/S* 类，没有台账号映射）单独报 unmappable，不进还剩。"
+    "在跑 worker 只数有心跳且新鲜的。"
+)
+
+_CANT_COUNT = "数不出来（判据：主树台账 docs/traceability.toml 读不到）"
+_SPEC_NAME = re.compile(r"^卡(?P<card>[0-9A-Za-z]+?)[-]")
+_TG_ID = re.compile(r"T-G\d+")
+
+
+def ledger_snapshot(root: Path) -> dict | None:
+    """主树台账 `docs/traceability.toml` 现算分布：done/partial/deferred/共几条 + done 条目 id 集。
+
+    读不到或解不了 → None（调用方如实写「数不出来」，**不许编 0**）。台账只读。
+    """
+    p = root / "docs" / "traceability.toml"
+    try:
+        data = tomllib.loads(p.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return None
+    entries = data.get("entries")
+    if not isinstance(entries, dict):
+        return None
+    counts: dict[str, int] = {}
+    done_ids: set[str] = set()
+    for eid, entry in entries.items():
+        st = str((entry or {}).get("status", "?"))
+        counts[st] = counts.get(st, 0) + 1
+        if st == "done":
+            done_ids.add(eid)
+    return {"done": counts.get("done", 0), "partial": counts.get("partial", 0),
+            "deferred": counts.get("deferred", 0), "total": len(entries),
+            "done_ids": done_ids}
+
+
+def main_tree_git(root: Path) -> dict:
+    """主树 HEAD 短 sha + 今天（本地 0 点起）带 `Task:` trailer 的提交笔数。
+
+    算不出（不是 git 仓库 / git 不在）→ head 空串、笔数 None，调用方如实显示。
+    """
+    out = {"head": "", "today_task_commits": None}
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=15, check=True).stdout.strip()
+        bodies = subprocess.run(
+            ["git", "-C", str(root), "log", "--since=midnight", "--pretty=format:%B%x1e"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=15, check=True).stdout
+    except (OSError, subprocess.SubprocessError):
+        return out
+    n = 0
+    for body in bodies.split("\x1e"):
+        if any(ln.strip().startswith("Task:") for ln in body.splitlines()):
+            n += 1
+    out["head"] = head
+    out["today_task_commits"] = n
+    return out
+
+
+def spec_cards(root: Path) -> dict[str, str]:
+    """各树 `gates/diag/卡*.md` → {卡号: 台账号}；台账号取文件**前 5 行**里第一个 `T-Gnn`。
+
+    规格标题行本来就带台账号（如「工具作者卡 055 …（台账号 `T-G147`）」）；正文里引到的
+    别的台账号（Refs 那类）不能算。找不到台账号的卡不进表 —— 调用方按「查不到」如实处理。
+    """
+    out: dict[str, str] = {}
+    for _tree, diag in _tree_dirs(root):
+        if not diag.is_dir():
+            continue
+        for spec in sorted(diag.glob("卡*.md")):
+            m = _SPEC_NAME.match(spec.name)
+            if not m:
+                continue
+            try:
+                head_lines = spec.read_text(encoding="utf-8",
+                                            errors="replace").splitlines()[:5]
+            except OSError:
+                continue
+            for ln in head_lines:
+                hit = _TG_ID.search(ln)
+                if hit:
+                    out.setdefault(m.group("card"), hit.group(0))
+                    break
+    return out
+
+
+def overview(root: Path | None = None) -> dict:
+    """页面顶部的「完成度总览」—— 每次刷新都从真源现算（不缓存、不写死，T-G147）。
+
+    返回结构化 summary（机器可验）+ 一行人话结论 `line` + 判据原文 `criteria`。
+    对每张卡（从各树 `gates/diag/卡*.md` 规格与 `wb-*.jsonl` 日志认出）判五态，
+    判据见 `CRITERIA`（同一段原样上页面）；认不出的写「无法判断」，**不许猜**。
+    """
+    root = Path(root) if root is not None else ROOT
+    now = time.time()
+    ledger = ledger_snapshot(root)
+    specs = spec_cards(root)
+    # 每张卡取**最近活动**的那一轮日志（同卡多轮/跨树只看最新 —— 卡是一张，轮是它的续跑）。
+    latest: dict[str, Path] = {}
+    for _tree, card, log in discover_logs(root):
+        key = _split_card(card)[0]
+        if key not in latest or log.stat().st_mtime > latest[key].stat().st_mtime:
+            latest[key] = log
+    statuses: dict[str, str] = {}
+    counts = {"已集成": 0, "在跑": 0, "已交付待复核": 0, "已停": 0, "无法判断": 0}
+    remaining_cards = 0
+    unmappable = 0
+    for card in sorted(set(specs) | set(latest)):
+        taid = specs.get(card, "")
+        log = latest.get(card)
+        # ★ 已集成判据：台账里 status=done。台账读不到 → 没法判集成，不许把 0 当「全没集成」。
+        integrated = bool(ledger and taid and taid in ledger["done_ids"])
+        if integrated:
+            st = "已集成"
+        elif log is None:
+            st = "无法判断"                          # 有规格无日志：不知道派没派
+        else:
+            verdict = log.with_suffix(".verdict.txt")
+            lines = _read_log_lines(log)
+            _tl, summary = wb_status.parse_events(lines)
+            finished = verdict.exists() or bool(summary["final"])
+            age = now - log.stat().st_mtime
+            inflight = wb_dispatch.inflight_tool(lines, now=now)
+            threshold = wb_dispatch.stall_threshold_seconds(
+                stall_seconds=STALL_BASE, inflight=inflight,
+                durations=wb_dispatch.tool_durations(lines))
+            if _heartbeat_fresh(log.with_suffix(".heartbeat.txt"), now):
+                st = "在跑"
+            elif finished:
+                # 台账读不到或没有台账号 → 查不了集成 → 不猜成「待复核」
+                st = ("已交付待复核" if ledger and taid else "无法判断")
+            elif not verdict.exists() and age >= threshold:
+                st = "已停"
+            else:
+                st = "无法判断"
+        statuses[card] = st
+        counts[st] += 1
+        if not taid:
+            unmappable += 1                          # ★ 元卡（R*/S* 类）：没台账号，单独报
+        elif st in ("在跑", "已交付待复核", "已停"):
+            remaining_cards += 1                     # ★ 还剩只数「有台账号且未集成」的真活
+    git_info = main_tree_git(root)
+    # 台账读不到 → 集成相关三个数如实「数不出来」；在跑不依赖台账，照说。
+    integrated_n: int | None = counts["已集成"] if ledger else None
+    delivered_n: int | None = counts["已交付待复核"] if ledger else None
+    # ★ §8：还剩 = 在跑＋待复核＋已停（有台账号且未集成）。台账读不到时待复核判不了 →
+    #   整个数如实「数不出来」，不许拿残缺的数冒充。
+    remaining_n: int | None = remaining_cards if ledger else None
+    line = (f"已集成 {integrated_n if integrated_n is not None else _CANT_COUNT} 笔 · "
+            f"在跑 {counts['在跑']} · "
+            f"已交付待复核 {delivered_n if delivered_n is not None else _CANT_COUNT} · "
+            f"还剩 {remaining_n if remaining_n is not None else _CANT_COUNT} 张卡")
+    return {
+        "ledger": ({k: ledger[k] for k in ("done", "partial", "deferred", "total")}
+                   if ledger else None),
+        "head": git_info["head"],
+        "today_task_commits": git_info["today_task_commits"],
+        "running_workers": counts["在跑"],
+        "cards_total": len(statuses),
+        "integrated": integrated_n,
+        "delivered": delivered_n,
+        "stopped": counts["已停"],
+        "unknown": counts["无法判断"],
+        "remaining": remaining_n,
+        "unmappable": unmappable,
+        "statuses": statuses,
+        "line": line,
+        "criteria": CRITERIA,
+    }
 
 
 PAGE = """<!doctype html><meta charset="utf-8"><title>工人状态</title>
@@ -313,11 +509,34 @@ PAGE = """<!doctype html><meta charset="utf-8"><title>工人状态</title>
  pre{white-space:pre-wrap;margin:0;color:#c9d1d9}
 </style>
 <h1>工人状态 <span class="dim small" id="at"></span></h1>
-<div id="tbl">加载中…</div>
+<div id="ov" class="small">总览加载中…</div>
+<div id="tbl" style="margin-top:12px">加载中…</div>
 <script>
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
 async function tick(){
   const r = await fetch('/api/state'); const d = await r.json();
   document.getElementById('at').textContent = '· ' + d.now;
+  const s = d.summary;
+  if(s){
+    let o = '<div style="font-size:15px;margin:0 0 6px"><b>'+esc(s.line)+'</b></div>';
+    const led = s.ledger
+      ? ('台账 done '+s.ledger.done+' / partial '+s.ledger.partial+' / deferred '+
+         s.ledger.deferred+' / 共 '+s.ledger.total+' 条')
+      : '台账：数不出来';
+    const tk = (s.today_task_commits===null||s.today_task_commits===undefined)
+      ? '数不出来' : s.today_task_commits+' 笔';
+    o += '<div class="dim">'+esc(led)+' · 主树 HEAD '+esc(s.head||'数不出来')+
+         ' · 今日 Task: 提交 '+esc(tk)+' · 在跑 worker '+s.running_workers+'</div>';
+    if(s.unmappable > 0){
+      o += '<div class="dim small">另有 '+s.unmappable+
+           ' 张元卡（R*/S* 类）映射不到台账 —— 如实不猜</div>';
+    }
+    const pairs = Object.entries(s.statuses||{}).map(function(kv){
+      return kv[0]+'＝'+kv[1];});
+    if(pairs.length){o += '<div class="dim small">每卡：'+esc(pairs.join(' · '))+'</div>';}
+    o += '<div class="dim small">'+esc(s.criteria)+'</div>';
+    document.getElementById('ov').innerHTML = o;
+  }
   if(!d.cards.length){document.getElementById('tbl').textContent='还没有任何 wb-*.jsonl';return}
   let h='<table><tr><th>卡</th><th>状态</th><th>已跑</th><th>回合</th><th>工具</th><th>报错</th>'+
         '<th>文件</th><th>静默</th><th>在跑 / 阈值</th><th>模型</th><th>最后一步</th></tr>';
