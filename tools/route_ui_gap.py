@@ -32,6 +32,15 @@ WEB = ROOT / "src" / "web"
 ROUTE_RE = re.compile(r'@app\.(get|post|patch|delete|put)\("([^"]+)"')
 FE_RE = re.compile(r"/api/[^\s\"'`)]*")
 
+# 已裁定的路由：后端**留着**、但按裁定不接界面 —— 每条都带出处，别再当"未声明的尾巴"报。
+# （T-G125：这两条早就裁定过，只是没进这张表，于是每跑一次都当新尾巴报一遍。）
+DECIDED: dict[tuple[str, str], str] = {
+    ("GET", "/api/team/assignments"):
+        "保持现状（已被 /api/team/board 取代）—— 复盘/口径落档-T-G19.md",
+    ("POST", "/api/sync/tasks"):
+        "已弃用（deprecated，2026-09-25 用户确认）—— src/timeflow/api/app.py 注释",
+}
+
 
 def backend_routes() -> set[tuple[str, str]]:
     src = APP.read_text(encoding="utf-8")
@@ -75,9 +84,15 @@ def main() -> int:
         for meth, path in routes
         if not any(matches(c, segments(path)) for c in callers)
     )
-    print(f"后端路由 {len(routes)} 条 / 前端没提到 {len(missing)} 条")
+    declared = [m for m in missing if (m[0], m[1]) in DECIDED or any(a in m[1] for a in ack)]
+    print(f"后端路由 {len(routes)} 条 / 前端没提到 {len(missing)} 条"
+          f"（已声明 {len(declared)} / 未声明 {len(missing) - len(declared)}）")
     for meth, path in missing:
-        tag = "（已声明按设计不给界面）" if any(a in path for a in ack) else ""
+        reason = DECIDED.get((meth, path))
+        if reason:
+            tag = f"（已声明：{reason}）"
+        else:
+            tag = "（已声明按设计不给界面）" if any(a in path for a in ack) else ""
         print(f"  {meth:6} {path} {tag}".rstrip())
     return 0
 

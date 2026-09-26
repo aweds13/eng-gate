@@ -4043,6 +4043,19 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：盘点 S-1 的 A17；T-G91.gaps「--detach 后看门狗是脱离进程自己带着的……还没做，是候选」+ 并发两卡复盘 §6「看门狗的寿命 = 那个进程的寿命」。**做了什么**：主控裁定架构 C（卡 §2.9）—— `--status` 新增心跳停滞醒目告警（`heartbeat_stall_alert`，tools/wb_dispatch.py:405；接线 :368/:381），阈值复用看门狗底线 STALL_SECONDS=480、不写第二份口径；顺带把 [心跳] 展示改为取最新一轮的心跳文件（续跑轮不再读第 1 轮那份停摆的）。**反证（先红后绿）**：突变拆掉 status_report 的告警接线 → test_status_alarms_when_nobody_is_watching / test_status_alarms_without_any_heartbeat 两条红；还原 86 passed 全绿（81 条既有一条没红）。**真机证据**：桩命令真起进程（驱动 %TEMP%/tg112_probe/probe.py；读状态阈值临时缩放 480→20、其余全真）—— ① --detach 真扔出去（pid 存活 + 心跳在写）；② 按 PID 杀整棵与只杀派活器两种杀法 → --status 都打出「没人盯」告警；③ 工人正常收工 → 判决落盘、派活进程自己退干净（tasklist 按 PID 核）、不告警。**探针修正**：初版「心跳停但日志还在动 = 孤儿」分支被探针 B 证伪 —— 工人 stdout 的读端（pump 线程）在派活进程里，派活进程一死 log 必冻结，该情形不可达，已收敛为一种告警。**边界（如实写）**：工人生死从文件判不出（残余风险 = 工人烧 token 没人看 → 候选卡 B 解，设计要点在复盘 §7）；系统重启连告警读者一起没 → 兜底是人/定时任务调 --status；两轮之间被杀的窗口不告警；--stall-seconds 自定义值不进告警口径；告警读 mtime、改系统时钟会误判。**没动的**：看门狗判据本体（watchdog_verdict / inflight_tool / tool_durations / stall_threshold_seconds）、心跳与判决落盘格式、--status 只读原则、wb_status.py、wb_dash.py（面板停滞告警 T-G97 已有）、src/**、docs/**、共享文件。"
 
+[entries."T-G125"]
+id = "T-G125"
+title = "工具收尾两小件：`route_ui_gap` 声明表补两条已裁定路由（未声明尾巴 → 0）+ `wb_status` 对畸形 log 的防御（T-G96 边界①／另立卡那张）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/工具收尾两小件-T-G125.md",
+  "text:tools/route_ui_gap.py::DECIDED: dict[tuple[str, str], str] = {",
+  "text:tools/wb_status.py::def _message_of(event: dict) -> tuple[dict, str | None]:",
+  "test:test_wb_status.py",
+]
+gaps = "**为什么有这张卡**：A 件 —— `route_ui_gap` 仍报 8 条无入口路由，其中 2 条早有裁定（`GET /api/team/assignments`＝「保持现状（已被 /api/team/board 取代）」见复盘/口径落档-T-G19.md；`POST /api/sync/tasks`＝「已弃用（deprecated，2026-09-25 用户确认）」见 src/timeflow/api/app.py:2305），只是没写进脚本声明表；B 件 —— 台账 T-G96.gaps 边界①原文「`wb_status.parse_events()` / `turns_seen()` / `tool_signatures()` 在 `message` 不是 dict 时仍会抛……本卡白名单不许碰 `tools/wb_status.py`」，复盘/看门狗护栏补强-T-G96.md:146「真要修得动 wb_status.py（另立卡）」。**做了什么**：A 件 —— `tools/route_ui_gap.py` 照既有风格加 `DECIDED` 声明表（两条各带出处），命中打「（已声明：<理由>）」，头部加「（已声明 N / 未声明 M）」计数；其余判据一字未动（剩 6 条按设计不给界面仍走 `--ack`）。B 件 —— `tools/wb_status.py` 新增 `_message_of()`，`parse_events()` 的 assistant / user 两分支改用它：`message` 缺失 / None → 空对象（老口径不变）；str / list → 记一行「message 不是对象」并计 unknown_events，不再抛 AttributeError。**真机证据（先红后绿）**：A 件 `route_ui_gap.py --ack ai,health` 未声明尾巴 2 → 0（改动前后原始输出见复盘）；B 件四条用例 —— 实现前 ①str ②list 两例抛 AttributeError（红）、实现后 12 passed、突变（把防御删成旧代码）后同两例再红、还原再绿。**边界（如实写）**：★ `turns_seen()` 与 `tool_signatures()` 定义在 `tools/wb_dispatch.py:577/602`、同病未修 —— 该文件是本卡禁区（024 在跑 / 029 待派），需主控另立卡收掉；另外 6 条按设计不给界面的路由没动；`route_ui_gap` 无对应测试文件（按卡 §3 不必新建，验收靠真机输出）；`wb_status.py` 里未再发现第二个同类抛点。**没动的**：wb_dispatch / wb_dash / wb_watchdog、src/**、scripts/**、docs/**、共享文件、其它 复盘/*.md。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"

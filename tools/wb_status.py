@@ -56,6 +56,20 @@ def _tool_line(name: str, payload: dict) -> str:
     return f"{name}()"
 
 
+def _message_of(event: dict) -> tuple[dict, str | None]:
+    """取 `message`；畸形 log（不是 dict）不许炸（T-G96 边界① / T-G125）。
+
+    返回 `(message, 坏行)`：`message` 缺失或为 None → 空对象（老口径，当没有）；
+    是字符串 / 列表等 → 给出可渲染的坏行（认不出来的一行也不丢），`message` 位返回空对象。
+    """
+    message = event.get("message")
+    if message is None:
+        return {}, None
+    if isinstance(message, dict):
+        return message, None
+    return {}, f"  ?  message 不是对象（{type(message).__name__}）：{_clip(message, 160)}"
+
+
 def parse_events(lines: list[str]) -> tuple[list[str], dict]:
     """把 JSONL 渲染成 `(时间线, 摘要)`。认不出的行原样留着 —— 不静默丢东西。"""
     timeline: list[str] = []
@@ -99,7 +113,12 @@ def parse_events(lines: list[str]) -> tuple[list[str], dict]:
 
         # ② 助手说话 / 调工具
         elif kind == "assistant":
-            content = (event.get("message") or {}).get("content")
+            message, bad_message = _message_of(event)
+            if bad_message:
+                unknown += 1
+                timeline.append(bad_message)
+                continue
+            content = message.get("content")
             if isinstance(content, str):
                 texts += 1
                 timeline.append(f"  说  {_clip(content)}")
@@ -124,7 +143,12 @@ def parse_events(lines: list[str]) -> tuple[list[str], dict]:
 
         # ③ 工具回话（成功/失败）
         elif kind == "user":
-            content = (event.get("message") or {}).get("content")
+            message, bad_message = _message_of(event)
+            if bad_message:
+                unknown += 1
+                timeline.append(bad_message)
+                continue
+            content = message.get("content")
             items = content if isinstance(content, list) else []
             for item in items:
                 if not isinstance(item, dict) or item.get("type") != "tool_result":

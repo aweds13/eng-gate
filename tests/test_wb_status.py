@@ -101,6 +101,48 @@ def test_non_dict_event_does_not_crash() -> None:
     assert summary["unknown_events"] == 1
 
 
+# ------- 畸形 `message`（T-G96 边界① / T-G125）：不是 dict 时不许抛、口径确定 -------
+
+_OK_ASSISTANT = _assistant({"type": "tool_use", "name": "Read",
+                            "input": {"file_path": "src/a.py"}})
+
+
+def test_message_is_a_string_does_not_crash() -> None:
+    """① `message` 是字符串（畸形 log）→ 记一行认不出，不抛；后面好事件照数。"""
+    timeline, summary = ws.parse_events([
+        _event(type="assistant", message="字符串"),
+        _OK_ASSISTANT,
+    ])
+    assert "message 不是对象" in "\n".join(timeline)
+    assert summary["unknown_events"] == 1
+    assert summary["tool_calls"] == 1          # 该数的照数
+
+
+def test_message_is_a_list_does_not_crash() -> None:
+    """② `message` 是列表（畸形 log）→ 同样记一行认不出，不抛。"""
+    timeline, summary = ws.parse_events([
+        _event(type="user", message=["不是 dict"]),
+    ])
+    assert "message 不是对象" in "\n".join(timeline)
+    assert summary["unknown_events"] == 1
+
+
+def test_message_none_behaves_like_before() -> None:
+    """③ `message` 是 None → 老口径（当空 message 跳过），不许抛、也不算未知。"""
+    timeline, summary = ws.parse_events([_event(type="assistant", message=None)])
+    assert summary["unknown_events"] == 0
+    assert summary["tool_calls"] == 0
+    assert summary["texts"] == 0
+
+
+def test_message_missing_behaves_like_before() -> None:
+    """④ 缺 `message` 字段 → 与 None 同口径（跳过），不许抛。"""
+    timeline, summary = ws.parse_events([_event(type="assistant")])
+    assert summary["unknown_events"] == 0
+    assert summary["tool_calls"] == 0
+    assert summary["texts"] == 0
+
+
 # ------------------------------------------------------------------ CLI 层
 
 

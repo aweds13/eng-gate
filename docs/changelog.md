@@ -4,6 +4,21 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 工具收尾两小件：`route_ui_gap` 声明表 + `wb_status` 畸形 log 防御（T-G125）
+
+- **A 件**（`tools/route_ui_gap.py`）：加 `DECIDED` 声明表补两条**早有裁定**的路由
+  （`GET /api/team/assignments`＝已被 `/api/team/board` 取代，`POST /api/sync/tasks`＝已弃用），
+  命中打「（已声明：<理由>）」+ 头部「（已声明 N / 未声明 M）」计数；
+  `--ack ai,health` 下未声明尾巴 **2 → 0**，其余判据一字未动。
+- **B 件**（`tools/wb_status.py`，即 T-G96 边界①「另立卡」那张）：新增 `_message_of()`，
+  `parse_events()` 的 assistant/user 两分支改用它 —— `message` 为 str/list 的畸形 log
+  记一行「message 不是对象」并计 `unknown_events`，**不再抛 AttributeError**；
+  缺失/None 老口径不变。先红后绿：实现前 ①str ②list 抛 AttributeError（红）→
+  实现后 12 passed → 突变删防御再红 → 还原再绿。
+- **边界（如实写）**：`turns_seen()` / `tool_signatures()` 定义在 `tools/wb_dispatch.py:577/602`、
+  **同病未修**（该文件是本卡禁区，024 在跑）→ 需主控另立卡收掉。
+- 复盘：`复盘/工具收尾两小件-T-G125.md`。
+
 ### 看门狗独立化第一步：`--status` 心跳停滞醒目告警（T-G112）
 
 - `tools/wb_dispatch.py` 新增 `heartbeat_stall_alert()`（:405，接线 :368/:381）：
