@@ -18,9 +18,9 @@
 # ★ 2026-09-26 收敛（T-G118）：这份文件是**待派队列** ——
 #   **已完成的卡要移出**（历史在 git 里）。原因：`wb_plan.py check` 目前**忽略 `status`**，
 #   把 backlog 当"全部已排班" → 已完成的卡会与待派卡报「同一文件两个写者」（实测 007↔024、009↔022）。
-#   ★ 已知缺口（候选卡）：`check` 应当① 跳过 `status = done` 的卡；② 允许**同域卡靠 `depends` 排到不同批**
-#   （现在只要 files 相交就一律拒单，装不下"队列里有同域串行关系"这种正常情形）。
-
+#   ★ 2026-09-26 已修（T-G119）：`check` 现在**跳过 `status = done`/`failed`**，
+#     并且**同域卡只要 `depends` 有路径就允许共存**（会被排到不同批）——所以队列里可以
+#     同时有「同域串行」的卡（例：024 → 029 都改 `tools/wb_dispatch.py`）。
 [base]
 reviewed = "1f47c5f"        # 已复核的基点提交（没登记过就不许建树）
 
@@ -53,5 +53,20 @@ files = [
   "tools/wb_watchdog.py"
 ]
 depends = []
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "029"
+task = "T-G114"
+title = "派活器三合一"
+tree = ".wt/dispatch"
+spec = "gates/diag/卡029-派活器三合一.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+  "复盘/派活器三合一-T-G114.md"
+]
+depends = ["024"]
 risk = "high"
 status = "pending"
