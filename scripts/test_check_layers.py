@@ -83,13 +83,29 @@ def main() -> int:
     if "DESIGN.md" in out and "引用断裂" in out:
         failures.append("DESIGN.md 应被豁免，但仍被报断链")
 
+    # --- 新规则正样例（T-G127）：引用 gitignored 产物（不存在但被 git 忽略）→ 应跳过，不报断链 ---
+    code, out = with_injected(
+        README, "\n> 测试：见 `gates/diag/绝不存在的产物-别创建-T-G127.md`\n"
+    )
+    print(f"[正样例2] gitignored 产物引用被跳过 → exit={code}")
+    if code != 0 or "引用断裂" in out:
+        failures.append(f"gitignored 产物引用应被跳过，实际: {out.strip()[:200]}")
+
+    # --- 新规则负样例（T-G127）：引用不存在的受版本管理文件 → 必须仍 FAIL ---
+    code, out = with_injected(
+        README, "\n> 测试：见 `docs/绝不存在的受管文件-T-G127.md`\n"
+    )
+    print(f"[负样例5] 受管文件断链仍咬 → exit={code}")
+    if code == 0 or "引用断裂" not in out:
+        failures.append(f"受管文件断链应仍被抓，实际: {out.strip()[:200]}")
+
     print()
     if failures:
         print("SELF-TEST FAIL ❌")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("SELF-TEST PASS ✅ （1 正样例 + 4 负样例 + 1 豁免用例）")
+    print("SELF-TEST PASS ✅ （2 正样例 + 5 负样例 + 1 豁免用例）")
     return 0
 
 

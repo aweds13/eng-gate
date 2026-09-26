@@ -4,6 +4,18 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### `check_layers` 不再对 gitignored 产物引用报假红（T-G127）
+
+- 卡 033 在 worktree 里跑 `check_layers.py` 被假红卡住（changelog 引用只在主树存在的
+  gitignored 文件 `gates/diag/wb-review-T-G79.md`）→ 判据改成**问 git**：对引用的每个候选
+  基准路径跑 `git check-ignore -q`，任一被忽略 → 跳过存在性检查、打一行 `[skip]`；
+  不硬编码目录名；check-ignore 出错按「未忽略」从严。
+- **先红后绿 + 突变检验**：改前 worktree FAIL → 改后同树 PASS；把 `is_git_ignored` 改恒真
+  → 负样例2/5 双红（受管断链仍被咬住）；原 1 正 + 4 负 + 1 豁免一条没动。
+- 同笔带三条台账日期注（SR-F1.9 / SR-F2.8 / SR-F8.4b，2026-09-26 用户裁定，status 仍 deferred）；
+  T-G127 证据指针由 `test:` 更正为 `file:scripts/test_check_layers.py`（R036 复核，主控裁定）。
+  复盘：`复盘/check_layers假红-T-G127.md`。
+
 ### 视觉线两处文档的过时句子加日期注（T-G124）
 
 - S-4 表 3 查出 **4 处反向漂移**（把已做完的事写成还没做，会误导后来者重复派活）：

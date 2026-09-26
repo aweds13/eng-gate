@@ -299,7 +299,7 @@ title = "区分三类任务（指标 / 逾期不候·作业考核 / 逾期不候
 group = "F1"
 status = "deferred"
 evidence = ["file:复盘/C批口径定案.md", "text:docs/specification/functional.md::不做任务分类字段"]
-gaps = "**一版不做**（2026-09-19 用户决定）：不加 `tasks.category`；「哪件事不能拖」用「优先级（高）+ 学校硬考核强提醒（T-C8）」表达；分类字段与「指标可重规划」留二版（SR-F2.8 同为二版）"
+gaps = "**一版不做**（2026-09-19 用户决定）：不加 `tasks.category`；「哪件事不能拖」用「优先级（高）+ 学校硬考核强提醒（T-C8）」表达；分类字段与「指标可重规划」留二版（SR-F2.8 同为二版）。2026-09-26 用户裁定：维持 deferred，先看代码现状再议（本轮不改口径）。"
 
 [entries."SR-F2.1a"]
 id = "SR-F2.1a"
@@ -414,7 +414,7 @@ title = "重规划 / 债务重组（保留教训记录；学校硬考核逾期�
 group = "F2"
 status = "deferred"
 evidence = []
-gaps = "规格自标「二版」"
+gaps = "规格自标「二版」。2026-09-26 用户裁定：软件开发完成前暂时不做。"
 
 [entries."SR-F3.1"]
 id = "SR-F3.1"
@@ -2017,7 +2017,7 @@ title = "预留「产出评价器」接口 —— 评价器 / 打分器本身（
 group = "F8"
 status = "deferred"
 evidence = []
-gaps = "**规格与契约自己就把这一半划在范围外**：`functional.md` 写「合同待知识管理项目对齐**再定**」，契约 `OP-38` 的【边界】写「**不做打分器**；合同待对齐」。所以它不是「欠着的活」，是**等外部口径**。**为什么拆出来而不是继续挂在 SR-F8.4 上**（T-G75，用户 2026-09-25 定的处置）：一版的交付（手动粗颗粒产出入口）已经做完了，混在一条里会让台账永远显示一个假欠账 —— 拆开之后「done 的一版」与「等外部口径的评价器」各自如实。**要开工需要先定的口径**：评的是哪一类产出（学校 KPI / 知识资产 / 两者）、几档（粗/中/细）、结果进不进账本与统计、要不要与「完成收益」（`gain_count`）分开。**没做**：`src/` 一行没改（这一轮只动台账与文档口径）。"
+gaps = "**规格与契约自己就把这一半划在范围外**：`functional.md` 写「合同待知识管理项目对齐**再定**」，契约 `OP-38` 的【边界】写「**不做打分器**；合同待对齐」。所以它不是「欠着的活」，是**等外部口径**。**为什么拆出来而不是继续挂在 SR-F8.4 上**（T-G75，用户 2026-09-25 定的处置）：一版的交付（手动粗颗粒产出入口）已经做完了，混在一条里会让台账永远显示一个假欠账 —— 拆开之后「done 的一版」与「等外部口径的评价器」各自如实。**要开工需要先定的口径**：评的是哪一类产出（学校 KPI / 知识资产 / 两者）、几档（粗/中/细）、结果进不进账本与统计、要不要与「完成收益」（`gain_count`）分开。**没做**：`src/` 一行没改（这一轮只动台账与文档口径）。2026-09-26 用户裁定：继续等外部（知识管理项目）对齐，维持 deferred。"
 
 [entries."SR-F9.1"]
 id = "SR-F9.1"
@@ -4079,6 +4079,18 @@ evidence = [
   "text:复盘/视觉重构素材清单-T-G24.md::2026-09-26 更正（T-G124）",
 ]
 gaps = "**为什么有这张卡**：S-4 表 3 查出 4 处反向漂移（把已做完的事写成还没做），会误导后来者重复派活。**做了什么**：逐处就地加日期注、原句一字未改 —— ①视觉线地图.md:288 悬停/选中态注「已做（T-G103 done，判据从 CSS 真读）」；②视觉线地图.md:260 棘轮注「现值已变，ui_text_baseline.toml 现为 count = 33（T-G101），43 是当时的数」；③视觉线地图.md:256 字号档位注「那张卡就是 T-G104（done）」；④视觉重构素材清单-T-G24.md:161 注「台账 SR-F1.5b 是 done，T-G55 行自注过早已 done」。**真机证据**：grep 命中 4 处注的原始输出在复盘里；反证检验（删一处注 → 命中 4→3 → 还原）证明断言会咬；原句仍在的 grep 输出在复盘里；git diff 4 处均为行尾追加、原句逐字未改。**边界（如实写）**：轻门 check_layers.py FAIL —— 但为基线预存在断裂（docs/changelog.md:207/499 引用不存在的 gates/diag/wb-review-T-G79.md，stash 掉本卡改动后 baseline_exit=1），与本卡无关；修它超出白名单 → 本卡未提交，留主控裁定。无第 5 处改动；规格行号与实际有出入（258→256、160→161），按原句 grep 定位解决。**没动的**：docs/**、其它复盘、src/tools/scripts/tests、gates/**、三个外来未跟踪文件。"
+
+[entries."T-G127"]
+id = "T-G127"
+title = "`check_layers.py` 不再对 **gitignored 产物**的引用报假红（worktree 里跑必然假红 → 卡住工人）；该咬的仍咬"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/check_layers假红-T-G127.md",
+  "text:scripts/check_layers.py::if any(is_git_ignored(c) for c in candidates):",
+  "file:scripts/test_check_layers.py",
+]
+gaps = '**为什么有这张卡**：卡 033 在自己的 worktree 里跑 `check_layers.py` 被假红卡住、拒绝提交 —— 断点是 `docs/changelog.md` 引用的 `gates/diag/wb-review-T-G79.md`（`gates/diag/` 整目录 gitignored、只存在于主树）。两次原始输出：主树 `LAYER CHECKS: PASS ✅`（exit=0）；worktree `[FAIL] 引用断裂: docs\changelog.md 引用了不存在的 gates/diag/wb-review-T-G79.md`（exit=1，出现两处）。**做了什么**：选 **A（问 git）** —— 对引用的每个候选基准路径跑 `git check-ignore -q -- <相对路径>`（命令见复盘 §2），任一候选被忽略 → 跳过存在性检查、只打一行 `[skip]` 说明；**不硬编码目录名**（`gates/diag/` 将来改名也不失效）；`check-ignore` 出错按「未忽略」从严处理（宁可多报断链、不悄悄放过）。候选 B（只对同层级判存在性）会放过跨层级的真断链，弃。**真机证据（先红后绿）**：改前 worktree FAIL（上面原文）→ 改后同树同命令 PASS，输出两行 `[skip] 跳过 gitignored 产物引用: docs\changelog.md → gates/diag/wb-review-T-G79.md` + `LAYER CHECKS: PASS ✅`（exit=0）。**反证（不许放松）**：自检新增两条 —— 正样例2（引用 gitignored 的不存在产物 → 跳过、exit=0）、负样例5（引用不存在的受管文件 → 仍 `[FAIL] 引用断裂`、exit=1）；原 1 正 + 4 负 + 1 豁免一条没动。**突变检验**：把 `is_git_ignored` 改成恒真（连受管断链也豁免）→ 负样例2/5 双双变 exit=0、`SELF-TEST FAIL ❌`（原文见复盘 §5）；还原 → `SELF-TEST PASS ✅ （2 正样例 + 5 负样例 + 1 豁免用例）`。ruff 两文件 `All checks passed!`。**边界（如实写）**：被跳过的引用只打 `[skip]` 行、不进判定；一个**真实存在但被 gitignore 的文件**被引用时本判据**静默放过**（它管断链、不管「产物该不该被引用」，要管需另立口径）；引用在所有基准下既不存在又不受忽略 → 仍 FAIL（负样例5 钉着）。**没动的**：`docs/**`（changelog 那两处引用合法、原样保留）、`gates/**`、`tools/**`、`src/**`、`tests/**`、共享文件、三个外来未跟踪文件。R036 复核发现原 test: 指针按 ROOT/tests/ 求值必假（真身在 scripts/），主控裁定改 file:；规矩见卡表 §22。'
 
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"

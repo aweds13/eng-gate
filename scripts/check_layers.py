@@ -14,7 +14,9 @@
 3. 约定层存在性：conventions.md 必须存在，且其规则条目须标注来源 N。
 4. 契约层存在性与覆盖：interactions.md / flows.md 必须存在；
    contracts 中引用的 SR 须能在 specification 中找到。
-5. 引用完整性：文档中引用的 docs 内相对路径必须真实存在。
+5. 引用完整性：文档中引用的 docs 内相对路径必须真实存在；
+   被 git 忽略的产物路径（如 gates/diag/ 下的过程文件，不随树分发）跳过存在性检查，
+   只打印一行说明 —— 判据问 git（check-ignore），不硬编码目录名（T-G127）。
 6. 覆盖矩阵：coverage.md 存在、含 SR-F1~F10，且每域详细规格/契约文件存在。
 
 用法：python scripts/check_layers.py
@@ -22,6 +24,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -81,16 +84,38 @@ def forbidden_hits(text: str) -> list[str]:
     return hits
 
 
-def check_link_integrity() -> list[str]:
+def is_git_ignored(path: Path) -> bool:
+    """问 git：这个路径是否被忽略（T-G127）。
+
+    check-ignore 退出码：0 = 忽略 / 1 = 未忽略 / 其余 = 出错。
+    出错时按「未忽略」处理（从严）：宁可多报一条断链，也不悄悄放过真断链。
+    """
+    try:
+        rel = str(path.relative_to(ROOT))
+    except ValueError:
+        rel = str(path)
+    p = subprocess.run(
+        ["git", "check-ignore", "-q", "--", rel],
+        capture_output=True, cwd=str(ROOT),
+    )
+    return p.returncode == 0
+
+
+def check_link_integrity() -> tuple[list[str], list[str]]:
     """检查 docs 内文档引用的相对路径是否真实存在。
 
     路径可能相对「当前文档」或相对「docs/ 根」书写（两种约定都常见），
     故对每个候选路径依次尝试多个基准目录，命中其一即算通过。
     已显式声明"待建/不存在"的目标（见 known_missing）豁免。
     绝对路径（项目外引用，如引上一项目的 TASTE）不属本检查范围，豁免。
+    被 git 忽略的产物（gitignored，不随 worktree 分发，如 gates/diag/ 的过程文件）
+    跳过存在性检查，只记一行说明 —— 判据问 git，不硬编码目录名（T-G127）。
+
+    返回（problems, notes）：problems 是断链，notes 是 gitignored 跳过说明。
     """
     known_missing = {"DESIGN.md", "LEARN.md"}  # 文档中已标注为"待建"，不算断链
     problems: list[str] = []
+    notes: list[str] = []
     docs_root = ROOT / "docs"
     # 匹配反引号内的 .md 路径（支持中文文件名；相对当前文档 / docs 根 / 仓库根三种写法）
     pattern = re.compile(r"`([^\s`]*?\.md)`")
@@ -113,8 +138,14 @@ def check_link_integrity() -> list[str]:
             if "/" not in rel and "\\" not in rel:
                 candidates += [p.resolve() for p in docs_root.rglob(rel)]
             if not any(c.exists() for c in candidates):
+                # gitignored 产物：不随树分发，worktree 里必然没有 → 跳过（T-G127）
+                if any(is_git_ignored(c) for c in candidates):
+                    notes.append(
+                        f"跳过 gitignored 产物引用: {md.relative_to(ROOT)} → {rel}"
+                    )
+                    continue
                 problems.append(f"{md.relative_to(ROOT)} 引用了不存在的 {rel}")
-    return problems
+    return problems, notes
 
 
 def main() -> int:
@@ -179,7 +210,9 @@ def main() -> int:
             ok = False
 
     # --- 5. 引用完整性 ---
-    broken = check_link_integrity()
+    broken, skipped_gitignored = check_link_integrity()
+    for s in skipped_gitignored:
+        print(f"[skip] {s}")
     if broken:
         for b in broken[:10]:
             print(f"[FAIL] 引用断裂: {b}")
