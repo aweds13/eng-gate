@@ -48,6 +48,11 @@ HIDDEN_STATUSES = (STATUS_ARCHIVED, STATUS_DELETED)
 # 行为同「取消」。债务由 `overdue_tasks` 派生（`ledger.summary`），所以在这里排除就等于不计债。
 PARKED_STATUSES = (STATUS_CANCELLED, STATUS_PENDING)
 
+# 「今天」清单里**被藏起来**的状态（完成 / 搁置「取消·待定」/ 归档 / 已删）—— 它们不出现在
+# `myday_tasks()` 里，但 `is_myday` 仍为 1、`myday_rank` 仍留着（T-G98：留着是为了让"完成 / 取消"
+# 这种**非排序动作不许动序号列**；见 `update_task` 里"回到可见 → 清号排最后"那一段）。
+MYDAY_HIDDEN_STATUSES = (STATUS_DONE, *PARKED_STATUSES, *HIDDEN_STATUSES)
+
 # 「进行中」的排序号口径（T-F1）：序号小的排前面；没排过序的（NULL）排最后。
 _DOING_ORDER_BY = " ORDER BY doing_rank IS NULL, doing_rank, updated_at"
 
@@ -558,6 +563,19 @@ def update_task(
     # 而它已经离开过今天了，那个位置不该留着（与 `doing_rank` 同一条规矩：不留幽灵序号）。
     if "is_myday" in updates and not bool(updates["is_myday"]) and before.is_myday:
         updates["myday_rank"] = None
+    # 从"被藏起来"回到"看得见"（撤销完成 / 取回待定·取消 / 取消归档·撤销删除）时也要清号：
+    # ★ T-G98 —— **进入隐藏态不清号**（"完成 / 取消"这类**非排序动作不许动 `myday_rank` 列**，
+    # 否则会顺着跨端 LWW 把别的端的真改动顶掉，见 `复盘/myday序号根因-T-G98.md`）；但那条号在
+    # 隐藏期间被"占着"（规整可见条目时要绕开它，见 `_myday_reserved_ranks`），所以"回来"时要还回去
+    # —— 清成 NULL = 按老口径排到"排过号的那一截"后面（**排最后**，与"移出今天再加回来"同一条规矩：
+    # 离开过清单，那个位置就不该再留着）。
+    if (
+        "status" in updates
+        and before.is_myday
+        and before.status in MYDAY_HIDDEN_STATUSES
+        and updates["status"] not in MYDAY_HIDDEN_STATUSES
+    ):
+        updates["myday_rank"] = None
     if "task_type" in updates or "course_id" in updates:
         # 类型与课程是一对：**按改完之后的状态**校验（只传 course_id 时也要看当前类型，
         # 只传 task_type='普通' 时也要看当前课程）—— 单看某一列会放过"普通 + 挂课程"这种组合。
@@ -743,7 +761,7 @@ def myday_tasks(conn: sqlite3.Connection, today: str | None = None) -> list[Task
     """
     rows = conn.execute(
         "SELECT * FROM tasks WHERE is_myday = 1 AND status NOT IN (?,?,?,?,?)" + _MYDAY_ORDER_BY,
-        (STATUS_DONE, *PARKED_STATUSES, *HIDDEN_STATUSES),
+        MYDAY_HIDDEN_STATUSES,
     ).fetchall()
     return [_row_to_task(r) for r in rows]
 
@@ -1411,8 +1429,10 @@ def _myday_null_positions(items: list[Task]) -> dict[str, int]:
     return {it.id: i for i, it in enumerate(x for x in items if x.myday_rank is None)}
 
 
-def _myday_rank_plan(items: list[Task], order: list[str]) -> dict[str, int]:
-    """让 `order` 成为新顺序要写哪些号：`{id: 新号}`（值为 **1..m**）。
+def _myday_rank_plan(
+    items: list[Task], order: list[str], reserved: set[int] | None = None
+) -> dict[str, int]:
+    """让 `order` 成为新顺序要写哪些号：`{id: 新号}`。
 
     头（要给号的一截）= `order` 里**最长的那段合法尾巴之前**的部分。合法尾巴三条：
     ① **全是不带号的行** —— 带号的行必须留在头里（我们从不把号清掉）；
@@ -1424,7 +1444,11 @@ def _myday_rank_plan(items: list[Task], order: list[str]) -> dict[str, int]:
     （值没变 = `version` 也不涨）。★ 为什么尾巴要加条件 ②：像"拖一次 → 整份清单都写号"
     那种整表归一化会把"没拖过 = NULL"抹掉 —— 而尾巴越短只会让**更多**行拿到号（仍然正确，
     只是写得更多），所以这几个条件只影响"写多少"，不影响"对不对"。
+
+    ★ T-G98：号从 **1** 起按头里的次序往上取，但**跳过 `reserved`**（被隐藏条目占着的号）。
+    不然可见条目的新号会和隐藏条目的旧号撞 —— 就是"撤销完成幽灵归位"那一半。
     """
+    reserved = reserved or set()
     by_id = {it.id: it for it in items}
     pos_now = {it.id: i for i, it in enumerate(items)}
     null_pos = _myday_null_positions(items)
@@ -1439,11 +1463,32 @@ def _myday_rank_plan(items: list[Task], order: list[str]) -> dict[str, int]:
             break
         prev = pos
         split = i
+    values: list[int] = []
+    nxt = 1
+    for _ in range(split):
+        while nxt in reserved:
+            nxt += 1
+        values.append(nxt)
+        nxt += 1
     return {
-        tid: i
-        for i, tid in enumerate(order[:split], start=1)
-        if by_id[tid].myday_rank != i
+        tid: values[i]
+        for i, tid in enumerate(order[:split])
+        if by_id[tid].myday_rank != values[i]
     }
+
+
+def _myday_reserved_ranks(conn: sqlite3.Connection, items: list[Task]) -> set[int]:
+    """今天清单里被**隐藏条目占着**的号（完成 / 取消 / 待定 / 归档 / 已删）。
+
+    ★ T-G98：隐藏条目**保留**它的 `myday_rank` —— 因为"完成 / 取消"是**非排序动作**，
+    不许动序号列（否则会顺着跨端 LWW 把别的端的真改动顶掉，见 `复盘/myday序号根因-T-G98.md`）。
+    可见条目取号时要绕开这些被占的号，否则可见条目的新号会和隐藏条目的旧号撞（同号）。
+    """
+    visible = {it.id for it in items}
+    rows = conn.execute(
+        "SELECT id, myday_rank FROM tasks WHERE is_myday = 1 AND myday_rank IS NOT NULL"
+    ).fetchall()
+    return {int(r["myday_rank"]) for r in rows if r["id"] not in visible}
 
 
 def _apply_myday_order(conn: sqlite3.Connection, items: list[Task], order: list[str]) -> None:
@@ -1458,7 +1503,8 @@ def _apply_myday_order(conn: sqlite3.Connection, items: list[Task], order: list[
     """
     if order == [it.id for it in items]:
         return
-    for task_id, rank in _myday_rank_plan(items, order).items():
+    reserved = _myday_reserved_ranks(conn, items)
+    for task_id, rank in _myday_rank_plan(items, order, reserved).items():
         _write_myday_rank(conn, task_id, rank)
 
 

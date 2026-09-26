@@ -4,6 +4,67 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 并发调度器 `tools/wb_plan.py`（T-G99）
+
+并发现在从「靠主控记性」变成「能跑的规则」：新工具（只标准库）`check` / `plan` / `worktrees` /
+`dispatch` 四个子命令。
+
+- **冲突域是硬约束**：`PROTECTED_FILES` 写死六个受保护共享文件（台账 / changelog / 两张交接文档 /
+  `gates/last.json` + `reuse.json`），作者一律不许碰；`validate()` 六类拒单（files 相交 / 含受保护
+  文件 / 同树 / depends 指向不存在的卡 / 成环 / files 为空）。
+- **怎么算批次**：`topo_layers()` 按 `depends` 拓扑分层（层号取**最长路径**，菱形成环都覆盖）→ 逐层
+  `greedy_pack()`（每批 ≤ `--concurrency`，同批两两 `files` 不相交、树不重复）。
+- 另交付 `docs/workbacklog.toml`（种子 = 在飞的 007/008/009/010 四张卡）。
+- **反证（先红后绿）**：`tests/test_wb_plan.py` **41 条**（实现缺席时 pytest 收集中断 → 实现后
+  41 passed）；★ 突变检验（反空转）：打瞎 `files_intersect` → 3 条红、打瞎 `greedy_pack` 的同树约束
+  → 1 条红，恢复后回 41 passed。
+- **边界（如实写）**：CLI 侧速率 / 账号并发上界**未探测**；`worktrees --execute` / `dispatch --execute`
+  **没真跑过**；`plan` 是确定性贪心、不是最优装箱；`check` 口径偏严（`depends` 链上两卡复用同树 /
+  同文件会被拒 —— 本卡的保守取舍）。
+
+### My Day 序号「整列写回」的根因（T-G98）
+
+完成 / 取消 / 待定 / 归档 / 已删的条目被 `myday_tasks()` 滤掉、`myday_rank` 却留着，而规整只按**可见**
+条目从 1 编号 —— 两个空间一重叠就撞号（复核报告 `gates/diag/wb-review-T-G79.md` 边界 B）。T-G86 只修掉
+了同一片的「没动也写库」那半；这半是根因的另一面。
+
+- **修法（只动 `src/timeflow/core/tasks/manager.py`，不引 schema 迁移、不改表结构）**：新增
+  `_myday_reserved_ranks(conn, items)` 读出被隐藏条目**占着**的号，`_myday_rank_plan` 给可见条目取号时
+  **跳过**它们（可见号与隐藏号**不可能撞**）。
+- `update_task`：从「被藏起来」回到「看得见」（撤销完成 / 取回待定·取消 / 取消归档·撤销删除）→
+  **清号排最后**；**进入**隐藏态**不清号** —— 因为「完成 / 取消」这类**非排序动作不许动序号列**
+  （`myday_rank` 是同步包里的普通字段、`version` 是跨端 LWW 首选键）。
+- 抽 `MYDAY_HIDDEN_STATUSES` 常量给 `myday_tasks` 与 `update_task` 共用，免得两处口径漂。
+- **反证（先红后绿）**：新增 `tests/test_myday_rank_line.py` 5 条（判据 = 直连库取
+  `{id:(myday_rank, version)}` 前后逐行比）—— 把 `manager.py` 还原成 HEAD 跑 `2 failed / 21 passed`
+  （红的正是「重号 `[1, 2, 1]`」与「撤销完成 `assert ['B2','B3','B1'] == ['B3','B1','B2']`」），
+  修完 `23 passed`。
+- **边界（如实写）**：★ 症状 C 的「真拖 version +2」**没能跑红**（那半在 T-G86 已收掉，改前量到的是
+  +1），其三条断言是**回归守卫**；**不做 sparse index**（真拖仍把头那截重排成跳过 reserved 的紧凑号，
+  sparse 属 A9）；只做应用层绕号、**不加 UNIQUE**、**不清洗历史遗留重号**；界面 / 路由 / 排序口径一字未改。
+
+### 状态面板的「卡死」判据与派活器对齐（T-G97）
+
+`tools/wb_dash.py` 原来把「卡死」硬写成 480 秒（注释还写「与派活器看门狗同一口径」），而派活器在
+T-G94 之后早已是「有工具在飞 → 底线上抬到 `BUSY_STALL_SECONDS`（1800 秒），再按
+`max(底线, 2.5 × 历史最长一次已完成调用)` 自适应」—— 面板于是会把一个正在跑长命令（全量门禁约 4 分钟、
+冷缓存 worktree 里 `ui_flow` 十几分钟）的工人**误标成「静默 N 分钟（可能卡死）」**，正是 T-G94 修掉的
+那个病。
+
+- **不在面板里写第二份口径**：`import wb_dispatch`，只调它的 `inflight_tool()` / `tool_durations()` /
+  `stall_threshold_seconds()` 拿「本次阈值」；底线 `STALL_BASE` 也取 `wb_dispatch.STALL_SECONDS`。
+- **四档只在「安静 / 卡死」的边界上变化**：收工·结束 / 在跑（静默 < 60 秒）不变；
+  安静 = 60 ≤ 静默 < **本次阈值**；卡死 = 静默 ≥ **本次阈值**。
+- 行里**新增**两字段（既有字段名一个没改、`/api/state` 顶层结构 `{now, cards}` 没动）：
+  `inflight` = 「在跑：<工具>（已跑 X 分钟）」、`threshold_min` = 本次阈值（分钟）；面板 HTML 加
+  「在跑 / 阈值」一列。
+- **反证（先红后绿）**：`tests/test_wb_dash.py` **11 → 16 条**（改前 7 failed / 9 passed、改后
+  16 passed）；含一条 `monkeypatch` 换掉 `wb_dispatch.stall_threshold_seconds` 证明面板是**调**不是
+  **抄**，以及「静默 600 秒 + 在飞 Bash → 新实现判「安静」」这条本卡要点。
+- **边界（如实写）**：面板仍只报「在不在动」、不判断内容对不对；仍是只读、不落文件；**静默的测法没动**
+  （面板量日志 mtime、派活器量末事件时刻，不是同一根秒表），本卡只对齐**阈值**口径；缺 `__timestamp`
+  → 退回底线 480、绝不放大阈值。
+
 ### 看门狗护栏补强（T-G96）
 
 对抗性复核 `1969b46`（T-G94：看门狗不再误杀长工具调用）判「算数，但有保留」，挑出三个缺口

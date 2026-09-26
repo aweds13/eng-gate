@@ -539,6 +539,55 @@ evidence = [
 gaps = "**为什么有这张卡**（T-G95，= 外包卡 006）：主控每收一张卡，最贵的开销**不是复核**（`wb_review.py` 一条命令 5 秒），而是**读工人那一轮的原始事件流** —— 卡 005 那轮是 `gates/diag/wb-005.jsonl`，**264 行 / 316 KB**，而他要的东西（工人的六项回报 / 判决 / 计数）**只压在它末尾**，读一次上万 token，纯浪费。**做四件事**：① 新增 `write_report(log, *, card, code, reason, scene, sid, attempts, lines, started_at)` → `gates/diag/wb-<卡>.report.md`（1~2 KB）：判决 / 会话 / 开始结束与用时 / 回合·工具·文件·报错 / log 行数与字节数 + **`result` 事件回话原文** + **最后 10 次工具调用**（序号 + 工具名 + 参数前 120 字符）+ 机械读数（`git status --porcelain` 未提交文件数、`gates/last.json` 的 ok/rev、复核命令模板）；② **每一条退出路径都落**（收工 / 被看门狗掐 / 超时 / 撞 `--max-turns` / **重试的每一轮**），重试轮按 log 名派生落成 `wb-<卡>.r2.report.md`（**不覆写**，与每轮一个 log 同一口径）；③ `status_report()` 在摘要存在时多打一行 `[摘要] gates/diag/wb-<卡>.report.md`（主控**先看它**）；④ ★ 顺手修**块缓冲**（T-G93 记录在案、主控撞了三次）：进度 `print(...)` 全加 `flush=True`，且 `detached_argv()` 给解释器补 `-u`（**只加这一个参数**）—— 原来 `--detach` 的 `wb-<卡>.dispatch.log` 是 **0 字节**，主控看日志以为它没起来。**口径复用现成的、不写第二份**：回合数走 `turns_seen()`、工具签名走 `tool_signatures()`、log 摘要走 `wb_status.parse_events()`。**反证（先红后绿）**：`tests/test_wb_dispatch.py` **50 → 57 条** —— 改实现前 **8 failed / 49 passed**（7 条新用例 + 1 条改过下标的既有用例全红），改后 **57 passed**；覆盖 = 摘要真的落盘且**含回话原文** / **没有 `result` 事件**时照样落盘并写明 / 半截·空事件流**不许炸** / 四条退出路径各落一份 / 重试每轮一份且不互盖 / **CJK 不被转义**（断言正文里没有 `\\u`）/ `--status` 指向摘要 / `detached_argv()` 的 `-u` **恰好一个**（输入里已有的去重）且 T-G92 既有事实（脚本自己、`--no-preflight` 恰好一个、`--detach` 已去掉、以 `--detach-done` 收尾）全绿。**真机证据**：`--detach` 真派一张小只读卡（`wb-R-smoke`，全文与字节数见复盘）。**边界（如实写）**：① `write_report` 的签名按卡规格带 `scene`，输出结构也按规格固定；现场只在**被掐 / 超时**（scene 非空）时多出一节 `## 现场`，正常收工不占地方；② 「最后 10 次工具调用」复用 `tool_signatures()` 的 `名字|参数JSON` 签名再裁到 120 字（**没有另写一个事件解析器**）；③ 未提交文件数走**全量** `git status --porcelain`（含未跟踪文件，与 preflight 的 `-uno` 口径不同 —— 这里要的就是「工作区现在有多少东西没提交」）；④ 摘要写在 `gates/diag/`（gitignored），**证据不进仓库**；⑤ `--status` 只指最新的那份摘要（按 mtime；重试轮的 `.r2` 更新则指它，前几轮仍在磁盘上）；⑥ §2.6 只改了 `外包-卡表与规矩.md` 的 §15/§16，同一份文档 §12 的表里仍写着「静默 ≥ `--stall-seconds`，默认 480 秒」—— 那是 T-G88 的表，**卡的白名单不许动它**（480 只是**底线**，实际口径是自适应，未同步属已知残留）；⑦ 修 `detached_argv()` 时必须动那条既有用例的下标断言（脚本位置从 3 挪到 4）—— 改为 `out[1:4] == [\"-X\", \"utf8\", \"-u\"]` 与 `out[4] == 脚本`，**T-G92 的四条事实一条没变**。**没动的**：`src/**`、`docs/` 里其它文件、`tools/wb_dash.py`、`tools/wb_status.py`、真实库/备份目录，以及三个外来未跟踪文件。"
 
 
+[entries."T-G99"]
+id = "T-G99"
+title = "并发调度器 `tools/wb_plan.py`：文件级冲突域 + 拓扑分层 + 同层打包，拒绝会冲突的组合"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/并发架构-T-G99.md",
+  "file:tools/wb_plan.py",
+  "text:tools/wb_plan.py::def validate(backlog: Backlog) -> list[str]:",
+  "text:tools/wb_plan.py::def topo_layers(cards: Sequence[Card]) -> list[list[Card]]:",
+  "text:tools/wb_plan.py::def greedy_pack(cards: Sequence[Card], limit: int) -> list[list[Card]]:",
+  "text:tools/wb_plan.py::PROTECTED_FILES = frozenset({",
+  "file:docs/workbacklog.toml",
+  "file:tests/test_wb_plan.py",
+]
+gaps = "**为什么有这张卡**（T-G99，= 外包卡 010）：并发现在是**手工**的 —— 规划者脑子里记着「哪张卡碰哪些文件、哪棵树空着」，靠记性避免冲突，卡数一多必出事。本卡把这套规则做成能跑的调度器。**架构（角色/时序/共享文件怎么不冲突）**：角色 = 规划者 P（主控）/ 作者 W（工人 ×N）/ 集成者 I（×1，串行收口）/ 复核者 R（只读，高风险卡）/ 盘点者 S（只读）；时序 = T0 写卡建树登记 → T1 并行干活 → T2 各提交 → T3 机械复核 → T4 串行集成 → T5 audit 收尾；共享文件（台账/changelog/两张交接文档/`gates/last.json`+`reuse.json` 六个，写死在 `PROTECTED_FILES`）**作者一律不碰**，台账由作者写片段、集成者串行合并；改 `src/**` 的卡跑不了全量门禁（`docs_sync_precheck` 读工作区改动要求同笔改台账）→ 作者只跑轻门。**怎么算批次**：`topo_layers()` 按 `depends` 拓扑分层（层号取**最长路径**，菱形成环都覆盖）→ 逐层 `greedy_pack()`（每批 ≤ `--concurrency`，同批两两 `files` 不相交、树不重复；冲突域是硬约束，上限是第二约束）→ `plan` 渲染成批次；`check` 只校验（六类拒单：files 相交 / 含受保护文件 / 同树 / depends 指向不存在的卡 / 成环 / files 为空）。**反证（先红后绿）**：`tests/test_wb_plan.py` 先于实现写好，缺席时 pytest 收集中断（ModuleNotFoundError）；实现后 **41 passed**。★ 跑绿时测试自己逮到用例 bug（三张卡误用同一主树 → 树唯一约束掩盖了并发上限），改成不同树才测准。★ 突变检验（反空转）：把 `files_intersect` 打瞎成恒空 → 3 条用例当场红；把 `greedy_pack` 的同树约束改成 `if False:` → 1 条当场红；恢复后回 41 passed。**边界（如实写）**：① CLI 侧速率/账号并发上界**未探测**（卡 §2.3 #9 明说本卡不解决，只把 `--concurrency` 显式摆出来以便观测）；② `worktrees --execute` / `dispatch --execute` **没真跑过**（卡 §8 坑 1 明令别真建树别真派活），只覆盖命令拼装的纯函数测试；③ `check` 口径偏严 —— 见 复盘 §六（`depends` 链上两卡复用同树/同文件会被拒，顺序复用其实安全；这是我定的保守取舍，口径不合请指出）；④ `plan` 是确定性贪心、不是最优装箱；⑤ 不校验 `[base].reviewed` 是否真已复核、`.wt/` 是否已存在；⑥ 种子 007/008/009 的 spec 路径按命名惯例填（只 010 真存在）。**没动的**：`src/**`、`tools/wb_dispatch.py`（只读）、`tools/wb_dash.py`、`tools/wb_status.py`、`gates/**`、`docs/` 其它文件（含台账/changelog）、两张交接文档、`复盘/外包-卡表与规矩.md`、真实库/备份目录。"
+
+
+[entries."T-G98"]
+id = "T-G98"
+title = "My Day 序号「整列写回」的根因：隐藏条目旧号与可见条目撞号 / 撤销完成幽灵归位 —— 可见条目取号绕开被隐藏条目占着的号 + 回可见态清号排最后 + 非排序动作不动序号列的断言（5 条 pytest）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/myday序号根因-T-G98.md",
+  "text:src/timeflow/core/tasks/manager.py::def _myday_reserved_ranks(conn: sqlite3.Connection, items: list[Task]) -> set[int]:",
+  "text:src/timeflow/core/tasks/manager.py::MYDAY_HIDDEN_STATUSES = (STATUS_DONE, *PARKED_STATUSES, *HIDDEN_STATUSES)",
+  "text:src/timeflow/core/tasks/manager.py::reserved = _myday_reserved_ranks(conn, items)",
+  "text:src/timeflow/core/tasks/manager.py::and before.status in MYDAY_HIDDEN_STATUSES",
+  "test:test_myday_rank_line.py",
+]
+gaps = "**为什么有这张卡**：卡 001 的独立复核（`gates/diag/wb-review-T-G79.md` 边界 B / 边界 C）＋`复盘/幂等写库-T-G86.md` 指出，T-G79 那片「读整列 → 算 → 整列写回」在 T-G86 修掉「没动也写库」之后，还长着另一半。**根因**：真正参与「读整列 → 算 → 整列写回」的只有 `place_myday` / `move_myday`（经 `_myday_sequence` → `_apply_myday_order` → `_myday_rank_plan` → `_write_myday_rank`）；完成 / 取消 / 待定 / 归档 / 已删这些隐藏路径本身**不写** `myday_rank`，它们只是让 `myday_tasks()` 少看见一条、而那条的号**原封不动**（`myday_tasks` 按五个状态过滤但不清号）。于是「隐藏条目留号」与「规整只按可见条目从 1 编号」相遇 → ① 一条藏起来的条目留着旧号、可见条目拿到同一个号 = **重号**（号不是两两不同的，没有 UNIQUE 也没断言兜着）；②「撤销完成」那条带旧号回来、靠并列兜底**插回旧号的位置**（幽灵归位），而不是排最后。**怎么修（只动 `src/timeflow/core/tasks/manager.py`，不引 schema 迁移、不改表结构）**：① 新增 `_myday_reserved_ranks(conn, items)` 读出被隐藏条目占着的号；② `_myday_rank_plan(items, order, reserved)` 里可见条目取号**跳过** reserved（卡 §2.2 的第二个例子「让可见序号从一个不与隐藏号冲突的空间取」）；③ `_apply_myday_order` 先算 reserved；④ `update_task` 里「从隐藏态回到可见态」（撤销完成 / 取回待定·取消 / 取消归档·撤销删除）→ **清号**（`myday_rank=NULL`，排最后），**进入**隐藏态**不清号**；⑤ 抽 `MYDAY_HIDDEN_STATUSES` 常量给 `myday_tasks` 与 `update_task` 共用。**为什么这么选**：卡 §2.3 要求「完成 / 取消这类**非排序动作不许动序号列**」（`myday_rank` 是同步包里的普通字段、`version` 是跨端 LWW 首选键，乱写会把别的端的真改动顶掉）→ 隐藏时**不能清号**；既然留号，可见条目取号就必须绕开它（防撞）；撤销完成的落点卡 §2.2 允许二选一，选**排最后**，与「移出今天再加回来排最后」同一条产品规矩、也是卡 §1 把「插回旧位置」列为症状所指向的期望。**反证（先红后绿）**：新增 `tests/test_myday_rank_line.py` 5 条（判据=直连库取 `{id:(myday_rank,version)}` 前后逐行比）——把 `manager.py` 还原成 HEAD（原实现）跑：`2 failed, 21 passed`，红的正是 B 的两条（`今天清单里出现了重号：[1, 2, 1]` / `assert ['B2','B3','B1'] == ['B3','B1','B2']`），修完 `23 passed`。**边界（如实写）**：★ 症状 C 的「真拖 version +2」**没能跑红** —— 那半在 T-G86 已收掉，改前量到的是 +1（不是 +2），故给 C 写的三条断言（非排序动作不动序号列、排序动作只写换了号的行）本来即绿、是**回归守卫**；本卡只做「根因 + 断言」，**不做 sparse index**（真拖仍把头那截重排成跳过 reserved 的紧凑号，sparse 属 A9）；只做应用层绕号、**不加 UNIQUE**、**不清洗历史遗留的重号**（不引迁移）；只统计 `is_myday=1` 的隐藏条目占号。**没动的**：`_MYDAY_ORDER_BY` / `myday_tasks` 的排序口径、路由语义（`api/app.py`）、界面（`src/web/**`）、`move_doing`/`doing_rank`、跨端合并规则，全部一字未改。★ **环境陷阱**：worktree 里 editable 安装的 `.pth` 指向**主树** src，不显式 `PYTHONPATH=「$PWD/src:…」` 会 import 到主树的旧代码（详见复盘 §6）。"
+
+
+[entries."T-G97"]
+id = "T-G97"
+title = "状态面板的「卡死」判据与派活器对齐：复用 `inflight_tool()` / `tool_durations()` / `stall_threshold_seconds()`，不再硬写 480 秒"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/面板口径对齐-T-G97.md",
+  "text:tools/wb_dash.py::wb_dispatch.stall_threshold_seconds",
+  "text:tools/wb_dash.py::wb_dispatch.inflight_tool",
+  "text:tools/wb_dash.py::threshold_min",
+  "file:tests/test_wb_dash.py",
+]
+gaps = "**为什么有这张卡**（T-G97 = 并发卡 008）：`tools/wb_dash.py` 原来把「卡死」硬写成 480 秒，注释还写「与派活器看门狗同一口径」；而派活器在 T-G94 之后早已是「有工具在飞 → 底线上抬到 `BUSY_STALL_SECONDS`（1800 秒），再按 `max(底线, 2.5 × 历史最长一次已完成调用)` 自适应」。后果：面板会把一个正在跑长命令（全量门禁约 4 分钟、冷缓存 worktree 里 `ui_flow` 十几分钟）的工人**误标成「静默 N 分钟（可能卡死）」** —— 正是 T-G94 修掉的那个病，面板还没跟上。**怎么做**（不在面板里写第二份口径）：`import wb_dispatch`，`card_state()` 里调 `wb_dispatch.inflight_tool(lines, now=...)` 拿在飞的那一次、`wb_dispatch.tool_durations(lines)` 拿历史耗时、`wb_dispatch.stall_threshold_seconds(stall_seconds=STALL_BASE, inflight=..., durations=...)` 拿**本次阈值**（`STALL_BASE = wb_dispatch.STALL_SECONDS`，底线也取派活器那个数）。四档只在「安静/卡死」的边界上变化：收工·结束（判决文件 或 日志里有 `result` 事件）、在跑（静默 < 60 秒）**都不变**；安静 = 60 ≤ 静默 < **本次阈值**；静默 N 分钟（可能卡死）= 静默 ≥ **本次阈值**。行里**新增**两字段（既有字段名一个没改、`/api/state` 顶层结构 `{now, cards}` 没动）：`inflight` = 「在跑：<工具>（已跑 X 分钟）」、`threshold_min` = 本次阈值（分钟）；面板 HTML 加「在跑 / 阈值」一列。**反证（先红后绿）**：`tests/test_wb_dash.py` 由 11 条扩到 **16 条** —— 改实现前 **7 failed / 9 passed**，改后 **16 passed**；五条新用例 = ① 静默 600 秒 + 一个在飞的 `Bash` → 旧实现「静默 10.0 分钟（可能卡死）」、新实现「**安静**」且 `threshold_min == 30.0`（本卡要点）；② 无在飞但历史最长一次已完成 400 秒 → 阈值 `max(480,2.5×400)=1000` 秒 → 静默 600 仍「安静」；③ 调用没带 `__timestamp` → 退回底线 480（保守，仍判卡死，`threshold_min == 8.0`）；④ `monkeypatch` 把 `wb_dispatch.stall_threshold_seconds` 换成返回 9999 秒的桩 → 面板 `threshold_min` 当场跟着变（证明是**调**不是抄）；⑤ 源码级断言面板里**字面**出现那三个 `wb_dispatch.*` 调用。**真机证据**：真起面板 + 真发 `GET /api/state`（本树根下有 `gates/diag/wb-008.jsonl`）→ 顶层仍是 `{now, cards}`，008 那张卡新增 `inflight` = 「在跑：Bash(…)（已跑 0.0 分钟）」、`threshold_min` = 30.0；另把「静默 600 秒 + 在飞 Bash」喂给 `api_state()` → `state` = 「安静」、`threshold_min` = 30.0（旧实现在这一步会报「静默 10.0 分钟（可能卡死）」）。**轻门**：`ruff check tools/wb_dash.py tests/test_wb_dash.py` = All checks passed；`pytest tests/test_wb_dash.py` = 16 passed（按卡 §0.3 **只跑轻门**，全量 `run_gates.py` 由主控集成时跑）。**边界（如实写）**：① 面板仍只报「在不在动、动到哪了」，**不判断内容对不对**；仍是只读，绝不调用/杀工人、不落任何文件；② **静默的测法没动** —— 面板量「日志文件 mtime 离现在多久」、派活器量「最后一条事件到达的时刻」，不是同一根秒表，本卡只对齐**阈值**口径；③ 面板**没有** `--stall-seconds` 开关，底线直接读派活器的 `STALL_SECONDS`（480），派活器若改底线面板会自动跟；④ 「在飞」依赖日志里的 `__timestamp`，**缺时间戳 → 退回底线 480**，绝不放大阈值。**没动的**：`tools/wb_dispatch.py`、`tools/wb_status.py`（只 import 前者、复用后者 `parse_events`）、`card_state()` 既有字段名、`/api/state` 顶层结构、`--port`/`--host` 默认值、`src/**`、`docs/**`、`gates/**`、其它 `复盘/` 交接文档与三个外来未跟踪文件。"
+
+
 [entries."T-G96"]
 id = "T-G96"
 title = "补看门狗护栏：接线进单测（两个假护栏）+ 畸形 log 两层防御 + 自适应阈值封顶 3600 + kill_tree 解码 + 每轮留痕不覆写 + Windows 不留空控制台窗口"
@@ -583,7 +632,7 @@ status = "done"
 evidence = [
   "file:复盘/wb_dash转正-T-G93.md",
   "file:复盘/并发两卡-T-G92T-G93.md",
-  "text:tools/wb_dash.py::def _state(age: float, finished: bool) -> tuple[str, str]:",
+  "text:tools/wb_dash.py::def _state(",
   "text:tools/wb_dash.py::def card_state(root: Path | None = None) -> list[dict]:",
   "text:tools/wb_dash.py::def discover_logs(root: Path) -> list[tuple[str, str, Path]]:",
   "text:tools/wb_dash.py::收工·结束",
@@ -695,7 +744,7 @@ group = "PROCESS"
 status = "done"
 evidence = [
   "file:复盘/幂等写库-T-G86.md",
-  "text:src/timeflow/core/tasks/manager.py::def _myday_rank_plan(items: list[Task], order: list[str]) -> dict[str, int]:",
+  "text:src/timeflow/core/tasks/manager.py::def _myday_rank_plan(",
   "text:src/timeflow/core/tasks/manager.py::def _apply_myday_order(conn: sqlite3.Connection, items: list[Task], order: list[str]) -> None:",
   "text:src/timeflow/core/tasks/manager.py::return myday_tasks(conn)",
   "text:tests/test_myday_idempotence_line.py::def test_dragging_onto_itself_writes_nothing(",

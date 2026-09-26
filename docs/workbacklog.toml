@@ -1,0 +1,79 @@
+# 并发工作 backlog —— 规划者 P 的排班表（台账号 T-G99）
+#
+# 用途：给定一批卡与并发上限，工具 `tools/wb_plan.py` 算出「谁和谁能同时跑」并拒绝冲突组合。
+#   子命令：check（只校验）/ plan（排批）/ worktrees（建树命令）/ dispatch（派活命令）。
+# 口径与架构（角色 / 时序 / 冲突域怎么定）见 `复盘/并发架构-T-G99.md`。
+#
+# ★ 字段口径：
+#   tree    —— "" = 主树（同一批最多一张卡用主树）；其余是 worktree 路径，如 .wt/dash。
+#   files   —— 这一张卡的**冲突域**：它会改的文件（含新建）。同批两卡相交 = 冲突。
+#             含 `docs/traceability.toml` 等受保护共享文件 = 直接拒单（作者一律不许碰）。
+#   depends —— 依赖的卡号；同层才并行。
+#   risk    —— low | mid | high（high 才派对抗性复核）。
+#   status  —— pending | running | done | failed。
+#
+# 口吻：这份文件**只登记没编过的卡**；下面 007/008/009/010 是当前在飞的四张。
+
+[base]
+reviewed = "1969b46"        # 已复核的基点提交（没登记过就不许建树）
+
+[[cards]]
+id = "007"
+task = "T-G96"
+title = "看门狗护栏补强"
+tree = ""                       # 主树
+spec = "gates/diag/卡007-看门狗护栏补强.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+  "复盘/看门狗护栏补强-T-G96.md",
+]
+depends = []
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "008"
+task = "T-G97"
+title = "面板口径对齐"
+tree = ".wt/dash"
+spec = "gates/diag/卡008-面板口径.md"
+files = [
+  "tools/wb_dash.py",
+  "tests/test_wb_dash.py",
+  "复盘/面板口径对齐-T-G97.md",
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "009"
+task = "T-G98"
+title = "myday序号根因"
+tree = ".wt/core"
+spec = "gates/diag/卡009-myday序号根因.md"
+files = [
+  "src/timeflow/core/tasks/manager.py",
+  "tests/test_myday_rank_line.py",
+  "复盘/myday序号根因-T-G98.md",
+]
+depends = []
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "010"
+task = "T-G99"
+title = "并发调度器"
+tree = ".wt/plan"
+spec = "gates/diag/卡010-并发调度器.md"
+files = [
+  "tools/wb_plan.py",
+  "tests/test_wb_plan.py",
+  "docs/workbacklog.toml",
+  "复盘/并发架构-T-G99.md",
+]
+depends = []
+risk = "low"
+status = "pending"

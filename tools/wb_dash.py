@@ -14,6 +14,11 @@
 `<仓库根>/.wt/*/gates/diag/`；从**某棵 worktree 内部**运行时，根是那棵 worktree，
 找得到它自己的 `gates/diag/`、找**不到**兄弟 worktree（面板的常规跑法是从主工作区起）。
 续跑日志（`wb-<卡>.r2.jsonl`）按文件各占一行，不按卡合并（合并口径未定）。
+
+★ 判卡死的阈值**不再硬写**（T-G97）：有工具在飞时静默是**预期**的（全量门禁 ~4 分钟、
+冷缓存 worktree 里 `ui_flow` 十几分钟），旧写法会把正常的长调用误标成「可能卡死」。
+现在**复用派活器**（`wb_dispatch`）的 `inflight_tool()` / `tool_durations()` /
+`stall_threshold_seconds()` —— **不在面板里写第二份口径**；行里多显示"在跑什么 / 本次阈值"。
 """
 
 from __future__ import annotations
@@ -31,23 +36,40 @@ TOOLS = Path(__file__).resolve().parent
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
+import wb_dispatch  # noqa: E402 —— 判卡死复用派活器的口径（同一个 tools/ 目录）
 import wb_status  # noqa: E402 —— 需要先把 tools/ 挂到 sys.path
 
 ROOT = TOOLS.parent
 
-STALL = 480          # 静默 ≥ 这么久 = 可能卡死（与派活器看门狗同一口径，秒）
 QUIET = 60           # 静默 ≥ 这么久 = "安静一下"（可能在长思考，也可能要出事，秒）
+# ★ 判卡死的**底线**不再在面板里写死 —— 取派活器那个数（480）。
+#   真正的"本次阈值"由 `wb_dispatch.stall_threshold_seconds()` 算：有工具在飞 → 上抬到 30 分钟；
+#   再按 `max(底线, 2.5 × 历史最长一次已完成调用)` 自适应（T-G94）。面板不抄公式，只调它。
+STALL_BASE = wb_dispatch.STALL_SECONDS
 
 
-def _state(age: float, finished: bool) -> tuple[str, str]:
-    """（状态字, 颜色）—— 顺序：有收工证据 = 结束；否则按日志静默多久分档。"""
+def _state(age: float, finished: bool, *,
+           threshold: float = float(STALL_BASE)) -> tuple[str, str]:
+    """（状态字, 颜色）—— 顺序：有收工证据 = 结束；否则按日志静默多久分档。
+
+    `threshold` = **本次阈值**（分钟数不写死）：有工具在飞或历史调用很长时会被上抬，
+    这样"正在跑一个长命令"不会被误标成"可能卡死"。
+    """
     if finished:
         return "收工·结束", "done"
     if age < QUIET:
         return "在跑", "run"
-    if age < STALL:
+    if age < threshold:
         return "安静", "quiet"
     return f"静默 {age / 60:.1f} 分钟（可能卡死）", "stall"
+
+
+def _inflight_label(inflight: tuple[str, float] | None) -> str:
+    """在飞的那一次报成人话：`在跑：<工具>（已跑 X 分钟）`；没有在飞 → 空串。"""
+    if not inflight:
+        return ""
+    sig, ran = inflight
+    return f"在跑：{sig}（已跑 {ran / 60:.1f} 分钟）"
 
 
 def _turns(lines: list[str]) -> int:
@@ -109,9 +131,16 @@ def card_state(root: Path | None = None) -> list[dict]:
         lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
         timeline, summary = wb_status.parse_events(lines)
         shown = [ln for ln in timeline if ln.strip()]
+        # ★ 判卡死的阈值**复用派活器**（T-G97）：有工具在飞 → 静默是预期的（底线上抬到 30 分钟）；
+        #   再按"历史最长一次已完成调用 × 2.5"自适应 —— 面板不自己算，只调它。
+        inflight = wb_dispatch.inflight_tool(lines, now=now)
+        threshold = wb_dispatch.stall_threshold_seconds(
+            stall_seconds=STALL_BASE, inflight=inflight,
+            durations=wb_dispatch.tool_durations(lines))
         # ★ "收工"有两个来源：**判决文件**，**或日志里已经出现了 `result` 事件** ——
         #   老卡没有判决文件，少了第二条就会把早已收工的卡误报成"静默 N 分钟（可能卡死）"。
-        state, color = _state(age, verdict.exists() or bool(summary["final"]))
+        state, color = _state(age, verdict.exists() or bool(summary["final"]),
+                              threshold=threshold)
         models = list(dict.fromkeys(summary["models"]))
         rows.append({
             # 跨树时带上树名（如 `004@.wt/004`），免得两张卡同号时看串。
@@ -138,6 +167,9 @@ def card_state(root: Path | None = None) -> list[dict]:
             "last": shown[-1].strip() if shown else "",
             "final": summary["final"] or "",
             "size_kb": round(st.st_size / 1024, 1),
+            # ★ T-G97 新增两字段（既有字段名一个没改）：让主控一眼看出"真卡死 vs 正在跑长命令"。
+            "inflight": _inflight_label(inflight),
+            "threshold_min": round(threshold / 60, 1),
         })
     return rows
 
@@ -168,13 +200,16 @@ async function tick(){
   document.getElementById('at').textContent = '· ' + d.now;
   if(!d.cards.length){document.getElementById('tbl').textContent='还没有任何 wb-*.jsonl';return}
   let h='<table><tr><th>卡</th><th>状态</th><th>已跑</th><th>回合</th><th>工具</th><th>报错</th>'+
-        '<th>文件</th><th>静默</th><th>模型</th><th>最后一步</th></tr>';
+        '<th>文件</th><th>静默</th><th>在跑 / 阈值</th><th>模型</th><th>最后一步</th></tr>';
   for(const c of d.cards){
     h += `<tr><td><b>${c.card}</b><div class="dim small">${c.log} · ${c.size_kb} KB`+
          `${c.session?' · 会话 '+c.session:''}</div></td>`+
          `<td class="${c.color}">${c.state}</td><td>${c.elapsed_min} 分</td><td>${c.turns}</td>`+
          `<td>${c.tool_calls}</td><td>${c.errors}</td><td>${c.files_total}</td>`+
-         `<td>${c.silent_s} 秒</td><td class="small">${c.model}</td>`+
+         `<td>${c.silent_s} 秒</td>`+
+         `<td class="small">${c.inflight?'<div>'+c.inflight+'</div>':''}`+
+         `<div class="dim">阈值 ${c.threshold_min} 分</div></td>`+
+         `<td class="small">${c.model}</td>`+
          `<td class="small"><pre>${c.last}</pre>`+
          `${c.heartbeat?'<div class="dim small">'+c.heartbeat+'</div>':''}`+
          `${c.verdict?'<div class="small">'+c.verdict.split('\\n')[0]+'</div>':''}</td></tr>`;
