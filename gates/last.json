@@ -1,10 +1,10 @@
 {
-  "rev": "a824f00",
-  "tree": "48fc395808c37ed6029318dfd0f0b13c48e0fac2",
-  "parent": "a824f00",
+  "rev": "a3ada56",
+  "tree": "d0b9d87e6e441b56da75329c9f171516796f494c",
+  "parent": "a3ada56",
   "branch": "line/impl-v1",
   "dirty": true,
-  "at": "2026-09-27T00:00:54",
+  "at": "2026-09-27T00:11:59",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
@@ -13,61 +13,61 @@
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 55.35,
-      "summary": "1465 passed, 1446 warnings in 53.40s"
+      "seconds": 52.6,
+      "summary": "1473 passed, 1426 warnings in 50.32s"
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 10.01,
-      "summary": "2 passed, 1465 deselected, 1 warning in 8.22s"
+      "seconds": 6.4,
+      "summary": "2 passed, 1473 deselected, 1 warning in 4.15s"
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 0.26,
+      "seconds": 0.44,
       "summary": "All checks passed!"
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 1.38,
+      "seconds": 1.65,
       "summary": "Success: no issues found in 56 source files"
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 1.22,
+      "seconds": 1.59,
       "summary": "LAYER CHECKS: PASS ✅"
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 12.44,
+      "seconds": 14.14,
       "summary": "SELF-TEST PASS ✅ （2 正样例 + 5 负样例 + 1 豁免用例）"
     },
     {
       "name": "contrast",
       "exit_code": 0,
-      "seconds": 0.31,
+      "seconds": 0.47,
       "summary": "对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）"
     },
     {
       "name": "style",
       "exit_code": 0,
-      "seconds": 0.28,
+      "seconds": 0.44,
       "summary": "风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）"
     },
     {
       "name": "ui_text",
       "exit_code": 0,
-      "seconds": 0.29,
+      "seconds": 0.46,
       "summary": "[OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）"
     },
     {
       "name": "commands",
       "exit_code": 0,
-      "seconds": 1.42,
+      "seconds": 1.68,
       "summary": "说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。"
     },
     {
@@ -81,13 +81,13 @@
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 3.11,
+      "seconds": 3.71,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）"
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 0.38,
+      "seconds": 0.53,
       "summary": "OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位"
     },
     {
@@ -131,6 +131,6 @@
     "render": "64535c7d4f8f0b14",
     "ui_flow": "a917be0e9109a23f"
   },
-  "trailer": "pytest 1465 passed, 1446 warnings in 53.40s; acceptance 2 passed, 1465 deselected, 1 warning in 8.22s; ruff All checks passed!; mypy Success: no issues found in 56 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （2 正样例 + 5 负样例 + 1 豁免用例）; contrast 对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。; ui_dom_probe 复用上次通过判定（输入未变 214e0a0a99330412）; audit 审计通过 ✅（豁免 0 项已知欠账）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; lf1_live 复用上次通过判定（输入未变 28860ad573081ccd）; web_live 复用上次通过判定（输入未变 c72df63522de6d38）; render 复用上次通过判定（输入未变 64535c7d4f8f0b14）; ui_flow 复用上次通过判定（输入未变 a917be0e9109a23f）",
-  "sealed_at": "2026-09-27T00:01:13"
+  "trailer": "pytest 1473 passed, 1426 warnings in 50.32s; acceptance 2 passed, 1473 deselected, 1 warning in 4.15s; ruff All checks passed!; mypy Success: no issues found in 56 source files; check_layers LAYER CHECKS: PASS ✅; check_layers_selftest SELF-TEST PASS ✅ （2 正样例 + 5 负样例 + 1 豁免用例）; contrast 对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。; ui_dom_probe 复用上次通过判定（输入未变 214e0a0a99330412）; audit 审计通过 ✅（豁免 0 项已知欠账）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; lf1_live 复用上次通过判定（输入未变 28860ad573081ccd）; web_live 复用上次通过判定（输入未变 c72df63522de6d38）; render 复用上次通过判定（输入未变 64535c7d4f8f0b14）; ui_flow 复用上次通过判定（输入未变 a917be0e9109a23f）",
+  "sealed_at": "2026-09-27T00:12:00"
 }
