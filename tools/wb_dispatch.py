@@ -38,8 +38,13 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
      计数器，卡 002 = 319 —— 照它定会把上限放到天上）。撞上限时 CLI 给的是
      `subtype = error_during_execution` + **空回话** + **退出码仍是 0** → 所以跑完既数回合（预警）
      也读 `result` 事件（硬证据），别把腰斩当成功。
-  ② **看门狗** —— 跑的时候盯着：日志**静默 ≥ 8 分钟**（卡死）或最近 12 次工具调用里
+  ② **看门狗** —— 跑的时候盯着：日志**静默**过久（卡死）或最近 12 次工具调用里
      **同一件事出现 ≥ 5 次**（空转）→ 掐掉整棵进程树，并把现场（最后几步、碰过哪些文件）报出来。
+     ★ **静默阈值不是常数（T-G94）**：一次工具调用期间**本来就静默**（全量门禁 ~4 分钟、
+     冷缓存 worktree 里十几分钟），旧写法会把这种正常的长调用误判成卡死 → 现在：
+     **有工具在飞**（`tool_use` 没配上 `tool_result`）时静默是预期的 → 底线上抬到 30 分钟；
+     再按 **2.5 × 历史最长一次已完成调用**自适应。判卡死时报告**带现场**（在跑什么 / 跑了多久 /
+     历史最长 / 这一次的阈值）—— 不再让主控自己去翻 log 猜。
   ③ **心跳** —— 每 2 分钟一行（已跑多久 / 回合 / 工具 / 碰过文件 / 静默多少秒）：
      让"它还在动"从猜测变成看得见的事实。
 两个默认值按用户 2026-09-26 的决定：`--autocompact 1m`（CLI 钳位 100k–1M）、
@@ -70,7 +75,7 @@ import sys
 import threading
 import time
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -104,6 +109,11 @@ DEFAULT_MAX_TURNS_WRITE = 240    # ≈ 2.2 × 卡 002 的 111 次工具调用
 DEFAULT_MAX_TURNS_READONLY = 80
 DEFAULT_AUTOCOMPACT = "1m"       # 用户 2026-09-26 定的；CLI 钳位 100k–1M
 STALL_SECONDS = 480              # 日志静默多久算卡死（8 分钟）
+# ★ T-G94：静默 480 秒这个常数**会误杀正常的长工具调用** —— 一次工具调用本来就会静默很久
+#   （主树全量 run_gates.py ~4 分钟、冷缓存 worktree 里 ui_flow 十几分钟）。所以判卡死改成
+#   "先看现场再判"：有工具在飞 → 底线上抬到 BUSY_STALL_SECONDS；再按"历史最长一次调用 × 2.5"自适应。
+BUSY_STALL_SECONDS = 1800        # 有工具在飞时的静默上限（30 分钟）—— 在飞 ≠ 卡死
+TOOL_DURATION_FACTOR = 2.5       # 阈值 = max(底线, 2.5 × 历史最长一次已完成调用)；留余量，宁可晚掐
 REPEAT_WINDOW = 12               # 空转只看最近多少次工具调用
 REPEAT_NEED = 5                  # 同一件事在里面出现几次算空转
 HEARTBEAT_SECONDS = 120          # 心跳行间隔
@@ -411,13 +421,156 @@ def repeat_signal(signatures: list[str], *, window: int = REPEAT_WINDOW,
     return (count, sig) if count >= need else None
 
 
+def stall_threshold_seconds(*, stall_seconds: int, inflight: tuple[str, float] | None,
+                            durations: list[float]) -> float:
+    """这一次判卡死用哪个阈值 —— 两种放宽**只叠加放宽、不收紧**（T-G94）。
+
+    ① **有工具在飞** → 静默是**预期**的 → 底线上抬到 `BUSY_STALL_SECONDS`（30 分钟）；
+    ② **按实测自适应** → `TOOL_DURATION_FACTOR × 历史最长一次已完成调用`（取**最长**而不是平均、
+       乘 2.5 是留余量：口径是宁可晚掐、不要误杀）。
+    两样都没有 → 就是 `stall_seconds`（老口径，一个字没变）。
+    """
+    base = float(stall_seconds)
+    if inflight:
+        base = max(base, float(BUSY_STALL_SECONDS))
+    longest = max(durations) if durations else 0.0
+    return max(base, TOOL_DURATION_FACTOR * longest)
+
+
+def _stall_report(*, silent_seconds: float, threshold: float,
+                  inflight: tuple[str, float] | None, durations: list[float]) -> str:
+    """卡死报告 —— ★ **必须带现场**（T-G94）：最后一次调用是什么 / 已跑多久 / 历史最长一次 /
+    这一次用的阈值。旧报告只说「X 分钟没有新事件」，主控拿到现场还得自己翻 log 去猜它当时在跑什么。
+    """
+    longest = max(durations) if durations else 0.0
+    if inflight:
+        sig, ran = inflight
+        what = f"在跑 {wb_status._clip(sig, 100)}（已跑 {ran / 60:.1f} 分钟）"
+    else:
+        what = "没有在飞的调用"
+    seen = f"历史最长一次调用 {longest / 60:.1f} 分钟" if longest else "历史最长一次调用：没有记录"
+    return (f"卡死：{silent_seconds / 60:.1f} 分钟没有新事件"
+            f"（这一次的阈值 {threshold / 60:.1f} 分钟；{what}；{seen}）")
+
+
+def _epoch(raw: object) -> float | None:
+    """把事件的 `__timestamp`（ISO-8601 UTC，**两个下划线**）解成 epoch 秒；解不开 → `None`。
+
+    ★ 主控第一次就读错了键（读成 `timestamp`），得到"没有时间戳"的错误结论 —— 这里只认
+    `__timestamp`，别的键一律当没有（宁可退回保守行为，不猜）。
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        stamp = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:                 # 没带时区 → 按 UTC 读（规范是 UTC）
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.timestamp()
+
+
+def _tool_use_blocks(lines: list[str]):
+    """按出现顺序产出 `assistant` 事件里的每一次 `tool_use`：(id, 名字, 参数, `__timestamp` 秒)。
+
+    ★ 与 `tool_signatures()`（空转判据用）分开写、**不去改它** —— 那条判据一个字都不许动。
+    """
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "assistant":
+            continue
+        stamp = _epoch(event.get("__timestamp"))
+        content = (event.get("message") or {}).get("content")
+        for item in content if isinstance(content, list) else []:
+            if isinstance(item, dict) and item.get("type") == "tool_use":
+                yield (str(item.get("id") or ""), str(item.get("name") or "?"),
+                       item.get("input") or {}, stamp)
+
+
+def _tool_result_blocks(lines: list[str]):
+    """按出现顺序产出 `user` 事件里的每一条 `tool_result`：(tool_use_id, `__timestamp` 秒)。"""
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "user":
+            continue
+        stamp = _epoch(event.get("__timestamp"))
+        content = (event.get("message") or {}).get("content")
+        for item in content if isinstance(content, list) else []:
+            if isinstance(item, dict) and item.get("type") == "tool_result":
+                yield str(item.get("tool_use_id") or ""), stamp
+
+
+def inflight_tool(lines: list[str], *, now: float | None = None) -> tuple[str, float] | None:
+    """识别「正在跑的工具调用」—— 返回 `(工具签名, 已跑秒数)`；没有在飞的 → `None`。
+
+    判据（T-G94，主控已在真 log 上验过形状）：`assistant` 的 `tool_use` 块与 `user` 的
+    `tool_result` 块**一一配对**（`id` ↔ `tool_use_id`）；**没配对的**就是正在跑的。
+    多个在飞（并行工具调用）→ 取**跑得最久**的那一次（最该被看见）。
+    ★ 保守口径：调用没带 `__timestamp`（半截 log / 对方改格式）→ 算不出耗时 → 返回 `None`
+    （**不放大阈值**），也绝不抛异常 —— 宁可早掐一次，不因为读不到时间戳把卡死判成健康。
+    """
+    finished = {rid for rid, _stamp in _tool_result_blocks(lines) if rid}
+    reference = time.time() if now is None else now
+    best: tuple[str, float] | None = None
+    for tid, name, payload, stamp in _tool_use_blocks(lines):
+        if tid and tid in finished:
+            continue
+        if stamp is None:
+            continue
+        ran = max(reference - stamp, 0.0)
+        sig = wb_status._tool_line(name, payload if isinstance(payload, dict) else {})
+        if best is None or ran > best[1]:
+            best = (sig, ran)
+    return best
+
+
+def tool_durations(lines: list[str]) -> list[float]:
+    """每一次**已完成**工具调用的耗时（秒）—— 用 `__timestamp` 把 `tool_use`/`tool_result` 配对算。
+
+    用来把"这活儿能跑多久"变成**实测**而不是猜（自适应阈值就吃它）。
+    ★ 缺 `__timestamp` / 解不开 / 时间倒流 → **跳过那一条**（不抛异常、不拿它去放大阈值）。
+    """
+    starts: dict[str, float] = {}
+    for tid, _name, _payload, stamp in _tool_use_blocks(lines):
+        if tid and stamp is not None:
+            starts[tid] = stamp
+    out: list[float] = []
+    for rid, stamp in _tool_result_blocks(lines):
+        start = starts.get(rid)
+        if start is None or stamp is None:
+            continue
+        ran = stamp - start
+        if ran >= 0:
+            out.append(ran)
+    return out
+
+
 def watchdog_verdict(*, silent_seconds: float, signatures: list[str],
                      stall_seconds: int = STALL_SECONDS, window: int = REPEAT_WINDOW,
-                     need: int = REPEAT_NEED) -> str:
-    """**在跑的时候**该不该把它掐了 —— 返回原因（空串 = 健康）。① 卡死 ② 空转。"""
-    if silent_seconds >= stall_seconds:
-        return (f"卡死：{silent_seconds / 60:.1f} 分钟没有新事件"
-                f"（阈值 {stall_seconds / 60:.1f} 分钟）")
+                     need: int = REPEAT_NEED, lines: list[str] | None = None) -> str:
+    """**在跑的时候**该不该把它掐了 —— 返回原因（空串 = 健康）。① 卡死 ② 空转。
+
+    ★ 判卡死的阈值**不是常数**（T-G94）：日志静默 ≠ 卡死 —— 一次工具调用期间**本来就静默**
+    （全量门禁 ~4 分钟、冷缓存 worktree 里十几分钟），旧写法会把这种正常的长调用误判成卡死。
+    所以给了 `lines` 就按现场放宽（在飞 → 30 分钟底线；再按历史最长一次调用 × 2.5 自适应）；
+    **不给 `lines`** = 老口径（阈值就是 `stall_seconds`）—— 空转那条判据一个字没动。
+    """
+    inflight = inflight_tool(lines) if lines is not None else None
+    durations = tool_durations(lines) if lines is not None else []
+    threshold = stall_threshold_seconds(stall_seconds=stall_seconds, inflight=inflight,
+                                        durations=durations)
+    if silent_seconds >= threshold:
+        return _stall_report(silent_seconds=silent_seconds, threshold=threshold,
+                             inflight=inflight, durations=durations)
     repeat = repeat_signal(signatures, window=window, need=need)
     if repeat:
         count, sig = repeat
@@ -467,10 +620,17 @@ def finish_verdict(lines: list[str]) -> str:
 
 
 def heartbeat_line(*, elapsed: float, turns: int, tool_calls: int, files: int,
-                   silent_seconds: float) -> str:
-    """心跳一行 —— 让"它还在动"变成看得见的事实（而不是主控干等）。"""
-    return (f"[心跳] 已跑 {elapsed / 60:.1f} 分钟 | 回合 {turns} | 工具 {tool_calls} 次 | "
+                   silent_seconds: float, inflight: str | None = None) -> str:
+    """心跳一行 —— 让"它还在动"变成看得见的事实（而不是主控干等）。
+
+    ★ T-G94：静默很可能是「正在跑一次长工具调用」，所以在末尾**追加**「在跑 <工具>」
+    （有帮助）—— 现有字段**一个都不删**（它们已经在被读、被断言）。
+    """
+    line = (f"[心跳] 已跑 {elapsed / 60:.1f} 分钟 | 回合 {turns} | 工具 {tool_calls} 次 | "
             f"碰过文件 {files} 个 | 日志静默 {silent_seconds:.0f} 秒")
+    if inflight:
+        line += f" | 在跑 {wb_status._clip(inflight, 80)}"
+    return line
 
 
 def kill_tree(pid: int) -> str:
@@ -549,18 +709,19 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
                     silent = now - state["last_at"]
                 if watchdog:
                     verdict = watchdog_verdict(silent_seconds=silent, signatures=snapshot,
-                                               stall_seconds=stall_seconds)
+                                               stall_seconds=stall_seconds, lines=snapshot)
                     if verdict:
                         reason = verdict
                         break
                 if heartbeat_seconds and now - last_beat >= heartbeat_seconds:
                     last_beat = now
                     sigs = tool_signatures(snapshot)
+                    live = inflight_tool(snapshot)
                     _, hb = wb_status.parse_events(snapshot)
                     printer(heartbeat_line(
                         elapsed=now - started, turns=turns_seen(snapshot),
                         tool_calls=len(sigs), files=hb["files_total"],
-                        silent_seconds=silent))
+                        silent_seconds=silent, inflight=live[0] if live else None))
         finally:
             gone = proc.poll() is not None
             killed = "（它已经自己退出了，不用掐）" if gone else ""
@@ -643,7 +804,8 @@ def main() -> int:
     parser.add_argument("--heartbeat-seconds", type=int, default=HEARTBEAT_SECONDS,
                         help="心跳行间隔（秒；0 = 不打）")
     parser.add_argument("--stall-seconds", type=int, default=STALL_SECONDS,
-                        help="日志静默多久算卡死（秒）")
+                        help=f"日志静默多久算卡死（秒，默认 {STALL_SECONDS}）—— ★ 这只是**底线**："
+                             "有工具在飞时抬到 BUSY_STALL_SECONDS，再按历史最长一次调用自适应")
     parser.add_argument("--poll-seconds", type=float, default=POLL_SECONDS,
                         help="看门狗多久醒一次（秒）")
     parser.add_argument("--no-watchdog", action="store_true",
@@ -722,8 +884,9 @@ def main() -> int:
           f"--permission-mode {args.permission_mode} --max-turns {max_turns} "
           f"--autocompact {args.autocompact}")
     guards = ("看门狗**关**（--no-watchdog）" if args.no_watchdog else
-              f"看门狗：日志静默 {args.stall_seconds}s 或最近 {REPEAT_WINDOW} 次调用里同一件事"
-              f"重复 {REPEAT_NEED} 次 → 掐")
+              f"看门狗：日志静默过久（底线 {args.stall_seconds}s；有工具在飞则 30 分钟，"
+              f"再按历史最长调用 ×{TOOL_DURATION_FACTOR} 自适应）或最近 {REPEAT_WINDOW} 次调用里"
+              f"同一件事重复 {REPEAT_NEED} 次 → 掐")
     print(f"[盯 ] {guards}；心跳每 {args.heartbeat_seconds}s；超时 {args.timeout}s；"
           f"中断自动续跑 {args.retry} 次")
     if not args.execute:

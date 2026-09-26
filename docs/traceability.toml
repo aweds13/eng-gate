@@ -521,6 +521,24 @@ evidence = [
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。 ★ **2026-09-25（T-G71）这条残留收口了**：`db.unit_of_work()` 在连接**代理层**把 `commit()` 推迟到退出那一刻（core 一个 `commit()` 都没改），本条的 `create_task` / `update_task` 两条路都包了事务 —— 第二笔抛数据库级错误时**库里一个字节都不留**（`tests/test_unit_of_work.py` 逐条钉，且用「第一笔确实跑过」证明不是空转）。详见 `复盘/跨函数事务-T-G71.md`。"
 
 
+[entries."T-G94"]
+id = "T-G94"
+title = "修看门狗误杀正常的长工具调用：认出「在飞」的调用（静默是预期）+ 按历史最长一次调用自适应阈值 + 判卡死报告带现场"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/看门狗误杀-T-G94.md",
+  "text:tools/wb_dispatch.py::def inflight_tool(lines: list[str], *, now: float | None = None) -> tuple[str, float] | None:",
+  "text:tools/wb_dispatch.py::def tool_durations(lines: list[str]) -> list[float]:",
+  "text:tools/wb_dispatch.py::BUSY_STALL_SECONDS = 1800",
+  "text:tools/wb_dispatch.py::def stall_threshold_seconds",
+  "text:tools/wb_dispatch.py::没有在飞的调用",
+  "text:tools/wb_dispatch.py::在跑",
+  "test:test_wb_dispatch.py",
+]
+gaps = "**为什么有这张卡**（T-G94，= 外包卡 005）：看门狗原来按「日志静默 ≥ 480 秒 → 掐掉整棵进程树」判卡死，它假定「一次工具调用最多几分钟」。实测不是：主树全量 `run_gates.py` 一次约 **4 分钟**（其中 `pytest` 一项 110 秒）、冷缓存 worktree 里 `ui_flow`（要起浏览器）能到 **十几分钟**。也就是说**工人只要在卡里跑一次重门禁，就会被自己的看门狗掐掉**，理由还写着「卡死」、报告里**没有**它当时在跑什么 —— 主控拿到现场还得自己翻 log 去猜。现在只靠「工人不许跑全量门禁」这条**规矩**绕开（`复盘/外包-卡表与规矩.md` §16），规矩只对「卡里不跑门禁」的活有效，不是阈值对。**关键发现（主控已在真 log 上验过形状）**：agent 事件流里**每个事件都带 `__timestamp`**（两个下划线，ISO-8601 UTC），且 `assistant` 的 `tool_use` 块与 `user` 的 `tool_result` 块**一一配对**（`id` ↔ `tool_use_id`）→ 「某次调用跑了多久」是**可测的**。**做三件事**：① 新增 `inflight_tool()` —— 没配对的 `tool_use` 就是正在跑的，返回 `(工具签名, 已跑秒数)`（多个在飞取跑得最久的那次）；② 有工具在飞 → 静默是**预期**的 → 底线上抬到新常量 `BUSY_STALL_SECONDS`（1800 秒 = 30 分钟）；③ 新增 `tool_durations()` 按 `__timestamp` 算每一次已完成调用的耗时，阈值改为 `max(底线, 2.5 × 历史最长一次)`（取**最长**而非平均、乘 2.5 留余量：宁可晚掐、不要误杀）。★ **报告必须带现场**：判卡死时把「在跑什么 / 已跑多久 / 历史最长一次 / 这一次用的阈值」全写进原因；心跳末尾**追加**「在跑 <工具>」（现有字段一个不删）。**反证（先红后绿）**：`tests/test_wb_dispatch.py` 新增 7 条 —— 改实现前 **43 passed / 7 failed**（7 条新用例全红：`AttributeError: no attribute 'inflight_tool'` / `'BUSY_STALL_SECONDS'` / `heartbeat_line() got an unexpected keyword argument 'inflight'`），改后 **50 passed**；六类覆盖 = 在飞静默 600 秒**健康**（旧写法在那里判卡死）/ 没有在飞时静默 600 秒**仍卡死**（证明阈值没被一味放宽）/ 历史最长 300 秒 → 阈值抬到 750 秒（静默 700 健康、800 卡死）/ `inflight_tool()` 配对判据 / 缺 `__timestamp` **不许炸**（退回空表、不放大阈值）/ 报告文本里**必须出现工具名**。**真机证据（桩命令，压缩阈值如实写）**：桩吐一条 `tool_use` 后真睡 500 秒，`run_worker` 真跑 —— **带** `__timestamp` 时认得出在飞 → 20 秒（压缩后的 `--stall-seconds`）**不掐**、一路跑到 `--timeout 40` 才报「超时」（实测 40.6s）；**不带** `__timestamp` 时退回保守行为 → 同样静默 20.7 秒即判「卡死」。判卡死报告实测：`卡死：30.2 分钟没有新事件（这一次的阈值 30.0 分钟；在跑 Bash(command=python -X utf8 scripts/run_gates.py)（已跑 33.3 分钟）；历史最长一次调用：没有记录）`。**边界（如实写）**：① 只改「判卡死」这一件事 —— `repeat_signal()` 的空转判据、`kill_tree()`、`cap_verdict()`、`finish_verdict()`、`--max-turns` 口径、`detached_argv()` 与 `--detach` 整条路、模型默认值、`--autocompact 1m`、超时默认 7200 **一个字没动**；② **不给 `lines`** 调用 `watchdog_verdict()` 就是**老口径**（阈值 = `stall_seconds`），留作对照；③ 缺 `__timestamp`（半截 log / 对方改格式）→ 一律退回保守行为（不放大阈值、不抛异常），所以读不到时间戳时宁可早掐一次；④ `tools/wb_dash.py` 的状态四档仍写「≥480 秒 = 可能卡死」，与本卡的新口径**还没对齐**（卡的白名单不许动它）—— 面板的档位要跟上得另立一张卡；⑤ 真机证据里的「20 秒」是把可配阈值压缩后的演示，真机是这样：480 秒底线 + 在飞 1800 秒 + 自适应；⑥ 顺带观察到 `kill_tree()` 读 Windows `taskkill` 输出用 UTF-8 解 GBK → 中文乱码（**既有**行为，卡明令不许动 `kill_tree()`，未修）。**没动的**：`src/**`、`docs/` 里其它文件、`tools/wb_dash.py`、`tools/wb_status.py`、真实库/备份目录。"
+
+
 [entries."T-G93"]
 id = "T-G93"
 title = "工人状态面板转正 `tools/wb_dash.py`：把 `gates/diag/wb-*` 那堆状态文件读成一块**自动刷新**的表（状态四档 / 多卡多树 / 零依赖只读）"

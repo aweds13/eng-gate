@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -615,3 +616,120 @@ def test_missing_spec_is_a_clean_error_not_a_crash(monkeypatch, capsys) -> None:
 def test_timeout_default_covers_a_long_card() -> None:
     """默认超时够长（卡 002 用了 44 分钟）；★ 而且超时**不是失败** —— 它会掐掉再续跑。"""
     assert wd.DEFAULT_TIMEOUT >= 7200
+
+
+# ============================================ 看门狗误杀正常的长工具调用（T-G94）
+#
+# 真机撞到的（不是猜的）：看门狗原来按「日志静默 ≥ 480 秒」判卡死，可是一次工具调用**本来就会
+# 静默很久** —— 主树全量 `run_gates.py` 约 4 分钟、冷缓存 worktree 里 `ui_flow` 十几分钟。
+# 于是工人只要在卡里跑一次重门禁，就会被自己的看门狗掐掉，理由还写着「卡死」、报告里
+# **没有**它当时在跑什么。修法两件：① 识别「在飞」的工具调用（静默是预期）；② 按实测耗时自适应。
+
+
+def _iso(offset: float) -> str:
+    """以"现在"为基准造一个 ISO-8601 UTC 时间戳（`offset` 秒前 = 负值）。"""
+    stamp = datetime.now(timezone.utc) + timedelta(seconds=offset)
+    return stamp.isoformat().replace("+00:00", "Z")
+
+
+def _tool_use_event(name: str, *, tid: str, ago: float, inp: dict | None = None) -> str:
+    """一条 `assistant`/`tool_use` 事件（带 `__timestamp` —— 主控第一次就读错过这键）。"""
+    payload = {"command": "python -X utf8 scripts/run_gates.py"} if inp is None else inp
+    return json.dumps({
+        "__timestamp": _iso(-ago),
+        "type": "assistant",
+        "message": {"id": f"m-{tid}", "content": [
+            {"type": "tool_use", "id": tid, "name": name, "input": payload}]},
+    }, ensure_ascii=False)
+
+
+def _tool_result_event(*, tid: str, ago: float) -> str:
+    """一条 `user`/`tool_result` 事件（与 `tool_use` 靠 `id` ↔ `tool_use_id` 配对）。"""
+    return json.dumps({
+        "__timestamp": _iso(-ago),
+        "type": "user",
+        "message": {"content": [
+            {"type": "tool_result", "tool_use_id": tid, "content": "done"}]},
+    }, ensure_ascii=False)
+
+
+def test_inflight_tool_call_is_not_a_stall() -> None:
+    """★ 有工具在飞 + 静默 600 秒 → **健康**（旧写法在这里判卡死 —— 这正是误杀的那条路）。"""
+    lines = [_tool_use_event("Bash", tid="t1", ago=610)]        # 610 秒前发起，还没回话
+    got = wd.inflight_tool(lines)
+    assert got is not None and "Bash" in got[0] and 600 <= got[1] <= 720, got
+    assert wd.watchdog_verdict(silent_seconds=600, signatures=["Bash|x"], lines=lines) == ""
+    # 老口径（不看 lines）在同一现场判卡死 —— 对照就在这里
+    assert "卡死" in wd.watchdog_verdict(silent_seconds=600, signatures=["Bash|x"])
+
+
+def test_silence_without_any_inflight_call_is_still_a_stall() -> None:
+    """★ 证明阈值不是被一味放宽：**没有**在飞的调用时，静默 600 秒仍然卡死。"""
+    lines = [_tool_use_event("Bash", tid="t1", ago=900),
+             _tool_result_event(tid="t1", ago=800)]              # 已经回话了 → 没有在飞的
+    assert wd.inflight_tool(lines) is None
+    assert "卡死" in wd.watchdog_verdict(silent_seconds=600, signatures=["Bash|x"], lines=lines)
+
+
+def test_threshold_adapts_to_the_longest_completed_call() -> None:
+    """★ 跑过一次 300 秒的调用 → 阈值抬到 750 秒（= 2.5 × 最长）：静默 700 健康、800 卡死。
+
+    取**最长**而不是平均、乘 2.5 是留余量 —— 口径是**宁可晚掐、不要误杀**。
+    """
+    lines = [_tool_use_event("Bash", tid="t1", ago=1000),
+             _tool_result_event(tid="t1", ago=700)]              # 一次 300 秒的已完成调用
+    assert abs(wd.tool_durations(lines)[0] - 300) < 5
+    assert wd.watchdog_verdict(silent_seconds=700, signatures=[], lines=lines) == ""
+    killed = wd.watchdog_verdict(silent_seconds=800, signatures=[], lines=lines)
+    assert "卡死" in killed and "12.5 分钟" in killed and "5.0 分钟" in killed, killed
+
+
+def test_inflight_tool_pairs_use_with_result() -> None:
+    """配对判据：`tool_use` 有配对 → 不在飞；多一个没配对 → 认出来（取跑得最久的那次）。"""
+    paired = [_tool_use_event("Read", tid="a", ago=30),
+              _tool_result_event(tid="a", ago=10)]
+    assert wd.inflight_tool(paired) is None
+    missing = [_tool_use_event("Read", tid="a", ago=30),
+               _tool_result_event(tid="a", ago=10),
+               _tool_use_event("Grep", tid="b", ago=5)]
+    got = wd.inflight_tool(missing)
+    assert got is not None and "Grep" in got[0] and got[1] < 60, got
+
+
+def test_tool_durations_and_inflight_survive_missing_timestamps() -> None:
+    """★ 半截 log / 对方改格式 → 缺 `__timestamp` 时**不许炸**，也不许拿它去放大阈值。
+
+    退回保守行为：耗时算不出来就当没有（阈值不放宽），这样宁可早掐一次，不会因为读不到
+    时间戳就把卡死判成健康。
+    """
+    assert wd.tool_durations([]) == []
+    assert wd.tool_durations(["不是 JSON 的一行", "{}", ""]) == []      # 不许抛异常
+    bare = [json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "x", "name": "Read", "input": {}}]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "x", "content": "ok"}]}})]
+    assert wd.tool_durations(bare) == []                                # 没时间戳 → 空表
+    assert wd.inflight_tool(bare) is None                               # 也不算"在飞"
+    assert "卡死" in wd.watchdog_verdict(silent_seconds=600, signatures=[], lines=bare)
+
+
+def test_stall_report_names_the_inflight_tool() -> None:
+    """★ 报告必须带现场：它当时在跑什么 / 跑了多久 / 历史上最长一次多久 / 这一次用的阈值。"""
+    live = [_tool_use_event("Bash", tid="t1", ago=2000)]                # 在飞、已跑 2000 秒
+    said = wd.watchdog_verdict(silent_seconds=wd.BUSY_STALL_SECONDS + 10, signatures=[],
+                               lines=live)
+    assert "卡死" in said and "Bash" in said, said
+    assert "在跑" in said and "30.0 分钟" in said and "阈值" in said
+    idle = [_tool_use_event("Bash", tid="s", ago=900),
+            _tool_result_event(tid="s", ago=600)]                       # 没有在飞的
+    quiet = wd.watchdog_verdict(silent_seconds=800, signatures=[], lines=idle)
+    assert "没有在飞的调用" in quiet and "历史最长一次调用 5.0 分钟" in quiet, quiet
+
+
+def test_heartbeat_can_mention_the_inflight_tool_without_dropping_fields() -> None:
+    """心跳**可以加**「在跑：<工具>」（有帮助），但现有字段一个都不许删。"""
+    line = wd.heartbeat_line(elapsed=610, turns=90, tool_calls=111, files=21, silent_seconds=3,
+                             inflight="Bash(command=run_gates.py)")
+    assert "在跑 Bash" in line
+    for needle in ("已跑 10.2 分钟", "回合 90", "工具 111 次", "碰过文件 21 个", "静默 3 秒"):
+        assert needle in line, line
