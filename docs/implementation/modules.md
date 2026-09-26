@@ -170,7 +170,7 @@
   v15 分组同层唯一 + 按 id 归属、v16 tasks.created_by、**v17 跨端（六张表 updated_at 触发器 +
   `sync_tombstones` 删除墓碑 + `sync_logs.result/note`）**、**v18 `school_notices`（学校通知的
   合作接口收件箱）**）；
-  LWW 同步（时间戳+version，不静默覆盖）；跨端**同 id 去重**（来源标记尚未落库，见 `traceability.toml` 的 SR-F2.6b）。
+  LWW 同步（时间戳+version，不静默覆盖）；跨端**同 id 去重**（来源标记尚未落库，见 `traceability.toml` 的 SR-F2.6b）。（2026-09-26 注：`SR-F2.6b` 在台账里已 `status = "done"` —— 本次复核读数：`re.findall(r'id = "SR-F2\.6b".*?status = "(\w+)"', t) == ['done']`，其 evidence 含 `text:src/timeflow/core/sync.py::同 id 去重`、`text:src/timeflow/core/sync.py::来源标记 device_id`；原句保留供查。）
 - **跨函数事务（`storage/db.unit_of_work()`，T-G71）**：core 里 60 多个函数各自 `conn.commit()`，
   而一个 HTTP 处理函数常要把**两条** core 调用当成一件事（建任务 + 挂分组）。缝开在
   **连接代理层**：`_ThreadLocalConn.commit()` 在事务段里只记账，真提交在段退出时发生

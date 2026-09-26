@@ -4242,6 +4242,18 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：<R036 复核 T-G127 发现 test:test_check_layers.py 求值为假（test: 按 ROOT/tests/<名> 求值，真身在 scripts/），根因一半在主控卡规格模板；加上「改措辞打穿 text: 指针」那次真撞>。**做了什么**：<§22 四件各一句：①真支持前缀清单（写法→语义→行号）②判据表 7 行含卡点名两条真例 ③两条硬禁（不钉会变内容/不改写原句）④只读自检命令；§7 标题加并行日期注>。**与卡规格的偏差**：<卡 §2.3 指的 §18.3 模板 test: 行实为不存在（grep test: 在 §18.3 段 0 命中），日期注改落在实际存在的两句：§2 台账证据句（原 43 行）与 §8 第 12 条（原 137 行）——只加注、原句未删改>。**真读到的前缀清单**：<file:（156-157）；text: 字面（158-164、168）与 re:（166-167）；route:（169-170，集合 56-61）；table:（171-172，103-105）；column:（173-175，columns 108-131）；ui: 三属性（176-183）与 ui:view（184-185，148-150）；test: 只按 tests/（187-188）；未知前缀 False（189）>。**只加不删的反证**：<git diff --numstat 该文件 = 62 增 3 删；被删的 3 行（§2 证据句、§7 标题、§8 第 12 条）均为「原句 + 行末日期注」的行内替换，每行原句逐字作为新行前缀保留（前缀验证 3/3 命中）；其余 59 行为文末新增 §22>。**没动的**：<audit_progress.py 与 scripts/** 其它、tools/**、tests/**、docs/**、gates/**、复盘/长任务执行协议.md、任务重规划、使用体验台账、视觉线地图、并发两篇、交接两篇>。"
 
+[entries."T-G135"]
+id = "T-G135"
+title = "docs 两处漂移：模块文档「来源标记尚未落库」加日期注（台账 SR-F2.6b 已 done）+ 人工验收-照着点补对账附录（逐条：已机器覆盖/未覆盖-需人点/台账已 done/无法判断）"
+group = "DOCS"
+status = "done"
+evidence = [
+  "file:复盘/docs两处漂移-T-G135.md",
+  "text:docs/implementation/modules.md::2026-09-26 注",
+  "text:docs/人工验收-照着点.md::2026-09-26 对账",
+]
+gaps = "**为什么有这张卡**：S-6 清点的 P5（modules.md:173 写「来源标记尚未落库」而台账 SR-F2.6b 已 status done，复核读数 status 域取值 done、evidence 含 sync.py 的同 id 去重与来源标记 device_id 两条）与 D2（人工验收清单无对账表，卡表的「剩 6 项」没人对过）。**做了什么**：P5 = 按裁定只在原句句末加日期注（原句逐字保留）；D2 = 文末新增对账附录，共 20 条（A 组 7 / B 组 2 / C 组 3 / D 组 2 / E 组 6），结论分布：已机器覆盖 2（㉒、⑭）/ 未覆盖-需人点 18 / 台账已 done 0 / 无法判断 0。**只加不删的反证**：modules.md 的 numstat 是一删一加 —— 被删的是原 173 行整行、新行以逐字相同的原句开头仅句末追加（行尾追加在 -U0 里长这样）；人工验收-照着点.md 纯追加 0 删；逐行看过 -U0 的删除行，无其它删除。**判「不动」的两处**：P6（architecture.md:28 的 getaways 预留位）= 台账搜 getaway/adapter/出站 全 0 命中、且 src/timeflow/getaways 盘上只有 __init__.py 确为预留位 → 没证据说它过期，不动；P7（coverage.md:5 的 B0/B1-B4 状态行）= 台账搜 B0 与 B1-B4 全 0 命中 → 没有真源读数，不动。**没动的**：architecture.md、coverage.md、traceability.toml、changelog.md、docs 其它文件、复盘其它文件、tools/tests/scripts/src/gates 全部未碰；未跑全量门禁（卡 §0.3，集成时由主控跑）。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
