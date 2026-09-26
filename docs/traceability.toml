@@ -573,6 +573,26 @@ evidence = [
 gaps = "**为什么有这张卡**：卡 001 的独立复核（`gates/diag/wb-review-T-G79.md` 边界 B / 边界 C）＋`复盘/幂等写库-T-G86.md` 指出，T-G79 那片「读整列 → 算 → 整列写回」在 T-G86 修掉「没动也写库」之后，还长着另一半。**根因**：真正参与「读整列 → 算 → 整列写回」的只有 `place_myday` / `move_myday`（经 `_myday_sequence` → `_apply_myday_order` → `_myday_rank_plan` → `_write_myday_rank`）；完成 / 取消 / 待定 / 归档 / 已删这些隐藏路径本身**不写** `myday_rank`，它们只是让 `myday_tasks()` 少看见一条、而那条的号**原封不动**（`myday_tasks` 按五个状态过滤但不清号）。于是「隐藏条目留号」与「规整只按可见条目从 1 编号」相遇 → ① 一条藏起来的条目留着旧号、可见条目拿到同一个号 = **重号**（号不是两两不同的，没有 UNIQUE 也没断言兜着）；②「撤销完成」那条带旧号回来、靠并列兜底**插回旧号的位置**（幽灵归位），而不是排最后。**怎么修（只动 `src/timeflow/core/tasks/manager.py`，不引 schema 迁移、不改表结构）**：① 新增 `_myday_reserved_ranks(conn, items)` 读出被隐藏条目占着的号；② `_myday_rank_plan(items, order, reserved)` 里可见条目取号**跳过** reserved（卡 §2.2 的第二个例子「让可见序号从一个不与隐藏号冲突的空间取」）；③ `_apply_myday_order` 先算 reserved；④ `update_task` 里「从隐藏态回到可见态」（撤销完成 / 取回待定·取消 / 取消归档·撤销删除）→ **清号**（`myday_rank=NULL`，排最后），**进入**隐藏态**不清号**；⑤ 抽 `MYDAY_HIDDEN_STATUSES` 常量给 `myday_tasks` 与 `update_task` 共用。**为什么这么选**：卡 §2.3 要求「完成 / 取消这类**非排序动作不许动序号列**」（`myday_rank` 是同步包里的普通字段、`version` 是跨端 LWW 首选键，乱写会把别的端的真改动顶掉）→ 隐藏时**不能清号**；既然留号，可见条目取号就必须绕开它（防撞）；撤销完成的落点卡 §2.2 允许二选一，选**排最后**，与「移出今天再加回来排最后」同一条产品规矩、也是卡 §1 把「插回旧位置」列为症状所指向的期望。**反证（先红后绿）**：新增 `tests/test_myday_rank_line.py` 5 条（判据=直连库取 `{id:(myday_rank,version)}` 前后逐行比）——把 `manager.py` 还原成 HEAD（原实现）跑：`2 failed, 21 passed`，红的正是 B 的两条（`今天清单里出现了重号：[1, 2, 1]` / `assert ['B2','B3','B1'] == ['B3','B1','B2']`），修完 `23 passed`。**边界（如实写）**：★ 症状 C 的「真拖 version +2」**没能跑红** —— 那半在 T-G86 已收掉，改前量到的是 +1（不是 +2），故给 C 写的三条断言（非排序动作不动序号列、排序动作只写换了号的行）本来即绿、是**回归守卫**；本卡只做「根因 + 断言」，**不做 sparse index**（真拖仍把头那截重排成跳过 reserved 的紧凑号，sparse 属 A9）；只做应用层绕号、**不加 UNIQUE**、**不清洗历史遗留的重号**（不引迁移）；只统计 `is_myday=1` 的隐藏条目占号。**没动的**：`_MYDAY_ORDER_BY` / `myday_tasks` 的排序口径、路由语义（`api/app.py`）、界面（`src/web/**`）、`move_doing`/`doing_rank`、跨端合并规则，全部一字未改。★ **环境陷阱**：worktree 里 editable 安装的 `.pth` 指向**主树** src，不显式 `PYTHONPATH=「$PWD/src:…」` 会 import 到主树的旧代码（详见复盘 §6）。"
 
 
+[entries."T-G108"]
+id = "T-G108"
+title = "少读、精准读：`tools/evidence_map.py`（台账证据↔源文件倒排索引）+ `tools/wb_diag.py`（日志失败定位器）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/少读工具-T-G108.md",
+  "file:tools/evidence_map.py",
+  "file:tools/wb_diag.py",
+  "text:tools/evidence_map.py::def stale_assertions(data: dict) -> list[tuple[str, str, str]]:",
+  "text:tools/evidence_map.py::return audit_progress.eval_assertion(assertion)",
+  "text:tools/wb_diag.py::def find_project_frames(texts: list[str], root: Path | None = None) -> list[str]:",
+  "text:tools/wb_diag.py::wb_status.parse_events(lines)",
+  "file:tests/test_evidence_map.py",
+  "file:tests/test_wb_diag.py",
+  "file:复盘/外包-卡表与规矩.md",
+]
+gaps = "**为什么有这张卡**（T-G108，= 外包并发卡 015）：主控复核工人产物最贵的两笔是整份读代码与读长报告；已有的 `wb_review.py` / `audit_progress.py` / `wb_status.py` 摘要替掉了一部分，还缺『改文件前先问哪几条台账证据会碎』（T-G93 真被 `_state` 签名变更打脸）与『把 1 MB 的 log 压成错在哪』。**索引怎么建（口径照抄/复用的哪几行）**：求值直接复用 `scripts/audit_progress.py:154-189` 的 `eval_assertion`（不另写一份，结构上不可能与 audit 不一致），仓库事实取数见同文件 56-150；`--stale` 只求值 status=done，遍历口径同 `audit_evidence` 245-260。**定位器抓哪几段**：红用例 / 断言原文（每类≤10）/ 项目内栈帧（外部库帧一律丢——真 traceback 7 帧全是 stdlib，留着是噪音淹信号）/ 最后 3 次工具调用 / 一行汇总；事件口径复用 `wb_status.parse_events`，只补它裁掉的那部分原文。**反证（先红后绿 + 真日志）**：对桩实现 15 failed，真实现 16 passed；`Error:` 只认行首异常名（剥 grep 的 NN→ 前缀）一条用例先红后绿；`--stale` 真台账 0 条 == audit 通过；`wb_diag` 跑真日志 wb-007（1133.1 KB / 435 行）输出 52 行 / 4929 字节（≈1/235）抓到 12 条红。**边界（如实写）**：卡里『--file/--entry 纯读、--stale 才求值』与『输出带命中列』措辞冲突，我按输出格式落（三模式都只读求值，--stale 只列失配）；覆盖面上 `--stale` 只查 done；栈帧只认 `File「<路径>」, line N`；退出码 jsonl 里没有，靠可选 `--exit-code`，不猜。**没动的**：docs/**、wb_status.py、wb_dispatch.py、wb_dash.py、wb_plan.py、scripts/**、src/**、其它复盘、gates/**、三个外来未跟踪文件；没跑全量门禁（并发期只跑 ruff + 两个目标测试文件）；台账/changelog/交接文档留给集成者。"
+
+
 [entries."T-G100"]
 id = "T-G100"
 title = "把盘点结果切成域不相交的 backlog：并发上限由「互不相交的源码域个数」决定，不由机器决定"
