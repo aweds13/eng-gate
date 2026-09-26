@@ -591,6 +591,99 @@ def test_status_says_so_when_nothing_ran_yet(tmp_path: Path, monkeypatch) -> Non
     assert "还没有" in said and "一个都没有" in said
 
 
+# -------------------------------------------------- 心跳停滞告警（T-G112 · 架构 C）
+#
+# 为什么值当测：架构 C 的全部价值就在这条告警上 —— 派活进程被系统杀掉之后，
+# 它是唯一的"有人管之前先看得见"。接线一旦掉了（`status_report` 忘了调
+# `heartbeat_stall_alert`），`--status` 照样正常输出、谁也发现不了 ——
+# 所以每条用例都直接打在接线上，突变检验时拆掉它必须红。
+
+
+def _running_events() -> list[str]:
+    """一段"还在跑"的 log：有事件、没有 result（result 一出现就算收工）。"""
+    return [EVENTS[0], EVENTS[1]]
+
+
+def _ageing(*paths: Path, seconds: float) -> None:
+    """把文件 mtime 拨回 `seconds` 秒前 —— 测试里替代"真的等那么久"。"""
+    old = time.time() - seconds
+    for p in paths:
+        os.utime(p, (old, old))
+
+
+def test_status_alarms_when_nobody_is_watching(tmp_path: Path, monkeypatch) -> None:
+    """心跳停 + 日志静默 + 没判决 → ★告警（派活进程被杀 = 没人盯了）。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-042.jsonl"
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    wd.write_heartbeat(log, "[心跳] 已跑 3.0 分钟 | 回合 5")
+    _ageing(log, wd.heartbeat_file_for(log), seconds=wd.STALL_SECONDS + 60)
+    said = wd.status_report("042")
+    assert "★告警" in said, said
+    assert "没人盯了" in said, said
+    assert "与看门狗底线同一口径" in said, said
+
+
+def test_status_alarms_without_any_heartbeat(tmp_path: Path, monkeypatch) -> None:
+    """没有心跳文件 + 日志静默 + 没判决 → 也告（--heartbeat-seconds 0 或派活器刚起就死）。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-042.jsonl"
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    _ageing(log, seconds=wd.STALL_SECONDS + 60)
+    said = wd.status_report("042")
+    assert "★告警" in said and "没有心跳文件" in said, said
+
+
+def test_status_does_not_alarm_a_healthy_run(tmp_path: Path, monkeypatch) -> None:
+    """心跳新鲜 → 不告警（哪怕还没判决 —— 刚起的前几分钟就是这个样子）。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-042.jsonl"
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    wd.write_heartbeat(log, "[心跳] 已跑 1.0 分钟 | 回合 2")
+    assert "★告警" not in wd.status_report("042")
+
+
+def test_status_does_not_alarm_a_finished_run(tmp_path: Path, monkeypatch) -> None:
+    """收工后心跳停止是**正常**的：有判决 / log 里有 result → 都不告警。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    old = wd.STALL_SECONDS + 60
+    log = diag / "wb-042.jsonl"                     # 情形 1：有判决文件
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    wd.write_heartbeat(log, "[心跳] 已跑 44.0 分钟 | 回合 90")
+    wd.verdict_file_for(log).write_text("判决：正常收工（工人退出码 0）\n", encoding="utf-8")
+    _ageing(log, wd.heartbeat_file_for(log), seconds=old)
+    assert "★告警" not in wd.status_report("042"), "有判决还告警 = 把收工当事故"
+    log2 = diag / "wb-043.jsonl"                    # 情形 2：log 里已有 result 事件
+    log2.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+    wd.write_heartbeat(log2, "[心跳] 已跑 44.0 分钟 | 回合 90")
+    _ageing(log2, wd.heartbeat_file_for(log2), seconds=old)
+    assert "★告警" not in wd.status_report("043"), "有 result 还告警 = 把收工当事故"
+
+
+def test_status_heartbeat_prefers_the_newest_round(tmp_path: Path, monkeypatch) -> None:
+    """续跑时 [心跳] 该显示第 2 轮那份 —— 第 1 轮那份早就停了，别把在跑读成停摆。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-042.jsonl"
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    wd.write_heartbeat(log, "[心跳] 第 1 轮 | 已跑 44.0 分钟")
+    _ageing(wd.heartbeat_file_for(log), seconds=600)
+    r2 = diag / "wb-042.r2.jsonl"
+    r2.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    wd.write_heartbeat(r2, "[心跳] 第 2 轮 | 已跑 1.0 分钟")
+    said = wd.status_report("042")
+    assert "第 2 轮" in said and "第 1 轮" not in said, said
+
+
 def test_heartbeat_is_written_to_a_file_with_a_timestamp(tmp_path: Path) -> None:
     """心跳落盘：过夜跑时"它最后一次动是什么时候"必须能一眼查到。"""
     log = tmp_path / "wb-002.jsonl"

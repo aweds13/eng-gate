@@ -348,19 +348,37 @@ def status_report(card: str) -> str:
     """一张卡现在到哪了 —— **只读文件**（心跳 / 判决 / 会话 / log 尾巴），不碰工人。
 
     长任务（尤其过夜跑）需要这条：新窗口、或者我半夜里，一条命令就知道"它还在跑吗 / 跑完没有"。
+    ★ T-G112（架构 C，主控裁定）：心跳停滞超过阈值且没有判决 → 打**醒目告警**
+    （见 `heartbeat_stall_alert`）—— 派活进程被系统杀掉后"没人盯"至少要**看得见**。
     """
     diag = ROOT / "gates" / "diag"
     head = diag / f"wb-{card}"
+    # 先把 log 读出来：告警判据（`heartbeat_stall_alert`）吃最新一轮的 log 与它的收工证据。
+    logs = sorted(diag.glob(f"wb-{card}*.jsonl"), key=lambda p: p.stat().st_mtime)
+    newest = logs[-1] if logs else None
+    lines: list[str] = []
+    summary: dict = {}
+    alert: list[str] = []
+    if newest is not None:
+        lines = newest.read_text(encoding="utf-8", errors="replace").splitlines()
+        _, summary = wb_status.parse_events(lines)
+        # ★ "收工"与面板同一口径：这张 log **自己**的判决文件，或 log 里已有 result 事件。
+        #   （判决按轮落，第 1 轮的判决不代表第 2 轮也结束了。）
+        finished = (verdict_file_for(newest).exists() or bool(summary["final"]))
+        alert = heartbeat_stall_alert(log=newest, finished=finished)
     out: list[str] = [f"=== 卡 {card} 的状态（{head}.*）==="]
     # ★ T-G95：有摘要就先把它指出来 —— 主控**先看它**，不必再翻原始 jsonl。
     reports = sorted(diag.glob(f"wb-{card}*.report.md"), key=lambda p: p.stat().st_mtime)
     if reports:
         out.append(f"  [摘要] {reports[-1].relative_to(ROOT).as_posix()}（先看它）")
-    hb = heartbeat_file_for(head.with_suffix(".jsonl"))
-    if hb.exists():
-        out.append(f"  [心跳] {hb.read_text(encoding='utf-8').strip() or '（空）'}")
+    # ★ T-G112：心跳**按轮落**（第 2 轮写 `wb-<卡>.r2.heartbeat.txt`）—— 取**最新**一份展示；
+    #   旧写法只认第 1 轮那份，续跑时会把"还在跑"读成"心跳停在几点"。
+    hbs = sorted(diag.glob(f"wb-{card}*.heartbeat.txt"), key=lambda p: p.stat().st_mtime)
+    if hbs:
+        out.append(f"  [心跳] {hbs[-1].read_text(encoding='utf-8').strip() or '（空）'}")
     else:
         out.append("  [心跳] （还没有 —— 要么没派过，要么刚起）")
+    out.extend(alert)                        # 醒目告警紧跟心跳 —— 没人盯这事要一眼看见
     # ★ T-G96：判决**按轮落**（`wb-<卡>.verdict.txt` / `wb-<卡>.r2.verdict.txt`…）—— 这里取
     #   **最后一轮**的那一份（按 mtime），别因为按轮落就变成主控读不到。
     verdicts = sorted(diag.glob(f"wb-{card}*.verdict.txt"), key=lambda p: p.stat().st_mtime)
@@ -374,18 +392,56 @@ def status_report(card: str) -> str:
     if sd.exists():
         sid = sd.read_text(encoding="utf-8").strip()
         out.append(f"  [会话] {sid}（续跑：--resume {sid}）")
-    logs = sorted(diag.glob(f"wb-{card}*.jsonl"), key=lambda p: p.stat().st_mtime)
-    if not logs:
+    if newest is None:
         out.append("  [log ] （一个都没有）")
         return "\n".join(out)
-    newest = logs[-1]
-    lines = newest.read_text(encoding="utf-8", errors="replace").splitlines()
-    _, summary = wb_status.parse_events(lines)
     out.append(f"  [log ] {newest.name}（{len(lines)} 行 / 共 {len(logs)} 个 log）；"
                f"工具调用 {summary['tool_calls']} 次；碰过文件 {summary['files_total']} 个；"
                f"工具报错 {summary['tool_errors']} 次")
     out.append(f"  [最后] {summary['final'] or '（还没见到 result —— 可能还在跑）'}")
     return "\n".join(out)
+
+
+def heartbeat_stall_alert(*, log: Path, finished: bool,
+                          now: float | None = None) -> list[str]:
+    """架构 C（T-G112，主控裁定）的**兜底告警** —— 返回要打进 `--status` 的行（空 = 不告警）。
+
+    为什么有它（T-G91.gaps + 并发两卡复盘 §6）：`--detach` 之后看门狗跑在**派活进程**里，
+    派活进程被系统杀掉（重启 / 休眠断电 / 任务管理器结束）→ 没人写心跳、没人掐工人、没人落判决，
+    只剩心跳文件停在几点。进程级独立（互盯 / 独立看门狗）暂不做；这一条是"看得见"的那一半：
+    `--status` 读文件时发现「心跳停滞超过阈值且没有判决」就打醒目告警，由主控/用户的定时调用兜底。
+
+    ★ 阈值与看门狗**同一口径**：复用 `STALL_SECONDS` 底线（480 秒 ≈ 心跳间隔 120 秒的 4 个周期
+    —— 派活进程活着时每个周期都该有心跳，连续 4 个周期没有 = 写心跳的那个循环不在了）。
+    判据只读**文件 mtime**，不猜进程状态。★ 只告一种（真机探针修正过的口径，2026-09-26）：
+    工人的 stdout 是**管道**，读管道的 pump 线程就在派活进程里 —— 派活进程一死，log 就**冻结**
+    （探针里工人随之退出），所以「心跳停了但日志还在动」在真实世界里**不可达**，
+    别按它分叉出第二种告警。工人生死从文件判不出来 → 这是架构 C 的残余风险（候选卡 B 解）。
+    已收工（这张 log 自己有判决 / 里有 result 事件）→ 不告警：收工后心跳停止是**正常**的。
+    ★ 宁可少告警也不让 `--status` 崩：mtime 读不到就退回"不告警"。
+    """
+    if finished:
+        return []
+    reference = time.time() if now is None else now
+    try:
+        hb = heartbeat_file_for(log)
+        hb_age: float | None = (max(reference - hb.stat().st_mtime, 0.0)
+                                if hb.exists() else None)
+        log_age = max(reference - log.stat().st_mtime, 0.0)
+    except OSError:
+        return []
+    base = float(STALL_SECONDS)
+    if hb_age is not None and hb_age < base:
+        return []                            # 心跳还新鲜 = 派活进程活着，没话要说
+    hb_said = (f"心跳停滞 {hb_age / 60:.1f} 分钟" if hb_age is not None
+               else "没有心跳文件（--heartbeat-seconds 0，或派活器刚起就死了）")
+    return [
+        f"  [★告警] {hb_said}、日志静默 {log_age / 60:.1f} 分钟"
+        f"（阈值 {base / 60:.1f} 分钟，与看门狗底线同一口径）且没有判决"
+        "—— 派活进程（含看门狗）多半已被杀（重启 / 休眠 / 被结束）：没人盯了。",
+        "  [★告警] 兜底：先 tools/wb_status.py <log> --tail 20 看现场，"
+        "再 --resume auto 续跑或重派。",
+    ]
 
 
 # ============================================ 交接摘要（T-G95 = 外包卡 006）

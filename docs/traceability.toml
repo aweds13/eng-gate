@@ -4031,6 +4031,18 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：用户 2026-09-26 两条原话 ——「那个面板能不能搞的就是最最新的任务在前头啊，不然我还要翻到下面看」；「假如说 deepseek v4.1 flash 是不行了，再给换给他（glm），让他干一两个卡之后再看看 v4.1 flash 可以不可以」。**做了什么**：tools/wb_dash.py 的 discover_logs 行序从旧口径（树内按 (卡号, 轮次) 升序）改成组（同树+同卡）按组内最新 mtime 降序、同卡各轮轮次新的在前、等值再按（树名, 卡号）稳定 —— 钉住排序的那一行：-latest[(e[0], _split_card(e[1])[0])]；tests/test_wb_dash.py 更新三条受行序影响的旧断言 + 新增两条（最新在前 / mtime 等值稳定次序）。规矩文件 复盘/外包-卡表与规矩.md §19.1 按卡 §2.2 逐字只改两处（白名单表第 2 行备注 + 表后追加轮换口径一段，git diff 核过 +5 −1）。**真机证据**：%TEMP% 造临时树（wb-024.jsonl 900 秒前 / wb-030.jsonl 120 秒前 / wb-030.r2.jsonl 5 秒前），--port 8788 起临时面板抓 /api/state：行序上→下 = 030.r2（静默 56 秒）→ 030（171 秒）→ 024（951 秒），最上面一行 = 卡 030 第 2 轮、mtime 最新；同卡两轮相邻、r2 在第 1 轮上面；核对完面板已关（8788 复查 connection refused）、临时树已删、8787 全程没碰。**反证**：突变检验把排序临时改回旧口径 (卡号, 轮次) 升序 → pytest 4 failed（四条排序用例全红）；还原 → 22 passed 全绿。**边界（如实写）**：稳定次序 = 等值 mtime 时按（树名, 卡号）升序；组内各轮只看轮次号不看各自 mtime（轮次号单调、ctime 不可靠）；T-G93 行模型/多树粒度与 T-G113 一行一轮/同卡相邻/「第 N 轮」标识没动，只把 T-G113 的「组内轮次升序」改成「轮次新的在前」（本卡用户明令）；面板是常驻进程、要重启才生效（没做热加载）；没跑全量门禁（卡 §0.3，主控集成时跑）。**没动的**：行模型/列/状态带/续跑合并/只读原则；tools 的 wb_dispatch.py、wb_watchdog.py、wb_status.py；src/**、scripts/**、docs/**、其它 复盘/*.md、gates/**、三个外来未跟踪文件。"
 
+[entries."T-G112"]
+id = "T-G112"
+title = "看门狗独立化：--detach 后派活进程被杀仍有人盯 —— 按主控选的架构（互盯 / 独立看门狗进程 / 兜底告警）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/看门狗独立化-T-G112.md",
+  "test:test_wb_dispatch.py",
+  "text:tools/wb_dispatch.py::heartbeat_stall_alert",
+]
+gaps = "**为什么有这张卡**：盘点 S-1 的 A17；T-G91.gaps「--detach 后看门狗是脱离进程自己带着的……还没做，是候选」+ 并发两卡复盘 §6「看门狗的寿命 = 那个进程的寿命」。**做了什么**：主控裁定架构 C（卡 §2.9）—— `--status` 新增心跳停滞醒目告警（`heartbeat_stall_alert`，tools/wb_dispatch.py:405；接线 :368/:381），阈值复用看门狗底线 STALL_SECONDS=480、不写第二份口径；顺带把 [心跳] 展示改为取最新一轮的心跳文件（续跑轮不再读第 1 轮那份停摆的）。**反证（先红后绿）**：突变拆掉 status_report 的告警接线 → test_status_alarms_when_nobody_is_watching / test_status_alarms_without_any_heartbeat 两条红；还原 86 passed 全绿（81 条既有一条没红）。**真机证据**：桩命令真起进程（驱动 %TEMP%/tg112_probe/probe.py；读状态阈值临时缩放 480→20、其余全真）—— ① --detach 真扔出去（pid 存活 + 心跳在写）；② 按 PID 杀整棵与只杀派活器两种杀法 → --status 都打出「没人盯」告警；③ 工人正常收工 → 判决落盘、派活进程自己退干净（tasklist 按 PID 核）、不告警。**探针修正**：初版「心跳停但日志还在动 = 孤儿」分支被探针 B 证伪 —— 工人 stdout 的读端（pump 线程）在派活进程里，派活进程一死 log 必冻结，该情形不可达，已收敛为一种告警。**边界（如实写）**：工人生死从文件判不出（残余风险 = 工人烧 token 没人看 → 候选卡 B 解，设计要点在复盘 §7）；系统重启连告警读者一起没 → 兜底是人/定时任务调 --status；两轮之间被杀的窗口不告警；--stall-seconds 自定义值不进告警口径；告警读 mtime、改系统时钟会误判。**没动的**：看门狗判据本体（watchdog_verdict / inflight_tool / tool_durations / stall_threshold_seconds）、心跳与判决落盘格式、--status 只读原则、wb_status.py、wb_dash.py（面板停滞告警 T-G97 已有）、src/**、docs/**、共享文件。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
