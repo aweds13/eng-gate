@@ -256,34 +256,128 @@ def test_load_backlog_files_must_be_array(tmp_path: Path) -> None:
 
 
 # ------------------------------------------------------------------ 种子 backlog（在飞的 007~010）
+#
+# ★ 真文件 `docs/workbacklog.toml` 会随调度**继续追加卡**（卡 013 就追加了 014–020 七张）。
+#   对它的**内容**做"恰好几张"式断言，必然被下一次追加撞红 —— 卡 010 原本那 5 条判据就是这么
+#   在卡 013 上红的（`== ["007","008","009","010"]`、`"4 张卡 → 2 批"`）。所以这里分两层：
+#   · 对**真文件**只钉**不变量**：能读 / 无冲突 / id 唯一 / 两个读法一致 / 四条种子在里头；
+#   · 对**批次**改用一份**冻结夹具**（下面 `_SEED_FIXTURE_TOML` = 四条种子的一字不差副本）——
+#     批次是调度器的**纯函数输出**，就该在**已知输入**上精确断言，与真文件的长短无关。
+
+
+_SEED_FIXTURE_TOML = """\
+[base]
+reviewed = "1969b46"
+
+[[cards]]
+id = "007"
+task = "T-G96"
+title = "看门狗护栏补强"
+tree = ""
+spec = "gates/diag/卡007-看门狗护栏补强.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+  "复盘/看门狗护栏补强-T-G96.md",
+]
+depends = []
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "008"
+task = "T-G97"
+title = "面板口径对齐"
+tree = ".wt/dash"
+spec = "gates/diag/卡008-面板口径.md"
+files = [
+  "tools/wb_dash.py",
+  "tests/test_wb_dash.py",
+  "复盘/面板口径对齐-T-G97.md",
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "009"
+task = "T-G98"
+title = "myday序号根因"
+tree = ".wt/core"
+spec = "gates/diag/卡009-myday序号根因.md"
+files = [
+  "src/timeflow/core/tasks/manager.py",
+  "tests/test_myday_rank_line.py",
+  "复盘/myday序号根因-T-G98.md",
+]
+depends = []
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "010"
+task = "T-G99"
+title = "并发调度器"
+tree = ".wt/plan"
+spec = "gates/diag/卡010-并发调度器.md"
+files = [
+  "tools/wb_plan.py",
+  "tests/test_wb_plan.py",
+  "docs/workbacklog.toml",
+  "复盘/并发架构-T-G99.md",
+]
+depends = []
+risk = "low"
+status = "pending"
+"""
+
+_SEED_IDS = frozenset({"007", "008", "009", "010"})
+
+
+def _seed_fixture(tmp_path: Path) -> Path:
+    """四条种子的**冻结夹具**（写进临时目录的 TOML）—— 批次断言只认它，不认真文件。"""
+    return _write(tmp_path, _SEED_FIXTURE_TOML)
 
 
 def test_seed_backlog_loads_and_is_conflict_free() -> None:
-    """真种子（`docs/workbacklog.toml`）必须能读、能过 check（这才是"能并行"的证据）。"""
+    """真种子（`docs/workbacklog.toml`）必须能读、能过 check（这才是"能并行"的证据）。
+
+    ★ 判据**不写死张数**（文件会随调度继续追加卡）：只钉**不变量** —— 能读、`validate` 返回空、
+    id 唯一、四条种子是实际 id 集合的**子集**。批次的精确断言见下面的冻结夹具用例。
+    """
     backlog = wb_plan.load_backlog(SEED)
-    assert [c.id for c in backlog.cards] == ["007", "008", "009", "010"]
+    ids = [c.id for c in backlog.cards]
+    assert len(ids) == len(set(ids)), f"卡号重复：{ids}"
+    assert set(ids) >= _SEED_IDS, f"四条种子必须都在：{sorted(_SEED_IDS - set(ids))}"
     assert wb_plan.validate(backlog) == []
 
 
 def test_seed_toml_roundtrips_with_tomllib() -> None:
-    """用 `tomllib` 读回来验一遍（卡 010 §8 坑 4：写 TOML 必须能读回）。"""
+    """用 `tomllib` 读回来验一遍（卡 010 §8 坑 4：写 TOML 必须能读回）。
+
+    ★ 钉的是**两个读法一致**（`tomllib` 与 `load_backlog` 读出同一串 id）+ 种子在里头 +
+    没有受保护文件；**不写死张数**（文件会长）。
+    """
     data = tomllib.loads(SEED.read_text(encoding="utf-8"))
     assert data["base"]["reviewed"]
-    assert [c["id"] for c in data["cards"]] == ["007", "008", "009", "010"]
+    raw_ids = [c["id"] for c in data["cards"]]
+    assert raw_ids == [c.id for c in wb_plan.load_backlog(SEED).cards]
+    assert set(raw_ids) >= _SEED_IDS
     # 受保护文件一个都不在种子里（作者不许碰）
     for card in data["cards"]:
         assert not (set(card["files"]) & wb_plan.PROTECTED_FILES)
 
 
-def test_seed_plan_with_concurrency_three() -> None:
-    """`plan --concurrency 3` 在种子上 = 2 批：[007,008,009] + [010]。"""
-    backlog = wb_plan.load_backlog(SEED)
+def test_seed_plan_with_concurrency_three(tmp_path: Path) -> None:
+    """`plan --concurrency 3` 在**四条种子**（冻结夹具）上 = 2 批：[007,008,009] + [010]。"""
+    backlog = wb_plan.load_backlog(_seed_fixture(tmp_path))
     batches = wb_plan.plan_batches(backlog, 3)
     assert [[c.id for c in batch] for batch in batches] == [["007", "008", "009"], ["010"]]
 
 
-def test_seed_plan_with_concurrency_two() -> None:
-    backlog = wb_plan.load_backlog(SEED)
+def test_seed_plan_with_concurrency_two(tmp_path: Path) -> None:
+    """上限 2 时四条种子（冻结夹具） = 2 批：[007,008] + [009,010]。"""
+    backlog = wb_plan.load_backlog(_seed_fixture(tmp_path))
     batches = wb_plan.plan_batches(backlog, 2)
     assert [[c.id for c in batch] for batch in batches] == [["007", "008"], ["009", "010"]]
 
@@ -344,8 +438,10 @@ def test_load_failure_exit_code(tmp_path: Path) -> None:
     assert wb_plan.main(["check", "--backlog", str(tmp_path / "nope.toml")]) == 2
 
 
-def test_plan_command_prints_batches(capsys: pytest.CaptureFixture) -> None:
-    code = wb_plan.main(["plan", "--concurrency", "3", "--backlog", str(SEED)])
+def test_plan_command_prints_batches(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """`plan` 子命令在**四条种子夹具**上端到端印出 2 批（走 main → load → plan → 渲染）。"""
+    code = wb_plan.main(
+        ["plan", "--concurrency", "3", "--backlog", str(_seed_fixture(tmp_path))])
     out = capsys.readouterr().out
     assert code == 0
     assert "4 张卡 → 2 批" in out
