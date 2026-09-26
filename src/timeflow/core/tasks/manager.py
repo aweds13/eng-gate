@@ -80,8 +80,10 @@ _PRIORITY_RANK = {PRIORITY_HIGH: 0, PRIORITY_MID: 1, PRIORITY_LOW: 2}
 # 任务类型 + 所属课程（SR-F5.4 学校任务带课程标签 / T-C12，用户 2026-09-19 要求）。
 # 词表**复用 `course_assessments.name` 已有的四种学校事项**（考试/作业/论文/小测）+ 普通，
 # 不另造一套说法；只有「非普通」才允许挂课程 —— 挂了课程就意味着这件事属于某门课。
+# 2026-09-26（T-G140 · SR-F1.9 ③）：扩「竞赛/活动」两个取值 —— 三类的「③ 竞赛/活动·逾期不候」
+# 此前没有任何专属信号；`tasks.task_type` 是纯 TEXT 无 CHECK（见 db.py），扩取值零迁移、不加字段。
 TASK_TYPE_NORMAL = "普通"
-VALID_TASK_TYPES = (TASK_TYPE_NORMAL, "作业", "考试", "论文", "小测")
+VALID_TASK_TYPES = (TASK_TYPE_NORMAL, "作业", "考试", "论文", "小测", "竞赛", "活动")
 DEFAULT_TASK_TYPE = TASK_TYPE_NORMAL
 COURSE_TASK_TYPES = tuple(t for t in VALID_TASK_TYPES if t != TASK_TYPE_NORMAL)
 
@@ -220,9 +222,10 @@ def _check_priority(value: object) -> str:
 
 
 def _check_task_type(value: object) -> str:
-    """任务类型只有五档（普通/作业/考试/论文/小测）—— 非法值拒绝，不静默降级成普通。
+    """任务类型只有七档（普通/作业/考试/论文/小测/竞赛/活动）—— 非法值拒绝，不静默降级成普通。
 
     为什么拒绝而不是回落默认值：用户明确选了「作业」却存成「普通」，他会以为绑定生效了。
+    「竞赛/活动」是 2026-09-26（T-G140 · SR-F1.9 ③）扩的两个取值，校验规则不变：仍是白名单制。
     """
     if value is None or str(value).strip() == "":
         raise ValueError(f"任务类型不能为空（只能是 {'/'.join(VALID_TASK_TYPES)}）")
@@ -241,6 +244,9 @@ def _check_course_pair(conn: sqlite3.Connection, task_type: str, course_id: obje
     - **只有非「普通」类型才允许挂课程** —— 挂了课程这件事本身就在说"它属于某门课"，
       「普通」是"与课程无关"，两者不能同时成立。这里拒绝而不是偷偷清掉课程：
       清掉是静默数据丢失，用户会以为保存成功了。
+    - `竞赛`/`活动`（2026-09-26 · T-G140 · SR-F1.9 ③）**挂课或不挂课都可以**：
+      它们可能属于某门课，也可能是校级事项 —— 上面的规则只禁「普通」这一档，
+      所以扩值后无需任何特判（既有语义一个字没动）。
     """
     text = None if course_id is None else str(course_id).strip()
     if not text:

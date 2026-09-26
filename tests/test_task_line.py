@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -20,6 +21,7 @@ from fastapi.testclient import TestClient
 from timeflow.api.app import create_app
 from timeflow.core import facts as facts_mod
 from timeflow.core import tasks as tm
+from timeflow.core.academic import academic as ac
 from timeflow.core.ledger import ledger
 from timeflow.storage import db as db_mod
 
@@ -178,3 +180,61 @@ def test_api_uncomplete_unknown_task_404(tmp_path) -> None:  # type: ignore[no-u
     client = TestClient(create_app(str(tmp_path / "b.db")))
     assert client.post("/api/tasks/nope/uncomplete").status_code == 404
     assert client.get("/api/tasks/nope/facts").status_code == 404
+
+
+# ---- SR-F1.9 ③：task_type 扩「竞赛/活动」（T-G140）----
+
+def test_competition_activity_roundtrip(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """钉子①：能存能取 —— 建一个 `task_type='竞赛'`（及「活动」）→ 读回来不变。"""
+    conn = db_mod.connect(str(tmp_path / "t140a.db"))
+    for kind in ("竞赛", "活动"):
+        t = tm.create_task(conn, title=f"一件{kind}", task_type=kind)
+        got = tm.get_task(conn, t.id)
+        assert got.task_type == kind
+    conn.close()
+
+
+def test_illegal_type_still_rejected_after_expansion(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """钉子②：扩值后白名单制不变 —— 非法值仍拒绝，不许静默降级成「普通」。"""
+    conn = db_mod.connect(str(tmp_path / "t140b.db"))
+    with pytest.raises(ValueError, match="非法任务类型"):
+        tm.create_task(conn, title="x", task_type="乱写")
+    conn.close()
+
+
+def test_competition_activity_course_pairing(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """钉子③：`竞赛`/`活动` 不带课程能建、带课程也能建；「普通」带课程仍被拒。
+
+    它们可能属于某门课，也可能是校级事项 —— 所以两个方向都放行（manager 的配对规则
+    只禁「普通」这一档，扩值无需特判）。
+    """
+    conn = db_mod.connect(str(tmp_path / "t140c.db"))
+    cid = ac.create_course(conn, name="程序设计竞赛")
+    for kind in ("竞赛", "活动"):
+        free = tm.create_task(conn, title=f"校级{kind}", task_type=kind)
+        assert free.course_id is None
+        bound = tm.create_task(conn, title=f"课内{kind}", task_type=kind, course_id=cid)
+        assert bound.course_id == cid
+    with pytest.raises(ValueError, match="不挂课程"):
+        tm.create_task(conn, title="x", task_type="普通", course_id=cid)
+    conn.close()
+
+
+def test_deferred_badge_only_for_new_types() -> None:
+    """钉子④（反向判据）：「逾期不候」轻标签只给 `竞赛`/`活动` —— 防"永远显示"。
+
+    判据读 `src/web/index.html` 里 deferredBadge 的守卫表达式：它必须**恰好**是
+    `type==='竞赛'||type==='活动'` 这两个取值（普通/作业/考试/论文/小测 不在列），
+    且该徽标必须真的接在任务卡片的 meta 行上。
+    """
+    html = (Path(__file__).resolve().parents[1] / "src" / "web" / "index.html").read_text(
+        encoding="utf-8"
+    )
+    guard = "(type==='竞赛'||type==='活动')"
+    assert guard in html, "deferredBadge 的守卫不是「只认 竞赛/活动」的白名单判据"
+    assert "${deferredBadge(t)}" in html, "逾期不候轻标签没有接到任务卡片上"
+    # 函数体里不许出现其余四档取值（防"顺手"扩成永远显示）；「普通」只允许作为兜底默认
+    body = html.split("function deferredBadge(t){", 1)[1].split("\n}", 1)[0]
+    for other in ("作业", "考试", "论文", "小测"):
+        assert other not in body, f"deferredBadge 不应给「{other}」出标签"
+    assert body.count("普通") == 1 and "||'普通'" in body, "「普通」只许出现在兜底默认里"

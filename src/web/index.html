@@ -1555,7 +1555,7 @@ function editForm(t){
       <textarea id="editNote" class="textarea" rows="3" placeholder="要求、思路、要带的东西…（只在这里显示，不进列表）">${esc(t.note||'')}</textarea></div>
   </div>
   <div class="sub" id="editCourseHint">${(t.task_type||'普通')==='普通'
-    ? '「普通」= 与课程无关，不挂课程；要挂课程请把类型改成 作业/考试/论文/小测。'
+    ? '可挂课类型：作业/考试/论文/小测/竞赛/活动'
     : '课程在学业页新建。'}</div>
   <div class="sub">已完成的任务可改，但不改写历史完成记录。</div>`;
 }
@@ -1769,8 +1769,10 @@ function prioOptions(current){
   return ['高','中','低'].map(v=>`<option value="${v}" ${v===(current||'中')?'selected':''}>${v}</option>`).join('');
 }
 // 任务类型 + 所属课程（SR-F5.4 / T-C12）：类型词表与后端 `tm.VALID_TASK_TYPES` 一致；
-// 「普通」= 与课程无关（此时课程下拉禁用并清空），其余四种是学校事项，可绑一门课。
-const TASK_TYPES=['普通','作业','考试','论文','小测'];
+// 「普通」= 与课程无关（此时课程下拉禁用并清空），其余是学校事项，可绑一门课。
+// 2026-09-26（T-G140 · SR-F1.9 ③）：扩「竞赛/活动」两个取值 —— 「逾期不候」的那一类
+// （它们挂课或不挂课都可以）；呈现只到一枚轻标签为止（见 deferredBadge）。
+const TASK_TYPES=['普通','作业','考试','论文','小测','竞赛','活动'];
 function taskTypeOptions(current){
   const cur=current||'普通';
   return TASK_TYPES.map(v=>`<option value="${v}" ${v===cur?'selected':''}>${v}</option>`).join('');
@@ -1786,6 +1788,13 @@ function courseBadge(t){
   const name=t.course_name?esc(t.course_name):(t.course_id?'课程已删':'未指定课程');
   return `<span class="badge" title="所属课程 · 任务类型">${name} · ${esc(type)}</span>`;
 }
+// 「逾期不候」轻标签（SR-F1.9 ③ / T-G140）：只给 `竞赛`/`活动` 两个类型 —— 它们的截止是
+// "过了就没"的那一类。只是如实标出来（与 T-C8 的硬考核同口径）：不加声音、不弹窗、不催。
+// ★ 反向判据：普通/作业/考试/论文/小测 一律不出现这枚标签（tests/test_task_line.py 钉住）。
+function deferredBadge(t){
+  const type=t.task_type||'普通';
+  return (type==='竞赛'||type==='活动')?`<span class="badge">逾期不候</span>`:'';
+}
 // 类型/课程是一对：切换类型时同步课程下拉的可用性（「普通」不挂课程 —— 与后端校验同一条规则）
 function syncTypeCourse(){
   const typeEl=document.getElementById('editType'),courseEl=document.getElementById('editCourse'),
@@ -1795,7 +1804,7 @@ function syncTypeCourse(){
   courseEl.disabled=normal;
   if(normal){courseEl.value='';}          // 可见地清空（不是偷偷清），并在下面写清原因
   if(hint)hint.textContent=normal
-    ? '「普通」= 与课程无关，不挂课程；要挂课程请把类型改成 作业/考试/论文/小测。'
+    ? '可挂课类型：作业/考试/论文/小测/竞赛/活动'
     : '选了课程就等于说「这件事属于这门课」；课程在学业页新建。';
 }
 // 状态徽标（T-F1）：只有「进行中 / 待定 / 取消 / 归档」才单独标出来 ——
@@ -1890,7 +1899,7 @@ function taskCard(t,isOverdue,order){
     <div class="card-body">
     <div class="title"><span class="open" data-action="task-detail" data-id="${t.id}"
       title="打开右栏详情（键盘用「…」里的「详情」）">${esc(t.title)}</span></div>
-    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${remindBadge(t)}${whoBadge}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}${aiReport}${orderRow}</div>
+    <div class="meta">${t.due_date||''} ${depthBadge} ${t.group_name?`<span class="badge">${esc(t.group_name)}</span>`:''} ${(t.groups||[]).map(g=>`<span class="badge">${esc(g)}</span>`).join('')}${asgMeta}${sub}${prioBadge(t.priority)}${flagBadge(t)}${courseBadge(t)}${deferredBadge(t)}${remindBadge(t)}${whoBadge}${(t.attach||[]).length?`<span class="badge">附件 ${t.attach.length}</span>`:''}${badge}</div>${cur}${aiReport}${orderRow}</div>
     <div class="row">
       ${doingButtonHTML(t)}
       ${isDone?'':`<button class="ghost" data-action="task-focus" data-id="${t.id}">专注</button>`}

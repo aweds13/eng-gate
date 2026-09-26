@@ -515,7 +515,9 @@ def test_task_type_and_course_are_wired_in_frontend() -> None:
     不是"偷偷清掉"（静默数据丢失正是本项目一直在防的事）。
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
-    assert "const TASK_TYPES=['普通','作业','考试','论文','小测']" in html, "类型词表要与后端同口径"
+    assert (
+        "const TASK_TYPES=['普通','作业','考试','论文','小测','竞赛','活动']" in html
+    ), "类型词表要与后端同口径"
     assert "function courseBadge(" in html and "function taskTypeOptions(" in html
     assert "function courseOptions(" in html and "function syncTypeCourse(" in html
     card = _fn_body(html, "taskCard")   # ★ 别抄签名：T-G79 给 taskCard 加了第三个参数（顺序）
