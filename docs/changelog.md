@@ -4,6 +4,16 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 面板不再把用量账本当工人 log + 日志非 UTF-8/NUL 容错（T-G137）
+
+- 根因：discover_logs 的 `wb-*.jsonl` 通配把用量账本 `wb-usage.jsonl` 当成一张叫 usage 的卡
+  （9 棵树 9 行幻影「静默/可能卡死」）；第二个坑是 PowerShell `*>` 写出的 UTF-16 log
+  被显示成「非 JSON 行」并误判静默。修法：排除判据收拢到具名常量 `NON_CARD_LOGS` +
+  `is_card_log()`；新增 `_read_log_lines()` 按行容错（非 UTF-8/含 NUL 的行跳过、
+  好行照常解析），整份解不出如实标「日志不可解析」。行序口径（T-G123）一字未动。
+- **先红后绿**：改前 2 failed → 改后 `tests/test_wb_dash.py` 26 passed + ruff 0。
+- 复盘：`复盘/面板幻影行与日志容错-T-G137.md`。
+
 ### worktree 轻门「测的是哪棵树」—— 修导入口径 + 自身钉子（T-G134）
 
 - 根因：miniconda 的 editable `.pth`（2026-09-17 装）硬指主树 `src`，worktree 里跑轻门

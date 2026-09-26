@@ -109,6 +109,46 @@ def _tree_dirs(root: Path) -> list[tuple[str, Path]]:
 _ROUND_SUFFIX = re.compile(r"^(?P<card>.+?)\.r(?P<n>\d+)$")
 
 
+# ★ T-G137（卡 046）：`gates/diag/` 里这些文件**不是卡** —— 派活器（T-G114）每棵树落一份
+#   用量账本 `wb-usage.jsonl`（只有 token 计数、没有事件流），`wb-*.jsonl` 通配会把它当成
+#   一张叫 `usage` 的假卡：账本永远没有事件流 → 永远「静默 N 分钟（可能卡死）」
+#   （9 棵树 9 行幻影，把真卡挤下去 —— 用户 2026-09-26 就是这么被吓到的）。
+#   ★ 判据收拢在这一个具名常量 + `is_card_log()`，别散落成难找的字符串；
+#   ★ 账本不改名、`wb_dispatch.py` 的落账逻辑不动 —— 面板适配账本，不是账本适配面板。
+NON_CARD_LOGS = frozenset({"wb-usage.jsonl"})
+
+
+def is_card_log(name: str) -> bool:
+    """`gates/diag/` 里这个文件名算不算一张卡的 log —— 用量账本等非卡文件排除。"""
+    return name not in NON_CARD_LOGS
+
+
+def _read_log_lines(log: Path) -> list[str]:
+    """读 log 的行，带容错（T-G137）：
+
+    - 真 UTF-8 → 与从前一字不差（`read_text(utf-8)` 的行）；
+    - 混进坏行（PowerShell `*>` 会写出 UTF-16 / 含 NUL 字节的行）→ **跳过那一条**，
+      好行照常解析 —— 不许把「读不懂」显示成 `? 非 JSON 行：\\x00`；
+    - 整份解不出 → 返回空列表，调用方如实标「日志不可解析」，**不许**判成「可能卡死」。
+    """
+    data = log.read_bytes()
+    if b"\x00" not in data:
+        try:
+            return data.decode("utf-8").splitlines()
+        except UnicodeDecodeError:
+            pass                                    # 非 UTF-8 → 退到按行救
+    lines: list[str] = []
+    for chunk in data.split(b"\n"):
+        try:
+            text = chunk.decode("utf-8")
+        except UnicodeDecodeError:
+            continue                                # 非 UTF-8 的行 → 跳过
+        if "\x00" in text:
+            continue                                # 含 NUL 的行 → 跳过
+        lines.append(text.rstrip("\r"))
+    return lines
+
+
 def _split_card(name: str) -> tuple[str, int]:
     """文件名里的卡标识拆成 (卡号, 第几轮)：`004.r2` → (`004`, 2)；`004` → (`004`, 1)。
 
@@ -136,6 +176,8 @@ def discover_logs(root: Path) -> list[tuple[str, str, Path]]:
         if not diag.is_dir():
             continue
         for log in diag.glob("wb-*.jsonl"):
+            if not is_card_log(log.name):           # ★ T-G137：用量账本等非卡文件排除
+                continue
             card = log.name.removeprefix("wb-").removesuffix(".jsonl")
             found.append((tree, card, log))
     # ★ T-G123：组键 = (树名, 卡号)，组时间 = 组内最新的 mtime；组按它降序。
@@ -163,7 +205,10 @@ def card_state(root: Path | None = None) -> list[dict]:
         heartbeat = log.with_suffix(".heartbeat.txt")
         session = log.with_suffix(".session.txt")
         age = now - st.st_mtime
-        lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = _read_log_lines(log)
+        # ★ T-G137：整份解不出（有内容但一行都读不进来，如 PowerShell `*>` 写出的 UTF-16）
+        #   → 如实标「日志不可解析」，不许按静默时长把它判成「可能卡死」。
+        unparseable = not lines and st.st_size > 0
         timeline, summary = wb_status.parse_events(lines)
         shown = [ln for ln in timeline if ln.strip()]
         # ★ 判卡死的阈值**复用派活器**（T-G97）：有工具在飞 → 静默是预期的（底线上抬到 30 分钟）；
@@ -174,8 +219,10 @@ def card_state(root: Path | None = None) -> list[dict]:
             durations=wb_dispatch.tool_durations(lines))
         # ★ "收工"有两个来源：**判决文件**，**或日志里已经出现了 `result` 事件** ——
         #   老卡没有判决文件，少了第二条就会把早已收工的卡误报成"静默 N 分钟（可能卡死）"。
-        state, color = _state(age, verdict.exists() or bool(summary["final"]),
-                              threshold=threshold)
+        #   日志整份解不出 →「日志不可解析」（T-G137），如实优先于推断。
+        state, color = (("日志不可解析", "quiet") if unparseable else
+                        _state(age, verdict.exists() or bool(summary["final"]),
+                               threshold=threshold))
         models = list(dict.fromkeys(summary["models"]))
         rows.append({
             # 跨树时带上树名（如 `004@.wt/004`），免得两张卡同号时看串。

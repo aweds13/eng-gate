@@ -343,3 +343,76 @@ def test_same_card_number_in_different_trees_stays_separate(tmp_path: Path) -> N
     assert [r["card"] for r in rows] == ["004.r2", "004", "004@.wt/004"]
     assert [r["round"] for r in rows] == [2, 1, 1]
     assert [r["tree"] for r in rows] == ["", "", ".wt/004"]
+
+
+# --------------------------- 用量账本不是卡 + 日志非 UTF-8/NUL 容错（T-G137，卡 046）
+
+
+def test_usage_ledger_is_not_a_card(tmp_path: Path) -> None:
+    """★ 用量账本 `wb-usage.jsonl` 不是卡 —— discover_logs 只许有真卡的两轮，一条 usage 都不许有。
+
+    派活器（T-G114）每棵树落一份 gates/diag/wb-usage.jsonl（只有 token 计数、没有事件流），
+    `wb-*.jsonl` 通配把它当一张叫 usage 的卡 → 永远「静默/可能卡死」（9 棵树 9 行幻影，
+    用户 2026-09-26 就是这么被吓到的）。★ 账本不改名，面板适配账本。
+    """
+    _card(tmp_path, "042")
+    _card(tmp_path, "042.r2")
+    usage = tmp_path / "gates" / "diag" / "wb-usage.jsonl"
+    usage.write_text('{"tokens_in": 1, "tokens_out": 2}\n', encoding="utf-8")
+    then = time.time() - 600
+    os.utime(usage, (then, then))
+    cards = [card for _t, card, _p in wb_dash.discover_logs(tmp_path)]
+    assert cards == ["042.r2", "042"]          # 轮次新的在前（030 口径照旧）
+    assert not any(c.startswith("usage") for c in cards)
+    assert wb_dash.is_card_log("wb-042.jsonl")
+    assert wb_dash.is_card_log("wb-042.r2.jsonl")
+    assert not wb_dash.is_card_log("wb-usage.jsonl")
+
+
+def test_utf16_log_is_unparseable_never_stalled(tmp_path: Path) -> None:
+    """★ UTF-16LE（PowerShell `*>` 重定向写出的那种）→ 不抛异常；整份解不出 →
+    如实标「日志不可解析」，**不许**显示成「? 非 JSON 行：\\x00」、也**不许**判成「可能卡死」。
+    """
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-901.jsonl"
+    log.write_bytes('{"type":"system","subtype":"init"}\n'.encode("utf-16-le"))
+    then = time.time() - 600
+    os.utime(log, (then, then))
+    row = wb_dash.card_state(tmp_path)[0]
+    assert row["state"] == "日志不可解析"
+    assert "卡死" not in row["state"]
+    assert "\\x00" not in row["last"]
+
+
+def test_bad_line_is_skipped_good_lines_still_parsed(tmp_path: Path) -> None:
+    """★ 混进一条坏行（NUL / 非 UTF-8 字节）→ **跳过那一条**，好行照常解析 ——
+    不能因为一行垃圾把整张卡说成「说不清」。
+    """
+    good1 = _line({"type": "assistant", "message": {"id": "m1", "content": []}})
+    good2 = _line({"type": "system", "subtype": "init", "model": "glm-5.3-flash"})
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-902.jsonl"
+    log.write_bytes(
+        good1.encode("utf-8") + b"\n"
+        + b'\x00\xff\xfe garbage \x00\n'
+        + good2.encode("utf-8") + b"\n")
+    row = wb_dash.card_state(tmp_path)[0]
+    assert row["turns"] == 1                              # 好行的回合还在
+    assert row["model"] == "glm-5.3-flash"                # 好行的 init 还在
+    assert "\\x00" not in row["last"]                     # 坏行不进时间线
+    assert "非 JSON 行" not in row["last"]
+
+
+def test_utf8_log_parsing_unchanged(tmp_path: Path) -> None:
+    """★ 既有行为不许变：真 UTF-8 log（哪怕带空行）的解析、状态判定与从前完全一致。"""
+    _card(tmp_path, "043", age=600, lines=[
+        _event(type="system", subtype="init", model="deepseek-v4.1-flash"),
+        "",
+        _event(type="result", subtype="success", result="做完了"),
+    ])
+    row = wb_dash.card_state(tmp_path)[0]
+    assert row["state"] == "收工·结束"
+    assert row["final"] == "做完了"
+    assert row["model"] == "deepseek-v4.1-flash"
