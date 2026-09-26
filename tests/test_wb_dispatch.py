@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -139,26 +140,32 @@ def test_auth_ok_recognises_the_authentication_needle(monkeypatch) -> None:
 # ------------------------------------------------------------------ 干跑与真跑
 
 
-def _fake_worker(record: list[list[str]], rc: int = 0):
-    def run(cmd, **kwargs):                       # noqa: ANN001, ANN202
+EVENTS = [
+    json.dumps({"type": "system", "subtype": "init", "model": "m", "tools": ["Read", "Grep"]},
+               ensure_ascii=False),
+    json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "name": "Grep", "input": {"pattern": "myday_rank"}}]}},
+        ensure_ascii=False),
+    json.dumps({"type": "result", "subtype": "success", "result": "复核完了"}, ensure_ascii=False),
+]
+
+
+def _fake_runner(record: list[list[str]], events: list[str] | None = None, rc: int = 0,
+                 reason: str = "", scene: str = ""):
+    """假 runner：照真 runner 的接口落 log 并回话（真 Popen 那条路由下面的桩命令真跑钉住）。"""
+    def run(cmd, log, errlog, **kwargs):          # noqa: ANN001, ANN202
         record.append(list(cmd))
-        out = kwargs.get("stdout")
-        if out is not None:
-            out.write(json.dumps({"type": "system", "subtype": "init", "model": "m",
-                                  "tools": ["Read", "Grep"]}, ensure_ascii=False) + "\n")
-            out.write(json.dumps({"type": "assistant", "message": {"content": [
-                {"type": "tool_use", "name": "Grep", "input": {"pattern": "myday_rank"}}]}},
-                ensure_ascii=False) + "\n")
-            out.write(json.dumps({"type": "result", "subtype": "success", "result": "复核完了"},
-                                 ensure_ascii=False) + "\n")
-        return _Done(returncode=rc)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(events or EVENTS) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return rc, reason, scene
     return run
 
 
 def test_dry_run_checks_but_does_not_dispatch(sandbox: Path, monkeypatch, capsys) -> None:
     """默认 dry-run：四道检查照跑、命令照印，但**一个子进程都不派**。"""
     record: list[list[str]] = []
-    monkeypatch.setattr(wd.subprocess, "run", _fake_worker(record))
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
     monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md"])
     assert wd.main() == 0
     out = capsys.readouterr().out
@@ -169,7 +176,7 @@ def test_dry_run_checks_but_does_not_dispatch(sandbox: Path, monkeypatch, capsys
 def test_execute_dispatches_and_renders_the_timeline(sandbox: Path, monkeypatch, capsys) -> None:
     """--execute：真派、真落 log、跑完**用状态器把时间线印出来**（主控要的就是这个）。"""
     record: list[list[str]] = []
-    monkeypatch.setattr(wd.subprocess, "run", _fake_worker(record))
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
     monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
                                       "--execute"])
     assert wd.main() == 0
@@ -177,17 +184,30 @@ def test_execute_dispatches_and_renders_the_timeline(sandbox: Path, monkeypatch,
     assert "Grep(pattern=myday_rank)" in out        # 时间线渲染出来了
     assert "复核完了" in out
     assert record and "--output-format" in record[0]
+    assert "--max-turns" in record[0] and "--autocompact" in record[0]
     log = sandbox / "gates" / "diag" / "wb-001.jsonl"
     assert log.exists() and "tool_use" in log.read_text(encoding="utf-8")
 
 
 def test_execute_reports_worker_failure_as_exit_4(sandbox: Path, monkeypatch, capsys) -> None:
     """工人自己失败（退出码非 0）→ 脚本退 4：主控一眼能看出"这一轮不算数"。"""
-    monkeypatch.setattr(wd.subprocess, "run", _fake_worker([], rc=1))
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([], rc=1))
     monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
                                       "--execute"])
     assert wd.main() == 4
     assert "退出码 1" in capsys.readouterr().out
+
+
+def test_execute_reports_a_killed_or_unfinished_run_as_exit_6(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 被掐 / 超时 / 撞上限 → 退 **6**，并把现场打到 stderr：这一轮**不算数**，别当成功。"""
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(
+        [], reason="空转：最近 12 次工具调用里同一件事出现了 5 次", scene="    做 Read(a.py)"))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 6
+    err = capsys.readouterr().err
+    assert "空转" in err and "现场" in err and "Read(a.py)" in err
 
 
 def test_git_dirty_ignores_untracked_files(monkeypatch) -> None:
@@ -201,3 +221,122 @@ def test_git_dirty_ignores_untracked_files(monkeypatch) -> None:
     monkeypatch.setattr(wd.subprocess, "run", fake_run)
     assert wd.git_dirty() == []
     assert argv_seen and "-uno" in argv_seen[0]
+
+
+# ============================================================ 反空转三道（T-G88）
+
+
+def test_max_turns_default_leaves_room_for_a_real_card() -> None:
+    """★ 标定不是拍的：卡 002 实测 **90 个回合**才收工 → 写卡默认必须留出余量，别腰斩正常卡。"""
+    assert wd.max_turns_default(read_only=False) == wd.DEFAULT_MAX_TURNS_WRITE
+    assert wd.max_turns_default(read_only=True) == wd.DEFAULT_MAX_TURNS_READONLY
+    assert wd.DEFAULT_MAX_TURNS_WRITE > 90, "卡 002 就用了 90 个回合（实测），上限得更高"
+
+
+def test_build_command_carries_the_cap_and_the_compaction_window(sandbox: Path) -> None:
+    """① 回合上限与上下文窗口都要真进命令行；`--effort` **不许**出现（= 保持默认 High）。"""
+    node, cli = wd.paths()
+    cmd = wd.build_command(node, cli, "001", "spec.md", "m", max_turns=42, autocompact="1m")
+    assert cmd[cmd.index("--max-turns") + 1] == "42"
+    assert cmd[cmd.index("--autocompact") + 1] == "1m"
+    assert "--effort" not in cmd
+
+
+def test_turns_are_counted_per_message_not_per_event() -> None:
+    """回合按 `message.id` 去重：同一条回合发几条事件（文本 + 工具）只算一个。"""
+    def ev(mid: str, *, tool: bool) -> str:
+        content = ([{"type": "tool_use", "name": "Read", "input": {"file_path": "a.py"}}] if tool
+                   else [{"type": "text", "text": "嗯"}])
+        return json.dumps({"type": "assistant", "message": {"id": mid, "content": content}})
+
+    lines = [ev("m1", tool=False), ev("m1", tool=True), ev("m2", tool=True), "不是 JSON 的一行"]
+    assert wd.turns_seen(lines) == 2
+    # 对方改格式、不带 id → 退回"数事件"（会多算，所以只用来预警，不用来卡人）
+    no_id = [json.dumps({"type": "assistant", "message": {"content": []}})] * 3
+    assert wd.turns_seen(no_id) == 3
+
+
+def test_repeat_signal_catches_consecutive_and_alternating_repeats() -> None:
+    """② 空转：连着来 5 次算，A,B,A,B… 交替到 5 次也算（按窗口计数，不数末尾连续）。"""
+    assert wd.repeat_signal(["Read|x"] * 5) == (5, "Read|x")
+    # 窗口里每种只有 4 次 → 不算（★ 注意口径：判的是**最近 window 次里**的计数，
+    # 所以"前面重复过、后来换了别的"不算数 —— 它现在不在原地打转了）
+    spread = ["Read|x"] * 4 + ["Grep|y"] * 4 + ["Write|z"] * 4
+    assert wd.repeat_signal(spread) is None
+    alt = wd.repeat_signal(["Read|x", "Grep|y"] * 5)                      # 交替 5 次
+    assert alt is not None and alt[0] == 5
+    assert wd.repeat_signal([]) is None                                   # 一次都没调
+
+
+def test_watchdog_speaks_up_on_stall_and_on_spin_only() -> None:
+    """看门狗两条判据：静默到阈值 → 卡死；窗口内重复到阈值 → 空转；健康时**一句话不说**。"""
+    healthy = ["Read|x", "Grep|y", "Write|z"] * 4     # 各 4 次，都没到阈值
+    assert wd.watchdog_verdict(silent_seconds=1, signatures=healthy) == ""
+    stall = wd.watchdog_verdict(silent_seconds=wd.STALL_SECONDS, signatures=healthy)
+    assert "卡死" in stall and "分钟" in stall
+    spin = wd.watchdog_verdict(silent_seconds=1, signatures=["Read|x"] * wd.REPEAT_NEED)
+    assert "空转" in spin and "Read|x" in spin
+
+
+def test_cap_verdict_calls_a_capped_run_unfinished() -> None:
+    """★★ 撞上限时 CLI **自己停、退出码仍是 0** —— 必须由我们判一句"没做完"，否则腰斩被当成功。"""
+    assert wd.cap_verdict(149, 150) == ""
+    assert "没做完" in wd.cap_verdict(150, 150)
+
+
+def test_heartbeat_line_says_what_the_controller_wants_to_know() -> None:
+    """③ 心跳：一眼看出"它在动 + 跑到哪了"，不用去翻 log。"""
+    line = wd.heartbeat_line(elapsed=610, turns=90, tool_calls=111, files=21, silent_seconds=3)
+    for needle in ("已跑 10.2 分钟", "回合 90", "工具 111 次", "碰过文件 21 个", "静默 3 秒"):
+        assert needle in line
+
+
+def _stub(events: int, sleep_after: float) -> list[str]:
+    """桩子命令：吐 `events` 条**一模一样**的工具调用，然后装死 `sleep_after` 秒。"""
+    code = "\n".join([
+        "import json, sys, time",
+        "ev = {'type': 'assistant', 'message': {'id': 'm', 'content': [",
+        "    {'type': 'tool_use', 'name': 'Read', 'input': {'file_path': 'a.py'}}]}}",
+        f"for _ in range({events}):",
+        "    print(json.dumps(ev), flush=True)",
+        f"time.sleep({sleep_after})",
+        "",
+    ])
+    return [sys.executable, "-X", "utf8", "-c", code]
+
+
+def test_runner_writes_the_log_and_reports_a_clean_finish(tmp_path: Path) -> None:
+    """健康的一轮：逐行落盘、退出码照传、**不掐**（reason 空串 = 正常收工）。"""
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    code, reason, scene = wd.run_worker(_stub(2, 0.1), log, err, timeout=60, max_turns=150,
+                                        watchdog=True, heartbeat_seconds=0)
+    assert (code, reason, scene) == (0, "", "")
+    assert len(log.read_text(encoding="utf-8").strip().splitlines()) == 2
+    assert tmp_path.joinpath("w.err").exists()
+
+
+def test_runner_kills_a_stalled_worker_and_reports_the_scene(tmp_path: Path) -> None:
+    """★ 真掐一条：工人吐一条事件然后装死 → 看门狗按阈值**掐掉整棵进程树**并报现场。
+
+    三道护栏里只有这条"会动刀"，所以必须真跑 —— 假 runner 证明不了它真能把它停住。
+    """
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    beats: list[str] = []
+    started = time.monotonic()
+    _, reason, scene = wd.run_worker(_stub(1, 60), log, err, timeout=120, max_turns=150,
+                                     watchdog=True, heartbeat_seconds=1, stall_seconds=2,
+                                     poll_seconds=0.2, printer=beats.append)
+    elapsed = time.monotonic() - started
+    assert "卡死" in reason, reason
+    assert elapsed < 30, f"装死 60 秒，掐得太慢了：{elapsed:.1f} 秒"
+    assert any("心跳" in b for b in beats), f"心跳没打：{beats}"
+    assert "file_path=a.py" in scene, scene       # 现场里带着它最后那步（主控据此看卡在哪）
+
+
+def test_runner_kills_a_spinning_worker_even_though_it_is_not_silent(tmp_path: Path) -> None:
+    """★ 空转也真掐：它**一直在动**（日志不静默），只是原地重复同一件事 —— 静默判据抓不到它。"""
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    _, reason, _ = wd.run_worker(_stub(wd.REPEAT_NEED + 1, 60), log, err, timeout=120,
+                                 max_turns=150, watchdog=True, heartbeat_seconds=0,
+                                 stall_seconds=120, poll_seconds=0.2)
+    assert "空转" in reason, reason

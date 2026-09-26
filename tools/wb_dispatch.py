@@ -27,17 +27,39 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
   · **`-y` 不够**：工人要用 `python …` 跑测试时会被"非交互无法确认"挡回来（它自己提示改用
     `--permission-mode bypassPermissions`）→ 这是默认值；想收紧就显式给别的模式。
 
-★ 边界（如实写）：`--execute` 那条路**还没在真登录下跑过**（CLI 未登录，T-G80/T-G82 如实记）——
-现在被验证过的是四道前置检查与命令拼装（`tests/test_wb_dispatch.py`）。
+★ 边界（如实写）：**`--execute` 现在真跑过两轮了**（卡 001 只读复核、卡 002 写卡修 T-G79 → T-G86），
+所以"命令拼装 + 真机派活"不再是纸面推理；但**看门狗那条路（真掐）还没在真工人身上触发过** ——
+这里用桩命令真跑一遍，钉住"静默 → 掐掉 + 报现场"这条行为（`tests/test_wb_dispatch.py`）。
+
+★ 反空转三道（T-G88，用户 2026-09-26 点名要的"心跳"）：工人在**别的进程**里干活，主控看得见的
+只有它落的 log，所以三道护栏全建在这份 log 上：
+  ① **回合上限** —— `--max-turns`（写卡 **150** / 只读卡 **60**）。标定不是拍的：卡 002 实测用了
+     **90 个回合**（`message.id` 去重）/ 111 次工具调用才收工，照 60 定会把正常的卡腰斩。
+     ★ 撞上限时 CLI **自己停**、退出码仍是 0 —— 所以跑完还要判一句「没做完」，别把腰斩当成功。
+  ② **看门狗** —— 跑的时候盯着：日志**静默 ≥ 8 分钟**（卡死）或最近 12 次工具调用里
+     **同一件事出现 ≥ 5 次**（空转）→ 掐掉整棵进程树，并把现场（最后几步、碰过哪些文件）报出来。
+  ③ **心跳** —— 每 2 分钟一行（已跑多久 / 回合 / 工具 / 碰过文件 / 静默多少秒）：
+     让"它还在动"从猜测变成看得见的事实。
+两个默认值按用户 2026-09-26 的决定：`--autocompact 1m`（CLI 钳位 100k–1M）、
+`--effort` **不加**（保持默认 High）；两条都对着 CLI 2.158.0 的 `--help` 核过。
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import signal
 import subprocess
 import sys
+import threading
+import time
+from collections import Counter
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
@@ -54,6 +76,18 @@ FALLBACK_CLI_REL = r"workbuddy\resources\app.asar.unpacked\cli\bin\codebuddy"
 # 工人要跑 pytest / 脚本，`-y` 不够（实测 `python …` 会被"非交互无法确认"挡回来）
 DEFAULT_PERMISSION_MODE = "bypassPermissions"
 AUTH_NEEDLE = "Authentication required"
+
+# ---------------------------------------------------------------- 反空转三道的默认值（T-G88）
+# 标定依据：卡 002 实测 90 个回合（`message.id` 去重）/ 111 次工具调用才收工 → 写卡留 1.6 倍余量。
+DEFAULT_MAX_TURNS_WRITE = 150
+DEFAULT_MAX_TURNS_READONLY = 60
+DEFAULT_AUTOCOMPACT = "1m"       # 用户 2026-09-26 定的；CLI 钳位 100k–1M
+STALL_SECONDS = 480              # 日志静默多久算卡死（8 分钟）
+REPEAT_WINDOW = 12               # 空转只看最近多少次工具调用
+REPEAT_NEED = 5                  # 同一件事在里面出现几次算空转
+HEARTBEAT_SECONDS = 120          # 心跳行间隔
+POLL_SECONDS = 5.0               # 看门狗多久醒一次
+SCENE_LINES = 6                  # 掐掉时报最后几步
 
 OPENING = (
     "读 复盘/交接-重构进度.md + 复盘/长任务执行协议.md + 复盘/新窗口交接卡.md + "
@@ -102,13 +136,233 @@ def auth_ok(node: Path, cli: Path, timeout: int = 180) -> tuple[bool, str]:
 
 
 def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
-                  permission_mode: str = DEFAULT_PERMISSION_MODE) -> list[str]:
+                  permission_mode: str = DEFAULT_PERMISSION_MODE, *,
+                  max_turns: int = DEFAULT_MAX_TURNS_WRITE,
+                  autocompact: str = DEFAULT_AUTOCOMPACT) -> list[str]:
     return [
         str(node), str(cli), "-p", OPENING.format(spec=spec, card=card),
         "--model", model, "--output-format", "stream-json",
         "--permission-mode", permission_mode,
+        # ① 回合上限：撞到了 CLI 会自己停（退出码仍是 0，所以跑完还要判"没做完"）
+        "--max-turns", str(max_turns),
+        # 用户 2026-09-26 定：上下文窗口按 1M 自动压缩（`--effort` 不加 = 保持默认 High）
+        "--autocompact", autocompact,
         "--no-session-persistence", "-y",
     ]
+
+
+# ================================================================ 反空转三道（T-G88）
+
+
+def max_turns_default(read_only: bool) -> int:
+    """写卡 150 / 只读卡 60 —— 依据：卡 002 实测 90 个回合（写卡）才收工，别照 60 那么定。"""
+    return DEFAULT_MAX_TURNS_READONLY if read_only else DEFAULT_MAX_TURNS_WRITE
+
+
+def turns_seen(lines: list[str]) -> int:
+    """数"回合"：`assistant` 事件的 `message.id` **去重**（实测卡 002：206 条事件 = 90 个回合）。
+
+    对方要是改了格式、没带 `message.id`，就退回"数 assistant 事件" —— 那会**多算**，
+    所以这个值只用来预警"撞上限了"，不用来卡人（判据宁可保守）。
+    """
+    ids: set[str] = set()
+    seen_events = 0
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "assistant":
+            continue
+        seen_events += 1
+        mid = (event.get("message") or {}).get("id")
+        if mid:
+            ids.add(str(mid))
+    return len(ids) if ids else seen_events
+
+
+def tool_signatures(lines: list[str]) -> list[str]:
+    """每次工具调用压成一个签名 `名字|参数` —— 空转判据拿它比"是不是在重复同一件事"。"""
+    out: list[str] = []
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "assistant":
+            continue
+        content = (event.get("message") or {}).get("content")
+        for item in content if isinstance(content, list) else []:
+            if not isinstance(item, dict) or item.get("type") != "tool_use":
+                continue
+            payload = item.get("input") or {}
+            try:
+                blob = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+            except (TypeError, ValueError):
+                blob = str(payload)
+            out.append(f"{item.get('name')}|{blob}")
+    return out
+
+
+def repeat_signal(signatures: list[str], *, window: int = REPEAT_WINDOW,
+                  need: int = REPEAT_NEED) -> tuple[int, str] | None:
+    """最近 `window` 次调用里同一个（工具+参数）出现了 ≥ `need` 次 → `(次数, 签名)`。
+
+    连着来 5 次算，A,B,A,B,… 交替 5 次也算（这就是按"窗口内计数"而不是"数末尾连续"的理由）。
+    ★ 边界（如实写）：只抓**完全一样**的调用；参数每次差一点点的"原地打转"抓不到 ——
+    那一类靠静默超时兜底（两条判据互为补集）。
+    """
+    tail = signatures[-window:]
+    if not tail:
+        return None
+    sig, count = Counter(tail).most_common(1)[0]
+    return (count, sig) if count >= need else None
+
+
+def watchdog_verdict(*, silent_seconds: float, signatures: list[str],
+                     stall_seconds: int = STALL_SECONDS, window: int = REPEAT_WINDOW,
+                     need: int = REPEAT_NEED) -> str:
+    """**在跑的时候**该不该把它掐了 —— 返回原因（空串 = 健康）。① 卡死 ② 空转。"""
+    if silent_seconds >= stall_seconds:
+        return (f"卡死：{silent_seconds / 60:.1f} 分钟没有新事件"
+                f"（阈值 {stall_seconds / 60:.1f} 分钟）")
+    repeat = repeat_signal(signatures, window=window, need=need)
+    if repeat:
+        count, sig = repeat
+        return (f"空转：最近 {window} 次工具调用里同一件事出现了 {count} 次"
+                f"（阈值 {need}）—— {wb_status._clip(sig, 120)}")
+    return ""
+
+
+def cap_verdict(turns: int, max_turns: int) -> str:
+    """**跑完之后**：回合数撞到上限 = **没做完**（CLI 会自己停，退出码还是 0，别当成功）。"""
+    if turns >= max_turns:
+        return (f"没做完：回合数 {turns} 撞到上限 {max_turns}"
+                f"（`--max-turns` 到了 CLI 会自己停，退出码仍是 0）")
+    return ""
+
+
+def heartbeat_line(*, elapsed: float, turns: int, tool_calls: int, files: int,
+                   silent_seconds: float) -> str:
+    """心跳一行 —— 让"它还在动"变成看得见的事实（而不是主控干等）。"""
+    return (f"[心跳] 已跑 {elapsed / 60:.1f} 分钟 | 回合 {turns} | 工具 {tool_calls} 次 | "
+            f"碰过文件 {files} 个 | 日志静默 {silent_seconds:.0f} 秒")
+
+
+def kill_tree(pid: int) -> str:
+    """掐掉**整棵进程树**（按 PID，不按进程名 —— 按名字会误伤同名的别的进程）。
+
+    Windows 走 `taskkill /F /T`；别的平台退回 `os.kill`。掐完返回一句人话（原因照实说）。
+    """
+    if os.name == "nt":
+        done = subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        body = (done.stdout or done.stderr or "").strip().splitlines()
+        return body[0] if body else f"taskkill 退出码 {done.returncode}"
+    os.kill(pid, signal.SIGKILL)
+    return f"已给 {pid} 发 SIGKILL"
+
+
+def _pump(stream, log: Path, lines: list[str], lock: threading.Lock,
+          state: dict[str, float]) -> None:
+    """读线程：工人每吐一行就**立刻落盘**并喂给判据（主控不必等它跑完才看得见）。"""
+    with log.open("w", encoding="utf-8") as out:
+        for raw in stream:
+            out.write(raw)
+            out.flush()
+            with lock:
+                lines.append(raw.rstrip("\n"))
+                state["last_at"] = time.monotonic()
+
+
+def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_turns: int,
+               watchdog: bool = True, heartbeat_seconds: int = HEARTBEAT_SECONDS,
+               stall_seconds: int = STALL_SECONDS, poll_seconds: float = POLL_SECONDS,
+               printer: Callable[[str], None] = print) -> tuple[int, str, str]:
+    """真跑工人并且**盯着它** —— 返回 `(退出码, 掐掉/超时/撞上限的原因, 现场)`。
+
+    为什么不是一句 `subprocess.run(stdout=file)`（T-G82 的老写法）：那样主控在它跑的那一小时里
+    **什么都看不见** —— 卡死了在等、空转烧时间也在等，而这两种"等"都不该发生。
+    所以改成 Popen + 读线程（逐行落盘、顺手喂判据）+ 主循环（心跳 / 看门狗 / 超时）。
+
+    ★ 边界（如实写）：判据每轮把已落的 log **整段重解析**（简单、够快：卡 002 那种量级
+    300 多条事件，解析一遍是毫秒级）；真跑出几万条事件再谈增量。
+    """
+    log.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    state: dict[str, float] = {"last_at": time.monotonic()}
+    lock = threading.Lock()
+    reason = ""
+
+    errlog.parent.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    last_beat = started
+    with errlog.open("w", encoding="utf-8") as err:
+        proc = subprocess.Popen(          # noqa: S603 —— 命令是本地拼好的 CLI，不是外部输入
+            list(cmd), cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=err, text=True, encoding="utf-8", errors="replace", bufsize=1,
+        )
+        pump = threading.Thread(target=_pump, args=(proc.stdout, log, lines, lock, state),
+                                daemon=True)
+        pump.start()
+        try:
+            while True:
+                try:
+                    # 用 wait(timeout=…) 而不是 sleep：工人收工就**立刻**返回，
+                    # 不必白等一个轮询周期（否则每一轮派活都要多搭最多 poll_seconds）
+                    proc.wait(timeout=poll_seconds)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                now = time.monotonic()
+                if now - started >= timeout:
+                    reason = f"超时：{timeout} 秒到了（`--timeout`）"
+                    break
+                with lock:
+                    snapshot = list(lines)
+                    silent = now - state["last_at"]
+                if watchdog:
+                    verdict = watchdog_verdict(silent_seconds=silent, signatures=snapshot,
+                                               stall_seconds=stall_seconds)
+                    if verdict:
+                        reason = verdict
+                        break
+                if heartbeat_seconds and now - last_beat >= heartbeat_seconds:
+                    last_beat = now
+                    sigs = tool_signatures(snapshot)
+                    _, hb = wb_status.parse_events(snapshot)
+                    printer(heartbeat_line(
+                        elapsed=now - started, turns=turns_seen(snapshot),
+                        tool_calls=len(sigs), files=hb["files_total"],
+                        silent_seconds=silent))
+        finally:
+            gone = proc.poll() is not None
+            killed = "（它已经自己退出了，不用掐）" if gone else ""
+            if reason and not gone:
+                killed = kill_tree(proc.pid)
+                try:
+                    proc.wait(timeout=30)
+                except subprocess.TimeoutExpired:      # 掐都掐不动：如实说，不假装
+                    killed += "（等它退出超时 30 秒）"
+            code = proc.wait()
+            pump.join(timeout=10)
+    with lock:
+        snapshot = list(lines)
+
+    if reason:
+        return code, f"{reason} → {killed}", _scene(snapshot)
+    return code, cap_verdict(turns_seen(snapshot), max_turns), ""
+
+
+def _scene(lines: list[str]) -> str:
+    """掐掉那一刻的现场：最后几步 + 它碰过哪些文件（主控据此判断"卡在哪一步"）。"""
+    timeline, summary = wb_status.parse_events(lines)
+    tail = timeline[-SCENE_LINES:]
+    files = "、".join(summary["files"]) or "（没碰过文件）"
+    return ("\n".join(f"    {ln}" for ln in tail)
+            + f"\n    碰过的文件（{summary['files_total']} 个）：{files}"
+            + f"\n    工具调用 {summary['tool_calls']} 次；"
+            + f"认不出的行 {summary['unknown_events']} 条")
 
 
 def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
@@ -150,6 +404,20 @@ def main() -> int:
     parser.add_argument("--force", action="store_true", help="允许覆盖已有 log")
     parser.add_argument("--no-preflight", action="store_true", help="跳过登录自检")
     parser.add_argument("--timeout", type=int, default=3600, help="工人最长跑多久（秒）")
+    parser.add_argument("--max-turns", type=int, default=0,
+                        help="回合上限（0 = 按卡种取默认：写卡 150 / 只读卡 60）")
+    parser.add_argument("--read-only", action="store_true",
+                        help="这是一张只读卡 → 回合上限默认取 60（预算，不是安全边界）")
+    parser.add_argument("--autocompact", default=DEFAULT_AUTOCOMPACT,
+                        help="自动压缩窗口（默认 1m；CLI 钳位 100k-1M）")
+    parser.add_argument("--heartbeat-seconds", type=int, default=HEARTBEAT_SECONDS,
+                        help="心跳行间隔（秒；0 = 不打）")
+    parser.add_argument("--stall-seconds", type=int, default=STALL_SECONDS,
+                        help="日志静默多久算卡死（秒）")
+    parser.add_argument("--poll-seconds", type=float, default=POLL_SECONDS,
+                        help="看门狗多久醒一次（秒）")
+    parser.add_argument("--no-watchdog", action="store_true",
+                        help="关掉看门狗（卡死/空转不再自动掐；心跳仍在）")
     args = parser.parse_args()
 
     problems, log = preflight(
@@ -157,7 +425,9 @@ def main() -> int:
         cli_override=args.cli,
     )
     node, cli = paths(args.cli)
-    cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode)
+    max_turns = args.max_turns or max_turns_default(args.read_only)
+    cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode,
+                        max_turns=max_turns, autocompact=args.autocompact)
 
     if problems:
         print("[FAIL] 不派活 —— 前置检查没过：", file=sys.stderr)
@@ -173,25 +443,38 @@ def main() -> int:
     print(f"[OK ] 前置检查全过（{done_checks}）")
     print(f"[log ] {log}")
     print(f"[cmd ] {' '.join(cmd[:4])} … --model {args.model} --output-format stream-json "
-          f"--permission-mode {args.permission_mode}")
+          f"--permission-mode {args.permission_mode} --max-turns {max_turns} "
+          f"--autocompact {args.autocompact}")
+    guards = ("看门狗**关**（--no-watchdog）" if args.no_watchdog else
+              f"看门狗：日志静默 {args.stall_seconds}s 或最近 {REPEAT_WINDOW} 次调用里同一件事"
+              f"重复 {REPEAT_NEED} 次 → 掐")
+    print(f"[盯 ] {guards}；心跳每 {args.heartbeat_seconds}s；超时 {args.timeout}s")
     if not args.execute:
         print("[dry ] 这是 dry-run；真想派活加 --execute")
         return 0
 
     errlog = log.with_suffix(".stderr.txt")
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("w", encoding="utf-8") as out, errlog.open("w", encoding="utf-8") as err:
-        done = subprocess.run(cmd, cwd=str(ROOT), stdout=out, stderr=err, timeout=args.timeout)
-    print(f"[done] 工人退出码 {done.returncode}；stderr 见 {errlog.name}")
+    code, reason, scene = run_worker(
+        cmd, log, errlog, timeout=args.timeout, max_turns=max_turns,
+        watchdog=not args.no_watchdog, heartbeat_seconds=args.heartbeat_seconds,
+        stall_seconds=args.stall_seconds, poll_seconds=args.poll_seconds,
+    )
+    print(f"[done] 工人退出码 {code}；stderr 见 {errlog.name}")
     lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
     timeline, summary = wb_status.parse_events(lines)
     for line in timeline:
         print(line)
-    print(f"[摘要] 工具调用 {summary['tool_calls']} 次；"
-          f"碰过的文件 {summary['files_total']} 个；"
+    print(f"[摘要] 回合 {turns_seen(lines)} 个（上限 {max_turns}）；"
+          f"工具调用 {summary['tool_calls']} 次；碰过的文件 {summary['files_total']} 个；"
           f"认不出的行 {summary['unknown_events']} 条")
+    if reason:
+        print(f"[掐 ] {reason}", file=sys.stderr)
+        print(f"     现场（最后一次动作之后的几步）：\n{scene}", file=sys.stderr)
+        print(f"[复核] 先看现场再决定：python -X utf8 tools/wb_status.py {log} --tail 20 --repo",
+              file=sys.stderr)
+        return 6
     print(f"[复核] 主控现在去看报告与 git status：python -X utf8 tools/wb_status.py {log} --repo")
-    return 0 if done.returncode == 0 else 4
+    return 0 if code == 0 else 4
 
 
 if __name__ == "__main__":
