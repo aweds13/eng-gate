@@ -227,10 +227,13 @@ def test_git_dirty_ignores_untracked_files(monkeypatch) -> None:
 
 
 def test_max_turns_default_leaves_room_for_a_real_card() -> None:
-    """★ 标定不是拍的：卡 002 实测 **90 个回合**才收工 → 写卡默认必须留出余量，别腰斩正常卡。"""
+    """★ 标定口径：`--max-turns` 数的是**工具调用回合** —— 卡 002 实测 111 次工具调用
+    （含工具调用的 assistant 消息 88 条）。`result` 里的 `num_turns`(=319) 是**另一个**计数器，
+    照它定上限会把上限放到天上（这一条就是那两次差点犯错的护栏）。"""
     assert wd.max_turns_default(read_only=False) == wd.DEFAULT_MAX_TURNS_WRITE
     assert wd.max_turns_default(read_only=True) == wd.DEFAULT_MAX_TURNS_READONLY
-    assert wd.DEFAULT_MAX_TURNS_WRITE > 90, "卡 002 就用了 90 个回合（实测），上限得更高"
+    assert wd.DEFAULT_MAX_TURNS_WRITE >= 2 * 111, "卡 002 就用了 111 次工具调用，上限得留足余量"
+    assert wd.DEFAULT_MAX_TURNS_READONLY < wd.DEFAULT_MAX_TURNS_WRITE
 
 
 def test_build_command_carries_the_cap_and_the_compaction_window(sandbox: Path) -> None:
@@ -292,17 +295,33 @@ def test_heartbeat_line_says_what_the_controller_wants_to_know() -> None:
 
 
 def _stub(events: int, sleep_after: float) -> list[str]:
-    """桩子命令：吐 `events` 条**一模一样**的工具调用，然后装死 `sleep_after` 秒。"""
+    """桩子命令：吐 `events` 条**一模一样**的工具调用、再吐一条成功的 `result`，然后装死。"""
     code = "\n".join([
         "import json, sys, time",
         "ev = {'type': 'assistant', 'message': {'id': 'm', 'content': [",
         "    {'type': 'tool_use', 'name': 'Read', 'input': {'file_path': 'a.py'}}]}}",
         f"for _ in range({events}):",
         "    print(json.dumps(ev), flush=True)",
+        "res = {'type': 'result', 'subtype': 'success', 'result': '干完了'}",
+        "print(json.dumps(res), flush=True)",
         f"time.sleep({sleep_after})",
         "",
     ])
     return [sys.executable, "-X", "utf8", "-c", code]
+
+
+def test_finish_verdict_catches_a_capped_run_though_the_exit_code_is_zero() -> None:
+    """★★ 真机实测（T-G89 探针）：撞 `--max-turns` 时 CLI 给的是
+    `subtype = error_during_execution` + **空回话**，而**进程退出码仍是 0** ——
+    只看退出码会把"腰斩"当成功，所以必须读 `result` 事件。"""
+    capped = [json.dumps({"type": "result", "subtype": "error_during_execution", "result": ""})]
+    assert "没跑完" in wd.finish_verdict(capped)
+    assert "error_during_execution" in wd.finish_verdict(capped)
+    assert "回话是空的" in wd.finish_verdict(
+        [json.dumps({"type": "result", "subtype": "success", "result": ""})])
+    assert "没有 `result` 事件" in wd.finish_verdict([json.dumps({"type": "assistant"})])
+    good = [json.dumps({"type": "result", "subtype": "success", "result": "干完了"})]
+    assert wd.finish_verdict(good) == ""
 
 
 def test_runner_writes_the_log_and_reports_a_clean_finish(tmp_path: Path) -> None:
@@ -311,7 +330,8 @@ def test_runner_writes_the_log_and_reports_a_clean_finish(tmp_path: Path) -> Non
     code, reason, scene = wd.run_worker(_stub(2, 0.1), log, err, timeout=60, max_turns=150,
                                         watchdog=True, heartbeat_seconds=0)
     assert (code, reason, scene) == (0, "", "")
-    assert len(log.read_text(encoding="utf-8").strip().splitlines()) == 2
+    # 2 条工具事件 + 1 条 result —— 真工人也是这么收尾的
+    assert len(log.read_text(encoding="utf-8").strip().splitlines()) == 3
     assert tmp_path.joinpath("w.err").exists()
 
 
@@ -340,3 +360,18 @@ def test_runner_kills_a_spinning_worker_even_though_it_is_not_silent(tmp_path: P
                                  max_turns=150, watchdog=True, heartbeat_seconds=0,
                                  stall_seconds=120, poll_seconds=0.2)
     assert "空转" in reason, reason
+
+
+def test_runner_reports_a_truncated_run_as_unfinished(tmp_path: Path) -> None:
+    """★ 退出码 0 但 stream 说 `error_during_execution` → runner 必须报「没跑完」（退 6）。
+
+    这就是"腰斩"最危险的那一面：进程**高高兴兴退 0**，而它其实什么都没交出来。
+    """
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    code = ("import json\n"
+            "print(json.dumps({'type': 'result', 'subtype': 'error_during_execution',"
+            " 'result': ''}))\n")
+    rc, reason, _ = wd.run_worker([sys.executable, "-X", "utf8", "-c", code], log, err,
+                                  timeout=60, max_turns=240, watchdog=True, heartbeat_seconds=0)
+    assert rc == 0, "这次就是故意让它退 0 的（真机撞上限时也是这样）"
+    assert "没跑完" in reason, reason

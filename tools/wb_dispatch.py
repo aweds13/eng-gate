@@ -31,11 +31,13 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
 所以"命令拼装 + 真机派活"不再是纸面推理；但**看门狗那条路（真掐）还没在真工人身上触发过** ——
 这里用桩命令真跑一遍，钉住"静默 → 掐掉 + 报现场"这条行为（`tests/test_wb_dispatch.py`）。
 
-★ 反空转三道（T-G88，用户 2026-09-26 点名要的"心跳"）：工人在**别的进程**里干活，主控看得见的
-只有它落的 log，所以三道护栏全建在这份 log 上：
-  ① **回合上限** —— `--max-turns`（写卡 **150** / 只读卡 **60**）。标定不是拍的：卡 002 实测用了
-     **90 个回合**（`message.id` 去重）/ 111 次工具调用才收工，照 60 定会把正常的卡腰斩。
-     ★ 撞上限时 CLI **自己停**、退出码仍是 0 —— 所以跑完还要判一句「没做完」，别把腰斩当成功。
+★ 反空转三道（T-G88 建 · **T-G89 更正标定**，用户 2026-09-26 点名要的"心跳"）：工人在**别的进程**
+里干活，主控看得见的只有它落的 log，所以三道护栏全建在这份 log 上：
+  ① **回合上限** —— `--max-turns`（写卡 **240** / 只读卡 **80**）。★ 口径是探针量出来的：它数的是
+     **工具调用回合**（卡 002 实测 88~111），**不是** `result` 里的 `num_turns`（那是**另一个**
+     计数器，卡 002 = 319 —— 照它定会把上限放到天上）。撞上限时 CLI 给的是
+     `subtype = error_during_execution` + **空回话** + **退出码仍是 0** → 所以跑完既数回合（预警）
+     也读 `result` 事件（硬证据），别把腰斩当成功。
   ② **看门狗** —— 跑的时候盯着：日志**静默 ≥ 8 分钟**（卡死）或最近 12 次工具调用里
      **同一件事出现 ≥ 5 次**（空转）→ 掐掉整棵进程树，并把现场（最后几步、碰过哪些文件）报出来。
   ③ **心跳** —— 每 2 分钟一行（已跑多久 / 回合 / 工具 / 碰过文件 / 静默多少秒）：
@@ -77,10 +79,15 @@ FALLBACK_CLI_REL = r"workbuddy\resources\app.asar.unpacked\cli\bin\codebuddy"
 DEFAULT_PERMISSION_MODE = "bypassPermissions"
 AUTH_NEEDLE = "Authentication required"
 
-# ---------------------------------------------------------------- 反空转三道的默认值（T-G88）
-# 标定依据：卡 002 实测 90 个回合（`message.id` 去重）/ 111 次工具调用才收工 → 写卡留 1.6 倍余量。
-DEFAULT_MAX_TURNS_WRITE = 150
-DEFAULT_MAX_TURNS_READONLY = 60
+# ---------------------------------------------------------------- 反空转三道的默认值
+# ★ 标定口径（T-G88 初版 → **T-G89 更正**，两处真机探针量出来的）：
+#   `--max-turns` 数的是**工具调用回合**，不是 `result` 事件里的 `num_turns` —— 那是**另一个**
+#   计数器（卡 002 实测 `num_turns`=319，而工具回合只有 88~111）。初版差点照 90 定 150，
+#   更正后又差点照 319 定 600；两次都是探针拦下的。
+#   探针（真机）：给一个要跑 6 条命令的活 + `--max-turns 2` → 只跑了 **2 次**工具调用，
+#   `result.subtype = error_during_execution`、**回话是空的**、而**退出码仍是 0**。
+DEFAULT_MAX_TURNS_WRITE = 240    # ≈ 2.2 × 卡 002 的 111 次工具调用
+DEFAULT_MAX_TURNS_READONLY = 80
 DEFAULT_AUTOCOMPACT = "1m"       # 用户 2026-09-26 定的；CLI 钳位 100k–1M
 STALL_SECONDS = 480              # 日志静默多久算卡死（8 分钟）
 REPEAT_WINDOW = 12               # 空转只看最近多少次工具调用
@@ -155,15 +162,18 @@ def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
 
 
 def max_turns_default(read_only: bool) -> int:
-    """写卡 150 / 只读卡 60 —— 依据：卡 002 实测 90 个回合（写卡）才收工，别照 60 那么定。"""
+    """写卡 240 / 只读卡 80 —— 依据：卡 002 实测 **111 次工具调用**（≈ 88~111 工具回合）才收工。"""
     return DEFAULT_MAX_TURNS_READONLY if read_only else DEFAULT_MAX_TURNS_WRITE
 
 
 def turns_seen(lines: list[str]) -> int:
-    """数"回合"：`assistant` 事件的 `message.id` **去重**（实测卡 002：206 条事件 = 90 个回合）。
+    """数"回合"：`assistant` 事件的 `message.id` **去重**。
 
-    对方要是改了格式、没带 `message.id`，就退回"数 assistant 事件" —— 那会**多算**，
-    所以这个值只用来预警"撞上限了"，不用来卡人（判据宁可保守）。
+    卡 002 实测：206 条事件 → 90 个回合，其中 88 条带工具调用。
+    这是 `--max-turns` 那个计数的**近似**（它的口径是工具调用回合），用来在心跳/预警里说进度。
+    ★ 别拿 `result` 里的 `num_turns` 当这个数：那是**另一个**计数器（卡 002 = 319），
+    不是上限比的那一格。对方要是改了格式、没带 `message.id`，就退回"数 assistant 事件" ——
+    那会**多算**，所以这个值只用来预警"撞上限了"，不用来卡人（判据宁可保守）。
     """
     ids: set[str] = set()
     seen_events = 0
@@ -239,6 +249,38 @@ def cap_verdict(turns: int, max_turns: int) -> str:
     if turns >= max_turns:
         return (f"没做完：回合数 {turns} 撞到上限 {max_turns}"
                 f"（`--max-turns` 到了 CLI 会自己停，退出码仍是 0）")
+    return ""
+
+
+def finish_verdict(lines: list[str]) -> str:
+    """从 stream 的 `result` 事件判「这一轮**到底跑完了没有**」—— 退出码 0 不等于干完了。
+
+    ★ 真机实测（T-G89 探针）：撞 `--max-turns` 上限时 CLI 给的是
+    `result.subtype = error_during_execution`、**回话是空的**，而**进程退出码仍是 0**。
+    只看退出码就会把"腰斩"当成成功。所以判据读事件本身：
+      ① 整段 log 里没有 `result` 事件 → 没跑完（被打断 / 被杀 / 还在跑）；
+      ② `subtype != success` → 中途停下（撞上限、被中断、工具连环失败）；
+      ③ 回话是空的 → 没交出东西。
+    ★ 两条判据（数回合 vs 读事件）是**互补**的：数回合能提前预警，读事件才是硬证据。
+    """
+    result: dict | None = None
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("type") == "result":
+            result = event
+    if result is None:
+        return "没跑完：整段 log 里没有 `result` 事件（进程被打断 / 被杀 / 还在跑）"
+    subtype = str(result.get("subtype") or "")
+    text = str(result.get("result") or "").strip()
+    if subtype != "success":
+        detail = f"回话：{wb_status._clip(text, 120)}" if text else "回话是空的"
+        return (f"没跑完：`result.subtype = {subtype or '（空）'}`"
+                f"（撞 `--max-turns` 上限时就是这个，而退出码仍是 0）—— {detail}")
+    if not text:
+        return "没跑完：`subtype = success` 但回话是空的 —— 没交出东西"
     return ""
 
 
@@ -351,7 +393,7 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
 
     if reason:
         return code, f"{reason} → {killed}", _scene(snapshot)
-    return code, cap_verdict(turns_seen(snapshot), max_turns), ""
+    return code, cap_verdict(turns_seen(snapshot), max_turns) or finish_verdict(snapshot), ""
 
 
 def _scene(lines: list[str]) -> str:
