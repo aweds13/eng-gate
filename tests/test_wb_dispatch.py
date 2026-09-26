@@ -475,3 +475,91 @@ def test_execute_does_not_resume_a_spinning_run(sandbox: Path, monkeypatch, caps
     assert wd.main() == 6
     assert len(calls) == 1, "空转只能跑一次，不许自动续跑"
     assert "空转" in capsys.readouterr().err
+
+
+# ==================================================== 长跑：活过我的窗口 + 状态可查（T-G91）
+
+
+def test_detached_argv_strips_the_flag_and_marks_the_child() -> None:
+    """★ 扔出去跑的子进程 argv：去掉 `--detach`、补内部标记 —— 不然会无限生小进程。"""
+    out = wd.detached_argv(["--card", "002", "--spec", "s.md", "--detach", "--execute"])
+    assert "--detach" not in out
+    assert out[-1] == "--detach-done"
+    assert "--card" in out and "002" in out and sys.executable in out
+
+
+def test_detach_throws_the_work_out_and_returns_immediately(monkeypatch, capsys) -> None:
+    """★ 长任务/过夜：`--detach` 只负责**扔出去**就返回（我的窗口关了它照样跑）。"""
+    seen: list[tuple[list[str], Path]] = []
+
+    def fake_spawn(argv: list[str], log_path: Path) -> int:      # noqa: ANN001
+        seen.append((list(argv), log_path))
+        return 4242
+
+    monkeypatch.setattr(wd, "spawn_detached", fake_spawn)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "002", "--spec", "spec.md",
+                                      "--detach", "--execute"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert len(seen) == 1, "应当只扔一次"
+    argv, log_path = seen[0]
+    assert "--detach-done" in argv and "--detach" not in argv
+    assert log_path.name == "wb-002.dispatch.log"
+    assert "4242" in out and "--status" in out
+
+
+def test_status_reads_files_only_and_needs_no_spec(tmp_path: Path, monkeypatch, capsys) -> None:
+    """★ 一条命令看状态：心跳 / 判决 / 会话 / log 尾巴 —— 只读文件，不碰工人。"""
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    (diag / "wb-002.jsonl").write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+    wd.write_heartbeat(diag / "wb-002.jsonl", "[心跳] 已跑 44.0 分钟 | 回合 90")
+    wd.verdict_file_for(diag / "wb-002.jsonl").write_text("判决：正常收工（工人退出码 0）\n",
+                                                          encoding="utf-8")
+    wd.session_file_for(diag / "wb-002.jsonl").write_text("sid-777", encoding="utf-8")
+
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "002", "--status"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    for needle in ("[心跳] 已跑 44.0 分钟", "正常收工", "sid-777", "wb-002.jsonl", "复核完了"):
+        assert needle in out, out
+
+
+def test_status_says_so_when_nothing_ran_yet(tmp_path: Path, monkeypatch) -> None:
+    """没派过的卡也要给一句人话（不是崩、不是空白）。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    said = wd.status_report("999")
+    assert "还没有" in said and "一个都没有" in said
+
+
+def test_heartbeat_is_written_to_a_file_with_a_timestamp(tmp_path: Path) -> None:
+    """心跳落盘：过夜跑时"它最后一次动是什么时候"必须能一眼查到。"""
+    log = tmp_path / "wb-002.jsonl"
+    wd.write_heartbeat(log, "[心跳] 已跑 1.0 分钟 | 回合 3")
+    body = wd.heartbeat_file_for(log).read_text(encoding="utf-8")
+    assert "[心跳] 已跑 1.0 分钟" in body and body[:4].isdigit()
+
+
+def test_verdict_is_written_when_the_run_finishes(sandbox: Path, monkeypatch, capsys) -> None:
+    """判决落盘：新窗口（或过夜之后的我）先读这个文件，别的都不用猜。"""
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+    verdict = sandbox / "gates" / "diag" / "wb-001.verdict.txt"
+    body = verdict.read_text(encoding="utf-8")
+    assert "card=001" in body and "正常收工" in body and "sid-test" in body
+    capsys.readouterr()
+
+
+def test_missing_spec_is_a_clean_error_not_a_crash(monkeypatch, capsys) -> None:
+    """`--spec` 改成手动校验（因为 --status 不需要它）：漏了要给一句人话 + 退 2。"""
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--execute"])
+    assert wd.main() == 2
+    assert "--spec" in capsys.readouterr().err
+
+
+def test_timeout_default_covers_a_long_card() -> None:
+    """默认超时够长（卡 002 用了 44 分钟）；★ 而且超时**不是失败** —— 它会掐掉再续跑。"""
+    assert wd.DEFAULT_TIMEOUT >= 7200

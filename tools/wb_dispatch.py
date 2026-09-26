@@ -70,6 +70,7 @@ import sys
 import threading
 import time
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -109,6 +110,8 @@ HEARTBEAT_SECONDS = 120          # 心跳行间隔
 POLL_SECONDS = 5.0               # 看门狗多久醒一次
 SCENE_LINES = 6                  # 掐掉时报最后几步
 DEFAULT_RETRIES = 1              # 被中断后自动带同一会话续跑几次
+DEFAULT_TIMEOUT = 7200           # 默认超时（秒）：卡 002 用了 44 分钟，长卡给到 2 小时
+                                 # ★ 超时**不是失败**，是"掐掉再续跑"的信号（见 §长跑那节）
 
 # ---------------------------------------------------------------- 八条铁律（进**系统提示**，T-G90）
 # 为什么进系统提示而不是只写在开场白里：工人换轮次 / 上下文被自动压缩之后，开场白会越来越远，
@@ -248,6 +251,86 @@ def should_resume(reason: str, attempts_done: int, retries: int) -> bool:
     if not reason or attempts_done > retries:
         return False
     return not reason.startswith("空转")
+
+
+# ================================================================ 长跑：活过我的窗口（T-G91）
+
+
+def heartbeat_file_for(log: Path) -> Path:
+    """心跳落成**文件**（不只打在 stdout 上）—— 过夜跑时"它还在不在动"读一个文件就知道。"""
+    return log.with_suffix(".heartbeat.txt")
+
+
+def verdict_file_for(log: Path) -> Path:
+    """这一轮的判决落盘（退出码 / 原因 / 会话 / 几次尝试）—— 新窗口先读它，别的都不用猜。"""
+    return log.with_suffix(".verdict.txt")
+
+
+def write_heartbeat(log: Path, line: str) -> None:
+    """心跳落盘（带时间戳，一行覆盖一行）：读的人只关心"它最后一次动是什么时候"。"""
+    heartbeat_file_for(log).write_text(
+        f"{datetime.now().isoformat(timespec='seconds')} {line}\n", encoding="utf-8")
+
+
+def detached_argv(argv: list[str]) -> list[str]:
+    """给"脱离窗口"的子进程用的 argv：去掉 `--detach`，加上内部标记 `--detach-done`。
+
+    为什么要这个标记：子进程再 detach 一次就会无限生小进程 —— 它是**内部**开关，不该给人用。
+    """
+    return [sys.executable, "-X", "utf8", *[a for a in argv if a != "--detach"], "--detach-done"]
+
+
+def spawn_detached(argv: list[str], log_path: Path) -> int:
+    """把派活**扔出去单独跑**（我的窗口关了它照样跑）：返回子进程 pid，输出落到 `log_path`。
+
+    Windows 用 `DETACHED_PROCESS`（没有控制台，不随父进程退出）；别的平台用 `start_new_session`。
+    """
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    kwargs: dict = ({"creationflags": subprocess.DETACHED_PROCESS
+                     | subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
+                    else {"start_new_session": True})
+    with log_path.open("w", encoding="utf-8") as out:
+        proc = subprocess.Popen(                      # noqa: S603 —— 命令是本地拼好的，不是外部输入
+            list(argv), cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=out,
+            stderr=subprocess.STDOUT, **kwargs,
+        )
+    return proc.pid
+
+
+def status_report(card: str) -> str:
+    """一张卡现在到哪了 —— **只读文件**（心跳 / 判决 / 会话 / log 尾巴），不碰工人。
+
+    长任务（尤其过夜跑）需要这条：新窗口、或者我半夜里，一条命令就知道"它还在跑吗 / 跑完没有"。
+    """
+    diag = ROOT / "gates" / "diag"
+    head = diag / f"wb-{card}"
+    out: list[str] = [f"=== 卡 {card} 的状态（{head}.*）==="]
+    hb = heartbeat_file_for(head.with_suffix(".jsonl"))
+    if hb.exists():
+        out.append(f"  [心跳] {hb.read_text(encoding='utf-8').strip() or '（空）'}")
+    else:
+        out.append("  [心跳] （还没有 —— 要么没派过，要么刚起）")
+    vd = verdict_file_for(head.with_suffix(".jsonl"))
+    if vd.exists():
+        out.append(f"  [判决] {vd.read_text(encoding='utf-8').strip()}")
+    else:
+        out.append("  [判决] （还没有 —— 还在跑，或没跑完就断了）")
+    sd = session_file_for(head.with_suffix(".jsonl"))
+    if sd.exists():
+        sid = sd.read_text(encoding="utf-8").strip()
+        out.append(f"  [会话] {sid}（续跑：--resume {sid}）")
+    logs = sorted(diag.glob(f"wb-{card}*.jsonl"), key=lambda p: p.stat().st_mtime)
+    if not logs:
+        out.append("  [log ] （一个都没有）")
+        return "\n".join(out)
+    newest = logs[-1]
+    lines = newest.read_text(encoding="utf-8", errors="replace").splitlines()
+    _, summary = wb_status.parse_events(lines)
+    out.append(f"  [log ] {newest.name}（{len(lines)} 行 / 共 {len(logs)} 个 log）；"
+               f"工具调用 {summary['tool_calls']} 次；碰过文件 {summary['files_total']} 个；"
+               f"工具报错 {summary['tool_errors']} 次")
+    out.append(f"  [最后] {summary['final'] or '（还没见到 result —— 可能还在跑）'}")
+    return "\n".join(out)
 
 
 # ================================================================ 反空转三道（T-G88）
@@ -531,7 +614,7 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
 def main() -> int:
     parser = argparse.ArgumentParser(description="派活给 CodeBuddy CLI（默认 dry-run）")
     parser.add_argument("--card", required=True, help="卡号（用来命名 log，如 001）")
-    parser.add_argument("--spec", required=True, help="卡规格文件（相对仓库根）")
+    parser.add_argument("--spec", default="", help="卡规格文件（相对仓库根；--status 时不必给）")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--cli", default=None,
                         help="CLI 入口覆盖（默认优先用独立安装的那份）")
@@ -541,7 +624,9 @@ def main() -> int:
                         help="真派活（默认只做前置检查 + 打印命令）")
     parser.add_argument("--force", action="store_true", help="允许覆盖已有 log")
     parser.add_argument("--no-preflight", action="store_true", help="跳过登录自检")
-    parser.add_argument("--timeout", type=int, default=3600, help="工人最长跑多久（秒）")
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT,
+                        help=f"工人最长跑多久（秒，默认 {DEFAULT_TIMEOUT}）；"
+                             "★ 超时不是失败，是『掐掉再续跑』的信号")
     parser.add_argument("--max-turns", type=int, default=0,
                         help="回合上限（0 = 按卡种取默认：写卡 150 / 只读卡 60）")
     parser.add_argument("--read-only", action="store_true",
@@ -561,7 +646,27 @@ def main() -> int:
                              "（默认 1；0 = 不续）")
     parser.add_argument("--resume", default="",
                         help="带着同一会话接着跑：给 sessionId，或 auto（读 wb-<卡>.session.txt）")
+    parser.add_argument("--detach", action="store_true",
+                        help="把这次派活**扔出去单独跑**（我的窗口关了它照样跑；过夜/长任务用）")
+    parser.add_argument("--detach-done", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--status", action="store_true",
+                        help="只看状态（心跳/判决/会话/log 尾巴），不派活、不用给 --spec")
     args = parser.parse_args()
+
+    if args.status:
+        print(status_report(args.card))
+        return 0
+    if not args.spec:
+        print("[FAIL] 派活得给 --spec（卡规格文件）；只看状态可以加 --status", file=sys.stderr)
+        return 2
+    if args.detach and not args.detach_done:
+        # ★ 长跑/过夜：把**自己**再启动成一个脱离窗口的进程，然后立刻返回
+        detach_log = ROOT / "gates" / "diag" / f"wb-{args.card}.dispatch.log"
+        pid = spawn_detached(detached_argv(sys.argv[1:]), detach_log)
+        print(f"[扔 ] 已扔出去单独跑（pid {pid}），我的窗口关了它照样跑")
+        print(f"[看 ] 进度：python -X utf8 tools/wb_dispatch.py --card {args.card} --status")
+        print(f"[log ] {detach_log}")
+        return 0
 
     problems, log = preflight(
         args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
@@ -606,6 +711,12 @@ def main() -> int:
         return 0
 
     attempts, code, reason, scene, sid = 1, 0, "", "", resume_sid
+
+    def beat(line: str) -> None:
+        """心跳：既打出来，也**落成文件** —— 过夜跑时读一个文件就知道它还在不在动。"""
+        print(line)
+        write_heartbeat(log, line)
+
     while True:
         log_k = log if attempts == 1 else log.with_name(f"wb-{args.card}.r{attempts}.jsonl")
         if attempts == 1 and not sid:
@@ -624,7 +735,7 @@ def main() -> int:
             cmd, log_k, log_k.with_suffix(".stderr.txt"), timeout=args.timeout,
             max_turns=max_turns, watchdog=not args.no_watchdog,
             heartbeat_seconds=args.heartbeat_seconds, stall_seconds=args.stall_seconds,
-            poll_seconds=args.poll_seconds,
+            poll_seconds=args.poll_seconds, printer=beat,
         )
         sid = new_sid or sid
         if sid:                      # ★ 一拿到就落盘：这样中断之后 `--resume auto` 才用得上
@@ -646,11 +757,19 @@ def main() -> int:
           f"认不出的行 {summary['unknown_events']} 条")
     if attempts > 1:
         print(f"[注 ] 这一轮跑了 {attempts} 次（前几次的 log：同目录 wb-{args.card}.r*.jsonl）")
+    # ★ 判决落盘：新窗口（或过夜之后的我）先读这个文件，别的都不用猜
+    verdict_file_for(log).write_text(
+        f"card={args.card} 尝试={attempts} 次 退出码={code} "
+        f"会话={sid or '（无）'} 结束于={datetime.now().isoformat(timespec='seconds')}\n"
+        f"判决：{reason or '正常收工（工人退出码 0）'}\n"
+        f"看细节：python -X utf8 tools/wb_status.py {log_k} --tail 20 --repo\n",
+        encoding="utf-8")
     if reason:
         print(f"[掐 ] {reason}", file=sys.stderr)
         print(f"     现场（最后一次动作之后的几步）：\n{scene}", file=sys.stderr)
         print(f"[复核] 先看现场再决定：python -X utf8 tools/wb_status.py {log_k} --tail 20 --repo",
               file=sys.stderr)
+        print(f"[判决] 已落盘：{verdict_file_for(log)}", file=sys.stderr)
         return 6
     print(f"[复核] 主控现在去看报告与 git status：python -X utf8 tools/wb_status.py {log_k} --repo")
     return 0 if code == 0 else 4

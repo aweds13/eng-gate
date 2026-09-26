@@ -521,6 +521,22 @@ evidence = [
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。 ★ **2026-09-25（T-G71）这条残留收口了**：`db.unit_of_work()` 在连接**代理层**把 `commit()` 推迟到退出那一刻（core 一个 `commit()` 都没改），本条的 `create_task` / `update_task` 两条路都包了事务 —— 第二笔抛数据库级错误时**库里一个字节都不留**（`tests/test_unit_of_work.py` 逐条钉，且用「第一笔确实跑过」证明不是空转）。详见 `复盘/跨函数事务-T-G71.md`。"
 
 
+[entries."T-G91"]
+id = "T-G91"
+title = "长任务保命：`--detach`（派活**活过主控窗口**）+ `--status`（只读文件看心跳/判决/会话/log 尾巴）+ 心跳与判决**落盘**（`wb-<卡>.heartbeat.txt` / `.verdict.txt`）+ 默认超时放到 2 小时（**超时不是失败，是掐掉再续跑的信号**）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/长跑保命-T-G91.md",
+  "text:tools/wb_dispatch.py::def spawn_detached(argv: list[str], log_path: Path) -> int:",
+  "text:tools/wb_dispatch.py::def status_report(card: str) -> str:",
+  "text:tools/wb_dispatch.py::def write_heartbeat(log: Path, line: str) -> None:",
+  "text:tools/wb_dispatch.py::DEFAULT_TIMEOUT = 7200",
+  "text:docs/traceability.toml::T-G91",
+  "test:test_wb_dispatch.py",
+]
+gaps = "**为什么有这张卡**（T-G91，用户 2026-09-26：「有的任务，时间花很多，怎么保证长时间运行」）：前面三张卡（T-G88/89/90）做的是**单卡内部**的护栏，但看门狗跑在**主控的 DSH 后台任务**里 —— 我的窗口一关就没人盯了，而这正是「时间花很多」的真正风险。**答案分三层**：① **最硬的一层是「别做一次长跑」**：长任务先拆成一串卡（每张 30–60 分钟量级），一张卡 = 一次提交 = 一次验收，状态存在 git / 台账 / 复盘 / 交接文档里，**不依赖任何进程活着** —— 这条写进了 `复盘/外包-卡表与规矩.md` §15（第一原则），也是这个项目一直在做的「复盘即外部记忆」；② 单卡内已有的护栏（看门狗 / 心跳 / 回合上限 / 铁律进系统提示 / 断点续跑）；③ ★ **主控不在场**（本卡补的）：`--detach` 把派活扔成**脱离窗口**的进程（Windows `DETACHED_PROCESS` + 新进程组，输出落 `wb-<卡>.dispatch.log`），`--status` 一条命令**只读文件**报状态（心跳 / 判决 / 会话 / log 尾巴 + 工具与文件计数，不必翻 1 MB log），心跳写进 `wb-<卡>.heartbeat.txt`（带时间戳）、收工或被掐都写 `wb-<卡>.verdict.txt`（卡号·尝试次数·退出码·会话）。默认超时 3600 → **7200 秒**，并把「**超时不是失败**」写进帮助与文档：到点掐掉、由 `should_resume` 允许「超时」续跑 —— 机器睡眠 / 断网 / CLI 崩了都走这一条路（日志静默 → 判卡死 → 掐 → 续跑），**这是故意设计**。**证据**：`tests/test_wb_dispatch.py` **32 → 40 条**（`detached_argv` 去掉 `--detach` 并补内部标记免得无限生小进程 / `--detach` 只扔一次就返回 / `--status` 只读文件且**不需要 `--spec`** / 没派过的卡给一句人话 / 心跳文件带时间戳 / 判决文件写全 / `--spec` 漏了给人话退 2 / 默认超时 ≥ 2 小时）；真机探针两条：`spawn_detached()` 起的 python 子进程「立刻活着 + 5 秒后输出已落在文件里」、`--card 002 --status` 读**真卡 002 的 1.1 MB log** 报出「322 行 / 工具调用 111 次 / 碰过文件 21 个 / 工具报错 0 次」并如实说心跳与判决「还没有」（那一轮早于这两个功能，不假装有）。**边界（如实写）**：`--detach` 之后看门狗是**那个脱离进程自己带着的** —— 它被系统杀掉（重启 / 休眠断电）就没人盯了，只能靠 `--status` 看「心跳停在几点」；想让看门狗也独立于派活进程是**之后的候选**（还没做）。`--status` 只报「它在动、动到哪了」，不判断内容对不对。状态文件都在 `gates/diag/`（gitignored），**证据不进仓库**。**没动的**：看门狗 / 心跳 / 回合上限的判据与阈值一个字没改；续跑判定仍是「只对被打断续、不对空转续」；模型与 `--autocompact 1m` 默认没改。"
+
 [entries."T-G90"]
 id = "T-G90"
 title = "稳定化：中断不等于白干 —— 会话续跑（`--resume <id>` / `--resume auto`）+ 自动重试（`--retry`，只对「被打断」不对「空转」）+ 八条铁律进**系统提示**（`--append-system-prompt`）；并写下「什么样的活能给工人」的判据"
