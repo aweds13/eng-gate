@@ -55,8 +55,16 @@ def _order(client: TestClient) -> list[str]:
 def _conflict_every_write(monkeypatch: pytest.MonkeyPatch) -> None:
     """桩：`_write_myday_rank` 每次调用都撞 —— 第 1 次 = 初写撞，第 2 次 = 重试仍撞。"""
 
+    # ★ 桩签名带 `bump_version`（T-G138 跨卡接缝）：022（T-G110）给产品的
+    # `_write_myday_rank` 加了 keyword-only `bump_version`，调用点传 `bump_version=bump`；
+    # 旧桩只收 4 个位置参 → TypeError → 500 而非 409。显式写 `bool = True` 与
+    # 产品签名同形（`src/timeflow/core/tasks/manager.py` 的默认就是 True）。
     def always_conflict(
-        conn: object, task_id: str, rank: int, expected_version: int
+        conn: object,
+        task_id: str,
+        rank: int,
+        expected_version: int,
+        bump_version: bool = True,
     ) -> None:
         raise manager.MydayConflictError(
             f"myday 排序撞上并发更新：写 {task_id} 时快照 version={expected_version}，"

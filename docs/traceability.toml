@@ -4165,6 +4165,18 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：第二次同类接缝 —— 卡 022（5f51806）改 `_write_myday_rank` 签名（新增 keyword-only `bump_version`）vs T-G126（803be3a）在另一文件用 `monkeypatch.setattr` 桩替换同一函数（老四参），文件不重叠 → 白名单拦不住；集成时门禁才红（500 != 409）。**做了什么**：三类判据在 `tools/seam_check.py` 的 `extract_symbols()`（① 定义 = 改动行的 def/class；② 桩替换对象 = setattr/monkeypatch.setattr/patch 的目标名；③ 形参 = 打开的 def 参数表里的参数行，且把所在签名函数名记为「签名改动」—— def 行常是上下文行，不归属会漏报）；退出码：有交集=1 / 无交集=0 / 用法错=2；输出三段（每卡符号、交集、无交集）。**真历史读数**：`--card 022=5f51806 --card 126=803be3a` → `[交集] ★ _write_myday_rank ← 出现在 022、126 → 必须串行，或后一张基于前一张重做`，exit=1。**零误报读数**：042×044（两卡均「允许路径内没有新增/删除代码行」→ 无交集）与 043×046（两侧各有定义符号但无共有 → 无交集），均 exit=0。**反证（突变）**：去掉「被桩替换」判据 → 钉子①变 `[交集] 无交集`（exit=0，真接缝漏报）→ 还原（git diff 为空）→ exit=1 报出 + pytest 5 passed + ruff 全过。**边界**：形参只取参数行、函数体局部变量与字符串里的词不算；交集只按名字（不同模块同名函数会撞，假阳性方向）；跨 hunk 丢开签名状态、def 行内联参数不抽（假阴性方向）——两头都按「宁可少、不可滥」接受；下标/属性链形参取不出名即跳过；只读工具（只跑 git show，不写任何仓库文件）；没跑全量门禁（本卡轻门 = ruff + 本文件 pytest，全量由主控集成时跑）。"
 
+[entries."T-G138"]
+id = "T-G138"
+title = "跨卡接缝：T-G126 的测试桩接住 T-G110 新增的 keyword-only 参数 bump_version（否则回 500 而非 409）—— 只改桩、不动产品与断言意图"
+group = "TEST"
+status = "done"
+evidence = [
+  "file:复盘/跨卡接缝-桩签名-T-G138.md",
+  "text:tests/test_myday_conflict_409.py::bump_version: bool = True",
+  "test:test_myday_conflict_409.py",
+]
+gaps = "**为什么有这张卡**：集成者 I-2 全量门禁红 1 例（tests/test_myday_conflict_409.py:82 assert 500 == 409）；根因 = 022（T-G110）给 _write_myday_rank 加 keyword-only bump_version 并在调用点传 bump_version=bump，而 T-G126（卡 035）的桩只有 4 个位置参 → TypeError → 500；两位作者都没撞到是因为 022 的树建在 T-G126 合入之前（树里没有这个测试文件）、035 写卡时 022 未落地。**做了什么**：桩 always_conflict 加显式第 5 参 bump_version: bool = True（与产品签名逐字同形，产品的默认就是 True）；断言与意图一个字没动。**反证（三贴）**：① 底座 277cf49 绿（2 passed）② checkout 5f51806 的 manager.py 后红（FAILED test_myday_conflict_surfaces_as_409_with_readable_detail，assert 500 == 409，与 I-2 逐字一致）③ 修后绿（2 passed）+ git checkout HEAD 还原产品代码 + git status 只剩白名单文件；ruff 0；myday 全家 25 passed。**边界**：断言与意图未动；产品代码一个字没提交；test: 指针只到文件名故合法；发现本机 editable 安装使 worktree 里 pytest 默认导入主树 src（PYTHONPATH 需以 Windows 风格路径把本树 src 放最前才测得到本树代码）—— 该发现的波及面（此前哪些卡的轻门测的是主树代码）本卡未查、留主控裁定。**没动的**：src/**（manager.py 临时取进验证后已还原）、tools/**、scripts/**、docs/**、gates/**、复盘/其它文件、主树外来未跟踪文件。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"

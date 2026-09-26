@@ -4,6 +4,16 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 跨卡接缝：T-G126 测试桩接住 T-G110 新增的 bump_version（T-G138）
+
+- 根因：022（T-G110）给 `_write_myday_rank` 加 keyword-only `bump_version`，而 T-G126
+  （卡 035）的测试桩只有 4 个位置参 → TypeError → 500 而非 409。两位作者都没撞到：
+  022 的树建在 T-G126 合入之前、035 写卡时 022 未落地。修法：桩 `always_conflict`
+  加显式第 5 参 `bump_version: bool = True`（与产品签名逐字同形）；断言与意图一字未动。
+- **反证三贴**：底座绿（2 passed）→ checkout 5f51806 的 manager.py 红
+  （`assert 500 == 409`，与 I-2 逐字一致）→ 修后绿（2 passed）。
+- 复盘：`复盘/跨卡接缝-桩签名-T-G138.md`。
+
 ### 跨卡接缝预检 seam_check（T-G139）
 
 - 背景：第二次同类接缝 —— 卡 022 改 `_write_myday_rank` 签名 vs T-G126 在另一文件桩替换
