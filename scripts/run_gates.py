@@ -406,7 +406,12 @@ def dead_gate(name: str, t0: float, why: str) -> dict[str, object]:
 
 
 def skip_reused(name: str, records: dict[str, dict[str, str]], no_reuse: bool) -> str | None:
-    """输入没变且上次是通过 → 返回那条记录里的哈希（调用方据此记 `reused`）；否则 None。"""
+    """输入没变且上次是通过 → 返回那条记录里的哈希（调用方据此记 `reused`）；否则 None。
+
+    ★ 这个判据**本身会不会咬**由 `tests/test_gates_reuse_line.py` 钉住（T-G106）：输入改一个
+      字节 / 新增文件 → 不复用；`--no-reuse` / `pytest`（不在 `REUSE_INPUTS`）/ 上次没过 /
+      没有记录 → 一律不复用。一条永远回「复用」的判据等于注释。
+    """
     if no_reuse or name not in REUSE_INPUTS:
         return None
     record = records.get(name)

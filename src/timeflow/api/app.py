@@ -1696,6 +1696,8 @@ def create_app(
 
         为什么用"放到谁前面"而不是"放到第几格"：中间插进来一条、或者列表里有些条目被隐藏，
         都不会让落点错位。两个键都给、或都不给 → **400 说清楚**（不静默挑一个执行）。
+        ★ `before` 给 `null` = 末尾；给**空串**（`{"before": ""}`）→ **400**（不静默当末尾）。
+        口径以 `docs/contracts/domains/F1-tasks.md` OP-2 为准（T-G102 统一）。
         """
         body = payload or {}
         direction = str(body.get("direction") or "")
@@ -1715,7 +1717,16 @@ def create_app(
             with db.unit_of_work(conn, what="POST /api/tasks/{task_id}/myday-move"):
                 if has_before:
                     raw = body.get("before")
-                    before = None if raw in (None, "") else str(raw)
+                    if raw is None:
+                        before = None          # 显式 null = 末尾（契约点名的合法值）
+                    elif raw == "":
+                        # ★ T-G102：空串与 null 分开 —— 给了键却是空串不再静默当末尾
+                        raise HTTPException(
+                            status_code=400,
+                            detail="before 不能是空串；拖到末尾请传 null",
+                        )
+                    else:
+                        before = str(raw)
                     moved = tm.place_myday(conn, task_id, before)
                 else:
                     moved = tm.move_myday(conn, task_id, direction)

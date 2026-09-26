@@ -69,6 +69,7 @@ mcp = ["myday"]
 kind = "write"
 reversible = "是（同一按钮反向操作）"
 ai = ["none"]
+note = "★ 顺序（`myday-move`）的口径（含 `before` 空串 = 400）以 `docs/contracts/domains/F1-tasks.md` 的 OP-2 为准（T-G102）；本表不另抄一套语义。"
 
 [commands."OP-3"]
 title = "开始专注"

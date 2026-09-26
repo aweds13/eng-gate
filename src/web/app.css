@@ -94,11 +94,24 @@
        圆角 6→6  8→6  10→10  12→10  999→999
      **并完只剩 6 + 3 档，名字跟着并** —— 同值两个名字（`--sp-2`/`--sp-3` 都是 6px 那种）
      是同一件事的两种写法，留着就还是"11 档"（档数报告按**令牌名**数，见 `tools/style_audit.py`）。
-     `--fs-*` 字号这一轮**不动**：候选 B 的注释把它留给步 3，而步 3 的实际范围（`T-G24 §8`）
-     只写 `--fw-*`/`--lh-*`；字号一动全表重排、且没有出过预演图，所以如实记成"没做"，不夹带。 */
+     `--fs-*` 字号到步 3 **还没动**（候选 B 的注释把它留给步 3，而步 3 的实际范围 `T-G24 §8`
+     只写 `--fw-*`/`--lh-*`）；**由 `T-G104` 补齐**（把 9 档并进 workbench 的类型网格），
+     见下面「字号档位对齐包」那一节。 */
   --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;  --sp-4: 16px;  --sp-5: 24px;  --sp-6: 32px;
   --r-sm: 6px;  --r-md: 10px; --r-pill: 999px;
-  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-base: 14px; --fs-lg: 15px; --fs-xl: 18px;
+  /* ★ 2026-09-26（T-G104 · 视觉线步 3「字号档位对齐包」）：字号档位**并进 workbench 的类型网格**。
+     包的类型量表 6 档（`styles.css:47-52`）：`--t-chip:11`（chips/meta）/ `--t-label:12`（labels）/
+     `--t-body:13`（body·dense，工作马）/ `--t-card:15`（card titles）/ `--t-section:20`（sections）/
+     `--t-page:28`（page title）。对齐后我们的 5 档小字号 = 包的前 5 档，值逐个相同：
+       xs 11→t-chip 11 · sm 12→t-label 12 · md 13→t-body 13 · lg 15→t-card 15 · xl 18→t-section 20
+     两处原来"差一点"的档并进网格（差异 2 档，≤ 主控裁定的 3 档上限，故直接改到位）：
+       · `--fs-base:14` **删掉**（包没有 14）—— 它 6 个消费者里 5 个是**表单/输入框文字**（body 角色，
+         包的工作马是 13），且裸 `select`/`input` 的元素级规则本来就写 `--fs-md:13`，留 14 等于
+         "同一种控件两种字号"；消费者一律改指 `--fs-md`（13）→ 表单文字全表统一。
+       · `--fs-xl:18` → **20**（包 `--t-section`；18 不在包网格上）。
+     ★ 三个"大读数"档（`--fs-num` 30 / `--fs-num-lg` 34 / `--fs-num-xl` 44）**不动**：包的类型量表里
+       没有"读数"这一档（包自己的 stat 读数是 `--t-page:28`），如实记"包没有对应档"、不硬凑。 */
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px; --fs-xl: 20px;
   --fs-num: 30px; --fs-num-lg: 34px; --fs-num-xl: 44px;
   /* 排版节奏（T-G53 · 视觉线步 3）：全表原来**只有一处行高**（还被登记成一条欠账）、
      字重靠手写。字号有 9 档而行高只有 1 档，等于"行距靠浏览器默认" —— 这就是节奏散。
@@ -359,7 +372,7 @@ button.ghost { background: transparent; color: var(--muted); border: 1px solid v
   padding: var(--sp-3) var(--sp-3);
   border: 1px solid var(--border-control);   /* T-G70：控件边界，不是分隔线 */
   border-radius: var(--r-md);
-  font-size: var(--fs-base);
+  font-size: var(--fs-md);
   background: var(--panel);
   color: var(--ink);
 }
@@ -403,7 +416,7 @@ input:not([type="checkbox"]):not([type="radio"]) {
   padding: var(--sp-3) var(--sp-3);
   border: 1px solid var(--border-control);   /* T-G70 */
   border-radius: var(--r-md);
-  font-size: var(--fs-base);
+  font-size: var(--fs-md);
   background: var(--panel);
   color: var(--ink);
 }
@@ -419,7 +432,7 @@ input:not([type="checkbox"]):not([type="radio"]) {
   padding: var(--sp-3) var(--sp-3);
   border: 1px solid var(--border-control);   /* T-G70 */
   border-radius: var(--r-md);
-  font-size: var(--fs-base);
+  font-size: var(--fs-md);
   resize: vertical;
 }
 /* 优先级色标（SR-F1.2 / T-B2）：高=实心强调色 / 中=描边 / 低=灰（颜色只住令牌区） */
@@ -670,13 +683,13 @@ button.ghost svg, .flag svg { width: 16px; height: 16px; vertical-align: -3px }
   max-width: 340px;
   box-shadow: var(--shadow);   /* ★ 这才是 `overlays only` 里的那个 overlays */
 }
-.modal-box .title { font-size: var(--fs-base); margin-bottom: var(--sp-3); line-height: var(--lh-tight) }
+.modal-box .title { font-size: var(--fs-md); margin-bottom: var(--sp-3); line-height: var(--lh-tight) }
 .modal-box input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
   padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--border-control);   /* T-G70：这个框的底是 --bg，边框要同时与 --panel 分得开 */
   border-radius: var(--r-md);
-  font-size: var(--fs-base);
+  font-size: var(--fs-md);
   background: var(--bg);
   color: var(--ink);
 }
@@ -715,7 +728,7 @@ button.ghost svg, .flag svg { width: 16px; height: 16px; vertical-align: -3px }
   padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--border-control);   /* T-G70：同 .modal-box */
   border-radius: var(--r-md);
-  font-size: var(--fs-base);
+  font-size: var(--fs-md);
   background: var(--bg);
   color: var(--ink);
 }
@@ -791,8 +804,11 @@ button.ghost svg, .flag svg { width: 16px; height: 16px; vertical-align: -3px }
   }
   .bottom-nav button.active { color: var(--accent); font-weight: var(--fw-bold) }
   /* 图标尺寸**只在这里定**（T-G54）：模板里没有裸宽高，svg 也不写自己的 class。
-     为什么是 20px：底栏槽位是 18px 字 + **24px 行盒**，20px 的图标塞得进同一个行盒、
-     不撑高按钮（行盒一矮，整排底栏的几何都会变）。 */
+     为什么是 20px：底栏槽位是「一行字 + 24px 行盒」，20px 的图标塞得进同一个行盒、
+     不撑高按钮（行盒一矮，整排底栏的几何都会变）。
+     ★ T-G104：`.ic` 的 `font-size` 走 `--fs-xl`，而这档由 18 → **20**（对齐包 `--t-section`）→
+     行盒随 20px 走、比原来略高一点点（图标本身仍是写死的 20px）—— 属于"值对齐"的可见位移，
+     由渲染黄金兜底（本卡并发期不采，主控集成时统一重采）。 */
   .ic svg { width: 20px; height: 20px; vertical-align: middle }
   .bottom-nav button .ic { display: block; font-size: var(--fs-xl) }
 }

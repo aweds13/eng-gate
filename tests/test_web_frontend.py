@@ -1041,7 +1041,7 @@ def test_r5_scale_tokens_are_the_only_way_to_write_sizes() -> None:
     css = re.sub(r"/\*.*?\*/", "", WEB_CSS.read_text(encoding="utf-8"), flags=re.S)
     for token, value in (("--sp-1", "4px"), ("--sp-2", "8px"), ("--sp-6", "32px"),
                          ("--r-sm", "6px"), ("--r-md", "10px"), ("--r-pill", "999px"),
-                         ("--fs-xs", "11px"), ("--fs-xl", "18px"),
+                         ("--fs-xs", "11px"), ("--fs-xl", "20px"),
                          ("--lh-tight", "1.2"), ("--lh-base", "1.5"),
                          ("--fw-semi", "600"), ("--fw-bold", "700"),
                          ("--nav-clearance", "90px"), ("--page-bottom", "60px")):

@@ -573,6 +573,79 @@ evidence = [
 gaps = "**为什么有这张卡**：卡 001 的独立复核（`gates/diag/wb-review-T-G79.md` 边界 B / 边界 C）＋`复盘/幂等写库-T-G86.md` 指出，T-G79 那片「读整列 → 算 → 整列写回」在 T-G86 修掉「没动也写库」之后，还长着另一半。**根因**：真正参与「读整列 → 算 → 整列写回」的只有 `place_myday` / `move_myday`（经 `_myday_sequence` → `_apply_myday_order` → `_myday_rank_plan` → `_write_myday_rank`）；完成 / 取消 / 待定 / 归档 / 已删这些隐藏路径本身**不写** `myday_rank`，它们只是让 `myday_tasks()` 少看见一条、而那条的号**原封不动**（`myday_tasks` 按五个状态过滤但不清号）。于是「隐藏条目留号」与「规整只按可见条目从 1 编号」相遇 → ① 一条藏起来的条目留着旧号、可见条目拿到同一个号 = **重号**（号不是两两不同的，没有 UNIQUE 也没断言兜着）；②「撤销完成」那条带旧号回来、靠并列兜底**插回旧号的位置**（幽灵归位），而不是排最后。**怎么修（只动 `src/timeflow/core/tasks/manager.py`，不引 schema 迁移、不改表结构）**：① 新增 `_myday_reserved_ranks(conn, items)` 读出被隐藏条目占着的号；② `_myday_rank_plan(items, order, reserved)` 里可见条目取号**跳过** reserved（卡 §2.2 的第二个例子「让可见序号从一个不与隐藏号冲突的空间取」）；③ `_apply_myday_order` 先算 reserved；④ `update_task` 里「从隐藏态回到可见态」（撤销完成 / 取回待定·取消 / 取消归档·撤销删除）→ **清号**（`myday_rank=NULL`，排最后），**进入**隐藏态**不清号**；⑤ 抽 `MYDAY_HIDDEN_STATUSES` 常量给 `myday_tasks` 与 `update_task` 共用。**为什么这么选**：卡 §2.3 要求「完成 / 取消这类**非排序动作不许动序号列**」（`myday_rank` 是同步包里的普通字段、`version` 是跨端 LWW 首选键，乱写会把别的端的真改动顶掉）→ 隐藏时**不能清号**；既然留号，可见条目取号就必须绕开它（防撞）；撤销完成的落点卡 §2.2 允许二选一，选**排最后**，与「移出今天再加回来排最后」同一条产品规矩、也是卡 §1 把「插回旧位置」列为症状所指向的期望。**反证（先红后绿）**：新增 `tests/test_myday_rank_line.py` 5 条（判据=直连库取 `{id:(myday_rank,version)}` 前后逐行比）——把 `manager.py` 还原成 HEAD（原实现）跑：`2 failed, 21 passed`，红的正是 B 的两条（`今天清单里出现了重号：[1, 2, 1]` / `assert ['B2','B3','B1'] == ['B3','B1','B2']`），修完 `23 passed`。**边界（如实写）**：★ 症状 C 的「真拖 version +2」**没能跑红** —— 那半在 T-G86 已收掉，改前量到的是 +1（不是 +2），故给 C 写的三条断言（非排序动作不动序号列、排序动作只写换了号的行）本来即绿、是**回归守卫**；本卡只做「根因 + 断言」，**不做 sparse index**（真拖仍把头那截重排成跳过 reserved 的紧凑号，sparse 属 A9）；只做应用层绕号、**不加 UNIQUE**、**不清洗历史遗留的重号**（不引迁移）；只统计 `is_myday=1` 的隐藏条目占号。**没动的**：`_MYDAY_ORDER_BY` / `myday_tasks` 的排序口径、路由语义（`api/app.py`）、界面（`src/web/**`）、`move_doing`/`doing_rank`、跨端合并规则，全部一字未改。★ **环境陷阱**：worktree 里 editable 安装的 `.pth` 指向**主树** src，不显式 `PYTHONPATH=「$PWD/src:…」` 会 import 到主树的旧代码（详见复盘 §6）。"
 
 
+[entries."T-G101"]
+id = "T-G101"
+title = "`src/web/index.html`：删 myday 拖拽的恒假早退（落点没变也发请求）+ 压 ≥20 字界面文案棘轮"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/前端死代码与长文案-T-G101.md",
+  "text:src/web/index.html::function mydayDragUp(){",
+  "text:src/web/index.html::if(want===order.indexOf(d.id))return;",
+  "text:tools/ui_text_baseline.toml::count = 33",
+]
+gaps = "**为什么有这张卡**：料来自盘点卡 S-1 的 A4 + A21（`gates/diag/盘点-20260926.md`）。A4 = `index.html:2051-2054` 的『落点没变就不发请求』是死代码（`rest.indexOf(d.id)` 恒 -1，恒不成立；拖回原位照样发写请求 —— 出处 `gates/diag/wb-review-T-G79.md` 边界 D）。A21 = 界面 ≥20 汉字棘轮挂在 43（`tools/ui_text_baseline.toml` `[ratchet]`）。**做了什么**：按主控 §2.9① 裁定选 **B** —— 把恒假那行改成 `if(want===order.indexOf(d.id))return;`（用全表位置），让『落点没变不发请求』真生效；按 §2.9② 改短 10 条**解释句**（引导/专注镜像/档案说明/已完成可改/导入路径等），把 `tools/ui_text_baseline.toml` 的 `count` **43 → 33**（棘轮只许往下调）。**反证（先红后绿）**：`node gates/diag/wb001_guard.mjs` 改前『落点=原位置 placeMyDay 被调 1 次（★早退没生效）』→ 改后『0 次（早退生效）』、真换位仍 1 次、落自己仍 0 次；`ui_text_audit --check` 改后 `≥20 字 33 条（基线 33）/≥30 字 0 条` OK。**边界（如实写）**：★ 渲染黄金**未采待集成**（并发期不许跑 render_check/run_gates，`render` 门在集成前红是预期，由主控集成时全量重采）；棘轮 `count` 已调小到 33；被钉着的边界事实（`先存在手机上`/`清空手机上的队列`/`FSRS 排好`/`当前没有进行中的专注`）grep 后一条没动，剩余 33 条里的报错原话/二次确认/诚实披露故意没动（一刀切=造假绿）。**没动的**：`src/**` 其余、`tools/**` 其余、`tests/**`、`scripts/**`、`docs/**`、其它复盘、`gates/**`、真实库/备份、三个外来未跟踪文件。"
+
+[entries."T-G102"]
+id = "T-G102"
+title = "myday-move 的空 `before` 口径：实现（静默当末尾）与文档（给空应 400）对齐，并登记到一处"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/myday空before口径-T-G102.md",
+  "text:src/timeflow/api/app.py::空串与 null 分开",
+  "route:POST /api/tasks/{task_id}/myday-move",
+]
+gaps = "**为什么有这张卡**：盘点卡 S-1 的 A5 —— 同一形状（给了 before 键却没给值）有两种答案：复盘 `拖拽排序-T-G79.md` 说「都给空 → 400」，而实现把空串与 null 一把抓（`raw is None 或 raw 是空串` 一并当 None）静默当末尾回 200；复核报告 `gates/diag/wb-review-T-G79.md` 边界 E 复现。**方向（据证据定）**：查界面与现有调用方 —— 唯一调用方 `src/web/index.html:2037` 落点取 `target ? target.dataset.mydayId : null`（真 id 或 null，从不发空串），现有测试也只传真 id / None → 没有人在用「空 = 末尾」→ **改代码对齐契约**（空串退回 400）。**登记到一处**：语义以契约 `docs/contracts/domains/F1-tasks.md` 的 OP-2 为单一真源；`docs/commands.toml` 的 OP-2 只加一句 note 指向契约，不另抄。**反证（先红后绿）**：空串改前→200（且把任务挪到末尾）、改后→400（顺序一个不动）；null 仍→200 落末尾。**边界（如实写）**：`POST /api/tasks/{task_id}/myday-move` 至今未登记进 `docs/commands.toml`（表里只有 OP-2 的 `POST /api/tasks/{task_id}/myday`），本卡未新增 OP 条目；路由次序语义（任务不存在 404 先于「不在今天」）与 null=末尾 一字未动。**没动的**：`manager.py` 领域层、`src/web/**`、`tools/**`、其它 `docs/**`、其它 `复盘/*.md`、真实库/备份目录、三个外来未跟踪文件。"
+
+[entries."T-G103"]
+id = "T-G103"
+title = "非文字对比度门补悬停/选中态那一半：从 CSS 真读 :hover/.on 的图形/底组合（阈值 3.0）+ 一条反证"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/非文字悬停态判据-T-G103.md",
+  "text:tools/contrast_audit.py::def nontext_state_pairs(css: str) -> list[Pair]:",
+  "text:tools/contrast_audit.py::def nontext_state_judged(css: str) -> list[Pair]:",
+  "text:tools/contrast_audit.py::def _is_state_selector(sel: str) -> bool:",
+  "test:test_contrast_nontext.py",
+]
+gaps = "**为什么有这张卡**：T-G70 只补了非文字的静态那一半（三条出处：`contrast_audit.py` 文件头「仍然算不了的」那一段、`复盘/视觉线地图.md` §8 标 ⏳ 未开、`复盘/非文字对比度-T-G70.md` §7 原话「悬停那三对是字/底，不是线条/底」）。**做了什么**：做法 B（从 CSS 真读，手写的表会腐烂）；`nontext_state_pairs()` 从 `:hover` / `.on` 规则里读图形/边界（border[-…]-color / border 简写色 / fill / stroke / outline-color，值可为令牌或两令牌 color-mix），只改 background 的状态取基础选择器的图形、底= 新底，图形与底同色时按实心图形对 --panel 判；`color` 归文字那半（`state_pairs`），两半分开读。hover 与 selected 两种态都覆盖（`.check.on` / `.swatch.on` / `.check:hover` / `button:hover` / `.danger:hover` / `.toast button:hover` / `.swatch:not(.on):hover`）。阈值仍 3.0、无登记表。真表读出 5 对/两套主题 10 条，全过（新增 3 对：mix(--accent 88% over --ink) on --panel 5.22/7.40、--accent on --panel-2 4.07/6.04、--danger on --danger-hover-bg 4.66/4.61；另 2 对与静态表同 key，报告两边都看得见）。**反证（先红后绿）**：临时删掉 `.check.on:not([disabled]):hover` 的 border-color 那行 → `--strict` 退 1（--accent on mix(...) 1.14/1.1 判新欠账）+ pytest `1 failed / 12 passed`；还原后 strict_exit=0、`13 passed`、`git status` 证明 app.css 干净。**边界（如实写）**：悬停浅底/悬停描边这类辅助线索仍只量不判（`AA_NONTEXT_EXEMPT` +1 行：--border-strong on mix(--toast-ink 14% over --toast-bg) 只有暗色、实测 1.01；另有 3 条沿用表里已有的行，理由同一句）；`.grab:hover` 只改 color、归字那半（即便算也是 --ink on --panel，静态表已有）；`…%, transparent` 的底算不了跳过；`.check.on:hover` 的「边界 vs 自己的填充」没量（要渲染层）；**顺带发现但没改**（不在口径内）：`_COLOR` 会匹配 `border-color: var(--x)` 里的 `color:`，给带 background 的悬停规则写 border-color 会让文字表读出假前景。**没动的**：`src/**`（app.css 只判不改）、`tools/contrast_baseline.toml`、其它门、真实库/备份、三个外来未跟踪文件、共享文件（台账/changelog/交接文档/gates 产物）。"
+
+[entries."T-G104"]
+id = "T-G104"
+title = "字号档位对齐 workbench 类型量表：`--fs-*` 9 档并进包的类型网格（视觉线步 3 故意留下的那一条）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/字号令牌化-T-G104.md",
+  "text:src/web/app.css::--fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px; --fs-xl: 20px;",
+  "text:src/web/app.css::--fs-num: 30px; --fs-num-lg: 34px; --fs-num-xl: 44px;",
+]
+gaps = "**为什么有这张卡**：A13 说「9 档裸字号无令牌」，实际 `--fs-*` 令牌**早已存在**（`app.css:101-102`，9 档，全表 font-size 走令牌）；真正没做的是「与包的类型量表对齐」（`T-G53.gaps` / `app.css` 注释 / `视觉线地图.md` §8 三处都写着「14→15、18→20 之类，要单独一张卡 + 预演图」）。**做了什么**：主控选「值对齐」（§2.9①），差异表逐档列后差异 **2 档**（≤3 直接改到位）——① `--fs-base:14` **删掉**、6 个消费者改指 `--fs-md:13`（包无 14；15 是 `--t-card` card-titles 角色不对，13 是 `--t-body` 工作马；且裸 `select`/元素级 `input` 本就写 13，留 14 等于同一控件两种字号）；② `--fs-xl:18` → **20**（包 `--t-section`）。对齐后 5 档小字号 = 包前 5 档、值逐个相同（xs11/sm12/md13/lg15/xl20）。**反证（先红后绿）**：改前 `style_audit` 字号 **9 档**、改后 **8 档**（`--fs-base` 被并掉；`git show HEAD:src/web/app.css` 逐条对照可证）；`ruff` 0、`style_audit` PASS。**★ 已知红（集成必处理）**：`tests/test_web_frontend.py:1044` 的 R5 护栏把 `--fs-xl` 钉死 `18px`（`AssertionError: 尺度令牌 --fs-xl 缺失或值变了`，:1048）—— `tests/**` 不在本卡白名单，未改，需集成者把该 pin 更新为 `20px`。**边界（如实写）**：三个「大读数」档（`--fs-num`30/`--fs-num-lg`34/`--fs-num-xl`44）**故意没并**——包的类型量表没有「读数」档（包 stat 读数是 `--t-page:28`），如实记「包没有对应档」、不硬凑；`--fs-xl` 改 20 让 `.bottom-nav button .ic`（走 `--fs-xl`）的行盒略高，属值对齐的可见位移。**没动的**：`src/web/index.html`、其余源码、`tools/**`、`tests/**`、`scripts/**`、`docs/**`、其它 `复盘/*.md`、`gates/**`（含渲染黄金，并发期不采，集成时全量重采）、真实库/备份、三个外来未跟踪文件。"
+
+[entries."T-G105"]
+id = "T-G105"
+title = "diag 目录清账：`inspect.py` 遮蔽标准库（改名 diag_inspect.py）+ 清掉两份已完成使命的草稿"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/diag目录清账-T-G105.md",
+]
+gaps = "**为什么有这张卡**：A15（复核 `gates/diag/wb-review-T-G79.md` §2 尾注 183-186：文件名就叫 inspect.py，任何从该目录起跑的脚本 import fastapi 必炸 `cannot import name 'isasyncgen'`）+ A22/D18（两份草稿自身尾注自称已完成使命）。**做了什么**：① `inspect.py` 按主控裁定**改名** `diag_inspect.py`（内容一字未动，改名即消除遮蔽标准库这个根因）；② 两份草稿（`round-plan-T-G92-G93.md`、`T-G93-ledger-draft.md`）**删除**——删前核过 `复盘/并发两卡-T-G92T-G93.md` 已承接其教训（尤其「按文件复制、不是按分支合并」那条）。验证先红后绿：改名前后各跑一次同目录探针，`inspect.__file__` 从 `gates/diag/inspect.py` 变回标准库、`import fastapi` 从 ImportError 变 OK。改名先查引用：`grep inspect.py` 命中全是文档、无脚本按名引用。**边界（如实写）**：三个目标文件都在 gitignored 的 `gates/diag/` 下（`.gitignore:71`）→ 改动不进 git，本卡唯一被跟踪产物是本复盘；clone 后仍见旧状态，是预期。本卡不产生机器可验断言（纯清理），evidence 只钉复盘。**没动的**：`docs/**`、`tools/**`、`tests/**`、`scripts/**`、`src/**`、其它复盘（含 `复盘/并发两卡-T-G92T-G93.md`）、`gates/` 其它、真实库/备份、三个外来未跟踪文件。"
+
+[entries."T-G106"]
+id = "T-G106"
+title = "核 `gates/reuse.json` 的复用判定本身对不对 —— 补一条能证明判据会咬的断言（T-G106 = 外包卡 019）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/reuse判定自证-T-G106.md",
+  "file:tests/test_gates_reuse_line.py",
+  "text:scripts/run_gates.py::tests/test_gates_reuse_line.py",
+]
+gaps = "**为什么有这张卡**：盘点卡 S-1 的 A16（出处 = 复核 §7.8 396–397「门禁说 5 道门复用判定，我没去核 reuse 判定本身对不对」）。**做了什么**：按主控 §2.9 路①，把判据落在新建的 `tests/test_gates_reuse_line.py`（16 条）—— import `run_gates` 做单元验证、不跑任何门；覆盖「输入不变→复用」「改一字节/新增文件→不复用」「--no-reuse→不复用」「不在 REUSE_INPUTS（含 pytest）→不复用」「上次没过/无记录→不复用」「每道门都把 src 算作输入」「黄金是 render 的输入」「reuse.json 往返 + 坏文件当空」。`scripts/run_gates.py` 只加一条指针注释（行为未改）。**反证（先红后绿）**：突变① `input_hash` 恒返回常量 → 8 failed；突变② `skip_reused` 无视记录哈希永远复用 → 2 failed；还原 → 16 passed（原始输出见复盘 §3）。**边界（如实写、按卡不擅自改）**：`REUSE_INPUTS` 有两处**真漏网输入** —— ① `render` 真读 `tools/render_signatures.json`（render_check.mjs:59）却未登记；② `web_live` 真跑 `tools/phone_check.mjs`（web_live_check.py:31/656）却未登记；`ui_dom_probe` 不含 `serve.py` 是有意（假 DOM 不起服务），`lf1_live` 登记 `serve.py` 属多算（安全）。判据只证明这套机制会咬，**不判 REUSE_INPUTS 是否完整**；`--fast` 不碰复用那条既有口径本卡未覆盖。**没动的**：`gates/reuse.json`、`gates/last.json`、`tools/**`、`docs/**`、`src/**`、复盘其它文件、真实库/备份、三个外来未跟踪文件。"
+
 [entries."T-G108"]
 id = "T-G108"
 title = "少读、精准读：`tools/evidence_map.py`（台账证据↔源文件倒排索引）+ `tools/wb_diag.py`（日志失败定位器）"
@@ -2262,7 +2335,7 @@ evidence = [
   "file:tools/ui_text_audit.py",
   "file:tools/ui_text_baseline.toml",
   "text:tools/ui_text_scan.py::def strip_comments(text: str) -> str:",
-  "text:tools/ui_text_baseline.toml::count = 43",
+  "text:tools/ui_text_baseline.toml::[ratchet]",
   "text:scripts/run_gates.py::界面文案上限门（T-G57）",
   "test:test_ui_text_line.py",
 ]

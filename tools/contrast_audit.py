@@ -40,11 +40,17 @@
   下拉 / 文本域的边框）、状态点、勾选圈、图表数据笔、逾期红条 —— 逐对 ≥3.0，**没有登记表**：
   控制边界看不见是缺陷不是欠账（与 T-G27 对 toast 的说法一致）。
   旁边还有一张 **`AA_NONTEXT_EXEMPT`（纯装饰）**：分隔线、卡片边、图表网格 / 环轨道 / 空格、
-  悬停描边、toast 按钮边框 —— **照样把实测值打出来**，但不当判据用，理由逐条写在表里
+  悬停浅底 / 悬停描边、toast 按钮边框 —— **照样把实测值打出来**，但不当判据用，理由逐条写在表里
   （`复盘/非文字对比度-T-G70.md` 列了"若用户不认，这几行是要复议的清单"）。
+- ★★ T-G103 起**悬停 / 选中态下的非文字也真读**（`nontext_state_pairs`，与 `state_pairs` 那半
+  **分开**读 —— 同一条 `:hover` 规则可能"字 / 底"与"图形 / 底"两个角色都有）：从 `:hover` / `.on`
+  规则里读**图形/边界**（`border[-…]-color` / `border` 简写里的色 / `fill` / `stroke` /
+  `outline-color`）；只改 `background`（换一层"底"）的状态，图形取**基础选择器**那条规则的图形
+  （悬停不改边界时边界是继承来的），底 = 新底；图形与底同色时按"实心图形"对**卡片底**判
+  （`.check.on` 那种）。辅助性的那几对（悬停浅底 / 悬停描边）与静态装饰同栏豁免、逐条写理由。
   ⚠️ 仍然算不了的（如实记，不假装看过）：**半透明填充**（`.chart-area` 10% /
   `.chart-fill-soft` 18% —— 合成结果取决于底下是什么，那要渲染层）、
-  **悬停/选中态下的非文字**、**浏览器自己画的 checkbox/radio**（黄金里它们的 fg/bg 是空的：
+  **浏览器自己画的 checkbox/radio**（黄金里它们的 fg/bg 是空的：
   `#000000/#000000@0.00`），以及 `color-mix(…, transparent)` 那种底。
 
 用法
@@ -156,6 +162,24 @@ def mix_over(color: str, base: str, pct: float) -> str:
     c, b = _rgb(color), _rgb(base)
     blended = tuple(pct * ci + (1 - pct) * bi for ci, bi in zip(c, b, strict=True))
     return _hex(blended)  # type: ignore[arg-type]
+
+
+# 组合里的**两令牌**合成色写法：`mix(--a 88% over --b)`（带 transparent 的算不了，不会到这儿）。
+_MIX_SPEC = re.compile(r"mix\((--[a-z0-9-]+) ([\d.]+)% over (--[a-z0-9-]+)\)")
+
+
+def resolve_color(spec: str, table: dict[str, str]) -> str:
+    """把一个"组合色"解析成字面色值：令牌 `--x`，或两令牌合成 `mix(--a N% over --b)`。
+
+    ★ T-G103 起**前景也可以是合成色**（`.check.on:hover` 的边界就是个 `color-mix`），
+      所以合成这步不能只做背景那一半。
+    """
+    m = _MIX_SPEC.fullmatch(spec)
+    if m is not None:
+        return mix_over(
+            resolve(m.group(1), table), resolve(m.group(3), table), float(m.group(2)) / 100
+        )
+    return resolve(spec, table)
 
 
 # ------------------------------------------------------------------ 令牌解析
@@ -343,6 +367,141 @@ def state_pairs(css: str) -> list[Pair]:
     return out
 
 
+# ---------------- 非文字图形的「悬停 / 选中态」（T-G103）----------------
+# 上面 `state_pairs` 读的是状态里的「**字** / 底」；这里读「**图形 / 边界** / 底」—— 同一档
+# 非文字（WCAG 1.4.11，3.0），但同一条 `:hover` 规则可能两个角色都有（`button:hover` 既改底色
+# 又改字色），所以**必须分开读**。为什么也从 CSS 真读：T-G42/T-G45 的血泪 —— 一个原子换个写法
+# 就整条从表里消失，门会显得是绿的（见文件头）。
+_ON_CLASS = re.compile(r"\.on(?![\w-])")
+_NOT_BLOCK = re.compile(r":not\([^)]*\)")
+_STATE_SUFFIX_ALL = re.compile(r":hover|:focus-visible|:not\([^)]*\)|\.on(?![\w-])")
+_BORDER_SIDE = r"(?:-(?:top|right|bottom|left))?"
+# `border-color: var(--x)` / `border-top-color: var(--x)`
+_BORDER_COLOR_VAR = re.compile(rf"border{_BORDER_SIDE}-color\s*:\s*var\(\s*(--[a-z0-9-]+)\s*\)")
+# `border: 1px solid var(--x)` / `border-top: 2px solid var(--x)`（★ 不吞 `border-radius`）
+_BORDER_VAR = re.compile(rf"border{_BORDER_SIDE}\s*:[^;]*?var\(\s*(--[a-z0-9-]+)\s*\)")
+# `border-color: color-mix(in srgb, var(--a) N%, var(--b))`
+_BORDER_MIX = re.compile(
+    rf"border{_BORDER_SIDE}(?:-color)?\s*:[^;]*?color-mix\(\s*in\s+srgb\s*,\s*"
+    r"var\(\s*(--[a-z0-9-]+)\s*\)\s*([\d.]+)%\s*,\s*var\(\s*(--[a-z0-9-]+)\s*\)\s*\)"
+)
+_FILL_VAR = re.compile(r"(?:fill|stroke|outline-color)\s*:\s*var\(\s*(--[a-z0-9-]+)\s*\)")
+
+
+def _is_state_selector(sel: str) -> bool:
+    """带状态标记的选择器：`:hover` 或选中类 `.on`。
+
+    ★ 先剥掉 `:not(...)` 再看 —— 否则 `.check:not(.on):hover` 里那个 `:not(.on)` 会被当成"选中态"
+      （实测第一版就把"未选圈的悬停"标成了"选中态"）。
+    """
+    bare = _NOT_BLOCK.sub("", sel)
+    return ":hover" in bare or _ON_CLASS.search(bare) is not None
+
+
+def _base_keys(sel: str) -> list[str]:
+    """剥掉状态标记后的基础选择器（可能有两个写法：`button.danger` → `.danger`）。
+
+    为什么两个：基础规则可能只写类（`.danger { border-color: var(--danger) }`），
+    而状态规则写 `button.danger:hover` —— 只按一个键查会漏掉那一行基础图形。
+    """
+    base = _STATE_SUFFIX_ALL.sub("", sel).strip()
+    keys = [base]
+    without_tag = re.sub(r"^[a-zA-Z][\w-]*", "", base).strip()
+    if without_tag and without_tag != base:
+        keys.append(without_tag)
+    return keys
+
+
+def _graphic_color(body: str) -> str | None:
+    """规则里写的**图形 / 边界**色（`--x`，或两令牌 `mix(--a N% over --b)`）；没有就 None。
+
+    ★ 只认图形/边界属性（border[-…]-color / border 简写的色 / fill / stroke / outline-color）——
+      `color` 是**字**那一半，归 `state_pairs`（同一条规则两个角色，别混）。
+    """
+    m = _BORDER_COLOR_VAR.search(body) or _BORDER_VAR.search(body)
+    if m is not None:
+        return m.group(1)
+    m = _BORDER_MIX.search(body)
+    if m is not None:
+        return f"mix({m.group(1)} {m.group(2)}% over {m.group(3)})"
+    m = _FILL_VAR.search(body)
+    if m is not None:
+        return m.group(1)
+    return None
+
+
+def _opaque_bg(body: str) -> str | None:
+    """规则里写的**不透明**底（`--x`，或两令牌 `mix(...)`）；`transparent`/`…%, transparent`→None。
+
+    `…%, transparent` 那种**算不了**（得知道它铺在什么上面，要渲染层）—— 如实跳过，不猜。
+    """
+    m = _MIX2.search(body)
+    if m is not None:
+        return f"mix({m.group(1)} {m.group(2)}% over {m.group(3)})"
+    m = _BG_VAR.search(body)
+    if m is not None:
+        return m.group(1)
+    return None
+
+
+def nontext_state_pairs(css: str) -> list[Pair]:
+    """从 `:hover` / `.on` 规则里读出「图形 / 底」组合（T-G103）。
+
+    - **图形**：规则自己写的边界/图形色；若规则只改了 `background`（换一层"底"），
+      取**基础选择器**那条规则的图形（悬停只换底时，边界是从基础规则继承来的 ——
+      `.check:not(.on):hover` 的圈仍是 `--accent`），底 = 这条规则给的新底；
+      图形与底同色时是"实心图形"（`.check.on` 的选中填充）→ 对**卡片底 `--panel`** 判。
+    - **底**：默认 `--panel`（本应用里控件住在卡片上 —— 与静态表 `AA_NONTEXT_PAIRS`
+      对 `.check` / `.swatch` 的取法一致）。
+    - 没有图形、也没有底的（只改字色，如 `.grab:hover`）→ 跳过。
+    """
+    stripped = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    parsed = [(s, body) for sel, body in _RULE.findall(stripped) for s in _selectors(sel)]
+
+    base_graphic: dict[str, str] = {}
+    for sel, body in parsed:
+        if _is_state_selector(sel):
+            continue
+        graphic = _graphic_color(body)
+        if graphic is not None:
+            base_graphic.setdefault(_STATE_SUFFIX_ALL.sub("", sel).strip(), graphic)
+
+    out: list[Pair] = []
+    for sel, body in parsed:
+        if not _is_state_selector(sel):
+            continue
+        graphic, bg = _graphic_color(body), _opaque_bg(body)
+        if graphic is not None:
+            fg, surface = graphic, "--panel"
+        elif bg is not None:
+            base = next((base_graphic[k] for k in _base_keys(sel) if k in base_graphic), None)
+            if base is None:
+                fg, surface = bg, "--panel"  # 没有基础图形 → 这层底就是它唯一的非文字线索
+            elif base == bg:
+                fg, surface = base, "--panel"  # 底就是图形本身（`.check.on` 的实心圈）
+            else:
+                fg, surface = base, bg  # 底换了，图形继承自基础规则 → 判"图形 / 新底"
+        else:
+            continue
+        state = "悬停" if ":hover" in _NOT_BLOCK.sub("", sel) else "选中"
+        where = f"{sel}：{state}态的非文字图形 / 底"
+        for theme in ("light", "dark"):
+            out.append(Pair(theme, fg, surface, AA_NONTEXT, where, kind="图形"))
+    return out
+
+
+def nontext_state_judged(css: str) -> list[Pair]:
+    """悬停/选中态里**要判**的那几对（3.0，无登记表）。
+
+    生成出来的组合去掉豁免表里那几对（悬停浅底 / 悬停描边这类**辅助线索**，理由逐条在
+    `AA_NONTEXT_EXEMPT`）。★ **不**去掉"与静态表同 key"的行 —— 从 CSS 真读就该如实报出来：
+    一个组合既是静态图形又是某个态（`.check.on` / `.swatch.on` 的选中态），报告里两边都看得见
+    （打印时标一句"同一对静态表里也在判"）。
+    """
+    excused = {(fg, bg) for fg, bg, _themes, _why in AA_NONTEXT_EXEMPT}
+    return dedupe([p for p in nontext_state_pairs(css) if (p.fg, p.bg) not in excused])
+
+
 # ---------------- 非文字图形（T-G70，WCAG 1.4.11）
 # 为什么单列一张表、而不是把阈值改成 3.0 混进上面那张：**管的东西不一样**。
 #   · 上面那张管「字读不读得出来」（1.4.3，4.5）；这张管「**不看字**能不能认出控件、
@@ -422,14 +581,17 @@ AA_NONTEXT_EXEMPT: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
         ("light", "dark"),
         "图表网格与轴基线 / 环轨道 / 空格描边（`.chart-grid` / `.chart-axis` / `.ring-track` / "
         "`.chart-cell-off-state`）：这些是**背景结构**，数据由 `--accent` 那几笔承担"
-        "（它们在 3.0 表里）",
+        "（它们在 3.0 表里）；**悬停**时幽灵按钮那圈同色 1px 边界（`button.ghost:hover`）"
+        "也是同一种「只做分组」的线 —— 识别靠字，不靠它",
     ),
     (
         "--panel-2",
         "--panel",
         ("light", "dark"),
         "热力图空格与条形体底（`.chart-cell-off` / `.cell-off` / `.bar-track`）："
-        "空格是「没有活动」，不是一个数据点；读数由有色格承担",
+        "空格是「没有活动」，不是一个数据点；读数由有色格承担；**悬停浅底**同属这一类"
+        "（`.palette-row:hover` / `.palette-row.on` / `button.ghost:hover` / `nav button:hover` / "
+        "`.bottom-nav button:hover`）：悬停是辅助线索（T-G70 §7），识别靠字与静态边界",
     ),
     (
         "--border-strong",
@@ -442,8 +604,17 @@ AA_NONTEXT_EXEMPT: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
         "--border-strong",
         "--panel",
         ("light", "dark"),
-        "取样圈的悬停描边（`.swatch:not(.on):hover`）：悬停是辅助线索，"
-        "静态下已经看得见（那条在 3.0 表里）",
+        "取样圈的**悬停描边**（`.swatch:not(.on):hover`，T-G103 起从 CSS 真读）："
+        "悬停是辅助线索，静态下已经看得见（那条在 3.0 表里）；实测 1.48 / 1.64 本来也过不了 —— "
+        "它是**状态**里的装饰，不是控件边界",
+    ),
+    (
+        "--border-strong",
+        "mix(--toast-ink 14% over --toast-bg)",
+        ("dark",),
+        "暗色 toast 动作按钮的**悬停边框**（`.toast button:hover`，T-G103 起从 CSS 真读）："
+        "按钮的**字**是识别线索（`--toast-ink` 13.04），边界不承担识别；"
+        "亮色那条 6.31 本来就过（所以只有暗色这一行）",
     ),
 )
 
@@ -500,17 +671,7 @@ def evaluate(
     rows: list[Row] = []
     for pair in pairs:
         table = tokens[pair.theme]
-        if pair.bg.startswith("mix("):
-            inner = re.fullmatch(r"mix\((--[a-z0-9-]+) ([\d.]+)% over (--[a-z0-9-]+)\)", pair.bg)
-            assert inner is not None
-            bg = mix_over(
-                resolve(inner.group(1), table),
-                resolve(inner.group(3), table),
-                float(inner.group(2)) / 100,
-            )
-        else:
-            bg = resolve(pair.bg, table)
-        ratio = contrast(resolve(pair.fg, table), bg)
+        ratio = contrast(resolve_color(pair.fg, table), resolve_color(pair.bg, table))
         entry = known.get(pair.key)
         recorded = float(str(entry["ratio"])) if entry else None
         why = str(entry.get("why", "")) if entry else ""
@@ -554,12 +715,16 @@ def main() -> int:
     known = load_baseline()
     pairs = dedupe(declared_pairs() + badge_pairs(css) + state_pairs(css))
     nt_pairs = nontext_pairs()
+    st_pairs = nontext_state_judged(css)  # T-G103：悬停 / 选中态的非文字图形（从 CSS 真读）
     ex_pairs = exempt_pairs()
     rows = evaluate(pairs, tokens, known)
     nt_rows = evaluate(nt_pairs, tokens, {})
+    st_rows = evaluate(st_pairs, tokens, {})
     ex_rows = evaluate(ex_pairs, tokens, {})
     counts = summarize(rows)
     text_keys = {(p.theme, p.fg, p.bg) for p in pairs}
+    nt_all = nt_pairs + st_pairs  # 两半合起来看"同一对在文字表里管着没有"
+    static_nt_keys = {p.key for p in nt_pairs}
 
     if args.json:
         print(
@@ -588,6 +753,17 @@ def main() -> int:
                         }
                         for r in nt_rows
                     ],
+                    "nontext_state": [
+                        {
+                            "key": r.pair.key,
+                            "where": r.pair.where,
+                            "ratio": r.ratio,
+                            "minimum": r.pair.minimum,
+                            "verdict": r.verdict,
+                            "text_table_covers": (r.pair.theme, r.pair.fg, r.pair.bg) in text_keys,
+                        }
+                        for r in st_rows
+                    ],
                     "exempt": [
                         {"key": r.pair.key, "where": r.pair.where, "ratio": r.ratio}
                         for r in ex_rows
@@ -611,17 +787,21 @@ def main() -> int:
                 f"{MARK[row.verdict]} {row.pair.fg} on {detail}"
             )
 
-        print(f"\n--- {label}：非文字图形（WCAG 1.4.11，阈值 3.0）---")
-        for row in [r for r in nt_rows if r.pair.theme == theme]:
-            same = (
-                "  ← 同一对在文字表里按 4.5 管着"
-                if (theme, row.pair.fg, row.pair.bg) in text_keys
-                else ""
-            )
-            print(
-                f"{row.ratio:>6} {row.pair.minimum:>5}  {MARK[row.verdict]} "
-                f"{row.pair.fg} on {row.pair.bg}：{row.pair.where}{same}"
-            )
+        for rows_here, title in (
+            (nt_rows, "非文字图形（WCAG 1.4.11，阈值 3.0）"),
+            (st_rows, "非文字图形·悬停 / 选中态（T-G103 从 CSS 真读，阈值 3.0）"),
+        ):
+            print(f"\n--- {label}：{title} ---")
+            for row in [r for r in rows_here if r.pair.theme == theme]:
+                note = ""
+                if (theme, row.pair.fg, row.pair.bg) in text_keys:
+                    note = "  ← 同一对在文字表里按 4.5 管着"
+                elif row.pair.key in static_nt_keys:
+                    note = "  ← 同一对静态非文字表里也在判（同一个图形的两个态）"
+                print(
+                    f"{row.ratio:>6} {row.pair.minimum:>5}  {MARK[row.verdict]} "
+                    f"{row.pair.fg} on {row.pair.bg}：{row.pair.where}{note}"
+                )
 
     print(
         f"\n=== 纯装饰（WCAG 1.4.11 明文不适用；实测值只作记录，共 {len(ex_rows)} 条）==="
@@ -639,11 +819,12 @@ def main() -> int:
             print(f"  {row.pair.key}（{row.ratio}）")
 
     bad = [r for r in rows if r.verdict in {"NEW", "WORSE"}] + [
-        r for r in nt_rows if r.verdict in {"NEW", "WORSE"}
+        r for r in nt_rows + st_rows if r.verdict in {"NEW", "WORSE"}
     ]
     print(
         f"\n合计：文字达标 {counts['PASS']} / 已登记欠账 {counts['KNOWN']} / "
-        f"可销账 {counts['FIXED']} ｜ 非文字 {len(nt_rows)} 条 ｜ 装饰 {len(ex_rows)} 条（只记录）"
+        f"可销账 {counts['FIXED']} ｜ 非文字 {len(nt_rows)} 条（静态）"
+        f" + {len(st_rows)} 条（悬停/选中） ｜ 装饰 {len(ex_rows)} 条（只记录）"
         f" / **新欠账或变差 {len(bad)}**"
     )
     if bad:
@@ -666,8 +847,9 @@ def main() -> int:
         return 1
     print(
         f"对比度审美门 PASS（文字达标 {counts['PASS']} / 已登记欠账 {counts['KNOWN']} / "
-        f"新欠账或变差 0；非文字 {len(nt_rows)} 条全过 3.0；装饰 {len(ex_rows)} 条只记录；"
-        f"共 {len(rows)} 条文字组合 + {len(nt_rows)} 条非文字）"
+        f"新欠账或变差 0；非文字 {len(nt_all)} 条全过 3.0"
+        f"（静态 {len(nt_rows)} + 悬停/选中 {len(st_rows)}）；"
+        f"装饰 {len(ex_rows)} 条只记录；共 {len(rows)} 条文字组合 + {len(nt_all)} 条非文字）"
     )
     return 0
 

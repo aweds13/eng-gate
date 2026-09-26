@@ -1309,7 +1309,7 @@ function renderActiveMirror(el,active){
     <div class="timer" id="clockPeer">--:--</div>
     <div class="meta">${active.kind==='tomato'?'番茄钟':'普通计时'} · 来自${who}</div>
     <div class="sub" id="focusTask">${active.task_id?'（正在取任务名）':'未绑定任务'}</div>
-    <div class="sub">这边<b>只看不动</b>：结束请去那边，这里不会重复记一笔投入，也不会打断它。</div>`;
+    <div class="sub">这边<b>只看不动</b>：结束请去那边，这里不重复记账、也不打断它。</div>`;
   const started=new Date(String(active.started_at).replace(' ','T')).getTime();
   // 读数用**另一个 id**（`clockPeer`）：`#clock` 永远是"本机那一支计时器"的唯一主人（R3 护栏），
   // 镜像不是本机计时器 —— 它只是把对面的秒数照出来。
@@ -1557,7 +1557,7 @@ function editForm(t){
   <div class="sub" id="editCourseHint">${(t.task_type||'普通')==='普通'
     ? '「普通」= 与课程无关，不挂课程；要挂课程请把类型改成 作业/考试/论文/小测。'
     : '课程在学业页新建。'}</div>
-  <div class="sub">已完成的任务也能改，但不会改写历史完成记录。</div>`;
+  <div class="sub">已完成的任务可改，但不改写历史完成记录。</div>`;
 }
 async function saveTaskEdit(){
   if(!detailTaskId){toast('没有正在编辑的任务');return}
@@ -2051,7 +2051,9 @@ async function mydayDragUp(){
   const rest=order.filter(x=>x!==d.id);
   const want=d.before===null?rest.length:rest.indexOf(d.before);
   if(want<0)return;                                        // 落点不在这一列里（理论上到不了这儿）
-  if(want===rest.indexOf(d.id))return;                     // 落点没变 → 不发请求（省一次重画）
+  // 落点没变 → 不发请求（省一次重画）。★ 要比的是**全表**里它现在的位置（`order.indexOf`）：
+  //   `rest` 已经滤掉了 `d.id`，`rest.indexOf(d.id)` 恒为 -1 —— 那条判断永远不成立（T-G101 修）。
+  if(want===order.indexOf(d.id))return;
   await placeMyDay(d.id,d.before);
 }
 async function placeMyDay(id,beforeId){
@@ -2130,7 +2132,7 @@ async function renderTasks(m){
     ${parked.map(t=>taskCard(t)).join('')}`:'';
   const archivedHtml=archived.length?`<div class="section-title">档案（${archived.length}）</div>
     <div class="sub">归档的任务不在默认列表里，但随时能翻出来。<b>手动归档</b>的可以「撤销归档」；
-    <b>完成满 ${afterDays} 天自动收入</b>的，撤销完成就会回到列表（它是按完成日算出来的，不是存下来的状态）。</div>
+    <b>完成满 ${afterDays} 天自动收入</b>的，撤销完成就会回到列表。</div>
     ${archived.map(archiveCard).join('')}`:'';
   m.innerHTML=`<div class="new">
       <input id="allTitle" placeholder="新任务（默认不进今天）" data-enter="task-add-here">
@@ -2552,7 +2554,7 @@ function doingSection(items){
   if(!items.length)return '';
   return `<div class="section-title">正在做（${items.length}）</div>
   <div class="card block">
-    <div class="sub">这是你自己标的先后：↑↓ 调顺序，「停止」表示这件现在不做了（回到未开始/逾期）。</div>
+    <div class="sub">这是你自己标的先后：↑↓ 调顺序；「停止」= 这件现在不做了（回到未开始/逾期）。</div>
     ${items.map((t,i)=>`<div class="fact">
       <span class="badge">${i+1}</span>
       <span class="grow">${esc(t.title)}</span>
@@ -2662,14 +2664,14 @@ async function renderFocus(m){
   if(active&&active.device_id&&active.device_id!==clientId()){   // 别处开的：这一页也只说实话（T-G20）
     m.innerHTML=`<div class="card block">
       <div class="title">别处正在专注</div>
-      <div class="meta">另一台设备（或另一个窗口）正在计时。这边只显示、不改动 —— 要结束请去那边。</div>
-      <div class="sub">同一段时间不会在这边重复记一笔投入。今日已计入 ${today.focus_minutes} 分钟（只算正常结束的）。</div></div>`;
+      <div class="meta">另一台设备（或窗口）正在计时；这边只看不改动 —— 要结束请去那边。</div>
+      <div class="sub">同一段时间不重复计一笔投入。今日已计入 ${today.focus_minutes} 分钟（只算正常结束的）。</div></div>`;
     return;
   }
   if(active){   // 计时态在右栏；这里只说明「去哪里结束」，避免两处计时器对不上
     m.innerHTML=`<div class="card block">
       <div class="title">专注进行中</div>
-      <div class="meta">计时与「结束 / 记中断 / 放弃」都在右侧常驻面板里，切到任何页面都不会停。</div>
+      <div class="meta">「结束 / 记中断 / 放弃」都在右侧常驻面板里。</div>
       <div class="sub">今日已计入 ${today.focus_minutes} 分钟（只算正常结束的）。</div></div>`;
     return;
   }
@@ -3282,7 +3284,7 @@ async function renderSetting(m){
     <div class="sub">收起时隐藏计时器与任务详情。</div>
     <div class="settings-sub">新手引导</div>
     <div class="row"><button class="ghost" data-action="guide-replay">再看一遍新手引导</button></div>
-    <div class="sub">引导只在今日页出现、可一键关掉，不再打扰；这里可以随时重新打开。</div>
+    <div class="sub">引导只在今日页出现，可随时在这里重新打开。</div>
   </div>
   <div class="section-title" id="set-focus-guard">专注（白名单 / 勿扰）</div>
   <div class="card block">
@@ -3375,7 +3377,7 @@ async function renderSetting(m){
       <button data-action="set-vault">保存</button></div>
     <div class="meta">${ex.vault_configured
       ? `已填：<b>${esc(ex.vault||'')}</b>${ex.vault_dir?` · 根目录 ${esc(ex.vault_dir)}`:' （没填根目录 → 只认 Vault 相对路径的句柄）'}`
-      : '还没填 —— 填上「Vault 名字」后，复习卡/备忘里挂的引用句柄就能一键跳进 Obsidian'}</div>
+      : '还没填 —— 填上「Vault 名字」后，引用句柄就能一键跳进 Obsidian'}</div>
     ${ex.vault_overlap?`<div class="meta err">${esc(ex.vault_overlap)}</div>`:''}
     <div class="sub">${noteHTML(ex.vault_note||'')}</div>
     <div class="sub">${noteHTML(ex.note||'')}</div>
@@ -3853,7 +3855,7 @@ async function exportSyncPack(){
 }
 async function previewSyncPack(){
   const path=((document.getElementById('syncPath')||{}).value||'').trim();
-  if(!path){toast('先把要导入的包路径粘进来（导出时完整路径已复制到剪贴板）');return}
+  if(!path){toast('先把要导入的包路径粘进来');return}
   try{
     const r=await api('/api/sync/import',
       {method:'POST',body:JSON.stringify({path,dry_run:true,apply_deletions:syncApplyDeletions()})});

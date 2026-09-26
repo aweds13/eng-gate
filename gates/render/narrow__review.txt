@@ -1,53 +1,53 @@
 # render-manifest v1 viewport=narrow 820x900 view=review rows=52 accent=#2f6feb device=ph-000000000000 day=2026-06-15
-html>body>div.shell		0,0,820,876	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
-html>body>div.shell>aside.rail		0,0,820,126	16/normal/400	#1e293b/#000000@0.00	0;16px 24px 0px
-body>div.shell>aside.rail>h1	timeflow ·	24,16,86,22	18/21.6/700	#1e293b/#000000@0.00	0;0px
-body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	122,17,356,20	13/19.5/400	#5b6472/#000000@0.00	0;0px
-div.shell>aside.rail>nav>button:nth-child(1)	今日	24,50,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(2)	全部任务	78,50,76,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(3)	重要	158,50,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(4)	有计划	212,50,63,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(5)	已标记	279,50,63,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(6)	专注	346,50,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(7)	统计	400,50,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(8)	习惯	454,50,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(9)	学业	508,50,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button.active	复习	562,50,50,35	13/normal/400	#ffffff/#2f6feb	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(11)	备忘录	616,50,63,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(12)	团队	683,50,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(13)	设置	737,50,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,89,63,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button#refresh	刷新	91,89,52,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button#railToggle	收起右栏	147,89,78,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button#cmdBtn	命令	229,89,99,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-aside.rail>nav>button#cmdBtn>kbd.kbd	Ctrl K	272,103,43,13	11/13.2/400	#5b6472/#000000@0.00	6;0px 4px
-html>body>div.shell>main#main		0,126,820,483	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
-body>div.shell>main#main>div.card.block		24,126,772,116	16/normal/400	#1e293b/#ffffff	10;16px
-div.shell>main#main>div.card.block>div.meta	复习完成计投入（维持），不折算时间	41,143,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
-div.shell>main#main>div.card.block>div.mt-3		41,169,738,30	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block>div.mt-3>div.sub.split		41,169,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
-div.card.block>div.mt-3>div.sub.split>span:nth-child(1)	今日复习进度	41,169,72,18	12/18/400	#5b6472/#000000@0.00	0;0px
-div.card.block>div.mt-3>div.sub.split>span:nth-child(2)	0/1	761,169,18,18	12/18/400	#5b6472/#000000@0.00	0;0px
-main#main>div.card.block>div.mt-3>div.bar-track.mini		41,191,738,8	16/normal/400	#1e293b/#eef2f7	6;0px
-div.shell>main#main>div.card.block>div.sub.mt-2	还剩 1 张；点了「记得/模糊/忘了」就会计入进度。	41,207,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
-body>div.shell>main#main>div.new		24,258,772,42	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.new>input#rvTitle	(text)新建复习卡内容	24,258,702,42	14/normal/400	#1e293b/#ffffff	10;12px
-div.shell>main#main>div.new>button	新建	738,261,58,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
-body>div.shell>main#main>div.section-title:nth-child(3)	到期复习（1）	24,324,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-body>div.shell>main#main>div.card		24,351,772,94	16/normal/400	#1e293b/#ffffff	10;16px
-div.shell>main#main>div.card>div.card-body		41,368,327,60	16/24/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.title	拉格朗日中值定理	41,368,327,24	16/24/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.meta:nth-child(2)	0次 · 0天	41,392,327,18	12/18/400	#5b6472/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.meta:nth-child(3)	引用 高数 · 第三章	41,410,327,18	12/18/400	#5b6472/#000000@0.00	0;0px
-div.shell>main#main>div.card>div.row		380,380,399,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.row>button	记得	380,381,58,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
-main#main>div.card>div.row>button.ghost:nth-child(2)	模糊	446,380,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card>div.row>button.ghost:nth-child(3)	忘了	514,380,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card>div.row>button.ghost:nth-child(4)	撤销上次	582,380,86,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card>div.row>button.ghost:nth-child(5)	改形式/句柄	676,380,103,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-body>div.shell>main#main>div.section-title:nth-child(5)	今天复习过的（0）	24,469,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-body>div.shell>main#main>div.empty	今天还没复习过卡	24,497,772,88	16/24/400	#5b6472/#000000@0.00	0;32px 0px
-html>body>div.shell>aside.sidebar		0,609,820,178	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
-body>div.shell>aside.sidebar>div#focusRail		24,609,772,76	16/normal/400	#1e293b/#ffffff	10;16px
-div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	41,626,738,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	41,649,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
+html>body>div.shell		0,0,820,878	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
+html>body>div.shell>aside.rail		0,0,820,128	16/normal/400	#1e293b/#000000@0.00	0;16px 24px 0px
+body>div.shell>aside.rail>h1	timeflow ·	24,16,95,24	20/24/700	#1e293b/#000000@0.00	0;0px
+body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	131,18,356,20	13/19.5/400	#5b6472/#000000@0.00	0;0px
+div.shell>aside.rail>nav>button:nth-child(1)	今日	24,52,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(2)	全部任务	78,52,76,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(3)	重要	158,52,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(4)	有计划	212,52,63,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(5)	已标记	279,52,63,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(6)	专注	346,52,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(7)	统计	400,52,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(8)	习惯	454,52,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(9)	学业	508,52,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button.active	复习	562,52,50,35	13/normal/400	#ffffff/#2f6feb	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(11)	备忘录	616,52,63,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(12)	团队	683,52,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(13)	设置	737,52,50,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,91,63,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button#refresh	刷新	91,91,52,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button#railToggle	收起右栏	147,91,78,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button#cmdBtn	命令	229,91,99,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+aside.rail>nav>button#cmdBtn>kbd.kbd	Ctrl K	272,105,43,13	11/13.2/400	#5b6472/#000000@0.00	6;0px 4px
+html>body>div.shell>main#main		0,128,820,482	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
+body>div.shell>main#main>div.card.block		24,128,772,116	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>main#main>div.card.block>div.meta	复习完成计投入（维持），不折算时间	41,145,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card.block>div.mt-3		41,171,738,30	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block>div.mt-3>div.sub.split		41,171,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block>div.mt-3>div.sub.split>span:nth-child(1)	今日复习进度	41,171,72,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.block>div.mt-3>div.sub.split>span:nth-child(2)	0/1	761,171,18,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block>div.mt-3>div.bar-track.mini		41,193,738,8	16/normal/400	#1e293b/#eef2f7	6;0px
+div.shell>main#main>div.card.block>div.sub.mt-2	还剩 1 张；点了「记得/模糊/忘了」就会计入进度。	41,209,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.new		24,260,772,41	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.new>input#rvTitle	(text)新建复习卡内容	24,260,702,41	13/normal/400	#1e293b/#ffffff	10;12px
+div.shell>main#main>div.new>button	新建	738,263,58,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
+body>div.shell>main#main>div.section-title:nth-child(3)	到期复习（1）	24,325,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.card		24,353,772,94	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>main#main>div.card>div.card-body		41,370,327,60	16/24/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.title	拉格朗日中值定理	41,370,327,24	16/24/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta:nth-child(2)	0次 · 0天	41,394,327,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta:nth-child(3)	引用 高数 · 第三章	41,412,327,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card>div.row		380,381,399,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.row>button	记得	380,382,58,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
+main#main>div.card>div.row>button.ghost:nth-child(2)	模糊	446,381,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card>div.row>button.ghost:nth-child(3)	忘了	514,381,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card>div.row>button.ghost:nth-child(4)	撤销上次	582,381,86,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card>div.row>button.ghost:nth-child(5)	改形式/句柄	676,381,103,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+body>div.shell>main#main>div.section-title:nth-child(5)	今天复习过的（0）	24,471,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.empty	今天还没复习过卡	24,498,772,88	16/24/400	#5b6472/#000000@0.00	0;32px 0px
+html>body>div.shell>aside.sidebar		0,610,820,178	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
+body>div.shell>aside.sidebar>div#focusRail		24,610,772,76	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	41,627,738,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	41,651,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
