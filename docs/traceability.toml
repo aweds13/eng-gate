@@ -521,6 +521,24 @@ evidence = [
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。 ★ **2026-09-25（T-G71）这条残留收口了**：`db.unit_of_work()` 在连接**代理层**把 `commit()` 推迟到退出那一刻（core 一个 `commit()` 都没改），本条的 `create_task` / `update_task` 两条路都包了事务 —— 第二笔抛数据库级错误时**库里一个字节都不留**（`tests/test_unit_of_work.py` 逐条钉，且用「第一笔确实跑过」证明不是空转）。详见 `复盘/跨函数事务-T-G71.md`。"
 
 
+[entries."T-G95"]
+id = "T-G95"
+title = "派活器收工时自己落一份交接摘要：主控不必再读原始事件流（+ 修块缓冲：进度 print flush + detach 解释器 -u）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/交接摘要-T-G95.md",
+  "text:tools/wb_dispatch.py::def write_report(log: Path, *, card: str,",
+  "text:tools/wb_dispatch.py::def report_file_for(log: Path) -> Path:",
+  "text:tools/wb_dispatch.py::def result_event_text(lines: list[str]) -> str | None:",
+  "text:tools/wb_dispatch.py::整段 log 里没有 result 事件",
+  "text:tools/wb_dispatch.py::[摘要]",
+  "text:tools/wb_dispatch.py::write_report(log_k, card=args.card,",
+  "test:test_wb_dispatch.py",
+]
+gaps = "**为什么有这张卡**（T-G95，= 外包卡 006）：主控每收一张卡，最贵的开销**不是复核**（`wb_review.py` 一条命令 5 秒），而是**读工人那一轮的原始事件流** —— 卡 005 那轮是 `gates/diag/wb-005.jsonl`，**264 行 / 316 KB**，而他要的东西（工人的六项回报 / 判决 / 计数）**只压在它末尾**，读一次上万 token，纯浪费。**做四件事**：① 新增 `write_report(log, *, card, code, reason, scene, sid, attempts, lines, started_at)` → `gates/diag/wb-<卡>.report.md`（1~2 KB）：判决 / 会话 / 开始结束与用时 / 回合·工具·文件·报错 / log 行数与字节数 + **`result` 事件回话原文** + **最后 10 次工具调用**（序号 + 工具名 + 参数前 120 字符）+ 机械读数（`git status --porcelain` 未提交文件数、`gates/last.json` 的 ok/rev、复核命令模板）；② **每一条退出路径都落**（收工 / 被看门狗掐 / 超时 / 撞 `--max-turns` / **重试的每一轮**），重试轮按 log 名派生落成 `wb-<卡>.r2.report.md`（**不覆写**，与每轮一个 log 同一口径）；③ `status_report()` 在摘要存在时多打一行 `[摘要] gates/diag/wb-<卡>.report.md`（主控**先看它**）；④ ★ 顺手修**块缓冲**（T-G93 记录在案、主控撞了三次）：进度 `print(...)` 全加 `flush=True`，且 `detached_argv()` 给解释器补 `-u`（**只加这一个参数**）—— 原来 `--detach` 的 `wb-<卡>.dispatch.log` 是 **0 字节**，主控看日志以为它没起来。**口径复用现成的、不写第二份**：回合数走 `turns_seen()`、工具签名走 `tool_signatures()`、log 摘要走 `wb_status.parse_events()`。**反证（先红后绿）**：`tests/test_wb_dispatch.py` **50 → 57 条** —— 改实现前 **8 failed / 49 passed**（7 条新用例 + 1 条改过下标的既有用例全红），改后 **57 passed**；覆盖 = 摘要真的落盘且**含回话原文** / **没有 `result` 事件**时照样落盘并写明 / 半截·空事件流**不许炸** / 四条退出路径各落一份 / 重试每轮一份且不互盖 / **CJK 不被转义**（断言正文里没有 `\\u`）/ `--status` 指向摘要 / `detached_argv()` 的 `-u` **恰好一个**（输入里已有的去重）且 T-G92 既有事实（脚本自己、`--no-preflight` 恰好一个、`--detach` 已去掉、以 `--detach-done` 收尾）全绿。**真机证据**：`--detach` 真派一张小只读卡（`wb-R-smoke`，全文与字节数见复盘）。**边界（如实写）**：① `write_report` 的签名按卡规格带 `scene`，输出结构也按规格固定；现场只在**被掐 / 超时**（scene 非空）时多出一节 `## 现场`，正常收工不占地方；② 「最后 10 次工具调用」复用 `tool_signatures()` 的 `名字|参数JSON` 签名再裁到 120 字（**没有另写一个事件解析器**）；③ 未提交文件数走**全量** `git status --porcelain`（含未跟踪文件，与 preflight 的 `-uno` 口径不同 —— 这里要的就是「工作区现在有多少东西没提交」）；④ 摘要写在 `gates/diag/`（gitignored），**证据不进仓库**；⑤ `--status` 只指最新的那份摘要（按 mtime；重试轮的 `.r2` 更新则指它，前几轮仍在磁盘上）；⑥ §2.6 只改了 `外包-卡表与规矩.md` 的 §15/§16，同一份文档 §12 的表里仍写着「静默 ≥ `--stall-seconds`，默认 480 秒」—— 那是 T-G88 的表，**卡的白名单不许动它**（480 只是**底线**，实际口径是自适应，未同步属已知残留）；⑦ 修 `detached_argv()` 时必须动那条既有用例的下标断言（脚本位置从 3 挪到 4）—— 改为 `out[1:4] == [\"-X\", \"utf8\", \"-u\"]` 与 `out[4] == 脚本`，**T-G92 的四条事实一条没变**。**没动的**：`src/**`、`docs/` 里其它文件、`tools/wb_dash.py`、`tools/wb_status.py`、真实库/备份目录，以及三个外来未跟踪文件。"
+
+
 [entries."T-G94"]
 id = "T-G94"
 title = "修看门狗误杀正常的长工具调用：认出「在飞」的调用（静默是预期）+ 按历史最长一次调用自适应阈值 + 判卡死报告带现场"

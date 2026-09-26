@@ -509,12 +509,13 @@ def test_detached_argv_keeps_the_script_so_the_child_actually_runs() -> None:
     `python -X utf8 --card 900 …` 里 python 把 `--card` 当成**自己的**选项 → 子进程其实什么都没跑
     （`Unknown option: --card`）。旧写法只 `[python, -X, utf8, *args]`，**从来没能真扔出去过** ——
     T-G91 的探针只验了 `spawn_detached()` 本身（用自造命令），没走 detach 这条 argv 拼装路。
+    ★ T-G95 在解释器开关里补了 `-u`（无缓冲），所以脚本的下标从 3 挪到 4 —— 事实一条没变。
     """
     out = wd.detached_argv(["--card", "900", "--detach"])
     assert out[0] == sys.executable
-    assert out[1:3] == ["-X", "utf8"]
-    assert out[3] == str(Path(wd.__file__).resolve()), "解释器后面必须是脚本自己"
-    assert out[4:6] == ["--card", "900"]
+    assert out[1:4] == ["-X", "utf8", "-u"]
+    assert out[4] == str(Path(wd.__file__).resolve()), "解释器开关后面必须是脚本自己"
+    assert out[5:7] == ["--card", "900"]
 
 
 def test_detach_throws_the_work_out_and_returns_immediately(
@@ -733,3 +734,151 @@ def test_heartbeat_can_mention_the_inflight_tool_without_dropping_fields() -> No
     assert "在跑 Bash" in line
     for needle in ("已跑 10.2 分钟", "回合 90", "工具 111 次", "碰过文件 21 个", "静默 3 秒"):
         assert needle in line, line
+
+
+# ====================================== 交接摘要：收工时落一份 1~2 KB 的摘要（T-G95 = 外包卡 006）
+#
+# 为什么有它（主控写的背景）：主控每收一张卡，最贵的开销不是复核（`wb_review.py` 5 秒），而是
+# **读工人那一轮的原始事件流**（卡 005 那轮是 264 行 / 316 KB），而他要的东西（六项回报 / 判决 /
+# 计数）只压在末尾。所以派活器**自己**在收工时落一份摘要 —— 主控只读它，永远不必再碰原始 jsonl。
+# ★ 口径复用现成的：回合走 `turns_seen()`、工具签名走 `tool_signatures()`、log 摘要走
+# `parse_events()` —— 不写第二份。
+
+
+def _report_lines(*, with_result: bool = True) -> list[str]:
+    """造一段像真工人的事件流（含一条 `tool_use` 与可选的 `result`）。"""
+    lines = [
+        json.dumps({"type": "system", "subtype": "init", "model": "m", "session_id": "sid-r1"},
+                   ensure_ascii=False),
+        json.dumps({"type": "assistant", "message": {"id": "m1", "content": [
+            {"type": "tool_use", "id": "t1", "name": "Read",
+             "input": {"file_path": "tools/wb_dispatch.py"}}]}}, ensure_ascii=False),
+    ]
+    if with_result:
+        lines.append(json.dumps({"type": "result", "subtype": "success",
+                                 "result": "卡号：006\n改了什么文件：\n- tools/wb_dispatch.py"},
+                                ensure_ascii=False))
+    return lines
+
+
+def test_write_report_carries_the_workers_words_verbatim(tmp_path: Path) -> None:
+    """★ 摘要必须把工人的回话**原样**贴进来（主控读的就是它），且中文**不许**被转义成 `\\uXXXX`。"""
+    log = tmp_path / "wb-006.jsonl"
+    lines = _report_lines()
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    wd.write_report(log, card="006", code=0, reason="", scene="", sid="sid-r1", attempts=1,
+                    lines=lines, started_at=time.time() - 60)
+    report = wd.report_file_for(log)
+    assert report.name == "wb-006.report.md", "摘要落在 wb-<卡>.report.md"
+    body = report.read_text(encoding="utf-8")
+    assert "# 卡 006 的交接摘要" in body
+    assert "退出码：0" in body and "正常收工" in body
+    assert "sid-r1" in body and "--resume sid-r1" in body
+    assert "用时" in body and "回合" in body
+    assert "卡号：006" in body and "tools/wb_dispatch.py" in body, "回话原文没被原样贴上"
+    assert "1. Read" in body, "最后 10 次工具调用没列出来"
+    assert "\\u" not in body, "中文被转义了 —— 主控读不懂"
+
+
+def test_write_report_says_so_when_there_is_no_result_event(tmp_path: Path) -> None:
+    """被打断 / 被杀 / 还在跑 → 整段 log 里没有 `result` 事件：摘要照样落盘，并**写明这一点**。"""
+    log = tmp_path / "wb-006.jsonl"
+    lines = _report_lines(with_result=False)
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    wd.write_report(log, card="006", code=6, reason="卡死：30.0 分钟没有新事件", scene="",
+                    sid="sid-r1", attempts=1, lines=lines, started_at=time.time() - 30)
+    body = wd.report_file_for(log).read_text(encoding="utf-8")
+    assert "没有 result 事件" in body and "被打断" in body
+    assert "卡死" in body
+
+
+def test_write_report_survives_a_truncated_or_empty_stream(tmp_path: Path) -> None:
+    """半截 log / 缺字段 / 空事件流 / 没给开始时间 → 一律退回「没有数据」，**绝不抛异常**。
+
+    报告是"事故现场"，它自己炸了就最坏 —— 所以宁可退化成"没有数据"，也不许把主控挡在门外。
+    """
+    log = tmp_path / "wb-006.jsonl"
+    lines = ["不是 JSON 的一行", "{}", json.dumps({"type": "assistant"})]
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    wd.write_report(log, card="006", code=6, reason="超时：7200 秒到了", scene="", sid="",
+                    attempts=2, lines=lines, started_at=None)
+    body = wd.report_file_for(log).read_text(encoding="utf-8")
+    assert "没有 result 事件" in body and "超时" in body
+    assert wd.write_report(log, card="006", code=0, reason="", scene="", sid="",
+                           attempts=1, lines=[], started_at=None).exists()
+
+
+def test_every_exit_path_writes_a_report(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 每一条退出路径都要落一份摘要：正常收工 / 被掐 / 超时 / 撞上限 —— 一个都不能少。"""
+    cases = {
+        "正常收工": "",
+        "空转：最近 12 次工具调用里同一件事出现了 9 次": "空转",
+        "超时：7200 秒到了（`--timeout`）": "超时",
+        ("没做完：回合数 240 撞到上限 240"
+         "（`--max-turns` 到了 CLI 会自己停，退出码仍是 0）"): "没做完",
+    }
+    for reason, needle in cases.items():
+        monkeypatch.setattr(wd, "run_worker", _fake_runner([], reason=reason))
+        monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "007", "--spec", "spec.md",
+                                          "--execute", "--retry", "0", "--force"])
+        wd.main()
+        capsys.readouterr()
+        report = sandbox / "gates" / "diag" / "wb-007.report.md"
+        assert report.exists(), f"「{needle or '正常收工'}」这条路径没落摘要"
+        assert needle in report.read_text(encoding="utf-8"), needle
+
+
+def test_a_retry_round_gets_its_own_report_not_an_overwrite(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 重试的每一轮各落一份摘要：`wb-<卡>.r2.report.md`（**不覆写**第 1 轮 —— 证据不互相盖）。"""
+    calls: list[list[str]] = []
+    outcomes = [("卡死：30.0 分钟没有新事件 → 已掐", "    做 Read(a.py)"), ("", "")]
+
+    def runner(cmd, log, errlog, **kwargs):            # noqa: ANN001, ANN202
+        calls.append(list(cmd))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, outcomes[len(calls) - 1][0], outcomes[len(calls) - 1][1], "sid-abc"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "007", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+    capsys.readouterr()
+    first = sandbox / "gates" / "diag" / "wb-007.report.md"
+    second = sandbox / "gates" / "diag" / "wb-007.r2.report.md"
+    assert first.exists() and second.exists(), "重试的每一轮都要落一份摘要"
+    assert "卡死" in first.read_text(encoding="utf-8")
+    assert "正常收工" in second.read_text(encoding="utf-8")
+
+
+def test_status_points_at_the_report_when_there_is_one(
+        tmp_path: Path, monkeypatch, capsys) -> None:
+    """★ `--status` 在摘要存在时多打一行 `[摘要]`（主控**先看它**，别再去翻 log）。"""
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    (diag / "wb-009.jsonl").write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+    (diag / "wb-009.report.md").write_text("# 卡 009 的交接摘要\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "009", "--status"])
+    assert wd.main() == 0
+    assert "[摘要] gates/diag/wb-009.report.md" in capsys.readouterr().out
+
+
+def test_detached_argv_pins_unbuffered_stdout_exactly_once() -> None:
+    """★ 块缓冲那个坑（T-G93 记录在案，主控撞了**三次**）：脱离窗口的子进程必须 `-u`（无缓冲），
+    否则 `wb-<卡>.dispatch.log` 会是 **0 字节**、看着像没起来。**恰好一个**，输入里已有的要去重。
+
+    T-G92 的既有事实一条不动：脚本自己在、`--no-preflight` 恰好一个、`--detach` 已去掉、
+    以 `--detach-done` 收尾。
+    """
+    once = wd.detached_argv(["--card", "002", "--spec", "s.md", "--detach", "--execute"])
+    assert once[0] == sys.executable
+    assert once[1:4] == ["-X", "utf8", "-u"]
+    assert once.count("-u") == 1
+    twice = wd.detached_argv(["--card", "002", "-u", "--detach"])
+    assert twice.count("-u") == 1
+    assert str(Path(wd.__file__).resolve()) in once
+    assert once.count("--no-preflight") == 1
+    assert "--detach" not in once and once[-1] == "--detach-done"

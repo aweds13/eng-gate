@@ -276,6 +276,14 @@ def verdict_file_for(log: Path) -> Path:
     return log.with_suffix(".verdict.txt")
 
 
+def report_file_for(log: Path) -> Path:
+    """这一轮的**交接摘要**落哪 —— 按 log 名派生，重试轮各落一份、互不覆盖（T-G95）。
+
+    `wb-005.jsonl` → `wb-005.report.md`；`wb-005.r2.jsonl` → `wb-005.r2.report.md`。
+    """
+    return log.with_suffix(".report.md")
+
+
 def write_heartbeat(log: Path, line: str) -> None:
     """心跳落盘（带时间戳，一行覆盖一行）：读的人只关心"它最后一次动是什么时候"。"""
     heartbeat_file_for(log).write_text(
@@ -291,9 +299,12 @@ def detached_argv(argv: list[str]) -> list[str]:
     ★ 为什么必须带**脚本自己**（T-G92 真机证据 (b) 逮到的第二个洞）：旧写法是
     `[python, -X, utf8, *args]` —— 少了脚本路径，子进程其实是 `python --card 900 …`，
     python 把 `--card` 当成**自己的**选项 → `Unknown option: --card`，**从来没真扔出去过**。
+    ★ 为什么带 `-u`（T-G95）：`print` 在**非 TTY**（后台 job / `--detach`）下是**块缓冲**的 ——
+    实测 `--detach` 之后 `wb-005.dispatch.log` 是 **0 字节**，主控看日志以为它没起来（同一个坑
+    撞了三次）。给解释器加 `-u` 让子进程无缓冲；输入里已有的 `-u` 也去掉，只留**恰好一个**。
     """
-    return [sys.executable, "-X", "utf8", str(Path(__file__).resolve()),
-            *[a for a in argv if a not in ("--detach", "--no-preflight")],
+    return [sys.executable, "-X", "utf8", "-u", str(Path(__file__).resolve()),
+            *[a for a in argv if a not in ("--detach", "--no-preflight", "-u")],
             "--no-preflight", "--detach-done"]
 
 
@@ -322,6 +333,10 @@ def status_report(card: str) -> str:
     diag = ROOT / "gates" / "diag"
     head = diag / f"wb-{card}"
     out: list[str] = [f"=== 卡 {card} 的状态（{head}.*）==="]
+    # ★ T-G95：有摘要就先把它指出来 —— 主控**先看它**，不必再翻原始 jsonl。
+    reports = sorted(diag.glob(f"wb-{card}*.report.md"), key=lambda p: p.stat().st_mtime)
+    if reports:
+        out.append(f"  [摘要] {reports[-1].relative_to(ROOT).as_posix()}（先看它）")
     hb = heartbeat_file_for(head.with_suffix(".jsonl"))
     if hb.exists():
         out.append(f"  [心跳] {hb.read_text(encoding='utf-8').strip() or '（空）'}")
@@ -348,6 +363,126 @@ def status_report(card: str) -> str:
                f"工具报错 {summary['tool_errors']} 次")
     out.append(f"  [最后] {summary['final'] or '（还没见到 result —— 可能还在跑）'}")
     return "\n".join(out)
+
+
+# ============================================ 交接摘要（T-G95 = 外包卡 006）
+#
+# 为什么有它（主控写的背景）：主控每收一张卡，最贵的开销不是复核（`wb_review.py` 5 秒的事），
+# 而是**读工人那一轮的原始事件流**（卡 005 那轮是 264 行 / 316 KB），而他要的东西（六项回报 /
+# 判决 / 计数）只压在末尾。所以派活器**自己**在收工时落一份 1~2 KB 的摘要 —— 主控只读它。
+# ★ 口径复用现成的，**不写第二份**：回合走 `turns_seen()`、工具签名走 `tool_signatures()`、
+# log 摘要走 `wb_status.parse_events()`（它已经算了工具调用 / 文件 / 报错）。
+
+
+def result_event_text(lines: list[str]) -> str | None:
+    """`result` 事件里 `result` 字段的**原文**（整段 log 里没有 `result` 事件 → `None`）。
+
+    ★ 与 `finish_verdict()` 分工不同：那条判「跑完没有」；这条要**原样搬运**工人的回话（主控读的
+    就是它），所以不能借用 `parse_events()` 里那份**截断过**的 `final`。
+    """
+    found: str | None = None
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("type") == "result":
+            found = str(event.get("result") or "")
+    return found
+
+
+def _iso_local(ts: float | None) -> str:
+    """epoch 秒 → 本地 ISO（秒级）；没有 / 解不开 → 用"现在"（报告不许因为时间戳炸）。"""
+    if ts is None:
+        return datetime.now().isoformat(timespec="seconds")
+    try:
+        return datetime.fromtimestamp(ts).isoformat(timespec="seconds")
+    except (OverflowError, OSError, ValueError):
+        return datetime.now().isoformat(timespec="seconds")
+
+
+def _last_tool_lines(lines: list[str], limit: int = 10) -> list[str]:
+    """最后 `limit` 次工具调用压成 `序号. 工具名 参数前 120 字符`（复用 `tool_signatures()`）。"""
+    out: list[str] = []
+    for idx, sig in enumerate(tool_signatures(lines)[-limit:], 1):
+        name, _, blob = sig.partition("|")
+        out.append(f"{idx}. {name} {wb_status._clip(blob, 120)}")
+    return out
+
+
+def _uncommitted_count() -> str:
+    """`git status --porcelain` 的未提交文件数（机械读数 —— 让主控一眼看出工人动没动工作区）。"""
+    try:
+        done = subprocess.run(["git", "-c", "core.quotepath=false", "status", "--porcelain"],
+                              cwd=str(ROOT), capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return f"（跑不了 git：{exc}）"
+    return str(len([ln for ln in (done.stdout or "").splitlines() if ln.strip()]))
+
+
+def _gates_summary() -> str:
+    """`gates/last.json` 的 `ok` / `rev`（读不出来就如实说）。"""
+    try:
+        data = json.loads((ROOT / "gates" / "last.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "（没有 gates/last.json 或读不出来）"
+    return f"ok={data.get('ok')} rev={data.get('rev')}"
+
+
+def write_report(log: Path, *, card: str, code: int, reason: str, scene: str, sid: str,
+                 attempts: int, lines: list[str], started_at: float | None) -> Path:
+    """把这一轮压成一份 1~2 KB 的**交接摘要** → `gates/diag/wb-<卡>.report.md`（T-G95）。
+
+    ★ **每一条退出路径都调它**（收工 / 被掐 / 超时 / 撞上限 / 重试的每一轮）；文件按 log 名派生，
+    所以重试轮是 `wb-<卡>.r2.report.md`（**不覆写**上一轮 —— 证据不互相盖）。
+    ★ 半截 log / 缺字段一律退回「没有数据」，**绝不抛异常** —— 报告是"事故现场"，它自己炸了就最坏。
+    """
+    _, summary = wb_status.parse_events(lines)
+    text = result_event_text(lines)
+    if text is None:
+        said = "整段 log 里没有 result 事件（被打断 / 被杀 / 还在跑）"
+    else:
+        said = text or "（`result` 事件里的回话是空的）"
+    tools = _last_tool_lines(lines) or ["（一次工具调用都没有）"]
+    try:
+        size_kb = log.stat().st_size / 1024
+    except OSError:
+        size_kb = 0.0
+    end = time.time()
+    began = end if started_at is None else started_at
+    minutes = max(end - began, 0.0) / 60
+    detail = [ln for ln in scene.splitlines() if ln.strip()] if scene else []
+    parts = [
+        f"# 卡 {card} 的交接摘要",
+        f"- 尝试：第 {attempts} 次   退出码：{code}   判决：{reason or '正常收工'}",
+        (f"- 会话：{sid}（续跑：--resume {sid}）" if sid else "- 会话：（还没拿到 session id）"),
+        f"- 开始 / 结束：{_iso_local(began)} / {_iso_local(end)}   用时：{minutes:.1f} 分钟",
+        (f"- 回合 {turns_seen(lines)} | 工具调用 {summary['tool_calls']} 次 | "
+         f"碰过文件 {summary['files_total']} 个 | 工具报错 {summary['tool_errors']} 次"),
+        f"- log：{log.name}（{len([ln for ln in lines if ln.strip()])} 行 / {size_kb:.1f} KB）",
+    ]
+    if detail:                                   # 被掐 / 超时时才有现场，别让收工的报告白占地方
+        parts += ["", "## 现场（被掐 / 超时 / 撞上限时的最后几步）", *detail]
+    parts += [
+        "",
+        "## 工人的回话（`result` 事件原文）",
+        said,
+        "",
+        "## 最后 10 次工具调用",
+        *tools,
+        "",
+        "## 主控下一步（机械读数，不是判断）",
+        ("- `git -c core.quotepath=false status --porcelain` 的未提交文件数："
+         f"{_uncommitted_count()}"),
+        f"- `gates/last.json`：{_gates_summary()}",
+        "- 建议复核命令（把 `<白名单>` 换成卡 §3 列的那些）："
+        "python -X utf8 tools/wb_review.py --rev HEAD --allow \"<白名单>\"",
+    ]
+    out = report_file_for(log)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(parts) + "\n", encoding="utf-8")
+    return out
 
 
 # ================================================================ 反空转三道（T-G88）
@@ -823,10 +958,11 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.status:
-        print(status_report(args.card))
+        print(status_report(args.card), flush=True)
         return 0
     if not args.spec:
-        print("[FAIL] 派活得给 --spec（卡规格文件）；只看状态可以加 --status", file=sys.stderr)
+        print("[FAIL] 派活得给 --spec（卡规格文件）；只看状态可以加 --status", file=sys.stderr,
+              flush=True)
         return 2
     problems, log = preflight(
         args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
@@ -834,9 +970,9 @@ def main() -> int:
     )
 
     if problems:
-        print("[FAIL] 不派活 —— 前置检查没过：", file=sys.stderr)
+        print("[FAIL] 不派活 —— 前置检查没过：", file=sys.stderr, flush=True)
         for item in problems:
-            print(f"  · {item}", file=sys.stderr)
+            print(f"  · {item}", file=sys.stderr, flush=True)
         # ★ 没过也要留痕（T-G92）：过夜跑时「没跑」和「跑挂了」必须一眼分得清
         #   —— `--status` 读的就是这个文件。旧写法在 detach 那条路上什么都不写。
         verdict = verdict_file_for(log)
@@ -846,6 +982,9 @@ def main() -> int:
             "判决：前置检查没过 → 没派活\n"
             f"原因：{'；'.join(problems)}\n",
             encoding="utf-8")
+        # ★ 摘要一样全（T-G95）：没派活也是**一条退出路径**，`--status` 照样能先看摘要。
+        write_report(log, card=args.card, code=2, reason="前置检查没过 → 没派活", scene="",
+                     sid="", attempts=1, lines=[], started_at=None)
         return 2
 
     if args.detach and not args.detach_done:
@@ -855,9 +994,10 @@ def main() -> int:
         #   子进程补 `--no-preflight`：父进程已经查过登录，省掉那次真发请求的自检。
         detach_log = ROOT / "gates" / "diag" / f"wb-{args.card}.dispatch.log"
         pid = spawn_detached(detached_argv(sys.argv[1:]), detach_log)
-        print(f"[OK ] 前置检查全过 → 扔出去单独跑（pid {pid}），我的窗口关了它照样跑")
-        print(f"[看 ] 进度：python -X utf8 tools/wb_dispatch.py --card {args.card} --status")
-        print(f"[log ] {detach_log}")
+        print(f"[OK ] 前置检查全过 → 扔出去单独跑（pid {pid}），我的窗口关了它照样跑", flush=True)
+        print(f"[看 ] 进度：python -X utf8 tools/wb_dispatch.py --card {args.card} --status",
+              flush=True)
+        print(f"[log ] {detach_log}", flush=True)
         return 0
 
     node, cli = paths(args.cli)
@@ -878,26 +1018,26 @@ def main() -> int:
         done_checks += " / **登录没查**（--no-preflight）"
     else:
         done_checks += " / 登录通"
-    print(f"[OK ] 前置检查全过（{done_checks}）")
-    print(f"[log ] {log}")
+    print(f"[OK ] 前置检查全过（{done_checks}）", flush=True)
+    print(f"[log ] {log}", flush=True)
     print(f"[cmd ] {' '.join(initial_cmd[:4])} … --model {args.model} --output-format stream-json "
           f"--permission-mode {args.permission_mode} --max-turns {max_turns} "
-          f"--autocompact {args.autocompact}")
+          f"--autocompact {args.autocompact}", flush=True)
     guards = ("看门狗**关**（--no-watchdog）" if args.no_watchdog else
               f"看门狗：日志静默过久（底线 {args.stall_seconds}s；有工具在飞则 30 分钟，"
               f"再按历史最长调用 ×{TOOL_DURATION_FACTOR} 自适应）或最近 {REPEAT_WINDOW} 次调用里"
               f"同一件事重复 {REPEAT_NEED} 次 → 掐")
     print(f"[盯 ] {guards}；心跳每 {args.heartbeat_seconds}s；超时 {args.timeout}s；"
-          f"中断自动续跑 {args.retry} 次")
+          f"中断自动续跑 {args.retry} 次", flush=True)
     if not args.execute:
-        print("[dry ] 这是 dry-run；真想派活加 --execute")
+        print("[dry ] 这是 dry-run；真想派活加 --execute", flush=True)
         return 0
 
     attempts, code, reason, scene, sid = 1, 0, "", "", resume_sid
 
     def beat(line: str) -> None:
         """心跳：既打出来，也**落成文件** —— 过夜跑时读一个文件就知道它还在不在动。"""
-        print(line)
+        print(line, flush=True)
         write_heartbeat(log, line)
 
     while True:
@@ -911,9 +1051,10 @@ def main() -> int:
                                  args.model, args.permission_mode,
                                  max_turns=max_turns, autocompact=args.autocompact)
         else:
-            print("[续 ] 没拿到 session id，续不了 → 只能重开一轮", file=sys.stderr)
+            print("[续 ] 没拿到 session id，续不了 → 只能重开一轮", file=sys.stderr, flush=True)
             cmd = initial_cmd
-        print(f"[跑 ] 第 {attempts} 次；log {log_k.name}")
+        print(f"[跑 ] 第 {attempts} 次；log {log_k.name}", flush=True)
+        attempt_started = time.time()
         code, reason, scene, new_sid = run_worker(
             cmd, log_k, log_k.with_suffix(".stderr.txt"), timeout=args.timeout,
             max_turns=max_turns, watchdog=not args.no_watchdog,
@@ -923,23 +1064,33 @@ def main() -> int:
         sid = new_sid or sid
         if sid:                      # ★ 一拿到就落盘：这样中断之后 `--resume auto` 才用得上
             session_file_for(log).write_text(sid, encoding="utf-8")
-        print(f"[done] 第 {attempts} 次：工人退出码 {code}；stderr 见 {log_k.name[:-6]}.stderr.txt")
+        # ★ T-G95：**每一条退出路径都落一份摘要**（含"被掐后再续跑"的每一轮），主控只读它。
+        report = write_report(log_k, card=args.card, code=code, reason=reason, scene=scene,
+                              sid=sid, attempts=attempts,
+                              lines=log_k.read_text(encoding="utf-8",
+                                                   errors="replace").splitlines(),
+                              started_at=attempt_started)
+        print(f"[done] 第 {attempts} 次：工人退出码 {code}；stderr 见 {log_k.name[:-6]}.stderr.txt",
+              flush=True)
+        print(f"[摘 ] 已落盘：{report.relative_to(ROOT).as_posix()}", flush=True)
         if not should_resume(reason, attempts, args.retry):
             break
         attempts += 1
-        print(f"[续 ] 第 {attempts} 次：带同一会话接着干（原因：{reason}）", file=sys.stderr)
+        print(f"[续 ] 第 {attempts} 次：带同一会话接着干（原因：{reason}）", file=sys.stderr,
+              flush=True)
 
     print(f"[会话] {sid or '（没见到 session_id）'}"
-          f"（落盘 {session_file_for(log).name}；续跑：--resume auto）")
+          f"（落盘 {session_file_for(log).name}；续跑：--resume auto）", flush=True)
     lines = log_k.read_text(encoding="utf-8", errors="replace").splitlines()
     timeline, summary = wb_status.parse_events(lines)
     for line in timeline:
         print(line)
     print(f"[摘要] 第 {attempts} 次：回合 {turns_seen(lines)} 个（上限 {max_turns}）；"
           f"工具调用 {summary['tool_calls']} 次；碰过的文件 {summary['files_total']} 个；"
-          f"认不出的行 {summary['unknown_events']} 条")
+          f"认不出的行 {summary['unknown_events']} 条", flush=True)
     if attempts > 1:
-        print(f"[注 ] 这一轮跑了 {attempts} 次（前几次的 log：同目录 wb-{args.card}.r*.jsonl）")
+        print(f"[注 ] 这一轮跑了 {attempts} 次（前几次的 log：同目录 wb-{args.card}.r*.jsonl）",
+              flush=True)
     # ★ 判决落盘：新窗口（或过夜之后的我）先读这个文件，别的都不用猜
     verdict_file_for(log).write_text(
         f"card={args.card} 尝试={attempts} 次 退出码={code} "
@@ -948,13 +1099,14 @@ def main() -> int:
         f"看细节：python -X utf8 tools/wb_status.py {log_k} --tail 20 --repo\n",
         encoding="utf-8")
     if reason:
-        print(f"[掐 ] {reason}", file=sys.stderr)
-        print(f"     现场（最后一次动作之后的几步）：\n{scene}", file=sys.stderr)
+        print(f"[掐 ] {reason}", file=sys.stderr, flush=True)
+        print(f"     现场（最后一次动作之后的几步）：\n{scene}", file=sys.stderr, flush=True)
         print(f"[复核] 先看现场再决定：python -X utf8 tools/wb_status.py {log_k} --tail 20 --repo",
-              file=sys.stderr)
-        print(f"[判决] 已落盘：{verdict_file_for(log)}", file=sys.stderr)
+              file=sys.stderr, flush=True)
+        print(f"[判决] 已落盘：{verdict_file_for(log)}", file=sys.stderr, flush=True)
         return 6
-    print(f"[复核] 主控现在去看报告与 git status：python -X utf8 tools/wb_status.py {log_k} --repo")
+    print(f"[复核] 主控现在去看报告与 git status：python -X utf8 tools/wb_status.py {log_k} --repo",
+          flush=True)
     return 0 if code == 0 else 4
 
 
