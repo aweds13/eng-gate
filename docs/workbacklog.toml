@@ -59,7 +59,7 @@ status = "pending"
 [[cards]]
 id = "029"
 task = "T-G114"
-title = "派活器三合一"
+title = "派活器收口（过期判决 / retry 读数 / 时间戳 / ★白名单硬闸门 / 429 三拍 / 落账预算 / 规格指纹）"
 tree = ".wt/dispatch"
 spec = "gates/diag/卡029-派活器三合一.md"
 files = [
