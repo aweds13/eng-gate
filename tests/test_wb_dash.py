@@ -19,6 +19,13 @@
 mtime **降序**（刚动过的卡在最上面，用户不用往下翻）；同卡各轮**轮次新的在前**（r2 在第 1 轮
 上面，与整体同一个「新在前」方向）；等值行再按（树名, 卡号）定稳定次序。
 
+★ 台账号 T-G144（卡 052）：**状态口径 —— 没有判决的日志不许说「可能卡死」**。直连 CLI 跑的
+日志（如 022.r2）既无判决文件也无派活器心跳，旧口径把「日志很久没动」渲染成
+「静默 N 分钟（可能卡死）」并永久挂着 —— 把"我不知道它怎么了"说成了"它卡死了"。
+新终态 **「已停（无判决）」**：没有判决 + 没有**在更新**的心跳 + 静默超过阈值 → 如实说
+"我看不到它的判决"，不下"卡死"的结论；「可能卡死」只允许在有**在更新**的心跳
+（= 本该在跑）时用。★ 046 的成果（账本排除 / 非 UTF-8 容错 / 行序）一条不许弄回去。
+
 ★ 只造假状态文件（`tmp_path`），**不起服务、不连网** —— 真机那一步是手工证据（卡 §5），不进测试。
 """
 
@@ -99,12 +106,45 @@ def test_state_quiet(tmp_path: Path) -> None:
     assert row["color"] == "quiet"
 
 
-def test_state_stalled(tmp_path: Path) -> None:
-    """静默 ≥ 本次阈值（这里没有在飞、没有历史耗时 → 底线 480 秒）→ 可能卡死。"""
-    _card(tmp_path, "004", age=600)
+def test_stopped_no_verdict_no_heartbeat(tmp_path: Path) -> None:
+    """★ T-G144 钉子①：没有判决 + 没有在更新的心跳 + 静默超过阈值 → 「已停（无判决）」。
+
+    直连 CLI 跑的日志（真数据 022.r2：静默 242.6 分钟、无心跳、无判决）旧口径渲染成
+    「静默 N 分钟（可能卡死）」并永久挂着。★ 状态字符串里不许出现「可能卡死」，
+    副文案要能让人看懂"这不是失败，是我看不到它的判决"。
+    """
+    _card(tmp_path, "022.r2", age=600)
     row = wb_dash.card_state(tmp_path)[0]
-    assert row["state"] == "静默 10.0 分钟（可能卡死）"
-    assert row["color"] == "stall"
+    assert row["state"] == "已停（无判决）"
+    assert "可能卡死" not in row["state"]
+    assert row["color"] == "quiet"                       # 不是失败，不下结论
+    assert "没有判决文件" in row["note"]
+
+
+def test_fresh_heartbeat_still_running_never_stopped(tmp_path: Path) -> None:
+    """★ T-G144 钉子②：有心跳且**在更新** → 不许判「已停」（防一刀切把旧的都判成已停）。
+
+    - 日志也新 → 「在跑」（原口径不变）；
+    - 日志静默 600 秒但心跳 mtime 是现在 → 派活器活着在盯 = 本该在跑 →
+      「静默…（可能卡死）」—— **不是**「已停（无判决）」；
+    - 心跳文件存在但早停了（mtime 600 秒前）→ 没有「在更新」的证据 → 「已停（无判决）」。
+    """
+    log1 = _card(tmp_path, "049", age=5)
+    hb1 = log1.with_suffix(".heartbeat.txt")
+    hb1.write_text("[心跳] 每 2 分钟一行", encoding="utf-8")
+    log2 = _card(tmp_path, "050", age=600)
+    hb2 = log2.with_suffix(".heartbeat.txt")
+    hb2.write_text("[心跳] 每 2 分钟一行", encoding="utf-8")     # mtime = 现在 = 在更新
+    log3 = _card(tmp_path, "051", age=600)
+    hb3 = log3.with_suffix(".heartbeat.txt")
+    hb3.write_text("[心跳] 早就停了", encoding="utf-8")
+    then = time.time() - 600
+    os.utime(hb3, (then, then))
+    rows = {r["card"]: r for r in wb_dash.card_state(tmp_path)}
+    assert rows["049"]["state"] == "在跑"
+    assert "已停" not in rows["050"]["state"]
+    assert "可能卡死" in rows["050"]["state"]
+    assert rows["051"]["state"] == "已停（无判决）"
 
 
 def test_state_finished_by_verdict_file(tmp_path: Path) -> None:
@@ -114,6 +154,7 @@ def test_state_finished_by_verdict_file(tmp_path: Path) -> None:
     row = wb_dash.card_state(tmp_path)[0]
     assert row["state"] == "收工·结束"
     assert row["color"] == "done"
+    assert row["note"] == ""                             # ★ T-G144：收工行没有副文案
 
 
 def test_result_event_means_finished_without_verdict(tmp_path: Path) -> None:
@@ -130,14 +171,17 @@ def test_result_event_means_finished_without_verdict(tmp_path: Path) -> None:
 
 
 def test_state_boundaries() -> None:
-    """60 是"安静"边界；卡死边界 = **本次阈值**（默认 = 派活器底线 480）。"""
+    """60 是"安静"边界；超阈值后按**心跳**分：没有在更新的心跳 → 已停（无判决）（T-G144）。"""
     assert wb_dash._state(59.9, False)[0] == "在跑"
     assert wb_dash._state(60.0, False)[0] == "安静"
     assert wb_dash._state(479.9, False)[0] == "安静"
-    assert wb_dash._state(480.0, False)[0].startswith("静默")
+    assert wb_dash._state(480.0, False)[0] == "已停（无判决）"
     # 本次阈值可注入（有在飞时就上抬到 1800）—— 边界跟着它走
     assert wb_dash._state(1799.0, False, threshold=1800.0)[0] == "安静"
-    assert wb_dash._state(1800.0, False, threshold=1800.0)[0].startswith("静默")
+    assert wb_dash._state(1800.0, False, threshold=1800.0)[0] == "已停（无判决）"
+    # ★ T-G144：有「在更新」的心跳 = 本该在跑 → 才允许说「可能卡死」
+    assert wb_dash._state(1800.0, False, threshold=1800.0,
+                          heartbeat=True)[0].startswith("静默")
 
 
 # ------------------------------------------------- 卡死阈值复用派活器（T-G97）
@@ -178,14 +222,15 @@ def test_threshold_adapts_to_longest_completed_call(tmp_path: Path) -> None:
 
 
 def test_no_timestamp_falls_back_to_baseline(tmp_path: Path) -> None:
-    """★ 保守口径：调用没带 `__timestamp` → 算不出耗时 → 阈值就是底线 480 秒（不放大）。"""
+    """★ 保守口径：调用没带 `__timestamp` → 算不出耗时 → 阈值就是底线 480 秒（不放大）；
+    没有心跳 → 超阈值就是「已停（无判决）」（T-G144），不再说「可能卡死」。"""
     _card(tmp_path, "008", age=600, lines=[
         _event(type="assistant", message={"id": "m1", "content": [
             {"type": "tool_use", "id": "t1", "name": "Bash",
              "input": {"command": "python -X utf8 scripts/run_gates.py"}}]}),
     ])
     row = wb_dash.card_state(tmp_path)[0]
-    assert row["state"] == "静默 10.0 分钟（可能卡死）"
+    assert row["state"] == "已停（无判决）"
     assert row["threshold_min"] == 8.0                          # 480 / 60
     assert row["inflight"] == ""
 
@@ -260,7 +305,8 @@ def test_api_state_json_shape(tmp_path: Path) -> None:
                   "events", "turns", "tool_calls", "tools", "errors", "files_total",
                   "model", "session", "heartbeat", "verdict", "last", "final", "size_kb",
                   "inflight", "threshold_min",      # ★ T-G97 新增两字段（只加不改）
-                  "round"):                         # ★ T-G113 新增（只加不改）：续跑第几轮
+                  "round",                          # ★ T-G113 新增（只加不改）：续跑第几轮
+                  "note"):                          # ★ T-G144 新增（只加不改）：已停副文案
         assert field in card
 
 

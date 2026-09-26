@@ -22,6 +22,13 @@
 冷缓存 worktree 里 `ui_flow` 十几分钟），旧写法会把正常的长调用误标成「可能卡死」。
 现在**复用派活器**（`wb_dispatch`）的 `inflight_tool()` / `tool_durations()` /
 `stall_threshold_seconds()` —— **不在面板里写第二份口径**；行里多显示"在跑什么 / 本次阈值"。
+
+★ 状态口径（T-G144，卡 052）：**没有判决的日志不许说「可能卡死」**。直连 CLI 跑的日志
+既无判决文件也无派活器心跳，旧口径把"日志很久没动"渲染成「可能卡死」并永久挂着 ——
+把"我不知道它怎么了"说成了"它卡死了"。新终态 **「已停（无判决）」**：没有判决 +
+没有**在更新**的心跳 + 静默超过阈值 → 如实说"我看不到它的判决"（副文案不下结论）；
+「可能卡死」只在**有在更新的心跳**（= 本该在跑，派活器 120 秒一跳）时才允许用。
+心跳是否"在更新"只看本仓真有的证据：`wb-<卡>.heartbeat.txt` 的 mtime（不做进程级猜测）。
 """
 
 from __future__ import annotations
@@ -51,13 +58,23 @@ QUIET = 60           # 静默 ≥ 这么久 = "安静一下"（可能在长思�
 #   再按 `max(底线, 2.5 × 历史最长一次已完成调用)` 自适应（T-G94）。面板不抄公式，只调它。
 STALL_BASE = wb_dispatch.STALL_SECONDS
 
+# ★ T-G144：心跳多久没更新算"不在更新" —— 派活器默认 120 秒一跳，给 ≈2.5 跳的余量。
+HEARTBEAT_FRESH_SECONDS = 300.0
+# ★ T-G144 新终态：没有判决 + 没有在更新的心跳 + 静默超过阈值 —— 如实说"看不到判决"，
+#   **不许**出现「可能卡死」（那是"本该在跑"才配下的判断）。
+STOPPED_NO_VERDICT = "已停（无判决）"
+NO_VERDICT_NOTE = "没有判决文件：可能是直连 CLI 跑的，或已退出"
+
 
 def _state(age: float, finished: bool, *,
-           threshold: float = float(STALL_BASE)) -> tuple[str, str]:
+           threshold: float = float(STALL_BASE),
+           heartbeat: bool = False) -> tuple[str, str]:
     """（状态字, 颜色）—— 顺序：有收工证据 = 结束；否则按日志静默多久分档。
 
     `threshold` = **本次阈值**（分钟数不写死）：有工具在飞或历史调用很长时会被上抬，
     这样"正在跑一个长命令"不会被误标成"可能卡死"。
+    `heartbeat` = 派活器心跳是否**在更新**（T-G144）：没有它就没有"本该在跑"的证据，
+    静默超过阈值时只能如实说「已停（无判决）」，不许说「可能卡死」。
     """
     if finished:
         return "收工·结束", "done"
@@ -65,7 +82,20 @@ def _state(age: float, finished: bool, *,
         return "在跑", "run"
     if age < threshold:
         return "安静", "quiet"
-    return f"静默 {age / 60:.1f} 分钟（可能卡死）", "stall"
+    if heartbeat:
+        return f"静默 {age / 60:.1f} 分钟（可能卡死）", "stall"
+    return STOPPED_NO_VERDICT, "quiet"
+
+
+def _heartbeat_fresh(heartbeat: Path, now: float) -> bool:
+    """派活器心跳算不算「在更新」（T-G144）：文件存在且 mtime 足够新。
+
+    只用本仓真有的证据（文件 mtime），不做进程级猜测；没有心跳文件 = 没有。
+    """
+    try:
+        return (now - heartbeat.stat().st_mtime) <= HEARTBEAT_FRESH_SECONDS
+    except OSError:
+        return False
 
 
 def _inflight_label(inflight: tuple[str, float] | None) -> str:
@@ -220,9 +250,13 @@ def card_state(root: Path | None = None) -> list[dict]:
         # ★ "收工"有两个来源：**判决文件**，**或日志里已经出现了 `result` 事件** ——
         #   老卡没有判决文件，少了第二条就会把早已收工的卡误报成"静默 N 分钟（可能卡死）"。
         #   日志整份解不出 →「日志不可解析」（T-G137），如实优先于推断。
+        # ★ T-G144：「可能卡死」只在心跳**在更新**（= 本该在跑）时才允许；
+        #   没有判决 + 没有在更新的心跳 + 静默超阈值 →「已停（无判决）」。
+        hb_fresh = _heartbeat_fresh(heartbeat, now)
         state, color = (("日志不可解析", "quiet") if unparseable else
                         _state(age, verdict.exists() or bool(summary["final"]),
-                               threshold=threshold))
+                               threshold=threshold, heartbeat=hb_fresh))
+        note = NO_VERDICT_NOTE if state == STOPPED_NO_VERDICT else ""
         models = list(dict.fromkeys(summary["models"]))
         rows.append({
             # 跨树时带上树名（如 `004@.wt/004`），免得两张卡同号时看串。
@@ -254,6 +288,8 @@ def card_state(root: Path | None = None) -> list[dict]:
             # ★ T-G97 新增两字段（既有字段名一个没改）：让主控一眼看出"真卡死 vs 正在跑长命令"。
             "inflight": _inflight_label(inflight),
             "threshold_min": round(threshold / 60, 1),
+            # ★ T-G144 新增（只加不改）：「已停（无判决）」的副文案，不下结论。
+            "note": note,
         })
     return rows
 
@@ -289,7 +325,9 @@ async function tick(){
     h += `<tr><td><b>${c.card}</b> <span class="pill small">第 ${c.round} 轮</span>`+
          `<div class="dim small">${c.log} · ${c.size_kb} KB`+
          `${c.session?' · 会话 '+c.session:''}</div></td>`+
-         `<td class="${c.color}">${c.state}</td><td>${c.elapsed_min} 分</td><td>${c.turns}</td>`+
+         `<td class="${c.color}">${c.state}`+
+         `${c.note?'<div class="dim small">'+c.note+'</div>':''}</td>`+
+         `<td>${c.elapsed_min} 分</td><td>${c.turns}</td>`+
          `<td>${c.tool_calls}</td><td>${c.errors}</td><td>${c.files_total}</td>`+
          `<td>${c.silent_s} 秒</td>`+
          `<td class="small">${c.inflight?'<div>'+c.inflight+'</div>':''}`+

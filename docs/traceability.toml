@@ -4293,6 +4293,18 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：用户裁定 F2.8 暂时不做但要护栏；现状债务纯派生（overdue_tasks/debt_groups/debt_count，全部 SELECT）、无清零路径（src grep 零命中）；将来最易犯的错=写库清零变两套真相。**钉了哪三条**：①读路径零写语句+同输入同输出（set_trace_callback 记录真实执行的 SQL）；②逾期的 作业/考试/论文/小测（COURSE_TASK_TYPES）反复读都在；③路由表无带写方法的债务端点+src 零命中（加了必红）。**反证（三贴）**：插 UPDATE→钉①红→还原绿；插 POST /api/debt/reset→钉③红→还原绿；两次还原后 git status 只剩本卡两个新文件。**怎么判零写库的**：sqlite3 set_trace_callback（记录这条连接真实执行的每条语句，不 patch 内部、不依赖 UoW 抽象）。**没做的**：src 一行没改、没加字段/路由/迁移、没改台账状态、没跑全量门禁（按卡 §0.3，由主控集成时跑）。"
 
+[entries."T-G144"]
+id = "T-G144"
+title = "面板状态口径：没有判决+没有心跳的日志改判「已停（无判决）」，不再渲染「可能卡死」（直连 CLI 的日志永久挂着的根因）"
+group = "TOOLS"
+status = "done"
+evidence = [
+  "file:复盘/面板状态口径-T-G144.md",
+  "text:tools/wb_dash.py::STOPPED_NO_VERDICT",
+  "test:test_wb_dash.py",
+]
+gaps = "**为什么有这张卡**：用户问「怎么有个开 2 小时的任务」；api_state 实测 022.r2=242.6 分钟显示「可能卡死」（022.r3/045 在含 046 的树里已是「日志不可解析」），真因=直连 CLI 的日志既无判决也无心跳。**做了什么**：新终态「已停（无判决）」判据在 tools/wb_dash.py 的 _state()（STOPPED_NO_VERDICT 常量行）；「在跑/可能卡死」要求心跳在更新（wb-<卡>.heartbeat.txt mtime ≤ 300 秒，常量 HEARTBEAT_FRESH_SECONDS）；行新增 note 字段 =「没有判决文件：可能是直连 CLI 跑的，或已退出」。**反证（先红后绿）**：①假 log 改前红（原文 assert '静默 10.0 分钟（可能卡死）' == '已停（无判决）'，6 failed/21 passed）②有心跳在更新仍「在跑」、静默超阈值+心跳新=「静默（可能卡死）」、心跳存在但停更=「已停（无判决）」③有判决仍「收工·结束」且 note 空 ④真数据 022.r2 改前「可能卡死」→ 改后「已停（无判决）」+ 副文案，022.r3/045 保持「日志不可解析」。**没弄回去的**：046 的账本排除（test_usage_ledger_is_not_a_card 过）/ UTF-16 容错（test_utf16_log_is_unparseable_never_stalled 过，「日志不可解析」）/ 行序口径（T-G123 排序四用例过）。**没动的**：wb_dispatch/wb_status 只读、日志与判决文件、gates/**、台账、其它树；心跳新鲜度只用了 mtime（没解析心跳行时间戳）。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
