@@ -4177,6 +4177,19 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：集成者 I-2 全量门禁红 1 例（tests/test_myday_conflict_409.py:82 assert 500 == 409）；根因 = 022（T-G110）给 _write_myday_rank 加 keyword-only bump_version 并在调用点传 bump_version=bump，而 T-G126（卡 035）的桩只有 4 个位置参 → TypeError → 500；两位作者都没撞到是因为 022 的树建在 T-G126 合入之前（树里没有这个测试文件）、035 写卡时 022 未落地。**做了什么**：桩 always_conflict 加显式第 5 参 bump_version: bool = True（与产品签名逐字同形，产品的默认就是 True）；断言与意图一个字没动。**反证（三贴）**：① 底座 277cf49 绿（2 passed）② checkout 5f51806 的 manager.py 后红（FAILED test_myday_conflict_surfaces_as_409_with_readable_detail，assert 500 == 409，与 I-2 逐字一致）③ 修后绿（2 passed）+ git checkout HEAD 还原产品代码 + git status 只剩白名单文件；ruff 0；myday 全家 25 passed。**边界**：断言与意图未动；产品代码一个字没提交；test: 指针只到文件名故合法；发现本机 editable 安装使 worktree 里 pytest 默认导入主树 src（PYTHONPATH 需以 Windows 风格路径把本树 src 放最前才测得到本树代码）—— 该发现的波及面（此前哪些卡的轻门测的是主树代码）本卡未查、留主控裁定。**没动的**：src/**（manager.py 临时取进验证后已还原）、tools/**、scripts/**、docs/**、gates/**、复盘/其它文件、主树外来未跟踪文件。"
 
+[entries."T-G129"]
+id = "T-G129"
+title = "长任务执行协议补两章：「外包链路」（四角色/一写一读/派活器真开关/白名单/强制复核/集成者 trailer）与「并行纪律」（多路派活/实测上界/同域排队/集成排序/--detach 非独立/盯盘）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/长任务执行协议.md",
+  "text:复盘/长任务执行协议.md::## 十、外包链路",
+  "text:复盘/长任务执行协议.md::## 十一、并行纪律",
+  "file:复盘/长任务协议补外包与并行-T-G129.md",
+]
+gaps = "**为什么有这张卡**：<协议 2049 行停在 2026-09-23，早于外包链路与并行；漂移 grep（wb_dispatch|wb_dash|外包|复核卡|白名单|worktree|并发）命中 33 处但无一章成文>。**做了什么**：<「十、外包链路」八件：五角色 P/W/R/I/S 表（R 锚点=元卡R 七行判词+make_R.py）；一写一读与 .wt/<名> worktree；卡规格与工人必读四份；派活器全开关表（读了 --help 与 1600 行代码，含四道前置检查/心跳/看门狗三档 480-1800-3600/续跑/用量落账）；模型白名单默认拒绝+轮换+429 三拍；只读复核强制；集成者 squash+四 trailer+共享文件独写；门禁真跑→--seal→commit -F。「十一、并行纪律」八件：N 棵树 N 路派活+主控不读代码；实测上界（主树五份 verdict 17:46-18:02 收工、log 207-625KB、同晚另 ≥6 路在线、速率上界未标定）；同域排队与窄白名单；抢文件=集成覆盖；集成排序约束；--detach 非独立（Job object+管道泵）；盯盘与滑动窗口阈值；续跑放行脏树（T-G114）。速查表 8 行（外包 5+并行 3）>。**只加不删的反证**：<git diff --numstat 该文件 = 加 141 行/动 5 行；5 个删除行全是「结论行+第二章表格 4 行」的句末日期注，原句逐行保留（见复盘「只加不删的反证」一节逐行说明）；行数 2049→2185；台账唯一旧 text: 指针（九、强制框架标题）未动>。**没动的**：<卡表与规矩/两份并发文档/交接文档/代码/tools/scripts/tests/src/docs/gates/主树外来未跟踪文件；未跑全量门禁（集成时跑）；未写 docs/traceability.toml（本块供粘贴）>。**顺带发现**：派活器 --help 的 max-turns 默认值文案（150/60）与代码常量（240/80）不一致，本卡按代码写，修文案不在白名单。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
