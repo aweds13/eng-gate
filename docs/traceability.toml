@@ -4068,6 +4068,18 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：T-G109 落地乐观锁时如实记的边界 —— 「重试一次仍撞的路径经 HTTP 会显成 500。需要主控决定」（`复盘/myday版本守卫-T-G109.md:66-70`），主控裁定另立卡（接口层域，与 022 的 core 域分开）。**做了什么**：映射加在 `src/timeflow/api/app.py` 的 `move_myday` 端点 except 链（KeyError 与 ValueError 之间插 `except MydayConflictError` → 409 + `str(e)`，照既有 `detail=str(e)` 写法，core 的报错文案本就是给用户看的）；异常类从 `manager` 模块直接导入（它没被 `core/tasks/__init__` re-export，而那文件在 `core/**` 禁区）—— 全卡只动 app.py 5 行。**现状证实**：台账那句属实 —— TestClient 真机探针（`_write_myday_rank` 换成每次都抛真异常的桩 = 初写撞 + 重试仍撞）读数：加映射前 `status = 500`、`body = 'Internal Server Error'`（纯文本）。**真机证据（先红后绿）**：加映射前同一请求 `500` + 纯文本 `Internal Server Error`；加映射后同一请求 `409`，body 的 detail 字段为「myday 排序撞上并发更新：写 <task_id> 时快照 version=1，库里已是 999 —— 这次拖拽建立在过期快照上（探针注入第 2 次调用）」。**反证（突变检验）**：删掉新映射三行 → 钉子用例红（`assert 500 == 409`，`1 failed`）；还原 → 全绿（`2 passed`），还原后逐字节 diff 一致。**边界（如实写）**：其它异常映射一个没动（既有 409/400/404 全绿：`tests/test_api.py` + `tests/test_lan_pairing_line.py` 28 passed、`-k 「myday or conflict」` 56 passed、ruff 两文件过）；装置是确定性桩不是真并发 HTTP（真并发交错的钉子在 T-G109 的屏障用例），没做真机并发压测；`tests/test_myday_sparse_line.py` 本树不存在（022 未合入）无从跑起；UI 拿到 409 后显示什么没查没动。**没动的**：`core/**`（022 的域）、`storage/**`、`tools/**`、`scripts/**`、`docs/**`、共享文件（台账 / changelog / 交接文档 / `gates/**`）、其它 `复盘/*.md`、三个外来未跟踪文件。"
 
+[entries."T-G124"]
+id = "T-G124"
+title = "视觉线两处文档的过时句子加日期注（4 处反向漂移：悬停/选中态 · 43→33 棘轮 · 字号档位 · SR-F1.5b 早已 done）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/视觉线地图漂移加注-T-G124.md",
+  "text:复盘/视觉线地图.md::2026-09-26 更正（T-G124）",
+  "text:复盘/视觉重构素材清单-T-G24.md::2026-09-26 更正（T-G124）",
+]
+gaps = "**为什么有这张卡**：S-4 表 3 查出 4 处反向漂移（把已做完的事写成还没做），会误导后来者重复派活。**做了什么**：逐处就地加日期注、原句一字未改 —— ①视觉线地图.md:288 悬停/选中态注「已做（T-G103 done，判据从 CSS 真读）」；②视觉线地图.md:260 棘轮注「现值已变，ui_text_baseline.toml 现为 count = 33（T-G101），43 是当时的数」；③视觉线地图.md:256 字号档位注「那张卡就是 T-G104（done）」；④视觉重构素材清单-T-G24.md:161 注「台账 SR-F1.5b 是 done，T-G55 行自注过早已 done」。**真机证据**：grep 命中 4 处注的原始输出在复盘里；反证检验（删一处注 → 命中 4→3 → 还原）证明断言会咬；原句仍在的 grep 输出在复盘里；git diff 4 处均为行尾追加、原句逐字未改。**边界（如实写）**：轻门 check_layers.py FAIL —— 但为基线预存在断裂（docs/changelog.md:207/499 引用不存在的 gates/diag/wb-review-T-G79.md，stash 掉本卡改动后 baseline_exit=1），与本卡无关；修它超出白名单 → 本卡未提交，留主控裁定。无第 5 处改动；规格行号与实际有出入（258→256、160→161），按原句 grep 定位解决。**没动的**：docs/**、其它复盘、src/tools/scripts/tests、gates/**、三个外来未跟踪文件。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
