@@ -55,4 +55,4 @@ body>div.shell>main#main>div.empty	今天还没有产出记录	24,620,772,88	16/
 html>body>div.shell>aside.sidebar		0,732,820,178	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
 body>div.shell>aside.sidebar>div#focusRail		24,732,772,76	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	41,749,738,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	41,773,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。	41,773,738,18	12/18/400	#5b6472/#000000@0.00	0;0px

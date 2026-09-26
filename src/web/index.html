@@ -364,7 +364,7 @@ async function offlineTaskAdd(){
   const r=await writeOrQueue('/api/tasks',
     {method:'POST',body:JSON.stringify({title,due_date:due,is_myday:myday,priority:prio,note})},
     o=>offlineQueueNewTask(o,{title,due_date:due,is_myday:myday,priority:prio,note}),
-    '连不上电脑：这一条先存在手机上（回电脑导出同步包导入）');
+    '连不上电脑：这一条先存在手机上');
   if(!r)return;
   if(titleEl)titleEl.value='';
   const n=document.getElementById('offNote');if(n)n.value='';
@@ -441,7 +441,7 @@ async function offlineExport(){
       : `浏览器没让直接下载（${r.filename}）—— 已生成，用下面的「复制包文本」兜底`);
     if(!r.downloaded){
       const copied=await copyText(r.text);
-      toast(copied?'包文本已复制到剪贴板，粘到电脑上的一个 .json 文件里就行':'复制也没成功，请手动重试');
+      toast(copied?'同步包文本已复制到剪贴板':'复制也没成功，请手动重试');
     }
     view(current);
   }catch(e){toast('导出失败：'+((e&&e.message)||e))}
@@ -491,7 +491,7 @@ async function offlineUpload(){
   if(!report)return;
   toast(`已传到电脑：${syncSummary(report.totals||{})}${report.conflict_count?` · 冲突 ${report.conflict_count} 条（电脑上可查）`:''}`);
   const n=await o.pendingCount().catch(()=>0);
-  if(n&&await confirmAsk(`这 ${n} 条已经合并进电脑的库了。现在清空手机上的队列吗？\n清掉就找不回来了（想留着也行）。`,'清空队列')){
+  if(n&&await confirmAsk(`这 ${n} 条已经合并进电脑的库了。现在清空手机上的队列吗？\n清掉就找不回来了。`,'清空队列')){
     try{await o.clearQueue()}catch(e){toast('清空失败：'+((e&&e.message)||e))}
   }
   paintOfflineBar();view(current);
@@ -566,9 +566,7 @@ async function renderOffline(m){
   // 「这台设备用不了离线存储 / 这个浏览器不支持 IndexedDB」—— 而下面那半页能用的功能照常渲染，
   // 自己打自己的脸。这种「同屏自相矛盾」静态检查（字符串护栏）看不出来，只有渲染出来才看得见。
   const notReady=ready?'':`<div class="card block" id="offlineUnsupported"><div class="title">这台设备用不了离线存储</div>
-    <div class="meta">${esc(err||'这个浏览器不支持 IndexedDB，或在隐私模式下被禁用了')}。
-    离线记要靠它把队列存在本机；换成 Chrome / Edge / Safari 的普通（非隐私）窗口就能用。
-    这一页其余部分不需要它也能看。</div></div>`;
+    <div class="meta">${esc(err||'这个浏览器不支持 IndexedDB，或在隐私模式下被禁用了')}。</div></div>`;
   const capture=!ready?'':`
   <div class="section-title">离线记一笔</div>
   <div class="card block">
@@ -606,8 +604,7 @@ async function renderOffline(m){
       </div>`).join(''):emptyState('缓存里没有任务')}
     ${doneTasks.length?`<div class="sub">已完成（点一下撤销）：${doneTasks.slice(0,10).map(t=>
       `<button class="ghost" data-action="offline-done" data-id="${esc(t.id)}" data-done="false">${esc(t.title)}</button>`).join('')}</div>`:''}
-    <div class="sub">这份清单是<b>上次联网时看到的样子</b>，只看不改：离线能改的只有「完成 / 撤销完成」，
-      改字段（截止日、优先级…）留给电脑（手机上判不准电脑那边有没有更新过）。</div>
+    <div class="sub">这份清单是<b>上次联网时看到的样子</b>；离线能改的只有「完成 / 撤销完成」。</div>
   </div>`;
   const queue=entries.length?entries.map(e=>`<div class="card"><div class="card-body">
       <div class="title">${esc(e.label||e.table)}</div>
@@ -619,7 +616,7 @@ async function renderOffline(m){
     <div class="meta">这台设备的设备号 <code>${esc(offlineDevice())}</code> · 待同步 <b>${entries.length}</b> 条${
       last?` · 上次导出 ${esc(String(last.at).replace('T',' '))}（${last.rows||0} 条）`:''}</div>
     <div class="meta">${off
-      ? '现在记下的东西先存在这台设备里；回到电脑前点下面的 <b>直接传到电脑</b>（连得上时）或 <b>导出同步包</b>。'
+      ? '现在记下的东西先存在这台设备里。'
       : '这台设备现在连得上电脑：记的东西直接进库。'}</div>
   </div>
   ${notReady}${capture}
@@ -1258,7 +1255,7 @@ function renderActive(el,active){
   if(!active){
     focusSeenKey='none';
     el.innerHTML=`<div class="panel-title">专注计时</div>
-      <div class="sub">当前没有进行中的专注。去「专注」页或任务上点「专注」开始。</div>`;
+      <div class="sub">当前没有进行中的专注。</div>`;
     clearInterval(focusTimer);focusTimer=null;
     return;
   }
@@ -1336,7 +1333,7 @@ function paintRail(mySeq){
     // 提示可能过期，但**不在这里自己探**：轮询每 10 秒会试一次，成功时 `markUp` 当场重画
     // （判断变了 → 界面跟着变，只有一处机制；T-G76）。
     rail.innerHTML=`<div class="panel-title">专注计时</div>
-      <div class="sub">离线中：这时看不到进行中的专注（回到电脑前会同步）。</div>`;
+      <div class="sub">离线中：这时看不到进行中的专注。</div>`;
     box.innerHTML='';return;
   }
   api('/api/focus/active')
@@ -1805,7 +1802,7 @@ function syncTypeCourse(){
   if(normal){courseEl.value='';}          // 可见地清空（不是偷偷清），并在下面写清原因
   if(hint)hint.textContent=normal
     ? '可挂课类型：作业/考试/论文/小测/竞赛/活动'
-    : '选了课程就等于说「这件事属于这门课」；课程在学业页新建。';
+    : '';
 }
 // 状态徽标（T-F1）：只有「进行中 / 待定 / 取消 / 归档」才单独标出来 ——
 // 「未开始 / 逾期」由卡片自己的样式（红边 + 逾期栏）表达，不必再挂一枚徽标。
@@ -1984,13 +1981,13 @@ function parkTask(id){return statusAction(id,'park','已搁置为「待定」：
 function unparkTask(id){return statusAction(id,'unpark','已取回')}
 function unarchiveTask(id){return statusAction(id,'unarchive','已撤销归档，回到列表里')}
 async function cancelTask(id){
-  if(!await confirmAsk('取消这个任务？取消后不再计入债务（可在「全部任务 · 搁置」里取回）。','取消任务'))return;
+  if(!await confirmAsk('取消这个任务？','取消任务'))return;
   await statusAction(id,'cancel','已取消');
 }
 // 归档可撤销 → 不给吓人的二次确认，直接给「撤销」（对齐软删除的做法）
 async function archiveTask(id){
   await api(`/api/tasks/${id}/archive`,{method:'POST'});
-  toastAction('已归档（默认列表不再显示，可在「全部任务 · 档案」里查阅）','撤销',async()=>{
+  toastAction('已归档','撤销',async()=>{
     await api(`/api/tasks/${id}/unarchive`,{method:'POST'});toast('已撤销归档');view(current)});
   view(current);
 }
@@ -2115,7 +2112,7 @@ async function addTask(){
   const r=await writeOrQueue('/api/tasks',
     {method:'POST',body:JSON.stringify({title,due_date:due,is_myday:myday})},
     o=>offlineQueueNewTask(o,{title,due_date:due,is_myday:myday}),
-    '连不上电脑：这一条先存在手机上（回电脑导出同步包导入）');
+    '连不上电脑：这一条先存在手机上');
   if(!r)return;
   titleEl.value='';document.getElementById('newDue').value='';titleEl.focus();
   if(!r.queued)toast(myday?'已加入今天':'已记入任务（未进 My Day）');
@@ -2150,7 +2147,7 @@ async function renderTasks(m){
     ${smartViewNavHTML('')}
     <div class="section-title">全部任务（${live.length}）</div>
     ${live.map(t=>taskCard(t)).join('')||emptyState('还没有任务')}
-    <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项（完成满 ${afterDays} 天自动进档案）；删除的任务在「今日 · 回收站」里可恢复或彻底删除。</div>
+    <div class="sub">未进今天的任务 ${notMyDay.length} 项 · 已完成 ${done.length} 项</div>
     ${parkedHtml}${archivedHtml}`;
   defaultDateFields(['allDue']);
 }
@@ -2794,8 +2791,7 @@ async function renderAcademic(m){
   // 所以这张列表里的每一项都是"逾期不候"的硬考核 —— 比普通任务逾期呈现得更明显
   // （置顶 + 左边条更粗 + 角标 + 一句说明）；但**只是如实标出来**：不加声音、不弹窗、不催。
   const upcomingHtml=soon.length?`<div class="section-title">硬考核：临期与逾期（14 天内，未录成绩）</div>
-    <div class="sub">这类是「逾期不候」的：交了就计成绩，没交就没了 —— 所以单独放前面、标出来。
-      不催你，只是别让它被忘掉。</div>
+    <div class="sub">这类是「逾期不候」的。</div>
     ${soon.map(a=>{
       const d=a.days_until;
       const when=d<0?`已逾期 ${-d} 天`:d===0?'今天到期':`还有 ${d} 天`;
@@ -2948,7 +2944,7 @@ function reviewDoneCard(r,ratings){
 }
 async function undoReview(id){
   await api(`/api/review/${id}/undo`,{method:'POST'});
-  toast('已撤销当日最近一次复习（间隔与账目一并回退）');view(current);
+  toast('已撤销当日最近一次复习');view(current);
 }
 async function regradeReview(id,feedback){
   const label=reviewRatings.find(x=>x.value===feedback);
@@ -2997,7 +2993,7 @@ async function saveReviewEdit(){
 }
 async function toReview(id){
   const r=await api(`/api/tasks/${id}/to-review`,{method:'POST',body:JSON.stringify({})});
-  toast(r.created?'已升级为复习卡：到期时间由 FSRS 排好，去复习页就能看到'
+  toast(r.created?'已升级为复习卡'
     :'这张任务已经有复习卡了（不会重复建）');
   view('review');
 }
@@ -3086,10 +3082,10 @@ async function review(id,fb){await api(`/api/review/${id}/review`,{method:'POST'
   toastAction('复习已记录 · 记错了可改判','记一笔产出',()=>reviewOutput(id));
   view(current)}
 async function reviewOutput(id){
-  const note=await ask('记一笔产出：这次温故知新记下了什么？（计入知识资产）','');
+  const note=await ask('记一笔产出：这次温故知新记下了什么？','');
   if(!note)return;
   await api('/api/ledger/output',{method:'POST',body:JSON.stringify({kind:'asset',value:1,note})});
-  toast('已记一笔「知识资产」产出（备忘录页可看到、可撤销）');view('memo');
+  toast('已记一笔「知识资产」产出');view('memo');
 }
 
 async function renderMemo(m){
@@ -3212,7 +3208,7 @@ async function restoreBackup(name){
   if(!name)return;
   const when=String(name).split('.bak-')[1]||name;
   const ok=await confirmAsk(
-    `把数据库整体恢复到「${when}」那一刻？（连设置一起；恢复前会自动再备份一次现库，选错了还能回去）`,
+    `把数据库整体恢复到「${when}」那一刻？（连设置一起）`,
     '恢复到这个备份');
   if(!ok)return;
   const r=await api('/api/settings/restore',{method:'POST',body:JSON.stringify({name})});
@@ -3450,7 +3446,6 @@ async function renderSetting(m){
       ||'<span class="sub">空 —— 白名单里的扩展名会直接用默认程序打开</span>'}</div>
     <div class="new"><input id="wlExt" placeholder="加扩展名，如 .pdf" data-enter="wl-add">
       <button class="ghost" data-action="wl-add">加入白名单</button></div>
-    <div class="sub">打开方式与白名单存在本机数据库（服务端），不由页面参数决定 —— 免得任何网页都能要求"直接打开"。</div>
   </div>
   <div class="section-title" id="set-remind">提醒</div>
   <div class="card block">
@@ -3471,8 +3466,7 @@ async function renderSetting(m){
       <span class="badge">${remindCfg.enabled?'已开启':'默认关闭'}</span>
       ${remindCfg.installed?'<span class="badge">计划任务已注册</span>':'<span class="badge">未注册计划任务</span>'}
     </div>
-    <div class="meta">在任务详情里设「提醒」时间；到点后：① 今日页出现「该提醒了」、卡片上标出（不用开通知也能用）；
-      ② 开启后会注册一个 Windows 计划任务（每 ${remindCfg.interval_minutes} 分钟检查一次），<b>关掉应用也会响</b>。</div>
+    <div class="meta">在任务详情里设「提醒」时间。</div>
     <div class="meta">上次通知：${remindCfg.last_notify_at?esc(String(remindCfg.last_notify_at).replace('T',' ')):'（还没有）'}
       ${remindCfg.last_result?` · ${esc(remindCfg.last_result)}`:''}</div>
     ${remindCfg.last_error?`<div class="meta err">上次出错：${esc(remindCfg.last_error)}（弹不出来不会静默，下次自动重试）</div>`:''}
@@ -3514,7 +3508,7 @@ async function renderSetting(m){
     <div class="settings-sub" id="set-lan">局域网访问（手机连电脑）</div>
     <div class="title">${lan.lan_open?'这台服务已对局域网开着':'这台服务只监听本机（手机连不上）'}</div>
     <div class="meta">${lan.lan_open
-      ? `手机 / 平板打开下面这个地址，第一次会让你输配对码：${(lan.addresses||[]).length
+      ? `手机 / 平板打开下面这个地址：${(lan.addresses||[]).length
           ? (lan.addresses||[]).map(a=>`<code>${esc(a)}</code>`).join(' · ') : '（没查到局域网地址：确认这台电脑连着 WiFi / 网线）'}`
       : '要让它能被手机打开：在电脑上用 <code>python tools/serve.py --lan</code> 起一次，或把 config.toml 的 <code>[net] allow_lan</code> 改成 true 后重启。'}</div>
     <div class="meta">配置里写的是：${lan.config_allow_lan?'开':'关'}（和上面"这台服务"可能不一致 —— 以服务为准）</div>
@@ -3527,11 +3521,9 @@ async function renderSetting(m){
       ${lan.code_visible?`<button class="ghost" data-action="lan-rotate">换一个配对码</button>`:''}</div>
     <div class="sub">${noteHTML(lan.note||'')}</div>
     <div class="settings-sub">怎么让手机连上（按顺序试）</div>
-    <div class="sub">① <b>电脑开「移动热点」</b>，手机连它（地址通常 <code>192.168.137.1</code>）——
-      自己开的小网、没有客户端隔离，最省事；② 手机开热点 / USB 共享，电脑连它（纯本地流量，不花流量费）；
-      ③ 都不方便就用<b>「离线记」</b>（手机记 → 导文件 → 电脑导入，不需要两台设备互相看见）。</div>
-    <div class="sub">⚠️ <b>校园网 / 公共 WiFi 常开「客户端隔离」</b>：看着连的是同一个 WiFi，设备之间其实不通 ——
-      那是网络策略，不是本软件的问题；而且同网段人很多，请<b>按公共网络对待</b>（要用才开、用完就关）。</div>
+    <div class="sub">① <b>电脑开「移动热点」</b>，手机连它（地址通常 <code>192.168.137.1</code>）；
+      ② 手机开热点 / USB 共享，电脑连它；③ 都不方便就用<b>「离线记」</b>。</div>
+    <div class="sub">⚠️ 校园网常开「客户端隔离」：设备之间其实不通。</div>
     <div class="row tight"><button class="ghost" data-action="lan-selfcheck">网络自检（在这台电脑上查）</button></div>
     <div class="sub" id="lanSelfCheck"></div>
     <div class="settings-sub" id="set-backup">备份与恢复</div>
@@ -3763,7 +3755,7 @@ async function setAiEnabled(on){
   try{
     const r=await api('/api/settings/ai',{method:'PUT',body:JSON.stringify({enabled:on})});
     aiCfg=r;
-    toast(r.enabled?'AI 接口已打开（本机程序现在可以读任务、加步骤、报告进展、勾它自己建的）'
+    toast(r.enabled?'AI 接口已打开'
       :'AI 接口已关闭（这一组接口现在一律 403）');
     view(current);
   }catch(e){/* api() 已经弹过后端原话 */}
@@ -3812,8 +3804,8 @@ async function setNotifyEnabled(on){
   try{
     const r=await api('/api/settings/notify',{method:'PUT',body:JSON.stringify({enabled:on})});
     notifyCfg=r;
-    toast(r.enabled?'合作接口已打开（你的脚本现在可以投递学校通知了）'
-      :'合作接口已关闭（投递会被 403；收件箱里已有的通知还是你的，照样能处理）');
+    toast(r.enabled?'合作接口已打开'
+      :'合作接口已关闭');
     view(current);
   }catch(e){/* api() 已经弹过后端原话 */}
 }
@@ -4056,7 +4048,7 @@ function guideCard(){
   if(guideDone)return '';
   return `<div class="card block" id="guideCard">
     <div class="title">第一次用，按这三步走就行</div>
-    <div class="sub">① 在下面的输入框写下一件要做的事（回车即可）→ ② 点「专注」开始计时，正常结束时会计入今天的投入 →
+    <div class="sub">① 在下面的输入框写下一件要做的事 → ② 点「专注」开始计时 →
       ③ 晚上在专注页跟一句「今天计划 vs 实际」。</div>
     <div class="row mt-3">
       <button data-action="guide-start">好，先写第一件事</button>
@@ -4082,7 +4074,7 @@ if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.se
    回到网络时说清楚「还有几条没同步」——**不会自动上传**（走文件，或等 ② 同一 WiFi 直连）。 */
 window.addEventListener('offline',()=>{
   markDown();paintOfflineBar();
-  toast('断网了：现在记的东西会先存在手机上，回电脑后导出同步包导入');
+  toast('断网了：现在记的东西会先存在手机上');
 });
 window.addEventListener('online',()=>{
   // 标记翻过来时 `markUp` 自己会重画一遍；只有"我们没失败过请求、只是浏览器说断网了"

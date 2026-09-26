@@ -1,9 +1,9 @@
 # render-manifest v1 viewport=phone 390x844 view=tasks rows=162 accent=#2f6feb device=ph-000000000000 day=2026-06-15
-html>body>div.shell		0,0,390,1912	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
+html>body>div.shell		0,0,390,1876	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,390,68	16/normal/400	#1e293b/#000000@0.00	0;12px 16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	16,12,95,24	20/24/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	16,48,356,20	13/19.5/400	#5b6472/#000000@0.00	0;0px
-html>body>div.shell>main#main		0,84,390,1543	16/normal/400	#1e293b/#000000@0.00	0;0px 16px 24px
+html>body>div.shell>main#main		0,84,390,1525	16/normal/400	#1e293b/#000000@0.00	0;0px 16px 24px
 body>div.shell>main#main>div.new		16,84,358,96	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.new>input#allTitle	(text)新任务（默认不进今天）	16,84,358,41	13/normal/400	#1e293b/#ffffff	10;12px
 div.shell>main#main>div.new>input#allDue	(date)YYYY-MM-DD	16,137,288,43	13/normal/400	#1e293b/#ffffff	10;12px
@@ -140,11 +140,11 @@ div.shell>main#main>div.card:nth-child(13)>div.row		237,1442,120,82	16/normal/40
 main#main>div.card:nth-child(13)>div.row>button.ghost:nth-child(1)	在做	237,1442,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
 main#main>div.card:nth-child(13)>div.row>button.ghost:nth-child(2)	专注	237,1487,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
 main#main>div.card:nth-child(13)>div.row>button.ghost:nth-child(3)	…	305,1489,47,33	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-body>div.shell>main#main>div.sub	未进今天的任务 7 项 · 已完成 2 项（完成满 3 天自动进档案）；删除的任务在「今日 · 回收站」里可恢复或彻底删除。	16,1567,358,36	12/18/400	#5b6472/#000000@0.00	0;0px
-html>body>div.shell>aside.sidebar		0,1627,390,196	16/normal/400	#1e293b/#000000@0.00	0;0px 16px 90px
-body>div.shell>aside.sidebar>div#focusRail		16,1627,358,94	16/normal/400	#1e293b/#ffffff	10;16px
-div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	33,1644,324,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	33,1667,324,36	12/18/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.sub	未进今天的任务 7 项 · 已完成 2 项	16,1567,358,18	12/18/400	#5b6472/#000000@0.00	0;0px
+html>body>div.shell>aside.sidebar		0,1609,390,178	16/normal/400	#1e293b/#000000@0.00	0;0px 16px 90px
+body>div.shell>aside.sidebar>div#focusRail		16,1609,358,76	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	33,1626,324,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。	33,1649,324,18	12/18/400	#5b6472/#000000@0.00	0;0px
 html>body>nav.bottom-nav		0,763,390,81	16/normal/400	#1e293b/#ffffff	0;8px 0px
 body>nav.bottom-nav>button:nth-child(1)>span.ic		4,784,41,23	20/normal/400	#5b6472/#000000@0.00	0;0px
 button:nth-child(1)>span.ic>svg>path		18,790,13,14	20/normal/400	#5b6472/#000000@0.00	0;0px

@@ -38,7 +38,7 @@ main#main>div.card.block:nth-child(2)>div.row.mt-3>button	4.0 制	41,254,67,35	1
 main#main>div.card.block:nth-child(2)>div.row.mt-3>button.ghost	5.0 制	116,253,69,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
 main#main>div.card.block:nth-child(2)>div.row.mt-3>span.sub	配置默认值来自 config.toml 的 [academic] gpa_scale；这里只切当前查看口径。	192,265,421,18	12/18/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title:nth-child(3)	硬考核：临期与逾期（14 天内，未录成绩）	24,331,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-body>div.shell>main#main>div.sub	这类是「逾期不候」的：交了就计成绩，没交就没了 —— 所以单独放前面、标出来。 不催你，只是别让它被忘掉。	24,359,772,18	12/18/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.sub	这类是「逾期不候」的。	24,359,772,18	12/18/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.card.hard		24,377,772,77	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>main#main>div.card.hard>div.card-body		45,394,662,43	16/24/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.hard>div.card-body>div.title		45,394,662,25	16/24/400	#1e293b/#000000@0.00	0;0px
@@ -154,4 +154,4 @@ div.shell>main#main>div.card>button.ghost	删除	719,1746,60,37	13/normal/400	#5
 html>body>div.shell>aside.sidebar		0,1839,820,178	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
 body>div.shell>aside.sidebar>div#focusRail		24,1839,772,76	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	41,1856,738,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	41,1879,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。	41,1879,738,18	12/18/400	#5b6472/#000000@0.00	0;0px

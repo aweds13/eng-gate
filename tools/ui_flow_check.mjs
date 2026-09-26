@@ -599,7 +599,8 @@ flow({
     await t.pressAction('task-to-review')
     const created = await t.waitToast('已升级为复习卡')
     t.ok('点一下就建好了', created.ok, `提示条里是：${created.text || '（空）'}`)
-    t.has('并且说清了到期时间排好了', created.text, '到期时间由 FSRS 排好')
+    t.has('回话钉住最小语义（T-G142）', created.text, '已升级为复习卡')
+    t.lacks('解释句不许回来（T-G142）', created.text, 'FSRS')
     t.ok('建完自动去了复习页（看得到结果）', (await t.count('[data-view="review"].active')) >= 1)
 
     await t.view('tasks')
@@ -668,6 +669,7 @@ flow({
     const body = await t.bodyText()
     t.has('单独放在前面并说明了', body, '硬考核：临期与逾期')
     t.has('写明了这类是「逾期不候」', body, '逾期不候')
+    t.lacks('解释句不许回来（T-G142）', body, '交了就计成绩')
     t.has('没有把已录成绩的算进来（说明里写着未录成绩）', body, '未录成绩')
   },
 })
@@ -1581,7 +1583,8 @@ flow({
     await t.pressAction('restore-backup', { text: labelOf(d0) })
     const title = String((await t.text('#modalTitle')) || '')
     t.has('★ 确认框写清恢复到**哪个时间点**', title, stamp)
-    t.has('★ 也写清"选错了还能回去"', title, '选错了还能回去')
+    t.has('★ 写清恢复范围（连设置一起）（T-G142）', title, '连设置一起')
+    t.lacks('解释句不许回来（T-G142）', title, '选错了还能回去')
     await t.key('Escape')
     t.eq('★ 反证：取消之后没有多出备份（它一步都没走）',
       (((await t.api('GET', '/api/settings/backups')).json || {}).items || []).length, nBefore)

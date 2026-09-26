@@ -47,7 +47,7 @@ main#main>div.card>div.row>button.ghost:nth-child(4)	撤销上次	705,242,86,37	
 main#main>div.card>div.row>button.ghost:nth-child(5)	改形式/句柄	503,287,103,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
 body>div.shell>main#main>div.section-title:nth-child(5)	今天复习过的（0）	240,365,668,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.empty	今天还没复习过卡	240,392,668,88	16/24/400	#5b6472/#000000@0.00	0;32px 0px
-html>body>div.shell>aside.sidebar		956,0,300,138	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
-body>div.shell>aside.sidebar>div#focusRail		956,16,300,94	16/normal/400	#1e293b/#ffffff	10;16px
+html>body>div.shell>aside.sidebar		956,0,300,120	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
+body>div.shell>aside.sidebar>div#focusRail		956,16,300,76	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	973,33,266,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	973,57,266,36	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。	973,57,266,18	12/18/400	#5b6472/#000000@0.00	0;0px

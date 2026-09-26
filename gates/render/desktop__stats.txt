@@ -452,7 +452,7 @@ div.card.block:nth-child(11)>div#hmBox>svg.chart>rect.chart-cell-off:nth-child(3
 div.card.block:nth-child(11)>div#hmBox>svg.chart>rect.chart-cell-off:nth-child(364)	YYYY-MM-DD	867,1144,10,10	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.card.block:nth-child(11)>div#hmBox>svg.chart>rect.chart-cell-off:nth-child(365)	YYYY-MM-DD	879,1072,10,10	16/normal/400	#1e293b/#000000@0.00	0;0px
 div.shell>main#main>div.card.block:nth-child(11)>div#hmNote	专注 · 颜色越深=当天投入越多；空=没有记录（不是失败，只是那天没记）。	257,1160,634,18	12/18/400	#5b6472/#000000@0.00	0;0px
-html>body>div.shell>aside.sidebar		956,0,300,138	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
-body>div.shell>aside.sidebar>div#focusRail		956,16,300,94	16/normal/400	#1e293b/#ffffff	10;16px
+html>body>div.shell>aside.sidebar		956,0,300,120	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
+body>div.shell>aside.sidebar>div#focusRail		956,16,300,76	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	973,33,266,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	973,57,266,36	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。	973,57,266,18	12/18/400	#5b6472/#000000@0.00	0;0px

@@ -582,9 +582,9 @@ evidence = [
   "file:复盘/前端死代码与长文案-T-G101.md",
   "text:src/web/index.html::function mydayDragUp(){",
   "text:src/web/index.html::if(want===order.indexOf(d.id))return;",
-  "text:tools/ui_text_baseline.toml::[ratchet]",
+  "text:tools/ui_text_baseline.toml::count = 4",
 ]
-gaps = "**为什么有这张卡**：料来自盘点卡 S-1 的 A4 + A21（`gates/diag/盘点-20260926.md`）。A4 = `index.html:2051-2054` 的『落点没变就不发请求』是死代码（`rest.indexOf(d.id)` 恒 -1，恒不成立；拖回原位照样发写请求 —— 出处 `gates/diag/wb-review-T-G79.md` 边界 D）。A21 = 界面 ≥20 汉字棘轮挂在 43（`tools/ui_text_baseline.toml` `[ratchet]`）。**做了什么**：按主控 §2.9① 裁定选 **B** —— 把恒假那行改成 `if(want===order.indexOf(d.id))return;`（用全表位置），让『落点没变不发请求』真生效；按 §2.9② 改短 10 条**解释句**（引导/专注镜像/档案说明/已完成可改/导入路径等），把 `tools/ui_text_baseline.toml` 的 `count` **43 → 33**（棘轮只许往下调）。**反证（先红后绿）**：`node gates/diag/wb001_guard.mjs` 改前『落点=原位置 placeMyDay 被调 1 次（★早退没生效）』→ 改后『0 次（早退生效）』、真换位仍 1 次、落自己仍 0 次；`ui_text_audit --check` 改后 `≥20 字 33 条（基线 33）/≥30 字 0 条` OK。**边界（如实写）**：★ 渲染黄金**未采待集成**（并发期不许跑 render_check/run_gates，`render` 门在集成前红是预期，由主控集成时全量重采）；棘轮 `count` 已调小到 33；被钉着的边界事实（`先存在手机上`/`清空手机上的队列`/`FSRS 排好`/`当前没有进行中的专注`）grep 后一条没动，剩余 33 条里的报错原话/二次确认/诚实披露故意没动（一刀切=造假绿）。**没动的**：`src/**` 其余、`tools/**` 其余、`tests/**`、`scripts/**`、`docs/**`、其它复盘、`gates/**`、真实库/备份、三个外来未跟踪文件。"
+gaps = "**为什么有这张卡**：料来自盘点卡 S-1 的 A4 + A21（`gates/diag/盘点-20260926.md`）。A4 = `index.html:2051-2054` 的『落点没变就不发请求』是死代码（`rest.indexOf(d.id)` 恒 -1，恒不成立；拖回原位照样发写请求 —— 出处 `gates/diag/wb-review-T-G79.md` 边界 D）。A21 = 界面 ≥20 汉字棘轮挂在 43（`tools/ui_text_baseline.toml` `[ratchet]`）。**做了什么**：按主控 §2.9① 裁定选 **B** —— 把恒假那行改成 `if(want===order.indexOf(d.id))return;`（用全表位置），让『落点没变不发请求』真生效；按 §2.9② 改短 10 条**解释句**（引导/专注镜像/档案说明/已完成可改/导入路径等），把 `tools/ui_text_baseline.toml` 的 `count` **43 → 33**（棘轮只许往下调）。**反证（先红后绿）**：`node gates/diag/wb001_guard.mjs` 改前『落点=原位置 placeMyDay 被调 1 次（★早退没生效）』→ 改后『0 次（早退生效）』、真换位仍 1 次、落自己仍 0 次；`ui_text_audit --check` 改后 `≥20 字 33 条（基线 33）/≥30 字 0 条` OK。**边界（如实写）**：★ 渲染黄金**未采待集成**（并发期不许跑 render_check/run_gates，`render` 门在集成前红是预期，由主控集成时全量重采）；棘轮 `count` 已调小到 33；被钉着的边界事实（`先存在手机上`/`清空手机上的队列`/`FSRS 排好`/`当前没有进行中的专注`）grep 后一条没动，剩余 33 条里的报错原话/二次确认/诚实披露故意没动（一刀切=造假绿）。**没动的**：`src/**` 其余、`tools/**` 其余、`tests/**`、`scripts/**`、`docs/**`、其它复盘、`gates/**`、真实库/备份、三个外来未跟踪文件。**2026-09-27 指针刷新（T-G142 集成 · 卡 I8 §2.5）**：界面解释文案第二批把 ≥20 字那批删/压，棘轮 31 → 4（实测 `ui_text_scan --stat`，≥25/≥30 → 0），本条证据指针同笔刷成等值数值锚 `count = 4` —— 主控卡 I6 §4.9 裁定：I-6 曾把它误刷成段标题锚属于「放松证据」，责令由收口卡改回数值并加日期注。"
 
 [entries."T-G102"]
 id = "T-G102"
@@ -4328,6 +4328,18 @@ evidence = [
   "test:test_seam_check.py",
 ]
 gaps = "**为什么有这张卡**：RC 复核卡 048 实测出假阳性 —— 一行注释写 monkeypatch.setattr(w, 「egg.spam」, x) 再加一行字符串 log(patch(「egg.spam」))，旧判据把 spam 收成符号 → 两张卡假交集 → exit 1 假串行；工具 docstring 自述与实现矛盾；假阳性会毁掉工具可信度。**做了什么**：判据改为 tokenize —— 先求该行注释/字符串字面量区间（f-string/三引号/转义由 tokenizer 天然处理），setattr(/patch(/def/class 只有落在代码位置才算符号，字符串实参此时才可取；跨行三引号带状态机；解析不了的整行跳过、不推进参数表状态（宁可少）。**真阳性没被收掉**：022=5f51806 × 126=803be3a → exit 1 交集含 _write_myday_rank；042=af5f81c × 044=f606037 → exit 0；043=288c3f0 × 046=9c2f863 → exit 0。**反证（三贴）**：改前钉子 5 failed, 6 passed → 改后 11 passed → 把跳过步骤短路改坏 → 同样 5 failed → 还原 11 passed，git status 只剩两个白名单文件。**边界**：docstring 只对齐「代码还是文本」一段；--card 解析/退出码/报告格式没动；三引号状态不跨 hunk（hunk 起点假定不在字符串里）——跨 hunk docstring 内容若自身是合法代码且带 def/setattr 形状仍可能被收（点名未修，另一张卡的活）；解析不了且无三引号开头的行整行跳过 → 理论上会漏报；没跑全量门禁（卡明令）、changelog 留给集成者收口。"
+
+[entries."T-G142"]
+id = "T-G142"
+title = "界面解释文案第二批：按「界面不解释」口径处理 ≥20 字那 33 条（设计意图/空态/教学解释句删、数字口径压到 ≤8 字、连带的断言换方向钉住而非放松）"
+group = "UX"
+status = "done"
+evidence = [
+  "file:复盘/界面解释文案第二批-T-G142.md",
+  "file:src/web/index.html",
+  "test:test_web_frontend.py",
+]
+gaps = "**为什么有这张卡**：用户 2026-09-26「还留着解释」；T-G49 §5 明写这批没做；主控此前的漏（S-4/S-6 把它当文档漂移找，它是没做完的活）。**做了什么**：33 条里删/压 28 条、留 3 条（配对状态 + 两道破坏性确认）、待主控定 2 条（卡 049 同域的「与课程无关…竞赛/活动」提示句，按卡 §2.7 避让）；另按卡 §2.4.5 处理了不在 33 条内的 T-C8 硬考核文案（只留「这类是「逾期不候」的。」）；全部集中在 src/web/index.html。**断言的处置**：flow①（升级为复习卡）t.has FSRS 句 → 改钉「已升级为复习卡」+ lacks「FSRS」；flow④ 新增 lacks「交了就计成绩」；flow? t.has「选错了还能回去」→ 改钉「连设置一起」+ lacks「选错了还能回去」；test_web_frontend.py:897 原断言保留 + 新增 not-in 断言（全部换方向钉住，零放松；逐条见复盘 §3）。**读数对照**：改前 1543 条/9181 汉字、≥20 → 33 条；改后 1514 条/8524 汉字、≥20 → 4 条（全部「留」类；§9 补笔把 049 同域那两句也改短后 ≥25/≥30 清零）。**待主控定**：无（原待定的 049 两处提示语已由主控裁定改短并执行，见复盘 §9）。**没动的**：尺子 ui_text_scan.py、src/web 之外的一切 src/**、docs/台账/卡表/gates、049 的竞赛活动取值与 deferredBadge。**边界**：该进小用户文档的 9 类内容只登记未建文档（复盘 §6）。"
 
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"

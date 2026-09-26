@@ -743,3 +743,54 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/team`
 - `phone/today`
 
+
+## 2026-09-26 17:19:23 · 45 份改动
+
+> 理由：T-G142 界面解释文案第二批（卡 I8 集成）：按「界面不解释」口径删/压 ≥20 字文案，渲染清单随之重采
+
+- `desktop/academic`
+- `desktop/flagged`
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/important`
+- `desktop/memo`
+- `desktop/offline`
+- `desktop/palette`
+- `desktop/planned`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `desktop/team`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/flagged`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/important`
+- `narrow/memo`
+- `narrow/offline`
+- `narrow/palette`
+- `narrow/planned`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `narrow/team`
+- `narrow/today`
+- `phone/academic`
+- `phone/flagged`
+- `phone/focus`
+- `phone/habit`
+- `phone/important`
+- `phone/memo`
+- `phone/offline`
+- `phone/palette`
+- `phone/planned`
+- `phone/review`
+- `phone/setting`
+- `phone/stats`
+- `phone/tasks`
+- `phone/team`
+- `phone/today`
+

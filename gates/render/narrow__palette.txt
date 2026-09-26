@@ -1,5 +1,5 @@
 # render-manifest v1 viewport=narrow 820x900 view=palette rows=158 accent=#2f6feb device=ph-000000000000 day=2026-06-15
-html>body>div.shell		0,0,820,1363	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
+html>body>div.shell		0,0,820,1345	16/normal/400	#1e293b/#000000@0.00	0;0px 0px 90px
 html>body>div.shell>aside.rail		0,0,820,128	16/normal/400	#1e293b/#000000@0.00	0;16px 24px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,16,95,24	20/24/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	131,18,356,20	13/19.5/400	#5b6472/#000000@0.00	0;0px
@@ -21,91 +21,91 @@ div.shell>aside.rail>nav>button#refresh	刷新	91,91,52,37	13/normal/400	#5b6472
 div.shell>aside.rail>nav>button#railToggle	收起右栏	147,91,78,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
 div.shell>aside.rail>nav>button#cmdBtn	命令	229,91,99,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
 aside.rail>nav>button#cmdBtn>kbd.kbd	Ctrl K	272,105,43,13	11/13.2/400	#5b6472/#000000@0.00	6;0px 4px
-html>body>div.shell>main#main		0,128,820,967	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
-body>div.shell>main#main>div#guideCard		24,128,772,140	16/normal/400	#1e293b/#ffffff	10;16px
+html>body>div.shell>main#main		0,128,820,949	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 24px
+body>div.shell>main#main>div#guideCard		24,128,772,122	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>main#main>div#guideCard>div.title	第一次用，按这三步走就行	41,145,738,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#guideCard>div.sub	① 在下面的输入框写下一件要做的事（回车即可）→ ② 点「专注」开始计时，正常结束时会计入今天的投入 → ③ 晚上在专注页跟一句「今天计划 vs 实际」。	41,170,738,36	12/18/400	#5b6472/#000000@0.00	0;0px
-div.shell>main#main>div#guideCard>div.row.mt-3		41,214,738,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div#guideCard>div.row.mt-3>button	好，先写第一件事	41,215,136,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
-main#main>div#guideCard>div.row.mt-3>button.ghost	知道了，不再显示	185,214,138,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-body>div.shell>main#main>div.new		24,284,772,43	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.new>input#newTitle	(text)今天要做什么？回车添加…	24,285,277,41	13/normal/400	#1e293b/#ffffff	10;12px
-div.shell>main#main>div.new>input#newDue	(date)YYYY-MM-DD	313,284,277,43	13/normal/400	#1e293b/#ffffff	10;12px
-div.shell>main#main>div.new>label.sub	也放进今天的清单	602,298,124,19	12/18/400	#5b6472/#000000@0.00	0;0px
-main#main>div.new>label.sub>input#newMyDay	(checkbox)on	606,301,13,13	13.3/normal/400	#000000/#000000@0.00	0;0px
-div.shell>main#main>div.new>button	添加	738,288,58,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
-body>div.shell>main#main>div.card.quiet		24,343,772,114	16/normal/400	#1e293b/#eef2f7	10;16px
-div.shell>main#main>div.card.quiet>div.ring-head		41,360,239,80	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.quiet>div.ring-head>svg.chart.ring		41,360,80,80	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>svg.chart.ring>circle.chart-ring		51,370,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>svg.chart.ring>circle.chart-ring-progress		51,370,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>svg.chart.ring>text.ring-text	2/10	65,388,33,20	15/normal/700	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>div>div.title	今日完成度	137,381,143,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.card.quiet>div.ring-head>div>div.meta	已完成 2 项 · 还有 8 项在手	137,402,143,18	12/18/400	#5b6472/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(4)	逾期（债务）	24,481,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-body>div.shell>main#main>div#ov		24,509,772,81	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#ov>div.card.overdue		24,509,772,81	16/normal/400	#1e293b/#ffffff	10;16px
-main#main>div#ov>div.card.overdue>button.check		43,538,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px
-main#main>div#ov>div.card.overdue>div.card-body		77,526,507,47	16/24/400	#1e293b/#000000@0.00	0;0px
-div#ov>div.card.overdue>div.card-body>div.title		77,526,507,24	16/24/400	#1e293b/#000000@0.00	0;0px
-div.card.overdue>div.card-body>div.title>span.open	补交上周的实验报告	77,527,144,21	16/24/400	#1e293b/#000000@0.00	0;0px
-div#ov>div.card.overdue>div.card-body>div.meta		77,550,507,23	12/18/400	#5b6472/#000000@0.00	0;0px
-div.card.overdue>div.card-body>div.meta>span.badge	高数 / 作业	150,550,72,23	11/16.5/400	#5b6472/#ffffff	999;2px 8px
-div.card.overdue>div.card-body>div.meta>span.prio.high	高	222,551,29,19	11/16.5/400	#ffffff/#2f6feb	999;1px 8px
-div.card.overdue>div.card-body>div.meta>span.badge.todo	未完成	259,550,51,23	11/16.5/400	#5b6472/#ffffff	999;2px 8px
-main#main>div#ov>div.card.overdue>div.row		596,530,183,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-div#ov>div.card.overdue>div.row>button.ghost:nth-child(1)	在做	596,530,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-div#ov>div.card.overdue>div.row>button.ghost:nth-child(2)	专注	664,530,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-div#ov>div.card.overdue>div.row>button.ghost:nth-child(3)	…	732,532,47,33	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-body>div.shell>main#main>div.section-title:nth-child(6)	今天（My Day）	24,613,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-body>div.shell>main#main>div#mydayList		24,641,772,111	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div#mydayList>div.card		24,641,772,111	16/normal/400	#1e293b/#ffffff	10;16px
-main#main>div#mydayList>div.card>span.grab		41,687,26,18	16/normal/400	#5b6472/#000000@0.00	0;0px 4px
-div.card>span.grab>svg>path		51,692,6,8	16/normal/400	#5b6472/#000000@0.00	0;0px
-main#main>div#mydayList>div.card>button.check		79,685,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px
-main#main>div#mydayList>div.card>div.card-body		113,658,471,77	16/24/400	#1e293b/#000000@0.00	0;0px
-div#mydayList>div.card>div.card-body>div.title		113,658,471,24	16/24/400	#1e293b/#000000@0.00	0;0px
-div.card>div.card-body>div.title>span.open	把第三章习题做完	113,659,128,21	16/24/400	#1e293b/#000000@0.00	0;0px
-div#mydayList>div.card>div.card-body>div.meta		113,682,471,23	12/18/400	#5b6472/#000000@0.00	0;0px
-div.card>div.card-body>div.meta>span.prio.high	高	178,683,29,19	11/16.5/400	#ffffff/#2f6feb	999;1px 8px
-div.card>div.card-body>div.meta>span.flag	已标记	207,684,55,16	12/18/400	#2f6feb/#000000@0.00	0;0px
-div.meta>span.flag>svg>path		211,686,7,11	12/18/400	#2f6feb/#000000@0.00	0;0px
-div.card>div.card-body>div.meta>span.badge.todo	未完成	270,682,51,23	11/16.5/400	#5b6472/#ffffff	999;2px 8px
-div#mydayList>div.card>div.card-body>div.row.tight.myday-order		113,712,471,22	16/24/400	#1e293b/#000000@0.00	0;0px
-div.card>div.card-body>div.row.tight.myday-order>span.sub	第 1 / 1	113,716,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
-div.card>div.card-body>div.row.tight.myday-order>button.ghost:nth-child(2)		160,714,34,18	13/normal/400	#5b6472/#000000@0.00	10;0px 8px
-div.row.tight.myday-order>button.ghost:nth-child(2)>svg>path		173,719,8,9	13/normal/400	#5b6472/#000000@0.00	0;0px
-div.card>div.card-body>div.row.tight.myday-order>button.ghost:nth-child(3)		202,714,34,18	13/normal/400	#5b6472/#000000@0.00	10;0px 8px
-div.row.tight.myday-order>button.ghost:nth-child(3)>svg>path		215,719,8,9	13/normal/400	#5b6472/#000000@0.00	0;0px
-main#main>div#mydayList>div.card>div.row		596,677,183,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-div#mydayList>div.card>div.row>button.ghost:nth-child(1)	在做	596,677,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-div#mydayList>div.card>div.row>button.ghost:nth-child(2)	专注	664,677,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-div#mydayList>div.card>div.row>button.ghost:nth-child(3)	…	732,679,47,33	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-body>div.shell>main#main>div#set-done	今天做成了什么（只读事实层，点开看明细）	24,775,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-body>div.shell>main#main>div.card.block		24,803,772,93	16/normal/400	#1e293b/#ffffff	10;16px
-div.shell>main#main>div.card.block>div.row		41,820,738,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card.block>div.row>button.ghost:nth-child(1)	展开 · 完成任务 1 项	41,820,151,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card.block>div.row>button.ghost:nth-child(2)	展开 · 完成步骤 1 个（属于 1 个任务）	200,820,256,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card.block>div.row>button.ghost:nth-child(3)	展开 · 产出 0 条（学校 KPI 0 · 知识资产 0）	464,820,287,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-div.shell>main#main>div.card.block>div.sub		41,861,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
-main#main>div.card.block>div.sub>b	事实	178,862,24,16	12/18/700	#5b6472/#000000@0.00	0;0px
-body>div.shell>main#main>div.section-title:nth-child(10)	今天该复习（1）	24,920,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-body>div.shell>main#main>div.card		24,947,772,94	16/normal/400	#1e293b/#ffffff	10;16px
-div.shell>main#main>div.card>div.card-body		41,964,327,60	16/24/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.title	拉格朗日中值定理	41,964,327,24	16/24/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.meta:nth-child(2)	0次 · 0天	41,988,327,18	12/18/400	#5b6472/#000000@0.00	0;0px
-main#main>div.card>div.card-body>div.meta:nth-child(3)	引用 高数 · 第三章	41,1006,327,18	12/18/400	#5b6472/#000000@0.00	0;0px
-div.shell>main#main>div.card>div.row		380,976,399,37	16/normal/400	#1e293b/#000000@0.00	0;0px
-main#main>div.card>div.row>button	记得	380,977,58,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
-main#main>div.card>div.row>button.ghost:nth-child(2)	模糊	446,976,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card>div.row>button.ghost:nth-child(3)	忘了	514,976,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card>div.row>button.ghost:nth-child(4)	撤销上次	582,976,86,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-main#main>div.card>div.row>button.ghost:nth-child(5)	改形式/句柄	676,976,103,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-body>div.shell>main#main>div.sub	逾期共 1 项（轻≤3天 / 中≤7天 / 重>7天）：补交上周的实验报告(轻·2天)	24,1053,772,18	12/18/400	#5b6472/#000000@0.00	0;0px
-html>body>div.shell>aside.sidebar		0,1095,820,178	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
-body>div.shell>aside.sidebar>div#focusRail		24,1095,772,76	16/normal/400	#1e293b/#ffffff	10;16px
-div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	41,1112,738,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
-div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。去「专注」页或任务上点「专注」开始。	41,1136,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div#guideCard>div.sub	① 在下面的输入框写下一件要做的事 → ② 点「专注」开始计时 → ③ 晚上在专注页跟一句「今天计划 vs 实际」。	41,170,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div#guideCard>div.row.mt-3		41,196,738,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div#guideCard>div.row.mt-3>button	好，先写第一件事	41,197,136,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
+main#main>div#guideCard>div.row.mt-3>button.ghost	知道了，不再显示	185,196,138,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+body>div.shell>main#main>div.new		24,266,772,43	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div.new>input#newTitle	(text)今天要做什么？回车添加…	24,267,277,41	13/normal/400	#1e293b/#ffffff	10;12px
+div.shell>main#main>div.new>input#newDue	(date)YYYY-MM-DD	313,266,277,43	13/normal/400	#1e293b/#ffffff	10;12px
+div.shell>main#main>div.new>label.sub	也放进今天的清单	602,280,124,19	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.new>label.sub>input#newMyDay	(checkbox)on	606,283,13,13	13.3/normal/400	#000000/#000000@0.00	0;0px
+div.shell>main#main>div.new>button	添加	738,270,58,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
+body>div.shell>main#main>div.card.quiet		24,325,772,114	16/normal/400	#1e293b/#eef2f7	10;16px
+div.shell>main#main>div.card.quiet>div.ring-head		41,342,239,80	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.quiet>div.ring-head>svg.chart.ring		41,342,80,80	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>svg.chart.ring>circle.chart-ring		51,352,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>svg.chart.ring>circle.chart-ring-progress		51,352,60,60	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>svg.chart.ring>text.ring-text	2/10	65,370,33,20	15/normal/700	#1e293b/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>div>div.title	今日完成度	137,363,143,21	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.card.quiet>div.ring-head>div>div.meta	已完成 2 项 · 还有 8 项在手	137,384,143,18	12/18/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(4)	逾期（债务）	24,463,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div#ov		24,491,772,81	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#ov>div.card.overdue		24,491,772,81	16/normal/400	#1e293b/#ffffff	10;16px
+main#main>div#ov>div.card.overdue>button.check		43,520,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px
+main#main>div#ov>div.card.overdue>div.card-body		77,508,507,47	16/24/400	#1e293b/#000000@0.00	0;0px
+div#ov>div.card.overdue>div.card-body>div.title		77,508,507,24	16/24/400	#1e293b/#000000@0.00	0;0px
+div.card.overdue>div.card-body>div.title>span.open	补交上周的实验报告	77,509,144,21	16/24/400	#1e293b/#000000@0.00	0;0px
+div#ov>div.card.overdue>div.card-body>div.meta		77,532,507,23	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card.overdue>div.card-body>div.meta>span.badge	高数 / 作业	150,532,72,23	11/16.5/400	#5b6472/#ffffff	999;2px 8px
+div.card.overdue>div.card-body>div.meta>span.prio.high	高	222,533,29,19	11/16.5/400	#ffffff/#2f6feb	999;1px 8px
+div.card.overdue>div.card-body>div.meta>span.badge.todo	未完成	259,532,51,23	11/16.5/400	#5b6472/#ffffff	999;2px 8px
+main#main>div#ov>div.card.overdue>div.row		596,512,183,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+div#ov>div.card.overdue>div.row>button.ghost:nth-child(1)	在做	596,512,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div#ov>div.card.overdue>div.row>button.ghost:nth-child(2)	专注	664,512,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div#ov>div.card.overdue>div.row>button.ghost:nth-child(3)	…	732,514,47,33	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+body>div.shell>main#main>div.section-title:nth-child(6)	今天（My Day）	24,595,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div#mydayList		24,623,772,111	16/normal/400	#1e293b/#000000@0.00	0;0px
+div.shell>main#main>div#mydayList>div.card		24,623,772,111	16/normal/400	#1e293b/#ffffff	10;16px
+main#main>div#mydayList>div.card>span.grab		41,669,26,18	16/normal/400	#5b6472/#000000@0.00	0;0px 4px
+div.card>span.grab>svg>path		51,674,6,8	16/normal/400	#5b6472/#000000@0.00	0;0px
+main#main>div#mydayList>div.card>button.check		79,667,22,22	13/normal/400	#ffffff/#000000@0.00	999;0px
+main#main>div#mydayList>div.card>div.card-body		113,640,471,77	16/24/400	#1e293b/#000000@0.00	0;0px
+div#mydayList>div.card>div.card-body>div.title		113,640,471,24	16/24/400	#1e293b/#000000@0.00	0;0px
+div.card>div.card-body>div.title>span.open	把第三章习题做完	113,641,128,21	16/24/400	#1e293b/#000000@0.00	0;0px
+div#mydayList>div.card>div.card-body>div.meta		113,664,471,23	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card>div.card-body>div.meta>span.prio.high	高	178,665,29,19	11/16.5/400	#ffffff/#2f6feb	999;1px 8px
+div.card>div.card-body>div.meta>span.flag	已标记	207,666,55,16	12/18/400	#2f6feb/#000000@0.00	0;0px
+div.meta>span.flag>svg>path		211,668,7,11	12/18/400	#2f6feb/#000000@0.00	0;0px
+div.card>div.card-body>div.meta>span.badge.todo	未完成	270,664,51,23	11/16.5/400	#5b6472/#ffffff	999;2px 8px
+div#mydayList>div.card>div.card-body>div.row.tight.myday-order		113,694,471,22	16/24/400	#1e293b/#000000@0.00	0;0px
+div.card>div.card-body>div.row.tight.myday-order>span.sub	第 1 / 1	113,698,39,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.card>div.card-body>div.row.tight.myday-order>button.ghost:nth-child(2)		160,696,34,18	13/normal/400	#5b6472/#000000@0.00	10;0px 8px
+div.row.tight.myday-order>button.ghost:nth-child(2)>svg>path		173,701,8,9	13/normal/400	#5b6472/#000000@0.00	0;0px
+div.card>div.card-body>div.row.tight.myday-order>button.ghost:nth-child(3)		202,696,34,18	13/normal/400	#5b6472/#000000@0.00	10;0px 8px
+div.row.tight.myday-order>button.ghost:nth-child(3)>svg>path		215,701,8,9	13/normal/400	#5b6472/#000000@0.00	0;0px
+main#main>div#mydayList>div.card>div.row		596,659,183,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+div#mydayList>div.card>div.row>button.ghost:nth-child(1)	在做	596,659,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div#mydayList>div.card>div.row>button.ghost:nth-child(2)	专注	664,659,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div#mydayList>div.card>div.row>button.ghost:nth-child(3)	…	732,661,47,33	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+body>div.shell>main#main>div#set-done	今天做成了什么（只读事实层，点开看明细）	24,757,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.card.block		24,785,772,93	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>main#main>div.card.block>div.row		41,802,738,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card.block>div.row>button.ghost:nth-child(1)	展开 · 完成任务 1 项	41,802,151,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card.block>div.row>button.ghost:nth-child(2)	展开 · 完成步骤 1 个（属于 1 个任务）	200,802,256,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card.block>div.row>button.ghost:nth-child(3)	展开 · 产出 0 条（学校 KPI 0 · 知识资产 0）	464,802,287,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+div.shell>main#main>div.card.block>div.sub		41,843,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card.block>div.sub>b	事实	178,844,24,16	12/18/700	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.section-title:nth-child(10)	今天该复习（1）	24,902,772,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+body>div.shell>main#main>div.card		24,929,772,94	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>main#main>div.card>div.card-body		41,946,327,60	16/24/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.title	拉格朗日中值定理	41,946,327,24	16/24/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta:nth-child(2)	0次 · 0天	41,970,327,18	12/18/400	#5b6472/#000000@0.00	0;0px
+main#main>div.card>div.card-body>div.meta:nth-child(3)	引用 高数 · 第三章	41,988,327,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card>div.row		380,958,399,37	16/normal/400	#1e293b/#000000@0.00	0;0px
+main#main>div.card>div.row>button	记得	380,959,58,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
+main#main>div.card>div.row>button.ghost:nth-child(2)	模糊	446,958,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card>div.row>button.ghost:nth-child(3)	忘了	514,958,60,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card>div.row>button.ghost:nth-child(4)	撤销上次	582,958,86,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+main#main>div.card>div.row>button.ghost:nth-child(5)	改形式/句柄	676,958,103,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
+body>div.shell>main#main>div.sub	逾期共 1 项（轻≤3天 / 中≤7天 / 重>7天）：补交上周的实验报告(轻·2天)	24,1035,772,18	12/18/400	#5b6472/#000000@0.00	0;0px
+html>body>div.shell>aside.sidebar		0,1077,820,178	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
+body>div.shell>aside.sidebar>div#focusRail		24,1077,772,76	16/normal/400	#1e293b/#ffffff	10;16px
+div.shell>aside.sidebar>div#focusRail>div.panel-title	专注计时	41,1094,738,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
+div.shell>aside.sidebar>div#focusRail>div.sub	当前没有进行中的专注。	41,1118,738,18	12/18/400	#5b6472/#000000@0.00	0;0px
 html>body>div#palette		0,0,820,900	16/normal/400	#1e293b/#000000@0.00	0;32px 16px
 html>body>div#palette>div.palette-backdrop		0,0,820,900	16/normal/400	#1e293b/#000000@0.38	0;0px
 html>body>div#palette>div.palette-box		150,32,520,410	16/normal/400	#1e293b/#ffffff	10;12px

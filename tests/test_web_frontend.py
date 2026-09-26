@@ -520,6 +520,13 @@ def test_task_type_and_course_are_wired_in_frontend() -> None:
     ), "类型词表要与后端同口径"
     assert "function courseBadge(" in html and "function taskTypeOptions(" in html
     assert "function courseOptions(" in html and "function syncTypeCourse(" in html
+    # T-G142（卡 §2.7/§9 主控裁定）：课程提示语只留「这是什么」的最短语义 —— 钉新句 + 旧长句不许回来
+    assert "可挂课类型：作业/考试/论文/小测/竞赛/活动" in html, (
+        "课程提示语要是最短语义（T-G142）"
+    )
+    assert "要挂课程请把类型改成" not in html and "不挂课程；" not in html, (
+        "课程提示语的旧长句不许回来（T-G142）"
+    )
     card = _fn_body(html, "taskCard")   # ★ 别抄签名：T-G79 给 taskCard 加了第三个参数（顺序）
     assert "courseBadge(t)" in card, "任务卡片没显示「课程 · 类型」"
     edit = html.split("function editForm(t){", 1)[1].split("\n}", 1)[0]
@@ -895,6 +902,10 @@ def test_hard_assessment_is_marked_more_strongly() -> None:
     assert "card hard" in academic and 'class="badge hard"' in academic, "硬考核卡片没用强呈现的类"
     assert "硬考核：临期与逾期" in academic, "硬考核区没有单独的小标题"
     assert "未录成绩" in academic and "逾期不候" in academic, "没说明为什么它被单独标出来"
+    # T-G142（用户 2026-09-26 加严「直接删解释」）：解释句不许回来 —— 换方向钉住，不是放松
+    assert "交了就计成绩" not in academic and "没交就没了" not in academic, (
+        "解释句不许回来（T-G142）"
+    )
     assert "days_until-b.days_until" in academic, "硬考核没有按剩余天数排（逾期优先）"
     css = WEB_CSS.read_text(encoding="utf-8")
     assert ".card.hard" in css and ".badge.hard" in css, "app.css 缺硬考核样式（颜色只能住这里）"
@@ -1196,7 +1207,8 @@ def test_backup_restore_is_wired_in_settings() -> None:
 
     两条要在界面上说清的：
     ① 恢复是**整库回到那一刻**（连设置一起）—— 不说清用户以为只回滚任务；
-    ② 恢复前会**自动再备份一次现库**，所以选错了还能回去 —— 这是"敢点"的前提。
+    ② T-G142（用户 2026-09-26 加严「直接删解释」）：界面不再写"恢复前会自动再备份一次现库，
+       选错了还能回去"那句解释 —— 行为本身仍在 tests/test_backup_restore_line.py 里钉着。
     """
     html = WEB_INDEX.read_text(encoding="utf-8")
     setting = html.split("async function renderSetting(m){", 1)[1].split("\n}", 1)[0]
