@@ -4317,6 +4317,18 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：同类事故本会话已四次 —— ①主控改写 复盘/外包-卡表与规矩.md 的措辞打穿 3 条 text: 证据；②卡 036 的 test: 指针写错前缀（test: 只按 ROOT/tests/ 求值）；③卡 029 把 DEFAULT_MODEL 改成 MODEL_WHITELIST[0] 打穿 T-G85 的证据指针；④卡 049 把 TASK_TYPES 扩成七档打穿 tests/test_web_frontend.py:518 的逐字断言。**做了什么**：新增只读工具 tools/pin_check.py —— 按字面列出命中（文件:行 + 原文截 120 字符）并分类（源码/测试/工具/文档/台账证据）、台账命中点名台账号、按断言/证据语境（assert / in / == / includes( / has( / text:）标 ★ 钉子，其余标叙述；退出码：零命中或无钉子 = 0、有钉子 = 1、用法错误 = 2；台账按反转义后的行匹配（TOML 把引号转义存账，不反转义查不到 T-G85）。**真历史读数**：①DEFAULT_MODEL 字面 → T-G85 被点名（台账证据 + 钉子，traceability.toml:1014）②TASK_TYPES 字面 → tests/test_web_frontend.py:518 被点名（钉子，另报出 src/web/index.html:1773 为叙述）③不存在的字面 → 零命中退 0。**反证（三贴）**：去掉 text: 判据 → 钉子①命中仍在但不再标钉子（test_mutation_dropping_text_marker_kills_pin1 钉住）→ 还原后 8 passed 全绿。**边界**：只读、只新增三个文件（没动 evidence_map 等任何既有文件）；没写台账（条目在复盘末尾供集成者粘贴）；没跑全量门禁（轻门见提交 trailer）；钉子判据是子串级 —— 只防逐字钉着，抓不到语义等价的改写；--ledger-only 只认 text: 前缀的命中行。"
 
+[entries."T-G146"]
+id = "T-G146"
+title = "seam_check 假阳性：注释/字符串里的 setattr/patch 形状被当符号 → 假交集假串行；改为按 token/剥引号判代码（真阳性三条读数不变）"
+group = "TOOLS"
+status = "done"
+evidence = [
+  "file:复盘/接缝预检假阳性-T-G146.md",
+  "text:tools/seam_check.py::def _line_analysis(",
+  "test:test_seam_check.py",
+]
+gaps = "**为什么有这张卡**：RC 复核卡 048 实测出假阳性 —— 一行注释写 monkeypatch.setattr(w, 「egg.spam」, x) 再加一行字符串 log(patch(「egg.spam」))，旧判据把 spam 收成符号 → 两张卡假交集 → exit 1 假串行；工具 docstring 自述与实现矛盾；假阳性会毁掉工具可信度。**做了什么**：判据改为 tokenize —— 先求该行注释/字符串字面量区间（f-string/三引号/转义由 tokenizer 天然处理），setattr(/patch(/def/class 只有落在代码位置才算符号，字符串实参此时才可取；跨行三引号带状态机；解析不了的整行跳过、不推进参数表状态（宁可少）。**真阳性没被收掉**：022=5f51806 × 126=803be3a → exit 1 交集含 _write_myday_rank；042=af5f81c × 044=f606037 → exit 0；043=288c3f0 × 046=9c2f863 → exit 0。**反证（三贴）**：改前钉子 5 failed, 6 passed → 改后 11 passed → 把跳过步骤短路改坏 → 同样 5 failed → 还原 11 passed，git status 只剩两个白名单文件。**边界**：docstring 只对齐「代码还是文本」一段；--card 解析/退出码/报告格式没动；三引号状态不跨 hunk（hunk 起点假定不在字符串里）——跨 hunk docstring 内容若自身是合法代码且带 def/setattr 形状仍可能被收（点名未修，另一张卡的活）；解析不了且无三引号开头的行整行跳过 → 理论上会漏报；没跑全量门禁（卡明令）、changelog 留给集成者收口。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"

@@ -126,3 +126,93 @@ def test_param_names_parse() -> None:
     # 下标/属性链不是形参名 → 跳过（宁可少）
     assert sc._param_names("by_id[task_id].version)") == []
     assert sc._param_names("*,") == []
+
+
+# ---- 卡 054（T-G146）的钉子：注释/字符串里的 setattr/patch 形状不算符号 ----
+
+DIFF_COMMENT = """\
+diff --git a/tests/test_a.py b/tests/test_a.py
+--- a/tests/test_a.py
++++ b/tests/test_a.py
+@@ -1,2 +1,3 @@
++    # see monkeypatch.setattr(w, "egg.spam", x)
+"""
+
+DIFF_IN_STRING = """\
+diff --git a/tests/test_b.py b/tests/test_b.py
+--- a/tests/test_b.py
++++ b/tests/test_b.py
+@@ -1,2 +1,3 @@
++    log("patch('egg.spam')")
+"""
+
+DIFF_IN_FSTRING = """\
+diff --git a/tests/test_b.py b/tests/test_b.py
+--- a/tests/test_b.py
++++ b/tests/test_b.py
+@@ -1,2 +1,3 @@
++    log(f"patch('egg.spam') end")
+"""
+
+DIFF_TRUE_CODE = """\
+diff --git a/tests/test_c.py b/tests/test_c.py
+--- a/tests/test_c.py
++++ b/tests/test_c.py
+@@ -1,2 +1,3 @@
++    monkeypatch.setattr(manager, "_write_myday_rank", always_conflict)
+"""
+
+# 三引号跨行：docstring 内容里带 def / setattr 形状（同一病根，一并收）
+DIFF_MULTILINE_DOCSTRING = """\
+diff --git a/tests/test_d.py b/tests/test_d.py
+--- a/tests/test_d.py
++++ b/tests/test_d.py
+@@ -1,2 +1,7 @@
++    def helper_with_doc(self):
++        \"\"\"Usage example:
++        def broken_example():
++            monkeypatch.setattr(w, "egg.spam", x)
++        \"\"\"
++        pass
+"""
+
+
+def test_comment_shape_not_collected() -> None:
+    """钉子①：一行注释里的 setattr 形状不许产出 spam（RC 反例）。"""
+    names = {s.name for s in sc.extract_symbols(DIFF_COMMENT)}
+    assert "spam" not in names, names
+
+
+def test_string_shape_not_collected() -> None:
+    """钉子②：字符串里的 patch 形状不许产出 spam（RC 反例）。"""
+    names = {s.name for s in sc.extract_symbols(DIFF_IN_STRING)}
+    assert "spam" not in names, names
+
+
+def test_fstring_shape_not_collected() -> None:
+    """f-string 里的形状同样不算（三引号/f-string/转义要照顾到）。"""
+    names = {s.name for s in sc.extract_symbols(DIFF_IN_FSTRING)}
+    assert "spam" not in names, names
+
+
+def test_true_code_shape_still_collected() -> None:
+    """钉子③：真代码的 setattr 实参必须照常产出（不许把真阳性一起收掉）。"""
+    syms = sc.extract_symbols(DIFF_TRUE_CODE)
+    names = {s.name for s in syms}
+    assert "_write_myday_rank" in names, syms
+    kinds = {s.name: s.kind for s in syms}
+    assert kinds["_write_myday_rank"] == "stub", syms
+
+
+def test_multiline_docstring_content_not_collected() -> None:
+    """三引号 docstring 的内容行不许产出 def / 桩替换符号（宁可少、不可滥）。"""
+    syms = sc.extract_symbols(DIFF_MULTILINE_DOCSTRING)
+    names = {s.name for s in syms}
+    assert "broken_example" not in names, syms
+    assert "spam" not in names, syms
+
+
+def test_false_positive_pair_has_no_intersection() -> None:
+    """RC 那对假反例合起来也不许再出交集（原先是 exit 1 的假串行）。"""
+    cards = _cards(("a", DIFF_COMMENT), ("b", DIFF_IN_STRING))
+    assert sc.find_common(cards) == {}
