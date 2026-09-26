@@ -13,8 +13,9 @@
 状态文件本身在 gitignored 目录里。多树只扫 `<仓库根>/gates/diag/` 与本仓库根下的
 `<仓库根>/.wt/*/gates/diag/`；从**某棵 worktree 内部**运行时，根是那棵 worktree，
 找得到它自己的 `gates/diag/`、找**不到**兄弟 worktree（面板的常规跑法是从主工作区起）。
-续跑日志（`wb-<卡>.r2.jsonl`）**一行一轮，按卡分组排序**（T-G113，口径 B）：
-同一张卡的各轮挨着、按文件名里的轮次后缀（`r2`/`r3`）排，行里标注「第 N 轮」；
+续跑日志（`wb-<卡>.r2.jsonl`）**一行一轮，同卡各轮相邻**（T-G113 定的一行一轮/相邻合并口径
+不变）；★ 整体行序**最新在前**（T-G123）：组的次序按组内最后一次活动的时间**降序** ——
+刚动过的卡在最上面，不用往下翻；同一张卡的各轮**轮次新的在前**（与整体同一个「新在前」方向）。
 行模型不变（不做跨轮合并/累加 —— 面板是状态面板，不是统计）。
 
 ★ 判卡死的阈值**不再硬写**（T-G97）：有工具在飞时静默是**预期**的（全量门禁 ~4 分钟、
@@ -123,18 +124,30 @@ def _split_card(name: str) -> tuple[str, int]:
 def discover_logs(root: Path) -> list[tuple[str, str, Path]]:
     """(树名, 卡标识, log 路径) —— 多卡多树一次找齐。
 
-    卡标识 = 文件名里的卡号（含 `.r2` 这类续跑后缀）。★ T-G113（口径 B）：
-    一棵树内按 (卡号, 轮次) 排 —— 同一张卡的各轮**挨着、按轮次排**，不再按 ctime。
+    卡标识 = 文件名里的卡号（含 `.r2` 这类续跑后缀）。
+    ★ 行序（T-G123，卡 030）：**最新在前** —— 按「卡组」（同树 + 同卡）分组，
+    组的次序 = 组内最后一次活动的时间（mtime）**降序**，刚动过的卡在最上面；
+    同一张卡的各轮**仍相邻**（T-G113 的一行一轮/相邻口径不破）且**轮次新的在前**
+    （r2 在第 1 轮上面 —— 与整体同一个「新在前」方向，不另搞一套）；
+    等值行再按（树名, 卡号）定**稳定**次序，刷新时不许跳。
     """
     found: list[tuple[str, str, Path]] = []
     for tree, diag in _tree_dirs(root):
         if not diag.is_dir():
             continue
-        key = lambda p: _split_card(  # noqa: E731 —— 单行排序键，犯不上 def
-            p.name.removeprefix("wb-").removesuffix(".jsonl"))
-        for log in sorted(diag.glob("wb-*.jsonl"), key=key):
+        for log in diag.glob("wb-*.jsonl"):
             card = log.name.removeprefix("wb-").removesuffix(".jsonl")
             found.append((tree, card, log))
+    # ★ T-G123：组键 = (树名, 卡号)，组时间 = 组内最新的 mtime；组按它降序。
+    latest: dict[tuple[str, str], float] = {}
+    for tree, card, log in found:
+        key = (tree, _split_card(card)[0])
+        latest[key] = max(latest.get(key, float("-inf")), log.stat().st_mtime)
+    found.sort(key=lambda e: (
+        -latest[(e[0], _split_card(e[1])[0])],      # 组最新活动降序 → 最新在最上面
+        e[0], _split_card(e[1])[0],                 # 等值 →（树名, 卡号）的稳定次序
+        -_split_card(e[1])[1],                      # 同卡各轮相邻，轮次新的在前
+    ))
     return found
 
 

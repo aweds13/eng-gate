@@ -11,9 +11,13 @@
 `inflight_tool()` / `tool_durations()` / `stall_threshold_seconds()` —— 本节后四条就是钉这个，
 **不许在面板里写第二份口径**（判据必须是派活器的：换掉它，面板结果要跟着变）。
 
-★ 台账号 T-G113（卡 025，口径 B）：续跑日志**一行一轮、按卡分组排序** —— 同一张卡的
-各轮挨着、按文件名里的轮次后缀（`r2`/`r3`）排（★ 不拿 ctime 排：Windows 上 ctime 是创建时间、
-复制/覆盖会重置），行里带 `round` 字段给「第 N 轮」标识用。行模型不变（不跨轮合并/累加）。
+★ 台账号 T-G113（卡 025，口径 B）：续跑日志**一行一轮、同卡各轮相邻** —— 不拿 ctime 当
+「第几轮」（Windows 上 ctime 是创建时间、复制/覆盖会重置），轮次看文件名里的后缀（`r2`/`r3`），
+行里带 `round` 字段给「第 N 轮」标识用。行模型不变（不跨轮合并/累加）。
+
+★ 台账号 T-G123（卡 030）：整体行序**最新在前** —— 组（同树 + 同卡）按组内最后一次活动的
+mtime **降序**（刚动过的卡在最上面，用户不用往下翻）；同卡各轮**轮次新的在前**（r2 在第 1 轮
+上面，与整体同一个「新在前」方向）；等值行再按（树名, 卡号）定稳定次序。
 
 ★ 只造假状态文件（`tmp_path`），**不起服务、不连网** —— 真机那一步是手工证据（卡 §5），不进测试。
 """
@@ -269,28 +273,51 @@ def test_no_cards_gives_empty_table_not_crash(tmp_path: Path) -> None:
 # -------------------------------------- 续跑分组排序 + 第 N 轮（T-G113，口径 B）
 
 
-def test_rerun_rounds_grouped_by_card_and_sorted_by_round(tmp_path: Path) -> None:
-    """★ 本卡要点：同一张卡的各轮**挨着、按轮次排**，与创建先后无关。
+def test_newest_activity_group_first_and_rounds_new_on_top(tmp_path: Path) -> None:
+    """★ 本卡要点（T-G123）：整体行序 = **最新活动在前**，同卡各轮相邻、轮次新的在前。
 
-    故意按 005 → 004.r3 → 004 → 004.r2 的顺序造文件：若还按 ctime 排（旧口径），
-    顺序就是创建序 → 这条红；按 (卡号, 轮次) 排才是 004 的三轮挨着、升序、然后 005。
+    故意按 005 → 004.r3 → 004 → 004.r2 的顺序**创建**文件（与创建序无关，mtime 用
+    `os.utime` 钉死）：004 组的最新活动（r3，5 秒前）比 005（600 秒前）新 → 004 整组
+    在上面，组内 r3/r2/第 1 轮；旧的 (卡号, 轮次) 升序口径会排成 004/004.r2/004.r3/005 → 红。
     """
-    _card(tmp_path, "005")
-    _card(tmp_path, "004.r3")
-    _card(tmp_path, "004")
-    _card(tmp_path, "004.r2")
+    _card(tmp_path, "005", age=600)
+    _card(tmp_path, "004.r3", age=5)
+    _card(tmp_path, "004", age=60)
+    _card(tmp_path, "004.r2", age=30)
     rows = wb_dash.card_state(tmp_path)
-    assert [r["card"] for r in rows] == ["004", "004.r2", "004.r3", "005"]
-    assert [r["round"] for r in rows] == [1, 2, 3, 1]
+    assert [r["card"] for r in rows] == ["004.r3", "004.r2", "004", "005"]
+    assert [r["round"] for r in rows] == [3, 2, 1, 1]
+
+
+def test_newest_card_on_top_overall(tmp_path: Path) -> None:
+    """用户要的那条：刚跑完的卡在最上面，不用往下翻。旧口径（按卡号升序）001 在前 → 红。"""
+    _card(tmp_path, "001", age=900)
+    _card(tmp_path, "024", age=10)
+    rows = wb_dash.card_state(tmp_path)
+    assert [r["card"] for r in rows] == ["024", "001"]
+
+
+def test_equal_mtime_is_stable_by_tree_then_card(tmp_path: Path) -> None:
+    """★ 排序要稳：mtime 真正相等（这里用 `os.utime` 钉成同一秒）→ 按（树名, 卡号）定次序，
+    连续两次求值结果一致，刷新不许跳。"""
+    log_b = _card(tmp_path, "010", age=30)
+    log_a = _card(tmp_path, "002", age=30)
+    same = time.time() - 30
+    for log in (log_a, log_b):
+        os.utime(log, (same, same))
+    first = [r["card"] for r in wb_dash.card_state(tmp_path)]
+    second = [r["card"] for r in wb_dash.card_state(tmp_path)]
+    assert first == second == ["002", "010"]
 
 
 def test_round_suffix_sorted_numerically_not_lexically(tmp_path: Path) -> None:
-    """轮次按**数字**排：r2 要在 r10 前面（按字符串排 'r10' < 'r2' → 这条红）。"""
+    """同卡各轮按**数字**降序（轮次新的在前）：r10 要在 r2 上面 ——
+    按字符串排 'r2' > 'r10' → 那种写法这条红。"""
     _card(tmp_path, "007.r10")
     _card(tmp_path, "007.r2")
     rows = wb_dash.card_state(tmp_path)
-    assert [r["card"] for r in rows] == ["007.r2", "007.r10"]
-    assert [r["round"] for r in rows] == [2, 10]
+    assert [r["card"] for r in rows] == ["007.r10", "007.r2"]
+    assert [r["round"] for r in rows] == [10, 2]
 
 
 def test_round_defaults_to_one_and_unparsed_suffix_is_first_round(tmp_path: Path) -> None:
@@ -305,13 +332,14 @@ def test_round_defaults_to_one_and_unparsed_suffix_is_first_round(tmp_path: Path
 def test_same_card_number_in_different_trees_stays_separate(tmp_path: Path) -> None:
     """★ 跨树的**同号卡不是同一张卡**（T-G93 立标识的原因）：分组只在**同一棵树内**发生。
 
-    主树 004 有两轮、`.wt/004` 里另有一张 004 —— 主树的两轮挨着在前，
-    worktree 那张带 `@.wt/004` 标识、自己一轮，绝不与主树的合并/插进去。
+    主树 004 有两轮（r2 刚动过、第 1 轮较旧）、`.wt/004` 里另有一张 004（更早没动）——
+    主树的两轮挨着在最上面（轮次新的在前），worktree 那张带 `@.wt/004` 标识、自己一轮，
+    绝不与主树的合并/插进去。
     """
-    _card(tmp_path, "004.r2")
-    _card(tmp_path, "004")
-    _card(tmp_path, "004", tree=".wt/004")
+    _card(tmp_path, "004.r2", age=5)
+    _card(tmp_path, "004", age=60)
+    _card(tmp_path, "004", tree=".wt/004", age=300)
     rows = wb_dash.card_state(tmp_path)
-    assert [r["card"] for r in rows] == ["004", "004.r2", "004@.wt/004"]
-    assert [r["round"] for r in rows] == [1, 2, 1]
+    assert [r["card"] for r in rows] == ["004.r2", "004", "004@.wt/004"]
+    assert [r["round"] for r in rows] == [2, 1, 1]
     assert [r["tree"] for r in rows] == ["", "", ".wt/004"]
