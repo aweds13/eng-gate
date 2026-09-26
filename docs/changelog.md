@@ -4,6 +4,17 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 跨卡接缝预检 seam_check（T-G139）
+
+- 背景：第二次同类接缝 —— 卡 022 改 `_write_myday_rank` 签名 vs T-G126 在另一文件桩替换
+  同一函数，文件不重叠 → 白名单拦不住，集成时门禁才红。新工具 `tools/seam_check.py`
+  按**符号**取交集（① 定义 = 改动行的 def/class；② 桩替换对象 = setattr/patch 的目标名；
+  ③ 形参 = 打开的 def 参数行），有交集 exit=1 / 无交集 exit=0 / 用法错 exit=2。
+- **真历史钉子**：`--card 022=5f51806 --card 126=803be3a` 报出 `_write_myday_rank` 交集；
+  **零误报**：042×044、043×046 均 exit=0；**突变检验**：去掉「桩替换」判据 → 钉子漏报
+  → 还原后 exit=1 + pytest 5 passed。
+- 复盘：`复盘/跨卡接缝预检-T-G139.md`。
+
 ### 面板不再把用量账本当工人 log + 日志非 UTF-8/NUL 容错（T-G137）
 
 - 根因：discover_logs 的 `wb-*.jsonl` 通配把用量账本 `wb-usage.jsonl` 当成一张叫 usage 的卡
