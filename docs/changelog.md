@@ -24,6 +24,30 @@
 - **条数不变**：`tests/test_wb_review.py` **仍是 12 条**（就地重写那一条）；五条判据没变。
 - 台账 `T-G87`；复盘 `复盘/测试定时炸弹-T-G87.md`。
 
+### 修 T-G79 的「幂等也在写库」（T-G86）：今天清单的空转不再整表重写
+
+`T-G79`（拖拽排序）的文档与提交信息写着「拖到自己前面 / 已在头尾按 ↑↓ …**也都不写库**」。
+**那句是错的**：`place_myday()` / `move_myday()` 的第一句 `_myday_sequence()` 干的是
+「读顺序 **+ 把每一行都写一次号**」—— 于是那三种**空转也整表重写**（`version + 1`），
+并把「没拖过 = `NULL`」冻成显式 `1..N`。两处独立复现：卡 001 的独立复核
+（`gates/diag/wb-review-T-G79.md`）与主控探针（`gates/diag/probes/myday_noop_write_check.py`，
+量到 3/3 行被改）。
+
+- **修法**（只动 `src/timeflow/core/tasks/manager.py`）：`_myday_sequence()` 改成**只读**
+  （`return myday_tasks(conn)`）；新增 `_myday_rank_plan()` / `_apply_myday_order()` ——
+  **顺序没变就一个字节都不写**，变了也只写**排过号的那一截**：从 `order` 尾巴往前找**最长的一段**
+  「不带号、且在里面仍是老口径次序」的尾巴，这段**一个都不写**（= 不许把没动过的 `NULL` 冻结成序号）。
+- **反证**：新增 `tests/test_myday_idempotence_line.py` **7 条**（直连库取
+  `{id: (myday_rank, version)}` 前后逐行比）—— 改实现前 **6 failed / 1 passed**，改后与
+  `tests/test_myday_order_line.py` 合计 **19 passed**；主控探针复跑从「3/3 行被改写」→「**0/3**」。
+- **顺带更正**：`复盘/拖拽排序-T-G79.md` 那句错话；以及一条依赖「拖一次 → 整份清单都写号」
+  的旧用例走法（结论不变，改成让那一条真的换位置）。
+- **边界（如实写）**：一次真拖仍是把「排过号的那一截」整截重排成 `1..m`；要「只写换位的那一行」
+  得把序号改成**有间隙**的（sparse index）—— 那是另一张卡。
+- **没动**：`src/web/**`、`api/app.py` 路由语义（两键规则 / 400·404 次序 / `myday_rank` 不进
+  PATCH 白名单）、`_MYDAY_ORDER_BY` 与 `myday_tasks` 的排序口径、`move_doing`，全部一字未改。
+- 台账 `T-G86`；复盘 `复盘/幂等写库-T-G86.md`。
+
 ### 外包链路接通真 CLI（T-G85）：改走独立安装的 CodeBuddy Code，派活器带上权限模式与新模型
 
 WorkBuddy 自带的那份 CLI 是**无头版** —— `cli/dist/` 里只有 `codebuddy-headless.js` 与

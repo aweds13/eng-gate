@@ -4,7 +4,10 @@
 
 - 拖过的按**拖的顺序**（`myday_rank` 小的在前）；**没拖过的排在后面**，它们之间仍按统一口径
   （截止日 → 优先级 → 创建时间）—— 也就是"新加进今天的排在后面"，不猜；
-- 拖一次把当前清单**整体规整成 1..N**（与 `doing_rank` 同一做法），于是中间插进来一条不会错位；
+- ★ **2026-09-26（T-G86）**：拖一次**不再把整份清单都写号** —— 只给"真的换了位置"的行写号，
+  没动过的仍保持 `NULL`（"不许把没拖过的冻结成序号"）。所以"拖过一次 → 全都有号"这句已作废
+  （那是 T-G79 那句错话的根因，见 `复盘/幂等写库-T-G86.md`）。幂等动作（拖到自己前面、
+  已在头/尾按 ↑↓）现在**一行都不写库**；
 - **只有「在今天」的任务才有序号**：移出今天一律清成 NULL（不留幽灵序号）；
 - 序号由领域层维护，**不进 PATCH 白名单**（不是内容字段，不给人手改）；
 - 落点是"**放到谁前面**"（`before`），不是"第几格"：隐藏/新增条目都不会让落点错位；
@@ -142,22 +145,24 @@ def test_keyboard_up_down_shares_the_same_order(tmp_path: Path) -> None:
 def test_leaving_today_clears_the_rank_and_coming_back_goes_last(tmp_path: Path) -> None:
     """移出今天 → 序号清掉；再加回来 → **排在末尾**（不带着旧号插回原位置）。
 
-    ★ "末尾"在这里是**精确**的：拖过一次之后整份清单都有号，而加回来的那条是 NULL
-    （没排过序）→ 按口径排在"排过序的那一截"后面 = 列表最后一条。
+    ★ 2026-09-26（T-G86）改过这条的**走法**（结论不变）：原来靠"拖一次 → 整份清单都写号"
+    来制造"丙 有号"，而那正是被修掉的整表归一化。现在改成**让那一条真的换位置**（丙 拖到最前
+    → 丙 拿到号 1，甲/乙 仍是 NULL），再把它移出/加回 —— 它加回来是 NULL（没排过号），
+    按口径排在"排过号的那一截"后面 = 列表最后一条（这里那一截已经空了，于是落到老口径的末尾）。
     """
     client = _client(tmp_path)
     for t in ("甲", "乙", "丙"):
         _add(client, t)
-    last = client.get("/api/mydays").json()[-1]["id"]      # 丙
-    client.post(f"/api/tasks/{last}/myday-move", json={"before": None})   # 拖一次 → 全都有号
-    first = client.get("/api/mydays").json()[0]["id"]      # 甲
-    client.post(f"/api/tasks/{first}/myday-move", json={"before": last})  # 把甲拖到丙前面
-    assert _order(client) == ["乙", "甲", "丙"], "落在「丙前面」= 夹在乙和丙之间"
+    ids = client.get("/api/mydays").json()
+    first, last = ids[0]["id"], ids[-1]["id"]              # 甲 / 丙
+    client.post(f"/api/tasks/{last}/myday-move", json={"before": first})   # 丙 拖到最前（真换位置）
+    assert _order(client) == ["丙", "甲", "乙"], "丙 拖到甲前面"
+    assert client.get(f"/api/tasks/{last}").json()["myday_rank"] == 1, "真换了位置才有号"
 
-    assert client.post(f"/api/tasks/{first}/myday").json()["myday_rank"] is None, \
+    assert client.post(f"/api/tasks/{last}/myday").json()["myday_rank"] is None, \
         "移出今天要清成 NULL（不留幽灵序号）"
-    client.post(f"/api/tasks/{first}/myday")               # 再加回来
-    assert _order(client) == ["乙", "丙", "甲"], "加回来排在末尾（不插回原来那个位置）"
+    client.post(f"/api/tasks/{last}/myday")               # 再加回来
+    assert _order(client) == ["甲", "乙", "丙"], "加回来排在末尾（不插回原来那个位置）"
 
 
 def test_untouched_tasks_keep_the_old_order(tmp_path: Path) -> None:
