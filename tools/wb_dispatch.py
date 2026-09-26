@@ -68,6 +68,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import locale
 import os
 import signal
 import subprocess
@@ -86,6 +87,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（别写第二份）
+
+# ★ T-G96：Windows 上派活器自己发起的那些 `subprocess` 不加这个，Windows 11 会把控制台程序
+#   转交给**默认终端宿主**（WindowsTerminal.exe -Embedding）→ 任务栏里留下一个**空窗口**、
+#   标题还是那个 node.exe 的名字，让人以为「它还在跑」。用户 2026-09-26 实际被它迷惑过。
+#   非 Windows 平台这个 kwargs 是空字典（别的平台没有这个概念）。
+NO_WINDOW: dict = ({"creationflags": subprocess.CREATE_NO_WINDOW}     # type: ignore[attr-defined]
+                   if os.name == "nt" else {})
 
 DEFAULT_MODEL = "deepseek-v4.1-flash"
 NODE_REL = r".workbuddy\binaries\node\versions\22.22.2-3\node.exe"
@@ -114,6 +122,11 @@ STALL_SECONDS = 480              # 日志静默多久算卡死（8 分钟）
 #   "先看现场再判"：有工具在飞 → 底线上抬到 BUSY_STALL_SECONDS；再按"历史最长一次调用 × 2.5"自适应。
 BUSY_STALL_SECONDS = 1800        # 有工具在飞时的静默上限（30 分钟）—— 在飞 ≠ 卡死
 TOOL_DURATION_FACTOR = 2.5       # 阈值 = max(底线, 2.5 × 历史最长一次已完成调用)；留余量，宁可晚掐
+# ★ T-G96：`2.5 × 历史最长`**必须有绝对上界**（复核 1969b46 §3 挑出来的「漏杀」风险）——
+#   没有上界时，一次 60 分钟的调用会把阈值抬到 150 分钟（2.5 × 3600），而它一轮内不衰减。
+#   实测三份真 log 里最长一次调用是 **389.3s / 81.2s / 69.1s** —— 60 分钟已是本项目最长门禁的
+#   约 5 倍，所以封顶取 3600（★ 这是主控定的口径，可被质疑）。
+ADAPTIVE_MAX_SECONDS = 3600
 REPEAT_WINDOW = 12               # 空转只看最近多少次工具调用
 REPEAT_NEED = 5                  # 同一件事在里面出现几次算空转
 HEARTBEAT_SECONDS = 120          # 心跳行间隔
@@ -165,6 +178,7 @@ def git_dirty() -> list[str]:
     done = subprocess.run(
         ["git", "status", "--porcelain", "-uno"],
         cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
+        **NO_WINDOW,
     )
     return [ln for ln in (done.stdout or "").splitlines() if ln.strip()]
 
@@ -175,7 +189,7 @@ def auth_ok(node: Path, cli: Path, timeout: int = 180) -> tuple[bool, str]:
         [str(node), str(cli), "-p", "只回复四个字：连接成功", "--output-format", "text",
          "--no-session-persistence", "-y"],
         cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
-        errors="replace", timeout=timeout,
+        errors="replace", timeout=timeout, **NO_WINDOW,
     )
     body = f"{done.stdout or ''}\n{done.stderr or ''}"
     if AUTH_NEEDLE in body:
@@ -312,10 +326,15 @@ def spawn_detached(argv: list[str], log_path: Path) -> int:
     """把派活**扔出去单独跑**（我的窗口关了它照样跑）：返回子进程 pid，输出落到 `log_path`。
 
     Windows 用 `DETACHED_PROCESS`（没有控制台，不随父进程退出）；别的平台用 `start_new_session`。
+    ★ T-G96：Windows 上再叠一个 `CREATE_NO_WINDOW` —— 用户 2026-09-26 看到任务栏里留着一个
+    **空窗口**（标题是那个 node.exe），Windows 11 把控制台程序转交给默认终端宿主就会这样。
+    ★ 边界：这两个 flag **不冲突**（`DETACHED_PROCESS` 已经不要控制台；`CREATE_NO_WINDOW` 让
+    宿主别再弹）—— 但「脱离窗口后照样活过父进程」是 `--detach` 的命根子，改完必须**真机验一次**。
     """
     log_path.parent.mkdir(parents=True, exist_ok=True)
     kwargs: dict = ({"creationflags": subprocess.DETACHED_PROCESS
-                     | subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
+                     | subprocess.CREATE_NEW_PROCESS_GROUP
+                     | subprocess.CREATE_NO_WINDOW} if os.name == "nt"
                     else {"start_new_session": True})
     with log_path.open("w", encoding="utf-8") as out:
         proc = subprocess.Popen(                      # noqa: S603 —— 命令是本地拼好的，不是外部输入
@@ -342,9 +361,13 @@ def status_report(card: str) -> str:
         out.append(f"  [心跳] {hb.read_text(encoding='utf-8').strip() or '（空）'}")
     else:
         out.append("  [心跳] （还没有 —— 要么没派过，要么刚起）")
-    vd = verdict_file_for(head.with_suffix(".jsonl"))
-    if vd.exists():
-        out.append(f"  [判决] {vd.read_text(encoding='utf-8').strip()}")
+    # ★ T-G96：判决**按轮落**（`wb-<卡>.verdict.txt` / `wb-<卡>.r2.verdict.txt`…）—— 这里取
+    #   **最后一轮**的那一份（按 mtime），别因为按轮落就变成主控读不到。
+    verdicts = sorted(diag.glob(f"wb-{card}*.verdict.txt"), key=lambda p: p.stat().st_mtime)
+    if verdicts:
+        newest_verdict = verdicts[-1]
+        body = newest_verdict.read_text(encoding="utf-8").strip()
+        out.append(f"  [判决] {newest_verdict.name}：{body}")
     else:
         out.append("  [判决] （还没有 —— 还在跑，或没跑完就断了）")
     sd = session_file_for(head.with_suffix(".jsonl"))
@@ -415,7 +438,7 @@ def _uncommitted_count() -> str:
     try:
         done = subprocess.run(["git", "-c", "core.quotepath=false", "status", "--porcelain"],
                               cwd=str(ROOT), capture_output=True, text=True,
-                              encoding="utf-8", errors="replace")
+                              encoding="utf-8", errors="replace", **NO_WINDOW)
     except OSError as exc:
         return f"（跑不了 git：{exc}）"
     return str(len([ln for ln in (done.stdout or "").splitlines() if ln.strip()]))
@@ -482,6 +505,64 @@ def write_report(log: Path, *, card: str, code: int, reason: str, scene: str, si
     out = report_file_for(log)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(parts) + "\n", encoding="utf-8")
+    return out
+
+
+# ============================================ 每轮判决（T-G96 = 外包卡 007）
+#
+# 为什么有它：复核卡 `R-1969b46` 跑了**两轮** —— 第 1 轮 CLI 中途死了（221 行、没有 `result`
+# 事件），第 2 轮才正常收工。安全网生效了，但**事后查不出第 1 轮为什么断**：判决文件只有一份、
+# 写的是第 2 轮的，第 1 轮的判决被覆写；`.stderr.txt` 是 0 字节；log 里也没留退出码 / 末事件类型。
+# 所以：判决**按轮落、不互相覆写**（与每轮一个 log / 一份摘要同一口径），并且每轮记下断流线索。
+
+
+def _last_event_type(lines: list[str]) -> str:
+    """整段 log 里**最后一个能解析成 dict 的事件**的 `type`（读不出 → 一句人话）。"""
+    found = ""
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict):
+            found = str(event.get("type") or "（没有 type）")
+    return found or "（没有可解析的事件）"
+
+
+def _stderr_tail(errlog: Path, limit: int = 5) -> list[str]:
+    """`stderr` 的最后 `limit` 行（断流时最要紧的线索之一）；读不出来 / 空 → 一句人话。"""
+    try:
+        text = errlog.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ["（读不到 stderr）"]
+    tail = [ln for ln in text.splitlines() if ln.strip()][-limit:]
+    return tail or ["（stderr 是空的）"]
+
+
+def write_verdict(log: Path, *, card: str, attempts: int, code: int, reason: str, sid: str,
+                  lines: list[str], errlog: Path) -> Path:
+    """这一轮的判决落盘 —— **按轮落、不互相覆写**（T-G96）。
+
+    `wb-<卡>.jsonl` → `wb-<卡>.verdict.txt`；`wb-<卡>.r2.jsonl` → `wb-<卡>.r2.verdict.txt`。
+    ★ 每轮要能查到**断在哪**：退出码 / 有没有 `result` 事件 / 末事件类型 / log 行数 / stderr 5 行。
+    """
+    has_result = "有" if result_event_text(lines) is not None else "没有"
+    diag = [
+        f"  退出码={code}；有 result 事件={has_result}；"
+        f"末事件类型={_last_event_type(lines)}；"
+        f"log 行数={len([ln for ln in lines if ln.strip()])}",
+        "  stderr 末 5 行：",
+        *[f"    {ln}" for ln in _stderr_tail(errlog)],
+    ]
+    out = verdict_file_for(log)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        f"card={card} 第={attempts} 次 退出码={code} "
+        f"会话={sid or '（无）'} 结束于={datetime.now().isoformat(timespec='seconds')}\n"
+        f"判决：{reason or '正常收工（工人退出码 0）'}\n"
+        "诊断（这一轮断在哪）：\n" + "\n".join(diag) + "\n"
+        f"看细节：python -X utf8 tools/wb_status.py {log} --tail 20 --repo\n",
+        encoding="utf-8")
     return out
 
 
@@ -564,12 +645,15 @@ def stall_threshold_seconds(*, stall_seconds: int, inflight: tuple[str, float] |
     ② **按实测自适应** → `TOOL_DURATION_FACTOR × 历史最长一次已完成调用`（取**最长**而不是平均、
        乘 2.5 是留余量：口径是宁可晚掐、不要误杀）。
     两样都没有 → 就是 `stall_seconds`（老口径，一个字没变）。
+    ★ 自适应的那一项**封顶** `ADAPTIVE_MAX_SECONDS`（T-G96）：`min(max(base, 2.5 × longest), 3600)`
+    —— 不然一次 60 分钟的调用会把阈值抬到 150 分钟（复核 1969b46 §3 的「漏杀」风险）。
+    封顶 3600 > `BUSY_STALL_SECONDS` 1800，所以在飞那条**不会被压下去**。
     """
     base = float(stall_seconds)
     if inflight:
         base = max(base, float(BUSY_STALL_SECONDS))
     longest = max(durations) if durations else 0.0
-    return max(base, TOOL_DURATION_FACTOR * longest)
+    return min(max(base, TOOL_DURATION_FACTOR * longest), float(ADAPTIVE_MAX_SECONDS))
 
 
 def _stall_report(*, silent_seconds: float, threshold: float,
@@ -612,6 +696,9 @@ def _tool_use_blocks(lines: list[str]):
     """按出现顺序产出 `assistant` 事件里的每一次 `tool_use`：(id, 名字, 参数, `__timestamp` 秒)。
 
     ★ 与 `tool_signatures()`（空转判据用）分开写、**不去改它** —— 那条判据一个字都不许动。
+    ★ T-G96：`message` **不是 dict** 时（畸形 log）当没有 `content` —— 复核 1969b46 §3.2 里
+    `message` 是 str/int 会让 `.get` 抛 `AttributeError`，异常逃出 `run_worker` 的轮询循环 →
+    看门狗失效。既有的守卫（`content` 不是 list / `item` 不是 dict / `input` 不是 dict）保持。
     """
     for raw in lines:
         try:
@@ -621,7 +708,8 @@ def _tool_use_blocks(lines: list[str]):
         if not isinstance(event, dict) or event.get("type") != "assistant":
             continue
         stamp = _epoch(event.get("__timestamp"))
-        content = (event.get("message") or {}).get("content")
+        message = event.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
         for item in content if isinstance(content, list) else []:
             if isinstance(item, dict) and item.get("type") == "tool_use":
                 yield (str(item.get("id") or ""), str(item.get("name") or "?"),
@@ -629,7 +717,10 @@ def _tool_use_blocks(lines: list[str]):
 
 
 def _tool_result_blocks(lines: list[str]):
-    """按出现顺序产出 `user` 事件里的每一条 `tool_result`：(tool_use_id, `__timestamp` 秒)。"""
+    """按出现顺序产出 `user` 事件里的每一条 `tool_result`：(tool_use_id, `__timestamp` 秒)。
+
+    ★ T-G96：与 `_tool_use_blocks` 同样对 `message` 做类型判断（畸形 log 不许让看门狗炸）。
+    """
     for raw in lines:
         try:
             event = json.loads(raw)
@@ -638,7 +729,8 @@ def _tool_result_blocks(lines: list[str]):
         if not isinstance(event, dict) or event.get("type") != "user":
             continue
         stamp = _epoch(event.get("__timestamp"))
-        content = (event.get("message") or {}).get("content")
+        message = event.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
         for item in content if isinstance(content, list) else []:
             if isinstance(item, dict) and item.get("type") == "tool_result":
                 yield str(item.get("tool_use_id") or ""), stamp
@@ -772,10 +864,19 @@ def kill_tree(pid: int) -> str:
     """掐掉**整棵进程树**（按 PID，不按进程名 —— 按名字会误伤同名的别的进程）。
 
     Windows 走 `taskkill /F /T`；别的平台退回 `os.kill`。掐完返回一句人话（原因照实说）。
+    ★ T-G96：`taskkill` 的输出是**系统区域编码**（这台机器是 cp936），原来按 `utf-8` 解 → 乱码
+    （掐是掐掉了，但那句回话没法读）。改成**系统区域编码** + `errors="replace"`（解不开的字节
+    替换掉，**绝不让解码把掐进程这条路带崩**）。只动解码这一处。
+    ★ 为什么用 `locale.getencoding()` 而不是 `getpreferredencoding(False)`：本仓一律
+    `python -X utf8`，那会让后者返回 `utf-8`（UTF-8 模式）→ 等于没改；前者仍回系统区域编码
+    （实测 **cp936**）。
     """
     if os.name == "nt":
+        enc = (locale.getencoding() if hasattr(locale, "getencoding")
+               else locale.getpreferredencoding(False)) or "utf-8"
         done = subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
-                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+                              capture_output=True, text=True, encoding=enc,
+                              errors="replace", **NO_WINDOW)
         body = (done.stdout or done.stderr or "").strip().splitlines()
         return body[0] if body else f"taskkill 退出码 {done.returncode}"
     os.kill(pid, signal.SIGKILL)
@@ -808,12 +909,15 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
 
     ★ 边界（如实写）：判据每轮把已落的 log **整段重解析**（简单、够快：卡 002 那种量级
     300 多条事件，解析一遍是毫秒级）；真跑出几万条事件再谈增量。
+    ★ T-G96 第二层兜底：**判据自己抛异常时不许让看门狗失效** —— 退到"当成没有在飞 / 没有耗时
+    数据"的保守口径继续盯，并把这次异常**如实记进心跳 / 判决**（不静默吞掉）。
     """
     log.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
     state: dict[str, float] = {"last_at": time.monotonic()}
     lock = threading.Lock()
     reason = ""
+    guard_note = ""      # 判据抛过异常就记在这里（T-G96）—— 如实说，不假装没发生
 
     errlog.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -843,20 +947,35 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
                     snapshot = list(lines)
                     silent = now - state["last_at"]
                 if watchdog:
-                    verdict = watchdog_verdict(silent_seconds=silent, signatures=snapshot,
-                                               stall_seconds=stall_seconds, lines=snapshot)
+                    try:
+                        verdict = watchdog_verdict(silent_seconds=silent, signatures=snapshot,
+                                                   stall_seconds=stall_seconds, lines=snapshot)
+                    except Exception as exc:      # noqa: BLE001 —— 判据炸了也**不许让看门狗失效**
+                        guard_note = (f"（看门狗判据抛异常，已退回保守口径："
+                                      f"{type(exc).__name__}: {exc}）")
+                        try:                       # 兜底：不给 lines = 老口径（无在飞/无耗时）
+                            verdict = watchdog_verdict(silent_seconds=silent, signatures=snapshot,
+                                                       stall_seconds=stall_seconds)
+                        except Exception:          # noqa: BLE001 —— 兜底也炸：至少别连累主循环
+                            verdict = f"卡死：{silent / 60:.1f} 分钟没有新事件"
                     if verdict:
-                        reason = verdict
+                        reason = verdict + ("" if guard_note in verdict else guard_note)
                         break
                 if heartbeat_seconds and now - last_beat >= heartbeat_seconds:
                     last_beat = now
-                    sigs = tool_signatures(snapshot)
-                    live = inflight_tool(snapshot)
-                    _, hb = wb_status.parse_events(snapshot)
-                    printer(heartbeat_line(
-                        elapsed=now - started, turns=turns_seen(snapshot),
-                        tool_calls=len(sigs), files=hb["files_total"],
-                        silent_seconds=silent, inflight=live[0] if live else None))
+                    try:
+                        sigs = tool_signatures(snapshot)
+                        live = inflight_tool(snapshot)
+                        _, hb = wb_status.parse_events(snapshot)
+                        printer(heartbeat_line(
+                            elapsed=now - started, turns=turns_seen(snapshot),
+                            tool_calls=len(sigs), files=hb["files_total"],
+                            silent_seconds=silent, inflight=live[0] if live else None) + guard_note)
+                    except Exception as exc:      # noqa: BLE001 —— 心跳这条路同样兜底
+                        guard_note = (f"（心跳判据抛异常，已退回保守口径："
+                                      f"{type(exc).__name__}: {exc}）")
+                        printer(f"[心跳] 已跑 {(now - started) / 60:.1f} 分钟 | "
+                                f"日志静默 {silent:.0f} 秒{guard_note}")
         finally:
             gone = proc.poll() is not None
             killed = "（它已经自己退出了，不用掐）" if gone else ""
@@ -879,8 +998,16 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
 
 
 def _scene(lines: list[str]) -> str:
-    """掐掉那一刻的现场：最后几步 + 它碰过哪些文件（主控据此判断"卡在哪一步"）。"""
-    timeline, summary = wb_status.parse_events(lines)
+    """掐掉那一刻的现场：最后几步 + 它碰过哪些文件（主控据此判断"卡在哪一步"）。
+
+    ★ T-G96 第二层兜底：现场渲染走 `wb_status.parse_events()`，它对畸形 log（`message` 不是 dict）
+    同样会抛 —— 若不接住，异常会**逃出** `run_worker` 的收尾路径，等于畸形 log 让看门狗失效。
+    所以这里退回一句"现场渲染失败"，**绝不因此让掐进程这件事本身出不来**。
+    """
+    try:
+        timeline, summary = wb_status.parse_events(lines)
+    except Exception as exc:              # noqa: BLE001 —— 现场渲染只是辅助，不许带崩主流程
+        return f"    （现场渲染失败，退回一句结论：{type(exc).__name__}: {exc}）"
     tail = timeline[-SCENE_LINES:]
     files = "、".join(summary["files"]) or "（没碰过文件）"
     return ("\n".join(f"    {ln}" for ln in tail)
@@ -1064,15 +1191,19 @@ def main() -> int:
         sid = new_sid or sid
         if sid:                      # ★ 一拿到就落盘：这样中断之后 `--resume auto` 才用得上
             session_file_for(log).write_text(sid, encoding="utf-8")
+        round_lines = log_k.read_text(encoding="utf-8", errors="replace").splitlines()
         # ★ T-G95：**每一条退出路径都落一份摘要**（含"被掐后再续跑"的每一轮），主控只读它。
         report = write_report(log_k, card=args.card, code=code, reason=reason, scene=scene,
-                              sid=sid, attempts=attempts,
-                              lines=log_k.read_text(encoding="utf-8",
-                                                   errors="replace").splitlines(),
+                              sid=sid, attempts=attempts, lines=round_lines,
                               started_at=attempt_started)
+        # ★ T-G96：判决**按轮落**（`wb-<卡>.r2.verdict.txt`…）—— 第 2 轮不许覆写第 1 轮的。
+        verdict = write_verdict(log_k, card=args.card, attempts=attempts, code=code, reason=reason,
+                                sid=sid, lines=round_lines,
+                                errlog=log_k.with_suffix(".stderr.txt"))
         print(f"[done] 第 {attempts} 次：工人退出码 {code}；stderr 见 {log_k.name[:-6]}.stderr.txt",
               flush=True)
         print(f"[摘 ] 已落盘：{report.relative_to(ROOT).as_posix()}", flush=True)
+        print(f"[判决] 已落盘：{verdict.relative_to(ROOT).as_posix()}", flush=True)
         if not should_resume(reason, attempts, args.retry):
             break
         attempts += 1
@@ -1089,21 +1220,13 @@ def main() -> int:
           f"工具调用 {summary['tool_calls']} 次；碰过的文件 {summary['files_total']} 个；"
           f"认不出的行 {summary['unknown_events']} 条", flush=True)
     if attempts > 1:
-        print(f"[注 ] 这一轮跑了 {attempts} 次（前几次的 log：同目录 wb-{args.card}.r*.jsonl）",
+        print(f"[注 ] 这一轮跑了 {attempts} 次（前几次的 log / 判决：同目录 wb-{args.card}.r*.*）",
               flush=True)
-    # ★ 判决落盘：新窗口（或过夜之后的我）先读这个文件，别的都不用猜
-    verdict_file_for(log).write_text(
-        f"card={args.card} 尝试={attempts} 次 退出码={code} "
-        f"会话={sid or '（无）'} 结束于={datetime.now().isoformat(timespec='seconds')}\n"
-        f"判决：{reason or '正常收工（工人退出码 0）'}\n"
-        f"看细节：python -X utf8 tools/wb_status.py {log_k} --tail 20 --repo\n",
-        encoding="utf-8")
     if reason:
         print(f"[掐 ] {reason}", file=sys.stderr, flush=True)
         print(f"     现场（最后一次动作之后的几步）：\n{scene}", file=sys.stderr, flush=True)
         print(f"[复核] 先看现场再决定：python -X utf8 tools/wb_status.py {log_k} --tail 20 --repo",
               file=sys.stderr, flush=True)
-        print(f"[判决] 已落盘：{verdict_file_for(log)}", file=sys.stderr, flush=True)
         return 6
     print(f"[复核] 主控现在去看报告与 git status：python -X utf8 tools/wb_status.py {log_k} --repo",
           flush=True)

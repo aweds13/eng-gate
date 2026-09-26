@@ -13,6 +13,9 @@
 from __future__ import annotations
 
 import json
+import locale
+import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -882,3 +885,295 @@ def test_detached_argv_pins_unbuffered_stdout_exactly_once() -> None:
     assert str(Path(wd.__file__).resolve()) in once
     assert once.count("--no-preflight") == 1
     assert "--detach" not in once and once[-1] == "--detach-done"
+
+
+# ================================ 复核 1969b46 挑出的三个缺口（T-G96 = 外包卡 007）
+#
+# 对抗性复核（`gates/diag/复核-1969b46.md`）挑出、都带复现：
+#   ① ★★ 两个**假护栏** —— `run_worker` 里那两行**接线**（`lines=snapshot` 喂看门狗、
+#      `inflight=` 喂心跳）单测覆盖 = 0：删掉它们，全套 50 条仍全绿。将来谁改回老样子，
+#      CI 全绿而真机上"长调用仍被误杀"的原始病灶**原样复发**。
+#   ② 畸形 log（`message` 不是 dict）让 `_tool_use_blocks` 抛 `AttributeError` → 异常**逃出**
+#      `run_worker` 的轮询循环 → 看门狗失效、阻塞到工人自退。
+#   ③ `2.5 × 历史最长` **无绝对上限**：一次 60 分钟的调用 → 150 分钟才判卡死（漏杀）。
+# 另加 §2.4 `kill_tree()` 的 GBK 乱码、§2.5 判决/摘要**按轮落不互相覆写**。
+
+
+def _stub_timestamped(events: list[dict], sleep_after: float) -> list[str]:
+    """桩命令：把 `events` 逐条打上**当前** `__timestamp`（ISO-8601 UTC）再吐出来，然后装死。
+
+    ★ 与既有 `_stub()`（既没 `id` 也没 `__timestamp`、恰好绕开新判据）相对照 —— 这条能真喂到
+    「在飞」那条判据上（复核 §2.2 点名的那条缝）。
+    """
+    payload = json.dumps(events, ensure_ascii=False)
+    code = "\n".join([
+        "import json, time",
+        "from datetime import datetime, timezone",
+        f"events = json.loads({payload!r})",
+        "for ev in events:",
+        "    ev['__timestamp'] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')",
+        "    print(json.dumps(ev, ensure_ascii=False), flush=True)",
+        f"time.sleep({sleep_after})",
+        "",
+    ])
+    return [sys.executable, "-X", "utf8", "-c", code]
+
+
+def test_runner_does_not_kill_a_worker_with_a_timestamped_inflight_call(tmp_path: Path) -> None:
+    """★★ 缺口 ① —— **接线①**：桩吐**带 `__timestamp` 的 `tool_use`** + 静默超过 `--stall-seconds`
+    → **不许被掐**（认得出"在飞"，静默是预期的）；心跳里也要出现「在跑 Bash」（**接线②**）。
+
+    ★ 验收硬标准（§2.1）：删 `run_worker` 里的 `lines=snapshot` → 本条**红**（判成卡死）；
+    删 `inflight=` → 心跳里没有「在跑」→ 本条**红**。
+    """
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    beats: list[str] = []
+    stub = _stub_timestamped([{"type": "assistant", "message": {"id": "m1", "content": [
+        {"type": "tool_use", "id": "t1", "name": "Bash",
+         "input": {"command": "python -X utf8 scripts/run_gates.py"}}]}}], sleep_after=30)
+    started = time.monotonic()
+    _, reason, _, _sid = wd.run_worker(stub, log, err, timeout=6, max_turns=150,
+                                       watchdog=True, heartbeat_seconds=1, stall_seconds=2,
+                                       poll_seconds=0.2, printer=beats.append)
+    elapsed = time.monotonic() - started
+    assert "卡死" not in reason, reason
+    assert "超时" in reason, reason
+    assert elapsed < 20, f"应当跑到 --timeout 6 才停，实际 {elapsed:.1f} 秒"
+    assert any("在跑" in b and "Bash" in b for b in beats), f"心跳没带「在跑」：{beats}"
+
+
+def test_runner_kills_a_quiet_worker_when_nothing_is_inflight(tmp_path: Path) -> None:
+    """★★ 缺口 ① 的对偶 —— **已配对完成、无在飞** + 静默超过阈值 → **必须被掐**。
+
+    证明阈值不是被一味放宽：没有在飞的调用时，静默到 `--stall-seconds` 照样判卡死。
+    """
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    stub = _stub_timestamped([
+        {"type": "assistant", "message": {"id": "m1", "content": [
+            {"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "a.py"}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]}},
+    ], sleep_after=60)
+    started = time.monotonic()
+    _, reason, _, _sid = wd.run_worker(stub, log, err, timeout=120, max_turns=150,
+                                       watchdog=True, heartbeat_seconds=0, stall_seconds=2,
+                                       poll_seconds=0.2)
+    elapsed = time.monotonic() - started
+    assert "卡死" in reason, reason
+    assert elapsed < 30, f"装死 60 秒，掐得太慢了：{elapsed:.1f} 秒"
+
+
+# 复核 §3.2 的 10 种畸形形状（两种 `message` 不是 dict 的会把判据炸掉）。
+_MALFORMED: list[tuple[str, list[str], bool]] = [
+    # (名字, 事件行, 期望 inflight 是不是 None)
+    ("half", [json.dumps({"__timestamp": _iso(0), "type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "sleep 5000"}}]}},
+        ensure_ascii=False)], False),
+    ("badjson", ["这行不是 JSON", "", "[]"], True),
+    ("nostamp", [json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "t1", "name": "Read", "input": {}}]}})], True),
+    ("cnotlist", [json.dumps({"__timestamp": _iso(0), "type": "assistant",
+                              "message": {"content": "不是列表"}}, ensure_ascii=False)], True),
+    ("itemstr", [json.dumps({"__timestamp": _iso(0), "type": "assistant",
+                             "message": {"content": ["不是 dict"]}}, ensure_ascii=False)], True),
+    ("stampnum", [json.dumps({"__timestamp": 12345, "type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "t1", "name": "Read", "input": {}}]}})], True),
+    ("noid", [json.dumps({"__timestamp": _iso(0), "type": "assistant", "message": {"content": [
+        {"type": "tool_use", "name": "Read", "input": {}}]}})], False),
+    ("inputstr", [json.dumps({"__timestamp": _iso(0), "type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "t1", "name": "Bash", "input": "不是 dict"}]}},
+        ensure_ascii=False)], False),
+    ("msgstr", [json.dumps({"__timestamp": _iso(0), "type": "assistant",
+                            "message": "我不是 dict"}, ensure_ascii=False)], True),
+    ("msgnum", [json.dumps({"__timestamp": _iso(0), "type": "assistant", "message": 7})], True),
+]
+
+
+@pytest.mark.parametrize("name,lines,expect_none", _MALFORMED,
+                         ids=[shape[0] for shape in _MALFORMED])
+def test_malformed_logs_never_break_the_criteria(name: str, lines: list[str],
+                                                 expect_none: bool) -> None:
+    """★ 缺口 ② 第一层：10 种畸形形状逐条 —— 判据**不抛异常**、退回保守行为。
+
+    两种 `message` 不是 dict（`msgstr` / `msgnum`）在复核里会抛 `AttributeError`；现在类型判断
+    把 `message` 不是 dict 当没有 `content`。既有的守卫（`content` 不是 list / `item` 不是 dict /
+    `input` 不是 dict / 缺 `__timestamp`）保持。
+    """
+    got = wd.inflight_tool(lines)
+    assert (got is None) == expect_none, f"{name}: inflight={got}"
+    assert wd.tool_durations(lines) == [], f"{name}: 耗时表应当退回空"
+    said = wd.watchdog_verdict(silent_seconds=600, signatures=[], lines=lines)
+    assert isinstance(said, str), name          # 不抛异常；具体判什么由场景决定
+
+
+@pytest.mark.parametrize("shape", ["msgstr", "msgnum"])
+def test_runner_survives_a_malformed_log_in_the_loop(tmp_path: Path, shape: str) -> None:
+    """★ 缺口 ② 经 `run_worker` 的**循环路径**：畸形事件既不许炸看门狗、也不许炸心跳。
+
+    心跳那条路会调用 `tool_signatures()` / `wb_status.parse_events()`（它们也会在 `message`
+    不是 dict 时抛）—— 第二层兜底把它们一起接住，退回保守口径继续盯。
+    """
+    payload = {n: ln for n, ln, _ in _MALFORMED}[shape][0]
+    code = "\n".join(["import time", f"print({payload!r}, flush=True)", "time.sleep(60)", ""])
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    _, reason, _, _sid = wd.run_worker([sys.executable, "-X", "utf8", "-c", code], log, err,
+                                       timeout=120, max_turns=150, watchdog=True,
+                                       heartbeat_seconds=1, stall_seconds=2, poll_seconds=0.2)
+    assert "卡死" in reason, reason               # 畸形事件没让看门狗失效
+
+
+def test_runner_falls_back_when_a_criterion_raises(tmp_path: Path, monkeypatch) -> None:
+    """★ 缺口 ② 第二层（更重要）：**判据自己抛异常时不许让看门狗失效**。
+
+    退到"没有在飞 / 没有耗时数据"的保守口径继续盯，并把这次异常**如实记进判决**（不静默吞）。
+    """
+    def boom(*args, **kwargs):                    # noqa: ANN002, ANN003, ANN202
+        raise AttributeError("'str' object has no attribute 'get'")
+
+    monkeypatch.setattr(wd, "inflight_tool", boom)
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    stub = _stub_timestamped([{"type": "assistant", "message": {"id": "m1", "content": [
+        {"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "a.py"}}]}}],
+        sleep_after=60)
+    _, reason, _, _sid = wd.run_worker(stub, log, err, timeout=120, max_turns=150,
+                                       watchdog=True, heartbeat_seconds=0, stall_seconds=2,
+                                       poll_seconds=0.2)
+    assert "卡死" in reason, reason
+    assert "退回保守口径" in reason, reason       # 异常被如实记下，不是静默吞掉
+
+
+def test_stall_threshold_is_capped_at_one_hour() -> None:
+    """★ 缺口 ③：`2.5 × 历史最长` **封顶** `ADAPTIVE_MAX_SECONDS`（3600），不再无上界。
+
+    边界：`BUSY_STALL_SECONDS = 1800` 仍生效（封顶 3600 > 1800，别把在飞那条压下去）；
+    没有历史长调用时老口径 **480 秒一字节不变**。
+    """
+    assert wd.ADAPTIVE_MAX_SECONDS == 3600
+    base = {"stall_seconds": wd.STALL_SECONDS}
+    assert wd.stall_threshold_seconds(inflight=None, durations=[], **base) == 480
+    assert wd.stall_threshold_seconds(inflight=("Bash(x)", 5.0), durations=[], **base) == 1800
+    assert wd.stall_threshold_seconds(inflight=None, durations=[240.0], **base) == 600
+    capped = wd.stall_threshold_seconds(inflight=None, durations=[3600.0], **base)
+    assert capped == 3600                              # 不是 9000
+    assert wd.stall_threshold_seconds(inflight=("Bash(x)", 5.0),
+                                      durations=[3600.0], **base) == 3600
+
+
+@pytest.mark.skipif(os.name != "nt", reason="taskkill 是 Windows 的")
+def test_kill_tree_decodes_with_the_system_locale(monkeypatch) -> None:
+    """★ §2.4：`kill_tree()` 读 `taskkill` 输出改用**系统区域编码**（这台机器 cp936）+ replace。
+
+    ★ 为什么是 `locale.getencoding()` 而不是 `getpreferredencoding(False)`：本仓一律
+    `python -X utf8`，后者在 UTF-8 模式下返回 `utf-8`（等于没改）；前者仍回 **cp936**（实测）。
+    """
+    seen: dict = {}
+
+    def fake_run(cmd, **kwargs):                  # noqa: ANN001, ANN202
+        seen.update(kwargs)
+        return _Done(stdout="成功: 已终止 PID 1 (属于 PID 2)的进程。")
+
+    monkeypatch.setattr(wd.subprocess, "run", fake_run)
+    said = wd.kill_tree(1)
+    assert "成功" in said
+    assert seen["encoding"] == locale.getencoding()
+    assert seen["encoding"] != "utf-8", "cp936 机器上按 utf-8 解就是乱码，这条防的是回退"
+    assert seen["errors"] == "replace"
+
+
+def test_retry_round_verdict_does_not_overwrite_the_first(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ §2.5：第 2 轮的判决**不覆写**第 1 轮的 —— 每轮各自留痕（第 1 轮断了才查得出）。"""
+    calls: list[list[str]] = []
+    outcomes = [("卡死：30.0 分钟没有新事件 → 已掐", "    做 Read(a.py)"), ("", "")]
+
+    def runner(cmd, log, errlog, **kwargs):        # noqa: ANN001, ANN202
+        calls.append(list(cmd))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, outcomes[len(calls) - 1][0], outcomes[len(calls) - 1][1], "sid-abc"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "007", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+    capsys.readouterr()
+    first = sandbox / "gates" / "diag" / "wb-007.verdict.txt"
+    second = sandbox / "gates" / "diag" / "wb-007.r2.verdict.txt"
+    assert first.exists() and second.exists(), "判决应当按轮落"
+    first_body = first.read_text(encoding="utf-8")
+    assert "卡死" in first_body and "第=1 次" in first_body
+    assert "正常收工" in second.read_text(encoding="utf-8")
+
+
+def test_verdict_records_the_diagnostics_of_each_round(tmp_path: Path) -> None:
+    """★ §2.5：每轮要能查到**断在哪** —— 退出码 / 有没有 `result` 事件 / 末事件类型 / log 行数 /
+    stderr 末 5 行（复核那轮断了之后这些**全查不到**）。"""
+    log = tmp_path / "wb-007.r2.jsonl"
+    errlog = tmp_path / "wb-007.r2.stderr.txt"
+    lines = [json.dumps({"type": "assistant", "message": {"content": []}})]
+    errlog.write_text("第一行\n第二行\n最后一行的线索\n", encoding="utf-8")
+    wd.write_verdict(log, card="007", attempts=2, code=6, reason="卡死：没有新事件",
+                     sid="sid-2", lines=lines, errlog=errlog)
+    body = wd.verdict_file_for(log).read_text(encoding="utf-8")
+    assert wd.verdict_file_for(log).name == "wb-007.r2.verdict.txt"
+    for needle in ("退出码=6", "有 result 事件=没有", "末事件类型=assistant", "log 行数=1",
+                   "stderr 末 5 行", "最后一行的线索", "第=2 次"):
+        assert needle in body, body
+
+
+def test_status_reads_the_latest_round_verdict(tmp_path: Path, monkeypatch, capsys) -> None:
+    """★ §2.5：判决按轮落之后，`--status` 仍要**读到最后一轮**（别改成主控读不到）。"""
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    (diag / "wb-007.jsonl").write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+    first = diag / "wb-007.verdict.txt"
+    second = diag / "wb-007.r2.verdict.txt"
+    first.write_text("card=007 第=1 次\n判决：卡死：第 1 轮被打断\n", encoding="utf-8")
+    second.write_text("card=007 第=2 次\n判决：正常收工（工人退出码 0）\n", encoding="utf-8")
+    now = time.time()
+    os.utime(first, (now - 100, now - 100))
+    os.utime(second, (now, now))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "007", "--status"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert "wb-007.r2.verdict.txt" in out and "正常收工" in out
+    assert "第 1 轮被打断" not in out
+
+
+@pytest.mark.skipif(os.name != "nt", reason="CREATE_NO_WINDOW 是 Windows 的")
+def test_no_window_flag_is_used_for_own_probes(monkeypatch) -> None:
+    """★ §2.6：派活器自己发起的 `subprocess`（前置检查那几条）加 `CREATE_NO_WINDOW`。"""
+    assert wd.NO_WINDOW.get("creationflags") == subprocess.CREATE_NO_WINDOW
+    seen: dict = {}
+
+    def fake_run(cmd, **kwargs):                  # noqa: ANN001, ANN202
+        seen.update(kwargs)
+        return _Done(stdout="")
+
+    monkeypatch.setattr(wd.subprocess, "run", fake_run)
+    wd.git_dirty()
+    assert seen.get("creationflags") == subprocess.CREATE_NO_WINDOW
+
+
+@pytest.mark.skipif(os.name != "nt", reason="CREATE_NO_WINDOW 是 Windows 的")
+def test_spawn_detached_keeps_detached_but_adds_no_window(tmp_path: Path, monkeypatch) -> None:
+    """★ §2.6：`spawn_detached` 在 Windows 上 `DETACHED_PROCESS | CREATE_NO_WINDOW` **一起**给。
+
+    ★ 边界：`DETACHED_PROCESS`（"活过父进程退出"的命根子）必须在，别为了不弹窗把它弄丢。
+    """
+    seen: dict = {}
+
+    class _P:
+        pid = 42
+
+    def fake_popen(argv, **kwargs):               # noqa: ANN001, ANN202
+        seen.update(kwargs)
+        return _P()
+
+    monkeypatch.setattr(wd.subprocess, "Popen", fake_popen)
+    assert wd.spawn_detached(["python", "x.py"], tmp_path / "d.log") == 42
+    flags = seen["creationflags"]
+    assert flags & subprocess.DETACHED_PROCESS
+    assert flags & subprocess.CREATE_NO_WINDOW

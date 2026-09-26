@@ -4,6 +4,46 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 看门狗护栏补强（T-G96）
+
+对抗性复核 `1969b46`（T-G94：看门狗不再误杀长工具调用）判「算数，但有保留」，挑出三个缺口
+（+ 一个小问题）；这张卡逐条补掉。
+
+- ★★ **两个假护栏补掉**：`run_worker` 里那两行**接线**（`lines=snapshot` 喂看门狗、`inflight=` 喂
+  心跳）单测覆盖 = 0 —— 复核删掉它们**全套 50 条仍全绿**，将来谁改回老样子，CI 全绿而**误杀
+  原样复发**。新增两条**经过 `run_worker` 的对偶用例**（带 `__timestamp` 的在飞调用 + 静默超阈值
+  → **不许被掐** + 心跳要写「在跑 Bash」；已配对无在飞 + 静默超阈值 → **必须被掐**），并**用突变
+  证明有牙**：删 `lines=snapshot` → 用例红；删 `inflight=` → 心跳断言红。
+- **畸形 log 两层防御**：`message` 不是 dict 时判据抛 `AttributeError` 逃出轮询循环 → 看门狗失效。
+  第一层 = 判据对 `message` 做类型判断（既有守卫保持）；第二层 = `run_worker` 循环给判据调用
+  （含心跳、含现场渲染 `_scene`）加兜底，退回保守口径继续盯，并把异常**如实记进心跳/判决**。
+  复核 §3.2 的 10 种畸形形状**参数化**钉住，其中 `msgstr`/`msgnum` 两条**经过 `run_worker` 循环**。
+- **自适应阈值封顶**：新增 `ADAPTIVE_MAX_SECONDS = 3600`，`stall_threshold_seconds()` 返回
+  `min(max(base, 2.5 × 历史最长), 3600)` —— 一次 60 分钟的调用不再把阈值抬到 **150 分钟**（复核的
+  「漏杀」风险）。★ 3600 是**主控定的口径**（可被质疑）：三份真 log 的最长一次调用是
+  **389.3s / 81.2s / 69.1s**，60 分钟已是本项目最长门禁的约 5 倍。边界：`BUSY_STALL_SECONDS`（1800）
+  仍生效、**没有历史长调用时老口径 480 秒一字节不变**。
+- **`kill_tree()` 的 GBK 乱码**：读 `taskkill` 输出改用**系统区域编码**（`locale.getencoding()` ——
+  本仓一律 `python -X utf8`，`getpreferredencoding(False)` 在 UTF-8 模式下返回 `utf-8`，等于没改）
+  + `errors="replace"`。真机对比：`�ɹ�: …` → `成功: 已终止 PID …的进程。`。
+- **每轮留痕不许互相覆写**：判决文件**按轮落**（`wb-<卡>.verdict.txt` / `wb-<卡>.r2.verdict.txt`…），
+  每轮记「退出码 / 有无 `result` 事件 / 末事件类型 / log 行数 / stderr 末 5 行」；`--status` 取**最新
+  一轮**判决（复核卡 `R-1969b46` 第 1 轮判决曾被第 2 轮覆写、断流原因事后查不出，就是它）。
+- **Windows 不留空控制台窗口**（用户实测被迷惑过）：派活器自己发起的 `subprocess`（`auth_ok()` 等
+  探测 + `git`/`taskkill`）加 `CREATE_NO_WINDOW`；`spawn_detached()` 用
+  `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW`。真机验过：子进程**活过父进程
+  退出**（父进程退后 4 秒才写 marker）且自报 `GetConsoleWindow() == 0`（无控制台 → 无窗口）。
+- **反证（先红后绿）**：`tests/test_wb_dispatch.py` **57 → 79 条** —— 改实现前 **9 failed / 68 passed
+  / 2 deselected**（另 2 条「畸形经 `run_worker`」用例在旧实现上让看门狗失效、阻塞到子进程自退
+  60s，正是缺口②本身），改后 **79 passed**。
+- **边界（如实写）**：`wb_status.parse_events()` / `turns_seen()` / `tool_signatures()` 在 `message`
+  不是 dict 时**仍会抛**（在别处、本卡白名单不许碰），本卡只在 `run_worker` 调用点接住；`main()`
+  收尾渲染时间线仍直接调 `parse_events`；`tool_durations` **跨轮串**（复核 §7-2）没验；完整
+  `--detach` 命令没真机重跑（前置检查要求工作区干净，提交前本就脏），真机证据走的是 `spawn_detached()` 本身；
+  `复盘/外包-卡表与规矩.md` §12 的表仍写「480 秒」（白名单不许动那份文件）。
+- 台账 `T-G96`；复盘 `复盘/看门狗护栏补强-T-G96.md`；更正追记在 `复盘/看门狗误杀-T-G94.md` §8。
+  **没动的**：`src/**`、`docs/` 里其它文件、`tools/wb_dash.py`、`tools/wb_status.py`、真实库/备份目录。
+
 ### 派活器收工时自己落一份交接摘要（T-G95）
 
 主控每收一张卡，最贵的开销**不是复核**（`tools/wb_review.py` 一条命令 5 秒），而是**读工人那一轮的
