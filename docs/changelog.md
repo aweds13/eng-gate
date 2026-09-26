@@ -4,6 +4,26 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 修 T-G84 那条「中文路径」用例的定时炸弹（T-G87）：判据不许依赖真仓库 HEAD 这一笔
+
+`test_chinese_paths_are_not_escaped` 断言的是「**HEAD 这一笔**的改动清单里必须出现
+`复盘/…`」。可门禁是**提交前**跑的 —— 那时 HEAD 还是**父提交**（恰好带中文路径）→ 绿；
+提交一落，HEAD 变成自己那一笔，只要它全是 ASCII 路径，**这条用例从此永远红**。
+实测：`46be295` 只动了 3 个 ASCII 路径，此后 pytest 门恒红 —— 卡 002（T-G86）那轮
+外包跑全量门禁时，16 门里 15 门绿、**唯一的红就是它**，而红的原因跟被验的产品代码
+毫无关系。**这种用例比没有用例更坏：它会把真红灯淹掉。**
+
+- **修法**：不再看真实历史 —— 在 `tmp_path` 里自己搭一个 git 仓库、提交一个
+  中文名的文件（临时仓库里叫「复盘/中文.md」），用 `monkeypatch` 只把 `wb_review.ROOT`
+  指向它（**`tools/` 一行不改**）。
+- **判据自己要能证明它看得到东西**：先证明**普通 git 确实会转义**
+  （`"\\345\\244\\215…"`），再证明 `wb_review.git()` 原样给出「复盘/中文.md」。
+- **证据**：`gates/diag/probes/wb_cjk_tmp_repo_probe.py` 先跑通；**突变检验**
+  `gates/diag/probes/wb_review_mutation_probe.py` 把 `-c core.quotepath=false` 临时拿掉
+  → 该用例**当场红**（exit 1），还原 → 绿（exit 0），`tools/` 一字未改。
+- **条数不变**：`tests/test_wb_review.py` **仍是 12 条**（就地重写那一条）；五条判据没变。
+- 台账 `T-G87`；复盘 `复盘/测试定时炸弹-T-G87.md`。
+
 ### 外包链路接通真 CLI（T-G85）：改走独立安装的 CodeBuddy Code，派活器带上权限模式与新模型
 
 WorkBuddy 自带的那份 CLI 是**无头版** —— `cli/dist/` 里只有 `codebuddy-headless.js` 与

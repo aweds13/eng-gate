@@ -521,6 +521,20 @@ evidence = [
 gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不存在的分组 id（传分组**路径**也一样）→ **500** —— `set_task_groups` 抛 `KeyError`（**领域层故意如此**：不静默建一个「差不多」的组，`test_task_group_names_line.py` 钉着），而那条路由只接了 `ValueError`。★ **顺手查出同族第二处**：`PATCH /api/tasks/{task_id}` 抛的同一个 `KeyError` 被「任务不存在」那条接住了 → 任务好好的却报**「任务不存在」**（状态码对、话指错对象）。**修法**：新增 `_require_groups()`，在建/改**之前**先把分组验干净（不存在的 → 404，并把是哪个 id 说出来，口径**照抄**隔壁 `POST /api/tasks/{id}/group` 那条已有路由）；这样顺带去掉了一类**半成品**——原来失败时任务**已经落库**（客户端看到报错、库里却多一条，重试就多两条）。**证明不假红**：把 `app.py` 的修复 stash 掉再跑那条新用例 → 当场失败，堆栈里正是逃出去的 `KeyError: 分组不存在: nope`。**残留边界（如实写）**：验完之后若再出数据库级错误，任务仍会留下 —— 两个 core 函数各自 `commit`，**没有跨函数事务**；要彻底解决得动事务边界，不在这张卡里做。 ★ **2026-09-25（T-G71）这条残留收口了**：`db.unit_of_work()` 在连接**代理层**把 `commit()` 推迟到退出那一刻（core 一个 `commit()` 都没改），本条的 `create_task` / `update_task` 两条路都包了事务 —— 第二笔抛数据库级错误时**库里一个字节都不留**（`tests/test_unit_of_work.py` 逐条钉，且用「第一笔确实跑过」证明不是空转）。详见 `复盘/跨函数事务-T-G71.md`。"
 
 
+[entries."T-G87"]
+id = "T-G87"
+title = "修 T-G84 那条「中文路径」用例的**定时炸弹**：判据不许依赖真仓库 HEAD 这一笔 —— 改成自搭临时仓库，并先证明普通 git 确实会转义"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/测试定时炸弹-T-G87.md",
+  "text:tests/test_wb_review.py::def plain(*args: str) -> str:",
+  "text:tests/test_wb_review.py::★ 还先证明**普通 git 确实会转义**",
+  "text:docs/traceability.toml::T-G87",
+  "test:test_wb_review.py",
+]
+gaps = "**怎么发现的**（T-G87，目标轮 3）：卡 002（T-G86）那轮外包真跑全量门禁时，16 门里 15 门绿、**唯一红**是 `tests/test_wb_review.py::test_chinese_paths_are_not_escaped` —— 而那是我 T-G84 自己写的用例。**根因（定时炸弹）**：它断言的是**真仓库 HEAD 这一笔**的改动清单里必须出现 `复盘/…`；可门禁是**提交前**跑的，那时 HEAD 还是**父提交**（恰好带中文路径）→ 绿；提交一落，HEAD 变成自己那一笔，只要它全是 ASCII 路径，**这条用例从此永远红**（实测：`46be295` 只动了 3 个 ASCII 路径 → 此后 pytest 门恒红）。同一棵树「提交前绿、提交后红」是**判据自己的毛病**，不是被查对象变了 —— 这种用例比没有用例更坏：它会把真红灯淹掉（这一轮门禁红了，而红的原因跟被验的东西毫无关系）。**修法**：不再看真实历史 —— 在 `tmp_path` 里**自己搭一个 git 仓库**、提交一个 `复盘/中文.md`，再用 `monkeypatch` 只把 `wb_review.ROOT` 指向它（**`tools/` 一行不改**），然后 ① 先证明**普通 git 确实会转义**（少了这一半，夹具就看不见这个现象）、② 再证明 `wb_review.git()` 原样给出中文路径。**证据**：`gates/diag/probes/wb_cjk_tmp_repo_probe.py` 先跑通（普通 git → `\\345\\244\\215…`，`wr.git()` → `复盘/中文.md`）；改完 `tests/test_wb_review.py` **仍是 12 条**（就地重写那一条，不新增 —— 省得全项目所有「12 条」都要跟着改）；**突变检验**（`gates/diag/probes/wb_review_mutation_probe.py`）：把 `-c core.quotepath=false` 临时拿掉 → 该用例**当场红**（exit 1），还原 → 绿（exit 0），且 `tools/wb_review.py` 一字未改（`git diff --quiet` 为真）—— 证明修好之后**判据还有牙**，不是装饰。**没动的**：`tools/**`、`src/**` 一行没改；T-G84 的五条判据一条没变。"
+
 [entries."T-G85"]
 id = "T-G85"
 title = "外包链路接通真 CLI：改走**独立安装**的 CodeBuddy Code（2.158.0，带 TUI）—— 派活器优先它、加 `--permission-mode`、模型换成 `deepseek-v4.1-flash`；同轮交付卡 002 规格"
@@ -550,7 +564,7 @@ evidence = [
   "text:复盘/外包-卡表与规矩.md::tools/wb_review.py",
   "test:test_wb_review.py",
 ]
-gaps = "**为什么要有**（T-G84，目标轮 3）：外包之后主控每轮都要复核工人的提交，手工复核有五件事（audit 过不过 / 四个 trailer 全不全 / 门禁是不是**为这一笔**真跑过 / 改动越界没有 / 工作区干不干净），每次现查既慢又容易漏 —— 而**漏一条**的代价是「把没验过的东西当验过了」。**判据五条**：① `scripts/audit_progress.py` 真跑一遍、退 0、且**豁免 0**；② trailer：`Task:` **恰好一个**台账编号 + `Ledger:`/`Gates:` 必须在（`Refs:` 可选，与门禁⑧同一件事）；③ ★ **门禁是不是为这一笔跑的** —— 取**这一笔提交里的** `gates/last.json`，要求 `ok=true`、`docs_sync_ok=true`、`docs_sync_missing=[]`、每道门 `exit_code=0`，且它的 `rev` **等于这一笔的父提交**（一次门禁跑完提交两笔，第二笔就是没验过）；④ `--read-only`（只读卡一个被跟踪文件都不许改）或 `--allow <glob>` 白名单，**不给白名单就拒绝**（默认放行等于没查）；⑤ 工作区干净（`-uno`）。退出码 0/1/2，`--json` 给机器读。**验收**：`tests/test_wb_review.py` **12 条**（大半是「该失败的输入」：两个 Task 编号 / 缺 Gates / 门禁 rev 是旧的 / 有门没过 / docs 没同步 / 空的 gates 数组 / ok=false / 只读卡改了文件 / 白名单外的文件 / 不给白名单；数据层拿**真仓库 HEAD** 验「本项目的提交流程应当通过第 ③ 条」）。**★ 实测踩到的坑**：第一版直接 `git show --name-only`，**中文路径被 git 转义**成 `\\345\\244…` → 第 ④ 条把中文路径全判成越界（假红）；修法是所有 git 调用统一带 `-c core.quotepath=false`，并补一条 `test_chinese_paths_are_not_escaped`（HEAD 的改动清单里必须原样出现 `复盘/…`）—— 同 T-G76/T-G79 那族：**判据自己要能证明它看得到东西**。**真机实测**：对 HEAD（T-G83 那笔）跑一遍五条全过（退 0），再拿 `--read-only` 复核同一笔 → 当场 FAIL（证明判据真的会咬）。**边界（不假装）**：`gates/last.json` 的 `tree` 字段**故意不查**（自指悖论，`run_gates.py` 写明「审计不看它」）；它不判**内容质量**（工人写的代码对不对），只判流程走全没有；它依赖本项目的提交流程（真跑门禁 → `--seal` → 带着 `gates/last.json` 提交）。**没动的**：`src/` 一行没改。"
+gaps = "**为什么要有**（T-G84，目标轮 3）：外包之后主控每轮都要复核工人的提交，手工复核有五件事（audit 过不过 / 四个 trailer 全不全 / 门禁是不是**为这一笔**真跑过 / 改动越界没有 / 工作区干不干净），每次现查既慢又容易漏 —— 而**漏一条**的代价是「把没验过的东西当验过了」。**判据五条**：① `scripts/audit_progress.py` 真跑一遍、退 0、且**豁免 0**；② trailer：`Task:` **恰好一个**台账编号 + `Ledger:`/`Gates:` 必须在（`Refs:` 可选，与门禁⑧同一件事）；③ ★ **门禁是不是为这一笔跑的** —— 取**这一笔提交里的** `gates/last.json`，要求 `ok=true`、`docs_sync_ok=true`、`docs_sync_missing=[]`、每道门 `exit_code=0`，且它的 `rev` **等于这一笔的父提交**（一次门禁跑完提交两笔，第二笔就是没验过）；④ `--read-only`（只读卡一个被跟踪文件都不许改）或 `--allow <glob>` 白名单，**不给白名单就拒绝**（默认放行等于没查）；⑤ 工作区干净（`-uno`）。退出码 0/1/2，`--json` 给机器读。**验收**：`tests/test_wb_review.py` **12 条**（大半是「该失败的输入」：两个 Task 编号 / 缺 Gates / 门禁 rev 是旧的 / 有门没过 / docs 没同步 / 空的 gates 数组 / ok=false / 只读卡改了文件 / 白名单外的文件 / 不给白名单；数据层拿**真仓库 HEAD** 验「本项目的提交流程应当通过第 ③ 条」）。**★ 实测踩到的坑**：第一版直接 `git show --name-only`，**中文路径被 git 转义**成 `\\345\\244…` → 第 ④ 条把中文路径全判成越界（假红）；修法是所有 git 调用统一带 `-c core.quotepath=false`，并补一条 `test_chinese_paths_are_not_escaped`（HEAD 的改动清单里必须原样出现 `复盘/…`）—— 同 T-G76/T-G79 那族：**判据自己要能证明它看得到东西**。**真机实测**：对 HEAD（T-G83 那笔）跑一遍五条全过（退 0），再拿 `--read-only` 复核同一笔 → 当场 FAIL（证明判据真的会咬）。**边界（不假装）**：`gates/last.json` 的 `tree` 字段**故意不查**（自指悖论，`run_gates.py` 写明「审计不看它」）；它不判**内容质量**（工人写的代码对不对），只判流程走全没有；它依赖本项目的提交流程（真跑门禁 → `--seal` → 带着 `gates/last.json` 提交）。**没动的**：`src/` 一行没改。**★ 2026-09-26 更正（T-G87）**：这条里的 `test_chinese_paths_are_not_escaped` 原来是拿**真仓库 HEAD** 验的 —— 门禁在提交前跑（HEAD 还是父提交）所以当时是绿的，可只要某一笔的改动全是 ASCII 路径，它从此**永远红**（定时炸弹；卡 002 那轮实测撞上，唯一红灯）。已改成**自搭临时仓库**（`monkeypatch` 只换 `wb_review.ROOT`）并先证明普通 git 确实会转义；条数仍是 **12 条**，五条判据一条没变。"
 
 [entries."T-G83"]
 id = "T-G83"

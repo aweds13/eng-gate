@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -120,10 +121,41 @@ def test_current_head_passes_the_gate_evidence_check() -> None:
     assert wr.check_gate_evidence(payload, parent) == []
 
 
-def test_chinese_paths_are_not_escaped() -> None:
-    """★ 中文路径必须原样出来：被转义成 `\\345\\244...` 会让白名单把中文路径全判成越界。"""
+def test_chinese_paths_are_not_escaped(tmp_path: Path, monkeypatch) -> None:
+    """★ 中文路径必须原样出来：被转义成 `\\345\\244...` 会让白名单把中文路径全判成越界。
+
+    ★ T-G87 修的是一条**定时炸弹**：老判据断言的是**真仓库 HEAD 这一笔**里必须出现
+    `复盘/…`。可门禁是在**提交前**跑的 —— 那时 HEAD 还是**父提交**（恰好带中文路径）。
+    提交一落，HEAD 变成自己那一笔，只要它全是 ASCII 路径，**这条测试从此永远红**：
+    同一棵树「提交前绿、提交后红」是判据自己的毛病，不是被查对象变了（实测踩到）。
+    现在**自己搭一个临时仓库**：`monkeypatch` 只换掉 `wb_review.ROOT`，`tools/` 一行不动，
+    判据不再依赖真实历史的运气。★ 还先证明**普通 git 确实会转义** —— 少了这一半，
+    夹具就看不见这个现象（同族规矩：**判据自己要能证明它看得到东西**）。
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def plain(*args: str) -> str:
+        """不带 `core.quotepath=false` 的 git —— 用来证明这个夹具真看得见转义。"""
+        done = subprocess.run(
+            ["git", *args], cwd=str(repo), capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+        )
+        assert done.returncode == 0, done.stderr
+        return done.stdout
+
+    plain("init", "-q", "-b", "main")
+    plain("config", "user.email", "test@local")
+    plain("config", "user.name", "test")
+    (repo / "复盘").mkdir()
+    (repo / "复盘" / "中文.md").write_text("x", encoding="utf-8")
+    plain("add", "复盘/中文.md")
+    plain("commit", "-q", "-m", "中文路径")
+
+    escaped = plain("show", "--name-only", "--format=", "HEAD").splitlines()
+    assert any(n.startswith('"') for n in escaped), f"普通 git 应当转义：{escaped}"
+
+    monkeypatch.setattr(wr, "ROOT", repo)
     names = wr.git("show", "--name-only", "--format=", "HEAD").splitlines()
-    assert names, "HEAD 应当至少改了一个文件"
-    assert not [n for n in names if n.startswith('"')], f"有被转义的路径：{names[:3]}"
-    folded = [n for n in names if "复盘" in n]
-    assert folded, "这一笔里有中文路径（复盘/…），它必须原样出现在清单里"
+    assert "复盘/中文.md" in names, f"wr.git() 应当原样给出中文路径：{names}"
+    assert not [n for n in names if n.startswith('"')], f"有被转义的路径：{names}"
