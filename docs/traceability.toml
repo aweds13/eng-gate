@@ -4281,6 +4281,18 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：规格三类里 ③ 竞赛/活动一直没有专属信号；用户 2026-09-26 当面选 A′（用 task_type 扩值、不加字段、不碰债务）；task_type 是纯 TEXT 无 CHECK → 零迁移。**做了什么**：新取值两个（manager.py VALID_TASK_TYPES）；课程配对零特判 —— 配对规则本身只禁「普通」挂课（manager.py `if task_type == TASK_TYPE_NORMAL:` 一行未改），扩值后自动「挂课或不挂课都可」；UI：index.html TASK_TYPES 七档 + 课程提示语追加新值（「普通」那半原文保留）+ deferredBadge 只给 竞赛/活动（守卫 `(type==='竞赛'||type==='活动')`，无 title 解释句），接入 taskCard meta。**两条既有约束怎么处置**：「非普通才允许挂课」按原语义未动；db.py:903-904 docstring 原句（含「复用…不另造一套说法」）逐字保留、后接 2026-09-26 日期注（为什么扩：③ 没信号、纯 TEXT 无 CHECK、零迁移、不加字段）。**反证（先红后绿）**：守卫改坏成 true（永远显示）→ 1 failed → 还原 → 17 passed；判据首版抓到自己兜底 '普通' 的误报（判据在读真文件）；另有反向断言「其余四档不出现在函数体」。最终 pytest 三族 140 passed、ruff 0、渲染黄金 45 份逐字节一致、check_toml 8 份过。**边界（如实写）**：test_web_frontend.py:518 词表断言经主控补裁定（卡 §2.8）逐字同步为七档（初版白名单漏列，工人停下问、主控授权后改）；test_task_line.py 属事实线、类型钉子按卡 §3 追加于此。**没做的**：未加字段/未动 schema/未碰债务正负向/未做自动推断/未改规格与台账/未动 offline.js 与 api/**；文档与注释里的五档措辞（api/app.py:67、test_task_course_line.py:9、tools/tf_browser.mjs:166、docs 契约与规格共 7 处）未同步 —— 白名单外，已点名交集成者；台账 evidence 无失配（COURSE_TASK_TYPES 子串仍命中）。**（2026-09-26 集成注 I-6）**：两处课程提示语按用户最高口径删解释，逐字改为「可挂课类型：作业/考试/论文/小测/竞赛/活动」（17 字），≥20 棘轮 33 → 31；详见复盘末尾「集成注」。"
 
+[entries."T-G141"]
+id = "T-G141"
+title = "SR-F2.8 现状特征测试：钉住「债务纯派生、读时零写库、无清零/重组路径、逾期硬考核不可消失」—— 只加护栏零功能，防将来误实现成写库清零"
+group = "TEST"
+status = "done"
+evidence = [
+  "file:复盘/F2.8债务派生特征测试-T-G141.md",
+  "file:tests/test_debt_derived_line.py",
+  "test:test_debt_derived_line.py",
+]
+gaps = "**为什么有这张卡**：用户裁定 F2.8 暂时不做但要护栏；现状债务纯派生（overdue_tasks/debt_groups/debt_count，全部 SELECT）、无清零路径（src grep 零命中）；将来最易犯的错=写库清零变两套真相。**钉了哪三条**：①读路径零写语句+同输入同输出（set_trace_callback 记录真实执行的 SQL）；②逾期的 作业/考试/论文/小测（COURSE_TASK_TYPES）反复读都在；③路由表无带写方法的债务端点+src 零命中（加了必红）。**反证（三贴）**：插 UPDATE→钉①红→还原绿；插 POST /api/debt/reset→钉③红→还原绿；两次还原后 git status 只剩本卡两个新文件。**怎么判零写库的**：sqlite3 set_trace_callback（记录这条连接真实执行的每条语句，不 patch 内部、不依赖 UoW 抽象）。**没做的**：src 一行没改、没加字段/路由/迁移、没改台账状态、没跑全量门禁（按卡 §0.3，由主控集成时跑）。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
