@@ -656,12 +656,19 @@ def usage_summary(card: str) -> str:
 # ============================================ 429 / 额度三拍（卡 029 §2.5）：等 → 按序换 → 全挂就停
 
 def quota_error(lines: list[str]) -> dict | None:
-    """从 `result` 事件认 429 / 额度错误 —— 返回 `{kind, reset}`；不是额度问题 → None。
+    """从 `result` 事件认 429 / 额度错误 —— 返回 `{kind, reset, why}`；不是额度问题 → None。
 
     ★ 429 长得像成功（`subtype=error_during_execution` + 空回话 + **退出码 0**）—— 不许只看
-    退出码。判据：`result.errors` / `errors_info` 里的 `status 429` / `code 6004` /
-    `category quota`，或正文含「额度已用尽」「使用量已超出频率限制」。
+    退出码。★ 卡 045（T-G136）加两道闸（R029 成功收工却被回话里的「429」续跑 3 轮，真撞过）：
+    ① **候选闸门**：只有 `subtype == "error_during_execution"` / `is_error` 为真 /
+       回话是空的，这三种 `result` 事件才允许进入额度判定 —— **正常成功（有非空回话）
+       的一律不算额度错**，这是硬闸门；
+    ② **结构化字段优先**：`errors` / `errors_info` 用状态 needle（429/6004/quota）与完整
+       中文短语匹配；**回话正文只允许完整中文短语**（「额度已用尽」等）—— 裸「429」/
+       「quota」/「6004」不许再扫正文（卡 029 自己的提交信息就写着「429 三拍」，
+       任何 `git log` 都会中招 → 自毒）。
     ★ 两种**分开记**：限流（带「将在 <时间> 重置」）vs 余额耗尽（没有重置时间）。
+    ★ `why`：命中了哪个 needle、在哪个字段里 —— 下次再误判，一眼看出是谁骗了它。
     """
     for raw in lines:
         try:
@@ -670,14 +677,48 @@ def quota_error(lines: list[str]) -> dict | None:
             continue
         if not (isinstance(event, dict) and event.get("type") == "result"):
             continue
-        blob = json.dumps({key: event.get(key) for key in ("errors", "errors_info", "result")},
-                          ensure_ascii=False, default=str)
-        if not (any(n in blob for n in QUOTA_STATUS_NEEDLES)
-                or any(n in blob for n in QUOTA_TEXT_NEEDLES)):
+        words = event.get("result")
+        words = words if isinstance(words, str) else ""
+        # ★★ 候选闸门（卡 045 §2.1）：正常成功 + 非空回话 → 一律不算额度错。
+        candidate = (event.get("subtype") == "error_during_execution"
+                     or bool(event.get("is_error"))
+                     or not words.strip())
+        if not candidate:
             continue
-        hit = re.search(r"将在\s*([^\n」\"']+?)\s*重置", blob)
-        return {"kind": "限流" if hit else "余额耗尽", "reset": hit.group(1) if hit else ""}
+        structured = json.dumps({key: event.get(key) for key in ("errors", "errors_info")},
+                                ensure_ascii=False, default=str)
+        hit_field, hit_needle = "", ""
+        for field, blob, needles in (
+                ("errors", structured, QUOTA_STATUS_NEEDLES + QUOTA_TEXT_NEEDLES),
+                ("result", words, QUOTA_TEXT_NEEDLES)):
+            for needle in needles:
+                if needle in blob:
+                    hit_field, hit_needle = field, needle
+                    break
+            if hit_field:
+                break
+        if not hit_field:
+            continue
+        hit = re.search(r"将在\s*([^\n」\"']+?)\s*重置", structured + "\n" + words)
+        return {"kind": "限流" if hit else "余额耗尽", "reset": hit.group(1) if hit else "",
+                "why": f"字段 {hit_field} 命中「{hit_needle}」"}
     return None
+
+
+def round_is_normal_success(lines: list[str]) -> bool:
+    """这一轮的 `result` 是不是「正常成功且有非空回话」（卡 045 §2.4 探针优先的判据）。"""
+    for raw in reversed(lines):
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not (isinstance(event, dict) and event.get("type") == "result"):
+            continue
+        words = event.get("result")
+        return (event.get("subtype") != "error_during_execution"
+                and not event.get("is_error")
+                and isinstance(words, str) and words.strip() != "")
+    return False
 
 
 def quota_probe_ok(node: Path, cli: Path, model: str, timeout: int = 120) -> tuple[bool, str]:
@@ -1612,14 +1653,37 @@ def main() -> int:
                                     else "，无重置时间（余额耗尽）")
             quota_seen[model] = note
             print(f"[额度] ★ 检出 429 / 额度错误：{model} —— {note}"
-                  f"（subtype=error_during_execution + 退出码 0，长得像成功 —— 别被骗）",
+                  f"（{quota['why']}；subtype=error_during_execution + 退出码 0，"
+                  "长得像成功 —— 别被骗）",
                   file=sys.stderr, flush=True)
+            # ★★ 卡 045（T-G136）续跑封顶 —— 界就是这一行：额度续跑与中断续跑**共用
+            #   `--retry` 这一个界**（已续跑 attempts-1 次 ≥ retry → 到界，写判决、退出码 7）。
+            #   R029 真撞过：旧代码这里无界，探针通过就永远「同一模型接着干」，白跑 3 轮。
+            if attempts > args.retry:
+                stop = ["", f"★★ 额度续跑到界：额度续跑次数已达 --retry={args.retry}"
+                            " → 任务停下（退出码 7，不再自动重试）"]
+                stop += [f"  · {m}：{n}" for m, n in quota_seen.items()]
+                stop.append(f"  · 这次共烧 input tokens {usage_total['input_tokens']:,}"
+                            f"（output {usage_total['output_tokens']:,}）")
+                with verdict.open("a", encoding="utf-8") as vf:
+                    vf.write("\n".join(stop) + "\n")
+                print("\n".join(stop), file=sys.stderr, flush=True)
+                print("[停 ] 额度续跑到界 → 任务停下（退出码 7）。恢复后由主控重派。",
+                      file=sys.stderr, flush=True)
+                return 7
             if args.quota_wait > 0:
                 print(f"[额度] 等 {args.quota_wait}s 再探（用户 2026-09-26：「你先等一下」）",
                       flush=True)
                 time.sleep(args.quota_wait)
             probe_ok, probe_why = quota_probe_ok(node, cli, model)
             if probe_ok:
+                # ★★ 卡 045 §2.4：探针与判别器矛盾时**以探针为准** —— 探针真调了模型，
+                #   它通过而这一轮又是「正常成功 + 非空回话」→ 判别器一定是被文本骗了
+                #   → 按成功收下，不再续跑。
+                if round_is_normal_success(round_lines):
+                    print("[额度] 误判？（探针通过但判别器报额度）→ 按成功收下",
+                          file=sys.stderr, flush=True)
+                    break
                 print(f"[额度] 探测通过（{probe_why}）→ 同一模型接着干", flush=True)
             else:
                 nxt = next_whitelist_model(model)

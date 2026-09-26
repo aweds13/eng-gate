@@ -1567,6 +1567,95 @@ def test_quota_all_exhausted_stops_with_exit_7(sandbox: Path, monkeypatch, capsy
     assert "2,000" in stop and "input tokens" in stop, "要写这次一共烧了多少 token"
 
 
+# ================================================ 卡 045（T-G136）：额度检测误判 + 续跑封顶
+#
+# ★ 真撞现场（2026-09-26）：只读复核卡 R029 第 1 轮**成功收工**（pytest 104 passed），
+#   但回话正文提到「429」（复核清单里就有「429 当成功」这条）→ 旧判据把 `result` 正文一起扫、
+#   名单里有裸 "429" → 判「余额耗尽」→ 等 300s → 探针通过 → 照样续跑 → 白跑 3 轮。
+#   自毒：卡 029 自己的提交信息就写着「429 三拍」，任何 `git log` 都会中招。
+
+
+def _success_result_event(words: str) -> str:
+    return json.dumps({"type": "result", "subtype": "success", "is_error": False,
+                       "result": words}, ensure_ascii=False)
+
+
+def test_quota_error_ignores_a_successful_round_that_mentions_429() -> None:
+    """★ 钉子①（今天 R029 真撞的回归）：正常成功 + 非空回话 → 一律不算额度错（候选闸门）。"""
+    words = ("复核完了：pytest 104 passed。清单第 5 条「429 当成功」不适用；"
+             "git log 显示上一条提交信息里写着「+429 三拍+」。")
+    assert wd.quota_error([_success_result_event(words)]) is None, \
+        "成功回话里出现「429」这个字符串不许判额度 —— 探针还通过呢"
+
+
+def test_quota_error_never_matches_bare_needles_in_the_words() -> None:
+    """★ 候选闸门放进来的事件，正文也**只允许完整中文短语**；裸 429/quota/6004 不许扫正文。"""
+    tricky = json.dumps(
+        {"type": "result", "subtype": "error_during_execution", "is_error": True,
+         "result": "git log 显示 +429 三拍+，正文里还有 quota 与 6004 这两个词", "errors": None},
+        ensure_ascii=False)
+    assert wd.quota_error([tricky]) is None, "裸 needle 不许匹配回话正文"
+    hit = wd.quota_error([json.dumps(
+        {"type": "result", "subtype": "error_during_execution", "is_error": True,
+         "result": "正文写着：额度已用尽", "errors": None}, ensure_ascii=False)])
+    assert hit is not None and hit["kind"] == "余额耗尽", "完整中文短语仍然抓得住（双向）"
+    assert "result" in hit["why"] and "额度已用尽" in hit["why"], \
+        "要写清命中的字段与 needle（可观测性：下次误判一眼看出是谁骗了它）"
+
+
+def test_quota_resume_is_capped_by_retry_and_stops_with_exit_7(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 钉子③：每轮都报额度错 → 续跑**停在 `--retry` 界上**并留下退出码 7 的判决，不许无界。"""
+    calls: list[list[str]] = []
+
+    def runner(cmd, log, errlog, **kwargs):          # noqa: ANN001, ANN202
+        calls.append(list(cmd))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text(_quota_result_event(with_reset=True) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, "", "", f"sid-{len(calls)}"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(wd, "quota_probe_ok", lambda *a, **k: (True, "探测通过"))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--quota-wait", "0", "--retry", "1"])
+    assert wd.main() == 7
+    assert len(calls) == 2, "第 1 轮续跑在界内；第 2 轮再报额度 → 到界，停（旧代码会无限续）"
+    err = capsys.readouterr().err
+    assert "到界" in err and "退出码 7" in err
+    stop = (sandbox / "gates" / "diag" / "wb-001.r2.verdict.txt").read_text(encoding="utf-8")
+    assert "额度续跑到界" in stop and "deepseek-v4.1-flash" in stop, "判决写清撞了什么"
+
+
+def test_probe_overrides_a_lying_discriminator_when_the_round_really_succeeded(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 卡 045 §2.4：探针通过 + 这一轮正常成功有非空回话 → **按成功收下**，不再续跑。
+
+    判别器用 monkeypatch 假装误报（闸门修好之后真判别器不会再对正常成功开火），
+    钉的是「矛盾时以探针为准」这条兜底路本身。"""
+    calls: list[list[str]] = []
+
+    def runner(cmd, log, errlog, **kwargs):          # noqa: ANN001, ANN202
+        calls.append(list(cmd))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text(_success_result_event("复核完了：pytest 104 passed。"
+                                             "第 5 条 429 当成功：不适用") + "\n",
+                       encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, "", "", "sid-1"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(wd, "quota_error",
+                        lambda lines: {"kind": "余额耗尽", "reset": "", "why": "（假装误报）"})
+    monkeypatch.setattr(wd, "quota_probe_ok", lambda *a, **k: (True, "探测通过"))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--quota-wait", "0"])
+    assert wd.main() == 0
+    err = capsys.readouterr().err
+    assert "误判？（探针通过但判别器报额度）→ 按成功收下" in err
+    assert len(calls) == 1, "按成功收下就不许再续跑"
+
+
 # ================================================ 卡 029（T-G114）：用量落账 + 防空烧预算（§2.6）
 
 

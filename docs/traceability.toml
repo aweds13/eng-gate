@@ -4116,6 +4116,19 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：规矩 §15 原文『一轮内不衰减那半仍是事实……漏杀风险』；卡 029 grep「衰减」0 命中。**做了什么**：按裁定 V2（方案 B）只换窗口 —— `stall_threshold_seconds` 的 longest 从全量历史最长改为最近 `REPEAT_WINDOW`(12) 次已完成调用里的最长，阈值 = `min(max(底线, 2.5 × 窗口内最长), 3600)`；窗口大小复用 `REPEAT_WINDOW`（与空转判据共用，未新增参数）；四个常量（480/1800/2.5/3600）全保持现值。**反证（先红后绿）**：新用例喂 13 次已完成调用（1 条 600s + 12 条 ~1s，时间用 ago 注入不真等）—— 改前红（`AssertionError: 1500.0001102685928 == 480.0`，1 failed in 0.68s）；改后绿（105 passed in 33.83s，如实记：首跑 1 failed 败在对照断言浮点精度、改 pytest.approx 后全绿，判定逻辑一次改对）；突变改坏回全量最长 → 又红（1 failed in 0.35s）→ 还原 105 passed + ruff 全过。**裁定 V2（必须写）**：第 1 轮**一行代码没动就停手** —— 原公式把自适应上限写成 BUSY_STALL_SECONDS(1800)，与现行封顶 ADAPTIVE_MAX_SECONDS(3600)（T-G96 成果）在「窗口内最长 × 2.5 > 1800」区间直接矛盾，字面执行会打破 T-G96 三颗钉子（非在飞 [3600]→3600 / 在飞 [3600]→3600 / 续跑 merged→3600）；主控 2026-09-26 19:35 改判方案 B（只换窗口、封顶保留），方案 A 否决。**边界（如实写）**：窗口常量与空转判据共用、改它会同时动两条判据；有工具在飞那条路没动；轮次边界没动；封顶/底线没动；`_stall_report` 的「历史最长」一行没动（T-G94 钉子 :824 钉住）—— 阈值看窗口、报告看全量，「阈值 8 分钟；历史最长 10 分钟」的组合是衰减的预期形态；help 与守卫行两处措辞同步改真。**没动的**：wb_dash / wb_status / 共享文件（台账、changelog、交接、卡表、gates/last.json、gates/reuse.json）/ 三个外来未跟踪文件。"
 
+[entries."T-G136"]
+id = "T-G136"
+title = "派活器额度检测误判与无限续跑：判据把工人回话正文里的「429」当额度错（R029 成功收工后被续跑 3 轮）—— 加候选闸门 + 只认结构化字段 + 续跑封顶 + 探针优先"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/额度检测误判与循环-T-G136.md",
+  "text:tools/wb_dispatch.py::candidate = (event.get(",
+  "text:tools/wb_dispatch.py::def round_is_normal_success",
+  "test:test_wb_dispatch.py",
+]
+gaps = "**为什么有这张卡**：R029 第 1 轮成功收工（pytest 104 passed）、回话正文提到「429」、探针通过仍被续跑 3 轮（wb-R029.jsonl + .r2 + .r3）；卡 029 自己的提交信息含「429 三拍」→ 任何 git log 都会中招（自毒）。**做了什么**：候选闸门三条（subtype=error_during_execution / is_error 为真 / 回话全空白，正常成功+非空回话一律不算额度错，wb_dispatch.py:683）；判据只认 errors/errors_info 的结构化字段，回话正文只许完整中文短语、裸 429/quota/6004 不许扫正文（wb_dispatch.py:688）；续跑封顶写在一行 if attempts > args.retry（wb_dispatch.py:1662），与中断续跑共用 --retry 这一个界，到界写判决退 7；探针优先 round_is_normal_success（wb_dispatch.py:708），矛盾时按成功收下（wb_dispatch.py:1684）；quota_error 返回 why（命中 needle 与字段，wb_dispatch.py:704）。**反证（先红后绿三贴）**：①改前钉子①红（成功回话含 429 被判余额耗尽，2 failed）②改后 109 passed + ruff 0 ③改坏回扫正文+裸 429 → 钉子①又红 → 还原 → 109 passed + git status 只有白名单文件；R029 真实回话形状直接喂 quota_error → None。**界线**：额度续跑总次数 ≤ --retry（默认 1，与中断续跑共用）；到界 → 判决含每模型撞了什么 + token 读数，退出码 7；全挂走原有退 7 路径不变。**没动的**：wb_dash / wb_status / 卡 037 滑窗（stall_threshold_seconds 一行没碰）/ scripts / src / docs / gates / 卡表与其它复盘 / 主树外来未跟踪文件。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
