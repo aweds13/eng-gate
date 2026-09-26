@@ -4216,6 +4216,20 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：地图停在 2026-09-26 18:40（291 行），§2 缺本会话三类改动的落点、§6 缺「改措辞打穿证据指针」这条；漂移自检 `Select-String -Pattern 'text:指针|证据指针|check_layers|tools/wb_'` 实测 6 处命中而 §2 原表无对应行。**做了什么**：§2 追加 5 行（① `tests/test_wb_*.py` 六份 + `scripts/test_check_layers.py`，pytest 实测 106 passed；② `tests/test_myday_conflict_409.py::test_myday_conflict_surfaces_as_409_with_readable_detail`；③ 打穿 `text:` 指针 → `tools/evidence_map.py --file` 自查可用；④ `复盘/并发两卡-T-G92T-G93.md` + 外包卡表 §16；⑤ 文档过时句句末加日期注，T-G124 做法，本文件已有 3 处该注）；§8 追加「（2026-09-26 补）」三件（T-G123 / T-G124 / T-G126）；§6 追加「改文档措辞 → 打穿台账 `text:` 证据指针」（真例：T-G122 gaps 记 `T-G120`/`T-G121` 3 条指针失效、audit 3 FAIL）。**只加不删的反证**：`git diff -U0 -- 复盘/视觉线地图.md | grep '^-'` 为空、numstat 删除列 0，原 291 行一字未动。**没动的**：协议 / 两份台账类文档 / 两份并发文档 / 卡表 / 交接两篇 / `tools/**` / `tests/**` / `scripts/**` / `src/**` / `docs/**` / `gates/**` / 共享文件全套。"
 
+[entries."T-G132"]
+id = "T-G132"
+title = "并发两份文档补实测对账：上界已探到（同模型 ≥7 路并发跑完）、真实限流与重置时刻、0 字节 log ≠ 失败、--detach 连带死；纠正 T-G99「未探测/没真跑过」的边界声明"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/并发架构-T-G99.md",
+  "text:复盘/并发架构-T-G99.md::2026-09-26 实测对账",
+  "file:复盘/并发两卡-T-G92T-G93.md",
+  "text:复盘/并发两卡-T-G92T-G93.md::从 2 卡到多卡",
+  "file:复盘/并发实测对账-T-G132.md",
+]
+gaps = "**为什么有这张卡**：T-G99 边界声明（上界未探测 / --execute 没真跑过）已被 2026-09-26 实测推翻；漂移 grep（未探测|没真跑过|并发两个|2 卡）在两份文档命中 8 行（T-G99 6 行、两卡文档 2 行）。**做了什么**：T-G99 边界段句末加日期注（原句未动）+ 文末新增「2026-09-26 实测对账」一节写六件（--execute 真跑量级 / 同模型 ≥7 路 / 真实限流与重置时刻 / 0 字节 log ≠ 失败 / --detach 连带死 / 纪律正文只指向）；两卡文档文末追加「从 2 卡到多卡」补注。**每个数字的出处**：判决 22 份 → 主树 ls gates/diag/wb-*.verdict.txt；9 份收工判决 17:45:37–18:02:24 → 各 wb-<卡>.verdict.txt 的「结束于」（024/030/033/034/035 在主树，S-4 在 .wt/survey4、S-5 在 .wt/ledger5、R030 在 .wt/R030、R024 在 .wt/R024）；单卡耗时 2.9–15.5 分钟 → 各树 wb-*.jsonl 首末事件时间戳相减（S/R 系列 jsonl 只有首两事件带时间戳、算不出，如实记）；log 大小 0.26–1.2 MB → 主树 wb-012f.jsonl 260,514 B 至 wb-002.jsonl 1,181,545 B（Get-ChildItem 排序），本批五卡 207,264–624,715 B；重叠实测 → 030 全程落在 024 窗口内、033/034/035 两两重叠（同时间戳来源）；限流重置 2026-09-27 07:38:29 UTC+8 → 主树 wb-012d.jsonl 的 errors_info 原文（status 429 / code 6004 / quota）；0 字节实例 → gates/diag/外包卡-006-交接摘要.md（wb-005.dispatch.log）；--detach 连带死 17:01:30 → 复盘/外包-卡表与规矩.md §20.1；模型凭据 --model glm-5.3-flash → 主树 wb-024.dispatch.log（本批唯一留档的 dispatch.log，其余未留档，如实记）；.wt/ 树 20+ 棵 → ls .wt/。**只加不删的反证**：git diff --numstat 两份文档删除列均 0；git diff -U0 取 ^- 且排除 ^--- 为空。**没动的**：长任务执行协议.md、任务重规划-剩余工作.md、使用体验问题与修改台账.md、视觉线地图.md、外包-卡表与规矩.md、交接两篇、tools/**、tests/**、scripts/**、src/**、docs/**、gates/**（gates/diag 全程只读）、主树三个外来未跟踪文件、真实库/备份目录。"
+
 [entries."DELIVERY.READY"]
 id = "DELIVERY.READY"
 title = "后端能力都要有界面入口（可达性）"
