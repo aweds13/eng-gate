@@ -1838,8 +1838,24 @@ def create_app(
         return fb.list_habits(conn)
 
     @app.post("/api/habits/{habit_id}/toggle")
-    def toggle_habit(habit_id: str, on_date: str | None = None) -> dict[str, bool]:
-        return {"done": fb.toggle_habit_log(conn, habit_id, on_date)}
+    def toggle_habit(
+        habit_id: str, on_date: str | None = None, invest_minutes: float | None = None
+    ) -> dict[str, object]:
+        """打卡/取消打卡（T-G164 起支持可选投入分钟）。
+
+        留空（默认）= 与老行为逐字相同：只写 `habit_logs`；填 N（>0）且打卡为 done 时，
+        另写**一条**手动投入流水（`ledger_entries` axis=invest / kind=habit，秒口径）——
+        与「今日手动投入」同表同口径、同样可撤销；不新造第二套投入口径，不改表结构。
+        """
+        # ★ 打卡与（可选的）投入流水是两条各自 commit 的 core 调用 → 合到一个事务：
+        #   中途出错不留「半条打卡」。
+        done = False
+        entry_id: str | None = None
+        with db.unit_of_work(conn, what="POST /api/habits/{id}/toggle"):
+            done = fb.toggle_habit_log(conn, habit_id, on_date)
+            if done and invest_minutes is not None and invest_minutes > 0:
+                entry_id = memo.add_invest_entry(conn, value=invest_minutes * 60.0, kind="habit")
+        return {"done": done, "entry_id": entry_id}
 
     @app.patch("/api/habits/{habit_id}")
     def rename_habit(habit_id: str, payload: dict[str, Any]) -> dict[str, str]:

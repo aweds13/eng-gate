@@ -29,7 +29,8 @@
       <button data-action="view" data-view="memo">备忘录</button>
       <button data-action="view" data-view="team">团队</button>
       <button data-action="view" data-view="setting">设置</button>
-      <button data-action="view" data-view="offline">离线记</button>
+      <!-- 「离线记」不在 PC 左栏（T-G162，用户 2026-09-27：它偏手机那条路）——
+           电脑的入口在 设置→数据 的「手机离线记」小节；手机靠顶部提示条（见 offlineBar 那段注释）。 -->
       <button id="refresh" class="ghost" data-action="refresh">刷新</button>
       <button id="railToggle" class="ghost" data-action="rail-toggle">收起右栏</button>
       <!-- 命令面板的入口（T-G61）。**这是鼠标那半的「可学习性」**：键位得有个地方写着，
@@ -866,7 +867,7 @@ const ACTIONS = {
   // 右栏折叠（SR-NF4 / GAP-NF-03）与新手引导（SR-NF2 / GAP-NF-02）—— R5 收口
   'rail-toggle':    () => toggleRail(),
   // 左栏智能视图（重要 / 有计划 / 已标记）收进设置开关（T-G154）
-  'left-rail-smart': () => toggleLeftRail(),
+  'left-rail-view':  el => toggleLeftRailView(el.dataset.view),
   'guide-start':    () => guideStart(),
   'guide-done':     () => { guideFinish(); render(current); },
   'guide-replay':   () => guideReplay(),
@@ -1230,10 +1231,9 @@ async function render(name){
     if(mySeq!==renderSeq)return;                 // 已被更新的点击取代：不做任何写入
     // 强调色：本机选过就以本机为准（配置默认只在没选过时用，否则每次渲染都会把用户的选择打回默认）
     if(accentChoice){applyAccent(accentChoice)}
-    else{
-      applyAccent(cfg.accent_color);
-      try{localStorage.setItem('tf_accent',cfg.accent_color)}catch(e){}
-    }
+    // 没选过时**不再把配置默认写成内联**（T-G163）：内联 `--accent` 的优先级高于
+    // [data-theme="dark"]，暗色的 --accent 永远不生效（探针 60 处「没跟着主题变」的主因）。
+    // 默认值由 app.css 令牌承担（亮色同值，亮色视觉零变化）；用户真选过才写内联。
     const paint=w=>{if(mySeq===renderSeq)w(m)};
     if(name==='today')return paint(renderToday);
     if(name==='tasks')return paint(renderTasks);
@@ -2731,14 +2731,14 @@ async function renderHabit(m){
       <div class="habit-head">
         <div class="card-body"><div class="title">${esc(h.name)}</div>
           <div class="meta">连续 ${h.streak} 天 · 近一年打卡 ${(h.logs||[]).length} 天</div></div>
+        <input id="habitMin-${h.id}" class="w-90" type="number" min="0" step="5" inputmode="numeric" placeholder="投入分钟（可选）">
         <button class="${doneToday?'':'ghost'}" data-action="habit-toggle" data-id="${h.id}">${doneToday?'已打卡（点此取消）':'打卡'}</button>
         <button class="ghost" data-action="habit-rename" data-id="${h.id}" data-name="${esc(h.name)}">改名</button>
         <button class="ghost" data-action="habit-delete" data-id="${h.id}" data-name="${esc(h.name)}">删除</button>
       </div>
       <div class="mt-4">${heatmap(h.logs)}</div></div>`;
   }).join('');
-  m.innerHTML=`<div class="card block"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div>
-    <div class="sub">习惯打卡<b>只记次数</b>；想算投入，去「今日手动投入」补记。</div></div>
+  m.innerHTML=`<div class="card block"><div class="meta">本周专注 ${sc.week_focus_minutes} 分钟 · 本周习惯打卡 ${sc.week_habit_done} 次 · 债务 ${sc.debt_count} 项${fb?` · 今日专注 ${fb.focus_minutes} 分钟`:''}</div></div>
   <div class="new"><input id="habitName" placeholder="新建习惯，如：早睡" data-enter="habit-add"><button data-action="habit-add">新建</button></div>
   ${cards||emptyState('还没有习惯')}
   <div class="section-title">每日反馈（计划 vs 执行）</div>
@@ -2754,11 +2754,15 @@ async function toggleHabit(id){
   const day=todayISO();
   const on=!!(h&&(h.logs||[]).includes(day));
   const next=!on;
-  const r=await writeOrQueue(`/api/habits/${id}/toggle`,{method:'POST'},
+  // T-G164：可选投入分钟 —— 留空与老行为逐字相同；填 N（>0）且打卡时另写一条投入流水（服务端）
+  const minEl=document.getElementById(`habitMin-${id}`);
+  const mins=minEl?parseFloat(minEl.value):NaN;
+  const q=(next&&mins>0)?`?invest_minutes=${mins}`:'';
+  const r=await writeOrQueue(`/api/habits/${id}/toggle${q}`,{method:'POST'},
     o=>o.enqueue('habit_logs',o.PURE.habitRow(id,day,next)),
-    `连不上电脑：${h?'「'+h.name+'」':''}${next?'今天的打卡':'取消打卡'}先存在手机上`);
+    `连不上电脑：${h?'「'+h.name+'」':''}${next?'今天的打卡':'取消打卡'}先存在手机上${next&&mins>0?'（投入分钟没记上，联网后在「今日手动投入」补记）':''}`);
   if(!r)return;
-  if(!r.queued)toast(next?'已打卡':'已取消打卡');
+  if(!r.queued)toast(next?(mins>0?`已打卡，记 ${mins} 分钟投入`:'已打卡'):'已取消打卡');
   else if(h){
     h.logs=next?[...(h.logs||[]),day].filter((d,i,a)=>a.indexOf(d)===i).sort():(h.logs||[]).filter(d=>d!==day);
   }
@@ -3311,8 +3315,9 @@ async function renderSetting(m){
     <div class="row"><button class="ghost" data-action="rail-toggle">${railOff?'展开右栏':'收起右栏'}</button></div>
     <div class="sub">收起时隐藏计时器与任务详情。</div>
     <div class="settings-sub">左栏智能视图</div>
-    <div class="row"><button class="ghost" data-action="left-rail-smart">${railDirect?'从左栏收起':'在左栏显示'}</button></div>
-    <div class="sub">「重要 / 有计划 / 已标记」是否出现在左栏。</div>
+    <div class="row tight">${SMART_RAIL_VIEWS.map(v=>
+      `<button class="${railViews[v]?'':'ghost'}" data-action="left-rail-view" data-view="${v}">${esc(SMART_VIEWS[v].title)}（${railViews[v]?'在左栏':'不在左栏'}）</button>`).join('')}</div>
+    <div class="sub">想让谁在左栏就开谁。</div>
     <div class="settings-sub">新手引导</div>
     <div class="row"><button class="ghost" data-action="guide-replay">再看一遍新手引导</button></div>
     <div class="sub">引导只在今日页出现，可随时在这里重新打开。</div>
@@ -4066,25 +4071,44 @@ function toggleRail(){
   toast(railOff?'已收起右栏（中列更宽）':'已展开右栏');
 }
 
-/* ---------- 左栏智能视图收进设置（T-G154）----------
- * 用户 2026-09-27 方案 A：设置里给个开关决定「重要 / 有计划 / 已标记」**是否出现在左栏**；
- * 默认收起（左栏只留主视图 —— 今日 / 全部任务 / 专注 / 统计 …），打开后这三项回到左栏、一点直达对应筛选视图。
- * ★ markup 不删：`test_smart_views_are_reachable` 静态钉着左栏 nav 里必须有这三个 `data-view`；
- *   所以这里只做**运行时**隐藏（`hidden` 属性），切视图时由 `view()` 重套一遍。
+/* ---------- 左栏智能视图：三项各自独立可选（T-G162）----------
+ * 用户 2026-09-27：「我不是说并成一组固定在左栏，我是说能自由选择。」
+ * 所以「重要 / 有计划 / 已标记」**各一个开关**（设置→外观「左栏智能视图」，名字显式写出），
+ * 想让谁出现在左栏就开谁；**默认沿用 T-G154**（三项都不在左栏）。
+ * markup 不删：`test_smart_views_are_reachable` 静态钉着左栏 nav 里必须有这三个 `data-view`；
+ * 所以这里只做**运行时**隐藏（`hidden` 属性），切视图时由 `view()` 重套一遍。
+ * 持久化逐项：新键 `tf_rail_views` 存「哪几个开着」（JSON 数组），**不许**再只存一个布尔；
+ * 老键 `tf_rail_direct`（布尔）只读不写 —— 迁移一次：`on` → 三项全开，`off`/没存 → 三项全关。
  * 关了左栏不丢入口：「全部任务」页头的互跳行（`smartViewNavHTML`）与设置页「入口」那排仍在（手机端尤其靠前者）。 */
-const LEFT_RAIL_KEY='tf_rail_direct';
+const LEFT_RAIL_KEY='tf_rail_direct';       // 旧键：布尔，只用于迁移（不再写它）
+const LEFT_RAIL_VIEWS_KEY='tf_rail_views';  // 新键：JSON 数组，表达「哪几个开着」
 const SMART_RAIL_VIEWS=['important','planned','flagged'];
-let railDirect=false;               // 默认关 = 这三项不出现在左栏
+let railViews={important:false,planned:false,flagged:false};   // 默认全关 = 三项不出现在左栏
+/* 老偏好迁移（要能被断言钉住）：新键存在就以新键为准（迁移只走一次）；
+ * 否则按旧键映射：`'on'` → 三项全开；`'off'`/没存 → 三项全关。 */
+function migrateRailPrefs(oldVal,newVal){
+  if(newVal!=null){
+    try{const arr=JSON.parse(newVal);
+      if(Array.isArray(arr))return Object.fromEntries(SMART_RAIL_VIEWS.map(v=>[v,arr.includes(v)]));
+    }catch(e){}
+  }
+  return Object.fromEntries(SMART_RAIL_VIEWS.map(v=>[v,oldVal==='on']));
+}
+function railViewsSave(){
+  try{localStorage.setItem(LEFT_RAIL_VIEWS_KEY,JSON.stringify(SMART_RAIL_VIEWS.filter(v=>railViews[v])))}catch(e){}
+}
 function applyLeftRail(){
   document.querySelectorAll('.rail nav button[data-view]').forEach(b=>{
-    if(SMART_RAIL_VIEWS.includes(b.dataset.view))b.hidden=!railDirect;
+    if(SMART_RAIL_VIEWS.includes(b.dataset.view))b.hidden=!railViews[b.dataset.view];
   });
 }
-function toggleLeftRail(){
-  railDirect=!railDirect;
-  try{localStorage.setItem(LEFT_RAIL_KEY,railDirect?'on':'off')}catch(e){}
+function toggleLeftRailView(name){
+  if(!SMART_RAIL_VIEWS.includes(name))return;
+  railViews[name]=!railViews[name];
+  railViewsSave();
   applyLeftRail();
-  toast(railDirect?'已把「重要 / 有计划 / 已标记」放回左栏':'已从左栏收起「重要 / 有计划 / 已标记」');
+  const label=SMART_VIEWS[name]?SMART_VIEWS[name].title:name;
+  toast(railViews[name]?`已把「${label}」放回左栏`:`已把「${label}」从左栏收起`);
   view(current);
 }
 
@@ -4115,7 +4139,9 @@ function guideReplay(){
   guideDone=false;try{localStorage.removeItem(GUIDE_KEY)}catch(e){}
   toast('新手引导已重新打开');view('today');
 }
-try{railOff=localStorage.getItem(RAIL_KEY)==='off';guideDone=guideSeen();railDirect=localStorage.getItem(LEFT_RAIL_KEY)==='on'}catch(e){}
+try{railOff=localStorage.getItem(RAIL_KEY)==='off';guideDone=guideSeen();
+  railViews=migrateRailPrefs(localStorage.getItem(LEFT_RAIL_KEY),localStorage.getItem(LEFT_RAIL_VIEWS_KEY));
+  railViewsSave()}catch(e){}
 applyRail();
 applyLeftRail();
 

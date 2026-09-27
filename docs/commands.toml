@@ -359,8 +359,9 @@ routes = [
   "POST /api/review/items", "POST /api/tasks/{task_id}/to-review",
   "PATCH /api/review/items/{item_id}", "GET /api/review/items/{item_id}",
   "GET /api/tasks/{task_id}/review-cards", "GET /api/review/meta", "GET /api/review/due",
+  "DELETE /api/review/items/{item_id}",
 ]
-ui = ["data-action=review-add", "data-action=task-to-review", "data-action=review-edit"]
+ui = ["data-action=review-add", "data-action=task-to-review", "data-action=review-edit", "data-action=review-delete"]
 kind = "write"
 reversible = "可删除"
 ai = ["none"]

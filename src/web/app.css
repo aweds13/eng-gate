@@ -157,7 +157,16 @@
   --danger-weak: #2d1517;
   --shadow-rgb: 0, 0, 0;
   --shadow: 0 6px 20px -8px rgba(var(--shadow-rgb), .55);
+  /* ★ 2026-09-27（T-G163）：暗色下让**原生控件**（textarea 的默认底、select 弹层、
+     滚动条、日期选择器）也跟随暗色 —— 它们的颜色是浏览器给的，不归令牌区管，
+     没有这一行 textarea 就一直是 UA 的白底黑字（探针判据 A/B 命中的「每日反馈」那两块）。 */
+  color-scheme: dark;
 }
+
+/* ★ 2026-09-27（T-G163）：`.textarea` 是唯一没写底色/文字色的文本控件（select/input 元素级
+   都有 background: var(--panel) / color: var(--ink)，见上面那两条），暗色下只能吃 UA 默认。
+   只加暗色覆盖、不动亮色（亮色 UA 默认白底恰好等于 --panel，改亮色会刷掉渲染黄金）。 */
+[data-theme="dark"] .textarea { background: var(--panel); color: var(--ink) }
 
 /* 跟随系统「减少动态效果」（T-G45；workbench 在同一处做同一件事）：
    把**时长归零**，不是把过渡删掉 —— 状态照样变，只是不再滑。 */

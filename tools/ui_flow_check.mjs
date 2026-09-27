@@ -13,7 +13,7 @@
  *   ① 每条流都**声明它替掉哪一条人工项**（打印出来 + 测试钉住），"搬走了哪几条"有据可查；
  *   ② 真点击做**命中测试**（`elementFromPoint`）：被浮层盖住、被挤出视口的按钮，
  *      `el.click()` 会"成功"，而用户点不到 —— 所以这里一律真按坐标，且先验"那个点上是不是它"；
- *   ③ **不做"全覆盖"**：够用的条数就停（现在 **24** 条）。要加一条，得先说明它替掉哪条人工项。
+ *   ③ **不做"全覆盖"**：够用的条数就停（现在 **26** 条）。要加一条，得先说明它替掉哪条人工项。
  *
  * 已知边界（**不谎报**）：
  *   · 起不了浏览器 → 退出码 3（NOT RUN），**NOT RUN 不是 PASS**（`run_gates.py` 单列一栏）。
@@ -492,40 +492,146 @@ flow({
 })
 
 flow({
-  id: '㉙', name: '左栏智能视图收进设置：默认不在左栏，开了回左栏且一点直达',
-  item: '用户 2026-09-27：重要/有计划/已标记收进设置开关（T-G154）',
+  id: '㉙', name: '左栏智能视图：三个开关各管各的，默认全关，老偏好迁移（T-G162）',
+  item: '用户 2026-09-27 更正：不是并成一组固定在左栏，是能自由选择（T-G162）',
   vp: 'desktop',
   async run(t) {
     await t.start('today')
-    // 默认收起：markup 还在（静态断言钉着），但运行时是 hidden —— 左栏只留主视图
+    // 默认全关（没存过偏好）：三项一个都不在左栏，主视图还在（沿用 T-G154 的默认）
     t.eq('默认左栏看不到「重要」', (await t.geom('.rail nav button[data-view="important"]')).display, 'none')
     t.eq('默认左栏这三项一个都没露（hidden）',
       await t.count('.rail nav button[data-view="important"]:not([hidden]), .rail nav button[data-view="planned"]:not([hidden]), .rail nav button[data-view="flagged"]:not([hidden])'), 0)
     t.eq('主视图还在（左栏不是空的）', await t.count('.rail nav button[data-view="today"]:not([hidden])'), 1)
 
-    // 打开开关（设置页「外观」里那一颗）
+    // 设置→外观：三个名字显式写出、各一个开关
     await t.view('setting')
     await t.openSetting('set-appearance')
-    await t.pressAction('left-rail-smart')
-    t.eq('开关打开后这三项回到左栏',
-      await t.count('.rail nav button[data-view="important"]:not([hidden]), .rail nav button[data-view="planned"]:not([hidden]), .rail nav button[data-view="flagged"]:not([hidden])'), 3)
-    t.eq('选择记在本机（tf_rail_direct=on）', await t.ls('tf_rail_direct'), 'on')
+    t.eq('设置里是三个独立开关（名字显式）', await t.count('[data-action="left-rail-view"]'), 3)
 
-    // 一点直达：点左栏那颗「重要」直接进筛选视图
-    await t.press('.rail nav button[data-view="important"]', '左栏「重要」')
-    t.has('点左栏「重要」直达筛选视图', await t.text('#main'), '重要（')
+    // 只开「有计划」：左栏只出它，另两项仍然收着
+    await t.press('[data-action="left-rail-view"][data-view="planned"]', '「有计划」开关')
+    t.eq('只开 planned 后左栏只有一项露出来',
+      await t.count('.rail nav button[data-view="important"]:not([hidden]), .rail nav button[data-view="planned"]:not([hidden]), .rail nav button[data-view="flagged"]:not([hidden])'), 1)
+    t.eq('露出来的正是「有计划」', await t.count('.rail nav button[data-view="planned"]:not([hidden])'), 1)
+    t.eq('逐项记在本机（tf_rail_views）', await t.ls('tf_rail_views'), '["planned"]')
 
     // 刷新后保持
     await t.reload()
-    t.eq('刷新后这三项仍在左栏', await t.count('.rail nav button[data-view="important"]:not([hidden])'), 1)
-    t.eq('刷新后本机状态也对', await t.ls('tf_rail_direct'), 'on')
+    t.eq('刷新后「有计划」仍在左栏', await t.count('.rail nav button[data-view="planned"]:not([hidden])'), 1)
+    t.eq('刷新后另两项仍收着', await t.count('.rail nav button[data-view="important"]:not([hidden])'), 0)
 
-    // 再关回去：左栏又只剩主视图
+    // 老偏好迁移：删掉新键、预置旧布尔 on → 三项全开，并落进新键
+    await t.cdp.eval(`(() => { localStorage.removeItem('tf_rail_views'); localStorage.setItem('tf_rail_direct', 'on'); return true })()`)
+    await t.reload()
+    t.eq('老偏好 on → 三项全回到左栏',
+      await t.count('.rail nav button[data-view="important"]:not([hidden]), .rail nav button[data-view="planned"]:not([hidden]), .rail nav button[data-view="flagged"]:not([hidden])'), 3)
+    t.eq('迁移结果写进新键', await t.ls('tf_rail_views'), '["important","planned","flagged"]')
+
+    // 逐项收起：只动「重要」自己
     await t.view('setting')
     await t.openSetting('set-appearance')
-    await t.pressAction('left-rail-smart')
-    t.eq('再点一次能收回去', await t.count('.rail nav button[data-view="important"]:not([hidden])'), 0)
-    t.eq('状态也回到 off', await t.ls('tf_rail_direct'), 'off')
+    await t.press('[data-action="left-rail-view"][data-view="important"]', '「重要」开关')
+    t.eq('收起「重要」后左栏剩两项',
+      await t.count('.rail nav button[data-view="important"]:not([hidden]), .rail nav button[data-view="planned"]:not([hidden]), .rail nav button[data-view="flagged"]:not([hidden])'), 2)
+    t.eq('收起后本机数组也对了', await t.ls('tf_rail_views'), '["planned","flagged"]')
+  },
+})
+
+/** 暗色读数（T-G163）：一屏的关键元素计算色 + 全页「文字色 == 背景色」扫描，一次求值拿回来。
+ *  为什么用探针元素比对令牌：令牌是 `#0b1220` 这种字面，计算值是 `rgb(11, 18, 32)` ——
+ *  字符串比不了。造一个 `background: var(--bg)` 的临时元素读它的计算值，两边同一格式。
+ *  `bad` 只扫**有自有文字**的元素：文字色等于它最近的不透明祖先背景 = 字看不见。 */
+const DARK_SNAPSHOT = `(() => {
+  const alpha = (s) => { const m = s.match(/rgba?\\\\(([^)]+)\\\\)/); if (!m) return 1;
+    const p = m[1].split(',').map(parseFloat); return p.length >= 4 ? p[3] : 1 };
+  const resolved = (name) => { const i = document.createElement('i');
+    i.style.background = 'var(' + name + ')'; i.style.display = 'none';
+    document.body.appendChild(i); const v = getComputedStyle(i).backgroundColor; i.remove(); return v };
+  const bg = resolved('--bg'); const panel = resolved('--panel'); const accent = resolved('--accent');
+  const bad = [];
+  for (const el of document.querySelectorAll('body *')) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || !el.getClientRects().length) continue;
+    if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+    let eb = null;
+    for (let e = el; e; e = e.parentElement) {
+      const b = getComputedStyle(e).backgroundColor;
+      if (alpha(b) > 0) { eb = b; break }
+    }
+    if (eb && getComputedStyle(el).color === eb) {
+      bad.push(el.tagName.toLowerCase() + (el.id ? '#' + el.id : '')
+        + (el.classList.length ? '.' + [...el.classList].slice(0, 2).join('.') : ''));
+      if (bad.length >= 5) break;
+    }
+  }
+  const card = document.querySelector('#main .card, #main .panel');
+  const fb = document.querySelector('#fbPlan');
+  const active = document.querySelector('nav button.active');
+  return {
+    theme: document.documentElement.dataset.theme,
+    bodyBg: getComputedStyle(document.body).backgroundColor,
+    bg, panel, accent,
+    cardBg: card ? getComputedStyle(card).backgroundColor : null,
+    fbBg: fb ? getComputedStyle(fb).backgroundColor : null,
+    activeBg: active ? getComputedStyle(active).backgroundColor : null,
+    bad,
+  };
+})()`
+
+flow({
+  id: '㉚', name: '暗色模式：切到暗色后关键元素落在暗色集、没有「文字与背景同色」的元素',
+  item: '新增（不是搬移项）：用户 2026-09-27 反馈暗色没适配（T-G163）',
+  vp: 'desktop',
+  async run(t) {
+    // 默认路径（用户没选过强调色）才是暗色令牌真正生效的路径 —— 这套工具每条流都会把
+    // 配置默认的强调色钉进本机存储（`bootApp({accent})`），先清掉再重载，走的就是
+    // 「令牌区说了算」的那条路（内联强调色只该在用户真选过时出现，同卡修的那条 JS）。
+    await t.start('today')
+    await t.cdp.eval(`(() => { try { localStorage.removeItem('tf_accent') } catch (e) {} return true })()`)
+    await t.reload()
+    // 记下亮色基线：后面的「落在暗色集」必须**同时**证明「跟亮色不一样」——
+    // 否则「body 背景 == --bg 的计算值」这条断言在亮色下也成立，是个恒真断言。
+    const light = await t.cdp.eval(DARK_SNAPSHOT)
+    t.eq('动手前确实是亮色', light.theme, 'light')
+
+    // 走真 UI 切暗色：设置页「外观」里的「暗色」按钮（不是直接改 data-theme —— 那是探针干的事）
+    await t.view('setting')
+    await t.openSetting('set-appearance')
+    await t.press('[data-action="set-theme"][data-theme-choice="dark"]', '主题「暗色」')
+    t.eq('主题切到暗色（html data-theme）', await t.attr('html', 'data-theme'), 'dark')
+    t.eq('html 上没有内联 --accent（默认强调色交给令牌区，暗色令牌才生效）',
+      await t.cdp.eval(`document.documentElement.style.getPropertyValue('--accent') || ''`), '')
+
+    // planned 的左栏按钮默认收着（T-G162 改后：三个独立开关、默认全关，旧总开关 left-rail-smart 已拆）
+    // —— 走真 UI 把「有计划」那个开关打开再进，与 ㉙ 同一条路径；本机存储每条流都会被
+    // bootApp 清掉重钉，不污染后面的流。（I-10 集成：此处原按 T-G163 树上的旧总开关写，并树后换向）
+    await t.press('[data-action="left-rail-view"][data-view="planned"]', '「有计划」开关')
+    t.eq('「有计划」回到左栏（点得到它）',
+      await t.count('.rail nav button[data-view="planned"]:not([hidden])'), 1)
+
+    for (const view of ['habit', 'planned', 'review']) {
+      await t.view(view)
+      const d = await t.cdp.eval(DARK_SNAPSHOT)
+      t.eq(`${view}：还在暗色`, d.theme, 'dark')
+      t.ok(`${view}：body 底跟亮色不一样`, d.bodyBg !== light.bodyBg,
+        `亮 ${light.bodyBg} / 暗 ${d.bodyBg}`)
+      t.eq(`${view}：body 底 = --bg 的暗色值`, d.bodyBg, d.bg)
+      t.eq(`${view}：卡片底 = --panel 的暗色值`, d.cardBg, d.panel)
+      t.ok(`${view}：没有「文字色 == 背景色」的元素`, d.bad.length === 0,
+        `文字与背景同色的有：${d.bad.join(' / ') || '（无）'}`)
+      if (view === 'habit') {
+        // 每日反馈的两块 textarea（#fbPlan / #fbGap）就是用户点名的那处：
+        // 修复前暗色下是 UA 白底，与 --panel 对不上。
+        t.eq('habit：每日反馈 textarea 底 = --panel 的暗色值（不再吃 UA 白底）', d.fbBg, d.panel)
+      }
+      if (view === 'habit') {
+        // 强调色：默认路径下必须落在 --accent 的**暗色**那一档 —— 修复前它被内联写死的
+        // 亮色默认值盖住（探针 60 处「没跟着主题变」的主因）。只断「亮暗不同」：
+        // 「选中项底 == accent」会撞上悬停态的 color-mix（点完左栏鼠标还停在那颗按钮上）。
+        t.ok('habit：强调色确实换成了暗色那一档', d.accent !== light.accent,
+          `亮 ${light.accent} / 暗 ${d.accent}`)
+      }
+    }
   },
 })
 
@@ -1105,7 +1211,14 @@ flow({
     let total = 0
     for (const v of VIEWS) {
       // 只扫文本：用轻量的"这一屏画出来了"就够（14 个视图 × 整页安静 = 光是等就 30s）
-      await t.view(v, { quiet: false })
+      if (v === 'offline') {
+        // T-G162：「离线记」不在 PC 左栏了 —— 从它现在的真入口进（设置→数据「手机离线记」小节）
+        await t.view('setting', { quiet: false })
+        await t.openSetting('set-offline')
+        await t.press('[data-action="view"][data-view="offline"]', '设置→数据的「离线记」入口', { quiet: false })
+      } else {
+        await t.view(v, { quiet: false })
+      }
       // **一处都不放过**：这句话本来是"人扫一眼"，人扫一眼最容易只看见第一处 ——
       // 所以这里把每一处都抠出来（含上下文），而不是碰见第一个就收工。
       const hits = await t.cdp.eval(`(() => {

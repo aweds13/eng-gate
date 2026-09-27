@@ -836,3 +836,40 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/team`
 - `phone/today`
 
+
+## 2026-09-27 12:36:17 · 31 份改动
+
+> 理由：I-10 集成八张并行卡：068 左栏三项独立开关+离线记移出 PC 左栏（桌面档公共区域+设置页三档）、070 习惯页打卡加可选分钟输入（三档习惯页）；069 亮色路径零视觉变化（其树上 45 份零 diff）—— 在并完的树上全量重采
+
+- `desktop/academic`
+- `desktop/flagged`
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/important`
+- `desktop/memo`
+- `desktop/offline`
+- `desktop/palette`
+- `desktop/planned`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `desktop/team`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/flagged`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/important`
+- `narrow/memo`
+- `narrow/offline`
+- `narrow/palette`
+- `narrow/planned`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `narrow/team`
+- `narrow/today`
+- `phone/habit`
+

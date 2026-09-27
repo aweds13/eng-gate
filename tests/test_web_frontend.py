@@ -349,7 +349,11 @@ def test_task_note_is_editable_in_detail_only() -> None:
 
 
 def test_habit_count_shown_alongside_investment() -> None:
-    """T-C1（用户口径）：习惯**只报次数**、与投入并排显示，**不折算成小时**；习惯页指路"手动补记"。"""
+    """T-C1（用户口径）：习惯**只报次数**、与投入并排显示，**不折算成小时**。
+
+    T-G164 换方向：习惯页不再指路「去今日手动投入补记」—— 打卡行自带**可选**的投入分钟输入，
+    那句说明整句删掉（前半句「只记次数」也不再为真）。
+    """
     html = WEB_INDEX.read_text(encoding="utf-8")
     summary = html.split("function summaryLine(s){", 1)[1].split("\n}", 1)[0]
     assert "s.habit_count" in summary and "习惯 ${s.habit_count} 次" in summary
@@ -359,7 +363,8 @@ def test_habit_count_shown_alongside_investment() -> None:
     assert "habit_count}h" not in html and "habits_done}h" not in html
     habit_view = html.split("async function renderHabit(", 1)[1]
     habit_view = habit_view.split("async function addHabit(", 1)[0]
-    assert "手动投入" in habit_view, "习惯页要指路「想计入投入就手动补记真实分钟」"
+    assert "投入分钟（可选）" in habit_view, "打卡行要有可选的投入分钟输入（T-G164）"
+    assert "去「今日手动投入」补记" not in habit_view, "指路补记的说明句已删（T-G164）"
 
 
 def _strip_js_comments(body: str) -> str:
@@ -521,6 +526,48 @@ def test_smart_views_are_reachable_at_every_breakpoint() -> None:
     assert "function flagBadge(" in html and "flagBadge(t)" in html
     assert 'data-action="task-flag"' in html and "function toggleFlag(" in html
     assert "/flag`" in html, "前端没调用 POST /api/tasks/{id}/flag"
+
+
+def test_left_rail_views_are_individually_chooseable() -> None:
+    """T-G162（用户 2026-09-27 更正原话：「我不是说并成一组固定在左栏，我是说能自由选择」）。
+
+    钉四件事：
+    ① 设置→外观「左栏智能视图」里**三个名字显式写出**、各一个独立开关
+       （用户说过「我没看清楚」—— 不许再用一个按钮含糊地说「在左栏显示/从左栏收起」）；
+    ② 逐项持久化：新键 `tf_rail_views` 存「哪几个开着」（JSON 数组），不许再只存一个布尔；
+    ③ 老偏好迁移：`tf_rail_direct='on'` → 三项全开；`'off'`/没存 → 三项全关；新键存在则以新键为准；
+    ④ 默认沿用 T-G154：没存过偏好时三项都不出现在左栏（markup 仍在，运行时 hidden）。
+    行为侧（真点、真刷新、真迁移）由 ui_flow ㉙ 钉。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    # ① 三个独立开关：模板按 SMART_RAIL_VIEWS 逐项生成（一顶三），名字显式 + 状态写在名字后面
+    setting_appearance = html.split('id="set-appearance"', 1)[1].split('id="set-focus-guard"', 1)[0]
+    assert 'data-action="left-rail-view"' in setting_appearance, "开关住在设置→外观"
+    assert "SMART_RAIL_VIEWS.map(v=" in setting_appearance, "三个开关由 SMART_RAIL_VIEWS 逐项生成"
+    assert "esc(SMART_VIEWS[v].title)}（${railViews[v]?'在左栏':'不在左栏'}）" in html, \
+        "开关上要显式写出视图名字与它的在/不在状态"
+    assert "'left-rail-view':" in html, "动作没在 ACTIONS 注册"
+    assert "toggleLeftRailView(el.dataset.view)" in html, "开关没接逐项切换"
+    assert 'data-action="left-rail-smart"' not in html, "旧的单个开关要拆掉"
+    assert "left-rail-smart" not in html, "旧动作不许有残留"
+    # ② 逐项持久化（存数组，不是布尔）
+    assert "const LEFT_RAIL_VIEWS_KEY='tf_rail_views'" in html, "没有新存储键"
+    assert "JSON.stringify(SMART_RAIL_VIEWS.filter(" in html, "存的是「哪几个开着」，不是布尔"
+    # 运行时按项隐藏（不再是一个布尔管三个）
+    apply_fn = html.split("function applyLeftRail(){", 1)[1].split("\n}", 1)[0]
+    assert "b.hidden=!railViews[b.dataset.view]" in apply_fn, "没有按项开关左栏按钮"
+    # ③ 迁移函数：on→全开；off/没存→全关；新键优先
+    mig = html.split("function migrateRailPrefs(", 1)[1].split("\n}", 1)[0]
+    assert "newVal!=null" in mig, "迁移没有「新键优先」分支"
+    assert "oldVal==='on'" in mig, "迁移没有按旧布尔映射"
+    # 启动时真的走迁移 + 把结果落进新键（迁移只走一次：之后新键存在，旧键不再被读出有效值）
+    boot = html.split("railOff=localStorage.getItem(RAIL_KEY)==='off'", 1)[1][:300]
+    assert "migrateRailPrefs(" in boot, "启动时没做老偏好迁移"
+    assert "railViewsSave()" in boot, "迁移结果没写进新键"
+    # ④ 默认全关（没存过偏好 = 三项不在左栏，沿用 T-G154 的默认）
+    state = html.split("let railViews=", 1)[1].split(";", 1)[0]
+    for name in ("important", "planned", "flagged"):
+        assert f"{name}:false" in state, f"{name} 的默认值不是关"
 
 
 def test_task_priority_badge_and_edit() -> None:
@@ -1454,11 +1501,14 @@ def test_mobile_offline_capture_is_wired_and_honest() -> None:
     for needle in ("不做：离线", "同一 WiFi 直连", "缓存里最近看到的那份清单"):
         assert needle in offline_view, f"离线页缺少边界说明：{needle}"
 
-    # 入口与动作：视图名在 VIEWS、左栏有入口、动作都注册了
+    # 入口与动作：视图名在 VIEWS、PC 入口在设置→数据（T-G162：左栏不再长它）、动作都注册了
     views = re.search(r"const VIEWS=\[([^\]]*)\]", html)
     assert views and "'offline'" in views.group(1), "offline 不在视图白名单里"
     rail = html.split('class="rail"', 1)[1].split("</nav>", 1)[0]
-    assert 'data-view="offline"' in rail, "左栏没有「离线记」入口"
+    # T-G162（用户 2026-09-27：离线记偏 App 端，不该长在 PC 左栏）—— 换方向钉
+    assert 'data-view="offline"' not in rail, "「离线记」不该再出现在 PC 左栏"
+    offline_setting = html.split('id="set-offline"', 1)[1].split('id="set-lan"', 1)[0]
+    assert 'data-view="offline"' in offline_setting, "设置→数据里要有「离线记」的入口"
     for action in ("offline-task-add", "offline-memo-add", "offline-feedback-save",
                    "offline-habit", "offline-done", "offline-export", "offline-copy",
                    "offline-clear"):

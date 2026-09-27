@@ -136,3 +136,60 @@ def test_api_memo_to_task_and_delete(tmp_path) -> None:  # type: ignore[no-untyp
 
     assert client.delete(f"/api/memos/{mid}").status_code == 200
     assert client.get("/api/memos").json() == []
+
+
+# ---- 打卡直接算投入（T-G164）：可选分钟，留空与老行为逐字相同 ----
+
+def test_habit_toggle_blank_writes_no_ledger(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """留空 → 与老行为逐字相同：habit_logs +1、ledger_entries 零新增。"""
+    client = TestClient(create_app(str(tmp_path / "h1.db")))
+    hid = client.post("/api/habits", json={"name": "早睡"}).json()["id"]
+
+    r = client.post(f"/api/habits/{hid}/toggle")
+    assert r.json() == {"done": True, "entry_id": None}
+
+    con = db_mod.connect(str(tmp_path / "h1.db"))
+    try:
+        logs = con.execute("SELECT COUNT(*) AS n FROM habit_logs WHERE done=1").fetchone()
+        ledger = con.execute("SELECT COUNT(*) AS n FROM ledger_entries").fetchone()
+    finally:
+        con.close()
+    assert int(logs["n"]) == 1
+    assert int(ledger["n"]) == 0
+
+
+def test_habit_toggle_with_minutes_writes_one_invest(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """填 30 → habit_logs +1 且**另写一条** axis=invest / kind=habit（秒口径，与专注同口径）。"""
+    client = TestClient(create_app(str(tmp_path / "h2.db")))
+    hid = client.post("/api/habits", json={"name": "跑步"}).json()["id"]
+
+    body = client.post(f"/api/habits/{hid}/toggle?invest_minutes=30").json()
+    assert body["done"] is True and body["entry_id"]
+
+    con = db_mod.connect(str(tmp_path / "h2.db"))
+    try:
+        row = con.execute(
+            "SELECT axis, kind, value FROM ledger_entries WHERE id=?", (body["entry_id"],)
+        ).fetchone()
+        logs = con.execute("SELECT COUNT(*) AS n FROM habit_logs WHERE done=1").fetchone()
+    finally:
+        con.close()
+    assert int(logs["n"]) == 1
+    assert (row["axis"], row["kind"]) == ("invest", "habit")
+    assert float(row["value"]) == 1800.0  # 30 分钟 = 1800 秒
+
+    # 「今日手动投入」同一统计入口：流水里看得到、合计 +30
+    rows = client.get("/api/ledger/invests").json()
+    assert [x["minutes"] for x in rows if not x["retracted"]] == [30.0]
+
+
+def test_habit_invest_retractable(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """打卡写的那条投入走既有撤销路：撤销后合计回退到 0。"""
+    client = TestClient(create_app(str(tmp_path / "h3.db")))
+    hid = client.post("/api/habits", json={"name": "阅读"}).json()["id"]
+    eid = client.post(f"/api/habits/{hid}/toggle?invest_minutes=30").json()["entry_id"]
+
+    assert client.delete(f"/api/ledger/invest/{eid}").json()["retracted"] is True
+    rows = client.get("/api/ledger/invests").json()
+    assert rows[0]["retracted"] is True
+    assert [x for x in rows if not x["retracted"]] == []

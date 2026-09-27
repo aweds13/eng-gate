@@ -4523,3 +4523,114 @@ evidence = [
   "text:docs/traceability.toml::T-G150",
 ]
 gaps = "**底座**：主树 6f7d4d0（十一张卡共同底座）。**十一张作者 sha（现读）**：rev1=99b114a（T-G150）/ acad1=63b0f8b（T-G151）/ copy1=6007290（T-G152）/ left1=71de85d（T-G154）/ cli1=be33d0e（T-G155）/ gates1=6d41e0e（T-G156）/ pypath1=71695f6（T-G157）/ review1=69868c5（T-G158）/ rules1=393fe84（T-G159）/ bg1=3deeb47（T-G160）/ lease1=3145051（T-G161）。**并集结论**：逐文件按 git show --name-only 取各卡自有改动清单（不用整树 diff，防把 062 的活算到工具树头上），单卡文件直接 checkout；src/web/index.html 被四张界面卡（057/058/059/060）碰过 → git merge-file 逐卡迭代三方合并，四趟 rc=0 无冲突，并逐卡核「新增行全在、删除行计数与作者一致」；scripts/run_gates.py 只取 .wt/pypath1 一份（062+063 并集，五棵工具树对 062 的祖先关系 rc 全 0）；gates/diag/gate_lock.py 只取 .wt/lease1 一份（065+067 并集）；tests/test_web_frontend.py 实为只有 058 改过。**共享三件手工并**：docs/traceability.toml / docs/changelog.md / 复盘/交接-重构进度.md 由集成者按各卡自有增量拼装（descendant 卡用 pairwise diff 隔离，避免把 062 的活重复计入）。**冲突怎么解**：无真正文本冲突（各卡改动区域不重叠）；共享文件的「同位置插入」按卡号升序排。**重采范围**：gates/render/** 不合并作者产物，按合并后源码全量重采（060 左栏少三行 → 桌面 15 + 窄屏 15；057/058/059 各改本视图）。**边界（如实写）**：卡 058（T-G151）对 复盘/交接-重构进度.md 只改了台账进度数字（numstat 1/1），**未写 CHECKPOINT 段** → 交接里只有十条卡 CHECKPOINT（057/059/060/061/062/063/064/065/066/067），缺 T-G151；按卡 §7.7「不许替它补」未代为编写，报主控。**门禁读数**：以提交后 audit_progress.py 与 gates/last.json 为准。"
+
+[entries."T-G163"]
+id = "T-G163"
+title = "暗色适配四屏（习惯/每日反馈/计划/复盘）+ 补暗色门禁（此前暗色零覆盖）"
+group = "F"
+status = "done"
+evidence = [
+  "file:tools/dark_probe.mjs",
+  "file:复盘/暗色适配与暗色门禁-T-G163.md",
+  "file:tools/ui_flow_check.mjs",
+  "text:src/web/app.css::color-scheme",
+]
+gaps = "**用户原话**（2026-09-27）：暗色模式下习惯这一个界面、每日反馈、下计划与复盘之类的东西，好像没有把它做成适配暗色模式的状态。**视图名对齐**（git grep 与 tf_browser.mjs 的 VIEWS，不猜）：habit = 习惯（每日反馈不是独立视图，是 habit 页的「每日反馈（计划 vs 执行）」区块 index.html:2744 的 #fbPlan/#fbGap）、planned = 有计划、review = 复习；没有 daily 视图。**令牌层自检**：颜色字面只在 app.css 令牌区，亮色区 25 / 暗色区 16 / 只在亮色区 9（--accent-1..6 与两个 --accent-N-ink 本该两主题同值 + --motion-ease 非颜色）→ 令牌层完整，病不在令牌；index.html 仍只有 meta theme-color 一处硬编码色（卡 §7.4 可不动）。**探针**：新建 tools/dark_probe.mjs（只读），复用 tf_browser.mjs 的 startServer --fresh + seedFixture + bootApp + 假时钟三处钉齐，每屏在 dataset.theme light/dark 下各渲染一遍（等 body 背景+变异计数连续 4 拍稳定），逐可见元素读 background-color/color/border-*-color/最近不透明祖先背景，出判据 A（暗值逐字节==亮值且不在白名单：transparent/rgba(0,0,0,0)/inherit/--accent-1..6）与判据 B（文字对比度正文 <4.5 / ≥18px 或 --muted 次要 <3.0），自带探针自检（切暗色 --bg 不变则退 2 作废）。**反证①（改前现场）**：A 60 处 / B 10 处；A 计数口径是逐元素逐属性（svg/path 与父 span 各命中一次同一规则），去重后问题类只有两类。**根因两类**（一次性 CDP 脚本对质：切暗色后 --bg/--ink 都变，但 nav button.active 背景仍是 rgb(47,111,235)）：① index.html view() 的 else 分支把配置默认强调色写成内联 --accent 并持久化 tf_accent —— 内联优先级高于 [data-theme=dark]，暗色 --accent:#60a5fa 永不生效，暗色墨 #0b1220 落在亮色强调底上 = 4.1 < 4.5（B 的全部 10 处）；② .textarea 是唯一没写底/字色的文本控件（select/input 元素级都有 var(--panel)/var(--ink)），暗色下吃 UA 白底黑字 —— 正是用户点名的每日反馈两块。**修法（只加暗色/删一条暗色才踩的分支）**：① 删 view() 的 else 分支（不再内联写默认强调色、不再持久化），默认值交令牌区（亮色 :root 同值 #2f6feb，亮色视觉零变化；渲染黄金的 bootApp 本就钉住 tf_accent 走 accentChoice 真值路径不受影响；用户真选过仍写内联 = 原行为）；② [data-theme=dark] 块加 color-scheme: dark（原生控件/弹层/滚动条跟随，亮色零影响）；③ 新增 [data-theme=dark] .textarea { background: var(--panel); color: var(--ink) }。改前按铁律 2 跑 pin_check 四条全钉子 0。**反证②（修完）**：探针复跑 A 0 处 / B 0 处（无白名单残留）；令牌自检改前改后 25/16/9 不变（本卡没补颜色令牌，病不在令牌）。**判据留下（选 A 断言、不选 B dark 黄金的理由）**：黄金要动 render_check 的采集/更新/命名三处、亮暗同目录易互相覆盖（反证③风险面大）；断言流不改任何既有判据、复用流底座真点击 + waitIdle。ui_flow_check.mjs 新增流 ㉚（26 条）：清掉工具钉的 tf_accent 重载走默认路径 → 先记亮色基线（防「body 背景==--bg 计算值」恒真断言）→ 真 UI 设置页外观切暗色 → 断言 html 无内联 --accent、habit/planned/review 三屏 body 底==--bg 暗色计算值、卡片底==--panel 暗色计算值、全页扫有自有文字的可见元素不存在文字色==背景色、habit 屏加断每日反馈 textarea 底==--panel 暗色值与强调色亮暗换档。实测 21 项断言全绿（16.2s）。已知边界：断「选中项底==accent」会撞悬停态的 color-mix（点完左栏鼠标停在那颗按钮上），故强调色只断换档+无内联两条，不是放松。**反证④（判据咬）**：故意把暗色 --accent:#60a5fa 改回 #2f6feb → 流 ㉚ 红（habit：强调色确实换成了暗色那一档 —— 亮 rgb(47,111,235) / 暗 rgb(47,111,235)），还原（只还原暗色块那一处）后复跑 21 项回绿。**反证③（亮色未动）**：git status --porcelain -- gates/render 为空（45 份黄金一份没动、无 dark 档 —— 判据走断言不走 2.3-B）；render 门 45 份逐字节比对全绿 = 机器判据；门禁读数：17 门全绿以 gates/last.json 为准（跑前 gate_lock.py acquire --card 069，提交后 audit）。**边界（旧会话残留，如实报）**：修复前 else 分支已把 tf_accent=#2f6feb 持久化过的本机存储，启动时顶层 applyAccent(localStorage.getItem(...)) 仍会内联写 → 这些旧会话的暗色强调色依旧不生效，要点一次设置页「默认」（setAccent(null)）才回令牌路径；区分「用户真选过」与「被持久化的默认」需别的判据，超本卡白名单口径没动。**没动**：src/timeflow/**、scripts/**、其余 tools/**、gates/diag/**、gates/render/**（一个字节没动）、.wt/**、主树外来未跟踪文件、data/。"
+
+
+[entries."T-G164"]
+id = "T-G164"
+title = "习惯打卡直接算投入（可选分钟，留空与旧行为逐字相同）—— 去掉「去今日手动投入补记」那句"
+group = "F"
+status = "done"
+evidence = [
+  "file:复盘/习惯打卡算投入-T-G164.md",
+  "text:src/web/index.html::投入分钟",
+  "file:tests/test_habit_memo_line.py",
+]
+gaps = "**用户原话（2026-09-27）**：习惯里面习惯打卡只记次数，想要算投入去「今日手动投入」补记，这个是废话吧。**现状**：habits / habit_logs 只有「那天做没做」，没有时长；但 ledger_entries 的 kind 本来就有 habit 取值（focus / habit / task_done / kpi / asset / review）——「打卡算投入」设计上走得通，只是没接上，把设计缺口写成了使用说明。**改法**：打卡行加可选分钟输入（placeholder「投入分钟（可选）」，必要语义用输入框自己表达、不留解释句，口径同界面不解释 T-G142/T-G144）；留空 = 与老行为逐字相同（只写 habit_logs，ledger_entries 零新增）；填 N（>0）且打卡为 done 时，后端走现成的 memo.add_invest_entry 另写一条 ledger_entries(axis=invest, kind=habit)，秒口径（value=分钟×60）与「今日手动投入」同表同口径、同撤销路（invest.retracted 反向事实）；不新造第二套投入口径；habits / habit_logs 表结构一字未动（git diff 底座 -- src/timeflow/storage/db.py 为空）。**先红后绿**：tests/test_habit_memo_line.py 新增三钉（留空不写流水 / 填 30 写一条 1800 秒 / 走既有撤销合计回退）；突变反证：把后端投入写入临时砍成 False，两条钉红（blank 条不受影响，符合预期），还原后全绿。**真机读数**（serve.py --fresh 临时空库，端口 8965）：留空 habit_logs 0→1、ledger_entries 0→0；填 30 时 habit_logs +1 且 ledger_entries 0→1（axis=invest kind=habit value=1800.0），「今日手动投入」合计 30.0 分钟；DELETE 撤销后 retracted=True、合计回退 0。**口径记录**：卡 §2.2 点名删后半句，实测把整句说明删掉——前半句「只记次数」在本卡之后也不再为真，且界面不解释（T-G142/T-G144）不许留解释句；离线排队场景投入分钟记不上，toast 如实提示联网后在「今日手动投入」补记。**没动**：scripts/**、其余 tools/**（ui_flow_check 无需换向：习惯页断言只有导航）、src/timeflow/core/**（复用现成函数，零改动）、src/timeflow/storage/db.py、gates/diag/**、data/ 与真实库、.wt/**。"
+
+
+[entries."T-G168"]
+id = "T-G168"
+title = "台账号 → 复盘文档索引（脚本现算，163 个全覆盖，五桶分标；既有复盘文件零改动）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/索引-台账号到复盘.md",
+  "file:复盘/台账号到复盘索引-T-G168.md",
+]
+gaps = "实测读数：复盘 189 份 / 台账 292 条 / file:复盘/ 证据指针 176 条零断链 / 偏薄占位 0 份。163 个台账号 = 台账 292 条按正则现算；137 = 文件名子串含台账号的专属复盘（桶 A）。五桶计数：A 137 / B 1（T-G8b，正文加粗行首）/ C 10（台账 file:复盘/ 指针）/ D 5（T-G115/116/120/121/122，text:复盘/ 指针指向共享文档）/ E 10。桶 E 分两半：T-G58/59/60/72/118 台账证据只指向 src/docs/tools/tests、复盘零提及；T-G38/39/46/56/57 仅在别的卡的复盘里有行首提及（索引备注透明列出文件与行号，按卡 §2.1.2 不许以该口径定位）。脚本解析顺序：A 文件名子串 → B 标题/加粗/引用行首 → C file:复盘/ → D text:复盘/ → E 未定位；命中即停、多份全列、不放宽到列表前缀或任意提及。既有复盘文件改动数 = 0（原「25 份各加一行」作废：25 是 163−137−1 的残差不是清单）；docs/ 只有 changelog 新增；台账零改动，本条由集成者粘贴。"
+
+[entries."T-G165"]
+id = "T-G165"
+title = "本轮并行波总复盘：十一张卡的过程代价、铁律 23-31 索引、耗时分解与下一波改进"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/并行波复盘-20260927.md",
+  "text:复盘/外包-卡表与规矩.md::铁律 29",
+]
+gaps = "**定位**：与 复盘/集成十一张并行卡-T-G153.md 分工 —— 那份讲怎么并、有没有丢活；本份讲为什么这么慢、贵在哪、下次怎么不这么慢（波级过程代价 + 流程改进，同一处入库）。**六起事故与代价**：① PYTHONPATH 假绿三张 UI 卡各撞一次（057 约 20 分钟定位读数在案，058/060 部分读数未留存）→ 063 修根因；② 按进程名清端口跨树误杀（059 约 45 分钟纯等端口/锁，本波最大单笔白吃）→ 062 端口按树隔离；③ 062 第一版清理误杀 060 在跑的门禁（两门 exit 13 实读，重跑分钟读数未留存）→ 判据加 cwd 树判据 + 陪练进程反证；④ 066 漏写共享三件审计当场红（工人提交 918ca07 → amend 成 3deeb47）→ 规矩补限定语；⑤ 064 第一次尝试秒死（0 字节日志）判决差点误导清场、实为 r2 在干活（46.6 分钟/71 回合）→ 判据用变新不用存在；⑥ 集成笔 amend 破坏门禁 provenance（last.json rev 指向孤儿 f816b3e → 本仓自带测试红，返工约 49 分钟）→ 由只读复核 RI9 抓出并重做。**铁律索引**：23–31 九条逐条 text: 指针 + git grep 命中数（2/2/5/2/3/2/2/1/1）。**耗时分解**：工人墙钟合计 535.3 分钟、回合 1128（11 份 report 头部相加）；可归因浪费约 114 分钟（占约 21%）= 059 等待 45 + 057 定位 20 + 集成返工 49；两笔读数未留存（060 门禁重跑、058 撞单次调用上限的 token 占比）；工具层 vs 模型层占比读数未留存（耗时拆解.py 在本批日志上工具计时恒 0，已如实记为工具局限）。058 token 读数 37,319,077（verdict 原文，≥ 预算 25,000,000 止损）。**下一波改进五条**：端口段写进卡规格 / worktree 开工 30 秒自检 / 超 8 分钟命令一律 run_bg / 卡模板统一提交后再 audit / 波级收口固定只读复核卡 —— 全部有本波读数支撑。**没动什么**：代码区零改动（git diff --stat b90c4e4 -- src tests scripts tools 为空）、gates/diag 工作台只读、各树只读、data/ 与外来未跟踪文件没碰。"
+
+
+[entries."T-G162"]
+id = "T-G162"
+title = "左栏整理：三项智能视图各自独立可选（默认全关+老偏好迁移）；「离线记」移出 PC 左栏（挪进设置→数据）"
+group = "F"
+status = "done"
+evidence = [
+  "file:复盘/左栏整理与离线记挪位-T-G162.md",
+  "text:src/web/index.html::migrateRailPrefs",
+]
+gaps = "**为什么有这张卡**：用户 2026-09-27 原话「我没有说切换，把它们放在左栏固定」+「离线记偏 App 端，为什么放在 PC 上」，同日更正「我不是说并成一组固定在左栏，我是说能自由选择」。**原实现（T-G154）错在哪**：把三项做成一颗总开关（在左栏显示/从左栏收起），只有一个布尔、名字也不显式（用户说「我没看清楚」）。**本卡改法**：设置→外观「左栏智能视图」拆成三个独立按钮（名字显式+状态写在名字后面：`重要（在左栏）` 等，模板按 `SMART_RAIL_VIEWS.map` 逐项生成）；状态 `railViews` 按项存；新键 `tf_rail_views` 存 JSON 数组（哪几个开着），不再存布尔。**默认值与老偏好兼容**：默认沿用 T-G154（三项全关，用户只要求能自由选择没要求改默认）；迁移函数 `migrateRailPrefs(旧键, 新键)`——新键存在以新键为准（迁移只走一次），否则旧键 `on`→三项全开、`off`/未存→三项全关；启动时迁移并落进新键，旧键只读不写。**分组怎么做的**：没有分组/没有标题/没有固定——用户更正后只要逐项自由选；左栏还是原来的排法、按项 `hidden`。**离线记挪到哪**：PC 左栏 `data-view=offline` 按钮删除；PC 通路保在设置→数据的 `set-offline` 小节（「打开『离线记』这一页」按钮，原有，未动）；离线引擎（offline.js / IndexedDB 队列 / 包格式 / 导入）一字未改。**手机端入口未动**：顶部提示条 `offlineBar` 原样；`git grep -c smartViewNavHTML` 改前 4 = 改后 4。**黄金重采范围**：全量（桌面档左栏是公共区域少一颗按钮，设置页外观节三档都渲染，不存在零改子集）；份数以 `gates/render/LAST_UPDATE.md` 为准。**卡内矛盾（如实写）**：卡标题/§4 提交信息/§5 读数 1 写「默认显示并成一组」，与 §2.1（更正后口径：自由选择、默认全关）冲突——按 §2.1 执行，读数 1 因此不成立（实测：未存偏好 → 三项全 hidden）；提交信息按实际行为改写。**反证读数**：行为流 ㉙ 重写为 13 项断言全绿（默认全关/只开 planned 只出 planned/刷新保持/迁移 on→全开落新键/逐项收起）；静态新增 `test_left_rail_views_are_individually_chooseable`、`test_mobile_offline_capture_is_wired_and_honest` 左栏断言换方向；前端 109 passed；ruff 全绿。**坑**：树里直接跑 node 工具忘带 `PYTHONPATH=$PWD/src` 时 serve.py 会加载主树旧壳（两次假红），带上后同条件全绿。**没动的**：src/timeflow、scripts、docs/commands.toml、离线引擎、手机端入口、左栏三项 markup。"
+
+
+[entries."T-G169"]
+id = "T-G169"
+title = "门禁锁改按端口段分把 + 全局并发上限（默认 2）：七张卡不再排一把锁"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tests/test_gate_lock_multi.py",
+  "text:gates/diag/gate_lock.py::TF_GATE_MAX_CONCURRENT",
+]
+gaps = "**用户原话**：2026-09-27「不能多几把跨树锁」。**为什么全局串行已无必要**：062（T-G156）已把端口按树隔离并实测两段端口基可同时跑真机门（四进程 rc 全 0）——必要条件收敛为「同一段不并行」+「整机趟数有上限（内存：一趟 17 门 15-30 个无头 Edge，机器 15.2 GB 常驻剩 1-3 GB）」。**锁路径向后兼容**：不设 TF_GATE_PORT_BASE → 仍是 gates/diag/gates.lock（逐字不变）；设了 → gates-<BASE>.lock；非法/越界 WARN 退默认段（与 run_gates.py 的 port_base() 同口径）；release 不给段 = 默认段，与今天一致。**上限语义与空位过期**：TF_GATE_MAX_CONCURRENT 默认 2（=1 退回全局串行旧行为）；实现 = 先创建本段锁再重扫全目录计数（含自己），超限自删退回并打印「当前 N 把在跑（上限 M）…等空位」，计数发生在创建之后不会超卖；名额只数租约内活锁 → 持有者死了/租约过期空位自动回归不泄漏；上限只保护内存不当门禁判据。**五条反证读数**：①不同段同时拿（9061+9081 各 rc=0，全局 1/2→2/2，锁文件各是一把）；②同段第二把等（rc=3，报持有者 card=075 已 19s）；③上限=1 第二段 rc=3 且其锁文件自删（报「当前 2 把在跑（上限 1）…等空位」）、=2 两段都 rc=0（全局 2/2）；④不设变量 lock_path()=主仓 gates/diag/gates.lock（只读验证不 acquire）；⑤同卡 renew rc=0（age 刷回 0s）/ 别人 renew rc=5 原锁未动 / 短租约 4s 睡过头后第三个卡清陈旧（已 7s 未动 > 租约 4s）拿到 rc=0。**先红后绿**：tests/test_gate_lock_multi.py 10 条在旧实现 b90c4e4 上 8 failed 2 passed（红的正是分段并发/上限/路径兼容/新字段/status 多段/默认上限）；新实现上 multi+lease 15 passed（lease 五条一字未动仍全绿）。**租约与续租未丢**：陈旧判定/续租/别人不能续全保留，且顺手收紧一条——同段 acquire 的陈旧判定改以持有者写进锁文件的租约为准（旧实现等的人拿短 --stale-after 就能清别人的活锁 = 063 现场机制；铁律 25/29 收紧非放松；此问题由反证 5 第一版 rc=3 暴露后修掉）。**没动**：scripts/**（含 run_gates.py）、src/**、tools/**、docs/ 下除 traceability/changelog 外的一切、gates/diag/ 下除 gate_lock.py 外的一切、.wt/**、data/、主树外来未跟踪文件；默认段锁全程未碰（开工基线不存在，期间卡 072 正常业务 acquire 持有，收工对比如实说明）。**CLI 反证跑法**：临时 git 仓库隔离（gate_lock.py 只依赖 git 定位 main_root），不在主仓锁目录留测试痕迹、不受正在跑的别的卡干扰。"
+
+
+[entries."T-G167"]
+id = "T-G167"
+title = "人工验收清单补齐本波已落地的界面行为（每条四要素 + 存在性 grep 证据）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:docs/人工验收-照着点.md",
+  "file:复盘/人工验收清单补齐-T-G167.md",
+]
+gaps = "**为什么有这张卡**：2026-09-27 集成（T-G153）落地了一批改界面行为的卡（复习卡删除 / 学业页瘦身 + 录成绩绑课程 / 备忘录团队文案 / 命令行 MCP 文案 / 「界面不解释」总口径），而附录对账（T-G135）停在 20 条 —— 新加的东西没人知道要去点哪里。**改前 / 改后**：原 20 条（已机器覆盖 2 / 需人点 18）→ 新增 F 组 5 条（F-1 复习卡删除 / F-2 学业页 / F-3 备忘录团队 / F-4 命令行 MCP / F-5 界面不解释抽查），全文 20 → 25。**存在性证据**：每条新条目至少一条 git grep 命中（src/web/index.html:2948「删除卡」/ 2976 二次确认原话 / 2870「不绑课程·先建课程」下拉 / 2796「未关联课程」/ 3456「4.0 制」只在设置页 / 3460 学业概览开关 / 3117「记一条…」/ 3137「不折算」口径 / 3062「不是两套数据（共 N 件）」/ 1925「团队任务不计个人投入」/ 642 离线页短口径句；F-4 用 python -X utf8 -m timeflow.cli --help 实跑输出 + src/timeflow/cli/main.py:20）。**既有条目未改**：git diff --stat b90c4e4 -- docs/人工验收-照着点.md = 21 insertions(+)、删除行 0；只在附录末尾加 2026-09-27 日期注说明 F 组存在。**只写已落地的**：三张在飞的卡的四项（左栏三项自由选择 / 离线记挪位 / 暗色适配 / 打卡分钟）一条都没写（暗色在 A 组原有条目，未动）；落地后再补。**不替用户判通过**：条目只有四要素，无任何「已通过」结论。**没动**：src/**、scripts/**、tools/**、tests/**、docs/ 下白名单之外的一切、gates/diag/**、.wt/**、主树外来未跟踪文件、data/、真实库与备份。"
+
+
+[entries."T-G166"]
+id = "T-G166"
+title = "本波新工具/新开关/新路由的模块与契约文档同步（先盘点缺口再补，只改文档）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/工具与口径文档同步-T-G166.md",
+  "text:复盘/外包-卡表与规矩.md::run_bg",
+]
+gaps = "**为什么有这张卡**：十一张卡新造了工具/开了开关/加了路由，但既有门（docs_sync/check_commands/check_layers）只保证「改了代码必须提到文档」，不保证「文档把新工具说清楚」。**先盘点后补**：缺口清单 7 对象在 复盘/工具与口径文档同步-T-G166.md §1（改前交出，每条带 grep/读文件读数）—— 3 个已覆盖不补（062 端口/并发开关已在 复盘/外包-卡表与规矩.md §24.8；065 即 §24 本身；066 run_bg 全量口径已在 复盘/长任务执行协议.md §十三），4 个补了 5 处落点：① docs/commands.toml OP-26 既有条目内追加 DELETE /api/review/items/{item_id} 路由与 data-action=review-delete 入口（界面 index.html:1024/2948 已有、契约 F6-review.md:30-36 已写全，唯独命令表没跟上）；② §24.8 补 063 tree_pythonpath() 已修的日期注；③ §11 补 wb_review check_branch 三态日期注；④ §15 补 run_bg 指针与退出码 0/3/2；⑤ §24.7 补租约 1800 → 10800 与 renew 子命令的日期注（1800s 的历史原句未动）。**全部是追加**：日期注或数组内追加，既有句子一个字未改写、§24 铁律正文（24.1–24.6、24.9）未动；改前 pin_check（OP-26 相邻字面）钉子 0。**docs/ 无归宿结论**：docs/ 没有工具类总览文档，门禁/外包工具的口径家在复盘协议文档，按卡 §7.4 不硬塞。**未新开 OP 号**：OP-1…OP-51 全占用，只在 OP-26 既有条目内补。**未动代码的证据**：git diff --stat b90c4e4 -- src tests scripts tools 为空。**没动**：复盘/长任务执行协议.md（run_bg 口径已在其 §十三，非本卡白名单）、在飞的卡（左栏三项/离线记挪位/暗色探针/打卡分钟）没算进盘点、真实库/备份目录、.wt/**。"
+
+
+[entries."T-G170"]
+id = "T-G170"
+title = "集成本波八张并行卡（068-075）：界面 3 + 文档 4 + 工具 1；共享四件手工并、黄金重采"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/集成八张并行卡-T-G170.md",
+  "text:docs/traceability.toml::T-G162",
+  "text:docs/traceability.toml::T-G169",
+]
+gaps = "**底座**：主树 b90c4e4（八张卡共同父提交）。**八张作者 sha（现读）**：068=a9f541a（T-G162）/ 069=d315882（T-G163）/ 070=0a0029d（T-G164）/ 071=75c8665（T-G165）/ 072=6c55059（T-G166）/ 073=921e1c0（T-G167）/ 074=709d5e0（T-G168）/ 075=97f59b7（T-G169），八张全部以 b90c4e4 为父、树全干净后才开工。**并集结论**：逐张按 `git show --name-only` 的文件清单取（不用整树 diff，防静默回退），单卡独占文件直接 checkout；src/web/index.html 被 068/069/070 三张界面卡碰过 → 顺序三方合并（068 为基，依次叠 069/070 的 diff），与 merge-file 参考并集逐字节（去 CR）比对一致；tools/ui_flow_check.mjs（068+069）与 tests/test_web_frontend.py（068+070）同法并并逐一比对一致。**集成换向一处（如实记）**：069 的流 ㉚ 在其自己树上经旧总开关 `left-rail-smart` 把 planned 请回左栏，该路径被 068 拆除 → 并树后 ㉚ 红两句（动作 0 个 / planned 0×0），集成改为按 T-G162 新路径按 [data-action=left-rail-view][data-view=planned]（与 ㉙ 同路），069 的暗色断言一行未动，单跑 21 项回绿；⑬ 导出流第一趟全量红（toast 空）、单跑 11 项全过（满载偶发），第二趟全量绿。**共享四件手工并**：traceability.toml 八块逐字抠自各卡 blob（T-G168 抠自其复盘末尾 TOML 块，卡 074 把台账列为禁区）+ 本笔 T-G170，全部 append 于文件尾；changelog 八段按提交时间倒序（069>070>074>071>068>075>073>072）+ 本笔；交接八段 CHECKPOINT 同序 + 本笔；外包-卡表与规矩.md 收 072 的四条 T-G166 日期注 + 075 的 §24.7 标题改/日期注/现行口径段（两卡同锚点插入，两块都留），并按卡 §2.4 把铁律 32/33/34/35 四份自工作台逐字搬入新 §24.10（grep 四编号各命中）。**重采范围**：gates/render/** 不并任何卡的作者产物，在并完的树上按 render_check --update 全量重采（068 动桌面档左栏与设置页三档、069 亮色零 diff 但 bootApp 路径被它改、070 动习惯页三档 —— 以 LAST_UPDATE.md 实测份数为准）；门禁按 provenance 铁律 30 在 HEAD==b90c4e4（并完、工作区脏）时跑。**边界（如实写）**：072/075 对规矩文档的插入点在 §24.7 相邻，两块顺序由集成者定（072 注在前、075 现行口径在后），内容零改写；四份铁律文件逐字 cat 搬入，仅在其间加分隔线与小节标题；T-G168 条目由本笔补粘是卡 074 设计内安排（铁律 35 记档）。**门禁读数**：以 gates/last.json（rev==b90c4e4）与提交后 audit_progress.py 为准；重采/分布读数以 复盘/集成八张并行卡-T-G170.md 为准。"
+

@@ -1,12 +1,25 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""门禁串行锁 —— 铁律 13 的机械化（fork/merge 并行开发必备）。
+"""门禁锁 —— 按端口段分把 + 全局并发上限（铁律 13 的机械化；fork/merge 并行开发必备）。
 
 为什么需要
 ----------
-`scripts/run_gates.py` 里的浏览器门用**固定端口**（render 8531/8532、ui_flow 8541~8544）。
-两条线同时跑门禁 = 互相把服务掐掉 → **假红**（051 与 I-6 撞过，见 `自动推进表.md` 铁律 13）。
-fork/merge 并行时每条树都要跑门禁，所以用一把**跨树共享**的文件锁把「跑门禁」那一段串起来。
+`scripts/run_gates.py` 里的浏览器门用**固定端口段**（render BASE/BASE+1、ui_flow BASE+10~+13，
+默认 BASE=8531）。同一段两条线同时跑门禁 = 互相把服务掐掉 → **假红**
+（051 与 I-6 撞过，见 `自动推进表.md` 铁律 13）。
+
+★ 2026-09-27（T-G169，用户原话「不能多几把跨树锁」）：062（T-G156）已把端口按树隔离并实测
+两段可**同时**跑真机门，所以「同一时刻整机只许一趟门禁」不再必要。必要条件收敛成两条：
+  1. **同一个端口段**不许两趟门禁并行（否则撞端口 → 假红）；
+  2. **整机并行趟数**有上限（真正的瓶颈是内存：一趟 17 门要 15–30 个无头 Edge）。
+于是锁从「跨树一把」改成「**每段一把 + 全局限额**」：
+  - 锁文件按 `TF_GATE_PORT_BASE` 分把（与 `scripts/run_gates.py` 的 `port_base()` 同一口径）：
+    **不设 = `gates/diag/gates.lock`（路径逐字不变，向后兼容）**；设了 = `gates/diag/gates-<BASE>.lock`；
+    非法/越界值 → WARN 并退回默认段（同 `run_gates.py`）。
+  - 新变量 `TF_GATE_MAX_CONCURRENT`（默认 2）：**同时**持锁的段数 ≤ N；=1 即退回「全局串行」旧行为。
+    超限时 `acquire` 里等（打印「当前 N 把在跑，等空位」）。空位**随租约一起过期**：
+    扫描名额时只数**租约内**的活锁，持有者死了/租约过期 → 名额自动回归，不会泄漏。
+  - 上限只保护内存，**不参与**任何「门禁通过与否」的判定。
 
 租约（lease）而不是 pid
 -----------------------
@@ -24,8 +37,8 @@ pid 立刻就"死"了，锁看着像僵尸 → 下一张卡把**正在跑门禁�
 **刷新锁文件 mtime**，于是「多久没动」重新从 0 起算。★ 判据仍是**锁文件 mtime**，不引入 pid 判活；
 串行性一点没松（`renew` 只刷 mtime，只有**同卡号**的持有者能续，别人续不了）。
 
-锁文件固定在**主仓**的 `gates/diag/gates.lock`（用 git 的 common dir 定位，
-所以在 `.wt/xxx` 这样的 worktree 里跑也指向同一把锁）。
+锁文件固定在**主仓**的 `gates/diag/`（用 git 的 common dir 定位，
+所以在 `.wt/xxx` 这样的 worktree 里跑也指向同一处）。
 
 用法（在自己那棵树里）
 ----------------------
@@ -35,7 +48,7 @@ pid 立刻就"死"了，锁看着像僵尸 → 下一张卡把**正在跑门禁�
     python -P -X utf8 gates/diag/gate_lock.py renew --card 057   # 长任务：定期续租（刷新 mtime）
     python -P -X utf8 gates/diag/gate_lock.py release --card 057
 
-    python -P -X utf8 gates/diag/gate_lock.py status
+    python -P -X utf8 gates/diag/gate_lock.py status   # 列出每一段的持有者与租约剩余
 
 ★ 一定要带 `-P`：`gates/diag/` 里若放了和标准库同名的脚本，会被当模块顶掉（铁律 24）。
 
@@ -56,6 +69,36 @@ from pathlib import Path
 
 GATE_PORTS = (8531, 8532, 8541, 8542, 8543, 8544)
 DEFAULT_STALE_AFTER = 10800
+DEFAULT_PORT_BASE = 8531
+DEFAULT_MAX_CONCURRENT = 2
+
+
+def segment_base() -> int:
+    """锁（与门）的端口段基准。
+
+    ★ T-G169：取段规则与 `scripts/run_gates.py` 的 `port_base()` **同一个口径**：
+    **不设 `TF_GATE_PORT_BASE` = 8531**（历史默认，逐字不变）；
+    非整数 / 越界（1024..65500 之外）→ 打 WARN 并退回 8531（同 `run_gates.py`）。
+    """
+    raw = os.environ.get("TF_GATE_PORT_BASE", "").strip()
+    if not raw:
+        return DEFAULT_PORT_BASE
+    try:
+        base = int(raw)
+    except ValueError:
+        print(
+            f"[锁] [WARN] TF_GATE_PORT_BASE={raw!r} 不是整数 → 退回默认段 {DEFAULT_PORT_BASE}",
+            flush=True,
+        )
+        return DEFAULT_PORT_BASE
+    if not (1024 <= base <= 65500):
+        print(
+            f"[锁] [WARN] TF_GATE_PORT_BASE={base} 越界（要求 1024..65500）→ 退回默认段 "
+            f"{DEFAULT_PORT_BASE}",
+            flush=True,
+        )
+        return DEFAULT_PORT_BASE
+    return base
 
 
 def gate_ports() -> tuple[int, ...]:
@@ -63,17 +106,39 @@ def gate_ports() -> tuple[int, ...]:
 
     ★ T-G156 配合端口隔离：设了 `TF_GATE_PORT_BASE` 就跟它平移（口径同
     `scripts/run_gates.py`：render BASE/BASE+1、ui_flow BASE+10..+13）；
-    **不设 = 历史的 8531/8532/8541~8544，逐字不变**。锁本身仍是**跨树一把**
-    （BASE 只影响"报哪些端口忙"，不放松串行）。
+    **不设 = 历史的 8531/8532/8541~8544，逐字不变**。
+    ★ T-G169：BASE 现在同时决定**用哪把锁**（`lock_path()`）——同一段共用一把，跨段各拿各的。
     """
-    raw = os.environ.get("TF_GATE_PORT_BASE", "").strip()
-    if not raw:
-        return GATE_PORTS
-    try:
-        base = int(raw)
-    except ValueError:
+    base = segment_base()
+    if base == DEFAULT_PORT_BASE:
         return GATE_PORTS
     return (base, base + 1, base + 10, base + 11, base + 12, base + 13)
+
+
+def max_concurrent() -> int:
+    """全局并发上限：**同时**持锁的段数 ≤ N（`TF_GATE_MAX_CONCURRENT`，默认 2）。
+
+    ★ T-G169：默认 2（保守：机器 15.2 GB 内存、常驻只剩 1–3 GB）；=1 即退回「全局串行」旧行为；
+    ≤0 / 非整数 → WARN 退回默认。上限只保护内存，**不参与**门禁通过与否的判定。
+    """
+    raw = os.environ.get("TF_GATE_MAX_CONCURRENT", "").strip()
+    if not raw:
+        return DEFAULT_MAX_CONCURRENT
+    try:
+        n = int(raw)
+    except ValueError:
+        print(
+            f"[锁] [WARN] TF_GATE_MAX_CONCURRENT={raw!r} 不是整数 → 退回默认 {DEFAULT_MAX_CONCURRENT}",
+            flush=True,
+        )
+        return DEFAULT_MAX_CONCURRENT
+    if n < 1:
+        print(
+            f"[锁] [WARN] TF_GATE_MAX_CONCURRENT={n} < 1 不合法 → 退回默认 {DEFAULT_MAX_CONCURRENT}",
+            flush=True,
+        )
+        return DEFAULT_MAX_CONCURRENT
+    return n
 
 
 def _git(*args: str) -> str:
@@ -91,10 +156,38 @@ def main_root() -> Path:
     return Path(_git("rev-parse", "--show-toplevel") or ".").resolve()
 
 
+def lock_dir() -> Path:
+    """全部段锁所在目录（由 `lock_path()` 派生）。
+
+    ★ 测试把 `lock_path` monkeypatch 到临时目录时，这里**自动跟着隔离** ——
+    不然 status / 名额扫描会去读真锁目录，混进别人卡的锁（真踩过：lease 测试的
+    断言被 docsync1 的锁行污染）。
+    """
+    d = lock_path().parent
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def lock_path() -> Path:
+    """本段锁文件的路径。
+
+    ★ T-G169 锁按端口段分把：**不设 `TF_GATE_PORT_BASE` → 仍是 `gates/diag/gates.lock`**
+    （路径逐字不变：台账/文档/别的卡里写死的路径都还成立）；
+    设了 BASE → `gates/diag/gates-<BASE>.lock`（BASE 非法时 `segment_base()` 已退回默认段）。
+    """
+    base = segment_base()
+    name = "gates.lock" if base == DEFAULT_PORT_BASE else f"gates-{base}.lock"
     d = main_root() / "gates" / "diag"
     d.mkdir(parents=True, exist_ok=True)
-    return d / "gates.lock"
+    return d / name
+
+
+def all_lock_paths() -> list[Path]:
+    """`gates/diag/` 下全部锁文件（各段一把：gates.lock + gates-<BASE>.lock）。
+
+    ★ 从 `lock_path().parent` 派生（不直接走 `main_root()`）—— 测试隔离的同一个口。
+    """
+    return sorted(lock_path().parent.glob("gates*.lock"))
 
 
 def _read(p: Path) -> dict:
@@ -109,6 +202,30 @@ def _age(p: Path) -> float:
         return max(0.0, time.time() - p.stat().st_mtime)
     except OSError:
         return 0.0
+
+
+def _lease_of(p: Path, info: dict, fallback: int) -> int:
+    """这把锁自己的租约（acquire 时写进锁文件；旧格式锁回退用调用者给的值）。"""
+    raw = info.get("lease")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _active_locks(stale_default: int) -> list[tuple[Path, dict, float]]:
+    """目录里全部**租约内**的活锁（含本段）。
+
+    ★ T-G169 空位随租约一起过期：只数 `age ≤ 租约` 的锁 —— 持有者死了/租约过期，
+    它占的名额自动回归，不会出现「空位泄漏导致永远等不到」。
+    """
+    out: list[tuple[Path, dict, float]] = []
+    for p in all_lock_paths():
+        info = _read(p)
+        age = _age(p)
+        if age <= _lease_of(p, info, stale_default):
+            out.append((p, info, age))
+    return out
 
 
 def _ports_busy() -> list[str]:
@@ -132,6 +249,7 @@ def cmd_acquire(card: str, wait: int, stale_after: int) -> int:
     t0 = time.time()
     printed = 0.0
     while True:
+        blocked = ""
         try:
             fd = os.open(str(p), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -140,58 +258,86 @@ def cmd_acquire(card: str, wait: int, stale_after: int) -> int:
                         "card": card,
                         "pid": os.getpid(),
                         "cwd": str(Path.cwd()),
+                        "base": segment_base(),
+                        "lease": stale_after,
                         "at": datetime.now().isoformat(timespec="seconds"),
                     },
                     fh,
                     ensure_ascii=False,
                 )
-            busy = _ports_busy()
-            print(f"[锁] 拿到了（card={card} pid={os.getpid()}）文件={p}", flush=True)
-            expire = datetime.now() + timedelta(seconds=stale_after)
-            print(
-                f"[锁] 租约到期：{expire.strftime('%Y-%m-%d %H:%M:%S')}"
-                f"（{stale_after}s 后）—— 到期前记得 release，或让它自己续租"
-                f"（renew --card {card}）。",
-                flush=True,
-            )
-            if busy:
+            # ★ T-G169 全局并发上限：先创建、再重扫全目录（计数含自己刚创建的这把）。
+            #   超限就自删退回等空位 —— 计数发生在创建之后，所以不会超卖；
+            #   名额只数租约内的活锁，持有者过期 → 空位自动回归（_active_locks）。
+            active = _active_locks(stale_after)
+            limit = max_concurrent()
+            if len(active) > limit:
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+                holders = ", ".join(
+                    f"{info.get('card')}({pl.name})" for pl, info, _ in active
+                )
+                blocked = (
+                    f"当前 {len(active)} 把在跑（上限 {limit}）：{holders}，等空位"
+                )
+            else:
+                busy = _ports_busy()
+                print(f"[锁] 拿到了（card={card} pid={os.getpid()}）文件={p}", flush=True)
+                expire = datetime.now() + timedelta(seconds=stale_after)
                 print(
-                    "[锁] ★ 警告：门禁端口已被占用：" + ", ".join(busy) + "（可能是上一轮的遗留服务）",
+                    f"[锁] 租约到期：{expire.strftime('%Y-%m-%d %H:%M:%S')}"
+                    f"（{stale_after}s 后）—— 到期前记得 release，或让它自己续租"
+                    f"（renew --card {card}）。",
                     flush=True,
                 )
-            print("[锁] 现在可以跑 scripts/run_gates.py；跑完立刻 release。", flush=True)
-            return 0
+                if busy:
+                    print(
+                        "[锁] ★ 警告：门禁端口已被占用：" + ", ".join(busy)
+                        + "（可能是上一轮的遗留服务）",
+                        flush=True,
+                    )
+                print(
+                    f"[锁] 现在可以跑 scripts/run_gates.py；跑完立刻 release。"
+                    f"（全局 {len(active)}/{limit} 把在跑）",
+                    flush=True,
+                )
+                return 0
         except FileExistsError:
             info = _read(p)
             age = _age(p)
-            if age > stale_after:
+            # ★ T-G169：陈旧判定以**持有者写进锁文件的租约**为准（旧格式锁没有 lease
+            #   字段才回退等待者的 stale_after）。等的人拿个短 --stale-after 就把
+            #   别人的活锁清走 = 063 现场的翻版（铁律 25/29 的保证收紧，不是放松）。
+            holder_lease = _lease_of(p, info, stale_after)
+            if age > holder_lease:
                 try:
                     p.unlink()
                     print(
-                        f"[锁] 清掉陈旧锁（已 {int(age)}s 未动 > {stale_after}s；"
+                        f"[锁] 清掉陈旧锁（已 {int(age)}s 未动 > 租约 {holder_lease}s；"
                         f"原 card={info.get('card')} pid={info.get('pid')} 起于 {info.get('at')}）",
                         flush=True,
                     )
                     continue
                 except OSError:
                     pass
-            waited = time.time() - t0
-            if waited >= wait:
-                print(
-                    f"[锁] ★ 等超时（{wait}s）——现持有者 card={info.get('card')} "
-                    f"pid={info.get('pid')} 起于 {info.get('at')}（已 {int(age)}s）",
-                    flush=True,
-                )
-                return 3
-            if waited - printed >= 60:
-                printed = waited
-                busy = _ports_busy()
-                print(
-                    f"[锁] 等门禁锁 {int(waited)}s… 持有者 card={info.get('card')} "
-                    f"pid={info.get('pid')}（已 {int(age)}s；端口{'忙:' + ','.join(busy) if busy else '空'}）",
-                    flush=True,
-                )
-            time.sleep(15)
+            blocked = (
+                f"本段锁被占：card={info.get('card')} pid={info.get('pid')}"
+                f"（已 {int(age)}s）"
+            )
+        waited = time.time() - t0
+        if waited >= wait:
+            print(f"[锁] ★ 等超时（{wait}s）——{blocked}", flush=True)
+            return 3
+        if waited - printed >= 60:
+            printed = waited
+            busy = _ports_busy()
+            print(
+                f"[锁] 等门禁锁 {int(waited)}s… {blocked}"
+                f"（端口{'忙:' + ','.join(busy) if busy else '空'}）",
+                flush=True,
+            )
+        time.sleep(15)
 
 
 def cmd_release(card: str, force: bool) -> int:
@@ -247,26 +393,47 @@ def cmd_renew(card: str) -> int:
 
 
 def cmd_status(stale_after: int) -> int:
-    p = lock_path()
-    if not p.exists():
-        print("[锁] 空着", flush=True)
-    else:
+    """看锁：**列出每一段**的持有者与租约剩余（T-G169：从"只看一把"改成扫全部段）。"""
+    locks = all_lock_paths()
+    if not locks:
+        print("[锁] 空着（没有任何段的锁）", flush=True)
+    for p in locks:
         info = _read(p)
         age = int(_age(p))
+        lease = _lease_of(p, info, stale_after)
+        remain = lease - age
+        base = info.get("base", DEFAULT_PORT_BASE)
         print(
-            f"[锁] 被占：card={info.get('card')} pid={info.get('pid')} 起于 {info.get('at')}"
-            f"（已 {age}s；{'★ 超过租约，可被清' if age > stale_after else '租约内'}）"
+            f"[锁] 段 base={base} 文件={p.name}: card={info.get('card')}"
+            f" pid={info.get('pid')} 起于 {info.get('at')}"
+            f"（已 {age}s / 租约剩 {remain}s；"
+            f"{'★ 超过租约，可被清' if age > lease else '租约内'}）"
             f" cwd={info.get('cwd')}",
             flush=True,
         )
-        print("[锁] ★ 别看 pid 判活：acquire 与 run_gates 是两次进程调用，pid 正常就会是死的。", flush=True)
+    print(
+        "[锁] ★ 别看 pid 判活：acquire 与 run_gates 是两次进程调用，pid 正常就会是死的。",
+        flush=True,
+    )
+    active = _active_locks(stale_after)
+    limit = max_concurrent()
+    print(
+        f"[锁] 全局并发上限 TF_GATE_MAX_CONCURRENT={limit}，当前租约内 {len(active)} 把在跑",
+        flush=True,
+    )
     busy = _ports_busy()
-    print("[锁] 门禁端口占用：" + (", ".join(busy) if busy else "全空"), flush=True)
+    print(
+        "[锁] 本段门禁端口占用（base=" + str(segment_base()) + "）："
+        + (", ".join(busy) if busy else "全空"),
+        flush=True,
+    )
     return 0
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="门禁串行锁（跨树共享，按租约判陈旧）")
+    ap = argparse.ArgumentParser(
+        description="门禁锁（按端口段分把 + 全局并发上限；按租约判陈旧，T-G169）"
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("acquire", help="拿锁（拿不到就等）")
     a.add_argument("--card", required=True)
