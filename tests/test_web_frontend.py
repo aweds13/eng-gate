@@ -160,6 +160,36 @@ def test_gpa_scale_is_switchable_in_page() -> None:
     assert "weighted_average" in html and "加权平均成绩" in html
 
 
+def test_academic_page_slimmed_overview_toggle_and_course_binding() -> None:
+    """T-G151（用户 2026-09-27 三条反馈）：学业页瘦身 + 概览开关 + 录成绩绑课程。
+
+    ① GPA 制式切换只留设置页 —— 学业页那份整块撤掉（设置页那两颗按钮是唯一入口）；
+    ② 概览区（读数卡 + radar）受 `tf_academic_overview` 开关控制，默认显示；
+    ③ 录入成绩表单接上后端早有的 `course_id`（空选项 = 不绑课），明细显示课程名。
+    """
+    html = WEB_INDEX.read_text(encoding="utf-8")
+    academic = _fn_body(html, "renderAcademic")
+    # ① 学业页不再有制式卡：按钮与两句说明都不在学业段里
+    assert 'data-action="set-gpa"' not in academic, "学业页不该再有 GPA 制式按钮"
+    assert "切换制式" not in academic
+    assert "GPA 制式（切换后" not in academic
+    # 设置页那份必须还在（切换入口只剩它）—— 4.0 / 5.0 各一颗
+    assert html.count('data-action="set-gpa"') == 2, "设置页的两颗制式按钮是唯一入口"
+    # ② 概览开关：偏好键 + 状态 + 动作 + 概览区按开关渲染
+    assert "tf_academic_overview" in html
+    assert "academicOverviewOn" in html and 'data-action="academic-overview-toggle"' in html
+    assert "academicOverviewOn?acadCards" in academic
+    assert "academicOverviewOn?acadRadar" in academic
+    # 概览关掉只隐藏概览：硬考核与两张表单不在开关里
+    assert "overview?upcomingHtml" not in academic and "${upcomingHtml}" in academic
+    # ③ 录成绩绑课程
+    assert 'id="gCourse"' in academic and "course_id:courseId||null" in html
+    assert "courseName(g.course_id)" in academic
+    # ④ 两张表单折起来压密度（复用设置页的折叠，默认收起）
+    assert 'id="set-acad-assessment"' in academic and 'id="set-acad-grade"' in academic
+    assert "foldSettingSections(m)" in academic
+
+
 def test_three_column_shell_exists() -> None:
     """R3 护栏（SR-NF4）：三栏骨架必须留在这里 —— 左导航 / 中列表 / 右详情 + 计时器常驻。
 

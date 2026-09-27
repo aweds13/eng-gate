@@ -4388,3 +4388,138 @@ evidence = [
 ]
 gaps = "**为什么有这张卡**：用户 2026-09-27 当面裁定「删」——原要求见 `复盘/口径定案-待定清单.md` §3（同步包+导出/导入+合并规则）；本路由是更早的逐条推任务老实现（`复盘/口径落档-T-G19.md:110`）。**做了什么**：删了 app.py 里 `@app.post` 装饰器（路径为旧的行级合并入口）与其下三行实现（`sync_tasks` 函数体），原位置留一段历史注释（含「已于 2026-09-27 按用户裁定删除」字样）；`docs/commands.toml` OP-40 的 routes 去掉该路由、note 末尾追加删除日期注；`tools/route_ui_gap.py` 的 DECIDED 表删掉该路由那条声明（GET /api/team/assignments 那条不动）。**证据指针**：SR-F9.2 删了 route: 那一行（同组仍有 export/import/status）；T-G59 两条 text: 刷成「已于 2026-09-27 按用户裁定删除」+ gaps 末段日期注。**读数**：pin_check 命中 2 颗钉子（即 T-G59 两条 evidence，卡 §2.3 预告的同笔刷新）；audit 0 失败豁免 0；check_commands 与 cli_line 通过；route_ui_gap 不再报该路由。**没动的**：src/timeflow/core/**（同步实现）、tests/**（零改动）、app.py 的 sync_mod import（2385 行 sync/status 仍在用）。"
 
+
+[entries."T-G150"]
+id = "T-G150"
+title = "复习卡支持删除：DELETE 路由 + 领域层幂等硬删 + 界面二次确认（契约 F6-review.md:11「可逆：可删除」的落地）"
+group = "API"
+status = "done"
+evidence = [
+  "route:DELETE /api/review/items/{item_id}",
+  "text:src/timeflow/core/review/review.py::def delete_item",
+  "file:复盘/复习卡删除-T-G150.md",
+]
+gaps = "**为什么有这张卡**：用户 2026-09-27 现场提问「没有删除复习卡功能吗」。只读盘点（gates/diag/盘点-S6-第二批界面反馈.md §1）实测界面零入口、后端零 DELETE，而契约 docs/contracts/domains/F6-review.md 的 OP-26 六要素写着「可逆：可删除」—— 规格有、实现漏。**做了什么**：领域层 review.py 加幂等硬删 delete_item（返回是否真删到）；app.py 加 DELETE /api/review/items/{item_id}（找不到 404）；index.html 复习卡按钮行加「删除卡」+ ACTIONS 注册 review-delete + deleteReviewCard 二次确认；契约 OP-26 节内补删除实现说明（未新开 OP 号，见边界）。**口径（卡里已定）**：硬删 + 界面二次确认、不做回收站（与习惯/成绩/备忘录一致）；facts 复习流水一个字节不删（删卡后 review facts 查询 404 是预期）；墓碑由 v17 DELETE 触发器自动落，不手写 sync_tombstones。**读数**：pin_check 三个拟改字面全零钉子；audit 0 失败豁免 0；目标测试 48 passed；ruff All checks passed；mypy 0 error（56 文件）；route_ui_gap 新路由不在「前端没提到」一侧。**边界（如实写）**：timeflow.core.review 包未 re-export delete_item，而 src/timeflow/core/review/__init__.py 不在本卡白名单 → app.py 与测试改从实现模块直接导入（与该两文件既有做法一致）；契约 OP-1…OP-51 全占用且新开 OP 会使 check_commands --check 变红（commands.toml 不在白名单）→ 删除说明补在既有 OP-26 内。**没动**：facts / tasks 本体 / 任务详情只读列表 / app.css / core 其它域 / tools / scripts。"
+[entries."T-G151"]
+id = "T-G151"
+title = "学业页瘦身 + 录成绩绑课程：GPA 制式只留设置页、概览区加开关、成绩接上已有的 course_id"
+group = "WEB"
+status = "done"
+evidence = [
+  "text:src/web/index.html::tf_academic_overview",
+  "text:src/web/index.html::course_id",
+  "file:复盘/学业页瘦身与成绩绑课程-T-G151.md",
+]
+gaps = "**为什么有这张卡**：用户 2026-09-27 现场三条反馈（学业太挤 / GPA 切换放设置就行 / 学业概览要个开关 / 录成绩没有与课程绑定）。盘点实测（`gates/diag/盘点-S6-第二批界面反馈.md` §2/§4）：`renderAcademic()` 一页拼 8 段；GPA 制式确有两处（学业页 + 设置页 set-academic）；概览无开关；`grades.course_id` 后端早有（`storage/db.py` 建列、`POST /api/grades` 收它、`add_grade` 写它、radar 的课程覆盖轴已在读）—— 只有录入表单不收、明细不显示。**做了什么**：① 删学业页那张 GPA 制式卡整块 + 它旁边指向按钮的「切换制式：另 X 制为 Y」sub，连带删死掉的 otherScale；设置页那份保留为唯一入口。② 概览区（顶部两张读数大卡 + 多维 radar）新建 acadCards/acadRadar 两个模板变量，按新偏好 `tf_academic_overview`（localStorage，默认显示，读写包 try/catch 照 RAIL_KEY）决定是否插入；关掉只隐藏概览，硬考核/课程/明细/两张表单照常；开关在设置页「学业」节，一颗按钮文案随状态变（隐藏概览/显示概览），动作 academic-overview-toggle。③ 录入表单在成绩/学分前插课程下拉 #gCourse（选项复用 courseOpts，空=不绑课），addGrade 请求体加 course_id:courseId||null，成绩明细 meta 前置 courseName(g.course_id)。④ 两张表单标题加 set- 前缀 id（set-acad-assessment/set-acad-grade），renderAcademic 末尾调仓内既有的 foldSettingSections(m) 折成「标题+现状+展开」默认收起 —— 不动 app.css、不新增全局样式。**读数**：git grep set-gpa 只剩 ACTIONS 注册(862) + 设置页(3442/3443)；同一条成绩(92/3)加绑课程前后 GET /api/gpa 逐字相同（gpa 4.0 / credits 3.0 / weighted_average 92.0 / weighted_credits 3.0），明细该行 course_id 已落库；ui_text_scan --stat ≥20→4 / ≥25→0 / ≥30→0，ui_text_audit --check 通过（基线 4 没长）。**先红后绿**：新前端断言在 src 改动前红（学业页仍有 set-gpa）、改动后绿。**没动的（边界）**：app.css 一字未动（样式令牌/全站间距）；api/**、core/** 零改动；复习段 / memo·team 段 / 左栏 markup / 设置页「外观」节一字未碰；设置页 nav 区那句注释「学业页的制式切换保留（就近改，两处一致）」现已过时，但它在 §3 白名单之外（本卡未动，留待收口）；真实库/备份与主树三个外来未跟踪文件未碰。**跨卡**：同批 057（复习卡删除）/059（文案）/060（左栏开关）在别的树，共享三件（台账/changelog/交接）的冲突留给集成者按序收口；本卡按门禁「文档与代码同提交」要求同笔改了台账 + changelog + 交接（sync_counts 刷数字）。"
+
+[entries."T-G152"]
+id = "T-G152"
+title = "清掉备忘录/团队里的解释性话语：删纯解释半句、保留口径半句（用户 2026-09-27 口径）"
+group = "WEB"
+status = "done"
+evidence = [
+  "file:复盘/备忘录团队文案-T-G152.md",
+  "text:src/timeflow/core/team/team.py::_board_note",
+]
+gaps = "为什么有这张卡：用户 2026-09-27「备忘录团队里仍有解释性话语，删除」，延续「界面不解释」总口径（T-G142/T-G144）。逐句处置见 复盘/备忘录团队文案-T-G152.md §1：后端 _board_note() 压短（manager 删「谁手上有什么、进展到哪」保留「分配出去不计投入」；not-me 只留「执行者视角要先说「我是谁」。」；有分配删「（点下一步动作）」）、前端删 3024/3033/3039/3094/3098/3103/3108/3114 的括号与解释句。★ 与卡表不一致（按卡 §0.2 停手保留原句）：pin_check 命中钉子——「先在上面填「我是谁」」（tools/ui_dom_probe.mjs:1367 + ui_flow_check.mjs:881）、「这个视角下没有任务」（ui_flow_check.mjs:895）、「不是两套数据」（ui_flow_check.mjs:876）、「按两类分开看（T-C4）」（台账 T-C4 的 text: 证据）——这些工具与别人的台账证据不在本卡白名单（tools/** 禁区），故卡 §2 里「3039 整句删」「3114 删「按两类分开看（T-C4）」」「3033 压到最短」的字面级要求做不到，只删了周边解释、保留被钉的子串；要真删需另立卡改那些门禁工具与 T-C4 证据。棘轮读数（ui_text_scan --stat）：改前 1514 条/8524 汉字（≥14→118、≥18→37、≥20→4），改后 1512 条/8439 汉字（≥14→113、≥18→36、≥20→4），[ratchet].count 仍 4（句子都 <20 汉字，未动 ui_text_baseline.toml）。没动：index.html 其它行、team.py 其它函数、tools/（除 ui_text_baseline.toml）、scripts/、app.css、api/**、core/{review,memo,academic}/**、学业/复习/左栏/设置页、真实库与备份目录。"
+[entries."T-G154"]
+id = "T-G154"
+title = "「重要/有计划/已标记」收进设置开关：左栏默认只剩主视图（用户 2026-09-27 方案 A）"
+group = "WEB"
+status = "done"
+evidence = [
+  "text:src/web/index.html::applyLeftRail",
+  "file:复盘/左栏三项收进设置-T-G154.md",
+]
+gaps = "**为什么有这张卡**：用户 2026-09-27 原话「重要，有计划，已标记可以不用放在左栏，我想在设置里自由切换是否直达」，被问「直达」时选方案 A —— 设置里给开关决定这三项是否出现在左栏。只读盘点（`gates/diag/盘点-S6-第二批界面反馈.md` §3）实测这三项原是写死的 markup（`src/web/index.html:21-23`）。**开关落点与偏好键**：设置页「外观」节、紧挨右栏折叠那一行；偏好键 `tf_rail_direct`（写 `'on'`/`'off'`，读/写都包 `try{}catch(e){}`）；默认 false = 不显示。**三个入口的关系（都没删、没改）**：① 左栏 nav 三项 —— 只做**运行时** `hidden`，markup 原样保留；② 设置页「入口」那排快捷跳转（`planned`/`flagged` 仍在）；③ `smartViewNavHTML` 互跳行（全部任务页 + 各智能视图头，手机端 ≤640px 左栏 nav `display:none`，就靠它进）。**为什么只隐藏不删 markup**：`tests/test_web_frontend.py` 的 `test_smart_views_are_reachable_at_every_breakpoint`（468-493）静态要求左栏 nav 里必须有这三个 `data-view`，删了必红。**黄金重采范围**：桌面 15 + 窄屏 15 共 30 份改、手机 15 份零改。★ 与卡 §7 预期有一处不同：卡写「手机档（narrow/phone）不该变（手机没左栏）」，但 `app.css` 断点在 640px —— 窄屏 820px **仍有**上图式左栏，所以窄屏 15 份的左栏也各少三行、一并重采；手机 390px 的 `.rail nav` 本就 `display:none`、未变（`git status gates/render` 里 `phone__*` 0 份）。**读数**：四条必带读数见 `复盘/左栏三项收进设置-T-G154.md`；新流 `tools/ui_flow_check.mjs` ㉙ 10 项断言通过（突变检验：把 `applyLeftRail` 的隐藏断掉后该流 3 处变红，还原后复绿）。**没做的**：没改 `app.css`（隐藏靠 `hidden` 属性，无新样式）；没动复习段（057）/学业段（058）/memo-team 段（059）。"
+
+[entries."T-G155"]
+id = "T-G155"
+title = "清掉命令行与 MCP 里的解释性话语（G-4 措辞线）：只留类型/单位/范围/默认值/枚举/口径"
+group = "CLI"
+status = "done"
+evidence = [
+  "file:复盘/命令行与MCP文案-T-G155.md",
+  "text:src/timeflow/cli/registry.py::Param",
+]
+gaps = "**为什么有这张卡**：用户 2026-09-27「一起清」—— 承接 G-4（命令行与 MCP 的措辞），把两个露给用户的面上的解释性话语一并删。**范围（主控划定）**：① timeflow --help / timeflow <命令> --help（来源 registry.py 的 title/help + main.py 的固定帮助句）；② MCP 工具描述（来源 server.py，且它就是 registry 的投影）。**逐条删了什么**：8 条标题的括号解释（focus/board/sync/complete/myday/focus-start/focus-finish/memo）、6 条参数 help 的括号解释（me/group_name/flagged/task_id/session_id/ref_handle）、main.py 两处（命令（不起服务、不占端口）与写命令（默认关：每条都要加 --allow-write））共 16 处。**逐条保留了什么**：范围 1~90 / 0~365、默认值 14 / 今天 / 本周、枚举 important/planned/flagged、manager/executor、高/中/低、tomato/plain、finished/abandoned/interrupted、口径（周一起算）/（只列未录成绩的）一个字未删。**范围边界（不动）**：docs/commands.toml 的 41 条 note（维护者依据记录）；server.py 的 _initialize.instructions 与 _mcp_usage（不属两个面且含 AI 上下文，见复盘 §4）；src/web/**、core/**、api/**、tools/**、scripts/**、contracts/**。**读数**：pin_check 16 条字面钉子 0；目标四测试 63 passed；ruff 通过；mypy 56 文件 0 error；MCP 工具数 14/20 与 schema 逐条不变；gates/render 与 ui_text_baseline.toml 零变动；全量门禁以 gates/last.json 为准。**没动的**：server.py 与 tests/** 零改动（无测试钉住被删字面）。**提交**：本卡自提，四个 trailer（Task / Refs / Ledger / Gates）齐全。"
+
+
+
+[entries."T-G156"]
+id = "T-G156"
+title = "门禁三项加固：端口按树隔离 + 开场清遗留 + pytest 限并发（不设变量时行为不变）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "text:scripts/run_gates.py::TF_GATE_PORT_BASE",
+  "text:scripts/run_gates.py::TF_PYTEST_WORKERS",
+  "file:复盘/门禁三项加固-T-G156.md",
+]
+gaps = "**为什么有这张卡**：并行五张卡实测三条结构性病灶 —— ①固定端口（render 8531/8532、ui_flow 8541~8544）多树排队等端口（059 约 45 分钟纯等）；②清端口按进程特征（serve.py --fresh / tf-flow-profile-）不认哪棵树 → 058 清端口把 059 正在跑的 render_check 一起杀了；③全量门禁超工人 CLI 的 10 分钟单次调用上限 → 调用被掐 → 服务/浏览器变孤儿。**做了什么（不设新变量时端口/门数/复用键/黄金/last.json 形状逐字不变）**：①新增可选 TF_GATE_PORT_BASE，run_gates 构造命令行时透传 --port 给 render（BASE）/ui_flow（BASE+10），render_check.mjs/ui_flow_check.mjs 已支持 --port；lf1_live（free_port）/web_live（T-G47 自动挑空闲）保持自动挑、ui_dom_probe（假 DOM）不用端口，均未动；②开场清遗留判据 = 端口段 ∩ cwd=本树根（_is_our_tree），只掐本树在本段端口上的 LISTENING 进程与其无头浏览器（_is_orphan_browser：镜像名像浏览器且命令行含本段端口/ profile 名），幂等有读数不静默，实现里无任何按 serve.py --fresh 匹配就杀的写法；③pytest worker 数读 TF_PYTEST_WORKERS，不设 = min(4, cpu)，xdist_available 与没装就串行的口径一个字不动。**真事故（本卡自撞，成了双判据的来由）**：只按端口的初版在默认（共用）端口段把 .wt/left1（卡 060，正握锁跑全量）正在跑的 render/ui_flow 一起掐了 —— 其 gates/logs/render.log 与 ui_flow.log 尾巴是 node 的 unsettled top-level await、两门 exit 13、last.json ok=false；加 cwd 树判据后对 left1 的活进程全打印不是本树→不动、对本树进程（serve.py --fresh --port 8543，cwd=本树根）照掐。**边界（如实写）**：gates/reuse.json 与 gates/last.json 每棵树各一份 tracked 副本 → 端口隔离不会造成跨树假复用；门禁锁仍是跨树一把（gate_lock 的 gate_ports 只让忙端口报告跟随 TF_GATE_PORT_BASE，向后兼容）；清理只在全量档跑（--quick/--fast 不起真机服务）；TF_GATE_PORT_BASE 非法（非整数/越界 1024..65500）→ WARN 并退回 8531；真并行证据用浏览器层双段并发，未在同一棵树同时跑两个全量 run_gates（会互写 last.json/reuse.json/.coverage 且违反重活不许并发）。**没动**：src/**、docs 其它文件、tools/render_check.mjs 与 ui_flow_check.mjs 的行为逻辑、tools/ui_dom_probe.mjs、tests/**、.wt/**、主树三个外来未跟踪文件、data/ 与真实库/备份。"
+
+[entries."T-G157"]
+id = "T-G157"
+title = "修 run_gates 在 worktree 里验主树页面的假绿：把本树 src 放进子进程 PYTHONPATH"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "text:scripts/run_gates.py::PYTHONPATH",
+  "file:复盘/门禁假绿-PYTHONPATH-T-G157.md",
+]
+gaps = "**为什么有这张卡**：本仓是可编辑安装（pip install -e .）指向主树 src；run_gates.py 给门禁子进程构造环境时只塞了 tools/sandbox_shim、没塞本树 ROOT/src → worktree 里 render/ui_flow/ui_dom_probe/web_live/lf1_live 起的 serve.py（import timeflow）解析到主树 src（app.py:343 的 web_dir 随导入的包走）→ 服务发的是主树页面，黄金又是在同一个错页面上采的 → 两边一致 → 假绿。**做了什么（最小）**：新增 tree_pythonpath(e)（scripts/run_gates.py:293），把 PYTHONPATH 设为 ROOT/src → tools/sandbox_shim → 原有 PYTHONPATH（前者优先）；env()（:315）与 staged_tree() 的 env_with_index（:352）两处都过它；开跑印一行 本树 src=…（:817）。shim 里只有 sitecustomize.py、ROOT/src 里没有 sitecustomize.py → 互不遮蔽。**先绿后红反证**：A（未改代码＋故意把 src/web/index.html:16 的 h1 改坏＋不设 PYTHONPATH）render/ui_flow 仍 exit 0＝假绿现场（gates/logs/063-A.log）；B（改后同一改动，--no-reuse 强制真跑）render exit=1、45 份清单全不同（h1 行 timeflow · vs timeflow · FALSGREENPROBE063）；C（还原）ok=true、17 门全绿。**主树对照**：主树 ROOT/src 即可编辑安装指向的那份 → 加它到首位是 no-op；两树 src 在 git 对象层同哈希 a4e94eaf…（git diff --stat 6f7d4d0 6d41e0e -- src/ 为空；062 也没动 src）；主树在案 gates/last.json（rev=6f7d4d0）同为 ok/17 门。**边界（如实写）**：本卡条目按卡 §4 要求也留在复盘末尾供集成者核对，但为让 audit（无 --all，会查 HEAD 的 Task: 是否在台账里）过硬要求，本卡已直接粘进台账；done 数字用 sync_counts.py 现算（非手写）。run_gates.py 在 scripts/ 下不在 mypy src/ 门内，其 mypy scripts/run_gates.py 的 7 个 no-untyped-call 改前改后都是 7 个（未新增未消）。**没动**：任何门的判据、端口（TF_GATE_PORT_BASE）、复用键（REUSE_INPUTS）、--seal、src/**、tools/**、tests/**、主树外来未跟踪文件、data/ 与真实库/备份。"
+[entries."T-G158"]
+id = "T-G158"
+title = "修 wb_review 在 detached worktree 里的假 FAIL：分支判据改三态（detached 跳过并如实记录）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tests/test_wb_review_branch.py",
+  "text:tools/wb_review.py::detached",
+]
+gaps = "**根因**：旧 `tools/wb_review.py:139` 用 `git rev-parse --abbrev-ref HEAD` 取分支，分离头指针下返回字面量 `HEAD`，旧 `:154` 的 `if branch != args.branch`（默认 `line/impl-v1`）**必然**成立 → 每张在 detached worktree 里干活的卡都被判 4/5。**062 原话**（`复盘/门禁三项加固-T-G156.md` 那一轮回报边界 b）：「wb_review.py 自检 4/5 过，唯一 FAIL 是「分支不对：现在 `HEAD`，期望 `line/impl-v1`」—— 本树是卡规定的 detached worktree（不许切分支），属口径差异」。**改法**：新增纯函数 `check_branch`（改后 `tools/wb_review.py:101`）分三态 —— 附着且匹配不报 / 附着但不匹配**仍报** / detached（`HEAD`）且期望是默认分支则跳过并记一行「分离头指针（detached HEAD）→ 跳过分支判据」；默认分支抽成 `DEFAULT_BRANCH`（`:49`），信息行进 `--json` 的 `branch_note` 字段（`:200`）与人类可读行（`:210`）。**卡内一处口径张力（如实写，请主控裁定）**：卡 §2.1 第三行要求 detached 无条件不报，卡 §5 反证 C 要求本树（detached）里 `--branch main` **仍报**；我的对齐 = **跳过只对默认期望分支生效**，否则该判据在 detached 树里等于被删掉、反证 C 永远失败（无条件跳过的改法只是去掉 `and expected == DEFAULT_BRANCH` 一行）。**读数**：先红 —— 新测试跑旧实现 6 条红；后绿 —— `tests/test_wb_review_branch.py` 12 passed（含同族 `tests/test_wb_review.py` 共 24 passed）；突变检验 —— 把「附着但不匹配」也改成不报 → 4 条红、还原后 12 绿；反证 A —— 本树 detached 上改前 `--rev HEAD --allow **` → exit 1 且含「分支不对：现在在 HEAD」；反证 B —— 提交后同命令五条全过（exit 0）；反证 C —— 提交后 `--branch main` → exit 1 仍报「分支不对」。**没动**：`--allow` 白名单逻辑、「五条」其余四条、`--read-only`、退出码约定、`src/**`、`scripts/**`、其余 `tools/**`、`gates/diag/**`、`.wt/**`、`data/` 与真实库备份；**没切过分支**。"
+
+
+[entries."T-G159"]
+id = "T-G159"
+title = "并行期铁律与门禁锁口径归位到已入库协议 + gates/diag/gate_lock.py 纳入版本管理"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "text:复盘/外包-卡表与规矩.md::铁律 27",
+  "text:.gitignore::gate_lock",
+]
+gaps = "**为什么有这张卡**：两件事一个根因 —— 该进版本管理的东西住在被 gitignore 的工作台里。① gates/diag/ 整个目录被 .gitignore 忽略，卡 062 给 gate_lock.py 加的「锁报告的端口段跟随 TF_GATE_PORT_BASE」改好却进不了提交（只在自己树生效，主控只能手工拷到主树，换机器/换窗口就没了）；② 本轮新增的铁律 23–28 只写在 gates/diag/第二批界面反馈-队列.md 里，而那个文件被忽略，规矩留在那里迟早随工作台一起丢。**做了什么**：把铁律 23/24/25/26/27/28 六条（含各自日期、代价数字、原话、修法）+ 门禁串行锁口径（gate_lock.py 的用法、租约判陈旧、为什么不许用 pid）+ 端口按树隔离口径（TF_GATE_PORT_BASE 不设=8531/8541 段逐字不变、设了则 render=BASE/BASE+1、ui_flow=BASE+10..+13；TF_PYTEST_WORKERS 不设=min(4, cpu)），原文搬进已入库的 复盘/外包-卡表与规矩.md 新增 §24「并行期铁律（23–28）+ 门禁锁/端口口径」（子节 24.1–24.8）；逐条在段首标出处（来源 gates/diag/第二批界面反馈-队列.md §五 + 铁律号 + 2026-09-27），台账号/日期/代价数字/原话一字未改写，新家只重排标题层级；只动这一个协议文档（复盘/长任务执行协议.md 归卡 066，不碰）。.gitignore 里 gates/diag/ 那行不动，在其下加精确取反三步 !gates/diag/ → gates/diag/* → !gates/diag/gate_lock.py（忽略目录再取反文件不生效，必须三步），只 git add gates/diag/gate_lock.py 这一个文件（卡规格/诊断日志/活文档仍不入库，绝不 add 整个目录）；不改来源文件。**读数**：git check-ignore -q gates/diag/gate_lock.py 退出码 1（不再忽略）；git check-ignore -q gates/diag/第二批界面反馈-队列.md 退出码 0（仍忽略）；git ls-files gates/diag 恰好一行 gates/diag/gate_lock.py；六条铁律各一条 Select-String 命中，台账号/日期与来源一致。**门禁连带**：新入库的 gate_lock.py 若被 check_layers / audit_titles / style / pin_check 挑出要求（层归属登记、标题规范等）则按门禁要求如实补登记，绝不关掉或降低任何门禁。**没动**：src/**、tools/**、scripts/**、tests/**、gates/diag/ 里除 gate_lock.py 之外的一切（尤其卡*.md / wb-*.jsonl / 自动推进表.md / 第二批界面反馈-队列.md）、.wt/**、主树外来未跟踪文件、data/ 与真实库/备份。"
+[entries."T-G160"]
+id = "T-G160"
+title = "run_bg：长命令分离起 + 哨兵轮询，治工人单次调用 10 分钟上限导致的孤儿服务与跨树误杀"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tools/run_bg.py",
+  "file:tests/test_run_bg.py",
+]
+gaps = "**为什么有这张卡**：工人单次调用有 10 分钟上限，而全量门禁 6–7 分钟（pytest 107s / render 110s / ui_flow 176s），重采黄金加再跑一遍必越界；越界即调用被掐 → serve.py/无头 Edge 变孤儿 → 跨树误杀（铁律 27/28；058 为此烧 37M tokens/2h15m）。**做了什么**：①新增 tools/run_bg.py（纯标准库）：run 用分离进程起命令（Windows 用 creationflags = CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS；一律 subprocess.Popen(argv_list)、不用 shell、不拼命令行字符串），stdout/stderr 都进 --log，立刻返回 pid=/log=/rc_file=，父进程退出不带走子进程；status 只按哨兵文件 <log>.rc 判终态（包装器在命令结束时先写临时文件再 os.replace），不看端口不看进程名，打印 state=running / state=done rc=N + 日志静默秒数（按 mtime）+ 尾 --tail 行；退出码 running=0 / done rc=0→0 / done rc!=0→3 / 用法错或日志不存在→2。②不改被测命令、不给 run_gates.py 加任何参数（rc 由外部包装器 __wrap__ 落盘）。③tests/test_run_bg.py 五条钉子（秒回 / 两态轮询 / 命令不存在 rc!=0 且 status 3 / log 不存在 2 / 缺 -- 与 log 不可写 2；慢命令只用 sleep 2、结束前轮询干净不留孤儿）。④复盘/长任务执行协议.md 新增 §十三（判据 / 为什么 / 代价读数 / 与 T-G156 分工 / 四条坑）。**反证读数**：20 秒命令 run 实测 0.24s 返回且 pid=79556（父退出后子活到最后、rc=0、日志尾 bg done）；status 先 state=running（idle 9.8s，退出码 0）后 state=done rc=0（退出码 0）；负样例命令不存在→done rc=127 且 status 退出码 3、log 不存在→2、缺 --→2、log 不可写→2；先红 5 failed → 后绿 5 passed；ruff All checks passed；mypy src/ 56 文件 0 error。**真撞的坑（写进 §13.4）**：DETACHED_PROCESS 的子进程不把重定向过的 std 句柄再传下去，包装器用 Popen(stdout=None) 跑真命令会丢孙进程输出 → 改成包装器自己 open(log,'ab') 并显式把句柄交给被测命令。**边界**：§3 列的共享三件（traceability.toml / changelog.md / 交接-重构进度.md）按卡 §4 与外包规矩 §16.3 归集成者，本卡未写、台账条目放复盘末尾；未同树跑两个全量；gates/logs/ 是 gitignored 产物。**没动**：src/**、scripts/**（含 run_gates.py）、其余 tools/**、复盘/外包-卡表与规矩.md、gates/diag/**、.wt/**、外来未跟踪文件、data/。"
+
+
+[entries."T-G161"]
+id = "T-G161"
+title = "门禁锁租约改大并支持续租：长门禁卡不再自己把自己变成陈旧锁而被别人拿走"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tests/test_gate_lock_lease.py",
+  "text:gates/diag/gate_lock.py::DEFAULT_STALE_AFTER",
+]
+gaps = "**为什么有这张卡**：063 实测（时间线）11:10:08 拿到锁（租约默认 1800s）→ 11:16–11:41 连跑三趟全量门禁（反证 A/B/C，持锁 31 分钟）→ 11:40:08 租约满而它还在跑 → 11:40:18 卡 066 按规则判它陈旧、把活锁拿走 → 11:41:12 最后一趟才结束，两趟真机门重叠约 1 分钟。没红只因两张卡用了不同端口段（T-G156 隔离）；都用默认段就是一次假红。**两条根因**：① DEFAULT_STALE_AFTER=1800（30 分钟）小于「一张卡持锁的常见时长」（三趟门禁 ≈ 30 分钟），正好把租约用光；② 租约是从 acquire 起算的静态计时，跑门禁期间锁文件没人动，「已 N 秒未动」一路涨到过期 —— 续跑中的卡会自己把自己变成陈旧锁。**改法（选 A：外部续租子命令，不选 B）**：① 默认租约 1800 → 10800（3 小时），docstring 与 --stale-after help 同步；② acquire 成功多印一行租约到期时刻（本地时间）+ 到期前记得 release 或让它自己续租，只加不改既有措辞；③ 新增 gate_lock.py renew --card，持有者定期调用即 os.utime 刷新锁文件 mtime，只有当前持有者同卡号才允许续（别人续不了，退 5 且不动原锁）。**选 A 的理由**：工人每次以子进程调用 gate_lock.py（acquire/run_gates/seal/release 各是独立进程），实现 B 的进程级守护线程只在同进程里 acquire 后就地跑门禁时有效、跨进程不生效；A 的 renew 在跨进程下就生效且判据干净。**判据与串行**：判据仍是锁文件 mtime（不引入 pid 判活），串行性没放松（renew 不改谁能拿锁、只刷 mtime、只有同卡号能续）。**先红后绿读数**：tests/test_gate_lock_lease.py 用 importlib 按路径加载 gate_lock.py、lock_path monkeypatch 到 tmp（绝不碰跨树共享真锁 gates/diag/gates.lock）、用 os.utime 拨 mtime 造陈旧（不靠长 sleep）；旧实现（git show 393fe84:gates/diag/gate_lock.py）上 3 failed 2 passed（默认租约 1800!=10800、cmd_renew 缺失两处），新实现 5 passed。**续租与不许别人续的反证**：测试里先拨 mtime 到租约之外让 status 报可被清，renew 后 status 报租约内且另一个卡 acquire 退 3（拿不走）；真机 CLI 上 renew --card 067 退 0、renew --card 999 退 5 且锁文件 mtime 前后不变。**串行未松的反证**：两个不同卡号 Barrier 同时 acquire，结果集恰为 [0, 3]（只有一个成功）。**没动**：src/**、scripts/**（含 run_gates.py）、其余 tools/**、复盘/外包-卡表与规矩.md（禁区，其 §24.7 仍写默认 1800s 与本卡不一致，建议主控后续加日期注）、gates/diag/ 里除 gate_lock.py 之外的一切、data/、真实库/备份、.wt/**、主树外来未跟踪文件。"
+
+[entries."T-G153"]
+id = "T-G153"
+title = "集成十一张并行卡：界面四件 + CLI/MCP 文案 + 门禁三项加固 + 修门禁假绿 + 复核器/长命令/锁续租 + 规矩归位（先 fork 再合并）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:复盘/集成十一张并行卡-T-G153.md",
+  "text:docs/traceability.toml::T-G150",
+]
+gaps = "**底座**：主树 6f7d4d0（十一张卡共同底座）。**十一张作者 sha（现读）**：rev1=99b114a（T-G150）/ acad1=63b0f8b（T-G151）/ copy1=6007290（T-G152）/ left1=71de85d（T-G154）/ cli1=be33d0e（T-G155）/ gates1=6d41e0e（T-G156）/ pypath1=71695f6（T-G157）/ review1=69868c5（T-G158）/ rules1=393fe84（T-G159）/ bg1=3deeb47（T-G160）/ lease1=3145051（T-G161）。**并集结论**：逐文件按 git show --name-only 取各卡自有改动清单（不用整树 diff，防把 062 的活算到工具树头上），单卡文件直接 checkout；src/web/index.html 被四张界面卡（057/058/059/060）碰过 → git merge-file 逐卡迭代三方合并，四趟 rc=0 无冲突，并逐卡核「新增行全在、删除行计数与作者一致」；scripts/run_gates.py 只取 .wt/pypath1 一份（062+063 并集，五棵工具树对 062 的祖先关系 rc 全 0）；gates/diag/gate_lock.py 只取 .wt/lease1 一份（065+067 并集）；tests/test_web_frontend.py 实为只有 058 改过。**共享三件手工并**：docs/traceability.toml / docs/changelog.md / 复盘/交接-重构进度.md 由集成者按各卡自有增量拼装（descendant 卡用 pairwise diff 隔离，避免把 062 的活重复计入）。**冲突怎么解**：无真正文本冲突（各卡改动区域不重叠）；共享文件的「同位置插入」按卡号升序排。**重采范围**：gates/render/** 不合并作者产物，按合并后源码全量重采（060 左栏少三行 → 桌面 15 + 窄屏 15；057/058/059 各改本视图）。**边界（如实写）**：卡 058（T-G151）对 复盘/交接-重构进度.md 只改了台账进度数字（numstat 1/1），**未写 CHECKPOINT 段** → 交接里只有十条卡 CHECKPOINT（057/059/060/061/062/063/064/065/066/067），缺 T-G151；按卡 §7.7「不许替它补」未代为编写，报主控。**门禁读数**：以提交后 audit_progress.py 与 gates/last.json 为准。"

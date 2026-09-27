@@ -42,6 +42,7 @@ from timeflow.core import tasks as tm
 from timeflow.core import team as team
 from timeflow.core.focus import guard as fg
 from timeflow.core.ledger import ledger
+from timeflow.core.review.review import delete_item as review_delete_item
 from timeflow.core.tasks.manager import MydayConflictError
 from timeflow.storage import backup as backup_mod
 from timeflow.storage import db
@@ -2071,6 +2072,19 @@ def create_app(
             return _ref_url(rv.get_item(conn, item_id))
         except KeyError:
             raise HTTPException(status_code=404, detail="复习卡不存在") from None
+
+    @app.delete("/api/review/items/{item_id}")
+    def delete_review(item_id: str) -> dict[str, str]:
+        """删除一张复习卡（OP-26「可逆：可删除」的落地）：硬删 + 界面二次确认，不做回收站。
+
+        - 只删卡本身；`facts` 里的复习流水**一个字节都不删**（删卡后 `GET /api/review/{id}/facts`
+          会因卡不存在而 404 —— 这是预期，不为了「没幽灵」去删 facts）；
+        - 卡的任务弱关联不断任务本体；墓碑由 v17 的 DELETE 触发器自动落。
+        - 找不到 → 404（幂等只在**领域层**承诺：`delete_item` 返回 False）。
+        """
+        if not review_delete_item(conn, item_id):
+            raise HTTPException(status_code=404, detail="复习卡不存在")
+        return {"deleted": item_id}
 
     @app.post("/api/tasks/{task_id}/to-review")
     def task_to_review(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:

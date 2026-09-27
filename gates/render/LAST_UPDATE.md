@@ -794,3 +794,45 @@ node tools/render_check.mjs --seed-only        # 起一个有种子数据的服�
 - `phone/team`
 - `phone/today`
 
+
+## 2026-09-27 08:01:19 · 36 份改动
+
+> 理由：集成十一张并行卡：060 左栏三项收进设置(桌面15+窄屏15左栏各少三行) + 057/058/059 各改本视图，按合并后源码全量重采(T-G153)
+
+- `desktop/academic`
+- `desktop/flagged`
+- `desktop/focus`
+- `desktop/habit`
+- `desktop/important`
+- `desktop/memo`
+- `desktop/offline`
+- `desktop/palette`
+- `desktop/planned`
+- `desktop/review`
+- `desktop/setting`
+- `desktop/stats`
+- `desktop/tasks`
+- `desktop/team`
+- `desktop/today`
+- `narrow/academic`
+- `narrow/flagged`
+- `narrow/focus`
+- `narrow/habit`
+- `narrow/important`
+- `narrow/memo`
+- `narrow/offline`
+- `narrow/palette`
+- `narrow/planned`
+- `narrow/review`
+- `narrow/setting`
+- `narrow/stats`
+- `narrow/tasks`
+- `narrow/team`
+- `narrow/today`
+- `phone/academic`
+- `phone/memo`
+- `phone/palette`
+- `phone/review`
+- `phone/team`
+- `phone/today`
+

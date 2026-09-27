@@ -1,40 +1,36 @@
-# render-manifest v1 viewport=desktop 1280x900 view=team rows=49 accent=#2f6feb device=ph-000000000000 day=2026-06-15
-html>body>div.shell		0,0,1280,800	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
-html>body>div.shell>aside.rail		24,0,168,800	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
+# render-manifest v1 viewport=desktop 1280x900 view=team rows=45 accent=#2f6feb device=ph-000000000000 day=2026-06-15
+html>body>div.shell		0,0,1280,683	16/normal/400	#1e293b/#000000@0.00	0;0px 24px
+html>body>div.shell>aside.rail		24,0,168,683	16/normal/400	#1e293b/#000000@0.00	0;16px 0px
 body>div.shell>aside.rail>h1	timeflow ·	24,16,167,24	20/24/700	#1e293b/#000000@0.00	0;0px
 body>div.shell>aside.rail>div#summary	债务 1 项 · 完成收益 1 项 · 投入 0h · 手动投入 0.75h · 习惯 1 次	24,48,167,59	13/19.5/400	#5b6472/#000000@0.00	0;0px
 div.shell>aside.rail>nav>button:nth-child(1)	今日	24,119,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
 div.shell>aside.rail>nav>button:nth-child(2)	全部任务	24,158,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(3)	重要	24,197,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(4)	有计划	24,236,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(5)	已标记	24,275,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(6)	专注	24,314,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(7)	统计	24,353,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(8)	习惯	24,392,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(9)	学业	24,431,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(10)	复习	24,470,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(11)	备忘录	24,509,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button.active	团队	24,548,167,35	13/normal/400	#ffffff/#2f6feb	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(13)	设置	24,587,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,626,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button#refresh	刷新	24,665,167,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button#railToggle	收起右栏	24,706,167,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-div.shell>aside.rail>nav>button#cmdBtn	命令	24,747,167,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
-aside.rail>nav>button#cmdBtn>kbd.kbd	Ctrl K	67,761,43,13	11/13.2/400	#5b6472/#000000@0.00	6;0px 4px
+div.shell>aside.rail>nav>button:nth-child(6)	专注	24,197,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(7)	统计	24,236,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(8)	习惯	24,275,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(9)	学业	24,314,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(10)	复习	24,353,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(11)	备忘录	24,392,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button.active	团队	24,431,167,35	13/normal/400	#ffffff/#2f6feb	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(13)	设置	24,470,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button:nth-child(14)	离线记	24,509,167,35	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button#refresh	刷新	24,548,167,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button#railToggle	收起右栏	24,589,167,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+div.shell>aside.rail>nav>button#cmdBtn	命令	24,630,167,37	13/normal/400	#5b6472/#000000@0.00	6;8px 12px
+aside.rail>nav>button#cmdBtn>kbd.kbd	Ctrl K	67,644,43,13	11/13.2/400	#5b6472/#000000@0.00	6;0px 4px
 html>body>div.shell>main#main		216,0,716,405	16/normal/400	#1e293b/#000000@0.00	0;0px 24px 90px
 body>div.shell>main#main>div.card.block		240,0,668,142	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>main#main>div.card.block>div.row		257,17,634,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block>div.row>button	管理者（我分配的）	257,18,149,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
 main#main>div.card.block>div.row>button.ghost	执行者（分配给我的）	414,17,164,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-div.shell>main#main>div.card.block>div.sub.mt-2	你分配出去的任务都在这里：谁手上有什么、进展到哪。分配出去不计投入。	257,62,634,18	12/18/400	#5b6472/#000000@0.00	0;0px
+div.shell>main#main>div.card.block>div.sub.mt-2	你分配出去的任务都在这里。分配出去不计投入。	257,62,634,18	12/18/400	#5b6472/#000000@0.00	0;0px
 div.shell>main#main>div.card.block>div.row.mt-3		257,88,634,37	16/normal/400	#1e293b/#000000@0.00	0;0px
 main#main>div.card.block>div.row.mt-3>button	全部 1	257,89,69,35	13/normal/400	#ffffff/#2f6feb	10;8px 16px
 main#main>div.card.block>div.row.mt-3>button.ghost:nth-child(2)	已分配 1	334,88,84,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
 main#main>div.card.block>div.row.mt-3>button.ghost:nth-child(3)	进行中 0	426,88,84,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
 main#main>div.card.block>div.row.mt-3>button.ghost:nth-child(4)	已完成 0	518,88,84,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
 main#main>div.card.block>div.row.mt-3>button.ghost:nth-child(5)	受阻 0	609,88,71,37	13/normal/400	#5b6472/#000000@0.00	10;8px 16px
-body>div.shell>main#main>div.meta.mt-3		240,154,668,21	16/normal/400	#1e293b/#000000@0.00	0;0px
-div.shell>main#main>div.meta.mt-3>b	分配关系的两种看法	304,154,144,21	16/normal/700	#1e293b/#000000@0.00	0;0px
+body>div.shell>main#main>div.meta.mt-3	不是两套数据（共 1 件）。	240,154,668,21	16/normal/400	#1e293b/#000000@0.00	0;0px
 body>div.shell>main#main>div.section-title	小李 · 1 件	240,199,668,16	13/15.6/400	#5b6472/#000000@0.00	0;0px
 body>div.shell>main#main>div.card		240,227,668,76	16/normal/400	#1e293b/#ffffff	10;16px
 div.shell>main#main>div.card>div.card-body		257,244,414,42	16/24/400	#1e293b/#000000@0.00	0;0px

@@ -202,6 +202,22 @@ def get_item(conn: sqlite3.Connection, item_id: str) -> dict[str, object]:
     return _item_dict(row)
 
 
+def delete_item(conn: sqlite3.Connection, item_id: str) -> bool:
+    """删除一张复习卡（硬删 · F6 OP-26「可逆：可删除」的落地）。
+
+    ★ 与 `memo.delete_memo` 同形（**硬删 + 界面二次确认**，不做回收站/撤销）：
+    - 只删 `review_items` 这一行，**不碰** `facts` —— 复习历史流水一个字节都不删；
+    - `review_items.task_id` 是单向弱关联（无外键），删卡**不伤任务本体**；
+    - 墓碑由 v17 的 DELETE 触发器自动落（`storage/db.py` 的 `SYNC_TOMBSTONE_KEYS` 已含
+      `review_items`）→ **不手写** `sync_tombstones`，旧同步包复活不了它。
+
+    幂等：删不存在的 id 不炸；返回**是否真删到了**（`cursor.rowcount > 0`）。
+    """
+    cur = conn.execute("DELETE FROM review_items WHERE id = ?", (item_id,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
 def update_item(
     conn: sqlite3.Connection,
     item_id: str,

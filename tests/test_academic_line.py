@@ -208,3 +208,36 @@ def test_api_gpa_includes_weighted_average(tmp_path) -> None:  # type: ignore[no
     assert five["scale"] == "5.0"
     assert five["weighted_average"] == 86.4  # 加权平均成绩与制式无关
     assert client.get("/api/gpa?scale=9.9").status_code == 400
+
+
+# ---- 录成绩绑课程（T-G151）：只接已有的 course_id 列，GPA 算法不读它 ----
+
+def test_grade_course_binding_does_not_change_gpa(conn: sqlite3.Connection) -> None:
+    """绑课与不绑课，GPA / 加权平均逐字相同 —— 界面只是把已有列接上。"""
+    _clear_grades(conn)
+    cid = ac.create_course(conn, "高数")
+    g_unbound = ac.add_grade(conn, score=92, credits=3)
+    before = (ac.gpa(conn, "4.0"), ac.weighted_average(conn))
+    ac.delete_grade(conn, g_unbound)
+
+    g_bound = ac.add_grade(conn, score=92, credits=3, course_id=cid)
+    after = (ac.gpa(conn, "4.0"), ac.weighted_average(conn))
+    assert after == before, "绑课程前后 GPA / 加权平均必须逐字相同"
+    row = next(r for r in ac.all_grade_rows(conn) if r["id"] == g_bound)
+    assert row["course_id"] == cid, "课程要落在 course_id 列上（明细才显示得出课程名）"
+
+
+def test_api_grade_with_course_id_keeps_gpa(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """API 侧同上：带 course_id 的 POST /api/grades，GPA 不变、明细带回 course_id。"""
+    client = TestClient(create_app(str(tmp_path / "g.db")))
+    gid = client.post("/api/grades", json={"score": 92, "credits": 3}).json()["id"]
+    gpa_before = client.get("/api/gpa").json()
+    assert client.delete(f"/api/grades/{gid}").status_code == 200
+
+    cid = client.post("/api/courses", json={"name": "高数", "credits": 4}).json()["id"]
+    gid2 = client.post(
+        "/api/grades", json={"score": 92, "credits": 3, "course_id": cid}
+    ).json()["id"]
+    assert client.get("/api/gpa").json() == gpa_before
+    rows = client.get("/api/grades").json()
+    assert next(r for r in rows if r["id"] == gid2)["course_id"] == cid

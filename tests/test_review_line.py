@@ -20,6 +20,7 @@ from timeflow.api.app import create_app
 from timeflow.core import facts as facts_mod
 from timeflow.core import review as rv
 from timeflow.core.ledger import ledger
+from timeflow.core.review.review import delete_item as review_delete_item
 from timeflow.storage import db as db_mod
 
 if TYPE_CHECKING:
@@ -276,3 +277,47 @@ def test_api_undo_review(tmp_path) -> None:  # type: ignore[no-untyped-def]
     assert client.post(f"/api/review/{rid}/undo").status_code == 200
     assert client.get("/api/summary").json()["review_count"] == 0
     assert client.post("/api/review/nope/undo").status_code == 404
+
+
+# ---- 删除复习卡（F6 OP-26「可逆：可删除」· T-G150）----
+
+def test_delete_item_removes_card(conn: sqlite3.Connection) -> None:
+    """硬删：删掉后 `get_item` 抛 KeyError（再由 API 转 404），返回「真删到了」。"""
+    rid = rv.create_item(conn, "待删卡")
+    assert review_delete_item(conn, rid) is True
+    with pytest.raises(KeyError):
+        rv.get_item(conn, rid)
+
+
+def test_delete_item_missing_is_idempotent(conn: sqlite3.Connection) -> None:
+    """删不存在的 id **幂等不炸**：返回 False（不是异常）。"""
+    assert review_delete_item(conn, "nope") is False
+
+
+def test_delete_item_keeps_facts(conn: sqlite3.Connection) -> None:
+    """反证：删卡**不删**复习历史流水（`facts` 一个字节都不动）—— 投入账本因此不受损。"""
+    rid = rv.create_item(conn, "留痕卡")
+    rv.review(conn, rid, rv.RATING_REMEMBER)
+    assert facts_mod.count(conn, kind="review.completed") == 1
+
+    review_delete_item(conn, rid)
+
+    assert facts_mod.count(conn, kind="review.completed") == 1  # 流水还在
+    assert ledger.summary(conn).review_count == 1               # 账目照记
+
+
+def test_api_delete_review_card_keeps_task(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """反证（端到端）：删掉「任务升级来的卡」后 —— 任务反查复习卡为空，而**任务本体还在**。
+
+    `review_items.task_id` 是单向弱关联（无外键），删卡只删卡这一行。
+    """
+    client = TestClient(create_app(str(tmp_path / "del.db")))
+    tid = client.post("/api/tasks", json={"title": "高数作业"}).json()["id"]
+    rid = client.post(f"/api/tasks/{tid}/to-review", json={}).json()["card"]["id"]
+    assert [c["id"] for c in client.get(f"/api/tasks/{tid}/review-cards").json()] == [rid]
+
+    assert client.delete(f"/api/review/items/{rid}").json() == {"deleted": rid}
+
+    assert client.get(f"/api/tasks/{tid}/review-cards").json() == []   # 卡没了
+    assert client.get(f"/api/tasks/{tid}").status_code == 200          # 任务主体还在
+    assert client.delete(f"/api/review/items/{rid}").status_code == 404  # 再删 → 404

@@ -97,6 +97,10 @@
 /* 应用外壳：视图路由 + 顶部摘要 + 通用反馈（R2 会把调度收敛到这里） */
 let current='today';
 let gpaScale='4.0';          // 学业页 GPA 制式（默认 4.0，可切换）
+// 学业页「概览区」开关（T-G151）：顶部两张读数大卡 + 多维 radar 是否显示。偏好只存本机（照 RAIL_KEY）。
+const ACADEMIC_OVERVIEW_KEY='tf_academic_overview';
+let academicOverviewOn=true; // 默认显示（用户 2026-09-27 只说"要个开关"，没说默认关）
+try{academicOverviewOn=localStorage.getItem(ACADEMIC_OVERVIEW_KEY)!=='off'}catch(e){}
 let renderSeq=0;             // 渲染序号：用于「后点的那次说了算」
 let abortCtl=null;           // 进行中的请求组：切视图即取消，避免过期渲染互相覆盖
 let themeChoice='light';     // 主题选择（R4 接通暗色）
@@ -826,6 +830,7 @@ function view(name){
   detailEditing=false;                          // 退出编辑态，避免残留半截表单
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+  applyLeftRail();                              // 左栏智能视图按偏好隐藏（T-G154）—— 每次切视图都重套一遍
   render(name);
 }
 
@@ -860,6 +865,8 @@ const ACTIONS = {
   'set-accent':     el => setAccent(el.dataset.color),
   // 右栏折叠（SR-NF4 / GAP-NF-03）与新手引导（SR-NF2 / GAP-NF-02）—— R5 收口
   'rail-toggle':    () => toggleRail(),
+  // 左栏智能视图（重要 / 有计划 / 已标记）收进设置开关（T-G154）
+  'left-rail-smart': () => toggleLeftRail(),
   'guide-start':    () => guideStart(),
   'guide-done':     () => { guideFinish(); render(current); },
   'guide-replay':   () => guideReplay(),
@@ -1014,6 +1021,7 @@ const ACTIONS = {
   'review-do':      el => review(el.dataset.id, el.dataset.feedback),
   'review-undo':    el => undoReview(el.dataset.id),
   'review-regrade': el => regradeReview(el.dataset.id, el.dataset.feedback),
+  'review-delete':  el => deleteReviewCard(el.dataset.id, el.dataset.title || ''),
   'review-add':     () => addReview(),
   // 复习卡的**定义类字段**（SR-F6.5 形式 / SR-F8.3 引用句柄 / T-C6·C7）与任务升级（SR-F6.2 / T-C5）
   'review-edit':    el => editReview(el.dataset.id),
@@ -1026,6 +1034,7 @@ const ACTIONS = {
   'assessment-del': el => delAssessment(el.dataset.id),
   'grade-add':      () => addGrade(),
   'grade-del':      el => delGrade(el.dataset.id),
+  'academic-overview-toggle': () => toggleAcademicOverview(),
   // 备忘录 / 产出 / 手动投入
   'memo-add':       () => addMemo(),
   'memo-to-task':   el => memoToTask(el.dataset.id),
@@ -2811,25 +2820,21 @@ async function renderAcademic(m){
       <div class="row mt-2"><button class="ghost" data-action="assessment-del" data-id="${a.id}">删除考核项</button></div>
     </div>`).join('')}`:'';
   const courseOpts=courses.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  const otherScale=scale==='4.0'?'5.0':'4.0';
   const hasGrades=grades.length>0;
-  m.innerHTML=`<div class="grid">
+  // 「概览区」= 顶部两张读数大卡 + 多维 radar（T-G151 开关拦的就是这一段）；制式切换只留设置页
+  // （用户 2026-09-27：「GPA 切换放在设置就行」）。关掉开关只隐藏概览，硬考核 / 课程 / 成绩明细 / 两张表单照常。
+  const acadCards=`<div class="grid">
    <div class="card quiet"><div class="big">${gpaG.weighted_average||0}</div>
      <div class="meta">加权平均成绩（百分制）<br><span class="sub">Σ(学分×成绩) ÷ Σ学分 · ${gpaG.weighted_credits||0} 学分计入</span></div></div>
    <div class="card quiet"><div class="big">${gpaG.gpa}</div>
-     <div class="meta">GPA（${scale} 制，${gpaG.credits} 学分）<br><span class="sub">切换制式：另 ${otherScale} 制为 ${other.gpa}</span></div></div></div>
-  <div class="card block">
-    <div class="meta">GPA 制式（切换后本页所有数值按该制式显示）</div>
-    <div class="row mt-3">
-      <button class="${scale==='4.0'?'':'ghost'}" data-action="set-gpa" data-scale="4.0">4.0 制</button>
-      <button class="${scale==='5.0'?'':'ghost'}" data-action="set-gpa" data-scale="5.0">5.0 制</button>
-      <span class="sub">配置默认值来自 config.toml 的 [academic] gpa_scale；这里只切当前查看口径。</span>
-    </div></div>
+     <div class="meta">GPA（${scale} 制，${gpaG.credits} 学分）</div></div></div>`;
+  const acadRadar=`<div class="section-title">学业概览（多维）</div>
+  ${gpaRadar(gpaG,{gpa:other.gpa},courses.length,grades)}
+  ${hasGrades?'':`<div class="sub">还没有成绩记录</div>`}`;
+  m.innerHTML=`${academicOverviewOn?acadCards:''}
   ${upcomingHtml}
   ${allAssessments}
-  <div class="section-title">学业概览（多维）</div>
-  ${gpaRadar(gpaG,{gpa:other.gpa},courses.length,grades)}
-  ${hasGrades?'':`<div class="sub">还没有成绩记录</div>`}
+  ${academicOverviewOn?acadRadar:''}
   <div class="section-title">课程</div>
   <div class="new"><input id="cName" placeholder="新建课程，如：高数" data-enter="course-add"><button data-action="course-add">新建课程</button></div>
   ${courses.map(c=>{const ts=tasksOfCourse(c.id);const open=ts.filter(t=>t.status!=='完成');
@@ -2844,7 +2849,7 @@ async function renderAcademic(m){
       ${ts.length&&!open.length?'<div class="sub">挂在这门课上的任务都已做完。</div>':''}
       ${ts.length?'':'<div class="sub">还没有挂到课的任务</div>'}
     </div>`}).join('')||emptyState('暂无课程')}
-  <div class="section-title">添加考核项（考试/作业/论文/小测）</div>
+  <div class="section-title" id="set-acad-assessment">添加考核项（考试/作业/论文/小测）</div>
   <div class="card block">
     <div class="form">
       <div class="field"><label>课程</label>
@@ -2858,9 +2863,11 @@ async function renderAcademic(m){
       <div class="actions"><button data-action="assessment-add">添加考核项</button></div>
     </div>
   </div>
-  <div class="section-title">录入成绩</div>
+  <div class="section-title" id="set-acad-grade">录入成绩</div>
   <div class="card block">
     <div class="form">
+      <div class="field"><label>课程（可选）</label>
+        <select id="gCourse" ${courses.length?'':'disabled'}><option value="">${courses.length?'不绑课程':'先建课程'}</option>${courseOpts}</select></div>
       <div class="field narrow"><label>成绩（百分制）</label>
         <input id="gScore" type="number" placeholder="如 88"></div>
       <div class="field narrow"><label>学分</label>
@@ -2870,8 +2877,16 @@ async function renderAcademic(m){
   </div>
   ${grades.length?`<div class="section-title">成绩明细（${grades.length} 条）</div>
     ${grades.slice().reverse().map(g=>`<div class="card"><div class="card-body"><div class="title">${g.score} 分</div>
-      <div class="meta">${g.credits} 学分 ${g.term?`· ${esc(g.term)}`:''}</div></div>
+      <div class="meta">${esc(courseName(g.course_id))} · ${g.credits} 学分 ${g.term?`· ${esc(g.term)}`:''}</div></div>
       <button class="ghost" data-action="grade-del" data-id="${g.id}">删除</button></div>`).join('')}`:''}`;
+  foldSettingSections(m);   // 2.4 压密度：两张录入表单折成「标题 + 展开」（默认收起），复用设置页那套
+}
+// 学业页「概览区」开关（T-G151）：只隐藏顶部读数卡 + 多维 radar，操作区与明细照常。
+function toggleAcademicOverview(){
+  academicOverviewOn=!academicOverviewOn;
+  try{localStorage.setItem(ACADEMIC_OVERVIEW_KEY,academicOverviewOn?'on':'off')}catch(e){}
+  toast(academicOverviewOn?'已显示学业概览':'已隐藏学业概览');
+  view(current);
 }
 async function addAssessment(){
   const courseId=document.getElementById('aCourse').value;
@@ -2915,7 +2930,8 @@ async function delGrade(id){
 async function addCourse(){const name=document.getElementById('cName').value.trim();if(!name)return;
   await api('/api/courses',{method:'POST',body:JSON.stringify({name})});view(current)}
 async function addGrade(){const score=parseFloat(document.getElementById('gScore').value);const credits=parseFloat(document.getElementById('gCredits').value);
-  if(isNaN(score))return;await api('/api/grades',{method:'POST',body:JSON.stringify({score,credits})});view(current)}
+  const courseId=document.getElementById('gCourse').value;   // 空 = 不绑课（后端 course_id 可为 null）
+  if(isNaN(score))return;await api('/api/grades',{method:'POST',body:JSON.stringify({score,credits,course_id:courseId||null})});view(current)}
 
 function reviewCard(r,ratings){
   if(reviewEdit.id===r.id) return reviewEditForm(reviewEdit.item,reviewEdit.meta);
@@ -2928,7 +2944,8 @@ function reviewCard(r,ratings){
     <div class="meta">${r.reps}次 · ${r.interval_days}天${r.source==='external'?'<span class="badge">外部</span>':''}</div>${handle}${fromTask}</div>
     <div class="row">${doBtns}
     <button class="ghost" data-action="review-undo" data-id="${r.id}">撤销上次</button>
-    <button class="ghost" data-action="review-edit" data-id="${r.id}">改形式/句柄</button></div></div>`;
+    <button class="ghost" data-action="review-edit" data-id="${r.id}">改形式/句柄</button>
+    <button class="ghost danger" data-action="review-delete" data-id="${r.id}" data-title="${esc(r.title)}">删除卡</button></div></div>`;
 }
 /* 今天**已经复习过**的卡（T-G13）：把"记错了"接上 —— 直接改判成另一档。
    只给**另外两档**的按钮（同一个档不给，改判成一样没有意义，后端也会拒）；
@@ -2952,6 +2969,12 @@ async function regradeReview(id,feedback){
   if(!await confirmAsk(`把今天这次反馈改成「${name}」？\n按新的一档重算，投入不会重复计。`,'改判'))return;
   const r=await api(`/api/review/${id}/regrade`,{method:'POST',body:JSON.stringify({feedback})});
   toast(`已改判为「${name}」，下次到期 ${r.due_date}`);view(current);
+}
+/* 删除复习卡（F6 OP-26「可逆：可删除」的界面落地）：**二次确认**后硬删（与习惯/成绩同一口径，
+   不做回收站）—— 卡本身删掉不可恢复，但**复习历史流水留在 facts 里**（本软件不删你复习过的账）。 */
+async function deleteReviewCard(id,title){
+  if(!await confirmAsk(`删除复习卡「${title}」？卡本身删掉且不可恢复；复习历史流水保留。`,'删除复习卡'))return;
+  await api(`/api/review/items/${id}`,{method:'DELETE'});toast('已删除复习卡');view(current);
 }
 /* ---------- 复习卡的定义类字段（SR-F6.5 / SR-F8.3 / T-C6·C7）----------
  * 中文词表（形式 / 执行源）**只在后端一处**（`review.meta()` 的 `_FORMATS` / `SOURCE_LABELS`），
@@ -3021,7 +3044,7 @@ async function renderTeam(m){
   const viewBtns=b.views.map(v=>`<button class="${v.value===b.view?'':'ghost'}" data-action="team-view" data-view="${v.value}">${esc(v.label)}</button>`).join('');
   // 执行者视角要一个名字（管理者视角不需要 —— 分配出去的记录本来就是你建的）
   const meRow=b.view==='executor'
-    ?`<div class="new mt-2"><input id="teamMe" class="grow" placeholder="我是谁？（分配记录里写的那个人名）" value="${esc(b.me)}">
+    ?`<div class="new mt-2"><input id="teamMe" class="grow" placeholder="我是谁？" value="${esc(b.me)}">
       <button data-action="team-me">就用这个名字</button></div>`
     :'';
   const chips=[{value:'',label:'全部',count:b.total}].concat(b.statuses)
@@ -3030,13 +3053,13 @@ async function renderTeam(m){
     ${g.items.map(it=>teamItemHTML(it,b.view)).join('')}`).join('');
   const empty=b.view==='manager'
     ?'还没有分配出去的任务'
-    :(b.me?'这个视角下没有任务（换个状态筛选看看）。':'先在上面填「我是谁」，再看分给你的那几件。');
+    :(b.me?'这个视角下没有任务。':'先在上面填「我是谁」。');
   m.innerHTML=`<div class="card block">
     <div class="row">${viewBtns}</div>
     <div class="sub mt-2">${noteHTML(b.note)}</div>
     ${meRow}
     <div class="row mt-3">${chips}</div></div>
-  <div class="meta mt-3">这一页是<b>分配关系的两种看法</b>，不是两套数据：切视角只是换个看法（共 ${b.shown} 件）。</div>
+  <div class="meta mt-3">不是两套数据（共 ${b.shown} 件）。</div>
   ${body||emptyState(empty)}`;
 }
 function teamItemHTML(it,view){
@@ -3091,27 +3114,27 @@ async function reviewOutput(id){
 async function renderMemo(m){
   const [memos,outputs,invests]=await Promise.all([
     api('/api/memos'),api('/api/ledger/outputs'),api('/api/ledger/invests')]);
-  m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="随手记一条…" data-enter="memo-add"><button data-action="memo-add">记录</button></div>
+  m.innerHTML=`<div class="new"><input id="memoTxt" placeholder="记一条…" data-enter="memo-add"><button data-action="memo-add">记录</button></div>
   ${memos.map(x=>`<div class="card"><div class="card-body"><div class="title">${esc(x.text)}</div><div class="meta">${x.created_at||''} ${x.ref_handle?`<span class="badge" title="${esc(x.ref_reason||'')}">${esc(x.ref_handle)}</span>`:''}${x.task_id?'<span class="badge">已转任务</span>':''}</div></div>
     <div class="row">${x.ref_url?`<button class="ghost" data-action="vault-open" data-handle="${esc(x.ref_handle)}">在 Obsidian 打开</button>`:''}${x.task_id?'':`<button class="ghost" data-action="memo-to-task" data-id="${x.id}">转为任务</button>`}
     <button class="ghost" data-action="memo-delete" data-id="${x.id}">删除</button></div></div>`).join('')||emptyState('暂无备忘录')}
-  <div class="section-title">今日手动投入（独立于专注投入）</div>
+  <div class="section-title">今日手动投入</div>
   <div class="new">
     <select id="inKind"><option value="focus">专注补记</option><option value="habit">习惯</option><option value="other">其它</option></select>
     <input id="inMinutes" class="w-90" type="number" min="0" step="5" value="25" title="分钟">
     <span class="sub">分钟</span>
-    <input id="inNote" placeholder="备注，如：番茄补记">
+    <input id="inNote" placeholder="备注">
     <button data-action="invest-add">记一笔投入</button></div>
   ${invests.map(i=>`<div class="card ${i.retracted?'done':''}"><div class="card-body"><div class="title">${esc(i.note||i.kind)} · ${i.minutes} 分钟</div>
     <div class="meta">${i.kind}${i.retracted?' · 已撤销':''}</div></div>
     ${i.retracted?'':`<button class="ghost" data-action="invest-retract" data-id="${i.entry_id}">撤销</button>`}</div>`).join('')||emptyState('今天还没有手动投入')}
-  <div class="section-title">今日产出（独立于投入轴）</div>
+  <div class="section-title">今日产出</div>
   <div class="new">
     <select id="outKind"><option value="asset">知识资产</option><option value="kpi">学校 KPI</option></select>
     <input id="outValue" class="w-90" type="number" step="0.5" value="1" title="数量">
     <input id="outNote" placeholder="备注，如：数学笔记#3">
     <button data-action="output-add">记一笔产出</button></div>
-  <div class="meta">按两类分开看（T-C4）：学校 KPI ${outputs.filter(o=>o.kind==='kpi'&&!o.retracted).length} 条 · 知识资产 ${outputs.filter(o=>o.kind==='asset'&&!o.retracted).length} 条 —— 同一份产出事实，只是分组显示（不拆轴、不折算）。</div>
+  <div class="meta">按两类分开看（T-C4）：学校 KPI ${outputs.filter(o=>o.kind==='kpi'&&!o.retracted).length} 条 · 知识资产 ${outputs.filter(o=>o.kind==='asset'&&!o.retracted).length} 条（不折算）。</div>
   ${outputs.map(o=>`<div class="card ${o.retracted?'done':''}"><div class="card-body"><div class="title">${esc(o.note||o.kind)} ×${o.value}</div>
     <div class="meta">${o.kind==='kpi'?'学校 KPI':'知识资产'}${o.retracted?' · 已撤销':''}</div></div>
     ${o.retracted?'':`<button class="ghost" data-action="output-retract" data-id="${o.entry_id}">撤销</button>`}</div>`).join('')||emptyState('今天还没有产出记录')}`;
@@ -3287,6 +3310,9 @@ async function renderSetting(m){
     <div class="settings-sub">右栏（宽屏才有）</div>
     <div class="row"><button class="ghost" data-action="rail-toggle">${railOff?'展开右栏':'收起右栏'}</button></div>
     <div class="sub">收起时隐藏计时器与任务详情。</div>
+    <div class="settings-sub">左栏智能视图</div>
+    <div class="row"><button class="ghost" data-action="left-rail-smart">${railDirect?'从左栏收起':'在左栏显示'}</button></div>
+    <div class="sub">「重要 / 有计划 / 已标记」是否出现在左栏。</div>
     <div class="settings-sub">新手引导</div>
     <div class="row"><button class="ghost" data-action="guide-replay">再看一遍新手引导</button></div>
     <div class="sub">引导只在今日页出现，可随时在这里重新打开。</div>
@@ -3431,6 +3457,9 @@ async function renderSetting(m){
       <button class="${gpaScale==='5.0'?'':'ghost'}" data-action="set-gpa" data-scale="5.0">5.0 制</button>
       <button class="ghost" data-action="view" data-view="academic">去学业页</button></div>
     <div class="sub">配置默认值来自 config.toml 的 [academic] gpa_scale；这里切的是查看口径。</div>
+    <div class="settings-sub">学业概览</div>
+    <div class="row"><button class="ghost" data-action="academic-overview-toggle">${academicOverviewOn?'隐藏概览':'显示概览'}</button></div>
+    <div class="sub">概览 = 顶部读数卡 + 多维雷达。</div>
   </div>
   <div class="section-title">分组管理</div>
   <div class="card block" id="groupAdmin"></div>
@@ -4037,6 +4066,28 @@ function toggleRail(){
   toast(railOff?'已收起右栏（中列更宽）':'已展开右栏');
 }
 
+/* ---------- 左栏智能视图收进设置（T-G154）----------
+ * 用户 2026-09-27 方案 A：设置里给个开关决定「重要 / 有计划 / 已标记」**是否出现在左栏**；
+ * 默认收起（左栏只留主视图 —— 今日 / 全部任务 / 专注 / 统计 …），打开后这三项回到左栏、一点直达对应筛选视图。
+ * ★ markup 不删：`test_smart_views_are_reachable` 静态钉着左栏 nav 里必须有这三个 `data-view`；
+ *   所以这里只做**运行时**隐藏（`hidden` 属性），切视图时由 `view()` 重套一遍。
+ * 关了左栏不丢入口：「全部任务」页头的互跳行（`smartViewNavHTML`）与设置页「入口」那排仍在（手机端尤其靠前者）。 */
+const LEFT_RAIL_KEY='tf_rail_direct';
+const SMART_RAIL_VIEWS=['important','planned','flagged'];
+let railDirect=false;               // 默认关 = 这三项不出现在左栏
+function applyLeftRail(){
+  document.querySelectorAll('.rail nav button[data-view]').forEach(b=>{
+    if(SMART_RAIL_VIEWS.includes(b.dataset.view))b.hidden=!railDirect;
+  });
+}
+function toggleLeftRail(){
+  railDirect=!railDirect;
+  try{localStorage.setItem(LEFT_RAIL_KEY,railDirect?'on':'off')}catch(e){}
+  applyLeftRail();
+  toast(railDirect?'已把「重要 / 有计划 / 已标记」放回左栏':'已从左栏收起「重要 / 有计划 / 已标记」');
+  view(current);
+}
+
 /* ---------- 新手引导（SR-NF2 / GAP-NF-02）----------
  * 需求：打开就要知道"先干什么"（建任务 → 开专注 → 记反馈），但**不许拦路** ——
  * 所以它不是遮罩弹窗，而是今日页顶部一张卡片：可一键关掉、之后不再出现，设置页留「再看一遍」。
@@ -4064,8 +4115,9 @@ function guideReplay(){
   guideDone=false;try{localStorage.removeItem(GUIDE_KEY)}catch(e){}
   toast('新手引导已重新打开');view('today');
 }
-try{railOff=localStorage.getItem(RAIL_KEY)==='off';guideDone=guideSeen()}catch(e){}
+try{railOff=localStorage.getItem(RAIL_KEY)==='off';guideDone=guideSeen();railDirect=localStorage.getItem(LEFT_RAIL_KEY)==='on'}catch(e){}
 applyRail();
+applyLeftRail();
 
 // PWA：注册 service worker（仅 secure context，如 https 或 localhost）
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}

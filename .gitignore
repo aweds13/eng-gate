@@ -70,6 +70,13 @@ gates/last.json.tmp
 gates/logs/
 gates/diag/
 
+# 例外（T-G159）：门禁串行锁是**每棵树都会调用**的工具，改它必须能进提交
+# （卡 062 踩过：改好却进不了提交，只能手工拷）。**只放这一个文件** ——
+# 卡规格、诊断日志、活文档（自动推进表/队列）仍不入库。
+!gates/diag/
+gates/diag/*
+!gates/diag/gate_lock.py
+
 # 渲染验证层的**截图**（T-G32）：`gates/render/*.txt` 是黄金（入库），
 # `shots/*.png` 是给人看的证据（按需 `node tools/render_check.mjs --shots` 重出，2.5 MB，不入库）
 gates/render/shots/

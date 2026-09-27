@@ -11,6 +11,22 @@
     python -X utf8 scripts/run_gates.py --no-reuse   # 不信复用记录，全部真跑一遍
     python -X utf8 scripts/run_gates.py --serial     # 全串行（对照"并行下偶发失败"用）
 
+★ T-G156 三项加固（**不设新环境变量时，端口/门数/复用键/黄金/last.json 形状逐字不变**）
+  1. `TF_GATE_PORT_BASE`（**可选旁路**）：不设 = 历史的 8531/8541 段；设了则整段平移
+     （render BASE/BASE+1、ui_flow BASE+10..+13），于是同机多棵树各自一段、不再排队等端口。
+     黄金与端口无关（`gates/render/**` 里出现 8531/8541 的份数 = 0）→ 换端口不该让黄金变。
+  2. 开场清遗留：**端口段 ∩ cwd=本树根** 双判据（只掐本树端口段上的 LISTENING 进程 +
+     绑这些端口的无头浏览器）；旧清法按进程名/特征（`serve.py --fresh` / `tf-flow-profile-`）
+     会跨树误杀（铁律 27）。★ 双判据缺一不可：默认端口段是**多棵树共用**的，只按端口会在
+     默认模式下跨树误杀（2026-09-27 真事故，见复盘）。
+  3. `TF_PYTEST_WORKERS`：不设 = `min(4, cpu)`（机器 32 核但只有 15.2 GB 内存，`-n auto` 会
+     拉 32 个 worker → 换页）；装了 xdist 才并行，没装就串行（既有口径不动）。
+
+★ T-G157（修 worktree 假绿）：子进程 `PYTHONPATH` 首位补上**本树 `ROOT/src`** —— 本仓是
+  可编辑安装指向**主树**的 `src`，原来只塞 `sandbox_shim`，于是 worktree 里 `render` / `ui_flow` /
+  `ui_dom_probe` / `web_live` / `lf1_live` 验的是**主树的页面**（同源黄金一比必绿）→ 假绿。
+  见 `tree_pythonpath()` 与 `复盘/门禁假绿-PYTHONPATH-T-G157.md`。
+
 ★ T-G47 提速（判定不变，只是不再"一个速度用到底"）
   1. **三层**：`--fast`（十几秒）→ `--quick`（~90 秒）→ 全量（~3 分钟）。
      `--fast` **不写 `gates/last.json`** —— 它不是提交闸，写了就会让"门禁产物与提交一致"
@@ -26,9 +42,9 @@
      ★ **pytest 永不复用**：它是唯一"从行为上证明功能还在"的那层，也是唯一能发现
        "谁动了 `src/` 却以为无关"的那层。跳过它省 66 秒，代价是把整条安全网摘掉。
 
-pytest 会**并行**跑（装了 `pytest-xdist` 时 `-n auto`）：用例之间没有共享状态（各自 tmp 库 +
-各自进程内的事实总线），而每个用例都要起真 app + 真库 —— 串行是这里唯一的瓶颈。
-覆盖率照旧判 70% 那道门（pytest-cov 会合并各 worker 的数据）。
+pytest 会**并行**跑（装了 `pytest-xdist`；worker 数见 `TF_PYTEST_WORKERS`，不设 = `min(4, cpu)`）：
+用例之间没有共享状态（各自 tmp 库 + 各自进程内的事实总线），而每个用例都要起真 app + 真库 ——
+串行是这里唯一的瓶颈。覆盖率照旧判 70% 那道门（pytest-cov 会合并各 worker 的数据）。
 
 约定（与用户确认）：**门禁或审计任一不通过 → 退出码非零 → 不许提交**。
 """
@@ -37,11 +53,13 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import contextlib
 import hashlib
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -106,6 +124,63 @@ NODE_TOOLS = ("ui_dom_probe", "render", "ui_flow")
 INFO_GATES: list[tuple[str, list[str]]] = []
 SUCCESS_HINTS = ("passed", "failed", "error", "PASS", "Success", "checks passed", "OK")
 
+# ---------------------------------------------------------------- 端口段（T-G156 §2.1）
+# 浏览器层的端口段。**默认与历史逐字一致**（render 8531/8532、ui_flow 8541~8544）；
+# 设了 `TF_GATE_PORT_BASE` 才整体平移 —— 于是同一台机器上多棵树各自一段、不再排队等端口：
+#     render   = BASE   / BASE+1
+#     ui_flow  = BASE+10 / +11（第一遍 server/cdp）、BASE+12 / +13（第二遍）
+#     流内自起的"另一台设备"：server+4 / server+6（见 ui_flow_check.mjs ㉒㉘）
+#       → 落在 BASE+10..BASE+18（清遗留时一并认领）
+# ★ 黄金与端口无关（实测 `git grep -l '8531' -- gates/render/` = 0）→ 换端口不该让黄金变。
+DEFAULT_PORT_BASE = 8531
+
+
+def port_base() -> int:
+    """门禁端口段的基准。**不设 `TF_GATE_PORT_BASE` = 8531**（历史默认，逐字不变）。"""
+    raw = os.environ.get("TF_GATE_PORT_BASE", "").strip()
+    if not raw:
+        return DEFAULT_PORT_BASE
+    try:
+        base = int(raw)
+    except ValueError:
+        print(f"[WARN] TF_GATE_PORT_BASE={raw!r} 不是整数 → 退回默认 {DEFAULT_PORT_BASE}",
+              file=sys.stderr, flush=True)
+        return DEFAULT_PORT_BASE
+    if not (1024 <= base <= 65500):
+        print(f"[WARN] TF_GATE_PORT_BASE={base} 越界（要求 1024..65500）→ 退回默认 "
+              f"{DEFAULT_PORT_BASE}", file=sys.stderr, flush=True)
+        return DEFAULT_PORT_BASE
+    return base
+
+
+def gate_port_set(base: int | None = None) -> list[int]:
+    """本树这一段用到的**全部**端口（给"按端口认领"的清理用）：
+    BASE / BASE+1（render）+ BASE+10..BASE+18（ui_flow 两遍 + 流内的对端）。"""
+    b = port_base() if base is None else base
+    return [b, b + 1, *range(b + 10, b + 19)]
+
+
+# ---------------------------------------------------------------- pytest 并发（T-G156 §2.3）
+# 机器 32 逻辑核、总内存只有 15.2 GB —— `-n auto` 会拉起最多 32 个 worker → 换页风险。
+# 读 `TF_PYTEST_WORKERS`；不设时用保守默认 `min(4, cpu)`。★「没装 xdist 就串行」的既有
+# 逻辑（`xdist_available()`）一个字不动。
+DEFAULT_PYTEST_WORKERS = 4
+
+
+def pytest_workers() -> int:
+    """pytest 并行 worker 数：`TF_PYTEST_WORKERS`（不设 → `min(4, cpu)`）。"""
+    raw = os.environ.get("TF_PYTEST_WORKERS", "").strip()
+    if raw:
+        try:
+            n = int(raw)
+        except ValueError:
+            n = 0
+        if n >= 1:
+            return n
+        print(f"[WARN] TF_PYTEST_WORKERS={raw!r} 不合法 → 用保守默认", file=sys.stderr, flush=True)
+    return max(1, min(DEFAULT_PYTEST_WORKERS, os.cpu_count() or 1))
+
+
 # ---------------------------------------------------------------- 复用（T-G47）
 # 每道真机门的**输入**：这些文件一动，判定就可能变 → 必须真跑。
 # 刻意写宽一点（宁可多跑一次，也不要"以为无关"）：`src/**` 一律算输入。
@@ -158,15 +233,24 @@ def dom_probe_cmd() -> list[str] | None:
 
 
 def render_cmd() -> list[str] | None:
-    """渲染验证层：真浏览器采几何清单与黄金比。node 不在就跳过（不谎报通过）。"""
+    """渲染验证层：真浏览器采几何清单与黄金比。node 不在就跳过（不谎报通过）。
+
+    ★ T-G156：把本树端口段的 BASE 透传给 `render_check.mjs --port`（该工具已支持；
+    不设 `TF_GATE_PORT_BASE` 时传的就是历史默认 8531，行为逐字不变）。"""
     node = shutil.which("node")
-    return [node, str(ROOT / "tools" / "render_check.mjs")] if node else None
+    if not node:
+        return None
+    return [node, str(ROOT / "tools" / "render_check.mjs"), "--port", str(port_base())]
 
 
 def ui_flow_cmd() -> list[str] | None:
-    """行为流层（T-G34）：真浏览器真点真按，验功能性的验收项。node 不在就跳过。"""
+    """行为流层（T-G34）：真浏览器真点真按，验功能性的验收项。node 不在就跳过。
+
+    ★ T-G156：透传 `--port BASE+10`（不设变量时 = 8541，历史默认，逐字不变）。"""
     node = shutil.which("node")
-    return [node, str(ROOT / "tools" / "ui_flow_check.mjs")] if node else None
+    if not node:
+        return None
+    return [node, str(ROOT / "tools" / "ui_flow_check.mjs"), "--port", str(port_base() + 10)]
 
 
 # 这三门都是 **node 脚本**：环境里没有 node 就跑不了 —— 统一记 `not_run`（不许静默跳过当通过）。
@@ -186,25 +270,50 @@ def xdist_available() -> bool:
 
 
 def pytest_cmd(serial: bool = False) -> list[str]:
-    """pytest 那条命令：装了 xdist 就 `-n auto` 并行，否则串行。
+    """pytest 那条命令：装了 xdist 就并行，否则串行。
 
     为什么可以并行（T-G7 实测的结论）：每个用例都起**真 app + 真库**（单次 `create_app()` ≈ 190ms、
     `connect + 迁移` ≈ 26ms），757 个用例串行要 3~4 分钟，而**用例之间没有共享状态** ——
     各自 `tmp_path` 一个库、各自进程内的 facts 总线，所以这是"安全的那一类提速"。
     覆盖率不受影响：pytest-cov 会把各 worker 的数据合并后，再判 `--cov-fail-under=70`。
     `--serial` 是给"并行下偶发失败"用的对照跑法（同一条命令、单进程）。
+
+    ★ T-G156：worker 数**不再 `-n auto`**（32 核会拉 32 个 worker，而机器只有 15.2 GB 内存 →
+    换页）。改成读 `TF_PYTEST_WORKERS`，不设时 `min(4, cpu)`（见 `pytest_workers`）。
+    `--serial` / 「没装 xdist 就串行」这两条既有口径一个字不动。
     """
     cmd = [PY, "-m", "pytest"]
     if not serial and xdist_available():
-        cmd += ["-n", "auto"]
+        workers = pytest_workers()
+        if workers > 1:
+            cmd += ["-n", str(workers)]
     return cmd
 
 
-def env() -> dict[str, str]:
-    e = dict(os.environ)
-    shim = str(ROOT / "tools" / "sandbox_shim")
-    e["PYTHONPATH"] = shim + (os.pathsep + e["PYTHONPATH"] if e.get("PYTHONPATH") else "")
+def tree_pythonpath(e: dict[str, str]) -> dict[str, str]:
+    """把**本树 `ROOT/src`** 放到子进程 `PYTHONPATH` 的**首位**（在原地改 `e` 并返回）。
+
+    ★ 为什么（T-G157，真机门验错树的假绿）：本仓是**可编辑安装**（`pip install -e .`）指向
+    **主树**的 `src` —— 在 worktree 里跑门禁时，node 门（`render` / `ui_flow` / `ui_dom_probe`）
+    起的 `serve.py` 与两个 live 检查 `import timeflow` 会解析到**主树的 src**，于是这几道真机门
+    验的是**主树的页面**；黄金又是在这同一个错页面上采的 → **两边一致 → 假绿**，你以为在验自己
+    那棵树。把本树 `src` 塞进 `PYTHONPATH` 首位，子进程（含 node 再 spawn 的 `serve.py`，
+    它继承 `process.env`）就解析到**本树**。
+
+    顺序（**前者优先**）：`<ROOT>/src` → `tools/sandbox_shim` → 原有的 `PYTHONPATH`。
+    `shim` 目录里只有 `sitecustomize.py`（无 `timeflow`），`<ROOT>/src` 里没有 `sitecustomize.py`
+    → 两者互不遮蔽，`site` 仍能扫描到 `shim` 的 `sitecustomize`。
+    ★ 主树里 `ROOT/src` 就是可编辑安装指向的那份 → **行为等价**（前后门数与结论不变）。
+    """
+    parts = [str(ROOT / "src"), str(ROOT / "tools" / "sandbox_shim")]
+    if e.get("PYTHONPATH"):
+        parts.append(e["PYTHONPATH"])
+    e["PYTHONPATH"] = os.pathsep.join(parts)
     return e
+
+
+def env() -> dict[str, str]:
+    return tree_pythonpath(dict(os.environ))
 
 
 def summarize(out: str) -> str:
@@ -240,7 +349,7 @@ def staged_tree() -> str:
     tmp_index = ROOT / ".git" / "dsh_gates_index"
     if tmp_index.exists():
         tmp_index.unlink()
-    env_with_index = dict(os.environ)
+    env_with_index = tree_pythonpath(dict(os.environ))
     env_with_index["GIT_INDEX_FILE"] = str(tmp_index)
     read = subprocess.run(
         ["git", "read-tree", "HEAD"], cwd=ROOT, env=env_with_index,
@@ -308,6 +417,243 @@ def seal() -> int:
     print(f"[封存] gates/last.json tree: {old[:12]} → {payload['tree'][:12]}")
     print("[提示] 现在 `git add gates/last.json && git commit` 后，产物与提交的树会一致")
     return 0
+
+
+# ---------------------------------------------------------------- 开场清遗留（T-G156 §2.2）
+# 病灶③：全量门禁常超工人 CLI 的 10 分钟单次调用上限 → 调用被掐 → 测试服务/无头 Edge 变孤儿
+# → 下一轮撞端口 → 又清又撞。旧清法是**按进程名/特征乱杀**（`serve.py --fresh` 等，不认哪棵树）
+# —— 058 清端口时把 059 正在跑的 render_check 一起杀了（铁律 27）。
+# 现在改成**按端口认领**：只看「本树这一段端口」上的 LISTENING 进程，只掐它们的 PID。
+def _is_listening(port: int) -> bool:
+    """127.0.0.1:<port> 有人在听吗（与 `gate_lock.py` 同一套探法）。"""
+    try:
+        s = socket.socket()
+        s.settimeout(0.2)
+        busy = s.connect_ex(("127.0.0.1", port)) == 0
+        s.close()
+        return busy
+    except OSError:
+        return False
+
+
+def _psutil():
+    """psutil 在就用它（跨平台、能拿命令行）；不在就回退。"""
+    try:
+        import psutil  # type: ignore[import-untyped]
+        return psutil
+    except Exception:
+        return None
+
+
+def _listening_pids(port: int) -> list[int] | None:
+    """监听 <port> 的进程 PID 列表；**查不到 → None**（调用方据此"不动并报原因"，不许瞎杀）。"""
+    ps = _psutil()
+    if ps is not None:
+        pids: set[int] = set()
+        try:
+            for conn in ps.net_connections(kind="tcp"):
+                if (conn.status == ps.CONN_LISTEN and conn.laddr
+                        and int(conn.laddr.port) == port and conn.pid):
+                    pids.add(int(conn.pid))
+            if pids:
+                return sorted(pids)
+        except Exception:
+            pass
+    # 兜底：netstat -ano（Windows 自带）
+    try:
+        proc = subprocess.run(["netstat", "-ano"], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", check=False)
+    except OSError:
+        return None
+    pids = set()
+    for line in (proc.stdout or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[3].upper() == "LISTENING":
+            tail = parts[1].rsplit(":", 1)[-1]
+            if tail.isdigit() and int(tail) == port:
+                with contextlib.suppress(ValueError):
+                    pids.add(int(parts[4]))
+    return sorted(pids) if pids else None
+
+
+def _pid_cwd(pid: int) -> str | None:
+    """进程工作目录（规范化）；拿不到 → None。**这是"是不是本树"的硬判据**：
+    本树起的 `serve.py` / node / 无头浏览器，cwd 都是本仓库根（`start_gate` 用 `cwd=ROOT`
+    起 node，node 再 `spawn` 子进程时继承）。★ 拿不到就**不杀**（拒绝优于跨树误杀）。"""
+    ps = _psutil()
+    if ps is None:
+        return None
+    try:
+        cwd = ps.Process(pid).cwd()
+    except Exception:
+        return None
+    if not cwd:
+        return None
+    try:
+        return os.path.normcase(str(Path(cwd).resolve()))
+    except OSError:
+        return None
+
+
+def _is_our_tree(pid: int, depth: int = 4) -> bool:
+    """本进程（或其至多 `depth` 代祖先）的 cwd 是不是**本仓库根**。
+
+    ★ 这一条是本卡的关键加固，来由是一次**真事故**（2026-09-27，见复盘）：默认端口段是
+    **多棵树共用**的，只按端口认领会在默认模式下**跨树误杀**（把另一棵树正在跑的
+    render/ui_flow 一起掐了，日志是 node 的「unsettled top-level await」+ 退 13）。
+    加上"cwd = 本树根"这条树判据后：别人的树 cwd 不同 → **天然不碰**。"""
+    ps = _psutil()
+    if ps is None:
+        return False
+    target = os.path.normcase(str(ROOT.resolve()))
+    cur = pid
+    seen: set[int] = set()
+    for _ in range(depth + 1):
+        if cur in seen or cur <= 0:
+            break
+        seen.add(cur)
+        if _pid_cwd(cur) == target:
+            return True
+        try:
+            cur = ps.Process(cur).ppid()
+        except Exception:
+            break
+    return False
+
+
+def _cmdline_of(pid: int) -> str:
+    """进程命令行（拿不到 → 空串）。只用于**打印留痕**，不做杀/不杀判据。"""
+    ps = _psutil()
+    if ps is not None:
+        try:
+            return " ".join(ps.Process(pid).cmdline())
+        except Exception:
+            return ""
+    return ""
+
+
+def _kill_pid(pid: int) -> tuple[bool, str]:
+    """**按 PID 单掐**（绝不用 `/T` 整树、绝不按进程名）。返回 (成功?, 说明)。"""
+    ps = _psutil()
+    if ps is not None:
+        try:
+            ps.Process(pid).kill()
+            return True, "psutil.kill"
+        except Exception as exc:
+            return False, f"psutil:{type(exc).__name__}"
+    try:
+        r = subprocess.run(["taskkill", "/PID", str(pid), "/F"],
+                           capture_output=True, text=True, check=False)
+        return r.returncode == 0, f"taskkill rc={r.returncode}"
+    except OSError as exc:
+        return False, f"{type(exc).__name__}"
+
+
+# 浏览器可执行名（只作**正向身份过滤**，好把"命令行里恰好含端口字样的外壳进程"排掉；
+# 杀/不杀的判据仍是端口认领，**不是**按名字乱杀 —— 见卡 §2.2 与铁律 27）。
+_BROWSER_IMAGE_HINTS = (
+    "msedge", "microsoft-edge", "chrome", "chromium", "headless_shell", "headless-shell",
+)
+
+
+def _is_orphan_browser(image_name: str, cmdline: str, ports: list[int]) -> str | None:
+    """纯判据（便于单测）：是"绑在本段端口上的无头浏览器"就返回原因，否则 None。
+
+    条件 = ①镜像名像浏览器（正向身份过滤）**且** ②命令行里带本段端口的两种令牌之一：
+    `--remote-debugging-port=<本段端口>` 或 profile 目录名 `tf-flow-profile-<端口>` /
+    `tf-render-profile-<端口>`。★ 两条都必须挂在**本段端口**上 —— 别的 BASE 段天然不匹配。"""
+    name = (image_name or "").lower()
+    if not any(hint in name for hint in _BROWSER_IMAGE_HINTS):
+        return None
+    if not cmdline:
+        return None
+    for p in ports:
+        if f"--remote-debugging-port={p}" in cmdline:
+            return f"命令行含 --remote-debugging-port={p}"
+    for p in ports:
+        for pat in (f"tf-flow-profile-{p}", f"tf-render-profile-{p}"):
+            if pat in cmdline:
+                return f"命令行含 {pat}"
+    return None
+
+
+def _orphan_browser_pids(ports: list[int], exclude: set[int]) -> dict[int, str]:
+    """**按端口/profile 目录认领**的无头浏览器（那正是"属于这段端口"的判据）。
+    ★ 绝不用"名字带 tf-flow-profile 就杀"（会跨树误杀）。判据见 `_is_orphan_browser`。"""
+    ps = _psutil()
+    if ps is None:
+        return {}
+    hits: dict[int, str] = {}
+    for proc in ps.process_iter(["pid", "name", "cmdline"]):
+        try:
+            pid = int(proc.info["pid"])
+            if pid in exclude:
+                continue
+            why = _is_orphan_browser(
+                str(proc.info.get("name") or ""),
+                " ".join(proc.info.get("cmdline") or []),
+                ports,
+            )
+            if why:
+                hits[pid] = why
+        except Exception:
+            continue
+    return hits
+
+
+def cleanup_leftovers() -> None:
+    """开场清**本树端口段**上的遗留（幂等 + 有读数，清不掉打印原因，不许静默）。
+
+    ★ 两条判据**同时**成立才掐：① 端口落在本树段 `gate_port_set()`（默认 = 8531..8549）；
+    ② 该进程（或近祖先）的 cwd = **本仓库根**（`_is_our_tree`）。别的 BASE 段在别的端口、
+    别的树的 cwd 也不同 → 两条都天然不碰（这才是"非本树的服务不许动"的真判据）。
+    ★ 本卡实现里**没有**任何"按 `serve.py --fresh` 匹配就杀"的写法（铁律 27）。"""
+    base = port_base()
+    ports = gate_port_set(base)
+    print(f"=== ⑨ 开场清遗留（端口段 + 本树 cwd 双判据；BASE={base}：{ports[0]}..{ports[-1]}）===",
+          flush=True)
+    busy = {p: _listening_pids(p) for p in ports if _is_listening(p)}
+    if not busy:
+        print(f"  [清遗留] 本树端口段本来就空着（{len(ports)} 个端口都没人听）", flush=True)
+    killed: list[str] = []
+    untouched: list[str] = []
+    for port in sorted(busy):
+        pids = busy[port]
+        if not pids:
+            untouched.append(f"{port} 在听但查不到持有进程（psutil/netstat 都没给出 PID）")
+            continue
+        for pid in pids:
+            cmd = _cmdline_of(pid)
+            note = f"pid={pid}@{port} cmd={cmd[:100]!r}"
+            if not _is_our_tree(pid):
+                untouched.append(note + " [不是本树（cwd 不符/查不到）→ 不动]")
+                continue
+            ok, why = _kill_pid(pid)
+            if ok:
+                killed.append(note + " [已掐]")
+            else:
+                untouched.append(note + f" [掐不掉:{why}]")
+    # 无头 Edge：按端口/profile 认领（排除刚掐掉的 serve PID）+ 本树 cwd 双判据
+    exclude = {pid for pids in busy.values() if pids for pid in pids}
+    edge_hits = _orphan_browser_pids(ports, exclude)
+    edge_killed: list[str] = []
+    for pid, why in edge_hits.items():
+        if not _is_our_tree(pid):
+            untouched.append(f"pid={pid}（{why}）[不是本树 → 不动]")
+            continue
+        ok, kwhy = _kill_pid(pid)
+        if ok:
+            edge_killed.append(f"pid={pid}（{why}）")
+        else:
+            untouched.append(f"pid={pid}（{why}）掐不掉:{kwhy}")
+    print(f"  [清遗留] 本树 serve/进程：掐了 {len(killed)} 个"
+          + ("：" + "；".join(killed) if killed else ""), flush=True)
+    print(f"  [清遗留] 本树无头浏览器：掐了 {len(edge_killed)} 个"
+          + ("：" + "；".join(edge_killed) if edge_killed else ""), flush=True)
+    if untouched:
+        print("  [清遗留] ★ 没动的（不静默）：" + "；".join(untouched), flush=True)
+    print("  [清遗留] 判据：端口段 ∩ cwd=本树根 —— 别的树/别的 BASE 段两条都不同，天然不碰。",
+          flush=True)
 
 
 # ---------------------------------------------------------------- 跑一道门
@@ -468,10 +814,20 @@ def main() -> int:
         print("\nTOML 有问题，门禁**没有跑** —— 先修上面那一行，再跑一次。")
         return 2
 
+    # ★ T-G157：开跑先印出**验的是哪棵树** —— 本树 `src` 是子进程 PYTHONPATH 的首位。
+    print(f"=== 本树 src = {ROOT / 'src'}（子进程 PYTHONPATH 首位，T-G157）===", flush=True)
+
+    # ★ ⑨ T-G156：全量门禁开场先清**本树端口段**上的遗留（孤儿服务/无头 Edge）。
+    #   只在**会用到端口**的档位跑（全量 = 含浏览器层）；`--quick` / `--fast` 不起真机服务，
+    #   清了没意义还可能误伤，所以那两档不碰（`--fast` 更不写盘）。
+    if not args.fast and not args.quick:
+        cleanup_leftovers()
+
     if args.serial:
         mode = "串行（--serial）"
     elif xdist_available():
-        mode = "并行（pytest-xdist，-n auto）"
+        w = pytest_workers()
+        mode = f"并行（pytest-xdist，-n {w}）" if w > 1 else "串行（TF_PYTEST_WORKERS=1）"
     else:
         mode = "串行（环境里没装 pytest-xdist）"
     if not args.fast:

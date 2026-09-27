@@ -492,6 +492,44 @@ flow({
 })
 
 flow({
+  id: '㉙', name: '左栏智能视图收进设置：默认不在左栏，开了回左栏且一点直达',
+  item: '用户 2026-09-27：重要/有计划/已标记收进设置开关（T-G154）',
+  vp: 'desktop',
+  async run(t) {
+    await t.start('today')
+    // 默认收起：markup 还在（静态断言钉着），但运行时是 hidden —— 左栏只留主视图
+    t.eq('默认左栏看不到「重要」', (await t.geom('.rail nav button[data-view="important"]')).display, 'none')
+    t.eq('默认左栏这三项一个都没露（hidden）',
+      await t.count('.rail nav button[data-view="important"]:not([hidden]), .rail nav button[data-view="planned"]:not([hidden]), .rail nav button[data-view="flagged"]:not([hidden])'), 0)
+    t.eq('主视图还在（左栏不是空的）', await t.count('.rail nav button[data-view="today"]:not([hidden])'), 1)
+
+    // 打开开关（设置页「外观」里那一颗）
+    await t.view('setting')
+    await t.openSetting('set-appearance')
+    await t.pressAction('left-rail-smart')
+    t.eq('开关打开后这三项回到左栏',
+      await t.count('.rail nav button[data-view="important"]:not([hidden]), .rail nav button[data-view="planned"]:not([hidden]), .rail nav button[data-view="flagged"]:not([hidden])'), 3)
+    t.eq('选择记在本机（tf_rail_direct=on）', await t.ls('tf_rail_direct'), 'on')
+
+    // 一点直达：点左栏那颗「重要」直接进筛选视图
+    await t.press('.rail nav button[data-view="important"]', '左栏「重要」')
+    t.has('点左栏「重要」直达筛选视图', await t.text('#main'), '重要（')
+
+    // 刷新后保持
+    await t.reload()
+    t.eq('刷新后这三项仍在左栏', await t.count('.rail nav button[data-view="important"]:not([hidden])'), 1)
+    t.eq('刷新后本机状态也对', await t.ls('tf_rail_direct'), 'on')
+
+    // 再关回去：左栏又只剩主视图
+    await t.view('setting')
+    await t.openSetting('set-appearance')
+    await t.pressAction('left-rail-smart')
+    t.eq('再点一次能收回去', await t.count('.rail nav button[data-view="important"]:not([hidden])'), 0)
+    t.eq('状态也回到 off', await t.ls('tf_rail_direct'), 'off')
+  },
+})
+
+flow({
   id: '⑨', name: '专注白名单/勿扰：能加能删，非法时段被后端拦下并原话透传',
   item: '前端批次③ ⑨ 设置页「专注（白名单/勿扰）」增删条',
   vp: 'desktop',

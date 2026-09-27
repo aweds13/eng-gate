@@ -107,7 +107,7 @@ def _usage() -> str:
         "timeflow —— 本地优先的时间与学习投入工具",
         "",
         "  timeflow                          开窗口（默认）",
-        "  timeflow <命令> [--json]          命令（不起服务、不占端口）",
+        "  timeflow <命令> [--json]          命令",
         "  timeflow mcp [--allow-write]      把同一批命令作为 MCP 工具给 AI 客户端（stdio）",
         "  timeflow commands                 我有哪些命令",
         "  timeflow commands --table         整张契约命令表（含 kind / 可逆 / AI 边界）",
@@ -115,7 +115,7 @@ def _usage() -> str:
         "只读命令：",
     ]
     lines += [f"  timeflow {c.name:<12} {c.title}" for c in registry.COMMANDS]
-    lines += ["", "写命令（默认关：每条都要加 " + WRITE_FLAG + "）："]
+    lines += ["", "写命令（默认关）："]
     lines += [f"  timeflow {c.name:<12} {c.title}" for c in registry.WRITE_COMMANDS]
     lines += [
         "",

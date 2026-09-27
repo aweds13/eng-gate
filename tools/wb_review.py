@@ -18,6 +18,10 @@ r"""主控复核器（外包链路的第 ④ 步）：一条命令把"这一笔�
   ⑤ **工作区干不干净**：复核时 `git status --porcelain -uno` 必须空
      （工人不许留没提交的改动）。
 
+★ 另有一条**分支判据**（T-G158）分三态：附着且 = `--branch` 不报 / 附着但不匹配仍报 /
+**分离头指针（detached HEAD）跳过并如实记一行** —— 外包链路的每张卡都在 detached worktree 里
+干活，老判据那一条**永远**为假（见 `check_branch()`）。
+
 用法：
     python -X utf8 tools/wb_review.py --rev HEAD --read-only
     python -X utf8 tools/wb_review.py --rev HEAD --allow "src/**" --allow "tests/**"
@@ -41,6 +45,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TASK_RE = re.compile(r"^Task:\s*(\S+)\s*$", re.M)
+#: 期望分支的默认值（就是集成分支）。`check_branch()` 的 detached 跳过只对它生效（T-G158）。
+DEFAULT_BRANCH = "line/impl-v1"
 
 
 def git(*args: str) -> str:
@@ -92,6 +98,40 @@ def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
     return problems
 
 
+def check_branch(branch: str, expected: str) -> tuple[list[str], str]:
+    """分支判据分**三态** —— 返回 `(problems, 如实信息行)`。
+
+    ★ 为什么是三态（T-G158）：`git rev-parse --abbrev-ref HEAD` 在**分离头指针**
+    （detached HEAD）下返回的就是**字面量** `"HEAD"`，而外包链路的每张卡都在
+    `.wt/<卡>` 的 detached worktree 里干活（卡规格明令"不许切分支"）—— 老判据拿它
+    跟 `--branch` 默认值（`line/impl-v1`）比，**必然**报「分支不对」，把干净的提交
+    判成 4/5 不过。代价不是"多一条噪音"：**复核器（防漏活的工具）自己在说假话，
+    说假话的次数一多，人就学会无视它，那它就废了**。
+
+      ① 附着分支且 = `expected`  → **不报**（保持原样）
+      ② 附着分支但 ≠ `expected`  → **必须仍报**「分支不对」（★ 判据不许一起废掉）
+      ③ detached（`"HEAD"`）且 `expected` 是**默认分支** → **跳过** + 如实记一行
+
+    ★ 口径：detached 时**没有分支可比**，所以**跳过**是对的；**不许**把它当成
+    「通过了一个分支检查」。信息行进 `--json`（`branch_note` 字段），机器也读得到。
+
+    ## 为什么不是无条件的跳过（卡内两处口径的对齐）
+
+    卡 §2.1 第三行写"detached → 不报「分支不对」"，而卡 §5 的反证 C 要求**在本树
+    （detached）里** `--branch main` **仍报**「分支不对」（原话："这是本卡的核心：
+    别把有用的判据一起废掉"）。两条要同时成立，只可能是：**跳过只针对"期望 = 默认
+    分支"这个假阳性**（每张外包卡都撞到的那一下）；一旦显式指定了**别的**期望分支
+    （`--branch main`），那就是一条**真要求** —— detached 的树**确实不是** `main`，
+    照报。否则在 detached 树里这条判据等于被删掉，反证 C 就永远失败。
+    `--branch HEAD` 两种读法下都过（`"HEAD" == "HEAD"`），与卡 §7 第 3 条一致。
+    """
+    if branch == "HEAD" and expected == DEFAULT_BRANCH:
+        return [], "分离头指针（detached HEAD）→ 跳过分支判据（没有分支可比，不等于通过了分支检查）"
+    if branch != expected:
+        return [f"分支不对：现在在 {branch!r}，期望 {expected!r}"], ""
+    return [], ""
+
+
 def check_files(files: list[str], *, read_only: bool, allow: list[str]) -> list[str]:
     """④ 改动越界没有：只读卡 = 一个被跟踪文件都不许改；否则按白名单。"""
     if read_only:
@@ -124,7 +164,7 @@ def main() -> int:
     parser.add_argument("--rev", default="HEAD", help="要复核的提交（默认 HEAD）")
     parser.add_argument("--read-only", action="store_true", help="只读卡：一个被跟踪文件都不许改")
     parser.add_argument("--allow", action="append", default=[], help="允许改动的 glob（可重复）")
-    parser.add_argument("--branch", default="line/impl-v1", help="期望所在分支")
+    parser.add_argument("--branch", default=DEFAULT_BRANCH, help="期望所在分支")
     parser.add_argument("--dirty-ok", action="store_true", help="允许工作区有未提交改动")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -151,13 +191,13 @@ def main() -> int:
         problems.append("这一笔里没有 gates/last.json（门禁产物没跟着提交）")
     problems += check_gate_evidence(payload, parent)
     problems += check_files(files, read_only=args.read_only, allow=args.allow)
-    if branch != args.branch:
-        problems.append(f"分支不对：现在在 {branch!r}，期望 {args.branch!r}")
+    branch_problems, branch_note = check_branch(branch, args.branch)
+    problems += branch_problems
     if dirty and not args.dirty_ok:
         problems.append(f"工作区有没提交的改动（{len(dirty)} 个）：{dirty[:5]}")
 
     verdict = {
-        "rev": sha, "parent": parent, "branch": branch,
+        "rev": sha, "parent": parent, "branch": branch, "branch_note": branch_note,
         "files": files, "trailers": trailers, "audit": audit_line,
         "gates_ok": payload.get("ok"), "gates_rev": payload.get("rev"),
         "problems": problems,
@@ -167,6 +207,8 @@ def main() -> int:
         return 0 if not problems else 1
 
     print(f"=== 复核 {sha}（父提交 {parent}，分支 {branch}）===")
+    if branch_note:
+        print(f"  ★ 分支判据：{branch_note}")
     print(f"  ① audit：{audit_line}")
     print(f"  ② trailer：{trailers.get('Task', '(缺)')}")
     print(f"  ③ 门禁：ok={payload.get('ok')} rev={payload.get('rev')}"
