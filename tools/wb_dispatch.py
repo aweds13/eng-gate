@@ -19,6 +19,7 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
     # 已经没有 deepseek-v3-2-volc 了 —— 默认模型是 hy4-preview，实测 JSON 里回的是 hy4-preview-f）
     # --cli 覆盖 CLI 入口；--permission-mode 默认 bypassPermissions（见下）
     # --no-preflight 跳过登录自检（省 10 秒，接口不改）
+    # ★ T-G173（卡 078）：--lean 改读 ≤6KB 开工切片 brief-<卡>.md（默认关，行为不变）
 
 ★ 2026-09-26 实测两条（都写进 复盘/外包-卡表与规矩.md §10）：
   · **CLI 入口优先独立安装的那份**（`%APPDATA%` 下 npm 装的 `@tencent-ai/codebuddy-code`）——
@@ -183,6 +184,24 @@ OPENING = (
     "规格与本句冲突时，按规格执行。干完按规格要求回报。卡号 {card}。"
 )
 
+# ★ T-G173（卡 078）：--lean 的开场白 —— 不拼那四份文档，改读 ≤6KB 开工切片（wb_brief 生成）。
+LEAN_OPENING = (
+    "读 {brief}（开工切片：现状现算 + 最新 CHECKPOINT + 本卡引用到的规矩 + 白名单/禁区 + 固定坑页）"
+    " + {spec}（这一张卡的规格）。你有完整 CLI、工具链与主控相同。"
+    "★ **以卡规格为准**：它写了这一轮能改哪些文件、能不能提交、要不要跑全量门禁、禁区是什么；"
+    "规格与本句冲突时，按规格执行。干完按规格要求回报。卡号 {card}。"
+)
+
+
+def ensure_lean_brief(card: str) -> str:
+    """--lean：切片缺了就**现生成**（tools/wb_brief.py --card <卡>）；返回仓库根相对路径。"""
+    rel = f"gates/diag/brief-{card}.md"
+    if not (ROOT / rel).exists():
+        subprocess.run([sys.executable, "-X", "utf8", "tools/wb_brief.py", "--card", card],
+                       cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", **NO_WINDOW)
+    return rel
+
 
 def paths(cli_override: str | None = None) -> tuple[Path, Path]:
     """（内置 node, CLI 入口）—— 默认优先独立安装的那份，找不到才退回 WorkBuddy 自带的。"""
@@ -250,9 +269,12 @@ def auth_ok(node: Path, cli: Path, timeout: int = 180) -> tuple[bool, str]:
 def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
                   permission_mode: str = DEFAULT_PERMISSION_MODE, *,
                   max_turns: int = DEFAULT_MAX_TURNS_WRITE,
-                  autocompact: str = DEFAULT_AUTOCOMPACT) -> list[str]:
+                  autocompact: str = DEFAULT_AUTOCOMPACT,
+                  lean: bool = False, brief: str = "") -> list[str]:
+    prompt = (LEAN_OPENING.format(brief=brief, spec=spec, card=card) if lean
+              else OPENING.format(spec=spec, card=card))
     return [
-        str(node), str(cli), "-p", OPENING.format(spec=spec, card=card),
+        str(node), str(cli), "-p", prompt,
         "--model", model, "--output-format", "stream-json",
         "--permission-mode", permission_mode,
         # ① 回合上限：撞到了 CLI 会自己停（退出码仍是 0，所以跑完还要判"没做完"）
@@ -1453,6 +1475,8 @@ def main() -> int:
                         help="真派活（默认只做前置检查 + 打印命令）")
     parser.add_argument("--force", action="store_true", help="允许覆盖已有 log")
     parser.add_argument("--no-preflight", action="store_true", help="跳过登录自检")
+    parser.add_argument("--lean", action="store_true",
+                        help="改读 ≤6KB 开工切片 gates/diag/brief-<卡>.md（不拼那四份大文档）")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT,
                         help=f"工人最长跑多久（秒，默认 {DEFAULT_TIMEOUT}）；"
                              "★ 超时不是失败，是『掐掉再续跑』的信号")
@@ -1552,8 +1576,10 @@ def main() -> int:
 
     node, cli = paths(args.cli)
     max_turns = args.max_turns or max_turns_default(args.read_only)
+    lean_brief = ensure_lean_brief(args.card) if args.lean else ""
     initial_cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode,
-                                max_turns=max_turns, autocompact=args.autocompact)
+                                max_turns=max_turns, autocompact=args.autocompact,
+                                lean=args.lean, brief=lean_brief)
 
     done_checks = "规格在 / 工作区干净（续跑则核对后放行）/ log 未占用"
     if args.no_preflight:
@@ -1602,7 +1628,8 @@ def main() -> int:
         log_k = log if attempts == 1 else log.with_name(f"wb-{args.card}.r{attempts}.jsonl")
         if attempts == 1 and not sid:
             cmd = build_command(node, cli, args.card, args.spec, model, args.permission_mode,
-                                max_turns=max_turns, autocompact=args.autocompact)
+                                max_turns=max_turns, autocompact=args.autocompact,
+                                lean=args.lean, brief=lean_brief)
         elif sid:
             prompt = continuation_prompt(reason=reason or "上次被中断", scene=scene,
                                          card=args.card)
@@ -1614,7 +1641,8 @@ def main() -> int:
         else:
             print("[续 ] 没拿到 session id，续不了 → 只能重开一轮", file=sys.stderr, flush=True)
             cmd = build_command(node, cli, args.card, args.spec, model, args.permission_mode,
-                                max_turns=max_turns, autocompact=args.autocompact)
+                                max_turns=max_turns, autocompact=args.autocompact,
+                                lean=args.lean, brief=lean_brief)
         print(f"[跑 ] 第 {attempts} 次；log {log_k.name}", flush=True)
         attempt_started = time.time()
         code, reason, scene, new_sid = run_worker(

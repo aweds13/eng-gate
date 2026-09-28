@@ -4657,3 +4657,18 @@ evidence = [
   "file:复盘/Trae池适配器-T-G172.md",
 ]
 gaps = "**实测读数**：node --check 退出码 0（371 行）；冒烟（提示词「只回两个字：在吗」）DONE sec=15 turns=5、balance 4,544->4,544、退出码 0；--out 为最后一条 agent 轮次（Agent/思考过程/在吗/10%）；log 10 行（connect/balance/send/poll×5/balance/done）、approve 0 次；balance 子命令打印 4,544 退出码 0；本卡约耗 1 个积分（4,545->4,544，三条「只回两个字：在吗」未扣分）。**两处与卡原文不一致（如实记）**：① 卡 §1.5 的 done=/任务耗时/ 在「纯文字回复」轮次里不出现（实测首趟白等 300 秒超时退出码 3），而「有工具调用」的轮次里出现（任务耗时 3m 17s）→ 现场补判据「发送键 sendDisabled 连续 2 拍 + 非 busy」；② 最后一条 .turn__agent-message 的 innerText 会混进无 data-item-type 的 container-* chrome（回显旧用户话 / 建议块）→ 取「有 data-item-type 或含 .markdown-renderer 的直接子块」拼接，保留工具输出且去脏。**两套授权文案**：路径授权 + git commit 高风险命令，判据取并集且排除拒绝/取消。**完成判据为什么只看最后一条 agent 轮次**：看整段尾部会被上一轮的「完成。」骗（探测结论 §5.2 主控实测）。**零新依赖**：只用 Node 22 内建 WebSocket/fetch/child_process。**没动派活器** wb_dispatch.py。**没动什么**：src/scripts/其余 tools/tests/docs 除白名单外零改动，gates/diag 除自测临时证据（本目录 git 忽略）未动，.wt 别的树/主树外来文件/data/真实库未碰。**未实测边界**：自动点授权未在「真跨界」场景验（本次冒烟全在工作区内 approve=0）；拉起 IDE 的 detached 子进程在父被 kill 时会连坐（探测结论 §9.1）。"
+
+
+[entries."T-G173"]
+id = "T-G173"
+title = "轻量化通道：开工切片 wb_brief（≤6KB）+ 一屏核实 wb_verify + 一屏现状 wb_state + 派活器 --lean"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tools/wb_brief.py",
+  "file:tools/wb_verify.py",
+  "file:tools/wb_state.py",
+  "file:复盘/口径坑.md",
+  "file:复盘/轻量化通道-T-G173.md",
+]
+gaps = "**实测读数**：① 三件工具各跑一次 —— wb_brief --card 078 → gates/diag/brief-078.md 5956 字节（≤6KB 硬上限 6144，五节齐全）；wb_brief --master → brief-主控.md 3479 字节；wb_state → 14 行（≤30）；wb_verify 干净树 --tree . 退出码 0（SUMMARY FAIL=0 OK=5），故意给错 --expect-parent deadbeef 退出码 1（SUMMARY FAIL=1 OK=4），带 7 条 --allow 在 150de81 上退出码 0（FAIL=0 OK=7）。② 省了多少：四份强制读文档合计 693KB ≈ 222K tokens → 切片 5.8KB，约 0.84%；按 tokens≈字节÷3.1 折算，每张卡省 ≈ 219K tokens（估算依据，非实测分词）。③ --lean 不改变默认行为：python -X utf8 tools/wb_dispatch.py --help 含 --lean；默认 -p 含四份文档名、不含 brief-078.md，--lean 的 -p 含 brief-078.md、不含四份文档名，除 -p 外其余参数逐字相同（d[4:]==l[4:]）；tests/test_wb_dispatch.py 全过。④ ★ 一处与卡原文偏差（如实记）：卡 §1.1 写「取最后一段 CHECKPOINT」，但交接文档是新→旧排列（最新那段在第 5 行），取字面最后一段会取到最旧的 2026-09-26 那段；本实现按日期最大取（= 卡 §0 明写的「只取最新那一段」），并列时取出现靠前的。⑤ 另固化复盘/口径坑.md 八条判据 + 外包-卡表与规矩.md 末尾追加 §24.12。⑥ **没动什么**：src/ scripts/ 其余 tools/ tests/ docs/（除台账那块与 changelog 一段）零改动；gates/diag/** 既有文件、.wt 别的树、主树外来未跟踪文件、data/ 一律未碰。"
