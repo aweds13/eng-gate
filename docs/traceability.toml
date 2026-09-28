@@ -4684,3 +4684,17 @@ evidence = [
   "file:复盘/人工验收清单G组-T-G174.md",
 ]
 gaps = "**背景**：卡 073（T-G167）在 F 组明写「正在别的树上飞的（左栏三项自由选择 / 离线记挪位 / 暗色适配 / 打卡分钟）一个都没写进来 —— 落地后再补」；那三张卡（T-G162 068 / T-G163 069 / T-G164 070）已集成到主树 HEAD，本卡照同一四要素补成 G 组 5 条（G-1 左栏三项各自独立 / G-2 离线记移出 PC 左栏 / G-3 暗色适配四屏 / G-4 打卡可选分钟 / G-5 那句废话已删），表头与列逐字照 F 组，并给 F 组开头那句追加日期注（原句一字未动）。**只加不删读数**：git diff --numstat 764a316 -- docs/人工验收-照着点.md → 19 加 / 0 删（卡 §3.2 要求删除 0 或 ≤2）。**存在性 grep 证据（现跑，绑定 764a316）**：G-1 src/web/index.html:3317 设置→外观「左栏智能视图」、:3319 状态跟在名字后（在左栏/不在左栏）、:4086 默认三项全关（railViews 全 false）；G-2 index.html:32「离线记」不在 PC 左栏（T-G162）、:3302/:3537 电脑入口在 设置→数据与同步「手机离线记」；G-3 app.css:163 color-scheme:dark、:169 [data-theme=dark] .textarea 暗色覆盖（T-G163）；G-4 index.html:2734 placeholder「投入分钟（可选）」、:2760 ?invest_minutes=N。**G-5 零命中**：git grep -n '去「今日手动投入」补记' -- src/ 退出码 1；git grep -c '习惯打卡只记次数' -- src/ 退出码 1。★ 偏差如实记：卡原话「全库 grep 习惯打卡只记次数 → 零命中」逐字跑全库不为零——命中在变更记录文档（changelog / traceability / 交接 / T-G164 复盘 / 本卡清单自身引用该检索词），界面源码 src/ 内为零，按界面口径成立（与 T-G164 复盘写法一致）。**没动什么**：既有 A–F 组句子与条目一字未改；src/ scripts/ tools/ tests/ 其余 docs/ 复盘/ gates/diag/ .wt 别的树/主树外来未跟踪文件/data/ 全未碰；附录对账未重算。**门禁**：17 门 + ok=True + rev=父提交 + seal + 提交后 audit，以 gates/last.json 为准。"
+
+
+[entries."T-G175"]
+id = "T-G175"
+title = "暗色护栏自证：改坏必红的常驻实证（静态层 + 活体层，只读可复现）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tools/contrast_audit.py",
+  "file:tools/dark_probe.mjs",
+  "file:tests/test_dark_teeth.py",
+  "file:复盘/暗色护栏自证-T-G175.md",
+]
+gaps = "五条自证的命令/退出码/首条红行见 复盘/暗色护栏自证-T-G175.md §一。①基线：真 app.css 暗色零欠账；②对比度变异：暗色 --ink←暗色 --bg → python -X utf8 tools/contrast_audit.py --css <副本> --strict 退 1，首条红行『1.0 4.5 [FAIL] --ink on body 继承色 / 页面底』；③令牌缺失：删暗色 --panel-2 → 退 1，首条红行『1.05 4.5 [FAIL] --ink on 浅底上的正文（热力图空格外 等）』；④整块消失：删整个暗色块 → token_blocks SystemExit（退 1，非绿）；⑤自证不动仓库：跑前跑后 sha256(src/web/app.css)=63bb5f49… 一致、git status 只多本卡白名单文件。★ 抓不到的格（5 条）：A 暗色令牌存在性层（tests/test_web_frontend.py:77-80）取暗色块的 split 撞上文件头注释、切到亮色 :root 块，清空暗色块仍绿（本卡不改它，在白名单之外）；B 门禁级 web_live（tools/web_live_check.py:876）只断选择器字符串在不在；C 门禁级 ui_flow 流㉚（tools/ui_flow_check.mjs:540-631）会抓但本卡禁区不许改 src，无法常驻复现；D 删装饰类暗色令牌（如 --border）无人抓；E 清空暗色块（保留选择器）无人抓（并推翻卡里『删整块仍绿』的预判）。★ 默认行为不变：改前改后 python -X utf8 tools/contrast_audit.py --strict 输出逐字节一致（diff 退 0、均退 0）。★ 没动 src：sha256(src/web/app.css)=63bb5f4987d25f43645ed7d8b3a394492c287c0bca7edbbcc5284158b525e207。"

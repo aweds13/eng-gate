@@ -58,6 +58,11 @@
   python -X utf8 tools/contrast_audit.py --json     # 机器读
   python -X utf8 tools/contrast_audit.py --check    # 门禁用：有新欠账/变差就退 1
   python -X utf8 tools/contrast_audit.py --strict   # 收紧后：任何不达标都退 1
+  python -X utf8 tools/contrast_audit.py --css <路径> --strict  # T-G175：指向**临时变异副本**
+                                                    # 做「改坏必红」自证；不传 = 默认 app.css
+
+★ T-G175 加的 `--css`：默认值**逐字不变**（门禁 `contrast` 不传它），只为让只读的人也能拿
+  一份**变异副本**跑同一套判据 —— 否则要证「改坏会红」就只能改真文件，而那正是复核者被禁令挡住的事。
 """
 
 from __future__ import annotations
@@ -708,9 +713,15 @@ def main() -> int:
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--check", action="store_true", help="有新欠账 / 比登记值更差 → 退出码 1")
     ap.add_argument("--strict", action="store_true", help="任何不达标都退 1（登记表清空后才可用）")
+    ap.add_argument(
+        "--css",
+        default=None,
+        help="覆盖令牌来源（默认 src/web/app.css）；T-G175：指向临时变异副本做「改坏必红」自证",
+    )
     args = ap.parse_args()
 
-    css = CSS.read_text(encoding="utf-8")
+    css_path = Path(args.css) if args.css else CSS  # 默认逐字不变：不传就是 CSS 常量
+    css = css_path.read_text(encoding="utf-8")
     tokens = token_blocks(css)
     known = load_baseline()
     pairs = dedupe(declared_pairs() + badge_pairs(css) + state_pairs(css))

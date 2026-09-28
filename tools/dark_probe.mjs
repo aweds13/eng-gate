@@ -22,6 +22,14 @@
  *     node tools/dark_probe.mjs                            # 默认 habit,planned,review
  *     node tools/dark_probe.mjs --view habit,planned,review
  *     node tools/dark_probe.mjs --view today --port 8961   # 调试：换视图 / 端口
+ *     node tools/dark_probe.mjs --view habit --mutate --ink=#0b1220   # T-G175：运行期注入证红
+ *
+ * ★ T-G175 加的 `--mutate <令牌>=<值>`（可重复）：在**运行期**用
+ *   `document.documentElement.style.setProperty(...)` 覆盖令牌，**绝不写文件** ——
+ *   让判据 A/B 当场证红（「有人把暗色改坏 → 活体这层也能照出来」）。
+ *   注入发生在**探针自检之后**（所以「切暗色 `--bg` 必变」的自检不受影响），
+ *   且**只在暗色那一遍注入** —— 模拟的正是「暗色被改坏、亮色没动」：
+ *     亮/暗读数因此**分叉**，判据 A（暗值 == 亮值）与判据 B（暗色下对比度不足）都能被触发。
  *
  * 退出码：0 打印完成（有没有命中都算探针正常收工——它是诊断工具，不是门）/
  *         1 起不来（服务 / fixture / 浏览器）/
@@ -39,13 +47,14 @@ import {
 /* ---------------------------------------------------------------- 参数 */
 
 function parseArgs(argv) {
-  const a = { view: 'habit,planned,review', port: 8961, keep: false, json: false }
+  const a = { view: 'habit,planned,review', port: 8961, keep: false, json: false, mutate: [] }
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]
     if (k === '--view') a.view = argv[++i] ?? a.view
     else if (k === '--port') a.port = Number(argv[++i])
     else if (k === '--keep') a.keep = true
     else if (k === '--json') a.json = true
+    else if (k === '--mutate') a.mutate.push(argv[++i] ?? '')
     else { console.error(`未知参数：${k}`); process.exit(1) }
   }
   a.views = a.view.split(',').map((s) => s.trim()).filter(Boolean)
@@ -55,6 +64,21 @@ function parseArgs(argv) {
 
 const ARGS = parseArgs(process.argv.slice(2))
 const VIEWS = ARGS.views
+
+/** `--mutate <令牌>=<值>` → `[令牌, 值]`；写成别的形状直接退 1（不猜）。 */
+const MUTATIONS = ARGS.mutate.map((s) => {
+  const eq = s.indexOf('=')
+  if (eq <= 0 || !s.startsWith('--')) {
+    console.error(`--mutate 要写成 <令牌>=<值>（如 --ink=#000），收到：${JSON.stringify(s)}`)
+    process.exit(1)
+  }
+  return [s.slice(0, eq), s.slice(eq + 1)]
+})
+
+/** 把全部注入写成页内一段：运行期覆盖 `--` 令牌（只改当前文档，不落任何文件）。 */
+const APPLY_MUTATIONS =
+  `(() => { for (const [k, v] of ${JSON.stringify(MUTATIONS)}) ` +
+  `document.documentElement.style.setProperty(k, v); return true })()`
 
 /* ---------------------------------------------------------------- 页内采集 */
 
@@ -280,6 +304,8 @@ async function main() {
       await waitIdle(cdp)
       for (const theme of ['light', 'dark']) {
         await cdp.eval(`document.documentElement.dataset.theme = ${JSON.stringify(theme)}`)
+        // ★ T-G175：只在**暗色**那一遍注入（模拟「暗色被改坏」）—— 探针自检早已跑完，不受影响。
+        if (MUTATIONS.length && theme === 'dark') await cdp.eval(`${APPLY_MUTATIONS}`)
         await waitThemeStable(cdp)
         const res = await cdp.eval(`${COLLECT}`)
         for (const row of res.rows) rows.push({ view, theme, row })
@@ -293,10 +319,13 @@ async function main() {
     const audit = tokenAudit()
 
     if (ARGS.json) {
-      console.log(JSON.stringify({ ok: true, views: VIEWS, audit, hitsA, hitsB, tokens }, null, 2))
+      console.log(JSON.stringify({ ok: true, views: VIEWS, audit, mutations: MUTATIONS, hitsA, hitsB, tokens }, null, 2))
     } else {
       console.log(`\n=== 暗色探针（只读）· 视图 ${VIEWS.join(', ')} · 1280×900 · 今天=${CAPTURE_DAY} ===`)
       console.log(`[令牌自检] 亮色区 ${audit.light} 个颜色令牌 / 暗色区 ${audit.dark} 个 / 只在亮色区（暗色没覆盖）${audit.onlyLight.length} 个${audit.onlyLight.length ? '：' + audit.onlyLight.join(' ') : ''}`)
+      if (MUTATIONS.length) {
+        console.log(`[注入] 运行期覆盖 ${MUTATIONS.map(([k, v]) => `${k}=${v}`).join(' ')}（只改当前页面，不写文件）`)
+      }
       console.log(`\n--- 判据 A「没跟着主题变」：${hitsA.length} 处 ---`)
       if (!hitsA.length) console.log('（无）')
       for (const h of hitsA) {
