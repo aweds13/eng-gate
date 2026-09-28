@@ -4,6 +4,23 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### TraeCode 池适配器 `tools/trae_pool.mjs`（T-G172）
+
+- **为什么**：TraeCode 免费池已实测能在真 worktree 里跑完 17 门全量门禁（`gates/diag/Trae池-探测结论.md` §七/§八），
+  但驱动还是临时脚本；正式化成工具，作为 CodeBuddy 池之外的第二池底座（明早 ① 回来前的替补）。
+- **做了什么**：新建 `tools/trae_pool.mjs`（**零新依赖**，只用 Node 22 内建 `WebSocket` + `fetch` + `child_process`），
+  两条子命令 —— `balance`（读 `.icube-titlebar-cn-free-upgrade-button` 免费积分）、
+  `send`（拉起/连上 IDE → `insertText` 打字 + Enter 发送 → 每 3 秒自动点**两套授权文案并集**（路径授权 + `git commit`「高风险命令」，
+  且排除「拒绝/取消」）→ 判完成 → 收工前后各读一次积分记账）。log 为 JSONL。
+- **实测**：`node --check` 退出码 0（371 行）；冒烟（提示词「只回两个字：在吗」）`DONE sec=15 turns=5 balance 4,544->4,544`，
+  `--out` 为最后一条 agent 轮次（读到「在吗」）、log 10 行、`approve` 0 次；`balance` 打印 `4,544`；本卡约耗 1 个积分。
+- ★ **两处与卡原文不一致（如实记，详见复盘 §2.1）**：① 卡给的完成判据 `/任务耗时/` 在**纯文字回复**轮次里不出现
+  （首趟白等 300 秒超时），而**有工具调用**的轮次里出现 → 现场补「发送键 `disabled` 连续 2 拍 + 非 busy」；
+  ② 最后一条 `.turn__agent-message` 的 `innerText` 会混进无 `data-item-type` 的 `container-*` chrome（回显旧用户话/建议块）
+  → 取「有 `data-item-type` 或含 `.markdown-renderer` 的直接子块」拼接（保留工具输出、去掉脏挂件）。
+- **不做的事**：**没改**派活器 `tools/wb_dispatch.py`（换池接线留待下一张卡）。
+- 复盘：`复盘/Trae池适配器-T-G172.md`。
+
 ### 台账号索引随波次重算（173 全覆盖，含本卡 T-G171）+ 「索引必须随波次重算」定成规矩（T-G171）
 
 - **为什么**：R-I10 只读复核抓出 `复盘/索引-台账号到复盘.md` 是底座 `b90c4e4` 的快照 ——
