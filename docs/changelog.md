@@ -4,6 +4,38 @@
 
 ## [未发布] — 文档体系重建 · 事实层（第 0 / 0.1 / 1 / 2 步 + 第 3 步迁移）
 
+### 封存指纹修真：worktree 回退 + 摘掉门禁产物做固定点 + 可独立复算（T-G179）
+
+- **为什么**：`gates/last.json` 的 `tree` 字段（「封存指纹」）一直**在说谎**。病灶两处叠加：
+  ① `scripts/run_gates.py:349` 把临时索引**写死在** `ROOT/.git` 下，而 linked worktree 里 `.git`
+  是**文件**（git-dir = `<主树>/.git/worktrees/<名>`）→ `GIT_INDEX_FILE` 指向"文件底下" →
+  `git read-tree HEAD` 失败 → 回退成 `HEAD^{tree}`（**底座那棵树的哈希**，不是"即将提交的那棵树"）；
+  ② `gates/last.json` 自己就在那棵树里（自指），含它自己的哈希写进去后哈希又变 → 永远追不上。
+  主控实测 5 棵树无一例外（`last.tree` 全 == 父提交的 tree）；而 `scripts/audit_progress.py:515-516`
+  与 `tools/wb_verify.py:32` 都**明写故意不查**这个字段 → 一整列"没人查、且每笔都错"的凭证，
+  RI10「无法脱离凭证独立证明门禁跑在脏树上」正是这个洞的直接后果。
+- **做了什么**：① `_git_index_path()` 用 `git rev-parse --git-path dsh_gates_index`（拿不到再退
+  `--absolute-git-dir`）取临时索引路径，**不再**手拼 `ROOT/.git`，拿不到就**打印警告**再回退（不静默）；
+  ② 新增 `tree_without_gates(repo, rev, include_worktree, exclude_gates)` 作为**唯一实现**：
+  `read-tree`（可叠 `add -A`）→ `git rm -r --cached --ignore-unmatch gates` → `write-tree`，
+  指纹 = **「除 `gates/**` 外、即将提交的内容」的 tree 哈希**（**可复现的固定点**），docstring 写清
+  "是什么/不是什么/为什么之前会骗人/现在已被检查"；③ `tools/wb_verify.py` 加一条独立复算行
+  （**import 门禁自己那份实现**，不手写第二套切法），旧笔（无 `tree_scope`）标 `INFO … 按旧口径不核`；
+  ④ `gates/last.json` 加口径自述位 `"tree_scope": "worktree-minus-gates"`。
+- **实测**（本树，底座 `d8ed19c`）：改前 `staged_tree()==HEAD^{tree}==bfa8abcc…`（相同 = 那个洞）；
+  改后 `staged_tree()=5d2f45dc…≠HEAD^{tree}=bfa8abcc…`；指纹里 `gates/` 条目 **0** 个（完整树 49 个）。
+  **固定点**：连取两次 + 改 `gates/last.json` 一字节后 → 三值全等。**防恒真**：喂一笔改过一字节的提交 →
+  复算 `291e989847da…` ≠ 记录 `c5047aa46bcb…` → FAIL。**主树（普通仓库）**：新索引路径与旧写死值
+  **逐字相同**，完整树算法结果与改前**逐字相同**（§1.1 零行为变化）。
+  `pytest tests/test_gates_reuse_line.py` → **16 passed**；新增 `tests/test_gate_fingerprint.py` → **3 passed**。
+- **边界（如实）**：指纹**不含 `gates/**`** ⇒ 证明不了门禁产物本身、也**不证明"门禁真在脏树上跑过"**；
+  旧笔仍核不了（标 INFO）。RI10 只是**被缩小**（新笔可独立复算），**未被消除**。
+- **端口偏差（如实）**：卡指定 `TF_GATE_PORT_BASE=9181`，但本机 **9197** 被外来服务 `vivoesService_x64.exe`
+  （PID 6736，09-24 起常驻）占用 —— 行为流 **㉒** 的对端 = ui_flow 端口 +6 = 9197 → base=9181 时 ㉒
+  **稳定** `fetch failed`。改用下一段空闲的 `TF_GATE_PORT_BASE=9201`（整段实测无 LISTENING）跑门禁 →
+  17 门全过。端口基址与门禁结论无关（黄金/判据与端口无关）。
+- 复盘 `复盘/封存指纹可核-T-G179.md`；台账 `T-G179`。
+
 ### `.wt` 清理器补「删前证据留档」—— 没拷走就不许删（T-G178）
 
 - **为什么**：卡 081（`T-G176`）的 `.wt` 清理器（`tools/wt_prune.py`）缺了**既有规矩**

@@ -338,37 +338,122 @@ def summarize(out: str) -> str:
     return lines[-1][:160] if lines else ""
 
 
+# ---------------------------------------------------------------- 封存指纹（T-G179）
+# 临时索引文件名（在 git-dir 里，不动用户真正的索引）。
+INDEX_NAME = "dsh_gates_index"
+# 封存指纹的口径自述（写进 last.json 的 tree_scope）：见 tree_without_gates。
+TREE_SCOPE = "worktree-minus-gates"
+
+
+def _git_index_path(repo: Path) -> Path | None:
+    """临时索引文件路径 —— **由 git 自己给**，不再手拼 `ROOT / ".git"`。
+
+    病灶（T-G179 实测钉死）：linked worktree 里 `ROOT/.git` 是**文件**（git-dir =
+    `<主树>/.git/worktrees/<名>`），而旧代码把它当**目录**拼出 `ROOT/.git/dsh_gates_index`
+    → `GIT_INDEX_FILE` 指向"一个文件底下"的路径 → `git read-tree HEAD` 失败 →
+    回退成 `HEAD^{tree}`（= 底座那棵树，不是"即将提交的那棵树"）。
+    改用 `git rev-parse --git-path`（拿到的可能是相对路径，按 repo 拼成绝对）。
+    两个办法都拿不到 → None（调用方打印警告并回退，**不许静默**）。
+    """
+    probe = subprocess.run(
+        ["git", "rev-parse", "--git-path", INDEX_NAME], cwd=repo,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    out = (probe.stdout or "").strip()
+    if probe.returncode == 0 and out:
+        path = Path(out)
+        return path if path.is_absolute() else (repo / path)
+    probe2 = subprocess.run(
+        ["git", "rev-parse", "--absolute-git-dir"], cwd=repo,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    out2 = (probe2.stdout or "").strip()
+    if probe2.returncode == 0 and out2:
+        return Path(out2) / INDEX_NAME
+    return None
+
+
+def tree_without_gates(
+    repo: Path, rev: str = "HEAD", *, include_worktree: bool = False, exclude_gates: bool = True
+) -> str | None:
+    """「封存指纹」的**唯一实现**：把 `<rev>`（可叠加工作区改动）写成临时 tree，返回它的哈希。
+
+    ── 这个字段**是什么** ──
+    除 `gates/**` 之外、即将提交的那份内容的 tree 哈希
+    （`exclude_gates=False` 时就是完整 tree）。
+    它是**可复现的固定点**：只要"除 gates 外的内容"不动，重算多少次都一样。
+    ── 它**不是什么** ──
+    ① **不是**完整提交的 tree（完整 tree 含 `gates/`）；② **不含门禁产物**。
+    为什么必须不含门禁产物：`gates/last.json` **自己就在那棵树里** —— 把"含它自己的树"的哈希
+    写进它自己，写完哈希又变 → **永远追不上**（自指悖论）。本卡 §0 实测：5 棵树的
+    `last.json.tree` 全等于底座那棵树（worktree 回退 + 自指，两个洞叠加），是一整列
+    "没人查、且每笔都错"的凭证；RI10「无法脱离凭证独立证明门禁跑在脏树上」正是这个洞的后遗症。
+    ⇒ 定义成"摘掉 `gates/**` 的固定点"后，`run_gates` 写它、`wb_verify` 能**独立复算**它
+    （见 §1.3；两处共用**本函数**这一份实现，不各写一套）。
+    ── 为什么之前会骗人 ──
+    见 `_git_index_path` 的病灶说明：回退路径把"即将提交的树"错记成"底座提交的树"。
+
+    做法：临时索引（路径由 git 给）→ `read-tree <rev>`（`include_worktree=True` 时再
+    `git add -A` 叠上工作区）→ `git rm -r --cached --ignore-unmatch gates`（`exclude_gates`）
+    → `git write-tree`。任何一步拿不到结果 → None（调用方决定回退 + 打警告，**不许静默**）。
+    """
+    index_path = _git_index_path(repo)
+    if index_path is None:
+        print("[警告] 取不到临时索引路径（git rev-parse --git-path 失败）→ 封存指纹回退",
+              file=sys.stderr, flush=True)
+        return None
+    with contextlib.suppress(OSError):
+        if index_path.exists():
+            index_path.unlink()
+    env_index = dict(os.environ)
+    env_index["GIT_INDEX_FILE"] = str(index_path)
+
+    def _git_i(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args], cwd=repo, env=env_index,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+        )
+
+    read = _git_i("read-tree", rev)
+    if read.returncode != 0:
+        print(f"[警告] read-tree {rev} 失败（{(read.stderr or '').strip()[:120]}）→ 封存指纹回退",
+              file=sys.stderr, flush=True)
+        with contextlib.suppress(OSError):
+            if index_path.exists():
+                index_path.unlink()
+        return None
+    if include_worktree:
+        _git_i("add", "-A")
+    if exclude_gates:
+        _git_i("rm", "-r", "--cached", "--ignore-unmatch", "--quiet", "gates")
+    written = _git_i("write-tree")
+    with contextlib.suppress(OSError):
+        if index_path.exists():
+            index_path.unlink()
+    tree = (written.stdout or "").strip()
+    if written.returncode != 0 or not tree:
+        print(f"[警告] write-tree 失败（{(written.stderr or '').strip()[:120]}）→ 封存指纹回退",
+              file=sys.stderr, flush=True)
+        return None
+    return tree
+
+
 def staged_tree() -> str:
-    """把"即将提交的内容"（索引 + 工作区）写成一个临时 tree，返回它的哈希。
+    """把"即将提交的内容"（索引 + 工作区）写成一个**封存指纹** tree，返回它的哈希。
 
     为什么不能用 HEAD 的 tree：门禁在**提交前**跑，那时 HEAD 还是上一次提交。
     工作树在提交前后一致，但工作区可能还有未 add 的改动，所以用 `git add -A` 到临时索引后
-    `git write-tree` 得到"这次要提交的那棵树"——它与最终提交的 tree 必然相同。
-    临时索引放在 `.git/` 下的独立文件里，不动用户真正的索引。
+    `git write-tree` 得到"这次要提交的那棵树"。
+    ★ T-G179：这个值**摘掉 `gates/**`**（`tree_without_gates` 的固定点口径）——
+    否则 `gates/last.json` 写进它自己的哈希会自指、永远对不上（见 `tree_without_gates`）。
+    任何一步失败 → 打一行警告并回退到 `HEAD^{tree}`（回退值**不是**固定点，可能骗人）。
     """
-    tmp_index = ROOT / ".git" / "dsh_gates_index"
-    if tmp_index.exists():
-        tmp_index.unlink()
-    env_with_index = tree_pythonpath(dict(os.environ))
-    env_with_index["GIT_INDEX_FILE"] = str(tmp_index)
-    read = subprocess.run(
-        ["git", "read-tree", "HEAD"], cwd=ROOT, env=env_with_index,
-        capture_output=True, text=True, check=False,
-    )
-    if read.returncode != 0:
-        return git("rev-parse", "HEAD^{tree}")
-    subprocess.run(
-        ["git", "add", "-A"], cwd=ROOT, env=env_with_index,
-        capture_output=True, text=True, check=False,
-    )
-    written = subprocess.run(
-        ["git", "write-tree"], cwd=ROOT, env=env_with_index,
-        capture_output=True, text=True, check=False,
-    )
-    if tmp_index.exists():
-        tmp_index.unlink()
-    tree = written.stdout.strip()
-    return tree or git("rev-parse", "HEAD^{tree}")
+    tree = tree_without_gates(ROOT, "HEAD", include_worktree=True)
+    if tree:
+        return tree
+    print("[警告] 封存指纹临时索引法失败 → 回退 HEAD^{tree}（这个值不是固定点，可能骗人）",
+          file=sys.stderr, flush=True)
+    return git("rev-parse", "HEAD^{tree}")
 
 
 def git(*args: str) -> str:
@@ -394,12 +479,12 @@ def docs_sync_precheck() -> tuple[bool, list[str]]:
 
 
 def seal() -> int:
-    """封存：只把 `gates/last.json` 里的 tree 更新为"含本文件自身的最新工作树"。
+    """封存：只把 `gates/last.json` 里的**封存指纹**（`tree`）重算一次，并写上口径自述。
 
-    为什么需要（自指问题，实测踩到）：`gates/last.json` **本身也是被提交的文件**。
-    第一次跑门禁时它被写进工作区，工作树随之改变 → 与刚算出的 tree 不再相等 →
-    提交后审计发现"门禁产物与提交不一致"。本步骤在正式提交前把 tree 重算一次即可收敛
-    （只改一个字段，不重跑测试）。
+    ★ T-G179 改口径：`tree` 现在是"**除 `gates/**` 外**、即将提交的那份内容"的 tree 哈希
+    （见 `tree_without_gates`）—— **不含**门禁产物，所以是个**固定点**：写完它自己也不变。
+    旧口径把"含 `gates/last.json` 自己"的树哈希写进去 → 写完哈希又变 → 永远追不上（自指）。
+    本步骤在正式提交前重算一次，让 `last.json.tree` 与最终提交【去掉 `gates/**`】的 tree 一致。
     """
     if not GATES.exists():
         print("[FAIL] 还没有 gates/last.json，先跑一次门禁")
@@ -410,12 +495,14 @@ def seal() -> int:
         return 1
     old = payload.get("tree", "")
     payload["tree"] = staged_tree()
+    payload["tree_scope"] = TREE_SCOPE   # 口径自述：旧笔没这个字段 → wb_verify 据它判"不核"
     payload["sealed_at"] = datetime.now().isoformat(timespec="seconds")
     GATES.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
     )
-    print(f"[封存] gates/last.json tree: {old[:12]} → {payload['tree'][:12]}")
-    print("[提示] 现在 `git add gates/last.json && git commit` 后，产物与提交的树会一致")
+    print(f"[封存] gates/last.json tree: {old[:12]} → {payload['tree'][:12]}（{TREE_SCOPE}）")
+    print("[提示] `git add gates/last.json && git commit` 后，"
+          "产物与提交【去掉 gates/**】的树会一致")
     return 0
 
 
@@ -940,9 +1027,12 @@ def main() -> int:
 
     payload = {
         "rev": git("rev-parse", "--short", "HEAD"),
-        # 注意：**不要**把 tree 当"这一版代码"的凭据 —— gates/last.json 自己也在那棵树里，
-        # 写入哈希会让树变化（自指悖论，实测踩到）。这里留着 tree 只作参考，审计不看它。
+        # ★ T-G179 封存指纹：除 gates/** 外即将提交内容的 tree 哈希（可复现固定点）。
+        # 为什么摘掉 gates/：gates/last.json 自己在那棵树里，写进它自己的哈希会让树变化 →
+        # 永远追不上（自指悖论）。它不是"完整提交的 tree"，也**不含门禁产物**。
+        # 口径自述见 tree_scope（旧笔没这个字段 → wb_verify 按旧口径标 INFO 不核）。
         "tree": staged_tree(),
+        "tree_scope": TREE_SCOPE,
         "parent": git("rev-parse", "--short", "HEAD"),
         "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
         "dirty": bool(git("status", "--porcelain")),
