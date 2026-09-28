@@ -4698,3 +4698,15 @@ evidence = [
   "file:复盘/暗色护栏自证-T-G175.md",
 ]
 gaps = "五条自证的命令/退出码/首条红行见 复盘/暗色护栏自证-T-G175.md §一。①基线：真 app.css 暗色零欠账；②对比度变异：暗色 --ink←暗色 --bg → python -X utf8 tools/contrast_audit.py --css <副本> --strict 退 1，首条红行『1.0 4.5 [FAIL] --ink on body 继承色 / 页面底』；③令牌缺失：删暗色 --panel-2 → 退 1，首条红行『1.05 4.5 [FAIL] --ink on 浅底上的正文（热力图空格外 等）』；④整块消失：删整个暗色块 → token_blocks SystemExit（退 1，非绿）；⑤自证不动仓库：跑前跑后 sha256(src/web/app.css)=63bb5f49… 一致、git status 只多本卡白名单文件。★ 抓不到的格（5 条）：A 暗色令牌存在性层（tests/test_web_frontend.py:77-80）取暗色块的 split 撞上文件头注释、切到亮色 :root 块，清空暗色块仍绿（本卡不改它，在白名单之外）；B 门禁级 web_live（tools/web_live_check.py:876）只断选择器字符串在不在；C 门禁级 ui_flow 流㉚（tools/ui_flow_check.mjs:540-631）会抓但本卡禁区不许改 src，无法常驻复现；D 删装饰类暗色令牌（如 --border）无人抓；E 清空暗色块（保留选择器）无人抓（并推翻卡里『删整块仍绿』的预判）。★ 默认行为不变：改前改后 python -X utf8 tools/contrast_audit.py --strict 输出逐字节一致（diff 退 0、均退 0）。★ 没动 src：sha256(src/web/app.css)=63bb5f4987d25f43645ed7d8b3a394492c287c0bca7edbbcc5284158b525e207。"
+
+[entries."T-G176"]
+id = "T-G176"
+title = ".wt 工作树清理器：七条判据 + 默认只看不删（真树不删，主控决定）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tools/wt_prune.py",
+  "file:tests/test_wt_prune.py",
+  "file:复盘/wt清理工具-T-G176.md",
+]
+gaps = "**七条判据的判法**（`tools/wt_prune.py:judge()` `:339`，按 1→7 取首条不成立当理由，七条全过才「可删」；任何一条判不了 → 保留）：①路径在 `<仓库根>/.wt/` 下且非主树非当前树（`git worktree list --porcelain` + `git rev-parse --show-toplevel`）；②在主树里 `git merge-base --is-ancestor <tip> HEAD` 退 0；③`git -C <树> status --porcelain --untracked-files=all` 里不以 `??` 开头的行数为 0（未跟踪只计数、不算阻塞）；④铁律 28 的树侧判据 = 进程 cwd == 树根（psutil 一次扫全机，绝不按进程名，本卡不杀进程）；⑤`gates/diag/gates*.lock` 的 cwd 不在树里；⑥`git worktree list --porcelain` 无 `locked`；⑦`docs/workbacklog.toml` 里 status!=done 的卡占的 tree 一律保留（不硬编码卡号；backlog 读坏 → 判不了 → 全保留）。**真树 dry-run 读数**：`python -X utf8 tools/wt_prune.py` → 可删 9 棵 / 保留 76 棵 / 可释放 245.5 MB（9 棵 tip 均已在主树 HEAD 4870bea；.wt/traegate 与 .wt/vis 撞判据3、.wt/wtprune 是当前树撞判据1）。**真树一棵未删**：跑前/跑后 `git worktree list --porcelain | grep -c '^worktree '` = 86 / 86。**临时仓库 --apply 证据**（git init + clean/dirty/ahead/locked 四棵）：删 1 棵该删的、保 3 棵该留的、EXIT=0、计数 5→4；未跟踪文件让 remove 失败时保留并退 1（有专用用例钉着）。**先红后绿**：把判据6 改坏的变异副本经 `WT_PRUNE_UNDER_TEST` 跑测试 → 2 failed 9 passed；真文件 11 passed。★ **边界（如实）**：判据 7 今天保护不到任何树（backlog 3 张卡全 done），在飞但未登记进 backlog 的卡它判不出，请主控用别的账再核；判据 4 我实现成「进程 cwd 在树里即算占用」的更宽安全侧（端口段只用于标注、不参与判定），若要逐字复刻「端口段 ∩ cwd」的窄口径请明说。**没动什么**：`.wt/**` 一个字未删未改；src/ scripts/ 别的 tools/ 别的 tests/ 其余 docs/ 复盘/ gates/diag/** data/ 主树外来未跟踪文件全未碰。"
