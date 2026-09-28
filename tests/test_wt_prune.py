@@ -1,4 +1,4 @@
-"""`.wt` 工作树清理器的钉子测试（卡 081 · `T-G176`）。
+"""`.wt` 工作树清理器的钉子测试（卡 081 · `T-G176`；卡 083 · `T-G178` 补「删前证据留档」）。
 
 为什么有这个文件：清理器是一台"会动世界"的机器（`--apply` 真删树），它最重要的性质是
 **默认只看不删 + 七条判据缺一不可**。所以这个测试**在 `tmp_path` 里造一棵临时 git 仓库**
@@ -11,6 +11,8 @@
   ⑤ 当前工作树                   → **保留**（判据 1）
   ⑥ 未完工卡（backlog `status != done`）占的树 → **保留**（判据 7）
   ⑦ 未跟踪文件**不算阻塞**（判据 3），但 `--apply` 时 `git worktree remove` 会失败 → 保留
+  ⑧（卡 083）删前留档：`wb-*` 拷回主树、`wb-usage.jsonl` 追加合并不覆盖、
+     拷不出来就不删、`--no-rescue` 跳过、dry-run 只预演不落盘
 
 ★ 测试自己建的 worktree 用完由 `tmp_path` 连同仓库一起回收；本文件**不需要真仓库里有 `.wt`**。
 ★ `tools/` 不是包（没有 `__init__.py`）→ 按路径用 `importlib` 加载被测模块。
@@ -18,6 +20,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -220,3 +223,119 @@ def test_dir_size_sums_and_survives_bad_paths(tmp_path, wt):
     assert total == 1500 and skipped == 0
     missing_total, missing_skipped = wt.dir_size(tmp_path / "不存在")
     assert missing_total == 0 and missing_skipped >= 1
+
+
+# ---------------------------------------------------------------- 删前证据留档（卡 083 · T-G178）
+
+# ★ 真实的 wb-* 证据就放在**被忽略的** `gates/diag/`（主树 `.gitignore:77`）；忽略的文件
+#   **不阻塞** `git worktree remove` → 只有配上这条 ignore，测试才复现得了"留档后成功删树"。
+_DIAG_IGNORE = "gates/diag/*\n!gates/diag/gate_lock.py\n"
+_WB_SUFFIXES = (".jsonl", ".report.md", ".verdict.txt", ".session.txt")
+
+
+@pytest.fixture()
+def rescue_repo(repo):
+    """临时仓库 + `.gitignore`（忽略 `gates/diag/*`）——留档测试的底座。"""
+    (repo / ".gitignore").write_text(_DIAG_IGNORE, encoding="utf-8")
+    _run(["git", "add", ".gitignore"], repo)
+    _run(["git", "commit", "-q", "-m", "ignore diag"], repo)
+    return repo
+
+
+def _uline(card: str, start: str) -> str:
+    """一行 usage 台账（去重键 = `(卡, 开始)`）。"""
+    return json.dumps({"卡": card, "模型": "deepseek-v4.1-flash", "轮次": 1, "开始": start},
+                      ensure_ascii=False)
+
+
+def _seed_wb(tree: Path, card: str, *, usage: list[str] | None = None) -> None:
+    """在某棵树的 `gates/diag/` 里放一整套假证据（4 个独占文件 + 可选 usage）。"""
+    d = tree / "gates" / "diag"
+    d.mkdir(parents=True, exist_ok=True)
+    for suffix in _WB_SUFFIXES:
+        (d / f"wb-{card}{suffix}").write_text(f"{card}{suffix}\n", encoding="utf-8")
+    if usage is not None:
+        (d / "wb-usage.jsonl").write_text("\n".join(usage) + "\n", encoding="utf-8")
+
+
+def _main_diag(repo: Path) -> Path:
+    return repo / "gates" / "diag"
+
+
+def test_apply_rescues_wb_family_then_removes(rescue_repo, wt):
+    """`--apply`：先整族拷 `wb-*` 回主树，再删树；退 0。"""
+    tree = _add(rescue_repo, "clean")
+    _seed_wb(tree, "900", usage=[_uline("900", "2026-09-28T10:00:00")])
+    r = _cli(wt, ["--root", str(rescue_repo), "--apply"], rescue_repo)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not tree.exists(), "留档成功后该删的树没删掉"
+    diag = _main_diag(rescue_repo)
+    for suffix in _WB_SUFFIXES:
+        assert (diag / f"wb-900{suffix}").is_file(), f"主树少了 wb-900{suffix}"
+    assert "[rescue]" in r.stdout and "拷了 4 份" in r.stdout, r.stdout
+    usage = (diag / "wb-usage.jsonl").read_text(encoding="utf-8").splitlines()
+    assert usage == [_uline("900", "2026-09-28T10:00:00")]
+
+
+def test_apply_merges_usage_without_clobbering(rescue_repo, wt):
+    """★ 本卡最容易写错的一格：usage **追加合并**，既有行一个字节不改、重复行不重复追加。"""
+    diag = _main_diag(rescue_repo)
+    diag.mkdir(parents=True, exist_ok=True)
+    old = [_uline("A", "2026-09-27T01:00:00"), _uline("B", "2026-09-27T02:00:00")]
+    (diag / "wb-usage.jsonl").write_text("\n".join(old) + "\n", encoding="utf-8")
+    before = (diag / "wb-usage.jsonl").read_bytes()
+
+    tree = _add(rescue_repo, "clean")
+    _seed_wb(tree, "901", usage=[_uline("C", "2026-09-28T03:00:00"),
+                                 _uline("B", "2026-09-27T02:00:00")])  # 第三行是重复
+    r = _cli(wt, ["--root", str(rescue_repo), "--apply"], rescue_repo)
+    assert r.returncode == 0, r.stdout + r.stderr
+    after_bytes = (diag / "wb-usage.jsonl").read_bytes()
+    lines = after_bytes.decode("utf-8").splitlines()
+    assert len(lines) == 3, f"应 3 行（2 旧 + 1 新）：{lines}"
+    assert after_bytes.startswith(before), "既有行被改了（不是纯追加）"
+    assert lines[2] == _uline("C", "2026-09-28T03:00:00"), lines
+    assert sum(1 for ln in lines if ln == _uline("B", "2026-09-27T02:00:00")) == 1, "重复行被追加了"
+
+
+def test_apply_keeps_tree_when_rescue_fails(rescue_repo, wt):
+    """拷贝失败（目标同名位置是**目录**）→ 该树**不删**、退 1、理由可读。"""
+    tree = _add(rescue_repo, "clean")
+    _seed_wb(tree, "902")
+    diag = _main_diag(rescue_repo)
+    (diag / "wb-902.jsonl").mkdir(parents=True, exist_ok=True)  # 同名目录 → 冲突
+    r = _cli(wt, ["--root", str(rescue_repo), "--apply"], rescue_repo)
+    assert tree.exists(), "留档失败时不该把树删掉"
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "留档失败" in r.stdout and "同名目录" in r.stdout, r.stdout
+
+
+def test_apply_no_rescue_skips_copying(rescue_repo, wt):
+    """`--no-rescue`：不拷、不合并，但树仍按判据删。"""
+    tree = _add(rescue_repo, "clean")
+    _seed_wb(tree, "903", usage=[_uline("903", "2026-09-28T04:00:00")])
+    r = _cli(wt, ["--root", str(rescue_repo), "--apply", "--no-rescue"], rescue_repo)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not tree.exists(), "--no-rescue 也该按判据删树"
+    diag = _main_diag(rescue_repo)
+    assert not (diag / "wb-903.jsonl").exists(), "--no-rescue 不该拷"
+    assert not (diag / "wb-usage.jsonl").exists(), "--no-rescue 不该合并 usage"
+    assert "--no-rescue" in r.stderr, "该打醒目警告"
+
+
+def test_dry_run_previews_and_touches_nothing(rescue_repo, wt):
+    """默认 dry-run：只预演（表里有「待留档」读数），**绝不拷、绝不动主树 usage**。"""
+    diag = _main_diag(rescue_repo)
+    diag.mkdir(parents=True, exist_ok=True)
+    usage_line = _uline("A", "2026-09-27T01:00:00") + "\n"
+    (diag / "wb-usage.jsonl").write_text(usage_line, encoding="utf-8")
+    before = (diag / "wb-usage.jsonl").read_bytes()
+
+    tree = _add(rescue_repo, "clean")
+    _seed_wb(tree, "904", usage=[_uline("904", "2026-09-28T05:00:00")])
+    r = _cli(wt, ["--root", str(rescue_repo)], rescue_repo)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert tree.exists(), "dry-run 不该删树"
+    assert "待留档" in r.stdout and "4份+usage追加1/跳过0" in r.stdout, r.stdout
+    assert not (diag / "wb-904.jsonl").exists(), "dry-run 不该拷任何东西"
+    assert (diag / "wb-usage.jsonl").read_bytes() == before, "dry-run 动了主树 usage"

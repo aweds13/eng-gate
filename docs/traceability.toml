@@ -4724,3 +4724,15 @@ evidence = [
   "file:复盘/暗色存在性层修真-T-G177.md",
 ]
 gaps = "**病根行号**：tests/test_web_frontend.py:78（修前用 css.split('[data-theme=dark]',1)[1].split('}',1)[0] 取暗色块，撞上 app.css 第 6 行文件头注释 → 切到的是 :root 亮色块）；同类第二处 tools/web_live_check.py:876（修前只断选择器字符串 '[data-theme=dark]' in css）。**真块 vs 假块令牌数（现跑）**：旧切法区域 56 令牌（含 :root {、不含 color-scheme:dark）；真暗色块 18 令牌（含 --panel-2、不含 :root {）。**修前红绿 vs 修后红绿四个读数**：D 删暗色 --border —— 修前 抓不到（080 实测）/ 修后 抓到，首条红行「暗色令牌缺少 --border」；E 清空暗色块体 —— 修前 抓不到 / 修后 抓到，首条红行「暗色令牌缺少 --bg」。**其它读数**：pytest tests/test_web_frontend.py → 109 passed（绿）；pytest tests/test_dark_teeth.py tests/test_web_frontend.py → 117 passed；python -X utf8 tools/web_live_check.py → 退 0、[OK ] 暗色令牌可取到。**是否补了暗色令牌**：没有 —— 修好测试后直接绿，按卡条件（没变红不许碰 src）src/web/app.css 一个字节未动。**没动什么**：src/ scripts/ 别的 tools/ 别的 tests/ 其余 docs/ 复盘/ gates/diag/** .wt 别的树/主树外来未跟踪文件/data/ 全未碰；修法复用令牌层 contrast_audit::token_blocks 同一条切法，必需集合 DARK_REQUIRED_TOKENS 只一份（存在性层 import 自 tools/web_live_check.py）。"
+
+[entries."T-G178"]
+id = "T-G178"
+title = ".wt 清理器补删前证据留档（wb-* 拷回主树；usage 追加合并；没拷走就不许删）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tools/wt_prune.py",
+  "file:tests/test_wt_prune.py",
+  "file:复盘/wt清理器证据留档-T-G178.md",
+]
+gaps = "**缺口原文出处**：gates/diag/do_tg120.py §19.3（同见台账 T-G120）——拆树之前把 wb-<卡>.dispatch.log / .verdict.txt / .report.md 拷回主树 gates/diag/；真丢过一次（换成 kimi 的那几轮日志随树消失，事后查不出哪张卡用了哪个模型）。卡 081 的 tools/wt_prune.py 完全没有这段逻辑（主控 grep copy|copytree|rescue|证据|report|jsonl 零命中），它的 9 棵可删里就有 lean1(078)/accept2(079)/darkgate(080) → 一跑 --apply 就烧掉这三张卡的凭证。**修法**：① scan_rescue 用 glob(wb-*) 通配整族（不写死卡号），wb-usage.jsonl 单独拎出来；② 每卡独占 wb-<卡>.* 拷到主树 gates/diag/、目标已存在则不覆盖（打印 已存在→跳过 并计数）、目标同名位置是目录则算冲突失败；③ wb-usage.jsonl 逐行追加合并、按 (卡,开始) 去重、既有行一个字节不改；④ 任何一份拷不出来 / 合并失败 → 该树本轮不删 + 理由进表 + 退出码 1（宁可保留）；⑤ 加 --no-rescue（默认关）逃生门并打醒目警告；⑥ dry-run 表里加「待留档」列预演 N份+usage追加K/跳过J。**动的是哪一行**：tools/wt_prune.py:698-707 的留档块插在 :708 的 git worktree remove 之前（do_apply 内、第二拍复核之后）。**三份拷贝与保留的临时仓库读数**：场景A 可删树带整套假证据 → [rescue] 拷了 7 份（跳过 0）usage 追加 1 行（跳过 0）、树已删、主树 gates/diag/ 里 7 份 wb-900.* + wb-usage.jsonl 都在、退 0；场景B 目标同名位置做成目录 → 留档失败→保留、理由「留档失败：目标 wb-901.jsonl 是同名目录（不覆盖）」、退 1；场景C --no-rescue → 不拷不合并、树仍按判据删、退 0、stderr 有警告。usage 追加合并钉在 test_apply_merges_usage_without_clobbering：主树 2 行 + 树里 1 新 1 重复 → 主树 3 行、after_bytes.startswith(before) 为真、重复行没被重复追加。**真树 9 棵各自的待留档份数**：★ 与卡原文偏差（如实）——卡写 9 棵，本卡现算（底座 68df254）是 11 棵（期间 tip 陆续集成）；逐棵：darkfix 7份+usage追加1/跳过0（082 的 usage 尚未进主树）、lean1 7份+usage追加0/跳过1（078）、wtprune 7份+usage追加0/跳过1（081）、darkgate 7份+usage追加0/跳过1（080）、traepool1 7份+usage追加0/跳过1（077）、accept2 7份+usage追加0/跳过1（079）、index2 0份（无 gates/diag/wb-*）、RI10 7份+usage追加0/跳过1、ledger5 6份（无 usage）、survey4 6份（无 usage）、decide 6份（无 usage）；合计 10 棵有凭证、67 份独占文件待拷，只有 darkfix 会往 usage 追加 1 行。**真树未删的两个计数**：git worktree list --porcelain | grep -c '^worktree ' 跑前 88 / 跑后 88（相等）；--apply 一次未对真 .wt 跑过。**测试**：pytest tests/test_wt_prune.py → 16 passed；变异副本（去掉 usage 去重）→ 1 failed（test_apply_merges_usage_without_clobbering：assert 4 == 3）+ 15 passed（先红后绿）。**没动什么**：.wt/** 任何树一个字未删未改；src/ scripts/ 别的 tools/ 别的 tests/ 其余 docs/ 复盘/ gates/diag/**（本树没往里拷证据）data/ 主树外来未跟踪文件全未碰。"

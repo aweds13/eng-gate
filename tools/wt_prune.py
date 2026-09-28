@@ -23,16 +23,28 @@ r"""`.wt` 工作树清理器 —— **带判据、默认只看不删**（外包�
 
 ★ 判据 2 是"活进主树了"；3/4/5/6 是"现在没在用"；7 是"还没干完"。**缺一不可。**
 
+删前证据留档（卡 083 · 台账号 `T-G178`）
+----------------------------------------
+★ **没拷走就不许删**。规矩出处：`gates/diag/do_tg120.py` §19.3（同见台账 `T-G120`）——
+拆树之前，把 `<树>/gates/diag/wb-*` 拷回**主树** `gates/diag/`（它们会随树一起消失）：
+`wb-<卡>.jsonl`（★ 第 1 行 `init` 里带 `model=`，是"这张卡用了哪个模型"的唯一凭证）·
+`.report.md` · `.verdict.txt` · `.session.txt` · `.stderr.txt` · `.spec.txt` 等整族（不止这些）。
+★ 通配 `wb-*`（**不写死卡号**）；`wb-usage.jsonl` 是**累积台账**，**逐行追加合并、绝不许覆盖**
+（主树的既有行一个字节都不改）。任何一份拷不出来 / 合并失败 → **这棵树本轮不删**（宁可保留）。
+`--no-rescue` 是显式逃生门（默认**关**，即默认**必须留档**）。
+
 用法
 ----
     python -X utf8 tools/wt_prune.py                      # dry-run（默认）：打表，一棵不删
-    python -X utf8 tools/wt_prune.py --apply              # 才真删；每删前再复核一遍七条
+    python -X utf8 tools/wt_prune.py --apply              # 才真删；每删前复核七条 + 先留档
     python -X utf8 tools/wt_prune.py --json               # 给主控读的机器可读输出
     python -X utf8 tools/wt_prune.py --min-size 50        # 只看 ≥50 MB 的树
+    python -X utf8 tools/wt_prune.py --no-rescue          # ★ 危险：跳过留档（默认不传 = 必须留档）
     python -X utf8 tools/wt_prune.py --root <仓库根>      # 指定仓库根（默认自动定位主仓）
 
-退出码：0 = 正常（dry-run / apply 全部按预期）；1 = 至少一棵"本应删掉"的树删失败
-（失败即**保留**并打印原因）；2 = 环境不对（不是 git 仓库 / 读不到 worktree 列表）。
+退出码：0 = 正常（dry-run / apply 全部按预期）；
+1 = 至少一棵"本应删掉"的树删失败（删失败 **或** 留档失败，都**保留**并打印原因）；
+2 = 环境不对（不是 git 仓库 / 读不到 worktree 列表）。
 """
 from __future__ import annotations
 
@@ -40,6 +52,7 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -319,6 +332,9 @@ class Verdict:
     skipped: bool = False
     apply_result: str = ""
     apply_ok: bool = field(default=True)
+    rescue_files: int | None = None       # 待留档的每卡独占文件数（None = 没预演 / 不留档）
+    rescue_usage_add: int | None = None   # usage 预演：会追加几行（None = 没有 usage 文件）
+    rescue_usage_skip: int | None = None  # usage 预演：会跳过几行已存在
 
 
 def _status_counts(tree: Path) -> tuple[int, int] | None:
@@ -429,7 +445,7 @@ def _pad(text: str, width: int) -> str:
 
 
 COLUMNS = ("树名", "tip", "已集成", "跟踪改动", "未跟踪", "进程占用", "锁", "大小MB",
-           "裁决", "理由")
+           "待留档", "裁决", "理由")
 
 
 def _yn(tri: bool | None) -> str:
@@ -445,6 +461,17 @@ def _row(cells: list[str]) -> str:
     return " | ".join(cells)
 
 
+def _rescue_cell(v: Verdict) -> str:
+    """「待留档」列：可删的树才显示预演读数；`--no-rescue` 时显示「不留档」。"""
+    if not v.deletable:
+        return "-"
+    if v.rescue_files is None:
+        return "不留档"
+    if v.rescue_usage_add is None:
+        return f"{v.rescue_files}份"
+    return f"{v.rescue_files}份+usage追加{v.rescue_usage_add}/跳过{v.rescue_usage_skip}"
+
+
 def render_table(verdicts: list[Verdict]) -> list[str]:
     head = _row(list(COLUMNS))
     rows = [head, "-" * _w(head)]
@@ -458,6 +485,7 @@ def render_table(verdicts: list[Verdict]) -> list[str]:
             _yn(v.occupied),
             "是" if v.locked else _yn(v.holds_lock),
             f"{v.size_bytes / MB:.1f}",
+            _rescue_cell(v),
             "可删" if v.deletable else "保留",
             v.reason or "",
         ]))
@@ -475,6 +503,134 @@ def summarize(verdicts: list[Verdict]) -> dict[str, Any]:
         "keep": len(keep),
         "reclaim_mb": round(sum(v.size_bytes for v in deletable) / MB, 1),
     }
+
+
+# ================================================================ 删前证据留档（卡 083 · T-G178）
+#
+# ★ 规矩（`gates/diag/do_tg120.py` §19.3 / 台账 `T-G120`）：拆树之前，把 `<树>/gates/diag/wb-*`
+#   拷回**主树** `gates/diag/`（它们会随树一起消失）。**没拷走就不许删**。
+
+RESCUE_GLOB = "wb-*"
+USAGE_NAME = "wb-usage.jsonl"
+
+
+def scan_rescue(src_diag: Path) -> tuple[list[Path], Path | None]:
+    """扫 `<树>/gates/diag/wb-*` → `(每卡独占文件列表, usage 文件或 None)`。
+
+    ★ **通配整族**，不写死卡号（卡 081 判据 7 硬编码 → 保护不到东西的教训）。
+    ★ `wb-usage.jsonl` 单独拎出来：它是**累积台账**，要**追加合并**不是覆盖。
+    ★ 只收 `wb-*` 这一族，别的文件一概不碰（范围越小越好）。
+    """
+    if not src_diag.is_dir():
+        return [], None
+    files: list[Path] = []
+    usage: Path | None = None
+    for p in sorted(src_diag.glob(RESCUE_GLOB)):
+        if not p.is_file():
+            continue
+        if p.name == USAGE_NAME:
+            usage = p
+        else:
+            files.append(p)
+    return files, usage
+
+
+def _usage_key(line: str) -> tuple[str, str] | None:
+    """一行 usage JSONL 的去重键 `(卡, 开始)`；JSON 坏 / 缺键 → None（调用方退化成整行做键）。"""
+    try:
+        obj = json.loads(line)
+    except Exception:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    card = str(obj.get("卡") or "")
+    start = str(obj.get("开始") or "")
+    if not card and not start:
+        return None
+    return card, start
+
+
+def _usage_diff(existing_text: str, src_text: str) -> tuple[list[str], int]:
+    """`(要追加的行, 跳过的行数)` —— 按 `(卡,开始)` 去重；解析不出键的行退化成整行做键。"""
+    seen: set[Any] = set()
+    for line in existing_text.splitlines():
+        if line.strip():
+            k = _usage_key(line)
+            seen.add(k if k is not None else line)
+    add: list[str] = []
+    skipped = 0
+    for line in src_text.splitlines():
+        if not line.strip():
+            continue
+        k = _usage_key(line)
+        key = k if k is not None else line
+        if key in seen:
+            skipped += 1
+            continue
+        seen.add(key)
+        add.append(line)
+    return add, skipped
+
+
+def merge_usage(dst: Path, src: Path) -> tuple[int, int]:
+    """把 `src` 的 usage **逐行追加合并**进 `dst`（按 `(卡,开始)` 去重）。
+
+    返回 `(追加行数, 跳过行数)`。★ **既有行一个字节都不改**（只在文件末尾 append）；
+    `dst` 不存在则创建。解析不出键的行退化成用整行做键（宁可重复也不丢）。
+    """
+    had = dst.exists()
+    existing = dst.read_text(encoding="utf-8") if had else ""
+    add, skipped = _usage_diff(existing, src.read_text(encoding="utf-8"))
+    if add:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        with dst.open("a", encoding="utf-8", newline="") as fh:
+            if had and existing and not existing.endswith("\n"):
+                fh.write("\n")  # 既有末行没换行 → 补一个，免得和新行粘一起
+            fh.write("\n".join(add) + "\n")
+    return len(add), skipped
+
+
+def preview_usage(dst: Path, src: Path) -> tuple[int, int]:
+    """**只读**预演一次合并（不落盘）：`(会追加的行数, 会跳过的行数)`。"""
+    existing = dst.read_text(encoding="utf-8") if dst.exists() else ""
+    add, skipped = _usage_diff(existing, src.read_text(encoding="utf-8"))
+    return len(add), skipped
+
+
+def rescue_tree(root: Path, tree: Path) -> tuple[bool, str, int, int]:
+    """把这棵树的证据拷回**主树** `gates/diag/`。返回 `(是否成功, 报告行, 待拷份数, 追加行数)`。
+
+    - 每卡独占 `wb-<卡>.*` → 拷到 `<root>/gates/diag/`；**目标已存在则不覆盖**（跳过并计数）；
+      目标同名位置竟是**目录** → 算**冲突失败**（不覆盖、不硬写）。
+    - `wb-usage.jsonl` → **逐行追加合并**（绝不覆盖主树那份）。
+    - ★ 任何一份拷不出来 / usage 合并失败 → **成功=False**（调用方据此**不删这棵树**）。
+    """
+    src_diag = tree / "gates" / "diag"
+    dst_diag = root / "gates" / "diag"
+    files, usage = scan_rescue(src_diag)
+    copied = skipped = 0
+    usage_add = usage_skip = 0
+    try:
+        dst_diag.mkdir(parents=True, exist_ok=True)
+        for f in files:
+            dst = dst_diag / f.name
+            if dst.exists():
+                if dst.is_dir():
+                    msg = f"留档失败：目标 {dst.name} 是同名目录（不覆盖）"
+                    return False, msg, copied, usage_add
+                skipped += 1
+                print(f"[rescue]   已存在→跳过 {f.name}")
+                continue
+            shutil.copy2(f, dst)
+            copied += 1
+        if usage is not None:
+            usage_add, usage_skip = merge_usage(dst_diag / usage.name, usage)
+    except OSError as exc:
+        return False, f"留档失败：{exc}", copied, usage_add
+    line = (f"[rescue] {tree} → 拷了 {copied} 份（跳过 {skipped} 份已存在）；"
+            f"usage 追加 {usage_add} 行（跳过 {usage_skip} 行已存在）")
+    print(line)
+    return True, line, len(files), usage_add
 
 
 # ================================================================ 主流程
@@ -523,12 +679,15 @@ def recheck_apply(root: Path, path: Path) -> Verdict:
     return judge(t, make_context(root, current_worktree()))
 
 
-def do_apply(root: Path, verdicts: list[Verdict]) -> int:
-    """真删：每棵**先复核七条**，再用**不带 `--force`** 的 `git worktree remove`。失败即保留。"""
+def do_apply(root: Path, verdicts: list[Verdict], rescue: bool = True) -> int:
+    """真删：每棵**先复核七条**、**再留档证据**，最后用**不带 `--force`** 的 `git worktree remove`。
+
+    ★ 留档失败（或 `rescue=False` 时按显式逃生门跳过）→ 该树**保留**并计失败。
+    """
     failed = 0
     removed: list[str] = []
     kept: list[str] = []
-    print("\n=== --apply：开始真删（每棵先复核七条，且不用 --force）===")
+    print("\n=== --apply：开始真删（每棵先复核七条 + 留档证据，且不用 --force）===")
     for v in verdicts:
         if not v.deletable:
             continue
@@ -538,6 +697,16 @@ def do_apply(root: Path, verdicts: list[Verdict]) -> int:
             v.reason = f"apply-复核未过 → 保留（{again.reason}）"
             kept.append(f"{v.name}（复核未过：{again.reason}）")
             continue
+        if rescue:
+            ok, line, _n_files, _n_add = rescue_tree(root, v.path)
+            if not ok:
+                v.deletable = False
+                v.apply_result = "留档失败"
+                v.apply_ok = False
+                failed += 1
+                v.reason = f"apply：{line} → 保留"
+                kept.append(f"{v.name}（{v.reason}）")
+                continue
         rc, out, err = _git(["worktree", "remove", str(v.path)], root)
         if rc == 0:
             v.apply_result = "已删"
@@ -562,7 +731,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--min-size", type=float, default=0.0, metavar="MB",
                     help="只看 ≥ 这个大小的树（MB；默认 0 = 全看）")
     ap.add_argument("--root", default=None, help="仓库根（默认自动定位主仓）")
+    ap.add_argument("--no-rescue", action="store_true",
+                    help="★ 危险：跳过「删前证据留档」（默认不传 = 必须留档）")
     ns = ap.parse_args(argv)
+
+    if ns.no_rescue:
+        print("★★★ 警告：--no-rescue 已开 —— 本轮**不留档**：树里的 wb-*.jsonl"
+              "（第 1 行含 model=，是「这张卡用了哪个模型」的唯一凭证）与 wb-usage.jsonl "
+              "会随树一起**永久消失**、事后从仓库里查不出来。", file=sys.stderr)
 
     root = main_root(ns.root)
     if root is None:
@@ -577,6 +753,16 @@ def main(argv: list[str] | None = None) -> int:
     summary = summarize(verdicts)
     shown = [v for v in verdicts if not v.skipped]
 
+    # ★ 留档预演（干跑也看得见）：可删的树各要留档几份 —— 「待留档」列
+    if not ns.no_rescue:
+        for v in verdicts:
+            if v.deletable:
+                files, usage = scan_rescue(v.path / "gates" / "diag")
+                v.rescue_files = len(files)
+                if usage is not None:
+                    v.rescue_usage_add, v.rescue_usage_skip = preview_usage(
+                        root / "gates" / "diag" / usage.name, usage)
+
     if ns.json:
         payload = {
             "root": str(root),
@@ -589,6 +775,9 @@ def main(argv: list[str] | None = None) -> int:
                     "locked": v.locked, "holds_lock": v.holds_lock,
                     "size_mb": round(v.size_bytes / MB, 1), "size_skipped": v.size_skipped,
                     "deletable": v.deletable, "reason": v.reason, "skipped": v.skipped,
+                    "rescue_files": v.rescue_files,
+                    "rescue_usage_add": v.rescue_usage_add,
+                    "rescue_usage_skip": v.rescue_usage_skip,
                 }
                 for v in verdicts
             ],
@@ -600,6 +789,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"=== .wt 工作树清理器 · {mode} · 仓库根 {root} ===")
         print("（判据：①在 .wt 下非主树非当前树 ②tip 已集成 ③无未提交跟踪改动 "
               "④无进程占用 ⑤无门禁锁 ⑥无 locked ⑦非未完工卡）")
+        print("（删前留档：把 <树>/gates/diag/wb-* 拷回主树 gates/diag/；"
+              "wb-usage.jsonl 追加合并；拷不出来就不删。--no-rescue 才跳过）")
+        if ns.no_rescue:
+            print("（★ --no-rescue：本轮不留档 —— 会丢掉模型凭证与 usage 台账）")
         if ns.min_size > 0:
             print(f"（--min-size {ns.min_size} MB：{summary['skipped']} 棵更小的树已跳过）")
         for line in render_table(shown):
@@ -609,7 +802,7 @@ def main(argv: list[str] | None = None) -> int:
 
     code = 0
     if ns.apply:
-        code = do_apply(root, verdicts)
+        code = do_apply(root, verdicts, rescue=not ns.no_rescue)
         if not ns.json:
             n_removed = sum(1 for v in verdicts if v.apply_result == "已删")
             n_left = sum(1 for v in verdicts if v.deletable and v.apply_result != "已删")
