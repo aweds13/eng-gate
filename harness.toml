@@ -1,0 +1,18 @@
+# harness.toml —— harness/ 复制体与本项目之间的**唯一胶水**（卡 088 · T-G183）
+#
+# 口径：这里只登记 harness/ 下复制体（wb_state/wb_diag/wb_plan/wb_status）**真读到的键**，
+# 不为未来设计键。复制体里不许再写死项目专有路径 —— 缺键 / 键名拼错 / 多写未知键 /
+# 值不是非空字符串 / must_exist 的路径不存在，harness.manifest 都会指名道姓报错（不静默用默认值）。
+# 路径一律相对仓根（绝对路径也接受）。
+
+[paths]
+backlog = "docs/workbacklog.toml"      # wb_plan 不传 --backlog 时默认读的并发排班表
+workbench = "tools"                    # 派活器 wb_dispatch.py 所在目录（复制体只拼命令/认进程，不 import 它）
+gate_lock = "gates/diag/gate_lock.py"  # wb_state 查门禁锁调用的脚本
+gates_runner = "scripts/run_gates.py"  # wb_state 在进程列表里认"在跑的门禁"用的脚本名
+ledger = "docs/traceability.toml"      # 台账：wb_plan 的受保护共享文件（作者不许碰）
+changelog = "docs/changelog.md"        # 变更日志：wb_plan 的受保护共享文件
+handoff = "复盘/交接-重构进度.md"       # 交接进度文档：wb_plan 的受保护共享文件
+handoff_card = "复盘/新窗口交接卡.md"   # 新窗口交接卡：wb_plan 的受保护共享文件
+gates_state = "gates/last.json"        # 门禁结果产物：wb_plan 的受保护共享文件
+gates_reuse = "gates/reuse.json"       # 门禁复用记录：wb_plan 的受保护共享文件

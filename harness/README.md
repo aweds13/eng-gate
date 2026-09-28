@@ -1,0 +1,58 @@
+# harness/ —— 基础设施与项目之间的「缝」（T-G183）
+
+`tools/` 工作台脚本的**复制体**：项目专有值已抽空，全读仓根 `harness.toml`
+（唯一解析处 `manifest.py`）。复制体是**登记外的新东西**，原件仍在 `tools/`
+一字未动，台账证据仍指原件。
+
+## 这是缝，怎么加键
+
+1. 先有**读取点**再加键；用不到不许写，没有装饰性配置。
+2. 键要登记进 `manifest.py` 的 `SCHEMA` 白名单；不登记 = 未知键，加载即报错。
+3. 只用 `manifest.get("段.键")` / `manifest.path("段.键", must_exist=...)` 读。
+   写错（缺文件/坏 TOML/缺段/缺键/拼错/多写段/空值/非字符串/路径不存在）一律抛
+   `ManifestError`，指名「哪个键·在哪个文件·期望什么」，**无静默默认值**。
+4. 相对路径相对仓根 `ROOT`（本目录上一级）。唯一旁路：`HARNESS_TOML` 指绝对
+   路径配置（测试/演示用）。
+
+## 已复制的 4 个（依赖闭包，原件仍在 `tools/`）
+
+| 复制体 | 原件 |
+| --- | --- |
+| `harness/wb_state.py` | `tools/wb_state.py` |
+| `harness/wb_status.py` | `tools/wb_status.py`（wb_diag 的兄弟依赖） |
+| `harness/wb_diag.py` | `tools/wb_diag.py` |
+| `harness/wb_plan.py` | `tools/wb_plan.py` |
+
+外加 `__init__.py`、`manifest.py`。复制体**不依赖 `tools/`**：不挂 `sys.path`、
+不 `from tools...`；`wb_diag` 的 `import wb_status` 由同目录天然解析。冻结输入下
+原件/复制体输出**逐字节相同**（现场板 wb_state 仅环境绝对路径字段不同），拿掉
+`tools/` 后仍能跑；证据见 T-G183 台账 gaps。
+
+## 还没复制的 6 个重工具（下期清单，附现算耦合点数）
+
+`wb_dispatch.py`(13) · `wb_verify.py`(9，import run_gates) · `wb_brief.py`(5) ·
+`wb_dash.py`(5，import wb_dispatch/wb_status) · `wb_review.py`(4) · `wt_prune.py`(4)。
+耦合点 = 本地 import + 仓内脚本路径 + 项目固定路径（`gates/diag`、`复盘/*` 等）。
+下期复制时同样逐个抽空进 `harness.toml`（按需加键，别提前设计）。
+
+## 为什么是复制，不是搬
+
+台账证据按**路径**钉死文件位置：钉在 `tools/` 226 条、`scripts/` 45 条，
+`audit_progress.py` 会求值其中的 `file:/text:/test:` 断言；铁律 35 定台账只许
+末尾追加。搬文件 = 同时改这 271 条，走不通。复制则原件不动、证据照常解析，
+复制体抽空后天生可独立，还能用「原件 vs 复制体」证明等价。
+
+## 门禁接线
+
+`scripts/run_gates.py` 的 ruff 目标加了 `"harness/"`（T-G183 对该文件唯一改动）：
+
+```python
+("ruff", [PY, "-m", "ruff", "check", "src/", "tests/", "scripts/",
+          "tools/", "examples/", "harness/"]),
+```
+
+## 将来退役原件要做什么（属下一期）
+
+退役 = 把台账按 `tools/` 钉死的证据（含三处按路径加载：`wt_prune.py` load
+`wb_plan.py`、两个测试挂 `sys.path`）成批迁到 `harness/`，并给出迁移后 audit
+全求值通过的证据。属下一期；**本卡不动原件**。
