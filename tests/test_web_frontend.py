@@ -13,12 +13,19 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from timeflow.api.app import create_app
+
+# ★ 2026-09-28（T-G177）：暗色令牌的「必需集合」与「取真暗色块的切法」住在门禁工具
+#   `tools/web_live_check.py` 里（那里也用同一份），这里 import 过来 ——
+#   两处各写一份正是本卡要灭的病根。
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+import web_live_check as wlc  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂上
 
 WEB_INDEX = Path(__file__).resolve().parent.parent / "src" / "web" / "index.html"
 WEB_CSS = Path(__file__).resolve().parent.parent / "src" / "web" / "app.css"
@@ -75,8 +82,15 @@ def test_css_tokens_exist_and_cover_both_themes() -> None:
     ):
         assert token in css, f"缺少令牌 {token}"
     # 暗色块里也要有背景/文字/表面的覆盖（否则暗色会是半成品）
-    dark = css.split('[data-theme="dark"]', 1)[1].split("}", 1)[0]
-    for token in ("--bg", "--panel", "--panel-2", "--border", "--ink"):
+    #
+    # ★ 2026-09-28（T-G177）修真「假护栏」：原先这里是
+    #     dark = css.split('[data-theme="dark"]', 1)[1].split("}", 1)[0]
+    #   —— 第一次命中落在**文件头注释**（app.css 第 6 行那句「[data-theme="dark"] 在 R1 就位」），
+    #   于是切出来的是 `:root` 亮色块，真暗色块（18 个令牌）永远没被查过：
+    #   清空暗色块它仍绿（卡 080 实测）。改用令牌层（tools/contrast_audit.py）同在用的切法
+    #   取真暗色块，且判据只看暗色块**自己声明**的令牌（不看亮色可以回落的那些）。
+    dark = wlc.dark_declared_tokens(css)
+    for token in wlc.DARK_REQUIRED_TOKENS:
         assert token in dark, f"暗色令牌缺少 {token}"
 
 

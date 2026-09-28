@@ -41,6 +41,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import contrast_audit as ca  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂上
 import test_web_frontend as twf  # noqa: E402 —— 存在性层的**真入口**就在这个测试模块里
+import web_live_check as wlc  # noqa: E402 —— 暗色必需令牌集合 / 取真暗色块的切法（T-G177 共用一份）
 
 # `contrast_audit.token_blocks` 用的同一条正则 —— 真暗色规则就是它。
 DARK_RULE = re.compile(r'\[data-theme="dark"\]\s*\{(.*?)\n\}', re.S)
@@ -161,21 +162,27 @@ def test_3_missing_dark_token_is_caught_by_contrast_layer() -> None:
     assert "dark:--ink on --panel-2" in bad, f"删了暗色 --panel-2 却没红：{bad}"
 
 
-def test_3b_decoration_only_token_deletion_is_uncaught_today(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """自证③b —— ★ **诚实记录，不是护栏**：删掉暗色只被「纯装饰」表用到的 `--border`。
+def test_3b_decoration_only_token_deletion_is_now_caught_by_existence_layer(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """自证③b（★ T-G177 把 080 的「抓不到」**翻面**：记录保留，判据反过来）：删掉暗色
+    只被「纯装饰」表用到的 `--border`。
 
-    实测：对比度层**绿**（`--border` 不在任何被判的组合里，只在 `AA_NONTEXT_EXEMPT` 装饰档，
-    只记录不判）、存在性层**也绿**（它读错了区域，见 `test_4b`）→
-    **今日没有任何静态层抓得到「删掉一个装饰类暗色令牌」**。
-
-    这格今日没人守 —— 如实登记在 `复盘/暗色护栏自证-T-G175.md`。
-    若哪天有层补上了，**这条会红**：那时把「抓不到」的记录更新掉即可（这正是它存在的意义）。
+    ★ **修之前（080 实测）**：删掉 `--border` → 对比度层**绿**（`--border` 只在
+    `AA_NONTEXT_EXEMPT` 装饰档，只记录不判）**且存在性层也绿**（它读错了区域）→
+    「今日没有任何静态层抓得到删掉一个装饰类暗色令牌」——080 如实登记在
+    `复盘/暗色护栏自证-T-G175.md` §二·抓不到的格 D。
+    ★ **修之后（本卡 T-G177 实测）**：存在性层改用令牌层同一条切法取**真暗色块**、
+      且只看暗色块**自己声明**的令牌 → `--border` 一被删就红（见下断言）。
+    对比度层这半仍是绿（它的口径没变）——两段都留在这里，作为这条"假护栏"的证据链。
     """
     css = _real_css()
     mutated = _del_dark_token(css, "--border")
     assert mutated != css, "变异没生效"
+    # 080 的记录：对比度层抓不到（`--border` 是装饰档，只记录不判）—— 口径没变，保留
     assert _dark_shortfalls(mutated) == [], "对比度层居然抓到了 —— 记录该更新"
-    assert not _existence_layer_catches(tmp_path, mutated), "存在性层居然抓到了 —— 记录该更新"
+    # ★ 本卡翻面：存在性层**现在必须抓到**
+    assert _existence_layer_catches(tmp_path, mutated), (
+        "存在性层没抓到删掉的 --border —— 假护栏又回来了"
+    )
 
 
 # ---------------------------------------------------------------- 自证④：整块消失变异
@@ -191,43 +198,59 @@ def test_4_whole_dark_block_removed_makes_contrast_audit_error_not_silently_gree
         ca.token_blocks(_remove_dark_block(_real_css()))
 
 
-def test_4b_emptied_dark_block_is_uncaught_by_any_static_layer_today(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """自证④b —— ★ **诚实记录，不是护栏**：把暗色块**清空**（保留选择器 `[data-theme="dark"] {}`）。
+def test_4b_emptied_dark_block_is_now_caught_by_existence_layer(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """自证④b（★ T-G177 翻面：记录保留，判据反过来）：把暗色块**清空**
+    （保留选择器 `[data-theme="dark"] {}`）。
 
-    这是比「整块删掉」**更阴**的一种改坏（选择器还在，看着像暗色还接线着）：
-    `contrast_audit` 拿到的暗色 = 亮色（本来就全过）→ **绿**；
-    存在性层也**绿**（它的暗色块取法有缺陷 —— `css.split('[data-theme="dark"]', 1)` 撞上文件头
-    注释里的同一句话，取到的是 `:root` **亮色**块）→ **今日没有任何静态层抓得到「暗色块被清空」**。
-
-    这格今日没人守 —— 如实登记在 `复盘/暗色护栏自证-T-G175.md`（含建议）。
-    有层补上后**这条会红** → 把记录更新掉。
+    这是比「整块删掉」**更阴**的一种改坏（选择器还在，看着像暗色还接线着）。
+    ★ **修之前（080 实测）**：`contrast_audit` 拿到的暗色 = 亮色（本来就全过）→ **绿**；
+      存在性层也**绿**（它的暗色块取法撞上文件头注释，切到的是 `:root` 亮色块）→
+      「今日没有任何静态层抓得到暗色块被清空」——080 如实登记在
+      `复盘/暗色护栏自证-T-G175.md` §二·抓不到的格 E。
+    ★ **修之后（本卡 T-G177 实测）**：存在性层取真暗色块 → 清空后块里零令牌，必需令牌全缺 → 红。
+    对比度层这半仍是绿（暗色 = `{**light}` 全用亮色令牌，亮色本来就全过）——两段都留作证据链。
     """
     css = _real_css()
     emptied = _empty_dark_block(css)
     assert emptied != css, "变异没生效"
     assert _dark_shortfalls(emptied) == [], "对比度层居然抓到了 —— 记录该更新"
-    assert not _existence_layer_catches(tmp_path, emptied), "存在性层居然抓到了 —— 记录该更新"
+    # ★ 本卡翻面：存在性层**现在必须抓到**
+    assert _existence_layer_catches(tmp_path, emptied), (
+        "存在性层没抓到被清空的暗色块 —— 假护栏又回来了"
+    )
 
 
-def test_4c_existence_layer_reads_the_light_block_not_the_dark_one() -> None:
-    """★ **实测缺陷登记**：存在性层（
-    `tests/test_web_frontend.py::test_css_tokens_exist_and_cover_both_themes`）
-    取暗色块的写法是 `css.split('[data-theme="dark"]', 1)[1].split("}", 1)[0]` ——
-    但 `app.css` 的**文件头注释**（第 6 行）里先出现了 `[data-theme="dark"]` 这句话，
-    于是它切到的是**注释之后到第一个 `}`**，也就是整个 `:root` **亮色**块 ——
-    **永远看不到真的暗色块**（④b 已从行为上证过：清空暗色块它仍绿）。
+def test_4c_existence_layer_now_reads_the_real_dark_block() -> None:
+    """★ 修前 / 修后对照（T-G177 翻面；历史痕迹保留）。
 
-    这里直接把「它切到的那个区域」取出来，证明它落在 `:root` 亮色块上、
-    且**真暗色块的令牌区不在其中**（真暗色块从第 141 行的 `[data-theme="dark"] {` 开始）。
-    ★ 本卡**不修** `tests/test_web_frontend.py` —— 它在白名单之外，先如实登记。
+    ★ 修前（080 实测）：存在性层取暗色块写的是
+        dark = css.split('[data-theme="dark"]', 1)[1].split("}", 1)[0]
+      但 `app.css` 的**文件头注释**（第 6 行）先出现了 `[data-theme="dark"]` 这句话，
+      于是它切到的是"注释之后到第一个 `}`" = 整个 `:root` **亮色**块 ——
+      真暗色块的令牌区永远不在其中（④b 从行为上证过：清空暗色块它仍绿）。
+    ★ 修后（本卡实测）：改用令牌层同在用的切法取真暗色块；下面对"它现在取到的是真暗色块"直接取证。
     """
     css = _real_css()
-    region = css.split('[data-theme="dark"]', 1)[1].split("}", 1)[0]
-    assert ":root {" in region, "它切到的区域居然不含亮色块 → 判断不成立，请更新记录"
-    dark_body = _dark_rule(css).group(1)
-    # 真暗色块的**令牌区**（去掉首尾空行后的第一行）必须不在它切到的区域里
-    first_line = dark_body.strip().splitlines()[0].strip()
-    assert first_line not in region, "它居然切到了真暗色块 → 判断不成立，请更新记录"
+    # —— 反例（保留）：旧的 split 确实落在亮色 :root 块上，且不含真暗色块的令牌区
+    old_region = css.split('[data-theme="dark"]', 1)[1].split("}", 1)[0]
+    assert ":root {" in old_region, "旧切法的反例失效了 —— 请更新这条记录"
+    first_decl = _dark_rule(css).group(1).strip().splitlines()[0].strip()
+    assert first_decl not in old_region, "旧切法居然切到了真暗色块 —— 记录不成立，请更新"
+
+    # —— 修后：新切法取到的是真暗色块（含暗色专属的 color-scheme: dark、不含 :root {）
+    dark_text = wlc.dark_block_text(css)
+    assert ":root {" not in dark_text, "新切法又切到亮色块了 —— 修真失败"
+    assert "color-scheme: dark" in dark_text, "新切法没取到真暗色块"
+    assert first_decl in dark_text, "新切法没取到真暗色块的令牌区"
+
+    # 现跑证据：真暗色块的令牌数 + 必需令牌都在（`--panel-2` 就在其中）
+    declared = wlc.dark_declared_tokens(css)
+    assert set(wlc.DARK_REQUIRED_TOKENS) <= declared, f"真暗色块令牌不全：{sorted(declared)}"
+    assert len(declared) >= 10, f"真暗色块令牌数异常偏少：{len(declared)}，可能切错了块"
+    print(
+        f"[T-G177 现跑] 旧切法区域含 ':root {{' = {':root {' in old_region}；"
+        f"真暗色块令牌数 = {len(declared)}（含 --panel-2 = {'--panel-2' in declared}）"
+    )
 
 
 # ---------------------------------------------------------------- 自证⑤：自证不许动仓库

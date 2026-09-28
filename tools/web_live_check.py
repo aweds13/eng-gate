@@ -12,6 +12,7 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -26,10 +27,43 @@ import uvicorn
 from timeflow.api.app import create_app
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))  # 同目录的令牌层工具
+import contrast_audit as ca  # noqa: E402 —— 复用它的令牌切法/正则（T-G177）
+
 INDEX = ROOT / "src" / "web" / "index.html"
 SCRIPTS = (ROOT / "src" / "web" / "offline.js", ROOT / "src" / "web" / "sw.js")
 PHONE_CHECK = ROOT / "tools" / "phone_check.mjs"
 SCRIPT = re.compile(r"<script>(.*?)</script>", re.S)
+
+# ★ 2026-09-28（T-G177）：暗色块里**必须真有**的令牌（背景 / 文字 / 表面）。
+# ★ 存在性层（`tests/test_web_frontend.py`）与本文件的活体判据**共用这一份**，别两处各写一份 ——
+#   这正是本卡要灭的病根（同一个口径写两套，切法和集合各自漂移）。
+DARK_REQUIRED_TOKENS: tuple[str, ...] = ("--bg", "--panel", "--panel-2", "--border", "--ink")
+
+# 取真暗色块的切法 = 令牌层 `contrast_audit.token_blocks` 用的同一条：同一正则、同样先剥注释。
+_DARK_BLOCK = re.compile(r'\[data-theme="dark"\]\s*\{(.*?)\n\}', re.S)
+
+
+def dark_block_text(css: str) -> str:
+    """真 `[data-theme="dark"] { … }` 规则的块体（已剥注释）。
+
+    ★ 为什么不用 `css.split('[data-theme="dark"]', 1)`:那句话在 `app.css` 的**文件头注释**
+    （第 6 行）先出现过一次，split 会切到"注释之后到第一个 `}`" —— 也就是 `:root` **亮色**块，
+    真暗色块永远读不到（卡 080 实测：清空暗色块它仍绿）。用令牌层同一条正则取，命中即真规则。
+    """
+    m = _DARK_BLOCK.search(css)
+    if m is None:
+        raise SystemExit('web_live：app.css 里找不到 [data-theme="dark"] 令牌区')
+    return re.sub(r"/\*.*?\*/", "", m.group(1), flags=re.S)
+
+
+def dark_declared_tokens(css: str) -> set[str]:
+    """暗色块里**真正声明**的令牌名（只看 delta —— 不含亮色块可回落的那些）。
+
+    ★ 不能直接用 `contrast_audit.token_blocks(css)["dark"]`：那个 dark 是 `{**light, **delta}`，
+    亮色块有而暗色块没有的令牌（如被删掉的 `--border`）会从亮色"看得见"，判不出"暗色块自己缺令牌"。
+    """
+    return {m.group(1) for m in ca._TOKEN.finditer(dark_block_text(css))}
 
 
 def check_js_syntax(tmp: Path) -> tuple[bool, str]:
@@ -873,7 +907,10 @@ def main() -> int:
         # 设置页（用户要求统一收拢）+ 挤压/遮挡修复的样式约定
         "左栏有设置入口": 'data-view="setting"' in _rail_nav(html),
         "挤压修复样式在位": ".new button { flex: none }" in css and ".field" in css,
-        "暗色令牌可取到": '[data-theme="dark"]' in css,
+        # ★ 2026-09-28（T-G177）：原先只断 `'[data-theme="dark"]' in css` ——
+        # 只验选择器**字符串**在不在，块里有没有令牌根本不看（清空暗色块照样绿）。
+        # 改成"真暗色块里必需令牌都在"，与存在性层同一份集合。
+        "暗色令牌可取到": all(tok in dark_declared_tokens(css) for tok in DARK_REQUIRED_TOKENS),
         # 智能视图可达（T-B3）：左栏 / 全部任务页 / 设置页都有入口 ——
         # 手机端（≤640px）左栏导航被 CSS 隐藏，所以不能只靠左栏（否则手机上直接进不去）。
         "智能视图可达": all(

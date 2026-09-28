@@ -4710,3 +4710,17 @@ evidence = [
   "file:复盘/wt清理工具-T-G176.md",
 ]
 gaps = "**七条判据的判法**（`tools/wt_prune.py:judge()` `:339`，按 1→7 取首条不成立当理由，七条全过才「可删」；任何一条判不了 → 保留）：①路径在 `<仓库根>/.wt/` 下且非主树非当前树（`git worktree list --porcelain` + `git rev-parse --show-toplevel`）；②在主树里 `git merge-base --is-ancestor <tip> HEAD` 退 0；③`git -C <树> status --porcelain --untracked-files=all` 里不以 `??` 开头的行数为 0（未跟踪只计数、不算阻塞）；④铁律 28 的树侧判据 = 进程 cwd == 树根（psutil 一次扫全机，绝不按进程名，本卡不杀进程）；⑤`gates/diag/gates*.lock` 的 cwd 不在树里；⑥`git worktree list --porcelain` 无 `locked`；⑦`docs/workbacklog.toml` 里 status!=done 的卡占的 tree 一律保留（不硬编码卡号；backlog 读坏 → 判不了 → 全保留）。**真树 dry-run 读数**：`python -X utf8 tools/wt_prune.py` → 可删 9 棵 / 保留 76 棵 / 可释放 245.5 MB（9 棵 tip 均已在主树 HEAD 4870bea；.wt/traegate 与 .wt/vis 撞判据3、.wt/wtprune 是当前树撞判据1）。**真树一棵未删**：跑前/跑后 `git worktree list --porcelain | grep -c '^worktree '` = 86 / 86。**临时仓库 --apply 证据**（git init + clean/dirty/ahead/locked 四棵）：删 1 棵该删的、保 3 棵该留的、EXIT=0、计数 5→4；未跟踪文件让 remove 失败时保留并退 1（有专用用例钉着）。**先红后绿**：把判据6 改坏的变异副本经 `WT_PRUNE_UNDER_TEST` 跑测试 → 2 failed 9 passed；真文件 11 passed。★ **边界（如实）**：判据 7 今天保护不到任何树（backlog 3 张卡全 done），在飞但未登记进 backlog 的卡它判不出，请主控用别的账再核；判据 4 我实现成「进程 cwd 在树里即算占用」的更宽安全侧（端口段只用于标注、不参与判定），若要逐字复刻「端口段 ∩ cwd」的窄口径请明说。**没动什么**：`.wt/**` 一个字未删未改；src/ scripts/ 别的 tools/ 别的 tests/ 其余 docs/ 复盘/ gates/diag/** data/ 主树外来未跟踪文件全未碰。"
+
+
+[entries."T-G177"]
+id = "T-G177"
+title = "修真暗色令牌存在性护栏：切错块（第 6 行注释先命中）+ web_live 判据过弱 + 080 两条断言翻面"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:tests/test_web_frontend.py",
+  "file:tests/test_dark_teeth.py",
+  "file:tools/web_live_check.py",
+  "file:复盘/暗色存在性层修真-T-G177.md",
+]
+gaps = "**病根行号**：tests/test_web_frontend.py:78（修前用 css.split('[data-theme=dark]',1)[1].split('}',1)[0] 取暗色块，撞上 app.css 第 6 行文件头注释 → 切到的是 :root 亮色块）；同类第二处 tools/web_live_check.py:876（修前只断选择器字符串 '[data-theme=dark]' in css）。**真块 vs 假块令牌数（现跑）**：旧切法区域 56 令牌（含 :root {、不含 color-scheme:dark）；真暗色块 18 令牌（含 --panel-2、不含 :root {）。**修前红绿 vs 修后红绿四个读数**：D 删暗色 --border —— 修前 抓不到（080 实测）/ 修后 抓到，首条红行「暗色令牌缺少 --border」；E 清空暗色块体 —— 修前 抓不到 / 修后 抓到，首条红行「暗色令牌缺少 --bg」。**其它读数**：pytest tests/test_web_frontend.py → 109 passed（绿）；pytest tests/test_dark_teeth.py tests/test_web_frontend.py → 117 passed；python -X utf8 tools/web_live_check.py → 退 0、[OK ] 暗色令牌可取到。**是否补了暗色令牌**：没有 —— 修好测试后直接绿，按卡条件（没变红不许碰 src）src/web/app.css 一个字节未动。**没动什么**：src/ scripts/ 别的 tools/ 别的 tests/ 其余 docs/ 复盘/ gates/diag/** .wt 别的树/主树外来未跟踪文件/data/ 全未碰；修法复用令牌层 contrast_audit::token_blocks 同一条切法，必需集合 DARK_REQUIRED_TOKENS 只一份（存在性层 import 自 tools/web_live_check.py）。"
