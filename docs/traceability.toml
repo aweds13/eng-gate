@@ -4672,3 +4672,15 @@ evidence = [
   "file:复盘/轻量化通道-T-G173.md",
 ]
 gaps = "**实测读数**：① 三件工具各跑一次 —— wb_brief --card 078 → gates/diag/brief-078.md 5956 字节（≤6KB 硬上限 6144，五节齐全）；wb_brief --master → brief-主控.md 3479 字节；wb_state → 14 行（≤30）；wb_verify 干净树 --tree . 退出码 0（SUMMARY FAIL=0 OK=5），故意给错 --expect-parent deadbeef 退出码 1（SUMMARY FAIL=1 OK=4），带 7 条 --allow 在 150de81 上退出码 0（FAIL=0 OK=7）。② 省了多少：四份强制读文档合计 693KB ≈ 222K tokens → 切片 5.8KB，约 0.84%；按 tokens≈字节÷3.1 折算，每张卡省 ≈ 219K tokens（估算依据，非实测分词）。③ --lean 不改变默认行为：python -X utf8 tools/wb_dispatch.py --help 含 --lean；默认 -p 含四份文档名、不含 brief-078.md，--lean 的 -p 含 brief-078.md、不含四份文档名，除 -p 外其余参数逐字相同（d[4:]==l[4:]）；tests/test_wb_dispatch.py 全过。④ ★ 一处与卡原文偏差（如实记）：卡 §1.1 写「取最后一段 CHECKPOINT」，但交接文档是新→旧排列（最新那段在第 5 行），取字面最后一段会取到最旧的 2026-09-26 那段；本实现按日期最大取（= 卡 §0 明写的「只取最新那一段」），并列时取出现靠前的。⑤ 另固化复盘/口径坑.md 八条判据 + 外包-卡表与规矩.md 末尾追加 §24.12。⑥ **没动什么**：src/ scripts/ 其余 tools/ tests/ docs/（除台账那块与 changelog 一段）零改动；gates/diag/** 既有文件、.wt 别的树、主树外来未跟踪文件、data/ 一律未碰。"
+
+
+[entries."T-G174"]
+id = "T-G174"
+title = "人工验收清单 G 组：068/069/070 三张卡已落地的界面行为（四要素 + 存在性证据）"
+group = "PROCESS"
+status = "done"
+evidence = [
+  "file:docs/人工验收-照着点.md",
+  "file:复盘/人工验收清单G组-T-G174.md",
+]
+gaps = "**背景**：卡 073（T-G167）在 F 组明写「正在别的树上飞的（左栏三项自由选择 / 离线记挪位 / 暗色适配 / 打卡分钟）一个都没写进来 —— 落地后再补」；那三张卡（T-G162 068 / T-G163 069 / T-G164 070）已集成到主树 HEAD，本卡照同一四要素补成 G 组 5 条（G-1 左栏三项各自独立 / G-2 离线记移出 PC 左栏 / G-3 暗色适配四屏 / G-4 打卡可选分钟 / G-5 那句废话已删），表头与列逐字照 F 组，并给 F 组开头那句追加日期注（原句一字未动）。**只加不删读数**：git diff --numstat 764a316 -- docs/人工验收-照着点.md → 19 加 / 0 删（卡 §3.2 要求删除 0 或 ≤2）。**存在性 grep 证据（现跑，绑定 764a316）**：G-1 src/web/index.html:3317 设置→外观「左栏智能视图」、:3319 状态跟在名字后（在左栏/不在左栏）、:4086 默认三项全关（railViews 全 false）；G-2 index.html:32「离线记」不在 PC 左栏（T-G162）、:3302/:3537 电脑入口在 设置→数据与同步「手机离线记」；G-3 app.css:163 color-scheme:dark、:169 [data-theme=dark] .textarea 暗色覆盖（T-G163）；G-4 index.html:2734 placeholder「投入分钟（可选）」、:2760 ?invest_minutes=N。**G-5 零命中**：git grep -n '去「今日手动投入」补记' -- src/ 退出码 1；git grep -c '习惯打卡只记次数' -- src/ 退出码 1。★ 偏差如实记：卡原话「全库 grep 习惯打卡只记次数 → 零命中」逐字跑全库不为零——命中在变更记录文档（changelog / traceability / 交接 / T-G164 复盘 / 本卡清单自身引用该检索词），界面源码 src/ 内为零，按界面口径成立（与 T-G164 复盘写法一致）。**没动什么**：既有 A–F 组句子与条目一字未改；src/ scripts/ tools/ tests/ 其余 docs/ 复盘/ gates/diag/ .wt 别的树/主树外来未跟踪文件/data/ 全未碰；附录对账未重算。**门禁**：17 门 + ok=True + rev=父提交 + seal + 提交后 audit，以 gates/last.json 为准。"
