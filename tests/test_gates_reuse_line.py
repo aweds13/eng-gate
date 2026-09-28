@@ -230,3 +230,80 @@ def test_reuse_records_roundtrip_and_bad_file_is_defensive(
 
     (tmp_path / "reuse.json").write_text("[1, 2, 3]", encoding="utf-8")
     assert rg.load_reuse() == {}  # 不是 dict
+
+
+# ------------------------------------------------------------------ 生成物不算输入（T-G181）
+
+
+def test_generated_files_do_not_change_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ T-G181：塞 `__pycache__/*.pyc` / `*.egg-info/*` / `.pytest_cache/*` → 哈希**不变**。
+
+    这些是"这棵树被 pip 装过 / 跑过测试"的产物，不是提交内容的一部分 —— 算进去会让
+    **同一个提交**在装过的树与干净的树里判出不同的复用结论。
+    """
+    monkeypatch.setattr(rg, "ROOT", tmp_path)
+    _seed(tmp_path, "src/a/app.py", "A")
+    before = rg.input_hash(PATTERNS)
+
+    _seed(tmp_path, "src/a/__pycache__/app.cpython-312.pyc", "生成物")
+    _seed(tmp_path, "src/a.egg-info/PKG-INFO", "生成物")
+    _seed(tmp_path, ".pytest_cache/CACHEDIR.TAG", "生成物")
+
+    assert rg.input_hash(PATTERNS) == before
+
+
+def test_same_content_in_two_trees_hashes_equal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★★ T-G181 的核心判据：同一份内容造两处（一棵带生成物、一棵不带）→ 两个哈希**相同**。
+
+    这就是"同一个提交在不同树里必须判出同一个复用结论"的机器钉子 —— 修之前，带生成物
+    的那棵树（被 pip 装过 / 跑过测试）会算出不同的哈希 → 同一提交复用结论不同。
+    """
+    clean = tmp_path / "clean"
+    dirty = tmp_path / "dirty"
+    for root in (clean, dirty):  # 两棵树：同一份**提交内容**
+        _seed(root, "src/a/app.py", "A")
+        _seed(root, "src/a/util.py", "B")
+    # 只在 dirty 那棵里多出生成物（模拟"这棵树装过 / 跑过测试"）
+    _seed(dirty, "src/a/__pycache__/app.cpython-312.pyc", "x")
+    _seed(dirty, "src/timeflow.egg-info/PKG-INFO", "x")
+    _seed(dirty, ".pytest_cache/CACHEDIR.TAG", "x")
+
+    monkeypatch.setattr(rg, "ROOT", clean)
+    hash_clean = rg.input_hash(PATTERNS)
+    monkeypatch.setattr(rg, "ROOT", dirty)
+    hash_dirty = rg.input_hash(PATTERNS)
+
+    assert hash_clean == hash_dirty
+
+
+def test_editing_a_plain_py_file_changes_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ 防恒真：改一个**普通** `.py` 一个字节 → 哈希**必须不同**。
+
+    证明"排生成物"没有顺手把真输入也排掉（否则复用判据就退化成恒真的注释）。
+    """
+    monkeypatch.setattr(rg, "ROOT", tmp_path)
+    _seed(tmp_path, "src/a/app.py", "A")
+    before = rg.input_hash(PATTERNS)
+
+    _seed(tmp_path, "src/a/app.py", "B")  # 普通文件，只变一个字节
+
+    assert rg.input_hash(PATTERNS) != before
+
+
+def test_new_plain_file_disables_reuse(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 既有口径仍成立：新增一个**普通**文件（不是生成物，命中 `src/**`）→ 哈希**必须变**、
+    复用被禁。与"生成物不算输入"成对：排掉的只是生成物，真新增的输入照咬。"""
+    monkeypatch.setattr(rg, "ROOT", tmp_path)
+    _seed(tmp_path, "src/a/app.py", "A")
+    records = {"render": _record(rg.input_hash(PATTERNS))}
+
+    _seed(tmp_path, "src/a/extra.py", "B")  # 普通新文件，命中 src/**
+
+    assert rg.input_hash(PATTERNS) != records["render"]["hash"]
+    assert rg.skip_reused("render", records, no_reuse=False) is None

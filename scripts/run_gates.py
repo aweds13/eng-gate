@@ -194,13 +194,40 @@ REUSE_INPUTS: dict[str, tuple[str, ...]] = {
 }
 REUSABLE = tuple(REUSE_INPUTS)
 
+# ★ T-G181：glob 是按【工作区】匹配的 —— 上面 `src/**` 这类宽度会把**未跟踪的生成物**
+# 也捞进输入哈希。它们是「这棵树有没有被 pip 装过 / 跑过测试」的函数，不是提交内容的一部分：
+# 同一个提交在装过的树与干净的树里会算出不同哈希，还可能让"复用通过"基于提交里没有的文件。
+# 下面这两个常量就是**要排掉的那几类**（按路径判；门清单与 `src/**` 宽度一个字不动）。
+GENERATED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__", ".pytest_cache"})
+GENERATED_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo")
+
+
+def is_generated(path: Path) -> bool:
+    """命中的文件是**生成物**吗（T-G181）：`__pycache__/` · `.pytest_cache/` ·
+    `*.egg-info/` 目录下的任何文件，以及 `*.pyc` / `*.pyo`。只看路径，与内容无关。"""
+    if path.suffix in GENERATED_SUFFIXES:
+        return True
+    return any(
+        part in GENERATED_DIR_NAMES or part.endswith(".egg-info") for part in path.parts[:-1]
+    )
+
 
 def input_hash(patterns: tuple[str, ...]) -> str:
-    """把一组 glob 命中的**文件内容**哈希起来（路径 + 内容，稳定排序）。"""
+    """把一组 glob 命中的**文件内容**哈希起来（路径 + 内容，稳定排序）。
+
+    ★ T-G181：命中结果里按**路径**排掉生成物（`__pycache__/` · `*.pyc`/`*.pyo` ·
+    `*.egg-info/` · `.pytest_cache/`，见上面的 `GENERATED_DIR_NAMES`/`GENERATED_SUFFIXES`）。
+    为什么排：glob 按工作区匹配，这些是**未跟踪的生成物**，随"这棵树装没装过 / 跑没跑过
+    测试"变 —— 算进去会让**同一个提交**在两棵树里判出不同的复用结论（主控实测：同一提交
+    render 主树 171 个输入 vs 工作树 164 个，差的就是 `src/timeflow.egg-info/*`），
+    且一条"复用通过"可能是基于提交里根本不存在的文件下的。
+    ★ 排掉之后哈希口径变了 → `gates/reuse.json` 里既有那几条记录会**失效一次**（下一轮这
+    几道门真跑一遍），这是自愈，不是 bug。
+    """
     digest = hashlib.sha256()
     files: list[Path] = []
     for pattern in patterns:
-        files.extend(p for p in ROOT.glob(pattern) if p.is_file())
+        files.extend(p for p in ROOT.glob(pattern) if p.is_file() and not is_generated(p))
     for path in sorted(set(files), key=lambda p: p.as_posix()):
         digest.update(path.relative_to(ROOT).as_posix().encode("utf-8"))
         digest.update(b"\0")
