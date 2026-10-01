@@ -47,7 +47,9 @@ def sandbox(tmp_path: Path, monkeypatch) -> Path:
     cli.write_text("", encoding="utf-8")
     monkeypatch.setattr(wd, "ROOT", tmp_path)
     monkeypatch.setattr(wd, "paths", lambda *a, **k: (node, cli))
-    monkeypatch.setattr(wd, "git_dirty", lambda: [])
+    # ★ T-G204：`git_dirty` 现在能收「看哪棵树」这个参数（T-G199），桩要跟着改成可变参 ——
+    #   否则一带 `--cwd` 的用例就会 `TypeError: <lambda>() takes 0 positional arguments`。
+    monkeypatch.setattr(wd, "git_dirty", lambda *a, **k: [])
     monkeypatch.setattr(wd, "auth_ok", lambda *a, **k: (True, "登录自检通过"))
     # ★ 卡 102：沙箱要**与宿主内存无关** —— 内存闸的判据（读本机 available）由
     #   `tests/test_mem_guard.py` 用桩专测；这里测的是规格/脏树/log/端口/登录，把它们
@@ -200,6 +202,35 @@ def test_main_skips_port_check_without_segment(sandbox: Path, monkeypatch, capsy
                                       "--no-preflight"])
     assert wd.main() == 0
     assert "未给端口段，跳过端口体检" in capsys.readouterr().err
+
+
+def test_cwd_makes_brief_and_spec_paths_absolute(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ T-G204：给了 `--cwd` ⇒ 开场白里的 brief/spec 必须是**绝对路径**。
+
+    为什么：`--cwd` 把**工人进程的 cwd** 挪到卡树，而切片/规格是**仓库相对**路径
+    （`gates/diag/…` 只存在于主仓）⇒ 相对写法会把工人指到不存在的路径上，
+    它只能自己满盘找（卡 106 的工人就是这么找到的 —— 那是运气不是设计）。
+    """
+    work = sandbox / "cardtree"
+    work.mkdir()
+    monkeypatch.setattr(wd, "is_git_worktree", lambda p: True)   # 这条判据由别的用例专测
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--lean", "--cwd", str(work), "--no-preflight"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert str(sandbox / "spec.md") in out, "规格没给绝对路径"
+    assert str(sandbox / "gates" / "diag" / "brief-001.md") in out, "切片没给绝对路径"
+    assert "读 gates/diag/brief-001.md" not in out, "还留着指错路的相对写法"
+
+
+def test_without_cwd_paths_stay_repo_relative(sandbox: Path, monkeypatch, capsys) -> None:
+    """反例：**不给** `--cwd` 时行为逐字不变（仍是仓库相对路径）。"""
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--lean", "--no-preflight"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert "读 gates/diag/brief-001.md" in out
+    assert str(sandbox / "gates" / "diag" / "brief-001.md") not in out
 
 
 def test_auth_ok_recognises_the_authentication_needle(monkeypatch) -> None:

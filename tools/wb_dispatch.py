@@ -298,6 +298,19 @@ def auth_ok(node: Path, cli: Path, timeout: int = 180) -> tuple[bool, str]:
     return False, f"自检没拿到预期回话（退出码 {done.returncode}）：{wb_status._clip(body, 200)}"
 
 
+def prompt_path(p: str, worker_cwd: Path | None) -> str:
+    """★ T-G204：给了 `--cwd` 就把路径转成**绝对**（不给时**逐字不变**）。
+
+    为什么：`--cwd` 让**工人进程的 cwd** 变成卡树，而切片与规格是**仓库相对**路径
+    （`gates/diag/…` 只存在于主仓）⇒ 相对写法会把工人指到一个**不存在的路径**上，
+    它只能自己满盘找（卡 106 的工人就是这么找到的 —— 那是运气，不是设计）。
+    """
+    if not p or worker_cwd is None:
+        return p
+    q = Path(p)
+    return str(q if q.is_absolute() else (ROOT / q).resolve())
+
+
 def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
                   permission_mode: str = DEFAULT_PERMISSION_MODE, *,
                   max_turns: int = DEFAULT_MAX_TURNS_WRITE,
@@ -1879,9 +1892,10 @@ def main() -> int:
     node, cli = paths(args.cli)
     max_turns = args.max_turns or max_turns_default(args.read_only)
     lean_brief = ensure_lean_brief(args.card, worker_cwd) if args.lean else ""
-    initial_cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode,
+    initial_cmd = build_command(node, cli, args.card, prompt_path(args.spec, worker_cwd),
+                                args.model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
-                                lean=args.lean, brief=lean_brief)
+                                lean=args.lean, brief=prompt_path(lean_brief, worker_cwd))
 
     done_checks = "规格在 / 工作区干净（续跑则核对后放行）/ log 未占用"
     if args.no_preflight:
@@ -1915,7 +1929,8 @@ def main() -> int:
         print(f"[归档] 旧判决/摘要已归档：{', '.join(archived)}", flush=True)
     # ★ 卡 029 §2.7：每次真开跑记规格指纹；续跑且指纹变了 → 硬塞「先读规格」进续跑提示词。
     spec_digest = spec_fingerprint(args.spec)
-    spec_preamble = "" if not resume_sid else spec_changed_notice(args.spec, log)
+    spec_preamble = ("" if not resume_sid
+                     else spec_changed_notice(prompt_path(args.spec, worker_cwd), log))
     spec_file_for(log).parent.mkdir(parents=True, exist_ok=True)
     spec_file_for(log).write_text(f"{args.spec}\nsha256={spec_digest}\n", encoding="utf-8")
 
@@ -1932,9 +1947,10 @@ def main() -> int:
     while True:
         log_k = log if attempts == 1 else log.with_name(f"wb-{args.card}.r{attempts}.jsonl")
         if attempts == 1 and not sid:
-            cmd = build_command(node, cli, args.card, args.spec, model, args.permission_mode,
+            cmd = build_command(node, cli, args.card, prompt_path(args.spec, worker_cwd),
+                                model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
-                                lean=args.lean, brief=lean_brief)
+                                lean=args.lean, brief=prompt_path(lean_brief, worker_cwd))
         elif sid:
             prompt = continuation_prompt(reason=reason or "上次被中断", scene=scene,
                                          card=args.card)
@@ -1945,9 +1961,10 @@ def main() -> int:
                                  max_turns=max_turns, autocompact=args.autocompact)
         else:
             print("[续 ] 没拿到 session id，续不了 → 只能重开一轮", file=sys.stderr, flush=True)
-            cmd = build_command(node, cli, args.card, args.spec, model, args.permission_mode,
+            cmd = build_command(node, cli, args.card, prompt_path(args.spec, worker_cwd),
+                                model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
-                                lean=args.lean, brief=lean_brief)
+                                lean=args.lean, brief=prompt_path(lean_brief, worker_cwd))
         print(f"[跑 ] 第 {attempts} 次；log {log_k.name}", flush=True)
         attempt_started = time.time()
         code, reason, scene, new_sid = run_worker(
