@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import io
 import json
+import locale
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -371,3 +372,72 @@ def test_serve_without_env_still_lists_six(monkeypatch: pytest.MonkeyPatch) -> N
     assert pool_mcp.serve([]) == 0
     reply = json.loads(out.getvalue().splitlines()[0])
     assert [t["name"] for t in reply["result"]["tools"]] == READ_TOOL_NAMES
+
+
+# ================================================================ ⑦ 证据编码（卡 113 · T-G210）
+
+
+def _expected_console_encoding() -> str:
+    """测试侧独立算一遍"该用哪个编码"——**不**调 `pool_mcp` 的那个函数（否则是循环自证）。"""
+    return (locale.getencoding() if hasattr(locale, "getencoding")
+            else locale.getpreferredencoding(False)) or "utf-8"
+
+
+def test_kill_and_image_decode_with_console_encoding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """结构性：`_kill` / `_image_name` 给 `subprocess` 的 `encoding` 是**系统区域编码**
+    （★ 动态比，换台机器也成立，不是写死 cp936），且 `errors` 仍是 `"replace"`。"""
+    seen: list[dict[str, Any]] = []
+
+    class _Done:
+        returncode = 0
+        stdout = '"x.exe","4242","Console","1","1 K"\n'
+        stderr = ""
+
+    def fake_run(argv: list[str], **kwargs: Any) -> _Done:
+        seen.append({"argv": list(argv), **kwargs})
+        return _Done()
+
+    monkeypatch.setattr(pool_mcp.subprocess, "run", fake_run)
+    pool_mcp._image_name(4242)
+    pool_mcp._kill(4242)
+
+    assert [call["argv"][0] for call in seen] == ["tasklist", "taskkill"]
+    expected = _expected_console_encoding()
+    for call in seen:
+        assert call["encoding"] == expected, call["argv"]
+        assert call["errors"] == "replace", call["argv"]
+
+
+def test_kill_reads_system_encoded_output_as_human_text(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """行为性：`taskkill` 吐的**系统编码**回话要能读成人话（不出替换字符 `\\ufffd`）；
+    坏字节只许被 `replace` 掉，**绝不许抛**（掐进程这条路不能被解码带崩）。"""
+    system_enc = _expected_console_encoding()
+    human = "成功: 已终止 PID 1（映像 python.exe）"
+    good_bytes = human.encode(system_enc)
+
+    class _Done:
+        returncode = 0
+        stderr = ""
+
+        def __init__(self, stdout: str) -> None:
+            self.stdout = stdout
+
+    def fake_run(argv: list[str], **kwargs: Any) -> _Done:
+        # 模拟真子进程：按**调用方给的 encoding/errors** 去解系统编码的原始字节。
+        return _Done(good_bytes.decode(kwargs["encoding"], errors=kwargs["errors"]))
+
+    monkeypatch.setattr(pool_mcp.subprocess, "run", fake_run)
+    ok, detail = pool_mcp._kill(4242)
+    assert ok is True
+    assert "\ufffd" not in detail          # 编码对 → 没有人话被替换成 U+FFFD（utf-8 老写法会中招）
+    assert "成功" in detail and "已终止" in detail
+
+    def fake_bad(argv: list[str], **kwargs: Any) -> _Done:
+        # 连系统编码都解不开的坏字节 → 只能 replace 掉，不许抛。
+        return _Done(b"\xff\xfe\xff".decode(kwargs["encoding"], errors=kwargs["errors"]))
+
+    monkeypatch.setattr(pool_mcp.subprocess, "run", fake_bad)
+    ok2, detail2 = pool_mcp._kill(4242)    # 没抛出来 = 过
+    assert isinstance(detail2, str)
+    assert "\ufffd" in detail2             # 坏字节被 replace 掉

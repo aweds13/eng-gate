@@ -96,6 +96,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import locale
 import os
 import re
 import subprocess
@@ -680,12 +681,25 @@ def _record_pid(card: str, pid: int) -> None:
     registry.save(rows)
 
 
+def _console_encoding() -> str:
+    """`tasklist` / `taskkill` 输出要按**系统区域编码**解（这台 cp936）。
+
+    ★ 照抄 `tools/wb_dispatch.py::kill_tree`（T-G96 的老坑，新代码重犯）：这两个命令吐的是
+    **系统区域编码**，原来按 `utf-8` 解 → 掐进程的回话成乱码（"证据读不出来，等于没留证据"）。
+    ★ 为什么**不用** `locale.getpreferredencoding(False)`：本仓一律 `python -X utf8`，
+    那会让它回 `utf-8`（UTF-8 模式）→ 等于没修；`locale.getencoding()` 仍回系统区域编码（cp936）。
+    ★ 解不开的字节仍走 `errors="replace"`，绝不让解码把掐进程这条路带崩。
+    """
+    return (locale.getencoding() if hasattr(locale, "getencoding")
+            else locale.getpreferredencoding(False)) or "utf-8"
+
+
 def _image_name(pid: int) -> str | None:
     """`tasklist` 拿这个 pid 的**映像名**；拿不到 → `None`（判不出，**不当作"没在跑"**）。"""
     try:
         done = subprocess.run(  # noqa: S603 —— pid 来自本机登记，不是外部输入
             ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, text=True, encoding=_console_encoding(), errors="replace",
         )
     except OSError:
         return None
@@ -700,7 +714,7 @@ def _kill(pid: int) -> tuple[bool, str]:
     try:
         done = subprocess.run(  # noqa: S603 —— pid 来自本机登记，不是外部输入
             ["taskkill", "/F", "/T", "/PID", str(int(pid))],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, text=True, encoding=_console_encoding(), errors="replace",
         )
     except OSError as exc:
         return False, f"taskkill 起不来：{type(exc).__name__}: {exc}"
