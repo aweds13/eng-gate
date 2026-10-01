@@ -5030,3 +5030,18 @@ evidence = [
   "file:tests/test_pool_lib.py",
 ]
 gaps = "**★ 本笔顺带把 10 条证据锚点跟着代码搬了（并在台账里记明）**：审计门指出这些锚点对不上了 —— 因为本笔把函数**搬进了 `tools/pool/`**（`wb_status` 的进 `tools/pool/jobs.py`、`wb_plan` 的进 `tools/pool/plan.py`）。**其中 9 条文字一字未改、只把「文件」那一段跟着搬**（`def validate` / `def topo_layers` / `def greedy_pack` / `PROTECTED_FILES = frozenset({` / `ACTIVE_STATUS = (…)` / `def dependency_path(` / `def parse_events(…)` / `MAX_TEXT = 240` / 键名 `unknown_events` 那一行）；**第 10 条是「改名」**：`def _message_of(event: dict) …` 改成 **`def message_of(event: dict) …`**（本笔顺手把它从私有变公开 —— 它现在是库函数、要给 MCP 用）—— 这条**锚点跟着新名字走**，并在此记明，免得将来有人以为台账被悄悄改过（`git log -S` 可查全部改动）。"
+
+[entries."T-G203"]
+id = "T-G203"
+title = "共享文档改「每笔一个片段文件」：并发提交零冲突（B 方案）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/sync_docs.py",
+  "file:scripts/run_gates.py",
+  "file:tests/test_docs_fragments.py",
+  "file:docs/changelog.d",
+  "file:docs/traceability.d",
+  "file:复盘/交接.d",
+]
+gaps = "**需求（用户 2026-10-01 拍板「B+A」）**：本仓**每一笔提交**都在**同样三个共享文档**的**同一个锚点**插入 —— `docs/changelog.md`（文件头插一节）· `docs/traceability.toml`（追加一个 `[entries.<台账号>]` 表）· `复盘/交接-重构进度.md`（锚点插一段 CHECKPOINT）。⇒ 两笔并发时，第二笔 rebase **必冲突**，于是「**门禁能并行、提交只能串行**」（主控今天实测过）。**做法（B）**：新增 **`tools/sync_docs.py`**（汇总器：把 `docs/changelog.d/<台账号>.md` / `docs/traceability.d/<台账号>.toml` / `复盘/交接.d/<台账号>.md` 三个**片段目录**汇进那三个共享文档；`--check` 只核对、`--root` 换根；**纯标准库**）+ 改 **`scripts/run_gates.py`**（`docs_sync_precheck` **认片段**（片段存在即视为已同步）+ 新增 `docs_fragments_problems()` 跑 `sync_docs.py --check`，**片段与汇总不一致判红**）+ 新增 `tests/test_docs_fragments.py`（**7 用例**）+ 三个目录占位 `.gitkeep`。**口径（主控确认，工人主动请裁）**：**增量式** —— 三个共享文档**保留全部既有历史**，片段只是**增量来源**，汇总**只插入、绝不改写既有字节**（所以「空片段 ⇒ 三个共享文档逐字不变」成立）。★ **不做**「全量迁移」（把历史条目全拆成片段、汇总=整份重建）—— 那是另一次大迁移，收益为零、风险不小。**验收（工人自测，主控逐条核对派活日志）**：① **汇总前后逐字等价**：`sha256` 前=后（changelog `7fad8d65…` / traceability `f5078b1b…` / 交接 `6173b1b9…`），`git status --porcelain -- <三个文件>` **空**；② **幂等**：连跑两次都 `[OK ] 无待汇总片段 —— 三个共享文档逐字不变`，sha256 不变（pytest 里另有「造 3 片段 → 汇总 → 再汇总零 diff」）；③ **`--check` 抓手改并点名**：`[FAIL] 片段 ↔ 汇总不一致：手改了汇总却没改片段，或反之 —— - docs/changelog.d/T-G204.md 的内容没在 docs/changelog.md 里（跑 …同步…）`、`exit=1`；**门禁侧同验**：造一个未汇总片段 → `docs_sync_precheck() -> False ['片段与汇总不一致：docs/changelog.d/T-G999-TEST.md …']`，删掉 → `(True, [])`；④ ★★ **并发零冲突演示（真 git，原样输出）**：`Rebasing (1/1)` / `Successfully rebased and updated refs/heads/second.`，**两份片段都在**；**对照用例**（两笔都改同一共享文档）→ rebase **CONFLICT** —— **这正是本卡的目的**，不是口述；⑤ **既有判据不变**：汇总前后 `audit_progress.py --all` 与 `check_layers.py` 输出 `diff` **IDENTICAL**（退出码均 0、`LAYER CHECKS: PASS`）；⑥ 全量 `pytest` → **1702 passed, 2 deselected**（覆盖率 **93.74%**）、`ruff`（含 `tools/`）`All checks passed!`。**★ 工人如实留白（四条，主控逐条裁定）**：① `--check` 只抓「片段文字不在汇总里」，**抓不到在非片段来源的归档区手改**（那部分本卡未纳管）—— **接受**，它管的是「片段↔汇总」这条缝，不是我手改归档；② `check_layers` **只在报告里手工跑**（本树 2.6s），**没写进 pytest**（怕它随引用数涨到 829s 拖慢套件；pytest 里覆盖的是 `audit`）—— **接受**（今日已把「这道自检 O(引用数) 次子进程会越来越慢」记进 `复盘/门禁改进清单.md` 的待做）；③ 本卡**没落自己的片段**（要落就得改那三个共享文档、违反「逐字等价」）⇒ **由主控在集成那一步用 `sync_docs.py` 汇总** —— 已做（主控同时把自己打点工具 `_stage_card.py` 改成**写片段 + 调汇总器**，并**自动判断**：`docs/changelog.d/` 在就走片段模式，旧树没有该目录 ⇒ 行为逐字不变）；④ `tools/wb_plan.py` 的 `PROTECTED_FILES`/冲突域与 `wb_dispatch` 的前置检查**尚未把 `<dir>.d/` 片段当一等公民**（不阻断：片段是各不相同的文件、天然零冲突）—— 属禁区未动，记进待做。**没动**：`tools/wb_*.py` · `tools/pool_mcp.py` · `src/**` · `infra/**`（另一个仓）。**★ 内存闸留痕**：这一笔跑门禁时**用户明确授权「可以暂时关掉内存阀」** ⇒ 用 `TF_GATE_MIN_FREE_GB=0` + `TF_PYTEST_WORKERS=2`。**来源**：CodeBuddy 号池（deepseek-v4.1-flash，树 `.wt/docsd`，base `d05efab`，74 回合 / 94 次工具 / **0 次工具报错**，用时 22.5 分钟）；★ 工人未提交，提交与台账由主控做。"

@@ -620,16 +620,59 @@ def git(*args: str) -> str:
     return r.stdout.strip()
 
 
+def docs_fragments_problems() -> list[str]:
+    """片段 ↔ 汇总一致性（卡 107 / T-G203）：跑 `tools/sync_docs.py --check`。
+
+    非零退出 = 三个共享文档与它们各自的片段目录**对不上**。说人话：
+    「**有人手改了汇总文件却没改片段，或反之**」—— 并发要零冲突，靠的就是两边一致。
+    工具不在（旧树）→ 不误报（返回空）。
+    """
+    tool = ROOT / "tools" / "sync_docs.py"
+    if not tool.exists():
+        return []
+    proc = subprocess.run(
+        [PY, "-X", "utf8", str(tool), "--check"],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    if proc.returncode == 0:
+        return []
+    out = (proc.stdout or "") + (proc.stderr or "")
+    dash = [ln.strip() for ln in out.splitlines() if ln.strip().startswith("-")]
+    if dash:
+        return [f"片段与汇总不一致：{ln.lstrip('- ').strip()}" for ln in dash]
+    return ["片段与汇总不一致：有人手改了汇总却没改片段，或反之（跑 `tools/sync_docs.py` 汇总）"]
+
+
+def _changed_or_frag(changed: set[str], whole: str, frag_dir: str, suffix: str) -> bool:
+    """整份共享文档改了，**或**它对应的片段目录下落了片段 —— 都算"已同步"。"""
+    if whole in changed:
+        return True
+    return any(p.startswith(frag_dir) and p.endswith(suffix) for p in changed)
+
+
 def docs_sync_precheck() -> tuple[bool, list[str]]:
-    """④ 的前置检查：改了源码就必须同时改台账/changelog/CHECKPOINT（**提交前**就发现）。"""
+    """④ 的前置检查：改了源码就必须同时改台账/changelog/CHECKPOINT（**提交前**就发现）。
+
+    ★ 卡 107（T-G203）：认**片段文件** —— 作者不再直接改三个共享文档，而是落
+    `docs/traceability.d/<台账号>.toml` / `docs/changelog.d/<台账号>.md` /
+    `复盘/交接.d/<台账号>.md`，由集成者用 `tools/sync_docs.py` **串行汇总**。
+    所以"改了源码却只落了片段"**也算已同步**。
+    另加一条新判据：**片段 ↔ 汇总必须一致**（`sync_docs.py --check`），不一致判红。
+    """
+    problems = list(docs_fragments_problems())
     changed = set(git("status", "--porcelain").split())
     changed |= set(git("diff", "--cached", "--name-only").split())
     if not any(p.startswith(("src/timeflow/", "src/web/")) for p in changed):
-        return True, []
-    missing = [n for n in ("docs/traceability.toml", "docs/changelog.md") if n not in changed]
-    if not any(p in changed for p in ("复盘/长任务执行协议.md", "复盘/交接-重构进度.md")):
-        missing.append("复盘/长任务执行协议.md（或 交接-重构进度.md）")
-    return not missing, missing
+        return (not problems), problems
+    missing: list[str] = []
+    if not _changed_or_frag(changed, "docs/traceability.toml", "docs/traceability.d/", ".toml"):
+        missing.append("docs/traceability.toml（或 docs/traceability.d/<台账号>.toml）")
+    if not _changed_or_frag(changed, "docs/changelog.md", "docs/changelog.d/", ".md"):
+        missing.append("docs/changelog.md（或 docs/changelog.d/<台账号>.md）")
+    if not (any(p in changed for p in ("复盘/长任务执行协议.md", "复盘/交接-重构进度.md"))
+            or any(p.startswith("复盘/交接.d/") for p in changed)):
+        missing.append("复盘/长任务执行协议.md（或 交接-重构进度.md，或 复盘/交接.d/<台账号>.md）")
+    return (not missing and not problems), problems + missing
 
 
 def seal() -> int:
@@ -1177,10 +1220,10 @@ def main() -> int:
         ok_docs, missing = docs_sync_precheck()
         print("=== ④ 文档与代码同提交（提交前检查）===")
         if ok_docs:
-            print("  [OK ] 源码有改动时，台账/changelog/CHECKPOINT 都在改动清单里"
-                  "（或本轮没改源码）")
+            print("  [OK ] 台账/changelog/CHECKPOINT 都在改动清单里（或其片段在），"
+                  "且**片段 ↔ 汇总一致**（或本轮没改源码）")
         else:
-            print(f"  [FAIL] 改了源码但还没同步：{missing}")
+            print(f"  [FAIL] 文档同步未过（改了源码没同步 / 片段与汇总对不上）：{missing}")
 
     # ★ ⓪ TOML 语法预检（T-G52）：台账是唯一真源，而「正文里写了 ASCII 双引号」这条坑
     #   已经在同一个会话里踩了 8 次 —— 一踩就是整份台账解析不了、`audit` 与 `audit_titles` 双红，

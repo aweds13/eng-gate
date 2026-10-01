@@ -1,3 +1,16 @@
+## 2026-10-01 —— 共享文档改「每笔一个片段文件」：并发提交零冲突（B 方案）（T-G203 / 卡 107）
+
+- 病：每一笔都在**同三个共享文档**的**同一锚点**插入 ⇒ 两笔并发 rebase **必冲突**（于是"门禁能并行、提交只能串行"）。
+- 做法（B）：**片段目录** `docs/changelog.d/` · `docs/traceability.d/` · `复盘/交接.d/` + 汇总器 **`tools/sync_docs.py`**
+  （`--check` / `--root`，纯标准库）+ 门禁 `docs_sync_precheck` **认片段** 并新增 `docs_fragments_problems()`
+  （片段与汇总不一致**判红**）+ `tests/test_docs_fragments.py`（7 用例）。
+- 口径：**增量式** —— 共享文档保留全部历史，汇总**只插入、不改写既有字节**；**不做**历史全量迁移。
+- 验收：**汇总前后逐字等价**（三份 sha256 前=后、`git status` 空）· **幂等**（连跑两次零 diff）· `--check` 抓手改并**点名**
+  （门禁侧同验）· ★ **并发零冲突真 git 演示**（`Rebasing (1/1)` → `Successfully rebased`，**两份片段都在**；对照用例两笔改同一共享文档 → **CONFLICT**）·
+  `audit`/`check_layers` 输出**改前=改后** · `pytest` **1702 passed**（93.74%）· ruff 全过。
+- ★ 主控配套改动：打点工具 `_stage_card.py` 改成**写片段 + 调汇总器**（`docs/changelog.d/` 在才走片段模式 ⇒ 旧树行为不变）。
+- ★ 留白：`--check` 抓不到"非片段归档区"的手改；`check_layers` 只在报告里手工跑（未进 pytest）；`tools/wb_*.py` 未把片段当一等公民（都不阻断）。
+- ★ 内存闸：**用户授权暂时关掉** ⇒ 本笔门禁用 `TF_GATE_MIN_FREE_GB=0` + `TF_PYTEST_WORKERS=2`。
 ## 2026-10-01 —— 号池那几个脚本收成一个包：CLI 与 MCP **共用同一批函数**（T-G202 / 卡 106）
 
 - 需求（用户）：「**你可以把之前相关的脚本集成进里面吗**」——"里面"就是那个 MCP 服务。
