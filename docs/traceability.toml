@@ -90,7 +90,7 @@ trailer_baseline = "593ea6c"
 [entries."T-00"]
 id = "T-00"
 title = "强制框架：git + 台账 + 门禁三方对账"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:docs/traceability.toml",
@@ -481,7 +481,7 @@ gaps = "**口径（用户 2026-09-23 定，T-G19）已按它落地（T-G20）**�
 [entries."T-G32"]
 id = "T-G32"
 title = "渲染验证层（SR-NF1 / N30）：真浏览器把 3 档宽度 × 14 个视图采成几何清单当黄金（每轮两遍做确定性自检 + 改黄金必须写理由），接进门禁"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/渲染验证层-T-G32.md",
@@ -524,7 +524,7 @@ gaps = "**已修**（2026-09-23）。原现象：`POST /api/tasks` 带一个不�
 [entries."T-G95"]
 id = "T-G95"
 title = "派活器收工时自己落一份交接摘要：主控不必再读原始事件流（+ 修块缓冲：进度 print flush + detach 解释器 -u）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/交接摘要-T-G95.md",
@@ -542,7 +542,7 @@ gaps = "**为什么有这张卡**（T-G95，= 外包卡 006）：主控每收一
 [entries."T-G99"]
 id = "T-G99"
 title = "并发调度器 `tools/wb_plan.py`：文件级冲突域 + 拓扑分层 + 同层打包，拒绝会冲突的组合"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/并发架构-T-G99.md",
@@ -601,7 +601,7 @@ gaps = "**为什么有这张卡**：盘点卡 S-1 的 A5 —— 同一形状（�
 [entries."T-G103"]
 id = "T-G103"
 title = "非文字对比度门补悬停/选中态那一半：从 CSS 真读 :hover/.on 的图形/底组合（阈值 3.0）+ 一条反证"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/非文字悬停态判据-T-G103.md",
@@ -627,7 +627,7 @@ gaps = "**为什么有这张卡**：A13 说「9 档裸字号无令牌」，实�
 [entries."T-G105"]
 id = "T-G105"
 title = "diag 目录清账：`inspect.py` 遮蔽标准库（改名 diag_inspect.py）+ 清掉两份已完成使命的草稿"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/diag目录清账-T-G105.md",
@@ -637,7 +637,7 @@ gaps = "**为什么有这张卡**：A15（复核 `gates/diag/wb-review-T-G79.md`
 [entries."T-G111"]
 id = "T-G111"
 title = "验续跑路径下 tool_durations 不跨轮串（每轮阈值只吃本轮 log）—— 补一条经过重试循环的判据 + 真机续跑证据"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/续跑跨轮耗时-T-G111.md",
@@ -649,7 +649,7 @@ gaps = "**为什么有这张卡**：A11；复核-1969b46.md §7.2（383-385 行�
 [entries."T-G121"]
 id = "T-G121"
 title = "更正模型白名单：是**模型名** `glm-5.3-flash`（一个），不是「`glm-5.3` + flash 两个」—— 主控误读、用户当场指出"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "text:复盘/外包-卡表与规矩.md::### 19.1 ★★ 有序白名单 + **默认拒绝**",
@@ -662,7 +662,7 @@ gaps = '**为什么有这一条**：用户 2026-09-26 指示「任务未经我�
 [entries."T-G120"]
 id = "T-G120"
 title = "模型白名单（只准 `glm-5.3` 与 `deepseek-v4.1-flash`；**换模型必须先问用户**）+ 拆 worktree 前必须证据留档"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "text:复盘/外包-卡表与规矩.md::## §19 模型白名单与",
@@ -675,7 +675,7 @@ gaps = "**为什么有这一条**（T-G120，用户 2026-09-26 直接指示）�
 [entries."T-G119"]
 id = "T-G119"
 title = "调度器补两个缺口：`check` 跳过 `status=done`（但**字段校验一条不松**）+ 同域卡靠 `depends` 排到不同批 —— 让 backlog 真能当**队列**"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/wb_plan缺口-T-G119.md",
@@ -691,7 +691,7 @@ gaps = "**为什么有这张卡**（T-G119，= 卡 032）：把 backlog 收敛�
 [entries."T-G118"]
 id = "T-G118"
 title = "backlog 收敛成**真正的待派队列**（完成的卡移出）+ 修掉产物占位名；并记下 `wb_plan.py check` 的两个缺口"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "text:docs/workbacklog.toml::已完成的卡要移出",
@@ -703,7 +703,7 @@ gaps = "**为什么有这一条**：目标里要「按 `tools/wb_plan.py` 排出
 [entries."T-G117"]
 id = "T-G117"
 title = "D 类叙事漂移加注（3 处带日期注 + **2 处核实后判定无需改动**）+ A 类 23 条覆盖核对与 A23 校准结论"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/叙事漂移加注-T-G117.md",
@@ -717,7 +717,7 @@ gaps = "**为什么有这一条**：盘点报告（卡 S-1）D 类 18 条里，�
 [entries."T-G116"]
 id = "T-G116"
 title = "D 类文档漂移收尾：**可客观核对**的那几处带日期与原因改对（复盘份数 99→146 / 契约 OP 54→53 / T-G79 的 13→12 条 / pytest 快照只加指针不回改）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "text:复盘/交接-重构进度.md::146 份",
@@ -730,7 +730,7 @@ gaps = "**为什么有这一条**：盘点报告（卡 S-1）D 类 18 条里，�
 [entries."T-G115"]
 id = "T-G115"
 title = "工人必读补全：调试者角色（**只读**、能与任何写者并行）+ 卡规格模板骨架 + 三条硬约束"
-group = "PROCESS"
+group = "RULES"
 status = "done"
 evidence = [
   "text:复盘/外包-卡表与规矩.md::## §18 调试者角色",
@@ -743,7 +743,7 @@ gaps = "**为什么有这一条**：目标里那两件（**调试者角色**与*
 [entries."T-G113"]
 id = "T-G113"
 title = "续跑日志的面板合并口径：wb-<卡>.r2.jsonl 从「一个文件一行、按 ctime 排」改成口径 B「一行一轮 + 按卡分组排序、行标识带第 N 轮」（T-G93.gaps「合并口径未定，故意没做」）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/续跑日志合并-T-G113.md",
@@ -767,7 +767,7 @@ gaps = "**为什么有这张卡**：A8；wb-review-T-G79.md §3「只是怀疑�
 [entries."T-G107"]
 id = "T-G107"
 title = "共享文档漂移：把 D12/D13/D14/D15/D16/D9 里过时的字改对（带日期与原因，不整条销账）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/共享文档漂移-T-G107.md",
@@ -779,7 +779,7 @@ gaps = "**为什么有这张卡**：<盘点 S-1 的 D 类（文档漂移）里�
 [entries."T-G106"]
 id = "T-G106"
 title = "核 `gates/reuse.json` 的复用判定本身对不对 —— 补一条能证明判据会咬的断言（T-G106 = 外包卡 019）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/reuse判定自证-T-G106.md",
@@ -791,7 +791,7 @@ gaps = "**为什么有这张卡**：盘点卡 S-1 的 A16（出处 = 复核 §7.
 [entries."T-G108"]
 id = "T-G108"
 title = "少读、精准读：`tools/evidence_map.py`（台账证据↔源文件倒排索引）+ `tools/wb_diag.py`（日志失败定位器）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/少读工具-T-G108.md",
@@ -811,7 +811,7 @@ gaps = "**为什么有这张卡**（T-G108，= 外包并发卡 015）：主控�
 [entries."T-G100"]
 id = "T-G100"
 title = "把盘点结果切成域不相交的 backlog：并发上限由「互不相交的源码域个数」决定，不由机器决定"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/backlog扩建-T-G100.md",
@@ -824,7 +824,7 @@ gaps = "**为什么有这张卡**（T-G100，= 外包卡 013）：并发上限**
 [entries."T-G97"]
 id = "T-G97"
 title = "状态面板的「卡死」判据与派活器对齐：复用 `inflight_tool()` / `tool_durations()` / `stall_threshold_seconds()`，不再硬写 480 秒"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/面板口径对齐-T-G97.md",
@@ -839,7 +839,7 @@ gaps = "**为什么有这张卡**（T-G97 = 并发卡 008）：`tools/wb_dash.py
 [entries."T-G96"]
 id = "T-G96"
 title = "补看门狗护栏：接线进单测（两个假护栏）+ 畸形 log 两层防御 + 自适应阈值封顶 3600 + kill_tree 解码 + 每轮留痕不覆写 + Windows 不留空控制台窗口"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/看门狗护栏补强-T-G96.md",
@@ -857,7 +857,7 @@ gaps = "**为什么有这张卡**（T-G96，= 外包卡 007）：上一笔 `1969
 [entries."T-G94"]
 id = "T-G94"
 title = "修看门狗误杀正常的长工具调用：认出「在飞」的调用（静默是预期）+ 按历史最长一次调用自适应阈值 + 判卡死报告带现场"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/看门狗误杀-T-G94.md",
@@ -875,7 +875,7 @@ gaps = "**为什么有这张卡**（T-G94，= 外包卡 005）：看门狗原来
 [entries."T-G93"]
 id = "T-G93"
 title = "工人状态面板转正 `tools/wb_dash.py`：把 `gates/diag/wb-*` 那堆状态文件读成一块**自动刷新**的表（状态四档 / 多卡多树 / 零依赖只读）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/wb_dash转正-T-G93.md",
@@ -894,7 +894,7 @@ gaps = "**为什么有这张卡**（T-G93，用户 2026-09-26：「可以并发�
 [entries."T-G92"]
 id = "T-G92"
 title = "修 `--detach`：前置检查必须在**父进程**里先做完（没过就退 2 + 写 verdict、绝不扔子进程）；扔出去的子进程 argv 补**脚本自己**（旧写法少了它，`--detach` 从未真跑起来过）与 `--no-preflight`"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/detach前置检查-T-G92.md",
@@ -909,7 +909,7 @@ gaps = "**为什么有这张卡**（T-G92）：`tools/wb_dispatch.py` 的 `--det
 [entries."T-G91"]
 id = "T-G91"
 title = "长任务保命：`--detach`（派活**活过主控窗口**）+ `--status`（只读文件看心跳/判决/会话/log 尾巴）+ 心跳与判决**落盘**（`wb-<卡>.heartbeat.txt` / `.verdict.txt`）+ 默认超时放到 2 小时（**超时不是失败，是掐掉再续跑的信号**）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/长跑保命-T-G91.md",
@@ -925,7 +925,7 @@ gaps = "**为什么有这张卡**（T-G91，用户 2026-09-26：「有的任务�
 [entries."T-G90"]
 id = "T-G90"
 title = "稳定化：中断不等于白干 —— 会话续跑（`--resume <id>` / `--resume auto`）+ 自动重试（`--retry`，只对「被打断」不对「空转」）+ 八条铁律进**系统提示**（`--append-system-prompt`）；并写下「什么样的活能给工人」的判据"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/续跑与铁律-T-G90.md",
@@ -942,7 +942,7 @@ gaps = "**为什么有这张卡**（T-G90，用户 2026-09-26：「能不能尽�
 [entries."T-G89"]
 id = "T-G89"
 title = "更正 T-G88 的回合上限标定与「跑完了没有」判据：`--max-turns` 数的是**工具调用回合**（卡 002 实测 111 次），不是 `result` 里的 `num_turns`(=319)；并新增 `finish_verdict()` 读 `result.subtype` 判腰斩（撞上限 = `error_during_execution` + 空回话 + **退出码 0**）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/反空转三道-T-G88.md",
@@ -957,7 +957,7 @@ gaps = "**怎么发现的**（T-G89）：T-G88 落盘后，我用真机探针**�
 [entries."T-G88"]
 id = "T-G88"
 title = "反空转三道（用户点名要的「心跳」）：`--max-turns` 上限 + 看门狗（静默 8 分钟或窗口内重复 5 次 → 掐进程树 + 报现场）+ 心跳（每 2 分钟一行）；顺带把 `--autocompact 1m` 做成默认（★ 上限的具体标定经 `T-G89` 更正）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/反空转三道-T-G88.md",
@@ -974,7 +974,7 @@ gaps = "**为什么要有**（T-G88，目标轮 3；用户 2026-09-26 点名「�
 [entries."T-G87"]
 id = "T-G87"
 title = "修 T-G84 那条「中文路径」用例的**定时炸弹**：判据不许依赖真仓库 HEAD 这一笔 —— 改成自搭临时仓库，并先证明普通 git 确实会转义"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/测试定时炸弹-T-G87.md",
@@ -1006,7 +1006,7 @@ gaps = "**发现人**：卡 001 的独立复核（`gates/diag/wb-review-T-G79.md
 [entries."T-G85"]
 id = "T-G85"
 title = "外包链路接通真 CLI：改走**独立安装**的 CodeBuddy Code（2.158.0，带 TUI）—— 派活器优先它、加 `--permission-mode`、模型换成 `deepseek-v4.1-flash`；同轮交付卡 002 规格"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/外包卡-002-修T-G79幂等写库.md",
@@ -1021,7 +1021,7 @@ gaps = "**为什么有这张卡**：卡 001 的独立复核（T-G82 派出的第
 [entries."T-G84"]
 id = "T-G84"
 title = "主控复核器（`tools/wb_review.py`）：把「这一笔提交算不算数」做成一条命令 —— audit / 四个 trailer / 门禁为谁而跑 / 改动越界 / 工作区，五条一次过（12 条测试）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tools/wb_review.py",
@@ -1037,7 +1037,7 @@ gaps = "**为什么要有**（T-G84，目标轮 3）：外包之后主控每轮�
 [entries."T-G83"]
 id = "T-G83"
 title = "外包卡 002 决策单：任务三分类（`SR-F1.9`）卡在**口径**不在技术 —— 三条走法 + 各自代价 + 出处齐全，等用户一句话"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/外包卡-002-任务三分类（决策单）.md",
@@ -1051,7 +1051,7 @@ gaps = "**为什么写它**：`SR-F1.9` 三分类一直挂在对话里当「等�
 [entries."T-G82"]
 id = "T-G82"
 title = "外包派活脚本（`tools/wb_dispatch.py`）：把派活做成一条有护栏的命令 —— 四道前置检查 + dry-run 默认 + 跑完自动渲染时间线（9 条测试）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tools/wb_dispatch.py",
@@ -1068,7 +1068,7 @@ gaps = "**为什么要有**（T-G82，目标轮 1）：派活 = **别人替我�
 [entries."T-G81"]
 id = "T-G81"
 title = "WorkBuddy 状态器（`tools/wb_status.py`）：把工人 CLI 的 stream-json 事件读成人能看的时间线（8 条测试）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tools/wb_status.py",
@@ -1084,7 +1084,7 @@ gaps = "**为什么要有**（用户 2026-09-26）：外包模式下工人（Cod
 [entries."T-G80"]
 id = "T-G80"
 title = "外包交接：把活交给 WorkBuddy/CodeBuddy CLI 那条线 —— 工人入口（规矩 + 卡表 + 已知坑）+ CLI 实测（**登录待用户完成**）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/外包-卡表与规矩.md",
@@ -1146,7 +1146,7 @@ gaps = "**它收的是 T-G33 复盘里那句如实记下的残留**：「验完�
 [entries."T-G78"]
 id = "T-G78"
 title = "独立实现的最小 MCP 客户端（tools/mcp_client.py）：换个实现来读，协议这一层才算验过 —— 不 import 本项目 + 按最挑的读法判（8 条 pytest）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/独立MCP客户端-T-G78.md",
@@ -1166,7 +1166,7 @@ gaps = "**它补的盲区**：服务端是 T-G65 手写的，`tests/test_mcp_lin
 [entries."T-G77"]
 id = "T-G77"
 title = "人工验收搬家·第六批：⑪ 备份与恢复搬给行为流层 —— 用「临时库 + 临时备份目录」把那条不可逆的路真走一遍（23 条流 / 312 项断言）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/人工验收搬家-第六批-T-G77.md",
@@ -1210,7 +1210,7 @@ gaps = "**症状（T-G73 照实记下、用户点名顺手修的那条）**：�
 [entries."T-G75"]
 id = "T-G75"
 title = "口径更正：台账上唯一的 todo（SR-F8.4 产出评价器）原来是一半幽灵 —— 判 done + OP-38 销账 + 评价器另立 SR-F8.4b（deferred）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/产出评价器口径更正-T-G75.md",
@@ -1246,7 +1246,7 @@ gaps = "**触发**：用户 2026-09-25 选「用 DSH 接一次」（D 组那条�
 [entries."T-G73"]
 id = "T-G73"
 title = "人工验收搬家·第五批（SR-NF1 / N30）：⑭ 词表 / ㉒ 删除可选 / ㉖ 手机上传 / ㉘ 跨端镜像 搬给行为流层（22 条流 / 292 项断言）—— 「另一台设备/另一个客户端」真起"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/人工验收搬家-第五批-T-G73.md",
@@ -1269,7 +1269,7 @@ gaps = "**这一批搬的是 §二 清单里标着「下一批可搬的（工具
 [entries."T-G72"]
 id = "T-G72"
 title = "人工验收清单（「照着点」）：把剩下要人做的那一层写成可逐条打勾的表 —— 每条带预期与反证"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:docs/人工验收-照着点.md",
@@ -1304,7 +1304,7 @@ gaps = "**用户 2026-09-23 交代「按你想的来」→ B 表（14 条待定�
 [entries."T-G38"]
 id = "T-G38"
 title = "最小验证法则（用户交代「别在验证上花那么多时间」）：行为流层默认一遍（--twice 按需）+ 复验既有界面抓到的一处勾选框缺陷与颜色归一缺口"
-group = "PROCESS"
+group = "RULES"
 status = "done"
 evidence = [
   "text:tools/ui_flow_check.mjs::★ 最小验证法则",
@@ -1321,7 +1321,7 @@ gaps = "**用户 2026-09-23 交代：「我不想你花那么多时间在这个�
 [entries."T-G37"]
 id = "T-G37"
 title = "人工验收搬家·第四批（SR-NF1 / N30）：㉗ 手机离线只读区（断网刷新真的落得进）/ ⑮ Obsidian 红线 搬给行为流层（17 条流 / 172 项断言）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/人工验收搬家-第四批-T-G37.md",
@@ -1340,7 +1340,7 @@ gaps = "行为流层继续搬第四批：**㉗ 手机离线只读区**（手机�
 [entries."T-G36"]
 id = "T-G36"
 title = "人工验收搬家·第三批（SR-NF1 / N30）：⑰ 跨端同步（自导自）/ ㉓ 团队视角 / ㉕ 学校通知合作接口 搬给行为流层（15 条流 / 149 项断言）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/人工验收搬家-第三批-T-G36.md",
@@ -1360,7 +1360,7 @@ gaps = "行为流层继续搬第三批：**⑰ 跨端同步（自导自）/ ㉓ 
 [entries."T-G35"]
 id = "T-G35"
 title = "人工验收搬家·第二批（SR-NF1 / N30）：⑬ 导出 Markdown / ⑯ AI 接口边界 / ㉔ 复习改判（+ ⑤）搬给行为流层（12 条流 / 106 项断言）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/人工验收搬家-第二批-T-G35.md",
@@ -1381,7 +1381,7 @@ gaps = "行为流层（T-G34）建成后继续搬第二批：**⑬ 导出 Markdo
 [entries."T-G34"]
 id = "T-G34"
 title = "行为流层（SR-NF1 / N30）：真浏览器真点真按，把「待人工确认 28 项」里功能性的搬给机器（9 条流 / 63 项断言；每轮跑两遍比断言指纹），接进门禁"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/功能验收机器化-T-G34.md",
@@ -1442,7 +1442,7 @@ gaps = "**是商讨稿**：回答用户三条（键盘附加层 / OpenWork / AI 
 [entries."T-G29"]
 id = "T-G29"
 title = "风格一致性门（SR-NF1 / N30）：融洽里能机器判的那一半（互动态/一次性值/同形状重复/动效/档数）接进门禁第 13 项"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/融洽门-风格一致性-T-G29.md",
@@ -1474,7 +1474,7 @@ gaps = "**是商讨稿不是施工图**：用户 2026-09-23 给了视觉方向�
 [entries."T-G27"]
 id = "T-G27"
 title = "对比度审美门（SR-NF1 / N30）：令牌层 WCAG 棘轮 + 18 条欠账登记表；顺手修掉暗色 toast 字看不见的缺陷"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/审美门-对比度-T-G27.md",
@@ -1862,7 +1862,7 @@ gaps = "**用户 2026-09-23**：「AI 原生的 CLI 这个可以加进来吗？�
 [entries."T-G69"]
 id = "T-G69"
 title = "每视图签名（T-G40 §六 那条残留）：判据自己也不许在错的时候被写下来 —— 防「三方一致地错」"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/每视图签名-T-G40残留-T-G69.md",
@@ -1878,7 +1878,7 @@ gaps = "**它补的是 T-G40 复盘里明确记下的没做**：「每个视图�
 [entries."T-G70"]
 id = "T-G70"
 title = "非文字对比度 3.0 表（T-G27 §6 / T-G45 §7 那条边界）：不看字也得看得见 —— 顺带抓到输入框边框只有 1.23"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/非文字对比度-T-G70.md",
@@ -1900,7 +1900,7 @@ gaps = "**它补的是两条边界**：`T-G27 §6` 的「非文字图形（图�
 [entries."T-G68"]
 id = "T-G68"
 title = "交接清单去幽灵 + 落档用户当面定的四件事（暗色不做全量基线 / MCP 与写操作开做 / 写入口径 / 人工验收排后）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/交接清单去幽灵与四个决定-T-G68.md",
@@ -1915,7 +1915,7 @@ gaps = "**用户说「开始问我吧」→ 我列问题之前先核事实，结
 [entries."T-G67"]
 id = "T-G67"
 title = "文档更正：AC-11「桌面形态」的状态已过期（pywebview 早已装上）—— 三处一起改，销掉一个幻影缺口"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/桌面形态状态更正-T-G67.md",
@@ -1973,7 +1973,7 @@ gaps = "**T-G30 §4.3 的最后两步一起做**（顺序是 命令表 T-G31 →
 [entries."T-G62"]
 id = "T-G62"
 title = "工程债（验证层）：把「今天」收成一处并让采集能钉住它（`src/timeflow/clock.py` + `TIMEFLOW_FAKE_TODAY` + 采集侧三处一致）—— 修掉「黄金跨午夜自己变红 6 份」"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/黄金跨天漂移-可注入的今天-T-G62.md",
@@ -2357,7 +2357,7 @@ gaps = ""
 [entries."T-G22"]
 id = "T-G22"
 title = "门禁收紧三条：`Task:` 逐条严查（基线 593ea6c）/ 契约层覆盖（[contract_ops] + [acknowledged_ops]）/ 母条-子卡一致性"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/门禁收紧三条-T-G22.md",
@@ -2373,7 +2373,7 @@ gaps = "三条都已上**阻断**（跟着门禁里的 `audit` 一道跑，门�
 [entries."T-G40"]
 id = "T-G40"
 title = "验证层两个漂移源：采集竞态（`stats` 的黄金一直是上一个视图的内容）+ fixture 日期与**星期几**相关"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/渲染采集漂移与星期相关-T-G40.md",
@@ -2456,7 +2456,7 @@ gaps = "**用户 2026-09-25 拍板**：这条（`POST /api/sync/tasks`，OP-40 �
 [entries."T-G58"]
 id = "T-G58"
 title = "门禁工具的两处诊断/防护缺陷（T-G51 落地时撞出来的）：`render --update --only` 会采到**错黄金**（视图之间不独立）→ 默认拒绝；全量门禁失败时把门自己的输出留下并当场印尾部"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:tools/render_check.mjs",
@@ -2548,7 +2548,7 @@ gaps = "**做了什么**：① 建两档行高 `--lh-tight: 1.2`（**单行**角
 [entries."T-G52"]
 id = "T-G52"
 title = "流程优化（用户 2026-09-24 问「我们的流程可以继续优化吗」）：① 报错说清在哪一行（TOML 预检 + 约定层报行号 + 交接数字一键刷）② 教训只写一处 ③ 前端热表；另把「一次门禁覆盖多个提交」「边跑边写」定为习惯"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:scripts/check_toml.py",
@@ -2608,7 +2608,7 @@ gaps = "**用户原话**：「为什么有些没有必要写的解释，你也�
 [entries."T-G48"]
 id = "T-G48"
 title = "内循环落档（SR-NF13）：把 `--only` 的单视图/单流用法写进视觉线地图（两条命令实测过 + 三条已验证边界 + 一条「查过不能做」的压缩设想）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/视觉线地图.md",
@@ -2620,7 +2620,7 @@ gaps = "**用户 2026-09-24 选的是「只写用法、不压全量」**（问�
 [entries."T-G47"]
 id = "T-G47"
 title = "工具链提速（SR-NF13 / 工程件）：门禁三层速度（--fast 7.4s / --quick / 全量）+ 两条泳道并行（412s → 184s）+ 输入没变就复用判定 + 视觉线地图"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/门禁提速-T-G47.md",
@@ -2748,7 +2748,7 @@ gaps = "**实现已落地**（2026-09-24），四处**故意不做**记在这里
 [entries."T-G19"]
 id = "T-G19"
 title = "口径落档：独立记账（SR-F2.4 done）/ 来源标记更正+逐条不做（SR-F2.6b done）/ 拖拽后置（SR-F1.1b deferred）/ AI 只写事实 / 跨端专注实时启动+结束同步（SR-F3.4 路线）"
-group = "PROCESS"
+group = "RULES"
 status = "done"
 evidence = [
   "file:复盘/口径落档-T-G19.md",
@@ -2761,7 +2761,7 @@ gaps = "落档完成。**两条新卡的实现状态（2026-09-24 更新）**：
 [entries."T-G18"]
 id = "T-G18"
 title = "文档修正：两处**过期 gaps**（SR-F1.7 / DELIVERY.READY）+ 交接文档自相矛盾与陈旧数字（含 `tools/route_ui_gap.py`）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/交接与台账陈旧-T-G18.md",
@@ -2774,7 +2774,7 @@ gaps = ""
 [entries."T-G17"]
 id = "T-G17"
 title = "流程修正：提交信息里的 `Task:` 只写一个卡号（其余编号写 Refs）—— 重建 5 条提交的标签"
-group = "PROCESS"
+group = "RULES"
 status = "done"
 evidence = [
   "file:复盘/提交标签写错-T-G17.md",
@@ -3034,7 +3034,7 @@ gaps = ""
 [entries."STEP-17"]
 id = "STEP-17"
 title = "段2 口径定案（提醒 / 附件打开方式 / 优先级）"
-group = "PROCESS"
+group = "RULES"
 status = "done"
 evidence = [
   "file:复盘/段2设计决策-提醒与附件打开方式.md",
@@ -3393,7 +3393,7 @@ gaps = ""
 [entries."T-D1"]
 id = "T-D1"
 title = "文档债务：台账 SR 编号/标题校正（规则 A：规格号只属于规格）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/台账编号校正-方案A落地.md",
@@ -3407,7 +3407,7 @@ gaps = ""
 [entries."T-D2"]
 id = "T-D2"
 title = "文档债务：审计加「标题级」规格对账（已接成门禁阻断项）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:scripts/audit_titles.py",
@@ -3989,7 +3989,7 @@ gaps = ""
 [entries."T-G7"]
 id = "T-G7"
 title = "工程：质量门提速 —— pytest 并行（pytest-xdist），判定不变、只变快慢"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/质量门提速-pytest并行-T-G7.md",
@@ -4005,7 +4005,7 @@ gaps = ""
 [entries."T-G122"]
 id = "T-G122"
 title = "派活器规矩收口：模型白名单改 ★★**有序白名单 + 默认拒绝**（用户下令锁死）+ 429 三拍（等 → 按序换 → 全挂即停）+ 三条硬伤（`--detach` 不真独立 / `subtype=success` ≠ 干完 / **原窗口发消息是通的 —— 伪证据纠正**）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "text:复盘/外包-卡表与规矩.md::有序白名单 + **默认拒绝**",
@@ -4020,7 +4020,7 @@ gaps = "**为什么有这一条**（T-G122，用户 2026-09-26 两次直接命�
 [entries."T-G123"]
 id = "T-G123"
 title = "面板行序改「最新在前」（同卡多轮仍相邻、轮次新的在前）+ 白名单轮换口径落地（① v4.1 主力 / ①挂了换 ② glm 干一两张 / 之后回头看）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/面板最新在前与轮换口径-T-G123.md",
@@ -4033,7 +4033,7 @@ gaps = "**为什么有这张卡**：用户 2026-09-26 两条原话 ——「那�
 [entries."T-G112"]
 id = "T-G112"
 title = "看门狗独立化：--detach 后派活进程被杀仍有人盯 —— 按主控选的架构（互盯 / 独立看门狗进程 / 兜底告警）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/看门狗独立化-T-G112.md",
@@ -4045,7 +4045,7 @@ gaps = "**为什么有这张卡**：盘点 S-1 的 A17；T-G91.gaps「--detach �
 [entries."T-G125"]
 id = "T-G125"
 title = "工具收尾两小件：`route_ui_gap` 声明表补两条已裁定路由（未声明尾巴 → 0）+ `wb_status` 对畸形 log 的防御（T-G96 边界①／另立卡那张）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/工具收尾两小件-T-G125.md",
@@ -4070,7 +4070,7 @@ gaps = "**为什么有这张卡**：T-G109 落地乐观锁时如实记的边界 
 [entries."T-G124"]
 id = "T-G124"
 title = "视觉线两处文档的过时句子加日期注（4 处反向漂移：悬停/选中态 · 43→33 棘轮 · 字号档位 · SR-F1.5b 早已 done）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/视觉线地图漂移加注-T-G124.md",
@@ -4082,7 +4082,7 @@ gaps = "**为什么有这张卡**：S-4 表 3 查出 4 处反向漂移（把已�
 [entries."T-G127"]
 id = "T-G127"
 title = "`check_layers.py` 不再对 **gitignored 产物**的引用报假红（worktree 里跑必然假红 → 卡住工人）；该咬的仍咬"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/check_layers假红-T-G127.md",
@@ -4094,7 +4094,7 @@ gaps = '**为什么有这张卡**：卡 033 在自己的 worktree 里跑 `check_
 [entries."T-G114"]
 id = "T-G114"
 title = "派活器收口（十小件一张卡）：--status 过期判决（归档+告警） / --retry 读数清单与会话堆积度量 / 时间戳解析健壮性（跨 3.12/3.14 双验+防御+突变） / ★模型白名单硬闸门（默认拒绝，退出码 2 零副作用，全入口过闸） / 429 三拍（等→按序换→全挂退出码 7，限流与余额耗尽分开记） / token 用量落账+--input-budget 防空烧 / 续跑核对规格指纹（先读规格硬塞提示词） / --status 串卡改精确匹配 / 续跑放行脏工作区（越界告警）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/派活器三合一-T-G114.md",
@@ -4106,7 +4106,7 @@ gaps = "**为什么合并**：十小件域全在 tools/wb_dispatch.py，一写�
 [entries."T-G128"]
 id = "T-G128"
 title = "看门狗阈值改**滑动窗口**（最近 12 次调用内取最长 × 系数，夹在既有上下限之间）—— 修『一轮内不衰减』的漏杀"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/看门狗阈值衰减-T-G128.md",
@@ -4118,7 +4118,7 @@ gaps = "**为什么有这张卡**：规矩 §15 原文『一轮内不衰减那�
 [entries."T-G136"]
 id = "T-G136"
 title = "派活器额度检测误判与无限续跑：判据把工人回话正文里的「429」当额度错（R029 成功收工后被续跑 3 轮）—— 加候选闸门 + 只认结构化字段 + 续跑封顶 + 探针优先"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/额度检测误判与循环-T-G136.md",
@@ -4179,7 +4179,7 @@ gaps = "**为什么有这张卡**：集成者 I-2 全量门禁红 1 例（tests/
 [entries."T-G129"]
 id = "T-G129"
 title = "长任务执行协议补两章：「外包链路」（四角色/一写一读/派活器真开关/白名单/强制复核/集成者 trailer）与「并行纪律」（多路派活/实测上界/同域排队/集成排序/--detach 非独立/盯盘）"
-group = "PROCESS"
+group = "RULES"
 status = "done"
 evidence = [
   "file:复盘/长任务执行协议.md",
@@ -4192,7 +4192,7 @@ gaps = "**为什么有这张卡**：<协议 2049 行停在 2026-09-23，早于�
 [entries."T-G130"]
 id = "T-G130"
 title = "两份台账补 2026-09-26 对账：剩余工作逐批归属（用户决策/手工验收/已开卡/工程债）+ 体验台账补记面板最新在前、409 映射、视觉线加注"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/任务重规划-剩余工作.md",
@@ -4206,7 +4206,7 @@ gaps = "**为什么有这张卡**：两份文档都停在 2026-09-26 14:33，早
 [entries."T-G131"]
 id = "T-G131"
 title = "视觉线地图更新：§2 经验表补 5 条落点（工具/错误码 409/文档措辞打穿证据指针/并发改界面）+ §8 进度补记 + §6 陷阱清单补「改措辞打穿 text: 指针」"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/视觉线地图.md",
@@ -4218,7 +4218,7 @@ gaps = "**为什么有这张卡**：地图停在 2026-09-26 18:40（291 行）�
 [entries."T-G132"]
 id = "T-G132"
 title = "并发两份文档补实测对账：上界已探到（同模型 ≥7 路并发跑完）、真实限流与重置时刻、0 字节 log ≠ 失败、--detach 连带死；纠正 T-G99「未探测/没真跑过」的边界声明"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/并发架构-T-G99.md",
@@ -4232,7 +4232,7 @@ gaps = "**为什么有这张卡**：T-G99 边界声明（上界未探测 / --exe
 [entries."T-G133"]
 id = "T-G133"
 title = "工人规矩 §22：台账证据指针语法表（按 audit_progress 求值语义逐个列前缀；scripts/ 下的自测不能用 test:）+ §7 过期句加日期注 + test: 相关旧句加注"
-group = "PROCESS"
+group = "RULES"
 status = "done"
 evidence = [
   "file:复盘/外包-卡表与规矩.md",
@@ -4364,7 +4364,7 @@ gaps = "**2026-09-23 更正（T-G18）**：原文「白名单/勿扰配置（SR-
 [entries."T-G148"]
 id = "T-G148"
 title = "收口卡 I-7：两篇交接现状段 + 工人规矩六处日期注与 §23 + 视觉线点名与实测数 + 协议补「通知驱动的自动推进」+ backlog 队列字段停旧 + 待用户清单一页纸"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/收口后待用户清单.md",
@@ -4449,7 +4449,7 @@ gaps = "**为什么有这张卡**：用户 2026-09-27「一起清」—— 承�
 [entries."T-G156"]
 id = "T-G156"
 title = "门禁三项加固：端口按树隔离 + 开场清遗留 + pytest 限并发（不设变量时行为不变）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "text:scripts/run_gates.py::TF_GATE_PORT_BASE",
@@ -4461,7 +4461,7 @@ gaps = "**为什么有这张卡**：并行五张卡实测三条结构性病灶 �
 [entries."T-G157"]
 id = "T-G157"
 title = "修 run_gates 在 worktree 里验主树页面的假绿：把本树 src 放进子进程 PYTHONPATH"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "text:scripts/run_gates.py::PYTHONPATH",
@@ -4471,7 +4471,7 @@ gaps = "**为什么有这张卡**：本仓是可编辑安装（pip install -e .�
 [entries."T-G158"]
 id = "T-G158"
 title = "修 wb_review 在 detached worktree 里的假 FAIL：分支判据改三态（detached 跳过并如实记录）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tests/test_wb_review_branch.py",
@@ -4483,7 +4483,7 @@ gaps = "**根因**：旧 `tools/wb_review.py:139` 用 `git rev-parse --abbrev-re
 [entries."T-G159"]
 id = "T-G159"
 title = "并行期铁律与门禁锁口径归位到已入库协议 + gates/diag/gate_lock.py 纳入版本管理"
-group = "PROCESS"
+group = "RULES"
 status = "done"
 evidence = [
   "text:复盘/外包-卡表与规矩.md::铁律 27",
@@ -4493,7 +4493,7 @@ gaps = "**为什么有这张卡**：两件事一个根因 —— 该进版本管
 [entries."T-G160"]
 id = "T-G160"
 title = "run_bg：长命令分离起 + 哨兵轮询，治工人单次调用 10 分钟上限导致的孤儿服务与跨树误杀"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tools/run_bg.py",
@@ -4505,7 +4505,7 @@ gaps = "**为什么有这张卡**：工人单次调用有 10 分钟上限，而�
 [entries."T-G161"]
 id = "T-G161"
 title = "门禁锁租约改大并支持续租：长门禁卡不再自己把自己变成陈旧锁而被别人拿走"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tests/test_gate_lock_lease.py",
@@ -4516,7 +4516,7 @@ gaps = "**为什么有这张卡**：063 实测（时间线）11:10:08 拿到锁�
 [entries."T-G153"]
 id = "T-G153"
 title = "集成十一张并行卡：界面四件 + CLI/MCP 文案 + 门禁三项加固 + 修门禁假绿 + 复核器/长命令/锁续租 + 规矩归位（先 fork 再合并）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/集成十一张并行卡-T-G153.md",
@@ -4554,7 +4554,7 @@ gaps = "**用户原话（2026-09-27）**：习惯里面习惯打卡只记次数�
 [entries."T-G168"]
 id = "T-G168"
 title = "台账号 → 复盘文档索引（脚本现算，163 个全覆盖，五桶分标；既有复盘文件零改动）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/索引-台账号到复盘.md",
@@ -4565,7 +4565,7 @@ gaps = "实测读数：复盘 189 份 / 台账 292 条 / file:复盘/ 证据指�
 [entries."T-G165"]
 id = "T-G165"
 title = "本轮并行波总复盘：十一张卡的过程代价、铁律 23-31 索引、耗时分解与下一波改进"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/并行波复盘-20260927.md",
@@ -4589,7 +4589,7 @@ gaps = "**为什么有这张卡**：用户 2026-09-27 原话「我没有说切�
 [entries."T-G169"]
 id = "T-G169"
 title = "门禁锁改按端口段分把 + 全局并发上限（默认 2）：七张卡不再排一把锁"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tests/test_gate_lock_multi.py",
@@ -4601,7 +4601,7 @@ gaps = "**用户原话**：2026-09-27「不能多几把跨树锁」。**为什�
 [entries."T-G167"]
 id = "T-G167"
 title = "人工验收清单补齐本波已落地的界面行为（每条四要素 + 存在性 grep 证据）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:docs/人工验收-照着点.md",
@@ -4613,7 +4613,7 @@ gaps = "**为什么有这张卡**：2026-09-27 集成（T-G153）落地了一批
 [entries."T-G166"]
 id = "T-G166"
 title = "本波新工具/新开关/新路由的模块与契约文档同步（先盘点缺口再补，只改文档）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/工具与口径文档同步-T-G166.md",
@@ -4625,7 +4625,7 @@ gaps = "**为什么有这张卡**：十一张卡新造了工具/开了开关/加
 [entries."T-G170"]
 id = "T-G170"
 title = "集成本波八张并行卡（068-075）：界面 3 + 文档 4 + 工具 1；共享四件手工并、黄金重采"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/集成八张并行卡-T-G170.md",
@@ -4639,7 +4639,7 @@ gaps = "**底座**：主树 b90c4e4（八张卡共同父提交）。**八张作�
 [entries."T-G171"]
 id = "T-G171"
 title = "台账号索引随波次重算（173 个全覆盖，含本卡自己）+ 定规矩：现算类索引必须在集成后重算"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:复盘/索引-台账号到复盘.md",
@@ -4650,7 +4650,7 @@ gaps = "**实测读数（脚本现算）**：重算分两步——① 追加本�
 [entries."T-G172"]
 id = "T-G172"
 title = "TraeCode 池适配器 tools/trae_pool.mjs（CDP：发指令/自动授权/判完成/积分记账）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tools/trae_pool.mjs",
@@ -4662,7 +4662,7 @@ gaps = "**实测读数**：node --check 退出码 0（371 行）；冒烟（提�
 [entries."T-G173"]
 id = "T-G173"
 title = "轻量化通道：开工切片 wb_brief（≤6KB）+ 一屏核实 wb_verify + 一屏现状 wb_state + 派活器 --lean"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tools/wb_brief.py",
@@ -4677,7 +4677,7 @@ gaps = "**实测读数**：① 三件工具各跑一次 —— wb_brief --card 0
 [entries."T-G174"]
 id = "T-G174"
 title = "人工验收清单 G 组：068/069/070 三张卡已落地的界面行为（四要素 + 存在性证据）"
-group = "PROCESS"
+group = "OPS"
 status = "done"
 evidence = [
   "file:docs/人工验收-照着点.md",
@@ -4689,7 +4689,7 @@ gaps = "**背景**：卡 073（T-G167）在 F 组明写「正在别的树上飞�
 [entries."T-G175"]
 id = "T-G175"
 title = "暗色护栏自证：改坏必红的常驻实证（静态层 + 活体层，只读可复现）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:tools/contrast_audit.py",
@@ -4702,7 +4702,7 @@ gaps = "五条自证的命令/退出码/首条红行见 复盘/暗色护栏自�
 [entries."T-G176"]
 id = "T-G176"
 title = ".wt 工作树清理器：七条判据 + 默认只看不删（真树不删，主控决定）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tools/wt_prune.py",
@@ -4715,7 +4715,7 @@ gaps = "**七条判据的判法**（`tools/wt_prune.py:judge()` `:339`，按 1�
 [entries."T-G177"]
 id = "T-G177"
 title = "修真暗色令牌存在性护栏：切错块（第 6 行注释先命中）+ web_live 判据过弱 + 080 两条断言翻面"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:tests/test_web_frontend.py",
@@ -4728,7 +4728,7 @@ gaps = "**病根行号**：tests/test_web_frontend.py:78（修前用 css.split('
 [entries."T-G178"]
 id = "T-G178"
 title = ".wt 清理器补删前证据留档（wb-* 拷回主树；usage 追加合并；没拷走就不许删）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:tools/wt_prune.py",
@@ -4739,7 +4739,7 @@ gaps = "**缺口原文出处**：gates/diag/do_tg120.py §19.3（同见台账 T-
 [entries."T-G179"]
 id = "T-G179"
 title = "封存指纹修真：worktree 回退 + 摘掉 gates/** 成固定点 + wb_verify 可独立复算"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:scripts/run_gates.py",
@@ -4753,7 +4753,7 @@ gaps = "**缺口（卡 §0 主控实测，照抄；本树现算坐实）**：`sc
 [entries."T-G180"]
 id = "T-G180"
 title = "归置：工作台分格器（默认 dry-run/可 undo）+ docs/归置地图.md（六格 + PC/APP + 契约与别读清单）"
-group = "PROCESS"
+group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:docs/归置地图.md",
@@ -4764,7 +4764,7 @@ gaps = "**分格器**：gates/diag/归置.py（gitignored，一次性）；默�
 [entries."T-G181"]
 id = "T-G181"
 title = "复用口径与生成物无关：input_hash 排掉 __pycache__/*.egg-info/*.pyc + 跨树一致钉子"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:scripts/run_gates.py",
@@ -4797,7 +4797,7 @@ gaps = "**症状**：`pytest tests/test_offline_phone_line.py` 在 base（dd2548
 [entries."T-G186"]
 id = "T-G186"
 title = "修两处负载敏感门：test_run_bg 墙钟断言改行为断言 + 门禁浏览器层改内部串行（满载不再假红）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:tests/test_run_bg.py",
@@ -4807,10 +4807,23 @@ gaps = "**症状与判据**：主控三趟全量门禁的实测对照 —— 跑
 [entries."T-G184"]
 id = "T-G184"
 title = "复用口径与换行无关：input_hash 归一 \r\n → \n + 同内容跨换行一致钉子（华为码道 pool 首张真卡）"
-group = "PROCESS"
+group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:scripts/run_gates.py",
   "file:tests/test_gates_reuse_line.py",
 ]
 gaps = "**问题**：`input_hash()` 直接对工作区文件字节做 sha256，而本仓库 `core.autocrlf=true`、`.gitattributes` 只给 `gates/render/*.txt` 钉了 `eol=lf` —— 已跟踪文件在工作区里 CRLF 256 / LF 288 / 混合 5（主控实测），门禁输入正是这种混合（`src/web/app.css`、`tools/ui_flow_check.mjs` 是 CRLF，`tools/serve.py` 是 LF）。⇒ **同一份提交内容**在「CRLF 签出」与「LF 签出」的树里算出不同哈希，复用结论随存放形式漂移。与 T-G181（按**路径**排掉生成物）同族。**修法**：哈希前把读到的字节里的 `\r\n`（两字节序列）替换成 `\n`，即 `hashlib.sha256(path.read_bytes().replace(b\"\\r\\n\", b\"\\n\")).digest()`；**只动这一个两字节序列，孤立 `\r` 不碰**（那会改内容语义）。docstring 按 T-G181 的写法补全原因与代价。**没动**：`REUSE_INPUTS` 的 glob 宽度与门清单一字未动、`skip_reused` 语义未动、`staged_tree`/封存指纹未碰、`.gitattributes` 未动、`gates/render/*.txt` 未动。**主控亲验的性质**（同一路径分别写 LF / CRLF / 混合换行 / 内容真变，调 `input_hash()`）：LF=`2ea4465b4b8cc743` · CRLF=`2ea4465b4b8cc743`（**相等**）· 混合=`2ea4465b4b8cc743`（**相等**）· 内容真变=`01b53dfdc69e575e`（**不等**）。**用例**：`pytest tests/test_gates_reuse_line.py tests/test_gate_fingerprint.py -q --no-cov` → **26 passed**（既有 20 + 新增 3 = 23 于 reuse_line，另 fingerprint 3）；★ 直接 `pytest` 会报 `Coverage failure: total of 0 < fail-under=70`，那是 `--cov=timeflow` 与「这些测试只 import run_gates」的既有现象，**不是测试失败**，故加 `--no-cov` 取真数。`ruff check scripts/run_gates.py tests/test_gates_reuse_line.py` → All checks passed。**代价（接受的取舍）**：只改换行不改内容时复用哈希**不会**失效 —— 但本仓库已给 `gates/render/*.txt` 钉 `eol=lf`，「只改换行」本就是违规改动。**自愈**：哈希口径变了 → `gates/reuse.json` 既有记录失效一次，下一轮真跑后按新口径重落盘。**来源**：华为码道 codearts 号池（infra/pool）派出的**首张真卡**（卡 089，GLM-5.2，树 .wt/p089，base dd2548c，本笔的父为 16af828）；★ 工人未提交，提交由主控做。"
+
+[entries."T-G182"]
+id = "T-G182"
+title = "归置机械码（锁死+白名单+逻辑归属）+ 台账 group 拆细（PROCESS 200 → OUTSOURCE/ENGINEERING/OPS/RULES）"
+group = "OUTSOURCE"
+status = "done"
+evidence = [
+  "file:docs/归置-机械码.toml",
+  "file:tools/relocate.py",
+  "file:tests/test_relocate.py",
+]
+gaps = "**四子命令**（tools/relocate.py，**只读** docs/归置-机械码.toml 一个文件、不内置任何应搬清单）：check 打印待搬/锁定/幽灵三表 —— 本笔 [allow] 空 ⇒ 待搬 0 条、锁定 14 条契约、幽灵 0 条，退 0；index 按 [regroup] 现算一张索引打印、不落盘。**锁死优先级三条**（假树，贴原样）：① [allow] 空 → apply 搬 0 跳过 0（退 0）；② 同一条同时进 [lock] 与 [allow] → 搬 0 跳过 1（点名被 [lock] 命中、退出码 0）；③ [allow] 一条 → 搬 1；undo 后目录树复原（含空目录已收）且幂等（再 undo 搬 0）。**幽灵条目**：策略里写一个盘上没有的路径 → check 退 2 且点名（报告/幽灵.md）。**index 现算且未落盘**：真树打印归属计数 产品线 74 / 工程运维 61 / 外包卡 52 / 规矩与口径 12 / 交接与索引 10 = 209（恰为 复盘/*.md 全量）；跑 index 前后 git status 不多文件。**台账拆细**：拆前 PROCESS=200，拆后 OUTSOURCE=43 / ENGINEERING=31 / OPS=24 / RULES=8，留在 PROCESS=94；逐行 diff 核对**只动 group 一个字段**（106 行 PROCESS 各自换成新值，其余字段与条目零改动）。★★ **判不了 0 条**；留在 PROCESS 的 94 条**不是判不了**，而是**产品实现/缺陷/视觉设计**类卡（软件格，不属四桶），按卡「拿不准别硬塞」留 PROCESS，明细已列名回报主控。**本笔零搬动**（[allow] 保持空）。"
+
