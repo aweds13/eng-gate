@@ -57,9 +57,9 @@ HEAD_RE = re.compile(r"^(#{1,4})\s*(.*)$")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
-def _git(*args: str) -> str:
+def _git(*args: str, where: Path | None = None) -> str:
     done = subprocess.run(
-        ["git", "-c", "core.quotepath=false", *args], cwd=str(ROOT),
+        ["git", "-c", "core.quotepath=false", *args], cwd=str(where or ROOT),
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     return (done.stdout or "").strip()
@@ -74,19 +74,44 @@ def _first_line(cmd: list[str]) -> str:
     return ""
 
 
-def section_state() -> str:
-    """一、现状 —— 全部现算，不抄任何文档。"""
-    sha = _git("rev-parse", "--short", "HEAD") or "?"
-    branch = _git("rev-parse", "--abbrev-ref", "HEAD") or "?"
-    porc = [ln for ln in _git("status", "--porcelain").splitlines() if ln.strip()]
+def _workspace_counts(where: Path) -> tuple[int, int]:
+    """`git status --porcelain` 在**哪棵树**里：被跟踪改动数 / 外来未跟踪数。"""
+    porc = [ln for ln in _git("status", "--porcelain", where=where).splitlines() if ln.strip()]
     tracked = [ln for ln in porc if not ln.startswith("??")]
     untracked = [ln for ln in porc if ln.startswith("??")]
+    return len(tracked), len(untracked)
+
+
+def section_state(cwd: str = "") -> str:
+    """一、现状 —— 全部现算，不抄任何文档。
+
+    ★ 卡 112（T-G209）：工人 `cd` 进的是**卡树**，而 `git status` 默认看**主仓** ——
+    只印主仓的数字会让工人报"文档和实际不符"（卡 109 / 110 各报一次）。给了 `cwd`
+    就**两棵树都印、各自标名**（`卡树 <路径>` 与 `主仓 <路径>`）；不给 `cwd` 时
+    输出**逐字不变**。
+    """
     dist = _first_line([sys.executable, "-X", "utf8", "tools/sync_counts.py", "--check"])
-    return "\n".join([
-        f"- HEAD {sha} · 分支 {branch}",
-        f"- 台账分布：{dist or '(sync_counts --check 没有输出)'}",
-        f"- 工作区：被跟踪文件改动 {len(tracked)} 个（应 0）+ 外来未跟踪 {len(untracked)} 个",
-    ])
+    if not cwd:
+        sha = _git("rev-parse", "--short", "HEAD") or "?"
+        branch = _git("rev-parse", "--abbrev-ref", "HEAD") or "?"
+        tracked, untracked = _workspace_counts(ROOT)
+        return "\n".join([
+            f"- HEAD {sha} · 分支 {branch}",
+            f"- 台账分布：{dist or '(sync_counts --check 没有输出)'}",
+            f"- 工作区：被跟踪文件改动 {tracked} 个（应 0）+ 外来未跟踪 {untracked} 个",
+        ])
+    rows: list[str] = []
+    for label, where in (("卡树", Path(cwd)), ("主仓", ROOT)):
+        sha = _git("rev-parse", "--short", "HEAD", where=where) or "?"
+        branch = _git("rev-parse", "--abbrev-ref", "HEAD", where=where) or "?"
+        tracked, untracked = _workspace_counts(where)
+        rows.append(f"- {label} {where}：HEAD {sha} · 分支 {branch}")
+        rows.append(
+            f"- {label} 工作区：被跟踪文件改动 {tracked} 个（应 0）"
+            f"+ 外来未跟踪 {untracked} 个"
+        )
+    rows.append(f"- 台账分布（主仓）：{dist or '(sync_counts --check 没有输出)'}")
+    return "\n".join(rows)
 
 
 def _is_checkpoint_start(line: str) -> bool:
@@ -242,30 +267,54 @@ def section_rules(spec_text: str | None) -> str:
     return _cap_sections(out, RULES_MAX_BYTES) + "\n"
 
 
+SCOPE_PATH_RE = re.compile(
+    r"[\w\-.]+/[\w\-./*]+"                       # 带斜杠的路径：tools/wb_brief.py、src/**
+    r"|[\w\-.]+\.(?:py|md|toml|json|jsonl|ya?ml|sh|txt|ts|tsx|js|css|html|ini|cfg|sql)\b"
+)
+
+
 def section_whitelist(spec_text: str | None) -> str:
     """四、本卡的白名单 / 禁区 —— 从卡里「白名单」小节原样摘出（含其后的禁区行）。
 
     ★ 卡 §1.1 的模板里也出现过一行「本卡的白名单 / 禁区」标题（那只是样张）——
     所以取**最后一个**含「白名单」的标题，且排除以「四、」开头的样张标题。
+
+    ★ 卡 112（T-G209）：本套卡的规格常常是「逐文件点名范围 + `## 禁区`」，**没有**
+    单独的「白名单」小节 —— 那种卡不该印"停工报主控"（今天卡 108/109/110 三次被它骗）。
+    范围声明 = 「白名单」小节 **或**「禁区」小节 **或**正文里逐一点名的文件 / 路径；
+    两个都没有（既无范围小节、又无点名文件）才印那句停工话。有「禁区」时直接摘它
+    （§四标题的另一半）。
     """
     if not spec_text:
         return "（主控版：无单卡白名单）\n"
     lines = spec_text.splitlines()
     heads = _headings(lines)
-    cands = [idx for idx, (_i, _lvl, title) in enumerate(heads)
-             if "白名单" in title and not title.startswith("四、")]
-    if not cands:
-        return "（卡里没找到「白名单」小节 —— 停工报主控）\n"
-    return _extract_section(lines, heads, cands[-1]) + "\n"
+    for keyword in ("白名单", "禁区"):
+        cands = [idx for idx, (_i, _lvl, title) in enumerate(heads)
+                 if keyword in title and not title.startswith("四、")]
+        if cands:
+            return _extract_section(lines, heads, cands[-1]) + "\n"
+    if SCOPE_PATH_RE.search(spec_text):
+        return "（本卡无「白名单」小节 —— 范围以规格里逐一点名的文件 / 路径为准）\n"
+    return "（卡里没找到「白名单」小节 —— 停工报主控）\n"
+
+
+#: 截断后缀（★ 它的**字节数**必须真的从限额里扣掉 —— 见 `_truncate`）。
+CUT_SUFFIX = "…(已截断)"
 
 
 def _truncate(text: str, limit: int) -> str:
-    """按字节截断（UTF-8 安全），去掉末尾半截，末尾补「…(已截断)」。"""
+    """按字节截断（UTF-8 安全），去掉末尾半截，末尾补 `CUT_SUFFIX`。
+
+    ★ 主控补（2026-10-02，卡 112 的工人如实报的既有缺陷）：原来写死 `limit - 12`，而后缀
+      `…(已截断)` 是 **14 字节**（`…` 3 + `(` 1 + 三字 9 + `)` 1）⇒ 截断后最多 **超上限 2 字节**
+      （实测全量 126 张卡里最长的那份 = **6146** > 6144）。改成**按后缀真实字节数**扣。
+    """
     raw = text.encode("utf-8")
     if len(raw) <= limit:
         return text
-    cut = raw[:max(0, limit - 12)].decode("utf-8", errors="ignore").rstrip()
-    return cut + "…(已截断)"
+    room = max(0, limit - len(CUT_SUFFIX.encode("utf-8")))
+    return raw[:room].decode("utf-8", errors="ignore").rstrip() + CUT_SUFFIX
 
 
 def build(*, card: str, spec: str, master: bool, cwd: str = "") -> str:
@@ -288,7 +337,7 @@ def build(*, card: str, spec: str, master: bool, cwd: str = "") -> str:
         f"# 开工切片 · {who}  · 生成于 {stamp} · HEAD {sha}",
         "",
         "## 一、现状（现算，不抄任何文档）",
-        section_state(),
+        section_state(cwd),
         "",
         "## 二、最新 1 个 CHECKPOINT",
         section_checkpoint(),
@@ -303,7 +352,9 @@ def build(*, card: str, spec: str, master: bool, cwd: str = "") -> str:
     text = "\n".join(parts)
     raw = text.encode("utf-8")
     if len(raw) > BRIEF_MAX_BYTES:
-        text = _truncate(text, BRIEF_MAX_BYTES) + "\n"
+        # ★ 主控补（2026-10-02）：截断后再补的这个 `\n` 也在限额里 ⇒ 预算少留 1 字节，
+        #   否则"≤6144"仍然会被自己顶破（原来是 6144 + 1）。
+        text = _truncate(text, BRIEF_MAX_BYTES - 1) + "\n"
     return text
 
 

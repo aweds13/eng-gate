@@ -1,0 +1,15 @@
+[entries."T-G205"]
+id = "T-G205"
+title = "号池写面①：作业登记（谁占了哪棵树）+ 三条自家守卫"
+group = "OPS"
+status = "done"
+evidence = [
+  "file:tools/pool/registry.py",
+  "file:tools/pool/guards.py",
+  "file:tools/pool/locks.py",
+  "file:tools/wb_registry.py",
+  "file:tests/test_pool_registry.py",
+  "file:tests/test_pool_guards.py",
+]
+gaps = "**来路**：写面（写面 = 另一窗口能「派活 / 取消」）的**第一块地基不是 MCP，而是「谁占了哪棵树」** —— 此前**没有任何地方记着这件事**：两个窗口各派一张卡进同一棵树，双方都不知道（真发生过：卡 100 / 102 的工人**跑进主树**改东西，见 `复盘/口径坑.md` 坑 20）。**做法**：① `tools/pool/registry.py`（新 311 行）—— 租约登记落在**主工作树**的 `gates/diag/pool-registry.json`（★ 用 `git rev-parse --git-common-dir` 定位、**不用 `--show-toplevel`**：那在卡树里回的是卡树；`TF_POOL_REGISTRY` 可覆盖），同目录 tmp + `os.replace` **原子写**，**死租约 = TTL 到期 或 该卡日志已判「断了/已判决」**（复用 `pool.jobs`，不另写），★ **不登记 pid** —— 因为 Windows 上 CPython 的 `os.kill(pid, 0)` 走 `TerminateProcess`，**那不是探活、是把进程杀掉**（口径坑 27），所以判活只走「租约 + 日志心跳」；② `tools/pool/guards.py`（新 175 行）—— **三条纯函数**守卫 `tree_guard`（一棵树一个写者）· `domain_guard`（冲突域相交就拒并**点名相交文件**，相交判据直接复用 `pool.plan.files_intersect`）· `lock_guard`（锁的 `card` = 本卡 **或** `cwd` 指向本树 ⇒ 拒）+ 最朴素的 `log_guard`（目标已存在 ⇒ 拒）；**纯函数**：不写文件、不 print、不起进程；③ `tools/wb_registry.py`（新 215 行）—— CLI `list` / `check`（只跑守卫、不登记 = 写面的干跑）/ `reserve` / `release`，`--files` 缺省从 `docs/workbacklog.toml` 查、★ **查不到就拒**（空域会绕过域守卫，不许猜）；④ `tools/pool/locks.py` 加 `parse_entries(body)`（照 `gate_lock.py status` 的**真实原文**解析，`is_empty()` 行为一字未改）；⑤ 两个测试文件 `tests/test_pool_registry.py`（22 例）+ `tests/test_pool_guards.py`（14 例）。**★ 六条不变量里只有三条是本卡判的** —— **内存闸**（`wb_dispatch` 的前置检查 `TF_GATE_MIN_FREE_GB`）· **日志换名**（`wb_dispatch` 自己挑 `wb-<卡>.r2.jsonl`，写面不给 `--force`）· **模型白名单**（`wb_dispatch.MODEL_WHITELIST` + `pool.models`）三条**明确委托**、本模块不重写（重写就是第三份真源），并各有测试钉住（`test_pool_guards.py` 里断言 `guards` 没有任何内存闸函数）。**验收（工人自报，主控逐条核）**：① `pytest tests/test_pool_guards.py tests/test_pool_registry.py` → **36 passed**；全量 `pytest` → **1756 passed, 2 deselected**（覆盖率 **93.74%**；去掉本卡两文件后 1720 passed 对得上）；② `ruff check` 本卡 6 个文件 → `All checks passed!`；③ **先红后绿**：把三个模块移开 → `ModuleNotFoundError: No module named 'wb_registry'`（2 errors during collection），复位 → 36 passed；④ 守卫被咬 **4/4 原样**（树被占 / 冲突域相交并点名文件 / 日志已存在 / 锁在跑两态：`card`= 本卡 与 `cwd` 指向本树）；⑤ **死租约两种腾位**都验了（把 `at` 推老 21601s > TTL 21600s ⇒ 别人占同一棵树成功；落下 `wb-110.jsonl` + `wb-110.verdict.txt` 判死后 ⇒ 登记表自动只剩活的）；⑥ **原子写**：落盘后 `json.loads` 成功、目录里没有半截 tmp 残留；**坏文件不静默清空**（`reserve` 对坏文件抛 `RegistryError`，原文件一个字没动）；⑦ 登记路径在卡树里的原样读数：`git rev-parse --git-common-dir` → `D:/repo/engineering/.git` ⇒ 登记文件 = **主树**的 `gates/diag/pool-registry.json`（对照 `--show-toplevel` 回的是卡树，正是不能用它的理由）。**★ 主控裁定（三条留白）**：① `check` 没有 `--log` ⇒ 日志守卫只在 `reserve` 生效 —— **接受**（写面本来就是先 `reserve` 再起进程）；② **同一张卡重复登记会被自己的活租约咬** —— **接受，且不加隐式续租**（「一棵树一个写者」要严；写面要重派就先 `release` 再 `reserve`，两步都留痕）；③ 「锁在跑」那条 bite 用的是按卡里给的原样格式**构造**的锁串（真锁当时空着，不便为演示真起一趟门禁）—— **接受**（解析器另有测试按原样格式钉住）。**★ 工人如实报的「没停工」**：切片 §4 有一条「卡里没找到白名单小节 → 停工报主控」，工人判定本卡已用「逐个点名文件 + 禁区」定死范围、故未停工 —— **主控追认**（本卡规格确实逐文件点名，停工反而空跑）。**★ 该改但不属于本卡**：`tools/pool/__init__.py` 的 docstring 仍写「本包**没有任何写操作 / 派活 / 抢锁**函数 —— 那是期 2」，而本包现在已有 `registry` / `guards` ⇒ 由**卡 111**（写面）一并更正（已写进那张卡的交付）。"
+
