@@ -1,3 +1,16 @@
+## 2026-10-01 —— 修两处负载敏感门禁（T-G186 / 卡 091，华为码道池第三张真卡）
+
+- 判据（主控三趟对照）：跑 A 满载 → `test_run_bg` 挂 + `ui_flow` 挂 2/26（⑮ Obsidian）；跑 B **低负载** →
+  两道门**都绿**；跑 C 满载 → `test_run_bg` **还是同一条**、`ui_flow` 换成挂 1/26（⑪ 备份与恢复）。
+  ⇒ **① 每次挂同一条 = 墙钟敏感；② 每次挂不同条 = 竞态/时序。** 这两道门让任何卡的提交在满载下都过不去。
+- `.tests/test_run_bg.py`：删掉墙钟断言 `elapsed < 1.5`，改为**行为断言**（`run` 返回后 status 仍为 running）；
+  被测命令 sleep 2→5s 并注明"那是被测时长、不是断言阈值"。
+- `scripts/run_gates.py`：浏览器层（render/ui_flow）改**内部串行**（原来两个真浏览器实例争资源）；
+  轻门泳道仍与浏览器层并行。代价：总时长 ≈ render+ui_flow，在 gate_lock 90 分钟预算内。
+- 验收：负载器（28~31 个 burn 子进程）下三次 `test_run_bg` 全过；`--no-reuse` 连跑两趟全量门禁均
+  `pytest 1578 passed`，`gates/last.json` **ok=True / rev=16af828**。无 xfail/skip 作弊。
+- 边界：`ui_flow` 是**结构性规避**竞态（串行化），不是逐条修 26 条流的等待原语。
+
 ## 2026-10-01 —— 修 wall-clock 定时炸弹：离线建任务的状态改按事件时间判定（T-G185 / 卡 090）
 
 - 症状：`pytest tests/test_offline_phone_line.py` 在 base 上 **13 ERROR + 1 FAILED**，全出自同一个夹具，

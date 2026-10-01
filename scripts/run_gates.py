@@ -976,24 +976,40 @@ def main() -> int:
             results.append(dead_gate(name, t0, why) if proc is None
                            else finish_gate(name, proc, t0))
     else:
-        # **两条泳道并行**：轻门一路、真机浏览器一路（浏览器层 2 条互不依赖：端口 / 临时库 /
-        # profile 目录都分开）。
+        # **两条泳道并行**：轻门一路、真机浏览器一路。
         # ★ 起进程一律在**主线程依次**做（见 start_gate 的注释：多线程同时 Popen 在 Windows 上
-        # 会 WinError 87）；并行只发生在"等输出"这一半 —— 而墙钟时间恰恰由等待决定。
+        #   会 WinError 87）；并行只发生在"等输出"这一半 —— 而墙钟时间恰恰由等待决定。
+        # ★ 卡 091：浏览器层（render / ui_flow）改成**内部串行**。原来两个真浏览器实例同时跑，
+        #   满载下争磁盘 IO / 内存 / 浏览器内部资源，ui_flow 的"等元素就绪"抢不到时间片而误判
+        #   稳定（症状：元素 0×0 / 匹配 0 个 / 可见 0 个），且每趟挂的是不同行为流（竞态签名，
+        #   非确定性缺陷）。串行后 ui_flow 跑时 render 已结束，不再争浏览器资源；轻门泳道仍与
+        #   浏览器层并行（那是 CPU vs 浏览器，争用小）。代价：总时长 ≈ render+ui_flow 而非 max，
+        #   在 gate_lock 90 分钟预算内。
         light = [(n, c) for n, c in todo if n not in BROWSER]
         heavy = [(n, c) for n, c in todo if n in BROWSER]
-        print(f"=== 泳道：轻门 {len(light)} 道 ∥ 真机浏览器 {len(heavy)} 道（各自内部并行）===")
-        started: list[tuple[str, subprocess.Popen[str] | None, float, str]] = []
-        for name, cmd in [*heavy, *light]:        # 长的那两条先起，让它俩先跑起来
+        print(f"=== 泳道：轻门 {len(light)} 道 ∥ 真机浏览器 {len(heavy)} 道（浏览器层内部串行）===")
+        # 轻门先在主线程依次起进程（Popen 不并发，见 start_gate 注释）
+        started_light: list[tuple[str, subprocess.Popen[str] | None, float, str]] = []
+        for name, cmd in light:
             proc, t0, why = start_gate(name, cmd)
-            started.append((name, proc, t0, why))
+            started_light.append((name, proc, t0, why))
+
+        def run_heavy_serial() -> list[dict[str, object]]:
+            out: list[dict[str, object]] = []
+            for name, cmd in heavy:           # 浏览器层串行：render 完了再 ui_flow
+                proc, t0, why = start_gate(name, cmd)
+                out.append(dead_gate(name, t0, why) if proc is None
+                           else finish_gate(name, proc, t0))
+            return out
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            futures = [
+            heavy_future = pool.submit(run_heavy_serial)
+            light_futures = [
                 pool.submit(dead_gate, n, t0, why) if proc is None
                 else pool.submit(finish_gate, n, proc, t0)
-                for n, proc, t0, why in started
+                for n, proc, t0, why in started_light
             ]
-            results = [f.result() for f in futures]
+            results = heavy_future.result() + [f.result() for f in light_futures]
 
     for name, mark in reused.items():
         results.append({

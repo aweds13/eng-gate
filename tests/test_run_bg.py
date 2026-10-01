@@ -23,8 +23,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUN_BG = ROOT / "tools" / "run_bg.py"
 
-# 门禁自己跑测试时是并行的（`-n 2`），给子进程留一点富余，别把「秒回」判成脆的。
-_SLOW_SECONDS = "2"
+# 被测命令故意 sleep 这么久（秒）。**不是断言阈值** —— 是给"run 秒回后 status 能查到
+# running"这个**行为观测**留窗口：满载下 `_status` 自己起一个 python 子进程也要时间，
+# 子进程得活得比"run 返回 + 一次 status 查询"加起来还久，"秒回"才观测得稳。5s 远大于
+# 起进程开销，满载也打不到（run 只是 fork+立刻返回，不 wait 子进程）。
+_SLOW_SECONDS = "5"
 
 
 def _run(args: list[str], timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
@@ -58,7 +61,6 @@ def _wait_done(log: Path, timeout: float = 20.0) -> subprocess.CompletedProcess[
 
 def test_run_returns_immediately_and_status_polls_two_states(tmp_path: Path) -> None:
     log = tmp_path / "slow.log"
-    started = time.monotonic()
     got = _run(
         [
             "run",
@@ -72,11 +74,15 @@ def test_run_returns_immediately_and_status_polls_two_states(tmp_path: Path) -> 
             f"import time; time.sleep({_SLOW_SECONDS}); print('bg done')",
         ]
     )
-    elapsed = time.monotonic() - started
 
-    # ★ 反证 1：父调用秒回（不 wait 子进程）
+    # ★ 反证 1：父调用没等子进程结束（"秒回"）。
+    #   不用墙钟（`elapsed < 1.5`）—— 它把"这台机器此刻快不快"当成了被测对象：满载下
+    #   起一个 python 子进程本身就可能 >1.5s，与被测逻辑无关却会让断言挂。改用**行为**
+    #   证据：run 返回后立刻查 status，子进程仍在 `state=running`（下面反证 2a）——
+    #   若 run wait 了子进程，这里只会是 done。为让这个观测在满载下稳（`_status` 自己
+    #   也要起一个 python 子进程），被测命令故意 sleep 5s（`_SLOW_SECONDS`），给"查到
+    #   running"留足窗口；那是被测时长，不是断言阈值。
     assert got.returncode == 0, got.stderr
-    assert elapsed < 1.5, f"run 没有秒回，实测 {elapsed:.2f}s"
     assert "pid=" in got.stdout, got.stdout
     assert f"rc_file={log}.rc" in got.stdout, got.stdout
     assert log.exists(), "run 应当先把日志文件建出来（status 立刻可读）"
