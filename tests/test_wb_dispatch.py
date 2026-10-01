@@ -745,6 +745,72 @@ def test_status_heartbeat_prefers_the_newest_round(tmp_path: Path, monkeypatch) 
     assert "第 2 轮" in said and "第 1 轮" not in said, said
 
 
+# -------------------------------------------------- 假警报 → 有证据的判断（卡 093 · T-G187）
+#
+# 主控今天亲历：worker 刚起不到一个心跳周期（心跳每 120s 才写一行），而 `--status` 只凭
+# 「心跳文件在不在」就喊「派活进程多半已被杀」—— 而工人活得好好的、日志还在长。
+# 一个会喊狼来了的状态器会让人误判、甚至**误重派**（撞上正在跑的活）。下面三条钉住：
+# ① 刚起必须说"正常"、不许告警；② "心跳真断了"仍然必须告得出来；③ 判据要念证据（时间/进程）。
+
+
+def test_status_says_just_started_not_dead(tmp_path: Path, monkeypatch) -> None:
+    """★ 核心：刚起（有 log、mtime 是刚刚、没有心跳文件、没有判决）→ 说"刚起/正常"，不告警。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-042.jsonl"
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")   # mtime = 现在
+    said = wd.status_report("042")
+    assert "刚起" in said and "正常" in said, said
+    assert "★告警" not in said, f"刚起不是事故：{said}"
+    assert "多半已被杀" not in said, f"无证据的措辞不许再出现：{said}"
+
+
+def test_status_still_alarms_when_the_heartbeat_really_died(
+        tmp_path: Path, monkeypatch) -> None:
+    """★ 不许把告警删掉了事：心跳陈旧 **且** 日志也不再长 → 这一态仍必须告警，并念出判据。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    monkeypatch.setattr(wd, "codebuddy_worker_pids", lambda: [])   # 桩：没有真 worker 也要能跑
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-042.jsonl"
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    wd.write_heartbeat(log, "[心跳] 已跑 3.0 分钟 | 回合 5")
+    _ageing(log, wd.heartbeat_file_for(log), seconds=wd.STALL_SECONDS + 60)
+    said = wd.status_report("042")
+    assert "★告警" in said and "没人盯了" in said, said
+    assert "日志最后写" in said and "与看门狗底线同一口径" in said, said   # 判据要念出来
+    assert "多半已被杀" not in said, f"改成了有证据的陈述，旧措辞应消失：{said}"
+
+
+def test_status_alarm_names_the_live_worker_when_the_command_line_finds_it(
+        tmp_path: Path, monkeypatch) -> None:
+    """进程判据按命令行查：查到**本卡** worker（命令行含 brief-<卡>.md）→ 别急着重派。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    monkeypatch.setattr(wd, "codebuddy_worker_pids",
+                        lambda: [(34168, "node.exe ... -p 读 gates/diag/brief-042.md ... -y")])
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-042.jsonl"
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    wd.write_heartbeat(log, "[心跳] 已跑 3.0 分钟 | 回合 5")
+    _ageing(log, wd.heartbeat_file_for(log), seconds=wd.STALL_SECONDS + 60)
+    said = wd.status_report("042")
+    assert "★告警" in said and "本卡" in said and "34168" in said, said
+
+
+def test_status_says_detach_has_no_push_channel_without_a_verdict(
+        tmp_path: Path, monkeypatch) -> None:
+    """★ 没判决时明说 `--detach` 没有回推通道 + 建议轮询间隔（今天真发生过：收工了没人知）。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-042.jsonl"
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    said = wd.status_report("042")
+    assert "没有回推通道" in said and "轮询" in said and "--card 042 --status" in said, said
+
+
 def test_heartbeat_is_written_to_a_file_with_a_timestamp(tmp_path: Path) -> None:
     """心跳落盘：过夜跑时"它最后一次动是什么时候"必须能一眼查到。"""
     log = tmp_path / "wb-002.jsonl"

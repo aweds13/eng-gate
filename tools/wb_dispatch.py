@@ -506,7 +506,8 @@ def status_report(card: str) -> str:
     hbs = card_artifacts(diag, card, ".heartbeat.txt")
     if hbs:
         out.append(f"  [心跳] {hbs[-1].read_text(encoding='utf-8').strip() or '（空）'}")
-    else:
+    elif newest is None:
+        # 一个 log 都没有 = 真没派过；有 log 而无心跳时，刚起/真断了由 alert 有证据地判（卡 093）
         out.append("  [心跳] （还没有 —— 要么没派过，要么刚起）")
     out.extend(alert)                        # 醒目告警紧跟心跳 —— 没人盯这事要一眼看见
     # ★ T-G96：判决**按轮落**（`wb-<卡>.verdict.txt` / `wb-<卡>.r2.verdict.txt`…）—— 这里取
@@ -522,6 +523,11 @@ def status_report(card: str) -> str:
             out.append("  [★告警] 判决比日志旧 —— 它描述的不是当前这一轮")
     else:
         out.append("  [判决] （还没有 —— 还在跑，或没跑完就断了）")
+        # ★ 卡 093：`--detach` 之后主控**收不到完工通知**（今天真发生过：worker 12:36 收工，
+        #   主控被用户问才发现）—— 没判决时把"没有回推通道 + 该多久轮询一次"明说出来。
+        out.append(f"  [提示] --detach 派活**没有回推通道**（完工不会自动通知主控）—— 请轮询："
+                   f"python -X utf8 tools/wb_dispatch.py --card {card} --status"
+                   f"（建议每 ~{HEARTBEAT_SECONDS / 60:.0f} 分钟一次；跑挂了再 --resume auto）。")
     sd = session_file_for(head.with_suffix(".jsonl"))
     if sd.exists():
         sid = sd.read_text(encoding="utf-8").strip()
@@ -539,21 +545,79 @@ def status_report(card: str) -> str:
     return "\n".join(out)
 
 
+# ---------------------------------------------------------------- 进程存活判据（卡 093 · T-G187）
+# 为什么按**命令行**查：`node.exe` 满机都是，只按名字下结论 = 铁律 23–28 明令禁止的那件事
+# （会把别的 node 当成本卡工人，也会把本卡工人当成"没在跑"）。CodeBuddy worker 的判据是
+# **node.exe 且命令行含 codebuddy**（当年主控就是按命令行精确查到 pid 34168 的）。
+# ★ 本函数**只查不杀** —— `--status` 是不碰工人的只读通道。
+
+
+def codebuddy_worker_pids() -> list[tuple[int, str]]:
+    """按命令行**精确**列 CodeBuddy worker：`(pid, 命令行)` 列表 —— 只查，不杀。
+
+    枚举不到（非 Windows / PowerShell 不可用 / 读不出）→ 返回 `[]`（意思是"判不出"，
+    **不是**"没有进程"）；调用方据此如实措辞，绝不把它读成"工人已死"。
+    """
+    if os.name != "nt":
+        return []
+    cmd = ["powershell", "-NoProfile", "-Command",
+           "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | "
+           "ConvertTo-Json -Compress"]
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=20, **NO_WINDOW)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if done.returncode != 0 or not (done.stdout or "").strip():
+        return []
+    try:
+        data = json.loads(done.stdout)
+    except json.JSONDecodeError:
+        return []
+    rows = data if isinstance(data, list) else [data]
+    found: list[tuple[int, str]] = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        cl = str(item.get("CommandLine") or "")
+        exe = cl.strip().split(" ", 1)[0].strip('"').replace("\\", "/").rsplit("/", 1)[-1].lower()
+        if exe != "node.exe" or "codebuddy" not in cl.lower():
+            continue                     # ★ 名字 + 命令行**两条都要**，缺一不认（不许只按名字）
+        try:
+            found.append((int(item.get("ProcessId")), cl))
+        except (TypeError, ValueError):
+            continue
+    return found
+
+
+def _card_of(log: Path) -> str:
+    """从 `wb-<卡>.jsonl` / `wb-<卡>.r2.jsonl` 里取出卡号（取不到 → 空串）。"""
+    hit = re.match(r"^wb-(.+?)(?:\.r\d+)?\.jsonl$", log.name)
+    return hit.group(1) if hit else ""
+
+
+def _clock(ts: float) -> str:
+    """mtime → `HH:MM:SS`（把判据念给人听用）。"""
+    return time.strftime("%H:%M:%S", time.localtime(ts))
+
+
 def heartbeat_stall_alert(*, log: Path, finished: bool,
                           now: float | None = None) -> list[str]:
-    """架构 C（T-G112，主控裁定）的**兜底告警** —— 返回要打进 `--status` 的行（空 = 不告警）。
+    """这张 log 的**心跳/存活**叙述 —— 返回要打进 `--status` 的行（空 = 没话要说）。
 
-    为什么有它（T-G91.gaps + 并发两卡复盘 §6）：`--detach` 之后看门狗跑在**派活进程**里，
-    派活进程被系统杀掉（重启 / 休眠断电 / 任务管理器结束）→ 没人写心跳、没人掐工人、没人落判决，
-    只剩心跳文件停在几点。进程级独立（互盯 / 独立看门狗）暂不做；这一条是"看得见"的那一半：
-    `--status` 读文件时发现「心跳停滞超过阈值且没有判决」就打醒目告警，由主控/用户的定时调用兜底。
+    为什么改成"有证据的判断"（卡 093 · T-G187，主控今天亲历）：旧口径只看「心跳文件在不在」，
+    于是把**刚起不到一个心跳周期**的正常现场读成了「多半已被杀」的假警报（会让人误判、甚至误重派，
+    重派会撞上正在跑的活）。现在每一态都要有证据：
 
-    ★ 阈值与看门狗**同一口径**：复用 `STALL_SECONDS` 底线（480 秒 ≈ 心跳间隔 120 秒的 4 个周期
-    —— 派活进程活着时每个周期都该有心跳，连续 4 个周期没有 = 写心跳的那个循环不在了）。
-    判据只读**文件 mtime**，不猜进程状态。★ 只告一种（真机探针修正过的口径，2026-09-26）：
-    工人的 stdout 是**管道**，读管道的 pump 线程就在派活进程里 —— 派活进程一死，log 就**冻结**
-    （探针里工人随之退出），所以「心跳停了但日志还在动」在真实世界里**不可达**，
-    别按它分叉出第二种告警。工人生死从文件判不出来 → 这是架构 C 的残余风险（候选卡 B 解）。
+      ① **刚起（正常，不告警）**：还没有心跳文件，且日志 mtime 就在**一个心跳周期内**
+         → 说"刚起 N 分钟、心跳每 120s 一行、正常"；
+      ② **日志还在长（暂不告警）**：心跳缺失/陈旧，但日志**刚刚还在写** → 派活器可能还在；
+      ③ **真断了（★必须告警）**：心跳陈旧（或无心跳文件）**且**日志也不再长（静默 ≥ 阈值）
+         → 报出来，并把判据**全部念出来**（心跳最后时间 / 日志最后写时间 / 阈值 / 进程判据）。
+
+    ★ 阈值与看门狗**同一口径**：`STALL_SECONDS` 底线（480 秒 ≈ 心跳间隔 120 秒的 4 个周期）。
+    ★ 进程判据按命令行精确查（`codebuddy_worker_pids`），把"多半已被杀"那种**无证据的措辞**
+      换成有证据的陈述 —— 不许按进程名判断。
     已收工（这张 log 自己有判决 / 里有 result 事件）→ 不告警：收工后心跳停止是**正常**的。
     ★ 宁可少告警也不让 `--status` 崩：mtime 读不到就退回"不告警"。
     """
@@ -564,18 +628,41 @@ def heartbeat_stall_alert(*, log: Path, finished: bool,
         hb = heartbeat_file_for(log)
         hb_age: float | None = (max(reference - hb.stat().st_mtime, 0.0)
                                 if hb.exists() else None)
-        log_age = max(reference - log.stat().st_mtime, 0.0)
+        log_mtime = log.stat().st_mtime
+        log_age = max(reference - log_mtime, 0.0)
     except OSError:
         return []
-    base = float(STALL_SECONDS)
+    base = float(STALL_SECONDS)          # 告警阈值（与看门狗底线同一口径）
+    period = float(HEARTBEAT_SECONDS)    # 一个心跳周期
     if hb_age is not None and hb_age < base:
-        return []                            # 心跳还新鲜 = 派活进程活着，没话要说
-    hb_said = (f"心跳停滞 {hb_age / 60:.1f} 分钟" if hb_age is not None
+        return []                        # 心跳还新鲜 = 派活进程活着，没话要说
+    hb_said = (f"心跳停滞 {hb_age / 60:.1f} 分钟（最后 {_clock(hb.stat().st_mtime)}）"
+               if hb_age is not None
                else "没有心跳文件（--heartbeat-seconds 0，或派活器刚起就死了）")
+    # ① 刚起：还没有心跳文件，而日志是在**一个周期内**写的 —— 正常，不告警
+    if hb_age is None and log_age < period:
+        return [f"  [心跳] 刚起 {log_age / 60:.1f} 分钟（日志最后写 {_clock(log_mtime)}；"
+                f"心跳每 {period / 60:.0f} 分钟一行）：还没到第一个心跳周期 —— 正常，不告警"]
+    # ② 心跳缺失/陈旧但**日志仍在长** → 派活器可能还在（长任务里心跳偶尔慢一拍），暂不告警
+    if log_age < base:
+        return [f"  [心跳] {hb_said}、但日志 {log_age / 60:.1f} 分钟前还在写（{_clock(log_mtime)}）"
+                " —— 派活器可能还在：暂不告警（继续观察）"]
+    # ③ 心跳缺失/陈旧 **且** 日志也不再长 = 真断了 —— 这一态才告警，并把所有判据念出来
+    card = _card_of(log)
+    procs = codebuddy_worker_pids()
+    mine = [pid for pid, cl in procs if f"brief-{card}.md" in cl]
+    if mine:
+        proof = (f"命令行里查到**本卡** worker 仍在（pid {'/'.join(map(str, mine))}，"
+                 "node.exe 且含 codebuddy）→ 别急着重派")
+    elif procs:
+        proof = (f"命令行里有 {len(procs)} 个 codebuddy worker，但没有本卡的"
+                 f"（命令行不含 brief-{card}.md）")
+    else:
+        proof = "命令行里查不到 codebuddy worker（node.exe 且含 codebuddy）"
     return [
-        f"  [★告警] {hb_said}、日志静默 {log_age / 60:.1f} 分钟"
+        f"  [★告警] {hb_said}、日志最后写 {_clock(log_mtime)}（静默 {log_age / 60:.1f} 分钟）"
         f"（阈值 {base / 60:.1f} 分钟，与看门狗底线同一口径）且没有判决"
-        "—— 派活进程（含看门狗）多半已被杀（重启 / 休眠 / 被结束）：没人盯了。",
+        f" —— {proof}：没人盯了。",
         "  [★告警] 兜底：先 tools/wb_status.py <log> --tail 20 看现场，"
         "再 --resume auto 续跑或重派。",
     ]
