@@ -1506,6 +1506,93 @@ def _outside_allow(dirty: list[str], allow: list[str]) -> list[str]:
     return out
 
 
+# ---------------------------------------------------------------- 内存闸（卡 102 / T-G198）
+# 与 `scripts/run_gates.py` **同一套口径**：读 **available**、同一个环境变量 `TF_GATE_MIN_FREE_GB`
+# （默认 4.0，`0` = 关）、同一套措辞、同样"读不到就跳过"。派活同样吃内存（工人会跑 pytest /
+# 起真服务），所以派活前也要过这道闸。★ 只加这一条前置判据 —— 派活主流程（心跳 / 看门狗 /
+# 429 / 判决口径 / retry）与 `--status` 三态判据一个字不动。
+DEFAULT_GATE_MIN_FREE_GB = 4.0
+
+
+def available_memory_gb() -> float | None:
+    """读**可用**内存（available，GB）；读不到 → None（调用方跳过这道闸，不静默当通过、也不拒跑）。
+
+    ★ **不许依赖 `psutil`**（本仓 `pyproject.toml` 的 `dependencies` 里没有它）。
+    Windows 走 `ctypes` 的 `GlobalMemoryStatusEx`（`ullAvailPhys`）；其它平台 `os.sysconf`。
+    """
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class _MemoryStatusEx(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = _MemoryStatusEx()
+            stat.dwLength = ctypes.sizeof(_MemoryStatusEx)
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                return None
+            avail = int(stat.ullAvailPhys)
+        else:
+            pages = int(os.sysconf("SC_AVPHYS_PAGES"))
+            size = int(os.sysconf("SC_PAGE_SIZE"))
+            if pages <= 0 or size <= 0:
+                return None
+            avail = pages * size
+    except Exception:
+        return None
+    return avail / (1024 ** 3) if avail > 0 else None
+
+
+def gate_min_free_gb() -> float:
+    """内存闸阈值（GB）：`TF_GATE_MIN_FREE_GB`（默认 4.0；`0` = 关掉这道闸）。坏值 → 退回默认。"""
+    raw = os.environ.get("TF_GATE_MIN_FREE_GB", "").strip()
+    if not raw:
+        return DEFAULT_GATE_MIN_FREE_GB
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"[WARN] TF_GATE_MIN_FREE_GB={raw!r} 不是数字 → 退回默认 "
+              f"{DEFAULT_GATE_MIN_FREE_GB:g} GB", file=sys.stderr, flush=True)
+        return DEFAULT_GATE_MIN_FREE_GB
+
+
+def memory_gate_problem() -> str | None:
+    """内存闸判据（卡 102）：可用内存 < 阈值 → 返回一句人话（**不派活**）；否则 None（放行）。
+
+    与 `run_gates.memory_gate_problem` 同一套措辞：阈值 `0` → 打一行"闸已关"并放行；
+    读不到内存（None 或抛异常）→ 打印"读不到，闸跳过"并放行（不静默当通过、也不拒跑）；
+    正常 → 打印一行读数并放行。
+    """
+    threshold = gate_min_free_gb()
+    if threshold <= 0:
+        print("=== 内存闸：已关（TF_GATE_MIN_FREE_GB=0）—— 不静默 ===", flush=True)
+        return None
+    try:
+        avail = available_memory_gb()
+    except Exception:
+        avail = None
+    if avail is None:
+        print(f"=== 内存闸：读不到可用内存（阈值 {threshold:.1f} GB）→ 跳过这道闸"
+              "（读不到不当通过、也不拒跑）===", flush=True)
+        return None
+    if avail < threshold:
+        return (f"可用内存 {avail:.1f} GB < 阈值 {threshold:.1f} GB → 内存不够："
+                "可能压死你正在用的程序 —— 今天真把用户的游戏挤崩过。"
+                "放行：TF_GATE_MIN_FREE_GB=0 关掉这道闸，或先腾出内存。")
+    print(f"=== 内存闸：可用 {avail:.1f} GB ≥ 阈值 {threshold:.1f} GB，放行 ===", flush=True)
+    return None
+
+
 def _resolve_port_bases(cli: list[int] | None) -> list[int] | None:
     """端口段来源：`--port-base`（可多次）**优先**；没给则读 **`TF_DISPATCH_PORT_BASE`**。
 
@@ -1595,6 +1682,10 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
         problems.append(f"这一轮的 log 已存在：{log}（要覆盖请 --force —— 证据不许被悄悄盖掉）")
     # ★ 卡 095：端口段体检（铁律 37）—— 给了段且段内有占用就拒派；没给段则如实跳过。
     problems.extend(port_preflight(port_bases))
+    # ★ 卡 102（T-G198）：内存闸 —— 派活同样吃内存，可用内存不够就不派活（同一环境变量/措辞）。
+    mem = memory_gate_problem()
+    if mem:
+        problems.append(mem)
     if check_auth and not problems:
         ok, why = auth_ok(node, cli)
         if not ok:

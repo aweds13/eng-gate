@@ -49,6 +49,10 @@ def sandbox(tmp_path: Path, monkeypatch) -> Path:
     monkeypatch.setattr(wd, "paths", lambda *a, **k: (node, cli))
     monkeypatch.setattr(wd, "git_dirty", lambda: [])
     monkeypatch.setattr(wd, "auth_ok", lambda *a, **k: (True, "登录自检通过"))
+    # ★ 卡 102：沙箱要**与宿主内存无关** —— 内存闸的判据（读本机 available）由
+    #   `tests/test_mem_guard.py` 用桩专测；这里测的是规格/脏树/log/端口/登录，把它们
+    #   从"这台机器此刻有多少可用内存"里摘出来（否则本机内存低时它们会假红）。
+    monkeypatch.setenv("TF_GATE_MIN_FREE_GB", "0")
     return tmp_path
 
 

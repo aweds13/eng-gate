@@ -143,6 +143,98 @@ SUCCESS_HINTS = ("passed", "failed", "error", "PASS", "Success", "checks passed"
 # 默认 1800 秒；`TF_GATE_DOOR_TIMEOUT` 可覆盖（`0` = 关掉，给将来留口子）。
 DEFAULT_DOOR_TIMEOUT = 1800.0
 
+# ---------------------------------------------------------------- 内存闸（T-G198 / 卡 102）
+# 病灶：跑门禁/派活**只看"我该不该跑"，不看"这台机器扛不扛得住"**。2026-10-01 晚，16.3 GB 机器上
+#   并行跑两趟门禁 + 4 个 CodeBuddy 工人 + 每趟门禁的无头 Edge + serve.py，同时用户在玩游戏
+#   （≈2 GB）→ 可用内存掉到 ~3 GB、MemCompression 起了 310 MB、整机慢 6 倍（pytest 884s vs 146s），
+#   **用户的游戏被挤崩了一次**。
+# 口径：读 **available**（可用，含可回收文件缓存），**不是 free** —— free 会把缓存算成"没内存"，
+#   误拦严重（卡 102 §干活前自问）。阈值 `TF_GATE_MIN_FREE_GB`（默认 4.0；`0` = 关掉这道闸）。
+DEFAULT_GATE_MIN_FREE_GB = 4.0
+
+
+def available_memory_gb() -> float | None:
+    """读**可用**内存（available，GB）；读不到 → None（调用方跳过这道闸，不静默当通过、也不拒跑）。
+
+    ★ **不许依赖 `psutil`**（本仓 `pyproject.toml` 的 `dependencies` 里没有它，卡 095 已如实报过）。
+    用标准库：
+      - Windows：`ctypes` 的 `GlobalMemoryStatusEx` 取 `ullAvailPhys`（可用，不是空闲）；
+      - 其它平台：`os.sysconf("SC_AVPHYS_PAGES") * SC_PAGE_SIZE`。
+    """
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class _MemoryStatusEx(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = _MemoryStatusEx()
+            stat.dwLength = ctypes.sizeof(_MemoryStatusEx)
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                return None
+            avail = int(stat.ullAvailPhys)
+        else:
+            pages = int(os.sysconf("SC_AVPHYS_PAGES"))
+            size = int(os.sysconf("SC_PAGE_SIZE"))
+            if pages <= 0 or size <= 0:
+                return None
+            avail = pages * size
+    except Exception:
+        return None
+    return avail / (1024 ** 3) if avail > 0 else None
+
+
+def gate_min_free_gb() -> float:
+    """内存闸阈值（GB）：`TF_GATE_MIN_FREE_GB`（默认 4.0；`0` = 关掉这道闸）。坏值 → 退回默认。"""
+    raw = os.environ.get("TF_GATE_MIN_FREE_GB", "").strip()
+    if not raw:
+        return DEFAULT_GATE_MIN_FREE_GB
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"[WARN] TF_GATE_MIN_FREE_GB={raw!r} 不是数字 → 退回默认 "
+              f"{DEFAULT_GATE_MIN_FREE_GB:g} GB", file=sys.stderr, flush=True)
+        return DEFAULT_GATE_MIN_FREE_GB
+
+
+def memory_gate_problem() -> str | None:
+    """内存闸判据（卡 102）：可用内存 < 阈值 → 返回一句人话（调用方**拒跑**）；否则 None（放行）。
+
+    - 阈值 `0` → 打一行"闸已关"并放行（**不静默**）；
+    - 读不到内存（`available_memory_gb()` 返回 None **或抛异常**）→ 打印"读不到，闸跳过"并放行
+      （★ **不静默当通过**、也**不**因此拒跑）；
+    - 正常 → 打印一行读数（两个数）并放行。
+    """
+    threshold = gate_min_free_gb()
+    if threshold <= 0:
+        print("=== 内存闸：已关（TF_GATE_MIN_FREE_GB=0）—— 不静默 ===", flush=True)
+        return None
+    try:
+        avail = available_memory_gb()
+    except Exception:
+        avail = None
+    if avail is None:
+        print(f"=== 内存闸：读不到可用内存（阈值 {threshold:.1f} GB）→ 跳过这道闸"
+              "（读不到不当通过、也不拒跑）===", flush=True)
+        return None
+    if avail < threshold:
+        return (f"可用内存 {avail:.1f} GB < 阈值 {threshold:.1f} GB → 内存不够："
+                "可能压死你正在用的程序 —— 今天真把用户的游戏挤崩过。"
+                "放行：TF_GATE_MIN_FREE_GB=0 关掉这道闸，或先腾出内存。")
+    print(f"=== 内存闸：可用 {avail:.1f} GB ≥ 阈值 {threshold:.1f} GB，放行 ===", flush=True)
+    return None
+
+
 # ---------------------------------------------------------------- 端口段（T-G156 §2.1）
 # 浏览器层的端口段。**默认与历史逐字一致**（render 8531/8532、ui_flow 8541~8544）；
 # 设了 `TF_GATE_PORT_BASE` 才整体平移 —— 于是同一台机器上多棵树各自一段、不再排队等端口：
@@ -1059,6 +1151,14 @@ def main() -> int:
     args = ap.parse_args()
     if args.seal:
         return seal()
+
+    # ★ 卡 102（T-G198）：开跑前先过**内存闸** —— 可用内存不够就拒跑（退出码 **3**；
+    #   124 是"门超时"、2 是 TOML 预检失败、1 是门禁不过，都不与 3 冲突）。
+    #   放在**一切之前**：走到这里时还没有任何门被启动（也没有清遗留 / TOML 预检的副作用）。
+    mem_problem = memory_gate_problem()
+    if mem_problem is not None:
+        print(f"[FAIL] 内存闸拒跑：{mem_problem}", flush=True)
+        return 3
 
     jobs: list[tuple[str, list[str]]] = [*COMMON, *REAL_PY]
     if args.fast:
