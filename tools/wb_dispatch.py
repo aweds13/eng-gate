@@ -11,6 +11,8 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
   ② `git status --porcelain -uno` 必须**空**（未跟踪文件不算，那两个是别的窗口放的）；
   ③ 轻量登录自检（真发一条极短请求，认出 `Authentication required`）；
   ④ `gates/diag/wb-<卡号>.jsonl` 不存在（要覆盖得显式 `--force`，证据不许被悄悄盖掉）。
+  ⑤ ★ 卡 095：**端口段体检**（铁律 37）—— 给了端口段（`--port-base` 或 `TF_GATE_PORT_BASE`）
+     且段内有占用 → 拒派并点名占用者；**没给段 → 跳过**（不检查也不假装检查，不许自动换段）。
 
 用法（默认 **dry-run**：只打印将要执行的命令，不派活）：
     python -X utf8 tools/wb_dispatch.py --card 001 --spec 复盘/外包卡-001-独立复核T-G79.md
@@ -1417,9 +1419,36 @@ def _outside_allow(dirty: list[str], allow: list[str]) -> list[str]:
     return out
 
 
+def port_preflight(port_bases: list[int] | None) -> list[str]:
+    """端口段体检（铁律 37）—— 段内有占用就**拒派**；没给段就如实跳过。
+
+    为什么是 17 个端口：行为流 ㉒ 要起「另一台设备」当对端，对端走 `BASE+16`；实测 9197 被
+    外来常驻服务 `vivoesService_x64.exe` 占着 → ㉒ 稳定报 `fetch failed`。所以派活前逐段看
+    `BASE..BASE+16`。★ 只判「拒派」，**不自动换段**（换段是主控的决定）。
+    没给端口段 → 打印一行跳过；★ **不检查也不假装检查**（不许静默当通过）。
+    """
+    if not port_bases:
+        print("  未给端口段，跳过端口体检", file=sys.stderr, flush=True)
+        return []
+    import tf_portcheck  # 同一目录（tools/），真身见 tools/tf_portcheck.py
+
+    span = tf_portcheck.DEFAULT_SPAN
+    busy = tf_portcheck.busy_ports()
+    problems: list[str] = []
+    for base in port_bases:
+        hits = tf_portcheck.segment_hits(base, span, busy)
+        if hits:
+            who = "；".join(f"{port} ← {name}" for port, name in hits)
+            problems.append(
+                f"端口段 {base}..{base + span - 1} 内有占用 → 拒派：{who}"
+                f"（铁律 37 / 行为流 ㉒：对端用 BASE+16，被占会稳定报 fetch failed）")
+    return problems
+
+
 def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
               cli_override: str | None = None, resuming: bool = False,
-              allow: list[str] | None = None) -> tuple[list[str], Path]:
+              allow: list[str] | None = None,
+              port_bases: list[int] | None = None) -> tuple[list[str], Path]:
     """四道检查 —— 返回（问题清单, 日志路径）。问题非空就不许派活。
 
     ★ 卡 029 §2.10（本轮真撞的）：**续跑**（`--resume <id>` / `--resume auto` 拿到了 id）时
@@ -1455,6 +1484,8 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
                       file=sys.stderr, flush=True)
     if log.exists() and not force:
         problems.append(f"这一轮的 log 已存在：{log}（要覆盖请 --force —— 证据不许被悄悄盖掉）")
+    # ★ 卡 095：端口段体检（铁律 37）—— 给了段且段内有占用就拒派；没给段则如实跳过。
+    problems.extend(port_preflight(port_bases))
     if check_auth and not problems:
         ok, why = auth_ok(node, cli)
         if not ok:
@@ -1502,6 +1533,9 @@ def main() -> int:
                         help="带着同一会话接着跑：给 sessionId，或 auto（读 wb-<卡>.session.txt）")
     parser.add_argument("--allow", action="append", default=None,
                         help="该卡的白名单 glob（续跑时脏文件越界告警用；可多次给）")
+    parser.add_argument("--port-base", action="append", type=int, default=None,
+                        help="端口段起点（可多次给）；不给则读环境变量 TF_GATE_PORT_BASE。"
+                             "段内有占用 → 拒派（铁律 37）；都没给 → 跳过端口体检")
     parser.add_argument("--quota-wait", type=int, default=DEFAULT_QUOTA_WAIT,
                         help=f"撞 429 先等几秒再探（默认 {DEFAULT_QUOTA_WAIT}；用户 2026-09-26："
                              "「你先等一下」；0 = 测试用）")
@@ -1538,9 +1572,22 @@ def main() -> int:
         if not resume_sid:
             print(f"[FAIL] --resume auto 但没找到会话文件：{side}", file=sys.stderr)
             return 2
+    # ★ 卡 095：端口段来源 —— `--port-base`（可多次）优先；没给则读 TF_GATE_PORT_BASE
+    #   （逗号/空白分隔）。都没给 → port_bases 为空 → 前置检查里如实跳过端口体检。
+    port_bases = list(args.port_base or [])
+    if not port_bases:
+        raw = os.environ.get("TF_GATE_PORT_BASE", "").strip()
+        if raw:
+            try:
+                port_bases = [int(tok) for tok in re.split(r"[,\s]+", raw) if tok]
+            except ValueError:
+                print(f"[FAIL] TF_GATE_PORT_BASE 不是整数端口段：{raw!r}", file=sys.stderr,
+                      flush=True)
+                return 2
     problems, log = preflight(
         args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
         cli_override=args.cli, resuming=bool(resume_sid), allow=args.allow,
+        port_bases=port_bases,
     )
 
     if problems:

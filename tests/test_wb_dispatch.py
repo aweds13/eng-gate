@@ -137,6 +137,58 @@ def test_preflight_reports_a_failed_login(sandbox: Path, monkeypatch) -> None:
     assert any("登录没通" in p for p in problems)
 
 
+# ------------------------------------------------------ ⑤ 端口段体检（卡 095 · 铁律 37）
+
+
+def test_port_preflight_skips_when_no_segment(sandbox: Path, capsys) -> None:
+    """没给端口段 → **跳过**端口体检（不检查也不假装检查），不拒派。"""
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False)
+    assert problems == []
+    assert "未给端口段，跳过端口体检" in capsys.readouterr().err
+
+
+def test_port_preflight_refuses_when_segment_busy(sandbox: Path, monkeypatch) -> None:
+    """★ 反例：段内有占用 → 拒派，并**点名**占用者 + 写出铁律 37 出处。"""
+    import tf_portcheck
+    monkeypatch.setattr(tf_portcheck, "busy_ports",
+                        lambda: {9197: "pid=4321 vivoesService_x64.exe"})
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False,
+                               port_bases=[9191])
+    assert any("9197" in p and "vivoesService_x64.exe" in p for p in problems)
+    assert any("铁律 37" in p for p in problems)
+
+
+def test_port_preflight_passes_when_segment_free(sandbox: Path, monkeypatch) -> None:
+    """段内全空闲 → 不拒派（问题清单里没有端口那条）。"""
+    import tf_portcheck
+    monkeypatch.setattr(tf_portcheck, "busy_ports", lambda: {})
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False,
+                               port_bases=[9191])
+    assert problems == []
+
+
+def test_main_refuses_when_env_segment_busy(sandbox: Path, monkeypatch, capsys) -> None:
+    """走完整 main：`TF_GATE_PORT_BASE` 给的段内有占用 → 拒派（退 2）并点名。"""
+    import tf_portcheck
+    monkeypatch.setattr(tf_portcheck, "busy_ports",
+                        lambda: {9197: "pid=1 vivoesService_x64.exe"})
+    monkeypatch.setenv("TF_GATE_PORT_BASE", "9191")
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--no-preflight"])
+    assert wd.main() == 2
+    err = capsys.readouterr().err
+    assert "9197" in err and "vivoesService_x64.exe" in err and "铁律 37" in err
+
+
+def test_main_skips_port_check_without_segment(sandbox: Path, monkeypatch, capsys) -> None:
+    """走完整 main：没给端口段 → 跳过体检（打印一行），照常 dry-run 通过。"""
+    monkeypatch.delenv("TF_GATE_PORT_BASE", raising=False)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--no-preflight"])
+    assert wd.main() == 0
+    assert "未给端口段，跳过端口体检" in capsys.readouterr().err
+
+
 def test_auth_ok_recognises_the_authentication_needle(monkeypatch) -> None:
     """真判据：回话里有那句 Authentication required 就判没登录（别把白等当成"它在想"）。"""
     monkeypatch.setattr(wd.subprocess, "run", lambda *a, **k: _Done(
