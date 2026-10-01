@@ -1,3 +1,13 @@
+## 2026-10-01 —— 复用口径与换行无关（T-G184 / 卡 089，华为码道池首张真卡）
+
+- `scripts/run_gates.py` 的 `input_hash()` 在做 sha256 前把字节里的 `\r\n` 归一成 `\n`（只动这一个两字节序列）。
+  真因：`core.autocrlf=true` 而 `.gitattributes` 只给 `gates/render/*.txt` 钉了 `eol=lf`，同一份提交内容
+  在 CRLF/LF 两棵树里会算出不同哈希，复用结论随存放形式漂移。与 T-G181 同族。
+- 钉子：`tests/test_gates_reuse_line.py` 加 3 条（同内容 LF/CRLF/混合 → 同哈希；内容真变 → 哈希变）。
+- 主控亲验：LF = CRLF = 混合 = `2ea4465b4b8cc743`；内容真变 = `01b53dfdc69e575e`。`--no-cov` 下 26 passed；ruff 全过。
+- 代价（接受）：只改换行不改内容时复用不失效 —— 本仓库已给 render 黄金文件钉 `eol=lf`，合规改动走不到这条路径。
+- 来源：华为码道 codearts 号池（infra/pool）派出的首张真卡，模型 GLM-5.2，树 `.wt/p089`。
+
 ## 2026-10-01 —— 修两处负载敏感门禁（T-G186 / 卡 091，华为码道池第三张真卡）
 
 - 判据（主控三趟对照）：跑 A 满载 → `test_run_bg` 挂 + `ui_flow` 挂 2/26（⑮ Obsidian）；跑 B **低负载** →

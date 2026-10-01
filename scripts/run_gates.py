@@ -224,6 +224,18 @@ def input_hash(patterns: tuple[str, ...]) -> str:
     且一条"复用通过"可能是基于提交里根本不存在的文件下的。
     ★ 排掉之后哈希口径变了 → `gates/reuse.json` 里既有那几条记录会**失效一次**（下一轮这
     几道门真跑一遍），这是自愈，不是 bug。
+
+    ★ 换行归一：哈希前把读到的字节里的 `\r\n`（两字节序列）替换成 `\n`，再喂给 sha256。
+    为什么归一：本仓库 `core.autocrlf=true`，而 `.gitattributes` 只给 `gates/render/*.txt`
+    钉了 `eol=lf`，其余已跟踪文件在工作区里 CRLF / LF / 混合都有（主控实测）。门禁的输入
+    正是这种混合的（例如 `src/web/app.css`、`tools/ui_flow_check.mjs` 是 CRLF，
+    `tools/serve.py` 是 LF）→ **同一份提交内容**在"CRLF 签出"和"LF 签出"的树里会算出不同
+    哈希，复用结论随存放形式漂移。归一后哈希只看内容，不看换行存放形式。
+    只动 `\r\n` 这一个两字节序列，**不**动孤立的 `\r`（那会改内容语义，超出本卡）。
+    ★ 代价（接受的取舍，不是遗漏）：只改换行不改内容时，复用哈希**不会**失效 —— 但本仓库
+    已给 `gates/render/*.txt` 钉了 `eol=lf`，"只改换行"本就是违规改动（动了逐字节比对的
+    黄金文件），所以这条"失效不了"的路径在合规改动下根本走不到。哈希口径变了 → 既有
+    `gates/reuse.json` 记录会**失效一次**（下一轮真跑），是自愈，不是 bug。
     """
     digest = hashlib.sha256()
     files: list[Path] = []
@@ -232,7 +244,7 @@ def input_hash(patterns: tuple[str, ...]) -> str:
     for path in sorted(set(files), key=lambda p: p.as_posix()):
         digest.update(path.relative_to(ROOT).as_posix().encode("utf-8"))
         digest.update(b"\0")
-        digest.update(hashlib.sha256(path.read_bytes()).digest())
+        digest.update(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).digest())
     return digest.hexdigest()[:16]
 
 

@@ -307,3 +307,67 @@ def test_new_plain_file_disables_reuse(tmp_path: Path, monkeypatch: pytest.Monke
 
     assert rg.input_hash(PATTERNS) != records["render"]["hash"]
     assert rg.skip_reused("render", records, no_reuse=False) is None
+
+
+# ------------------------------------------------------------------ 换行归一（本卡）
+
+
+def _seed_bytes(root: Path, rel: str, data: bytes) -> Path:
+    """按字节落盘（不经过 text 的换行转换）—— 拿来造 CRLF / LF / 混合的对照。"""
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
+
+
+def test_same_content_lf_vs_crlf_hashes_equal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★★ 同一份内容分别以 LF 和 CRLF 落盘 → `input_hash` **相等**。
+
+    本仓库 `core.autocrlf=true` 而 `.gitattributes` 只给 `gates/render/*.txt` 钉了 `eol=lf`，
+    其余文件在工作区里 CRLF / LF / 混合都有 → 同一份提交内容在"CRLF 签出"和"LF 签出"的
+    树里必须判出同一个复用结论，否则复用结论随存放形式漂移。
+    """
+    lf = tmp_path / "lf"
+    crlf = tmp_path / "crlf"
+    body = b"line1\nline2\nline3\n"
+    _seed_bytes(lf, "src/app.css", body)
+    _seed_bytes(crlf, "src/app.css", body.replace(b"\n", b"\r\n"))
+
+    monkeypatch.setattr(rg, "ROOT", lf)
+    h_lf = rg.input_hash(PATTERNS)
+    monkeypatch.setattr(rg, "ROOT", crlf)
+    h_crlf = rg.input_hash(PATTERNS)
+
+    assert h_lf == h_crlf
+
+
+def test_real_content_change_still_changes_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ 防"归一化顺手把内容也抹平了"：内容真的不同（改一个字节）→ 哈希**不等**。"""
+    monkeypatch.setattr(rg, "ROOT", tmp_path)
+    _seed_bytes(tmp_path, "src/app.css", b"abc\r\n")
+    before = rg.input_hash(PATTERNS)
+
+    _seed_bytes(tmp_path, "src/app.css", b"abX\r\n")  # 改一个字节，换行不变
+
+    assert rg.input_hash(PATTERNS) != before
+
+
+def test_mixed_newlines_hash_equals_all_lf(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ 同一文件里 CRLF 与 LF 混着 → 与全 LF 版**相等**（归一化逐对吃掉 `\r\n`）。"""
+    mixed = tmp_path / "mixed"
+    all_lf = tmp_path / "all_lf"
+    _seed_bytes(mixed, "src/app.css", b"crlf\r\nlf\nlf\n")
+    _seed_bytes(all_lf, "src/app.css", b"crlf\nlf\nlf\n")
+
+    monkeypatch.setattr(rg, "ROOT", mixed)
+    h_mixed = rg.input_hash(PATTERNS)
+    monkeypatch.setattr(rg, "ROOT", all_lf)
+    h_lf = rg.input_hash(PATTERNS)
+
+    assert h_mixed == h_lf
