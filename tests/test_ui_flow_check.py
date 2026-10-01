@@ -141,3 +141,65 @@ def test_flow_metadata_is_exported_as_json() -> None:
     payload = json.loads("\n".join(lines[start:]))
     assert payload["code"] == 1
     assert payload["not_run"] is False
+
+
+def _method_body(src: str, name: str) -> str:
+    """取出类里 `async <name>(...)` 那个方法的正文（到同级缩进的 `}` 为止）。"""
+    start = src.index(f"\n  async {name}(")
+    end = src.index("\n  }", start)
+    return src[start:end]
+
+
+def test_wait_primitives_poll_instead_of_asserting_once() -> None:
+    """★ 卡 092（T-G188）：这五处「找元素 / 点」的原语必须**先轮询等就绪、再断言**。
+
+    病（主控三趟全量门禁实测）：它们各自**只查一次**（`mark()` 一次 / `rectOf()` 一次），
+    满载下抢不到时间片就报「匹配到 0 个」「元素是 0×0」——**假警报**（每趟挂的还不是同一条）。
+    修法：把「等时间」换成「等就绪判据」（`this.waitFor`：存在 ∧ 可见 ∧ 尺寸非零），
+    且**不许**改成更大的固定 `sleep`（那只是把概率推小，卡 092 明令禁止）。
+
+    这条测试钉的就是「别退回去」：正文里必须有 `waitFor(`，且不许出现 `sleep(`。
+    """
+    src = TOOL.read_text(encoding="utf-8")
+    for name in ("view", "press", "pressAction", "drag", "openSetting"):
+        body = _method_body(src, name)
+        assert "this.waitFor(" in body, f"{name}() 退回一次性断言了（正文里没有 waitFor）"
+        assert "sleep(" not in body, (
+            f"{name}() 里出现了固定 sleep —— 卡 092 明令不许用「等更久」顶替「等就绪」"
+        )
+    # flow ⑭ 里那个局部 press（同一个症状类，主控补齐）
+    seg = src[src.index("const press = async (sel, label) =>"):][:700]
+    assert "t.waitFor(" in seg, "flow ⑭ 的局部 press 又退回一次性断言了"
+    assert "sleep(" not in seg
+
+
+def test_no_flow_was_deleted() -> None:
+    """★ 卡 092 明令：不许删流 / 删断言来把门禁弄绿。
+
+    行为流是**搬走的人工项**（每条都在 `--list` 第三列声明它替掉哪一条），少一条就是少一块覆盖。
+    这条断言把「26 条流」钉住：真要增删，就得改这条断言并在复盘里写明为什么。
+    """
+    proc = run_tool("--list")
+    assert proc.returncode == 0
+    rows = [ln for ln in proc.stdout.splitlines() if "\t" in ln]
+    assert len(rows) == 26, f"行为流从 26 条变成 {len(rows)} 条 —— 删流是把覆盖丢掉（卡 092 禁止）"
+
+
+def test_toast_assertions_wait_for_the_whole_predicate() -> None:
+    """★ 卡 092（T-G188，主控补齐）：**值 / 文本就绪**也是一条等待原语。
+
+    病（满载实测 ㉒）：`waitToast('已导入：')` 只等到了**前缀**，
+    紧接着拿眼前那半句去断言 `删除 1` —— 提示条是**分步渲染**的，那一瞬间必然落空
+    （原文：`导入报告里写了删了几行 —— 没找到「删除 1」`）。
+    同族写法当时 4 处：⑯ / ㉒ 预览 / ㉒ 导入 / ㉖ 断网。
+
+    判据：① 不许再出现「同一行里既 `t.has(` 又 `waitToast(`」的写法（先等前缀、再拿眼前文本断言）；
+         ② 整条判据必须用 `waitToastWhere(pred)` 一次说完整、等到它成立。
+    """
+    src = TOOL.read_text(encoding="utf-8")
+    bad = [ln.strip() for ln in src.splitlines() if "t.has(" in ln and "waitToast(" in ln]
+    assert not bad, (
+        "这几行又在「先等前缀、再拿眼前文本断言」了（改成 waitToastWhere）：\n"
+        + "\n".join(bad)
+    )
+    assert "async waitToastWhere(" in src, "waitToastWhere 这个原语不见了（值/文本就绪就靠它）"

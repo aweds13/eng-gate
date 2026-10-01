@@ -95,3 +95,6 @@ node_modules/
 .vscode/
 .idea/
 *.swp
+
+# 号池 CLI（infra/pool 派活）在自己跑过的树里留下的状态目录 —— 不是项目产物
+.codeartsdoer/

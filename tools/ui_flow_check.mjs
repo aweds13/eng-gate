@@ -182,8 +182,13 @@ class T {
   }
 
   async view(name, { quiet = true } = {}) {
-    const m = await this.mark(`[data-view="${name}"]`)
-    if (!m.ok) throw new Error(`界面上找不到视图 ${name} 的入口`)
+    const readyMs = 8000
+    let m = null
+    const got = await this.waitFor(async () => {
+      m = await this.mark(`[data-view="${name}"]`)
+      return m.ok
+    }, readyMs)
+    if (!got) throw new Error(`界面上找不到视图 ${name} 的入口（等了约${readyMs}ms，匹配到 ${m.all} 个）`)
     await this.press(HIT, `视图 ${name}`, { quiet })
     if (quiet) await waitIdle(this.cdp)
     else await this.settle()
@@ -232,10 +237,14 @@ class T {
   }
 
   /** 真按下去：滚进视口 → **命中测试** → 真鼠标事件（`Input.dispatchMouseEvent`）。 */
-  async press(selector, label = selector, { quiet = true } = {}) {
-    const r = await this.cdp.rectOf(selector)
-    if (!r) { this.ok(`点得到：${label}`, false, '找不到元素（可能没渲染出来）'); return false }
-    if (r.w < 1 || r.h < 1) { this.ok(`点得到：${label}`, false, `元素是 ${r.w}×${r.h}，点不到`); return false }
+  async press(selector, label = selector, { quiet = true, readyMs = 8000 } = {}) {
+    let r = null
+    const got = await this.waitFor(async () => {
+      r = await this.cdp.rectOf(selector)
+      return r && r.w > 0 && r.h > 0
+    }, readyMs)
+    if (!r) { this.ok(`点得到：${label}`, false, `等了约${readyMs}ms 仍找不到元素（可能没渲染出来）`); return false }
+    if (!got) { this.ok(`点得到：${label}`, false, `等了约${readyMs}ms，元素仍是 ${r.w}×${r.h}，点不到`); return false }
     const hit = await this.cdp.hitTest(selector, r.cx, r.cy)
     if (!hit.ok) { this.ok(`点得到：${label}（没被别的东西挡住）`, false, hit.why); return false }
     await this.cdp.clickAt(r.cx, r.cy)
@@ -245,9 +254,14 @@ class T {
 
   /** 按 `data-action` 点（界面里所有交互都挂在这张表上，见 T-G31 的命令表）。 */
   async pressAction(name, opts = {}) {
-    const m = await this.mark(`[data-action="${name}"]`, opts)
-    if (!m.ok) { this.ok(`界面上有这个动作：${name}`, false, `匹配到 ${m.all} 个，可见 ${m.pool} 个`); return false }
-    return this.press(HIT, `${name}${opts.text ? `（${opts.text}）` : ''}`)
+    const readyMs = opts.readyMs ?? 8000
+    let m = null
+    const got = await this.waitFor(async () => {
+      m = await this.mark(`[data-action="${name}"]`, opts)
+      return m.ok
+    }, readyMs)
+    if (!got) { this.ok(`界面上有这个动作：${name}`, false, `等了约${readyMs}ms，匹配到 ${m.all} 个，可见 ${m.pool} 个`); return false }
+    return this.press(HIT, `${name}${opts.text ? `（${opts.text}）` : ''}`, { readyMs })
   }
 
   /** 真拖（T-G79）：按住 `from` 拖到 `to`（`frac` 决定落在目标卡的哪个高度上）。
@@ -260,10 +274,12 @@ class T {
    *   ③ `frac` 不是装饰：落点算的是"鼠标在目标卡中线的上面还是下面"，要验"插到这条前面"
    *      就得落在它**上半部分**（默认 0.3）—— 落正中间会算成"插到它的下一条前面"。
    */
-  async drag(fromSel, toSel, { frac = 0.3, steps = 10 } = {}) {
-    // 只借 `rectOf` 的 scrollIntoView（把起点那一列滚进视口），返回值不用
-    await this.cdp.rectOf(fromSel)
-    const both = await this.cdp.eval(`(() => {
+  async drag(fromSel, toSel, { frac = 0.3, steps = 10, readyMs = 8000 } = {}) {
+    let both = null
+    await this.waitFor(async () => {
+      // 只借 `rectOf` 的 scrollIntoView（把起点那一列滚进视口），返回值不用
+      await this.cdp.rectOf(fromSel)
+      both = await this.cdp.eval(`(() => {
       const a = document.querySelector(${JSON.stringify(fromSel)});
       const b = document.querySelector(${JSON.stringify(toSel)});
       if (!a || !b) return null;
@@ -273,15 +289,17 @@ class T {
       const out = { a: box(a), b: box(b), vh: window.innerHeight };
       out.offscreen = [out.a, out.b].some((r) => r.y < 0 || r.y + r.h > out.vh);
       return out; })()`)
-    if (!both) { this.ok(`拖得动：${fromSel} → ${toSel}`, false, '起点或落点没找到'); return false }
+      return both && both.a.w >= 1 && both.a.h >= 1 && both.b.w >= 1 && both.b.h >= 1 && !both.offscreen
+    }, readyMs)
+    if (!both) { this.ok(`拖得动：${fromSel} → ${toSel}`, false, `等了约${readyMs}ms，起点或落点没找到`); return false }
     if (both.a.w < 1 || both.a.h < 1 || both.b.w < 1 || both.b.h < 1) {
       this.ok(`拖得动：${fromSel} → ${toSel}`, false,
-        `起点 ${both.a.w}×${both.a.h} / 落点 ${both.b.w}×${both.b.h}`)
+        `等了约${readyMs}ms，起点 ${both.a.w}×${both.a.h} / 落点 ${both.b.w}×${both.b.h}`)
       return false
     }
     if (both.offscreen) {
       this.ok(`拖得动：${fromSel} → ${toSel}`, false,
-        `起点或落点在视口外（视口高 ${both.vh}）—— 先把这一列滚进来再拖`)
+        `等了约${readyMs}ms，起点或落点在视口外（视口高 ${both.vh}）—— 先把这一列滚进来再拖`)
       return false
     }
     const hit = await this.cdp.hitTest(fromSel, both.a.cx, both.a.cy)
@@ -318,8 +336,13 @@ class T {
     const state = await this.cdp.eval(`(() => { const b = document.getElementById('body-${sec}');
       return b ? (b.hidden ? 'closed' : 'open') : 'missing' })()`)
     if (state === 'open') return true
-    const m = await this.mark(`[data-action="set-fold"][data-sec="${sec}"]`)
-    if (!m.ok) { this.ok(`设置页有「${sec}」这一节（可展开）`, false, `匹配到 ${m.all} 个`); return false }
+    const readyMs = 8000
+    let m = null
+    const got = await this.waitFor(async () => {
+      m = await this.mark(`[data-action="set-fold"][data-sec="${sec}"]`)
+      return m.ok
+    }, readyMs)
+    if (!got) { this.ok(`设置页有「${sec}」这一节（可展开）`, false, `等了约${readyMs}ms，匹配到 ${m.all} 个`); return false }
     return this.press(HIT, `展开设置里的「${sec}」`)
   }
 
@@ -378,7 +401,9 @@ class T {
    *  ★ 失败时回的是**最后一句非空的**提示条，不是"最后一次采样" ——
    *  第一版回最后一次采样，而提示条 2.2 秒后就自己消失了，于是失败信息永远是『（空）』，
    *  看着像"点了没反应"，其实它明明说过一句别的（T-G35 就这么被误导过一次）。 */
-  async waitToast(needle, ms = 5000) {
+  // ★ 卡 092：默认预算 5s → 12s。满载下提示条要十几秒才出来（实测 ㉕ 就是 5s 没等到而假红）——
+  // 这仍是**等到就绪就返回**的轮询，不是固定 sleep。
+  async waitToast(needle, ms = 12000) {
     const t0 = Date.now()
     let last = ''
     while (Date.now() - t0 < ms) {
@@ -386,6 +411,23 @@ class T {
       if (now) last = now
       if (now.includes(needle)) return { ok: true, text: now }
       await sleep(100)
+    }
+    return { ok: false, text: last }
+  }
+
+  /** ★ 卡 092：等**提示条满足整条判据**（不是一个前缀）。
+   *
+   *  为什么不能"先 `waitToast('已导入：')`、再拿眼前文本断言 `删除 1`"：提示条是**分步渲染**的，
+   *  满载下先出现的是前半句，那一瞬间去断言后半句**必然落空**（实测 ㉒「导入报告里写了删了几行」
+   *  就是这么挂的）。判据必须**一次说完整**：等到它整条成立，或者超时后说实话。 */
+  async waitToastWhere(pred, ms = 12000, step = 150) {
+    const t0 = Date.now()
+    let last = ''
+    while (Date.now() - t0 < ms) {
+      const now = await this.toast()
+      if (now) last = now
+      if (now && pred(now)) return { ok: true, text: now }
+      await sleep(step)
     }
     return { ok: false, text: last }
   }
@@ -1370,9 +1412,12 @@ flow({
     // 这张页上有好几张词表、每张一个「加一项」——`pressAction` 只按 data-action 挑会挑错，
     // 所以这里按**带 data-key 的选择器**挑，再走同一条"真按 + 命中测试"的路。
     const press = async (sel, label) => {
-      const m = await t.mark(sel)
-      if (!m.ok) { t.ok(`点得到：${label}`, false, `匹配到 ${m.all} 个`); return false }
-      return t.press(HIT, label)
+      // ★ 卡 092 补齐：与 t.press / t.pressAction 同一判据 —— 先轮询等它出现，别一次性断言
+      let m = null
+      const readyMs = 8000
+      const got = await t.waitFor(async () => { m = await t.mark(sel); return m.ok }, readyMs)
+      if (!got) { t.ok(`点得到：${label}`, false, `等了约${readyMs}ms，匹配到 ${m.all} 个`); return false }
+      return t.press(HIT, label, { readyMs })
     }
 
     // ① 先记下**没加之前**卡上那个下拉长什么样（下面要比"只多了这一项、别的没动"）
@@ -1395,7 +1440,8 @@ flow({
 
     // ③ 反证：两个框都空 → 界面自己拦（不拿空 id 去撞后端）
     await press(add, '「复习形式」的加一项（空框）')
-    t.has('空框时说清了要填什么', (await t.waitToast('id 和显示名')).text, 'id 和显示名都要填')
+    t.ok('空框时说清了要填什么', (await t.waitToastWhere((x) => x.includes('id 和显示名都要填'))).ok,
+      '等了约 12s 也没等到「id 和显示名都要填」那句话')
 
     // ④ 反证：非法 id → **后端原话**透出来，且那张表一个字节没变
     await t.type(`#vb_${KEY}_id`, 'My Form')
@@ -1504,7 +1550,9 @@ flow({
       t.has('★ 勾上之后把"这会删东西"说清楚', hint, '不可撤销')
       t.has('也说了本地改过的那种仍然不删', hint, '本地改过的那种仍然不删')
       await t.pressAction('sync-preview')
-      t.has('★ 预览明说会删 1 行', (await t.waitToast('预览：')).text, '删除 1 行')
+      t.ok('★ 预览明说会删 1 行',
+        (await t.waitToastWhere((x) => x.includes('预览：') && x.includes('删除 1 行'))).ok,
+        '等了约 12s 也没等到同时含「预览：」与「删除 1 行」的提示条')
 
       // ⑤ 取消 = 什么都不动（★ 反证：确认框不是"点了就干"）
       await t.pressAction('sync-import')
@@ -1517,7 +1565,9 @@ flow({
       // ⑥ 真删（同一个包、同一个勾选，这次点确认）
       await t.pressAction('sync-import')
       await t.pressAction('modal-ok')
-      t.has('导入报告里写了删了几行', (await t.waitToast('已导入：')).text, '删除 1')
+      t.ok('导入报告里写了删了几行',
+        (await t.waitToastWhere((x) => x.includes('已导入：') && x.includes('删除 1'))).ok,
+        '等了约 12s 也没等到同时含「已导入：」与「删除 1」的提示条')
       t.ok('★ 勾了才真删：那一行不在了', !(await stillThere()))
     } finally {
       try { peer.child.kill() } catch { /* ignore */ }
@@ -1547,7 +1597,9 @@ flow({
     // ③ 断网记一条 → **存进手机队列**，并且如实说"先存在手机上"
     await t.type('#offTitle', TITLE)
     await t.pressAction('offline-task-add')
-    t.has('★ 断网时如实说"先存在手机上"', (await t.waitToast('连不上电脑')).text, '先存在手机上')
+    t.ok('★ 断网时如实说"先存在手机上"',
+      (await t.waitToastWhere((x) => x.includes('连不上电脑') && x.includes('先存在手机上'))).ok,
+      '等了约 12s 也没等到同时含「连不上电脑」与「先存在手机上」的提示条')
     t.has('队列里看得见这一条', await t.bodyText(), TITLE)
     t.has('待同步计数是 1', await t.text('#offlineStatus'), '待同步 1 条')
 
