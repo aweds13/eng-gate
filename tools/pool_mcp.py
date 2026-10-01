@@ -14,7 +14,7 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 |---|---|
 | `initialize` | 协议版本 + `capabilities.tools` + `serverInfo`（+ 一段 `instructions` 说明边界） |
 | `notifications/initialized` | 不回（通知没有 `id` —— JSON-RPC 的规矩，也是客户端不卡住的前提） |
-| `tools/list` | 六个只读工具的清单（**写死在 `TOOL_SPECS` 里**，见下） |
+| `tools/list` | 工具清单（**写死在 `TOOL_SPECS` / `WRITE_TOOL_SPECS`**；写工具按 env 列不列） |
 | `tools/call` | 跑一个工具 → 人话文本 + ```json 围栏里的机器可读块 |
 | `ping` | `{}` |
 
@@ -26,7 +26,7 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 默认跟**控制台代码页**（这台 cp936）——不钉的话中文出去是 GBK、进来会把服务端**打崩**。
 所以协议这一层把三件套钉成 UTF-8，并按**字节**逐行读（一行坏字节只坏那一行，不打死循环）。
 
-## ★★ 六个工具，一个都不许写文件（本卡硬要求）
+## ★★ 六个只读工具（一个都不许写文件）
 
 | 工具 | 干什么 | 底层 |
 |---|---|---|
@@ -41,7 +41,40 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 `subprocess` 只留**一处** —— `lock_status` 跑 `gate_lock.py`：那是 `gates/diag/` 下的**独立脚本**
 （`-P` 是铁律 24：那里的同名脚本会被当模块顶掉），且既有测试把"经 `_run` 调它"钉住了。
 
-**没有一个是写类工具**（派活 / 取消 / 提交 / 抢锁）—— 那是**期 2**。
+## ★★ 写面（卡 111 · T-G208）：`pool_dispatch` / `pool_cancel` —— 要 `POOL_MCP_WRITE=1` 才列
+
+两个写工具**默认隐身**（没有那个 env 就只列六个只读工具）：起工人 / 杀进程不该被"顺手"调到。
+每次写调用还必须 `arguments.confirm` **等于卡号**（防手滑）。六个只读工具**不需要任何 env**。
+
+**`pool_dispatch(card, tree, spec?, model?, pool?, note?)`** —— 顺序**固定**：
+① 干跑（`pool.guards` 三条 + `pool.registry` 的租约判据，**import 调用**）→ 有咬就**不派活**、
+把逐条原因原样回给调用方（`isError=true`）；② `pool.registry.reserve(...)` **先占位**（并发安全
+的关键：不能"先派活后登记"）；③ 起工人 `wb_dispatch.py … --cwd <树绝对路径> --lean --detach
+--execute`（**必须 `--detach`**：MCP 工具调用不能阻塞几十分钟）；④ 起不来就
+`pool.registry.release(...)` **回滚**并如实报错。参数**写死、不透传危险项**：不给 `--force` /
+`--allow` / `--no-preflight` / `--resume`；`--model` 只许取 `wb_dispatch.MODEL_WHITELIST` 里的值
+（不在就拒），不给用默认。
+
+**`pool_cancel(card, reason?)`** —— 只取消**本机登记里那一条租约**的 pid：
+★ 先核对身份（`tasklist /FI "PID eq <n>" /FO CSV` 的映像名必须是 `node.exe` / `python.exe`），
+不对就**拒绝动手**并把"人工该敲什么"的确切命令印出来；★★ **绝不用 `os.kill(pid, 0)` 探活**
+（Windows 上 CPython 的 `os.kill` 走 `TerminateProcess` —— 那不是探活、那是**把人杀了**，
+见 `复盘/口径坑.md` 第 27 条）。成功后写 `gates/diag/wb-<卡>.cancel.txt`（谁 / 什么时候 /
+为什么）并 `pool.registry.release(card)`。
+
+### 六条不变量：哪条谁判（★ 不在本模块重写任何判据）
+
+| # | 不变量 | 谁判 |
+|---|---|---|
+| ① | 一棵树同时一个写者 | `pool.guards.tree_guard` |
+| ② | 冲突域不许相交（域从 backlog 读，**查不到就拒**，别猜空域） | `pool.guards.domain_guard` |
+| ③ | 门禁还在跑就不动手 | `pool.guards.lock_guard` |
+| ④ | 内存闸 | **委托** `wb_dispatch.py` 的前置检查（本模块**不写**内存判据） |
+| ⑤ | 日志不许覆盖 | `pool.guards.log_guard` + **不给** `--force`（wb_dispatch 自己挑 r2） |
+| ⑥ | 模型白名单 | `wb_dispatch.MODEL_WHITELIST`（硬闸门）+ `pool.models`（批准 ∩ 可用） |
+
+★ 干跑与登记都经 `pool.registry.list_reservations` + `pool.guards`（同一批纯函数）—— 派活的
+"能不能占"与 CLI `wb_registry.py check` 是**同一处判据**，不另写一份（本仓最忌两份真源）。
 
 ## 诚实边界（如实写）
 
@@ -61,13 +94,18 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 
 from __future__ import annotations
 
+import datetime
 import json
+import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import wb_dispatch  # noqa: PLC0415 —— 模型白名单 / 默认模型的**唯一**真源（卡 111 §2 ⑥）
+from pool import guards, registry
 from pool.jobs import (
     HEARTBEAT_SECONDS,
     REPORT_MAX_CHARS,
@@ -242,8 +280,66 @@ TOOL_SPECS: list[dict[str, Any]] = [
 
 
 def tool_list() -> list[dict[str, Any]]:
-    """工具清单（六个只读工具；本卡不列任何写工具）。"""
-    return list(TOOL_SPECS)
+    """工具清单：六个只读工具；服务端有 `POOL_MCP_WRITE=1` 时再补两个写工具（"存在性即授权"）。"""
+    specs = list(TOOL_SPECS)
+    if write_enabled():
+        specs += WRITE_TOOL_SPECS
+    return specs
+
+
+# ================================================================ 写工具元数据（卡 111 §3 / §5）
+
+#: 写工具的授权 env —— **有它才把写工具列进 `tools/list`**（"存在性即授权"）。
+WRITE_ENV = "POOL_MCP_WRITE"
+
+WRITE_TOOL_SPECS: list[dict[str, Any]] = [
+    {
+        "name": "pool_dispatch",
+        "description": ("派活：干跑守卫 → 先占树 → 起工人（--detach，立刻返回）。"
+                        "只在服务端 POOL_MCP_WRITE=1 时可见；arguments.confirm 必须等于卡号。"),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card": {"type": "string", "description": "卡号，例如 111"},
+                "tree": {"type": "string", "description": "工人干活树（相对主树根；'' = 主树）"},
+                "spec": {"type": "string",
+                         "description": "卡规格文件（仓库相对）；不给就按 backlog 登记的路径"},
+                "model": {"type": "string",
+                          "description": "模型；不给用默认；必须在 wb_dispatch 白名单里"},
+                "pool": {"type": "string", "description": "号池名（记进租约）"},
+                "note": {"type": "string", "description": "备注（记进租约）"},
+                "confirm": {"type": "string", "description": "★ 防手滑：必须等于 card"},
+            },
+            "required": ["card", "tree"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
+    },
+    {
+        "name": "pool_cancel",
+        "description": ("取消本机登记里那张卡的工人（先核对 pid 身份再动手）。"
+                        "只在服务端 POOL_MCP_WRITE=1 时可见；arguments.confirm 必须等于卡号。"),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card": {"type": "string", "description": "卡号"},
+                "reason": {"type": "string", "description": "为什么取消（写进 cancel.txt）"},
+                "confirm": {"type": "string", "description": "★ 防手滑：必须等于 card"},
+            },
+            "required": ["card"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True},
+    },
+]
+
+#: 两个写工具的名字 —— 授权门 / `confirm` 校验用。
+WRITE_NAMES = frozenset(spec["name"] for spec in WRITE_TOOL_SPECS)
+
+
+def write_enabled() -> bool:
+    """服务端授权：env `POOL_MCP_WRITE=1` 才把写工具列出来（"存在性即授权"）。"""
+    return os.environ.get(WRITE_ENV, "").strip() == "1"
 
 
 # ================================================================ 小工具：命令 / 子进程 / 产物
@@ -522,6 +618,246 @@ def tool_pool_models(arguments: dict[str, Any], root: Path = ROOT
     return _result("\n".join(lines), info, is_error=False)
 
 
+# ================================================================ 写面：pool_dispatch / pool_cancel
+
+
+def _backlog_for(root: Path) -> Any:
+    """读 **root 下**的 backlog（不像 `pool.plan.load_backlog()` 那样固定到导入时的仓库根）。
+
+    ★ 为什么按 root：MCP 服务端的 root 就是主仓；测试把 root 指到临时目录时读的也是那一份，
+      不与别的门共享真 backlog。解析仍是同一个 `load_backlog`（不另写一份 parser）。
+    """
+    return load_backlog(root / "docs" / "workbacklog.toml")
+
+
+def _how_to_pass() -> str:
+    """干跑被咬时附给人看的"怎么才能通过"（逐条对得上守卫的措辞）。"""
+    return ("怎么才能通过：\n"
+            "  · 树被占 → 等那张卡的租约释放，或换一棵树（tree）；\n"
+            "  · 冲突域相交 → 换一张域不相交的卡，或等对方收工；\n"
+            "  · 日志已存在 → 由 wb_dispatch 自己挑 wb-<卡>.r2.jsonl，或先归档旧日志；\n"
+            "  · 门禁还在跑 → 等这趟门禁结束（用 lock_status 看进度）。")
+
+
+def _dispatch_argv(card: str, spec: str, cwd: Path, model: str) -> list[str]:
+    """给 `wb_dispatch.py` 的 argv —— **写死**，不透传危险项。
+
+    不透传：`--force` / `--allow` / `--resume` / `--no-preflight`。
+    """
+    return [
+        sys.executable, "-X", "utf8", "tools/wb_dispatch.py",
+        "--card", card, "--spec", spec, "--cwd", str(cwd), "--model", model,
+        "--lean", "--detach", "--execute",
+    ]
+
+
+def _spawn_worker(argv: list[str], root: Path) -> tuple[int | None, str, str]:
+    """起工人（带 `--detach`：父进程前置检查完就把自己扔出去，立刻返回）—— 本模块第二处 subprocess。
+
+    返回 `(退出码 | None, stdout, stderr)`；跑不起来**不抛**（调用方据 `OSError` 回滚租约）。
+    """
+    done = subprocess.run(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
+        argv, cwd=str(root), capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
+    return done.returncode, done.stdout or "", done.stderr or ""
+
+
+#: 从 `wb_dispatch --detach` 的那行「…（pid 4242）…」里取 pid（★ 收紧到括号，避免误抓别的数字）。
+_PID_RE = re.compile(r"（pid\s+(\d+)）")
+
+
+def _record_pid(card: str, pid: int) -> None:
+    """把刚起的工人 pid 补进**已经占好的那条租约** —— `pool_cancel` 靠它认身份。
+
+    ★ 卡 108 明确 `registry.reserve` **不登记 pid**（判活只按租约 + 日志）—— 这里不碰那条规矩：
+      只在既有租约上补一个"我派的是哪个进程"，用的还是 `registry.load` / `registry.save`。
+    """
+    rows = registry.load()
+    for row in rows:
+        if str(row.get("card")) == str(card):
+            row["pid"] = int(pid)
+    registry.save(rows)
+
+
+def _image_name(pid: int) -> str | None:
+    """`tasklist` 拿这个 pid 的**映像名**；拿不到 → `None`（判不出，**不当作"没在跑"**）。"""
+    try:
+        done = subprocess.run(  # noqa: S603 —— pid 来自本机登记，不是外部输入
+            ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+    except OSError:
+        return None
+    line = next((ln for ln in (done.stdout or "").splitlines() if ln.strip()), "")
+    if done.returncode != 0 or not line.startswith('"'):
+        return None
+    return line[1:line.index('"', 1)]
+
+
+def _kill(pid: int) -> tuple[bool, str]:
+    """`taskkill /F /T /PID <n>` 杀**整棵**（★ 绝不 `os.kill` 探活/杀，见模块头）。"""
+    try:
+        done = subprocess.run(  # noqa: S603 —— pid 来自本机登记，不是外部输入
+            ["taskkill", "/F", "/T", "/PID", str(int(pid))],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+    except OSError as exc:
+        return False, f"taskkill 起不来：{type(exc).__name__}: {exc}"
+    return done.returncode == 0, ((done.stdout or "") + (done.stderr or "")).strip()
+
+
+def tool_pool_dispatch(arguments: dict[str, Any], root: Path = ROOT
+                       ) -> tuple[str, dict[str, Any], bool]:
+    """派活：干跑守卫 → `registry.reserve` 先占位 → 起工人（`--detach`）→ 起不来就回滚。"""
+    card = str(arguments.get("card") or "").strip()
+    tree = str(arguments.get("tree") or "").strip()
+    if not card:
+        return _result("pool_dispatch：得给我一个卡号（card）。", {"card": None}, is_error=True)
+
+    # ① 定位：主树 / 域 / 规格 —— 域**查不到就拒**（别猜空域），规格按 backlog 登记的路径
+    try:
+        main_root = registry.main_tree_root()
+    except registry.RegistryError as exc:
+        return _result(f"pool_dispatch：算不出主工作树：{exc}", {"card": card}, is_error=True)
+    try:
+        hit = _backlog_for(root).by_id().get(card)
+    except BacklogError as exc:
+        return _result(f"pool_dispatch：读不了 backlog：{exc}", {"card": card}, is_error=True)
+    if hit is None or not hit.files:
+        return _result(
+            f"pool_dispatch：backlog 里没有卡 {card} 的冲突域 ⇒ 不许派活（别猜空域）。",
+            {"card": card, "found": False}, is_error=True)
+    files = list(hit.files)
+    spec = str(arguments.get("spec") or "").strip() or hit.spec
+    model = str(arguments.get("model") or "").strip() or wb_dispatch.DEFAULT_MODEL
+    if model not in wb_dispatch.MODEL_WHITELIST:      # ⑥ 模型白名单（硬闸门）
+        return _result(wb_dispatch.model_rejected(model),
+                       {"card": card, "model": model,
+                        "allowed": list(wb_dispatch.MODEL_WHITELIST)}, is_error=True)
+
+    # ② 干跑：三条自家守卫 + 登记里的租约判据（import 调用，不 shell 出去）
+    stamp = time.time()
+    log_path = diag_dir(root) / f"wb-{card}.jsonl"
+    try:
+        live = registry.list_reservations(stamp)
+        lock_body = registry.read_lock_body()
+    except registry.RegistryError as exc:
+        return _result(f"pool_dispatch：读登记失败：{exc}", {"card": card}, is_error=True)
+    problems = [
+        *guards.tree_guard(tree, live, stamp),                          # ① 一棵树一个写者
+        *guards.domain_guard(files, live, stamp),                       # ② 冲突域不相交
+        *guards.lock_guard(card, tree, lock_body, root=main_root),      # ③ 门禁还在跑
+        *guards.log_guard(log_path),                                    # ⑤ 日志不许覆盖
+    ]
+    if problems:
+        text = ("pool_dispatch：干跑没过，**不派活**（逐条原因）：\n"
+                + "".join(f"  · {item}\n" for item in problems) + "\n" + _how_to_pass())
+        return _result(text, {"card": card, "dispatched": False, "problems": problems},
+                       is_error=True)
+
+    # ③ 先占位（并发安全的关键：不能"先派活后登记"）
+    try:
+        lease = registry.reserve(card, task=hit.task, tree=tree, files=files,
+                                 pool=str(arguments.get("pool") or ""), model=model,
+                                 log=log_path.as_posix(), note=str(arguments.get("note") or ""),
+                                 lock_body=lock_body)
+    except registry.GuardError as exc:
+        text = ("pool_dispatch：占位时被守卫拦下，**不派活**：\n"
+                + "".join(f"  · {item}\n" for item in exc.problems) + "\n" + _how_to_pass())
+        return _result(text, {"card": card, "dispatched": False, "problems": exc.problems},
+                       is_error=True)
+    except registry.RegistryError as exc:
+        return _result(f"pool_dispatch：登记失败（未派活）：{exc}", {"card": card},
+                       is_error=True)
+
+    # ④ 起工人（--detach：立刻返回）；起不来就回滚刚占的租约
+    cwd = Path(tree) if Path(tree).is_absolute() else (main_root / tree if tree else main_root)
+    argv = _dispatch_argv(card, spec, cwd, model)
+    try:
+        code, out, err = _spawn_worker(argv, root)
+    except OSError as exc:
+        registry.release(card)
+        return _result(f"pool_dispatch：工人起不来，已回滚租约：{type(exc).__name__}: {exc}",
+                       {"card": card, "dispatched": False, "rolled_back": True}, is_error=True)
+    preflight = (out + ("\n" + err if err.strip() else "")).strip()
+    pid_hit = _PID_RE.search(preflight)
+    if code != 0 or pid_hit is None:
+        registry.release(card)
+        return _result(
+            f"pool_dispatch：wb_dispatch 没把工人扔出去（退出码 {code}），"
+            f"已回滚租约：\n{preflight}",
+            {"card": card, "dispatched": False, "rolled_back": True, "exit_code": code,
+             "preflight": preflight}, is_error=True)
+    pid = int(pid_hit.group(1))
+    _record_pid(card, pid)
+
+    dispatch_log = log_path.with_name(f"wb-{card}.dispatch.log")
+    data = {"card": card, "tree": tree or "（主树）", "cwd": cwd.as_posix(), "spec": spec,
+            "model": model, "log": log_path.as_posix(),
+            "dispatch_log": dispatch_log.as_posix(), "pid": pid, "preflight": preflight,
+            "lease": {**lease, "pid": pid}}
+    text = (f"pool_dispatch：卡 {card} 已派（pid {pid}）—— 来自 `{_cmd_text(argv)}`\n"
+            f"  log：{log_path.as_posix()}\n"
+            f"  dispatch.log：{dispatch_log.as_posix()}\n"
+            f"  租约：树 {tree or '（主树）'}｜域 {'、'.join(files)}\n"
+            f"  前置检查原文：\n{preflight}\n"
+            f"  ★ 用 job_status(card='{card}') 看进度。")
+    return _result(text, data, is_error=False)
+
+
+def tool_pool_cancel(arguments: dict[str, Any], root: Path = ROOT
+                     ) -> tuple[str, dict[str, Any], bool]:
+    """取消本机登记里那张卡的工人 —— **先核对 pid 身份**，不对就拒绝动手。"""
+    card = str(arguments.get("card") or "").strip()
+    reason = str(arguments.get("reason") or "").strip()
+    if not card:
+        return _result("pool_cancel：得给我一个卡号（card）。", {"card": None}, is_error=True)
+    try:
+        live = registry.list_reservations()
+    except registry.RegistryError as exc:
+        return _result(f"pool_cancel：读登记失败：{exc}", {"card": card}, is_error=True)
+    hit = next((row for row in live if str(row.get("card")) == card), None)
+    if hit is None:
+        return _result(f"pool_cancel：本机登记里没有卡 {card} 的**活租约** —— 不动手。",
+                       {"card": card, "found": False}, is_error=True)
+    pid = hit.get("pid")
+    manual = (f"人工怎么做（先看清是不是本卡的活）：\n"
+              f"  tasklist /FI \"PID eq {pid or '<pid>'}\" /FO CSV\n"
+              f"  taskkill /F /T /PID {pid or '<pid>'}")
+    if not isinstance(pid, int):
+        return _result(
+            f"pool_cancel：这条租约里没记 pid（不是本 MCP 派的活）→ **拒绝动手**。\n{manual}",
+            {"card": card, "found": True, "pid": None}, is_error=True)
+    image = _image_name(pid)
+    if image is None or image.lower() not in ("node.exe", "python.exe"):
+        return _result(
+            f"pool_cancel：**拒绝动手** —— PID {pid} 的映像是 {image or '（查不到，判不出）'}，"
+            f"不是 node.exe / python.exe（pid 会被复用，杀错树 = 杀掉别人的东西）。\n{manual}",
+            {"card": card, "found": True, "pid": pid, "image": image}, is_error=True)
+    ok, detail = _kill(pid)
+    if not ok:
+        return _result(f"pool_cancel：taskkill 没成功（pid {pid}），租约**没动**：{detail}",
+                       {"card": card, "pid": pid, "image": image, "killed": False},
+                       is_error=True)
+    note_path = diag_dir(root) / f"wb-{card}.cancel.txt"
+    note_path.parent.mkdir(parents=True, exist_ok=True)
+    note_path.write_text(
+        f"card={card} 取消于={datetime.datetime.now().isoformat(timespec='seconds')}\n"
+        f"谁：{registry.default_owner()}\n"
+        f"pid={pid}（映像 {image}）\n"
+        f"为什么：{reason or '（没写理由）'}\n"
+        f"结果：taskkill /F /T /PID {pid}\n{detail}\n",
+        encoding="utf-8")
+    released = registry.release(card)
+    data = {"card": card, "pid": pid, "image": image, "killed": True, "released": released,
+            "cancel_txt": note_path.as_posix(), "reason": reason}
+    text = (f"pool_cancel：卡 {card} 的工人已结束（pid {pid}，映像 {image}）\n"
+            f"  已写 {note_path.as_posix()}（谁 / 什么时候 / 为什么）\n"
+            f"  租约{'已释放' if released else '本来就没有'}。")
+    return _result(text, data, is_error=False)
+
+
 # ================================================================ tools/call 调度
 
 
@@ -532,16 +868,32 @@ _HANDLERS: dict[str, Any] = {
     "job_result": tool_job_result,
     "lock_status": tool_lock_status,
     "pool_models": tool_pool_models,
+    "pool_dispatch": tool_pool_dispatch,
+    "pool_cancel": tool_pool_cancel,
 }
 
 
 def call_tool(name: str, arguments: dict[str, Any], *, root: Path = ROOT
               ) -> dict[str, Any] | None:
-    """跑一个工具；`None` = **不认识这个名字**（调用方翻成 `-32602`，不崩）。"""
+    """跑一个工具；`None` = **不认识这个名字**（调用方翻成 `-32602`，不崩）。
+
+    ★ 写工具多两道门：① 服务端要有 `POOL_MCP_WRITE=1`（没有就当"没有这个工具"）；
+    ② `arguments.confirm` 必须**等于卡号**（防手滑 —— 真要害的一张卡，就把卡号再写一遍）。
+    """
     handler = _HANDLERS.get(name)
     if handler is None:
         return None
-    text, _data, is_error = handler(arguments or {}, root)
+    args = arguments or {}
+    if name in WRITE_NAMES:
+        if not write_enabled():
+            return None
+        card = str(args.get("card") or "").strip()
+        if not card or str(args.get("confirm") or "").strip() != card:
+            return {"content": [{"type": "text", "text":
+                    f"pool_mcp：写调用被拒 —— arguments.confirm 必须等于卡号"
+                    f"（card={card or '?'}）。这是防手滑：真要害的一张卡，就把卡号再写一遍。"}],
+                    "isError": True}
+    text, _data, is_error = handler(args, root)
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
@@ -555,10 +907,15 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
         "capabilities": {"tools": {"listChanged": False}},
         "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
         "instructions": (
-            "外包号池的**只读**面：pool_plan / job_list / job_status / job_result / "
-            "lock_status / pool_models。六个工具都只读 —— 不写文件、不派活、不抢锁。"
-            "派活 / 取消 / 提交 / 抢锁是期 2，不在这里。命令失败会带回**原样命令**；"
-            "产物缺失会明说'没有'，不假装有。"
+            "外包号池：默认是**只读**面 —— pool_plan / job_list / job_status / job_result / "
+            "lock_status / pool_models，六个都只读（不写文件、不派活、不抢锁、不要 env）。"
+            "**写工具**（pool_dispatch 派活 / pool_cancel 取消）只有在**服务端**设了 "
+            "POOL_MCP_WRITE=1 时才列出来 —— 那是「存在性即授权」：没这个 env 就没有写工具。"
+            "而且每次写调用还要 arguments.confirm **等于卡号**（防手滑）。"
+            "pool_dispatch 的顺序固定：先干跑守卫（被咬就不派活、逐条给原因）→ 先占树 → 起工人"
+            "（--detach，立刻返回）→ 起不来就回滚租约；危险参数一律不透传。"
+            "pool_cancel 只取消本机登记里那张卡的工人，**先核对 pid 身份**（映像必须是 node.exe / "
+            "python.exe），不对就拒绝动手。命令失败会带回**原样命令**；产物缺失会明说'没有'。"
         ),
     }
 
@@ -592,24 +949,26 @@ def handle(message: dict[str, Any], *, root: Path = ROOT) -> dict[str, Any] | No
         arguments = params.get("arguments")
         result = call_tool(name, arguments if isinstance(arguments, dict) else {}, root=root)
         if result is None:
-            listed = "、".join(spec["name"] for spec in TOOL_SPECS)
-            return bad(JSONRPC_INVALID_PARAMS,
-                       f"没有这个工具：{name!r}；有：{listed}。"
-                       f"（本服务只有只读工具 —— 六个都不写文件、不派活、不抢锁。）")
+            listed = "、".join(spec["name"] for spec in tool_list())
+            extra = ("" if write_enabled() else
+                     "（本服务现在只有只读工具 —— 写工具要服务端设 POOL_MCP_WRITE=1 才列出来。）")
+            return bad(JSONRPC_INVALID_PARAMS, f"没有这个工具：{name!r}；有：{listed}。{extra}")
         return ok(result)
     return bad(JSONRPC_METHOD_NOT_FOUND, f"不支持的方法：{method}")
 
 
 def _usage() -> str:
     return (
-        "pool_mcp —— 把外包号池的现状作为 MCP 只读工具提供给 AI 客户端"
+        "pool_mcp —— 把外包号池的现状与派活作为 MCP 工具提供给 AI 客户端"
         "（stdio，一行一个 JSON-RPC 消息）\n"
         "\n"
         "  python -X utf8 tools/pool_mcp.py          起 stdio 服务\n"
         "  python -X utf8 tools/pool_mcp.py --help\n"
         "\n"
-        "工具：pool_plan / job_list / job_status(card) / job_result(card) / "
-        "lock_status / pool_models —— 全部只读。\n"
+        "只读工具：pool_plan / job_list / job_status(card) / job_result(card) / "
+        "lock_status / pool_models。\n"
+        "写工具（要服务端 env POOL_MCP_WRITE=1 才列出来；每次调用还要 confirm=卡号）："
+        "pool_dispatch / pool_cancel。\n"
         "客户端配置（示例）：command = python，args = [\"-X\", \"utf8\", "
         "\"tools/pool_mcp.py\"]。stdout 只走协议。\n"
     )

@@ -1,3 +1,19 @@
+## 2026-10-02 —— 号池写面②：MCP 的 `pool_dispatch` / `pool_cancel`（六条不变量 + 存在性即授权）（T-G208 / 卡 111）
+
+- 期 1（T-G201）只有六个**只读**工具；本卡把**写**接进 MCP：`pool_dispatch`（派活）/ `pool_cancel`（取消）。
+- ★ `pool_dispatch` 顺序**写死**：干跑守卫被咬就不派 → `reserve` **先占位**（并发安全）→ `--detach --execute` 起工人
+  → **起不来就回滚租约**；★ **不给** `--force` / `--allow` / `--resume` / `--no-preflight`，`--model` 只许白名单内。
+- ★ `pool_cancel` **先核对 pid 身份**（`tasklist` 映像名必须是 `node.exe` / `python.exe`，否则**拒绝动手**并印人工命令），
+  再 `taskkill /F /T`，写 `wb-<卡>.cancel.txt` 并放租约；★ **绝不用 `os.kill(pid, 0)` 判活**（Windows 上它会真杀进程）。
+- ★ **六条不变量**在 docstring 里列成"哪条谁判"：三条自家（树 / 域 / 锁）+ 一条日志；
+  **内存闸与模型白名单明确委托** `wb_dispatch`（重写就是第三份真源）。
+- ★ **授权 = 存在性**：两个写工具**只在 env `POOL_MCP_WRITE=1` 时**才列进 `tools/list`（否则仍是六个只读工具）；
+  每次写调用还要 `confirm` **等于卡号**。
+- 验收：`tools/list` **8 个**（前六个 `readOnlyHint` **一字未变**）· 干跑被咬 **4/4**（`dispatched:false`、起工人桩未调用）·
+  argv **逐字**无危险项且**先占后起** · **回滚**（起不来 → 租约已放）· cancel 身份不对时 **taskkill 调用 0 次** ·
+  `ruff` 全过 · 号池 5 文件 **83 passed** · 全量 `pytest -q` **1777 passed**（门禁那道 `pytest` 门只跑非验收 ⇒ **1775**，两边都对）。
+- ★ 留白与裁定：**pid 只作取消线索、绝不用于判活**（取消前 `tasklist` 核对映像名；缺 pid ⇒ 拒绝动手）；
+  未做真机端到端（集成之后**主控自己补一次零花费的真机 cancel 演练**）。
 ## 2026-10-02 —— 号池去重收口：`wb_dispatch` / `tf_stage_guard` 里剩下的三处副本（T-G206 / 卡 109）
 
 - 病：卡 106 说"白名单越界**三处**收敛成**一处**"，实际只有 `wb_review.py` 改了 —— `wb_dispatch._outside_allow`、
