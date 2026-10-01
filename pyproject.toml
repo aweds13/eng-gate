@@ -11,10 +11,14 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "pydantic>=2",
-    "pywebview",
 ]
 
 [project.optional-dependencies]
+# 桌面窗口壳（AC-11 / SR-NF1）：只想在浏览器 / 手机上用的人**不必**装它 ——
+# 无窗口入口 `timeflow-web` 不需要它；要桌面窗口再 `pip install -e ".[pc]"`。
+pc = [
+    "pywebview",
+]
 dev = [
     "pytest",
     "pytest-cov",
@@ -27,6 +31,8 @@ dev = [
 
 [project.scripts]
 timeflow = "timeflow.app.main:main"
+# 无窗口入口：只起本地服务、不开桌面窗口（不需要 pywebview）。
+timeflow-web = "timeflow.app.serve:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

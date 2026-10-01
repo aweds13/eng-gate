@@ -67,7 +67,10 @@ def main(argv: list[str] | None = None) -> None:
     try:
         import webview
     except Exception as exc:  # noqa: BLE001 —— 依赖问题要说清，不静默
+        # pywebview 现在是可选依赖（`optional-dependencies[pc]`）：import 失败多半是**没装它**，
+        # 而不是环境坏了 —— 所以要说清怎么装，别让人以为是"依赖缺失"这种说不通的错。
         print(f"[退回浏览器] 打不开窗口：import webview 失败（{exc}）")
+        print('[提示] 想用桌面窗口就装上它：pip install -e ".[pc]"')
         webbrowser.open(url)
         thread.join()
         return

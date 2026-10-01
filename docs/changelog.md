@@ -1,3 +1,14 @@
+## 2026-10-01 —— 轨外 089（A 档）：`pywebview` 挪进可选依赖 + 无窗口入口 `timeflow-web`（T-G193 / 卡 098）
+
+- `pyproject.toml`：`pywebview` 从**硬依赖**删掉，移入新增的 `optional-dependencies.pc`；
+  `[project.scripts]` 新增 `timeflow-web = "timeflow.app.serve:main"`（`timeflow` 那条**一字未动**）。
+- 新增 `src/timeflow/app/serve.py`：**无窗口**入口 —— 起服务前**先备份**、认 `[net] allow_lan`（默认关，开了绑 `0.0.0.0`
+  并打印地址与配对码）、打印人话地址；与 `main.py` 的**唯一区别就是不开窗口**（不 import `webview`、不调 `webbrowser`），
+  也没复制 `tools/serve.py`。`main.py` 只改回退文案一处（说清 `pip install -e ".[pc]"`）。
+- 新增 `tests/test_pc_entry_line.py`（6 例）：pyproject 三处 + `serve` 不把 `webview` 拉进 `sys.modules` +
+  先备份再起服务 + LAN 开/关横幅 + 可选 `--port`。**6 passed**。
+- ★ 边界如实：这台机器上 **`pywebview` 其实装着**（旧 editable install），所以「没装也能跑」是用
+  **干净子进程 + `sys.meta_path` 拦截器**假装没装来证的，**不是**靠卸载；本卡没装依赖、没联网。
 ## 2026-10-01 —— 端口体检误读门禁自己的端口段：改用专用变量 `TF_DISPATCH_PORT_BASE`（T-G195 / 卡 095 补正）
 
 - 症状（**真回归**，门禁当场抓到）：落卡 098 那趟 `pytest` 门 **24 failed / 1629 passed**，失败原话
