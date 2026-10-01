@@ -81,3 +81,21 @@ def test_hotmap_reads_the_view_dispatch() -> None:
     for fn in rows.values():
         assert fn in fns, f"热表指向的 {fn} 在 index.html 里找不到定义（锚点烂了）"
     assert len(fns) > 50, "顶层函数数量级不对，函数扫描的正则可能失效了"
+
+
+def test_toml_preflight_survives_cjk_paths() -> None:
+    """★ T-G190：`toml_files()` 必须能读**中文名**的 TOML（`docs/归置-机械码.toml`，T-G182 加的）。
+
+    病：它 `subprocess.run(..., text=True)` **不给 encoding** → 按本机区域编码（这台机器 GBK）解，
+    而 `git -c core.quotepath=false` 吐的是**原始 UTF-8 字节** → 读线程抛 UnicodeDecodeError →
+    `communicate()` 拿到 None → `.stdout.split()` 报 AttributeError。满仓只有这一个 TOML 名带中文，
+    所以它一进库，**pytest 门就红**（而单跑这条测试时若带了 `-X utf8` 反而是绿的 —— 假绿陷阱）。
+
+    判据：那个中文名必须**原样**出现在清单里（编码解错时它根本到不了这一行）。
+    """
+    names = [p.relative_to(ROOT).as_posix() for p in check_toml.toml_files()]
+    assert "docs/归置-机械码.toml" in names, (
+        "中文名的 TOML 没出现在清单里 —— 要么它被移走了（那就改这条断言），",
+        "要么 git 输出又被按区域编码解了（见本用例 docstring 的 T-G190）。",
+        f"现在的清单：{names}",
+    )

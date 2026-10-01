@@ -37,12 +37,17 @@ def toml_files() -> list[Path]:
     为什么不直接 `rglob`：工作区里有一堆沙箱残留目录（`m_*` / `um*` / `.p_*`），
     递归进去只会读到别人的垃圾，还会让"预检通过（N 份）"里的 N 每次都不一样。
     """
+    # ★ T-G190：**必须显式说 utf-8**。默认 `text=True` 按**本机区域编码**解（这台机器 GBK），
+    #   而 `core.quotepath=false` 让 git 吐**原始 UTF-8 字节** → 中文路径（`docs/归置-机械码.toml`）
+    #   在 GBK 下解不开：读线程抛 UnicodeDecodeError → `communicate()` 拿到 None →
+    #   `.stdout.split()` 报 AttributeError（**pytest 门就是这么红的**，见 gates/logs/pytest.log）。
+    #   `errors="replace"`：真出现解不开的字节也要把清单交出来，别让整道预检崩掉。
     out = subprocess.run(
         ["git", "-c", "core.quotepath=false", "ls-files",
          "--cached", "--others", "--exclude-standard", "*.toml"],
-        cwd=ROOT, capture_output=True, text=True, check=False,
-    ).stdout.split()
-    return [ROOT / p for p in out]
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    ).stdout or ""
+    return [ROOT / p for p in out.split()]
 
 
 def check_one(path: Path) -> list[str]:

@@ -76,7 +76,7 @@ PY = sys.executable
 COMMON = [
     ("pytest", []),                # 占位：按有没有 pytest-xdist 决定并行/串行（见 pytest_cmd）
     # 验收层只跑 2 个用例，必须关掉全局 addopts 里的覆盖率门，否则"覆盖率不达标"会误判验收失败
-    ("acceptance", [PY, "-m", "pytest", "-m", "acceptance", "--no-cov"]),
+    ("acceptance", [PY, "-X", "utf8", "-m", "pytest", "-m", "acceptance", "--no-cov"]),
     ("ruff", [PY, "-m", "ruff", "check", "src/", "tests/", "scripts/",
               "tools/", "examples/", "harness/"]),
     ("mypy", [PY, "-m", "mypy", "src/"]),
@@ -322,7 +322,11 @@ def pytest_cmd(serial: bool = False) -> list[str]:
     换页）。改成读 `TF_PYTEST_WORKERS`，不设时 `min(4, cpu)`（见 `pytest_workers`）。
     `--serial` / 「没装 xdist 就串行」这两条既有口径一个字不动。
     """
-    cmd = [PY, "-m", "pytest"]
+    # ★ T-G190：**必须带 `-X utf8`**（本仓铁律：「python 一律 `python -X utf8 …`」）。
+    #   不带它时子进程按**本机区域编码**解自己 subprocess 的输出（这台机器 GBK）→ 中文路径当场炸
+    #   （`scripts/check_toml.py` 的 `toml_files()` 就是这么把 pytest 门弄红的）。
+    #   本文件里其余十几条命令本来就带，漏的就是 acceptance / pytest 这两条。
+    cmd = [PY, "-X", "utf8", "-m", "pytest"]
     if not serial and xdist_available():
         workers = pytest_workers()
         if workers > 1:

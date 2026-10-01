@@ -1,3 +1,18 @@
+## 2026-10-01 —— 门禁的 `pytest` 子进程漏了 `-X utf8`：中文名 TOML 让预检在 GBK 下崩（T-G189 / 卡 096）
+
+- 症状：`3540f4c` 上跑全量门禁，**pytest 门必红**（两趟都红，不是偶发）：`test_real_ledger_passes_the_preflight`
+  报 `AttributeError: 'NoneType' object has no attribute 'split'` —— **不是断言失败**。
+- 根因：`check_toml.toml_files()` 用 `subprocess.run(..., text=True)` **不给 `encoding=`** ⇒ 按本机区域编码（GBK）解，
+  而它又给 git 传了 `core.quotepath=false` ⇒ git 吐原始 UTF-8 字节；全仓**只有 `docs/归置-机械码.toml` 一个中文名**
+  （T-G182 / 卡 087 昨天加的）⇒ 读线程 `UnicodeDecodeError` ⇒ `communicate()` 返回 None ⇒ `.split()` 炸。
+- ★ **为什么以前不红**：`run_gates.py` 里十几条命令**都带** `-X utf8`，**偏偏漏了 `acceptance` 与 `pytest` 两条**；
+  带 `-X utf8` 时 `text=True` 按 UTF-8 解（绿），不带就按 GBK（红）。⇒ 人**单跑这条测试时总会带 `-X utf8`，看着是绿的**（假绿陷阱）。
+- 修法三处：① `toml_files()` 显式 `encoding="utf-8", errors="replace"` 且 `stdout` 为 None 不静默；
+  ② `acceptance` / `pytest` 两条命令补 `"-X", "utf8"`；③ 钉子 `test_toml_preflight_survives_cjk_paths`（中文名必须原样在清单里）。
+- 验收：`.wt/utf8` 里**故意不带 `-X utf8`** 跑 `pytest tests/test_process_tools.py -q --no-cov` → **6 passed**；
+  同机同内容**改前**同一条命令 → **FAILED**（`'gbk' codec can't decode byte 0xa2 in position 100`）。
+- 边界：只修了爆出来的这一处；同类隐患（门禁里 `text=True` 不给编码的子进程）**没做全仓扫描**，如实留档。
+
 ## 2026-10-01 —— 归置机械码（锁死 + 白名单）+ 台账 group 拆细（T-G182 / 卡 087）
 
 - 用户令：搬迁要「**锁死，但允许的话就能搬**」的机械码 —— 我输入，你确定资料。本笔交
