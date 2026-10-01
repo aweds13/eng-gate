@@ -146,7 +146,8 @@
       parent_id: null,
       is_myday: input.is_myday ? 1 : 0,
       // 与电脑侧一致：建的时候就过期 → 初始状态「逾期」（之后的逾期是派生显示）
-      status: (due && due < localDay()) ? STATUS_OVERDUE : STATUS_TODO,
+      // 按 `at`（建这条的那一刻）判过期，不偷看墙钟——离线建的任务是否过期由事件时间决定
+      status: (due && due < String(at).slice(0, 10)) ? STATUS_OVERDUE : STATUS_TODO,
       created_at: at,
       updated_at: at,
       version: 1,

@@ -1,3 +1,14 @@
+## 2026-10-01 —— 修 wall-clock 定时炸弹：离线建任务的状态改按事件时间判定（T-G185 / 卡 090）
+
+- 症状：`pytest tests/test_offline_phone_line.py` 在 base 上 **13 ERROR + 1 FAILED**，全出自同一个夹具，
+  夹具跑 `tools/phone_check.mjs` 只报一项「新任务的行不对」——**一处根因拖垮 14 个测试**。
+- 根因：`src/web/offline.js` 的 `taskRow()` 用 `localDay()`（**真实系统时钟**）与 `due_date` 比来定初始状态，
+  而夹具把 `at`/`due_date` 写死 ⇒ **同一个输入，日期一走过夹具的 due_date 就自己变红**（墙钟依赖型定时炸弹）。
+- 修法：改按**事件自己的时间戳** `at` 判定（`+2/-1`），`at` 缺省仍有 `localNow()` 兜底。
+- 没有把校验器改松：`tools/phone_check.mjs` 一字未动，也无 xfail/跳过/删测试。
+- 主控亲跑验收：`pytest tests/test_offline_phone_line.py -q --no-cov` → **14 passed**（原 13 ERROR + 1 FAILED）。
+- 来源：华为码道 codearts 号池第二张真卡（GLM-5.2，树 `.wt/fixphone`，base `dd2548c`）。
+
 # Changelog — timeflow
 
 > 按时间倒序记录每次有意义的功能/变更。遵循 Conventional Commits 类型。
