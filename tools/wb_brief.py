@@ -27,6 +27,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from pool.plan import find_spec
+
 ROOT = Path(__file__).resolve().parent.parent
 DIAG = ROOT / "gates" / "diag"
 HANDOFF = ROOT / "复盘" / "交接-重构进度.md"
@@ -264,15 +266,6 @@ def _truncate(text: str, limit: int) -> str:
         return text
     cut = raw[:max(0, limit - 12)].decode("utf-8", errors="ignore").rstrip()
     return cut + "…(已截断)"
-
-
-def find_spec(card: str) -> str:
-    """按卡号找规格文件（默认住在 gates/diag/）。"""
-    for pat in (f"卡{card}-*.md", f"卡{card}.md", f"*{card}*.md"):
-        hits = sorted(DIAG.glob(pat))
-        if hits:
-            return str(hits[0].relative_to(ROOT)).replace("\\", "/")
-    return ""
 
 
 def build(*, card: str, spec: str, master: bool, cwd: str = "") -> str:

@@ -30,12 +30,16 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 
 | 工具 | 干什么 | 底层 |
 |---|---|---|
-| `pool_plan` | 队列与冲突域 | 跑 `tools/wb_plan.py plan`（只打印，不建树不派活） |
-| `job_list` | 扫 `gates/diag/wb-*.jsonl` → 在跑 / 已判决 / 断了（**看证据，不猜**） | 纯扫文件 |
-| `job_status(card)` | 一张卡的时间线 + 仓库状态 | 跑 `tools/wb_status.py <log> --repo` |
-| `job_result(card)` | 判决与摘要的**原文**（截断**明示总长**） | 纯读文件 |
-| `lock_status` | 门禁锁：哪把、谁的、租约剩多久 | `gates/diag/gate_lock.py status`（只列不拿） |
-| `pool_models` | 号池可用模型（批准 ∩ 可用） | 读号池 `models.*` 快照（只读） |
+| `pool_plan` | 队列与冲突域 | **import** `tools/pool/plan.py`（不再 shell 出去） |
+| `job_list` | 扫 `wb-*.jsonl` → 在跑/已判决/断了（看证据不猜） | **import** `tools/pool/jobs.py` |
+| `job_status(card)` | 时间线 + 仓库状态 | **import** `tools/pool/jobs.py`（读 log + 渲染） |
+| `job_result(card)` | 判决与摘要的**原文**（截断**明示总长**） | **import** `tools/pool/jobs.py` |
+| `lock_status` | 门禁锁：哪把、谁的、租约剩多久 | `gate_lock.py status`（唯一 subprocess，见下） |
+| `pool_models` | 号池可用模型（批准 ∩ 可用） | **import** `tools/pool/models.py`（只读快照） |
+
+★ 卡 106（T-G202）：六个工具的**逻辑**已全部收敛到 `tools/pool/` 包，CLI 与 MCP **共用同一批函数**。
+`subprocess` 只留**一处** —— `lock_status` 跑 `gate_lock.py`：那是 `gates/diag/` 下的**独立脚本**
+（`-P` 是铁律 24：那里的同名脚本会被当模块顶掉），且既有测试把"经 `_run` 调它"钉住了。
 
 **没有一个是写类工具**（派活 / 取消 / 提交 / 抢锁）—— 那是**期 2**。
 
@@ -61,12 +65,29 @@ import json
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pool.jobs import (
+    HEARTBEAT_SECONDS,
+    REPORT_MAX_CHARS,
+    STALL_SECONDS,
+    card_artifacts,
+    diag_dir,
+    parse_events,
+    render_timeline,
+    scan_jobs,
+)
+from pool.locks import is_empty as lock_is_empty
+from pool.locks import status_argv as lock_status_argv
+from pool.models import find_pool_dir, load_pool_models
+from pool.plan import BacklogError, load_backlog, plan_report
+
 if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解（ruff TCH）
     from typing import Any
+
+#: 阈值从 `pool.jobs` 转发（与 `tools/wb_dispatch.py` **同一口径**）—— 供既有测试读。
+__all__ = ["HEARTBEAT_SECONDS", "STALL_SECONDS"]
 
 #: 我们支持的协议版本（`initialize` 时优先回客户端那个"我们认识"的版本）。
 PROTOCOL_VERSION = "2025-06-18"
@@ -80,16 +101,6 @@ JSONRPC_INVALID_PARAMS = -32602
 JSONRPC_INTERNAL_ERROR = -32603
 
 ROOT = Path(__file__).resolve().parent.parent
-
-#: 判据常量 —— ★ 与 `tools/wb_dispatch.py` **同一口径**（不另立一套阈值）。
-STALL_SECONDS = 480         # 日志静默多久算"断了"（wb_dispatch.STALL_SECONDS）
-HEARTBEAT_SECONDS = 120     # 心跳行间隔（只在说明里引用）
-REPORT_MAX_CHARS = 4000     # `job_result` 单份原文最多显示多少字（截断要明示总长）
-
-#: 号池内的锚点文件（用它定位号池目录）。
-POOL_ANCHOR = ("infra", "pool", "pool_models.py")
-#: 号池的用量账（不是派活日志）—— `job_list` 单独标出来，不当成"在跑/断了"。
-USAGE_LOG_RE = re.compile(r"^wb-usage(\.r\d+)?\.jsonl$")
 
 
 # ================================================================ 协议边界：UTF-8 stdio（照抄先例）
@@ -244,7 +255,11 @@ def _cmd_text(argv: list[str]) -> str:
 
 
 def _run(argv: list[str], cwd: Path) -> tuple[int | None, str, str]:
-    """跑一条**只读**命令：返回 `(退出码 | None, stdout, stderr)`；起不来不抛、如实回报。"""
+    """跑一条**只读**命令：返回 `(退出码 | None, stdout, stderr)`；起不来不抛、如实回报。
+
+    ★ 卡 106 后**只剩一处调用方**（`lock_status` 跑 `gate_lock.py`，见模块头）—— 别的工具
+    已改成 import `tools/pool/` 的函数，不再 shell 出去。
+    """
     try:
         done = subprocess.run(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
             argv, cwd=str(cwd), capture_output=True, text=True,
@@ -262,35 +277,6 @@ def _fence(data: dict[str, Any]) -> str:
 
 def _result(text: str, data: dict[str, Any], *, is_error: bool) -> tuple[str, dict[str, Any], bool]:
     return f"{text.rstrip()}\n\n{_fence(data)}", data, is_error
-
-
-def diag_dir(root: Path) -> Path:
-    return root / "gates" / "diag"
-
-
-def card_artifacts(diag: Path, card: str, suffix: str) -> list[Path]:
-    """这张卡自己的产物（**精确匹配**、按 mtime 升序）—— 口径照抄 `wb_dispatch.card_artifacts`。
-
-    ★ 为什么不能宽 glob：`wb-42*` 会串到卡 `421`（卡 029 §2.9 实测挖出的既有 bug）。
-    """
-    if not diag.exists():
-        return []
-    pat = re.compile(rf"^wb-{re.escape(card)}(\.r\d+)?{re.escape(suffix)}$")
-    return sorted((p for p in diag.iterdir() if pat.match(p.name)),
-                  key=lambda p: p.stat().st_mtime)
-
-
-def _find_pool_dir(root: Path) -> Path | None:
-    """从 `root` 逐级向上找号池目录（含 `<祖先>/infra/pool/pool_models.py` 的那个）。
-
-    号池**不在本仓**（跨项目复用），所以不能写死相对层级 —— 逐级向上找最稳。
-    """
-    anchor = Path(*POOL_ANCHOR)
-    for base in (root, *root.parents):
-        candidate = base / "infra" / "pool"
-        if (candidate / anchor.name).exists():
-            return candidate
-    return None
 
 
 # ================================================================ 工具 1：pool_plan
@@ -333,7 +319,10 @@ def _parse_plan(text: str) -> list[dict[str, Any]] | None:
 
 def tool_pool_plan(arguments: dict[str, Any], root: Path = ROOT
                    ) -> tuple[str, dict[str, Any], bool]:
-    """队列与冲突域 —— 跑 `tools/wb_plan.py plan`（只打印，不建树、不派活）。"""
+    """队列与冲突域 —— **import** `tools/pool/plan.py`（只读、不建树、不派活，不 shell 出去）。
+
+    ★ `command` 字段仍给**人能照抄的 CLI 命令**（那是同一份逻辑的 CLI 说法）。
+    """
     try:
         concurrency = int(arguments.get("concurrency", 2))
     except (TypeError, ValueError):
@@ -342,8 +331,12 @@ def tool_pool_plan(arguments: dict[str, Any], root: Path = ROOT
         concurrency = 2
     argv = [sys.executable, "-X", "utf8", "tools/wb_plan.py",
             "plan", "--concurrency", str(concurrency)]
-    code, out, err = _run(argv, root)
     command = _cmd_text(argv)
+    try:
+        backlog = load_backlog(root / "docs" / "workbacklog.toml")
+        code, out, err = plan_report(backlog, concurrency)
+    except BacklogError as exc:
+        code, out, err = 2, "", f"[FAIL] {exc}\n"
     body = (out + ("\n" + err if err.strip() else "")).strip()
     if code != 0:
         text = (f"pool_plan：我没有拿到计划。我是跑 `{command}` 得到这个的"
@@ -357,54 +350,6 @@ def tool_pool_plan(arguments: dict[str, Any], root: Path = ROOT
 
 
 # ================================================================ 工具 2：job_list
-
-
-def _classify(age: float, has_verdict: bool) -> tuple[str, str]:
-    """按**证据**给出一态（不猜）：判决文件 / 日志 mtime 距今多久。"""
-    if has_verdict:
-        return "已判决", "有判决文件"
-    if age <= STALL_SECONDS:
-        return "在跑", f"无判决，且日志 mtime 距今 {age:.0f}s ≤ {STALL_SECONDS}s"
-    return "断了", f"无判决，且日志已静默 {age:.0f}s > {STALL_SECONDS}s"
-
-
-def scan_jobs(diag: Path, now: float | None = None) -> list[dict[str, Any]]:
-    """扫 `gates/diag/wb-*.jsonl`，每条给出 mtime / 大小 / 有无判决 + 一态判断。"""
-    if not diag.exists():
-        return []
-    now = time.time() if now is None else now
-    rows: list[dict[str, Any]] = []
-    for log in sorted(diag.glob("wb-*.jsonl")):
-        try:
-            stat = log.stat()
-        except OSError:  # pragma: no cover —— 边扫边被删就跳过这一条
-            continue
-        age = max(0.0, now - stat.st_mtime)
-        verdict = log.with_suffix(".verdict.txt")
-        report = log.with_suffix(".report.md")
-        has_verdict = verdict.exists()
-        if USAGE_LOG_RE.match(log.name):
-            state, why = "非派活", "用量账（wb_dispatch 追加的 token 账），不是派活日志"
-        else:
-            state, why = _classify(age, has_verdict)
-        rows.append({
-            "card": _card_of(log),
-            "log": log.name,
-            "mtime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime)),
-            "age_seconds": round(age, 1),
-            "size_bytes": stat.st_size,
-            "has_verdict": has_verdict,
-            "verdict": verdict.name if has_verdict else None,
-            "has_report": report.exists(),
-            "state": state,
-            "why": why,
-        })
-    return rows
-
-
-def _card_of(log: Path) -> str:
-    hit = re.match(r"^wb-(.+?)(?:\.r\d+)?\.jsonl$", log.name)
-    return hit.group(1) if hit else ""
 
 
 def tool_job_list(arguments: dict[str, Any], root: Path = ROOT) -> tuple[str, dict[str, Any], bool]:
@@ -437,7 +382,10 @@ def tool_job_list(arguments: dict[str, Any], root: Path = ROOT) -> tuple[str, di
 
 def tool_job_status(arguments: dict[str, Any], root: Path = ROOT
                     ) -> tuple[str, dict[str, Any], bool]:
-    """一张卡现在到哪了 —— 跑 `tools/wb_status.py <最新 log> --repo`（只读）。"""
+    """一张卡现在到哪了 —— **import** `tools/pool/jobs.py` 读 log 并渲染（不再起进程）。
+
+    ★ `command` 字段仍给 CLI 说法；输出形状与 `wb_status.py <log> --repo` **逐字一致**。
+    """
     card = str(arguments.get("card") or "").strip()
     if not card:
         text = ("job_status：得给我一个卡号（card）。我是照 `card` 参数找 "
@@ -452,16 +400,13 @@ def tool_job_status(arguments: dict[str, Any], root: Path = ROOT
                               "diag_dir": diag.as_posix()}, is_error=True)
     log = logs[-1]
     argv = [sys.executable, "-X", "utf8", "tools/wb_status.py", log.name, "--repo"]
-    code, out, err = _run(argv, diag)
     command = _cmd_text(argv)
-    body = (out + ("\n" + err if err.strip() else "")).strip()
+    lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+    timeline, summary = parse_events(lines)
+    body = render_timeline(log.name, timeline, summary, tail=0, repo=True, git_cwd=diag).strip()
     text = f"卡 {card} 的状态（job_status）—— 来自 `{command}`（cwd={diag.as_posix()}）：\n{body}"
-    is_error = code != 0
-    if is_error:
-        text = f"job_status：我是跑 `{command}` 得到这个的（退出码 {code}）：\n{body}"
-    data = {"card": card, "found": True, "log": log.name, "command": command,
-            "exit_code": code}
-    return _result(text, data, is_error=is_error)
+    data = {"card": card, "found": True, "log": log.name, "command": command, "exit_code": 0}
+    return _result(text, data, is_error=False)
 
 
 # ================================================================ 工具 4：job_result(card)
@@ -524,12 +469,17 @@ def tool_job_result(arguments: dict[str, Any], root: Path = ROOT
 
 def tool_lock_status(arguments: dict[str, Any], root: Path = ROOT
                      ) -> tuple[str, dict[str, Any], bool]:
-    """门禁锁现状 —— 跑 `gates/diag/gate_lock.py status`（只列不拿，不抢锁）。"""
-    argv = [sys.executable, "-P", "-X", "utf8", "gates/diag/gate_lock.py", "status"]
+    """门禁锁现状 —— 跑 `gates/diag/gate_lock.py status`（只列不拿，不抢锁）。
+
+    ★ 卡 106：命令与"空着"判据走 `pool.locks`；**这一处 subprocess 是本模块唯一保留的** ——
+    `gate_lock.py` 是 `gates/diag/` 下的独立 `-P` 脚本（铁律 24：同名脚本会被当模块顶掉），
+    且既有测试把"经 `_run` 调它"钉住了。
+    """
+    argv = lock_status_argv()
     code, out, err = _run(argv, root)
     command = _cmd_text(argv)
     body = (out + ("\n" + err if err.strip() else "")).strip()
-    empty = "空着（没有任何段的锁）" in body
+    empty = lock_is_empty(body)
     if code != 0:
         text = f"lock_status：我是跑 `{command}` 得到这个的（退出码 {code}）：\n{body}"
         return _result(text, {"command": command, "exit_code": code}, is_error=True)
@@ -542,52 +492,17 @@ def tool_lock_status(arguments: dict[str, Any], root: Path = ROOT
 # ================================================================ 工具 6：pool_models
 
 
-def _load_pool_models(pool: Path) -> dict[str, Any]:
-    """读号池的**静态产物**并求交（只读；**不联网、不写快照**）。"""
-    import tomllib  # py>=3.11（本仓已依赖它，见 wb_plan.py）
-
-    whitelist = pool / "models.whitelist.toml"
-    snapshot = pool / "models.live.json"
-    approved: list[str] = []
-    if whitelist.exists():
-        data = tomllib.loads(whitelist.read_text(encoding="utf-8"))
-        approved = [str(w["model"]) for w in (data.get("approved") or []) if w.get("model")]
-    live: list[str] = []
-    live_names: dict[str, str] = {}
-    at = None
-    if snapshot.exists():
-        snap = json.loads(snapshot.read_text(encoding="utf-8"))
-        live = [str(m) for m in (snap.get("live") or [])]
-        live_names = {str(k): str(v) for k, v in (snap.get("live_names") or {}).items()}
-        at = snap.get("at")
-    in_both = [m for m in approved if m in set(live)]
-    return {
-        "pool_dir": pool.as_posix(),
-        "whitelist": whitelist.name,
-        "whitelist_exists": whitelist.exists(),
-        "snapshot": snapshot.name,
-        "snapshot_exists": snapshot.exists(),
-        "snapshot_at": at,
-        "approved": approved,
-        "live": live,
-        "live_names": live_names,
-        "in_both": in_both,
-        "approved_but_missing": [m for m in approved if m not in set(live)],
-        "live_but_unapproved": [m for m in live if m not in set(approved)],
-    }
-
-
 def tool_pool_models(arguments: dict[str, Any], root: Path = ROOT
                      ) -> tuple[str, dict[str, Any], bool]:
     """号池可用模型：批准集 ∩ 可用集 —— 读快照，**只读、不联网、不写快照**。"""
-    pool = _find_pool_dir(root)
+    pool = find_pool_dir(root)
     if pool is None:
         searched = " 、 ".join(
             (base / "infra" / "pool").as_posix() for base in (root, *root.parents))
         text = (f"没有：从 {root.as_posix()} 向上没找到号池目录"
                 f"（找的是各级 `<祖先>/infra/pool/pool_models.py`）。找过：{searched}")
         return _result(text, {"found": False, "pool_dir": None}, is_error=True)
-    info = _load_pool_models(pool)
+    info = load_pool_models(pool)
     if not info["whitelist_exists"] and not info["snapshot_exists"]:
         text = (f"没有：号池目录 {pool.as_posix()} 里既没有 {info['whitelist']}，"
                 f"也没有 {info['snapshot']}。")

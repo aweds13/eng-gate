@@ -1,3 +1,18 @@
+## 2026-10-01 —— 号池那几个脚本收成一个包：CLI 与 MCP **共用同一批函数**（T-G202 / 卡 106）
+
+- 需求（用户）：「**你可以把之前相关的脚本集成进里面吗**」——"里面"就是那个 MCP 服务。
+- 病：逻辑散在 6 个脚本里，**同一判据多份实现**（白名单三处、三态两处、产物定位两处、阈值两处）；
+  把脚本"搬进"MCP 只会把三份变四份。
+- 做法：**抽 `tools/pool/` 包**（`plan` / `jobs` / `locks` / `models` / `review`）+ 4 个 CLI 改成调库 +
+  **`pool_mcp` 六个工具全部 `import` 库、不再 shell 出去**。
+- 验收：**逐字不变**（`wb_plan plan/check/stats`、**MCP 六工具 text+data**、`wb_status` 默认/`--tail`/`--json`、
+  `wb_brief --master` 与 `git HEAD` 版逐条 diff **IDENTICAL**）· **白名单三处同一结论**（含中文路径）·
+  `pytest` **1710 passed**（覆盖 93.64%）· `ruff` 全过 · 只新增 15 条直测（既有钉子一条未改）。
+- ★ 工人如实留白（主控逐条裁定：接受）：白名单与 `card_artifacts` **没彻底收口**（`wb_dispatch` 是禁区、
+  `tf_stage_guard` 不在白名单 ⇒ 靠测试证明三者同结论）；**顺带修掉一个真 bug**——原 `pool_mcp._run` 用
+  `cwd=gates/diag` + 相对脚本路径 ⇒ 只要有 log 必报 `can't open file`（复现过），抽库后恢复正常；
+  `subprocess` 只剩 `gate_lock.py` 与 `git` 两处外部工具；本卡未跑全量门禁（由主控在集成那步跑）。
+- ★ 内存闸：**用户明确授权暂时关掉** ⇒ 本笔门禁用 `TF_GATE_MIN_FREE_GB=0`（配 `TF_PYTEST_WORKERS=2`）。
 ## 2026-10-01 —— `--cwd` 之后开场白要给**绝对路径**（T-G204）
 
 - 病（卡 106 的工人当场暴露）：`--lean` 的切片与 `--spec` 是**仓库相对**路径，而 `--cwd` 已把工人 cwd 挪到卡树；

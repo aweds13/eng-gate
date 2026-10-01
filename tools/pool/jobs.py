@@ -1,0 +1,325 @@
+r"""作业状态 / 扫日志（从 `tools/wb_status.py` 与 `tools/pool_mcp.py` 抽，卡 106 · T-G202）。
+
+**防什么**：外包模式下工人 agent 在**别的进程**里干活，主控与用户看不见它做了什么 —— 只能读它
+留下的 log。这里把两件事做成**只读、无副作用**的纯函数，让 CLI（`wb_status.py`）与号池 MCP
+（`job_list` / `job_status`）**共用同一批实现**，不再各写一份（本仓最忌的"两份真源"）。
+
+| 组 | 函数 | 干什么 |
+|---|---|---|
+| 读日志 | `parse_events`/`clip`/`tool_line`/`message_of` | 把 stream-json 渲成时间线 + 摘要 |
+| 三态判据 | `classify_job_state`/`scan_jobs` | 在跑 / 已判决 / 断了（不猜） |
+| 产物定位 | `diag_dir`/`card_artifacts`/`card_of` | 精确匹配文件名（宽 glob 会串卡） |
+| 渲染 | `render_timeline`/`render_json`/`repo_state` | 拼成 `wb_status.py` 的那段人话 |
+
+★ 阈值 (`STALL_SECONDS` / `HEARTBEAT_SECONDS`) 与 `tools/wb_dispatch.py` **同一口径**，由
+`tests/test_pool_mcp.py::test_thresholds_match_the_dispatch_tool` 钉住（不另立一套）。
+★ 只读：本模块不写任何文件；`repo_state()` 只跑 `git status/log` 两条**只读**命令。
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import time
+from collections import Counter
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+MAX_TEXT = 240          # 一句话最多显示多少字（长输出不许刷屏）
+MAX_FILE = 12           # 摘要里最多列几个文件
+
+#: 与 `tools/wb_dispatch.py` **同一口径**（不另立一套阈值）。
+STALL_SECONDS = 480         # 日志静默多久算"断了"（wb_dispatch.STALL_SECONDS）
+HEARTBEAT_SECONDS = 120     # 心跳行间隔（只在说明里引用）
+REPORT_MAX_CHARS = 4000     # `job_result` 单份原文最多显示多少字（截断要明示总长）
+
+#: 号池的用量账（不是派活日志）—— `scan_jobs` 单独标出来，不当成"在跑/断了"。
+USAGE_LOG_RE = re.compile(r"^wb-usage(\.r\d+)?\.jsonl$")
+
+
+# ================================================================ 读日志：渲染时间线 / 摘要
+
+
+def clip(text: object, limit: int = MAX_TEXT) -> str:
+    """压成一行、按字数截断 —— 日志里的东西可能是几万字的文件内容。"""
+    flat = " ".join(str(text or "").split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
+def tool_line(name: str, payload: dict) -> str:
+    """把一次工具调用压成一行 —— 优先显示"它动了哪儿"（路径/命令/查询）。"""
+    if not isinstance(payload, dict):
+        return f"{name} {clip(payload, 120)}"
+    keys = (
+        "file_path", "command", "pattern", "path", "notebook_path",
+        "url", "query", "description", "prompt", "old_string",
+    )
+    for key in keys:
+        if key in payload and payload[key]:
+            return f"{name}({key}={clip(payload[key], 160)})"
+    if payload:
+        return f"{name}({clip(json.dumps(payload, ensure_ascii=False), 160)})"
+    return f"{name}()"
+
+
+def message_of(event: dict) -> tuple[dict, str | None]:
+    """取 `message`；畸形 log（不是 dict）不许炸（T-G96 边界① / T-G125）。
+
+    返回 `(message, 坏行)`：`message` 缺失或为 None → 空对象（老口径，当没有）；
+    是字符串 / 列表等 → 给出可渲染的坏行（认不出来的一行也不丢），`message` 位返回空对象。
+    """
+    message = event.get("message")
+    if message is None:
+        return {}, None
+    if isinstance(message, dict):
+        return message, None
+    return {}, f"  ?  message 不是对象（{type(message).__name__}）：{clip(message, 160)}"
+
+
+def parse_events(lines: list[str]) -> tuple[list[str], dict]:
+    """把 JSONL 渲染成 `(时间线, 摘要)`。认不出的行原样留着 —— 不静默丢东西。"""
+    timeline: list[str] = []
+    tools: Counter[str] = Counter()
+    files: list[str] = []
+    models: list[str] = []
+    texts = 0
+    errors = 0
+    final: str | None = None
+    unknown = 0
+
+    for raw in lines:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            unknown += 1
+            timeline.append(f"  ?  非 JSON 行：{clip(raw, 160)}")
+            continue
+        if not isinstance(event, dict):
+            unknown += 1
+            timeline.append(f"  ?  非对象事件：{clip(raw, 160)}")
+            continue
+
+        kind = str(event.get("type") or event.get("event") or "")
+        subtype = str(event.get("subtype") or "")
+
+        # ① 开场：把它的模型与工具清单说出来（"它到底有没有 grep"这种问题看这里）
+        if kind == "system" and subtype == "init":
+            model = event.get("model")
+            if model:
+                models.append(str(model))
+            tools_now = event.get("tools") or []
+            if isinstance(tools_now, list) and tools_now:
+                timeline.append(f"  开  init  model={model}  tools={len(tools_now)}："
+                                + clip(", ".join(str(t) for t in tools_now), 300))
+            else:
+                timeline.append(f"  开  init  model={model}")
+
+        # ② 助手说话 / 调工具
+        elif kind == "assistant":
+            message, bad_message = message_of(event)
+            if bad_message:
+                unknown += 1
+                timeline.append(bad_message)
+                continue
+            content = message.get("content")
+            if isinstance(content, str):
+                texts += 1
+                timeline.append(f"  说  {clip(content)}")
+                continue
+            for item in content or []:
+                if not isinstance(item, dict):
+                    timeline.append(f"  说  {clip(item)}")
+                    continue
+                if item.get("type") == "text" and item.get("text"):
+                    texts += 1
+                    timeline.append(f"  说  {clip(item['text'])}")
+                elif item.get("type") == "tool_use":
+                    name = str(item.get("name") or "?")
+                    tools[name] += 1
+                    payload = item.get("input") or {}
+                    if isinstance(payload, dict):
+                        for key in ("file_path", "path", "notebook_path"):
+                            got = payload.get(key)
+                            if got and str(got) not in files:
+                                files.append(str(got))
+                    timeline.append(f"  做  {tool_line(name, payload)}")
+
+        # ③ 工具回话（成功/失败）
+        elif kind == "user":
+            message, bad_message = message_of(event)
+            if bad_message:
+                unknown += 1
+                timeline.append(bad_message)
+                continue
+            content = message.get("content")
+            items = content if isinstance(content, list) else []
+            for item in items:
+                if not isinstance(item, dict) or item.get("type") != "tool_result":
+                    continue
+                if item.get("is_error"):
+                    errors += 1
+                    timeline.append(f"  错  {clip(item.get('content'), 200)}")
+                else:
+                    timeline.append(f"  回  {clip(item.get('content'), 120)}")
+
+        # ④ 收尾
+        elif kind == "result":
+            final = clip(event.get("result") or subtype, 400)
+            timeline.append(f"  完  {subtype or 'result'}：{final}")
+
+        else:
+            unknown += 1
+            raw_line = clip(json.dumps(event, ensure_ascii=False), 160)
+            timeline.append(f"  ?  {kind or '未知'} {raw_line}")
+
+    summary = {
+        "events": len([ln for ln in lines if ln.strip()]),
+        "texts": texts,
+        "tools": dict(tools),
+        "tool_calls": sum(tools.values()),
+        "files": files[:MAX_FILE],
+        "files_total": len(files),
+        "models": models[:3],
+        "tool_errors": errors,
+        "unknown_events": unknown,
+        "final": final,
+    }
+    return timeline, summary
+
+
+# ================================================================ 产物定位：gates/diag/wb-*
+
+
+def diag_dir(root: Path) -> Path:
+    """`<root>/gates/diag` —— 派活日志、判决、心跳都落在这里。"""
+    return root / "gates" / "diag"
+
+
+def card_artifacts(diag: Path, card: str, suffix: str) -> list[Path]:
+    """这一张卡自己的产物文件（精确匹配，按 mtime 升序）—— 口径照抄 `wb_dispatch.card_artifacts`。
+
+    ★ 为什么不能宽 glob：`wb-42*` 会**串卡**（`fnmatch("wb-421.jsonl", "wb-42*.jsonl") == True`，
+    卡 029 §2.9 实测挖出的既有 bug）。改成精确匹配：卡号后面**只能是**后缀本身或 `.r<N>`+后缀。
+    """
+    if not diag.exists():
+        return []
+    pat = re.compile(rf"^wb-{re.escape(card)}(\.r\d+)?{re.escape(suffix)}$")
+    return sorted((p for p in diag.iterdir() if pat.match(p.name)),
+                  key=lambda p: p.stat().st_mtime)
+
+
+def card_of(log: Path) -> str:
+    """从 log 文件名取卡号（`wb-105.jsonl` / `wb-105.r2.jsonl` → `105`）；取不到 → `""`。"""
+    hit = re.match(r"^wb-(.+?)(?:\.r\d+)?\.jsonl$", log.name)
+    return hit.group(1) if hit else ""
+
+
+# ================================================================ 三态判据 + 扫全部日志
+
+
+def classify_job_state(age: float, has_verdict: bool) -> tuple[str, str]:
+    """按**证据**给出一态（不猜）：判决文件 / 日志 mtime 距今多久。"""
+    if has_verdict:
+        return "已判决", "有判决文件"
+    if age <= STALL_SECONDS:
+        return "在跑", f"无判决，且日志 mtime 距今 {age:.0f}s ≤ {STALL_SECONDS}s"
+    return "断了", f"无判决，且日志已静默 {age:.0f}s > {STALL_SECONDS}s"
+
+
+def scan_jobs(diag: Path, now: float | None = None) -> list[dict]:
+    """扫 `gates/diag/wb-*.jsonl`，每条给出 mtime / 大小 / 有无判决 + 一态判断。"""
+    if not diag.exists():
+        return []
+    now = time.time() if now is None else now
+    rows: list[dict] = []
+    for log in sorted(diag.glob("wb-*.jsonl")):
+        try:
+            stat = log.stat()
+        except OSError:  # pragma: no cover —— 边扫边被删就跳过这一条
+            continue
+        age = max(0.0, now - stat.st_mtime)
+        verdict = log.with_suffix(".verdict.txt")
+        report = log.with_suffix(".report.md")
+        has_verdict = verdict.exists()
+        if USAGE_LOG_RE.match(log.name):
+            state, why = "非派活", "用量账（wb_dispatch 追加的 token 账），不是派活日志"
+        else:
+            state, why = classify_job_state(age, has_verdict)
+        rows.append({
+            "card": card_of(log),
+            "log": log.name,
+            "mtime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime)),
+            "age_seconds": round(age, 1),
+            "size_bytes": stat.st_size,
+            "has_verdict": has_verdict,
+            "verdict": verdict.name if has_verdict else None,
+            "has_report": report.exists(),
+            "state": state,
+            "why": why,
+        })
+    return rows
+
+
+# ================================================================ 渲染：`wb_status.py` 的那段输出
+
+
+def repo_state(git_cwd: Path | None = None) -> list[str]:
+    """它对仓库做了什么 —— 只看两条最实在的（工作区状态 + 最新提交）。
+
+    ★ `git_cwd` 是给号池 MCP 用的：`job_status` 原先在 `gates/diag/` 里跑 `wb_status.py`，
+    git 的相对路径口径就按那个 cwd 来；不传 = 继承当前进程 cwd（CLI 的默认行为）。
+    """
+    out: list[str] = []
+    for args in (["status", "--short"], ["log", "-1", "--format=%h %s"]):
+        try:
+            done = subprocess.run(
+                ["git", *args], capture_output=True, text=True, encoding="utf-8",
+                errors="replace", cwd=str(git_cwd) if git_cwd else None,
+            )
+            body = (done.stdout or "").strip() or "(空)"
+        except OSError as exc:                      # git 不在也不许崩
+            body = f"（跑不了 git：{exc}）"
+        indented = "\n".join("    " + ln for ln in body.splitlines())
+        out.append(f"  git {' '.join(args)}：\n" + indented)
+    return out
+
+
+def render_timeline(path_display: str, timeline: list[str], summary: dict, *,
+                    tail: int = 0, repo: bool = False,
+                    git_cwd: Path | None = None) -> str:
+    """把时间线 + 摘要拼成 `wb_status.py` 的**那段人话**（逐字口径，CLI 与 MCP 共用）。
+
+    ★ 为什么抽成函数：`wb_status.py` 打的就是这段文本，号池 MCP 的 `job_status` 也承诺给
+    同一段（措辞逐字不变）—— 只有一处打印才不会有第二份口径。
+    """
+    shown = timeline[-tail:] if tail and tail > 0 else timeline
+    only = f"，只显示最后 {tail} 条" if tail and tail > 0 else ""
+    lines: list[str] = [f"=== WorkBuddy 状态器：{path_display}"
+                        f"（事件 {summary['events']} 条{only}）==="]
+    lines += shown
+    lines.append("--- 摘要 ---")
+    model_line = ", ".join(summary["models"]) or "（没见到 init 事件）"
+    lines.append(f"  模型：{model_line}")
+    tools_line = "、".join(f"{k}×{v}" for k, v in sorted(summary["tools"].items()))
+    lines.append(f"  工具调用 {summary['tool_calls']} 次：{tools_line or '（一次都没调）'}")
+    lines.append(f"  助手发言 {summary['texts']} 次；工具报错 {summary['tool_errors']} 次")
+    lines.append(f"  认不出的行 {summary['unknown_events']} 条")
+    if summary["files"]:
+        shown_files = len(summary["files"])
+        more = f"（共 {summary['files_total']} 个）" if summary["files_total"] > shown_files else ""
+        lines.append(f"  碰过的文件{more}：" + "、".join(summary["files"]))
+    lines.append(f"  最后一条结果：{summary['final'] or '（还没见到 result —— 可能还在跑）'}")
+    if repo:
+        lines += repo_state(git_cwd)
+    return "\n".join(lines) + "\n"
+
+
+def render_json(path_display: str, summary: dict) -> str:
+    """`wb_status.py --json` 的那段机器可读摘要（`log` + 摘要字段）。"""
+    return json.dumps({"log": path_display, **summary}, ensure_ascii=False, indent=2)

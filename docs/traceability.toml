@@ -547,10 +547,10 @@ status = "done"
 evidence = [
   "file:复盘/并发架构-T-G99.md",
   "file:tools/wb_plan.py",
-  "text:tools/wb_plan.py::def validate(backlog: Backlog) -> list[str]:",
-  "text:tools/wb_plan.py::def topo_layers(cards: Sequence[Card]) -> list[list[Card]]:",
-  "text:tools/wb_plan.py::def greedy_pack(cards: Sequence[Card], limit: int) -> list[list[Card]]:",
-  "text:tools/wb_plan.py::PROTECTED_FILES = frozenset({",
+  "text:tools/pool/plan.py::def validate(backlog: Backlog) -> list[str]:",
+  "text:tools/pool/plan.py::def topo_layers(cards: Sequence[Card]) -> list[list[Card]]:",
+  "text:tools/pool/plan.py::def greedy_pack(cards: Sequence[Card], limit: int) -> list[list[Card]]:",
+  "text:tools/pool/plan.py::PROTECTED_FILES = frozenset({",
   "file:docs/workbacklog.toml",
   "file:tests/test_wb_plan.py",
 ]
@@ -679,8 +679,8 @@ group = "OUTSOURCE"
 status = "done"
 evidence = [
   "file:复盘/wb_plan缺口-T-G119.md",
-  "text:tools/wb_plan.py::ACTIVE_STATUS = (\"pending\", \"running\")",
-  "text:tools/wb_plan.py::def dependency_path(",
+  "text:tools/pool/plan.py::ACTIVE_STATUS = (\"pending\", \"running\")",
+  "text:tools/pool/plan.py::def dependency_path(",
   "text:tools/wb_plan.py::def cmd_stats(",
   "text:tools/wb_plan.py::只有待派的参与冲突判定与排批",
   "test:test_wb_plan.py",
@@ -1073,9 +1073,9 @@ status = "done"
 evidence = [
   "file:tools/wb_status.py",
   "file:复盘/WorkBuddy状态器-T-G81.md",
-  "text:tools/wb_status.py::def parse_events(lines: list[str]) -> tuple[list[str], dict]:",
-  "text:tools/wb_status.py::MAX_TEXT = 240",
-  "text:tools/wb_status.py::\"unknown_events\": unknown,",
+  "text:tools/pool/jobs.py::def parse_events(lines: list[str]) -> tuple[list[str], dict]:",
+  "text:tools/pool/jobs.py::MAX_TEXT = 240",
+  "text:tools/pool/jobs.py::\"unknown_events\": unknown,",
   "text:复盘/外包-卡表与规矩.md::python -X utf8 tools/wb_status.py",
   "test:test_wb_status.py",
 ]
@@ -4050,7 +4050,7 @@ status = "done"
 evidence = [
   "file:复盘/工具收尾两小件-T-G125.md",
   "text:tools/route_ui_gap.py::DECIDED: dict[tuple[str, str], str] = {",
-  "text:tools/wb_status.py::def _message_of(event: dict) -> tuple[dict, str | None]:",
+  "text:tools/pool/jobs.py::def message_of(event: dict) -> tuple[dict, str | None]:",
   "test:test_wb_status.py",
 ]
 gaps = "**为什么有这张卡**：A 件 —— `route_ui_gap` 仍报 8 条无入口路由，其中 2 条早有裁定（`GET /api/team/assignments`＝「保持现状（已被 /api/team/board 取代）」见复盘/口径落档-T-G19.md；`POST /api/sync/tasks`＝「已弃用（deprecated，2026-09-25 用户确认）」见 src/timeflow/api/app.py:2305），只是没写进脚本声明表；B 件 —— 台账 T-G96.gaps 边界①原文「`wb_status.parse_events()` / `turns_seen()` / `tool_signatures()` 在 `message` 不是 dict 时仍会抛……本卡白名单不许碰 `tools/wb_status.py`」，复盘/看门狗护栏补强-T-G96.md:146「真要修得动 wb_status.py（另立卡）」。**做了什么**：A 件 —— `tools/route_ui_gap.py` 照既有风格加 `DECIDED` 声明表（两条各带出处），命中打「（已声明：<理由>）」，头部加「（已声明 N / 未声明 M）」计数；其余判据一字未动（剩 6 条按设计不给界面仍走 `--ack`）。B 件 —— `tools/wb_status.py` 新增 `_message_of()`，`parse_events()` 的 assistant / user 两分支改用它：`message` 缺失 / None → 空对象（老口径不变）；str / list → 记一行「message 不是对象」并计 unknown_events，不再抛 AttributeError。**真机证据（先红后绿）**：A 件 `route_ui_gap.py --ack ai,health` 未声明尾巴 2 → 0（改动前后原始输出见复盘）；B 件四条用例 —— 实现前 ①str ②list 两例抛 AttributeError（红）、实现后 12 passed、突变（把防御删成旧代码）后同两例再红、还原再绿。**边界（如实写）**：★ `turns_seen()` 与 `tool_signatures()` 定义在 `tools/wb_dispatch.py:577/602`、同病未修 —— 该文件是本卡禁区（024 在跑 / 029 待派），需主控另立卡收掉；另外 6 条按设计不给界面的路由没动；`route_ui_gap` 无对应测试文件（按卡 §3 不必新建，验收靠真机输出）；`wb_status.py` 里未再发现第二个同类抛点。**没动的**：wb_dispatch / wb_dash / wb_watchdog、src/**、scripts/**、docs/**、共享文件、其它 复盘/*.md。"
@@ -5014,3 +5014,19 @@ evidence = [
   "file:tests/test_wb_dispatch.py",
 ]
 gaps = "**病（卡 106 的工人当场暴露，主控从派活日志里读出来的）**：`--lean` 的**开工切片**与 `--spec` 传给工人的是**仓库相对**路径（`gates/diag/…`），而 `--cwd`（T-G199）已经把**工人进程的 cwd** 挪到了卡树 —— 于是那两个相对路径在卡树里**指不到东西**：`gates/diag/` 是 **gitignore 的目录**，卡树里**根本没有它**。卡 106 的工人日志原话是「Working directory is already the poolkit worktree」，而它**同时读了** `.wt/poolkit/gates/diag/brief-106.md`（**不存在**）与主仓那份 —— 也就是说它**自己满盘找才找对**：那是**运气，不是设计**。**做法**：新增 `prompt_path(p, worker_cwd)` —— **只在给了 `--cwd` 时**把路径解析成**绝对**（`q if q.is_absolute() else (ROOT / q).resolve()`），并在**三处** `build_command(...)` 调用（首次 / 重开一轮 / 续跑拿不到 session）与**一处** `spec_changed_notice(...)`（续跑那段「规格改了」提示）都用它；**不给 `--cwd` 时逐字不变**。**验收**：新增**两条**用例 —— ① 给了 `--cwd`：开场白里出现 `str(sandbox/「spec.md」)` 与 `str(sandbox/「gates」/「diag」/「brief-001.md」)`（**绝对**路径），且**裸相对写法 `读 gates/diag/brief-001.md` 不再出现**（「还留着指错路的相对写法」）；② **反例**：不给 `--cwd` 时**仍是相对**（`读 gates/diag/brief-001.md` 在、绝对路径不在）——证明老用法逐字不变。`pytest tests/test_wb_dispatch.py` → **126 passed**；`ruff` 对两个被改文件 `All checks passed!`。**★ 顺带修的一处（T-G199 留下的接缝）**：测试夹具 `sandbox` 里 `git_dirty` 的桩是**零参** lambda（`lambda: []`），而 T-G199 之后 `preflight` 在**给了 `--cwd`** 时会调 `git_dirty(worker_cwd)` ⇒ 任何带 `--cwd` 的用例都会 `TypeError: <lambda>() takes 0 positional arguments but 1 was given`（我这条新用例就是这么撞上的，报错点 `wb_dispatch.py:1724`）。改成**可变参** `lambda *a, **k: []`（对零参调用行为不变）—— 这属于「**改了签名，测试桩没跟上**」的典型接缝，记一笔。**★ 过程如实（我自己第二次栽在同一处）**：第一版补丁的注释里带了**反引号**，而我是用**内联 `python -c 「…」`** 打进去的 ⇒ **bash 把反引号当命令替换吃掉**，注释缺了三处词（`git_dirty` / `--cwd` / `TypeError…`，原样：`# ★ T-G204： 现在能收「看哪棵树」这个参数`）；**功能改动是对的**（`ruff` 全过、126 passed），注释已按原文补回 —— 这正是 `复盘/口径坑.md` 里记的那条「**内联 shell 字符串里不许放反引号**」，我今天第二次犯。**没动**：`--status` 三态判据 / 端口体检 / 内存闸 / 心跳 / 看门狗 / 429 / retry / 判决口径 / `--cwd` 的**脏检查语义**（仍看工人干活那棵树，主仓脏只提示）。**来源**：主控自做（不是外包卡）；树 `.wt/cwdpath`，base `d05efab`。**★ 内存闸留痕（用户授权）**：这趟门禁**先被内存闸拒了两次** —— 第一次`可用 3.3 GB < 阈值 4.0 GB`、退 3；主控把阈值调到 3.0 后，第二次 `可用 2.7 GB < 阈值 3.0 GB` **又被拒**、退 3。现场硬证据：`MemCompression` 已 **506 MB**（Windows 又在压内存）、`msedge` 1.2 GB、DSH 604 MB、Defender 602 MB ⇒ **这台机器的常态可用就是 3 GB 上下**。主控当时的处置是**不继续降阈值、挂起等腾内存**；用户随后明确授权「**可以暂时关掉内存阀**」⇒ 这一趟用 `TF_GATE_MIN_FREE_GB=0` 跑（**是用户点头的例外，不是主控自己关的**）。★ 由此记一条改进：那道闸的阈值该按「**这一趟要跑什么**」定（真机门全复用、不起浏览器的趟次与要真跑 `ui_flow`/`render` 的趟次差一个量级），且 **4.0 的默认值在这台机器上会常态误拦**（今天 T-G201 / T-G199 / T-G204 三笔都被拒过）。"
+
+[entries."T-G202"]
+id = "T-G202"
+title = "号池脚本收成一个包：CLI 与 MCP 共用同一批函数（pool_mcp 不再 shell 出去）"
+group = "OPS"
+status = "done"
+evidence = [
+  "file:tools/pool_mcp.py",
+  "file:tools/wb_plan.py",
+  "file:tools/wb_status.py",
+  "file:tools/wb_review.py",
+  "file:tools/wb_brief.py",
+  "file:tools/pool",
+  "file:tests/test_pool_lib.py",
+]
+gaps = "**★ 本笔顺带把 10 条证据锚点跟着代码搬了（并在台账里记明）**：审计门指出这些锚点对不上了 —— 因为本笔把函数**搬进了 `tools/pool/`**（`wb_status` 的进 `tools/pool/jobs.py`、`wb_plan` 的进 `tools/pool/plan.py`）。**其中 9 条文字一字未改、只把「文件」那一段跟着搬**（`def validate` / `def topo_layers` / `def greedy_pack` / `PROTECTED_FILES = frozenset({` / `ACTIVE_STATUS = (…)` / `def dependency_path(` / `def parse_events(…)` / `MAX_TEXT = 240` / 键名 `unknown_events` 那一行）；**第 10 条是「改名」**：`def _message_of(event: dict) …` 改成 **`def message_of(event: dict) …`**（本笔顺手把它从私有变公开 —— 它现在是库函数、要给 MCP 用）—— 这条**锚点跟着新名字走**，并在此记明，免得将来有人以为台账被悄悄改过（`git log -S` 可查全部改动）。"

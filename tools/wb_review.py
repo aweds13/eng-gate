@@ -36,12 +36,13 @@ r"""主控复核器（外包链路的第 ④ 步）：一条命令把"这一笔�
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+from pool.review import outside_allow
 
 ROOT = Path(__file__).resolve().parent.parent
 TASK_RE = re.compile(r"^Task:\s*(\S+)\s*$", re.M)
@@ -133,12 +134,16 @@ def check_branch(branch: str, expected: str) -> tuple[list[str], str]:
 
 
 def check_files(files: list[str], *, read_only: bool, allow: list[str]) -> list[str]:
-    """④ 改动越界没有：只读卡 = 一个被跟踪文件都不许改；否则按白名单。"""
+    """④ 改动越界没有：只读卡 = 一个被跟踪文件都不许改；否则按白名单。
+
+    ★ 白名单判据走 `pool.review.outside_allow()` —— **唯一实现**（卡 106 把原先三处收敛成一处：
+    本函数、`wb_dispatch._outside_allow`、`tf_stage_guard.outside_allow`）。
+    """
     if read_only:
         return [f"只读卡不许改被跟踪文件，但它改了 {len(files)} 个：{files[:8]}"] if files else []
     if not allow:
         return ["没有给白名单：复核改动范围请加 `--allow <glob>`（或声明 `--read-only`）"]
-    outside = [f for f in files if not any(fnmatch.fnmatch(f, pat) for pat in allow)]
+    outside = outside_allow(files, allow)
     return [f"有 {len(outside)} 个改动不在白名单里：{outside[:8]}"] if outside else []
 
 
