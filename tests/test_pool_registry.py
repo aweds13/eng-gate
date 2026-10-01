@@ -19,6 +19,7 @@ import ast
 import datetime
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -63,6 +64,75 @@ def test_default_registry_path_is_in_the_main_worktree(
     assert path.as_posix().endswith("gates/diag/pool-registry.json")
     # 主树里 `.git` 是**目录**；卡树里是**文件** —— 这正是不用 --show-toplevel 的原因。
     assert (registry.main_tree_root() / ".git").is_dir()
+
+
+# ================================================================ ⑤ 主树定位不许依赖 cwd（卡 114）
+
+
+def test_registry_path_does_not_depend_on_cwd(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 卡 114：进程 cwd 在仓库外（DSH 起 MCP 子进程就是这样）也算得出主树。
+
+    改之前 `main_tree_root()` 的那次 git 走**进程 cwd** ⇒ 在仓库外直接抛 `RegistryError`。
+    """
+    monkeypatch.delenv("TF_POOL_REGISTRY", raising=False)
+    expected = registry.main_tree_root() / "gates" / "diag" / "pool-registry.json"
+    elsewhere = tmp_path / "not-a-repo"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    assert registry.registry_path() == expected
+
+
+#: 号池 MCP 的八个工具名（写工具要服务端 `POOL_MCP_WRITE=1` 才列）。
+POOL_TOOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_status",
+                   "pool_models", "pool_dispatch", "pool_cancel"]
+
+
+def _rpc(proc: subprocess.Popen[str], message: dict) -> dict:
+    """发一条 JSON-RPC、读回话（一行一条）—— 端到端钉子自己用的最小客户端。"""
+    assert proc.stdin is not None and proc.stdout is not None
+    proc.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
+    proc.stdin.flush()
+    line = proc.stdout.readline()
+    assert line, "服务端还没回话就关了 stdout（EOF）"
+    return json.loads(line)
+
+
+def test_server_from_foreign_cwd_still_locates_main_tree(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 端到端（卡 114）：真起 `tools/pool_mcp.py`，**子进程 cwd 在仓库外**。
+
+    - `tools/list` ⇒ 8 个工具（顺带钉住"注册环境里 `POOL_MCP_WRITE=1`"）；
+    - `tools/call pool_cancel {"card":"999","confirm":"999"}` ⇒ 走"本机登记里没有活租约"的
+      正常路径；改之前这里是「算不出主工作树」。
+
+    ★ 不往真 `gates/diag/` 写一个字节：`pool_cancel` 的"没租约"路径只读不写。
+    """
+    monkeypatch.delenv("TF_POOL_REGISTRY", raising=False)
+    env = {k: v for k, v in os.environ.items() if k != "TF_POOL_REGISTRY"}
+    env["POOL_MCP_WRITE"] = "1"
+    foreign = tmp_path / "not-a-repo"
+    foreign.mkdir()
+    with (tmp_path / "server-err.txt").open("w", encoding="utf-8") as err:
+        proc = subprocess.Popen(
+            [sys.executable, "-X", "utf8", str(ROOT / "tools" / "pool_mcp.py")],
+            cwd=str(foreign), env=env,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err,
+            text=True, encoding="utf-8", errors="replace",
+        )
+        try:
+            listing = _rpc(proc, {"jsonrpc": "2.0", "id": "t1", "method": "tools/list"})
+            assert [t["name"] for t in listing["result"]["tools"]] == POOL_TOOL_NAMES
+            reply = _rpc(proc, {"jsonrpc": "2.0", "id": "t2", "method": "tools/call",
+                                "params": {"name": "pool_cancel",
+                                           "arguments": {"card": "999", "confirm": "999"}}})
+            text = reply["result"]["content"][0]["text"]
+            assert "本机登记里没有卡 999 的**活租约**" in text
+            assert "算不出主工作树" not in text
+        finally:
+            proc.kill()                     # 自己起的服务自己收尾
+            proc.wait(timeout=10)
+
 
 
 # ================================================================ ① 落盘 / 原子写

@@ -74,10 +74,19 @@ def main_tree_root() -> Path:
 
     ★ 卡树里 `--git-common-dir` 回的是主仓的 `.git`（如 `D:/.../engineering/.git`），父目录就是
       主工作树；而 `--show-toplevel` 会回卡树本身 —— 所以只用前者。
+
+    ★ 卡 114（T-G211）：这次 `git` 必须显式给 `cwd=` —— 服务可能被别的程序（如 DSH 起
+      MCP 子进程）从**任意 cwd** 拉起，那是进程 cwd、不在仓库里，git 会报错、算不出主树。
+      这里用**从本文件推出来的仓库根**（`tools/pool/registry.py` 的上三级）：存在就给它，
+      取不到（被拆散 / 装包了）才退回 `None`（保持旧行为：走进程 cwd）。卡树里那个根 =
+      卡树，它同样是 git 工作树 ⇒ `--git-common-dir` 照样回主仓的 `.git` ⇒ 父目录仍是
+      主工作树（卡 108 设计的语义不变）。
     """
+    tree_root = Path(__file__).resolve().parents[2]
     try:
         done = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
+            cwd=str(tree_root) if tree_root.is_dir() else None,
             capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
     except OSError as exc:

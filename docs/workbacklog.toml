@@ -22,7 +22,7 @@
 #     并且**同域卡只要 `depends` 有路径就允许共存**（会被排到不同批）——所以队列里可以
 #     同时有「同域串行」的卡（例：024 → 029 都改 `tools/wb_dispatch.py`）。
 [base]
-reviewed = "1f47c5f"        # 已复核的基点提交（没登记过就不许建树）
+reviewed = "93c79ae"        # 已复核的基点提交（没登记过就不许建树）
 
 [[cards]]
 id = "022"
@@ -69,4 +69,112 @@ files = [
 ]
 depends = ["024"]
 risk = "high"
+status = "done"
+
+[[cards]]
+id = "108"
+task = "T-G205"
+title = "号池写面①：作业登记（谁占了哪棵树）+ 三条自家守卫"
+tree = ".wt/poolreg"
+spec = "gates/diag/卡108-号池写面①作业登记与守卫.md"
+files = [
+  "tools/pool/registry.py",
+  "tools/pool/guards.py",
+  "tools/pool/locks.py",
+  "tools/wb_registry.py",
+  "tests/test_pool_registry.py",
+  "tests/test_pool_guards.py"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "109"
+task = "T-G206"
+title = "号池去重收口：wb_dispatch / tf_stage_guard 里剩下的两份真源"
+tree = ".wt/pooldup"
+spec = "gates/diag/卡109-号池去重收口.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tools/tf_stage_guard.py",
+  "tests/test_wb_dispatch.py",
+  "tests/test_pool_dedup.py"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "110"
+task = "T-G207"
+title = "文档落地（外包）：今天七条坑 + 门禁改进清单"
+tree = ".wt/docmine"
+spec = "gates/diag/卡110-文档落地七条坑与清单.md"
+files = [
+  "复盘/口径坑.md",
+  "复盘/门禁改进清单.md"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "111"
+task = "T-G208"
+title = "号池写面②：MCP 的 pool_dispatch / pool_cancel（六条不变量 + 存在性即授权）"
+tree = ".wt/poolmcp2"
+spec = "gates/diag/卡111-号池写面②MCP写工具.md"
+files = [
+  "tools/pool_mcp.py",
+  "tools/pool/__init__.py",
+  "tests/test_pool_mcp.py",
+  "tests/test_pool_mcp_write.py"
+]
+# ★ 依赖卡 108（T-G205）—— 它已在 e9224f7 落地，所以这里不再写 depends（写了会把 111 推到更后面的层，
+#   而 110 与 111 的域不相交、正该同批跑）。
+depends = []
+risk = "high"
+status = "done"
+
+[[cards]]
+id = "112"
+task = "T-G209"
+title = "开工切片两处误报：停工样板话误报 + 现状段看错树"
+tree = ".wt/brief2"
+spec = "gates/diag/卡112-切片两处误报.md"
+files = [
+  "tools/wb_brief.py",
+  "tests/test_wb_brief.py"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "113"
+task = "T-G210"
+title = "pool_cancel 的证据别是乱码：taskkill 输出按系统区域编码解"
+tree = ".wt/tkill"
+spec = "gates/diag/卡113-pool_cancel证据编码.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_write.py"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "114"
+task = "T-G211"
+title = "main_tree_root 不许依赖当前目录（MCP 真机跑出来的 bug）"
+tree = ".wt/poolcwd"
+spec = "gates/diag/卡114-main_tree_root不许依赖cwd.md"
+files = [
+  "tools/pool/registry.py",
+  "tests/test_pool_registry.py"
+]
+depends = []
+risk = "low"
 status = "done"

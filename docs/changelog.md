@@ -1,3 +1,17 @@
+## 2026-10-02 —— `main_tree_root()` 不许依赖当前目录（MCP 真机跑出来的 bug）（T-G211 / 卡 114）
+
+- 来路：`mcp-pool` 注册进 DSH 之后，主控用**注册时那条真命令**起服务做端到端 —— 六个**只读**工具全对，
+  一调**写面**就 `算不出主工作树：git rev-parse --git-common-dir 没回路径`。
+- 根因：`tools/pool/registry.py::main_tree_root()` 跑 git **没给 `cwd=`** ⇒ 用**进程当前目录**；
+  而 DSH 起 MCP 子进程时 cwd **在仓库外**（只读那六个的 ROOT 从**脚本路径**推导，所以只有写面中招）。
+- ★ 卡 108 / 111 的测试抓不到，是因为它们**全都在仓库里跑**（cwd 就是仓库）—— 又一次"**桩验过了 ≠ 真机能用**"。
+- 做法：那次 `subprocess.run` 加 `cwd=`（用 `Path(__file__).resolve().parents[2]` 推出来的仓库根）+ 注释；
+  **卡树语义不变**（卡树里 `parents[2]` = 卡树、也是工作树 ⇒ `--git-common-dir` 照回主仓 `.git`）。
+- 审计：`tools/pool/**` 与 `pool_mcp.py` 里**所有** `subprocess.run` 的 `cwd=` 逐个过了一遍，
+  **漏网的只有这一处**；`tasklist` / `taskkill` 按 PID、与 cwd 无关。
+- 验收：**先红后绿**（单元 + **端到端**两条钉子都验了**两遍**）—— 改前 = 线上那句报错，改后 = `没有活租约` +
+  `tools/list` **8 个**；号池 5 个测试文件 **87 passed** · ruff 全过 · 测试自收尾、没写脏 `gates/diag/`。
+- ★ 本笔另含补账：`docs/workbacklog.toml`（108~114 七张卡的登记与状态 + `reviewed` 一次收干净）。
 ## 2026-10-02 —— `pool_cancel` 的证据别是乱码：taskkill 输出按系统区域编码解（T-G210 / 卡 113）
 
 - 来路：卡 111（T-G208）只做了**桩验**；主控补做**真机 cancel 演练**（零花费：靶子是自己起的 `python` / `ping`）——
