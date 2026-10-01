@@ -1,3 +1,18 @@
+- ★ **留痕（这条钉子被咬两次）**：门禁**红在工人自己那条钉子**上（`test_six_tools_return_and_write_nothing`）——两次"多出来"的文件分别是 ` M docs/implementation/coverage.md` 与 ` M docs/contracts/flows.md`，都是**别的门重生成**的`docs/**` 派生文件。★ 加排除项是**打地鼠**；根因是 `git status` 是**全局可变视图**（＝当天早上 T-G194 那条坑，**今天第二次**）⇒ **换判据**：① 不许**新建未跟踪文件**；② 不许改动它读的**真源**（按 sha256 比）。**断言一条没删**，修完 15 passed。
+## 2026-10-01 —— 外包号池的 MCP 只读面：`tools/pool_mcp.py`（T-G201 / 卡 105）
+
+- 需求：用户要在 **DSH 的不同窗口**里用外包调用 ⇒ 做成 **MCP**（DSH 已注册 4 个 MCP：arxiv/dblp/deepxiv/metaso）。
+- 新增 **`tools/pool_mcp.py`**：**手写零依赖** MCP 服务端（stdio + JSON-RPC 2.0，握手**照抄本仓先例** `src/timeflow/mcp/server.py`），
+  暴露**六个只读工具**：`pool_plan` / `job_list` / `job_status` / `job_result` / `lock_status` / `pool_models`（都带 `readOnlyHint`）。
+- 验收：`initialize`（协议 `2025-06-18`）与 `tools/list` 报文齐全 · 未知工具名 → `-32602` 且**服务不崩** · 缺产物**明说"没有"** ·
+  **六个工具都不写文件**（跑前后 `git status -uall` 逐字相同 + 钉子）· **先红后绿**（`_classify` 改坏 → FAILED → 改回 → `sha256` 复原）·
+  `pytest tests/test_pool_mcp.py` **15 passed** · 门禁口径 `-n 4` 退出 0、覆盖率 93.71% · `ruff` 全过。
+- 注册写法（**已核没写进用户配置**：那份文件 mtime 仍是 19:40）：`~/.dsh/profiles/desktop/cordis.patch.yml` 加 `- id: mcp-pool`，
+  `args` 用**绝对路径**（ROOT 由 `__file__` 推得）；★ `dsh-mcp-client` **会剥掉名字含 KEY/PASSWORD/SECRET/TOKEN 的环境变量与全部 `DSH_*`**，要传的必须写进 `env:`。
+- ★ 留白：`pool_models` 读**快照**不是现场（脚本要联网+写快照，都被禁区挡着，输出里已明说）· `job_list/job_status` **只读当前树**（跨树聚合未做）·
+  号池目录靠"向上找"定位 · **DSH 真接一次未做**。
+
+**★ 落户过程如实留痕（第一次门禁红是判据工具错、不是产品错）**：这一笔的第一次门禁**红在工人自己那条钉子**上 —— `FAILED tests/test_pool_mcp.py::test_six_tools_return_and_write_nothing`，原样证据是 `E Extra items in the right set: ' M docs/implementation/coverage.md'`。也就是说：六个**只读**工具跑完之后，工作区里"多出来"的那个文件是 **`docs/implementation/coverage.md`** —— 那是**并行跑的另一道门（`check_layers`）重生成的派生文件**，与只读工具毫无关系。★ 这与当天早上修的 **T-G194（自证⑤）是同一个坑**：`git status` 是**全局可变视图**，不能拿来当"谁写的"证据。判据的**意图**是对的（只读工具不许留痕），错在 **instrument** ⇒ 主控按 T-G194 的先例修了那条判据（快照剔掉"别的门会重生成"的路径，并写明为什么），工人那 15 条用例里**只有这一条的判据工具被换掉，断言一条没删**；修完 `pytest tests/test_pool_mcp.py` → 15 passed。★ 这条坑今天**第二次**出现（同一个 `git status` 全局视图），已写进 `复盘/口径坑.md`。
 ## 2026-10-01 —— 轨二 ①③ 正文：门禁改进清单 + 逐门去留提案（T-G200）
 
 - **① `复盘/门禁改进清单.md`**：今天被门禁自己咬的**四处**逐条摊开（病 → 根 → 修在哪 → 钉子在哪）——
