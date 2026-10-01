@@ -275,7 +275,7 @@ def find_spec(card: str) -> str:
     return ""
 
 
-def build(*, card: str, spec: str, master: bool) -> str:
+def build(*, card: str, spec: str, master: bool, cwd: str = "") -> str:
     stamp = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     sha = _git("rev-parse", "--short", "HEAD") or "?"
     who = "主控" if master else (card or "?")
@@ -284,7 +284,14 @@ def build(*, card: str, spec: str, master: bool) -> str:
         p = ROOT / spec
         if p.exists():
             spec_text = p.read_text(encoding="utf-8", errors="replace")
-    parts = [
+    parts = []
+    # ★ 卡 103（T-G199）：给了卡树路径 → **第一行**就写死那句硬话（不许靠"工作树：…"一句软话）。
+    if cwd:
+        parts += [
+            f"★ **你必须 `cd {cwd}` 再干活**；在别的树（尤其主仓）里改文件 = 这一轮作废。",
+            "",
+        ]
+    parts += [
         f"# 开工切片 · {who}  · 生成于 {stamp} · HEAD {sha}",
         "",
         "## 一、现状（现算，不抄任何文档）",
@@ -313,6 +320,9 @@ def main() -> int:
     ap.add_argument("--spec", default="", help="卡规格文件（相对仓库根）")
     ap.add_argument("--out", default="", help="写到哪里（默认 gates/diag/brief-<卡号>.md）")
     ap.add_argument("--master", action="store_true", help="主控版（无单卡白名单/引用）")
+    ap.add_argument("--cwd", default="",
+                    help="卡树路径（绝对/相对都行）—— 给了就把切片**第一行**写成硬话："
+                         "「你必须 cd <绝对路径> 再干活」（卡 103 / T-G199）")
     args = ap.parse_args()
 
     card = args.card
@@ -326,7 +336,8 @@ def main() -> int:
         print("[FAIL] 得给 --card 或 --spec（或 --master）", file=sys.stderr)
         return 2
 
-    text = build(card=card, spec=spec, master=args.master)
+    cwd = str(Path(args.cwd).expanduser().resolve()) if args.cwd else ""
+    text = build(card=card, spec=spec, master=args.master, cwd=cwd)
     out = args.out or str(DIAG / (f"brief-{card}.md" if not args.master else "brief-主控.md"))
     out_path = ROOT / out
     out_path.parent.mkdir(parents=True, exist_ok=True)

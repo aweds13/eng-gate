@@ -2003,3 +2003,107 @@ def test_port_bases_come_from_the_dispatch_var_not_the_gate_one(monkeypatch) -> 
 
     monkeypatch.setenv("TF_DISPATCH_PORT_BASE", "不是数字")
     assert wd._resolve_port_bases(None) is None           # 给错要当场说，不静默
+
+
+# ================================================== 卡 103（T-G199）：派活器 --cwd
+#
+# 病（工人自己报的）：`wb_dispatch.py` 用 `cwd=ROOT`（**主仓**）把工人拉起来 ⇒ 工人会话 cwd
+# 落在主仓，唯一护栏是切片里那句「工作树：.wt/xxx」—— 卡 100 / 卡 102 连着两口没 cd，直接
+# 在主仓改了文件。这一卡把「工人必须在卡树里干活」从一句软话变成**接口 + 判据**。
+
+
+def test_worker_process_starts_in_the_given_cwd(tmp_path: Path, monkeypatch) -> None:
+    """★ `--cwd` 真透传到工人进程（`Popen(cwd=…)`）；**不给时逐字不变**（仍是仓库根）。"""
+    seen: dict = {}
+
+    class _FakeProc:
+        pid = 12345
+
+        def __init__(self) -> None:
+            self.returncode = 0
+            self.stdout = iter([])          # 没输出 → 读线程立刻收工
+
+        def wait(self, timeout: float | None = None) -> int:      # noqa: ARG002
+            return 0
+
+        def poll(self) -> int:
+            return 0
+
+    def fake_popen(argv, **kwargs):         # noqa: ANN001, ANN202
+        seen.clear()
+        seen.update(kwargs)
+        return _FakeProc()
+
+    monkeypatch.setattr(wd.subprocess, "Popen", fake_popen)
+    tree = tmp_path / "cardtree"
+    tree.mkdir()
+    wd.run_worker([sys.executable, "-X", "utf8", "-c", "pass"], tmp_path / "l.jsonl",
+                  tmp_path / "e.txt", timeout=60, max_turns=150, watchdog=False,
+                  heartbeat_seconds=0, worker_cwd=tree)
+    assert Path(seen["cwd"]) == tree, "给了 --cwd 就必须是它（工人的 cwd）"
+
+    # 反例：不给 --cwd → 工人 cwd 仍是仓库根（老行为逐字不变）
+    wd.run_worker([sys.executable, "-X", "utf8", "-c", "pass"], tmp_path / "l2.jsonl",
+                  tmp_path / "e2.txt", timeout=60, max_turns=150, watchdog=False,
+                  heartbeat_seconds=0)
+    assert Path(seen["cwd"]) == wd.ROOT, "不给 --cwd 时不许偷偷挪窝"
+
+
+def test_preflight_with_cwd_refuses_a_dirty_card_tree_and_names_it(
+        sandbox: Path, monkeypatch) -> None:
+    """★ 给了 --cwd：脏检查看**工人要干活的那棵树** —— 卡树脏 → 拒派并**点名是哪棵树**。"""
+    worker = sandbox / "cardtree"
+    worker.mkdir()
+    monkeypatch.setattr(wd, "is_git_worktree", lambda p: True)             # noqa: ARG005
+    monkeypatch.setattr(wd, "git_dirty",
+                        lambda cwd=None: ([" M tools/x.py"] if Path(cwd) == worker else []))
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False,
+                               worker_cwd=worker)
+    assert problems, "卡树脏了必须拒派"
+    assert "工作区不干净" in problems[0]
+    assert str(worker) in problems[0], "要点名是哪棵树，别只说『不干净』"
+
+
+def test_preflight_with_cwd_passes_when_card_tree_is_clean_even_if_main_is_dirty(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 卡树干净 + 主仓脏 → **放行**（主仓状态只当提示打出来）—— 反例式证明"不再被主仓挡住"。"""
+    worker = sandbox / "cardtree"
+    worker.mkdir()
+    main_dirty = [" M docs/主控的文档.md", " M docs/台账.md"]
+    monkeypatch.setattr(wd, "is_git_worktree", lambda p: True)             # noqa: ARG005
+    monkeypatch.setattr(wd, "git_dirty",
+                        lambda cwd=None: ([] if Path(cwd) == worker else main_dirty))
+    capsys.readouterr()
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False,
+                               worker_cwd=worker)
+    assert problems == [], "主仓自己的文档改动不该挡住派活（今天为此白 stash 过一次）"
+    err = capsys.readouterr().err
+    assert "主仓状态" in err and "只提示" in err, "主仓状态要当提示打出来"
+    assert str(worker) in err, "工人干活树是哪棵要打出来"
+
+
+def test_cwd_not_a_git_worktree_is_a_clean_exit_2(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ `--cwd` 指到非 git 工作树 → 明确报错退 2（不静默当干净）。"""
+    monkeypatch.setattr(wd, "is_git_worktree", lambda p: False)            # noqa: ARG005
+    monkeypatch.setattr(wd, "git_dirty", lambda cwd=None: [])              # noqa: ARG005
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--cwd", str(sandbox / "不是工作树")])
+    assert wd.main() == 2
+    err = capsys.readouterr().err
+    assert "不是 git 工作树" in err, "不是工作树要当场说清"
+
+
+def test_brief_first_line_hardens_the_worker_cwd(tmp_path: Path) -> None:
+    """★ `wb_brief.py --cwd`：切片**第一行**就是那句硬话（不再靠一句软软的「工作树：…」）。"""
+    import wb_brief as wb  # 本文件只白名单追加用例；wb_brief 在此单独导入
+
+    tree = str(tmp_path.resolve())
+    text = wb.build(card="001", spec="", master=False, cwd=tree)
+    first = text.splitlines()[0]
+    assert first.startswith("★")
+    assert "你必须" in first and f"cd {tree}" in first
+    assert "在别的树" in first and "这一轮作废" in first
+
+    # 反例：不给 --cwd → 第一行仍是老的表头（逐字不变）
+    plain = wb.build(card="001", spec="", master=False)
+    assert plain.splitlines()[0].startswith("# 开工切片")

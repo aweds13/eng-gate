@@ -1,5 +1,17 @@
-- ★ **留痕（这条钉子被咬两次）**：门禁**红在工人自己那条钉子**上（`test_six_tools_return_and_write_nothing`）——两次"多出来"的文件分别是 ` M docs/implementation/coverage.md` 与 ` M docs/contracts/flows.md`，都是**别的门重生成**的`docs/**` 派生文件。★ 加排除项是**打地鼠**；根因是 `git status` 是**全局可变视图**（＝当天早上 T-G194 那条坑，**今天第二次**）⇒ **换判据**：① 不许**新建未跟踪文件**；② 不许改动它读的**真源**（按 sha256 比）。**断言一条没删**，修完 15 passed。
+## 2026-10-01 —— 派活器 `--cwd`：工人必须在卡树里干活（T-G199 / 卡 103）
+
+- 病（今天连栽两口，且是工人自己报出来的）：`wb_dispatch.py` 用 **`cwd=ROOT`** 拉 CLI ⇒ **工人落在主仓**，
+  全靠切片那句"工作树"自己 `cd`。卡 100 直接在主仓改了 `scripts/run_gates.py`；卡 102 同样，它两树各放一份并建议"让 `wb_dispatch` 真正 cd 进卡树"。
+- 修：`git_dirty(cwd=None)` 可选取树 · `is_git_worktree()`（非工作树**不静默当干净**）· `run_worker(worker_cwd=…)` → `Popen(cwd=…)` ·
+  `preflight(worker_cwd=…)` **查工人那棵树**（主仓脏只**提示**不拦）· `main --cwd` · `wb_brief.py --cwd` 把切片**第一行**写成硬话。
+- 验收：不给 `--cwd` **124 passed** 且 `numstat 104 0`（既有断言零改动）· 给了 `--cwd` 子进程**自报 cwd** 与给的树一致 ·
+  卡树脏**拒派并点名** · **卡树干净+主仓脏 → 放行**（今天为此白 stash 过一次）· 非 git 工作树**退 2** · 全量 `pytest` **1680 passed**、ruff 全过。
+- ★ 当场见效：卡 103 **自己**回报第一句就是坐标自查（`.wt/cwd`，不是主仓）—— 对照卡 100/102，**第一次没栽**。
+- ★ 留白：已存在的切片**不重生成**（免得覆盖主控手写的切片）；`is_git_worktree` 走子进程未 mock；
+  软话产地 `tools/tf_cardgen.py:80` **不在白名单**未动（另记）。
 ## 2026-10-01 —— 外包号池的 MCP 只读面：`tools/pool_mcp.py`（T-G201 / 卡 105）
+
+- ★ **留痕（这条钉子被咬两次）**：门禁**红在工人自己那条钉子**上（`test_six_tools_return_and_write_nothing`）——两次"多出来"的文件分别是 ` M docs/implementation/coverage.md` 与 ` M docs/contracts/flows.md`，都是**别的门重生成**的`docs/**` 派生文件。★ 加排除项是**打地鼠**；根因是 `git status` 是**全局可变视图**（＝当天早上 T-G194 那条坑，**今天第二次**）⇒ **换判据**：① 不许**新建未跟踪文件**；② 不许改动它读的**真源**（按 sha256 比）。**断言一条没删**，修完 15 passed。
 
 - 需求：用户要在 **DSH 的不同窗口**里用外包调用 ⇒ 做成 **MCP**（DSH 已注册 4 个 MCP：arxiv/dblp/deepxiv/metaso）。
 - 新增 **`tools/pool_mcp.py`**：**手写零依赖** MCP 服务端（stdio + JSON-RPC 2.0，握手**照抄本仓先例** `src/timeflow/mcp/server.py`），

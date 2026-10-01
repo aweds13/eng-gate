@@ -195,13 +195,19 @@ LEAN_OPENING = (
 )
 
 
-def ensure_lean_brief(card: str) -> str:
-    """--lean：切片缺了就**现生成**（tools/wb_brief.py --card <卡>）；返回仓库根相对路径。"""
+def ensure_lean_brief(card: str, worker_cwd: Path | None = None) -> str:
+    """--lean：切片缺了就**现生成**（tools/wb_brief.py --card <卡>）；返回仓库根相对路径。
+
+    ★ 卡 103：把 `--cwd`（工人干活树）透传给 `wb_brief.py` —— 切片第一行才写得出那句硬话
+    （"你必须 cd <绝对路径> 再干活"）。
+    """
     rel = f"gates/diag/brief-{card}.md"
     if not (ROOT / rel).exists():
-        subprocess.run([sys.executable, "-X", "utf8", "tools/wb_brief.py", "--card", card],
-                       cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
-                       errors="replace", **NO_WINDOW)
+        cmd = [sys.executable, "-X", "utf8", "tools/wb_brief.py", "--card", card]
+        if worker_cwd is not None:
+            cmd += ["--cwd", str(worker_cwd)]
+        subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", **NO_WINDOW)
     return rel
 
 
@@ -242,14 +248,38 @@ def next_whitelist_model(model: str) -> str | None:
     return MODEL_WHITELIST[idx + 1] if idx + 1 < len(MODEL_WHITELIST) else None
 
 
-def git_dirty() -> list[str]:
-    """被跟踪文件里有没有未提交改动（未跟踪文件不算：那两个是别的窗口放的）。"""
+def git_dirty(cwd: Path | None = None) -> list[str]:
+    """被跟踪文件里有没有未提交改动（未跟踪文件不算：那两个是别的窗口放的）。
+
+    ★ 卡 103（T-G199）：多了 `cwd` —— 脏检查要看**工人要干活的那棵树**，不是永远看主仓。
+    不给（默认 `None` = 主仓）时行为逐字不变（既有调用与用例一条不动地全过）。
+    """
     done = subprocess.run(
         ["git", "status", "--porcelain", "-uno"],
-        cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(cwd or ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
         **NO_WINDOW,
     )
     return [ln for ln in (done.stdout or "").splitlines() if ln.strip()]
+
+
+def is_git_worktree(path: Path) -> bool:
+    """`path` 是不是一个 git 工作树（卡 103）—— 不是就**当场说**，不许静默当干净。
+
+    判据用 `git -C <path> rev-parse --is-inside-work-tree`（比看 `.git` 是文件还是目录稳：
+    链接工作树（`git worktree add`）里 `.git` 只是**文件**，不是目录）。路径不存在 / 跑不了
+    git / 回话不是 `true` → 一律 False。
+    """
+    if not path.is_dir():
+        return False
+    try:
+        done = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=str(path), capture_output=True, text=True, encoding="utf-8",
+            errors="replace", **NO_WINDOW,
+        )
+    except OSError:
+        return False
+    return done.returncode == 0 and (done.stdout or "").strip() == "true"
 
 
 def auth_ok(node: Path, cli: Path, timeout: int = 180) -> tuple[bool, str]:
@@ -1375,7 +1405,8 @@ def _pump(stream, log: Path, lines: list[str], lock: threading.Lock,
 def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_turns: int,
                watchdog: bool = True, heartbeat_seconds: int = HEARTBEAT_SECONDS,
                stall_seconds: int = STALL_SECONDS, poll_seconds: float = POLL_SECONDS,
-               printer: Callable[[str], None] = print) -> tuple[int, str, str, str]:
+               printer: Callable[[str], None] = print,
+               worker_cwd: Path | None = None) -> tuple[int, str, str, str]:
     """真跑工人并且**盯着它** —— 返回 `(退出码, 掐掉/超时/撞上限的原因, 现场, 会话 id)`。
 
     第 4 项是给"续跑"用的（T-G90）：中断之后带着同一个会话接着干，而不是从头再来。
@@ -1388,6 +1419,8 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
     300 多条事件，解析一遍是毫秒级）；真跑出几万条事件再谈增量。
     ★ T-G96 第二层兜底：**判据自己抛异常时不许让看门狗失效** —— 退到"当成没有在飞 / 没有耗时
     数据"的保守口径继续盯，并把这次异常**如实记进心跳 / 判决**（不静默吞掉）。
+    ★ 卡 103（T-G199）：`worker_cwd` 给了就是**工人进程的 cwd**（工人落在卡树里干活）；
+    不给（默认 `None`）仍是仓库根 —— `cwd` 传参逐字不变。
     """
     log.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
@@ -1401,7 +1434,8 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
     last_beat = started
     with errlog.open("w", encoding="utf-8") as err:
         proc = subprocess.Popen(          # noqa: S603 —— 命令是本地拼好的 CLI，不是外部输入
-            list(cmd), cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            list(cmd), cwd=str(worker_cwd or ROOT), stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
             stderr=err, text=True, encoding="utf-8", errors="replace", bufsize=1,
         )
         pump = threading.Thread(target=_pump, args=(proc.stdout, log, lines, lock, state),
@@ -1644,7 +1678,8 @@ def port_preflight(port_bases: list[int] | None) -> list[str]:
 def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
               cli_override: str | None = None, resuming: bool = False,
               allow: list[str] | None = None,
-              port_bases: list[int] | None = None) -> tuple[list[str], Path]:
+              port_bases: list[int] | None = None,
+              worker_cwd: Path | None = None) -> tuple[list[str], Path]:
     """四道检查 —— 返回（问题清单, 日志路径）。问题非空就不许派活。
 
     ★ 卡 029 §2.10（本轮真撞的）：**续跑**（`--resume <id>` / `--resume auto` 拿到了 id）时
@@ -1652,6 +1687,10 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
     改成把 `git status --porcelain` 原文打出来 + 一行「★ 续跑：…继续」→ 放行；
     脏文件里若有不在 `--allow` 白名单里的 → 醒目告警（可能是别的卡串了树）。
     ★ **非续跑**（全新一轮）保持原判据（必须干净）—— 那是"一写一读"的护栏，不许松。
+    ★ **卡 103（T-G199）**：给了 `worker_cwd`（`--cwd`）时，"工作区必须干净"看的是
+    **工人要干活的那棵树**（那才是"一写一读"要护的地方）；**主仓状态照打当提示、但不因此拒派**
+    （主控自己的文档改动不该挡住派活）。给的路径不是 git 工作树 → 明确报错（不静默当干净）。
+    不给 `worker_cwd` 时行为逐字不变（仍看主仓）。
     """
     problems: list[str] = []
     node, cli = paths(cli_override)
@@ -1662,9 +1701,25 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
         problems.append(f"找不到内置 node：{node}")
     if not cli.exists():
         problems.append(f"找不到 CLI：{cli}")
-    dirty = git_dirty()
+    if worker_cwd is not None:
+        # ★ 卡 103：脏检查看**工人要干活的那棵树**；主仓状态只当提示、不拒派。
+        if not is_git_worktree(worker_cwd):
+            problems.append(f"--cwd 不是 git 工作树：{worker_cwd}"
+                            "（一写一读要护的那棵树不在 → 不静默当干净）")
+            dirty: list[str] = []
+        else:
+            dirty = git_dirty(worker_cwd)
+        root_dirty = git_dirty(ROOT)
+        root_state = ("干净" if not root_dirty
+                      else f"脏（{len(root_dirty)} 个被跟踪文件有改动）")
+        print(f"  工人干活树（--cwd）：{worker_cwd}", file=sys.stderr, flush=True)
+        print(f"  主仓状态：{root_state} —— 只提示，不拦派活（卡 103）",
+              file=sys.stderr, flush=True)
+    else:
+        dirty = git_dirty()
     if dirty and not resuming:
-        problems.append(f"工作区不干净（{len(dirty)} 个被跟踪文件有改动）→ 一写一读："
+        where = f"工人干活树 {worker_cwd}" if worker_cwd is not None else "主仓"
+        problems.append(f"工作区不干净（{where}，{len(dirty)} 个被跟踪文件有改动）→ 一写一读："
                         f"先提交或收起它们：{', '.join(dirty[:5])}")
     elif dirty:
         print("  续跑前核对 —— git status --porcelain 原文：", file=sys.stderr, flush=True)
@@ -1697,6 +1752,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="派活给 CodeBuddy CLI（默认 dry-run）")
     parser.add_argument("--card", required=True, help="卡号（用来命名 log，如 001）")
     parser.add_argument("--spec", default="", help="卡规格文件（相对仓库根；--status 时不必给）")
+    parser.add_argument("--cwd", default="",
+                        help="工人进程的 cwd（绝对/相对都行，会解析成绝对路径）—— 让工人"
+                             "**落在卡树里干活**（卡 103）。★ 派活产物（wb-<卡>.jsonl / "
+                             "brief-<卡>.md / 卡规格）仍落在**主仓**的 gates/diag/：那一份目录"
+                             "是 gitignore 的、卡树里没有。不给则行为与从前逐字相同（工人 cwd="
+                             "仓库根）")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--cli", default=None,
                         help="CLI 入口覆盖（默认优先用独立安装的那份）")
@@ -1776,10 +1837,12 @@ def main() -> int:
     port_bases = _resolve_port_bases(args.port_base)
     if port_bases is None:
         return 2
+    # ★ 卡 103（T-G199）：--cwd 解析成绝对路径（工人进程就落在它里面干活）。
+    worker_cwd = Path(args.cwd).expanduser().resolve() if args.cwd else None
     problems, log = preflight(
         args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
         cli_override=args.cli, resuming=bool(resume_sid), allow=args.allow,
-        port_bases=port_bases,
+        port_bases=port_bases, worker_cwd=worker_cwd,
     )
 
     if problems:
@@ -1815,7 +1878,7 @@ def main() -> int:
 
     node, cli = paths(args.cli)
     max_turns = args.max_turns or max_turns_default(args.read_only)
-    lean_brief = ensure_lean_brief(args.card) if args.lean else ""
+    lean_brief = ensure_lean_brief(args.card, worker_cwd) if args.lean else ""
     initial_cmd = build_command(node, cli, args.card, args.spec, args.model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
                                 lean=args.lean, brief=lean_brief)
@@ -1826,6 +1889,9 @@ def main() -> int:
     else:
         done_checks += " / 登录通"
     print(f"[OK ] 前置检查全过（{done_checks}）", flush=True)
+    if worker_cwd is not None:
+        print(f"[cwd ] 工人干活树：{worker_cwd}（工人进程 cwd = 它；产物仍在主仓 gates/diag/）",
+              flush=True)
     print(f"[log ] {log}", flush=True)
     print(f"[cmd ] {' '.join(initial_cmd[:4])} … --model {args.model} --output-format stream-json "
           f"--permission-mode {args.permission_mode} --max-turns {max_turns} "
@@ -1888,7 +1954,7 @@ def main() -> int:
             cmd, log_k, log_k.with_suffix(".stderr.txt"), timeout=args.timeout,
             max_turns=max_turns, watchdog=not args.no_watchdog,
             heartbeat_seconds=args.heartbeat_seconds, stall_seconds=args.stall_seconds,
-            poll_seconds=args.poll_seconds, printer=beat,
+            poll_seconds=args.poll_seconds, printer=beat, worker_cwd=worker_cwd,
         )
         sid = new_sid or sid
         if sid:                      # ★ 一拿到就落盘：这样中断之后 `--resume auto` 才用得上
