@@ -47,6 +47,16 @@ pytest 会**并行**跑（装了 `pytest-xdist`；worker 数见 `TF_PYTEST_WORKE
 串行是这里唯一的瓶颈。覆盖率照旧判 70% 那道门（pytest-cov 会合并各 worker 的数据）。
 
 约定（与用户确认）：**门禁或审计任一不通过 → 退出码非零 → 不许提交**。
+
+★ T-G196（卡 100，每道门加硬超时）：门禁历史病灶是**一道门卡死 = 整趟永久挂死** ——
+  2026-10-01 落卡 092 时 `ui_flow` 真卡死 56 分钟（正常 386 秒），`run_gates.py` 一直等它。
+  现在每道门有硬超时（`DEFAULT_DOOR_TIMEOUT` = 1800 秒；`TF_GATE_DOOR_TIMEOUT` 可覆盖，
+  `0` = 关掉）：到点 → **掐掉整棵进程树**（Windows `taskkill /PID <pid> /T /F`，★ 只杀父的
+  会留一堆孤儿占端口）→ 这道门记 **`exit_code = 124`** + `timeout=True`、summary 写清
+  「超时 N 秒被掐」并报出门名/pid/掐了几个子进程 → **判红**（124 ≠ 0 → 整趟非 0，
+  绝不当"跳过/没跑"糊过去 = 假绿）。其余门的结论照常收完（超时只掐那一棵，不吞别人的读数）。
+  ★ 这一层**只加"到点就掐"**：门判据、门清单、泳道/串行结构、`input_hash()` / `REUSE_INPUTS`
+  / 封存指纹**一个字不动**。测试见 `tests/test_run_gates_timeout.py`（假门 `sleep`）。
 """
 
 from __future__ import annotations
@@ -124,6 +134,14 @@ NODE_TOOLS = ("ui_dom_probe", "render", "ui_flow")
 # 信息性检查（只报告、不阻断）—— 当前为空：`audit_titles` 已转正为阻断项（T-D2 收口）。
 INFO_GATES: list[tuple[str, list[str]]] = []
 SUCCESS_HINTS = ("passed", "failed", "error", "PASS", "Success", "checks passed", "OK")
+
+# ---------------------------------------------------------------- 每道门硬超时（T-G196 / 卡 100）
+# 病灶：一道门卡死 = **整趟门禁永久挂死**。2026-10-01 落卡 092 时，`ui_flow` 那道门真卡死
+#   56 分钟（正常 386 秒）——`run_gates.py` 一直 `communicate()` 等它，锁租约到了也不杀，
+#   只能人工按 PID 逐个核命令行再掐。这一层**只加"到点就掐"**：门判据、门清单、泳道结构、
+#   输入哈希与封存指纹一个字不动。
+# 默认 1800 秒；`TF_GATE_DOOR_TIMEOUT` 可覆盖（`0` = 关掉，给将来留口子）。
+DEFAULT_DOOR_TIMEOUT = 1800.0
 
 # ---------------------------------------------------------------- 端口段（T-G156 §2.1）
 # 浏览器层的端口段。**默认与历史逐字一致**（render 8531/8532、ui_flow 8541~8544）；
@@ -791,6 +809,89 @@ def cleanup_leftovers() -> None:
 PRINT_LOCK = threading.Lock()
 
 
+def door_timeout() -> float | None:
+    """每道门的硬超时（秒）；`None` = **不设超时**（一直等）。
+
+    - 不设 `TF_GATE_DOOR_TIMEOUT` → 默认 `DEFAULT_DOOR_TIMEOUT`（1800 秒）；
+    - 设了且 > 0 → 用该值；`0`（或任何 ≤ 0 的值）→ `None` = 关掉这条路；
+    - 设了但不是数字 → 打警告并退回默认（**不许静默**：静默退回和"没设"分不出来，
+      而"没设"与"设错了"对一道卡死的门后果完全不同）。
+
+    ★ 这一层不碰任何门的判据 —— 它只决定"等多久后掐"，掐完仍由 `finish_gate` 判红。
+    """
+    raw = os.environ.get("TF_GATE_DOOR_TIMEOUT", "").strip()
+    if not raw:
+        return DEFAULT_DOOR_TIMEOUT
+    try:
+        val = float(raw)
+    except ValueError:
+        print(f"[WARN] TF_GATE_DOOR_TIMEOUT={raw!r} 不是数字 → 退回默认 "
+              f"{DEFAULT_DOOR_TIMEOUT:g} 秒", file=sys.stderr, flush=True)
+        return DEFAULT_DOOR_TIMEOUT
+    if val <= 0:
+        return None
+    return val
+
+
+def _fmt_secs(value: float) -> str:
+    """秒数的**人话**写法：整数就不带小数点（3 而不是 3.0）；否则留有效位。"""
+    return str(int(value)) if float(value).is_integer() else f"{value:g}"
+
+
+def _descendant_pids(pid: int) -> list[int]:
+    """`pid` 的所有后代 PID（psutil 在才给得出；拿不到 → 空表 = "只掐得掉它自己"）。
+
+    ★ 只用来**数**要掐几个子进程并留痕，不参与"掐/不掐"的判据（那个判据是"超时了"）。
+    """
+    ps = _psutil()
+    if ps is None:
+        return []
+    try:
+        return [int(c.pid) for c in ps.Process(pid).children(recursive=True)]
+    except Exception:
+        return []
+
+
+def kill_gate_tree(pid: int) -> tuple[bool, int, str]:
+    """**掐掉整棵进程树**（不是只杀父进程）。返回 `(掐成功?, 子进程数, 说明)`。
+
+    ★ 为什么必须整树（本卡的病根）：2026-10-01 卡死的那串是
+      `node ui_flow_check.mjs` → `serve.py` + 无头 `msedge` —— 只 `kill` 父的会留下一堆
+      孤儿继续占端口，下一轮又撞端口。Windows 上用 `taskkill /PID <pid> /T /F`（`/T` = 连
+      子孙一起），先数一下后代个数（`_descendant_pids`）好在 report 里说清"掐了几个"。
+    ★ 与开场清遗留（`cleanup_leftovers`，按端口 + 本树 cwd 双判据、`/T` 绝不用的**单掐**）
+      刻意分开：那一条怕跨树误杀，这一条掐的是**本进程刚起的门**，杀整树才对。
+    """
+    children = _descendant_pids(pid)
+    n_children = len(children)
+    if os.name == "nt":
+        try:
+            r = subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],  # noqa: S603
+                               capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", check=False)
+        except OSError as exc:
+            return False, n_children, f"{type(exc).__name__}: {exc}"
+        ok = r.returncode == 0
+        return ok, n_children, f"taskkill /PID {pid} /T /F rc={r.returncode}"
+    # POSIX（本仓主力在 Windows，这条是防"换台机器跑不了"）：
+    ps = _psutil()
+    if ps is not None:
+        try:
+            victims = ps.Process(pid).children(recursive=True) + [ps.Process(pid)]
+            for victim in victims:
+                with contextlib.suppress(Exception):
+                    victim.kill()
+            gone, _ = ps.wait_procs(victims, timeout=5)
+            return len(gone) > 0, n_children, f"psutil 递归掐（{len(gone)} 个）"
+        except Exception as exc:
+            return False, n_children, f"{type(exc).__name__}: {exc}"
+    try:
+        os.kill(pid, 9)
+        return True, n_children, f"os.kill({pid}, 9)"
+    except OSError as exc:
+        return False, n_children, f"{type(exc).__name__}: {exc}"
+
+
 def resolve_cmd(name: str, cmds: dict[str, list[str]], serial: bool) -> list[str] | None:
     """把占位命令填实（node 不在 → None = 这一门没跑，记 `not_run`，不算通过）。
 
@@ -831,16 +932,53 @@ def start_gate(name: str, cmd: list[str]) -> tuple[subprocess.Popen[str] | None,
     return proc, t0, ""
 
 
-def finish_gate(name: str, proc: subprocess.Popen[str], t0: float) -> dict[str, object]:
-    """等一道门跑完，汇成它的结果条目（这一半可以放心并行）。"""
-    out, _ = proc.communicate()
+def finish_gate(
+    name: str, proc: subprocess.Popen[str], t0: float, timeout: float | None = None
+) -> dict[str, object]:
+    """等一道门跑完，汇成它的结果条目（这一半可以放心并行）。
+
+    ★ 本卡 T-G196：`timeout` 是这道门的**硬超时**（秒；`None` = 一直等）。到点 → **掐整棵树**
+    （`kill_gate_tree`）→ 记 **`exit_code = 124`**（`timeout(1)` 的约定俗成）并在 summary 里
+    写清「**超时 N 秒被掐**」+ 门名 + pid + 掐了几个子进程；`timeout=True` 这个字段让它
+    **机器可读**。★ 判红：124 ≠ 0 → 整趟非 0，**绝不当"跳过/没跑"糊过去**（那是最坏的一种假绿）。
+    """
+    timed_out = False
+    killed_children = 0
+    kill_note = ""
+    try:
+        out, _ = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        # kill_gate_tree 自己在掐之前数后代（杀完就查不到了）——这个数进 summary 与 last.json。
+        ok_kill, killed_children, kill_note = kill_gate_tree(proc.pid)
+        # 树掐完后把 shell 与管道收干净（拿回剩余输出；万一父进程没死透，兜底硬 kill）。
+        try:
+            out, _ = proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(OSError):
+                proc.kill()
+            out, _ = proc.communicate()
+        if not ok_kill:
+            kill_note = f"★ 整树没掐干净（{kill_note}）"
+
+    exit_code = 124 if timed_out else int(proc.returncode)
     item: dict[str, object] = {
         "name": name,
-        "exit_code": proc.returncode,
+        "exit_code": exit_code,
         "seconds": round(time.time() - t0, 2),
         "summary": summarize(out or ""),
     }
-    if name in NODE_CMD and proc.returncode == 3:
+    if timed_out:
+        item["summary"] = (
+            f"超时 {_fmt_secs(timeout)} 秒被掐：{name} pid={proc.pid}，"
+            f"掐了 {killed_children} 个子进程（{kill_note}）"
+        )
+        # 机器可读：哪道门被超时掐的、限时多少、掐了几个子进程。
+        item["timeout"] = True
+        item["timeout_seconds"] = timeout
+        item["killed_pid"] = proc.pid
+        item["killed_children"] = killed_children
+    if name in NODE_CMD and exit_code == 3:
         item["blocking"] = False
         item["status"] = "NOT RUN"
         item["note"] = "起不了真浏览器：这一层**没有验证**，不算通过"
@@ -848,7 +986,7 @@ def finish_gate(name: str, proc: subprocess.Popen[str], t0: float) -> dict[str, 
     # 「全量跑红了」之后唯一的办法是**把这道门单独再跑一遍**（render 110 秒、ui_flow 176 秒），
     # 而它往往是随机的，重跑还未必复现（T-G51 就在这上面白花了两轮）。现在：全量输出落
     # `gates/logs/<门名>.log`（不进仓库），**并且**当场印尾部若干行 —— 红的时候立刻能看到原因。
-    failed = proc.returncode not in (0, 3)
+    failed = exit_code not in (0, 3)
     if out:
         try:
             LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -856,11 +994,13 @@ def finish_gate(name: str, proc: subprocess.Popen[str], t0: float) -> dict[str, 
         except OSError:  # 写不了日志不该把门禁也带走
             pass
     with PRINT_LOCK:
-        tag = f"{name:<22} exit={proc.returncode}  {item['seconds']}s"
+        tag = f"{name:<22} exit={exit_code}  {item['seconds']}s"
         if item.get("status") == "NOT RUN":
             print(f"[SKIP] {tag}  （起不了真浏览器）")
+        elif timed_out:
+            print(f"[FAIL] {tag}  ★ {item['summary']}")
         else:
-            mark = "[OK ]" if proc.returncode == 0 else "[FAIL]"
+            mark = "[OK ]" if exit_code == 0 else "[FAIL]"
             print(f"{mark} {tag}  {item['summary']}")
         if failed and out:
             tail = [ln.rstrip() for ln in out.splitlines() if ln.strip()][-12:]
@@ -896,6 +1036,17 @@ def skip_reused(name: str, records: dict[str, dict[str, str]], no_reuse: bool) -
         return None
     current = input_hash(REUSE_INPUTS[name])
     return current if record.get("hash") == current else None
+
+
+def gates_ok(results: list[dict[str, object]]) -> bool:
+    """整趟是否通过：**所有阻断门**都 `exit_code == 0`。
+
+    单独抽出来（T-G196）是为了让"一道门被超时掐 → 整趟退非 0"这条**有机器钉子**：
+    `exit_code = 124` 一样落进 `!= 0` → 整趟非 0，超时**不会被别的门的通过吞掉**。
+    `blocking=False` 的（NOT RUN 渲染层、信息性门）照旧不计。
+    """
+    blocking = [r for r in results if r.get("blocking", True)]
+    return all(int(str(r["exit_code"])) == 0 for r in blocking)
 
 
 def main() -> int:
@@ -964,6 +1115,14 @@ def main() -> int:
     if not args.fast:
         print(f"=== pytest 跑法：{mode} ===")
 
+    # ★ T-G196 每道门硬超时：整轮只解析一次（到点就掐整棵树，掐完记 124 判红）。
+    timeout = door_timeout()
+    if not args.fast:
+        if timeout is None:
+            print("=== 每道门硬超时：**已关**（TF_GATE_DOOR_TIMEOUT=0）—— 一道卡死会挂死整趟 ===")
+        else:
+            print(f"=== 每道门硬超时：{_fmt_secs(timeout)} 秒（到点掐整棵进程树，记 exit=124）===")
+
     # 复用判定：只对"输入确实是那几样"的真机门做（--quick 里本来就没有真机层，--fast 更不碰）。
     records = load_reuse()
     reused: dict[str, str] = {}
@@ -990,7 +1149,7 @@ def main() -> int:
         for name, cmd in todo:
             proc, t0, why = start_gate(name, cmd)
             results.append(dead_gate(name, t0, why) if proc is None
-                           else finish_gate(name, proc, t0))
+                           else finish_gate(name, proc, t0, timeout))
     else:
         # **两条泳道并行**：轻门一路、真机浏览器一路。
         # ★ 起进程一律在**主线程依次**做（见 start_gate 的注释：多线程同时 Popen 在 Windows 上
@@ -1015,14 +1174,14 @@ def main() -> int:
             for name, cmd in heavy:           # 浏览器层串行：render 完了再 ui_flow
                 proc, t0, why = start_gate(name, cmd)
                 out.append(dead_gate(name, t0, why) if proc is None
-                           else finish_gate(name, proc, t0))
+                           else finish_gate(name, proc, t0, timeout))
             return out
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             heavy_future = pool.submit(run_heavy_serial)
             light_futures = [
                 pool.submit(dead_gate, n, t0, why) if proc is None
-                else pool.submit(finish_gate, n, proc, t0)
+                else pool.submit(finish_gate, n, proc, t0, timeout)
                 for n, proc, t0, why in started_light
             ]
             results = heavy_future.result() + [f.result() for f in light_futures]
@@ -1072,7 +1231,7 @@ def main() -> int:
               f"{summary}（不阻断）")
 
     blocking = [r for r in results if r.get("blocking", True)]
-    ok = all(int(str(r["exit_code"])) == 0 for r in blocking)
+    ok = gates_ok(results)
     if not args.fast:
         ok = ok and ok_docs
     passed = [r for r in blocking if int(str(r["exit_code"])) == 0]
