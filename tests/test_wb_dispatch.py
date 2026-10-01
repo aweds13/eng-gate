@@ -168,11 +168,11 @@ def test_port_preflight_passes_when_segment_free(sandbox: Path, monkeypatch) -> 
 
 
 def test_main_refuses_when_env_segment_busy(sandbox: Path, monkeypatch, capsys) -> None:
-    """走完整 main：`TF_GATE_PORT_BASE` 给的段内有占用 → 拒派（退 2）并点名。"""
+    """走完整 main：`TF_DISPATCH_PORT_BASE` 给的段内有占用 → 拒派（退 2）并点名。"""
     import tf_portcheck
     monkeypatch.setattr(tf_portcheck, "busy_ports",
                         lambda: {9197: "pid=1 vivoesService_x64.exe"})
-    monkeypatch.setenv("TF_GATE_PORT_BASE", "9191")
+    monkeypatch.setenv("TF_DISPATCH_PORT_BASE", "9191")
     monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
                                       "--no-preflight"])
     assert wd.main() == 2
@@ -181,8 +181,17 @@ def test_main_refuses_when_env_segment_busy(sandbox: Path, monkeypatch, capsys) 
 
 
 def test_main_skips_port_check_without_segment(sandbox: Path, monkeypatch, capsys) -> None:
-    """走完整 main：没给端口段 → 跳过体检（打印一行），照常 dry-run 通过。"""
-    monkeypatch.delenv("TF_GATE_PORT_BASE", raising=False)
+    """走完整 main：没给端口段 → 跳过体检（打印一行），照常 dry-run 通过。
+
+    ★ T-G195：这里**故意**把 `TF_GATE_PORT_BASE` 设成一个"段内有占用"的值 ——
+    它是**门禁自己**的端口段（`run_gates.py` 会把它设进每一道门的子进程，含 pytest），
+    派活器**绝不能**拿它当自己的端口段，否则门禁内部一起服务就"拒派"，24 条用例全红。
+    """
+    import tf_portcheck
+    monkeypatch.setattr(tf_portcheck, "busy_ports",
+                        lambda: {9197: "pid=1 vivoesService_x64.exe"})
+    monkeypatch.setenv("TF_GATE_PORT_BASE", "9191")          # ← 门禁那个：必须被无视
+    monkeypatch.delenv("TF_DISPATCH_PORT_BASE", raising=False)
     monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
                                       "--no-preflight"])
     assert wd.main() == 0
@@ -1904,3 +1913,23 @@ def test_epoch_four_shapes_are_deterministic_and_never_raise() -> None:
     assert wd._epoch("2026-13-99T99:00:00Z") is None, "越界字段 → None，不许抛"
     assert wd._epoch("") is None and wd._epoch(None) is None and wd._epoch(12345) is None
     assert wd._epoch("  2026-09-26T10:00:00Z  ") is not None, "首尾空白要容住"
+
+
+def test_port_bases_come_from_the_dispatch_var_not_the_gate_one(monkeypatch) -> None:
+    """★ T-G195：端口段**只认 `TF_DISPATCH_PORT_BASE`，绝不认 `TF_GATE_PORT_BASE`**。
+
+    为什么（真回归）：`TF_GATE_PORT_BASE` 是**门禁自己**的端口段，`run_gates.py` 会把它设进
+    **每一道门**的子进程环境（**含 pytest**）。读了它，门禁内一旦真有门起了服务
+    （`render`/`ui_flow`/`lf1_live`/`web_live` 在 `BASE..BASE+16` 上听），`preflight()` 就会
+    把「门禁自己的服务」当成「段被占」→ 拒派 → 本文件 24 条用例全红（2026-10-01 实测）。
+    """
+    monkeypatch.setenv("TF_GATE_PORT_BASE", "9034")        # 门禁会设的那个：不许当自己的
+    monkeypatch.delenv("TF_DISPATCH_PORT_BASE", raising=False)
+    assert wd._resolve_port_bases(None) == []
+
+    monkeypatch.setenv("TF_DISPATCH_PORT_BASE", "9034, 9074")
+    assert wd._resolve_port_bases(None) == [9034, 9074]
+    assert wd._resolve_port_bases([8080]) == [8080]       # CLI 优先
+
+    monkeypatch.setenv("TF_DISPATCH_PORT_BASE", "不是数字")
+    assert wd._resolve_port_bases(None) is None           # 给错要当场说，不静默

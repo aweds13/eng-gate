@@ -11,7 +11,7 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
   ② `git status --porcelain -uno` 必须**空**（未跟踪文件不算，那两个是别的窗口放的）；
   ③ 轻量登录自检（真发一条极短请求，认出 `Authentication required`）；
   ④ `gates/diag/wb-<卡号>.jsonl` 不存在（要覆盖得显式 `--force`，证据不许被悄悄盖掉）。
-  ⑤ ★ 卡 095：**端口段体检**（铁律 37）—— 给了端口段（`--port-base` 或 `TF_GATE_PORT_BASE`）
+  ⑤ ★ 卡 095：**端口段体检**（铁律 37）—— 给了端口段（`--port-base` 或 `TF_DISPATCH_PORT_BASE`）
      且段内有占用 → 拒派并点名占用者；**没给段 → 跳过**（不检查也不假装检查，不许自动换段）。
 
 用法（默认 **dry-run**：只打印将要执行的命令，不派活）：
@@ -1419,6 +1419,28 @@ def _outside_allow(dirty: list[str], allow: list[str]) -> list[str]:
     return out
 
 
+def _resolve_port_bases(cli: list[int] | None) -> list[int] | None:
+    """端口段来源：`--port-base`（可多次）**优先**；没给则读 **`TF_DISPATCH_PORT_BASE`**。
+
+    ★★ 卡 195（T-G195，真回归）：**绝不读 `TF_GATE_PORT_BASE`** —— 那是**门禁自己**的端口段，
+    `run_gates.py` 会把它设进**每一道门**的子进程环境里（**包括 pytest**）。读了它就会在门禁内部
+    把"门禁自己的服务正在 `BASE..BASE+16` 上听"误判成"段被占"→ **拒派** → 门内 24 条用例全红
+    （2026-10-01 卡 098 那趟实测）。
+    返回 `None` = 给的值不是整数（调用方打印原因并退 2）；返回 `[]` = 没给（如实跳过体检）。
+    """
+    bases = [int(x) for x in (cli or [])]
+    if bases:
+        return bases
+    raw = os.environ.get("TF_DISPATCH_PORT_BASE", "").strip()
+    if not raw:
+        return []
+    try:
+        return [int(tok) for tok in re.split(r"[,\s]+", raw) if tok]
+    except ValueError:
+        print(f"[FAIL] TF_DISPATCH_PORT_BASE 不是整数端口段：{raw!r}", file=sys.stderr, flush=True)
+        return None
+
+
 def port_preflight(port_bases: list[int] | None) -> list[str]:
     """端口段体检（铁律 37）—— 段内有占用就**拒派**；没给段就如实跳过。
 
@@ -1534,7 +1556,8 @@ def main() -> int:
     parser.add_argument("--allow", action="append", default=None,
                         help="该卡的白名单 glob（续跑时脏文件越界告警用；可多次给）")
     parser.add_argument("--port-base", action="append", type=int, default=None,
-                        help="端口段起点（可多次给）；不给则读环境变量 TF_GATE_PORT_BASE。"
+                        help="端口段起点（可多次给）；不给则读环境变量 "
+                             "TF_DISPATCH_PORT_BASE（★ 不是门禁那个）。"
                              "段内有占用 → 拒派（铁律 37）；都没给 → 跳过端口体检")
     parser.add_argument("--quota-wait", type=int, default=DEFAULT_QUOTA_WAIT,
                         help=f"撞 429 先等几秒再探（默认 {DEFAULT_QUOTA_WAIT}；用户 2026-09-26："
@@ -1572,18 +1595,9 @@ def main() -> int:
         if not resume_sid:
             print(f"[FAIL] --resume auto 但没找到会话文件：{side}", file=sys.stderr)
             return 2
-    # ★ 卡 095：端口段来源 —— `--port-base`（可多次）优先；没给则读 TF_GATE_PORT_BASE
-    #   （逗号/空白分隔）。都没给 → port_bases 为空 → 前置检查里如实跳过端口体检。
-    port_bases = list(args.port_base or [])
-    if not port_bases:
-        raw = os.environ.get("TF_GATE_PORT_BASE", "").strip()
-        if raw:
-            try:
-                port_bases = [int(tok) for tok in re.split(r"[,\s]+", raw) if tok]
-            except ValueError:
-                print(f"[FAIL] TF_GATE_PORT_BASE 不是整数端口段：{raw!r}", file=sys.stderr,
-                      flush=True)
-                return 2
+    port_bases = _resolve_port_bases(args.port_base)
+    if port_bases is None:
+        return 2
     problems, log = preflight(
         args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
         cli_override=args.cli, resuming=bool(resume_sid), allow=args.allow,

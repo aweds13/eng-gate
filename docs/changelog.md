@@ -1,3 +1,17 @@
+## 2026-10-01 —— 端口体检误读门禁自己的端口段：改用专用变量 `TF_DISPATCH_PORT_BASE`（T-G195 / 卡 095 补正）
+
+- 症状（**真回归**，门禁当场抓到）：落卡 098 那趟 `pytest` 门 **24 failed / 1629 passed**，失败原话
+  `判决：前置检查没过 → 没派活` —— 全是 `tests/test_wb_dispatch.py` 的用例。
+- 真因：卡 095 把端口段来源写成「`--port-base` 优先，否则读 **`TF_GATE_PORT_BASE`**」，
+  而那是**门禁自己**的端口段，`run_gates.py` 会把它设进**每一道门**的子进程环境（**含 pytest**）。
+  同一趟门禁里只要真有门起了服务（`render`/`ui_flow`/`lf1_live`/`web_live` 在 `BASE..BASE+16` 上听），
+  门内 `preflight()` 就把「门禁自己的服务」当成「段被占」→ 拒派 → 24 条用例全红。
+- ★ 为什么 095 自己那趟没红：095 只动 `tools/**`+`tests/**`，`src/**` 没变 ⇒ 5 道真机门**全命中复用**、
+  一个服务都没起 ⇒ 段是空的 ⇒ **侥幸全过**（「复用掩盖失败」的又一例：**真机门真跑的那趟才暴露**）。
+- 修法：端口段改用**专用变量 `TF_DISPATCH_PORT_BASE`**（`--port-base` 仍优先），**绝不读门禁那个**；
+  解析抽成 `_resolve_port_bases()`；两条用例改用专用变量，并钉住「门禁那个变量必须被无视」。
+- 先红后绿（段 9034 上真放监听者）：`TF_GATE_PORT_BASE=9034` → **0 failed**（打印"跳过端口体检"）；
+  `TF_DISPATCH_PORT_BASE=9034` → **大量 failed**（体检还活着）；修前的 24 failed 在 `.wt/pc1/gates/logs/pytest.log`。
 ## 2026-10-01 —— 机器替代 ⑤：提交流程七步收成一条命令（带硬闸门 + dry-run + --step）（T-G192 / 卡 097）
 
 - 新增 **`tools/tf_commit.py`**（432 行）：把「文档件 → sync_counts → 拿门禁锁 → 跑门禁 → seal →
