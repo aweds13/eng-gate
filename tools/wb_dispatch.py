@@ -70,7 +70,6 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import hashlib
 import json
 import locale
@@ -93,6 +92,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（别写第二份）
+
+# ★ 卡 109（T-G206）：白名单越界与产物定位**只有一份真源**，都在 `tools/pool/` 包里。
+#   这里只 import、不再有本地实现（本地副本各删一处）—— 判据漂一次就会越界 / 串卡。
+from pool.jobs import card_artifacts  # noqa: E402 —— 产物定位唯一实现（pool.jobs）
+from pool.review import outside_allow  # noqa: E402 —— 白名单越界唯一实现（pool.review）
 
 # ★ T-G96：Windows 上派活器自己发起的那些 `subprocess` 不加这个，Windows 11 会把控制台程序
 #   转交给**默认终端宿主**（WindowsTerminal.exe -Embedding）→ 任务栏里留下一个**空窗口**、
@@ -500,19 +504,9 @@ def spawn_detached(argv: list[str], log_path: Path) -> int:
     return proc.pid
 
 
-def card_artifacts(diag: Path, card: str, suffix: str) -> list[Path]:
-    """这一张卡自己的产物文件（精确匹配，按 mtime 升序）。
-
-    ★ 卡 029 §2.9（R024 实测挖出的**既有** bug）：宽 glob `wb-<卡>*` 会**串卡** ——
-    `fnmatch("wb-421.jsonl", "wb-42*.jsonl") == True`，卡 42 的 `--status` 可能拿卡 421 的
-    log 来判「收工/告警」。改成精确匹配：卡号后面**只能是** `.jsonl`（或该后缀本身）或
-    `.r<N>` + 后缀（同卡多轮），不许被更长的卡号前缀命中。保留「同卡多轮取最新一轮」的口径。
-    """
-    if not diag.exists():
-        return []
-    pat = re.compile(rf"^wb-{re.escape(card)}(\.r\d+)?{re.escape(suffix)}$")
-    return sorted((p for p in diag.iterdir() if pat.match(p.name)),
-                  key=lambda p: p.stat().st_mtime)
+# ★ 卡 109（T-G206）：`card_artifacts()` 的**唯一实现**在 `pool.jobs`（见顶部 import）——
+#   原先这里的副本已删。别在本地重新长一份：宽 glob `wb-<卡>*` 会**串卡**
+#   （`fnmatch("wb-421.jsonl", "wb-42*.jsonl")`），卡 029 §2.9 实测挖出过。
 
 
 def status_report(card: str) -> str:
@@ -1540,17 +1534,14 @@ def _scene(lines: list[str]) -> str:
             + f"认不出的行 {summary['unknown_events']} 条")
 
 
-def _outside_allow(dirty: list[str], allow: list[str]) -> list[str]:
-    """脏文件里**不在** `--allow` 白名单里的那些（续跑时的串卡告警用）。
+def _porcelain_path(line: str) -> str:
+    """`git status --porcelain` 的一行 → 纯仓库相对路径（posix 风格）。
 
-    porcelain 行形如 `M src/x.py` / `?? file` —— 路径取第 3 列之后；glob 按 posix 风格比。
+    porcelain 行形如 `M src/x.py` / `?? file` / ` M docs/c.md` —— 路径取 `XY ` 三字符之后。
+    ★ 卡 109：越界判据现在走 `pool.review.outside_allow()`（唯一实现），那只吃**纯路径**，
+    所以 porcelain → 纯路径这一步留在**调用点**，不再自己写一份比对逻辑。
     """
-    out: list[str] = []
-    for ln in dirty:
-        rel = (ln[3:].strip() if len(ln) > 3 else ln).replace("\\", "/")
-        if not any(fnmatch.fnmatch(rel, pat) for pat in allow):
-            out.append(ln)
-    return out
+    return (line[3:].strip() if len(line) > 3 else line).replace("\\", "/")
 
 
 # ---------------------------------------------------------------- 内存闸（卡 102 / T-G198）
@@ -1741,10 +1732,15 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
         print(f"★ 续跑：工作区带着 {len(dirty)} 个未提交改动（上一轮的活），继续",
               file=sys.stderr, flush=True)
         if allow:
-            outside = _outside_allow(dirty, allow)
+            # ★ 卡 109：判据走唯一实现 `pool.review.outside_allow()`（只吃纯路径）——
+            #   porcelain → 纯路径的还原留在这里；打出来的仍是 porcelain 原文。
+            rel_paths = [_porcelain_path(ln) for ln in dirty]
+            outside = outside_allow(rel_paths, allow)
             if outside:
+                outside_lines = [ln for ln, p in zip(dirty, rel_paths, strict=False)
+                                 if p in outside]
                 print(f"  [★告警] {len(outside)} 个脏文件不在 --allow 白名单里"
-                      f"（可能是别的卡串了树）：{', '.join(outside[:5])}",
+                      f"（可能是别的卡串了树）：{', '.join(outside_lines[:5])}",
                       file=sys.stderr, flush=True)
     if log.exists() and not force:
         problems.append(f"这一轮的 log 已存在：{log}（要覆盖请 --force —— 证据不许被悄悄盖掉）")

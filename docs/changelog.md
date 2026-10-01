@@ -1,3 +1,18 @@
+## 2026-10-02 —— 号池去重收口：`wb_dispatch` / `tf_stage_guard` 里剩下的三处副本（T-G206 / 卡 109）
+
+- 病：卡 106 说"白名单越界**三处**收敛成**一处**"，实际只有 `wb_review.py` 改了 —— `wb_dispatch._outside_allow`、
+  `wb_dispatch.card_artifacts`、`tf_stage_guard.outside_allow` 三处副本还在（`pool/jobs.py` 自己写着"口径照抄 wb_dispatch"）。
+- 做法：三处**全删 → import 唯一实现**（`pool.review.outside_allow` / `pool.jobs.card_artifacts`）；
+  `_outside_allow` 原来吃 porcelain 行 ⇒ 新加 `_porcelain_path()` 还原纯路径，**打出来的仍是 porcelain 原文**；
+  `tf_stage_guard` 顺手删掉不再用的 `import fnmatch`。
+- ★ 本卡重点是**不许再长回来**：`tests/test_wb_dispatch.py` **+2 条结构判据**（三个函数必须是**同一个对象** +
+  用 `ast` 断言两份工具文件里不再有同名 `def`），并给了"故意加回去 ⇒ 测试变红"的**真证据**。
+- 验收：`test_wb_dispatch.py` **128 passed**（原 126 例判据一字未改）· 全量 **1722 passed**（= 基线 1720 + 2，93.74%）
+  · ruff 全过 · **无循环 import** · 脚本态行为与改前一致。
+- ★ 留白与裁定：`tests/test_pool_lib.py` **不在卡的域里**（必改 3 行、判据未动）⇒ **主控追认并补进白名单**
+  （是我**写卡时漏了域**）；切片那条"没找到白名单小节就停工"的样板话**两张卡都误报** ⇒ 记一笔待修 `wb_brief.py`。
+- ★ 待用户拍板：`MODEL_WHITELIST` 与 `pool.models` 两个白名单真源要统一，得先定五件事 ——
+  号池缺失怎么办 / 快照过期算不算过 / 口径是交还是并 / 默认与替补怎么表达 / **改名单的权限归谁**。
 ## 2026-10-02 —— 号池写面①：作业登记（谁占了哪棵树）+ 三条守卫（T-G205 / 卡 108）
 
 - 病：**没有任何地方记着**谁占了哪棵树 / 哪个冲突域 ⇒ 两个窗口能同时派进同一棵树

@@ -236,13 +236,19 @@ def test_wb_review_check_files_uses_the_library() -> None:
 
 
 def _porcelain_paths(lines: list[str]) -> list[str]:
-    """把 `wb_dispatch._outside_allow` 回吐的 porcelain 行还原成纯路径。"""
+    """porcelain 行（`XY path`）→ 纯仓库相对路径（posix 风格）。
+
+    ★ 卡 109：`outside_allow` 的唯一实现只吃**纯路径**，porcelain → 纯路径的还原在调用点做
+    （`wb_dispatch._porcelain_path()` 与这里同一口径）。
+    """
     return [(ln[3:].strip() if len(ln) > 3 else ln).replace("\\", "/") for ln in lines]
 
 
 def test_whitelist_three_entries_agree_including_chinese() -> None:
-    """三处入口（`pool.review` / `tf_stage_guard` / `wb_dispatch._outside_allow`）对同一组
-    暂存/脏文件给出**同一个**越界清单 —— 含**中文路径**（曾经被 git 八进制转义坑过）。"""
+    """三处入口（`pool.review` / `tf_stage_guard` / `wb_dispatch`）对同一组暂存/脏文件给出
+    **同一个**越界清单 —— 含**中文路径**（曾经被 git 八进制转义坑过）。
+
+    ★ 卡 109 起三处是**同一个对象**（`outside_allow` 只有 `pool.review` 一份实现）。"""
     paths = ["tools/pool/plan.py", "复盘/中文卡.md", "src/越界的.py"]
     allow = ["tools/**", "复盘/中文卡.md"]
     expected = ["src/越界的.py"]
@@ -250,5 +256,5 @@ def test_whitelist_three_entries_agree_including_chinese() -> None:
     review_outside = review.outside_allow(paths, allow)
     stage_outside = tf_stage_guard.outside_allow(paths, allow)
     dirty = [f" M {p}" for p in paths]   # 真 porcelain：`XY ` 三字符前缀
-    dispatch_outside = _porcelain_paths(wb_dispatch._outside_allow(dirty, allow))
+    dispatch_outside = wb_dispatch.outside_allow(_porcelain_paths(dirty), allow)
     assert review_outside == stage_outside == dispatch_outside == expected

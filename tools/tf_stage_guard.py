@@ -21,12 +21,16 @@
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+
+# ★ 卡 109（T-G206）：`outside_allow` 的**唯一实现**在 `pool.review` —— 这里只 import，
+#   不再有本地 `def`（本仓最忌"两份真源"：判据漂一次，越界就漏了）。
+from pool.review import outside_allow  # noqa: E402 —— 同一个目录下的包（tools/pool）
 
 
 def staged_paths(root: Path = ROOT) -> list[str]:
@@ -37,17 +41,6 @@ def staged_paths(root: Path = ROOT) -> list[str]:
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or "git diff --cached 失败")
     return [ln for ln in proc.stdout.splitlines() if ln.strip()]
-
-
-def outside_allow(staged: list[str], allow: list[str]) -> list[str]:
-    """暂存区里**不在**允许列表（fnmatch）里的路径 —— 越界项，顺序保持原样。"""
-    allow = [a.replace("\\", "/") for a in allow]
-    out: list[str] = []
-    for path in staged:
-        rel = path.replace("\\", "/")
-        if not any(fnmatch.fnmatch(rel, pat) for pat in allow):
-            out.append(path)
-    return out
 
 
 def load_allow_file(path: str) -> list[str]:

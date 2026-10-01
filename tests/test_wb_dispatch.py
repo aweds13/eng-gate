@@ -2138,3 +2138,50 @@ def test_brief_first_line_hardens_the_worker_cwd(tmp_path: Path) -> None:
     # 反例：不给 --cwd → 第一行仍是老的表头（逐字不变）
     plain = wb.build(card="001", spec="", master=False)
     assert plain.splitlines()[0].startswith("# 开工切片")
+
+
+# ================================================ 卡 109（T-G206）：两份真源钉死成一份
+#
+# ★ 为什么放这里（本卡让在 `tests/test_wb_dispatch.py` 末尾与新建 `tests/test_pool_dedup.py`
+#   之间二选一）：候选理由——① 本文件已经在测 `wb_dispatch` 的**行为**，而这条判据测的是
+#   `wb_dispatch` 里那两个函数的**来路**（结构），同文件里"行为 + 结构"一起看最省事；
+#   ② **不新造文件名** —— 卡 108 正在同一片区域（`tools/pool/**`）加文件，新文件名有撞名风险。
+#   （`test_pool_lib.py` 里已有的"三处入口结论一致"是**行为**判据，与本卡的**结构**判据互补。）
+
+_POOL_DEDUP_FILES = ("wb_dispatch.py", "tf_stage_guard.py")
+_POOL_DEDUP_NAMES = frozenset({"_outside_allow", "card_artifacts", "outside_allow"})
+
+
+def test_dedup_outside_allow_and_card_artifacts_are_the_same_object() -> None:
+    """★ 卡 109：判据是**同一个对象**，不是"长得像"。
+
+    为什么值当测：卡 106 把"三处副本"收敛进 `tools/pool/`，但只改了 `wb_review.py` ——
+    `wb_dispatch._outside_allow` / `wb_dispatch.card_artifacts` / `tf_stage_guard.outside_allow`
+    三处**副本还在**（正是本仓最忌的"两份真源"：判据一漂，白名单就越界、产物就串卡）。
+    删副本不够 —— 得钉死"同一个对象"，否则换个窗口又会各写一份。
+    """
+    import pool.jobs
+    import pool.review
+    import tf_stage_guard
+
+    assert wd.outside_allow is pool.review.outside_allow, "越界判据必须与 pool.review 是同一个对象"
+    assert tf_stage_guard.outside_allow is pool.review.outside_allow, \
+        "tf_stage_guard 只许 `from … import`，不许另有一份"
+    assert wd.card_artifacts is pool.jobs.card_artifacts, "产物定位必须与 pool.jobs 是同一个对象"
+
+
+def test_dedup_no_local_defs_of_those_names_in_tools() -> None:
+    """★ 卡 109：源码里**不许再出现**那些名字的 `def`（`from … import` 可以，`def` 不行）。
+
+    为什么值当测：`is` 那条只能证明**现在**是同一个对象 —— 有人在文件下面再 `def` 一份，
+    名字被后定义的顶掉，判据当场分叉。这条把病灶**直接点在源码上**（AST），
+    顺手也管住 `tf_stage_guard.py`（它只该 import）。
+    """
+    import ast
+
+    for name in _POOL_DEDUP_FILES:
+        src = (ROOT / "tools" / name).read_text(encoding="utf-8")
+        defs = {n.name for n in ast.walk(ast.parse(src))
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        offenders = defs & _POOL_DEDUP_NAMES
+        assert not offenders, f"{name} 里又长出了本地 def：{sorted(offenders)}"
