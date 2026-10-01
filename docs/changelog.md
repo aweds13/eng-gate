@@ -1,3 +1,15 @@
+## 2026-10-01 —— 自证⑤ 的快照别管门禁产物：`git status` 全文前后比 → 只比「已跟踪 ∧ 非 gates/」（T-G194）
+
+- 症状（满载实测第三次假红）：`pytest` 门挂 `test_dark_teeth.py::test_5_self_proof_never_touches_the_repo`，
+  而消息里**差集是空的**（`自证让工作区多出文件：[]`）—— 断言失败却是"少了"而不是"多了"。
+- 真因：那条自证要证的是「**变异实验没动仓库里的真文件**」（五种暗色变异都落 `tmp_path`），
+  却拿 `git status --porcelain` **全文**做前后快照 —— 那是**全局可变视图**：两次快照之间 `gates/**`
+  （**门禁自己的产物**：`last.json` / `reuse.json`，一轮跑动中本来就在被改）与**未跟踪残留**（`data/` 之类）会变。
+- 修法：`_git_status()` 只看「**已跟踪 ∧ 不在 `gates/` 下**」的改动（`--untracked-files=no` + 排 `gates/`），
+  断言消息**两侧都报**（`多了 …；少了 …`）—— 原来的文案只报"多了"，正是它把真因藏住。
+- 钉子：新增 `test_6_the_status_snapshot_ignores_gate_artifacts_and_untracked`（快照里不许有 `gates/`、不许有 `??`）。
+- 验收：`pytest tests/test_dark_teeth.py -q --no-cov` → **9 passed**；ruff 全过。
+- ★ 同族待办（未做，如实记）：`run_gates.py` **每道门没有超时** —— 同一天 `ui_flow` 真卡死过 **56 分钟**。
 ## 2026-10-01 —— 门禁的 `pytest` 子进程漏了 `-X utf8`：中文名 TOML 让预检在 GBK 下崩（T-G189 / 卡 096）
 
 - 症状：`3540f4c` 上跑全量门禁，**pytest 门必红**（两趟都红，不是偶发）：`test_real_ledger_passes_the_preflight`

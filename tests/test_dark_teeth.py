@@ -124,15 +124,31 @@ def _existence_layer_catches(tmp_path: Path, css: str) -> bool:
 
 
 def _git_status() -> set[str]:
+    """★ T-G194：只看**已跟踪、且不在 `gates/` 下**的改动。
+
+    为什么不是「`git status --porcelain` 全文」：这一层要证的是「**变异实验没动仓库里的真文件**」，
+    而 `git status` 是个**全局可变视图** —— 满载并行跑门禁时，`gates/**`（门禁自己的产物：
+    `gates/last.json` / `gates/reuse.json`）与工作区里的**未跟踪残留**（`data/` 之类）会在
+    **两次快照之间**变来变去，于是这条断言以「**差集是空的**」这种说不出道理的方式假红
+    （实测 2026-10-01：断言失败但 `after - before == []`，即"少了"而不是"多了"）。
+    """
     proc = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "status", "--porcelain", "--untracked-files=no"],
         cwd=ROOT,
         capture_output=True,
         text=True,
         encoding="utf-8",
         check=True,
     )
-    return {line for line in proc.stdout.splitlines() if line.strip()}
+    out = set()
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].strip().strip('"')          # porcelain 是「XY <path>」
+        if path.startswith("gates/"):
+            continue
+        out.add(line)
+    return out
 
 
 # ---------------------------------------------------------------- 自证①：不恒真（基线）
@@ -281,5 +297,18 @@ def test_5_self_proof_never_touches_the_repo(tmp_path) -> None:  # type: ignore[
     assert hashlib.sha256(ca.CSS.read_bytes()).hexdigest() == before_hash, "自证改了真 app.css！"
     after_status = _git_status()
     assert after_status == before_status, (
-        f"自证让工作区多出文件：{sorted(after_status - before_status)}"
+        "自证动了工作区（只看已跟踪、非 gates/ 的改动）："
+        f"多了 {sorted(after_status - before_status)}；"
+        f"少了 {sorted(before_status - after_status)}"
     )
+
+
+def test_6_the_status_snapshot_ignores_gate_artifacts_and_untracked() -> None:
+    """★ T-G194：快照口径本身要有钉子 —— 不许把 `gates/**` 与 `??`（未跟踪）算进来。
+
+    这条是**反空转**：口径一旦被改回“全文 `git status`”，下面两条断言会当场红
+    （本仓 `gates/last.json` / `gates/reuse.json` 在门禁跑动中本来就被改着）。
+    """
+    snap = _git_status()
+    assert all("gates/" not in ln for ln in snap), f"快照里混进了门禁产物：{snap}"
+    assert all(not ln.startswith("??") for ln in snap), f"快照里混进了未跟踪文件：{snap}"
