@@ -15,11 +15,10 @@ config.toml
 # Obsidian 本地库配置
 .obsidian/
 
-# 本地数据 + 备份
-data/*.db
-data/*.db-*
-data/*.db.bak-*
-data/*.png
+# 本地数据 + 备份（★ 整目录忽略：`data/` 里**一个被跟踪的文件都没有**）
+# 为什么不再一条条列：窄规则总会漏下一种命名 —— 实测 `data/timeflow.db.before-acceptance`
+# 既不匹配 `data/*.db-*`（那是 `.db-xxx`）也不匹配别的 ⇒ `git status` 一直挂着 `?? data/`。
+data/
 backups/
 *.sqlite3
 *.db-journal
