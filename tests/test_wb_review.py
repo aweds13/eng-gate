@@ -159,3 +159,152 @@ def test_chinese_paths_are_not_escaped(tmp_path: Path, monkeypatch) -> None:
     names = wr.git("show", "--name-only", "--format=", "HEAD").splitlines()
     assert "复盘/中文.md" in names, f"wr.git() 应当原样给出中文路径：{names}"
     assert not [n for n in names if n.startswith('"')], f"有被转义的路径：{names}"
+
+
+# ------------------------------------------------------------------ ⑥ 实际改动 vs 权威域
+#
+# 治 GLM 审查「三.1」（卡 131 · T-G228）：栅栏的域检查吃的是"交申请一方自己填的清单"，
+# 卡树里**真的改了什么**从不参与判断 ⇒ 越界只要不自报就全绿。本档拿"卡树实际改动"
+# （`git status --porcelain -uall --no-renames`，含未跟踪）与"权威域"（栅栏预声明优先、
+# 队列次之；两个都查不到就拒）比对，域外即拒、逐个点名。
+
+
+def _run_git(repo: Path, *args: str) -> str:
+    done = subprocess.run(
+        ["git", *args], cwd=str(repo), capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
+    assert done.returncode == 0, done.stderr
+    return done.stdout
+
+
+def _card_repo(tmp_path: Path, paths: list[str] | None = None) -> Path:
+    """造一棵卡树：一个真 git 仓库 + 一份栅栏预声明（域默认 `src/**`）。
+
+    ★ 预声明目录按本仓口径忽略（`.gitignore` 里 `gates/diag/*`），否则它自己会进 `git status`
+      被当成"域外改动"，把每条钉子污染成假红（夹具自己踩过一次）。
+    """
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "docs").mkdir()
+    (repo / "src" / "a.py").write_text("a\n", encoding="utf-8")
+    (repo / "docs" / "x.md").write_text("x\n", encoding="utf-8")
+    _run_git(repo, "init", "-q", "-b", "main")
+    _run_git(repo, "config", "user.email", "t@local")
+    _run_git(repo, "config", "user.name", "t")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "seed")
+    (repo / ".git" / "info" / "exclude").write_text("gates/diag/\n", encoding="utf-8")
+    batch = repo / "gates" / "diag" / "batch"
+    batch.mkdir(parents=True)
+    dom = json.dumps(paths or ["src/**"])
+    (batch / "B-X.toml").write_text(
+        f'id = "B-X"\nwhy = "夹具"\n\n[[member]]\nid = "M-1"\nlayer = "门禁层"\n'
+        f'what = "x"\npaths = {dom}\n',
+        encoding="utf-8",
+    )
+    return repo
+
+
+def test_changed_paths_reads_porcelain_including_untracked() -> None:
+    """零件层：porcelain 原文 → 路径集合（含 `??` 未跟踪，`-z` 不用、箭头也认）。"""
+    text = " M docs/x.md\n?? docs/new.md\nD  src/gone.py\n"
+    assert wr.changed_paths(text) == ["docs/x.md", "docs/new.md", "src/gone.py"]
+
+
+def test_domain_of_manifest_text_reads_member_paths() -> None:
+    """零件层：从预声明 TOML 原文取某成员的 `paths`；没有这个成员 → `None`（不是空域）。"""
+    text = 'id = "B"\n[[member]]\nid = "M-1"\npaths = ["a/**", "b.py"]\n'
+    assert wr.domain_of_manifest_text(text, "M-1") == ["a/**", "b.py"]
+    assert wr.domain_of_manifest_text(text, "M-2") is None
+
+
+def test_actual_change_outside_domain_is_refused(
+    tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    """① ★★ 自报清单里没有、但树里真改了 ⇒ 必须拒并点名（域 `src/**`，真改的是 `docs/x.md`）。"""
+    repo = _card_repo(tmp_path)
+    (repo / "docs" / "x.md").write_text("改了\n", encoding="utf-8")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    rc = wr.main(["--card", "M-1", "--task", "B-X", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert data["outside"] == ["docs/x.md"]
+    assert any("docs/x.md" in p for p in data["problems"])
+
+
+def test_actual_change_inside_domain_passes(
+    tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    """② 域内改动 ⇒ 过（别误伤）。"""
+    repo = _card_repo(tmp_path)
+    (repo / "src" / "a.py").write_text("改了\n", encoding="utf-8")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    rc = wr.main(["--card", "M-1", "--task", "B-X"])
+    assert rc == 0, capsys.readouterr().out
+
+
+def test_untracked_new_file_counts(tmp_path: Path, monkeypatch, capsys) -> None:
+    """③ 未跟踪的新文件（`??`）**也要算**：域外新建 ⇒ 拒；域内新建 ⇒ 过。"""
+    repo = _card_repo(tmp_path)
+    (repo / "docs" / "new.md").write_text("新\n", encoding="utf-8")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    rc = wr.main(["--card", "M-1", "--task", "B-X", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert "docs/new.md" in data["outside"]
+
+    (repo / "docs" / "new.md").unlink()
+    (repo / "src" / "new.py").write_text("新\n", encoding="utf-8")
+    rc2 = wr.main(["--card", "M-1", "--task", "B-X"])
+    assert rc2 == 0, capsys.readouterr().out
+
+
+def test_waive_exempts_and_records(tmp_path: Path, monkeypatch, capsys) -> None:
+    """④ 豁免留痕：`--waive <域外文件>` ⇒ 放行，输出有"豁免"行、`--json` 有字段。"""
+    repo = _card_repo(tmp_path)
+    (repo / "docs" / "x.md").write_text("改了\n", encoding="utf-8")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    rc = wr.main(["--card", "M-1", "--task", "B-X", "--waive", "docs/x.md"])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "豁免" in out
+    rc2 = wr.main(["--card", "M-1", "--task", "B-X", "--waive", "docs/x.md", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert rc2 == 0
+    assert data["waived"] == ["docs/x.md"] and data["outside"] == []
+
+
+def test_missing_authoritative_domain_is_refused(
+    tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    """⑤ 权威域查不到（既不在预声明、也不在队列）⇒ 拒 —— 别猜空域（空域骗过一切守卫）。"""
+    repo = _card_repo(tmp_path)
+    (repo / "src" / "a.py").write_text("改了\n", encoding="utf-8")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    rc = wr.main(["--card", "卡不存在", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert any("查不到" in p for p in data["problems"])
+
+
+def test_hand_typed_allow_is_disclosed(tmp_path: Path, monkeypatch, capsys) -> None:
+    """⑥ 没有权威域而给了 `--allow` ⇒ 输出里必须有"手打白名单"那一行（降级要说出来）。"""
+    repo = _card_repo(tmp_path)
+    (repo / "src" / "a.py").write_text("改了\n", encoding="utf-8")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    rc = wr.main(["--card", "卡不存在", "--allow", "src/**"])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "手打白名单" in out
+
+
+def test_authoritative_domain_beats_hand_typed_allow(
+    tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    """权威域在时，手打 `--allow` **不再能接管** —— 否则就是被审查点名的"手打接力"。"""
+    repo = _card_repo(tmp_path)
+    (repo / "docs" / "x.md").write_text("改了\n", encoding="utf-8")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    rc = wr.main(["--card", "M-1", "--task", "B-X", "--allow", "docs/**"])
+    assert rc == 1, capsys.readouterr().out

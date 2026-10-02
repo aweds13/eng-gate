@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import fnmatch
 
+import tomllib
+
 
 def outside_allow(paths: list[str], allow: list[str]) -> list[str]:
     """`paths` 里**不在**允许列表（fnmatch）里的那些 —— 越界项，顺序保持原样。
@@ -32,3 +34,59 @@ def outside_allow(paths: list[str], allow: list[str]) -> list[str]:
         if not any(fnmatch.fnmatch(rel, pat) for pat in normalized_allow):
             out.append(path)
     return out
+
+
+# ================================================ 实际改动 vs 权威域（卡 131 · T-G228）
+#
+# 治外部审查（GLM-5.3）「三.1」：域检查原先吃的是**交申请一方自己填的清单** —— 卡树里真的改了
+# 什么从不参与判断，于是**真实越界只要不自报就全绿**。下面三个零件给复核侧一条机器判据：
+# 读卡树的**实际改动**、读**权威域**、比出越界。纯函数、无 IO（读文件 / 跑 git 留给调用方）。
+
+
+def changed_paths(status_text: str) -> list[str]:
+    """从 `git status --porcelain -uall --no-renames` 的原文取出改动路径集合（**含未跟踪** `??`）。
+
+    ★ 每行形状 `XY <path>`：状态恰好 2 列 + 1 个空格 ⇒ 取 `line[3:]`。
+    ★ `--no-renames` 让改名拆成"删 + 增"两行、**不出现** `old -> new`；这里仍按箭头右侧兜一下。
+    ★ **不做**引号反转义：本仓取路径一律带 `core.quotepath=false`（中文不做八进制转义）；
+      会触发 git 引号的是控制字符 / 引号本身那类罕见路径 —— 那种路径会原样（带引号）出现，
+      属**已知边界**（本卡不要求）。
+    """
+    out: list[str] = []
+    for line in status_text.splitlines():
+        if len(line) < 4:
+            continue
+        path = line[3:]
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1]
+        if path:
+            out.append(path)
+    return out
+
+
+def domain_of_manifest_text(text: str, member_id: str) -> list[str] | None:
+    """任务预声明 TOML 原文里某成员的 `paths`（＝这张卡的域）；**没有这个成员 → `None`**。
+
+    ★ 直接读预声明原文，**不 import `pool.task`**：栅栏本体的 `batch_dir()` 锚在**主树**
+      （`git rev-parse --git-common-dir`）且会顺手校验 `why` / `layer` 等字段 —— 复核器只要
+      **这一张成员的域**，读原始 TOML 耦合更少（卡 131 只治复核侧，不动栅栏本体）。
+    ★ 返回 `None` 而不是 `[]`：区分"查不到这个成员"与"成员域就是空的" —— **空域会骗过一切守卫**
+      （`guards.py` 模块头专门写了这条），调用方据此**拒单**，绝不当成"没有约束"。
+    """
+    data = tomllib.loads(text)
+    for member in data.get("member") or []:
+        if str(member.get("id", "")) == member_id:
+            return [str(p) for p in (member.get("paths") or [])]
+    return None
+
+
+def outside_domain(paths: list[str], domain: list[str]) -> list[str]:
+    """`paths` 里**不在权威域**里的那些 —— 就是 `outside_allow()`，只换了个语义标签。
+
+    ★ 为什么复用 `outside_allow` 而**不**新写第三套匹配（卡 131 明令"别造第三套语义"）：
+      栅栏那侧（`pool.task.check_domain`）对成员 `paths` 用的就是 `fnmatch`，这里的"域"是
+      **同一份声明** ⇒ 用同一套语义才叫"和权威域比对"。队列那侧的 `files` 是**精确路径且禁通配**
+      （`pool.plan.validate` ⑧），对无通配的模式 `fnmatch` 退化成精确匹配 ⇒ 两种来源都不走样。
+      （`files_intersect` 是**相交**判据，用途不同，不拿它判"在不在域内"。）
+    """
+    return outside_allow(paths, domain)

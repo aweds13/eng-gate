@@ -22,10 +22,26 @@ r"""主控复核器（外包链路的第 ④ 步）：一条命令把"这一笔�
 **分离头指针（detached HEAD）跳过并如实记一行** —— 外包链路的每张卡都在 detached worktree 里
 干活，老判据那一条**永远**为假（见 `check_branch()`）。
 
+★★ 第 ⑥ 档（卡 131 · T-G228，治外部审查 GLM-5.3「三.1」）—— 只有给 `--card` 时才跑：
+
+  ⑥ **实际改动 vs 权威域**：拿**卡树里真的改了什么**（`git status --porcelain -uall --no-renames`，
+     **含未跟踪**）与**权威域**比对，域外即**拒并逐个点名**。「权威域」按序读：① 任务栅栏的
+     预声明（`gates/diag/batch/<任务>.toml` 里该成员的 `paths`）；② 队列 `docs/workbacklog.toml`
+     里该卡的 `files`；**两个都查不到 ⇒ 拒**（空域会骗过一切守卫）。手打的 `--allow` **降级**为
+     「只在没有权威域时才用」、且**用了会打印一行"手打白名单"**（治"手打接力"）；`--waive` 显式
+     豁免并**留痕**（打印 + 进 `--json`）。
+     ★ 老判据的缺口正在这：第 ④ 条只对**自报的**改动列表做 fnmatch（`check_files`），
+     "卡树里真的改了什么"从不参与 —— 现在补上，越界不再靠人手对眼。
+
 用法：
     python -X utf8 tools/wb_review.py --rev HEAD --read-only
     python -X utf8 tools/wb_review.py --rev HEAD --allow "src/**" --allow "tests/**"
     python -X utf8 tools/wb_review.py --rev HEAD --allow "**" --json
+    python -X utf8 tools/wb_review.py --card M-1 --task B-FIX3     # 第 ⑥ 档：真卡树 vs 权威域
+    python -X utf8 tools/wb_review.py --card M-1 --task B-FIX3 --waive 某文件 --json
+
+★ `--card` 模式下**不跑** ②③④⑤ 那几条：它们是"针对某一笔**提交**"的判据，而卡树在被复核时
+  通常**还没提交**（工人不许 commit）；第 ⑥ 档只看**工作区实际改动**，所以是独立的一档。
 
 退出码：0 全过 / 1 有不过的（逐条打印为什么）/ 2 参数或 git 取不到。
 
@@ -42,7 +58,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pool.review import outside_allow
+import tomllib
+from pool.plan import BacklogError, load_backlog
+from pool.review import changed_paths, domain_of_manifest_text, outside_allow, outside_domain
 
 ROOT = Path(__file__).resolve().parent.parent
 TASK_RE = re.compile(r"^Task:\s*(\S+)\s*$", re.M)
@@ -58,6 +76,17 @@ def git(*args: str) -> str:
         text=True, encoding="utf-8", errors="replace",
     )
     return (done.stdout or "").strip()
+
+
+def git_raw(*args: str) -> str:
+    """同 `git()`，但**不 strip 前导空白** —— `--porcelain` 的状态列可能是空格（` M src/a.py`），
+    一 strip 就错位（`changed_paths` 会读到 `rc/a.py` 这种缺一个字符的路径；实测踩到）。
+    只把行尾换行去掉，行首原样。"""
+    done = subprocess.run(
+        ["git", "-c", "core.quotepath=false", *args], cwd=str(ROOT), capture_output=True,
+        text=True, encoding="utf-8", errors="replace",
+    )
+    return (done.stdout or "").rstrip("\r\n")
 
 
 def check_trailers(body: str) -> tuple[list[str], dict[str, str]]:
@@ -164,15 +193,148 @@ def audit_verdict() -> tuple[list[str], str]:
     return problems, ("审计通过 ✅" if wait else "审计**未通过**")
 
 
-def main() -> int:
+def fence_dir() -> Path:
+    """任务预声明目录 `gates/diag/batch/` —— 卡树里没有就回**主树**那一份。
+
+    ★ 预声明住在**主树**（`gates/diag/*` 被 gitignore，不进 worktree）；复核器常在 `.wt/<卡>`
+      的卡树里跑，要能跨回主树。先认本树 `ROOT/gates/diag/batch`（主树自己 / 夹具命中），
+      没有再用 `git rev-parse --git-common-dir` 的父目录拼主树批次目录。
+    """
+    local = ROOT / "gates" / "diag" / "batch"
+    if local.is_dir():
+        return local
+    common = git("rev-parse", "--git-common-dir")
+    if common:
+        base = Path(common)
+        if not base.is_absolute():
+            base = (ROOT / base).resolve()
+        return base.resolve().parent / "gates" / "diag" / "batch"
+    return local
+
+
+def _rel(path: Path) -> str:
+    """尽量给仓库相对路径，给不了（在主树里、不在本树 ROOT 下）就原样。"""
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def resolve_domain(card: str, task: str | None) -> tuple[list[str] | None, str]:
+    """权威域：**优先栅栏预声明**（`gates/diag/batch/<任务>.toml` 该成员的 `paths`），
+    **否则队列**（`docs/workbacklog.toml` 该卡的 `files`）；两个都查不到 → `(None, 原因)`。
+
+    返回 `(域, 来源标签)`：域为 `None` 时第二个元素是**为什么查不到**（直接进拒单理由）。
+    """
+    fdir = fence_dir()
+    if task:
+        path = fdir / f"{task}.toml"
+        if path.exists():
+            got = domain_of_manifest_text(path.read_text(encoding="utf-8"), card)
+            if got is not None:
+                return got, f"栅栏预声明 {_rel(path)}"
+            return None, f"栅栏预声明里没有成员「{card}」：{_rel(path)}"
+        return None, f"没有这个任务的预声明：{_rel(path)}"
+    # 没给任务号：先在栅栏里扫同名成员（命中恰好一个才敢用；多个 = 歧义，拒）
+    hits: list[tuple[Path, list[str]]] = []
+    if fdir.is_dir():
+        for path in sorted(fdir.glob("*.toml")):
+            try:
+                got = domain_of_manifest_text(path.read_text(encoding="utf-8"), card)
+            except (tomllib.TOMLDecodeError, OSError):
+                continue
+            if got is not None:
+                hits.append((path, got))
+    if len(hits) == 1:
+        return hits[0][1], f"栅栏预声明 {_rel(hits[0][0])}"
+    if len(hits) > 1:
+        names = "、".join(_rel(p) for p, _ in hits)
+        return None, f"栅栏里有多个同名成员「{card}」（{names}）—— 请用 `--task` 指定任务号"
+    bpath = ROOT / "docs" / "workbacklog.toml"
+    if bpath.exists():
+        try:
+            backlog = load_backlog(bpath)
+        except BacklogError as exc:
+            return None, f"队列读不了（{exc}），栅栏里也没有「{card}」"
+        found = backlog.by_id().get(card)
+        if found is not None and found.files:
+            return list(found.files), f"队列 {_rel(bpath)}（卡 {card}）"
+    return None, (f"权威域查不到「{card}」：栅栏预声明与队列都没有"
+                  f"（空域会骗过一切守卫，故拒 —— 补声明，或给 `--allow` 并留痕）")
+
+
+def run_card_mode(args: argparse.Namespace) -> int:
+    """第 ⑥ 档：卡树**实际改动** vs **权威域**（本档独立 —— ②③④⑤ 是"针对某笔提交"的判据，
+    卡树未提交时不适用）。"""
+    actual = changed_paths(git_raw("status", "--porcelain", "-uall", "--no-renames"))
+    domain, source = resolve_domain(args.card, args.task)
+    hand_typed = False
+    if domain is None and args.allow:
+        domain = list(args.allow)
+        source = "手打白名单 --allow"
+        hand_typed = True
+
+    want = {w.replace("\\", "/").strip() for w in args.waive}
+    outside: list[str] = []
+    waived: list[str] = []
+    problems: list[str] = []
+    if domain is None:
+        problems.append(f"权威域查不到或读不了（{source}）—— 没有权威域就是拒，不许当成"
+                        f"「没有约束」")
+    else:
+        for path in outside_domain(actual, domain):
+            if path.replace("\\", "/").strip() in want:
+                waived.append(path)
+            else:
+                outside.append(path)
+        for path in outside:
+            problems.append(
+                f"卡树实际改了域外文件：{path}（卡「{args.card}」的域来自 {source}：{domain}）")
+
+    verdict = {
+        "mode": "card", "card": args.card, "task": args.task or "",
+        "domain_source": source, "hand_typed": hand_typed,
+        "domain": domain, "actual": actual, "outside": outside, "waived": waived,
+        "problems": problems,
+    }
+    if args.json:
+        print(json.dumps(verdict, ensure_ascii=False, indent=2))
+        return 0 if not problems else 1
+
+    print(f"=== 卡树实际改动 vs 权威域（卡 {args.card}"
+          + (f" · 任务 {args.task}" if args.task else "") + "）===")
+    print(f"  域来源：{source}")
+    if hand_typed:
+        print("  ★ 这一趟用的是**手打白名单（--allow）**，不是权威域 —— 只在没有权威域时才允许")
+    print(f"  实际改动 {len(actual)} 个：" + ("、".join(actual[:8]) or "（没有改动）"))
+    print("  豁免（留痕）：" + ("、".join(waived) if waived else "（无）"))
+    if problems:
+        print(f"\n[FAIL] {len(problems)} 条不过 —— **有域外改动**：")
+        for item in problems:
+            print(f"  · {item}")
+        return 1
+    print("\n[OK ] 卡树实际改动全部落在权威域内（域外 0 个）")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="主控复核：这一笔提交算不算数")
     parser.add_argument("--rev", default="HEAD", help="要复核的提交（默认 HEAD）")
     parser.add_argument("--read-only", action="store_true", help="只读卡：一个被跟踪文件都不许改")
     parser.add_argument("--allow", action="append", default=[], help="允许改动的 glob（可重复）")
     parser.add_argument("--branch", default=DEFAULT_BRANCH, help="期望所在分支")
     parser.add_argument("--dirty-ok", action="store_true", help="允许工作区有未提交改动")
+    parser.add_argument("--card", help="★ 第 ⑥ 档：卡号 / 栅栏成员号 —— 用它的**权威域**与卡树"
+                                      "实际改动（含未跟踪）比对，域外即拒并点名")
+    parser.add_argument("--task", help="任务号（给栅栏成员定位；不给则先在栅栏里扫同名成员、"
+                                       "再查队列）")
+    parser.add_argument("--waive", action="append", default=[],
+                        help="显式豁免某个域外文件（可重复，留痕：打印 + 进 --json）")
     parser.add_argument("--json", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+
+    if args.card:
+        return run_card_mode(args)
 
     sha = git("rev-parse", "--short", args.rev)
     if not sha:
