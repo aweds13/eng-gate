@@ -1215,6 +1215,90 @@ def _confirm_reject(tool: str, got: str, want: str, what: str) -> tuple[str, dic
     return _result(text, {"rejected": True, "confirm": got, "expected": want}, is_error=True)
 
 
+# ================================================================ 卡 136：把 claim 的整棵进程树带走
+#
+# 卡 130 把 claim 挪进子进程后自己报过一条没治的边界：**超时只带走 `subprocess.run` 的直连子进程**，
+# 它再起的 grandchild 门禁进程（Windows）不在它的树下 ⇒ 真正吃 CPU / 占端口的还在跑（"孤儿门禁"）。
+# 本段：执行换 `Popen` + `communicate(timeout=…)`；超时 / 失败时复用
+# `wb_dispatch.kill_tree`（**按 PID 收子树**，不按进程名 —— 按名字会误伤同名进程）把整棵带走，
+# 并把读数**如实**写进回话（杀了哪些 pid / 有没有残留），绝不只说"已清理"。
+
+
+def _optional_psutil() -> Any:
+    """best-effort 取 `psutil`（本仓 dependencies 里没有它）—— 取不到回 `None`（判不了就说判不了）。
+
+    ★ 只用它**点数**（点名 pid / 核残留），**不**用它掐进程 —— 杀树仍走 `wb_dispatch.kill_tree`。
+    """
+    try:
+        import psutil  # type: ignore[import-untyped]  # noqa: PLC0415
+    except ImportError:  # pragma: no cover —— 本机有；没有时如实降级
+        return None
+    return psutil
+
+
+def _descendant_pids(pid: int) -> list[int]:
+    """`pid` 的**后代**（递归子进程）pid —— psutil 不在 / 进程没了 → 空表（判不了 ≠ 没有）。"""
+    ps = _optional_psutil()
+    if ps is None:
+        return []
+    try:
+        return [child.pid for child in ps.Process(pid).children(recursive=True)]  # type: ignore[no-any-return]
+    except Exception:  # noqa: BLE001 —— 进程可能已消失 / 权限不够：判不了就当空
+        return []
+
+
+def _pid_alive(pid: int) -> bool | None:
+    """`True` / `False` = 判出来了；`None` = 判不了（psutil 不在）。"""
+    ps = _optional_psutil()
+    if ps is None:
+        return None
+    try:
+        return bool(ps.pid_exists(pid))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _reap_claim_tree(proc: subprocess.Popen[str]) -> dict[str, Any]:
+    """把 claim 子进程**整棵**带走并给出**如实**读数（卡 136）。
+
+    ★ 复用 `wb_dispatch.kill_tree`（按 PID 收子树）；★ 回话必须点名**杀了哪些 pid / 有没有残留**
+    —— 不许只说"已清理"。子进程若已退出（非零退出那条路），如实记"没有活子树可带"。
+    """
+    alive_before = proc.poll() is None
+    pids = [proc.pid, *_descendant_pids(proc.pid)]
+    kill_note: str | None = None
+    killed = False
+    if alive_before:
+        try:
+            kill_note = wb_dispatch.kill_tree(proc.pid)
+            killed = True
+        except Exception as exc:  # noqa: BLE001 —— 杀树本身失败也要如实报（钉子③）
+            kill_note = f"kill_tree 抛异常：{type(exc).__name__}: {exc}"
+        if killed:
+            with contextlib.suppress(Exception):
+                proc.communicate(timeout=10)  # 排空管道（树已死 → 应立刻返回）
+    residual = [pid for pid in pids if _pid_alive(pid) is True]
+    return {"alive_before": alive_before, "killed": killed, "pids": pids,
+            "kill_note": kill_note, "residual": residual,
+            "psutil": _optional_psutil() is not None}
+
+
+def _reap_line(reap: dict[str, Any]) -> str:
+    """把 `_reap_claim_tree` 的读数做成人话（★ 有残留就点名"没带走"，绝不吞）。"""
+    if not reap.get("alive_before"):
+        return "  · 进程树：子进程已退出（没有活子树可带）。"
+    pids = "、".join(str(p) for p in reap.get("pids") or []) or "（无）"
+    head = (f"  · 杀树：wb_dispatch.kill_tree → {reap.get('kill_note')}\n"
+            f"  · 目标 pid（直连 + 后代）：{pids}")
+    residual = reap.get("residual") or []
+    if residual:
+        left = "、".join(str(p) for p in residual)
+        return f"{head}\n  · 残留：{left} —— **没带走**（这条必须告诉人）"
+    if reap.get("psutil"):
+        return f"{head}\n  · 残留：无（已核对）"
+    return f"{head}\n  · 残留：判不了（psutil 不在，没能核对）"
+
+
 def tool_task_register(arguments: dict[str, Any], root: Path = ROOT
                        ) -> tuple[str, dict[str, Any], bool]:
     """注册一个任务：`manifest_text`（整段 TOML）或 `manifest_path`；`confirm` = TOML 里的 id。"""
@@ -1321,29 +1405,48 @@ def tool_task_claim(arguments: dict[str, Any], root: Path = ROOT
         return _confirm_reject("task_claim", confirm, task_id, "「任务号（task）」")
     argv = _claim_argv(root, task_id, member, claim, evidence, files_arg, why)
     try:
-        done = subprocess.run(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
-            argv, cwd=str(root), capture_output=True,
-            encoding="utf-8", errors="replace", timeout=CLAIM_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        return _result(
-            f"task_claim：卡 {member} 的申请**没跑完**（子进程超时 {CLAIM_TIMEOUT_SECONDS}s，"
-            f"已被掐掉）。\n"
-            f"  ★ 别当成成功 —— 门禁/状态可能没落盘；稍后用 `task_status` 看现状。",
-            {"task": task_id, "member": member, "claimed": False, "timeout": True},
-            is_error=True)
+        proc = subprocess.Popen(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
+            argv, cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace")
     except OSError as exc:
         return _result(f"task_claim：子进程起不来：{type(exc).__name__}: {exc}",
                        {"task": task_id, "member": member, "claimed": False}, is_error=True)
-    rc = int(done.returncode)
-    out = done.stdout or ""
-    err = done.stderr or ""
+    try:
+        out, err = proc.communicate(timeout=CLAIM_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        # ★ 卡 136：`subprocess.run` 超时只带走**直连**子进程，它再起的门禁孙进程会成孤儿 ——
+        #   所以这里自己按 PID 收整棵子树（复用 wb_dispatch.kill_tree），读数如实写进回话。
+        reap = _reap_claim_tree(proc)
+        return _result(
+            f"task_claim：卡 {member} 的申请**没跑完**（子进程超时 {CLAIM_TIMEOUT_SECONDS}s）。\n"
+            f"{_reap_line(reap)}\n"
+            f"  ★ 别当成成功 —— 门禁/状态可能没落盘；稍后用 `task_status` 看现状。",
+            {"task": task_id, "member": member, "claimed": False, "timeout": True, **reap},
+            is_error=True)
+    except OSError as exc:
+        # 排空/读写出错也是失败路径 —— 同样把树带走（卡 136），别留孤儿。
+        reap = _reap_claim_tree(proc)
+        return _result(
+            f"task_claim：子进程读写出错：{type(exc).__name__}: {exc}\n{_reap_line(reap)}",
+            {"task": task_id, "member": member, "claimed": False, **reap}, is_error=True)
+    except Exception as exc:  # noqa: BLE001 —— 执行边界：任何别的失败也把树带走，别留孤儿
+        reap = _reap_claim_tree(proc)
+        return _result(
+            f"task_claim：子进程执行出错：{type(exc).__name__}: {exc}\n{_reap_line(reap)}",
+            {"task": task_id, "member": member, "claimed": False, **reap}, is_error=True)
+    rc = int(proc.returncode)
+    out = out or ""
+    err = err or ""
     if rc != 0:
         # ★ 非零退出 = 没成（域守卫拒收 / 证据缺失 / 门禁红 …）—— **如实带出**输出与退出码，绝不吞。
+        #   子进程已退出 ⇒ 正常无活子树；卡 136 仍核一遍（有残留就点名，绝不假装"已清理"）。
+        reap = _reap_claim_tree(proc)
         detail = "\n".join(x for x in (out.strip(), err.strip()) if x) or "（子进程没有输出）"
         return _result(
-            f"task_claim：卡 {member} 的申请**没跑通**（子进程退出码 {rc}）。\n{detail}",
+            f"task_claim：卡 {member} 的申请**没跑通**（子进程退出码 {rc}）。\n{detail}\n"
+            f"{_reap_line(reap)}",
             {"task": task_id, "member": member, "claimed": False, "exit_code": rc,
-             "stdout": out, "stderr": err},
+             "stdout": out, "stderr": err, **reap},
             is_error=True)
     st = task.read_json(task.state_path(task_id))
     data = {"task": task_id, "member": member, "claim": claim, "claimed": True,

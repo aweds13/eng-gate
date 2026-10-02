@@ -12,6 +12,8 @@ r"""号池模型的**只读**读取（从 `tools/pool_mcp.py` 抽，卡 106 · T
 from __future__ import annotations
 
 import json
+import os
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +24,11 @@ if TYPE_CHECKING:
 
 #: 号池内的锚点文件（用它定位号池目录）。
 POOL_ANCHOR = ("infra", "pool", "pool_models.py")
+
+#: 模型开关文件名（与号池**同目录**；跨项目共用、**只有用户能改**、UI 也是改它 —— 卡 138）。
+SWITCH_FILE_NAME = "model-switches.toml"
+#: 覆盖开关文件路径的环境变量（★ **只给测试用** —— 免得测试去改 infra 那份真文件）。
+SWITCH_PATH_ENV = "TF_MODEL_SWITCHES"
 
 
 def find_pool_dir(root: Path) -> Path | None:
@@ -68,6 +75,80 @@ def load_pool_models(pool: Path) -> dict[str, Any]:
         "approved_but_missing": [m for m in approved if m not in set(live)],
         "live_but_unapproved": [m for m in live if m not in set(approved)],
     }
+
+
+# ---------------------------------------------------------------- 模型开关文件（卡 138 · T-G236）
+# 用户要「按一下就 true/false」的开关 ⇒ 开关必须是**数据、不是代码**（改源码 + 跑门禁太贵）。
+# 形态：`[switch]` 段里 `"<模型裸名>" = true|false`；`true` = 额外放行（**只做加法**，不进轮换链）。
+
+
+class SwitchFileError(ValueError):
+    """模型开关文件**坏了**（TOML 解析失败 / 值不是布尔）—— 带**路径与行号**。
+
+    ★ 为什么单独一个异常类、且**绝不静默当空**：静默当空会让「我明明开了」变成「实际没开」
+      —— 正是本仓反复吃过的「看着绿其实没查」。坏文件必须**响亮地**失败并**点名**哪份、哪一行。
+    """
+
+
+def switch_file_path(pool_dir: Path | None = None) -> Path | None:
+    """开关文件路径：`TF_MODEL_SWITCHES` 覆盖 > 显式 `pool_dir` > `find_pool_dir()`。
+
+    池目录都找不到 ⇒ `None`（调用方按「没有开关文件」处理 —— **不报错**）。
+    ★ 复用 `find_pool_dir()`，**不另写一份路径查找**（起点 = 本模块所在仓库根）。
+    """
+    override = os.environ.get(SWITCH_PATH_ENV)
+    if override:
+        return Path(override)
+    if pool_dir is not None:
+        return Path(pool_dir) / SWITCH_FILE_NAME
+    pool = find_pool_dir(Path(__file__).resolve().parents[2])
+    return None if pool is None else pool / SWITCH_FILE_NAME
+
+
+def _switch_line(text: str, key: str) -> int | None:
+    """在原文里找 `"<key>" = …` 那一行（1 起）；找不到 → None。只用于**报错点名行号**。"""
+    forms = (f'"{key}"', f"'{key}'", key)
+    pattern = re.compile(r"^\s*(?:" + "|".join(re.escape(f) for f in forms) + r")\s*=")
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        if pattern.match(line):
+            return lineno
+    return None
+
+
+def load_switches(pool_dir: Path | None = None) -> dict[str, bool]:
+    """读**外部开关文件**（`[switch]` 段：模型裸名 → 布尔）—— **只读**、不写、不联网。
+
+    语义（卡 138）：
+      · 文件**不存在**（或池目录都找不到）⇒ **空字典**、**不报错**（大多数人没有这份文件）；
+      · 文件**坏**（TOML 解析失败 / 值不是布尔）⇒ 抛 `SwitchFileError`，**点名路径与行号**
+        —— ★ **不许静默当空**。
+    ★ 只回答「哪些模型被开关打开」，**不碰任何名单常量**（名单是下限，开关是加法）。
+    """
+    path = switch_file_path(pool_dir)
+    if path is None or not path.exists():
+        return {}
+    text = path.read_text(encoding="utf-8")
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        line = getattr(exc, "lineno", None)
+        where = f"{path}（第 {line} 行）" if line else str(path)
+        raise SwitchFileError(f"模型开关文件解析失败：{where} —— {exc}") from exc
+    table = data.get("switch")
+    if table is None:
+        return {}
+    if not isinstance(table, dict):
+        raise SwitchFileError(f"模型开关文件坏：{path} 的 `[switch]` 必须是表，"
+                              f"实际是 {type(table).__name__}")
+    out: dict[str, bool] = {}
+    for key, value in table.items():
+        if not isinstance(value, bool):
+            line = _switch_line(text, key)
+            where = f"{path}（第 {line} 行）" if line else str(path)
+            raise SwitchFileError(f"模型开关文件坏：{where} 的「{key}」必须是布尔"
+                                  f"（true / false），实际是 {type(value).__name__}（{value!r}）")
+        out[str(key)] = value
+    return out
 
 
 def _names(items: Iterable[str] | None) -> list[str]:

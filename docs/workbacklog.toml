@@ -448,7 +448,7 @@ files = [
   "tests/test_pool_registry.py",
   "tests/test_pool_task.py"
 ]
-depends = ["135"]
+depends = ["138"]
 risk = "high"
 status = "pending"
 
@@ -462,13 +462,13 @@ files = [
   "tools/wb_dispatch.py",
   "tests/test_wb_dispatch.py"
 ]
-depends = ["138"]
+depends = ["120"]
 risk = "mid"
 status = "pending"
 
 [[cards]]
 id = "136"
-task = "T-G234"
+task = "T-G238"
 title = "MCP 收申请超时/失败时把整棵进程树带走（治孤儿门禁）"
 tree = ".wt/orphan"
 spec = "复盘/卡/卡136-孤儿门禁杀整棵树.md"
@@ -478,7 +478,7 @@ files = [
 ]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "137"
@@ -497,7 +497,7 @@ status = "done"
 
 [[cards]]
 id = "138"
-task = "T-G236"
+task = "T-G238"
 title = "模型开关：外部开关文件 + 派活器读它（加法、不进轮换链）"
 tree = ".wt/modelswitch"
 spec = "复盘/卡/卡138-模型开关机制.md"
@@ -509,7 +509,7 @@ files = [
 ]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "139"

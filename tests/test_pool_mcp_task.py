@@ -395,37 +395,48 @@ def _claim_args(**over: Any) -> dict[str, Any]:
 
 def test_claim_runs_in_a_subprocess_not_inprocess(batch: Path, write_on: None,
                                                   monkeypatch: pytest.MonkeyPatch) -> None:
-    """⑦ 真走子进程：`task_claim` 起 `wb_task.py claim …`，**不许**进程内调 `task.cmd_claim`。"""
+    """⑦ 真走子进程：`task_claim` 起 `wb_task.py claim …`，**不许**进程内调 `task.cmd_claim`。
+
+    ★ 卡 136 起执行改走 `Popen` + `communicate(timeout=…)` —— 原因：`subprocess.run` 超时只杀
+      **直连子进程**，真正吃 CPU / 占端口的门禁孙进程留成孤儿（本卡要治的正是这个）。本条判据
+      **不变**（真起子进程 / 超时给足 / utf-8），只把钉的接缝从 `run` 挪到 `Popen`。
+    """
     _seed(batch)
-    seen: list[dict[str, Any]] = []
+    calls: list[dict[str, Any]] = []
 
-    class _Done:
+    class _Proc:
+        pid = 4242
         returncode = 0
-        stdout = "子进程说：收了\n"
-        stderr = ""
 
-    def fake_run(argv: list[str], **kwargs: Any) -> _Done:
-        seen.append({"argv": list(argv), **kwargs})
-        return _Done()
+        def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+            calls.append({"communicate_timeout": timeout})
+            return "子进程说：收了\n", ""
+
+        def poll(self) -> int:
+            return 0
+
+    def fake_popen(argv: list[str], **kwargs: Any) -> _Proc:
+        calls.append({"argv": list(argv), **kwargs})
+        return _Proc()
 
     def boom(*_a: Any, **_k: Any) -> int:
         raise AssertionError("task_claim 不许在进程内调 task.cmd_claim（必须走子进程）")
 
-    monkeypatch.setattr(pool_mcp.subprocess, "run", fake_run)
+    monkeypatch.setattr(pool_mcp.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(task, "cmd_claim", boom)  # 进程内那条路一旦被走到就当场炸
 
     _t, _data, is_error = pool_mcp.tool_task_claim(_claim_args())
 
     assert is_error is False
-    assert len(seen) == 1, seen
-    call = seen[0]
-    argv = call["argv"]
+    spawn = calls[0]
+    argv = spawn["argv"]
     assert argv[0] == sys.executable, argv
     assert any(a.endswith("wb_task.py") for a in argv), argv
     assert "claim" in argv and "T-1" in argv and "卡A" in argv, argv
-    assert call["encoding"] == "utf-8" and call["errors"] == "replace", call
-    assert call["timeout"] >= 1800, call
-    assert call["capture_output"] is True, call
+    assert spawn["encoding"] == "utf-8" and spawn["errors"] == "replace", spawn
+    assert spawn["stdout"] == subprocess.PIPE and spawn["stderr"] == subprocess.PIPE, spawn
+    timeouts = [c["communicate_timeout"] for c in calls if "communicate_timeout" in c]
+    assert timeouts and min(timeouts) >= 1800, calls
 
 
 def test_claim_subprocess_nonzero_exit_is_surfaced(batch: Path, write_on: None,
@@ -433,12 +444,17 @@ def test_claim_subprocess_nonzero_exit_is_surfaced(batch: Path, write_on: None,
     """⑨ 子进程非零退出 ⇒ 回话里**既有退出码又有原文**（不许吞、不许假装成功）。"""
     _seed(batch)
 
-    class _Done:
+    class _Proc:
+        pid = 4243
         returncode = 2
-        stdout = "部分输出：域守卫拒收\n"
-        stderr = "错误原文：卡 卡A 碰了**自己域外**的文件\n"
 
-    monkeypatch.setattr(pool_mcp.subprocess, "run", lambda argv, **k: _Done())
+        def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+            return "部分输出：域守卫拒收\n", "错误原文：卡 卡A 碰了**自己域外**的文件\n"
+
+        def poll(self) -> int:
+            return 2  # 已退出 ⇒ 没有活子树可带（卡 136 也只如实记一句）
+
+    monkeypatch.setattr(pool_mcp.subprocess, "Popen", lambda argv, **k: _Proc())
     text, data, is_error = pool_mcp.tool_task_claim(_claim_args())
 
     assert is_error is True
@@ -449,13 +465,23 @@ def test_claim_subprocess_nonzero_exit_is_surfaced(batch: Path, write_on: None,
 
 def test_claim_subprocess_timeout_is_not_success(batch: Path, write_on: None,
                                                  monkeypatch: pytest.MonkeyPatch) -> None:
-    """⑩ 子进程超时 ⇒ 回话写"没跑完/超时"，**不许**当成成功。"""
+    """⑩ 子进程超时 ⇒ 回话写"没跑完/超时"，**不许**当成成功（卡 136 起还会带走整棵树）。"""
     _seed(batch)
 
-    def fake_run(argv: list[str], **kwargs: Any) -> Any:
-        raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs.get("timeout"))
+    class _Proc:
+        pid = 4244
+        returncode = None
 
-    monkeypatch.setattr(pool_mcp.subprocess, "run", fake_run)
+        def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+            raise subprocess.TimeoutExpired(cmd="wb_task.py", timeout=timeout)
+
+        def poll(self) -> None:
+            return None  # 还活着 ⇒ 走"带走整棵树"那条路
+
+    monkeypatch.setattr(pool_mcp.subprocess, "Popen", lambda argv, **k: _Proc())
+    # 杀树用桩（pid 4244 不存在，真 kill_tree 只会白跑）—— 钉子⑩只钉"超时不当成功"。
+    monkeypatch.setattr(pool_mcp.wb_dispatch, "kill_tree", lambda pid: f"桩：已处理 {pid}")
+
     text, data, is_error = pool_mcp.tool_task_claim(_claim_args())
 
     assert is_error is True
@@ -533,3 +559,114 @@ def test_stdio_not_frozen_while_claim_runs(batch: Path) -> None:
         proc.wait(timeout=60)
 
     assert 1 in got, f"claim 的回话没到（收到的 id：{sorted(got)}）"
+
+
+# ================================================================ 卡 136：超时/失败把整棵进程树带走
+#
+# 卡 130 把 claim 挪进子进程后自己报过一条没治的边界：**超时只杀 `subprocess.run` 的直连子进程**，
+# 它再起的 grandchild 门禁进程（Windows）不在它的树下 ⇒ 真正吃 CPU / 占端口的还在跑（"孤儿门禁"）。
+# 卡 136 把执行改走 `Popen` + `communicate(timeout=…)`，超时/失败时复用
+# `wb_dispatch.kill_tree`（按 PID 收子树）把**整棵**带走。四条钉子各钉一处：
+
+
+def _wait_until(pred: Any, timeout: float = 15.0) -> bool:
+    """等 `pred()` 变真（最多 `timeout` 秒）—— 给"掐进程后等它真的消失"用。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if pred():
+            return True
+        time.sleep(0.1)
+    return bool(pred())
+
+
+def test_claim_timeout_carries_away_the_grandchild(batch: Path, write_on: None,
+                                                   monkeypatch: pytest.MonkeyPatch,
+                                                   tmp_path: Path) -> None:
+    """① ★★ 孙进程也死了：门禁桩**真起一个孙进程**，claim 超时 ⇒ 用 `psutil` 核它已不在。
+
+    先红后绿：改前 `subprocess.run` 超时只杀直连子进程（桩），孙进程被留成孤儿 ⇒ **红**；
+    改后 `Popen` + `kill_tree` 把整棵带走 ⇒ **绿**。
+
+    ★ 桩给孙进程的 stdio 钉 `DEVNULL`：否则它继承 claim 子进程的捕获管道 → 直连子进程被杀后
+      管道仍被孙进程握着（`subprocess.run` 的收尾 `communicate()` 会一直阻塞到它自己退出）——
+      那会先把**测试自己**卡住，红是"卡住"而不是"断言失败"。
+    """
+    _seed(batch)
+    pidfile = tmp_path / "grandchild.pid"
+    stub = tmp_path / "spawn_gate_stub.py"
+    stub.write_text(
+        "import subprocess, sys, time\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'],\n"
+        "                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,\n"
+        "                         stderr=subprocess.DEVNULL)\n"
+        "open(sys.argv[1], 'w').write(str(child.pid))\n"
+        "time.sleep(120)\n",
+        encoding="utf-8", newline="\n")
+    monkeypatch.setattr(pool_mcp, "_claim_argv",
+                        lambda *a, **k: [sys.executable, str(stub), str(pidfile)])
+    monkeypatch.setattr(pool_mcp, "CLAIM_TIMEOUT_SECONDS", 3)
+
+    psutil = pytest.importorskip("psutil")
+    text, data, is_error = pool_mcp.tool_task_claim(_claim_args())
+    grandchild = int(pidfile.read_text(encoding="utf-8").strip())
+    try:
+        assert is_error is True and "超时" in text, text
+        gone = _wait_until(lambda: not psutil.pid_exists(grandchild), timeout=15.0)
+        assert gone, f"孙进程 pid {grandchild} 仍在 —— 整棵没被带走（本卡要治的孤儿门禁）\n{text}"
+    finally:
+        with contextlib.suppress(Exception):      # 红的时候自己收尸，别留睡眠子进程
+            psutil.Process(grandchild).kill()
+
+
+def test_claim_normal_path_unchanged(batch: Path, write_on: None) -> None:
+    """② 正常路径不受影响：不超时的 claim 照旧成功、回话形态不变（仍带机器可读块）。"""
+    _seed(batch)
+    text, data, is_error = pool_mcp.tool_task_claim(_claim_args())
+
+    assert is_error is False, text
+    assert data["claimed"] is True and data["claim"] == "success", data
+    block = _json_block(text)  # 回话形态不变：正文 + 唯一标记后的机器块
+    assert block["claimed"] is True and block["task"] == "T-1", block
+    assert "没跑完" not in text and "超时" not in text, text
+
+
+def test_claim_kill_failure_is_reported_not_swallowed(batch: Path, write_on: None,
+                                                      monkeypatch: pytest.MonkeyPatch,
+                                                      tmp_path: Path) -> None:
+    """③ 杀不掉要如实说：`kill_tree` 抛异常 ⇒ 回话**点名"没带走 / 残留 pid"**，不许吞。"""
+    pytest.importorskip("psutil")  # 残留判定要 psutil 才判得了
+    _seed(batch)
+    stub = tmp_path / "sleep_gate_stub.py"
+    stub.write_text("import time\ntime.sleep(300)\n", encoding="utf-8", newline="\n")
+    monkeypatch.setattr(pool_mcp, "_claim_argv", lambda *a, **k: [sys.executable, str(stub)])
+    monkeypatch.setattr(pool_mcp, "CLAIM_TIMEOUT_SECONDS", 3)
+
+    real_kill = pool_mcp.wb_dispatch.kill_tree
+
+    def boom(pid: int) -> str:
+        raise RuntimeError(f"桩：杀不掉 {pid}")
+
+    monkeypatch.setattr(pool_mcp.wb_dispatch, "kill_tree", boom)
+
+    text, data, is_error = pool_mcp.tool_task_claim(_claim_args())
+    try:
+        assert is_error is True and "超时" in text, text
+        assert "没带走" in text and "残留" in text, text
+        assert data["killed"] is False and data["residual"], data
+        assert str(data["pids"][0]) in text, text
+    finally:
+        # 收尸：kill 被桩掉了，真起来的桩子树得由测试自己清掉（别留睡眠子进程）。
+        with contextlib.suppress(Exception):
+            real_kill(data["pids"][0])
+
+
+def test_tools_list_counts_unchanged(batch: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """④ 工具清单没变：没 env = **9**（全只读）；`POOL_MCP_WRITE=1` = **13**。"""
+    monkeypatch.delenv("POOL_MCP_WRITE", raising=False)
+    nine = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    assert len(nine) == 9, [t["name"] for t in nine]
+    assert all(t["annotations"]["readOnlyHint"] is True for t in nine), nine
+
+    monkeypatch.setenv("POOL_MCP_WRITE", "1")
+    thirteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    assert len(thirteen) == 13, [t["name"] for t in thirteen]

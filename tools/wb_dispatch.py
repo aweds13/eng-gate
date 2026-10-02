@@ -107,6 +107,7 @@ import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（
 from pool import guards as pool_guards  # noqa: E402 —— 四条守卫唯一实现（pool.guards）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
 from pool.jobs import card_artifacts  # noqa: E402 —— 产物定位唯一实现（pool.jobs）
+from pool.models import SwitchFileError, load_switches  # noqa: E402 —— 外部模型开关（卡 138）
 from pool.plan import BacklogError, load_backlog  # noqa: E402 —— 队列/冲突域唯一实现（pool.plan）
 from pool.review import outside_allow  # noqa: E402 —— 白名单越界唯一实现（pool.review）
 
@@ -140,8 +141,12 @@ DEFAULT_MODEL = MODEL_WHITELIST[0]
 #   ★ **撤掉之后的行为**：`glm-5.3` 回到「默认拒绝」，与任何表外模型**一视同仁**
 #     （要再派会被拒，并列出允许集）。
 ONE_OFF_MODELS: tuple[str, ...] = ()
-#: 真正允许派活的集合 = 轮换名单 ∪ 一次性授权。**闸门查这个**；轮换只走 `MODEL_WHITELIST`。
+#: 名单常量 = 轮换名单 ∪ 一次性授权（★ **下限**）。闸门查的是「本常量 ∪ 外部开关文件里打开的」——
+#: 见 `effective_allowed_models()`；轮换只走 `MODEL_WHITELIST`（开关**不进轮换链**）。
 ALLOWED_MODELS: tuple[str, ...] = MODEL_WHITELIST + ONE_OFF_MODELS
+# ★ 卡 138：外部开关文件里 `true` 的模型**额外放行**。
+#   文件 = `infra/pool/model-switches.toml`（只有用户能改）。
+#   **只做加法**（名单是下限、开关不许把名单里的关掉），**不进 429 轮换链**。
 
 # ---------------------------------------------------------------- 429 / 额度（卡 029 §2.5）
 # ★ 429 长得像成功：CLI 给 `result.subtype = error_during_execution` + 空回话 + 退出码 0 ——
@@ -256,21 +261,45 @@ def paths(cli_override: str | None = None) -> tuple[Path, Path]:
     return node, Path("D:/") / FALLBACK_CLI_REL
 
 
+def switch_open_models() -> tuple[str, ...]:
+    """外部开关文件里**打开**（值为 `true`）的模型 —— **只做加法**、不进 429 轮换链。
+
+    ★ 文件不存在 ⇒ 空（不报错）；文件坏 ⇒ `SwitchFileError` 冒泡（**不许静默当空**）。
+    """
+    return tuple(name for name, on in load_switches().items() if on)
+
+
+def effective_allowed_models() -> tuple[str, ...]:
+    """允许集 = 名单常量 `ALLOWED_MODELS` ∪ 开关文件里打开的模型。
+
+    ★ 名单是**下限**、开关只做**加法**。
+    ★ 现算（每次读开关文件），**不**拼进模块常量：开关是**数据**、用户随时能改；拼进常量
+      就变成「改源码才生效」，正是卡 138 要消灭的东西。轮换链仍只走 `MODEL_WHITELIST`。
+    """
+    out = list(ALLOWED_MODELS)
+    for name in switch_open_models():
+        if name not in out:
+            out.append(name)
+    return tuple(out)
+
+
 def model_rejected(model: str) -> str:
     """模型白名单硬闸门 —— 不在**允许集**里 → 返回拒单理由（在集合里 → 空串）。
 
     ★ 逐字比较（连大小写 / 连字符都不许含糊）；拒绝必须**零副作用**：不起进程、不建 log、
     不改树。★ `--resume` / `--retry` / `--detach` 全都从 `main()` 过这道闸；续跑必须沿用
     原来那个模型，不许因为「原模型挂了」就换成表外的。
-    ★ 允许集 = `ALLOWED_MODELS`（= 轮换名单 `MODEL_WHITELIST` ∪ 一次性授权 `ONE_OFF_MODELS`）——
-    **但不是轮换链**：`next_whitelist_model()` 只看 `MODEL_WHITELIST`（2026-10-02 分开这两件事）。
+    ★ 允许集 = `effective_allowed_models()`（名单常量 `ALLOWED_MODELS` ∪ 外部开关文件里打开的）
+    —— **但不是轮换链**：`next_whitelist_model()` 只看 `MODEL_WHITELIST`。
     """
-    if model in ALLOWED_MODELS:
+    allowed = effective_allowed_models()
+    if model in allowed:
         return ""
     return (f"未授权模型，已拒绝派活：{model}\n"
-            f"  允许集（只有用户能改，见 tools/wb_dispatch.py 顶部的 "
-            f"MODEL_WHITELIST / ONE_OFF_MODELS 常量）：{'、'.join(ALLOWED_MODELS)}\n"
-            "  默认拒绝：不在名单里的模型一律调不动（用户 2026-09-26 令：黑名单锁死）。")
+            f"  允许集（名单常量 MODEL_WHITELIST / ONE_OFF_MODELS + 外部开关文件"
+            f"(infra/pool/model-switches.toml) 里打开的；只有用户能改）：{'、'.join(allowed)}\n"
+            "  默认拒绝：既不在名单、也没在开关文件里打开的模型一律调不动"
+            "（用户 2026-09-26 令：黑名单锁死）。")
 
 
 def next_whitelist_model(model: str) -> str | None:
@@ -1879,7 +1908,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "brief-<卡>.md / 卡规格）仍落在**主仓**的 gates/diag/：那一份目录"
                              "是 gitignore 的、卡树里没有。不给则行为与从前逐字相同（工人 cwd="
                              "仓库根）")
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=DEFAULT_MODEL,
+                        help=f"派活用哪个模型（默认 {DEFAULT_MODEL}）。★ 允许集 = 名单常量 "
+                             "MODEL_WHITELIST / ONE_OFF_MODELS **外加**外部开关文件 "
+                             "infra/pool/model-switches.toml 里打开(true)的模型；"
+                             "表外一律拒单（用户 2026-09-26 令：黑名单锁死）")
     parser.add_argument("--cli", default=None,
                         help="CLI 入口覆盖（默认优先用独立安装的那份）")
     parser.add_argument("--permission-mode", default=DEFAULT_PERMISSION_MODE,
@@ -1951,7 +1984,13 @@ def main() -> int:
     # ★★ 模型白名单硬闸门（卡 029 §2.4，用户 2026-09-26 令：默认拒绝）—— 放在**一切之前**：
     #   拒单必须**零副作用**：不起进程、不建 log、不写判决、不改树。--resume / --retry /
     #   --detach 全都从这里过闸（它们都要带 --model）。
-    rejected = model_rejected(args.model)
+    try:
+        rejected = model_rejected(args.model)
+    except SwitchFileError as exc:
+        # ★ 卡 138：外部开关文件坏了要**响亮地**失败并点名路径与行号（**不静默当空**）——
+        #   仍在起进程之前拦下（零副作用），退出码 2（前置检查没过）。
+        print(f"[FAIL] {exc}", file=sys.stderr, flush=True)
+        return 2
     if rejected:
         print(f"[FAIL] {rejected}", file=sys.stderr, flush=True)
         return 2

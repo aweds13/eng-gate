@@ -1597,7 +1597,7 @@ def test_model_whitelist_is_locked_and_default_is_the_first_entry() -> None:
     assert wd.next_whitelist_model("glm-5.3-flash") is None      # 最后一个 → 全挂就停的判据
 
 
-def test_one_off_model_is_allowed_but_stays_out_of_the_rotation(monkeypatch) -> None:
+def test_one_off_model_is_allowed_but_stays_out_of_the_rotation(monkeypatch, tmp_path) -> None:  # noqa: ANN001
     """★ 2026-10-02（卡 124 / `T-G222`，**同日晚按用户令撤回**）：**一次性授权 ≠ 改轮换口径**。
 
     用户 2026-10-02 授权 `glm-5.3`（**不带 flash**）做**一次**外部审查；★ 同日晚用户令
@@ -1609,7 +1609,10 @@ def test_one_off_model_is_allowed_but_stays_out_of_the_rotation(monkeypatch) -> 
          而它**仍不进轮换链** —— 将来要再放行谁，填一处即可。
     ★ 反证：若有人图省事把 `glm-5.3` 直接塞进 `MODEL_WHITELIST`，上面那条
     `test_model_whitelist_is_locked_and_default_is_the_first_entry` 与本条的第 ② 段**立刻红**。
+    ★ 卡 138：`model_rejected` 现在也读**外部开关文件** → 这条钉子把开关**隔离**掉（指到不存在的
+      路径），否则真文件被打开时「撤了就是撤了」这句会跟着环境变，钉不住。
     """
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(tmp_path / "absent.toml"))
     # ① 轮换链**没变**：名单仍两项，末尾仍是 glm-5.3-flash → 停
     assert wd.MODEL_WHITELIST == ("deepseek-v4.1-flash", "glm-5.3-flash")
     assert wd.next_whitelist_model("deepseek-v4.1-flash") == "glm-5.3-flash"
@@ -1668,6 +1671,76 @@ def test_model_gate_passes_both_whitelisted_models(sandbox: Path, monkeypatch, c
         assert wd.main() == 0
         capsys.readouterr()
         assert "--model" in record[0] and record[0][record[0].index("--model") + 1] == model
+
+
+# ================================================ 卡 138（T-G236）：外部模型开关文件
+#
+# 用户要「按一下就 true/false」的开关 ⇒ 开关做**数据**（infra/pool/model-switches.toml），
+# 派活器只读、**只做加法**（名单是下限）、**不进 429 轮换链**。
+# ★ 坏文件**报错点名**、不静默当空；★ 各钉子都用 `TF_MODEL_SWITCHES` 指到临时文件
+#   （**不碰 infra 那份真文件**）。
+
+
+def _point_switches(tmp_path: Path, body: str, monkeypatch) -> Path:  # noqa: ANN001
+    path = tmp_path / "model-switches.toml"
+    path.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    return path
+
+
+def test_switch_on_allows_model_but_keeps_it_out_of_the_rotation(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """① 开关开 ⇒ 放行；★ 但仍**不进轮换链**（轮换只走 `MODEL_WHITELIST`）。"""
+    _point_switches(tmp_path, '[switch]\n"glm-5.3" = true\n', monkeypatch)
+    assert wd.model_rejected("glm-5.3") == ""
+    assert wd.next_whitelist_model("glm-5.3-flash") is None      # 开关不开新的轮换格
+    assert wd.next_whitelist_model("glm-5.3") is None
+    assert wd.MODEL_WHITELIST == ("deepseek-v4.1-flash", "glm-5.3-flash")  # 常量没动
+
+
+def test_switch_off_still_rejects(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """② 开关关（false）⇒ 被拒。"""
+    _point_switches(tmp_path, '[switch]\n"glm-5.3" = false\n', monkeypatch)
+    assert wd.model_rejected("glm-5.3") != ""
+
+
+def test_no_switch_file_behaves_exactly_as_before(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """③ 文件不存在 ⇒ 空、其它行为与今天逐字相同（名单两个照放、表外照拒）。"""
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(tmp_path / "absent.toml"))
+    assert wd.MODEL_WHITELIST == ("deepseek-v4.1-flash", "glm-5.3-flash")
+    for model in wd.MODEL_WHITELIST:
+        assert wd.model_rejected(model) == ""
+    assert wd.model_rejected("glm-5.3") != ""
+    assert wd.model_rejected("kimi-k2.7") != ""
+
+
+def test_broken_switch_file_is_named_not_silently_ignored(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """④ 坏文件 ⇒ 报错并点名路径与行号（★ 不是静默当空）。"""
+    path = _point_switches(tmp_path, '[switch]\n"glm-5.3" = "yes"\n', monkeypatch)
+    with pytest.raises(wd.SwitchFileError) as excinfo:
+        wd.model_rejected("glm-5.3")
+    message = str(excinfo.value)
+    assert str(path) in message and "第 2 行" in message and "glm-5.3" in message, message
+
+
+def test_broken_switch_file_makes_dispatch_fail_loudly(tmp_path, monkeypatch, capsys) -> None:  # noqa: ANN001
+    """④ 走真入口也一样：坏开关文件 → 退 2、**点名**、**不起进程**（零副作用）。"""
+    path = _point_switches(tmp_path, '[switch]\n"glm-5.3" = "yes"\n', monkeypatch)
+    spawned: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(spawned))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000", "--model", "glm-5.3"])
+    assert wd.main() == 2
+    err = capsys.readouterr().err
+    assert str(path) in err and "第 2 行" in err
+    assert spawned == [], "坏开关文件也要在起进程之前拦下"
+
+
+def test_switch_is_purely_additive(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """⑤ ★ 开关只做加法：写 `kimi-k2.7=true` ⇒ 它被放行；**名单里那两个不因此被关**。"""
+    _point_switches(tmp_path, '[switch]\n"kimi-k2.7" = true\n', monkeypatch)
+    assert wd.model_rejected("kimi-k2.7") == ""
+    for model in wd.MODEL_WHITELIST:
+        assert wd.model_rejected(model) == "", "名单是下限，开关不许把它关掉"
+    assert wd.ALLOWED_MODELS == wd.MODEL_WHITELIST, "常量一个字没动（开关是加法）"
 
 
 # ================================================ 卡 029（T-G114）：429 / 额度三拍（§2.5）

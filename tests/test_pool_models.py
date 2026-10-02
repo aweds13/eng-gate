@@ -21,6 +21,8 @@ import builtins
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
@@ -108,3 +110,74 @@ def test_line_roster_reads_real_names() -> None:
     """真读数：本仓裸名名单 vs 号池 provider/model —— 两套 id 体系本来就不同。"""
     line = wb_state.line_roster()
     assert line.startswith(("⚠ 白名单对账：", "✓ 白名单对账：", "白名单对账：无法判断")), line
+
+
+# ================================================================ 模型开关文件（卡 138 · T-G236）
+#
+# 用户要「按一下就 true/false」的开关 ⇒ 开关做**数据**（infra/pool/model-switches.toml）。
+# `load_switches()` 是那条**只读**通路：缺文件=空（不报错）；坏文件=**报错点名路径与行号**，
+# ★ 绝不静默当空（否则「我明明开了」会变成「实际没开」）。
+# ★ 各钉子都用 `TF_MODEL_SWITCHES` 指到临时文件 —— **不碰 infra 那份真文件**。
+
+
+def _switch_file(tmp_path: Path, body: str) -> Path:
+    path = tmp_path / "model-switches.toml"
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+def test_load_switches_missing_file_is_empty(tmp_path: Path, monkeypatch) -> None:
+    """③ 文件不存在 ⇒ 空字典、**不报错**（大多数人没有这份文件）。"""
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(tmp_path / "absent.toml"))
+    assert models.load_switches() == {}
+
+
+def test_load_switches_reads_bare_name_booleans(tmp_path: Path, monkeypatch) -> None:
+    """① 开关开 / ② 开关关：`[switch]` 段里裸名 → 布尔，原样读出。"""
+    path = _switch_file(tmp_path, '[switch]\n"glm-5.3" = true\n"kimi-k2.7" = false\n')
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    assert models.load_switches() == {"glm-5.3": True, "kimi-k2.7": False}
+
+
+def test_load_switches_pool_dir_arg_is_used(tmp_path: Path) -> None:
+    """`pool_dir` 给了就用它（复用 `find_pool_dir()` 的口径，不另写路径查找）。"""
+    _switch_file(tmp_path, '[switch]\n"glm-5.3" = true\n')
+    assert models.load_switches(tmp_path) == {"glm-5.3": True}
+
+
+def test_load_switches_env_overrides_pool_dir(tmp_path: Path, monkeypatch) -> None:
+    """`TF_MODEL_SWITCHES`（测试覆盖）优先于显式 `pool_dir`。"""
+    pool = tmp_path / "pool"
+    pool.mkdir()
+    (pool / "model-switches.toml").write_text('[switch]\n"x" = false\n', encoding="utf-8")
+    override = tmp_path / "override.toml"
+    override.write_text('[switch]\n"x" = true\n', encoding="utf-8")
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(override))
+    assert models.load_switches(pool) == {"x": True}
+
+
+def test_load_switches_non_bool_names_path_and_line(tmp_path: Path, monkeypatch) -> None:
+    """④ 值不是布尔 ⇒ 报错并**点名路径与那一行**（★ 不是静默当空）。"""
+    path = _switch_file(tmp_path, '[switch]\n# 注释占一行\n"glm-5.3" = "yes"\n')
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    with pytest.raises(models.SwitchFileError) as excinfo:
+        models.load_switches()
+    message = str(excinfo.value)
+    assert str(path) in message and "第 3 行" in message and "glm-5.3" in message, message
+
+
+def test_load_switches_broken_toml_names_path_and_line(tmp_path: Path, monkeypatch) -> None:
+    """④ 故意写坏 TOML ⇒ 报错并**点名路径与那一行**（`yes` 不是 TOML 布尔）。"""
+    path = _switch_file(tmp_path, '[switch]\n"glm-5.3" = yes\n')
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    with pytest.raises(models.SwitchFileError) as excinfo:
+        models.load_switches()
+    message = str(excinfo.value)
+    assert str(path) in message and "第 2 行" in message, message
+
+
+def test_load_switches_missing_switch_table_is_empty(tmp_path: Path, monkeypatch) -> None:
+    """有文件但没 `[switch]` 段 ⇒ 空字典（不是「坏文件」）。"""
+    path = _switch_file(tmp_path, "# 只有注释\n")
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    assert models.load_switches() == {}
