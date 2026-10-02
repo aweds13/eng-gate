@@ -963,7 +963,7 @@ def _report(state: dict) -> int:
     if state["state"] == "awaiting-commit":
         print(f"文书骨架：{state['draft']['path']}")
         print(f"人手补『为什么』：{state['draft'].get('why') or '（无）'}")
-        print("★ 停在这儿：补完 → 走正常收口（`_integrate.py --batch`）→ 提交后 `landed`")
+        print("★ 停在这儿：补完 → 走正常收口（`tools/wb_land.py --batch`）→ 提交后 `landed`")
     return 0
 
 

@@ -277,6 +277,19 @@
 - ★ 老实说：卡 136 **改了我卡里「断言一条不许改」那句话**（`subprocess.run` 拿不到 PID ⇒ 必须换 `Popen`）——
   **是我写错了，工人对的，已裁定接受**；孤儿门禁的「非零退出」路径仍收不到已死父下的孤儿（如实留）；
   开关的**界面**另开卡。
+## 2026-10-02 —— **收口链进 git**：`_integrate`/`_stage_card` 从 scratch 搬成 `tools/`（T-G237 / 卡 139）
+
+- 来路：本仓**自己反复记的最大缺口** —— 收口工具住在 gitignore 的 scratch 里 ⇒ 「**别的窗口能派活、不能落地**」；
+  ★ 今晚六笔提交全是**手工跑那两个 scratch 脚本**收的（别的窗口一行都拿不到）。
+- 做法：`_integrate.py` → `tools/wb_land.py`（+`tools/pool/landing.py`）、`_stage_card.py` → `tools/wb_stage_card.py`
+  （+`tools/pool/stage_card.py`）；★ **七步链行为一字不变**（含 **fail-fast**、**`atexit` 还锁**、目录用 `git ls-files`
+  展开、片段自动补、计划外暂存停手）；`ROOT` 按新位置**自推**（不再写死绝对路径）；旧壳留转发；
+  四处文档事实句更正（「工具在 scratch」改成现状）。
+- 验收：`tests/test_wb_land.py` **7 passed** · 新旧 `--help` 对照 · ★ **行为不变自证**（同场景新旧对照，
+  归一化后 diff 为空）· `ruff` 全过 · 全量门禁与审计见 trailer。
+- ★ 老实说：**卡里自相矛盾是我的错**（§1 说留壳、禁区说不动主树）⇒ 工人按禁区办、主控收口时替换主树那两份（gitignore，不入提交）；
+  `tools/` 不在 mypy 门禁范围（四个新文件与旧 scratch 一样有 mypy 报错，为守「行为不变」未动，该另开小卡）；
+  `--commit-only` 与「门禁红」两条路径**只看代码等价、没真跑**。
 ## 2026-10-01 —— 过程记录笔：今天踩的七条坑与门禁改进清单补齐（T-G207 / 卡 110）
 
 - 病：教训只留在主控 scratch（`gates/diag/_todo_pending.md`），而工人切片天天引用的两页复盘没更新
