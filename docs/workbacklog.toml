@@ -29,7 +29,7 @@ id = "022"
 task = "T-G110"
 title = "myday 稀疏序号：真拖只写换位那一行"
 tree = ".wt/sparse"
-spec = "gates/diag/卡022-myday稀疏序号.md"
+spec = "复盘/卡/卡022-myday稀疏序号.md"
 files = [
   "src/timeflow/core/tasks/manager.py",
   "src/timeflow/storage/db.py",
@@ -45,7 +45,7 @@ id = "024"
 task = "T-G112"
 title = "看门狗独立化：`--detach` 之后被系统杀掉就没人盯"
 tree = ".wt/watchdog"
-spec = "gates/diag/卡024-看门狗独立化.md"
+spec = "复盘/卡/卡024-看门狗独立化.md"
 files = [
   "tools/wb_dispatch.py",
   "tests/test_wb_dispatch.py",
@@ -61,7 +61,7 @@ id = "029"
 task = "T-G114"
 title = "派活器收口（过期判决 / retry 读数 / 时间戳 / ★白名单硬闸门 / 429 三拍 / 落账预算 / 规格指纹）"
 tree = ".wt/dispatch"
-spec = "gates/diag/卡029-派活器三合一.md"
+spec = "复盘/卡/卡029-派活器三合一.md"
 files = [
   "tools/wb_dispatch.py",
   "tests/test_wb_dispatch.py",
@@ -76,7 +76,7 @@ id = "108"
 task = "T-G205"
 title = "号池写面①：作业登记（谁占了哪棵树）+ 三条自家守卫"
 tree = ".wt/poolreg"
-spec = "gates/diag/卡108-号池写面①作业登记与守卫.md"
+spec = "复盘/卡/卡108-号池写面①作业登记与守卫.md"
 files = [
   "tools/pool/registry.py",
   "tools/pool/guards.py",
@@ -94,7 +94,7 @@ id = "109"
 task = "T-G206"
 title = "号池去重收口：wb_dispatch / tf_stage_guard 里剩下的两份真源"
 tree = ".wt/pooldup"
-spec = "gates/diag/卡109-号池去重收口.md"
+spec = "复盘/卡/卡109-号池去重收口.md"
 files = [
   "tools/wb_dispatch.py",
   "tools/tf_stage_guard.py",
@@ -110,7 +110,7 @@ id = "110"
 task = "T-G207"
 title = "文档落地（外包）：今天七条坑 + 门禁改进清单"
 tree = ".wt/docmine"
-spec = "gates/diag/卡110-文档落地七条坑与清单.md"
+spec = "复盘/卡/卡110-文档落地七条坑与清单.md"
 files = [
   "复盘/口径坑.md",
   "复盘/门禁改进清单.md"
@@ -124,7 +124,7 @@ id = "111"
 task = "T-G208"
 title = "号池写面②：MCP 的 pool_dispatch / pool_cancel（六条不变量 + 存在性即授权）"
 tree = ".wt/poolmcp2"
-spec = "gates/diag/卡111-号池写面②MCP写工具.md"
+spec = "复盘/卡/卡111-号池写面②MCP写工具.md"
 files = [
   "tools/pool_mcp.py",
   "tools/pool/__init__.py",
@@ -142,7 +142,7 @@ id = "112"
 task = "T-G209"
 title = "开工切片两处误报：停工样板话误报 + 现状段看错树"
 tree = ".wt/brief2"
-spec = "gates/diag/卡112-切片两处误报.md"
+spec = "复盘/卡/卡112-切片两处误报.md"
 files = [
   "tools/wb_brief.py",
   "tests/test_wb_brief.py"
@@ -156,7 +156,7 @@ id = "113"
 task = "T-G210"
 title = "pool_cancel 的证据别是乱码：taskkill 输出按系统区域编码解"
 tree = ".wt/tkill"
-spec = "gates/diag/卡113-pool_cancel证据编码.md"
+spec = "复盘/卡/卡113-pool_cancel证据编码.md"
 files = [
   "tools/pool_mcp.py",
   "tests/test_pool_mcp_write.py"
@@ -170,7 +170,7 @@ id = "114"
 task = "T-G211"
 title = "main_tree_root 不许依赖当前目录（MCP 真机跑出来的 bug）"
 tree = ".wt/poolcwd"
-spec = "gates/diag/卡114-main_tree_root不许依赖cwd.md"
+spec = "复盘/卡/卡114-main_tree_root不许依赖cwd.md"
 files = [
   "tools/pool/registry.py",
   "tests/test_pool_registry.py"
@@ -178,3 +178,46 @@ files = [
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "115"
+task = "T-G212"
+title = "「生成了却没进提交」要有机器判据（封存时的未跟踪清单）"
+tree = ".wt/sealchk"
+spec = "复盘/卡/卡115-封存未跟踪清单判据.md"
+files = [
+  "scripts/run_gates.py",
+  "scripts/audit_progress.py",
+  "tests/test_seal_untracked.py"
+]
+depends = []
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "116"
+task = "T-G213"
+title = "卡规格搬进 git：让队列自洽（谁都能接手）"
+tree = ".wt/cardgit"
+spec = "复盘/卡/卡116-卡规格搬进git.md"
+files = [
+  "复盘/卡/卡022-myday稀疏序号.md",
+  "复盘/卡/卡024-看门狗独立化.md",
+  "复盘/卡/卡029-派活器三合一.md",
+  "复盘/卡/卡108-号池写面①作业登记与守卫.md",
+  "复盘/卡/卡109-号池去重收口.md",
+  "复盘/卡/卡110-文档落地七条坑与清单.md",
+  "复盘/卡/卡111-号池写面②MCP写工具.md",
+  "复盘/卡/卡112-切片两处误报.md",
+  "复盘/卡/卡113-pool_cancel证据编码.md",
+  "复盘/卡/卡114-main_tree_root不许依赖cwd.md",
+  "复盘/卡/卡115-封存未跟踪清单判据.md",
+  "复盘/卡/卡116-卡规格搬进git.md",
+  "docs/workbacklog.toml",
+  "tools/pool/plan.py",
+  "tools/wb_plan.py",
+  "tests/test_card_specs_tracked.py"
+]
+depends = []
+risk = "low"
+status = "pending"

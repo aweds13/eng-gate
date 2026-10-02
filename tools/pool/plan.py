@@ -362,15 +362,18 @@ def render_plan(batches: Sequence[Sequence[Card]]) -> str:
 
 
 def find_spec(card: str) -> str:
-    """按卡号找规格文件（默认住在 `gates/diag/`）—— 返回**仓库相对 posix 路径**；找不到 → `""`。
+    """按卡号找规格文件 —— 返回**仓库相对 posix 路径**；找不到 → `""`。
 
+    ★ 卡 116：先在 **`复盘/卡/`**（搬进 git、随仓库分发）里找，找不到再**退回** `gates/diag/`
+    （历史 / 尚未搬进 git 的卡仍能解析出来）—— **行为向后兼容**。
     ★ 从 `wb_brief.py` 搬来（卡 106）："某张卡的规格文件在哪"属于**卡域**，是只读查文件，
     放这里让开工切片生成器与号池工具共用同一处（不再各写一份 glob）。
     """
-    for pat in (f"卡{card}-*.md", f"卡{card}.md", f"*{card}*.md"):
-        hits = sorted(DIAG.glob(pat))
-        if hits:
-            return str(hits[0].relative_to(ROOT)).replace("\\", "/")
+    for root in (ROOT / "复盘" / "卡", DIAG):
+        for pat in (f"卡{card}-*.md", f"卡{card}.md", f"*{card}*.md"):
+            hits = sorted(root.glob(pat))
+            if hits:
+                return str(hits[0].relative_to(ROOT)).replace("\\", "/")
     return ""
 
 

@@ -5144,3 +5144,27 @@ evidence = [
   "file:tests/test_seal_untracked.py",
 ]
 gaps = "**来路**：2026-10-02 三笔提交（`T-G205` / `T-G206` / `T-G208`）的**片段文件根本没进提交** —— `_stage_card.py` 在卡树里生成 `docs/changelog.d/<台账号>.md` 等三个片段（**未跟踪文件**），集成时 `--allow` 只给了代码文件 ⇒ `git add` 没带上 ⇒ 三笔的 `.d/` 文件数实测 **0 / 0 / 0**，靠人眼才翻出来。**为什么门禁没咬**：`run_gates.py --seal` 算的「封存树」是**工作树减 `gates/**`**（临时索引 `git add -A`）—— 它**包含**了那些未跟踪片段；可是**没人**拿它与「提交树」比；而 `sync_docs.py --check` **只查**「现有片段在不在汇总里」，**少文件照样 PASS** ⇒ 这个缺口此前**零判据**（「生成了却没进提交」＝账上写了、仓里没有）。**做法**（严格按卡的口径，不扩大）：① `scripts/run_gates.py` 新增 `untracked_files()`，把「此刻未跟踪（不含 `gates/**`）」写进封存读数的新字段 `gates/last.json.untracked`（**两处**：`main()` 落盘 + `seal()` 封存前重算）；② `scripts/audit_progress.py` 新增第 **⑪** 条判据 `check_seal_untracked()` —— 逐条 `git ls-files --error-unmatch` **点名**「封存时未跟踪、现在仍未被跟踪」的文件；③ `tests/test_seal_untracked.py` 新建，**四条钉子 + 一条反例**。**验收（工人自报，主控逐条核）**：① 钉子五条全绿（`pytest -v` = 5 passed，5.90s）：未跟踪片段被封存记下并**点名** · 事后 `git add` 同一份清单 ⇒ 绿 · **老 `last.json` 没有 `untracked` 字段 ⇒ 优雅降级不炸** · 封存记的就是「那几条」未跟踪文件 · 反例「已删除不算缺」；② **对今晚三笔形态的复现**（临时仓库：片段生成在工作区却没进提交）⇒ 逐条点名 `docs/changelog.d/T-G205.md` / `T-G206.md` / `T-G208.md` 并给出「集成时 `--allow` 漏了它」；`git add docs/changelog.d` 之后同一份清单再查 = `[]`（绿）—— **这条判据真的会咬今晚那种账**；③ 既有受影响的测试（gate_fingerprint / run_gates_timeout / gates_reuse_line / audit_tightening / docs_fragments）+ 新文件 = **48 passed**（exit 0）；④ `ruff check src/ tests/ scripts/ tools/ examples/ harness/` = `All checks passed!`。**★ 工人自己交代没做到的（主控认，不替它圆）**：① **没跑任何真门禁**（卡禁区）⇒ `main()` 那条 `untracked` 写入路径**没有端到端跑过 main()**，是借 `seal()`（同一条 `untracked_files()`）+ 真 `audit_progress.py --all` 的 ⑪ 段**间接**验的（`main()` 里只多一个键、只追加、不改既有字段）；② 「有缺 ⇒ 退非 0」靠汇聚进 `all_fails`（与既有各条同一条路），**没有造一次真红的 exit=1 端到端**；③ 判决口径取「未跟踪**且**文件还在」＝红 ⇒ **已删除/改名的片段不报红**（有一条钉子钉住这个选择，卡的口径允许）。**★ 卡外两条（工人判断、主控认，留待另开卡）**：① `_stage_card.py --allow` 的**默认口径**（今晚漏片段的**根因**）不在本卡白名单；真正的防呆是「提交后核对 `docs/changelog.d/` 片段数」；② `tools/sync_docs.py --check` 还有**窄版之外的洞**：「片段存在、但其内容没进汇总」仍零判据。**★ 内存闸真实读数（这趟被它拒过一次，如实记）**：本机可用内存常态就是 **2.3~3.0 GB**（16.33 GB 机器上，用户自己的 Edge 就占 **4.55 GB**、DSH 1.52 GB、`MemCompression` 0.95 GB —— 逐进程核过，**没有**门禁留下的无头 Edge 残留，所以这些内存**不是我能腾的**）。第一次跑集成时读数 **2.3 GB < 2.8 GB ⇒ 内存闸拒跑、门禁根本没跑、不提交**（这道闸按它自己说的做了事，不是噪音）；随后实测 **2.5 GB**，主控显式 `TF_GATE_MIN_FREE_GB=2.2` 放行重跑，理由：本笔只动 `scripts/` + `tests/` ⇒ 5 道真机门**输入未变、全复用**、**不起浏览器**，`TF_PYTEST_WORKERS=2`，且**串行**跑（不与另一笔并行）。这与清单 ⑦/⑧ 的「4.0 在本机常态误拦、阈值该按趟次定」是一致的。"
+
+[entries."T-G213"]
+id = "T-G213"
+title = "卡规格搬进 git：让队列自洽（谁都能接手）"
+group = "RULES"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:tests/test_card_specs_tracked.py",
+  "file:tools/pool/plan.py",
+  "file:复盘/卡/卡022-myday稀疏序号.md",
+  "file:复盘/卡/卡024-看门狗独立化.md",
+  "file:复盘/卡/卡029-派活器三合一.md",
+  "file:复盘/卡/卡108-号池写面①作业登记与守卫.md",
+  "file:复盘/卡/卡109-号池去重收口.md",
+  "file:复盘/卡/卡110-文档落地七条坑与清单.md",
+  "file:复盘/卡/卡111-号池写面②MCP写工具.md",
+  "file:复盘/卡/卡112-切片两处误报.md",
+  "file:复盘/卡/卡113-pool_cancel证据编码.md",
+  "file:复盘/卡/卡114-main_tree_root不许依赖cwd.md",
+  "file:复盘/卡/卡115-封存未跟踪清单判据.md",
+  "file:复盘/卡/卡116-卡规格搬进git.md",
+]
+gaps = "**来路**：队列（`docs/workbacklog.toml`）里每张卡都指着 `spec = 「gates/diag/卡NNN-….md」`，而这些卡规格**全在 gitignore 的 scratch 里**（实测 `gates/diag/` 下 128 份规格文件**一份都没进 git**）⇒ **队列不自洽**：换一个窗口、换一台机器、或者过几天回头看，队列指着的文件**根本不在仓里**，谁也没法接手（「卡规格是工作单/冲突域声明/验收判据的来源」，丢了等于队列名存实亡）。**做法**：① 把**队列登记过的那 11 份 + 本卡 116 自己**逐字搬进 `复盘/卡/`（**只换目录、不改一个字**）；② `tools/pool/plan.py::find_spec` 改成**先查 `复盘/卡/`、再回落 `gates/diag/`**（老根保留，历史卡继续能查到）；③ 新建 `tests/test_card_specs_tracked.py` 三条钉子把「队列自洽」变成机器判据。**验收（工人自报，主控逐条核）**：① **源↔目标 sha256 12/12 全相等**（纯 LF，逐条贴在报告里）；② 钉子 **3 passed**，且钉子①做过**先红演示**（把卡 115 临时移出索引 ⇒ `AssertionError: 队列不自洽 … 卡 115：spec 未进 git（git ls-files 不认）` ⇒ 放回后 3 passed）；③ `pytest tests/ -n 4` = **1791 passed**（4 warnings），相关消费者套件 290 passed；④ `ruff check src tests scripts tools examples harness` = `All checks passed!`。**★ 工人自己交代的两点（主控认，不替它圆）**：① **卡树 base（`5fac774`）里根本没有 115/116 的队列登记** —— 那两段只存在于**主仓未提交**的 `docs/workbacklog.toml`（我加卡时只改了主树、没提交）⇒ 与卡里写的「116 登记主控已做好」**不符**；工人把主仓那份登记搬进卡树，并把两份 spec 一并改成 `复盘/卡/…`（否则队列不自洽、钉子①必红）—— 本笔因此**包含** `docs/workbacklog.toml` 的收拢（10 条 `spec` 行改路径 + 115/116 两段登记，53+/10−，纯 CRLF、未重排其它字段）；② 为满足钉子① 的 `git ls-files`，工人对新文件执行了 **`git add`（只暂存，未 commit/tag/动 refs）**。**★ 卡外两条（工人判断、主控认，留待另开卡）**：① **`.gitattributes` 没给 `复盘/卡/*.md` 钉 `text eol=lf`** ⇒ 本仓 `core.autocrlf=true`，checkout 会把工作区那份变 CRLF、与 LF 源不再逐字 ⇒ 钉子③将来可能**假红**（工人已在钉子③里加了「与**索引里的规范字节**再比一次」的兜底，但根治要给属性）；② `wb_brief.py` / `wb_dispatch.py` 的**文档串**里仍写 `gates/diag/`（那只是示例/输出路径、不是查找根，不影响功能）。**★ 内存闸留痕**：本趟与卡 115 **串行**跑（不并行），可用内存按同一读数（本机常态 2.3~3.0 GB）显式 `TF_GATE_MIN_FREE_GB=2.2` 放行：本笔只动 `复盘/卡/*` + `docs/workbacklog.toml` + `tools/pool/plan.py` + 一个测试 ⇒ 真机门输入未变、全复用、不起浏览器。"
