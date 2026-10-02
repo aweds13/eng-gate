@@ -33,6 +33,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -154,3 +156,38 @@ def test_seal_records_exactly_the_untracked_files(
     assert sorted(payload["untracked"]) == ["docs/changelog.d/T-G999.md", "notes.txt"]
     assert "src/a.txt" not in payload["untracked"]        # 已跟踪的不列
     assert all(not p.startswith("gates/") for p in payload["untracked"])  # gates/** 不列
+
+
+# --------------------------------------------------- ⑤ 卡 118：外来未跟踪文件**不算缺**
+
+def test_foreign_untracked_file_is_not_a_violation(tmp_path: Path) -> None:
+    """★ 卡 118（T-G216）：**外来未跟踪文件不算缺**（用户放在仓库根的笔记就是这种）。
+
+    来路：收一笔文档任务时，⑪ 拿「封存时未跟踪」的**全量**清单去比 ⇒ 把用户那 4 份一直未跟踪、
+    明确说过「留着」的笔记判成「生成了却没进提交」⇒ **任何主树收口都会被挡住**。
+    口径收窄到三个片段目录；其它位置不算缺（但会报一行「不计」）。
+    """
+    _init_repo(tmp_path)
+    _seed(tmp_path, "外来笔记.md", "用户自己的东西，永远不该进提交")
+    _seed(tmp_path, "docs/changelog.d/T-G999.md", "真漏的片段")
+    _write_last(tmp_path, {"ok": True, "untracked": ["外来笔记.md", "docs/changelog.d/T-G999.md"]})
+
+    fails = ap.check_seal_untracked(repo=tmp_path)
+
+    assert len(fails) == 1, fails
+    assert fails[0].startswith("docs/changelog.d/T-G999.md"), fails
+    assert not any("外来笔记" in f for f in fails), fails
+
+
+def test_foreign_untracked_file_alone_is_green_and_reported(tmp_path: Path) -> None:
+    """★ 只有外来未跟踪文件 ⇒ **绿**（今晚主树那 4 份笔记的形态），且要报一行「不计」。"""
+    _init_repo(tmp_path)
+    _seed(tmp_path, "DSH-窗口化方案.md", "用户的笔记")
+    _write_last(tmp_path, {"ok": True, "untracked": ["DSH-窗口化方案.md"]})
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        fails = ap.check_seal_untracked(repo=tmp_path)
+
+    assert fails == []
+    assert "不计" in buf.getvalue() and "无关" in buf.getvalue()

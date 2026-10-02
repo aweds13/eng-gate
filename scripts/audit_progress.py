@@ -444,7 +444,22 @@ def check_spec_child_cards(data: dict, n2sr: dict[str, set[str]] | None = None) 
     return errs
 
 
-# ---------------------------------------------- ⑪ 封存未跟踪清单（卡 115 / T-G212）
+# ------------------------- ⑪ 封存未跟踪清单（卡 115 / T-G212；卡 118 收窄口径）
+
+#: ⑪ **只对这三个片段目录**下的未跟踪文件咬（卡 118 收窄）。
+#: 为什么收窄：2026-10-02 收一笔文档任务时，⑪ 把**用户自己放在仓库根的 4 份笔记**
+#: （一直未跟踪、用户明确说过"留着"）判成"生成了却没进提交"⇒ **任何主树收口都被挡住**。
+#: 今晚真丢的三笔（`T-G205`/`T-G206`/`T-G208`）丢的**正是这三类片段** ⇒ 口径收到这里足够，
+#: 其它位置的未跟踪文件**不算缺**（但要报一行"不计"，别让"看不见"变成新盲区）。
+FRAGMENT_DIRS = ("docs/changelog.d/", "docs/traceability.d/", "复盘/交接.d/")
+
+
+def _in_fragment_dir(rel: str) -> bool:
+    """这条未跟踪文件是不是"本笔该带的"片段（路径先按 `/` 归一，再比前缀）。"""
+    norm = rel.replace("\\", "/")
+    return any(norm.startswith(d) for d in FRAGMENT_DIRS)
+
+
 def _is_tracked(repo: Path, rel: str) -> bool:
     """`rel` 现在被 git 跟踪吗（`git ls-files --error-unmatch` 退 0 才算）。"""
     done = subprocess.run(
@@ -489,13 +504,22 @@ def check_seal_untracked(repo: Path = ROOT, gates_path: Path | None = None) -> l
     if not isinstance(untracked, list):  # 老产物没有这个字段 → 没有清单，优雅降级
         return []
     fails: list[str] = []
+    ignored: list[str] = []
     for rel in untracked:
         rel = str(rel)
         if not rel or _is_tracked(repo, rel):
             continue
         if not (repo / rel).exists():  # 干脆不存在了 → 不算"生成了却没进提交"
             continue
+        if not _in_fragment_dir(rel):
+            # ★ 卡 118 收窄：不在片段目录里的未跟踪文件**不算缺**（用户笔记、外来文档…），
+            #   只记下来报一行 —— 判据盯的是"本笔该带的片段"，不是"工作区所有未跟踪"。
+            ignored.append(rel)
+            continue
         fails.append(f"{rel}：{hint}")
+    if ignored:
+        joined = "、".join(sorted(ignored))
+        print(f"  {WARN} 另有 {len(ignored)} 个**无关**未跟踪文件（不计）：{joined}")
     return fails
 
 

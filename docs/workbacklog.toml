@@ -237,3 +237,17 @@ files = [
 depends = []
 risk = "low"
 status = "pending"
+
+[[cards]]
+id = "118"
+task = "T-G216"
+title = "⑪ 判据口径收窄（不许把外来未跟踪文件当漏交）+ 审计失败路径补还门禁锁"
+tree = ".wt/auditc"
+spec = "复盘/卡/卡118-审计⑪口径收窄.md"
+files = [
+  "scripts/audit_progress.py",
+  "tests/test_seal_untracked.py"
+]
+depends = []
+risk = "low"
+status = "pending"
