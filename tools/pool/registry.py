@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pool import guards, jobs
+from pool import guards, jobs, projects
 from pool import locks as pool_locks
 
 if TYPE_CHECKING:
@@ -265,8 +265,22 @@ def read_lock_body(path: Path | str | None = None) -> str:
     return (done.stdout or "") + (done.stderr or "")
 
 
+def _resolve_project(tree: str, project: str) -> str:
+    """租约的 `project`（卡 120）：显式给的优先；没给就按树**反查**（查不到 ⇒ 空，不猜）。
+
+    ★ `project` 是**附注**（"这棵树属于谁"），不是放行判据 —— 所以索引读不了时**留空**，
+      不因此拖垮登记（守卫该咬的地方在 `pool.guards.project_guard`）。
+    """
+    if str(project).strip():
+        return str(project).strip()
+    try:
+        return projects.find_by_tree(tree) or ""
+    except projects.ProjectsError:
+        return ""
+
+
 def reserve(card: str, *, task: str = "", tree: str = "", files: Iterable[str] = (),
-            pool: str = "", model: str = "", log: str = "", note: str = "",
+            project: str = "", pool: str = "", model: str = "", log: str = "", note: str = "",
             owner: str | None = None, ttl_seconds: float = DEFAULT_TTL,
             now: float | None = None, path: Path | str | None = None,
             lock_body: str | None = None) -> dict:
@@ -274,6 +288,7 @@ def reserve(card: str, *, task: str = "", tree: str = "", files: Iterable[str] =
 
     过的守卫 = 树（`tree_guard`）+ 冲突域（`domain_guard`）+ 门禁锁（`lock_guard`）
     + 日志不许覆盖（`log_guard`，给了 `log` 才查）。
+    ★ 卡 120：租约里记下 `project`（占树时定下来）—— 不给则按 `tree` 反查（`_resolve_project`）。
     守卫咬 → `GuardError`（`problems` 逐条点名）；环境 / 文件坏 → `RegistryError`；
     两者都**不落盘**。`lock_body` 不给就现跑一次 `gate_lock.py status`。
     """
@@ -299,6 +314,7 @@ def reserve(card: str, *, task: str = "", tree: str = "", files: Iterable[str] =
         "task": str(task),
         "tree": str(tree),
         "files": [str(item) for item in files],
+        "project": _resolve_project(str(tree), project),
         "pool": str(pool),
         "model": str(model),
         "log": str(log),

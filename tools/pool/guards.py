@@ -1,15 +1,18 @@
-r"""三条自家守卫（卡 108 · T-G205）—— **纯函数**：吃数据 → 回 `list[str]` 问题。
+r"""自家守卫 —— **纯函数**：吃数据 → 回 `list[str]` 问题。
 
-**防什么**：写面（派活 / 取消）动手前要能回答「这棵树 / 这个冲突域 / 这趟门禁，现在能不能碰」。
-这里三条守卫只吃**已经读好的数据**（租约表 / 锁的原文），回一串人话问题：**不写文件、不 print、
-不起进程** —— 所以既好测，也能被写面（卡 110）直接复用，不会变成第二份真源。
+**防什么**：写面（派活 / 取消）动手前要能回答「这棵树 / 这个冲突域 / 这趟门禁 / **这个项目**，
+现在能不能碰」。这里守卫只吃**已经读好的数据**（租约表 / 锁的原文 / 只读项目索引），
+回一串人话问题：**不写文件、不 print、不起进程** —— 所以既好测，也能被写面（卡 110）直接复用，
+不会变成第二份真源。
 
-**哪三条是我判的**：
+**哪几条是我判的**：
 - `tree_guard`   —— 一棵树同时只能有一个活租约（主树尤其）。
 - `domain_guard` —— 冲突域与任何活租约**相交**就拒，并**点名相交的文件**（相交判据直接用
   `pool.plan.files_intersect`，不另写一份 —— 本仓最忌两份真源）。
 - `lock_guard`   —— 门禁锁的原文里，若有锁的 `card` = 本卡 **或** `cwd` 指向本树 ⇒ 拒
   （"这趟门禁还在跑，别动手"）。解析在 `pool.locks.parse_entries`。
+- `project_guard` —— **项目守卫（卡 120 · T-G232）**：没登记过的项目 / 树不落在该项目
+  `tree_prefixes` 里 / 反查不到 ⇒ 拒。数据来自**只读**的 `pool.projects` 索引。
 
 **哪三条是别人判的（本模块明确"委托"，重写就是第三份真源）**：
 - **内存闸** —— `tools/wb_dispatch.py` 的前置检查（`TF_GATE_MIN_FREE_GB`）是唯一实现；
@@ -30,6 +33,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pool import locks as pool_locks
+from pool import projects as pool_projects
 from pool.plan import Card, files_intersect
 
 if TYPE_CHECKING:
@@ -172,4 +176,48 @@ def log_guard(path: object) -> list[str]:
     return []
 
 
-__all__ = ["domain_guard", "lock_guard", "log_guard", "tree_guard"]
+# ================================================================ 守卫⑤ 项目（卡 120 · T-G232）
+
+
+def project_guard(tree_rel: object, project: object = None) -> list[str]:
+    """项目守卫：**没登记的项目 / 树越界 / 反查不到 ⇒ 拒**（空列表 = 没被咬）。
+
+    ★ 与 `pool.projects` 的三条硬判据配套（存在性即授权，和 MCP 写面同一个思路）：
+      ① **没登记过的项目不许派活**（点名已登记的有哪些）；
+      ② `tree` 必须落在该项目 `tree_prefixes` 里，越界 ⇒ 拒并**点名允许哪些前缀**；
+      ③ 不给 `project` ⇒ 用 `projects.find_by_tree` **反查**；反查不到 ⇒ 拒
+         （"这棵树不属于任何已登记项目"）。
+    ★ 主树（`tree_rel == ""`）= **项目根本身** ⇒ 放行 —— 它就是这个项目；"越界"的定义是
+      "落在本项目的树前缀之外"，不是"不是主树"。
+    ★ 索引读不了（找不到 / 本身违规）⇒ **拒**（不猜、不放过）。
+    ★ 该函数只**读**只读索引（不写 / 不 print / 不起进程）：问题是返回值，不是异常；
+      与同模块另三条同一风格（吃数据 / 回 `list[str]`，只是这条的数据在只读索引里）。
+    """
+    try:
+        entries = pool_projects.load()
+    except pool_projects.ProjectsError as exc:
+        return [f"项目索引读不了（项目守卫判不了）：{exc}"]
+    tree = _norm(tree_rel)
+    name = str(project).strip() if project is not None else ""
+    if not name:
+        found = pool_projects.find_by_tree(tree, rows=entries)
+        if not found:
+            return [f"这棵树不属于任何已登记项目：{_tree_label(tree)}"
+                    f" —— 没登记的树不许派活（先把它登记进项目索引）"]
+        name = found
+    entry = pool_projects.get(name, rows=entries)
+    if entry is None:
+        known = "、".join(row["id"] for row in entries) or "（一个都没登记）"
+        return [f"没登记过的项目不许派活：{name}（已登记：{known}）"]
+    if tree == "":
+        owner = pool_projects.find_by_tree("", rows=entries)
+        if owner is None or owner == name:
+            return []
+        return [f"树越界：主树属于项目 {owner}，不是 {name}"]
+    if pool_projects.under_prefix(tree, entry["tree_prefixes"]):
+        return []
+    return [f"树越界：{_tree_label(tree)} 不落在项目 {name} 的树前缀里"
+            f"（允许：{'、'.join(entry['tree_prefixes'])}）"]
+
+
+__all__ = ["domain_guard", "lock_guard", "log_guard", "project_guard", "tree_guard"]

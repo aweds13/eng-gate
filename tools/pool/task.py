@@ -67,6 +67,11 @@ try:  # ★ 受保护共享文件（卡 128）：只在包上下文里可相对�
 except ImportError:  # pragma: no cover - 直接以脚本方式运行时才走这条
     from plan import PROTECTED_FILES
 
+try:  # ★ 项目索引（卡 120）：同上 —— 包上下文相对导入，直接跑脚本退回绝对导入。
+    from .projects import ProjectsError, find_by_tree
+except ImportError:  # pragma: no cover - 直接以脚本方式运行时才走这条
+    from projects import ProjectsError, find_by_tree  # type: ignore[no-redef]
+
 #: 任务相关文件都放这儿（相对主工作树根）。
 BATCH_REL = ("gates", "diag", "batch")
 
@@ -407,6 +412,20 @@ def layers_of(man: dict) -> list[str]:
     return out
 
 
+def project_of_main_tree() -> tuple[str, str]:
+    """收批任务的 `project`（卡 120）：按**主树**反查；拿不到 ⇒ `("", 一句为什么)`。
+
+    ★ 只反查、**不猜**：索引读不了或主树不属于任何已登记项目 ⇒ 留空并说明（写进 history）。
+    """
+    try:
+        found = find_by_tree("") or ""
+    except ProjectsError as exc:
+        return "", f"项目索引读不了（{exc}）⇒ project 留空"
+    if not found:
+        return "", "主树不属于任何已登记项目 ⇒ project 留空"
+    return found, ""
+
+
 def cmd_register(args: argparse.Namespace) -> int:
     src = Path(args.manifest)
     if not src.is_absolute():
@@ -429,6 +448,7 @@ def cmd_register(args: argparse.Namespace) -> int:
     dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
     man = load_manifest(task_id)
     members = [m["id"] for m in man["member"]]
+    project, project_why = project_of_main_tree()
 
     state = {
         "id": task_id,
@@ -436,6 +456,7 @@ def cmd_register(args: argparse.Namespace) -> int:
         "layers": layers_of(man),
         "declared": members,
         "need": len(members),          # ★ 判据是"名单上每张卡都交了成功申请"，不是数量阈值
+        "project": project,            # ★ 卡 120：任务属于哪个项目（反查得到就写；拿不到留空）
         "claims": {},                  # 卡号 → 成送申请（success / failed）
         "waived": [],
         "state": "collecting",
@@ -450,6 +471,8 @@ def cmd_register(args: argparse.Namespace) -> int:
     _log(state, "-", "collecting",
          f"注册任务：{len(members)} 张卡 · 层 {'、'.join(state['layers'])} · "
          f"集齐条件=**全部成送申请**")
+    if project_why:
+        _log(state, "-", "collecting", f"project 留空：{project_why}")
     write_json_atomic(state_path(task_id), state)
     print(f"任务 {task_id} 注册好了：{len(members)} 张卡 / 层 {'、'.join(state['layers'])}")
     print("  ★ 放行判据：名单上每一张卡都交了**成功申请**（或缺席者被显式豁免）—— 不看数量")
@@ -963,7 +986,7 @@ def _report(state: dict) -> int:
     if state["state"] == "awaiting-commit":
         print(f"文书骨架：{state['draft']['path']}")
         print(f"人手补『为什么』：{state['draft'].get('why') or '（无）'}")
-        print("★ 停在这儿：补完 → 走正常收口（`tools/wb_land.py --batch`）→ 提交后 `landed`")
+        print("★ 停在这儿：补完 → 走正常收口（`_integrate.py --batch`）→ 提交后 `landed`")
     return 0
 
 

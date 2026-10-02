@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import locale
 import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -78,6 +79,37 @@ def sandbox(tmp_path: Path, monkeypatch) -> Path:
     (tmp_path / "docs" / "workbacklog.toml").write_text(_SANDBOX_BACKLOG, encoding="utf-8")
     monkeypatch.setenv("TF_POOL_REGISTRY",
                        str(tmp_path / "gates" / "diag" / "pool-registry.json"))
+    # ★ 卡 120（T-G232）接上 `project_guard` 之后，沙箱也得**有一份自己的项目索引**：
+    #   几条用例把 `--cwd` 指到**仓外临时目录**、或干脆不给 `--cwd`（= 主树）⇒ 守卫会**正确地**拒
+    #   （"这棵树不属于任何已登记项目"）——那是守卫在干活，不是它坏了 ⇒ 这里按 `TF_POOL_REGISTRY`
+    #   同款把**索引也隔离到沙箱**：① 沙箱临时目录自己算一个项目（仓外树标签走这条）；
+    #   ② ★ **「主树」那条反查用的是 `projects.tree_root()`（真实仓库根，
+    #      不受 `wd.ROOT` monkeypatch 影响）**
+    #   ⇒ 还得有一条 `root` 是**真实仓库根的祖先**的登记（父目录，真实存在 ⇒ 过 root 校验）。
+    real_root = pathlib.Path(wd.__file__).resolve().parents[2]
+    projects_toml = tmp_path / "projects.toml"
+    projects_toml.write_text(chr(10).join([
+        "[project.sandbox]",
+        'name = "沙箱"',
+        f'root = "{tmp_path.as_posix()}"',
+        "memory = []",
+        "layers = []",
+        f'tree_prefixes = ["{tmp_path.as_posix()}"]',
+        'queue = ""',
+        'ledger = ""',
+        'cards = ""',
+        "",
+        "[project.sandbox-ancestor]",
+        'name = "沙箱（祖先，给主树反查用）"',
+        f'root = "{real_root.parent.as_posix()}"',
+        "memory = []",
+        "layers = []",
+        f'tree_prefixes = ["{tmp_path.as_posix()}"]',
+        'queue = ""',
+        'ledger = ""',
+        'cards = ""',
+    ]) + chr(10), encoding="utf-8")
+    monkeypatch.setenv("TF_PROJECTS_TOML", str(projects_toml))
     monkeypatch.setattr(wd.pool_registry, "read_lock_body", lambda *a, **k: "")
     return tmp_path
 

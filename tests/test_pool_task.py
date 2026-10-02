@@ -551,3 +551,40 @@ def test_nail128_09_protected_files_rejected(tmp_path, monkeypatch):
     _register(tmp_path, "T-Q", _manifest("T-Q", [("卡A", ["tools/a/*"])]))
     rc = task.main(["claim", "T-Q", "卡A", "--evidence", "ok", "--files", "docs/traceability.toml"])
     assert rc == 2, f"claim 把受保护文件写进 --files 没拒：rc={rc}"
+
+
+# ================================================================ 任务带 project（卡 120 · T-G232）
+
+
+def test_register_records_project_from_the_main_tree(tmp_path, monkeypatch):
+    """★ 卡 120：任务状态里带 `project`（按主树反查索引得到）—— 真索引里是 engineering。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    monkeypatch.delenv("TF_PROJECTS_TOML", raising=False)
+    _register(tmp_path, "T-P", _manifest("T-P", [("卡A", ["tools/a/*"])]))
+    st = task.read_json(task.state_path("T-P"))
+    assert st["project"] == "engineering", st.get("project")
+
+
+def test_register_project_empty_and_explained_when_index_missing(tmp_path, monkeypatch):
+    """★ 索引读不了 ⇒ `project` 留空，**并在 history 里记一行说清为什么**（不猜）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    monkeypatch.setenv("TF_PROJECTS_TOML", str(tmp_path / "没有这份.toml"))
+    _register(tmp_path, "T-Q", _manifest("T-Q", [("卡A", ["tools/a/*"])]))
+    st = task.read_json(task.state_path("T-Q"))
+    assert st["project"] == ""
+    assert any("project 留空" in row["note"] for row in st["history"]), st["history"]
+
+
+def test_register_project_empty_when_no_project_claims_the_main_tree(tmp_path, monkeypatch):
+    """反查得到"不属于任何项目" ⇒ 同样留空 + 记一行（和"读不了"分开说）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    idx = tmp_path / "projects.toml"
+    idx.write_text(f'[project.x]\nroot = "{other.as_posix()}"\ntree_prefixes = [".wt/"]\n',
+                   encoding="utf-8")
+    monkeypatch.setenv("TF_PROJECTS_TOML", str(idx))
+    _register(tmp_path, "T-Z", _manifest("T-Z", [("卡A", ["tools/a/*"])]))
+    st = task.read_json(task.state_path("T-Z"))
+    assert st["project"] == ""
+    assert any("不属于任何已登记项目" in row["note"] for row in st["history"]), st["history"]

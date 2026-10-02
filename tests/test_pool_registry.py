@@ -319,6 +319,42 @@ def test_default_owner_prefers_window_id(monkeypatch: pytest.MonkeyPatch) -> Non
     assert ":" in registry.default_owner()          # 回退 <hostname>:<pid>
 
 
+# ================================================================ ⑤ 租约带 project（卡 120）
+
+
+def test_reservation_writes_project_from_the_tree(reg: Path, quiet_lock: None,
+                                                  monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 租约里**真的写了** `project`（写进去再读回来核）—— 按树从项目索引反查。"""
+    monkeypatch.delenv("TF_PROJECTS_TOML", raising=False)
+    entry = registry.reserve("108", tree=".wt/a", files=["a.py"], now=NOW)
+    assert entry["project"] == "engineering"
+    assert json.loads(reg.read_text(encoding="utf-8"))[0]["project"] == "engineering"
+
+
+def test_reservation_honours_an_explicit_project(reg: Path, quiet_lock: None) -> None:
+    entry = registry.reserve("108", tree=".wt/a", files=["a.py"], project="whatever", now=NOW)
+    assert entry["project"] == "whatever"
+
+
+def test_reservation_project_empty_when_index_is_unreadable(
+        reg: Path, quiet_lock: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """索引读不了 ⇒ `project` 留空（附注而已，**不拖垮登记**）。"""
+    monkeypatch.setenv("TF_PROJECTS_TOML", str(tmp_path / "没有这份.toml"))
+    entry = registry.reserve("108", tree=".wt/a", files=["a.py"], now=NOW)
+    assert entry["project"] == ""
+
+
+def test_cli_list_shows_the_project(reg: Path, quiet_lock: None,
+                                    monkeypatch: pytest.MonkeyPatch,
+                                    capsys: pytest.CaptureFixture) -> None:
+    monkeypatch.delenv("TF_PROJECTS_TOML", raising=False)
+    assert wb_registry.main(["reserve", "--card", "108", "--tree", ".wt/a",
+                             "--files", "a.py"]) == 0
+    capsys.readouterr()
+    assert wb_registry.main(["list"]) == 0
+    assert "项目 engineering" in capsys.readouterr().out
+
+
 # ================================================================ ④ CLI：list/check/reserve/release
 
 

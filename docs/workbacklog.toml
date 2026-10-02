@@ -450,7 +450,7 @@ files = [
 ]
 depends = ["138"]
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "135"
@@ -528,4 +528,32 @@ files = [
 ]
 depends = []
 risk = "high"
+status = "pending"
+
+[[cards]]
+id = "140"
+task = "T-G239"
+title = "「门 × 输入」表 + run_gates --affected（自查提速；收口仍全量）"
+tree = ".wt/affected"
+spec = "复盘/卡/卡140-门乘输入表与自查提速.md"
+files = [
+  "scripts/run_gates.py",
+  "tests/test_run_gates_affected.py"
+]
+depends = []
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "141"
+task = "T-G240"
+title = "掐掉工人要还租约（atexit 兜底 + 强杀后陈旧租约能清）"
+tree = ".wt/lease"
+spec = "复盘/卡/卡141-掐工人要还租约.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py"
+]
+depends = ["135"]
+risk = "mid"
 status = "pending"

@@ -104,7 +104,7 @@ import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（
 #   —— 这里只 import、只调用，不另写一份（本地副本各删一处；判据漂一次就会越界 / 串卡）。
 #   ★ 卡 125 的来路（GLM-5.3 审查 2.1）：从前只有 MCP 写面与手工 CLI 接守卫，走**默认派活器**
 #   `wb_dispatch --execute` 时不变量 ①②③⑤ 全部失效、且对其他窗口不可见（一树两写者不会被咬）。
-from pool import guards as pool_guards  # noqa: E402 —— 四条守卫唯一实现（pool.guards）
+from pool import guards as pool_guards  # noqa: E402 —— 守卫唯一实现（pool.guards）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
 from pool.jobs import card_artifacts  # noqa: E402 —— 产物定位唯一实现（pool.jobs）
 from pool.models import SwitchFileError, load_switches  # noqa: E402 —— 外部模型开关（卡 138）
@@ -1774,14 +1774,16 @@ def queue_files(card: str, *, root: Path | None = None) -> tuple[list[str], str 
     return list(hit.files), None
 
 
-def guard_problems(card: str, worker_cwd: Path | None, *, now: float | None = None) -> list[str]:
-    """四条守卫的干跑（树 / 冲突域 / 门禁锁）—— 返回问题清单（空 = 全过）。
+def guard_problems(card: str, worker_cwd: Path | None, *, now: float | None = None,
+                   project: str | None = None) -> list[str]:
+    """守卫的干跑（树 / 冲突域 / 项目 / 门禁锁）—— 返回问题清单（空 = 全过）。
 
     ★ 判据全在 `pool.guards`（在这里只**喂数据**，不另写一份）：活租约来自
       `pool.registry.list_reservations`（它先清死租约）、锁原文来自
       `pool.registry.read_lock_body`（不许自己拼 shell 命令）。
     ★ 位置与现有 `[FAIL] 不派活` **同一层**：任何一条咬 → 这条派活前置检查全过不了。
-    ★ 算不出主工作树 / 读不了登记 / 查不到域 → **拒**（不静默当通过，也不猜）。
+    ★ 算不出主工作树 / 读不了登记 / 查不到域 / 项目索引读不了 → **拒**（不静默当通过，也不猜）。
+    ★ 卡 120：项目守卫（`project_guard`）接在**树 / 域守卫之后**；`project` 不给 ⇒ 按树反查。
     """
     files, why = queue_files(card)
     if why:
@@ -1799,7 +1801,8 @@ def guard_problems(card: str, worker_cwd: Path | None, *, now: float | None = No
     return [
         *pool_guards.tree_guard(tree, live, now),                          # ① 一棵树一个写者
         *pool_guards.domain_guard(files, live, now),                       # ② 冲突域不相交
-        *pool_guards.lock_guard(card, tree, lock_body, root=main_root),    # ③ 门禁还在跑
+        *pool_guards.project_guard(tree, project),                         # ③ 项目：登记/前缀/反查
+        *pool_guards.lock_guard(card, tree, lock_body, root=main_root),    # ④ 门禁还在跑
     ]
 
 
@@ -1808,7 +1811,8 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
               allow: list[str] | None = None,
               port_bases: list[int] | None = None,
               worker_cwd: Path | None = None,
-              already_reserved: bool = False) -> tuple[list[str], Path]:
+              already_reserved: bool = False,
+              project: str | None = None) -> tuple[list[str], Path]:
     """四道检查 —— 返回（问题清单, 日志路径）。问题非空就不许派活。
 
     ★ 卡 029 §2.10（本轮真撞的）：**续跑**（`--resume <id>` / `--resume auto` 拿到了 id）时
@@ -1823,6 +1827,8 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
     ★ **卡 125 修订**：`already_reserved=True`（`--already-reserved`）= 调用方（MCP 写面）已经
     占过树 ⇒ **只跳过守卫那一段**；别的检查（规格 / 脏树 / log / 端口 / 内存 / 登录）**照走**。
     不带它时行为**一字不变**。
+    ★ **卡 120**：`project` 给或不给，都过 `project_guard`（不给 ⇒ 按树从项目索引反查）；它接在
+    既有树 / 域守卫**之后**，**不放宽**任何既有前置（内存 / 登录 / 白名单 / 日志 / 树 / 域 / 锁）。
     """
     problems: list[str] = []
     node, cli = paths(cli_override)
@@ -1879,9 +1885,9 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
         print("  守卫已跳过（--already-reserved：树由调用方占过，判据在那边）",
               file=sys.stderr, flush=True)
     else:
-        guard_list = guard_problems(card, worker_cwd)
+        guard_list = guard_problems(card, worker_cwd, project=project)
         if not guard_list:
-            print("  守卫全过（树被占 / 冲突域相交 / 门禁还在跑 —— 三条都没咬）",
+            print("  守卫全过（树被占 / 冲突域相交 / 项目越界 / 门禁还在跑 —— 四条都没咬）",
                   file=sys.stderr, flush=True)
         problems.extend(guard_list)
     # ★ 卡 095：端口段体检（铁律 37）—— 给了段且段内有占用就拒派；没给段则如实跳过。
@@ -1913,6 +1919,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "MODEL_WHITELIST / ONE_OFF_MODELS **外加**外部开关文件 "
                              "infra/pool/model-switches.toml 里打开(true)的模型；"
                              "表外一律拒单（用户 2026-09-26 令：黑名单锁死）")
+    parser.add_argument("--project", default=None,
+                        help="项目名（卡 120）—— 不给就按 `--cwd` 那棵树从项目索引反查；"
+                             "没登记的项目 / 树不落在该项目的树前缀里 ⇒ 拒派")
     parser.add_argument("--cli", default=None,
                         help="CLI 入口覆盖（默认优先用独立安装的那份）")
     parser.add_argument("--permission-mode", default=DEFAULT_PERMISSION_MODE,
@@ -2016,7 +2025,7 @@ def main() -> int:
         args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
         cli_override=args.cli, resuming=bool(resume_sid), allow=args.allow,
         port_bases=port_bases, worker_cwd=worker_cwd,
-        already_reserved=args.already_reserved,
+        already_reserved=args.already_reserved, project=args.project,
     )
 
     if problems:
@@ -2139,9 +2148,10 @@ def main() -> int:
             # ★ **不把 log 交给 reserve**：`log_guard`（目标已存在就拒）与续跑语义打架 ——
             #   续跑时 log 本就在（`--force` / 换 `r2` 名是 wb_dispatch 自己的逻辑，见卡规格）。
             #   日志那条委托 wb_dispatch 自己（preflight 已按 `--force` 判过），这里不重判。
-            pool_registry.reserve(args.card, tree=reserve_tree, files=reserve_files,
-                                  model=args.model, note=f"spec={args.spec}",
-                                  lock_body=pool_registry.read_lock_body())
+            lease = pool_registry.reserve(args.card, tree=reserve_tree, files=reserve_files,
+                                          project=args.project or "", model=args.model,
+                                          note=f"spec={args.spec}",
+                                          lock_body=pool_registry.read_lock_body())
         except pool_registry.GuardError as exc:
             print("[FAIL] 占树被守卫拦下，**不派活**：", file=sys.stderr, flush=True)
             for item in exc.problems:
@@ -2153,6 +2163,7 @@ def main() -> int:
         # ★ 照卡 118 给门禁锁做的兜底：进程怎么退都 release 一次（已还过 = 空操作）。
         atexit.register(release_tree, "进程退出兜底")
         print(f"[占树] 已登记租约：卡 {args.card}｜树 {reserve_tree or '（主树）'}｜"
+              f"项目 {lease.get('project') or '（未定）'}｜"
               f"域 {'、'.join(reserve_files)}", flush=True)
 
     attempts, code, reason, scene, sid = 1, 0, "", "", resume_sid

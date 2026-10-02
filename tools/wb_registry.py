@@ -6,7 +6,7 @@ r"""号池写面地基①：作业登记 CLI `tools/wb_registry.py`（卡 108 ·
     python -X utf8 tools/wb_registry.py list [--json]                    列活租约（空就说"空着"）
     python -X utf8 tools/wb_registry.py check --card 108 [--tree T] [--files A B …]
     python -X utf8 tools/wb_registry.py reserve --card 108 [--tree T] [--files A B …] \
-        [--model M] [--log L] [--ttl 21600]
+        [--project P] [--model M] [--log L] [--ttl 21600]
     python -X utf8 tools/wb_registry.py release --card 108
 
 - `check` = **只跑守卫、不登记**（写面的"干跑"）。
@@ -67,7 +67,8 @@ def _render_human(rows: list[dict]) -> str:
     for row in rows:
         lines.append(
             f"  · 卡 {row.get('card')}（{row.get('task') or '—'}）｜树 "
-            f"{row.get('tree') or '（主树）'}｜owner {row.get('owner')}")
+            f"{row.get('tree') or '（主树）'}｜项目 {row.get('project') or '（未定）'}"
+            f"｜owner {row.get('owner')}")
         lines.append(
             f"      域：{'、'.join(row.get('files') or []) or '（空）'}"
             f"｜起于 {row.get('at')}｜TTL {row.get('ttl_seconds')}s")
@@ -131,13 +132,13 @@ def cmd_check(card: str, tree: str, files: list[str] | None, now: float | None =
 
 
 def cmd_reserve(card: str, tree: str, files: list[str] | None, *,
-                model: str = "", log: str = "", ttl: int = registry.DEFAULT_TTL,
-                now: float | None = None) -> int:
+                project: str = "", model: str = "", log: str = "",
+                ttl: int = registry.DEFAULT_TTL, now: float | None = None) -> int:
     stamp = time.time() if now is None else now
     try:
         domain = _files_or_backlog(card, files)
-        entry = registry.reserve(card, tree=tree, files=domain, model=model, log=log,
-                                 ttl_seconds=ttl, now=stamp)
+        entry = registry.reserve(card, tree=tree, files=domain, project=project,
+                                 model=model, log=log, ttl_seconds=ttl, now=stamp)
     except registry.GuardError as exc:
         print("[咬 ] 守卫拦下，未登记：", file=sys.stderr)
         for item in exc.problems:
@@ -147,7 +148,8 @@ def cmd_reserve(card: str, tree: str, files: list[str] | None, *,
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 2
     print(f"[登 ] 已登记：卡 {entry['card']}（{entry['task'] or '—'}）占树 "
-          f"{entry['tree'] or '（主树）'}｜owner {entry['owner']}")
+          f"{entry['tree'] or '（主树）'}｜项目 {entry['project'] or '（未定）'}"
+          f"｜owner {entry['owner']}")
     print(f"      域：{'、'.join(entry['files']) or '（空）'}｜at {entry['at']}"
           f"｜TTL {int(entry['ttl_seconds'])}s｜登记文件 {registry.registry_path()}")
     return 0
@@ -188,6 +190,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_res.add_argument("--tree", default="", help="树（相对主树根；默认 '' = 主树）")
     p_res.add_argument("--files", nargs="+", default=None,
                        help="冲突域；不给就按卡号从 backlog 查")
+    p_res.add_argument("--project", default="",
+                       help="项目名（卡 120）；不给就按树从项目索引反查")
     p_res.add_argument("--model", default="", help="模型")
     p_res.add_argument("--log", default="", help="作业日志（相对路径）")
     p_res.add_argument("--ttl", type=int, default=registry.DEFAULT_TTL,
@@ -207,7 +211,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_check(args.card, args.tree, args.files)
     if args.command == "reserve":
         return cmd_reserve(args.card, args.tree, args.files,
-                           model=args.model, log=args.log, ttl=args.ttl)
+                           project=args.project, model=args.model, log=args.log, ttl=args.ttl)
     return cmd_release(args.card)
 
 

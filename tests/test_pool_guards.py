@@ -19,12 +19,16 @@ import datetime
 import inspect
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import wb_dispatch  # noqa: E402 —— tools/ 已在 sys.path 上
 from pool import guards, locks, plan  # noqa: E402
+
+if TYPE_CHECKING:
+    import pytest
 
 NOW = 1_700_000_000.0
 
@@ -154,3 +158,87 @@ def test_guards_are_importable_without_registry() -> None:
     lines = [ln.strip() for ln in inspect.getsource(guards).splitlines()]
     assert not any(ln.startswith(("import registry", "from pool import registry"))
                    for ln in lines)
+
+
+# ================================================================ ④ 项目守卫（卡 120 · T-G232）
+#
+# 为什么值当测：`project_guard` 把"哪个项目 / 允许派到哪些树"从自觉变成机器判据。三条咬法各配
+# 一条正例（别的项目的树 / 未登记项目 / 反查不到），并留一条"正常树放行"当反空转；「码道」是
+# 用户亲口定的反例（索引里没有 ⇒ **不许猜路径**）。临时索引一律用 `TF_PROJECTS_TOML`。
+
+
+def _two_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """临时索引：engineering（`.wt/`）与 other（`cards/`）—— 供"别的项目的树"测试。"""
+    eng, other = tmp_path / "eng", tmp_path / "other"
+    eng.mkdir()
+    other.mkdir()
+    index = tmp_path / "projects.toml"
+    index.write_text((
+        "[project.engineering]\n"
+        f'root = "{eng.as_posix()}"\n'
+        'memory = ["a.md"]\n'
+        'tree_prefixes = [".wt/"]\n'
+        "\n[project.other]\n"
+        f'root = "{other.as_posix()}"\n'
+        'memory = ["o.md"]\n'
+        'tree_prefixes = ["cards/"]\n'), encoding="utf-8")
+    monkeypatch.setenv("TF_PROJECTS_TOML", str(index))
+
+
+def test_project_guard_allows_a_tree_in_prefix(tmp_path: Path,
+                                               monkeypatch: pytest.MonkeyPatch) -> None:
+    _two_projects(tmp_path, monkeypatch)
+    assert guards.project_guard(".wt/card") == []          # 反例：正常树 ⇒ 放行
+    assert guards.project_guard("cards/x", project="other") == []
+
+
+def test_project_guard_bites_another_projects_tree(tmp_path: Path,
+                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 别的项目的树 ⇒ 拒，并**点名允许哪些前缀**。"""
+    _two_projects(tmp_path, monkeypatch)
+    problems = guards.project_guard("cards/x", project="engineering")
+    assert problems and "cards/x" in problems[0] and ".wt/" in problems[0]
+    assert "越界" in problems[0]
+
+
+def test_project_guard_bites_unregistered_project(tmp_path: Path,
+                                                  monkeypatch: pytest.MonkeyPatch) -> None:
+    _two_projects(tmp_path, monkeypatch)
+    problems = guards.project_guard(".wt/card", project="没有这个项目")
+    assert problems and "没登记过的项目" in problems[0]
+
+
+def test_project_guard_bites_when_reverse_lookup_fails(tmp_path: Path,
+                                                       monkeypatch: pytest.MonkeyPatch) -> None:
+    _two_projects(tmp_path, monkeypatch)
+    problems = guards.project_guard("somewhere/else")
+    assert problems and "不属于任何已登记项目" in problems[0]
+
+
+def test_project_guard_bites_foreign_index_main_tree(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """临时索引里的项目根都不是本仓库树的祖先 ⇒ 主树反查不到 ⇒ 拒（不默认放行）。"""
+    _two_projects(tmp_path, monkeypatch)
+    problems = guards.project_guard("")
+    assert problems and "不属于任何已登记项目" in problems[0]
+
+
+def test_project_guard_allows_the_main_tree_of_the_real_project(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 真索引（engineering）：主树 = 项目根本身 ⇒ 放行（否则默认派活全被拦）。"""
+    monkeypatch.delenv("TF_PROJECTS_TOML", raising=False)
+    assert guards.project_guard("") == []
+
+
+def test_project_guard_bites_when_index_is_unreadable(tmp_path: Path,
+                                                      monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TF_PROJECTS_TOML", str(tmp_path / "没有这份.toml"))
+    problems = guards.project_guard(".wt/x")
+    assert problems and "项目索引读不了" in problems[0]
+
+
+def test_project_guard_refuses_maidao_not_guesses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 用户亲口：索引里只有 `engineering`（「码道」是号池、不是项目）⇒ 显式点它必须被拒。"""
+    monkeypatch.delenv("TF_PROJECTS_TOML", raising=False)
+    problems = guards.project_guard(".wt/card", project="码道")
+    assert problems and "没登记过的项目" in problems[0] and "码道" in problems[0]
