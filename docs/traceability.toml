@@ -5426,3 +5426,32 @@ evidence = [
   "file:docs/workbacklog.toml",
 ]
 gaps = "**来路（架构审议里**唯一还没动的结构性项**）**：`复盘/架构审议-外包与门禁.md` **§二 错配①（粒度错配）** + **§五** 原话：> 「**A 分档**：现在门禁**只有「全量」**，没有「哪个文件影响哪道门」的依赖图 ⇒ 中等工作量，> 而且**判据方向是反的**（不是「多跑安全」，而是「**漏跑危险**」）⇒ 要先做一张**门 × 输入**的表。」实测代价（今晚真读数）：一趟全量门禁 **`pytest 1973 passed in 633s` ≈ 10.5 分钟**，而 17 道门里**真机浏览器门**最贵。★ **本笔只做「自查提速」**：判据方向写成**宁多勿漏**，而且**收口链仍走全量**（绝不动「提交前必须全量」那条铁律）。**做法（四件，都在 `scripts/run_gates.py`）**：① 把文件里**已有的** file→门 映射抽成一张显式的「**门 × 输入**」表；★ **逐门核过**——`pytest` / `acceptance` / `ruff` / `mypy` / `check_layers` / `check_layers_selftest` / `audit` **这七道**被判为「**任何改动都可能影响它**」（它们的输入太广：`pytest` 的用例到处在读 `docs/`·`复盘/`·台账；`ruff` 扫六个目录；`mypy` 整份 `src/`；`check_layers` 读整棵 docs 体系；`audit` 的证据指针可指向任何地方）⇒ **永远跑**。这条**保守**是**故意**的。② 新增 **`--affected <路径…>`**：只跑「被这些路径影响」的门。★ **判据方向写进 `--help`**：路径匹配不上任何门 ⇒ **跑全量**；某道门在表里缺输入 ⇒ **那道门照跑**；拿不准就多跑。③ ★ **一切「真的判提交」的路径仍走全量**：`tools/wb_land.py`（+ 转发壳 `gates/diag/_integrate.py`）**不透传** `--affected` —— `--affected` **只给「改完一小块自查」**用（像工人跑目标用例那样）。④ **不许静默跳过**：`--affected` 那一趟把「跑了哪几道 · **跳了哪几道、为什么跳**」写进`gates/last.json` 的 `affected` 块（`to_payload()`），输出里也打印；★ **默认（不给 `--affected`）行为逐字不变**。**验收（工人自验 + 主控复核）**：`tests/test_run_gates_affected.py` **13 passed** ·既有 `tests/test_run_gates_timeout.py` **未被打穿** · `ruff check tools tests scripts` = **All checks passed!** ·★ **真读数**：`--affected <本卡自己的文件…>` 那一趟的门集合与耗时（端到端补证「affected 块真写进 `last.json`」）·全量门禁与审计读数见 trailer 与提交之后的 audit 段。**★ 老实说（偏差、以及它自己发现的一个后门）**：① **保守的那七道门是「照卡处理」**：卡里把 `ruff`/`mypy`/`check_layers` 点成「无输入」的例子，工人**照保守**列成「永远跑」，并**如实**给出「其实可给精确输入」的建议（`ruff` = `src/ tests/ scripts/ tools/ examples/ harness/` + `pyproject.toml`；`mypy` = `src/**`；`check_layers` = `docs/**`）—— ★ **本卡不改**（宁可多跑，别漏跑）。② ★★ **它发现一个真后门（重要）**：`tools/wb_verify.py` 查 `EXPECT_GATES=17`，**会**拦住部分跑的 `last.json`；但 **`tools/wb_review.py` 只查 `ok` / `rev` / 每门 `exit_code`，不查门数** ⇒ 若有人把 affected 的 `last.json` 提交上去，**复核主链可能不拦**。★ **`wb_review.py` 不在本卡白名单** ⇒ **如实记、另开卡**（这是「自查提速」最该防的那条缝）。③ **没跑 `main()`**（那等于真跑一趟门禁）：钉的是 `AffectedPlan.to_payload()` 与**默认门集**；端到端（`last.json` 里真有 `affected` 块）由**真读数那一趟**补证。④ `--fast --affected` 那一档**不落盘**（`--fast` 本来就不写 `last.json`）⇒ `affected` 块不会进—— **符合既有口径**（那一档不是提交闸）。⑤ 本笔**不改**任何门的**判据**，也不改「提交前必须全量」。**★ 本笔另含**：`docs/workbacklog.toml` 把卡 140 标 `done`。"
+
+[entries."T-G244"]
+id = "T-G244"
+title = "卡树基点过期判据 + 影响面反推 + 对抗复核常态化（提交后异步、不挡收口）+ 不变量台账"
+group = "OPS"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_dispatch.py",
+  "file:tools/wb_impact.py",
+  "file:tests/test_wb_impact.py",
+  "file:tools/pool/task.py",
+  "file:tests/test_pool_task.py",
+  "file:tools/wb_advcard.py",
+  "file:tests/test_wb_advcard.py",
+  "file:tools/wb_invariants.py",
+  "file:tests/test_wb_invariants.py",
+  "file:复盘/不变量台账.toml",
+  "file:复盘/外包-卡表与规矩.md",
+  "file:复盘/卡/卡142-影响面反推.md",
+  "file:复盘/卡/卡143-对抗复核常态化.md",
+  "file:复盘/卡/卡144-不变量台账.md",
+  "file:复盘/卡/卡146-合并模型白名单.md",
+  "file:复盘/卡/卡147-复核器查门数.md",
+  "file:复盘/卡/卡148-子进程不弹窗.md",
+  "file:复盘/卡/卡149-派活器按账号.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = "**来路（用户点名的三条 + 今晚反复咬人的那个坑）**：- **卡 135（卡树基点过期）**：今晚咬了**两次** —— 一次把凭据/白名单的已落地改动拷回旧内容，一次把卡 138 的**模型开关功能整个覆盖掉**（3 条开关测试转红），是主控用 `git apply -3` 手工救回来的。- **卡 142 / 143 / 144**：用户问「**为什么你总是能发现后门**？是不是缺乏一个**审核**以及**需求架构的整理**？…后面为什么总是有？」主控的诊断：**文档不缺**，缺的是「**不变量台账**」（哪些安全主张还没被判）、「**影响面靠手打**」（今晚四次同类漏项）、「**审核在收口之后、范围之内、且不对抗**」。用户随即给出关键口径：*「对抗复核**放在提交之后**，然后**继续推进任务**，这样子可以**加快任务推进**。」***做法（四张卡）**：- **卡 135**：`tools/wb_dispatch.py` 新增 `stale_base_problem()` + 三个 git 小助手（`_tree_head` / `_changed_since` /`_commits_since`），**接进 `preflight`** ⇒ 卡树基点与当前主树基点对不上就**在派活前**拦；配 4 条反例钉子 + 1 条接线钉子。- **卡 142**：新增 `tools/wb_impact.py` —— 吃「改了什么」，回「**受影响的门**（★ **读** `scripts/run_gates.py` 的「门 × 输入」表，**缺输入的门一律必跑**）+ **钉住这些文件的测试** + 建议的白名单」；还有 `--check`：**事前**点名「改动面里有文件不在声明域里」（事后那条在 `wb_review` 里）。- **卡 143**：`tools/pool/task.py` 支持「**审计型只读成员**」（`read_only = true` + 空 `paths`）——★★ **它不参与放行判据**（`need` 只数非只读成员）⇒ **提交之后才跑的对抗日志不会把任务卡在 `collecting`**；新增 `tools/wb_advcard.py`（从 `--task`/`--commit` 生成对抗**开场白 + 指针索引**，含固定**四问**：①哪条新能力让「看着绿其实没查」变得可能 ②哪条判据只查存在性而非真伪 ③哪条自报清单还在被当判据④哪条退出码/产物被当成了结论；并写明硬要求：**只读 · 证据指针 · 找不到就说找不到 · 产出是跟进卡清单**）；`复盘/外包-卡表与规矩.md` 新增一节：**默认提交后异步** · 发现了**开跟进卡** · **不可逆/影响面大的仍要前置** ·**实现者与复核者必须不同族** · 输入用**指针索引** · 开场白必须**对抗** · 诚实边界（降低概率、不归零、最终责任在主控）。- **卡 144**：新增 `复盘/不变量台账.toml`（**安全主张 → 判据在哪 → 反例钉子 → `covered`/`partial`/`missing`**）+ `tools/wb_invariants.py`（`--check` 核**判据与钉子真的存在**，对不上就**咬**；`--missing` 就是那份**待验台账**；★ **`missing` 是状态、不是错误** —— 不许把「诚实」判成失败）。**验收（工人自验 + 主控复核；全量门禁与审计见 trailer 与提交之后的 audit 段）**：五个目标测试文件（`test_wb_dispatch` / `test_wb_impact` / `test_pool_task` / `test_wb_advcard` /`test_wb_invariants`）**219 passed** · `ruff check tools tests` = **All checks passed!**。**★ 老实说（偏差、裁定与两次现场）**：① ★★ **135 要治的坑，当晚报了两次**；而这次落地我**特意等卡 140 落完才建 142/143/144 的树**（142 要读 140 刚加的「门 × 输入」表）—— ★ **纪律生效了一次**，写在这里当正例。② ★★ **143/144 第一次都撞了 `--max-turns` 上限**：退出码 **0**，但 `result.subtype = error_during_execution`、**回话是空的** ⇒ ★ **看门狗没被骗过**（这正是「退出码 0 其实没跑完」那一族，判决照实报「没跑完」）。续跑时又连撞**两个坑**：**死掉的工人没还租约**（域守卫照旧拦，★ **卡 141 正是要治它**）·**`log 已存在`**（守卫说「证据不许被悄悄盖掉」）⇒ 主控**手工还租约** + 把第 1 次的 log **改名留档**（`wb-143.attempt1.*` / `wb-144.attempt1.*`）+ 再 `--resume auto --max-turns 400`，两次都跑完并交申请。③ **144 的台账故意保留 `missing` 条目**（例如「**门数≠17 冒充全量门禁**」—— 卡 140 自己发现的后门：`wb_verify` 查门数、**`wb_review` 不查**）⇒ 本笔**不修**那个后门（**另开卡**，写进台账的 `note`）。④ **142 与 143 是同一族工具**（一个**算**影响面、一个**拿**影响面写对抗开场白）：143 的生成器**复用** 142 的`wb_impact.py`，★ **不复制第二份门表**（本仓最忌第二份真源）。⑤ **本笔不改**任何既有判据：申请仍必须带证据、既有放行判据一字未动、收口仍只有一个写者。**★ 本笔另含**：`docs/workbacklog.toml` —— 卡 135 / 142 / 143 / 144 归到 `T-G244` 并标 `done`。"

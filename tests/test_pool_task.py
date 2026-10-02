@@ -588,3 +588,102 @@ def test_register_project_empty_when_no_project_claims_the_main_tree(tmp_path, m
     st = task.read_json(task.state_path("T-Z"))
     assert st["project"] == ""
     assert any("不属于任何已登记项目" in row["note"] for row in st["history"]), st["history"]
+
+
+# ================================================================ 审计型只读成员（卡 143 · T-G242）
+
+
+def _manifest_ro(task_id, *, worker=("M-1", ["tools/a/*"]), reviewer=("M-2", None)):
+    """拼一份含「审计型只读成员」的预声明。
+
+    `reviewer` 给 `(id, paths)`：`paths=None` ⇒ 只读成员（不写 `paths` 行，等价于空域）。
+    """
+    lines = [f'id = "{task_id}"', f'why = "{task_id} 用"', 'on_complete = ["draft"]']
+    wid, wpaths = worker
+    lines += ["", "[[member]]", f'id = "{wid}"', 'layer = "后端"', f'what = "{wid}"',
+              f"paths = {json.dumps(wpaths, ensure_ascii=False)}"]
+    rid, rpaths = reviewer
+    lines += ["", "[[member]]", f'id = "{rid}"', 'layer = "审计层"', f'what = "{rid}"',
+              "read_only = true"]
+    if rpaths is not None:
+        lines.append(f"paths = {json.dumps(rpaths, ensure_ascii=False)}")
+    return "\n".join(lines) + "\n"
+
+
+def test_nail143_01_read_only_member_does_not_block(tmp_path, monkeypatch, capsys):
+    """★★ 本卡的命门：只读成员**没交申请**，任务**照样能进 `awaiting-commit`**。
+
+    `read_only = true` + `paths` 空 ⇒ 注册成功；`need` = **非只读成员数**（=1）；
+    干活的 M-1 一交成功申请，任务当场放行 —— 只读的 M-2 一行没交也不挡。
+    """
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    _register(tmp_path, "T-RO", _manifest_ro("T-RO"))
+
+    st = task.read_json(task.state_path("T-RO"))
+    assert st["read_only"] == ["M-2"], st.get("read_only")
+    assert st["need"] == 1, f"need 应只数非只读成员，得到 {st['need']}"
+    assert task._missing(st) == "M-1", f"只读成员不该被算作『还缺』：{task._missing(st)}"
+
+    rc = task.main(["claim", "T-RO", "M-1", "--evidence", "pytest 1 passed",
+                    "--files", "tools/a/x.py", "--why", "干完了"])
+    st = task.read_json(task.state_path("T-RO"))
+    assert rc == 0, f"rc={rc}"
+    assert st["state"] == "awaiting-commit", f"只读成员没交就卡住了：{st['state']}"
+
+    # status 原文：只读成员被**标出来**（一眼看得出"这不是闸，是审计"）
+    capsys.readouterr()
+    task.main(["status", "T-RO"])
+    out = capsys.readouterr().out
+    assert "◇只读…" in out, out
+    assert "只读·不改文件" in out, out
+
+
+def test_nail143_02_paths_empty_without_read_only_still_refused(tmp_path, monkeypatch):
+    """★ 判据别放松：**没有** `read_only = true` 而 `paths` 为空 ⇒ **照旧被拒**（rc=2）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    body = ('id = "T-NO"\nwhy = "缺 paths 不许放行"\non_complete = ["draft"]\n'
+            '\n[[member]]\nid = "M-1"\nlayer = "后端"\nwhat = "甲"\npaths = []\n')
+    rc, err = _register(tmp_path, "T-NO", body, expect_ok=False)
+    assert rc == 2 and "paths" in err, f"rc={rc} err={err.strip()}"
+    assert not task.state_path("T-NO").exists(), "不合法的预声明不该留下半截任务"
+
+
+def test_nail143_03_read_only_cannot_declare_files(tmp_path, monkeypatch):
+    """★ 只读成员**声明改了文件** ⇒ **拒**（它的产物是攻击记录，不是文件改动）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    _register(tmp_path, "T-RO2", _manifest_ro("T-RO2", reviewer=("M-2", None)))
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        rc = task.main(["claim", "T-RO2", "M-2", "--evidence", "ok", "--files", "tools/a/x.py"])
+    assert rc == 2, f"rc={rc}"
+    assert "只读" in err.getvalue() and "tools/a/x.py" in err.getvalue(), err.getvalue()
+
+
+def test_nail143_04_read_only_claim_is_recorded_but_not_counted(tmp_path, monkeypatch):
+    """★ 只读成员的申请**照样记进 history、照样能看**，但**不参与放行**（不涨成功数）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    _register(tmp_path, "T-RO3", _manifest_ro("T-RO3"))
+
+    rc = task.main(["claim", "T-RO3", "M-1", "--evidence", "pytest 1 passed", "--files",
+                    "tools/a/x.py", "--why", "干完了"])
+    assert rc == 0
+    # 任务已进入 awaiting-commit（提交之后才跑审计 ⇒ 复核的申请不会在放行前存在）
+    st = task.read_json(task.state_path("T-RO3"))
+    assert st["state"] == "awaiting-commit", st["state"]
+
+    # 审计成员**事后**投一份（读它自己的攻击记录）：只读、无文件
+    rc = task.main(["claim", "T-RO3", "M-2", "--evidence", "对抗复核：找到 3 条假绿路径"])
+    st = task.read_json(task.state_path("T-RO3"))
+    assert rc == 0, f"只读成员（不带 --files）交申请应成功：rc={rc}"
+    assert st["claims"]["M-2"] == "success", st["claims"]
+    assert len(task._ok(st)) == 2, "两份申请都应留在记录里"
+    assert len(task._ok_required(st)) == 1, "放行只数非只读成员"
+    assert task._missing(st) == "", "只读成员不算『还缺』"
+    assert any("M-2" in row["note"] and "成功申请" in row["note"]
+               for row in st["history"]), st["history"]
+    # 只读成员投『不通过』也**不挡收口**（那正是审计的产物：开跟进卡，不是卡住本批）
+    rc = task.main(["claim", "T-RO3", "M-2", "--claim", "failed", "--evidence", "找到问题"])
+    st = task.read_json(task.state_path("T-RO3"))
+    assert rc == 0 and st["state"] == "awaiting-commit", \
+        f"只读不通过挡了收口：rc={rc} {st['state']}"
+    assert task._bad(st) == [], f"只读成员不该进『不通过挡收口』：{task._bad(st)}"

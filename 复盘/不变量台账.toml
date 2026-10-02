@@ -1,0 +1,138 @@
+# 不变量台账（卡 144 · T-G243）
+#
+# 病：需求与架构文档不缺，缺的是「这套系统的安全主张有几条 → 每条由哪段代码判 →
+#     反例钉子在哪 → 现在覆盖到没覆盖」。于是每加一个能力，安全主张就多一条，而没人知道它还没被判。
+# ★ 立的规矩：新能力没进这张表，就不算做完。
+#
+# 字段（[[invariant]] 一条一块，一行一条）：
+#   id     台账条号（INV-nn）
+#   claim  一句人话：什么不许发生
+#   judge  判据在哪：`<仓库相对路径>` 或 `<路径>::<符号>`。若判据是一句命令，
+#          命令写在 note 里、judge 仍指向命令所在脚本的路径（wb_invariants.py 只核路径，不真跑）。
+#   nail   反例钉子：`tests/<文件>::<用例名>`；没有钉子就写 `-`，并把 status 标 missing / partial。
+#   status `covered`（判据 + 钉子都在）/ `partial`（有判据、缺一半）/ `missing`（本仓内无判据）
+#   note   诚实说明边界
+#
+# ★ 机器核：`python -X utf8 tools/wb_invariants.py --check` —— 逐条核 judge 路径与 nail 用例名真的存在。
+#   status 为 missing / partial 的条目，judge / nail 可以写 `-`（状态不是错误）。
+# ★ 中文正文用「」，不写 ASCII 双引号（TOML 基本串里会解析不了）。
+
+[[invariant]]
+id = "INV-01"
+claim = "全量门禁没跑过、或有门没过时，这一笔不许提交"
+judge = "tools/pool/landing.py::main"
+nail = "tests/test_wb_review.py::test_gate_evidence_catches_a_stale_run"
+status = "covered"
+note = "两处：收口链 tools/pool/landing.py::main 第④步门禁红了就 release 并退出（绝不带着红门禁提交）；复核侧 tools/wb_review.py::check_gate_evidence 要求 gates/last.json 的 ok==true 且 rev==这一笔的父提交。边界（如实写）：工人绕过收口链、自己 git commit 时，机器拦在复核/审计侧（事后咬），不是 pre-commit 硬拦。"
+
+[[invariant]]
+id = "INV-02"
+claim = "同一棵树 / 同一段门禁同时只能有一个写者，第二个必须被拒"
+judge = "gates/diag/gate_lock.py::main"
+nail = "tests/test_gate_lock_lease.py::test_two_cards_cannot_both_hold"
+status = "covered"
+note = "门禁锁 gates/diag/gate_lock.py（被 .gitignore 精确取反纳入版本管理，T-G159 / 卡 075）；租约判陈旧 + renew 续租 + 别人不能续（T-G161）。树租约守卫在 tools/pool/guards.py::tree_guard（nail 见 INV-05）。"
+
+[[invariant]]
+id = "INV-03"
+claim = "提交信息末尾四行 trailer 必须齐（Task 恰好一个），且 Gates: 不许谎称门禁绿"
+judge = "tools/wb_review.py::check_gates_trailer_truth"
+nail = "tests/test_wb_review.py::test_gates_trailer_truth_forged_green_is_refused"
+status = "covered"
+note = "存在性（Task 恰好一个 / Ledger / Gates 在不在）归 scripts/audit_progress.py；Refs 可选；真伪归 tools/wb_review.py::check_gates_trailer_truth（拿 trailer 内容与 gates/last.json 对账，卡 133 · T-G230）。"
+
+[[invariant]]
+id = "INV-04"
+claim = "任务放行判据是名单上每一张卡都交了成功申请，不是攒够 N 条"
+judge = "tools/pool/task.py::_maybe_advance"
+nail = "tests/test_pool_task.py::test_nail"
+status = "covered"
+note = "nail 是参数化的 33 条反例钉子（其中含『名单都投过了、但有一张不通过 ⇒ 仍然不放行』与『重投成功申请 ⇒ 集齐当场放行』）。逐卡域越界 / 名单外 / 没证据 / 过期，都被拒在 tools/pool/task.py::cmd_claim。边界：放行后停在 awaiting-commit，绝不自动提交。"
+
+[[invariant]]
+id = "INV-05"
+claim = "派活前必须过树（一树一写者）/ 域（冲突域不相交）/ 锁（门禁锁在跑就别动手）三条守卫"
+judge = "tools/pool/guards.py::tree_guard"
+nail = "tests/test_pool_guards.py::test_domain_guard_bites_and_names_the_intersection"
+status = "covered"
+note = "三条纯函数 tree_guard / domain_guard / lock_guard（吃数据、回 list[str]，不写文件不起进程）；域相交判据复用 pool.plan.files_intersect，不另写一份真源。另两条 nail：test_tree_guard_bites_same_tree_but_not_other、test_lock_guard_bites_cwd_pointing_at_this_tree。"
+
+[[invariant]]
+id = "INV-06"
+claim = "记忆层三条：没登记过的项目不许派活 / 树必须落在该项目 tree_prefixes 里 / 反查不到就拒"
+judge = "tools/pool/guards.py::project_guard"
+nail = "tests/test_pool_guards.py::test_project_guard_bites_unregistered_project"
+status = "covered"
+note = "配套三条硬判据在 tools/pool/projects.py::_validate（root 必须真实存在 / 两个项目不许同一个 root / tree_prefixes 非空）。另两条 nail：test_project_guard_bites_when_reverse_lookup_fails、test_project_guard_bites_another_projects_tree。"
+
+[[invariant]]
+id = "INV-07"
+claim = "MCP 写工具默认隐身（存在性即授权），每次写调用 confirm 必须等于卡号"
+judge = "tools/pool_mcp.py::call_tool"
+nail = "tests/test_pool_mcp_write.py::test_confirm_must_equal_card"
+status = "covered"
+note = "存在性即授权 = tools/pool_mcp.py::write_enabled（服务端 POOL_MCP_WRITE=1 才把写工具列进 tools/list；没有它调用方得到 -32602，不崩）。隐藏那半的 nail：test_write_tools_are_hidden_without_env。任务面写工具的 confirm 判据各自在 handler 里（register 等 TOML 里的 id / claim 等 task）。"
+
+[[invariant]]
+id = "INV-08"
+claim = "模型不在白名单（且没在开关文件里打开）时一律拒单，且零副作用"
+judge = "tools/wb_dispatch.py::model_rejected"
+nail = "tests/test_wb_dispatch.py::test_model_gate_refuses_an_unknown_model_with_zero_side_effects"
+status = "covered"
+note = "白名单常量 tools/wb_dispatch.py::MODEL_WHITELIST（deepseek-v4.1-flash / glm-5.3-flash）；允许集 = 名单常量 ∪ 开关文件里打开的，但 429 轮换链只走名单。--resume / --retry / --detach 全过这道闸；拒单必须零副作用（不起进程、不建 log、不改树）。"
+
+[[invariant]]
+id = "INV-09"
+claim = "只增不减：凭据快照 / 白名单 / 账号快照只增不删（要覆盖必须显式 --force）"
+judge = "-"
+nail = "-"
+status = "missing"
+note = "★ 本仓内无判据、无钉子 ⇒ 老实标 missing（不编一个假路径）。真判据在号池目录、★ 在本仓之外：infra/pool/codebuddy_accounts.py（save 默认拒覆盖已存在的账号快照）、infra/pool/models.whitelist.toml（只有用户能改）、infra/pool/rotate_credentials.py（凭据轮换）。wb_invariants.py 只核仓库内路径，核不到号池 ⇒ 这半需要另立工具或人工对账。"
+
+[[invariant]]
+id = "INV-10"
+claim = "假绿家族：ff 合流失败时不许打印『合流完成』（否则日志像成功、主树却没有这笔）"
+judge = "tools/pool/landing.py::main"
+nail = "-"
+status = "partial"
+note = "判据在：tools/pool/landing.py::main 第⑦步先比 rev-parse，只在真成功时才打印『ff 合流完成』；失败时打 stdout + stderr 并退 2（2026-10-02 修：原来 check=False + or 兜底 ⇒ git fatal 也照打）。但 tests/test_wb_land.py 明说『不覆盖 ⑦ 之后（ff 合流 / rebase 自动解决）』⇒ 无反例钉子，故标 partial。"
+
+[[invariant]]
+id = "INV-11"
+claim = "假绿家族：退出码 0 不等于跑完（撞 --max-turns / result 空回话也回 0）"
+judge = "tools/wb_dispatch.py::finish_verdict"
+nail = "tests/test_wb_dispatch.py::test_finish_verdict_catches_a_capped_run_though_the_exit_code_is_zero"
+status = "covered"
+note = "两条判据互为补集：① 数工具调用回合（提前预警）；② 读 result 事件（硬证据：没有 result / subtype != success / 回话空 ⇒ 没做完）。同族的空转/卡死看门狗 nail 在 test_runner_kills_a_stalled_worker_and_reports_the_scene。"
+
+[[invariant]]
+id = "INV-12"
+claim = "假绿家族：台账 [exceptions] 的豁免不许当通过（复核要求豁免 0）"
+judge = "tools/wb_review.py::audit_verdict"
+nail = "-"
+status = "partial"
+note = "判据在：tools/wb_review.py::audit_verdict 要求 audit 输出里含『豁免 0 项已知欠账』，否则报 problem。但本仓没有一条『台账带豁免 ⇒ 复核红』的反例钉子（tests/test_wb_review.py 里没有对应用例）⇒ 标 partial。"
+
+[[invariant]]
+id = "INV-13"
+claim = "假绿家族：Gates: trailer 只查存在性不算数，真伪必须与 last.json 对账"
+judge = "tools/wb_review.py::check_gates_trailer_truth"
+nail = "tests/test_wb_review.py::test_gates_trailer_truth_real_green_that_denies_it_is_refused"
+status = "covered"
+note = "卡 133 · T-G230 补的这一档：真绿必须声称绿、非真绿不许声称绿（= 伪造）；--no-gate / --commit-only 主动披露的形态放行但记一行『这一笔没有本轮门禁结论』。存在性判据仍归 scripts/audit_progress.py。"
+
+[[invariant]]
+id = "INV-14"
+claim = "假绿家族：门数≠17 冒充全量门禁（wb_verify 查、wb_review 不查）"
+judge = "tools/wb_verify.py::check_gates"
+nail = "-"
+status = "missing"
+note = "★ 卡 140 自己发现的后门：tools/wb_verify.py::check_gates 有 EXPECT_GATES=17 这条判据（门数 != 17 ⇒ 报 FAIL），但复核链必跑的 tools/wb_review.py::check_gate_evidence **不查门数**（只查各门 exit_code=0、ok、rev）⇒ 门数 != 17 时复核仍可过。台账这半没关：判据只在一屏核实器里、复核器里缺 ⇒ 标 missing。"
+
+[[invariant]]
+id = "INV-15"
+claim = "假绿家族：共享文档片段『单向缺失』查不出来（--check 只查片段没进汇总）"
+judge = "tools/sync_docs.py::run"
+nail = "tests/test_docs_fragments.py::test_check_is_green_after_merge_and_points_at_hand_edit"
+status = "partial"
+note = "tools/sync_docs.py::run 的 --check 只查『片段内容没在汇总里』这一个方向；反方向（汇总里有、片段已经没了）查不出来 ⇒ 单向。已有钉子只钉『手改汇总被抓』那半。"

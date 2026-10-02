@@ -454,7 +454,7 @@ status = "done"
 
 [[cards]]
 id = "135"
-task = "T-G233"
+task = "T-G244"
 title = "卡树基点过期的机器判据（派活前置：基点之后主树改过本卡域里的文件就拒）"
 tree = ".wt/stalebase"
 spec = "复盘/卡/卡135-卡树基点过期判据.md"
@@ -464,7 +464,7 @@ files = [
 ]
 depends = ["120"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "136"
@@ -528,7 +528,7 @@ files = [
 ]
 depends = []
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "140"
@@ -542,7 +542,7 @@ files = [
 ]
 depends = []
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "141"
@@ -560,7 +560,7 @@ status = "pending"
 
 [[cards]]
 id = "142"
-task = "T-G241"
+task = "T-G244"
 title = "影响面反推：算出这张卡的白名单与要跑的测试"
 tree = ".wt/impact"
 spec = "复盘/卡/卡142-影响面反推.md"
@@ -570,11 +570,11 @@ files = [
 ]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "143"
-task = "T-G242"
+task = "T-G244"
 title = "对抗复核常态化（提交之后·异步·不挡收口）"
 tree = ".wt/advcard"
 spec = "复盘/卡/卡143-对抗复核常态化.md"
@@ -587,11 +587,11 @@ files = [
 ]
 depends = []
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "144"
-task = "T-G243"
+task = "T-G244"
 title = "不变量台账：安全主张 → 判据 → 反例钉子 → 覆盖状态"
 tree = ".wt/invariants"
 spec = "复盘/卡/卡144-不变量台账.md"
@@ -602,4 +602,4 @@ files = [
 ]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"

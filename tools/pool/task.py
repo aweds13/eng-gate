@@ -372,10 +372,14 @@ def _validate_manifest(man: dict, task_id: str) -> None:
     for m in members:
         if not m.get("layer"):
             raise BatchError(f"卡 {m.get('id')} 没写 `layer`（属于哪一层：审美层 / 后端 / 前端 …）")
-        if not m.get("paths"):
-            raise BatchError(f"卡 {m.get('id')} 没写 `paths`（这张卡的域＝它能碰的路径）")
+        # ★ 卡 143：**审计型只读成员**（`read_only = true`）不改任何文件 ⇒ 允许 `paths` 为空。
+        #   ★ 判据别放松：**没有** `read_only` 而 `paths` 为空 ⇒ 照旧拒（原文保留）。
+        if not m.get("paths") and not m.get("read_only"):
+            raise BatchError(
+                f"卡 {m.get('id')} 没写 `paths`（这张卡的域＝它能碰的路径）；"
+                f"若它是**审计型只读成员**（不改任何文件）请显式写 `read_only = true`")
         # ★ 受保护共享文件谁都不许写进自己的域（卡 128 · GLM 审查 三.1）—— **register 时就拒**。
-        for pattern in m["paths"]:
+        for pattern in m.get("paths") or []:
             covered = sorted(p for p in PROTECTED_FILES if fnmatch.fnmatch(p, pattern))
             if covered:
                 raise BatchError(
@@ -401,6 +405,15 @@ def member_of(man: dict, member_id: str) -> dict:
         if m.get("id") == member_id:
             return m
     raise BatchError(f"预声明里没有这张卡：{member_id}")
+
+
+def member_is_read_only(man: dict, member_id: str) -> bool:
+    """★ 卡 143：这张卡是不是**审计型只读成员**（`read_only = true`）。
+
+    语义：它**不改任何文件**，产物是**攻击记录**（读数 + 结论）—— 于是它与"闸"分道扬镳：
+    **不参与放行判据**（放行只数非只读成员），只记进 `history`、照样能看。
+    """
+    return bool(member_of(man, member_id).get("read_only"))
 
 
 def layers_of(man: dict) -> list[str]:
@@ -448,6 +461,7 @@ def cmd_register(args: argparse.Namespace) -> int:
     dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
     man = load_manifest(task_id)
     members = [m["id"] for m in man["member"]]
+    read_only = [m["id"] for m in man["member"] if m.get("read_only")]
     project, project_why = project_of_main_tree()
 
     state = {
@@ -455,7 +469,9 @@ def cmd_register(args: argparse.Namespace) -> int:
         "why": man["why"],
         "layers": layers_of(man),
         "declared": members,
-        "need": len(members),          # ★ 判据是"名单上每张卡都交了成功申请"，不是数量阈值
+        # ★ 卡 143：审计型只读成员**不参与放行** ⇒ `need` 只数非只读成员。
+        "read_only": read_only,
+        "need": len(members) - len(read_only),
         "project": project,            # ★ 卡 120：任务属于哪个项目（反查得到就写；拿不到留空）
         "claims": {},                  # 卡号 → 成送申请（success / failed）
         "waived": [],
@@ -470,11 +486,14 @@ def cmd_register(args: argparse.Namespace) -> int:
     }
     _log(state, "-", "collecting",
          f"注册任务：{len(members)} 张卡 · 层 {'、'.join(state['layers'])} · "
-         f"集齐条件=**全部成送申请**")
+         f"集齐条件=**全部成送申请**"
+         + (f" · ★ 只读（审计）成员不参与放行：{'、'.join(read_only)}" if read_only else ""))
     if project_why:
         _log(state, "-", "collecting", f"project 留空：{project_why}")
     write_json_atomic(state_path(task_id), state)
     print(f"任务 {task_id} 注册好了：{len(members)} 张卡 / 层 {'、'.join(state['layers'])}")
+    if read_only:
+        print(f"  ★ 审计型只读成员（不参与放行，`need` = {state['need']}）：{'、'.join(read_only)}")
     print("  ★ 放行判据：名单上每一张卡都交了**成功申请**（或缺席者被显式豁免）—— 不看数量")
     print(f"  预声明：{dest}")
     return 0
@@ -532,7 +551,7 @@ def check_domain(man: dict, member_id: str, files: list[str]) -> None:
     （register 时已拒 paths；这道防的是手填的 `--files`）。
     """
     mem = member_of(man, member_id)
-    patterns = list(mem["paths"])
+    patterns = list(mem.get("paths") or [])
     protected = sorted({f for f in files if f.replace("\\", "/") in PROTECTED_FILES})
     if protected:
         raise RefuseError([
@@ -575,9 +594,17 @@ def cmd_claim(args: argparse.Namespace) -> int:
             raise RefuseError([f"{member_id} 已被豁免，不能再交申请（要交先撤豁免）"])
 
         files = [f.strip() for f in (args.files or "").split(",") if f.strip()]
+        mem = member_of(man, member_id)
+        # ★ 卡 143：只读（审计）成员**不许**声明"我改了文件"（它的产物是攻击记录，不是文件改动）。
+        if mem.get("read_only") and files:
+            raise RefuseError([
+                f"卡 {member_id} 是**审计型只读成员**（`read_only = true`）"
+                f"—— 不许声明「我改了文件」",
+                f"它报上来的文件：{'、'.join(files)}",
+                "只读成员的产物是**攻击记录**（读数 + 结论）；报文件改动请去掉 `read_only`",
+            ])
         check_domain(man, member_id, files)
 
-        mem = member_of(man, member_id)
         payload = {
             "member": member_id,
             "layer": mem["layer"],
@@ -594,11 +621,13 @@ def cmd_claim(args: argparse.Namespace) -> int:
         first = member_id not in state["claims"]
         state["claims"][member_id] = args.claim
         mark = "成功申请" if args.claim == "success" else "★ 不通过"
+        ro_tag = "（只读·审计，不参与放行）" if mem.get("read_only") else ""
         _log(state, state["state"], state["state"],
              f"卡 {member_id}（{mem['layer']}）交了{mark}"
              f"（{'首次' if first else '更新'}）：{args.why or '（没写为什么）'}")
-        print(f"卡 {member_id} 的{mark}收了（{len(_ok(state))}/{state['need']} 张已成功，名单共 "
-              f"{len(state['declared'])}）")
+        print(f"卡 {member_id} 的{mark}收了{ro_tag}"
+              f"（{len(_ok_required(state))}/{state['need']} 张已成功，"
+              f"名单共 {len(state['declared'])}）")
         print(f"  还缺：{_missing(state) or '（齐了）'}")
         before = state["state"]
         state = _maybe_advance(state, man)
@@ -612,15 +641,36 @@ def _ok(state: dict) -> set[str]:
     return {mid for mid, kind in (state.get("claims") or {}).items() if kind == "success"}
 
 
+def _read_only(state: dict) -> list[str]:
+    """状态里记的**审计型只读成员**（老状态没这个键 ⇒ 空列表 = 向后兼容）。"""
+    return list(state.get("read_only") or [])
+
+
+def _required(state: dict) -> list[str]:
+    """**参与放行**的成员 = 名单去掉只读成员（顺序照名单）。"""
+    ro = set(_read_only(state))
+    return [m for m in state["declared"] if m not in ro]
+
+
+def _ok_required(state: dict) -> set[str]:
+    """已交成功申请的**非只读**成员 —— 只读成员的申请**不参与放行**（照样记 history）。"""
+    ro = set(_read_only(state))
+    return {m for m in _ok(state) if m not in ro}
+
+
 def _bad(state: dict) -> list[str]:
-    """投了"不通过"、还没改成成功、也没被豁免的卡。"""
+    """投了"不通过"、还没改成成功、也没被豁免的**非只读**卡。
+
+    ★ 卡 143：只读（审计）成员**不参与放行** —— 所以它的"不通过"也**不挡收口**
+    （那正是审计的产物：发现了问题要开跟进卡，而不是卡住本批）。"""
+    ro = set(_read_only(state))
     return [mid for mid, kind in (state.get("claims") or {}).items()
-            if kind == "failed" and mid not in state["waived"]]
+            if kind == "failed" and mid not in state["waived"] and mid not in ro]
 
 
 def _missing(state: dict) -> str:
     got = _ok(state) | set(state["waived"])
-    return "、".join(m for m in state["declared"] if m not in got)
+    return "、".join(m for m in _required(state) if m not in got)
 
 
 def cmd_waive(args: argparse.Namespace) -> int:
@@ -697,7 +747,9 @@ def _maybe_advance(state: dict, man: dict) -> dict:
     """
     if state["state"] in ("ready", "gating", "awaiting-commit", "landed"):
         return state
-    got = _ok(state) | set(state["waived"])
+    # ★ 卡 143：只数**非只读**成员（审计型只读成员不参与放行）—— 老状态 `read_only` 缺省为空集。
+    ro = set(_read_only(state))
+    got = {m for m in (_ok(state) | set(state["waived"])) if m not in ro}
     if len(got) < state["need"]:
         return state
     # ★ 有"不通过"的卡没处理 ⇒ 挡住（哪怕名单上别的卡都成功了）。
@@ -812,6 +864,15 @@ def render_draft(state: dict, man: dict) -> str:
                 continue
             mid = mem["id"]
             inbox = inbox_dir(state["id"]) / f"{mid}.json"
+            # ★ 卡 143：只读（审计）成员单独一行 —— 它的申请**不参与放行**，只如实展示。
+            if mem.get("read_only"):
+                note = "★ **只读（审计）**（不参与放行）"
+                if inbox.exists():
+                    got_ro = read_json(inbox)
+                    detail = got_ro.get("evidence") or got_ro.get("why") or ""
+                    note = f"★ **只读（审计）**（不参与放行）：{detail}"
+                rows.append(f"| {mid} | {mem.get('what', '')} | —— | {note} |")
+                continue
             if mid in state["waived"]:
                 rows.append(f"| {mid} | {mem.get('what', '')} | —— | ★ **豁免**（没到） |")
                 continue
@@ -828,11 +889,14 @@ def render_draft(state: dict, man: dict) -> str:
                       + "\n".join(rows))
     body = "\n\n".join(blocks)
     gate = state.get("gate") or {}
+    # ★ 卡 143：集齐数只数非只读成员（审计型只读成员不参与放行）。
+    ro = set(_read_only(state))
+    got_n = len({m for m in (_ok(state) | set(state["waived"])) if m not in ro})
     return (f"""# 任务 {state['id']} 文书骨架（按**层**分组）
 
 > 任务一句话：{state['why']}
 > 层：{'、'.join(state['layers'])}
-> 集齐：{len(_ok(state) | set(state['waived']))}/{state['need']} 张卡的**成送申请**"""
+> 集齐：{got_n}/{state['need']} 张卡的**成送申请**"""
             f"""（名单 {len(state['declared'])} 张）
 > 门禁：{gate.get('verdict', '（没跑）')}（exit={gate.get('exit_code')}）
 > ★ 枚举已由机器填好（**勿手改本文件：它随时会被重算**）；人要写的部分在 `{state['id']}.why.md`。
@@ -974,7 +1038,7 @@ def _report(state: dict) -> int:
     """把当前状态打一屏；门禁红了或不通过挡着 ⇒ **非零退出**（别让人以为"过了"）。"""
     gate = state.get("gate") or {}
     bad = _bad(state)
-    print(f"状态：**{state['state']}** · 成功申请 {len(_ok(state))}/{state['need']} · "
+    print(f"状态：**{state['state']}** · 成功申请 {len(_ok_required(state))}/{state['need']} · "
           f"豁免 {len(state['waived'])} · 还缺 {_missing(state) or '（齐了）'}")
     if bad:
         print(f"★ 有卡投了**不通过**、还没处理：{'、'.join(bad)} —— 不放行（重投或豁免）")
@@ -995,11 +1059,19 @@ def cmd_status(args: argparse.Namespace) -> int:
     man = load_manifest(args.task)
     print(f"任务 {state['id']}：{state['why']}")
     print(f"  层 {'、'.join(state['layers'])} · 集齐条件=**全部成送申请**"
-          f"（名单 {state['need']} 张卡）"
+          f"（放行需 {state['need']} 张 / 名单 {len(state['declared'])} 张）"
           f" · 自动 {state['auto']} · 期限 {state.get('deadline') or '（无）'}")
     for mem in man["member"]:
         mid = mem["id"]
-        if mid in state["waived"]:
+        if mem.get("read_only"):
+            # ★ 卡 143：审计型只读成员单独标出来 —— 一眼看得出"这不是闸，是审计"。
+            if state.get("claims", {}).get(mid) == "success":
+                tag = "◇只读✓"
+            elif state.get("claims", {}).get(mid) == "failed":
+                tag = "◇只读✗"
+            else:
+                tag = "◇只读…"
+        elif mid in state["waived"]:
             tag = "★豁免"
         elif state.get("claims", {}).get(mid) == "success":
             tag = "✓成功申请"
@@ -1008,7 +1080,8 @@ def cmd_status(args: argparse.Namespace) -> int:
         else:
             tag = "…还缺"
         print(f"  [{tag:<8}] {mid:<8} {mem['layer']:<8} {mem.get('what', '')}")
-        print(f"             域：{'、'.join(mem['paths'])}")
+        domain = '、'.join(mem.get('paths') or []) or '（只读·不改文件：审计）'
+        print(f"             域：{domain}")
     print("  --- history ---")
     for row in state["history"]:
         print(f"  {row['at']} {row['from']}→{row['to']} {row['note']}")
@@ -1030,7 +1103,8 @@ def cmd_list(args: argparse.Namespace) -> int:
             if not isinstance(st.get("declared"), list):
                 continue
             shown = True
-            print(f"{st['id']:<22} {st['state']:<16} {len(_ok(st))}/{st['need']}  {st['why']}")
+            print(f"{st['id']:<22} {st['state']:<16} "
+                  f"{len(_ok_required(st))}/{st['need']}  {st['why']}")
     if not shown:
         print(f"（还没有任务：{root}）")
     return 0

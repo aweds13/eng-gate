@@ -2477,3 +2477,87 @@ def test_main_with_already_reserved_leaves_the_registry_untouched(
     assert [r["card"] for r in wd.pool_registry.list_reservations()] == ["777"]
     assert "[还树]" not in out                         # 还树归调用方（MCP），这里没还
     assert record, "工人还是要派出去的（只是不占树）"
+
+
+# ------------------------------------------------ 卡树基点过期（卡 135 · T-G233）
+#
+# 为什么值当测：收口会把卡树那份文件**拷回主树**；卡树基点比主树旧、主树又恰好改过同一份文件时，
+# 这一步就是**静默覆盖**（本轮真咬：`.wt/mcpclaim` 的 `pool_mcp.py` 盖掉了 B-FIX1 的改动 →
+# `test_dispatch_argv_is_pinned_and_reserves_first` 当场红）。下面四条各钉一处，每条"故意坏掉会红"。
+
+
+def _git(cwd: Path, *args: str) -> str:
+    done = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+    assert done.returncode == 0, f"git {args} 真跑失败了：{done.stderr}"
+    return (done.stdout or "").strip()
+
+
+def _stale_scene(tmp_path: Path, *, changed: list[str]) -> tuple[Path, Path, str, str]:
+    """造一对真仓库：主树从基点 `A` 前进到 `B`（`changed` 里的文件被改），卡树停在 `A`。
+
+    ★ 这是**真 git**（不是桩）：判据吃的是 `rev-parse` / `diff --name-only` / `log --oneline`，
+      用桩喂不出"基点漂了"这件事。卡树用**真 worktree**（`git worktree add --detach`），
+      与真链路一致（`.wt/<卡>` 就是 this）。
+    """
+    repo = tmp_path / "main"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    (repo / "sandbox-001.md").write_text("v0\n", encoding="utf-8")
+    (repo / "别的.md").write_text("v0\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "A：基点")
+    a = _git(repo, "rev-parse", "HEAD")
+    card = tmp_path / "cardtree"
+    _git(repo, "worktree", "add", "-q", "--detach", str(card), a)
+    if changed:
+        for name in changed:
+            (repo / name).write_text("v1\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "-m", "B：基点之后主树又改了 " + "、".join(changed))
+    b = _git(repo, "rev-parse", "HEAD")
+    return repo, card, a, b
+
+
+def test_stale_base_refuses_and_names_the_file_and_commit(sandbox: Path) -> None:
+    """① 真过期：基点之后主树改了**本卡域里的文件** ⇒ 拒，且点名那个文件与那笔提交。"""
+    repo, card, a, b = _stale_scene(sandbox, changed=["sandbox-001.md"])
+    problem = wd.stale_base_problem("001", card, main_root=repo)
+    assert problem is not None, "域里的文件被改过，判据必须咬"
+    assert "sandbox-001.md" in problem, problem            # 点名文件
+    assert "B：基点之后主树又改了" in problem, problem       # 点名提交
+    assert a[:12] in problem and b[:12] in problem, problem
+
+
+def test_stale_base_passes_when_only_out_of_domain_files_moved(sandbox: Path) -> None:
+    """② 别误伤（最重要）：基点之后主树**只改了域外文件** ⇒ 放行（多批并行时很常见）。"""
+    repo, card, _a, _b = _stale_scene(sandbox, changed=["别的.md"])
+    assert wd.stale_base_problem("001", card, main_root=repo) is None
+
+
+def test_stale_base_passes_when_the_heads_are_the_same(sandbox: Path) -> None:
+    """③ `A == B` ⇒ 放行（卡树就在主树当前 HEAD 上，无过期可言）。"""
+    repo, card, a, b = _stale_scene(sandbox, changed=[])
+    assert a == b
+    assert wd.stale_base_problem("001", card, main_root=repo) is None
+
+
+def test_stale_base_skips_when_the_base_cannot_be_computed(sandbox: Path, capsys) -> None:
+    """④ 算不出基点（cwd 不是 git 树）⇒ 打印"算不出基点，跳过"并**继续**（不是拒）。"""
+    plain = sandbox / "not-a-repo"
+    plain.mkdir()
+    assert wd.stale_base_problem("001", plain, main_root=sandbox / "main") is None
+    err = capsys.readouterr().err
+    assert "算不出基点" in err and "跳过" in err, err
+
+
+def test_preflight_wires_the_stale_base_check(sandbox: Path, monkeypatch) -> None:
+    """接线：`preflight` 真把这条判据接上了（拆掉接线 → 这条红；判据本身由上面四条专测）。"""
+    repo, card, _a, _b = _stale_scene(sandbox, changed=["sandbox-001.md"])
+    monkeypatch.setattr(wd.pool_registry, "main_tree_root", lambda: repo)
+    monkeypatch.setattr(wd, "is_git_worktree", lambda p: True)
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False,
+                               worker_cwd=card)
+    assert any("卡树基点过期" in p for p in problems), problems

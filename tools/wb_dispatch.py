@@ -19,6 +19,10 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
      （`atexit` 兜底）；dry-run **不占树**。
      ★ `--already-reserved`：调用方（MCP 写面 `pool_cancel`/`pool_dispatch`）**已经占过树**时用 ——
      **只跳过**守卫与占/还树，别的检查（内存 / 登录 / 白名单 / 日志）**照走**；不带它就一字不变。
+  ⑦ ★ 卡 135（T-G233）：**卡树基点过期** —— 卡树的基点（`A`）之后主树（`B`）若改过**这张卡
+     要碰的文件**（域从队列真读）⇒ 拒派并点名文件 / 提交 / 修法（收口时会把卡树那份旧文件
+     拷回主树 = 静默覆盖新改动，真咬过）；只改了域外文件 ⇒ 放行（别误伤多批并行）；
+     算不出 `A`/`B` ⇒ 如实说"算不出基点，跳过"并继续 —— **只拒不猜**。
 
 用法（默认 **dry-run**：只打印将要执行的命令，不派活）：
     python -X utf8 tools/wb_dispatch.py --card 001 --spec 复盘/外包卡-001-独立复核T-G79.md
@@ -1806,6 +1810,107 @@ def guard_problems(card: str, worker_cwd: Path | None, *, now: float | None = No
     ]
 
 
+# ================================================================ 卡树基点过期（卡 135 · T-G233）
+
+
+def _tree_head(tree: Path) -> str | None:
+    """`tree` 的 HEAD sha；跑不了 git / 不是仓库 / 算不出 → `None`（不许猜）。"""
+    try:
+        done = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=str(tree), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", **NO_WINDOW,
+        )
+    except OSError:
+        return None
+    out = (done.stdout or "").strip()
+    return out if done.returncode == 0 and out else None
+
+
+def _changed_since(root: Path, base: str, head: str, files: list[str]) -> list[str] | None:
+    """`base..head` 之间改过的**域内**文件名；算不出（拿不到主树 / git 报错）→ `None`。"""
+    try:
+        done = subprocess.run(
+            ["git", "diff", "--name-only", f"{base}..{head}", "--", *files],
+            cwd=str(root), capture_output=True, text=True, encoding="utf-8",
+            errors="replace", **NO_WINDOW,
+        )
+    except OSError:
+        return None
+    if done.returncode != 0:
+        return None
+    return [ln for ln in (done.stdout or "").splitlines() if ln.strip()]
+
+
+def _commits_since(root: Path, base: str, head: str, files: list[str]) -> str:
+    """`base..head` 里与域相关的提交（`git log --oneline` 原文，多行压一行）；取不到就说取不到。"""
+    try:
+        done = subprocess.run(
+            ["git", "log", "--oneline", f"{base}..{head}", "--", *files],
+            cwd=str(root), capture_output=True, text=True, encoding="utf-8",
+            errors="replace", **NO_WINDOW,
+        )
+    except OSError:
+        return "（取不到提交列表）"
+    text = (done.stdout or "").strip()
+    return text.replace("\n", " / ") if text else "（没有可点名的提交）"
+
+
+def stale_base_problem(card: str, worker_cwd: Path | None, *,
+                       main_root: Path | None = None) -> str | None:
+    """★ 卡 135（T-G233）：**卡树的基点之后，主树有没有改过这张卡要碰的文件？**
+
+    为什么（本轮真咬的一口）：收 `B-FIX1` 时卡树的基点比主树旧，而主树恰好也改了卡树要碰的
+    那份文件 ⇒ 收口把卡树那份**拷回主树**时**静默覆盖**了主树的新改动（测试当场红）。口头正解
+    是"下一批的卡树要等上一批落地之后再建"，但那**不是判据** —— 这条把它做成机器判据。
+
+    判据（只拒不猜）：
+      - 卡树没有给（`worker_cwd is None`）⇒ 工人在**主树**里干活，与主树同基点 ⇒ 放行；
+      - 域从**队列真读**（`queue_files`，与既有守卫同源）；查不到域 ⇒ 放行（既有守卫已经会拒，
+        这条不重复咬，也不另造一份域来源）；
+      - 取卡树 HEAD `A`、主树 HEAD `B`；`A == B` ⇒ 放行；
+      - 否则 `git diff --name-only A..B -- <域>`：**空**（基点之后主树只改了域外文件）⇒ 放行
+        （多批并行时这很常见，别误伤）；**非空** ⇒ 拒，**点名**那些文件 + 涉及的提交 + 修法。
+      - 算不出 `A`/`B`（不在 git 树里等）⇒ **如实说"算不出基点，跳过这条判据"并继续**，
+        ★ 不许把"算不出"当"过期"（那会把好卡全拒了）。
+    """
+    if worker_cwd is None:
+        return None
+    files, why = queue_files(card)
+    if why:
+        return None
+    root = main_root
+    if root is None:
+        try:
+            root = pool_registry.main_tree_root()
+        except pool_registry.RegistryError as exc:
+            print(f"  卡树基点体检：算不出主树（{exc}）→ 算不出基点，跳过这条判据",
+                  file=sys.stderr, flush=True)
+            return None
+    a = _tree_head(worker_cwd)
+    b = _tree_head(root)
+    if a is None or b is None:
+        print("  卡树基点体检：算不出基点（有树不在 git 里）→ 跳过这条判据",
+              file=sys.stderr, flush=True)
+        return None
+    if a == b:
+        print("  卡树基点体检：卡树与主树同基点 → 过", file=sys.stderr, flush=True)
+        return None
+    hits = _changed_since(root, a, b, files)
+    if hits is None:
+        print("  卡树基点体检：算不出基点之后改了哪些文件 → 跳过这条判据",
+              file=sys.stderr, flush=True)
+        return None
+    if not hits:
+        print("  卡树基点体检：基点之后主树只改了域外文件 → 过", file=sys.stderr, flush=True)
+        return None
+    commits = _commits_since(root, a, b, files)
+    return (f"卡树基点过期：这张卡要碰的文件在主树基点之后被改过（卡树建早了）→ 卡树 HEAD "
+            f"{a[:12]} / 主树 HEAD {b[:12]}；被改的文件：{', '.join(hits)}；相关提交：{commits}；"
+            f"修法：这张卡的树建早了 ⇒ 把树重置到主树 HEAD 再派"
+            f"（`git -C <树> reset --hard {b[:12]}` 会丢未提交改动，先 `git status` 看清楚），"
+            "或重建一棵树")
+
+
 def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
               cli_override: str | None = None, resuming: bool = False,
               allow: list[str] | None = None,
@@ -1890,6 +1995,12 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
             print("  守卫全过（树被占 / 冲突域相交 / 项目越界 / 门禁还在跑 —— 四条都没咬）",
                   file=sys.stderr, flush=True)
         problems.extend(guard_list)
+    # ★ 卡 135（T-G233）：卡树基点过期 —— 基点之后主树改过这张卡域里的文件 ⇒ 拒派
+    #   （收口把卡树那份旧文件拷回主树 = 静默覆盖新改动，真咬过：.wt/mcpclaim vs B-FIX1）。
+    #   ★ 挂在守卫**之外**：`--already-reserved` 只跳过守卫，这条判据照走（它跟占没占树无关）。
+    stale = stale_base_problem(card, worker_cwd)
+    if stale:
+        problems.append(stale)
     # ★ 卡 095：端口段体检（铁律 37）—— 给了段且段内有占用就拒派；没给段则如实跳过。
     problems.extend(port_preflight(port_bases))
     # ★ 卡 102（T-G198）：内存闸 —— 派活同样吃内存，可用内存不够就不派活（同一环境变量/措辞）。
