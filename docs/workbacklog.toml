@@ -676,3 +676,229 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "151"
+task = "T-G251"
+title = "判决文案要分真因：429 不许说成撞 --max-turns（两者同一指纹）"
+tree = ".wt/verdict"
+spec = "复盘/卡/卡151-判决文案要分真因.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+]
+depends = ["149"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "153"
+task = "T-G252"
+title = "GLM-5.3 对抗性审核：整个外包系统（找主控没发现或忘了的缺陷）"
+tree = ".wt/audit53"
+spec = "复盘/卡/卡153-GLM53对抗审核外包系统.md"
+files = [
+  "复盘/审计-GLM53-外包系统对抗审核.md",
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "154"
+task = "T-G254"
+title = "登录自检会假红：分不清「真没登录」与「这次探失败」（三态 + 重试一次）"
+tree = ".wt/loginguard"
+spec = "复盘/卡/卡154-登录自检假红.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+]
+depends = ["151"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "156"
+task = "T-G256"
+title = "旧判决文件冒充当前状态：归档第二个起静默失败（rename 撞已存在的 .stale 被吞）"
+tree = ".wt/verdictstale"
+spec = "复盘/卡/卡156-旧判决冒充当前状态.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tools/wb_dash.py",
+  "tests/test_wb_dispatch.py",
+  "tests/test_wb_dash.py",
+]
+depends = ["154"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "157"
+task = "T-G257"
+title = "写卡必须同写预声明：队列自洽判据 + 派活前置（把咬了 9 次的缝从源头堵掉）"
+tree = ".wt/predeclare"
+spec = "复盘/卡/卡157-写卡必须同写预声明.md"
+files = [
+  "tools/pool/plan.py",
+  "tools/wb_plan.py",
+  "tests/test_wb_plan.py",
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+]
+depends = ["156"]
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "158"
+task = "T-G253"
+title = "卡146 落地的产品后果（决策单）：合并白名单后 --model 默认值会变成服务不了的名字"
+tree = ".wt/modeldecision"
+spec = "复盘/卡/卡158-合并白名单的产品后果.md"
+files = [
+  "docs/workbacklog.toml",
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "159"
+task = "T-G259"
+title = "判据强度：声明过的证据必须能被机器复核（单向判据一族，9 条）"
+tree = ".wt/judgepower"
+spec = "复盘/卡/卡159-判据强度.md"
+files = [
+  "scripts/audit_progress.py",
+  "scripts/check_commands.py",
+  "scripts/check_layers.py",
+  "scripts/test_check_layers.py",
+  "tools/sync_docs.py",
+  "tools/wb_review.py",
+  "tools/pin_check.py",
+  "tools/ui_flow_check.mjs",
+  "tests/test_audit_tightening.py",
+  "tests/test_check_commands.py",
+  "tests/test_wb_review.py",
+  "tests/test_docs_fragments.py",
+  "tests/test_pin_check.py",
+  "tests/test_ui_flow_check.py",
+  "复盘/不变量台账.toml",
+  "复盘/外包-卡表与规矩.md",
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "160"
+task = "T-G260"
+title = "台账自己接进门（门数 17→18）+ 封存树/提交树对账（8 条）"
+tree = ".wt/invgate"
+spec = "复盘/卡/卡160-台账接进门.md"
+files = [
+  "scripts/run_gates.py",
+  "scripts/audit_progress.py",
+  "tools/wb_invariants.py",
+  "tools/wb_review.py",
+  "tools/wb_verify.py",
+  "tests/test_run_gates_affected.py",
+  "tests/test_run_gates_timeout.py",
+  "tests/test_wb_review.py",
+  "tests/test_wb_invariants.py",
+  "tests/test_audit_tightening.py",
+  "复盘/门禁四要素.md",
+]
+depends = ["159"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "161"
+task = "T-G261"
+title = "门的输入面与跑法：覆盖面缺口 + 跑法落盘 + 排队期按符号报警（5 条）"
+tree = ".wt/coverage"
+spec = "复盘/卡/卡161-门的输入面.md"
+files = [
+  "scripts/run_gates.py",
+  "tools/wb_impact.py",
+  "tools/seam_check.py",
+  "tools/pool/plan.py",
+  "tools/wb_plan.py",
+  "tests/test_run_gates_affected.py",
+  "tests/test_gates_reuse_line.py",
+  "tests/test_seam_check.py",
+  "tests/test_wb_impact.py",
+  "tests/test_wb_plan.py",
+]
+depends = ["160", "157"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "162"
+task = "T-G262"
+title = "人话条款建账：要么有机器判据，要么写明机器判不了 + 理由（5 条）"
+tree = ".wt/humanonly"
+spec = "复盘/卡/卡162-人话条款建账.md"
+files = [
+  "复盘/条款台账.toml",
+  "tools/wb_invariants.py",
+  "tests/test_wb_invariants.py",
+  "tools/style_audit.py",
+  "tests/test_style_audit.py",
+  "复盘/长任务执行协议.md",
+  "复盘/外包-卡表与规矩.md",
+  "复盘/不变量台账.toml",
+]
+depends = ["159", "160"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "163"
+task = "T-G263"
+title = "锁与租约的「有能力、零接线」：续租/还租约/按轮留证据（5 条，含新咬的旧判决一条）"
+tree = ".wt/gatelock"
+spec = "复盘/卡/卡163-锁与租约接线.md"
+files = [
+  "gates/diag/gate_lock.py",
+  "tools/pool/landing.py",
+  "tools/pool/registry.py",
+  "tools/pool/task.py",
+  "tools/pool/stage_card.py",
+  "tools/wb_land.py",
+  "tools/wb_dispatch.py",
+  "tests/test_gate_lock_lease.py",
+  "tests/test_pool_registry.py",
+  "tests/test_wb_land.py",
+  "tests/test_wb_dispatch.py",
+]
+depends = ["150", "157"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "164"
+task = "T-G264"
+title = "观测面与通则：状态判定不许把噪声当结论 + 两条通则性判据（10 条）"
+tree = ".wt/observe"
+spec = "复盘/卡/卡164-观测面与通则.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tools/wb_dash.py",
+  "tools/pool/jobs.py",
+  "tools/run_bg.py",
+  "src/timeflow/core/tasks/manager.py",
+  "src/timeflow/api/app.py",
+  "src/timeflow/core/syncpack.py",
+  "src/web/index.html",
+  "tests/test_wb_dispatch.py",
+  "tests/test_wb_dash.py",
+  "tests/test_run_bg.py",
+]
+depends = ["156", "157", "163"]
+risk = "mid"
+status = "pending"

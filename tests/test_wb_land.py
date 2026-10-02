@@ -21,6 +21,16 @@ r"""钉 `tools/wb_land.py`（收口链搬进 git；卡 139 · `T-G237`）。
 | ⑥ | fail-fast：卡规格钉子红 ⇒ 退 4、**门禁一步没跑** | 不先跑钉子 = 白烧 9 分钟全量门禁 |
 | ⑦ | 拿了锁之后异常退出 ⇒ `atexit` **把锁还掉** | 锁泄漏 = 后面的卡全卡死 |
 
+卡 150（`T-G250`）增补的**五条钉子**（开跑先回退派生物 ⇒ 幂等重跑；`--no-reset` 可关）：
+
+| # | 钉子 | 坏掉会红在哪 |
+|---|---|---|
+| ⑧ | 脏派生物+残留片段 ⇒ 回到干净态，且**打印**回退了什么 | 不回退 ⇒ 脏台账/残留片段还在 |
+| ⑨ | **不碰源文件**：白名单源文件内容不变、改动原样保留 | 名单混进源文件 ⇒ 被 checkout 抹掉 |
+| ⑩ | **幂等**：同一笔连跑两次，第二次不报「重复条目」 | 无回退 ⇒ 第二趟撞 `…twice` |
+| ⑪ | `--no-reset` 真的关掉（脏派生物原样保留） | 形同虚设 ⇒ 关了也回退、照样绿 |
+| ⑫ | 拿不到 HEAD（空 git 仓）⇒ **警告+继续**，不崩 | 把回退写成新闸 ⇒ 直接栈回溯 |
+
 ## 怎么跑（★ 不碰真仓库、不跑真门禁）
 
 - 每条 git 相关的钉子都在 `tmp_path` 里 `git init` 一个**假仓库**，把新工具拷进去再跑
@@ -74,6 +84,51 @@ _TEXT = """=== gaps ===
 """
 
 _MAYBE = "import sys\nprint('stub')\nsys.exit(0)\n"
+
+#: stage_card 桩（**故意失败**）：把链冻在「⓪ 回退派生物」之后、② 真改文档之前，
+#: 好断言「回退真的发生、且只发生在派生物上」（⑧⑨ 用）。
+_STUB_STAGE_CARD_FAIL = """import sys
+
+
+def main(argv=None):
+    print("stub-stage_card: 故意失败")
+    return 3
+"""
+
+#: sync_docs 桩（带**真合并语义**，⑩⑪ 用）：把 `docs/traceability.d/*.toml` 的条目
+#: 合进台账（LF→CRLF，与真台账一致）；条目已在台账里 ⇒ 打印真现场那句
+#: `Cannot declare ('entries', '<id>') twice` 并退 1。`--check` 只验台账可解析
+#: （与 stage_card 写后自检的调用方式对齐）。
+_SYNC_DOCS_MERGE = '''import pathlib, sys, tomllib
+
+frag_d = pathlib.Path("docs") / "traceability.d"
+ledger = pathlib.Path("docs") / "traceability.toml"
+ids = []
+for f in sorted(frag_d.glob("*.toml")):
+    for line in f.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if s.startswith('[entries."') and s.endswith('"]'):
+            ids.append(s.split('"')[1])
+if "--check" in sys.argv:
+    tomllib.loads(ledger.read_text(encoding="utf-8"))
+    print("stub-sync_docs --check OK")
+    sys.exit(0)
+raw = ledger.read_bytes()
+for tid in ids:
+    if f'[entries."{tid}"]'.encode("utf-8") in raw:
+        print(f"Cannot declare ('entries', '{tid}') twice")
+        sys.exit(1)
+for tid in ids:
+    frag = (frag_d / (tid + ".toml")).read_bytes()
+    raw += frag.replace(b"\\n", b"\\r\\n")
+ledger.write_bytes(raw)
+print("stub-sync_docs merged:", ids)
+'''
+
+#: 模拟「上一趟收口合入过本条目」的台账残留（纯 CRLF —— 与真台账一致）。
+_DIRTY_ENTRY = ('[entries."T-G999"]\r\nid = "T-G999"\r\ntitle = "上一趟残留"\r\n'
+                'group = "ENGINEERING"\r\nstatus = "done"\r\n'
+                'evidence = ["file:code/a.py"]\r\ngaps = "合成残留"\r\n\r\n')
 
 #: 门禁锁桩：每次调用都落一行 `gate_lock_calls.log`；`acquire` 建 `lock.marker`、`release` 删它。
 #: ★ 为什么要那本账：`atexit` 在**任何**退出路径都会 `release`（连 fail-fast 那条也还一次），
@@ -134,14 +189,20 @@ def _stage_tools(repo: Path) -> None:
         dst.write_bytes(src.read_bytes())
 
 
-def _mk_repo(tmp: Path, card_specs_pass: bool = True) -> Path:
-    """造一个「够收口链走到 ⑥」的最小假仓库：共享文档 + 桩 + 新工具 + 文书模板。"""
+def _mk_repo(tmp: Path, card_specs_pass: bool = True, sync_docs_body: str | None = None,
+             stage_card_body: str | None = None) -> Path:
+    """造一个「够收口链走到 ⑥」的最小假仓库：共享文档 + 桩 + 新工具 + 文书模板。
+
+    `sync_docs_body` / `stage_card_body`：给真桩换**行为桩**（卡 150 的幂等钉子用）——
+    在 `_stage_tools` 拷完真工具**之后**覆写，只影响用到它们的测试。
+    """
     repo = tmp / "repo"
     repo.mkdir()
     _git(repo, "init", "-q")
     _git(repo, "config", "user.email", "nail@example.invalid")
     _git(repo, "config", "user.name", "nail")
     _git(repo, "config", "core.autocrlf", "false")
+    _git(repo, "config", "commit.gpgsign", "false")
     _write(repo, ".gitignore", "__pycache__/\n*.pyc\n")
     _write(repo, "README.md", "hello\n")
     _write(repo, "code/a.py", "X = 1\n")
@@ -162,16 +223,29 @@ def _mk_repo(tmp: Path, card_specs_pass: bool = True) -> Path:
         else "def test_red():\n    assert False\n"
     _write(repo, "tests/test_card_specs_tracked.py", body)
     _stage_tools(repo)
+    if stage_card_body is not None:
+        _write(repo, "tools/pool/stage_card.py", stage_card_body)
+    if sync_docs_body is not None:
+        _write(repo, "tools/sync_docs.py", sync_docs_body)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "init")
     return repo
 
 
+def _make_rerun_dirt(repo: Path) -> None:
+    """模拟「上一趟收口跑到一半」的派生物残留：脏台账 + 三个未跟踪片段（卡 150）。"""
+    ledger = repo / "docs" / "traceability.toml"
+    ledger.write_bytes(ledger.read_bytes() + _DIRTY_ENTRY.encode("utf-8"))
+    _write(repo, "docs/changelog.d/T-G999.md", "## 上一趟残留\n\n- 合成\n")
+    _write(repo, "docs/traceability.d/T-G999.toml", '[entries."T-G999"]\nid = "T-G999"\n')
+    _write(repo, "复盘/交接.d/T-G999.md", "> 上一趟残留\n")
+
+
 def _wand(
-    repo: Path, *extra: str, allow: tuple[str, ...] = ("code",)
+    repo: Path, *extra: str, allow: tuple[str, ...] = ("code",), tree: str = "."
 ) -> subprocess.CompletedProcess:
     cmd = [sys.executable, "-X", "utf8", str(repo / "tools" / "wb_land.py"),
-           "--card", "T-G999", "--tree", ".", "--task", "T-G999", "--title", "钉子",
+           "--card", "T-G999", "--tree", tree, "--task", "T-G999", "--title", "钉子",
            "--type", "feat", "--group", "ENGINEERING", "--evidence", "code/a.py",
            "--allow", *allow, *extra]
     return subprocess.run(cmd, cwd=str(repo), env=_ENV, capture_output=True, text=True,
@@ -191,7 +265,7 @@ def test_help_lists_every_argument() -> None:
     assert done.returncode == 0, _out(done)
     for flag in ("--card", "--batch", "--tree", "--task", "--title", "--type", "--scope",
                  "--group", "--evidence", "--allow", "--port-base", "--refs",
-                 "--no-gate", "--commit-only"):
+                 "--no-gate", "--commit-only", "--no-reset"):
         assert flag in done.stdout, f"`--help` 少了 {flag}"
     # 文书生成器那一半（同一批搬进来）也照钉
     done2 = subprocess.run(
@@ -318,3 +392,112 @@ def test_atexit_releases_lock_on_abnormal_exit(tmp_path: Path) -> None:
     assert "acquire" in calls, f"应当拿过锁：{calls!r}"
     assert "release" in calls, f"异常退出后应当还过锁：{calls!r}"
     assert not (repo / "lock.marker").exists(), "★ 异常退出后锁必须被 atexit 还掉"
+
+
+# ================================================ ⑧ 自动回退派生物 + 打印（卡 150）
+def test_reset_derived_restores_head_state_and_prints(tmp_path: Path) -> None:
+    """脏派生物 + 残留片段 ⇒ 开跑回到干净态，且**打印**了回退了什么（不许静默）。
+
+    ★ 用「故意失败的 stage_card 桩」把链冻在 ⓪ 之后、② 真改文档之前 —— 现场不被动过，
+      才能直接断言「回退到的是 HEAD 的字节」。
+    """
+    repo = _mk_repo(tmp_path, stage_card_body=_STUB_STAGE_CARD_FAIL)
+    _make_rerun_dirt(repo)
+
+    done = _wand(repo, "--no-gate")
+
+    out = _out(done)
+    assert done.returncode == 2, out                      # ② 的桩故意失败 ⇒ 停在这
+    assert "stub-stage_card: 故意失败" in out, out        # 确实走到了 ②（回退在它之前）
+    assert (repo / "docs" / "traceability.toml").read_bytes() == b"[entries]\r\n"
+    for frag in ("docs/changelog.d/T-G999.md", "docs/traceability.d/T-G999.toml",
+                 "复盘/交接.d/T-G999.md"):
+        assert not (repo / frag).exists(), f"残留片段没被删：{frag}"
+    assert "docs/traceability.toml —— 有改动" in out      # 打印：回退了什么 + 是否真变
+    assert "复盘/交接.d/T-G999.md —— HEAD 里没有" in out  # 打印：新文件残留是删掉的
+    assert "本来就干净" in out                            # 打印：没变的也如实说
+
+
+# ================================================ ⑨ 不碰白名单源文件
+def test_reset_derived_never_touches_whitelist_sources(tmp_path: Path) -> None:
+    """白名单里的源文件（`tools/wb_land.py` 自己）在回退前后**内容不变**、改动原样保留。"""
+    repo = _mk_repo(tmp_path, stage_card_body=_STUB_STAGE_CARD_FAIL)
+    _make_rerun_dirt(repo)
+    src = repo / "tools" / "wb_land.py"
+    before = src.read_bytes() + "# 白名单源文件，不许被回退碰掉\n".encode()
+    src.write_bytes(before)
+
+    done = _wand(repo, "--no-gate")
+
+    out = _out(done)
+    assert src.read_bytes() == before, "★ 回退动了白名单源文件！"
+    st = _git(repo, "status", "--porcelain", "--", "tools/wb_land.py").stdout
+    assert " M" in st, "源文件的改动应当原样保留（回退不许把它退回 HEAD）"
+    assert "· tools/wb_land.py" not in out, "回退清单里不许出现源文件"
+    assert (repo / "docs" / "traceability.toml").read_bytes() == b"[entries]\r\n", \
+        "（对照）同一次开跑里派生物应当被回退——证明不是整场没跑"
+
+
+# ================================================ ⑩ 幂等：同一笔连跑两次
+def test_second_run_of_same_landing_hits_no_duplicate(tmp_path: Path) -> None:
+    """同一笔连跑两次：第一趟半路停手留下派生物残留 ⇒ 第二趟不再报「重复条目」。
+
+    ★ 第一趟用「计划外暂存」停手（同 2026-10-02 今晚第 1 趟的死法）：
+      ② 的文书已经写好（台账已合入 T-G999、片段已生成），但没提交。
+    """
+    repo = _mk_repo(tmp_path, sync_docs_body=_SYNC_DOCS_MERGE)
+    _write(repo, "rogue.txt", "偷渡\n")
+    _git(repo, "add", "--", "rogue.txt")
+
+    first = _wand(repo, "--no-gate")
+    assert first.returncode == 2, _out(first)             # ⑥ 计划外 ⇒ 停（残留下派生物）
+    ledger = (repo / "docs" / "traceability.toml").read_bytes()
+    assert b'[entries."T-G999"]' in ledger, "第一趟应当残留下脏台账"
+
+    second = _wand(repo, "--no-gate")
+
+    out = _out(second)
+    assert second.returncode == 0, out
+    assert "twice" not in out and "解析不了" not in out, "★ 第二趟又撞重复条目"
+    assert "已回到 HEAD 干净态" in out and "已删除" in out, out
+    shown = _git(repo, "show", "HEAD:docs/traceability.toml").stdout
+    assert shown.count('[entries."T-G999"]') == 1, "提交里的台账应当恰好一条，没有重复"
+
+
+# ================================================ ⑪ --no-reset 真的关掉
+def test_no_reset_really_disables(tmp_path: Path) -> None:
+    """`--no-reset`：脏派生物**原样保留**、重复条目照样炸（与 ⑩ 的第二趟成对照）。"""
+    repo = _mk_repo(tmp_path, sync_docs_body=_SYNC_DOCS_MERGE)
+    _make_rerun_dirt(repo)
+
+    with_reset = _wand(repo, "--no-gate")
+    assert with_reset.returncode == 0, _out(with_reset)   # 默认（回退开着）：救回来跑绿
+
+    ledger = repo / "docs" / "traceability.toml"
+    ledger.write_bytes(ledger.read_bytes() + _DIRTY_ENTRY.encode("utf-8"))
+    without = _wand(repo, "--no-gate", "--no-reset")
+
+    out = _out(without)
+    assert "回退派生物：**跳过**" in out and "--no-reset" in out, out
+    assert "Cannot declare" in out and "twice" in out, "关了回退就该撞重复条目"
+    assert without.returncode != 0
+    wb = ledger.read_bytes()
+    assert wb.count(b'[entries."T-G999"]') == 2, "关了回退：脏台账应当原样保留"
+    assert (repo / "docs" / "traceability.d" / "T-G999.toml").exists(), "关了就不许删片段"
+
+
+# ================================================ ⑫ 拿不到 HEAD ⇒ 警告 + 继续
+def test_reset_warns_and_continues_when_head_unavailable(tmp_path: Path) -> None:
+    """卡树是**没有任何提交**的空 git 仓 ⇒ 回退警告并跳过，链条继续往下走（不崩）。"""
+    repo = _mk_repo(tmp_path)
+    sub = repo / "sub"
+    sub.mkdir()
+    _git(sub, "init", "-q")                               # 空仓：没有提交 ⇒ 拿不到 HEAD
+
+    done = _wand(repo, "--no-gate", tree="sub")
+
+    out = _out(done)
+    assert done.returncode == 2, out                      # ① 死在同一个空仓上，正常
+    assert "拿不到 HEAD" in out, "回退步骤应当警告并跳过"
+    assert "=== ①" in out, "警告之后应当继续，不许停在回退这一步"
+    assert "Traceback" not in out

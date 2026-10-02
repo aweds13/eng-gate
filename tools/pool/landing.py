@@ -17,6 +17,8 @@ r"""主控的通用集成器（实现层）：把一张外包卡（工人已在�
 `release_lock`）—— 它们与旧内联代码逐字等价，只是搬出来了。
 
 做什么（顺序固定，任一步失败就停，**绝不**带着红门禁提交）：
+  ⓪ 回退派生物（卡 150：上一趟残留的共享文档/门禁产物/本台片段 → HEAD 干净态；
+     幂等重跑 —— `--no-reset` 可关，`--commit-only` 一律不回退）
   ① 把卡树迁到**当时的主树 HEAD**（工人只新增/改自己的文件 → untracked 不会冲突）
   ② 生成文档件（台账条目 / changelog / 交接 CHECKPOINT）—— 复用 `tools/wb_stage_card.py`
   ③ tools/sync_counts.py
@@ -58,6 +60,50 @@ STAGE_CARD = ROOT / "tools" / "wb_stage_card.py"
 #: 见 `gates/diag/_todo_pending.md` 坑 32 / 33。
 DERIVED = DOCS
 GATE_ARTIFACTS = GATES
+
+#: 卡 150（`T-G250`）：⓪ 要回退的**本台账号三个片段**（`{task}` 占位，
+#: 与 ⑥ 自动补片段是同一组路径）。
+RESET_FRAGMENTS = ("docs/changelog.d/{task}.md", "docs/traceability.d/{task}.toml",
+                   "复盘/交接.d/{task}.md")
+
+
+def reset_derived(wt: pathlib.Path, task: str) -> None:
+    """⓪ 把上一趟残留的派生物回退到 HEAD 干净态（卡 150 · 幂等重跑）。
+
+    回退名单 = 三个派生共享文档（DOCS）+ 两个门禁产物（GATES）+ 本台的三个片段。
+    ★ 名单里**只有**派生物/记账产物，**绝不**含白名单里的源文件（那是要提交的东西）。
+      每一样都打印「回退了什么 + 是否真的变过」，不许静默。
+    · 在 HEAD 里且有改动 ⇒ `git checkout HEAD -- <路径>`；本来就干净 ⇒ 只报一句；
+    · 不在 HEAD 里（新文件残留）⇒ 删掉（进了暂存区就 `git rm -f`，否则直接删）；
+    · 拿不到 HEAD（不是 git 仓 / 空仓）⇒ **警告并跳过**（幂等是加分项，不是新闸）；
+    · 单个文件回退失败 ⇒ 也警告并继续。
+    """
+    if not wt.is_dir():
+        print(f"  ★ 回退派生物：卡树 {wt} 不存在 ⇒ 警告并跳过，不因此停手")
+        return
+    r = run(["git", "rev-parse", "--verify", "HEAD"], cwd=wt, check=False)
+    if r.returncode != 0:
+        first_err = ((r.stderr or "").strip().splitlines() or ["不是 git 仓"])[-1]
+        print(f"  ★ 回退派生物：**拿不到 HEAD**（{first_err[:120]}）⇒ 警告并跳过，不因此停手")
+        return
+    for rel in (*DOCS, *GATES, *(f.format(task=task) for f in RESET_FRAGMENTS)):
+        st = run(["git", "-c", "core.quotepath=false", "status", "--porcelain", "--", rel],
+                 cwd=wt, check=False)
+        if not [x for x in (st.stdout or "").splitlines() if x.strip()]:
+            print(f"  · {rel} —— 本来就干净，不用回退")
+            continue
+        if run(["git", "cat-file", "-e", f"HEAD:{rel}"], cwd=wt, check=False).returncode == 0:
+            rc = run(["git", "checkout", "HEAD", "--", rel], cwd=wt, check=False).returncode
+            print(f"  · {rel} —— 有改动 ⇒ "
+                  + ("**已回到 HEAD 干净态**" if rc == 0
+                     else f"★ 回退失败（checkout 退 {rc}）⇒ 警告并继续"))
+            continue
+        if run(["git", "ls-files", "--error-unmatch", "--", rel],
+               cwd=wt, check=False).returncode == 0:
+            run(["git", "rm", "-f", "-q", "--", rel], cwd=wt, check=False)
+        else:
+            (wt / rel).unlink(missing_ok=True)
+        print(f"  · {rel} —— HEAD 里没有（新文件残留）⇒ **已删除**")
 
 
 def is_ancestor(commit: str, maybe_descendant: str, cwd: pathlib.Path) -> bool:
@@ -180,6 +226,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--port-base", type=int, default=9034)
     ap.add_argument("--refs", default="")
     ap.add_argument("--no-gate", action="store_true", help="★ 只在文档件/白名单上试跑时用")
+    ap.add_argument("--no-reset", action="store_true",
+                    help="关掉开跑时的「⓪ 回退派生物」；★ **默认会回退**"
+                         "（把上一趟残留的派生物/记账产物退回 HEAD，幂等重跑用）")
     ap.add_argument("--commit-only", action="store_true",
                     help="⑥ 起接着走：门禁已绿、封存没变时用（跳过 ①②③④⑤）")
     a = ap.parse_args(argv)
@@ -203,6 +252,15 @@ def main(argv: list[str] | None = None) -> int:
     if not a.commit_only and not a.no_gate:
         __import__("atexit").register(_release_lock_on_exit)
     if not a.commit_only:
+        # ★ 卡 150（T-G250）：幂等重跑 —— 开跑先把**上一趟残留的派生物**退回 HEAD 干净态
+        #   （放在拿锁之前，越早越好；2026-10-02 同一笔连吃三趟 11 分钟门禁，全死在这层）。
+        #   ★ 只退派生物（DOCS+GATES+本台三片段），白名单源文件绝不碰；每一样都打印。
+        #   --commit-only 不回退：它要提交的就是上一趟写好的文书，退了就没东西可提交。
+        if a.no_reset:
+            print("=== ⓪ 回退派生物：**跳过**（--no-reset）===")
+        else:
+            print("=== ⓪ 回退派生物（上一趟残留 → HEAD 干净态；幂等重跑）===")
+            reset_derived(wt, a.task)
         main_head = git("rev-parse", "HEAD")
         print(f"=== ① 卡树迁到主树 HEAD {main_head[:12]} ===")
         cur = git("rev-parse", "HEAD", cwd=wt)

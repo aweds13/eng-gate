@@ -8,6 +8,7 @@ r"""主控的通用集成器 CLI `tools/wb_land.py`（卡 139 · `T-G237`）—�
 只做「取参数 → 转发给逻辑层」这一件事。
 
 七步链（顺序固定，任一步失败就停，绝不带着红门禁提交）：
+    ⓪ 回退派生物（卡 150：幂等重跑；`--no-reset` 可关，`--commit-only` 不回退）
     ① 卡树迁到主树 HEAD  ② 文档件  ③ sync_counts  ④ 门禁锁 + 门禁  ⑤ seal
     ⑥ 白名单 → add → commit  ⑦ audit → release → ff 合流
 
