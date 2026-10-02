@@ -15,7 +15,7 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 | `initialize` | 协议版本 + `capabilities.tools` + `serverInfo`（+ 一段 `instructions` 说明边界） |
 | `notifications/initialized` | 不回（通知没有 `id` —— JSON-RPC 的规矩，也是客户端不卡住的前提） |
 | `tools/list` | 工具清单（**写死在 `TOOL_SPECS` / `WRITE_TOOL_SPECS`**；写工具按 env 列不列） |
-| `tools/call` | 跑一个工具 → 人话文本 + ```json 围栏里的机器可读块 |
+| `tools/call` | 跑一个工具 → 人话文本 + **唯一标记**之后的机器可读块（见 `_fence`） |
 | `ping` | `{}` |
 
 不认的方法回 `-32601`，不认的工具名回 `-32602`。**未知工具名明确报错、绝不崩**（先例同款）。
@@ -367,9 +367,25 @@ def _run(argv: list[str], cwd: Path) -> tuple[int | None, str, str]:
     return done.returncode, done.stdout or "", done.stderr or ""
 
 
+#: 机器可读块的**唯一标记**（独占一行）—— 卡 117。
+#: `job_result` 会把**报告正文原样带出**，正文里引用 tools/list 报文样例时也带 ```json；
+#: 读端只认这个标记**之后**那一段，才不会把正文里的样例当成工具自己的机器块（主树实测坑）。
+JSON_MARKER = "--- tf-json ---"
+
+
 def _fence(data: dict[str, Any]) -> str:
-    """把机器可读块拼成 ```json 围栏（卡允许"围栏 或 structuredContent"，这里选围栏）。"""
-    return "```json\n" + json.dumps(data, ensure_ascii=False, indent=2) + "\n```"
+    """把机器可读块放在**唯一标记**之后（标记后紧跟单行紧凑 JSON）。
+
+    ★ 卡 117（T-G215）：老写法只靠 ```json 围栏 —— 而 `job_result` 原样带出的**报告正文**
+      里正好引用了一份 tools/list 报文样例（也是 ```json）⇒ 读端取"第一个围栏"抓到的是
+      **样例**（主树里必红、卡树里没报告所以必绿）。现在标记在前（正文里不会有的唯一行）、
+      JSON 用**单行紧凑**（不含裸换行），唯一性不再依赖"围栏是不是第一个"。
+    ★ 仍**保留** ```json 围栏：白名单外的既有读端 `tests/test_pool_mcp_write.py::_json_block`
+      按第一个 ```json 取块（它读的 dispatch/cancel 正文里没有围栏，首块即真块），删围栏会
+      波及那张卡；标记才是新的唯一判据，围栏只为兼容那个读端（本卡白名单不含它）。
+    """
+    compact = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return f"{JSON_MARKER}\n```json\n{compact}\n```"
 
 
 def _result(text: str, data: dict[str, Any], *, is_error: bool) -> tuple[str, dict[str, Any], bool]:

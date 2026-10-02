@@ -60,10 +60,25 @@ def _text(result: dict[str, Any]) -> str:
     return result["result"]["content"][0]["text"]
 
 
+#: 机器可读块的唯一标记（**写死**，与 `tools/pool_mcp.py::JSON_MARKER` 逐字一致）——
+#: 钉住格式：工具若偷偷换标记，这里就红。卡 117。
+JSON_MARKER = "--- tf-json ---"
+
+
 def _json_block(text: str) -> dict[str, Any]:
-    """取出回复里 ```json 围栏中的那个机器可读块（解不开 = 形状不对）。"""
-    body = text.split("```json", 1)[1].split("```", 1)[0]
-    return json.loads(body)
+    """取出回复里**唯一标记之后**那一行**单行紧凑 JSON**（解不开 = 形状不对）。
+
+    ★ 卡 117（T-G215）：老读端取"第一个 ```json 围栏" —— 但 `job_result` 把**报告正文
+      原样带出**，正文里引用 tools/list 报文样例时也带 ```json ⇒ 抓到的是**样例**
+      （主树里真红）。现在工具把真机器块放在唯一标记之后。
+    ★ 也**不**按"下一个 ```"去截：机器块 JSON 里就含报告正文（正文里的 ``` 落进字符串），
+      按围栏截会把 JSON 截断。标记后那**一行**紧凑 JSON 才是唯一可靠的判据。
+    """
+    assert JSON_MARKER in text, f"回复里没有机器可读块标记 {JSON_MARKER!r}"
+    after = text.split(JSON_MARKER, 1)[1]
+    line = next((ln for ln in after.splitlines() if ln.lstrip().startswith("{")), None)
+    assert line is not None, "唯一标记之后没有机器可读块"
+    return json.loads(line)
 
 
 # ================================================================ 钉子④：只读（不写工作区）
@@ -172,6 +187,38 @@ def test_six_tools_return_and_write_nothing() -> None:
     after_hashes = _hashes()
     changed = [k for k in after_hashes if after_hashes.get(k) != before_hashes.get(k)]
     assert not changed, f"只读工具不许改动它读的真源：{changed}"
+
+
+def test_machine_block_survives_a_report_that_quotes_json(tmp_path: Path) -> None:
+    """★ 卡 117 钉子：报告正文里**带 ```json 样例**时，六个工具仍解析得出自己的机器块。
+
+    复现的就是主树里那条真 pytest —— `job_result` 原样带出的报告正文里引用了一份
+    tools/list 报文样例（JSON 里带**裸换行**，正是"Invalid control character"的来源）。
+    老读端取"第一个 ```json" ⇒ 抓到样例 ⇒ 主树里必红。这里跑**六个**工具逐个验机器块。
+    """
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    (diag / "wb-105.jsonl").write_text('{"type":"assistant"}\n', encoding="utf-8")
+    (diag / "wb-105.verdict.txt").write_text("判决：过\n", encoding="utf-8")
+    # 正文里的样例：JSON 字符串内**裸换行**（非法 JSON，真报告里就是这么被引用的）
+    sample = ('```json\n{"jsonrpc":"2.0","id":2,"result":{"tools":[\n'
+              ' {"name":"pool_plan"}\n]}}\n```')
+    (diag / "wb-105.report.md").write_text(
+        "# 卡 105 报告\n\n正文引用了一份 tools/list 报文样例（★ 不是工具的机器块）：\n\n"
+        + sample + "\n\n以上是样例，下面是结论。\n", encoding="utf-8")
+
+    for name in TOOL_NAMES:
+        args = {"card": "105"} if name in ("job_status", "job_result") else {}
+        result = pool_mcp.call_tool(name, args, root=tmp_path)
+        assert result is not None, name
+        block = _json_block(result["content"][0]["text"])  # 不抛 = 认出的是真机器块
+        assert isinstance(block, dict), name
+
+    # 正文里的样例确实被带了出来（证明这条钉子不是空跑）：`job_result` 人话里有那个样例
+    job_text = pool_mcp.call_tool("job_result", {"card": "105"}, root=tmp_path)
+    assert job_text is not None
+    assert "tools/list 报文样例" in job_text["content"][0]["text"]
+    assert "```json" in job_text["content"][0]["text"]
 
 
 def test_pool_plan_json_is_structured_not_faked() -> None:

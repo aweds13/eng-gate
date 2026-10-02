@@ -1,0 +1,15 @@
+[entries."T-G215"]
+id = "T-G215"
+title = "主树里算错主工作树（相对 --git-common-dir 用了进程 cwd）+ MCP 机器可读块被报告正文冒充"
+group = "OPS"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:tests/test_pool_mcp.py",
+  "file:tests/test_pool_registry.py",
+  "file:tools/pool/registry.py",
+  "file:tools/pool_mcp.py",
+  "file:复盘/卡/卡117-registry相对路径与MCP机器块.md",
+]
+gaps = "**来路**：主控在**主树**（`--tree .`）收一个**纯文档任务**时，门禁红了 `2 failed, 1792 passed` —— 两条都**只在主树现形**（卡树里一直绿），又一次「桩验过了 ≠ 真机能用」。**① `tools/pool/registry.py::main_tree_root()` 的相对路径解析用错了 cwd**：主控实测两条命令就把病根摆出来了 —— 主树里 `git rev-parse --git-common-dir` 回的是**相对路径** `.git`，卡树里回的是**绝对路径** `D:/…/engineering/.git`。git 既然是在**仓库根**里跑的，它回的相对路径就是**相对那个 cwd**；可原代码拿 **`Path.cwd()`（进程 cwd）** 去解析 ⇒ 只要进程 cwd 不是仓库根（卡 114 那条钉子的场景、DSH 起 MCP 子进程也是这个场景），主工作树就算成 `<进程 cwd>/gates/diag/pool-registry.json`。★ 卡 114（T-G211）当时只修了「**跑不起来**」那一半（补 `cwd=`），**没修「解析用错 cwd」**这一半；因为卡树回的是绝对路径，这个洞在卡树里**永远绿**。**做法**：相对路径改按**给 git 的那个 cwd**（`git_cwd`）解析，取不到才退回 `Path.cwd()`，并把这条理由写进 docstring。**② `tools/pool_mcp.py` 的「机器可读块」被**报告正文**冒充**：`job_result` 会把**工人报告正文**原样带出来，而那篇报告里**正好引用了 tools/list 的报文样例** ⇒ 测试的 `_json_block()`（取正文里第一个 `{ … }`）抓到的是**报告里的样例**（`json.JSONDecodeError: Invalid control character`），不是工具自己的机器块 —— 主树（有真报告）必红、卡树（返回「没有」）必绿。**做法**：新增唯一标记 `--- tf-json ---`，机器可读块放在标记之后（**紧跟单行紧凑 JSON**），读端**只认标记之后那一行**；```json 围栏**保留**，只为兼容白名单**外**的既有读端（`tests/test_pool_mcp_write.py::_json_block` 仍按「第一个围栏块」取）。★ 读端**不能**按围栏截断：机器块的 JSON 里就含报告正文，正文里的 ``` 会落进字符串、按围栏截会把 JSON 截断。**验收（工人自报，主控逐条核）**：① **都在主树里先红后绿** —— 改前 `tests/test_pool_registry.py:83` 的 `AssertionError` 原文（进程 cwd 那个 temp 路径 vs `<仓库根>/gates/diag/pool-registry.json`）在报告里**逐字贴出**；注入修复版模块后 `test_pool_registry.py` **23 passed**、`test_pool_mcp.py` **15 passed**（真报告 `wb-105.report.md` 在场）；② 新增钉子：`main_tree_root()` 与进程 cwd 无关 · `TF_POOL_REGISTRY` 优先 · **真 `git init` 造一个只回相对 `.git` 的仓库来验解析** · 正文含围栏 json 样例时六个工具仍解析得出机器块；③ 卡树全量（门禁同款 `pytest -n 4`）= **1797 passed**（`Total coverage: 93.71%`，收集 1799 条）、受影响三文件 `--no-cov` **60 passed**；④ 门禁同款 `ruff check src/ tests/ scripts/ tools/ examples/ harness/` = `All checks passed!`；⑤ 卡树只动白名单那 4 个文件、**没提交**、**主树磁盘一个字节没动**（工人自己在主树里注入修复版做的复现，事后核过）。**★ 老实说（边界）**：① **口径还没一次收口** —— 两条读端现在并存（新的唯一标记 vs 白名单外那个「第一个围栏块」），将来若再分叉要一次收干净；② 本卡**没跑真门禁**（禁区），主树那两条红是用「注入修复版模块」的方式在主树里复现与验绿的，**不是**在主树里跑完整门禁；③ 主树里这类「只有主树才现形」的钉子这次是**第二次**咬人（前一次是卡 114 的 `cwd=`），所以本笔的钉子特意要求**在主树里**先红后绿。**★ 这一笔自己撞上的第二个坑（钉子是好的）**：头一趟门禁红在 `tests/test_card_specs_tracked.py`（卡 116 的钉子）—— 因为它查「队列里登记的每一份卡规格都要**已被 git 跟踪**」，而本卡的新规格虽然**拷进了卡树**、却要等收口的第 ⑥ 步才 `git add` ⇒ 门禁（第 ④ 步）比它早，于是当场红。★ 规矩：**新卡的规格必须在门禁之前就进索引**（先 `git add` 再跑门禁），否则那条钉子必咬 —— 钉子没错，是流程顺序错了。**★ 本笔另含补账（同一提交）**：`docs/workbacklog.toml` —— 卡 115（`T-G212`）与卡 116（`T-G213`）**已落地**却还挂着 `pending`，本笔一并标 `done` 并登记卡 117；卡规格 `复盘/卡/卡117-….md` 也随本笔进 git（T-G213 起的规矩：队列要自洽）。"
+

@@ -1,222 +1,238 @@
-# 并发工作 backlog —— 规划者 P 的排班表（台账号 T-G99）
-#
-# 用途：给定一批卡与并发上限，工具 `tools/wb_plan.py` 算出「谁和谁能同时跑」并拒绝冲突组合。
-#   子命令：check（只校验）/ plan（排批）/ worktrees（建树命令）/ dispatch（派活命令）。
-# 口径与架构（角色 / 时序 / 冲突域怎么定）见 `复盘/并发架构-T-G99.md`。
-#
-# ★ 字段口径：
-#   tree    —— "" = 主树（同一批最多一张卡用主树）；其余是 worktree 路径，如 .wt/dash。
-#   files   —— 这一张卡的**冲突域**：它会改的文件（含新建）。同批两卡相交 = 冲突。
-#             含 `docs/traceability.toml` 等受保护共享文件 = 直接拒单（作者一律不许碰）。
-#   depends —— 依赖的卡号；同层才并行。
-#   risk    —— low | mid | high（high 才派对抗性复核）。
-#   status  —— pending | running | done | failed。
-#
-# 口吻：这份文件**只登记没编过的卡**；下面 007/008/009/010 是当前在飞的四张。
-
-#
-# ★ 2026-09-26 收敛（T-G118）：这份文件是**待派队列** ——
-#   **已完成的卡要移出**（历史在 git 里）。原因：`wb_plan.py check` 目前**忽略 `status`**，
-#   把 backlog 当"全部已排班" → 已完成的卡会与待派卡报「同一文件两个写者」（实测 007↔024、009↔022）。
-#   ★ 2026-09-26 已修（T-G119）：`check` 现在**跳过 `status = done`/`failed`**，
-#     并且**同域卡只要 `depends` 有路径就允许共存**（会被排到不同批）——所以队列里可以
-#     同时有「同域串行」的卡（例：024 → 029 都改 `tools/wb_dispatch.py`）。
-[base]
-reviewed = "93c79ae"        # 已复核的基点提交（没登记过就不许建树）
+# 并发工作 backlog —— 规划者 P 的排班表（台账号 T-G99）
+#
+# 用途：给定一批卡与并发上限，工具 `tools/wb_plan.py` 算出「谁和谁能同时跑」并拒绝冲突组合。
+#   子命令：check（只校验）/ plan（排批）/ worktrees（建树命令）/ dispatch（派活命令）。
+# 口径与架构（角色 / 时序 / 冲突域怎么定）见 `复盘/并发架构-T-G99.md`。
+#
+# ★ 字段口径：
+#   tree    —— "" = 主树（同一批最多一张卡用主树）；其余是 worktree 路径，如 .wt/dash。
+#   files   —— 这一张卡的**冲突域**：它会改的文件（含新建）。同批两卡相交 = 冲突。
+#             含 `docs/traceability.toml` 等受保护共享文件 = 直接拒单（作者一律不许碰）。
+#   depends —— 依赖的卡号；同层才并行。
+#   risk    —— low | mid | high（high 才派对抗性复核）。
+#   status  —— pending | running | done | failed。
+#
+# 口吻：这份文件**只登记没编过的卡**；下面 007/008/009/010 是当前在飞的四张。
+
+#
+# ★ 2026-09-26 收敛（T-G118）：这份文件是**待派队列** ——
+#   **已完成的卡要移出**（历史在 git 里）。原因：`wb_plan.py check` 目前**忽略 `status`**，
+#   把 backlog 当"全部已排班" → 已完成的卡会与待派卡报「同一文件两个写者」（实测 007↔024、009↔022）。
+#   ★ 2026-09-26 已修（T-G119）：`check` 现在**跳过 `status = done`/`failed`**，
+#     并且**同域卡只要 `depends` 有路径就允许共存**（会被排到不同批）——所以队列里可以
+#     同时有「同域串行」的卡（例：024 → 029 都改 `tools/wb_dispatch.py`）。
+[base]
+reviewed = "b7dcdc2"        # 已复核的基点提交（没登记过就不许建树）
+
+[[cards]]
+id = "022"
+task = "T-G110"
+title = "myday 稀疏序号：真拖只写换位那一行"
+tree = ".wt/sparse"
+spec = "复盘/卡/卡022-myday稀疏序号.md"
+files = [
+  "src/timeflow/core/tasks/manager.py",
+  "src/timeflow/storage/db.py",
+  "tests/test_myday_sparse_line.py",
+  "复盘/myday稀疏序号-T-G110.md"
+]
+depends = []
+risk = "high"
+status = "done"
+
+[[cards]]
+id = "024"
+task = "T-G112"
+title = "看门狗独立化：`--detach` 之后被系统杀掉就没人盯"
+tree = ".wt/watchdog"
+spec = "复盘/卡/卡024-看门狗独立化.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+  "复盘/看门狗独立化-T-G112.md",
+  "tools/wb_watchdog.py"
+]
+depends = []
+risk = "high"
+status = "done"
+
+[[cards]]
+id = "029"
+task = "T-G114"
+title = "派活器收口（过期判决 / retry 读数 / 时间戳 / ★白名单硬闸门 / 429 三拍 / 落账预算 / 规格指纹）"
+tree = ".wt/dispatch"
+spec = "复盘/卡/卡029-派活器三合一.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+  "复盘/派活器三合一-T-G114.md"
+]
+depends = ["024"]
+risk = "high"
+status = "done"
+
+[[cards]]
+id = "108"
+task = "T-G205"
+title = "号池写面①：作业登记（谁占了哪棵树）+ 三条自家守卫"
+tree = ".wt/poolreg"
+spec = "复盘/卡/卡108-号池写面①作业登记与守卫.md"
+files = [
+  "tools/pool/registry.py",
+  "tools/pool/guards.py",
+  "tools/pool/locks.py",
+  "tools/wb_registry.py",
+  "tests/test_pool_registry.py",
+  "tests/test_pool_guards.py"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "109"
+task = "T-G206"
+title = "号池去重收口：wb_dispatch / tf_stage_guard 里剩下的两份真源"
+tree = ".wt/pooldup"
+spec = "复盘/卡/卡109-号池去重收口.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tools/tf_stage_guard.py",
+  "tests/test_wb_dispatch.py",
+  "tests/test_pool_dedup.py"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "110"
+task = "T-G207"
+title = "文档落地（外包）：今天七条坑 + 门禁改进清单"
+tree = ".wt/docmine"
+spec = "复盘/卡/卡110-文档落地七条坑与清单.md"
+files = [
+  "复盘/口径坑.md",
+  "复盘/门禁改进清单.md"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "111"
+task = "T-G208"
+title = "号池写面②：MCP 的 pool_dispatch / pool_cancel（六条不变量 + 存在性即授权）"
+tree = ".wt/poolmcp2"
+spec = "复盘/卡/卡111-号池写面②MCP写工具.md"
+files = [
+  "tools/pool_mcp.py",
+  "tools/pool/__init__.py",
+  "tests/test_pool_mcp.py",
+  "tests/test_pool_mcp_write.py"
+]
+# ★ 依赖卡 108（T-G205）—— 它已在 e9224f7 落地，所以这里不再写 depends（写了会把 111 推到更后面的层，
+#   而 110 与 111 的域不相交、正该同批跑）。
+depends = []
+risk = "high"
+status = "done"
+
+[[cards]]
+id = "112"
+task = "T-G209"
+title = "开工切片两处误报：停工样板话误报 + 现状段看错树"
+tree = ".wt/brief2"
+spec = "复盘/卡/卡112-切片两处误报.md"
+files = [
+  "tools/wb_brief.py",
+  "tests/test_wb_brief.py"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "113"
+task = "T-G210"
+title = "pool_cancel 的证据别是乱码：taskkill 输出按系统区域编码解"
+tree = ".wt/tkill"
+spec = "复盘/卡/卡113-pool_cancel证据编码.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_write.py"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "114"
+task = "T-G211"
+title = "main_tree_root 不许依赖当前目录（MCP 真机跑出来的 bug）"
+tree = ".wt/poolcwd"
+spec = "复盘/卡/卡114-main_tree_root不许依赖cwd.md"
+files = [
+  "tools/pool/registry.py",
+  "tests/test_pool_registry.py"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "115"
+task = "T-G212"
+title = "「生成了却没进提交」要有机器判据（封存时的未跟踪清单）"
+tree = ".wt/sealchk"
+spec = "复盘/卡/卡115-封存未跟踪清单判据.md"
+files = [
+  "scripts/run_gates.py",
+  "scripts/audit_progress.py",
+  "tests/test_seal_untracked.py"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "116"
+task = "T-G213"
+title = "卡规格搬进 git：让队列自洽（谁都能接手）"
+tree = ".wt/cardgit"
+spec = "复盘/卡/卡116-卡规格搬进git.md"
+files = [
+  "复盘/卡/卡022-myday稀疏序号.md",
+  "复盘/卡/卡024-看门狗独立化.md",
+  "复盘/卡/卡029-派活器三合一.md",
+  "复盘/卡/卡108-号池写面①作业登记与守卫.md",
+  "复盘/卡/卡109-号池去重收口.md",
+  "复盘/卡/卡110-文档落地七条坑与清单.md",
+  "复盘/卡/卡111-号池写面②MCP写工具.md",
+  "复盘/卡/卡112-切片两处误报.md",
+  "复盘/卡/卡113-pool_cancel证据编码.md",
+  "复盘/卡/卡114-main_tree_root不许依赖cwd.md",
+  "复盘/卡/卡115-封存未跟踪清单判据.md",
+  "复盘/卡/卡116-卡规格搬进git.md",
+  "docs/workbacklog.toml",
+  "tools/pool/plan.py",
+  "tools/wb_plan.py",
+  "tests/test_card_specs_tracked.py"
+]
+depends = []
+risk = "low"
+status = "done"
 
 [[cards]]
-id = "022"
-task = "T-G110"
-title = "myday 稀疏序号：真拖只写换位那一行"
-tree = ".wt/sparse"
-spec = "复盘/卡/卡022-myday稀疏序号.md"
-files = [
-  "src/timeflow/core/tasks/manager.py",
-  "src/timeflow/storage/db.py",
-  "tests/test_myday_sparse_line.py",
-  "复盘/myday稀疏序号-T-G110.md"
-]
-depends = []
-risk = "high"
-status = "done"
-
-[[cards]]
-id = "024"
-task = "T-G112"
-title = "看门狗独立化：`--detach` 之后被系统杀掉就没人盯"
-tree = ".wt/watchdog"
-spec = "复盘/卡/卡024-看门狗独立化.md"
-files = [
-  "tools/wb_dispatch.py",
-  "tests/test_wb_dispatch.py",
-  "复盘/看门狗独立化-T-G112.md",
-  "tools/wb_watchdog.py"
-]
-depends = []
-risk = "high"
-status = "done"
-
-[[cards]]
-id = "029"
-task = "T-G114"
-title = "派活器收口（过期判决 / retry 读数 / 时间戳 / ★白名单硬闸门 / 429 三拍 / 落账预算 / 规格指纹）"
-tree = ".wt/dispatch"
-spec = "复盘/卡/卡029-派活器三合一.md"
-files = [
-  "tools/wb_dispatch.py",
-  "tests/test_wb_dispatch.py",
-  "复盘/派活器三合一-T-G114.md"
-]
-depends = ["024"]
-risk = "high"
-status = "done"
-
-[[cards]]
-id = "108"
-task = "T-G205"
-title = "号池写面①：作业登记（谁占了哪棵树）+ 三条自家守卫"
-tree = ".wt/poolreg"
-spec = "复盘/卡/卡108-号池写面①作业登记与守卫.md"
+id = "117"
+task = "T-G215"
+title = "主树里算错主工作树（相对 --git-common-dir 用了进程 cwd）+ MCP 机器可读块被报告正文冒充"
+tree = ".wt/poolfix"
+spec = "复盘/卡/卡117-registry相对路径与MCP机器块.md"
 files = [
   "tools/pool/registry.py",
-  "tools/pool/guards.py",
-  "tools/pool/locks.py",
-  "tools/wb_registry.py",
+  "tools/pool_mcp.py",
   "tests/test_pool_registry.py",
-  "tests/test_pool_guards.py"
-]
-depends = []
-risk = "mid"
-status = "done"
-
-[[cards]]
-id = "109"
-task = "T-G206"
-title = "号池去重收口：wb_dispatch / tf_stage_guard 里剩下的两份真源"
-tree = ".wt/pooldup"
-spec = "复盘/卡/卡109-号池去重收口.md"
-files = [
-  "tools/wb_dispatch.py",
-  "tools/tf_stage_guard.py",
-  "tests/test_wb_dispatch.py",
-  "tests/test_pool_dedup.py"
-]
-depends = []
-risk = "mid"
-status = "done"
-
-[[cards]]
-id = "110"
-task = "T-G207"
-title = "文档落地（外包）：今天七条坑 + 门禁改进清单"
-tree = ".wt/docmine"
-spec = "复盘/卡/卡110-文档落地七条坑与清单.md"
-files = [
-  "复盘/口径坑.md",
-  "复盘/门禁改进清单.md"
-]
-depends = []
-risk = "low"
-status = "done"
-
-[[cards]]
-id = "111"
-task = "T-G208"
-title = "号池写面②：MCP 的 pool_dispatch / pool_cancel（六条不变量 + 存在性即授权）"
-tree = ".wt/poolmcp2"
-spec = "复盘/卡/卡111-号池写面②MCP写工具.md"
-files = [
-  "tools/pool_mcp.py",
-  "tools/pool/__init__.py",
-  "tests/test_pool_mcp.py",
-  "tests/test_pool_mcp_write.py"
-]
-# ★ 依赖卡 108（T-G205）—— 它已在 e9224f7 落地，所以这里不再写 depends（写了会把 111 推到更后面的层，
-#   而 110 与 111 的域不相交、正该同批跑）。
-depends = []
-risk = "high"
-status = "done"
-
-[[cards]]
-id = "112"
-task = "T-G209"
-title = "开工切片两处误报：停工样板话误报 + 现状段看错树"
-tree = ".wt/brief2"
-spec = "复盘/卡/卡112-切片两处误报.md"
-files = [
-  "tools/wb_brief.py",
-  "tests/test_wb_brief.py"
-]
-depends = []
-risk = "low"
-status = "done"
-
-[[cards]]
-id = "113"
-task = "T-G210"
-title = "pool_cancel 的证据别是乱码：taskkill 输出按系统区域编码解"
-tree = ".wt/tkill"
-spec = "复盘/卡/卡113-pool_cancel证据编码.md"
-files = [
-  "tools/pool_mcp.py",
-  "tests/test_pool_mcp_write.py"
-]
-depends = []
-risk = "low"
-status = "done"
-
-[[cards]]
-id = "114"
-task = "T-G211"
-title = "main_tree_root 不许依赖当前目录（MCP 真机跑出来的 bug）"
-tree = ".wt/poolcwd"
-spec = "复盘/卡/卡114-main_tree_root不许依赖cwd.md"
-files = [
-  "tools/pool/registry.py",
-  "tests/test_pool_registry.py"
-]
-depends = []
-risk = "low"
-status = "done"
-
-[[cards]]
-id = "115"
-task = "T-G212"
-title = "「生成了却没进提交」要有机器判据（封存时的未跟踪清单）"
-tree = ".wt/sealchk"
-spec = "复盘/卡/卡115-封存未跟踪清单判据.md"
-files = [
-  "scripts/run_gates.py",
-  "scripts/audit_progress.py",
-  "tests/test_seal_untracked.py"
-]
-depends = []
-risk = "low"
-status = "pending"
-
-[[cards]]
-id = "116"
-task = "T-G213"
-title = "卡规格搬进 git：让队列自洽（谁都能接手）"
-tree = ".wt/cardgit"
-spec = "复盘/卡/卡116-卡规格搬进git.md"
-files = [
-  "复盘/卡/卡022-myday稀疏序号.md",
-  "复盘/卡/卡024-看门狗独立化.md",
-  "复盘/卡/卡029-派活器三合一.md",
-  "复盘/卡/卡108-号池写面①作业登记与守卫.md",
-  "复盘/卡/卡109-号池去重收口.md",
-  "复盘/卡/卡110-文档落地七条坑与清单.md",
-  "复盘/卡/卡111-号池写面②MCP写工具.md",
-  "复盘/卡/卡112-切片两处误报.md",
-  "复盘/卡/卡113-pool_cancel证据编码.md",
-  "复盘/卡/卡114-main_tree_root不许依赖cwd.md",
-  "复盘/卡/卡115-封存未跟踪清单判据.md",
-  "复盘/卡/卡116-卡规格搬进git.md",
-  "docs/workbacklog.toml",
-  "tools/pool/plan.py",
-  "tools/wb_plan.py",
-  "tests/test_card_specs_tracked.py"
+  "tests/test_pool_mcp.py"
 ]
 depends = []
 risk = "low"

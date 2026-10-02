@@ -81,12 +81,20 @@ def main_tree_root() -> Path:
       取不到（被拆散 / 装包了）才退回 `None`（保持旧行为：走进程 cwd）。卡树里那个根 =
       卡树，它同样是 git 工作树 ⇒ `--git-common-dir` 照样回主仓的 `.git` ⇒ 父目录仍是
       主工作树（卡 108 设计的语义不变）。
+
+    ★★ 卡 117（T-G215）：`--git-common-dir` 回的可能是**相对路径** —— 在**主工作树根**
+      里跑 git 时它回 `.git`（在卡树 / 子目录里跑才回绝对路径）。相对路径相对的是
+      **"给 git 的那个 cwd"**（即这里的 `tree_root`），**不是进程 cwd**。老写法用
+      `Path.cwd()` 解析 ⇒ 进程 cwd 一旦不是仓库根（卡 114 那条钉子的场景、DSH 起 MCP
+      子进程也一样），主工作树就被算成 `<进程 cwd>/gates/diag/…`（主树里实测就这么错的）。
+      所以这里按 `git_cwd` 解析；只有拿不到 `git_cwd`（被拆散 / 装包了）才退回 `Path.cwd()`。
     """
     tree_root = Path(__file__).resolve().parents[2]
+    git_cwd = tree_root if tree_root.is_dir() else None
     try:
         done = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
-            cwd=str(tree_root) if tree_root.is_dir() else None,
+            cwd=str(git_cwd) if git_cwd is not None else None,
             capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
     except OSError as exc:
@@ -96,7 +104,8 @@ def main_tree_root() -> Path:
         raise RegistryError("算不出主工作树：`git rev-parse --git-common-dir` 没回路径")
     common = Path(raw)
     if not common.is_absolute():
-        common = Path.cwd() / common
+        # ★ 相对路径相对的是**给 git 的那个 cwd**（`git_cwd`），不是进程 cwd（卡 117）。
+        common = (git_cwd or Path.cwd()) / common
     return common.resolve().parent
 
 

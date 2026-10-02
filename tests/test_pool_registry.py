@@ -83,6 +83,44 @@ def test_registry_path_does_not_depend_on_cwd(
     assert registry.registry_path() == expected
 
 
+def test_main_tree_root_is_the_repo_root_regardless_of_cwd(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 卡 117 钉子：chdir 到临时目录后 `main_tree_root()` 仍等于仓库根；
+    再把 `TF_POOL_REGISTRY` 设成临时值 → `registry_path()` **优先用它**（覆盖主树路径）。"""
+    monkeypatch.delenv("TF_POOL_REGISTRY", raising=False)
+    repo_root = registry.main_tree_root()
+    assert (repo_root / ".git").is_dir()        # 主树里 `.git` 是**目录**（卡树里是**文件**）
+    elsewhere = tmp_path / "not-a-repo"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    assert registry.main_tree_root() == repo_root
+    override = tmp_path / "custom-registry.json"
+    monkeypatch.setenv("TF_POOL_REGISTRY", str(override))
+    assert registry.registry_path() == override
+
+
+def test_relative_git_common_dir_resolves_against_git_cwd(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 卡 117：git 回**相对**路径时，相对的是**给 git 的那个 cwd**，不是进程 cwd。
+
+    ★ 为什么另起一条：主树里 `--git-common-dir` 回的是相对的 `.git`（在**主工作树根**里
+      跑 git 就是这个行为），而卡树里回的是绝对路径 —— 只跑卡树那两条钉子**碰不到**这个
+      分支。这里造一个**真**仓库当"树根"（真跑 `git init`），把它当 `registry.py` 所在树，
+      再把进程 cwd 挪去别处：老代码用 `Path.cwd()` 解析 `.git` ⇒ 会算成 `<进程 cwd>`（红）。
+    """
+    fake_root = tmp_path / "fake-repo"
+    (fake_root / "tools" / "pool").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(fake_root)], check=True,
+                   capture_output=True, text=True)
+    monkeypatch.setattr(registry, "__file__", str(fake_root / "tools" / "pool" / "registry.py"))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)                    # 进程 cwd 远离"树根"
+    got = registry.main_tree_root()
+    assert os.path.samefile(got, fake_root)         # 相对 `.git` 按"给 git 的 cwd"解析 → 树根
+    assert not os.path.samefile(got, elsewhere)     # 老代码会落到进程 cwd（这条就红）
+
+
 #: 号池 MCP 的八个工具名（写工具要服务端 `POOL_MCP_WRITE=1` 才列）。
 POOL_TOOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_status",
                    "pool_models", "pool_dispatch", "pool_cancel"]
