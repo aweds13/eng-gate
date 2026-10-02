@@ -157,6 +157,7 @@ from pool.jobs import (
 from pool.locks import is_empty as lock_is_empty
 from pool.locks import status_argv as lock_status_argv
 from pool.models import find_pool_dir, load_pool_models
+from pool.no_window import NO_WINDOW  # ★ 卡 148：子进程一律不弹窗（flag 的唯一真源）
 from pool.plan import BacklogError, load_backlog, plan_report
 
 if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解（ruff TCH）
@@ -490,7 +491,7 @@ def _run(argv: list[str], cwd: Path) -> tuple[int | None, str, str]:
     try:
         done = subprocess.run(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
             argv, cwd=str(cwd), capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
+            encoding="utf-8", errors="replace", **NO_WINDOW,
         )
     except OSError as exc:
         return None, "", f"跑不起来：{type(exc).__name__}: {exc}"
@@ -958,7 +959,7 @@ def _spawn_worker(argv: list[str], root: Path) -> tuple[int | None, str, str]:
     """
     done = subprocess.run(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
         argv, cwd=str(root), capture_output=True, text=True,
-        encoding="utf-8", errors="replace",
+        encoding="utf-8", errors="replace", **NO_WINDOW,
     )
     return done.returncode, done.stdout or "", done.stderr or ""
 
@@ -999,6 +1000,7 @@ def _image_name(pid: int) -> str | None:
         done = subprocess.run(  # noqa: S603 —— pid 来自本机登记，不是外部输入
             ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
             capture_output=True, text=True, encoding=_console_encoding(), errors="replace",
+            **NO_WINDOW,
         )
     except OSError:
         return None
@@ -1014,6 +1016,7 @@ def _kill(pid: int) -> tuple[bool, str]:
         done = subprocess.run(  # noqa: S603 —— pid 来自本机登记，不是外部输入
             ["taskkill", "/F", "/T", "/PID", str(int(pid))],
             capture_output=True, text=True, encoding=_console_encoding(), errors="replace",
+            **NO_WINDOW,
         )
     except OSError as exc:
         return False, f"taskkill 起不来：{type(exc).__name__}: {exc}"
@@ -1407,7 +1410,7 @@ def tool_task_claim(arguments: dict[str, Any], root: Path = ROOT
     try:
         proc = subprocess.Popen(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
             argv, cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, encoding="utf-8", errors="replace")
+            text=True, encoding="utf-8", errors="replace", **NO_WINDOW)
     except OSError as exc:
         return _result(f"task_claim：子进程起不来：{type(exc).__name__}: {exc}",
                        {"task": task_id, "member": member, "claimed": False}, is_error=True)

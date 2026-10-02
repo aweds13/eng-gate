@@ -67,6 +67,16 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# ★ 卡 148（T-G248）：子进程一律不弹窗 —— flag 与 `tools/pool/no_window.py` **同一真源**。
+#   本脚本用 `-P` 跑（铁律 24）时**不**把自身目录放上 sys.path → 显式把仓库 `tools/` 挂上。
+for _base in Path(__file__).resolve().parents:
+    _tools = _base / "tools"
+    if (_tools / "pool" / "no_window.py").is_file():
+        if str(_tools) not in sys.path:
+            sys.path.insert(0, str(_tools))
+        break
+from pool.no_window import NO_WINDOW  # noqa: E402 —— 需先挂 sys.path（见上）
+
 GATE_PORTS = (8531, 8532, 8541, 8542, 8543, 8544)
 DEFAULT_STALE_AFTER = 10800
 DEFAULT_PORT_BASE = 8531
@@ -143,7 +153,8 @@ def max_concurrent() -> int:
 
 def _git(*args: str) -> str:
     out = subprocess.run(
-        ["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace"
+        ["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
+        **NO_WINDOW,
     )
     return (out.stdout or "").strip()
 

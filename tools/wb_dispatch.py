@@ -1761,6 +1761,25 @@ def worker_tree_label(worker_cwd: Path | None, main_root: Path) -> str:
     return "" if text == "." else text
 
 
+def lease_log_for(log: Path) -> str:
+    """要写进租约的 `log` 字段 —— **绝对 posix 路径**（口径与 MCP 写面 `pool_dispatch` 一致）。
+
+    **为什么登记它（卡 141 · T-G240）**：`pool.registry` 的死租约判据有两条 —— ① TTL 过期、
+    ② **该卡的作业日志被判「断了 / 已判决」**（`registry.is_dead` → `pool.jobs.scan_jobs`）。
+    租约不带 `log` 时**只剩 ①**，于是「工人 / 派活器**被强杀**（`atexit` 根本不跑）」这条路上
+    的租约要把树占满 TTL（6 小时）—— 2026-10-02 真咬过：`.wt/projguard` 的工人被
+    `kill_tree` 掐掉 ⇒ 二十多分钟后别的卡因「冲突域相交」被拒 ⇒ 主控只能**手工**
+    `registry.release('120')` 才继续。带上 `log` 之后，日志一静默（> `STALL_SECONDS`）或一有判决，
+    `list_reservations()` / `prune()` 就能把它清掉。
+
+    ★ **文件已存在时返回 ""（不登记）**：`reserve` 会连带过 `log_guard`（目标已存在就拒），
+      而那正是 `--force` 要覆盖的那条路（`preflight` 的"这一轮的 log 已存在"）—— 硬塞会被守卫
+      拦下 ⇒ 连派活都派不出去。所以这种情况**不登记**，退回 TTL 兜底。
+      ★ 边界（如实记）：`--force` / log 已存在那条路的租约**仍只能等 TTL** 才消失。
+    """
+    return "" if log.exists() else log.as_posix()
+
+
 def queue_files(card: str, *, root: Path | None = None) -> tuple[list[str], str | None]:
     """从队列（backlog）**真读**这张卡的冲突域；查不到 → 返回 `([], 一句原因)`。
 
@@ -2255,12 +2274,15 @@ def main() -> int:
                 return
             print(f"[还树] 租约已释放（卡 {args.card}；{why}）", flush=True)
 
+        # ★ 卡 141：租约要带上**作业 log** —— 否则「工人被强杀（`atexit` 不跑）」这条路上它
+        #   只能等 TTL（6 小时），把树白占着（真咬过，见 `lease_log_for`）。带上之后
+        #   `registry.is_dead` 的「日志判死」那条判据就能生效（`list_reservations` / `prune`）。
+        #   ★ 已存在的 log 不登记（`log_guard` 与 `--force` 覆盖语义打架，见 `lease_log_for`）。
+        lease_log = lease_log_for(log)
         try:
-            # ★ **不把 log 交给 reserve**：`log_guard`（目标已存在就拒）与续跑语义打架 ——
-            #   续跑时 log 本就在（`--force` / 换 `r2` 名是 wb_dispatch 自己的逻辑，见卡规格）。
-            #   日志那条委托 wb_dispatch 自己（preflight 已按 `--force` 判过），这里不重判。
             lease = pool_registry.reserve(args.card, tree=reserve_tree, files=reserve_files,
                                           project=args.project or "", model=args.model,
+                                          log=lease_log,
                                           note=f"spec={args.spec}",
                                           lock_body=pool_registry.read_lock_body())
         except pool_registry.GuardError as exc:
@@ -2276,6 +2298,11 @@ def main() -> int:
         print(f"[占树] 已登记租约：卡 {args.card}｜树 {reserve_tree or '（主树）'}｜"
               f"项目 {lease.get('project') or '（未定）'}｜"
               f"域 {'、'.join(reserve_files)}", flush=True)
+        # ★ 说实话：按**登记里那条**报（别拿本地的 `lease_log` 报 —— 万一 reserve 没收，就成假读数）
+        registered_log = str(lease.get("log") or "")
+        print(f"      死租约判据：TTL {int(lease.get('ttl_seconds') or 0)}s"
+              + (f" + 日志判死（log={registered_log}）" if registered_log
+                 else "（**没有日志判死**：这一轮的 log 已存在，只能等 TTL）"), flush=True)
 
     attempts, code, reason, scene, sid = 1, 0, "", "", resume_sid
     model = args.model                       # 429 三拍会按序换（只换白名单里的）

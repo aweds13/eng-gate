@@ -546,7 +546,7 @@ status = "done"
 
 [[cards]]
 id = "141"
-task = "T-G240"
+task = "T-G245"
 title = "掐掉工人要还租约（atexit 兜底 + 强杀后陈旧租约能清）"
 tree = ".wt/lease"
 spec = "复盘/卡/卡141-掐工人要还租约.md"
@@ -556,7 +556,7 @@ files = [
 ]
 depends = ["135"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "142"
@@ -603,3 +603,76 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "146"
+task = "T-G246"
+title = "合并两份模型白名单：infra 是唯一真源"
+tree = ".wt/onemodel"
+spec = "复盘/卡/卡146-合并模型白名单.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+]
+depends = ["141"]
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "147"
+task = "T-G245"
+title = "复核器查门数：部分跑的门禁不许冒充全量"
+tree = ".wt/doorcount"
+spec = "复盘/卡/卡147-复核器查门数.md"
+files = [
+  "tools/wb_review.py",
+  "tests/test_wb_review.py",
+]
+depends = []
+risk = "high"
+status = "done"
+
+[[cards]]
+id = "148"
+task = "T-G245"
+title = "子进程一律不弹窗（+ 扫描钉子防回归）"
+tree = ".wt/nowindow"
+spec = "复盘/卡/卡148-子进程不弹窗.md"
+files = [
+  "tools/pool_mcp.py",
+  "tools/pool/no_window.py",
+  "tests/test_no_window.py",
+  "gates/diag/gate_lock.py",
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "149"
+task = "T-G249"
+title = "派活器 --account：两个号并行派活"
+tree = ".wt/acctflag"
+spec = "复盘/卡/卡149-派活器按账号.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+]
+depends = ["146"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "150"
+task = "T-G250"
+title = "收口链幂等重跑：开跑前自动回退派生物"
+tree = ".wt/idempotent"
+spec = "复盘/卡/卡150-收口链幂等重跑.md"
+files = [
+  "tools/wb_land.py",
+  "tools/pool/landing.py",
+  "tests/test_wb_land.py",
+]
+depends = []
+risk = "mid"
+status = "pending"

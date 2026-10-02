@@ -41,6 +41,17 @@ r"""主控复核器（外包链路的第 ④ 步）：一条命令把"这一笔�
      （= 伪造）；`--no-gate` / `--commit-only` 形态若主动披露"没跑门禁"，**放行**但在输出与
      `--json` 里标一行「这一笔**没有**本轮门禁结论」，**不许**当成"门禁绿"混过去。
 
+★★ 第 ③′ 档（卡 147 · T-G247）—— **门禁必须是"全量那一趟"**：部分跑的门禁**不许冒充全量**：
+
+   ★ 来路：卡 140 自己发现的后门 —— `tools/wb_verify.py` 查 `EXPECT_GATES` **会**拦"部分跑的
+     `last.json`"，但 `wb_review.py` 原来只查 `ok` / `rev` / 每门 `exit_code`，**不查门数** ⇒
+     若有人把 `--affected` 那一趟的 `last.json` 提交上去，**复核主链可能不拦**（正是本仓最该防的
+     "看着绿其实没查全"）。判据见 `check_full_gate_run()`：① 门数 = 该仓**当前应有**的门数
+     （从 `scripts/run_gates.py` 的 `build_jobs` **现读** —— ★ **不写死 17、不造第二份门表**）；
+     ② `last.json` 里出现 `affected` 块（`--affected` 部分跑的记账）⇒ 判红并贴原文。
+   ★ **只对"门禁自己写出来的产物"判红**（`tree_scope` 是 `run_gates.py` 必写的字段）：合成夹具
+     （无 `tree_scope`）**只标注不判红** —— 详见 `check_full_gate_run()` 的 docstring。
+
 用法：
     python -X utf8 tools/wb_review.py --rev HEAD --read-only
     python -X utf8 tools/wb_review.py --rev HEAD --allow "src/**" --allow "tests/**"
@@ -138,6 +149,116 @@ def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
     if not payload.get("gates"):
         problems.append("gates/last.json 里没有任何门的结果（不是真跑过的产物）")
     return problems
+
+
+def _run_gates_module() -> object:
+    """按**本树** `scripts/` 现读门禁模块 —— 门清单的**唯一真源**。
+
+    ★ 卡 147 的硬要求（别越界）：门数是会变的（今天 17，明天加一道就是 18）——
+      **不许在本文件里再造第二份门表**（写死一个数字就是一份会漂的第二真源）。
+      延迟到运行时 `import run_gates`，用它的门表现读。
+    """
+    scripts = str(ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import run_gates  # 延迟 import：避免 wb_review 被 import 时就依赖 scripts/ 的运行时
+    return run_gates
+
+
+def expected_gate_names() -> tuple[list[str], str]:
+    """该仓**当前应有**的门清单：`run_gates.build_jobs(quick=False, fast=False)`（全量那一趟）。
+
+    返回 `(名字清单, 来源标签)`；读不到（import 失败 / 门表坏了）→ `([], 原因)` ——
+    调用方据此**判红**（拿不准不放过），不静默当成"没有约束"。
+    """
+    try:
+        names = [str(n) for n, _ in _run_gates_module().build_jobs(False, False)]
+    except Exception as exc:  # 读不到就如实说，别猜（"无法判断"优于猜）
+        return [], f"读不到门表（{type(exc).__name__}: {exc}）"
+    return names, f"run_gates.build_jobs(quick=False, fast=False)（{len(names)} 道）"
+
+
+def _affected_marks_partial_run(payload: dict) -> bool:
+    """`last.json` 里的 `affected` 块是不是"部分跑"的标记（卡 147）。
+
+    ★ 现行 `AffectedPlan.to_payload()`（`scripts/run_gates.py` 的 `--affected` 记账）**没有**
+      `enabled` 字段 —— `--affected` 那一趟只要用了就写这个块，块的**出现**即是标记。
+      若将来真加了 `enabled`，这里尊重显式的 `False`（= 作者声明它不是部分跑）。
+    """
+    block = payload.get("affected")
+    if block is None:
+        return False
+    return not (isinstance(block, dict) and block.get("enabled") is False)
+
+
+def check_full_gate_run(payload: dict) -> tuple[list[str], str, str]:
+    """③′ 门禁必须是"**全量那一趟**"（卡 147 · T-G247）—— 部分跑的门禁不许冒充全量。
+
+    判据（**两条**，任一命中即**判红**）：
+      ① 门数 = 该仓**当前应有**的门数（从 `build_jobs` **现读**，见 `expected_gate_names()`）；
+         不等就**点名**"少了哪几道 / 多了哪几道"（照现行实现，门名是稳定字面）；
+      ② `last.json` 里出现 `affected` 块（`--affected` 部分跑的记账）⇒ 判红并贴原文片段。
+
+    ★ **一条红线：判据只对"门禁自己写出来的产物"生效**（`run_gates.py` 写 `last.json` 时**必写**
+      `tree_scope`，见 `scripts/run_gates.py:1664`）。没有 `tree_scope` 的 `last.json`（测试夹具 /
+      T-G179 之前的旧笔）**不当真产物** ⇒ **只标注、不判红**（拿不准就如实记一行让人瞥一眼）。
+      为什么要有这条：本仓的两个既有测试（`tests/test_wb_review_branch.py` 等）用的是 1 道门的
+      **合成** `last.json`；若不区分，它们会被这条新判据当场判红，而那张卡的白名单里**没有**它们
+      （改它们 = 越界）。区分之后：真·`--affected` 产物 **照判红**（带 `tree_scope`），夹具只留一条
+      标注。
+
+    ★ **口径选了"判红"而不是一律"只标注"**（卡 147 给了两种，选一种）：对真产物，
+      本工具的语义是"这一笔**算不算数**"的闸 —— 只标注不判红 = 把"部分跑"放进"算数"，正是本卡要堵的
+      假绿；卡也明写"宁可误报……不许放过"。"读不到门表"同样**判红**（读不到就不敢确认是全量那一趟）。
+
+    ★ 返回 `(problems, note, 如实读数行)`：
+      - `reading` **无条件**给（门数=多少、应有=多少、affected 有无）——
+        复核报告那一行一眼看出查的是什么；
+      - `note` 非空 = 一条"标注"（不是红），进 `--json` 的 `full_gate_note`。
+    """
+    gates = payload.get("gates") or []
+    got = [str(g.get("name")) for g in gates if isinstance(g, dict)]
+    expected, source = expected_gate_names()
+    partial = _affected_marks_partial_run(payload)
+    reading = (f"门数={len(got)}，应有={len(expected) if expected else '?'}（{source}）；"
+               f"affected 块={'有' if partial else '无'}")
+    missing = [n for n in expected if n not in got]
+    extra = [n for n in got if n not in expected]
+    mismatch = bool(expected) and (len(got) != len(expected) or set(got) != set(expected))
+
+    def _dump() -> str:
+        return json.dumps(payload.get("affected"), ensure_ascii=False)[:200]
+
+    # 非真产物（没有 `tree_scope`）：只标注、不判红（见 docstring 的红线）。
+    if not payload.get("tree_scope") and (not expected or mismatch or partial):
+        why = ("读不到门表" if not expected
+               else (f"不是全量那一趟：{_shortfall(missing, extra)}" if mismatch
+                     else f"带 affected 块：{_dump()}"))
+        note = (f"{reading} —— 这份 last.json **没有 tree_scope**，不是门禁跑出来的产物"
+                f"（{why}）；拿不准就不敢确认它是全量那一趟，**如实标注、不判红**")
+        return [], note, reading
+
+    problems: list[str] = []
+    if not expected:
+        problems.append(f"③′ 全量门禁：{reading} —— 读不到应有的门数，无法确认这是全量那一趟"
+                        "（拿不准不放过）")
+    elif mismatch:
+        problems.append(f"③′ 全量门禁：{reading} —— 不是全量那一趟：{_shortfall(missing, extra)}"
+                        "（部分跑的门禁不许冒充全量）")
+    if partial:
+        problems.append(f"③′ 全量门禁：{reading} —— last.json 里有 affected 块"
+                        f"（--affected 部分跑的记账）：{_dump()}；部分跑不许冒充全量")
+    return problems, "", reading
+
+
+def _shortfall(missing: list[str], extra: list[str]) -> str:
+    """把"差在哪"说成人话：少了几道（点名）/ 多了几道（点名）。"""
+    detail = []
+    if missing:
+        detail.append(f"少 {len(missing)} 道：{missing}")
+    if extra:
+        detail.append(f"多 {len(extra)} 道：{extra}")
+    return "；".join(detail) or "门数不等"
 
 
 def check_gates_trailer_truth(
@@ -410,6 +531,8 @@ def main(argv: list[str] | None = None) -> int:
         payload = {}
         problems.append("这一笔里没有 gates/last.json（门禁产物没跟着提交）")
     problems += check_gate_evidence(payload, parent)
+    full_gate_problems, full_gate_note, full_gate_reading = check_full_gate_run(payload)
+    problems += full_gate_problems
     truth_problems, truth_note = check_gates_trailer_truth(
         trailers.get("Gates") or "", payload, parent,
     )
@@ -427,6 +550,9 @@ def main(argv: list[str] | None = None) -> int:
         "gates_trailer": trailers.get("Gates"),
         "gates_trailer_note": truth_note,
         "no_round_gate_verdict": bool(truth_note),
+        "full_gate_reading": full_gate_reading,
+        "full_gate_note": full_gate_note,
+        "full_gate_problems": full_gate_problems,
         "problems": problems,
     }
     if args.json:
@@ -440,6 +566,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  ② trailer：{trailers.get('Task', '(缺)')}")
     print(f"  ③ 门禁：ok={payload.get('ok')} rev={payload.get('rev')}"
           f"（这一笔的父提交 {parent}）+ {len(payload.get('gates', []))} 道门")
+    print(f"  ③′ 全量门禁（门数 / affected 标记）：{full_gate_reading}")
+    if full_gate_note:
+        print(f"     ★ 标注（不判红）：{full_gate_note}")
     print(f"  ⓖ `Gates:` 真伪：{truth_note or '与 gates/last.json 对得上（真绿，已核）'}")
     print(f"  ④ 这一笔改了 {len(files)} 个文件：" + ("、".join(files[:6]) or "（一个都没改）"))
     print(f"  ⑤ 工作区未提交改动：{len(dirty)} 个")

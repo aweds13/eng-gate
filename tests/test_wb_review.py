@@ -16,7 +16,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.append(str(ROOT / "scripts"))
 
+import run_gates as rg  # noqa: E402 —— 第 ③′ 档的门表真源（卡 147）
 import wb_review as wr  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂上
 
 
@@ -364,7 +366,10 @@ def test_task_single_still_enforced_alongside_the_truth_check() -> None:
     assert found["Gates"] == GOOD_TRAILERS["Gates"]
 
 
-def _rev_repo(tmp_path: Path, *, last_ok: bool, gates_line: str) -> Path:
+def _rev_repo(
+    tmp_path: Path, *, last_ok: bool, gates_line: str,
+    gates: list[dict] | None = None, tree_scope: bool = False,
+) -> Path:
     """造一棵能走 `--rev` 流程的小仓库：seed 提交 → 带 `gates/last.json` 的第二笔提交。"""
     repo = tmp_path / "repo"
     (repo / "src").mkdir(parents=True)
@@ -377,7 +382,10 @@ def _rev_repo(tmp_path: Path, *, last_ok: bool, gates_line: str) -> Path:
     _run_git(repo, "commit", "-q", "-m", "seed")
     parent = _run_git(repo, "rev-parse", "--short", "HEAD").strip()
     payload = {"rev": parent, "ok": last_ok, "docs_sync_ok": True,
-               "docs_sync_missing": [], "gates": [{"name": "pytest", "exit_code": 0}]}
+               "docs_sync_missing": [],
+               "gates": gates if gates is not None else [{"name": "pytest", "exit_code": 0}]}
+    if tree_scope:  # 让夹具像"门禁自己写出来的产物"（第 ③′ 档只对真产物判红）
+        payload["tree_scope"] = "worktree-minus-gates"
     (repo / "gates" / "last.json").write_text(json.dumps(payload), encoding="utf-8")
     msg = f"feat: 一笔\n\nTask: T-999\nLedger: 1 条\nGates: {gates_line}\n"
     _run_git(repo, "add", "-A")
@@ -401,4 +409,102 @@ def test_no_gate_form_is_surfaced_in_output_and_json(
     wr.main(["--rev", "HEAD", "--branch", "main", "--allow", "**", "--dirty-ok"])
     out = capsys.readouterr().out
     assert "本轮门禁结论" in out
+
+
+# ------------------------------------------ ③′ 全量门禁（门数 / affected 标记）
+#
+# 卡 147 · T-G247 —— 来路：卡 140 自己发现的后门。`tools/wb_verify.py` 查 `EXPECT_GATES`
+# 会拦"部分跑的 `last.json`"，但 `wb_review.py` 原来只查 `ok`/`rev`/每门 `exit_code`，
+# **不查门数** ⇒ 若有人把 `--affected` 那一趟的 `last.json` 提交上去，复核主链可能不拦。
+# 本档：门数必须 = 该仓**当前应有**的门数（从 `rg.build_jobs` **现读**，不写死 17），
+# 且不许带 `affected` 块。判据只对**真产物**（带 `run_gates.py` 必写的 `tree_scope`）判红；
+# 合成夹具（无 `tree_scope`）只标注不判红（否则会误伤 `tests/test_wb_review_branch.py`
+# 的 1 道门夹具，而它不在本卡白名单里）。每条判据都配"故意坏掉会红"的反例。
+
+
+def _gates_payload(names: list[str], *, real: bool = True, **over: object) -> dict:
+    base: dict = {"gates": [{"name": n, "exit_code": 0} for n in names]}
+    if real:
+        base["tree_scope"] = "worktree-minus-gates"   # 真产物才有的字段（run_gates.py:1664）
+    base.update(over)
+    return base
+
+
+def _real_gate_names() -> list[str]:
+    return [n for n, _ in rg.build_jobs(False, False)]
+
+
+def test_full_run_last_json_still_passes() -> None:
+    """① 真·全量的 `last.json`（门数齐、无 affected 块）⇒ **照旧通过**（不许把正常路径判死）。"""
+    names = _real_gate_names()
+    problems, note, reading = wr.check_full_gate_run(_gates_payload(names))
+    assert problems == [], problems
+    assert note == "", "真全量不该留标注"
+    assert f"门数={len(names)}" in reading and f"应有={len(names)}" in reading
+    assert "affected 块=无" in reading
+
+
+def test_partial_run_last_json_is_flagged_and_points_at_the_shortfall() -> None:
+    """② 部分跑的 `last.json`（门数少几道）⇒ **判红**并**点名差在哪**（少的是哪几道）。"""
+    names = _real_gate_names()
+    short = names[:-2]
+    problems, _, reading = wr.check_full_gate_run(_gates_payload(short))
+    assert problems, "少了两道门却没报"
+    assert any(("少 2 道" in p) and all(n in p for n in names[-2:]) for p in problems), problems
+    assert f"门数={len(short)}" in reading and f"应有={len(names)}" in reading
+
+
+def test_affected_block_marks_a_partial_run() -> None:
+    """③ `last.json` 带 `affected` 块（`--affected` 部分跑的记账）⇒ **判红**并**贴原文**。"""
+    names = _real_gate_names()
+    block = {"inputs": ["src/a.py"], "ran": ["ruff"], "matched": ["ruff"],
+             "skipped": [{"name": "pytest", "why": "输入未命中"}],
+             "full_fallback": False, "note": "命中 1 道门"}
+    problems, _, reading = wr.check_full_gate_run(_gates_payload(names, affected=block))
+    assert any("affected 块" in p for p in problems), problems
+    assert any("pytest" in p for p in problems), "affected 原文片段没被贴出来"
+    assert "affected 块=有" in reading
+
+
+def test_expected_count_is_read_from_the_run_gates_table(monkeypatch) -> None:
+    """④ ★ **门数是现读的、不是硬编码**：桩掉 `scripts/run_gates.py` 的门表（少一道）⇒
+    复核器跟着认为"应有 N-1"（这一条防"第二份真源"）。"""
+    names = _real_gate_names()
+    assert len(names) >= 2
+    # 真表：全在 ⇒ 过；少一道 ⇒ 判"少 1 道"（证明它真拿真表当基准）
+    assert wr.check_full_gate_run(_gates_payload(names))[0] == []
+    assert any("少 1 道" in p for p in wr.check_full_gate_run(_gates_payload(names[:-1]))[0])
+    # 桩掉门表（少一道）⇒ 基准跟着变：喂 N-1 道就过，喂 N 道反而被点名"多 1 道"
+    monkeypatch.setattr(rg, "build_jobs", lambda q, f: [(n, []) for n in names[:-1]])
+    assert wr.check_full_gate_run(_gates_payload(names[:-1]))[0] == []
+    assert any("多 1 道" in p for p in wr.check_full_gate_run(_gates_payload(names))[0])
+
+
+def test_synthetic_payload_without_tree_scope_is_only_annotated() -> None:
+    """⑤ ★ 红线：**没有 `tree_scope`** 的 `last.json`（合成夹具 / 旧笔）**只标注、不判红**。
+
+    为什么：`tests/test_wb_review_branch.py` 用的是一个 1 道门的合成 `last.json`，且断言 CLI 退 0；
+    若新判据不留这条红线，那张**不在本卡白名单里**的测试会当场红（= 越界才能修）。真·`--affected`
+    产物带 `tree_scope`，照判红（见 ②③）。
+    """
+    problems, note, reading = wr.check_full_gate_run(_gates_payload(["pytest"], real=False))
+    assert problems == [], "合成夹具不该被判红（那是越界改动才救得回来的假红）"
+    assert "tree_scope" in note and "标注" in note
+    assert "门数=1" in reading
+
+
+def test_partial_real_artifact_cli_is_rejected_end_to_end(
+    tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    """②（CLI 层）**真产物**（带 `tree_scope`）门数少一道 ⇒ `wb_review` **判红退 1** ——
+    证明这条判据在整条 `--rev` 流程里真会咬（不止零件层）。"""
+    names = _real_gate_names()
+    short = [{"name": n, "exit_code": 0} for n in names[:-1]]
+    repo = _rev_repo(tmp_path, last_ok=True, gates_line="全量门禁绿", gates=short, tree_scope=True)
+    monkeypatch.setattr(wr, "ROOT", repo)
+    monkeypatch.setattr(wr, "audit_verdict", lambda: ([], "审计通过 ✅"))
+    code = wr.main(["--rev", "HEAD", "--branch", "main", "--allow", "**", "--dirty-ok"])
+    out = capsys.readouterr().out
+    assert code == 1, out
+    assert "少 1 道" in out and names[-1] in out, out
 

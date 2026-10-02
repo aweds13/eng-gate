@@ -2479,6 +2479,154 @@ def test_main_with_already_reserved_leaves_the_registry_untouched(
     assert record, "工人还是要派出去的（只是不占树）"
 
 
+# ---------------------------------------------- 掐工人要还租约（卡 141 · T-G240）
+#
+# 为什么值当测：2026-10-02 真咬过 —— `.wt/projguard` 的工人被 `kill_tree` 掐掉，**租约没还**，
+# 二十多分钟后另一张卡（同域）被域守卫当场拒（主控只能**手工** `registry.release('120')`）。
+# 退出路径那几条靠 `atexit` 兜底（卡 118 给门禁锁那套）；但**强杀**（`kill -9` / 进程被外部
+# 杀掉）时 `atexit` 根本不跑 ⇒ 还得靠 `pool.registry` 的死租约判据 —— 它的第二条要**租约里有 log**。
+# 下面六条钉子各钉一处，每条都"故意坏掉会红"。
+
+_LEASE_SUBPROCESS = r'''
+import pathlib, sys
+tools_dir = pathlib.Path(sys.argv[1])
+root = pathlib.Path(sys.argv[2])
+sys.path.insert(0, str(tools_dir))
+import wb_dispatch as wd
+wd.ROOT = root
+wd.paths = lambda *a, **k: (root / "node.exe", root / "codebuddy")
+wd.git_dirty = lambda *a, **k: []
+wd.auth_ok = lambda *a, **k: (True, "登录自检通过")
+
+def boom(cmd, log, errlog, **kw):
+    (root / "reached_runner.txt").write_text("到了工人这一步\n", encoding="utf-8")
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("", encoding="utf-8")
+    raise RuntimeError("模拟派活器异常早退（工人半路炸了）")
+
+wd.run_worker = boom
+sys.argv = ["wb_dispatch.py", "--card", "001", "--spec", "spec.md", "--execute"]
+wd.main()
+'''
+
+
+def _entry(card: str, *, tree: str, files: list[str], log: str = "") -> dict:
+    """手工造一条租约条目（绕过 `reserve`）—— "租约还在、写它的进程已经没了"就是这个样子。
+
+    ★ `at` 用**现在**（租约没过期）—— 这样用例判的就**只有**"日志判死"这一条，不是 TTL。
+    """
+    return {"card": card, "task": "", "tree": tree, "files": files, "project": "",
+            "pool": "", "model": "", "log": log, "owner": "test",
+            "at": datetime.now().isoformat(timespec="seconds"),
+            "ttl_seconds": float(wd.pool_registry.DEFAULT_TTL),
+            "note": ""}
+
+
+def _diag(sandbox: Path) -> Path:
+    d = sandbox / "gates" / "diag"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def test_lease_log_for_skips_an_existing_log(sandbox: Path) -> None:
+    """接线的前置：log 不存在 → 登记；**已存在** → 不登记（否则 `log_guard` 拦死 `--force`）。"""
+    log = _diag(sandbox) / "wb-001.jsonl"
+    assert wd.lease_log_for(log) == log.as_posix(), "log 不存在 ⇒ 必须登记（绝对 posix 路径）"
+    log.write_text("", encoding="utf-8")
+    assert wd.lease_log_for(log) == "", "log 已存在 ⇒ 不许塞（会被守卫拒）→ 退回 TTL 兜底"
+
+
+def test_execute_registers_the_log_in_the_lease(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 接线（拆掉 → 这条红）：真跑一次 `--execute`，**跑的那一刻**那条租约必须带着 log。
+
+    为什么必须带：不带 log 的租约只剩 TTL 一条判据 ⇒ 强杀之后要白占树 6 小时（卡 141 的现场）。
+    """
+    seen: list[dict] = []
+
+    def runner(cmd, log, errlog, **kwargs):          # noqa: ANN001, ANN202
+        seen.extend(wd.pool_registry.list_reservations())
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, "", "", "sid-test"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+    assert [r["card"] for r in seen] == ["001"], seen
+    registered = seen[0]["log"]
+    assert registered, "租约必须带上 log（否则强杀那条路只能等 6 小时 TTL）"
+    assert registered.endswith("wb-001.jsonl"), registered
+    assert "日志判死" in capsys.readouterr().out       # 也说出来给读日志的人看
+
+
+def test_a_stale_log_lease_is_not_listed_and_prune_clears_it(sandbox: Path) -> None:
+    """④ **强杀那条路**：工人进程早没了、日志也不动了 ⇒ `list_reservations()` 不当它是活的。"""
+    log = _diag(sandbox) / "wb-003.jsonl"
+    log.write_text("{}\n", encoding="utf-8")
+    old = time.time() - (wd.STALL_SECONDS + 60)
+    os.utime(log, (old, old))                          # 日志"早就没动静了"（> STALL_SECONDS）
+    wd.pool_registry.save([_entry("003", tree=".wt/dead", files=["sandbox-003.md"],
+                                  log=log.as_posix())])
+    assert wd.pool_registry.list_reservations() == [], "日志判死 ⇒ 不许再当活租约"
+    assert wd.pool_registry.prune() == 1, "prune 要能把它清掉"
+
+
+def test_a_live_log_lease_is_not_cleared(sandbox: Path) -> None:
+    """⑤ 反例（不许误清）：同一条租约、log **刚写过** ⇒ 它必须还在（"宁可多拦一次"）。"""
+    log = _diag(sandbox) / "wb-002.jsonl"
+    log.write_text("{}\n", encoding="utf-8")           # mtime = 现在 ⇒ 还在跑
+    wd.pool_registry.save([_entry("002", tree=".wt/live", files=["sandbox-002.md"],
+                                  log=log.as_posix())])
+    assert [r["card"] for r in wd.pool_registry.list_reservations()] == ["002"]
+    assert wd.pool_registry.prune() == 0
+
+
+def test_watchdog_kill_returns_the_lease(sandbox: Path, monkeypatch) -> None:
+    """①② 看门狗把工人掐掉（`kill_tree`）之后，**租约也要还** —— 真跑一次（假工人被判卡死）。"""
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([], reason="卡死：9.0 分钟没有新事件"))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--retry", "0"])
+    assert wd.main() == 6
+    assert wd.pool_registry.list_reservations() == [], "掐掉之后租约必须已还"
+
+
+def test_budget_stop_returns_the_lease(sandbox: Path, monkeypatch) -> None:
+    """③ 预算止损（另一条"提前 break"的退出路径）同样要还租约。"""
+    events = [json.dumps({"type": "result", "subtype": "success", "result": "干完了",
+                          "usage": {"input_tokens": 3_000_000}}, ensure_ascii=False)]
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([], events=events))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--input-budget", "1000000"])
+    assert wd.main() == 6
+    assert wd.pool_registry.list_reservations() == []
+
+
+def test_the_lease_is_returned_even_when_the_dispatcher_raises(sandbox: Path) -> None:
+    """③ **任何异常早退**都要还租约 —— 靠 `atexit` 兜底（`main()` 里那条收尾根本走不到）。
+
+    ★ 为什么必须**子进程**真跑：`atexit` 只在**解释器退出**时跑；进程内抛异常时它还没跑，
+      就地断言会假红。子进程炸了（退出码非 0）而登记里没有卡 001 = 兜底真生效。
+    """
+    done = subprocess.run([sys.executable, "-X", "utf8", "-c", _LEASE_SUBPROCESS,
+                           str(ROOT / "tools"), str(sandbox)],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+    assert done.returncode != 0, f"这个子进程本来就该炸：\n{done.stdout}\n{done.stderr}"
+    assert (sandbox / "reached_runner.txt").exists(), "没跑到工人那一步 ⇒ 这条用例没咬到点上"
+    assert "[还树] 租约已释放" in done.stdout, done.stdout + done.stderr
+    assert wd.pool_registry.list_reservations() == [], "异常早退之后租约必须已还（atexit 兜底）"
+
+
+def test_release_is_idempotent_and_does_not_touch_others(sandbox: Path) -> None:
+    """⑥ 重复还租约幂等：还两次不报错、也不误删别人的（★ 不许放宽守卫的反面：别误伤）。"""
+    wd.pool_registry.save([_entry("001", tree=".wt/x", files=["sandbox-001.md"]),
+                           _entry("002", tree=".wt/y", files=["sandbox-002.md"])])
+    assert wd.pool_registry.release("001") is True
+    assert wd.pool_registry.release("001") is False, "已经没了 ⇒ 空操作，不许报错"
+    assert [r["card"] for r in wd.pool_registry.list_reservations()] == ["002"]
+
+
 # ------------------------------------------------ 卡树基点过期（卡 135 · T-G233）
 #
 # 为什么值当测：收口会把卡树那份文件**拷回主树**；卡树基点比主树旧、主树又恰好改过同一份文件时，
