@@ -57,6 +57,19 @@ pytest 会**并行**跑（装了 `pytest-xdist`；worker 数见 `TF_PYTEST_WORKE
   绝不当"跳过/没跑"糊过去 = 假绿）。其余门的结论照常收完（超时只掐那一棵，不吞别人的读数）。
   ★ 这一层**只加"到点就掐"**：门判据、门清单、泳道/串行结构、`input_hash()` / `REUSE_INPUTS`
   / 封存指纹**一个字不动**。测试见 `tests/test_run_gates_timeout.py`（假门 `sleep`）。
+
+★ T-G239（卡 140）`--affected`：**自查提速** —— 只跑"被给定路径影响"的那几道门。
+  来路：`复盘/架构审议-外包与门禁.md` §二 错配① + §五「A 分档」原话 —— 现在门禁只有"全量"、
+  没有"哪个文件影响哪道门"的依赖图，且**判据方向是反的**（不是"多跑安全"，是"**漏跑危险**"）
+  ⇒ 先立一张「**门 × 输入**」表（`DOOR_INPUTS`，见下），再据它裁。
+  **判据（宁多勿漏，写进 `--help` 原文）**：
+    ① 路径匹配不上任何门 ⇒ **跑全量**；② 某道门在表里**缺输入** ⇒ **那道门照跑**；③ 拿不准就多跑。
+  **不许静默跳过**：`--affected` 那一趟会**明说**跑了哪几道、跳了哪几道、为什么跳，并把这份
+  记账写进 `gates/last.json` 的 `affected` 块（`ok` 的语义**不动**）。
+  ★★ **分工（本卡的硬要求，别越界）**：`--affected` **只给"改完一小块自查"**用（像工人跑目标
+  用例那样）。一切**真的判提交**的路径 —— 收口链（`tools/wb_land.py` / `tools/pool/landing.py`）
+  与"**提交前必须全量**"的约定 —— **仍然跑全量**；本卡**不改**它们，本开关也**不许**被当提交闸。
+  ★ **不给 `--affected` 时**：门清单、输出结构、`last.json` 形状**逐字不变**。
 """
 
 from __future__ import annotations
@@ -64,6 +77,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import contextlib
+import dataclasses
 import hashlib
 import json
 import os
@@ -76,6 +90,10 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parent.parent
 GATES = ROOT / "gates" / "last.json"
@@ -292,18 +310,53 @@ def pytest_workers() -> int:
     return max(1, min(DEFAULT_PYTEST_WORKERS, os.cpu_count() or 1))
 
 
-# ---------------------------------------------------------------- 复用（T-G47）
-# 每道真机门的**输入**：这些文件一动，判定就可能变 → 必须真跑。
+# ---------------------------------------------------------------- 门 × 输入表（T-G239）
+# 这张表回答**两件事**（共用同一份 glob，但用途不同，别混）：
+#   ① `REUSE_INPUTS`（T-G47）：某道真机门的"输入一个字节都没变 → 可以复用上次判定"；
+#   ② `--affected`（T-G239）：改了**这些**路径才需要重跑这道门。
+# ★ 判据方向 = **宁多勿漏**（漏跑的代价比多跑高）：
+#   - 一道门**在这张表里没有条目** ⇒ 视为"任何改动都可能影响它" ⇒ **永远跑**（见表后面的清单）；
+#   - 表里每一条都要能在代码里找到出处 —— 下面逐条注明了出处的命令/常量。
 # 刻意写宽一点（宁可多跑一次，也不要"以为无关"）：`src/**` 一律算输入。
-REUSE_INPUTS: dict[str, tuple[str, ...]] = {
+DOOR_INPUTS: dict[str, tuple[str, ...]] = {
+    # —— 真机层（起真服务 / 真浏览器）：输入 = 网页资源 + 服务端 + 门上自己的脚本（+ 黄金）——
+    #    出处：命令见 `NODE_CMD`（render/ui_flow/ui_dom_probe）与 `REAL_PY`（两个 live 门）；
+    #    输入与 T-G47 的 `REUSE_INPUTS` 同源（`REUSE_INPUTS` 就是从这里取的那 5 道）。
     "render": ("src/**", "tools/render_check.mjs", "tools/tf_browser.mjs", "tools/serve.py",
                "gates/render/*.txt"),
     "ui_flow": ("src/**", "tools/ui_flow_check.mjs", "tools/tf_browser.mjs", "tools/serve.py"),
     "lf1_live": ("src/**", "tools/lf1_live_check.py", "tools/serve.py"),
     "web_live": ("src/**", "tools/web_live_check.py", "tools/serve.py"),
     "ui_dom_probe": ("src/web/**", "tools/ui_dom_probe.mjs"),
+    # —— 静态审美/文案门（见 `COMMON`）：只读 `src/web` 的令牌与文案 ——
+    #    出处：`tools/contrast_audit.py` 的 CSS/BASELINE 常量（CSS=src/web/app.css）、
+    #    `tools/style_audit.py` 的 CSS/BASELINE、`tools/ui_text_audit.py` 的 BASELINE +
+    #    它 import 的 `tools/ui_text_scan.py`（扫 src/web/index.html）。
+    "contrast": ("src/web/**", "tools/contrast_audit.py", "tools/contrast_baseline.toml"),
+    "style": ("src/web/**", "tools/style_audit.py", "tools/style_baseline.toml"),
+    "ui_text": ("src/web/**", "tools/ui_text_audit.py", "tools/ui_text_scan.py",
+                "tools/ui_text_baseline.toml"),
+    # —— 命令表一致性（命令见 `COMMON` 的 commands）：读 src（app.py / index.html / registry / mcp）
+    #    + 契约层 + `docs/commands.toml` ——
+    #    出处：`scripts/check_commands.py` 的 COMMANDS/CONTRACTS/APP/INDEX 常量。
+    "commands": ("src/**", "docs/contracts/**", "docs/commands.toml", "scripts/check_commands.py"),
+    # —— 台账↔规格 标题对账（命令见 `COMMON` 的 audit_titles）：只读台账 + 两份规格 + 自己 ——
+    #    出处：`scripts/audit_titles.py` 的 LEDGER/FUNCTIONAL/NONFUNCTIONAL 常量。
+    "audit_titles": ("docs/traceability.toml", "docs/specification/**",
+                     "scripts/audit_titles.py"),
 }
-REUSABLE = tuple(REUSE_INPUTS)
+# 表里**没有**条目的门 = 「任何改动都可能影响它」⇒ **永远跑**（逐门核过；出处写在各行）：
+#   - pytest / acceptance：测试会读**整棵仓库**（docs/ · 复盘/ · traceability · harness …，
+#     实测 tests/ 里到处在读）→ 任何改动都可能让它变红；与 T-G47「pytest 永不复用」同一精神。
+#   - ruff：命令扫 `src/ tests/ scripts/ tools/ examples/ harness/`（见 `COMMON`），面宽。
+#   - mypy：型检查整份 `src/`（见 `COMMON` 的 mypy），且对"别的模块改了"敏感（跨模块类型）。
+#   - check_layers / check_layers_selftest：读 `docs/` 整棵文档体系并做跨层引用完整性
+#     （出处：`scripts/check_layers.py` 的 docstring 与 `scripts/test_check_layers.py`）。
+#   - audit：`audit_progress.py --all` 逐条求值台账 evidence，指针可指向仓库里**任何**地方。
+#     （卡 140 §2 点名的例子之一。）
+# ★ 读法等价的旧名字：`REUSE_INPUTS` = 从 `DOOR_INPUTS` 取那 5 道真机门（**避免两处漂**）。
+REUSABLE: tuple[str, ...] = ("render", "ui_flow", "lf1_live", "web_live", "ui_dom_probe")
+REUSE_INPUTS: dict[str, tuple[str, ...]] = {k: DOOR_INPUTS[k] for k in REUSABLE}
 
 # ★ T-G181：glob 是按【工作区】匹配的 —— 上面 `src/**` 这类宽度会把**未跟踪的生成物**
 # 也捞进输入哈希。它们是「这棵树有没有被 pip 装过 / 跑过测试」的函数，不是提交内容的一部分：
@@ -1213,13 +1266,183 @@ def gates_ok(results: list[dict[str, object]]) -> bool:
     return all(int(str(r["exit_code"])) == 0 for r in blocking)
 
 
-def main() -> int:
+# ---------------------------------------------------------------- --affected（T-G239 / 卡 140）
+# 只裁"该跑哪几道门"，**不碰任何门的判据**。判据方向 = 宁多勿漏（见模块头与 `--help`）。
+_GLOB_RE_CACHE: dict[str, re.Pattern[str]] = {}
+
+
+def _glob_re(pattern: str) -> re.Pattern[str]:
+    """把 glob 翻成正则（与 `ROOT.glob` 同语义：`**` 跨目录、`*`/`?` 不跨；结果缓存）。"""
+    cached = _GLOB_RE_CACHE.get(pattern)
+    if cached is not None:
+        return cached
+    out: list[str] = []
+    i, n = 0, len(pattern)
+    while i < n:
+        c = pattern[i]
+        if c == "*":
+            if i + 1 < n and pattern[i + 1] == "*":
+                j = i + 2
+                if j < n and pattern[j] == "/":
+                    # `**/` → 跨目录且**含零层**（`src/**` 要能命中 `src/foo.py`）
+                    j += 1
+                    out.append("(?:.*/)?")
+                else:
+                    out.append(".*")
+                i = j
+                continue
+            out.append("[^/]*")
+            i += 1
+            continue
+        if c == "?":
+            out.append("[^/]")
+            i += 1
+            continue
+        out.append(re.escape(c))
+        i += 1
+    compiled = re.compile("^" + "".join(out) + "$")
+    _GLOB_RE_CACHE[pattern] = compiled
+    return compiled
+
+
+def _norm_path(raw: str) -> str:
+    """把路径规范成**仓库相对、POSIX 斜杠**（去 `./` 前缀与尾部 `/`）。"""
+    p = raw.strip().replace("\\", "/")
+    while p.startswith("./"):
+        p = p[2:]
+    return p.rstrip("/")
+
+
+def path_matches_glob(path: str, pattern: str) -> bool:
+    """`path`（仓库相对）命中 glob `pattern` 吗。
+
+    ★ 宁多勿漏的第二道：`path` 是 `pattern` 的**祖先目录**（如 path=`src`、pattern=`src/**`）
+      也算命中 —— 少跑一道门的代价比多跑一道高。
+    """
+    path = _norm_path(path)
+    if not path or not pattern:
+        return False
+    if path == pattern:
+        return True
+    if pattern.startswith(path + "/"):
+        return True
+    return _glob_re(pattern).match(path) is not None
+
+
+@dataclasses.dataclass(frozen=True)
+class AffectedPlan:
+    """`--affected` 这一趟的**记账**（哪些门跑、哪些跳、为什么跳）。
+
+    ★ 它是**纯数据**：`to_payload()` 直接进 `gates/last.json` 的 `affected` 块，
+      好让"这趟是部分跑、跳了哪几道、为什么"事后**能从产物里看出来**（不许静默跳过）。
+    """
+
+    inputs: tuple[str, ...]
+    ran: tuple[str, ...]
+    matched: tuple[str, ...]
+    skipped: tuple[tuple[str, str], ...]
+    full_fallback: bool
+    note: str
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "inputs": list(self.inputs),
+            "ran": list(self.ran),
+            "matched": list(self.matched),
+            "skipped": [{"name": n, "why": w} for n, w in self.skipped],
+            "full_fallback": self.full_fallback,
+            "note": self.note,
+        }
+
+
+def plan_affected(
+    paths: Iterable[str],
+    all_doors: Sequence[str],
+    door_inputs: Mapping[str, tuple[str, ...]] | None = None,
+) -> AffectedPlan:
+    """按「门 × 输入」表算出 `--affected` 该跑哪几道（**宁多勿漏**）。
+
+    判据（与卡 140 §2 逐条对应）：
+      ① `paths` 一条都命不中任何门的输入 ⇒ **跑全量**（`full_fallback=True`）；
+      ② 某道门在表里**缺输入** ⇒ 那道门**永远跑**（`all_doors` 里不在表内的门）；
+      ③ 命中就多跑：要跑 = 永远跑的门 ∪ 被命中的门；其余进 `skipped`（带原因）。
+    ★ 只裁"名单"，**不碰任何门的判据**：`all_doors` 之外的语义（复用/超时/落盘）一个字不动。
+    """
+    table = DOOR_INPUTS if door_inputs is None else door_inputs
+    norm = [p for p in (_norm_path(p) for p in paths) if p]
+    doors = list(all_doors)
+    always = [d for d in doors if d not in table]
+    matched = [
+        d for d in doors
+        if table.get(d) and any(path_matches_glob(p, pat) for p in norm for pat in table[d])
+    ]
+    if not matched:
+        note = ("没有任何路径命中门的输入表 ⇒ 宁多勿漏：**跑全量**"
+                if norm else "没给路径（空）⇒ 宁多勿漏：**跑全量**")
+        return AffectedPlan(inputs=tuple(norm), ran=tuple(doors), matched=(),
+                            skipped=(), full_fallback=True, note=note)
+    keep = set(always) | set(matched)
+    ran = [d for d in doors if d in keep]
+    skipped = [
+        (d, f"输入未命中（该门登记的输入：{'、'.join(table[d])}）")
+        for d in doors if d not in keep
+    ]
+    note = (f"命中 {len(matched)} 道门（{', '.join(matched)}）；"
+            f"无输入映射永远跑 {len(always)} 道；跳过 {len(skipped)} 道")
+    return AffectedPlan(inputs=tuple(norm), ran=tuple(ran), matched=tuple(matched),
+                        skipped=tuple(skipped), full_fallback=False, note=note)
+
+
+def changed_paths_from(rev: str) -> list[str]:
+    """`--changed-from <REV>`：让 git 现算"改了哪些路径"。
+
+    = `git diff --name-only <REV>`（含已提交与未提交的**已跟踪**改动）
+      ∪ 未跟踪且未被 `.gitignore` 忽略的文件（排除 `gates/**` 与生成物，与封存指纹同口径）。
+    ★ 生成物（`__pycache__/` · `*.pyc` · `*.egg-info/`）按 `is_generated` 排掉 ——
+      否则在"装过 / 跑过测试"的树里它们会顶替成 `src/**` 的输入，把真机门白白全拉起来。
+    """
+    paths = [p for p in git("diff", "--name-only", rev).splitlines() if p.strip()]
+    for line in git("ls-files", "--others", "--exclude-standard").splitlines():
+        sp = line.strip()
+        if sp and sp != "gates" and not sp.startswith("gates/") and not is_generated(Path(sp)):
+            paths.append(sp)
+    return paths
+
+
+def build_jobs(quick: bool, fast: bool) -> list[tuple[str, list[str]]]:
+    """门清单（**默认逐字不变**）：`--fast` 只留十几秒那几道；否则除 `--quick` 外加真机浏览器层。"""
+    jobs: list[tuple[str, list[str]]] = [*COMMON, *REAL_PY]
+    if fast:
+        jobs = [j for j in jobs if j[0] in FAST]
+    elif not quick:
+        jobs += [(n, []) for n in BROWSER]
+    return jobs
+
+
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="跳过真机层（提交前够用）")
     ap.add_argument("--fast", action="store_true", help="只跑十几秒那几道（内循环；不落盘）")
     ap.add_argument("--serial", action="store_true", help="全串行（对照并行下的偶发失败）")
     ap.add_argument("--no-reuse", action="store_true", help="不信复用记录，真机层全部重跑")
     ap.add_argument("--seal", action="store_true", help="提交前封存：只更新 tree 字段")
+    ap.add_argument(
+        "--affected", nargs="+", metavar="路径",
+        help=("只跑「被这些路径影响」的门（**自查用，不是提交闸**）。判据方向 = 宁多勿漏："
+              "① 路径匹配不上任何门 ⇒ 跑全量；② 某道门没登记输入 ⇒ 那道门照跑；③ 拿不准就多跑。"
+              "★ 一切真的判提交的路径（收口链 tools/wb_land.py 与「提交前必须全量」的约定）"
+              "仍然跑全量；本开关不会、也不许被当成提交闸。跑/跳的道与原因记进 gates/last.json。"),
+    )
+    ap.add_argument(
+        "--changed-from", metavar="REV",
+        help=("同 --affected，但路径由 git 现算：git diff --name-only <REV> + 未跟踪文件"
+              "（排生成物与 gates/**）。同样只是「改完一小块自查」，不替代全量。"),
+    )
+    return ap
+
+
+def main() -> int:
+    ap = build_parser()
     args = ap.parse_args()
     if args.seal:
         return seal()
@@ -1232,11 +1455,25 @@ def main() -> int:
         print(f"[FAIL] 内存闸拒跑：{mem_problem}", flush=True)
         return 3
 
-    jobs: list[tuple[str, list[str]]] = [*COMMON, *REAL_PY]
-    if args.fast:
-        jobs = [j for j in jobs if j[0] in FAST]
-    elif not args.quick:
-        jobs += [(n, []) for n in BROWSER]
+    jobs = build_jobs(args.quick, args.fast)
+
+    # ★ T-G239（卡 140）：`--affected` / `--changed-from` —— **只裁门名单**，不碰别处。
+    affected_plan: AffectedPlan | None = None
+    if args.affected is not None or args.changed_from:
+        paths: list[str] = list(args.affected or [])
+        if args.changed_from:
+            paths += changed_paths_from(args.changed_from)
+        seen: set[str] = set()
+        uniq = [p for p in paths if not (p in seen or seen.add(p))]
+        affected_plan = plan_affected(uniq, [n for n, _ in jobs])
+        jobs = [j for j in jobs if j[0] in set(affected_plan.ran)]
+        print(f"=== --affected：只跑受影响的 {len(jobs)} 道门"
+              "（**自查用**；★ 提交前仍要全量）===", flush=True)
+        print(f"  [affected] 输入 {len(uniq)} 条：{uniq if uniq else '（空）'}", flush=True)
+        print(f"  [affected] {affected_plan.note}", flush=True)
+        for _n, _why in affected_plan.skipped:
+            print(f"  [affected] 跳 {_n:<22} {_why}", flush=True)
+
     cmds = dict(jobs)
 
     ok_docs: bool = True                     # --fast 不判"文档同提交"（那是提交闸的事）
@@ -1274,7 +1511,8 @@ def main() -> int:
     # ★ ⑨ T-G156：全量门禁开场先清**本树端口段**上的遗留（孤儿服务/无头 Edge）。
     #   只在**会用到端口**的档位跑（全量 = 含浏览器层）；`--quick` / `--fast` 不起真机服务，
     #   清了没意义还可能误伤，所以那两档不碰（`--fast` 更不写盘）。
-    if not args.fast and not args.quick:
+    #   ★ T-G239：`--affected` 若把浏览器层裁掉了，就不清 —— 这趟不起真机服务，没有端口可清。
+    if not args.fast and not args.quick and any(n in BROWSER for n, _ in jobs):
         cleanup_leftovers()
 
     if args.serial:
@@ -1448,6 +1686,14 @@ def main() -> int:
             + [f"{n} NOT RUN" for n in not_run]
         ) or "（无通过项）",
     }
+    # ★ T-G239（卡 140）：`--affected` 是**部分跑** —— 把"跑了/跳了/为什么跳"记进 `affected` 块。
+    #   ★ `ok` 的语义一个字不动（仍 = "这一趟**真跑的**阻断门全过"）；本块只**披露范围**，
+    #   让事后能从产物里看出"这不是一轮全量门禁"。默认（不给 `--affected`）**不加这个键**
+    #   → `last.json` 形状逐字不变（卡 §4 硬要求）。
+    if affected_plan is not None:
+        payload["affected"] = affected_plan.to_payload()
+        payload["trailer"] = ("【--affected：只跑了受影响的 "
+                              f"{len(jobs)} 道门，未跑全量】" + str(payload["trailer"]))
     GATES.parent.mkdir(parents=True, exist_ok=True)
     GATES.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"

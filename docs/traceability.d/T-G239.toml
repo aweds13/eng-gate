@@ -1,0 +1,12 @@
+[entries."T-G239"]
+id = "T-G239"
+title = "「门 × 输入」表 + run_gates --affected（自查提速；宁多勿漏；收口链仍走全量）"
+group = "OPS"
+status = "done"
+evidence = [
+  "file:scripts/run_gates.py",
+  "file:tests/test_run_gates_affected.py",
+  "file:docs/workbacklog.toml",
+]
+gaps = "**来路（架构审议里**唯一还没动的结构性项**）**：`复盘/架构审议-外包与门禁.md` **§二 错配①（粒度错配）** + **§五** 原话：> 「**A 分档**：现在门禁**只有「全量」**，没有「哪个文件影响哪道门」的依赖图 ⇒ 中等工作量，> 而且**判据方向是反的**（不是「多跑安全」，而是「**漏跑危险**」）⇒ 要先做一张**门 × 输入**的表。」实测代价（今晚真读数）：一趟全量门禁 **`pytest 1973 passed in 633s` ≈ 10.5 分钟**，而 17 道门里**真机浏览器门**最贵。★ **本笔只做「自查提速」**：判据方向写成**宁多勿漏**，而且**收口链仍走全量**（绝不动「提交前必须全量」那条铁律）。**做法（四件，都在 `scripts/run_gates.py`）**：① 把文件里**已有的** file→门 映射抽成一张显式的「**门 × 输入**」表；★ **逐门核过**——`pytest` / `acceptance` / `ruff` / `mypy` / `check_layers` / `check_layers_selftest` / `audit` **这七道**被判为「**任何改动都可能影响它**」（它们的输入太广：`pytest` 的用例到处在读 `docs/`·`复盘/`·台账；`ruff` 扫六个目录；`mypy` 整份 `src/`；`check_layers` 读整棵 docs 体系；`audit` 的证据指针可指向任何地方）⇒ **永远跑**。这条**保守**是**故意**的。② 新增 **`--affected <路径…>`**：只跑「被这些路径影响」的门。★ **判据方向写进 `--help`**：路径匹配不上任何门 ⇒ **跑全量**；某道门在表里缺输入 ⇒ **那道门照跑**；拿不准就多跑。③ ★ **一切「真的判提交」的路径仍走全量**：`tools/wb_land.py`（+ 转发壳 `gates/diag/_integrate.py`）**不透传** `--affected` —— `--affected` **只给「改完一小块自查」**用（像工人跑目标用例那样）。④ **不许静默跳过**：`--affected` 那一趟把「跑了哪几道 · **跳了哪几道、为什么跳**」写进`gates/last.json` 的 `affected` 块（`to_payload()`），输出里也打印；★ **默认（不给 `--affected`）行为逐字不变**。**验收（工人自验 + 主控复核）**：`tests/test_run_gates_affected.py` **13 passed** ·既有 `tests/test_run_gates_timeout.py` **未被打穿** · `ruff check tools tests scripts` = **All checks passed!** ·★ **真读数**：`--affected <本卡自己的文件…>` 那一趟的门集合与耗时（端到端补证「affected 块真写进 `last.json`」）·全量门禁与审计读数见 trailer 与提交之后的 audit 段。**★ 老实说（偏差、以及它自己发现的一个后门）**：① **保守的那七道门是「照卡处理」**：卡里把 `ruff`/`mypy`/`check_layers` 点成「无输入」的例子，工人**照保守**列成「永远跑」，并**如实**给出「其实可给精确输入」的建议（`ruff` = `src/ tests/ scripts/ tools/ examples/ harness/` + `pyproject.toml`；`mypy` = `src/**`；`check_layers` = `docs/**`）—— ★ **本卡不改**（宁可多跑，别漏跑）。② ★★ **它发现一个真后门（重要）**：`tools/wb_verify.py` 查 `EXPECT_GATES=17`，**会**拦住部分跑的 `last.json`；但 **`tools/wb_review.py` 只查 `ok` / `rev` / 每门 `exit_code`，不查门数** ⇒ 若有人把 affected 的 `last.json` 提交上去，**复核主链可能不拦**。★ **`wb_review.py` 不在本卡白名单** ⇒ **如实记、另开卡**（这是「自查提速」最该防的那条缝）。③ **没跑 `main()`**（那等于真跑一趟门禁）：钉的是 `AffectedPlan.to_payload()` 与**默认门集**；端到端（`last.json` 里真有 `affected` 块）由**真读数那一趟**补证。④ `--fast --affected` 那一档**不落盘**（`--fast` 本来就不写 `last.json`）⇒ `affected` 块不会进—— **符合既有口径**（那一档不是提交闸）。⑤ 本笔**不改**任何门的**判据**，也不改「提交前必须全量」。**★ 本笔另含**：`docs/workbacklog.toml` 把卡 140 标 `done`。"
+

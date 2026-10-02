@@ -557,3 +557,49 @@ files = [
 depends = ["135"]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "142"
+task = "T-G241"
+title = "影响面反推：算出这张卡的白名单与要跑的测试"
+tree = ".wt/impact"
+spec = "复盘/卡/卡142-影响面反推.md"
+files = [
+  "tools/wb_impact.py",
+  "tests/test_wb_impact.py",
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "143"
+task = "T-G242"
+title = "对抗复核常态化（提交之后·异步·不挡收口）"
+tree = ".wt/advcard"
+spec = "复盘/卡/卡143-对抗复核常态化.md"
+files = [
+  "tools/pool/task.py",
+  "tools/wb_advcard.py",
+  "tests/test_pool_task.py",
+  "tests/test_wb_advcard.py",
+  "复盘/外包-卡表与规矩.md",
+]
+depends = []
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "144"
+task = "T-G243"
+title = "不变量台账：安全主张 → 判据 → 反例钉子 → 覆盖状态"
+tree = ".wt/invariants"
+spec = "复盘/卡/卡144-不变量台账.md"
+files = [
+  "复盘/不变量台账.toml",
+  "tools/wb_invariants.py",
+  "tests/test_wb_invariants.py",
+]
+depends = []
+risk = "mid"
+status = "pending"
