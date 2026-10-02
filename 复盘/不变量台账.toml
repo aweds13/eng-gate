@@ -136,3 +136,498 @@ judge = "tools/sync_docs.py::run"
 nail = "tests/test_docs_fragments.py::test_check_is_green_after_merge_and_points_at_hand_edit"
 status = "partial"
 note = "tools/sync_docs.py::run 的 --check 只查『片段内容没在汇总里』这一个方向；反方向（汇总里有、片段已经没了）查不出来 ⇒ 单向。已有钉子只钉『手改汇总被抓』那半。"
+[[invariant]]
+id = "INV-16"
+claim = "队列登记的卡，其规格文件必须已进 git 索引 —— 否则不许开跑门禁"
+judge = "tools/pool/landing.py::main"
+nail = "tests/test_card_specs_tracked.py::test_every_registered_spec_exists_and_is_tracked"
+status = "partial"
+note = "★ 现状：判据在收口链（fail-fast，红了退 4），**真源头（登记那一刻）没有判据** ⇒ 每忘一次就白等一趟门禁。真源头应是 tools/pool/plan.py::validate 的字段类判据。 ★ 归位：写卡/登记那道动作（`tools/pool/plan.py::validate` 的字段类判据里缺这一条 → 应加「存在 + `git ls-files --error-unmatch`」）；现状的判据在收口那道门，不在源头"
+
+[[invariant]]
+id = "INV-17"
+claim = "队列的 files 不许写通配字符 —— 否则静默绕过冲突域检查"
+judge = "tools/pool/plan.py::validate"
+nail = "tests/test_wb_plan.py::test_wildcard_in_files_is_rejected"
+status = "covered"
+note = "通配与谁都相交、于是与谁都不报冲突。 ★ 归位：`tools/pool/plan.py::WILDCARD_CHARS`（`*` `?` `[`）+ `tools/pool/plan.py::validate`（命中就拒并点名是哪张卡的哪个条目）"
+
+[[invariant]]
+id = "INV-18"
+claim = "卡的域里不许出现受保护共享文件（changelog / traceability / 交接进度）"
+judge = "tools/pool/plan.py::validate"
+nail = "tests/test_wb_plan.py::test_every_protected_file_is_rejected"
+status = "covered"
+note = "受保护集合的唯一真源是 tools/pool/plan.py::PROTECTED_FILES，三处消费点都从它派生。 ★ 归位：`tools/pool/plan.py::PROTECTED_FILES`（唯一真源）→ 三处消费点：`tools/pool/plan.py::validate`、`tools/pool/task.py::_validate_manifest`、`tools/pool/task.py::check_domain`"
+
+[[invariant]]
+id = "INV-19"
+claim = "越界判据必须吃**卡树的实际改动**，不许吃申请方自报的清单"
+judge = "tools/wb_review.py::run_card_mode"
+nail = "tests/test_wb_review.py::test_actual_change_outside_domain_is_refused"
+status = "covered"
+note = "★ 这是外部审查里最值钱的一条：不自报就全绿。权威域 = 栅栏预声明 → 队列，查不到即拒（不猜空域）。 ★ 归位：`tools/wb_review.py` 第⑥档 + `tools/pool/review.py::changed_paths`（`git status --porcelain -uall --no-renames`，**含未跟踪** `??`）/ `tools/pool/review.py::domain_of_manifest_text`（权威域：栅栏预声明 → 队列，两处都查不到 ⇒ 拒、别猜空域）/ `tools/pool/review.py::outside_domain`（`--allow` 降级为「只在没有权威域时用」且用了要说出来；`--waive` 显式豁免留痕）"
+
+[[invariant]]
+id = "INV-20"
+claim = "排队白名单只保证文件不相交，保证不了契约不相交 —— 排队阶段要能按符号报警"
+judge = "tools/seam_check.py::extract_symbols"
+nail = "tests/test_seam_check.py::test_common_symbol_reported"
+status = "partial"
+note = "接缝预检按符号取交集；现状是**推荐**不是硬门。 ★ 归位：源头 = `tools/seam_check.py::extract_symbols`（定义 / 被桩替换的对象 / 形参三类取交集；有交集退 1）"
+
+[[invariant]]
+id = "INV-21"
+claim = "预声明名单里的每个成员都必须有对应卡规格，且集成 --allow 不许漏本批规格"
+judge = "tools/pool/landing.py::main"
+nail = "tests/test_wb_land.py::test_unexpected_staged_file_stops_and_resets"
+status = "covered"
+note = "由收口链第 ⑥ 步的 extra 守卫兜住（计划外暂存就停手）。 ★ 归位：`tools/pool/landing.py::main` ⑥ 的 `expand_allow`/`extra` 守卫（第 306–319 行）+ ③′ 的 fail-fast（第 243 行）"
+
+[[invariant]]
+id = "INV-22"
+claim = "同域但有 depends 依赖路径的两张卡不许一律拒单（队列要装得下同域串行）"
+judge = "tools/pool/plan.py::dependency_path"
+nail = "tests/test_wb_plan.py::test_overlapping_cards_need_a_dependency_path"
+status = "covered"
+note = "冲突域判据要认得依赖链，否则队列表达不了串行。 ★ 归位：`tools/pool/plan.py::dependency_path`（含 `_reachable` 传递、兜环）⇒ `validate()` 的相交判据改成「相交 **且** 无依赖路径」；`topo_layers()` + `greedy_pack()` 保证有路径的两卡不可能同批"
+
+[[invariant]]
+id = "INV-23"
+claim = "往 TOML 基本串里写 Windows 路径必须把反斜杠加倍 —— 否则收口链自己崩"
+judge = "tools/pool/stage_card.py::_selfcheck"
+nail = "tests/test_pool_task.py::test_toml_str_survives_quotes_and_backslashes"
+status = "partial"
+note = "同类：中文正文用「」不写 ASCII 双引号（照写会解析不了）。 ★ 归位：源头 = `tools/pool/stage_card.py::quote_safe`（先成对换引号、**最后**加倍反斜杠）+ `_unescape_git_quoted` + `_toml_str`"
+
+[[invariant]]
+id = "INV-24"
+claim = "复用判据不许变成永远回复用（也没有永远回真跑）—— pytest 永不复用"
+judge = "scripts/run_gates.py::skip_reused"
+nail = "tests/test_gates_reuse_line.py::test_one_byte_change_disables_reuse"
+status = "partial"
+note = "★ 这道门的读数是：4 worker 146 s、被换页拖到 32 worker 884 s、而我手打 1 worker 时 pytest 612 s（占全趟 707 s 的 86%）⇒ 「跑法」本身是要被量、被守的东西，不是随手设的环境变量。 ★ 归位：源头 = `scripts/run_gates.py::skip_reused`（配 `input_hash` / `REUSE_INPUTS` / `REUSABLE`）"
+
+[[invariant]]
+id = "INV-25"
+claim = "worktree 里跑门禁/测试不许导入主树的 src —— 既能造假红也能造假绿"
+judge = "scripts/run_gates.py::tree_pythonpath"
+nail = "tests/test_src_import_line.py::test_import_timeflow_resolves_to_this_tree"
+status = "partial"
+note = "editable 的 .pth 硬指主树；两道：门禁的 tree_pythonpath 与 tests/conftest.py 把本树 src 插到 sys.path 最前。 ★ 归位：源头 = `scripts/run_gates.py::tree_pythonpath`（本树 src 放子进程 PYTHONPATH 首位；`env()` 与封存那处 env 都过它）"
+
+[[invariant]]
+id = "INV-26"
+claim = "封存之后再新增文件（提交树 ≠ 封存树）不许无人发现"
+judge = "scripts/audit_progress.py::check_seal_untracked"
+nail = "tests/test_seal_untracked.py::test_untracked_fragment_after_seal_is_caught_and_named"
+status = "partial"
+note = "★ 目前只有 sync_docs 的单向检查；封存树与提交树的正面对账是**待做**（复盘自己列在门禁改进清单 ⑨）。 ★ 归位：源头 = 审计/复核侧的树对比（`HEAD^{tree}` 剔 `gates/**` == `last.json.tree`，不等就点名差在哪几个路径）"
+
+[[invariant]]
+id = "INV-27"
+claim = "同一端口段不许两趟门禁并行；整机并行趟数要有上限"
+judge = "gates/diag/gate_lock.py::cmd_acquire"
+nail = "tests/test_gate_lock_multi.py::test_same_segment_second_must_wait"
+status = "covered"
+note = "陈旧判定不许用**等待者**的 --stale-after，必须以**持有者写进锁文件的租约**为准。 ★ 归位：源头 = `gates/diag/gate_lock.py::lock_path`（按段分把）/ `max_concurrent`（默认 2）/ `cmd_acquire` 的 `_active_locks`（只数租约内活锁、以持有者写进锁文件的租约为准）"
+
+[[invariant]]
+id = "INV-28"
+claim = "不许用从 acquire 起算的静态租约把还在跑的活锁判成陈旧锁"
+judge = "gates/diag/gate_lock.py::cmd_renew"
+nail = "tests/test_gate_lock_lease.py::test_renew_resets_age_and_prevents_stale"
+status = "partial"
+note = "续租（cmd_renew）只许同卡号。 ★ 归位：源头 = `gates/diag/gate_lock.py::DEFAULT_STALE_AFTER`（1800 → 10800）+ `cmd_renew`（只有当前持有者同卡号能续）"
+
+[[invariant]]
+id = "INV-29"
+claim = "门禁产物必须留得住证据：封存指纹不许是没人查、且每笔都错的凭证"
+judge = "scripts/audit_progress.py::check_seal_untracked"
+nail = "tests/test_seal_untracked.py::test_untracked_fragment_after_seal_is_caught_and_named"
+status = "partial"
+note = "worktree 回退 + 自指是这条的两个坑；check_fingerprint 有判据，但「谁在什么时候查它」没有判据。 ★ 归位：源头 = 审计/复核侧的树对比（`HEAD^{tree}` 剔 `gates/**` == `last.json.tree`，不等就点名差在哪几个路径）"
+
+[[invariant]]
+id = "INV-30"
+claim = "界面版面被改坏不许没人发现 —— 必须有真的渲染门（不是只有 DOM 探针）"
+judge = "scripts/run_gates.py::finish_gate"
+nail = "tests/test_render_check.py::test_golden_files_are_readable_manifests"
+status = "covered"
+note = "14 道门原先一道都没渲染过界面；现在由 render + render_signatures 兜。 ★ 归位：源头 = `tools/render_check.mjs`（几何清单当判据、PNG 当证据；与 `gates/render/*.txt` 逐字节比；起不了浏览器记 `not_run` 不算通过）"
+
+[[invariant]]
+id = "INV-31"
+claim = "门禁/工具文档里的判据描述不许落后于代码（否则读文档的人按旧口径干活）"
+judge = "-"
+nail = "-"
+status = "missing"
+note = "「门禁四要素.md」里已出现过写「run_gates 没给每道门超时」而代码早就有 DEFAULT_DOOR_TIMEOUT 的漂移。 ★ 归位：源头 = 该文档那一行（改判据的同一笔里应同步；或改成「见 `DEFAULT_DOOR_TIMEOUT`」指向真源）"
+
+[[invariant]]
+id = "INV-32"
+claim = "台账的 test: 证据不许只证明「这个测试文件在」—— 必须指到真用例名"
+judge = "scripts/audit_progress.py::eval_assertion"
+nail = "-"
+status = "partial"
+note = "★ 最贵的一条缝：eval_assertion 对 test: 只做文件存在性；wb_invariants 才核用例名，但它只覆盖这张台账 ⇒ 两边该合流。 ★ 归位：`scripts/audit_progress.py::eval_assertion`"
+
+[[invariant]]
+id = "INV-33"
+claim = "台账/复盘里写的可核对事实，必须能被机器复核（否则工人写错没人咬）"
+judge = "scripts/audit_progress.py::eval_assertion"
+nail = "tests/test_evidence_map.py::test_evaluate_covers_file_text_and_test_types"
+status = "partial"
+note = "证据倒排工具在（evidence_map），但「数字与事实对不对」只有一半判据。 ★ 归位：台账 evidence 的 `file:` / `text:` 断言由 `scripts/audit_progress.py::eval_assertion` 真求值（改文件之前还能用 `tools/evidence_map.py --stale` 事前问「会碎什么」）"
+
+[[invariant]]
+id = "INV-34"
+claim = "封存指纹必须有人查 —— 不许是没人查、且每笔都错的凭证"
+judge = "tools/wb_verify.py::check_fingerprint"
+nail = "tests/test_gate_fingerprint.py::test_fingerprint_sees_changes_outside_gates"
+status = "partial"
+note = "与 INV-29 同族：指纹的生成有判据，指纹的**消费**（谁在提交前拿它比对）没有。 ★ 归位：源头 = `scripts/run_gates.py::tree_without_gates` / `_git_index_path`（+ `TREE_SCOPE` 口径自述位）"
+
+[[invariant]]
+id = "INV-35"
+claim = "跳过一条判据不许写成「通过了一条判据」"
+judge = "tools/wb_review.py::check_branch"
+nail = "tests/test_wb_review_branch.py::test_cli_json_carries_the_detached_note"
+status = "covered"
+note = "detached 树里不许无条件跳过分支判据，否则那条判据等于被删掉。 ★ 归位：`tools/wb_review.py::check_branch` 返回的如实 info 行 + `tools/wb_review.py` 的 `--json` `branch_note` 字段"
+
+[[invariant]]
+id = "INV-36"
+claim = "判据依赖的桩数据缺字段时不许走保守路径变成假绿（该红的不红）"
+judge = "tools/wb_dispatch.py::_epoch"
+nail = "tests/test_wb_dispatch.py::test_epoch_four_shapes_are_deterministic_and_never_raise"
+status = "partial"
+note = "★ 典型「判据自己假绿」：桩事件缺 id + __timestamp ⇒ _epoch 走保守分支 ⇒ 断言恒真。 ★ 归位：`tools/wb_dispatch.py::_epoch`（缺字段/畸形 → `None`，**不猜**）+ 桩必须带这两个字段"
+
+[[invariant]]
+id = "INV-37"
+claim = "护栏脚本不许永远输出 PASS（引用正则漏掉中文文件名 = 对中文路径视而不见）"
+judge = "scripts/check_layers.py::check_link_integrity"
+nail = "-"
+status = "partial"
+note = "判据本身要能证明它看得到东西（合成坏样例必须被抓）。 ★ 归位：源头 = `scripts/check_layers.py::check_link_integrity` 的正则（现为 `` `([^\\s`]*?\\.md)` ``，:121）+ 它自己的自检 `scripts/test_check_layers.py`（正/负样例）"
+
+[[invariant]]
+id = "INV-38"
+claim = "判据不许在错的那一刻被写下来 —— 采集当场判，不成立就不许落成黄金"
+judge = "tools/render_check.mjs::checkSignature"
+nail = "tests/test_render_signatures.py::test_the_check_bites_on_a_wrong_screen"
+status = "covered"
+note = "三方一致地错（黄金 + 夹具 + 采集）最难发现。 ★ 归位：`tools/render_signatures.json`（15 屏 must/forbid/min_count/min_rows）+ `tools/render_check.mjs::checkSignature` —— **采集当场**判，不成立就抛，**绝不让它落成黄金**"
+
+[[invariant]]
+id = "INV-39"
+claim = "工人/派活器被强杀时租约必须腾得出来 —— 不许每次都靠人手 release"
+judge = "tools/pool/guards.py::_is_live"
+nail = "tests/test_pool_task.py::test_nail"
+status = "partial"
+note = "atexit 只在解释器正常退出时跑，被 taskkill /F /T 强杀时不跑 ⇒ 要靠「日志判死」（租约带作业 log）。 ★ 归位：`tools/pool/task.py` 的 `release` 路径 + `atexit` 兜底（正常/异常退出路径 + 扛强杀时能清陈旧租约）"
+
+[[invariant]]
+id = "INV-40"
+claim = "续跑不许让第 1 轮的证据被覆盖（同一张卡同一轮次的 log 名只能用一次）"
+judge = "tools/wb_dispatch.py::lease_log_for"
+nail = "tests/test_wb_dispatch.py::test_lease_log_for_skips_an_existing_log"
+status = "partial"
+note = "★ 现场缝：lease_log_for 在本轮 log 已存在（--force 重派那条路）时返回空串 ⇒ 那条路仍只能等 TTL。 ★ 归位：`tools/wb_dispatch.py::preflight`（log 已存在即拒）+ `tools/wb_dispatch.py::main`（`log_k` 命名）"
+
+[[invariant]]
+id = "INV-41"
+claim = "派活进程被杀之后不许「没人盯」—— 要能一眼看出没人盯、以及该干什么"
+judge = "tools/wb_dispatch.py::heartbeat_stall_alert"
+nail = "tests/test_wb_dispatch.py::test_status_alarms_when_nobody_is_watching"
+status = "partial"
+note = "心跳停更要有告警；判卡死的报告必须带「在跑什么」。 ★ 归位：源头 = `tools/wb_dispatch.py::heartbeat_stall_alert`（接进 `status_report`；阈值复用看门狗底线，不写第二份口径）"
+
+[[invariant]]
+id = "INV-42"
+claim = "主控窗口一关就没人盯工人 —— 长跑必须能脱离窗口，状态全落在 git/台账/文件里"
+judge = "tools/wb_dispatch.py::spawn_detached"
+nail = "tests/test_wb_dispatch.py::test_detached_argv_keeps_the_script_so_the_child_actually_runs"
+status = "partial"
+note = "detached argv 里必须有**脚本自己**，否则 --detach 从来没真跑起来过。 ★ 归位：源头 = `tools/wb_dispatch.py::spawn_detached` / `detached_argv` / `status_report` + 心跳/判决文件按轮落"
+
+[[invariant]]
+id = "INV-43"
+claim = "预计超过单次工具调用上限的命令不许同步等死（要转到后台并留哨兵）"
+judge = "tools/run_bg.py"
+nail = "tests/test_run_bg.py::test_run_returns_immediately_and_status_polls_two_states"
+status = "partial"
+note = "同步等会被掐掉、服务变孤儿、进而跨树误杀。 ★ 归位：源头 = `tools/run_bg.py`（分离起 + 哨兵文件 `<log>.rc` 判终态，不看端口不看进程名）"
+
+[[invariant]]
+id = "INV-44"
+claim = "输入预算必须能在单轮跑到一半时拦住超支（只按轮结算拦不住）"
+judge = "tools/wb_dispatch.py::main"
+nail = "tests/test_wb_dispatch.py::test_input_budget_stops_the_run_without_auto_resume"
+status = "partial"
+note = "额度封顶与续跑共用同一个界，到界必须退 7。 ★ 归位：`tools/wb_dispatch.py::main` 的预算分支"
+
+[[invariant]]
+id = "INV-45"
+claim = "影响面不许靠手打 —— 改了 A 忘了 B 必须由机器反推"
+judge = "tools/wb_impact.py::main"
+nail = "tests/test_wb_impact.py::test_check_bites_when_outside_domain"
+status = "partial"
+note = "★ 缝：收口链不 import、不调 wb_impact ⇒ 提交门仍是手打 --allow。 ★ 归位：`tools/wb_impact.py::analyze` / `::pinned_tests` / `::check_domain`（第 276 行）/ `::plan_gates`（第 104 行）"
+
+[[invariant]]
+id = "INV-46"
+claim = "卡树基点落后主树时不许派活（否则收口把卡树文件拷回主树会覆盖别人的落地）"
+judge = "tools/wb_dispatch.py::stale_base_problem"
+nail = "tests/test_wb_dispatch.py::test_stale_base_refuses_and_names_the_file_and_commit"
+status = "covered"
+note = "判据按**域内文件**比对两个基点；「基点本身成孤儿提交」那半仍无判据。 ★ 归位：`tools/wb_dispatch.py::stale_base_problem`（第 1877 行，接进 `preflight` 第 2020 行）"
+
+[[invariant]]
+id = "INV-47"
+claim = "改一个字面前必须知道「谁逐字钉着它」（同类事故本会话四次）"
+judge = "tools/pin_check.py::PIN_MARKERS"
+nail = "tests/test_pin_check.py::test_mutation_dropping_text_marker_kills_pin1"
+status = "partial"
+note = "先跑 pin_check 列出挂在该文件上的字面断言；台账的 text: 指针该指语义锚点而不是整句。 ★ 归位：源头 = `tools/pin_check.py`（只读工具：按字面列命中并标注钉子语境 + 点名台账号）"
+
+[[invariant]]
+id = "INV-48"
+claim = "log 是 0 字节不等于失败（多半是采样太早）—— 状态判定不许把采样噪声当结论"
+judge = "tools/pool/jobs.py::classify_job_state"
+nail = "tests/test_wb_dash.py::test_stopped_no_verdict_no_heartbeat"
+status = "partial"
+note = "★ 主控为同一个坑撞三次。 ★ 归位：`tools/pool/jobs.py::classify_job_state`（按判决文件 **+** 日志 mtime 距今多久判三态，**不看大小**）+ `tools/wb_dash.py::_state`"
+
+[[invariant]]
+id = "INV-49"
+claim = "面板不许把「不知道它怎么了」渲染成「它卡死了」，也不许永久挂着"
+judge = "tools/wb_dash.py"
+nail = "tests/test_wb_dash.py::test_stopped_no_verdict_no_heartbeat"
+status = "partial"
+note = "新终态 STOPPED_NO_VERDICT：无判决 + 无在更新的心跳 + 静默超阈值。 ★ 归位：源头 = `tools/wb_dash.py::_state` 的新终态 `STOPPED_NO_VERDICT`（无判决 + 无**在更新**的心跳 + 静默超本次阈值）；`HEARTBEAT_FRESH_SECONDS = 300`；「可能卡死」加了前置（只有心跳在更新时才允许）"
+
+[[invariant]]
+id = "INV-50"
+claim = "面板的卡死阈值不许写第二份口径 —— 必须调派活器那个判据"
+judge = "tools/wb_dash.py::threshold_min"
+nail = "tests/test_wb_dash.py::test_threshold_comes_from_dispatch_not_a_second_copy"
+status = "partial"
+note = "同一个词两个口径（面板量文件 mtime、派活器量最后一条事件时刻）这半仍在。 ★ 归位：源头 = `tools/wb_dash.py` 直接 `import wb_dispatch` 调 `inflight_tool()` / `tool_durations()` / `stall_threshold_seconds()`，`STALL_BASE = wb_dispatch.STALL_SECONDS`"
+
+[[invariant]]
+id = "INV-51"
+claim = ".wt/ 不许留孤儿树（集成后必须拆，否则占磁盘、占树标签、把已死的租约当活的）"
+judge = "tools/wt_prune.py::run"
+nail = "tests/test_wt_prune.py::test_integrated_clean_is_deletable"
+status = "covered"
+note = "清理器默认只看不删（--apply 才真删）。 ★ 归位：`tools/wb_plan.py::worktree_commands`（列出该建/该拆的树供核对）+ `tools/wt_prune.py::run`（按「已集成 + 干净 + 未锁定 + 非当前树 + 不在待派队列」判可删）"
+
+[[invariant]]
+id = "INV-52"
+claim = "amend / reset 之后必须为**最终树**重跑门禁（否则依据指向的那棵树已经不是提交的树）"
+judge = "tools/wb_review.py::check_gate_evidence"
+nail = "tests/test_wb_review.py::test_gate_evidence_catches_a_stale_run"
+status = "partial"
+note = "判据在 wb_review 的 check_gate_evidence；现场未标状态。 ★ 归位：`tools/pool/landing.py::main`（门禁红了就 release 并退出、绝不带红门禁提交）+ `tools/wb_review.py::check_gate_evidence`（要求 `last.json` 的 `ok==true` 且 `rev` == 这一笔的父提交）"
+
+[[invariant]]
+id = "INV-53"
+claim = "集成者不许伪造门禁结论（--no-gate 模式下仍写「全量门禁绿 + seal」）"
+judge = "tools/pool/landing.py::main"
+nail = "tests/test_wb_review.py::test_gates_trailer_truth_no_gate_form_is_disclosed"
+status = "covered"
+note = "★ 这条记的是**收口链那一侧**：trailer 必须按实际模式分支写（复核侧的真伪对账已在 INV-13）。 ★ 归位：`tools/pool/landing.py` 的 trailer 按实际模式分支"
+
+[[invariant]]
+id = "INV-54"
+claim = "复核器必须核「这一笔依据的是全量那一趟」，且 --allow 漏项要报"
+judge = "tools/wb_review.py::expected_gate_names"
+nail = "tests/test_wb_review.py::test_partial_run_last_json_is_flagged_and_points_at_the_shortfall"
+status = "covered"
+note = "门数从 run_gates 的门表**读**，不写死 17、不造第二份表。 ★ 归位：`tools/wb_review.py::expected_gate_names`（第 168 行）+ `tools/wb_review.py::check_full_gate_run`（第 194 行）"
+
+[[invariant]]
+id = "INV-55"
+claim = "提交信息里 Task: 恰好一个；契约操作必须挂台账卡；母条子卡全 done 时该收口"
+judge = "scripts/audit_progress.py::check_commit_trailers"
+nail = "tests/test_audit_tightening.py::test_todo_spec_with_all_children_done_fails"
+status = "partial"
+note = "「机器完全能查、却从来没人查」的那一类。 ★ 归位：源头 = `scripts/audit_progress.py::check_commit_trailers` / `check_contract_ops` / `check_spec_child_cards`（都进现有 `audit` 那道门，门数不增）"
+
+[[invariant]]
+id = "INV-56"
+claim = "产品与验证里所有「今天/现在」只许走一处出口（时间源可注入）"
+judge = "src/timeflow/clock.py::today"
+nail = "tests/test_clock.py::test_no_module_asks_the_system_clock_directly"
+status = "covered"
+note = "后端 clock.today + 前端 todayISO + 采集 CAPTURE_DAY 三处同一个基准日。 ★ 归位：`src/timeflow/clock.py::today`（全仓唯一的「现在」出口）+ `TIMEFLOW_FAKE_TODAY` + 采集侧 `tools/tf_browser.mjs::CAPTURE_DAY`（服务器 + fixture + 浏览器三处同一个基准日）"
+
+[[invariant]]
+id = "INV-57"
+claim = "一个处理函数里调 ≥2 个会自己 commit 的 core 函数，必须包 unit_of_work"
+judge = "src/timeflow/storage/db.py::unit_of_work"
+nail = "tests/test_unit_of_work.py::test_every_multi_write_handler_is_wrapped_or_explicitly_exempt"
+status = "covered"
+note = "AST 扫描 app.py：≥2 笔写的必须包事务或在带理由的豁免清单上。 ★ 归位：`src/timeflow/storage/db.py::unit_of_work`（在连接代理层拦 commit，退出时一次提交/回滚）"
+
+[[invariant]]
+id = "INV-58"
+claim = "跨端只许传库里的形状：字段白名单与主键映射必须与真库对账（不是各写一份）"
+judge = "src/timeflow/core/syncpack.py::plan_merge"
+nail = "tests/test_sync_pack_line.py::test_primary_key_map_matches_the_real_tables"
+status = "covered"
+note = "错法是**静默跳过**（`feedback_logs` 主键是 date 而合并按 id 取键 ⇒ 整表静默不传）。 ★ 归位：`src/timeflow/core/syncpack.py::PRIMARY_KEYS` / `row_key`（各表真主键声明）+ `plan_merge` 一处判新旧"
+
+[[invariant]]
+id = "INV-59"
+claim = "读函数不许有副作用 ——「结果看起来一样」不等于「没写库」"
+judge = "src/timeflow/core/tasks/manager.py::_apply_myday_order"
+nail = "tests/test_myday_idempotence_line.py::test_dragging_onto_itself_writes_nothing"
+status = "covered"
+note = "归一化写在读路径上最隐蔽（任何调用含空转都整表重写、并把 NULL 冻成序号、白抬跨端 version）。 ★ 归位：`src/timeflow/core/tasks/manager.py::_myday_sequence`（只读出顺序）+ `_apply_myday_order`（`order == 现序列` 就一个字节都不写）"
+
+[[invariant]]
+id = "INV-60"
+claim = "读整列 → 算 → 写回的窗口必须焊死（UPDATE 带 AND version = ?，且多行写整笔提交）"
+judge = "src/timeflow/core/tasks/manager.py::_write_myday_rank"
+nail = "tests/test_myday_version_guard_line.py::test_concurrent_drags_do_not_lose_updates_or_duplicate_ranks"
+status = "covered"
+note = "★ 边界：只有 myday 排序列有守卫；其它读-改-写路径是否也需要，没有通用判据（见 INV-61）。 ★ 归位：`src/timeflow/core/tasks/manager.py::_write_myday_rank`（乐观锁 + 影响行数 0 → `MydayConflictError`）+ `_write_myday_plan`（一笔事务，任何一行抛错整笔 rollback）"
+
+[[invariant]]
+id = "INV-61"
+claim = "「读-改-写必须有版本守卫」不能只覆盖 myday 一列 —— 这条通则没有通用判据"
+judge = "src/timeflow/core/tasks/manager.py::_write_myday_rank"
+nail = "tests/test_myday_version_guard_line.py::test_concurrent_drags_do_not_lose_updates_or_duplicate_ranks"
+status = "partial"
+note = "★ 缺的是对账：新写一个读-改-写路径，没有任何东西会问它要不要版本守卫。 ★ 归位：`src/timeflow/core/tasks/manager.py::_write_myday_rank`（`AND version = ?`）、`_write_myday_plan`（整笔）"
+
+[[invariant]]
+id = "INV-62"
+claim = "判据不许拿替代品当证据（网络层地址不是身份、上一次的结论不是现在、墓碑见没见过不是要不要做）"
+judge = "src/timeflow/api/app.py::sync_import"
+nail = "tests/test_phone_upload_line.py::test_lan_page_cannot_point_at_a_local_path"
+status = "partial"
+note = "三处实例都关了；「判据必须问现在」没有通用判据。 ★ 归位：`src/timeflow/api/app.py::sync_import`（看 Origin）、`src/web/index.html::offlineConfirmed`（先真探）、`src/timeflow/core/syncpack.py::plan_merge`（看本地那一行还在不在）"
+
+[[invariant]]
+id = "INV-63"
+claim = "镜像里不许有任何写动作；同一段时间不许记两笔投入"
+judge = "src/timeflow/core/focus/timer.py::active_session"
+nail = "tests/test_focus_mirror_line.py::test_peeking_from_another_client_does_not_write_anything"
+status = "covered"
+note = "跨端实时专注的三条硬边界之一。 ★ 归位：`src/timeflow/core/focus/timer.py::active_session`（回 `device_id`）+ `_clean_device`（规整/截断 40）；`src/web/index.html::renderActiveMirror`（0 个 `data-action`，秒数走 `#clockPeer`）"
+
+[[invariant]]
+id = "INV-64"
+claim = "配对码只许在那台电脑的响应里出现；开局域网只能是启动期开关"
+judge = "src/timeflow/core/lan.py::status"
+nail = "tests/test_lan_pairing_line.py::test_pairing_code_is_never_sent_to_the_lan"
+status = "covered"
+note = "失败节流按来源锁；换码只允许回环。 ★ 归位：`src/timeflow/core/lan.py::status`（`code` 只在回环请求里非空 + `code_visible`）、`check_pair`/`note_failure`（失败节流 20 次锁 5 分钟，按来源锁）、`gate`；换码只允许回环"
+
+[[invariant]]
+id = "INV-65"
+claim = "契约六要素写着的能力不许只有一半（写了「可逆：可删除」就必须真有删除入口）"
+judge = "src/timeflow/core/review/review.py::delete_item"
+nail = "tests/test_review_line.py::test_delete_item_keeps_facts"
+status = "covered"
+note = "★ 同族的通则（契约六要素 ↔ 路由 ↔ 界面三面通路）在 INV-66。 ★ 归位：`src/timeflow/core/review/review.py::delete_item` + `src/timeflow/api/app.py` 的 `DELETE /api/review/items/{item_id}` + `src/web/index.html` 的「删除卡」按钮与二次确认"
+
+[[invariant]]
+id = "INV-66"
+claim = "规格/台账声称 done 的操作，契约 / 路由 / 界面三个面必须真的都有通路"
+judge = "scripts/check_commands.py::main"
+nail = "tests/test_check_commands.py::test_real_repo_has_no_hard_conflict"
+status = "partial"
+note = "★ 现状：check_commands 只核 OP ↔ commands.toml 的**存在性**，不核「可逆/可删」这类承诺是否真有实现 ⇒ 「洞」是进度不是错误，只报不红。 ★ 归位：`docs/commands.toml` 每条 OP 的 `routes` / `ui` 字段 + `scripts/check_commands.py::main`（表 ↔ 契约 ↔ 路由 ↔ 界面逐条核对）"
+
+[[invariant]]
+id = "INV-67"
+claim = "前端不许用 new Date().toISOString() 取「今天」（那是 UTC 日期，本地凌晨差一天）"
+judge = "tests/test_web_frontend.py::_utc_date_misuse"
+nail = "tests/test_web_frontend.py::test_today_is_local_not_utc"
+status = "covered"
+note = "边界：只扫 src/web/index.html，其它 js 与 tools 没扫。 ★ 归位：`src/web/index.html::todayISO`（日期一律按本地时区拼）"
+
+[[invariant]]
+id = "INV-68"
+claim = "护栏一律先剥注释再判 —— 注释不是代码（同类坑第 3 次）"
+judge = "tools/contrast_audit.py::token_blocks"
+nail = "tests/test_contrast_audit.py::test_badge_shortfalls_are_actually_detected"
+status = "covered"
+note = "两个实例：contrast_audit 的 token_blocks 与 test_web_frontend 的裸像素护栏。 ★ 归位：源头 = `tools/contrast_audit.py::token_blocks` **先剥注释再抽令牌**；`badge_pairs()` 泛化（令牌底也认），回归守卫改喂合成 CSS 而不绑当前配方"
+
+[[invariant]]
+id = "INV-69"
+claim = "协议里只用「人话」约束的条款不许被当成「已经不可能发生」"
+judge = "-"
+nail = "-"
+status = "missing"
+note = "★ 用户最恨的一类。实读：六条硬规矩里只有「门禁落盘 / 审计不过不许提交 / 文档同提交」三条有机器判据；「无任务卡不开工」「一次只做一条主线」「不许把等用户说继续当默认」「不许自己重排任务」全是人话。 ★ 归位：`复盘/长任务执行协议.md` §九.2 / §九.5 / §十二（都是人话，没有对应的代码或登记动作）"
+
+[[invariant]]
+id = "INV-70"
+claim = "视觉/布局类改动必须人工过目 —— 这条不许一直停在「建议写进协议」"
+judge = "tools/evidence_map.py"
+nail = "-"
+status = "missing"
+note = "★ 沙箱跑不了浏览器 ⇒ 布局改动的第一道发现者是用户；协议 §四 至今只有 5 条停止条件，没有这一条。 ★ 归位：源头 = `docs/traceability.toml` 的 `text:` 证据指**语义锚点**（节标题 / 函数名）而不是整句；改前先跑 `tools/evidence_map.py --file <要改的文件>`"
+
+[[invariant]]
+id = "INV-71"
+claim = "悬停只许动 background / border / color —— 不许位移、不许换行"
+judge = "-"
+nail = "-"
+status = "missing"
+note = "★ 只有一句包的原话 + 代码注释；唯一的钉子只挡「卡片悬停显形」这一种 ⇒ 没有一条门在判「hover 改了高度/位置」。 ★ 归位：`src/web/app.css` 末节「互动态」（变体选择器**一条条写全**、放全表最后）+ `src/web/index.html::taskCard`（做 `…` 行内展开而不是悬停显形）"
+
+[[invariant]]
+id = "INV-72"
+claim = "一份数字不许手抄两处（门数 / pytest 数 / 探针档数要以落盘真源为准）"
+judge = "-"
+nail = "-"
+status = "missing"
+note = "★ 已复发 ≥3 次（交接文档自己记着「漂过三次」）：真源 gates/last.json 已立，但没有任何检查发现文档里的数字与它不一致。 ★ 归位：`gates/last.json`（唯一真源）+ `复盘/长任务执行协议.md::10.4`（自己加了一句「以代码为准」）"
+
+[[invariant]]
+id = "INV-73"
+claim = "没 pin、gitignored 的外部东西不许被门禁依赖"
+judge = "-"
+nail = "-"
+status = "missing"
+note = "接进门禁 = 换台机器就变成「在别人机器上不存在」的检查。 ★ 归位：门禁的输入清单（`scripts/run_gates.py` 的门 × 输入表）"
+
+[[invariant]]
+id = "INV-74"
+claim = "同一件教训不许在复盘的正文 / changelog / 台账 gaps 三处各写一遍"
+judge = "-"
+nail = "-"
+status = "missing"
+note = "规矩在（教训只写一处 + 指针），但实读 T-G137/144/147/152/155 的 gaps 仍是 600–1500 字、大量复述 ⇒ 没有判据。 ★ 归位：源头 = 规矩「教训只写 `复盘/视觉线地图.md` §6；卡的 `gaps` 只写本卡特有事实 + 给指针」"
+
+[[invariant]]
+id = "INV-75"
+claim = "状态字段没人复查就会漂 —— 不许把做完的事说成没做（幻影缺口）"
+judge = "-"
+nail = "-"
+status = "missing"
+note = "★ 现场：同一句过期话漂在**三处**，都说 pywebview 未安装，而它 2026-09-21 就装上了。 ★ 归位：源头 = 改状态时 ① 先 `grep` 那句关键词看它在**几处**写着；② 更正带日期与原因；③ 看清「还剩哪半没做」别整条一起销账"
+
+[[invariant]]
+id = "INV-76"
+claim = "人工验收项不许无限期停在「人看一眼」，也不许把搬走的写回「要人点」"
+judge = "tools/ui_flow_check.mjs::selectedFlows"
+nail = "tests/test_ui_flow_check.py::test_no_flow_was_deleted"
+status = "partial"
+note = "★ 正向对账缺一条：清单里每个非物理/非口味项，都要么被某条流的 item 指到、要么写明机器判不了的理由。 ★ 归位：源头 = `tools/ui_flow_check.mjs`（真点击走 `elementFromPoint` 命中测试 + 真按键 + 每条流必填 `item` 回查交接文档）"
+
+[[invariant]]
+id = "INV-77"
+claim = "改一句话会打穿钉在它上面的断言与台账 text: 证据 ⇒ 门禁成了改文案的阻力"
+judge = "tools/evidence_map.py"
+nail = "-"
+status = "partial"
+note = "改前先跑 evidence_map --file <要改的文件>；text: 证据该指语义锚点（节标题/函数名）而不是整句。 ★ 归位：源头 = `docs/traceability.toml` 的 `text:` 证据指**语义锚点**（节标题 / 函数名）而不是整句；改前先跑 `tools/evidence_map.py --file <要改的文件>`"

@@ -1,0 +1,13 @@
+[entries."T-G265"]
+id = "T-G265"
+title = "落档：坑总账（344 条）+ 不变量台账（77 条）"
+group = "RULES"
+status = "done"
+evidence = [
+  "file:复盘/坑总账.md",
+  "file:复盘/不变量台账.toml",
+  "file:复盘/卡",
+  "file:docs/workbacklog.toml",
+]
+gaps = "本笔落两份**挖矿产物**，它们是后面所有卡的来源（批 A 的 6 张卡就是按 `wb_invariants.py --missing` 的 44 条归并出来的）。不落进 git，随时会被下一次 `git checkout HEAD --` 抹掉 —— 2026-10-02 夜**真发生过一次**：主控为落 B-IDEMPOTENT 临时把它挪走，工人随后报「62 条丢了」，靠临时备份才捞回。★ 诚实缺口：台账里 **60 条 missing + partial**（10 + 50）就是「还没钉死」的真账，由卡 159~164 去关；其中 `judge = -` 的 7 条是「只有人话、没有机器落点」那一类，老实标着，**没编假路径**。"
+
