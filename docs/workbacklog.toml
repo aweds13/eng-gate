@@ -399,7 +399,7 @@ files = [
 ]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "133"
@@ -413,7 +413,7 @@ files = [
 ]
 depends = ["131"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "134"
@@ -427,5 +427,105 @@ files = [
 ]
 depends = []
 risk = "low"
+status = "done"
+
+[[cards]]
+id = "120"
+task = "T-G232"
+title = "记忆层守卫：项目索引接到派活上（tree 前缀 / project 字段 / wb_project use·show·memory）"
+tree = ".wt/projguard"
+spec = "复盘/卡/卡120-记忆层守卫.md"
+files = [
+  "tools/pool/projects.py",
+  "tools/pool/guards.py",
+  "tools/pool/registry.py",
+  "tools/pool/task.py",
+  "tools/wb_registry.py",
+  "tools/wb_dispatch.py",
+  "tools/wb_project.py",
+  "tests/test_pool_projects.py",
+  "tests/test_pool_guards.py",
+  "tests/test_pool_registry.py",
+  "tests/test_pool_task.py"
+]
+depends = ["135"]
+risk = "high"
 status = "pending"
 
+[[cards]]
+id = "135"
+task = "T-G233"
+title = "卡树基点过期的机器判据（派活前置：基点之后主树改过本卡域里的文件就拒）"
+tree = ".wt/stalebase"
+spec = "复盘/卡/卡135-卡树基点过期判据.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py"
+]
+depends = ["138"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "136"
+task = "T-G234"
+title = "MCP 收申请超时/失败时把整棵进程树带走（治孤儿门禁）"
+tree = ".wt/orphan"
+spec = "复盘/卡/卡136-孤儿门禁杀整棵树.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_task.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "137"
+task = "T-G235"
+title = "glm-5.3 用完就撤（用户令）：ONE_OFF_MODELS 清空 + 钉子改三段 + 文档标已定"
+tree = "（主树直接做 —— 两行撤回，主控自己动手，理由写进文书）"
+spec = "复盘/卡/卡137-GLM53用完就撤.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+  "复盘/外包工具-需求与架构.md"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "138"
+task = "T-G236"
+title = "模型开关：外部开关文件 + 派活器读它（加法、不进轮换链）"
+tree = ".wt/modelswitch"
+spec = "复盘/卡/卡138-模型开关机制.md"
+files = [
+  "tools/pool/models.py",
+  "tools/wb_dispatch.py",
+  "tests/test_pool_models.py",
+  "tests/test_wb_dispatch.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "139"
+task = "T-G237"
+title = "收口链进 git：_integrate/_stage_card 从 scratch 搬成 tools/（行为一字不变 + 钉子）"
+tree = ".wt/landing"
+spec = "复盘/卡/卡139-收口链进git.md"
+files = [
+  "tools/wb_land.py",
+  "tools/pool/landing.py",
+  "tools/wb_stage_card.py",
+  "tools/pool/stage_card.py",
+  "tests/test_wb_land.py",
+  "复盘/外包工具-需求与架构.md",
+  "复盘/号池MCP-使用与设计.md"
+]
+depends = []
+risk = "high"
+status = "pending"

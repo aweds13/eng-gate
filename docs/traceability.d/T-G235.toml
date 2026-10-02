@@ -1,0 +1,19 @@
+[entries."T-G235"]
+id = "T-G235"
+title = "glm-5.3 用完就撤：ONE_OFF_MODELS 清空 + 钉子改三段 + 文档标已定"
+group = "OPS"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_dispatch.py",
+  "file:复盘/外包工具-需求与架构.md",
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡137-GLM53用完就撤.md",
+  "file:复盘/卡/卡120-记忆层守卫.md",
+  "file:复盘/卡/卡135-卡树基点过期判据.md",
+  "file:复盘/卡/卡136-孤儿门禁杀整棵树.md",
+  "file:复盘/卡/卡138-模型开关机制.md",
+  "file:复盘/卡/卡139-收口链进git.md",
+]
+gaps = "**来路（用户原话，一句）**：「**GLM5.3 用完就撤。**」背景：2026-10-02 下午用户授权 `glm-5.3`（**不带 flash**）做**一次**外部审查（「你可以把它列到白名单，但是**我希望是一次性的调用**」）⇒ 当时用**加法**接进来（新增 `ONE_OFF_MODELS`，**没有**塞进 `MODEL_WHITELIST` ⇒ **429 轮换链一个字没动**），那次审查已落档（批 `B-ARCH1` / `T-G220`：Flash 指针索引 + GLM-5.3 整体审查 + 逐条处置表）。**现在用完撤回。****做法（三处）**：① `tools/wb_dispatch.py` 的 `ONE_OFF_MODELS` **清空为 `()`** —— ★ **机制留着、名额清空**：它是「一次性放行」的**唯一入口**，将来要再放行谁就填一处（**仍不进 429 轮换链**）；注释里把用户的**两句原话**（授权 + 撤回）与「撤掉之后的行为」都写清。② `tests/test_wb_dispatch.py` 那条钉子改成**三段**：轮换链没变 · **撤了就是撤了**（`ONE_OFF_MODELS == ()`、`model_rejected(「glm-5.3」) != 「」`、名单里两个照放）· **机制仍在**（临时填一个 ⇒ 放行，且轮换链仍不动）。③ `复盘/外包工具-需求与架构.md`：§6 第 5 条（原来挂着「长留还是用完即撤」）**标成已定**；§三那句「现场核过 `glm-5.3` 可用」补一句**当日晚已撤回**（免得后人照着用）。**验收（真读数）**：`ruff check tools tests` = **All checks passed!** ·`pytest tests/test_wb_dispatch.py -k 「one_off or whitelist or model_gate」` = 全绿 ·★ **行为读数**（dry-run 原样）：`--model glm-5.3` ⇒ `[FAIL] 未授权模型，已拒绝派活：glm-5.3`，允许集只剩 **`deepseek-v4.1-flash`、`glm-5.3-flash`**；全量门禁与审计见 trailer 与 audit 段。**★ 老实说（为什么这一笔不另建卡树）**：它是**两行代码 + 一条钉子 + 两行文档**的撤回，另起一棵树 + 派一个工人 + 等一轮，只为删一个名字，**收益不抵开销** ⇒ **主控在主树直接改**，但收口仍走**同一条链**（`_integrate.py --tree . --task T-G235`：文书 → 全量门禁 → 封存 → 白名单提交 → 审计）。★ 按本仓口径这**不算「外包了一张卡」**，如实写在这里（同类先例：卡 118 内存不够时主控自己动手）。**★ 本笔另含**：`docs/workbacklog.toml` 登记卡 137（并在同批的文书里说明它走的是「主树直接做」这条路）。"
+
