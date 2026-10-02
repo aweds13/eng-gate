@@ -33,6 +33,14 @@ r"""主控复核器（外包链路的第 ④ 步）：一条命令把"这一笔�
      ★ 老判据的缺口正在这：第 ④ 条只对**自报的**改动列表做 fnmatch（`check_files`），
      "卡树里真的改了什么"从不参与 —— 现在补上，越界不再靠人手对眼。
 
+★★ `Gates:` trailer 的**真伪**（卡 133 · T-G230，治外部审查 GLM-5.3「三.2」）—— 只在 `--rev` 里跑：
+
+   ★ **分工（别把这条做成第二份真源）**：`Gates:` **在不在**归 `scripts/audit_progress.py`
+     （存在性判据，**保留**）；**真伪**归这里 —— 拿 trailer 的内容与 `gates/last.json` 的
+     `ok`/`rev` **对账**。判据见 `check_gates_trailer_truth()`：真绿必须声称绿；非真绿不许声称绿
+     （= 伪造）；`--no-gate` / `--commit-only` 形态若主动披露"没跑门禁"，**放行**但在输出与
+     `--json` 里标一行「这一笔**没有**本轮门禁结论」，**不许**当成"门禁绿"混过去。
+
 用法：
     python -X utf8 tools/wb_review.py --rev HEAD --read-only
     python -X utf8 tools/wb_review.py --rev HEAD --allow "src/**" --allow "tests/**"
@@ -64,6 +72,10 @@ from pool.review import changed_paths, domain_of_manifest_text, outside_allow, o
 
 ROOT = Path(__file__).resolve().parent.parent
 TASK_RE = re.compile(r"^Task:\s*(\S+)\s*$", re.M)
+#: `Gates:` trailer 里声称"跑过门禁**且绿**"的字样 —— 真绿那一笔**必须**含其中之一（卡 133）。
+GREEN_CLAIM_RE = re.compile(r"门禁绿|全绿|seal")
+#: 声称"这一笔没跑门禁 / 复用已绿的旧结论"的字样（`--no-gate` / `--commit-only` 的**主动披露**）。
+NO_GATE_CLAIM_RE = re.compile(r"没跑|未跑|no-gate|commit-only|复用|跳过")
 #: 期望分支的默认值（就是集成分支）。`check_branch()` 的 detached 跳过只对它生效（T-G158）。
 DEFAULT_BRANCH = "line/impl-v1"
 
@@ -126,6 +138,47 @@ def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
     if not payload.get("gates"):
         problems.append("gates/last.json 里没有任何门的结果（不是真跑过的产物）")
     return problems
+
+
+def check_gates_trailer_truth(
+    gates_line: str, payload: dict, parent_short: str
+) -> tuple[list[str], str]:
+    """`Gates:` trailer 的**真伪**（卡 133 · T-G230，治外部审查 GLM-5.3「三.2」）。
+
+    ★ **分工（别把这条做成第二份真源）**：`scripts/audit_progress.py` 只管 `Gates:`
+    trailer **在不在**（存在性判据，保留）；**真伪**归这里 —— 拿 trailer 的内容与
+    `gates/last.json` 的**实际结论**对账。
+
+    判据（照卡写，别自己发明方向）：
+      (a) `last.json.ok==true` 且 `rev==父提交`（这一笔真跑过全量门禁）⇒ trailer **必须**
+          声称跑过门禁（含「门禁绿」/「全绿」/「seal」这类字样），否则 ⇒ 拒（声称与事实不符）；
+      (b) `ok==false`，**或** `rev!=父提交` ⇒ trailer **不许**声称"全量门禁绿 + seal"，
+          否则 ⇒ 拒（这就是"伪造门禁结论"的机器版）；
+      (c) `--no-gate` / `--commit-only` 形态：trailer 主动披露"没跑门禁"（或"复用已绿的那一趟"）
+          ⇒ **放行**，但如实标一行「这一笔**没有**本轮门禁结论」，并且进 `--json` ——
+          **不许**把它当成"门禁绿"混过去。
+
+    ★ 返回 `(problems, 如实信息行)`：真绿对得上时信息行为空串。
+    """
+    line = (gates_line or "").strip()
+    ok = payload.get("ok")
+    rev = payload.get("rev")
+    matched = ok is True and rev == parent_short
+    claims_green = bool(GREEN_CLAIM_RE.search(line))
+    claims_no_gate = bool(NO_GATE_CLAIM_RE.search(line))
+    reading = (f"`Gates:` 原文=「{line}」 / last.json ok={ok!r} rev={rev!r}"
+               f"（本提交父提交 {parent_short!r}）")
+    if matched and not claims_green:
+        return [f"{reading} —— 这一笔真跑过全量门禁，trailer 却没声称跑过"
+                f"（缺「门禁绿/全绿/seal」这类字样）：声称与事实不符"], ""
+    if not matched and claims_green:
+        return [f"{reading} —— last.json 不是这一笔的门禁结论，trailer 却声称"
+                f"「全量门禁绿 + seal」：伪造门禁结论"], ""
+    if matched:
+        return [], ""
+    why = ("（--no-gate / --commit-only 形态：trailer 已披露，放行）" if claims_no_gate
+           else "（trailer 未主动披露「没跑门禁」—— 如实标一行，不当门禁绿）")
+    return [], f"这一笔**没有**本轮门禁结论{why}"
 
 
 def check_branch(branch: str, expected: str) -> tuple[list[str], str]:
@@ -357,6 +410,10 @@ def main(argv: list[str] | None = None) -> int:
         payload = {}
         problems.append("这一笔里没有 gates/last.json（门禁产物没跟着提交）")
     problems += check_gate_evidence(payload, parent)
+    truth_problems, truth_note = check_gates_trailer_truth(
+        trailers.get("Gates") or "", payload, parent,
+    )
+    problems += truth_problems
     problems += check_files(files, read_only=args.read_only, allow=args.allow)
     branch_problems, branch_note = check_branch(branch, args.branch)
     problems += branch_problems
@@ -367,6 +424,9 @@ def main(argv: list[str] | None = None) -> int:
         "rev": sha, "parent": parent, "branch": branch, "branch_note": branch_note,
         "files": files, "trailers": trailers, "audit": audit_line,
         "gates_ok": payload.get("ok"), "gates_rev": payload.get("rev"),
+        "gates_trailer": trailers.get("Gates"),
+        "gates_trailer_note": truth_note,
+        "no_round_gate_verdict": bool(truth_note),
         "problems": problems,
     }
     if args.json:
@@ -380,6 +440,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  ② trailer：{trailers.get('Task', '(缺)')}")
     print(f"  ③ 门禁：ok={payload.get('ok')} rev={payload.get('rev')}"
           f"（这一笔的父提交 {parent}）+ {len(payload.get('gates', []))} 道门")
+    print(f"  ⓖ `Gates:` 真伪：{truth_note or '与 gates/last.json 对得上（真绿，已核）'}")
     print(f"  ④ 这一笔改了 {len(files)} 个文件：" + ("、".join(files[:6]) or "（一个都没改）"))
     print(f"  ⑤ 工作区未提交改动：{len(dirty)} 个")
     if problems:

@@ -353,7 +353,7 @@ files = [
 ]
 depends = []
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "130"
@@ -369,7 +369,7 @@ files = [
 ]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "131"
@@ -384,5 +384,48 @@ files = [
 ]
 depends = []
 risk = "high"
+status = "done"
+
+[[cards]]
+id = "132"
+task = "T-G229"
+title = "两份模型白名单的对账判据（只报告、不自动改）"
+tree = ".wt/roster"
+spec = "复盘/卡/卡132-两份白名单对账.md"
+files = [
+  "tools/pool/models.py",
+  "tools/wb_state.py",
+  "tests/test_pool_models.py"
+]
+depends = []
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "133"
+task = "T-G229"
+title = "Gates trailer 的真伪判据（复核侧与 last.json 对账）"
+tree = ".wt/gatestruth"
+spec = "复盘/卡/卡133-Gates真伪判据.md"
+files = [
+  "tools/wb_review.py",
+  "tests/test_wb_review.py"
+]
+depends = ["131"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "134"
+task = "T-G229"
+title = "文档口径两件：卡规格模板补「交成送申请」· 边界写清闸门是派活器级的"
+tree = ".wt/docfix"
+spec = "复盘/卡/卡134-文档口径三件.md"
+files = [
+  "复盘/外包-卡表与规矩.md",
+  "复盘/外包工具-需求与架构.md"
+]
+depends = []
+risk = "low"
 status = "pending"
 

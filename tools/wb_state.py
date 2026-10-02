@@ -3,11 +3,14 @@ r"""一屏现状（卡 078 · T-G173）—— 给主控用：一眼看清这棵�
 为什么有它：主控接手/派活之前要现查的那几样东西（HEAD、锁、在跑的派活器与门禁、最近提交、
 Trae 池余额）散在五六个命令里，每次现敲既慢又容易漏。这一条命令把它们收进 ≤30 行。
 
-一句话：HEAD / 分支 / 脏 / 外来未跟踪 / 锁 / 在跑的派活器 / 在跑的门禁 / 最近 5 条提交 / Trae 余额。
+一句话：HEAD / 分支 / 脏 / 外来未跟踪 / **白名单对账** / 锁 / 在跑的派活器 / 在跑的门禁 /
+最近 5 条提交 / Trae 余额。
 
     python -X utf8 tools/wb_state.py
 
 ★ 一律**只读**：不许杀进程、不许占端口、不许写任何文件。
+★ 白名单对账（卡 132 · T-G229）：把本仓那份名单（`wb_dispatch` 的裸名）与号池那份
+  （`pool.models` 的 `provider/model`）**并排**列出，漂了就 `⚠`、一致就 `✓`。**只报告、不改名单**。
 ★ Trae 余额：从 `%LOCALAPPDATA%` 下读不到就算了，打 `(需 IDE 在跑)` —— **不许为此去起 IDE**。
 """
 
@@ -19,6 +22,10 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 ROOT = Path(__file__).resolve().parent.parent
 NO_WINDOW = {"creationflags": 0x08000000} if os.name == "nt" else {}
@@ -45,6 +52,48 @@ def line_head() -> str:
     untracked = [ln for ln in porc if ln.startswith("??")]
     return (f"HEAD {sha} · 分支 {branch} · 脏(tracked) {len(tracked)}"
             f" · 外来未跟踪 {len(untracked)}")
+
+
+def _local_whitelist() -> list[str]:
+    """本仓那份名单（CLI 层的硬闸门常量 `MODEL_WHITELIST` ∪ `ONE_OFF_MODELS`）。
+
+    ★ 惰性 import：`wb_dispatch` 是 CLI 层，只在真要读名单时才引；且**不在 `pool.models`
+      里反向 import 它**（那是分层倒置）—— 名字由这里读出来、**传**给对账函数。
+    """
+    import wb_dispatch  # tools/ 已在 sys.path 上（脚本入口 / 测试都会挂）
+
+    return list(wb_dispatch.MODEL_WHITELIST) + list(wb_dispatch.ONE_OFF_MODELS)
+
+
+def _pool_roster() -> dict[str, Any]:
+    """仓外那份批准集（`load_pool_models()` 的返回值）；号池目录找不到时回空批准集。"""
+    from pool import models as pool_models
+
+    pool = pool_models.find_pool_dir(ROOT)
+    if pool is None:
+        return {"approved": [], "pool_dir": ""}
+    return pool_models.load_pool_models(pool)
+
+
+def roster_line(local_names: Iterable[str], pool_models: dict[str, Any]) -> str:
+    """对账那一行的**纯格式**：吃两份数据 → 一行字（漂 / 一致都行）。"""
+    from pool import models as pool_models_mod
+
+    local = "、".join(local_names) or "(空)"
+    pool = "、".join(pool_models.get("approved") or []) or "(空)"
+    seen = f"本仓[{local}] ｜ 池[{pool}]"
+    problems = pool_models_mod.compare_rosters(local_names, pool_models)
+    if not problems:
+        return f"✓ 白名单对账：一致（{seen}）"
+    return f"⚠ 白名单对账：{'；'.join(problems)}（{seen}）"
+
+
+def line_roster() -> str:
+    """白名单对账行 —— 现读两份名单再对账。★ 面板不许因为这一行整个崩，故兜底成「无法判断」。"""
+    try:
+        return roster_line(_local_whitelist(), _pool_roster())
+    except Exception as exc:  # 只读面板：读不到就如实说读不到，别整个崩
+        return f"白名单对账：无法判断（{exc}）"
 
 
 def line_lock() -> str:
@@ -132,7 +181,8 @@ def line_trae() -> str:
 
 
 def main() -> int:
-    for ln in [line_head(), line_lock(), *lines_procs(), *lines_commits(), line_trae()]:
+    lines = [line_head(), line_roster(), line_lock(), *lines_procs(), *lines_commits(), line_trae()]
+    for ln in lines:
         print(ln, flush=True)
     return 0
 

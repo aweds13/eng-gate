@@ -308,3 +308,97 @@ def test_authoritative_domain_beats_hand_typed_allow(
     monkeypatch.setattr(wr, "ROOT", repo)
     rc = wr.main(["--card", "M-1", "--task", "B-X", "--allow", "docs/**"])
     assert rc == 1, capsys.readouterr().out
+
+
+# ------------------------------------------------------------------ ⓖ Gates trailer 真伪
+#
+# 治外部审查 GLM-5.3「三.2」：`audit_progress` 只查 `Gates:` trailer **在不在**，不查**真伪**；
+# 而同一条链路的生成端有 `--no-gate` / `--commit-only` 两个模式（会写死一句"全量门禁绿 + seal"）。
+# 本档拿 trailer 的内容与 `gates/last.json` 的 ok/rev **对账**（分工：存在性归 audit，真伪归这里）。
+
+
+def test_gates_trailer_truth_forged_green_is_refused() -> None:
+    """① ★ 伪造"门禁绿"：`ok=false`（或 `rev` 对不上）而 trailer 说绿 ⇒ **拒**，
+    且报错里**同时**出现 trailer 原文与 `last.json` 的读数（"为什么说你假"）。"""
+    p1, note = wr.check_gates_trailer_truth(
+        "全量门禁绿 + seal", _payload(ok=False), "abc1234")
+    assert note == ""
+    assert len(p1) == 1
+    assert "全量门禁绿 + seal" in p1[0] and "ok=False" in p1[0]
+    p2, _ = wr.check_gates_trailer_truth(
+        "门禁绿 + seal", _payload(rev="oldc0de"), "abc1234")
+    assert any("伪造门禁结论" in p for p in p2)
+
+
+def test_gates_trailer_truth_real_green_passes() -> None:
+    """② 真绿：`ok=true` + `rev` = 父提交 + trailer 说绿 ⇒ **过**。"""
+    assert wr.check_gates_trailer_truth("全量门禁绿 + seal", _payload(), "abc1234") == ([], "")
+
+
+def test_gates_trailer_truth_real_green_that_denies_it_is_refused() -> None:
+    """②' 真绿那一笔 trailer 若写"没跑门禁"：声称与事实不符 ⇒ 也拒（判据 (a) 的另一半）。"""
+    problems, _ = wr.check_gates_trailer_truth("没跑门禁", _payload(), "abc1234")
+    assert any("真跑过全量门禁" in p and "没声称" in p for p in problems)
+
+
+def test_gates_trailer_truth_no_gate_form_is_disclosed() -> None:
+    """③ `--no-gate` 形态：没跑门禁而 trailer 主动披露 ⇒ **放行** + 标"没有本轮门禁结论"。"""
+    problems, note = wr.check_gates_trailer_truth(
+        "未跑门禁（--no-gate）", _payload(ok=False), "abc1234")
+    assert problems == []
+    assert "没有" in note and "本轮门禁结论" in note
+
+
+def test_gates_trailer_truth_commit_only_form_is_disclosed() -> None:
+    """④ `--commit-only` 形态：trailer 写"复用已绿的那一趟" ⇒ **放行**并标注。"""
+    problems, note = wr.check_gates_trailer_truth(
+        "复用已绿的那一趟", _payload(rev="oldc0de"), "abc1234")
+    assert problems == []
+    assert "本轮门禁结论" in note
+
+
+def test_task_single_still_enforced_alongside_the_truth_check() -> None:
+    """⑤ 加了这一档之后 `Task:` 仍**恰好一个** —— 新判据不替换旧 trailer 判据。"""
+    problems, found = wr.check_trailers(_body(**GOOD_TRAILERS) + "Task: T-998\n")
+    assert any("恰好一个" in p for p in problems)
+    assert found["Gates"] == GOOD_TRAILERS["Gates"]
+
+
+def _rev_repo(tmp_path: Path, *, last_ok: bool, gates_line: str) -> Path:
+    """造一棵能走 `--rev` 流程的小仓库：seed 提交 → 带 `gates/last.json` 的第二笔提交。"""
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "gates").mkdir()
+    (repo / "src" / "a.py").write_text("a\n", encoding="utf-8")
+    _run_git(repo, "init", "-q", "-b", "main")
+    _run_git(repo, "config", "user.email", "t@local")
+    _run_git(repo, "config", "user.name", "t")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "seed")
+    parent = _run_git(repo, "rev-parse", "--short", "HEAD").strip()
+    payload = {"rev": parent, "ok": last_ok, "docs_sync_ok": True,
+               "docs_sync_missing": [], "gates": [{"name": "pytest", "exit_code": 0}]}
+    (repo / "gates" / "last.json").write_text(json.dumps(payload), encoding="utf-8")
+    msg = f"feat: 一笔\n\nTask: T-999\nLedger: 1 条\nGates: {gates_line}\n"
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", msg)
+    return repo
+
+
+def test_no_gate_form_is_surfaced_in_output_and_json(
+    tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    """③（CLI 层）`ok=false` 且 trailer 披露"没跑门禁" ⇒ 真伪那一档**不报伪造**，
+    且**输出与 `--json` 都给**"没有本轮门禁结论"（不许把它当"门禁绿"混过去）。"""
+    repo = _rev_repo(tmp_path, last_ok=False, gates_line="未跑门禁（--no-gate）")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    monkeypatch.setattr(wr, "audit_verdict", lambda: ([], "审计通过 ✅"))
+    wr.main(["--rev", "HEAD", "--branch", "main", "--allow", "**", "--dirty-ok", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["no_round_gate_verdict"] is True
+    assert "本轮门禁结论" in data["gates_trailer_note"]
+    assert not any("伪造门禁结论" in p for p in data["problems"])
+    wr.main(["--rev", "HEAD", "--branch", "main", "--allow", "**", "--dirty-ok"])
+    out = capsys.readouterr().out
+    assert "本轮门禁结论" in out
+
