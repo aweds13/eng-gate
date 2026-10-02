@@ -1,17 +1,14 @@
-# ruff: noqa: E501
-# ★ 卡 119（T-G217）：本文件是从 scratch 原型（gates/diag/tf_batch.py）**整份搬**进来的，
-#   33 条钉子逐条验过"行为一字未变"。里面有多处**中文长行** —— E501 按**显示宽度**算（CJK 一字 = 2 列），
-#   而这些行多是中文整句，拆行必然要动**字符串字面量**，风险不该在"搬家"这张卡里担。
-#   ⇒ 本次**整份豁免 E501**，拆行的纯美化**另开一张卡**（记在卡 119 的正文与 _todo_pending 里）。
 r"""任务栅栏：**注册一个跨层的任务 → 每张卡交成送申请 → 集齐才收口**（用户 2026-10-02 定的形状）。
 
 **防什么**：一笔提交 = 一张卡 + 一棵树 + 一趟 17 道门（约 5 分钟）+ 三段文书，**与改动大小无关**
 （卡 113 改 16 行、卡 114 改 9 行照走全流程）。用户要的是**版本管理式的攒批**，并把它说准了两次：
 
-> 第一次：『要引入**版本管理**的理念：小规模的改动应该**堆在一起**，同一个板块堆在一起写文书会好一点。』
+> 第一次：『要引入**版本管理**的理念：小规模的改动应该**堆在一起**，
+> 同一个板块堆在一起写文书会好一点。』
 > 第二次（**纠正我理解错的地方**）：『收批应该是我根据**任务的种类**，就是属于不同的板块，比如属于
 > **审美层**的、属于**后端**的、属于**前端**的。然后我在外包程序的某个地方**注册一个任务**，
-> 然后任务需要这些板块下面的**多张卡都完成了**，并且**发送了那个成功申请**，然后**集齐所有的成送申请**
+> 然后任务需要这些板块下面的**多张卡都完成了**，并且**发送了那个成功申请**，
+> 然后**集齐所有的成送申请**
 > 再写 —— **而不是单纯的数量**。』
 
 ★ 所以本模块的形状是**任务**（不是"同目录族攒够 N 条"）：
@@ -42,8 +39,10 @@ r"""任务栅栏：**注册一个跨层的任务 → 每张卡交成送申请 �
   卡树里回的是卡树，写进去等于没写（同一个坑在 `tools/pool/registry.py` 里踩过）。
 - ★ 并发写用 `O_CREAT|O_EXCL` 自旋锁 + 同目录 `os.replace` 原子写；判据是"丢一次投递只会让任务多等"
   （安全方向），锁只是省掉白等。**只治单机**，跨机不做也不假装能做。
-- ★ **已进 git（卡 119 / `T-G217`）—— 权威副本就是本文件**（`tools/pool/task.py`，模块 `pool.task`）。
-  命令行壳是 `tools/wb_task.py`；旧的 `gates/diag/tf_batch.py` 保留成临时转发壳（免得旧调用点当夜断掉）。
+- ★ **已进 git（卡 119 / `T-G217`）—— 权威副本就是本文件**
+  （`tools/pool/task.py`，模块 `pool.task`）。
+  命令行壳是 `tools/wb_task.py`；旧的 `gates/diag/tf_batch.py` 保留成临时转发壳
+  （免得旧调用点当夜断掉）。
 """
 
 from __future__ import annotations
@@ -308,7 +307,8 @@ def cmd_register(args: argparse.Namespace) -> int:
         "history": [],
     }
     _log(state, "-", "collecting",
-         f"注册任务：{len(members)} 张卡 · 层 {'、'.join(state['layers'])} · 集齐条件=**全部成送申请**")
+         f"注册任务：{len(members)} 张卡 · 层 {'、'.join(state['layers'])} · "
+         f"集齐条件=**全部成送申请**")
     write_json_atomic(state_path(task_id), state)
     print(f"任务 {task_id} 注册好了：{len(members)} 张卡 / 层 {'、'.join(state['layers'])}")
     print("  ★ 放行判据：名单上每一张卡都交了**成功申请**（或缺席者被显式豁免）—— 不看数量")
@@ -325,7 +325,8 @@ def _log(state: dict, frm: str, to: str, note: str) -> None:
 
 
 def check_domain(man: dict, member_id: str, files: list[str]) -> None:
-    """★★ 最重要的守卫：这张卡碰的文件必须落在**它自己声明的域**里（否则任务＝绕过冲突域的后门）。"""
+    """★★ 最重要的守卫：这张卡碰的文件必须落在**它自己声明的域**里
+    （否则任务＝绕过冲突域的后门）。"""
     mem = member_of(man, member_id)
     patterns = list(mem["paths"])
     bad = [f for f in files if not any(fnmatch.fnmatch(f, p) for p in patterns)]
@@ -348,7 +349,8 @@ def cmd_claim(args: argparse.Namespace) -> int:
         man = load_manifest(args.task)
         state = read_json(state_path(args.task))
         if state["state"] in ("landed", "timeout"):
-            raise RefuseError([f"任务已处于 {state['state']}，不再收申请（要先 `extend` 或另开任务）"])
+            raise RefuseError([f"任务已处于 {state['state']}，不再收申请"
+                               f"（要先 `extend` 或另开任务）"])
 
         member_id = args.member
         if member_id not in state["declared"]:
@@ -473,7 +475,8 @@ def _maybe_advance(state: dict, man: dict) -> dict:
     if bad:
         frm = state["state"]
         _log(state, frm, frm,
-             f"★ 齐了但**有卡投了不通过**：{'、'.join(bad)} ⇒ 不放行（要么重投成功申请，要么显式豁免）")
+             f"★ 齐了但**有卡投了不通过**：{'、'.join(bad)} ⇒ 不放行"
+             f"（要么重投成功申请，要么显式豁免）")
         return state
     frm = state["state"]
     state["state"] = "ready"
@@ -489,7 +492,8 @@ def _run_auto(state: dict, man: dict) -> dict:
     """跑 `on_complete` 里声明的动作：`gate` → `draft`。★ **没有 commit**（见模块头）。"""
     if "gate" in state["auto"]:
         state["state"] = "gating"
-        _log(state, "ready", "gating", f"跑门禁：{state['gate_cmd'] or '（任务里没声明 gate_cmd，跳过）'}")
+        _log(state, "ready", "gating",
+             f"跑门禁：{state['gate_cmd'] or '（任务里没声明 gate_cmd，跳过）'}")
         if state["gate_cmd"]:
             done = subprocess.run(state["gate_cmd"], shell=True, capture_output=True,
                                   text=True, encoding="utf-8", errors="replace")
@@ -498,7 +502,8 @@ def _run_auto(state: dict, man: dict) -> dict:
                 "exit_code": done.returncode,
                 "verdict": "green" if done.returncode == 0 else "red",
                 "at": now_iso(),
-                "tail": "\n".join(((done.stdout or "") + (done.stderr or "")).strip().splitlines()[-12:]),
+                "tail": "\n".join(
+                    ((done.stdout or "") + (done.stderr or "")).strip().splitlines()[-12:]),
             }
             _log(state, "gating", "gating",
                  f"门禁读数：exit={done.returncode} ⇒ **{state['gate']['verdict']}**")
@@ -546,15 +551,17 @@ def render_draft(state: dict, man: dict) -> str:
             files = "、".join(got.get("files") or []) or "——"
             rows.append(f"| {mid} | {kind}{got.get('why') or mem.get('what', '')} | {files} | "
                         f"{got.get('evidence') or '——'} |")
-        blocks.append(f"### 层：{layer}\n\n| 卡 | 改了什么 | 碰过的文件 | 证据 |\n|---|---|---|---|\n"
+        blocks.append(f"### 层：{layer}\n\n| 卡 | 改了什么 | 碰过的文件 | 证据 |\n"
+                      f"|---|---|---|---|\n"
                       + "\n".join(rows))
     body = "\n\n".join(blocks)
     gate = state.get("gate") or {}
-    return f"""# 任务 {state['id']} 文书骨架（按**层**分组）
+    return (f"""# 任务 {state['id']} 文书骨架（按**层**分组）
 
 > 任务一句话：{state['why']}
 > 层：{'、'.join(state['layers'])}
-> 集齐：{len(_ok(state) | set(state['waived']))}/{state['need']} 张卡的**成送申请**（名单 {len(state['declared'])} 张）
+> 集齐：{len(_ok(state) | set(state['waived']))}/{state['need']} 张卡的**成送申请**"""
+            f"""（名单 {len(state['declared'])} 张）
 > 门禁：{gate.get('verdict', '（没跑）')}（exit={gate.get('exit_code')}）
 > ★ 枚举已由机器填好（**勿手改本文件：它随时会被重算**）；人要写的部分在 `{state['id']}.why.md`。
 
@@ -589,7 +596,7 @@ def render_draft(state: dict, man: dict) -> str:
   · 为什么攒成一批：（★ 人写一句）
   · 与单卡流程的差别：一次收口 / 一段文书 / 一趟门禁
 ```
-"""
+""")
 
 
 def render_why_skeleton(state: dict, man: dict) -> str:
@@ -660,7 +667,8 @@ def cmd_expire(args: argparse.Namespace) -> int:
             return 0
         state["state"] = "timeout"
         _log(state, frm, "timeout",
-             f"到期（{state.get('deadline')}），缺席：{_missing(state)} ⇒ 等人工（waive 或 extend）")
+             f"到期（{state.get('deadline')}），缺席：{_missing(state)} ⇒ 等人工"
+             f"（waive 或 extend）")
         write_json_atomic(state_path(args.task), state)
     print(f"任务 {args.task} 标成 timeout，缺席：{_missing(state)}")
     return 0
@@ -676,7 +684,8 @@ def _report(state: dict) -> int:
         print(f"★ 有卡投了**不通过**、还没处理：{'、'.join(bad)} —— 不放行（重投或豁免）")
         return 3
     if gate.get("verdict") == "red":
-        print(f"★ 门禁红了（exit={gate.get('exit_code')}）—— 不提交。尾部读数：\n{gate.get('tail', '')}")
+        print(f"★ 门禁红了（exit={gate.get('exit_code')}）—— 不提交。"
+              f"尾部读数：\n{gate.get('tail', '')}")
         return 3
     if state["state"] == "awaiting-commit":
         print(f"文书骨架：{state['draft']['path']}")
@@ -689,7 +698,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     state = read_json(state_path(args.task))
     man = load_manifest(args.task)
     print(f"任务 {state['id']}：{state['why']}")
-    print(f"  层 {'、'.join(state['layers'])} · 集齐条件=**全部成送申请**（名单 {state['need']} 张卡）"
+    print(f"  层 {'、'.join(state['layers'])} · 集齐条件=**全部成送申请**"
+          f"（名单 {state['need']} 张卡）"
           f" · 自动 {state['auto']} · 期限 {state.get('deadline') or '（无）'}")
     for mem in man["member"]:
         mid = mem["id"]
@@ -901,7 +911,8 @@ def selftest() -> int:
         rc, err = run_cap("claim", "T-1", "卡B", "--claim", "failed", "--why", "乙那件事黄了")
         st = read_json(root / "T-1.json")
         nail("投『不通过』不进成功数", _ok(st) == {"卡A"}, str(_ok(st)))
-        rc, err = run_cap("claim", "T-1", "卡C", "--evidence", "ui 三张图都过", "--files", "ui/c.png")
+        rc, err = run_cap("claim", "T-1", "卡C", "--evidence", "ui 三张图都过", "--files",
+                          "ui/c.png")
         st = read_json(root / "T-1.json")
         nail("★ 名单都投过了、但有一张『不通过』⇒ **仍然不放行**",
              rc == 3 and st["state"] == "collecting", f"rc={rc} state={st['state']}")
@@ -1028,7 +1039,8 @@ def main(argv: list[str] | None = None) -> int:
         prog="tf_batch", description="任务栅栏：注册任务 → 各卡交成送申请 → 集齐才收口")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p = sub.add_parser("register", help="★ 注册任务（预声明它需要哪些卡 / 每张卡属于哪层 / 各自域）")
+    p = sub.add_parser("register",
+                       help="★ 注册任务（预声明它需要哪些卡 / 每张卡属于哪层 / 各自域）")
     p.add_argument("manifest", nargs="?", help="预声明 TOML 的路径（用 --from-pool 时不用给）")
     p.add_argument("--force", action="store_true", help="覆盖已存在的任务")
     p.add_argument("--from-pool", metavar="层", help="把该层的待办登记收成成员（预声明由机器生成）")
