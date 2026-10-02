@@ -931,11 +931,14 @@ def _dispatch_argv(card: str, spec: str, cwd: Path, model: str) -> list[str]:
     """给 `wb_dispatch.py` 的 argv —— **写死**，不透传危险项。
 
     不透传：`--force` / `--allow` / `--resume` / `--no-preflight`。
+    ★ 卡 125：带 `--already-reserved` —— 本函数**上游**（`tool_pool_dispatch`）已经
+      `registry.reserve` 过这条树；不带它会撞上 wb_dispatch 新接的 `tree_guard`（自己占的树
+      被自己判"被占"）⇒ 派活必被拒。带上它 = wb_dispatch **只跳过**守卫与占/还树，别的前置照走。
     """
     return [
         sys.executable, "-X", "utf8", "tools/wb_dispatch.py",
         "--card", card, "--spec", spec, "--cwd", str(cwd), "--model", model,
-        "--lean", "--detach", "--execute",
+        "--lean", "--detach", "--execute", "--already-reserved",
     ]
 
 

@@ -14,14 +14,20 @@ r"""汇总「每笔一个片段」到三个共享文档（卡 107 · T-G203）�
 
 用法：
     python -X utf8 tools/sync_docs.py             # 把片段汇进三个共享文档（**幂等**）
-    python -X utf8 tools/sync_docs.py --check      # 只核对「片段 ↔ 汇总」，不一致退 1 并**点名**
+    python -X utf8 tools/sync_docs.py --check      # 核对「片段 ↔ 汇总」（不一致退 1 并点名）；
+                                                   # 另查 changelog 次序，错了报 WARN 并点名两节日期
     python -X utf8 tools/sync_docs.py --root DIR   # 换根（测试用；默认 = 本仓根）
 
 ★ 硬约束（卡 §禁区）：
   1. 汇总**只插入**片段内容、**绝不改写既有字节** —— 幂等：连跑两次，第二次零 diff；
      片段目录为空 ⇒ 三个共享文档**逐字不变**（sha256 不变）。
-  2. 顺序**逐字等于现在的形态**：changelog 新片段接文件头（新→旧）· traceability 新片段接文件尾 ·
-     交接新片段按锚点插在第一个 CHECKPOINT 段之前（新→旧）。
+  2. 顺序：traceability 新片段接**文件尾**、交接新片段按锚点插在第一个 CHECKPOINT 段之前
+     （这两个通道**没动**）；★ changelog 新片段**按日期插到正确位置**（新的在上、旧的在下；
+     **同一天保持已有序**，不搅乱同日次序）—— 卡 126（`T-G224`）改的口径，治「rebase 里本笔
+     （更老）被一律插到文件头 ⇒ 老日期压住新日期」（`复盘/口径坑.md` 坑 32 的自动重演）。
+     ★ 次序错时 `--check` 报 **WARN 并点名两节日期**，但**不改退出码**（真仓可能有历史倒置，
+     硬失败会打穿既有断言
+     `tests/test_docs_fragments.py::test_real_repo_is_in_sync_and_merge_is_noop`）。
 """
 
 from __future__ import annotations
@@ -36,6 +42,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+# changelog 里「一节」的行首长这样：`## 2026-10-02 —— …`
+CHANGELOG_SECTION_RE = re.compile(r"^##\s+(\d{4}-\d{2}-\d{2})", re.MULTILINE)
 # 交接文档里「一段 CHECKPOINT」的行首长这样：`> **2026-10-01 · CHECKPOINT（卡 103 · `T-G199`）…`
 CHECKPOINT_ANCHOR_RE = re.compile(r"^\s*>\s*\*\*.*CHECKPOINT")
 
@@ -54,10 +62,59 @@ def _rel(path: str | Path, root: Path) -> str:
 # ---------------------------------------------------------------- 三种"汇进哪里"的规则
 
 
+def _changelog_sections(text: str) -> list[tuple[int, str, int]]:
+    """目标文件里每个 `## <日期>` 节的 `(起始偏移, 日期, 结束偏移)`，按出现次序。"""
+    hits = list(CHANGELOG_SECTION_RE.finditer(text))
+    spans: list[tuple[int, str, int]] = []
+    for i, m in enumerate(hits):
+        end = hits[i + 1].start() if i + 1 < len(hits) else len(text)
+        spans.append((m.start(), m.group(1), end))
+    return spans
+
+
+def _insert_changelog_block(text: str, block: str) -> str:
+    """把一节（`block`，已 `_norm`）插进 `text` 的**日期正确位置**（**只插入、不改写既有字节**）。
+
+    规则：新的在上、旧的在下 —— 插到**第一个日期严格更旧**的节之前（`<` 而非 `<=`
+    ⇒ 同日**不**插到已有同日节之上，**不搅乱同日次序**）。找不到更旧的节 = 它比所有既有节
+    都更旧（或无节）⇒ 接在**末尾**；片段自身无日期 ⇒ 保底接文件头（旧行为）。
+    """
+    m = DATE_RE.search(block)
+    if m is None:
+        return (block + "\n" + text) if text else (block + "\n")
+    block_date = m.group(0)
+    for start, sec_date, _end in _changelog_sections(text):
+        if sec_date < block_date:
+            return text[:start] + block + "\n" + text[start:]
+    if not text:
+        return block + "\n"
+    tail = text if text.endswith("\n") else text + "\n"
+    return tail + block + "\n"
+
+
 def _merge_changelog(target: str, pending: list[tuple[str, str]]) -> str:
-    """新片段按新→旧接在**文件头**（现有形态本来就是新→旧；首行仍是 `## 2026-`）。"""
-    prefix = "\n".join(_norm(t) for _n, t in pending)
-    return prefix + "\n" + target
+    """新片段**按日期插入**：新的在上、旧的在下（同一天保持传入次序，不搅乱同日次序）。
+
+    旧口径是「一律接文件头」—— rebase 场景里基线已含对方**日期更新**的那节，
+    本笔（日期更老）再插到文件头 ⇒ **老日期压在新日期上面**，坑 32 原样重演（且是自动的）。
+    """
+    text = target
+    for _name, raw in pending:  # `pending` 已按新→旧排好；同日保持传入次序
+        text = _insert_changelog_block(text, _norm(raw))
+    return text
+
+
+def _changelog_order_problems(rel_name: str, target: str) -> list[str]:
+    """changelog 各节是否**新在上、旧在下**；倒置就点名**相邻两节的日期**（只报不阻断）。"""
+    spans = _changelog_sections(target)
+    out: list[str] = []
+    for (_s0, prev_date, _e0), (_s1, cur_date, _e1) in zip(spans, spans[1:], strict=False):
+        if cur_date > prev_date:
+            out.append(
+                f"{rel_name} 次序错：`## {prev_date}`（上）排在 `## {cur_date}`（下）上面"
+                " —— 新的应在上面"
+            )
+    return out
 
 
 def _merge_traceability(target: str, pending: list[tuple[str, str]]) -> str:
@@ -166,9 +223,11 @@ def run(root: Path, *, check: bool) -> int:
     """check=True 只核对；check=False 把待汇总片段写回三个共享文档。返回进程退出码。"""
     if check:
         problems: list[str] = []
+        warnings: list[str] = []
         counts: list[str] = []
         for ch in build_channels(root):
-            target_norm = _norm(_read_target(ch))
+            target = _read_target(ch)
+            target_norm = _norm(target)
             pending = _collect_pending(ch, target_norm)
             counts.append(f"{ch.frag_dir.name}={len(_fragment_files(ch))}")
             for path, _text in pending:
@@ -176,6 +235,11 @@ def run(root: Path, *, check: bool) -> int:
                     f"{_rel(path, root)} 的内容没在 {_rel(ch.target, root)} 里"
                     "（跑 `python -X utf8 tools/sync_docs.py` 汇总）"
                 )
+            # ★ 卡 126（T-G224）：changelog 另查**次序**（旧实现只查「片段在不在」，次序错抓不到）。
+            if ch.name == "changelog" and target:
+                warnings.extend(_changelog_order_problems(_rel(ch.target, root), target))
+        for w in warnings:
+            print(f"[WARN] {w}")  # ★ 只报、不改退出码（真仓有历史倒置，见模块头）
         if problems:
             print("[FAIL] 片段 ↔ 汇总不一致：手改了汇总却没改片段，或反之 ——")
             for p in problems:
@@ -210,7 +274,8 @@ def main() -> int:
         description="把「每笔一个片段」汇进三个共享文档（卡 107 · T-G203）"
     )
     ap.add_argument("--check", action="store_true",
-                    help="只核对「片段 == 汇总」；不一致退 1 并点名（接进门禁用）")
+                    help="只核对「片段 == 汇总」；不一致退 1 并点名（接进门禁用）；"
+                         "另查 changelog 次序，错了报 WARN 并点名两节日期")
     ap.add_argument("--root", default="", help="仓库根（默认 = 本脚本所在仓；测试可换）")
     args = ap.parse_args()
     root = (Path(args.root).expanduser().resolve() if args.root

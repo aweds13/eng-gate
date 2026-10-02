@@ -37,9 +37,25 @@ class _Done:
         self.stderr = stderr
 
 
+#: 沙箱队列：测试里用到的卡号各一条（域各不同）—— 守卫「域从队列真读」要有东西可读。
+_SANDBOX_CARD_IDS = ("000", "001", "002", "007", "009", "023")
+_SANDBOX_BACKLOG = "[base]\nreviewed = \"sandbox\"\n" + "".join(
+    f"""
+[[cards]]
+id = "{cid}"
+task = "T-{cid}"
+title = "沙箱卡 {cid}"
+tree = ""
+spec = "spec.md"
+files = ["sandbox-{cid}.md"]
+"""
+    for cid in _SANDBOX_CARD_IDS
+)
+
+
 @pytest.fixture()
 def sandbox(tmp_path: Path, monkeypatch) -> Path:
-    """一个"像仓库"的临时根：规格在、node 与 CLI 在、工作区干净、登录通。"""
+    """一个"像仓库"的临时根：规格在、队列在、登记空、node 与 CLI 在、工作区干净、登录通。"""
     (tmp_path / "spec.md").write_text("卡规格", encoding="utf-8")
     node = tmp_path / "node.exe"
     cli = tmp_path / "codebuddy"
@@ -55,6 +71,14 @@ def sandbox(tmp_path: Path, monkeypatch) -> Path:
     #   `tests/test_mem_guard.py` 用桩专测；这里测的是规格/脏树/log/端口/登录，把它们
     #   从"这台机器此刻有多少可用内存"里摘出来（否则本机内存低时它们会假红）。
     monkeypatch.setenv("TF_GATE_MIN_FREE_GB", "0")
+    # ★ 卡 125：守卫要读**队列**（域）与**作业登记**（活租约），还要看门禁锁原文 —— 全部指到
+    #   沙箱里：队列现写、登记用 `TF_POOL_REGISTRY` 覆盖（绝不碰主树那份真登记）、
+    #   锁原文用桩（真跑 `gate_lock.py status` 会把宿主的活锁读进来 → 假红）。
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "workbacklog.toml").write_text(_SANDBOX_BACKLOG, encoding="utf-8")
+    monkeypatch.setenv("TF_POOL_REGISTRY",
+                       str(tmp_path / "gates" / "diag" / "pool-registry.json"))
+    monkeypatch.setattr(wd.pool_registry, "read_lock_body", lambda *a, **k: "")
     return tmp_path
 
 
@@ -2209,3 +2233,134 @@ def test_dedup_no_local_defs_of_those_names_in_tools() -> None:
                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
         offenders = defs & _POOL_DEDUP_NAMES
         assert not offenders, f"{name} 里又长出了本地 def：{sorted(offenders)}"
+
+
+# ---------------------------------------------- 默认派活器接守卫与登记（卡 125 · T-G223）
+#
+# 为什么值当测：`wb_dispatch --execute` 是项目自认的**默认派活入口**（唯一每天真在跑的那条路）。
+# 从前它不 import 守卫 / 登记 ⇒ 别的窗口看不见这个活、一树两写者不会被咬（GLM-5.3 审查 2.1）。
+# 下面六条**反例钉子**各钉一处；每条都"故意坏掉会红"（把接线拆掉/把判据写死，对应那条立刻红）。
+
+
+def _reserve(card: str, *, tree: str, files: list[str]) -> None:
+    """在**沙箱登记**（`TF_POOL_REGISTRY`）上占一条活租约 —— 用真 `pool.registry.reserve`。"""
+    wd.pool_registry.reserve(card, tree=tree, files=files, lock_body="")
+
+
+def test_guard_problems_pass_in_a_clean_sandbox(sandbox: Path) -> None:
+    """正例（反空转）：干净的沙箱里四条守卫**全过** —— 证明下面几条不是"永远在咬"。"""
+    assert wd.guard_problems("001", None) == []
+
+
+def test_guard_refuses_a_second_dispatch_on_the_same_tree(sandbox: Path) -> None:
+    """① 同一棵树第二次派活被拒 —— 第一次 reserve 之后，第二次前置检查必须 FAIL 并点名"树被占"。"""
+    _reserve("777", tree="", files=["别的东西.md"])
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False)
+    assert any("树被占" in p and "777" in p for p in problems), problems
+
+
+def test_guard_refuses_a_domain_intersection_and_names_the_file(sandbox: Path) -> None:
+    """② 冲突域相交被拒 —— 另一个活租约拿着同一文件 ⇒ FAIL 并**点名相交的文件**。"""
+    _reserve("777", tree=".wt/other", files=["sandbox-001.md"])
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False)
+    assert any("冲突域相交" in p and "sandbox-001.md" in p for p in problems), problems
+
+
+def test_guard_refuses_while_the_gate_lock_is_held(sandbox: Path, monkeypatch) -> None:
+    """③ 门禁锁在跑被拒 —— 用**桩**喂一份 `gate_lock.py status` 形态的锁原文（不去真抢锁）。"""
+    body = ("[锁] 段 base=9034 文件=D:/x/gates.lock: card=001 pid=4242 "
+            "起于 2026-10-02T10:00:00（已 12s / 租约剩 10688s；租约内） cwd=D:/x\n")
+    monkeypatch.setattr(wd.pool_registry, "read_lock_body", lambda *a, **k: body)
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False)
+    assert any("这趟门禁还在跑" in p and "base=9034" in p for p in problems), problems
+
+
+def test_guard_refuses_a_card_missing_from_the_queue(sandbox: Path) -> None:
+    """④ 查不到域的卡被拒 —— 队列里没有这张卡 ⇒ FAIL，且**不是**当成空域放行（别猜空域）。"""
+    problems, _ = wd.preflight("404", "spec.md", force=False, check_auth=False)
+    assert any("队列里没有卡 404" in p and "别猜空域" in p for p in problems), problems
+
+
+def test_execute_reserves_then_releases_the_tree(sandbox: Path, monkeypatch, capsys) -> None:
+    """⑤ 收工之后租约不见了 —— 真跑一次（假工人）走完全流程：跑时占着、收工后不在登记里。"""
+    during: list[list[str]] = []
+
+    def runner(cmd, log, errlog, **kwargs):          # noqa: ANN001, ANN202
+        during.append([str(r.get("card")) for r in wd.pool_registry.list_reservations()])
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        wd.session_file_for(log).write_text("sid-test", encoding="utf-8")
+        return 0, "", "", "sid-test"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+    assert during == [["001"]], f"跑工人的那一刻必须占着租约，实测 {during}"
+    assert wd.pool_registry.list_reservations() == [], "收工之后租约必须已经不在了"
+    assert "[还树] 租约已释放" in capsys.readouterr().out
+
+
+def test_dry_run_does_not_reserve_the_tree(sandbox: Path, monkeypatch) -> None:
+    """反例（卡规格明写）：**dry-run 不许占树** —— 只读的干跑不能改状态。"""
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md"])
+    assert wd.main() == 0
+    assert wd.pool_registry.list_reservations() == []
+
+
+def test_worker_tree_label_is_main_tree_or_relative(sandbox: Path) -> None:
+    """树标签口径与登记一致：主树 = ""；卡树 = 相对主树根的 posix 路径。"""
+    root = sandbox
+    assert wd.worker_tree_label(None, root) == ""
+    assert wd.worker_tree_label(root, root) == ""
+    assert wd.worker_tree_label(root / ".wt" / "x", root) == ".wt/x"
+    outside = root.parent / "别的地方"
+    assert wd.worker_tree_label(outside, root) == outside.as_posix()
+
+
+def test_max_turns_help_is_built_from_the_constants(monkeypatch) -> None:
+    """⑥ 帮助文本的数字 = 常量（改常量不同步改帮助就红）—— 帮助**从常量拼出来**，写死就咬。"""
+    helps = {a.dest: (a.help or "") for a in wd.build_parser()._actions}
+    assert str(wd.DEFAULT_MAX_TURNS_WRITE) in helps["max_turns"]
+    assert str(wd.DEFAULT_MAX_TURNS_READONLY) in helps["max_turns"]
+    assert str(wd.DEFAULT_MAX_TURNS_READONLY) in helps["read_only"]
+    # ★ 突变检验：把常量改掉，帮助必须跟着变（旧版写死"150 / 60" → 这一条当场红）。
+    monkeypatch.setattr(wd, "DEFAULT_MAX_TURNS_WRITE", 111)
+    monkeypatch.setattr(wd, "DEFAULT_MAX_TURNS_READONLY", 7)
+    after = {a.dest: (a.help or "") for a in wd.build_parser()._actions}
+    assert "111" in after["max_turns"] and "7" in after["max_turns"]
+    assert "7" in after["read_only"]
+
+
+def test_already_reserved_skips_the_guards_but_not_the_rest(sandbox: Path) -> None:
+    """★ 卡 125 修订：`--already-reserved` **只**跳过守卫与占/还树；别的前置照走（两读数）。
+
+    读数一：不带开关 → 已有活租约的树被拒（守卫照走）。
+    读数二：带开关 → **不因那条租约**被拒；但**别的毛病照咬**（规格不在 → 仍拒）。
+    """
+    _reserve("777", tree="", files=["别的东西.md"])
+    strict, _ = wd.preflight("001", "spec.md", force=False, check_auth=False)
+    assert any("树被占" in p for p in strict), strict                  # 读数一
+    relaxed, _ = wd.preflight("001", "spec.md", force=False, check_auth=False,
+                              already_reserved=True)
+    assert relaxed == [], relaxed                                     # 读数二
+    still, _ = wd.preflight("001", "没有这张卡.md", force=False, check_auth=False,
+                            already_reserved=True)
+    assert any("卡规格文件不存在" in p for p in still), still          # 只跳过守卫
+
+
+def test_main_with_already_reserved_leaves_the_registry_untouched(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """带 `--already-reserved` 走完整 --execute：**不占也不还**（登记里仍只有调用方那条）。"""
+    _reserve("777", tree="", files=["别的东西.md"])
+    record: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--already-reserved"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert "--already-reserved" in out and "不占、不还" in out
+    assert [r["card"] for r in wd.pool_registry.list_reservations()] == ["777"]
+    assert "[还树]" not in out                         # 还树归调用方（MCP），这里没还
+    assert record, "工人还是要派出去的（只是不占树）"

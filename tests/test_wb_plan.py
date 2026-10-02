@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import wb_plan  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂上
+from pool import plan as pool_plan  # noqa: E402 —— find_spec 在逻辑层（卡 127 钉子要直测它）
 
 SEED = ROOT / "docs" / "workbacklog.toml"
 
@@ -85,6 +86,64 @@ def test_intersection_is_rejected() -> None:
         _card("008", files=("tools/wb_dispatch.py",)),
     ))
     assert any("相交" in p and "tools/wb_dispatch.py" in p for p in problems), problems
+
+
+# ---------------------------------------- 卡 127：禁通配 + find_spec 精确（T-G225）
+#
+# ★ 这两条判据治 GLM 外部审查的 2.2b / 2.11：域写成通配 ⇒ 静默绕过冲突域检查；
+#   找卡规格用 `*<号>*` 乱兜 ⇒ 卡号 `12` 会命中 `卡112-…` / `卡120-…`。
+#   每条都是**反空转**：判据删掉/放宽 → 当场红。
+
+
+def test_wildcard_in_files_is_rejected() -> None:
+    """★ 2.2b：`files` 写 `tools/pool/*.py` ⇒ **拒单**，错误文本**点名**那张卡与该条目。
+
+    `files_intersect()` 是精确匹配，含通配的域与任何精确路径都不相交 ⇒ 静默绕过冲突域检查。
+    """
+    problems = wb_plan.validate(_backlog(_card("007", files=("tools/pool/*.py",))))
+    assert any("通配字符" in p and "007" in p and "tools/pool/*.py" in p
+               for p in problems), problems
+
+
+@pytest.mark.parametrize("bad", ["tools/pool/*.py", "tools/foo?.py", "tools/[ab].py"])
+def test_each_wildcard_char_is_rejected(bad: str) -> None:
+    """`*` / `?` / `[` **三个**都要咬（漏一个 = 假护栏）。"""
+    problems = wb_plan.validate(_backlog(_card("007", files=(bad,))))
+    assert any("通配字符" in p for p in problems), problems
+
+
+def test_exact_files_pass_the_wildcard_rule() -> None:
+    """② 全精确路径（真队列的形态）**不该**被新判据误伤。"""
+    exact = ("tools/pool/plan.py", "tools/wb_plan.py", "tests/test_wb_plan.py")
+    assert wb_plan.validate(_backlog(_card("007", files=exact))) == []
+
+
+def test_find_spec_card_number_is_boundary_exact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ 2.11：`find_spec("12")` **不许**命中 `卡112-…` / `卡120-…`。
+
+    造一棵临时树放这两张，断言 `12` 返回 `""`（找不到就**如实**说找不到，不猜最像的）。
+    """
+    monkeypatch.setattr(pool_plan, "ROOT", tmp_path)
+    monkeypatch.setattr(pool_plan, "DIAG", tmp_path / "gates" / "diag")
+    card_dir = tmp_path / "复盘" / "卡"
+    card_dir.mkdir(parents=True)
+    (card_dir / "卡112-切片误报.md").write_text("x", encoding="utf-8")
+    (card_dir / "卡120-另一张.md").write_text("x", encoding="utf-8")
+    assert pool_plan.find_spec("12") == ""
+
+
+def test_find_spec_finds_existing_card_exactly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """④ 精确匹配对**存在**的卡号照样找得到（`卡<号>-…` 整段匹配），返回真实路径。"""
+    monkeypatch.setattr(pool_plan, "ROOT", tmp_path)
+    monkeypatch.setattr(pool_plan, "DIAG", tmp_path / "gates" / "diag")
+    card_dir = tmp_path / "复盘" / "卡"
+    card_dir.mkdir(parents=True)
+    (card_dir / "卡108-号池.md").write_text("x", encoding="utf-8")
+    assert pool_plan.find_spec("108") == "复盘/卡/卡108-号池.md"
 
 
 # ------------------------------------------------------------------ ② 共享文件拒单（见上 ¶ 参数化）

@@ -127,6 +127,9 @@ def dispatch_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """一个"像仓库"的临时根（规格在、node/CLI 在、工作区干净、登录通）。
 
     ★ 这里**不**关内存闸（与 `test_wb_dispatch.py` 的 sandbox 不同）—— 本文件就是要真验它。
+    ★ 卡 125：`preflight()` 现在还走**守卫**（树 / 冲突域 / 门禁锁）—— 本文件考的是**内存闸**，
+      不该被队列守卫连坐 ⇒ 把守卫需要的环境补齐（写一份最小队列、隔离登记、桩掉锁原文）。
+      **判据一个字没松**（不是把守卫关掉，是把它要读的输入喂进沙箱）。
     """
     (tmp_path / "spec.md").write_text("卡规格", encoding="utf-8")
     node = tmp_path / "node.exe"
@@ -137,6 +140,17 @@ def dispatch_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(wd, "paths", lambda *a, **k: (node, cli))
     monkeypatch.setattr(wd, "git_dirty", lambda: [])
     monkeypatch.setattr(wd, "auth_ok", lambda *a, **k: (True, "登录自检通过"))
+    # ★ 卡 125：守卫的输入 —— 队列写一份（卡 102 的冲突域）、登记用 `TF_POOL_REGISTRY` 隔离到
+    #   沙箱（绝不读主树那份真登记）、锁原文用桩（真跑 `gate_lock.py status` 会把宿主活锁读进来）。
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "workbacklog.toml").write_text(
+        '[base]\nreviewed = "mem-guard-sandbox"\n\n'
+        '[[cards]]\nid = "102"\ntask = "T-G198"\ntitle = "内存闸"\n'
+        'tree = ""\nspec = "spec.md"\nfiles = ["sandbox-102.md"]\n',
+        encoding="utf-8")
+    monkeypatch.setenv("TF_POOL_REGISTRY",
+                       str(tmp_path / "gates" / "diag" / "pool-registry.json"))
+    monkeypatch.setattr(wd.pool_registry, "read_lock_body", lambda *a, **k: "")
     return tmp_path
 
 

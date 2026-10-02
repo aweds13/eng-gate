@@ -13,6 +13,12 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
   ④ `gates/diag/wb-<卡号>.jsonl` 不存在（要覆盖得显式 `--force`，证据不许被悄悄盖掉）。
   ⑤ ★ 卡 095：**端口段体检**（铁律 37）—— 给了端口段（`--port-base` 或 `TF_DISPATCH_PORT_BASE`）
      且段内有占用 → 拒派并点名占用者；**没给段 → 跳过**（不检查也不假装检查，不许自动换段）。
+  ⑥ ★ 卡 125（T-G223）：**四条守卫干跑**（树 `tree_guard` / 冲突域 `domain_guard` / 门禁锁
+     `lock_guard`）—— 判据全在 `pool.guards`；冲突域从队列**真读**（查不到就拒，别猜空域）。
+     真派活（`--execute`）前先 `pool.registry.reserve` 占树，**任何退出路径都 release**
+     （`atexit` 兜底）；dry-run **不占树**。
+     ★ `--already-reserved`：调用方（MCP 写面 `pool_cancel`/`pool_dispatch`）**已经占过树**时用 ——
+     **只跳过**守卫与占/还树，别的检查（内存 / 登录 / 白名单 / 日志）**照走**；不带它就一字不变。
 
 用法（默认 **dry-run**：只打印将要执行的命令，不派活）：
     python -X utf8 tools/wb_dispatch.py --card 001 --spec 复盘/外包卡-001-独立复核T-G79.md
@@ -70,6 +76,7 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import json
 import locale
@@ -93,9 +100,14 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（别写第二份）
 
-# ★ 卡 109（T-G206）：白名单越界与产物定位**只有一份真源**，都在 `tools/pool/` 包里。
-#   这里只 import、不再有本地实现（本地副本各删一处）—— 判据漂一次就会越界 / 串卡。
+# ★ 卡 109（T-G206）/ 卡 125（T-G223）：这些判据**只有一份真源**，都在 `tools/pool/` 包里
+#   —— 这里只 import、只调用，不另写一份（本地副本各删一处；判据漂一次就会越界 / 串卡）。
+#   ★ 卡 125 的来路（GLM-5.3 审查 2.1）：从前只有 MCP 写面与手工 CLI 接守卫，走**默认派活器**
+#   `wb_dispatch --execute` 时不变量 ①②③⑤ 全部失效、且对其他窗口不可见（一树两写者不会被咬）。
+from pool import guards as pool_guards  # noqa: E402 —— 四条守卫唯一实现（pool.guards）
+from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
 from pool.jobs import card_artifacts  # noqa: E402 —— 产物定位唯一实现（pool.jobs）
+from pool.plan import BacklogError, load_backlog  # noqa: E402 —— 队列/冲突域唯一实现（pool.plan）
 from pool.review import outside_allow  # noqa: E402 —— 白名单越界唯一实现（pool.review）
 
 # ★ T-G96：Windows 上派活器自己发起的那些 `subprocess` 不加这个，Windows 11 会把控制台程序
@@ -1697,11 +1709,77 @@ def port_preflight(port_bases: list[int] | None) -> list[str]:
     return problems
 
 
+def worker_tree_label(worker_cwd: Path | None, main_root: Path) -> str:
+    """工人要占的树 —— 登记用的标签：**主树 = ""**；卡树 = 相对主树根的 posix 路径。
+
+    ★ `pool.registry` 的树标签就是这种形式（`pool_mcp._dispatch_argv` 把 `--cwd` 传成
+      `main_root / tree` 或 `main_root`）—— 这里**反过来**从 `--cwd` 还原出标签，好让
+      `tree_guard` 按同一把尺子比。树在仓库外（罕见）：原样给绝对 posix 路径（守卫按字符串比，
+      不猜、不归一成"主树"）。
+    """
+    if worker_cwd is None:
+        return ""
+    target = worker_cwd.resolve()
+    try:
+        rel = target.relative_to(main_root.resolve())
+    except ValueError:
+        return target.as_posix()
+    text = rel.as_posix()
+    return "" if text == "." else text
+
+
+def queue_files(card: str, *, root: Path | None = None) -> tuple[list[str], str | None]:
+    """从队列（backlog）**真读**这张卡的冲突域；查不到 → 返回 `([], 一句原因)`。
+
+    ★ 绝不许把查不到的卡猜成"空域" —— 空域 = 不与任何活租约相交 = 骗过 `domain_guard`
+      （`pool/guards.py` 模块头专门写了这条）。查不到就拒，宁可多问人一次。
+    """
+    base = (root or ROOT) / "docs" / "workbacklog.toml"
+    try:
+        backlog = load_backlog(base)
+    except BacklogError as exc:
+        return [], f"读不了队列（冲突域无处可查）：{base}（{exc}）"
+    hit = backlog.by_id().get(str(card))
+    if hit is None or not hit.files:
+        return [], f"队列里没有卡 {card} 的冲突域 ⇒ 不许派活（别猜空域）"
+    return list(hit.files), None
+
+
+def guard_problems(card: str, worker_cwd: Path | None, *, now: float | None = None) -> list[str]:
+    """四条守卫的干跑（树 / 冲突域 / 门禁锁）—— 返回问题清单（空 = 全过）。
+
+    ★ 判据全在 `pool.guards`（在这里只**喂数据**，不另写一份）：活租约来自
+      `pool.registry.list_reservations`（它先清死租约）、锁原文来自
+      `pool.registry.read_lock_body`（不许自己拼 shell 命令）。
+    ★ 位置与现有 `[FAIL] 不派活` **同一层**：任何一条咬 → 这条派活前置检查全过不了。
+    ★ 算不出主工作树 / 读不了登记 / 查不到域 → **拒**（不静默当通过，也不猜）。
+    """
+    files, why = queue_files(card)
+    if why:
+        return [why]
+    try:
+        main_root = pool_registry.main_tree_root()
+    except pool_registry.RegistryError as exc:
+        return [f"算不出主工作树（守卫判不了树/锁）：{exc}"]
+    tree = worker_tree_label(worker_cwd, main_root)
+    try:
+        live = pool_registry.list_reservations(now)
+    except pool_registry.RegistryError as exc:
+        return [f"读不了作业登记（守卫判不了树/域）：{exc}"]
+    lock_body = pool_registry.read_lock_body()
+    return [
+        *pool_guards.tree_guard(tree, live, now),                          # ① 一棵树一个写者
+        *pool_guards.domain_guard(files, live, now),                       # ② 冲突域不相交
+        *pool_guards.lock_guard(card, tree, lock_body, root=main_root),    # ③ 门禁还在跑
+    ]
+
+
 def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
               cli_override: str | None = None, resuming: bool = False,
               allow: list[str] | None = None,
               port_bases: list[int] | None = None,
-              worker_cwd: Path | None = None) -> tuple[list[str], Path]:
+              worker_cwd: Path | None = None,
+              already_reserved: bool = False) -> tuple[list[str], Path]:
     """四道检查 —— 返回（问题清单, 日志路径）。问题非空就不许派活。
 
     ★ 卡 029 §2.10（本轮真撞的）：**续跑**（`--resume <id>` / `--resume auto` 拿到了 id）时
@@ -1713,6 +1791,9 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
     **工人要干活的那棵树**（那才是"一写一读"要护的地方）；**主仓状态照打当提示、但不因此拒派**
     （主控自己的文档改动不该挡住派活）。给的路径不是 git 工作树 → 明确报错（不静默当干净）。
     不给 `worker_cwd` 时行为逐字不变（仍看主仓）。
+    ★ **卡 125 修订**：`already_reserved=True`（`--already-reserved`）= 调用方（MCP 写面）已经
+    占过树 ⇒ **只跳过守卫那一段**；别的检查（规格 / 脏树 / log / 端口 / 内存 / 登录）**照走**。
+    不带它时行为**一字不变**。
     """
     problems: list[str] = []
     node, cli = paths(cli_override)
@@ -1762,6 +1843,18 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
                       file=sys.stderr, flush=True)
     if log.exists() and not force:
         problems.append(f"这一轮的 log 已存在：{log}（要覆盖请 --force —— 证据不许被悄悄盖掉）")
+    # ★ 卡 125（T-G223）：四条守卫的干跑（树 / 冲突域 / 门禁锁）—— 与 `[FAIL] 不派活` 同一层。
+    #   域从队列**真读**（查不到就拒，见 `queue_files`）；判据全在 `pool.guards`，不另写一份。
+    #   ★ `--already-reserved`：调用方（MCP）已经占过树 ⇒ 只跳过这一段（占/还树也在 main 里跳过）。
+    if already_reserved:
+        print("  守卫已跳过（--already-reserved：树由调用方占过，判据在那边）",
+              file=sys.stderr, flush=True)
+    else:
+        guard_list = guard_problems(card, worker_cwd)
+        if not guard_list:
+            print("  守卫全过（树被占 / 冲突域相交 / 门禁还在跑 —— 三条都没咬）",
+                  file=sys.stderr, flush=True)
+        problems.extend(guard_list)
     # ★ 卡 095：端口段体检（铁律 37）—— 给了段且段内有占用就拒派；没给段则如实跳过。
     problems.extend(port_preflight(port_bases))
     # ★ 卡 102（T-G198）：内存闸 —— 派活同样吃内存，可用内存不够就不派活（同一环境变量/措辞）。
@@ -1775,7 +1868,8 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
     return problems, log
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """命令行解析器 —— 抽成函数，好让测试**真读帮助文本**（卡 125 §2.9：帮助与常量同源）。"""
     parser = argparse.ArgumentParser(description="派活给 CodeBuddy CLI（默认 dry-run）")
     parser.add_argument("--card", required=True, help="卡号（用来命名 log，如 001）")
     parser.add_argument("--spec", default="", help="卡规格文件（相对仓库根；--status 时不必给）")
@@ -1793,16 +1887,24 @@ def main() -> int:
     parser.add_argument("--execute", action="store_true",
                         help="真派活（默认只做前置检查 + 打印命令）")
     parser.add_argument("--force", action="store_true", help="允许覆盖已有 log")
+    parser.add_argument("--already-reserved", action="store_true",
+                        help="★ 调用方（MCP 写面）已经占过这棵树 ⇒ **只跳过**守卫与占/还树；"
+                             "别的前置检查（规格 / 脏树 / log / 端口 / 内存 / 登录）照走。"
+                             "不带它时行为一字不变（守卫照走、照样占树）")
     parser.add_argument("--no-preflight", action="store_true", help="跳过登录自检")
     parser.add_argument("--lean", action="store_true",
                         help="改读 ≤6KB 开工切片 gates/diag/brief-<卡>.md（不拼那四份大文档）")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT,
                         help=f"工人最长跑多久（秒，默认 {DEFAULT_TIMEOUT}）；"
                              "★ 超时不是失败，是『掐掉再续跑』的信号")
+    # ★ 卡 125 §2.9：帮助文本的数字**从常量拼出来**（从前写死"150 / 60"，而常量是 240/80
+    #   —— 照帮助估预算会低估 60%）。改常量帮助自动跟着变，钉子（tests）钉住这条同源。
     parser.add_argument("--max-turns", type=int, default=0,
-                        help="回合上限（0 = 按卡种取默认：写卡 150 / 只读卡 60）")
+                        help=f"回合上限（0 = 按卡种取默认：写卡 {DEFAULT_MAX_TURNS_WRITE} / "
+                             f"只读卡 {DEFAULT_MAX_TURNS_READONLY}）")
     parser.add_argument("--read-only", action="store_true",
-                        help="这是一张只读卡 → 回合上限默认取 60（预算，不是安全边界）")
+                        help=f"这是一张只读卡 → 回合上限默认取 {DEFAULT_MAX_TURNS_READONLY}"
+                             "（预算，不是安全边界）")
     parser.add_argument("--autocompact", default=DEFAULT_AUTOCOMPACT,
                         help="自动压缩窗口（默认 1m；CLI 钳位 100k-1M）")
     parser.add_argument("--heartbeat-seconds", type=int, default=HEARTBEAT_SECONDS,
@@ -1836,6 +1938,11 @@ def main() -> int:
     parser.add_argument("--detach-done", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--status", action="store_true",
                         help="只看状态（心跳/判决/会话/log 尾巴），不派活、不用给 --spec")
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
     args = parser.parse_args()
 
     if args.status:
@@ -1870,6 +1977,7 @@ def main() -> int:
         args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
         cli_override=args.cli, resuming=bool(resume_sid), allow=args.allow,
         port_bases=port_bases, worker_cwd=worker_cwd,
+        already_reserved=args.already_reserved,
     )
 
     if problems:
@@ -1947,6 +2055,66 @@ def main() -> int:
                      else spec_changed_notice(prompt_path(args.spec, worker_cwd), log))
     spec_file_for(log).parent.mkdir(parents=True, exist_ok=True)
     spec_file_for(log).write_text(f"{args.spec}\nsha256={spec_digest}\n", encoding="utf-8")
+
+    # ★★ 卡 125（T-G223）：真派活（--execute；dry-run 已在上面 return）**起工人之前**先占树 ——
+    #   登记一次，别的窗口走正规干跑就看得见这个活（从前看不见 ⇒ 一树两写者不会被咬）。
+    #   ★ 位置选这里的原因：`--detach` 的**父进程**在更上面就 return 了（它只负责扔出去），
+    #     真正跑工人的是**脱离子进程**（带 `--detach-done`）；于是"占树 + 还树"都落在**跑工人
+    #     的那个进程**里 —— 与卡的要求（还树由带租约的那个进程在工人收工后做，而不是父进程
+    #     立刻还）一致。dry-run 不走这一段（不占树）。
+    if args.already_reserved:
+        # ★ 调用方（MCP 写面 `pool_dispatch`）**已经** reserve 过这条树 ⇒ 这里不占、也不还
+        #   （还树归调用方：它拿 pid 走 `pool_cancel` / 租约 TTL）。守卫也已在 preflight 里跳过。
+        def release_tree(why: str) -> None:
+            """`--already-reserved`：占树/还树都归调用方 ⇒ 这里全是空操作。"""
+            return
+
+        print("[占树] --already-reserved：树由调用方（MCP）占过 —— 本次不占、不还", flush=True)
+    else:
+        reserve_files, reserve_why = queue_files(args.card)
+        if reserve_why:
+            print(f"[FAIL] {reserve_why}", file=sys.stderr, flush=True)
+            return 2
+        try:
+            reserve_root = pool_registry.main_tree_root()
+        except pool_registry.RegistryError as exc:
+            print(f"[FAIL] 算不出主工作树 ⇒ 不占树、不派活：{exc}", file=sys.stderr, flush=True)
+            return 2
+        reserve_tree = worker_tree_label(worker_cwd, reserve_root)
+        released = False
+
+        def release_tree(why: str) -> None:
+            """还树 —— **幂等**（已还过就是空操作）；任何退出路径都要走它（`atexit` 兜底）。"""
+            nonlocal released
+            if released:
+                return
+            released = True
+            try:
+                pool_registry.release(args.card)
+            except pool_registry.RegistryError as exc:
+                print(f"[还树] 释放失败（卡 {args.card}）：{exc}", file=sys.stderr, flush=True)
+                return
+            print(f"[还树] 租约已释放（卡 {args.card}；{why}）", flush=True)
+
+        try:
+            # ★ **不把 log 交给 reserve**：`log_guard`（目标已存在就拒）与续跑语义打架 ——
+            #   续跑时 log 本就在（`--force` / 换 `r2` 名是 wb_dispatch 自己的逻辑，见卡规格）。
+            #   日志那条委托 wb_dispatch 自己（preflight 已按 `--force` 判过），这里不重判。
+            pool_registry.reserve(args.card, tree=reserve_tree, files=reserve_files,
+                                  model=args.model, note=f"spec={args.spec}",
+                                  lock_body=pool_registry.read_lock_body())
+        except pool_registry.GuardError as exc:
+            print("[FAIL] 占树被守卫拦下，**不派活**：", file=sys.stderr, flush=True)
+            for item in exc.problems:
+                print(f"  · {item}", file=sys.stderr, flush=True)
+            return 2
+        except pool_registry.RegistryError as exc:
+            print(f"[FAIL] 占树失败（登记坏了），**不派活**：{exc}", file=sys.stderr, flush=True)
+            return 2
+        # ★ 照卡 118 给门禁锁做的兜底：进程怎么退都 release 一次（已还过 = 空操作）。
+        atexit.register(release_tree, "进程退出兜底")
+        print(f"[占树] 已登记租约：卡 {args.card}｜树 {reserve_tree or '（主树）'}｜"
+              f"域 {'、'.join(reserve_files)}", flush=True)
 
     attempts, code, reason, scene, sid = 1, 0, "", "", resume_sid
     model = args.model                       # 429 三拍会按序换（只换白名单里的）
@@ -2034,6 +2202,7 @@ def main() -> int:
                 print("\n".join(stop), file=sys.stderr, flush=True)
                 print("[停 ] 额度续跑到界 → 任务停下（退出码 7）。恢复后由主控重派。",
                       file=sys.stderr, flush=True)
+                release_tree("额度续跑到界 → 任务停下")
                 return 7
             if args.quota_wait > 0:
                 print(f"[额度] 等 {args.quota_wait}s 再探（用户 2026-09-26：「你先等一下」）",
@@ -2064,6 +2233,7 @@ def main() -> int:
                     print("\n".join(stop), file=sys.stderr, flush=True)
                     print("[停 ] 白名单全部额度耗尽 → 任务停下（退出码 7）。"
                           "恢复后由主控重派；不自动换表外模型。", file=sys.stderr, flush=True)
+                    release_tree("额度全挂 → 任务停下")
                     return 7
                 print(f"[额度] 探测仍挂（{probe_why}）→ 按白名单顺序换：{model} → {nxt}"
                       "（只换白名单里的，不许跳表外）", file=sys.stderr, flush=True)
@@ -2085,6 +2255,10 @@ def main() -> int:
         attempts += 1
         print(f"[续 ] 第 {attempts} 次：带同一会话接着干（原因：{reason}）", file=sys.stderr,
               flush=True)
+
+    # ★ 卡 125：工人已收工 / 已被判死 → 还树（`--detach` 的那条路里，跑这一段的正是脱离子进程）。
+    #   循环内那几个 `return 7`（额度全挂）由 `atexit` 兜底 —— 任何退出路径都会还一次。
+    release_tree("工人收工")
 
     print(f"[会话] {sid or '（没见到 session_id）'}"
           f"（落盘 {session_file_for(log).name}；续跑：--resume auto）", flush=True)

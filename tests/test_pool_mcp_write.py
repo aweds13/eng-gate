@@ -242,6 +242,8 @@ def test_dispatch_argv_is_pinned_and_reserves_first(
     argv = seen["argv"]
     joined = " ".join(argv)
     assert "--detach" in argv and "--execute" in argv and "--lean" in argv
+    # ★ 卡 125：MCP 已先 reserve ⇒ 必须带 --already-reserved（否则撞 wb_dispatch 的 tree_guard）
+    assert "--already-reserved" in argv
     assert "--cwd" in argv
     cwd = argv[argv.index("--cwd") + 1]
     assert Path(cwd).is_absolute()

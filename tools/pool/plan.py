@@ -12,6 +12,7 @@ r"""队列 / 冲突域 / 排批（从 `tools/wb_plan.py` 抽，卡 106 · T-G202
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +46,11 @@ VALID_STATUS = ("pending", "running", "done", "failed")
 # ★ T-G119：只有这两种参与「冲突判定」与「排批」—— done/failed 是历史，
 #   它们占过的文件与树都**已经释放**（backlog 是**队列**，不是「全部已排班」）。
 ACTIVE_STATUS = ("pending", "running")
+
+# ★ 卡 127（T-G225）：`files` 里**不许**出现的通配字符。`files_intersect()` 是**精确**集合相交，
+#   若某张卡把域写成 `tools/pool/*.py` 这类通配，它与**任何**精确路径都不相交 ⇒ 两张卡明明
+#   改同一批文件却互不报冲突，**静默绕过**冲突域检查。所以这里在字段层直接拒单（见 `validate`）。
+WILDCARD_CHARS = ("*", "?", "[")
 
 
 class BacklogError(Exception):
@@ -145,7 +151,15 @@ def load_backlog(path: Path = DEFAULT_BACKLOG) -> Backlog:
 
 
 def files_intersect(a: Card, b: Card) -> set[str]:
-    """两张卡的冲突域**相交部分** —— 空集 = 可以同批跑。"""
+    """两张卡的冲突域**相交部分** —— 空集 = 可以同批跑。
+
+    ★ 卡 127（T-G225）口径注：这里的匹配是**精确**的（字符串集合相交，`tools/pool/*.py`
+    不是任何一个真实路径的字符串 ⇒ 恒不相交）。**栅栏那一侧**（`tools/pool/task.py` 的
+    `check_domain`）用的是 `fnmatch`，而 `fnmatch` 的 `*` **跨目录分隔符** —— **两处不是
+    同一套语义**（`*` 跨 `/` 在 one 侧算命中、在另一侧不算）。本卡只在**队列侧**禁通配
+    （见 `validate` ⑧），**不**改 `task.py`：栅栏侧由另一张卡治；在那之前，两套语义的分歧
+    以这里这段为**唯一口径记录**（别再各写一份）。
+    """
     return set(a.files) & set(b.files)
 
 
@@ -213,7 +227,8 @@ def validate(backlog: Backlog) -> list[str]:
     """拒单清单（空 = 这份 backlog 能用）。
 
     字段类（**所有卡都要过**）：② `files` 含受保护共享文件；④ `depends` 指向不存在的卡；
-    ⑤ 依赖成环；⑥ `files` 为空；⑦ `risk`/`status` 取值非法。
+    ⑤ 依赖成环；⑥ `files` 为空；⑦ `risk`/`status` 取值非法；⑧ `files` 条目含通配字符
+    （`*` `?` `[` —— 卡 127 / T-G225：通配会让这张卡与谁都不相交 ⇒ 静默绕过冲突域检查）。
 
     冲突类（★ **只判"还在队列里"的卡**，即 `pending` / `running`）：
     ① 两卡 `files` 相交 **且两者之间没有依赖路径**；③ 两卡用同一棵树。
@@ -235,6 +250,11 @@ def validate(backlog: Backlog) -> list[str]:
             if path in PROTECTED_FILES:
                 problems.append(
                     f"卡 {card.id}：files 含受保护共享文件 {path}（作者一律不许碰）")
+            if any(ch in path for ch in WILDCARD_CHARS):
+                problems.append(
+                    f"卡 {card.id}：files 条目 {path} 含通配字符（`*` `?` `[`）"
+                    f"—— 域必须是**精确路径**（`files_intersect()` 是精确匹配，"
+                    f"通配会让这张卡与谁都不相交 ⇒ 静默绕过冲突域检查）")
         for dep in card.depends:
             if dep not in ids:
                 problems.append(f"卡 {card.id}：depends 指向不存在的卡 {dep}")
@@ -368,12 +388,22 @@ def find_spec(card: str) -> str:
     （历史 / 尚未搬进 git 的卡仍能解析出来）—— **行为向后兼容**。
     ★ 从 `wb_brief.py` 搬来（卡 106）："某张卡的规格文件在哪"属于**卡域**，是只读查文件，
     放这里让开工切片生成器与号池工具共用同一处（不再各写一份 glob）。
+    ★ 卡 127（T-G225）：卡号匹配改成**边界精确** —— 只认 `卡<号>-…` / `卡<号>.md` / `卡<号>_…`
+    （`卡<号>` 之后必须是分隔符 `-`/`_`/`.` 或文件名结尾）。旧实现第三档 `*{card}*.md` 是
+    **乱兜**：`12` 会命中 `卡112-…` / `卡120-…`（GLM 审查 2.11，按字母序取先）。现在去掉乱兜，
+    找不到就**如实返回 `""`**（不猜一张最像的）。
     """
+    card = card.strip()
+    if not card:
+        return ""
+    # `卡<号>` 之后：要么直接 `.md`，要么跟一个分隔符（- _ .）再接任意后缀。
+    pattern = re.compile(rf"^卡{re.escape(card)}(?:[-_.].*)?\.md$")
     for root in (ROOT / "复盘" / "卡", DIAG):
-        for pat in (f"卡{card}-*.md", f"卡{card}.md", f"*{card}*.md"):
-            hits = sorted(root.glob(pat))
-            if hits:
-                return str(hits[0].relative_to(ROOT)).replace("\\", "/")
+        if not root.is_dir():
+            continue
+        hits = sorted(path for path in root.glob("*.md") if pattern.match(path.name))
+        if hits:
+            return str(hits[0].relative_to(ROOT)).replace("\\", "/")
     return ""
 
 
