@@ -1573,6 +1573,30 @@ def test_model_whitelist_is_locked_and_default_is_the_first_entry() -> None:
     assert wd.next_whitelist_model("glm-5.3-flash") is None      # 最后一个 → 全挂就停的判据
 
 
+def test_one_off_model_is_allowed_but_stays_out_of_the_rotation() -> None:
+    """★ 2026-10-02（卡 124 / `T-G222`）：**一次性授权 ≠ 改轮换口径**。
+
+    用户 2026-10-02 授权 `glm-5.3`（**不带 flash**）做**一次**外部审查；而 2026-09-26 定的
+    「429 按序换」口径**一个字不许变**（① flash → ② glm-5.3-flash → 全挂就停）。
+    这条钉子把两件事**钉开**：闸门查的是**允许集**（能不能调），
+    轮换只走 `MODEL_WHITELIST`（坏了按什么顺序换）。
+    ★ 反证：若有人图省事把 `glm-5.3` 直接塞进 `MODEL_WHITELIST`，上面那条
+    `test_model_whitelist_is_locked_and_default_is_the_first_entry` 与本条的第 ② 段**立刻红**。
+    """
+    # ① 闸门放行一次性授权的那个，且**不误放**表外的
+    assert wd.model_rejected("glm-5.3") == ""
+    assert wd.model_rejected("glm-5.3-flash") == ""
+    assert wd.model_rejected("kimi-k3-1") != ""
+    # ② 轮换链**没变**：名单仍两项，末尾仍是 glm-5.3-flash → 停
+    assert wd.MODEL_WHITELIST == ("deepseek-v4.1-flash", "glm-5.3-flash")
+    assert wd.next_whitelist_model("deepseek-v4.1-flash") == "glm-5.3-flash"
+    assert wd.next_whitelist_model("glm-5.3-flash") is None
+    # ③ 一次性授权**不是**轮换链成员：`next` 指不到它
+    assert "glm-5.3" not in wd.MODEL_WHITELIST
+    assert "glm-5.3" in wd.ALLOWED_MODELS
+    assert wd.next_whitelist_model("glm-5.3") is None
+
+
 def test_model_gate_refuses_an_unknown_model_with_zero_side_effects(
         sandbox: Path, monkeypatch, capsys) -> None:
     """★★ 拒单实测（可重复用例）：表外模型 → 退 2、**不起进程**、**不建 log**、**不写判决**。"""

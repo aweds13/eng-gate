@@ -115,6 +115,22 @@ NO_WINDOW: dict = ({"creationflags": subprocess.CREATE_NO_WINDOW}     # type: ig
 MODEL_WHITELIST: tuple[str, ...] = ("deepseek-v4.1-flash", "glm-5.3-flash")
 DEFAULT_MODEL = MODEL_WHITELIST[0]
 
+# ★★ 2026-10-02 用户授权的**一次性**模型（**故意不进轮换链**）：`glm-5.3`（**不带 flash**）。
+#   用户原话：「然后呢，把这些东西再喂给 GLM5.3，注意，我这次要求的是 GLM5.3 不是 Flash …
+#   你可以把它列到白名单，但是**我希望是一次性的调用**」。
+#   ⇒ 做法是**加法、不是改口径**：闸门放行它，而 `MODEL_WHITELIST` 与 `next_whitelist_model()`
+#     **一个字没动** ⇒ 429 的「按序换」仍是 ① flash → ② glm-5.3-flash → 全挂就停
+#     （用户 2026-09-26 定的轮换口径**没被悄悄改掉**）。
+#   ★ 为什么不直接塞进 `MODEL_WHITELIST`：那不是"加一个模型"，而是**改轮换口径** ——
+#     而"改顺序 / 改默认"只有用户能定（第 111 行那条规矩）。这一条把两件事**分开**：
+#     **能不能调**（本常量）与**坏了按什么顺序换**（`MODEL_WHITELIST`）。
+#   ★ 现场核过它真能用：`--model glm-5.3 -p "只回 OK"` ⇒ `subtype=success`，且 init 事件的
+#     `model` 就是 `glm-5.3`（**没有被静默降级**成默认模型）。用途只有一次：卡 124（`T-G222`）
+#     那次外部模型的整体审查；要不要长留是**待用户拍板**的事（记在需求与架构 §6）。
+ONE_OFF_MODELS: tuple[str, ...] = ("glm-5.3",)
+#: 真正允许派活的集合 = 轮换名单 ∪ 一次性授权。**闸门查这个**；轮换只走 `MODEL_WHITELIST`。
+ALLOWED_MODELS: tuple[str, ...] = MODEL_WHITELIST + ONE_OFF_MODELS
+
 # ---------------------------------------------------------------- 429 / 额度（卡 029 §2.5）
 # ★ 429 长得像成功：CLI 给 `result.subtype = error_during_execution` + 空回话 + 退出码 0 ——
 #   只看退出码会把「额度烧干」读成「正常收工」（2026-09-26 真撞过）。所以判据读事件本身：
@@ -229,17 +245,19 @@ def paths(cli_override: str | None = None) -> tuple[Path, Path]:
 
 
 def model_rejected(model: str) -> str:
-    """模型白名单硬闸门 —— 不在名单里 → 返回拒单理由（在名单里 → 空串）。
+    """模型白名单硬闸门 —— 不在**允许集**里 → 返回拒单理由（在集合里 → 空串）。
 
     ★ 逐字比较（连大小写 / 连字符都不许含糊）；拒绝必须**零副作用**：不起进程、不建 log、
     不改树。★ `--resume` / `--retry` / `--detach` 全都从 `main()` 过这道闸；续跑必须沿用
-    白名单里的那个模型，不许因为「原模型挂了」就换成表外的。
+    原来那个模型，不许因为「原模型挂了」就换成表外的。
+    ★ 允许集 = `ALLOWED_MODELS`（= 轮换名单 `MODEL_WHITELIST` ∪ 一次性授权 `ONE_OFF_MODELS`）——
+    **但不是轮换链**：`next_whitelist_model()` 只看 `MODEL_WHITELIST`（2026-10-02 分开这两件事）。
     """
-    if model in MODEL_WHITELIST:
+    if model in ALLOWED_MODELS:
         return ""
     return (f"未授权模型，已拒绝派活：{model}\n"
-            f"  白名单（只有用户能改，见 tools/wb_dispatch.py 顶部 MODEL_WHITELIST 常量）："
-            f"{'、'.join(MODEL_WHITELIST)}\n"
+            f"  允许集（只有用户能改，见 tools/wb_dispatch.py 顶部的 "
+            f"MODEL_WHITELIST / ONE_OFF_MODELS 常量）：{'、'.join(ALLOWED_MODELS)}\n"
             "  默认拒绝：不在名单里的模型一律调不动（用户 2026-09-26 令：黑名单锁死）。")
 
 
