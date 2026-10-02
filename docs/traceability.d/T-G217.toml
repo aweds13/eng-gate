@@ -1,0 +1,14 @@
+[entries."T-G217"]
+id = "T-G217"
+title = "任务栅栏搬进 git：权威副本 tools/pool/task.py + 壳 tools/wb_task.py + 35 条钉子"
+group = "OPS"
+status = "done"
+evidence = [
+  "file:tools/pool/task.py",
+  "file:tools/wb_task.py",
+  "file:tests/test_pool_task.py",
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡119-栅栏搬进git.md",
+]
+gaps = "**来路**：任务栅栏（`register / claim / 集齐放行 / 按层写文书`）此前只住在 `gates/diag/tf_batch.py` —— 那是 **gitignore 的 scratch** ⇒ **别的窗口、别的机器拿不到**（架构审议里记的错配③：权威与工具位置错配）。用户定的分层是「**通用设施放 `infra/pool`**（跨项目复用）、**权威副本进项目仓并过门禁**」（`infra` 那个仓**没有门禁**）。**做法（只做「搬进 git」这一件事，不改行为）**：① 把 `gates/diag/tf_batch.py` **整份搬**成 **`tools/pool/task.py`**（模块 `pool.task`），只允许动三处 —— 模块头那段「本版在 scratch 里原型验证」改成「**已进 git（卡 119）—— 权威副本就是本文件**」· import 风格与本仓 `tools/pool/*` 一致 · 新增一个 `_toml_str()`（把文本写成 TOML 基本字符串，含引号/反斜杠也写不坏，替掉原先裸用 `json.dumps` 的几处）；★ **状态目录常量保持 `gates/diag/batch/` 不动**（免得迁移旧任务）。② 新增 CLI 壳 **`tools/wb_task.py`**（与 `wb_plan.py` / `wb_status.py` 同款）：`register / claim / deposit / waive / extend / expire / advance / landed / status / list / pool` 原样转发，`--selftest` 转发到 `pool.task.selftest`。③ 新增 **`tests/test_pool_task.py`**：把原 `--selftest` 的 **33 条钉子逐条搬成 pytest**（`parametrize` 成 33 个看得见名字的用例，少一条就红），另加 **2 条新钉子** —— `test_shell_status_matches_body`（真起子进程跑壳，与进程内本体输出**逐字**比）与 `test_toml_str_survives_quotes_and_backslashes`（含 `「` 与反斜杠的文本经它转义后 `tomllib` 还能原样解回；反证：不转义直接塞进 TOML 会 `TOMLDecodeError`）。**验收（工人自报，主控逐条核）**：① `pytest tests/test_pool_task.py -q --no-cov` = **35 passed**；② ★ **两段 `--selftest` 逐字对照**：主树那份**未被改动**的原实现 vs 新壳，把随机临时目录名归一化后 **`difflib` 为空**（`old exit 0 / new exit 0`，各 105 行；唯一的字节差异是 `Temp\\tmpXXXX` 这种随机名）；③ 工人另加了一条**额外等价性证明**：把新旧两个模块都 `importlib` 载进来跑**同一套含 `」` / 反斜杠 / 中文**的场景，逐字节比对全部产物（归一化时间戳与临时目录名后一致）；④ 卡树内 `git status` 只有那 3 个新文件 + 卡规格，**0 个被跟踪改动**（没动主树、没提交）。**★ 老实说（边界与偏差）**：① **`ruff` 头一次是红的** —— 把 scratch 文件搬进 `tools/` 之后 `ruff check tools tests` 报 **17 个 `E501`**（scratch 从来没被 lint 过；E501 按**显示宽度**算，中文一字 = 2 列，而这些行多是中文整句）。拆行必然要动**字符串字面量**，风险不该担在「搬家」这张卡里 ⇒ 主控加了**一条文件级显式豁免**（`tools/pool/task.py` 顶部 `# ruff: noqa: E501` + **四行理由**），**拆行的纯美化另开一张卡**。★ 这是**显式豁免**、不是偷偷绕过：豁免就在文件第 1 行、理由紧随其后。② **转发壳进不了提交** —— `gates/diag/tf_batch.py`（转发壳）在卡树里是 **gitignore** 的 ⇒ 它不在这一笔里；主控会在**主树**把那份 scratch 原型换成转发壳（那是 scratch，本来就不进 git）。③ 壳的 `--help` 里 `prog` 名仍是 `tf_batch`（工人**没改**，属「行为一字未变」的一部分）—— 要在意的话另开小改。④ `infra/pool/README.md` 里那行「栅栏在 `tools/pool/task.py`、索引在 `infra/pool/projects.toml`」由**主控**在 infra 仓加（工人不许动 infra）。**★ 本笔另含补账**：`docs/workbacklog.toml` —— 卡 118（`T-G216`）标 `done` 并登记卡 119，卡规格随本笔进 git（T-G213 起的规矩：队列要自洽）。"
+

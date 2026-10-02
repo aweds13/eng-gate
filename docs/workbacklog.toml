@@ -250,4 +250,19 @@ files = [
 ]
 depends = []
 risk = "low"
+status = "done"
+
+[[cards]]
+id = "119"
+task = "T-G217"
+title = "把任务栅栏搬进 git（tools/pool/task.py + tools/wb_task.py + 33 条钉子搬成 pytest）"
+tree = ".wt/taskgit"
+spec = "复盘/卡/卡119-栅栏搬进git.md"
+files = [
+  "tools/pool/task.py",
+  "tools/wb_task.py",
+  "tests/test_pool_task.py"
+]
+depends = []
+risk = "low"
 status = "pending"
