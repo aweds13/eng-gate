@@ -1,0 +1,16 @@
+[entries."T-G218"]
+id = "T-G218"
+title = "把任务栅栏接到外包面：MCP 的只读 task_list/task_status/task_pool + 写 task_register/task_claim"
+group = "OPS"
+status = "done"
+evidence = [
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp.py",
+  "file:tests/test_pool_mcp_write.py",
+  "file:tests/test_pool_registry.py",
+  "file:tests/test_pool_mcp_task.py",
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡121-MCP任务面.md",
+]
+gaps = "**来路**：用户的硬要求 —— 『然后呢，我在**外包程序的某个地方**给一个板块的数个复数个任务他们。**注册一个任务**，然后任务需要这些板块下面的**多张卡都完成了**，并且**发送了那个成功申请**，然后**集齐所有的成送申请**再写』。栅栏本体已经进 git（卡 119：`tools/pool/task.py` + 壳 `tools/wb_task.py`），但**外包面（MCP）里一个任务工具都没有** —— 别的窗口 / 别的 AI 只能敲命令行，等于「**注册任务**」这件事还没接到外包程序上。**做法（全部复用 `pool.task`：进程内调用、捕获 stdout，★ 绝不 shell 出去 —— 卡 106 的规矩）**：① **只读三个**（**不要 env、永远列出**、零写入）：`task_list`（所有任务一行：任务号 / 状态 / 成送申请进度 / 一句话 why）· `task_status`（一个任务的详情：每张卡的**层**与**域**、交没交、history 尾部）· `task_pool`（还没定卡的待办登记，按层）；② **写两个**（★ 只在服务端 `POOL_MCP_WRITE=1` 时**列出来** —— 「存在性即授权」，卡 111 的规矩；每次调用还要 `arguments.confirm` **等于任务号**）：`task_register`（给整段预声明 TOML 文本或路径，`confirm` 必须等于 TOML 里的 `id`）与 `task_claim`（`task`/`member`/`claim`(success|failed)/`evidence`/`files`/`why`，`confirm` 必须等于 `task`）；③ 工具清单 **只读 6→9、写 2→4**（`instructions` 与 `--help` 同步）。**验收（工人自报，主控逐条核）**：① **15 条新钉子**（`tests/test_pool_mcp_task.py`）：只读三个带机器可读块且**零写入**（任务目录文件集不变 + 工作区未跟踪文件集不变）· 授权（**不设 env ⇒ 当「没有这个工具」**）· `confirm` 两道 · **域外拒并点名** · 未知任务说清（不崩不带假数据）· 真 stdio 端到端；② ★ **真 stdio 端到端原样报文**（子进程起真 `tools/pool_mcp.py`）：三个只读工具的回话都带 `--- tf-json ---` 机器块；**四段反例逐条原样** —— `confirm` 不符（回 `rejected:true` + `confirm`/`expected`）· 没 env（回「没有这个工具：'task_register'；有：…」并列出 9 个只读）· **域外**（回话点名「卡 卡B（审美层）碰了**自己域外**的文件：docs/别的.md」+「这张卡的域是：ui/*」）· 任务不存在（「我不假装有」）；③ ★ **两段 `tools/list` 原样对照**：**不设** env = 9 个（六个老只读 + 三个新只读，**没有**那两个写工具）· 设 `POOL_MCP_WRITE=1` = **13 个**（9 只读 + 4 写：`pool_dispatch`/`pool_cancel`/`task_register`/`task_claim`）；只读那些的 `annotations.readOnlyHint` 全 `true`。**★ 老实说（边界与运维口径）**：① **正在跑的那个 MCP 客户端里还是旧代码** —— DSH 起的 MCP 子进程在**启动时**就把代码载进去了，本笔落地后**不会**自动出现新工具，要**新开一个会话/重启 DSH** 才会看到 13 个工具（今晚已踩过一次同类：改 `cordis.patch.yml` 不会重挂）；② 本卡**没有**改 `tools/pool/task.py` 的行为（只调用），栅栏的 33 条钉子判据原样；③ **记忆层（project 字段 / 树前缀守卫）按用户要求押后** —— 所以现在这些任务工具**还不校验「这棵树属于哪个项目」**（卡 120 已写好规格，等排期）；④ `task_register` 认的是**主控写好的预声明**，不是「随手口述一个任务」 —— 这是有意的（预声明要能被复核）。**★ 本笔另含补账**：`docs/workbacklog.toml` —— 卡 119（`T-G217`）标 `done` 并登记卡 121，卡规格随本笔进 git（队列自洽）。"
+

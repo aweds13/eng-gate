@@ -236,7 +236,7 @@ files = [
 ]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "118"
@@ -264,5 +264,19 @@ files = [
   "tests/test_pool_task.py"
 ]
 depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "121"
+task = "T-G218"
+title = "把任务栅栏接到外包面：MCP 的只读 task_list/task_status/task_pool + 写 task_register/task_claim"
+tree = ".wt/mcptask"
+spec = "复盘/卡/卡121-MCP任务面.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_task.py"
+]
+depends = ["117"]
 risk = "low"
 status = "pending"

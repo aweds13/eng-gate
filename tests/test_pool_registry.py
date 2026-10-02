@@ -122,8 +122,11 @@ def test_relative_git_common_dir_resolves_against_git_cwd(
 
 
 #: 号池 MCP 的八个工具名（写工具要服务端 `POOL_MCP_WRITE=1` 才列）。
-POOL_TOOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_status",
-                   "pool_models", "pool_dispatch", "pool_cancel"]
+POOL_TOOL_NAMES = [
+    "pool_plan", "job_list", "job_status", "job_result", "lock_status", "pool_models",
+    "task_list", "task_status", "task_pool",
+    "pool_dispatch", "pool_cancel", "task_register", "task_claim",
+]
 
 
 def _rpc(proc: subprocess.Popen[str], message: dict) -> dict:
@@ -140,7 +143,7 @@ def test_server_from_foreign_cwd_still_locates_main_tree(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """★ 端到端（卡 114）：真起 `tools/pool_mcp.py`，**子进程 cwd 在仓库外**。
 
-    - `tools/list` ⇒ 8 个工具（顺带钉住"注册环境里 `POOL_MCP_WRITE=1`"）；
+    - `tools/list` ⇒ 13 个工具（9 只读 + 4 写）（顺带钉住"注册环境里 `POOL_MCP_WRITE=1`"）；
     - `tools/call pool_cancel {"card":"999","confirm":"999"}` ⇒ 走"本机登记里没有活租约"的
       正常路径；改之前这里是「算不出主工作树」。
 

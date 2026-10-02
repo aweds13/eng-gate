@@ -76,6 +76,30 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 ★ 干跑与登记都经 `pool.registry.list_reservations` + `pool.guards`（同一批纯函数）—— 派活的
 "能不能占"与 CLI `wb_registry.py check` 是**同一处判据**，不另写一份（本仓最忌两份真源）。
 
+## ★★ 任务面（卡 121 · T-G218）：只读三个 + 写两个
+
+任务栅栏（注册一个跨层的任务 → 每张卡交成送申请 → 集齐才收口）的本体是 `tools/pool/task.py`
+（模块 `pool.task`，卡 119 搬进 git）。本段把**它**接到外包面，**复用 `pool.task` 的函数**、
+**绝不 shell 出去**（卡 106 的规矩：CLI 与 MCP 共用同一批函数）。
+
+| 工具 | 干什么 |
+|---|---|
+| `task_list` | 所有任务一行（任务号 / 状态 / 成送申请进度 / 一句话 why） |
+| `task_status(task)` | 一个任务的详情（每张卡的**层**与**域**、交没交、history 尾部） |
+| `task_pool` | 待办登记表（还没定卡的活，按层） |
+
+三个只读工具全部 **import `pool.task`**（`batch_dir` / `read_json` / `_ok` / `_missing` /
+`_load_pool`），**不需要任何 env、永远列出**，且**一个字节都不许写**（卡 105 的机器判据要能过）。
+
+**写两个**（★ 只在服务端 `POOL_MCP_WRITE=1` 时**列出来** —— "存在性即授权"，卡 111 的规矩）：
+
+- **`task_register(manifest_text? | manifest_path?, confirm)`** —— 给**整段预声明 TOML** 或路径，
+  `confirm` = TOML 里的 `id`；走 `pool.task.cmd_register`（`Namespace` + 捕获 stdout、进程内）。
+  文本先落到批目录里一个临时源文件、注册完即删，**不留半截**。
+- **`task_claim(task, member, claim, evidence, files, why, confirm)`** —— `confirm` = `task`；
+  走 `pool.task.cmd_claim`。★★ **逐卡域守卫照走**：碰了域外文件 ⇒ `RefuseError`
+  **逐条点名**、回话 `isError=true`，**绝不静默**（域守卫在 MCP 这条路上也不能绕）。
+
 ## 诚实边界（如实写）
 
 - `pool_models` 读的是**快照** `models.live.json`（带 `at` 时间戳），**不是现场拉取**：
@@ -94,7 +118,10 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 
 from __future__ import annotations
 
+import argparse
+import contextlib
 import datetime
+import io
 import json
 import locale
 import os
@@ -105,8 +132,9 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import tomllib
 import wb_dispatch  # noqa: PLC0415 —— 模型白名单 / 默认模型的**唯一**真源（卡 111 §2 ⑥）
-from pool import guards, registry
+from pool import guards, registry, task
 from pool.jobs import (
     HEARTBEAT_SECONDS,
     REPORT_MAX_CHARS,
@@ -279,12 +307,53 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
 ]
 
+#: 任务面三个**只读**工具（卡 121 §1）—— **不要 env、永远列出**、一个字节都不写。
+TASK_TOOL_SPECS: list[dict[str, Any]] = [
+    {
+        "name": "task_list",
+        "description": ("任务栅栏现状：所有任务一行（任务号 / 状态 / 成送申请进度 / 一句话 why）。"
+                        "只读，不要 env。"),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "task_status",
+        "description": ("一个任务的详情：每张卡的层与域、交没交、history 尾部。"
+                        "参数 task。只读，不要 env。"),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "任务号，例如 T-1"},
+            },
+            "required": ["task"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "task_pool",
+        "description": "待办登记表（还没定卡的活，按层）。只读，不要 env。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+]
+
 
 def tool_list() -> list[dict[str, Any]]:
-    """工具清单：六个只读工具；服务端有 `POOL_MCP_WRITE=1` 时再补两个写工具（"存在性即授权"）。"""
-    specs = list(TOOL_SPECS)
+    """九个只读工具（六个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补四个写工具。"""
+    specs = [*TOOL_SPECS, *TASK_TOOL_SPECS]
     if write_enabled():
-        specs += WRITE_TOOL_SPECS
+        specs += [*WRITE_TOOL_SPECS, *TASK_WRITE_TOOL_SPECS]
     return specs
 
 
@@ -334,8 +403,60 @@ WRITE_TOOL_SPECS: list[dict[str, Any]] = [
     },
 ]
 
-#: 两个写工具的名字 —— 授权门 / `confirm` 校验用。
+#: 两个号池写工具的名字 —— 授权门 / `confirm` 校验用。
 WRITE_NAMES = frozenset(spec["name"] for spec in WRITE_TOOL_SPECS)
+
+#: 任务面两个**写**工具（卡 121 §2）—— 同样只在 `POOL_MCP_WRITE=1` 时列出。
+#: ★ `confirm` 的判据与号池写工具**不同**：register 要等于 TOML 里的 `id`、claim 要等于 `task`，
+#:   所以**不走** `call_tool` 里那条"confirm=卡号"的通用检查，各自在 handler 里判（见下）。
+TASK_WRITE_TOOL_SPECS: list[dict[str, Any]] = [
+    {
+        "name": "task_register",
+        "description": (
+            "★ 注册一个任务（预声明它需要哪些卡 / 每张卡属于哪层 / 各自域）。给 manifest_text"
+            "（整段 TOML）或 manifest_path；只在服务端 POOL_MCP_WRITE=1 时可见；arguments.confirm"
+            " 必须等于 TOML 里的 id。"),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "manifest_text": {"type": "string", "description": "整段预声明 TOML 文本"},
+                "manifest_path": {"type": "string",
+                                  "description": "预声明 TOML 的路径（相对仓库根或绝对）"},
+                "confirm": {"type": "string", "description": "★ 防手滑：必须等于 TOML 里的 id"},
+            },
+            "required": ["confirm"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
+    },
+    {
+        "name": "task_claim",
+        "description": (
+            "★ 一张卡交成送申请（success 必带证据；failed ⇒ 挡住收口）。只在服务端 "
+            "POOL_MCP_WRITE=1 时可见；arguments.confirm 必须等于 task；碰了域外文件会被拒并点名。"),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "任务号，例如 T-1"},
+                "member": {"type": "string", "description": "卡号，例如 卡115"},
+                "claim": {"type": "string", "enum": ["success", "failed"],
+                          "description": "success（成送申请）/ failed（不通过 ⇒ 挡住收口）"},
+                "evidence": {"type": "string",
+                             "description": "★ success 必填：测试读数 / 门禁结论 / 原样输出"},
+                "files": {"type": "array", "items": {"type": "string"},
+                          "description": "碰过的文件（**要过这张卡自己的域检查**）"},
+                "why": {"type": "string", "description": "这张卡干了什么（会进文书骨架）"},
+                "confirm": {"type": "string", "description": "★ 防手滑：必须等于 task"},
+            },
+            "required": ["task", "member", "confirm"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True},
+    },
+]
+
+#: 任务面两个写工具的名字 —— 授权门用（`confirm` 判据各自在 handler 里）。
+TASK_WRITE_NAMES = frozenset(spec["name"] for spec in TASK_WRITE_TOOL_SPECS)
 
 
 def write_enabled() -> bool:
@@ -635,6 +756,156 @@ def tool_pool_models(arguments: dict[str, Any], root: Path = ROOT
     return _result("\n".join(lines), info, is_error=False)
 
 
+# ================================================================ 任务面（卡 121）：只读三个
+#
+# ★ 全部 **import `pool.task`**：任务状态住在**主工作树**的 `gates/diag/batch/`（`TF_BATCH_DIR`
+#   可覆盖），不是本树 —— 与 `pool.task` 一致，不另算一份根。**一个字节都不写**。
+
+
+def _task_batch_dir() -> Path:
+    """任务目录（可能还不存在）—— 转发 `pool.task.batch_dir()`（`TF_BATCH_DIR` 覆盖）。"""
+    return task.batch_dir()
+
+
+def _load_tasks() -> list[dict[str, Any]]:
+    """把批目录里的任务状态都读进来（跳过 `pool.json` / 结构不对的）。**只读**。"""
+    root = _task_batch_dir()
+    if not root.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    for path in sorted(root.glob("*.json")):
+        if path.name == "pool.json":
+            continue
+        try:
+            st = task.read_json(path)
+        except task.BatchError:
+            continue
+        if isinstance(st.get("declared"), list):
+            out.append(st)
+    return out
+
+
+def tool_task_list(arguments: dict[str, Any], root: Path = ROOT
+                   ) -> tuple[str, dict[str, Any], bool]:
+    """所有任务一行：任务号 / 状态 / 成送申请进度 / 一句话 why（**只读**）。"""
+    try:
+        root_dir = _task_batch_dir()
+        states = _load_tasks()
+    except task.BatchError as exc:
+        return _result(f"task_list：读不了任务目录：{exc}", {"count": 0, "tasks": []},
+                       is_error=True)
+    head = f"任务栅栏（task_list）—— 读 {root_dir.as_posix()}"
+    if not states:
+        return _result(head + "\n（一个任务都没有）",
+                       {"batch_dir": root_dir.as_posix(), "count": 0, "tasks": []},
+                       is_error=False)
+    lines = [head + f"（共 {len(states)} 个任务）"]
+    rows: list[dict[str, Any]] = []
+    for st in states:
+        ok = task._ok(st)
+        waived = list(st.get("waived") or [])
+        missing = task._missing(st)
+        rows.append({"id": st.get("id"), "state": st.get("state"), "need": st.get("need"),
+                     "success": len(ok), "waived": waived, "missing": missing,
+                     "why": st.get("why")})
+        extra = f"（豁免 {len(waived)}）" if waived else ""
+        lines.append(f"  · {st.get('id')}  [{st.get('state')}]  成送申请 {len(ok)}/{st.get('need')}"
+                     f"{extra}  还缺：{missing or '（齐了）'}  —— {st.get('why')}")
+    data = {"batch_dir": root_dir.as_posix(), "count": len(states), "tasks": rows}
+    return _result("\n".join(lines), data, is_error=False)
+
+
+def tool_task_status(arguments: dict[str, Any], root: Path = ROOT
+                     ) -> tuple[str, dict[str, Any], bool]:
+    """一个任务的详情：每张卡的**层**与**域**、交没交、history 尾部（**只读**）。"""
+    task_id = str(arguments.get("task") or "").strip()
+    if not task_id:
+        return _result("task_status：得给我一个任务号（task）。我是照 `task` 找 "
+                       "`<批目录>/<任务号>.json` 的。", {"task": None, "found": False},
+                       is_error=True)
+    try:
+        root_dir = _task_batch_dir()
+        sp = task.state_path(task_id)
+    except task.BatchError as exc:
+        return _result(f"task_status：算不出任务目录：{exc}", {"task": task_id, "found": False},
+                       is_error=True)
+    if not sp.exists():
+        return _result(
+            f"没有：{root_dir.as_posix()} 里没有任务 {task_id} 的状态文件（{sp.name}）"
+            f"—— 还没注册，或不在这个树里（我不假装有）。",
+            {"task": task_id, "found": False, "batch_dir": root_dir.as_posix()},
+            is_error=True)
+    try:
+        st = task.read_json(sp)
+        man = task.load_manifest(task_id)
+    except task.BatchError as exc:
+        return _result(f"task_status：读不了任务 {task_id}：{exc}",
+                       {"task": task_id, "found": True}, is_error=True)
+    claims = st.get("claims") or {}
+    waived = list(st.get("waived") or [])
+    lines = [f"任务 {task_id}：{st.get('why')}",
+             f"  状态 **{st.get('state')}** · 层 {'、'.join(st.get('layers') or [])}"
+             f" · 自动 {st.get('auto')} · 期限 {st.get('deadline') or '（无）'}",
+             f"  成送申请 {len(task._ok(st))}/{st.get('need')} · 豁免 {len(waived)}"
+             f" · 还缺 {task._missing(st) or '（齐了）'}"]
+    members: list[dict[str, Any]] = []
+    for mem in man["member"]:
+        mid = mem["id"]
+        kind = claims.get(mid)
+        if mid in waived:
+            tag = "★豁免"
+        elif kind == "success":
+            tag = "✓成功申请"
+        elif kind == "failed":
+            tag = "✗不通过"
+        else:
+            tag = "…还缺"
+        members.append({"id": mid, "layer": mem["layer"], "what": mem.get("what"),
+                        "paths": list(mem.get("paths") or []), "claim": kind,
+                        "waived": mid in waived})
+        lines.append(f"  [{tag:<8}] {mid} · 层 {mem['layer']} · 域 "
+                     f"{'、'.join(mem.get('paths') or [])}")
+    history = list(st.get("history") or [])
+    lines.append("  --- history（尾部）---")
+    for row in history[-8:]:
+        lines.append(f"  {row.get('at')} {row.get('from')}→{row.get('to')} {row.get('note')}")
+    data = {"task": task_id, "found": True, "state": st.get("state"), "why": st.get("why"),
+            "layers": st.get("layers"), "need": st.get("need"), "success": len(task._ok(st)),
+            "waived": waived, "missing": task._missing(st), "claims": claims,
+            "members": members, "history": history, "history_total": len(history),
+            "batch_dir": root_dir.as_posix()}
+    return _result("\n".join(lines), data, is_error=False)
+
+
+def tool_task_pool(arguments: dict[str, Any], root: Path = ROOT
+                   ) -> tuple[str, dict[str, Any], bool]:
+    """待办登记表：还没定卡的活，**按层**（只读）。"""
+    try:
+        root_dir = _task_batch_dir()
+        rows = task._load_pool()
+    except task.BatchError as exc:
+        return _result(f"task_pool：读不了待办表：{exc}",
+                       {"found": False, "count": 0, "pool": []}, is_error=True)
+    if not rows:
+        return _result(f"待办登记（task_pool）—— {root_dir.as_posix()} 里没有待办"
+                       f"（pool.json 不存在或为空）。",
+                       {"batch_dir": root_dir.as_posix(), "found": True, "count": 0,
+                        "layers": {}, "pool": []}, is_error=False)
+    by_layer: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        by_layer.setdefault(str(row.get("layer") or "（没写层）"), []).append(row)
+    lines = [f"待办登记（task_pool）—— 读 {root_dir.as_posix()}（共 {len(rows)} 条，按层）"]
+    for layer, items in by_layer.items():
+        lines.append(f"  层 {layer}：")
+        for row in items:
+            domain = "、".join(row.get("files") or []) or "——"
+            lines.append(f"    · {row.get('id')}  {row.get('what')}  域 {domain}")
+    data = {"batch_dir": root_dir.as_posix(), "found": True, "count": len(rows),
+            "layers": {lay: [r.get("id") for r in items] for lay, items in by_layer.items()},
+            "pool": rows}
+    return _result("\n".join(lines), data, is_error=False)
+
+
 # ================================================================ 写面：pool_dispatch / pool_cancel
 
 
@@ -888,6 +1159,155 @@ def tool_pool_cancel(arguments: dict[str, Any], root: Path = ROOT
     return _result(text, data, is_error=False)
 
 
+# ================================================================ 任务面（卡 121）：写两个
+#
+# ★ 复用 `pool.task.cmd_register` / `pool.task.cmd_claim`（**进程内调用，不 shell 出去**）。
+#   两个函数都往 stdout `print(...)` —— 那在 MCP 里是**协议流**，所以必须 `redirect_stdout`
+#   把它们的输出收成人话，绝不能让它漏进协议报文（漏了客户端就解析崩）。
+
+
+def _capture(fn: Any) -> tuple[int, str]:
+    """进程内跑一个 `pool.task.cmd_*`，把它的 `print` 收成字符串（别漏进协议流）。"""
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = fn()
+    return int(rc), buf.getvalue()
+
+
+def _confirm_reject(tool: str, got: str, want: str, what: str) -> tuple[str, dict[str, Any], bool]:
+    """`confirm` 与应值不一致 ⇒ **拒**，并把"为什么"说清（防手滑）。`what` 自带引号。"""
+    text = (f"{tool}：**拒绝** —— arguments.confirm（{got or '空'}）必须等于{what}（{want}）。"
+            f"这是防手滑：真要害的是一个任务，就把{what}再写一遍。")
+    return _result(text, {"rejected": True, "confirm": got, "expected": want}, is_error=True)
+
+
+def tool_task_register(arguments: dict[str, Any], root: Path = ROOT
+                       ) -> tuple[str, dict[str, Any], bool]:
+    """注册一个任务：`manifest_text`（整段 TOML）或 `manifest_path`；`confirm` = TOML 里的 id。"""
+    text_arg = arguments.get("manifest_text")
+    mpath = str(arguments.get("manifest_path") or "").strip()
+    confirm = str(arguments.get("confirm") or "").strip()
+    tmp_src: Path | None = None
+
+    if text_arg is not None and str(text_arg).strip():
+        raw = str(text_arg)
+        try:
+            man = tomllib.loads(raw)
+        except tomllib.TOMLDecodeError as exc:
+            return _result(f"task_register：预声明不是合法 TOML：{exc}",
+                           {"registered": False, "error": "toml"}, is_error=True)
+        task_id = str(man.get("id") or "").strip()
+        if not task_id:
+            return _result("task_register：预声明里没写 `id`（任务号）。",
+                           {"registered": False}, is_error=True)
+        if confirm != task_id:
+            return _confirm_reject("task_register", confirm, task_id, "「TOML 里的 id」")
+        try:
+            batch = _task_batch_dir()
+            batch.mkdir(parents=True, exist_ok=True)
+            tmp_src = batch / f".{task_id}.mcp-src.toml"
+            tmp_src.write_text(raw, encoding="utf-8", newline="\n")
+        except (task.BatchError, OSError) as exc:
+            return _result(f"task_register：写临时预声明失败：{exc}",
+                           {"registered": False}, is_error=True)
+        src = tmp_src
+    elif mpath:
+        src = Path(mpath)
+        if not src.is_absolute():
+            src = root / src
+        if not src.exists():
+            return _result(f"task_register：找不到预声明文件：{src.as_posix()}",
+                           {"registered": False}, is_error=True)
+        try:
+            with src.open("rb") as fh:
+                man = tomllib.load(fh)
+        except (tomllib.TOMLDecodeError, OSError) as exc:
+            return _result(f"task_register：读不了预声明：{exc}",
+                           {"registered": False}, is_error=True)
+        task_id = str(man.get("id") or "").strip()
+        if not task_id:
+            return _result("task_register：预声明里没写 `id`（任务号）。",
+                           {"registered": False}, is_error=True)
+        if confirm != task_id:
+            return _confirm_reject("task_register", confirm, task_id, "「TOML 里的 id」")
+    else:
+        return _result("task_register：得给 `manifest_text`（整段 TOML）或 `manifest_path`。",
+                       {"registered": False}, is_error=True)
+
+    try:
+        _rc, out = _capture(
+            lambda: task.cmd_register(argparse.Namespace(manifest=str(src), force=False)))
+    except task.RefuseError as exc:
+        return _result("task_register：**拒收**：\n" + "\n".join(f"  · {r}" for r in exc.reasons),
+                       {"registered": False, "task": task_id, "reasons": exc.reasons},
+                       is_error=True)
+    except task.BatchError as exc:
+        return _result(f"task_register：注册失败（没落成）：{exc}",
+                       {"registered": False, "task": task_id}, is_error=True)
+    finally:
+        if tmp_src is not None:
+            with contextlib.suppress(OSError):
+                tmp_src.unlink()
+
+    st = task.read_json(task.state_path(task_id))
+    manifest = task.manifest_path(task_id)
+    data = {"registered": True, "task": task_id, "state": st.get("state"), "need": st.get("need"),
+            "layers": st.get("layers"), "declared": st.get("declared"),
+            "manifest": manifest.as_posix(), "cli": out.strip()}
+    text = (f"task_register：任务 {task_id} 注册好了（复用 `pool.task.cmd_register`，进程内）。\n"
+            f"  {st.get('need')} 张卡 · 层 {'、'.join(st.get('layers') or [])}\n"
+            f"  ★ 放行判据：名单上每一张卡都交了**成功申请**（或缺席者被显式豁免）—— 不看数量。\n"
+            f"  预声明：{manifest.as_posix()}")
+    return _result(text, data, is_error=False)
+
+
+def tool_task_claim(arguments: dict[str, Any], root: Path = ROOT
+                    ) -> tuple[str, dict[str, Any], bool]:
+    """一张卡交成送申请：`confirm` = task；★ 逐卡域守卫照走，越界**逐条点名**。"""
+    task_id = str(arguments.get("task") or "").strip()
+    member = str(arguments.get("member") or "").strip()
+    claim = str(arguments.get("claim") or "success").strip()
+    confirm = str(arguments.get("confirm") or "").strip()
+    evidence = str(arguments.get("evidence") or "")
+    why = str(arguments.get("why") or "")
+    files = arguments.get("files")
+    if isinstance(files, list):
+        files_arg = ",".join(str(f).strip() for f in files if str(f).strip())
+    else:
+        files_arg = str(files or "")
+    if not task_id:
+        return _result("task_claim：得给我一个任务号（task）。", {"claimed": False}, is_error=True)
+    if not member:
+        return _result("task_claim：得给我一个卡号（member）。",
+                       {"task": task_id, "claimed": False}, is_error=True)
+    if claim not in ("success", "failed"):
+        return _result(f"task_claim：claim 只能是 success / failed（收到 {claim!r}）。",
+                       {"task": task_id, "member": member, "claimed": False}, is_error=True)
+    if confirm != task_id:
+        return _confirm_reject("task_claim", confirm, task_id, "「任务号（task）」")
+    try:
+        rc, out = _capture(lambda: task.cmd_claim(argparse.Namespace(
+            task=task_id, member=member, claim=claim, evidence=evidence,
+            files=files_arg, why=why, log="")))
+    except task.RefuseError as exc:
+        return _result(
+            f"task_claim：卡 {member} 的申请被**拒收**（点名，绝不静默）：\n"
+            + "\n".join(f"  · {r}" for r in exc.reasons),
+            {"task": task_id, "member": member, "claimed": False, "reasons": exc.reasons},
+            is_error=True)
+    except task.BatchError as exc:
+        return _result(f"task_claim：{exc}", {"task": task_id, "member": member, "claimed": False},
+                       is_error=True)
+    st = task.read_json(task.state_path(task_id))
+    data = {"task": task_id, "member": member, "claim": claim, "claimed": True,
+            "state": st.get("state"), "success": len(task._ok(st)), "need": st.get("need"),
+            "missing": task._missing(st), "exit_code": rc, "cli": out.strip()}
+    text = (f"task_claim：卡 {member} 的申请收了（复用 `pool.task.cmd_claim`，进程内）。\n"
+            f"  任务 {task_id} 现在：**{st.get('state')}** · 成功申请 "
+            f"{len(task._ok(st))}/{st.get('need')} · 还缺 {task._missing(st) or '（齐了）'}")
+    return _result(text, data, is_error=False)
+
+
 # ================================================================ tools/call 调度
 
 
@@ -900,6 +1320,11 @@ _HANDLERS: dict[str, Any] = {
     "pool_models": tool_pool_models,
     "pool_dispatch": tool_pool_dispatch,
     "pool_cancel": tool_pool_cancel,
+    "task_list": tool_task_list,
+    "task_status": tool_task_status,
+    "task_pool": tool_task_pool,
+    "task_register": tool_task_register,
+    "task_claim": tool_task_claim,
 }
 
 
@@ -923,6 +1348,8 @@ def call_tool(name: str, arguments: dict[str, Any], *, root: Path = ROOT
                     f"pool_mcp：写调用被拒 —— arguments.confirm 必须等于卡号"
                     f"（card={card or '?'}）。这是防手滑：真要害的一张卡，就把卡号再写一遍。"}],
                     "isError": True}
+    if name in TASK_WRITE_NAMES and not write_enabled():
+        return None  # 没 env ⇒ 当"没有这个工具"（"存在性即授权"）；confirm 判据在 handler 里
     text, _data, is_error = handler(args, root)
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
@@ -938,14 +1365,19 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
         "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
         "instructions": (
             "外包号池：默认是**只读**面 —— pool_plan / job_list / job_status / job_result / "
-            "lock_status / pool_models，六个都只读（不写文件、不派活、不抢锁、不要 env）。"
-            "**写工具**（pool_dispatch 派活 / pool_cancel 取消）只有在**服务端**设了 "
-            "POOL_MCP_WRITE=1 时才列出来 —— 那是「存在性即授权」：没这个 env 就没有写工具。"
-            "而且每次写调用还要 arguments.confirm **等于卡号**（防手滑）。"
+            "lock_status / pool_models，加任务面的 task_list / task_status / task_pool，"
+            "九个都只读（不写文件、不派活、不抢锁、不要 env）。"
+            "**写工具**（pool_dispatch 派活 / pool_cancel 取消 / task_register 注册任务 / "
+            "task_claim 交成送申请）只有在**服务端**设了 POOL_MCP_WRITE=1 时才列出来 —— 那是"
+            "「存在性即授权」：没这个 env 就没有写工具。号池写工具每次调用还要 arguments.confirm "
+            "**等于卡号**；任务写工具里 task_register 的 confirm 等于 TOML 里的 id、"
+            "task_claim 的 confirm 等于 task（防手滑）。"
             "pool_dispatch 的顺序固定：先干跑守卫（被咬就不派活、逐条给原因）→ 先占树 → 起工人"
             "（--detach，立刻返回）→ 起不来就回滚租约；危险参数一律不透传。"
             "pool_cancel 只取消本机登记里那张卡的工人，**先核对 pid 身份**（映像必须是 node.exe / "
-            "python.exe），不对就拒绝动手。命令失败会带回**原样命令**；产物缺失会明说'没有'。"
+            "python.exe），不对就拒绝动手。"
+            "任务面复用 tools/pool/task.py 的函数（进程内，不 shell 出去）：task_claim 走**逐卡域"
+            "守卫**，碰了域外文件会**点名拒收**、绝不静默。命令失败会带回**原样命令**；产物缺失会明说'没有'。"
         ),
     }
 
@@ -996,9 +1428,9 @@ def _usage() -> str:
         "  python -X utf8 tools/pool_mcp.py --help\n"
         "\n"
         "只读工具：pool_plan / job_list / job_status(card) / job_result(card) / "
-        "lock_status / pool_models。\n"
-        "写工具（要服务端 env POOL_MCP_WRITE=1 才列出来；每次调用还要 confirm=卡号）："
-        "pool_dispatch / pool_cancel。\n"
+        "lock_status / pool_models / task_list / task_status(task) / task_pool。\n"
+        "写工具（要服务端 env POOL_MCP_WRITE=1 才列出来）：pool_dispatch / pool_cancel"
+        "（confirm=卡号）、task_register（confirm=TOML 里的 id）、task_claim（confirm=task）。\n"
         "客户端配置（示例）：command = python，args = [\"-X\", \"utf8\", "
         "\"tools/pool_mcp.py\"]。stdout 只走协议。\n"
     )

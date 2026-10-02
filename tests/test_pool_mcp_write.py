@@ -37,9 +37,11 @@ import pool_mcp  # noqa: E402 —— tools/ 已在 sys.path 上
 import wb_dispatch  # noqa: E402
 from pool import registry  # noqa: E402
 
-READ_TOOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_status",
-                   "pool_models"]
-WRITE_TOOL_NAMES = ["pool_dispatch", "pool_cancel"]
+READ_TOOL_NAMES = [
+    "pool_plan", "job_list", "job_status", "job_result", "lock_status", "pool_models",
+    "task_list", "task_status", "task_pool",
+]
+WRITE_TOOL_NAMES = ["pool_dispatch", "pool_cancel", "task_register", "task_claim"]
 
 BACKLOG = """\
 [base]
