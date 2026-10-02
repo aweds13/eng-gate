@@ -12,16 +12,28 @@ r"""任务栅栏接到外包面（MCP 的任务类工具）的钉子 —— 卡 
 | ⑤ 域守卫不许绕 | `task_claim` 带**域外文件** ⇒ **拒并点名**（★ 任务＝绕冲突域后门，这条最重要） |
 | ⑥ 未知任务说清 | `task_status` 传不存在的任务 ⇒ 明说"没有"，**不崩、不带假数据** |
 
+★ 卡 130（`task_claim` 改**子进程**跑，治 GLM-2.3 的放大器）另加四条：
+
+| 钉子 | 判什么 |
+|---|---|
+| ⑦ 真走子进程 | `task_claim` 起 `wb_task.py claim` 子进程，**不许**进程内调 `task.cmd_claim` |
+| ⑧ stdio 不被冻住 | 慢门禁（8 秒）的 claim 在跑时，只读工具**5 秒内**答（★ 本案命门；先红后绿） |
+| ⑨ 失败如实带出 | 子进程非零退出 ⇒ 回话里**既有退出码又有原文**（不许吞、不许假装成功） |
+| ⑩ 超时不当成功 | 子进程超时 ⇒ 回话写"没跑完"，**不许**当成成功 |
+
 ★ 一律把 `TF_BATCH_DIR` 指到临时目录 —— 一个字节都不写进真的 `gates/diag/batch/`。
 ★ 导入口径照既有测试：把 `tools/` 挂上 `sys.path` 再 `import pool_mcp` / `pool.task`。
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -48,7 +60,7 @@ SERVER_SNIPPET = "import sys; from pool_mcp import serve; raise SystemExit(serve
 MANIFEST = """\
 id = "T-1"
 why = "审美层 + 后端一次收口"
-gate_cmd = "exit 0"
+gate_cmd = "python -X utf8 tools/wb_task.py list"
 on_complete = ["gate", "draft"]
 
 [[member]]
@@ -363,3 +375,161 @@ def test_real_stdio_without_env_hides_task_writes(batch: Path) -> None:
     names = [t["name"] for t in replies[0]["result"]["tools"]]
     assert names == READ_TOOL_NAMES
     assert "task_register" not in names and "task_claim" not in names
+
+
+# ================================================================ 卡 130：claim 走子进程
+#
+# GLM-5.3 的 2.3「放大器」：`task_claim` 进程内跑 ⇒ 最后一名 claimant 走 MCP 时，
+# **MCP 服务进程**同步跑完整个门禁（stdio 全程冻结）。改法：claim 走**子进程**、
+# `serve` 再把它交给**后台线程**。四条钉子各钉一处，缺一条这段就没牙。
+
+
+def _claim_args(**over: Any) -> dict[str, Any]:
+    """一份能过写门/域守卫的 `task_claim` 参数（要挪就覆盖个别键）。"""
+    args: dict[str, Any] = {"task": "T-1", "member": "卡A", "claim": "success",
+                            "evidence": "pytest 3 passed", "files": ["tools/a/x.py"],
+                            "why": "自证", "confirm": "T-1"}
+    args.update(over)
+    return args
+
+
+def test_claim_runs_in_a_subprocess_not_inprocess(batch: Path, write_on: None,
+                                                  monkeypatch: pytest.MonkeyPatch) -> None:
+    """⑦ 真走子进程：`task_claim` 起 `wb_task.py claim …`，**不许**进程内调 `task.cmd_claim`。"""
+    _seed(batch)
+    seen: list[dict[str, Any]] = []
+
+    class _Done:
+        returncode = 0
+        stdout = "子进程说：收了\n"
+        stderr = ""
+
+    def fake_run(argv: list[str], **kwargs: Any) -> _Done:
+        seen.append({"argv": list(argv), **kwargs})
+        return _Done()
+
+    def boom(*_a: Any, **_k: Any) -> int:
+        raise AssertionError("task_claim 不许在进程内调 task.cmd_claim（必须走子进程）")
+
+    monkeypatch.setattr(pool_mcp.subprocess, "run", fake_run)
+    monkeypatch.setattr(task, "cmd_claim", boom)  # 进程内那条路一旦被走到就当场炸
+
+    _t, _data, is_error = pool_mcp.tool_task_claim(_claim_args())
+
+    assert is_error is False
+    assert len(seen) == 1, seen
+    call = seen[0]
+    argv = call["argv"]
+    assert argv[0] == sys.executable, argv
+    assert any(a.endswith("wb_task.py") for a in argv), argv
+    assert "claim" in argv and "T-1" in argv and "卡A" in argv, argv
+    assert call["encoding"] == "utf-8" and call["errors"] == "replace", call
+    assert call["timeout"] >= 1800, call
+    assert call["capture_output"] is True, call
+
+
+def test_claim_subprocess_nonzero_exit_is_surfaced(batch: Path, write_on: None,
+                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    """⑨ 子进程非零退出 ⇒ 回话里**既有退出码又有原文**（不许吞、不许假装成功）。"""
+    _seed(batch)
+
+    class _Done:
+        returncode = 2
+        stdout = "部分输出：域守卫拒收\n"
+        stderr = "错误原文：卡 卡A 碰了**自己域外**的文件\n"
+
+    monkeypatch.setattr(pool_mcp.subprocess, "run", lambda argv, **k: _Done())
+    text, data, is_error = pool_mcp.tool_task_claim(_claim_args())
+
+    assert is_error is True
+    assert "退出码 2" in text, text
+    assert "部分输出" in text and "错误原文" in text, text
+    assert data["claimed"] is False and data["exit_code"] == 2, data
+
+
+def test_claim_subprocess_timeout_is_not_success(batch: Path, write_on: None,
+                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    """⑩ 子进程超时 ⇒ 回话写"没跑完/超时"，**不许**当成成功。"""
+    _seed(batch)
+
+    def fake_run(argv: list[str], **kwargs: Any) -> Any:
+        raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs.get("timeout"))
+
+    monkeypatch.setattr(pool_mcp.subprocess, "run", fake_run)
+    text, data, is_error = pool_mcp.tool_task_claim(_claim_args())
+
+    assert is_error is True
+    assert "没跑完" in text and "超时" in text, text
+    assert data.get("timeout") is True and data.get("claimed") is False, data
+
+
+#: 慢门禁：仓库内慢门禁桩睡 8 秒（claim 是最后一名投递者 ⇒ 当场跑它）。
+SLOW_GATE_SECONDS = 8
+
+
+def _slow_manifest(seconds: int = SLOW_GATE_SECONDS) -> str:
+    """一个单成员任务，`gate_cmd` 睡 `seconds` 秒 —— 用来把"最后一名 claimant 跑门禁"演出来。
+
+    ★ 2026-10-02 主控改的接缝：`gate_cmd` 从卡 128（`T-G226`）起**白名单化**（只认
+      `python -X utf8 scripts/…` 或 `tools/…`，**不许** `python -c`）⇒ 原来的
+      `"{sys.executable}" -X utf8 -c "…sleep…"` 会被 `register` 拒。改用仓库内的
+      **慢门禁桩** `tools/_slow_gate_stub.py`（合法形态 + 真的会慢）。
+    """
+    gate = json.dumps(f"python -X utf8 tools/_slow_gate_stub.py {seconds}")
+    return ("id = \"T-SLOW\"\nwhy = \"慢门禁自证\"\n"
+            f"gate_cmd = {gate}\non_complete = [\"gate\", \"draft\"]\n\n"
+            "[[member]]\nid = \"卡A\"\nlayer = \"门禁层\"\nwhat = \"慢门禁\"\n"
+            "paths = [\"tools/a/*\"]\n")
+
+
+def test_stdio_not_frozen_while_claim_runs(batch: Path) -> None:
+    """⑧ ★ 本案命门：慢门禁的 `task_claim` 在跑时，只读工具必须 **5 秒内**答。
+
+    先红后绿：改前 claim **进程内**跑门禁 ⇒ 主循环被冻住，只读要等门禁跑完（≈8~10s）⇒ 红；
+    改后 claim 走**子进程 + 后台线程** ⇒ 主循环继续读，只读即刻答 ⇒ 绿。
+    """
+    _seed(batch, _slow_manifest())
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT / "tools")
+    env["TF_BATCH_DIR"] = str(batch)
+    env["POOL_MCP_WRITE"] = "1"
+    proc = subprocess.Popen([sys.executable, "-c", SERVER_SNIPPET],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            env=env, cwd=str(ROOT))
+    got: dict[int, float] = {}
+
+    def _read() -> None:
+        for raw in proc.stdout:  # type: ignore[union-attr]
+            if raw.strip():
+                got[json.loads(raw.decode("utf-8"))["id"]] = time.monotonic()
+
+    threading.Thread(target=_read, daemon=True).start()
+
+    def _send(msg: dict[str, Any]) -> None:
+        proc.stdin.write((json.dumps(msg, ensure_ascii=False) + "\n").encode("utf-8"))  # type: ignore[union-attr]
+        proc.stdin.flush()  # type: ignore[union-attr]
+
+    try:
+        _send(_req(1, "tools/call", {"name": "task_claim",
+                                     "arguments": {"task": "T-SLOW", "member": "卡A",
+                                                   "claim": "success", "evidence": "自证",
+                                                   "files": ["tools/a/x.py"],
+                                                   "confirm": "T-SLOW"}}))
+        time.sleep(1.0)
+        t_status = time.monotonic()
+        _send(_req(2, "tools/call", {"name": "task_status", "arguments": {"task": "T-SLOW"}}))
+
+        deadline = t_status + 12.0
+        while 2 not in got and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert 2 in got, f"只读工具没回话（收到的 id：{sorted(got)}）"
+        latency = got[2] - t_status
+        print(f"\n[钉子⑧] 慢门禁 running 时，只读 task_status 回话耗时 = {latency:.2f}s（阈值 5s）")
+        # 贴两次读数（先红后绿）：改前这里会是 ≈7~10s（红），改后 < 0.5s（绿）。
+        assert latency < 5.0, f"stdio 被 claim 冻住了：只读回话等了 {latency:.2f}s"
+    finally:
+        with contextlib.suppress(OSError):
+            proc.stdin.close()  # type: ignore[union-attr]
+        proc.wait(timeout=60)
+
+    assert 1 in got, f"claim 的回话没到（收到的 id：{sorted(got)}）"

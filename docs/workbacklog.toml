@@ -295,3 +295,94 @@ depends = []
 risk = "low"
 status = "done"
 
+[[cards]]
+id = "125"
+task = "T-G223"
+title = "把四条守卫与作业登记接进默认派活器 wb_dispatch（含 --already-reserved 与两处夹具）"
+tree = ".wt/dispguard"
+spec = "复盘/卡/卡125-默认派活器接守卫与登记.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+  "tools/pool_mcp.py",
+  "tests/test_mem_guard.py",
+  "tests/test_pool_mcp_write.py"
+]
+depends = []
+risk = "high"
+status = "done"
+
+[[cards]]
+id = "126"
+task = "T-G223"
+title = "sync_docs 的 changelog 合并改按日期插入（治坑 32 在自动汇总里重演）"
+tree = ".wt/docorder"
+spec = "复盘/卡/卡126-changelog按日期插入.md"
+files = [
+  "tools/sync_docs.py",
+  "tests/test_sync_docs.py"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "127"
+task = "T-G223"
+title = "队列 files 禁通配 + plan.find_spec 改边界精确匹配"
+tree = ".wt/plancard"
+spec = "复盘/卡/卡127-队列禁通配与找卡精确.md"
+files = [
+  "tools/pool/plan.py",
+  "tools/wb_plan.py",
+  "tests/test_wb_plan.py"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "128"
+task = "T-G226"
+title = "栅栏六处判据一次治干净（锁租约/门禁出锁/advance-expire-deadline/gate_cmd 白名单/PROTECTED_FILES/selftest 复原）"
+tree = ".wt/tasklock"
+spec = "复盘/卡/卡128-栅栏六处判据.md"
+files = [
+  "tools/pool/task.py",
+  "tests/test_pool_task.py"
+]
+depends = []
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "130"
+task = "T-G227"
+title = "MCP 的 task_claim 改子进程跑（别拿服务进程去跑门禁）"
+tree = ".wt/mcpclaim"
+spec = "复盘/卡/卡130-MCP收申请改子进程.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_task.py",
+  "tests/test_pool_mcp.py",
+  "tests/test_pool_mcp_write.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "131"
+task = "T-G228"
+title = "复核侧：用卡树的实际改动判越界（不再只信自报清单）"
+tree = ".wt/realdomain"
+spec = "复盘/卡/卡131-用实际改动判越界.md"
+files = [
+  "tools/wb_review.py",
+  "tools/pool/review.py",
+  "tests/test_wb_review.py"
+]
+depends = []
+risk = "high"
+status = "pending"
+

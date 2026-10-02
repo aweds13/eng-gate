@@ -53,6 +53,7 @@ import datetime
 import fnmatch
 import json
 import os
+import shlex
 import socket
 import subprocess
 import sys
@@ -61,11 +62,28 @@ from pathlib import Path
 
 import tomllib
 
+try:  # ★ 受保护共享文件（卡 128）：只在包上下文里可相对导入；直接跑脚本时退回绝对导入。
+    from .plan import PROTECTED_FILES
+except ImportError:  # pragma: no cover - 直接以脚本方式运行时才走这条
+    from plan import PROTECTED_FILES
+
 #: 任务相关文件都放这儿（相对主工作树根）。
 BATCH_REL = ("gates", "diag", "batch")
 
 #: 集齐后允许声明的自动化动作（**故意不含 commit**，见模块头）。
 ALLOWED_ACTIONS = ("gate", "draft")
+
+#: 任务锁的租约（秒）：锁多久没动算陈旧、可被接管（`TF_BATCH_LOCK_TTL` 可覆盖）。
+DEFAULT_LOCK_TTL = 3600.0
+
+#: `spin_lock` 拿不到锁时最多等多久（秒）（`TF_BATCH_LOCK_WAIT` 可覆盖 —— 自证要用小值）。
+DEFAULT_LOCK_WAIT = 10.0
+
+#: ★ `gate_cmd` 白名单：只认 `python -X utf8 <仓库内脚本>`，脚本必须在这两个目录下。
+GATE_CMD_SCRIPT_ROOTS = ("scripts/", "tools/")
+
+#: ★ `gate_cmd` 里一律不许出现的 shell 元字符（含换行 —— 换行能把一条命令拆成两条）。
+GATE_CMD_METACHARS = ";|&$`><\n\r"
 
 #: 状态机的合法态。
 STATES = (
@@ -161,9 +179,70 @@ def write_json_atomic(target: Path, payload: object) -> None:
     os.replace(tmp, target)
 
 
+def _lock_ttl() -> float:
+    """任务锁租约（秒）—— `TF_BATCH_LOCK_TTL` 覆盖，默认 3600；非法 / 非正 → 退默认。"""
+    raw = os.environ.get("TF_BATCH_LOCK_TTL", "").strip()
+    if not raw:
+        return DEFAULT_LOCK_TTL
+    try:
+        ttl = float(raw)
+    except ValueError:
+        return DEFAULT_LOCK_TTL
+    return ttl if ttl > 0 else DEFAULT_LOCK_TTL
+
+
+def _lock_wait() -> float:
+    """拿不到锁时最多等多久（秒）—— `TF_BATCH_LOCK_WAIT` 覆盖，默认 10；非法 / 非正 → 退默认。"""
+    raw = os.environ.get("TF_BATCH_LOCK_WAIT", "").strip()
+    if not raw:
+        return DEFAULT_LOCK_WAIT
+    try:
+        wait = float(raw)
+    except ValueError:
+        return DEFAULT_LOCK_WAIT
+    return wait if wait > 0 else DEFAULT_LOCK_WAIT
+
+
+def _lock_payload(lock: Path) -> dict:
+    """读锁文件里写的「谁拿的 / 什么时候拿的」（读不了或坏了就当空 —— 那种锁按 mtime 判陈旧）。"""
+    try:
+        data = json.loads(lock.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _lock_age(lock: Path, payload: dict) -> float:
+    """锁有多久没动了 —— ★ 优先用锁里写的 `at`（ISO），**退化到锁文件 mtime**。
+
+    照抄 `gates/diag/gate_lock.py` 的口径：**按时间判陈旧，绝不按 pid 判活**
+    （pid 会重用、跨机不可信；`acquire` 与真正的写往往不是同一个进程）。
+    """
+    raw = payload.get("at")
+    if raw:
+        try:
+            at = datetime.datetime.fromisoformat(str(raw))
+        except ValueError:
+            at = None
+        if at is not None:
+            now = datetime.datetime.now(at.tzinfo) if at.tzinfo is not None \
+                else datetime.datetime.now()
+            return max(0.0, (now - at).total_seconds())
+    try:
+        return max(0.0, time.time() - lock.stat().st_mtime)
+    except OSError:
+        return 0.0
+
+
 @contextlib.contextmanager
-def spin_lock(target: Path, timeout: float = 10.0):
-    """`O_CREAT|O_EXCL` 自旋锁。判据：拿不到只影响"白等"，不影响正确性。
+def spin_lock(target: Path, timeout: float | None = None):
+    """`O_CREAT|O_EXCL` 自旋锁 + **租约制陈旧接管**（照抄 `gates/diag/gate_lock.py`）。
+
+    - 锁文件里写清：谁拿的（owner / pid / task）+ 拿到的时间（ISO）；
+    - **按时间判陈旧**（锁里的 `at`，退化到 mtime），租约 `TF_BATCH_LOCK_TTL`（默认 3600s）；
+    - 陈旧 ⇒ **接管**（清掉重拿），并把接管信息 yield 给调用方写进 history；
+      活锁 ⇒ 照旧等到超时再拒（**绝不**按 pid 判活）。
+    - ★ 判据：拿不到只影响"白等"；现在**持有者死了也能自愈**（不再永久卡死）。
 
     ★ `yield` **必须在取到锁之后、循环之外** —— 放在 `while` 里，上下文正常退出后生成器会绕回
     循环再 yield 一次，`contextlib` 直接报 `RuntimeError: generator didn't stop`（自证时咬过）。
@@ -172,23 +251,49 @@ def spin_lock(target: Path, timeout: float = 10.0):
     """
     lock = target.with_suffix(target.suffix + ".lock")
     lock.parent.mkdir(parents=True, exist_ok=True)
-    deadline = time.monotonic() + timeout
+    deadline = time.monotonic() + (_lock_wait() if timeout is None else timeout)
+    takeover: dict | None = None
     while True:
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
+            payload = _lock_payload(lock)
+            age = _lock_age(lock, payload)
+            ttl = _lock_ttl()
+            if age > ttl:
+                # ★ 陈旧 ⇒ 接管：记下是谁留下的、有多久了（调用方写进 history），清掉重拿。
+                takeover = {"by": payload.get("owner") or "（未知）", "pid": payload.get("pid"),
+                            "age": int(age), "ttl": int(ttl),
+                            "task": payload.get("task") or target.stem}
+                with contextlib.suppress(OSError):
+                    lock.unlink()
+                continue
             if time.monotonic() > deadline:
-                raise BatchError(f"拿不到任务锁（{lock}）—— 有别的进程在写，稍后重试") from None
+                raise BatchError(
+                    f"拿不到任务锁（{lock}）—— 被 {payload.get('owner') or '（未知）'}"
+                    f"（pid={payload.get('pid')}）占着且没到租约"
+                    f"（已 {int(age)}s / 租约 {int(ttl)}s），稍后重试") from None
             time.sleep(0.05)
             continue
-        os.write(fd, f"{whoami()} {now_iso()}\n".encode())
+        payload = {"owner": whoami(), "pid": os.getpid(), "task": target.stem, "at": now_iso()}
+        os.write(fd, (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
         os.close(fd)
         break
     try:
-        yield
+        yield takeover
     finally:
         with contextlib.suppress(OSError):
             lock.unlink()
+
+
+def _log_takeover(state: dict, takeover: dict | None) -> None:
+    """★ 接管了别人的陈旧锁 ⇒ 在该任务 history 里留一行（谁留下的 / 已多久）。"""
+    if not takeover:
+        return
+    _log(state, state["state"], state["state"],
+         f"★ 接管了 {takeover['by']}（pid={takeover['pid']}）留下的陈旧锁"
+         f"（已 {takeover['age']}s 未动 > 租约 {takeover['ttl']}s）")
+
 
 
 def _toml_str(value: str) -> str:
@@ -216,12 +321,41 @@ def read_json(target: Path) -> dict:
 # ================================================================ 注册任务（预声明）
 
 
+def validate_gate_cmd(cmd: str | None) -> None:
+    """★ `gate_cmd` 白名单化（卡 128 · GLM 审查 2.6）：只认**仓库内脚本**。
+
+    合法形态：`python -X utf8 scripts/…` 或 `python -X utf8 tools/…`（可带参数）。
+    拒：任何 shell 元字符（`; | & $ 反引号 > < 换行`）、非固定解释器前缀、仓库外脚本。
+    ★ 报错**点名那条命令**（`register` 与 `claim` 都调它 —— 后者防手改 manifest）。
+    """
+    if not cmd:
+        return
+    bad = sorted({ch for ch in cmd if ch in GATE_CMD_METACHARS})
+    if bad:
+        raise BatchError(
+            f"gate_cmd 含 shell 元字符 {bad} —— 只认仓库内脚本，命令：{cmd!r}")
+    try:
+        argv = shlex.split(cmd)
+    except ValueError as exc:
+        raise BatchError(f"gate_cmd 引号不成对、解析不了（{exc}），命令：{cmd!r}") from exc
+    if len(argv) < 3 or tuple(argv[:3]) != ("python", "-X", "utf8"):
+        raise BatchError(
+            f"gate_cmd 必须以 `python -X utf8` 开头（只认仓库内脚本），命令：{cmd!r}")
+    if len(argv) < 4:
+        raise BatchError(f"gate_cmd 要指向一个仓库内脚本（scripts/ 或 tools/），命令：{cmd!r}")
+    script = argv[3].replace("\\", "/")
+    if not script.startswith(GATE_CMD_SCRIPT_ROOTS):
+        raise BatchError(
+            f"gate_cmd 只认 scripts/ 或 tools/ 下的脚本，得到 {script!r}，命令：{cmd!r}")
+
+
 def _validate_manifest(man: dict, task_id: str) -> None:
     """预声明的全套校验 —— **落盘之前**就要跑（否则不合法任务会留在目录里）。"""
     if man.get("id") != task_id:
         raise BatchError(f"预声明里的 id（{man.get('id')!r}）与文件名（{task_id!r}）不一致")
     if not man.get("why"):
         raise BatchError("预声明缺 `why`（这个任务要干成什么）")
+    validate_gate_cmd(man.get("gate_cmd"))
     members = man.get("member") or []
     if not isinstance(members, list) or not members:
         raise BatchError("预声明里一张卡都没有（`[[member]]`）")
@@ -235,6 +369,13 @@ def _validate_manifest(man: dict, task_id: str) -> None:
             raise BatchError(f"卡 {m.get('id')} 没写 `layer`（属于哪一层：审美层 / 后端 / 前端 …）")
         if not m.get("paths"):
             raise BatchError(f"卡 {m.get('id')} 没写 `paths`（这张卡的域＝它能碰的路径）")
+        # ★ 受保护共享文件谁都不许写进自己的域（卡 128 · GLM 审查 三.1）—— **register 时就拒**。
+        for pattern in m["paths"]:
+            covered = sorted(p for p in PROTECTED_FILES if fnmatch.fnmatch(p, pattern))
+            if covered:
+                raise BatchError(
+                    f"卡 {m.get('id')} 的域 {pattern!r} 覆盖了受保护共享文件 "
+                    f"{'、'.join(covered)} —— 谁都不许把它们写进域（`register` 就拒）")
     for action in man.get("on_complete", ["gate", "draft"]):
         if action not in ALLOWED_ACTIONS:
             raise BatchError(f"`on_complete` 里有不认识的动作 {action!r}（只认 {ALLOWED_ACTIONS}）")
@@ -324,11 +465,58 @@ def _log(state: dict, frm: str, to: str, note: str) -> None:
 # ================================================================ 成送申请（收件箱）
 
 
+def _deadline_passed(deadline) -> bool:
+    """deadline 是不是真到了（空 / 解析不了 ⇒ 不算到）。带不带时区都认。"""
+    if not deadline:
+        return False
+    try:
+        dt = datetime.datetime.fromisoformat(str(deadline))
+    except ValueError:
+        return False
+    now = datetime.datetime.now(dt.tzinfo) if dt.tzinfo is not None else datetime.datetime.now()
+    return now > dt
+
+
+#: ★ 已到终态 / 已在等人的状态：deadline 不再把它们判死（与 `cmd_expire` 的豁免一致）。
+_DEADLINE_EXEMPT = ("awaiting-commit", "landed", "timeout")
+
+
+def _enforce_deadline(state: dict, task_id: str) -> None:
+    """★ 统一 deadline 口径（卡 128 · GLM 审查 2.5/三.3）：**每个会改状态的入口先查一次**。
+
+    过期 ⇒ 判死（`timeout`，**只判死、绝不放行**），落盘后抛 `RefuseError`。
+    这样「到 deadline ⇒ timeout」不再依赖有人记得手动跑 `expire`。
+    """
+    if state["state"] in _DEADLINE_EXEMPT or not _deadline_passed(state.get("deadline")):
+        return
+    frm = state["state"]
+    state["state"] = "timeout"
+    _log(state, frm, "timeout",
+         f"★ 到 deadline（{state.get('deadline')}）⇒ 判死 timeout（只判死、不放行）；"
+         f"缺席：{_missing(state)}（要重开用 `extend`）")
+    write_json_atomic(state_path(task_id), state)
+    raise RefuseError([
+        f"任务 {task_id} 已过期（deadline {state.get('deadline')}）⇒ 判死 timeout，不放行",
+        "要重开用 `extend --to <新期限>`（或重新 register）",
+    ])
+
+
 def check_domain(man: dict, member_id: str, files: list[str]) -> None:
     """★★ 最重要的守卫：这张卡碰的文件必须落在**它自己声明的域**里
-    （否则任务＝绕过冲突域的后门）。"""
+    （否则任务＝绕过冲突域的后门）。
+
+    ★ 卡 128（GLM 审查 三.1）：**受保护共享文件谁都不许声明进自己的域** —— 这里也拒一道
+    （register 时已拒 paths；这道防的是手填的 `--files`）。
+    """
     mem = member_of(man, member_id)
     patterns = list(mem["paths"])
+    protected = sorted({f for f in files if f.replace("\\", "/") in PROTECTED_FILES})
+    if protected:
+        raise RefuseError([
+            f"卡 {member_id}（{mem['layer']}）把**受保护共享文件**写进了 `--files`："
+            f"{'、'.join(protected)}",
+            "受保护共享文件谁都不许声明进自己的域（要动它们由主控收口）",
+        ])
     bad = [f for f in files if not any(fnmatch.fnmatch(f, p) for p in patterns)]
     if bad:
         raise RefuseError([
@@ -345,12 +533,14 @@ def cmd_claim(args: argparse.Namespace) -> int:
             "成功申请**必须带证据**（`--evidence`）—— 没证据的不叫申请",
             "证据可以是：测试读数 / 门禁结论 / 命令原样输出 / 文件 sha256",
         ])
-    with spin_lock(state_path(args.task)):
+    with spin_lock(state_path(args.task)) as takeover:
         man = load_manifest(args.task)
         state = read_json(state_path(args.task))
+        _enforce_deadline(state, args.task)
         if state["state"] in ("landed", "timeout"):
             raise RefuseError([f"任务已处于 {state['state']}，不再收申请"
                                f"（要先 `extend` 或另开任务）"])
+        _log_takeover(state, takeover)
 
         member_id = args.member
         if member_id not in state["declared"]:
@@ -387,9 +577,11 @@ def cmd_claim(args: argparse.Namespace) -> int:
         print(f"卡 {member_id} 的{mark}收了（{len(_ok(state))}/{state['need']} 张已成功，名单共 "
               f"{len(state['declared'])}）")
         print(f"  还缺：{_missing(state) or '（齐了）'}")
-        advanced = _maybe_advance(state, man)
-        write_json_atomic(state_path(args.task), advanced)
-    return _report(advanced)
+        before = state["state"]
+        state = _maybe_advance(state, man)
+        write_json_atomic(state_path(args.task), state)
+    state = _drive(args.task, man, state, before)
+    return _report(state)
 
 
 def _ok(state: dict) -> set[str]:
@@ -410,9 +602,10 @@ def _missing(state: dict) -> str:
 
 def cmd_waive(args: argparse.Namespace) -> int:
     """显式豁免：谁没到要留痕。**这是"不齐也能放行"的唯一合法路径**。"""
-    with spin_lock(state_path(args.task)):
+    with spin_lock(state_path(args.task)) as takeover:
         man = load_manifest(args.task)
         state = read_json(state_path(args.task))
+        _enforce_deadline(state, args.task)
         if args.member not in state["declared"]:
             raise RefuseError([f"{args.member} 不在名单里（{'、'.join(state['declared'])}）"])
         if args.member in state["waived"]:
@@ -420,18 +613,22 @@ def cmd_waive(args: argparse.Namespace) -> int:
             return 0
         if state.get("claims", {}).get(args.member) == "success":
             raise RefuseError([f"{args.member} 已经交过成功申请了，不用豁免"])
+        _log_takeover(state, takeover)
         state["waived"].append(args.member)
         _log(state, state["state"], state["state"],
              f"★ 豁免 {args.member}（不齐放行，留痕）：{args.reason}")
         print(f"已豁免 {args.member}：{args.reason}")
         print(f"  还缺：{_missing(state) or '（齐了）'}")
-        advanced = _maybe_advance(state, man)
-        write_json_atomic(state_path(args.task), advanced)
-    return _report(advanced)
+        before = state["state"]
+        state = _maybe_advance(state, man)
+        write_json_atomic(state_path(args.task), state)
+    state = _drive(args.task, man, state, before)
+    return _report(state)
 
 
 def cmd_extend(args: argparse.Namespace) -> int:
-    with spin_lock(state_path(args.task)):
+    """续期（也是 `timeout` 的逃生口）：先落新 deadline，再按统一口径查一次。"""
+    with spin_lock(state_path(args.task)) as takeover:
         man = load_manifest(args.task)
         state = read_json(state_path(args.task))
         frm = state["state"]
@@ -443,17 +640,23 @@ def cmd_extend(args: argparse.Namespace) -> int:
         else:
             _log(state, frm, frm, f"续期到 {args.to}")
             print(f"续期到 {args.to}")
-        advanced = _maybe_advance(state, man)
-        write_json_atomic(state_path(args.task), advanced)
-    return _report(advanced)
+        _log_takeover(state, takeover)
+        _enforce_deadline(state, args.task)
+        before = state["state"]
+        state = _maybe_advance(state, man)
+        write_json_atomic(state_path(args.task), state)
+    state = _drive(args.task, man, state, before)
+    return _report(state)
 
 
 def cmd_landed(args: argparse.Namespace) -> int:
-    with spin_lock(state_path(args.task)):
+    with spin_lock(state_path(args.task)) as takeover:
         state = read_json(state_path(args.task))
+        _enforce_deadline(state, args.task)
         frm = state["state"]
         state["state"] = "landed"
         state["landed"] = {"commit": args.commit, "at": now_iso(), "by": whoami()}
+        _log_takeover(state, takeover)
         _log(state, frm, "landed", f"收口提交了：{args.commit}")
         write_json_atomic(state_path(args.task), state)
     print(f"任务 {args.task} 标成 landed（{args.commit}）")
@@ -464,7 +667,11 @@ def cmd_landed(args: argparse.Namespace) -> int:
 
 
 def _maybe_advance(state: dict, man: dict) -> dict:
-    """数**成送申请**；齐了才推过栅栏并跑任务里声明的自动动作。**幂等**：不齐就原样返回。"""
+    """数**成送申请**（**锁内**）：齐了就推过栅栏并推到 `gating`（**门禁本身在锁外跑**）。
+
+    **幂等**：不齐 / 已推过 ⇒ 原样返回。★ 第二个投递者看到 `gating` 时**不会**重复跑门禁
+    （`_drive` 只在"刚转进 gating"的那一次才去跑）。
+    """
     if state["state"] in ("ready", "gating", "awaiting-commit", "landed"):
         return state
     got = _ok(state) | set(state["waived"])
@@ -485,34 +692,76 @@ def _maybe_advance(state: dict, man: dict) -> dict:
          f"自动动作 {state['auto']}")
     if state["waived"]:
         _log(state, "ready", "ready", f"注意：放行时有豁免（{'、'.join(state['waived'])}）")
-    return _run_auto(state, man)
-
-
-def _run_auto(state: dict, man: dict) -> dict:
-    """跑 `on_complete` 里声明的动作：`gate` → `draft`。★ **没有 commit**（见模块头）。"""
     if "gate" in state["auto"]:
+        # ★ 门禁移出锁外（卡 128）：这里只记账「开始跑门禁」，subprocess 在 _finish_gate。
         state["state"] = "gating"
         _log(state, "ready", "gating",
-             f"跑门禁：{state['gate_cmd'] or '（任务里没声明 gate_cmd，跳过）'}")
-        if state["gate_cmd"]:
-            done = subprocess.run(state["gate_cmd"], shell=True, capture_output=True,
-                                  text=True, encoding="utf-8", errors="replace")
-            state["gate"] = {
-                "cmd": state["gate_cmd"],
-                "exit_code": done.returncode,
-                "verdict": "green" if done.returncode == 0 else "red",
-                "at": now_iso(),
-                "tail": "\n".join(
-                    ((done.stdout or "") + (done.stderr or "")).strip().splitlines()[-12:]),
-            }
-            _log(state, "gating", "gating",
-                 f"门禁读数：exit={done.returncode} ⇒ **{state['gate']['verdict']}**")
-            if done.returncode != 0:
-                state["state"] = "ready"
-                _log(state, "gating", "ready", "★ 门禁红了 ⇒ **不许提交**；修好再 `advance`")
-                return state
-        else:
-            state["gate"] = {"cmd": None, "exit_code": None, "verdict": "skipped", "at": now_iso()}
+             f"开始跑门禁（**锁外**）：{state['gate_cmd'] or '（任务里没声明 gate_cmd，跳过）'}")
+        return state
+    return _write_draft(state, man)
+
+
+def _run_gate_cmd(cmd: str | None) -> dict:
+    """★ 执行已过白名单的 `gate_cmd`：`shlex.split` + **`shell=False`**（卡 128 · GLM 审查 2.6）。
+
+    `cmd` 空 ⇒ 记成 `skipped`（任务没声明门禁）。`cwd` 落在主树根 —— 于是
+    `python -X utf8 scripts/…` / `tools/…` 这类**仓库内相对路径**能解析。
+    """
+    if not cmd:
+        return {"cmd": None, "exit_code": None, "verdict": "skipped", "at": now_iso()}
+    done = subprocess.run(shlex.split(cmd), shell=False, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", cwd=str(main_tree_root()))
+    return {
+        "cmd": cmd,
+        "exit_code": done.returncode,
+        "verdict": "green" if done.returncode == 0 else "red",
+        "at": now_iso(),
+        "tail": "\n".join(
+            ((done.stdout or "") + (done.stderr or "")).strip().splitlines()[-12:]),
+    }
+
+
+def _finish_gate(task_id: str, man: dict) -> dict:
+    """★ 门禁在**锁外**跑：放掉锁 → 跑 → **再拿锁** → 写读数与骨架（卡 128 · GLM 审查 2.3）。
+
+    幂等：拿锁后重读状态，若已不是 `gating`（别人已记账）⇒ 不重复跑、直接返回。
+    """
+    pre = read_json(state_path(task_id))
+    gate = _run_gate_cmd(pre.get("gate_cmd"))
+    with spin_lock(state_path(task_id)) as takeover:
+        state = read_json(state_path(task_id))
+        if state["state"] != "gating":
+            print(f"（门禁读数没落：状态已是 {state['state']} —— 可能别人已记账，跳过）")
+            return state
+        _log_takeover(state, takeover)
+        state["gate"] = gate
+        _log(state, "gating", "gating",
+             f"门禁读数：exit={gate['exit_code']} ⇒ **{gate['verdict']}**")
+        if gate["exit_code"] not in (None, 0):
+            state["state"] = "ready"
+            _log(state, "gating", "ready", "★ 门禁红了 ⇒ **不许提交**；修好再 `advance`")
+            write_json_atomic(state_path(task_id), state)
+            return state
+        state = _write_draft(state, man)
+        write_json_atomic(state_path(task_id), state)
+    return state
+
+
+def _drive(task_id: str, man: dict, state: dict, before: str) -> dict:
+    """锁外的收尾：若本次**刚**把状态推成 `gating`，由这一位投递者把门禁跑完。
+
+    ★ 第二个投递者看到 `gating` 时**不重复跑**（只回一句）—— 没有守候进程、没有轮询
+    （保持"最后一名投递者当场关门"）。
+    """
+    if state["state"] != "gating" or before == "gating":
+        if state["state"] == "gating":
+            print("（门禁正由别的投递者跑：状态 gating、读数未落 —— 本卡不重复跑）")
+        return state
+    return _finish_gate(task_id, man)
+
+
+def _write_draft(state: dict, man: dict) -> dict:
+    """生成文书骨架（`draft` in auto 时）并推进到 `awaiting-commit`。★ 幂等：不覆盖人写的 why。"""
     if "draft" in state["auto"]:
         text = render_draft(state, man)
         draft = batch_dir() / f"{state['id']}.draft.md"
@@ -629,15 +878,25 @@ def render_why_skeleton(state: dict, man: dict) -> str:
 
 
 def cmd_advance(args: argparse.Namespace) -> int:
-    """手动推一次（幂等）：门禁红了修好后重推、申请更新后**重算骨架**、或状态卡住时。"""
-    with spin_lock(state_path(args.task)):
+    """手动推一次（幂等）：门禁红了修好后重推、申请更新后**重算骨架**、或状态卡住时。
+
+    ★ 卡 128（GLM 审查 2.5）：对 `landed` / `timeout` **必须拒** —— 不许复活 `landed`
+    （它字段里还挂着 commit）、不许把 `timeout` 抹成 `collecting`。要重开用 `extend`。
+    """
+    with spin_lock(state_path(args.task)) as takeover:
         man = load_manifest(args.task)
         state = read_json(state_path(args.task))
+        if state["state"] in ("landed", "timeout"):
+            raise RefuseError([
+                f"任务已处于 {state['state']}，`advance` **不许**复活 / 抹掉它",
+                "要重开用 `extend --to <新期限>`（或重新 register）",
+            ])
+        _enforce_deadline(state, args.task)
         if state["state"] == "awaiting-commit":
             # ★ 骨架随时可重算（人写的东西在 `<任务号>.why.md` 里，不在骨架里 ⇒ 冲不掉）。
             text = render_draft(state, man)
             draft = batch_dir() / f"{state['id']}.draft.md"
-            before = draft.stat().st_size if draft.exists() else 0
+            before_size = draft.stat().st_size if draft.exists() else 0
             draft.write_text(text, encoding="utf-8", newline="\n")
             why = batch_dir() / f"{state['id']}.why.md"
             if not why.exists():
@@ -646,29 +905,43 @@ def cmd_advance(args: argparse.Namespace) -> int:
             state["draft"] = {"path": str(draft), "at": now_iso(),
                               "bytes": len(text.encode("utf-8")), "why": str(why)}
             _log(state, state["state"], state["state"],
-                 f"重算骨架：{before} → {state['draft']['bytes']} 字节（人手补的在 "
+                 f"重算骨架：{before_size} → {state['draft']['bytes']} 字节（人手补的在 "
                  f"{state['id']}.why.md，不受影响）")
             write_json_atomic(state_path(args.task), state)
             print(f"骨架已重算（{state['draft']['bytes']} 字节）")
             return _report(state)
+        _log_takeover(state, takeover)
         state["state"] = "collecting"
+        before = state["state"]
         state = _maybe_advance(state, man)
         write_json_atomic(state_path(args.task), state)
+    state = _drive(args.task, man, state, before)
     return _report(state)
 
 
 def cmd_expire(args: argparse.Namespace) -> int:
-    """过期判死：**只标 timeout + 列缺席者，绝不放行** —— 放行要人显式 waive。"""
-    with spin_lock(state_path(args.task)):
+    """过期判死：**只标 timeout + 列缺席者，绝不放行** —— 放行要人显式 waive。
+
+    ★ 卡 128（GLM 审查 2.5）：**校验 `now > deadline`**（没到 ⇒ 拒，不许任何时候都判死）；
+    没写 `deadline` ⇒ 没有可校验的期限，按人工判断判死（与旧行为一致）。
+    """
+    with spin_lock(state_path(args.task)) as takeover:
         state = read_json(state_path(args.task))
         frm = state["state"]
-        if state["state"] in ("landed", "awaiting-commit"):
-            print(f"已经是 {state['state']}，不用判死")
+        if frm in ("landed", "awaiting-commit"):
+            print(f"已经是 {frm}，不用判死")
             return 0
+        if state.get("deadline") and not _deadline_passed(state["deadline"]):
+            raise RefuseError([
+                f"还没到 deadline（{state['deadline']}）⇒ 不判死",
+                "到点了再判死，或先 `extend --to <新期限>`",
+            ])
+        tail = f"缺席：{_missing(state)} ⇒ 等人工（waive 或 extend）"
+        note = (f"到期（{state['deadline']}），{tail}" if state.get("deadline")
+                else f"没写 deadline，按人工判断判死；{tail}")
+        _log_takeover(state, takeover)
         state["state"] = "timeout"
-        _log(state, frm, "timeout",
-             f"到期（{state.get('deadline')}），缺席：{_missing(state)} ⇒ 等人工"
-             f"（waive 或 extend）")
+        _log(state, frm, "timeout", note)
         write_json_atomic(state_path(args.task), state)
     print(f"任务 {args.task} 标成 timeout，缺席：{_missing(state)}")
     return 0
@@ -837,6 +1110,14 @@ def _register_from_pool(args: argparse.Namespace) -> int:
 # ================================================================ 自证（反例钉子）
 
 
+def _restore_env(name: str, value: str | None) -> None:
+    """把环境变量还原成 `value`（None ⇒ 删掉）—— 自证收尾用（卡 128 · GLM 审查 2.12）。"""
+    if value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = value
+
+
 def selftest() -> int:
     """反例钉子：每条守卫都要有一个"它确实会咬"的例子，否则等于没有守卫。"""
     import io
@@ -854,7 +1135,14 @@ def selftest() -> int:
             rc = main([*argv])
         return rc, err.getvalue()
 
-    with tempfile.TemporaryDirectory() as tmp:
+    # ★ 门禁桩（卡 128）：`gate_cmd` 现在过**白名单**（只认 `python -X utf8 scripts/…|tools/…`），
+    #   所以桩不能再写 `exit 0` / `exit 1` —— 用仓库内脚本：green=rc0、red=rc2。
+    gate_green = "python -X utf8 tools/wb_task.py list"
+    gate_red = "python -X utf8 tools/wb_task.py status __no_such_task__"
+
+    with tempfile.TemporaryDirectory() as tmp, contextlib.ExitStack() as _stack:
+        # ★ 复原 TF_BATCH_DIR（卡 128 · 审查 2.12）：后续 batch_dir() 不再指向已删的临时目录。
+        _stack.callback(_restore_env, "TF_BATCH_DIR", os.environ.get("TF_BATCH_DIR"))
         os.environ["TF_BATCH_DIR"] = tmp
         root = Path(tmp)
         # ★ 源预声明放 `src/` 子目录，**不要**直接放批目录 —— 否则"有没有落半截任务"这条自证
@@ -869,7 +1157,7 @@ def selftest() -> int:
         man = write_man("T-1.toml", (
             'id = "T-1"\n'
             'why = "自证用：审美层 + 后端一次收口"\n'
-            'gate_cmd = "exit 0"\non_complete = ["gate", "draft"]\n'
+            f'gate_cmd = {json.dumps(gate_green)}\non_complete = ["gate", "draft"]\n'
             '\n[[member]]\nid = "卡A"\nlayer = "后端"\nwhat = "甲"\npaths = ["tools/a/*"]\n'
             '\n[[member]]\nid = "卡B"\nlayer = "后端"\nwhat = "乙"\npaths = ["tools/b/*"]\n'
             '\n[[member]]\nid = "卡C"\nlayer = "审美层"\nwhat = "丙"\npaths = ["ui/*"]\n'))
@@ -949,7 +1237,8 @@ def selftest() -> int:
 
         # ---- 豁免是"不齐也能放行"的唯一合法路径 ----
         man2 = write_man("T-2.toml", (
-            'id = "T-2"\nwhy = "豁免自证"\ngate_cmd = "exit 0"\non_complete = ["gate", "draft"]\n'
+            'id = "T-2"\nwhy = "豁免自证"\n'
+            f'gate_cmd = {json.dumps(gate_green)}\non_complete = ["gate", "draft"]\n'
             '\n[[member]]\nid = "卡A"\nlayer = "后端"\nwhat = "甲"\npaths = ["a/*"]\n'
             '\n[[member]]\nid = "卡B"\nlayer = "后端"\nwhat = "乙"\npaths = ["b/*"]\n'))
         run_cap("register", str(man2))
@@ -962,7 +1251,8 @@ def selftest() -> int:
 
         # ---- 门禁红了 ⇒ 不许提交 ----
         man3 = write_man("T-3.toml", (
-            'id = "T-3"\nwhy = "红门禁自证"\ngate_cmd = "exit 1"\non_complete = ["gate", "draft"]\n'
+            'id = "T-3"\nwhy = "红门禁自证"\n'
+            f'gate_cmd = {json.dumps(gate_red)}\non_complete = ["gate", "draft"]\n'
             '\n[[member]]\nid = "卡A"\nlayer = "后端"\nwhat = "甲"\npaths = ["a/*"]\n'))
         run_cap("register", str(man3))
         rc, err = run_cap("claim", "T-3", "卡A", "--evidence", "ok", "--files", "a/x.py")

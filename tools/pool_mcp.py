@@ -62,7 +62,7 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 见 `复盘/口径坑.md` 第 27 条）。成功后写 `gates/diag/wb-<卡>.cancel.txt`（谁 / 什么时候 /
 为什么）并 `pool.registry.release(card)`。
 
-### 六条不变量：哪条谁判（★ 不在本模块重写任何判据）
+### 六条不变量 + 一条执行口径：哪条谁判（★ 不在本模块重写任何判据）
 
 | # | 不变量 | 谁判 |
 |---|---|---|
@@ -72,6 +72,11 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 | ④ | 内存闸 | **委托** `wb_dispatch.py` 的前置检查（本模块**不写**内存判据） |
 | ⑤ | 日志不许覆盖 | `pool.guards.log_guard` + **不给** `--force`（wb_dispatch 自己挑 r2） |
 | ⑥ | 模型白名单 | `wb_dispatch.MODEL_WHITELIST`（硬闸门）+ `pool.models`（批准 ∩ 可用） |
+| ⑦ | `task_claim` 不许冻住 stdio（卡 130） | 本模块：子进程 + 后台线程 |
+
+★ ⑦ 是**执行口径**（不是外部守卫）：`tool_task_claim` 把 `wb_task.py claim` 跑在**子进程**里，
+`serve` 再把它交给一个**后台 FIFO 线程** —— 主循环继续读，只读工具照样即刻答；判据仍只有一份
+（`pool.task`，见下节）。
 
 ★ 干跑与登记都经 `pool.registry.list_reservations` + `pool.guards`（同一批纯函数）—— 派活的
 "能不能占"与 CLI `wb_registry.py check` 是**同一处判据**，不另写一份（本仓最忌两份真源）。
@@ -79,8 +84,9 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 ## ★★ 任务面（卡 121 · T-G218）：只读三个 + 写两个
 
 任务栅栏（注册一个跨层的任务 → 每张卡交成送申请 → 集齐才收口）的本体是 `tools/pool/task.py`
-（模块 `pool.task`，卡 119 搬进 git）。本段把**它**接到外包面，**复用 `pool.task` 的函数**、
-**绝不 shell 出去**（卡 106 的规矩：CLI 与 MCP 共用同一批函数）。
+（模块 `pool.task`，卡 119 搬进 git）。本段把**它**接到外包面，**判据只有一份**（都跑
+`wb_task.py` → `pool.task`，卡 106 的规矩：CLI 与 MCP 共用同一批函数）；★ 卡 130 起
+**执行方式分两路**：快的（register）进程内，会跑门禁的（claim）走子进程。
 
 | 工具 | 干什么 |
 |---|---|
@@ -94,11 +100,12 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 **写两个**（★ 只在服务端 `POOL_MCP_WRITE=1` 时**列出来** —— "存在性即授权"，卡 111 的规矩）：
 
 - **`task_register(manifest_text? | manifest_path?, confirm)`** —— 给**整段预声明 TOML** 或路径，
-  `confirm` = TOML 里的 `id`；走 `pool.task.cmd_register`（`Namespace` + 捕获 stdout、进程内）。
+  `confirm` = TOML 里的 `id`；走 `cmd_register`（`Namespace` + 捕获 stdout、**进程内**，快路径）。
   文本先落到批目录里一个临时源文件、注册完即删，**不留半截**。
 - **`task_claim(task, member, claim, evidence, files, why, confirm)`** —— `confirm` = `task`；
-  走 `pool.task.cmd_claim`。★★ **逐卡域守卫照走**：碰了域外文件 ⇒ `RefuseError`
-  **逐条点名**、回话 `isError=true`，**绝不静默**（域守卫在 MCP 这条路上也不能绕）。
+  ★ **走子进程** `[python -X utf8 tools/wb_task.py claim …]`（它会跑门禁 5~9 分钟 ⇒ 不许进程内跑、
+  不许冻住 stdio；卡 130）。★★ **逐卡域守卫照走**：碰了域外文件 ⇒ 子进程非零退出，
+  回话**原样带出**它的输出与退出码、`isError=true`，**绝不静默**（域守卫在 MCP 这条路上也不能绕）。
 
 ## 诚实边界（如实写）
 
@@ -125,9 +132,11 @@ import io
 import json
 import locale
 import os
+import queue
 import re
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -1164,17 +1173,39 @@ def tool_pool_cancel(arguments: dict[str, Any], root: Path = ROOT
 
 # ================================================================ 任务面（卡 121）：写两个
 #
-# ★ 复用 `pool.task.cmd_register` / `pool.task.cmd_claim`（**进程内调用，不 shell 出去**）。
-#   两个函数都往 stdout `print(...)` —— 那在 MCP 里是**协议流**，所以必须 `redirect_stdout`
-#   把它们的输出收成人话，绝不能让它漏进协议报文（漏了客户端就解析崩）。
+# ★ 判据仍然只有一份（`pool.task`，经 `tools/wb_task.py` 这个壳），但**执行换到子进程**（卡 130）：
+#   - `task_register`（快路径，几毫秒）**仍进程内**：复用一个 `pool.task.cmd_register`，
+#     `redirect_stdout` 把它的 `print` 收成人话（绝不能漏进协议报文）。
+#   - `task_claim` **走子进程** `[python -X utf8 tools/wb_task.py claim …]`：它会跑
+#     `on_complete` 里声明的门禁（**5~9 分钟**）—— 进程内跑就是把 MCP 服务进程**冻住 stdio**
+#     （连九个只读工具也答不了；服务中途被杀还会把锁与状态一起带走）。子进程里跑 ⇒ **服务进程
+#     永远不替别人跑门禁**；`serve()` 再把它交给后台线程（见 `_CLAIM_TOOL`），只读工具照样即刻答。
+#   ★ 为什么不是"另写一份判据"：子进程跑的**就是** `wb_task.py` → `pool.task.cmd_claim`，一处判据。
+
+#: `task_claim` 会跑门禁 ⇒ 子进程至少给这么久的超时（卡 130：门禁 6~9 分钟，留足余量）。
+CLAIM_TIMEOUT_SECONDS = 1800
 
 
 def _capture(fn: Any) -> tuple[int, str]:
-    """进程内跑一个 `pool.task.cmd_*`，把它的 `print` 收成字符串（别漏进协议流）。"""
+    """进程内跑一个 `pool.task.cmd_*`（现只给**快路径** register 用），把 `print` 收成字符串。"""
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         rc = fn()
     return int(rc), buf.getvalue()
+
+
+def _claim_argv(root: Path, task_id: str, member: str, claim: str,
+                evidence: str, files_arg: str, why: str) -> list[str]:
+    """拼 `wb_task.py claim …` 的命令行 —— 与 `pool.task.cmd_claim` 的 CLI 口径**逐字一致**。"""
+    argv = [sys.executable, "-X", "utf8", str(root / "tools" / "wb_task.py"),
+            "claim", task_id, member, "--claim", claim]
+    if evidence:
+        argv += ["--evidence", evidence]
+    if files_arg:
+        argv += ["--files", files_arg]
+    if why:
+        argv += ["--why", why]
+    return argv
 
 
 def _confirm_reject(tool: str, got: str, want: str, what: str) -> tuple[str, dict[str, Any], bool]:
@@ -1288,24 +1319,37 @@ def tool_task_claim(arguments: dict[str, Any], root: Path = ROOT
                        {"task": task_id, "member": member, "claimed": False}, is_error=True)
     if confirm != task_id:
         return _confirm_reject("task_claim", confirm, task_id, "「任务号（task）」")
+    argv = _claim_argv(root, task_id, member, claim, evidence, files_arg, why)
     try:
-        rc, out = _capture(lambda: task.cmd_claim(argparse.Namespace(
-            task=task_id, member=member, claim=claim, evidence=evidence,
-            files=files_arg, why=why, log="")))
-    except task.RefuseError as exc:
+        done = subprocess.run(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
+            argv, cwd=str(root), capture_output=True,
+            encoding="utf-8", errors="replace", timeout=CLAIM_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
         return _result(
-            f"task_claim：卡 {member} 的申请被**拒收**（点名，绝不静默）：\n"
-            + "\n".join(f"  · {r}" for r in exc.reasons),
-            {"task": task_id, "member": member, "claimed": False, "reasons": exc.reasons},
+            f"task_claim：卡 {member} 的申请**没跑完**（子进程超时 {CLAIM_TIMEOUT_SECONDS}s，"
+            f"已被掐掉）。\n"
+            f"  ★ 别当成成功 —— 门禁/状态可能没落盘；稍后用 `task_status` 看现状。",
+            {"task": task_id, "member": member, "claimed": False, "timeout": True},
             is_error=True)
-    except task.BatchError as exc:
-        return _result(f"task_claim：{exc}", {"task": task_id, "member": member, "claimed": False},
-                       is_error=True)
+    except OSError as exc:
+        return _result(f"task_claim：子进程起不来：{type(exc).__name__}: {exc}",
+                       {"task": task_id, "member": member, "claimed": False}, is_error=True)
+    rc = int(done.returncode)
+    out = done.stdout or ""
+    err = done.stderr or ""
+    if rc != 0:
+        # ★ 非零退出 = 没成（域守卫拒收 / 证据缺失 / 门禁红 …）—— **如实带出**输出与退出码，绝不吞。
+        detail = "\n".join(x for x in (out.strip(), err.strip()) if x) or "（子进程没有输出）"
+        return _result(
+            f"task_claim：卡 {member} 的申请**没跑通**（子进程退出码 {rc}）。\n{detail}",
+            {"task": task_id, "member": member, "claimed": False, "exit_code": rc,
+             "stdout": out, "stderr": err},
+            is_error=True)
     st = task.read_json(task.state_path(task_id))
     data = {"task": task_id, "member": member, "claim": claim, "claimed": True,
             "state": st.get("state"), "success": len(task._ok(st)), "need": st.get("need"),
             "missing": task._missing(st), "exit_code": rc, "cli": out.strip()}
-    text = (f"task_claim：卡 {member} 的申请收了（复用 `pool.task.cmd_claim`，进程内）。\n"
+    text = (f"task_claim：卡 {member} 的申请收了（走 `wb_task.py claim`，子进程）。\n"
             f"  任务 {task_id} 现在：**{st.get('state')}** · 成功申请 "
             f"{len(task._ok(st))}/{st.get('need')} · 还缺 {task._missing(st) or '（齐了）'}")
     return _result(text, data, is_error=False)
@@ -1379,8 +1423,10 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
             "（--detach，立刻返回）→ 起不来就回滚租约；危险参数一律不透传。"
             "pool_cancel 只取消本机登记里那张卡的工人，**先核对 pid 身份**（映像必须是 node.exe / "
             "python.exe），不对就拒绝动手。"
-            "任务面复用 tools/pool/task.py 的函数（进程内，不 shell 出去）：task_claim 走**逐卡域"
-            "守卫**，碰了域外文件会**点名拒收**、绝不静默。命令失败会带回**原样命令**；产物缺失会明说'没有'。"
+            "任务面的判据只有一份（都跑 tools/pool/task.py）：task_register 进程内、快；"
+            "task_claim 走**子进程**（它会跑门禁，5~9 分钟 ⇒ 不许冻住 stdio），且走**逐卡域"
+            "守卫**，碰了域外文件会**点名拒收**、子进程非零退出时回话原样带出它的输出与退出码。"
+            "命令失败会带回**原样命令**；产物缺失会明说'没有'。"
         ),
     }
 
@@ -1439,12 +1485,43 @@ def _usage() -> str:
     )
 
 
+# ================================================================ stdio 主循环
+
+
+#: 唯一**会被交给后台线程**的工具（卡 130）：它跑门禁、要 5~9 分钟，绝不许冻住主循环。
+#: 别的工具（含快路径 `task_register`）都还在主循环里**当场答**。
+_CLAIM_TOOL = "task_claim"
+
+#: stdout 只有一处写（`_emit`）—— 主循环与 claim 后台线程都会写，串起来（卡 130）。
+_SEND_LOCK = threading.Lock()
+
+
+def _emit_locked(payload: dict[str, Any]) -> None:
+    """`_emit` 的加锁版：主循环与后台线程共用一条 stdout，别让两条报文绞在一起。"""
+    with _SEND_LOCK:
+        _emit(payload)
+
+
+def _is_claim_call(message: dict[str, Any]) -> bool:
+    """这条消息是不是 `tools/call` → `task_claim`（唯一的慢工具）。"""
+    if str(message.get("method") or "") != "tools/call":
+        return False
+    params = message.get("params")
+    if not isinstance(params, dict):
+        return False
+    return str(params.get("name") or "") == _CLAIM_TOOL
+
+
 def serve(tail: list[str]) -> int:
     """stdio 主循环：读一行、处理、回一行；EOF 就退 0。
 
-    两道防线（照抄先例，缺一条就真出事）：① `_pin_stdio_utf8()` 钉编码；
+    三道防线（前两条照抄先例，缺一条就真出事）：
+    ① `_pin_stdio_utf8()` 钉编码；
     ② 一条坏消息（不是 UTF-8 / 不是 JSON / 处理时异常）只换**一条错误回话**，循环继续 ——
-    客户端拿到一条 JSON-RPC 错误还能接着用，拿到 EOF 只会以为"服务坏了"。
+       客户端拿到一条 JSON-RPC 错误还能接着用，拿到 EOF 只会以为"服务坏了"；
+    ③ ★ 卡 130：`task_claim` 会跑 5~9 分钟的门禁 ⇒ 把它交给**后台线程**，主循环**继续读**
+       （只读工具照样即刻答）。它是**串行**的（一个后台 worker + FIFO），所以回话顺序对
+       register/claim 这类连着来的写调用**仍是请求顺序**，不会有两条 claim 抢着写。
     """
     for token in tail:
         if token in ("-h", "--help"):
@@ -1455,12 +1532,39 @@ def serve(tail: list[str]) -> int:
 
     _pin_stdio_utf8()
 
+    # 慢工具（task_claim）的 FIFO：一个后台 worker，串行处理，主循环不等它。
+    pending: queue.Queue[dict[str, Any] | None] = queue.Queue()
+
+    def _answer(message: dict[str, Any]) -> None:
+        """处理一条消息并按需回一条（异常只换一条错误回话，绝不把循环打死）。"""
+        try:
+            answer = handle(message, root=ROOT)
+        except Exception as exc:  # noqa: BLE001 —— 协议边界：任何异常只换一条错误回话
+            print(f"[pool_mcp] 处理这条消息时出错：{type(exc).__name__}: {exc}", file=sys.stderr)
+            answer = {"jsonrpc": "2.0", "id": message.get("id"),
+                      "error": {"code": JSONRPC_INTERNAL_ERROR,
+                                "message": (f"服务端处理这条消息时出错："
+                                            f"{type(exc).__name__}: {exc}")}}
+        if answer is not None:
+            _emit_locked(answer)
+
+    def _slow_worker() -> None:
+        while True:
+            message = pending.get()
+            if message is None:  # 主循环收工（EOF）时会放这个哨兵
+                return
+            _answer(message)
+
+    worker = threading.Thread(target=_slow_worker, name="pool-mcp-slow", daemon=True)
+    worker.start()
+
     while True:
         try:
             line = _read_line()
         except UnicodeDecodeError as exc:
-            _emit({"jsonrpc": "2.0", "id": None,
-                   "error": {"code": JSONRPC_PARSE_ERROR, "message": f"这一行不是 UTF-8：{exc}"}})
+            _emit_locked({"jsonrpc": "2.0", "id": None,
+                          "error": {"code": JSONRPC_PARSE_ERROR,
+                                    "message": f"这一行不是 UTF-8：{exc}"}})
             continue
         if line is None:  # EOF：客户端走了
             break
@@ -1470,24 +1574,20 @@ def serve(tail: list[str]) -> int:
         try:
             message = json.loads(text)
         except ValueError as exc:
-            _emit({"jsonrpc": "2.0", "id": None,
-                   "error": {"code": JSONRPC_PARSE_ERROR, "message": f"不是合法 JSON：{exc}"}})
+            _emit_locked({"jsonrpc": "2.0", "id": None,
+                          "error": {"code": JSONRPC_PARSE_ERROR,
+                                    "message": f"不是合法 JSON：{exc}"}})
             continue
         if not isinstance(message, dict):
-            _emit({"jsonrpc": "2.0", "id": None,
-                   "error": {"code": JSONRPC_PARSE_ERROR, "message": "消息必须是对象"}})
+            _emit_locked({"jsonrpc": "2.0", "id": None,
+                          "error": {"code": JSONRPC_PARSE_ERROR, "message": "消息必须是对象"}})
             continue
-        try:
-            answer = handle(message, root=ROOT)
-        except Exception as exc:  # noqa: BLE001 —— 协议边界：任何异常只换一条错误回话
-            print(f"[pool_mcp] 处理这条消息时出错：{type(exc).__name__}: {exc}", file=sys.stderr)
-            answer = {"jsonrpc": "2.0", "id": message.get("id"),
-                      "error": {"code": JSONRPC_INTERNAL_ERROR,
-                                "message": (f"服务端处理这条消息时出错："
-                                            f"{type(exc).__name__}: {exc}")}}
-        if answer is None:
+        if _is_claim_call(message):
+            pending.put(message)  # 慢工具 → 后台串行跑，主循环继续读
             continue
-        _emit(answer)
+        _answer(message)
+    pending.put(None)  # 收工：让 worker 把手上那条跑完、把回话吐完再退
+    worker.join()
     return 0
 
 

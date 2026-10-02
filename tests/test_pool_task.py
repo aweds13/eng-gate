@@ -18,7 +18,9 @@ r"""任务栅栏搬进 git（卡 119 · T-G217）的钉子。
 from __future__ import annotations
 
 import contextlib
+import datetime
 import io
+import json
 import os
 import subprocess
 import sys
@@ -97,10 +99,15 @@ def _replay(root: Path, record: Callable[[str, bool, str], None]) -> None:
         path.write_text(body, encoding="utf-8", newline="\n")
         return path
 
+    # ★ 门禁桩（卡 128）：`gate_cmd` 现在过**白名单**（只认 `python -X utf8 scripts/…|tools/…`），
+    #   所以桩不能再写 `exit 0` / `exit 1` —— 用仓库内脚本：green=rc0、red=rc2。
+    gate_green = "python -X utf8 tools/wb_task.py list"
+    gate_red = "python -X utf8 tools/wb_task.py status __no_such_task__"
+
     man = write_man("T-1.toml", (
         'id = "T-1"\n'
         'why = "自证用：审美层 + 后端一次收口"\n'
-        'gate_cmd = "exit 0"\non_complete = ["gate", "draft"]\n'
+        f'gate_cmd = {json.dumps(gate_green)}\non_complete = ["gate", "draft"]\n'
         '\n[[member]]\nid = "卡A"\nlayer = "后端"\nwhat = "甲"\npaths = ["tools/a/*"]\n'
         '\n[[member]]\nid = "卡B"\nlayer = "后端"\nwhat = "乙"\npaths = ["tools/b/*"]\n'
         '\n[[member]]\nid = "卡C"\nlayer = "审美层"\nwhat = "丙"\npaths = ["ui/*"]\n'))
@@ -179,7 +186,8 @@ def _replay(root: Path, record: Callable[[str, bool, str], None]) -> None:
 
     # ---- 豁免是"不齐也能放行"的唯一合法路径 ----
     man2 = write_man("T-2.toml", (
-        'id = "T-2"\nwhy = "豁免自证"\ngate_cmd = "exit 0"\non_complete = ["gate", "draft"]\n'
+        'id = "T-2"\nwhy = "豁免自证"\n'
+        f'gate_cmd = {json.dumps(gate_green)}\non_complete = ["gate", "draft"]\n'
         '\n[[member]]\nid = "卡A"\nlayer = "后端"\nwhat = "甲"\npaths = ["a/*"]\n'
         '\n[[member]]\nid = "卡B"\nlayer = "后端"\nwhat = "乙"\npaths = ["b/*"]\n'))
     run_cap("register", str(man2))
@@ -192,7 +200,8 @@ def _replay(root: Path, record: Callable[[str, bool, str], None]) -> None:
 
     # ---- 门禁红了 ⇒ 不许提交 ----
     man3 = write_man("T-3.toml", (
-        'id = "T-3"\nwhy = "红门禁自证"\ngate_cmd = "exit 1"\non_complete = ["gate", "draft"]\n'
+        'id = "T-3"\nwhy = "红门禁自证"\n'
+        f'gate_cmd = {json.dumps(gate_red)}\non_complete = ["gate", "draft"]\n'
         '\n[[member]]\nid = "卡A"\nlayer = "后端"\nwhat = "甲"\npaths = ["a/*"]\n'))
     run_cap("register", str(man3))
     rc, err = run_cap("claim", "T-3", "卡A", "--evidence", "ok", "--files", "a/x.py")
@@ -322,3 +331,223 @@ def test_toml_str_survives_quotes_and_backslashes():
     # 反证：原样（不转义）塞进 TOML 就不是合法语法 —— 说明这条钉子确有其事
     with pytest.raises(tomllib.TOMLDecodeError):
         tomllib.loads("v = " + raw)
+
+
+# ================================================================ 卡 128 的六处判据（九条新钉子）
+
+GATE_GREEN = "python -X utf8 tools/wb_task.py list"
+GATE_RED = "python -X utf8 tools/wb_task.py status __no_such_task__"
+
+
+def _manifest(task_id, paths_by_member, *, gate_cmd=None, on_complete=("draft",), deadline=None):
+    """拼一份预声明 TOML。`paths_by_member` = [(成员号, [域…]), …]。"""
+    lines = [f'id = "{task_id}"', f'why = "{task_id} 用"']
+    if gate_cmd:
+        lines.append(f"gate_cmd = {json.dumps(gate_cmd)}")
+    if deadline:
+        lines.append(f"deadline = {json.dumps(deadline)}")
+    lines.append(f"on_complete = {json.dumps(list(on_complete))}")
+    for mid, paths in paths_by_member:
+        lines += ["", "[[member]]", f'id = "{mid}"', 'layer = "后端"', f'what = "{mid}"',
+                  f"paths = {json.dumps(paths, ensure_ascii=False)}"]
+    return "\n".join(lines) + "\n"
+
+
+def _register(tmp_path, task_id, body, *, expect_ok=True):
+    """写预声明 → `register`；返回 (rc, stderr 文本)。"""
+    src = tmp_path / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    man = src / f"{task_id}.toml"
+    man.write_text(body, encoding="utf-8", newline="\n")
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        rc = task.main(["register", str(man)])
+    if expect_ok:
+        assert rc == 0, err.getvalue()
+    return rc, err.getvalue()
+
+
+def _iso(offset_seconds: float) -> str:
+    return (datetime.datetime.now().astimezone()
+            + datetime.timedelta(seconds=offset_seconds)).isoformat(timespec="seconds")
+
+
+def _green(cmd: str) -> dict:
+    return {"cmd": cmd, "exit_code": 0, "verdict": "green", "at": task.now_iso(), "tail": ""}
+
+
+def test_nail128_01_stale_lock_taken_over(tmp_path, monkeypatch):
+    """① 陈旧锁能接管：伪造 `at = now - TTL - 60` ⇒ claim 成功，history 有接管那一行。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    _register(tmp_path, "T-X", _manifest("T-X", [("卡A", ["tools/a/*"]), ("卡B", ["tools/b/*"])]))
+    lock = task.state_path("T-X").with_suffix(".json.lock")
+    lock.write_text(json.dumps({"owner": "ghost", "pid": 999, "task": "T-X",
+                                "at": _iso(-(task.DEFAULT_LOCK_TTL + 60))}), encoding="utf-8")
+
+    rc = task.main(["claim", "T-X", "卡A", "--evidence", "ok", "--files", "tools/a/x.py"])
+    state = task.read_json(task.state_path("T-X"))
+    takeover = [row["note"] for row in state["history"] if "接管" in row["note"]]
+    assert rc == 0, f"rc={rc}"
+    assert takeover, f"history 里没有接管行：{state['history']}"
+    assert "ghost" in takeover[0], takeover[0]
+    assert not lock.exists(), "跑完该把锁放掉"
+
+
+def test_nail128_02_live_lock_refused(tmp_path, monkeypatch):
+    """② 活锁照样拒：刚写的锁 ⇒ rc=2，不许接管。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    monkeypatch.setenv("TF_BATCH_LOCK_WAIT", "0.3")   # 别真等 10 秒
+    _register(tmp_path, "T-X", _manifest("T-X", [("卡A", ["tools/a/*"])]))
+    lock = task.state_path("T-X").with_suffix(".json.lock")
+    lock.write_text(json.dumps({"owner": "someone", "pid": 1, "task": "T-X",
+                                "at": task.now_iso()}), encoding="utf-8")
+
+    rc = task.main(["claim", "T-X", "卡A", "--evidence", "ok", "--files", "tools/a/x.py"])
+    assert rc == 2, f"rc={rc}"
+    assert json.loads(lock.read_text(encoding="utf-8"))["owner"] == "someone", "活锁不许被接管"
+
+
+def test_nail128_03_gate_runs_without_lock(tmp_path, monkeypatch):
+    """③ 门禁在无锁状态跑：桩检查锁文件**不存在**并写标记 ⇒ 标记在。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    _register(tmp_path, "T-X", _manifest("T-X", [("卡A", ["tools/a/*"])],
+                                         gate_cmd=GATE_GREEN, on_complete=("gate", "draft")))
+    lock = task.state_path("T-X").with_suffix(".json.lock")
+    marker = tmp_path / "gate_ran.txt"
+    seen: dict[str, object] = {}
+
+    def stub(cmd: str) -> dict:
+        seen["lock_exists_when_gating"] = lock.exists()
+        marker.write_text("ran", encoding="utf-8")
+        return _green(cmd)
+
+    monkeypatch.setattr(task, "_run_gate_cmd", stub)
+    rc = task.main(["claim", "T-X", "卡A", "--evidence", "ok", "--files", "tools/a/x.py"])
+    assert rc == 0, f"rc={rc}"
+    assert marker.exists(), "桩门禁没被跑到"
+    assert seen["lock_exists_when_gating"] is False, "门禁跑的时候还持着锁"
+
+
+def test_nail128_04_gate_runs_only_once(tmp_path, monkeypatch):
+    """④ 门禁只跑一次：桩计数 + 重复投递 ⇒ `_run_gate_cmd` 执行次数 = 1。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    _register(tmp_path, "T-X", _manifest("T-X", [("卡A", ["tools/a/*"]), ("卡B", ["tools/b/*"])],
+                                         gate_cmd=GATE_GREEN, on_complete=("gate", "draft")))
+    calls: list[str] = []
+    monkeypatch.setattr(task, "_run_gate_cmd", lambda cmd: (calls.append(cmd), _green(cmd))[1])
+
+    assert task.main(["claim", "T-X", "卡A", "--evidence", "ok", "--files", "tools/a/x.py"]) == 0
+    assert task.main(["claim", "T-X", "卡B", "--evidence", "ok", "--files", "tools/b/x.py"]) == 0
+    # 再投一次（此时已是 awaiting-commit）—— 不许重跑
+    assert task.main(["claim", "T-X", "卡A", "--evidence", "ok2", "--files", "tools/a/x.py"]) == 0
+    assert len(calls) == 1, f"门禁跑了 {len(calls)} 次"
+
+    # 第二个投递者看到 `gating`（门禁还没记账）⇒ 不重复跑
+    state = task.read_json(task.state_path("T-X"))
+    state["state"] = "gating"
+    task.write_json_atomic(task.state_path("T-X"), state)
+    task.main(["claim", "T-X", "卡A", "--evidence", "ok3", "--files", "tools/a/x.py"])
+    assert len(calls) == 1, "看到 gating 还重复跑了门禁"
+
+
+def test_nail128_05_selftest_restores_batch_dir(tmp_path, monkeypatch):
+    """⑤ `selftest()` 之后 `batch_dir()` 复原（不指向已删的临时目录）。"""
+    keep = tmp_path / "keep"
+    monkeypatch.setenv("TF_BATCH_DIR", str(keep))
+    before = task.batch_dir()
+    assert task.selftest() == 0
+    assert task.batch_dir() == before, f"batch_dir() 漂了：{task.batch_dir()}"
+
+
+def test_nail128_06_advance_refuses_terminal(tmp_path, monkeypatch):
+    """⑥ `advance` 对 `landed` / `timeout` 都拒（rc≠0 且状态**一字不变**）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    _register(tmp_path, "T-X", _manifest("T-X", [("卡A", ["tools/a/*"])]))
+    assert task.main(["claim", "T-X", "卡A", "--evidence", "ok", "--files", "tools/a/x.py"]) == 0
+    assert task.main(["landed", "T-X", "--commit", "deadbeef"]) == 0
+
+    before = task.read_json(task.state_path("T-X"))
+    rc = task.main(["advance", "T-X"])
+    assert rc == 2, f"advance-on-landed rc={rc}"
+    assert task.read_json(task.state_path("T-X")) == before, "advance 动了 landed 的状态"
+
+    st = task.read_json(task.state_path("T-X"))
+    st["state"], st["landed"] = "timeout", None
+    task.write_json_atomic(task.state_path("T-X"), st)
+    before = task.read_json(task.state_path("T-X"))
+    rc = task.main(["advance", "T-X"])
+    assert rc == 2, f"advance-on-timeout rc={rc}"
+    assert task.read_json(task.state_path("T-X")) == before, "advance 抹了 timeout"
+
+
+def test_nail128_07_expire_and_deadline(tmp_path, monkeypatch):
+    """⑦ `expire` 没到期 ⇒ 拒；到期 ⇒ 判死；过期的任务再 claim ⇒ 自动判死且不放行。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    future, past = _iso(86400), _iso(-86400)
+
+    # 没到期 ⇒ 拒（状态不变）
+    _register(tmp_path, "T-A", _manifest("T-A", [("卡A", ["tools/a/*"])], deadline=future))
+    assert task.main(["expire", "T-A"]) == 2
+    assert task.read_json(task.state_path("T-A"))["state"] == "collecting"
+
+    # 到期 ⇒ 判死
+    _register(tmp_path, "T-B", _manifest("T-B", [("卡A", ["tools/a/*"])], deadline=past))
+    assert task.main(["expire", "T-B"]) == 0
+    assert task.read_json(task.state_path("T-B"))["state"] == "timeout"
+
+    # 过期的任务再 claim ⇒ 自动判死且不放行（成功申请数 = 0）
+    _register(tmp_path, "T-C", _manifest("T-C", [("卡A", ["tools/a/*"])], deadline=past))
+    rc = task.main(["claim", "T-C", "卡A", "--evidence", "ok", "--files", "tools/a/x.py"])
+    st = task.read_json(task.state_path("T-C"))
+    assert rc == 2, f"过期 claim rc={rc}"
+    assert st["state"] == "timeout", st["state"]
+    assert task._ok(st) == set(), "过期还放进了成功申请"
+
+
+def test_nail128_08_gate_cmd_whitelist(tmp_path, monkeypatch):
+    """⑧ `gate_cmd` 校验：shell 元字符 / `bash -c` / 仓外脚本 ⇒ register 拒并点名；正常 ⇒ 通过。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    one = [("卡A", ["tools/a/*"])]
+    bad_cmds = [
+        "bash -c 'echo hi'",
+        "rm -rf /",
+        "python -X utf8 scripts/run_gates.py; rm -rf x",
+        "python -X utf8 scripts/run_gates.py | tee log",
+        "python -X utf8 scripts/run_gates.py > log",
+        "python -X utf8 scripts/`x`.py",
+        "python -X utf8 /etc/passwd",
+    ]
+    for i, bad in enumerate(bad_cmds):
+        tid = f"T-BAD{i}"
+        rc, err = _register(tmp_path, tid, _manifest(tid, one, gate_cmd=bad), expect_ok=False)
+        assert rc == 2, f"{bad!r} ⇒ rc={rc}"
+        assert bad in err, f"报错没点名那条命令：{err!r}"
+
+    # 正常的仓库内脚本 ⇒ 通过（两次：scripts/ 与 tools/）
+    for i, ok in enumerate(["python -X utf8 scripts/run_gates.py", GATE_GREEN]):
+        tid = f"T-OK{i}"
+        _register(tmp_path, tid, _manifest(tid, one, gate_cmd=ok))
+
+    # claim 时**再校验一次**（防手改 manifest）
+    _register(tmp_path, "T-OKX", _manifest("T-OKX", one, gate_cmd=GATE_GREEN))
+    task.manifest_path("T-OKX").write_text(
+        _manifest("T-OKX", one, gate_cmd="bash -c 'evil'"), encoding="utf-8", newline="\n")
+    rc = task.main(["claim", "T-OKX", "卡A", "--evidence", "ok", "--files", "tools/a/x.py"])
+    assert rc == 2, f"手改 manifest 后 claim 没拒：rc={rc}"
+
+
+def test_nail128_09_protected_files_rejected(tmp_path, monkeypatch):
+    """⑨ 受保护文件不许进域：写进 `paths` ⇒ register 拒；写进 `--files` ⇒ claim 拒。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+
+    # register：精确路径与通配都拒
+    for i, paths in enumerate([["docs/traceability.toml"], ["docs/**"], ["gates/*.json"]]):
+        tid = f"T-P{i}"
+        rc, err = _register(tmp_path, tid, _manifest(tid, [("卡A", paths)]), expect_ok=False)
+        assert rc == 2, f"paths={paths} ⇒ rc={rc}"
+        assert "受保护" in err, f"没点名受保护文件：{err!r}"
+
+    # claim：域合法，但 `--files` 自报了一个受保护文件 ⇒ 拒
+    _register(tmp_path, "T-Q", _manifest("T-Q", [("卡A", ["tools/a/*"])]))
+    rc = task.main(["claim", "T-Q", "卡A", "--evidence", "ok", "--files", "docs/traceability.toml"])
+    assert rc == 2, f"claim 把受保护文件写进 --files 没拒：rc={rc}"
