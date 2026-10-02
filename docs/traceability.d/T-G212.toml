@@ -1,0 +1,12 @@
+[entries."T-G212"]
+id = "T-G212"
+title = "「生成了却没进提交」要有机器判据（封存时的未跟踪清单）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/run_gates.py",
+  "file:scripts/audit_progress.py",
+  "file:tests/test_seal_untracked.py",
+]
+gaps = "**来路**：2026-10-02 三笔提交（`T-G205` / `T-G206` / `T-G208`）的**片段文件根本没进提交** —— `_stage_card.py` 在卡树里生成 `docs/changelog.d/<台账号>.md` 等三个片段（**未跟踪文件**），集成时 `--allow` 只给了代码文件 ⇒ `git add` 没带上 ⇒ 三笔的 `.d/` 文件数实测 **0 / 0 / 0**，靠人眼才翻出来。**为什么门禁没咬**：`run_gates.py --seal` 算的「封存树」是**工作树减 `gates/**`**（临时索引 `git add -A`）—— 它**包含**了那些未跟踪片段；可是**没人**拿它与「提交树」比；而 `sync_docs.py --check` **只查**「现有片段在不在汇总里」，**少文件照样 PASS** ⇒ 这个缺口此前**零判据**（「生成了却没进提交」＝账上写了、仓里没有）。**做法**（严格按卡的口径，不扩大）：① `scripts/run_gates.py` 新增 `untracked_files()`，把「此刻未跟踪（不含 `gates/**`）」写进封存读数的新字段 `gates/last.json.untracked`（**两处**：`main()` 落盘 + `seal()` 封存前重算）；② `scripts/audit_progress.py` 新增第 **⑪** 条判据 `check_seal_untracked()` —— 逐条 `git ls-files --error-unmatch` **点名**「封存时未跟踪、现在仍未被跟踪」的文件；③ `tests/test_seal_untracked.py` 新建，**四条钉子 + 一条反例**。**验收（工人自报，主控逐条核）**：① 钉子五条全绿（`pytest -v` = 5 passed，5.90s）：未跟踪片段被封存记下并**点名** · 事后 `git add` 同一份清单 ⇒ 绿 · **老 `last.json` 没有 `untracked` 字段 ⇒ 优雅降级不炸** · 封存记的就是「那几条」未跟踪文件 · 反例「已删除不算缺」；② **对今晚三笔形态的复现**（临时仓库：片段生成在工作区却没进提交）⇒ 逐条点名 `docs/changelog.d/T-G205.md` / `T-G206.md` / `T-G208.md` 并给出「集成时 `--allow` 漏了它」；`git add docs/changelog.d` 之后同一份清单再查 = `[]`（绿）—— **这条判据真的会咬今晚那种账**；③ 既有受影响的测试（gate_fingerprint / run_gates_timeout / gates_reuse_line / audit_tightening / docs_fragments）+ 新文件 = **48 passed**（exit 0）；④ `ruff check src/ tests/ scripts/ tools/ examples/ harness/` = `All checks passed!`。**★ 工人自己交代没做到的（主控认，不替它圆）**：① **没跑任何真门禁**（卡禁区）⇒ `main()` 那条 `untracked` 写入路径**没有端到端跑过 main()**，是借 `seal()`（同一条 `untracked_files()`）+ 真 `audit_progress.py --all` 的 ⑪ 段**间接**验的（`main()` 里只多一个键、只追加、不改既有字段）；② 「有缺 ⇒ 退非 0」靠汇聚进 `all_fails`（与既有各条同一条路），**没有造一次真红的 exit=1 端到端**；③ 判决口径取「未跟踪**且**文件还在」＝红 ⇒ **已删除/改名的片段不报红**（有一条钉子钉住这个选择，卡的口径允许）。**★ 卡外两条（工人判断、主控认，留待另开卡）**：① `_stage_card.py --allow` 的**默认口径**（今晚漏片段的**根因**）不在本卡白名单；真正的防呆是「提交后核对 `docs/changelog.d/` 片段数」；② `tools/sync_docs.py --check` 还有**窄版之外的洞**：「片段存在、但其内容没进汇总」仍零判据。**★ 内存闸真实读数（这趟被它拒过一次，如实记）**：本机可用内存常态就是 **2.3~3.0 GB**（16.33 GB 机器上，用户自己的 Edge 就占 **4.55 GB**、DSH 1.52 GB、`MemCompression` 0.95 GB —— 逐进程核过，**没有**门禁留下的无头 Edge 残留，所以这些内存**不是我能腾的**）。第一次跑集成时读数 **2.3 GB < 2.8 GB ⇒ 内存闸拒跑、门禁根本没跑、不提交**（这道闸按它自己说的做了事，不是噪音）；随后实测 **2.5 GB**，主控显式 `TF_GATE_MIN_FREE_GB=2.2` 放行重跑，理由：本笔只动 `scripts/` + `tests/` ⇒ 5 道真机门**输入未变、全复用**、**不起浏览器**，`TF_PYTEST_WORKERS=2`，且**串行**跑（不与另一笔并行）。这与清单 ⑦/⑧ 的「4.0 在本机常态误拦、阈值该按趟次定」是一致的。"
+

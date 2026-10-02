@@ -1,0 +1,156 @@
+"""核「生成了却没进提交」这条机器判据会不会咬（T-G212 · 卡 115）。
+
+## 为什么有这张测试
+
+2026-10-02 三笔提交（`T-G205`/`T-G206`/`T-G208`）的**片段文件根本没进提交** ——
+`_stage_card.py` 在卡树里生成 `docs/changelog.d/<台账号>.md` 等片段（**未跟踪文件**），
+集成时 `git add --allow` 只给了代码文件 ⇒ 提交里没有片段（实测三笔的 `.d/` 文件数 = 0/0/0）。
+这门缺口**零判据**：`run_gates.py --seal` 算的封存树包含了那些未跟踪片段却没人跟提交树比，
+`sync_docs.py --check` 又只查"现有片段在不在汇总里"、少文件照样 PASS。
+
+本卡补上：`--seal` 把当时未跟踪的清单记进 `gates/last.json.untracked`；
+`scripts/audit_progress.py::check_seal_untracked()` 逐条 `git ls-files --error-unmatch` 点名。
+
+## 怎么验（临时 git 仓库，不碰真仓库）
+
+四条钉子（卡 §3）：
+  ① 会咬 —— 清单里的文件没被跟踪且还在 ⇒ 报红并点名那条路径；
+  ② 不误报 —— 同一文件 `git add` 之后 ⇒ 绿；
+  ③ 优雅降级 —— 老 `last.json` 没有 `untracked` 字段 ⇒ 绿（不崩、不报红）；
+  ④ `--seal` 真写清单 —— 跑一次 `seal()`，新字段**恰好**是当时未跟踪的那些（已跟踪的不在、
+     `gates/**` 不在）。
+另加一条：文件**已不存在** ⇒ 不算缺（口径"必须已被跟踪（或者干脆不存在了）"）。
+
+★ 全部在 `tmp_path` 里 `git init` 的真临时仓库跑，**不动**本仓库的 `gates/last.json`、
+不跑任何门（卡禁区：跑真门禁太贵）。
+
+## 边界（如实写，未覆盖）
+
+- 不跑 `main()` 全量（本卡明说跑真门禁太贵）；判据落进 `all_fails` 那条由 `main()` 收口，
+  这里只钉 `check_seal_untracked()` 这一条判据本身。
+- 只在 Windows（本仓主力）上跑过；路径分隔符交给 git（`git ls-files` 输出 `/`）。
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import audit_progress as ap  # noqa: E402 —— 需要先用 sys.path 把 scripts/ 挂上
+import run_gates as rg  # noqa: E402
+
+_GIT_ENV = {
+    **os.environ,
+    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid",
+}
+
+
+def _git(root: Path, *args: str) -> str:
+    done = subprocess.run(
+        ["git", "-c", "commit.gpgsign=false", *args], cwd=root, env=_GIT_ENV,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    assert done.returncode == 0, f"git {args} 失败：{done.stderr}"
+    return done.stdout.strip()
+
+
+def _seed(root: Path, rel: str, text: str) -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _init_repo(root: Path) -> None:
+    """一个**真**临时 git 仓库（`--seal` 要真 git），已有一笔提交（`src/a.txt` 已跟踪）。"""
+    _git(root, "init", "-q")
+    _seed(root, "src/a.txt", "A")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "init")
+
+
+def _write_last(root: Path, payload: dict) -> None:
+    _seed(root, "gates/last.json", json.dumps(payload, ensure_ascii=False))
+
+
+# ------------------------------------------------------------------ ① 必须咬
+
+def test_untracked_fragment_after_seal_is_caught_and_named(tmp_path: Path) -> None:
+    """★ ① 清单里的文件没被跟踪且还在 ⇒ 报红并点名那条路径（今晚那三笔的形态）。"""
+    _init_repo(tmp_path)
+    _seed(tmp_path, "docs/changelog.d/T-G999.md", "片段：生成了，没进提交")
+    _write_last(tmp_path, {"ok": True, "untracked": ["docs/changelog.d/T-G999.md"]})
+
+    fails = ap.check_seal_untracked(repo=tmp_path)
+
+    assert fails, "造了未跟踪片段却不报红 —— 这条判据不会咬（等于注释）"
+    assert any("docs/changelog.d/T-G999.md" in f for f in fails)   # 逐条点名
+    assert any("生成了却没进提交" in f for f in fails)              # 附一句人话
+    assert any("--allow" in f for f in fails)                      # 指向集成那个洞
+
+
+# ------------------------------------------------------------------ ② 不许误报
+
+def test_tracked_afterwards_is_green(tmp_path: Path) -> None:
+    """★ ② 同一个文件 `git add` 之后 ⇒ 绿（别把已经进提交的也报了）。"""
+    _init_repo(tmp_path)
+    _seed(tmp_path, "docs/changelog.d/T-G999.md", "片段")
+    _write_last(tmp_path, {"ok": True, "untracked": ["docs/changelog.d/T-G999.md"]})
+    _git(tmp_path, "add", "docs/changelog.d/T-G999.md")
+
+    assert ap.check_seal_untracked(repo=tmp_path) == []
+
+
+# ------------------------------------------------------------------ ③ 优雅降级
+
+def test_old_last_json_without_field_degrades(tmp_path: Path) -> None:
+    """★ ③ 老 `last.json` 里**没有** `untracked` 字段 ⇒ 绿（不崩、不报红）。
+
+    仓库里就躺着历史版本的 `gates/last.json`，这条不降级就会当场假红。
+    """
+    _init_repo(tmp_path)
+    _seed(tmp_path, "docs/changelog.d/T-G999.md", "片段")
+    _write_last(tmp_path, {"ok": True, "tree": "老产物没有 untracked"})
+
+    assert ap.check_seal_untracked(repo=tmp_path) == []
+
+
+def test_absent_file_is_not_a_violation(tmp_path: Path) -> None:
+    """口径「必须已被跟踪（**或者干脆不存在了**）」：文件被删/改名 ⇒ 不算缺。"""
+    _init_repo(tmp_path)
+    _write_last(tmp_path, {"ok": True, "untracked": ["docs/changelog.d/T-G999.md"]})
+
+    assert ap.check_seal_untracked(repo=tmp_path) == []
+
+
+# ------------------------------------------------------------------ ④ --seal 真写清单
+
+def test_seal_records_exactly_the_untracked_files(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """★ ④ `--seal` 真写清单：新字段**恰好**是当时未跟踪的那些。
+
+    已跟踪的（`src/a.txt`）不在、`gates/**`（`gates/reuse.json`）不在 —— 断言用**排序列表
+    相等**（不只是"包含"），"恰好"才算钉住。
+    """
+    _init_repo(tmp_path)
+    _write_last(tmp_path, {"ok": True, "tree": "old"})
+    _seed(tmp_path, "docs/changelog.d/T-G999.md", "片段")  # 未跟踪 → 该进清单
+    _seed(tmp_path, "notes.txt", "随手记")                  # 未跟踪 → 该进清单
+    _seed(tmp_path, "gates/reuse.json", "{}")               # gates/** → 不许进清单
+
+    monkeypatch.setattr(rg, "ROOT", tmp_path)
+    monkeypatch.setattr(rg, "GATES", tmp_path / "gates" / "last.json")
+
+    assert rg.seal() == 0
+
+    payload = json.loads((tmp_path / "gates" / "last.json").read_text(encoding="utf-8"))
+    assert sorted(payload["untracked"]) == ["docs/changelog.d/T-G999.md", "notes.txt"]
+    assert "src/a.txt" not in payload["untracked"]        # 已跟踪的不列
+    assert all(not p.startswith("gates/") for p in payload["untracked"])  # gates/** 不列

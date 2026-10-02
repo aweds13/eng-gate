@@ -444,6 +444,61 @@ def check_spec_child_cards(data: dict, n2sr: dict[str, set[str]] | None = None) 
     return errs
 
 
+# ---------------------------------------------- ⑪ 封存未跟踪清单（卡 115 / T-G212）
+def _is_tracked(repo: Path, rel: str) -> bool:
+    """`rel` 现在被 git 跟踪吗（`git ls-files --error-unmatch` 退 0 才算）。"""
+    done = subprocess.run(
+        ["git", "-c", "core.quotepath=false", "ls-files", "--error-unmatch", "--", rel],
+        cwd=repo, capture_output=True, text=True, check=False,
+    )
+    return done.returncode == 0
+
+
+def check_seal_untracked(repo: Path = ROOT, gates_path: Path | None = None) -> list[str]:
+    """⑪ 封存时未跟踪的文件，现在必须已被 git 跟踪（T-G212 / 卡 115）。
+
+    为什么：2026-10-02 三笔提交（`T-G205`/`T-G206`/`T-G208`）的**片段文件根本没进提交** ——
+    `_stage_card.py` 在卡树里生成 `docs/changelog.d/<台账号>.md` 等片段（**未跟踪文件**），
+    集成时 `git add --allow` 只给了代码文件 ⇒ 提交里没有片段（实测三笔的 `.d/` 文件数 = 0/0/0）。
+    门禁算的"封存树"包含了那些未跟踪片段，却**没人**拿它跟"提交树"比；`sync_docs.py --check`
+    又只查"现有片段在不在汇总里"、少文件照样 PASS ⇒ 这个缺口零判据。
+    `run_gates.py --seal` 现在把当时未跟踪的清单写进 `gates/last.json.untracked`，
+    本函数就是那条**机器判据**：逐条 `git ls-files --error-unmatch`，谁还没被跟踪就点名。
+
+    口径（卡 §1 定，别扩大）：
+    - 只查**这份清单**（封存那一刻未跟踪的），不查"封存树 == 提交树"（那三个派生的共享文档
+      允许在门禁之后按片段重汇总，是有意的宽松）；
+    - 逐条点名，附一句"生成了却没进提交 ⇒ 集成时 `--allow` 漏了它"；
+    - **有缺 ⇒ 判红**（返回非空 → 调用方计进 all_fails，退出码非 0）；
+    - 清单为空 / 全被跟踪 ⇒ 返回空（绿），不打印逐条路径的噪音；
+    - ★ **优雅降级**：老 `gates/last.json` **没有** `untracked` 字段（仓库里就躺着历史版本）
+      → 当"没有清单"，返回空，**不报红、不崩**；
+    - 文件**已不存在**（被删/改名）不算缺 —— 口径是"必须已被跟踪（**或者干脆不存在了**）"。
+    """
+    hint = "封存时未跟踪、现在仍未被 git 跟踪 —— 生成了却没进提交 ⇒ 集成时 `--allow` 漏了它"
+    path = gates_path if gates_path is not None else (repo / "gates" / "last.json")
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    untracked = payload.get("untracked")
+    if not isinstance(untracked, list):  # 老产物没有这个字段 → 没有清单，优雅降级
+        return []
+    fails: list[str] = []
+    for rel in untracked:
+        rel = str(rel)
+        if not rel or _is_tracked(repo, rel):
+            continue
+        if not (repo / rel).exists():  # 干脆不存在了 → 不算"生成了却没进提交"
+            continue
+        fails.append(f"{rel}：{hint}")
+    return fails
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rev", default="HEAD")
@@ -585,7 +640,19 @@ def main() -> int:
             n = len([ln for ln in log.splitlines() if ln])
             print(f"  {OK} {n} 条提交全部合格（多余编号写进 `Refs:` 的那条规矩，机器也会拦了）")
 
-    all_fails = shape + fails + num_fails + git_fails + tighten_fails
+    # ⑪ 封存未跟踪清单（T-G212 / 卡 115）：封存时未跟踪的文件，提交后必须已被 git 跟踪。
+    #   需要 git，所以 `--no-git`（无 git 场景）下跳过 —— 那条路本来就没有 git 可查。
+    seal_fails: list[str] = []
+    if not args.no_git:
+        print("\n=== ⑪ 封存未跟踪清单（封存时未跟踪的文件，提交后必须已被跟踪）===")
+        seal_fails = check_seal_untracked()
+        if seal_fails:
+            for line in seal_fails:
+                print(f"  {FAIL} {line}")
+        else:
+            print(f"  {OK} 清单为空 / 全被跟踪（或老产物没这字段 → 优雅降级）")
+
+    all_fails = shape + fails + num_fails + git_fails + tighten_fails + seal_fails
     n_exempt = len(exempted) + len(git_exempt)
     print("\n" + "=" * 72)
     if all_fails:

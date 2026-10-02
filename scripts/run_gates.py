@@ -620,6 +620,32 @@ def git(*args: str) -> str:
     return r.stdout.strip()
 
 
+def untracked_files() -> list[str]:
+    """此刻**未跟踪**的文件清单（= 会进 `git add -A`、但还没进索引的），不含 `gates/**`。
+
+    ★ T-G212 / 卡 115：门禁算的"封存树"是**工作树减 `gates/**`**（临时索引 `git add -A`），
+    **包含**未跟踪的生成物（例如 `_stage_card.py` 落的 `docs/changelog.d/<台账号>.md` 片段）——
+    可是**没人**拿它跟"提交树"比：2026-10-02 三笔提交（`T-G205`/`T-G206`/`T-G208`）的片段文件
+    **根本没进提交**（集成时 `--allow` 只给了代码文件），而 `sync_docs.py --check` 只查
+    "现有片段在不在汇总里"、**少文件照样 PASS** ⇒ 这个缺口零判据。
+
+    本函数把"封存那一刻未跟踪的文件"记进 `gates/last.json.untracked`，好让
+    `scripts/audit_progress.py` 事后逐条 `git ls-files --error-unmatch` —— 谁"生成了却没进提交"
+    当场点名。口径：
+
+    - 用 `--others --exclude-standard`：只列**未跟踪且未被 `.gitignore` 忽略**的（= `git add -A`
+      会带上的那批，与"封存树"口径一致）；
+    - **已跟踪的不列**：它们本来就在提交里，列出来只会是噪音；
+    - **`gates/**` 照旧不列**：与封存指纹（`tree_without_gates`）同一口径 —— 门禁产物不进清单，
+      否则 `gates/logs/**` 这类未跟踪产物会天天误报。
+    """
+    out = git("ls-files", "--others", "--exclude-standard")
+    return [
+        p for p in out.splitlines()
+        if p.strip() and p != "gates" and not p.startswith("gates/")
+    ]
+
+
 def docs_fragments_problems() -> list[str]:
     """片段 ↔ 汇总一致性（卡 107 / T-G203）：跑 `tools/sync_docs.py --check`。
 
@@ -693,6 +719,9 @@ def seal() -> int:
     old = payload.get("tree", "")
     payload["tree"] = staged_tree()
     payload["tree_scope"] = TREE_SCOPE   # 口径自述：旧笔没这个字段 → wb_verify 据它判"不核"
+    # ★ T-G212 / 卡 115：封存**这一刻**的未跟踪清单 —— 提交前最后一眼，比门禁跑时那份更贴近提交。
+    #   提交之后 `scripts/audit_progress.py` 逐条查它们有没有被跟踪：漏了 = 生成了却没进提交。
+    payload["untracked"] = untracked_files()
     payload["sealed_at"] = datetime.now().isoformat(timespec="seconds")
     GATES.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
@@ -1410,6 +1439,10 @@ def main() -> int:
         # 复用了上次判定的门（T-G47）：单列一栏 + 带上输入哈希。**不是"通过"的同义词** ——
         # 它是"这一层的输入一个字节都没变，所以上次那个判定仍然成立"，写出来才禁得住问。
         "reused": {k: v for k, v in reused.items()},
+        # ★ T-G212 / 卡 115：门禁跑时**未跟踪**的文件清单（不含 `gates/**`）。
+        #   这是"生成了却没进提交"那条判据的凭证：审计逐条查它们提交后有没有被 git 跟踪。
+        #   既有字段语义一个字不动，这里只**追加**一个新键。
+        "untracked": untracked_files(),
         "trailer": "; ".join(
             [f"{r['name']} {r['summary']}" for r in passed]
             + [f"{n} NOT RUN" for n in not_run]
