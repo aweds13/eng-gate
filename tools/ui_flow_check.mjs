@@ -29,6 +29,9 @@
  *     node tools/ui_flow_check.mjs --twice         # 跑两遍并比断言指纹（**按需**：改这套流本身时用）
  *     node tools/ui_flow_check.mjs --only 新手引导  # 只跑名字/编号里含这几个字的那条
  *     node tools/ui_flow_check.mjs --list          # 列出所有流与它们替掉的人工项
+ *     node tools/ui_flow_check.mjs --coverage      # ★ 正向对账（卡 159）：清单里每个功能项
+ *                                                  #   要么被某条流的 item 指到、要么写明
+ *                                                  #   机器判不了的理由；不起浏览器
  *     node tools/ui_flow_check.mjs --json          # 机器可读结果
  *     node tools/ui_flow_check.mjs --port 8541 --keep   # 换端口 / 跑完不杀服务
  *
@@ -100,7 +103,7 @@ function newestSyncPack() {
 /* ---------------------------------------------------------------- 参数 */
 
 function parseArgs(argv) {
-  const a = { json: false, keep: false, twice: false, quiet: false, list: false, port: 8541, only: '' }
+  const a = { json: false, keep: false, twice: false, quiet: false, list: false, port: 8541, only: '', coverage: false, doc: '' }
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]
     if (k === '--json') a.json = true
@@ -109,6 +112,8 @@ function parseArgs(argv) {
     else if (k === '--quiet') a.quiet = true
     else if (k === '--list') a.list = true
     else if (k === '--shots') a.shots = true
+    else if (k === '--coverage') a.coverage = true
+    else if (k === '--doc') a.doc = argv[++i] ?? ''
     else if (k === '--port') a.port = Number(argv[++i])
     else if (k === '--only') a.only = argv[++i] ?? ''
     else { console.error(`未知参数：${k}`); process.exit(1) }
@@ -1901,6 +1906,82 @@ flow({
   },
 })
 
+/* ------------------------------------------------ 正向对账（卡 159 · T-G259 · INV-76）
+ * 人工验收清单里每个**非物理 / 非口味**项，要么被某条流的 `item` 指到（机器搬走了），
+ * 要么写明「机器判不了 / 机器已验到哪」的理由 —— 两样都没有 = 一条没人认账的验收项，
+ * 它会无限期停在「人看一眼」或被悄悄丢掉。判据只吃清单本身 + FLOWS 的 item 列，
+ * `--doc <路径>` 可换清单（自检喂合成坏样例用），**不起浏览器**。 */
+
+const REASON_MARKERS = [
+  // 「机器判不了 / 剩哪眼给人」的理由
+  '机器判不了', '机器验不了', '机器不许碰', '机器碰不了', '机器动不了',
+  '人的观感', '是人读', '是人看', '要人读', '要人看', '人读出来', '人的判断',
+  '留给人工', '没搬给机器', '只有人能', '需人点', '没验过', '没人点过', '没人看过',
+  '无门禁', '无判据', '环境差异',
+  // 「机器已验到哪」的记账（有机器判据的行也算对过账，不是黑洞）
+  '机器已经', '机器搬走', '机器只能', '机器判据', '你不用点', '渲染黄金', '对比度门',
+  '每轮门禁', '每轮比对', '零命中',
+]
+
+function classifySection(name) {
+  if (name.includes('物理') || name.includes('机器动不了')) return 'physical'
+  if (name.includes('口味')) return 'taste'
+  return 'functional'
+}
+
+/** 解析人工验收清单：回 `{ physical, taste, items }`；
+ *  `items` 是功能项（非物理 / 非口味）的表格行 `{ id, row, flowCovered, reasoned }`。 */
+function parseManualDoc(text, flowItems) {
+  const stat = { physical: 0, taste: 0, items: [] }
+  let kind = 'functional'
+  for (const line of text.split(/\r?\n/)) {
+    const h = line.match(/^##\s+(.*)$/)
+    if (h) { kind = classifySection(h[1]); continue }
+    if (kind === 'physical') { if (/^\|\s*\*\*/.test(line)) stat.physical += 1; continue }
+    if (kind === 'taste') { if (/^\|\s*\*\*/.test(line)) stat.taste += 1; continue }
+    if (!line.startsWith('|')) continue
+    const m = line.match(/^\|\s*\*\*(.+?)\*\*/)
+    if (!m) continue
+    const id = m[1].replace(/<br>.*$/, '').trim()
+    if (!id || id === '#') continue
+    stat.items.push({
+      id,
+      row: line.trim().slice(0, 160),
+      flowCovered: flowItems.some((it) => it.includes(id)),
+      reasoned: REASON_MARKERS.some((k) => line.includes(k)),
+    })
+  }
+  return stat
+}
+
+function coverageReport(docPath) {
+  const path = docPath || MANUAL_DOC
+  if (!existsSync(path)) {
+    console.log(`❌ 找不到人工验收清单：${path}`)
+    return 2
+  }
+  const text = readFileSync(path, 'utf8')
+  const flowItems = FLOWS.map((f) => f.item)
+  const stat = parseManualDoc(text, flowItems)
+  const unclaimed = stat.items.filter((x) => !x.flowCovered && !x.reasoned)
+  console.log('=== 正向对账：人工验收清单 ↔ 行为流（卡 159 / T-G259）===')
+  console.log(`  清单：${path}`)
+  console.log(`  物理场景 ${stat.physical} 条 · 口味判断 ${stat.taste} 条（机器不动，豁免）`)
+  console.log(`  功能项 ${stat.items.length} 条：流覆盖 ${stat.items.filter((x) => x.flowCovered).length}`
+    + ` · 写明机器判不了/已验到哪 ${stat.items.filter((x) => x.reasoned).length}`
+    + ` · 未对账 ${unclaimed.length}`)
+  if (unclaimed.length) {
+    console.log('\n❌ 未对账的功能项（既没有被某条流的 item 指到、也没写明机器判不了的理由）：')
+    for (const x of unclaimed) console.log(`  · ${x.id} —— ${x.row}`)
+    console.log('  补法：给这条流加 `item` 指到它，或在清单该行末列写明机器判不了的理由。')
+    return 1
+  }
+  console.log('\n正向对账通过 ✅ 每个功能项都有去处（流覆盖或写明理由）')
+  return 0
+}
+
+const MANUAL_DOC = join(ROOT, 'docs', '人工验收-照着点.md')
+
 /* ---------------------------------------------------------------- 跑 */
 
 function fingerprint(results) {
@@ -1967,6 +2048,12 @@ async function main() {
   if (ARGS.list) {
     for (const f of FLOWS) console.log(`${f.id}\t${f.name}\t← ${f.item}`)
     return { ...result, code: 0, ok: true }
+  }
+
+  // ★ 正向对账（卡 159 / T-G259）：不起浏览器，只对清单与流的 item 列
+  if (ARGS.coverage) {
+    const code = coverageReport(ARGS.doc || null)
+    return { ...result, code, ok: code === 0 }
   }
 
   const browserPath = findBrowser()

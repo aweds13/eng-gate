@@ -18,7 +18,8 @@ r"""不变量台账的机器核查器（卡 144 · T-G243）。
     id      台账条号（INV-nn）
     claim   一句人话：什么不许发生
     judge   判据在哪：`<仓库相对路径>` 或 `<路径>::<符号>`；命令写在 note 里、judge 仍指脚本路径
-    nail    反例钉子：`tests/<文件>::<用例名>`；没有钉子写 `-`，并把 status 标 missing / partial
+    nail    反例钉子：`tests/<文件>::<用例名>`（★ 卡 159 起也认 `scripts/<自测脚本>::<用例名>`）；
+            没有钉子写 `-`，并把 status 标 missing / partial
     status  `covered`（判据 + 钉子都在）/ `partial`（有判据、缺一半）/ `missing`（本仓内无判据）
     note    诚实说明边界
 
@@ -53,8 +54,10 @@ DEFAULT_LEDGER = ROOT / "复盘" / "不变量台账.toml"
 STATUSES = ("covered", "partial", "missing")
 #: 「本仓内没有」的哨兵（判据或钉子缺一半时写它）。
 NONE_MARK = "-"
-#: nail 的写法：`tests/<文件>::<用例名>`（用例名可带 pytest 参数化后缀 `[...]`）。
-NAIL_RE = re.compile(r"^(?P<file>tests/[^:]+?)::(?P<case>.+)$")
+#: nail 的写法：`tests/<文件>::<用例名>`；★ 卡 159 起也认 `scripts/<自测脚本>::<用例名>`
+#: （护栏脚本自己的命名用例，如 `scripts/test_check_layers.py::<case_*>`）；
+#: 用例名可带 pytest 参数化后缀 `[...]`。
+NAIL_RE = re.compile(r"^(?P<file>(?:tests|scripts)/[^:]+?)::(?P<case>.+)$")
 
 
 class LedgerError(Exception):
@@ -100,6 +103,15 @@ def _defines(text: str, name: str) -> bool:
     return re.search(rf"\bdef\s+{re.escape(name)}\s*\(", text) is not None
 
 
+def defines_case(text: str, name: str) -> bool:
+    """测试文件正文里有没有 `def <name>(` —— 用例级存在性判据的**唯一真源**。
+
+    ★ 卡 159（T-G259）：`scripts/audit_progress.py::eval_assertion` 的 `test:文件::用例名`
+    复用这一把尺子（**不许写第二份**）；本模块自己的 nail 核对也走它。
+    """
+    return _defines(text, name)
+
+
 def check_entries(rows: Iterable[dict[str, Any]], root: Path = ROOT) -> list[str]:
     """逐条核 `judge` 的路径与 `nail` 的用例名 —— 回一串人话问题（**空列表 = 全过**）。
 
@@ -135,7 +147,7 @@ def check_entries(rows: Iterable[dict[str, Any]], root: Path = ROOT) -> list[str
             match = NAIL_RE.match(nail)
             if not match:
                 problems.append(
-                    f"{rid} nail 写法不对（要 tests/<文件>::<用例名>）：{nail}")
+                    f"{rid} nail 写法不对（要 tests/…或 scripts/…::<用例名>）：{nail}")
             else:
                 test_file = root / match.group("file")
                 if not test_file.exists():
@@ -143,7 +155,7 @@ def check_entries(rows: Iterable[dict[str, Any]], root: Path = ROOT) -> list[str
                 else:
                     name = case_name(match.group("case"))
                     text = test_file.read_text(encoding="utf-8")
-                    if not _defines(text, name):
+                    if not defines_case(text, name):
                         problems.append(
                             f"{rid} nail 用例名在 {match.group('file')} 里找不到："
                             f"{match.group('case')}")

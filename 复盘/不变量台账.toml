@@ -9,7 +9,8 @@
 #   claim  一句人话：什么不许发生
 #   judge  判据在哪：`<仓库相对路径>` 或 `<路径>::<符号>`。若判据是一句命令，
 #          命令写在 note 里、judge 仍指向命令所在脚本的路径（wb_invariants.py 只核路径，不真跑）。
-#   nail   反例钉子：`tests/<文件>::<用例名>`；没有钉子就写 `-`，并把 status 标 missing / partial。
+#   nail   反例钉子：`tests/<文件>::<用例名>`（★ 卡 159 起也认 `scripts/<自测脚本>::<用例名>`）；
+#          没有钉子就写 `-`，并把 status 标 missing / partial。
 #   status `covered`（判据 + 钉子都在）/ `partial`（有判据、缺一半）/ `missing`（本仓内无判据）
 #   note   诚实说明边界
 #
@@ -109,9 +110,9 @@ note = "两条判据互为补集：① 数工具调用回合（提前预警）�
 id = "INV-12"
 claim = "假绿家族：台账 [exceptions] 的豁免不许当通过（复核要求豁免 0）"
 judge = "tools/wb_review.py::audit_verdict"
-nail = "-"
-status = "partial"
-note = "判据在：tools/wb_review.py::audit_verdict 要求 audit 输出里含『豁免 0 项已知欠账』，否则报 problem。但本仓没有一条『台账带豁免 ⇒ 复核红』的反例钉子（tests/test_wb_review.py 里没有对应用例）⇒ 标 partial。"
+nail = "tests/test_wb_review.py::test_ledger_with_exemption_makes_review_red"
+status = "covered"
+note = "卡 159（T-G259）补上反例钉子：判据拆成 audit_verdict_from_output（可喂假数据）—— audit 退出码 0 但输出是「豁免 1 项已知欠账」⇒ 复核必须红并点名豁免；「豁免 0 项」⇒ 绿。"
 
 [[invariant]]
 id = "INV-13"
@@ -133,9 +134,9 @@ note = "★ 卡 140 自己发现的后门：tools/wb_verify.py::check_gates 有 
 id = "INV-15"
 claim = "假绿家族：共享文档片段『单向缺失』查不出来（--check 只查片段没进汇总）"
 judge = "tools/sync_docs.py::run"
-nail = "tests/test_docs_fragments.py::test_check_is_green_after_merge_and_points_at_hand_edit"
-status = "partial"
-note = "tools/sync_docs.py::run 的 --check 只查『片段内容没在汇总里』这一个方向；反方向（汇总里有、片段已经没了）查不出来 ⇒ 单向。已有钉子只钉『手改汇总被抓』那半。"
+nail = "tests/test_docs_fragments.py::test_check_catches_a_deleted_fragment"
+status = "covered"
+note = "卡 159（T-G259）补反方向：汇总里有、片段被删了（git 里跟踪过 / HEAD 里有 / 历史上删过）⇒ 判红并点名台账号；片段从未存在（片段纪元 T-G203 前的老账）⇒ 只报一行 info 不判红 —— 两种情形分得开。"
 [[invariant]]
 id = "INV-16"
 claim = "队列登记的卡，其规格文件必须已进 git 索引 —— 否则不许开跑门禁"
@@ -268,17 +269,17 @@ note = "「门禁四要素.md」里已出现过写「run_gates 没给每道门�
 id = "INV-32"
 claim = "台账的 test: 证据不许只证明「这个测试文件在」—— 必须指到真用例名"
 judge = "scripts/audit_progress.py::eval_assertion"
-nail = "-"
-status = "partial"
-note = "★ 最贵的一条缝：eval_assertion 对 test: 只做文件存在性；wb_invariants 才核用例名，但它只覆盖这张台账 ⇒ 两边该合流。 ★ 归位：`scripts/audit_progress.py::eval_assertion`"
+nail = "tests/test_audit_tightening.py::test_case_level_test_assertion_bites_on_a_missing_case"
+status = "covered"
+note = "卡 159（T-G259）收口：test:文件::用例名 真核用例名在文件里（尺子复用 wb_invariants.defines_case，不写第二份；编造用例名 ⇒ 红并点名）；裸 test:文件 继续支持，但存量还有 235 条没补用例名 —— audit 的「③b」一节逐条列出（不许静默降级），逐笔补齐前先在此留痕。"
 
 [[invariant]]
 id = "INV-33"
 claim = "台账/复盘里写的可核对事实，必须能被机器复核（否则工人写错没人咬）"
 judge = "scripts/audit_progress.py::eval_assertion"
-nail = "tests/test_evidence_map.py::test_evaluate_covers_file_text_and_test_types"
-status = "partial"
-note = "证据倒排工具在（evidence_map），但「数字与事实对不对」只有一半判据。 ★ 归位：台账 evidence 的 `file:` / `text:` 断言由 `scripts/audit_progress.py::eval_assertion` 真求值（改文件之前还能用 `tools/evidence_map.py --stale` 事前问「会碎什么」）"
+nail = "tests/test_audit_tightening.py::test_unclaimed_changed_file_is_named"
+status = "covered"
+note = "卡 159（T-G259）补上「实际发生的有没被声称」那半：反向判据 ⑫ check_claimed_files —— 本笔实际改动的文件 ⊆ 台账证据指针集合 ∪ 显式豁免清单（模块默认 docs/复盘/gates 三族 + 台账顶层 [claimed_files_exempt] 可追加），谁没人声称就点名。边界（如实写）：复盘正文里的自然语言事实仍靠 text: 指针（语义锚点口径见卡表 §22⑤）。"
 
 [[invariant]]
 id = "INV-34"
@@ -308,9 +309,9 @@ note = "★ 典型「判据自己假绿」：桩事件缺 id + __timestamp ⇒ _
 id = "INV-37"
 claim = "护栏脚本不许永远输出 PASS（引用正则漏掉中文文件名 = 对中文路径视而不见）"
 judge = "scripts/check_layers.py::check_link_integrity"
-nail = "-"
-status = "partial"
-note = "判据本身要能证明它看得到东西（合成坏样例必须被抓）。 ★ 归位：源头 = `scripts/check_layers.py::check_link_integrity` 的正则（现为 `` `([^\\s`]*?\\.md)` ``，:121）+ 它自己的自检 `scripts/test_check_layers.py`（正/负样例）"
+nail = "scripts/test_check_layers.py::case_chinese_broken_link_is_caught"
+status = "covered"
+note = "卡 159（T-G259）补「证明它看得到东西」：合成坏样例（中文文件名之间的断链）必须被抓并点名引用所在文件，中文正常引用不许误报；check_link_integrity 现回「这次实际检查了几条引用」，门的输出打出来（真仓当前 ≈597 条/趟）。钉子落在 scripts/ 自测的命名用例里（wb_invariants 已认 scripts/ 前缀）。"
 
 [[invariant]]
 id = "INV-38"
@@ -387,10 +388,10 @@ note = "判据按**域内文件**比对两个基点；「基点本身成孤儿�
 [[invariant]]
 id = "INV-47"
 claim = "改一个字面前必须知道「谁逐字钉着它」（同类事故本会话四次）"
-judge = "tools/pin_check.py::PIN_MARKERS"
-nail = "tests/test_pin_check.py::test_mutation_dropping_text_marker_kills_pin1"
-status = "partial"
-note = "先跑 pin_check 列出挂在该文件上的字面断言；台账的 text: 指针该指语义锚点而不是整句。 ★ 归位：源头 = `tools/pin_check.py`（只读工具：按字面列命中并标注钉子语境 + 点名台账号）"
+judge = "tools/wb_dispatch.py::OPENING"
+nail = "tests/test_pin_check.py::test_opening_rules_tell_copy_edit_cards_to_run_pin_check"
+status = "covered"
+note = "卡 159（T-G259）接上：改文案/措辞/字面/常量类卡开工前必须跑 pin_check，这条规矩写进派活开场白（OPENING 与 --lean 的 LEAN_OPENING 两块都有，钉子两块一起钉）；pin_check 本体（按字面列命中 + 钉子语境标注 + 点名台账号）不变。"
 
 [[invariant]]
 id = "INV-48"
@@ -540,9 +541,9 @@ note = "★ 同族的通则（契约六要素 ↔ 路由 ↔ 界面三面通路�
 id = "INV-66"
 claim = "规格/台账声称 done 的操作，契约 / 路由 / 界面三个面必须真的都有通路"
 judge = "scripts/check_commands.py::main"
-nail = "tests/test_check_commands.py::test_real_repo_has_no_hard_conflict"
-status = "partial"
-note = "★ 现状：check_commands 只核 OP ↔ commands.toml 的**存在性**，不核「可逆/可删」这类承诺是否真有实现 ⇒ 「洞」是进度不是错误，只报不红。 ★ 归位：`docs/commands.toml` 每条 OP 的 `routes` / `ui` 字段 + `scripts/check_commands.py::main`（表 ↔ 契约 ↔ 路由 ↔ 界面逐条核对）"
+nail = "tests/test_check_commands.py::test_unregistered_route_without_any_claim_is_red"
+status = "covered"
+note = "卡 159（T-G259）加反方向：真 app.routes 里有、**谁都不认账**（命令表 routes 字段 + 台账 route: 证据 + [meta.acknowledged_routes] 三处都没有）⇒ 红（老口径只算「洞」不红）；「只在台账认领、命令表没登」是两份记账间的进度差，报数不红（真仓当前 29 条只台账认领，如实打印）。"
 
 [[invariant]]
 id = "INV-67"
@@ -619,18 +620,18 @@ note = "★ 现场：同一句过期话漂在**三处**，都说 pywebview 未�
 [[invariant]]
 id = "INV-76"
 claim = "人工验收项不许无限期停在「人看一眼」，也不许把搬走的写回「要人点」"
-judge = "tools/ui_flow_check.mjs::selectedFlows"
-nail = "tests/test_ui_flow_check.py::test_no_flow_was_deleted"
-status = "partial"
-note = "★ 正向对账缺一条：清单里每个非物理/非口味项，都要么被某条流的 item 指到、要么写明机器判不了的理由。 ★ 归位：源头 = `tools/ui_flow_check.mjs`（真点击走 `elementFromPoint` 命中测试 + 真按键 + 每条流必填 `item` 回查交接文档）"
+judge = "tools/ui_flow_check.mjs::coverageReport"
+nail = "tests/test_ui_flow_check.py::test_coverage_bites_on_an_unclaimed_item"
+status = "covered"
+note = "卡 159（T-G259）补正向对账：ui_flow_check.mjs --coverage（不起浏览器）核清单里每个非物理/非口味项，要么被某条流的 item 指到、要么行内写明机器判不了/已验到哪的理由；合成坏样例（F-99 没人认账）必须红并点名。边界：node 缺席时整层 skip（与本层其它用例同口径，NOT RUN 不是 PASS）。"
 
 [[invariant]]
 id = "INV-77"
 claim = "改一句话会打穿钉在它上面的断言与台账 text: 证据 ⇒ 门禁成了改文案的阻力"
 judge = "tools/evidence_map.py"
-nail = "-"
-status = "partial"
-note = "改前先跑 evidence_map --file <要改的文件>；text: 证据该指语义锚点（节标题/函数名）而不是整句。 ★ 归位：源头 = `docs/traceability.toml` 的 `text:` 证据指**语义锚点**（节标题 / 函数名）而不是整句；改前先跑 `tools/evidence_map.py --file <要改的文件>`"
+nail = "tests/test_pin_check.py::test_text_pointer_rule_prefers_semantic_anchors"
+status = "covered"
+note = "卡 159（T-G259）立口径：text: 指针改指**语义锚点**（节标题/函数签名/常量名），不钉整句正文 —— 写进卡表 §22⑤（钉子核口径真在那一节）；改文案类卡开工前先跑 pin_check（已进派活开场白，见 INV-47）。边界（如实写）：存量台账里钉整句的 text: 指针未逐一迁移 —— 那半在改到对应文件时逐条换锚点，evidence_map --stale 会在断的那一刻报。"
 
 [[invariant]]
 id = "INV-78"

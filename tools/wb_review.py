@@ -350,6 +350,23 @@ def check_files(files: list[str], *, read_only: bool, allow: list[str]) -> list[
     return [f"有 {len(outside)} 个改动不在白名单里：{outside[:8]}"] if outside else []
 
 
+def audit_verdict_from_output(returncode: int, body: str) -> list[str]:
+    """① 的判据（从 audit 的退出码与输出判）—— 单独拆出来是为了能**喂假数据测试**
+    （同 `scripts/audit_progress.py::parse_task_trailers` 的做法）。
+
+    ★ 卡 159（T-G259 / INV-12）：台账 `[exceptions]` 的豁免**不许当通过** ——
+    audit 自己对豁免条目只打 WARN、退出码仍是 0，所以这里必须**另查**「豁免 0 项已知欠账」
+    这行读数：只要不是 0，复核就红（反例钉子：tests/test_wb_review.py）。
+    """
+    problems: list[str] = []
+    if returncode != 0:
+        tail = [ln for ln in body.splitlines() if ln.strip()][-4:]
+        problems.append("audit 没过：" + " | ".join(tail))
+    if "豁免 0 项已知欠账" not in body:
+        problems.append("audit 里有豁免项（本项目要求 [exceptions] 保持 0）")
+    return problems
+
+
 def audit_verdict() -> tuple[list[str], str]:
     """① audit 真跑一遍（它是唯一能判"证据对不上"的东西）。"""
     done = subprocess.run(
@@ -357,12 +374,7 @@ def audit_verdict() -> tuple[list[str], str]:
         cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     body = f"{done.stdout or ''}\n{done.stderr or ''}"
-    problems: list[str] = []
-    if done.returncode != 0:
-        tail = [ln for ln in body.splitlines() if ln.strip()][-4:]
-        problems.append("audit 没过：" + " | ".join(tail))
-    if "豁免 0 项已知欠账" not in body:
-        problems.append("audit 里有豁免项（本项目要求 [exceptions] 保持 0）")
+    problems = audit_verdict_from_output(done.returncode, body)
     wait = re.search(r"审计通过", body)
     return problems, ("审计通过 ✅" if wait else "审计**未通过**")
 

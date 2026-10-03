@@ -508,3 +508,26 @@ def test_partial_real_artifact_cli_is_rejected_end_to_end(
     assert code == 1, out
     assert "少 1 道" in out and names[-1] in out, out
 
+
+
+# ------------------------------------------------------------------ ① 豁免钉子（卡 159 · T-G259）
+
+def test_ledger_with_exemption_makes_review_red() -> None:
+    """★ 卡 159（INV-12 的钉子）：**台账带豁免 ⇒ 复核必须红**。
+
+    红读数（实现前）：判据内联在 `audit_verdict` 里、没法喂数据 ⇒ 本用例 AttributeError 红。
+    绿读数（实现后）：audit 退出码 0、但输出里是「豁免 1 项已知欠账」⇒ 复核**红**并点名豁免；
+    「豁免 0 项已知欠账」⇒ 绿。判据单独拆出来喂假数据（同 `parse_task_trailers` 的做法）。
+    """
+    # 退出码 0 + 有豁免 ⇒ 仍必须红（豁免不许当通过）
+    body_exempt = (
+        "=== 台账：364 条 / 豁免（已知欠账）：1 条 ===\n"
+        "审计通过 ✅（豁免 1 项已知欠账）\n"
+    )
+    problems = wr.audit_verdict_from_output(0, body_exempt)
+    assert problems, "台账带豁免时复核不许绿"
+    assert any("豁免" in p for p in problems), problems
+    # 豁免 0 + 退出码 0 ⇒ 绿
+    assert wr.audit_verdict_from_output(0, "审计通过 ✅（豁免 0 项已知欠账）") == []
+    # 退出码非 0 ⇒ 红（audit 没过）
+    assert wr.audit_verdict_from_output(1, "审计不通过：2 项失败（0 项已豁免）")

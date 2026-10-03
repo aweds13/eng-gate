@@ -97,3 +97,39 @@ def test_mutation_dropping_text_marker_kills_pin1(monkeypatch) -> None:
     ledger_hits = [h for h in hits if h.category == "台账证据" and h.entry == "T-G85"]
     assert ledger_hits, "命中本身不该消失（消失 = 匹配坏了，不是判据坏了）"
     assert all(not h.is_pin for h in ledger_hits), "去掉 text: 判据后 T-G85 不应再被标钉子"
+
+
+# ---------------------------------------------------------------- 接上派活链路（卡 159 · T-G259）
+
+
+def _opening_blocks() -> dict[str, str]:
+    """派活器里的开场白常量原文（OPENING / LEAN_OPENING 两块都要有那条规矩）。"""
+    import re
+
+    src = (ROOT / "tools" / "wb_dispatch.py").read_text(encoding="utf-8")
+    blocks = {}
+    for name in ("OPENING", "LEAN_OPENING"):
+        m = re.search(rf"^{name} = \((.*?)^\)", src, re.S | re.M)
+        assert m, f"wb_dispatch.py 里找不到 {name}"
+        blocks[name] = m.group(1)
+    return blocks
+
+
+def test_opening_rules_tell_copy_edit_cards_to_run_pin_check() -> None:
+    """★ 卡 159（INV-47 的钉子）：改文案/字面/常量类卡**开工前必须跑 pin_check** ——
+    这条规矩要钉进派活的开场白（普通 OPENING 与 --lean 的 LEAN_OPENING 都要），
+    少任何一块 = 规矩悄悄退化回「撞上了才知道」。
+    """
+    for name, block in _opening_blocks().items():
+        assert "pin_check" in block, f"{name} 里没有 pin_check 规矩（卡 159）"
+        assert "--literal" in block, f"{name} 里没写怎么跑（--literal）"
+
+
+def test_text_pointer_rule_prefers_semantic_anchors() -> None:
+    """★ 卡 159（INV-77 的钉子）：`text:` 指针改指**语义锚点**的口径必须写进
+    `复盘/外包-卡表与规矩.md` §22（证据指针语法表）—— 口径没立 = 下一个工人照旧钉整句。
+    """
+    doc = (ROOT / "复盘" / "外包-卡表与规矩.md").read_text(encoding="utf-8")
+    sec22 = doc.split("## §22", 1)[1].split("## §23", 1)[0]
+    assert "语义锚点" in sec22, "§22 里没有「语义锚点」口径"
+    assert "pin_check" in sec22, "§22 里没有「改前先跑 pin_check」"

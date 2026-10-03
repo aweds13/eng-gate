@@ -101,7 +101,7 @@ def is_git_ignored(path: Path) -> bool:
     return p.returncode == 0
 
 
-def check_link_integrity() -> tuple[list[str], list[str]]:
+def check_link_integrity(root: Path | None = None) -> tuple[list[str], list[str], int]:
     """检查 docs 内文档引用的相对路径是否真实存在。
 
     路径可能相对「当前文档」或相对「docs/ 根」书写（两种约定都常见），
@@ -111,12 +111,20 @@ def check_link_integrity() -> tuple[list[str], list[str]]:
     被 git 忽略的产物（gitignored，不随 worktree 分发，如 gates/diag/ 的过程文件）
     跳过存在性检查，只记一行说明 —— 判据问 git，不硬编码目录名（T-G127）。
 
-    返回（problems, notes）：problems 是断链，notes 是 gitignored 跳过说明。
+    ★ 卡 159（T-G259 / INV-37）：判据要能**证明它看得到东西** ——
+      ① 返回值多了第三位 `checked`（这次**实际检查**的引用条数），门的输出要打出来；
+      ② 接受 `root` 参数（自检喂合成坏样例：中文文件名断链必须被抓 ——
+         老的正则漏中文路径那种「对中文视而不见」，用这条钉住）。
+
+    返回（problems, notes, checked）：problems 是断链，notes 是 gitignored 跳过说明，
+    checked 是实际核对过的引用条数（豁免 URL/绝对路径/待建之后仍数进去的）。
     """
+    base = root if root is not None else ROOT
     known_missing = {"DESIGN.md", "LEARN.md"}  # 文档中已标注为"待建"，不算断链
     problems: list[str] = []
     notes: list[str] = []
-    docs_root = ROOT / "docs"
+    checked = 0
+    docs_root = base / "docs"
     # 匹配反引号内的 .md 路径（支持中文文件名；相对当前文档 / docs 根 / 仓库根三种写法）
     pattern = re.compile(r"`([^\s`]*?\.md)`")
     for md in docs_root.rglob("*.md"):
@@ -128,11 +136,12 @@ def check_link_integrity() -> tuple[list[str], list[str]]:
                 continue
             if Path(rel).name in known_missing:
                 continue
+            checked += 1
             # 多基准尝试：相对当前文档 / 相对 docs 根 / 相对仓库根
             candidates = [
                 (md.parent / rel).resolve(),
                 (docs_root / rel).resolve(),
-                (ROOT / rel).resolve(),
+                (base / rel).resolve(),
             ]
             # 裸文件名（无目录分隔）时，在 docs 下递归查找同名文件
             if "/" not in rel and "\\" not in rel:
@@ -141,11 +150,11 @@ def check_link_integrity() -> tuple[list[str], list[str]]:
                 # gitignored 产物：不随树分发，worktree 里必然没有 → 跳过（T-G127）
                 if any(is_git_ignored(c) for c in candidates):
                     notes.append(
-                        f"跳过 gitignored 产物引用: {md.relative_to(ROOT)} → {rel}"
+                        f"跳过 gitignored 产物引用: {md.relative_to(base)} → {rel}"
                     )
                     continue
-                problems.append(f"{md.relative_to(ROOT)} 引用了不存在的 {rel}")
-    return problems, notes
+                problems.append(f"{md.relative_to(base)} 引用了不存在的 {rel}")
+    return problems, notes, checked
 
 
 def main() -> int:
@@ -210,7 +219,9 @@ def main() -> int:
             ok = False
 
     # --- 5. 引用完整性 ---
-    broken, skipped_gitignored = check_link_integrity()
+    broken, skipped_gitignored, checked_refs = check_link_integrity()
+    # ★ 卡 159（INV-37）：打出「这次实际检查了几条引用」—— 判据要证明它看得到东西
+    print(f"[info] 引用完整性：这次实际检查了 {checked_refs} 条引用（断链 {len(broken)} 处）")
     for s in skipped_gitignored:
         print(f"[skip] {s}")
     if broken:

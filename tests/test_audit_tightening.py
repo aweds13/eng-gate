@@ -187,6 +187,82 @@ def _blank_ack_reasons(data: dict[str, Any]) -> list[str]:
     ]
 
 
+# ---------------------------------------------------------------- ⑫ 卡 159：用例级 test: + 反向判据
+
+
+def test_case_level_test_assertion_bites_on_a_missing_case() -> None:
+    """★ 卡 159（INV-32 的钉子）：`test:文件::用例名` 必须真的核**用例名**在文件里。
+
+    红读数（实现前）：eval_assertion 对 `::` 后面那段**不认识**（老代码只做文件存在性，
+    任何用例名都返回 True）⇒ 下面第一条断言当场红。
+    绿读数（实现后）：真用例名 ⇒ True；编造的用例名 ⇒ False 且**点名**用例。
+    `:文件`（不带用例名）**继续支持**（卡 159 明写「`:文件` 继续支持」）。
+    """
+    ledger_file = "test:test_audit_tightening.py"
+    real_case = f"{ledger_file}::test_valid_single_trailer_passes"
+    fake_case = f"{ledger_file}::test_this_case_does_not_exist_zzz"
+    assert ap.eval_assertion(real_case) == (True, ap.eval_assertion(real_case)[1])
+    ok, desc = ap.eval_assertion(real_case)
+    assert ok, desc
+    ok, desc = ap.eval_assertion(fake_case)
+    assert not ok, f"编造的用例名不该通过：{desc}"
+    assert "test_this_case_does_not_exist_zzz" in desc, f"要点名缺失的用例：{desc}"
+    ok, _desc = ap.eval_assertion(ledger_file)
+    assert ok, "裸 `test:文件` 要继续支持（卡 159）"
+
+
+def test_case_ruler_is_wb_invariants_not_a_second_copy() -> None:
+    """判据必须**复用** `tools/wb_invariants.py` 那把「核用例名真的存在」的尺子（不许写第二份）。"""
+    wb = ap._wb_invariants()
+    assert wb.__file__ is not None and str(Path(wb.__file__)).replace("\\", "/").endswith(
+        "tools/wb_invariants.py"
+    )
+    text = "def test_a():\n    pass\n"
+    assert wb.defines_case(text, "test_a")
+    assert not wb.defines_case(text, "test_ab")  # 词边界：test_a 不许命中 test_ab
+
+
+def test_unclaimed_changed_file_is_named() -> None:
+    """★ 卡 159（INV-33 的钉子）：反向判据 —— 本笔实际改动的文件 ⊆ 台账证据指针 ∪ 豁免清单。
+
+    红读数（实现前）：`check_claimed_files` 不存在 ⇒ AttributeError 当场红。
+    绿读数（实现后）：没人声称的文件被**点名**；有 `text:` 指针 / 在豁免清单里 ⇒ 放行。
+    """
+    data = {"entries": {"T-X": {"status": "done", "evidence": ["text:src/a.py::def f"]}}}
+    fails = ap.check_claimed_files(["src/a.py", "src/nobody_claimed_this.py"], data)
+    assert len(fails) == 1 and "src/nobody_claimed_this.py" in fails[0], fails
+    # 声称过（text: 指针指到）⇒ 放行
+    assert ap.check_claimed_files(["src/a.py"], data) == []
+    # 派生物豁免清单（模块常量）⇒ 放行
+    assert ap.check_claimed_files(["docs/changelog.md", "gates/last.json"], data) == []
+    # 台账自己的 `[claimed_files_exempt]` 追加豁免 ⇒ 放行
+    data2 = {**data, "claimed_files_exempt": ["config.example.toml"]}
+    assert ap.check_claimed_files(["config.example.toml"], data2) == []
+
+
+def test_real_repo_history_files_are_all_claimed() -> None:
+    """数据层：真台账的证据指针集合，要能盖住最近几笔真实提交的改动（豁免清单除外）。
+
+    这条钉住「反向判据开着且当前 0 假红」—— 以后谁改出缺口，这里先红。
+    """
+    import fnmatch  # noqa: F401
+    import subprocess  # noqa: F401
+
+    data = _ledger()
+    claimed = ap.evidence_file_set(data)
+    exempts = ap.claimed_files_exempt(data)
+    log = subprocess.run(
+        ["git", "-c", "core.quotepath=false", "log", "-6", "--name-only", "--format="],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
+    ).stdout
+    files = {ln.strip().replace("\\", "/") for ln in log.splitlines() if ln.strip()}
+    unclaimed = sorted(
+        f for f in files
+        if f not in claimed and not any(fnmatch.fnmatch(f, pat) for pat in exempts)
+    )
+    assert unclaimed == [], f"这几笔提交里有台账没声称过的文件：{unclaimed}"
+
+
 def test_every_acknowledged_op_has_a_nonempty_reason() -> None:
     """`[acknowledged_ops]` 里每一条都要写清"**为什么**先不挂"（不是"忘了"）。
 

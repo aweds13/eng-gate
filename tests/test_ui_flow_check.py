@@ -203,3 +203,58 @@ def test_toast_assertions_wait_for_the_whole_predicate() -> None:
         + "\n".join(bad)
     )
     assert "async waitToastWhere(" in src, "waitToastWhere 这个原语不见了（值/文本就绪就靠它）"
+
+
+# ---------------------------------------------------------------- 正向对账（卡 159 · T-G259）
+
+def test_coverage_bites_on_an_unclaimed_item(tmp_path: Path) -> None:
+    """★ 卡 159（INV-76 的钉子）：功能项既没被流的 item 指到、又没写明机器判不了的理由
+    ⇒ --coverage 必须**红并点名**；写明理由后 ⇒ 绿。合成坏样例证明判据看得到东西。
+    """
+    bad = tmp_path / "清单.md"
+    bad.write_text(
+        "## A. 物理场景（机器动不了的）\n\n| # | 怎么做 |\n|---|---|\n| **⑫** 桌面窗口 | x |\n"
+        "\n## E. 口味与判断\n\n| # | 看什么 |\n|---|---|\n| **G-1** 观感 | x |\n"
+        "\n## F. 功能行\n\n| # | 怎么做 | 机器已验到哪 |\n|---|---|---|\n"
+        "| **F-99** 没人认账的项 | 步骤 | （这里什么理由都没写） |\n",
+        encoding="utf-8",
+    )
+    proc = run_tool("--coverage", "--doc", str(bad))
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 1, f"没人认账的功能项必须红：{out}"
+    assert "F-99" in out and "未对账" in out, out
+
+    # 补上「机器判不了的理由」⇒ 绿
+    bad.write_text(
+        bad.read_text(encoding="utf-8").replace(
+            "（这里什么理由都没写）", "机器判不了的是这句文案顺不顺，人读的"),
+        encoding="utf-8",
+    )
+    proc = run_tool("--coverage", "--doc", str(bad))
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert "正向对账通过" in out, out
+    # 物理与口味两节被豁免（上面那份清单里它们没红就是证明）—— 计数如实打出来
+    assert "物理场景 1 条" in out and "口味判断 1 条" in out, out
+
+
+def test_coverage_accepts_a_flow_covered_item(tmp_path: Path) -> None:
+    """被某条流的 item 指到的功能项 ⇒ 绿（正向对账的另一半去处）。"""
+    doc = tmp_path / "清单2.md"
+    doc.write_text(
+        "## B. 功能\n\n| # | 怎么做 | 机器已验到哪 |\n|---|---|---|\n"
+        "| **⑪** 备份与恢复 | 步骤 | （没写理由，但流 ⑪ 的 item 指到它） |\n",
+        encoding="utf-8",
+    )
+    proc = run_tool("--coverage", "--doc", str(doc))
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert "流覆盖 1" in out, out
+
+
+def test_real_manual_doc_passes_forward_reconciliation() -> None:
+    """数据层：真清单开着且当前 0 未对账（以后新加的验收项没去处，这里先红）。"""
+    proc = run_tool("--coverage")
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert "未对账 0" in out, out

@@ -34,9 +34,18 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+# `python -P -X utf8 tools/sync_docs.py`（-P 不把脚本目录放进 sys.path）也要能 import pool：
+_TOOLS_DIR = str(Path(__file__).resolve().parent)
+if _TOOLS_DIR not in sys.path:
+    sys.path.insert(0, _TOOLS_DIR)
+
+from pool.no_window import NO_WINDOW  # noqa: E402  ★ 卡 159 收尾：子进程一律不弹窗（唯一真源）
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -219,11 +228,93 @@ def _read_target(ch: Channel) -> str:
     return ch.target.read_text(encoding="utf-8") if ch.target.exists() else ""
 
 
+# ---------------------------------------------------------------- 反方向核对（卡 159 · T-G259）
+# 老的 --check 只查「片段没进汇总」一个方向；这里补另一半：**汇总里有、片段已经没了**。
+# ★ 要能区分两种情形（卡 159 原话）：
+#   「片段被删了」= git 里跟踪过 / HEAD 里有 / 历史上删过 ⇒ 判红（内容还在汇总、来源却没了）；
+#   「本来就是汇总独有」= 片段从未存在（片段机制 T-G203 之前的老账、SR-*/OP-* 这类
+#   从不落片段的条目）⇒ 只报一行信息，**不判红**（真仓里这类是多数，判红会打穿既有门）。
+
+_ENTRY_ID_RE = re.compile(r'\[entries\."([^"]+)"\]')
+_TG_ID_RE = re.compile(r"T-G(\d+)")
+
+
+def _summary_unit_ids(ch: Channel, target: str) -> set[str]:
+    """汇总文件里每个「片段纪元」单元的台账号（反方向核对用）。
+
+    traceability 按条目头 `[entries."X"]` 取；changelog / 交接按每节**标题行**里
+    第一个 `T-Gnnn` 取（每节的自己的台账号约定俗成排在前面）。
+    """
+    if ch.name == "traceability":
+        return set(_ENTRY_ID_RE.findall(target))
+    line_re = (re.compile(r"^##.*$", re.MULTILINE) if ch.name == "changelog"
+               else re.compile(r"^>.*CHECKPOINT.*$", re.MULTILINE))
+    ids: set[str] = set()
+    for m in line_re.finditer(target):
+        tm = _TG_ID_RE.search(m.group(0))
+        if tm:
+            ids.add(f"T-G{tm.group(1)}")
+    return ids
+
+
+def _git_fragment_names(root: Path, ch: Channel) -> tuple[set[str], set[str], set[str]]:
+    """`(index 跟踪的, HEAD 树里有的, 历史上删过的)` 片段名集合（不带后缀）。
+
+    不是 git 仓库 / git 失败 ⇒ 三个空集（降级：无从判断「被删」，只影响判红那半，
+    汇总独有的信息行照报）。
+    """
+    def _run(*args: str) -> list[str]:
+        done = subprocess.run(
+            ["git", "-c", "core.quotepath=false", *args],
+            cwd=root, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", check=False, **NO_WINDOW,
+        )
+        if done.returncode != 0:
+            return []
+        return [ln.strip() for ln in done.stdout.splitlines() if ln.strip()]
+
+    rel_dir = _rel(ch.frag_dir, root)
+    names: set[str] = set()
+    out: list[set[str]] = []
+    for argv in (
+        ("ls-files", "--", rel_dir),  # ls-files 默认就打印文件名（没有 --name-only 这个旗标）
+        ("ls-tree", "--name-only", "HEAD", "--", rel_dir),
+        ("log", "--diff-filter=D", "--name-only", "--format=", "--", rel_dir),
+    ):
+        got = {Path(p).name for p in _run(*argv)}
+        got = {n[: -len(ch.suffix)] for n in got if n.endswith(ch.suffix)}
+        out.append(got)
+        names |= got
+    return out[0], out[1], out[2]
+
+
+def _reverse_fragment_problems(ch: Channel, target: str, root: Path) -> tuple[list[str], list[str]]:
+    """反方向核对：回 (判红的问题, 只报不红的汇总独有)。"""
+    present = {p.stem for p in _fragment_files(ch)}
+    tracked, in_head, deleted_ever = _git_fragment_names(root, ch)
+    problems: list[str] = []
+    solo: list[str] = []
+    for uid in sorted(_summary_unit_ids(ch, target)):
+        if uid in present:
+            continue
+        frag = _rel(ch.frag_dir / f"{uid}{ch.suffix}", root)
+        if uid in tracked or uid in in_head or uid in deleted_ever:
+            problems.append(
+                f"{frag} 片段没了，但 {_rel(ch.target, root)} 里还有它的内容"
+                " —— 片段被删了（把片段找回来，或把汇总里那段一起撤掉）"
+            )
+        else:
+            solo.append(f"{_rel(ch.target, root)} 里有 {uid}，但没有对应片段"
+                        "（本来就是汇总独有：片段纪元（T-G203）前的老账或从不落片段的条目）")
+    return problems, solo
+
+
 def run(root: Path, *, check: bool) -> int:
     """check=True 只核对；check=False 把待汇总片段写回三个共享文档。返回进程退出码。"""
     if check:
         problems: list[str] = []
         warnings: list[str] = []
+        solo: list[str] = []
         counts: list[str] = []
         for ch in build_channels(root):
             target = _read_target(ch)
@@ -235,11 +326,20 @@ def run(root: Path, *, check: bool) -> int:
                     f"{_rel(path, root)} 的内容没在 {_rel(ch.target, root)} 里"
                     "（跑 `python -X utf8 tools/sync_docs.py` 汇总）"
                 )
+            # ★ 卡 159（T-G259）：反方向 —— 汇总里有、片段已经没了。
+            #   区分「片段被删了」（判红）与「本来就是汇总独有」（只报一行，不判红）。
+            rev_problems, rev_solo = _reverse_fragment_problems(ch, target, root)
+            problems.extend(rev_problems)
+            solo.extend(rev_solo)
             # ★ 卡 126（T-G224）：changelog 另查**次序**（旧实现只查「片段在不在」，次序错抓不到）。
             if ch.name == "changelog" and target:
                 warnings.extend(_changelog_order_problems(_rel(ch.target, root), target))
         for w in warnings:
             print(f"[WARN] {w}")  # ★ 只报、不改退出码（真仓有历史倒置，见模块头）
+        for s in solo[:5]:
+            print(f"[info] {s}")  # 汇总独有：如实留痕，不判红（见 _reverse_fragment_problems）
+        if len(solo) > 5:
+            print(f"[info] …另有 {len(solo) - 5} 条「汇总独有」（老账，不判红）")
         if problems:
             print("[FAIL] 片段 ↔ 汇总不一致：手改了汇总却没改片段，或反之 ——")
             for p in problems:

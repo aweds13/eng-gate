@@ -161,6 +161,42 @@ def test_check_is_green_after_merge_and_points_at_hand_edit(
     assert "changelog.md" in out  # 点名汇总文件
 
 
+# ---------------------------------------------------------------- 2b. 反方向（卡 159 / T-G259）
+
+
+def test_check_catches_a_deleted_fragment(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """★ 卡 159（INV-15 的钉子）：汇总里有、**片段被删了** ⇒ --check 必须红并点名。
+
+    红读数（实现前）：--check 只查「片段没进汇总」一个方向，删掉片段照样绿 ⇒ 本用例红。
+    绿读数（实现后）：git 里跟踪过 / HEAD 里有的片段没了 ⇒ 判红，点名台账号与汇总文件。
+    """
+    root = _mkroot(tmp_path)
+    _write_frags(root, "T-G204", CHANGELOG_FRAG, TRACE_FRAG, HANDOFF_FRAG)
+    assert sd.run(root, check=False) == 0  # 先把片段汇进三个共享文档（汇总里才有 T-G204）
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    # 片段已被 git 跟踪（提交过），然后从工作区删掉 —— 汇总里那段还在
+    for rel in ("docs/changelog.d/T-G204.md", "docs/traceability.d/T-G204.toml",
+                "复盘/交接.d/T-G204.md"):
+        (root / rel).unlink()
+    assert sd.run(root, check=True) == 1
+    out = capsys.readouterr().out
+    assert "T-G204" in out, out
+    assert "片段" in out and ("删" in out or "没了" in out), out
+
+
+def test_summary_only_units_are_reported_without_red(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """「本来就是汇总独有」（片段纪元之前的老账 / 从未有片段）⇒ 如实报一行，**不判红**。"""
+    root = _mkroot(tmp_path)  # T-G001 在汇总里、从未有过片段、也不是 git 仓库
+    assert sd.run(root, check=True) == 0
+    out = capsys.readouterr().out
+    assert "T-G001" in out, out
+
+
 # ---------------------------------------------------------------- 3. 真 git 并发零冲突（本卡目的）
 
 

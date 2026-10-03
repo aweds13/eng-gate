@@ -185,8 +185,99 @@ def eval_assertion(assertion: str) -> tuple[bool, str]:
             return val in views(), f"视图 {val}"
         return False, f"未知 ui 断言 {rest}"
     if kind == "test":
-        return (ROOT / "tests" / rest).exists(), f"测试文件 {rest}"
+        # ★ 卡 159（T-G259）：`test:文件::用例名` 升级成**用例级** —— 用例名必须真的在文件里
+        #   （尺子复用 tools/wb_invariants.py 的 defines_case，不写第二份）。
+        #   `test:文件`（不带用例名）**继续支持**（卡 159 明写），但哪些条目还没补用例名
+        #   会被 `bare_test_assertions` 列出来（不许静默降级）。
+        fname, _, case = rest.partition("::")
+        p = ROOT / "tests" / fname
+        if not p.exists():
+            return False, f"测试文件 {fname}"
+        if not case:
+            return True, f"测试文件 {fname}（未写到用例名）"
+        wb = _wb_invariants()
+        text = p.read_text(encoding="utf-8")
+        bare = wb.case_name(case)
+        if wb.defines_case(text, bare):
+            return True, f"测试用例 {fname}::{bare}"
+        return False, f"用例 {bare} 不在 {fname} 里"
     return False, f"未知断言类型 {kind}"
+
+
+def _wb_invariants():
+    """拿 tools/wb_invariants.py 那把「核用例名真的存在」的尺子（唯一真源，卡 159）。"""
+    tools = str(ROOT / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import wb_invariants
+    return wb_invariants
+
+
+def bare_test_assertions(data: dict) -> list[str]:
+    """台账里仍只写到文件名的 `test:` 证据（`test:文件`，没有 `::用例名`）。
+
+    ★ 卡 159（INV-32）：凡指向某个具体行为的都必须写到用例名；一次改不完的**列出来**，
+    不许静默降级。这些条目仍按「文件存在」求值（继续支持），但在这里点名。
+    """
+    out: list[str] = []
+    for eid, e in sorted(data.get("entries", {}).items()):
+        for item in e.get("evidence", []):
+            if str(item).startswith("test:") and "::" not in str(item):
+                out.append(f"{eid}: {item}")
+    return out
+
+
+# ------------------------- ⑫ 反向判据（卡 159 / T-G259）：实际发生的有没有被声称
+#: 派生物 / 记账层文件的豁免清单（glob，posix 风格）。这些文件是「声称的那一层」自己
+#: （台账、changelog、交接、门禁产物），不该反过来要求台账声称它们。
+#: 台账可用顶层 `[claimed_files_exempt]`（字符串数组）**追加**（见 claimed_files_exempt）。
+CLAIMED_FILE_EXEMPTS = ("docs/**", "复盘/**", "gates/**")
+
+
+def claimed_files_exempt(data: dict) -> tuple[str, ...]:
+    """生效的豁免清单 = 模块默认 ∪ 台账顶层 `claimed_files_exempt`（显式追加，可审）。"""
+    extra = data.get("claimed_files_exempt")
+    if isinstance(extra, (list, tuple)):
+        return CLAIMED_FILE_EXEMPTS + tuple(str(x) for x in extra)
+    return CLAIMED_FILE_EXEMPTS
+
+
+def evidence_file_set(data: dict) -> set[str]:
+    """台账全部证据指针指到的仓库文件集合（file:/text:/test: 三类；复用 evidence_map 的取法）。"""
+    tools = str(ROOT / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    from evidence_map import assertion_path  # 懒加载：evidence_map 复用本模块，避免环
+    out: set[str] = set()
+    for e in data.get("entries", {}).values():
+        for item in e.get("evidence", []):
+            p = assertion_path(str(item))
+            if p:
+                out.add(p)
+    return out
+
+
+def check_claimed_files(files: list[str], data: dict) -> list[str]:
+    """⑫ 本笔实际改动的文件集合 ⊆ 台账证据指针集合 ∪ 显式豁免清单，不等就点名。
+
+    这是「实际发生的有没被声称」那半（卡 159）：正向判据只查「你声称的有没有」，
+    反向判据补上「实际改了的有没有人声称」。谁没被声称就点名谁 —— 补一条
+    `file:`/`text:`/`test:` 证据，或写进台账 `[claimed_files_exempt]`。
+    """
+    import fnmatch
+    claimed = evidence_file_set(data)
+    exempts = claimed_files_exempt(data)
+    unclaimed: list[str] = []
+    for f in files:
+        rel = f.replace("\\", "/")
+        if rel in claimed or any(fnmatch.fnmatch(rel, pat) for pat in exempts):
+            continue
+        unclaimed.append(rel)
+    return [
+        f"这一笔改了 {rel}，但台账没有任何证据指针指到它"
+        "（实际发生的有没被声称 —— 补 file:/text:/test: 证据，或写进 [claimed_files_exempt]）"
+        for rel in sorted(unclaimed)
+    ]
 
 
 # ---------------------------------------------------------------- 台账检查
@@ -556,6 +647,19 @@ def main() -> int:
         print(f"  {FAIL} {line}")
     if not fails:
         print(f"  {OK} 所有 status=done 的断言都成立（{counts.get('done', 0)} 条）")
+    # ★ 卡 159（INV-32）：还没补到用例名的 `test:` 证据 —— 列出来，不许静默降级
+    bare = bare_test_assertions(data)
+    print("\n=== ③b test: 证据用例名补齐进度 ===")
+    if bare:
+        print(f"  {WARN} 有 {len(bare)} 条 test: 证据仍只写到文件名（未补 `::用例名`）：")
+        for line in bare[:12]:
+            print(f"       {line}")
+        if len(bare) > 12:
+            print(f"       …另有 {len(bare) - 12} 条")
+        print(f"  {WARN} 口径：凡指向具体行为的都要写到用例名（卡 159）；"
+              "存量条目逐笔补齐前先在此留痕")
+    else:
+        print(f"  {OK} 所有 test: 证据都写到了用例名")
     # ⑦ 交接文档里手写的那行分布（能查就查，查不到不失败）
     num_fails = check_handoff_numbers(counts, len(entries))
     print("\n=== ⑦ 交接文档的分布数字 ===")
@@ -586,6 +690,15 @@ def main() -> int:
                         git_fails.append(f"改了源码但本提交没同步 {need}")
                 if not any(f in files for f in CHECKPOINTS):
                     git_fails.append("改了源码但本提交没写 CHECKPOINT（协议或交接文档）")
+            # ⑫ 反向判据（卡 159 / T-G259）：实际改动的文件 ⊆ 台账证据指针 ∪ 豁免清单 ——
+            #   正向判据只查「你声称的有没有」，这一条补「实际发生的有没被声称」。
+            claimed_fails = check_claimed_files(files, data)
+            print("\n=== ⑫ 声称覆盖（这一笔实际改的文件都被台账声称过吗）===")
+            for line in claimed_fails:
+                print(f"  {FAIL} {line}")
+            if not claimed_fails:
+                print(f"  {OK} 这一笔的 {len(files)} 个改动全部有台账证据指针或豁免清单背书")
+            git_fails.extend(claimed_fails)
             if meta["Task"]:
                 if not GATES.exists():
                     git_fails.append("没有 gates/last.json（门禁未落盘）")

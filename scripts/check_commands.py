@@ -48,6 +48,7 @@ from timeflow.mcp import server as mcp_server
 
 ROOT = Path(__file__).resolve().parent.parent
 COMMANDS = ROOT / "docs" / "commands.toml"
+LEDGER = ROOT / "docs" / "traceability.toml"
 CONTRACTS = ROOT / "docs" / "contracts"
 APP = ROOT / "src" / "timeflow" / "api" / "app.py"
 INDEX = ROOT / "src" / "web" / "index.html"
@@ -103,6 +104,45 @@ def contract_ops() -> tuple[dict[str, str], list[str]]:
 def routes() -> set[str]:
     src = APP.read_text(encoding="utf-8")
     return {f"{m.group(1).upper()} {m.group(2)}" for m in ROUTE.finditer(src)}
+
+
+def ledger_route_citations() -> tuple[set[str], set[str]]:
+    """台账那半的「认领」：`(route: 证据引用过的路由, meta.acknowledged_routes)`。
+
+    ★ 卡 159（T-G259 / INV-66）：反方向的判据是「真路由必须**有人声称**」。声称有两个合法
+    去处 —— 命令表的路由字段（四面的真源），或台账的 `route:` 证据 / `[meta.acknowledged_routes]`
+    （`scripts/audit_progress.py::check_shape` 本来就要求每条路由在这两者或证据里出现，
+    这里与它同一个口径，**不造第二份规则**）。台账读不了 ⇒ 两个空集（保守从严：宁红不漏）。
+    """
+    import tomllib
+
+    cited: set[str] = set()
+    acked: set[str] = set()
+    try:
+        data = tomllib.loads(LEDGER.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return cited, acked
+    for e in data.get("entries", {}).values():
+        for item in e.get("evidence", []):
+            m = re.match(r"route:(\S+ \S+)", str(item))
+            if m:
+                cited.add(m.group(1))
+    meta_ack = data.get("meta", {}).get("acknowledged_routes", [])
+    if isinstance(meta_ack, list):
+        acked = {str(x) for x in meta_ack}
+    return cited, acked
+
+
+def unregistered_routes(
+    real: set[str], table: dict, cited: set[str], acked: set[str]
+) -> list[str]:
+    """反方向：真 `app.routes` 里有、命令表没登记**且**台账也没认领的路由（卡 159 / INV-66）。
+
+    老口径里这种只算「洞」不红 —— 现在凡是**谁都不认账**的就点名判红；
+    「进了命令表但没进台账（或反之）」是记账进度，仍只报数不红。
+    """
+    table_routes = {r for row in table.values() for r in as_list(row.get("routes"))}
+    return sorted(real - table_routes - cited - acked)
 
 
 def wildcard_routes() -> list[str]:
@@ -320,6 +360,19 @@ def main() -> int:
     if missing:
         problems.append(f"契约里有 {len(missing)} 条 OP 还没进命令表：{missing}")
 
+    # ---- 反方向（卡 159 / T-G259）：真路由必须**有人声称**（INV-66 的缝）----
+    #   谁都不认账（命令表没登记 + 台账没引用 + 没 acknowledged）⇒ 硬冲突；
+    #   「只在台账认领、命令表没登」是两份记账之间的进度差，报数不红。
+    cited_routes, acked_routes = ledger_route_citations()
+    unregistered = unregistered_routes(real_routes, table, cited_routes, acked_routes)
+    table_routes_all = {r for row in table.values() for r in as_list(row.get("routes"))}
+    ledger_only = sorted((real_routes - table_routes_all) & (cited_routes | acked_routes))
+    if unregistered:
+        problems.append(
+            f"app.py 有 {len(unregistered)} 条路由既没进命令表、也没被台账认领"
+            f"（实际发生的有没被声称）：{unregistered}"
+        )
+
     # ---- 命令面板（T-G61）：⌘K 那份投影必须与前三者一致 ----
     # 这一节是"四个面共用一个点"从口号变成判定的地方：面板里的每条命令都要
     #   ① 跑一个**真注册过**的动作（否则点了没反应，是空壳）；
@@ -496,6 +549,8 @@ def main() -> int:
         "rows": len(table),
         "routes_in_app": len(real_routes),
         "wildcard_routes": wildcards,
+        "routes_unregistered": unregistered,
+        "routes_ledger_claimed_only": ledger_only,
         "actions_in_registry": len(actions),
         "views": len(views),
         "rows_without_route": no_route,
@@ -532,6 +587,9 @@ def main() -> int:
     )
     if wildcards:
         print(f"  （另有 {len(wildcards)} 条通配兜底，故意不做事、不进命令表：{wildcards}）")
+    if ledger_only:
+        print(f"  （提示）{len(ledger_only)} 条真路由只在台账认领、命令表还没登：{ledger_only[:6]}"
+              f"{'…' if len(ledger_only) > 6 else ''}")
     if dupes:
         print(f"\n  （提示）同一号在基础篇与领域篇各有一节：{len(dupes)} 处")
         for d in dupes:

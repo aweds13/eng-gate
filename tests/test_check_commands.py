@@ -379,3 +379,52 @@ def test_mcp_projection_conflict_is_reported(tmp_path, monkeypatch, capsys) -> N
     problems = json.loads(capsys.readouterr().out)["problems"]
     assert any("mcp 字段里没写" in p for p in problems), problems
     assert any("代码里没有这个工具" in p for p in problems), problems
+
+
+# ------------------------------------------------------------------ 反方向（卡 159 · T-G259）
+
+def test_unregistered_route_without_any_claim_is_red() -> None:
+    """★ 卡 159（INV-66 的钉子）：真 `app.routes` 里有、**谁都不认账**的路由 ⇒ 红。
+
+    红读数（实现前）：`unregistered_routes` 不存在 ⇒ AttributeError 当场红。
+    绿读数（实现后）：没进命令表、也没被台账 route: 证据 / acknowledged 认领 ⇒ 点名；
+    登记进命令表 / 台账认领 / acknowledged 任一 ⇒ 放行。
+    """
+    real = {"GET /api/ghost", "GET /api/claimed"}
+    table = {"OP-1": {"routes": ["GET /api/claimed"]}}
+    # 谁都不认账 ⇒ 红
+    assert cc.unregistered_routes(real, table, cited=set(), acked=set()) == ["GET /api/ghost"]
+    # 登记进命令表 ⇒ 放行
+    table2 = {"OP-1": {"routes": ["GET /api/claimed", "GET /api/ghost"]}}
+    assert cc.unregistered_routes(real, table2, cited=set(), acked=set()) == []
+    # 台账 route: 证据认领 ⇒ 放行
+    assert cc.unregistered_routes(real, table, cited={"GET /api/ghost"}, acked=set()) == []
+    # meta.acknowledged_routes 认领 ⇒ 放行
+    assert cc.unregistered_routes(real, table, cited=set(), acked={"GET /api/ghost"}) == []
+
+
+def test_ledger_route_citations_read_evidence_and_ack(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """台账那半的「认领」从 `docs/traceability.toml` 现读：route: 证据 + acknowledged_routes。"""
+    ledger = _write(
+        tmp_path,
+        "traceability.toml",
+        '[meta]\nacknowledged_routes = ["GET /api/acked"]\n\n'
+        '[entries."T-X"]\nstatus = "done"\nevidence = ["route:GET /api/cited"]\n',
+    )
+    monkeypatch.setattr(cc, "LEDGER", ledger)
+    cited, acked = cc.ledger_route_citations()
+    assert cited == {"GET /api/cited"}
+    assert acked == {"GET /api/acked"}
+
+
+def test_real_repo_routes_are_all_registered_or_claimed() -> None:
+    """数据层：真仓库的每条真路由，要么进命令表、要么被台账认领（开着且 0 假红）。"""
+    import tomllib
+
+    real = cc.routes()
+    table = cc.load_commands()
+    cited, acked = cc.ledger_route_citations()
+    assert cc.unregistered_routes(real, table, cited, acked) == []
+    # 附带钉住：台账文件真的能解析（别让认领那半静默降级成空集）
+    with cc.LEDGER.open("rb") as fh:
+        tomllib.load(fh)
