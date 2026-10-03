@@ -75,6 +75,13 @@
 - ★★ **修掉 D-12**（GLM-5.3 对抗审核里那条**掉在地上没人接**的缺陷）：`--apply --min-size N` 会把「因体积被跳过」的小树**照样删掉**。真因定位在 `collect()`：跳过时只置了 `skipped=True`、**没把 `deletable` 置假**，而 `do_apply()` 只看 `deletable`。★ 修法 + **两条反例钉子**（`test_d12_min_size_skipped_tree_survives_apply` / `test_d12_min_size_table_marks_skipped_not_deletable`）。
 - **把「有能力、零接线」接上**：`tools/wt_prune.py` 的读数与「该拆哪些树」接到一个固定环节，**默认只看不删**（`--apply` 仍由主控拍板）。
 - ★ **它是第一张走码道号池交回的卡**：`huaweicloud-maas/GLM-5.2` · 35 分钟 · 84,931 tokens · 事件 195 · **正常收工**（判据读事件，不看退出码）。
+## 2026-10-03 —— 框架 MVP 落地：核心库 + 薄 CLI + 模板仓 + 非 timeflow 例子（54 个文件 · 自测 55 条全过）（T-G279 / 卡 179）
+
+- **产物**：`framework/`（**54 个文件**，全部在框架目录内）—— 核心库（`config.py` 严格 schema 校验 · `gates.py` 门执行器：并发 / 硬超时 / 输入面 / 落盘 · **`verdict` 三值判决** · `exit_codes.py` 唯一一张退出码表）· **薄 CLI**（`cli/main.py`）· **模板仓**（`templates/minimal/**`，`pipe init` 铺出来的骨架）· ★ **一个非 timeflow 的最小仓**（`examples/minimal-notes/**`，自带 `src/notes/` 与自己的测试）· 框架自己的 7 份测试 · `pipeline.schema.json` · `pyproject.toml` · `framework/PIPELINE.md`。
+- ★★ **两条硬判据（现跑读数）**：**`grep -r timeflow framework/` = 0**（泛用性钉子）；**框架自己的测试 `pytest tests` = 55 passed / 46.30s**（**主控独立复跑**，不是照抄工人自报）。
+- ★ **它自己撞了两处并如实报回**：① 「域守卫拒了申请」（预声明域与实际交付不符，见 gaps 3）；② 它主动清掉了 `__pycache__` / `.pytest_cache`（工作区干净）。
+- **主控做的收尾**：按实测回填预声明域（54 条）+ 重注册 + 回填成送申请。
+- ★ **它是「按设计书施工」的第一次**：卡 178 的 53 字段 schema / 8 条命令 / 目录树**第一次被真的建出来**。
 ## 2026-10-02 —— 外包工具：需求与架构定稿 + **两级整体审查**（Flash 指针索引 → **GLM-5.3** 审查）+ `glm-5.3` 一次性授权（T-G220 / 批 `B-ARCH1`）
 
 - 来路（用户两条要求）：把外挂设施的**需求与整体架构**发出来；把"检查这套设施"做成**两级** ——
