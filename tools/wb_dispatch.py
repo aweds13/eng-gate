@@ -23,6 +23,10 @@ r"""派活给 WorkBuddy / CodeBuddy CLI（外包链路的第 ② 步）—— �
      要碰的文件**（域从队列真读）⇒ 拒派并点名文件 / 提交 / 修法（收口时会把卡树那份旧文件
      拷回主树 = 静默覆盖新改动，真咬过）；只改了域外文件 ⇒ 放行（别误伤多批并行）；
      算不出 `A`/`B` ⇒ 如实说"算不出基点，跳过"并继续 —— **只拒不猜**。
+  ⑧ ★ 卡 149（T-G249）：**多号 profile**（`--account <名>`）—— 用沙箱 profile 并存两个号、
+     **不切号**。那组环境变量的**唯一真源**是仓外工具
+     `infra/pool/codebuddy_accounts.py profile env <名>`（这里**只调不抄**）；**不给 `--account`
+     时行为逐字不变**（工人继承今天的家目录），**给而拿不到 ⇒ 拒派并点名**（绝不悄悄退回默认号）。
 
 用法（默认 **dry-run**：只打印将要执行的命令，不派活）：
     python -X utf8 tools/wb_dispatch.py --card 001 --spec 复盘/外包卡-001-独立复核T-G79.md
@@ -111,7 +115,11 @@ import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（
 from pool import guards as pool_guards  # noqa: E402 —— 守卫唯一实现（pool.guards）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
 from pool.jobs import card_artifacts  # noqa: E402 —— 产物定位唯一实现（pool.jobs）
-from pool.models import SwitchFileError, load_switches  # noqa: E402 —— 外部模型开关（卡 138）
+from pool.models import (  # noqa: E402 —— 外部模型开关（卡 138）+ 号池定位（卡 149）
+    SwitchFileError,
+    find_pool_dir,
+    load_switches,
+)
 from pool.plan import BacklogError, load_backlog  # noqa: E402 —— 队列/冲突域唯一实现（pool.plan）
 from pool.review import outside_allow  # noqa: E402 —— 白名单越界唯一实现（pool.review）
 
@@ -319,6 +327,108 @@ def next_whitelist_model(model: str) -> str | None:
     except ValueError:
         return None
     return MODEL_WHITELIST[idx + 1] if idx + 1 < len(MODEL_WHITELIST) else None
+
+
+# ---------------------------------------------------------------- 多号 profile（卡 149 · T-G249）
+# ★ 为什么有它：用户要「两个号并行派活」—— 不切号、不打扰在跑的活。当晚实测出的隔离法：
+#   登录态住在 `<USERPROFILE>\.workbuddy\`；只把 `USERPROFILE` + `HOME` 等**六个**环境变量
+#   指到一个沙箱 profile，实例就变成「未登录」，而外面那个号**一字未动**。
+# ★ 那六个变量的**唯一真源**是**仓外**工具 `infra/pool/codebuddy_accounts.py`（`profile env <名>`）
+#   —— 这里**只调它、只读它的输出**，**绝不**把那份清单抄进本仓（抄一份 = 第二份真源；
+#   两份一漂，这里就会让工人**悄悄跑到别的号**上 —— 本仓最恨的"看着成了其实用错号"）。
+ACCOUNT_SCRIPT_ENV = "TF_ACCOUNT_SCRIPT"   # ★ 只给测试用：覆盖 profile 工具路径（生产别设）
+ACCOUNT_TIMEOUT = 120
+#: `KEY=VALUE` 行的合法形状 —— 只收**像变量名**的 key（`export X=…` / `$env:X = …` 自然被滤掉）。
+_ENV_LINE_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+
+
+class AccountError(Exception):
+    """拿不到某个 profile 的那组环境变量 —— 点名 profile 与原因（**绝不悄悄退回默认号**）。"""
+
+
+def account_script_path(root: Path | None = None) -> Path | None:
+    """号池工具 `codebuddy_accounts.py` 的位置：`TF_ACCOUNT_SCRIPT` 覆盖 > 号池目录里那份。
+
+    ★ 号池目录用 `pool.models.find_pool_dir`（**唯一实现**）定位 —— 那份工具**不在本仓**
+      （跨项目复用，在 `jelly_ware/infra/pool/`），写死相对层级会漂。找不到 → `None`。
+    """
+    override = os.environ.get(ACCOUNT_SCRIPT_ENV, "").strip()
+    if override:
+        return Path(override)
+    pool = find_pool_dir(root or ROOT)
+    return None if pool is None else pool / "codebuddy_accounts.py"
+
+
+def _run_account_script(script: Path, argv: list[str]) -> subprocess.CompletedProcess[str]:
+    """调号池工具（`python -X utf8 <脚本> …`）—— 不弹窗、有超时；**只读它的输出**。"""
+    return subprocess.run(
+        [sys.executable, "-X", "utf8", str(script), *argv],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=ACCOUNT_TIMEOUT, **NO_WINDOW,
+    )
+
+
+def available_profiles(script: Path) -> list[str]:
+    """可用 profile 名（**只在拒绝派活时**取，best-effort）—— 读号池工具 `list` 的**输出**。
+
+    取不到（跑不了 / 输出认不出）→ 空列表：**拒绝照样发生**，只是少一行提示，**不因此放宽**。
+    """
+    try:
+        done = _run_account_script(script, ["list"])
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    names: list[str] = []
+    for line in (done.stdout or "").splitlines():
+        hit = re.match(r"^\s*·\s*(.+?)（\d+\s*件）\s*$", line)
+        if hit:
+            names.append(hit.group(1).strip())
+    return names
+
+
+def account_env(name: str) -> dict[str, str]:
+    """跑 `codebuddy_accounts.py profile env <名>`，把输出解析成**环境变量字典**。
+
+    ★ **调，不是抄**：本函数**不知道**是哪六个变量 —— 凡 `KEY=VALUE` 行都收（`#` 注释与非
+      变量名行丢掉）。于是"清单"只有一份真源（那份仓外工具），它改了这里跟着改。
+    ★ **profile 不存在**：`profile env` **不查存在性**（实测：不存在的名字照样回 0 并打印路径）
+      ⇒ 存在性用**那份工具自己**的 `profile check`（退出码 2 = 没有这个 profile）判，
+      仍不抄任何清单。
+    ★ **拿不到就抛 `AccountError`**（点名 profile + 可用清单），**绝不**回空 dict 让调用方
+      悄悄退回默认号 —— 那会让工人跑到**别的号**上。
+    """
+    script = account_script_path()
+    if script is None or not script.is_file():
+        raise AccountError(f"找不到号池工具 codebuddy_accounts.py（{script}）→ 拒绝派活"
+                           f"（不许悄悄用默认号）")
+    try:
+        checked = _run_account_script(script, ["profile", "check", name])
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise AccountError(f"核 profile「{name}」失败（跑不了号池工具）：{exc}") from exc
+    if checked.returncode == 2:                     # 那份工具自己判：没有这个 profile
+        avail = available_profiles(script)
+        tail = f"；可用 profile：{'、'.join(avail)}" if avail else ""
+        raise AccountError(f"没有这个 profile：「{name}」（`profile check` 退出码 2）"
+                           f"→ 拒绝派活（不许悄悄退回默认号）{tail}")
+    if checked.returncode != 0:
+        blob = wb_status._clip((checked.stderr or "") + (checked.stdout or ""), 200)
+        raise AccountError(f"核 profile「{name}」失败（退出码 {checked.returncode}）：{blob}")
+    try:
+        done = _run_account_script(script, ["profile", "env", name])
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise AccountError(f"取 profile「{name}」的环境变量失败：{exc}") from exc
+    if done.returncode != 0:
+        blob = wb_status._clip((done.stderr or "") + (done.stdout or ""), 200)
+        raise AccountError(f"取 profile「{name}」的环境变量失败"
+                           f"（退出码 {done.returncode}）：{blob}")
+    out: dict[str, str] = {}
+    for line in (done.stdout or "").splitlines():
+        hit = _ENV_LINE_RE.match(line.strip())
+        if hit:
+            out[hit.group(1)] = hit.group(2).strip()
+    if not out:
+        raise AccountError(f"profile「{name}」没输出任何环境变量（`profile env` 回话认不出）"
+                           f"→ 拒绝派活（不许悄悄退回默认号）")
+    return out
 
 
 def git_dirty(cwd: Path | None = None) -> list[str]:
@@ -1482,7 +1592,8 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
                watchdog: bool = True, heartbeat_seconds: int = HEARTBEAT_SECONDS,
                stall_seconds: int = STALL_SECONDS, poll_seconds: float = POLL_SECONDS,
                printer: Callable[[str], None] = print,
-               worker_cwd: Path | None = None) -> tuple[int, str, str, str]:
+               worker_cwd: Path | None = None,
+               worker_env: dict[str, str] | None = None) -> tuple[int, str, str, str]:
     """真跑工人并且**盯着它** —— 返回 `(退出码, 掐掉/超时/撞上限的原因, 现场, 会话 id)`。
 
     第 4 项是给"续跑"用的（T-G90）：中断之后带着同一个会话接着干，而不是从头再来。
@@ -1497,6 +1608,9 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
     数据"的保守口径继续盯，并把这次异常**如实记进心跳 / 判决**（不静默吞掉）。
     ★ 卡 103（T-G199）：`worker_cwd` 给了就是**工人进程的 cwd**（工人落在卡树里干活）；
     不给（默认 `None`）仍是仓库根 —— `cwd` 传参逐字不变。
+    ★ 卡 149（T-G249）：`worker_env` 给了就是**工人进程的整份环境**（多号 profile 用）——
+    由 `account_env()` 从仓外号池工具解析出来 + 现进程环境合成；**不给（默认 `None`）时
+    `Popen(env=None)` = 逐字继承**今天的家目录，行为一字不变。
     """
     log.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
@@ -1511,7 +1625,7 @@ def run_worker(cmd: list[str], log: Path, errlog: Path, *, timeout: int, max_tur
     with errlog.open("w", encoding="utf-8") as err:
         proc = subprocess.Popen(          # noqa: S603 —— 命令是本地拼好的 CLI，不是外部输入
             list(cmd), cwd=str(worker_cwd or ROOT), stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
+            stdout=subprocess.PIPE, env=worker_env, **NO_WINDOW,
             stderr=err, text=True, encoding="utf-8", errors="replace", bufsize=1,
         )
         pump = threading.Thread(target=_pump, args=(proc.stdout, log, lines, lock, state),
@@ -2058,6 +2172,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--project", default=None,
                         help="项目名（卡 120）—— 不给就按 `--cwd` 那棵树从项目索引反查；"
                              "没登记的项目 / 树不落在该项目的树前缀里 ⇒ 拒派")
+    parser.add_argument("--account", default=None,
+                        help="★ 多号（卡 149）：把工人跑在指定 profile 里的那组环境变量现取注入；"
+                             "不给 = 今天家目录、逐字不变；名字不存在 / 取不到 ⇒ 拒派并点名")
     parser.add_argument("--cli", default=None,
                         help="CLI 入口覆盖（默认优先用独立安装的那份）")
     parser.add_argument("--permission-mode", default=DEFAULT_PERMISSION_MODE,
@@ -2164,6 +2281,17 @@ def main() -> int:
         already_reserved=args.already_reserved, project=args.project,
     )
 
+    # ★ 卡 149（T-G249）：多号 profile —— 起工人**之前**先把那组环境变量取好。
+    #   ★ 不给 `--account` ⇒ `worker_env=None` ⇒ 工人**逐字继承**今天的家目录（行为一字不变）。
+    #   ★ 给而拿不到 ⇒ 并入前置检查的问题清单 ⇒ **拒绝派活并点名**（走同一套留痕 / 退出码 2）
+    #     —— **绝不悄悄退回默认号**（那会让工人跑到别的号上）。
+    account_vars: dict[str, str] = {}
+    if args.account:
+        try:
+            account_vars = account_env(args.account)
+        except AccountError as exc:
+            problems.append(str(exc))
+
     if problems:
         print("[FAIL] 不派活 —— 前置检查没过：", file=sys.stderr, flush=True)
         for item in problems:
@@ -2181,6 +2309,15 @@ def main() -> int:
         write_report(log, card=args.card, code=2, reason="前置检查没过 → 没派活", scene="",
                      sid="", attempts=1, lines=[], started_at=None)
         return 2
+
+    # ★ 卡 149：profile 取到了 ⇒ 与现进程环境合成一份交给工人（**不给 = None = 逐字继承**）。
+    #   ★ 放在 `--detach` **之前**：坏 profile 在**父进程**就拒（脱离子进程带 `--detach-done`，
+    #     会自己再取一次同一份数据 —— 幂等）。
+    worker_env: dict[str, str] | None = None
+    if args.account:
+        worker_env = {**os.environ, **account_vars}
+        print(f"[账号] profile「{args.account}」并入 {len(account_vars)} 个环境变量："
+              + "；".join(f"{k}={v}" for k, v in account_vars.items()), flush=True)
 
     if args.detach and not args.detach_done:
         # ★ 长跑/过夜：**前置检查已全过**，才把**自己**再启动成一个脱离窗口的进程，然后立刻返回。
@@ -2285,11 +2422,14 @@ def main() -> int:
         #   `registry.is_dead` 的「日志判死」那条判据就能生效（`list_reservations` / `prune`）。
         #   ★ 已存在的 log 不登记（`log_guard` 与 `--force` 覆盖语义打架，见 `lease_log_for`）。
         lease_log = lease_log_for(log)
+        # ★ 卡 149：留痕 —— 这一趟是哪个号跑的，一眼可查（与 `project` / `model` 同一风格）。
+        #   ★ 不给 `--account` 时**逐字不变**（仍是 `spec=…`），免得打穿既有读数。
+        lease_note = f"spec={args.spec}" + (f"｜account={args.account}" if args.account else "")
         try:
             lease = pool_registry.reserve(args.card, tree=reserve_tree, files=reserve_files,
                                           project=args.project or "", model=args.model,
                                           log=lease_log,
-                                          note=f"spec={args.spec}",
+                                          note=lease_note,
                                           lock_body=pool_registry.read_lock_body())
         except pool_registry.GuardError as exc:
             print("[FAIL] 占树被守卫拦下，**不派活**：", file=sys.stderr, flush=True)
@@ -2348,6 +2488,7 @@ def main() -> int:
             max_turns=max_turns, watchdog=not args.no_watchdog,
             heartbeat_seconds=args.heartbeat_seconds, stall_seconds=args.stall_seconds,
             poll_seconds=args.poll_seconds, printer=beat, worker_cwd=worker_cwd,
+            worker_env=worker_env,
         )
         sid = new_sid or sid
         if sid:                      # ★ 一拿到就落盘：这样中断之后 `--resume auto` 才用得上

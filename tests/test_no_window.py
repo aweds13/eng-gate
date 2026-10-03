@@ -180,8 +180,6 @@ EXEMPT: dict[tuple[str, str, str], str] = {
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("tools/wb_diag.py", "run", "401d1382229c"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
-    ("tools/wb_dispatch.py", "Popen", "7800156a8627"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("tools/wb_plan.py", "run", "2da90d27beb7"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("tools/wb_plan.py", "run", "08b1e7c21664"):

@@ -2785,3 +2785,230 @@ def test_preflight_wires_the_stale_base_check(sandbox: Path, monkeypatch) -> Non
     problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False,
                                worker_cwd=card)
     assert any("卡树基点过期" in p for p in problems), problems
+
+
+# ============================================ 多号 profile：--account（卡 149 · T-G249）
+#
+# 为什么值当测：`--account` 让工人跑在**另一个号**的家目录里。判错方向只有一种，但后果很重 ——
+# 「**看着成了其实用错号**」（本仓最恨的假绿）。下面每条各钉一处，每条"故意坏掉会红"：
+#   ① 给了 ⇒ 工人环境里**真有**那六个变量（值来自 profile 的输出）；
+#   ② 不给 ⇒ 环境**逐字不变**（`worker_env=None`，且租约 note 一字不改）；
+#   ③ profile 不存在 ⇒ **拒派并点名**（含可用清单），**绝不退回默认号**；
+#   ④ **没有第二份真源**：桩换一组值 ⇒ 派活器跟着变；本仓源码里**不许**出现那份清单；
+#   ⑤ 留痕：租约 note / 派活日志里**看得见**那个 profile 名。
+#
+# ★ 那六个变量名只出现在**这份测试**里 —— 它是**钉子**，不是实现的一部分。
+
+#: 判据用的六项（`codebuddy_accounts.py::profile_env` 的口径）。
+_ACCOUNT_KEYS = ("USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA",
+                 "WORKBUDDY_CONFIG_DIR", "CODEBUDDY_CONFIG_DIR")
+
+
+def _demo_vars(*, userprofile: str = "C:/profiles/demo/home") -> dict[str, str]:
+    """一组像样的 profile 环境变量（桩输出用）。"""
+    return {
+        "USERPROFILE": userprofile,
+        "HOME": userprofile,
+        "APPDATA": "C:/profiles/demo/appdata",
+        "LOCALAPPDATA": "C:/profiles/demo/localappdata",
+        "WORKBUDDY_CONFIG_DIR": "C:/profiles/demo/wb",
+        "CODEBUDDY_CONFIG_DIR": "C:/profiles/demo/cb",
+    }
+
+
+def _account_stub(tmp_path: Path, profiles: dict[str, dict[str, str]]) -> Path:
+    """造一个假号池工具（照 `codebuddy_accounts.py` 的三种输出形状，含 bash/pwsh 两段）。
+
+    ★ 用它替换**真源**：能改的一组值 ⇒ 证明派活器是**调**那份工具，而不是抄它的清单。
+    """
+    script = tmp_path / "fake_codebuddy_accounts.py"
+    script.write_text(
+        "import sys\n"
+        f"PROFILES = {profiles!r}\n"
+        "\n"
+        "args = sys.argv[1:]\n"
+        'if args[:2] == ["profile", "check"]:\n'
+        "    if args[2] not in PROFILES:\n"
+        '        print("✗ 没有这个 profile：" + args[2])\n'
+        "        sys.exit(2)\n"
+        "    sys.exit(0)\n"
+        'if args[:2] == ["profile", "env"]:\n'
+        "    env = PROFILES.get(args[2], {})\n"
+        '    print("# profile " + args[2])\n'
+        "    for k in env:\n"
+        '        print(k + "=" + env[k])\n'
+        '    print("")\n'
+        '    print("# bash")\n'
+        "    for k in env:\n"
+        '        print(\'export \' + k + \'="\' + env[k] + \'"\')\n'
+        '    print("")\n'
+        '    print("# powershell")\n'
+        "    for k in env:\n"
+        '        print(\'$env:\' + k + \' = "\' + env[k] + \'"\')\n'
+        "    sys.exit(0)\n"
+        'if args[:1] == ["list"]:\n'
+        '    print("账号根目录：tmp")\n'
+        "    for name in PROFILES:\n"
+        '        print("  · " + name + "（1 件）")\n'
+        "    sys.exit(0)\n"
+        "sys.exit(1)\n",
+        encoding="utf-8")
+    return script
+
+
+def _capture_worker(seen: dict) -> object:
+    """假 runner：把**收到的 kwargs**（含 `worker_env`）记下来，再照常落 log 回话。"""
+    def run(cmd, log, errlog, **kwargs):              # noqa: ANN001, ANN202
+        seen.update(kwargs)
+        seen["cmd"] = list(cmd)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        wd.session_file_for(log).write_text("sid-test", encoding="utf-8")
+        return 0, "", "", "sid-test"
+    return run
+
+
+def _spy_reserve(monkeypatch) -> dict:
+    """记下 `pool_registry.reserve` 收到的 kwargs（留痕判据用它看 `note`）。"""
+    seen: dict = {}
+    real = wd.pool_registry.reserve
+
+    def spy(card, **kwargs):                          # noqa: ANN001, ANN202
+        seen.update(kwargs)
+        return real(card, **kwargs)
+
+    monkeypatch.setattr(wd.pool_registry, "reserve", spy)
+    return seen
+
+
+def _account_argv(monkeypatch, *extra: str) -> None:
+    """把 `main()` 要读的 argv 摆好（`--account` 系列用例共用；用 monkeypatch ⇒ 自动还原）。"""
+    monkeypatch.setattr(sys, "argv",
+                        ["wb_dispatch.py", "--card", "001", "--spec", "spec.md", *extra])
+
+
+def test_account_injects_the_profile_env_into_the_worker(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """① 给了 `--account` ⇒ 工人环境里**真有**那六个变量，值来自那份工具的**输出**。"""
+    vars_ = _demo_vars()
+    assert set(_ACCOUNT_KEYS) <= set(vars_), "桩要覆盖那六项（判据自检）"
+    stub = _account_stub(sandbox, {"demo": vars_, "other": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    seen: dict = {}
+    monkeypatch.setattr(wd, "run_worker", _capture_worker(seen))
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 0
+    env = seen["worker_env"]
+    assert env is not None, "给了 --account 就必须给工人一份环境"
+    for key, val in vars_.items():
+        assert env[key] == val, f"{key} 没并进去：{env.get(key)!r}"
+    # ★ 只并那六项：bash / pwsh 两段不能被解析出假 key（`export X=…` / `$env:X = …`）
+    for bogus in ("export USERPROFILE", "$env:USERPROFILE", "export HOME"):
+        assert bogus not in env, f"解析器把 {bogus!r} 也当成变量了"
+    out = capsys.readouterr().out
+    assert "[账号] profile「demo」" in out
+
+
+def test_without_account_the_worker_env_and_the_note_are_untouched(
+        sandbox: Path, monkeypatch) -> None:
+    """② 不给 `--account` ⇒ 环境**逐字不变**（`worker_env=None`）+ 租约 note 一字不改。"""
+    seen: dict = {}
+    monkeypatch.setattr(wd, "run_worker", _capture_worker(seen))
+    note = _spy_reserve(monkeypatch)
+    _account_argv(monkeypatch, "--execute")
+    assert wd.main() == 0
+    assert seen["worker_env"] is None, "不给 --account 时不许给工人另塞环境（= 继承真家目录）"
+    assert note["note"] == "spec=spec.md", f"租约 note 被改了：{note['note']!r}"
+
+
+def test_missing_profile_refuses_and_names_it(sandbox: Path, monkeypatch, capsys) -> None:
+    """③ profile 不存在 ⇒ **拒派并点名**（列出可用 profile），**一个工人都别起**。"""
+    stub = _account_stub(sandbox, {"demo": _demo_vars(), "other": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    dispatched: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(dispatched))
+    _account_argv(monkeypatch, "--account", "nope", "--execute")
+    assert wd.main() == 2, "profile 不存在必须拒派（退 2），不许退回默认号"
+    err = capsys.readouterr().err
+    assert "nope" in err and "拒绝派活" in err, err
+    assert "demo" in err and "other" in err, f"要列出可用 profile：{err}"
+    assert dispatched == [], "拒派时一个工人都不能起"
+
+
+def test_account_values_follow_the_tool_not_a_local_copy(
+        sandbox: Path, monkeypatch) -> None:
+    """④a **调**不是**抄**：桩换一组值 ⇒ 派活器跟着变。"""
+    stub = _account_stub(sandbox, {"demo": _demo_vars(userprofile="D:/别的号/home")})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    seen: dict = {}
+    monkeypatch.setattr(wd, "run_worker", _capture_worker(seen))
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 0
+    assert seen["worker_env"]["USERPROFILE"] == "D:/别的号/home", \
+        "派活器没跟着那份工具的输出变 —— 说明它抄了一份本地清单"
+
+
+def test_no_local_copy_of_the_profile_list_in_the_dispatcher(sandbox: Path) -> None:
+    """④b 本仓源码里**不许**出现那份清单（否则就是第二份真源，两份一漂就会用错号）。
+
+    ★ 钉哪三个：`LOCALAPPDATA` / `WORKBUDDY_CONFIG_DIR` / `CODEBUDDY_CONFIG_DIR` ——
+      **任何**对本卡的复制都必然带上它们，而今天它们在 `wb_dispatch.py` 里出现 0 次。
+    ★ 为什么不一并钉 `USERPROFILE` / `APPDATA` / `HOME`：前者 `paths()` 早就用了（与本卡无关），
+      `HOME` 出现在**解释那段机制**的注释里 —— 那**不是**清单，钉它只会误伤自己的注释。
+    """
+    src = pathlib.Path(wd.__file__).read_text(encoding="utf-8")
+    for key in ("LOCALAPPDATA", "WORKBUDDY_CONFIG_DIR", "CODEBUDDY_CONFIG_DIR"):
+        assert key not in src, f"wb_dispatch.py 里出现了 profile 清单项 {key}（那是第二份真源）"
+    assert "PROFILE_ENV_KEYS" not in src
+    # ★ 另一半：机制必须是**通用**的 `KEY=VALUE` 解析（不是一张写死的 key 清单）。
+    assert hasattr(wd, "_ENV_LINE_RE"), "解析器不见了 —— 通用解析是'只调不抄'的关键"
+
+
+def test_account_is_recorded_in_the_lease_note_and_the_log(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """⑤ 留痕：租约 note 与派活日志里**看得见**那个 profile 名。"""
+    stub = _account_stub(sandbox, {"demo": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    note = _spy_reserve(monkeypatch)
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 0
+    assert "account=demo" in note["note"], f"租约没记下 profile：{note.get('note')!r}"
+    assert "[账号]" in capsys.readouterr().out
+
+
+def _env_dump_stub(dump: Path) -> list[str]:
+    """桩命令：吐一条成功的 result，再把自己的环境 dump 到 `dump`。"""
+    code = ("import json, os\n"
+            "print(json.dumps({'type': 'result', 'subtype': 'success', 'result': 'ok'}))\n"
+            f"open({str(dump)!r}, 'w', encoding='utf-8').write(json.dumps(dict(os.environ)))\n")
+    return [sys.executable, "-X", "utf8", "-c", code]
+
+
+def test_runner_hands_the_injected_env_to_the_child(tmp_path: Path, monkeypatch) -> None:
+    """真 Popen：`worker_env` 是**整份替换**（不是叠加）—— 桩把子进程环境打出来核对。"""
+    monkeypatch.setenv("PROBE_PARENT_ONLY", "yes")
+    dump = tmp_path / "env.json"
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    env = {k: os.environ[k] for k in ("PATH", "SystemRoot", "TEMP", "TMP") if k in os.environ}
+    env["MARKER"] = "profile-xyz"
+    rc, reason, _scene, _sid = wd.run_worker(_env_dump_stub(dump), log, err, timeout=60,
+                                             max_turns=150, watchdog=True, heartbeat_seconds=0,
+                                             worker_env=env)
+    assert (rc, reason) == (0, ""), (rc, reason)
+    child = json.loads(dump.read_text(encoding="utf-8"))
+    assert child.get("MARKER") == "profile-xyz", "工人没拿到注入的环境"
+    assert "PROBE_PARENT_ONLY" not in child, "给的是整份环境，不该顺便继承父进程的"
+
+
+def test_runner_without_worker_env_inherits_the_parent(tmp_path: Path, monkeypatch) -> None:
+    """`worker_env` 不给（默认 None）⇒ `Popen(env=None)` = **逐字继承**父进程环境。"""
+    monkeypatch.setenv("PROBE_PARENT_ONLY", "yes")
+    dump = tmp_path / "env.json"
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    rc, reason, _scene, _sid = wd.run_worker(_env_dump_stub(dump), log, err, timeout=60,
+                                             max_turns=150, watchdog=True, heartbeat_seconds=0)
+    assert (rc, reason) == (0, ""), (rc, reason)
+    child = json.loads(dump.read_text(encoding="utf-8"))
+    assert child.get("PROBE_PARENT_ONLY") == "yes", "不给 worker_env 必须继承父进程环境"
