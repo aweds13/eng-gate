@@ -1,0 +1,18 @@
+[entries."T-G280"]
+id = "T-G280"
+title = "框架自带 skills 层：6 份 SKILL/README + 唯一胶水处 + 2 道机器钉子"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:skills/README.md",
+  "file:skills/GLUE-harness.md",
+  "file:skills/pipe-init/SKILL.md",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:skills/pipe-card/SKILL.md",
+  "file:skills/pipe-land/SKILL.md",
+  "file:skills/pipe-forensics/SKILL.md",
+  "file:skills/nails/check_commands.py",
+  "file:skills/nails/check_skills.py",
+]
+gaps = "本笔落卡 180（框架自带 skills 层）。★ 诚实缺口七条。① ★★ **成送申请是主控回填的**：工人在码道上**正常收工**（`finished=true`、`errors=[]`、293s、56 事件、`tokens total=37245`），但**没走最后一步交申请** ⇒ `B-SKILLS` 停在 `collecting 0/1`。内容逐条取自它在码道日志里的回报 + 主控的第一手复跑，**不是主控编的**。★ 真因在**收工侧**（工人漏最后一步），不是登记侧 —— 与卡 157 治的那个病**不是同一个**。② ★★ **两道钉子目前没有任何消费端**：`skills/nails/check_commands.py` 与 `skills/nails/check_skills.py` **不在** `scripts/run_gates.py` 的门表里，也没有别的脚本调用它们（全仓 grep 到的 `scripts/check_commands.py` 是**另一件**既有件、与 `skills/nails/` 无关）⇒ 这正是「**判据生成了但没有消费端**」—— 卡 160（`T-G260`，**本日刚落**）刚给台账治过的那一族。★ 本笔**不治**（180 的域里没有 `run_gates.py`；接线该另算），如实记。③ **域被显式修订过**：原预声明 **6** 份、实际 **9** 份。多出来的 3 份（`skills/GLUE-harness.md` + 两道钉子）**是卡规格自己点名的**（第 45~47 行「③ 反例钉子」两条 + 第 59 行「故意写错一个命令名 ⇒ 红…改回 ⇒ 绿」）⇒ 是**预声明漏了「必然产出」的件**，不是工人越界。理由与查证已写进 `gates/diag/batch/B-SKILLS.toml`。★ 教训进 §26：**写预声明域时要把规格里「反例钉子」这类必然产出一起写进去**，否则工人**越照规格干越会被咬**。④ **「红→绿」里的「红」是工人自报的**：它贴了原文（`skills/pipe-init/SKILL.md:40 引用了不存在的命令 pipe initt`），但主控**没有重做那次故意红**（重做要改文件、有污染与「改了忘改回」的风险）⇒ **只有「绿」是主控第一手复跑的**：两道钉子 `rc=0`。⑤ **工人跑在码道上**（用户 14:2x 预授权「code 底限额就转码道」；19:0x 确认「已经跑就不用停」）⇒ 这条路**丢四样**（交接文档 14:2x 记过）：没有开工切片 brief（所以**不能** `--lean`，`gates/diag/brief-180.md` 本来就不存在）· **没有回合上限** · 日志落在 `infra/pool/logs/`（`job_list`/哨兵都看不见）· **没有域检查 / project 守卫**。★ 且 `exit_code` 不可信 —— 本笔靠 **`finished=true` + `errors=[]`** 判的活（卡 189 就是 `exit_code: 0` 而实为 403 拒答）。⑥ **「判据 → 库 / 门」这条口径没有机器判据**：README 立了分界（「判据 → 库 / 门；怎么用 → skill；换 harness 要改的 → 只许集中在 `skills/GLUE-harness.md`」），但**没有门去查「SKILL 里有没有塞判据、胶水有没有漏到别处」**；现有的只有钉子①（命令名对账）与钉子②（frontmatter + 必备节）。★ 如实记。⑦ 工人自报的「SKILL.md 正文无 harness 特有名」**主控第一手验过**：`skills/README.md` + 5 份 SKILL（如 `skills/pipe-init/SKILL.md`）命中 **0**，`skills/GLUE-harness.md` 命中 **3** ⇒ 与规格硬要求一致。★ 但「无 harness 特有名」只是**一条 grep 口径**，不等于「跨 harness 真能用」（那要换一个 harness 真跑一次才算）。"
+

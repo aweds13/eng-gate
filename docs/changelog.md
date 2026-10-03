@@ -132,6 +132,15 @@
 - ★ **台账里的「整句指针」跟着实现迁移（§22⑤ / INV-77 的那一刻）**：`T-G127` 的 evidence 里有一条 `text:scripts/check_layers.py::if any(is_git_ignored(c) for c in candidates):` —— **它钉的是整句正文**，而本笔修根因把那一行改成了 `is_git_ignored(c, base)` ⇒ 第 4 趟门禁红在 `tests/test_docs_fragments.py::test_audit_verdict_unchanged_by_sync`（`assert before[0] == 0` → `1 == 0`）。⇒ 照本仓早立的口径换成**两个语义锚点**（函数签名 `def is_git_ignored(` + 该行为的可见字面 `跳过 gitignored 产物引用`）。★ **INV-77 的 note 早就预言了这一刻**（原话：「存量台账里钉整句的 `text:` 指针未逐一迁移 —— 那半在**改到对应文件时**逐条换锚点」）。
 - ★★ **内存闸默认阈值 4.0 → 2.0**（用户 2026-10-03 18:2x 令，原话「**把内存限制降到2G**」）：`DEFAULT_GATE_MIN_FREE_GB` 在**两处**（`scripts/run_gates.py` 与 `tools/wb_dispatch.py` —— **同一套口径的两份，必须一起改**），连注释 / docstring 与 `tests/test_mem_guard.py` 里**钉住默认值**的那个用例（改名 `test_default_threshold_is_2gb`）一起。★ **留痕如实写**：这条闸当初正是**为护这台机器**（可用掉到 ~3 GB 时整机慢 6 倍、用户的游戏被挤崩过一次，见该处注释原文）⇒ 默认降到 2.0 = **用户本人拍板**接受「门禁能在只剩 2 GB 时开跑」；缓解手段：内存紧时配 `TF_PYTEST_WORKERS=1`。
 - ★ **同一笔攒批的主控文档笔**：`docs/workbacklog.toml`（补登 **卡 189 / 卡 192**，卡 186 转 `done`）· 卡 160 与卡 184 的规格追加 · **卡 192 的规格**（新）· `复盘/框架-git-多人协作口径.md`（新，用户 17:3x 的 git 基线令）。★ **为什么攒在一起**：它们是**主控自己的文档笔**，散着落会每笔各跑一趟全量门禁；而攒批是「一笔提交 = 一个 `Task:`」之下唯一的合法通道。
+## 2026-10-03 —— 框架自带 skills 层：6 份 SKILL/README + 唯一胶水处 + 2 道机器钉子（T-G280 / 卡 180）
+
+- **交付 9 份 / 603 行**（`skills/`）：`skills/README.md` 81 · `skills/GLUE-harness.md` 29 · 5 份 SKILL 52~68（如 `skills/pipe-init/SKILL.md`）· 两道钉子 119+81。
+- **5 个 skill** 覆盖框架 CLI 的五条主动线（`pipe init / gate / card / land / forensics`），每份六节：**什么时候用 / 什么时候别用 / 前置检查 / 真命令 / 怎么读结果（尤其三值判决里的 inconclusive）/ 常见错与处置**。
+- ★ **`skills/README.md` 立了「该不该写成 skill」的判据**（这是本卡真正要补的漏项）：**判据 → 库 / 门；怎么用 → skill；换个 harness 要改的 → 只许集中在 `skills/GLUE-harness.md`**；并给出「换 harness 要改什么」的清单式 G1~G6。
+- ★ **`skills/GLUE-harness.md` = 唯一胶水处**（注册方式 / frontmatter 字段名 / 调用入口这类 harness 特有物只许在这里）。
+- ★ **两道机器钉子**：① `check_commands.py` —— 把各 skill 里出现的命令名（如 `skills/pipe-init/SKILL.md`）与框架 CLI 的 `--help` **对账**（引用了不存在的命令 ⇒ 红）；② `check_skills.py` —— 各 skill 缺 frontmatter / 缺「什么时候别用」⇒ 红。
+- ★ **主控第一手复核**：两道钉子 `rc=0`；harness 特有名在 README + 5 份 SKILL 里 **0 命中**、在 `skills/GLUE-harness.md` 里 **3 命中**（与硬要求一致）。
+- ★ **同一笔**：`docs/workbacklog.toml` —— 卡 180 转 `done`，并把它的 `files` 从 6 份补到 9 份（与上面那条域修订对齐）。
 ## 2026-10-02 —— 外包工具：需求与架构定稿 + **两级整体审查**（Flash 指针索引 → **GLM-5.3** 审查）+ `glm-5.3` 一次性授权（T-G220 / 批 `B-ARCH1`）
 
 - 来路（用户两条要求）：把外挂设施的**需求与整体架构**发出来；把"检查这套设施"做成**两级** ——

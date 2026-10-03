@@ -1142,10 +1142,17 @@ files = [
   "skills/pipe-card/SKILL.md",
   "skills/pipe-land/SKILL.md",
   "skills/pipe-forensics/SKILL.md",
+  "skills/GLUE-harness.md",
+  "skills/nails/check_commands.py",
+  "skills/nails/check_skills.py",
 ]
 depends = ["179"]
 risk = "mid"
-status = "pending"
+# ★ 2026-10-03 19:3x：`files` 从 6 → 9（补上规格自己点名的 3 份「必然产出」：
+#   GLUE-harness.md + 2 道钉子；理由见 `gates/diag/batch/B-SKILLS.toml` 的域修订段）。
+#   `status` 转 done：码道工人正常收工（finished=true / errors=[] / 293s），
+#   成送申请由主控回填（工人收工侧漏交——那一族）。
+status = "done"
 [[cards]]
 id = "181"
 task = "T-G281"
