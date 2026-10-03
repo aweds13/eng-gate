@@ -1,0 +1,139 @@
+# 优化候选（机器可读）—— 卡 187 / 台账号 T-G287 / 任务 B-CITEBACK · M-1
+# 来源：引文回溯（snowballing，Wohlin EASE 2014 口径），种子 18 篇 + 主控的 复盘/框架-并行度与内存.md
+# ★ 下游用途 = 直接生成卡。字段一律不许空；空字段的候选应进 verdict = 否掉。
+# ★ 中文正文一律用「」，不许出现未转义 ASCII 双引号（会打碎解析，见 复盘/外包-卡表与规矩.md §8 坑 1）。
+# ★ 排序 = 收益/代价 从高到低；只留前 12 条。
+# ★ 数字纪律：凡引用文献读数，一律标 arXiv 号并把别人的实验条件写明；本仓预期收益只给方向与量级，
+#   不给「别人跑出来 = 我们能拿到」的伪数字。
+
+[[candidate]]
+id = "OPT-01"
+method = "资源感知排班互斥 + 先量真实峰值（Resource-aware scheduling exclusion / measure-before-tune）"
+where = "排班口径（主控「何时派工、何时跑门禁」）+ scripts/run_gates.py 的内存闸（DEFAULT_GATE_MIN_FREE_GB=4.0）：门禁跑时不派工人、工人跑时不跑门禁；并先量一趟 4-worker 门禁的真实峰值 RSS。"
+gain = "本机实测（复盘/框架-并行度与内存.md，2026-10-03 15:59）：可用 3.56/15.21 GB，最大占用是 DSH 自身 10 进程 2.47 GB；门禁与工人重叠 ⇒ 被迫 TF_PYTEST_WORKERS=1 ⇒ pytest 620~700 秒，而默认 4 worker 只要 250 秒。—— 门禁期不派工这一条就能把每笔从 ~700s 压回 ~250s（省 ~7 分钟/笔），代价近零。文献佐证：按实际占用排布而非静态配额，可把 OOM/超时压到 0.05~0.08%（arXiv:2102.09098，Google 生产、日 1.47M target）且平均 >60% 已分配内存本就没被用（arXiv:2604.12673）。"
+cost = "零代码改动（只是不把两件事叠一起）；外加一次「跑 4-worker 门禁、记峰值 RSS 与各 worker 峰值」的测量。约 0.5 张卡，纯口径 + 一次读数。"
+verify = "对照两次：重叠跑 vs 互斥跑，报「pytest 墙钟 / 峰值可用内存 / 是否触发内存闸」三读数；判据 = 互斥后能拿回默认 worker 数且门禁全绿。"
+reversible = "可逆"
+evidence = "arXiv:2102.09098（种子，主控 16:4x 补）；arXiv:2604.12673（种子，主控 16:4x 补）；本仓读数 复盘/框架-并行度与内存.md §一（本机实测）"
+verdict = "采纳"
+
+[[candidate]]
+id = "OPT-02"
+method = "在线内存预测 + 分位数右尺寸（Online memory prediction and quantile right-sizing）"
+where = "scripts/run_gates.py 的内存闸（DEFAULT_GATE_MIN_FREE_GB=4.0 静态阈值）与 pytest_workers（固定 min(4,cpu)）：把「静态保守配额」换成「按门/按用例实测历史的分位数配额」，并按预测占用求和放行。"
+gain = "文献读数：生产 CI 里平均 >60% 已分配内存没被用、8.6% 的失败源于内存欠分配；分位数回归右尺寸后每 build 省约 36GB、欠分配率 <0.3%、构建时长不变（arXiv:2604.12673，30 万条 build、千余节点 SAP HANA 集群）；在线预测把内存浪费中位降 24.68%（arXiv:2407.16353，六条 nf-core 工作流）；内存分配质量升 71.0% 且任务失败降 93.8%（arXiv:2408.00047，Nextflow 实现）。对齐到本仓方向：把「可用 2–4 GB ⇒ 被迫 worker=1」换成按门实测占用放行，往上抬 worker 数；量级待实测（单机 16 GB、样本远小于文献）。"
+cost = "新增「门/用例 → 峰值内存」历史登记（落 gates/ 下一个 jsonl）+ 一层分位预测与按门放行逻辑；约 1 张卡。★ 不改任何门的判据、不改 reuse 输入哈希。"
+verify = "先跑 N 轮记录每道门与每个 pytest worker 的实测峰值（Windows WorkingSet 或 tracemalloc），比对「预测分位 vs 实测」；判据：预测值 ≥ 实测 p99 的比例 ≥ 99%，且据此放行的门禁整趟全绿（无 OOM/换页）。反空转：配一条「故意把某门预测调低 → 应被准入拦截」的用例。"
+reversible = "可逆"
+evidence = "arXiv:2604.12673（种子，主控 16:4x 补）；arXiv:2407.16353（种子 2604.12673 backward 1 跳）；arXiv:2408.00047（种子 2604.12673 backward 1 跳）"
+verdict = "采纳"
+
+[[candidate]]
+id = "OPT-03"
+method = "每 worker 内存下限判据 + 资源敏感 flaky 的受控复测（Resource-Affected Flaky Test controlled re-run / RAFT）"
+where = "scripts/run_gates.py 的并发口径（铁律 6 的「重活不许并发」）与内存闸：补「低于 X 内存/核数不许跑」的下限判据；对疑似资源型失败加一层「固定低配档重测」的归因。"
+gain = "文献读数：52 项目 / 27 资源档下 46.5% 的 flaky 是资源敏感型（RAFT），CPU <1 core 或内存 <1 GiB 时 flakiness 激增、个别项目失败率升 >200×，且「主动降资源」是高性价比的 flaky 检出手段（arXiv:2310.12132，Java/JS/Python）；另一条相反信号：基础设施负载与 CPU/内存需求无显著相关，执行时间与 flaky 强相关（r=0.79）（arXiv:2409.10062，SAP HANA ESEM 2024）。对齐到本仓：两条打架 ⇒ 必须先量；方向 = 把「满负载假红」从「靠人记得串行」升级为「机器用低配档区分真红/假红」，并给内存加下限。具体降幅待实测。"
+cost = "加下限判据（一条）+ 资源受限复测档（可能需要 cgroup / Windows Job Object 限额）+ 结果写进 last.json 归因块；★ 只在疑似资源型失败时触发。约 1 张卡；隔离/限额权限是主要代价。"
+verify = "拿本仓历史真红/假红各若干条做对照：真红两档都应红；假红应在低配档复现、全绿路径不出现。判据：假红复现率与真红误伤率两个读数一起报。反空转：造一条「把资源降到下限以下 → 应被拦截或标资源受限」的用例。"
+reversible = "可逆"
+evidence = "arXiv:2310.12132（种子，主控 16:4x 补）；arXiv:2409.10062（2310.12132 forward 1 跳）；backward/forward 同族 ICSME 2024「Test Scheduling Across Heterogeneous Machines While Balancing Running Time, Price, and Flakiness」"
+verdict = "采纳"
+
+[[candidate]]
+id = "OPT-04"
+method = "拒绝点变异测试（Refusal-site mutation testing）"
+where = "门禁与复核的判据本体：scripts/run_gates.py 各门判据、scripts/audit_progress.py 的 eval_assertion、tools/wb_review.py、tools/wb_invariants.py。"
+gain = "文献读数：某证据捆绑校验器暴露 112 个拒绝点，其中 75 个可删而整套测试与全部篡改夹具仍全绿、得分仅 0.330；把拒绝点也纳入测试后得分升到 0.941→1.000（arXiv:2608.26183，自测系统）。对齐到本仓方向：找出「删掉它、篡改夹具照样绿」的空转判据（vacuous pass，本仓已撞过：门报绿其实没查任何东西），逐条补成会咬的断言；目标 = 拒绝点得分按文献量级抬到 0.9+，具体基线待实测。"
+cost = "写一个「逐条删除拒绝点 + 跑篡改夹具」的变异扫描器（脚本，不改被测判据）；产出 = 每个门的「可删拒绝点」清单 + 补测。约 1–2 张卡。"
+verify = "扫描器读数 = 拒绝点总数 / 可删数 / 得分，改前改后各一次；反空转 = 扫描器自己必须能抓到一个「故意造的空转判据」。"
+reversible = "可逆"
+evidence = "arXiv:2608.26183（种子）；同族机制见 arXiv:2607.14890（种子，Proof-or-Stop：zero false-DONE）"
+verdict = "采纳"
+
+[[candidate]]
+id = "OPT-05"
+method = "证据新鲜度 + 源状态绑定（Freshness-bound, source-state-bound evidence gates / Proof-or-Stop）"
+where = "gates/last.json 的 rev 绑定与 tools/wb_review.py 的「门禁是不是为这一笔跑的」判据，以及 tools/pool/landing.py 的放行条件。"
+gain = "文献读数：门控循环把「可见通过/隐藏失败」的放大从 1800 格里的 31 格降到 2 格（arXiv:2607.14890，9,240 格消融，95% CI [0.8,2.5] 个百分点）；18 类篡改全部被本地密钥回执拒绝、0 误接受。对齐到本仓方向：我们现在只核「门的 rev = 提交的父」，不核「证据是否覆盖当前被改的树/文件」；加 source-state 绑定后，把「陈旧证据冒充当前状态」（本仓卡 156 的病灶）机器化拦掉。"
+cost = "给证据产物加「它依据的 tree hash / 输入哈希」字段，并在放行处与当前 HEAD 比对；★ 只加校验，不放宽任何既有判据。约半张到 1 张卡。"
+verify = "注入一条「陈旧证据（tree hash 对不上）」→ 放行必须拒；注入一条「新鲜证据」→ 必须过。两条都进测试。"
+reversible = "可逆"
+evidence = "arXiv:2607.14890（种子）"
+verdict = "采纳"
+
+[[candidate]]
+id = "OPT-06"
+method = "静默失败探针（Silent-failure detection：退出码 0 但没干活 / 忽略退出码 / artifact-cache 操作失败）"
+where = "收口链 tools/wb_land.py 与 tools/pool/landing.py、门执行处 scripts/run_gates.py 的子进程退出码汇总，以及复用记录 gates/reuse.json 的写入路径。"
+gain = "文献读数：142,387 个 job / 81 个工业项目里 11% 的「成功」job 被重跑（35% 在 24 小时后）；静默失败 11 类，最高频 = artifact 操作错误、缓存错误、被忽略的退出码（arXiv:2509.14347）。对齐到本仓：我们已撞过同一族（CLI 撞回合上限/429 时退出码仍 0、回话空；门「跑完」但产物没变），故这层是真风险；探针方向 = 把「退出码 0 但产物为空/未变」一律判红，压到 0 漏网，具体降幅待实测。"
+cost = "给收口链与门执行处加「动作后再读一次产物」的断言（本仓坑 8 的既有手法）+ 一条「缓存/artifact 写失败但函数提前 return」的用例。约半张到 1 张卡。"
+verify = "反空转用例：造一个「退出码 0、产物未写」的假门 → 必须判红；造一个「缓存写失败被吞」的假路径 → 必须判红。"
+reversible = "可逆"
+evidence = "arXiv:2509.14347（种子）；同一 SLR 也点名 flaky build failures（arXiv:2501.11940，2102.06666 forward 1 跳）"
+verdict = "采纳"
+
+[[candidate]]
+id = "OPT-07"
+method = "Python 细粒度回归测试选择（Fine-grained name-graph reachability RTS / NameRTS）"
+where = "scripts/run_gates.py 的 --affected 与 DOOR_INPUTS（文件 → 门）表；把它从「粗粒度路径匹配」升级为「名字/引用可达」的测试选择。"
+gain = "文献读数：NameRTS 平均跳过 69.90% 的测试文件、端到端测试时间降 45.59%，对 99.6% 的提交选全了受影响测试（对比 BabelRTS 的 76.6% 安全率）（arXiv:2605.25356，ISSTA 2026，首个 Python RTS 基准）。对齐到本仓：--affected 明令「宁多勿漏、只给自查用、判提交一律全量」——可在**自查路径**先吃这 ~70% 跳过 / ~45% 时间收益，判提交路径不动。"
+cost = "搭一张「代码元素 / 名字」二分图 + 可达性选择（纯静态，不改测试本身）；接进 --affected 的显式记账。约 1–2 张卡。★ 必须保留「拿不准就跑全量」兜底。"
+verify = "在本仓取若干历史提交做 ground truth（全量跑的受影响集合），比 NameRTS 选择集：必须全覆盖受影响测试（安全率向 99%+ 看齐），并报跳过比例与省时。"
+reversible = "可逆"
+evidence = "arXiv:2605.25356（种子 1810.05286 forward 1 跳，Semantic Scholar）；同族 arXiv:1810.05286（种子，预测式测试选择）"
+verdict = "采纳"
+
+[[candidate]]
+id = "OPT-08"
+method = "按门历史 p99 的自适应硬超时（Per-door adaptive timeout from historical tail）"
+where = "scripts/run_gates.py 的 DEFAULT_DOOR_TIMEOUT=1800.0（现为所有门统一阈值）与每门的 timeout 记录（last.json 的 timeout 字段）。"
+gain = "文献读数：CI 超时构建有可识别的特征与代价（「Characterizing Timeout Builds in Continuous Integration」TSE 2024，1810.05286 forward 1 跳）。对齐到本仓：本仓病灶是 ui_flow 正常 386 秒、却卡死过 56 分钟才被统一 1800s 兜住（卡 100）；方向 = 按每门历史 p99（+ 余量）设阈，把异常门更早掐掉、又不误杀长门；量级 = 把异常门从「等满 30 分钟」压到「几倍 p99」，具体待实测。"
+cost = "给每门登记完成时长的历史 + 由 p99 推阈值（保留统一值当无历史时的兜底）。约半张卡。★ 不改掐树逻辑、不改判红口径。"
+verify = "对每门报「历史 p99 / 现统一阈值 / 建议阈值」三列；反空转：造一个「跑超 p99×余量」的假门 → 必须被掐并判红。"
+reversible = "可逆"
+evidence = "arXiv:「Characterizing Timeout Builds in Continuous Integration」(TSE 2024)，路径 = 种子 1810.05286 forward 1 跳（Semantic Scholar）"
+verdict = "采纳"
+
+[[candidate]]
+id = "OPT-09"
+method = "Strangler-Fig 可逆迁移 + A/B/C 可转换性分类（Reversible migration path and three-tier convertibility taxonomy）"
+where = "框架迁移线（复盘/框架-*.md 与 harness 落地方案）：把每个环节按 A/B/C 可转换性分级后路由（先迁能迁的、可逆、可回退）。"
+gain = "文献读数：该文给出可逆、分阶段的迁移路径 + 三层可转换性分类（A/B/C），实现为路由阶段，用于诊断并路由 legacy「LLM + script」工作流（arXiv:2606.24598）。对齐到本仓：我们的框架迁移（T-G277/T-G278 等）正需要「哪些环节能可逆地抽出来、哪些抽了不可逆」的判据；方向 = 用 A/B/C 给 12 层/53 字段分级、把不可逆项单列。收益方向性（降低迁移返工），无现成数字。"
+cost = "对现有框架清单做一次 A/B/C 标注 + 一条「不可逆项必须先手改」的规矩；纯文档/口径卡，约半张卡；不改代码。"
+verify = "产出一张「环节 → A/B/C → 迁移动作 → 回退方式」表；判据 = 每个「不可逆」项都有一条显式的回退/前置复核（对齐本仓 §25.3 例外清单）。"
+reversible = "可逆"
+evidence = "arXiv:2606.24598（种子）"
+verdict = "采纳"
+
+[[candidate]]
+id = "OPT-10"
+method = "门按内存分池 + 大测试文件拆块（Memory-pooling of doors and test sharding）"
+where = "scripts/run_gates.py 的泳道结构（轻门 12 道 ∥ 浏览器层）与 tests/ 下的大测试文件；把「重门单独排」并让调度器能塞满。"
+gain = "文献读数：ConstantBatching（批 4）用最多 72% 更少的机器维持同等反馈时间；DynamicBatching 最多 91% 更少机器（arXiv:2308.13129，2.76 亿条 Chrome 测试结果，ESEC/FSE 2023）；按预测内存把 target 装箱可把 OOM 压到 0.08%（arXiv:2102.09098）。对齐到本仓：本仓一次只跑一趟门禁、内存只够 1 worker —— 方向 = 用更少机器换同等反馈时间；但**跨树隔离**（铁律 27 / §16）是硬约束，收益要减去隔离成本。"
+cost = "批次隔离（各自临时库/端口/profile）+ 队列合并；与「同一段不许两趟门禁并行」的根冲突，需先证明不破坏隔离。约 2 张卡 + 实测。"
+verify = "同一批 n 张卡的门禁：比「逐张跑」与「分池/拆块跑」的墙钟与峰值内存；判据 = 反馈时间不劣化、且跨树隔离判据仍成立。"
+reversible = "可逆"
+evidence = "arXiv:2308.13129（种子）；arXiv:2102.09098（种子，主控 16:4x 补）；EMSE 2025「Lightweight dynamic build batching algorithms for continuous integration」（2102.06666 forward 1 跳）"
+verdict = "待定"
+
+[[candidate]]
+id = "OPT-11"
+method = "预测式测试选择 + 批处理测试（Predictive test selection / Parallel batch testing）"
+where = "scripts/run_gates.py 的 pytest 全量执行（现口径：pytest 永不复用，是唯一「从行为上证明功能还在」的安全网）。"
+gain = "文献读数：Facebook 生产把测试基础设施成本降为 1/2，同时保证 >95% 单个失败与 >99.9% 故障变更仍被报回，并处理 flakiness（arXiv:1810.05286）；工业多语言管线在 98% 用例通过的前提下用语言无关特征 + RL 做前置选择（arXiv:2501.11550，ICST 2025）；ConstantBatching/DynamicBatching 用最多 72%/91% 更少机器维持同等反馈时间（arXiv:2308.13129）。对齐到本仓：潜在收益大（省 pytest 时间/机器），但与「pytest 永不复用 / 漏跑危险」正面冲突——只有能证明「本仓场景下故障变更召回 ≥ 99.9%」才可考虑。"
+cost = "长期采集「变更特征 → 用例结果」数据 + 训练与漂移监控；★ 必须先证明不破坏安全网。约数张卡 + 持续数据。"
+verify = "在本仓历史提交上离线回放：报「单个失败召回 / 故障变更召回 / 省下的测试时间」三读数；任一低于既有全量的安全承诺即不许上。"
+reversible = "可逆"
+evidence = "arXiv:1810.05286（种子）；arXiv:2501.11550（种子 2604.12673 backward 1 跳）；arXiv:2308.13129（种子）"
+verdict = "待定"
+
+[[candidate]]
+id = "OPT-12"
+method = "把内存缓冲挪到磁盘（Disk-backed buffering / DBPP 的「以盘换内存」）"
+where = "scripts/run_gates.py 捕获子进程输出、以及任何「为了保序而在内存里攒数据」的部位。"
+gain = "文献读数：DBPP 把 peak daemon memory 降 8.7–25.3×（arXiv:2607.05596，五种 31–48 GiB 容器镜像，条件是镜像拉取的有序重组）；同族思路可用于 pytest 的 --basetemp / 大对象落盘。对齐到本仓：★ 我们的内存压力来自**pytest 进程与无头浏览器本体**，不是门的输出缓冲——把输出改落盘对峰值内存几乎无影响，故不命中本痛点（主控文档亦把它列为「消除缓冲」而非内存主因）。"
+cost = "若强行做：改所有门的输出捕获路径 + 落盘/回收逻辑，收益远小于风险。"
+verify = "先量「门的输出缓冲占了多少峰值内存」；若占比可忽略即否掉（预期如此）。"
+reversible = "可逆"
+evidence = "arXiv:2607.05596（种子，主控 16:4x 补）；本仓判断见 复盘/框架-并行度与内存.md §2.3"
+verdict = "否掉（原因：本仓内存瓶颈在 pytest/浏览器进程本体，不在门的输出缓冲；该文的「有序缓冲挪盘」不命中我们的瓶颈，收益可忽略而改动面大）"
