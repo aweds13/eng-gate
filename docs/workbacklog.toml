@@ -616,7 +616,13 @@ files = [
 ]
 depends = ["141"]
 risk = "high"
-status = "pending"
+# ★★ 2026-10-03 14:5x 主控裁定：**本卡作废，由卡 166 取代**（不是做砸了，是方案被换掉）。
+#   依据：卡 158 的决策单（已落地）+ 用户 2026-10-03 的令「**做成一层统一，再按池分流**」——
+#   146 的朴素合并（把本仓硬编码拆掉、改读 infra 那份）落下去会**立刻出事且必然**：
+#   ① 裸名一律被拒；② `--model` 默认值变成 CodeBuddy 服务不了的名字 ⇒ 不带 --model 的派活全挂。
+#   ★ `.wt/onemodel` 里那份**未提交的工作原样保留**（禁区：不许 reset）；任务 `B-ONEMODEL` 留在 awaiting-commit。
+#   ⇒ 状态取 `failed` 而不是 `done`：**它没做成，是被取代**，写成 done 就是伪造完成。
+status = "failed"
 
 [[cards]]
 id = "147"
@@ -660,7 +666,11 @@ files = [
 ]
 depends = ["146"]
 risk = "mid"
-status = "pending"
+# 2026-10-03 16:3x：已落地（提交 1005569；任务 B-ACCOUNT 已标 landed）。★ 共跑 **4 趟门禁**：
+#   ① 红（NO_WINDOW 两处：新代码漏 flag + 旧豁免键失配）② 内存闸拒跑（3.8 < 4.0）③ 绿到 pytest 又红一条
+#   **计时敏感的真进程测试**（4 worker 下 stub 第一行没落地 ⇒ 判「卡死」而不是「超时」＝ flaky）④ 绿。
+#   ★ flaky 那条已记成债（写进卡 164 的追加要求：计时测试要么给足容差、要么钉串行池；不许反复重跑洗绿）。
+status = "done"
 
 [[cards]]
 id = "150"
@@ -1057,7 +1067,12 @@ files = [
 ]
 depends = []
 risk = "mid"
-status = "pending"
+# 2026-10-03 14:2x：已落地（提交 31cfb52，任务 B-TERMS 标 landed）⇒ 不再参与规划。
+# ★ 这一笔门**绿了**（pytest 2051 passed，耗时 10 分 16 秒），卡在**第⑦步审计**一条：
+#   攒批里带了仓根的 `DSH-技能与插件开发参考.md`，而 ⑫「实际改了的有没有人声称」只豁免 docs/ 复盘/ gates/ 三族
+#   ⇒ 必须有一条 `file:` 证据指针指到它。★ 修法：补进 `docs/traceability.d/T-G277.toml` **并且重合并**进
+#   `docs/traceability.toml`（只改片段不改合并件 = 白改：审计读的是合并件）。
+status = "done"
 [[cards]]
 id = "178"
 task = "T-G278"
@@ -1069,7 +1084,12 @@ files = [
 ]
 depends = ["175", "177"]
 risk = "mid"
-status = "pending"
+# 2026-10-03 14:4x：已落地（任务 B-SKELETON 自己交了成送申请）⇒ 不再参与规划。
+# ★ 产物 884 行 / 71,728 字节，六节 + 追加 A~E：五条追加要求**全答了**（接续既有缝判同一脉 + 6 件逐件列耦合点、
+#   解耦四条候选（推荐 B 短期 + A 长期 `sym:`）、居所两阶段、自举=整理文档、命名冲突自定处置）。
+# ★★ 一条范围问题：它把「6 件工具迁移」划进**阶段一（卡 179 的交付面）** ⇒ 主控**不照单全收**：
+#   派 179 前切一刀（先做能跑的核心库/薄 CLI/模板仓/非 timeflow 例子），**迁移另立卡**（要动 375 条路径证据）。
+status = "done"
 # ★★ 下面三张是 2026-10-03 **偏移复审**补的卡（用户令：该写的卡都写好）——
 #   复审发现三条真偏移：① 抽取物与仓里既有的 harness 缝**脱钩**；② **skills 一条都没有**（抽取清单 110 行 0 命中）；
 #   ③ 框架的**居所与分发形态未定**（抽取物全落在 timeflow 仓里，而框架是要带走的）。
@@ -1083,21 +1103,33 @@ tree = ".wt/fwmvp"
 spec = "复盘/卡/卡179-框架MVP实现.md"
 files = [
   "framework/pyproject.toml",
-  "framework/README.md",
+  "framework/PIPELINE.md",
   "framework/pipeline.schema.json",
-  "framework/pipe/__init__.py",
-  "framework/pipe/cli.py",
-  "framework/pipe/config.py",
-  "framework/pipe/gates.py",
-  "framework/pipe/verdict.py",
+  "framework/src/framework/__init__.py",
+  "framework/src/framework/config.py",
+  "framework/src/framework/gates.py",
+  "framework/src/framework/exit_codes.py",
+  "framework/src/framework/verdict.py",
+  "framework/src/framework/ledger.py",
+  "framework/src/framework/invariants.py",
+  "framework/src/framework/claim.py",
+  "framework/src/framework/land.py",
+  "framework/src/framework/trace.py",
+  "framework/cli/main.py",
   "framework/templates/minimal/pipeline.toml",
-  "framework/examples/nontimeflow/pipeline.toml",
+  "framework/templates/card-template.md",
+  "framework/examples/minimal-notes/pipeline.toml",
   "framework/tests/test_config.py",
   "framework/tests/test_verdict_three_valued.py",
+  "framework/tests/test_cli_contract.py",
+  "framework/tests/test_no_timeflow_words.py",
 ]
 depends = ["178"]
 risk = "high"
-status = "pending"
+# 2026-10-03 16:0x：已落地（提交 1646aef；任务 B-FRAMEWORK 已标 landed）。★ 54 个文件 · 自测 55 passed ·
+# `grep -r timeflow framework/` = 0 · 主控独立复跑过。★ 两趟门禁：第一趟红在我文书里一个裸 `PIPELINE.md` 引用
+# （链接扫描按仓根解析 ⇒ 断裂），改 `framework/PIPELINE.md` 后第二趟绿。
+status = "done"
 [[cards]]
 id = "180"
 task = "T-G280"
@@ -1146,6 +1178,113 @@ files = [
 depends = ["181"]
 risk = "mid"
 status = "pending"
+# ★★ 卡 184 是**用户 2026-10-03 15:4x 点名要的加速**：「不要求只过门禁，只让他思考……让机器做的及时检查是否可行？」
+#   现状：每笔落地跑全量门禁，pytest 2065 条 —— 4 worker 时 250s、1 worker 时 620~700s ⇒ 12 分钟一趟 × 19 张卡。
+#   零件其实齐了（run_gates 的 --affected/--changed-from · wb_impact · last.json 的 affected 块 · 卡 147 的护栏），
+#   差的是**收口链那一步**（tools/pool/landing.py 的 ④ 硬编码跑全量）。
+#   ★ 它动的是「判提交的那一步」⇒ high；三条**强制全量**（判据本体改了 / 空计划 / 每 N 笔周期）一条都不许省。
+#   ★ 域与卡 163 相交 ⇒ 两卡必须串（pending 之间的域相交由排班器串开，不算冲突）。
+[[cards]]
+id = "184"
+task = "T-G284"
+title = "收口链支持增量门禁（--affected）+ 三条强制全量 + 如实披露"
+tree = ".wt/incgate"
+spec = "复盘/卡/卡184-收口增量门禁.md"
+files = [
+  "tools/pool/landing.py",
+  "tools/wb_land.py",
+  "tests/test_wb_land.py",
+  "复盘/收口-增量门禁.md",
+]
+depends = ["163"]
+risk = "high"
+status = "pending"
+# ★★ 卡 185：用户令「想一下行业有没有相关的，通过文献的搜索，看看还有什么调整的方法，**然后把这个东西纳入我们的
+#   软件工程执行框架上**」⇒ 检索结果落档 `复盘/框架-验证分层的行业做法.md`（带真实 arXiv 编号），
+#   本卡把那份文书的 F1~F9 折进**框架本身**（选择率+召回 / 兜底捕获率 / 动态读数进输入面 / 粒度 / 无关失败 /
+#   silent failure 三族 / 跃迁检测 / 覆盖率不许单独当绿 / 默认满并行）。
+#   ★ 文献两处空白（分层没有端到端实证 · 兜底层没人量过捕获率）由 F3 自己量 —— 这就是「沉淀成证据」。
+#   ★ 与卡 184 的分工：184 管本仓收口那一步，本卡管框架内部的门与产物。
+[[cards]]
+id = "185"
+task = "T-G285"
+title = "把验证分层的行业要求折进框架（F1~F9：选择率+召回 · 兜底捕获率 · 动态读数 · 无关失败）"
+tree = ".wt/fwverify"
+spec = "复盘/卡/卡185-框架验证分层.md"
+files = [
+  "framework/src/framework/gates.py",
+  "framework/src/framework/selection.py",
+  "framework/tests/test_selection.py",
+  "framework/tests/test_full_run_capture.py",
+  "framework/tests/test_silent_failure_family.py",
+  "framework/PIPELINE.md",
+]
+depends = ["179"]
+risk = "high"
+status = "pending"
+# ★★ 卡 186：用户问「整个管线不可能十全十美，**如何做到这种可控性的维护？以及修改**」⇒ 检索结果落档
+#   `复盘/框架-可控性与安全修改.md`（带真实 arXiv 编号 + 三条证据缺口）。总纲 = **可执行约束 + 闭环 +
+#   多样性匹配（Ashby）+ 显式债务 + 可逆迁移**；「安全修改」第一条 = **先证明旧判据还活着，再改它**。
+#   ★ 本卡只做框架这一侧（G1/G3/G5/G7/G8/G9）；G2/G4/G6 归本仓卡 160/162/156。★ 域与卡 185 相交 ⇒ 两卡串。
+[[cards]]
+id = "186"
+task = "T-G286"
+title = "框架的可控性与安全修改（G1~G9：架构级 fitness · 多样性不许削减 · 可转换性分类 · 拒绝点活性扫描）"
+tree = ".wt/fwcontrol"
+spec = "复盘/卡/卡186-框架可控性与安全修改.md"
+files = [
+  "framework/src/framework/fitness.py",
+  "framework/src/framework/evidence.py",
+  "framework/src/framework/migration.py",
+  "framework/tests/test_fitness_functions.py",
+  "framework/tests/test_meta_verification.py",
+  "framework/tests/test_evidence_freshness.py",
+  "framework/PIPELINE.md",
+]
+depends = ["179", "185"]
+risk = "high"
+status = "pending"
+# ★★ 卡 187（用户 16:3x：「专门拍这张卡去做一下**引文的回溯**……**关键是有我们的目标是优化，而不是单纯的找文献**」）：
+#   方法照官方 **snowballing 指南**（Wohlin, EASE 2014）：起点集 14 篇 → backward/forward 逐跳 → 记收敛跳数。
+#   ★ 交付**不是书目**：`复盘/优化候选.toml`（机器可读，**下游直接生成卡**）+ 一份人读的引文链与差集。
+#   ★ 判据：每条候选必须能回答「改哪里 / 收益 / 代价 / 怎么验 / 可不可逆」；答不出的进 `否掉 + 原因`。
+[[cards]]
+id = "187"
+task = "T-G287"
+title = "引文回溯：从 14 篇种子挖出能改我们管线的优化候选（产物可直接生成卡）"
+tree = ".wt/citeback"
+spec = "复盘/卡/卡187-引文回溯优化候选.md"
+files = [
+  "复盘/优化候选.toml",
+  "复盘/优化候选-引文回溯.md",
+]
+depends = []
+risk = "low"
+# 2026-10-03 16:3x：已落地（提交 d77d5b8；任务 B-CITEBACK 已标 landed）。★ 12 条候选：采纳 9 / 待定 2 / 否掉 1。
+# ★ 下游用途 = **直接生成卡**（字段固定、机器可读）⇒ 后面对齐 OPT-01/02/03 时就照它立卡，别再重搜。
+status = "done"
+# ★★ 卡 188：用户问「**有那些不得不串行工作的，能否实现并行？**」⇒ 主控当场量出真因：
+#   **21 张待派卡里 9 张都声明要动 `tools/wb_dispatch.py`**（2481 行）+ 它的测试（2787 行）
+#   ⇒ 排班器只能一张一张串。★ 串行的真因**不是依赖，是共享文件**；而 git 合并是**行级**的、
+#   我们的域检查是**文件级**的。判据：**「必须串行」要写明是「真依赖(a)」还是「只是同文件(b)」，(b) 不许直接接受**。
+#   ★ 本卡**刻意选了域不相交的形态**（新模块，不碰 plan 三件）—— 否则我自己就成了串行链上的第 10 张。
+#   ★ 候选 A（拆那个 2481 行的巨文件）**不在本卡**：它要动台账里按路径钉住的证据，代价大，等本卡的实测读数再定。
+[[cards]]
+id = "188"
+task = "T-G288"
+title = "域检查从文件级细化到符号级（解掉「一个文件绑 9 张卡」的假串行）"
+tree = ".wt/domainsym"
+spec = "复盘/卡/卡188-域细化为符号级.md"
+files = [
+  "tools/domain_symbols.py",
+  "tests/test_domain_symbols.py",
+  "复盘/域与串行-符号级细化.md",
+]
+depends = []
+risk = "mid"
+status = "pending"
+# ★ 注：与卡 185 同写 `framework/PIPELINE.md` ⇒ 队列校验当场咬住（「同一文件两个写者要串」）——
+#   这就是本仓那条规矩在替我们干活。⇒ 185 先落，186 后落。
 # ★★ 卡 182 也是 2026-10-03 复审数出来的账（用户问「外包工程怎么样了」）：
 #   树数 89（T-G180 读数）→ **176**；派活日志 117 份、其中 22 份无判决；清理器 D-12 掉在地上无人接。
 #   四条都不是新问题，是**没人定常规**——同族病见卡 163（有能力、零接线）。域与任何待派卡都不相交。
@@ -1164,4 +1303,7 @@ files = [
 ]
 depends = []
 risk = "mid"
-status = "pending"
+# 2026-10-03 15:3x：已落地（提交 75e459e）。★ 这是**第一张从码道号池交回的卡** —— 通路验证 + 真干活。
+# ★ 两趟门禁：第一趟红在 `tests/test_no_window.py`（新工具漏了 `NO_WINDOW`，码道那侧不喂固定坑页 ⇒ 工人不可能知道）；
+#   主控补一行 + 独立复跑 39 条测试后重跑门禁，第二趟绿。缺口已写进卡 166 的追加要求。
+status = "done"
