@@ -440,11 +440,47 @@ def account_env(name: str) -> dict[str, str]:
     for line in (done.stdout or "").splitlines():
         hit = _ENV_LINE_RE.match(line.strip())
         if hit:
-            out[hit.group(1)] = hit.group(2).strip()
+            val = hit.group(2).strip()
+            # ★ 卡 190（T-G290）F4：值里带引号 = 真源形状漂移（如 KEY="v"），静默收会
+            #   连引号一起当值用 → 响亮拒（不许静默收错值）。廉价健全性：路径里不会有引号。
+            #   ★ F5 并入：④b 清单钉是文本存在性（防抄有效、不验行为）；这条验**行为**。
+            if '"' in val or "'" in val:
+                raise AccountError(f"profile「{name}」的 {hit.group(1)}={val!r} 值里带引号"
+                                   f" → 解析形状漂移，拒派（不许静默收错值）")
+            out[hit.group(1)] = val
     if not out:
         raise AccountError(f"profile「{name}」没输出任何环境变量（`profile env` 回话认不出）"
                            f"→ 拒绝派活（不许悄悄退回默认号）")
     return out
+
+
+def _account_env_probe(env: dict[str, str], expected: dict[str, str]) -> tuple[bool, str]:
+    """★ 卡 190（T-G290）F2 子进程侧读数 —— 不再"自己打印自己"。
+
+    用 `env` 起一个极小子进程，让它读**自己的**环境回话：`expected` 里每一项
+    `KEY=VALUE` 都在子进程环境里对得上 ⇒ 接缝（account_env 输出 → main 合成 → Popen）
+    在"真输出 + 真子进程"组合下成立。对不上 ⇒ 拒派（接缝断了，不许放行）。
+    ★ 廉价：一个 `python -c`，30s 超时；只在给了 `--account` 时跑。
+    """
+    pairs = [f"{k}={v}" for k, v in expected.items()]
+    check = subprocess.run(
+        [sys.executable, "-X", "utf8", "-c",
+         "import os, sys\n"
+         "bad = 0\n"
+         "for a in sys.argv[1:]:\n"
+         "    k, v = a.split('=', 1)\n"
+         "    if os.environ.get(k) != v:\n"
+         "        bad = 1\n"
+         "sys.exit(bad)\n",
+         *pairs],
+        env=env, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", timeout=30, **NO_WINDOW,
+    )
+    if check.returncode == 0:
+        return True, f"子进程侧读数通过（{len(expected)} 项变量全到位）"
+    blob = wb_status._clip((check.stderr or "") + (check.stdout or ""), 200)
+    return False, (f"账号环境注入自检失败：子进程没拿到 profile 的变量"
+                   f"（退出码 {check.returncode}）：{blob} → 拒派（接缝断了）")
 
 
 def git_dirty(cwd: Path | None = None) -> list[str]:
@@ -481,12 +517,23 @@ def is_git_worktree(path: Path) -> bool:
     return done.returncode == 0 and (done.stdout or "").strip() == "true"
 
 
-def auth_ok(node: Path, cli: Path, timeout: int = 180) -> tuple[bool, str]:
-    """真发一条极短请求 —— 登录没通就当场认出来（别把一轮白等当成"工人在想"）。"""
+def auth_ok(node: Path, cli: Path, timeout: int = 180, *,
+            env: dict[str, str] | None = None,
+            model: str | None = None) -> tuple[bool, str]:
+    """真发一条极短请求 —— 登录没通就当场认出来（别把一轮白等当成"工人在想"）。
+
+    ★ 卡 190（T-G290）F1 两半：探针必须打在「将要用的那个「号 × 模型」组合」上 ——
+      · `env`（给了 --account 时 = 合成后的 profile 环境）⇒ 探针用**那个号**发，不是默认号；
+      · `model`（给了 --account 时 = 派活要用的 --model）⇒ 探针判**那个模型桶**，不是 CLI 默认。
+      两半都不给（默认 None）⇒ 行为逐字不变（父进程环境、不带 --model）。
+    """
+    argv = [str(node), str(cli), "-p", "只回复四个字：连接成功", "--output-format", "text"]
+    if model:
+        argv += ["--model", model]
+    argv += ["--no-session-persistence", "-y"]
     done = subprocess.run(
-        [str(node), str(cli), "-p", "只回复四个字：连接成功", "--output-format", "text",
-         "--no-session-persistence", "-y"],
-        cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+        argv,
+        cwd=str(ROOT), env=env, capture_output=True, text=True, encoding="utf-8",
         errors="replace", timeout=timeout, **NO_WINDOW,
     )
     body = f"{done.stdout or ''}\n{done.stderr or ''}"
@@ -2304,8 +2351,12 @@ def main() -> int:
         return 2
     # ★ 卡 103（T-G199）：--cwd 解析成绝对路径（工人进程就落在它里面干活）。
     worker_cwd = Path(args.cwd).expanduser().resolve() if args.cwd else None
+    # ★ 卡 190（T-G290）F1：登录自检移出 preflight —— 要用 profile 合成的环境 + 要用的 --model
+    #   发探针，而 profile 环境在 preflight **之后**才取。改成：preflight 不做 auth
+    #   （check_auth=False），account_env 取好之后由 main 自己用「那个号 × 那个模型」组合发探针。
+    #   ★ 不给 --account ⇒ env=None, model=None ⇒ auth_ok 逐字不变（父进程环境、不带 --model）。
     problems, log = preflight(
-        args.card, args.spec, force=args.force, check_auth=not args.no_preflight,
+        args.card, args.spec, force=args.force, check_auth=False,
         cli_override=args.cli, resuming=bool(resume_sid), allow=args.allow,
         port_bases=port_bases, worker_cwd=worker_cwd,
         already_reserved=args.already_reserved, project=args.project,
@@ -2321,6 +2372,33 @@ def main() -> int:
             account_vars = account_env(args.account)
         except AccountError as exc:
             problems.append(str(exc))
+
+    # ★ 卡 149：profile 取到了 ⇒ 与现进程环境合成一份交给工人（**不给 = None = 逐字继承**）。
+    #   ★ 放在 `--detach` **之前**：坏 profile 在**父进程**就拒（脱离子进程带 `--detach-done`，
+    #     会自己再取一次同一份数据 —— 幂等）。
+    worker_env: dict[str, str] | None = None
+    if args.account and account_vars:
+        worker_env = {**os.environ, **account_vars}
+
+    # ★ 卡 190（T-G290）F1 两半：登录自检打在「将要用的那个「号 × 模型」组合」上 ——
+    #   用 profile 合成的环境发探针 + 把派活要用的 --model 透传给探针。
+    #   ★ 不给 --account ⇒ env=None, model=None ⇒ 逐字不变（与卡 149 硬要求 2 同）。
+    node, cli = paths(args.cli)
+    if not args.no_preflight and not problems:
+        ok, why = auth_ok(node, cli, env=worker_env,
+                          model=args.model if args.account else None)
+        if not ok:
+            problems.append(why)
+
+    # ★ 卡 190（T-G290）F2 子进程侧读数：派活前用 worker_env 起子进程读自己的环境回话 ——
+    #   不再"自己打印自己"（[账号] 那行只是留痕，不是判据）。接缝断了 ⇒ 拒派。
+    #   ★ 不给 --account ⇒ 不跑（逐字不变）。
+    if args.account and worker_env and not problems:
+        probe_ok, probe_msg = _account_env_probe(worker_env, account_vars)
+        if not probe_ok:
+            problems.append(probe_msg)
+        else:
+            print(f"[账号自检] {probe_msg}", flush=True)
 
     if problems:
         print("[FAIL] 不派活 —— 前置检查没过：", file=sys.stderr, flush=True)
@@ -2340,12 +2418,8 @@ def main() -> int:
                      sid="", attempts=1, lines=[], started_at=None)
         return 2
 
-    # ★ 卡 149：profile 取到了 ⇒ 与现进程环境合成一份交给工人（**不给 = None = 逐字继承**）。
-    #   ★ 放在 `--detach` **之前**：坏 profile 在**父进程**就拒（脱离子进程带 `--detach-done`，
-    #     会自己再取一次同一份数据 —— 幂等）。
-    worker_env: dict[str, str] | None = None
-    if args.account:
-        worker_env = {**os.environ, **account_vars}
+    # ★ 留痕（不是判据；判据是上面的子进程侧读数）。
+    if args.account and worker_env:
         print(f"[账号] profile「{args.account}」并入 {len(account_vars)} 个环境变量："
               + "；".join(f"{k}={v}" for k, v in account_vars.items()), flush=True)
 
@@ -2362,7 +2436,6 @@ def main() -> int:
         print(f"[log ] {detach_log}", flush=True)
         return 0
 
-    node, cli = paths(args.cli)
     max_turns = args.max_turns or max_turns_default(args.read_only)
     lean_brief = ensure_lean_brief(args.card, worker_cwd) if args.lean else ""
     initial_cmd = build_command(node, cli, args.card, prompt_path(args.spec, worker_cwd),

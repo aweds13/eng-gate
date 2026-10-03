@@ -3045,3 +3045,141 @@ def test_runner_without_worker_env_inherits_the_parent(tmp_path: Path, monkeypat
     assert (rc, reason) == (0, ""), (rc, reason)
     child = json.loads(dump.read_text(encoding="utf-8"))
     assert child.get("PROBE_PARENT_ONLY") == "yes", "不给 worker_env 必须继承父进程环境"
+
+
+# ============================================ F1-F4 判据修复（卡 190 · T-G290）
+#
+# ★ 来自一次不同族模型的独立检查（卡 189）：--account 整条链路"工人的号真的换了吗"
+#   从生产到测试没有任何一环判"对不对"。这组钉子逐条补判据，每条"故意坏掉会红"：
+#   · F1 登录自检判错对象（两半）：探针要用 profile 环境 + 要用的那个 --model；
+#   · F2 生产路径零判据：派活前跑一次子进程侧读数（不再"自己打印自己"）；
+#   · F3 存在性冒充可用性：profile check 退 0 ≠ 号可用 —— 由 F1 的 auth_ok 用 profile 环境治；
+#   · F4 解析契约手抄：值带引号 = 真源漂移 ⇒ 响亮拒（不静默收连引号的值）。
+#   · F5（④b 清单钉是文本存在性判据）并入 F4 备注：防抄有效、不验行为 —— 这组钉子验行为。
+
+
+def test_auth_ok_probe_uses_the_given_env(monkeypatch) -> None:
+    """F1 第一半（单元）：auth_ok 收到 env ⇒ 探针用这个 env 发（不是父进程环境）。"""
+    seen: dict = {}
+
+    def spy_run(*a, **k):
+        seen.update(k)
+        return _Done(stdout="连接成功", stderr="")
+
+    monkeypatch.setattr(wd.subprocess, "run", spy_run)
+    probe_env = {"PATH": "x", "MARKER": "profile-xyz"}
+    ok, _ = wd.auth_ok(Path("node"), Path("cli"), env=probe_env)
+    assert ok
+    assert seen.get("env") is probe_env, "探针没用给定的 env —— 还是父进程环境（F1 第一半）"
+
+
+def test_auth_ok_probe_carries_the_model_when_given(monkeypatch) -> None:
+    """F1 第二半（单元）：auth_ok 收到 model ⇒ 探针命令带 --model
+    （判的是那个模型桶，不是 CLI 默认模型）。"""
+    calls: list[list[str]] = []
+
+    def spy_run(*a, **k):
+        calls.append(list(a[0]))
+        return _Done(stdout="连接成功", stderr="")
+
+    monkeypatch.setattr(wd.subprocess, "run", spy_run)
+    ok, _ = wd.auth_ok(Path("node"), Path("cli"), model="glm-5.2")
+    assert ok
+    cmd = calls[0]
+    assert "--model" in cmd and "glm-5.2" in cmd, f"探针没带 --model glm-5.2：{cmd}"
+
+
+def test_account_auth_uses_the_profile_env_and_model(sandbox: Path, monkeypatch) -> None:
+    """F1 集成：给了 --account --model ⇒ auth_ok 收到 profile 环境 + 那个 model（判对对象）。"""
+    stub = _account_stub(sandbox, {"demo": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    seen: dict = {}
+
+    def spy_auth(*a, **k):
+        seen.update(k)
+        return (True, "登录自检通过")
+
+    monkeypatch.setattr(wd, "auth_ok", spy_auth)
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    _account_argv(monkeypatch, "--account", "demo", "--model", "glm-5.2", "--execute")
+    assert wd.main() == 0
+    assert seen.get("env") is not None, "auth_ok 没收到 env —— 探的还是父进程环境（F1 第一半）"
+    assert seen["env"].get("USERPROFILE") == _demo_vars()["USERPROFILE"], "env 里没有 profile 变量"
+    assert seen.get("model") == "glm-5.2", "auth_ok 没收到 model —— 探的还是默认模型桶（F1 第二半）"
+
+
+def test_account_refuses_when_the_profile_login_fails(sandbox: Path, monkeypatch,
+                                                       capsys) -> None:
+    """F3：auth_ok 用 profile 环境发探针失败 ⇒ 拒派（存在性 ≠ 可用性；号得真能登录）。
+
+    ★ F1/F3 并案：profile check 退 0 只代表目录在；"号可用"由 auth_ok 用 profile 环境发探针判。
+    """
+    stub = _account_stub(sandbox, {"demo": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+
+    def spy_auth(*a, **k):
+        if k.get("env") and k["env"].get("USERPROFILE") == _demo_vars()["USERPROFILE"]:
+            return (False, "登录没通（profile 的号没登录）")
+        return (True, "登录自检通过")
+
+    monkeypatch.setattr(wd, "auth_ok", spy_auth)
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 2, "profile 的号没登录必须拒派（F3），不许探默认号绿就放行"
+    err = capsys.readouterr().err
+    assert "登录" in err or "没通" in err, err
+
+
+def test_dispatch_probes_the_account_env_from_the_child_side(sandbox: Path, monkeypatch,
+                                                             capsys) -> None:
+    """F2a 生产侧读数：派活前用 worker_env 起子进程读自己的环境回话 —— 不再"自己打印自己"。"""
+    stub = _account_stub(sandbox, {"demo": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert "[账号自检]" in out, "没跑子进程侧读数 probe —— 生产路径零判据（F2）"
+
+
+def test_the_seam_account_env_to_real_child_holds(tmp_path: Path, monkeypatch) -> None:
+    """F2b 接缝真通：真 account_env（桩脚本）+ 真 run_worker（真 Popen）
+    → 子进程真拿到 profile 变量。
+
+    ★ F2 的核心钉子：以前接缝（account_env 输出 → main 合成 → Popen）在"真输出 + 真子进程"
+    组合下从未同时成立过 —— main 层桩只验到 kwargs，run_worker 层真 Popen 钉喂的是手工 env。
+    这条把两端都写真：能抓住 run_worker 没把 env 传给 Popen（接缝断）。
+    """
+    stub = _account_stub(tmp_path, {"demo": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    account_vars = wd.account_env("demo")
+    base = {k: os.environ[k] for k in ("PATH", "SystemRoot", "TEMP", "TMP") if k in os.environ}
+    worker_env = {**base, **account_vars}
+    dump = tmp_path / "env.json"
+    log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
+    rc, reason, _scene, _sid = wd.run_worker(_env_dump_stub(dump), log, err, timeout=60,
+                                             max_turns=150, watchdog=True, heartbeat_seconds=0,
+                                             worker_env=worker_env)
+    assert (rc, reason) == (0, ""), (rc, reason)
+    child = json.loads(dump.read_text(encoding="utf-8"))
+    for key, val in account_vars.items():
+        assert child.get(key) == val, \
+            f"子进程没拿到 {key}={val!r}（拿到 {child.get(key)!r}）—— 接缝断了"
+
+
+def test_a_profile_value_with_quotes_is_refused(sandbox: Path, monkeypatch,
+                                                capsys) -> None:
+    """F4：真源漂移（值带引号）⇒ 响亮拒，不静默收连引号的值。
+
+    ★ F5 并入：④b 清单钉是文本存在性判据（防抄有效、不验行为）；这条验**行为** ——
+      正则 `^KEY=(.*)$` 贪婪，真源某天输出 `KEY="v"` 会连引号收成 `"v"`，这里当场拒。
+    """
+    bad_vars = _demo_vars()
+    bad_vars["USERPROFILE"] = '"C:/带引号/home"'
+    stub = _account_stub(sandbox, {"demo": bad_vars})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 2, "值带引号必须拒派（F4），不许静默收连引号的值"
+    err = capsys.readouterr().err
+    assert "引号" in err or "拒" in err, err
