@@ -660,8 +660,11 @@ def collect(root: Path, current: Path | None, min_size_mb: float) -> list[Verdic
         size, skipped = dir_size(v.path)
         v.size_bytes, v.size_skipped = size, skipped
         if min_size_mb > 0 and size < min_size_mb * MB:
+            # ★ D-12（审计 D-12 / T-G282）：只置 skipped 不清 deletable → do_apply 照删。
+            # 两拍之间过滤条件会丢；这里同时把 deletable 关掉，跳过的树绝不进删除循环。
             v.skipped = True
-            v.reason = f"小于 --min-size {min_size_mb} MB（跳过）"
+            v.deletable = False
+            v.reason = f"小于 --min-size {min_size_mb} MB（跳过 → 不删）"
         out.append(v)
     out.sort(key=lambda v: v.size_bytes, reverse=True)
     return out

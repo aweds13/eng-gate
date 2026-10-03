@@ -339,3 +339,41 @@ def test_dry_run_previews_and_touches_nothing(rescue_repo, wt):
     assert "待留档" in r.stdout and "4份+usage追加1/跳过0" in r.stdout, r.stdout
     assert not (diag / "wb-904.jsonl").exists(), "dry-run 不该拷任何东西"
     assert (diag / "wb-usage.jsonl").read_bytes() == before, "dry-run 动了主树 usage"
+
+
+# ---------------------------------------------------------------- D-12（审计 D-12 / T-G282）
+# `--apply --min-size N` 不许把「因体积被跳过」的小树照样删掉。
+
+
+def test_d12_min_size_skipped_tree_survives_apply(repo, wt):
+    """D-12 反例钉子：因 `--min-size` 被跳过的小树，`--apply` 之后**必须还在**。
+
+    造一棵七条全过（干净 + 已集成 → deletable=True）但体积 < min-size 的树。
+    修前（D-12）：collect 只置 skipped 不清 deletable → do_apply 照删 → 这棵树消失。
+    修后：collect 同时置 deletable=False → do_apply 跳过 → 树还在。
+    """
+    p = _add(repo, "small")  # 干净 + 已集成 → 七条全过
+    before_n = len(wt.list_worktrees(repo))
+    # min-size 设一个远超实际体积的值 → 这棵树被 collect 标 skipped
+    r = _cli(wt, ["--root", str(repo), "--apply", "--min-size", "999999"], repo)
+    assert p.exists(), "D-12：因体积被跳过的小树被 --apply 删掉了！"
+    assert len(wt.list_worktrees(repo)) == before_n, "D-12：跳过的树被删了"
+    assert "跳过" in r.stdout, r.stdout
+
+
+def test_d12_min_size_table_marks_skipped_not_deletable(repo, wt):
+    """D-12 配套：表格里被跳过的树标「跳过」且裁决不是「可删」。"""
+    _add(repo, "small")
+    r = _cli(wt, ["--root", str(repo), "--min-size", "999999"], repo)
+    assert r.returncode == 0, r.stderr
+    assert "跳过" in r.stdout, r.stdout
+    # 汇总里可删应为 0（被 min-size 跳过的不算可删）
+    assert "可删 0 棵" in r.stdout, r.stdout
+
+
+def test_d12_min_size_still_deletes_large_deletable(repo, wt):
+    """D-12 配套：`--min-size` 不误伤——够大且七条全过的树仍可删（dry-run 报可删 1）。"""
+    _add(repo, "big")  # 干净 + 已集成；min-size=0 → 不跳过
+    r = _cli(wt, ["--root", str(repo), "--min-size", "0"], repo)
+    assert r.returncode == 0, r.stderr
+    assert "可删 1 棵" in r.stdout, r.stdout
