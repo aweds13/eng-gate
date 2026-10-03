@@ -1013,7 +1013,8 @@ files = [
 ]
 depends = ["168", "169", "170", "171", "172"]
 risk = "mid"
-status = "pending"
+# 2026-10-03：已落地（提交 0721749，任务 B-K3DEEP 标 landed）⇒ 不再参与规划。
+status = "done"
 [[cards]]
 id = "174"
 task = "T-G274"
@@ -1030,3 +1031,137 @@ risk = "low"
 # ★ 它必须转 done 而不是靠 depends 消冲突：它的域与 12 张卡（146/149/151/154/156/157/159/162/163/164/166/167）相交，
 #   而那 12 张全是**还没跑**的卡 —— 卡一旦收工落地，就该退出规划，否则每张后来的卡都要为它写 depends。
 status = "done"
+[[cards]]
+id = "175"
+task = "T-G275"
+title = "框架抽取清单：整段历史考古，标出通用 / 专属 / 研究性"
+tree = ".wt/extract"
+spec = "复盘/卡/卡175-框架抽取清单.md"
+files = [
+  "复盘/框架-抽取清单.md",
+]
+depends = []
+risk = "mid"
+# 2026-10-03 12:2x：已落地（提交 885a774，任务 B-EXTRACT 标 landed）⇒ 不再参与规划。
+# ★ 这一笔落地**连红两趟**，两条真因都是主控写文书/证据串时犯的（前缀 `file:` 由收口链自己加，别自带）——
+#   配方已写进 `gates/diag/_HOLD.md`。另顺带量出一条新缝：`--evidence` 只能出 `file:` 一类断言（判据强度）。
+status = "done"
+[[cards]]
+id = "177"
+task = "T-G277"
+title = "框架术语表 + 进程契约纪律（中英对照 + 权威出处 + 自造词标注）"
+tree = ".wt/terms"
+spec = "复盘/卡/卡177-框架术语表与契约.md"
+files = [
+  "复盘/框架-术语表与契约.md",
+]
+depends = []
+risk = "mid"
+status = "pending"
+[[cards]]
+id = "178"
+task = "T-G278"
+title = "框架骨架设计（配置 schema / 命令面 / 分层 / 扩展点 / 升级路径 / 落地顺序）"
+tree = ".wt/skeleton"
+spec = "复盘/卡/卡178-框架骨架设计.md"
+files = [
+  "复盘/框架-骨架设计.md",
+]
+depends = ["175", "177"]
+risk = "mid"
+status = "pending"
+# ★★ 下面三张是 2026-10-03 **偏移复审**补的卡（用户令：该写的卡都写好）——
+#   复审发现三条真偏移：① 抽取物与仓里既有的 harness 缝**脱钩**；② **skills 一条都没有**（抽取清单 110 行 0 命中）；
+#   ③ 框架的**居所与分发形态未定**（抽取物全落在 timeflow 仓里，而框架是要带走的）。
+#   三条分别落到：卡 178 的追加要求（①③）、卡 180（②）、卡 181（自举 + 第二仓验证）。
+#   ★ 179/180 的 files 是**临时的**：卡 178 落地后按设计书的目录布局改写（见两张卡正文「主控留的口径」）。
+[[cards]]
+id = "179"
+task = "T-G279"
+title = "框架 MVP：核心库 + 薄 CLI + 模板仓（第一次真的能跑）"
+tree = ".wt/fwmvp"
+spec = "复盘/卡/卡179-框架MVP实现.md"
+files = [
+  "framework/pyproject.toml",
+  "framework/README.md",
+  "framework/pipeline.schema.json",
+  "framework/pipe/__init__.py",
+  "framework/pipe/cli.py",
+  "framework/pipe/config.py",
+  "framework/pipe/gates.py",
+  "framework/pipe/verdict.py",
+  "framework/templates/minimal/pipeline.toml",
+  "framework/examples/nontimeflow/pipeline.toml",
+  "framework/tests/test_config.py",
+  "framework/tests/test_verdict_three_valued.py",
+]
+depends = ["178"]
+risk = "high"
+status = "pending"
+[[cards]]
+id = "180"
+task = "T-G280"
+title = "框架自带 skills 层（agent 侧人机接口 + 该不该写成 skill 的判据）"
+tree = ".wt/skills"
+spec = "复盘/卡/卡180-框架skills层.md"
+files = [
+  "skills/README.md",
+  "skills/pipe-init/SKILL.md",
+  "skills/pipe-gate/SKILL.md",
+  "skills/pipe-card/SKILL.md",
+  "skills/pipe-land/SKILL.md",
+  "skills/pipe-forensics/SKILL.md",
+]
+depends = ["179"]
+risk = "mid"
+status = "pending"
+[[cards]]
+id = "181"
+task = "T-G281"
+title = "把 framework/ 提升成独立仓 framework，并让它作为一个新项目参与这套管线"
+tree = ".wt/promote"
+spec = "复盘/卡/卡181-框架独立仓与参与管线.md"
+files = [
+  "复盘/框架-独立仓提升.md",
+]
+depends = ["179"]
+risk = "high"
+status = "pending"
+# ★ 卡 183（用户 2026-10-03 12:1x 令）：框架做出来之后的**自举第一步** ——
+#   「把我们已用那些文档全部整理一遍」。★ 只盘点 + 出方案 + 给机器判据（索引/生成器/钉子），**不移动不删除任何文档**：
+#   ① 大搬家不可逆；② 台账按路径钉死 271 条；③ 卡树白名单装不下 200+ 份 + 引用同步。
+#   真整理由紧随其后的一张卡按本卡给的「安全批」清单来（那时域才定得下来）。
+[[cards]]
+id = "183"
+task = "T-G283"
+title = "自举第一步：用框架盘点我们已用的文档（机器可读索引 + 重整方案 + 安全批/危险批）"
+tree = ".wt/docstidy"
+spec = "复盘/卡/卡183-文档重整盘点.md"
+files = [
+  "tools/wb_docmap.py",
+  "tests/test_wb_docmap.py",
+  "复盘/文档索引.toml",
+  "复盘/文档重整方案.md",
+]
+depends = ["181"]
+risk = "mid"
+status = "pending"
+# ★★ 卡 182 也是 2026-10-03 复审数出来的账（用户问「外包工程怎么样了」）：
+#   树数 89（T-G180 读数）→ **176**；派活日志 117 份、其中 22 份无判决；清理器 D-12 掉在地上无人接。
+#   四条都不是新问题，是**没人定常规**——同族病见卡 163（有能力、零接线）。域与任何待派卡都不相交。
+[[cards]]
+id = "182"
+task = "T-G282"
+title = "外包面的留痕与配额：工作树 / 派活日志 / 判决的保留与处置"
+tree = ".wt/retention"
+spec = "复盘/卡/卡182-外包留痕与配额.md"
+files = [
+  "tools/wb_retention.py",
+  "tools/wt_prune.py",
+  "tests/test_wb_retention.py",
+  "tests/test_wt_prune.py",
+  "复盘/留痕与配额策略.md",
+]
+depends = []
+risk = "mid"
+status = "pending"
