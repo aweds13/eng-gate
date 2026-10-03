@@ -79,6 +79,24 @@ def test_door_timeout_default_override_and_off(monkeypatch: pytest.MonkeyPatch) 
     assert rg.door_timeout() is None  # 关掉这条路
 
 
+# ------------------------------------------------------ 文档判据指向真源（卡 160 · T-G260）
+#
+# 来路 INV-31：门禁/工具文档里的判据描述会落后于代码 —— `门禁四要素.md` 曾写
+# 「run_gates 没给每道门超时」，而代码早就有 `DEFAULT_DOOR_TIMEOUT`（卡 100 / T-G196）。
+# 判据：那一页的「超时」描述必须**指向真源**（`DEFAULT_DOOR_TIMEOUT`），别复述一个会漂的数值。
+
+def test_door_timeout_doc_points_at_the_truth_source() -> None:
+    """★ `门禁四要素.md` 不许再说「每道门没有超时」——要指向 `DEFAULT_DOOR_TIMEOUT`。
+
+    反例（先红）：文档里还有「没有超时」这句（代码早有硬超时）⇒ 本用例当场红。
+    另钉：门数不许写死旧值（`17 道门`）——真源是门表 / `gates/last.json`。
+    """
+    doc = (ROOT / "复盘" / "门禁四要素.md").read_text(encoding="utf-8")
+    assert "DEFAULT_DOOR_TIMEOUT" in doc, "文档没指向真源（DEFAULT_DOOR_TIMEOUT）"
+    assert "没有超时" not in doc, "文档还写着过时的『每道门没有超时』"
+    assert "17 道门" not in doc, "门数写死在文档里了（真源 = 门表 / gates/last.json）"
+
+
 # ------------------------------------------------------------------ 主判据：超时被掐 + 判红
 
 def test_timeout_kills_gate_records_124_and_others_survive(

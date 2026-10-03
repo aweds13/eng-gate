@@ -43,14 +43,22 @@ r"""主控复核器（外包链路的第 ④ 步）：一条命令把"这一笔�
 
 ★★ 第 ③′ 档（卡 147 · T-G247）—— **门禁必须是"全量那一趟"**：部分跑的门禁**不许冒充全量**：
 
-   ★ 来路：卡 140 自己发现的后门 —— `tools/wb_verify.py` 查 `EXPECT_GATES` **会**拦"部分跑的
-     `last.json`"，但 `wb_review.py` 原来只查 `ok` / `rev` / 每门 `exit_code`，**不查门数** ⇒
+   ★ 来路：卡 140 自己发现的后门 —— `tools/wb_verify.py` 原来写死 `EXPECT_GATES=17`、能拦"部分
+     跑的 `last.json`"，但 `wb_review.py` 原来只查 `ok` / `rev` / 每门 `exit_code`，**不查门数** ⇒
      若有人把 `--affected` 那一趟的 `last.json` 提交上去，**复核主链可能不拦**（正是本仓最该防的
      "看着绿其实没查全"）。判据见 `check_full_gate_run()`：① 门数 = 该仓**当前应有**的门数
      （从 `scripts/run_gates.py` 的 `build_jobs` **现读** —— ★ **不写死 17、不造第二份门表**）；
      ② `last.json` 里出现 `affected` 块（`--affected` 部分跑的记账）⇒ 判红并贴原文。
    ★ **只对"门禁自己写出来的产物"判红**（`tree_scope` 是 `run_gates.py` 必写的字段）：合成夹具
      （无 `tree_scope`）**只标注不判红** —— 详见 `check_full_gate_run()` 的 docstring。
+
+★★ 第 ③″ 档（卡 160 · T-G260）—— **封存树 vs 提交树的正面对账**（消费掉那个"没人查"的封存指纹）：
+
+   ★ 来路：INV-26 / INV-29 / INV-34 —— 封存指纹**生成了、没人查**（谁在提交前拿它比对，没有判据）。
+     判据见 `check_seal_tree()`：拿 `last.json.tree`（封存那一刻"去 `gates/**`、即将提交"的 tree）
+     与本笔提交**去掉 `gates/**` 的 tree** 比；**不等就点名差在哪几个路径**。原来只有一屏核实器
+     `wb_verify.py::check_fingerprint` 查它，**复核主链一条都不查** —— 现在接进主链。
+   ★ 同一口径：只对真产物（带 `tree_scope`）判红；旧笔（无 `tree_scope`）**只标注不判红**。
 
 用法：
     python -X utf8 tools/wb_review.py --rev HEAD --read-only
@@ -259,6 +267,84 @@ def _shortfall(missing: list[str], extra: list[str]) -> str:
     if extra:
         detail.append(f"多 {len(extra)} 道：{extra}")
     return "；".join(detail) or "门数不等"
+
+
+def _expected_scope() -> str:
+    """封存指纹口径自述值的**唯一真源**：`scripts/run_gates.py::TREE_SCOPE`（现读）。
+
+    读不到（import 炸了）→ 回退字面量 —— 那时 `check_seal_tree` 反正会因复算失败判红，
+    这个回退只影响"是不是旧笔"的判定，不静默放过。
+    """
+    try:
+        return str(_run_gates_module().TREE_SCOPE)
+    except Exception:
+        return "worktree-minus-gates"
+
+
+def _tree_without_gates(rev: str) -> str:
+    """按**本树** `scripts/run_gates.py` 的实现复算 `<rev>` 去掉 `gates/**` 的 tree 哈希。
+
+    ★ 共用门禁自己那份实现（`run_gates.tree_without_gates`），**不在这里另写一套切法**
+      —— 手写第二套切法就是 080 那个假护栏的病根（见 `wb_verify.py::_tree_without_gates`）。
+    复算失败（取不到索引 / write-tree 失败）→ 空串：调用方如实报"复算失败"，**不假装对上**。
+    """
+    try:
+        return _run_gates_module().tree_without_gates(ROOT, rev) or ""
+    except Exception:  # import / 复算炸了都算"拿不到"——"无法判断"优于猜
+        return ""
+
+
+def _diff_tree_paths(old_tree: str, new_tree: str) -> list[str]:
+    """两个 tree 之间**内容不同**的路径（点名用）：`git diff --name-only <t1> <t2>`。
+
+    两个 tree 对象都在对象库里（`write-tree` 写下的那个是悬空的，但在 GC 之前一直在），
+    所以按 tree 哈希直接 diff 是可行的。拿不到（命令失败）→ 空列表（调用方如实说"拿不到"）。
+    """
+    if not (old_tree and new_tree):
+        return []
+    return [ln.strip() for ln in git("diff", "--name-only", old_tree, new_tree).splitlines()
+            if ln.strip()]
+
+
+def check_seal_tree(payload: dict, sha: str) -> tuple[list[str], str, str]:
+    """③″ **封存树 vs 提交树的正面对账**（卡 160 · T-G260）。
+
+    `last.json.tree`（口径见 `tree_scope`）是封存那一刻「**除 `gates/**` 外**、即将提交的内容」
+    的 tree 哈希（`scripts/run_gates.py::tree_without_gates` 的固定点口径）。提交之后，
+    这一笔提交**去掉 `gates/**` 的 tree 必须与它逐字节相同** —— 不等就**点名差在哪几个路径**。
+    这补的是那条"判据生成了、没人消费"的缝（INV-26 / INV-29 / INV-34）：原来只有一屏核实器
+    `wb_verify.py::check_fingerprint` 查它，**复核主链一条都不查**。
+
+    ★ 只对**真产物**（`tree_scope == run_gates.TREE_SCOPE`）生效：旧笔没 `tree_scope`，那一列记的是
+      "底座那棵树的哈希"（worktree 回退 + 自指两个洞），核不了 ⇒ **只如实记一行、不判红**
+      （既不假装 OK、也不算 FAIL）—— 与 `wb_verify.py::check_fingerprint` 同一口径。
+
+    返回 `(problems, note, reading)`：
+      - `reading` **无条件**给（两边的 tree 短哈希 + 相同 / 不同 / 未核）；
+      - `note` 非空 = 一条"标注"（不是红），进 `--json` 的 `seal_tree_note`；
+      - `problems` = 该红的那几条（提交树 ≠ 封存树、或复算失败）。
+    """
+    scope = payload.get("tree_scope")
+    recorded = str(payload.get("tree") or "")
+    if scope != _expected_scope():
+        reading = f"tree_scope={scope!r}（非「去 gates/**」口径）→ 不核"
+        note = (f"{reading} —— 旧笔那一列是「底座那棵树的哈希」（worktree 回退 + 自指两个洞），"
+                "核不了；**只标注、不判红**（既不假装核过、也不算 FAIL）")
+        return [], note, reading
+    calc = _tree_without_gates(sha)
+    reading = (f"last.json.tree={recorded[:12] or '?'}；本笔提交去 gates/** 的 tree="
+               f"{calc[:12] if calc else '(复算失败)'}"
+               f" → {'相同' if calc and calc == recorded else '不同'}")
+    if not calc:
+        return ([f"封存树 vs 提交树：复算 {sha[:12]}（去 gates/**）失败"
+                 f" —— 拿不准不放过"], "", reading)
+    if calc == recorded:
+        return [], "", reading
+    paths = _diff_tree_paths(recorded, calc)
+    where = (f"差在这些路径：{paths}" if paths
+             else "拿不到差在哪几个路径（git diff 没回东西）")
+    return [f"封存树 vs 提交树：last.json.tree={recorded[:12]} ≠ 本笔提交去 gates/** 的 tree="
+            f"{calc[:12]} —— 提交树 ≠ 封存树（封存之后又动了文件？）；{where}"], "", reading
 
 
 def check_gates_trailer_truth(
@@ -545,6 +631,8 @@ def main(argv: list[str] | None = None) -> int:
     problems += check_gate_evidence(payload, parent)
     full_gate_problems, full_gate_note, full_gate_reading = check_full_gate_run(payload)
     problems += full_gate_problems
+    seal_problems, seal_note, seal_reading = check_seal_tree(payload, sha)
+    problems += seal_problems
     truth_problems, truth_note = check_gates_trailer_truth(
         trailers.get("Gates") or "", payload, parent,
     )
@@ -565,6 +653,9 @@ def main(argv: list[str] | None = None) -> int:
         "full_gate_reading": full_gate_reading,
         "full_gate_note": full_gate_note,
         "full_gate_problems": full_gate_problems,
+        "seal_tree_reading": seal_reading,
+        "seal_tree_note": seal_note,
+        "seal_tree_problems": seal_problems,
         "problems": problems,
     }
     if args.json:
@@ -581,6 +672,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  ③′ 全量门禁（门数 / affected 标记）：{full_gate_reading}")
     if full_gate_note:
         print(f"     ★ 标注（不判红）：{full_gate_note}")
+    print(f"  ③″ 封存树 vs 提交树：{seal_reading}")
+    if seal_note:
+        print(f"     ★ 标注（不判红）：{seal_note}")
     print(f"  ⓖ `Gates:` 真伪：{truth_note or '与 gates/last.json 对得上（真绿，已核）'}")
     print(f"  ④ 这一笔改了 {len(files)} 个文件：" + ("、".join(files[:6]) or "（一个都没改）"))
     print(f"  ⑤ 工作区未提交改动：{len(dirty)} 个")

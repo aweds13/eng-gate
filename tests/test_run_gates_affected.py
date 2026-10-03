@@ -34,15 +34,16 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import run_gates as rg  # noqa: E402 —— 需要先用 sys.path 把 scripts/ 挂上
 
-# 真表下的全量门清单（17 道；顺序 = `build_jobs(False, False)` 的顺序）。
+# 真表下的全量门清单（18 道；顺序 = `build_jobs(False, False)` 的顺序）。
+# ★ 卡 160（T-G260）加进 `invariants`（不变量台账核查）后 17 → 18；门数是会变的，**真源只有门表**。
 FULL = (
     "pytest", "acceptance", "ruff", "mypy", "check_layers", "check_layers_selftest",
-    "contrast", "style", "ui_text", "commands", "ui_dom_probe", "audit", "audit_titles",
-    "lf1_live", "web_live", "render", "ui_flow",
+    "contrast", "style", "ui_text", "commands", "ui_dom_probe", "audit", "invariants",
+    "audit_titles", "lf1_live", "web_live", "render", "ui_flow",
 )
 # 真表里**没有**输入映射的门（= 任何改动都可能影响它 ⇒ 永远跑）。
 NO_INPUT = ("pytest", "acceptance", "ruff", "mypy", "check_layers", "check_layers_selftest",
-            "audit")
+            "audit", "invariants")
 
 
 # ------------------------------------------------------------------ ① 只跑受影响的门
@@ -87,7 +88,7 @@ def test_unmatched_path_falls_back_to_full() -> None:
     assert hit.ran == ("render", "audit")
     assert "ui_flow" not in hit.ran
 
-    # 真表也成立：走 .md 路径（谁都不吃）⇒ 全量 17 道
+    # 真表也成立：走 .md 路径（谁都不吃）⇒ 全量 18 道
     assert rg.plan_affected(["复盘/随便.md"], FULL).full_fallback is True
     assert rg.plan_affected(["复盘/随便.md"], FULL).ran == FULL
 
@@ -134,7 +135,7 @@ def test_skipped_doors_are_recorded_with_reason() -> None:
 
 
 def test_default_job_list_and_table_shape_are_pinned() -> None:
-    """★ 判据⑤：不给 `--affected` 时门集合与今天一致；真表形状钉死（10 有输入 + 7 无输入）。"""
+    """★ 判据⑤：不给 `--affected` 时门集合与今天一致；真表形状钉死（10 有输入 + 8 无输入）。"""
     # 门清单（默认 = 全量）逐字一致，顺序也一致
     assert tuple(n for n, _ in rg.build_jobs(False, False)) == FULL
     # --quick / --fast 的既有口径没被碰

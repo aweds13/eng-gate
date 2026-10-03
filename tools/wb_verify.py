@@ -6,7 +6,8 @@ r"""一屏核实（卡 078 · T-G173）—— 把主控自用的 `gates/diag/ver
 
 判据（一条一行，前面 `OK`/`FAIL`/`INFO`；**退出码 = FAIL 条数**，0 = 全过）：
     OK   提交骨架：HEAD <短sha> · 父 <短sha> · 脏 0 · trailer Task/Refs/Ledger/Gates = 1/1/1/1
-    OK   门禁：ok=True · rev=<短sha>=父提交 · 17 门 · exit_code 非零 0 道 · not_run 0 道 · 复用 N 道
+    OK   门禁：ok=True · rev=<短sha>=父提交 · N 门（N 从门表现读，不写死）· exit_code 非零 0 道
+         · not_run 0 道 · 复用 N 道
     OK   封存指纹：last.json.tree == 本笔提交【去掉 gates/**】的 tree（旧笔则 INFO 不核，见下）
     OK   台账：sync_counts --check <原文那一行>
     OK   审计：提交后 audit <原文那一行>
@@ -38,10 +39,24 @@ import subprocess
 import sys
 from pathlib import Path
 
-EXPECT_GATES = 17
 TRAILER_KEYS = ("Task", "Refs", "Ledger", "Gates")
-# 封存指纹的口径自述值（T-G179）：last.json.tree_scope == 它就按新口径独立复算，否则按旧口径不核。
-EXPECT_SCOPE = "worktree-minus-gates"
+
+
+def _expected_scope(tree: Path) -> str:
+    """封存指纹口径自述值的**唯一真源**（T-G179 / 卡 160）：`run_gates.TREE_SCOPE`（现读）。
+
+    原来这里写死一个字面量 `EXPECT_SCOPE = "worktree-minus-gates"` —— 与门数一样，凡是写死的
+    口径都是会漂的第二真源；改成按 `--tree` 指向的那棵树现读。读不到 → 回退字面量（此时
+    `check_fingerprint` 反正会走"不核/复算失败"那条路，不静默放过）。
+    """
+    scripts = str(tree / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import run_gates  # noqa: PLC0415 —— 延迟到运行时按 --tree 的树 import
+    try:
+        return str(run_gates.TREE_SCOPE)
+    except Exception:
+        return "worktree-minus-gates"
 
 
 class Screen:
@@ -76,6 +91,26 @@ def _run(cmd: list[str], cwd: Path) -> tuple[int, str]:
 def _git(cwd: Path, *args: str) -> str:
     rc, out = _run(["git", "-c", "core.quotepath=false", *args], cwd)
     return out.strip() if rc == 0 else ""
+
+
+def expected_gate_names(tree: Path) -> tuple[list[str], str]:
+    """该仓**当前应有**的门清单 —— 从门表现读（卡 160 · T-G260）。
+
+    ★ **门数真源只有一处**：`<tree>/scripts/run_gates.py::build_jobs(quick=False, fast=False)`
+      （全量那一趟）。原来这里写死 `EXPECT_GATES = 17`，加了第 18 道门（`invariants`）就得
+      两处一起改 —— 凡是写死的数字都是会漂的第二真源（卡 147 已立同一条口径）。现在改成
+      **按 `--tree` 指向的那棵树现读**（核的是那棵树的门表，不是本进程所在树的）。
+    读不到（import 失败 / 门表坏了）→ `([], 原因)`：调用方据此**判红**（拿不准不放过）。
+    """
+    scripts = str(tree / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import run_gates  # noqa: PLC0415 —— 延迟到运行时按 --tree 的树 import
+    try:
+        names = [str(n) for n, _ in run_gates.build_jobs(False, False)]
+    except Exception as exc:  # 读不到就如实说，别猜（"无法判断"优于猜）
+        return [], f"读不到门表（{type(exc).__name__}: {exc}）"
+    return names, f"run_gates.build_jobs(False, False)（{len(names)} 道）"
 
 
 def _tree_without_gates(tree: Path, rev: str) -> str:
@@ -151,8 +186,14 @@ def check_gates(s: Screen, tree: Path, parent: str) -> None:
     rev = str(payload.get("rev") or "")
     rev_short = rev[:len(parent)] if parent else rev
     rev_ok = bool(rev) and parent.startswith(rev)
+    # ★ 门数**从门表现读**（不是写死 17）—— 见 `expected_gate_names()`。
+    expected, source = expected_gate_names(tree)
+    got = [str(g.get("name")) for g in gates if isinstance(g, dict)]
+    missing = [n for n in expected if n not in got]
+    extra = [n for n in got if n not in expected]
     detail = (f"ok={payload.get('ok')} · rev={rev_short}"
               f"{'=父提交' if rev_ok else '≠' + parent} · {len(gates)} 门"
+              f"（应有 {len(expected) if expected else '?'}，{source}）"
               f" · exit_code 非零 {len(nonzero)} 道 · not_run {len(not_run)} 道"
               f" · 复用 {(len(reused) if isinstance(reused, dict) else '?')} 道")
     problems: list[str] = []
@@ -160,8 +201,11 @@ def check_gates(s: Screen, tree: Path, parent: str) -> None:
         problems.append("ok 不是 True")
     if not rev_ok:
         problems.append("rev != 父提交（一次门禁跑完提交两笔？第二笔没验过）")
-    if len(gates) != EXPECT_GATES:
-        problems.append(f"门数 != {EXPECT_GATES}")
+    if not expected:
+        problems.append(f"读不到应有的门数（{source}）—— 拿不准不放过")
+    elif missing or extra:
+        problems.append(f"门数/门名对不上（应有 {len(expected)} 道，来自 {source}）："
+                        f"少 {missing}；多 {extra}")
     if nonzero:
         problems.append(f"有门没过：{nonzero}")
     if not_run:
@@ -175,7 +219,8 @@ def check_gates(s: Screen, tree: Path, parent: str) -> None:
 def check_fingerprint(s: Screen, tree: Path, short_sha: str) -> None:
     """封存指纹独立复算（T-G179 §1.3）：`last.json.tree` == 本笔提交【去掉 `gates/**`】的 tree。
 
-    旧笔（`last.json` 没有 `tree_scope` 字段）→ 记 `INFO … 按旧口径不核`：那时这一列记的是
+    旧笔（`last.json` 没有 `tree_scope` 字段）→ 记 `INFO … 按旧口径不核`：口径自述值从门表现读
+    （`_expected_scope`）。那时这一列记的是
     "底座那棵树的哈希"（worktree 回退 + 自指两个洞），核不了 —— **既不假装 OK，也不算 FAIL**。
     """
     raw = _git(tree, "show", "HEAD:gates/last.json")
@@ -188,7 +233,7 @@ def check_fingerprint(s: Screen, tree: Path, short_sha: str) -> None:
         s.bad("封存指纹：gates/last.json 不是合法 JSON")
         return
     recorded = str(payload.get("tree") or "")
-    if payload.get("tree_scope") != EXPECT_SCOPE:
+    if payload.get("tree_scope") != _expected_scope(tree):
         s.info(f"封存指纹：{short_sha[:12]} 早于本卡，按旧口径不核"
                f"（无 tree_scope，旧值 {recorded[:12] or '?'} 是底座那棵树的哈希）")
         return

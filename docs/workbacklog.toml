@@ -828,8 +828,7 @@ files = [
 ]
 depends = ["159"]
 risk = "mid"
-status = "pending"
-
+status = "running"
 [[cards]]
 id = "161"
 task = "T-G261"
@@ -1282,7 +1281,7 @@ files = [
 ]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 # ★ 注：与卡 185 同写 `framework/PIPELINE.md` ⇒ 队列校验当场咬住（「同一文件两个写者要串」）——
 #   这就是本仓那条规矩在替我们干活。⇒ 185 先落，186 后落。
 # ★★ 卡 182 也是 2026-10-03 复审数出来的账（用户问「外包工程怎么样了」）：
@@ -1307,3 +1306,46 @@ risk = "mid"
 # ★ 两趟门禁：第一趟红在 `tests/test_no_window.py`（新工具漏了 `NO_WINDOW`，码道那侧不喂固定坑页 ⇒ 工人不可能知道）；
 #   主控补一行 + 独立复跑 39 条测试后重跑门禁，第二趟绿。缺口已写进卡 166 的追加要求。
 status = "done"
+
+# ★★ 卡 189（用户 2026-10-03 17:2x：「（让工人写文书）会形成自夸吧……**那假如你把它扔给另一个工人呢，就是不同对话窗口？**」）：
+#   本仓规矩页 §25.4 早写明「**检查者必须与实现者不同族**（同族共享盲点 ⇒ 退化成盖章）」；
+#   `tools/wb_advcard.py`（卡 143 的产物：检查用开场白 + 指针索引生成器）**建了却零接线** ⇒ 本卡是它**第一次真跑**。
+#   ★ 第一版用**码道池 `huaweicloud-maas/GLM-5.2`** 派 ⇒ **服务端拒答**（InferHub.ModelArts.81011.403）
+#   ⇒ 主控判断**真因是措辞**（「对抗/攻击/漏洞」字面）⇒ 改**工程语言** + 换 CodeBuddy 侧 `glm-5.3-flash`
+#   （相对 deepseek **是不同族**）重派 ⇒ ★ **成功**：7 条发现、其中 4 条「看着查过了其实没查」（含 2 条高）。
+#   ★ 它是**审计不是闸**（§25.1：提交之后 · 异步 · 不挡收口）；发现的问题已并成**卡 190**（域与 wb_dispatch 链串）。
+[[cards]]
+id = "189"
+task = "T-G289"
+title = "独立检查实验：拿 T-G249 真跑一次（不同族模型 · 只读审计 · 结果开跟进卡）"
+tree = ".wt/advreview"
+spec = "复盘/卡/卡189-对抗复核实验.md"
+files = [
+  "复盘/对抗复核-T-G249.md",
+]
+depends = []
+risk = "low"
+status = "pending"
+
+# ★★ 卡 192（用户 2026-10-03 17:3x：「**留快照，根据 git 正经的多人开发思路去保证那个项目的稳定运行和维护。**」）：
+#   审计读数（现量）：**零 remote**（无异地备份）· **177 个卡树是 detached HEAD**（提交没有 ref ⇒ 镜像带不走）·
+#   ★★ **工人"不许 commit"** ⇒ 成果全在未提交区 = **今晚卡 160 丢掉的直接原因** · 主干工作区被主控直接改。
+#   ★★ 根因：**一条规矩写错了对象** —— 初衷「不许把提交弄到主干」被写成「不许提交」⇒ **把唯一的保护机制禁掉了**。
+#   口径见 `复盘/框架-git-多人协作口径.md`；★ 已做：镜像 `backup-engineering.git`（21MB/32ref）+ `_snapshot.py`（挂 ref）+ `_batcher.py` step 0。
+[[cards]]
+id = "192"
+task = "T-G292"
+title = "git 基线：卡分支 + 小步提交 + 主干只合流 + 镜像备份（让丢成果在结构上不可能）"
+tree = ".wt/gitbase"
+spec = "复盘/卡/卡192-git基线与备份.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tools/pool/landing.py",
+  "tools/pool/snapshot.py",
+  "tests/test_wb_land.py",
+  "tests/test_pool_snapshot.py",
+  "复盘/卡/卡192-git基线与备份.md",
+]
+depends = ["164", "166", "167", "184"]
+risk = "high"
+status = "pending"

@@ -8,8 +8,9 @@
 | ① | `judge` 路径不存在 ⇒ `--check` **咬**并点名那一行 | 指针烂了没人管 |
 | ② | `nail` 的用例名不存在（真测试文件里查不到）⇒ **咬**并点名 | 钉子缺了没人管 |
 | ③ | ★ **真台账**（`复盘/不变量台账.toml`）`--check` 必须通过 | 防「账本写得太随意」 |
-| ④ | ★ `--missing` 输出里必须有那条「门数≠17 冒充全量门禁」 | 它**真的没关**，必须在待验台账里 |
-| ⑤ | `missing` **不算错**：整份台账全是 `missing` 时 `--check` 仍退 0 | 状态与错误要分开 |
+| ④ | ★ `--missing` 如实列没关的缝（哨兵 INV-72；INV-14 已关不许再出现） | 关了的不许还挂 missing |
+| ⑤ | `missing` **不算错**：全 `missing` 时 `--check` 仍退 0 | 状态与错误分开 |
+| ⑥ | ★ 核查器**真进了门表**（`invariants`→`wb_invariants.py --check`） | 有机器落点 |
 
 ★ 只读：这里不写仓库里的真台账（临时台账都落在 `tmp_path`），也不跑门禁。
 """
@@ -99,13 +100,32 @@ def test_real_ledger_check_passes(capsys: pytest.CaptureFixture) -> None:
 # ------------------------------------------------------------------ ④ --missing 里必须有那条
 
 
-def test_missing_lists_the_gate_count_backdoor(capsys: pytest.CaptureFixture) -> None:
-    """★ `--missing` 的输出里**必须**有「门数≠17 冒充全量门禁」——它就是真的没关。"""
+def test_missing_lists_the_unclosed_seams(capsys: pytest.CaptureFixture) -> None:
+    """★ `--missing` 必须**如实**列出还没关的缝，且**关了的不许再挂 missing**。
+
+    卡 160（T-G260）之前 INV-14（「门数≠17 冒充全量门禁」）确实没关、必须露面；卡 147+160
+    把它关掉之后（门数从门表现读、复核主链真查），它**不该**再出现在待验台账里。
+    INV-72（一份数字手抄两处）同日仍是真欠账 ⇒ 拿它当「待验台账」的哨兵。
+    """
     rc = wb.main(["--ledger", str(wb.DEFAULT_LEDGER), "--missing"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "门数≠17 冒充全量门禁" in out
-    assert "INV-14" in out
+    assert "INV-72" in out, "INV-72（数字手抄两处）真的没关，必须在待验台账里"
+    assert "INV-14" not in out, "INV-14 已由卡 147/160 关掉，不许再挂 missing"
+
+
+def test_checker_is_wired_into_the_gate_table() -> None:
+    """⑥ ★ 核查器**真进了门表**：「新能力没进这张表，就不算做完」要有机器落点。
+
+    反例（先红）：把 `run_gates.py` 里那道 `invariants` 门删掉 ⇒ 本用例当场红。
+    """
+    sys.path.append(str(ROOT / "scripts"))
+    import run_gates as rg  # noqa: PLC0415 —— 需要先把 scripts/ 挂上
+
+    jobs = dict(rg.build_jobs(quick=False, fast=False))
+    assert "invariants" in jobs, "不变量核查器没进门表（那条规矩还只是一句人话）"
+    cmd = jobs["invariants"]
+    assert "tools/wb_invariants.py" in cmd and "--check" in cmd
 
 
 # ------------------------------------------------------------------ ⑤ missing 不算错

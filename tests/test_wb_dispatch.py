@@ -1042,6 +1042,39 @@ def test_stall_report_names_the_inflight_tool() -> None:
     assert "没有在飞的调用" in quiet and "历史最长一次调用 5.0 分钟" in quiet, quiet
 
 
+def test_zero_output_is_starting_not_stalled_but_the_grace_expires() -> None:
+    """★★ T-G260b **启动宽限**的反例钉子（现场：2026-10-03 全量门禁连红两趟，都是这一族）。
+
+    真现场指纹（逐字）：`判决：卡死：0.0 分钟没有新事件（这一次的阈值 0.0 分钟；
+    没有在飞的调用；历史最长一次调用：没有记录）` —— ★「**没有记录**」= 快照是空的 =
+    判据**什么都还没看见**。它判的不是"静默"，是"还没开始"：
+    `Popen` 到第一行落地之间有真实延迟（冷启动 + xdist 满载时 >2 秒），
+    而静默计时从进程起来就开始了。
+
+    三条一起钉住（★ 判据**不许被放宽**，只许改判对象）：
+      ① 零输出 + 静默 2 秒（阈值也是 2 秒）⇒ **不许**判卡死；
+      ② 零输出 + 静默过了宽限 ⇒ **照判卡死**，且报告**点名**是
+         "一行输出都还没有"（不许含糊成"没有在飞的调用"）；
+      ③ 一旦有第一行 ⇒ 宽限**立刻失效**，口径回到老样子
+         （有输出但没在飞 + 静默 3 秒 > 2 秒 ⇒ 卡死）。
+    """
+    # ① 还在启动：零输出，静默 2 秒，压缩阈值 2 秒 ⇒ 不许掐
+    assert wd.watchdog_verdict(silent_seconds=2, signatures=[], stall_seconds=2,
+                               lines=[]) == ""
+    # ② 宽限过了还零输出 ⇒ 照掐，且必须点名"零输出"（与"没有在飞的调用"区分开）
+    said = wd.watchdog_verdict(silent_seconds=wd.STARTUP_GRACE_SECONDS + 1, signatures=[],
+                               stall_seconds=2, lines=[])
+    assert "卡死" in said, said
+    assert "一行输出都还没有" in said, said
+    assert "没有在飞的调用" not in said, said
+    # ③ 有第一行之后，宽限不再生效：静默 3 秒 > 阈值 2 秒 ⇒ 卡死（老口径，一个字没改）
+    after_first_line = ['{"type": "system", "subtype": "init"}']
+    assert "卡死" in wd.watchdog_verdict(silent_seconds=3, signatures=[], stall_seconds=2,
+                                         lines=after_first_line)
+    # ★ 且**不给 lines**（老调用方）时宽限一个字都不许插进来：静默 2 秒 = 阈值 ⇒ 照掐
+    assert "卡死" in wd.watchdog_verdict(silent_seconds=2, signatures=[], stall_seconds=2)
+
+
 def test_heartbeat_can_mention_the_inflight_tool_without_dropping_fields() -> None:
     """心跳**可以加**「在跑：<工具>」（有帮助），但现有字段一个都不许删。"""
     line = wd.heartbeat_line(elapsed=610, turns=90, tool_calls=111, files=21, silent_seconds=3,

@@ -19,26 +19,74 @@
    只打印一行说明 —— 判据问 git（check-ignore），不硬编码目录名（T-G127）。
 6. 覆盖矩阵：coverage.md 存在、含 SR-F1~F10，且每域详细规格/契约文件存在。
 
-用法：python scripts/check_layers.py
+用法：python scripts/check_layers.py [--root <路径>]
+      `--root` 换一棵树来查（默认 = 本脚本所在仓库根）—— 自检拿它在临时目录里喂
+      合成坏样例，**真实仓库一个字节都不写**。
 """
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
+# 真仓库根：这份脚本所在仓库的根。★ `git` 永远在它下面问（口径见 is_git_ignored）。
 ROOT = Path(__file__).resolve().parent.parent
-INT = ROOT / "docs" / "intention" / "needs.md"
-SPEC_TRACE = ROOT / "docs" / "specification" / "traceability.md"
-IMPL_TRACE = ROOT / "docs" / "implementation" / "traceability.md"
-CONVENTIONS = ROOT / "docs" / "specification" / "conventions.md"
-CONTRACTS = ROOT / "docs" / "contracts"
-INTERACTIONS = CONTRACTS / "interactions.md"
-FLOWS = CONTRACTS / "flows.md"
-COVERAGE = ROOT / "docs" / "implementation" / "coverage.md"
-SPEC_DOMAINS = ROOT / "docs" / "specification" / "domains"
-CONTRACT_DOMAINS = CONTRACTS / "domains"
+
+
+class LayerPaths(NamedTuple):
+    """一棵「五层文档树」的全部落点（默认真仓库根，`--root` 可换成合成小树）。"""
+
+    root: Path
+    intention: Path
+    spec_trace: Path
+    impl_trace: Path
+    conventions: Path
+    contracts: Path
+    interactions: Path
+    flows: Path
+    coverage: Path
+    spec_domains: Path
+    contract_domains: Path
+
+
+def layer_paths(root: Path | str | None = None) -> LayerPaths:
+    """按给定根算出五层检查用到的每一个路径 —— 全部门路都从这一个根派生。
+
+    不给 `root` = 真仓库根：与加 `--root` 之前的行为逐字一致。
+    """
+    base = Path(root).resolve() if root is not None else ROOT
+    contracts = base / "docs" / "contracts"
+    return LayerPaths(
+        root=base,
+        intention=base / "docs" / "intention" / "needs.md",
+        spec_trace=base / "docs" / "specification" / "traceability.md",
+        impl_trace=base / "docs" / "implementation" / "traceability.md",
+        conventions=base / "docs" / "specification" / "conventions.md",
+        contracts=contracts,
+        interactions=contracts / "interactions.md",
+        flows=contracts / "flows.md",
+        coverage=base / "docs" / "implementation" / "coverage.md",
+        spec_domains=base / "docs" / "specification" / "domains",
+        contract_domains=contracts / "domains",
+    )
+
+
+PATHS = layer_paths(ROOT)
+
+# 兼容旧写法：模块级常量仍指向真仓库根（外部引用照旧，公共面不变）。
+INT = PATHS.intention
+SPEC_TRACE = PATHS.spec_trace
+IMPL_TRACE = PATHS.impl_trace
+CONVENTIONS = PATHS.conventions
+CONTRACTS = PATHS.contracts
+INTERACTIONS = PATHS.interactions
+FLOWS = PATHS.flows
+COVERAGE = PATHS.coverage
+SPEC_DOMAINS = PATHS.spec_domains
+CONTRACT_DOMAINS = PATHS.contract_domains
 
 FORBIDDEN = ["目标实体", "时间折算", "折算成", "学期分账", "Assigned to me"]
 NEG = ["不", "无", "砍", "去", "免", "禁", "避免", "杜绝", "不要", "不设"]
@@ -84,15 +132,28 @@ def forbidden_hits(text: str) -> list[str]:
     return hits
 
 
-def is_git_ignored(path: Path) -> bool:
+def is_git_ignored(path: Path, base: Path | None = None) -> bool:
     """问 git：这个路径是否被忽略（T-G127）。
+
+    语义是「这条**仓库相对路径**会不会被 gitignore」，所以 `git` 一律在**真仓库根**
+    （`ROOT`）问；只是问之前先把路径化成仓库相对：
+      ① 先按调用方给的那棵树 `base`（`--root`，默认真仓库根）化 —— 合成小树里的
+         `<tmp>/gates/diag/x.md` ⇒ 问 git 的就是 `gates/diag/x.md`；
+      ② 不在 `base` 下却在真仓库根下的，按真仓库根化。
 
     check-ignore 退出码：0 = 忽略 / 1 = 未忽略 / 其余 = 出错。
     出错时按「未忽略」处理（从严）：宁可多报一条断链，也不悄悄放过真断链。
     """
-    try:
-        rel = str(path.relative_to(ROOT))
-    except ValueError:
+    rel: str | None = None
+    for candidate_base in (base, ROOT):
+        if candidate_base is None:
+            continue
+        try:
+            rel = str(path.relative_to(candidate_base))
+            break
+        except ValueError:
+            continue
+    if rel is None:
         rel = str(path)
     p = subprocess.run(
         ["git", "check-ignore", "-q", "--", rel],
@@ -118,8 +179,11 @@ def check_link_integrity(root: Path | None = None) -> tuple[list[str], list[str]
 
     返回（problems, notes, checked）：problems 是断链，notes 是 gitignored 跳过说明，
     checked 是实际核对过的引用条数（豁免 URL/绝对路径/待建之后仍数进去的）。
+
+    `root` 换一棵树（默认 = 真仓库根）：路径与输出里的相对路径都从它派生 ——
+    喂合成小树时不会 `relative_to` 到真仓库根上去（那会 ValueError）。
     """
-    base = root if root is not None else ROOT
+    base = Path(root).resolve() if root is not None else ROOT
     known_missing = {"DESIGN.md", "LEARN.md"}  # 文档中已标注为"待建"，不算断链
     problems: list[str] = []
     notes: list[str] = []
@@ -148,7 +212,7 @@ def check_link_integrity(root: Path | None = None) -> tuple[list[str], list[str]
                 candidates += [p.resolve() for p in docs_root.rglob(rel)]
             if not any(c.exists() for c in candidates):
                 # gitignored 产物：不随树分发，worktree 里必然没有 → 跳过（T-G127）
-                if any(is_git_ignored(c) for c in candidates):
+                if any(is_git_ignored(c, base) for c in candidates):
                     notes.append(
                         f"跳过 gitignored 产物引用: {md.relative_to(base)} → {rel}"
                     )
@@ -157,14 +221,19 @@ def check_link_integrity(root: Path | None = None) -> tuple[list[str], list[str]
     return problems, notes, checked
 
 
-def main() -> int:
+def main(root: Path | str | None = None) -> int:
+    """检查一棵「五层文档树」；`root` 不给 = 真仓库根。
+
+    命令行 `--root <路径>` 换树（自检喂合成小树用）；公共面 `main()` 不变。
+    """
     ok = True
+    p = layer_paths(root)
 
     # --- 1. 编号闭合 ---
-    n_ids = extract_n(read(INT))
-    spec_n_refs = extract_n(read(SPEC_TRACE))
-    spec_srs = extract_srs(read(SPEC_TRACE))
-    impl_srs = extract_srs(read(IMPL_TRACE))
+    n_ids = extract_n(read(p.intention))
+    spec_n_refs = extract_n(read(p.spec_trace))
+    spec_srs = extract_srs(read(p.spec_trace))
+    impl_srs = extract_srs(read(p.impl_trace))
 
     missing_n = {n for n in n_ids if n not in spec_n_refs}
     if missing_n:
@@ -177,14 +246,14 @@ def main() -> int:
         ok = False
 
     # --- 2. 词表护栏 ---
-    for path in (INT, SPEC_TRACE, IMPL_TRACE):
+    for path in (p.intention, p.spec_trace, p.impl_trace):
         hits = forbidden_hits(read(path))
         if hits:
             print(f"[FAIL] 已砍概念残留 {path.name}: {hits}")
             ok = False
 
     # --- 3. 约定层存在性 + 来源 N 标注 ---
-    conv_text = read(CONVENTIONS)
+    conv_text = read(p.conventions)
     if not conv_text:
         print("[FAIL] 约定层缺失: docs/specification/conventions.md")
         ok = False
@@ -206,12 +275,12 @@ def main() -> int:
             ok = False
 
     # --- 4. 契约层存在性与 SR 可追溯 ---
-    for contract in (INTERACTIONS, FLOWS):
+    for contract in (p.interactions, p.flows):
         if not contract.exists():
-            print(f"[FAIL] 契约层缺失: {contract.relative_to(ROOT)}")
+            print(f"[FAIL] 契约层缺失: {contract.relative_to(p.root)}")
             ok = False
-    if INTERACTIONS.exists() and FLOWS.exists():
-        contract_text = read(INTERACTIONS) + read(FLOWS)
+    if p.interactions.exists() and p.flows.exists():
+        contract_text = read(p.interactions) + read(p.flows)
         contract_srs = extract_srs(contract_text)
         unknown = contract_srs - spec_srs - impl_srs
         if unknown:
@@ -219,7 +288,7 @@ def main() -> int:
             ok = False
 
     # --- 5. 引用完整性 ---
-    broken, skipped_gitignored, checked_refs = check_link_integrity()
+    broken, skipped_gitignored, checked_refs = check_link_integrity(p.root)
     # ★ 卡 159（INV-37）：打出「这次实际检查了几条引用」—— 判据要证明它看得到东西
     print(f"[info] 引用完整性：这次实际检查了 {checked_refs} 条引用（断链 {len(broken)} 处）")
     for s in skipped_gitignored:
@@ -232,7 +301,7 @@ def main() -> int:
         ok = False
 
     # --- 6. 覆盖矩阵 ---
-    cov_text = read(COVERAGE)
+    cov_text = read(p.coverage)
     if not cov_text:
         print("[FAIL] 覆盖矩阵缺失: docs/implementation/coverage.md")
         ok = False
@@ -242,10 +311,10 @@ def main() -> int:
             if sr not in cov_text:
                 print(f"[FAIL] 覆盖矩阵缺 {sr}")
                 ok = False
-            if not list(SPEC_DOMAINS.glob(f"F{i}-*.md")):
+            if not list(p.spec_domains.glob(f"F{i}-*.md")):
                 print(f"[FAIL] 缺详细规格: docs/specification/domains/F{i}-*.md")
                 ok = False
-            if not list(CONTRACT_DOMAINS.glob(f"F{i}-*.md")):
+            if not list(p.contract_domains.glob(f"F{i}-*.md")):
                 print(f"[FAIL] 缺域契约: docs/contracts/domains/F{i}-*.md")
                 ok = False
 
@@ -253,5 +322,20 @@ def main() -> int:
     return 0 if ok else 1
 
 
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """命令行接口：`--root` 换一棵树（默认 = 真仓库根，行为与老版一致）。"""
+    parser = argparse.ArgumentParser(
+        description="五层对齐检查（intention → specification(+conventions) → contracts → "
+                    "implementation ← taste）"
+    )
+    parser.add_argument(
+        "--root",
+        default=None,
+        help="查哪棵树（默认 = 本脚本所在仓库根）。自检拿它在临时目录里搭合成小树喂坏样例，"
+             "真实仓库一个字节都不写。",
+    )
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(parse_args().root))

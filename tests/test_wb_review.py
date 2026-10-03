@@ -509,6 +509,77 @@ def test_partial_real_artifact_cli_is_rejected_end_to_end(
     assert "少 1 道" in out and names[-1] in out, out
 
 
+# ------------------------------------------ ③″ 封存树 vs 提交树（卡 160 · T-G260）
+#
+# 来路：INV-26 / INV-29 / INV-34 —— 封存指纹**生成了、没人查**（谁在提交前拿它比对，没有判据）。
+# `check_seal_tree()` 把「`last.json.tree`（封存那刻去 gates/**、即将提交的 tree）== 本笔提交
+# 去掉 gates/** 的 tree」这条对账接进**复核主链**；不等就点名差在哪几个路径。只对真产物
+# （带 `tree_scope`）判红，旧笔（无 `tree_scope`）只标注。每条都配"故意坏掉会红"的反例。
+
+
+def test_seal_tree_matches_commit_tree(monkeypatch) -> None:
+    """① 封存指纹与本笔提交（去 gates/**）的 tree **一致** ⇒ 不报、不留标注。"""
+    monkeypatch.setattr(wr, "_tree_without_gates", lambda rev: "deadbeefcafe")
+    problems, note, reading = wr.check_seal_tree(
+        {"tree": "deadbeefcafe", "tree_scope": rg.TREE_SCOPE}, "HEAD")
+    assert problems == [], problems
+    assert note == "", "真对上不该留标注"
+    assert "相同" in reading and "deadbeefcafe" in reading
+
+
+def test_seal_tree_mismatch_names_the_paths(monkeypatch) -> None:
+    """② ★ 提交树 ≠ 封存树（封存之后又动了文件）⇒ **判红**并**点名差在哪几个路径**。"""
+    monkeypatch.setattr(wr, "_tree_without_gates", lambda rev: "bbbbbbbbbbbb")
+    monkeypatch.setattr(wr, "_diff_tree_paths",
+                        lambda old, new: ["docs/changelog.md", "复盘/x.md"])
+    problems, note, reading = wr.check_seal_tree(
+        {"tree": "aaaaaaaaaaaa", "tree_scope": rg.TREE_SCOPE}, "HEAD")
+    assert problems, "提交树 ≠ 封存树却没报"
+    assert note == ""
+    assert any("docs/changelog.md" in p and "复盘/x.md" in p for p in problems), problems
+    assert "不同" in reading
+
+
+def test_seal_tree_recompute_failure_is_red(monkeypatch) -> None:
+    """③ 复算封存指纹失败（拿不到 tree）⇒ **判红**（拿不准不放过），不静默当对上。"""
+    monkeypatch.setattr(wr, "_tree_without_gates", lambda rev: "")
+    problems, _, reading = wr.check_seal_tree(
+        {"tree": "a" * 12, "tree_scope": rg.TREE_SCOPE}, "HEAD")
+    assert problems and "复算" in problems[0], problems
+    assert "复算失败" in reading
+
+
+def test_seal_tree_old_artifact_is_only_annotated() -> None:
+    """④ ★ 红线：**没有 `tree_scope`** 的旧笔（那一列是底座那棵树的哈希）**只标注、不判红**。"""
+    problems, note, reading = wr.check_seal_tree({"tree": "abc"}, "HEAD")
+    assert problems == [], "旧笔不该被判红（核不了就别假装核过）"
+    assert "不核" in note and "标注" in note
+    assert "不核" in reading
+
+
+# ------------------------------------------ wb_verify 门数也从门表现读（卡 160 · T-G260）
+#
+# 卡 147 治的是 `wb_review` 那一侧；`tools/wb_verify.py` 当时还写死 `EXPECT_GATES = 17`
+# （加了第 18 道门就得两处一起改 = 第二份会漂的真源）。本档钉「它跟着门表算」。
+
+
+def test_wb_verify_gate_count_is_read_from_the_table(monkeypatch) -> None:
+    """★ `wb_verify.expected_gate_names()` 从门表现读（不是写死 17/18）——门表改了它跟着算。
+
+    真表：与 `rg.build_jobs(False, False)` 一致，且含卡 160 接进来的那道 `invariants`。
+    桩掉门表（只留一道）⇒ 现读出的清单**跟着变**（证明没有第二份真源）。
+    """
+    import wb_verify as wv  # noqa: PLC0415 —— tools/ 已在 sys.path 里
+
+    names, source = wv.expected_gate_names(ROOT)
+    assert names == _real_gate_names()
+    assert "invariants" in names, "卡 160 的 invariants 门没进门表"
+    assert "build_jobs" in source
+
+    monkeypatch.setattr(rg, "build_jobs", lambda q, f: [("only_one", [])])
+    short, source2 = wv.expected_gate_names(ROOT)
+    assert short == ["only_one"] and "1 道" in source2
+
 
 # ------------------------------------------------------------------ ① 豁免钉子（卡 159 · T-G259）
 

@@ -124,11 +124,11 @@ note = "卡 133 · T-G230 补的这一档：真绿必须声称绿、非真绿不
 
 [[invariant]]
 id = "INV-14"
-claim = "假绿家族：门数≠17 冒充全量门禁（wb_verify 查、wb_review 不查）"
-judge = "tools/wb_verify.py::check_gates"
-nail = "-"
-status = "missing"
-note = "★ 卡 140 自己发现的后门：tools/wb_verify.py::check_gates 有 EXPECT_GATES=17 这条判据（门数 != 17 ⇒ 报 FAIL），但复核链必跑的 tools/wb_review.py::check_gate_evidence **不查门数**（只查各门 exit_code=0、ok、rev）⇒ 门数 != 17 时复核仍可过。台账这半没关：判据只在一屏核实器里、复核器里缺 ⇒ 标 missing。"
+claim = "假绿家族：门数≠应有门数冒充全量门禁（复核主链与一屏核实器都从门表现读）"
+judge = "tools/wb_review.py::check_full_gate_run"
+nail = "tests/test_wb_review.py::test_partial_run_last_json_is_flagged_and_points_at_the_shortfall"
+status = "covered"
+note = "卡 147（T-G247）把复核主链补上：tools/wb_review.py::check_full_gate_run 从 run_gates.build_jobs 现读门数（不写死 17）。卡 160（T-G260）把一屏核实器 tools/wb_verify.py 的 EXPECT_GATES=17 也改成从门表现读（expected_gate_names），至此门数真源只有门表一处，17→18 时两边都跟着算。钉子另见 tests/test_wb_review.py::test_expected_count_is_read_from_the_run_gates_table（桩掉门表 ⇒ 基准跟着变）。"
 
 [[invariant]]
 id = "INV-15"
@@ -220,10 +220,10 @@ note = "editable 的 .pth 硬指主树；两道：门禁的 tree_pythonpath 与 
 [[invariant]]
 id = "INV-26"
 claim = "封存之后再新增文件（提交树 ≠ 封存树）不许无人发现"
-judge = "scripts/audit_progress.py::check_seal_untracked"
-nail = "tests/test_seal_untracked.py::test_untracked_fragment_after_seal_is_caught_and_named"
-status = "partial"
-note = "★ 目前只有 sync_docs 的单向检查；封存树与提交树的正面对账是**待做**（复盘自己列在门禁改进清单 ⑨）。 ★ 归位：源头 = 审计/复核侧的树对比（`HEAD^{tree}` 剔 `gates/**` == `last.json.tree`，不等就点名差在哪几个路径）"
+judge = "tools/wb_review.py::check_seal_tree"
+nail = "tests/test_wb_review.py::test_seal_tree_mismatch_names_the_paths"
+status = "covered"
+note = "两条互补：① 封存时未跟踪的文件提交后必须已被跟踪（audit_progress.py::check_seal_untracked，卡 115/T-G212）；② 卡 160（T-G260）把「HEAD^{tree} 剔 gates/** == last.json.tree」这条**正面对账**接进复核主链（tools/wb_review.py::check_seal_tree），不等就点名差在哪几个路径。复算共用 run_gates.tree_without_gates 那一份实现，不另写切法；只对真产物判红、旧笔只标注。 ★ 反方向「汇总里有、片段没了」归 tools/sync_docs.py（卡 159，INV-15）。"
 
 [[invariant]]
 id = "INV-27"
@@ -244,10 +244,10 @@ note = "续租（cmd_renew）只许同卡号。 ★ 归位：源头 = `gates/dia
 [[invariant]]
 id = "INV-29"
 claim = "门禁产物必须留得住证据：封存指纹不许是没人查、且每笔都错的凭证"
-judge = "scripts/audit_progress.py::check_seal_untracked"
-nail = "tests/test_seal_untracked.py::test_untracked_fragment_after_seal_is_caught_and_named"
-status = "partial"
-note = "worktree 回退 + 自指是这条的两个坑；check_fingerprint 有判据，但「谁在什么时候查它」没有判据。 ★ 归位：源头 = 审计/复核侧的树对比（`HEAD^{tree}` 剔 `gates/**` == `last.json.tree`，不等就点名差在哪几个路径）"
+judge = "tools/wb_review.py::check_seal_tree"
+nail = "tests/test_wb_review.py::test_seal_tree_matches_commit_tree"
+status = "covered"
+note = "worktree 回退 + 自指是这条的两个坑；指纹的**消费端**此前只有一屏核实器 tools/wb_verify.py::check_fingerprint（复核主链一条都不查）。卡 160（T-G260）把它接进复核主链（tools/wb_review.py::check_seal_tree：对真产物判红、旧笔只标注）—— 指纹从「生成了没人查」变成「每笔都有人查」。"
 
 [[invariant]]
 id = "INV-30"
@@ -260,10 +260,10 @@ note = "14 道门原先一道都没渲染过界面；现在由 render + render_s
 [[invariant]]
 id = "INV-31"
 claim = "门禁/工具文档里的判据描述不许落后于代码（否则读文档的人按旧口径干活）"
-judge = "-"
-nail = "-"
-status = "missing"
-note = "「门禁四要素.md」里已出现过写「run_gates 没给每道门超时」而代码早就有 DEFAULT_DOOR_TIMEOUT 的漂移。 ★ 归位：源头 = 该文档那一行（改判据的同一笔里应同步；或改成「见 `DEFAULT_DOOR_TIMEOUT`」指向真源）"
+judge = "scripts/run_gates.py::DEFAULT_DOOR_TIMEOUT"
+nail = "tests/test_run_gates_timeout.py::test_door_timeout_doc_points_at_the_truth_source"
+status = "covered"
+note = "「门禁四要素.md」§三·3 曾写「run_gates 没给每道门超时」，而代码早就有 DEFAULT_DOOR_TIMEOUT（卡 100/T-G196）。卡 160（T-G260）把它改成**指向真源**（见 DEFAULT_DOOR_TIMEOUT），不再复述会漂的秒数；钉子钉那页必须含 DEFAULT_DOOR_TIMEOUT、不含「没有超时」、门数不写死旧值。 ★ 边界：本卡只改这一处已发现的漂移，「改判据的同一笔里同步文档」这条通则没有通用判据。"
 
 [[invariant]]
 id = "INV-32"
@@ -284,10 +284,10 @@ note = "卡 159（T-G259）补上「实际发生的有没被声称」那半：�
 [[invariant]]
 id = "INV-34"
 claim = "封存指纹必须有人查 —— 不许是没人查、且每笔都错的凭证"
-judge = "tools/wb_verify.py::check_fingerprint"
-nail = "tests/test_gate_fingerprint.py::test_fingerprint_sees_changes_outside_gates"
-status = "partial"
-note = "与 INV-29 同族：指纹的生成有判据，指纹的**消费**（谁在提交前拿它比对）没有。 ★ 归位：源头 = `scripts/run_gates.py::tree_without_gates` / `_git_index_path`（+ `TREE_SCOPE` 口径自述位）"
+judge = "tools/wb_review.py::check_seal_tree"
+nail = "tests/test_wb_review.py::test_seal_tree_old_artifact_is_only_annotated"
+status = "covered"
+note = "与 INV-29 同族：指纹的生成有判据（scripts/run_gates.py::tree_without_gates / _git_index_path + TREE_SCOPE 口径自述位），消费端由卡 160（T-G260）接进复核主链（tools/wb_review.py::check_seal_tree）。旧笔（无 tree_scope）只标注不判红 —— 既不假装核过、也不算 FAIL。"
 
 [[invariant]]
 id = "INV-35"
@@ -455,7 +455,7 @@ claim = "提交信息里 Task: 恰好一个；契约操作必须挂台账卡；�
 judge = "scripts/audit_progress.py::check_commit_trailers"
 nail = "tests/test_audit_tightening.py::test_todo_spec_with_all_children_done_fails"
 status = "partial"
-note = "「机器完全能查、却从来没人查」的那一类。 ★ 归位：源头 = `scripts/audit_progress.py::check_commit_trailers` / `check_contract_ops` / `check_spec_child_cards`（都进现有 `audit` 那道门，门数不增）"
+note = "卡 160（T-G260）核实：三条**确实在现有 `audit` 那道门里真跑**（门命令是 `scripts/audit_progress.py --all`；2026-10-03 实测输出含「⑧ 提交信息逐条」「⑨ 契约层覆盖」「⑩ 母条/子卡一致性」三节，门数不增）。判据在、各条也各有钉子。 ★ 仍留 partial：缺一条「它们**在门里**被调用」的专门反例钉子 —— 谁把这三节从 main 里删掉，现有用例不会红。"
 
 [[invariant]]
 id = "INV-56"
@@ -640,3 +640,11 @@ judge = "tests/test_wb_dispatch.py::test_model_gate_refuses_an_unknown_model_wit
 nail = "tests/test_wb_dispatch.py::test_switch_on_model_is_dispatched_through_the_gate"
 status = "covered"
 note = "★ 现场（卡 174 · T-G274）：模型闸的拒单用例把样本写死成 `kimi-k3-1`，用户 2026-10-03 在**仓外**开关文件 `infra/pool/model-switches.toml` 里把它打开 ⇒ 一行代码没改，全量门禁自己变红。根因两条：① 样本写死成「可被数据打开」的名字；② 开关文件在本仓外，`sandbox` 隔离不到，用例读的是**真机那份**。做法：样本**现算**（从有效允许集之外挑）+ 开关读取打到 tmp 夹具（`TF_MODEL_SWITCHES`）⇒ 沙箱封闭。正向钉子 `test_switch_on_model_is_dispatched_through_the_gate` 证明开关真生效，`test_switch_missing_or_broken_still_refuses_by_default` 证明读不到 / 坏掉时默认拒绝不变。★ 边界：只治「用例依赖机器状态」，不重设计模型注册表（那是卡 166 的活）。"
+
+[[invariant]]
+id = "INV-79"
+claim = "工人一行输出都还没有时，不许按「静默」把它判成卡死（那是「在启动」，不是「卡死」）"
+judge = "tools/wb_dispatch.py::watchdog_verdict"
+nail = "tests/test_wb_dispatch.py::test_zero_output_is_starting_not_stalled_but_the_grace_expires"
+status = "covered"
+note = "★ 现场（卡 160 · T-G260 落档时）：全量门禁连红两趟，判决逐字是 `卡死：0.0 分钟没有新事件（这一次的阈值 0.0 分钟；没有在飞的调用；历史最长一次调用：没有记录）` —— ★「**没有记录**」就是判据**什么都没看见**：静默计时从 `Popen` 那一刻起算，而第一行落地有真实延迟（Python 冷启动 + xdist 满载时可超过 2 秒），压缩阈值 `--stall-seconds 2` 下它就拿**空快照**判卡死。做法：`STARTUP_GRACE_SECONDS = 60` —— **零输出期间**阈值抬到 `max(阈值, 宽限)`，**一有第一行立刻回到老口径**；且报告**点名**是零输出（不许含糊成「没有在飞的调用」）。★ 不是放宽：零输出**照样会被掐**，只是从「起手就掐」改成「过了宽限再掐」—— 钉子四条一起钉住（不许掐 / 过宽限照掐且点名 / 有输出后宽限立刻失效 / 不给 `lines` 的老调用方一个字不受影响）。★ 边界：对生产**无影响**（`STALL_SECONDS = 480 > 60`）；但若有人把 `--stall-seconds` 调到小于 60，那档就再也不会「起手掐」—— 这是明文换来的东西，不是一直如此。"

@@ -6,7 +6,7 @@
 16.3 GB 机器上并行两趟门禁 + 4 个工人 + 无头 Edge + serve.py，同时用户在玩游戏 → 可用内存掉到
 ~3 GB、MemCompression 起 310 MB、整机慢 6 倍（pytest 884s vs 146s），**用户的游戏被挤崩**。
 本卡：`scripts/run_gates.py` 与 `tools/wb_dispatch.py` 在开跑/派活前读**可用**内存，低于
-`TF_GATE_MIN_FREE_GB`（默认 4.0，`0` = 关）就拒跑/不派活，并说清两个数、后果、怎么放行。
+`TF_GATE_MIN_FREE_GB`（默认 2.0，`0` = 关）就拒跑/不派活，并说清两个数、后果、怎么放行。
 
 ## 怎么验（用**桩**，不真动机器内存）
 
@@ -45,17 +45,21 @@ def test_available_memory_reads_a_positive_number_or_gives_up() -> None:
     assert val is None or val > 0
 
 
-def test_default_threshold_is_4gb(monkeypatch: pytest.MonkeyPatch) -> None:
-    """不设变量 → 默认 4.0（两个模块同一口径）。"""
+def test_default_threshold_is_2gb(monkeypatch: pytest.MonkeyPatch) -> None:
+    """不设变量 → 默认 **2.0**（两个模块同一口径）。
+
+    ★ 2026-10-03 18:2x 用户令：4.0 → 2.0（原话「把内存限制降到2G」）。
+    代价与缓解见 `scripts/run_gates.py` 里 `DEFAULT_GATE_MIN_FREE_GB` 那段留痕。
+    """
     monkeypatch.delenv("TF_GATE_MIN_FREE_GB", raising=False)
-    assert rg.gate_min_free_gb() == 4.0
-    assert wd.gate_min_free_gb() == 4.0
+    assert rg.gate_min_free_gb() == 2.0
+    assert wd.gate_min_free_gb() == 2.0
 
 
 def test_bad_threshold_falls_back_to_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """坏阈值 → 退回默认（不静默、不当成 0）。"""
     monkeypatch.setenv("TF_GATE_MIN_FREE_GB", "abc")
-    assert rg.gate_min_free_gb() == 4.0
+    assert rg.gate_min_free_gb() == 2.0
 
 
 # ============================================================ run_gates：三条判据 + 反例

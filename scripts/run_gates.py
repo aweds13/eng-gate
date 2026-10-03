@@ -127,6 +127,13 @@ COMMON = [
     ("commands", [PY, "-X", "utf8", "scripts/check_commands.py", "--check"]),
     ("ui_dom_probe", []),          # 占位：下面按 node 是否可用来填
     ("audit", [PY, "-X", "utf8", "scripts/audit_progress.py", "--all"]),
+    # 不变量台账核查器（卡 160 · T-G260）：「**新能力没进这张表，就不算做完**」从
+    # `复盘/不变量台账.toml` 文件头那句人话变成**一道门**。它只核 `judge` 路径与 `nail`
+    # 用例名的**存在性**（不真跑门禁）—— 台账里的 `missing` / `partial` 是**状态、不是错误**
+    # （诚实标缺口不算红），这道门只咬「指针指向不存在的东西」。
+    # ★ 门数是会变的（这一天 17 → 18）：**真源只有门表这一处**，`tools/wb_verify.py` 与
+    # `tools/wb_review.py` 都从这里**现读**，任何地方都不许写死 17 / 18（卡 147 已立的口径）。
+    ("invariants", [PY, "-X", "utf8", "tools/wb_invariants.py", "--check"]),
     # 台账↔规格 标题对账（T-D2）：`--check` 一发现「确定错位」或「无规格对应的 SR 卡」就退 1。
     # 2026-09-20 校正前它挂的是"信息性"（blocking=false）—— 因为台账里 F/NF 两层编号错位还没修，
     # 一接进来就会 FAIL。T-D1 校正完（见 `复盘/台账编号校正-方案A落地.md`）后转正为阻断项。
@@ -168,7 +175,16 @@ DEFAULT_DOOR_TIMEOUT = 1800.0
 #   **用户的游戏被挤崩了一次**。
 # 口径：读 **available**（可用，含可回收文件缓存），**不是 free** —— free 会把缓存算成"没内存"，
 #   误拦严重（卡 102 §干活前自问）。阈值 `TF_GATE_MIN_FREE_GB`（默认 4.0；`0` = 关掉这道闸）。
-DEFAULT_GATE_MIN_FREE_GB = 4.0
+# ★★ 2026-10-03 18:2x —— **用户令：默认阈值 4.0 → 2.0**（原话「把内存限制降到2G」）。
+#   ★ 为什么改：这台机器上 4.0 **长期过不去**（Edge ~1.9 GB + Memory Compression ~0.9 GB +
+#     Defender ~0.5 GB + 多个 DSH 实例 ~0.9 GB）⇒ 落地几乎每趟都要主控手打 `TF_GATE_MIN_FREE_GB=2.5`
+#     才能开跑；那个数字反复出现在交接文档里，已经成了**靠人记**的东西。
+#   ★★ **如实留痕（这是本仓自己的规矩：改阈值必须写清代价）**：这条闸当初就是为了护这台机器 ——
+#     上面那段病灶记的正是「可用掉到 ~3 GB 时整机慢 6 倍、用户的游戏被挤崩过一次」。
+#     ⇒ 默认降到 2.0 意味着**门禁能在只剩 2 GB 时开跑**，那是**用户本人拍板**接受的代价。
+#     ★ 缓解手段（内存紧时请一并加）：`TF_PYTEST_WORKERS=1` —— 1 worker 的实际占用只几百 MB
+#       （照 `_text_TG250.md` 先例）。`0` 仍可完全关掉这道闸。
+DEFAULT_GATE_MIN_FREE_GB = 2.0
 
 
 def available_memory_gb() -> float | None:
@@ -213,7 +229,7 @@ def available_memory_gb() -> float | None:
 
 
 def gate_min_free_gb() -> float:
-    """内存闸阈值（GB）：`TF_GATE_MIN_FREE_GB`（默认 4.0；`0` = 关掉这道闸）。坏值 → 退回默认。"""
+    """内存闸阈值（GB）：`TF_GATE_MIN_FREE_GB`（默认 2.0；`0` = 关掉这道闸）。坏值 → 退回默认。"""
     raw = os.environ.get("TF_GATE_MIN_FREE_GB", "").strip()
     if not raw:
         return DEFAULT_GATE_MIN_FREE_GB

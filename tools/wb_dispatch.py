@@ -207,6 +207,22 @@ REPEAT_WINDOW = 12               # 空转只看最近多少次工具调用
 REPEAT_NEED = 5                  # 同一件事在里面出现几次算空转
 HEARTBEAT_SECONDS = 120          # 心跳行间隔
 POLL_SECONDS = 5.0               # 看门狗多久醒一次
+# ★★ 启动宽限（T-G260b，卡 160 那一笔的域修订）：**零输出 = 「在启动」，不是「卡死」**。
+#   为什么必须有（真现场 2026-10-03 18:4x：全量门禁连红两趟，两次都是这一族）：
+#     `Popen` 起来到第一行落地之间有**真实延迟**（Python 冷启动 + xdist 满载时可超过 2 秒），
+#     而静默计时从**进程起来那一刻**就开始了 ⇒ `--stall-seconds 2` 这种压缩阈值下，
+#     看门狗会拿着**空快照**判卡死。现场指纹（逐字）：
+#       `判决：卡死：0.0 分钟没有新事件（这一次的阈值 0.0 分钟；` +
+#       `没有在飞的调用；历史最长一次调用：没有记录）`
+#     ★「**历史最长一次调用：没有记录**」= 判据当时**什么都还没看见** ——
+#       它判的不是静默，是还没开始。
+#   ★ 口径：**零输出期间**阈值抬到 `max(原阈值, 启动宽限)`；
+#     一旦有第一行，立刻回到老口径（一个字没改）。
+#   ★ 对生产**无影响**：`STALL_SECONDS = 480 > 60` ⇒ 宽限永远不生效；
+#     它只治压缩阈值下的那个真实竞态。
+#   ★ 不是「放宽」：零输出**照样会被掐**，只是从「起手就掐」改成「过了宽限再掐」，
+#     而且报告会**点名**是零输出（不许含糊成「没有在飞的调用」）。
+STARTUP_GRACE_SECONDS = 60
 SCENE_LINES = 6                  # 掐掉时报最后几步
 DEFAULT_RETRIES = 1              # 被中断后自动带同一会话续跑几次
 DEFAULT_TIMEOUT = 7200           # 默认超时（秒）：卡 002 用了 44 分钟，长卡给到 2 小时
@@ -1343,14 +1359,20 @@ def stall_threshold_seconds(*, stall_seconds: int, inflight: tuple[str, float] |
 
 
 def _stall_report(*, silent_seconds: float, threshold: float,
-                  inflight: tuple[str, float] | None, durations: list[float]) -> str:
+                  inflight: tuple[str, float] | None, durations: list[float],
+                  no_output: bool = False) -> str:
     """卡死报告 —— ★ **必须带现场**（T-G94）：最后一次调用是什么 / 已跑多久 / 历史最长一次 /
     这一次用的阈值。旧报告只说「X 分钟没有新事件」，主控拿到现场还得自己翻 log 去猜它当时在跑什么。
+
+    ★ T-G260b：`no_output`（一行输出都没有、且启动宽限已过）**必须点名**——
+    它与「有输出但没在飞」是两回事，报告里含糊过去就等于把判据的对象藏起来了。
     """
     longest = max(durations) if durations else 0.0
     if inflight:
         sig, ran = inflight
         what = f"在跑 {wb_status._clip(sig, 100)}（已跑 {ran / 60:.1f} 分钟）"
+    elif no_output:
+        what = f"它**一行输出都还没有**（启动宽限 {STARTUP_GRACE_SECONDS} 秒已过）"
     else:
         what = "没有在飞的调用"
     seen = f"历史最长一次调用 {longest / 60:.1f} 分钟" if longest else "历史最长一次调用：没有记录"
@@ -1476,21 +1498,28 @@ def tool_durations(lines: list[str]) -> list[float]:
 
 def watchdog_verdict(*, silent_seconds: float, signatures: list[str],
                      stall_seconds: int = STALL_SECONDS, window: int = REPEAT_WINDOW,
-                     need: int = REPEAT_NEED, lines: list[str] | None = None) -> str:
+                     need: int = REPEAT_NEED, lines: list[str] | None = None,
+                     startup_grace_seconds: float = STARTUP_GRACE_SECONDS) -> str:
     """**在跑的时候**该不该把它掐了 —— 返回原因（空串 = 健康）。① 卡死 ② 空转。
 
     ★ 判卡死的阈值**不是常数**（T-G94）：日志静默 ≠ 卡死 —— 一次工具调用期间**本来就静默**
     （全量门禁 ~4 分钟、冷缓存 worktree 里十几分钟），旧写法会把这种正常的长调用误判成卡死。
     所以给了 `lines` 就按现场放宽（在飞 → 30 分钟底线；再按历史最长一次调用 × 2.5 自适应）；
     **不给 `lines`** = 老口径（阈值就是 `stall_seconds`）—— 空转那条判据一个字没动。
+    ★★ T-G260b **启动宽限**：`lines` 给了但**是空的**（工人一行都还没吐）⇒ 这不是「静默」，
+    是「还没开始」⇒ 阈值抬到 `max(阈值, startup_grace_seconds)`。
+    理由与现场指纹见 `STARTUP_GRACE_SECONDS` 上面那段。★ 一旦有第一行就**不再**生效。
     """
     inflight = inflight_tool(lines) if lines is not None else None
     durations = tool_durations(lines) if lines is not None else []
     threshold = stall_threshold_seconds(stall_seconds=stall_seconds, inflight=inflight,
                                         durations=durations)
+    no_output = lines is not None and not lines
+    if no_output:
+        threshold = max(threshold, float(startup_grace_seconds))
     if silent_seconds >= threshold:
         return _stall_report(silent_seconds=silent_seconds, threshold=threshold,
-                             inflight=inflight, durations=durations)
+                             inflight=inflight, durations=durations, no_output=no_output)
     repeat = repeat_signal(signatures, window=window, need=need)
     if repeat:
         count, sig = repeat
@@ -1729,10 +1758,11 @@ def _porcelain_path(line: str) -> str:
 
 # ---------------------------------------------------------------- 内存闸（卡 102 / T-G198）
 # 与 `scripts/run_gates.py` **同一套口径**：读 **available**、同一个环境变量 `TF_GATE_MIN_FREE_GB`
-# （默认 4.0，`0` = 关）、同一套措辞、同样"读不到就跳过"。派活同样吃内存（工人会跑 pytest /
-# 起真服务），所以派活前也要过这道闸。★ 只加这一条前置判据 —— 派活主流程（心跳 / 看门狗 /
-# 429 / 判决口径 / retry）与 `--status` 三态判据一个字不动。
-DEFAULT_GATE_MIN_FREE_GB = 4.0
+# （默认 4.0 → ★ **2026-10-03 18:2x 用户令改为 2.0**，理由与留痕见 `scripts/run_gates.py` 同段注释；
+# 两处**必须一起改**，否则"同一套口径"当场变成两套）、同一套措辞、同样"读不到就跳过"。
+# 派活同样吃内存（工人会跑 pytest / 起真服务），所以派活前也要过这道闸。★ 只加这一条前置判据 ——
+# 派活主流程（心跳 / 看门狗 / 429 / 判决口径 / retry）与 `--status` 三态判据一个字不动。
+DEFAULT_GATE_MIN_FREE_GB = 2.0
 
 
 def available_memory_gb() -> float | None:
@@ -1775,7 +1805,7 @@ def available_memory_gb() -> float | None:
 
 
 def gate_min_free_gb() -> float:
-    """内存闸阈值（GB）：`TF_GATE_MIN_FREE_GB`（默认 4.0；`0` = 关掉这道闸）。坏值 → 退回默认。"""
+    """内存闸阈值（GB）：`TF_GATE_MIN_FREE_GB`（默认 2.0；`0` = 关掉这道闸）。坏值 → 退回默认。"""
     raw = os.environ.get("TF_GATE_MIN_FREE_GB", "").strip()
     if not raw:
         return DEFAULT_GATE_MIN_FREE_GB
