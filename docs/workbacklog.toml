@@ -902,3 +902,126 @@ files = [
 depends = ["156", "157", "163"]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "166"
+task = "T-G266"
+title = "模型注册表：一层统一 + 按池分流（取代卡 146 的朴素合并）"
+tree = ".wt/modelregistry"
+spec = "复盘/卡/卡166-模型注册表按池分流.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tools/pool/models.py",
+  "tests/test_wb_dispatch.py",
+  "tests/test_pool_models.py",
+]
+depends = ["164"]
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "167"
+task = "T-G267"
+title = "派活器 --effort 透传：让「思考等级 MAX」有落点"
+tree = ".wt/effort"
+spec = "复盘/卡/卡167-派活器effort透传.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tests/test_wb_dispatch.py",
+]
+depends = ["166"]
+risk = "mid"
+status = "pending"
+[[cards]]
+id = "168"
+task = "T-G168"
+title = "想问题：L0 意图 · L1 规格/契约 · L11 示例"
+tree = ".wt/q1"
+spec = "复盘/卡/卡168-想问题-q1.md"
+files = [
+  "复盘/问题清单-组1.md",
+]
+depends = []
+risk = "low"
+status = "pending"
+[[cards]]
+id = "169"
+task = "T-G169"
+title = "想问题：L2 产品 · L2.5 基础设施 · L10 缝"
+tree = ".wt/q2"
+spec = "复盘/卡/卡169-想问题-q2.md"
+files = [
+  "复盘/问题清单-组2.md",
+]
+depends = []
+risk = "low"
+status = "pending"
+[[cards]]
+id = "170"
+task = "T-G170"
+title = "想问题：L3 验收/测试 · L4 门禁 · L7 证据/留痕"
+tree = ".wt/q3"
+spec = "复盘/卡/卡170-想问题-q3.md"
+files = [
+  "复盘/问题清单-组3.md",
+]
+depends = []
+risk = "low"
+status = "pending"
+[[cards]]
+id = "171"
+task = "T-G171"
+title = "想问题：L5 审计/台账 · L8 复盘"
+tree = ".wt/q4"
+spec = "复盘/卡/卡171-想问题-q4.md"
+files = [
+  "复盘/问题清单-组4.md",
+]
+depends = []
+risk = "low"
+status = "pending"
+[[cards]]
+id = "172"
+task = "T-G172"
+title = "想问题：L6 外包/流水线 · L9 号池"
+tree = ".wt/q5"
+spec = "复盘/卡/卡172-想问题-q5.md"
+files = [
+  "复盘/问题清单-组5.md",
+]
+depends = []
+risk = "low"
+status = "pending"
+[[cards]]
+id = "173"
+task = "T-G273"
+title = "Kimi K3 深化：148 条问题 → 归并分级 + 改写问句 + 跨层元问题"
+tree = ".wt/k3"
+spec = "复盘/卡/卡173-K3深化问题清单.md"
+files = [
+  "复盘/问题清单-K3-深化.md",
+  "复盘/问题清单-组1.md",
+  "复盘/问题清单-组2.md",
+  "复盘/问题清单-组3.md",
+  "复盘/问题清单-组4.md",
+  "复盘/问题清单-组5.md",
+]
+depends = ["168", "169", "170", "171", "172"]
+risk = "mid"
+status = "pending"
+[[cards]]
+id = "174"
+task = "T-G274"
+title = "门的用例自控输入面：不再依赖仓外开关文件"
+tree = ".wt/hermetic"
+spec = "复盘/卡/卡174-用例自控输入面.md"
+files = [
+  "tests/test_wb_dispatch.py",
+  "复盘/不变量台账.toml",
+]
+depends = []
+risk = "low"
+# 2026-10-03 10:3x：已落地（提交 37c4a61，任务 B-HERMETIC 标 landed）⇒ 不再参与规划。
+# ★ 它必须转 done 而不是靠 depends 消冲突：它的域与 12 张卡（146/149/151/154/156/157/159/162/163/164/166/167）相交，
+#   而那 12 张全是**还没跑**的卡 —— 卡一旦收工落地，就该退出规划，否则每张后来的卡都要为它写 depends。
+status = "done"
