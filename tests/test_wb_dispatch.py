@@ -1664,20 +1664,96 @@ def test_one_off_model_is_allowed_but_stays_out_of_the_rotation(monkeypatch, tmp
     assert wd.next_whitelist_model("glm-5.3-flash") is None
 
 
+def _name_outside_the_effective_allowed_set() -> str:
+    """★ 卡 174（T-G274）：**现算**一个「确实表外」的模型名 —— 不再写死某个具体名字。
+
+    病：样本写死（现场是 `kimi-k3-1`）⇒ 用户 2026-10-03 在**仓外**开关文件里把它打开，
+    它就不再表外，用例在**一行代码都没改**时自己变红。做法：拿**有效允许集**
+    （名单常量 ∪ 开关文件里打开的），在它之外挑一个名字 —— 用户打开哪个，这名字都还在表外。
+    """
+    allowed = set(wd.effective_allowed_models())
+    name = "no-such-model-anywhere"
+    suffix = 0
+    while name in allowed:
+        suffix += 1
+        name = f"no-such-model-anywhere-{suffix}"
+    assert name not in allowed, "现算的表外样本仍落在允许集里（算法坏了）"
+    return name
+
+
 def test_model_gate_refuses_an_unknown_model_with_zero_side_effects(
-        sandbox: Path, monkeypatch, capsys) -> None:
-    """★★ 拒单实测（可重复用例）：表外模型 → 退 2、**不起进程**、**不建 log**、**不写判决**。"""
+        sandbox: Path, tmp_path, monkeypatch, capsys) -> None:
+    """★★ 拒单实测（可重复用例）：表外模型 → 退 2、**不起进程**、**不建 log**、**不写判决**。
+
+    ★ 卡 174（T-G274）：两处**自控输入面**，让用例不再依赖机器状态：
+      ① 样本**现算**（`_name_outside_the_effective_allowed_set()`）—— 不写死名字，
+         用户改仓外开关文件也不会把这个样本变成「表内」；
+      ② 开关**读取**打到 tmp 夹具上（空开关文件）—— 沙箱真的封闭，
+         不再读真机那份 `infra/pool/model-switches.toml`（它在本仓外、`sandbox` 隔离不到）。
+    """
+    _point_switches(tmp_path, "", monkeypatch)          # 夹具：空开关 ⇒ 允许集 = 名单常量
+    outsider = _name_outside_the_effective_allowed_set()
     record: list[list[str]] = []
     monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
     monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000",
-                                      "--model", "kimi-k3-1", "--execute"])
+                                      "--model", outsider, "--execute"])
     assert wd.main() == 2
     err = capsys.readouterr().err
-    assert "未授权模型，已拒绝派活" in err and "kimi-k3-1" in err
+    assert "未授权模型，已拒绝派活" in err and outsider in err
     assert "deepseek-v4.1-flash" in err and "glm-5.3-flash" in err, "要列出白名单"
     assert record == [], "一个子进程都不许起"
     assert not (sandbox / "gates" / "diag" / "wb-000.jsonl").exists(), "不许建 log"
     assert not (sandbox / "gates" / "diag" / "wb-000.verdict.txt").exists(), "不许写判决"
+
+
+def test_switch_on_model_is_dispatched_through_the_gate(
+        sandbox: Path, tmp_path, monkeypatch, capsys) -> None:
+    """★ 卡 174（T-G274）正向钉子：开关里写 `X = true` ⇒ X **必须真被派出去**（证明开关真的生效）。
+
+    这是上面那条拒单用例的**另一半**：那半钉「表外被拒」，这半钉「开关里开的放行」——
+    合起来才说明闸门读的**就是**这个自控的输入面。
+    ★ 开关夹具在 tmp 里（沙箱封闭），不读真机那份 `infra/pool/model-switches.toml`。
+    """
+    opened = "switched-on-third-party-model"
+    assert opened not in wd.MODEL_WHITELIST, "样本不能是名单里的（否则证明不了开关在起作用）"
+    _point_switches(tmp_path, f'[switch]\n"{opened}" = true\n', monkeypatch)
+    assert wd.model_rejected(opened) == "", "开关开了就必须放行"
+    record: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000", "--spec", "spec.md",
+                                      "--model", opened, "--execute", "--force"])
+    assert wd.main() == 0
+    capsys.readouterr()
+    assert record, "开关开了就要真派出去"
+    assert record[0][record[0].index("--model") + 1] == opened, "派出去的正是开关里的那个名字"
+
+
+def test_switch_missing_or_broken_still_refuses_by_default(
+        sandbox: Path, tmp_path, monkeypatch, capsys) -> None:
+    """★ 卡 174（T-G274）正向钉子：开关**读不到 / 坏掉** ⇒ 默认拒绝**不变**（黑名单锁死那条令）。
+
+    · **读不到**（夹具文件不存在）⇒ 空开关、不报错 —— 表外照拒（不是「读不到就当全开」）；
+    · **坏掉**（值不是布尔）⇒ `SwitchFileError` 响亮失败、退 2、点名 —— **也不放行**。
+    两半都要求**零副作用**（一个子进程都不许起）。
+    """
+    outsider = "switched-off-third-party-model"
+    assert outsider not in wd.MODEL_WHITELIST
+    record: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
+
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(tmp_path / "absent.toml"))   # 读不到
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000",
+                                      "--model", outsider, "--execute"])
+    assert wd.main() == 2
+    assert "未授权模型，已拒绝派活" in capsys.readouterr().err, "读不到开关 ≠ 放行"
+
+    _point_switches(tmp_path, f'[switch]\n"{outsider}" = "yes"\n', monkeypatch)   # 坏掉
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000",
+                                      "--model", outsider, "--execute"])
+    assert wd.main() == 2
+    broken_err = capsys.readouterr().err
+    assert "模型开关文件" in broken_err and outsider in broken_err, "坏文件要点名"
+    assert record == [], "拒单必须零副作用（一个子进程都不许起）"
 
 
 def test_model_gate_applies_to_resume_and_detached_too(sandbox: Path, monkeypatch, capsys) -> None:

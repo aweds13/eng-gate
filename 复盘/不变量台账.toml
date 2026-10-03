@@ -631,3 +631,11 @@ judge = "tools/evidence_map.py"
 nail = "-"
 status = "partial"
 note = "改前先跑 evidence_map --file <要改的文件>；text: 证据该指语义锚点（节标题/函数名）而不是整句。 ★ 归位：源头 = `docs/traceability.toml` 的 `text:` 证据指**语义锚点**（节标题 / 函数名）而不是整句；改前先跑 `tools/evidence_map.py --file <要改的文件>`"
+
+[[invariant]]
+id = "INV-78"
+claim = "门禁的判据必须自控输入面，不许依赖仓外可被用户改的数据"
+judge = "tests/test_wb_dispatch.py::test_model_gate_refuses_an_unknown_model_with_zero_side_effects"
+nail = "tests/test_wb_dispatch.py::test_switch_on_model_is_dispatched_through_the_gate"
+status = "covered"
+note = "★ 现场（卡 174 · T-G274）：模型闸的拒单用例把样本写死成 `kimi-k3-1`，用户 2026-10-03 在**仓外**开关文件 `infra/pool/model-switches.toml` 里把它打开 ⇒ 一行代码没改，全量门禁自己变红。根因两条：① 样本写死成「可被数据打开」的名字；② 开关文件在本仓外，`sandbox` 隔离不到，用例读的是**真机那份**。做法：样本**现算**（从有效允许集之外挑）+ 开关读取打到 tmp 夹具（`TF_MODEL_SWITCHES`）⇒ 沙箱封闭。正向钉子 `test_switch_on_model_is_dispatched_through_the_gate` 证明开关真生效，`test_switch_missing_or_broken_still_refuses_by_default` 证明读不到 / 坏掉时默认拒绝不变。★ 边界：只治「用例依赖机器状态」，不重设计模型注册表（那是卡 166 的活）。"
