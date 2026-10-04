@@ -5812,3 +5812,16 @@ evidence = [
   "file:tests/test_wb_docmap.py",
 ]
 gaps = "① ★ **本笔混了一笔「主控文档笔」**：符号级接线（`tools/pool/guards.py`）+ §17 增补（压缩文书口径）+ 两份卡规格追加。⇒ 一笔提交里两类东西，**审阅时要分清哪个是卡 183 的产物**。指针：`复盘/外包-卡表与规矩.md` §17。② ★ **判据工具与判据口径仍不同步**：§17 写了「文书 ≤60 行 / 每条 gap 带指针」，而**能咬它的工具（卡 164 的 `tools/card_doc_budget.py`）没接线**（它自己写明「接进 `stage_card._selfcheck` 是后续卡的事」）⇒ 本笔的文书是**人守纪律**写出来的，不是机器逼出来的。指针：卡 164 规格第 4 条。③ ★ **183 的索引是派生物**：`复盘/文档索引.toml` 由 `tools/wb_docmap.py` 生成，`--check` 当晚报 460 处差异（那是索引对当前文档树的正常读数）⇒ **它不是「手写数据」**，别照它手工改。指针：`tools/wb_docmap.py`。④ ★ **「安全批 / 危险批」只是方案**：本笔只交清单与判据，**没有搬动任何文档**（用户口径：大搬家不可逆，台账按路径钉死 271 条）。⇒ 真整理要另一张卡。指针：`复盘/文档重整方案.md`。"
+
+[entries."T-G261"]
+id = "T-G261"
+title = "门的输入面与跑法：补全输入表 + 慢门预算告警 + seam_check 从推荐变硬门"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/run_gates.py",
+  "file:tools/seam_check.py",
+  "file:tests/test_seam_check.py",
+  "file:tests/test_door_inputs_coverage.py",
+]
+gaps = "① ★ **门的输入表是「唯一真源」，本笔又给它加了两条输入**（`render_signatures.json`、`phone_check.mjs`）⇒ 以后**别再另写一份输入表**（`DOOR_INPUTS` 派生自 `COMMON`/`REUSE_INPUTS`，钉子会咬）。指针：`scripts/run_gates.py`。② ★ **慢门告警是「告警」不是「闸」**：`pytest` 超预算只进 `slow_doors`、**不红**（工人实测 `budget=50s` 时 `88.74s` 被记录）。⇒ 别把它当「跑得慢就一定过/一定不过」的判据。指针：`gates/last.json` 的 `pytest_mode`/`workers` 字段。③ ★ **`tools/wb_impact.py` 只接进「派活前置 + 复核侧」**，**没有**接进门禁本身 ⇒ 它挡的是「改这个文件会影响哪些门」，不是「门跑不跑」。指针：`tools/wb_impact.py`。④ ★ **域外新文件一例**：工人新写了 `tests/test_door_inputs_coverage.py`（本次才出现的钉子文件）⇒ 主控按口径**显式改域 + 写明理由**后补进预声明（第 5 次同模式）。指针：`gates/diag/batch/B-COVERAGE.toml`。"

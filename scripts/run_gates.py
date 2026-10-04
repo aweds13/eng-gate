@@ -339,10 +339,10 @@ DOOR_INPUTS: dict[str, tuple[str, ...]] = {
     #    出处：命令见 `NODE_CMD`（render/ui_flow/ui_dom_probe）与 `REAL_PY`（两个 live 门）；
     #    输入与 T-G47 的 `REUSE_INPUTS` 同源（`REUSE_INPUTS` 就是从这里取的那 5 道）。
     "render": ("src/**", "tools/render_check.mjs", "tools/tf_browser.mjs", "tools/serve.py",
-               "gates/render/*.txt"),
+               "tools/render_signatures.json", "gates/render/*.txt"),
     "ui_flow": ("src/**", "tools/ui_flow_check.mjs", "tools/tf_browser.mjs", "tools/serve.py"),
     "lf1_live": ("src/**", "tools/lf1_live_check.py", "tools/serve.py"),
-    "web_live": ("src/**", "tools/web_live_check.py", "tools/serve.py"),
+    "web_live": ("src/**", "tools/web_live_check.py", "tools/phone_check.mjs", "tools/serve.py"),
     "ui_dom_probe": ("src/web/**", "tools/ui_dom_probe.mjs"),
     # —— 静态审美/文案门（见 `COMMON`）：只读 `src/web` 的令牌与文案 ——
     #    出处：`tools/contrast_audit.py` 的 CSS/BASELINE 常量（CSS=src/web/app.css）、
@@ -425,6 +425,40 @@ def input_hash(patterns: tuple[str, ...]) -> str:
         digest.update(b"\0")
         digest.update(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).digest())
     return digest.hexdigest()[:16]
+
+
+# ---- 门输入字面路径必须 git 跟踪（卡 161 §4 / INV-73）----
+# gitignored / 没 pin 的输入（`.uiux-skill-probe/` 那类）换个机器就变成
+# 「在别人机器上不存在」的检查 ⇒ 门禁结果依赖机器状态、不可复现。门表里出现的
+# 字面路径（非 glob）一律要求 git 跟踪；glob 由 `--affected` 与复用哈希各自把关。
+
+def _is_literal_path(pattern: str) -> bool:
+    """这条门输入是字面路径（不是 glob）吗？出现 `*` `?` `[` 即视为 glob。"""
+    return not any(c in pattern for c in "*?[")
+
+
+def door_input_violations(
+    door_inputs: Mapping[str, tuple[str, ...]] | None = None,
+) -> list[str]:
+    """门输入表里的**字面路径**必须是 git 跟踪的。
+
+    返回违规字面路径（仓库相对、POSIX 斜杠）；空 = 全部合规。
+    ★ 只读 `DOOR_INPUTS`（默认）或传入的表 —— 不写第二份门表（钉子⑤钉死这条）。
+    """
+    table = DOOR_INPUTS if door_inputs is None else door_inputs
+    literals = sorted({p for pats in table.values() for p in pats if _is_literal_path(p)})
+    if not literals:
+        return []
+    proc = subprocess.run(  # noqa: S603 —— 参数写死，无 shell
+        ["git", "-c", "core.quotepath=false", "ls-files", "--", *literals],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+        # ★ 防窗旗：Windows 上别让这条 git 弹控制台窗口（POSIX 上 `getattr` 落到 0 = 无操作）。
+        #   ★ 为什么不登记进 `tests/test_no_window.py` 的 EXEMPT：那表是**白名单外改不了**的欠账，
+        #   而本文件在卡 161 自己的域里 ⇒ 能加旗就加旗，别把债留给下一张卡。
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    tracked = {ln.strip() for ln in proc.stdout.splitlines() if ln.strip()}
+    return [p for p in literals if p not in tracked]
 
 
 def load_reuse() -> dict[str, dict[str, str]]:
@@ -1066,6 +1100,34 @@ def door_timeout() -> float | None:
     return val
 
 
+# 卡 161 §2：慢门软预算（**告警**，不阻断——硬超时仍由 `door_timeout()` 掐）。
+# 默认 600 秒：一道门跑过 10 分钟就该被点名（pytest 1 worker 实测 612s 会踩这条），
+# 让"我手打 1 个 worker"从静默变成会被发现的事。`=0` 关掉告警。
+DEFAULT_DOOR_BUDGET = 600.0
+
+
+def door_budget() -> float | None:
+    """单门慢告警阈值（秒）；`None` = 不告警。
+
+    - 不设 `TF_GATE_DOOR_BUDGET` → 默认 `DEFAULT_DOOR_BUDGET`（600 秒）；
+    - 设了且 > 0 → 用该值；`0` → `None` = 关掉告警；
+    - 设了但不是数字 → 打警告并退回默认（**不许静默**）。
+    ★ 与 `door_timeout()` 是两件事：硬超时掐门、软预算只点名。
+    """
+    raw = os.environ.get("TF_GATE_DOOR_BUDGET", "").strip()
+    if not raw:
+        return DEFAULT_DOOR_BUDGET
+    try:
+        val = float(raw)
+    except ValueError:
+        print(f"[WARN] TF_GATE_DOOR_BUDGET={raw!r} 不是数字 → 退回默认 "
+              f"{DEFAULT_DOOR_BUDGET:g} 秒", file=sys.stderr, flush=True)
+        return DEFAULT_DOOR_BUDGET
+    if val <= 0:
+        return None
+    return val
+
+
 def _fmt_secs(value: float) -> str:
     """秒数的**人话**写法：整数就不带小数点（3 而不是 3.0）；否则留有效位。"""
     return str(int(value)) if float(value).is_integer() else f"{value:g}"
@@ -1471,6 +1533,18 @@ def main() -> int:
         print(f"[FAIL] 内存闸拒跑：{mem_problem}", flush=True)
         return 3
 
+    # ★ 卡 161 §4（INV-73）：门输入表里的**字面路径**必须 git 跟踪 ——
+    # gitignored / 没 pin 的输入换个机器就变「在别人机器上不存在」的检查 ⇒ 不可复现。
+    # 违规就拒跑（退出码 1），不静默。glob（`src/**`）不在此列。
+    input_violations = door_input_violations()
+    if input_violations:
+        print(f"[FAIL] 门输入表里有 {len(input_violations)} 个字面路径未被 git 跟踪：",
+              flush=True)
+        for p in input_violations:
+            print(f"  - {p}", flush=True)
+        print("  （gitignored 的输入要么删掉、要么显式豁免并写理由）", flush=True)
+        return 1
+
     jobs = build_jobs(args.quick, args.fast)
 
     # ★ T-G239（卡 140）：`--affected` / `--changed-from` —— **只裁门名单**，不碰别处。
@@ -1686,6 +1760,20 @@ def main() -> int:
         "docs_sync_ok": ok_docs,
         "docs_sync_missing": missing,
         "ok": ok,
+        # ★ 卡 161 §2（INV-24）：跑法落盘 —— worker 数与跑法一目了然，
+        #   让"我手打 1 个 worker（pytest 612s 占全趟 86%）"从静默变成会被发现的事。
+        #   ★ worker 数只读 `pytest_workers()` 一处（不写第二份口径）。
+        "workers": pytest_workers(),
+        "pytest_mode": mode,
+        # 慢门清单（卡 161 §2 验收）：把「哪道门多少秒」打出来——"盯着慢"的第一份真读数。
+        #   阈值 `TF_GATE_DOOR_BUDGET`（默认 600s，`=0` 关）；告警不阻断
+        #   （硬超时仍由 door_timeout 掐）。
+        "slow_doors": sorted(
+            [{"name": r["name"], "seconds": r.get("seconds", 0)}
+             for r in results
+             if r.get("seconds") and (door_budget() is None or r["seconds"] >= door_budget())],
+            key=lambda x: x["seconds"], reverse=True,
+        ),
         "gates": results,
         # 没验证成的门（当前只有渲染层会遇到：起不了真浏览器）。**不是"通过"**，
         # 单列一栏 + 写进 trailer，让"这次提交哪些东西没被验证过"有据可查。

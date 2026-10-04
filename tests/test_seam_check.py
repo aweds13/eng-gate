@@ -216,3 +216,56 @@ def test_false_positive_pair_has_no_intersection() -> None:
     """RC 那对假反例合起来也不许再出交集（原先是 exit 1 的假串行）。"""
     cards = _cards(("a", DIFF_COMMENT), ("b", DIFF_IN_STRING))
     assert sc.find_common(cards) == {}
+
+
+# ---- 卡 161 §6：从「推荐」变「硬门」（classify_intersections 复用 dependency_path）----
+
+from pool.plan import Card  # noqa: E402
+
+
+def _card(cid: str, depends: tuple[str, ...] = ()) -> Card:
+    """造一张桩卡（只填 id 与 depends，其余字段给占位值）。"""
+    return Card(
+        id=cid, task="t", title="ttl", tree="", spec="",
+        files=("src/**",), depends=depends,
+    )
+
+
+def test_intersection_with_dependency_path_is_allowed() -> None:
+    """★ 卡 161 §6：两卡符号相交 + 有依赖路径 ⇒ 允许（topo 会分层、不会同批）。
+
+    这是「从推荐变硬门」的核心：有依赖路径时不再误拒（卡 157 的 dependency_path 救它）。
+    """
+    common = {"_write_myday_rank": ["022", "126"]}
+    cards = [_card("022", depends=("126",)), _card("126")]
+    allowed, rejected = sc.classify_intersections(common, cards)
+    assert allowed == [("_write_myday_rank", "022", "126")]
+    assert rejected == []
+
+
+def test_intersection_without_dependency_path_is_rejected() -> None:
+    """★ 卡 161 §6：两卡符号相交 + 没有依赖路径 ⇒ 拒（真冲突）。"""
+    common = {"_write_myday_rank": ["022", "126"]}
+    cards = [_card("022"), _card("126")]  # 互不依赖
+    allowed, rejected = sc.classify_intersections(common, cards)
+    assert allowed == []
+    assert rejected == [("_write_myday_rank", "022", "126")]
+
+
+def test_card_not_in_backlog_is_rejected() -> None:
+    """卡不在 backlog 里 ⇒ 查不了依赖 ⇒ 按没有依赖路径处理（fail closed，不静默放过）。"""
+    common = {"fn": ["ghost", "022"]}
+    cards = [_card("022")]  # backlog 里只有 022，没有 ghost
+    allowed, rejected = sc.classify_intersections(common, cards)
+    assert allowed == []
+    assert rejected == [("fn", "ghost", "022")]
+
+
+def test_transitive_dependency_allows_intersection() -> None:
+    """传递依赖也算（a→b→c，a 与 c 相交 ⇒ 允许）。"""
+    common = {"fn": ["a", "c"]}
+    cards = [_card("a", depends=("b",)), _card("b", depends=("c",)), _card("c")]
+    allowed, rejected = sc.classify_intersections(common, cards)
+    assert allowed == [("fn", "a", "c")]
+    assert rejected == []
+

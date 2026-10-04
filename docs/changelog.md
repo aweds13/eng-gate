@@ -1,3 +1,11 @@
+## 2026-10-04 —— 门的输入面与跑法：补全输入表 + 慢门告警 + `wb_impact` 接进前置（T-G261 / 卡 161）
+
+- `scripts/run_gates.py` +86/-2：`DOOR_INPUTS`/`REUSE_INPUTS` 补 `render_signatures.json` / `phone_check.mjs`
+  （真读数：`render` 与 `web_live` **真读**这两个文件，而它们原先不在输入表里 ⇒ 改它们不会让复用失效）；
+  `gates/last.json` 记 `pytest_mode` / `workers`；单门秒数超预算 ⇒ 进 `slow_doors`（告警，不红）。
+- `tools/seam_check.py` +77/-4：从"推荐"升为**硬门**（按符号相交且无依赖路径 ⇒ 拒）。
+- `tests/test_seam_check.py` +53 · 新增 `tests/test_door_inputs_coverage.py`（覆盖面钉子）。
+- ★ 第一手：`pytest tests/test_seam_check.py tests/test_door_inputs_coverage.py` ⇒ **29 passed**；`ruff` 干净。
 ## 2026-10-03 —— 坑总账与不变量台账落档：344 条坑 + 77 条不变量进 git（T-G265 / 卡 165）
 
 - **坑总账建档**：7 个只读工人把 218 份复盘按门类分片读完，机器逐条解析出 **344 条坑**（工人自报合计 314，差额 30 条是几份报告的统计行少算了自己列出的条目 —— 这条差额本身就是「数字手抄」那类坑的又一次现场），按**归位点**分成 8 类 + 共因 Top5。

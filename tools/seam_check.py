@@ -37,6 +37,18 @@ import subprocess
 import sys
 import tokenize
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+# 卡 161 §6：复用 `pool.plan` 的依赖判据（卡 157 收敛成的唯一实现）—— 不写第二份。
+ROOT = Path(__file__).resolve().parent.parent
+for _extra in (ROOT / "tools",):
+    if str(_extra) not in sys.path:
+        sys.path.insert(0, str(_extra))
+from pool.plan import Card, dependency_path, load_backlog  # noqa: E402
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # 只在这些路径里找符号（与卡的口径一致：实现层 + 测试层；文档不算契约）
 ALLOWED_PREFIXES = ("src/", "tools/", "scripts/", "tests/")
@@ -324,6 +336,36 @@ def find_common(
     return {n: cs for n, cs in where.items() if len(cs) >= 2}
 
 
+def classify_intersections(
+    common: dict[str, list[str]],
+    cards: Sequence[Card],
+) -> tuple[list[tuple[str, str, str]], list[tuple[str, str, str]]]:
+    """把交集按「两卡之间有没有依赖路径」分两类（卡 161 §6）。
+
+    返回 ``(allowed, rejected)``，每条 = ``(符号, 卡 a, 卡 b)``：
+      - **allowed** = 两卡之间有依赖路径 ⇒ ``topo_layers()`` 会分层、
+        ``greedy_pack()`` 不跨层 ⇒ 两卡不可能同批 ⇒ 接缝由「先跑的那张定调」消化，不拒；
+      - **rejected** = 没有依赖路径 ⇒ 真冲突，拒。
+
+    ★ 复用 ``pool.plan.dependency_path``（卡 157 收敛成的唯一依赖判据）—— **不写第二份**。
+    若某张卡不在 backlog 里（``by_id`` 查不到）⇒ 查不了依赖 ⇒ 按没有依赖路径处理（拒）。
+    """
+    by_id = {c.id: c for c in cards}
+    allowed: list[tuple[str, str, str]] = []
+    rejected: list[tuple[str, str, str]] = []
+    for sym, owners in common.items():
+        for i, a in enumerate(owners):
+            for b in owners[i + 1:]:
+                ca = by_id.get(a)
+                cb = by_id.get(b)
+                if (ca is not None and cb is not None
+                        and dependency_path(ca, cb, cards)):
+                    allowed.append((sym, a, b))
+                else:
+                    rejected.append((sym, a, b))
+    return allowed, rejected
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="跨卡接缝预检：按符号取交集（定义/桩替换对象/形参）",
@@ -331,6 +373,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--card", action="append", required=True, metavar="名字=sha",
         help="一张卡的提交，可重复给多张（如 --card 022=5f51806）",
+    )
+    parser.add_argument(
+        "--backlog", metavar="路径",
+        default=str(ROOT / "docs" / "workbacklog.toml"),
+        help="backlog 文件（读 `depends` 判依赖路径；默认 docs/workbacklog.toml）",
     )
     args = parser.parse_args(argv)
     cards = parse_cards(args.card)
@@ -346,12 +393,38 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[卡 {name}={sha}] 符号：{parts}")
 
     common = find_common(card_symbols)
+
+    # 卡 161 §6：从「推荐」变「硬门」—— 交集且没有依赖路径 ⇒ 拒。
+    # 有依赖路径（卡 157 的判据）⇒ topo 会分层、不会同批 ⇒ 允许。
+    backlog_cards: tuple[Card, ...] = ()
+    if args.backlog:
+        try:
+            backlog_cards = tuple(load_backlog(Path(args.backlog)).cards)
+        except FileNotFoundError:
+            # backlog 不在 ⇒ 退化成老口径（有交集就拒），不静默放过
+            print(f"[注意] backlog {args.backlog} 不存在 → 不判依赖路径（有交集即拒）",
+                  file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001 —— backlog 坏了如实说，不静默放过
+            print(f"[注意] backlog 读取失败（{exc}）→ 不判依赖路径（有交集即拒）",
+                  file=sys.stderr)
+
+    if backlog_cards:
+        allowed, rejected = classify_intersections(common, backlog_cards)
+        for sym, a, b in allowed:
+            print(f"[交集] {sym} ← {a}、{b}（有依赖路径 ⇒ 允许，topo 会分层）")
+        for sym, a, b in rejected:
+            print(f"[交集] ★ {sym} ← {a}、{b}"
+                  f" → 没有依赖路径，必须串行，或后一张基于前一张重做")
+        if rejected:
+            return 1
+        print("[交集] 全部交集都有依赖路径（允许）" if allowed else "[交集] 无交集")
+        return 0
+
+    # backlog 没读成：老口径（有交集即拒）
     if common:
         for name, owners in common.items():
-            print(
-                f"[交集] ★ {name} ← 出现在 {'、'.join(owners)}"
-                f" → 必须串行，或后一张基于前一张重做"
-            )
+            print(f"[交集] ★ {name} ← 出现在 {'、'.join(owners)}"
+                  f" → 必须串行，或后一张基于前一张重做")
         return 1
     print("[交集] 无交集")
     return 0

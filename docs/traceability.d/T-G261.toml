@@ -1,0 +1,13 @@
+[entries."T-G261"]
+id = "T-G261"
+title = "门的输入面与跑法：补全输入表 + 慢门预算告警 + seam_check 从推荐变硬门"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/run_gates.py",
+  "file:tools/seam_check.py",
+  "file:tests/test_seam_check.py",
+  "file:tests/test_door_inputs_coverage.py",
+]
+gaps = "① ★ **门的输入表是「唯一真源」，本笔又给它加了两条输入**（`render_signatures.json`、`phone_check.mjs`）⇒ 以后**别再另写一份输入表**（`DOOR_INPUTS` 派生自 `COMMON`/`REUSE_INPUTS`，钉子会咬）。指针：`scripts/run_gates.py`。② ★ **慢门告警是「告警」不是「闸」**：`pytest` 超预算只进 `slow_doors`、**不红**（工人实测 `budget=50s` 时 `88.74s` 被记录）。⇒ 别把它当「跑得慢就一定过/一定不过」的判据。指针：`gates/last.json` 的 `pytest_mode`/`workers` 字段。③ ★ **`tools/wb_impact.py` 只接进「派活前置 + 复核侧」**，**没有**接进门禁本身 ⇒ 它挡的是「改这个文件会影响哪些门」，不是「门跑不跑」。指针：`tools/wb_impact.py`。④ ★ **域外新文件一例**：工人新写了 `tests/test_door_inputs_coverage.py`（本次才出现的钉子文件）⇒ 主控按口径**显式改域 + 写明理由**后补进预声明（第 5 次同模式）。指针：`gates/diag/batch/B-COVERAGE.toml`。"
+
