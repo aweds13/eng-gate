@@ -112,3 +112,45 @@
 凡写「文献里没有 X」必须附检索词与检索范围 —— 否则不可复核 = 自证清白。
 本文件引用的文献结论都是**设计输入**，不是产物的读数；要照某条改代码前先打开原文核（二手证据）。
 
+## G1~G10 · 可控性与安全修改（卡 186 / T-G286）
+
+> 一句话（照 `复盘/框架-可控性与安全修改.md`）：**不是追求完美，是让偏差被看见、
+> 被限制、可回收**。本框架只管 G1/G3/G5/G7/G8/G9/G10 这一侧；G2/G4/G6 由本仓的
+> 卡 160 / 162 / 156 管（闭环可判 / 债务带利息 / 证据要新鲜）。
+
+| G | 文件::符号 | 产物字段 | 反例钉子 |
+|---|---|---|---|
+| **G1** 架构级 fitness | `fitness.py::architecture_fitness`（四条：`layered_dependencies_no_backflow` / `no_project_specific_imports` / `dangling_references` / `directory_discipline`） | `FitnessViolation{constraint,where,detail}` | `test_g1_layered_backflow_is_red` 等 4 条：造倒流 / 造项目 import / 造悬空引用 / 造缺目录 ⇒ 各红 |
+| **G3** 多样性不许削减 | `fitness.py::diversity_not_reduced` | `FitnessViolation{constraint="G3·多样性削减"}` | `test_g3_reduction_without_justification_is_red`：砍门无论证 ⇒ 红（依据 [2510.20041]） |
+| **G5** 可转换性分类 | `migration.py::validate_checklist` + `FRAMEWORK_MIGRATION` | `checklist_to_dict(){items,violations,ok}` | `test_g5_reversible_without_rollback_is_red` 等：缺回滚 / 不可逆没写「无」 ⇒ 红 |
+| **G7** 拒绝点活性扫描 | `fitness.py::classify_refusal_scan` / `refusal_site_mutation` | `MutationReading{site,subject,original_verdict,mutated_verdict,is_vacuous_pass}` | `test_g7_refusal_scan_has_vacuous_pass`：删「empty」拒绝点 ⇒ collected=0 本该 inconclusive 却变 pass（★ 现成读数） |
+| **G8** 三个数分开报 | `evidence.py::metrics_from_runs` / `Metrics.to_dict` | `{false_positive_rate,false_negative_rate,rerun_rate}` 各含 `{numerator,denominator,ratio}` | `test_g8_degenerate_green_only_is_caught`：只报 `ok` 的退化产物被 `metrics_complete` 咬住 |
+| **G9** 验证器脆弱性 | `fitness.py::verifier_stable_under_reorder` | `EquivalenceReading{stable,detail}` | `test_g9_fragile_validator_is_caught`：脆弱验证器（依赖 dict 顺序）被等价重排改判 ⇒ 钉子有牙 |
+| **G10** 复核面 | `review.py::run_review` + `ReviewConfig` + 检查面（`outside_allow` / `check_gate_evidence` / `check_full_gate_run` / `check_gates_trailer_truth` / `check_branch` / `check_seal_tree`） | `ReviewVerdict{landed,problems,notes,readings}` + `exit_code()` | ① `test_g10_nail_no_review_record_not_landed` ② `test_g10_nail_rev_mismatch_is_red` ③ `test_g10_nail_affected_block_is_red_with_original` |
+
+### G7 现成读数（贴出）
+
+对框架自己的三值判决 `gates.classify` 做拒绝点活性扫描，删掉「空集 ⇒ inconclusive」拒绝点后：
+
+```
+site(empty)被删  subject=collected=0,exit=0
+原判 = inconclusive（空集：一条样例都没收集到 —— 不许当绿）
+删后 = pass（退出码 0 在 exit_ok 内）  ⇒ ★ vacuous pass：本该不绿却变绿
+```
+
+★ 文献 [2608.26183] 说「对验证器自身拒绝逻辑做活性测试，比对具体 bug 写回归测试有效得多」；
+★ 文献里**没有现成工具** —— 这是本框架自研的差异化能力。
+
+### G10 复核面（`pipe review`）
+
+`pipe review` 的库实现是 `review.py::run_review`：输入「一次集成的结果 + 卡的权威域」，
+输出 `ReviewVerdict`（能不能算这一笔 + 稳定 `--json` + 退出码照卡 177 的表）。
+`pipeline.toml` 的 `[review]` 段字段（`who`/`what`/`where`/`on_fail`）由 `ReviewConfig` 定义，
+schema 接线由后续卡做（本卡白名单不含 `pipeline.schema.json`）。
+本仓的 `tools/wb_review.py` + `tools/pool/review.py` 是那个零件，本卡把它**抽空进库**
+（路径 / 常量由调用方传，库里不写死本仓路径）。
+
+### 证据缺口（如实上，照文书 §四）
+
+文献里**没有** CI 门禁可靠性的 SLO 定义、**没有**「规则被删仍变绿」的现成检测工具、
+**没有**变异门禁的工业成本数据 ⇒ G7 是本框架自己补的洞，不是照抄。

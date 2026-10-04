@@ -23,6 +23,14 @@
 - 新增 3 份钉子：`test_selection.py` · `test_full_run_capture.py` · `test_silent_failure_family.py`；
   `framework/PIPELINE.md` +39（"验证分层 F1~F11"一节）。
 - ★ 第一手：`pytest framework/tests` ⇒ **99 passed**（基线 55 ⇒ 新增 44 条）。
+## 2026-10-04 —— 框架的可控性与安全修改（G1~G10）（T-G286 / 卡 186）
+
+- 新增 `framework/src/framework/fitness.py`（G1 架构级 fitness：分层依赖不许倒流 / framework 不许 import 项目代码 /
+  证据不许指向不存在的路径 / 目录纪律）· `evidence.py`（G8 假红率·漏检率·重跑率**分开报**）·
+  `migration.py`（G5 可转换性分类：可逆 / 一次性 / 不可逆 + 回滚手段）· `review.py`（G10 评审侧）。
+- 新增 3 份钉子：`test_fitness_functions.py` · `test_meta_verification.py` · `test_evidence_freshness.py`；
+  `framework/PIPELINE.md` 加「G1~G10」一节 + **证据缺口三条**（如实写明文献里没什么）。
+- ★ 第一手：`pytest framework/tests` ⇒ **150 passed**（185 的 99 + 本卡）。
 ## 2026-10-03 —— 坑总账与不变量台账落档：344 条坑 + 77 条不变量进 git（T-G265 / 卡 165）
 
 - **坑总账建档**：7 个只读工人把 218 份复盘按门类分片读完，机器逐条解析出 **344 条坑**（工人自报合计 314，差额 30 条是几份报告的统计行少算了自己列出的条目 —— 这条差额本身就是「数字手抄」那类坑的又一次现场），按**归位点**分成 8 类 + 共因 Top5。

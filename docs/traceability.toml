@@ -5857,3 +5857,20 @@ evidence = [
   "file:framework/PIPELINE.md",
 ]
 gaps = "① ★★ **验收对象是「框架」而不是「本仓的门」**：F1~F11 折进的是 `framework/` 那一侧的判据（选择率+召回 / 兜底捕获率 / 动态读数 / 无关失败），**本仓自己的 18 道门不受它影响**。指针：`framework/src/framework/gates.py`。② ★ **本仓门禁的 ruff/mypy 不扫 `framework/`**（那是独立子项目，有自己的 `pyproject.toml`）⇒ 本笔**在框架那侧没有静态检查兜底**；框架自己的 lint 谁管，本笔没回答。指针：`pyproject.toml` 的 ruff 扫描面。③ ★ **F10 那条纪律是「自证清白」类**：凡写「文献里没有 X」必须附检索词与检索范围 —— 它管的是**文档措辞**，不拦代码。指针：`framework/PIPELINE.md`。④ ★ **本笔与卡 186 同写 `framework/PIPELINE.md`**：本笔先落，186 后落时要拿「落地版 + 它自己的改动」合。指针：`framework/PIPELINE.md`。"
+
+[entries."T-G286"]
+id = "T-G286"
+title = "框架的可控性与安全修改（G1~G10）：架构级 fitness + 拒绝点活性 + 可转换性分类"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:framework/src/framework/fitness.py",
+  "file:framework/src/framework/evidence.py",
+  "file:framework/src/framework/migration.py",
+  "file:framework/src/framework/review.py",
+  "file:framework/tests/test_fitness_functions.py",
+  "file:framework/tests/test_meta_verification.py",
+  "file:framework/tests/test_evidence_freshness.py",
+  "file:framework/PIPELINE.md",
+]
+gaps = "① ★★ **G7（拒绝点活性扫描）是「自己补的洞」**：文献里**没有**现成的「规则被删仍变绿」检测工具 ⇒ 这一条是本框架**自己设计的**，不是照抄；它的强度**没有被外部标准校准过**。指针：`framework/src/framework/fitness.py`。② ★★ **G10 的评审侧是「抽空进库」**：本仓的 `tools/wb_review.py` + `tools/pool/review.py` 是那个零件，本卡把它抽进框架（路径/常量由调用方传，库里不写死本仓路径）⇒ ★ **本仓那份还在原地**，两份的关系要人记。指针：`framework/src/framework/review.py`。③ ★ **G3（多样性不许被削减）只能「要论证」，不能「证明没削减」**：它要求提速改动若减少门数或兜底**必须有显式论证记录**，判据只到「有没有记录」 ⇒ **论证本身对不对**判不了。指针：`framework/PIPELINE.md`。④ ★ **证据缺口三条如实上**：文献里没有 CI 门禁可靠性的 SLO 定义、没有「规则被删仍变绿」的现成检测工具、没有变异门禁的工业成本数据。指针：`framework/PIPELINE.md` 的「证据缺口」节。⑤ ★ **与 185 同写 `framework/PIPELINE.md`**：本笔取「落地版 + 本卡改动」手工合（两节独立，无冲突）⇒ 口径同 162 那笔。指针：本笔的 `git apply` 记录。"
