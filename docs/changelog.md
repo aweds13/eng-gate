@@ -31,6 +31,13 @@
 - 新增 3 份钉子：`test_fitness_functions.py` · `test_meta_verification.py` · `test_evidence_freshness.py`；
   `framework/PIPELINE.md` 加「G1~G10」一节 + **证据缺口三条**（如实写明文献里没什么）。
 - ★ 第一手：`pytest framework/tests` ⇒ **150 passed**（185 的 99 + 本卡）。
+## 2026-10-04 —— 收口链支持增量门禁（`--affected`）+ 三条强制全量 + 如实披露（T-G284 / 卡 184）
+
+- `tools/pool/landing.py` +268/-6：`--affected` 判据本体（`JUDGE_BODY_GLOBS` = `scripts/** tools/** gates/**`
+  任一被碰 ⇒ 强制全量；空计划 ⇒ 全量；每日首趟 ⇒ 全量）+ 增量分支写 `affected` 块 + trailer 如实披露。
+- `tools/wb_land.py` +7/-1（新开关的接线）· `tests/test_wb_land.py` +371/-3（**23 条**钉子，含四条强制全量）·
+  新增 `复盘/收口-增量门禁.md`（方案与边界）。
+- ★ 第一手：`pytest tests/test_wb_land.py` ⇒ **23 passed**；`ruff` 干净。
 ## 2026-10-03 —— 坑总账与不变量台账落档：344 条坑 + 77 条不变量进 git（T-G265 / 卡 165）
 
 - **坑总账建档**：7 个只读工人把 218 份复盘按门类分片读完，机器逐条解析出 **344 条坑**（工人自报合计 314，差额 30 条是几份报告的统计行少算了自己列出的条目 —— 这条差额本身就是「数字手抄」那类坑的又一次现场），按**归位点**分成 8 类 + 共因 Top5。

@@ -160,15 +160,18 @@ def test_default_job_list_and_table_shape_are_pinned() -> None:
 # ------------------------------------------------------------------ ⑥ 收口链仍走全量（防呆）
 
 
-def test_landing_chain_never_passes_affected() -> None:
-    """★★ 防呆：收口链**不许**把 `--affected` 透传出去 —— 别让"自查提速"从后门变成"提交前漏门"。"""
-    for rel in ("tools/wb_land.py", "tools/pool/landing.py"):
-        text = (ROOT / rel).read_text(encoding="utf-8")
-        assert "--affected" not in text, f"{rel} 里出现了 --affected（收口链不许漏门）"
+def test_landing_chain_may_use_affected_only_with_mandatory_full_runs() -> None:
+    """★★ 防呆（**卡 184 起更新**；原「收口链永不许传 `--affected`」由卡 161 立）。
 
+    161 那条的原意是：别让「自查提速」从后门变成「提交前漏门」。**卡 184 把这条前提取代了** ——
+    收口链**可以**用 `--affected` 提速，但**三条强制全量**必须在：
+    碰判据体（`scripts/**` / `tools/**` / `gates/**`）/ 空计划 / 每日首趟。
+    ⇒ 本测试改为钉**新契约**，而不是继续禁一个已经合法的东西。
+    """
     landing = (ROOT / "tools" / "pool" / "landing.py").read_text(encoding="utf-8")
-    # 收口跑门禁的那条命令就是**无参数**的 `scripts/run_gates.py`（全量）
-    assert '"scripts/run_gates.py"' in landing
+    assert "--affected" in landing, "卡 184 的增量通道应当在收口链里"
+    assert "JUDGE_BODY_GLOBS" in landing, "★ 强制全量的判据体（碰判据/门/收口链自己 ⇒ 全量）必须在"
+    assert "全量门禁绿" in landing, "★ 全量分支的字面「全量门禁绿」一字未动（卡 133 的钉子钉着它）"
 
 
 # ------------------------------------------------------------------ glob 语义（判据的地基）

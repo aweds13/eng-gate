@@ -49,7 +49,9 @@ r"""钉 `tools/wb_land.py`（收口链搬进 git；卡 139 · `T-G237`）。
 
 from __future__ import annotations
 
+import datetime
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -65,10 +67,13 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / "tools"
 
 #: 拷进假仓库的新工具（相对仓库根）—— 权威副本 + 命令行壳，一个不少。
+#: ★ 卡 184：加 `tools/pool/review.py` —— landing.py 的 _touched_paths / _touched_judge_body
+#:   会 `from pool.review import changed_paths / outside_allow`，假仓库里没有它就 ImportError。
 _NEW_TOOLS = (
     "tools/wb_land.py",
     "tools/pool/__init__.py",
     "tools/pool/landing.py",
+    "tools/pool/review.py",
     "tools/wb_stage_card.py",
     "tools/pool/stage_card.py",
 )
@@ -152,6 +157,121 @@ print("stub-run_gates")
 sys.exit(0)
 """
 
+#: ★ 卡 184 钉子用的「增量门禁」桩（比 _RUN_GATES 多三件事）：
+#:   ① 记下 argv（断言 --affected 有没有传到 run_gates 这一层）；
+#:   ② 写一份真模样的 gates/last.json —— 跑过 --affected ⇒ 加 affected 块（卡 147 护栏读的就是它）；
+#:   ③ 提供 build_jobs / plan_affected 让 landing.py 的 _affected_plan 能 import（不 exit）。
+#:   ★ plan_affected 的匹配口径（够测试用，不复制 run_gates 的正则）：
+#:     pat='code/**' ⇒ path 以 'code/' 开头算命中；其它不命中。
+#:     「code/」命中 ⇒ 跑 pytest 一道；其它路径 ⇒ full_fallback（空计划）。
+_RUN_GATES_AFFECTED = '''import json, pathlib, sys
+
+DOOR_INPUTS = {"pytest": ("code/**",), "ruff": ("src/**",), "render": ("src/web/**",)}
+
+
+class AffectedPlan:
+    def __init__(self, ran, matched, skipped, full_fallback, note, inputs=()):
+        self.ran = tuple(ran)
+        self.matched = tuple(matched)
+        self.skipped = tuple(skipped)
+        self.full_fallback = full_fallback
+        self.note = note
+        self.inputs = tuple(inputs)
+
+    def to_payload(self):
+        return {"ran": list(self.ran), "matched": list(self.matched),
+                "skipped": [{"name": n, "why": w} for n, w in self.skipped],
+                "full_fallback": self.full_fallback, "note": self.note,
+                "inputs": list(self.inputs)}
+
+
+def build_jobs(quick, fast):
+    return [("pytest", []), ("ruff", []), ("render", [])]
+
+
+def _norm(p):
+    p = p.strip()
+    while p.startswith("./"):
+        p = p[2:]
+    return p.rstrip("/")
+
+
+def _match(path, pat):
+    prefix = pat.rstrip("/*")
+    n = _norm(path)
+    return n == prefix or n.startswith(prefix + "/")
+
+
+def plan_affected(paths, doors, door_inputs=None):
+    norm = [p for p in (_norm(p) for p in paths) if p]
+    always = [d for d in doors if d not in DOOR_INPUTS]
+    matched = [d for d in doors if DOOR_INPUTS.get(d) and
+               any(_match(p, pat) for p in norm for pat in DOOR_INPUTS[d])]
+    if not matched:
+        note = "no match -> full" if norm else "empty -> full"
+        return AffectedPlan(doors, (), (), True, note, norm)
+    keep = set(always) | set(matched)
+    ran = [d for d in doors if d in keep]
+    skipped = [(d, "no match") for d in doors if d not in keep]
+    return AffectedPlan(ran, matched, skipped, False, "matched " + str(matched), norm)
+
+
+def _main():
+    args = sys.argv[1:]
+    pathlib.Path("gate_ran.marker").write_text("ran", encoding="utf-8")
+    # ★ 追加（不覆盖）：④ 门禁 + ⑤ seal 都会调本桩，覆盖了就只剩 ⑤ 的 --seal
+    with pathlib.Path("gate_args.txt").open("a", encoding="utf-8") as fh:
+        fh.write(" ".join(args) + "\\n")
+    last_path = pathlib.Path("gates") / "last.json"
+    last_path.parent.mkdir(exist_ok=True)
+    # ★ --seal：真 run_gates 只改 tree/tree_scope/untracked，保留其它字段（含 affected 块）。
+    #   桩照这个口径 —— 读旧 last.json + 改 tree，不覆盖 ④ 写的 affected 块。
+    if "--seal" in args:
+        payload = {}
+        if last_path.exists():
+            try:
+                payload = json.loads(last_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                payload = {}
+        payload["tree"] = "stub-tree"
+        payload["tree_scope"] = "worktree-minus-gates"
+        last_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        print("stub-run_gates-seal")
+        sys.exit(0)
+    doors = [n for n, _ in build_jobs(False, False)]
+    aff = None
+    ran_doors = list(doors)
+    if "--affected" in args:
+        idx = args.index("--affected")
+        aff = plan_affected(args[idx + 1:], doors)
+        ran_doors = list(aff.ran)
+    elif "--changed-from" in args:
+        idx = args.index("--changed-from")
+        aff = plan_affected([args[idx + 1]], doors)
+        ran_doors = list(aff.ran)
+    gates = [{"name": d, "exit_code": 0} for d in ran_doors]
+    payload = {"ok": True, "rev": "", "gates": gates,
+               "tree_scope": "worktree-minus-gates"}
+    if aff is not None:
+        payload["affected"] = aff.to_payload()
+    last_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print("stub-run_gates-affected")
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    _main()
+'''
+
+#: ★ 卡 184 ⑧ 复核桩：输出一份「复核通过」的 JSON（让 landing.py 落盘 gates/review/<task>.json）。
+#:   ★ 不真跑 wb_review（那会 import scripts/run_gates）；这里只测「收口链有没有把结论落盘」。
+_WB_REVIEW = """import json, sys
+print(json.dumps({"rev": "HEAD", "problems": []}, ensure_ascii=False, indent=2))
+sys.exit(0)
+"""
+
 _ENV = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
 
 
@@ -190,11 +310,14 @@ def _stage_tools(repo: Path) -> None:
 
 
 def _mk_repo(tmp: Path, card_specs_pass: bool = True, sync_docs_body: str | None = None,
-             stage_card_body: str | None = None) -> Path:
+             stage_card_body: str | None = None, run_gates_body: str | None = None,
+             wb_review_body: str | None = None) -> Path:
     """造一个「够收口链走到 ⑥」的最小假仓库：共享文档 + 桩 + 新工具 + 文书模板。
 
     `sync_docs_body` / `stage_card_body`：给真桩换**行为桩**（卡 150 的幂等钉子用）——
     在 `_stage_tools` 拷完真工具**之后**覆写，只影响用到它们的测试。
+    `run_gates_body` / `wb_review_body`（卡 184）：换门禁桩 / 复核桩 —— 在初始提交里就位，
+    免得 stub swap 本身变成卡树改动（会撞 ②.1 判据本体 ⇒ 强制全量）。
     """
     repo = tmp / "repo"
     repo.mkdir()
@@ -218,7 +341,9 @@ def _mk_repo(tmp: Path, card_specs_pass: bool = True, sync_docs_body: str | None
                 "scripts/audit_progress.py"):
         _write(repo, rel, _MAYBE)
     _write(repo, "gates/diag/gate_lock.py", _GATE_LOCK)
-    _write(repo, "scripts/run_gates.py", _RUN_GATES)
+    _write(repo, "scripts/run_gates.py", run_gates_body or _RUN_GATES)
+    if wb_review_body is not None:
+        _write(repo, "tools/wb_review.py", wb_review_body)
     body = "def test_ok():\n    assert True\n" if card_specs_pass \
         else "def test_red():\n    assert False\n"
     _write(repo, "tests/test_card_specs_tracked.py", body)
@@ -256,6 +381,18 @@ def _out(done: subprocess.CompletedProcess) -> str:
     return (done.stdout or "") + (done.stderr or "")
 
 
+# ================================================================ 卡 184 钉子用的辅助
+def _write_daily_full(repo: Path, *, today: bool = True, date: str | None = None) -> Path:
+    """写 `gates/diag/_daily_full.json`：today=True ⇒ 今天（让 landing.py 认「今天跑过」）；
+    today=False ⇒ 给一个历史日期（让 landing.py 认「今天还没跑」）。"""
+    d = date or (datetime.date.today().isoformat() if today else "2020-01-01")
+    p = repo / "gates" / "diag" / "_daily_full.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"date": d, "rev": "stub0001", "time": "stub"},
+                            ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return p
+
+
 # ================================================================ ① --help
 def test_help_lists_every_argument() -> None:
     """`--help` 要列出全部参数（少一个 = 旧调用点找不到入口）。"""
@@ -265,7 +402,9 @@ def test_help_lists_every_argument() -> None:
     assert done.returncode == 0, _out(done)
     for flag in ("--card", "--batch", "--tree", "--task", "--title", "--type", "--scope",
                  "--group", "--evidence", "--allow", "--port-base", "--refs",
-                 "--no-gate", "--commit-only", "--no-reset"):
+                 "--no-gate", "--commit-only", "--no-reset",
+                 # ★ 卡 184：增量门禁开关 + ⑧ 复核跳过
+                 "--affected", "--changed-from", "--no-review"):
         assert flag in done.stdout, f"`--help` 少了 {flag}"
     # 文书生成器那一半（同一批搬进来）也照钉
     done2 = subprocess.run(
@@ -501,3 +640,272 @@ def test_reset_warns_and_continues_when_head_unavailable(tmp_path: Path) -> None
     assert "拿不到 HEAD" in out, "回退步骤应当警告并跳过"
     assert "=== ①" in out, "警告之后应当继续，不许停在回退这一步"
     assert "Traceback" not in out
+
+
+# ================================================================ 卡 184（T-G284）增量门禁
+# ★ 四条反例钉子（卡 §三条硬要求 ②）：① 空计划 ⇒ 真退全量；② 增量那一趟 trailer 含「非全量」；
+#   ③ 碰 tools/** ⇒ 强制全量；④ 卡 147 护栏仍咬（增量产物有 affected 块）。
+#   另加：每日全量兜底、⑧ 复核落盘、全量后落盘每日记录。
+
+
+# ----------------------------------------------- ⓭ --help 列新参数（已在 ① 里加了，这里单钉一遍）
+def test_help_lists_incremental_flags() -> None:
+    """`--affected` / `--changed-from` / `--no-review` 三个新参数都要在 `--help` 里。"""
+    done = subprocess.run([sys.executable, "-X", "utf8", str(TOOLS / "wb_land.py"), "--help"],
+                          env=_ENV, capture_output=True, text=True, encoding="utf-8",
+                          errors="replace")
+    assert done.returncode == 0, _out(done)
+    for flag in ("--affected", "--changed-from", "--no-review"):
+        assert flag in done.stdout, f"`--help` 少了卡 184 的新参数 {flag}"
+
+
+# ----------------------------------------------- ⓱ --affected 透传（无强制条件）
+def test_affected_passes_through_when_no_force_full(tmp_path: Path) -> None:
+    """没碰判据本体 + 非空计划 + 今天已跑过全量 ⇒ `--affected` 透传给 run_gates.py。
+
+    ★ 坏掉写法（不透传 / 把 --affected 吞了）：gate_args.txt 里没有 `--affected` ⇒ 钉子红。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")           # 卡树改动：只动 code/（非判据本体）
+
+    done = _wand(repo, "--affected", "code/a.py")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    args = (repo / "gate_args.txt").read_text(encoding="utf-8")
+    assert "--affected" in args and "code/a.py" in args, \
+        f"--affected 没透传到 run_gates：{args!r}"
+    last = json.loads((repo / "gates/last.json").read_text(encoding="utf-8"))
+    assert "affected" in last, "增量那一趟必须写 affected 块（卡 147 护栏读它）"
+    assert "增量" in out and "非全量" not in out.split("=== ⑤")[0]  # 文书那行在 ⑥ 之后才出现
+
+
+# ----------------------------------------------- ⓲ 碰 tools/** ⇒ 强制全量
+def test_touching_tools_forces_full(tmp_path: Path) -> None:
+    """卡树改动里有 `tools/**` 文件 ⇒ 强制全量（不传 --affected）。
+
+    ★ 判据本体改了 = 碰 scripts/** / tools/** / gates/** 里任何文件（卡 184 §②.1）。
+    ★ 坏掉写法（把 --affected 传过去）：gate_args.txt 里有 `--affected` ⇒ 钉子红。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")               # 卡树改动：code/（非判据本体）
+    _write(repo, "tools/extra_notes.md", "notes\n")    # 卡树改动：tools/**（判据本体）
+
+    done = _wand(repo, "--affected", "code/a.py",
+                allow=("code", "tools/extra_notes.md"))
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    args = (repo / "gate_args.txt").read_text(encoding="utf-8")
+    assert "--affected" not in args, \
+        f"碰了 tools/** 就该强制全量（不传 --affected），却传了：{args!r}"
+    assert "强制全量" in out and "判据本体" in out, \
+        "stdout 应当点名「强制全量」+「判据本体」"
+    last = json.loads((repo / "gates/last.json").read_text(encoding="utf-8"))
+    assert "affected" not in last, "全量那一趟不许有 affected 块"
+
+
+# ----------------------------------------------- ⓳ 空计划 ⇒ 强制全量
+def test_empty_plan_forces_full(tmp_path: Path) -> None:
+    """`--affected` 给的路径一条都命不中任何门 ⇒ 空计划 ⇒ 退全量（绝不许空集绿灯）。
+
+    ★ 这是 `Silent Success` 那个「空集绿灯」的同族 —— 本仓已经栽过。
+    ★ 坏掉写法（把 --affected 传过去跑空集）：gate_args.txt 里有 `--affected` ⇒ 钉子红。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")           # 卡树改动只在 code/
+    # --affected 给一个不命中任何门的路径（stub 的门表只认 code/、src/、src/web/）
+    _write(repo, "docs/foo.md", "doc\n")
+    _git(repo, "add", "--", "docs/foo.md")
+
+    done = _wand(repo, "--affected", "docs/foo.md", allow=("code", "docs/foo.md"))
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    args = (repo / "gate_args.txt").read_text(encoding="utf-8")
+    assert "--affected" not in args, \
+        f"空计划该退全量（不传 --affected），却传了：{args!r}"
+    assert "空计划" in out or "强制全量" in out, "stdout 应当点名「空计划」或「强制全量」"
+
+
+# ----------------------------------------------- ⓴ 今天没跑过全量 ⇒ 强制全量
+def test_no_daily_full_forces_full(tmp_path: Path) -> None:
+    """今天还没跑过全量（无每日记录 / 记录是昨天的）⇒ 强制全量（每日一次兜底）。
+
+    ★ 「今天跑过全量没有」必须机器可判，不许靠人记（卡 184 §②.3）。
+    ★ 坏掉写法（让 --affected 透传）：gate_args.txt 里有 `--affected` ⇒ 钉子红。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW)
+    _write_daily_full(repo, today=False)            # 历史日期 ⇒ 今天还没跑
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--affected", "code/a.py")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    args = (repo / "gate_args.txt").read_text(encoding="utf-8")
+    assert "--affected" not in args, \
+        f"今天没跑过全量就该强制全量，却传了 --affected：{args!r}"
+    assert "每日一次兜底" in out or "强制全量" in out, "stdout 应当点名「每日一次兜底」"
+
+
+# ----------------------------------------------- ⓵ 增量 trailer 含「非全量」
+def test_incremental_trailer_says_not_full(tmp_path: Path) -> None:
+    """增量那一趟的提交信息 trailer 必须含「非全量」字样（卡 184 §③ 如实披露）。
+
+    ★ 复用卡 147 的判据与措辞（affected 块照写），不许另写一份「看起来像全量」的话。
+    ★ 全量分支字面「全量门禁绿 + seal」一字不动（卡 133 的 6 个钉子钉着它）。
+    ★ 坏掉写法（增量 trailer 写「全量门禁绿」）：会撞卡 133 钉子 + 这条钉子也红。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--affected", "code/a.py")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    msg = _git(repo, "log", "-1", "--format=%B").stdout
+    assert "非全量" in msg, f"增量 trailer 必须含「非全量」：{msg!r}"
+    assert "全量门禁绿 + seal" not in msg, \
+        "增量 trailer 不许写「全量门禁绿 + seal」（那是全量分支的字面，卡 133 钉着）"
+
+
+# ----------------------------------------------- ⓶ 全量那一趟落盘每日记录
+def test_full_run_marks_daily_full(tmp_path: Path) -> None:
+    """全量那一趟（没给 --affected）跑完 ⇒ 落盘 gates/diag/_daily_full.json（今天跑过了）。
+
+    ★ 「今天跑过全量没有」必须机器可判 —— 落盘是机器判据，不是人记。
+    ★ 坏掉写法（不落盘）：第二趟给 --affected 时 _today_full_done() 仍返回 False ⇒ 强制全量
+      （下一趟该跑增量却跑了全量）。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW)
+    assert not (repo / "gates" / "diag" / "_daily_full.json").exists(), \
+        "初始状态：不该有每日全量记录"
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo)                              # 不给 --affected ⇒ 全量
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    daily = repo / "gates" / "diag" / "_daily_full.json"
+    assert daily.is_file(), "全量那一趟必须落盘每日记录"
+    data = json.loads(daily.read_text(encoding="utf-8"))
+    assert data.get("date") == datetime.date.today().isoformat(), \
+        f"每日记录的 date 应当是今天：{data!r}"
+    assert data.get("rev"), "每日记录的 rev 不该空"
+
+
+# ----------------------------------------------- ⓷ ⑧ 复核落盘 gates/review/<task>.json
+def test_review_step_writes_to_gates_review(tmp_path: Path) -> None:
+    """⑧ 跑 wb_review.py --rev <新提交> --json ⇒ 落盘 gates/review/<task>.json（追加三）。
+
+    ★ 口径照卡 143：「提交之后 · 异步 · 不挡提交」—— 复核失败不回滚已提交的那笔；
+      但 wb_task.py landed 之前必须存在一条复核记录（机器判据）。
+    ★ 坏掉写法（不落盘）：gates/review/<task>.json 不存在 ⇒ 钉子红。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo)                              # 全量那一趟（含 ⑧ 复核）
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    review = repo / "gates" / "review" / "T-G999.json"
+    assert review.is_file(), f"⑧ 复核必须落盘：{review}"
+    verdict = json.loads(review.read_text(encoding="utf-8"))
+    assert "problems" in verdict, f"复核产物应当有 problems 字段：{verdict!r}"
+    assert "复核落盘" in out, "stdout 应当点名「复核落盘」"
+
+
+# ----------------------------------------------- ⓸ 增量产物有 affected 块（卡 147 护栏可读）
+def test_incremental_writes_affected_block_for_card147_fence(tmp_path: Path) -> None:
+    """增量那一趟的 gates/last.json 必须有 affected 块 —— 卡 147 护栏读的就是它。
+
+    ★ 卡 147 的 `wb_review._affected_marks_partial_run`：last.json 有 affected 块 ⇒ 判红
+      （把增量产物当全量交 ⇒ 红）。本卡**不动**这个护栏，只确保 landing.py 不许静默吞掉它。
+    ★ 坏掉写法（landing.py 把 affected 块吞了）：卡 147 护栏咬不住 ⇒ 这条钉子红。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--affected", "code/a.py")
+
+    assert done.returncode == 0, _out(done)
+    last = json.loads((repo / "gates/last.json").read_text(encoding="utf-8"))
+    assert "affected" in last, \
+        "增量那一趟必须有 affected 块（卡 147 护栏读它来咬「把增量当全量交」）"
+    aff = last["affected"]
+    assert isinstance(aff, dict) and "ran" in aff and "skipped" in aff, \
+        f"affected 块形状不对：{aff!r}"
+
+
+# ----------------------------------------------- ⓹ --no-review 跳过 ⑧
+def test_no_review_skips_step8(tmp_path: Path) -> None:
+    """`--no-review` ⇒ ⑧ 不跑、gates/review/<task>.json 不存在（默认会跑）。"""
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--no-review")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    assert "⑧ 复核落盘" not in out, "--no-review 应当跳过 ⑧"
+    assert not (repo / "gates" / "review" / "T-G999.json").exists(), \
+        "--no-review 不该有复核产物"
+
+
+# ----------------------------------------------- ⓺ 降级跑法 trailer 留痕（边界纪律）
+def test_degraded_run_trailer(tmp_path: Path) -> None:
+    """设了 TF_PYTEST_WORKERS / TF_GATE_MIN_FREE_GB ⇒ 提交 trailer 必须点名（边界纪律）。
+
+    ★ 判据：跑法字段缺失、或与默认不同却没有 trailer 声明 ⇒ 红（wb_review.py 那半属卡 161）。
+    ★ 坏掉写法（不声明）：提交信息里没有 Run: 行 ⇒ 钉子红。
+    ★ 不设环境变量 ⇒ 不该有 Run: 行（默认跑法不声明，宁多勿漏但不噪音）。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    env = {**_ENV, "TF_PYTEST_WORKERS": "1", "TF_GATE_MIN_FREE_GB": "1.5"}
+    cmd = [sys.executable, "-X", "utf8", str(repo / "tools" / "wb_land.py"),
+           "--card", "T-G999", "--tree", ".", "--task", "T-G999", "--title", "钉子",
+           "--type", "feat", "--group", "ENGINEERING", "--evidence", "code/a.py",
+           "--allow", "code"]
+    done = subprocess.run(cmd, cwd=str(repo), env=env, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    msg = _git(repo, "log", "-1", "--format=%B").stdout
+    assert "Run:" in msg, f"降级跑法必须在 trailer 里声明：{msg!r}"
+    assert "TF_PYTEST_WORKERS=1" in msg, f"trailer 必须含 TF_PYTEST_WORKERS=1：{msg!r}"
+    assert "TF_GATE_MIN_FREE_GB=1.5" in msg, f"trailer 必须含 TF_GATE_MIN_FREE_GB=1.5：{msg!r}"
+
+    # 反向：不设环境变量 ⇒ 不该有 Run: 行
+    (tmp_path / "b").mkdir(parents=True)
+    repo2 = _mk_repo(tmp_path / "b", run_gates_body=_RUN_GATES_AFFECTED,
+                     wb_review_body=_WB_REVIEW)
+    _write_daily_full(repo2, today=True)
+    _write(repo2, "code/a.py", "X = 2\n")
+    done2 = _wand(repo2)
+    assert done2.returncode == 0, _out(done2)
+    msg2 = _git(repo2, "log", "-1", "--format=%B").stdout
+    assert "Run:" not in msg2, f"默认跑法不该有 Run: trailer：{msg2!r}"
+

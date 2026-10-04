@@ -5874,3 +5874,18 @@ evidence = [
   "file:framework/PIPELINE.md",
 ]
 gaps = "① ★★ **G7（拒绝点活性扫描）是「自己补的洞」**：文献里**没有**现成的「规则被删仍变绿」检测工具 ⇒ 这一条是本框架**自己设计的**，不是照抄；它的强度**没有被外部标准校准过**。指针：`framework/src/framework/fitness.py`。② ★★ **G10 的评审侧是「抽空进库」**：本仓的 `tools/wb_review.py` + `tools/pool/review.py` 是那个零件，本卡把它抽进框架（路径/常量由调用方传，库里不写死本仓路径）⇒ ★ **本仓那份还在原地**，两份的关系要人记。指针：`framework/src/framework/review.py`。③ ★ **G3（多样性不许被削减）只能「要论证」，不能「证明没削减」**：它要求提速改动若减少门数或兜底**必须有显式论证记录**，判据只到「有没有记录」 ⇒ **论证本身对不对**判不了。指针：`framework/PIPELINE.md`。④ ★ **证据缺口三条如实上**：文献里没有 CI 门禁可靠性的 SLO 定义、没有「规则被删仍变绿」的现成检测工具、没有变异门禁的工业成本数据。指针：`framework/PIPELINE.md` 的「证据缺口」节。⑤ ★ **与 185 同写 `framework/PIPELINE.md`**：本笔取「落地版 + 本卡改动」手工合（两节独立，无冲突）⇒ 口径同 162 那笔。指针：本笔的 `git apply` 记录。"
+
+[entries."T-G284"]
+id = "T-G284"
+title = "收口链支持增量门禁（--affected）+ 三条强制全量 + 如实披露"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "file:tools/wb_land.py",
+  "file:tests/test_wb_land.py",
+  "file:复盘/收口-增量门禁.md",
+  "file:tests/test_no_window.py",
+  "file:tests/test_run_gates_affected.py",
+]
+gaps = "① ★★ **增量门禁的「省」是有条件的**：它只改「跑哪几道」，**不改任何门判据**；碰 `tools/**` / `scripts/**` / `gates/**` 的任意文件、空计划、每日首趟 ⇒ **强制全量**。⇒ 本笔**不许**被读成「门变松了」。指针：`tools/pool/landing.py` 的 `JUDGE_BODY_GLOBS`。② ★★ **本卡是「跨两个池 + 被额度掐断 + 换池续跑」的产物**：CodeBuddy 那轮跑 34 分钟后 429 停下（留了 WIP 提交 `38f630b`），码道接着补完方案文档与跑法字段。⇒ **它的证据链横跨两个池**，本笔只有「最后那段」的读数。指针：`gates/diag/_HOLD.md` 的额度一节。③ ★ **增量那条路的「如实披露」落在 trailer 字面**：全量分支的字面「全量门禁绿 + seal」**一字未动**（卡 133 的钉子钉着它），增量分支用**不同**字面（含「非全量」）⇒ 判据靠**字面**，不靠结构。指针：`tests/test_wb_land.py`。④ ★ **本卡的方案文档是我从收集树恢复的**：它的卡树在还原成工作区改动时被 `git clean` 误删过该文件，从 `.wt/sweep2` 拷回（同一份逐字节）。指针：`复盘/收口-增量门禁.md`。"

@@ -23,10 +23,14 @@ r"""主控的通用集成器（实现层）：把一张外包卡（工人已在�
   ② 生成文档件（台账条目 / changelog / 交接 CHECKPOINT）—— 复用 `tools/wb_stage_card.py`
   ③ tools/sync_counts.py
   ④ 拿门禁锁（段由 --port-base 给）→ 跑门禁（★ 带 1800s 硬超时）→ 红了就 release + 退出
-  ⑤ --seal
+     ★ 卡 184：`--affected` / `--changed-from` 透传给 `run_gates.py`（默认关，给了才少跑）；
+     三条强制全量（碰 scripts/**/tools/**/gates/** / 空计划 / 今天没跑过全量）任何一条命中就跑全量
+  ⑤ --seal（★ 全量那一趟落盘 gates/diag/_daily_full.json：今天跑过全量没有，机器可判）
   ⑥ 白名单核对（卡的文件 + 文档三件 + gates/last.json + gates/reuse.json）
-     → 显式 git add → commit（四 trailer）
+     → 显式 git add → commit（四 trailer；★ 增量那一趟 trailer 写「非全量」字样）
   ⑦ audit_progress.py → 释放锁 → 主树 ff 合流
+  ⑧ 复核落盘（卡 184 · 追加三）：wb_review.py --rev <新提交> --json → gates/review/<task>.json
+     ★ 异步、不挡提交；但 wb_task.py landed 之前必须存在一条复核记录（机器判据）
 
 用法：
   python -X utf8 tools/wb_land.py --card 096 --tree .wt/mech2 --task T-G191 \
@@ -34,11 +38,17 @@ r"""主控的通用集成器（实现层）：把一张外包卡（工人已在�
       --evidence tools/tf_group.py tests/test_tf_group.py \
       --allow tools/tf_group.py tests/test_tf_group.py \
       --port-base 9034 --refs "T-G182"
-"""
+  # 卡 184：增量门禁（默认全量；只在显式给开关时才少跑，三条强制全量照咬）
+  python -X utf8 tools/wb_land.py --card 184 --tree .wt/incgate --task T-G284 \
+      --title "收口链支持增量门禁 + 三条强制全量" --evidence tools/pool/landing.py \
+      --allow tools/pool/landing.py tools/wb_land.py tests/test_wb_land.py \
+      --affected tools/pool/landing.py  # ★ 默认关；给了才少跑，碰 tools/** 会强制全量"""
 from __future__ import annotations
 
 import argparse
 import contextlib
+import datetime
+import json
 import os
 import pathlib
 import subprocess
@@ -207,6 +217,180 @@ def release_lock(lock_label: str, wt: pathlib.Path, env: dict) -> None:
         )
 
 
+# ---------------------------------------------------------------- 卡 184（T-G284）：增量门禁
+# ★ 三条硬要求：① 不改门判据（只改「跑哪几道」）；② 反例钉子四条（空计划⇒全量 /
+#   trailer 含「非全量」/ 碰 tools/**⇒强制全量 / 卡 147 护栏仍咬）；③ 不动 wb_impact /
+#   run_gates 门清单 / .wt/**；不许 commit。
+# ★ 全量分支的 gates_line 字面「全量门禁绿 + seal」**一字不动** —— 卡 133 的 6 个钉子
+#   钉着它（伪造门禁结论那条判据）。增量分支用**不同**字面（含「非全量」）。
+
+#: ★ ②.1 判据本体：碰了这些目录里**任何**文件 ⇒ 强制全量（判据/门/收口链自己）。
+#: 判据按本笔的改动路径现算，**不许**由人记（卡 184 §②.1）。
+JUDGE_BODY_GLOBS = ("scripts/**", "tools/**", "gates/**")
+
+#: ★ ②.3 每日一次全量兜底：`gates/diag/_daily_full.json`（gitignored，运行时产物）。
+#: 谁读它：landing.py ④ 步前读 —— 决定「今天跑过全量没有」；
+#: 谁写它：landing.py ⑤ 步后写 —— 全量那一趟落盘 {date, rev, time}。
+DAILY_FULL = ROOT / "gates" / "diag" / "_daily_full.json"
+
+#: ★ ⑧ 复核落盘目录（追加三）：`gates/review/<task>.json`（gitignored，运行时产物）。
+REVIEW_DIR = ROOT / "gates" / "review"
+
+
+def _today_iso() -> str:
+    """本地日期（YYYY-MM-DD）—— 「今天跑过全量没有」的判据单位是「天」（卡 184 §②.3）。"""
+    return datetime.date.today().isoformat()
+
+
+def _touched_paths(wt: pathlib.Path) -> list[str]:
+    """本笔卡树改动路径（含未跟踪）—— ②.1 判据本体检查的输入。
+
+    ★ 复用 `pool.review.changed_paths`（**唯一实现**，卡 106）：从 `git status --porcelain
+    -uall --no-renames` 取路径。`-c core.quotepath=false` 钉死，中文路径不被八进制转义。
+    ★ 排运行时产物（gates/** / .wt/** / __pycache__/**）—— 与 `_changed_paths_from` 同口径：
+      它们不是源文件改动，不该触发 ②.1「判据本体改了」。gates/** 在真仓里是 gitignored，
+      本来就不进 `git status`；假仓库里 .gitignore 没盖到，这里显式排掉。
+    """
+    from pool.review import changed_paths
+    raw = subprocess.run(
+        ["git", "-c", "core.quotepath=false", "status", "--porcelain", "-uall",
+         "--no-renames"],
+        cwd=str(wt), capture_output=True, text=True, encoding="utf-8", errors="replace",
+        # ★ 防窗旗（卡 184 补）：`landing.py` 在本卡域里，能加旗就加旗 ——
+        #   别再往 `tests/test_no_window.py` 的 EXEMPT 里加欠账。
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    paths = changed_paths((raw.stdout or "").rstrip("\r\n"))
+    return [p for p in paths
+            if not p.startswith(("gates/", ".wt/", "__pycache__/"))]
+
+
+def _touched_judge_body(paths: list[str]) -> list[str]:
+    """②.1 碰了 `scripts/**` / `tools/**` / `gates/**` 里**任何**文件 ⇒ 返回命中清单（空 = 没碰）。
+
+    ★ 用 `pool.review.outside_allow` 的反义：把「白名单 = JUDGE_BODY_GLOBS」反着读 ——
+      「在白名单里」=「碰了判据本体」。复用同一套 fnmatch 语义，不另写第三套匹配。
+    """
+    from pool.review import outside_allow
+    # outside_allow 返回**不在** glob 里的；这里要**在** glob 里的 ⇒ 全集减去 outside
+    outside = set(outside_allow(paths, list(JUDGE_BODY_GLOBS)))
+    return [p for p in paths if p not in outside]
+
+
+def _today_full_done() -> tuple[bool, str]:
+    """②.3 今天跑过全量没有 —— 读 `gates/diag/_daily_full.json`。
+
+    返回 `(done, info)`：done=True ⇒ 今天已经跑过一次全量，可以跑增量；
+    done=False ⇒ 还没跑 ⇒ 强制全量（每日一次兜底）。读不到/坏文件 ⇒ False（宁多勿漏）。
+    """
+    if not DAILY_FULL.is_file():
+        return False, f"没有每日全量记录（{DAILY_FULL} 不存在）⇒ 强制全量"
+    try:
+        data = json.loads(DAILY_FULL.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return False, f"每日全量记录读不了（{type(exc).__name__}: {exc}）⇒ 强制全量"
+    date = str(data.get("date", ""))
+    rev = str(data.get("rev", ""))[:12]
+    if date == _today_iso():
+        return True, f"今天（{date}）已跑过全量（rev={rev}）⇒ 可跑增量"
+    return False, (f"上一次全量是 {date or '（空）'}（rev={rev}），"
+                   f"今天 {_today_iso()} 还没跑 ⇒ 强制全量")
+
+
+def _mark_today_full(rev: str) -> None:
+    """②.3 全量那一趟落盘：写 `{date, rev, time}` 进 `gates/diag/_daily_full.json`。
+
+    ★ 落盘要能从产物里一眼看出「今天跑过全量没有」（机器可判，不许靠人记）。
+    ★ 失败 ⇒ 警告并继续（每日全量是兜底，不是新闸；写不了不挡提交）。
+    """
+    try:
+        DAILY_FULL.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"date": _today_iso(), "rev": rev[:12],
+                   "time": datetime.datetime.now().isoformat(timespec="seconds")}
+        DAILY_FULL.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8", newline="\n")
+        print(f"  ★ 每日全量已落盘：{DAILY_FULL}（{payload['date']} / {payload['rev']}）")
+    except OSError as exc:
+        print(f"  ★ 每日全量落盘失败（{type(exc).__name__}: {exc}）⇒ 警告并继续（不挡提交）")
+
+
+def _affected_plan(paths: list[str]) -> tuple[object | None, str]:
+    """②.2 算 `--affected` 的计划（不真跑门）—— 空计划 ⇒ 退全量，绝不许空集绿灯。
+
+    返回 `(plan, note)`：
+      - `plan is None` ⇒ **不要**传 `--affected`（跑全量）。原因可能是：没给路径 / 空计划
+        （一条都命不中任何门的输入）/ 读不到门表；
+      - `plan` 非 None ⇒ 可以传 `--affected`（`plan.ran` 是要跑的门清单）。
+    ★ 复用 `scripts/run_gates.py` 的 `build_jobs` + `plan_affected`（**唯一真源**），
+      不在本文件里造第二份门表（卡 147 硬要求）。读不到 ⇒ None（宁多勿漏：跑全量）。
+    """
+    if not paths:
+        return None, "没给路径（空）⇒ 退全量，不传 --affected"
+    try:
+        scripts = str(ROOT / "scripts")
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+        import run_gates  # 延迟 import：避免 landing 被 import 时就依赖 scripts/
+        doors = [n for n, _ in run_gates.build_jobs(False, False)]
+        plan = run_gates.plan_affected(paths, doors)
+        if plan.full_fallback:
+            return None, f"空计划（{plan.note}）⇒ 退全量，不传 --affected"
+        return plan, plan.note
+    except Exception as exc:
+        return None, f"读不到门表（{type(exc).__name__}: {exc}）⇒ 退全量（拿不准不放过）"
+
+
+def _changed_paths_from(rev: str, wt: pathlib.Path) -> list[str]:
+    """`--changed-from <REV>`：让 git 现算改了哪些路径（与 run_gates 同口径）。
+
+    = `git diff --name-only <REV>`（已跟踪改动）∪ 未跟踪且未被忽略的文件
+    （排 `gates/**` 与 `.wt/**`，与封存指纹同口径）。
+    """
+    tracked = [p.strip() for p in git("diff", "--name-only", rev, cwd=wt).splitlines()
+               if p.strip()]
+    untracked = [p.strip() for p in
+                 git("ls-files", "-o", "--exclude-standard", cwd=wt).splitlines()
+                 if p.strip()]
+    out: list[str] = []
+    seen: set[str] = set()
+    for p in tracked + untracked:
+        if p in seen or p.startswith(("gates/", ".wt/")):
+            continue
+        seen.add(p)
+        out.append(p)
+    return out
+
+
+def _run_review(task: str, rev: str) -> tuple[int, str, pathlib.Path]:
+    """⑧ 复核落盘（追加三）：wb_review.py --rev <新提交> --json → gates/review/<task>.json。
+
+    ★ 口径照卡 143：「提交之后 · 异步 · 不挡提交」—— 复核失败不回滚已提交的那笔；
+      但 `wb_task.py landed` 之前必须存在一条复核记录（那是 landed 的机器判据，不在这条链上）。
+    ★ 复核发现问题 ⇒ 立卡或在文书里写明为什么不立卡（不许"跑完看一眼就丢"）。
+    ★ 返回 `(exit_code, summary, path)`：exit_code 非 0 ⇒ 复核有问题（不挡提交，只警告）。
+    """
+    REVIEW_DIR.mkdir(parents=True, exist_ok=True)
+    review_file = REVIEW_DIR / f"{task}.json"
+    r = subprocess.run(
+        [sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_review.py"),
+         "--rev", rev, "--json"],
+        cwd=str(ROOT), capture_output=True, text=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        encoding="utf-8", errors="replace")
+    body = (r.stdout or "").strip()
+    review_file.write_text(body or "{}\n", encoding="utf-8", newline="\n")
+    n_problems = -1
+    try:
+        verdict = json.loads(body) if body else {}
+        n_problems = len(verdict.get("problems", []))
+    except json.JSONDecodeError:
+        n_problems = -1
+    summary = (f"exit={r.returncode}，problems={'?' if n_problems < 0 else n_problems}"
+               f"，落盘 {review_file}")
+    return r.returncode, summary, review_file
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser()
@@ -231,11 +415,28 @@ def main(argv: list[str] | None = None) -> int:
                          "（把上一趟残留的派生物/记账产物退回 HEAD，幂等重跑用）")
     ap.add_argument("--commit-only", action="store_true",
                     help="⑥ 起接着走：门禁已绿、封存没变时用（跳过 ①②③④⑤）")
+    # ★ 卡 184（T-G284）：增量门禁开关 —— **默认关**（今天的行为一字不变）。
+    #   只在显式给开关时才少跑几道门；判据方向 = 宁多勿漏
+    #   （碰判据本体 / 空计划 / 今天没跑过全量 ⇒ 强制全量）。
+    ap.add_argument("--affected", nargs="+", metavar="路径",
+                    help="★ 卡 184：只跑「被这些路径影响」的门"
+                         "（透传给 run_gates.py 的 --affected）。"
+                         "判据方向 = 宁多勿漏：① 碰 scripts/**/tools/**/gates/** ⇒ 强制全量；"
+                         "② 空计划 ⇒ 退全量；③ 今天还没跑过全量 ⇒ 强制全量（每日一次兜底）。"
+                         "★ 默认（不给）跑全量；增量那一趟的 trailer 会写「非全量」字样。")
+    ap.add_argument("--changed-from", metavar="REV",
+                    help="★ 卡 184：同 --affected，但路径由 git 现算"
+                         "（git diff --name-only <REV> + 未跟踪）。"
+                         "与 --affected 同样受三条强制全量约束。")
+    ap.add_argument("--no-review", action="store_true",
+                    help="★ 卡 184：跳过 ⑧ 复核落盘（默认会跑 wb_review.py --rev <新提交> --json "
+                         "并落盘 gates/review/<task>.json；★ 复核异步、不挡提交）")
     a = ap.parse_args(argv)
     if bool(a.card) == bool(a.batch):
         print("★ `--card` 与 `--batch` 必须**恰好给一个**")
         return 2
     lock_label = a.card or a.batch   # 门禁锁的标签（批号也行）
+    incremental_run = False          # 卡 184：--affected 那一趟 = True（gates_line 用）
 
     wt = ROOT / a.tree
     text = pathlib.Path(str(TEXT).format(task=a.task.replace("-", "")))
@@ -317,7 +518,43 @@ def main(argv: list[str] | None = None) -> int:
             print("  ✓ 卡规格都在索引里（正式门禁 ④ 仍会再跑一遍全量）")
 
         if not a.no_gate:
-            print(f"=== ④ 锁（段 {a.port_base}）→ 门禁（硬超时 1800s）===")
+            # ★ 卡 184（T-G284）：算要不要跑增量 —— 默认全量；只有显式给 --affected /
+            #   --changed-from 才考虑增量，且三条强制全量任何一条命中就跑全量：
+            #   ②.1 判据本体改了（scripts/**/tools/**/gates/**）/ ②.2 空计划 / ②.3 今天还没跑过全量
+            gate_cmd = [sys.executable, "-X", "utf8", "scripts/run_gates.py"]
+            force_full_reason = ""
+            if a.affected is not None or a.changed_from:
+                aff_paths = list(a.affected or [])
+                if a.changed_from:
+                    aff_paths += _changed_paths_from(a.changed_from, wt)
+                # ②.1 判据本体改了 ⇒ 强制全量（按本笔改动路径现算，不许由人记）
+                touched = _touched_paths(wt)
+                judge_hits = _touched_judge_body(touched)
+                if judge_hits:
+                    force_full_reason = (f"②.1 判据本体改了：碰了 {len(judge_hits)} 个"
+                                         f" scripts/**/tools/**/gates/** 文件：{judge_hits[:5]}")
+                else:
+                    # ②.2 空计划 ⇒ 退全量（绝不许空集绿灯）
+                    plan, plan_note = _affected_plan(aff_paths)
+                    if plan is None:
+                        force_full_reason = f"②.2 空计划/读不到门表：{plan_note}"
+                    else:
+                        # ②.3 今天还没跑过全量 ⇒ 强制全量（每日一次兜底，不按笔数）
+                        today_done, daily_info = _today_full_done()
+                        if not today_done:
+                            force_full_reason = f"②.3 每日一次兜底：{daily_info}"
+                        else:
+                            # 可以跑增量
+                            incremental_run = True
+                            print(f"  ★ 跑增量（{plan_note}）；{daily_info}")
+                            if a.affected:
+                                gate_cmd += ["--affected", *a.affected]
+                            if a.changed_from:
+                                gate_cmd += ["--changed-from", a.changed_from]
+            if force_full_reason:
+                print(f"  ★ 强制全量（不传 --affected）：{force_full_reason}")
+            print(f"=== ④ 锁（段 {a.port_base}）→ 门禁（硬超时 1800s；"
+                  f"{'增量' if incremental_run else '全量'}）===")
             r = subprocess.run([sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
                                 "acquire", "--card", lock_label, "--wait", "5400",
                                 "--stale-after", "3600"],
@@ -325,10 +562,12 @@ def main(argv: list[str] | None = None) -> int:
                                capture_output=True, text=True, encoding="utf-8", errors="replace")
             print(r.stdout.strip()[-400:])
             try:
-                r = subprocess.run([sys.executable, "-X", "utf8", "scripts/run_gates.py"],
+                r = subprocess.run(gate_cmd,
                                    cwd=str(wt), env={**os.environ, **env},
                                    capture_output=True, text=True,
                                    encoding="utf-8", errors="replace",
+                                   creationflags=getattr(__import__("subprocess"),
+                                                         "CREATE_NO_WINDOW", 0),
                                    timeout=1800)
                 out, rc = (r.stdout or ""), r.returncode
             except subprocess.TimeoutExpired as exc:   # ★ 门禁卡死：硬超时当红，别把锁留着
@@ -337,7 +576,8 @@ def main(argv: list[str] | None = None) -> int:
                 rc = 124
             tail = out.strip().splitlines()[-22:]
             print("\n".join(tail))
-            print(f"★★ 门禁退出码 = {rc}（124 = 硬超时掐的）")
+            mode = "增量" if incremental_run else "全量"
+            print(f"★★ 门禁退出码 = {rc}（124 = 硬超时掐的）【{mode}】")
             if rc != 0:
                 print("★ 不绿 ⇒ 不提交")
                 for lg in ("gates/logs/pytest.log", "gates/logs/ui_flow.log"):
@@ -358,6 +598,11 @@ def main(argv: list[str] | None = None) -> int:
             print("=== ⑤ seal ===")
             sealed = run([sys.executable, "-X", "utf8", "scripts/run_gates.py", "--seal"], cwd=wt)
             print(sealed.stdout.strip()[-300:])
+            # ★ 卡 184：全量那一趟落盘每日记录（增量不落盘——它不是全量兜底）。
+            #   「今天跑过全量没有」必须机器可判，不许靠人记。
+            if not incremental_run:
+                _mark_today_full(git("rev-parse", "--short", "HEAD", cwd=wt))
+
 
     if a.commit_only:
         print("=== ①~⑤ 跳过（--commit-only：门禁已绿、封存没变）===")
@@ -396,12 +641,29 @@ def main(argv: list[str] | None = None) -> int:
     #   「全量门禁绿 + seal」，而本脚本有 `--no-gate`（跳过 ④⑤）与 `--commit-only`（跳过 ①~⑤）
     #   两个模式 ⇒ **工具自己在伪造门禁结论**（违反铁律 4「不许伪造完成」，且 `audit` 只查 trailer
     #   存在性、查不出真伪）。现在按**实际模式**写：跳过门禁的那两条路，谁都不许借这行冒充跑过。
+    # ★ 卡 184（T-G284）：第四种形态 —— 增量门禁（--affected）。trailer 必须**如实披露「非全量」**
+    #   （跑了几道 / 哪些被跳），复用卡 147 的判据（last.json 的 affected 块照写）。
+    #   ★ 全量分支字面「全量门禁绿 + seal」**一字不动** —— 卡 133 的 6 个钉子钉着它（伪造门禁
+    #   结论那条判据的机器版）。增量分支用**不同**字面（含「非全量」），不撞那 6 个钉子。
     if a.no_gate:
         gates_line = "Gates: ★ 本笔**没跑门禁**（--no-gate）—— 这行不是门禁结论，别当证据用"
     elif a.commit_only:
         gates_line = "Gates: 复用已绿的那一趟（--commit-only，封存未变）；真读数见 gates/last.json"
+    elif incremental_run:
+        gates_line = ("Gates: 增量门禁（--affected，非全量；"
+                      "真读数见 gates/last.json 的 affected 块）"
+                      "+ seal —— 卡 147 护栏会咬：把增量产物当全量交 ⇒ 红")
     else:
         gates_line = "Gates: 全量门禁绿 + seal（跑前先拿门禁锁；★ 提交之后再跑 audit）"
+    # ★ 卡 184 边界纪律：降级跑法必须机器可读地留痕 —— 写进 trailer 并点名。
+    #   判据（wb_review.py 那半属卡 161）：跑法字段缺失、或与默认不同却没有 trailer 声明 ⇒ 红。
+    #   这里只做"声明"那一半：环境变量被设了（非默认）⇒ 在 trailer 里点名。
+    #   ★ 宁多勿漏：只要环境变量被设了就声明（不硬编码默认值，不造第二套）。
+    run_degraded: list[str] = []
+    if os.environ.get("TF_PYTEST_WORKERS") is not None:
+        run_degraded.append(f"TF_PYTEST_WORKERS={os.environ['TF_PYTEST_WORKERS']}")
+    if os.environ.get("TF_GATE_MIN_FREE_GB") is not None:
+        run_degraded.append(f"TF_GATE_MIN_FREE_GB={os.environ['TF_GATE_MIN_FREE_GB']}")
     msg = (f"{a.type}({a.scope}): {a.title}（{a.task}）\n\n"
            + changelog_body(text)
            + f"\n\nTask: {a.task}\n"
@@ -409,6 +671,8 @@ def main(argv: list[str] | None = None) -> int:
            + f"Ledger: 新增 {a.task}（{a.group}/done，{len(a.evidence)} 条证据）；"
            + "done 的数字以 sync_counts.py 的实测输出为准\n"
            + gates_line + "\n")
+    if run_degraded:
+        msg += f"Run: 降级跑法（{'; '.join(run_degraded)}）—— 非默认，卡 184 咬\n"
     msgfile = ROOT / "gates" / "diag" / f"_msg_{a.task}.txt"
     msgfile.write_text(msg, encoding="utf-8", newline="\n")
     r = subprocess.run(["git", "-c", "core.quotepath=false", "commit", "-q", "-F", str(msgfile)],
@@ -484,6 +748,21 @@ def main(argv: list[str] | None = None) -> int:
     print("  ff 合流完成：主树 →", git("rev-parse", "--short", "HEAD"))
     print("  主树 HEAD =", git("rev-parse", "--short", "HEAD"), "| -uno =",
           len([x for x in git("status", "--porcelain", "-uno").splitlines() if x.strip()]), "行")
+
+    # ★ 卡 184（T-G284）⑧ 复核落盘（追加三）：跑 wb_review.py --rev <新提交> --json，
+    #   写 gates/review/<task>.json。★ 口径照卡 143：「提交之后 · 异步 · 不挡提交」——
+    #   复核失败不回滚已提交的那笔；但 wb_task.py landed 之前必须存在一条复核记录（机器判据）。
+    #   复核有问题 ⇒ 立卡或在文书里写明为什么不立卡（不许"跑完看一眼就丢"）。
+    #   --no-review 跳过（默认会跑）。--commit-only / --no-gate 也跳过（没新提交可复核）。
+    if not a.no_review and not a.commit_only:
+        print("=== ⑧ 复核落盘（gates/review/<task>.json；异步、不挡提交）===")
+        new_rev = git("rev-parse", "--short", "HEAD")
+        rv_rc, rv_summary, rv_path = _run_review(a.task, new_rev)
+        print(f"  {rv_summary}")
+        if rv_rc != 0:
+            print("  ★ 复核有问题（不挡提交）⇒ 立卡或在文书里写明为什么不立卡")
+        else:
+            print(f"  ✓ 复核落盘完成：{rv_path}")
     return 0
 
 
