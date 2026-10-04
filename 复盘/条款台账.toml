@@ -1,0 +1,62 @@
+# 条款台账（卡 162 · T-G262）
+#
+# 病：六条硬规矩里只有「门禁落盘 / 审计不过不许提交 / 文档同提交」三条有机器判据；
+#     其余**全是人话** —— 于是「没人知道它已经不可能发生，还是根本没人管」。
+# ★ 立的规矩：每条人话条款要么有机器判据（covered / partial），
+#   要么**如实标 unjudgeable + 写清为什么机器判不了**。
+# ★ `unjudgeable` 是诚实态、不是失败 —— 但它**必须带理由**（note 空 ⇒ 红）。
+#
+# 字段（[[clause]] 一条一块，一行一条）：
+#   id      条款号（CL-nn），通常对应一条 INV-nn 的「只有人话」那半
+#   clause  原话 / 出处 §（哪份协议 / 哪条规矩）
+#   judge   判据落点：`<路径::符号>` 或 `-`（unjudgeable 时写 `-`）
+#   nail    反例钉子：`tests/<文件>::<用例名>`（★ 卡 159 起也认 `scripts/<自测脚本>::<用例名>`）；
+#           没有钉子就写 `-`，并把 status 标 partial / unjudgeable
+#   status  `covered`（判据 + 钉子都在）/ `partial`（有判据、缺一半）/ `unjudgeable`（机器判不了 + 必须带 note）
+#   note    **为什么机器判不了** —— `unjudgeable` 的必备项（空的要红）
+#
+# ★ 机器核：`python -X utf8 tools/wb_invariants.py --clauses` —— 逐条核 judge 路径与 nail 用例名真的存在，
+#   并且**必须咬**「`status = unjudgeable` 但 `note` 为空」这一种（★ 本卡最关键的一条判据）。
+# ★ 中文正文用「」，不写 ASCII 双引号（TOML 基本串里会解析不了）。
+# ★ 与不变量台账（复盘/不变量台账.toml）的差异：本台账只收「只有一句人话」的规矩，
+#   不收「已经有代码判据」的硬规矩（那些归不变量台账）；状态集合也不同（unjudgeable 替代 missing）。
+
+[[clause]]
+id = "CL-01"
+clause = "协议 §十二（回合收工 / 自动推进）整节；「无任务卡不开工」「一次只做一条主线」「不许把等用户说继续当默认」「不许自己重排任务」（INV-69）"
+judge = "-"
+nail = "-"
+status = "unjudgeable"
+note = "要变成判据需要一个能看见「当轮没有下一动作」的运行时钩子 —— 本仓没有。事件流里每个事件带 __timestamp，assistant 的 tool_use 与 user 的 tool_result 一一配对 ⇒ 「有没有在飞」可测（INV-11 已用），但「工人有没有等用户说继续才推进」「有没有自己重排任务」是**行为约束**，不在代码层 —— 协议文件能 grep 到字面，但行为本身机器看不到。要变 covered 需要在事件层捕「轮结束且 result 为空且没在等用户」并加一个「等待原因」字段，事件流目前没有这字段。故如实标 unjudgeable。"
+
+[[clause]]
+id = "CL-02"
+clause = "视觉/布局类改动必须人工过目 —— 不许一直停在「建议写进协议」（INV-70）"
+judge = "复盘/外包-卡表与规矩.md::§18.3"
+nail = "tests/test_wb_invariants.py::test_clause_template_has_visual_layout_row"
+status = "partial"
+note = "动作可判（卡规格模板 §18.3 加一行「本卡是否属视觉/布局类」⇒ 报告里必须写明「已交用户过目/待过目」；机器能核模板有那一行、能核报告有没有写明）；但「好不好看」机器判不了 ⇒ 那半如实标 unjudgeable：沙箱跑不了浏览器，眼睛仍是唯一裁判。两条加起来 = partial（有判据、缺一半）。"
+
+[[clause]]
+id = "CL-03"
+clause = "悬停只许动 background / border / color —— 不许位移、不许换行（INV-71）"
+judge = "tools/style_audit.py::check_hover_motion"
+nail = "tests/test_style_audit.py::test_hover_motion_bites_on_transform"
+status = "covered"
+note = "卡 162（T-G262）立：扫 :hover 规则的属性集，只许 background / border* / color / opacity 这类不改变几何的属性；出现 transform / translate / margin / padding / height / flex / display 等 ⇒ 红。先红后绿：合成带 transform 的 :hover 必红、真实 src/web/app.css 必绿（若真实样式表本来就有位移 ⇒ 如实报，不改样式迁就判据 —— 改法另立卡）。"
+
+[[clause]]
+id = "CL-04"
+clause = "同一件教训不许在复盘的正文 / changelog / 台账 gaps 三处各写一遍（INV-74）"
+judge = "-"
+nail = "-"
+status = "unjudgeable"
+note = "gaps 是自由文本（TOML 字符串），机器没法判「同一件事在三处用了不同措辞」—— 那需要语义比对，超出静态检查。规矩在（教训只写一处 + 指针），但实读 T-G137/144/147/152/155 的 gaps 仍是 600–1500 字、大量复述 ⇒ 没有判据。要变 covered 需要一个「教训指纹」机制（hash 关键词 + 比对三处），但那会把 gaps 变成结构化字段、损失表达力 —— 权衡之下不划算，故如实标 unjudgeable。"
+
+[[clause]]
+id = "CL-05"
+clause = "状态字段没人复查就会漂 —— 不许把做完的事说成没做（幻影缺口，INV-75）"
+judge = "-"
+nail = "-"
+status = "unjudgeable"
+note = "状态句是自然语言（「pywebview 未安装」之类），机器没法判「这句话还成不成立」—— 那需要把每句状态话结构化成「(断言, 依赖, 复查日期)」三元组并定期复查，超出本仓口径。状态话散落在 30+ 份文档里，逐条登记成本不划算。要变 covered 需要一个状态话登记表 + 定期复查器（类似 tools/sync_counts.py --check 那种），但状态话的「成立条件」本身就是人判的，故如实标 unjudgeable。"

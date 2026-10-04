@@ -151,3 +151,107 @@ def test_tool_says_it_cannot_judge_beauty() -> None:
     """工具必须在输出里留那句"不证明好看" —— 免得以后有人拿它当审美结论用。"""
     source = (ROOT / "tools" / "style_audit.py").read_text(encoding="utf-8")
     assert "不证明好看" in source
+
+
+# ==================================================================
+# 卡 162 · T-G262 —— 悬停几何位移（INV-71）的反例钉子
+# ==================================================================
+#
+# 包的原话：悬停只许动 background / border / color —— 不许位移、不许换行。
+# 判据：`tools/style_audit.py::check_hover_motion` —— 扫 `:hover` 规则的属性集，
+# 只许出现不改变几何的属性；出现 transform / margin / padding / height / flex / display 等 ⇒ 红。
+# ★ 真实样式表若本来就有位移 ⇒ 如实报，不改样式迁就判据（改法另立卡）。
+
+
+def test_hover_motion_bites_on_transform() -> None:
+    """★ 反例钉子（先红）：`:hover` 改 `transform` ⇒ 必须报红。
+
+    突变证明有牙：把 `check_hover_motion` 从 `collect` 里删掉 ⇒ 本用例当场红
+    （坏样例不再被报）。
+    """
+    css = ".card:hover { transform: translateY(-2px); color: var(--accent) }"
+    keys = _keys(css)
+    assert any(k.startswith("hover:motion:") for k in keys), (
+        "带 transform 的 :hover 没被抓到 —— 判据没牙"
+    )
+    # 点名那个坏属性
+    assert "hover:motion:.card:hover:transform" in keys
+
+
+def test_hover_motion_bites_on_each_geometry_property() -> None:
+    """每种改变几何的属性都要咬（不只是 transform）—— 卡规格点名的全测一遍。"""
+    forbidden = (
+        ("transform", "translateY(-2px)"),
+        ("margin", "4px"),
+        ("margin-top", "4px"),
+        ("padding", "4px"),
+        ("padding-top", "4px"),
+        ("height", "40px"),
+        ("width", "40px"),
+        ("flex", "1"),
+        ("display", "block"),
+        ("position", "absolute"),
+        ("top", "0"),
+        ("left", "0"),
+        ("border-radius", "8px"),
+        ("border-top-width", "2px"),
+        ("border", "2px solid var(--accent)"),  # 简写可能含 width
+        ("font-size", "16px"),
+        ("line-height", "1.5"),
+        ("gap", "8px"),
+    )
+    for prop, value in forbidden:
+        css = f".x:hover {{ {prop}: {value} }}"
+        keys = _keys(css)
+        assert any(k.startswith("hover:motion:") for k in keys), (
+            f"`:hover` 改 `{prop}` 没被抓到 —— 漏检改变几何的属性"
+        )
+
+
+def test_hover_motion_allows_non_geometry_properties() -> None:
+    """不改几何的属性（background / border-color / color / opacity 等）⇒ 不报。"""
+    css = (
+        ".card:hover {\n"
+        "  background: var(--accent);\n"
+        "  background-color: var(--muted);\n"
+        "  color: var(--ink);\n"
+        "  border-color: var(--accent);\n"
+        "  border-top-color: var(--accent);\n"
+        "  border-style: solid;\n"
+        "  opacity: .9;\n"
+        "  box-shadow: 0 2px 8px var(--shadow);\n"
+        "  outline: 2px solid var(--accent);\n"
+        "  cursor: pointer;\n"
+        "  text-decoration: underline;\n"
+        "}\n"
+    )
+    keys = _keys(css)
+    bad = [k for k in keys if k.startswith("hover:motion:")]
+    assert not bad, f"不该报 hover:motion —— 这些属性不改几何：{bad}"
+
+
+def test_hover_motion_ignores_non_hover_rules() -> None:
+    """非 `:hover` 规则（如 `.x { transform: ... }`）不在本判据范围 —— 不报。"""
+    css = ".card { transform: translateY(-2px) }\n.card:hover { color: var(--accent) }"
+    keys = _keys(css)
+    assert not any(k.startswith("hover:motion:") for k in keys), (
+        "非 :hover 规则不该被 hover 判据咬"
+    )
+
+
+def test_real_stylesheet_hover_keeps_geometry_still() -> None:
+    """★ 真样式表（`src/web/app.css`）的 `:hover` 规则不许改几何 —— 这是 INV-71 的真东西。
+
+    若真实样式表本来就有 hover 位移 ⇒ 如实报（判据不能为了过而漏检），
+    主控另立卡改样式 —— 本测试钉的是「判据在真东西上跑出来的状态」。
+    """
+    css = sa.CSS.read_text(encoding="utf-8")
+    keys = _keys(css)
+    hover_motion = [k for k in keys if k.startswith("hover:motion:")]
+    if hover_motion:
+        # 如实报：真样式表有 hover 几何位移 ⇒ 点名哪条，让主控另立卡改样式
+        raise AssertionError(
+            "真样式表有 :hover 改了几何属性（不改样式迁就判据，改法另立卡）："
+            f"{hover_motion}"
+        )
+    # 绿：真样式表的 :hover 只动 background/border/color

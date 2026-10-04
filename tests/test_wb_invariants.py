@@ -1,4 +1,4 @@
-"""不变量台账核查器（`tools/wb_invariants.py`，卡 144 · T-G243）的反例钉子。
+"""不变量台账核查器（卡 144 · T-G243）+ 条款台账核查器（卡 162 · T-G262）的反例钉子。
 
 这个工具的价值全在**判据**上：台账是一张「安全主张 → 判据 → 反例钉子 → 覆盖到没覆盖」的表，
 它自己**不许烂掉**（指向不存在的路径 / 用例名）。所以这张测试按卡 §验收 钉五条：
@@ -11,6 +11,15 @@
 | ④ | ★ `--missing` 如实列没关的缝（哨兵 INV-72；INV-14 已关不许再出现） | 关了的不许还挂 missing |
 | ⑤ | `missing` **不算错**：全 `missing` 时 `--check` 仍退 0 | 状态与错误分开 |
 | ⑥ | ★ 核查器**真进了门表**（`invariants`→`wb_invariants.py --check`） | 有机器落点 |
+
+卡 162（T-G262）加条款台账的那半 —— 钉核查器对 `unjudgeable` 的判据：
+
+| # | 钉子 | 坏掉会红在哪 |
+|---|---|---|
+| ⑦ | `unjudgeable` 无 `note` ⇒ `--clauses` **咬**并点名 | ★ 本卡最关键：不许「用人话糊过去」 |
+| ⑧ | `covered` 无 `judge` / `nail` ⇒ **咬** | covered 必须有判据 + 钉子 |
+| ⑨ | ★ **真条款台账**（`复盘/条款台账.toml`）`--clauses` 必须通过 | 防条款台账写得太随意 |
+| ⑩ | ★ 卡规格模板真有「本卡是否属视觉/布局类」那一行 | CL-02 的判据落点 |
 
 ★ 只读：这里不写仓库里的真台账（临时台账都落在 `tmp_path`），也不跑门禁。
 """
@@ -176,3 +185,143 @@ def test_grouping_and_counts_split_states() -> None:
     ]
     assert wb.counts(rows) == {"covered": 2, "partial": 1, "missing": 1}
     assert {row["id"] for row in wb.missing_rows(rows)} == {"B", "C"}
+
+
+# ==================================================================
+# 卡 162 · T-G262 —— 条款台账核查器（`--clauses`）的反例钉子
+# ==================================================================
+#
+# 与不变量台账的差异：状态集合用 `unjudgeable` 替代 `missing`，
+# 且 `unjudgeable` **强制要 `note`**（「用一句人话糊过去」不许蒙混）。
+
+
+def _write_clauses(tmp_path: Path, body: str) -> Path:
+    path = tmp_path / "clauses.toml"
+    path.write_text(body, encoding="utf-8", newline="\n")
+    return path
+
+
+# ------------------------------------------------------------------ ⑦ unjudgeable 无 note ⇒ 咬
+
+
+def test_clauses_bites_when_unjudgeable_has_no_note(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """★ 本卡最关键的一条判据：`status = unjudgeable` 但 `note` 为空 ⇒ `--clauses` 非零退出并点名。
+
+    反例（先红）：把 `note` 删掉 ⇒ 用例当场红。
+    这条钉住的是「『机器判不了』要诚实 + 给理由」，不是「用一句人话糊过去」。
+    """
+    ledger = _write_clauses(tmp_path, """
+[[clause]]
+id = "CL-BAD"
+clause = "self-test: unjudgeable without a note must bite"
+judge = "-"
+nail = "-"
+status = "unjudgeable"
+note = ""
+""")
+    rc = wb.main(["--ledger", str(ledger), "--clauses"])
+    out = capsys.readouterr().out
+    assert rc != 0
+    assert "CL-BAD" in out
+    assert "unjudgeable" in out and "note" in out
+
+
+def test_clauses_passes_when_unjudgeable_has_a_note(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """`unjudgeable` 带 `note` ⇒ `--clauses` 退 0（诚实态不是失败）。"""
+    ledger = _write_clauses(tmp_path, """
+[[clause]]
+id = "CL-OK"
+clause = "self-test: unjudgeable with a note is honest"
+judge = "-"
+nail = "-"
+status = "unjudgeable"
+note = "因为 X 判不了"
+""")
+    rc = wb.main(["--ledger", str(ledger), "--clauses"])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "[OK ]" in out
+    assert "unjudgeable 1" in out
+
+
+# ------------------------------------------------------------------ ⑧ covered 无 judge / nail ⇒ 咬
+
+
+def test_clauses_bites_when_covered_lacks_judge_or_nail(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """`covered` 必须判据 + 钉子都在（缺任一 ⇒ 红）。"""
+    ledger = _write_clauses(tmp_path, f"""
+[[clause]]
+id = "CL-COV1"
+clause = "self-test: covered without judge"
+judge = "-"
+nail = "{SELF}::test_clauses_bites_when_covered_lacks_judge_or_nail"
+status = "covered"
+note = "self-test"
+
+[[clause]]
+id = "CL-COV2"
+clause = "self-test: covered without nail"
+judge = "tools/wb_invariants.py"
+nail = "-"
+status = "covered"
+note = "self-test"
+""")
+    rc = wb.main(["--ledger", str(ledger), "--clauses"])
+    out = capsys.readouterr().out
+    assert rc != 0
+    assert "CL-COV1" in out and "judge" in out
+    assert "CL-COV2" in out and "nail" in out
+
+
+def test_clauses_bites_when_judge_path_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """judge 指不存在的路径 ⇒ 红（指针烂了没人管）。"""
+    ledger = _write_clauses(tmp_path, f"""
+[[clause]]
+id = "CL-PATH"
+clause = "self-test: judge path does not exist"
+judge = "tools/__no_such_tool__.py::main"
+nail = "{SELF}::test_clauses_bites_when_judge_path_missing"
+status = "covered"
+note = "self-test"
+""")
+    rc = wb.main(["--ledger", str(ledger), "--clauses"])
+    out = capsys.readouterr().out
+    assert rc != 0
+    assert "CL-PATH" in out and "judge 路径不存在" in out
+
+
+# ------------------------------------------------------------------ ⑨ 真条款台账 --clauses 必须通过
+
+
+def test_real_clauses_ledger_check_passes(capsys: pytest.CaptureFixture) -> None:
+    """拿仓库里那份**真条款台账**跑 `--clauses`：必须退 0（防「账本写得太随意」）。"""
+    assert wb.DEFAULT_CLAUSE_LEDGER.exists(), f"真条款台账不在：{wb.DEFAULT_CLAUSE_LEDGER}"
+    rc = wb.main(["--clauses"])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "[OK ]" in out
+
+
+# ----------------------------------------------- ⑩ CL-02 判据落点：卡规格模板视觉/布局那一行
+
+
+def test_clause_template_has_visual_layout_row() -> None:
+    """CL-02（视觉/布局改动人工过目）的判据落点：卡规格模板 §18.3 真有那一行。
+
+    反例（先红）：把那一行从模板里删掉 ⇒ 本用例当场红 —— 人话条款停在「建议」没落地。
+    """
+    rules_path = ROOT / "复盘" / "外包-卡表与规矩.md"
+    text = rules_path.read_text(encoding="utf-8")
+    # ★ 这一行是 INV-70 那句人话从「建议写进协议」变成「卡规格模板里机器可查」的落点。
+    assert "本卡是否属视觉/布局类" in text, (
+        "卡规格模板里没有「本卡是否属视觉/布局类」这一行 —— "
+        "CL-02（视觉/布局改动人工过目）还停在「建议写进协议」，没落地"
+    )

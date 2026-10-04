@@ -567,23 +567,23 @@ claim = "协议里只用「人话」约束的条款不许被当成「已经不�
 judge = "-"
 nail = "-"
 status = "missing"
-note = "★ 用户最恨的一类。实读：六条硬规矩里只有「门禁落盘 / 审计不过不许提交 / 文档同提交」三条有机器判据；「无任务卡不开工」「一次只做一条主线」「不许把等用户说继续当默认」「不许自己重排任务」全是人话。 ★ 归位：`复盘/长任务执行协议.md` §九.2 / §九.5 / §十二（都是人话，没有对应的代码或登记动作）"
+note = "★ 用户最恨的一类。实读：六条硬规矩里只有「门禁落盘 / 审计不过不许提交 / 文档同提交」三条有机器判据；「无任务卡不开工」「一次只做一条主线」「不许把等用户说继续当默认」「不许自己重排任务」全是人话。 ★ 归位：`复盘/长任务执行协议.md` §九.2 / §九.5 / §十二（都是人话，没有对应的代码或登记动作）。 ★ 卡 162（T-G262）建账：`复盘/条款台账.toml` 的 CL-01 把这条单独立账，标 `unjudgeable` + 理由（要变成判据需要一个能看见「当轮没有下一动作」的运行时钩子 —— 本仓没有）。★ 规矩本身仍判不了 ⇒ 本条保持 missing（建账动作是元判据，不等于规矩被覆盖 —— 不许为了变绿硬凑）。"
 
 [[invariant]]
 id = "INV-70"
 claim = "视觉/布局类改动必须人工过目 —— 这条不许一直停在「建议写进协议」"
-judge = "tools/evidence_map.py"
-nail = "-"
-status = "missing"
-note = "★ 沙箱跑不了浏览器 ⇒ 布局改动的第一道发现者是用户；协议 §四 至今只有 5 条停止条件，没有这一条。 ★ 归位：源头 = `docs/traceability.toml` 的 `text:` 证据指**语义锚点**（节标题 / 函数名）而不是整句；改前先跑 `tools/evidence_map.py --file <要改的文件>`"
+judge = "复盘/外包-卡表与规矩.md::§18.3"
+nail = "tests/test_wb_invariants.py::test_clause_template_has_visual_layout_row"
+status = "partial"
+note = "★ 卡 162（T-G262）落地：协议 §四 现在有 6 条停止条件（第 6 条就是这条，原话「视觉/布局类改动必须交用户过目」）；卡规格模板 §18.3 加了「§8 本卡是否属视觉/布局类」一行（机器可核存在性，nail 钉住）。 ★ 沙箱跑不了浏览器 ⇒ 布局改动的第一道发现者是用户。 ★ 建账：`复盘/条款台账.toml` 的 CL-02 把这条单独立账，标 `partial`（动作可判、好不好看判不了 ⇒ unjudgeable 那半如实标 + 理由）。 ★ 归位：源头 = `docs/traceability.toml` 的 `text:` 证据指**语义锚点**（节标题 / 函数名）而不是整句；改前先跑 `tools/evidence_map.py --file <要改的文件>`"
 
 [[invariant]]
 id = "INV-71"
 claim = "悬停只许动 background / border / color —— 不许位移、不许换行"
-judge = "-"
-nail = "-"
-status = "missing"
-note = "★ 只有一句包的原话 + 代码注释；唯一的钉子只挡「卡片悬停显形」这一种 ⇒ 没有一条门在判「hover 改了高度/位置」。 ★ 归位：`src/web/app.css` 末节「互动态」（变体选择器**一条条写全**、放全表最后）+ `src/web/index.html::taskCard`（做 `…` 行内展开而不是悬停显形）"
+judge = "tools/style_audit.py::check_hover_motion"
+nail = "tests/test_style_audit.py::test_hover_motion_bites_on_transform"
+status = "covered"
+note = "★ 卡 162（T-G262）立判据：`tools/style_audit.py::check_hover_motion` 扫 :hover 规则的属性集，只许 background / border* / color / opacity 这类不改变几何的属性；出现 transform / translate / margin / padding / height / flex / display 等 ⇒ 红。先红后绿：合成带 transform 的 :hover 必红（nail 钉这条）、真实 src/web/app.css 必绿（真样式表本来就没位移 ⇒ 没报）。 ★ 边界（如实写）：本判据只看 `:hover` 选择器的规则；`:focus-visible` / `.is-active` 不在范围。真实样式表若以后出现 hover 位移 ⇒ 如实报，不改样式迁就判据（改法另立卡）。 ★ 建账：`复盘/条款台账.toml` 的 CL-03 把这条单独立账，标 `covered`（判据 + 钉子都在）。 ★ 归位：`src/web/app.css` 末节「互动态」（变体选择器**一条条写全**、放全表最后）+ `src/web/index.html::taskCard`（做 `…` 行内展开而不是悬停显形）"
 
 [[invariant]]
 id = "INV-72"
@@ -607,7 +607,7 @@ claim = "同一件教训不许在复盘的正文 / changelog / 台账 gaps 三�
 judge = "-"
 nail = "-"
 status = "missing"
-note = "规矩在（教训只写一处 + 指针），但实读 T-G137/144/147/152/155 的 gaps 仍是 600–1500 字、大量复述 ⇒ 没有判据。 ★ 归位：源头 = 规矩「教训只写 `复盘/视觉线地图.md` §6；卡的 `gaps` 只写本卡特有事实 + 给指针」"
+note = "★ 卡 162（T-G262）建账：`复盘/条款台账.toml` 的 CL-04 把这条单独立账，标 `unjudgeable` + 理由（gaps 是自由文本，机器没法判「同一件事在三处用了不同措辞」—— 那需要语义比对，超出静态检查；要变 covered 需要一个「教训指纹」机制，但那会把 gaps 变成结构化字段、损失表达力 —— 权衡之下不划算）。★ 规矩本身仍判不了 ⇒ 本条保持 missing（建账动作是元判据，不等于规矩被覆盖）。规矩在（教训只写一处 + 指针），但实读 T-G137/144/147/152/155 的 gaps 仍是 600–1500 字、大量复述 ⇒ 没有判据。 ★ 归位：源头 = 规矩「教训只写 `复盘/视觉线地图.md` §6；卡的 `gaps` 只写本卡特有事实 + 给指针」"
 
 [[invariant]]
 id = "INV-75"
@@ -615,7 +615,7 @@ claim = "状态字段没人复查就会漂 —— 不许把做完的事说成没
 judge = "-"
 nail = "-"
 status = "missing"
-note = "★ 现场：同一句过期话漂在**三处**，都说 pywebview 未安装，而它 2026-09-21 就装上了。 ★ 归位：源头 = 改状态时 ① 先 `grep` 那句关键词看它在**几处**写着；② 更正带日期与原因；③ 看清「还剩哪半没做」别整条一起销账"
+note = "★ 现场：同一句过期话漂在**三处**，都说 pywebview 未安装，而它 2026-09-21 就装上了。 ★ 卡 162（T-G262）建账：`复盘/条款台账.toml` 的 CL-05 把这条单独立账，标 `unjudgeable` + 理由（状态句是自然语言，机器没法判「这句话还成不成立」—— 那需要把每句状态话结构化成「(断言, 依赖, 复查日期)」三元组并定期复查，超出本仓口径；状态话散落在 30+ 份文档里，逐条登记成本不划算）。★ 规矩本身仍判不了 ⇒ 本条保持 missing（建账动作是元判据，不等于规矩被覆盖）。 ★ 归位：源头 = 改状态时 ① 先 `grep` 那句关键词看它在**几处**写着；② 更正带日期与原因；③ 看清「还剩哪半没做」别整条一起销账"
 
 [[invariant]]
 id = "INV-76"

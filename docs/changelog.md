@@ -6,6 +6,15 @@
 - `tools/seam_check.py` +77/-4：从"推荐"升为**硬门**（按符号相交且无依赖路径 ⇒ 拒）。
 - `tests/test_seam_check.py` +53 · 新增 `tests/test_door_inputs_coverage.py`（覆盖面钉子）。
 - ★ 第一手：`pytest tests/test_seam_check.py tests/test_door_inputs_coverage.py` ⇒ **29 passed**；`ruff` 干净。
+## 2026-10-04 —— 人话条款建账：条款台账 + 核查器 + 视觉类过目条款 + hover 运动检查（T-G262 / 卡 162）
+
+- 新增 `复盘/条款台账.toml`（**5 条人话条款**）· `tools/wb_invariants.py` 加 `--clauses` / `load_clauses` /
+  `check_clauses` / `_print_clauses`（**要么有机器判据，要么写明机器判不了 + 理由**）· `tests/test_wb_invariants.py` +5 条钉子。
+- `tools/style_audit.py` 加 `check_hover_motion` + `HOVER_ALLOWED`/`HOVER_FORBIDDEN` 并接进 `collect`；
+  `tests/test_style_audit.py` +5 条 hover 钉子。
+- `复盘/长任务执行协议.md` §四 加第 **6 条停止条件**（视觉/布局类必须交用户过目）；
+  `复盘/外包-卡表与规矩.md` 加 §8 选填行 + §18.6 条款（INV-70 / CL-02）。
+- ★ 第一手：`pytest tests/test_wb_invariants.py tests/test_style_audit.py` ⇒ **31 passed**；`ruff` 干净。
 ## 2026-10-03 —— 坑总账与不变量台账落档：344 条坑 + 77 条不变量进 git（T-G265 / 卡 165）
 
 - **坑总账建档**：7 个只读工人把 218 份复盘按门类分片读完，机器逐条解析出 **344 条坑**（工人自报合计 314，差额 30 条是几份报告的统计行少算了自己列出的条目 —— 这条差额本身就是「数字手抄」那类坑的又一次现场），按**归位点**分成 8 类 + 共因 Top5。

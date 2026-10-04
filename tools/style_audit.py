@@ -11,7 +11,7 @@
   **门只负责「淘汰破例的候选」，不负责「挑出好看的」。** 这句写进代码里，
   免得以后有人拿它当审美结论用。
 
-## 五条判定（全部从 `src/web/app.css` 静态算，不需要浏览器）
+## 六条判定（全部从 `src/web/app.css` 静态算，不需要浏览器）
 
 - **互动态缺失**：`:hover` ≥1 条规则、`:focus-visible` ≥1 条规则。
   对「手放上去」和「键盘走到这里」都没回应，就是**每个元素各过各的**；
@@ -22,6 +22,11 @@
   一个原子抄 N 份，就是令牌层开始烂的方式（workbench 原文），
   也是「每块长得不一样」的根。
 - **动效超时/循环**：时长 ≤200ms、无 `infinite`。各走各的时长＝节奏散。
+- **悬停几何位移**（卡 162 · T-G262 立，INV-71）：`:hover` 规则只许出现
+  `background` / `border*` / `color` / `opacity` 这类**不改变几何**的属性；
+  出现 `transform` / `translate` / `margin` / `padding` / `height` / `flex` / `display`
+  等 ⇒ 红。**包的原话**：悬停只许动 background / border / color —— 不许位移、不许换行。
+  ★ 真实样式表若本来就有位移 ⇒ **如实报**，不改样式迁就判据（改法另立卡）。
 - **档数**（只报告、不判）：圆角 ≤3 档（workbench 明文），其余只报数。
   档数就是「语言的收敛度」：同一属性 7 档圆角＝没有语言。
 
@@ -52,6 +57,50 @@ BASELINE = ROOT / "tools" / "style_baseline.toml"
 
 MOTION_CEILING_MS = 200  # workbench：状态过渡 0.12–0.18s，超过就不是这个包的语速
 RADIUS_TIER_CAP = 3  # workbench：6 / 10 / 999，Nothing else
+
+# ---- 悬停几何位移（卡 162 · T-G262，INV-71）----------------------------------------
+# 包的原话：悬停只许动 background / border / color —— 不许位移、不许换行。
+# 允许的属性 = 不改变几何（颜色 / 背景 / 边框颜色 / 不透明度 / 轮廓 / 阴影等）；
+# 禁止的属性 = 改变几何（transform / 位移 / 内外边距 / 尺寸 / 弹性 / 显示 / 布局等）。
+# ★ `border` 简写可能含 `border-width`（改变几何）⇒ 不进 allowed，归 forbidden EXACT。
+# ★ 真实样式表若本来就有位移 ⇒ 如实报，不改样式迁就判据（改法另立卡）。
+HOVER_ALLOWED_PROPS = {
+    "background", "background-color", "background-image", "background-blend-mode",
+    # 背景图位置/重复/大小不改元素几何：
+    "background-position", "background-repeat", "background-size",
+    "color",
+    "border-color", "border-top-color", "border-right-color",
+    "border-bottom-color", "border-left-color",
+    "border-style", "border-top-style", "border-right-style",
+    "border-bottom-style", "border-left-style",
+    "outline", "outline-color", "outline-style", "outline-offset",  # outline 不占布局流
+    "opacity", "box-shadow", "cursor", "filter",
+    "text-decoration", "text-decoration-color", "text-decoration-line", "text-decoration-style",
+    "fill", "stroke", "stroke-width",  # SVG 描边粗细不改 HTML 几何
+}
+#: 精确命中即红的属性（简写或单值，改变几何或布局）。
+HOVER_FORBIDDEN_EXACT = {
+    "transform",
+    "margin", "padding",
+    "top", "right", "bottom", "left",  # 定位位移
+    "width", "height",
+    "flex", "grid", "display", "position", "float", "clear",
+    "overflow", "clip",
+    "border",  # 简写可能含 border-width ⇒ 改变几何
+    "font-size", "line-height", "letter-spacing", "word-spacing",  # 字号/行高变化会让行换行
+    "gap", "row-gap", "column-gap",  # gap 变化改变布局
+}
+#: 前缀命中即红（带后缀的属性，如 margin-top / border-radius / min-width 等）。
+#: ★ `border-top-` 等前缀会匹配 `border-top-width`（红）；`border-top-color` 先被 allowed 救回。
+HOVER_FORBIDDEN_PREFIXES = (
+    "translate", "rotate", "scale",  # translateX / rotateY / scaleZ 等
+    "margin-", "padding-",
+    "min-", "max-",  # min-width / max-height
+    "flex-", "grid-",  # flex-grow / grid-template
+    "overflow-",  # overflow-x / overflow-y
+    "border-radius", "border-top-", "border-right-", "border-bottom-", "border-left-",
+    # ↑ border-top-width / border-top-left-radius 等
+)
 
 _RULE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.S)
 _VAR_ONLY = re.compile(r"^var\(\s*(--[a-z0-9-]+)\s*\)$")
@@ -253,6 +302,49 @@ def check_motion(rules: list[Rule]) -> list[Finding]:
     return out
 
 
+def check_hover_motion(rules: list[Rule]) -> list[Finding]:
+    """悬停几何位移（卡 162 · T-G262，INV-71）：`:hover` 规则不许改变几何。
+
+    包的原话：悬停只许动 `background` / `border` / `color` —— 不许位移、不许换行。
+    本函数扫所有 `:hover` 规则的属性集，禁止出现改变几何的属性
+    （`transform` / `translate` / `margin` / `padding` / `height` / `flex` / `display` 等）。
+
+    判断顺序（重要）：先 `HOVER_ALLOWED_PROPS` 精确命中 ⇒ 放行；再 `HOVER_FORBIDDEN_EXACT`
+    精确命中或 `HOVER_FORBIDDEN_PREFIXES` 前缀命中 ⇒ 红；其他 ⇒ 不报。
+    ★ 这个顺序让 `border-top-color` 先被 allowed 救回，而 `border-top-width` 被前缀咬住。
+
+    ★ 真实样式表若本来就有位移 ⇒ **如实报**，不改样式迁就判据（改法另立卡）。
+    ★ 只看 `:hover` 选择器的规则；`:focus-visible` / `.is-active` 等不在本判据范围。
+    """
+    out: list[Finding] = []
+    for rule in rules:
+        if ":hover" not in rule.selector:
+            continue
+        for prop, value in rule.declarations:
+            if prop in HOVER_ALLOWED_PROPS:
+                continue
+            if prop in HOVER_FORBIDDEN_EXACT:
+                out.append(
+                    Finding(
+                        f"hover:motion:{rule.selector}:{prop}",
+                        "SHORT",
+                        f"{rule.selector} 的 `:hover` 改了 `{prop}: {value}` —— "
+                        "悬停只许动 background / border / color，不许位移、不许换行",
+                    )
+                )
+                continue
+            if any(prop.startswith(p) for p in HOVER_FORBIDDEN_PREFIXES):
+                out.append(
+                    Finding(
+                        f"hover:motion:{rule.selector}:{prop}",
+                        "SHORT",
+                        f"{rule.selector} 的 `:hover` 改了 `{prop}: {value}` —— "
+                        "悬停只许动 background / border / color，不许位移、不许换行",
+                    )
+                )
+    return out
+
+
 def tier_report(rules: list[Rule]) -> list[tuple[str, int, int | None, list[str]]]:
     """档数报告（人类读的部分）：一个属性在这套样式里一共有几种写法。
 
@@ -282,6 +374,7 @@ def collect(css: str) -> list[Finding]:
         + check_orphan_literals(rules)
         + check_shape_duplicates(rules)
         + check_motion(rules)
+        + check_hover_motion(rules)
     )
 
 

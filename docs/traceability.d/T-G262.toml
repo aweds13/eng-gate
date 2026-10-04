@@ -1,0 +1,17 @@
+[entries."T-G262"]
+id = "T-G262"
+title = "人话条款建账：条款台账 + 核查器 + 视觉类过目条款 + hover 运动检查"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/条款台账.toml",
+  "file:tools/wb_invariants.py",
+  "file:tests/test_wb_invariants.py",
+  "file:tools/style_audit.py",
+  "file:tests/test_style_audit.py",
+  "file:复盘/长任务执行协议.md",
+  "file:复盘/外包-卡表与规矩.md",
+  "file:复盘/不变量台账.toml",
+]
+gaps = "① ★ **「人话条款」只做到「建账 + 核查器」**：`复盘/条款台账.toml` 立了 5 条，核查器能查它们**有没有机器判据 / 有没有写明机器判不了** —— 但**「条款本身对不对」没有判据**（那要人读）。指针：`tools/wb_invariants.py`。② ★ **视觉/布局那条（§18.6 / INV-70）是「流程条款」，不是门禁**：它要求「交用户过目」，而**判据只能到「回报里写没写状态」**（好不好看机器判不了）。⇒ 沙箱跑不了浏览器，这条**结构上**只能靠人。指针：`复盘/外包-卡表与规矩.md` §18.6。③ ★ **hover 运动检查是「新欠账校验」**：`HOVER_ALLOWED/FORBIDDEN` 只报**新增**违规、不动既有 0 条欠账 ⇒ 它**不会**让存量变好。指针：`tools/style_audit.py`。④ ★ **本页（外包-卡表与规矩）与上一笔（183 的 §17）在同一文件**：本笔取「落地版 + 本卡改动」手工合（两段不同区域，无冲突）。★ 口径：**同一文件的多笔落地要「拿落地版再打自己的补丁」，不许整份覆盖**。指针：本笔的 `git apply` 记录。"
+

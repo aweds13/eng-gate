@@ -5825,3 +5825,20 @@ evidence = [
   "file:tests/test_door_inputs_coverage.py",
 ]
 gaps = "① ★ **门的输入表是「唯一真源」，本笔又给它加了两条输入**（`render_signatures.json`、`phone_check.mjs`）⇒ 以后**别再另写一份输入表**（`DOOR_INPUTS` 派生自 `COMMON`/`REUSE_INPUTS`，钉子会咬）。指针：`scripts/run_gates.py`。② ★ **慢门告警是「告警」不是「闸」**：`pytest` 超预算只进 `slow_doors`、**不红**（工人实测 `budget=50s` 时 `88.74s` 被记录）。⇒ 别把它当「跑得慢就一定过/一定不过」的判据。指针：`gates/last.json` 的 `pytest_mode`/`workers` 字段。③ ★ **`tools/wb_impact.py` 只接进「派活前置 + 复核侧」**，**没有**接进门禁本身 ⇒ 它挡的是「改这个文件会影响哪些门」，不是「门跑不跑」。指针：`tools/wb_impact.py`。④ ★ **域外新文件一例**：工人新写了 `tests/test_door_inputs_coverage.py`（本次才出现的钉子文件）⇒ 主控按口径**显式改域 + 写明理由**后补进预声明（第 5 次同模式）。指针：`gates/diag/batch/B-COVERAGE.toml`。"
+
+[entries."T-G262"]
+id = "T-G262"
+title = "人话条款建账：条款台账 + 核查器 + 视觉类过目条款 + hover 运动检查"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/条款台账.toml",
+  "file:tools/wb_invariants.py",
+  "file:tests/test_wb_invariants.py",
+  "file:tools/style_audit.py",
+  "file:tests/test_style_audit.py",
+  "file:复盘/长任务执行协议.md",
+  "file:复盘/外包-卡表与规矩.md",
+  "file:复盘/不变量台账.toml",
+]
+gaps = "① ★ **「人话条款」只做到「建账 + 核查器」**：`复盘/条款台账.toml` 立了 5 条，核查器能查它们**有没有机器判据 / 有没有写明机器判不了** —— 但**「条款本身对不对」没有判据**（那要人读）。指针：`tools/wb_invariants.py`。② ★ **视觉/布局那条（§18.6 / INV-70）是「流程条款」，不是门禁**：它要求「交用户过目」，而**判据只能到「回报里写没写状态」**（好不好看机器判不了）。⇒ 沙箱跑不了浏览器，这条**结构上**只能靠人。指针：`复盘/外包-卡表与规矩.md` §18.6。③ ★ **hover 运动检查是「新欠账校验」**：`HOVER_ALLOWED/FORBIDDEN` 只报**新增**违规、不动既有 0 条欠账 ⇒ 它**不会**让存量变好。指针：`tools/style_audit.py`。④ ★ **本页（外包-卡表与规矩）与上一笔（183 的 §17）在同一文件**：本笔取「落地版 + 本卡改动」手工合（两段不同区域，无冲突）。★ 口径：**同一文件的多笔落地要「拿落地版再打自己的补丁」，不许整份覆盖**。指针：本笔的 `git apply` 记录。"
