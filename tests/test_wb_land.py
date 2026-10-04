@@ -909,3 +909,117 @@ def test_degraded_run_trailer(tmp_path: Path) -> None:
     msg2 = _git(repo2, "log", "-1", "--format=%B").stdout
     assert "Run:" not in msg2, f"默认跑法不该有 Run: trailer：{msg2!r}"
 
+# ================================================ 卡 163 INV-28：收口链续租接线
+_GATE_LOCK_RENEW = """import pathlib, sys
+with pathlib.Path("gate_lock_calls.log").open("a", encoding="utf-8") as fh:
+    fh.write(" ".join(sys.argv[1:]) + "\\n")
+mk = pathlib.Path("lock.marker")
+if "acquire" in sys.argv:
+    mk.write_text("locked", encoding="utf-8")
+elif "release" in sys.argv and mk.exists():
+    mk.unlink()
+elif "renew" in sys.argv:
+    pathlib.Path("renew.marker").touch()
+print("stub-gate_lock", " ".join(sys.argv[1:]))
+sys.exit(0)
+"""
+
+_RUN_GATES_SLOW = """import pathlib, sys, time
+pathlib.Path("gate_ran.marker").write_text("ran", encoding="utf-8")
+time.sleep(0.5)
+print("stub-run_gates")
+sys.exit(0)
+"""
+
+
+def test_landing_renews_lock_during_gate(tmp_path: Path) -> None:
+    """★ 卡 163 INV-28：收口链跑门禁期间自动续租 —— renew 真的被调过（不只是 cmd_renew 存在）。"""
+    repo = _mk_repo(tmp_path)
+    _write(repo, "gates/diag/gate_lock.py", _GATE_LOCK_RENEW)
+    _write(repo, "scripts/run_gates.py", _RUN_GATES_SLOW)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "stubs with renew")
+
+    env = {**_ENV, "TF_GATE_RENEW_INTERVAL": "0.05"}
+    cmd = [sys.executable, "-X", "utf8", str(repo / "tools" / "wb_land.py"),
+           "--card", "T-G999", "--tree", ".", "--task", "T-G999", "--title", "钉子",
+           "--type", "feat", "--group", "ENGINEERING", "--evidence", "code/a.py",
+           "--allow", "code"]
+    subprocess.run(cmd, cwd=str(repo), env=env, capture_output=True, text=True,
+                   encoding="utf-8", errors="replace")
+
+    calls = (repo / "gate_lock_calls.log").read_text(encoding="utf-8") \
+        if (repo / "gate_lock_calls.log").exists() else ""
+    assert "renew" in calls, f"续租必须真的发生（renew 被调过）：{calls!r}"
+
+
+# ================================================ 卡 163 INV-10：第⑦步 ff 合流失败反例
+def test_ff_merge_failure_does_not_print_complete(tmp_path: Path) -> None:
+    r"""★ 卡 163 INV-10：ff 合流失败时不许打印「合流完成」—— 要打 stdout/stderr、退 2。
+
+    卡明说「不覆盖⑦之后」，本卡**必须覆盖它**。造法：子 worktree 提交一笔 + 主树对同一文件
+    造本地改动 ⇒ `git merge --ff-only` 拒绝覆盖本地改动 ⇒ HEAD 不变 ⇒ 不许打印「合流完成」。
+    """
+    repo = _mk_repo(tmp_path)
+    sub = repo / ".wt" / "sub"
+    _git(repo, "worktree", "add", str(sub), "HEAD")
+    (sub / "code" / "a.py").write_text("X = 2\n", encoding="utf-8")
+    (repo / "code" / "a.py").write_text("X = 3\n", encoding="utf-8")
+
+    done = _wand(repo, "--no-gate", tree=".wt/sub", allow=("code",))
+
+    out = _out(done)
+    assert done.returncode == 2, out
+    assert "ff 合流完成" not in out, "★ ff 没成功时不许打印「合流完成」"
+    assert "没成功" in out, out
+    assert "stdout:" in out, "要打 merge 的 stdout"
+    assert "stderr:" in out, "要打 merge 的 stderr"
+
+
+# ================================================ 卡 163 INV-23：stage_card 引号/反斜杠钉子
+def _load_stage_card() -> ModuleType:
+    """按文件路径加载 `tools/pool/stage_card.py`（钉**这一份**，不是 task.py 那份副本）。"""
+    path = TOOLS / "pool" / "stage_card.py"
+    spec = importlib.util.spec_from_file_location("stage_card_under_test", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_stage_card_quote_safe_escapes_windows_backslashes() -> None:
+    r"""★ 含反斜杠的 Windows 路径 —— 反斜杠必须加倍（TOML 基本串里 \U 是 8 位十六进制转义）。"""
+    import tomllib
+    sc = _load_stage_card()
+    out = sc.quote_safe(r"C:/Users/example\test")
+    tomllib.loads(f'x = "{out}"')
+    assert "\\\\" in out, "反斜杠必须加倍"
+
+
+def test_stage_card_quote_safe_replaces_ascii_quotes_with_corners() -> None:
+    """★ 含 ASCII 双引号的中文正文 —— 双引号换成「」。"""
+    sc = _load_stage_card()
+    out = sc.quote_safe('他说"你好"然后"再见"')
+    assert '"' not in out, "ASCII 双引号不许留"
+    assert "「" in out and "」" in out
+
+
+def test_stage_card_unescape_git_quoted_octal() -> None:
+    r"""★ 含八进制转义的 git 输出 —— 还原成人能用的路径。
+
+    git 对非 ASCII 路径输出八进制转义：中文.txt 的 UTF-8 字节
+    E4 B8 AD E6 96 87 → \344\270\255\346\226\207。
+    """
+    sc = _load_stage_card()
+    escaped = '"\\344\\270\\255\\346\\226\\207.txt"'
+    out = sc._unescape_git_quoted(escaped)
+    assert out == "中文.txt", f"还原失败：{out!r}"
+
+
+def test_stage_card_toml_str_produces_valid_toml() -> None:
+    """★ _toml_str 对各种特殊字符都产出合法 TOML（钉 stage_card 这一份，不是 task.py 那份）。"""
+    import tomllib
+    sc = _load_stage_card()
+    for s in (r"C:\Users\test", '含"引号"的', "含\\反斜杠的", "中文正文"):
+        out = sc._toml_str(s)
+        tomllib.loads(f"x = {out}")

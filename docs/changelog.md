@@ -62,6 +62,14 @@
 - `tests/test_wb_dispatch.py` +106：**4 条反例钉子**（① 真没登录 ⇒ 报「没登录」② 探失败 ⇒ 报「没能得出结论」
   ③ 先失败后成功 ⇒ 放行 ④ 两次都失败 ⇒ 给两条出路）。
 - ★ 第一手：`pytest tests/test_wb_dispatch.py` + `test_no_window` ⇒ **196 passed**；`ruff` 干净。
+## 2026-10-04 —— 锁与租约的接线：续租线程 + 去掉硬编码 `--stale-after` + `prune`/`first_attempt`（T-G263 / 卡 163）
+
+- `tools/pool/landing.py` +32/-2：拿锁后起**后台续租线程**（`INV-28`）· 去掉硬编码 `--stale-after 3600`
+  ⇒ 租约时长只由 `gate_lock.DEFAULT_STALE_AFTER` 一处决定 · 两处取锁/续租调用**加防窗旗**（Windows 不弹窗）。
+- `tools/wb_dispatch.py` +33/-3：`INV-39`（派活前 `prune` 死租约）· `INV-40`（`first_attempt` 记账，续跑不覆盖第一轮证据）。
+- `tests/test_gate_lock_lease.py` +35 · `tests/test_wb_dispatch.py` +55 · `tests/test_wb_land.py` +116 ·
+  `tests/test_no_window.py`（删一条失效登记 + 指向新调用）。
+- ★ 第一手：`pytest test_no_window + test_gate_lock_lease + test_wb_land` ⇒ **43 passed**；`ruff` 干净。
 ## 2026-10-03 —— 坑总账与不变量台账落档：344 条坑 + 77 条不变量进 git（T-G265 / 卡 165）
 
 - **坑总账建档**：7 个只读工人把 218 份复盘按门类分片读完，机器逐条解析出 **344 条坑**（工人自报合计 314，差额 30 条是几份报告的统计行少算了自己列出的条目 —— 这条差额本身就是「数字手抄」那类坑的又一次现场），按**归位点**分成 8 类 + 共因 Top5。

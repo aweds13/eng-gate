@@ -3404,3 +3404,56 @@ def test_card154_nail4_both_fail_prompts_two_ways_out_not_silent(
     assert "/login" in err, f"两次都失败应提示 /login 出路：{err}"
     assert "--no-preflight" in err, f"两次都失败应提示 --no-preflight 出路：{err}"
     assert "没能得出结论" in err, f"应明说「没能得出结论」（不是静默按没登录处理）：{err}"
+# ================================================ 卡 163 INV-39：派活前清死租约
+def test_dispatch_prunes_dead_leases_before_reserving(sandbox: Path, monkeypatch,
+                                                      capsys) -> None:
+    """★ 卡 163 INV-39：派活前先清死租约 —— 下一位能直接拿到树，不需要人工 registry.release。
+
+    造一个"日志已死"的租约（日志静默超 STALL_SECONDS）⇒ 派活时 prune 清掉它 + 说清清了什么。
+    """
+    dead_log = _diag(sandbox) / "wb-dead.jsonl"
+    dead_log.write_text("{}\n", encoding="utf-8")
+    old = time.time() - (wd.STALL_SECONDS + 60)
+    os.utime(dead_log, (old, old))
+    wd.pool_registry.save([_entry("dead", tree=".wt/dead", files=["sandbox-001.md"],
+                                  log=dead_log.as_posix())])
+
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+
+    out = capsys.readouterr().out
+    assert "清租" in out, "派活前必须说清清了什么"
+    rows = wd.pool_registry.load()
+    assert not any(r["card"] == "dead" for r in rows), "死租约必须被清掉"
+
+
+# ================================================ 卡 163 INV-40：续跑不覆盖第 1 轮证据
+def test_resume_does_not_overwrite_first_round_evidence(sandbox: Path, monkeypatch) -> None:
+    """★ 卡 163 INV-40：续跑时第 1 轮的证据不许被覆盖 —— 从已有轮次+1 开始。
+
+    造一个 wb-001.jsonl（第 1 轮证据）+ 会话文件 ⇒ --resume auto 续跑时从 r2 起，
+    wb-001.jsonl 原封不动。
+    """
+    diag = _diag(sandbox)
+    log = diag / "wb-001.jsonl"
+    log.write_text("第一轮证据\n", encoding="utf-8")
+    (diag / "wb-001.session.txt").write_text("sid-test", encoding="utf-8")
+
+    seen_logs: list[str] = []
+
+    def runner(cmd, log_k, errlog, **kwargs):          # noqa: ANN001, ANN202
+        seen_logs.append(log_k.name)
+        log_k.parent.mkdir(parents=True, exist_ok=True)
+        log_k.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        return 0, "", "", "sid-test"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--resume", "auto"])
+    assert wd.main() == 0
+
+    assert "wb-001.r2.jsonl" in seen_logs, f"续跑必须从 r2 开始（不覆盖第 1 轮）：{seen_logs}"
+    assert log.read_text(encoding="utf-8") == "第一轮证据\n", "第 1 轮证据不许被覆盖"

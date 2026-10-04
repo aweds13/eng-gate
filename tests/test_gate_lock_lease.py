@@ -126,3 +126,38 @@ def test_two_cards_cannot_both_hold(gl, capsys):
     assert sorted(results.values()) == [0, 3]
     assert gl._read(gl.lock_path()).get("card") in results
     capsys.readouterr()
+
+
+# ================================================ 卡 163 INV-28：续租线程真读数
+def test_renewer_thread_actually_refreshes_mtime(gl, capsys):
+    """★ 卡 163 INV-28：续租线程真的把 mtime 续了 —— 不只是 cmd_renew 存在，而是 mtime 真变了。
+
+    模拟 landing.py 的续租接线：起一个后台线程定期调 cmd_renew，跑一会儿后停。
+    断言：renew 被调过、mtime 是新的、锁没被别人拿走（串行仍在）。
+    """
+    lease = 10
+    assert gl.cmd_acquire("A", wait=0, stale_after=lease) == 0
+    lock = gl.lock_path()
+    _backdate(lock, lease + 5)  # 不续租的话已经陈旧了
+
+    stop = threading.Event()
+    renew_count = [0]
+
+    def renewer() -> None:
+        while not stop.wait(0.02):
+            if gl.cmd_renew("A") == 0:
+                renew_count[0] += 1
+
+    t = threading.Thread(target=renewer, daemon=True)
+    t.start()
+    time.sleep(0.15)  # 让续租线程跑几次
+    stop.set()
+    t.join(timeout=1)
+
+    assert renew_count[0] > 0, "续租线程必须真的调了 cmd_renew"
+    assert gl._age(lock) < 1, "续租后 mtime 必须是新的"
+
+    # 反证：续租后别人拿不走（串行仍在）
+    assert gl.cmd_acquire("B", wait=0, stale_after=lease) == 3
+    assert gl._read(lock).get("card") == "A"
+    capsys.readouterr()

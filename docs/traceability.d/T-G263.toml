@@ -1,0 +1,15 @@
+[entries."T-G263"]
+id = "T-G263"
+title = "锁与租约的接线：续租线程 + 去掉硬编码 --stale-after + prune/first_attempt"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_gate_lock_lease.py",
+  "file:tests/test_wb_dispatch.py",
+  "file:tests/test_wb_land.py",
+  "file:tests/test_no_window.py",
+]
+gaps = "① ★★ **续租是「保命」不是「判据」**：`_renewer_loop` 每 300s 刷一次锁的 mtime，**失败只吞异常**（不崩主流程、不报红）⇒ 续租挂了**没人会知道**，只会在锁被判陈旧时才暴露。指针：`tools/pool/landing.py` 的 `_renewer_loop`。② ★ **租约时长收敛到一处**（`gate_lock.DEFAULT_STALE_AFTER`），但 `acquire` 那条命令的 `--stale-after 3600` **被删掉了** ⇒ 老窗口/老脚本若还传它，行为会与今天不同。指针：`tools/pool/landing.py` 第 ④ 步。③ ★ **`prune` / `first_attempt` 只解决「轮次记账」**：旧判决文件被冒充过的那些（卡 156 的现场）**不会被自动修好**。指针：`tools/wb_dispatch.py`。④ ★ **本笔与卡 184（已落）共用 `tools/pool/landing.py`**：冲突是「两边都要」那一类（184 的增量块 + 本卡的 `_renewer_loop`）⇒ 主控手工合，**两边的钉子都跑过**。指针：本笔的 `git apply` 记录。"
+

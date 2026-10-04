@@ -53,6 +53,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import threading
 
 # ★ 2026-10-02：ROOT 原来是硬编码绝对路径（换机器即碎）。本位置 `tools/pool/` 上两级 = 仓库根，
 #   与旧位置 `gates/diag/` 的 `parents[2]` 结果一致 ⇒ 这一行搬过来不用改（已核对）。
@@ -389,6 +390,24 @@ def _run_review(task: str, rev: str) -> tuple[int, str, pathlib.Path]:
     summary = (f"exit={r.returncode}，problems={'?' if n_problems < 0 else n_problems}"
                f"，落盘 {review_file}")
     return r.returncode, summary, review_file
+def _renewer_loop(lock_label: str, wt: pathlib.Path, env: dict,
+                  stop: threading.Event, interval: float) -> None:
+    r"""后台续租门禁锁（卡 163 INV-28）—— 定期调 `gate_lock.py renew`，直到 `stop` 被设。
+
+    ★ 不许把租约时长写第二份：这里只刷 mtime，租约时长仍由
+      `gate_lock.DEFAULT_STALE_AFTER` 唯一决定（acquire 不再传 --stale-after）。
+      续租失败不崩主流程（只吞异常）—— 续租是**保命**的，不是门禁通过的判据。
+    """
+    while not stop.wait(interval):
+        with contextlib.suppress(Exception):
+            subprocess.run(
+                [sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
+                 "renew", "--card", lock_label],
+                cwd=str(wt), env={**os.environ, **env},
+                capture_output=True, text=True, timeout=30,
+                # ★ 防窗旗（卡 163）：续租每 5 分钟起一次进程，Windows 上不许弹窗。
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -556,11 +575,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"=== ④ 锁（段 {a.port_base}）→ 门禁（硬超时 1800s；"
                   f"{'增量' if incremental_run else '全量'}）===")
             r = subprocess.run([sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
-                                "acquire", "--card", lock_label, "--wait", "5400",
-                                "--stale-after", "3600"],
+                                "acquire", "--card", lock_label, "--wait", "5400"],
                                cwd=str(wt), env={**os.environ, **env},
-                               capture_output=True, text=True, encoding="utf-8", errors="replace")
+                               capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             print(r.stdout.strip()[-400:])
+            # ★ 卡 163 INV-28：拿锁后起续租线程 —— 门禁跑期间锁不会被判陈旧。
+            #   不传 --stale-after ⇒ 用 gate_lock.DEFAULT_STALE_AFTER（唯一真源，不写第二份）。
+            renew_stop = threading.Event()
+            if r.returncode == 0:
+                _interval = float(os.environ.get("TF_GATE_RENEW_INTERVAL", "300"))
+                threading.Thread(
+                    target=_renewer_loop,
+                    args=(lock_label, wt, env, renew_stop, _interval),
+                    daemon=True,
+                ).start()
             try:
                 r = subprocess.run(gate_cmd,
                                    cwd=str(wt), env={**os.environ, **env},
@@ -574,6 +603,8 @@ def main(argv: list[str] | None = None) -> int:
                 out = (exc.stdout or b"").decode("utf-8", "replace") \
                     if isinstance(exc.stdout, bytes) else (exc.stdout or "")
                 rc = 124
+            finally:
+                renew_stop.set()
             tail = out.strip().splitlines()[-22:]
             print("\n".join(tail))
             mode = "增量" if incremental_run else "全量"

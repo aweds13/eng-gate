@@ -2346,8 +2346,10 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
                 print(f"  [★告警] {len(outside)} 个脏文件不在 --allow 白名单里"
                       f"（可能是别的卡串了树）：{', '.join(outside_lines[:5])}",
                       file=sys.stderr, flush=True)
-    if log.exists() and not force:
+    if log.exists() and not force and not resuming:
         problems.append(f"这一轮的 log 已存在：{log}（要覆盖请 --force —— 证据不许被悄悄盖掉）")
+    # ★ 卡 163 INV-40：续跑时 log 已存在是正常的（那是上一轮的证据）⇒ 不拒。
+    #   续跑从 first_attempt（已有轮次+1）起，log_k = wb-<卡>.r<N>.jsonl，不覆盖旧证据。
     # ★ 卡 125（T-G223）：四条守卫的干跑（树 / 冲突域 / 门禁锁）—— 与 `[FAIL] 不派活` 同一层。
     #   域从队列**真读**（查不到就拒，见 `queue_files`）；判据全在 `pool.guards`，不另写一份。
     #   ★ `--already-reserved`：调用方（MCP）已经占过树 ⇒ 只跳过这一段（占/还树也在 main 里跳过）。
@@ -2647,6 +2649,19 @@ def main() -> int:
     spec_file_for(log).parent.mkdir(parents=True, exist_ok=True)
     spec_file_for(log).write_text(f"{args.spec}\nsha256={spec_digest}\n", encoding="utf-8")
 
+    # ★ 卡 163 INV-40：续跑时从已有轮次的下一个开始 —— 旧证据不许被覆盖。
+    #   非续跑（resume_sid 空）⇒ first_attempt=1（仍*仍*用 wb-<卡>.jsonl，向后兼容）；
+    #   续跑 ⇒ 扫已有 wb-<卡>.r*.jsonl + wb-<卡>.jsonl，从 max+1 起（不覆盖任何旧证据）。
+    if resume_sid:
+        _rounds_seen = [1] if log.exists() else []
+        for _p in log.parent.glob(f"wb-{args.card}.r*.jsonl"):
+            _m = re.match(rf"^wb-{re.escape(args.card)}\.r(\d+)\.jsonl$", _p.name)
+            if _m:
+                _rounds_seen.append(int(_m.group(1)))
+        first_attempt = max(_rounds_seen) + 1 if _rounds_seen else 1
+    else:
+        first_attempt = 1
+
     # ★★ 卡 125（T-G223）：真派活（--execute；dry-run 已在上面 return）**起工人之前**先占树 ——
     #   登记一次，别的窗口走正规干跑就看得见这个活（从前看不见 ⇒ 一树两写者不会被咬）。
     #   ★ 位置选这里的原因：`--detach` 的**父进程**在更上面就 return 了（它只负责扔出去），
@@ -2662,6 +2677,15 @@ def main() -> int:
 
         print("[占树] --already-reserved：树由调用方（MCP）占过 —— 本次不占、不还", flush=True)
     else:
+        # ★ 卡 163 INV-39：派活前先清死租约 —— 被强杀的工人留的租约，
+        #   下一位不该只能靠"读者过滤"（list_reservations 只读不清）。prune 落盘 + 说清清了什么。
+        try:
+            _pruned = pool_registry.prune()
+            if _pruned:
+                print(f"[清租] 派活前清掉 {_pruned} 条死租约（日志已死/TTL 过期）", flush=True)
+        except pool_registry.RegistryError as _exc:
+            print(f"[清租] 读不了登记，跳过清理：{_exc}", file=sys.stderr, flush=True)
+
         reserve_files, reserve_why = queue_files(args.card)
         if reserve_why:
             print(f"[FAIL] {reserve_why}", file=sys.stderr, flush=True)
@@ -2691,7 +2715,13 @@ def main() -> int:
         #   只能等 TTL（6 小时），把树白占着（真咬过，见 `lease_log_for`）。带上之后
         #   `registry.is_dead` 的「日志判死」那条判据就能生效（`list_reservations` / `prune`）。
         #   ★ 已存在的 log 不登记（`log_guard` 与 `--force` 覆盖语义打架，见 `lease_log_for`）。
-        lease_log = lease_log_for(log)
+        #   ★ 卡 163 INV-40：续跑时 lease 的 log 用 first_attempt 那一轮的 log_k
+        #     （wb-<卡>.r<N>.jsonl），这样日志判死看的是真在跑的那一轮，不是被覆盖的第 1 轮。
+        if first_attempt > 1:
+            _first_log = log.with_name(f"wb-{args.card}.r{first_attempt}.jsonl")
+            lease_log = lease_log_for(_first_log)
+        else:
+            lease_log = lease_log_for(log)
         # ★ 卡 149：留痕 —— 这一趟是哪个号跑的，一眼可查（与 `project` / `model` 同一风格）。
         #   ★ 不给 `--account` 时**逐字不变**（仍是 `spec=…`），免得打穿既有读数。
         lease_note = f"spec={args.spec}" + (f"｜account={args.account}" if args.account else "")
@@ -2720,7 +2750,7 @@ def main() -> int:
               + (f" + 日志判死（log={registered_log}）" if registered_log
                  else "（**没有日志判死**：这一轮的 log 已存在，只能等 TTL）"), flush=True)
 
-    attempts, code, reason, scene, sid = 1, 0, "", "", resume_sid
+    attempts, code, reason, scene, sid = first_attempt, 0, "", "", resume_sid
     model = args.model                       # 429 三拍会按序换（只换白名单里的）
     quota_seen: dict[str, str] = {}          # 每个模型撞的额度错（全挂就停时写进判决）
     usage_total = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0}

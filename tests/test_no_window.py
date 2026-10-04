@@ -134,8 +134,8 @@ EXEMPT: dict[tuple[str, str, str], str] = {
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("tools/pool/landing.py", "run", "3cec796c7340"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
-    ("tools/pool/landing.py", "run", "9c0587802f71"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
+
+    # ★ 2026-10-04：卡 163 给 landing.py 的 acquire/renew 加了防窗旗（原登记已删）。
     ("tools/pool/landing.py", "run", "c28ff8284e2a"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("tools/pool/landing.py", "run", "501976f736bb"):
