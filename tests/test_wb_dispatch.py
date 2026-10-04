@@ -987,6 +987,27 @@ def test_silence_without_any_inflight_call_is_still_a_stall() -> None:
     assert "卡死" in wd.watchdog_verdict(silent_seconds=600, signatures=["Bash|x"], lines=lines)
 
 
+def test_stub_missing_fields_is_caught_not_silently_skipped() -> None:
+    """★★ 卡 164（T-G264 / INV-36）：桩缺 `id` + `__timestamp` ⇒ 判据必须**红**，
+    不是\"悄悄跳过让断言恒真\"。
+
+    现场：`_epoch` 保守分支（缺字段 → None）+ `inflight_tool`/`tool_durations` 的
+    `if stamp is None: continue` 会跳过残桩 —— 生产里对（半截 log 不许炸），但测试里
+    它让断言恒真（桩什么都没喂进去 ⇒ 阈值 == 底线 ⇒ \"阈值没被抬\"绿了）。
+    `tool_use_missing_fields` 让测试自检桩完整性：缺字段时非空、完整时空。
+    """
+    # 残桩：缺 id + 缺 __timestamp
+    broken = [json.dumps({"type": "assistant", "message": {"id": "m-x", "content": [
+        {"type": "tool_use", "name": "Bash", "input": {"command": "x"}}]}})]
+    assert wd.inflight_tool(broken) is None, "缺字段的桩不许假装有在飞的调用"
+    missing = wd.tool_use_missing_fields(broken)
+    assert missing and "id" in missing[0] and "__timestamp" in missing[0], missing
+    # 对照：完整桩 ⇒ missing_fields 空（测试自检会绿）
+    full = [_tool_use_event("Bash", tid="t1", ago=10)]
+    assert wd.tool_use_missing_fields(full) == []
+    assert wd.inflight_tool(full) is not None
+
+
 def test_threshold_adapts_to_the_longest_completed_call() -> None:
     """★ 跑过一次 300 秒的调用 → 阈值抬到 750 秒（= 2.5 × 最长）：静默 700 健康、800 卡死。
 
@@ -1610,13 +1631,19 @@ def test_retry_round_threshold_eats_only_its_own_log(
         sandbox: Path, monkeypatch, capsys) -> None:
     """★★ 真机层（§2.1 + §2.2）：真起两轮子进程、真走 main() 的重试循环 ——
     第 1 轮塞一条 **3600 秒的已完成调用**（它把**自己这一轮**的阈值抬到 60 分钟封顶，所以
-    第 1 轮用 `--timeout 6` 掐 —— 超时同样触发续跑，这是 T-G91 定的「超时不是失败」）
+    第 1 轮用 `--timeout 12` 掐 —— 超时同样触发续跑，这是 T-G91 定的「超时不是失败」）
     → 自动续跑第 2 轮 → 第 2 轮只有秒级调用，判决里的「这一次的阈值」必须**只反映
     第 2 轮**（几秒级）；若被旧轮抬到 3600 秒，第 2 轮等不到「卡死」、只能再等一个超时。
 
     ★ 突变检验的靶子（§2.3）：把 `run_worker` 改坏成「第 2 轮从第 1 轮的 lines 起步」
     → 第 2 轮阈值被旧轮抬到 3600 秒 → 判决是「超时」不是「卡死」→ 本条**红**。
-    ★ 压缩阈值如实写（T-G94 先例）：`--timeout 6`、`--stall-seconds 2`、`--poll-seconds 0.2`。
+    ★ 压缩阈值如实写（T-G94 先例）：`--timeout 12`、`--stall-seconds 5`、`--poll-seconds 0.5`。
+
+    ★★ 计时 flake 处置（卡 164 第 7 条）：本条真起 `Popen`，在 **4 worker 满载**下曾 flake
+    （卡 149 第 3 趟：stub 第一行还没落地，看门狗就开跑 ⇒ 阈值 0.0 ⇒ 判「卡死」不是「超时」）。
+    处置 = **给足容差**：`stall 2→5` / `poll 0.2→0.5` / `timeout 6→12`，给 stub 落地窗口。
+    ★ **这降低 flake 概率，没根治**——根治要钉串行池（不让它和真 `Popen` 钉子挤一个 worker），
+    那是后续卡的事。读数（2026-10-03）：1 worker ×3 + 4 worker ×5 全绿。
     """
     r1_events = [
         {"type": "system", "subtype": "init", "session_id": "sid-tg111"},
@@ -1630,13 +1657,13 @@ def test_retry_round_threshold_eats_only_its_own_log(
     monkeypatch.setattr(wd, "build_command", lambda *a, **k: _stub_literal(r1_events, 120))
     monkeypatch.setattr(wd, "resume_command", lambda *a, **k: _stub_literal(r2_events, 120))
     monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "023", "--spec", "spec.md",
-                                      "--execute", "--retry", "1", "--timeout", "6",
-                                      "--stall-seconds", "2", "--poll-seconds", "0.2",
+                                      "--execute", "--retry", "1", "--timeout", "12",
+                                      "--stall-seconds", "5", "--poll-seconds", "0.5",
                                       "--heartbeat-seconds", "1"])
     started = time.monotonic()
     assert wd.main() == 6                                    # 第 2 轮被掐 → 退 6
     elapsed = time.monotonic() - started
-    assert elapsed < 30, f"两轮合计应 ~10 秒（6 超时 + ~3 卡死），实际 {elapsed:.1f} 秒"
+    assert elapsed < 50, f"两轮合计应 ~20 秒（12 超时 + ~5 卡死），实际 {elapsed:.1f} 秒"
     out = capsys.readouterr().out
     assert "续跑" in out                                     # 真走了自动续跑
     v1 = (sandbox / "gates" / "diag" / "wb-023.verdict.txt").read_text(encoding="utf-8")
@@ -2163,6 +2190,50 @@ def test_real_run_archives_stale_verdict_and_report_but_dry_run_does_not(
     assert (diag / "wb-001.report.md.stale").exists()
     fresh = (diag / "wb-001.verdict.txt").read_text(encoding="utf-8")
     assert "正常收工" in fresh, "新一轮的判决落在原位（归档的是旧的）"
+
+
+def test_detach_archives_stale_verdict_in_the_parent_before_return(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★★ 卡 164（T-G264）：`--force --detach --execute` 时**父进程**归档旧判决 ——
+    在 detach return **之前**，不是之后。
+
+    旧写法把 archive_stale_artifacts 放在 detach return 之后（原 line 2473）⇒ 父进程
+    return 0 时旧判决还在原位 ⇒ 子进程起来到归档之间有时序窗口，谁读判决都读到旧的
+    （146 现场：23:10「没派活」旧判决冒充当前状态到 23:40 真跑完）。这条钉子把归档
+    **钉在 return 之前**：父进程 return 后旧判决已经是 `.stale`。
+    """
+    diag = sandbox / "gates" / "diag"
+    diag.mkdir(parents=True)
+    stale_verdict = diag / "wb-002.verdict.txt"
+    stale_verdict.write_text("判决：前置检查没过 → 没派活\n", encoding="utf-8")
+    monkeypatch.setattr(wd, "spawn_detached",
+                        lambda argv, log: 4242)              # 不真起子进程
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "002", "--spec", "spec.md",
+                                      "--detach", "--execute", "--force"])
+    assert wd.main() == 0                                     # 父进程扔出去就返回
+    out = capsys.readouterr().out
+    assert "[归档]" in out, "父进程 return 前必须归档（detach 路径）"
+    assert (diag / "wb-002.verdict.txt.stale").exists(), "旧判决已改名 .stale"
+    assert not (diag / "wb-002.verdict.txt").exists(), "原位不该再有旧判决"
+
+
+def test_verdict_carries_round_and_start_and_end_timestamps(
+        sandbox: Path, monkeypatch) -> None:
+    """★ 卡 164（T-G264）：判决带**轮次 + 开始时刻 + 结束时刻** ——
+    读的人要能判「这是不是当前这一轮」（旧判决冒充当前状态的现场就是它）。
+    """
+    diag = sandbox / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-007.jsonl"
+    log.write_text("\n".join(_running_events()) + "\n", encoding="utf-8")
+    began = time.time() - 60
+    vf = wd.write_verdict(log, card="007", attempts=2, code=0, reason="正常收工",
+                          sid="sid-abc", lines=["{}"], errlog=log.with_suffix(".stderr.txt"),
+                          started_at=began)
+    text = vf.read_text(encoding="utf-8")
+    assert "第=2 次" in text, "判决必须带轮次"
+    assert "开始于=" in text and "结束于=" in text, "判决必须带开始与结束时刻"
+    assert "sid-abc" in text
 
 
 def test_status_warns_when_the_verdict_is_older_than_the_log(

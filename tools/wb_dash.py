@@ -268,6 +268,17 @@ def card_state(root: Path | None = None) -> list[dict]:
                         _state(age, verdict.exists() or bool(summary["final"]),
                                threshold=threshold, heartbeat=hb_fresh))
         note = NO_VERDICT_NOTE if state == STOPPED_NO_VERDICT else ""
+        # ★ 卡 164（T-G264）：判决比日志旧 → 显著提示（146 现场：旧判决冒充当前状态）。
+        #   派活器 --status 已有这条告警（wb_dispatch.status_report），面板照搬同一口径。
+        verdict_stale = False
+        if verdict.exists():
+            try:
+                verdict_stale = verdict.stat().st_mtime < st.st_mtime
+            except OSError:
+                verdict_stale = False
+        if verdict_stale and "判决比日志旧" not in note:
+            tag = "★ 判决比日志旧 —— 它描述的不是当前这一轮"
+            note = f"{note} {tag}" if note else tag
         models = list(dict.fromkeys(summary["models"]))
         rows.append({
             # 跨树时带上树名（如 `004@.wt/004`），免得两张卡同号时看串。
@@ -300,7 +311,9 @@ def card_state(root: Path | None = None) -> list[dict]:
             "inflight": _inflight_label(inflight),
             "threshold_min": round(threshold / 60, 1),
             # ★ T-G144 新增（只加不改）：「已停（无判决）」的副文案，不下结论。
+            # ★ 卡 164 新增 verdict_stale：判决比日志旧时为 True，note 里已带显著提示。
             "note": note,
+            "verdict_stale": verdict_stale,
         })
     return rows
 

@@ -309,6 +309,12 @@ def gate_port_set(base: int | None = None) -> list[int]:
 # 机器 32 逻辑核、总内存只有 15.2 GB —— `-n auto` 会拉起最多 32 个 worker → 换页风险。
 # 读 `TF_PYTEST_WORKERS`；不设时用保守默认 `min(4, cpu)`。★「没装 xdist 就串行」的既有
 # 逻辑（`xdist_available()`）一个字不动。
+#
+# ★★ 快与稳的账（卡 164 第 8 条 / T-G264 · 2026-10-03 实测留痕）：
+#   4 worker = 126~158 秒 · 1 worker = 620~700 秒（差 ~5 倍）。
+#   代价 = 第 7 条那类计时 flake（真起 `Popen` 的测试在满载下 stub 落地慢 → 看门狗误判）。
+#   取舍：默认 4 worker（快），计时敏感测试给足容差（见 test_retry_round_threshold…）；
+#         若 flake 复发 → `TF_PYTEST_WORKERS=1` 串行（稳但慢 5 倍），别反复重跑到绿（第 9 条）。
 DEFAULT_PYTEST_WORKERS = 4
 
 

@@ -635,3 +635,59 @@ def test_overview_criteria_mentions_meta_card_rule(tmp_path: Path) -> None:
     assert "还剩" in s["criteria"]
     assert "元卡" in s["criteria"]
     assert "unmappable" in s["criteria"]
+
+
+# ================================================ 卡 164（T-G264）：观测面统一 + 0 字节 ≠ 失败
+
+
+def test_panel_warns_when_verdict_is_older_than_log(tmp_path: Path) -> None:
+    """★★ 卡 164 钉子：面板「判决比日志旧」要显著提示（146 现场）。
+
+    造一个旧判决 + 新 log ⇒ `verdict_stale=True` 且 note 含「判决比日志旧」；
+    对照：判决比 log 新 ⇒ `verdict_stale=False` 且 note 不含告警。
+    """
+    log = _card(tmp_path, "146", age=5)                  # log 新（5 秒前）
+    verdict = log.with_suffix(".verdict.txt")
+    verdict.write_text("判决：前置检查没过 → 没派活\n", encoding="utf-8")
+    old = time.time() - 600
+    os.utime(verdict, (old, old))                        # 判决旧（600 秒前）
+    row = wb_dash.card_state(tmp_path)[0]
+    assert row["verdict_stale"] is True
+    assert "判决比日志旧" in row["note"]
+    # 对照：判决比 log 新 → 不告警
+    fresh = time.time() - 1
+    os.utime(verdict, (fresh, fresh))
+    row2 = wb_dash.card_state(tmp_path)[0]
+    assert row2["verdict_stale"] is False
+    assert "判决比日志旧" not in row2["note"]
+
+
+def test_zero_bytes_no_verdict_silent_is_not_done(tmp_path: Path) -> None:
+    """★★ 卡 164 钉子（INV-48）：0 字节 + 无判决 + 静默超阈值 ⇒ 「已停（无判决）」，
+    **不是**「收工」—— 判据只看判决文件 + 日志 mtime 距今多久，**不看大小**。
+
+    0 字节多半是采样太早（Popen 起来到第一行落地之间有延迟），不是失败。
+    """
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    log = diag / "wb-200.jsonl"
+    log.write_text("", encoding="utf-8")                # 0 字节
+    then = time.time() - 600                            # 静默 600 秒 > 阈值
+    os.utime(log, (then, then))
+    row = wb_dash.card_state(tmp_path)[0]
+    assert row["size_kb"] == 0.0
+    assert row["state"] == "已停（无判决）"             # 不是「收工·结束」
+    assert "可能卡死" not in row["state"]               # 没有心跳不许下卡死结论
+
+
+def test_classify_job_state_ignores_size(tmp_path: Path) -> None:
+    """★★ 卡 164 钉子：`classify_job_state` 只看判决 + age，不看大小（INV-48）。
+
+    0 字节 + 无判决 + age ≤ 阈值 ⇒ 「在跑」；age > 阈值 ⇒ 「断了」—— 与有内容的日志同口径。
+    """
+    sys.path.insert(0, str(ROOT / "tools" / "pool"))
+    from pool.jobs import classify_job_state  # noqa: E402
+    assert classify_job_state(age=10, has_verdict=False)[0] == "在跑"
+    assert classify_job_state(age=10, has_verdict=True)[0] == "已判决"
+    assert classify_job_state(age=99999, has_verdict=False)[0] == "断了"
+

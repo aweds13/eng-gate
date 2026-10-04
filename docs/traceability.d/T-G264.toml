@@ -1,0 +1,26 @@
+[entries."T-G264"]
+id = "T-G264"
+title = "观测面与通则（10 条）+ 压缩文书判据（结构预算 + 指针核对）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/card_doc_budget.py",
+  "file:tests/test_card_doc_budget.py",
+  "file:tools/version_guard_scan.py",
+  "file:tests/test_version_guard_scan.py",
+  "file:tools/wb_flow.py",
+  "file:tests/test_wb_flow.py",
+  "file:tools/wb_dispatch.py",
+  "file:tools/wb_dash.py",
+  "file:tools/wb_invariants.py",
+  "file:tests/test_wb_invariants.py",
+  "file:scripts/run_gates.py",
+  "file:tests/test_run_bg.py",
+  "file:tests/test_wb_dash.py",
+  "file:tests/test_wb_dispatch.py",
+  "file:复盘/观测面与通则-卡164.md",
+  "file:复盘/不变量台账.toml",
+  "file:复盘/外包-卡表与规矩.md",
+]
+gaps = "① ★★ **压缩文书判据有零件、没接线**：`tools/card_doc_budget.py`（≤60 行 / gaps ≤6 每条 ≤3 行 / changelog 每卡 ≤6 行 /老实说 ≤4 条 / **每条 gap 必须带真存在的指针**）**已建 + 4 条钉子**，但它自己写明「接进 `stage_card._selfcheck`是后续卡的事」⇒ ★ **在那之前，这条规矩仍然只是「话」**（与卡 188 的 `domain_symbols` 同一模式）。指针：`tools/card_doc_budget.py` 的模块头。② ★★ **「靠快照反推」的两个前提**：`_snapshot.py` 对未跟踪文件是瞎的（`git stash create` 拍不到新文件）；快照落在 gitignored 目录、不随仓库分发。★ 本笔把它们写进通则，**没有修**工具。指针：`复盘/观测面与通则-卡164.md`。③ ★ **跨卡互动两处（主控手工解，都是真语义碰撞）**：① `tools/wb_invariants.py` —— 卡 162 与卡 164 **都加了 `unjudgeable`**（一个给条款台账、一个给不变量台账）⇒ 两套状态**都留**；② 162 的 `test_grouping_and_counts_split_states` 钉着`counts()` 的键集，被 164 的新状态打破 ⇒ **改了那条测试的期望**（多一个 `unjudgeable: 0`）。指针：本笔的 `git apply` 与 `git add` 记录。④ ★ **`--detach` 父进程归档时机**是本卡的根因修法（把归档移到父进程 return 之前）⇒ 但它**只改时机**，旧判决文件**已经**被冒充过的那些不会自动修好。指针：`tools/wb_dispatch.py`。"
+

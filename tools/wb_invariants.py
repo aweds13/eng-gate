@@ -72,9 +72,12 @@ DEFAULT_LEDGER = ROOT / "复盘" / "不变量台账.toml"
 #: 条款台账（卡 162 · T-G262）：把「只有一句人话」的规矩单独建账。
 DEFAULT_CLAUSE_LEDGER = ROOT / "复盘" / "条款台账.toml"
 
-#: 合法的状态值（不变量台账）。
-STATUSES = ("covered", "partial", "missing")
-#: 条款台账的合法状态值（卡 162）：`unjudgeable` 替代 `missing` —— 机器判不了要**如实标 + 给理由**。
+#: 合法的状态值（不变量台账）。★ 卡 164（T-G264）加 `unjudgeable`：本仓内**判不了**的通则
+#: （如 INV-62「判据必须问现在」—— 它是评审口味，不是机器能查的子串）。
+#: `unjudgeable` 不算错误、不进待验清单 —— 它是**诚实标记**：不许编一个假判据冒充它。
+STATUSES = ("covered", "partial", "missing", "unjudgeable")
+#: 条款台账的合法状态值（卡 162 · T-G262）：`unjudgeable` 替代 `missing`
+#: —— 机器判不了要**如实标 + 给理由**（与上面那份是**两张不同的账**，别混）。
 CLAUSE_STATUSES = ("covered", "partial", "unjudgeable")
 #: 「本仓内没有」的哨兵（判据或钉子缺一半时写它）。
 NONE_MARK = "-"

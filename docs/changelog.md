@@ -38,6 +38,15 @@
 - `tools/wb_land.py` +7/-1（新开关的接线）· `tests/test_wb_land.py` +371/-3（**23 条**钉子，含四条强制全量）·
   新增 `复盘/收口-增量门禁.md`（方案与边界）。
 - ★ 第一手：`pytest tests/test_wb_land.py` ⇒ **23 passed**；`ruff` 干净。
+## 2026-10-04 —— 观测面与通则（10 条）+ 压缩文书判据（T-G264 / 卡 164）
+
+- 新增 `tools/card_doc_budget.py`（**文书结构预算 + 指针核对**）· `tools/version_guard_scan.py`（版本守卫扫描）·
+  `tools/wb_flow.py` + 三份钉子（`test_card_doc_budget.py` / `test_version_guard_scan.py` / `test_wb_flow.py`）。
+- `tools/wb_dispatch.py` +59/-8（`--detach` 父进程归档移到 return 之前；判决带「开始于 / 轮次」；
+  桩缺字段可被发现）· `tools/wb_dash.py` +13（面板加「判决比日志旧」显著提示）· `tools/wb_invariants.py`
+  （`STATUSES` 加 `unjudgeable` —— 本仓内**判不了**的通则如实标，不许编假判据）· `scripts/run_gates.py` +6。
+- `复盘/观测面与通则-卡164.md`（通则 + 两条前提的如实记录）· `复盘/外包-卡表与规矩.md`（§17 落地说明）。
+- ★ 第一手：`pytest` 六份（含 `test_wb_dispatch` 177 条）**全过**；`ruff` 干净。
 ## 2026-10-03 —— 坑总账与不变量台账落档：344 条坑 + 77 条不变量进 git（T-G265 / 卡 165）
 
 - **坑总账建档**：7 个只读工人把 218 份复盘按门类分片读完，机器逐条解析出 **344 条坑**（工人自报合计 314，差额 30 条是几份报告的统计行少算了自己列出的条目 —— 这条差额本身就是「数字手抄」那类坑的又一次现场），按**归位点**分成 8 类 + 共因 Top5。

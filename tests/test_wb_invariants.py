@@ -183,7 +183,9 @@ def test_grouping_and_counts_split_states() -> None:
         {"id": "C", "status": "partial"},
         {"id": "D", "status": "covered"},
     ]
-    assert wb.counts(rows) == {"covered": 2, "partial": 1, "missing": 1}
+    # ★ 2026-10-04：卡 164 给 `STATUSES` 加了 `unjudgeable` ⇒ `counts()` 会把**所有**状态
+    #   都初始化出来（多一个 `unjudgeable: 0`）—— 这是有意的"诚实标记"，不是回归。
+    assert wb.counts(rows) == {"covered": 2, "partial": 1, "missing": 1, "unjudgeable": 0}
     assert {row["id"] for row in wb.missing_rows(rows)} == {"B", "C"}
 
 

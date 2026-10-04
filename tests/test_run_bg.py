@@ -136,3 +136,40 @@ def test_run_unwritable_log_exits_2(tmp_path: Path) -> None:
     assert got.returncode == 2, got.stdout + got.stderr
     assert "不可写" in got.stderr, got.stderr
     assert "Traceback" not in got.stderr, got.stderr
+
+
+def test_status_judges_only_by_sentinel_not_by_process(tmp_path: Path) -> None:
+    """★★ 卡 164（T-G264 / INV-43）：哨兵文件 `<log>.rc` 是**唯一判据** ——
+    不看端口、不看进程名、不查 pid 是否还活。
+
+    反证：手写一个哨兵文件（不真起任何进程）⇒ status 必须说 `done`；
+    反证对称：有日志但**没**哨兵 ⇒ status 必须说 `running`（哪怕根本没有进程在跑）。
+    这条钉住「判据只读哨兵」—— 换成查进程的写法会立刻红。
+    """
+    log = tmp_path / "sentinel-only.log"
+    log.write_text("一些输出\n", encoding="utf-8")
+    # 手写哨兵（不真起进程）⇒ status 说 done rc=0
+    (tmp_path / "sentinel-only.log.rc").write_text("0\n", encoding="utf-8")
+    st = _status(log)
+    assert st.returncode == 0, st.stdout + st.stderr
+    assert "state=done rc=0" in st.stdout, st.stdout
+    # 删哨兵 ⇒ status 说 running（哪怕没进程在跑 —— 判据只看哨兵）
+    (tmp_path / "sentinel-only.log.rc").unlink()
+    st2 = _status(log)
+    assert st2.returncode == 0, st2.stdout + st2.stderr
+    assert "state=running" in st2.stdout, st2.stdout
+
+
+def test_sentinel_is_atomic_half_written_is_treated_as_running(tmp_path: Path) -> None:
+    """★★ 卡 164（T-G264 / INV-43）：哨兵半截（空文件 / 非 数字）⇒ `running`，
+    不崩、不把半截当退出码（`_write_rc` 先写 tmp 再 `os.replace`，status 永远读不到半截）。
+
+    这条钉住「哨兵口径抗半截」—— `cmd_status` 的 `_read_rc` 对空/非数字返回 None。
+    """
+    log = tmp_path / "half.log"
+    log.write_text("x\n", encoding="utf-8")
+    (tmp_path / "half.log.rc").write_text("", encoding="utf-8")    # 空哨兵
+    assert "state=running" in _status(log).stdout
+    (tmp_path / "half.log.rc").write_text("not-a-number\n", encoding="utf-8")
+    assert "state=running" in _status(log).stdout
+

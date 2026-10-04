@@ -1285,11 +1285,14 @@ def _stderr_tail(errlog: Path, limit: int = 5) -> list[str]:
 
 
 def write_verdict(log: Path, *, card: str, attempts: int, code: int, reason: str, sid: str,
-                  lines: list[str], errlog: Path) -> Path:
+                  lines: list[str], errlog: Path,
+                  started_at: float | None = None) -> Path:
     """这一轮的判决落盘 —— **按轮落、不互相覆写**（T-G96）。
 
     `wb-<卡>.jsonl` → `wb-<卡>.verdict.txt`；`wb-<卡>.r2.jsonl` → `wb-<卡>.r2.verdict.txt`。
     ★ 每轮要能查到**断在哪**：退出码 / 有没有 `result` 事件 / 末事件类型 / log 行数 / stderr 5 行。
+    ★ 卡 164（T-G264）：判决带**轮次 + 开始时刻 + 结束时刻** —— 读的人要能判「这是不是当前这一轮」
+      （旧判决冒充当前状态的现场就是它：判决里没开始时刻，分不清是哪一轮）。
     """
     has_result = "有" if result_event_text(lines) is not None else "没有"
     diag = [
@@ -1301,9 +1304,12 @@ def write_verdict(log: Path, *, card: str, attempts: int, code: int, reason: str
     ]
     out = verdict_file_for(log)
     out.parent.mkdir(parents=True, exist_ok=True)
+    end_iso = datetime.now().isoformat(timespec="seconds")
+    began_iso = (datetime.fromtimestamp(started_at).isoformat(timespec="seconds")
+                 if started_at is not None else "（无）")
     out.write_text(
         f"card={card} 第={attempts} 次 退出码={code} "
-        f"会话={sid or '（无）'} 结束于={datetime.now().isoformat(timespec='seconds')}\n"
+        f"会话={sid or '（无）'} 开始于={began_iso} 结束于={end_iso}\n"
         f"判决：{reason or '正常收工（工人退出码 0）'}\n"
         "诊断（这一轮断在哪）：\n" + "\n".join(diag) + "\n"
         f"看细节：python -X utf8 tools/wb_status.py {log} --tail 20 --repo\n",
@@ -1496,6 +1502,43 @@ def _tool_result_blocks(lines: list[str]):
         for item in content if isinstance(content, list) else []:
             if isinstance(item, dict) and item.get("type") == "tool_result":
                 yield str(item.get("tool_use_id") or ""), stamp
+
+
+def tool_use_missing_fields(lines: list[str]) -> list[str]:
+    """★★ 卡 164（T-G264 / INV-36）：列出 `tool_use` 块里**缺 `id` 或 `__timestamp`** 的那些。
+
+    为什么要有它：`_epoch` 的保守分支（缺字段 → None）+ `inflight_tool`/`tool_durations`
+    的 `if stamp is None: continue` 会**悄悄跳过**残桩 —— 生产里这是对的（半截 log 不许炸），
+    但**测试里**它会让断言**恒真**（桩缺字段 ⇒ 没数据放大阈值 ⇒ 阈值 == 底线 ⇒ 断言"阈值
+    没被抬"绿了，但其实是因为桩什么都没喂进去）。这条就是那个假绿的根因。
+
+    用法（测试里自检桩完整性）：
+    `assert not wd.tool_use_missing_fields(桩), wd.tool_use_missing_fields(桩)`
+    —— 桩缺字段时这条**红**，并指出缺的是哪一块。
+    """
+    missing: list[str] = []
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "assistant":
+            continue
+        has_stamp = _epoch(event.get("__timestamp")) is not None
+        message = event.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        for item in content if isinstance(content, list) else []:
+            if not isinstance(item, dict) or item.get("type") != "tool_use":
+                continue
+            tid = item.get("id")
+            lacks: list[str] = []
+            if not tid:
+                lacks.append("id")
+            if not has_stamp:
+                lacks.append("__timestamp")
+            if lacks:
+                missing.append(f"tool_use name={item.get('name') or '?'} 缺 {'+'.join(lacks)}")
+    return missing
 
 
 def inflight_tool(lines: list[str], *, now: float | None = None) -> tuple[str, float] | None:
@@ -2423,6 +2466,18 @@ def main() -> int:
         print(f"[账号] profile「{args.account}」并入 {len(account_vars)} 个环境变量："
               + "；".join(f"{k}={v}" for k, v in account_vars.items()), flush=True)
 
+    # ★★ 卡 164（T-G264）：归档旧判决**必须**在 detach 父进程 return **之前** ——
+    #   旧写法把 archive_stale_artifacts 放在 detach return 之后（原 line 2473），于是
+    #   `--force --detach` 时父进程 return 0、旧判决还在原位；子进程起来到归档之间有一个
+    #   **时序窗口**，谁读判决都读到旧的（146 现场就是它：23:10「没派活」的旧判决在
+    #   23:40 真跑完前一直冒充当前状态）。改法：真跑（--execute）才归档，且在 detach 之前。
+    #   ★ dry-run 不归档（args.execute 守卫）；子进程带 --detach-done 时旧判决已被父进程
+    #   归档，再调一次找不到文件、返回空，幂等。
+    if args.execute:
+        archived = archive_stale_artifacts(args.card)
+        if archived:
+            print(f"[归档] 旧判决/摘要已归档：{', '.join(archived)}", flush=True)
+
     if args.detach and not args.detach_done:
         # ★ 长跑/过夜：**前置检查已全过**，才把**自己**再启动成一个脱离窗口的进程，然后立刻返回。
         #   ★ T-G92 更正：检查必须在**父进程**里先做完 —— 旧写法先 detach（父进程退 0）、
@@ -2468,11 +2523,6 @@ def main() -> int:
         print("[dry ] 这是 dry-run；真想派活加 --execute", flush=True)
         return 0
 
-    # ★ 卡 029 §2.1（A 根因）：**真开跑**（过前置检查 + --execute）那一刻，把这张卡的旧
-    #   判决 / 摘要改名归档（加 .stale）—— 只归档、不删（证据留档）。dry-run 不会走到这里。
-    archived = archive_stale_artifacts(args.card)
-    if archived:
-        print(f"[归档] 旧判决/摘要已归档：{', '.join(archived)}", flush=True)
     # ★ 卡 029 §2.7：每次真开跑记规格指纹；续跑且指纹变了 → 硬塞「先读规格」进续跑提示词。
     spec_digest = spec_fingerprint(args.spec)
     spec_preamble = ("" if not resume_sid
@@ -2610,7 +2660,8 @@ def main() -> int:
         # ★ T-G96：判决**按轮落**（`wb-<卡>.r2.verdict.txt`…）—— 第 2 轮不许覆写第 1 轮的。
         verdict = write_verdict(log_k, card=args.card, attempts=attempts, code=code, reason=reason,
                                 sid=sid, lines=round_lines,
-                                errlog=log_k.with_suffix(".stderr.txt"))
+                                errlog=log_k.with_suffix(".stderr.txt"),
+                                started_at=attempt_started)
         print(f"[done] 第 {attempts} 次：工人退出码 {code}；stderr 见 {log_k.name[:-6]}.stderr.txt",
               flush=True)
         print(f"[摘 ] 已落盘：{report.relative_to(ROOT).as_posix()}", flush=True)

@@ -300,10 +300,10 @@ note = "detached 树里不许无条件跳过分支判据，否则那条判据等
 [[invariant]]
 id = "INV-36"
 claim = "判据依赖的桩数据缺字段时不许走保守路径变成假绿（该红的不红）"
-judge = "tools/wb_dispatch.py::_epoch"
-nail = "tests/test_wb_dispatch.py::test_epoch_four_shapes_are_deterministic_and_never_raise"
-status = "partial"
-note = "★ 典型「判据自己假绿」：桩事件缺 id + __timestamp ⇒ _epoch 走保守分支 ⇒ 断言恒真。 ★ 归位：`tools/wb_dispatch.py::_epoch`（缺字段/畸形 → `None`，**不猜**）+ 桩必须带这两个字段"
+judge = "tools/wb_dispatch.py::tool_use_missing_fields"
+nail = "tests/test_wb_dispatch.py::test_stub_missing_fields_is_caught_not_silently_skipped"
+status = "covered"
+note = "★ 卡 164（T-G264）补钉子：`tool_use_missing_fields` 让测试自检桩完整性 —— 缺 id/__timestamp 的桩 ⇒ 非空（红），完整 ⇒ 空（绿）。★ 归位：`tools/wb_dispatch.py::_epoch`（缺字段/畸形 → `None`，**不猜**）+ `tool_use_missing_fields`（列出残桩）"
 
 [[invariant]]
 id = "INV-37"
@@ -357,9 +357,9 @@ note = "detached argv 里必须有**脚本自己**，否则 --detach 从来没�
 id = "INV-43"
 claim = "预计超过单次工具调用上限的命令不许同步等死（要转到后台并留哨兵）"
 judge = "tools/run_bg.py"
-nail = "tests/test_run_bg.py::test_run_returns_immediately_and_status_polls_two_states"
-status = "partial"
-note = "同步等会被掐掉、服务变孤儿、进而跨树误杀。 ★ 归位：源头 = `tools/run_bg.py`（分离起 + 哨兵文件 `<log>.rc` 判终态，不看端口不看进程名）"
+nail = "tests/test_run_bg.py::test_status_judges_only_by_sentinel_not_by_process"
+status = "covered"
+note = "★ 卡 164（T-G264）补钉子：哨兵文件 `<log>.rc` 是唯一判据，不看端口/进程名/pid。★ 归位：`tools/run_bg.py`（分离起 + 哨兵判终态）"
 
 [[invariant]]
 id = "INV-44"
@@ -367,7 +367,7 @@ claim = "输入预算必须能在单轮跑到一半时拦住超支（只按轮�
 judge = "tools/wb_dispatch.py::main"
 nail = "tests/test_wb_dispatch.py::test_input_budget_stops_the_run_without_auto_resume"
 status = "partial"
-note = "额度封顶与续跑共用同一个界，到界必须退 7。 ★ 归位：`tools/wb_dispatch.py::main` 的预算分支"
+note = "★ 卡 164（T-G264）如实标边界：**单轮中途拦不住** —— CLI 只在 `result` 事件报 `usage`，轮内拿不到实时 input tokens，预算检查只能在轮间做（`wb_dispatch.py:2734` 的 `usage_total` 累加后）。这是已知边界，别假装能。★ 归位：`tools/wb_dispatch.py::main` 的预算分支（轮间止损，退出码 6）"
 
 [[invariant]]
 id = "INV-45"
@@ -397,9 +397,9 @@ note = "卡 159（T-G259）接上：改文案/措辞/字面/常量类卡开工�
 id = "INV-48"
 claim = "log 是 0 字节不等于失败（多半是采样太早）—— 状态判定不许把采样噪声当结论"
 judge = "tools/pool/jobs.py::classify_job_state"
-nail = "tests/test_wb_dash.py::test_stopped_no_verdict_no_heartbeat"
-status = "partial"
-note = "★ 主控为同一个坑撞三次。 ★ 归位：`tools/pool/jobs.py::classify_job_state`（按判决文件 **+** 日志 mtime 距今多久判三态，**不看大小**）+ `tools/wb_dash.py::_state`"
+nail = "tests/test_wb_dash.py::test_zero_bytes_no_verdict_silent_is_not_done"
+status = "covered"
+note = "★ 卡 164（T-G264）补钉子：0 字节 + 无判决 + 静默 ⇒ 「已停（无判决）」不是「收工」；`classify_job_state` 只看判决 + age 不看大小。★ 主控为同一个坑撞三次。★ 归位：`tools/pool/jobs.py::classify_job_state`（按判决 + 日志 mtime 距今多久，**不看大小**）+ `tools/wb_dash.py::_state`"
 
 [[invariant]]
 id = "INV-49"
@@ -499,19 +499,19 @@ note = "★ 边界：只有 myday 排序列有守卫；其它读-改-写路径�
 
 [[invariant]]
 id = "INV-61"
-claim = "「读-改-写必须有版本守卫」不能只覆盖 myday 一列 —— 这条通则没有通用判据"
-judge = "src/timeflow/core/tasks/manager.py::_write_myday_rank"
-nail = "tests/test_myday_version_guard_line.py::test_concurrent_drags_do_not_lose_updates_or_duplicate_ranks"
-status = "partial"
-note = "★ 缺的是对账：新写一个读-改-写路径，没有任何东西会问它要不要版本守卫。 ★ 归位：`src/timeflow/core/tasks/manager.py::_write_myday_rank`（`AND version = ?`）、`_write_myday_plan`（整笔）"
+claim = "「读-改-写必须有版本守卫」不能只覆盖 myday 一列 —— 通则要有机器能看见的清单"
+judge = "tools/version_guard_scan.py::scan_path"
+nail = "tests/test_version_guard_scan.py::test_unguarded_read_modify_write_is_caught"
+status = "covered"
+note = "★ 卡 164（T-G264）补扫描器：`tools/version_guard_scan.py` 只读 AST 扫 src/ 里含 UPDATE 的函数，列有守卫/无守卫清单。实测：`_write_myday_rank` 有守卫、`_write_doing_rank`/`update_task`/`review` 无守卫（doing 排序与 myday 对称却缺守卫，正是本条要抓的）。★ 归位：`tools/version_guard_scan.py`（扫描器）+ `src/timeflow/core/tasks/manager.py::_write_myday_rank`（守卫范本）"
 
 [[invariant]]
 id = "INV-62"
 claim = "判据不许拿替代品当证据（网络层地址不是身份、上一次的结论不是现在、墓碑见没见过不是要不要做）"
-judge = "src/timeflow/api/app.py::sync_import"
-nail = "tests/test_phone_upload_line.py::test_lan_page_cannot_point_at_a_local_path"
-status = "partial"
-note = "三处实例都关了；「判据必须问现在」没有通用判据。 ★ 归位：`src/timeflow/api/app.py::sync_import`（看 Origin）、`src/web/index.html::offlineConfirmed`（先真探）、`src/timeflow/core/syncpack.py::plan_merge`（看本地那一行还在不在）"
+judge = "-"
+nail = "-"
+status = "unjudgeable"
+note = "★ 卡 164（T-G264）如实标 unjudgeable：「判据必须问现在」是**评审口味**，不是机器能查的子串 —— 三处实例（Origin/先真探/看本地行）都关了，但通则本身判不了。**不许**编一个只能查子串的假判据冒充它（那会让「问现在」降级成「提到现在」）。三处实例的钉子：`tests/test_phone_upload_line.py::test_lan_page_cannot_point_at_a_local_path` 等"
 
 [[invariant]]
 id = "INV-63"
