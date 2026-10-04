@@ -1,0 +1,11 @@
+[entries."T-G254"]
+id = "T-G254"
+title = "登录自检三态：分得清「真没登录」与「这次探失败」+ 重试一次"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_dispatch.py",
+]
+gaps = "① ★★ **「探失败」与「真没登录」分开之后，第三种状态仍然拦人**：`INCONCLUSIVE` 只**多给两条出路**（去 `/login` / 加 `--no-preflight`），**默认仍然不派活** ⇒ 机器换页/网络抖动那种偶发，人还是得手动决定。指针：`tools/wb_dispatch.py` 的 `AuthState`。② ★ **重试只一次、退避几秒**：第二次仍失败 ⇒ 报「没结论」；**没有指数退避、没有按池重试**。指针：`tools/wb_dispatch.py`。③ ★ **「额度尽」仍归在「探失败」那一类**（本卡与卡 151 的分流是**两条**：151 管判决文案、本卡管自检三态）⇒ 429 时人看到的是「没能得出结论」+ 原文，不是「额度尽」这句**结论**。指针：`tools/wb_dispatch.py` 与卡 151 的 `finish_verdict()`。"
+

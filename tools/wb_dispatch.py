@@ -97,6 +97,7 @@ import threading
 import time
 from collections import Counter
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -181,6 +182,13 @@ FALLBACK_CLI_REL = r"workbuddy\resources\app.asar.unpacked\cli\bin\codebuddy"
 # 工人要跑 pytest / 脚本，`-y` 不够（实测 `python …` 会被"非交互无法确认"挡回来）
 DEFAULT_PERMISSION_MODE = "bypassPermissions"
 AUTH_NEEDLE = "Authentication required"
+# ★ 卡 154（T-G254）：登录自检三态 + 重试一次 —— 派活器自检分得清「真没登录」与「探失败」。
+#   旧口径只看 AUTH_NEEDLE 一个字符串，超时/起不来/非零退出/空输出也被当成「没登录」⇒ 假红三次。
+#   · `AUTH_PROBE_FAILED_TAG`：auth_ok 给「探失败」类结果打的前缀标签（供 _classify_probe 认）；
+#     用字符串标签而不改 auth_ok 的返回类型 —— 卡 190 已定签名为 (bool, str)，改签名会推回 190。
+#   · `AUTH_RETRY_BACKOFF_SECONDS`：第一次「探失败」后退避几秒再试一次（卡 154 规格）。
+AUTH_PROBE_FAILED_TAG = "探失败"
+AUTH_RETRY_BACKOFF_SECONDS = 5
 
 # ---------------------------------------------------------------- 反空转三道的默认值
 # ★ 标定口径（T-G88 初版 → **T-G89 更正**，两处真机探针量出来的）：
@@ -526,22 +534,103 @@ def auth_ok(node: Path, cli: Path, timeout: int = 180, *,
       · `env`（给了 --account 时 = 合成后的 profile 环境）⇒ 探针用**那个号**发，不是默认号；
       · `model`（给了 --account 时 = 派活要用的 --model）⇒ 探针判**那个模型桶**，不是 CLI 默认。
       两半都不给（默认 None）⇒ 行为逐字不变（父进程环境、不带 --model）。
+    ★ 卡 154（T-G254）：False 的两类结果**分开打标签**（让 _classify_probe 能分三态）——
+      · NEEDLE 命中 → 「登录没通（Authentication required）」（NEEDS_LOGIN，进程正常退出）
+      · 超时/起不来/非零退出/空输出 → 「探失败：…」（INCONCLUSIVE —— 不许当「没登录」）
+      重试与两条出路提示在 `preflight_auth`；本函数只发**一次**探针。
     """
     argv = [str(node), str(cli), "-p", "只回复四个字：连接成功", "--output-format", "text"]
     if model:
         argv += ["--model", model]
     argv += ["--no-session-persistence", "-y"]
-    done = subprocess.run(
-        argv,
-        cwd=str(ROOT), env=env, capture_output=True, text=True, encoding="utf-8",
-        errors="replace", timeout=timeout, **NO_WINDOW,
-    )
+    try:
+        done = subprocess.run(
+            argv,
+            cwd=str(ROOT), env=env, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=timeout, **NO_WINDOW,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"{AUTH_PROBE_FAILED_TAG}：探针超时（{timeout}s）—— 可能是机器换页/CLI 起不来"
+    except OSError as exc:
+        return False, f"{AUTH_PROBE_FAILED_TAG}：探针起不来（{exc}）"
     body = f"{done.stdout or ''}\n{done.stderr or ''}"
     if AUTH_NEEDLE in body:
         return False, "登录没通（Authentication required）→ 先在 TUI 里敲 /login（T-G80）"
     if "连接成功" in body:
         return True, "登录自检通过"
-    return False, f"自检没拿到预期回话（退出码 {done.returncode}）：{wb_status._clip(body, 200)}"
+    # ★ 卡 154：剩下都是「探失败」—— 非零退出 / 空输出 / 没有可判读的结论 —— 不许当「没登录」
+    return False, (f"{AUTH_PROBE_FAILED_TAG}：自检没拿到预期回话（退出码 {done.returncode}）："
+                   + wb_status._clip(body, 200))
+
+
+class AuthState(StrEnum):
+    """登录自检的三态（卡 154 / T-G254）：分得清「真没登录」与「探失败」。
+
+    · OK               —— 拿到会话 → 放行；
+    · NEEDS_LOGIN      —— 明确拿到 Authentication required 且进程正常退出 → 拦 + 提示 /login；
+    · INCONCLUSIVE     —— 超时/非零退出/空输出/起不来 → 不许当「没登录」，重试一次；
+                          两次都得不出来 ⇒ 给两条出路（/login 或 --no-preflight）。
+    """
+
+    OK = "ok"
+    NEEDS_LOGIN = "needs_login"
+    INCONCLUSIVE = "inconclusive"
+
+
+def _classify_probe(ok: bool, why: str) -> AuthState:
+    """把 `auth_ok` 的 (bool, why) 归到三态之一（卡 154）。
+
+    · True → OK；
+    · False 且 why 含 `AUTH_PROBE_FAILED_TAG` → INCONCLUSIVE（探本身失败了）；
+    · False 且 why 不含该标签 → NEEDS_LOGIN（保留旧语义：False 默认 = 没登录 ——
+      卡 190 的桩与 test:199 都按这个签名 stub，不在 why 里打「探失败」标签）。
+    """
+    if ok:
+        return AuthState.OK
+    if AUTH_PROBE_FAILED_TAG in why:
+        return AuthState.INCONCLUSIVE
+    return AuthState.NEEDS_LOGIN
+
+
+def preflight_auth(node: Path, cli: Path, *, env: dict[str, str] | None = None,
+                   model: str | None = None, timeout: int = 180,
+                   retry_backoff: float | None = None) -> tuple[AuthState, str]:
+    """登录自检（三态 + 重试一次）—— 卡 154（T-G254）。
+
+    旧口径只看 `AUTH_NEEDLE` 一个字符串，超时/起不来/非零退出也被当成「没登录」⇒ 当晚假红三次
+    （每次都：不派活 + 白等 + 换号重试 + 白花额度）。本函数把「真没登录」与「探失败」分开：
+
+    · **登录有效**（拿到会话）⇒ 放行；
+    · **真没登录**（明确拿到 `Authentication required` 且进程正常退出）⇒ 拦，提示去 `/login`；
+    · **探失败**（超时/非零退出/空输出/起不来）⇒ **不许当「没登录」** ⇒ 退避几秒**重试一次**；
+      两次都得不出来 ⇒ 明确告诉人「**要么去 `/login`，要么用 `--no-preflight` 自己担**」，
+      **不许静默按「没登录」处理**。
+
+    ★ 不改任何放行判据（内存闸 / 白名单 / 树 / 域 / 锁 / 基点一个都不松）—— 本函数只判登录自检。
+    ★ 不真发请求去打真实号池（钉子用桩，别花额度、别碰真登录态）—— 由 test_wb_dispatch 保证。
+    ★ `retry_backoff=None` 时用模块常量 `AUTH_RETRY_BACKOFF_SECONDS`（测试可置零加速）。
+    """
+    backoff = AUTH_RETRY_BACKOFF_SECONDS if retry_backoff is None else retry_backoff
+    ok, why = auth_ok(node, cli, timeout=timeout, env=env, model=model)
+    state = _classify_probe(ok, why)
+    if state is AuthState.OK or state is AuthState.NEEDS_LOGIN:
+        # ★ 确定的态不重试：拿到会话就放行；明确没登录就拦 —— 重试只会白等 + 漂移结论。
+        return state, why
+    # INCONCLUSIVE → 退避几秒重试一次（★ 只对「探失败」续，不对「真没登录」续 —— 那是确定的）
+    if backoff > 0:
+        time.sleep(backoff)
+    ok2, why2 = auth_ok(node, cli, timeout=timeout, env=env, model=model)
+    state2 = _classify_probe(ok2, why2)
+    if state2 is AuthState.OK:
+        return AuthState.OK, why2
+    if state2 is AuthState.NEEDS_LOGIN:
+        return AuthState.NEEDS_LOGIN, why2
+    # 两次都探失败 → 不许静默按「没登录」处理，明确给两条出路
+    return AuthState.INCONCLUSIVE, (
+        "登录自检两次都没能得出结论（探失败：超时 / 非零退出 / 空输出 / 起不来）。"
+        "要么去 TUI 敲 /login 重登，要么用 --no-preflight 自己担（跳过自检直接派）。"
+        f"第一次：{why}；第二次：{why2}"
+    )
 
 
 def prompt_path(p: str, worker_cwd: Path | None) -> str:
@@ -2440,14 +2529,25 @@ def main() -> int:
     if args.account and account_vars:
         worker_env = {**os.environ, **account_vars}
 
-    # ★ 卡 190（T-G290）F1 两半：登录自检打在「将要用的那个「号 × 模型」组合」上 ——
-    #   用 profile 合成的环境发探针 + 把派活要用的 --model 透传给探针。
+    # ★ 卡 154（T-G254）：登录自检三态 + 重试一次 —— 分得清「真没登录」与「探失败」。
+    #   旧口径：auth_ok 返 False 就一律拒（探失败也当没登录 → 当晚假红三次：
+    #     白等 + 换号 + 白花额度）。
+    #   新口径：preflight_auth 三态 ——
+    #     · OK              → 放行；
+    #     · NEEDS_LOGIN     → 拦 + 提示 /login（明确拿到 Authentication required）；
+    #     · INCONCLUSIVE    → 两次探都失败 → 拦 + 提示「要么 /login 要么 --no-preflight」，
+    #                        **不许静默按「没登录」处理**（卡规格硬要求）。
+    #   ★ 卡 190 的 env/model 透传一字不动（只在它之上加三态与重试，不推回 190）。
     #   ★ 不给 --account ⇒ env=None, model=None ⇒ 逐字不变（与卡 149 硬要求 2 同）。
     node, cli = paths(args.cli)
     if not args.no_preflight and not problems:
-        ok, why = auth_ok(node, cli, env=worker_env,
-                          model=args.model if args.account else None)
-        if not ok:
+        state, why = preflight_auth(node, cli, env=worker_env,
+                                    model=args.model if args.account else None)
+        if state is AuthState.OK:
+            pass  # 放行 —— 「登录通」由后面 done_checks 那段统一打
+        elif state is AuthState.NEEDS_LOGIN:
+            problems.append(why)
+        else:  # AuthState.INCONCLUSIVE —— 两次都探失败
             problems.append(why)
 
     # ★ 卡 190（T-G290）F2 子进程侧读数：派活前用 worker_env 起子进程读自己的环境回话 ——

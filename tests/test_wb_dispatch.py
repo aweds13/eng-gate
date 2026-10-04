@@ -3298,3 +3298,109 @@ def test_a_profile_value_with_quotes_is_refused(sandbox: Path, monkeypatch,
     assert wd.main() == 2, "值带引号必须拒派（F4），不许静默收连引号的值"
     err = capsys.readouterr().err
     assert "引号" in err or "拒" in err, err
+
+
+# ============================================================ 卡 154（T-G254）
+#   登录自检三态 + 重试一次 —— 派活器自检分得清「真没登录」与「探失败」。
+#   来路：当晚同一个家、同一份 Cookies，派活器三次把「探失败」（超时/起不来/非零退出/空输出）
+#   当成「没登录」⇒ 假红三次（不派活 + 白等 + 换号重试 + 白花额度）。
+#   修法：三态（OK / NEEDS_LOGIN / INCONCLUSIVE）+ 重试一次 + 两次都失败给两条出路。
+#   ★ 四条钉子用桩（stub auth_ok），不许真发请求打真实号池（卡规格禁区）。
+
+
+def _auth_sequence(seq: list[tuple[bool, str]]):
+    """桩 auth_ok：按 seq 顺序逐次返回（用完就停，多调一次直接抛 —— 防偷偷多发探针）。"""
+    it = iter(seq)
+
+    def spy(*a, **k):
+        try:
+            return next(it)
+        except StopIteration as exc:                       # noqa: TRY004
+            raise AssertionError("auth_ok 被多调了一次（不该重试那么多）") from exc
+    return spy
+
+
+def test_card154_nail1_real_not_logged_in_reports_not_login_not_probe_fail(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """① 真没登录 ⇒ 拦住，且报的是「没登录」（不是「探失败」）。
+
+    ★ 反例钉子：把 NEEDLE 命中错判成「探失败」⇒ 这条红（消息里会冒「探失败」/「没能得出结论」）。
+    """
+    monkeypatch.setattr(wd, "AUTH_RETRY_BACKOFF_SECONDS", 0)   # 真没登录不重试，但保险置零
+    monkeypatch.setattr(wd, "auth_ok", _auth_sequence([
+        (False, "登录没通（Authentication required）→ 先在 TUI 里敲 /login（T-G80）"),
+    ]))
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001",
+                                      "--spec", "spec.md", "--execute"])
+    assert wd.main() == 2, "真没登录必须拦派（NEEDS_LOGIN）"
+    err = capsys.readouterr().err
+    assert "登录没通" in err or "Authentication required" in err, err
+    # ★ 关键反例：不许把「真没登录」报成「探失败」/「没能得出结论」
+    assert "探失败" not in err, f"真没登录被错报成探失败：{err}"
+    assert "没能得出结论" not in err, f"真没登录被错报成「没能得出结论」：{err}"
+
+
+def test_card154_nail2_probe_failed_reports_inconclusive_not_not_login(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """② 探失败（超时/非零退出/空输出）⇒ 不许报「没登录」，报的是「没能得出结论」。
+
+    ★ 反例钉子：把「探失败」错判成「没登录」⇒ 这条红（消息里冒「登录没通」）。
+    """
+    monkeypatch.setattr(wd, "AUTH_RETRY_BACKOFF_SECONDS", 0)   # 重试但不睡
+    monkeypatch.setattr(wd, "auth_ok", _auth_sequence([
+        (False, "探失败：探针超时（180s）—— 可能是机器换页/CLI 起不来"),
+        (False, "探失败：探针超时（180s）—— 可能是机器换页/CLI 起不来"),
+    ]))
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001",
+                                      "--spec", "spec.md", "--execute"])
+    assert wd.main() == 2, "探失败（两次都没结论）也必须拦派 —— 不许静默放行"
+    err = capsys.readouterr().err
+    assert "没能得出结论" in err, f"探失败应报「没能得出结论」：{err}"
+    assert "探失败" in err, f"消息应带「探失败」标签让人能定位：{err}"
+    # ★ 关键反例：不许把「探失败」报成「没登录」
+    assert "登录没通" not in err, f"探失败被错报成「没登录」：{err}"
+
+
+def test_card154_nail3_first_fail_then_success_allows_dispatch(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """③ 先失败后成功（重试拿到会话）⇒ 放行 —— 这是当晚的真现场。
+
+    ★ 反例钉子：不重试 / 把第一次「探失败」当终局拒派 ⇒ 这条红（main() != 0）。
+    """
+    monkeypatch.setattr(wd, "AUTH_RETRY_BACKOFF_SECONDS", 0)   # 重试但不睡
+    monkeypatch.setattr(wd, "auth_ok", _auth_sequence([
+        (False, "探失败：探针超时（180s）—— 第一次探失败"),
+        (True, "登录自检通过"),
+    ]))
+    record: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001",
+                                      "--spec", "spec.md", "--execute"])
+    assert wd.main() == 0, "先失败后成功（重试拿到会话）必须放行 —— 这是当晚真现场"
+    out = capsys.readouterr().out
+    assert record and "--output-format" in record[0], "重试拿到会话后应真派活"
+    assert "复核完了" in out  # fake_runner 落的回话 —— 确认真走到了派活这一步
+
+
+def test_card154_nail4_both_fail_prompts_two_ways_out_not_silent(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """④ 两次都失败 ⇒ 明确提示两条出路（/login 或 --no-preflight），不静默。
+
+    ★ 反例钉子：两次都失败时静默按「没登录」处理 / 只给一条出路 ⇒ 这条红。
+    """
+    monkeypatch.setattr(wd, "AUTH_RETRY_BACKOFF_SECONDS", 0)
+    monkeypatch.setattr(wd, "auth_ok", _auth_sequence([
+        (False, "探失败：探针超时（180s）—— 第一次"),
+        (False, "探失败：自检没拿到预期回话（退出码 1）—— 第二次"),
+    ]))
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001",
+                                      "--spec", "spec.md", "--execute"])
+    assert wd.main() == 2, "两次都失败必须拦派（不许静默放行自己担）"
+    err = capsys.readouterr().err
+    # ★ 两条出路都得在消息里 —— 缺一条 = 没把选择权交给人
+    assert "/login" in err, f"两次都失败应提示 /login 出路：{err}"
+    assert "--no-preflight" in err, f"两次都失败应提示 --no-preflight 出路：{err}"
+    assert "没能得出结论" in err, f"应明说「没能得出结论」（不是静默按没登录处理）：{err}"
