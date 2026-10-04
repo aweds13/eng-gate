@@ -32,6 +32,12 @@ import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+# ★ 卡 188（T-G288）交的**符号级**冲突判据 —— 本模块是它的**接线处**
+#   （2026-10-03，用户令「把符号级那半接上」）。
+#   分层：`files_intersect` 当**粗筛**（一个字没改），相交的**再细判到符号**。
+#   ★ 不写 `::` 的声明恒判 `WHOLE_FILE` ⇒ **行为与今天逐字相同**（向后兼容是硬要求）。
+from domain_symbols import overlap as _symbol_overlap
+
 from pool import locks as pool_locks
 from pool import projects as pool_projects
 from pool.plan import Card, files_intersect
@@ -103,23 +109,115 @@ def tree_guard(tree: object, reservations: Iterable[dict], now: float | None = N
 # ================================================================ 守卫② 冲突域
 
 
+def _file_part(decl: str) -> str:
+    """声明里的**文件部分**（`X.py::sym` → `X.py`；没有 `::` 就是它自己）。
+
+    ★ 只做字符串切分，不做任何判定 —— 判定一律交给 `domain_symbols`（不另写一份真源）。
+    """
+    return _norm(decl).split("::", 1)[0]
+
+
+def _pair_verdict(a: str, b: str, root: object = None) -> tuple[bool, str]:
+    """**同一个文件**上的两份声明能不能并行 —— 交给 `domain_symbols.overlap()`。
+
+    ★ 四种判定里：`DISJOINT` / `SAME_FILE_DIFFERENT_SYMBOL` ⇒ 放行；
+      `SAME_FILE_SAME_SYMBOL` / `WHOLE_FILE` ⇒ 拒（= 今天的行为）。
+    ★ 边界（如实）：只有同路径的 `.py` 才问符号级；非 Python（`.md` / `.toml` / `src/web/…`）
+      与目录 / 通配声明一律退回**文件级**；符号级**判不出来**（文件不在 / 符号名不存在 / 解析失败）
+      ⇒ **保守拒**并把原因带出来 —— 不静默当成"能并行"。
+    """
+    pa, pb = _norm(a), _norm(b)
+    if _file_part(pa) != _file_part(pb) or not _file_part(pa).endswith(".py"):
+        return False, "按文件级判（不是同一个 .py 文件）"
+    try:
+        got = _symbol_overlap(pa, pb, root=root)
+    except Exception as exc:  # noqa: BLE001 —— 判不出来 ⇒ 保守拒，且如实说
+        return False, f"符号级判定失败（{type(exc).__name__}: {exc}）⇒ 按文件级判"
+    return got.parallel, got.message()
+
+
+def _domain_pairs(mine: list[str], theirs: list[str],
+                  root: object = None) -> tuple[list[str], list[str]]:
+    """两串声明里的**同文件声明对** —— 返回 `(拒的理由, 放行但要提醒的, 有没有真符号声明)`。
+
+    ★★ 为什么不能只看 `files_intersect`：它是**字符串精确相交** ⇒ `X.py::sym` 与 `X.py`
+      **永不相交** —— 于是「一边声明整个文件、一边声明某个符号」这种**最危险的组合粗筛看不见**
+      （今天会被放过去）。这里按**文件部分**成对，正好把这个洞补上（宁可多拦一次）。
+    """
+    bad: list[str] = []
+    notes: list[str] = []
+    # ★ 只有当**某一方真的声明了符号**（含 `::`）时，才让新文案生效；
+    #   两边都是裸路径（= `WHOLE_FILE`）⇒ 文案与接线前**逐字相同** ——
+    #   两条既有测试钉着旧话（`test_pool_registry` / `test_wb_dispatch`），这是向后兼容的硬要求。
+    symbol_level = False
+    for a in mine:
+        for b in theirs:
+            if _file_part(a) != _file_part(b):
+                continue
+            ok, why = _pair_verdict(a, b, root)
+            if not ok and ("::" in a or "::" in b):
+                symbol_level = True
+            (notes if ok else bad).append(f"{a} × {b} —— {why}")
+    return bad, notes, symbol_level
+
+
 def domain_guard(files: Iterable[str], reservations: Iterable[dict],
-                 now: float | None = None) -> list[str]:
+                 now: float | None = None, *, root: object = None) -> list[str]:
     """冲突域与任何活租约**相交**就拒，并**点名相交的文件**（空列表 = 没被咬）。
 
+    ★ 判据分两层（2026-10-03 接线，零件是卡 188 的）：
+      ① **粗筛**：`pool.plan.files_intersect`（字符串精确相交）—— 一个字没改；
+      ② **细判**：**同一个文件**的每一对再问 `domain_symbols.overlap()` ——
+         「同文件**不同符号**」**放行**（`domain_notes()` 会给 rebase 提醒），
+         「同文件**同符号**」与「整个文件（不写 `::`）」照旧**拒**。
+      ★ 细判按**文件部分**成对，所以连「`X.py` × `X.py::sym`」也拦得住（粗筛看不见它）。
     ★ 空域 = 不与任何东西相交 = 绕过这条守卫 —— 所以调用方（CLI）**不许把查不到的卡猜成空域**。
     """
-    request = _as_card("?", list(files))
+    mine = [str(item) for item in files] if isinstance(files, (list, tuple, set)) else []
+    request = _as_card("?", mine)
     problems: list[str] = []
     for res in reservations:
         if not _is_live(res, now):
             continue
-        hit = files_intersect(request, _as_card(res.get("card"), res.get("files") or []))
-        if hit:
+        theirs = [str(item) for item in (res.get("files") or [])]
+        hit = files_intersect(request, _as_card(res.get("card"), theirs))
+        bad, _notes, symbol_level = _domain_pairs(mine, theirs, root)
+        if not hit and not bad:
+            continue
+        label = (f"与活租约卡 {res.get('card')}（树 {_tree_label(res.get('tree'))}）")
+        if bad:
+            # ★ 兼容钉住的旧契约：**非 Python / 文件级**的相交，文案与接线前**逐字相同**
+            #   （`tests/test_wb_dispatch.py::test_guard_refuses_a_domain_intersection`
+            #   钉着「冲突域相交」+ 文件名）。只有真做了符号级细判，才用新文案。
+            if not symbol_level:
+                problems.append(
+                    f"冲突域相交：{label}相交文件 {sorted(hit)} —— 同一文件不许两个写者")
+            else:
+                problems.append(
+                    f"冲突域**同文件同符号**：{label} —— " + "；".join(bad[:3])
+                    + " ⇒ 同一符号不许两个写者（★ 同文件**不同**符号是放行的：声明写成 "
+                      "`<路径>::<符号>` 即可并行）")
+        elif hit:
             problems.append(
-                f"冲突域相交：与活租约卡 {res.get('card')}（树 {_tree_label(res.get('tree'))}）"
-                f"相交文件 {sorted(hit)} —— 同一文件不许两个写者")
+                f"冲突域相交：{label}相交文件 {sorted(hit)} —— 同一文件不许两个写者")
     return problems
+
+
+def domain_notes(files: Iterable[str], reservations: Iterable[dict],
+                 now: float | None = None, *, root: object = None) -> list[str]:
+    """**放行但要提醒**的那些（同文件不同符号 ⇒ 撞了就 rebase）—— 只提醒，**不拒**。
+
+    ★ 与 `domain_guard()` 同源（都走 `_domain_pairs`）；调用方拿它打一行提醒即可。
+    """
+    mine = [str(item) for item in files] if isinstance(files, (list, tuple, set)) else []
+    out: list[str] = []
+    for res in reservations:
+        if not _is_live(res, now):
+            continue
+        _bad, notes, _sym = _domain_pairs(mine, [str(x) for x in (res.get("files") or [])], root)
+        out.extend(notes)
+    return out
+
 
 
 # ================================================================ 守卫③ 门禁锁

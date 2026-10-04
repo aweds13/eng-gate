@@ -1195,7 +1195,8 @@ files = [
 ]
 depends = ["181"]
 risk = "mid"
-status = "pending"
+# ★ 2026-10-03 23:4x 转 done：索引 + 方案已交出（钉子 4/4、ruff 干净），随本笔落地。
+status = "done"
 # ★★ 卡 184 是**用户 2026-10-03 15:4x 点名要的加速**：「不要求只过门禁，只让他思考……让机器做的及时检查是否可行？」
 #   现状：每笔落地跑全量门禁，pytest 2065 条 —— 4 worker 时 250s、1 worker 时 620~700s ⇒ 12 分钟一趟 × 19 张卡。
 #   零件其实齐了（run_gates 的 --affected/--changed-from · wb_impact · last.json 的 affected 块 · 卡 147 的护栏），

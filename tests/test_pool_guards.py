@@ -242,3 +242,44 @@ def test_project_guard_refuses_maidao_not_guesses(monkeypatch: pytest.MonkeyPatc
     monkeypatch.delenv("TF_PROJECTS_TOML", raising=False)
     problems = guards.project_guard(".wt/card", project="码道")
     assert problems and "没登记过的项目" in problems[0] and "码道" in problems[0]
+
+
+# ======================================== 守卫② · 符号级细判（2026-10-03 接线，零件是卡 188 的）
+
+
+def test_domain_guard_allows_same_file_different_symbol() -> None:
+    """★ 正例：同文件**不同符号** ⇒ 放行 —— 这是接线（卡 188 的零件接进守卫）的全部意义。"""
+    f = "tools/wb_dispatch.py"
+    held = [_res("151", ".wt/verdict", (f + "::status_report",))]
+    assert guards.domain_guard([f + "::auth_ok"], held, NOW) == []
+    notes = guards.domain_notes([f + "::auth_ok"], held, NOW)
+    assert notes and "rebase" in notes[0] and "同文件" in notes[0]
+
+
+def test_domain_guard_bites_same_file_same_symbol() -> None:
+    """★ 反例：同文件**同符号** ⇒ 照旧拒（放行只放"不同符号"那一类）。"""
+    f = "tools/wb_dispatch.py"
+    held = [_res("151", ".wt/verdict", (f + "::status_report",))]
+    bad = guards.domain_guard([f + "::status_report"], held, NOW)
+    assert bad and "同符号" in bad[0]
+
+
+def test_domain_guard_bites_whole_file_against_a_symbol() -> None:
+    """★★ **粗筛看不见的那一种**：`X.py` 与 `X.py::sym` 在 `files_intersect` 里
+    **永不相交**（字符串精确相交）⇒ 今天会被放过去。接线必须按**文件部分**成对，把它拦住。
+    """
+    f = "tools/wb_dispatch.py"
+    assert plan.files_intersect(guards._as_card("?", [f]),
+                                guards._as_card("151", [f + "::status_report"])) == set()
+    held = [_res("151", ".wt/verdict", (f + "::status_report",))]
+    bad = guards.domain_guard([f], held, NOW)
+    assert bad and "同一整个文件" in bad[0]
+
+
+def test_domain_guard_backward_compatible_without_symbols() -> None:
+    """★ 硬要求：**不写 `::`** 的声明 ⇒ 行为与今天**逐字相同**（同文件即拒，
+    且不给「可并行」提醒）。"""
+    held = [_res("108", ".wt/a", ("a.py", "b.py"))]
+    bad = guards.domain_guard(["b.py"], held, NOW)
+    assert bad and "b.py" in bad[0]
+    assert guards.domain_notes(["b.py"], held, NOW) == []

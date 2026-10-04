@@ -1,0 +1,6292 @@
+# 文档索引（卡 183 · T-G283）—— 由 tools/wb_docmap.py 生成，不要手改。
+# 字段：path/bytes/top/ref_count/pinned/pinned_by/referenced_by
+# pinned=true ⇒ docs/traceability.toml 有 file:/text: 断言指到它（动了会碎台账）。
+# referenced_by 最多列 6 条（文件:行）；ref_count 是全部引用数。
+# 共 476 条。
+
+[[doc]]
+path = "docs/ACCEPTANCE.md"
+bytes = 9747
+top = "docs"
+ref_count = 76
+pinned = true
+pinned_by = ["T-G67", "T-G72", "T-G73"]
+referenced_by = [
+  "docs/CODING_GUIDELINES.md:4",
+  "docs/CODING_GUIDELINES.md:20",
+  "docs/CODING_GUIDELINES.md:46",
+  "docs/README.md:96",
+  "docs/changelog.md:2515",
+  "docs/changelog.md:2526",
+]
+
+[[doc]]
+path = "docs/CODING_GUIDELINES.md"
+bytes = 7981
+top = "docs"
+ref_count = 31
+pinned = true
+pinned_by = ["SR-NF11", "SR-NF15", "SR-NF9", "T-G62"]
+referenced_by = [
+  "docs/ACCEPTANCE.md:3",
+  "docs/EXTENDING.md:54",
+  "docs/EXTENDING.md:251",
+  "docs/README.md:96",
+  "docs/changelog.md:4941",
+  "docs/implementation/traceability.md:37",
+]
+
+[[doc]]
+path = "docs/EXTENDING.md"
+bytes = 16719
+top = "docs"
+ref_count = 39
+pinned = true
+pinned_by = ["SR-NF10", "SR-NF7", "T-G1", "T-G17", "T-G2"]
+referenced_by = [
+  "docs/README.md:65",
+  "docs/README.md:93",
+  "docs/changelog.md:4232",
+  "docs/changelog.md:4256",
+  "docs/changelog.md:4742",
+  "docs/changelog.md:4759",
+]
+
+[[doc]]
+path = "docs/README.md"
+bytes = 8046
+top = "docs"
+ref_count = 44
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.d/T-G260.md:9",
+  "docs/changelog.md:129",
+  "docs/changelog.md:3567",
+  "docs/changelog.md:4758",
+  "docs/traceability.toml:1267",
+  "docs/traceability.toml:5651",
+]
+
+[[doc]]
+path = "docs/changelog.d/T-G203.md"
+bytes = 1746
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G205.md"
+bytes = 2059
+top = "docs.changelog.d"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/traceability.toml:5147",
+]
+
+[[doc]]
+path = "docs/changelog.d/T-G206.md"
+bytes = 1789
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G207.md"
+bytes = 1727
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G208.md"
+bytes = 2009
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G209.md"
+bytes = 1465
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G210.md"
+bytes = 1667
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G211.md"
+bytes = 1631
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G212.md"
+bytes = 1663
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G213.md"
+bytes = 1356
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G214.md"
+bytes = 1769
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G215.md"
+bytes = 1363
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G216.md"
+bytes = 1407
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G217.md"
+bytes = 1190
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G218.md"
+bytes = 1176
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G219.md"
+bytes = 1121
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G220.md"
+bytes = 1792
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G223.md"
+bytes = 1665
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G226.md"
+bytes = 1777
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G228.md"
+bytes = 1208
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G229.md"
+bytes = 1819
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G232.md"
+bytes = 1704
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G235.md"
+bytes = 1066
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G237.md"
+bytes = 1527
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G238.md"
+bytes = 1436
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G239.md"
+bytes = 1563
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G244.md"
+bytes = 1733
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G245.md"
+bytes = 1508
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G249.md"
+bytes = 1071
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G250.md"
+bytes = 1656
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G252.md"
+bytes = 1987
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G253.md"
+bytes = 1098
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G259.md"
+bytes = 1256
+top = "docs.changelog.d"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:71",
+  "复盘/交接.d/T-G259.md:20",
+]
+
+[[doc]]
+path = "docs/changelog.d/T-G260.md"
+bytes = 5331
+top = "docs.changelog.d"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/traceability.toml:5754",
+]
+
+[[doc]]
+path = "docs/changelog.d/T-G265.md"
+bytes = 769
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G268.md"
+bytes = 835
+top = "docs.changelog.d"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/框架-术语表与契约.md:52",
+]
+
+[[doc]]
+path = "docs/changelog.d/T-G273.md"
+bytes = 1585
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G274.md"
+bytes = 1690
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G275.md"
+bytes = 1304
+top = "docs.changelog.d"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:150",
+  "复盘/交接.d/T-G275.md:20",
+]
+
+[[doc]]
+path = "docs/changelog.d/T-G276.md"
+bytes = 1757
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G277.md"
+bytes = 1772
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G278.md"
+bytes = 2518
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G279.md"
+bytes = 1462
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G280.md"
+bytes = 1693
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G281.md"
+bytes = 1750
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G282.md"
+bytes = 1371
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G287.md"
+bytes = 1468
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G288.md"
+bytes = 1815
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.d/T-G289.md"
+bytes = 1190
+top = "docs.changelog.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/changelog.md"
+bytes = 574316
+top = "docs"
+ref_count = 142
+pinned = true
+pinned_by = ["T-G180", "T-G229"]
+referenced_by = [
+  "docs/CODING_GUIDELINES.md:76",
+  "docs/README.md:78",
+  "docs/README.md:96",
+  "docs/README.md:97",
+  "docs/changelog.d/T-G229.md:11",
+  "docs/contracts/domains/F8-memo.md:41",
+]
+
+[[doc]]
+path = "docs/contracts/domains/F1-tasks.md"
+bytes = 15550
+top = "docs.contracts"
+ref_count = 22
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/EXTENDING.md:40",
+  "docs/EXTENDING.md:86",
+  "docs/contracts/domains/F5-academic.md:28",
+  "docs/contracts/domains/README.md:9",
+  "docs/contracts/interactions.md:210",
+  "docs/specification/domains/F1-tasks.md:4",
+]
+
+[[doc]]
+path = "docs/contracts/domains/F10-notify.md"
+bytes = 3338
+top = "docs.contracts"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/contracts/domains/README.md:18",
+  "docs/specification/domains/F10-notify.md:4",
+  "复盘/学校通知合作接口-T-G14.md:35",
+]
+
+[[doc]]
+path = "docs/contracts/domains/F2-ledger.md"
+bytes = 6296
+top = "docs.contracts"
+ref_count = 6
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/contracts/domains/README.md:10",
+  "docs/specification/domains/F2-ledger.md:4",
+  "复盘/长任务执行协议.md:402",
+  "复盘/长任务执行协议.md:446",
+  "复盘/长任务执行协议.md:470",
+  "复盘/长任务执行协议.md:491",
+]
+
+[[doc]]
+path = "docs/contracts/domains/F3-focus.md"
+bytes = 6925
+top = "docs.contracts"
+ref_count = 8
+pinned = true
+pinned_by = ["SR-F3.2", "SR-F3.4", "T-G20"]
+referenced_by = [
+  "docs/contracts/domains/README.md:11",
+  "docs/specification/domains/F3-focus.md:4",
+  "docs/traceability.toml:445",
+  "docs/traceability.toml:476",
+  "docs/traceability.toml:1561",
+  "复盘/坑总账.md:425",
+]
+
+[[doc]]
+path = "docs/contracts/domains/F4-feedback.md"
+bytes = 2706
+top = "docs.contracts"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/contracts/domains/README.md:12",
+  "docs/specification/domains/F4-feedback.md:4",
+  "复盘/长任务执行协议.md:210",
+]
+
+[[doc]]
+path = "docs/contracts/domains/F5-academic.md"
+bytes = 7258
+top = "docs.contracts"
+ref_count = 7
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/contracts/domains/F1-tasks.md:152",
+  "docs/contracts/domains/README.md:13",
+  "docs/specification/domains/F5-academic.md:4",
+  "复盘/新窗口交接卡.md:1020",
+  "复盘/第6-10步工作线复盘.md:82",
+  "复盘/长任务执行协议.md:541",
+]
+
+[[doc]]
+path = "docs/contracts/domains/F6-review.md"
+bytes = 7870
+top = "docs.contracts"
+ref_count = 12
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:1248",
+  "docs/changelog.md:1255",
+  "docs/contracts/domains/README.md:14",
+  "docs/specification/domains/F6-review.md:4",
+  "docs/traceability.toml:4403",
+  "复盘/复习卡删除-T-G150.md:9",
+]
+
+[[doc]]
+path = "docs/contracts/domains/F7-team.md"
+bytes = 8093
+top = "docs.contracts"
+ref_count = 10
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:3190",
+  "docs/contracts/domains/README.md:15",
+  "docs/specification/domains/F7-team.md:4",
+  "docs/specification/domains/F7-team.md:11",
+  "docs/specification/domains/F7-team.md:30",
+  "docs/specification/domains/F7-team.md:42",
+]
+
+[[doc]]
+path = "docs/contracts/domains/F8-memo.md"
+bytes = 2805
+top = "docs.contracts"
+ref_count = 4
+pinned = true
+pinned_by = ["SR-F8.4", "T-G75"]
+referenced_by = [
+  "docs/contracts/domains/README.md:16",
+  "docs/specification/domains/F8-memo.md:4",
+  "docs/traceability.toml:1220",
+  "docs/traceability.toml:2009",
+]
+
+[[doc]]
+path = "docs/contracts/domains/F9-storage-sync.md"
+bytes = 16412
+top = "docs.contracts"
+ref_count = 4
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/contracts/domains/README.md:17",
+  "docs/specification/domains/F9-storage-sync.md:4",
+  "复盘/长任务执行协议.md:1817",
+  "复盘/长任务执行协议.md:1871",
+]
+
+[[doc]]
+path = "docs/contracts/domains/README.md"
+bytes = 797
+top = "docs.contracts"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/contracts/flows.md:8",
+  "docs/contracts/interactions.md:8",
+]
+
+[[doc]]
+path = "docs/contracts/domains/_CROSS.md"
+bytes = 3190
+top = "docs.contracts"
+ref_count = 6
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/specification/domains/_CROSS.md:4",
+  "复盘/全量审计报告-五层一致性与缺口登记.md:193",
+  "复盘/全量补充执行计划.md:94",
+  "复盘/新窗口交接卡.md:1020",
+  "复盘/长任务执行协议.md:181",
+  "复盘/问题清单-组1.md:91",
+]
+
+[[doc]]
+path = "docs/contracts/flows.md"
+bytes = 11052
+top = "docs.contracts"
+ref_count = 70
+pinned = true
+pinned_by = ["T-G23"]
+referenced_by = [
+  "docs/ACCEPTANCE.md:5",
+  "docs/ACCEPTANCE.md:19",
+  "docs/ACCEPTANCE.md:41",
+  "docs/CODING_GUIDELINES.md:9",
+  "docs/README.md:72",
+  "docs/changelog.d/T-G260.md:9",
+]
+
+[[doc]]
+path = "docs/contracts/interactions.md"
+bytes = 12497
+top = "docs.contracts"
+ref_count = 51
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/ACCEPTANCE.md:5",
+  "docs/ACCEPTANCE.md:19",
+  "docs/ACCEPTANCE.md:24",
+  "docs/CODING_GUIDELINES.md:9",
+  "docs/EXTENDING.md:41",
+  "docs/README.md:72",
+]
+
+[[doc]]
+path = "docs/implementation/README.md"
+bytes = 4074
+top = "docs.implementation"
+ref_count = 10
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/CODING_GUIDELINES.md:10",
+  "docs/changelog.md:4936",
+  "复盘/docs一致性审查-发现清单.md:122",
+  "复盘/docs一致性审查报告.md:38",
+  "复盘/docs一致性审查报告.md:123",
+  "复盘/docs一致性审查报告.md:126",
+]
+
+[[doc]]
+path = "docs/implementation/architecture.md"
+bytes = 8294
+top = "docs.implementation"
+ref_count = 26
+pinned = true
+pinned_by = ["SR-NF9", "T-G67"]
+referenced_by = [
+  "docs/README.md:32",
+  "docs/changelog.md:2639",
+  "docs/changelog.md:4935",
+  "docs/changelog.md:5096",
+  "docs/implementation/README.md:46",
+  "docs/traceability.toml:1923",
+]
+
+[[doc]]
+path = "docs/implementation/coverage.md"
+bytes = 4841
+top = "docs.implementation"
+ref_count = 34
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/ACCEPTANCE.md:6",
+  "docs/CODING_GUIDELINES.md:10",
+  "docs/CODING_GUIDELINES.md:77",
+  "docs/changelog.d/T-G260.md:9",
+  "docs/changelog.md:129",
+  "docs/changelog.md:606",
+]
+
+[[doc]]
+path = "docs/implementation/modules.md"
+bytes = 34662
+top = "docs.implementation"
+ref_count = 42
+pinned = true
+pinned_by = ["T-G135"]
+referenced_by = [
+  "docs/CODING_GUIDELINES.md:10",
+  "docs/CODING_GUIDELINES.md:76",
+  "docs/EXTENDING.md:51",
+  "docs/changelog.md:1538",
+  "docs/changelog.md:4935",
+  "docs/changelog.md:5083",
+]
+
+[[doc]]
+path = "docs/implementation/traceability.md"
+bytes = 4900
+top = "docs.implementation"
+ref_count = 25
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:4935",
+  "docs/changelog.md:4989",
+  "docs/changelog.md:5084",
+  "docs/changelog.md:5095",
+  "docs/changelog.md:5469",
+  "docs/implementation/README.md:46",
+]
+
+[[doc]]
+path = "docs/intention/README.md"
+bytes = 1749
+top = "docs.intention"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/意图、规格和实现复盘.md:23",
+  "复盘/意图、规格和实现复盘.md:61",
+  "复盘/问题清单-组1.md:43",
+]
+
+[[doc]]
+path = "docs/intention/needs.md"
+bytes = 27131
+top = "docs.intention"
+ref_count = 27
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/EXTENDING.md:30",
+  "docs/changelog.md:4224",
+  "docs/intention/README.md:10",
+  "docs/specification/domains/_CROSS.md:3",
+  "docs/traceability.toml:1049",
+  "scripts/test_check_layers.py:75",
+]
+
+[[doc]]
+path = "docs/specification/README.md"
+bytes = 2262
+top = "docs.specification"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/docs一致性审查报告.md:145",
+  "复盘/任务复盘-全程.md:74",
+  "复盘/意图、规格和实现复盘.md:25",
+  "复盘/意图、规格和实现复盘.md:62",
+  "复盘/意图到规格-产品判断复盘.md:27",
+]
+
+[[doc]]
+path = "docs/specification/behaviors.md"
+bytes = 2928
+top = "docs.specification"
+ref_count = 29
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/CODING_GUIDELINES.md:8",
+  "docs/EXTENDING.md:222",
+  "docs/changelog.md:4289",
+  "docs/contracts/domains/F1-tasks.md:3",
+  "docs/contracts/domains/F10-notify.md:3",
+  "docs/contracts/domains/F2-ledger.md:3",
+]
+
+[[doc]]
+path = "docs/specification/conventions.md"
+bytes = 6743
+top = "docs.specification"
+ref_count = 103
+pinned = true
+pinned_by = ["T-F1", "T-G39", "T-G49"]
+referenced_by = [
+  "docs/CODING_GUIDELINES.md:4",
+  "docs/CODING_GUIDELINES.md:7",
+  "docs/CODING_GUIDELINES.md:76",
+  "docs/EXTENDING.md:34",
+  "docs/EXTENDING.md:35",
+  "docs/README.md:71",
+]
+
+[[doc]]
+path = "docs/specification/domains/F1-tasks.md"
+bytes = 11572
+top = "docs.specification"
+ref_count = 4
+pinned = true
+pinned_by = ["T-C9"]
+referenced_by = [
+  "docs/implementation/coverage.md:9",
+  "docs/specification/domains/README.md:9",
+  "docs/traceability.toml:3343",
+  "复盘/长任务执行协议.md:155",
+]
+
+[[doc]]
+path = "docs/specification/domains/F10-notify.md"
+bytes = 2869
+top = "docs.specification"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/contracts/domains/F10-notify.md:4",
+  "docs/implementation/coverage.md:19",
+  "docs/specification/domains/README.md:18",
+  "复盘/学校通知合作接口-T-G14.md:4",
+  "复盘/学校通知合作接口-T-G14.md:34",
+]
+
+[[doc]]
+path = "docs/specification/domains/F2-ledger.md"
+bytes = 8057
+top = "docs.specification"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/implementation/coverage.md:10",
+  "docs/specification/domains/README.md:10",
+  "复盘/长任务执行协议.md:228",
+  "复盘/长任务执行协议.md:264",
+  "复盘/长任务执行协议.md:362",
+]
+
+[[doc]]
+path = "docs/specification/domains/F3-focus.md"
+bytes = 3859
+top = "docs.specification"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/implementation/coverage.md:11",
+  "docs/specification/domains/README.md:11",
+]
+
+[[doc]]
+path = "docs/specification/domains/F4-feedback.md"
+bytes = 2989
+top = "docs.specification"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/implementation/coverage.md:12",
+  "docs/specification/domains/README.md:12",
+]
+
+[[doc]]
+path = "docs/specification/domains/F5-academic.md"
+bytes = 4357
+top = "docs.specification"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/implementation/coverage.md:13",
+  "docs/specification/domains/README.md:13",
+]
+
+[[doc]]
+path = "docs/specification/domains/F6-review.md"
+bytes = 4040
+top = "docs.specification"
+ref_count = 4
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/implementation/coverage.md:15",
+  "docs/specification/domains/README.md:14",
+  "复盘/长任务执行协议.md:246",
+  "复盘/长任务执行协议.md:380",
+]
+
+[[doc]]
+path = "docs/specification/domains/F7-team.md"
+bytes = 5288
+top = "docs.specification"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/implementation/coverage.md:16",
+  "docs/specification/domains/README.md:15",
+  "复盘/AI写事实回报进展-T-G21.md:98",
+  "复盘/团队视角页-T-G12.md:10",
+  "复盘/团队视角页-T-G12.md:35",
+]
+
+[[doc]]
+path = "docs/specification/domains/F8-memo.md"
+bytes = 2105
+top = "docs.specification"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/implementation/coverage.md:17",
+  "docs/specification/domains/README.md:16",
+]
+
+[[doc]]
+path = "docs/specification/domains/F9-storage-sync.md"
+bytes = 10685
+top = "docs.specification"
+ref_count = 4
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/implementation/coverage.md:14",
+  "docs/implementation/coverage.md:18",
+  "docs/specification/domains/README.md:17",
+  "复盘/长任务执行协议.md:282",
+]
+
+[[doc]]
+path = "docs/specification/domains/README.md"
+bytes = 758
+top = "docs.specification"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "docs/specification/domains/_CROSS.md"
+bytes = 2427
+top = "docs.specification"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/长任务执行协议.md:181",
+  "复盘/问题清单-组1.md:92",
+]
+
+[[doc]]
+path = "docs/specification/domains/_TEMPLATE.md"
+bytes = 340
+top = "docs.specification"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/全量审计报告-五层一致性与缺口登记.md:169",
+  "复盘/全量补充执行计划.md:84",
+]
+
+[[doc]]
+path = "docs/specification/functional.md"
+bytes = 9706
+top = "docs.specification"
+ref_count = 44
+pinned = true
+pinned_by = ["SR-F1.9", "SR-F3.2", "T-C9", "T-G39", "T-G75"]
+referenced_by = [
+  "docs/EXTENDING.md:35",
+  "docs/changelog.md:4816",
+  "docs/changelog.md:5468",
+  "docs/changelog.md:5480",
+  "docs/contracts/flows.md:5",
+  "docs/contracts/flows.md:190",
+]
+
+[[doc]]
+path = "docs/specification/nonfunctional.md"
+bytes = 27684
+top = "docs.specification"
+ref_count = 43
+pinned = true
+pinned_by = ["T-G26", "T-G44", "T-G61", "T-G62", "T-G63", "T-G64", "T-G69", "T-G70"]
+referenced_by = [
+  "docs/EXTENDING.md:35",
+  "docs/changelog.md:3073",
+  "docs/changelog.md:4304",
+  "docs/changelog.md:4817",
+  "docs/specification/README.md:39",
+  "docs/specification/conventions.md:5",
+]
+
+[[doc]]
+path = "docs/specification/traceability.md"
+bytes = 3699
+top = "docs.specification"
+ref_count = 15
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/specification/README.md:20",
+  "docs/specification/README.md:39",
+  "scripts/audit_progress.py:491",
+  "scripts/test_check_layers.py:76",
+  "复盘/docs一致性修复记录.md:52",
+  "复盘/docs一致性审查-发现清单.md:54",
+]
+
+[[doc]]
+path = "docs/taste/README.md"
+bytes = 3154
+top = "docs.taste"
+ref_count = 7
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/check_layers修复与验证复盘.md:71",
+  "复盘/docs一致性审查-发现清单.md:93",
+  "复盘/docs一致性审查-发现清单.md:166",
+  "复盘/docs一致性审查-发现清单.md:182",
+  "复盘/docs一致性审查报告.md:102",
+  "复盘/docs一致性审查报告.md:197",
+]
+
+[[doc]]
+path = "docs/user-guide.md"
+bytes = 10796
+top = "docs"
+ref_count = 24
+pinned = true
+pinned_by = ["T-G57", "T-G64", "T-G68", "T-G70"]
+referenced_by = [
+  "docs/changelog.md:2627",
+  "docs/changelog.md:2790",
+  "docs/changelog.md:2810",
+  "docs/traceability.toml:1581",
+  "docs/traceability.toml:1856",
+  "docs/traceability.toml:1896",
+]
+
+[[doc]]
+path = "docs/workbuddy-cli-使用指南.md"
+bytes = 8784
+top = "docs"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G80"]
+referenced_by = [
+  "docs/traceability.toml:672",
+  "docs/traceability.toml:1094",
+  "docs/traceability.toml:1099",
+  "复盘/外包-卡表与规矩.md:154",
+  "复盘/框架-术语表与契约.md:177",
+  "复盘/派活器三合一-T-G114.md:104",
+]
+
+[[doc]]
+path = "docs/人工验收-照着点.md"
+bytes = 32252
+top = "docs"
+ref_count = 65
+pinned = true
+pinned_by = ["T-G135", "T-G167", "T-G174", "T-G72", "T-G73", "T-G74", "T-G77", "T-G78"]
+referenced_by = [
+  "docs/ACCEPTANCE.md:7",
+  "docs/changelog.md:1023",
+  "docs/changelog.md:1026",
+  "docs/changelog.md:1205",
+  "docs/changelog.md:1207",
+  "docs/changelog.md:1540",
+]
+
+[[doc]]
+path = "docs/归置地图.md"
+bytes = 5059
+top = "docs"
+ref_count = 12
+pinned = true
+pinned_by = ["T-G180", "T-G181"]
+referenced_by = [
+  "docs/changelog.md:790",
+  "docs/changelog.md:872",
+  "docs/changelog.md:885",
+  "docs/changelog.md:895",
+  "docs/traceability.toml:4756",
+  "docs/traceability.toml:4760",
+]
+
+[[doc]]
+path = "复盘/AI写事实回报进展-T-G21.md"
+bytes = 10202
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G21"]
+referenced_by = [
+  "docs/traceability.toml:2732",
+  "复盘/交接-重构进度.md:2701",
+  "复盘/交接-重构进度.md:3069",
+  "复盘/交接-重构进度.md:3138",
+  "复盘/索引-台账号到复盘.md:113",
+  "复盘/索引-台账号到复盘.md:122",
+]
+
+[[doc]]
+path = "复盘/AI接口边界-T-G6.md"
+bytes = 7920
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G6"]
+referenced_by = [
+  "docs/changelog.md:4093",
+  "docs/specification/domains/F7-team.md:45",
+  "docs/traceability.toml:3950",
+  "复盘/交接-重构进度.md:2749",
+  "复盘/交接-重构进度.md:2870",
+  "复盘/任务重规划-剩余工作.md:150",
+]
+
+[[doc]]
+path = "复盘/C批口径定案.md"
+bytes = 11369
+top = "复盘"
+ref_count = 26
+pinned = true
+pinned_by = ["SR-F1.9", "SR-F2.1b", "T-C1", "T-C8", "T-C9"]
+referenced_by = [
+  "docs/changelog.md:2299",
+  "docs/changelog.md:4701",
+  "docs/changelog.md:5475",
+  "docs/changelog.md:5483",
+  "docs/contracts/domains/F5-academic.md:59",
+  "docs/implementation/modules.md:118",
+]
+
+[[doc]]
+path = "复盘/DESIGN-LEARN撤回与闭环验收恢复.md"
+bytes = 5083
+top = "复盘"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/README.md:97",
+  "docs/intention/needs.md:178",
+  "docs/specification/nonfunctional.md:157",
+]
+
+[[doc]]
+path = "复盘/F1.9三类扩类型-T-G140.md"
+bytes = 11561
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G140"]
+referenced_by = [
+  "docs/changelog.md:1525",
+  "docs/traceability.toml:4276",
+  "复盘/交接-重构进度.md:1401",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:128",
+  "复盘/索引-台账号到复盘.md:157",
+]
+
+[[doc]]
+path = "复盘/F2.8债务派生特征测试-T-G141.md"
+bytes = 7838
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G141"]
+referenced_by = [
+  "docs/changelog.md:1516",
+  "docs/traceability.toml:4290",
+  "复盘/交接-重构进度.md:1393",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:128",
+  "复盘/索引-台账号到复盘.md:158",
+]
+
+[[doc]]
+path = "复盘/MCP与写操作-T-G65.md"
+bytes = 12218
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G65"]
+referenced_by = [
+  "docs/changelog.md:2573",
+  "docs/implementation/modules.md:278",
+  "docs/specification/nonfunctional.md:98",
+  "docs/traceability.toml:1953",
+  "docs/traceability.toml:1970",
+  "复盘/交接-重构进度.md:2049",
+]
+
+[[doc]]
+path = "复盘/MCP编码缺陷-T-G74.md"
+bytes = 7795
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G74"]
+referenced_by = [
+  "docs/changelog.md:2483",
+  "docs/traceability.toml:1232",
+  "复盘/交接-重构进度.md:1965",
+  "复盘/新窗口交接卡.md:547",
+  "复盘/索引-台账号到复盘.md:62",
+  "复盘/索引-台账号到复盘.md:135",
+]
+
+[[doc]]
+path = "复盘/MVP结构梳理-框架与交叉.md"
+bytes = 9676
+top = "复盘"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/intention/README.md:21",
+  "docs/specification/domains/_CROSS.md:3",
+  "复盘/check_layers修复与验证复盘.md:33",
+]
+
+[[doc]]
+path = "复盘/Obsidian跳转与红线机器化-T-G5.md"
+bytes = 9018
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G5"]
+referenced_by = [
+  "docs/changelog.md:4186",
+  "docs/contracts/domains/F6-review.md:91",
+  "docs/contracts/domains/F8-memo.md:41",
+  "docs/traceability.toml:3715",
+  "复盘/交接-重构进度.md:2882",
+  "复盘/任务重规划-剩余工作.md:149",
+]
+
+[[doc]]
+path = "复盘/Trae池适配器-T-G172.md"
+bytes = 10170
+top = "复盘"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G172"]
+referenced_by = [
+  "docs/changelog.md:1070",
+  "docs/traceability.toml:4658",
+  "复盘/交接-重构进度.md:1100",
+]
+
+[[doc]]
+path = "复盘/WorkBuddy状态器-T-G81.md"
+bytes = 4122
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G81"]
+referenced_by = [
+  "docs/changelog.md:2345",
+  "docs/traceability.toml:1075",
+  "复盘/交接-重构进度.md:1805",
+  "复盘/新窗口交接卡.md:368",
+  "复盘/索引-台账号到复盘.md:54",
+  "复盘/索引-台账号到复盘.md:132",
+]
+
+[[doc]]
+path = "复盘/backlog扩建-T-G100.md"
+bytes = 21149
+top = "复盘"
+ref_count = 11
+pinned = true
+pinned_by = ["T-G100"]
+referenced_by = [
+  "docs/traceability.toml:817",
+  "复盘/交接-重构进度.md:1602",
+  "复盘/外包卡-012b-集成.md:18",
+  "复盘/外包卡-012b-集成.md:54",
+  "复盘/外包卡-012b-集成.md:105",
+  "复盘/外包卡-012b-集成.md:180",
+]
+
+[[doc]]
+path = "复盘/check_layers修复与验证复盘.md"
+bytes = 7862
+top = "复盘"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:3189",
+]
+
+[[doc]]
+path = "复盘/check_layers假红-T-G127.md"
+bytes = 8227
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G127"]
+referenced_by = [
+  "docs/changelog.md:1677",
+  "docs/traceability.toml:4088",
+  "复盘/交接-重构进度.md:1476",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:130",
+  "复盘/索引-台账号到复盘.md:142",
+]
+
+[[doc]]
+path = "复盘/detach前置检查-T-G92.md"
+bytes = 7526
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G92"]
+referenced_by = [
+  "docs/changelog.md:2140",
+  "docs/traceability.toml:900",
+  "docs/traceability.toml:923",
+  "复盘/交接-重构进度.md:1704",
+  "复盘/外包卡-003-修detach前置检查.md:58",
+  "复盘/新窗口交接卡.md:252",
+]
+
+[[doc]]
+path = "复盘/diag目录清账-T-G105.md"
+bytes = 7733
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G105"]
+referenced_by = [
+  "docs/traceability.toml:633",
+  "复盘/索引-台账号到复盘.md:24",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:127",
+]
+
+[[doc]]
+path = "复盘/docs一致性修复记录.md"
+bytes = 6303
+top = "复盘"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/框架-术语表与契约.md:55",
+]
+
+[[doc]]
+path = "复盘/docs一致性审查-发现清单.md"
+bytes = 10549
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/docs一致性审查报告.md"
+bytes = 11058
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/docs两处漂移-T-G135.md"
+bytes = 6499
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G135"]
+referenced_by = [
+  "docs/changelog.md:1543",
+  "docs/traceability.toml:4251",
+  "复盘/交接-重构进度.md:1409",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:129",
+  "复盘/索引-台账号到复盘.md:155",
+]
+
+[[doc]]
+path = "复盘/myday序号根因-T-G98.md"
+bytes = 18782
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G98"]
+referenced_by = [
+  "docs/traceability.toml:566",
+  "复盘/外包卡-012-集成.md:13",
+  "复盘/索引-台账号到复盘.md:19",
+  "复盘/索引-台账号到复盘.md:134",
+]
+
+[[doc]]
+path = "复盘/myday撞击409映射-T-G126.md"
+bytes = 8922
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G126"]
+referenced_by = [
+  "docs/changelog.md:1701",
+  "docs/traceability.toml:4064",
+  "复盘/使用体验问题与修改台账.md:302",
+  "复盘/使用体验问题与修改台账.md:308",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:130",
+]
+
+[[doc]]
+path = "复盘/myday版本守卫-T-G109.md"
+bytes = 8630
+top = "复盘"
+ref_count = 5
+pinned = true
+pinned_by = ["T-G109"]
+referenced_by = [
+  "docs/traceability.toml:761",
+  "docs/traceability.toml:4068",
+  "复盘/索引-台账号到复盘.md:34",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:127",
+]
+
+[[doc]]
+path = "复盘/myday稀疏序号-T-G110.md"
+bytes = 20347
+top = "复盘"
+ref_count = 10
+pinned = true
+pinned_by = ["T-G110"]
+referenced_by = [
+  "docs/changelog.md:1534",
+  "docs/traceability.toml:700",
+  "docs/traceability.toml:4263",
+  "docs/workbacklog.toml:37",
+  "复盘/交接-重构进度.md:1405",
+  "复盘/卡/卡022-myday稀疏序号.md:83",
+]
+
+[[doc]]
+path = "复盘/myday空before口径-T-G102.md"
+bytes = 9775
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G102"]
+referenced_by = [
+  "docs/traceability.toml:595",
+  "复盘/索引-台账号到复盘.md:21",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:127",
+]
+
+[[doc]]
+path = "复盘/reuse判定自证-T-G106.md"
+bytes = 11652
+top = "复盘"
+ref_count = 5
+pinned = true
+pinned_by = ["T-G106"]
+referenced_by = [
+  "docs/traceability.toml:785",
+  "复盘/框架-术语表与契约.md:53",
+  "复盘/索引-台账号到复盘.md:36",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:127",
+]
+
+[[doc]]
+path = "复盘/ui_flow等待原语-T-G188.md"
+bytes = 7729
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/wb_dash转正-T-G93.md"
+bytes = 9285
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G93"]
+referenced_by = [
+  "docs/changelog.md:2115",
+  "docs/traceability.toml:881",
+  "复盘/交接-重构进度.md:1691",
+  "复盘/外包卡-004-wb_dash转正.md:37",
+  "复盘/并发两卡-T-G92T-G93.md:12",
+  "复盘/并发两卡-T-G92T-G93.md:77",
+]
+
+[[doc]]
+path = "复盘/wb_plan缺口-T-G119.md"
+bytes = 5095
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G119"]
+referenced_by = [
+  "docs/traceability.toml:681",
+  "复盘/索引-台账号到复盘.md:28",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:126",
+]
+
+[[doc]]
+path = "复盘/wb_review分支假FAIL-T-G158.md"
+bytes = 10590
+top = "复盘"
+ref_count = 6
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:1377",
+  "复盘/交接-重构进度.md:1309",
+  "复盘/外包-卡表与规矩.md:251",
+  "复盘/索引-台账号到复盘.md:118",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:173",
+]
+
+[[doc]]
+path = "复盘/worktree轻门导入口径-T-G134.md"
+bytes = 7115
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G134"]
+referenced_by = [
+  "docs/changelog.md:1632",
+  "docs/traceability.toml:4138",
+  "复盘/交接-重构进度.md:1453",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:129",
+  "复盘/索引-台账号到复盘.md:146",
+]
+
+[[doc]]
+path = "复盘/wt清理器证据留档-T-G178.md"
+bytes = 9981
+top = "复盘"
+ref_count = 5
+pinned = true
+pinned_by = ["T-G178"]
+referenced_by = [
+  "docs/changelog.md:949",
+  "docs/traceability.toml:4737",
+  "复盘/交接-重构进度.md:1012",
+  "复盘/卡/卡182-外包留痕与配额.md:15",
+  "复盘/留痕与配额策略.md:60",
+]
+
+[[doc]]
+path = "复盘/wt清理工具-T-G176.md"
+bytes = 11418
+top = "复盘"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G176"]
+referenced_by = [
+  "docs/changelog.md:995",
+  "docs/traceability.toml:4711",
+  "复盘/交接-重构进度.md:1041",
+]
+
+[[doc]]
+path = "复盘/三层断裂诊断-实现与交互复盘.md"
+bytes = 16182
+top = "复盘"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/README.md:79",
+  "docs/changelog.md:4841",
+  "复盘/交接-重构进度.md:3142",
+  "复盘/任务复盘-全程.md:17",
+  "复盘/任务复盘-全程.md:59",
+]
+
+[[doc]]
+path = "复盘/主控复核器-T-G84.md"
+bytes = 3308
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G84"]
+referenced_by = [
+  "docs/changelog.md:2294",
+  "docs/traceability.toml:1028",
+  "复盘/索引-台账号到复盘.md:51",
+  "复盘/索引-台账号到复盘.md:132",
+]
+
+[[doc]]
+path = "复盘/习惯打卡算投入-T-G164.md"
+bytes = 8156
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G164"]
+referenced_by = [
+  "docs/changelog.md:1139",
+  "docs/traceability.toml:4548",
+  "复盘/交接-重构进度.md:1151",
+  "复盘/索引-台账号到复盘.md:117",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:179",
+]
+
+[[doc]]
+path = "复盘/习惯页今天差一天-T-G41.md"
+bytes = 4524
+top = "复盘"
+ref_count = 5
+pinned = true
+pinned_by = ["T-G41"]
+referenced_by = [
+  "docs/traceability.toml:2397",
+  "复盘/交接-重构进度.md:3140",
+  "复盘/渲染采集漂移与星期相关-T-G40.md:78",
+  "复盘/索引-台账号到复盘.md:92",
+  "复盘/索引-台账号到复盘.md:120",
+]
+
+[[doc]]
+path = "复盘/事实层架构设计复盘.md"
+bytes = 10465
+top = "复盘"
+ref_count = 4
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/implementation/traceability.md:27",
+  "复盘/交接-重构进度.md:3098",
+  "复盘/交接后审计-不一致与风险修复.md:127",
+  "复盘/框架-术语表与契约.md:60",
+]
+
+[[doc]]
+path = "复盘/交接-重构进度.md"
+bytes = 454067
+top = "复盘"
+ref_count = 146
+pinned = true
+pinned_by = ["T-G116", "T-G117", "T-G18", "T-G68", "T-G73", "T-G80"]
+referenced_by = [
+  "docs/CODING_GUIDELINES.md:34",
+  "docs/changelog.md:1039",
+  "docs/changelog.md:1099",
+  "docs/changelog.md:2515",
+  "docs/changelog.md:3748",
+  "docs/changelog.md:5178",
+]
+
+[[doc]]
+path = "复盘/交接.d/T-G203.md"
+bytes = 1580
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G205.md"
+bytes = 1706
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G206.md"
+bytes = 1575
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G207.md"
+bytes = 1306
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G208.md"
+bytes = 1631
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G209.md"
+bytes = 1320
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G210.md"
+bytes = 1381
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G211.md"
+bytes = 1393
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G212.md"
+bytes = 1613
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G213.md"
+bytes = 1131
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G214.md"
+bytes = 1707
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G215.md"
+bytes = 1379
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G216.md"
+bytes = 1256
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G217.md"
+bytes = 1308
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G218.md"
+bytes = 1304
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G219.md"
+bytes = 1520
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G220.md"
+bytes = 2614
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G223.md"
+bytes = 2156
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G226.md"
+bytes = 2291
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G228.md"
+bytes = 1812
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G229.md"
+bytes = 2079
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G232.md"
+bytes = 2523
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G235.md"
+bytes = 946
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G237.md"
+bytes = 1666
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G238.md"
+bytes = 1967
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G239.md"
+bytes = 1925
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G244.md"
+bytes = 2244
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G245.md"
+bytes = 1956
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G249.md"
+bytes = 3643
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G250.md"
+bytes = 2811
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G252.md"
+bytes = 1551
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G253.md"
+bytes = 2262
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G259.md"
+bytes = 3588
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G260.md"
+bytes = 5049
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G265.md"
+bytes = 1283
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G268.md"
+bytes = 1873
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G273.md"
+bytes = 2767
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G274.md"
+bytes = 3823
+top = "复盘.交接.d"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/优化候选-引文回溯.md:62",
+]
+
+[[doc]]
+path = "复盘/交接.d/T-G275.md"
+bytes = 4863
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G276.md"
+bytes = 1916
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G277.md"
+bytes = 3574
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G278.md"
+bytes = 1955
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G279.md"
+bytes = 1735
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G280.md"
+bytes = 2195
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G281.md"
+bytes = 2097
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G282.md"
+bytes = 2055
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G287.md"
+bytes = 1262
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G288.md"
+bytes = 1664
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接.d/T-G289.md"
+bytes = 1590
+top = "复盘.交接.d"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/交接与台账陈旧-T-G18.md"
+bytes = 13513
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G18"]
+referenced_by = [
+  "docs/changelog.md:3747",
+  "docs/traceability.toml:2767",
+  "复盘/交接-重构进度.md:3116",
+  "复盘/口径定案-待定清单.md:389",
+  "复盘/索引-台账号到复盘.md:115",
+  "复盘/索引-台账号到复盘.md:119",
+]
+
+[[doc]]
+path = "复盘/交接后审计-不一致与风险修复.md"
+bytes = 11376
+top = "复盘"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:3103",
+  "复盘/框架-术语表与契约.md:60",
+]
+
+[[doc]]
+path = "复盘/交接摘要-T-G95.md"
+bytes = 10230
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G95"]
+referenced_by = [
+  "docs/changelog.md:2060",
+  "docs/traceability.toml:530",
+  "复盘/交接-重构进度.md:1663",
+  "复盘/外包卡-006-交接摘要.md:106",
+  "复盘/新窗口交接卡.md:176",
+  "复盘/新窗口交接卡.md:177",
+]
+
+[[doc]]
+path = "复盘/交接清单去幽灵与四个决定-T-G68.md"
+bytes = 5126
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G68"]
+referenced_by = [
+  "docs/changelog.md:2630",
+  "docs/traceability.toml:1906",
+  "复盘/交接-重构进度.md:2110",
+  "复盘/新窗口交接卡.md:681",
+  "复盘/索引-台账号到复盘.md:85",
+  "复盘/索引-台账号到复盘.md:133",
+]
+
+[[doc]]
+path = "复盘/产出评价器口径更正-T-G75.md"
+bytes = 4579
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G75"]
+referenced_by = [
+  "docs/changelog.md:2462",
+  "docs/traceability.toml:1216",
+  "复盘/交接-重构进度.md:1936",
+  "复盘/新窗口交接卡.md:524",
+  "复盘/索引-台账号到复盘.md:61",
+  "复盘/索引-台账号到复盘.md:135",
+]
+
+[[doc]]
+path = "复盘/人工验收搬家-第三批-T-G36.md"
+bytes = 6172
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G36"]
+referenced_by = [
+  "docs/traceability.toml:1346",
+  "docs/traceability.toml:1347",
+  "docs/traceability.toml:1348",
+  "docs/traceability.toml:1349",
+  "复盘/交接-重构进度.md:3135",
+  "复盘/索引-台账号到复盘.md:68",
+]
+
+[[doc]]
+path = "复盘/人工验收搬家-第二批-T-G35.md"
+bytes = 7384
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G35"]
+referenced_by = [
+  "docs/traceability.toml:1366",
+  "docs/traceability.toml:1367",
+  "docs/traceability.toml:1368",
+  "docs/traceability.toml:1369",
+  "docs/traceability.toml:1370",
+  "复盘/交接-重构进度.md:3134",
+]
+
+[[doc]]
+path = "复盘/人工验收搬家-第五批-T-G73.md"
+bytes = 10992
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G73"]
+referenced_by = [
+  "docs/changelog.md:2509",
+  "docs/traceability.toml:1252",
+  "复盘/交接-重构进度.md:1991",
+  "复盘/新窗口交接卡.md:577",
+  "复盘/索引-台账号到复盘.md:63",
+  "复盘/索引-台账号到复盘.md:135",
+]
+
+[[doc]]
+path = "复盘/人工验收搬家-第六批-T-G77.md"
+bytes = 5830
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G77"]
+referenced_by = [
+  "docs/changelog.md:2414",
+  "docs/traceability.toml:1172",
+  "复盘/交接-重构进度.md:1890",
+  "复盘/新窗口交接卡.md:468",
+  "复盘/索引-台账号到复盘.md:59",
+  "复盘/索引-台账号到复盘.md:135",
+]
+
+[[doc]]
+path = "复盘/人工验收搬家-第四批-T-G37.md"
+bytes = 5178
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G37"]
+referenced_by = [
+  "docs/traceability.toml:1327",
+  "docs/traceability.toml:1328",
+  "docs/traceability.toml:1329",
+  "docs/traceability.toml:1330",
+  "复盘/交接-重构进度.md:3136",
+  "复盘/索引-台账号到复盘.md:67",
+]
+
+[[doc]]
+path = "复盘/人工验收清单G组-T-G174.md"
+bytes = 8611
+top = "复盘"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G174"]
+referenced_by = [
+  "docs/changelog.md:1032",
+  "docs/traceability.toml:4685",
+  "复盘/交接-重构进度.md:1069",
+]
+
+[[doc]]
+path = "复盘/人工验收清单补齐-T-G167.md"
+bytes = 7915
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G167"]
+referenced_by = [
+  "docs/changelog.md:1216",
+  "docs/traceability.toml:4609",
+  "复盘/交接-重构进度.md:1216",
+  "复盘/索引-台账号到复盘.md:117",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:184",
+]
+
+[[doc]]
+path = "复盘/任务复盘-全程.md"
+bytes = 6740
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/任务重规划-剩余工作.md"
+bytes = 38680
+top = "复盘"
+ref_count = 49
+pinned = true
+pinned_by = ["STEP-17", "T-D11", "T-G107", "T-G130"]
+referenced_by = [
+  "docs/changelog.md:1863",
+  "docs/changelog.md:4782",
+  "docs/changelog.md:5098",
+  "docs/changelog.md:5177",
+  "docs/traceability.toml:775",
+  "docs/traceability.toml:3041",
+]
+
+[[doc]]
+path = "复盘/优化候选-引文回溯.md"
+bytes = 11916
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G287"]
+referenced_by = [
+  "docs/changelog.d/T-G287.md:4",
+  "docs/changelog.md:98",
+  "docs/traceability.toml:5717",
+  "docs/workbacklog.toml:1269",
+  "复盘/交接-重构进度.md:249",
+  "复盘/交接.d/T-G287.md:4",
+]
+
+[[doc]]
+path = "复盘/使用体验问题与修改台账.md"
+bytes = 30047
+top = "复盘"
+ref_count = 21
+pinned = true
+pinned_by = ["T-G130"]
+referenced_by = [
+  "docs/changelog.md:1864",
+  "docs/implementation/traceability.md:32",
+  "docs/traceability.toml:4201",
+  "docs/traceability.toml:4202",
+  "复盘/backlog扩建-T-G100.md:44",
+  "复盘/交接-重构进度.md:2660",
+]
+
+[[doc]]
+path = "复盘/全量审计报告-五层一致性与缺口登记.md"
+bytes = 20068
+top = "复盘"
+ref_count = 19
+pinned = true
+pinned_by = ["T-G67"]
+referenced_by = [
+  "docs/changelog.md:5097",
+  "docs/implementation/modules.md:42",
+  "docs/traceability.toml:1924",
+  "docs/traceability.toml:1927",
+  "复盘/C批口径定案.md:5",
+  "复盘/交接-重构进度.md:2662",
+]
+
+[[doc]]
+path = "复盘/全量补充执行计划.md"
+bytes = 5171
+top = "复盘"
+ref_count = 7
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:3105",
+  "复盘/框架-术语表与契约.md:56",
+  "复盘/长任务执行协议.md:86",
+  "复盘/长任务执行协议.md:142",
+  "复盘/长任务执行协议.md:155",
+  "复盘/长任务执行协议.md:168",
+]
+
+[[doc]]
+path = "复盘/共享文档漂移-T-G107.md"
+bytes = 8634
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G107"]
+referenced_by = [
+  "docs/traceability.toml:773",
+  "复盘/交接-重构进度.md:1548",
+  "复盘/外包卡-012f-集成.md:11",
+  "复盘/外包卡-012f-集成.md:22",
+  "复盘/新窗口交接卡.md:52",
+  "复盘/索引-台账号到复盘.md:35",
+]
+
+[[doc]]
+path = "复盘/写法参考-feat-ui-refactor分支.md"
+bytes = 9227
+top = "复盘"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/前端现状评估与接缝重构方案.md:73",
+  "复盘/第6-10步工作线复盘.md:27",
+  "复盘/长任务执行协议.md:456",
+]
+
+[[doc]]
+path = "复盘/决策-框架居所与推进.md"
+bytes = 8451
+top = "复盘"
+ref_count = 21
+pinned = true
+pinned_by = ["T-G277"]
+referenced_by = [
+  "docs/changelog.d/T-G277.md:7",
+  "docs/changelog.d/T-G288.md:11",
+  "docs/changelog.md:61",
+  "docs/changelog.md:116",
+  "docs/traceability.toml:5606",
+  "复盘/卡/卡178-框架骨架设计.md:124",
+]
+
+[[doc]]
+path = "复盘/删sync-tasks路由-T-G149.md"
+bytes = 6123
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G149"]
+referenced_by = [
+  "docs/changelog.md:1462",
+  "docs/traceability.toml:4388",
+  "复盘/交接-重构进度.md:1348",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:128",
+  "复盘/索引-台账号到复盘.md:165",
+]
+
+[[doc]]
+path = "复盘/前端死代码与长文案-T-G101.md"
+bytes = 12211
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G101"]
+referenced_by = [
+  "docs/traceability.toml:582",
+  "复盘/索引-台账号到复盘.md:20",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:127",
+]
+
+[[doc]]
+path = "复盘/前端热表.md"
+bytes = 4337
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G52"]
+referenced_by = [
+  "docs/changelog.md:2945",
+  "docs/traceability.toml:2557",
+  "docs/traceability.toml:2563",
+  "tools/ui_hotmap.py:17",
+  "复盘/交接-重构进度.md:2221",
+  "复盘/索引-台账号到复盘.md:102",
+]
+
+[[doc]]
+path = "复盘/前端现状评估与接缝重构方案.md"
+bytes = 17568
+top = "复盘"
+ref_count = 14
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/implementation/coverage.md:20",
+  "复盘/交接-重构进度.md:2655",
+  "复盘/交接-重构进度.md:3108",
+  "复盘/使用体验问题与修改台账.md:4",
+  "复盘/本轮踩坑与反馈处理复盘.md:5",
+  "复盘/第6-10步工作线复盘.md:20",
+]
+
+[[doc]]
+path = "复盘/剩余工作与体验台账补全-T-G130.md"
+bytes = 7988
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G130"]
+referenced_by = [
+  "docs/changelog.md:1579",
+  "docs/traceability.toml:4203",
+  "复盘/交接-重构进度.md:1427",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:129",
+  "复盘/索引-台账号到复盘.md:151",
+]
+
+[[doc]]
+path = "复盘/功能验收机器化-T-G34.md"
+bytes = 15419
+top = "复盘"
+ref_count = 14
+pinned = true
+pinned_by = ["T-G34"]
+referenced_by = [
+  "docs/traceability.toml:1387",
+  "docs/traceability.toml:1388",
+  "docs/traceability.toml:1389",
+  "docs/traceability.toml:1390",
+  "docs/traceability.toml:1391",
+  "docs/traceability.toml:1392",
+]
+
+[[doc]]
+path = "复盘/动线自查回填与番茄钟-T-G23.md"
+bytes = 6175
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G23"]
+referenced_by = [
+  "docs/traceability.toml:1540",
+  "复盘/交接-重构进度.md:3120",
+  "复盘/索引-台账号到复盘.md:79",
+  "复盘/索引-台账号到复盘.md:122",
+]
+
+[[doc]]
+path = "复盘/卡/卡022-myday稀疏序号.md"
+bytes = 17021
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5158",
+  "docs/workbacklog.toml:32",
+  "docs/workbacklog.toml:204",
+]
+
+[[doc]]
+path = "复盘/卡/卡024-看门狗独立化.md"
+bytes = 10370
+top = "复盘.卡"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5159",
+  "docs/workbacklog.toml:48",
+  "docs/workbacklog.toml:205",
+  "复盘/框架-术语表与契约.md:65",
+]
+
+[[doc]]
+path = "复盘/卡/卡029-派活器三合一.md"
+bytes = 22310
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5160",
+  "docs/workbacklog.toml:64",
+  "docs/workbacklog.toml:206",
+]
+
+[[doc]]
+path = "复盘/卡/卡108-号池写面①作业登记与守卫.md"
+bytes = 7075
+top = "复盘.卡"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5161",
+  "docs/workbacklog.toml:79",
+  "docs/workbacklog.toml:207",
+  "复盘/卡/卡116-卡规格搬进git.md:27",
+]
+
+[[doc]]
+path = "复盘/卡/卡109-号池去重收口.md"
+bytes = 4611
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5162",
+  "docs/workbacklog.toml:97",
+  "docs/workbacklog.toml:208",
+]
+
+[[doc]]
+path = "复盘/卡/卡110-文档落地七条坑与清单.md"
+bytes = 3945
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5163",
+  "docs/workbacklog.toml:113",
+  "docs/workbacklog.toml:209",
+]
+
+[[doc]]
+path = "复盘/卡/卡111-号池写面②MCP写工具.md"
+bytes = 8815
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5164",
+  "docs/workbacklog.toml:127",
+  "docs/workbacklog.toml:210",
+]
+
+[[doc]]
+path = "复盘/卡/卡112-切片两处误报.md"
+bytes = 3524
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5165",
+  "docs/workbacklog.toml:145",
+  "docs/workbacklog.toml:211",
+]
+
+[[doc]]
+path = "复盘/卡/卡113-pool_cancel证据编码.md"
+bytes = 3921
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5166",
+  "docs/workbacklog.toml:159",
+  "docs/workbacklog.toml:212",
+]
+
+[[doc]]
+path = "复盘/卡/卡114-main_tree_root不许依赖cwd.md"
+bytes = 4603
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5167",
+  "docs/workbacklog.toml:173",
+  "docs/workbacklog.toml:213",
+]
+
+[[doc]]
+path = "复盘/卡/卡115-封存未跟踪清单判据.md"
+bytes = 5024
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5168",
+  "docs/workbacklog.toml:187",
+  "docs/workbacklog.toml:214",
+]
+
+[[doc]]
+path = "复盘/卡/卡116-卡规格搬进git.md"
+bytes = 5666
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G213"]
+referenced_by = [
+  "docs/traceability.toml:5169",
+  "docs/workbacklog.toml:202",
+  "docs/workbacklog.toml:215",
+]
+
+[[doc]]
+path = "复盘/卡/卡117-registry相对路径与MCP机器块.md"
+bytes = 5646
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G215"]
+referenced_by = [
+  "docs/traceability.toml:5184",
+  "docs/workbacklog.toml:230",
+]
+
+[[doc]]
+path = "复盘/卡/卡118-审计⑪口径收窄.md"
+bytes = 4058
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G216"]
+referenced_by = [
+  "docs/traceability.toml:5210",
+  "docs/workbacklog.toml:246",
+]
+
+[[doc]]
+path = "复盘/卡/卡119-栅栏搬进git.md"
+bytes = 3549
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G217"]
+referenced_by = [
+  "docs/traceability.toml:5224",
+  "docs/workbacklog.toml:260",
+]
+
+[[doc]]
+path = "复盘/卡/卡120-记忆层守卫.md"
+bytes = 8028
+top = "复盘.卡"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G232", "T-G235"]
+referenced_by = [
+  "docs/traceability.toml:5352",
+  "docs/traceability.toml:5413",
+  "docs/workbacklog.toml:437",
+]
+
+[[doc]]
+path = "复盘/卡/卡121-MCP任务面.md"
+bytes = 4096
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G218"]
+referenced_by = [
+  "docs/traceability.toml:5240",
+  "docs/workbacklog.toml:275",
+]
+
+[[doc]]
+path = "复盘/卡/卡122-撤E501豁免与文档更正.md"
+bytes = 3481
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G219"]
+referenced_by = [
+  "docs/traceability.toml:5254",
+  "docs/workbacklog.toml:289",
+]
+
+[[doc]]
+path = "复盘/卡/卡123-审查索引.md"
+bytes = 4335
+top = "复盘.卡"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/卡/卡124-GLM整体审查.md"
+bytes = 4833
+top = "复盘.卡"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/卡/卡125-默认派活器接守卫与登记.md"
+bytes = 5615
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:303",
+]
+
+[[doc]]
+path = "复盘/卡/卡126-changelog按日期插入.md"
+bytes = 4221
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:320",
+]
+
+[[doc]]
+path = "复盘/卡/卡127-队列禁通配与找卡精确.md"
+bytes = 4302
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:334",
+]
+
+[[doc]]
+path = "复盘/卡/卡128-栅栏六处判据.md"
+bytes = 7641
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G226"]
+referenced_by = [
+  "docs/traceability.toml:5302",
+  "docs/workbacklog.toml:349",
+]
+
+[[doc]]
+path = "复盘/卡/卡130-MCP收申请改子进程.md"
+bytes = 5241
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G226"]
+referenced_by = [
+  "docs/traceability.toml:5303",
+  "docs/workbacklog.toml:363",
+]
+
+[[doc]]
+path = "复盘/卡/卡131-用实际改动判越界.md"
+bytes = 5592
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G226"]
+referenced_by = [
+  "docs/traceability.toml:5304",
+  "docs/workbacklog.toml:379",
+]
+
+[[doc]]
+path = "复盘/卡/卡132-两份白名单对账.md"
+bytes = 5090
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G229"]
+referenced_by = [
+  "docs/traceability.toml:5335",
+  "docs/workbacklog.toml:394",
+]
+
+[[doc]]
+path = "复盘/卡/卡133-Gates真伪判据.md"
+bytes = 4753
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G229"]
+referenced_by = [
+  "docs/traceability.toml:5336",
+  "docs/workbacklog.toml:409",
+]
+
+[[doc]]
+path = "复盘/卡/卡134-文档口径三件.md"
+bytes = 5225
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G229"]
+referenced_by = [
+  "docs/traceability.toml:5337",
+  "docs/workbacklog.toml:423",
+]
+
+[[doc]]
+path = "复盘/卡/卡135-卡树基点过期判据.md"
+bytes = 4574
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G235"]
+referenced_by = [
+  "docs/traceability.toml:5353",
+  "docs/workbacklog.toml:460",
+]
+
+[[doc]]
+path = "复盘/卡/卡136-孤儿门禁杀整棵树.md"
+bytes = 4461
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G235"]
+referenced_by = [
+  "docs/traceability.toml:5354",
+  "docs/workbacklog.toml:474",
+]
+
+[[doc]]
+path = "复盘/卡/卡137-GLM53用完就撤.md"
+bytes = 2706
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G235"]
+referenced_by = [
+  "docs/traceability.toml:5351",
+  "docs/workbacklog.toml:488",
+]
+
+[[doc]]
+path = "复盘/卡/卡138-模型开关机制.md"
+bytes = 5141
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G235"]
+referenced_by = [
+  "docs/traceability.toml:5355",
+  "docs/workbacklog.toml:503",
+]
+
+[[doc]]
+path = "复盘/卡/卡139-收口链进git.md"
+bytes = 6786
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G235"]
+referenced_by = [
+  "docs/traceability.toml:5356",
+  "docs/workbacklog.toml:519",
+]
+
+[[doc]]
+path = "复盘/卡/卡140-门乘输入表与自查提速.md"
+bytes = 5677
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G232"]
+referenced_by = [
+  "docs/traceability.toml:5414",
+  "docs/workbacklog.toml:538",
+]
+
+[[doc]]
+path = "复盘/卡/卡141-掐工人要还租约.md"
+bytes = 5326
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G232"]
+referenced_by = [
+  "docs/traceability.toml:5415",
+  "docs/workbacklog.toml:552",
+]
+
+[[doc]]
+path = "复盘/卡/卡142-影响面反推.md"
+bytes = 4843
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G244"]
+referenced_by = [
+  "docs/traceability.toml:5449",
+  "docs/workbacklog.toml:566",
+]
+
+[[doc]]
+path = "复盘/卡/卡143-对抗复核常态化.md"
+bytes = 7210
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G244"]
+referenced_by = [
+  "docs/traceability.toml:5450",
+  "docs/workbacklog.toml:580",
+]
+
+[[doc]]
+path = "复盘/卡/卡144-不变量台账.md"
+bytes = 5342
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G244"]
+referenced_by = [
+  "docs/traceability.toml:5451",
+  "docs/workbacklog.toml:597",
+]
+
+[[doc]]
+path = "复盘/卡/卡146-合并模型白名单.md"
+bytes = 4745
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G244"]
+referenced_by = [
+  "docs/traceability.toml:5452",
+  "docs/workbacklog.toml:612",
+]
+
+[[doc]]
+path = "复盘/卡/卡147-复核器查门数.md"
+bytes = 3485
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G244"]
+referenced_by = [
+  "docs/traceability.toml:5453",
+  "docs/workbacklog.toml:632",
+]
+
+[[doc]]
+path = "复盘/卡/卡148-子进程不弹窗.md"
+bytes = 4526
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G244"]
+referenced_by = [
+  "docs/traceability.toml:5454",
+  "docs/workbacklog.toml:646",
+]
+
+[[doc]]
+path = "复盘/卡/卡149-派活器按账号.md"
+bytes = 4991
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G244"]
+referenced_by = [
+  "docs/traceability.toml:5455",
+  "docs/workbacklog.toml:662",
+]
+
+[[doc]]
+path = "复盘/卡/卡150-收口链幂等重跑.md"
+bytes = 4691
+top = "复盘.卡"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G245", "T-G250"]
+referenced_by = [
+  "docs/traceability.toml:5474",
+  "docs/traceability.toml:5489",
+  "docs/workbacklog.toml:680",
+  "复盘/框架-术语表与契约.md:58",
+]
+
+[[doc]]
+path = "复盘/卡/卡151-判决文案要分真因.md"
+bytes = 3733
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G245"]
+referenced_by = [
+  "docs/traceability.toml:5475",
+  "docs/workbacklog.toml:695",
+]
+
+[[doc]]
+path = "复盘/卡/卡153-GLM53对抗审核外包系统.md"
+bytes = 5188
+top = "复盘.卡"
+ref_count = 2
+pinned = true
+pinned_by = ["T-G250"]
+referenced_by = [
+  "docs/traceability.toml:5491",
+  "docs/workbacklog.toml:709",
+]
+
+[[doc]]
+path = "复盘/卡/卡154-登录自检假红.md"
+bytes = 4708
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:722",
+]
+
+[[doc]]
+path = "复盘/卡/卡155-profile-check判据按subtype.md"
+bytes = 4489
+top = "复盘.卡"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/卡/卡156-旧判决冒充当前状态.md"
+bytes = 5763
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:736",
+]
+
+[[doc]]
+path = "复盘/卡/卡157-写卡必须同写预声明.md"
+bytes = 7305
+top = "复盘.卡"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:752",
+  "复盘/框架-术语表与契约.md:51",
+]
+
+[[doc]]
+path = "复盘/卡/卡158-合并白名单的产品后果.md"
+bytes = 4964
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:769",
+]
+
+[[doc]]
+path = "复盘/卡/卡159-判据强度.md"
+bytes = 6530
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:782",
+]
+
+[[doc]]
+path = "复盘/卡/卡160-台账接进门.md"
+bytes = 6682
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:815",
+]
+
+[[doc]]
+path = "复盘/卡/卡161-门的输入面.md"
+bytes = 4049
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:837",
+]
+
+[[doc]]
+path = "复盘/卡/卡162-人话条款建账.md"
+bytes = 4810
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:859",
+]
+
+[[doc]]
+path = "复盘/卡/卡163-锁与租约接线.md"
+bytes = 4813
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:879",
+]
+
+[[doc]]
+path = "复盘/卡/卡164-观测面与通则.md"
+bytes = 9639
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:902",
+]
+
+[[doc]]
+path = "复盘/卡/卡165-落档坑总账与台账.md"
+bytes = 2511
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/框架-术语表与契约.md:41",
+]
+
+[[doc]]
+path = "复盘/卡/卡166-模型注册表按池分流.md"
+bytes = 7216
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:925",
+]
+
+[[doc]]
+path = "复盘/卡/卡167-派活器effort透传.md"
+bytes = 2910
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:941",
+]
+
+[[doc]]
+path = "复盘/卡/卡168-想问题-q1.md"
+bytes = 2691
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:954",
+]
+
+[[doc]]
+path = "复盘/卡/卡169-想问题-q2.md"
+bytes = 2668
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:966",
+]
+
+[[doc]]
+path = "复盘/卡/卡170-想问题-q3.md"
+bytes = 2669
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:978",
+]
+
+[[doc]]
+path = "复盘/卡/卡171-想问题-q4.md"
+bytes = 2666
+top = "复盘.卡"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:990",
+  "复盘/问题清单-组4.md:180",
+]
+
+[[doc]]
+path = "复盘/卡/卡172-想问题-q5.md"
+bytes = 2609
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1002",
+]
+
+[[doc]]
+path = "复盘/卡/卡173-K3深化问题清单.md"
+bytes = 5364
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1014",
+]
+
+[[doc]]
+path = "复盘/卡/卡174-用例自控输入面.md"
+bytes = 4780
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1032",
+]
+
+[[doc]]
+path = "复盘/卡/卡175-框架抽取清单.md"
+bytes = 3858
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1048",
+]
+
+[[doc]]
+path = "复盘/卡/卡177-框架术语表与契约.md"
+bytes = 9491
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1063",
+]
+
+[[doc]]
+path = "复盘/卡/卡178-框架骨架设计.md"
+bytes = 13074
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1080",
+]
+
+[[doc]]
+path = "复盘/卡/卡179-框架MVP实现.md"
+bytes = 8165
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1102",
+]
+
+[[doc]]
+path = "复盘/卡/卡180-框架skills层.md"
+bytes = 5446
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1137",
+]
+
+[[doc]]
+path = "复盘/卡/卡181-框架独立仓与参与管线.md"
+bytes = 10111
+top = "复盘.卡"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.d/T-G281.md:15",
+  "docs/changelog.md:168",
+  "docs/workbacklog.toml:1161",
+]
+
+[[doc]]
+path = "复盘/卡/卡182-外包留痕与配额.md"
+bytes = 6434
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1306",
+]
+
+[[doc]]
+path = "复盘/卡/卡183-文档重整盘点.md"
+bytes = 6813
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1181",
+]
+
+[[doc]]
+path = "复盘/卡/卡184-收口增量门禁.md"
+bytes = 18991
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1202",
+]
+
+[[doc]]
+path = "复盘/卡/卡185-框架验证分层.md"
+bytes = 7362
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1223",
+]
+
+[[doc]]
+path = "复盘/卡/卡186-框架可控性与安全修改.md"
+bytes = 7542
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1244",
+]
+
+[[doc]]
+path = "复盘/卡/卡187-引文回溯优化候选.md"
+bytes = 6521
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1266",
+]
+
+[[doc]]
+path = "复盘/卡/卡188-域细化为符号级.md"
+bytes = 7461
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1287",
+]
+
+[[doc]]
+path = "复盘/卡/卡189-对抗复核实验.md"
+bytes = 5064
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1333",
+]
+
+[[doc]]
+path = "复盘/卡/卡190-账号判据修好.md"
+bytes = 8357
+top = "复盘.卡"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1379",
+]
+
+[[doc]]
+path = "复盘/卡/卡192-git基线与备份.md"
+bytes = 4424
+top = "复盘.卡"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1353",
+  "docs/workbacklog.toml:1360",
+  "复盘/框架-git-多人协作口径.md:93",
+]
+
+[[doc]]
+path = "复盘/反空转三道-T-G88.md"
+bytes = 8235
+top = "复盘"
+ref_count = 12
+pinned = true
+pinned_by = ["T-G88", "T-G89"]
+referenced_by = [
+  "docs/changelog.md:2195",
+  "docs/changelog.md:2213",
+  "docs/traceability.toml:948",
+  "docs/traceability.toml:955",
+  "docs/traceability.toml:963",
+  "docs/traceability.toml:972",
+]
+
+[[doc]]
+path = "复盘/叙事漂移加注-T-G117.md"
+bytes = 5299
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G117"]
+referenced_by = [
+  "docs/traceability.toml:709",
+  "复盘/索引-台账号到复盘.md:30",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:126",
+]
+
+[[doc]]
+path = "复盘/口径坑.md"
+bytes = 19006
+top = "复盘"
+ref_count = 59
+pinned = true
+pinned_by = ["T-G173", "T-G181", "T-G197", "T-G207", "T-G209", "T-G214"]
+referenced_by = [
+  "docs/changelog.d/T-G205.md:14",
+  "docs/changelog.d/T-G207.md:5",
+  "docs/changelog.md:405",
+  "docs/changelog.md:532",
+  "docs/changelog.md:606",
+  "docs/changelog.md:871",
+]
+
+[[doc]]
+path = "复盘/口径定案-待定清单.md"
+bytes = 35437
+top = "复盘"
+ref_count = 60
+pinned = true
+pinned_by = ["SR-F1.4b", "SR-NF15", "SR-NF7", "SR-NF8", "T-D11", "T-F1", "T-F10", "T-F2", "T-F3", "T-F4", "T-F5", "T-F6", "T-F7", "T-F8", "T-F9", "T-G1", "T-G19", "T-G4"]
+referenced_by = [
+  "docs/changelog.md:1453",
+  "docs/changelog.md:3945",
+  "docs/changelog.md:3984",
+  "docs/changelog.md:4019",
+  "docs/changelog.md:4156",
+  "docs/changelog.md:4193",
+]
+
+[[doc]]
+path = "复盘/口径落档-T-G19.md"
+bytes = 10724
+top = "复盘"
+ref_count = 17
+pinned = true
+pinned_by = ["T-G19"]
+referenced_by = [
+  "docs/changelog.md:3716",
+  "docs/contracts/domains/F7-team.md:33",
+  "docs/traceability.toml:2754",
+  "docs/traceability.toml:4056",
+  "docs/traceability.toml:4390",
+  "tools/route_ui_gap.py:39",
+]
+
+[[doc]]
+path = "复盘/只读CLI-命令表的第四份投影-T-G64.md"
+bytes = 10182
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G64"]
+referenced_by = [
+  "docs/changelog.md:2686",
+  "docs/implementation/modules.md:278",
+  "docs/specification/nonfunctional.md:85",
+  "docs/traceability.toml:1844",
+  "复盘/交接-重构进度.md:2159",
+  "复盘/新窗口交接卡.md:749",
+]
+
+[[doc]]
+path = "复盘/只读CLI-环境错加固-T-G66.md"
+bytes = 6137
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G66"]
+referenced_by = [
+  "docs/changelog.md:2662",
+  "docs/traceability.toml:1935",
+  "复盘/交接-重构进度.md:2140",
+  "复盘/新窗口交接卡.md:718",
+  "复盘/索引-台账号到复盘.md:87",
+  "复盘/索引-台账号到复盘.md:133",
+]
+
+[[doc]]
+path = "复盘/台账号到复盘索引-T-G168.md"
+bytes = 16715
+top = "复盘"
+ref_count = 12
+pinned = true
+pinned_by = ["T-G168"]
+referenced_by = [
+  "docs/changelog.md:1151",
+  "docs/traceability.toml:4562",
+  "docs/traceability.toml:4649",
+  "复盘/交接-重构进度.md:1119",
+  "复盘/交接-重构进度.md:1164",
+  "复盘/外包-卡表与规矩.md:1073",
+]
+
+[[doc]]
+path = "复盘/台账编号校正-方案A落地.md"
+bytes = 15452
+top = "复盘"
+ref_count = 17
+pinned = true
+pinned_by = ["T-D1"]
+referenced_by = [
+  "docs/CODING_GUIDELINES.md:92",
+  "docs/changelog.md:4768",
+  "docs/traceability.toml:9",
+  "docs/traceability.toml:3399",
+  "scripts/audit_titles.py:25",
+  "scripts/audit_titles.py:245",
+]
+
+[[doc]]
+path = "复盘/号池MCP-使用与设计.md"
+bytes = 7881
+top = "复盘"
+ref_count = 11
+pinned = true
+pinned_by = ["T-G214", "T-G237"]
+referenced_by = [
+  "docs/traceability.toml:5197",
+  "docs/traceability.toml:5199",
+  "docs/traceability.toml:5388",
+  "docs/traceability.toml:5392",
+  "docs/workbacklog.toml:527",
+  "复盘/卡/卡123-审查索引.md:43",
+]
+
+[[doc]]
+path = "复盘/合并白名单-决策单.md"
+bytes = 15159
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G253"]
+referenced_by = [
+  "docs/changelog.d/T-G253.md:3",
+  "docs/changelog.md:14",
+  "docs/traceability.toml:5525",
+  "docs/traceability.toml:5528",
+  "复盘/交接-重构进度.md:41",
+  "复盘/交接.d/T-G253.md:4",
+]
+
+[[doc]]
+path = "复盘/命令行与MCP文案-T-G155.md"
+bytes = 13971
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G155"]
+referenced_by = [
+  "docs/changelog.md:1316",
+  "docs/traceability.toml:4443",
+  "复盘/交接-重构进度.md:1282",
+  "复盘/索引-台账号到复盘.md:118",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:170",
+]
+
+[[doc]]
+path = "复盘/命令表-四个面一个点-T-G31.md"
+bytes = 10817
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G31"]
+referenced_by = [
+  "docs/traceability.toml:1416",
+  "docs/traceability.toml:1417",
+  "docs/traceability.toml:1418",
+  "复盘/交接-重构进度.md:3056",
+  "复盘/交接-重构进度.md:3129",
+  "复盘/交接-重构进度.md:3239",
+]
+
+[[doc]]
+path = "复盘/团队视角页-T-G12.md"
+bytes = 7467
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G12"]
+referenced_by = [
+  "docs/implementation/modules.md:155",
+  "docs/traceability.toml:3889",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:130",
+]
+
+[[doc]]
+path = "复盘/坑总账.md"
+bytes = 61621
+top = "复盘"
+ref_count = 18
+pinned = true
+pinned_by = ["T-G265"]
+referenced_by = [
+  "docs/traceability.toml:5501",
+  "复盘/交接-重构进度.md:5",
+  "复盘/交接-重构进度.md:16",
+  "复盘/交接.d/T-G265.md:1",
+  "复盘/交接.d/T-G265.md:12",
+  "复盘/卡/卡153-GLM53对抗审核外包系统.md:35",
+]
+
+[[doc]]
+path = "复盘/域与串行-符号级细化.md"
+bytes = 9444
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G288"]
+referenced_by = [
+  "docs/changelog.d/T-G288.md:4",
+  "docs/changelog.md:109",
+  "docs/traceability.toml:5729",
+  "docs/workbacklog.toml:1291",
+  "tools/domain_symbols.py:26",
+  "复盘/交接-重构进度.md:263",
+]
+
+[[doc]]
+path = "复盘/备忘录团队文案-T-G152.md"
+bytes = 10450
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G152"]
+referenced_by = [
+  "docs/changelog.md:1284",
+  "docs/changelog.md:1286",
+  "docs/traceability.toml:4422",
+  "docs/traceability.toml:4425",
+  "复盘/交接-重构进度.md:1263",
+  "复盘/交接-重构进度.md:1264",
+]
+
+[[doc]]
+path = "复盘/复习卡删除-T-G150.md"
+bytes = 9374
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G150"]
+referenced_by = [
+  "docs/changelog.md:1258",
+  "docs/traceability.toml:4401",
+  "复盘/交接-重构进度.md:1247",
+  "复盘/索引-台账号到复盘.md:118",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:166",
+]
+
+[[doc]]
+path = "复盘/复习改判-T-G13.md"
+bytes = 6592
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G13"]
+referenced_by = [
+  "docs/implementation/modules.md:144",
+  "docs/traceability.toml:3868",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:129",
+]
+
+[[doc]]
+path = "复盘/外包-卡表与规矩.md"
+bytes = 107142
+top = "复盘"
+ref_count = 243
+pinned = true
+pinned_by = ["T-G108", "T-G115", "T-G120", "T-G121", "T-G122", "T-G123", "T-G133", "T-G148", "T-G159", "T-G165", "T-G166", "T-G229", "T-G244", "T-G80", "T-G81", "T-G82", "T-G83", "T-G84", "T-G85"]
+referenced_by = [
+  "docs/changelog.d/T-G244.md:10",
+  "docs/changelog.d/T-G288.md:10",
+  "docs/changelog.md:115",
+  "docs/changelog.md:496",
+  "docs/changelog.md:895",
+  "docs/changelog.md:1019",
+]
+
+[[doc]]
+path = "复盘/外包卡-001-独立复核T-G79.md"
+bytes = 5278
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G82"]
+referenced_by = [
+  "docs/changelog.md:2327",
+  "docs/traceability.toml:1059",
+  "docs/traceability.toml:1066",
+  "tools/wb_dispatch.py:32",
+  "复盘/交接-重构进度.md:1787",
+  "复盘/新窗口交接卡.md:353",
+]
+
+[[doc]]
+path = "复盘/外包卡-002-任务三分类（决策单）.md"
+bytes = 4590
+top = "复盘"
+ref_count = 10
+pinned = true
+pinned_by = ["T-G83"]
+referenced_by = [
+  "docs/changelog.md:2300",
+  "docs/changelog.md:2310",
+  "docs/traceability.toml:1043",
+  "docs/traceability.toml:1044",
+  "docs/traceability.toml:1045",
+  "docs/traceability.toml:1046",
+]
+
+[[doc]]
+path = "复盘/外包卡-002-修T-G79幂等写库.md"
+bytes = 6096
+top = "复盘"
+ref_count = 10
+pinned = true
+pinned_by = ["T-G85"]
+referenced_by = [
+  "docs/changelog.md:2274",
+  "docs/traceability.toml:1012",
+  "docs/traceability.toml:1019",
+  "复盘/交接-重构进度.md:1773",
+  "复盘/外包-卡表与规矩.md:105",
+  "复盘/幂等写库-T-G86.md:3",
+]
+
+[[doc]]
+path = "复盘/外包卡-003-修detach前置检查.md"
+bytes = 8837
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/外包卡-004-wb_dash转正.md"
+bytes = 5966
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/外包卡-005-看门狗误杀.md"
+bytes = 8738
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/外包卡-006-交接摘要.md"
+bytes = 11562
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/外包卡-007-复核缺口.md"
+bytes = 13674
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/外包卡-012-集成.md"
+bytes = 9347
+top = "复盘"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:1625",
+  "复盘/外包卡-012b-集成.md:31",
+  "复盘/新窗口交接卡.md:128",
+]
+
+[[doc]]
+path = "复盘/外包卡-012b-集成.md"
+bytes = 15550
+top = "复盘"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:1603",
+  "复盘/新窗口交接卡.md:105",
+  "复盘/框架-术语表与契约.md:25",
+]
+
+[[doc]]
+path = "复盘/外包卡-012c-集成.md"
+bytes = 10932
+top = "复盘"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:1584",
+  "复盘/新窗口交接卡.md:89",
+]
+
+[[doc]]
+path = "复盘/外包卡-012d-集成.md"
+bytes = 7705
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/外包卡-012e-集成.md"
+bytes = 4678
+top = "复盘"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/派活器三合一-T-G114.md:107",
+]
+
+[[doc]]
+path = "复盘/外包卡-012f-集成.md"
+bytes = 3951
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/外包审查-索引.md"
+bytes = 12245
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G220"]
+referenced_by = [
+  "docs/traceability.toml:5265",
+  "docs/traceability.toml:5270",
+  "复盘/交接-重构进度.md:562",
+  "复盘/交接.d/T-G220.md:6",
+  "复盘/卡/卡123-审查索引.md:16",
+  "复盘/卡/卡124-GLM整体审查.md:13",
+]
+
+[[doc]]
+path = "复盘/外包工具-整体审查-GLM5.3.md"
+bytes = 15755
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G220"]
+referenced_by = [
+  "docs/traceability.toml:5266",
+  "docs/traceability.toml:5270",
+  "docs/traceability.toml:5288",
+  "复盘/交接-重构进度.md:564",
+  "复盘/交接.d/T-G220.md:8",
+  "复盘/卡/卡124-GLM整体审查.md:21",
+]
+
+[[doc]]
+path = "复盘/外包工具-需求与架构.md"
+bytes = 34953
+top = "复盘"
+ref_count = 31
+pinned = true
+pinned_by = ["T-G220", "T-G229", "T-G235", "T-G237"]
+referenced_by = [
+  "docs/traceability.toml:5264",
+  "docs/traceability.toml:5270",
+  "docs/traceability.toml:5288",
+  "docs/traceability.toml:5332",
+  "docs/traceability.toml:5339",
+  "docs/traceability.toml:5349",
+]
+
+[[doc]]
+path = "复盘/外包派活脚本-T-G82.md"
+bytes = 3091
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G82"]
+referenced_by = [
+  "docs/changelog.md:2328",
+  "docs/traceability.toml:1058",
+  "复盘/交接-重构进度.md:1789",
+  "复盘/新窗口交接卡.md:354",
+  "复盘/派活器三合一-T-G114.md:107",
+  "复盘/索引-台账号到复盘.md:53",
+]
+
+[[doc]]
+path = "复盘/外网工具链与技能包勘察-T-G27.md"
+bytes = 13040
+top = "复盘"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:3553",
+  "复盘/交接-重构进度.md:3125",
+  "复盘/索引-台账号到复盘.md:75",
+  "复盘/索引-台账号到复盘.md:122",
+  "复盘/视觉方向草案-T-G28.md:49",
+]
+
+[[doc]]
+path = "复盘/外部做法-问MCP答案.md"
+bytes = 35553
+top = "复盘"
+ref_count = 12
+pinned = true
+pinned_by = ["T-G276"]
+referenced_by = [
+  "docs/traceability.toml:5585",
+  "docs/traceability.toml:5587",
+  "复盘/交接-重构进度.md:117",
+  "复盘/交接-重构进度.md:120",
+  "复盘/交接.d/T-G276.md:1",
+  "复盘/交接.d/T-G276.md:4",
+]
+
+[[doc]]
+path = "复盘/字号令牌化-T-G104.md"
+bytes = 9852
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G104"]
+referenced_by = [
+  "docs/traceability.toml:621",
+  "复盘/索引-台账号到复盘.md:23",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:127",
+]
+
+[[doc]]
+path = "复盘/学业页瘦身与成绩绑课程-T-G151.md"
+bytes = 9596
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G151"]
+referenced_by = [
+  "docs/changelog.md:1271",
+  "docs/traceability.toml:4412",
+  "复盘/交接-重构进度.md:1256",
+  "复盘/索引-台账号到复盘.md:118",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:167",
+]
+
+[[doc]]
+path = "复盘/学校通知合作接口-T-G14.md"
+bytes = 8298
+top = "复盘"
+ref_count = 5
+pinned = true
+pinned_by = ["T-G14"]
+referenced_by = [
+  "docs/contracts/domains/F10-notify.md:5",
+  "docs/implementation/modules.md:236",
+  "docs/traceability.toml:3842",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:128",
+]
+
+[[doc]]
+path = "复盘/审美门-对比度-T-G27.md"
+bytes = 11946
+top = "复盘"
+ref_count = 10
+pinned = true
+pinned_by = ["T-G27"]
+referenced_by = [
+  "docs/specification/nonfunctional.md:24",
+  "docs/traceability.toml:1480",
+  "docs/traceability.toml:1481",
+  "docs/traceability.toml:1482",
+  "复盘/交接-重构进度.md:3124",
+  "复盘/交接-重构进度.md:3237",
+]
+
+[[doc]]
+path = "复盘/审计-GLM53-外包系统对抗审核.md"
+bytes = 66136
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G252"]
+referenced_by = [
+  "docs/traceability.toml:5575",
+  "docs/workbacklog.toml:711",
+  "复盘/交接-重构进度.md:104",
+  "复盘/交接.d/T-G252.md:1",
+  "复盘/卡/卡153-GLM53对抗审核外包系统.md:16",
+  "复盘/卡/卡153-GLM53对抗审核外包系统.md:66",
+]
+
+[[doc]]
+path = "复盘/对抗复核-T-G249.md"
+bytes = 12913
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G289"]
+referenced_by = [
+  "docs/changelog.d/T-G289.md:3",
+  "docs/changelog.md:146",
+  "docs/traceability.toml:5780",
+  "docs/workbacklog.toml:1335",
+  "复盘/卡/卡189-对抗复核实验.md:25",
+  "复盘/卡/卡189-对抗复核实验.md:43",
+]
+
+[[doc]]
+path = "复盘/导读-怎么读这套工作流.md"
+bytes = 6685
+top = "复盘"
+ref_count = 1
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/框架-git-多人协作口径.md:80",
+]
+
+[[doc]]
+path = "复盘/封存指纹可核-T-G179.md"
+bytes = 12729
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G179"]
+referenced_by = [
+  "docs/changelog.md:927",
+  "docs/traceability.toml:4749",
+  "复盘/交接-重构进度.md:995",
+  "复盘/框架-术语表与契约.md:34",
+]
+
+[[doc]]
+path = "复盘/少读工具-T-G108.md"
+bytes = 10477
+top = "复盘"
+ref_count = 11
+pinned = true
+pinned_by = ["T-G108"]
+referenced_by = [
+  "docs/traceability.toml:797",
+  "tools/evidence_map.py:3",
+  "复盘/交接-重构进度.md:1584",
+  "复盘/外包卡-012c-集成.md:10",
+  "复盘/外包卡-012c-集成.md:21",
+  "复盘/外包卡-012c-集成.md:45",
+]
+
+[[doc]]
+path = "复盘/局域网访问与配对码-T-G10b.md"
+bytes = 13392
+top = "复盘"
+ref_count = 17
+pinned = true
+pinned_by = ["T-G10b", "T-G10c"]
+referenced_by = [
+  "docs/changelog.md:3941",
+  "docs/changelog.md:3980",
+  "docs/contracts/domains/F9-storage-sync.md:128",
+  "docs/specification/domains/F9-storage-sync.md:63",
+  "docs/specification/nonfunctional.md:247",
+  "docs/traceability.toml:3765",
+]
+
+[[doc]]
+path = "复盘/工具与口径文档同步-T-G166.md"
+bytes = 8358
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G166"]
+referenced_by = [
+  "docs/changelog.md:1224",
+  "docs/traceability.toml:4620",
+  "docs/traceability.toml:4623",
+  "复盘/交接-重构进度.md:1222",
+  "复盘/索引-台账号到复盘.md:117",
+  "复盘/索引-台账号到复盘.md:119",
+]
+
+[[doc]]
+path = "复盘/工具收尾两小件-T-G125.md"
+bytes = 9055
+top = "复盘"
+ref_count = 5
+pinned = true
+pinned_by = ["T-G125"]
+referenced_by = [
+  "docs/changelog.md:1716",
+  "docs/traceability.toml:4051",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:130",
+  "复盘/索引-台账号到复盘.md:139",
+]
+
+[[doc]]
+path = "复盘/左栏三项收进设置-T-G154.md"
+bytes = 10530
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G154"]
+referenced_by = [
+  "docs/changelog.md:1299",
+  "docs/traceability.toml:4433",
+  "docs/traceability.toml:4435",
+  "复盘/交接-重构进度.md:1272",
+  "复盘/索引-台账号到复盘.md:118",
+  "复盘/索引-台账号到复盘.md:119",
+]
+
+[[doc]]
+path = "复盘/左栏整理与离线记挪位-T-G162.md"
+bytes = 11312
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G162"]
+referenced_by = [
+  "docs/changelog.md:1182",
+  "docs/traceability.toml:4584",
+  "复盘/交接-重构进度.md:1189",
+  "复盘/索引-台账号到复盘.md:117",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:182",
+]
+
+[[doc]]
+path = "复盘/幂等写库-T-G86.md"
+bytes = 8556
+top = "复盘"
+ref_count = 16
+pinned = true
+pinned_by = ["T-G86"]
+referenced_by = [
+  "docs/changelog.md:2257",
+  "docs/traceability.toml:573",
+  "docs/traceability.toml:994",
+  "docs/traceability.toml:1124",
+  "docs/traceability.toml:4268",
+  "复盘/myday序号根因-T-G98.md:5",
+]
+
+[[doc]]
+path = "复盘/年历热力图空渲染缺陷-T-G3.md"
+bytes = 4043
+top = "复盘"
+ref_count = 4
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:4275",
+  "复盘/任务重规划-剩余工作.md:147",
+  "复盘/口径定案-待定清单.md:240",
+  "复盘/索引-台账号到复盘.md:123",
+]
+
+[[doc]]
+path = "复盘/并发两卡-T-G92T-G93.md"
+bytes = 8539
+top = "复盘"
+ref_count = 23
+pinned = true
+pinned_by = ["T-G132", "T-G93"]
+referenced_by = [
+  "docs/changelog.md:2120",
+  "docs/traceability.toml:635",
+  "docs/traceability.toml:882",
+  "docs/traceability.toml:4217",
+  "docs/traceability.toml:4227",
+  "docs/traceability.toml:4228",
+]
+
+[[doc]]
+path = "复盘/并发实测对账-T-G132.md"
+bytes = 7983
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G132"]
+referenced_by = [
+  "docs/changelog.md:1561",
+  "docs/traceability.toml:4229",
+  "复盘/交接-重构进度.md:1418",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:129",
+  "复盘/索引-台账号到复盘.md:153",
+]
+
+[[doc]]
+path = "复盘/并发架构-T-G99.md"
+bytes = 18957
+top = "复盘"
+ref_count = 15
+pinned = true
+pinned_by = ["T-G132", "T-G99"]
+referenced_by = [
+  "docs/traceability.toml:548",
+  "docs/traceability.toml:4225",
+  "docs/traceability.toml:4226",
+  "docs/workbacklog.toml:5",
+  "harness/wb_plan.py:7",
+  "tools/wb_plan.py:7",
+]
+
+[[doc]]
+path = "复盘/并行波复盘-20260927.md"
+bytes = 25560
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G165"]
+referenced_by = [
+  "docs/changelog.md:1157",
+  "docs/traceability.toml:4572",
+  "复盘/交接-重构进度.md:1170",
+  "复盘/框架-术语表与契约.md:69",
+  "复盘/索引-台账号到复盘.md:181",
+  "复盘/索引重算与规矩-T-G171.md:48",
+]
+
+[[doc]]
+path = "复盘/意图、规格和实现复盘.md"
+bytes = 4775
+top = "复盘"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/任务复盘-全程.md:13",
+  "复盘/任务复盘-全程.md:57",
+]
+
+[[doc]]
+path = "复盘/意图到规格-产品判断复盘.md"
+bytes = 15301
+top = "复盘"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/任务复盘-全程.md:14",
+  "复盘/任务复盘-全程.md:58",
+]
+
+[[doc]]
+path = "复盘/手机直传同步包-T-G15.md"
+bytes = 6172
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G15"]
+referenced_by = [
+  "docs/contracts/domains/F9-storage-sync.md:81",
+  "docs/implementation/modules.md:195",
+  "docs/specification/domains/F9-storage-sync.md:50",
+  "docs/traceability.toml:2807",
+  "复盘/索引-台账号到复盘.md:118",
+  "复盘/索引-台账号到复盘.md:119",
+]
+
+[[doc]]
+path = "复盘/手机看得更全-T-G16.md"
+bytes = 4763
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G16"]
+referenced_by = [
+  "docs/contracts/domains/F9-storage-sync.md:92",
+  "docs/implementation/modules.md:201",
+  "docs/specification/domains/F9-storage-sync.md:57",
+  "docs/traceability.toml:2791",
+  "复盘/索引-台账号到复盘.md:117",
+  "复盘/索引-台账号到复盘.md:119",
+]
+
+[[doc]]
+path = "复盘/手机离线记-T-G10.md"
+bytes = 11200
+top = "复盘"
+ref_count = 13
+pinned = true
+pinned_by = ["T-G10"]
+referenced_by = [
+  "docs/changelog.md:4013",
+  "docs/contracts/domains/F9-storage-sync.md:70",
+  "docs/implementation/modules.md:190",
+  "docs/implementation/modules.md:308",
+  "docs/specification/nonfunctional.md:235",
+  "docs/traceability.toml:3821",
+]
+
+[[doc]]
+path = "复盘/拖拽排序-T-G79.md"
+bytes = 10215
+top = "复盘"
+ref_count = 20
+pinned = true
+pinned_by = ["T-G79", "T-G86"]
+referenced_by = [
+  "docs/changelog.md:2251",
+  "docs/changelog.md:2367",
+  "docs/traceability.toml:130",
+  "docs/traceability.toml:727",
+  "docs/traceability.toml:999",
+  "docs/traceability.toml:1004",
+]
+
+[[doc]]
+path = "复盘/按钮瘦身-卡片与设置页-T-G63.md"
+bytes = 6998
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G63"]
+referenced_by = [
+  "docs/specification/nonfunctional.md:131",
+  "docs/traceability.toml:1821",
+  "复盘/交接-重构进度.md:2178",
+  "复盘/新窗口交接卡.md:775",
+  "复盘/索引-台账号到复盘.md:81",
+  "复盘/索引-台账号到复盘.md:133",
+]
+
+[[doc]]
+path = "复盘/接口500-分组不存在-T-G33.md"
+bytes = 5177
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G33"]
+referenced_by = [
+  "docs/traceability.toml:512",
+  "docs/traceability.toml:513",
+  "docs/traceability.toml:514",
+  "复盘/交接-重构进度.md:3046",
+  "复盘/交接-重构进度.md:3132",
+  "复盘/渲染验证层-T-G32.md:176",
+]
+
+[[doc]]
+path = "复盘/接缝预检假阳性-T-G146.md"
+bytes = 7271
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G146"]
+referenced_by = [
+  "docs/changelog.md:1492",
+  "docs/traceability.toml:4326",
+  "复盘/交接-重构进度.md:1380",
+  "复盘/框架-术语表与契约.md:68",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:128",
+]
+
+[[doc]]
+path = "复盘/提交标签写错-T-G17.md"
+bytes = 6383
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G17"]
+referenced_by = [
+  "docs/EXTENDING.md:161",
+  "docs/traceability.toml:2780",
+  "复盘/索引-台账号到复盘.md:116",
+  "复盘/索引-台账号到复盘.md:119",
+]
+
+[[doc]]
+path = "复盘/收口后待用户清单.md"
+bytes = 3367
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G148"]
+referenced_by = [
+  "docs/traceability.toml:4371",
+  "docs/traceability.toml:4378",
+  "复盘/交接-重构进度.md:1359",
+  "复盘/人工验收清单补齐-T-G167.md:63",
+  "复盘/删sync-tasks路由-T-G149.md:29",
+  "复盘/新窗口交接卡.md:31",
+]
+
+[[doc]]
+path = "复盘/改字面前先查钉子-T-G145.md"
+bytes = 12646
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G145"]
+referenced_by = [
+  "docs/changelog.md:1501",
+  "docs/traceability.toml:4314",
+  "复盘/交接-重构进度.md:1385",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:128",
+  "复盘/索引-台账号到复盘.md:160",
+]
+
+[[doc]]
+path = "复盘/文档债务-NF编号错位.md"
+bytes = 11600
+top = "复盘"
+ref_count = 17
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:4664",
+  "docs/changelog.md:4797",
+  "docs/changelog.md:4828",
+  "docs/changelog.md:5365",
+  "复盘/交接-重构进度.md:2681",
+  "复盘/交接-重构进度.md:2682",
+]
+
+[[doc]]
+path = "复盘/文档债务清理-实现层对齐.md"
+bytes = 4049
+top = "复盘"
+ref_count = 6
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:4945",
+  "docs/implementation/coverage.md:24",
+  "docs/implementation/traceability.md:35",
+  "复盘/交接-重构进度.md:2649",
+  "复盘/长任务执行协议.md:411",
+  "复盘/长任务执行协议.md:425",
+]
+
+[[doc]]
+path = "复盘/文档偏移与约束框架复盘.md"
+bytes = 7157
+top = "复盘"
+ref_count = 7
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:5103",
+  "复盘/交接-重构进度.md:3114",
+  "复盘/新窗口交接卡.md:1015",
+  "复盘/框架落地执行复盘.md:5",
+  "复盘/长任务执行协议.md:770",
+  "复盘/长任务执行协议.md:781",
+]
+
+[[doc]]
+path = "复盘/断网判据过期-T-G76.md"
+bytes = 12531
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G76"]
+referenced_by = [
+  "docs/changelog.md:2445",
+  "docs/traceability.toml:1190",
+  "复盘/交接-重构进度.md:1916",
+  "复盘/新窗口交接卡.md:506",
+  "复盘/索引-台账号到复盘.md:60",
+  "复盘/索引-台账号到复盘.md:135",
+]
+
+[[doc]]
+path = "复盘/新窗口交接卡.md"
+bytes = 111575
+top = "复盘"
+ref_count = 56
+pinned = true
+pinned_by = ["STEP-17", "T-G148", "T-G68", "T-G80"]
+referenced_by = [
+  "docs/changelog.md:5178",
+  "docs/traceability.toml:1097",
+  "docs/traceability.toml:1099",
+  "docs/traceability.toml:1908",
+  "docs/traceability.toml:3042",
+  "docs/traceability.toml:4372",
+]
+
+[[doc]]
+path = "复盘/暗色存在性层修真-T-G177.md"
+bytes = 8299
+top = "复盘"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G177"]
+referenced_by = [
+  "docs/changelog.md:971",
+  "docs/traceability.toml:4725",
+  "复盘/交接-重构进度.md:1028",
+]
+
+[[doc]]
+path = "复盘/暗色护栏自证-T-G175.md"
+bytes = 11307
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G175"]
+referenced_by = [
+  "docs/changelog.md:1012",
+  "docs/traceability.toml:4699",
+  "docs/traceability.toml:4701",
+  "复盘/交接-重构进度.md:1026",
+  "复盘/交接-重构进度.md:1058",
+  "复盘/暗色存在性层修真-T-G177.md:103",
+]
+
+[[doc]]
+path = "复盘/暗色适配与暗色门禁-T-G163.md"
+bytes = 18126
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G163"]
+referenced_by = [
+  "docs/changelog.md:1122",
+  "docs/traceability.toml:4535",
+  "复盘/交接-重构进度.md:1138",
+  "复盘/索引-台账号到复盘.md:117",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:178",
+]
+
+[[doc]]
+path = "复盘/本轮踩坑与反馈处理复盘.md"
+bytes = 17877
+top = "复盘"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:3113",
+  "复盘/新窗口交接卡.md:1017",
+  "复盘/长任务执行协议.md:752",
+]
+
+[[doc]]
+path = "复盘/架构审议-外包与门禁.md"
+bytes = 17102
+top = "复盘"
+ref_count = 18
+pinned = true
+pinned_by = ["T-G214", "T-G219"]
+referenced_by = [
+  "docs/changelog.d/T-G219.md:4",
+  "docs/changelog.md:187",
+  "docs/traceability.toml:5194",
+  "docs/traceability.toml:5199",
+  "docs/traceability.toml:5252",
+  "docs/traceability.toml:5256",
+]
+
+[[doc]]
+path = "复盘/架构索引-分层图.md"
+bytes = 18452
+top = "复盘"
+ref_count = 28
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.d/T-G253.md:5",
+  "docs/changelog.d/T-G274.md:7",
+  "docs/changelog.md:11",
+  "docs/changelog.md:16",
+  "docs/traceability.toml:5517",
+  "docs/traceability.toml:5528",
+]
+
+[[doc]]
+path = "复盘/核心操作诊断清单-MVP.md"
+bytes = 8835
+top = "复盘"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/任务复盘-全程.md:19",
+  "复盘/任务复盘-全程.md:60",
+]
+
+[[doc]]
+path = "复盘/框架-git-多人协作口径.md"
+bytes = 6990
+top = "复盘"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.d/T-G260.md:14",
+  "docs/changelog.md:134",
+  "docs/workbacklog.toml:1347",
+  "复盘/卡/卡192-git基线与备份.md:10",
+  "复盘/卡/卡192-git基线与备份.md:63",
+]
+
+[[doc]]
+path = "复盘/框架-可控性与安全修改.md"
+bytes = 11328
+top = "复盘"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1236",
+  "复盘/卡/卡186-框架可控性与安全修改.md:10",
+  "复盘/卡/卡186-框架可控性与安全修改.md:16",
+]
+
+[[doc]]
+path = "复盘/框架-并行度与内存.md"
+bytes = 8038
+top = "复盘"
+ref_count = 6
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/优化候选-引文回溯.md:16",
+  "复盘/优化候选.toml:2",
+  "复盘/优化候选.toml:13",
+  "复盘/优化候选.toml:17",
+  "复盘/优化候选.toml:138",
+  "复盘/卡/卡187-引文回溯优化候选.md:34",
+]
+
+[[doc]]
+path = "复盘/框架-并行改同一件.md"
+bytes = 10993
+top = "复盘"
+ref_count = 0
+pinned = false
+pinned_by = []
+referenced_by = []
+
+[[doc]]
+path = "复盘/框架-抽取清单.md"
+bytes = 34578
+top = "复盘"
+ref_count = 15
+pinned = true
+pinned_by = ["T-G275"]
+referenced_by = [
+  "docs/changelog.d/T-G275.md:3",
+  "docs/changelog.md:51",
+  "docs/traceability.toml:5595",
+  "docs/traceability.toml:5597",
+  "docs/workbacklog.toml:1050",
+  "复盘/交接-重构进度.md:131",
+]
+
+[[doc]]
+path = "复盘/框架-术语表与契约.md"
+bytes = 28702
+top = "复盘"
+ref_count = 12
+pinned = true
+pinned_by = ["T-G277"]
+referenced_by = [
+  "docs/changelog.d/T-G277.md:3",
+  "docs/changelog.md:57",
+  "docs/traceability.toml:5605",
+  "docs/workbacklog.toml:1065",
+  "复盘/卡/卡177-框架术语表与契约.md:14",
+  "复盘/卡/卡177-框架术语表与契约.md:58",
+]
+
+[[doc]]
+path = "复盘/框架-独立仓提升.md"
+bytes = 22034
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G281"]
+referenced_by = [
+  "docs/traceability.toml:5790",
+  "docs/traceability.toml:5792",
+  "docs/workbacklog.toml:1163",
+  "复盘/卡/卡181-框架独立仓与参与管线.md:45",
+  "复盘/卡/卡181-框架独立仓与参与管线.md:74",
+  "复盘/卡/卡181-框架独立仓与参与管线.md:101",
+]
+
+[[doc]]
+path = "复盘/框架-验证分层的行业做法.md"
+bytes = 17288
+top = "复盘"
+ref_count = 3
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/workbacklog.toml:1213",
+  "复盘/卡/卡185-框架验证分层.md:11",
+  "复盘/卡/卡185-框架验证分层.md:16",
+]
+
+[[doc]]
+path = "复盘/框架-骨架设计.md"
+bytes = 72612
+top = "复盘"
+ref_count = 14
+pinned = true
+pinned_by = ["T-G278"]
+referenced_by = [
+  "docs/changelog.d/T-G278.md:3",
+  "docs/changelog.md:64",
+  "docs/traceability.toml:5617",
+  "docs/traceability.toml:5619",
+  "docs/workbacklog.toml:1082",
+  "复盘/卡/卡178-框架骨架设计.md:19",
+]
+
+[[doc]]
+path = "复盘/框架落地执行复盘.md"
+bytes = 10955
+top = "复盘"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:5114",
+  "复盘/交接-重构进度.md:2663",
+  "复盘/交接-重构进度.md:3114",
+  "复盘/新窗口交接卡.md:1015",
+  "复盘/长任务执行协议.md:782",
+]
+
+[[doc]]
+path = "复盘/桌面形态状态更正-T-G67.md"
+bytes = 3773
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G67"]
+referenced_by = [
+  "docs/changelog.md:2644",
+  "docs/traceability.toml:1921",
+  "复盘/交接-重构进度.md:2124",
+  "复盘/新窗口交接卡.md:697",
+  "复盘/索引-台账号到复盘.md:86",
+  "复盘/索引-台账号到复盘.md:133",
+]
+
+[[doc]]
+path = "复盘/段2设计决策-提醒与附件打开方式.md"
+bytes = 18376
+top = "复盘"
+ref_count = 20
+pinned = true
+pinned_by = ["STEP-17"]
+referenced_by = [
+  "docs/changelog.md:5177",
+  "docs/changelog.md:5254",
+  "docs/changelog.md:5288",
+  "docs/traceability.toml:3040",
+  "复盘/交接-重构进度.md:3115",
+  "复盘/任务重规划-剩余工作.md:51",
+]
+
+[[doc]]
+path = "复盘/每视图签名-T-G40残留-T-G69.md"
+bytes = 5799
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G69"]
+referenced_by = [
+  "docs/changelog.md:2613",
+  "docs/specification/nonfunctional.md:217",
+  "docs/traceability.toml:1868",
+  "复盘/交接-重构进度.md:2094",
+  "复盘/新窗口交接卡.md:664",
+  "复盘/索引-台账号到复盘.md:83",
+]
+
+[[doc]]
+path = "复盘/派活器三合一-T-G114.md"
+bytes = 19050
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G114"]
+referenced_by = [
+  "docs/changelog.md:1665",
+  "docs/traceability.toml:4101",
+  "docs/workbacklog.toml:68",
+  "tools/wb_dispatch.py:1394",
+  "复盘/交接-重构进度.md:1470",
+  "复盘/卡/卡029-派活器三合一.md:219",
+]
+
+[[doc]]
+path = "复盘/测试定时炸弹-T-G87.md"
+bytes = 6091
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G87"]
+referenced_by = [
+  "docs/changelog.md:2233",
+  "docs/traceability.toml:980",
+  "复盘/交接-重构进度.md:1761",
+  "复盘/幂等写库-T-G86.md:134",
+  "复盘/新窗口交接卡.md:324",
+  "复盘/索引-台账号到复盘.md:48",
+]
+
+[[doc]]
+path = "复盘/渲染采集漂移与星期相关-T-G40.md"
+bytes = 7342
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G40"]
+referenced_by = [
+  "docs/traceability.toml:2379",
+  "复盘/交接-重构进度.md:3139",
+  "复盘/索引-台账号到复盘.md:91",
+  "复盘/索引-台账号到复盘.md:120",
+]
+
+[[doc]]
+path = "复盘/渲染验证层-T-G32.md"
+bytes = 14518
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G32"]
+referenced_by = [
+  "docs/traceability.toml:487",
+  "docs/traceability.toml:488",
+  "docs/traceability.toml:489",
+  "docs/traceability.toml:490",
+  "docs/traceability.toml:491",
+  "复盘/交接-重构进度.md:3047",
+]
+
+[[doc]]
+path = "复盘/独立MCP客户端-T-G78.md"
+bytes = 5793
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G78"]
+referenced_by = [
+  "docs/changelog.md:2390",
+  "docs/traceability.toml:1152",
+  "复盘/交接-重构进度.md:1869",
+  "复盘/新窗口交接卡.md:439",
+  "复盘/索引-台账号到复盘.md:58",
+  "复盘/索引-台账号到复盘.md:135",
+]
+
+[[doc]]
+path = "复盘/界面不解释-T-G49.md"
+bytes = 10752
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G49"]
+referenced_by = [
+  "docs/changelog.md:2966",
+  "docs/traceability.toml:2598",
+  "docs/traceability.toml:2599",
+  "tools/ui_text_audit.py:5",
+  "复盘/界面解释文案第二批-T-G142.md:3",
+  "复盘/界面解释文案第二批-T-G142.md:11",
+]
+
+[[doc]]
+path = "复盘/界面字面星号缺陷-T-G11.md"
+bytes = 6850
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G11"]
+referenced_by = [
+  "docs/changelog.md:3914",
+  "docs/traceability.toml:3806",
+  "复盘/任务重规划-剩余工作.md:155",
+  "复盘/功能验收机器化-T-G34.md:118",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:126",
+]
+
+[[doc]]
+path = "复盘/界面解释文案第二批-T-G142.md"
+bytes = 20303
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G142"]
+referenced_by = [
+  "docs/changelog.md:1483",
+  "docs/traceability.toml:4338",
+  "复盘/交接-重构进度.md:1375",
+  "复盘/界面不解释-T-G49.md:126",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:128",
+]
+
+[[doc]]
+path = "复盘/留痕与配额策略.md"
+bytes = 13556
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G282"]
+referenced_by = [
+  "docs/changelog.d/T-G282.md:3",
+  "docs/changelog.md:74",
+  "docs/traceability.toml:5631",
+  "docs/workbacklog.toml:1312",
+  "复盘/交接-重构进度.md:188",
+  "复盘/交接.d/T-G282.md:4",
+]
+
+[[doc]]
+path = "复盘/看门狗护栏补强-T-G96.md"
+bytes = 13127
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G96"]
+referenced_by = [
+  "docs/changelog.md:2026",
+  "docs/traceability.toml:845",
+  "docs/traceability.toml:4056",
+  "复盘/交接-重构进度.md:1645",
+  "复盘/外包卡-007-复核缺口.md:127",
+  "复盘/新窗口交接卡.md:154",
+]
+
+[[doc]]
+path = "复盘/看门狗独立化-T-G112.md"
+bytes = 10676
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G112"]
+referenced_by = [
+  "docs/changelog.md:1731",
+  "docs/traceability.toml:700",
+  "docs/traceability.toml:4039",
+  "docs/workbacklog.toml:52",
+  "复盘/卡/卡024-看门狗独立化.md:74",
+  "复盘/索引-台账号到复盘.md:119",
+]
+
+[[doc]]
+path = "复盘/看门狗误杀-T-G94.md"
+bytes = 11044
+top = "复盘"
+ref_count = 11
+pinned = true
+pinned_by = ["T-G94"]
+referenced_by = [
+  "docs/changelog.md:2026",
+  "docs/changelog.md:2091",
+  "docs/traceability.toml:863",
+  "复盘/交接-重构进度.md:1645",
+  "复盘/交接-重构进度.md:1679",
+  "复盘/外包卡-005-看门狗误杀.md:51",
+]
+
+[[doc]]
+path = "复盘/看门狗阈值衰减-T-G128.md"
+bytes = 8678
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G128"]
+referenced_by = [
+  "docs/changelog.md:1652",
+  "docs/traceability.toml:4113",
+  "复盘/交接-重构进度.md:1463",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:130",
+  "复盘/索引-台账号到复盘.md:144",
+]
+
+[[doc]]
+path = "复盘/第0步实施-事实层落地.md"
+bytes = 6003
+top = "复盘"
+ref_count = 2
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:3099",
+  "复盘/交接后审计-不一致与风险修复.md:127",
+]
+
+[[doc]]
+path = "复盘/第6-10步工作线复盘.md"
+bytes = 7526
+top = "复盘"
+ref_count = 6
+pinned = false
+pinned_by = []
+referenced_by = [
+  "复盘/交接-重构进度.md:2655",
+  "复盘/交接-重构进度.md:3109",
+  "复盘/使用体验问题与修改台账.md:5",
+  "复盘/团队视角页-T-G12.md:4",
+  "复盘/长任务执行协议.md:557",
+  "复盘/长任务执行协议.md:567",
+]
+
+[[doc]]
+path = "复盘/索引-台账号到复盘.md"
+bytes = 25648
+top = "复盘"
+ref_count = 14
+pinned = true
+pinned_by = ["T-G168", "T-G171"]
+referenced_by = [
+  "docs/changelog.md:1074",
+  "docs/changelog.md:1145",
+  "docs/traceability.toml:4561",
+  "docs/traceability.toml:4646",
+  "复盘/交接-重构进度.md:1103",
+  "复盘/交接-重构进度.md:1158",
+]
+
+[[doc]]
+path = "复盘/索引重算与规矩-T-G171.md"
+bytes = 21850
+top = "复盘"
+ref_count = 14
+pinned = true
+pinned_by = ["T-G171"]
+referenced_by = [
+  "docs/changelog.md:1084",
+  "docs/traceability.toml:4647",
+  "docs/traceability.toml:4649",
+  "复盘/交接-重构进度.md:1113",
+  "复盘/外包-卡表与规矩.md:1100",
+  "复盘/框架-术语表与契约.md:57",
+]
+
+[[doc]]
+path = "复盘/续跑与铁律-T-G90.md"
+bytes = 5421
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G90"]
+referenced_by = [
+  "docs/changelog.md:2178",
+  "docs/traceability.toml:931",
+  "复盘/交接-重构进度.md:1725",
+  "复盘/新窗口交接卡.md:283",
+  "复盘/索引-台账号到复盘.md:45",
+  "复盘/索引-台账号到复盘.md:134",
+]
+
+[[doc]]
+path = "复盘/续跑日志合并-T-G113.md"
+bytes = 5998
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G113"]
+referenced_by = [
+  "docs/traceability.toml:749",
+  "复盘/索引-台账号到复盘.md:33",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:126",
+]
+
+[[doc]]
+path = "复盘/续跑跨轮耗时-T-G111.md"
+bytes = 8750
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G111"]
+referenced_by = [
+  "docs/traceability.toml:643",
+  "复盘/索引-台账号到复盘.md:25",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:126",
+]
+
+[[doc]]
+path = "复盘/缺口处理与假设台账.md"
+bytes = 6625
+top = "复盘"
+ref_count = 8
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/CODING_GUIDELINES.md:77",
+  "复盘/交接-重构进度.md:3106",
+  "复盘/使用体验问题与修改台账.md:11",
+  "复盘/坑总账.md:410",
+  "复盘/新窗口交接卡.md:1018",
+  "复盘/长任务执行协议.md:86",
+]
+
+[[doc]]
+path = "复盘/融洽门-风格一致性-T-G29.md"
+bytes = 8483
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G29"]
+referenced_by = [
+  "docs/traceability.toml:1448",
+  "docs/traceability.toml:1449",
+  "docs/traceability.toml:1450",
+  "docs/traceability.toml:1451",
+  "复盘/交接-重构进度.md:3127",
+  "复盘/交接-重构进度.md:3238",
+]
+
+[[doc]]
+path = "复盘/规矩归位与门禁锁入库-T-G159.md"
+bytes = 7795
+top = "复盘"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:1399",
+  "复盘/交接-重构进度.md:1317",
+  "复盘/索引-台账号到复盘.md:118",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:174",
+]
+
+[[doc]]
+path = "复盘/视觉方向草案-T-G28.md"
+bytes = 20929
+top = "复盘"
+ref_count = 10
+pinned = true
+pinned_by = ["T-G28"]
+referenced_by = [
+  "docs/traceability.toml:1465",
+  "docs/traceability.toml:1466",
+  "docs/traceability.toml:1467",
+  "docs/traceability.toml:1468",
+  "docs/traceability.toml:1469",
+  "docs/traceability.toml:1470",
+]
+
+[[doc]]
+path = "复盘/视觉线互动态-T-G45.md"
+bytes = 15802
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G45"]
+referenced_by = [
+  "docs/specification/nonfunctional.md:61",
+  "docs/traceability.toml:2655",
+  "复盘/交接-重构进度.md:2510",
+  "复盘/交接-重构进度.md:3233",
+  "复盘/索引-台账号到复盘.md:109",
+  "复盘/索引-台账号到复盘.md:120",
+]
+
+[[doc]]
+path = "复盘/视觉线图标与图表-T-G54.md"
+bytes = 6841
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G54", "T-G55"]
+referenced_by = [
+  "docs/traceability.toml:2506",
+  "docs/traceability.toml:2523",
+  "复盘/新窗口交接卡.md:856",
+  "复盘/索引-台账号到复盘.md:99",
+  "复盘/索引-台账号到复盘.md:100",
+  "复盘/索引-台账号到复盘.md:121",
+]
+
+[[doc]]
+path = "复盘/视觉线地图.md"
+bytes = 53830
+top = "复盘"
+ref_count = 73
+pinned = true
+pinned_by = ["T-G107", "T-G124", "T-G131", "T-G148", "T-G47", "T-G48", "T-G52", "T-G73"]
+referenced_by = [
+  "docs/changelog.md:1863",
+  "docs/changelog.md:2445",
+  "docs/changelog.md:2483",
+  "docs/changelog.md:2509",
+  "docs/changelog.md:2943",
+  "docs/changelog.md:3013",
+]
+
+[[doc]]
+path = "复盘/视觉线地图更新-T-G131.md"
+bytes = 6162
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G131"]
+referenced_by = [
+  "docs/changelog.md:1569",
+  "docs/traceability.toml:4215",
+  "复盘/交接-重构进度.md:1422",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:129",
+  "复盘/索引-台账号到复盘.md:152",
+]
+
+[[doc]]
+path = "复盘/视觉线地图漂移加注-T-G124.md"
+bytes = 8094
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G124"]
+referenced_by = [
+  "docs/changelog.md:1688",
+  "docs/traceability.toml:4076",
+  "复盘/使用体验问题与修改台账.md:316",
+  "复盘/使用体验问题与修改台账.md:321",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:130",
+]
+
+[[doc]]
+path = "复盘/视觉线层次与节奏-T-G51.md"
+bytes = 10138
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G51", "T-G53"]
+referenced_by = [
+  "docs/traceability.toml:2539",
+  "docs/traceability.toml:2571",
+  "复盘/新窗口交接卡.md:856",
+  "复盘/索引-台账号到复盘.md:101",
+  "复盘/索引-台账号到复盘.md:103",
+  "复盘/索引-台账号到复盘.md:121",
+]
+
+[[doc]]
+path = "复盘/视觉线步0-内联样式归位-T-G43.md"
+bytes = 8926
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G43"]
+referenced_by = [
+  "docs/traceability.toml:2695",
+  "复盘/交接-重构进度.md:3225",
+  "复盘/索引-台账号到复盘.md:111",
+  "复盘/索引-台账号到复盘.md:120",
+]
+
+[[doc]]
+path = "复盘/视觉线步1-令牌改名对齐-T-G44.md"
+bytes = 6385
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G44"]
+referenced_by = [
+  "docs/traceability.toml:2677",
+  "复盘/交接-重构进度.md:3227",
+  "复盘/索引-台账号到复盘.md:110",
+  "复盘/索引-台账号到复盘.md:120",
+]
+
+[[doc]]
+path = "复盘/视觉线步2层次语言-T-G50.md"
+bytes = 4392
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G50"]
+referenced_by = [
+  "docs/traceability.toml:2588",
+  "docs/traceability.toml:2590",
+  "复盘/索引-台账号到复盘.md:104",
+  "复盘/索引-台账号到复盘.md:121",
+]
+
+[[doc]]
+path = "复盘/视觉线第0.5步-对比度与状态色-T-G42.md"
+bytes = 12578
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G42"]
+referenced_by = [
+  "docs/specification/nonfunctional.md:30",
+  "docs/traceability.toml:2713",
+  "scripts/run_gates.py:116",
+  "tools/contrast_audit.py:238",
+  "复盘/交接-重构进度.md:3223",
+  "复盘/索引-台账号到复盘.md:112",
+]
+
+[[doc]]
+path = "复盘/视觉续议-键盘与CLI-T-G30.md"
+bytes = 11196
+top = "复盘"
+ref_count = 11
+pinned = true
+pinned_by = ["T-G30"]
+referenced_by = [
+  "docs/traceability.toml:1433",
+  "docs/traceability.toml:1434",
+  "docs/traceability.toml:1435",
+  "docs/traceability.toml:1436",
+  "docs/traceability.toml:1437",
+  "docs/traceability.toml:1438",
+]
+
+[[doc]]
+path = "复盘/视觉重构素材清单-T-G24.md"
+bytes = 12393
+top = "复盘"
+ref_count = 15
+pinned = true
+pinned_by = ["T-G124", "T-G24"]
+referenced_by = [
+  "docs/traceability.toml:1527",
+  "docs/traceability.toml:1528",
+  "docs/traceability.toml:1529",
+  "docs/traceability.toml:1530",
+  "docs/traceability.toml:4078",
+  "复盘/交接-重构进度.md:2411",
+]
+
+[[doc]]
+path = "复盘/设计基线-workbench与去AI味-T-G26.md"
+bytes = 22141
+top = "复盘"
+ref_count = 14
+pinned = true
+pinned_by = ["T-G26"]
+referenced_by = [
+  "docs/specification/nonfunctional.md:17",
+  "docs/traceability.toml:1497",
+  "docs/traceability.toml:1498",
+  "docs/traceability.toml:1499",
+  "docs/traceability.toml:1500",
+  "复盘/交接-重构进度.md:2278",
+]
+
+[[doc]]
+path = "复盘/证据指针语法-T-G133.md"
+bytes = 7409
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G133"]
+referenced_by = [
+  "docs/changelog.md:1552",
+  "docs/traceability.toml:4241",
+  "复盘/交接-重构进度.md:1414",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:129",
+  "复盘/索引-台账号到复盘.md:154",
+]
+
+[[doc]]
+path = "复盘/质量门提速-pytest并行-T-G7.md"
+bytes = 6876
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G7"]
+referenced_by = [
+  "docs/changelog.md:4150",
+  "docs/traceability.toml:3995",
+  "复盘/任务重规划-剩余工作.md:151",
+  "复盘/索引-台账号到复盘.md:135",
+]
+
+[[doc]]
+path = "复盘/跨函数事务-T-G71.md"
+bytes = 10722
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G71"]
+referenced_by = [
+  "docs/changelog.md:2548",
+  "docs/traceability.toml:521",
+  "docs/traceability.toml:1133",
+  "复盘/交接-重构进度.md:2025",
+  "复盘/新窗口交接卡.md:602",
+  "复盘/索引-台账号到复盘.md:57",
+]
+
+[[doc]]
+path = "复盘/跨卡接缝-桩签名-T-G138.md"
+bytes = 7453
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G138"]
+referenced_by = [
+  "docs/changelog.md:1600",
+  "docs/traceability.toml:4174",
+  "复盘/交接-重构进度.md:1438",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:129",
+  "复盘/索引-台账号到复盘.md:149",
+]
+
+[[doc]]
+path = "复盘/跨卡接缝预检-T-G139.md"
+bytes = 9574
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G139"]
+referenced_by = [
+  "docs/changelog.md:1611",
+  "docs/traceability.toml:4162",
+  "复盘/交接-重构进度.md:1443",
+  "复盘/框架-术语表与契约.md:42",
+  "复盘/框架-术语表与契约.md:68",
+  "复盘/索引-台账号到复盘.md:119",
+]
+
+[[doc]]
+path = "复盘/跨端同步合并机制-T-G8.md"
+bytes = 13202
+top = "复盘"
+ref_count = 11
+pinned = true
+pinned_by = ["T-G8", "T-G8b"]
+referenced_by = [
+  "docs/changelog.md:3892",
+  "docs/changelog.md:4055",
+  "docs/contracts/domains/F9-storage-sync.md:44",
+  "docs/traceability.toml:3910",
+  "docs/traceability.toml:3927",
+  "复盘/交接-重构进度.md:2763",
+]
+
+[[doc]]
+path = "复盘/跨端实时专注-T-G20.md"
+bytes = 7997
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G20"]
+referenced_by = [
+  "docs/changelog.md:1864",
+  "docs/changelog.md:1865",
+  "docs/traceability.toml:1556",
+  "复盘/backlog扩建-T-G100.md:44",
+  "复盘/交接-重构进度.md:3063",
+  "复盘/交接-重构进度.md:3119",
+]
+
+[[doc]]
+path = "复盘/轻量化通道-T-G173.md"
+bytes = 6200
+top = "复盘"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G173"]
+referenced_by = [
+  "docs/changelog.md:1053",
+  "docs/traceability.toml:4673",
+  "复盘/交接-重构进度.md:1087",
+]
+
+[[doc]]
+path = "复盘/迁移漏档缺陷-T-G9.md"
+bytes = 7248
+top = "复盘"
+ref_count = 5
+pinned = true
+pinned_by = ["T-G9"]
+referenced_by = [
+  "docs/changelog.md:4123",
+  "docs/specification/nonfunctional.md:178",
+  "docs/traceability.toml:3979",
+  "复盘/任务重规划-剩余工作.md:152",
+  "复盘/索引-台账号到复盘.md:134",
+]
+
+[[doc]]
+path = "复盘/重复节奏视图-T-G25.md"
+bytes = 5023
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G25"]
+referenced_by = [
+  "docs/traceability.toml:1511",
+  "复盘/交接-重构进度.md:3122",
+  "复盘/索引-台账号到复盘.md:77",
+  "复盘/索引-台账号到复盘.md:122",
+]
+
+[[doc]]
+path = "复盘/键盘附加层-命令面板-T-G61.md"
+bytes = 10178
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G61"]
+referenced_by = [
+  "docs/specification/nonfunctional.md:75",
+  "docs/traceability.toml:2410",
+  "复盘/交接-重构进度.md:2213",
+  "复盘/新窗口交接卡.md:829",
+  "复盘/索引-台账号到复盘.md:93",
+  "复盘/索引-台账号到复盘.md:133",
+]
+
+[[doc]]
+path = "复盘/长任务协议补外包与并行-T-G129.md"
+bytes = 11059
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G129"]
+referenced_by = [
+  "docs/changelog.md:1590",
+  "docs/traceability.toml:4189",
+  "复盘/交接-重构进度.md:1432",
+  "复盘/外包工具-需求与架构.md:255",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:130",
+]
+
+[[doc]]
+path = "复盘/长任务执行协议.md"
+bytes = 194050
+top = "复盘"
+ref_count = 96
+pinned = true
+pinned_by = ["T-00", "T-G129", "T-G148"]
+referenced_by = [
+  "docs/CODING_GUIDELINES.md:55",
+  "docs/CODING_GUIDELINES.md:78",
+  "docs/changelog.md:1389",
+  "docs/changelog.md:1422",
+  "docs/traceability.toml:100",
+  "docs/traceability.toml:1099",
+]
+
+[[doc]]
+path = "复盘/长命令后台跑-T-G160.md"
+bytes = 10694
+top = "复盘"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:1422",
+  "复盘/交接-重构进度.md:1330",
+  "复盘/索引-台账号到复盘.md:117",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:175",
+]
+
+[[doc]]
+path = "复盘/长跑保命-T-G91.md"
+bytes = 5014
+top = "复盘"
+ref_count = 12
+pinned = true
+pinned_by = ["T-G91"]
+referenced_by = [
+  "docs/changelog.md:2160",
+  "docs/traceability.toml:915",
+  "复盘/detach前置检查-T-G92.md:3",
+  "复盘/交接-重构进度.md:1715",
+  "复盘/卡/卡024-看门狗独立化.md:29",
+  "复盘/外包-卡表与规矩.md:329",
+]
+
+[[doc]]
+path = "复盘/门禁三项加固-T-G156.md"
+bytes = 12038
+top = "复盘"
+ref_count = 9
+pinned = true
+pinned_by = ["T-G156"]
+referenced_by = [
+  "docs/changelog.md:1337",
+  "docs/traceability.toml:4458",
+  "docs/traceability.toml:4481",
+  "复盘/wb_review分支假FAIL-T-G158.md:21",
+  "复盘/wb_review分支假FAIL-T-G158.md:136",
+  "复盘/交接-重构进度.md:1289",
+]
+
+[[doc]]
+path = "复盘/门禁假绿-PYTHONPATH-T-G157.md"
+bytes = 8670
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G157"]
+referenced_by = [
+  "docs/changelog.md:1357",
+  "docs/traceability.toml:4469",
+  "scripts/run_gates.py:28",
+  "复盘/交接-重构进度.md:1299",
+  "复盘/框架-术语表与契约.md:64",
+  "复盘/索引-台账号到复盘.md:118",
+]
+
+[[doc]]
+path = "复盘/门禁去留提案.md"
+bytes = 5619
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G200"]
+referenced_by = [
+  "docs/changelog.md:613",
+  "docs/traceability.toml:4980",
+  "docs/traceability.toml:4983",
+  "复盘/交接-重构进度.md:792",
+]
+
+[[doc]]
+path = "复盘/门禁四要素.md"
+bytes = 8979
+top = "复盘"
+ref_count = 18
+pinned = true
+pinned_by = ["T-G197", "T-G260"]
+referenced_by = [
+  "docs/changelog.d/T-G260.md:7",
+  "docs/changelog.md:127",
+  "docs/changelog.md:640",
+  "docs/traceability.toml:4955",
+  "docs/traceability.toml:4958",
+  "docs/traceability.toml:5747",
+]
+
+[[doc]]
+path = "复盘/门禁提速-T-G47.md"
+bytes = 6826
+top = "复盘"
+ref_count = 3
+pinned = true
+pinned_by = ["T-G47"]
+referenced_by = [
+  "docs/traceability.toml:2626",
+  "复盘/索引-台账号到复盘.md:107",
+  "复盘/索引-台账号到复盘.md:120",
+]
+
+[[doc]]
+path = "复盘/门禁收紧三条-T-G22.md"
+bytes = 6342
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G22"]
+referenced_by = [
+  "docs/changelog.md:3701",
+  "docs/traceability.toml:2363",
+  "scripts/audit_progress.py:397",
+  "复盘/交接-重构进度.md:3045",
+  "复盘/交接-重构进度.md:3118",
+  "复盘/索引-台账号到复盘.md:90",
+]
+
+[[doc]]
+path = "复盘/门禁改进清单.md"
+bytes = 12617
+top = "复盘"
+ref_count = 29
+pinned = true
+pinned_by = ["T-G200", "T-G207", "T-G209", "T-G214"]
+referenced_by = [
+  "docs/changelog.d/T-G207.md:5",
+  "docs/changelog.md:532",
+  "docs/changelog.md:609",
+  "docs/traceability.toml:4979",
+  "docs/traceability.toml:4983",
+  "docs/traceability.toml:5048",
+]
+
+[[doc]]
+path = "复盘/门禁跨午夜暴露的时区口径缺陷-T-D12.md"
+bytes = 4993
+top = "复盘"
+ref_count = 3
+pinned = true
+pinned_by = ["T-D12"]
+referenced_by = [
+  "docs/EXTENDING.md:223",
+  "docs/changelog.md:4300",
+  "docs/traceability.toml:3445",
+]
+
+[[doc]]
+path = "复盘/门禁锁分把与并发上限-T-G169.md"
+bytes = 9878
+top = "复盘"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:1199",
+  "复盘/交接-重构进度.md:1203",
+  "复盘/索引-台账号到复盘.md:117",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:183",
+]
+
+[[doc]]
+path = "复盘/门禁锁租约续租-T-G161.md"
+bytes = 11170
+top = "复盘"
+ref_count = 5
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.md:1448",
+  "复盘/交接-重构进度.md:1340",
+  "复盘/索引-台账号到复盘.md:117",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:176",
+]
+
+[[doc]]
+path = "复盘/问题清单-K3-深化.md"
+bytes = 57542
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G273"]
+referenced_by = [
+  "docs/traceability.toml:5565",
+  "docs/workbacklog.toml:1016",
+  "复盘/交接-重构进度.md:88",
+  "复盘/交接.d/T-G273.md:1",
+  "复盘/卡/卡173-K3深化问题清单.md:31",
+  "复盘/卡/卡173-K3深化问题清单.md:40",
+]
+
+[[doc]]
+path = "复盘/问题清单-分层.md"
+bytes = 10405
+top = "复盘"
+ref_count = 20
+pinned = false
+pinned_by = []
+referenced_by = [
+  "docs/changelog.d/T-G253.md:5",
+  "docs/changelog.d/T-G274.md:7",
+  "docs/changelog.md:11",
+  "docs/changelog.md:16",
+  "docs/traceability.toml:5517",
+  "docs/traceability.toml:5528",
+]
+
+[[doc]]
+path = "复盘/问题清单-组1.md"
+bytes = 16090
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G268"]
+referenced_by = [
+  "docs/changelog.d/T-G268.md:3",
+  "docs/changelog.md:24",
+  "docs/traceability.toml:5551",
+  "docs/workbacklog.toml:956",
+  "docs/workbacklog.toml:1017",
+  "复盘/卡/卡168-想问题-q1.md:8",
+]
+
+[[doc]]
+path = "复盘/问题清单-组2.md"
+bytes = 21354
+top = "复盘"
+ref_count = 5
+pinned = true
+pinned_by = ["T-G268"]
+referenced_by = [
+  "docs/traceability.toml:5552",
+  "docs/workbacklog.toml:968",
+  "docs/workbacklog.toml:1018",
+  "复盘/卡/卡169-想问题-q2.md:8",
+  "复盘/卡/卡173-K3深化问题清单.md:12",
+]
+
+[[doc]]
+path = "复盘/问题清单-组3.md"
+bytes = 22251
+top = "复盘"
+ref_count = 5
+pinned = true
+pinned_by = ["T-G268"]
+referenced_by = [
+  "docs/traceability.toml:5553",
+  "docs/workbacklog.toml:980",
+  "docs/workbacklog.toml:1019",
+  "复盘/卡/卡170-想问题-q3.md:8",
+  "复盘/卡/卡173-K3深化问题清单.md:13",
+]
+
+[[doc]]
+path = "复盘/问题清单-组4.md"
+bytes = 35173
+top = "复盘"
+ref_count = 8
+pinned = true
+pinned_by = ["T-G268"]
+referenced_by = [
+  "docs/traceability.toml:5554",
+  "docs/workbacklog.toml:992",
+  "docs/workbacklog.toml:1020",
+  "复盘/卡/卡171-想问题-q4.md:8",
+  "复盘/卡/卡173-K3深化问题清单.md:14",
+  "复盘/框架-术语表与契约.md:36",
+]
+
+[[doc]]
+path = "复盘/问题清单-组5.md"
+bytes = 25584
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G268"]
+referenced_by = [
+  "docs/traceability.toml:5555",
+  "docs/workbacklog.toml:1004",
+  "docs/workbacklog.toml:1021",
+  "复盘/卡/卡172-想问题-q5.md:8",
+  "复盘/卡/卡173-K3深化问题清单.md:15",
+  "复盘/框架-术语表与契约.md:49",
+]
+
+[[doc]]
+path = "复盘/集成八张并行卡-T-G170.md"
+bytes = 6921
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G170"]
+referenced_by = [
+  "docs/changelog.md:1103",
+  "docs/traceability.toml:4632",
+  "docs/traceability.toml:4636",
+  "复盘/交接-重构进度.md:1122",
+  "复盘/索引-台账号到复盘.md:116",
+  "复盘/索引-台账号到复盘.md:119",
+]
+
+[[doc]]
+path = "复盘/集成十一张并行卡-T-G153.md"
+bytes = 9449
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G153"]
+referenced_by = [
+  "docs/traceability.toml:4523",
+  "docs/traceability.toml:4575",
+  "复盘/交接-重构进度.md:1241",
+  "复盘/并行波复盘-20260927.md:3",
+  "复盘/索引-台账号到复盘.md:118",
+  "复盘/索引-台账号到复盘.md:119",
+]
+
+[[doc]]
+path = "复盘/非文字对比度-T-G70.md"
+bytes = 13882
+top = "复盘"
+ref_count = 15
+pinned = true
+pinned_by = ["T-G70"]
+referenced_by = [
+  "docs/changelog.md:2594",
+  "docs/specification/nonfunctional.md:110",
+  "docs/traceability.toml:613",
+  "docs/traceability.toml:1884",
+  "docs/traceability.toml:1898",
+  "docs/traceability.toml:2579",
+]
+
+[[doc]]
+path = "复盘/非文字悬停态判据-T-G103.md"
+bytes = 12289
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G103"]
+referenced_by = [
+  "docs/traceability.toml:607",
+  "复盘/索引-台账号到复盘.md:22",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:127",
+]
+
+[[doc]]
+path = "复盘/面板口径对齐-T-G97.md"
+bytes = 12575
+top = "复盘"
+ref_count = 4
+pinned = true
+pinned_by = ["T-G97"]
+referenced_by = [
+  "docs/traceability.toml:830",
+  "复盘/外包卡-012-集成.md:12",
+  "复盘/索引-台账号到复盘.md:39",
+  "复盘/索引-台账号到复盘.md:134",
+]
+
+[[doc]]
+path = "复盘/面板幻影行与日志容错-T-G137.md"
+bytes = 8533
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G137"]
+referenced_by = [
+  "docs/changelog.md:1621",
+  "docs/traceability.toml:4150",
+  "复盘/交接-重构进度.md:1448",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:129",
+  "复盘/索引-台账号到复盘.md:147",
+]
+
+[[doc]]
+path = "复盘/面板总览条-T-G147.md"
+bytes = 14118
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G147"]
+referenced_by = [
+  "docs/changelog.md:1471",
+  "docs/traceability.toml:4350",
+  "复盘/交接-重构进度.md:1368",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:128",
+  "复盘/索引-台账号到复盘.md:163",
+]
+
+[[doc]]
+path = "复盘/面板最新在前与轮换口径-T-G123.md"
+bytes = 9275
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G123"]
+referenced_by = [
+  "docs/changelog.md:1747",
+  "docs/traceability.toml:4026",
+  "复盘/使用体验问题与修改台账.md:288",
+  "复盘/使用体验问题与修改台账.md:294",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:130",
+]
+
+[[doc]]
+path = "复盘/面板状态口径-T-G144.md"
+bytes = 7621
+top = "复盘"
+ref_count = 7
+pinned = true
+pinned_by = ["T-G144"]
+referenced_by = [
+  "docs/changelog.md:1509",
+  "docs/traceability.toml:4302",
+  "复盘/交接-重构进度.md:1389",
+  "复盘/框架-术语表与契约.md:63",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:128",
+]
+
+[[doc]]
+path = "复盘/额度检测误判与循环-T-G136.md"
+bytes = 8623
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G136"]
+referenced_by = [
+  "docs/changelog.md:1642",
+  "docs/traceability.toml:4125",
+  "复盘/交接-重构进度.md:1457",
+  "复盘/索引-台账号到复盘.md:119",
+  "复盘/索引-台账号到复盘.md:129",
+  "复盘/索引-台账号到复盘.md:145",
+]
+
+[[doc]]
+path = "复盘/黄金跨天漂移-可注入的今天-T-G62.md"
+bytes = 6570
+top = "复盘"
+ref_count = 6
+pinned = true
+pinned_by = ["T-G62"]
+referenced_by = [
+  "docs/specification/nonfunctional.md:207",
+  "docs/traceability.toml:1979",
+  "复盘/交接-重构进度.md:2192",
+  "复盘/新窗口交接卡.md:797",
+  "复盘/索引-台账号到复盘.md:89",
+  "复盘/索引-台账号到复盘.md:133",
+]
