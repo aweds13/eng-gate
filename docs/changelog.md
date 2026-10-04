@@ -70,6 +70,13 @@
 - `tests/test_gate_lock_lease.py` +35 · `tests/test_wb_dispatch.py` +55 · `tests/test_wb_land.py` +116 ·
   `tests/test_no_window.py`（删一条失效登记 + 指向新调用）。
 - ★ 第一手：`pytest test_no_window + test_gate_lock_lease + test_wb_land` ⇒ **43 passed**；`ruff` 干净。
+## 2026-10-04 —— 派活器 `--effort` 透传：让「思考等级 MAX」有落点（T-G267 / 卡 167）
+
+- `tools/wb_dispatch.py` +44/-9：新增 `EFFORT_LEVELS` 常量（help 由它拼出，**同源**）· `build_command` 与
+  `resume_command` 加 `effort` 参数（**不给则逐字不变**）· `--effort` 进 argparse（在 `--autocompact` 之后）·
+  `main` 加 effort 闸门（照 `--model` 那套：零副作用、退 2、点名合法值）· 4 处调用点透传 · `[cmd]` 摘要只在给了才显示。
+- `tests/test_wb_dispatch.py` +68：**5 条判据钉子**。
+- ★ 第一手：`pytest` 五份（含 `test_no_window` / `test_pin_check` / `test_docs_fragments`）⇒ **240 passed**；`ruff` 干净。
 ## 2026-10-03 —— 坑总账与不变量台账落档：344 条坑 + 77 条不变量进 git（T-G265 / 卡 165）
 
 - **坑总账建档**：7 个只读工人把 218 份复盘按门类分片读完，机器逐条解析出 **344 条坑**（工人自报合计 314，差额 30 条是几份报告的统计行少算了自己列出的条目 —— 这条差额本身就是「数字手抄」那类坑的又一次现场），按**归位点**分成 8 类 + 共因 Top5。

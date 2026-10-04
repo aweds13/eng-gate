@@ -1955,6 +1955,74 @@ def test_switch_is_purely_additive(tmp_path, monkeypatch) -> None:  # noqa: ANN0
     assert wd.ALLOWED_MODELS == wd.MODEL_WHITELIST, "常量一个字没动（开关是加法）"
 
 
+# ================================================ 卡 167（T-G267）：--effort 透传
+#
+# ★ 用户 2026-10-03 令：「思考等级为 MAX」—— CLI 支持 --effort 六档，但派活器从前
+#   **刻意不传**（两处注释写着「保持默认 High」，2026-09-26 的口径）。本卡加一条透传：
+#   给了才传，不给 = 逐字不变。值域以 CLI 2.158.0 的 --help 为准（6 档）。
+
+
+def test_effort_is_passed_through_when_given(sandbox: Path, monkeypatch, capsys) -> None:
+    """① --effort max ⇒ 命令行里真出现 --effort max（build_command 与 dry-run 摘要都有）。"""
+    node, cli = wd.paths()
+    cmd = wd.build_command(node, cli, "001", "spec.md", "deepseek-v4.1-flash", effort="max")
+    assert cmd[cmd.index("--effort") + 1] == "max", "build_command 要真把 --effort max 塞进去"
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--effort", "max"])
+    assert wd.main() == 0
+    assert "--effort max" in capsys.readouterr().out, "dry-run 的 [cmd] 摘要里要能看到 --effort max"
+
+
+def test_effort_is_absent_when_not_given(sandbox: Path, monkeypatch, capsys) -> None:
+    """② 不给 --effort ⇒ 命令行里没有 --effort（逐字与今天一致 = CLI 默认 High）。"""
+    node, cli = wd.paths()
+    cmd = wd.build_command(node, cli, "001", "spec.md", "deepseek-v4.1-flash")
+    assert "--effort" not in cmd, "不给 effort ⇒ 命令里不许出现 --effort"
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md"])
+    assert wd.main() == 0
+    assert "--effort" not in capsys.readouterr().out, "[cmd] 摘要里也不许冒出 --effort"
+
+
+def test_effort_gate_refuses_an_unknown_level_with_zero_side_effects(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """③ --effort 玄学 ⇒ 退 2、不起进程、不建 log、不写判决、点名合法值（照 --model 闸门那套）。"""
+    record: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000", "--spec", "spec.md",
+                                      "--effort", "玄学", "--execute"])
+    assert wd.main() == 2
+    err = capsys.readouterr().err
+    assert "未授权的思考等级" in err and "玄学" in err
+    for level in wd.EFFORT_LEVELS:                       # 点名每一个合法值（值域以常量为准）
+        assert level in err, f"拒单要点名合法值 {level}"
+    assert record == [], "一个子进程都不许起"
+    assert not (sandbox / "gates" / "diag" / "wb-000.jsonl").exists(), "不许建 log"
+    assert not (sandbox / "gates" / "diag" / "wb-000.verdict.txt").exists(), "不许写判决"
+
+
+def test_effort_is_carried_into_resume_command() -> None:
+    """④ 续跑（--resume）也带 --effort，否则续跑那一轮掉回 High；不给则续跑命令也没有。"""
+    node, cli = wd.paths()
+    cmd = wd.resume_command(node, cli, "sid-1", "接着干", "deepseek-v4.1-flash",
+                            "bypassPermissions", effort="max")
+    assert cmd[cmd.index("--effort") + 1] == "max"
+    plain = wd.resume_command(node, cli, "sid-1", "接着干", "deepseek-v4.1-flash",
+                              "bypassPermissions")
+    assert "--effort" not in plain
+
+
+def test_effort_help_is_built_from_the_constants(monkeypatch) -> None:
+    """⑤ help 文本里的值域与常量同源（改常量即改 help，写死就咬 —— 与 --max-turns 同款）。"""
+    helps = {a.dest: (a.help or "") for a in wd.build_parser()._actions}
+    for level in wd.EFFORT_LEVELS:
+        assert level in helps["effort"], f"help 里要列出 {level}"
+    assert str(len(wd.EFFORT_LEVELS)) in helps["effort"], "help 里的档数也要从常量来"
+    monkeypatch.setattr(wd, "EFFORT_LEVELS", ("minimal", "low", "super"))   # 突变检验
+    after = {a.dest: (a.help or "") for a in wd.build_parser()._actions}
+    assert "super" in after["effort"] and "max" not in after["effort"]
+    assert str(3) in after["effort"]
+
+
 # ================================================ 卡 029（T-G114）：429 / 额度三拍（§2.5）
 #
 # ★ 429 长得像成功：subtype=error_during_execution + 空回话 + **退出码 0** —— 判据必须读

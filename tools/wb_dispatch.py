@@ -200,6 +200,12 @@ AUTH_RETRY_BACKOFF_SECONDS = 5
 DEFAULT_MAX_TURNS_WRITE = 240    # ≈ 2.2 × 卡 002 的 111 次工具调用
 DEFAULT_MAX_TURNS_READONLY = 80
 DEFAULT_AUTOCOMPACT = "1m"       # 用户 2026-09-26 定的；CLI 钳位 100k–1M
+# ★ 卡 167（T-G267）：`--effort` 透传 —— CLI 支持 minimal/low/medium/high/xhigh/max 六档，
+#   从前**刻意不传**（两处注释写着「`--effort` 不加 = 保持默认 High」，2026-09-26 的口径）。
+#   要跑 MAX 就得显式透传一条下去。★ 缺省**仍不传**（不给 --effort ⇒ 命令行里没有它 =
+#   CLI 默认 High，逐字不变）；不许把默认改成显式 high —— 那会改变现有每一笔的行为。
+#   ★ 值域以 CLI 2.158.0 的 `--help` 为准（6 档）；CLI 若新增档位，本卡不预判。
+EFFORT_LEVELS: tuple[str, ...] = ("minimal", "low", "medium", "high", "xhigh", "max")
 STALL_SECONDS = 480              # 日志静默多久算卡死（8 分钟）
 # ★ T-G94：静默 480 秒这个常数**会误杀正常的长工具调用** —— 一次工具调用本来就会静默很久
 #   （主树全量 run_gates.py ~4 分钟、冷缓存 worktree 里 ui_flow 十几分钟）。所以判卡死改成
@@ -650,10 +656,11 @@ def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
                   permission_mode: str = DEFAULT_PERMISSION_MODE, *,
                   max_turns: int = DEFAULT_MAX_TURNS_WRITE,
                   autocompact: str = DEFAULT_AUTOCOMPACT,
-                  lean: bool = False, brief: str = "") -> list[str]:
+                  lean: bool = False, brief: str = "",
+                  effort: str | None = None) -> list[str]:
     prompt = (LEAN_OPENING.format(brief=brief, spec=spec, card=card) if lean
               else OPENING.format(spec=spec, card=card))
-    return [
+    cmd = [
         str(node), str(cli), "-p", prompt,
         "--model", model, "--output-format", "stream-json",
         "--permission-mode", permission_mode,
@@ -666,18 +673,23 @@ def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
         # ★ 不再传 `--no-session-persistence`（T-G90）：会话要留着，才能 `--resume` 续跑
         "-y",
     ]
+    # ★ 卡 167（T-G267）：显式给 --effort 才透传；不给 = 不传 = CLI 默认 High（逐字不变）
+    if effort:
+        cmd += ["--effort", effort]
+    return cmd
 
 
 def resume_command(node: Path, cli: Path, session_id: str, prompt: str, model: str,
                    permission_mode: str = DEFAULT_PERMISSION_MODE, *,
                    max_turns: int = DEFAULT_MAX_TURNS_WRITE,
-                   autocompact: str = DEFAULT_AUTOCOMPACT) -> list[str]:
+                   autocompact: str = DEFAULT_AUTOCOMPACT,
+                   effort: str | None = None) -> list[str]:
     """带着**同一个会话**接着跑（`--resume <sessionId>`）—— 中断不等于白干。
 
     实测（T-G90 探针）：首轮 `-p 「请记住一个数字：42」` → 回「记下了」；
     `--resume <同一个 id>` 再问「我刚才让你记的数字是多少」→ 回 **42**，且 session_id 没变。
     """
-    return [
+    cmd = [
         str(node), str(cli), "--resume", session_id, "-p", prompt,
         "--model", model, "--output-format", "stream-json",
         "--permission-mode", permission_mode,
@@ -686,6 +698,10 @@ def resume_command(node: Path, cli: Path, session_id: str, prompt: str, model: s
         "--append-system-prompt", IRON_RULES,
         "-y",
     ]
+    # ★ 卡 167（T-G267）：续跑也要带 --effort，否则续跑那一轮掉回 High
+    if effort:
+        cmd += ["--effort", effort]
+    return cmd
 
 
 def session_file_for(log: Path) -> Path:
@@ -2430,6 +2446,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "（预算，不是安全边界）")
     parser.add_argument("--autocompact", default=DEFAULT_AUTOCOMPACT,
                         help="自动压缩窗口（默认 1m；CLI 钳位 100k-1M）")
+    # ★ 卡 167（T-G267）：--effort 透传。help 文本里的值域**从常量拼出来**（与 --max-turns
+    #   同款：改常量即改 help，不许写死 —— 本仓有过 help 与常量漂了的老坑）。
+    parser.add_argument("--effort", default=None,
+                        help=f"思考等级（CLI 2.158.0 的 {len(EFFORT_LEVELS)} 档："
+                             f"{' / '.join(EFFORT_LEVELS)}）。★ 不给 = 不传 = CLI 默认 High"
+                             "（2026-09-26 口径，逐字不变）；给了才透传给工人")
     parser.add_argument("--heartbeat-seconds", type=int, default=HEARTBEAT_SECONDS,
                         help="心跳行间隔（秒；0 = 不打）")
     parser.add_argument("--stall-seconds", type=int, default=STALL_SECONDS,
@@ -2483,6 +2505,13 @@ def main() -> int:
         return 2
     if rejected:
         print(f"[FAIL] {rejected}", file=sys.stderr, flush=True)
+        return 2
+    # ★ 卡 167（T-G267）：--effort 白名单硬校验（照 --model 闸门那套）—— 非法值退 2、
+    #   零副作用（不起进程、不建 log、不写判决）、点名合法值。值域以 CLI --help 为准。
+    if args.effort is not None and args.effort not in EFFORT_LEVELS:
+        print(f"[FAIL] 未授权的思考等级，已拒绝派活：{args.effort}\n"
+              f"合法值（CLI 2.158.0 的 --help）：{'、'.join(EFFORT_LEVELS)}",
+              file=sys.stderr, flush=True)
         return 2
     if not args.spec:
         print("[FAIL] 派活得给 --spec（卡规格文件）；只看状态可以加 --status", file=sys.stderr,
@@ -2615,7 +2644,8 @@ def main() -> int:
     initial_cmd = build_command(node, cli, args.card, prompt_path(args.spec, worker_cwd),
                                 args.model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
-                                lean=args.lean, brief=prompt_path(lean_brief, worker_cwd))
+                                lean=args.lean, brief=prompt_path(lean_brief, worker_cwd),
+                                effort=args.effort)
 
     done_checks = "规格在 / 工作区干净（续跑则核对后放行）/ log 未占用"
     if args.no_preflight:
@@ -2627,9 +2657,11 @@ def main() -> int:
         print(f"[cwd ] 工人干活树：{worker_cwd}（工人进程 cwd = 它；产物仍在主仓 gates/diag/）",
               flush=True)
     print(f"[log ] {log}", flush=True)
+    # ★ 卡 167（T-G267）：[cmd] 摘要也带上 --effort（给了才带，不给 = 逐字不变）
+    effort_tag = f" --effort {args.effort}" if args.effort else ""
     print(f"[cmd ] {' '.join(initial_cmd[:4])} … --model {args.model} --output-format stream-json "
           f"--permission-mode {args.permission_mode} --max-turns {max_turns} "
-          f"--autocompact {args.autocompact}", flush=True)
+          f"--autocompact {args.autocompact}{effort_tag}", flush=True)
     guards = ("看门狗**关**（--no-watchdog）" if args.no_watchdog else
               f"看门狗：日志静默过久（底线 {args.stall_seconds}s；有工具在飞则 30 分钟，"
               f"再按最近 {REPEAT_WINDOW} 次调用里最长一次 ×{TOOL_DURATION_FACTOR} 自适应）或"
@@ -2766,7 +2798,8 @@ def main() -> int:
             cmd = build_command(node, cli, args.card, prompt_path(args.spec, worker_cwd),
                                 model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
-                                lean=args.lean, brief=prompt_path(lean_brief, worker_cwd))
+                                lean=args.lean, brief=prompt_path(lean_brief, worker_cwd),
+                                effort=args.effort)
         elif sid:
             prompt = continuation_prompt(reason=reason or "上次被中断", scene=scene,
                                          card=args.card)
@@ -2774,13 +2807,15 @@ def main() -> int:
             #   它会锚在旧上下文里当没看见 —— 卡 022 白跑两轮的真因）。
             cmd = resume_command(node, cli, sid, spec_preamble + prompt,
                                  model, args.permission_mode,
-                                 max_turns=max_turns, autocompact=args.autocompact)
+                                 max_turns=max_turns, autocompact=args.autocompact,
+                                 effort=args.effort)
         else:
             print("[续 ] 没拿到 session id，续不了 → 只能重开一轮", file=sys.stderr, flush=True)
             cmd = build_command(node, cli, args.card, prompt_path(args.spec, worker_cwd),
                                 model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
-                                lean=args.lean, brief=prompt_path(lean_brief, worker_cwd))
+                                lean=args.lean, brief=prompt_path(lean_brief, worker_cwd),
+                                effort=args.effort)
         print(f"[跑 ] 第 {attempts} 次；log {log_k.name}", flush=True)
         attempt_started = time.time()
         code, reason, scene, new_sid = run_worker(

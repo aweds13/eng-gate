@@ -1,0 +1,11 @@
+[entries."T-G267"]
+id = "T-G267"
+title = "派活器 --effort 透传：让「思考等级 MAX」有落点"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_dispatch.py",
+]
+gaps = "① ★ **`--effort` 不给就不传**（= CLI 默认 High），给了才透传 ⇒ 但**「续跑那一轮」也要带**（否则续跑掉回默认）——本卡照顾到了 `resume_command`。指针：`tools/wb_dispatch.py`。② ★ **闸门只认「合法值集合」**（`EFFORT_LEVELS`，从常量拼 help）：非法值 ⇒ 退 2 并点名合法值；**但「该用哪一级」没有任何判据**（那是人的判断，不是机器能查的）。指针：`tools/wb_dispatch.py` 的 effort 闸门。③ ★ **它的 5 条钉子只覆盖「传/不传/非法/续跑/摘要打印」**，**没有**覆盖「CLI 真收到 `--effort` 后行为不同」（那要真跑一个 CLI）。指针：`tests/test_wb_dispatch.py`。"
+
