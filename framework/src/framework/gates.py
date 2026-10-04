@@ -29,6 +29,15 @@ from enum import Enum
 from pathlib import Path
 
 from .config import Config, GateSpec
+from .selection import (
+    SCHEDULED_BUILD,
+    TRIGGERED_STRICT_BUILD,
+    Selection,
+    backstop_capture,
+    detect_transitions,
+    is_sole_coverage,
+    select_gates,
+)
 
 # 每道门的日志/状态落盘时用的子目录名（相对 evidence_dir / logs_dir）。
 STATE_SCHEMA = "pipe/1"
@@ -95,10 +104,14 @@ class GateResult:
     reason: str
     log_path: str | None = None
     emits: tuple[str, ...] = ()
+    dynamic_reads: tuple[str, ...] = ()
+    input_hash_with_dynamic: str | None = None
+    failure_attribution: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
         d["emits"] = list(self.emits)
+        d["dynamic_reads"] = list(self.dynamic_reads)
         return d
 
 
@@ -107,6 +120,11 @@ class GatesRun:
     """一趟门禁的全部结果 + 总判决。"""
 
     results: list[GateResult] = field(default_factory=list)
+    build_kind: str = TRIGGERED_STRICT_BUILD
+    selection: Selection | None = None
+    parallelism: dict | None = None
+    backstop: object | None = None
+    transitions: list | None = None
 
     def overall(self) -> Verdict:
         """总判决：**阻断门**里的最坏值（fail > inconclusive > pass）。
@@ -128,12 +146,20 @@ class GatesRun:
         return worst
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "schema": STATE_SCHEMA,
             "overall": self.overall().value,
             "ok": self.overall() == Verdict.PASS,
+            "build_kind": self.build_kind,
+            "selection": self.selection.to_dict() if self.selection else None,
+            "parallelism": self.parallelism,
             "gates": [r.to_dict() for r in self.results],
         }
+        if self.backstop is not None:
+            d["backstop"] = self.backstop.to_dict()
+        if self.transitions is not None:
+            d["transitions"] = [t.to_dict() for t in self.transitions]
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -172,17 +198,9 @@ def missing_runtimes(spec: GateSpec) -> list[str]:
 # 输入面（输入哈希 → 增量执行判据）
 # ---------------------------------------------------------------------------
 
-def input_hash(spec: GateSpec, repo_root: Path) -> str | None:
-    """按 `inputs` 的 glob 现算输入面摘要。
-
-    `inputs` 为空 → 返回 None（口径：**空 = 每次真跑**，不复用）。
-    """
-    if not spec.inputs:
-        return None
+def _hash_files(files: list[Path], repo_root: Path) -> str:
+    """把一组文件的内容摘要成一个 sha256（按 (相对路径, 内容) 序对，去重）。"""
     digest = hashlib.sha256()
-    files: list[Path] = []
-    for pattern in spec.inputs:
-        files.extend(sorted(repo_root.glob(pattern)))
     seen: set[str] = set()
     for f in files:
         if not f.is_file():
@@ -196,6 +214,57 @@ def input_hash(spec: GateSpec, repo_root: Path) -> str | None:
         digest.update(f.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def input_hash(spec: GateSpec, repo_root: Path) -> str | None:
+    """按 `inputs` 的 glob 现算输入面摘要。
+
+    `inputs` 为空 → 返回 None（口径：**空 = 每次真跑**，不复用）。
+    """
+    if not spec.inputs:
+        return None
+    files: list[Path] = []
+    for pattern in spec.inputs:
+        files.extend(sorted(repo_root.glob(pattern)))
+    return _hash_files(files, repo_root)
+
+
+# ---------------------------------------------------------------------------
+# F4 · 输入面含「动态读数」：门运行时真读过哪些文件要能被登记并进输入表
+# 依据 [arXiv:2104.00142] NodeSRT 方法级 · [arXiv:1606.04568] Ada 混合影响分析。
+# 现场洞见（复盘 P2）：render 真读 tools/render_signatures.json、web_live 真跑
+# tools/phone_check.mjs，两个文件都不在门的输入表里 ⇒ 改它们时增量会跳过这两道门。
+# ---------------------------------------------------------------------------
+def dynamic_input_hash(dynamic_reads: tuple[str, ...], repo_root: Path) -> str | None:
+    """把门运行时**真读过**的文件（动态读数）摘成一个哈希。空 ⇒ None。"""
+    if not dynamic_reads:
+        return None
+    files = [repo_root / r for r in dynamic_reads]
+    return _hash_files(files, repo_root)
+
+
+def combined_input_hash(base: str | None, dynamic: str | None) -> str | None:
+    """把声明的输入面哈希与动态读数哈希合成一个（任一非空就合成）。"""
+    if base is None and dynamic is None:
+        return None
+    digest = hashlib.sha256()
+    digest.update((base or "").encode("utf-8"))
+    digest.update(b"\0")
+    digest.update((dynamic or "").encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _load_dynamic_reads(manifest: Path | None) -> tuple[str, ...]:
+    """从一份 JSON 清单（相对路径数组）读动态读数。文件缺/不合法 ⇒ ()（不猜）。"""
+    if manifest is None or not manifest.is_file():
+        return ()
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return ()
+    if isinstance(data, list) and all(isinstance(x, str) for x in data):
+        return tuple(data)
+    return ()
 
 
 # ---------------------------------------------------------------------------
@@ -252,15 +321,22 @@ def run_gate(
     logs_dir: Path,
     junit_dir: Path | None = None,
     env: dict[str, str] | None = None,
+    reads_manifest: Path | None = None,
 ) -> GateResult:
     """跑一道门（阻塞式单门）。返回 `GateResult`。
 
     - 运行时依赖缺失 → `not_run`（**不是** pass）。
     - 硬超时 → 掐整棵进程树，`exit_code=124`、`timed_out=True`、判决 `fail`。
     - `emits` 含 `junit` 时，从 `<junit_dir>/<门名>.xml` 数样例数；为 0 → `inconclusive`。
+    - `reads_manifest`（F4）：一份 JSON 清单（相对路径数组），登记门**运行时真读过**的文件，
+      并入 `input_hash_with_dynamic`，进产物。
+    - F9：`emits == ("coverage",)`（覆盖率是唯一证据）→ 即使退出码 0 也折成 `inconclusive`。
     """
     start = time.monotonic()
     ih = input_hash(spec, repo_root)
+    dynamic = _load_dynamic_reads(reads_manifest)
+    dyn_hash = dynamic_input_hash(dynamic, repo_root)
+    ih_dyn = combined_input_hash(ih, dyn_hash)
 
     missing = missing_runtimes(spec)
     if missing:
@@ -269,6 +345,7 @@ def run_gate(
             run_state=RunState.NOT_RUN.value, verdict=None, exit_code=None,
             seconds=0.0, timed_out=False, collected=None, input_hash=ih, reused=False,
             reason=f"缺运行时依赖 {missing} —— 记 not_run，不当通过", emits=spec.emits,
+            dynamic_reads=dynamic, input_hash_with_dynamic=ih_dyn,
         )
 
     needs_junit = "junit" in spec.emits
@@ -301,6 +378,7 @@ def run_gate(
             run_state=RunState.RAN.value, verdict=Verdict.FAIL.value, exit_code=None,
             seconds=time.monotonic() - start, timed_out=False, collected=None,
             input_hash=ih, reused=False, reason=f"命令找不到：{exc}", emits=spec.emits,
+            dynamic_reads=dynamic, input_hash_with_dynamic=ih_dyn,
         )
 
     try:
@@ -329,13 +407,20 @@ def run_gate(
         exit_ok=spec.exit_ok, collected=collected,
     )
 
+    # F9 · 覆盖率不许单独当绿（依据 [1903.04055] / [2606.22475]）：
+    # emits 恰好只有 coverage 一项 ⇒ 即使退出码 0 也折成 inconclusive。
+    if verdict == Verdict.PASS and is_sole_coverage(spec.emits):
+        verdict = Verdict.INCONCLUSIVE
+        reason = "只有覆盖率证据，不许单独当绿（F9）—— 需与其它证据并列"
+
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_path = logs_dir / f"{spec.name}.log"
     log_path.write_text(
         f"# gate={spec.name} stage={spec.stage} verdict={verdict.value if verdict else None}\n"
         f"# cmd={list(spec.cmd)}\n"
         f"# exit_code={exit_code} timed_out={timed_out} seconds={seconds:.2f} "
-        f"collected={collected} input_hash={ih}\n"
+        f"collected={collected} input_hash={ih} input_hash_with_dynamic={ih_dyn} "
+        f"dynamic_reads={list(dynamic)}\n"
         f"# --- stdout ---\n{stdout}\n# --- stderr ---\n{stderr}\n",
         encoding="utf-8",
     )
@@ -346,6 +431,7 @@ def run_gate(
         exit_code=exit_code, seconds=round(seconds, 3), timed_out=timed_out,
         collected=collected, input_hash=ih, reused=False, reason=reason,
         log_path=str(log_path), emits=spec.emits,
+        dynamic_reads=dynamic, input_hash_with_dynamic=ih_dyn,
     )
 
 
@@ -367,6 +453,7 @@ def _save_reuse(path: Path, results: list[GateResult]) -> None:
             continue
         data[r.name] = {
             "input_hash": r.input_hash,
+            "input_hash_with_dynamic": r.input_hash_with_dynamic,
             "verdict": r.verdict,
             "run_state": r.run_state,
             "exit_code": r.exit_code,
@@ -379,55 +466,95 @@ def run_gates(
     *,
     only: list[str] | None = None,
     max_concurrent: int | None = None,
+    build_kind: str = TRIGGERED_STRICT_BUILD,
+    reads_manifests: dict[str, Path] | None = None,
+    skipped_by_increment: tuple[str, ...] | None = None,
+    yesterday_state: dict[str, str] | None = None,
 ) -> GatesRun:
     """按配置跑门（**并发**，每门硬超时）。返回 `GatesRun`。
 
-    `only` 给了就只跑这些门；给了未声明的门名 → `KeyError`（调用方映射成用法错）。
+    - `only` 给了就只跑这些门；给了未声明的门名 → `KeyError`（调用方映射成用法错）。
+    - `build_kind`（F11）：`triggered_strict_build`（收口）/ `scheduled_build`（每日全量）/
+      `regression_test_window`（增量窗口）。
+    - `reads_manifests`（F4）：`{门名: JSON 清单路径}`，登记门运行时真读过的文件，并入输入面。
+    - `skipped_by_increment`（F3）：增量那一趟跳过的门名，scheduled build 算捕获率用。
+    - `yesterday_state`（F8）：`{门名: 昨天的判决}`，scheduled build 算跃迁用。
+    - `max_concurrent`（F1）：主动降级 ⇒ 产物 `parallelism.degraded=True` 留痕。
     """
     gates = config.all_gates()
     if only is not None:
         unknown = [n for n in only if n not in gates]
         if unknown:
             raise KeyError(f"未声明的门：{unknown}（已声明：{sorted(gates)}）")
-        chosen = [gates[n] for n in only]
-    else:
-        chosen = [gates[n] for n in sorted(gates)]
+    sel = select_gates(gates, only=only, build_kind=build_kind)
+    chosen = [gates[n] for n in sel.chosen]
 
     reuse_path = config.paths["gates_reuse"]
     reuse = _load_reuse(reuse_path)
     junit_dir = None
     if "junit_dir" in config.reports:
         junit_dir = Path(config.reports["junit_dir"])
+    reads_manifests = reads_manifests or {}
 
     results: list[GateResult] = []
     to_run: list[GateSpec] = []
     for spec in chosen:
         ih = input_hash(spec, config.repo_root)
+        dynamic = _load_dynamic_reads(reads_manifests.get(spec.name))
+        dyn_hash = dynamic_input_hash(dynamic, config.repo_root)
+        ih_dyn = combined_input_hash(ih, dyn_hash)
         prev = reuse.get(spec.name)
-        if spec.reuse == "hash" and prev and ih is not None and prev.get("input_hash") == ih:
+        if (spec.reuse == "hash" and prev and ih_dyn is not None
+                and prev.get("input_hash_with_dynamic") == ih_dyn):
             results.append(GateResult(
                 name=spec.name, stage=spec.stage, blocking=spec.blocking,
                 run_state=prev.get("run_state", RunState.RAN.value),
                 verdict=prev.get("verdict"), exit_code=prev.get("exit_code"),
                 seconds=0.0, timed_out=False, collected=None, input_hash=ih, reused=True,
-                reason="输入面未变，沿用上次结果（增量执行）", emits=spec.emits,
+                reason="输入面（含动态读数）未变，沿用上次结果（增量执行）", emits=spec.emits,
+                dynamic_reads=dynamic, input_hash_with_dynamic=ih_dyn,
             ))
         else:
             to_run.append(spec)
 
-    workers = max_concurrent if max_concurrent is not None else int(config.resource.get("max_concurrent_gates", 2))
-    workers = max(1, workers)
+    # F1 · 并行度优先：默认满并行（配置值），调用方主动降级必须留痕。
+    requested = int(config.resource.get("max_concurrent_gates", 2))
+    used = max_concurrent if max_concurrent is not None else requested
+    used = max(1, used)
+    degraded = used < requested
+    parallelism = {
+        "requested": requested,
+        "used": used,
+        "degraded": degraded,
+        "reason": "调用方主动降级" if degraded else "满并行",
+    }
+
     if to_run:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
+        with ThreadPoolExecutor(max_workers=used) as pool:
             for res in pool.map(
                 lambda s: run_gate(s, repo_root=config.repo_root, logs_dir=config.paths["logs_dir"],
-                                   junit_dir=junit_dir),
+                                   junit_dir=junit_dir,
+                                   reads_manifest=reads_manifests.get(s.name)),
                 to_run,
             ):
                 results.append(res)
 
     results.sort(key=lambda r: r.name)
-    run = GatesRun(results=results)
+
+    # F3 · 兜底层捕获率（仅 scheduled build）
+    backstop = None
+    if build_kind == SCHEDULED_BUILD:
+        backstop = backstop_capture(results, skipped_by_increment or ())
+
+    # F8 · 跃迁检测（仅 scheduled build 且给了昨天状态）
+    transitions = None
+    if build_kind == SCHEDULED_BUILD and yesterday_state is not None:
+        transitions = detect_transitions(results, yesterday_state)
+
+    run = GatesRun(
+        results=results, build_kind=build_kind, selection=sel,
+        parallelism=parallelism, backstop=backstop, transitions=transitions,
+    )
     _save_reuse(reuse_path, results)
     return run
 

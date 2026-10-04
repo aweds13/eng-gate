@@ -1,0 +1,15 @@
+[entries."T-G285"]
+id = "T-G285"
+title = "把验证分层的行业要求折进框架（F1~F11）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:framework/src/framework/gates.py",
+  "file:framework/src/framework/selection.py",
+  "file:framework/tests/test_selection.py",
+  "file:framework/tests/test_full_run_capture.py",
+  "file:framework/tests/test_silent_failure_family.py",
+  "file:framework/PIPELINE.md",
+]
+gaps = "① ★★ **验收对象是「框架」而不是「本仓的门」**：F1~F11 折进的是 `framework/` 那一侧的判据（选择率+召回 / 兜底捕获率 / 动态读数 / 无关失败），**本仓自己的 18 道门不受它影响**。指针：`framework/src/framework/gates.py`。② ★ **本仓门禁的 ruff/mypy 不扫 `framework/`**（那是独立子项目，有自己的 `pyproject.toml`）⇒ 本笔**在框架那侧没有静态检查兜底**；框架自己的 lint 谁管，本笔没回答。指针：`pyproject.toml` 的 ruff 扫描面。③ ★ **F10 那条纪律是「自证清白」类**：凡写「文献里没有 X」必须附检索词与检索范围 —— 它管的是**文档措辞**，不拦代码。指针：`framework/PIPELINE.md`。④ ★ **本笔与卡 186 同写 `framework/PIPELINE.md`**：本笔先落，186 后落时要拿「落地版 + 它自己的改动」合。指针：`framework/PIPELINE.md`。"
+

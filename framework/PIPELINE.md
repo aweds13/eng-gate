@@ -73,3 +73,42 @@
   `pytest` 类恒 `never`。
 - 跨平台：进程树掐杀在 Windows 用 `taskkill /T /F`，其它平台用进程组 `SIGKILL`；**Linux 未在 CI 验证**。
 - 本框架**尚未接进本项目的主门禁**（已知缺口，由后续独立仓门禁去关）。
+
+## 验证分层（F1~F11，卡 185 / T-G285）
+
+> 把「验证分层的行业要求」折进框架。依据见 `复盘/框架-验证分层的行业做法.md` §四（带真实 arXiv 编号）。
+> ★ 每条都落到**代码 + 产物字段 + 判据**，不是只写文档。反例钉子随件走在 `tests/`。
+
+### 术语（F11，依据 [arXiv:1305.4776] / [arXiv:2511.02810]）
+
+| 这一趟 | 官方词 | 产物字段 |
+|---|---|---|
+| 收口 | `triggered_strict_build` | `build_kind` |
+| 每日全量 | `scheduled_build` | `build_kind` |
+| 增量窗口 | `regression_test_window` | `build_kind` |
+
+### 逐条落点
+
+| # | 条目 | 代码::符号 | 产物字段 | 钉子 |
+|---|---|---|---|---|
+| **F1** | 并行度优先，降级留痕 | `gates.py::run_gates` | `parallelism.{requested,used,degraded,reason}` | `test_full_run_capture::test_f1_degradation_is_recorded` |
+| **F2** | 选择面报两个数 | `selection.py::select_gates` | `selection.{total,chosen,skipped,selection_rate}` | `test_selection::test_nail_f2_missing_selection_is_red` |
+| **F3** | 兜底层报捕获率 | `selection.py::backstop_capture` | `backstop.{failures_caught,from_skipped,capture_rate}` | `test_selection::test_nail_f3_scheduled_missing_backstop_is_red` |
+| **F4** | 输入面含动态读数 | `gates.py::run_gate(reads_manifest=)` | `gates[].{dynamic_reads,input_hash_with_dynamic}` | `test_full_run_capture::test_f4_dynamic_reads_change_the_combined_hash` |
+| **F5** | 粒度按门/测试，不许跳整棵树 | `selection.py::validate_granularity` | —（抛 `SelectionError`） | `test_selection::test_nail_f5_tree_skip_is_red` |
+| **F6** | 区分无关失败 | `selection.py::classify_failure` | `gates[].failure_attribution` | `test_selection::test_nail_f6_failure_missing_attribution_is_red` |
+| **F7** | silent failure 三族一等风险 | `selection.py::check_ignored_exit_code` / `check_cache_stale` / `check_artifact_op` | —（抛 `SilentFailureError`） | `test_silent_failure_family`（三族各一） |
+| **F8** | 跃迁检测 | `selection.py::detect_transitions` | `transitions[]` | `test_selection::test_nail_f8_scheduled_missing_transitions_is_red` |
+| **F9** | 覆盖率不单独当绿 | `gates.py::run_gate`（`is_sole_coverage`） | —（`pass`→`inconclusive`） | `test_full_run_capture::test_f9_sole_coverage_is_inconclusive` |
+| **F10** | 外部证据纪律 | `selection.py::lint_external_evidence` | —（抛 `EvidenceDisciplineError`） | `test_selection::test_f10_lint_catches_negation_without_search_terms` |
+| **F11** | 术语对齐 | `selection.py::BUILD_KINDS` | `build_kind` | `test_selection::test_nail_f11_bad_build_kind_in_state_is_red` |
+
+### 产物校验（`selection.py::validate_state`）
+
+跑完一趟门禁，产物 dict 可过 `validate_state` 校验：缺 `selection`（F2）/ scheduled build 缺 `backstop`（F3）/ 失败门缺 `failure_attribution`（F6）/ scheduled build 缺 `transitions`（F8）/ `build_kind` 非官方词（F11）⇒ `StateValidationError`。★ 反例钉子：故意造缺字段的产物 ⇒ 必须红。
+
+### F10 的纪律（写进框架，也约束本文件）
+
+凡写「文献里没有 X」必须附检索词与检索范围 —— 否则不可复核 = 自证清白。
+本文件引用的文献结论都是**设计输入**，不是产物的读数；要照某条改代码前先打开原文核（二手证据）。
+

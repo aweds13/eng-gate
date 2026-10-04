@@ -15,6 +15,14 @@
 - `复盘/长任务执行协议.md` §四 加第 **6 条停止条件**（视觉/布局类必须交用户过目）；
   `复盘/外包-卡表与规矩.md` 加 §8 选填行 + §18.6 条款（INV-70 / CL-02）。
 - ★ 第一手：`pytest tests/test_wb_invariants.py tests/test_style_audit.py` ⇒ **31 passed**；`ruff` 干净。
+## 2026-10-04 —— 把验证分层的行业要求折进框架（F1~F11）（T-G285 / 卡 185）
+
+- 新增 `framework/src/framework/selection.py`（选择/并行/兜底/跃迁的核心）；`gates.py` +150/-23
+  （`GateResult` 加 F4/F6 字段、`GatesRun` 加 F1/F2/F3/F8/F11 字段与产物节、`input_hash` 重构 +
+  动态读数、`run_gate` 加 `reads_manifest` 与 F9 判据）。
+- 新增 3 份钉子：`test_selection.py` · `test_full_run_capture.py` · `test_silent_failure_family.py`；
+  `framework/PIPELINE.md` +39（"验证分层 F1~F11"一节）。
+- ★ 第一手：`pytest framework/tests` ⇒ **99 passed**（基线 55 ⇒ 新增 44 条）。
 ## 2026-10-03 —— 坑总账与不变量台账落档：344 条坑 + 77 条不变量进 git（T-G265 / 卡 165）
 
 - **坑总账建档**：7 个只读工人把 218 份复盘按门类分片读完，机器逐条解析出 **344 条坑**（工人自报合计 314，差额 30 条是几份报告的统计行少算了自己列出的条目 —— 这条差额本身就是「数字手抄」那类坑的又一次现场），按**归位点**分成 8 类 + 共因 Top5。

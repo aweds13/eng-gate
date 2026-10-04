@@ -5842,3 +5842,18 @@ evidence = [
   "file:复盘/不变量台账.toml",
 ]
 gaps = "① ★ **「人话条款」只做到「建账 + 核查器」**：`复盘/条款台账.toml` 立了 5 条，核查器能查它们**有没有机器判据 / 有没有写明机器判不了** —— 但**「条款本身对不对」没有判据**（那要人读）。指针：`tools/wb_invariants.py`。② ★ **视觉/布局那条（§18.6 / INV-70）是「流程条款」，不是门禁**：它要求「交用户过目」，而**判据只能到「回报里写没写状态」**（好不好看机器判不了）。⇒ 沙箱跑不了浏览器，这条**结构上**只能靠人。指针：`复盘/外包-卡表与规矩.md` §18.6。③ ★ **hover 运动检查是「新欠账校验」**：`HOVER_ALLOWED/FORBIDDEN` 只报**新增**违规、不动既有 0 条欠账 ⇒ 它**不会**让存量变好。指针：`tools/style_audit.py`。④ ★ **本页（外包-卡表与规矩）与上一笔（183 的 §17）在同一文件**：本笔取「落地版 + 本卡改动」手工合（两段不同区域，无冲突）。★ 口径：**同一文件的多笔落地要「拿落地版再打自己的补丁」，不许整份覆盖**。指针：本笔的 `git apply` 记录。"
+
+[entries."T-G285"]
+id = "T-G285"
+title = "把验证分层的行业要求折进框架（F1~F11）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:framework/src/framework/gates.py",
+  "file:framework/src/framework/selection.py",
+  "file:framework/tests/test_selection.py",
+  "file:framework/tests/test_full_run_capture.py",
+  "file:framework/tests/test_silent_failure_family.py",
+  "file:framework/PIPELINE.md",
+]
+gaps = "① ★★ **验收对象是「框架」而不是「本仓的门」**：F1~F11 折进的是 `framework/` 那一侧的判据（选择率+召回 / 兜底捕获率 / 动态读数 / 无关失败），**本仓自己的 18 道门不受它影响**。指针：`framework/src/framework/gates.py`。② ★ **本仓门禁的 ruff/mypy 不扫 `framework/`**（那是独立子项目，有自己的 `pyproject.toml`）⇒ 本笔**在框架那侧没有静态检查兜底**；框架自己的 lint 谁管，本笔没回答。指针：`pyproject.toml` 的 ruff 扫描面。③ ★ **F10 那条纪律是「自证清白」类**：凡写「文献里没有 X」必须附检索词与检索范围 —— 它管的是**文档措辞**，不拦代码。指针：`framework/PIPELINE.md`。④ ★ **本笔与卡 186 同写 `framework/PIPELINE.md`**：本笔先落，186 后落时要拿「落地版 + 它自己的改动」合。指针：`framework/PIPELINE.md`。"
