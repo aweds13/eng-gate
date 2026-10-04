@@ -1633,26 +1633,43 @@ def finish_verdict(lines: list[str]) -> str:
     `result.subtype = error_during_execution`、**回话是空的**，而**进程退出码仍是 0**。
     只看退出码就会把"腰斩"当成成功。所以判据读事件本身：
       ① 整段 log 里没有 `result` 事件 → 没跑完（被打断 / 被杀 / 还在跑）；
-      ② `subtype != success` → 中途停下（撞上限、被中断、工具连环失败）；
+      ② `subtype != success` → 中途停下（撞上限、被中断、工具连环失败、429 限流…）；
       ③ 回话是空的 → 没交出东西。
     ★ 两条判据（数回合 vs 读事件）是**互补**的：数回合能提前预警，读事件才是硬证据。
+    ★ 卡 151（T-G251）：`subtype != success` **不再无脑归到「撞 `--max-turns`」** ——
+      派活器**已经**有 `quota_error()` 这个判据（429 / 额度），把它的结论**带进判决**：
+      有 429 命中 ⇒ 写「429 限流（额度重置时间：…）」；没有 ⇒ 写「**真因未识别**」
+      （★★ **不许**默认归到 `--max-turns` —— 那是猜；`--max-turns` 该由 `cap_verdict()`
+      数回合来判，本函数只判 `result` 事件）。判决带**依据**（log 行号 / 字段名），让人能核。
     """
     result: dict | None = None
-    for raw in lines:
+    result_line: int = 0
+    for i, raw in enumerate(lines, 1):
         try:
             event = json.loads(raw)
         except json.JSONDecodeError:
             continue
         if isinstance(event, dict) and event.get("type") == "result":
             result = event
+            result_line = i
     if result is None:
         return "没跑完：整段 log 里没有 `result` 事件（进程被打断 / 被杀 / 还在跑）"
     subtype = str(result.get("subtype") or "")
     text = str(result.get("result") or "").strip()
     if subtype != "success":
-        detail = f"回话：{wb_status._clip(text, 120)}" if text else "回话是空的"
-        return (f"没跑完：`result.subtype = {subtype or '（空）'}`"
-                f"（撞 `--max-turns` 上限时就是这个，而退出码仍是 0）—— {detail}")
+        # ★ 卡 151：先把派活器已有的 429 / 额度判据带进判决 —— 同一个指纹（subtype + 空回话）
+        #   背后可能是 429 限流，也可能是真撞 --max-turns；只看指纹 = 猜，要查真因。
+        quota = quota_error(lines)
+        if quota is not None:
+            reset = (f"额度重置时间：{quota['reset']}" if quota["reset"]
+                     else "无重置时间（余额耗尽）")
+            return (f"没跑完：`result.subtype = {subtype or '（空）'}` —— 429 限流"
+                    f"（{reset}）；依据：log 第 {result_line} 行 result 事件，{quota['why']}")
+        detail = "回话是空的" if not text else f"回话：{wb_status._clip(text, 120)}"
+        return (f"没跑完：`result.subtype = {subtype or '（空）'}` —— 真因未识别"
+                f"（429 与回合数到顶都没命中；不许默认归到 `--max-turns`，那是猜）；"
+                f"依据：log 第 {result_line} 行 result 事件，"
+                f"subtype={subtype or '（空）'}，{detail}")
     if not text:
         return "没跑完：`subtype = success` 但回话是空的 —— 没交出东西"
     return ""

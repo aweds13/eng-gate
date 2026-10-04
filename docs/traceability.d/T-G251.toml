@@ -1,0 +1,11 @@
+[entries."T-G251"]
+id = "T-G251"
+title = "判决文案要分真因：429 不许说成撞 --max-turns（两者同一指纹）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_dispatch.py",
+]
+gaps = "① ★★ **429 与撞 `--max-turns` 在旧判决里是同一个指纹**（都表现为 `subtype != success` + 退出码 0）⇒ 本卡按 `quota_error()` 分流，**认不得的仍写「真因未识别」**（不许猜）。指针：`tools/wb_dispatch.py` 的 `finish_verdict()`。② ★ **判决带证据指针（log 行号 + 字段名）**，但**指针只到「行号」**——log 是 `gates/diag/wb-<卡>.jsonl`（**gitignored**）⇒ 判决文本随提交走，**它指的原文不随提交走**。指针：`gates/diag/wb-<卡>.jsonl`。③ ★ **文档串轮次**：`started_at` / `第=N 次` 由卡 156 与卡 164 各自追加过 ⇒ 本卡的分流判据**只认 `quota_error()`**，不依赖轮次字段（那两笔在本笔之后落）。指针：`tools/wb_dispatch.py`。"
+

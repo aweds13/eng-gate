@@ -485,6 +485,50 @@ def test_finish_verdict_catches_a_capped_run_though_the_exit_code_is_zero() -> N
     assert wd.finish_verdict(good) == ""
 
 
+def test_finish_verdict_names_429_when_quota_error_hits() -> None:
+    """★ 卡 151 钉子①：log 里有 429 命中 ⇒ 判决文案出现"429"、不出现"撞 `--max-turns`"，
+    且把重置时间原样带出来。故意删掉 429 分流会让本条红。"""
+    quota_log = [_quota_result_event(with_reset=True)]
+    verdict = wd.finish_verdict(quota_log)
+    assert "429" in verdict, "429 命中要点名 429"
+    assert "撞 `--max-turns`" not in verdict, "429 命中不许再归到撞 max-turns（那是另一个真因）"
+    assert "2026-09-27 07:38" in verdict, "重置时间要原样带出来"
+
+
+def test_cap_verdict_names_max_turns_and_not_429() -> None:
+    """★ 卡 151 钉子②：没有 429、但回合数到顶 ⇒ 判决文案出现 max-turns、不出现 429。
+    这是 `cap_verdict()` 的判据（数回合），与 `finish_verdict()` 读 result 事件互补。"""
+    verdict = wd.cap_verdict(150, 150)
+    assert "max-turns" in verdict, "回合数到顶要写出 max-turns"
+    assert "429" not in verdict, "回合数到顶不该提 429（429 在 finish_verdict 那一支）"
+    assert "没做完" in verdict
+
+
+def test_finish_verdict_says_unknown_when_no_quota_no_cap() -> None:
+    """★ 卡 151 钉子③：subtype != success + 没有 429 + 回话空 ⇒ 判决文案写「真因未识别」，
+    不许默认说是 max-turns（那是猜）。"""
+    no_clue = [json.dumps({"type": "result", "subtype": "error_during_execution", "result": ""})]
+    verdict = wd.finish_verdict(no_clue)
+    assert "真因未识别" in verdict, "两个真因都没命中要写真因未识别"
+    assert "撞 `--max-turns`" not in verdict, "不许默认归到撞 max-turns（旧文案）"
+
+
+def test_finish_verdict_carries_evidence_pointer_in_the_verdict_line() -> None:
+    """★ 卡 151 钉子④：判决那句里带得出依据（log 行号 / 字段名）——
+    429 现场要点出 result 事件在第几行、命中了哪个字段；真因未识别现场要点出 subtype 与回话。
+    删掉依据指针会让本条红（哪怕 429 / 真因未识别 字面还在）。"""
+    verdict_429 = wd.finish_verdict([_quota_result_event(with_reset=True)])
+    assert "依据" in verdict_429, "429 判决要带依据"
+    assert "第 1 行" in verdict_429, "429 判决要点出 log 行号"
+    assert "字段" in verdict_429, "429 判决要点出命中字段"
+
+    no_clue = [json.dumps({"type": "result", "subtype": "error_during_execution", "result": ""})]
+    verdict_unknown = wd.finish_verdict(no_clue)
+    assert "依据" in verdict_unknown, "真因未识别判决也要带依据"
+    assert "第 1 行" in verdict_unknown, "真因未识别判决要点出 log 行号"
+    assert "subtype=" in verdict_unknown, "真因未识别判决要点出 result 事件的字段"
+
+
 def test_runner_writes_the_log_and_reports_a_clean_finish(tmp_path: Path) -> None:
     """健康的一轮：逐行落盘、退出码照传、**不掐**（reason 空串 = 正常收工）。"""
     log, err = tmp_path / "w.jsonl", tmp_path / "w.err"
