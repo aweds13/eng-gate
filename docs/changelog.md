@@ -1,3 +1,9 @@
+## 2026-10-11 —— CodeBuddy 工人的白名单路径要指向卡树（T-G294 / 卡 194）
+
+- `tools/wb_dispatch.py` +40/-6：`prompt_path()` 区分**两类路径** —— 「**工人要改的**（白名单 / 域）」给 `--cwd` 时
+  解析成**卡树绝对路径**；「**只读临时件**（规格 / 切片）」仍按主仓解析（它们不在卡树里）。
+- `tests/test_wb_dispatch.py` +60：**四条钉子**（① 卡树绝对 ② 临时件仍主仓 ③ 不给 `--cwd` 逐字不变 ④ 反例：指向主仓即红）。
+- ★ 第一手：`pytest tests/test_wb_dispatch.py tests/test_no_window.py` ⇒ **209 passed**；`ruff` 干净。
 ## 2026-10-04 —— 门的输入面与跑法：补全输入表 + 慢门告警 + `wb_impact` 接进前置（T-G261 / 卡 161）
 
 - `scripts/run_gates.py` +86/-2：`DOOR_INPUTS`/`REUSE_INPUTS` 补 `render_signatures.json` / `phone_check.mjs`

@@ -1,0 +1,11 @@
+[entries."T-G294"]
+id = "T-G294"
+title = "CodeBuddy 工人的白名单路径要指向卡树（不是主仓）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_dispatch.py",
+]
+gaps = "① ★★ **本卡只修了「提示里的路径」，没修「工人改到主树」的最终保险**：路径指对了，但工人**仍可能**用绝对路径写主树（它自己选择）。⇒ 真保险是「写面锁在卡树里」，本卡没做。指针：`tools/wb_dispatch.py` 的 `prompt_path()`。② ★ **「临时件仍指主仓」这条是靠约定**：规格 / 切片只存在于主仓 ⇒ 仍按 `ROOT` 解析；若哪天规格也进了卡树，这条要跟着改。指针：`tests/test_wb_dispatch.py` 的第②条钉子。③ ★ **不给 `--cwd` 时行为逐字不变**（向后兼容）—— 也就是说**老调用方式仍有那个毛病**。指针：`tools/wb_dispatch.py`。"
+

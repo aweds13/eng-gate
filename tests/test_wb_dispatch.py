@@ -308,6 +308,66 @@ def test_without_cwd_paths_stay_repo_relative(sandbox: Path, monkeypatch, capsys
     assert str(sandbox / "gates" / "diag" / "brief-001.md") not in out
 
 
+# ---------------------------------------------- 卡 194（T-G294）：白名单路径指卡树
+
+
+def test_cwd_resolves_domain_files_to_the_card_tree(sandbox: Path, monkeypatch,
+                                                    capsys) -> None:
+    """★ 卡 194 钉子①：给了 `--cwd` ⇒ 白名单（域）路径必须是**卡树绝对路径**。
+
+    现场根因：`prompt_path()` 一刀切到主仓 ⇒ 工人顺着绝对路径改到主树（卡 151 真发生）。
+    """
+    work = sandbox / "cardtree"
+    work.mkdir()
+    monkeypatch.setattr(wd, "is_git_worktree", lambda p: True)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--cwd", str(work), "--no-preflight"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert str(work / "sandbox-001.md") in out, "域文件没解析成卡树绝对路径"
+
+
+def test_cwd_keeps_spec_and_brief_on_the_main_tree(sandbox: Path, monkeypatch,
+                                                   capsys) -> None:
+    """★ 卡 194 钉子②：给了 `--cwd`，规格 / 切片仍指向**主仓**（只读临时件不在卡树里）。"""
+    work = sandbox / "cardtree"
+    work.mkdir()
+    monkeypatch.setattr(wd, "is_git_worktree", lambda p: True)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--lean", "--cwd", str(work), "--no-preflight"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert str(sandbox / "spec.md") in out, "规格没指向主仓"
+    assert str(sandbox / "gates" / "diag" / "brief-001.md") in out, "切片没指向主仓"
+
+
+def test_without_cwd_no_domain_hint(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 卡 194 钉子③：不给 `--cwd` ⇒ 域提示不出现、行为逐字不变（向后兼容）。"""
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--no-preflight"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert "卡树（--cwd）" not in out, "不给 --cwd 不该出现域提示段"
+    assert str(sandbox / "sandbox-001.md") not in out, "不给 --cwd 不该有域绝对路径"
+
+
+def test_cwd_domain_files_must_not_resolve_to_main_tree(sandbox: Path, monkeypatch,
+                                                        capsys) -> None:
+    """★ 卡 194 钉子④（反例）：给了 `--cwd`，域文件的主仓绝对路径**不许**出现。
+
+    今天这个 bug 就是白名单路径解析到主仓 ⇒ 工人改到主树。本条故意坏掉 `writable` 分支
+    （改回一刀切主仓）会红。
+    """
+    work = sandbox / "cardtree"
+    work.mkdir()
+    monkeypatch.setattr(wd, "is_git_worktree", lambda p: True)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--cwd", str(work), "--no-preflight"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert str(sandbox / "sandbox-001.md") not in out, "域文件解析到主仓了（卡 194 的 bug）"
+
+
 def test_auth_ok_recognises_the_authentication_needle(monkeypatch) -> None:
     """真判据：回话里有那句 Authentication required 就判没登录（别把白等当成"它在想"）。"""
     monkeypatch.setattr(wd.subprocess, "run", lambda *a, **k: _Done(

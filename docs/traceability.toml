@@ -5996,3 +5996,14 @@ evidence = [
   "file:docs/traceability.toml",
 ]
 gaps = "① ★★ **码道那一侧的「拒绝」是响亮的，不是回落**：注册表里码道条目走 `source = 「infra/pool/models.whitelist.toml」` **引用**（加载时读它、不复制）；裸名在码道那侧服务端不可用 ⇒ 派活**当场拒**，**不许静默换成别的模型**。⇒ 但这也意味着：**码道池的可用集以 `infra/` 那份为准**，本仓改不到它。指针：`tools/pool/model-registry.toml`。② ★ **`--model` 缺省按池取默认**（不许取注册表首项）⇒ 但**「池」是从参数推出来的**：不给 `--account`（码道那侧）时，默认池是哪个**取决于调用方式**，本笔没有让「猜池」这件事本身有判据。指针：`tools/pool/models.py`。③ ★ **注册表是「统一读取层」，不是唯一可写真源**：CodeBuddy 条目直接写注册表、码道条目引用 `infra/` 那份⇒ **两个可写点**（注册表 + `infra/`），只是读取统一。指针：`tools/pool/model-registry.toml`。④ ★ 本卡的 3 份新文件（`model_registry.py` / `model-registry.toml` / `test_model_registry.py`）在派活时**不存在**⇒ 主控**显式改域 + 写明理由**后补进预声明（今晚第 N 次同模式）。指针：`gates/diag/batch/B-MODELREGISTRY.toml`。"
+
+[entries."T-G294"]
+id = "T-G294"
+title = "CodeBuddy 工人的白名单路径要指向卡树（不是主仓）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_dispatch.py",
+]
+gaps = "① ★★ **本卡只修了「提示里的路径」，没修「工人改到主树」的最终保险**：路径指对了，但工人**仍可能**用绝对路径写主树（它自己选择）。⇒ 真保险是「写面锁在卡树里」，本卡没做。指针：`tools/wb_dispatch.py` 的 `prompt_path()`。② ★ **「临时件仍指主仓」这条是靠约定**：规格 / 切片只存在于主仓 ⇒ 仍按 `ROOT` 解析；若哪天规格也进了卡树，这条要跟着改。指针：`tests/test_wb_dispatch.py` 的第②条钉子。③ ★ **不给 `--cwd` 时行为逐字不变**（向后兼容）—— 也就是说**老调用方式仍有那个毛病**。指针：`tools/wb_dispatch.py`。"

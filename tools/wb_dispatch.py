@@ -685,17 +685,47 @@ def preflight_auth(node: Path, cli: Path, *, env: dict[str, str] | None = None,
     )
 
 
-def prompt_path(p: str, worker_cwd: Path | None) -> str:
+def prompt_path(p: str, worker_cwd: Path | None, *, writable: bool = False) -> str:
     """★ T-G204：给了 `--cwd` 就把路径转成**绝对**（不给时**逐字不变**）。
 
     为什么：`--cwd` 让**工人进程的 cwd** 变成卡树，而切片与规格是**仓库相对**路径
     （`gates/diag/…` 只存在于主仓）⇒ 相对写法会把工人指到一个**不存在的路径**上，
     它只能自己满盘找（卡 106 的工人就是这么找到的 —— 那是运气，不是设计）。
+
+    ★ 卡 194（T-G294）：**两类路径不许一刀切** ——
+      · `writable=False`（默认，**只读临时件**：规格 / 切片）⇒ 解析到 **主仓 `ROOT`**
+        （它们只存在于主仓，卡树里没有）；
+      · `writable=True`（**工人要改的**：白名单 / 域里的仓库相对路径）⇒ 解析到 **卡树
+        `worker_cwd`**（工人顺着绝对路径改时落到它自己的树，不窜到主树 —— 卡 151 现场就是
+        一刀切到主仓，工人报成功却把改动落进主树，挡住 ff 合流）。
+    不给 `worker_cwd` 时两类都逐字不变（向后兼容）。
     """
     if not p or worker_cwd is None:
         return p
     q = Path(p)
-    return str(q if q.is_absolute() else (ROOT / q).resolve())
+    if q.is_absolute():
+        return p
+    base = worker_cwd if writable else ROOT
+    return str((base / q).resolve())
+
+
+def domain_path_hint(card: str, worker_cwd: Path | None) -> str:
+    """★ 卡 194（T-G294）：给了 `--cwd` 时，把这张卡的**域文件**（= 白名单）解析成**卡树绝对路径**
+    塞进开场白 —— 工人顺着绝对路径改时落到它自己的树，不窜到主树。
+
+    为什么（现场）：`--cwd` 只管**进程起点**，管不住工人从规格 / 切片里读到的白名单相对路径
+    被它**相对于主仓**解析（规格本身在主仓）⇒ 改到主树。这里**显式**把域文件写成卡树绝对路径，
+    覆盖规格里的相对写法。★ 不给 `--cwd` ⇒ 空串（逐字不变）；域查不到 ⇒ 空串
+    （判据归守卫，不在这儿拒）。
+    """
+    if worker_cwd is None:
+        return ""
+    files, why = queue_files(card)
+    if why or not files:
+        return ""
+    paths = [prompt_path(f, worker_cwd, writable=True) for f in files]
+    return ("★ 你要改的文件在卡树（--cwd）下 —— 用这些**绝对路径**改，别改主仓：\n"
+            + "\n".join(f"  {p}" for p in paths) + "\n")
 
 
 def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
@@ -703,9 +733,12 @@ def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
                   max_turns: int = DEFAULT_MAX_TURNS_WRITE,
                   autocompact: str = DEFAULT_AUTOCOMPACT,
                   lean: bool = False, brief: str = "",
-                  effort: str | None = None) -> list[str]:
+                  effort: str | None = None,
+                  domain_hint: str = "") -> list[str]:
     prompt = (LEAN_OPENING.format(brief=brief, spec=spec, card=card) if lean
               else OPENING.format(spec=spec, card=card))
+    if domain_hint:
+        prompt = domain_hint + prompt
     # ★ 卡 166 追加要求 2：最小规矩集拼进提示（换池不许改变工人看到的东西）。
     prompt = prompt + "\n" + minimum_ruleset_text()
     cmd = [
@@ -2717,11 +2750,12 @@ def main() -> int:
 
     max_turns = args.max_turns or max_turns_default(args.read_only)
     lean_brief = ensure_lean_brief(args.card, worker_cwd) if args.lean else ""
+    domain_hint = domain_path_hint(args.card, worker_cwd)
     initial_cmd = build_command(node, cli, args.card, prompt_path(args.spec, worker_cwd),
                                 args.model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
                                 lean=args.lean, brief=prompt_path(lean_brief, worker_cwd),
-                                effort=args.effort)
+                                effort=args.effort, domain_hint=domain_hint)
 
     done_checks = "规格在 / 工作区干净（续跑则核对后放行）/ log 未占用"
     if args.no_preflight:
@@ -2875,7 +2909,7 @@ def main() -> int:
                                 model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
                                 lean=args.lean, brief=prompt_path(lean_brief, worker_cwd),
-                                effort=args.effort)
+                                effort=args.effort, domain_hint=domain_hint)
         elif sid:
             prompt = continuation_prompt(reason=reason or "上次被中断", scene=scene,
                                          card=args.card)
@@ -2891,7 +2925,7 @@ def main() -> int:
                                 model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
                                 lean=args.lean, brief=prompt_path(lean_brief, worker_cwd),
-                                effort=args.effort)
+                                effort=args.effort, domain_hint=domain_hint)
         print(f"[跑 ] 第 {attempts} 次；log {log_k.name}", flush=True)
         attempt_started = time.time()
         code, reason, scene, new_sid = run_worker(
