@@ -45,7 +45,8 @@ id = "001"
 task = "T-G9x"
 title = "样卡一"
 tree = ".wt/a"
-spec = "s.md"
+spec = "复盘/卡/卡160-台账接进门.md"   # ★ 卡 157 起：validate 会查
+#      "队列指向的规格在不在" ⇒ 合成队列也要指向真文件
 files = ["a.py"]
 status = "pending"
 
@@ -54,7 +55,8 @@ id = "002"
 task = "T-G9x"
 title = "样卡二"
 tree = ".wt/b"
-spec = "s.md"
+spec = "复盘/卡/卡160-台账接进门.md"   # ★ 卡 157 起：validate 会查
+#      "队列指向的规格在不在" ⇒ 合成队列也要指向真文件
 files = ["b.py"]
 status = "pending"
 
@@ -63,7 +65,8 @@ id = "003"
 task = "T-G9x"
 title = "已完成的样卡"
 tree = ".wt/c"
-spec = "s.md"
+spec = "复盘/卡/卡160-台账接进门.md"   # ★ 卡 157 起：validate 会查
+#      "队列指向的规格在不在" ⇒ 合成队列也要指向真文件
 files = ["c.py"]
 status = "done"
 """

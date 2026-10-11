@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING
 
 from pool.plan import (
     ACTIVE_STATUS,
+    BATCH_CLAIM_RE,
     DEFAULT_BACKLOG,
     DEFAULT_CONCURRENCY,
     PROTECTED_FILES,
@@ -50,6 +51,9 @@ from pool.plan import (
     Backlog,
     BacklogError,
     Card,
+    audit_batch_claims,
+    batch_manifest_path,
+    extract_batch_claim,
     files_intersect,
     find_cycle,
     greedy_pack,
@@ -69,6 +73,7 @@ if TYPE_CHECKING:
 __all__ = [
     "ACTIVE_STATUS", "DEFAULT_BACKLOG", "DEFAULT_CONCURRENCY", "PROTECTED_FILES",
     "VALID_RISK", "VALID_STATUS", "Backlog", "BacklogError", "Card",
+    "BATCH_CLAIM_RE", "audit_batch_claims", "batch_manifest_path", "extract_batch_claim",
     "cmd_check", "cmd_dispatch", "cmd_plan", "cmd_stats", "cmd_worktrees",
     "build_parser", "dispatch_argv", "files_intersect", "find_cycle", "greedy_pack",
     "in_flight", "load_backlog", "main", "plan_batches", "plan_report", "render_dispatch",
@@ -119,6 +124,16 @@ def cmd_check(backlog: Backlog) -> int:
     active = [card for card in backlog.cards if in_flight(card)]
     print(f"[队列] 待派 {len(active)} 张 / 其它 {len(backlog.cards) - len(active)} 张"
           f"（★ 只有待派的参与冲突判定与排批）")
+    # ★ 卡 157（T-G257）：批次自洽提醒（只报不拒）—— done 卡历史欠账 / 孤儿预声明 / 没声称批次的卡。
+    notes = audit_batch_claims(backlog)
+    for note in notes:
+        print(f"[提醒] {note}", file=sys.stderr)
+    # ★ 卡 157（T-G257）：`depends` 字段没有任何消费端（grep depends 在派活器 / 守卫 / 本工具
+    #   零命中）—— 真正把同文件卡串起来的是 `files` 域相交（`plan_batches` 排批）。`depends` 只是
+    #   人读的规划字段，不拦派活。选了 (b)：降级成注释，并在 check 里输出一行说明（不接进派活前置，
+    #   那是 (a)，风险更高）。
+    print("[说明] depends 仅规划用，不拦派活（同文件卡靠 files 域相交串批，不靠 depends）",
+          file=sys.stderr)
     return 0
 
 

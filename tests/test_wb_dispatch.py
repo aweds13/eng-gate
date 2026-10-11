@@ -170,6 +170,25 @@ def test_preflight_refuses_a_missing_spec(sandbox: Path) -> None:
     assert any("卡规格文件不存在" in p for p in problems)
 
 
+def test_preflight_refuses_when_batch_manifest_missing(sandbox: Path) -> None:
+    """★ 卡 157（T-G257）派活前置：规格声称了 `B-X` 但预声明缺 ⇒ **拒发**（第一分钟就知道）。
+
+    工人不用再干 28 分钟到最后交申请时才被栅栏咬 —— 派活器在 preflight 里就拦下。
+    """
+    (sandbox / "spec.md").write_text(
+        "# 卡\n\n**成员号**：任务 `B-PREFLIGHT-TEST` 的 **M-1**\n", encoding="utf-8")
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False)
+    hit = [p for p in problems if "B-PREFLIGHT-TEST" in p and "预声明" in p and "register" in p]
+    assert hit, f"应点名缺的预声明并提示 register，拿到 {problems}"
+
+
+def test_preflight_passes_when_spec_has_no_batch_claim(sandbox: Path) -> None:
+    """★ 卡 157：规格里没声称批次（只读审计型）⇒ preflight **不因这条报**。"""
+    (sandbox / "spec.md").write_text("# 对抗审核卡\n\n没有成员号那行\n", encoding="utf-8")
+    problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False)
+    assert not any("声称" in p or "预声明" in p for p in problems), problems
+
+
 def test_preflight_refuses_a_dirty_workspace(sandbox: Path, monkeypatch) -> None:
     """脏工作区 = 一写一读当场失效 → 拦下，并把是哪些文件说出来。"""
     monkeypatch.setattr(wd, "git_dirty", lambda: ["M src/timeflow/api/app.py", "M docs/x.md"])

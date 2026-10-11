@@ -30,7 +30,7 @@ SEED = ROOT / "docs" / "workbacklog.toml"
 
 def _card(cid: str, *, files: tuple[str, ...] = ("a.py",), tree: str = "",
           task: str = "T-G9x", title: str = "样卡", depends: tuple[str, ...] = (),
-          risk: str = "low", status: str = "pending", spec: str = "s.md") -> wb_plan.Card:
+          risk: str = "low", status: str = "pending", spec: str = "") -> wb_plan.Card:
     return wb_plan.Card(id=cid, task=task, title=title, tree=tree, spec=spec,
                         files=tuple(files), depends=tuple(depends), risk=risk, status=status)
 
@@ -333,7 +333,7 @@ id = "007"
 task = "T-G96"
 title = "看门狗护栏补强"
 tree = ""
-spec = "gates/diag/卡007-看门狗护栏补强.md"
+spec = ""
 files = [
   "tools/wb_dispatch.py",
   "tests/test_wb_dispatch.py",
@@ -348,7 +348,7 @@ id = "008"
 task = "T-G97"
 title = "面板口径对齐"
 tree = ".wt/dash"
-spec = "gates/diag/卡008-面板口径.md"
+spec = ""
 files = [
   "tools/wb_dash.py",
   "tests/test_wb_dash.py",
@@ -363,7 +363,7 @@ id = "009"
 task = "T-G98"
 title = "myday序号根因"
 tree = ".wt/core"
-spec = "gates/diag/卡009-myday序号根因.md"
+spec = ""
 files = [
   "src/timeflow/core/tasks/manager.py",
   "tests/test_myday_rank_line.py",
@@ -378,7 +378,7 @@ id = "010"
 task = "T-G99"
 title = "并发调度器"
 tree = ".wt/plan"
-spec = "gates/diag/卡010-并发调度器.md"
+spec = ""
 files = [
   "tools/wb_plan.py",
   "tests/test_wb_plan.py",
@@ -496,9 +496,9 @@ def test_check_command_passes_on_seed() -> None:
 
 def test_check_command_fails_on_conflict(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     body = ('[base]\nreviewed = "abc"\n\n'
-            '[[cards]]\nid = "007"\ntask = "t"\ntitle = "t"\ntree = ""\nspec = "s"\n'
+            '[[cards]]\nid = "007"\ntask = "t"\ntitle = "t"\ntree = ""\nspec = ""\n'
             'files = ["a.py"]\n\n'
-            '[[cards]]\nid = "008"\ntask = "t2"\ntitle = "t2"\ntree = ".wt/x"\nspec = "s2"\n'
+            '[[cards]]\nid = "008"\ntask = "t2"\ntitle = "t2"\ntree = ".wt/x"\nspec = ""\n'
             'files = ["a.py"]\n')
     code = wb_plan.main(["check", "--backlog", str(_write(tmp_path, body))])
     assert code == 1
@@ -587,7 +587,7 @@ id = "001"
 task = "T-G9x"
 title = "已完成的样卡"
 tree = ".wt/x"
-spec = "s.md"
+spec = ""
 files = ["a.py"]
 depends = []
 risk = "low"
@@ -598,7 +598,7 @@ id = "002"
 task = "T-G9x"
 title = "待派样卡一"
 tree = ".wt/y"
-spec = "s.md"
+spec = ""
 files = ["b.py"]
 depends = []
 risk = "low"
@@ -609,7 +609,7 @@ id = "003"
 task = "T-G9x"
 title = "待派样卡二"
 tree = ".wt/z"
-spec = "s.md"
+spec = ""
 files = ["c.py"]
 depends = []
 risk = "low"
@@ -620,3 +620,100 @@ status = "pending"
     out = capsys.readouterr().out
     assert "待派 2" in out, out
     assert "最大一批 2" in out, out
+
+
+# ------------------------------------------------------------------ 卡 157（T-G257）
+#   写卡必须同写预声明
+#
+# ★ 这一族判据治「写卡时声称了批次 B-XXX，但预声明 gates/diag/batch/B-XXX.toml 从没写」
+#   ⇒ 工人干到最后一步交申请时才被栅栏咬（已咬 9 次：141/147/148/146/150…）。
+#   五条钉子：① 缺 ⇒ 拒 ② 在 ⇒ 放 ③ 没声称 ⇒ 放 ④ 孤儿 ⇒ 报不算错 ⑤ spec 不存在 ⇒ 拒。
+
+
+def _claim_spec(tmp_path: Path, batch: str = "B-X", member: str = "M-1") -> str:
+    """写一份声称属于 `batch` 的 `member` 的卡规格到 tmp_path，返回相对 spec 路径。"""
+    spec = tmp_path / "spec.md"
+    spec.write_text(f"# 卡\n\n**成员号**：任务 `{batch}` 的 **{member}**\n",
+                    encoding="utf-8")
+    return "spec.md"
+
+
+def test_batch_claim_missing_manifest_is_rejected(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """① pending 卡声称了 `B-X` 但预声明缺 ⇒ **拒**，且报里**点名**卡号与缺的文件路径。"""
+    monkeypatch.setattr(pool_plan, "ROOT", tmp_path)
+    monkeypatch.setattr(pool_plan, "DIAG", tmp_path / "gates" / "diag")
+    spec = _claim_spec(tmp_path, "B-X")
+    card = _card("007", files=("a.py",), spec=spec, status="pending")
+    problems = wb_plan.validate(_backlog(card))
+    hit = [p for p in problems if "B-X" in p and "007" in p and "gates/diag/batch/B-X.toml" in p]
+    assert hit, f"应点名卡号与缺的预声明路径，拿到 {problems}"
+
+
+def test_batch_claim_with_manifest_is_allowed(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """② 声称了 `B-X` 且预声明在 ⇒ **放行**（不因这条判据报 problem）。"""
+    monkeypatch.setattr(pool_plan, "ROOT", tmp_path)
+    monkeypatch.setattr(pool_plan, "DIAG", tmp_path / "gates" / "diag")
+    spec = _claim_spec(tmp_path, "B-X")
+    (tmp_path / "gates" / "diag" / "batch").mkdir(parents=True)
+    (tmp_path / "gates" / "diag" / "batch" / "B-X.toml").write_text(
+        'id = "B-X"\nwhy = "x"\non_complete = ["draft"]\n'
+        '\n[[member]]\nid = "M-1"\nlayer = "后端"\nwhat = "x"\npaths = ["a.py"]\n',
+        encoding="utf-8")
+    card = _card("007", files=("a.py",), spec=spec, status="pending")
+    problems = wb_plan.validate(_backlog(card))
+    assert not any("B-X" in p and "预声明" in p for p in problems), problems
+
+
+def test_no_batch_claim_is_allowed(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """③ 规格里没有「成员号」那行 ⇒ **放行**（只读审计型卡，如卡 153 —— 别误杀）。"""
+    monkeypatch.setattr(pool_plan, "ROOT", tmp_path)
+    monkeypatch.setattr(pool_plan, "DIAG", tmp_path / "gates" / "diag")
+    (tmp_path / "spec.md").write_text("# 对抗审核卡\n\n没有成员号那行\n", encoding="utf-8")
+    card = _card("007", files=("a.py",), spec="spec.md", status="pending")
+    problems = wb_plan.validate(_backlog(card))
+    assert not any("声称" in p or "预声明" in p for p in problems), problems
+
+
+def test_orphan_manifest_is_reported_but_not_an_error(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """④ 反向：孤儿预声明（有 `B-*.toml`、没卡声称）⇒ `audit_batch_claims` **报一行**，但不算错。"""
+    monkeypatch.setattr(pool_plan, "ROOT", tmp_path)
+    monkeypatch.setattr(pool_plan, "DIAG", tmp_path / "gates" / "diag")
+    batch_dir = tmp_path / "gates" / "diag" / "batch"
+    batch_dir.mkdir(parents=True)
+    (batch_dir / "B-ORPHAN.toml").write_text("x", encoding="utf-8")
+    card = _card("007", files=("a.py",), spec="", status="pending")
+    backlog = _backlog(card)
+    assert wb_plan.validate(backlog) == []          # 不算错
+    notes = wb_plan.audit_batch_claims(backlog)
+    assert any("孤儿" in n and "B-ORPHAN" in n for n in notes), notes
+
+
+def test_missing_spec_is_rejected_not_silently_passed(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """⑤ spec 文件不存在（队列指向一个没有的规格）⇒ 如实报「读不到规格」，**不许静默放行**。"""
+    monkeypatch.setattr(pool_plan, "ROOT", tmp_path)
+    monkeypatch.setattr(pool_plan, "DIAG", tmp_path / "gates" / "diag")
+    card = _card("007", files=("a.py",), spec="nope.md", status="pending")
+    problems = wb_plan.validate(_backlog(card))
+    assert any("读不到规格" in p and "007" in p and "nope.md" in p for p in problems), problems
+
+
+def test_done_card_missing_manifest_is_reported_not_rejected(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ done 卡缺预声明 ⇒ **只报**（历史欠账，不追溯），不让 check 变红。
+
+    这是 T-G257 的边界取舍：判据的目标语义是对 done 也拒（预声明是历史证据），但当前有
+    大量历史欠账 ⇒ 本卡暂缓对 done 的拒，走 `audit_batch_claims` 的提醒通道。
+    """
+    monkeypatch.setattr(pool_plan, "ROOT", tmp_path)
+    monkeypatch.setattr(pool_plan, "DIAG", tmp_path / "gates" / "diag")
+    spec = _claim_spec(tmp_path, "B-DONE")
+    card = _card("007", files=("a.py",), spec=spec, status="done")
+    backlog = _backlog(card)
+    assert wb_plan.validate(backlog) == []          # done 不拒
+    notes = wb_plan.audit_batch_claims(backlog)
+    assert any("B-DONE" in n and "历史欠账" in n for n in notes), notes

@@ -1,0 +1,15 @@
+[entries."T-G257"]
+id = "T-G257"
+title = "写卡必须同写预声明：判据 + 派活前置 + audit 提醒（含主控修的 worktree 盲区）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/plan.py",
+  "file:tools/wb_plan.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_plan.py",
+  "file:tests/test_wb_dispatch.py",
+  "file:tests/test_pool_lib.py",
+]
+gaps = "① ★★ **主控改了本卡的产物一处（要写明）**：工人写的预声明判据**在 worktree 里必假红** —— `ROOT` 解析出的是**卡树**，而 `gates/diag/batch/` 是 **gitignored、只存在于主树** ⇒ 而**门禁恰恰在卡树里跑** ⇒ **这一笔落地后每次落地都会红**。我按它自己的口径（只读、**不调 git**）改成 worktree 感知（读卡树 `.git` 文件里的 `gitdir:` ⇒ 主树根）。★ 我第一版还把顺序写反了（「本地存在就用本地」），**当场被测试咬住**才改对。指针：`tools/pool/plan.py` 的 `_fence_batch_dir()`。② ★ **判据只对 `pending` / `running` 拒，`done` 只报不拒**（不追溯历史欠账）—— 真读数：**60 张卡声称批次，而预声明全缺**（当晚开工时 `gates/diag/batch/` 目录都不存在）⇒ 存量欠账**留着**，只拦新的。指针：本卡的 `audit_batch_claims`。③ ★ **`depends` 仍是「只读的规划字段」**：本卡确认它**不拦派活**（真正串起来的是 `files` 域相交），只在 `check` 里输出一行说明。指针：`tools/wb_plan.py`。④ ★ **预声明在 gitignored 目录**：⇒ **它不随仓库分发**，换机器/换人后「队列自洽」的判据**看不出真相**（本卡当晚就栽在这上面）。指针：`.gitignore` 的 `gates/diag/*`。"
+

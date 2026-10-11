@@ -49,8 +49,14 @@ ACTIVE_STATUS = ("pending", "running")
 
 # ★ 卡 127（T-G225）：`files` 里**不许**出现的通配字符。`files_intersect()` 是**精确**集合相交，
 #   若某张卡把域写成 `tools/pool/*.py` 这类通配，它与**任何**精确路径都不相交 ⇒ 两张卡明明
-#   改同一批文件却互不报冲突，**静默绕过**冲突域检查。所以这里在字段层直接拒单（见 `validate`）。
+#   改同一批文件却互不报冲突，**静默绕过**冲突域检查。所以这里在字段层直接拒单（见 `validate` ⑧）。
 WILDCARD_CHARS = ("*", "?", "[")
+
+# ★ 卡 157（T-G257）：从卡规格里抽「任务 `B-XXX` 的 `M-n`」这个形状 ——
+#   声称了 `B-XXX` ⇒ 它的批次预声明 `gates/diag/batch/B-XXX.toml` 必须在（写卡时同时写）。
+#   正则容忍反引号 / 加粗（`**M-1**`）的写法；批次号允许含 `-`（如 `B-PREFLIGHT-TEST`）；
+#   只抽批次号（判据只查预声明在不在）。
+BATCH_CLAIM_RE = re.compile(r"任务\s*`?(B-[A-Z0-9]+(?:-[A-Z0-9]+)*)`?\s*的\s*\**\s*M-\d+")
 
 
 class BacklogError(Exception):
@@ -262,6 +268,27 @@ def validate(backlog: Backlog) -> list[str]:
             problems.append(f"卡 {card.id}：risk={card.risk!r} 不是 {VALID_RISK} 之一")
         if card.status not in VALID_STATUS:
             problems.append(f"卡 {card.id}：status={card.status!r} 不是 {VALID_STATUS} 之一")
+        # ★ 卡 157（T-G257）⑨：声称了批次 ⇒ 预声明必须在（写卡时同时写）。
+        #   字段类判据 —— **所有卡都过**（不分 done/pending，T-G119 口径）：
+        #   · spec 不存在 ⇒ 拒（队列指向一个没有的规格 —— 不许静默放行）；
+        #   · 抽到 `B-XXX` 且预声明缺：
+        #       - pending/running ⇒ **拒**（省整轮白干 —— 这是本卡的核心价值）；
+        #       - done/failed ⇒ **只报**（见 `audit_batch_claims`，不追溯历史欠账 —— T-G257 边界）；
+        #   · 抽不到批次 ⇒ 放行（只读审计型卡，如卡 153）。
+        #   ★ `spec` 为空 ⇒ 跳过（测试夹具约定；真 backlog 的 spec 由 `load_backlog` 保证非空）。
+        if not card.spec:
+            continue
+        spec_path = ROOT / card.spec
+        if not spec_path.exists():
+            problems.append(f"卡 {card.id}：读不到规格 {card.spec}（队列指向一个没有的规格）")
+        else:
+            batch = extract_batch_claim(spec_path)
+            if batch and not batch_manifest_path(batch).exists():
+                rel = batch_manifest_path(batch).relative_to(ROOT).as_posix()
+                if in_flight(card):
+                    problems.append(
+                        f"卡 {card.id}：声称属于 {batch}，但预声明 {rel} 不存在"
+                        f"（写卡时必须同时写它；先 `wb_task.py register {rel}`）")
     active = [card for card in cards if in_flight(card)]
     for i, first in enumerate(active):
         for second in active[i + 1:]:
@@ -283,6 +310,51 @@ def validate(backlog: Backlog) -> list[str]:
     if cycle:
         problems.append("依赖成环：" + " → ".join(cycle))
     return problems
+
+
+def audit_batch_claims(backlog: Backlog) -> list[str]:
+    r"""只报不拒的批次自洽提醒（卡 157 · T-G257）—— 返回**提醒行**（不计入 `validate` 的拒单）。
+
+    `validate` ⑨ 对 pending/running 卡缺预声明**拒**；这里补**只报**的那一半：
+      · done/failed 卡声称了批次但预声明缺（历史欠账 —— 本卡不追溯，只报，不改历史）；
+      · 孤儿预声明（有 `gates/diag/batch/B-*.toml`、没卡声称它）—— 提醒，不算错；
+      · 没声称批次的卡（点一句，不拦）。
+
+    ★ 为什么单开一个函数：`validate` 返回的拒单会让 `wb_plan.py check` 退 1；这些行**不该**让
+    check 变红（历史欠账不是当前队列的错），所以走**提醒**通道（`cmd_check` 打印到 stderr）。
+    ★ 判据的**目标语义**是对 done 也拒（预声明是历史证据，删了就是丢证据）；本卡因当前有大量
+    历史欠账而**暂缓**对 done 的拒，待欠账清完可一行收紧（把这里的 note 挪进 `validate`）。
+    """
+    notes: list[str] = []
+    claimed: set[str] = set()
+    for card in backlog.cards:
+        if not card.spec:
+            continue
+        spec_path = ROOT / card.spec
+        if not spec_path.exists():
+            continue
+        batch = extract_batch_claim(spec_path)
+        if not batch:
+            notes.append(f"卡 {card.id}：规格里没声称批次（只读审计型？不拦，点一句）")
+            continue
+        claimed.add(batch)
+        if not in_flight(card) and not batch_manifest_path(batch).exists():
+            rel = batch_manifest_path(batch).relative_to(ROOT).as_posix()
+            notes.append(
+                f"卡 {card.id}（{card.status}）：声称属于 {batch}，但预声明 {rel} 缺"
+                f"（历史欠账 —— 本卡不追溯，只报）")
+    batch_dir = _fence_batch_dir()
+    if batch_dir.is_dir():
+        for path in sorted(batch_dir.glob("B-*.toml")):
+            if path.stem not in claimed:
+                # ★ 目录可能是**主树**的（卡树里没有它）⇒ 相对路径按那个根算，
+                #   别 relative_to(ROOT) 炸。
+                try:
+                    rel = path.relative_to(batch_dir.parents[2]).as_posix()
+                except ValueError:
+                    rel = path.as_posix()
+                notes.append(f"孤儿预声明：{rel}（没有卡声称它 —— 提醒，不算错）")
+    return notes
 
 
 # ================================================================ 排班：拓扑分层 + 同层打包
@@ -379,6 +451,62 @@ def render_plan(batches: Sequence[Sequence[Card]]) -> str:
             lines.append(f"  · 卡 {card.id}（{card.task}）｜树 {tree}｜{card.title}")
             lines.append(f"      域：{'、'.join(card.files) or '（空）'}")
     return "\n".join(lines)
+
+
+def _fence_batch_dir() -> Path:
+    """预声明**真正住在哪** —— ★ 卡树（`git worktree`）里也得找得到它。
+
+    ★★ 为什么需要这个（T-G257 落地当天实测的真缺陷）：预声明住在 `gates/diag/batch/`，
+    而那一整个目录是 **gitignored**（`.gitignore: gates/diag/*`）⇒ `git worktree add` 建出来的
+    **卡树里根本没有它**。于是「卡声称批次 ⇒ 预声明必须在」这条判据在**任何卡树里都必假红** ——
+    而**门禁恰恰是在卡树里跑的**（`scripts/run_gates.py` 的 cwd = 卡树）
+    ⇒ 落地当场红、以后每次落地都红。
+
+    ★ 口径：预声明是**主树的运行态**（不是卡的产物）⇒ 卡树里应当去**主树**找它。
+    ★ 实现只用 stdlib、**不调 git**（本模块"只读校验、不起子进程"的口径不变）：
+      主树的 `.git` 是**目录**；卡树的 `.git` 是**文件**，内容 `gitdir: <主树>/.git/worktrees/<名>`
+      ⇒ 那个路径的 `parents[2]` 就是主树根。
+    ★★ 顺序要紧（第一版写反了，当场被自己的测试咬住）：**卡树里必须先找主树那个** ——
+      收集树里常被主控拷进**几份**预声明 ⇒「本地存在就用本地」会让它
+      拿一份**残缺**的目录去判，假红照旧。
+    """
+    marker = ROOT / ".git"
+    if marker.is_file():
+        try:
+            text = marker.read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            text = ""
+        if text.startswith("gitdir:"):
+            target = Path(text.split(":", 1)[1].strip())
+            shared = target.parents[2] / "gates" / "diag" / "batch"
+            if shared.is_dir():
+                return shared
+    return DIAG / "batch"
+
+
+def batch_manifest_path(task_id: str) -> Path:
+    """批次预声明路径 = `gates/diag/batch/<task_id>.toml`（与 `pool.task.manifest_path` 同口径）。
+
+    ★ 用 `plan.ROOT` / `plan.DIAG`（不调 git）—— 队列校验是**只读**的，不该起子进程。
+    ★ 卡树里 `ROOT` 指向卡树自己，而预声明只在主树 ⇒ 目录一律经 `_fence_batch_dir()` 解析
+      （见那里对"卡树里必假红"这条真缺陷的说明）。
+    """
+    return _fence_batch_dir() / f"{task_id}.toml"
+
+
+
+def extract_batch_claim(spec_path: Path) -> str | None:
+    """从卡规格里抽它声称的批次号 `B-XXX`；抽不到 ⇒ `None`（只读审计型卡等）。
+
+    ★ `None` 与「写错」是两回事：抽不到 = 这张卡没声称批次（放行）；
+    抽到了但预声明不在 = 写卡时漏了（拒）。不许把两者混成一种（卡 153 就是对抗审核卡，
+    规格里没有「成员号」那行 —— 它该放行，不是该拒）。
+    ★ 调用方先确认 `spec_path` 存在；这里**不**吞 `OSError`（读不到规格是另一条错，
+    见 `validate` ⑨）。
+    """
+    text = spec_path.read_text(encoding="utf-8")
+    m = BATCH_CLAIM_RE.search(text)
+    return m.group(1) if m else None
 
 
 def find_spec(card: str) -> str:

@@ -121,7 +121,12 @@ from pool.models import (  # noqa: E402 —— 外部模型开关（卡 138）+ 
     find_pool_dir,
     load_switches,
 )
-from pool.plan import BacklogError, load_backlog  # noqa: E402 —— 队列/冲突域唯一实现（pool.plan）
+from pool.plan import (  # noqa: E402 —— 队列/冲突域唯一实现（pool.plan）
+    BacklogError,
+    batch_manifest_path,
+    extract_batch_claim,
+    load_backlog,
+)
 from pool.review import outside_allow  # noqa: E402 —— 白名单越界唯一实现（pool.review）
 
 # ★ T-G96：Windows 上派活器自己发起的那些 `subprocess` 不加这个，Windows 11 会把控制台程序
@@ -2321,6 +2326,20 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
     log = ROOT / "gates" / "diag" / f"wb-{card}.jsonl"
     if not (ROOT / spec).exists():
         problems.append(f"卡规格文件不存在：{spec}（不许凭记忆派活）")
+    else:
+        # ★ 卡 157（T-G257）派活前置：规格声称了批次 `B-XXX` ⇒ 预声明必须在 ——
+        #   缺就**拒发**（工人的第一分钟就知道，而不是第 28 分钟交申请时才被栅栏咬）。
+        #   与其它前置检查并列（规格在 / 脏树 / log / 端口 / 内存 / 登录 / 守卫 / 卡树基点）。
+        try:
+            batch = extract_batch_claim(ROOT / spec)
+        except OSError as exc:
+            problems.append(f"读不到卡规格 {spec}（{exc}）")
+            batch = None
+        if batch and not batch_manifest_path(batch).exists():
+            rel = f"gates/diag/batch/{batch}.toml"
+            problems.append(
+                f"卡 {card} 声称属于 {batch}，但预声明 {rel} 不存在"
+                f"（先 `wb_task.py register {rel}`）")
     if not node.exists():
         problems.append(f"找不到内置 node：{node}")
     if not cli.exists():

@@ -77,6 +77,14 @@
   `main` 加 effort 闸门（照 `--model` 那套：零副作用、退 2、点名合法值）· 4 处调用点透传 · `[cmd]` 摘要只在给了才显示。
 - `tests/test_wb_dispatch.py` +68：**5 条判据钉子**。
 - ★ 第一手：`pytest` 五份（含 `test_no_window` / `test_pin_check` / `test_docs_fragments`）⇒ **240 passed**；`ruff` 干净。
+## 2026-10-04 —— 写卡必须同写预声明：判据 + 派活前置 + `audit` 提醒（T-G257 / 卡 157）
+
+- `tools/pool/plan.py` +90/-1：`BATCH_CLAIM_RE` 从卡规格抽「任务 `B-XXX` 的 `M-n`」形状；
+  `pending`/`running` 卡声称的批次**必须有预声明**（`extract_batch_claim` / `batch_manifest_path` /
+  `audit_batch_claims`）；`done`/`failed` 只报不拒。★ **外加主控的 worktree 修复**（见 gaps ①）。
+- `tools/wb_plan.py` +15 · `tools/wb_dispatch.py` +20/-1（派活前置接上）· `tests/test_wb_plan.py` +107/-10 ·
+  `tests/test_wb_dispatch.py` +19（**先红后绿**：钉子先写、旧代码当场红）。
+- ★ 第一手：`pytest tests/test_wb_plan.py`（含 worktree 盲区的两条）⇒ **全过**；`test_no_window` 8 条过；`ruff` 干净。
 ## 2026-10-03 —— 坑总账与不变量台账落档：344 条坑 + 77 条不变量进 git（T-G265 / 卡 165）
 
 - **坑总账建档**：7 个只读工人把 218 份复盘按门类分片读完，机器逐条解析出 **344 条坑**（工人自报合计 314，差额 30 条是几份报告的统计行少算了自己列出的条目 —— 这条差额本身就是「数字手抄」那类坑的又一次现场），按**归位点**分成 8 类 + 共因 Top5。
