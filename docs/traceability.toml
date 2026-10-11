@@ -1011,7 +1011,7 @@ status = "done"
 evidence = [
   "file:复盘/外包卡-002-修T-G79幂等写库.md",
   "text:tools/wb_dispatch.py::NPM_CLI_PARTS = (\"npm\", \"node_modules\", \"@tencent-ai\", \"codebuddy-code\", \"bin\", \"codebuddy\")",
-  "text:tools/wb_dispatch.py::DEFAULT_MODEL = MODEL_WHITELIST[0]",
+  "text:tools/wb_dispatch.py::default_model_for(pool).alias",
   "text:tools/wb_dispatch.py::DEFAULT_PERMISSION_MODE = \"bypassPermissions\"",
   "text:复盘/外包-卡表与规矩.md::deepseek-v4.1-flash",
   "test:test_wb_dispatch.py",
@@ -5978,3 +5978,21 @@ evidence = [
   "file:tests/test_pool_lib.py",
 ]
 gaps = "① ★★ **主控改了本卡的产物一处（要写明）**：工人写的预声明判据**在 worktree 里必假红** —— `ROOT` 解析出的是**卡树**，而 `gates/diag/batch/` 是 **gitignored、只存在于主树** ⇒ 而**门禁恰恰在卡树里跑** ⇒ **这一笔落地后每次落地都会红**。我按它自己的口径（只读、**不调 git**）改成 worktree 感知（读卡树 `.git` 文件里的 `gitdir:` ⇒ 主树根）。★ 我第一版还把顺序写反了（「本地存在就用本地」），**当场被测试咬住**才改对。指针：`tools/pool/plan.py` 的 `_fence_batch_dir()`。② ★ **判据只对 `pending` / `running` 拒，`done` 只报不拒**（不追溯历史欠账）—— 真读数：**60 张卡声称批次，而预声明全缺**（当晚开工时 `gates/diag/batch/` 目录都不存在）⇒ 存量欠账**留着**，只拦新的。指针：本卡的 `audit_batch_claims`。③ ★ **`depends` 仍是「只读的规划字段」**：本卡确认它**不拦派活**（真正串起来的是 `files` 域相交），只在 `check` 里输出一行说明。指针：`tools/wb_plan.py`。④ ★ **预声明在 gitignored 目录**：⇒ **它不随仓库分发**，换机器/换人后「队列自洽」的判据**看不出真相**（本卡当晚就栽在这上面）。指针：`.gitignore` 的 `gates/diag/*`。"
+
+[entries."T-G266"]
+id = "T-G266"
+title = "模型注册表：一层统一 + 按池分流（取代卡 146 的朴素合并）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tools/pool/models.py",
+  "file:tools/pool/model_registry.py",
+  "file:tools/pool/model-registry.toml",
+  "file:tests/test_wb_dispatch.py",
+  "file:tests/test_pool_models.py",
+  "file:tests/test_model_registry.py",
+  "file:tests/test_pin_check.py",
+  "file:docs/traceability.toml",
+]
+gaps = "① ★★ **码道那一侧的「拒绝」是响亮的，不是回落**：注册表里码道条目走 `source = 「infra/pool/models.whitelist.toml」` **引用**（加载时读它、不复制）；裸名在码道那侧服务端不可用 ⇒ 派活**当场拒**，**不许静默换成别的模型**。⇒ 但这也意味着：**码道池的可用集以 `infra/` 那份为准**，本仓改不到它。指针：`tools/pool/model-registry.toml`。② ★ **`--model` 缺省按池取默认**（不许取注册表首项）⇒ 但**「池」是从参数推出来的**：不给 `--account`（码道那侧）时，默认池是哪个**取决于调用方式**，本笔没有让「猜池」这件事本身有判据。指针：`tools/pool/models.py`。③ ★ **注册表是「统一读取层」，不是唯一可写真源**：CodeBuddy 条目直接写注册表、码道条目引用 `infra/` 那份⇒ **两个可写点**（注册表 + `infra/`），只是读取统一。指针：`tools/pool/model-registry.toml`。④ ★ 本卡的 3 份新文件（`model_registry.py` / `model-registry.toml` / `test_model_registry.py`）在派活时**不存在**⇒ 主控**显式改域 + 写明理由**后补进预声明（今晚第 N 次同模式）。指针：`gates/diag/batch/B-MODELREGISTRY.toml`。"

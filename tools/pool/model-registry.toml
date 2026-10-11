@@ -1,0 +1,43 @@
+# 模型注册表 —— 一层统一，按池分流（卡 166 · T-G266）
+#
+# ★★ 唯一可写的"跨池统一层"（只有用户能改）。每个池各有自己的真源：
+#   · CodeBuddy 池的真源 = 本文件里的 [[model]] 条目（pool = "codebuddy"）
+#   · 码道池的真源 = infra/pool/models.whitelist.toml（本文件 [pool.codearts] 引用它、不复制）
+#
+# ★ 不许再有第二份可写名单（"多份真源"是本仓老坑）：
+#   wb_dispatch.py 的 MODEL_WHITELIST 常量已删，改成 PEP 562 现读本文件。
+#
+# 每条 [[model]] 声明：
+#   alias   逻辑名（工人/主控用的名字，--model 给它）
+#   pool    池名（codebuddy / codearts）
+#   id      该池内的真实 id（codebuddy 用裸名；codearts 用 provider/model 形式）
+#   default 是否该池默认（布尔；每池至多一条 default = true）
+#   note    备注
+#
+# 顺序 = 429 轮换序（只对 CodeBuddy 池有意义；码道池不参与轮换）。
+
+# ---------------------------------------------------------------- CodeBuddy 池（今天在用的）
+# id 是裸名；顺序 = 429 轮换序（① 默认 → ② ① 被限流时的替补）
+# ★ 卡 166 判据 ⑥：本段与卡 166 之前的 MODEL_WHITELIST 逐字相同（行为不变）。
+[[model]]
+alias   = "deepseek-v4.1-flash"
+pool    = "codebuddy"
+id      = "deepseek-v4.1-flash"
+default = true
+note    = "默认；429 轮换链第 1 项"
+
+[[model]]
+alias   = "glm-5.3-flash"
+pool    = "codebuddy"
+id      = "glm-5.3-flash"
+default = false
+note    = "429 轮换链第 2 项（① 被限流时的替补）"
+
+# ---------------------------------------------------------------- 码道池（华为码道 CLI）
+# 引用 infra/pool/models.whitelist.toml（边界：不动它的既有条目语义）。
+# 那份文件的 [[approved]] 条目（provider/model 形式）= 码道池的真实 id；alias = id。
+# default = 那份文件里某个 model（此处声明哪条是该池默认）。
+# ★ 卡 166：本池的适配器只留接口 + 响亮拒绝（真实调用另立卡）。
+[pool.codearts]
+source  = "models.whitelist.toml"
+default = "huaweicloud-maas/GLM-5.2"

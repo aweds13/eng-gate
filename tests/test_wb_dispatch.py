@@ -1780,8 +1780,10 @@ def test_one_off_model_is_allowed_but_stays_out_of_the_rotation(monkeypatch, tmp
     assert "glm-5.3" not in wd.ALLOWED_MODELS
     assert wd.next_whitelist_model("glm-5.3") is None
     # ③ 机制仍在：临时往一次性名单里填一个 ⇒ 闸门放行，且**轮换链仍不动**（用完不该长留）
+    #   ★ 卡 166：ALLOWED_MODELS 现在是 PEP 562 __getattr__（自动 = 注册表 codebuddy 段
+    #   ∪ ONE_OFF_MODELS），改 ONE_OFF_MODELS 它就跟着变 —— 不再手动 setattr
+    #   ALLOWED_MODELS（那会与 __getattr__ 残留交互）。
     monkeypatch.setattr(wd, "ONE_OFF_MODELS", ("glm-5.3",))
-    monkeypatch.setattr(wd, "ALLOWED_MODELS", wd.MODEL_WHITELIST + ("glm-5.3",))
     assert wd.model_rejected("glm-5.3") == ""
     assert wd.MODEL_WHITELIST == ("deepseek-v4.1-flash", "glm-5.3-flash")
     assert wd.next_whitelist_model("glm-5.3-flash") is None

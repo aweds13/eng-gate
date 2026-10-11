@@ -115,14 +115,35 @@ def _switch_line(text: str, key: str) -> int | None:
     return None
 
 
-def load_switches(pool_dir: Path | None = None) -> dict[str, bool]:
-    """读**外部开关文件**（`[switch]` 段：模型裸名 → 布尔）—— **只读**、不写、不联网。
+def _validate_switch_pairs(path: Path, text: str,
+                           pairs: list[tuple[str, Any]]) -> dict[str, bool]:
+    """验证一批 ``(key, value)`` 都是布尔 → 收成字典；非布尔 ⇒ `SwitchFileError` 点名行号。"""
+    out: dict[str, bool] = {}
+    for key, value in pairs:
+        if not isinstance(value, bool):
+            line = _switch_line(text, key)
+            where = f"{path}（第 {line} 行）" if line else str(path)
+            raise SwitchFileError(f"模型开关文件坏：{where} 的「{key}」必须是布尔"
+                                  f"（true / false），实际是 {type(value).__name__}（{value!r}）")
+        out[str(key)] = value
+    return out
 
-    语义（卡 138）：
-      · 文件**不存在**（或池目录都找不到）⇒ **空字典**、**不报错**（大多数人没有这份文件）；
-      · 文件**坏**（TOML 解析失败 / 值不是布尔）⇒ 抛 `SwitchFileError`，**点名路径与行号**
+
+def load_switches(pool_dir: Path | None = None, *, pool: str | None = None) -> dict[str, bool]:
+    """读**外部开关文件**（按池分段；**只读**、不写、不联网）。
+
+    语义（卡 138 / 卡 166 按池）：
+      · ``pool=None`` 或 ``"codebuddy"``：读 ``[switch]`` 顶层布尔键（向后兼容）
+        **外加** ``[switch.codebuddy]`` 子表；
+      · ``pool="codearts"`` / 其他：只读 ``[switch.<pool>]`` 子表；
+      · 文件**不存在**（或池目录都找不到）⇒ **空字典**、**不报错**；
+      · 文件**坏**（TOML 解析失败 / 值不是布尔）⇒ `SwitchFileError` **点名路径与行号**
         —— ★ **不许静默当空**。
     ★ 只回答「哪些模型被开关打开」，**不碰任何名单常量**（名单是下限，开关是加法）。
+    ★ 向后兼容：旧文件只有 ``[switch]`` 段（无子表）⇒ ``pool="codebuddy"`` 仍读到它
+      （卡 166 判据 ⑥：今天 CodeBuddy 池行为一字不变）。
+    ★ ``pool_dir`` 仍是第一个位置参数（向后兼容旧调用 ``load_switches(tmp_path)``）；
+      ``pool`` 是关键字参数。
     """
     path = switch_file_path(pool_dir)
     if path is None or not path.exists():
@@ -134,21 +155,28 @@ def load_switches(pool_dir: Path | None = None) -> dict[str, bool]:
         line = getattr(exc, "lineno", None)
         where = f"{path}（第 {line} 行）" if line else str(path)
         raise SwitchFileError(f"模型开关文件解析失败：{where} —— {exc}") from exc
-    table = data.get("switch")
-    if table is None:
+    switch = data.get("switch")
+    if switch is None:
         return {}
-    if not isinstance(table, dict):
+    if not isinstance(switch, dict):
         raise SwitchFileError(f"模型开关文件坏：{path} 的 `[switch]` 必须是表，"
-                              f"实际是 {type(table).__name__}")
-    out: dict[str, bool] = {}
-    for key, value in table.items():
-        if not isinstance(value, bool):
-            line = _switch_line(text, key)
-            where = f"{path}（第 {line} 行）" if line else str(path)
-            raise SwitchFileError(f"模型开关文件坏：{where} 的「{key}」必须是布尔"
-                                  f"（true / false），实际是 {type(value).__name__}（{value!r}）")
-        out[str(key)] = value
-    return out
+                              f"实际是 {type(switch).__name__}")
+    effective_pool = pool or "codebuddy"
+    if effective_pool == "codebuddy":
+        pairs: list[tuple[str, Any]] = []
+        for key, value in switch.items():
+            if isinstance(value, dict):
+                continue
+            pairs.append((str(key), value))
+        sub = switch.get("codebuddy")
+        if isinstance(sub, dict):
+            for key, value in sub.items():
+                pairs.append((str(key), value))
+        return _validate_switch_pairs(path, text, pairs)
+    sub = switch.get(effective_pool)
+    if not isinstance(sub, dict):
+        return {}
+    return _validate_switch_pairs(path, text, list(sub.items()))
 
 
 def _names(items: Iterable[str] | None) -> list[str]:

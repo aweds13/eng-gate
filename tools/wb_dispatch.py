@@ -99,7 +99,7 @@ from collections import Counter
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -116,6 +116,19 @@ import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（
 from pool import guards as pool_guards  # noqa: E402 —— 守卫唯一实现（pool.guards）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
 from pool.jobs import card_artifacts  # noqa: E402 —— 产物定位唯一实现（pool.jobs）
+from pool.model_registry import (  # noqa: E402 —— 一层注册表 + 按池分流（卡 166 · T-G266）
+    DEFAULT_POOL,
+    ModelRegistryError,
+    PoolMismatchError,
+    PoolNotWiredError,
+    UnknownPoolError,
+    default_model_for,
+    effective_allowed_for,
+    get_adapter,
+    minimum_ruleset_text,
+    resolve_model,
+    rotation_chain_for,
+)
 from pool.models import (  # noqa: E402 —— 外部模型开关（卡 138）+ 号池定位（卡 149）
     SwitchFileError,
     find_pool_dir,
@@ -139,12 +152,16 @@ NO_WINDOW: dict = ({"creationflags": subprocess.CREATE_NO_WINDOW}     # type: ig
 # ★★ 模型白名单（用户 2026-09-26 明令：「黑名单锁死吧，就是只有白名单里面的模型，名字，
 #   带模型的名字，你才能调用」→ **默认拒绝**：不在名单里的模型一律调不动，这是代码里的
 #   硬闸门，不是一句叮嘱）。
-# ★★ 改这份名单必须先问用户（加名字 / 换顺序 / 改默认 → 只有用户能改；主控不许自作主张）。
-# ★ 顺序就是「默认优先」：① 默认；② ① 被限流/额度耗尽时的替补（轮换口径：
-#   换 ② 让它干一两张卡，然后再探 ①，恢复了换回来）。换模型只影响新派的卡，
-#   已经在某模型上跑的卡不许中途换。★ 不许做成读环境变量 / 读配置文件 / 命令行传一串的宽松形式。
-MODEL_WHITELIST: tuple[str, ...] = ("deepseek-v4.1-flash", "glm-5.3-flash")
-DEFAULT_MODEL = MODEL_WHITELIST[0]
+# ★★ 卡 166（T-G266，2026-10-03 用户拍板「一层统一，按池分流」）：真源收成**一处** =
+#   `tools/pool/model-registry.toml`（跨池统一层；CodeBuddy 池条目直接写、码道池引用
+#   `infra/pool/models.whitelist.toml`）。本模块**改成读它**，不再硬编码第二份
+#   （本仓铁律：最忌第二份真源 —— 凡「两边都写一份」，迟早漂）。
+#   ★ 名字 `MODEL_WHITELIST` / `DEFAULT_MODEL` / `ALLOWED_MODELS` 保留成「**读出来的结果**」
+#     （模块 `__getattr__` 每次现读，见下）—— 免得动到一堆调用点（pool_mcp / wb_state / 测试）。
+#   ★ 默认值**按池声明**（判据 ②）：`--model` 缺省时按当前池取该池默认，**绝不取注册表首项**
+#     —— 那正是卡 146 踩的雷（跨池串了默认值）。
+#   ★ 真源**找不到/坏掉 ⇒ 拒绝派活**并点名（`ModelRegistryError`）—— **绝不**退回一份
+#     内置名单，那就是又造了第二份真源。
 
 # ★★ 2026-10-02 **一次性**模型的入口（**故意不进轮换链**）—— ★ **当天已按用户令清空**。
 #   用户原话两句，第二句是**撤回**：
@@ -152,19 +169,35 @@ DEFAULT_MODEL = MODEL_WHITELIST[0]
 #      你可以把它列到白名单，但是**我希望是一次性的调用**」；
 #   ② ★ **「GLM5.3 用完就撤。」**
 #   ⇒ 处置：**机制留着、名额清空** —— 本常量是"一次性放行"的**唯一入口**，
-#     要再放行谁就填进来（**仍然不进 429 轮换链**：轮换只走 `MODEL_WHITELIST`）。
+#     要再放行谁就填进来（**仍然不进 429 轮换链**：轮换只走注册表名单）。
 #   ★ 当时现场核过的读数（留档）：`--model glm-5.3 -p "只回 OK"` ⇒ `subtype=success`，
 #     且 init 事件的 `model` 就是 `glm-5.3`（**没被静默降级**）；那次外部审查已落档
 #     （批 `B-ARCH1` / `T-G220`）。
 #   ★ **撤掉之后的行为**：`glm-5.3` 回到「默认拒绝」，与任何表外模型**一视同仁**
 #     （要再派会被拒，并列出允许集）。
 ONE_OFF_MODELS: tuple[str, ...] = ()
-#: 名单常量 = 轮换名单 ∪ 一次性授权（★ **下限**）。闸门查的是「本常量 ∪ 外部开关文件里打开的」——
-#: 见 `effective_allowed_models()`；轮换只走 `MODEL_WHITELIST`（开关**不进轮换链**）。
-ALLOWED_MODELS: tuple[str, ...] = MODEL_WHITELIST + ONE_OFF_MODELS
-# ★ 卡 138：外部开关文件里 `true` 的模型**额外放行**。
+#: 一次性授权 = 轮换名单（真源注册表）之外的**加法**（★ **下限仍是注册表名单**）。
+#: 闸门查的是「注册表名单 ∪ 一次性授权 ∪ 外部开关文件里打开的」—— 见 `effective_allowed_models()`；
+#: 轮换只走注册表名单（一次性授权与开关**都不进轮换链**）。
+# ★ 卡 138：外部开关文件里 `true` 的模型**额外放行**（按池读，见 `pool.models.load_switches`）。
 #   文件 = `infra/pool/model-switches.toml`（只有用户能改）。
 #   **只做加法**（名单是下限、开关不许把名单里的关掉），**不进 429 轮换链**。
+
+
+def __getattr__(name: str) -> Any:  # noqa: ANN401
+    """PEP 562：`MODEL_WHITELIST` / `DEFAULT_MODEL` / `ALLOWED_MODELS` 是「读出来的结果」。
+
+    ★ 每次访问都从注册表**现读**（按 CodeBuddy 池 —— 今天在用的、向后兼容）——
+      改注册表 ⇒ 允许集跟着变（这正是单一真源的机器语义）；保留旧名字免得动到一堆调用点。
+    ★ 卡 166 判据 ⑥：CodeBuddy 池的条目与卡 166 之前的 `MODEL_WHITELIST` 逐字相同。
+    """
+    if name == "MODEL_WHITELIST":
+        return rotation_chain_for("codebuddy")
+    if name == "DEFAULT_MODEL":
+        return default_model_for("codebuddy").alias
+    if name == "ALLOWED_MODELS":
+        return (*rotation_chain_for("codebuddy"), *ONE_OFF_MODELS)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # ---------------------------------------------------------------- 429 / 额度（卡 029 §2.5）
 # ★ 429 长得像成功：CLI 给 `result.subtype = error_during_execution` + 空回话 + 退出码 0 ——
@@ -314,54 +347,62 @@ def paths(cli_override: str | None = None) -> tuple[Path, Path]:
     return node, Path("D:/") / FALLBACK_CLI_REL
 
 
-def switch_open_models() -> tuple[str, ...]:
+def switch_open_models(pool: str = DEFAULT_POOL) -> tuple[str, ...]:
     """外部开关文件里**打开**（值为 `true`）的模型 —— **只做加法**、不进 429 轮换链。
 
+    ★ 按池读（卡 166）：`pool` 决定读 `[switch.<pool>]` 段还是 `[switch]` 段（向后兼容）。
     ★ 文件不存在 ⇒ 空（不报错）；文件坏 ⇒ `SwitchFileError` 冒泡（**不许静默当空**）。
     """
-    return tuple(name for name, on in load_switches().items() if on)
+    return tuple(name for name, on in load_switches(pool=pool).items() if on)
 
 
-def effective_allowed_models() -> tuple[str, ...]:
-    """允许集 = 名单常量 `ALLOWED_MODELS` ∪ 开关文件里打开的模型。
+def effective_allowed_models(pool: str = DEFAULT_POOL) -> tuple[str, ...]:
+    """允许集 = 注册表该池条目 ∪ 一次性授权（仅 codebuddy）∪ 开关文件里打开的。
 
     ★ 名单是**下限**、开关只做**加法**。
-    ★ 现算（每次读开关文件），**不**拼进模块常量：开关是**数据**、用户随时能改；拼进常量
-      就变成「改源码才生效」，正是卡 138 要消灭的东西。轮换链仍只走 `MODEL_WHITELIST`。
+    ★ 现算（每次读注册表 + 开关文件），**不**拼进模块常量：开关是**数据**、用户随时能改。
+    ★ 轮换链仍只走注册表该池条目（`rotation_chain_for(pool)`）。
     """
-    out = list(ALLOWED_MODELS)
-    for name in switch_open_models():
-        if name not in out:
-            out.append(name)
+    out = list(effective_allowed_for(pool))
+    if pool == "codebuddy":
+        for name in ONE_OFF_MODELS:
+            if name not in out:
+                out.append(name)
     return tuple(out)
 
 
-def model_rejected(model: str) -> str:
+def model_rejected(model: str, pool: str = DEFAULT_POOL) -> str:
     """模型白名单硬闸门 —— 不在**允许集**里 → 返回拒单理由（在集合里 → 空串）。
 
     ★ 逐字比较（连大小写 / 连字符都不许含糊）；拒绝必须**零副作用**：不起进程、不建 log、
     不改树。★ `--resume` / `--retry` / `--detach` 全都从 `main()` 过这道闸；续跑必须沿用
     原来那个模型，不许因为「原模型挂了」就换成表外的。
-    ★ 允许集 = `effective_allowed_models()`（名单常量 `ALLOWED_MODELS` ∪ 外部开关文件里打开的）
-    —— **但不是轮换链**：`next_whitelist_model()` 只看 `MODEL_WHITELIST`。
+    ★ 允许集 = `effective_allowed_models(pool)`（注册表该池条目 + 一次性授权 + 开关打开的）
+    —— **但不是轮换链**：`next_whitelist_model()` 只走注册表该池条目。
+    ★ 跨池串用由 `resolve_model(model, pool)` 在 `main()` 里另拒（`PoolMismatchError`）。
     """
-    allowed = effective_allowed_models()
+    allowed = effective_allowed_models(pool)
     if model in allowed:
         return ""
     return (f"未授权模型，已拒绝派活：{model}\n"
-            f"  允许集（名单常量 MODEL_WHITELIST / ONE_OFF_MODELS + 外部开关文件"
-            f"(infra/pool/model-switches.toml) 里打开的；只有用户能改）：{'、'.join(allowed)}\n"
+            f"  当前池：{pool}；允许集（注册表 {pool} 池条目 + 一次性授权 ONE_OFF_MODELS"
+            f" + 外部开关文件(infra/pool/model-switches.toml) 里打开的；只有用户能改）："
+            f"{'、'.join(allowed)}\n"
             "  默认拒绝：既不在名单、也没在开关文件里打开的模型一律调不动"
             "（用户 2026-09-26 令：黑名单锁死）。")
 
 
-def next_whitelist_model(model: str) -> str | None:
-    """按清单顺序取下一个（429 三拍「按序换」用）；已经是最后一个 → None（全挂就停）。"""
+def next_whitelist_model(model: str, pool: str = DEFAULT_POOL) -> str | None:
+    """按该池注册表顺序取下一个（429 三拍「按序换」用）；已经是最后一个 → None（全挂就停）。
+
+    ★ 卡 166：轮换链按池（`rotation_chain_for(pool)`），不许跨池串。
+    """
+    chain = rotation_chain_for(pool)
     try:
-        idx = MODEL_WHITELIST.index(model)
+        idx = chain.index(model)
     except ValueError:
         return None
-    return MODEL_WHITELIST[idx + 1] if idx + 1 < len(MODEL_WHITELIST) else None
+    return chain[idx + 1] if idx + 1 < len(chain) else None
 
 
 # ---------------------------------------------------------------- 多号 profile（卡 149 · T-G249）
@@ -665,6 +706,8 @@ def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
                   effort: str | None = None) -> list[str]:
     prompt = (LEAN_OPENING.format(brief=brief, spec=spec, card=card) if lean
               else OPENING.format(spec=spec, card=card))
+    # ★ 卡 166 追加要求 2：最小规矩集拼进提示（换池不许改变工人看到的东西）。
+    prompt = prompt + "\n" + minimum_ruleset_text()
     cmd = [
         str(node), str(cli), "-p", prompt,
         "--model", model, "--output-format", "stream-json",
@@ -2427,11 +2470,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "brief-<卡>.md / 卡规格）仍落在**主仓**的 gates/diag/：那一份目录"
                              "是 gitignore 的、卡树里没有。不给则行为与从前逐字相同（工人 cwd="
                              "仓库根）")
-    parser.add_argument("--model", default=DEFAULT_MODEL,
-                        help=f"派活用哪个模型（默认 {DEFAULT_MODEL}）。★ 允许集 = 名单常量 "
-                             "MODEL_WHITELIST / ONE_OFF_MODELS **外加**外部开关文件 "
-                             "infra/pool/model-switches.toml 里打开(true)的模型；"
-                             "表外一律拒单（用户 2026-09-26 令：黑名单锁死）")
+    parser.add_argument("--pool", default=DEFAULT_POOL,
+                        help=f"派到哪个池（默认 {DEFAULT_POOL}；卡 166 按池分流）。"
+                             "codebuddy = CodeBuddy CLI（今天在用的）；"
+                             "codearts = 华为码道 CLI（卡 166 只留接口 + 拒绝路径）；"
+                             "未知池 ⇒ 响亮拒绝并点名已接的池")
+    parser.add_argument("--model", default=None,
+                        help="派活用哪个模型（不给 = 该池默认，按池声明、不取注册表首项）。"
+                             "★ 允许集 = 注册表该池条目 + 一次性授权 + 外部开关文件里打开的；"
+                             "表外一律拒单（用户 2026-09-26 令：黑名单锁死）。"
+                             "★ 跨池串用被拒（codebuddy 用裸名、codearts 用 provider/model 形式）")
     parser.add_argument("--project", default=None,
                         help="项目名（卡 120）—— 不给就按 `--cwd` 那棵树从项目索引反查；"
                              "没登记的项目 / 树不落在该项目的树前缀里 ⇒ 拒派")
@@ -2512,14 +2560,23 @@ def main() -> int:
     if args.status:
         print(status_report(args.card), flush=True)
         return 0
-    # ★★ 模型白名单硬闸门（卡 029 §2.4，用户 2026-09-26 令：默认拒绝）—— 放在**一切之前**：
+    # ★★ 模型白名单硬闸门（卡 029 §2.4 + 卡 166 按池分流）—— 放在**一切之前**：
     #   拒单必须**零副作用**：不起进程、不建 log、不写判决、不改树。--resume / --retry /
     #   --detach 全都从这里过闸（它们都要带 --model）。
+    #   ★ 卡 166：--model 缺省按池取默认（不取注册表首项，判据 ②）；跨池串用被拒（判据 ③）；
+    #   未知池 / 未接池被拒（判据 ④）；注册表坏掉退 2 零副作用点名（判据 ⑤）。
     try:
-        rejected = model_rejected(args.model)
-    except SwitchFileError as exc:
-        # ★ 卡 138：外部开关文件坏了要**响亮地**失败并点名路径与行号（**不静默当空**）——
-        #   仍在起进程之前拦下（零副作用），退出码 2（前置检查没过）。
+        pool = args.pool
+        get_adapter(pool)                                 # 未知池 ⇒ 拒（判据 ④）
+        if args.model is None:
+            args.model = default_model_for(pool).alias    # 按池取默认（判据 ②）
+        resolve_model(args.model, pool)                   # 跨池串用 ⇒ 拒（判据 ③）
+        get_adapter(pool).assert_wired()                  # 已知但未接 ⇒ 拒（判据 ④）
+        rejected = model_rejected(args.model, pool)
+    except (ModelRegistryError, PoolMismatchError, UnknownPoolError, PoolNotWiredError,
+            SwitchFileError) as exc:
+        # ★ 卡 138 / 卡 146 / 卡 166：开关文件 / 注册表 / 适配器坏了要**响亮地**失败并点名
+        #   （**不静默当空、不退回内置名单**）—— 仍在起进程之前拦下（零副作用），退 2。
         print(f"[FAIL] {exc}", file=sys.stderr, flush=True)
         return 2
     if rejected:
@@ -2909,7 +2966,7 @@ def main() -> int:
                     break
                 print(f"[额度] 探测通过（{probe_why}）→ 同一模型接着干", flush=True)
             else:
-                nxt = next_whitelist_model(model)
+                nxt = next_whitelist_model(model, pool)
                 if nxt is None:
                     # ★ 全挂就停（用户原话：「都有问题的话，就直接把任务停下来」）——
                     #   不是「换个模型接着干」；退出码 7，不再自动重试。

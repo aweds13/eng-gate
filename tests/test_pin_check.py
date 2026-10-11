@@ -22,7 +22,8 @@ import pin_check as pc  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂
 
 TOOL = [sys.executable, "-X", "utf8", str(ROOT / "tools" / "pin_check.py")]
 
-LITERAL_TG85 = "DEFAULT_MODEL = MODEL_WHITELIST[0]"
+# ★ 2026-10-04 卡 166：默认模型改成"按池取默认" ⇒ 原字面不存在了，锚点跟着迁
+LITERAL_TG85 = "default_model_for(pool).alias"
 LITERAL_TASK_TYPES = "const TASK_TYPES=['普通','作业','考试','论文','小测','竞赛','活动']"
 LITERAL_ABSENT = "这个词本仓绝对不存在zzz"
 

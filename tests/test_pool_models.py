@@ -181,3 +181,49 @@ def test_load_switches_missing_switch_table_is_empty(tmp_path: Path, monkeypatch
     path = _switch_file(tmp_path, "# 只有注释\n")
     monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
     assert models.load_switches() == {}
+
+
+# ================================================ 卡 166（T-G266）：开关按池分段
+# ★ 向后兼容：[switch] 顶层（无子表）⇒ pool="codebuddy" 仍读到它（判据 ⑥）。
+
+
+def test_load_switches_by_pool_codebuddy_subtable(tmp_path: Path, monkeypatch) -> None:
+    """★ [switch.codebuddy] 子表 ⇒ pool="codebuddy" 读到。"""
+    path = _switch_file(tmp_path, '[switch.codebuddy]\n"glm-5.2" = true\n')
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    assert models.load_switches(pool="codebuddy") == {"glm-5.2": True}
+
+
+def test_load_switches_by_pool_codearts_subtable(tmp_path: Path, monkeypatch) -> None:
+    """★ [switch.codearts] 子表 ⇒ pool="codearts" 读到；pool="codebuddy" 读不到。"""
+    path = _switch_file(tmp_path, '[switch.codearts]\n"huaweicloud-maas/GLM-5.2" = true\n')
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    assert models.load_switches(pool="codearts") == {"huaweicloud-maas/GLM-5.2": True}
+    assert models.load_switches(pool="codebuddy") == {}, "codebuddy 不读 codearts 子表"
+
+
+def test_load_switches_codebuddy_falls_back_to_legacy_switch(tmp_path: Path, monkeypatch) -> None:
+    """★ 向后兼容：[switch] 顶层（无子表）⇒ pool="codebuddy" 仍读到它（判据 ⑥）。"""
+    path = _switch_file(tmp_path, '[switch]\n"glm-5.3" = true\n')
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    assert models.load_switches(pool="codebuddy") == {"glm-5.3": True}
+    assert models.load_switches(pool="codearts") == {}, "codearts 不回退读 [switch] 顶层"
+
+
+def test_load_switches_codebuddy_merges_legacy_and_subtable(tmp_path: Path, monkeypatch) -> None:
+    """★ codebuddy = [switch] 顶层 + [switch.codebuddy] 子表（合并；子表优先覆盖）。"""
+    path = _switch_file(tmp_path,
+                        '[switch]\n"glm-5.3" = true\n[switch.codebuddy]\n"glm-5.2" = true\n')
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    result = models.load_switches(pool="codebuddy")
+    assert result == {"glm-5.3": True, "glm-5.2": True}, result
+
+
+def test_load_switches_non_bool_in_subtable_names_line(tmp_path: Path, monkeypatch) -> None:
+    """★ 子表里非布尔也要点名行号（不因按池而放水）。"""
+    path = _switch_file(tmp_path, '[switch.codearts]\n"x" = "yes"\n')
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    with pytest.raises(models.SwitchFileError) as excinfo:
+        models.load_switches(pool="codearts")
+    message = str(excinfo.value)
+    assert str(path) in message and "x" in message, message

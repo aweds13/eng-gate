@@ -85,6 +85,14 @@
 - `tools/wb_plan.py` +15 · `tools/wb_dispatch.py` +20/-1（派活前置接上）· `tests/test_wb_plan.py` +107/-10 ·
   `tests/test_wb_dispatch.py` +19（**先红后绿**：钉子先写、旧代码当场红）。
 - ★ 第一手：`pytest tests/test_wb_plan.py`（含 worktree 盲区的两条）⇒ **全过**；`test_no_window` 8 条过；`ruff` 干净。
+## 2026-10-04 —— 模型注册表：一层统一 + 按池分流（T-G266 / 卡 166）
+
+- 新增 `tools/pool/model_registry.py`（读取层）· `tools/pool/model-registry.toml`（**跨池统一层**：
+  CodeBuddy 条目直写；码道条目 `source = "infra/pool/models.whitelist.toml"` **引用，不复制**）·
+  `tests/test_model_registry.py`（钉子）。
+- `tools/pool/models.py` +46/-18（`--model` 缺省**按池取默认**，绝不取首项；跨池 id 串用当场拒）·
+  `tools/wb_dispatch.py` +100/-43（派活侧接线）· `tests/test_pool_models.py` +46 · `tests/test_wb_dispatch.py` +3/-1。
+- ★ 第一手：`pytest test_pool_models + test_model_registry + test_no_window` ⇒ **53 passed**；`ruff` 干净。
 ## 2026-10-03 —— 坑总账与不变量台账落档：344 条坑 + 77 条不变量进 git（T-G265 / 卡 165）
 
 - **坑总账建档**：7 个只读工人把 218 份复盘按门类分片读完，机器逐条解析出 **344 条坑**（工人自报合计 314，差额 30 条是几份报告的统计行少算了自己列出的条目 —— 这条差额本身就是「数字手抄」那类坑的又一次现场），按**归位点**分成 8 类 + 共因 Top5。
