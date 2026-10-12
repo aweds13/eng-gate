@@ -6,6 +6,10 @@
 - 新增 `tools/pool/snapshot.py`（快照挂 git ref）+ `tests/test_pool_snapshot.py` · `tests/test_pool_landing_gitbase.py`。
 - `tools/pool/landing.py`：⑨ 镜像推送 · **主干保护**（★ 主控修三处：① 守卫原来查 `ROOT`=**卡树** ⇒ 真流程里从没保护过主干，改查**主工作树** ② 白名单原来**逐字相等** ⇒ `--allow code` 管不到 `code/a.py`，改 **glob + 目录前缀** ③ 笔就是主树时不触发）· 三处新 `subprocess` 补防窗旗。
 - `tools/tf_cardgen.py` · `tools/wb_plan.py` · `tools/wb_dispatch.py` + 四份测试：卡分支模板 / 计划侧口径 / 沙箱清单补 `pool/snapshot.py`。★ 第一手：五份测试**全过** + `ruff` 干净。
+## 2026-10-12 —— 码道派活进租约登记：跨池冲突才看得见（T-G295 / 卡 195）
+- 新增 `tools/pool/lease.py`（`claim` / `release`，**写与 CodeBuddy 那条路同一本账**）+ `tests/test_pool_lease.py`（3 条钉子）。
+- 钉子证明：卡 154 占 `shared.py` 后，卡 166 从**码道入口**再占 ⇒ **退 1 并报「冲突域相交」**（跨入口可见）。
+- ★ 第一手：`pytest tests/test_pool_lease.py` ⇒ **3 passed**；`ruff` 干净。★ 仓外调用点的主控贴法见文书。
 ## 2026-10-11 —— CodeBuddy 工人的白名单路径要指向卡树（T-G294 / 卡 194）
 
 - `tools/wb_dispatch.py` +40/-6：`prompt_path()` 区分**两类路径** —— 「**工人要改的**（白名单 / 域）」给 `--cwd` 时

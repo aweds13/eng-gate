@@ -6051,3 +6051,14 @@ evidence = [
   "file:tests/test_tf_cardgen.py",
 ]
 gaps = "① ★★ **主干保护只在「主树 ≠ 卡树」时才有意义**：`_main_tree_root()` 靠卡树 `.git` **文件**里的 `gitdir:` 反推主树；若哪天改成「在主树里直接跑」（`--tree .`），它退化回查自己 ⇒ 保护等于没有。指针：`tools/pool/landing.py`。② ★ **本卡改了收口链的核心**（`landing.py` 的 `release_lock` 之后新加 `_main_tree_root` + 镜像那一步），⇒ 与 184/163 的改动同处一个文件 ⇒ 主控**手工合过**（本次：0 冲突，因为基点已是含它们的主树）。指针：`tools/pool/landing.py`。③ ★ **「计划外暂存」那三条钉子改了场景**：原来把偷渡文件造在**主树**，现在造在**卡树**（`.pen` worktree）——因为新守卫会先咬主树。⇒ ⑤/⑥ 的覆盖**保住了**，但「主树里有偷渡文件」这个场景**现在归守卫管**（守卫自己的钉子覆盖）。指针：`tests/test_wb_land.py`。"
+
+[entries."T-G295"]
+id = "T-G295"
+title = "码道派活进租约登记：跨池冲突才看得见"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/lease.py",
+  "file:tests/test_pool_lease.py",
+]
+gaps = "① ★★ **仓外那半没落地**：本笔只交 engineering 侧的产物；真正让码道「进账」的是 `D:/repo/infra/pool/dispatch.py`里那几行调用（工人在日志里给了**建议 diff**）⇒ **要主控贴过去**，否则跨池冲突**照旧看不见**。对照物是**会登记**的那条路。指针：`tools/wb_dispatch.py`。② ★ **「同一本账」是靠读同一份实现**（不另起一本）⇒ 若哪天守卫换存储，**两处要一起改**（账本格式没有独立判据）。指针：`tools/pool/guards.py`。③ ★ **只覆盖「写者自己来登记」**：码道那条路若**不调** `claim`，本笔一点办法没有（它是**补账**、不是**上锁**）。指针：`gates/diag/batch/B-CROSSLEASE.toml`。④ ★ **判据自己的盲区**：`check_pointers` 在**主树**里查文件 ⇒ 指向**本笔新增**的那两份产物会**报不存在**⇒ 文书写指针时只能指**已存在**的东西（本条四处指针都是这么挑的）。指针：`tools/card_doc_budget.py`。"

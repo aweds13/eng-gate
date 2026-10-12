@@ -1,0 +1,11 @@
+[entries."T-G295"]
+id = "T-G295"
+title = "码道派活进租约登记：跨池冲突才看得见"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/lease.py",
+  "file:tests/test_pool_lease.py",
+]
+gaps = "① ★★ **仓外那半没落地**：本笔只交 engineering 侧的产物；真正让码道「进账」的是 `D:/repo/infra/pool/dispatch.py`里那几行调用（工人在日志里给了**建议 diff**）⇒ **要主控贴过去**，否则跨池冲突**照旧看不见**。对照物是**会登记**的那条路。指针：`tools/wb_dispatch.py`。② ★ **「同一本账」是靠读同一份实现**（不另起一本）⇒ 若哪天守卫换存储，**两处要一起改**（账本格式没有独立判据）。指针：`tools/pool/guards.py`。③ ★ **只覆盖「写者自己来登记」**：码道那条路若**不调** `claim`，本笔一点办法没有（它是**补账**、不是**上锁**）。指针：`gates/diag/batch/B-CROSSLEASE.toml`。④ ★ **判据自己的盲区**：`check_pointers` 在**主树**里查文件 ⇒ 指向**本笔新增**的那两份产物会**报不存在**⇒ 文书写指针时只能指**已存在**的东西（本条四处指针都是这么挑的）。指针：`tools/card_doc_budget.py`。"
+
