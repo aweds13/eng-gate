@@ -367,19 +367,25 @@ def _changed_paths_from(rev: str, wt: pathlib.Path) -> list[str]:
     return out
 
 
-def _run_review(task: str, rev: str) -> tuple[int, str, pathlib.Path]:
+def _run_review(task: str, rev: str, allow: list[str]) -> tuple[int, str, pathlib.Path]:
     """⑧ 复核落盘（追加三）：wb_review.py --rev <新提交> --json → gates/review/<task>.json。
 
     ★ 口径照卡 143：「提交之后 · 异步 · 不挡提交」—— 复核失败不回滚已提交的那笔；
       但 `wb_task.py landed` 之前必须存在一条复核记录（那是 landed 的机器判据，不在这条链上）。
     ★ 复核发现问题 ⇒ 立卡或在文书里写明为什么不立卡（不许"跑完看一眼就丢"）。
+    ★ 卡 198（T-G298）：把收口链**自己那份** `--allow` 原样传给复核
+      （不许另造一份、不许改成 `--read-only` 消红字）。
     ★ 返回 `(exit_code, summary, path)`：exit_code 非 0 ⇒ 复核有问题（不挡提交，只警告）。
     """
     REVIEW_DIR.mkdir(parents=True, exist_ok=True)
     review_file = REVIEW_DIR / f"{task}.json"
+    cmd = [sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_review.py"),
+           "--rev", rev, "--json"]
+    for _g in allow:
+        cmd += ["--allow", _g]
+    print("  复核命令：", " ".join(cmd))
     r = subprocess.run(
-        [sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_review.py"),
-         "--rev", rev, "--json"],
+        cmd,
         cwd=str(ROOT), capture_output=True, text=True,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         encoding="utf-8", errors="replace")
@@ -901,7 +907,7 @@ def main(argv: list[str] | None = None) -> int:
     if not a.no_review and not a.commit_only:
         print("=== ⑧ 复核落盘（gates/review/<task>.json；异步、不挡提交）===")
         new_rev = git("rev-parse", "--short", "HEAD")
-        rv_rc, rv_summary, rv_path = _run_review(a.task, new_rev)
+        rv_rc, rv_summary, rv_path = _run_review(a.task, new_rev, a.allow)
         print(f"  {rv_summary}")
         if rv_rc != 0:
             print("  ★ 复核有问题（不挡提交）⇒ 立卡或在文书里写明为什么不立卡")

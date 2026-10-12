@@ -14,6 +14,10 @@
 - `tools/wb_dispatch.py`：`NODE_REL`（写死 `22.22.2-3`）⇒ 改成 `_resolve_node()`：先读 `versions/current`（**内容为版本名的小文件**，不是目录），再扫 `versions/*/node.exe` 取最新，都不行才退回旧路径。
 - `tests/test_wb_dispatch.py`：两条钉子（current 优先 / 回退最新 or 写死路径）。★ 第一手：干跑从「找不到内置 node」变成解析到 `…\versions\22.22.2-6\node.exe`（存在）。
 - ★ 第一手：`pytest test_wb_dispatch + test_no_window` ⇒ **212 passed**；`ruff` 干净。
+## 2026-10-12 —— ⑧ 复核带上收口链自己那份 --allow（那行「没有给白名单」是噪声）（T-G298 / 卡 198）
+- `tools/pool/landing.py` +10/-4：第 ⑧ 步调 `wb_review.py` 时把收口链**自己那份** `--allow` 原样传下去（★ 不另造一份、不用 `--read-only` 蒙）。
+- `tests/test_wb_land.py` +98：三条钉子（① 命令里确实带 `--allow` 且与收口链一致 ② 复核若仍报没白名单要当问题 ③ 复核的其他真问题照旧非零）。
+- ★ 第一手：`pytest test_wb_land + test_no_window` ⇒ **40 passed**；`ruff` 干净。★ 半成品说明：测试侧那两笔是**上一轮 CodeBuddy 工人**被 429 掐断前写的，主控用 `tools/replay_worker_edits.py` 重放回树，本轮的码道工人接着补了源码侧。
 ## 2026-10-11 —— CodeBuddy 工人的白名单路径要指向卡树（T-G294 / 卡 194）
 
 - `tools/wb_dispatch.py` +40/-6：`prompt_path()` 区分**两类路径** —— 「**工人要改的**（白名单 / 域）」给 `--cwd` 时

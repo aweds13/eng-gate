@@ -6073,3 +6073,14 @@ evidence = [
   "file:tests/test_wb_dispatch.py",
 ]
 gaps = "① ★★ **只修了「内置 node」这一处**：CodeBuddy CLI 自己的位置（`NPM_CLI_PARTS` / `FALLBACK_CLI_REL`）仍按老假设找；哪天 npm 全局目录变了，同类故障会再出现一次。指针：`tools/wb_dispatch.py` 的 `paths()`。② ★ **回退路径仍是写死的 `22.22.2-3`**：它只在「`versions` 目录都不存在」时才用 ⇒ 那种机器上**照样报找不到**，本卡**不猜**（宁可报错，也不静默换一个不存在的东西）。指针：`tools/wb_dispatch.py` 的 `NODE_REL_FALLBACK`。③ ★ **「最新」按版本目录名**倒序排（字符串序）⇒ `22.22.2-10` 会排在 `22.22.2-9` **前面**（恰好对）；但若哪天版本号位数不齐（`22.9` vs `22.10`）这条会挑错。指针：`tests/test_wb_dispatch.py` 的第②条钉子。"
+
+[entries."T-G298"]
+id = "T-G298"
+title = "⑧ 复核带上收口链自己那份 --allow（那行「没有给白名单」是噪声）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "file:tests/test_wb_land.py",
+]
+gaps = "① ★★ **只治了「⑧ 复核没白名单」这一处**：复核的**其他**入参（`--rev` / `--json` / `--read-only`）没动 ⇒它仍不知道「这次落地到底允许改哪些文件」以外的范围问题。指针：`tools/pool/landing.py` 的 `_run_review`。② ★ **白名单是「原样传」**（收口链那份 `a.allow`）⇒ 若收口链自己那份被人写宽了，复核就跟着宽 ✓（本卡**故意**不另造一份，免得两份漂）。指针：`tools/pool/landing.py` 的调用点。③ ★ **那行 `problems=1` 以后会变**：它不再是「没给白名单」，而是复核**真的**查出问题时才有 ⇒以后看到红字要**读内容**，别条件反射当噪声（本卡的目的正是把噪声清掉）。指针：`tools/wb_review.py`。"

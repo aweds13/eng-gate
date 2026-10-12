@@ -277,6 +277,31 @@ print(json.dumps({"rev": "HEAD", "problems": []}, ensure_ascii=False, indent=2))
 sys.exit(0)
 """
 
+#: ★ 卡 198 ①钉子桩：把收到的 argv 原样记到 `review_args.txt`（假仓库根 = ⑧ 的 cwd），
+#:   证明 `--allow` 真传到了、且就是收口链那一份；随后输出「复核通过」JSON。
+_WB_REVIEW_ARGS = """import json, pathlib, sys
+pathlib.Path("review_args.txt").write_text(json.dumps(sys.argv[1:]), encoding="utf-8")
+print(json.dumps({"rev": "HEAD", "problems": []}, ensure_ascii=False, indent=2))
+sys.exit(0)
+"""
+
+#: ★ 卡 198 ②钉子桩：明明收到了 `--allow` 却**仍**报「没有给白名单」—— 复核侧为什么
+#:   还报不归本卡管（`wb_review.py` 是别的域），但收口链必须把它当成问题喊出来。
+_WB_REVIEW_STUBBORN = """import json, sys
+print(json.dumps({"rev": "HEAD", "problems": [
+    "没有给白名单：复核改动范围请加 `--allow <glob>`（或声明 `--read-only`）"]},
+    ensure_ascii=False, indent=2))
+sys.exit(1)
+"""
+
+#: ★ 卡 198 ③钉子桩：复核报一条**真问题**（白名单外有改动）—— 传 `--allow` 不许顺手
+#:   把真问题也压掉；problems 必须照旧 != 0。
+_WB_REVIEW_REAL = """import json, sys
+print(json.dumps({"rev": "HEAD", "problems": [
+    "有 1 个改动不在白名单里：['code/rogue.py']"]}, ensure_ascii=False, indent=2))
+sys.exit(1)
+"""
+
 _ENV = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
 
 
@@ -849,6 +874,79 @@ def test_review_step_writes_to_gates_review(tmp_path: Path) -> None:
     verdict = json.loads(review.read_text(encoding="utf-8"))
     assert "problems" in verdict, f"复核产物应当有 problems 字段：{verdict!r}"
     assert "复核落盘" in out, "stdout 应当点名「复核落盘」"
+
+
+# ------------------- ⓷′ 卡 198：⑧ 复核必须带上收口链自己那份 --allow（三条钉子）
+def test_review_cmd_gets_landing_allow(tmp_path: Path) -> None:
+    """① 卡 198：⑧ 调复核的命令行确实带 `--allow`，且与收口链那份**同一次运行一致**。
+
+    ★ 坏掉写法 A（不传）：复核 argv 里没有 `--allow` ⇒ 每笔报「没有给白名单」。
+    ★ 坏掉写法 B（另造一份 / 传展开后的提交白名单）：收到的与 wb_land 收到的不一致。
+    ★ 坏掉写法 C（改成 --read-only 消红字）：有 `--read-only` 没有 `--allow`。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW_ARGS)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, allow=("code", "README.md"))
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    args = json.loads((repo / "review_args.txt").read_text(encoding="utf-8"))
+    assert "--allow" in args, f"⑧ 复核命令行必须带 --allow：{args!r}"
+    assert "--read-only" not in args, f"不许改成 --read-only 消红字：{args!r}"
+    vals = [a for i, a in enumerate(args) if i and args[i - 1] == "--allow"]
+    assert vals == ["code", "README.md"], \
+        f"复核收到的 --allow 必须就是收口链那一份（不许另造）：{args!r}"
+    assert "--rev" in args, f"--rev 原有行为不动：{args!r}"
+    cmd_line = [ln for ln in out.splitlines() if "复核命令" in ln]
+    assert cmd_line and "--allow" in cmd_line[0], \
+        f"⑧ 打印的复核命令行原文必须看得见 --allow：{out!r}"
+
+
+def test_review_whitelist_complaint_is_not_silenced(tmp_path: Path) -> None:
+    """② 卡 198：复核**仍**报「没有给白名单」⇒ 必须当成问题（不许静默）。
+
+    ★ 坏掉写法：landing 特判这条消息把它吞掉（problems 记 0 / 不喊 ★ 行）⇒ 红。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW_STUBBORN)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo)
+
+    out = _out(done)
+    assert done.returncode == 0, out      # 异步、不挡提交
+    assert "复核有问题" in out, "复核仍报「没有给白名单」必须当成问题喊出来"
+    assert "problems=1" in out, out
+    verdict = json.loads((repo / "gates/review/T-G999.json").read_text(
+        encoding="utf-8"))
+    assert any("没有给白名单" in p for p in verdict["problems"]), \
+        f"那条消息不许在落盘前被滤掉：{verdict!r}"
+
+
+def test_review_real_problems_still_count(tmp_path: Path) -> None:
+    """③ 卡 198：复核的**真问题**照旧让 problems != 0（别顺手压掉）。
+
+    ★ 坏掉写法：为了让红字消失而把复核结论吞掉 / 强行记 0 ⇒ 红。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
+                    wb_review_body=_WB_REVIEW_REAL)
+    _write_daily_full(repo, today=True)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo)
+
+    out = _out(done)
+    assert done.returncode == 0, out      # 异步、不挡提交
+    assert "复核有问题" in out, "复核的真问题必须当成问题喊出来"
+    assert "problems=1" in out, out
+    verdict = json.loads((repo / "gates/review/T-G999.json").read_text(
+        encoding="utf-8"))
+    assert any("rogue.py" in p for p in verdict["problems"]), \
+        f"真问题不许在落盘前被滤掉：{verdict!r}"
 
 
 # ----------------------------------------------- ⓸ 增量产物有 affected 块（卡 147 护栏可读）
