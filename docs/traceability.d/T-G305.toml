@@ -1,0 +1,11 @@
+[entries."T-G305"]
+id = "T-G305"
+title = "登记两张新卡（201 额度按钟表算 / 202 指标防近视）+ 基点改对"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡201-额度按钟表算.md",
+  "file:复盘/卡/卡202-指标防近视.md",
+]
+gaps = "① ★ 两张卡**都还没派活、更没落地** —— 本笔只做登记与入库，队列里它们如实记 `pending`。指针：`docs/workbacklog.toml`。② ★ `[base] reviewed` 长期停在 `b7dcdc2`（很旧），本笔改成当时 HEAD；**旧基点下建过的树**不受影响，但以后再照旧值建树仍会错。指针：`tools/wb_plan.py`。③ ★ 队列里那 10 张与 201 同域的卡**实际已落地、却还写着 `pending`** —— 那是卡 197 要收的口，本笔没替它收。指针：`复盘/卡/卡197-队列状态收口.md`。④ ★★ **本笔原先还把两个预声明文件当证据**（`file:gates/diag/batch/B-QUOTA.toml` / `B-PROXY.toml`）—— 那两个目录是 **gitignored**，`file:` 断言永远不成立 ⇒ 下一笔落地时 audit 当场咬出来。指针：`tools/wb_task.py`。"

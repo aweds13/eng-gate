@@ -26,6 +26,16 @@
 - `docs/workbacklog.toml`：补回 197（队列状态收口）/ 198（复核拿白名单）/ 200（禅道研究）三条；198 带 `depends = ["184","192"]`。
 - `复盘/卡/卡197-队列状态收口.md` · `复盘/卡/卡198-复核拿白名单.md`：**入库**（原来只在工作区未跟踪 ⇒ `test_card_specs_tracked` 要求"登记过的规格必须在 git 里"）。
 - ★ 第一手：`wb_plan.py check` 退 0（待派 18 张）；`pytest test_card_specs_tracked` 3 条全过。
+## 2026-10-12 —— 登记两张新卡：201 额度按钟表算 / 202 指标防近视（T-G305）
+- `docs/workbacklog.toml`：新增 201（`T-G303`）/ 202（`T-G304`）两条 + 两条预声明（`B-QUOTA` / `B-PROXY` 已 register）；201 与 10 张已落卡同写 `wb_dispatch.py` ⇒ 给一条排班边。
+- `复盘/卡/卡201-额度按钟表算.md` · `复盘/卡/卡202-指标防近视.md`：入库（`test_card_specs_tracked` 要求登记过的规格必须在 git 里）。
+- `[base] reviewed` 由陈旧的 `b7dcdc2` 改成当时 HEAD（`wb_plan worktrees` 照它建树，不跟随就会一落地就撞）。
+- ★ 第一手：`wb_plan.py check` 退 0（84 张卡 / 待派 20）；两池现探均通 —— 记录里的 16:52:45 已过期，**过期 ≠ 可用**。
+## 2026-10-12 —— 登记两张新卡：201 额度按钟表算 / 202 指标防近视（T-G305）
+- `docs/workbacklog.toml`：新增 201（`T-G303`）/ 202（`T-G304`）两条 + 两条预声明（`B-QUOTA` / `B-PROXY` 已 register）；201 与 10 张已落卡同写 `wb_dispatch.py` ⇒ 给一条排班边。
+- `复盘/卡/卡201…md` · `卡202…md` 入库（`test_card_specs_tracked` 要求登记过的规格必须在 git 里）；顺带补 `卡193/194/195…md` —— 它们已落地却一直未跟踪（同类隐患：换个窗口读不到这张卡要干什么）。
+- `[base] reviewed` 由陈旧的 `b7dcdc2` 改成当时 HEAD（`wb_plan worktrees` 照它建树，不跟随就会一落地就撞）。
+- ★ 第一手：`wb_plan.py check` 退 0（84 张卡 / 待派 20）；两池现探均通 —— 记录里的 16:52:45 已过期，**过期 ≠ 可用**。
 ## 2026-10-11 —— CodeBuddy 工人的白名单路径要指向卡树（T-G294 / 卡 194）
 
 - `tools/wb_dispatch.py` +40/-6：`prompt_path()` 区分**两类路径** —— 「**工人要改的**（白名单 / 域）」给 `--cwd` 时

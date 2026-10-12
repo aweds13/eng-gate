@@ -22,7 +22,10 @@
 #     并且**同域卡只要 `depends` 有路径就允许共存**（会被排到不同批）——所以队列里可以
 #     同时有「同域串行」的卡（例：024 → 029 都改 `tools/wb_dispatch.py`）。
 [base]
-reviewed = "b7dcdc2"        # 已复核的基点提交（没登记过就不许建树）
+reviewed = "64d9d02"        # 已复核的基点提交（没登记过就不许建树）
+# ★ 2026-10-12 主控：原来是 `b7dcdc2`（很旧）⇒ `wb_plan worktrees` 会照它建树，
+#   而主树早已走远（新树必须建在**当时的主树 HEAD** 上，否则一落地就撞——本仓咬过）。
+#   现在改成当时 HEAD；以后每落一批，这里跟着走。
 
 [[cards]]
 id = "022"
@@ -1435,4 +1438,46 @@ files = [
   "复盘/研究-禅道22.6.md",
 ]
 risk = "low"
+status = "pending"
+
+# ★★ 卡 201 / 202（用户 2026-10-12 的两条令）：
+#   ① 「pool 要有个功能，就是你 429 了，**不要凭记忆确定是否 429**，要根据**记录时间和现实时间对比**」
+#   ② 读过他六篇个人系统笔记（含 `优化理论与学习实践` 的 Goodhart 定律）之后，主控实测
+#      `src/` 里 **Goodhart 零命中** —— 而我们每天盯的全是代理指标 ⇒ 建登记表 + 过期对账。
+#   两张卡互不撞域，可与 197 同批跑。
+[[cards]]
+id = "201"
+task = "T-G303"
+title = "额度状态按钟表算：429 不许凭记忆，一律「记录时间 vs 现实时间」（四态 + 反向测试）"
+tree = ".wt/quota"
+spec = "复盘/卡/卡201-额度按钟表算.md"
+files = [
+  "tools/pool_quota.py",
+  "tools/wb_dispatch.py",
+  "tools/pool_mcp.py",
+  "tests/test_quota_clock.py",
+  "tests/test_pool_mcp.py",
+  "复盘/卡/卡201-额度按钟表算.md",
+]
+# ★ 与这 10 张**同写 `tools/wb_dispatch.py`** ⇒ 队列校验要求给一条排班边。
+#   ★ 方向：这 10 张**都已落地**（197 那棵树里它们已是 done，主树队列还没翻），所以
+#     `depends` 只作**排班**用、**不拦派活** —— 派活器的真守卫是「域与**在跑**的卡相交」，
+#     而这 10 张现在都没在跑 ⇒ 卡 201 **现在就可以派**（本卡正是「额度不许凭记忆」那条令的落点）。
+depends = ["151", "154", "156", "157", "163", "164", "166", "167", "192", "190"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "202"
+task = "T-G304"
+title = "指标防近视：代理指标登记表（真实目标/证据/上次验证/失效方式）+ 过期对账工具"
+tree = ".wt/proxymap"
+spec = "复盘/卡/卡202-指标防近视.md"
+files = [
+  "docs/proxy-map.toml",
+  "tools/proxy_audit.py",
+  "tests/test_proxy_audit.py",
+  "复盘/卡/卡202-指标防近视.md",
+]
+risk = "mid"
 status = "pending"
