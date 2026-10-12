@@ -18,6 +18,10 @@
 - `tools/pool/landing.py` +10/-4：第 ⑧ 步调 `wb_review.py` 时把收口链**自己那份** `--allow` 原样传下去（★ 不另造一份、不用 `--read-only` 蒙）。
 - `tests/test_wb_land.py` +98：三条钉子（① 命令里确实带 `--allow` 且与收口链一致 ② 复核若仍报没白名单要当问题 ③ 复核的其他真问题照旧非零）。
 - ★ 第一手：`pytest test_wb_land + test_no_window` ⇒ **40 passed**；`ruff` 干净。★ 半成品说明：测试侧那两笔是**上一轮 CodeBuddy 工人**被 429 掐断前写的，主控用 `tools/replay_worker_edits.py` 重放回树，本轮的码道工人接着补了源码侧。
+## 2026-10-12 —— 禅道 22.6 便携版研究：功能 / 架构 / 技术设计 / 理念（T-G300 / 卡 200）
+- 新增 `复盘/研究-禅道22.6.md`（390 行）：一句话 / **104 个模块**原文清单 + 能力域归类 / 组件图 + 版本"声明 vs 实测" / ZenTaoPHP 五层 + 路由 / **337 个 sql（282 个 update）** / 理念与启示 5 条 / 老实说。
+- ★ 第一手：`7z l` 总数行 **22269 files / 6470 folders**；模块数 **104**；★ **MariaDB 不是 MySQL**（声明 10.1.25 / 二进制嵌 MariaDB 10.1.7）。
+- ★ 半成品：上一轮 CodeBuddy 工人已解包（`…/Temp/zentao226/ZenTao`），本轮码道工人**复用**、没重解 894 MB。
 ## 2026-10-11 —— CodeBuddy 工人的白名单路径要指向卡树（T-G294 / 卡 194）
 
 - `tools/wb_dispatch.py` +40/-6：`prompt_path()` 区分**两类路径** —— 「**工人要改的**（白名单 / 域）」给 `--cwd` 时
