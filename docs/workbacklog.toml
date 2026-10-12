@@ -1398,3 +1398,41 @@ files = [
 depends = ["151", "154", "156", "157", "163", "164", "166", "167", "192"]
 risk = "high"
 status = "running"
+
+[[cards]]
+id = "197"
+task = "T-G297"
+title = "队列状态收口：把已落地那批卡的 status 改对 + 一处与现状不符的说明"
+tree = ".wt/queue"
+spec = "复盘/卡/卡197-队列状态收口.md"
+files = [
+  "docs/workbacklog.toml",
+]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "198"
+task = "T-G298"
+title = "收口链把 --allow 传给复核（⑧ 那行「没有给白名单」是噪声，不是缺陷）"
+tree = ".wt/reviewallow"
+spec = "复盘/卡/卡198-复核拿白名单.md"
+files = [
+  "tools/pool/landing.py",
+  "tests/test_wb_land.py",
+]
+depends = ["184", "192"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "200"
+task = "T-G300"
+title = "研究禅道 22.6 便携版：功能 / 架构 / 技术设计 / 理念"
+tree = ".wt/zentao"
+spec = "复盘/卡/卡200-分析禅道22.6.md"
+files = [
+  "复盘/研究-禅道22.6.md",
+]
+risk = "low"
+status = "pending"
