@@ -40,6 +40,11 @@
 - 新增 `docs/proxy-map.toml`（5 条：done 数 / 门禁绿 / 文书行数 / 派活成功率 / 收敛四数）+ `tools/proxy_audit.py`（`--check` 过期退非零并逐条念判据 · `--report` · `--json`）+ `tests/test_proxy_audit.py`（9 条）。
 - ★ 开宗明义写的是 **Goodhart 定律**：这些数**全是代理指标** —— 登记 `real_goal` / `evidence` / `last_verified` / `failure_mode`（极端|因果|对抗）四项，30 天不验就红一次，逼人重新验证。
 - ★ 两个真现场都写进登记表当**案**：① 193 的「文书 ≤6 行」上线当天就被我们自己压到 6 行（**对抗型**）；② 记录里 16:52:45 让所有人以为到点就能派活，23:28 真探才知通不通（**因果型**）。
+## 2026-10-12 —— 队列状态收口：14 张已落卡的 status 改对 + 一处过时说明（T-G297 / 卡 197）
+- `docs/workbacklog.toml`：**14 处 `pending → done`**（151/154/156/157/161/162/163/164/166/167/184/185/186/192），逐张按**各自落地提交**核对（工人给出的对照表在 `gates/diag/wb-197.jsonl`）。
+- ★ 主控**补收名单外的 3 张**：190（`c2c7508`）/ 198（`0ba753d`）/ 200（`9526cfc`）—— 它们已落却还挂着 `running`/`pending`。
+- ★ 省去：把那行过时说明改对（`007/008/009/010 是当前在飞的四张` ⇒ 全量登记口径）。
+- ★ 第一手：`wb_plan.py check` 退 0；工人子集 `pytest tests/test_wb_plan.py tests/test_card_specs_tracked.py` **67 passed**。
 ## 2026-10-11 —— CodeBuddy 工人的白名单路径要指向卡树（T-G294 / 卡 194）
 
 - `tools/wb_dispatch.py` +40/-6：`prompt_path()` 区分**两类路径** —— 「**工人要改的**（白名单 / 域）」给 `--cwd` 时

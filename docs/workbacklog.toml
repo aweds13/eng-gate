@@ -12,7 +12,7 @@
 #   risk    —— low | mid | high（high 才派对抗性复核）。
 #   status  —— pending | running | done | failed。
 #
-# 口吻：这份文件**只登记没编过的卡**；下面 007/008/009/010 是当前在飞的四张。
+# 口吻：这份文件是**全量登记**——已落地的卡留在表里、status 转 done/failed（check 跳过它们；历史在 git 里）。
 
 #
 # ★ 2026-09-26 收敛（T-G118）：这份文件是**待派队列** ——
@@ -704,7 +704,7 @@ files = [
 ]
 depends = ["149"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "153"
@@ -731,7 +731,7 @@ files = [
 ]
 depends = ["151"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "156"
@@ -747,7 +747,7 @@ files = [
 ]
 depends = ["154"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "157"
@@ -764,7 +764,7 @@ files = [
 ]
 depends = ["156"]
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "158"
@@ -860,7 +860,7 @@ files = [
 ]
 depends = ["160", "157"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "162"
@@ -880,7 +880,7 @@ files = [
 ]
 depends = ["159", "160"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "163"
@@ -903,7 +903,7 @@ files = [
 ]
 depends = ["150", "157"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "164"
@@ -926,7 +926,7 @@ files = [
 ]
 depends = ["156", "157", "163"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "166"
@@ -942,7 +942,7 @@ files = [
 ]
 depends = ["164"]
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "167"
@@ -956,7 +956,7 @@ files = [
 ]
 depends = ["166"]
 risk = "mid"
-status = "pending"
+status = "done"
 [[cards]]
 id = "168"
 task = "T-G168"
@@ -1220,7 +1220,7 @@ files = [
 ]
 depends = ["163"]
 risk = "high"
-status = "pending"
+status = "done"
 # ★★ 卡 185：用户令「想一下行业有没有相关的，通过文献的搜索，看看还有什么调整的方法，**然后把这个东西纳入我们的
 #   软件工程执行框架上**」⇒ 检索结果落档 `复盘/框架-验证分层的行业做法.md`（带真实 arXiv 编号），
 #   本卡把那份文书的 F1~F9 折进**框架本身**（选择率+召回 / 兜底捕获率 / 动态读数进输入面 / 粒度 / 无关失败 /
@@ -1243,7 +1243,7 @@ files = [
 ]
 depends = ["179"]
 risk = "high"
-status = "pending"
+status = "done"
 # ★★ 卡 186：用户问「整个管线不可能十全十美，**如何做到这种可控性的维护？以及修改**」⇒ 检索结果落档
 #   `复盘/框架-可控性与安全修改.md`（带真实 arXiv 编号 + 三条证据缺口）。总纲 = **可执行约束 + 闭环 +
 #   多样性匹配（Ashby）+ 显式债务 + 可逆迁移**；「安全修改」第一条 = **先证明旧判据还活着，再改它**。
@@ -1265,7 +1265,7 @@ files = [
 ]
 depends = ["179", "185"]
 risk = "high"
-status = "pending"
+status = "done"
 # ★★ 卡 187（用户 16:3x：「专门拍这张卡去做一下**引文的回溯**……**关键是有我们的目标是优化，而不是单纯的找文献**」）：
 #   方法照官方 **snowballing 指南**（Wohlin, EASE 2014）：起点集 14 篇 → backward/forward 逐跳 → 记收敛跳数。
 #   ★ 交付**不是书目**：`复盘/优化候选.toml`（机器可读，**下游直接生成卡**）+ 一份人读的引文链与差集。
@@ -1373,7 +1373,7 @@ files = [
 ]
 depends = ["164", "166", "167", "184"]
 risk = "high"
-status = "pending"
+status = "done"
 
 # ★★ 卡 190（用户 2026-10-03 17:2x 的令：「那假如你把它扔给另一个工人呢，就是不同对话窗口？」⇒ 卡 189 是
 #   `wb_advcard.py` 的**第一次真跑**，用**不同族**模型（实现 deepseek-v4.1-flash / 复核 glm-5.3-flash）
@@ -1400,7 +1400,7 @@ files = [
 #     而那 9 张现在都没在跑 ⇒ ★ 本卡**现在就可以派**（它的 F1 正是**解开账号路线**的那一条）。
 depends = ["151", "154", "156", "157", "163", "164", "166", "167", "192"]
 risk = "high"
-status = "running"
+status = "done"
 
 [[cards]]
 id = "197"
@@ -1412,7 +1412,7 @@ files = [
   "docs/workbacklog.toml",
 ]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "198"
@@ -1426,7 +1426,7 @@ files = [
 ]
 depends = ["184", "192"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "200"
@@ -1438,7 +1438,7 @@ files = [
   "复盘/研究-禅道22.6.md",
 ]
 risk = "low"
-status = "pending"
+status = "done"
 
 # ★★ 卡 201 / 202（用户 2026-10-12 的两条令）：
 #   ① 「pool 要有个功能，就是你 429 了，**不要凭记忆确定是否 429**，要根据**记录时间和现实时间对比**」
@@ -1465,7 +1465,7 @@ files = [
 #     而这 10 张现在都没在跑 ⇒ 卡 201 **现在就可以派**（本卡正是「额度不许凭记忆」那条令的落点）。
 depends = ["151", "154", "156", "157", "163", "164", "166", "167", "192", "190"]
 risk = "mid"
-status = "pending"
+status = "running"
 
 [[cards]]
 id = "202"
@@ -1480,4 +1480,4 @@ files = [
   "复盘/卡/卡202-指标防近视.md",
 ]
 risk = "mid"
-status = "pending"
+status = "done"
