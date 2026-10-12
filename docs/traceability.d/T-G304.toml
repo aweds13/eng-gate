@@ -1,0 +1,12 @@
+[entries."T-G304"]
+id = "T-G304"
+title = "指标防近视：代理指标登记表 + 过期对账"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/proxy-map.toml",
+  "file:tools/proxy_audit.py",
+  "file:tests/test_proxy_audit.py",
+]
+gaps = "① ★ **本卡没接门禁** —— `tools/proxy_audit.py` 是**零件**，还没人自动跑（接线要动 `scripts/run_gates.py` 的 `build_jobs()`/`FAST`，而 `tests/test_gates_reuse_line.py` 里有写死的门数断言）。★ 这正是本仓点过名的病：「零件在那儿、没人用」。指针：`tools/proxy_audit.py`。② ★★ **5 条的 `last_verified` 全是今天** —— 那是**登记日**、不是**真验证过**的日期。判据在 11-11 之前会一直绿，而**期间没有任何人真验证过那些代理还成不成立** ⇒ 「有日期」被当成了「验过」。指针：`docs/proxy-map.toml`。③ ★ **`--check` 在新鲜时把「过期多少天」显示成负数**（如 `-30`）—— 口径该是 0。只是显示，不影响判读退码。指针：`tools/proxy_audit.py`。"
+
