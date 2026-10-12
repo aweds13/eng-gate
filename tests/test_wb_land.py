@@ -76,10 +76,13 @@ _NEW_TOOLS = (
     "tools/pool/review.py",
     "tools/wb_stage_card.py",
     "tools/pool/stage_card.py",
+    # ★ 卡 193（T-G293）：`stage_card._selfcheck` 起要 `import card_doc_budget`
+    #   ⇒ 沙箱少这一份，脚本**一 import 就崩**（当晚实测）⇒ 清单必须跟着真依赖走。
+    "tools/card_doc_budget.py",
 )
 
 _TEXT = """=== gaps ===
-**边界**：合成卡，仅供钉子用，不作数。
+**边界**：合成卡，仅供钉子用，不作数（指针 `code/a.py`）。
 === changelog ===
 ## 2026-10-02 · 钉子用
 - 为什么：证明收口链搬进 git 后行为还在

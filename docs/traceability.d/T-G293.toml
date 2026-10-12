@@ -1,0 +1,12 @@
+[entries."T-G293"]
+id = "T-G293"
+title = "压缩文书判据接线：card_doc_budget 接进收口链（超预算/指针够不着 ⇒ 当场退回）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/stage_card.py",
+  "file:tests/test_card_doc_budget.py",
+  "file:tests/test_wb_land.py",
+]
+gaps = "① ★★ **接上的判据只管「文书」**：它查结构预算与指针存在性，**查不了内容对不对**（那要人读）⇒ 它拦的是「太长 / 指针够不着」，不是「写得对不对」。指针：`tools/card_doc_budget.py`。② ★ **预算数值是口径，不是真理**（60 行 / gaps ≤6 / 每条 ≤3 行 / changelog 每卡 ≤6 行 / 老实说 ≤4 条）——本卡**不许改它们**；要改得用户点头。指针：`复盘/外包-卡表与规矩.md` §17 第 5 条。③ ★ **判据只对「这一笔」生效**：接入前写下的文书**不会被追溯检查**（正如今晚那些）。指针：`tools/pool/stage_card.py` 的 `_selfcheck`。"
+

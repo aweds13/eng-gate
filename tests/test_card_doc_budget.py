@@ -158,3 +158,84 @@ def test_real_checkpoints_fit_budget():
     assert not over_lines, f"行数超 60: {over_lines}"
     if honest_debt:
         print(f"[已知债] 老实说超 4 条的既有文书: {honest_debt}")
+
+
+# ---------------------------------------------------------- _selfcheck 接线（卡 193 / T-G293）
+# 四条反例钉子：判据接进 stage_card._selfcheck 后，坏文书当场退回、合规文书放行。
+# 判据真源只在 tools/card_doc_budget.py；_selfcheck 只透传正文、不重写判据。
+from pool import stage_card as _stage_card  # noqa: E402
+
+
+def _crlf(text: str) -> bytes:
+    """纯 CRLF 字节（_selfcheck 第③条要求三个共享文档纯 CRLF）。"""
+    return text.encode("utf-8").replace(b"\n", b"\r\n")
+
+
+def _compliant_wt(tmp_path: Path) -> Path:
+    """造一个让 _selfcheck 前 4 条都过的工作树。"""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "复盘").mkdir()
+    (tmp_path / "docs" / "traceability.toml").write_bytes(
+        _crlf('[entries]\n\n[entries."T-G293"]\nid = "T-G293"\nstatus = "done"\n'))
+    (tmp_path / "docs" / "changelog.md").write_bytes(_crlf("## 2026-10-11 标题\n"))
+    (tmp_path / "复盘" / "交接-重构进度.md").write_bytes(_crlf("# 交接\n"))
+    return tmp_path
+
+
+def _compliant_gaps(wt: Path) -> str:
+    """一条带真文件指针的合规 gap（在 wt 下造指针指向的文件）。"""
+    needle = wt / "tools" / "ok.py"
+    needle.parent.mkdir(parents=True, exist_ok=True)
+    needle.write_text("# ok\n", encoding="utf-8")
+    return f"1. 边界 X 没做，见 {needle.relative_to(wt)}:1。"
+
+
+def _stub_subprocess_for_selfcheck(monkeypatch) -> None:
+    """_selfcheck 第④条要跑 tools/sync_docs.py（tmp_path 里没有）⇒ stub 成过；
+    check_pointers 的 git cat-file ⇒ stub 成失败（sha 不存在，钉子③用得上）。"""
+    real = subprocess.run
+
+    def fake(cmd, **kwargs):                       # noqa: ANN001, ANN202
+        cmd = list(cmd)
+        if any("sync_docs.py" in c for c in cmd):
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        if "git" in cmd and "cat-file" in cmd:
+            return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="fatal: no git")
+        return real(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake)
+
+
+def test_selfcheck_rejects_over_budget_checkpoint(tmp_path, monkeypatch):
+    """① 反例：checkpoint 61 行 > 预算 60 ⇒ _selfcheck 报出哪一节超多少。"""
+    wt = _compliant_wt(tmp_path)
+    _stub_subprocess_for_selfcheck(monkeypatch)
+    cp = "\n".join(f"行 {i}" for i in range(budget.MAX_CHECKPOINT_LINES + 1))
+    bad = _stage_card._selfcheck(wt, cp_text=cp, gaps_text=_compliant_gaps(wt), cl_text=_CL_OK)
+    assert any("checkpoint" in b and "超" in b for b in bad), bad
+
+
+def test_selfcheck_rejects_gap_without_pointer(tmp_path, monkeypatch):
+    """② 反例：gaps 一条不带指针 ⇒ _selfcheck 报出来。"""
+    wt = _compliant_wt(tmp_path)
+    _stub_subprocess_for_selfcheck(monkeypatch)
+    bad = _stage_card._selfcheck(wt, cp_text=_CP_OK, gaps_text="1. 这条只说没做，不指哪里。",
+                                 cl_text=_CL_OK)
+    assert any("没有指针" in b for b in bad), bad
+
+
+def test_selfcheck_rejects_pointer_to_nonexistent(tmp_path, monkeypatch):
+    """③ 反例：指针指向不存在的东西 ⇒ _selfcheck 报出来。"""
+    wt = _compliant_wt(tmp_path)
+    _stub_subprocess_for_selfcheck(monkeypatch)
+    bad = _stage_card._selfcheck(wt, cp_text=_CP_OK, gaps_text="1. 见 no/such.py:1。",
+                                 cl_text=_CL_OK)
+    assert any("不存在" in b for b in bad), bad
+
+
+def test_selfcheck_passes_compliant_doc(tmp_path, monkeypatch):
+    """④ 反例：合规文书 ⇒ _selfcheck 全绿（别把正常文书也拦了）。"""
+    wt = _compliant_wt(tmp_path)
+    _stub_subprocess_for_selfcheck(monkeypatch)
+    bad = _stage_card._selfcheck(wt, cp_text=_CP_OK, gaps_text=_compliant_gaps(wt), cl_text=_CL_OK)
+    assert bad == [], bad

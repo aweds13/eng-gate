@@ -36,6 +36,13 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 ANCHOR = "> **给新对话窗口用的交接文档。** 读完本文 + §五 的必读清单，即可无缝接手。"
 
+# ★ 卡 193（T-G293）：把 tools/ 挂上 path 以便 import 压缩文书判据
+#   （判据唯一真源 = tools/card_doc_budget.py，不许在本文件重写一份）
+_TOOLS_DIR = str(pathlib.Path(__file__).resolve().parent.parent)
+if _TOOLS_DIR not in sys.path:
+    sys.path.insert(0, _TOOLS_DIR)
+import card_doc_budget  # noqa: E402
+
 
 def _unescape_git_quoted(value: str) -> str:
     """把 `git` 默认 `core.quotePath=true` 输出的**八进制转义路径**还原成人能用的路径。
@@ -94,14 +101,16 @@ def quote_safe(text: str) -> str:
     return out.replace("\\", "\\\\")
 
 
-def _selfcheck(wt: pathlib.Path) -> list[str]:
+def _selfcheck(wt: pathlib.Path, *, cp_text: str = "", gaps_text: str = "",
+               cl_text: str = "") -> list[str]:
     r"""写完**立刻**验一遍机器可读文件（2026-10-01 一天里我自己的工具弄坏过 4 次机器可读文件）。
 
-    判据只有四条，都是**真踩过**的：
+    判据有五条，前四条**真踩过**、第五条卡 193 接线：
       ① 台账能 `tomllib` 解析 —— 病：`\U` 被当 unicode 转义（坑 22）
       ② changelog 首行是 `## ` 标题 —— 病：bullet 插到标题之上（坑 23）
       ③ 三个共享文档是纯 CRLF —— 病：汇总器写死 `\n` 整份变 LF
       ④ 片段 ↔ 汇总一致 —— 病：手改了汇总却没改片段（或反之）
+      ⑤ 压缩文书结构预算 + 指针（卡 193 / T-G293）—— 判据真源 = tools/card_doc_budget.py
     """
     import subprocess
     import sys as _sys
@@ -134,6 +143,13 @@ def _selfcheck(wt: pathlib.Path) -> list[str]:
     if r.returncode != 0:
         detail = ((r.stdout or "") + (r.stderr or "")).strip()[:400]
         bad.append("sync_docs.py --check 不通过：" + detail)
+
+    # ⑤ 卡 193（T-G293）：压缩文书结构预算 + 指针 —— 判据真源 = tools/card_doc_budget.py，
+    #   文书正文从 main 透传（收口链的 _text_<台账号>.md 那条路），不在本文件重写判据。
+    if cp_text or gaps_text or cl_text:
+        bad += card_doc_budget.check_budget(checkpoint=cp_text, gaps=gaps_text, changelog=cl_text)
+        if gaps_text.strip():
+            bad += card_doc_budget.check_pointers(gaps_text, root=wt)
     return bad
 
 
@@ -195,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     #   为什么：共享文档是**每笔都在同一锚点改**的那三个文件 ⇒ 并发提交必冲突（B 就是为它做的）。
     frag_dir = wt / "docs" / "changelog.d"
     if frag_dir.is_dir():
-        return _fragments_mode(wt, a, gaps, cl, cp)
+        return _fragments_mode(wt, a, gaps, cl, cp, raw_gaps=raw_gaps)
 
     # ① 台账
     raw, nl = load(ledger)
@@ -236,19 +252,21 @@ def main(argv: list[str] | None = None) -> int:
         lf = b.count(b"\n") - b.count(b"\r\n")
         print(f"  {p.name}: {len(b)} 字节 纯LF={lf}")
         assert lf == 0
-    bad = _selfcheck(wt)
+    bad = _selfcheck(wt, cp_text=cp, gaps_text=raw_gaps, cl_text=cl)
     if bad:
         print("★ 写后自检没过 ⇒ 停手（别拿去提交）：")
         for item in bad:
             print(f"   - {item}")
         return 3
-    print("OK（写后自检 4 条全过：台账可解析 / changelog 首行是标题 / 纯 CRLF / 片段↔汇总一致）")
+    print("OK（写后自检 5 条全过：台账可解析 / changelog 首行是标题 / "
+          "纯 CRLF / 片段↔汇总一致 / 文书预算+指针）")
     return 0
 
 
 
 
-def _fragments_mode(wt: pathlib.Path, a, gaps: str, cl: str, cp: str) -> int:
+def _fragments_mode(wt: pathlib.Path, a, gaps: str, cl: str, cp: str,
+                    raw_gaps: str = "") -> int:
     """写三个片段 → 调 `tools/sync_docs.py` 汇总（**幂等**）。返回 0。
 
     ★ 内容与旧写法**一字不差**：changelog 片段 = 原来要插到文件头的那一节；
@@ -297,13 +315,14 @@ def _fragments_mode(wt: pathlib.Path, a, gaps: str, cl: str, cp: str) -> int:
         print(f"  {rel}: {len(b)} 字节 纯LF={lf}")
         assert lf == 0, rel
     print("OK（片段模式）")
-    bad = _selfcheck(wt)
+    bad = _selfcheck(wt, cp_text=cp, gaps_text=raw_gaps, cl_text=cl)
     if bad:
         print("★ 写后自检没过 ⇒ 停手（别拿去提交）：")
         for item in bad:
             print(f"   - {item}")
         return 3
-    print("OK（写后自检 4 条全过：台账可解析 / changelog 首行是标题 / 纯 CRLF / 片段↔汇总一致）")
+    print("OK（写后自检 5 条全过：台账可解析 / changelog 首行是标题 / "
+          "纯 CRLF / 片段↔汇总一致 / 文书预算+指针）")
     return 0
 
 

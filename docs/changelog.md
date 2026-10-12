@@ -4,6 +4,14 @@
   解析成**卡树绝对路径**；「**只读临时件**（规格 / 切片）」仍按主仓解析（它们不在卡树里）。
 - `tests/test_wb_dispatch.py` +60：**四条钉子**（① 卡树绝对 ② 临时件仍主仓 ③ 不给 `--cwd` 逐字不变 ④ 反例：指向主仓即红）。
 - ★ 第一手：`pytest tests/test_wb_dispatch.py tests/test_no_window.py` ⇒ **209 passed**；`ruff` 干净。
+## 2026-10-11 —— 压缩文书判据接线：card_doc_budget 接进收口链（T-G293 / 卡 193）
+
+- `tools/pool/stage_card.py` +27/-8：`_selfcheck()` 接上 `tools/card_doc_budget.py` 的
+  `check_budget()` + `check_pointers()` ⇒ **文书超预算 / `gaps` 的指针指不到东西 ⇒ 收口当场退回**，
+  并**指出超哪一节、超多少**（不许只说"太长"）。
+- `tests/test_card_doc_budget.py` +81：**四条反例钉子**（超预算 / 没指针 / 指针指不到 ⇒ 红；合规 ⇒ 绿）。
+- ★ 第一手：`pytest tests/test_card_doc_budget.py tests/test_tf_stage_guard.py` ⇒ **26 passed**；`ruff` 干净。
+- ★ **本卡的文书就是被它自己查的**（接线之后第一次自证：合规 ⇒ 绿）。
 ## 2026-10-04 —— 门的输入面与跑法：补全输入表 + 慢门告警 + `wb_impact` 接进前置（T-G261 / 卡 161）
 
 - `scripts/run_gates.py` +86/-2：`DOOR_INPUTS`/`REUSE_INPUTS` 补 `render_signatures.json` / `phone_check.mjs`
