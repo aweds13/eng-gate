@@ -1,0 +1,11 @@
+[entries."T-G296"]
+id = "T-G296"
+title = "内置 node 不许写死版本：CodeBuddy 那条路整条断过"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_dispatch.py",
+]
+gaps = "① ★★ **只修了「内置 node」这一处**：CodeBuddy CLI 自己的位置（`NPM_CLI_PARTS` / `FALLBACK_CLI_REL`）仍按老假设找；哪天 npm 全局目录变了，同类故障会再出现一次。指针：`tools/wb_dispatch.py` 的 `paths()`。② ★ **回退路径仍是写死的 `22.22.2-3`**：它只在「`versions` 目录都不存在」时才用 ⇒ 那种机器上**照样报找不到**，本卡**不猜**（宁可报错，也不静默换一个不存在的东西）。指针：`tools/wb_dispatch.py` 的 `NODE_REL_FALLBACK`。③ ★ **「最新」按版本目录名**倒序排（字符串序）⇒ `22.22.2-10` 会排在 `22.22.2-9` **前面**（恰好对）；但若哪天版本号位数不齐（`22.9` vs `22.10`）这条会挑错。指针：`tests/test_wb_dispatch.py` 的第②条钉子。"
+

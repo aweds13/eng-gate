@@ -3673,3 +3673,31 @@ def test_main_reports_archive_failures_to_stderr(sandbox: Path, monkeypatch, cap
     assert "wb-001.verdict.txt" in err, "stderr 要点名哪件没归成"
 
 
+# ---------------------------------------------------------------- 卡 196（T-G296）：内置 node 不许
+
+def test_resolve_node_prefers_current_marker(tmp_path: Path) -> None:
+    """★ 卡 196 钉子①：`versions/current`（**内容为版本名的小文件**）优先 —— 机器升版本后不再断。"""
+    versions = tmp_path / ".workbuddy" / "binaries" / "node" / "versions"
+    (versions / "22.22.2-6").mkdir(parents=True)
+    (versions / "22.22.2-6" / "node.exe").write_text("x", encoding="utf-8")
+    (versions / "22.22.2-3").mkdir(parents=True)
+    (versions / "22.22.2-3" / "node.exe").write_text("x", encoding="utf-8")
+    (versions / "current").write_text("22.22.2-6", encoding="utf-8")
+
+    got = wd._resolve_node(tmp_path)
+    assert got == versions / "22.22.2-6" / "node.exe", got
+
+
+def test_resolve_node_falls_back_to_newest_and_then_pinned(tmp_path: Path) -> None:
+    """★ 卡 196 钉子②：没有 `current` ⇒ 扫 `versions/*/node.exe` 取**最新**；
+    连 versions 目录都没有 ⇒ 退回旧的写死路径（宁可报错，也不静默换一个不存在的）。"""
+    versions = tmp_path / ".workbuddy" / "binaries" / "node" / "versions"
+    (versions / "22.22.2-6").mkdir(parents=True)
+    (versions / "22.22.2-6" / "node.exe").write_text("x", encoding="utf-8")
+    (versions / "22.22.2-4").mkdir(parents=True)
+    (versions / "22.22.2-4" / "node.exe").write_text("x", encoding="utf-8")
+    assert wd._resolve_node(tmp_path) == versions / "22.22.2-6" / "node.exe"
+
+    empty = tmp_path / "nohome"
+    empty.mkdir()
+    assert wd._resolve_node(empty) == empty / wd.NODE_REL_FALLBACK

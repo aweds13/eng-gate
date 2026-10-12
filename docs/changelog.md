@@ -10,6 +10,10 @@
 - 新增 `tools/pool/lease.py`（`claim` / `release`，**写与 CodeBuddy 那条路同一本账**）+ `tests/test_pool_lease.py`（3 条钉子）。
 - 钉子证明：卡 154 占 `shared.py` 后，卡 166 从**码道入口**再占 ⇒ **退 1 并报「冲突域相交」**（跨入口可见）。
 - ★ 第一手：`pytest tests/test_pool_lease.py` ⇒ **3 passed**；`ruff` 干净。★ 仓外调用点的主控贴法见文书。
+## 2026-10-12 —— 内置 node 不许写死版本：CodeBuddy 那条路整条断过（T-G296 / 卡 196）
+- `tools/wb_dispatch.py`：`NODE_REL`（写死 `22.22.2-3`）⇒ 改成 `_resolve_node()`：先读 `versions/current`（**内容为版本名的小文件**，不是目录），再扫 `versions/*/node.exe` 取最新，都不行才退回旧路径。
+- `tests/test_wb_dispatch.py`：两条钉子（current 优先 / 回退最新 or 写死路径）。★ 第一手：干跑从「找不到内置 node」变成解析到 `…\versions\22.22.2-6\node.exe`（存在）。
+- ★ 第一手：`pytest test_wb_dispatch + test_no_window` ⇒ **212 passed**；`ruff` 干净。
 ## 2026-10-11 —— CodeBuddy 工人的白名单路径要指向卡树（T-G294 / 卡 194）
 
 - `tools/wb_dispatch.py` +40/-6：`prompt_path()` 区分**两类路径** —— 「**工人要改的**（白名单 / 域）」给 `--cwd` 时

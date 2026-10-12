@@ -211,7 +211,13 @@ DEFAULT_QUOTA_WAIT = 300         # 撞 429 → 先等 300 秒再探（用户 202
 DEFAULT_INPUT_BUDGET = 25_000_000  # 防空烧：单卡 input tokens 预算（实测单卡最高 18,400,724）
 
 
-NODE_REL = r".workbuddy\binaries\node\versions\22.22.2-3\node.exe"
+NODE_VERSIONS_REL = r".workbuddy\binaries\node\versions"
+# ★ 2026-10-12（主控）：这里原来把版本号**写死**成 `22.22.2-3`；机器升到 `22.22.2-6` 之后，
+#   整条 CodeBuddy 路**直接断**（干跑报「找不到内置 node」）。改成**解析**：
+#   ① 读 `versions/current` —— 它是个**内容为版本名的小文件**（不是目录！）；
+#   ② 退而扫 `versions/*/node.exe` 取**最新**（按版本目录名倒序）；
+#   ③ 都不行才退回旧的写死路径（宁可报错，也不静默换一个不存在的）。
+NODE_REL_FALLBACK = r".workbuddy\binaries\node\versions\22.22.2-3\node.exe"
 # ★ 优先用**独立安装**的 CodeBuddy CLI（官方 npm 包，带 TUI、能登录）：
 #   WorkBuddy 自带那份是**无头版**（缺 dist/codebuddy.js，`config`/`doctor`/`install` 全废、
 #   也没有 `/login` 可敲）—— 2026-09-26 实测，见 复盘/外包-卡表与规矩.md §10。
@@ -335,10 +341,36 @@ def ensure_lean_brief(card: str, worker_cwd: Path | None = None) -> str:
     return rel
 
 
+def _resolve_node(home: Path) -> Path:
+    """内置 node 的可执行文件 —— **不写死版本号**（见 `NODE_VERSIONS_REL` 那段的注释）。
+
+    ★ 2026-10-12：机器上的 node 从 `22.22.2-3` 升到 `22.22.2-6` ⇒ 写死的那条路整条断。
+    顺序：`versions/current`（指针文件）→ `versions/*/node.exe` 取最新 → 旧的写死路径。
+    """
+    versions = home / NODE_VERSIONS_REL
+    if versions.is_dir():
+        marker = versions / "current"
+        if marker.is_file():
+            try:
+                name = marker.read_text(encoding="utf-8", errors="replace").strip()
+            except OSError:
+                name = ""
+            if name:
+                cand = versions / name / "node.exe"
+                if cand.is_file():
+                    return cand
+        cands = sorted((p / "node.exe" for p in versions.iterdir() if p.is_dir()),
+                       key=lambda p: p.parent.name, reverse=True)
+        for cand in cands:
+            if cand.is_file():
+                return cand
+    return home / NODE_REL_FALLBACK
+
+
 def paths(cli_override: str | None = None) -> tuple[Path, Path]:
     """（内置 node, CLI 入口）—— 默认优先独立安装的那份，找不到才退回 WorkBuddy 自带的。"""
     home = Path(os.environ.get("USERPROFILE", str(Path.home())))
-    node = home / NODE_REL
+    node = _resolve_node(home)
     if cli_override:
         return node, Path(cli_override)
     appdata = Path(os.environ.get("APPDATA", str(home / "AppData" / "Roaming")))
