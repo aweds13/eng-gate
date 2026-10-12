@@ -4,6 +4,9 @@
 - `tools/pool_mcp.py`：加**只读**工具 `quota_status`（当场算，回「能不能派活 + 还有多久」）；四个测试文件的工具计数跟着 9/13 → 10/14。
 - ★ 四态实测：限流中（`remaining_seconds=9000`）· **已过期，需重新探测** · 余额耗尽 · **未记录（不猜）**。
 - ★ 真现场：记录写 `16:52:45`，主控 23:28 现探两个模型都通 —— **「过期」不是「可用」，只有探测才是证据**。
+## 2026-10-13 —— 队列收尾：卡 201 落地后 status 转 done（T-G306 / 卡 201 的尾巴）
+- `docs/workbacklog.toml`：卡 201 `running → done`（它的落地提交是 `59e1d0f`）—— 补齐「落地即翻 status」这一步。
+- ★ 第一手：`wb_plan.py check` 退 0，**待派 0 张 / 84 张全部有终态**（done 83 + failed 1）。
 ## 2026-10-12 —— 旧判决归档不再静默失败：唯一时间戳名 + `(moved, failed)` 出声（T-G256 / 卡 156）
 - `tools/wb_dispatch.py`：目标已存在 ⇒ **带时间戳的唯一名**（Windows 上 rename 撞已存在会抛 `FileExistsError`，旧写法静默吞 ⇒ 第二次起归档全失败）；返回 `(moved, failed)`，调用点把失败打进 stderr。
 - `tests/test_wb_dispatch.py`：移植它的 **3 条归档钉子**。★ 与已落 164 重叠的那半**没有写第二份**。

@@ -6158,3 +6158,13 @@ evidence = [
   "file:tests/test_pool_registry.py",
 ]
 gaps = "① ★★ **卡规格的白名单开窄了（我的缺陷）**：加一个**只读** MCP 工具会改**四个**测试文件里的工具计数，而我只给了 `test_pool_mcp.py` ⇒ 落地时红 **9 条**。主控补了 `test_pool_mcp_task.py` / `test_pool_mcp_write.py` / `test_pool_registry.py` 的计数（并改对两处过时说明）。指针：`tools/pool_mcp.py`。② ★ **工人没跑 ruff**（卡规格只让它跑 pytest）⇒ 它交的代码带 5 条 lint：3 处长行 + 1 处导入序 + 1 处 `SIM105`，全由主控修。★ 根因是我的卡规格漏了「跑 ruff」这一条。指针：`tools/pool_quota.py`。③ ★ **测试函数用了中文名**（9 个，`test_state_限流中` 一类）⇒ `N802`；本仓惯例是 ASCII 名，主控改成 ASCII（语义留在 docstring 里）。指针：`tests/test_quota_clock.py`。④ ★ **`record` 没有独立 CLI**（只有库函数）：手工补一条记录只能从 python 调。够用（记录本来由派活器自动落），但排障少一个入口。指针：`tools/pool_quota.py`。⑤ ★ **等待只在「短侧」按记录算**：上限默认 = `--quota-wait`（300 秒）⇒ 记录写「2 小时后重置」仍只等 300 秒。这是**有意**的（不让坏记录冻住派活器），但要说清。指针：`tools/pool_quota.py`。"
+
+[entries."T-G306"]
+id = "T-G306"
+title = "队列收尾：卡 201 落地后 status 转 done"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+]
+gaps = "① ★ 这一笔只有一行（卡 201 的 `status`：`running` → `done`）—— 它本该在**201 自己那笔**里翻，但 201 的域不含队列文件 ⇒ 漏到主控补。**同类漏**在 193/194/195/196 上还有（它们已落、却**没有条目**），那是另一张卡的活。指针：`docs/workbacklog.toml`。② ★ 队列文件由**多张卡**改，所以「落地时翻自己 status」这件事**结构上没人管** —— 本仓的惯例是主控收口时顺手翻，没有机器判据。指针：`tools/wb_plan.py`。"

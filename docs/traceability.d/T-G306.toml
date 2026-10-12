@@ -1,0 +1,10 @@
+[entries."T-G306"]
+id = "T-G306"
+title = "队列收尾：卡 201 落地后 status 转 done"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+]
+gaps = "① ★ 这一笔只有一行（卡 201 的 `status`：`running` → `done`）—— 它本该在**201 自己那笔**里翻，但 201 的域不含队列文件 ⇒ 漏到主控补。**同类漏**在 193/194/195/196 上还有（它们已落、却**没有条目**），那是另一张卡的活。指针：`docs/workbacklog.toml`。② ★ 队列文件由**多张卡**改，所以「落地时翻自己 status」这件事**结构上没人管** —— 本仓的惯例是主控收口时顺手翻，没有机器判据。指针：`tools/wb_plan.py`。"
+
