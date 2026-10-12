@@ -49,7 +49,9 @@ import pool_mcp  # noqa: E402 —— tools/ 已在 sys.path 上
 from pool import task  # noqa: E402
 
 READ_POOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_status",
-                   "pool_models"]
+                   "pool_models",
+                   # ★ 卡 201（T-G303）：第 10 个只读工具 —— 额度状态按钟表算
+                   "quota_status"]
 READ_TASK_NAMES = ["task_list", "task_status", "task_pool"]
 READ_TOOL_NAMES = [*READ_POOL_NAMES, *READ_TASK_NAMES]
 WRITE_TOOL_NAMES = ["pool_dispatch", "pool_cancel", "task_register", "task_claim"]
@@ -206,7 +208,7 @@ def test_tools_list_without_env_is_nine_read(batch: Path,
 
 
 def test_tools_list_with_env_adds_two_task_writes(batch: Path, write_on: None) -> None:
-    """有 env ⇒ 9 只读 + 4 写；只读的 `readOnlyHint` 仍 true；任务写工具的 annotations 逐字。"""
+    """有 env ⇒ 10 只读 + 4 写；只读的 `readOnlyHint` 仍 true；任务写工具的 annotations 逐字。"""
     tools = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
     assert [t["name"] for t in tools] == [*READ_TOOL_NAMES, *WRITE_TOOL_NAMES]
     by_name = {t["name"]: t for t in tools}
@@ -661,12 +663,16 @@ def test_claim_kill_failure_is_reported_not_swallowed(batch: Path, write_on: Non
 
 
 def test_tools_list_counts_unchanged(batch: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """④ 工具清单没变：没 env = **9**（全只读）；`POOL_MCP_WRITE=1` = **13**。"""
+    """④ 工具清单没变：没 env = **10**（全只读）；`POOL_MCP_WRITE=1` = **14**。
+
+    ★ 卡 201（T-G303）：加了第 10 个只读工具 `quota_status`（额度按钟表算，只读）⇒
+      9/13 → 10/14。**没人放松判据** —— 只是把新工具如实计进来。
+    """
     monkeypatch.delenv("POOL_MCP_WRITE", raising=False)
-    nine = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
-    assert len(nine) == 9, [t["name"] for t in nine]
-    assert all(t["annotations"]["readOnlyHint"] is True for t in nine), nine
+    ten = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    assert len(ten) == 10, [t["name"] for t in ten]
+    assert all(t["annotations"]["readOnlyHint"] is True for t in ten), ten
 
     monkeypatch.setenv("POOL_MCP_WRITE", "1")
-    thirteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
-    assert len(thirteen) == 13, [t["name"] for t in thirteen]
+    fourteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    assert len(fourteen) == 14, [t["name"] for t in fourteen]

@@ -85,6 +85,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import contextlib
 import hashlib
 import json
 import locale
@@ -107,6 +108,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
+import pool_quota  # noqa: E402 —— 额度按钟表算（卡 201）：429 不许凭记忆，按记录时间 vs 现实时间
 import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（别写第二份）
 
 # ★ 卡 109（T-G206）/ 卡 125（T-G223）：这些判据**只有一份真源**，都在 `tools/pool/` 包里
@@ -1321,7 +1323,12 @@ def quota_error(lines: list[str]) -> dict | None:
         if not hit_field:
             continue
         hit = re.search(r"将在\s*([^\n」\"']+?)\s*重置", structured + "\n" + words)
-        return {"kind": "限流" if hit else "余额耗尽", "reset": hit.group(1) if hit else "",
+        reset_raw = hit.group(1) if hit else ""
+        # ★ 卡 201（T-G303）：加 `reset_at`（ISO 或 None）—— 解析只调 `pool_quota.parse_reset`
+        #   （判据只许一份真源）。原有 `kind` / `reset` / `why` 一字不变；两道闸门没动。
+        reset_dt = pool_quota.parse_reset(reset_raw) if reset_raw else None
+        return {"kind": "限流" if hit else "余额耗尽", "reset": reset_raw,
+                "reset_at": reset_dt.isoformat() if reset_dt is not None else None,
                 "why": f"字段 {hit_field} 命中「{hit_needle}」"}
     return None
 
@@ -3018,6 +3025,12 @@ def main() -> int:
                   f"（{quota['why']}；subtype=error_during_execution + 退出码 0，"
                   "长得像成功 —— 别被骗）",
                   file=sys.stderr, flush=True)
+            # ★ 卡 201（T-G303）：把这次 429 落成一条记录 —— 解析在 `pool_quota.record` 里
+            #   （判据只许一份真源）。落记录失败不许影响派活主流程。
+            with contextlib.suppress(OSError, ValueError):
+                pool_quota.record(card=args.card, model=model, pool=pool,
+                                  kind=quota["kind"], reset_raw=quota["reset"],
+                                  source_log=log_k.name, root=ROOT)
             # ★★ 卡 045（T-G136）续跑封顶 —— 界就是这一行：额度续跑与中断续跑**共用
             #   `--retry` 这一个界**（已续跑 attempts-1 次 ≥ retry → 到界，写判决、退出码 7）。
             #   R029 真撞过：旧代码这里无界，探针通过就永远「同一模型接着干」，白跑 3 轮。
@@ -3034,10 +3047,13 @@ def main() -> int:
                       file=sys.stderr, flush=True)
                 release_tree("额度续跑到界 → 任务停下")
                 return 7
-            if args.quota_wait > 0:
-                print(f"[额度] 等 {args.quota_wait}s 再探（用户 2026-09-26：「你先等一下」）",
-                      flush=True)
-                time.sleep(args.quota_wait)
+            # ★ 卡 201（T-G303）：等待按记录算 —— reset_at 在 1 分钟后 ⇒ 等 60 秒（不睡满 300）；
+            #   reset_at 解析不出 ⇒ 退回 --quota-wait。上限 = --quota-wait（不让坏记录冻几小时）。
+            wait = pool_quota.wait_seconds(quota.get("reset_at"), args.quota_wait)
+            if wait > 0:
+                _reset = quota.get("reset_at") or "（无）"
+                print(f"[额度] 等 {wait}s 再探（按记录算；reset_at={_reset}）", flush=True)
+                time.sleep(wait)
             probe_ok, probe_why = quota_probe_ok(node, cli, model)
             if probe_ok:
                 # ★★ 卡 045 §2.4：探针与判别器矛盾时**以探针为准** —— 探针真调了模型，

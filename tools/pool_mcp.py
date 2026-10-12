@@ -315,6 +315,23 @@ TOOL_SPECS: list[dict[str, Any]] = [
         },
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
+    {
+        "name": "quota_status",
+        "description": ("额度四态（卡 201）：按「记录时间 vs 现实时间」判 —— 限流中 / 已过期，"
+                        "需重新探测 / 余额耗尽 / 未记录。只读，当场算，不探测。"),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card": {"type": "string", "description": "卡号，例如 201"},
+                "model": {"type": "string", "description": "模型名"},
+                "now": {"type": "string",
+                        "description": "注入「现在」（ISO-8601；测试用，不许靠真实钟表）"},
+            },
+            "required": ["card", "model"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
 ]
 
 #: 任务面三个**只读**工具（卡 121 §1）—— **不要 env、永远列出**、一个字节都不写。
@@ -360,7 +377,7 @@ TASK_TOOL_SPECS: list[dict[str, Any]] = [
 
 
 def tool_list() -> list[dict[str, Any]]:
-    """九个只读工具（六个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补四个写工具。"""
+    """十个只读工具（七个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补四个写工具。"""
     specs = [*TOOL_SPECS, *TASK_TOOL_SPECS]
     if write_enabled():
         specs += [*WRITE_TOOL_SPECS, *TASK_WRITE_TOOL_SPECS]
@@ -764,6 +781,29 @@ def tool_pool_models(arguments: dict[str, Any], root: Path = ROOT
         lines.append("服务端有但未批准（只报告，绝不自动启用 → 等你一句「批 X」）："
                      + "、".join(info["live_but_unapproved"]))
     return _result("\n".join(lines), info, is_error=False)
+
+
+# ================================================================ 工具 7：quota_status（卡 201）
+
+
+def tool_quota_status(arguments: dict[str, Any], root: Path = ROOT
+                     ) -> tuple[str, dict[str, Any], bool]:
+    """额度四态（卡 201）—— 按「记录时间 vs 现实时间」判，**只读、当场算、不探测**。
+
+    ★ 用户原话：「429 了不要凭记忆确定是否 429，要根据记录时间和现实时间对比」。
+      这个工具就是那条判据的 MCP 面 —— 会话里问「现在能不能派活」得到的是**读数**，
+      不是人的记忆。四态都不猜：`未记录` 不当可用、`已过期` 不当可用。
+    """
+    import pool_quota  # noqa: PLC0415 —— 同一个 tools/ 目录
+    card = str(arguments.get("card") or "").strip()
+    model = str(arguments.get("model") or "").strip()
+    now = arguments.get("now") or None
+    if not card or not model:
+        text = "quota_status：card 和 model 都要给（例如 card=201, model=deepseek-v4.1-flash）。"
+        return _result(text, {"state": None, "card": card, "model": model}, is_error=True)
+    st = pool_quota.status(card=card, model=model, now=now, root=root)
+    text = pool_quota.render(st)
+    return _result(text, st, is_error=False)
 
 
 # ================================================================ 任务面（卡 121）：只读三个
@@ -1471,6 +1511,7 @@ _HANDLERS: dict[str, Any] = {
     "job_result": tool_job_result,
     "lock_status": tool_lock_status,
     "pool_models": tool_pool_models,
+    "quota_status": tool_quota_status,
     "pool_dispatch": tool_pool_dispatch,
     "pool_cancel": tool_pool_cancel,
     "task_list": tool_task_list,
@@ -1518,8 +1559,11 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
         "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
         "instructions": (
             "外包号池：默认是**只读**面 —— pool_plan / job_list / job_status / job_result / "
-            "lock_status / pool_models，加任务面的 task_list / task_status / task_pool，"
-            "九个都只读（不写文件、不派活、不抢锁、不要 env）。"
+            "lock_status / pool_models / quota_status，加任务面的 task_list / task_status / "
+            "task_pool，"
+            "十个都只读（不写文件、不派活、不抢锁、不要 env）。"
+            "quota_status（卡 201）按「记录时间 vs 现实时间」判额度四态 —— "
+            "限流中 / 已过期，需重新探测 / 余额耗尽 / 未记录，不猜、不探测。"
             "**写工具**（pool_dispatch 派活 / pool_cancel 取消 / task_register 注册任务 / "
             "task_claim 交成送申请）只有在**服务端**设了 POOL_MCP_WRITE=1 时才列出来 —— 那是"
             "「存在性即授权」：没这个 env 就没有写工具。号池写工具每次调用还要 arguments.confirm "

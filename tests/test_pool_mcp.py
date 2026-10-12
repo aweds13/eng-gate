@@ -37,9 +37,9 @@ sys.path.insert(0, str(ROOT / "tools"))
 import pool_mcp  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂上
 
 SERVER_SNIPPET = "import sys; from pool_mcp import serve; raise SystemExit(serve(sys.argv[1:]))"
-#: 九个只读工具：六个号池 + 三个任务面（卡 121 加了 task_list / task_status / task_pool）。
+#: 十个只读工具：七个号池（含卡 201 的 quota_status）+ 三个任务面。
 TOOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_status", "pool_models",
-              "task_list", "task_status", "task_pool"]
+              "quota_status", "task_list", "task_status", "task_pool"]
 
 
 # ---------------------------------------------------------------- 报文小工具（照先例）
@@ -168,14 +168,19 @@ def test_notification_ping_and_unknown_method() -> None:
     assert bad is not None and bad["error"]["code"] == pool_mcp.JSONRPC_METHOD_NOT_FOUND
 
 
-# ================================================================ 钉子②：九个工具都返回、都不写文件
+# ================================================================ 钉子②：十个工具都返回、都不写文件
 
 
 def test_nine_tools_return_and_write_nothing() -> None:
-    """九个工具都返回内容，且跑一遍**工作区不多出一个文件**（只读的机器判据）。"""
+    """十个工具都返回内容，且跑一遍**工作区不多出一个文件**（只读的机器判据）。"""
     before, before_hashes = _git_status(), _hashes()
     for name in TOOL_NAMES:
-        args = {"card": "105"} if name in ("job_status", "job_result") else {}
+        if name in ("job_status", "job_result"):
+            args = {"card": "105"}
+        elif name == "quota_status":
+            args = {"card": "105", "model": "deepseek-v4.1-flash"}
+        else:
+            args = {}
         result = pool_mcp.call_tool(name, args, root=ROOT)
         assert result is not None, name
         assert result["content"][0]["type"] == "text"
@@ -210,7 +215,12 @@ def test_machine_block_survives_a_report_that_quotes_json(tmp_path: Path) -> Non
         + sample + "\n\n以上是样例，下面是结论。\n", encoding="utf-8")
 
     for name in TOOL_NAMES:
-        args = {"card": "105"} if name in ("job_status", "job_result") else {}
+        if name in ("job_status", "job_result"):
+            args = {"card": "105"}
+        elif name == "quota_status":
+            args = {"card": "105", "model": "deepseek-v4.1-flash"}
+        else:
+            args = {}
         result = pool_mcp.call_tool(name, args, root=tmp_path)
         assert result is not None, name
         block = _json_block(result["content"][0]["text"])  # 不抛 = 认出的是真机器块
