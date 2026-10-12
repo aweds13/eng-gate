@@ -1,3 +1,7 @@
+## 2026-10-12 —— 旧判决归档不再静默失败：唯一时间戳名 + `(moved, failed)` 出声（T-G256 / 卡 156）
+- `tools/wb_dispatch.py`：目标已存在 ⇒ **带时间戳的唯一名**（Windows 上 rename 撞已存在会抛 `FileExistsError`，旧写法静默吞 ⇒ 第二次起归档全失败）；返回 `(moved, failed)`，调用点把失败打进 stderr。
+- `tests/test_wb_dispatch.py`：移植它的 **3 条归档钉子**。★ 与已落 164 重叠的那半**没有写第二份**。
+- ★ 第一手：`pytest test_wb_dispatch + test_no_window + test_docs_fragments` ⇒ **208 passed**；`ruff` 干净。
 ## 2026-10-11 —— CodeBuddy 工人的白名单路径要指向卡树（T-G294 / 卡 194）
 
 - `tools/wb_dispatch.py` +40/-6：`prompt_path()` 区分**两类路径** —— 「**工人要改的**（白名单 / 域）」给 `--cwd` 时

@@ -3606,3 +3606,69 @@ def test_resume_does_not_overwrite_first_round_evidence(sandbox: Path, monkeypat
 
     assert "wb-001.r2.jsonl" in seen_logs, f"续跑必须从 r2 开始（不覆盖第 1 轮）：{seen_logs}"
     assert log.read_text(encoding="utf-8") == "第一轮证据\n", "第 1 轮证据不许被覆盖"
+
+
+# ================================================ 卡 156（T-G256）：旧判决冒充当前状态
+
+
+def test_archive_succeeds_even_when_stale_already_exists(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 卡 156 钉子①：归档第二次也成功 —— 造已存在 `.stale` 的现场 ⇒ 再归档 ⇒ 旧判决被挪进
+    唯一名（不撞、不丢），**且打印了它**。这条直接钉真因：Windows 上 rename 撞已存在
+    不再静默失败。"""
+    diag = sandbox / "gates" / "diag"
+    diag.mkdir(parents=True)
+    (diag / "wb-001.verdict.txt").write_text("判决：前置检查没过 → 没派活\n", encoding="utf-8")
+    (diag / "wb-001.report.md").write_text("# 卡 001 的交接摘要\n", encoding="utf-8")
+    # 第一次归档留下的 .stale（已在现场）—— 旧写法到这里第二次 rename 就撞已存在、静默失败
+    (diag / "wb-001.verdict.txt.stale").write_text("更早一次的判决\n", encoding="utf-8")
+    (diag / "wb-001.report.md.stale").write_text("更早一次的摘要\n", encoding="utf-8")
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+    out = capsys.readouterr().out
+    assert "[归档]" in out, "归档成功必须出声（钉子①：打印了它）"
+    # 旧判决被挪进带时间戳的唯一名，没撞、没丢
+    archived = list(diag.glob("wb-001.verdict.*.stale"))
+    assert archived, "旧判决应被归档进唯一名（wb-001.verdict.<ts>.stale）"
+    assert any("前置检查没过" in p.read_text(encoding="utf-8") for p in archived), "归档的是旧判决"
+    # 更早那份 .stale 还在（没被覆盖）—— 唯一名不丢历史归档
+    assert (diag / "wb-001.verdict.txt.stale").read_text(encoding="utf-8") == "更早一次的判决\n"
+    # 新一轮的判决落在原位
+    assert "正常收工" in (diag / "wb-001.verdict.txt").read_text(encoding="utf-8"), \
+        "新一轮判决落在原位（归档的是旧的）"
+
+
+def test_archive_failure_is_not_silent(tmp_path: Path, monkeypatch) -> None:
+    """★ 卡 156 钉子②：归档失败要出声 —— 桩一个不可 rename 的现场 ⇒ failed 带文件名 + 原因，
+    不是 `except OSError: continue` 那种静默吞。"""
+    monkeypatch.setattr(wd, "ROOT", tmp_path)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    (diag / "wb-001.verdict.txt").write_text("旧判决\n", encoding="utf-8")
+
+    def _boom(self, target):            # noqa: ANN001 —— 桩：模拟只读目录 / 目标被占
+        raise OSError("rename 被桩拒绝")
+    monkeypatch.setattr(Path, "rename", _boom)
+    moved, failed = wd.archive_stale_artifacts("001")
+    assert moved == [], "rename 全被桩拒绝 ⇒ 没有成功归档的"
+    assert failed, "归档失败必须进 failed（不许静默吞）"
+    assert any("wb-001.verdict.txt" in f for f in failed), "failed 要点名哪件没归成"
+    assert any("rename 被桩拒绝" in f for f in failed), "failed 要带原因"
+
+
+def test_main_reports_archive_failures_to_stderr(sandbox: Path, monkeypatch, capsys) -> None:
+    """★ 卡 156 钉子②（main 端）：归档失败 ⇒ stderr 有 [归档失败] —— 与「没有旧件可归档」
+    （什么都不打印）长得不一样，主控才分得清。"""
+    monkeypatch.setattr(wd, "archive_stale_artifacts",
+                        lambda card: ([], [f"wb-{card}.verdict.txt：rename 被桩拒绝"]))
+    monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+    err = capsys.readouterr().err
+    assert "[归档失败]" in err, "归档失败必须打到 stderr（不许与「没有旧件」长得一样）"
+    assert "wb-001.verdict.txt" in err, "stderr 要点名哪件没归成"
+
+

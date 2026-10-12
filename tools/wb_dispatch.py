@@ -1135,7 +1135,7 @@ def heartbeat_stall_alert(*, log: Path, finished: bool,
 
 # ============================================ 过期判决的根因修法（卡 029 §2.1，原卡 028 裁定 A）
 
-def archive_stale_artifacts(card: str) -> list[str]:
+def archive_stale_artifacts(card: str) -> tuple[list[str], list[str]]:
     """**真开跑那一刻**，把这张卡的旧判决 / 摘要**改名归档**（加 `.stale` 后缀）—— 只归档、不删。
 
     为什么（主控 2026-09-26 真撞到）：一次被前置检查拒绝的派活会留下「前置检查没过 → 没派活」
@@ -1143,18 +1143,30 @@ def archive_stale_artifacts(card: str) -> list[str]:
     ★ 归档不删：`--force` 才让覆盖那条规矩的精神是**留证据**，归档兼容它、删除不兼容。
     ★ dry-run 不许归档（没真跑）—— 调用点在 `main()` 的 dry-run 返回**之后**。
     ★ 用 `card_artifacts`（精确匹配）—— 别把卡 421 的判决归档到卡 42 头上（§2.9 同源）。
+
+    ★ 卡 156（T-G256）：Windows 上 `Path.rename` 在**目标已存在**时抛 `FileExistsError`，旧写法
+      用 `except OSError: continue` 静默吞掉 ⇒ **第二次以后的归档全失败**，旧判决留在原地冒充
+      当前状态。修法：目标已存在 ⇒ 用带时间戳的**唯一名**（`wb-<卡>.verdict.<ts>.stale`），
+      既不丢历史归档又不撞；失败 ⇒ 收进 `failed` 让调用方**出声**，不许让"失败"与"没有旧件"
+      长得一样。
     """
     diag = ROOT / "gates" / "diag"
     moved: list[str] = []
+    failed: list[str] = []
     for suffix in (".verdict.txt", ".report.md"):
         for p in card_artifacts(diag, card, suffix):
             target = p.with_name(p.name + ".stale")
+            if target.exists():
+                # ★ 卡 156：撞已存在 ⇒ 唯一名（不丢历史归档、也不静默失败）
+                ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+                target = p.with_name(f"{p.stem}.{ts}.stale")
             try:
                 p.rename(target)
                 moved.append(target.name)
-            except OSError:
-                continue        # 归档失败不许挡住真跑 —— 如实留在返回里（少了就是没归成）
-    return moved
+            except OSError as exc:
+                # ★ 归档失败不许挡住真跑，但**必须出声**（留在原地会冒充当前状态 —— 卡 156 真因）
+                failed.append(f"{p.name}：{exc}")
+    return moved, failed
 
 
 # ============================================ token 用量落账（卡 029 §2.6）
@@ -2731,9 +2743,13 @@ def main() -> int:
     #   ★ dry-run 不归档（args.execute 守卫）；子进程带 --detach-done 时旧判决已被父进程
     #   归档，再调一次找不到文件、返回空，幂等。
     if args.execute:
-        archived = archive_stale_artifacts(args.card)
+        archived, archive_failures = archive_stale_artifacts(args.card)
         if archived:
             print(f"[归档] 旧判决/摘要已归档：{', '.join(archived)}", flush=True)
+        if archive_failures:
+            # ★ 卡 156：归档失败必须出声 —— 旧判决留在原地会冒充当前状态（146 现场）
+            print("[归档失败] 以下旧件没归成（留在原地，可能冒充当前状态，请手工挪走）："
+                  f"{'; '.join(archive_failures)}", file=sys.stderr, flush=True)
 
     if args.detach and not args.detach_done:
         # ★ 长跑/过夜：**前置检查已全过**，才把**自己**再启动成一个脱离窗口的进程，然后立刻返回。

@@ -1,0 +1,11 @@
+[entries."T-G256"]
+id = "T-G256"
+title = "旧判决归档不再静默失败：唯一时间戳名 + (moved, failed) 出声"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_dispatch.py",
+]
+gaps = "① ★★ **本笔只取了 156 的「独有那半」**（归档根因修法）；它与已落的 164 **重复**的部分（判决带轮次/开始时刻、面板「判决比日志旧」提示）**由 164 那版承担**，本笔**没有再写第二份**（用户裁定：「两个合并」）。指针：`tools/wb_dispatch.py` 的 `archive_stale_artifacts()`。② ★ **「归档在 detach 之前」那半已在主树里**（更早的卡做的）⇒ 156 原样带过来的那部分**没有重复落地**。指针：`tools/wb_dispatch.py` 的 `main()` 归档调用点。③ ★ **归档失败只「出声」，不改行为**：失败件**留在原地**（可能继续冒充当前状态），本笔只保证**不再静默**。⇒ 要真修好「冒充」，还得人把留在原地的旧件挪走。指针：`tests/test_wb_dispatch.py` 的验收钉子。"
+
