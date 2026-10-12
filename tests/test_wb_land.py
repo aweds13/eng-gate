@@ -79,6 +79,8 @@ _NEW_TOOLS = (
     # ★ 卡 193（T-G293）：`stage_card._selfcheck` 起要 `import card_doc_budget`
     #   ⇒ 沙箱少这一份，脚本**一 import 就崩**（当晚实测）⇒ 清单必须跟着真依赖走。
     "tools/card_doc_budget.py",
+    # ★ 卡 192（T-G292）：`landing.py` 起要 `import pool.snapshot` ⇒ 沙箱少一份就崩。
+    "tools/pool/snapshot.py",
 )
 
 _TEXT = """=== gaps ===
@@ -380,6 +382,20 @@ def _wand(
                           encoding="utf-8", errors="replace")
 
 
+def _mk_pen(repo: Path) -> Path:
+    """给沙箱建一个**卡树**（worktree，`--tree .pen`）。
+
+    ★ 卡 192（T-G292）起：`wb_land` 有「主干保护」——主树里出现白名单外的**跟踪文件**改动就退 5。
+    这些钉子的场景本意是「**计划外暂存**发生在卡树里」（真流程就是 `.wt/<卡树>`）⇒ 只有把脏东西
+    放进卡树，⑤/⑥ 才测得到、主树也才是干净的（否则守卫先咬，测的就不是原来那条路了）。
+    """
+    pen = repo / ".pen"
+    subprocess.run(["git", "worktree", "add", "--detach", str(pen), "HEAD"],
+                   cwd=str(repo), env=_ENV, capture_output=True, text=True, check=False,
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return pen
+
+
 def _out(done: subprocess.CompletedProcess) -> str:
     return (done.stdout or "") + (done.stderr or "")
 
@@ -480,10 +496,11 @@ def test_allow_dir_expands_via_git_ls_files_and_drops_pycache(tmp_path: Path) ->
 def test_unexpected_staged_file_stops_and_resets(tmp_path: Path) -> None:
     """暂存区里出现**计划外**文件 ⇒ 停手（退 2）+ 清暂存区（不许夹带别人的东西）。"""
     repo = _mk_repo(tmp_path)
-    _write(repo, "rogue.txt", "偷渡\n")
-    _git(repo, "add", "--", "rogue.txt")               # 先偷偷 stage 一个白名单外的
+    pen = _mk_pen(repo)   # ★ 192：脏东西落在卡树里（真流程如此）
+    _write(pen, "rogue.txt", "偷渡\n")
+    _git(pen, "add", "--", "rogue.txt")               # 先偷偷 stage 一个白名单外的
 
-    done = _wand(repo, "--no-gate")
+    done = _wand(repo, "--no-gate", tree=".pen")
 
     assert done.returncode == 2, _out(done)
     assert "计划外" in _out(done), _out(done)
@@ -564,16 +581,17 @@ def test_reset_derived_restores_head_state_and_prints(tmp_path: Path) -> None:
 def test_reset_derived_never_touches_whitelist_sources(tmp_path: Path) -> None:
     """白名单里的源文件（`tools/wb_land.py` 自己）在回退前后**内容不变**、改动原样保留。"""
     repo = _mk_repo(tmp_path, stage_card_body=_STUB_STAGE_CARD_FAIL)
-    _make_rerun_dirt(repo)
-    src = repo / "tools" / "wb_land.py"
+    pen = _mk_pen(repo)   # ★ 192：脏东西落在卡树里（真流程如此）
+    _make_rerun_dirt(pen)
+    src = pen / "tools" / "wb_land.py"
     before = src.read_bytes() + "# 白名单源文件，不许被回退碰掉\n".encode()
     src.write_bytes(before)
 
-    done = _wand(repo, "--no-gate")
+    done = _wand(repo, "--no-gate", tree=".pen")
 
     out = _out(done)
     assert src.read_bytes() == before, "★ 回退动了白名单源文件！"
-    st = _git(repo, "status", "--porcelain", "--", "tools/wb_land.py").stdout
+    st = _git(pen, "status", "--porcelain", "--", "tools/wb_land.py").stdout
     assert " M" in st, "源文件的改动应当原样保留（回退不许把它退回 HEAD）"
     assert "· tools/wb_land.py" not in out, "回退清单里不许出现源文件"
     assert (repo / "docs" / "traceability.toml").read_bytes() == b"[entries]\r\n", \
@@ -588,15 +606,16 @@ def test_second_run_of_same_landing_hits_no_duplicate(tmp_path: Path) -> None:
       ② 的文书已经写好（台账已合入 T-G999、片段已生成），但没提交。
     """
     repo = _mk_repo(tmp_path, sync_docs_body=_SYNC_DOCS_MERGE)
-    _write(repo, "rogue.txt", "偷渡\n")
-    _git(repo, "add", "--", "rogue.txt")
+    pen = _mk_pen(repo)   # ★ 192：脏东西落在卡树里（真流程如此）
+    _write(pen, "rogue.txt", "偷渡\n")
+    _git(pen, "add", "--", "rogue.txt")
 
-    first = _wand(repo, "--no-gate")
+    first = _wand(repo, "--no-gate", tree=".pen")
     assert first.returncode == 2, _out(first)             # ⑥ 计划外 ⇒ 停（残留下派生物）
-    ledger = (repo / "docs" / "traceability.toml").read_bytes()
+    ledger = (pen / "docs" / "traceability.toml").read_bytes()
     assert b'[entries."T-G999"]' in ledger, "第一趟应当残留下脏台账"
 
-    second = _wand(repo, "--no-gate")
+    second = _wand(repo, "--no-gate", tree=".pen")
 
     out = _out(second)
     assert second.returncode == 0, out

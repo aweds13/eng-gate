@@ -86,8 +86,15 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def worktree_commands(backlog: Backlog, base: str) -> list[tuple[Card, str]]:
-    """每张非主树卡的建树命令；主树那张卡**不建树**（卡 010 §3.2）。"""
-    return [(card, f"git worktree add {card.tree} {base}")
+    """每张非主树卡的建树命令；主树那张卡**不建树**（卡 010 §3.2）。
+
+    ★★ 卡 192（T-G292）：建树用 **`-b card/<号>`**（卡分支），**不是 detached HEAD** ——
+    detached 的提交没有 ref ⇒ `clone --mirror` 带不走、`gc` 会清掉（今晚卡 160 丢东西的根因）。
+    卡分支让工人"小步提交到本卡分支"成为可能，且提交**有 ref** ⇒ 镜像带得走。
+    ★ 向后兼容：已有的 detached 卡树不会重建（树已存在 git 自拒，行为不变）；
+    若 `card/<号>` 分支已存在（如旧卡 037），`cmd_worktrees` 会退回 checkout 形式。
+    """
+    return [(card, f"git worktree add -b card/{card.id} {card.tree} {base}")
             for card in backlog.cards if card.tree and in_flight(card)]
 
 
@@ -179,6 +186,13 @@ def cmd_worktrees(backlog: Backlog, base: str, *, execute: bool) -> int:
         print(f"[跑 ] 卡 {card.id}：{command}")
         done = subprocess.run(command.split(), cwd=str(ROOT), capture_output=True,
                               text=True, encoding="utf-8", errors="replace")
+        # ★ 卡 192：`card/<号>` 分支已存在（如旧卡 037）⇒ 退回 checkout 形式（向后兼容）
+        if done.returncode != 0 and "already exists" in (done.stderr or ""):
+            fallback = f"git worktree add {card.tree} card/{card.id}"
+            print(f"  ↳ card/{card.id} 已存在 ⇒ 退回 checkout：{fallback}")
+            done = subprocess.run(fallback.split(), cwd=str(ROOT), capture_output=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                                  text=True, encoding="utf-8", errors="replace")
         body = (done.stdout or "") + (done.stderr or "")
         print(body.strip() or f"（退出码 {done.returncode}）")
     return 0

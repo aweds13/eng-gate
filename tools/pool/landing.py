@@ -58,6 +58,10 @@ import threading
 # ★ 2026-10-02：ROOT 原来是硬编码绝对路径（换机器即碎）。本位置 `tools/pool/` 上两级 = 仓库根，
 #   与旧位置 `gates/diag/` 的 `parents[2]` 结果一致 ⇒ 这一行搬过来不用改（已核对）。
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
+
+from pool.snapshot import take_snapshot  # noqa: E402 —— 卡 192：快照挂 ref（唯一实现）
+
 TEXT = ROOT / "gates" / "diag" / "_text_{task}.md"
 DOCS = ("docs/traceability.toml", "docs/changelog.md", "复盘/交接-重构进度.md")
 GATES = ("gates/last.json", "gates/reuse.json")
@@ -408,6 +412,93 @@ def _renewer_loop(lock_label: str, wt: pathlib.Path, env: dict,
                 # ★ 防窗旗（卡 163）：续租每 5 分钟起一次进程，Windows 上不许弹窗。
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
+def mirror_remote() -> pathlib.Path | None:
+    r"""镜像路径（卡 192 · T-G292）：**不许写死**。
+
+    优先级：① 环境变量 `TF_MIRROR_REMOTE`；② 相对 ROOT 探测默认位置
+    `ROOT.parent.parent / "backup-engineering.git"`（engineering 上两级 = jelly_ware，
+    镜像与仓平级 —— 换机器只要目录结构一样就通，不写死绝对路径）；③ 都没有 ⇒ None（跳过 push）。
+    """
+    env = os.environ.get("TF_MIRROR_REMOTE", "").strip()
+    if env:
+        p = pathlib.Path(env)
+        return p if p.exists() else None
+    default = ROOT.parent.parent / "backup-engineering.git"
+    return default if default.is_dir() else None
+
+
+def _main_tree_root() -> pathlib.Path:
+    """**主工作树**的根。
+
+    卡树里 `.git` 是文件（`gitdir: <主>/.git/worktrees/<名>`）⇒ `parents[2]` 即主树根。
+        #
+
+    ★ 纯 stdlib、不调 git（守卫是纯函数那一层的口径）。
+    """
+    marker = ROOT / ".git"
+    if marker.is_file():
+        try:
+            text = marker.read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            return ROOT
+        if text.startswith("gitdir:"):
+            target = pathlib.Path(text.split(":", 1)[1].strip())
+            shared = target.parents[2]
+            if shared.is_dir():
+                return shared
+    return ROOT
+
+
+def main_tree_offenders(allow: list[str], pen: pathlib.Path | None = None) -> list[str]:
+    r"""★ 卡 192（T-G292）主干保护：主树**跟踪文件**的改动且不在白名单 ⇒ 列出来（拒）。
+
+    判据：`git status --porcelain -uno`（只看跟踪文件，未跟踪的用户笔记不算）里，
+    去掉白名单（`--allow` + DOCS + GATES，收口链本就要动的）后仍非空 ⇒ 主控在主干直接改了
+    不该改的东西 ⇒ 违反"主干只接受合并、不接受直接改"。★ `--tree .` 时工人的产物在主树、
+    且在 `--allow` 里 ⇒ 不算 offender（放行）。
+    """
+    # ★ 2026-10-12（主控）：**笔就是主树时不触发** —— 那时「改笔」与「改主干」是同一件事，
+    #   守卫无从区分、也没有意义（它要防的是「改动从卡树漏进主干」）。真流程里笔是
+    #   `.wt/<卡树>`，所以这条豁免既保住老用法（`--tree .`），又不放松真正的保护。
+    if pen is not None:
+        try:
+            if pen.resolve() == _main_tree_root().resolve():
+                return []
+        except OSError:
+            pass
+    # ★ 2026-10-12 修（主控）：这里原来用 `ROOT` —— 而 `ROOT` 是**本模块所在的那棵树**（卡树！），
+    #   ⇒ 真流程里它查的是卡树、**从没保护过主干**。改成查**主工作树**
+    #   （卡树里 `.git` 是文件，内容 `gitdir: <主树>/.git/worktrees/<名>` ⇒ parents[2] 即主树根）。
+    raw = run(["git", "-c", "core.quotepath=false", "status", "--porcelain", "-uno"],
+              cwd=_main_tree_root(), check=False).stdout or ""
+    dirty = [x for x in raw.splitlines() if x.strip()]
+    allow_set = set(allow) | set(DOCS) | set(GATES)
+    offenders: list[str] = []
+    for line in dirty:
+        path = line[3:].split(" -> ")[-1].strip().strip('"')
+        if not _allow_hits(path, allow_set):
+            offenders.append(line)
+    return offenders
+
+
+def _allow_hits(path: str, allow: set[str]) -> bool:
+    """`--allow` 的一项是否**盖住**这个路径。
+
+    ★ 2026-10-12（主控）：原来是**逐字相等** ⇒ `--allow code` **管不到** `code/a.py`，
+    于是守则把自己的测试（`allow=("code",)` + 改 `code/a.py`）也拦了。而 `wb_land` 的
+    `--allow` 语义本来就是 **glob**（复核那侧写着 `--allow <glob>`）⇒ 这里对齐：
+    逐字相等 / `fnmatch` / **目录前缀**（`code` 盖 `code/a.py`）三选一。
+    """
+    import fnmatch
+
+    for pat in allow:
+        if not pat:
+            continue
+        if path == pat or fnmatch.fnmatch(path, pat):
+            return True
+        if path.startswith(pat.rstrip("/") + "/"):
+            return True
+    return False
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -471,6 +562,28 @@ def main(argv: list[str] | None = None) -> int:
         release_lock(lock_label, wt, env)
     if not a.commit_only and not a.no_gate:
         __import__("atexit").register(_release_lock_on_exit)
+
+    # ★★ 卡 192（T-G292）主干保护：主树跟踪文件的改动且不在白名单 ⇒ 拒（主干只接受合并）
+    #   现在坑 41 有判据但没强制 —— 这里把它**前置**到收口最前面（任何写之前）。
+    offenders = main_tree_offenders(a.allow, wt)
+    if offenders:
+        print("★★ 主干保护：主树有跟踪文件的改动且不在白名单 ⇒ **拒**"
+              "（主干只接受合并、不接受直接改）")
+        for o in offenders[:10]:
+            print(f"   {o}")
+        print("  处置：把那些改动挪进卡分支（`git stash` / 卡树里重做），别在主干上直接改。")
+        return 5
+
+    # ★★ 卡 192（T-G292）落地前打快照：卡树 + 主树（stash create + 挂 ref ⇒ 镜像带得走）
+    #   为什么必须在**任何写之前**：今晚卡 160 的工人成果被覆盖，靠 fsck 悬空对象才救回 ——
+    #   那是运气。挂 ref 后变成可达对象 ⇒ gc 不清 ⇒ 镜像带得走 ⇒ 才算真备份。
+    print("=== ⓪′ 快照（落地前；stash create + 挂 ref）===")
+    seg = a.tree.replace("/", "-").lstrip(".") or "root"
+    snap_wt = take_snapshot(wt, why=f"落地前/{a.task}", name=seg)
+    snap_root = take_snapshot(ROOT, why=f"落地前/{a.task}", name="root")
+    print(f"  快照[卡树 {seg}] = {snap_wt or '(干净，无需快照)'}")
+    print(f"  快照[主树 root]  = {snap_root or '(干净，无需快照)'}")
+
     if not a.commit_only:
         # ★ 卡 150（T-G250）：幂等重跑 —— 开跑先把**上一趟残留的派生物**退回 HEAD 干净态
         #   （放在拿锁之前，越早越好；2026-10-02 同一笔连吃三趟 11 分钟门禁，全死在这层）。
@@ -794,6 +907,21 @@ def main(argv: list[str] | None = None) -> int:
             print("  ★ 复核有问题（不挡提交）⇒ 立卡或在文书里写明为什么不立卡")
         else:
             print(f"  ✓ 复核落盘完成：{rv_path}")
+    # ★★ 卡 192（T-G292）落地后推镜像：每次落地之后 git push --mirror <镜像>
+    #   镜像路径不许写死（见 mirror_remote）—— 环境变量优先，否则相对 ROOT 探测默认位置。
+    #   push 失败不阻断收口（收口已成功，备份是附加），但会打印一行（不许静默）。
+    mirror = mirror_remote()
+    if mirror:
+        r = subprocess.run(["git", "push", "--mirror", str(mirror)], cwd=str(ROOT),
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(f"=== ⑧ 镜像 push --mirror {mirror}：退出码 {r.returncode} ===")
+        if r.returncode != 0:
+            print(f"  ★ push 失败（不阻断收口，但备份没更新）：{(r.stderr or '').strip()[:200]}")
+        else:
+            print("  ✓ 镜像已更新（卡分支 + 快照 ref 都带得走）")
+    else:
+        print("=== ⑧ 镜像：未配置 TF_MIRROR_REMOTE 且默认位置不存在 ⇒ 跳过 push --mirror ===")
     return 0
 
 

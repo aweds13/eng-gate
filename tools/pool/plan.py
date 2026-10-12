@@ -229,6 +229,20 @@ def dependency_path(a: Card, b: Card, cards: Sequence[Card]) -> bool:
     return b.id in _reachable(a.id, deps) or a.id in _reachable(b.id, deps)
 
 
+
+def _rel_for_message(path: Path) -> str:
+    """给消息用的"仓库相对路径" —— **算不出就退回原名**。
+
+    ★ 2026-10-12（主控）：卡树里 `ROOT` 是卡树、而预声明住在**主树** ⇒ 直接
+    `path.relative_to(ROOT)` 会抛 `ValueError`（157 的 worktree 修复漏了这一处）。
+    这里退一步：能算就算，算不出就**照实给绝对路径**（宁可难看，不许崩）。
+    """
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def validate(backlog: Backlog) -> list[str]:
     """拒单清单（空 = 这份 backlog 能用）。
 
@@ -284,7 +298,7 @@ def validate(backlog: Backlog) -> list[str]:
         else:
             batch = extract_batch_claim(spec_path)
             if batch and not batch_manifest_path(batch).exists():
-                rel = batch_manifest_path(batch).relative_to(ROOT).as_posix()
+                rel = _rel_for_message(batch_manifest_path(batch))
                 if in_flight(card):
                     problems.append(
                         f"卡 {card.id}：声称属于 {batch}，但预声明 {rel} 不存在"
@@ -339,7 +353,7 @@ def audit_batch_claims(backlog: Backlog) -> list[str]:
             continue
         claimed.add(batch)
         if not in_flight(card) and not batch_manifest_path(batch).exists():
-            rel = batch_manifest_path(batch).relative_to(ROOT).as_posix()
+            rel = _rel_for_message(batch_manifest_path(batch))
             notes.append(
                 f"卡 {card.id}（{card.status}）：声称属于 {batch}，但预声明 {rel} 缺"
                 f"（历史欠账 —— 本卡不追溯，只报）")

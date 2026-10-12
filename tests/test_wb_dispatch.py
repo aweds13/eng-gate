@@ -671,7 +671,8 @@ def test_iron_rules_go_into_the_system_prompt_not_only_the_opening(sandbox: Path
     cmd = wd.build_command(node, cli, "002", "spec.md", "m")
     rules = cmd[cmd.index("--append-system-prompt") + 1]
     assert rules == wd.IRON_RULES
-    for needle in ("以卡规格为准", "越界", "不许假完成", "一写一读", "禁区", "不假装"):
+    for needle in ("以卡规格为准", "越界", "不许假完成", "一写一读", "禁区", "不假装",
+                   "小步提交", "不许碰主干", "card/<号>"):
         assert needle in rules, rules
 
 

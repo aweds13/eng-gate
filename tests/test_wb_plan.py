@@ -468,7 +468,20 @@ def test_worktree_commands_skip_main_tree() -> None:
                        _card("008", files=("b.py",), tree=".wt/dash"))
     commands = wb_plan.worktree_commands(backlog, "1969b46")
     assert [card.id for card, _ in commands] == ["008"]
-    assert commands[0][1] == "git worktree add .wt/dash 1969b46"
+    # ★ 卡 192（T-G292）：建树用 -b card/<号>（卡分支），不是 detached HEAD
+    assert commands[0][1] == "git worktree add -b card/008 .wt/dash 1969b46"
+
+
+def test_worktree_commands_use_card_branch_not_detach() -> None:
+    """★ 卡 192：每张卡的建树命令都含 `-b card/<号>` —— detached HEAD 的提交没有 ref，
+    `clone --mirror` 带不走、gc 会清掉（今晚卡 160 丢东西的根因）。"""
+    backlog = _backlog(
+        _card("A", files=("a.py",), tree=".wt/a"),
+        _card("B", files=("b.py",), tree=".wt/b"),
+    )
+    for card, cmd in wb_plan.worktree_commands(backlog, "abc1234"):
+        assert f"-b card/{card.id}" in cmd, cmd
+        assert "--detach" not in cmd, cmd
 
 
 def test_dispatch_argv_points_at_the_card() -> None:

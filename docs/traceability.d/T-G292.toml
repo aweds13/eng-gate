@@ -1,0 +1,21 @@
+[entries."T-G292"]
+id = "T-G292"
+title = "骨架进 git：卡分支/小步提交/主干只合流/镜像备份 + 主干保护"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "file:tools/pool/plan.py",
+  "file:tools/pool/snapshot.py",
+  "file:tools/tf_cardgen.py",
+  "file:tools/wb_plan.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_pool_snapshot.py",
+  "file:tests/test_pool_landing_gitbase.py",
+  "file:tests/test_wb_land.py",
+  "file:tests/test_wb_plan.py",
+  "file:tests/test_wb_dispatch.py",
+  "file:tests/test_tf_cardgen.py",
+]
+gaps = "① ★★ **主干保护只在「主树 ≠ 卡树」时才有意义**：`_main_tree_root()` 靠卡树 `.git` **文件**里的 `gitdir:` 反推主树；若哪天改成「在主树里直接跑」（`--tree .`），它退化回查自己 ⇒ 保护等于没有。指针：`tools/pool/landing.py`。② ★ **本卡改了收口链的核心**（`landing.py` 的 `release_lock` 之后新加 `_main_tree_root` + 镜像那一步），⇒ 与 184/163 的改动同处一个文件 ⇒ 主控**手工合过**（本次：0 冲突，因为基点已是含它们的主树）。指针：`tools/pool/landing.py`。③ ★ **「计划外暂存」那三条钉子改了场景**：原来把偷渡文件造在**主树**，现在造在**卡树**（`.pen` worktree）——因为新守卫会先咬主树。⇒ ⑤/⑥ 的覆盖**保住了**，但「主树里有偷渡文件」这个场景**现在归守卫管**（守卫自己的钉子覆盖）。指针：`tests/test_wb_land.py`。"
+

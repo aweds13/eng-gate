@@ -2,6 +2,10 @@
 - `tools/wb_dispatch.py`：目标已存在 ⇒ **带时间戳的唯一名**（Windows 上 rename 撞已存在会抛 `FileExistsError`，旧写法静默吞 ⇒ 第二次起归档全失败）；返回 `(moved, failed)`，调用点把失败打进 stderr。
 - `tests/test_wb_dispatch.py`：移植它的 **3 条归档钉子**。★ 与已落 164 重叠的那半**没有写第二份**。
 - ★ 第一手：`pytest test_wb_dispatch + test_no_window + test_docs_fragments` ⇒ **208 passed**；`ruff` 干净。
+## 2026-10-12 —— 骨架进 git：卡分支/小步提交/主干只合流/镜像备份 + 主干保护（T-G292 / 卡 192）
+- 新增 `tools/pool/snapshot.py`（快照挂 git ref）+ `tests/test_pool_snapshot.py` · `tests/test_pool_landing_gitbase.py`。
+- `tools/pool/landing.py`：⑨ 镜像推送 · **主干保护**（★ 主控修三处：① 守卫原来查 `ROOT`=**卡树** ⇒ 真流程里从没保护过主干，改查**主工作树** ② 白名单原来**逐字相等** ⇒ `--allow code` 管不到 `code/a.py`，改 **glob + 目录前缀** ③ 笔就是主树时不触发）· 三处新 `subprocess` 补防窗旗。
+- `tools/tf_cardgen.py` · `tools/wb_plan.py` · `tools/wb_dispatch.py` + 四份测试：卡分支模板 / 计划侧口径 / 沙箱清单补 `pool/snapshot.py`。★ 第一手：五份测试**全过** + `ruff` 干净。
 ## 2026-10-11 —— CodeBuddy 工人的白名单路径要指向卡树（T-G294 / 卡 194）
 
 - `tools/wb_dispatch.py` +40/-6：`prompt_path()` 区分**两类路径** —— 「**工人要改的**（白名单 / 域）」给 `--cwd` 时

@@ -63,7 +63,9 @@ def test_dry_run_prints_but_writes_nothing(tmp_path: Path) -> None:
     assert "dry-run" in done.stdout
     # 必备两段都在打印里
     assert "Task: T-G191" in done.stdout
-    assert "不要 commit" in done.stdout
+    assert "小步提交" in done.stdout          # ★ 卡 192：小步提交到 card/<号>（不是"不要 commit"）
+    assert "card/096" in done.stdout
+    assert "不要 commit" not in done.stdout   # ★ 旧规矩已废
     assert not out.exists()  # ★ 不落盘（连目录都不建）
 
 
@@ -78,7 +80,9 @@ def test_normal_run_writes_two_files_with_markers(tmp_path: Path) -> None:
     for p in (card, brief):
         text = p.read_text(encoding="utf-8")
         assert "Task: T-G191" in text          # ★ 必备一：Task: 行
-        assert "不要 commit" in text            # ★ 必备二：不要 commit 段
+        assert "小步提交" in text              # ★ 卡 192：小步提交到 card/<号>
+        assert "card/096" in text
+        assert "不要 commit" not in text       # ★ 旧规矩已废
     assert ".wt/mech2" in card.read_text(encoding="utf-8")
     assert "5db2aa1" in card.read_text(encoding="utf-8")
 
