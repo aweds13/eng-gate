@@ -493,11 +493,40 @@ def test_dispatch_argv_points_at_the_card() -> None:
     assert argv[-2:] == ["--detach", "--execute"]
 
 
-def test_render_dispatch_pushes_into_own_tree() -> None:
+def test_dispatch_argv_carries_an_absolute_cwd_for_a_card_tree() -> None:
+    """★ 卡 203：卡树的派活命令要带 `--cwd <该卡树绝对路径>` —— 登记树 = 工人树。
+
+    ★ 绝对路径锚在**主树根**上（树标签就是"相对主树根"的），不是锚在"wb_plan 从哪跑"。
+    """
+    from pool import registry as pool_registry
+
+    card = _card("008", spec="s.md", tree=".wt/dash")
+    argv = wb_plan.dispatch_argv(card)
+    assert "--cwd" in argv, argv
+    assert "pushd" not in argv, argv
+    cwd = argv[argv.index("--cwd") + 1]
+    assert cwd == (pool_registry.main_tree_root() / ".wt/dash").as_posix(), cwd
+    assert Path(cwd).is_absolute(), cwd
+
+
+def test_dispatch_argv_omits_cwd_for_the_main_tree() -> None:
+    """★ 卡 203：主树（`tree == ""`）**不给** `--cwd` —— 从主仓跑时标签仍是主树（`""`），
+    工人看到的东西逐字不变（卡 166）。"""
+    argv = wb_plan.dispatch_argv(_card("007", spec="s.md", tree=""))
+    assert "--cwd" not in argv, argv
+    assert "pushd" not in argv, argv
+
+
+def test_render_dispatch_never_pushes_into_own_tree() -> None:
+    """★ 卡 203：印的命令**不再 `pushd`**；卡树版**看得到 `--cwd`**（从主仓跑）。"""
     main = _card("007", spec="s.md", tree="")
     tree = _card("008", spec="s.md", tree=".wt/dash")
-    assert "pushd" not in wb_plan.render_dispatch(main)
-    assert wb_plan.render_dispatch(tree).startswith("pushd .wt/dash; ")
+    rendered_main = wb_plan.render_dispatch(main)
+    rendered_tree = wb_plan.render_dispatch(tree)
+    assert "pushd" not in rendered_main, rendered_main
+    assert "pushd" not in rendered_tree, rendered_tree
+    assert "--cwd" in rendered_tree, rendered_tree
+    assert rendered_tree == " ".join(wb_plan.dispatch_argv(tree)), rendered_tree
 
 
 # ------------------------------------------------------------------ 子命令（主线）

@@ -2244,9 +2244,16 @@ def worker_tree_label(worker_cwd: Path | None, main_root: Path) -> str:
       `main_root / tree` 或 `main_root`）—— 这里**反过来**从 `--cwd` 还原出标签，好让
       `tree_guard` 按同一把尺子比。树在仓库外（罕见）：原样给绝对 posix 路径（守卫按字符串比，
       不猜、不归一成"主树"）。
+
+    ★★ 卡 203（T-G307）：**不给 `--cwd`**（`worker_cwd is None`）时**按进程 cwd 还原标签**
+      —— 工人进程的 cwd 就是派活器的进程 cwd（从卡树里跑那棵树里那份脚本时 = 卡树，从主仓跑
+      = 主仓）。**老行为是"一律 `""`"（= 主树）** ⇒ 从卡树里跑会把**主树**误登记成被占、
+      而工人在卡树里干活（症状 A：197/201/202 三张卡都被自己那条 `tree: ""` 租约挡过）。
+      ★ 只改**标签怎么算**，不改树/域/锁/日志/模型白名单/内存闸任何一条守卫的语义。
     """
     if worker_cwd is None:
-        return ""
+        # 不给 `--cwd` ⇒ 工人 cwd 就是派活器的进程 cwd（卡 203）。
+        worker_cwd = Path.cwd()
     target = worker_cwd.resolve()
     try:
         rel = target.relative_to(main_root.resolve())
@@ -2254,6 +2261,30 @@ def worker_tree_label(worker_cwd: Path | None, main_root: Path) -> str:
         return target.as_posix()
     text = rel.as_posix()
     return "" if text == "." else text
+
+
+def wrong_copy_warning() -> str:
+    """★ 卡 203（T-G307）：跑的是**树里那份**派活器时，给一句人话提示（**不拒跑**）。
+
+    判据：`ROOT != 主树根` —— 即 `wb_dispatch.py` 不是主仓那份，而是从卡树 / 别的树里跑的那份。
+    那时 `ROOT` 是产物目录（`gates/diag/wb-<卡>.jsonl` / brief / 规格路径）的基 ⇒ 派活产物会
+    落卡树（症状 B），而卡树里**没有**主仓那份 `gates/diag/`（gitignore 目录）。
+
+    ★ 选了**只提示、不拒跑**，理由三条：
+      ① 卡 203 只许改"标签怎么算" —— 拒跑是**新增一条守卫语义**，不在卡的改法里；
+      ② `ROOT` 被显式指到别处（测试沙箱 / 别的项目）是**合法调用**，拒跑会误伤；
+      ③ 登记的树已由 `worker_tree_label` 按进程 cwd 还原（**症状 A 已治**），
+         剩下"产物落哪"用一句人话点破就够。
+    主树根算不出（git 不可用）⇒ 回 `""`（**不新增失败**）。
+    """
+    try:
+        main_root = pool_registry.main_tree_root()
+    except pool_registry.RegistryError:
+        return ""
+    if ROOT.resolve() == main_root.resolve():
+        return ""
+    return (f"[提示] 你在卡树里跑了**树里那份**派活器（ROOT={ROOT}；主树={main_root}）："
+            "派活产物会落卡树。正确跑法：从**主仓**跑 + `--cwd <树>`（卡 203）")
 
 
 def lease_log_for(log: Path) -> str:
@@ -2645,6 +2676,10 @@ def main() -> int:
     if args.status:
         print(status_report(args.card), flush=True)
         return 0
+    # ★ 卡 203（T-G307）：跑的是**树里那份**派活器 ⇒ 一句人话提示（**不拒跑**，理由见该函数）。
+    wrong_copy = wrong_copy_warning()
+    if wrong_copy:
+        print(wrong_copy, file=sys.stderr, flush=True)
     # ★★ 模型白名单硬闸门（卡 029 §2.4 + 卡 166 按池分流）—— 放在**一切之前**：
     #   拒单必须**零副作用**：不起进程、不建 log、不写判决、不改树。--resume / --retry /
     #   --detach 全都从这里过闸（它们都要带 --model）。

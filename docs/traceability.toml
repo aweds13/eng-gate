@@ -6179,3 +6179,16 @@ evidence = [
   "file:复盘/卡/卡203-派活树标签.md",
 ]
 gaps = "① ★ **本笔只登记，卡 203 还没派活**（队列里如实记 `pending`）。指针：`复盘/卡/卡203-派活树标签.md`。② ★ **码道那条路的同一坑没修**：码道派活器（在**另一个仓**，不在本仓里）的 `--tree` 默认值被当成「主树」 ⇒ 从卡树里跑照样误占主树。本笔与本卡都不动它（★ 那片留白写在卡规格里，因为指针只能指本仓的文件）。指针：`复盘/卡/卡203-派活树标签.md`。③ ★ **队列里 193/194/195/196 仍没有条目**（卡 197 报的登记漏：已落地却没条目 ⇒ 没有 status 可改）。本笔没替它们补。指针：`docs/workbacklog.toml`。"
+
+[entries."T-G308"]
+id = "T-G308"
+title = "派活器的「树」两个口径对齐"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_plan.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_plan.py",
+  "file:tests/test_wb_dispatch.py",
+]
+gaps = "① ★★ **`harness/` 那份复制体没跟上**：`harness/wb_plan.py` 仍是老的 `pushd <树>` 写法 ⇒ **框架那条路**（别的项目按框架跑）拿到的仍是错形态。它在卡白名单之外，本卡未改。指针：`harness/wb_plan.py`。② ★ **`wb_plan.py cmd_dispatch --execute` 那条路仍 `cwd=<卡树>`**（会跑树里那份脚本）—— 卡规格明写「只改『印什么』」，故未动。指针：`tools/wb_plan.py`。③ ★ **选了「只提示、不拒跑」**：拒跑等于**新增一条守卫语义**（不在卡的改法里）；且 `ROOT` 被显式指到别处（测试沙箱 / 别的项目）是**合法调用**，拒跑会误伤。指针：`tools/wb_dispatch.py`。④ ★ **码道那条路的同一坑仍在**（在另一个仓）：它的 `--tree` 默认值被当「主树」 ⇒ 从卡树里跑照样误占主树。工人**现读确认**仍是原样。指针：`复盘/卡/卡203-派活树标签.md`。"

@@ -94,7 +94,10 @@ def sandbox(tmp_path: Path, monkeypatch) -> Path:
         f'root = "{tmp_path.as_posix()}"',
         "memory = []",
         "layers = []",
-        f'tree_prefixes = ["{tmp_path.as_posix()}"]',
+        # ★ 卡 203：`worker_tree_label(None, …)` 现在按**进程 cwd** 还原 ⇒ 不给 `--cwd` 的用例
+        #   会算出**相对**标签（如 `.wt/dtree`）。真索引（infra/pool/projects.toml）的
+        #   `tree_prefixes = [".wt/"]` 正是这种相对前缀 —— 沙箱照抄一条，别再只认绝对临时目录。
+        f'tree_prefixes = ["{tmp_path.as_posix()}", ".wt/"]',
         'queue = ""',
         'ledger = ""',
         'cards = ""',
@@ -2739,8 +2742,15 @@ def test_guard_problems_pass_in_a_clean_sandbox(sandbox: Path) -> None:
     assert wd.guard_problems("001", None) == []
 
 
-def test_guard_refuses_a_second_dispatch_on_the_same_tree(sandbox: Path) -> None:
-    """① 同一棵树第二次派活被拒 —— 第一次 reserve 之后，第二次前置检查必须 FAIL 并点名"树被占"。"""
+def test_guard_refuses_a_second_dispatch_on_the_same_tree(
+        sandbox: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """① 同一棵树第二次派活被拒 —— 第一次 reserve 之后，第二次前置检查必须 FAIL 并点名"树被占"。
+
+    ★ 卡 203：不给 `--cwd` 的标签现在按**进程 cwd** 还原 —— 这条用例**从主树跑**（cwd = 沙箱根）
+    才拿得到主树标签（`""`），与占着的 `tree=""` 同树 ⇒ 咬。
+    """
+    monkeypatch.setattr(wd.pool_registry, "main_tree_root", lambda: sandbox)
+    monkeypatch.chdir(sandbox)
     _reserve("777", tree="", files=["别的东西.md"])
     problems, _ = wd.preflight("001", "spec.md", force=False, check_auth=False)
     assert any("树被占" in p and "777" in p for p in problems), problems
@@ -2797,13 +2807,60 @@ def test_dry_run_does_not_reserve_the_tree(sandbox: Path, monkeypatch) -> None:
 
 
 def test_worker_tree_label_is_main_tree_or_relative(sandbox: Path) -> None:
-    """树标签口径与登记一致：主树 = ""；卡树 = 相对主树根的 posix 路径。"""
+    """树标签口径与登记一致：主树 = ""；卡树 = 相对主树根的 posix 路径（**给了 `--cwd`** 时）。"""
     root = sandbox
-    assert wd.worker_tree_label(None, root) == ""
     assert wd.worker_tree_label(root, root) == ""
     assert wd.worker_tree_label(root / ".wt" / "x", root) == ".wt/x"
     outside = root.parent / "别的地方"
     assert wd.worker_tree_label(outside, root) == outside.as_posix()
+
+
+def test_worker_tree_label_none_uses_the_process_cwd(
+        sandbox: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 卡 203（T-G307）：**不给 `--cwd`** 时按**进程 cwd** 还原标签 —— 老行为是**一律 `''`**。
+
+    为什么钉住：老的「一律 `''`」= 从卡树里跑也把**主树**登记成被占，而工人在卡树里干活
+    （症状 A：197/201/202 三张卡都被自己那条 `tree: ""` 租约挡过）。这条是**行为变化**的显式用例。
+    """
+    root = sandbox
+    (root / ".wt" / "x").mkdir(parents=True)
+    monkeypatch.chdir(root / ".wt" / "x")
+    assert wd.worker_tree_label(None, root) == ".wt/x"           # 老行为是 ""
+
+
+def test_worker_tree_label_none_from_the_main_tree_is_empty(
+        sandbox: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 卡 203 反例：从**主仓**跑（不给 `--cwd`）⇒ 标签仍是 `''`（不许把主树误标成卡树）。"""
+    root = sandbox
+    monkeypatch.chdir(root)
+    assert wd.worker_tree_label(None, root) == ""
+
+
+def test_execute_without_cwd_from_a_card_tree_registers_that_tree(
+        sandbox: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 卡 203 端到端（桩 CLI，不真调模型）：**从卡树里**派一次（不给 `--cwd`）⇒
+    租约登记的 `tree` **等于该卡树标签**（不是 `''`）—— 症状 A 的正面回归钉。"""
+    root = sandbox
+    monkeypatch.setattr(wd.pool_registry, "main_tree_root", lambda: root)
+    card_tree = root / ".wt" / "x"
+    card_tree.mkdir(parents=True)
+    monkeypatch.chdir(card_tree)
+    during: list[list[str]] = []
+
+    def runner(cmd, log, errlog, **kwargs):          # noqa: ANN001, ANN202
+        during.append([str(r.get("tree")) for r in wd.pool_registry.list_reservations()])
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(EVENTS) + "\n", encoding="utf-8")
+        errlog.write_text("", encoding="utf-8")
+        wd.session_file_for(log).write_text("sid-test", encoding="utf-8")
+        return 0, "", "", "sid-test"
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute"])
+    assert wd.main() == 0
+    assert during == [[".wt/x"]], f"从卡树跑 ⇒ 租约登记该卡树标签，实测 {during}"
+    assert wd.pool_registry.list_reservations() == [], "收工之后租约必须已经不在了"
 
 
 def test_max_turns_help_is_built_from_the_constants(monkeypatch) -> None:
@@ -2820,12 +2877,16 @@ def test_max_turns_help_is_built_from_the_constants(monkeypatch) -> None:
     assert "7" in after["read_only"]
 
 
-def test_already_reserved_skips_the_guards_but_not_the_rest(sandbox: Path) -> None:
+def test_already_reserved_skips_the_guards_but_not_the_rest(
+        sandbox: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """★ 卡 125 修订：`--already-reserved` **只**跳过守卫与占/还树；别的前置照走（两读数）。
 
     读数一：不带开关 → 已有活租约的树被拒（守卫照走）。
     读数二：带开关 → **不因那条租约**被拒；但**别的毛病照咬**（规格不在 → 仍拒）。
+    ★ 卡 203：从**主树跑**（cwd = 沙箱根）才拿得到主树标签（`""`）与占着的 `tree=""` 同树。
     """
+    monkeypatch.setattr(wd.pool_registry, "main_tree_root", lambda: sandbox)
+    monkeypatch.chdir(sandbox)
     _reserve("777", tree="", files=["别的东西.md"])
     strict, _ = wd.preflight("001", "spec.md", force=False, check_auth=False)
     assert any("树被占" in p for p in strict), strict                  # 读数一

@@ -40,6 +40,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pool import registry as pool_registry  # noqa: E402 —— 主树根（树标签的锚点；卡 203）
 from pool.plan import (
     ACTIVE_STATUS,
     BATCH_CLAIM_RE,
@@ -98,15 +99,43 @@ def worktree_commands(backlog: Backlog, base: str) -> list[tuple[Card, str]]:
             for card in backlog.cards if card.tree and in_flight(card)]
 
 
+def _tree_abs(tree: str) -> str:
+    """卡树（相对**主树根**的标签）的**绝对路径**（posix）—— 口径与 `pool.registry` 的树标签一致。
+
+    ★ 卡 203：树标签（`wb_dispatch.worker_tree_label`）就是"相对**主树根**的 posix 路径" ⇒
+      绝对路径必须锚在**主树根**上 —— 不能锚在"wb_plan 从哪儿跑"（那样在卡树里会拼成
+      `<卡树>/.wt/x`，正好是这个 bug 家族的错法）。主树根算不出（git 不可用）⇒ 退回本文件
+      所在树（`ROOT`，通常就是主树）。
+    """
+    try:
+        main_root = pool_registry.main_tree_root()
+    except pool_registry.RegistryError:
+        main_root = ROOT
+    return (main_root / tree).as_posix()
+
+
 def dispatch_argv(card: Card) -> list[str]:
-    """一张卡的派活命令（argv）—— 模板照卡 010 §3.2；**从它自己的树里跑**。"""
-    return ["python", "-X", "utf8", "tools/wb_dispatch.py",
-            "--card", card.id, "--spec", card.spec, "--detach", "--execute"]
+    """一张卡的派活命令（argv）—— **从主仓跑**（卡 203 换掉了「pushd 进卡树」那套）。
+
+    ★★ 卡 203（T-G307）：旧形态是 `pushd <树>; python tools/wb_dispatch.py …` —— 它有两个病：
+      ① `pushd` 让进程 cwd 落到卡树，而跑的是**树里那份**脚本（`ROOT = Path(__file__)…` 于是成了
+         卡树）⇒ 派活产物（log / brief / 规格）落进卡树（症状 B），而卡树里没有主仓的
+         `gates/diag/`（那是 gitignore 的）；
+      ② 不给 `--cwd` ⇒ 租约把「主树」登记成被占（症状 A），可工人在卡树里干活。
+      现在：**从主仓**跑（不再 `pushd`）+ 显式 `--cwd <该卡树的绝对路径>` —— 登记树 = 工人树。
+    ★ 主树（`tree == ""`）**不给** `--cwd`：从主仓跑时进程 cwd 就是主仓 ⇒ 标签仍是主树（`""`），
+      且工人看到的东西逐字不变（卡 166：换法不许改变工人看到的东西）。
+    """
+    argv = ["python", "-X", "utf8", "tools/wb_dispatch.py",
+            "--card", card.id, "--spec", card.spec]
+    if card.tree:
+        argv += ["--cwd", _tree_abs(card.tree)]
+    return [*argv, "--detach", "--execute"]
 
 
 def render_dispatch(card: Card) -> str:
-    base = " ".join(dispatch_argv(card))
-    return f"pushd {card.tree}; {base}" if card.tree else base
+    """把派活 argv 拼成一整行命令（从**主仓**跑）—— 不再 `pushd`（卡 203）。"""
+    return " ".join(dispatch_argv(card))
 
 
 # ================================================================ 子命令
