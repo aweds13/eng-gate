@@ -80,7 +80,8 @@ __all__ = [
     "BATCH_CLAIM_RE", "audit_batch_claims", "batch_manifest_path", "extract_batch_claim",
     "cmd_check", "cmd_dispatch", "cmd_plan", "cmd_stats", "cmd_worktrees",
     "build_parser", "dispatch_argv", "files_intersect", "find_cycle", "greedy_pack",
-    "find_landed_but_pending", "in_flight", "load_backlog", "main", "plan_batches",
+    "find_landed_but_pending", "find_gate_drift", "in_flight", "load_backlog",
+    "main", "plan_batches",
     "plan_report", "render_dispatch", "render_plan", "topo_layers", "validate",
     "worktree_commands",
 ]
@@ -222,6 +223,82 @@ def find_landed_but_pending(backlog: Backlog, repo: Path | None = None) -> list[
     return reports
 
 
+# -------------------------------------------------- 卡 212（T-G323）：栅栏漂移
+def _match_member_to_card(
+    member_id: str, member_paths: list[str], by_id: dict[str, Card],
+) -> Card | None:
+    r"""把栅栏成员对应到 backlog 卡（与 `pool.task.find_gates_for_member` 同口径，方向相反）。
+
+    ① 成员号 == 卡 id ⇒ 直接（`B-20261014` 的 `210`/`211`/`212`）；
+    ② 成员 `paths` ∩ 卡 `files` 非空 ⇒ 取相交最多的那张（`B-DTREE` 的 `M-1` → 卡 203）。
+    找不到 ⇒ None。
+    """
+    if member_id in by_id:
+        return by_id[member_id]
+    mpaths = set(member_paths or [])
+    if not mpaths:
+        return None
+    best: Card | None = None
+    best_n = 0
+    for card in by_id.values():
+        n = len(mpaths & set(card.files))
+        if n > best_n:
+            best, best_n = card, n
+    return best
+
+
+def find_gate_drift(backlog: Backlog) -> list[str]:
+    r"""★ 卡 212（T-G323）：栅栏漂移判据 —— 对每个 `gates/diag/batch/B-*.toml`，
+    它的成员在**队列里的 status** 与**栅栏状态**必须一致。
+
+    **「卡已 `done` 而栅栏还 `collecting`（未到终态）」⇒ 红并点名**
+    （批号 + 成员号 + 卡号 + 两边各说什么）。
+
+    ★ 反向保护（五条都要）：
+      ① 只报 `done` 的卡（`pending`/`running`/`failed` 不报 —— 它们没落地，栅栏等着是对的）；
+      ② 成员找不到对应卡 ⇒ 不报（可能还没派活 / 成员号不是卡号且 paths 不相交）；
+      ③ 栅栏已到终态（`awaiting-commit` / `landed` / `timeout`）⇒ 不报；
+      ④ 只读成员不参与放行 ⇒ 不报；
+      ⑤ 没有栅栏目录 / 单个栅栏坏了 ⇒ 优雅跳过（不崩、不当通过也不当红）。
+    """
+    try:
+        from pool.task import batch_dir, load_manifest, read_json, state_path
+    except Exception:  # pragma: no cover - pool.task 不在时优雅跳过
+        return []
+    try:
+        bd = batch_dir()
+    except Exception:  # pragma: no cover - git 不可用时优雅跳过
+        return []
+    if not bd.is_dir():
+        return []
+    by_id: dict[str, Card] = {card.id: card for card in backlog.cards}
+    reports: list[str] = []
+    for toml in sorted(bd.glob("B-*.toml")):
+        gate_id = toml.stem
+        sp = state_path(gate_id)
+        if not sp.is_file():
+            continue
+        try:
+            st = read_json(sp)
+            man = load_manifest(gate_id)
+        except Exception:  # pragma: no cover - 坏栅栏跳过
+            continue
+        state = st.get("state", "")
+        if state in ("awaiting-commit", "landed", "timeout"):
+            continue
+        for mem in man.get("member") or []:
+            if mem.get("read_only"):
+                continue
+            mid = mem.get("id", "")
+            card = _match_member_to_card(mid, mem.get("paths") or [], by_id)
+            if card is None or card.status != "done":
+                continue
+            reports.append(
+                f"批 {gate_id} 成员 {mid} → 卡 {card.id}（{card.task}）："
+                f"栅栏={state} / 队列=done —— 卡已落地但栅栏未推进")
+    return reports
+
+
 def cmd_check(backlog: Backlog) -> int:
     code = _problems_or_exit(backlog)
     if code:
@@ -247,6 +324,14 @@ def cmd_check(backlog: Backlog) -> int:
     for line in landed:
         print(f"[FAIL] {line}", file=sys.stderr)
     if landed:
+        return 1
+    # ★ 卡 212（T-G323）：栅栏漂移 —— 卡已 done 而栅栏还 collecting ⇒ 红。
+    #   判据盯的是「真仓库的栅栏」（gates/diag/batch/B-*.toml）与「队列里的 status」是否一致。
+    #   反向保护：只报 done 的卡 / 成员找不到卡不报 / 终态不报 / 只读不报 / 没栅栏优雅跳过。
+    drift = find_gate_drift(backlog)
+    for line in drift:
+        print(f"[FAIL] {line}", file=sys.stderr)
+    if drift:
         return 1
     return 0
 

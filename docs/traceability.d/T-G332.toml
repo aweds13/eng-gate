@@ -1,0 +1,37 @@
+[entries."T-G332"]
+id = "T-G332"
+title = "攒批收口第一批：卡 210/211/212/213/214 一笔提交（+ 219~224 登记）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/changelog.md",
+  "file:docs/traceability.toml",
+  "file:docs/workbacklog.toml",
+  "file:docs/zentao-bridge.toml",
+  "file:harness/README.md",
+  "file:tests/test_harness_manifest.py",
+  "file:tests/test_pool_mcp.py",
+  "file:tests/test_pool_mcp_board.py",
+  "file:tests/test_pool_mcp_task.py",
+  "file:tests/test_pool_mcp_write.py",
+  "file:tests/test_pool_registry.py",
+  "file:tests/test_wb_land.py",
+  "file:tests/test_wb_plan.py",
+  "file:tests/test_wb_review.py",
+  "file:tests/test_zentao_bridge.py",
+  "file:tools/pool/landing.py",
+  "file:tools/pool/task.py",
+  "file:tools/pool_mcp.py",
+  "file:tools/wb_plan.py",
+  "file:tools/wb_review.py",
+  "file:tools/zentao_bridge.py",
+  "file:复盘/交接-重构进度.md",
+  "file:复盘/卡/卡219-工作台不建模清单.md",
+  "file:复盘/卡/卡220-定时巡检让每日一批自己跑.md",
+  "file:复盘/卡/卡221-全局面板.md",
+  "file:复盘/卡/卡222-timeflow收件箱.md",
+  "file:复盘/卡/卡223-禅道迭代甘特.md",
+  "file:复盘/卡/卡224-工作台状态注入.md",
+]
+gaps = "① ★★ **集成仍是手工的**：`wb_land.py --batch` 只落**一棵树**，而五张卡在五棵树里 ⇒ 本笔由主控手工 `git apply` 五份补丁。**卡 212 就是治这件事的，但它在这一批里** ⇒ 本次还没生效。指针：`tools/pool/landing.py`。② ★ **214 的补丁带一处「文件尾空行」**（`git apply` 报 whitespace warning）—— 已并入未清。指针：`tests/test_harness_manifest.py`。③ ★ **218（Trae 接入）不属本批**：它在飞；主控预修的 5 处暂存在 stash 里、并已同步进 `.wt/traecli`。指针：`tools/trae_pool.mjs`。④ ★ **主树这次一次落五张卡的成果** —— 一笔提交含 5 张卡（千行级）。攒批的代价与收益都在这里。指针：`docs/workbacklog.toml`。"
+

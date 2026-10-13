@@ -1,0 +1,152 @@
+# 禅道桥（只读那一半）的真源表 —— 卡 211 · T-G321
+#
+# 这份文件是**下游读禅道读数的唯一真源**：`tools/zentao_bridge.py` 的端点与字段映射
+# 就照这里写。规矩（卡 211 §1）：**没验到的一律不写** —— 写进去就等于声称。
+#
+# ★ 本机实况（2026-10-13 实测，见 `[runtime]`）：**没有在跑的禅道**。
+#   所以本文件里凡是「源码里读到的」与「本机连得上的」**分成两个字段**：
+#     · `source`        = 从**安装包里那份源码**逐字读到的（可回查文件路径）；
+#     · `reachable_now` = 本机此刻**能不能连上**（实测，`[runtime]` 里给证据）。
+#   ★ 排查过一次别的不许出现：`reachable_now = "unverified"` 只在 `[runtime]` 为「无实例」时用，
+#     其余一律给真值与证据命令。
+
+[meta]
+product       = "ZenTaoPMS"
+version       = "22.6"          # 证据：app/zentao/VERSION 全文 = "22.6"；config.php:19
+edition       = "open"          # 证据：app/zentao/config/config.php:27
+extension_level = 1             # 证据：app/zentao/config/config.php:123
+request_type  = "PATH_INFO"     # 证据：app/zentao/config/config.php:32
+session_var   = "zentaosid"     # 证据：app/zentao/config/config.php:37
+module_var    = "m"             # 证据：app/zentao/config/config.php:34
+method_var    = "f"             # 证据：app/zentao/config/config.php:35
+# ★ 本卡与授权/破解无关：edition 就按 open 用，升级/解锁不是这张卡的活（卡 211 抬头）。
+note          = "只读那一半；写回那一半是另一张卡。本文件不含任何凭据。"
+
+# ── 安装物在哪里（只读侦察：从包里读出来的，不是猜的）──────────────────────────
+[install]
+# 便携版自解压包（仓库外）；本仓只登记**它是什么、怎么读**，不搬运 894 MB。
+package_path        = 'D:/downloads/zentao-22.6-amd64-portable.exe'
+payload_path        = 'D:/downloads/zentao_payload.7z'   # 从上面那个 exe 里取出的 7z 载荷（151 MiB）
+package_bytes       = 158043680                     # 证据：os.stat(package_path).st_size
+web_root_in_package = 'ZenTao/app/zentao/www'       # 证据：包内路径，api.php / index.php 在这里
+# ★ 数据库配置**从配置里读**（不是猜）：安装包的 config/my.php 里逐字读到下列键。
+config_file         = 'ZenTao/app/zentao/config/my.php'
+
+[install.database]
+# ★ 只放**键名**与说明，不放任何口令 / token（卡 211 §2 & 硬约束）。
+host_key        = "config->db->host"      # my.php 原文：$config->db->host = '127.0.0.1';
+name_key        = "config->db->name"      # my.php 原文：$config->db->name = 'zentao';
+prefix_key      = "config->db->prefix"    # my.php 原文：$config->db->prefix = 'zt_';
+host_default    = "127.0.0.1"             # 证据：my.php 逐字
+name_default    = "zentao"                # 证据：my.php 逐字
+prefix_default  = "zt_"                   # 证据：my.php 逐字
+credentials_src = "config/mysql.php（安装时生成，在仓外；本仓不存任何口令）"
+# 注：my.php 末尾 `include 'mysql.php';` —— 账号/口令在 mysql.php 里，仓库不登记其值。
+
+# ── 鉴权怎么走（两条都已通行的路，源码为证）──────────────────────────────────
+[api]
+# 路 A：REST v1（推荐的只读路）。响应根见 [[endpoints]]。
+rest_router   = "/api.php/v1"               # 证据：app/zentao/www/api.php 里 router apiVersion=v1
+login_path    = "/api.php/v1/tokens"        # 证据：app/zentao/api/v1/entries/tokens.php::post()
+login_method  = "POST"                      # 证据：同上（★ 本工具**不调它**：它写会话 = 写）
+login_body    = '{"account": "<账号>", "password": "<口令>"}'
+login_response = '{ "token": "<session_id>" }'   # tokens.php 原文：send(201, array('token' => session_id()))
+auth_header   = "Token"                     # 证据：framework/base/router.class.php:1295 $_SERVER['HTTP_TOKEN']
+auth_note     = "后续每个 GET 带 header `Token: <token>`，等价于带上该会话。"
+unauthorized  = "未登录 / token 失效 → HTTP 401 {\"error\":\"Unauthorized\"}"  # entry.class.php:22
+forbidden     = "无该方法权限 → HTTP 403 {\"error\":\"Access not allowed\"}"   # entry.class.php:634
+error_shape   = '{ "error": "<msg>" }'       # baseEntry::sendError()
+# 路 B：老「应用接入」路（checkEntry）—— 需要预先在「应用」里配 code/key/IP/账号绑定。
+legacy_router = "/api.php"                   # 证据：www/api.php：无 apiVersion 时调 $common->checkEntry()
+legacy_query  = "?m=<module>&f=<method>&code=<code>&token=<token>"
+legacy_token  = "token = md5(md5(其余query串) . entryKey)（或带 time 的时效式）"
+legacy_evidence = "app/zentao/module/common/model.php:1823 checkEntry() / :1889 checkEntryToken()"
+
+# ── 端点表（每个都标 exist=源码里读到；reachable_now=本机此刻实测）──────────────
+# ★ reachable_now 本机全为 false，因为**没有在跑的禅道**（见 [runtime]）；
+#   这不是「入口不存在」—— 入口在包里都在（exist=true，附 source）。
+[[endpoints]]
+name            = "projects"
+method          = "GET"
+path            = "/api.php/v1/projects"
+source          = "app/zentao/api/v1/entries/projects.php"
+exists          = true
+reachable_now   = false
+response_root   = "projects"        # 顶层数组键
+# 响应信封：{ page, total, limit, projects:[...] }（projects.php::get → send(200,$data)）。
+# 参数（源码读到，未实跑）：program, status, order, limit, page, withUser, fields。
+
+[[endpoints]]
+name            = "executions"
+method          = "GET"
+path            = "/api.php/v1/executions"
+source          = "app/zentao/api/v1/entries/executions.php"
+exists          = true
+reachable_now   = false
+response_root   = "executions"
+# 响应信封：{ page, total, limit, executions:[...], projects? }。参数：projectID,status,order,limit,page,mergeChildren,withProject,fields。
+
+[[endpoints]]
+name            = "tasks"
+method          = "GET"
+path            = "/api.php/v1/tasks"
+source          = "app/zentao/api/v1/entries/tasks.php"
+exists          = true
+reachable_now   = false
+response_root   = "tasks"
+# 响应信封：{ page, total, limit, tasks:[...] }。参数：executionID,status,order,limit,page,search,mergeChildren。
+
+[[endpoints]]
+name            = "tokens"
+method          = "POST"
+path            = "/api.php/v1/tokens"
+source          = "app/zentao/api/v1/entries/tokens.php"
+exists          = true
+reachable_now   = false
+response_root   = "token"
+# ★ 写请求（建会话）——列入此表只为**说清鉴权**；本工具**不调用**它（只读）。
+note            = "只读桥不调它；拿 token 在桥外做。"
+
+[[endpoints]]
+name            = "ping"
+method          = "GET"
+path            = "/api.php/v1/ping"
+source          = "app/zentao/api/v1/entries/ping.php"
+exists          = true
+reachable_now   = false
+response_root   = "token"
+# 响应：{ token, tokenLife }；活体探针（还需已登录，否则先吃 401）。
+
+# ── 字段映射：禅道字段 → 本仓读数用的规范字段（tools/zentao_bridge.py 照此映射）──
+# ★ 规范字段只留**跨版本稳的标量**；用户对象（{account,avatar,realname}）取 account。
+[[mapping]]
+section        = "projects"
+tz_envelope    = "page,total,limit,projects"
+# 来源：projectStats 逐条 format('openedBy:user,openedDate:time,...,realBegan:date,realEnd:date')
+fields         = ["id", "name", "code", "model", "type", "status", "PM", "begin", "end", "progress"]
+
+[[mapping]]
+section        = "executions"
+tz_envelope    = "page,total,limit,executions"
+# 来源：filterFields('id,name,project,code,type,parent,begin,end,status,openedBy,openedDate,delay,progress,children,isParent')
+fields         = ["id", "name", "project", "code", "type", "parent", "begin", "end", "status", "progress", "isParent"]
+
+[[mapping]]
+section        = "tasks"
+tz_envelope    = "page,total,limit,tasks"
+# 来源：execution/task 的 task 行 + format('deadline:date,openedBy:user,...,mailto:userList')
+fields         = ["id", "name", "execution", "project", "status", "pri", "assignedTo", "estimate", "consumed", "left", "deadline"]
+
+# 每个条目的**必需字段**；缺任一 ⇒ 工具报 `badshape`（不许静默给空）。
+[required_fields]
+item_fields = ["id", "name"]
+
+# ── 运行可达性（本机实测；★ 这是「连得上吗」，不是「入口存在吗」）─────────────
+[runtime]
+live_reachable = false
+reason         = "本机没有在跑的禅道（没有 Apache/MySQL/PHP/mysqld 进程；常见端口无一 LISTENING）。"
+# 证据（2026-10-13 实测，逐条原样）：
+probe_command  = 'curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:<PORT>/api.php/v1/ping'
+probe_result   = "ports 80/8080/8088/8999/3306 全部 http_code=000, curl exit=7（connection refused）"
+process_check  = "tasklist | grep -iE 'httpd|mysqld|php|zentao' → 无匹配（只有无关的系统进程）"
+how_to_go_live = "在仓外启动便携版：解 D:/downloads/zentao-22.6-amd64-portable.exe → 双击 ZenTao.exe（ZenPanel）起 Apache+MySQL；安装后设 ZENTAO_URL/ZENTAO_TOKEN 再跑本桥。"

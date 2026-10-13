@@ -861,3 +861,152 @@ def test_check_passes_when_no_landed_but_pending(
     monkeypatch.setattr(wb_plan, "ROOT", repo)
     backlog = _backlog(_card("007", task="T-G999", status="pending", spec=""))
     assert wb_plan.cmd_check(backlog) == 0
+
+
+# ================================================================ 卡 212（T-G323）：栅栏漂移判据
+
+import json as _json  # noqa: E402
+
+
+def _make_gate(
+    bd: Path, gate_id: str, state: str,
+    members: list[dict[str, object]],
+) -> None:
+    """在 `bd` 下造一个栅栏（toml + json），供 `find_gate_drift` 测试。"""
+    bd.mkdir(parents=True, exist_ok=True)
+    member_text = "".join(
+        f'\n[[member]]\nid = "{m["id"]}"\nlayer = "{m.get("layer", "test")}"\n'
+        + (f'what = "{m.get("what", "")}"\n' if m.get("what") else "")
+        + ('read_only = true\n' if m.get("read_only") else "")
+        + f'paths = {_json.dumps(m.get("paths", []))}\n'
+        for m in members)
+    (bd / f"{gate_id}.toml").write_text(
+        f'id = "{gate_id}"\nwhy = "test"\non_complete = ["draft"]\n{member_text}',
+        encoding="utf-8")
+    declared = [str(m["id"]) for m in members]
+    read_only = [str(m["id"]) for m in members if m.get("read_only")]
+    st = {
+        "id": gate_id, "why": "test", "layers": ["test"], "declared": declared,
+        "read_only": read_only, "need": len(declared) - len(read_only),
+        "claims": {}, "waived": [], "state": state, "auto": ["draft"],
+        "gate_cmd": None, "deadline": None, "gate": None, "draft": None,
+        "landed": None, "history": [],
+    }
+    (bd / f"{gate_id}.json").write_text(
+        _json.dumps(st, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def test_gate_drift_done_card_collecting_gate_is_red(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """① 判据红：卡 done 而栅栏 collecting ⇒ 红并点名（paths 匹配）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-TEST", "collecting",
+               [{"id": "M-1", "layer": "工具层", "paths": ["tools/x.py"]}])
+    backlog = _backlog(_card("007", task="T-G999", status="done",
+                             files=("tools/x.py",)))
+    reports = wb_plan.find_gate_drift(backlog)
+    assert len(reports) == 1, reports
+    assert "B-TEST" in reports[0] and "007" in reports[0] and "done" in reports[0]
+
+
+def test_gate_drift_member_id_equals_card_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⑦ 成员号 == 卡 id 直接匹配（B-20261014 的 210/211/212 那种）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-TEST", "collecting",
+               [{"id": "007", "layer": "工具层", "paths": ["tools/x.py"]}])
+    backlog = _backlog(_card("007", task="T-G999", status="done",
+                             files=("tools/x.py",)))
+    reports = wb_plan.find_gate_drift(backlog)
+    assert len(reports) == 1, reports
+    assert "007" in reports[0]
+
+
+def test_gate_drift_landed_gate_not_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """② 栅栏已 landed ⇒ 不报（终态）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-TEST", "landed",
+               [{"id": "M-1", "layer": "工具层", "paths": ["tools/x.py"]}])
+    backlog = _backlog(_card("007", task="T-G999", status="done",
+                             files=("tools/x.py",)))
+    assert wb_plan.find_gate_drift(backlog) == []
+
+
+def test_gate_drift_pending_card_not_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """③ 反向保护①：卡 pending ⇒ 不报（没落地，栅栏等着是对的）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-TEST", "collecting",
+               [{"id": "M-1", "layer": "工具层", "paths": ["tools/x.py"]}])
+    backlog = _backlog(_card("007", task="T-G999", status="pending",
+                             files=("tools/x.py",)))
+    assert wb_plan.find_gate_drift(backlog) == []
+
+
+def test_gate_drift_member_no_card_not_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """④ 反向保护②：成员找不到对应卡 ⇒ 不报（可能还没派活）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-TEST", "collecting",
+               [{"id": "M-1", "layer": "工具层", "paths": ["tools/x.py"]}])
+    backlog = _backlog(_card("007", task="T-G999", status="done",
+                             files=("tools/z.py",)))  # 不相交
+    assert wb_plan.find_gate_drift(backlog) == []
+
+
+def test_gate_drift_read_only_member_not_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⑤ 反向保护④：只读成员不参与放行 ⇒ 不报。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-TEST", "collecting",
+               [{"id": "M-1", "layer": "审计层", "paths": [],
+                 "read_only": True}])
+    backlog = _backlog(_card("007", task="T-G999", status="done",
+                             files=("tools/x.py",)))
+    assert wb_plan.find_gate_drift(backlog) == []
+
+
+def test_gate_drift_no_gate_dir_skips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⑥ 反向保护⑤：没有栅栏目录 ⇒ 优雅跳过（不崩）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "nonexistent"))
+    backlog = _backlog(_card("007", task="T-G999", status="done"))
+    assert wb_plan.find_gate_drift(backlog) == []
+
+
+def test_gate_drift_awaiting_commit_not_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """③ 扩展：栅栏到 awaiting-commit（齐了等人提交）⇒ 不报。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-TEST", "awaiting-commit",
+               [{"id": "M-1", "layer": "工具层", "paths": ["tools/x.py"]}])
+    backlog = _backlog(_card("007", task="T-G999", status="done",
+                             files=("tools/x.py",)))
+    assert wb_plan.find_gate_drift(backlog) == []
+
+
+def test_check_fails_on_gate_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """端到端：check 在「栅栏漂移」时退 1 并点名。"""
+    repo = _git_init(tmp_path)
+    monkeypatch.setattr(wb_plan, "ROOT", repo)
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    _make_gate(tmp_path / "batch", "B-TEST", "collecting",
+               [{"id": "M-1", "layer": "工具层", "paths": ["tools/x.py"]}])
+    backlog = _backlog(_card("007", task="T-G999", status="done",
+                             files=("tools/x.py",), spec=""))
+    code = wb_plan.cmd_check(backlog)
+    err = capsys.readouterr().err
+    assert code == 1, f"check 应当退 1：{err}"
+    assert "B-TEST" in err and "007" in err, err

@@ -110,6 +110,113 @@ def test_missing_allowlist_is_refused_not_silently_passed() -> None:
     assert any("没有给白名单" in p for p in problems)
 
 
+# ------------------------------------- ④′ 派生物噪声（卡 210 · T-G320）
+#
+# 收口链第 ⑥ 步（`tools/pool/landing.py`）**无条件**把「三份本台片段 + 三份共享文档 +
+# 两个门禁产物」并进 `allow` 才提交；而复核只拿到调用方给的 `--allow`（不含它们）⇒ 连着
+# 6 笔都被**自己的派生物**判成"越界"（噪声，`gates/review/*.json` 里同一条）。本档钉：
+# 那批派生物是**预期内**，**只有**「`allow` ∪ 派生物清单」**之外**的改动才报、才红。
+# ★★ 这条不许放松成"什么都不报"（见下面的反例）。
+
+#: 一份典型派生物（照 `e0a6dc8` / `T-G313` 那 7 条的样子）—— 判据与钉子都拿它当样例。
+DERIVED_SAMPLE = (
+    "docs/changelog.d/T-G999.md",
+    "docs/traceability.d/T-G999.toml",
+    "复盘/交接.d/T-G999.md",
+    "docs/changelog.md",
+    "docs/traceability.toml",
+    "复盘/交接-重构进度.md",
+    "gates/last.json",
+    "gates/reuse.json",
+)
+
+
+def test_derived_artifacts_are_expected_not_outside() -> None:
+    """① **绿**：一笔只含「本卡 allow + 派生物清单」的改动 ⇒ **problems 为空**（噪声归零）。"""
+    files = ["src/a.py", *DERIVED_SAMPLE]
+    assert wr.check_files(files, read_only=False, allow=["src/**"]) == []
+
+
+def test_rogue_file_alongside_derived_is_still_refused() -> None:
+    """② ★★ **红（反例，最重要）**：同一堆改动里**多塞一个两边都不在的文件** ⇒
+    **必须报出来并点名它**；再把它删掉 ⇒ **回到绿**（判据没被放松成"什么都不报"）。"""
+    files = ["src/a.py", *DERIVED_SAMPLE, "docs/rogue.md"]
+    problems = wr.check_files(files, read_only=False, allow=["src/**"])
+    assert len(problems) == 1, problems
+    assert "docs/rogue.md" in problems[0], "越界文件没被点名"
+    assert "docs/changelog.md" not in problems[0], "派生物被误当成越界点名了"
+    # 把那个越界文件删掉 ⇒ 回到绿
+    assert wr.check_files(["src/a.py", *DERIVED_SAMPLE], read_only=False, allow=["src/**"]) == []
+
+
+def test_classify_changes_separates_the_two_columns() -> None:
+    """③ 报告两栏分开：`classify_changes()` 把「派生物（预期）」与「越界」各归各（互斥）。"""
+    derived_hits, outside = wr.classify_changes(
+        ["src/a.py", "gates/last.json", "docs/rogue.md"], ["src/**"])
+    assert derived_hits == ["gates/last.json"]
+    assert outside == ["docs/rogue.md"]
+
+
+def test_derived_globs_are_pinned_and_match_landing() -> None:
+    """④ ★ **清单钉子**：派生物清单逐字钉住（改了它 ⇒ 这里红），且与真源
+    `tools/pool/landing.py` 的 `DOCS` / `GATES` **对齐**（那边漂了 ⇒ 这里也红）。"""
+    assert wr.DERIVED_GLOBS == (
+        "docs/changelog.d/*.md",
+        "docs/traceability.d/*.toml",
+        "复盘/交接.d/*.md",
+        "docs/changelog.md",
+        "docs/traceability.toml",
+        "复盘/交接-重构进度.md",
+        "gates/last.json",
+        "gates/reuse.json",
+    )
+    from pool import landing  # noqa: PLC0415 —— tools/ 已在 sys.path 里；landing 是清单真源
+    for path in (*landing.DOCS, *landing.GATES):
+        assert path in wr.DERIVED_GLOBS, f"派生物清单漏了 landing 的 {path}"
+
+
+def _derived_repo(tmp_path: Path) -> Path:
+    """造一棵能走 `--rev` 的仓库：seed 一笔 → 带着「本卡 allow + 派生物清单」的第二笔。"""
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    for rel in ("docs/changelog.d", "docs/traceability.d", "复盘/交接.d", "gates"):
+        (repo / rel).mkdir(parents=True)
+    (repo / "src" / "a.py").write_text("a\n", encoding="utf-8")
+    _run_git(repo, "init", "-q", "-b", "main")
+    _run_git(repo, "config", "user.email", "t@local")
+    _run_git(repo, "config", "user.name", "t")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "seed")
+    parent = _run_git(repo, "rev-parse", "--short", "HEAD").strip()
+    payload = {"rev": parent, "ok": True, "docs_sync_ok": True, "docs_sync_missing": [],
+               "gates": [{"name": "pytest", "exit_code": 0}]}
+    files = ("docs/changelog.d/T-G999.md", "docs/traceability.d/T-G999.toml",
+             "复盘/交接.d/T-G999.md", "docs/changelog.md", "docs/traceability.toml",
+             "复盘/交接-重构进度.md")
+    for rel in files:
+        (repo / rel).write_text("x\n", encoding="utf-8")
+    (repo / "gates" / "last.json").write_text(json.dumps(payload), encoding="utf-8")
+    (repo / "src" / "a.py").write_text("b\n", encoding="utf-8")
+    msg = "feat: 一笔\n\nTask: T-G999\nLedger: 1 条\nGates: 全量门禁绿\n"
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", msg)
+    return repo
+
+
+def test_cli_commit_with_only_allow_and_derived_passes(
+    tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    """⑤（CLI 层）一笔只含「本卡 allow + 派生物清单」的提交 ⇒ 复核**退 0** ——
+    证明这条判据在整条 `--rev` 流程里也认（不止零件层），且输出里有「派生物（预期）」那一栏。"""
+    repo = _derived_repo(tmp_path)
+    monkeypatch.setattr(wr, "ROOT", repo)
+    monkeypatch.setattr(wr, "audit_verdict", lambda: ([], "审计通过 ✅"))
+    code = wr.main(["--rev", "HEAD", "--branch", "main", "--allow", "src/**", "--dirty-ok"])
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "派生物（预期）" in out
+
+
 # ------------------------------------------------------------------ 数据层：真仓库
 
 

@@ -107,6 +107,18 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
   不许冻住 stdio；卡 130）。★★ **逐卡域守卫照走**：碰了域外文件 ⇒ 子进程非零退出，
   回话**原样带出**它的输出与退出码、`isError=true`，**绝不静默**（域守卫在 MCP 这条路上也不能绕）。
 
+## ★★ 工作台面（卡 213 · T-G325）：`workbench_board` —— 会话内看全六块
+
+一个**只读**工具，把卡 207 的 `tools/pipeline_view.py` 的一份读数（卡 / 门禁 / 判决 / 租约 /
+栅栏 / 卡树**六块**）收成一份端到会话内 —— 用户原话「尽量**不要让我切来切去**」的第 1 个面。
+
+- ★ **判据只有一份**：本工具**只调** `pipeline_view.py --json`（子进程），**不重写**读队列 /
+  读门禁的逻辑 —— 这正是卡 207 存在的意义。
+- ★ 参数 `section`：不给 = 一次看全六块；给了 = 只要那一块。
+- ★ **缺什么说什么**：某块是 `null` + 说明时**原样透传** —— 不许洗成空对象、不许省略。
+- ★ 子进程带 `NO_WINDOW` 且**限时**（`WORKBENCH_TIMEOUT`）：非零 / 超时 / 起不来都**如实报错**
+  （`isError=true`、`reading=null`），**绝不**返回一个"看起来正常"的空板子。
+
 ## 诚实边界（如实写）
 
 - `pool_models` 读的是**快照** `models.live.json`（带 `at` 时间戳），**不是现场拉取**：
@@ -237,6 +249,17 @@ def _read_line() -> str | None:
 
 # ================================================================ 工具元数据（照先例：写死在表里）
 
+#: ★ 卡 213：工作台读数的**唯一**来源 —— 调卡 207 的 `tools/pipeline_view.py`（**不重写判据**）。
+#: 测试可把 `PIPELINE_VIEW` 换成一个"故意非零"的桩脚本，验 `workbench_board` 会如实报错。
+PIPELINE_VIEW = ROOT / "tools" / "pipeline_view.py"
+
+#: `workbench_board` 的六块（顺序即 `pipeline_view` 的块序）。
+WORKBENCH_SECTIONS = ("cards", "gates", "verdicts", "leases", "fences", "worktrees")
+
+#: 子进程**限时**上限（秒）：pipeline_view 要跑 `git worktree list` + 逐树 `git status`，
+#: 给足但不许无限等（超时 ⇒ 如实报错，绝不静默返空）。
+WORKBENCH_TIMEOUT = 60.0
+
 
 TOOL_SPECS: list[dict[str, Any]] = [
     {
@@ -332,6 +355,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
         },
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
+    {
+        "name": "workbench_board",
+        "description": ("工作台一份读数（卡 213）：卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树六块"
+                        "收成一份（只读，走 pipeline_view.py --json，不重写判据）。"
+                        "section 不给=一次看全六块；某块缺来源会如实给 null + 说明。"),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "section": {
+                    "type": "string",
+                    "description": "只要哪一块；不给=六块全给",
+                    "enum": list(WORKBENCH_SECTIONS),
+                }
+            },
+            "required": [],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
 ]
 
 #: 任务面三个**只读**工具（卡 121 §1）—— **不要 env、永远列出**、一个字节都不写。
@@ -377,7 +419,7 @@ TASK_TOOL_SPECS: list[dict[str, Any]] = [
 
 
 def tool_list() -> list[dict[str, Any]]:
-    """十个只读工具（七个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补四个写工具。"""
+    """十一个只读工具（八个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补四个写工具。"""
     specs = [*TOOL_SPECS, *TASK_TOOL_SPECS]
     if write_enabled():
         specs += [*WRITE_TOOL_SPECS, *TASK_WRITE_TOOL_SPECS]
@@ -510,6 +552,25 @@ def _run(argv: list[str], cwd: Path) -> tuple[int | None, str, str]:
             argv, cwd=str(cwd), capture_output=True, text=True,
             encoding="utf-8", errors="replace", **NO_WINDOW,
         )
+    except OSError as exc:
+        return None, "", f"跑不起来：{type(exc).__name__}: {exc}"
+    return done.returncode, done.stdout or "", done.stderr or ""
+
+
+def _run_bounded(argv: list[str], cwd: Path, timeout: float) -> tuple[int | None, str, str]:
+    """跑一条**只读、限时**的命令：返回 `(退出码 | None, stdout, stderr)`。
+
+    ★ 卡 213：`workbench_board` 要起 `pipeline_view.py` —— 与 `_run` 的区别只有一条：
+      **有超时上限**（`subprocess.run(timeout=…)`）。起不来 / 超时都 **不抛**，
+      退出码给 `None` + stderr 里写清原因（**绝不静默返空**）；子进程一律带 `NO_WINDOW`。
+    """
+    try:
+        done = subprocess.run(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
+            argv, cwd=str(cwd), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=timeout, **NO_WINDOW,
+        )
+    except subprocess.TimeoutExpired:
+        return None, "", f"超时：超过 {timeout:g}s 还没跑完，已掐掉（`{_cmd_text(argv)}`）。"
     except OSError as exc:
         return None, "", f"跑不起来：{type(exc).__name__}: {exc}"
     return done.returncode, done.stdout or "", done.stderr or ""
@@ -804,6 +865,85 @@ def tool_quota_status(arguments: dict[str, Any], root: Path = ROOT
     st = pool_quota.status(card=card, model=model, now=now, root=root)
     text = pool_quota.render(st)
     return _result(text, st, is_error=False)
+
+
+# ================================================================ 工具 8：workbench_board（卡 213）
+
+
+def _board_subset(reading: dict[str, Any], section: str | None) -> dict[str, Any]:
+    """按块名取子集：块本身 + 它的 `<块>_*` 说明键（`cards_note` / `fences_broken` …）。
+
+    ★ **原样**取，不填默认、**不洗 null** —— `pipeline_view` 说"这块是 null + 为什么"，
+      这里就把 `null` 与那句说明**一起**端出去（卡 213 的硬约束）。
+    """
+    if section is None:
+        return reading
+    return {k: v for k, v in reading.items() if k == section or k.startswith(section + "_")}
+
+
+def _board_line(section: str, reading: dict[str, Any]) -> str:
+    """一块的**人话**一行（只念数，不重算读数 —— 数都从已解析的 JSON 里取）。"""
+    val = reading.get(section)
+    note = reading.get(f"{section}_note")
+    if val is None:
+        return f"  · {section}：**没有** —— {note or '（来源缺失，未给说明）'}"
+    if isinstance(val, list):
+        extra = ""
+        if section == "fences" and reading.get("fences_broken"):
+            extra = f"（另有坏文件 {len(reading['fences_broken'])} 个）"
+        tail = f" —— {note}" if note else ""
+        return f"  · {section}：{len(val)} 项{extra}{tail}"
+    if section == "gates" and isinstance(val, dict):
+        items = val.get("items") or []
+        return (f"  · gates：ok={val.get('ok')} rev={val.get('rev')} 共 {len(items)} 道"
+                f"{(' —— ' + note) if note else ''}")
+    return f"  · {section}：{json.dumps(val, ensure_ascii=False, sort_keys=True)}"
+
+
+def tool_workbench_board(arguments: dict[str, Any], root: Path = ROOT
+                        ) -> tuple[str, dict[str, Any], bool]:
+    """工作台一份读数（卡 213）—— **只调** `tools/pipeline_view.py --json`，**不重写判据**。
+
+    ★ 判据只许一份真源（卡 207 的 `pipeline_view` 把六块收成一份）：这里**不**读队列 /
+      不读门禁 / 不读租约，只把它的 `--json` **原样**端出来。
+    ★ 缺什么说什么：某块是 `null` + 说明时**原样透传** —— 不许洗成空对象、不许省略。
+    ★ 子进程带 `NO_WINDOW` 且**限时**（`WORKBENCH_TIMEOUT`）：非零 / 超时 / 起不来都
+      **如实报错**（`is_error=True`、`reading=None`），**绝不**返回一个"看起来正常"的空板子。
+    """
+    section = str(arguments.get("section") or "").strip() or None
+    if section is not None and section not in WORKBENCH_SECTIONS:
+        text = (f"workbench_board：不认识的 section={section!r}；六块是："
+                + "、".join(WORKBENCH_SECTIONS) + "。不给 section 就一次给全。")
+        return _result(text, {"section": section, "reading": None}, is_error=True)
+    argv = [sys.executable, "-X", "utf8", str(PIPELINE_VIEW), "--json", "--root", str(root)]
+    command = _cmd_text(argv)
+    code, out, err = _run_bounded(argv, root, WORKBENCH_TIMEOUT)
+    if code != 0:
+        body = "\n".join(x for x in (out.strip(), err.strip()) if x) or "（子进程没有输出）"
+        what = "没跑起来（起不来或超时）" if code is None else f"退出码 {code}（不是 0）"
+        text = (f"workbench_board：**没能拿到读数** —— 我是跑 `{command}`，它 {what}。\n"
+                f"pipeline_view 的原样输出：\n{body}\n"
+                f"（★ 我没拿一个空板子糊弄你：非零/超时就是没读到读数。）")
+        return _result(text, {"command": command, "exit_code": code, "section": section,
+                              "reading": None, "stdout": out, "stderr": err}, is_error=True)
+    try:
+        reading = json.loads(out)
+    except json.JSONDecodeError as exc:
+        text = (f"workbench_board：`{command}` 退 0，但 stdout 不是 JSON（{exc}）。"
+                f"原样输出：\n{out.strip()}")
+        return _result(text, {"command": command, "exit_code": code, "section": section,
+                              "reading": None, "stdout": out}, is_error=True)
+    if not isinstance(reading, dict):
+        text = f"workbench_board：`{command}` 的 JSON 顶层不是对象（是 {type(reading).__name__}）。"
+        return _result(text, {"command": command, "exit_code": code, "section": section,
+                              "reading": None}, is_error=True)
+    shown = [section] if section is not None else list(WORKBENCH_SECTIONS)
+    lines = [f"工作台读数（workbench_board）—— 来自 `{command}`"
+             f"（卡 207 的一份读数，六块）："]
+    lines += [_board_line(sec, reading) for sec in shown]
+    data = {"command": command, "exit_code": 0, "section": section,
+            "reading": _board_subset(reading, section)}
+    return _result("\n".join(lines), data, is_error=False)
 
 
 # ================================================================ 任务面（卡 121）：只读三个
@@ -1512,6 +1652,7 @@ _HANDLERS: dict[str, Any] = {
     "lock_status": tool_lock_status,
     "pool_models": tool_pool_models,
     "quota_status": tool_quota_status,
+    "workbench_board": tool_workbench_board,
     "pool_dispatch": tool_pool_dispatch,
     "pool_cancel": tool_pool_cancel,
     "task_list": tool_task_list,
@@ -1559,11 +1700,14 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
         "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
         "instructions": (
             "外包号池：默认是**只读**面 —— pool_plan / job_list / job_status / job_result / "
-            "lock_status / pool_models / quota_status，加任务面的 task_list / task_status / "
-            "task_pool，"
-            "十个都只读（不写文件、不派活、不抢锁、不要 env）。"
+            "lock_status / pool_models / quota_status / workbench_board，加任务面的 "
+            "task_list / task_status / task_pool，"
+            "十一个都只读（不写文件、不派活、不抢锁、不要 env）。"
             "quota_status（卡 201）按「记录时间 vs 现实时间」判额度四态 —— "
             "限流中 / 已过期，需重新探测 / 余额耗尽 / 未记录，不猜、不探测。"
+            "workbench_board（卡 213）把 pipeline_view 的一份读数（卡 / 门禁 / 判决 / 租约 / "
+            "栅栏 / 卡树六块）收成一份端到会话内 —— 不给 section 就一次看全六块，"
+            "某块缺来源会如实给 null + 说明（不洗成空对象）。"
             "**写工具**（pool_dispatch 派活 / pool_cancel 取消 / task_register 注册任务 / "
             "task_claim 交成送申请）只有在**服务端**设了 POOL_MCP_WRITE=1 时才列出来 —— 那是"
             "「存在性即授权」：没这个 env 就没有写工具。号池写工具每次调用还要 arguments.confirm "
@@ -1627,7 +1771,8 @@ def _usage() -> str:
         "  python -X utf8 tools/pool_mcp.py --help\n"
         "\n"
         "只读工具：pool_plan / job_list / job_status(card) / job_result(card) / "
-        "lock_status / pool_models / task_list / task_status(task) / task_pool。\n"
+        "lock_status / pool_models / quota_status(card,model) / workbench_board(section?) / "
+        "task_list / task_status(task) / task_pool。\n"
         "写工具（要服务端 env POOL_MCP_WRITE=1 才列出来）：pool_dispatch / pool_cancel"
         "（confirm=卡号）、task_register（confirm=TOML 里的 id）、task_claim（confirm=task）。\n"
         "客户端配置（示例）：command = python，args = [\"-X\", \"utf8\", "

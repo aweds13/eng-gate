@@ -30,11 +30,17 @@
 `tools/pool/`。所以复制体跑起来只需要：**标准库 + 一份 `harness.toml` + `git`**，
 拿掉 `tools/` 后仍能跑；证据见 T-G183 台账 gaps。
 
-冻结输入下**原件/复制体渲染的派活命令逐字节相同**（唯一允许的差异是派活器脚本路径
-前缀：原件写死 `tools/wb_dispatch.py`，复制体读 `harness.toml` `paths.workbench`；
-现场板 wb_state 仅环境绝对路径字段不同）。★ 这条不变量**已装牙**（卡 205）：`tests/`
-下的 `test_harness_manifest.py` 逐字比较两者的 `render_dispatch` —— 卡 203 改对了原件、
-复制体却没跟上，正是从前**没有判据**盯它才一路绿灯的。
+冻结输入下**原件/复制体输出逐字节相同**（允许的差异逐条写明）：
+
+| 复制体 | 允许的差异 |
+| --- | --- |
+| `wb_plan` | 派活器脚本路径前缀：原件写死 `tools/wb_dispatch.py`，复制体读 `harness.toml` `paths.workbench` |
+| `wb_state` | 原件有「白名单对账」行（`line_roster`，惰性 import `tools/wb_dispatch` + `tools/pool.models`）；复制体按「不依赖 `tools/`」约束**不复制这一行** —— 剥掉后逐字相同 |
+| `wb_diag` / `wb_status` | 无差异 |
+
+★ 这条不变量**已装牙**（卡 205 给 `wb_plan`，卡 214 给另外三份）：`tests/`
+下的 `test_harness_manifest.py` 逐字比较两边的输出 —— 卡 203 改对了原件、复制体
+却没跟上，正是从前**没有判据**盯它才一路绿灯的。
 
 ## 还没复制的 6 个重工具（下期清单，附现算耦合点数）
 

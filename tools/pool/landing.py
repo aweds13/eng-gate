@@ -591,6 +591,241 @@ def _allow_hits(path: str, allow: set[str]) -> bool:
     return False
 
 
+# -------------------------------------------------- 卡 212（T-G323）：攒批收口固定进工作流
+
+def _card_files_from_backlog(wt: pathlib.Path, card_id: str | None, task: str) -> list[str]:
+    r"""从 backlog 读这张卡的 `files`（用来匹配栅栏成员的 `paths`）。
+
+    ★ 复用 `flip_card_status` 的读法口径（CRLF 感知、逐块解析），但只读不写。
+    找不到 ⇒ 空列表（不崩、不猜）。
+    """
+    import re
+    backlog_path = wt / "docs" / "workbacklog.toml"
+    if not backlog_path.is_file():
+        return []
+    raw = backlog_path.read_bytes()
+    sep = b"\r\n" if b"\r\n" in raw else b"\n"
+    lines = raw.split(sep)
+    kv = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
+    n = len(lines)
+    i = 0
+    while i < n:
+        if lines[i].decode("utf-8", "replace").strip() != "[[cards]]":
+            i += 1
+            continue
+        cid_val: str | None = None
+        task_val: str | None = None
+        files_start: int | None = None
+        j = i + 1
+        while j < n:
+            t = lines[j].decode("utf-8", "replace").strip()
+            if t == "[[cards]]" or (t.startswith("[") and not t.startswith("[[")):
+                break
+            m = kv.match(t)
+            if m:
+                if m.group(1) == "id":
+                    cid_val = m.group(2)
+                elif m.group(1) == "task":
+                    task_val = m.group(2)
+            if t.startswith("files"):
+                files_start = j
+            j += 1
+        is_target = ((cid_val == card_id) if card_id is not None
+                     else (task_val == task))
+        if is_target and files_start is not None:
+            out: list[str] = []
+            for k in range(files_start + 1, j):
+                ln = lines[k].decode("utf-8", "replace").strip()
+                if ln.startswith("]"):
+                    break
+                fm = re.match(r'"([^"]*)"', ln)
+                if fm:
+                    out.append(fm.group(1))
+            return out
+        i = j
+    return []
+
+
+def _warn_if_card_in_batch(card_id: str, match_files: list[str]) -> None:
+    r"""★ 卡 212：单张落地时**警告** —— 这张卡属于某栅栏且该栅栏还有别的成员。
+
+    选了**警告**而非拒绝（理由写进打印）：① 不破坏既有单张落地的工作流（有些卡确实
+    需要单独收口，如登记卡）；② 警告已把「它属于批」这个信息摆出来，消除了「静默」这个病根；
+    ③ 拒绝需加 `--force-single` 开关，增加复杂度且可能卡住紧急修复。
+    ★ 不许静默继续（那正是今天的毛病）。
+    """
+    from pool.task import find_gates_for_member, other_members_in_gate
+    gates = find_gates_for_member(card_id, match_files)
+    for gate_id, member_id in gates:
+        others = other_members_in_gate(gate_id, member_id)
+        if others:
+            print(f"★★ 警告：卡 {card_id} 属于批 {gate_id}（还有 {len(others)} 个成员："
+                  f"{'、'.join(others)}）—— 攒批该走 `--batch {gate_id}`。")
+            print("  本笔将单独落地这张卡（选了警告而非拒绝：有时确实需要单独收口，"
+                  "如登记卡；警告已把信息摆出来，消除静默）。")
+
+
+def _run_task_sub(cmd: list[str]) -> int:
+    """起 `wb_task.py` 子进程（带 NO_WINDOW），打印退出码与摘要。"""
+    r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True,
+                       encoding="utf-8", errors="replace",
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    for line in (r.stdout or "").strip().splitlines()[-3:]:
+        print(f"    {line}")
+    if r.returncode != 0:
+        err = (r.stderr or r.stdout or "").strip()
+        if err:
+            print(f"    ★ {err[:200]}")
+    return r.returncode
+
+
+def _advance_batch_gate(batch_id: str, commit_sha: str, task: str) -> None:
+    r"""`--batch` 模式：逐成员推 `claim success`，然后 `landed`（记这笔的真实 sha）。"""
+    from pool.task import load_manifest
+    try:
+        man = load_manifest(batch_id)
+    except Exception as exc:
+        print(f"  ★ 读不到栅栏 {batch_id}（{type(exc).__name__}: {exc}）⇒ 跳过推栅栏")
+        return
+    members = [m["id"] for m in man.get("member", []) if not m.get("read_only")]
+    for mid in members:
+        ev = f"landing.py 提交 {commit_sha[:12]}（task={task}，--batch {batch_id}）"
+        print(f"  推栅栏 {batch_id} 成员 {mid}：")
+        _run_task_sub([sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_task.py"),
+                       "claim", batch_id, mid, "--claim", "success",
+                       "--evidence", ev, "--why", f"批 {batch_id} 收口（landing.py 自动推）"])
+    print(f"  标 landed {batch_id}（{commit_sha[:12]}）：")
+    _run_task_sub([sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_task.py"),
+                   "landed", batch_id, "--commit", commit_sha])
+
+
+def _advance_card_gate(card_id: str, commit_sha: str, task: str,
+                        match_files: list[str]) -> None:
+    r"""`--card` 模式：找卡属于哪个栅栏，推 `claim success`。
+
+    ★ 只推 `claim`（单张落地不等于整个批收口）。若推完后栅栏齐了（到 `awaiting-commit`），
+      也推 `landed`（need=1 的批就是这样）。
+    ★ 读不到栅栏（卡不在任何栅栏里）⇒ 跳过并打印一句（不崩、不猜、不新建栅栏）。
+    """
+    from pool.task import find_gates_for_member, read_json, state_path
+    gates = find_gates_for_member(card_id, match_files)
+    if not gates:
+        print(f"  ★ 卡 {card_id} 不属于任何栅栏 ⇒ 跳过推栅栏")
+        return
+    for gate_id, member_id in gates:
+        ev = f"landing.py 提交 {commit_sha[:12]}（task={task}，--card {card_id}）"
+        print(f"  推栅栏 {gate_id} 成员 {member_id}：")
+        _run_task_sub([sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_task.py"),
+                       "claim", gate_id, member_id, "--claim", "success",
+                       "--evidence", ev,
+                       "--why", f"卡 {card_id}（{task}）落地（landing.py 自动推）"])
+        with contextlib.suppress(Exception):
+            st = read_json(state_path(gate_id))
+            if st.get("state") == "awaiting-commit":
+                print(f"  栅栏 {gate_id} 齐了 ⇒ 标 landed（{commit_sha[:12]}）：")
+                _run_task_sub([sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_task.py"),
+                               "landed", gate_id, "--commit", commit_sha])
+
+
+def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
+                          task: str) -> bool:
+    r"""★ 卡 212：`--batch` 收口时，若批成员的产物**不在同一棵树**里，
+    把各棵树的改动合进集成树 `into_wt` 再落。
+
+    ★ 冲突要当场咬：两棵树改了**同一个文件** ⇒ **停手并点名**（不许自动择一、不许静默覆盖）。
+    ★ 合的方式与顺序**可复现**：按栅栏 declared 顺序逐棵树复制文件。
+    ★ 都在同一棵树（或都是主树）⇒ 不做集成，返回 True（现有逻辑不变）。
+
+    返回 False ⇒ 冲突停手（调用方 return 3）。
+    """
+    from pool.task import load_manifest
+    try:
+        man = load_manifest(batch_id)
+    except Exception:
+        return True  # 读不到栅栏 ⇒ 不做集成（现有逻辑不变）
+    # 读 backlog 找各成员卡的 tree
+    card_files_map: dict[str, tuple[str, ...]] = {}
+    for m in man.get("member", []):
+        mid = m["id"]
+        cfiles = _card_files_from_backlog(into_wt, mid, None) or (m.get("paths") or [])
+        card_files_map[mid] = tuple(cfiles)
+    # 找各成员卡的 tree（从 backlog）
+    backlog_path = into_wt / "docs" / "workbacklog.toml"
+    if not backlog_path.is_file():
+        return True
+    import re
+    raw = backlog_path.read_bytes()
+    sep = b"\r\n" if b"\r\n" in raw else b"\n"
+    lines = raw.split(sep)
+    kv = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
+    member_trees: list[tuple[str, pathlib.Path]] = []
+    n = len(lines)
+    i = 0
+    while i < n:
+        if lines[i].decode("utf-8", "replace").strip() != "[[cards]]":
+            i += 1
+            continue
+        cid_val: str | None = None
+        tree_val: str | None = None
+        j = i + 1
+        while j < n:
+            t = lines[j].decode("utf-8", "replace").strip()
+            if t == "[[cards]]" or (t.startswith("[") and not t.startswith("[[")):
+                break
+            m2 = kv.match(t)
+            if m2:
+                if m2.group(1) == "id":
+                    cid_val = m2.group(2)
+                elif m2.group(1) == "tree":
+                    tree_val = m2.group(2)
+            j += 1
+        if cid_val and tree_val:
+            for mid, cfiles in card_files_map.items():
+                if mid == cid_val or (cfiles and set(cfiles) & set(card_files_map.get(mid, ()))):
+                    member_trees.append((mid, ROOT / tree_val))
+                    break
+        i = j
+    # 去重：同一棵树只取一次
+    seen_trees: set[pathlib.Path] = set()
+    unique: list[tuple[str, pathlib.Path]] = []
+    for mid, src in member_trees:
+        if src not in seen_trees:
+            seen_trees.add(src)
+            unique.append((mid, src))
+    if len(unique) <= 1:
+        return True  # 只有一棵树（或都是主树）⇒ 不需要集成
+    print(f"=== ①′ 多棵树集成（{len(unique)} 棵 → {into_wt}）===")
+    seen_files: dict[str, str] = {}
+    total = 0
+    for member_id, src_wt in unique:
+        if not src_wt.is_dir():
+            print(f"  ★ {member_id}：树 {src_wt} 不存在 ⇒ 跳过")
+            continue
+        base = git("rev-parse", "--short", "HEAD", cwd=src_wt, check=False) or "?"
+        tracked = [p for p in git("diff", "--name-only", "HEAD", cwd=src_wt,
+                                  check=False).splitlines() if p.strip()]
+        untracked = [p for p in git("ls-files", "-o", "--exclude-standard",
+                                    cwd=src_wt, check=False).splitlines() if p.strip()]
+        changed = tracked + untracked
+        print(f"  {member_id}：树 {src_wt}（基点 {base}，{len(changed)} 个改动文件）")
+        for f in changed:
+            if f in seen_files:
+                print(f"  ★★ 冲突：文件 {f} 被 {seen_files[f]} 和 {member_id} 都改了"
+                      f" ⇒ **停手**（不许自动择一、不许静默覆盖）")
+                return False
+            seen_files[f] = member_id
+            src = src_wt / f
+            dst = into_wt / f
+            if src.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(src.read_bytes())
+                total += 1
+            else:
+                dst.unlink(missing_ok=True)
+    print(f"  合了 {total} 个文件，来自 {len(unique)} 棵树")
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser()
@@ -637,6 +872,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     lock_label = a.card or a.batch   # 门禁锁的标签（批号也行）
     incremental_run = False          # 卡 184：--affected 那一趟 = True（gates_line 用）
+
+    # ★ 卡 212（T-G323）：单张落地时警告 —— 这张卡属于某栅栏且该栅栏还有别的成员。
+    #   选了警告而非拒绝（理由见 _warn_if_card_in_batch docstring）。
+    if a.card:
+        _warn_if_card_in_batch(a.card, list(a.evidence) + list(a.allow))
 
     wt = ROOT / a.tree
     text = pathlib.Path(str(TEXT).format(task=a.task.replace("-", "")))
@@ -705,6 +945,12 @@ def main(argv: list[str] | None = None) -> int:
         print("  树内 HEAD =", git("rev-parse", "--short", "HEAD", cwd=wt))
         print("  改动：")
         print("   ", git("status", "--porcelain", cwd=wt).replace("\n", "\n    "))
+
+        # ★★ 卡 212（T-G323）：`--batch` 多棵树集成 —— 若批成员的产物不在同一棵树里，
+        #   把各棵树的改动合进集成树 `wt` 再落。冲突（同一文件被多棵树改）⇒ 停手。
+        if a.batch and not _integrate_multi_tree(wt, a.batch, a.task):
+            print("  ★★ 多棵树集成冲突 ⇒ 停手（不许自动择一、不许静默覆盖）")
+            return 3
 
         print("=== ② 文档件 ===")
         run([sys.executable, "-X", "utf8", str(STAGE_CARD),
@@ -1021,6 +1267,18 @@ def main(argv: list[str] | None = None) -> int:
             print("  ✓ 镜像已更新（卡分支 + 快照 ref 都带得走）")
     else:
         print("=== ⑧ 镜像：未配置 TF_MIRROR_REMOTE 且默认位置不存在 ⇒ 跳过 push --mirror ===")
+
+    # ★★ 卡 212（T-G323）：提交成功后**自动**推栅栏（人不该是状态机的一部分）。
+    #   推送内容取自这一笔的真实产物（--task、--card/--batch、提交 sha）。
+    #   读不到栅栏 ⇒ 跳过并打印一句（不崩、不猜、不新建栅栏）。
+    #   landed 记这一笔的真实 sha（wb_task.py landed 的现有口径照用）。
+    print("=== ⑨ 自动推栅栏（卡 212）===")
+    _commit_sha = git("rev-parse", "HEAD")
+    if a.batch:
+        _advance_batch_gate(a.batch, _commit_sha, a.task)
+    elif a.card:
+        _advance_card_gate(a.card, _commit_sha, a.task,
+                            list(a.evidence) + list(a.allow))
     return 0
 
 

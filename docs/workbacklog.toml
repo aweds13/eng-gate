@@ -1737,4 +1737,89 @@ spec = "复盘/卡/卡217-契约保护.md"
 files = ["tools/contract_audit.py", "tests/test_contract_audit.py", "复盘/契约-判据对账.md", "复盘/卡/卡217-契约保护.md"]
 risk = "mid"
 status = "pending"
-
+
+# ★★ 卡 219~224（主控 2026-10-13 深夜，用户令「开始大规模派卡」）：计划里剩下的六项。
+#   ★ 域互不相交（除 224 与 215 同碰 tools/wb_dispatch.py ⇒ 给 depends）；批号 B-20261016。
+
+[[cards]]
+id = "219"
+task = "T-G333"
+title = "工作台「不建模」清单：把决定不做的写下来，并装一条判据"
+tree = ".wt/notmodel"
+spec = "复盘/卡/卡219-工作台不建模清单.md"
+files = [
+  "docs/工作台-不建模清单.md",
+  "tools/notmodel_audit.py",
+  "tests/test_notmodel_audit.py",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "220"
+task = "T-G334"
+title = "定时巡检：让「每日一批」自己跑，不靠人记（W8）"
+tree = ".wt/daily"
+spec = "复盘/卡/卡220-定时巡检让每日一批自己跑.md"
+files = [
+  "tools/wb_daily.py",
+  "tests/test_wb_daily.py",
+  "docs/定时巡检.md",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "221"
+task = "T-G335"
+title = "全局面板：把看板接进 DSH 的全局座位（W3-3）"
+tree = ".wt/panel"
+spec = "复盘/卡/卡221-全局面板.md"
+files = [
+  "tools/dsh_panel.py",
+  "tests/test_dsh_panel.py",
+  "docs/全局面板.md",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "222"
+task = "T-G336"
+title = "timeflow 收件箱：从 DSH 里看见待办（W4）"
+tree = ".wt/inbox"
+spec = "复盘/卡/卡222-timeflow收件箱.md"
+files = [
+  "tools/timeflow_inbox.py",
+  "tests/test_timeflow_inbox.py",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "223"
+task = "T-G337"
+title = "禅道桥第二半：自写迭代甘特（W5）"
+tree = ".wt/gantt"
+spec = "复盘/卡/卡223-禅道迭代甘特.md"
+files = [
+  "tools/zentao_gantt.py",
+  "tests/test_zentao_gantt.py",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "224"
+task = "T-G338"
+title = "workbench_bridge：把工作台状态注入给工人（一套真源）"
+tree = ".wt/wbridge"
+spec = "复盘/卡/卡224-工作台状态注入.md"
+files = [
+  "tools/workbench_bridge.py",
+  "tools/wb_dispatch.py",
+  "tests/test_workbench_bridge.py",
+]
+risk = "mid"
+status = "pending"
+depends = ["215"]

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
@@ -312,4 +313,207 @@ def test_card205_harness_copies_do_not_import_tools():
                    or n == "pool" or n.startswith("pool.") for n in names):
                 offenders.append(f"{path.name}:{node.lineno}")
     assert not offenders, f"复制体不许 import 原件（`tools/` / `pool`）：{offenders}"
+
+
+# ================================================================ 复制体 vs 原件（卡 214 · T-G326）
+#
+# 卡 205 只给 `wb_plan.py` 装了牙；另外三份复制体（`wb_state` / `wb_diag` / `wb_status`）
+# 与原件的等价仍然没有判据。下面三条把 README 那句「冻结输入下原件/复制体输出逐字节相同」
+# 对这三份也变成机器判据。
+#
+# 冻结输入的定义（三份各自写进对应判据的 docstring）：
+#   · wb_status：一段合成的 stream-json `lines`（覆盖 system/assistant/text/tool_use/
+#     user/tool_result/result/坏行），喂给两边的 `parse_events`，比 `(timeline, summary)`。
+#     不允许任何差异。
+#   · wb_diag：一段合成的 stream-json `lines`（含 FAILED/ERROR/三类断言/项目内+外部栈帧/
+#     工具调用/result），喂给两边的 `diagnose(lines, root=ROOT)`（传 root 避免 `repo_root()`
+#     跑 git），比返回 dict。不允许任何差异。
+#   · wb_state：mock `subprocess.run` 返回冻结的 git/锁/进程输出 + `LOCALAPPDATA=""`，
+#     喂给两边的 `main()`，比 stdout。允许的差异只有一处：原件有「白名单对账」行
+#     （`line_roster`，依赖 `tools/wb_dispatch`+`tools/pool.models`，复制体按 README 约束
+#     不 import `tools/` 故不复制），剥掉后逐字相同。
+
+ORIGINAL_WB_STATUS = ROOT / "tools" / "wb_status.py"
+REPLICA_WB_STATUS = ROOT / "harness" / "wb_status.py"
+ORIGINAL_WB_DIAG = ROOT / "tools" / "wb_diag.py"
+REPLICA_WB_DIAG = ROOT / "harness" / "wb_diag.py"
+ORIGINAL_WB_STATE = ROOT / "tools" / "wb_state.py"
+REPLICA_WB_STATE = ROOT / "harness" / "wb_state.py"
+
+
+def _import_wb_diag_with_status(name: str, path: Path, dep_dir: Path, wb_status_module):
+    """加载 `wb_diag`，把指定的 `wb_status` 注入 `sys.modules` —— 两个 `wb_diag` 各自
+    `import wb_status` 要拿到**对应版本**（原件拿原件的，复制体拿复制体的），不能串。
+
+    加载完恢复 `sys.modules["wb_status"]`、摘掉 `dep_dir`、移除 `name`（与卡 205 的
+    `_import_as` 同一套清理规矩）。
+    """
+    saved = sys.modules.get("wb_status")
+    sys.modules["wb_status"] = wb_status_module
+    sys.path.insert(0, str(dep_dir))
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None, path
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if saved is not None:
+            sys.modules["wb_status"] = saved
+        else:
+            sys.modules.pop("wb_status", None)
+        sys.modules.pop(name, None)
+        sys.path.remove(str(dep_dir))
+    return module
+
+
+@pytest.fixture(scope="module")
+def card214_six_modules():
+    """（原件/复制体 × status/diag/state）六个模块各自独立加载，供下面三条判据逐字比较。"""
+    o_status = _import_as("card214_o_wb_status", ORIGINAL_WB_STATUS, ROOT / "tools")
+    r_status = _import_as("card214_r_wb_status", REPLICA_WB_STATUS, ROOT / "harness")
+    o_diag = _import_wb_diag_with_status(
+        "card214_o_wb_diag", ORIGINAL_WB_DIAG, ROOT / "tools", o_status)
+    r_diag = _import_wb_diag_with_status(
+        "card214_r_wb_diag", REPLICA_WB_DIAG, ROOT / "harness", r_status)
+    o_state = _import_as("card214_o_wb_state", ORIGINAL_WB_STATE, ROOT / "tools")
+    r_state = _import_as("card214_r_wb_state", REPLICA_WB_STATE, ROOT / "harness")
+    return SimpleNamespace(
+        o_status=o_status, r_status=r_status,
+        o_diag=o_diag, r_diag=r_diag,
+        o_state=o_state, r_state=r_state,
+    )
+
+
+def _frozen_status_lines() -> list[str]:
+    """wb_status.parse_events 的冻结输入：覆盖 system init / assistant text / tool_use /
+    user tool_result（成功+失败）/ result / 非 JSON 行 / 非对象事件 七种情况。"""
+    return [
+        json.dumps({"type": "system", "subtype": "init", "model": "claude-x", "tools": ["a", "b"]}),
+        json.dumps({"type": "assistant", "message": {"content": "hello"}}),
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "say"},
+            {"type": "tool_use", "name": "Edit", "input": {"file_path": "src/x.py"}},
+        ]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "content": "ok"},
+            {"type": "tool_result", "is_error": True, "content": "boom"},
+        ]}}),
+        json.dumps({"type": "result", "subtype": "done", "result": "all good"}),
+        "not json",
+        json.dumps([1, 2]),
+    ]
+
+
+def _frozen_diag_lines() -> list[str]:
+    """wb_diag.diagnose 的冻结输入：覆盖 FAILED/ERROR 行、assert/AssertionError/Error: 三类
+    断言、项目内栈帧、外部库栈帧、工具调用、result 事件。"""
+    failed_text = "FAILED tests/test_x.py::test_a\nERROR tests/test_y.py::test_b"
+    assert_text = "  assert x == 1\n  AssertionError: boom\n  ValueError: bad"
+    frame_text = '  File "src/x.py", line 42\n  File "/usr/lib/python3/y.py", line 1'
+    return [
+        json.dumps({"type": "system", "subtype": "init", "model": "m"}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "content": failed_text},
+        ]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "content": assert_text},
+        ]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "content": frame_text},
+        ]}}),
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}},
+        ]}}),
+        json.dumps({"type": "result", "subtype": "done", "result": "ok"}),
+    ]
+
+
+def test_card214_wb_status_replica_parse_events_matches_original(card214_six_modules):
+    """★ 卡 214 命门：冻结输入下，`wb_status.parse_events` 两边逐字相同。
+
+    冻结输入 = `_frozen_status_lines()`（合成 stream-json，覆盖七种事件分支）。
+    比 `(timeline, summary)` 逐字相等。**不允许任何差异**：`wb_status` 是纯函数，
+    复制体内联 `parse_events`，原件委托 `pool.jobs.parse_events`，逻辑该等价。
+    装之前它是绿的（量测：两边输出逐字相同）。
+    """
+    m = card214_six_modules
+    lines = _frozen_status_lines()
+    o_tl, o_sum = m.o_status.parse_events(lines)
+    r_tl, r_sum = m.r_status.parse_events(lines)
+    assert o_tl == r_tl, f"timeline 漂:\n  原={o_tl}\n  复={r_tl}"
+    assert o_sum == r_sum, f"summary 漂:\n  原={o_sum}\n  复={r_sum}"
+
+
+def test_card214_wb_diag_replica_diagnose_matches_original(card214_six_modules):
+    """★ 卡 214 命门：冻结输入下，`wb_diag.diagnose` 两边逐字相同。
+
+    冻结输入 = `_frozen_diag_lines()`（合成 stream-json，含 FAILED/ERROR/断言/栈帧/工具调用）
+    + `root=ROOT`（传 root 避免 `repo_root()` 跑 git，让 diagnose 成纯函数）。
+    比返回 dict 逐字相等。**不允许任何差异**：`wb_diag` 的核心是 `wb_status.parse_events`
+    + 一组纯函数，前者已由上一条钉住，后者两边逐字同源。
+    装之前它是绿的（量测：两边输出逐字相同）。
+    """
+    m = card214_six_modules
+    lines = _frozen_diag_lines()
+    o_d = m.o_diag.diagnose(lines, root=ROOT)
+    r_d = m.r_diag.diagnose(lines, root=ROOT)
+    assert o_d == r_d, f"diagnose 漂:\n  原={o_d}\n  复={r_d}"
+
+
+def _fake_subprocess_run_214(cmd, *a, **kw):
+    """冻结的 subprocess.run：给 wb_state.main() 喂固定的 git/锁/进程输出，让现场板成纯函数。"""
+    import subprocess as sp
+    cmdstr = " ".join(str(c) for c in cmd)
+    if "rev-parse" in cmdstr and "--short" in cmdstr:
+        return sp.CompletedProcess(cmd, 0, stdout="abc1234\n", stderr="")
+    if "rev-parse" in cmdstr and "--abbrev-ref" in cmdstr:
+        return sp.CompletedProcess(cmd, 0, stdout="main\n", stderr="")
+    if "status" in cmdstr and "--porcelain" in cmdstr:
+        return sp.CompletedProcess(cmd, 0, stdout=" M src/x.py\n?? tmp\n", stderr="")
+    if "log" in cmdstr and "--format" in cmdstr:
+        return sp.CompletedProcess(cmd, 0, stdout="abc1234 init\n", stderr="")
+    if "gate_lock" in cmdstr:
+        return sp.CompletedProcess(cmd, 0, stdout="未上锁\n", stderr="")
+    if "Win32_Process" in cmdstr or "ps" in cmdstr:
+        return sp.CompletedProcess(cmd, 0, stdout="[]", stderr="")
+    return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+
+def _grab_wb_state_main_214(mod, monkeypatch: pytest.MonkeyPatch):
+    """跑 `wb_state.main()` 抓 stdout（mock subprocess.run + LOCALAPPDATA）。"""
+    import contextlib
+    import io
+    monkeypatch.setattr("subprocess.run", _fake_subprocess_run_214)
+    monkeypatch.setenv("LOCALAPPDATA", "")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        mod.main()
+    return buf.getvalue()
+
+
+def test_card214_wb_state_replica_main_matches_original_modulo_roster(
+        card214_six_modules, monkeypatch: pytest.MonkeyPatch):
+    """★ 卡 214 命门：冻结输入下，`wb_state.main()` 两边**剥掉白名单对账行后**逐字相同。
+
+    冻结输入 = mock `subprocess.run` 返回固定的 git/锁/进程输出 + `LOCALAPPDATA=""`
+    （让 `line_head`/`line_lock`/`lines_procs`/`lines_commits`/`line_trae` 成纯函数）。
+
+    允许的差异**只有一处**：原件输出含一行「白名单对账」（`line_roster`，它惰性 import
+    `tools/wb_dispatch` + `tools/pool.models` 算两份名单的并排对账）；复制体按 README
+    「不依赖 `tools/`」的约束**不复制这一行**。把含「白名单对账」的那一行从原件输出里
+    剥掉后，两边必须**逐字节相同** —— 不许「大致相等」。
+
+    ★ 这条判据防的是**以后**漂：现在复制体与原件在这条允许差异内一致（装之前它是绿的）；
+    谁要是把 `line_head`/`line_lock` 等共享行的格式改得两边不一样，这条会红。
+    """
+    m = card214_six_modules
+    o_out = _grab_wb_state_main_214(m.o_state, monkeypatch)
+    r_out = _grab_wb_state_main_214(m.r_state, monkeypatch)
+    o_stripped = [ln for ln in o_out.splitlines() if "白名单对账" not in ln]
+    r_lines = r_out.splitlines()
+    assert "白名单对账" not in r_out, f"复制体不该有白名单对账行（不 import tools/）：\n{r_out}"
+    assert o_stripped == r_lines, (
+        f"剥掉白名单对账行后仍该逐字相同\n"
+        f"  原件（剥后）：{o_stripped}\n  复制体：{r_lines}")
 

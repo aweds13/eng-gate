@@ -15,6 +15,9 @@ r"""主控复核器（外包链路的第 ④ 步）：一条命令把"这一笔�
      第二笔就是"没验过"）；
   ④ **改动越界没有**：`--read-only`（只读卡：**一个被跟踪文件都不许改**）或
      `--allow <glob>` 白名单；
+     ★ 卡 210（T-G320）：收口链自己造的**派生物**（三份本台片段 + 三份共享文档 +
+     两个门禁产物 —— 见 `DERIVED_GLOBS`）是**预期内**：放行集 = `allow` ∪ 派生物清单，
+     **只有**两边都不在的改动才报（报告分「派生物（预期）」/「越界」两栏，让人一眼看出该有哪栏）；
   ⑤ **工作区干不干净**：复核时 `git status --porcelain -uno` 必须空
      （工人不许留没提交的改动）。
 
@@ -97,6 +100,28 @@ GREEN_CLAIM_RE = re.compile(r"门禁绿|全绿|seal")
 NO_GATE_CLAIM_RE = re.compile(r"没跑|未跑|no-gate|commit-only|复用|跳过")
 #: 期望分支的默认值（就是集成分支）。`check_branch()` 的 detached 跳过只对它生效（T-G158）。
 DEFAULT_BRANCH = "line/impl-v1"
+
+#: ★ 卡 210（T-G320）：收口链第 ⑥ 步（`tools/pool/landing.py`）**无条件**并进 `allow` 才提交的
+#: **派生物清单** —— 复核侧必须把它们认成**预期内**，否则每一笔都被自己的派生物判成"越界"（噪声，
+#: 连着 6 笔报同一条）。**凭什么预期**（真源是 `landing.py`）：
+#:   · 三份**本台片段**（`docs/changelog.d/{task}.md` / `docs/traceability.d/{task}.toml` /
+#:     `复盘/交接.d/{task}.md`）—— 第 ⑥ 步「白名单 → add → commit」里**自动补进** `allow` 的循环
+#:     （`landing.py:851`）；片段名里带任务号，复核这侧不查任务号（提交的 `Task:` 未必等于片段名），
+#:     故按**目录 glob** 认；
+#:   · 三份**共享文档** `DOCS`（`landing.py:66`）与两个**门禁产物** `GATES`（`landing.py:67`）——
+#:     第 ⑥ 步 `allow += list(DOCS) + list(GATES)` **无条件**并入（`landing.py:856`）。
+#: ★ 这只是「预期内」的**边界**、**不是"什么都不报"**：`allow` ∪ 本清单**之外**的改动照报、照红
+#:   （判据在 `check_files()` / `classify_changes()`）。
+DERIVED_GLOBS: tuple[str, ...] = (
+    "docs/changelog.d/*.md",        # 片段：changelog
+    "docs/traceability.d/*.toml",   # 片段：traceability
+    "复盘/交接.d/*.md",             # 片段：交接
+    "docs/changelog.md",            # DOCS：changelog 汇总
+    "docs/traceability.toml",       # DOCS：traceability 汇总
+    "复盘/交接-重构进度.md",         # DOCS：交接 CHECKPOINT
+    "gates/last.json",              # GATES：门禁结论
+    "gates/reuse.json",             # GATES：复用记账
+)
 
 
 def git(*args: str) -> str:
@@ -422,17 +447,42 @@ def check_branch(branch: str, expected: str) -> tuple[list[str], str]:
     return [], ""
 
 
-def check_files(files: list[str], *, read_only: bool, allow: list[str]) -> list[str]:
+def classify_changes(
+    files: list[str], allow: list[str], derived: tuple[str, ...] | None = None,
+) -> tuple[list[str], list[str]]:
+    """把这一笔改动的文件分成**两栏**：`(派生物（预期）, 越界)`（卡 210）。
+
+    ★ 判据与 `check_files()` **同源**（同一份 `allow` ∪ `derived`，走同一个 `outside_allow()`）：
+      · **派生物（预期）** = 命中 `derived`（默认 `DERIVED_GLOBS`，收口链自己造的）的那些；
+      · **越界** = 落在「`allow` ∪ `derived`」**之外**的那些 —— 这些才该报、才该红。
+    两栏互斥：派生物先认，越界是剩下的（派生物绝不出现在越界栏里）。
+    """
+    listed = list(DERIVED_GLOBS if derived is None else derived)
+    derived_hits = [f for f in files if not outside_allow([f], listed)]
+    outside = outside_allow(files, list(allow) + listed)
+    return derived_hits, outside
+
+
+def check_files(
+    files: list[str], *, read_only: bool, allow: list[str],
+    derived: tuple[str, ...] | None = None,
+) -> list[str]:
     """④ 改动越界没有：只读卡 = 一个被跟踪文件都不许改；否则按白名单。
 
     ★ 白名单判据走 `pool.review.outside_allow()` —— **唯一实现**（卡 106 把原先三处收敛成一处：
     本函数、`wb_dispatch._outside_allow`、`tf_stage_guard.outside_allow`）。
+
+    ★ 卡 210（T-G320）：放行集 = `allow` ∪ `derived`（默认 `DERIVED_GLOBS`）—— 收口链第 ⑥ 步
+      自己造的**派生物是预期内**，不报。**只有**两边都不在的改动才报。
+      ★ 这不是"什么都不报"：`allow ∪ derived` 之外的照报、照红（见 `test_rogue_...` 反例）。
+      ★ `--read-only` 那一条**不动**（只读卡仍旧一个被跟踪文件都不许改）—— 收口链从不以只读模式调它
+        （见 `pool/landing.py::_run_review`，一律传 `--allow`），本卡只治白名单这一侧。
     """
     if read_only:
         return [f"只读卡不许改被跟踪文件，但它改了 {len(files)} 个：{files[:8]}"] if files else []
     if not allow:
         return ["没有给白名单：复核改动范围请加 `--allow <glob>`（或声明 `--read-only`）"]
-    outside = outside_allow(files, allow)
+    _, outside = classify_changes(files, allow, derived)
     return [f"有 {len(outside)} 个改动不在白名单里：{outside[:8]}"] if outside else []
 
 
@@ -638,6 +688,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     problems += truth_problems
     problems += check_files(files, read_only=args.read_only, allow=args.allow)
+    # ★ 卡 210：报告分两栏 —— 「派生物（预期）」与「越界」（只读卡的判据不同，不列这两栏）。
+    derived_files, outside_files = (
+        ([], []) if args.read_only else classify_changes(files, args.allow))
     branch_problems, branch_note = check_branch(branch, args.branch)
     problems += branch_problems
     if dirty and not args.dirty_ok:
@@ -646,6 +699,7 @@ def main(argv: list[str] | None = None) -> int:
     verdict = {
         "rev": sha, "parent": parent, "branch": branch, "branch_note": branch_note,
         "files": files, "trailers": trailers, "audit": audit_line,
+        "derived_files": derived_files, "outside_files": outside_files,
         "gates_ok": payload.get("ok"), "gates_rev": payload.get("rev"),
         "gates_trailer": trailers.get("Gates"),
         "gates_trailer_note": truth_note,
@@ -677,6 +731,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"     ★ 标注（不判红）：{seal_note}")
     print(f"  ⓖ `Gates:` 真伪：{truth_note or '与 gates/last.json 对得上（真绿，已核）'}")
     print(f"  ④ 这一笔改了 {len(files)} 个文件：" + ("、".join(files[:6]) or "（一个都没改）"))
+    if not args.read_only:
+        print("     ★ 派生物（预期）：" + ("、".join(derived_files) or "（无）"))
+        print("     ★ 越界（allow ∪ 派生物之外 —— 该栏应为空）："
+              + ("、".join(outside_files) or "（无）"))
     print(f"  ⑤ 工作区未提交改动：{len(dirty)} 个")
     if problems:
         print(f"\n[FAIL] {len(problems)} 条不过 —— **这一笔不算数**：")

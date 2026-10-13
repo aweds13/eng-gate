@@ -425,6 +425,57 @@ def layers_of(man: dict) -> list[str]:
     return out
 
 
+# ================================================================ 卡 212：栅栏查询
+
+
+def find_gates_for_member(
+    member_id: str, member_files: list[str] | None = None,
+) -> list[tuple[str, str]]:
+    r"""★ 卡 212：找包含这个成员的栅栏 → `[(gate_id, member_id_in_gate), ...]`。
+
+    匹配（任一即中）：
+      ① 成员号 == 栅栏 declared 里的某个成员（最精确：`B-20261014` 的 `210`/`211`/`212`）；
+      ② `member_files` 与该成员的 `paths` 相交（`B-DTREE` 的 `M-1` 对应卡 203 的 files）。
+
+    ★ 读不到栅栏目录 / 单个栅栏坏了 ⇒ **跳过那个**，不崩、不猜。
+    ★ 返回顺序按栅栏号字母序，方便可复现。
+    """
+    try:
+        bd = batch_dir()
+    except BatchError:
+        return []
+    if not bd.is_dir():
+        return []
+    mfiles = set(member_files or [])
+    hits: list[tuple[str, str]] = []
+    for toml in sorted(bd.glob("B-*.toml")):
+        gate_id = toml.stem
+        with contextlib.suppress(BatchError):
+            man = load_manifest(gate_id)
+            for m in man.get("member") or []:
+                mid = m.get("id", "")
+                if mid == member_id:
+                    hits.append((gate_id, mid))
+                    break
+                if mfiles and set(m.get("paths") or []) & mfiles:
+                    hits.append((gate_id, mid))
+                    break
+    return hits
+
+
+def other_members_in_gate(gate_id: str, member_id: str) -> list[str]:
+    r"""★ 卡 212：这个栅栏里除了 `member_id` 还有**哪些非只读成员**。
+
+    用来判「单张落地时该不该提醒『它属于一个批，还有别的成员』」。
+    读不到栅栏 / 成员不在名单 ⇒ 返回空列表（不崩、不猜）。
+    """
+    with contextlib.suppress(BatchError):
+        man = load_manifest(gate_id)
+        return [m["id"] for m in man.get("member") or []
+                if m.get("id") != member_id and not m.get("read_only")]
+    return []
+
+
 def project_of_main_tree() -> tuple[str, str]:
     """收批任务的 `project`（卡 120）：按**主树**反查；拿不到 ⇒ `("", 一句为什么)`。
 

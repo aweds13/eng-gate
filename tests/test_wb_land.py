@@ -81,6 +81,12 @@ _NEW_TOOLS = (
     "tools/card_doc_budget.py",
     # ★ 卡 192（T-G292）：`landing.py` 起要 `import pool.snapshot` ⇒ 沙箱少一份就崩。
     "tools/pool/snapshot.py",
+    # ★ 卡 212（T-G323）：`landing.py` 的 _warn_if_card_in_batch / _advance_*_gate
+    #   会 `from pool.task import ...` ⇒ 沙箱少 task.py / plan.py / projects.py 就崩。
+    "tools/pool/task.py",
+    "tools/pool/plan.py",
+    "tools/pool/projects.py",
+    "tools/wb_task.py",
 )
 
 _TEXT = """=== gaps ===
@@ -1247,3 +1253,142 @@ def test_landing_skip_when_already_done(tmp_path: Path) -> None:
     assert done.returncode == 0, out
     assert "已是 done" in out, out
     assert _backlog_card_status(repo, "T-G999") == "done"
+
+
+# -------------------------------------------------- 卡 212（T-G323）：攒批收口固定进工作流
+
+sys.path.insert(0, str(TOOLS))
+import json as _json212  # noqa: E402
+
+from pool import landing as _landing  # noqa: E402
+from pool import task as _task  # noqa: E402
+
+
+def _mk_gate212(bd: Path, gate_id: str, state: str,
+                members: list[dict[str, object]]) -> None:
+    """在 `bd` 下造一个栅栏（toml + json），供卡 212 测试。"""
+    bd.mkdir(parents=True, exist_ok=True)
+    member_text = "".join(
+        f'\n[[member]]\nid = "{m["id"]}"\nlayer = "{m.get("layer", "test")}"\n'
+        + ('read_only = true\n' if m.get("read_only") else "")
+        + f'paths = {_json212.dumps(m.get("paths", []))}\n'
+        for m in members)
+    (bd / f"{gate_id}.toml").write_text(
+        f'id = "{gate_id}"\nwhy = "test"\non_complete = ["draft"]\n{member_text}',
+        encoding="utf-8")
+    declared = [str(m["id"]) for m in members]
+    read_only = [str(m["id"]) for m in members if m.get("read_only")]
+    st = {
+        "id": gate_id, "why": "test", "layers": ["test"], "declared": declared,
+        "read_only": read_only, "need": len(declared) - len(read_only),
+        "claims": {}, "waived": [], "state": state, "auto": ["draft"],
+        "gate_cmd": None, "deadline": None, "gate": None, "draft": None,
+        "landed": None, "history": [],
+    }
+    (bd / f"{gate_id}.json").write_text(
+        _json212.dumps(st, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def test_find_gates_for_member_by_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """成员号 == declared 里的成员 ⇒ 匹配。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _mk_gate212(tmp_path, "B-X", "collecting",
+                [{"id": "203", "layer": "工具层", "paths": ["tools/x.py"]}])
+    hits = _task.find_gates_for_member("203", ["tools/x.py"])
+    assert hits == [("B-X", "203")], hits
+
+
+def test_find_gates_for_member_by_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """成员号不等于卡号，但 paths 相交 ⇒ 匹配（B-DTREE 的 M-1 → 卡 203）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _mk_gate212(tmp_path, "B-X", "collecting",
+                [{"id": "M-1", "layer": "工具层",
+                  "paths": ["tools/wb_plan.py", "tools/wb_dispatch.py"]}])
+    hits = _task.find_gates_for_member("203",
+                                       ["tools/wb_plan.py", "tools/wb_dispatch.py"])
+    assert hits == [("B-X", "M-1")], hits
+
+
+def test_find_gates_for_member_no_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """成员号不匹配且 paths 不相交 ⇒ 空列表。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _mk_gate212(tmp_path, "B-X", "collecting",
+                [{"id": "M-1", "layer": "工具层", "paths": ["tools/x.py"]}])
+    assert _task.find_gates_for_member("203", ["tools/z.py"]) == []
+
+
+def test_other_members_in_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """栅栏里除了指定成员还有哪些非只读成员。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _mk_gate212(tmp_path, "B-X", "collecting", [
+        {"id": "M-1", "layer": "工具层", "paths": ["a.py"]},
+        {"id": "M-2", "layer": "工具层", "paths": ["b.py"]},
+        {"id": "M-3", "layer": "审计层", "paths": [], "read_only": True},
+    ])
+    others = _task.other_members_in_gate("B-X", "M-1")
+    assert others == ["M-2"], others  # M-3 是只读，不算
+
+
+def test_warn_if_card_in_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """单张落地警告：卡属于批且批还有别的成员 ⇒ 打印警告。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _mk_gate212(tmp_path, "B-X", "collecting", [
+        {"id": "M-1", "layer": "工具层", "paths": ["tools/x.py"]},
+        {"id": "M-2", "layer": "工具层", "paths": ["tools/y.py"]},
+    ])
+    _landing._warn_if_card_in_batch("203", ["tools/x.py"])
+    out = capsys.readouterr().out
+    assert "警告" in out and "B-X" in out and "M-2" in out, out
+
+
+def test_warn_if_card_in_batch_no_others(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """卡属于批但批没有别的成员 ⇒ 不警告（need=1 的批）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _mk_gate212(tmp_path, "B-X", "collecting",
+                [{"id": "M-1", "layer": "工具层", "paths": ["tools/x.py"]}])
+    _landing._warn_if_card_in_batch("203", ["tools/x.py"])
+    out = capsys.readouterr().out
+    assert "警告" not in out, out
+
+
+def test_integrate_multi_tree_single_tree_returns_true(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """只有一棵树（或读不到栅栏）⇒ 不做集成，返回 True。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    # 没有栅栏文件 ⇒ load_manifest 失败 ⇒ 返回 True
+    assert _landing._integrate_multi_tree(tmp_path, "B-NOSUCH", "T-G999") is True
+
+
+def test_integrate_multi_tree_no_gate_returns_true(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """读不到栅栏 ⇒ 不做集成，返回 True（现有逻辑不变）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "empty"))
+    (tmp_path / "empty").mkdir()
+    assert _landing._integrate_multi_tree(tmp_path, "B-NOSUCH", "T-G999") is True
+
+
+def test_advance_card_gate_no_gate_skips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """卡不属于任何栅栏 ⇒ 打印跳过（不崩、不猜、不新建栅栏）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _landing._advance_card_gate("999", "abc123", "T-G999", ["tools/z.py"])
+    out = capsys.readouterr().out
+    assert "不属于任何栅栏" in out, out

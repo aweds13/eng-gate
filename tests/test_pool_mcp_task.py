@@ -6,7 +6,7 @@ r"""任务栅栏接到外包面（MCP 的任务类工具）的钉子 —— 卡 
 | 钉子 | 判什么 |
 |---|---|
 | ① 只读三个 | 三个任务只读工具都返回、都带机器可读块、且**不写一个文件** |
-| ② 授权（`tools/list`） | 不设 env = **9 个**只读；设 `POOL_MCP_WRITE=1` 才多出两个写工具 |
+| ② 授权（`tools/list`） | 不设 env = **11 个**只读；设 `POOL_MCP_WRITE=1` 才多出两个写工具 |
 | ③ 写门 `confirm` | `task_register` 的 `confirm` = TOML 的 `id`；`task_claim` = `task`；不符 ⇒ 拒 |
 | ④ 没 env = 没这个工具 | 没设 env 时写调用回 `-32602`（"没有这个工具"），**不假装有** |
 | ⑤ 域守卫不许绕 | `task_claim` 带**域外文件** ⇒ **拒并点名**（★ 任务＝绕冲突域后门，这条最重要） |
@@ -51,7 +51,9 @@ from pool import task  # noqa: E402
 READ_POOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_status",
                    "pool_models",
                    # ★ 卡 201（T-G303）：第 10 个只读工具 —— 额度状态按钟表算
-                   "quota_status"]
+                   "quota_status",
+                   # ★ 卡 213（T-G325）：第 11 个只读工具 —— 工作台读数（调 pipeline_view）
+                   "workbench_board"]
 READ_TASK_NAMES = ["task_list", "task_status", "task_pool"]
 READ_TOOL_NAMES = [*READ_POOL_NAMES, *READ_TASK_NAMES]
 WRITE_TOOL_NAMES = ["pool_dispatch", "pool_cancel", "task_register", "task_claim"]
@@ -195,7 +197,7 @@ def test_task_status_unknown_task_says_clearly(batch: Path) -> None:
 
 def test_tools_list_without_env_is_nine_read(batch: Path,
                                              monkeypatch: pytest.MonkeyPatch) -> None:
-    """没 env ⇒ **9 个只读**；两个任务写工具当"没有这个工具"（`-32602`）。"""
+    """没 env ⇒ **11 个只读**；两个任务写工具当"没有这个工具"（`-32602`）。"""
     monkeypatch.delenv("POOL_MCP_WRITE", raising=False)
     names = [t["name"] for t in pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]]
     assert names == READ_TOOL_NAMES
@@ -208,7 +210,7 @@ def test_tools_list_without_env_is_nine_read(batch: Path,
 
 
 def test_tools_list_with_env_adds_two_task_writes(batch: Path, write_on: None) -> None:
-    """有 env ⇒ 10 只读 + 4 写；只读的 `readOnlyHint` 仍 true；任务写工具的 annotations 逐字。"""
+    """有 env ⇒ 11 只读 + 4 写；只读的 `readOnlyHint` 仍 true；任务写工具的 annotations 逐字。"""
     tools = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
     assert [t["name"] for t in tools] == [*READ_TOOL_NAMES, *WRITE_TOOL_NAMES]
     by_name = {t["name"]: t for t in tools}
@@ -663,16 +665,18 @@ def test_claim_kill_failure_is_reported_not_swallowed(batch: Path, write_on: Non
 
 
 def test_tools_list_counts_unchanged(batch: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """④ 工具清单没变：没 env = **10**（全只读）；`POOL_MCP_WRITE=1` = **14**。
+    """④ 工具清单没变：没 env = **11**（全只读）；`POOL_MCP_WRITE=1` = **15**。
 
     ★ 卡 201（T-G303）：加了第 10 个只读工具 `quota_status`（额度按钟表算，只读）⇒
-      9/13 → 10/14。**没人放松判据** —— 只是把新工具如实计进来。
+      9/13 → 10/14。★ 卡 213（T-G325）：加了第 11 个只读工具 `workbench_board`
+      （工作台读数，调 pipeline_view，只读）⇒ 10/14 → 11/15。**没人放松判据** ——
+      只是把新工具如实计进来。
     """
     monkeypatch.delenv("POOL_MCP_WRITE", raising=False)
-    ten = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
-    assert len(ten) == 10, [t["name"] for t in ten]
-    assert all(t["annotations"]["readOnlyHint"] is True for t in ten), ten
+    eleven = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    assert len(eleven) == 11, [t["name"] for t in eleven]
+    assert all(t["annotations"]["readOnlyHint"] is True for t in eleven), eleven
 
     monkeypatch.setenv("POOL_MCP_WRITE", "1")
-    fourteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
-    assert len(fourteen) == 14, [t["name"] for t in fourteen]
+    fifteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    assert len(fifteen) == 15, [t["name"] for t in fifteen]
