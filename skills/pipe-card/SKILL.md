@@ -34,10 +34,12 @@ python framework/cli/main.py claim --task <卡号> --member <成员号> --status
 
 ## 怎么读结果
 
-- `card new`：退 `0` 生成；退 `4` 卡号已存在 / 域含受保护文件；退 `5` 模板缺失。`--json` 给 `card_id` / `spec_path` / `domain`。
-- `claim`：退 `0` 收下；退 `4` 投了 `failed`（**会挡住集成发布**）；退 `5` 任务 / 成员未预登记。`--json` 给 `task` / `member` / `status` / `accepted`。
-- ★ **`success` 必须带 `--evidence`**：没证据不叫完成申报。
-- ★ 当前实现里 `claim`（以及 `land`）是**薄壳**：签名在、行为未建，调用即抛「未实现」并退 `5`（`PRECONDITION`）。看到退 `5` 且提示未实现，**不是你的用法错**。
+> 每条口径末尾的「复核」都指着**能重跑的那个脚本**——结论别靠人眼，跑它。
+
+- `card new`：退 `0` 生成；退 `4` 卡号已存在 / 域含受保护文件；退 `5` 模板缺失。`--json` 给 `card_id` / `spec_path` / `domain`（复核 `python -X utf8 framework/cli/main.py card new --json`）。
+- `claim`：退 `0` 收下；退 `4` 投了 `failed`（**会挡住集成发布**）；退 `5` 任务 / 成员未预登记。`--json` 给 `task` / `member` / `status` / `accepted`（复核 `python -X utf8 framework/cli/main.py claim --json`）。
+- ★ **`success` 必须带 `--evidence`**：没证据不叫完成申报（复核 `python -X utf8 framework/cli/main.py claim --json`）。
+- ★ 当前实现里 `claim`（以及 `land`）是**薄壳**：签名在、行为未建，调用即抛「未实现」并退 `5`（`PRECONDITION`）。看到退 `5` 且提示未实现，**不是你的用法错**（复核 `python -X utf8 framework/cli/main.py claim --json`）。
 
 ## 常见错与处置
 

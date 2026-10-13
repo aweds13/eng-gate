@@ -46,13 +46,15 @@ python framework/cli/main.py trace seal --reason <为什么改封存>
 
 ## 怎么读结果
 
-- **先看整体判决，再看每道门那一行**：名字 → 运行状态 → 判决 → exit → 秒数 → 是否复用。
-- ★ **`inconclusive`（判不了）与 `not-run`（没跑）是两种不同的"非通过"**：前者是空集 / 判不了，后者是运行时依赖缺失根本没跑。**两者都不算通过**，但查法不同 —— 前者补样例，后者补依赖。
-- `doctor`：看 `all_have_teeth` 与每门的 `has_teeth`；有门失效（判据退化成注释）会退 `1`。它查的是**门**，不是你的代码。
-- 某门带 `[复用]`：这一门是**增量执行读缓存**，不是现在重跑的；要当下的结论就用 `--only <门>` 重来。
-- **封存指纹**：`trace seal --json` 给 `tree` / `rev` / `algorithm`；拿它和失败报告里的 `rev` 对，判断「结论是不是这一棵树的」。
-- 台账对账：`ledger check --missing` 只回报失败条目。
-- ★ 当前实现里 `ledger check` 与 `trace seal` 也是**薄壳**：调用即退 `5`（未实现）。这**不是**「台账没问题」，是「这一层还没建」—— 别读反。
+> 每条口径末尾的「复核」都指着**能重跑的那个脚本**——结论别靠人眼，跑它。
+
+- **先看整体判决，再看每道门那一行**：名字 → 运行状态 → 判决 → exit → 秒数 → 是否复用（复核 `python -X utf8 framework/cli/main.py gate --json`）。
+- ★ **`inconclusive`（判不了）与 `not-run`（没跑）是两种不同的"非通过"**：前者是空集 / 判不了，后者是运行时依赖缺失根本没跑。**两者都不算通过**，但查法不同 —— 前者补样例，后者补依赖（复核 `python -X utf8 framework/cli/main.py gate --json`）。
+- `doctor`：看 `all_have_teeth` 与每门的 `has_teeth`；有门失效（判据退化成注释）会退 `1`。它查的是**门**，不是你的代码（复核 `python -X utf8 framework/cli/main.py doctor --json`）。
+- 某门带 `[复用]`：这一门是**增量执行读缓存**，不是现在重跑的；要当下的结论就用 `--only <门>` 重来（复核 `python -X utf8 framework/cli/main.py gate --json`）。
+- **封存指纹**：`trace seal --json` 给 `tree` / `rev` / `algorithm`；拿它和失败报告里的 `rev` 对，判断「结论是不是这一棵树的」（复核 `python -X utf8 framework/cli/main.py trace seal --json`）。
+- 台账对账：`ledger check --missing` 只回报失败条目（复核 `python -X utf8 framework/cli/main.py ledger check --missing`）。
+- ★ 当前实现里 `ledger check` 与 `trace seal` 也是**薄壳**：调用即退 `5`（未实现）。这**不是**「台账没问题」，是「这一层还没建」—— 别读反（复核 `python -X utf8 framework/cli/main.py ledger check --missing`）。
 
 ## 常见错与处置
 

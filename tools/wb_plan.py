@@ -14,6 +14,9 @@ r"""并发调度器 CLI `tools/wb_plan.py`（外包卡 010 · 台账号 T-G99）
 
 子命令（默认都只**打印**，不建树、不派活）：
   check                       只校验 backlog，不输出批次；不合法 → 退 1
+                              ★ 卡 204：还查「已落却仍 pending」—— 队列里
+                                status=pending 的卡其 task 已在 git log 的 Task:
+                                trailer 里 ⇒ 退 1（前提：一卡一号）
   plan [--concurrency N]      拓扑分层 + 同层贪心打包，输出批次（默认 N=2）
   stats                       队列全貌（待派 / 其它 / 批数 / 最大一批 / 占用的树）
   worktrees [--base <sha>]    打印建树命令（`--execute` 才真建）
@@ -77,8 +80,9 @@ __all__ = [
     "BATCH_CLAIM_RE", "audit_batch_claims", "batch_manifest_path", "extract_batch_claim",
     "cmd_check", "cmd_dispatch", "cmd_plan", "cmd_stats", "cmd_worktrees",
     "build_parser", "dispatch_argv", "files_intersect", "find_cycle", "greedy_pack",
-    "in_flight", "load_backlog", "main", "plan_batches", "plan_report", "render_dispatch",
-    "render_plan", "topo_layers", "validate", "worktree_commands",
+    "find_landed_but_pending", "in_flight", "load_backlog", "main", "plan_batches",
+    "plan_report", "render_dispatch", "render_plan", "topo_layers", "validate",
+    "worktree_commands",
 ]
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -151,6 +155,73 @@ def _problems_or_exit(backlog: Backlog) -> int:
     return 1
 
 
+# -------------------------------------------------- 卡 204（T-G311）：已落却仍 pending
+def _landed_task_shas(repo: Path | None = None) -> dict[str, list[str]]:
+    r"""从 `git log` 取所有提交的 `Task:` trailer → `{task号: [短sha]}`。
+
+    精确匹配整行 `Task: <task号>`（不许 `T-G303` 命中 `T-G3031`）。
+    没有 git / 空仓 ⇒ 返回空 dict（优雅跳过，不当通过也不崩）。
+
+    ★ 前提：**一卡一号** —— 登记/收尾提交必须用自己的簿记号；本仓已在这么做。
+    """
+    cwd = str(repo or ROOT)
+    try:
+        raw = subprocess.run(
+            ["git", "log", "--format=%h%x1f%B%x1e"],
+            cwd=cwd, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, FileNotFoundError):
+        return {}
+    if raw.returncode != 0:
+        return {}
+    result: dict[str, list[str]] = {}
+    for chunk in raw.stdout.split("\x1e"):
+        chunk = chunk.strip("\n")
+        if not chunk:
+            continue
+        sha, _, body = chunk.partition("\x1f")
+        sha = sha.strip()
+        if not sha:
+            continue
+        for line in body.splitlines():
+            line = line.strip()
+            if line.startswith("Task: "):
+                task = line[len("Task: "):].strip()
+                if task:
+                    result.setdefault(task, []).append(sha)
+    return result
+
+
+def find_landed_but_pending(backlog: Backlog, repo: Path | None = None) -> list[str]:
+    r"""★ 卡 204（T-G311）：已落却仍 pending —— 队列里 `status=pending` 的卡，
+    其 `task` 号出现在 `git log` 的 `Task:` trailer 里 ⇒ 报「已落却仍 pending」。
+
+    返回报告行列表（空 = 没问题），每行**点名卡号 + 那笔提交的短 sha**。
+
+    ★ 前提（写进 docstring/--help）：**一卡一号** —— 登记/收尾提交必须用自己的
+      簿记号；本仓已在这么做。
+
+    ★ 反向保护（三条都要）：
+      ① 不许把 `done`/`failed`/`running` 的卡报成错（只看 `pending`）；
+      ② 不许把队列里没有条目的已落卡牵进来（只看队列里的 `pending` 卡）；
+      ③ 没有 git 时优雅跳过（返回空列表，不当通过也不崩）。
+    """
+    landed = _landed_task_shas(repo)
+    if not landed:
+        return []
+    reports: list[str] = []
+    for card in backlog.cards:
+        if card.status != "pending":
+            continue
+        shas = landed.get(card.task)
+        if shas:
+            reports.append(
+                f"卡 {card.id}：已落却仍 pending（task={card.task}，提交 {shas[0]}）")
+    return reports
+
+
 def cmd_check(backlog: Backlog) -> int:
     code = _problems_or_exit(backlog)
     if code:
@@ -170,6 +241,13 @@ def cmd_check(backlog: Backlog) -> int:
     #   那是 (a)，风险更高）。
     print("[说明] depends 仅规划用，不拦派活（同文件卡靠 files 域相交串批，不靠 depends）",
           file=sys.stderr)
+    # ★ 卡 204（T-G311）：已落却仍 pending —— 队列里 pending 的卡其 task 已在 git log 里 ⇒ 红。
+    #   前提：一卡一号（登记/收尾提交必须用自己的簿记号；本仓已在这么做）。
+    landed = find_landed_but_pending(backlog)
+    for line in landed:
+        print(f"[FAIL] {line}", file=sys.stderr)
+    if landed:
+        return 1
     return 0
 
 

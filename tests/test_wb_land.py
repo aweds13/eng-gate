@@ -397,10 +397,11 @@ def _make_rerun_dirt(repo: Path) -> None:
 
 
 def _wand(
-    repo: Path, *extra: str, allow: tuple[str, ...] = ("code",), tree: str = "."
+    repo: Path, *extra: str, allow: tuple[str, ...] = ("code",), tree: str = ".",
+    card: str = "T-G999", task: str = "T-G999"
 ) -> subprocess.CompletedProcess:
     cmd = [sys.executable, "-X", "utf8", str(repo / "tools" / "wb_land.py"),
-           "--card", "T-G999", "--tree", tree, "--task", "T-G999", "--title", "钉子",
+           "--card", card, "--tree", tree, "--task", task, "--title", "钉子",
            "--type", "feat", "--group", "ENGINEERING", "--evidence", "code/a.py",
            "--allow", *allow, *extra]
     return subprocess.run(cmd, cwd=str(repo), env=_ENV, capture_output=True, text=True,
@@ -1143,3 +1144,106 @@ def test_stage_card_toml_str_produces_valid_toml() -> None:
     for s in (r"C:\Users\test", '含"引号"的', "含\\反斜杠的", "中文正文"):
         out = sc._toml_str(s)
         tomllib.loads(f"x = {out}")
+
+
+# ================================================ 卡 204（T-G311）：落地即翻 status
+#
+# ★ 收口链在第⑥步把队列里那张卡的 status 翻成 done（当且仅当 --task == 卡.task）。
+#   三条钉子：① 正向（自己的落地）⇒ 翻；② 反例（登记型 --task != 卡.task）⇒ 不翻；
+#   ③ 跳过路径（找不到卡 / 已是 done）⇒ 打印并跳过。
+#   ★ CRLF 感知：workbacklog.toml 是纯 CRLF，flip_card_status 按字节读写。
+
+def _write_backlog(repo: Path, *, cid: str = "T-G999", task: str = "T-G999",
+                   status: str = "pending") -> None:
+    """往假仓库写一份只含一张卡的 workbacklog.toml（纯 CRLF，与真文件一致）。"""
+    body = (
+        f'[base]\nreviewed = "abc1234"\n\n'
+        f'[[cards]]\n'
+        f'id = "{cid}"\n'
+        f'task = "{task}"\n'
+        f'title = "测试卡"\n'
+        f'tree = ""\n'
+        f'spec = ""\n'
+        f'files = ["code/a.py"]\n'
+        f'depends = []\n'
+        f'risk = "low"\n'
+        f'status = "{status}"\n')
+    _write(repo, "docs/workbacklog.toml", body, crlf=True)
+
+
+def _backlog_card_status(repo: Path, cid: str) -> str:
+    """读 HEAD 里 workbacklog.toml 那张卡的 status（提交之后的真读数）。"""
+    import tomllib
+    blob = _git(repo, "show", "HEAD:docs/workbacklog.toml").stdout
+    data = tomllib.loads(blob)
+    cards = [c for c in data["cards"] if c["id"] == cid]
+    assert cards, f"提交里找不到卡 {cid}"
+    return cards[0]["status"]
+
+
+def test_landing_flips_status_when_task_matches(tmp_path: Path) -> None:
+    """① 正向：--task == 卡.task ⇒ 提交里那张卡的 status = done（端到端）。"""
+    repo = _mk_repo(tmp_path)
+    _write_backlog(repo, cid="T-G999", task="T-G999", status="pending")
+    _git(repo, "add", "--", "docs/workbacklog.toml")
+    _git(repo, "commit", "-q", "-m", "add backlog")
+    pen = _mk_pen(repo)
+    _write(pen, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--no-gate", tree=".pen")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    assert "[队列] 卡 T-G999：pending → done" in out, out
+    assert _backlog_card_status(repo, "T-G999") == "done"
+
+
+def test_landing_does_not_flip_status_on_registration(tmp_path: Path) -> None:
+    """★★ 反例（最重要）：--task != 卡.task（登记型）⇒ 那张卡的 status 一字不动。"""
+    repo = _mk_repo(tmp_path)
+    _write_backlog(repo, cid="T-G999", task="T-G888", status="pending")
+    _git(repo, "add", "--", "docs/workbacklog.toml")
+    _git(repo, "commit", "-q", "-m", "add backlog")
+    pen = _mk_pen(repo)
+    _write(pen, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--no-gate", tree=".pen")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    assert "登记型" in out, out
+    assert _backlog_card_status(repo, "T-G999") == "pending"
+
+
+def test_landing_skip_when_card_not_found(tmp_path: Path) -> None:
+    """跳过路径：找不到卡 ⇒ 打印并跳过（不崩、不翻）。"""
+    repo = _mk_repo(tmp_path)
+    _write_backlog(repo, cid="203", task="T-G308", status="pending")
+    _git(repo, "add", "--", "docs/workbacklog.toml")
+    _git(repo, "commit", "-q", "-m", "add backlog")
+    pen = _mk_pen(repo)
+    _write(pen, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--no-gate", tree=".pen", card="999")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    assert "找不到卡 999" in out, out
+    assert _backlog_card_status(repo, "203") == "pending"
+
+
+def test_landing_skip_when_already_done(tmp_path: Path) -> None:
+    """跳过路径：已是 done ⇒ 打印并跳过（不崩、不重复翻）。"""
+    repo = _mk_repo(tmp_path)
+    _write_backlog(repo, cid="T-G999", task="T-G999", status="done")
+    _git(repo, "add", "--", "docs/workbacklog.toml")
+    _git(repo, "commit", "-q", "-m", "add backlog")
+    pen = _mk_pen(repo)
+    _write(pen, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--no-gate", tree=".pen")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    assert "已是 done" in out, out
+    assert _backlog_card_status(repo, "T-G999") == "done"

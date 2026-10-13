@@ -13,6 +13,8 @@ r"""并发调度器（`tools/wb_plan.py`，台账号 T-G99 · 外包卡 010）�
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -759,3 +761,103 @@ def test_done_card_missing_manifest_is_reported_not_rejected(
     assert wb_plan.validate(backlog) == []          # done 不拒
     notes = wb_plan.audit_batch_claims(backlog)
     assert any("B-DONE" in n and "历史欠账" in n for n in notes), notes
+
+
+# ================================================ 卡 204（T-G311）：已落却仍 pending
+#
+# ★ 判据：队列里 status=pending 的卡，其 task 出现在 git log 的 Task: trailer 里 ⇒ 报红。
+#   四条钉子：① 红并点名卡号+sha；② 翻成 done ⇒ 绿；③ 没有对应提交的 pending ⇒ 不报红；
+#   ④ 没有 git 时优雅跳过。另加端到端 check 退 1。
+
+def _git_init(tmp_path: Path) -> Path:
+    """造一个空 git 仓用于测「已落却仍 pending」。"""
+    repo = tmp_path / "gitrepo"
+    repo.mkdir()
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    for cmd in (["git", "init", "-q"],
+                ["git", "config", "user.email", "nail@example.invalid"],
+                ["git", "config", "user.name", "nail"],
+                ["git", "config", "commit.gpgsign", "false"]):
+        subprocess.run(cmd, cwd=str(repo), env=env, capture_output=True, text=True)
+    return repo
+
+
+def _commit_with_task(repo: Path, task: str, msg: str = "test") -> str:
+    """造一笔含 `Task:` trailer 的提交，返回短 sha。"""
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    (repo / "f.txt").write_text(task, encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=str(repo), env=env,
+                   capture_output=True, text=True)
+    subprocess.run(["git", "commit", "-q", "-m", f"{msg}\n\nTask: {task}"],
+                   cwd=str(repo), env=env, capture_output=True, text=True)
+    sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                         cwd=str(repo), env=env, capture_output=True,
+                         text=True).stdout.strip()
+    return sha
+
+
+def test_landed_but_pending_is_reported(tmp_path: Path) -> None:
+    """① 判据红：pending 卡的 task 出现在 git log ⇒ 红并点名卡号 + sha。"""
+    repo = _git_init(tmp_path)
+    sha = _commit_with_task(repo, "T-G999")
+    backlog = _backlog(_card("007", task="T-G999", status="pending"))
+    reports = wb_plan.find_landed_but_pending(backlog, repo=repo)
+    assert len(reports) == 1, reports
+    assert "007" in reports[0] and "T-G999" in reports[0] and sha in reports[0], reports
+
+
+def test_landed_but_pending_done_card_not_reported(tmp_path: Path) -> None:
+    """② 翻成 done ⇒ 绿：done 的卡不报（反向保护①）。"""
+    repo = _git_init(tmp_path)
+    _commit_with_task(repo, "T-G999")
+    backlog = _backlog(_card("007", task="T-G999", status="done"))
+    assert wb_plan.find_landed_but_pending(backlog, repo=repo) == []
+
+
+def test_pending_without_landed_commit_not_reported(tmp_path: Path) -> None:
+    """③ 没有对应提交的 pending 卡 ⇒ 不许报红（这条错了会天天误伤）。"""
+    repo = _git_init(tmp_path)
+    _commit_with_task(repo, "T-G888")          # 不同 task
+    backlog = _backlog(_card("007", task="T-G999", status="pending"))
+    assert wb_plan.find_landed_but_pending(backlog, repo=repo) == []
+
+
+def test_landed_but_pending_no_git_skips(tmp_path: Path) -> None:
+    """④ 没有 git 时优雅跳过（不崩、不当通过）（反向保护③）。"""
+    repo = tmp_path / "nogit"
+    repo.mkdir()
+    backlog = _backlog(_card("007", task="T-G999", status="pending"))
+    assert wb_plan.find_landed_but_pending(backlog, repo=repo) == []
+
+
+def test_landed_but_pending_does_not_pull_unlisted_cards(tmp_path: Path) -> None:
+    """反向保护②：队列里没有条目的已落卡不许被牵进来（只看队列里的 pending 卡）。"""
+    repo = _git_init(tmp_path)
+    _commit_with_task(repo, "T-G999")
+    # 队列里只有一张 task=T-G888 的卡；T-G999 虽已落但不在队列 ⇒ 不报
+    backlog = _backlog(_card("007", task="T-G888", status="pending"))
+    assert wb_plan.find_landed_but_pending(backlog, repo=repo) == []
+
+
+def test_check_fails_on_landed_but_pending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """端到端：check 在「已落却仍 pending」时退 1 并点名。"""
+    repo = _git_init(tmp_path)
+    sha = _commit_with_task(repo, "T-G999")
+    monkeypatch.setattr(wb_plan, "ROOT", repo)
+    backlog = _backlog(_card("007", task="T-G999", status="pending", spec=""))
+    code = wb_plan.cmd_check(backlog)
+    err = capsys.readouterr().err
+    assert code == 1, f"check 应当退 1：{err}"
+    assert "已落却仍 pending" in err and "007" in err and sha in err, err
+
+
+def test_check_passes_when_no_landed_but_pending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """端到端：没有「已落却仍 pending」时 check 退 0。"""
+    repo = _git_init(tmp_path)
+    monkeypatch.setattr(wb_plan, "ROOT", repo)
+    backlog = _backlog(_card("007", task="T-G999", status="pending", spec=""))
+    assert wb_plan.cmd_check(backlog) == 0

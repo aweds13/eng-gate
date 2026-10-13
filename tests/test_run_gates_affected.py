@@ -34,16 +34,13 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import run_gates as rg  # noqa: E402 —— 需要先用 sys.path 把 scripts/ 挂上
 
-# 真表下的全量门清单（18 道；顺序 = `build_jobs(False, False)` 的顺序）。
-# ★ 卡 160（T-G260）加进 `invariants`（不变量台账核查）后 17 → 18；门数是会变的，**真源只有门表**。
-FULL = (
-    "pytest", "acceptance", "ruff", "mypy", "check_layers", "check_layers_selftest",
-    "contrast", "style", "ui_text", "commands", "ui_dom_probe", "audit", "invariants",
-    "audit_titles", "lf1_live", "web_live", "render", "ui_flow",
-)
-# 真表里**没有**输入映射的门（= 任何改动都可能影响它 ⇒ 永远跑）。
-NO_INPUT = ("pytest", "acceptance", "ruff", "mypy", "check_layers", "check_layers_selftest",
-            "audit", "invariants")
+# 全量门清单 —— **现读**门表真源 `run_gates.build_jobs(False, False)`，**不写死**数字/名单。
+# ★ 卡 208 §2 的口径：写死的门数/名单是**会漂的第二真源**（同 `tools/wb_verify.py`
+#   `expected_gate_names()` 的现读法）。卡 160 加 `invariants`（17→18）、卡 208 加 `proxy`
+#   （18→19）都是「改一行门表」的事 —— 门数变了这条测试**不该红**，所以这里改成现算。
+FULL = tuple(n for n, _ in rg.build_jobs(False, False))
+# 真表里**没有**输入映射的门（= 任何改动都可能影响它 ⇒ 永远跑）= `DOOR_INPUTS` 的**补集**（现算）。
+NO_INPUT = tuple(n for n in FULL if n not in rg.DOOR_INPUTS)
 
 
 # ------------------------------------------------------------------ ① 只跑受影响的门
@@ -135,9 +132,15 @@ def test_skipped_doors_are_recorded_with_reason() -> None:
 
 
 def test_default_job_list_and_table_shape_are_pinned() -> None:
-    """★ 判据⑤：不给 `--affected` 时门集合与今天一致；真表形状钉死（10 有输入 + 8 无输入）。"""
-    # 门清单（默认 = 全量）逐字一致，顺序也一致
-    assert tuple(n for n, _ in rg.build_jobs(False, False)) == FULL
+    """★ 判据⑤：不给 `--affected` 时门集合 = 全量；真表形状（有输入 ∪ 无输入）自洽。
+
+    ★ 卡 208 §2：门清单**现读门表**（不写死名字/门数）⇒ 这里把"逐字一致"换成**结构判据**
+    （无重名 / 默认含真机层 / 有输入的门都在真表里），免得它变成会漂的第二真源。
+    """
+    # 门清单（默认 = 全量）：现读自 `build_jobs`，钉的是它**结构自洽**（不是写死的名单）
+    default = tuple(n for n, _ in rg.build_jobs(False, False))
+    assert len(default) == len(set(default)), "门清单出现重名门"
+    assert {"render", "ui_flow", "pytest"} <= set(default), "默认全量必须含真机浏览器层与 pytest"
     # --quick / --fast 的既有口径没被碰
     quick = tuple(n for n, _ in rg.build_jobs(True, False))
     assert "render" not in quick and "pytest" in quick

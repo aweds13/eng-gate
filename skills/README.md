@@ -37,6 +37,12 @@
 | `pipe-land` | 集成与发布 | `pipe land` |
 | `pipe-forensics` | 出事了从证据里查 | `pipe gate` · `pipe doctor` · `pipe ledger check` · `pipe trace seal` |
 
+每个技能目录里**两个版本**（卡 209 · `T-G318`）：
+
+- `SKILL.md` = **机器执行版**（给 agent 用：顺序 / 前置检查 / 真命令 / 怎么读结果 / 常见错）。
+- `NOTES.md` = **人类理解版**（给接手改它的人用：这一层在防哪类错误 / 失败过什么（带读数）/
+  脚本接口与以后怎么改）。**它不是判据的第二份抄写** —— 判据仍在库与门里，它只讲来历与接口。
+
 ## §3 ★ 换 harness 要改什么（清单式）
 
 **通用的（一个字不改）：**
@@ -68,14 +74,32 @@
 
 ```bash
 python skills/nails/check_commands.py    # ① skills 里引用的命令名，都能在 CLI 帮助里找到
-python skills/nails/check_skills.py      # ② SKILL.md 有 frontmatter（name + description）且含「什么时候别用」
+python skills/nails/check_skills.py      # ② SKILL.md 格式 + 卡 209 四条加严（见下）
 ```
 
 - 钉子①：扫 `skills/**/SKILL.md` 里代码段 / 围栏 / 标题中的 `pipe <命令>`，与 CLI 的 `--help`（含各子命令）对账；引用不存在的命令或子命令 ⇒ 红。
-- 钉子②：扫每个 `SKILL.md`：缺 frontmatter、缺 `name` / `description`、`name` 不是 kebab-case 或与目录名不符、或缺「什么时候别用」（以及其余必需小节）⇒ 红。
+- 钉子②：扫每个 `SKILL.md`。**原有四条**：缺 frontmatter、缺 `name` / `description`、`name` 不是 kebab-case 或与目录名不符、或缺必需小节（含「什么时候别用」）⇒ 红。
+- ★ 钉子② **卡 209（`T-G318`）加严四条**（口径写在 `skills/nails/check_skills.py` 的 docstring 里，别处不复述）：
+  1. **长度上限**：`SKILL.md` ≤ **120 行** ⇒ 超出红并报实际行数；
+  2. **流程数上限**：正文「流程级」小节（非六个固定小节的那些 `##` / `###` 标题）≤ **3** ⇒ 超出红并点名；
+  3. ★★ **验收必须指向脚本**：「怎么读结果」**每条口径**都要有一个**真实存在的脚本路径**（允许的脚本根：
+     `tools/` · `skills/` · `framework/cli/`）⇒ 指不出来就红并点名是哪一条；
+  4. **人类理解版**：每个技能目录必须有 `NOTES.md` 且含三节 ⇒ 缺文件或缺节红。
+  这四条是「用户笔记《AI agent skill 的一些开发经验》」里那三条（用确定的程序验收 / 别太长 / 两个版本）
+  在本仓的落点。
 
 ## §6 边界（如实写）
 
 - skills **只有操作知识**；**框架能不能用，不由 skills 证明** —— 那是框架自己门禁的事（卡 181）。
 - 命令面里有几个是**薄壳**（`claim` / `land` / `ledger check` / `trace seal`）：签名在、行为未建，调用即退 `5`。skill 里**如实标注**了，没拿「未实现」冒充「通过」。
 - 本层**不绑某个 harness**：harness 特有值只在 `GLUE-harness.md`。
+- ★ **卡 209（`T-G318`）的欠账处置 = 「补脚本指针」，不是「登记欠账」**。理由：加严第 3 条会当场咬出
+  5 份 `SKILL.md`「怎么读结果」共 **25 条口径**都没指向脚本 —— 而本仓的纪律是**不许静默豁免**。
+  两条路里选了补指针，因为「验收必须指向一个能重跑的脚本」正是这条加严要的东西，登记成欠账等于
+  把它留着不治；补完之后 `python -X utf8 skills/nails/check_skills.py` 在真仓**退 0**（5 份 SKILL + 5 份 NOTES）。
+- ★ **口径偏差如实记**：卡 209 点名的脚本根是 `tools/**` 或 `skills/**/scripts/**`，但**本仓 pipe CLI
+  在 `framework/cli/main.py`**（那五份 skill 的验收程序就是它）—— 那两个根都覆盖不到它。
+  所以加严第 3 条的允许脚本根**加列了 `framework/cli/`**（口径写在 `skills/nails/check_skills.py` 的 docstring里）。
+  这是**扩**不是**松**：原有 frontmatter / kebab / 目录名 / 六节四条判据一条没动。
+- ★ **两道钉子仍没有消费端**（`T-G280` 缺口②没被本卡治）：`skills/nails/check_commands.py` 与
+  `check_skills.py` 仍不在 `scripts/run_gates.py` 的门表里 ⇒ **加严了判据，但没接线**。别把「绿」读成「已进闸」。

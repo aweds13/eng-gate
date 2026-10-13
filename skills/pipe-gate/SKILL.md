@@ -38,12 +38,14 @@ pipe gate --config <pipeline.toml> --json
 
 ## 怎么读结果
 
-- **整体判决**：输出第一行「门禁总判决：<pass|fail|inconclusive>（绿 / 非绿）」。
-- **每道门一行**：`名字 / 运行状态 / 判决 / exit / 秒数 / 是否复用`。
-- ★ **三值里的 `inconclusive` 不等于通过**：它的意思是「判不了」（例如一条样例都没收集到）。看到它**不许当绿** —— 下一步要么补样例、要么停手报清楚。
-- ★ **`not-run` 是运行状态，不是判决**：运行时依赖缺失就没跑；阻断门 `not-run` 会把总判决折成 `inconclusive`。别把「没跑」读成「过了」。
-- 结构化结果落进 `[paths].gates_state`（模板默认 `gates/last.json`）；`--json` 是它的 stdout 版，字段稳定。
-- 退出码：`0` 全绿 / `1` 有门红 / `2` 用法错 / `3` 资源闸拒跑 / `6` 被外部打断（可续跑）/ `124` 单道门硬超时。
+> 每条口径末尾的「复核」都指着**能重跑的那个脚本**——结论别靠人眼，跑它。
+
+- **整体判决**：输出第一行「门禁总判决：<pass|fail|inconclusive>（绿 / 非绿）」（复核 `python -X utf8 framework/cli/main.py gate --json`）。
+- **每道门一行**：`名字 / 运行状态 / 判决 / exit / 秒数 / 是否复用`（复核 `python -X utf8 framework/cli/main.py gate --json`）。
+- ★ **三值里的 `inconclusive` 不等于通过**：它的意思是「判不了」（例如一条样例都没收集到）。看到它**不许当绿** —— 下一步要么补样例、要么停手报清楚（复核 `python -X utf8 framework/cli/main.py gate --json`）。
+- ★ **`not-run` 是运行状态，不是判决**：运行时依赖缺失就没跑；阻断门 `not-run` 会把总判决折成 `inconclusive`。别把「没跑」读成「过了」（复核 `python -X utf8 framework/cli/main.py gate --json`）。
+- 结构化结果落进 `[paths].gates_state`（模板默认 `gates/last.json`）；`--json` 是它的 stdout 版，字段稳定（复核 `python -X utf8 framework/cli/main.py gate --json`）。
+- 退出码：`0` 全绿 / `1` 有门红 / `2` 用法错 / `3` 资源闸拒跑 / `6` 被外部打断（可续跑）/ `124` 单道门硬超时（复核 `python -X utf8 framework/cli/main.py gate --json`）。
 
 ## 常见错与处置
 

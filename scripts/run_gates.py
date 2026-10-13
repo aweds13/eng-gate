@@ -134,6 +134,12 @@ COMMON = [
     # ★ 门数是会变的（这一天 17 → 18）：**真源只有门表这一处**，`tools/wb_verify.py` 与
     # `tools/wb_review.py` 都从这里**现读**，任何地方都不许写死 17 / 18（卡 147 已立的口径）。
     ("invariants", [PY, "-X", "utf8", "tools/wb_invariants.py", "--check"]),
+    # 代理指标过期对账（卡 208 · T-G317）：把卡 202 交的**零件**（`docs/proxy-map.toml`
+    # 登记表 + `tools/proxy_audit.py --check`）接进门禁 —— 不接 ⇒ 那 5 条代理指标没有任何东西在
+    # 定期对账，「防近视」只是话（Goodhart 定律：度量被当目标就会漂）。
+    # ★ 判据**只许一份真源**：这道门调的就是 `tools/proxy_audit.py --check` 本身，
+    #   **不在这里重写**「过期怎么算」（阈值 / ISO 日期校验 / 读不到表就当不过，全在那边）。
+    ("proxy", [PY, "-X", "utf8", "tools/proxy_audit.py", "--check"]),
     # 台账↔规格 标题对账（T-D2）：`--check` 一发现「确定错位」或「无规格对应的 SR 卡」就退 1。
     # 2026-09-20 校正前它挂的是"信息性"（blocking=false）—— 因为台账里 F/NF 两层编号错位还没修，
     # 一接进来就会 FAIL。T-D1 校正完（见 `复盘/台账编号校正-方案A落地.md`）后转正为阻断项。
@@ -153,7 +159,9 @@ REAL_PY = [
 BROWSER = ("render", "ui_flow")
 # ① --fast：开发内循环用。挑的是"**改一行就能犯、且十几秒内查得出来**"的那几道 ——
 # 尤其 audit（TOML/台账语法，实测犯过 5 次）与 contrast/style（照抄包时最容易抄错的令牌层）。
-FAST = ("ruff", "contrast", "style", "ui_text", "commands", "audit", "audit_titles")
+# ★ 卡 208：`proxy`（代理指标过期对账）也属这一类 —— 改一条 `docs/proxy-map.toml` 的
+#   `last_verified` 就能犯，`proxy_audit.py --check` 十几秒查得出来。
+FAST = ("ruff", "contrast", "style", "ui_text", "commands", "audit", "audit_titles", "proxy")
 # 这些门是 **node 脚本**：环境里没有 node 时就跑不了 —— 统一记 `not_run`（不许静默跳过当通过）。
 NODE_TOOLS = ("ui_dom_probe", "render", "ui_flow")
 # 信息性检查（只报告、不阻断）—— 当前为空：`audit_titles` 已转正为阻断项（T-D2 收口）。

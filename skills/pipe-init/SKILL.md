@@ -44,11 +44,13 @@ pipe init --dir <目标目录>
 
 ## 怎么读结果
 
-- 退出码 `0`：铺好了 —— 人读输出有一行「铺出 N 个文件到 …」，`--json` 里有 `files` 清单和 `count`。
-- 退出码 `5`：**前置条件缺失** —— 目标已存在且没给 `--force`（或模板缺失）。这是「可修了再来」，不是坏了。
-- 退出码 `4`：**被策略拒绝** —— `--force` 的目标在仓外（越界）。
-- 退出码 `2`：用法 / 参数错。
-- 拿不准时看 `--json` 的 `error.message`；完整退出码表见 `pipe --help` 尾部。
+> 每条口径末尾的「复核」都指着**能重跑的那个脚本**——结论别靠人眼，跑它。
+
+- 退出码 `0`：铺好了 —— 人读输出有一行「铺出 N 个文件到 …」，`--json` 里有 `files` 清单和 `count`（复核 `python -X utf8 framework/cli/main.py init --json`）。
+- 退出码 `5`：**前置条件缺失** —— 目标已存在且没给 `--force`（或模板缺失）。这是「可修了再来」，不是坏了（复核 `python -X utf8 framework/cli/main.py init --json`）。
+- 退出码 `4`：**被策略拒绝** —— `--force` 的目标在仓外（越界）（复核 `python -X utf8 framework/cli/main.py init --json`）。
+- 退出码 `2`：用法 / 参数错（复核 `python -X utf8 framework/cli/main.py init --help`）。
+- 拿不准时看 `--json` 的 `error.message`；完整退出码表见 `pipe --help` 尾部（复核 `python -X utf8 framework/cli/main.py init --json`）。
 
 ## 常见错与处置
 

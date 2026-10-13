@@ -1,0 +1,40 @@
+[entries."T-G319"]
+id = "T-G319"
+title = "第一次攒批收口：卡 204/207/208/209 一笔提交"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/changelog.d/T-G319.md",
+  "file:docs/traceability.d/T-G319.toml",
+  "file:docs/workbacklog.toml",
+  "file:scripts/run_gates.py",
+  "file:skills/README.md",
+  "file:skills/nails/check_skills.py",
+  "file:skills/pipe-card/SKILL.md",
+  "file:skills/pipe-forensics/SKILL.md",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:skills/pipe-init/SKILL.md",
+  "file:skills/pipe-land/SKILL.md",
+  "file:tests/test_run_gates_affected.py",
+  "file:tests/test_wb_land.py",
+  "file:tests/test_wb_plan.py",
+  "file:tools/pool/landing.py",
+  "file:tools/wb_plan.py",
+  "file:复盘/交接.d/T-G319.md",
+  "file:复盘/卡/卡208-指标防近视装牙.md",
+  "file:skills/pipe-card/NOTES.md",
+  "file:skills/pipe-forensics/NOTES.md",
+  "file:skills/pipe-gate/NOTES.md",
+  "file:skills/pipe-init/NOTES.md",
+  "file:skills/pipe-land/NOTES.md",
+  "file:tests/test_check_skills.py",
+  "file:tests/test_pipeline_view.py",
+  "file:tests/test_run_gates_proxy.py",
+  "file:tools/pipeline_view.py",
+  "file:复盘/卡/卡210-复核派生物噪声.md",
+  "file:复盘/卡/卡211-禅道桥只读那一半.md",
+  "file:复盘/卡/卡212-攒批固定进工作流.md",
+  "file:复盘/并行与攒批模型.md",
+]
+gaps = "① ★★ **集成那一步还是手工的**：`gates/diag/_integrate.py --batch` 只转发到 `wb_land.py`，而它只落**一棵树**；四张卡在四棵树里 ⇒ 本笔由主控手工 `git apply` 四份补丁 + 主树的登记改动。**这条要自动化**（卡 212 的第 3 条）。指针：`tools/pool/landing.py`。② ★ **改域声明会清空批状态**：`wb_task.py register --force` 把已交的 4 条成送申请与 3 条豁免**全清了** ⇒ 全部重交一遍才回到 `awaiting-commit`。指针：`tools/pool/task.py`。③ ★ **卡 208 的域声明主控写错了文件名**（写 `tests/test_gates_reuse_line.py`，真钉着写死门数的是 `tests/test_run_gates_affected.py`）—— 逐卡域守卫当场拒收、点名，工人才找对的文件。指针：`复盘/卡/卡208-指标防近视装牙.md`。④ ★ **卡 205/206 已落但队列 status 仍是 `pending`** —— 本笔并入的卡 204 那条判据在主仓现跑**精确报出这两条**；翻正要等本笔收口之后。指针：`docs/workbacklog.toml`。"
+

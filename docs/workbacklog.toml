@@ -853,7 +853,7 @@ files = [
   "tools/pool/plan.py",
   "tools/wb_plan.py",
   "tests/test_run_gates_affected.py",
-  "tests/test_gates_reuse_line.py",
+  "tests/test_run_gates_affected.py",
   "tests/test_seam_check.py",
   "tests/test_wb_impact.py",
   "tests/test_wb_plan.py",
@@ -1523,7 +1523,7 @@ files = [
   "复盘/卡/卡204-落地即翻状态.md",
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 # ★★ 卡 205 / 206（主控 2026-10-13 并行发出的第二批）：
 #   205：`harness/` 复制体悄悄漂了 —— 卡 203 改了 `tools/wb_plan.py`（加 --cwd、去 pushd），
@@ -1547,7 +1547,7 @@ files = [
   "复盘/卡/卡205-harness复制体不许漂.md",
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "206"
@@ -1562,7 +1562,7 @@ files = [
   "复盘/卡/卡206-项目级技能junction.md",
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 # ★★ 卡 207 / 208 / 209（主控 2026-10-13 并行发出的第三批）。
 #   207 = 方案 W2「一份读数」：多个「面」之前必须先有一个只读读数器，否则同一件事各读各的、口径必漂。
@@ -1582,7 +1582,7 @@ files = [
   "复盘/卡/卡207-一份读数.md",
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "208"
@@ -1592,12 +1592,12 @@ tree = ".wt/proxygate"
 spec = "复盘/卡/卡208-指标防近视装牙.md"
 files = [
   "scripts/run_gates.py",
-  "tests/test_gates_reuse_line.py",
+  "tests/test_run_gates_affected.py",
   "tests/test_run_gates_proxy.py",
   "复盘/卡/卡208-指标防近视装牙.md",
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "209"
@@ -1612,4 +1612,56 @@ files = [
   "复盘/卡/卡209-skill层加严.md",
 ]
 risk = "mid"
+status = "done"
+
+# ★★ 卡 210 / 211 / 212（主控 2026-10-13 写好、排在**明天**那一批）。
+#   ★ 规矩（用户令「攒批提交，一日一次」+「收口也可以攒批啊」）：**一天一个批**，
+#     不再一张卡建一个批 —— 那是主控当天的错法（每个批 need=1 ⇒ --batch 只会收一张）。
+#   ★ 210 与 212 的域：210 = tools/wb_review.py（与在飞的 204 不撞）；212 = tools/pool/landing.py +
+#     tools/wb_plan.py（**与 204 同域** ⇒ 必须排在 204 落地之后）。
+[[cards]]
+id = "210"
+task = "T-G320"
+title = "复核的派生物噪声：把收口链自己造的派生物认成预期，越界仍然红"
+tree = ".wt/reviewnoise"
+spec = "复盘/卡/卡210-复核派生物噪声.md"
+files = [
+  "tools/wb_review.py",
+  "tests/test_wb_review.py",
+  "复盘/卡/卡210-复核派生物噪声.md",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "211"
+task = "T-G321"
+title = "禅道桥（只读那一半）：先侦察实测，再把项目/迭代/任务拉成一份读数"
+tree = ".wt/zentao"
+spec = "复盘/卡/卡211-禅道桥只读那一半.md"
+files = [
+  "tools/zentao_bridge.py",
+  "tests/test_zentao_bridge.py",
+  "docs/zentao-bridge.toml",
+  "复盘/卡/卡211-禅道桥只读那一半.md",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "212"
+task = "T-G323"
+title = "把攒批收口固定进工作流：自动推栅栏 + 单张落地警告 + 多棵树集成 + 盯真仓库栅栏的判据"
+tree = ".wt/batchflow"
+spec = "复盘/卡/卡212-攒批固定进工作流.md"
+files = [
+  "tools/pool/landing.py",
+  "tools/wb_plan.py",
+  "tools/pool/task.py",
+  "tests/test_wb_land.py",
+  "tests/test_wb_plan.py",
+  "复盘/卡/卡212-攒批固定进工作流.md",
+]
+risk = "mid"
+depends = ["204"]
 status = "pending"

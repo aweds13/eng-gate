@@ -222,6 +222,90 @@ def release_lock(lock_label: str, wt: pathlib.Path, env: dict) -> None:
         )
 
 
+# ---------------------------------------------------------------- 卡 204（T-G311）：落地即翻 status
+def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str) -> bool:
+    r"""把队列里那张卡的 `status` 翻成 `done`（当且仅当这是它自己的落地）。
+
+    判据（安全边界）：队列 `docs/workbacklog.toml` 里 `card_id` 那张卡的
+    `task` 字段 == 给的 `task` ⇒ 这是**这张卡自己的落地** ⇒ 翻 `status → done`。
+
+    · `card_id is None` ⇒ 遍历所有卡，找 `task` 匹配的那张（`--batch` 模式：
+      逐个成员用同一判据）。
+    · ★ **为什么不能只看 `--card`**：本仓的登记/收尾提交也用 `--card <号>`
+      （现场：登记卡 203 那笔用 `--card 203 --task T-G307`，而卡的号是 `T-G308`）
+      ⇒ 只看 `--card` 会把**还没干的卡标成 done**。`--task == 卡的 task` 这条
+      把两者天然分开。
+    · ★ **CRLF 感知**：那份文件是纯 CRLF；用 `\n` 匹配会静默不生效
+      （主控本轮真踩过）⇒ 按字节读写、按原始行尾分割。
+    · 找不到卡 / 找不到 `status` 行 / 那行已经是 `done` / `task` 不匹配
+      ⇒ 打印一句并**跳过**（不许崩、不许猜、不许新建卡）。
+
+    返回 `True` ⇒ 翻了（调用方应把 `docs/workbacklog.toml` 加进 `allow`）。
+    返回 `False` ⇒ 没翻。
+    """
+    import re
+    backlog_rel = "docs/workbacklog.toml"
+    backlog_path = wt / backlog_rel
+    if not backlog_path.is_file():
+        print(f"  [队列] 找不到 {backlog_rel} ⇒ 跳过翻 status")
+        return False
+    raw = backlog_path.read_bytes()
+    sep = b"\r\n" if b"\r\n" in raw else b"\n"
+    lines = raw.split(sep)
+    kv = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
+    n = len(lines)
+    i = 0
+    while i < n:
+        if lines[i].decode("utf-8", "replace").strip() != "[[cards]]":
+            i += 1
+            continue
+        cid_val: str | None = None
+        task_val: str | None = None
+        status_idx: int | None = None
+        status_val: str | None = None
+        j = i + 1
+        while j < n:
+            t = lines[j].decode("utf-8", "replace").strip()
+            if t == "[[cards]]" or (t.startswith("[") and not t.startswith("[[")):
+                break
+            m = kv.match(t)
+            if m:
+                key, val = m.group(1), m.group(2)
+                if key == "id":
+                    cid_val = val
+                elif key == "task":
+                    task_val = val
+                elif key == "status":
+                    status_idx, status_val = j, val
+            j += 1
+        is_target = ((cid_val == card_id) if card_id is not None
+                     else (task_val == task))
+        if is_target:
+            if task_val != task:
+                print(f"  [队列] 卡 {cid_val}：--task={task} ≠ 卡.task={task_val}"
+                      f"（登记型提交）⇒ 不翻 status")
+                return False
+            if status_idx is None or status_val is None:
+                print(f"  [队列] 卡 {cid_val}：找不到 status 行 ⇒ 跳过")
+                return False
+            if status_val == "done":
+                print(f"  [队列] 卡 {cid_val}：已是 done ⇒ 跳过")
+                return False
+            old_line = lines[status_idx].decode("utf-8", "replace")
+            new_line = re.sub(r'(status\s*=\s*)"[^"]*"', r'\1"done"', old_line)
+            lines[status_idx] = new_line.encode("utf-8")
+            backlog_path.write_bytes(sep.join(lines))
+            print(f"  [队列] 卡 {cid_val}：{status_val} → done"
+                  f"（这一笔是它的落地）")
+            return True
+        i = j
+    if card_id is not None:
+        print(f"  [队列] 找不到卡 {card_id} ⇒ 跳过翻 status")
+    else:
+        print(f"  [队列] 找不到 task={task} 的卡 ⇒ 跳过翻 status")
+    return False
+
+
 # ---------------------------------------------------------------- 卡 184（T-G284）：增量门禁
 # ★ 三条硬要求：① 不改门判据（只改「跑哪几道」）；② 反例钉子四条（空计划⇒全量 /
 #   trailer 含「非全量」/ 碰 tools/**⇒强制全量 / 卡 147 护栏仍咬）；③ 不动 wb_impact /
@@ -770,6 +854,15 @@ def main(argv: list[str] | None = None) -> int:
             allow.append(frag)
             print(f"  ★ 自动补上片段：{frag}")
     allow += list(DOCS) + list(GATES)
+    # ★ 卡 204（T-G311）：落地即翻 status —— 当且仅当 --task == 队列里该卡的 task 时，
+    #   把那张卡的 status 翻成 done，并把 docs/workbacklog.toml 加进 allow（随这一笔进提交）。
+    #   ★ 不能只看 --card：登记/收尾提交也用 --card <号>，但 --task 不同
+    #     ⇒ 用 --task == 卡.task 把「自己的落地」与「登记型提交」天然分开。
+    #   ★ 必须在 staged_and_extra 之前完成，否则会被当成「计划外暂存」而停手。
+    #   ★ --batch：card_id=None ⇒ 遍历所有卡，找 task 匹配的那张（逐个成员同一判据）。
+    _flip_target = a.card if a.card else None
+    if flip_card_status(wt, _flip_target, a.task) and "docs/workbacklog.toml" not in allow:
+        allow.append("docs/workbacklog.toml")
     staged, extra = staged_and_extra(wt, allow)
     print("  staged =", staged)
     print("  extra  =", extra)
