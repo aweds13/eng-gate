@@ -1,0 +1,12 @@
+[entries."T-G324"]
+id = "T-G324"
+title = "登记卡 213 工作台接进会话内 / 214 harness 其余三份装牙"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡213-工作台接进会话内.md",
+  "file:复盘/卡/卡214-harness其余三份装牙.md",
+]
+gaps = "① ★ **本笔只登记，213 / 214 都还没派活**（队列里如实记 `pending`）。指针：`复盘/卡/卡213-工作台接进会话内.md`。② ★ **没落地的卡占着它的域**：210/211/212 三张在飞，213/214 是挑**与它们不相交**的域写的 —— 再往后想派新卡，可选面会越来越窄，除非收口一次腾出域。指针：`docs/workbacklog.toml`。③ ★ **预声明第一版又写坏了**：`what` 里用了 ASCII 双引号 ⇒ TOML 基本串解析不了（本仓记着「这条坑已踩 8 次」）。改用 `「」` 后过。指针：`gates/diag/batch/B-20261014.toml`。"
+

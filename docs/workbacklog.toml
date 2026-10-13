@@ -1665,3 +1665,42 @@ files = [
 risk = "mid"
 depends = ["204"]
 status = "pending"
+
+# ★★ 卡 213 / 214（主控 2026-10-13 晚上续写；与在飞的 210/211/212 域不相交）。
+#   213：把 pipeline_view（卡 207 的产物）接进 MCP 只读面 —— 会话内就能看板，不用切窗口。
+#   214：关掉卡 205 自己留的白 —— harness 另外三份复制体（wb_state/wb_diag/wb_status）与原件的等价仍无判据。
+#   ★ 用户 2026-10-13 令：「可以一直做，等我命令再收口」⇒ 登记提交照做（纯文档、零代码），工作成果不落地。
+[[cards]]
+id = "213"
+task = "T-G325"
+title = "工作台接进会话内：MCP 加只读工具 workbench_board（调 pipeline_view，不重写判据）"
+tree = ".wt/wbboard"
+spec = "复盘/卡/卡213-工作台接进会话内.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp.py",
+  "tests/test_pool_mcp_task.py",
+  "tests/test_pool_mcp_write.py",
+  "tests/test_pool_registry.py",
+  "tests/test_pool_mcp_board.py",
+  "复盘/卡/卡213-工作台接进会话内.md",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "214"
+task = "T-G326"
+title = "harness 另外三份复制体也要装牙：先量漂没漂，再逐份装等价判据"
+tree = ".wt/harnessrest"
+spec = "复盘/卡/卡214-harness其余三份装牙.md"
+files = [
+  "tests/test_harness_manifest.py",
+  "harness/wb_state.py",
+  "harness/wb_diag.py",
+  "harness/wb_status.py",
+  "harness/README.md",
+  "复盘/卡/卡214-harness其余三份装牙.md",
+]
+risk = "mid"
+status = "pending"

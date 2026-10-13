@@ -6302,3 +6302,15 @@ evidence = [
   "file:复盘/并行与攒批模型.md",
 ]
 gaps = "① ★★ **集成那一步还是手工的**：`gates/diag/_integrate.py --batch` 只转发到 `wb_land.py`，而它只落**一棵树**；四张卡在四棵树里 ⇒ 本笔由主控手工 `git apply` 四份补丁 + 主树的登记改动。**这条要自动化**（卡 212 的第 3 条）。指针：`tools/pool/landing.py`。② ★ **改域声明会清空批状态**：`wb_task.py register --force` 把已交的 4 条成送申请与 3 条豁免**全清了** ⇒ 全部重交一遍才回到 `awaiting-commit`。指针：`tools/pool/task.py`。③ ★ **卡 208 的域声明主控写错了文件名**（写 `tests/test_gates_reuse_line.py`，真钉着写死门数的是 `tests/test_run_gates_affected.py`）—— 逐卡域守卫当场拒收、点名，工人才找对的文件。指针：`复盘/卡/卡208-指标防近视装牙.md`。④ ★ **卡 205/206 已落但队列 status 仍是 `pending`** —— 本笔并入的卡 204 那条判据在主仓现跑**精确报出这两条**；翻正要等本笔收口之后。指针：`docs/workbacklog.toml`。"
+
+[entries."T-G324"]
+id = "T-G324"
+title = "登记卡 213 工作台接进会话内 / 214 harness 其余三份装牙"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡213-工作台接进会话内.md",
+  "file:复盘/卡/卡214-harness其余三份装牙.md",
+]
+gaps = "① ★ **本笔只登记，213 / 214 都还没派活**（队列里如实记 `pending`）。指针：`复盘/卡/卡213-工作台接进会话内.md`。② ★ **没落地的卡占着它的域**：210/211/212 三张在飞，213/214 是挑**与它们不相交**的域写的 —— 再往后想派新卡，可选面会越来越窄，除非收口一次腾出域。指针：`docs/workbacklog.toml`。③ ★ **预声明第一版又写坏了**：`what` 里用了 ASCII 双引号 ⇒ TOML 基本串解析不了（本仓记着「这条坑已踩 8 次」）。改用 `「」` 后过。指针：`gates/diag/batch/B-20261014.toml`。"
