@@ -7,6 +7,11 @@
 ## 2026-10-13 —— 队列收尾：卡 201 落地后 status 转 done（T-G306 / 卡 201 的尾巴）
 - `docs/workbacklog.toml`：卡 201 `running → done`（它的落地提交是 `59e1d0f`）—— 补齐「落地即翻 status」这一步。
 - ★ 第一手：`wb_plan.py check` 退 0，**待派 0 张 / 84 张全部有终态**（done 83 + failed 1）。
+## 2026-10-13 —— 登记卡 203：派活器的「树」两个口径必须同一个（T-G307）
+- `docs/workbacklog.toml`：新增 203（`T-G307`）+ 预声明 `B-DTREE`（已 register）；域 = `tools/wb_plan.py` / `tools/wb_dispatch.py` / `tests/test_wb_plan.py` / `tests/test_wb_dispatch.py`。
+- `复盘/卡/卡203-派活树标签.md`：**入库**（`test_card_specs_tracked` 要求登记过的规格必须在 git 里）。
+- ★ 卡规格里把**症状与根因带行号**钉死：租约误占主树（`tools/wb_dispatch.py:2694` `worker_cwd` 为 `None` ⇒ 标签一律 `''`）+ 产物落卡树（`tools/wb_plan.py:100` 印 `pushd <树>`、跑的是树里那份脚本）。
+- ★ 第一手：`wb_plan.py check` 退 0（85 张卡 / 待派 1）；现测 `worker_tree_label(None, main_root) == ''`。
 ## 2026-10-12 —— 旧判决归档不再静默失败：唯一时间戳名 + `(moved, failed)` 出声（T-G256 / 卡 156）
 - `tools/wb_dispatch.py`：目标已存在 ⇒ **带时间戳的唯一名**（Windows 上 rename 撞已存在会抛 `FileExistsError`，旧写法静默吞 ⇒ 第二次起归档全失败）；返回 `(moved, failed)`，调用点把失败打进 stderr。
 - `tests/test_wb_dispatch.py`：移植它的 **3 条归档钉子**。★ 与已落 164 重叠的那半**没有写第二份**。

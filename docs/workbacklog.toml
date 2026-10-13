@@ -1481,3 +1481,25 @@ files = [
 ]
 risk = "mid"
 status = "done"
+
+# ★★ 卡 203（主控 2026-10-13 连派三张卡时被同一个缺陷咬了三次）：
+#   症 A：租约把「主树」登记成被占 —— `wb_dispatch.py` 不给 `--cwd` 时 `worker_tree_label` 一律回 `''`，
+#          而工人真正干活的树是进程 cwd（在卡树里就是卡树）⇒ 202 第一次、201 第一次都是这么被挡的。
+#   症 B：派活产物落卡树 —— `wb_plan.dispatch_argv()` 印的命令是 `pushd <树>; python tools/wb_dispatch.py …`
+#          （既没 `--cwd`、又跑**树里那份**脚本），与卡 103 明写的「产物落主仓」相矛盾。
+#   ★ 码道那条路（`infra/pool/dispatch.py` 的 `--tree` 默认 `.`）踩的是同一个坑的另一面 —— 在另一个仓，本卡不改。
+[[cards]]
+id = "203"
+task = "T-G308"
+title = "派活器的「树」两个口径必须同一个：租约登记的树 == 工人真正干活的树"
+tree = ".wt/dtree"
+spec = "复盘/卡/卡203-派活树标签.md"
+files = [
+  "tools/wb_plan.py",
+  "tools/wb_dispatch.py",
+  "tests/test_wb_plan.py",
+  "tests/test_wb_dispatch.py",
+  "复盘/卡/卡203-派活树标签.md",
+]
+risk = "mid"
+status = "pending"
