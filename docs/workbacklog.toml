@@ -1524,3 +1524,42 @@ files = [
 ]
 risk = "mid"
 status = "pending"
+
+# ★★ 卡 205 / 206（主控 2026-10-13 并行发出的第二批）：
+#   205：`harness/` 复制体悄悄漂了 —— 卡 203 改了 `tools/wb_plan.py`（加 --cwd、去 pushd），
+#        而 `harness/wb_plan.py:422` 仍是老的 `pushd`；且 `test_harness_manifest.py` 从不比较复制体与原件
+#        ⇒ 那条「冻结输入下逐字节相同」的不变量破了一路绿灯。另：README 说「复制体不依赖 tools/」
+#        被实测证否（单独跑 `harness/wb_plan.py` 报 ModuleNotFoundError: No module named 'pool'）。
+#   206：用户令「不要让我切来切去」⇒ 把 `skills/` 那 5 个技能目录各做成 `<项目>/.dsh/skills/<名>`
+#        junction（DSH 技能扫描根 rank 100 = 项目级）—— 一进这个项目技能就在。★ 只挂技能目录：
+#        `README.md` / `GLUE-harness.md` / `nails` 一个都不许挂（DSH 还认平铺 `<root>/<名>.md`）。
+#   两卡域互不相交，可与 204 同批跑。
+[[cards]]
+id = "205"
+task = "T-G313"
+title = "harness 复制体不许悄悄漂：同步 wb_plan 的派活形态 + 装一条判据 + 改清 README 那句"
+tree = ".wt/harnesssy"
+spec = "复盘/卡/卡205-harness复制体不许漂.md"
+files = [
+  "harness/wb_plan.py",
+  "harness/README.md",
+  "tests/test_harness_manifest.py",
+  "复盘/卡/卡205-harness复制体不许漂.md",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "206"
+task = "T-G314"
+title = "项目级技能 junction：一进这个项目技能就在（只挂技能目录，不挂 README/nails）"
+tree = ".wt/dshtie"
+spec = "复盘/卡/卡206-项目级技能junction.md"
+files = [
+  "tools/dsh_skills_link.py",
+  ".gitignore",
+  "tests/test_dsh_skills_link.py",
+  "复盘/卡/卡206-项目级技能junction.md",
+]
+risk = "mid"
+status = "pending"

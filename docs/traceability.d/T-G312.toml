@@ -1,0 +1,12 @@
+[entries."T-G312"]
+id = "T-G312"
+title = "登记卡 205 harness 复制体不许漂 / 206 项目级技能 junction"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡205-harness复制体不许漂.md",
+  "file:复盘/卡/卡206-项目级技能junction.md",
+]
+gaps = "① ★ **本笔只登记，卡 205 / 206 都还没派活**（队列里如实记 `pending`）。指针：`复盘/卡/卡205-harness复制体不许漂.md`。② ★ **`harness/` 那条漂是既有事实**：卡 203 改了 `tools/wb_plan.py`（加 `--cwd`、去 `pushd`），而复制体没跟上 —— 本笔**没修**，那是卡 205 的活。指针：`harness/wb_plan.py`。③ ★ **队列里 193/194/195/196 仍没有条目**（已落地却没条目 ⇒ 没有 status 可改）。指针：`docs/workbacklog.toml`。④ ★ **另三处留白仍在**：`wb_plan.py cmd_dispatch --execute` 那条路、码道那条路（另一个仓）、⑧ 复核的派生物噪声。指针：`复盘/卡/卡203-派活树标签.md`。"
+

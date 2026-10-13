@@ -25,6 +25,12 @@
 - `docs/workbacklog.toml`：新增 204（**卡号 `T-G311`**，本条登记是 `T-G310`）+ 预声明 `B-STATUSFLIP`（已 register）；域 = `landing.py` / `wb_plan.py` / 两份测试。
 - `复盘/卡/卡204-落地即翻状态.md` 入库；把**安全边界**钉死：**不能只看 `--card`**（本仓登记/收尾提交也用它）⇒ 判据是「`--task` == 队列里该卡的 `task`」。
 - ★ 第一手：`wb_plan.py check` 退 0（86 张卡 / 待派 1）；现场两笔手工补（卡 201 的 `T-G306`、卡 203 的 `T-G309`）带 sha 写进卡规格。
+## 2026-10-13 —— 登记卡 205（harness 复制体不许漂）/ 206（项目级技能 junction）（T-G312）
+- `docs/workbacklog.toml`：新增 205（`T-G313`）/ 206（`T-G314`）+ 预声明 `B-HARNESSSY` / `B-DSHTIE`（已 register）；域 = `harness/` 三件 / `tools/dsh_skills_link.py` + `.gitignore` + 一份测试。
+- `复盘/卡/卡205-harness复制体不许漂.md` · `复盘/卡/卡206-项目级技能junction.md`：**入库**。
+- ★ 205 的来路：卡 203 把原件改对了，**复制体 `harness/wb_plan.py:422` 仍是老 `pushd`**，而 `test_harness_manifest.py` 从不比较两者 ⇒ 那条不变量破了一路绿灯。
+- ★ 206 的来路：用户令「不要让我切来切去」⇒ DSH 技能扫描根 **rank 100 = `<项目>/.dsh/skills`**，本仓还没有 `.dsh/`。
+- ★ 第一手：`wb_plan.py check` 退 0（**88 张卡 / 待派 3、无冲突**）⇒ 204/205/206 可同批并行。
 ## 2026-10-12 —— 旧判决归档不再静默失败：唯一时间戳名 + `(moved, failed)` 出声（T-G256 / 卡 156）
 - `tools/wb_dispatch.py`：目标已存在 ⇒ **带时间戳的唯一名**（Windows 上 rename 撞已存在会抛 `FileExistsError`，旧写法静默吞 ⇒ 第二次起归档全失败）；返回 `(moved, failed)`，调用点把失败打进 stderr。
 - `tests/test_wb_dispatch.py`：移植它的 **3 条归档钉子**。★ 与已落 164 重叠的那半**没有写第二份**。
