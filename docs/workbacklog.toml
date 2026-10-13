@@ -1704,3 +1704,37 @@ files = [
 ]
 risk = "mid"
 status = "pending"
+
+# ★★ 卡 215 / 216 / 217（主控 2026-10-13 晚，用户令「先推其他卡，快」时一次登记三张）。
+#   域与在飞的 210-214 全不相交：215 = wb_dispatch + 新看守；216 = 新队列审计 + 队列文件；
+#   217 = 新契约对账工具 + 一份新文档。
+[[cards]]
+id = "215"
+task = "T-G328"
+title = "派活不该靠人记着轮询：wb_watch 一次盯多张卡，两种池的收工信号都要认"
+tree = ".wt/watchdog"
+spec = "复盘/卡/卡215-派活不该靠人轮询.md"
+files = ["tools/wb_watch.py", "tools/wb_dispatch.py", "tests/test_wb_watch.py", "复盘/卡/卡215-派活不该靠人轮询.md"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "216"
+task = "T-G329"
+title = "队列登记漏与一卡一号：孤儿台账号要红 + 补齐 193-196 的条目"
+tree = ".wt/queueaudit"
+spec = "复盘/卡/卡216-队列登记漏与一卡一号.md"
+files = ["tools/wb_queue_audit.py", "tests/test_wb_queue_audit.py", "docs/workbacklog.toml", "复盘/卡/卡216-队列登记漏与一卡一号.md"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "217"
+task = "T-G330"
+title = "契约保护：契约段与判据的对账（把只有话的那几条列出来）"
+tree = ".wt/contract"
+spec = "复盘/卡/卡217-契约保护.md"
+files = ["tools/contract_audit.py", "tests/test_contract_audit.py", "复盘/契约-判据对账.md", "复盘/卡/卡217-契约保护.md"]
+risk = "mid"
+status = "pending"
+
