@@ -23,10 +23,18 @@
 | `harness/wb_diag.py` | `tools/wb_diag.py` |
 | `harness/wb_plan.py` | `tools/wb_plan.py` |
 
-外加 `__init__.py`、`manifest.py`。复制体**不依赖 `tools/`**：不挂 `sys.path`、
-不 `from tools...`；`wb_diag` 的 `import wb_status` 由同目录天然解析。冻结输入下
-原件/复制体输出**逐字节相同**（现场板 wb_state 仅环境绝对路径字段不同），拿掉
-`tools/` 后仍能跑；证据见 T-G183 台账 gaps。
+外加 `__init__.py`、`manifest.py`。复制体**不依赖 `tools/`**（卡 205 选了 ①：让这句话
+**真的成立**）：不挂 `sys.path`、不 `from tools...`；`wb_diag` 的 `import wb_status`
+由同目录天然解析，`wb_plan` 算派活 `--cwd` 要的「主树根」也**就地**自己算
+（`git rev-parse --git-common-dir`，算不出退回本复制体所在仓根）—— 不 import
+`tools/pool/`。所以复制体跑起来只需要：**标准库 + 一份 `harness.toml` + `git`**，
+拿掉 `tools/` 后仍能跑；证据见 T-G183 台账 gaps。
+
+冻结输入下**原件/复制体渲染的派活命令逐字节相同**（唯一允许的差异是派活器脚本路径
+前缀：原件写死 `tools/wb_dispatch.py`，复制体读 `harness.toml` `paths.workbench`；
+现场板 wb_state 仅环境绝对路径字段不同）。★ 这条不变量**已装牙**（卡 205）：`tests/`
+下的 `test_harness_manifest.py` 逐字比较两者的 `render_dispatch` —— 卡 203 改对了原件、
+复制体却没跟上，正是从前**没有判据**盯它才一路绿灯的。
 
 ## 还没复制的 6 个重工具（下期清单，附现算耦合点数）
 

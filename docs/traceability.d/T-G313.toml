@@ -1,0 +1,12 @@
+[entries."T-G313"]
+id = "T-G313"
+title = "harness 复制体不许悄悄漂：同步派活形态 + 装牙"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:harness/wb_plan.py",
+  "file:harness/README.md",
+  "file:tests/test_harness_manifest.py",
+]
+gaps = "① ★ **只给 `render_dispatch` 装了牙**：另外三份复制体（`wb_state` / `wb_diag` / `wb_status`）与各自原件的等价**仍然没有判据**。指针：`harness/README.md`。② ★ **原件那条 `cmd_dispatch --execute` 的路仍跑树里那份脚本**（`cwd=<卡树>`）—— 卡 203 留下的白，本卡没动它。指针：`tools/wb_plan.py`。③ ★ **README 里「还没复制的 6 个重工具（下期清单）」那段没碰** —— 本卡只管已复制那 4 份的一致性。指针：`harness/README.md`。"
+

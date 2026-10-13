@@ -6225,3 +6225,15 @@ evidence = [
   "file:复盘/卡/卡206-项目级技能junction.md",
 ]
 gaps = "① ★ **本笔只登记，卡 205 / 206 都还没派活**（队列里如实记 `pending`）。指针：`复盘/卡/卡205-harness复制体不许漂.md`。② ★ **`harness/` 那条漂是既有事实**：卡 203 改了 `tools/wb_plan.py`（加 `--cwd`、去 `pushd`），而复制体没跟上 —— 本笔**没修**，那是卡 205 的活。指针：`harness/wb_plan.py`。③ ★ **队列里 193/194/195/196 仍没有条目**（已落地却没条目 ⇒ 没有 status 可改）。指针：`docs/workbacklog.toml`。④ ★ **另三处留白仍在**：`wb_plan.py cmd_dispatch --execute` 那条路、码道那条路（另一个仓）、⑧ 复核的派生物噪声。指针：`复盘/卡/卡203-派活树标签.md`。"
+
+[entries."T-G313"]
+id = "T-G313"
+title = "harness 复制体不许悄悄漂：同步派活形态 + 装牙"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:harness/wb_plan.py",
+  "file:harness/README.md",
+  "file:tests/test_harness_manifest.py",
+]
+gaps = "① ★ **只给 `render_dispatch` 装了牙**：另外三份复制体（`wb_state` / `wb_diag` / `wb_status`）与各自原件的等价**仍然没有判据**。指针：`harness/README.md`。② ★ **原件那条 `cmd_dispatch --execute` 的路仍跑树里那份脚本**（`cwd=<卡树>`）—— 卡 203 留下的白，本卡没动它。指针：`tools/wb_plan.py`。③ ★ **README 里「还没复制的 6 个重工具（下期清单）」那段没碰** —— 本卡只管已复制那 4 份的一致性。指针：`harness/README.md`。"

@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+import ast
+import importlib.util
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -174,3 +177,139 @@ def test_env_override_is_the_only_bypass(tmp_path: Path, monkeypatch: pytest.Mon
     assert manifest.config_path() == alt
     manifest._CACHE = None
     assert manifest.get("paths.workbench") == "wb-alt"
+
+
+# ================================================================ 复制体 vs 原件（卡 205 · T-G313）
+#
+# 为什么有这一段：`harness/` 是 `tools/` 的**复制体**，它的不变量是「冻结输入下原件/复制体
+# 输出逐字节相同」—— 可卡 203 把原件 `tools/wb_plan.py` 的派活命令改成对的形态（加 `--cwd`、
+# 不再 `pushd`）之后，复制体 `harness/wb_plan.py` **悄悄漂了**，而本文件从前**只测
+# `harness.toml` 的加载**、从不比较两者 ⇒ 那条不变量破了一路绿灯。下面三条给这条不变量装牙。
+
+ROOT = Path(__file__).resolve().parents[1]
+ORIGINAL_WB_PLAN = ROOT / "tools" / "wb_plan.py"
+REPLICA_WB_PLAN = ROOT / "harness" / "wb_plan.py"
+#: 原件把派活器脚本**写死**在 `tools/wb_dispatch.py`；复制体从 `harness.toml`
+#: `paths.workbench` 取目录（本仓 = `tools`）。这是两者之间**唯一**允许的差异（路径前缀）。
+ORIGINAL_DISPATCHER = "tools/wb_dispatch.py"
+DISPATCHER_PLACEHOLDER = "<工作台>/wb_dispatch.py"
+
+
+def _import_as(name: str, path: Path, dep_dir: Path):
+    """把 `path` 当**独立模块**加载（不占 `wb_plan` 这个常见名），加载期间把 `dep_dir` 挂上
+    `sys.path`，完了摘掉。
+
+    两个 `wb_plan` 依赖不同目录：原件 `from pool import …`（要 `tools/` 在 `sys.path`），
+    复制体 `import manifest`（要 `harness/`）—— 只有按文件路径加载 + 临时改 `sys.path`
+    才能在同一进程里**同时**拿到两个。
+    """
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None, path
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(dep_dir))
+    # ★ 必须先登记进 sys.modules 再 exec：复制体里有 `@dataclass`，dataclass 的注解解析会
+    #   回头查 `sys.modules[cls.__module__]` —— 不登记就 `AttributeError`。
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop(name, None)
+        sys.path.remove(str(dep_dir))
+    return module
+
+
+@pytest.fixture(scope="module")
+def two_wb_plans():
+    """（原件, 复制体）—— 各自独立加载，供下面三条判据逐字比较。"""
+    return (
+        _import_as("card205_original_wb_plan", ORIGINAL_WB_PLAN, ROOT / "tools"),
+        _import_as("card205_replica_wb_plan", REPLICA_WB_PLAN, ROOT / "harness"),
+    )
+
+
+def _frozen_card(tree: str) -> SimpleNamespace:
+    """冻结输入的「鸭子卡」—— `render_dispatch`/`dispatch_argv` 只读 `.id/.spec/.tree`。
+    用 `SimpleNamespace` 免得在两个模块各自的 `Card` 类之间来回换算。"""
+    return SimpleNamespace(id="205", spec="复盘/卡/卡205-harness复制体不许漂.md", tree=tree)
+
+
+def _dispatcher_token(rendered: str) -> str:
+    """渲染行里的**派活器脚本路径**那一段（`python -X utf8 <工作台>/wb_dispatch.py …`）。
+
+    按「以 `wb_dispatch.py` 结尾」认，不按位置认 —— 老 `pushd <树>; …` 形态里它的位置不同。
+    """
+    tokens = [tok for tok in rendered.split() if tok.endswith("wb_dispatch.py")]
+    assert len(tokens) == 1, rendered
+    return tokens[0]
+
+
+def test_card205_replica_renders_the_same_dispatch_as_original(two_wb_plans):
+    """★ 卡 205 命门：冻结输入下，复制体与原件对同一张卡渲染出的派活命令**一致**。
+
+    允许的差异**只有一处**：派活器脚本路径的前缀（复制体从 `harness.toml`
+    `paths.workbench` 取目录，原件把 `tools/wb_dispatch.py` 写死）。把这一处各自换成
+    占位符之后，两边必须**逐字节相同** —— 不许「大致相等」。
+    """
+    origin, replica = two_wb_plans
+    for tree in ("", ".wt/harnesssy"):
+        card = _frozen_card(tree)
+        from_origin = origin.render_dispatch(card)
+        from_replica = replica.render_dispatch(card)
+        assert _dispatcher_token(from_origin) == ORIGINAL_DISPATCHER, from_origin
+        assert _dispatcher_token(from_replica).endswith("/wb_dispatch.py"), from_replica
+        assert (from_origin.replace(ORIGINAL_DISPATCHER, DISPATCHER_PLACEHOLDER)
+                == from_replica.replace(_dispatcher_token(from_replica),
+                                        DISPATCHER_PLACEHOLDER)), (
+            f"tree={tree!r}（工作台路径前缀换成占位符后仍该逐字节相同）\n"
+            f"  原件：{from_origin}\n  复制体：{from_replica}")
+
+
+def test_card205_replica_never_pushes_and_carries_cwd(two_wb_plans):
+    """★ 卡 205 反例：复制体输出**不许出现 `pushd`**；卡树带 `--cwd`、主树不带（与原件同一条）。"""
+    origin, replica = two_wb_plans
+    for module in (origin, replica):
+        main_tree = module.render_dispatch(_frozen_card(""))
+        card_tree = module.render_dispatch(_frozen_card(".wt/harnesssy"))
+        assert "pushd" not in main_tree, main_tree
+        assert "pushd" not in card_tree, card_tree
+        assert "--cwd" not in main_tree, main_tree
+        assert "--cwd" in card_tree, card_tree
+
+
+def test_card205_replica_cwd_is_the_card_tree_absolute_path(two_wb_plans):
+    """★ 卡 205：`--cwd` 是**该卡树的绝对路径**，且两个模块锚在同一处主树根（卡树里也回主树）。"""
+    origin, replica = two_wb_plans
+    card = _frozen_card(".wt/harnesssy")
+    cwds = []
+    for module in (origin, replica):
+        argv = module.render_dispatch(card).split()
+        cwd = argv[argv.index("--cwd") + 1]
+        assert Path(cwd).is_absolute(), cwd
+        assert cwd.endswith("/.wt/harnesssy"), cwd
+        cwds.append(cwd)
+    assert cwds[0] == cwds[1], cwds
+
+
+def test_card205_harness_copies_do_not_import_tools():
+    """★ 卡 205 / README 那句：`harness/` 复制体**不依赖 `tools/`** —— 不许 `import tools`
+    或 `from pool import …`（`pool` 是 `tools/pool/` 的包名）。AST 扫，docstring 里的引用不算。
+
+    这一条正是把 README 那句断言**变成机器判据**（否则以后谁给复制体顺手补一句 import，
+    只有人读 README 才发现 —— 见 `复盘/问题清单-组2.md` Q-L10-06）。
+    """
+    files = sorted((ROOT / "harness").glob("*.py"))
+    assert files, "没扫到 harness/*.py —— 判据空了"
+    offenders: list[str] = []
+    for path in files:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            else:
+                continue
+            if any(n == "tools" or n.startswith("tools.")
+                   or n == "pool" or n.startswith("pool.") for n in names):
+                offenders.append(f"{path.name}:{node.lineno}")
+    assert not offenders, f"复制体不许 import 原件（`tools/` / `pool`）：{offenders}"
+

@@ -31,6 +31,11 @@
 - ★ 205 的来路：卡 203 把原件改对了，**复制体 `harness/wb_plan.py:422` 仍是老 `pushd`**，而 `test_harness_manifest.py` 从不比较两者 ⇒ 那条不变量破了一路绿灯。
 - ★ 206 的来路：用户令「不要让我切来切去」⇒ DSH 技能扫描根 **rank 100 = `<项目>/.dsh/skills`**，本仓还没有 `.dsh/`。
 - ★ 第一手：`wb_plan.py check` 退 0（**88 张卡 / 待派 3、无冲突**）⇒ 204/205/206 可同批并行。
+## 2026-10-13 —— harness 复制体不许悄悄漂：同步派活形态 + 装牙（T-G313 / 卡 205）
+- `harness/wb_plan.py`：`dispatch_argv()` / `render_dispatch()` 同步成原件的形态（**带 `--cwd`、不再 `pushd`**）；★ 并**就地自己算主树根**（`git rev-parse --git-common-dir`，算不出退回本仓根）⇒ 复制体**真的**不再需要 `tools/pool/`。
+- `harness/README.md`：那句「复制体不依赖 `tools/`」**从"与实测不符"改成"真的成立"**，并写清它跑起来只需要 标准库 + `harness.toml` + `git`。
+- `tests/test_harness_manifest.py`：装 **4 条牙** —— 复制体与原件 `render_dispatch` **逐字相同** · 复制体不许 `pushd` 且必须带 `--cwd` · `--cwd` 是卡树绝对路径 · 复制体不 import `tools`。
+- ★ 真读数：复制体单独跑（sys.path **只挂 `harness/`**）**退 0** 并印出带 `--cwd` 的命令；两份输出逐字相同；`pytest tests/test_harness_manifest.py` **19 passed**；`ruff`（含 `harness/`）All checks passed。
 ## 2026-10-12 —— 旧判决归档不再静默失败：唯一时间戳名 + `(moved, failed)` 出声（T-G256 / 卡 156）
 - `tools/wb_dispatch.py`：目标已存在 ⇒ **带时间戳的唯一名**（Windows 上 rename 撞已存在会抛 `FileExistsError`，旧写法静默吞 ⇒ 第二次起归档全失败）；返回 `(moved, failed)`，调用点把失败打进 stderr。
 - `tests/test_wb_dispatch.py`：移植它的 **3 条归档钉子**。★ 与已落 164 重叠的那半**没有写第二份**。

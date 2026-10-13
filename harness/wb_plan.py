@@ -405,21 +405,65 @@ def worktree_commands(backlog: Backlog, base: str) -> list[tuple[Card, str]]:
             for card in backlog.cards if card.tree and _in_flight(card)]
 
 
-def dispatch_argv(card: Card) -> list[str]:
-    """一张卡的派活命令（argv）—— 模板照卡 010 §3.2；**从它自己的树里跑**。
+def _main_tree_root() -> Path:
+    """主工作树根 = `git rev-parse --git-common-dir` 的父目录（卡树里也回主树）。
 
-    派活器脚本位置是项目胶水：目录读 harness.toml `paths.workbench`（原件写死
-    `tools/wb_dispatch.py`；本复制闭包还没复制 wb_dispatch.py，所以配置仍指向 tools/）。
-    as_posix() 保证 Windows 上也输出正斜杠 —— 与原件逐字一致。
+    ★ 复制体**不依赖 `tools/pool/`**（缝层的规矩）：这里把原件 `pool.registry.main_tree_root()`
+      那件事**就地**做一遍（只标准库 + git）。相对路径相对的是**给 git 的 cwd**（= 本复制体
+      所在仓根），不是进程 cwd —— 主树里回 `.git`、卡树里回主仓 `.git` 的绝对路径，父目录都是
+      主工作树。算不出（git 不可用 / 不在仓库里）⇒ 退回本复制体所在仓根 `manifest.ROOT`。
+    """
+    try:
+        done = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"], cwd=str(manifest.ROOT),
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError:
+        return manifest.ROOT
+    raw = (done.stdout or "").strip()
+    if done.returncode or not raw:
+        return manifest.ROOT
+    common = Path(raw)
+    if not common.is_absolute():
+        common = manifest.ROOT / common
+    return common.resolve().parent
+
+
+def _tree_abs(tree: str) -> str:
+    """卡树（相对**主树根**的标签）的**绝对路径**（posix）—— 与原件同一形态（卡 205）。
+
+    树标签（`wb_dispatch.worker_tree_label`）就是"相对**主树根**的 posix 路径" ⇒ 绝对路径
+    必须锚在**主树根**上 —— 不能锚在"wb_plan 从哪儿跑"（那样在卡树里会拼成 `<卡树>/.wt/x`，
+    正是卡 203 修掉的那个 bug 家族）。
+    """
+    return (_main_tree_root() / tree).as_posix()
+
+
+def dispatch_argv(card: Card) -> list[str]:
+    """一张卡的派活命令（argv）—— **从仓根跑**（卡 205 同步成与原件同一形态）。
+
+    ★★ 卡 203（T-G307）在原件上改的形态，这里同步过来：旧形态 `pushd <树>; python
+      <工作台>/wb_dispatch.py …` 让进程 cwd 落到卡树、派活产物落进卡树，且不给 `--cwd`
+      ⇒ 租约把「主树」登记成被占。现在：**从仓根**跑（不再 `pushd`）+ 显式
+      `--cwd <该卡树的绝对路径>` —— 登记树 = 工人树。
+    ★ 主树（`tree == ""`）**不给** `--cwd`：从仓根跑时进程 cwd 就是仓根 ⇒ 标签仍是主树（`""`），
+      且工人看到的东西逐字不变（卡 166：换法不许改变工人看到的东西）。
+    ★ 派活器脚本位置是项目胶水：目录读 harness.toml `paths.workbench`（原件写死
+      `tools/wb_dispatch.py`；本复制闭包还没复制 wb_dispatch.py，所以配置仍指向 tools/）。
+      as_posix() 保证 Windows 上也输出正斜杠 —— 与原件逐字一致。
     """
     dispatcher = (Path(manifest.get("paths.workbench")) / "wb_dispatch.py").as_posix()
-    return ["python", "-X", "utf8", dispatcher,
-            "--card", card.id, "--spec", card.spec, "--detach", "--execute"]
+    argv = ["python", "-X", "utf8", dispatcher,
+            "--card", card.id, "--spec", card.spec]
+    if card.tree:
+        argv += ["--cwd", _tree_abs(card.tree)]
+    return [*argv, "--detach", "--execute"]
 
 
 def render_dispatch(card: Card) -> str:
-    base = " ".join(dispatch_argv(card))
-    return f"pushd {card.tree}; {base}" if card.tree else base
+    """把派活 argv 拼成一整行命令（从**仓根**跑）—— 不再 `pushd`（卡 205 同步成同一形态）。"""
+    return " ".join(dispatch_argv(card))
 
 
 # ================================================================ 子命令
