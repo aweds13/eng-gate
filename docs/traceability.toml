@@ -6364,3 +6364,22 @@ evidence = [
   "file:复盘/卡/卡224-工作台状态注入.md",
 ]
 gaps = "① ★★ **集成仍是手工的**：`wb_land.py --batch` 只落**一棵树**，而五张卡在五棵树里 ⇒ 本笔由主控手工 `git apply` 五份补丁。**卡 212 就是治这件事的，但它在这一批里** ⇒ 本次还没生效。指针：`tools/pool/landing.py`。② ★ **214 的补丁带一处「文件尾空行」**（`git apply` 报 whitespace warning）—— 已并入未清。指针：`tests/test_harness_manifest.py`。③ ★ **218（Trae 接入）不属本批**：它在飞；主控预修的 5 处暂存在 stash 里、并已同步进 `.wt/traecli`。指针：`tools/trae_pool.mjs`。④ ★ **主树这次一次落五张卡的成果** —— 一笔提交含 5 张卡（千行级）。攒批的代价与收益都在这里。指针：`docs/workbacklog.toml`。"
+
+[entries."T-G339"]
+id = "T-G339"
+title = "攒批收口第二批：卡 215/216/217 一笔提交（含修 212 多树集成的恒真条件）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_watch.py",
+  "file:tests/test_wb_watch.py",
+  "file:tools/wb_dispatch.py",
+  "file:tools/wb_queue_audit.py",
+  "file:tests/test_wb_queue_audit.py",
+  "file:tools/contract_audit.py",
+  "file:tests/test_contract_audit.py",
+  "file:复盘/契约-判据对账.md",
+  "file:tools/pool/landing.py",
+  "file:tests/test_wb_land.py",
+]
+gaps = "① ★★ **卡 212 的多树集成有个恒真条件，本笔修了**：原条件第二项是自己跟自己求交（`cfiles` 就是被求交的那个值）⇒ 批里每条带 `tree` 的卡都认成「第一个成员」，陈旧卡树被当成员拉进来、报出假冲突，把 `--batch` 收口整个挡住。改成按卡号匹配 + 补先红后绿的回归用例。指针：`tools/pool/landing.py`。② ★ **本笔集成仍手工**（自动集成被可逆跳过：三棵成员树暂改名 `.wt/_hold_*`）：`_integrate_multi_tree`按**整棵树全量**拷贝、不看 `[member].paths`，成员树的旧 `workbacklog` 会覆盖集成树里的新版。**待开卡**：让它按声明域取文件。指针：`tools/pool/landing.py`。③ ★ **216 也改队列文件** `docs/workbacklog.toml`（193~196 补登记）—— 与第一批同文件，三方合并冲突后按主树 `f4fd27d` 口径取：核对过 216 真正改的就是 193~196，而那已在 `f4fd27d` 里。指针：`docs/workbacklog.toml`。④ ★ **218（Trae 接入）与 219~224（六张）此刻在飞**，都不属本批；批 3 必须在批 2 之后 rebase。指针：`tools/trae_pool.mjs`。⑤ ★ **门禁逮到一处真漂移**：批 1（卡 214）把 `harness/README.md` 里「原件/复制体**渲染的派活命令**逐字节相同」改写成表格、措辞变成「**输出**逐字节相同」⇒ 217 新写的契约 `CX-05` 锚点失效、审计报 `source_missing=1`。集成时按**现行文本**更新锚点（**判据一字未动**）。指针：`tools/contract_audit.py` · `harness/README.md`。"

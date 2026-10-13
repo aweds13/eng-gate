@@ -780,8 +780,16 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
                     tree_val = m2.group(2)
             j += 1
         if cid_val and tree_val:
-            for mid, cfiles in card_files_map.items():
-                if mid == cid_val or (cfiles and set(cfiles) & set(card_files_map.get(mid, ()))):
+            # ★ 卡 212 跟进（2026-10-14 主控，批 2 收口被挡时逮到）：
+            #   原条件的第二项是 `set(cfiles) & set(card_files_map.get(mid, ()))`
+            #   —— 而 `cfiles` **就是** `card_files_map.get(mid)` ⇒ **自己跟自己求交**，
+            #   只要非空就恒真 ⇒ 批里每一条带 `tree` 的 backlog 卡都被认成
+            #   "第一个成员"，**陈旧卡树**于是全被当成成员拉进来，报出
+            #   `X 和 X 都改了 <同一个文件>` 的**假冲突** ⇒ `--batch` 收口全被挡。
+            #   改成**按卡号**匹配（容忍 `卡215` / `215` 这种口径差）。
+            key = re.sub(r"\D", "", cid_val)
+            for mid in card_files_map:
+                if mid == cid_val or (key and re.sub(r"\D", "", mid) == key):
                     member_trees.append((mid, ROOT / tree_val))
                     break
         i = j

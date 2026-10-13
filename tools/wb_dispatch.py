@@ -2836,6 +2836,10 @@ def main() -> int:
         print(f"[OK ] 前置检查全过 → 扔出去单独跑（pid {pid}），我的窗口关了它照样跑", flush=True)
         print(f"[看 ] 进度：python -X utf8 tools/wb_dispatch.py --card {args.card} --status",
               flush=True)
+        # ★ 卡 215（T-G328）：`--detach` 出去之后**没有回推通道**，别靠人记着轮询 ——
+        #   挂上 `wb_watch`（只读看守）就默认收工出结论。**只加这一行提示**，派活/守卫逻辑一字不动。
+        print(f"[看 ] 挂看守（收工自动出结论，不用人轮询）："
+              f"python -X utf8 tools/wb_watch.py --cards {args.card}", flush=True)
         print(f"[log ] {detach_log}", flush=True)
         return 0
 

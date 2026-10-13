@@ -1383,6 +1383,43 @@ def test_integrate_multi_tree_no_gate_returns_true(
     assert _landing._integrate_multi_tree(tmp_path, "B-NOSUCH", "T-G999") is True
 
 
+def test_integrate_multi_tree_ignores_cards_outside_the_fence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """★ 卡 212 跟进：批外的陈旧卡树**不许**被当成批成员（回归用例）。
+
+    先红后绿：原条件 `cfiles and set(cfiles) & set(card_files_map.get(mid, ()))`
+    是自己跟自己求交（恒真）⇒ backlog 里**每一条**带 `tree` 的卡都被认成
+    "第一个成员"（这里恒为 215），于是批外的陈旧卡树也进了集成名单，
+    报出 `X 和 X 都改了 <同一个文件>` 的**假冲突**，把 `--batch` 收口全挡住。
+
+    钉住的是"映射对不对"，不是"集成了几棵树"：真成员 216 必须出现在
+    成员名单里（恒真条件下它永远不会出现），批外卡 999 的树必须不出现。
+    """
+    bd = tmp_path / "batch"
+    monkeypatch.setenv("TF_BATCH_DIR", str(bd))
+    _mk_gate212(bd, "B-MAP", "awaiting-commit", [
+        {"id": "215", "layer": "工具层", "paths": ["tools/a.py"]},
+        {"id": "216", "layer": "工具层", "paths": ["tools/b.py"]},
+    ])
+    wt = tmp_path / "wt"
+    (wt / "docs").mkdir(parents=True)
+    (wt / "docs" / "workbacklog.toml").write_text(
+        '[[cards]]\nid = "215"\ntree = ".wt/t215"\n\n'
+        '[[cards]]\nid = "216"\ntree = ".wt/t216"\n\n'
+        '[[cards]]\nid = "999"\ntree = ".wt/stale-tree"\n',
+        encoding="utf-8")
+    monkeypatch.setattr(_landing, "ROOT", tmp_path)
+    # ★ 故意**不造**树目录：函数会走「树不存在 ⇒ 跳过」这一支，
+    #   而那一支会把**成员号**打出来 —— 正好用来判映射对不对（不依赖 git）。
+    _landing._integrate_multi_tree(wt, "B-MAP", "T-G999")
+    out = capsys.readouterr().out
+    assert "2 棵" in out, out
+    assert "216" in out, out              # 真成员必须被认出来（恒真条件下恒不出现）
+    assert "stale-tree" not in out, out   # 批外卡 999 的树不许进集成名单
+
+
 def test_advance_card_gate_no_gate_skips(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
