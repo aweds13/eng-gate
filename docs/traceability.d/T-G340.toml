@@ -1,0 +1,25 @@
+[entries."T-G340"]
+id = "T-G340"
+title = "Trae 第三条道第一批：六张卡攒批落地（不建模清单 / 定时巡检 / 全局面板 / timeflow 收件箱 / 禅道甘特 / workbench_bridge）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/工作台-不建模清单.md",
+  "file:docs/定时巡检.md",
+  "file:docs/全局面板.md",
+  "file:tools/notmodel_audit.py",
+  "file:tests/test_notmodel_audit.py",
+  "file:tools/wb_daily.py",
+  "file:tests/test_wb_daily.py",
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+  "file:tools/timeflow_inbox.py",
+  "file:tests/test_timeflow_inbox.py",
+  "file:tools/zentao_gantt.py",
+  "file:tests/test_zentao_gantt.py",
+  "file:tools/workbench_bridge.py",
+  "file:tests/test_workbench_bridge.py",
+  "file:tools/wb_dispatch.py",
+]
+gaps = "① ★ **六棵树的读数是「基点口径」**：基点 `ed41a9f` 落后批 1 的 `f4fd27d` 一个提交，所以工人报告里 `wb_plan.py check` 写的是 **99 张卡**（主树那时已 109）。不是错，是老实在报自己看到的。指针：`gates/diag/batch/B-20261016.toml`。② ★ **树根副本与工人汇报都不进本笔**：六棵树各自在树根留了一份 `卡2NN-*.md`、外加一份 `_trae_report.md` —— 正式规格在主树 `复盘/卡/`（批 1 已落），汇报是过程件。指针：`复盘/卡/卡219-工作台不建模清单.md`。③ ★ **自动集成那步又被可逆跳过**（与 T-G339 同一原因）：`_integrate_multi_tree` 按**整棵树全量**拷贝、不看 `[member].paths` ⇒ 会把 `_trae_report.md` 和树根副本一起拉进来。**待开卡：让它按声明域取文件**。指针：`tools/pool/landing.py`。④ ★ **有四项是「没验」而不是「验过了」**，别当成全验过：221 的面板插件**没在真 DSH 里装过**；223 的甘特有 DOM 快照**没有截图**；222 的样例读数是照 fixture 字段形状编的、不是真拉到的响应。指针：`gates/diag/batch/B-20261016.d/221.json`。"
+

@@ -110,6 +110,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import pool_quota  # noqa: E402 —— 额度按钟表算（卡 201）：429 不许凭记忆，按记录时间 vs 现实时间
 import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（别写第二份）
+import workbench_bridge  # noqa: E402 —— 工作台状态一处真源（卡 224）：只调它，别在这儿现拼
 
 # ★ 卡 109（T-G206）/ 卡 125（T-G223）：这些判据**只有一份真源**，都在 `tools/pool/` 包里
 #   —— 这里只 import、只调用，不另写一份（本地副本各删一处；判据漂一次就会越界 / 串卡）。
@@ -763,19 +764,44 @@ def domain_path_hint(card: str, worker_cwd: Path | None) -> str:
             + "\n".join(f"  {p}" for p in paths) + "\n")
 
 
+def workbench_brief_text(card: str, worker_cwd: Path | None) -> str:
+    """★ 卡 224（T-G338）：把工作台状态（我在哪张卡 / 谁在飞 / 我的域有没有被别人占 /
+    该看哪个产物）拼进开场白 —— 就一段文字，数据只来自 `tools/workbench_bridge.py`
+    （它是**唯一真源**，这里**不**自己再读一遍队列 / 租约 / 判决 —— 一份读数）。
+
+    ★ **只加不改**：不给 `--cwd`（从主树跑 / 向后兼容）⇒ 回空串，开场白**逐字不变**（卡 166）；
+      给了 `--cwd`（工人在卡树里干活）⇒ 追加这段（工人看到的东西**只多不少**，不会变差）。
+    ★ 树标签用 `worker_tree_label(...)`（与守卫**同一把尺子**）；算不出主树 ⇒ 退空串
+      （**不新增失败**：这段是加料，不是判据）。
+    """
+    if worker_cwd is None:
+        return ""
+    try:
+        main_root = pool_registry.main_tree_root()
+        tree = worker_tree_label(worker_cwd, main_root)
+    except pool_registry.RegistryError:
+        tree = ""
+    return workbench_bridge.bridge_text(card=card, tree=tree, root=ROOT)
+
+
 def build_command(node: Path, cli: Path, card: str, spec: str, model: str,
                   permission_mode: str = DEFAULT_PERMISSION_MODE, *,
                   max_turns: int = DEFAULT_MAX_TURNS_WRITE,
                   autocompact: str = DEFAULT_AUTOCOMPACT,
                   lean: bool = False, brief: str = "",
                   effort: str | None = None,
-                  domain_hint: str = "") -> list[str]:
+                  domain_hint: str = "",
+                  workbench_text: str = "") -> list[str]:
     prompt = (LEAN_OPENING.format(brief=brief, spec=spec, card=card) if lean
               else OPENING.format(spec=spec, card=card))
     if domain_hint:
         prompt = domain_hint + prompt
     # ★ 卡 166 追加要求 2：最小规矩集拼进提示（换池不许改变工人看到的东西）。
     prompt = prompt + "\n" + minimum_ruleset_text()
+    # ★ 卡 224（T-G338）：工作台状态注入 —— **只加不改**：空串 = 逐字不变；给了就**追加在末尾**
+    #   ⇒ 改动前的提示词是改动后的**前缀**（删不掉、改不动，工人看到的东西只多不少）。
+    if workbench_text:
+        prompt = prompt + "\n" + workbench_text
     cmd = [
         str(node), str(cli), "-p", prompt,
         "--model", model, "--output-format", "stream-json",
@@ -2846,11 +2872,15 @@ def main() -> int:
     max_turns = args.max_turns or max_turns_default(args.read_only)
     lean_brief = ensure_lean_brief(args.card, worker_cwd) if args.lean else ""
     domain_hint = domain_path_hint(args.card, worker_cwd)
+    # ★ 卡 224（T-G338）：工作台状态一处真源 —— 派活器**改用它**拼开场白（只加不改；
+    #   不给 --cwd ⇒ 空串，开场白逐字不变）。
+    workbench_text = workbench_brief_text(args.card, worker_cwd)
     initial_cmd = build_command(node, cli, args.card, prompt_path(args.spec, worker_cwd),
                                 args.model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
                                 lean=args.lean, brief=prompt_path(lean_brief, worker_cwd),
-                                effort=args.effort, domain_hint=domain_hint)
+                                effort=args.effort, domain_hint=domain_hint,
+                                workbench_text=workbench_text)
 
     done_checks = "规格在 / 工作区干净（续跑则核对后放行）/ log 未占用"
     if args.no_preflight:
@@ -3004,7 +3034,8 @@ def main() -> int:
                                 model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
                                 lean=args.lean, brief=prompt_path(lean_brief, worker_cwd),
-                                effort=args.effort, domain_hint=domain_hint)
+                                effort=args.effort, domain_hint=domain_hint,
+                                workbench_text=workbench_text)
         elif sid:
             prompt = continuation_prompt(reason=reason or "上次被中断", scene=scene,
                                          card=args.card)
@@ -3020,7 +3051,8 @@ def main() -> int:
                                 model, args.permission_mode,
                                 max_turns=max_turns, autocompact=args.autocompact,
                                 lean=args.lean, brief=prompt_path(lean_brief, worker_cwd),
-                                effort=args.effort, domain_hint=domain_hint)
+                                effort=args.effort, domain_hint=domain_hint,
+                                workbench_text=workbench_text)
         print(f"[跑 ] 第 {attempts} 次；log {log_k.name}", flush=True)
         attempt_started = time.time()
         code, reason, scene, new_sid = run_worker(
