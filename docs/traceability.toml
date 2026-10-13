@@ -6408,3 +6408,20 @@ evidence = [
   "file:tools/wb_dispatch.py",
 ]
 gaps = "① ★ **六棵树的读数是「基点口径」**：基点 `ed41a9f` 落后批 1 的 `f4fd27d` 一个提交，所以工人报告里 `wb_plan.py check` 写的是 **99 张卡**（主树那时已 109）。不是错，是老实在报自己看到的。指针：`gates/diag/batch/B-20261016.toml`。② ★ **树根副本与工人汇报都不进本笔**：六棵树各自在树根留了一份 `卡2NN-*.md`、外加一份 `_trae_report.md` —— 正式规格在主树 `复盘/卡/`（批 1 已落），汇报是过程件。指针：`复盘/卡/卡219-工作台不建模清单.md`。③ ★ **自动集成那步又被可逆跳过**（与 T-G339 同一原因）：`_integrate_multi_tree` 按**整棵树全量**拷贝、不看 `[member].paths` ⇒ 会把 `_trae_report.md` 和树根副本一起拉进来。**待开卡：让它按声明域取文件**。指针：`tools/pool/landing.py`。④ ★ **有四项是「没验」而不是「验过了」**，别当成全验过：221 的面板插件**没在真 DSH 里装过**；223 的甘特有 DOM 快照**没有截图**；222 的样例读数是照 fixture 字段形状编的、不是真拉到的响应。指针：`gates/diag/batch/B-20261016.d/221.json`。"
+
+[entries."T-G331"]
+id = "T-G331"
+title = "Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（+ 卡 218/225/226/227 登记；顺手拔掉纯数字短 sha 的地雷）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/trae_pool.mjs",
+  "file:tools/pool/trae_dispatch.py",
+  "file:tests/test_trae_dispatch.py",
+  "file:tools/card_doc_budget.py",
+  "file:tests/test_card_doc_budget.py",
+  "file:.trae/mcp.json",
+  "file:复盘/Trae-接入结论.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = "① ★ **`--target` 多窗口没做**：本卡规格里没点它，而用户「多开」的需求已单独写成卡 227（`depends = [「218」]`，在本卡之后跑）。指针：`复盘/卡/卡227-Trae多窗口target.md`。② ★ **面板里的模型回话有怪癖**：问它 PONG、它答 PORT（不是管道问题，是模型），所以回话提取改成「取最后一条 agent 消息」并加了收尾卡识别。指针：`tools/trae_pool.mjs`。③ ★ **MCP 那次没在真 DSH/Trae 里端到端验**：Trae 的项目级配置要放在**工作区根**下它才读，所以得**把主仓当 Trae 工作区根**再开窗、跑 `/mcp` 才吃到；这一步**得用户自己做**。它指向的服务端就在仓里 —— 指针：`tools/pool_mcp.py`。④ ★ **Trae 那条道要 IDE 带调试口**：`trae_pool.mjs` 连的是 `127.0.0.1:9333` 的 CDP，得先用桌面上的 `启动Trae-带调试口.cmd` 起 Trae（`argv.json` 里那个键 **Trae CN 不认**）。指针：`tools/trae_pool.mjs`。⑤ ★★ **顺手拔掉一颗地雷（本笔必须带它，否则谁都落不了地）**：卡 193 的文书预算判据 `_find_pointers` 要求 sha 里**至少有一个 `a`~`f`**，而短 sha **恰好纯数字**时（`(10/16)^7 ≈ 3.7%`）真 sha 会被当普通数字 ⇒ `test_pointer_to_real_sha_is_green` **必红**；主树 HEAD `2051255` 正是纯数字 ⇒ **主树红了、任何收口都过不去**。改成「纯数字候选走 `git cat-file -e` 实测」（**不是**放宽成「数字都算指针」：同一串数字在没有该对象的仓库里照旧不算）。指针：`tools/card_doc_budget.py` · `tests/test_card_doc_budget.py`。"

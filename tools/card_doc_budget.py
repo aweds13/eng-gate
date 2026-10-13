@@ -139,14 +139,24 @@ def check_budget(
     return problems
 
 
-def _find_pointers(text: str) -> list[str]:
-    """从一段文本里找出指针（文件路径 / commit sha / 快照 id）。返回去重后的指针串列表。"""
+def _find_pointers(text: str, *, allow_numeric_sha: bool = False) -> list[str]:
+    """从一段文本里找出指针（文件路径 / commit sha / 快照 id）。返回去重后的指针串列表。
+
+    `allow_numeric_sha=False`（默认）时，**纯数字**的 7~40 位十六进制串**不算** sha ——
+    这是为了别把正文里的普通数字（行数、年份…）当成指针。
+    ★ 但这个启发式有个**假阴**：提交的**短 sha 恰好纯数字**时（如 `2051255`，
+    概率约 `(10/16)^7 ≈ 3.7%`），真 sha 会被当成普通数字 ⇒ `gaps 没有指针` ⇒
+    `tests/test_card_doc_budget.py::test_pointer_to_real_sha_is_green` **必红**，
+    而且**跟改了什么无关**（2026-10-14 主树就这么红了一次，把收口整个卡死）。
+    所以 `check_pointers` 在"一个指针都没找到"时会用 `allow_numeric_sha=True` **再来一遍**，
+    让纯数字候选走 `_pointer_exists` 的 `git cat-file -e` **实测** —— 是对象才算指针。
+    """
     found: list[str] = []
     for m in _PTR_PATH.finditer(text):
         found.append(m.group(1))
     for m in _PTR_SHA.finditer(text):
         s = m.group(1)
-        if any(c in "abcdef" for c in s.lower()):
+        if allow_numeric_sha or any(c in "abcdef" for c in s.lower()):
             found.append(s)
     for m in _PTR_SNAPSHOT.finditer(text):
         found.append(m.group(1))
@@ -199,6 +209,12 @@ def check_pointers(gaps: str, root: pathlib.Path) -> list[str]:
     for idx, item in enumerate(items, 1):
         text = "\n".join(item)
         ptrs = _find_pointers(text)
+        if not ptrs:
+            # ★ 兜底：短 sha **恰好纯数字**时上面的启发式会漏掉它（见 `_find_pointers` 的说明）。
+            #   再找一遍、放开纯数字候选，让 `git cat-file -e` **实测**说了算 ——
+            #   是对象就算指针；不是对象 ⇒ 下面照旧报「不存在」（不放松任何真实约束）。
+            ptrs = [p for p in _find_pointers(text, allow_numeric_sha=True)
+                    if _pointer_exists(p, root)[0]]
         if not ptrs:
             problems.append(f"gaps 第 {idx} 条没有指针（须带文件路径 / commit sha / 快照 id）")
             continue

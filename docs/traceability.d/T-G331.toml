@@ -1,0 +1,17 @@
+[entries."T-G331"]
+id = "T-G331"
+title = "Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（+ 卡 218/225/226/227 登记；顺手拔掉纯数字短 sha 的地雷）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/trae_pool.mjs",
+  "file:tools/pool/trae_dispatch.py",
+  "file:tests/test_trae_dispatch.py",
+  "file:tools/card_doc_budget.py",
+  "file:tests/test_card_doc_budget.py",
+  "file:.trae/mcp.json",
+  "file:复盘/Trae-接入结论.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = "① ★ **`--target` 多窗口没做**：本卡规格里没点它，而用户「多开」的需求已单独写成卡 227（`depends = [「218」]`，在本卡之后跑）。指针：`复盘/卡/卡227-Trae多窗口target.md`。② ★ **面板里的模型回话有怪癖**：问它 PONG、它答 PORT（不是管道问题，是模型），所以回话提取改成「取最后一条 agent 消息」并加了收尾卡识别。指针：`tools/trae_pool.mjs`。③ ★ **MCP 那次没在真 DSH/Trae 里端到端验**：Trae 的项目级配置要放在**工作区根**下它才读，所以得**把主仓当 Trae 工作区根**再开窗、跑 `/mcp` 才吃到；这一步**得用户自己做**。它指向的服务端就在仓里 —— 指针：`tools/pool_mcp.py`。④ ★ **Trae 那条道要 IDE 带调试口**：`trae_pool.mjs` 连的是 `127.0.0.1:9333` 的 CDP，得先用桌面上的 `启动Trae-带调试口.cmd` 起 Trae（`argv.json` 里那个键 **Trae CN 不认**）。指针：`tools/trae_pool.mjs`。⑤ ★★ **顺手拔掉一颗地雷（本笔必须带它，否则谁都落不了地）**：卡 193 的文书预算判据 `_find_pointers` 要求 sha 里**至少有一个 `a`~`f`**，而短 sha **恰好纯数字**时（`(10/16)^7 ≈ 3.7%`）真 sha 会被当普通数字 ⇒ `test_pointer_to_real_sha_is_green` **必红**；主树 HEAD `2051255` 正是纯数字 ⇒ **主树红了、任何收口都过不去**。改成「纯数字候选走 `git cat-file -e` 实测」（**不是**放宽成「数字都算指针」：同一串数字在没有该对象的仓库里照旧不算）。指针：`tools/card_doc_budget.py` · `tests/test_card_doc_budget.py`。"
+

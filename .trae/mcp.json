@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "pool": {
+      "command": "C:/Users/example\\miniconda3\\python.exe",
+      "args": [
+        "-X",
+        "utf8",
+        "D:/repo/engineering\\tools\\pool_mcp.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+        "POOL_MCP_WRITE": "1",
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

@@ -136,6 +136,27 @@ def test_pointer_to_real_sha_is_green():
     assert budget.check_pointers(gp, root=ROOT) == []
 
 
+@pytest.mark.skipif(
+    not ROOT.joinpath(".git").exists(), reason="不在 git 仓里"
+)
+def test_numeric_short_sha_is_still_a_pointer(tmp_path):
+    """★ 回归（2026-10-14 主树真红过一次）：短 sha **恰好纯数字**时，它仍是指针。
+
+    病根：`_find_pointers` 的启发式要求 sha 里**至少有一个 `a`~`f`**（免得把正文里的
+    普通数字当指针）。可提交的短 sha 有 `(10/16)**7 ≈ 3.7%` 的概率**纯数字** ——
+    2026-10-14 主树 HEAD 恰好是 `2051255` ⇒ `test_pointer_to_real_sha_is_green` **必红**，
+    **跟改了什么无关**，而且**任何收口都过不去**（门禁在卡树里跑，卡树 HEAD 也是它）。
+
+    钉的是"纯数字候选要**实测**、是 git 对象才算指针"，**不是**"数字都算指针"：
+    同一串数字在**没有**这个对象的仓库里，照旧不算指针（见断言 ②）。
+    """
+    # ① 一个**真实存在**的纯数字短 sha（本仓 2026-10-14 那笔，仍在历史里可达）⇒ 必须算指针
+    assert budget.check_pointers("1. 见提交 2051255。", root=ROOT) == []
+    # ② 同一串数字，在**没有**这个对象的仓库里 ⇒ 不许算指针（不然就是把「数字」当「指针」）
+    assert budget.check_pointers("1. 见提交 2051255。", root=tmp_path) == [
+        "gaps 第 1 条没有指针（须带文件路径 / commit sha / 快照 id）"]
+
+
 # ---------------------------------------------------------- 真实仓库回归
 def test_real_checkpoints_fit_budget():
     """真实交接片段的**行数**应在预算内（回归：别让判据一上线就退回一堆既有文书）。

@@ -12,6 +12,22 @@
  *    这边是 DOM，**没有** token/回合/预算这类读数，唯一的用量读数是**整数积分**。
  *  · **脆**：全是 UI 自动化，面板改版/选择器改名就废；选择器里**不钉中文文案**（文案只用在授权框判据里）。
  *  · **串行**：一个面板一次一个任务。
+ *
+ * ★★ 卡 218（2026-10-13）当场裁决 —— **① 保留 + 就在这里写下结论**（不另开卡删它，不装作没这回事）：
+ *   本机实测这条道**不可用于派活**：面板页会**重载 / 目标更替**（新版 TRAE 的 agent 界面是
+ *   `workbench.desktop.main.solo-lite*`），而驱动原来对它**零韧性** ⇒ 第 1 次真派卡
+ *   （`gates/diag/trae-218.jsonl`）就是这么死的 —— WS 一断，`poll` 里的 `await` 永远不 settle
+ *   ⇒ 事件循环空掉 ⇒ Node 报 `Warning: Detected unsettled top-level await … await main()` 直接退出，
+ *   而**任务在面板里还在跑**（"驱动死了、活没死"）。
+ *   取证四条（同日，指向同一根因）：① CDP target 从 `title=Agent` 变成 `title=` 空、url 当标题
+ *   （面板页重载/跳转）；② 端口 9333 的所有者 pid 从 5692 → 22340；③ 同一时刻
+ *   `Page.captureScreenshot` 只 11 KB（正常 133 KB）；④ 树里零产出（只有主控种进来的两个文件）。
+ *   ⇒ 卡 218 就地补了**断线重连**（`Cdp.markDead` + `cmdSend` 的 `ensureCdp`）：断线留痕、
+ *   重解析 `/json/list` 找 `solo-lite`、重连、**接着判完成**；连不上 6 拍就明确报「已失联」退 3
+ *   （不再是 Node 的内部警告）。
+ *   ★ 但这条道**仍不接进派活**：首选是**反向**把我们的 `pool` MCP 挂进 Trae（`.trae/mcp.json`，
+ *     不需要任何登录）—— 三条路的实测与证据见 `复盘/Trae-接入结论.md`。
+ *     留着本文件只为「主控遥控 Trae 面板」这一用法有据可查，且改起来半天就能再战。
  */
 import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -29,11 +45,22 @@ const DEFAULT_PORT = 9333
 // 实测选择器（探测结论 §三 表；★ 别钉中文文案，文案会随语言/改版变）。
 const SEL_BALANCE = '.icube-titlebar-cn-free-upgrade-button' // 免费积分按钮（文本如 4,650）
 const SEL_INPUT = '.chat-input-v2-input-box-editable' // 输入框（role=textbox，需先 focus）
-const SEL_AGENT = '.turn__agent-message' // agent 回复轮次
+// ★★ 卡 218（2026-10-13 CDP 实测）：新版「Agent」界面（`solo-lite`）里，**agent 的最终回答**
+//   落在 **`.core-finish-card`**（实测链路：`p.markdown-p` → `.markdown-renderer` →
+//   `.core-finish-card__summary` → **`.core-finish-card`** → `.agent-plan-item`）；
+//   老 UI 才是 `.turn__agent-message`。⇒ **两代都认**。
+//   ★ 只认老的那个时 `--out` 抽到的是界面文字（当天真抽到过「TRAE / 思考过程 / 由 AI 生成」）。
+const SEL_AGENT = '.turn__agent-message, .core-finish-card' // agent 回复轮次（老 UI + 新 UI）
 
 // 授权框文案**并集**（探测结论 §9.2：路径授权 与 「高风险命令 git commit」是**两套**文案，只认一套会漏）。
 // 命中即"是授权类按钮"；优先级见 pickApproval。
-const APPROVE_RE = /仅本次运行|本次会话允许|始终允许|拒绝执行|允许运行|允许一次|允许本次|继续执行|继续|确认|批准|同意|允许|Allow|Approve|Accept|Continue|Run/i
+// ★★ 卡 218（2026-10-13 截图实证）：这一版**必须收紧成"授权框专有文案"**。
+//   老写法把「继续 / 确认 / 允许 / Run」这类**通用词**也算授权 ⇒ 新版界面上一个
+//   **快捷回复芯片**（"好的，执行吧"）被它当按钮点了，于是那句话被当成**用户消息发了出去**
+//   （截图实证：那条出现在**用户侧**气泡，而 agent 回了一句
+//   「目前没有待执行的任务——上一条我只按要求回复了 OK…」）。
+//   ⇒ 只认授权框专有文案；通用词一律不算。
+const APPROVE_RE = /仅本次运行|本次会话允许|始终允许|拒绝执行|允许运行|允许一次|允许本次|允许执行|批准并运行|同意并运行/
 
 /* ---------------------------------------------------------------- 参数解析 */
 
@@ -64,18 +91,47 @@ function makeLogger(path) {
 /* ---------------------------------------------------------------- CDP */
 
 class Cdp {
-  constructor(ws) { this.ws = ws; this.id = 0; this.pending = new Map() }
+  constructor(ws) {
+    this.ws = ws; this.id = 0; this.pending = new Map(); this.closed = false; this.deathWhy = ''
+    // ★★ 卡 218（2026-10-13 实测，第一次派真卡就是这么死的）：
+    //   WS 一断，原来那些 pending 的 Promise **永远不 settle** ⇒ `await` 永久挂起 ⇒
+    //   事件循环空掉 ⇒ Node 直接退出，原样报错：
+    //     `Warning: Detected unsettled top-level await at …trae_pool.mjs:400 / await main()`
+    //   而任务在面板里可能还在跑 ⇒ **看着像"驱动莫名其妙死了"**。
+    //   ⇒ 断线时把 pending **全部拒绝**，让"断线"变成一条**可读的失败**；再配 `send` 的超时兜底。
+    //   ★ 卡 218 再进一步：`cmdSend` 拿到这个"已死"标记后**重解析 /json/list 并重连**（见 ensureCdp）。
+    ws.onclose = () => this.markDead('WS 关闭（面板可能重载了）')
+    ws.onerror = () => this.markDead('WS 出错（面板可能重载了）')
+  }
 
-  send(method, params = {}) {
-    return new Promise((res) => {
+  /** 把这条连接判死：pending 全部拒绝（回 `{__closed}` 哨兵）—— 断线由此变成**可读的失败**。 */
+  markDead(why) {
+    if (this.closed) return
+    this.closed = true; this.deathWhy = why
+    for (const [, res] of this.pending) { try { res({ __closed: why }) } catch { /* ignore */ } }
+    this.pending.clear()
+  }
+
+  send(method, params = {}, timeoutMs = 30000) {
+    return new Promise((res, rej) => {
+      if (this.closed) { rej(new Error('CDP 连接已关闭（面板重载？）')); return }
       const id = ++this.id
-      this.pending.set(id, res)
-      this.ws.send(JSON.stringify({ id, method, params }))
+      const timer = setTimeout(() => {
+        if (this.pending.delete(id)) rej(new Error(`${method} 超时 ${timeoutMs}ms —— 面板可能重载了`))
+      }, timeoutMs)
+      this.pending.set(id, (m) => { clearTimeout(timer); res(m) })
+      try {
+        this.ws.send(JSON.stringify({ id, method, params }))
+      } catch (e) {
+        this.pending.delete(id); clearTimeout(timer); rej(e)
+      }
     })
   }
 
   async eval(expression) {
     const out = await this.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+    // ★ 断线时 send 会回一个 `{__closed}` 哨兵（不是 CDP 的 reply）⇒ 这里如实翻成异常。
+    if (out && out.__closed) throw new Error('CDP 断了：' + out.__closed)
     if (out.result?.exceptionDetails) {
       throw new Error('页面里抛错：' + JSON.stringify(out.result.exceptionDetails).slice(0, 300))
     }
@@ -85,15 +141,29 @@ class Cdp {
   close() { try { this.ws.close() } catch { /* ignore */ } }
 }
 
-/** 轮询 `/json/list`，找当前 Trae 面板那条 `type=page` 且 url 含 `workbench` 的目标。 */
+/**
+ * 轮询 `/json/list`，找当前 Trae 面板那条 `type=page` 的目标。
+ *
+ * ★★ 卡 218（2026-10-13 实测）：**新版 TRAE 的面板页不是 `workbench.html` 了**。
+ *   合并 TraeWork/TraeCode 之后的「Agent」界面，URL 是
+ *   `vscode-file://vscode-app/…/vs/code/electron-browser/**solo/solo-lite.html**` ——
+ *   原来写死 `includes('workbench')` ⇒ **一个都匹配不上**，直接报「连不上 CDP」，
+ *   而 `curl http://127.0.0.1:9333/json/version` **明明是通的**（主控当天实测）。
+ *   ⇒ 两代都认：`workbench`（老）**或** `solo-lite`（新）。
+ *   ★ 顺带实测：新界面里输入框类名 **`.chat-input-v2-input-box-editable` 一字没变**
+ *     （`Runtime.evaluate` 现读），所以下游那些选择器**不用跟着改**。
+ */
 async function findWorkbench(port, timeoutMs) {
   const t0 = Date.now()
+  const looksLikePanel = (t) =>
+    t.type === 'page' && t.webSocketDebuggerUrl &&
+    (String(t.url).includes('workbench') || String(t.url).includes('solo-lite'))
   while (Date.now() - t0 < timeoutMs) {
     try {
       const r = await fetch(`http://127.0.0.1:${port}/json/list`)
       if (r.ok) {
         const list = await r.json()
-        const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl && String(t.url).includes('workbench'))
+        const page = list.find(looksLikePanel)
         if (page) return page
       }
     } catch { /* 还没起来 */ }
@@ -110,9 +180,13 @@ function launchIde(port, workspace) {
   child.unref()
 }
 
-/** 连上 CDP：先找现成的口；找不到且允许拉起就拉 IDE 再轮询最多 60 秒。连不上返回 null。 */
-async function attach(port, { launch, workspace }) {
-  let page = await findWorkbench(port, 2000)
+/** 连上 CDP：先找现成的口；找不到且允许拉起就拉 IDE 再轮询最多 60 秒。连不上返回 null。
+ *
+ *  ★ 卡 218：`findMs` 可调 —— **重连**时面板刚重载，目标可能还没出现在 `/json/list`，
+ *    给 2 秒太短（第一次派卡就是这么"看着像连不上"）；重连走 15 秒。
+ */
+async function attach(port, { launch, workspace, findMs = 2000 }) {
+  let page = await findWorkbench(port, findMs)
   if (!page && launch) {
     if (!existsSync(IDE_PATH)) throw new Error(`找不到 IDE：${IDE_PATH}（可用 TF_TRAE_EXE 覆盖）`)
     launchIde(port, workspace)
@@ -120,9 +194,15 @@ async function attach(port, { launch, workspace }) {
   }
   if (!page) return null
   const ws = new WebSocket(page.webSocketDebuggerUrl)
+  // ★ 卡 218：这个 await 也必须**有条退路** —— 原来只挂 onopen/onerror，
+  //   而"连上又立刻被关"（面板正在重载）会让 onerror 永远不来 ⇒ 又是挂死。
+  //   ⇒ 加超时 + onclose 兜底，任何一条路都 settle。
   await new Promise((res, rej) => {
-    ws.onopen = res
-    ws.onerror = () => rej(new Error('WebSocket 连不上 ' + page.webSocketDebuggerUrl))
+    const timer = setTimeout(
+      () => rej(new Error('WebSocket 打开超时（面板在重载？） ' + page.webSocketDebuggerUrl)), 15000)
+    ws.onopen = () => { clearTimeout(timer); res() }
+    ws.onerror = () => { clearTimeout(timer); rej(new Error('WebSocket 连不上 ' + page.webSocketDebuggerUrl)) }
+    ws.onclose = () => { clearTimeout(timer); rej(new Error('WebSocket 打开即关（面板在重载？）')) }
   })
   const cdp = new Cdp(ws)
   ws.onmessage = (ev) => {
@@ -210,11 +290,15 @@ async function clickApproval(cdp) {
       return 3;
     };
     const cands = [];
-    for (const el of document.querySelectorAll('button, [role="button"], a, div, span')) {
+    // ★★ 卡 218（2026-10-13 实测）：**只扫真按钮**，而且**排除**输入区 / 会话列表 / 侧栏。
+    //   老写法扫 「button, [role=button], a, div, span」 且只要求"叶子 + 文案命中" ⇒
+    //   新版界面上的**快捷回复芯片**（div/span）会被当成授权按钮点掉。
+    for (const el of document.querySelectorAll('button, [role="button"], a')) {
       const t = (el.innerText || '').replace(/\\s+/g, '');
       if (!t || t.length >= 16) continue;
       if (el.children.length) continue;
       if (!RE.test(t) || DENY.test(t)) continue;
+      if (el.closest('.chat-input-v2-input-box-editable, .task-list-group-sortable-wrapper, [class*="task-list"]')) continue;
       const r = el.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) continue;
       const st = getComputedStyle(el);
@@ -283,6 +367,39 @@ async function cmdSend(argv) {
   }
 
   const startedAt = Date.now()
+  // ★★ 卡 218：断线重连的读数 —— 都落进 JSONL（断线**留痕**），最后进 stdout 那行。
+  let disconnects = 0
+  let reconnects = 0
+  let lost = false
+
+  /** 连接是活的就放行；判死了就**重解析 `/json/list` 找 `solo-lite` 目标并重连**。
+   *
+   *  返回 false = 这一拍连不上（由调用方累计 `lostStreak`，够数就明说「已失联」退 3）。
+   *  ★ 为什么不是"直接抛"：抛出去会带走 `main()`，回到"Node 内部警告"那条老路 ——
+   *    卡 218 的死法正是**进程死了、活还在跑**；这里坚持"每一拍都有结论"。
+   */
+  async function ensureCdp() {
+    if (!cdp.closed) return true
+    disconnects += 1
+    log({ ev: 'disconnect', why: cdp.deathWhy || '连接已关闭',
+          sec: Math.round((Date.now() - startedAt) / 1000) })
+    let fresh = null
+    try {
+      fresh = await attach(port, { launch: false, findMs: 15000 })
+    } catch (e) {
+      log({ ev: 'reconnect', ok: false, msg: e.message })
+      return false
+    }
+    if (!fresh) {
+      log({ ev: 'reconnect', ok: false, msg: '重解析 /json/list 没找到 solo-lite 目标' })
+      return false
+    }
+    cdp = fresh
+    reconnects += 1
+    log({ ev: 'reconnect', ok: true, sec: Math.round((Date.now() - startedAt) / 1000) })
+    return true
+  }
+
   try {
     log({ ev: 'connect', port })
 
@@ -290,10 +407,10 @@ async function cmdSend(argv) {
     const before = await readBalance(cdp)
     log({ ev: 'balance', value: before })
 
-    // 等输入框出现（面板可能还在渲染）。
+    // 等输入框出现（面板可能还在渲染/重载 —— 期间断线照样重连）。
     let ready = false
     while (Date.now() - startedAt < 30000) {
-      if (await focusInput(cdp)) { ready = true; break }
+      if (await ensureCdp() && await focusInput(cdp)) { ready = true; break }
       await sleep(1000)
     }
     if (!ready) {
@@ -305,30 +422,59 @@ async function cmdSend(argv) {
     // ★ 记发送前的 agent 轮次数：完成判据要求"出现了**新的** agent 轮次"，防被上一轮的「完成。」骗。
     const baseline = (await readAgents(cdp)).count
 
-    // 发送：insertText 打字 → Enter。
-    await cdp.send('Input.insertText', { text: prompt })
-    const enter = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, text: '\r' }
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...enter })
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...enter })
+    // 发送：insertText 打字 → Enter。★ 发指令这一刻断了**不重发**（会重复提问）—— 如实报错退 3。
+    try {
+      await cdp.send('Input.insertText', { text: prompt })
+      const enter = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, text: '\r' }
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...enter })
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...enter })
+    } catch (e) {
+      cdp.markDead('发指令时读页面失败：' + e.message)
+      log({ ev: 'error', msg: 'send failed（不重发，避免重复提问）: ' + e.message })
+      process.stderr.write(`[trae] 发指令失败（不重发）：${e.message}\n`)
+      return 3
+    }
     log({ ev: 'send', promptLen: prompt.length })
 
-    // 盯梢：每 3 秒自动点授权 + 判完成。
-    //  完成判据（★ 只看最后一条 agent 轮次 + 必须出现了**新**轮次）：
+    // 盯梢：每 3 秒自动点授权 + 判完成。每一拍都先 ensureCdp（断线 ⇒ 重连 ⇒ 接着判）。
+    //  完成判据（★ 只看最后一条 agent 轮次）：
     //   · 快路径：卡规格原文 `/任务耗时/`（本机实测不出现，保留以防别的版本有）；
-    //   · 实测定稿：新轮次 且 连续 2 拍 `!busy && sendDisabled===true`（生成中 send 键不带 disabled）。
+    //   · 实测定稿：新轮次 且 连续 2 拍 `!busy && sendDisabled===true`（生成中 send 键不带 disabled）；
+    //   · ★ 卡 218：**重连过之后**轮次数会被面板重载冲掉 ⇒ 不再要求"新轮次"，
+    //     改成"**非空回答** 且 连续 2 拍 `!busy && sendDisabled===true`"。
     let turns = 0
     let lastText = ''
     let done = false
     let idleStreak = 0
+    let lostStreak = 0
     while (true) {
       await sleep(3000)
       const sec = Math.round((Date.now() - startedAt) / 1000)
-      const label = await clickApproval(cdp)
+      if (!(await ensureCdp())) {
+        lostStreak += 1
+        if (lostStreak >= 6) {
+          lost = true
+          log({ ev: 'lost', sec, msg: '连不上面板（重解析 /json/list 也找不到 solo-lite 目标）' })
+          break
+        }
+        continue
+      }
+      lostStreak = 0
+      let label = null
+      let st = null
+      try {
+        label = await clickApproval(cdp)
+        st = await readAgents(cdp)
+      } catch (e) {
+        // 这一拍读挂了（超时 / 断线 / 页面抛错）—— 判死这条连接，下一拍走重连（**不当成功**）。
+        cdp.markDead('这一拍读页面失败：' + e.message)
+        log({ ev: 'poll-error', sec, msg: e.message })
+        continue
+      }
       if (label) log({ ev: 'approve', label })
-      const st = await readAgents(cdp)
       turns = st.count
       lastText = st.last || ''
-      const isNew = st.count > baseline
+      const isNew = reconnects > 0 ? lastText.length > 0 : st.count > baseline
       const idle = st.sendDisabled === true && !st.busy
       idleStreak = (isNew && idle) ? idleStreak + 1 : 0
       const isDone = isNew && (st.specDone || idleStreak >= 2)
@@ -337,15 +483,18 @@ async function cmdSend(argv) {
       if (Date.now() - startedAt > timeoutSec * 1000) break
     }
 
-    // 记账：收工读**后**一次；两次都落 log。
-    const after = await readBalance(cdp)
+    // 记账：收工读**后**一次；两次都落 log。（读不到就如实记 null，不是失败。）
+    let after = null
+    try { after = await readBalance(cdp) } catch { after = null }
     log({ ev: 'balance', before, after })
 
     writeFileSync(outPath, lastText, 'utf8')
     const sec = Math.round((Date.now() - startedAt) / 1000)
-    const reason = done ? 'done' : 'timeout'
-    log({ ev: 'done', sec, reason })
-    process.stdout.write(`[trae] ${done ? 'DONE' : 'TIMEOUT'} sec=${sec} turns=${turns} balance ${before}->${after} out=${outPath}\n`)
+    const reason = done ? 'done' : (lost ? 'lost' : 'timeout')
+    log({ ev: 'done', sec, reason, disconnects, reconnects, lost })
+    process.stdout.write(
+      `[trae] ${done ? 'DONE' : (lost ? 'LOST' : 'TIMEOUT')} sec=${sec} turns=${turns}`
+      + ` disconnect=${disconnects} reconnect=${reconnects} balance ${before}->${after} out=${outPath}\n`)
     return done ? 0 : 3
   } finally {
     cdp.close()
@@ -368,4 +517,11 @@ async function main() {
   process.exitCode = code
 }
 
-await main()
+// ★ 卡 218：顶层**显式兜底** —— 任何没接住的异常都变成一条**可读的失败** + 明确的退出码，
+//   而不是 `Warning: Detected unsettled top-level await … await main()`（第一次派卡就是这么死的：
+//   进程退出、面板里的活却还在跑）。`main()` 内部已把断线做成"每一拍都有结论"，
+//   这里只兜最后一层。
+await main().catch((e) => {
+  process.stderr.write(`[trae] 没跑成：${e && e.message ? e.message : e}\n`)
+  process.exitCode = 3
+})

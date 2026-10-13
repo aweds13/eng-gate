@@ -1737,89 +1737,283 @@ spec = "复盘/卡/卡217-契约保护.md"
 files = ["tools/contract_audit.py", "tests/test_contract_audit.py", "复盘/契约-判据对账.md", "复盘/卡/卡217-契约保护.md"]
 risk = "mid"
 status = "pending"
-
-# ★★ 卡 219~224（主控 2026-10-13 深夜，用户令「开始大规模派卡」）：计划里剩下的六项。
-#   ★ 域互不相交（除 224 与 215 同碰 tools/wb_dispatch.py ⇒ 给 depends）；批号 B-20261016。
-
-[[cards]]
-id = "219"
-task = "T-G333"
-title = "工作台「不建模」清单：把决定不做的写下来，并装一条判据"
-tree = ".wt/notmodel"
-spec = "复盘/卡/卡219-工作台不建模清单.md"
-files = [
-  "docs/工作台-不建模清单.md",
-  "tools/notmodel_audit.py",
-  "tests/test_notmodel_audit.py",
-]
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "220"
-task = "T-G334"
-title = "定时巡检：让「每日一批」自己跑，不靠人记（W8）"
-tree = ".wt/daily"
-spec = "复盘/卡/卡220-定时巡检让每日一批自己跑.md"
-files = [
-  "tools/wb_daily.py",
-  "tests/test_wb_daily.py",
-  "docs/定时巡检.md",
-]
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "221"
-task = "T-G335"
-title = "全局面板：把看板接进 DSH 的全局座位（W3-3）"
-tree = ".wt/panel"
-spec = "复盘/卡/卡221-全局面板.md"
-files = [
-  "tools/dsh_panel.py",
-  "tests/test_dsh_panel.py",
-  "docs/全局面板.md",
-]
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "222"
-task = "T-G336"
-title = "timeflow 收件箱：从 DSH 里看见待办（W4）"
-tree = ".wt/inbox"
-spec = "复盘/卡/卡222-timeflow收件箱.md"
-files = [
-  "tools/timeflow_inbox.py",
-  "tests/test_timeflow_inbox.py",
-]
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "223"
-task = "T-G337"
-title = "禅道桥第二半：自写迭代甘特（W5）"
-tree = ".wt/gantt"
-spec = "复盘/卡/卡223-禅道迭代甘特.md"
-files = [
-  "tools/zentao_gantt.py",
-  "tests/test_zentao_gantt.py",
-]
-risk = "mid"
-status = "pending"
-
-[[cards]]
-id = "224"
-task = "T-G338"
-title = "workbench_bridge：把工作台状态注入给工人（一套真源）"
-tree = ".wt/wbridge"
-spec = "复盘/卡/卡224-工作台状态注入.md"
-files = [
-  "tools/workbench_bridge.py",
-  "tools/wb_dispatch.py",
-  "tests/test_workbench_bridge.py",
-]
-risk = "mid"
-status = "pending"
-depends = ["215"]
+
+
+# ★★ 卡 219~224（主控 2026-10-13 深夜，用户令「开始大规模派卡」）：计划里剩下的六项。
+
+#   ★ 域互不相交（除 224 与 215 同碰 tools/wb_dispatch.py ⇒ 给 depends）；批号 B-20261016。
+
+
+
+[[cards]]
+
+id = "219"
+
+task = "T-G333"
+
+title = "工作台「不建模」清单：把决定不做的写下来，并装一条判据"
+
+tree = ".wt/notmodel"
+
+spec = "复盘/卡/卡219-工作台不建模清单.md"
+
+files = [
+
+  "docs/工作台-不建模清单.md",
+
+  "tools/notmodel_audit.py",
+
+  "tests/test_notmodel_audit.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+
+
+[[cards]]
+
+id = "220"
+
+task = "T-G334"
+
+title = "定时巡检：让「每日一批」自己跑，不靠人记（W8）"
+
+tree = ".wt/daily"
+
+spec = "复盘/卡/卡220-定时巡检让每日一批自己跑.md"
+
+files = [
+
+  "tools/wb_daily.py",
+
+  "tests/test_wb_daily.py",
+
+  "docs/定时巡检.md",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+
+
+[[cards]]
+
+id = "221"
+
+task = "T-G335"
+
+title = "全局面板：把看板接进 DSH 的全局座位（W3-3）"
+
+tree = ".wt/panel"
+
+spec = "复盘/卡/卡221-全局面板.md"
+
+files = [
+
+  "tools/dsh_panel.py",
+
+  "tests/test_dsh_panel.py",
+
+  "docs/全局面板.md",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+
+
+[[cards]]
+
+id = "222"
+
+task = "T-G336"
+
+title = "timeflow 收件箱：从 DSH 里看见待办（W4）"
+
+tree = ".wt/inbox"
+
+spec = "复盘/卡/卡222-timeflow收件箱.md"
+
+files = [
+
+  "tools/timeflow_inbox.py",
+
+  "tests/test_timeflow_inbox.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+
+
+[[cards]]
+
+id = "223"
+
+task = "T-G337"
+
+title = "禅道桥第二半：自写迭代甘特（W5）"
+
+tree = ".wt/gantt"
+
+spec = "复盘/卡/卡223-禅道迭代甘特.md"
+
+files = [
+
+  "tools/zentao_gantt.py",
+
+  "tests/test_zentao_gantt.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+
+
+[[cards]]
+
+id = "224"
+
+task = "T-G338"
+
+title = "workbench_bridge：把工作台状态注入给工人（一套真源）"
+
+tree = ".wt/wbridge"
+
+spec = "复盘/卡/卡224-工作台状态注入.md"
+
+files = [
+
+  "tools/workbench_bridge.py",
+
+  "tools/wb_dispatch.py",
+
+  "tests/test_workbench_bridge.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = ["215"]
+
+
+[[cards]]
+
+id = "225"
+
+task = "T-G341"
+
+title = "收口链的成员映射：按 [member].paths 只取声明域"
+
+tree = ".wt/integrate"
+
+spec = "复盘/卡/卡225-成员映射按声明域.md"
+
+files = [
+
+  "tools/pool/landing.py",
+
+  "tests/test_wb_land.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = ["212"]
+
+[[cards]]
+
+id = "226"
+
+task = "T-G342"
+
+title = "收口链先跑快门禁预检：秒级失败别烧全量"
+
+tree = ".wt/fastpre"
+
+spec = "复盘/卡/卡226-收口链快预检.md"
+
+files = [
+
+  "tools/wb_land.py",
+
+  "tests/test_wb_land_cli.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = []
+
+[[cards]]
+
+id = "227"
+
+task = "T-G343"
+
+title = "trae_pool.mjs 的 --target：一次驱动多个 Trae 窗口"
+
+tree = ".wt/traetarget"
+
+spec = "复盘/卡/卡227-Trae多窗口target.md"
+
+files = [
+
+  "tools/trae_pool.mjs",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = ['218']
+
+[[cards]]
+
+id = "218"
+
+task = "T-G331"
+
+title = "Trae 接成第三条道（CDP 驱动 Agent 面板 + 多会话并行）"
+
+tree = ".wt/traecli"
+
+spec = "复盘/卡/卡218-Trae接成第三条道.md"
+
+files = [
+
+  "tools/trae_pool.mjs",
+
+  ".trae/mcp.json",
+
+  "tools/pool/trae_dispatch.py",
+
+  "tests/test_trae_dispatch.py",
+
+  "复盘/Trae-接入结论.md",
+
+]
+
+risk = "mid"
+
+status = "done"
+
+depends = []
