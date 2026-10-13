@@ -1,0 +1,13 @@
+[entries."T-G315"]
+id = "T-G315"
+title = "登记卡 207 一份读数 / 208 指标装牙 / 209 skill 层加严"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡207-一份读数.md",
+  "file:复盘/卡/卡208-指标防近视装牙.md",
+  "file:复盘/卡/卡209-skill层加严.md",
+]
+gaps = "① ★ **本笔只登记，207 / 208 / 209 都还没派活**（队列里如实记 `pending`）。指针：`复盘/卡/卡207-一份读数.md`。② ★★ **换掉了主控上一轮提的两张**：原计划的「⑧ 复核的派生物噪声」与「队列登记漏 193/194/195/196」都要改 `tools/pool/landing.py` 与 `tools/wb_plan.py`，而那**正是正在跑的卡 204 的域** ⇒ 派了会被 `wb_plan check` 拒。它们排到 204 落地之后那批。指针：`tools/wb_plan.py`。③ ★ **`harness/` 另外三份复制体的等价仍没有判据**（卡 205 只在 `render_dispatch` 那一处装了牙，它自己在文书里如实留了这条白）。指针：`harness/README.md`。④ ★ **三条预声明的头两版写坏了**：`why` 里用了 ASCII 双引号 ⇒ TOML 基本串解析不了（本仓 `scripts/check_toml.py` 的注释里写着「这条坑已踩 8 次」）。已重写成 `『』`。指针：`scripts/check_toml.py`。"
+

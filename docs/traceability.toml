@@ -6249,3 +6249,16 @@ evidence = [
   "file:tests/test_dsh_skills_link.py",
 ]
 gaps = "① ★★ **junction 能不能被 DSH 的运行时 / watcher 读到 —— 没验到**：工人用 Node 复刻了 DSH 的 `nodeEntryKind` 逻辑、在本机真 junction 上确认「Node 把它报成 symlink → DSH 的 `isSymbolicLink` 分支 `stat` 跟随 → 分类成 `directory` 并读到 `skills/pipe-card/SKILL.md`」；★ 但**没验**两件：① 真实宿主走 Node 路径还是沙箱 `ctx.fs`；② **watcher（`fs.watch` / `canonicalizeWatchPath`）跟不跟随**。⇒ 口径：**junction 本身好 = 本机实测；「DSH 一定读到」= 不知道**。指针：`tools/dsh_skills_link.py`。② ★ **卡规格里的「（干完要交成成送申请，见最后）」是悬空指针** —— 卡正文到「验收」就结束，**没有**「最后」一节（与卡 197 同一个毛病，是**我的模板问题**）。工人没自拟流程，如实问了。指针：`复盘/卡/卡206-项目级技能junction.md`。③ ★ **「★ 不要 commit」与通用规矩「小步提交」冲突** —— 工人按规格未提交并如实报了这条冲突；本笔由主控收口。指针：`tools/dsh_skills_link.py`。"
+
+[entries."T-G315"]
+id = "T-G315"
+title = "登记卡 207 一份读数 / 208 指标装牙 / 209 skill 层加严"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡207-一份读数.md",
+  "file:复盘/卡/卡208-指标防近视装牙.md",
+  "file:复盘/卡/卡209-skill层加严.md",
+]
+gaps = "① ★ **本笔只登记，207 / 208 / 209 都还没派活**（队列里如实记 `pending`）。指针：`复盘/卡/卡207-一份读数.md`。② ★★ **换掉了主控上一轮提的两张**：原计划的「⑧ 复核的派生物噪声」与「队列登记漏 193/194/195/196」都要改 `tools/pool/landing.py` 与 `tools/wb_plan.py`，而那**正是正在跑的卡 204 的域** ⇒ 派了会被 `wb_plan check` 拒。它们排到 204 落地之后那批。指针：`tools/wb_plan.py`。③ ★ **`harness/` 另外三份复制体的等价仍没有判据**（卡 205 只在 `render_dispatch` 那一处装了牙，它自己在文书里如实留了这条白）。指针：`harness/README.md`。④ ★ **三条预声明的头两版写坏了**：`why` 里用了 ASCII 双引号 ⇒ TOML 基本串解析不了（本仓 `scripts/check_toml.py` 的注释里写着「这条坑已踩 8 次」）。已重写成 `『』`。指针：`scripts/check_toml.py`。"

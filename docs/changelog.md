@@ -42,6 +42,12 @@
 - 新增 `tests/test_dsh_skills_link.py` **7 条**（含两条反例：挂上非技能目录 ⇒ 红；指错 ⇒ 不许静默重建）。
 - ★ 真读数：本机建出 **5 个真 Junction**（`LinkType=Junction`、目标正确）；`skills/README.md` / `skills/GLUE-harness.md` / `nails` **一个都没挂**；`pytest` **7 passed**；`ruff` 全过。
 - ★ 边界如实：DSH 的 **watcher 跟不跟随 junction 未实测**（Node 侧复刻的读数是「认它是目录并读到 `skills/pipe-card/SKILL.md`」，宿主走哪条 fs 路径没验）。
+## 2026-10-13 —— 登记卡 207 一份读数 / 208 指标装牙 / 209 skill 层加严（T-G315）
+- `docs/workbacklog.toml`：新增 207（`T-G316`）/ 208（`T-G317`）/ 209（`T-G318`）+ 三条预声明（已 register）；三条域互不相交，且**都与在跑的卡 204 不撞**。
+- **207** = 方案 W2「一份读数」：新 `tools/pipeline_view.py` 把六块（卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树）收成**一份**只读读数，缺什么说什么、幂等。
+- **208** = 关掉卡 202 自己留的白：把 `proxy_audit` 接进 `run_gates` 的 `FAST` 层，并把写死的门数改成**现读**。
+- **209** = 用户笔记的三条落成机器判据：长度上限 120 行 · 流程小节 ≤3 · **验收口径必须指向真脚本** · 五份人类理解版（NOTES.md）。
+- ★ 第一手：`wb_plan.py check` 退 0（**91 张卡 / 待派 6**、无冲突）。
 ## 2026-10-12 —— 旧判决归档不再静默失败：唯一时间戳名 + `(moved, failed)` 出声（T-G256 / 卡 156）
 - `tools/wb_dispatch.py`：目标已存在 ⇒ **带时间戳的唯一名**（Windows 上 rename 撞已存在会抛 `FileExistsError`，旧写法静默吞 ⇒ 第二次起归档全失败）；返回 `(moved, failed)`，调用点把失败打进 stderr。
 - `tests/test_wb_dispatch.py`：移植它的 **3 条归档钉子**。★ 与已落 164 重叠的那半**没有写第二份**。

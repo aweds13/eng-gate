@@ -1563,3 +1563,53 @@ files = [
 ]
 risk = "mid"
 status = "pending"
+
+# ★★ 卡 207 / 208 / 209（主控 2026-10-13 并行发出的第三批）。
+#   207 = 方案 W2「一份读数」：多个「面」之前必须先有一个只读读数器，否则同一件事各读各的、口径必漂。
+#   208 = 关掉卡 202 自己在文书里留的白（零件交了、没接门禁 ⇒ 5 条代理指标没人对账）。
+#   209 = 用户笔记《AI agent skill 的一些开发经验》的三条落成机器判据（长度 / 流程数 / 验收必须指向脚本 / 人类理解版）。
+#   ★ 与正在跑的 204 域互不相交（204 = landing.py + wb_plan.py + 两份测试）。
+#   ★ 上一轮我提的「⑧ 复核噪声」与「队列登记漏 193-196」都要改 landing.py / wb_plan.py ⇒ 与 204 撞域，排到 204 之后。
+[[cards]]
+id = "207"
+task = "T-G316"
+title = "一份读数：tools/pipeline_view.py（六块收成一份，缺什么说什么、幂等、只读）"
+tree = ".wt/pview"
+spec = "复盘/卡/卡207-一份读数.md"
+files = [
+  "tools/pipeline_view.py",
+  "tests/test_pipeline_view.py",
+  "复盘/卡/卡207-一份读数.md",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "208"
+task = "T-G317"
+title = "指标防近视装牙：proxy_audit 接进 run_gates，并把写死的门数改成现读"
+tree = ".wt/proxygate"
+spec = "复盘/卡/卡208-指标防近视装牙.md"
+files = [
+  "scripts/run_gates.py",
+  "tests/test_gates_reuse_line.py",
+  "tests/test_run_gates_proxy.py",
+  "复盘/卡/卡208-指标防近视装牙.md",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "209"
+task = "T-G318"
+title = "skill 层加严：长度上限 + 验收必须指向脚本 + 5 份人类理解版"
+tree = ".wt/skillnails"
+spec = "复盘/卡/卡209-skill层加严.md"
+files = [
+  "skills/nails/check_skills.py",
+  "skills/README.md",
+  "tests/test_check_skills.py",
+  "复盘/卡/卡209-skill层加严.md",
+]
+risk = "mid"
+status = "pending"
