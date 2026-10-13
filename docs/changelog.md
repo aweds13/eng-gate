@@ -18,6 +18,9 @@
 - ★ 真读数（租约标签三态）：卡树里不给 `--cwd` ⇒ **`.wt/dtree`**（老为 `''`）· 给主树 ⇒ `''`（**反例**）· 给卡树 ⇒ `.wt/dtree`。
 - ★ 端到端（桩 CLI）：从卡树里派一次 ⇒ 租约 `tree` **等于该卡树标签**；`pytest` 两份 **275 passed**（--no-cov）；`ruff` 全过。
 - ★ 现场对照：这一笔派活本身用的就是**对的形态** ⇒ 租约写着 `.wt/dtree`、产物落主仓（错形态是 `''` + 产物落卡树）。
+## 2026-10-13 —— 队列收尾：卡 203 落地后 status 转 done（T-G309 / 卡 203 的尾巴）
+- `docs/workbacklog.toml`：卡 203 `pending → done`（它的落地提交是 `e45267b`）。
+- ★ 第一手：`wb_plan.py check` 退 0，**待派 0 张 / 85 张全部有终态**（done 84 + failed 1）。
 ## 2026-10-12 —— 旧判决归档不再静默失败：唯一时间戳名 + `(moved, failed)` 出声（T-G256 / 卡 156）
 - `tools/wb_dispatch.py`：目标已存在 ⇒ **带时间戳的唯一名**（Windows 上 rename 撞已存在会抛 `FileExistsError`，旧写法静默吞 ⇒ 第二次起归档全失败）；返回 `(moved, failed)`，调用点把失败打进 stderr。
 - `tests/test_wb_dispatch.py`：移植它的 **3 条归档钉子**。★ 与已落 164 重叠的那半**没有写第二份**。

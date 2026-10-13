@@ -6192,3 +6192,13 @@ evidence = [
   "file:tests/test_wb_dispatch.py",
 ]
 gaps = "① ★★ **`harness/` 那份复制体没跟上**：`harness/wb_plan.py` 仍是老的 `pushd <树>` 写法 ⇒ **框架那条路**（别的项目按框架跑）拿到的仍是错形态。它在卡白名单之外，本卡未改。指针：`harness/wb_plan.py`。② ★ **`wb_plan.py cmd_dispatch --execute` 那条路仍 `cwd=<卡树>`**（会跑树里那份脚本）—— 卡规格明写「只改『印什么』」，故未动。指针：`tools/wb_plan.py`。③ ★ **选了「只提示、不拒跑」**：拒跑等于**新增一条守卫语义**（不在卡的改法里）；且 `ROOT` 被显式指到别处（测试沙箱 / 别的项目）是**合法调用**，拒跑会误伤。指针：`tools/wb_dispatch.py`。④ ★ **码道那条路的同一坑仍在**（在另一个仓）：它的 `--tree` 默认值被当「主树」 ⇒ 从卡树里跑照样误占主树。工人**现读确认**仍是原样。指针：`复盘/卡/卡203-派活树标签.md`。"
+
+[entries."T-G309"]
+id = "T-G309"
+title = "队列收尾：卡 203 落地后 status 转 done"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+]
+gaps = "① ★★ **「落地即翻 status」仍然没有机器判据** —— 这是**连续第二次**主控手工补（上一次是卡 201）：落地链不知道队列文件，`wb_plan check` 也不会因为「已落却仍 pending」而红。指针：`tools/wb_plan.py`。② ★ 本笔只补一行数据（卡 203 `pending → done`），**没治病**（gaps ①）。指针：`docs/workbacklog.toml`。"

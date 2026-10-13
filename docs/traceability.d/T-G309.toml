@@ -1,0 +1,10 @@
+[entries."T-G309"]
+id = "T-G309"
+title = "队列收尾：卡 203 落地后 status 转 done"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+]
+gaps = "① ★★ **「落地即翻 status」仍然没有机器判据** —— 这是**连续第二次**主控手工补（上一次是卡 201）：落地链不知道队列文件，`wb_plan check` 也不会因为「已落却仍 pending」而红。指针：`tools/wb_plan.py`。② ★ 本笔只补一行数据（卡 203 `pending → done`），**没治病**（gaps ①）。指针：`docs/workbacklog.toml`。"
+
