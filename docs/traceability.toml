@@ -6237,3 +6237,15 @@ evidence = [
   "file:tests/test_harness_manifest.py",
 ]
 gaps = "① ★ **只给 `render_dispatch` 装了牙**：另外三份复制体（`wb_state` / `wb_diag` / `wb_status`）与各自原件的等价**仍然没有判据**。指针：`harness/README.md`。② ★ **原件那条 `cmd_dispatch --execute` 的路仍跑树里那份脚本**（`cwd=<卡树>`）—— 卡 203 留下的白，本卡没动它。指针：`tools/wb_plan.py`。③ ★ **README 里「还没复制的 6 个重工具（下期清单）」那段没碰** —— 本卡只管已复制那 4 份的一致性。指针：`harness/README.md`。"
+
+[entries."T-G314"]
+id = "T-G314"
+title = "项目级技能 junction：一进这个项目技能就在"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_skills_link.py",
+  "file:.gitignore",
+  "file:tests/test_dsh_skills_link.py",
+]
+gaps = "① ★★ **junction 能不能被 DSH 的运行时 / watcher 读到 —— 没验到**：工人用 Node 复刻了 DSH 的 `nodeEntryKind` 逻辑、在本机真 junction 上确认「Node 把它报成 symlink → DSH 的 `isSymbolicLink` 分支 `stat` 跟随 → 分类成 `directory` 并读到 `skills/pipe-card/SKILL.md`」；★ 但**没验**两件：① 真实宿主走 Node 路径还是沙箱 `ctx.fs`；② **watcher（`fs.watch` / `canonicalizeWatchPath`）跟不跟随**。⇒ 口径：**junction 本身好 = 本机实测；「DSH 一定读到」= 不知道**。指针：`tools/dsh_skills_link.py`。② ★ **卡规格里的「（干完要交成成送申请，见最后）」是悬空指针** —— 卡正文到「验收」就结束，**没有**「最后」一节（与卡 197 同一个毛病，是**我的模板问题**）。工人没自拟流程，如实问了。指针：`复盘/卡/卡206-项目级技能junction.md`。③ ★ **「★ 不要 commit」与通用规矩「小步提交」冲突** —— 工人按规格未提交并如实报了这条冲突；本笔由主控收口。指针：`tools/dsh_skills_link.py`。"

@@ -36,6 +36,12 @@
 - `harness/README.md`：那句「复制体不依赖 `tools/`」**从"与实测不符"改成"真的成立"**，并写清它跑起来只需要 标准库 + `harness.toml` + `git`。
 - `tests/test_harness_manifest.py`：装 **4 条牙** —— 复制体与原件 `render_dispatch` **逐字相同** · 复制体不许 `pushd` 且必须带 `--cwd` · `--cwd` 是卡树绝对路径 · 复制体不 import `tools`。
 - ★ 真读数：复制体单独跑（sys.path **只挂 `harness/`**）**退 0** 并印出带 `--cwd` 的命令；两份输出逐字相同；`pytest tests/test_harness_manifest.py` **19 passed**；`ruff`（含 `harness/`）All checks passed。
+## 2026-10-13 —— 项目级技能 junction：一进这个项目技能就在（T-G314 / 卡 206）
+- 新增 `tools/dsh_skills_link.py`：把 `skills/` 下那 **5 个技能目录**各做成 `<项目>/.dsh/skills/<名>` 的 **junction**（指向真源、零副本、单向）；`--check` 点名「指错 / 缺失」；`--list` 人读；★ **幂等**，且已存在但**指向错 ⇒ 报错停下**（不许静默重建，那会抹掉"有人手工改过"）。
+- `.gitignore`：`.dsh/` 忽略（junction 是本机派生物）。
+- 新增 `tests/test_dsh_skills_link.py` **7 条**（含两条反例：挂上非技能目录 ⇒ 红；指错 ⇒ 不许静默重建）。
+- ★ 真读数：本机建出 **5 个真 Junction**（`LinkType=Junction`、目标正确）；`skills/README.md` / `skills/GLUE-harness.md` / `nails` **一个都没挂**；`pytest` **7 passed**；`ruff` 全过。
+- ★ 边界如实：DSH 的 **watcher 跟不跟随 junction 未实测**（Node 侧复刻的读数是「认它是目录并读到 `skills/pipe-card/SKILL.md`」，宿主走哪条 fs 路径没验）。
 ## 2026-10-12 —— 旧判决归档不再静默失败：唯一时间戳名 + `(moved, failed)` 出声（T-G256 / 卡 156）
 - `tools/wb_dispatch.py`：目标已存在 ⇒ **带时间戳的唯一名**（Windows 上 rename 撞已存在会抛 `FileExistsError`，旧写法静默吞 ⇒ 第二次起归档全失败）；返回 `(moved, failed)`，调用点把失败打进 stderr。
 - `tests/test_wb_dispatch.py`：移植它的 **3 条归档钉子**。★ 与已落 164 重叠的那半**没有写第二份**。

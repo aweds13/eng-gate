@@ -97,3 +97,7 @@ node_modules/
 
 # 号池 CLI（infra/pool 派活）在自己跑过的树里留下的状态目录 —— 不是项目产物
 .codeartsdoer/
+
+# 项目级技能 junction（卡 206）：`tools/dsh_skills_link.py` 在 `.dsh/skills/<名>` 建的
+# 目录联接是本机派生物（真源仍在 `skills/`，入库、被钉子扫）——整目录不入版本管理。
+.dsh/
