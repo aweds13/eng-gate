@@ -6202,3 +6202,14 @@ evidence = [
   "file:docs/workbacklog.toml",
 ]
 gaps = "① ★★ **「落地即翻 status」仍然没有机器判据** —— 这是**连续第二次**主控手工补（上一次是卡 201）：落地链不知道队列文件，`wb_plan check` 也不会因为「已落却仍 pending」而红。指针：`tools/wb_plan.py`。② ★ 本笔只补一行数据（卡 203 `pending → done`），**没治病**（gaps ①）。指针：`docs/workbacklog.toml`。"
+
+[entries."T-G310"]
+id = "T-G310"
+title = "登记卡 204：落地即翻 status"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡204-落地即翻状态.md",
+]
+gaps = "① ★ **本笔只登记，卡 204 还没派活**（队列里如实记 `pending`）。指针：`复盘/卡/卡204-落地即翻状态.md`。② ★ **`harness/` 那份复制体仍没跟上**：`harness/wb_plan.py` 还是卡 203 之前的 `pushd` 形态 —— 那是上一张卡留下的留白，本笔不动它。指针：`harness/wb_plan.py`。③ ★ **队列里 193/194/195/196 仍没有条目**（已落地却没条目 ⇒ 没有 status 可改）。本笔没替它们补。指针：`docs/workbacklog.toml`。"

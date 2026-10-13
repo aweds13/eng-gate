@@ -1503,3 +1503,24 @@ files = [
 ]
 risk = "mid"
 status = "done"
+
+# ★★ 卡 204（主控 2026-10-13 一晚手工补了两次同一行之后）：卡 201 落地后队列里还挂 running（59e1d0f，
+#   主控另开 T-G306 才翻正）、卡 203 落地后还挂 pending（e45267b，主控另开 T-G309 才翻正）—— 判据缺着。
+#   ★ 安全边界：**不能只看 --card** —— 登记/收尾提交也用 --card <号>（现场：登记卡 203 那笔是
+#     --card 203 --task T-G307，而卡的号是 T-G308）⇒ 只看 --card 会把还没干的卡标成 done。
+#     判据是「--task == 队列里该卡的 task」。
+[[cards]]
+id = "204"
+task = "T-G311"
+title = "落地即翻 status：收口链自己翻 + 一条判据（已落却仍 pending）"
+tree = ".wt/statusflip"
+spec = "复盘/卡/卡204-落地即翻状态.md"
+files = [
+  "tools/pool/landing.py",
+  "tools/wb_plan.py",
+  "tests/test_wb_land.py",
+  "tests/test_wb_plan.py",
+  "复盘/卡/卡204-落地即翻状态.md",
+]
+risk = "mid"
+status = "pending"

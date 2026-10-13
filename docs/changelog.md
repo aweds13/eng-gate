@@ -21,6 +21,10 @@
 ## 2026-10-13 —— 队列收尾：卡 203 落地后 status 转 done（T-G309 / 卡 203 的尾巴）
 - `docs/workbacklog.toml`：卡 203 `pending → done`（它的落地提交是 `e45267b`）。
 - ★ 第一手：`wb_plan.py check` 退 0，**待派 0 张 / 85 张全部有终态**（done 84 + failed 1）。
+## 2026-10-13 —— 登记卡 204：落地即翻 status（T-G310）
+- `docs/workbacklog.toml`：新增 204（**卡号 `T-G311`**，本条登记是 `T-G310`）+ 预声明 `B-STATUSFLIP`（已 register）；域 = `landing.py` / `wb_plan.py` / 两份测试。
+- `复盘/卡/卡204-落地即翻状态.md` 入库；把**安全边界**钉死：**不能只看 `--card`**（本仓登记/收尾提交也用它）⇒ 判据是「`--task` == 队列里该卡的 `task`」。
+- ★ 第一手：`wb_plan.py check` 退 0（86 张卡 / 待派 1）；现场两笔手工补（卡 201 的 `T-G306`、卡 203 的 `T-G309`）带 sha 写进卡规格。
 ## 2026-10-12 —— 旧判决归档不再静默失败：唯一时间戳名 + `(moved, failed)` 出声（T-G256 / 卡 156）
 - `tools/wb_dispatch.py`：目标已存在 ⇒ **带时间戳的唯一名**（Windows 上 rename 撞已存在会抛 `FileExistsError`，旧写法静默吞 ⇒ 第二次起归档全失败）；返回 `(moved, failed)`，调用点把失败打进 stderr。
 - `tests/test_wb_dispatch.py`：移植它的 **3 条归档钉子**。★ 与已落 164 重叠的那半**没有写第二份**。
