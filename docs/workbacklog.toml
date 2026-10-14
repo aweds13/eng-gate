@@ -2335,3 +2335,55 @@ risk = "high"
 status = "done"
 
 depends = ["238"]
+
+[[cards]]
+
+id = "240"
+
+task = "T-G358"
+
+title = "DSH 面板三座位 + 宿主到浏览器的只读缝（左栏点开即看）"
+
+tree = ".wt/panel3"
+
+spec = "复盘/卡/卡240-面板三座位.md"
+
+files = [
+
+  "tools/dsh_panel.py",
+
+  "tests/test_dsh_panel.py",
+
+]
+
+risk = "high"
+
+status = "done"
+
+depends = []
+
+[[cards]]
+
+id = "241"
+
+task = "T-G359"
+
+title = "一起起、分别停：tools/stack.py + 桌面 start-all.cmd"
+
+tree = ".wt/stackone"
+
+spec = "复盘/卡/卡241-起停栈.md"
+
+files = [
+
+  "tools/stack.py",
+
+  "tests/test_stack.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = []

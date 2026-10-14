@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -186,3 +187,125 @@ def test_board_reads_a_fixture_repo(tmp_path: Path) -> None:
     assert isinstance(reading["cards"], list) and len(reading["cards"]) == 1
     assert reading["cards_reviewed"] == "deadbeef"
     assert reading["cards"][0]["id"] == "001"
+
+
+# ================================================================== 卡 240 · T-G358
+# 三座位（main key = sidebar.panellist 行 id）+ 宿主→浏览器那条只读缝（只 GET）。
+# ★ 每条都配反例（故意坏掉 ⇒ 判据必须咬）。
+
+
+def _parse_seat_lists(client: str) -> tuple[list[str], list[str]]:
+    """从浏览器半源码里**独立**抽出两个列表：`main` 座 key、`sidebar.panellist` 行 id。
+
+    ★ 故意不调 `dp._client_seat_lists`（那是被测对象自己的解析器）—— 判据要能独立复核。
+    """
+    def norm(value: str) -> str:
+        return dp.PANEL_ID if value == "PANEL_ID" else value.strip('"')
+
+    mains = [norm(m) for m in re.findall(r'name: "main",\s*key: (PANEL_ID|"[^"]+")', client)]
+    rows = [
+        norm(m)
+        for m in re.findall(r'name: "sidebar\.panellist",\s*id: (PANEL_ID|"[^"]+")', client)
+    ]
+    return mains, rows
+
+
+# ------------------------------------------------------------ 9. ★ 三座位的 key 与行 id 逐项一致
+
+
+def test_client_main_keys_equal_sidebar_row_ids(tmp_path: Path) -> None:
+    """★ 三个座位：`main` 座 key 与 `sidebar.panellist` 行 id **逐项一致**（不手抄）。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    mains, rows = _parse_seat_lists(client)
+    assert mains == rows, (mains, rows)
+    assert mains == list(dp.SEAT_KEYS), mains
+    assert len(mains) == 3
+
+
+def test_seat_consistency_check_bites_when_row_id_drifts() -> None:
+    """★ 反例：行 id 与 main key 错位 ⇒ `check` 必须红（用户点行就打不开面板）。"""
+    broken = dp.CLIENT_JS.replace('id: PANEL_ID', 'id: "workbench_board_x"')
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("座位" in p for p in problems), problems
+
+
+# ------------------------------------------------------------ 10. ★ 只读缝三条路由只 GET
+
+
+def test_seam_routes_are_get_only(tmp_path: Path) -> None:
+    """★ 三条只读缝路由：只 GET、写方法一个不许出现、三条路径都在宿主半。"""
+    dp.emit(tmp_path)
+    host = (tmp_path / dp.HOST_REL).read_text(encoding="utf-8")
+    assert 'req.method !== "GET"' in host
+    for verb in ("POST", "PUT", "DELETE", "PATCH"):
+        assert f'"{verb}"' not in host, verb
+    assert len(dp.ROUTE_PATHS) == 3
+    for seat in dp.SEATS:
+        assert seat.route in host
+
+
+def test_seam_uses_prefix_kind_and_registers_three_tools() -> None:
+    """★ 只读缝按 `kind: "prefix"` 注册；三个会话内只读工具都注册了。"""
+    host = dp.HOST_JS
+    assert dp.SEAM_PREFIX == "/dsh-panel"
+    assert 'kind: "prefix"' in host
+    assert "webServer.register" in host
+    for seat in dp.SEATS:
+        assert f'name: "{seat.key}"' in host
+
+
+def test_get_only_check_bites_when_guard_removed() -> None:
+    """★ 反例：拿掉只 GET 守卫 ⇒ `check` 必须红。"""
+    broken = dp.HOST_JS.replace('req.method !== "GET"', 'req.method === "n/a"')
+    assert broken != dp.HOST_JS
+    problems = dp.check(host_js=broken)
+    assert any("只 GET" in p for p in problems), problems
+
+
+# ------------------------------------------------------------ 11. ★ 缺数据 ⇒ ok:false
+
+
+def test_read_source_missing_tool_is_ok_false(tmp_path: Path) -> None:
+    """★ 缺数据：造一个「工具不在」的目录 ⇒ `read_source` 回 `ok:false` + 原话，绝不返空。"""
+    for seat in dp.SEATS:
+        result = dp.read_source(seat.key, tmp_path)
+        assert result["ok"] is False, (seat.key, result)
+        assert "数据源缺失" in result["error"], result
+        assert "reading" not in result
+
+
+# ------------------------------------------------------------ 12. ★ 复用 FORBIDDEN_WRITE_TOKENS
+
+
+@pytest.mark.parametrize("token", dp.FORBIDDEN_WRITE_TOKENS)
+def test_forbidden_write_tokens_bite_in_host(token: str) -> None:
+    """★ 反例：宿主半塞任一越界词 ⇒ `check` 必须红并点名那个词。"""
+    problems = dp.check(host_js=dp.HOST_JS + f'\nconst evil = "{token}";\n')
+    assert any("只读" in p and token in p for p in problems), problems
+
+
+@pytest.mark.parametrize("token", dp.FORBIDDEN_WRITE_TOKENS)
+def test_forbidden_write_tokens_bite_in_client(token: str) -> None:
+    """★ 反例：浏览器半塞任一越界词 ⇒ `check` 必须红并点名那个词。"""
+    problems = dp.check(client_js=dp.CLIENT_JS + f'\nconst evil = "{token}";\n')
+    assert any("只读" in p and token in p for p in problems), problems
+
+
+# ------------------------------------------------------------ 13. ★ 装法必须 file: 且不许 link:
+
+
+def test_install_doc_requires_file_and_names_link_forbidden() -> None:
+    """★ 说明必须写 `file:`，并写明**不许 `link:`**（link: ⇒ ERR_MODULE_NOT_FOUND）。"""
+    doc = dp.INSTALL_DOC
+    assert "file:" in doc
+    assert "link:" in doc
+    assert "不许" in doc
+    assert "ERR_MODULE_NOT_FOUND" in doc
+
+
+def test_doc_check_bites_when_file_scheme_missing() -> None:
+    """★ 反例：拿掉 `file:` ⇒ `check` 必须红。"""
+    problems = dp.check(doc=dp.INSTALL_DOC.replace("file:", "scheme:"))
+    assert any("file:" in p for p in problems), problems

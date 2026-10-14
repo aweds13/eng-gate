@@ -6570,3 +6570,14 @@ evidence = [
   "file:tests/test_wb_land.py",
 ]
 gaps = "① ★ **本笔是 228 的补完**（卡 237 判为 A：228 没改完 ✗）：失败原话 `problems` 差在 `[gate_lock_calls.log, gate_ran.marker, lock.marker]` —— 都是**跑门禁时生成、提交装不下**的产物 ✗ ⇒ 封存树与「提交去 gates/** 的树」**不可比**。本笔把两边做成可比。指针：`tools/pool/landing.py`。② ★ **那条 e2e 未删未降级**（它是 228 自己装的 ✓，钉的正是「完整链跑完复核必须 `problems == []`」 ✓）—— 本笔让它**真绿**，不是让它消失 ✓。指针：`tests/test_wb_land.py`。③ ★ **反向判据证明没放水**：`test_tamper_after_seal_review_red_e2e`（封存后改**被跟踪**文件 ⇒ 复核**必须**报「封存树 vs 提交树」✓）；★ 238 的⑨核验行为**逐字保留** ✓。指针：`tests/test_wb_land.py`。"
+
+[entries."T-G358"]
+id = "T-G358"
+title = "面板三座位：工作台看板 / 禅道迭代甘特 / timeflow 待办 + 宿主到浏览器的只读缝"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+]
+gaps = "① ★ 面板从「一个座位」扩成**三个座位**（工作台看板 / 禅道迭代甘特 / timeflow 待办）：座位表**唯一真源**是本文件的 `SEATS` —— `main` key、左栏行 id、会话内工具名三者同源，不再手抄。指针：`tools/dsh_panel.py`。② ★ 补上**宿主→浏览器那条只读缝**：一条 `/dsh-panel` 前缀路由（只 GET、只读、不写盘、不起工人），三条 URL 分别回三份只读工具的 JSON；缺数据一律回 `{ ok:false, error:<原话> }`，绝不用空数据冒充成功。指针：`tools/dsh_panel.py`。③ ★ `kind` 取值**有源码依据**（不是猜）：`@deepseek-ai/dsh-host-webserver` 里明写 `route.kind === 「exact」 ? exact : prefixes` ⇒ 取 `prefix`；注册形状照 `@deepseek-ai/dsh-client-modules` 注册 `/plugins` 那一段。指针：`tools/dsh_panel.py`。"
