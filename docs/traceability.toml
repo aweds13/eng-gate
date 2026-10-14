@@ -6548,3 +6548,14 @@ evidence = [
   "file:复盘/卡/卡237-228与234冲突.md",
 ]
 gaps = "① ★★ **本笔纠正了主控的前提**：那条失败 e2e（`test_full_chain_review_green_e2e`）**不是卡 234 装的，是卡 228 自己装的** ⇒ 「228 vs 234 相争」**不成立**，「B（234 钉错了）」**无所指** ⇒ 结论是 **A：228 没改完**（它要的正是它自己那条 `problems == []`）。指针：`tests/test_wb_land.py`。② ★ **失败原话给了方向**：把 228 的两件产物拷进来后 `problems` 差在这些路径 —— `['gate_lock_calls.log', 'gate_ran.marker', 'lock.marker']` ⇒ **封存树 vs 提交树的差异跑到「门禁产物」上去了**（228 的修只治了一半：它把翻账挪到封存前 ✓，但**门禁产物本身**仍会让两边不一致 ✗）。指针：`tools/pool/landing.py`。③ ★ **本笔只做诊断与纠偏，不动 228**：修 228 是**另一笔**（它的域 = 228 的两件产物 ⇒ 与新卡串批 ✓）。指针：`复盘/卡/卡228-封存后才翻status.md`。"
+
+[entries."T-G356"]
+id = "T-G356"
+title = "⑨ 推栅栏盖章前必须核验：产物真在那笔提交里吗"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "file:tests/test_wb_land.py",
+]
+gaps = "① ★★ **现象（机制自己制造的假账）**：`B-20261017`/`B-20261018`/`B-20261026` 三笔被标 landed ✗，而 225 的活**不在主仓** ✗；推栅栏的原话引的是 **236** 的提交号 ✗ ⇒ ⑨ 按「成员都交了申请」就盖章、**没核验产物真在那笔提交里**。指针：`tools/pool/landing.py`。② ★ **改法**：盖章前取 `[[member]].paths ∩ git show --name-only <sha>` ⇒ **空就拒盖章并点名** ✗；声明域为空 ⇒ 如实说「无法核验」、**不盖章**（宁缺勿假 ✓）。指针：`tools/pool/landing.py`。③ ★ **反向判据（本卡核心）**：一笔**不带**某成员产物的提交 ⇒ ⑨ **不许**把它标 landed（断言盖章函数被调用 **0 次** + 点名里有那个成员）；产物真在 ⇒ 照旧盖章（既有行为不变 ✓）。指针：`tests/test_wb_land.py`。"

@@ -308,136 +308,6 @@ print(json.dumps({"rev": "HEAD", "problems": [
 sys.exit(1)
 """
 
-#: ★ 卡 228 e2e 门禁桩：④ 假跑门禁（写**真模样**的 last.json：ok/rev=HEAD/docs_sync_ok/
-#:   gates 与本桩 build_jobs 一致 —— wb_review ③′ 现读的就是这份），`--seal` 时用
-#:   **真 run_gates 的算法**（`tree_without_gates` / `TREE_SCOPE`，importlib 按路径加载，
-#:   ★ 不造第二份指纹实现）在 cwd（=.pen 卡树）上重算封存指纹。
-#:   不能直接转发 `python <真卡树>/scripts/run_gates.py --seal`：真模块的 ROOT 绑定
-#:   `__file__` 所在树，会把指纹算到卡树自己头上。
-_RUN_GATES_E2E = '''import importlib.util, json, pathlib, subprocess, sys
-
-REAL = r"{real}"
-_spec = importlib.util.spec_from_file_location("_real_run_gates", REAL)
-_real = importlib.util.module_from_spec(_spec)
-sys.modules[_spec.name] = _real  # ★ 先注册再 exec：真模块里有 dataclass，解析时要查 sys.modules
-_spec.loader.exec_module(_real)
-
-
-def build_jobs(quick, fast):
-    return [("pytest", [])]
-
-
-# ★ wb_review ③″ 复算「提交树去 gates/**」现读的就是本桩的这两个名字 —— re-export
-#   真实现（不造第二份）：复核与封存用同一套切法，判据才对得上。
-tree_without_gates = _real.tree_without_gates
-TREE_SCOPE = _real.TREE_SCOPE
-
-
-def _seal():
-    last = pathlib.Path("gates") / "last.json"
-    payload = json.loads(last.read_text(encoding="utf-8"))
-    payload["tree"] = _real.tree_without_gates(
-        pathlib.Path.cwd(), "HEAD", include_worktree=True)
-    payload["tree_scope"] = _real.TREE_SCOPE
-    payload["sealed_at"] = "stub"
-    last.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("[seal-stub] tree =", (payload["tree"] or "?")[:12])
-
-
-def _main():
-    args = sys.argv[1:]
-    pathlib.Path("gate_ran.marker").write_text("ran", encoding="utf-8")
-    if "--seal" in args:
-        _seal()
-        sys.exit(0)
-    rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
-                         capture_output=True, text=True).stdout.strip()
-    payload = {{"ok": True, "rev": rev, "docs_sync_ok": True, "docs_sync_missing": [],
-               "gates": [{{"name": n, "exit_code": 0}}
-                         for n, _ in build_jobs(False, False)],
-               "tree_scope": _real.TREE_SCOPE}}
-    last = pathlib.Path("gates") / "last.json"
-    last.parent.mkdir(exist_ok=True)
-    last.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("stub-run_gates-e2e")
-    sys.exit(0)
-
-
-if __name__ == "__main__":
-    _main()
-'''
-
-#: ★ 卡 228 先红钉：同上，但**第二次 `--seal` 之后**模拟「封存之后还有人改被跟踪文件」
-#:   （卡 218 现场：⑤ 封存先算指纹、⑥ 提交前翻 status）—— 翻完还 `git add` 进提交
-#:   ⇒ 提交树 ≠ 封存树 ⇒ 复核**必须**报「封存树 vs 提交树」（判据不许删/不许降级）。
-_RUN_GATES_E2E_TAMPER = '''import importlib.util, json, pathlib, subprocess, sys
-
-REAL = r"{real}"
-_spec = importlib.util.spec_from_file_location("_real_run_gates", REAL)
-_real = importlib.util.module_from_spec(_spec)
-sys.modules[_spec.name] = _real  # ★ 先注册再 exec：真模块里有 dataclass，解析时要查 sys.modules
-_spec.loader.exec_module(_real)
-
-
-def build_jobs(quick, fast):
-    return [("pytest", [])]
-
-
-# ★ 同 E2E 桩：wb_review ③″ 复算读的是本桩模块级这两个名字 —— re-export 真实现，
-#   红钉才是「真比对出来的不等」，不是「复算失败拿不准不放过」那种假红。
-tree_without_gates = _real.tree_without_gates
-TREE_SCOPE = _real.TREE_SCOPE
-
-
-def _seal():
-    last = pathlib.Path("gates") / "last.json"
-    payload = json.loads(last.read_text(encoding="utf-8"))
-    payload["tree"] = _real.tree_without_gates(
-        pathlib.Path.cwd(), "HEAD", include_worktree=True)
-    payload["tree_scope"] = _real.TREE_SCOPE
-    payload["sealed_at"] = "stub"
-    last.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    n = 0
-    if pathlib.Path("seal_count.txt").exists():
-        n = int(pathlib.Path("seal_count.txt").read_text(encoding="utf-8"))
-    pathlib.Path("seal_count.txt").write_text(str(n + 1), encoding="utf-8")
-    if n >= 1:  # 第二次封存**之后**：模拟「封存之后才翻 status」（卡 218 病根原样）
-        wb = pathlib.Path("docs") / "workbacklog.toml"
-        wb.write_bytes(wb.read_bytes().replace(b"pending", b"done"))
-        subprocess.run(["git", "add", "--", "docs/workbacklog.toml"],
-                       capture_output=True, text=True)
-    print("[seal-stub-tamper] tree =", (payload["tree"] or "?")[:12])
-
-
-def _main():
-    args = sys.argv[1:]
-    pathlib.Path("gate_ran.marker").write_text("ran", encoding="utf-8")
-    if "--seal" in args:
-        _seal()
-        sys.exit(0)
-    rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
-                         capture_output=True, text=True).stdout.strip()
-    payload = {{"ok": True, "rev": rev, "docs_sync_ok": True, "docs_sync_missing": [],
-               "gates": [{{"name": n, "exit_code": 0}}
-                         for n, _ in build_jobs(False, False)],
-               "tree_scope": _real.TREE_SCOPE}}
-    last = pathlib.Path("gates") / "last.json"
-    last.parent.mkdir(exist_ok=True)
-    last.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("stub-run_gates-e2e-tamper")
-    sys.exit(0)
-
-
-if __name__ == "__main__":
-    _main()
-'''
-
-#: ★ 卡 228 e2e 审计桩：wb_review ① 判据要「退出 0 + 审计通过 + 豁免 0 项已知欠账」。
-_AUDIT_E2E = """import sys
-print("审计通过：豁免 0 项已知欠账（桩）")
-sys.exit(0)
-"""
-
 _ENV = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
 
 
@@ -477,15 +347,13 @@ def _stage_tools(repo: Path) -> None:
 
 def _mk_repo(tmp: Path, card_specs_pass: bool = True, sync_docs_body: str | None = None,
              stage_card_body: str | None = None, run_gates_body: str | None = None,
-             wb_review_body: str | None = None,
-             audit_body: str | None = None) -> Path:
+             wb_review_body: str | None = None) -> Path:
     """造一个「够收口链走到 ⑥」的最小假仓库：共享文档 + 桩 + 新工具 + 文书模板。
 
     `sync_docs_body` / `stage_card_body`：给真桩换**行为桩**（卡 150 的幂等钉子用）——
     在 `_stage_tools` 拷完真工具**之后**覆写，只影响用到它们的测试。
     `run_gates_body` / `wb_review_body`（卡 184）：换门禁桩 / 复核桩 —— 在初始提交里就位，
     免得 stub swap 本身变成卡树改动（会撞 ②.1 判据本体 ⇒ 强制全量）。
-    `audit_body`（卡 228 e2e）：换审计桩 —— 复核 ① 判据要「审计通过 + 豁免 0」。
     """
     repo = tmp / "repo"
     repo.mkdir()
@@ -494,18 +362,7 @@ def _mk_repo(tmp: Path, card_specs_pass: bool = True, sync_docs_body: str | None
     _git(repo, "config", "user.name", "nail")
     _git(repo, "config", "core.autocrlf", "false")
     _git(repo, "config", "commit.gpgsign", "false")
-    _write(repo, ".gitignore",
-           "__pycache__/\n*.pyc\n"
-           # ★ 卡 237（T-G355）：门禁桩/锁桩的**运行印记**不进指纹 —— 与生产同口径：
-           #   真 run_gates 的产物全在 `gates/**`（封存指纹本就摘掉），桩把它们落在
-           #   根上纯属夹具简化；不加这条，旧 `add -A` 指纹（真 run_gates 的
-           #   `tree_without_gates`，本卡域外不许动）就会把这三个未跟踪印记算进
-           #   封存树 ⇒ 提交装不下 ⇒ 复核必报「封存树 vs 提交树」⇒ 228 的绿 e2e
-           #   在没带 run_gates.py 修复的树上必红（2026-10-14 实测：差在这些路径
-           #   ['gate_lock_calls.log', 'gate_ran.marker', 'lock.marker']）。
-           #   ★ 判据一字未动；「未跟踪杂物进不进指纹」另有专项判据（228 在
-           #     tests/test_gate_fingerprint.py 的域外改动，留主控裁）。
-           "gate_ran.marker\nlock.marker\ngate_lock_calls.log\n")
+    _write(repo, ".gitignore", "__pycache__/\n*.pyc\n")
     _write(repo, "README.md", "hello\n")
     _write(repo, "code/a.py", "X = 1\n")
     changelog_head = "## 2026-10-02 · 现有\n\n- 旧条目\n"
@@ -516,9 +373,9 @@ def _mk_repo(tmp: Path, card_specs_pass: bool = True, sync_docs_body: str | None
     _write(repo, "gates/reuse.json", "{}\n")
     _write(repo, "docs/changelog.d/.keep", "")
     _write(repo, "gates/diag/_text_TG999.md", _TEXT)
-    for rel in ("tools/sync_counts.py", "tools/sync_docs.py", "scripts/check_toml.py"):
+    for rel in ("tools/sync_counts.py", "tools/sync_docs.py", "scripts/check_toml.py",
+                "scripts/audit_progress.py"):
         _write(repo, rel, _MAYBE)
-    _write(repo, "scripts/audit_progress.py", audit_body or _MAYBE)
     _write(repo, "gates/diag/gate_lock.py", _GATE_LOCK)
     _write(repo, "scripts/run_gates.py", run_gates_body or _RUN_GATES)
     if wb_review_body is not None:
@@ -547,21 +404,13 @@ def _make_rerun_dirt(repo: Path) -> None:
 
 def _wand(
     repo: Path, *extra: str, allow: tuple[str, ...] = ("code",), tree: str = ".",
-    card: str = "T-G999", task: str = "T-G999", batch: str | None = None,
-    env: dict[str, str] | None = None
+    card: str = "T-G999", task: str = "T-G999"
 ) -> subprocess.CompletedProcess:
-    """跑一次 wb_land。★ 卡 228：`batch` 给了走 `--batch`（恰好给一个）；`env` 覆写
-    子进程环境（批 e2e 要传 `TF_BATCH_DIR` —— `_ENV` 是 import 时的快照，
-    monkeypatch.setenv 影响不到它）。"""
-    cmd = [sys.executable, "-X", "utf8", str(repo / "tools" / "wb_land.py")]
-    if batch is not None:
-        cmd += ["--batch", batch]
-    else:
-        cmd += ["--card", card]
-    cmd += ["--tree", tree, "--task", task, "--title", "钉子",
-            "--type", "feat", "--group", "ENGINEERING", "--evidence", "code/a.py",
-            "--allow", *allow, *extra]
-    return subprocess.run(cmd, cwd=str(repo), env=env or _ENV, capture_output=True, text=True,
+    cmd = [sys.executable, "-X", "utf8", str(repo / "tools" / "wb_land.py"),
+           "--card", card, "--tree", tree, "--task", task, "--title", "钉子",
+           "--type", "feat", "--group", "ENGINEERING", "--evidence", "code/a.py",
+           "--allow", *allow, *extra]
+    return subprocess.run(cmd, cwd=str(repo), env=_ENV, capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
 
 
@@ -1311,12 +1160,8 @@ def test_stage_card_toml_str_produces_valid_toml() -> None:
 #   ★ CRLF 感知：workbacklog.toml 是纯 CRLF，flip_card_status 按字节读写。
 
 def _write_backlog(repo: Path, *, cid: str = "T-G999", task: str = "T-G999",
-                   status: str = "pending", extra_pending: str | None = None) -> None:
-    """往假仓库写一份 workbacklog.toml（纯 CRLF，与真文件一致）。
-
-    `extra_pending`：再附一张**永远 pending** 的卡（卡 228 红钉用）—— 主卡翻 done 之后
-    账里仍有 `pending` 字样，封存后的翻账动作才有真内容可改。
-    """
+                   status: str = "pending") -> None:
+    """往假仓库写一份只含一张卡的 workbacklog.toml（纯 CRLF，与真文件一致）。"""
     body = (
         f'[base]\nreviewed = "abc1234"\n\n'
         f'[[cards]]\n'
@@ -1329,18 +1174,6 @@ def _write_backlog(repo: Path, *, cid: str = "T-G999", task: str = "T-G999",
         f'depends = []\n'
         f'risk = "low"\n'
         f'status = "{status}"\n')
-    if extra_pending:
-        body += (
-            f'\n[[cards]]\n'
-            f'id = "{extra_pending}"\n'
-            f'task = "T-G{extra_pending}"\n'
-            f'title = "陪绑卡"\n'
-            f'tree = ""\n'
-            f'spec = ""\n'
-            f'files = ["code/a.py"]\n'
-            f'depends = []\n'
-            f'risk = "low"\n'
-            f'status = "pending"\n')
     _write(repo, "docs/workbacklog.toml", body, crlf=True)
 
 
@@ -1684,128 +1517,139 @@ def test_preflight_green_continues_to_full_gates(tmp_path: Path) -> None:
     assert "门禁退出码 = 0" in out, out
 
 
-# ================================================================ 卡 228（T-G344）：完整链判据
-# ★ 判据本体：临时小树跑**完整链**（假门禁 + 真封存算法 + 假提交），断言真复核
-#   `problems == []`；配两条先红后绿反例。真复核 = **真 wb_review.py**（不是桩）——
-#   只有真判据才能钉住「链子顺序改对了」。
-
-def _real_run_gates_path() -> Path:
-    """真 run_gates.py（卡树 scripts/ 下）—— e2e 桩 import 它的指纹算法，不造第二份。"""
-    return ROOT / "scripts" / "run_gates.py"
+# ================================================ 卡 238（T-G356）：⑨ 盖章前核验产物在提交里
+# ★ 现象（机制自己制造的假账）：B-20261017/18/26 全被 ⑨ 标 landed，而 225 的活不在主仓 ——
+#   ⑨ 按「成员都交了申请」就盖章、没验产物真在那笔提交里（推栅栏原话引的还是 236 的提交号）。
+#   三条钉子：反向（不带产物 ⇒ 盖章函数被调用 0 次，先红后绿）/ 正向（产物真在 ⇒ 照旧盖章）/
+#   边界（paths 为空 ⇒ 如实说「无法核验」，不盖章）；另加卡模式 landed 同款反例。
+#   「盖章函数」= `_run_task_sub`（⑨ 推 claim / landed 全走它）—— 用记录桩数它被调几次。
 
 
-def test_full_chain_review_green_e2e(tmp_path: Path) -> None:
-    """★ 卡 228 判据：完整链跑完（翻账 → 封存 → 兜底重封存 → 提交 → 复核），
-    真复核 `problems == []` —— 卡 218 那笔「封存树 vs 提交树必然红」的病根已修。
-
-    ★ 先红后绿：老链（⑤ 封存在 ⑤′ 翻账之前 + `add -A` 指纹）下本测试必红
-      （workbacklog.toml 翻账后提交树 ≠ 封存树）。
-    """
-    repo = _mk_repo(
-        tmp_path,
-        run_gates_body=_RUN_GATES_E2E.format(real=str(_real_run_gates_path())),
-        wb_review_body=(TOOLS / "wb_review.py").read_text(encoding="utf-8"),
-        audit_body=_AUDIT_E2E)
-    _write_backlog(repo, cid="T-G999", task="T-G999", status="pending")
-    _git(repo, "add", "--", "docs/workbacklog.toml")
-    _git(repo, "commit", "-q", "-m", "add backlog")
-    _git(repo, "branch", "-m", "line/impl-v1")  # 复核分支判据认这个名字
-    pen = _mk_pen(repo)
-    _write(pen, "code/a.py", "X = 2\n")
-
-    done = _wand(repo, tree=".pen", allow=("code/a.py", "docs/workbacklog.toml"))
-
-    out = _out(done)
-    assert done.returncode == 0, out
-    assert "[队列] 卡 T-G999：pending → done" in out, out
-    assert _backlog_card_status(repo, "T-G999") == "done"
-    review = json.loads(
-        (repo / "gates" / "review" / "T-G999.json").read_text(encoding="utf-8"))
-    assert review.get("problems") == [], review
+def _mk_repo_238(tmp_path: Path) -> tuple[Path, str]:
+    """造一个带**一笔真提交**的假仓（提交只改 code/a.py + tools/a.py），返回 (repo, sha)。"""
+    repo = tmp_path / "repo238"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "nail@example.invalid")
+    _git(repo, "config", "user.name", "nail")
+    _git(repo, "config", "core.autocrlf", "false")
+    _git(repo, "config", "commit.gpgsign", "false")
+    _write(repo, "code/a.py", "X = 1\n")
+    _write(repo, "tools/a.py", "A = 1\n")     # 这笔只带「tools/a.py 成员」的产物
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init for 238")
+    sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    return repo, sha
 
 
-def test_tamper_after_seal_review_red_e2e(tmp_path: Path) -> None:
-    """★★ 卡 228 反例（先红钉，判据不放松）：封存之后仍改被跟踪文件并暂存进提交
-    ⇒ 真复核**必须**报「封存树 vs 提交树」。
-
-    ★ 这条钉住 `wb_review.check_seal_tree` 本体：删掉它 / 降级成警告 = 本测试红。
-      桩在**第二次** `--seal`（= ⑤″ 兜底之后没有第三道封存）之后翻账 + `git add`，
-      原样复刻卡 218 现场。
-    """
-    repo = _mk_repo(
-        tmp_path,
-        run_gates_body=_RUN_GATES_E2E_TAMPER.format(real=str(_real_run_gates_path())),
-        wb_review_body=(TOOLS / "wb_review.py").read_text(encoding="utf-8"),
-        audit_body=_AUDIT_E2E)
-    # ★ 陪绑卡 998 留在 pending：主卡在 ⑤′（封存**前**）已被新链翻成 done，
-    #   桩在**封存之后**把账里剩的 pending 翻 done —— 那一刻改的才是**真内容**
-    #   （等价卡 218 现场：封存先算树、翻账在提交前 ⇒ 提交树 ≠ 封存树）。
-    _write_backlog(repo, cid="T-G999", task="T-G999", status="pending", extra_pending="998")
-    _git(repo, "add", "--", "docs/workbacklog.toml")
-    _git(repo, "commit", "-q", "-m", "add backlog")
-    _git(repo, "branch", "-m", "line/impl-v1")
-    pen = _mk_pen(repo)
-    _write(pen, "code/a.py", "X = 2\n")
-
-    done = _wand(repo, tree=".pen", allow=("code/a.py", "docs/workbacklog.toml"))
-
-    out = _out(done)
-    assert done.returncode == 0, out  # ⑧ 复核不挡提交；问题在复核记录里
-    review = json.loads(
-        (repo / "gates" / "review" / "T-G999.json").read_text(encoding="utf-8"))
-    problems = [str(p) for p in review.get("problems", [])]
-    assert any("封存树 vs 提交树" in p for p in problems), problems
-
-
-def test_batch_landing_flips_member_status_e2e(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+def test_batch_gate_refuses_stamp_when_member_artifacts_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
 ) -> None:
-    """★★ 卡 228 批 e2e（先红后绿钉）：`--batch` 收口、`--task` 给**批台账号**（T-G340，
-    不在队列）⇒ 成员卡 301 的 status 仍**必须**翻成 done。
-
-    ★ 老码必红：老链拿批台账号去比每张卡自己的 `task`（T-G333）⇒ 永远比不中 ⇒
-      「一张都翻不了」。新码按批清单 `[[member]]` + 「产物 ∩ 暂存」判 ⇒ 翻中。
-    """
+    """★★ 反向（本卡核心）：提交里没有成员 302 的产物 ⇒ ⑨ **不盖章** ——
+    盖章函数（`_run_task_sub`）被调用 **0 次**，且点名里有 302。
+    先红后绿：旧码按「成员都在名单」就推 2 个申请 + landed（调用 3 次）⇒ 旧码必红。"""
     bd = tmp_path / "batch"
-    monkeypatch.setenv("TF_BATCH_DIR", str(bd))  # 进程内辅助（_integrate 等）
-    _mk_gate212(bd, "B-TEST1", "collecting", [
-        {"id": "301", "layer": "工具层", "paths": ["code/a.py"]}])
-    repo = _mk_repo(tmp_path)
-    _write(repo, "gates/diag/_text_TG340.md", _TEXT)  # 批台账号 T-G340 的文书模板
-    _write_backlog(repo, cid="301", task="T-G333", status="pending")
-    _git(repo, "add", "--", "docs/workbacklog.toml")
-    _git(repo, "commit", "-q", "-m", "add backlog")
-    pen = _mk_pen(repo)
-    _write(pen, "code/a.py", "X = 2\n")
+    monkeypatch.setenv("TF_BATCH_DIR", str(bd))
+    _mk_gate212(bd, "B-238", "awaiting-commit", [
+        {"id": "301", "layer": "工具层", "paths": ["tools/a.py"]},
+        {"id": "302", "layer": "工具层", "paths": ["tools/b.py"]},
+    ])
+    repo, sha = _mk_repo_238(tmp_path)              # 这笔提交只改 tools/a.py
+    monkeypatch.setattr(_landing, "ROOT", repo)     # `git show` 在假仓里查
+    calls: list[list[str]] = []
+    monkeypatch.setattr(_landing, "_run_task_sub", lambda cmd: calls.append(cmd) or 0)
 
-    done = _wand(repo, batch="B-TEST1", task="T-G340", tree=".pen",
-                 allow=("code/a.py", "docs/workbacklog.toml"),
-                 env={**_ENV, "TF_BATCH_DIR": str(bd)})
+    _landing._advance_batch_gate("B-238", sha, "T-G999")
 
-    out = _out(done)
-    assert done.returncode == 0, out
-    assert "卡 301：pending → done" in out, out
-    assert _backlog_card_status(repo, "301") == "done"
+    out = capsys.readouterr().out
+    assert calls == [], f"★ 盖章函数被调用了 {len(calls)} 次：{calls!r}"
+    assert "拒盖章" in out, out
+    assert "302 的产物不在这笔提交里" in out, out
+    assert "paths=['tools/b.py']" in out, out       # 点名要带它的声明域
 
 
-def test_flip_card_status_require_task_match_flag(
-    tmp_path: Path, capsys: pytest.CaptureFixture,
+def test_batch_gate_stamps_when_artifacts_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
 ) -> None:
-    """卡 228 单元钉：`require_task_match=False` 跳过 task 比对（批成员翻账专用）；
-    默认 `True` 时 task 不匹配仍拒绝 —— 登记型保护**不放松**（单卡路径一字不变）。"""
-    repo = _mk_repo(tmp_path)
-    _write_backlog(repo, cid="301", task="T-G333", status="pending")
+    """正向：两个成员的产物**真在**这笔提交里 ⇒ 照旧盖章：2 个申请 + 1 个 landed
+    （既有行为不变，不许因新核验多拒或少推）。"""
+    bd = tmp_path / "batch"
+    monkeypatch.setenv("TF_BATCH_DIR", str(bd))
+    _mk_gate212(bd, "B-238P", "awaiting-commit", [
+        {"id": "301", "layer": "工具层", "paths": ["tools/a.py"]},
+        {"id": "302", "layer": "工具层", "paths": ["tools/b.py"]},
+    ])
+    repo, _ = _mk_repo_238(tmp_path)
+    _write(repo, "tools/a.py", "A = 2\n")           # 第二笔同时带两个成员的产物
+    _write(repo, "tools/b.py", "B = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "both artifacts")
+    sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    monkeypatch.setattr(_landing, "ROOT", repo)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(_landing, "_run_task_sub", lambda cmd: calls.append(cmd) or 0)
 
-    flipped = _landing.flip_card_status(repo, "301", "", require_task_match=False)
-    assert flipped is True
-    _git(repo, "add", "--", "docs/workbacklog.toml")
-    _git(repo, "commit", "-q", "-m", "flip 301")
-    assert _backlog_card_status(repo, "301") == "done"
+    _landing._advance_batch_gate("B-238P", sha, "T-G999")
 
-    _write_backlog(repo, cid="302", task="T-G334", status="pending")
-    _git(repo, "add", "--", "docs/workbacklog.toml")
-    _git(repo, "commit", "-q", "-m", "add 302")
-    flipped2 = _landing.flip_card_status(repo, "302", "T-G999")  # 默认：task 不匹配 ⇒ 拒
-    assert flipped2 is False
-    assert _backlog_card_status(repo, "302") == "pending"
-    assert "登记型" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    # ★ 按 argv 元素判（不 join 成串）—— pytest 的 tmp 目录名里可能有「landed」字样，
+    #   子串匹配会假阳（本卡自证时当场咬过一次）。
+    claim_calls = [c for c in calls if "claim" in c]
+    landed_calls = [c for c in calls if "landed" in c]
+    assert len(claim_calls) == 2 and all("B-238P" in c for c in claim_calls), calls
+    assert len(landed_calls) == 1 and "B-238P" in landed_calls[0], calls
+    assert "拒盖章" not in out, out
+
+
+def test_batch_gate_empty_paths_says_cannot_verify(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+) -> None:
+    """边界：成员声明的 paths 为空 ⇒ 如实说「无法核验」、**不盖章**（宁可漏盖不可假盖）。
+
+    ★ `load_manifest` 的校验正常会拒「非只读成员 paths 为空」；这条钉的是核验自己的
+      防御分支（别的入口绕过校验时也不许瞎盖）⇒ 用桩 manifest 直达 ⑨。
+    """
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    repo, sha = _mk_repo_238(tmp_path)
+    monkeypatch.setattr(_landing, "ROOT", repo)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(_landing, "_run_task_sub", lambda cmd: calls.append(cmd) or 0)
+    fake = {"id": "B-238E", "member": [{"id": "303", "layer": "工具层", "paths": []}]}
+    monkeypatch.setattr(_task, "load_manifest", lambda tid: fake)
+
+    _landing._advance_batch_gate("B-238E", sha, "T-G999")
+
+    out = capsys.readouterr().out
+    assert calls == [], f"★ 无法核验时不许盖章：{calls!r}"
+    assert "无法核验" in out, out
+    assert "303" in out, out
+
+
+def test_card_gate_refuses_landed_when_other_member_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+) -> None:
+    """卡模式同款核验（现象原样）：本卡（236）产物在、栅栏也齐，但**别的成员**（225）
+    的产物不在这笔提交里 ⇒ 本卡的申请照推（那是真的）、**landed 不许标**。
+    旧码会拿本卡的提交号把整个批盖成 landed（f4d4626 假账）⇒ 旧码必红。"""
+    bd = tmp_path / "batch"
+    monkeypatch.setenv("TF_BATCH_DIR", str(bd))
+    _mk_gate212(bd, "B-238C", "awaiting-commit", [
+        {"id": "236", "layer": "工具层", "paths": ["tools/a.py"]},
+        {"id": "225", "layer": "工具层", "paths": ["tools/b.py"]},
+    ])
+    repo, sha = _mk_repo_238(tmp_path)              # 这笔提交只带 236 的产物
+    monkeypatch.setattr(_landing, "ROOT", repo)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(_landing, "_run_task_sub", lambda cmd: calls.append(cmd) or 0)
+
+    _landing._advance_card_gate("236", sha, "T-G999", ["tools/a.py"])
+
+    out = capsys.readouterr().out
+    # ★ 按 argv 元素判（不 join 成串）—— tmp 目录名 test_card_gate_refuses_landed_0
+    #   自带「landed」字样，子串匹配会假阳（本卡自证时当场咬过一次）。
+    claim_calls = [c for c in calls if "claim" in c]
+    landed_calls = [c for c in calls if "landed" in c]
+    assert len(claim_calls) == 1 and "B-238C" in claim_calls[0], calls
+    assert landed_calls == [], f"★ landed 不许盖：{calls!r}"
+    assert "不标 landed" in out, out
+    assert "225 的产物不在这笔提交里" in out, out

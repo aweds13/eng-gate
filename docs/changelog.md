@@ -54,6 +54,11 @@
 - **诊断三件事**（228 改了什么 / 那条 e2e 断言什么 / 冲突点原话）逐条贴了真读数 ✓；★ **纠偏**：e2e 是 **228 自己**装的（`git log`/归属证据见报告 §2.0 ✓）⇒ B 无所指 ✓。
 - ★ **结论 A**：228 的修法**只治了一半** —— 翻账挪到封存前 ✓，但 **门禁产物**（`gate_lock_calls.log` / `gate_ran.marker` / `lock.marker`）仍使封存树与提交树不一致 ✗。
 - ★ 基线读数：本树 `49 passed`；带 228 的两件产物 ⇒ `1 failed, 49 passed`（失败即那条 e2e ✓）；`ruff` 全过。
+## 2026-10-14 —— ⑨ 推栅栏盖章前必须核验：产物真在那笔提交里吗（T-G356）
+- **`tools/pool/landing.py`**：⑨ 盖章前取成员的 `[[member]].paths` ∩ 该笔提交 `git show --name-only` ⇒ **空 ⇒ 拒盖章并点名** ✗；`paths` 为空 ⇒ 说"无法核验"、**不盖章** ✓。
+- ★ 判据 `tests/test_wb_land.py` 补一条**反向**：不带产物的提交 ⇒ **盖章函数被调用 0 次**（先红后绿）；产物真在 ⇒ 行为不变 ✓。
+- ★ 并把**三笔被误标的**（`B-20261017`/`B-20261018`/`B-20261026`）退回 `awaiting-commit`，把"为什么退"写进各自的 `gates/diag/batch/B-20261017.why.md` 那种「为什么」文件 ✓。
+- ★ 真读数：`tests/test_wb_land.py` + `tests/test_no_window.py` 全过 · `ruff` 全过。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。
