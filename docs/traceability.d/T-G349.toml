@@ -1,0 +1,12 @@
+[entries."T-G349"]
+id = "T-G349"
+title = "补齐 W 清单点名、但没写的那两件文书（W5 禅道怎么起 + W6 pipe-workbench 技能）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/禅道-怎么起.md",
+  "file:skills/pipe-workbench/SKILL.md",
+  "file:skills/pipe-workbench/NOTES.md",
+]
+gaps = "① ★ **这是「W 清单点名、却没人写」的账**：用户 2026-10-14 贴出 W0~W8 执行清单，主控逐条核出只有两件**文书**没写（W5 的说明 + W6 点名新增的技能）。指针：`复盘/卡/卡232-补齐W点名文书.md`。② ★ **新技能必须过卡 209 装的四条牙**（≤120 行 / 流程级小节 ≤3 / 「怎么读结果」每条指向**真实存在**的脚本 / 有 NOTES.md 三节）—— 这是它区别于「随手写一篇说明」的地方。指针：`skills/nails/check_skills.py`。③ ★ **禅道那条是红线**：只写「怎么起」（解压目录 / 端口 / 只监听 127.0.0.1 / 本体不进 git），**不碰授权与破解**（用户 2026-10-13 令）。指针：`docs/禅道-怎么起.md`。"
+

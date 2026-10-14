@@ -8,6 +8,10 @@
 - 210 211 212 213 214（批 `B-20261014`）· 215 216 217（`B-20261015`）· 219 220 221 222 223 224（`B-20261016`）—— 产物早在主干，`status` 仍是 `pending`。
 - ★ 翻的依据是**围栏状态**（`state == landed` ⇒ 成员都算已落），不是"看起来像落了"；本笔不碰代码、不碰产物。
 - ★ 真读数：`wb_plan.py check` 尾行从 **待派 18 张** 变成 **待派 4 张**（= 真在飞的 225/226/227 + 等着的 228）✓
+## 2026-10-14 —— 补齐 W 清单点名、但没写的那两件文书（T-G349）
+- **`docs/禅道-怎么起.md`**（W5）：解压目录 / 端口 / **只监听 127.0.0.1** / 禅道本体不进 git / 与仓内桥（`tools/zentao_bridge.py`）的分工；★ 只写怎么起，不碰授权破解。
+- **`skills/pipe-workbench/SKILL.md` + `skills/pipe-workbench/NOTES.md`**（W6）：工作台四件套（一份读数 → 巡检 → 注入 → 面板）的操作知识；★ 只放操作知识，判据留在库与门里。
+- ★ 真读数：`skills/nails/check_skills.py` **钉子②绿**（6 个 SKILL.md 全过卡 209 四条）· `wb_plan.py check` 尾行 · `ruff` 全过。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。

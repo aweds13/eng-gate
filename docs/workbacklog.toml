@@ -2043,3 +2043,165 @@ risk = "mid"
 status = "pending"
 
 depends = ["225"]
+
+[[cards]]
+
+id = "229"
+
+task = "T-G346"
+
+title = "插件/扩展点：加字段、加功能不改核心（T-D9 留的工程债）"
+
+tree = ".wt/plugin"
+
+spec = "复盘/卡/卡229-插件扩展点.md"
+
+files = [
+
+  "src/timeflow/plugins/__init__.py",
+
+  "src/timeflow/api/app.py",
+
+  "tests/test_plugins.py",
+
+  "examples/05_plugin_demo/plugin.py",
+
+  "docs/EXTENDING.md",
+
+]
+
+risk = "high"
+
+status = "pending"
+
+depends = []
+
+[[cards]]
+
+id = "230"
+
+task = "T-G347"
+
+title = "park_store：非 done 的卡必须有断点存档（W0 还账）"
+
+tree = ".wt/park"
+
+spec = "复盘/卡/卡230-断点存档.md"
+
+files = [
+
+  "tools/park_store.py",
+
+  "tests/test_park_store.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = []
+
+[[cards]]
+
+id = "231"
+
+task = "T-G348"
+
+title = "W7 收口面：timeflow 三个端点 + 一份读数判据"
+
+tree = ".wt/w7face"
+
+spec = "复盘/卡/卡231-W7收口面.md"
+
+files = [
+
+  "src/timeflow/api/app.py",
+
+  "tests/test_workbench_line.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = ["229"]
+
+[[cards]]
+
+id = "232"
+
+task = "T-G349"
+
+title = "补齐 W 清单点名、但没写的那两件文书（W5 禅道怎么起 + W6 pipe-workbench 技能）"
+
+tree = ".wt/wdocs"
+
+spec = "复盘/卡/卡232-补齐W点名文书.md"
+
+files = [
+
+  "docs/禅道-怎么起.md",
+
+  "skills/pipe-workbench/SKILL.md",
+
+]
+
+risk = "low"
+
+status = "done"
+
+depends = []
+
+[[cards]]
+
+id = "233"
+
+task = "T-G350"
+
+title = "auto_land：把收口器做成确定的程序（零 LLM；四态明确）"
+
+tree = ".wt/autoland"
+
+spec = "复盘/卡/卡233-确定性收口器.md"
+
+files = [
+
+  "tools/auto_land.py",
+
+  "tests/test_auto_land.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = []
+
+[[cards]]
+
+id = "234"
+
+task = "T-G351"
+
+title = "假漂移挡住收口：真围栏 × 合成队列（夹具隔离 + 兜底不许乱兜）"
+
+tree = ".wt/driftfix"
+
+spec = "复盘/卡/卡234-假漂移挡住收口.md"
+
+files = [
+
+  "tools/wb_plan.py",
+
+  "tests/test_wb_plan.py",
+
+]
+
+risk = "high"
+
+status = "pending"
+
+depends = []
