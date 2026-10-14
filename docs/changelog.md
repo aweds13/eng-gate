@@ -38,6 +38,11 @@
 - ★ **`--batch` 按栅栏成员翻账**（不再拿批台账号去比卡台账号）⇒ 批量收口也能把成员的 `status` 翻成 `done`。
 - ★ **封存只算「提交能装下」的东西**：未跟踪文件不再影响树指纹（主树有杂物时复核不再报"封存树 ≠ 提交树"）。
 - ★ 真读数：`tests/test_wb_land.py` 全过 · `ruff` 全过 · 层检查红项 0。
+## 2026-10-14 —— ③″ 快预检的次序：挪到参数合法性检查之后（T-G354）
+- **`tools/pool/landing.py`**：`--card` / `--batch` **恰好给一个**这条检查**先跑**（参数非法 ⇒ 立刻退 6 + 原话，不碰门禁也不碰预检 ✗）；③″ 快预检在其后、仍在全量门禁 ④ 之前。
+- ★ 判据 `tests/test_wb_land.py` 补一条**反向**：参数互斥非法 ⇒ **预检被调用 0 次**（先红后绿）。
+- ★ 既有判据 `test_card_and_batch_is_exactly_one` **一字未改**（它现在恢复原样能红能绿 ✓）。
+- ★ 真读数：`tests/test_wb_land.py` 全过 · `ruff` 全过 · 层检查红项 0。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。

@@ -6505,3 +6505,14 @@ evidence = [
   "file:tests/test_auto_land.py",
 ]
 gaps = "① ★ **现象**：`tools/auto_land.py` 遇到**一批**不能自动决定的（`B-20261017` 要动 3 棵树）⇒ 它选 **「什么都不落」** ✗ ⇒ 把本来能落的 `B-20261018`（228）也堵死 ⇒ 收口器每 5 分钟报同一句、**一笔都落不了** ✗。指针：`tools/auto_land.py`。② ★ **改法**：改成**按批跳** —— 能落的照落、不能自动决定的只跳它自己并点名，**只有「全都没法落」才退 4**。指针：`tools/auto_land.py`。③ ★ **反向判据（本卡核心）**：{不能自动决定的批 + 能落的批} ⇒ **能落的那批必须被落**（断言落函数被调用 1 次、参数是那批）—— 旧码在这条上**必红**。指针：`tests/test_auto_land.py`。"
+
+[entries."T-G354"]
+id = "T-G354"
+title = "③″ 快预检的次序：挪到参数合法性检查之后"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "file:tests/test_wb_land.py",
+]
+gaps = "① ★ **现象**：门禁 pytest 里 `test_card_and_batch_is_exactly_one` 红 —— 那条既有判据**同时给 `--card` 与 `--batch`**、期望退 6 + 「恰好给一个」，但 **③″ 快预检跑在互斥检查之前** ⇒ 先撞内存闸、带内存那句话说再见 ✗。指针：`tests/test_wb_land.py`。② ★ **改法**：把 ③″ 挪到**参数合法性检查之后**（参数非法 ⇒ 立刻退 6 + 原话，**不碰门禁也不碰预检**）；预检仍在全量门禁 ④ 之前（动机不变 ✓）。指针：`tools/pool/landing.py`。③ ★ **反向判据（本卡核心）**：参数互斥非法 ⇒ **预检被调用 0 次**（先红后绿）；★ 既有那条判据**一个字没改**（原样能红能绿 ✓）。指针：`tests/test_wb_land.py`。"

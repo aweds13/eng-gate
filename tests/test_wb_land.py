@@ -1429,3 +1429,89 @@ def test_advance_card_gate_no_gate_skips(
     _landing._advance_card_gate("999", "abc123", "T-G999", ["tools/z.py"])
     out = capsys.readouterr().out
     assert "不属于任何栅栏" in out, out
+
+
+# ================================================ 卡 236（T-G354）：③″ 快预检的次序
+# ★ ③″ 快门禁预检（卡 226 的 ③″；`run_gates.py --fast`，不落盘）的**次序**钉死：
+#   「--card/--batch 恰好给一个」的参数合法性检查（退 6）**必须最先** —— 参数非法 ⇒
+#   立刻退 6，**不碰门禁、不碰预检**；预检落在参数检查之后、全量门禁 ④ 之前。
+#   三条钉子都要有先红后绿读数（旧码在反向那条上必红）。
+
+#: ★ 快预检感知的门禁桩 = --fast 前缀 + _RUN_GATES_AFFECTED 本体：
+#:   ① 每次被调都把 argv 追加记到 `fast_args.txt`（断言 --fast 跑没跑、跑了几次）；
+#:   ② `--fast` 那一趟**不落盘**（不写 gate_ran.marker / last.json / gate_args.txt，
+#:     与真 run_gates 的 --fast 同口径）；卡树里有 `fast_red.marker` ⇒ 退 1 并带出
+#:     一句内存闸原话（模拟预检红）；否则退 0（预检绿）；
+#:   ③ 非 --fast 的调用照走 _RUN_GATES_AFFECTED 的全量/seal 行为。
+_RUN_GATES_FAST_PREFIX = '''import pathlib, sys
+
+with pathlib.Path("fast_args.txt").open("a", encoding="utf-8") as fh:
+    fh.write(" ".join(sys.argv[1:]) + "\\n")
+
+if "--fast" in sys.argv:
+    if pathlib.Path("fast_red.marker").exists():
+        print("[FAIL] 内存闸拒跑：可用内存 2.0 GB < 阈值 2.0 GB")
+        sys.exit(1)
+    print("--fast 全过（stub）")
+    sys.exit(0)
+'''
+
+_RUN_GATES_FAST = _RUN_GATES_FAST_PREFIX + _RUN_GATES_AFFECTED
+
+
+def test_invalid_params_run_fast_preflight_zero_times(tmp_path: Path) -> None:
+    """★★ 反向（本卡核心）：参数互斥非法 ⇒ 退 6，且 ③″ 预检被调用 **0 次**。
+
+    旧码必红：旧码这条非法路径退 2（≠ 6）。③″ 若跑到参数检查**之前**，
+    预检的输出（如内存闸那句话）会顶掉「恰好给一个」⇒ 既有判据红（主控 2026-10-14 实测）。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_FAST,
+                    wb_review_body=_WB_REVIEW)
+    cmd = [sys.executable, "-X", "utf8", str(repo / "tools" / "wb_land.py"),
+           "--card", "T-G999", "--batch", "B1", "--tree", ".", "--task", "T-G999",
+           "--title", "钉子", "--type", "feat", "--group", "ENGINEERING",
+           "--evidence", "code/a.py", "--allow", "code"]
+    done = subprocess.run(cmd, cwd=str(repo), env=_ENV, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+
+    out = _out(done)
+    assert done.returncode == 6, out
+    assert "恰好给一个" in out, out
+    fast = (repo / "fast_args.txt").read_text(encoding="utf-8") \
+        if (repo / "fast_args.txt").exists() else ""
+    assert "--fast" not in fast, f"参数非法不许碰预检：{fast!r}"
+    assert not (repo / "gate_ran.marker").exists(), "参数非法也不许碰全量门禁"
+
+
+def test_preflight_red_stops_before_full_gates(tmp_path: Path) -> None:
+    """参数合法 + ③″ 预检红 ⇒ 停手（退 7）且全量门禁 **0 次**（卡 226 判据，不许破）。"""
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_FAST,
+                    wb_review_body=_WB_REVIEW)
+    _write(repo, "fast_red.marker", "red")
+
+    done = _wand(repo)
+
+    out = _out(done)
+    assert done.returncode == 7, out
+    assert "还没跑全量" in out, out
+    assert "内存闸拒跑" in out, out
+    assert not (repo / "gate_ran.marker").exists(), "预检红了不许再跑全量门禁"
+    calls = (repo / "gate_lock_calls.log").read_text(encoding="utf-8") \
+        if (repo / "gate_lock_calls.log").exists() else ""
+    assert "acquire" not in calls, f"预检红了不许拿门禁锁：{calls!r}"
+
+
+def test_preflight_green_continues_to_full_gates(tmp_path: Path) -> None:
+    """参数合法 + ③″ 预检绿 ⇒ 继续走全量门禁（预检恰好 1 次）（卡 226 判据，不许破）。"""
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_FAST,
+                    wb_review_body=_WB_REVIEW)
+
+    done = _wand(repo)
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    assert "快门禁全过" in out, out
+    fast = (repo / "fast_args.txt").read_text(encoding="utf-8") \
+        if (repo / "fast_args.txt").exists() else ""
+    assert fast.count("--fast") == 1, f"预检应当恰好跑一次：{fast!r}"
+    assert "门禁退出码 = 0" in out, out

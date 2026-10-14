@@ -22,6 +22,9 @@ r"""主控的通用集成器（实现层）：把一张外包卡（工人已在�
   ① 把卡树迁到**当时的主树 HEAD**（工人只新增/改自己的文件 → untracked 不会冲突）
   ② 生成文档件（台账条目 / changelog / 交接 CHECKPOINT）—— 复用 `tools/wb_stage_card.py`
   ③ tools/sync_counts.py
+  ③′ fail-fast 钉子（卡规格都要在索引里）→ ③″ 快门禁预检（卡 226/236：run_gates.py
+     --fast，十几秒，不落盘；★ 次序钉死：参数互斥检查最先（非法退 6，不碰预检）
+     → ③′ → ③″ → ④ 全量；预检红退 7，`--no-preflight` 可跳过）
   ④ 拿门禁锁（段由 --port-base 给）→ 跑门禁（★ 带 1800s 硬超时）→ 红了就 release + 退出
      ★ 卡 184：`--affected` / `--changed-from` 透传给 `run_gates.py`（默认关，给了才少跑）；
      三条强制全量（碰 scripts/**/tools/**/gates/** / 空计划 / 今天没跑过全量）任何一条命中就跑全量
@@ -834,6 +837,31 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
     return True
 
 
+def fast_preflight(wt: pathlib.Path, env: dict) -> bool:
+    """③″ 快门禁预检（卡 226 · `T-G342`；次序钉在卡 236 · `T-G354`）：
+    卡树里跑 `scripts/run_gates.py --fast`（十几秒；★ **不落盘**）。
+
+    · 红 ⇒ 停手（调用方退 7）：把红的门连**原话输出**带出来，并说清「还没跑全量」；
+    · 绿 ⇒ 打一行「快门禁全过」后照常走 ④ 全量（动机不变：秒级失败别烧那 3~4 分钟）；
+    · ★ 次序：必须在「--card/--batch 恰好给一个」的参数合法性检查**之后**
+      （参数非法 ⇒ 立刻退 6，预检一次都不许跑 —— 否则预检的话会顶掉那句原话），
+      且仍在全量门禁 ④ **之前**。
+    · 内存闸不绕：`--fast` 那一趟照样先过 `run_gates.py` 的内存闸（卡 102）。
+    """
+    print("=== ③″ 快门禁预检（run_gates.py --fast；十几秒；★ 不落盘）===")
+    r = subprocess.run(
+        [sys.executable, "-X", "utf8", "scripts/run_gates.py", "--fast"],
+        cwd=str(wt), env={**os.environ, **env},
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if r.returncode != 0:
+        print((r.stdout or "").strip()[-1200:])
+        print(f"  ★ 快门禁预检不绿（退出码 {r.returncode}）⇒ **停手**（还没跑全量）")
+        return False
+    print("  ✓ 快门禁全过（十几秒）⇒ 继续全量")
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser()
@@ -874,10 +902,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-review", action="store_true",
                     help="★ 卡 184：跳过 ⑧ 复核落盘（默认会跑 wb_review.py --rev <新提交> --json "
                          "并落盘 gates/review/<task>.json；★ 复核异步、不挡提交）")
+    ap.add_argument("--no-preflight", action="store_true",
+                    help="★ 卡 226/236：跳过 ③″ 快门禁预检（run_gates.py --fast，不落盘）；"
+                         "给「已经知道全量要跑」的场景。默认会先预检（参数检查之后、④ 全量之前）")
     a = ap.parse_args(argv)
     if bool(a.card) == bool(a.batch):
+        # ★ 卡 236（T-G354）：参数合法性检查必须**最先**跑 —— 非法 ⇒ 立刻退 6 + 原话，
+        #   **不碰门禁、不碰预检**（③″ 若跑到这前面，预检的话会顶掉这句 ⇒ 既有判据红）。
         print("★ `--card` 与 `--batch` 必须**恰好给一个**")
-        return 2
+        return 6
     lock_label = a.card or a.batch   # 门禁锁的标签（批号也行）
     incremental_run = False          # 卡 184：--affected 那一趟 = True（gates_line 用）
 
@@ -992,6 +1025,12 @@ def main(argv: list[str] | None = None) -> int:
                 print("  ", (pre.stdout or "").strip()[-600:])
                 return 4
             print("  ✓ 卡规格都在索引里（正式门禁 ④ 仍会再跑一遍全量）")
+
+        # ★ 卡 236（T-G354）：③″ 快门禁预检的**次序** —— 必须在参数合法性检查
+        #   （--card/--batch 恰好给一个 ⇒ 退 6）**之后**、全量门禁 ④ **之前**
+        #   （卡 226 的动机不变：秒级失败别烧全量那 3~4 分钟）。
+        if not a.no_gate and not a.no_preflight and not fast_preflight(wt, env):
+            return 7    # ★ 预检红 ⇒ 停手（全量门禁 ④ 一步没跑、锁也没拿）
 
         if not a.no_gate:
             # ★ 卡 184（T-G284）：算要不要跑增量 —— 默认全量；只有显式给 --affected /
