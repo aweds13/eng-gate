@@ -1,0 +1,10 @@
+[entries."T-G343"]
+id = "T-G343"
+title = "Trae 驱动器的多窗口 --target：按序号/子串选面板"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/trae_pool.mjs",
+]
+gaps = "① ★ **本笔只交 227**（`trae_pool.mjs` 的多窗口 `--target`）：同批的 225/226 与卡 236 都动 `tools/pool/landing.py` ✗ ⇒ 那边要「以 main 为底只叠差异」（下一跳做 ✓）。本笔**不碰那个文件** ✓。指针：`tools/trae_pool.mjs`。② ★ **不给 `--target` 时行为逐字不变**（既有调用方不受影响 ✓）；匹配不唯一或匹配不到 ⇒ **停手并列出候选**（不许随便挑一个 ✗）。指针：`tools/trae_pool.mjs`。③ ★ **只读 CDP**：不许写用户的 Trae 安装/配置（`%APPDATA%\\Trae CN` 一个字节都不碰 ✓）。指针：`tools/trae_pool.mjs`。"
+

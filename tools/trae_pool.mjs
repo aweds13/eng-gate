@@ -28,6 +28,22 @@
  *   ★ 但这条道**仍不接进派活**：首选是**反向**把我们的 `pool` MCP 挂进 Trae（`.trae/mcp.json`，
  *     不需要任何登录）—— 三条路的实测与证据见 `复盘/Trae-接入结论.md`。
  *     留着本文件只为「主控遥控 Trae 面板」这一用法有据可查，且改起来半天就能再战。
+ *
+ * ★★ 卡 227（T-G343，2026-10-14）—— **多开窗口时选面板**（本卡只动本文件）：
+ *   病：原来只会拿**第一个** `solo-lite` 页面（`findWorkbench` 里的 `list.find`）⇒ 用户多开 Trae 时，
+ *   活可能被派进**不是他想要的那个窗口**；也看不见"现在到底有几个面板"。
+ *   ★ 卡 218 里我试补过一次 `--target`，**补丁打在陈旧文本上、静默没生效** —— `--target` 报
+ *     "连不上 CDP"，其实是参数根本没接上（`parseArgs` 收下了却没人用）。本卡把它**接对**：
+ *     ① `--target "#N"`（**1 基**，第 N 个面板）或 `--target <子串>`（按 URL/标题子串匹配）；
+ *     ② 匹配**不唯一**或**匹配不到** ⇒ **在连面板之前就停手并列出所有候选**（不许"随便挑一个"）；
+ *     ③ 不给 `--target` ⇒ 走老路（第一个面板），**行为逐字不变**；
+ *     ④ 只读子命令 `list`（也认 `--list`）列出所有可驱动面板（序号 / 标题 / URL / 是否已有会话），
+ *        给 `--target` 当索引；
+ *     ⑤ 判据 `selftest`（纯函数，不需要 Trae）钉住上面三条 + 越界 —— ★ 为什么判据在本文件里、
+ *        不另开 `tests/`：本卡栅栏 `gates/diag/batch/B-20261017.toml` 的成员 227
+ *        `paths = ["tools/trae_pool.mjs"]` —— 另开测试文件就是**域外改动**（`wb_review` ⑥ 拒）。
+ *   ★ 边界（诚实写）：`--target "#N"` 的 N 是**这次 `/json/list` 里的出现序号**，面板增减会漂；
+ *     断了线重连时优先按 **target id / 标题**锁回原面板（同代面板的 URL 一模一样，不能靠 URL 认）。
  */
 import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -61,6 +77,77 @@ const SEL_AGENT = '.turn__agent-message, .core-finish-card' // agent 回复轮�
 //   「目前没有待执行的任务——上一条我只按要求回复了 OK…」）。
 //   ⇒ 只认授权框专有文案；通用词一律不算。
 const APPROVE_RE = /仅本次运行|本次会话允许|始终允许|拒绝执行|允许运行|允许一次|允许本次|允许执行|批准并运行|同意并运行/
+
+/* ------------------------------------------------- 卡 227：面板枚举 + --target 选择 */
+
+/** 什么算「可驱动的面板」：`type=page` 且有 ws 调试口，URL 含 `workbench`（老）或 `solo-lite`（新）。
+ *  与卡 218 的 `findWorkbench` 同一口径，抽成常量避免两份判据各自演化。 */
+const PANEL_HINT = /workbench|solo-lite/
+
+/**
+ * ★ 纯函数（可单测、不碰 CDP）：从 `/json/list` 的**原始 target 数组**里挑出所有可驱动面板，
+ * **保持原顺序**，加上 1 基序号。`--target "#N"` / `--list` 都以它为准。
+ *
+ * 返回 [{ index, id, title, url, webSocketDebuggerUrl }]（index 从 1 起 —— **本工具用 1 基**）。
+ */
+export function panelsOf(targets) {
+  const out = []
+  for (const t of targets || []) {
+    if (!t || t.type !== 'page' || !t.webSocketDebuggerUrl) continue
+    const url = String(t.url || '')
+    if (!PANEL_HINT.test(url)) continue
+    out.push({
+      index: out.length + 1,
+      id: String(t.id || ''),
+      title: String(t.title || ''),
+      url,
+      webSocketDebuggerUrl: String(t.webSocketDebuggerUrl),
+    })
+  }
+  return out
+}
+
+/**
+ * ★ 纯函数（可单测、不碰 CDP）：按 `--target` 选面板。**不许"随便挑一个"**。
+ *
+ *  · `target` 不给（null/''）⇒ 返回第一个 —— ★ 与老行为**逐字一致**（老代码就是 `list.find` 取首个）。
+ *  · `target === "#N"` ⇒ 第 N 个（**1 基**：`#1` 是第一个）；越界 ⇒ 停手。
+ *  · 其它 ⇒ 在 **URL 或标题**里找**子串**；命中 1 个才回；0 个 / ≥2 个 ⇒ 停手（由调用方列候选）。
+ *
+ * 返回 `{ ok, panel?, code?, reason? }`；`code` ∈ {first,index,nomatch,ambiguous,none,range}。
+ */
+export function pickPanel(panels, target) {
+  const list = panels || []
+  if (list.length === 0) return { ok: false, code: 'none', reason: '一个可驱动面板都没有' }
+  if (target == null || target === '') return { ok: true, code: 'first', panel: list[0] }
+  const s = String(target)
+  const m = /^#(\d+)$/.exec(s)
+  if (m) {
+    const n = Number(m[1])
+    if (n < 1 || n > list.length) {
+      return { ok: false, code: 'range',
+               reason: `--target ${s} 越界：只有 ${list.length} 个面板（1..${list.length}，**1 基**）` }
+    }
+    return { ok: true, code: 'index', panel: list[n - 1] }
+  }
+  const hits = list.filter((p) => String(p.url).includes(s) || String(p.title).includes(s))
+  if (hits.length === 0) {
+    return { ok: false, code: 'nomatch', reason: `--target ${JSON.stringify(s)} 谁都匹配不上` }
+  }
+  if (hits.length > 1) {
+    return { ok: false, code: 'ambiguous',
+             reason: `--target ${JSON.stringify(s)} 匹配到 ${hits.length} 个 —— 不唯一，不许随便挑` }
+  }
+  return { ok: true, code: 'substr', panel: hits[0] }
+}
+
+/** 把面板列成**候选清单**（`--list` 与「停手列候选」共用一份格式）：序号 / 标题 / URL / 会话。 */
+export function formatPanels(panels) {
+  if (!panels || panels.length === 0) return '  （一个可驱动面板都没有）\n'
+  return panels
+    .map((p) => `  #${p.index}\t${p.title || '(无标题)'}\t${p.url}\t${p.session || '会话：未探'}`)
+    .join('\n') + '\n'
+}
 
 /* ---------------------------------------------------------------- 参数解析 */
 
@@ -155,19 +242,29 @@ class Cdp {
  */
 async function findWorkbench(port, timeoutMs) {
   const t0 = Date.now()
-  const looksLikePanel = (t) =>
-    t.type === 'page' && t.webSocketDebuggerUrl &&
-    (String(t.url).includes('workbench') || String(t.url).includes('solo-lite'))
   while (Date.now() - t0 < timeoutMs) {
     try {
       const r = await fetch(`http://127.0.0.1:${port}/json/list`)
       if (r.ok) {
-        const list = await r.json()
-        const page = list.find(looksLikePanel)
-        if (page) return page
+        const panels = panelsOf(await r.json())
+        if (panels.length) return panels[0]   // ★ 卡 227：仍取**第一个**（不给 --target 时的老行为）
       }
     } catch { /* 还没起来 */ }
     await sleep(1000)
+  }
+  return null
+}
+
+/** ★ 卡 227：一次拉全**可驱动面板**（不是只找第一个）。返回 null = **连不上 CDP**（与
+ *  「连上了但 0 个面板」的 `[]` 区分开 —— 前者是"CDP 没开"，后者是"开着但没有面板"）。 */
+async function fetchPanels(port, timeoutMs = 3000) {
+  const t0 = Date.now()
+  while (Date.now() - t0 < timeoutMs) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/json/list`)
+      if (r.ok) return panelsOf(await r.json())
+    } catch { /* 还没起来 */ }
+    await sleep(300)
   }
   return null
 }
@@ -180,19 +277,8 @@ function launchIde(port, workspace) {
   child.unref()
 }
 
-/** 连上 CDP：先找现成的口；找不到且允许拉起就拉 IDE 再轮询最多 60 秒。连不上返回 null。
- *
- *  ★ 卡 218：`findMs` 可调 —— **重连**时面板刚重载，目标可能还没出现在 `/json/list`，
- *    给 2 秒太短（第一次派卡就是这么"看着像连不上"）；重连走 15 秒。
- */
-async function attach(port, { launch, workspace, findMs = 2000 }) {
-  let page = await findWorkbench(port, findMs)
-  if (!page && launch) {
-    if (!existsSync(IDE_PATH)) throw new Error(`找不到 IDE：${IDE_PATH}（可用 TF_TRAE_EXE 覆盖）`)
-    launchIde(port, workspace)
-    page = await findWorkbench(port, 60000)
-  }
-  if (!page) return null
+/** 连上**指定**面板（卡 227 抽出，供"选好的那个面板"复用）。连不上抛错（调用方决定怎么收）。 */
+async function connectPage(page) {
   const ws = new WebSocket(page.webSocketDebuggerUrl)
   // ★ 卡 218：这个 await 也必须**有条退路** —— 原来只挂 onopen/onerror，
   //   而"连上又立刻被关"（面板正在重载）会让 onerror 永远不来 ⇒ 又是挂死。
@@ -211,6 +297,83 @@ async function attach(port, { launch, workspace, findMs = 2000 }) {
   }
   await cdp.send('Runtime.enable')
   return cdp
+}
+
+/** ★ 卡 227：只读探一个面板**是否已有会话**（逐个面板接一下、数 agent 轮次）。**绝不动它**。
+ *  best-effort：接不上 / 读不到 ⇒ 回 `会话：未知`（不猜、不当失败）。 */
+async function probeSession(panel) {
+  let cdp = null
+  try {
+    cdp = await connectPage(panel)
+    const n = await cdp.eval(`document.querySelectorAll(${JSON.stringify(SEL_AGENT)}).length`)
+    if (typeof n === 'number') return n > 0 ? `有会话(${n})` : '空(0)'
+    return '会话：未知'
+  } catch {
+    return '会话：未知'
+  } finally {
+    if (cdp) cdp.close()
+  }
+}
+
+/** 连上 CDP：先找现成的口；找不到且允许拉起就拉 IDE 再轮询最多 60 秒。连不上返回 null。
+ *
+ *  ★ 卡 218：`findMs` 可调 —— **重连**时面板刚重载，目标可能还没出现在 `/json/list`，
+ *    给 2 秒太短（第一次派卡就是这么"看着像连不上"）；重连走 15 秒。
+ *  ★ 卡 227：**不给 --target 时**这条老路逐字未改（取第一个面板）。
+ */
+async function attach(port, { launch, workspace, findMs = 2000 }) {
+  let page = await findWorkbench(port, findMs)
+  if (!page && launch) {
+    if (!existsSync(IDE_PATH)) throw new Error(`找不到 IDE：${IDE_PATH}（可用 TF_TRAE_EXE 覆盖）`)
+    launchIde(port, workspace)
+    page = await findWorkbench(port, 60000)
+  }
+  if (!page) return null
+  return await connectPage(page)
+}
+
+/** ★ 卡 227：按 `--target` 选面板**并**连上去。返回 `{ code, cdp?, panel? }`（code===0 才是连上了）。
+ *
+ *  顺序**刻意**是"先选、后连"：匹配不唯一 / 匹配不到 / 越界 ⇒ **一个面板都不连**，停手 + 列候选。
+ *  ★ 这正是卡 218 那个坑的反面 —— 那次 `--target` 没接上，于是**盲连第一个**、报一句
+ *    "连不上 CDP"，把"参数没生效"伪装成"网络问题"。这里让"没选成"变成一条**说谎不出口**的失败。
+ */
+async function connectTarget(port, target, { launch, workspace, log = null }) {
+  let panels = await fetchPanels(port, 2000)
+  if ((panels == null || panels.length === 0) && launch) {
+    if (!existsSync(IDE_PATH)) {
+      process.stderr.write(`[trae] 找不到 IDE：${IDE_PATH}（可用 TF_TRAE_EXE 覆盖）\n`)
+      return { code: 2 }
+    }
+    launchIde(port, workspace)
+    panels = await fetchPanels(port, 60000)
+  }
+  if (panels == null) {
+    process.stderr.write(`[trae] 连不上 CDP（127.0.0.1:${port}）\n`)
+    return { code: 2 }
+  }
+  const pick = pickPanel(panels, target)
+  if (!pick.ok) {
+    // ★ 必须：**停手** + **列出所有候选**（不许"随便挑一个"）。
+    process.stderr.write(`[trae] 选面板停手：${pick.reason}\n`)
+    process.stderr.write(`[trae] 候选（本机 ${panels.length} 个可驱动面板；--target 可用 "#N" 或子串）：\n`)
+    process.stderr.write(formatPanels(panels))
+    if (pick.code === 'ambiguous') {
+      process.stderr.write(`[trae] 提示：改 --target "#1".."#${panels.length}" 指到想用的那一个（1 基）\n`)
+    } else if (pick.code === 'nomatch') {
+      process.stderr.write('[trae] 提示：子串要能在某个面板的 URL 或标题里找得到\n')
+    } else if (pick.code === 'range') {
+      process.stderr.write('[trae] 提示：--target "#N" 是 **1 基**（第 1 个就是 "#1"）\n')
+    }
+    if (log) {
+      log({ ev: 'target', ok: false, code: pick.code, reason: pick.reason,
+            panels: panels.map((p) => p.url) })
+    }
+    return { code: 2 }
+  }
+  if (log) log({ ev: 'target', ok: true, how: pick.code, index: pick.panel.index, url: pick.panel.url })
+  const cdp = await connectPage(pick.panel)   // 连不上会抛，由调用方 catch 收
+  return { code: 0, cdp, panel: pick.panel }
 }
 
 /* ---------------------------------------------------------------- 页面动作 */
@@ -345,16 +508,27 @@ async function cmdSend(argv) {
   const outPath = args.out
   const timeoutSec = Number(args['timeout-sec'] || 3600)
   const noLaunch = Boolean(args.noLaunch)
+  const target = args.target == null ? null : String(args.target)   // ★ 卡 227：不给 ⇒ 老路
   if (!promptFile || !logPath || !outPath) {
-    process.stderr.write('用法：node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch]\n')
+    process.stderr.write('用法：node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>]\n')
     return 2
   }
   const log = makeLogger(logPath)
   const prompt = readFileSync(promptFile, 'utf8')
 
+  // ★★ 卡 227：`--target` 给就**先选面板再连**（选不成直接停手，见 connectTarget）；
+  //   不给 `--target` ⇒ `attach`（取第一个面板）—— 老行为**逐字不变**。
+  let chosen = null
   let cdp
   try {
-    cdp = await attach(port, { launch: !noLaunch, workspace })
+    if (target != null) {
+      const r = await connectTarget(port, target, { launch: !noLaunch, workspace, log })
+      if (r.code !== 0) return r.code
+      cdp = r.cdp
+      chosen = r.panel
+    } else {
+      cdp = await attach(port, { launch: !noLaunch, workspace })
+    }
   } catch (e) {
     log({ ev: 'error', msg: 'launch/connect failed: ' + e.message })
     process.stderr.write(`[trae] ${e.message}\n`)
@@ -385,13 +559,28 @@ async function cmdSend(argv) {
           sec: Math.round((Date.now() - startedAt) / 1000) })
     let fresh = null
     try {
-      fresh = await attach(port, { launch: false, findMs: 15000 })
+      if (chosen) {
+        // ★ 卡 227：重连**要锁回选中的那个面板**，别悄悄换成别的（否则又"派进别的窗口"）。
+        //   同代面板的 URL 一模一样 ⇒ 不能靠 URL 认：优先 **target id → 标题 → 重跑 pickPanel**。
+        const panels = await fetchPanels(port, 15000)
+        const same = panels && (
+          panels.find((p) => p.id && p.id === chosen.id)
+          || panels.find((p) => p.title && p.title === chosen.title)
+          || (() => { const r = pickPanel(panels, target); return r.ok ? r.panel : null })())
+        if (same) {
+          fresh = await connectPage(same)
+          log({ ev: 'reconnect-target', index: same.index, url: same.url })
+        }
+      } else {
+        fresh = await attach(port, { launch: false, findMs: 15000 })
+      }
     } catch (e) {
       log({ ev: 'reconnect', ok: false, msg: e.message })
       return false
     }
     if (!fresh) {
-      log({ ev: 'reconnect', ok: false, msg: '重解析 /json/list 没找到 solo-lite 目标' })
+      log({ ev: 'reconnect', ok: false,
+            msg: chosen ? '重解析 /json/list 没锁回原面板' : '重解析 /json/list 没找到 solo-lite 目标' })
       return false
     }
     cdp = fresh
@@ -501,6 +690,76 @@ async function cmdSend(argv) {
   }
 }
 
+/* ---------------------------------------------------------------- 卡 227：list / selftest */
+
+/** 只读子命令：列出**所有可驱动面板**（序号 / 标题 / URL / 是否已有会话），给 `--target` 当索引。
+ *  ★ 一个字节都不写（只读 CDP）；连不上 CDP ⇒ 退 2 并说清。`list` 与 `--list` 两种写法都认。 */
+async function cmdList(argv) {
+  const args = parseArgs(argv)
+  const port = Number(args.port || DEFAULT_PORT)
+  const panels = await fetchPanels(port, 2000)
+  if (panels == null) {
+    process.stderr.write(`[trae] 连不上 CDP（127.0.0.1:${port}）`
+      + ` —— IDE 没开着，或没带 --remote-debugging-port=${port}？\n`)
+    return 2
+  }
+  // 逐个面板探"是否已有会话"（只读、best-effort；探不到就写"未知"，不猜）。
+  for (const p of panels) p.session = await probeSession(p)
+  process.stdout.write(`[trae] 可驱动面板 ${panels.length} 个`
+    + `（--target 用 "#N"（1 基）或 URL/标题子串）：\n`)
+  process.stdout.write(formatPanels(panels))
+  return 0
+}
+
+/** ★ 卡 227 判据：纯函数，**不碰 Trae / CDP** —— 钉住「老行为 / 1 基序号 / 两条反例 / 越界 / 唯一命中」。
+ *
+ *  为什么判据在本文件里、不另开 `tests/`：本卡栅栏域只有 `tools/trae_pool.mjs`
+ *  （`gates/diag/batch/B-20261017.toml` 成员 227 的 `paths`）—— 另开测试文件就是**域外改动**。
+ *  跑法：`node tools/trae_pool.mjs selftest` —— 全绿退 0，任一条红退 1。
+ */
+async function cmdSelftest() {
+  const mk = (n, title, url) => ({
+    index: n, id: `P${n}`, title,
+    url: url || `solo-lite.html?win=${n}`,
+    webSocketDebuggerUrl: `ws://127.0.0.1:1/x${n}`,
+  })
+  const two = [mk(1, 'Agent'), mk(2, 'Agent')]   // 反例素材：两个面板标题一模一样
+  const one = [mk(1, 'Agent')]
+  const checks = [
+    ['老行为：不给 --target ⇒ 第一个面板（逐字不变）',
+      pickPanel(two, null), (r) => r.ok && r.code === 'first' && r.panel.index === 1],
+    ['--target "#1"（**1 基**）⇒ 第 1 个', pickPanel(two, '#1'),
+      (r) => r.ok && r.code === 'index' && r.panel.index === 1],
+    ['--target "#2" ⇒ 第 2 个', pickPanel(two, '#2'),
+      (r) => r.ok && r.code === 'index' && r.panel.index === 2],
+    ['反例①：两个面板标题都含同一子串 ⇒ 停手且不唯一（不许择一）',
+      pickPanel(two, 'Agent'), (r) => !r.ok && r.code === 'ambiguous'],
+    ['反例②：子串谁都不匹配 ⇒ 停手（nomatch）',
+      pickPanel(two, 'zzz-no-such'), (r) => !r.ok && r.code === 'nomatch'],
+    ['越界：--target "#9" ⇒ 停手（range）', pickPanel(two, '#9'), (r) => !r.ok && r.code === 'range'],
+    ['子串唯一命中 ⇒ 选中它', pickPanel(one, 'Agent'),
+      (r) => r.ok && r.code === 'substr' && r.panel.index === 1],
+    ['一个可驱动面板都没有 ⇒ 停手（none）', pickPanel([], '#1'),
+      (r) => !r.ok && r.code === 'none'],
+  ]
+  let bad = 0
+  for (const [name, got, ok] of checks) {
+    const pass = ok(got)
+    if (!pass) bad += 1
+    process.stdout.write(`[${pass ? '绿' : '红'}] ${name}  → code=${got.code}`
+      + `${got.panel ? ' #' + got.panel.index : ''}\n`)
+  }
+  // "停手要列出候选" 也顺带验：反例的候选清单里两个面板都得在。
+  const listed = formatPanels(two)
+  const both = listed.includes('win=1') && listed.includes('win=2')
+  if (!both) bad += 1
+  process.stdout.write(`[${both ? '绿' : '红'}] 停手时列的候选清单把两个面板都列了出来\n`)
+  process.stdout.write(bad === 0
+    ? `[OK] selftest 全绿（${checks.length + 1} 条）\n`
+    : `[FAIL] selftest 有 ${bad} 条红\n`)
+  return bad === 0 ? 0 : 1
+}
+
 /* ---------------------------------------------------------------- 入口 */
 
 async function main() {
@@ -509,9 +768,13 @@ async function main() {
   let code
   if (cmd === 'balance') code = await cmdBalance(argv.slice(1))
   else if (cmd === 'send') code = await cmdSend(argv.slice(1))
+  else if (cmd === 'list' || cmd === '--list') code = await cmdList(argv.slice(1))
+  else if (cmd === 'selftest' || cmd === '--selftest') code = await cmdSelftest()
   else {
     process.stderr.write('用法：node tools/trae_pool.mjs balance [--port 9333]\n')
-    process.stderr.write('      node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch]\n')
+    process.stderr.write('      node tools/trae_pool.mjs list [--port 9333]     # 只读：列可驱动面板（= --list）\n')
+    process.stderr.write('      node tools/trae_pool.mjs selftest                # 判据：面板选择（不需要 Trae）\n')
+    process.stderr.write('      node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>]\n')
     code = 2
   }
   process.exitCode = code
