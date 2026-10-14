@@ -6448,3 +6448,16 @@ evidence = [
   "file:skills/pipe-workbench/NOTES.md",
 ]
 gaps = "① ★ **这是「W 清单点名、却没人写」的账**：用户 2026-10-14 贴出 W0~W8 执行清单，主控逐条核出只有两件**文书**没写（W5 的说明 + W6 点名新增的技能）。指针：`复盘/卡/卡232-补齐W点名文书.md`。② ★ **新技能必须过卡 209 装的四条牙**（≤120 行 / 流程级小节 ≤3 / 「怎么读结果」每条指向**真实存在**的脚本 / 有 NOTES.md 三节）—— 这是它区别于「随手写一篇说明」的地方。指针：`skills/nails/check_skills.py`。③ ★ **禅道那条是红线**：只写「怎么起」（解压目录 / 端口 / 只监听 127.0.0.1 / 本体不进 git），**不碰授权与破解**（用户 2026-10-13 令）。指针：`docs/禅道-怎么起.md`。"
+
+[entries."T-G346"]
+id = "T-G346"
+title = "插件/扩展点：加字段、加功能不改核心（计划里唯一「未开卡」的工程债）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:src/timeflow/plugins/__init__.py",
+  "file:tests/test_plugins.py",
+  "file:examples/05_plugin_demo/plugin.py",
+  "file:docs/EXTENDING.md",
+]
+gaps = "① ★ **这是计划里唯一「未开卡」的工程债**：`复盘/任务重规划-剩余工作.md` 的 T-D9 行原话「真正的插件注册机制仍没有 → 工程债（未开卡）」，现状是「加字段 / 加功能做不到不改核心」。本笔给出**一条最小可用的注册路径**（不是「再来一份模板+示例」）。指针：`复盘/卡/卡229-插件扩展点.md`。② ★ **「不改核心」是机器证明的，不是口号**：判据断言**装配过程对核心文件的改动为零**（`git status --porcelain` 在 `src/timeflow/**` 注册路径之外为空）；配**先红后绿**的反例。指针：`tests/test_plugins.py`。③ ★ **侦察后复用既有接缝**：照 `src/timeflow/core/behavior.py`（T-D11 的口径注册表）的形态接，**不另造第二张口径表**；`examples/01~03` 那三个示例原来的做法正是「改核心」，本笔把它们指向的活干成了注册。指针：`tools/pool/landing.py`（收口链）。"

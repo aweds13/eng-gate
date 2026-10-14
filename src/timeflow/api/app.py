@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from timeflow import logs, vocab
+from timeflow import logs, plugins, vocab
 from timeflow.config import load_settings
 from timeflow.core import academic as ac
 from timeflow.core import ai as ai_mod
@@ -2422,6 +2422,11 @@ def create_app(
              "created_at": r["created_at"]}
             for r in rows
         ]
+
+    # 插件注册路径（卡 229 / T-G346）：装 TIMEFLOW_PLUGINS 里声明的插件（加路由 / 加口径）。
+    # 必须在挂静态前端**之前**（/ 的 mount 会兜住后面再加的路由）；坏插件原样报进
+    # /api/plugins，不静默吞、不牵连服务本体。没设环境变量 = 一个都不装 = 什么都没变。
+    plugins.apply(app, conn)
 
     # 静态前端入口：/ （index.html）、/manifest.json、/sw.js、图标等
     app.mount("/", StaticFiles(directory=str(web_dir), html=True), name="web")

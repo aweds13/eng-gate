@@ -1,0 +1,13 @@
+[entries."T-G346"]
+id = "T-G346"
+title = "插件/扩展点：加字段、加功能不改核心（计划里唯一「未开卡」的工程债）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:src/timeflow/plugins/__init__.py",
+  "file:tests/test_plugins.py",
+  "file:examples/05_plugin_demo/plugin.py",
+  "file:docs/EXTENDING.md",
+]
+gaps = "① ★ **这是计划里唯一「未开卡」的工程债**：`复盘/任务重规划-剩余工作.md` 的 T-D9 行原话「真正的插件注册机制仍没有 → 工程债（未开卡）」，现状是「加字段 / 加功能做不到不改核心」。本笔给出**一条最小可用的注册路径**（不是「再来一份模板+示例」）。指针：`复盘/卡/卡229-插件扩展点.md`。② ★ **「不改核心」是机器证明的，不是口号**：判据断言**装配过程对核心文件的改动为零**（`git status --porcelain` 在 `src/timeflow/**` 注册路径之外为空）；配**先红后绿**的反例。指针：`tests/test_plugins.py`。③ ★ **侦察后复用既有接缝**：照 `src/timeflow/core/behavior.py`（T-D11 的口径注册表）的形态接，**不另造第二张口径表**；`examples/01~03` 那三个示例原来的做法正是「改核心」，本笔把它们指向的活干成了注册。指针：`tools/pool/landing.py`（收口链）。"
+

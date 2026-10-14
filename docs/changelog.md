@@ -12,6 +12,11 @@
 - **`docs/禅道-怎么起.md`**（W5）：解压目录 / 端口 / **只监听 127.0.0.1** / 禅道本体不进 git / 与仓内桥（`tools/zentao_bridge.py`）的分工；★ 只写怎么起，不碰授权破解。
 - **`skills/pipe-workbench/SKILL.md` + `skills/pipe-workbench/NOTES.md`**（W6）：工作台四件套（一份读数 → 巡检 → 注入 → 面板）的操作知识；★ 只放操作知识，判据留在库与门里。
 - ★ 真读数：`skills/nails/check_skills.py` **钉子②绿**（6 个 SKILL.md 全过卡 209 四条）· `wb_plan.py check` 尾行 · `ruff` 全过。
+## 2026-10-14 —— 插件/扩展点：加字段、加功能不改核心（T-G346）
+- 新增 **`src/timeflow/plugins/`**（注册路径）+ **样例插件** `examples/05_plugin_demo/`；`docs/EXTENDING.md` **只追加**（既有口径一字未改）。
+- 扩展点覆盖两条真需求：**① 加一个 API 路由** · **② 加一个口径/派生读数**（复用 `core/behavior.py` 形态，不并列造表）。
+- ★ 判据（`tests/test_plugins.py`）：**装上可用 · 卸下无残留 · 坏插件必须报出来 · 「不改核心」由机器证明**；两条反例先红后绿。
+- ★ 真读数：`tests/test_plugins.py` **10 passed** · 相关旧判据 7 个文件 **54 passed** · `ruff All checks passed` · `src/timeflow/**` 注册路径外**零改动**。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。
