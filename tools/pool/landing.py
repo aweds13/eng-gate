@@ -730,12 +730,54 @@ def _advance_card_gate(card_id: str, commit_sha: str, task: str,
                                "landed", gate_id, "--commit", commit_sha])
 
 
+def _split_domain(changed: list[str], domain: list[str]) -> tuple[list[str], list[str]]:
+    r"""把一棵树的改动文件切成 `(域内, 域外)` 两拨（卡 225）。
+
+    ★ 复用 `pool.review.outside_domain` —— 那是本仓域匹配的**唯一实现**（卡 131，
+      fnmatch 语义同源）⇒ 不在本文件里造第三套匹配。
+    """
+    from pool.review import outside_domain
+    outside = set(outside_domain(changed, domain))
+    return [f for f in changed if f not in outside], [f for f in changed if f in outside]
+
+
+def _domain_hits(paths: list[str], pattern: str) -> list[str]:
+    r"""`paths` 里命中声明项 `pattern` 的那些（卡 225）—— 复用同一套匹配语义。"""
+    from pool.review import outside_domain
+    return [p for p in paths if not outside_domain([p], [pattern])]
+
+
+def _domain_overlap(members: list[dict], mids: list[str]) -> list[tuple[str, str, str]]:
+    r"""**声明域相交**的成员对 `[(a, b, 相交项), …]`（卡 225 §2）。
+
+    ★ 判据在**声明**这一层：两个成员声称能碰同一处 ⇒ 天然该停手（谁来都不许自动择一）。
+    ★ 逐对子比、逐声明项比；`a == b` 直接算相交，`a` 命中 `b` 的 glob（或反过来）也算。
+      匹配复用 `pool.review` 的 fnmatch 语义（不另写一套）。
+    """
+    from pool.review import outside_domain
+    domains = {str(m.get("id")): [str(p) for p in (m.get("paths") or [])]
+               for m in members}
+    hits: list[tuple[str, str, str]] = []
+    for i, a in enumerate(mids):
+        for b in mids[i + 1:]:
+            for pa in domains.get(a, []):
+                for pb in domains.get(b, []):
+                    if (pa == pb or not outside_domain([pa], [pb])
+                            or not outside_domain([pb], [pa])):
+                        hits.append((a, b, pa if pa == pb else f"{pa} ∩ {pb}"))
+    return hits
+
+
 def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
                           task: str) -> bool:
     r"""★ 卡 212：`--batch` 收口时，若批成员的产物**不在同一棵树**里，
     把各棵树的改动合进集成树 `into_wt` 再落。
 
-    ★ 冲突要当场咬：两棵树改了**同一个文件** ⇒ **停手并点名**（不许自动择一、不许静默覆盖）。
+    ★ 卡 225（T-G341）：参与集成的文件**只取声明域** —— 每棵成员树拷进去的 =
+      `[[member]].paths ∩ 该树真正改过的文件`。域外改动**不拷**，但**逐条打印**
+      （"看见并放过"，不许静默忽略）；声明域内**该改没改**也要如实报（不许当没这回事）。
+    ★ 冲突要当场咬：两个成员**声明域相交**（或改了同一个声明域内文件）⇒ **停手并点名**
+      （不许自动择一、不许静默覆盖）。
     ★ 合的方式与顺序**可复现**：按栅栏 declared 顺序逐棵树复制文件。
     ★ 都在同一棵树（或都是主树）⇒ 不做集成，返回 True（现有逻辑不变）。
 
@@ -746,6 +788,10 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
         man = load_manifest(batch_id)
     except Exception:
         return True  # 读不到栅栏 ⇒ 不做集成（现有逻辑不变）
+    # ★ 卡 225：成员域 = `[[member]].paths`（栅栏里写好的**声明域**）—— 参与集成的唯一口径。
+    domain_map: dict[str, list[str]] = {
+        str(m["id"]): [str(p) for p in (m.get("paths") or [])]
+        for m in man.get("member", [])}
     # 读 backlog 找各成员卡的 tree
     card_files_map: dict[str, tuple[str, ...]] = {}
     for m in man.get("member", []):
@@ -806,20 +852,40 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
     if len(unique) <= 1:
         return True  # 只有一棵树（或都是主树）⇒ 不需要集成
     print(f"=== ①′ 多棵树集成（{len(unique)} 棵 → {into_wt}）===")
+    # ★ 卡 225 §2：两个成员**声明域相交** ⇒ 停手并点名（不许自动择一、不许静默覆盖）。
+    #   判据在**声明**这一层 —— 不用先看谁真改了哪一份（改没改都该停）。
+    overlap = _domain_overlap(man.get("member", []), [mid for mid, _ in unique])
+    if overlap:
+        print("  ★★ 冲突：两个成员的**声明域相交** ⇒ **停手**"
+              "（不许自动择一、不许静默覆盖）：")
+        for a, b, hit in overlap:
+            print(f"     成员 {a} 与 {b} 都声明了 {hit}")
+        return False
     seen_files: dict[str, str] = {}
     total = 0
     for member_id, src_wt in unique:
         if not src_wt.is_dir():
             print(f"  ★ {member_id}：树 {src_wt} 不存在 ⇒ 跳过")
             continue
+        domain = domain_map.get(member_id, [])
         base = git("rev-parse", "--short", "HEAD", cwd=src_wt, check=False) or "?"
         tracked = [p for p in git("diff", "--name-only", "HEAD", cwd=src_wt,
                                   check=False).splitlines() if p.strip()]
         untracked = [p for p in git("ls-files", "-o", "--exclude-standard",
                                     cwd=src_wt, check=False).splitlines() if p.strip()]
         changed = tracked + untracked
-        print(f"  {member_id}：树 {src_wt}（基点 {base}，{len(changed)} 个改动文件）")
-        for f in changed:
+        inside, outside = _split_domain(changed, domain)
+        print(f"  {member_id}：树 {src_wt}（基点 {base}，{len(changed)} 个改动文件；"
+              f"声明域内 {len(inside)} / 域外 {len(outside)}）")
+        # ★ 卡 225：域外改动**不拷**，但**逐条打印**（"看见并放过"，不许静默忽略）。
+        for f in outside:
+            print(f"    ★ 域外改动（不拷，仅看见并放过）：{f}")
+        # ★ 卡 225：声明域内**该改没改**（声明缺路径）⇒ 如实报，不许当没这回事。
+        for pat in domain:
+            if not _domain_hits(changed, pat):
+                print(f"    ★ 声明域内 {pat} —— 这棵树**没改**"
+                      f"（如实报，不许静默跳过）")
+        for f in inside:
             if f in seen_files:
                 print(f"  ★★ 冲突：文件 {f} 被 {seen_files[f]} 和 {member_id} 都改了"
                       f" ⇒ **停手**（不许自动择一、不许静默覆盖）")

@@ -46,6 +46,10 @@
 ## 2026-10-14 —— Trae 驱动器的多窗口 `--target`：按序号/子串选面板（T-G343）
 - **`tools/trae_pool.mjs`**：新增 `--target`（1 基序号 `#N` 或 URL/标题子串）与只读 `list` 子命令；匹配**不唯一或匹配不到** ⇒ **停手并列出候选** ✓；不给 `--target` ⇒ 行为**逐字不变** ✓。
 - ★ 判据：`selftest`（先红后绿）· `All checks passed` · 层检查红项 0。
+## 2026-10-14 —— 成员映射按声明域：`_integrate_multi_tree` 只取 `[[member]].paths`（T-G341）
+- **`tools/pool/landing.py`**：每棵成员树参与集成的文件 = `[[member]].paths ∩ 该树真改过的文件` ✓；**域外改动不拷但逐条打印** ✓；声明域内该改没改**如实报** ✓；两成员**声明域相交 ⇒ 停手点名** ✓。
+- ★ 落地方式：**以 main 为底**（含 226 的预检 + 236 的次序修 ✓），**只叠 225 的三个 domain 函数**（`_domain_hits` / `_domain_overlap` / `_split_domain`）⇒ 不覆盖别人的活 ✓。
+- ★ 真读数：`tests/test_wb_land.py` 全过 · `ruff` 全过 · 层检查红项 0 · `git apply --check -p0` 干净 ✓。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。

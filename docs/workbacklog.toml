@@ -1932,7 +1932,7 @@ files = [
 
 risk = "mid"
 
-status = "pending"
+status = "done"
 
 depends = ["212"]
 
@@ -2283,3 +2283,29 @@ risk = "high"
 status = "pending"
 
 depends = ["236"]
+
+[[cards]]
+
+id = "238"
+
+task = "T-G356"
+
+title = "⑨ 推栅栏盖章前必须核验：产物真在那笔提交里吗"
+
+tree = ".wt/stampverify"
+
+spec = "复盘/卡/卡238-盖章前核验.md"
+
+files = [
+
+  "tools/pool/landing.py",
+
+  "tests/test_wb_land.py",
+
+]
+
+risk = "high"
+
+status = "pending"
+
+depends = ["237"]

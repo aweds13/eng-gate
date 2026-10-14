@@ -6526,3 +6526,13 @@ evidence = [
   "file:tools/trae_pool.mjs",
 ]
 gaps = "① ★ **本笔只交 227**（`trae_pool.mjs` 的多窗口 `--target`）：同批的 225/226 与卡 236 都动 `tools/pool/landing.py` ✗ ⇒ 那边要「以 main 为底只叠差异」（下一跳做 ✓）。本笔**不碰那个文件** ✓。指针：`tools/trae_pool.mjs`。② ★ **不给 `--target` 时行为逐字不变**（既有调用方不受影响 ✓）；匹配不唯一或匹配不到 ⇒ **停手并列出候选**（不许随便挑一个 ✗）。指针：`tools/trae_pool.mjs`。③ ★ **只读 CDP**：不许写用户的 Trae 安装/配置（`%APPDATA%\\Trae CN` 一个字节都不碰 ✓）。指针：`tools/trae_pool.mjs`。"
+
+[entries."T-G341"]
+id = "T-G341"
+title = "成员映射按声明域：_integrate_multi_tree 只取 [[member]].paths（+ 238 登记）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+]
+gaps = "① ★ **本笔只含 225 的那一处**（`_integrate_multi_tree` 按 `[[member]].paths` 只取声明域）：它历时最久 —— 先被同批的 226/236 卷进 `tools/pool/landing.py` 的**整份覆盖 vs 只叠差异**问题（主控一度把 236 的次序修盖掉 ✗），最后以「**以 main 为底、只取那三个 domain 函数**」的方式落地。指针：`tools/pool/landing.py`。② ★ **域外改动不拷但逐条打印**（看见并放过 ✓，不许静默忽略 ✗）；声明域内该改没改也如实报 ✓；两成员声明域相交 ⇒ 停手点名 ✓。指针：`tools/pool/landing.py`。③ ★ **这份补丁是「挑 hunk」挑出来的**：工人那棵树里混着 226 的 `fast_preflight` ✗ ⇒ 认不出的 hunk **一律不拿**（宁缺勿滥 ✓）；挑完 `git apply --check -p0` 干净 ✓。指针：`gates/diag/_p225_domain_only.patch`。"
