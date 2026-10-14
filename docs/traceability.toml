@@ -6581,3 +6581,14 @@ evidence = [
   "file:tests/test_dsh_panel.py",
 ]
 gaps = "① ★ 面板从「一个座位」扩成**三个座位**（工作台看板 / 禅道迭代甘特 / timeflow 待办）：座位表**唯一真源**是本文件的 `SEATS` —— `main` key、左栏行 id、会话内工具名三者同源，不再手抄。指针：`tools/dsh_panel.py`。② ★ 补上**宿主→浏览器那条只读缝**：一条 `/dsh-panel` 前缀路由（只 GET、只读、不写盘、不起工人），三条 URL 分别回三份只读工具的 JSON；缺数据一律回 `{ ok:false, error:<原话> }`，绝不用空数据冒充成功。指针：`tools/dsh_panel.py`。③ ★ `kind` 取值**有源码依据**（不是猜）：`@deepseek-ai/dsh-host-webserver` 里明写 `route.kind === 「exact」 ? exact : prefixes` ⇒ 取 `prefix`；注册形状照 `@deepseek-ai/dsh-client-modules` 注册 `/plugins` 那一段。指针：`tools/dsh_panel.py`。"
+
+[entries."T-G359"]
+id = "T-G359"
+title = "一起起、分别停：tools/stack.py（closer/timeflow/zentao/trae，各自可停）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/stack.py",
+  "file:tests/test_stack.py",
+]
+gaps = "① ★ 一件工具统管**四件常驻**：`closer`（收口看门）/ `timeflow`（`tools/serve.py`）/ `zentao` / `trae`，子命令 `start` / `stop <名>` / `status` / `list` —— **每件都能单独停**（用户令：「一起启动，但是关闭可以分开」）。指针：`tools/stack.py`。② ★ `stop` **先核 pid 身份**（映像白名单）⇒ 不匹配就**拒绝动手并点名**；pid 已不存在 ⇒ 如实说「没在跑」并清掉过期文件 —— 这条保证不会误杀用户别的 `python` / `node`。指针：`tools/stack.py`。③ ★ **禅道那件如实拒**：它必须由 ZenPanel（GUI）在面板里点启 Apache/MySQL（面板会渲染 conf、可能改端口），所以 `start zentao` **不假装起了**，而是把「怎么起」的原话交出来。指针：`docs/禅道-怎么起.md`。"

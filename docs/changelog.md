@@ -67,6 +67,10 @@
 - **`tools/dsh_panel.py`**：由 `SEATS` 唯一真源生成三座位（`workbench_board` / `zentao_gantt` / `timeflow_inbox`）+ `/dsh-panel` 只读前缀路由（`/dsh-panel/workbench-board`、`/dsh-panel/zentao-gantt`、`/dsh-panel/timeflow-inbox`）+ 三个只读会话工具；数据源分别是 `tools/pipeline_view.py`、`tools/zentao_gantt.py`、`tools/timeflow_inbox.py`（★ 不重写读法）。
 - ★ 判据 `tests/test_dsh_panel.py`：**45 条**（旧 15 条**一条未删、未降级** + 新 30 条），覆盖「三座位 id 一致」「只 GET 守卫」「缺数据必回 `ok:false`」「11 个越界词注入两半」「装法必须 `file:` 不许 `link:`」。
 - ★ 真读数：`tools/dsh_panel.py --check` 绿（原话「三座位（workbench_board、zentao_gantt、timeflow_inbox）；只读 + 失败可见 + 只 GET」）· `45 passed` · `ruff All checks passed!` · 生成物两半 `node --check` 通过 · `tests/test_no_window.py` 8 项子集全绿。
+## 2026-10-14 —— 一起起、分别停：tools/stack.py（T-G359）
+- **`tools/stack.py`**（新）：`start` / `stop <名>` / `status` / `list`；组件表 closer / timeflow / zentao / trae；判活 = **真进程**（tasklist）+ **真端口**（socket）；子进程全部带 `NO_WINDOW`；源码里没有 `except: pass`。
+- ★ 判据 `tests/test_stack.py`（新，5 条，**逐条先红后绿**）：身份不符必拒 / 过期 pid 如实说并清文件 / `start` 幂等（已在跑不重复起）/ `status` 缺件必须写「没起」/ 源码不许吞异常。
+- ★ 真读数：`status` 原话 —— `closer 没起：无 pid 记录` · `timeflow 没起：端口都不通，也没有活的 pid` · `zentao 没起：端口都不通，也没有活的 pid` · `trae 在跑：端口 9333；映像 Trae CN.exe`；`5 passed in 1.88s` · `ruff All checks passed!` · `tests/test_no_window.py` 8 passed。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。
