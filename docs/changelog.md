@@ -59,6 +59,10 @@
 - ★ 判据 `tests/test_wb_land.py` 补一条**反向**：不带产物的提交 ⇒ **盖章函数被调用 0 次**（先红后绿）；产物真在 ⇒ 行为不变 ✓。
 - ★ 并把**三笔被误标的**（`B-20261017`/`B-20261018`/`B-20261026`）退回 `awaiting-commit`，把"为什么退"写进各自的 `gates/diag/batch/B-20261017.why.md` 那种「为什么」文件 ✓。
 - ★ 真读数：`tests/test_wb_land.py` + `tests/test_no_window.py` 全过 · `ruff` 全过。
+## 2026-10-14 —— 把 228 补完：封存树 vs 提交树的差异排除门禁产物（T-G357）
+- **`tools/pool/landing.py`**：把**提交装不下**的东西（未跟踪件 / 门禁产物 `gate_lock_calls.log`·`gate_ran.marker`·`lock.marker`）排除出「封存树 vs 提交树」的比较 ⇒ 两边**可比** ✓；那条 e2e `test_full_chain_review_green_e2e` **真绿**（未删未降级 ✓）。
+- ★ 判据 `tests/test_wb_land.py`：正向（门禁产物变化不影响 ✓）+ **反向** `test_tamper_after_seal_review_red_e2e`（封存后改被跟踪文件 ⇒ **必须照样红** ✗，证明没放水 ✓）。
+- ★ 真读数：`pytest tests/test_wb_land.py -q --no-cov` = **58 passed** · `ruff All checks passed` · **产物无 BOM** ✓ · 起子进程均带 `NO_WINDOW` ✓。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。

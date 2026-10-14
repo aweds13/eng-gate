@@ -6559,3 +6559,14 @@ evidence = [
   "file:tests/test_wb_land.py",
 ]
 gaps = "① ★★ **现象（机制自己制造的假账）**：`B-20261017`/`B-20261018`/`B-20261026` 三笔被标 landed ✗，而 225 的活**不在主仓** ✗；推栅栏的原话引的是 **236** 的提交号 ✗ ⇒ ⑨ 按「成员都交了申请」就盖章、**没核验产物真在那笔提交里**。指针：`tools/pool/landing.py`。② ★ **改法**：盖章前取 `[[member]].paths ∩ git show --name-only <sha>` ⇒ **空就拒盖章并点名** ✗；声明域为空 ⇒ 如实说「无法核验」、**不盖章**（宁缺勿假 ✓）。指针：`tools/pool/landing.py`。③ ★ **反向判据（本卡核心）**：一笔**不带**某成员产物的提交 ⇒ ⑨ **不许**把它标 landed（断言盖章函数被调用 **0 次** + 点名里有那个成员）；产物真在 ⇒ 照旧盖章（既有行为不变 ✓）。指针：`tests/test_wb_land.py`。"
+
+[entries."T-G357"]
+id = "T-G357"
+title = "把 228 补完：封存树 vs 提交树的差异要排除门禁产物"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "file:tests/test_wb_land.py",
+]
+gaps = "① ★ **本笔是 228 的补完**（卡 237 判为 A：228 没改完 ✗）：失败原话 `problems` 差在 `[gate_lock_calls.log, gate_ran.marker, lock.marker]` —— 都是**跑门禁时生成、提交装不下**的产物 ✗ ⇒ 封存树与「提交去 gates/** 的树」**不可比**。本笔把两边做成可比。指针：`tools/pool/landing.py`。② ★ **那条 e2e 未删未降级**（它是 228 自己装的 ✓，钉的正是「完整链跑完复核必须 `problems == []`」 ✓）—— 本笔让它**真绿**，不是让它消失 ✓。指针：`tests/test_wb_land.py`。③ ★ **反向判据证明没放水**：`test_tamper_after_seal_review_red_e2e`（封存后改**被跟踪**文件 ⇒ 复核**必须**报「封存树 vs 提交树」✓）；★ 238 的⑨核验行为**逐字保留** ✓。指针：`tests/test_wb_land.py`。"

@@ -2309,3 +2309,29 @@ risk = "high"
 status = "done"
 
 depends = ["237"]
+
+[[cards]]
+
+id = "239"
+
+task = "T-G357"
+
+title = "把 228 补完：封存树 vs 提交树的差异要排除门禁产物"
+
+tree = ".wt/seal228"
+
+spec = "复盘/卡/卡239-228补完.md"
+
+files = [
+
+  "tools/pool/landing.py",
+
+  "tests/test_wb_land.py",
+
+]
+
+risk = "high"
+
+status = "done"
+
+depends = ["238"]
