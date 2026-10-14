@@ -17,6 +17,12 @@
 - 扩展点覆盖两条真需求：**① 加一个 API 路由** · **② 加一个口径/派生读数**（复用 `core/behavior.py` 形态，不并列造表）。
 - ★ 判据（`tests/test_plugins.py`）：**装上可用 · 卸下无残留 · 坏插件必须报出来 · 「不改核心」由机器证明**；两条反例先红后绿。
 - ★ 真读数：`tests/test_plugins.py` **10 passed** · 相关旧判据 7 个文件 **54 passed** · `ruff All checks passed` · `src/timeflow/**` 注册路径外**零改动**。
+## 2026-10-14 —— 收口器做成确定的程序：`tools/auto_land.py`（零 LLM）（T-G350）
+- 新增 **`tools/auto_land.py`**：扫 `gates/diag/batch/*.json` 里 `state == awaiting-commit` 的批 ⇒ 走**既定收口链**落掉 ⇒ 标 landed + 推镜像；`--dry-run` 只说不动。
+- **四态**：有批且就绪 ⇒ 落；**内存紧 / 门禁红 / 含用户决策项 ⇒ 什么都不做 + 非零退出 + 点名**；**无批 ⇒ 退 0 且不打印废话**（它每 5 分钟跑一次，别刷屏）。
+- ★ 判据 `tests/test_auto_land.py`：四态各一条 + **两条反向**（内存紧/门禁红时**落函数被调用 0 次**，先红后绿）。
+- ★ 挂法：DSH 那条每 5 分钟的提示词**缩成一句命令**（或 Windows 计划任务）—— **不经模型判断** ✓。
+- ★ 真读数：`tests/test_auto_land.py` 9 passed · `ruff` 全过 · 断链 0。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。

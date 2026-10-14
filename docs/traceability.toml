@@ -6461,3 +6461,14 @@ evidence = [
   "file:docs/EXTENDING.md",
 ]
 gaps = "① ★ **这是计划里唯一「未开卡」的工程债**：`复盘/任务重规划-剩余工作.md` 的 T-D9 行原话「真正的插件注册机制仍没有 → 工程债（未开卡）」，现状是「加字段 / 加功能做不到不改核心」。本笔给出**一条最小可用的注册路径**（不是「再来一份模板+示例」）。指针：`复盘/卡/卡229-插件扩展点.md`。② ★ **「不改核心」是机器证明的，不是口号**：判据断言**装配过程对核心文件的改动为零**（`git status --porcelain` 在 `src/timeflow/**` 注册路径之外为空）；配**先红后绿**的反例。指针：`tests/test_plugins.py`。③ ★ **侦察后复用既有接缝**：照 `src/timeflow/core/behavior.py`（T-D11 的口径注册表）的形态接，**不另造第二张口径表**；`examples/01~03` 那三个示例原来的做法正是「改核心」，本笔把它们指向的活干成了注册。指针：`tools/pool/landing.py`（收口链）。"
+
+[entries."T-G350"]
+id = "T-G350"
+title = "收口器做成确定的程序：tools/auto_land.py（零 LLM，四态明确）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/auto_land.py",
+  "file:tests/test_auto_land.py",
+]
+gaps = "① ★ **这张卡的来由是用户的两个追问**：「这个收口器是什么形式」「为什么没自动执行」—— 当场那个收口器是**一段自然语言提示词**（每 5 分钟投一次、由一个 agent 回合读懂再动）✗。本笔把它换成纯程序。指针：`tools/auto_land.py`。② ★ **四态都做成「确定的」**：该落就落；**内存紧 / 门禁红 / 混着用户决策项 ⇒ 什么都不做 + 非零退出 + 点名**（★ 不许用 `TF_GATE_MIN_FREE_GB=0` 这类逃生门绕内存闸 ✗）。指针：`tests/test_auto_land.py`。③ ★ **两条反向判据**：内存紧与门禁红时，**落函数被调用 0 次**（先红后绿）—— 钉的是「它真看得见这两种态」，不是「顺便退了个非零码」。指针：`tools/auto_land.py`。"
