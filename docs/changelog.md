@@ -50,6 +50,10 @@
 - **`tools/pool/landing.py`**：每棵成员树参与集成的文件 = `[[member]].paths ∩ 该树真改过的文件` ✓；**域外改动不拷但逐条打印** ✓；声明域内该改没改**如实报** ✓；两成员**声明域相交 ⇒ 停手点名** ✓。
 - ★ 落地方式：**以 main 为底**（含 226 的预检 + 236 的次序修 ✓），**只叠 225 的三个 domain 函数**（`_domain_hits` / `_domain_overlap` / `_split_domain`）⇒ 不覆盖别人的活 ✓。
 - ★ 真读数：`tests/test_wb_land.py` 全过 · `ruff` 全过 · 层检查红项 0 · `git apply --check -p0` 干净 ✓。
+## 2026-10-14 —— 判 228-vs-234：结论是"228 没改完"，且"234 的 e2e"不存在（T-G355）
+- **诊断三件事**（228 改了什么 / 那条 e2e 断言什么 / 冲突点原话）逐条贴了真读数 ✓；★ **纠偏**：e2e 是 **228 自己**装的（`git log`/归属证据见报告 §2.0 ✓）⇒ B 无所指 ✓。
+- ★ **结论 A**：228 的修法**只治了一半** —— 翻账挪到封存前 ✓，但 **门禁产物**（`gate_lock_calls.log` / `gate_ran.marker` / `lock.marker`）仍使封存树与提交树不一致 ✗。
+- ★ 基线读数：本树 `49 passed`；带 228 的两件产物 ⇒ `1 failed, 49 passed`（失败即那条 e2e ✓）；`ruff` 全过。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。

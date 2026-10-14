@@ -6536,3 +6536,15 @@ evidence = [
   "file:tools/pool/landing.py",
 ]
 gaps = "① ★ **本笔只含 225 的那一处**（`_integrate_multi_tree` 按 `[[member]].paths` 只取声明域）：它历时最久 —— 先被同批的 226/236 卷进 `tools/pool/landing.py` 的**整份覆盖 vs 只叠差异**问题（主控一度把 236 的次序修盖掉 ✗），最后以「**以 main 为底、只取那三个 domain 函数**」的方式落地。指针：`tools/pool/landing.py`。② ★ **域外改动不拷但逐条打印**（看见并放过 ✓，不许静默忽略 ✗）；声明域内该改没改也如实报 ✓；两成员声明域相交 ⇒ 停手点名 ✓。指针：`tools/pool/landing.py`。③ ★ **这份补丁是「挑 hunk」挑出来的**：工人那棵树里混着 226 的 `fast_preflight` ✗ ⇒ 认不出的 hunk **一律不拿**（宁缺勿滥 ✓）；挑完 `git apply --check -p0` 干净 ✓。指针：`gates/diag/_p225_domain_only.patch`。"
+
+[entries."T-G355"]
+id = "T-G355"
+title = "判 228-vs-234：结论是 228 没改完，且 234 的 e2e 不存在"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_wb_land.py",
+  "file:tools/pool/landing.py",
+  "file:复盘/卡/卡237-228与234冲突.md",
+]
+gaps = "① ★★ **本笔纠正了主控的前提**：那条失败 e2e（`test_full_chain_review_green_e2e`）**不是卡 234 装的，是卡 228 自己装的** ⇒ 「228 vs 234 相争」**不成立**，「B（234 钉错了）」**无所指** ⇒ 结论是 **A：228 没改完**（它要的正是它自己那条 `problems == []`）。指针：`tests/test_wb_land.py`。② ★ **失败原话给了方向**：把 228 的两件产物拷进来后 `problems` 差在这些路径 —— `['gate_lock_calls.log', 'gate_ran.marker', 'lock.marker']` ⇒ **封存树 vs 提交树的差异跑到「门禁产物」上去了**（228 的修只治了一半：它把翻账挪到封存前 ✓，但**门禁产物本身**仍会让两边不一致 ✗）。指针：`tools/pool/landing.py`。③ ★ **本笔只做诊断与纠偏，不动 228**：修 228 是**另一笔**（它的域 = 228 的两件产物 ⇒ 与新卡串批 ✓）。指针：`复盘/卡/卡228-封存后才翻status.md`。"

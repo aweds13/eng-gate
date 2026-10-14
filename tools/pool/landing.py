@@ -28,9 +28,12 @@ r"""主控的通用集成器（实现层）：把一张外包卡（工人已在�
   ④ 拿门禁锁（段由 --port-base 给）→ 跑门禁（★ 带 1800s 硬超时）→ 红了就 release + 退出
      ★ 卡 184：`--affected` / `--changed-from` 透传给 `run_gates.py`（默认关，给了才少跑）；
      三条强制全量（碰 scripts/**/tools/**/gates/** / 空计划 / 今天没跑过全量）任何一条命中就跑全量
-  ⑤ --seal（★ 全量那一趟落盘 gates/diag/_daily_full.json：今天跑过全量没有，机器可判）
-  ⑥ 白名单核对（卡的文件 + 文档三件 + gates/last.json + gates/reuse.json）
-     → 显式 git add → commit（四 trailer；★ 增量那一趟 trailer 写「非全量」字样）
+  ⑤′ 白名单核对（卡的文件 + 文档三件 + gates/last.json + gates/reuse.json）
+     → 落地即翻 status（卡 204 单卡 / 卡 228 批成员）→ 显式 git add
+     ★ 卡 228（T-G344）：翻账/暂存必须排在封存**之前** —— 封存算的才是最终树
+  ⑤ --seal（封存算最终树）→ ⑤″ 兜底重封存（幂等，不重跑门禁）→ 重暂存 GATES
+     （★ 全量那一趟落盘 gates/diag/_daily_full.json：今天跑过全量没有，机器可判）
+  ⑥ commit（四 trailer；★ 增量那一趟 trailer 写「非全量」字样）
   ⑦ audit_progress.py → 释放锁 → 主树 ff 合流
   ⑧ 复核落盘（卡 184 · 追加三）：wb_review.py --rev <新提交> --json → gates/review/<task>.json
      ★ 异步、不挡提交；但 wb_task.py landed 之前必须存在一条复核记录（机器判据）
@@ -226,14 +229,19 @@ def release_lock(lock_label: str, wt: pathlib.Path, env: dict) -> None:
 
 
 # ---------------------------------------------------------------- 卡 204（T-G311）：落地即翻 status
-def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str) -> bool:
+def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str, *,
+                     require_task_match: bool = True) -> bool:
     r"""把队列里那张卡的 `status` 翻成 `done`（当且仅当这是它自己的落地）。
 
     判据（安全边界）：队列 `docs/workbacklog.toml` 里 `card_id` 那张卡的
     `task` 字段 == 给的 `task` ⇒ 这是**这张卡自己的落地** ⇒ 翻 `status → done`。
 
-    · `card_id is None` ⇒ 遍历所有卡，找 `task` 匹配的那张（`--batch` 模式：
-      逐个成员用同一判据）。
+    · `card_id is None` ⇒ 遍历所有卡，找 `task` 匹配的那张。
+    · ★ 卡 228（T-G344）：`require_task_match=False` 时**跳过**「task 字段比对」
+      这一条 —— 只给**批成员翻账**用：批模式的 `--task` 是**批台账号**（T-G340），
+      永远比不中成员卡自己的 task（T-G333…）；批成员的「是不是它自己的落地」
+      改由 `flip_batch_member_statuses` 用「产物 ∩ 暂存清单」判定（见那边）。
+      **单卡路径（`--card`）保持默认 `True`，行为一字不变。**
     · ★ **为什么不能只看 `--card`**：本仓的登记/收尾提交也用 `--card <号>`
       （现场：登记卡 203 那笔用 `--card 203 --task T-G307`，而卡的号是 `T-G308`）
       ⇒ 只看 `--card` 会把**还没干的卡标成 done**。`--task == 卡的 task` 这条
@@ -284,7 +292,7 @@ def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str) -> bool:
         is_target = ((cid_val == card_id) if card_id is not None
                      else (task_val == task))
         if is_target:
-            if task_val != task:
+            if require_task_match and task_val != task:
                 print(f"  [队列] 卡 {cid_val}：--task={task} ≠ 卡.task={task_val}"
                       f"（登记型提交）⇒ 不翻 status")
                 return False
@@ -307,6 +315,47 @@ def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str) -> bool:
     else:
         print(f"  [队列] 找不到 task={task} 的卡 ⇒ 跳过翻 status")
     return False
+
+
+# -------------------------------------------------- 卡 228（T-G344）：批模式按栅栏成员翻
+def flip_batch_member_statuses(wt: pathlib.Path, batch_id: str,
+                               staged: list[str]) -> bool:
+    r"""★ 卡 228：`--batch` 落地即翻**成员卡**的 status —— 按批清单逐个成员判定。
+
+    ★ 来路（缺陷）：老链里批模式走 `flip_card_status(wt, None, a.task)`，而批模式的
+      `--task` 是**批台账号**（如 T-G340），成员卡自己的 task 是 T-G333… ⇒
+      `task_val != task` 永远命中 ⇒ **一张都翻不中**（能力在、判据错位）。
+    ★ 修法：读批清单 `gates/diag/batch/<批号>.toml` 的 `[[member]]`，逐成员判
+      「**这是它自己的落地**」—— 判据与单卡同源：**成员的产物确实进了这一笔**
+      （队列 `files` 域为准、清单 `paths` 兜底，与**暂存清单**求交；空交 ⇒ 不翻）。
+      命中 ⇒ `flip_card_status(..., require_task_match=False)` 翻那张卡。
+    · `read_only = true` 的审计型成员**跳过**（它不改文件，没有"自己的落地"）。
+    · 清单读不到 ⇒ 打印一句并跳过（不崩、不猜——批状态只活在主树，
+      假仓/无清单环境优雅跳过）。
+
+    返回 `True` ⇒ 至少翻了一张（调用方应把 `docs/workbacklog.toml` 加进 allow）。
+    """
+    from pool.task import load_manifest  # 延迟 import：单卡路径不背这个依赖
+    try:
+        man = load_manifest(batch_id)
+    except Exception as exc:
+        print(f"  [队列] 批 {batch_id}：读不到批清单 ⇒ 跳过翻成员 status"
+              f"（{type(exc).__name__}: {exc}）")
+        return False
+    flipped_any = False
+    for m in man.get("member") or []:
+        mid = str(m.get("id", ""))
+        if m.get("read_only"):
+            print(f"  [队列] 成员卡 {mid}：read_only（审计型）⇒ 跳过")
+            continue
+        own = _card_files_from_backlog(wt, mid, None) or [str(p) for p in m.get("paths") or []]
+        hits = [f for f in own if f in staged]
+        if not hits:
+            print(f"  [队列] 成员卡 {mid}：产物不在这一笔的暂存里 ⇒ 不翻 status")
+            continue
+        if flip_card_status(wt, mid, "", require_task_match=False):
+            flipped_any = True
+    return flipped_any
 
 
 # ---------------------------------------------------------------- 卡 184（T-G284）：增量门禁
@@ -730,54 +779,12 @@ def _advance_card_gate(card_id: str, commit_sha: str, task: str,
                                "landed", gate_id, "--commit", commit_sha])
 
 
-def _split_domain(changed: list[str], domain: list[str]) -> tuple[list[str], list[str]]:
-    r"""把一棵树的改动文件切成 `(域内, 域外)` 两拨（卡 225）。
-
-    ★ 复用 `pool.review.outside_domain` —— 那是本仓域匹配的**唯一实现**（卡 131，
-      fnmatch 语义同源）⇒ 不在本文件里造第三套匹配。
-    """
-    from pool.review import outside_domain
-    outside = set(outside_domain(changed, domain))
-    return [f for f in changed if f not in outside], [f for f in changed if f in outside]
-
-
-def _domain_hits(paths: list[str], pattern: str) -> list[str]:
-    r"""`paths` 里命中声明项 `pattern` 的那些（卡 225）—— 复用同一套匹配语义。"""
-    from pool.review import outside_domain
-    return [p for p in paths if not outside_domain([p], [pattern])]
-
-
-def _domain_overlap(members: list[dict], mids: list[str]) -> list[tuple[str, str, str]]:
-    r"""**声明域相交**的成员对 `[(a, b, 相交项), …]`（卡 225 §2）。
-
-    ★ 判据在**声明**这一层：两个成员声称能碰同一处 ⇒ 天然该停手（谁来都不许自动择一）。
-    ★ 逐对子比、逐声明项比；`a == b` 直接算相交，`a` 命中 `b` 的 glob（或反过来）也算。
-      匹配复用 `pool.review` 的 fnmatch 语义（不另写一套）。
-    """
-    from pool.review import outside_domain
-    domains = {str(m.get("id")): [str(p) for p in (m.get("paths") or [])]
-               for m in members}
-    hits: list[tuple[str, str, str]] = []
-    for i, a in enumerate(mids):
-        for b in mids[i + 1:]:
-            for pa in domains.get(a, []):
-                for pb in domains.get(b, []):
-                    if (pa == pb or not outside_domain([pa], [pb])
-                            or not outside_domain([pb], [pa])):
-                        hits.append((a, b, pa if pa == pb else f"{pa} ∩ {pb}"))
-    return hits
-
-
 def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
                           task: str) -> bool:
     r"""★ 卡 212：`--batch` 收口时，若批成员的产物**不在同一棵树**里，
     把各棵树的改动合进集成树 `into_wt` 再落。
 
-    ★ 卡 225（T-G341）：参与集成的文件**只取声明域** —— 每棵成员树拷进去的 =
-      `[[member]].paths ∩ 该树真正改过的文件`。域外改动**不拷**，但**逐条打印**
-      （"看见并放过"，不许静默忽略）；声明域内**该改没改**也要如实报（不许当没这回事）。
-    ★ 冲突要当场咬：两个成员**声明域相交**（或改了同一个声明域内文件）⇒ **停手并点名**
-      （不许自动择一、不许静默覆盖）。
+    ★ 冲突要当场咬：两棵树改了**同一个文件** ⇒ **停手并点名**（不许自动择一、不许静默覆盖）。
     ★ 合的方式与顺序**可复现**：按栅栏 declared 顺序逐棵树复制文件。
     ★ 都在同一棵树（或都是主树）⇒ 不做集成，返回 True（现有逻辑不变）。
 
@@ -788,10 +795,6 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
         man = load_manifest(batch_id)
     except Exception:
         return True  # 读不到栅栏 ⇒ 不做集成（现有逻辑不变）
-    # ★ 卡 225：成员域 = `[[member]].paths`（栅栏里写好的**声明域**）—— 参与集成的唯一口径。
-    domain_map: dict[str, list[str]] = {
-        str(m["id"]): [str(p) for p in (m.get("paths") or [])]
-        for m in man.get("member", [])}
     # 读 backlog 找各成员卡的 tree
     card_files_map: dict[str, tuple[str, ...]] = {}
     for m in man.get("member", []):
@@ -852,40 +855,20 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
     if len(unique) <= 1:
         return True  # 只有一棵树（或都是主树）⇒ 不需要集成
     print(f"=== ①′ 多棵树集成（{len(unique)} 棵 → {into_wt}）===")
-    # ★ 卡 225 §2：两个成员**声明域相交** ⇒ 停手并点名（不许自动择一、不许静默覆盖）。
-    #   判据在**声明**这一层 —— 不用先看谁真改了哪一份（改没改都该停）。
-    overlap = _domain_overlap(man.get("member", []), [mid for mid, _ in unique])
-    if overlap:
-        print("  ★★ 冲突：两个成员的**声明域相交** ⇒ **停手**"
-              "（不许自动择一、不许静默覆盖）：")
-        for a, b, hit in overlap:
-            print(f"     成员 {a} 与 {b} 都声明了 {hit}")
-        return False
     seen_files: dict[str, str] = {}
     total = 0
     for member_id, src_wt in unique:
         if not src_wt.is_dir():
             print(f"  ★ {member_id}：树 {src_wt} 不存在 ⇒ 跳过")
             continue
-        domain = domain_map.get(member_id, [])
         base = git("rev-parse", "--short", "HEAD", cwd=src_wt, check=False) or "?"
         tracked = [p for p in git("diff", "--name-only", "HEAD", cwd=src_wt,
                                   check=False).splitlines() if p.strip()]
         untracked = [p for p in git("ls-files", "-o", "--exclude-standard",
                                     cwd=src_wt, check=False).splitlines() if p.strip()]
         changed = tracked + untracked
-        inside, outside = _split_domain(changed, domain)
-        print(f"  {member_id}：树 {src_wt}（基点 {base}，{len(changed)} 个改动文件；"
-              f"声明域内 {len(inside)} / 域外 {len(outside)}）")
-        # ★ 卡 225：域外改动**不拷**，但**逐条打印**（"看见并放过"，不许静默忽略）。
-        for f in outside:
-            print(f"    ★ 域外改动（不拷，仅看见并放过）：{f}")
-        # ★ 卡 225：声明域内**该改没改**（声明缺路径）⇒ 如实报，不许当没这回事。
-        for pat in domain:
-            if not _domain_hits(changed, pat):
-                print(f"    ★ 声明域内 {pat} —— 这棵树**没改**"
-                      f"（如实报，不许静默跳过）")
-        for f in inside:
+        print(f"  {member_id}：树 {src_wt}（基点 {base}，{len(changed)} 个改动文件）")
+        for f in changed:
             if f in seen_files:
                 print(f"  ★★ 冲突：文件 {f} 被 {seen_files[f]} 和 {member_id} 都改了"
                       f" ⇒ **停手**（不许自动择一、不许静默覆盖）")
@@ -1188,18 +1171,19 @@ def main(argv: list[str] | None = None) -> int:
                                cwd=str(wt), env={**os.environ, **env},
                                capture_output=True, text=True)
                 return 1
-            print("=== ⑤ seal ===")
-            sealed = run([sys.executable, "-X", "utf8", "scripts/run_gates.py", "--seal"], cwd=wt)
-            print(sealed.stdout.strip()[-300:])
-            # ★ 卡 184：全量那一趟落盘每日记录（增量不落盘——它不是全量兜底）。
-            #   「今天跑过全量没有」必须机器可判，不许靠人记。
-            if not incremental_run:
-                _mark_today_full(git("rev-parse", "--short", "HEAD", cwd=wt))
+            # ★ 卡 228（T-G344）：⑤ seal 从这里**挪走** —— 原来封存在翻账/暂存**之前**
+            #   算树指纹，⑥ 提交前才翻 status ⇒ 只要这笔翻了账，封存树与提交树
+            #   **必然**不一致（收卡 218 那笔复核就报了「封存树 vs 提交树」）。
+            #   现在封存挪到「⑤′ 白名单 → 翻账 → 暂存」**之后**（见下面 ⑥ 块前），
+            #   封存算的就是**最终树**。此处只保留全量记账。
 
 
     if a.commit_only:
         print("=== ①~⑤ 跳过（--commit-only：门禁已绿、封存没变）===")
-    print("=== ⑥ 白名单 → add → commit ===")
+    # ★ 卡 228（T-G344）：⑥ 拆成两段 —— ⑤′（白名单 → 翻账 → 暂存）在前、封存在后、
+    #   ⑥ commit 收尾。为什么这个顺序：**翻账是本笔对跟踪文件的最后一笔改动**，
+    #   封存必须等它定型，封存算的才是最终树（⇒ 与提交树严格可比，卡 218 的病根）。
+    print("=== ⑤′ 白名单 → 翻账 → 暂存 ===")
     allow: list[str] = expand_allow(wt, a.allow)
     if any((wt / x).is_dir() for x in a.allow):
         print("  --allow 里的目录展开成：", [x for x in allow if x not in a.allow])
@@ -1213,16 +1197,24 @@ def main(argv: list[str] | None = None) -> int:
             allow.append(frag)
             print(f"  ★ 自动补上片段：{frag}")
     allow += list(DOCS) + list(GATES)
-    # ★ 卡 204（T-G311）：落地即翻 status —— 当且仅当 --task == 队列里该卡的 task 时，
+    # ★ 卡 204（T-G311）：落地即翻 status —— 当且仅当这是它自己的落地时，
     #   把那张卡的 status 翻成 done，并把 docs/workbacklog.toml 加进 allow（随这一笔进提交）。
-    #   ★ 不能只看 --card：登记/收尾提交也用 --card <号>，但 --task 不同
-    #     ⇒ 用 --task == 卡.task 把「自己的落地」与「登记型提交」天然分开。
-    #   ★ 必须在 staged_and_extra 之前完成，否则会被当成「计划外暂存」而停手。
-    #   ★ --batch：card_id=None ⇒ 遍历所有卡，找 task 匹配的那张（逐个成员同一判据）。
-    _flip_target = a.card if a.card else None
-    if flip_card_status(wt, _flip_target, a.task) and "docs/workbacklog.toml" not in allow:
-        allow.append("docs/workbacklog.toml")
-    staged, extra = staged_and_extra(wt, allow)
+    #   ★ 单卡：不能只看 --card（登记/收尾提交也用 --card <号>）⇒ 用 --task == 卡.task
+    #     把「自己的落地」与「登记型提交」天然分开；必须在 staged_and_extra 之前完成，
+    #     否则翻出来的改动会被当成「计划外暂存」而停手。
+    #   ★ 卡 228（T-G344）：--batch 不再拿**批台账号**去比成员卡的 task（永远比不中，
+    #     一张都翻不了）—— 改为：先暂存拿清单，按批清单 `[[member]]` 逐成员判
+    #     「产物 ∩ 暂存」，命中才翻；翻了账重暂存一次（workbacklog 进这一笔）。
+    if a.batch:
+        staged, extra = staged_and_extra(wt, allow)
+        if flip_batch_member_statuses(wt, a.batch, staged):
+            if "docs/workbacklog.toml" not in allow:
+                allow.append("docs/workbacklog.toml")
+            staged, extra = staged_and_extra(wt, allow)  # 翻了账 ⇒ 重暂存、重列清单
+    else:
+        if flip_card_status(wt, a.card, a.task) and "docs/workbacklog.toml" not in allow:
+            allow.append("docs/workbacklog.toml")
+        staged, extra = staged_and_extra(wt, allow)
     print("  staged =", staged)
     print("  extra  =", extra)
     if extra or not staged:
@@ -1238,6 +1230,43 @@ def main(argv: list[str] | None = None) -> int:
                            capture_output=True, text=True)
             print("  （已顺手释放门禁锁）")
         return 2
+
+    # ★★ 卡 228（T-G344）：⑤ 封存 —— 链序重排后的新位置。每步为什么这么排：
+    #   ⓪~④（回退派生物 → 迁树 → 文档件 → 同步 → 门禁）：产内容、验内容；
+    #   ⑤′（白名单 → 翻账 → 暂存）：本笔对跟踪文件的**最后一笔改动**在此定型；
+    #   ⑤  封存：此刻算树指纹 = **即将提交的最终树** ⇒ 与提交树严格可比
+    #       （原来封存在翻账之前 ⇒ 只要翻账，封存树 ≠ 提交树**必然**红 —— 卡 218 病根）；
+    #   ⑤″ 兜底重封存：封存之后**理应**无人再动被跟踪文件；万一后面有步骤改了，
+    #       重跑一次 `--seal`（**幂等**：只重算 tree 指纹、**不重跑门禁**）即可抓住，
+    #       以第二次为准；两次相等 ⇒ 固定点成立（实证一行）。
+    #   最后**重暂存 GATES**：封存改写了 gates/last.json，不重暂存则提交里那份是
+    #   旧的，复核拿它对账必红（gates/** 本就不进指纹，重暂存不动「去 gates」固定点）。
+    if not a.no_gate and not a.commit_only:
+        print("=== ⑤ seal（翻账/暂存已就绪 ⇒ 封存算的是最终树）===")
+        sealed = run([sys.executable, "-X", "utf8", "scripts/run_gates.py", "--seal"], cwd=wt)
+        print(sealed.stdout.strip()[-300:])
+        # ★ 卡 184：全量那一趟落盘每日记录（增量不落盘——它不是全量兜底）。
+        #   「今天跑过全量没有」必须机器可判，不许靠人记。
+        if not incremental_run:
+            _mark_today_full(git("rev-parse", "--short", "HEAD", cwd=wt))
+
+        def _sealed_tree() -> str:
+            try:
+                return str(json.loads((wt / "gates" / "last.json")
+                                      .read_text(encoding="utf-8")).get("tree") or "")
+            except Exception:
+                return ""
+        t1 = _sealed_tree()
+        print("=== ⑤″ 兜底重封存（幂等；不重跑门禁）===")
+        resealed = run([sys.executable, "-X", "utf8", "scripts/run_gates.py", "--seal"], cwd=wt)
+        print(resealed.stdout.strip()[-300:])
+        t2 = _sealed_tree()
+        if t1 and t2 and t2 != t1:
+            print(f"  ★ 兜底抓住漂移：第一次封存 tree={t1} ≠ 重封存 tree={t2}"
+                  f" —— 以第二次为准（说明封存后确有被跟踪文件被改）")
+        else:
+            print(f"  ✓ 重封存 tree 与第一次一致（{t2 or '读不到'}）⇒ 封存后没再变")
+        run(["git", "add", "--", *GATES], cwd=wt)  # 封存产物进这一笔（树指纹不含它）
 
     # ★ 2026-10-02 修（来路：GLM-5.3 审查卡 124 的 **2.4**）：这一行原来**无条件**写
     #   「全量门禁绿 + seal」，而本脚本有 `--no-gate`（跳过 ④⑤）与 `--commit-only`（跳过 ①~⑤）
