@@ -6425,3 +6425,14 @@ evidence = [
   "file:docs/workbacklog.toml",
 ]
 gaps = "① ★ **`--target` 多窗口没做**：本卡规格里没点它，而用户「多开」的需求已单独写成卡 227（`depends = [「218」]`，在本卡之后跑）。指针：`复盘/卡/卡227-Trae多窗口target.md`。② ★ **面板里的模型回话有怪癖**：问它 PONG、它答 PORT（不是管道问题，是模型），所以回话提取改成「取最后一条 agent 消息」并加了收尾卡识别。指针：`tools/trae_pool.mjs`。③ ★ **MCP 那次没在真 DSH/Trae 里端到端验**：Trae 的项目级配置要放在**工作区根**下它才读，所以得**把主仓当 Trae 工作区根**再开窗、跑 `/mcp` 才吃到；这一步**得用户自己做**。它指向的服务端就在仓里 —— 指针：`tools/pool_mcp.py`。④ ★ **Trae 那条道要 IDE 带调试口**：`trae_pool.mjs` 连的是 `127.0.0.1:9333` 的 CDP，得先用桌面上的 `启动Trae-带调试口.cmd` 起 Trae（`argv.json` 里那个键 **Trae CN 不认**）。指针：`tools/trae_pool.mjs`。⑤ ★★ **顺手拔掉一颗地雷（本笔必须带它，否则谁都落不了地）**：卡 193 的文书预算判据 `_find_pointers` 要求 sha 里**至少有一个 `a`~`f`**，而短 sha **恰好纯数字**时（`(10/16)^7 ≈ 3.7%`）真 sha 会被当普通数字 ⇒ `test_pointer_to_real_sha_is_green` **必红**；主树 HEAD `2051255` 正是纯数字 ⇒ **主树红了、任何收口都过不去**。改成「纯数字候选走 `git cat-file -e` 实测」（**不是**放宽成「数字都算指针」：同一串数字在没有该对象的仓库里照旧不算）。指针：`tools/card_doc_budget.py` · `tests/test_card_doc_budget.py`。"
+
+[entries."T-G345"]
+id = "T-G345"
+title = "队列账目修复：14 张已落卡的 status 翻成 done（+ 卡 228 登记）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡228-封存后才翻status.md",
+]
+gaps = "① ★ **本笔是账目修复，不是新功能**：14 张卡（210~214 · 215~217 · 219~224）的产物**早在主干**里，队列里的 `status` 却一直写着 `pending` ⇒ `wb_plan.py plan` 把**已落地的卡**当成「待派」，排批与冲突判定全被污染（今天主控就差点按它重派一遍）。指针：`docs/workbacklog.toml`。② ★ **真因不是「谁忘了翻」**：`flip_card_status` 的判据是「那张卡的 `task` == 传进来的 `task`」，而 `--batch` 时链子传的是**批的台账号**（如 `T-G340`），拿去比**每张卡自己的台账号**（如 `T-G333`）⇒ **永远比不中** ⇒ 批量收口一张都翻不了（单卡收口有效，卡 218 那笔就翻了）。已并进卡 228 一起治。指针：`tools/pool/landing.py` · `复盘/卡/卡228-封存后才翻status.md`。③ ★ **本笔只改一个文件**：`docs/workbacklog.toml` 里 14 处 `status`；**不动任何代码、不动任何卡的产物**，翻的依据是「那张卡在某个**已 landed** 的围栏名单里」（`gates/diag/batch/*.json` 的 `state == landed`）。指针：`gates/diag/batch/B-20261016.toml`。"

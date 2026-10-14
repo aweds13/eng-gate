@@ -1631,7 +1631,7 @@ files = [
   "复盘/卡/卡210-复核派生物噪声.md",
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "211"
@@ -1646,7 +1646,7 @@ files = [
   "复盘/卡/卡211-禅道桥只读那一半.md",
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "212"
@@ -1664,7 +1664,7 @@ files = [
 ]
 risk = "mid"
 depends = ["204"]
-status = "pending"
+status = "done"
 
 # ★★ 卡 213 / 214（主控 2026-10-13 晚上续写；与在飞的 210/211/212 域不相交）。
 #   213：把 pipeline_view（卡 207 的产物）接进 MCP 只读面 —— 会话内就能看板，不用切窗口。
@@ -1686,7 +1686,7 @@ files = [
   "复盘/卡/卡213-工作台接进会话内.md",
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "214"
@@ -1703,7 +1703,7 @@ files = [
   "复盘/卡/卡214-harness其余三份装牙.md",
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 # ★★ 卡 215 / 216 / 217（主控 2026-10-13 晚，用户令「先推其他卡，快」时一次登记三张）。
 #   域与在飞的 210-214 全不相交：215 = wb_dispatch + 新看守；216 = 新队列审计 + 队列文件；
@@ -1716,7 +1716,7 @@ tree = ".wt/watchdog"
 spec = "复盘/卡/卡215-派活不该靠人轮询.md"
 files = ["tools/wb_watch.py", "tools/wb_dispatch.py", "tests/test_wb_watch.py", "复盘/卡/卡215-派活不该靠人轮询.md"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "216"
@@ -1726,7 +1726,7 @@ tree = ".wt/queueaudit"
 spec = "复盘/卡/卡216-队列登记漏与一卡一号.md"
 files = ["tools/wb_queue_audit.py", "tests/test_wb_queue_audit.py", "docs/workbacklog.toml", "复盘/卡/卡216-队列登记漏与一卡一号.md"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "217"
@@ -1736,7 +1736,7 @@ tree = ".wt/contract"
 spec = "复盘/卡/卡217-契约保护.md"
 files = ["tools/contract_audit.py", "tests/test_contract_audit.py", "复盘/契约-判据对账.md", "复盘/卡/卡217-契约保护.md"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 
 # ★★ 卡 219~224（主控 2026-10-13 深夜，用户令「开始大规模派卡」）：计划里剩下的六项。
@@ -1769,7 +1769,7 @@ files = [
 
 risk = "mid"
 
-status = "pending"
+status = "done"
 
 
 
@@ -1797,7 +1797,7 @@ files = [
 
 risk = "mid"
 
-status = "pending"
+status = "done"
 
 
 
@@ -1825,7 +1825,7 @@ files = [
 
 risk = "mid"
 
-status = "pending"
+status = "done"
 
 
 
@@ -1851,7 +1851,7 @@ files = [
 
 risk = "mid"
 
-status = "pending"
+status = "done"
 
 
 
@@ -1877,7 +1877,7 @@ files = [
 
 risk = "mid"
 
-status = "pending"
+status = "done"
 
 
 
@@ -1905,7 +1905,7 @@ files = [
 
 risk = "mid"
 
-status = "pending"
+status = "done"
 
 depends = ["215"]
 
@@ -2017,3 +2017,29 @@ risk = "mid"
 status = "done"
 
 depends = []
+
+[[cards]]
+
+id = "228"
+
+task = "T-G344"
+
+title = "封存之后才翻 status：封存树必然对不上提交树"
+
+tree = ".wt/sealorder"
+
+spec = "复盘/卡/卡228-封存后才翻status.md"
+
+files = [
+
+  "tools/pool/landing.py",
+
+  "tests/test_wb_land.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = ["225"]

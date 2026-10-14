@@ -1,0 +1,11 @@
+[entries."T-G345"]
+id = "T-G345"
+title = "队列账目修复：14 张已落卡的 status 翻成 done（+ 卡 228 登记）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡228-封存后才翻status.md",
+]
+gaps = "① ★ **本笔是账目修复，不是新功能**：14 张卡（210~214 · 215~217 · 219~224）的产物**早在主干**里，队列里的 `status` 却一直写着 `pending` ⇒ `wb_plan.py plan` 把**已落地的卡**当成「待派」，排批与冲突判定全被污染（今天主控就差点按它重派一遍）。指针：`docs/workbacklog.toml`。② ★ **真因不是「谁忘了翻」**：`flip_card_status` 的判据是「那张卡的 `task` == 传进来的 `task`」，而 `--batch` 时链子传的是**批的台账号**（如 `T-G340`），拿去比**每张卡自己的台账号**（如 `T-G333`）⇒ **永远比不中** ⇒ 批量收口一张都翻不了（单卡收口有效，卡 218 那笔就翻了）。已并进卡 228 一起治。指针：`tools/pool/landing.py` · `复盘/卡/卡228-封存后才翻status.md`。③ ★ **本笔只改一个文件**：`docs/workbacklog.toml` 里 14 处 `status`；**不动任何代码、不动任何卡的产物**，翻的依据是「那张卡在某个**已 landed** 的围栏名单里」（`gates/diag/batch/*.json` 的 `state == landed`）。指针：`gates/diag/batch/B-20261016.toml`。"
+
