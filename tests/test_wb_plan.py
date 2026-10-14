@@ -534,7 +534,19 @@ def test_render_dispatch_never_pushes_into_own_tree() -> None:
 # ------------------------------------------------------------------ 子命令（主线）
 
 
-def test_check_command_passes_on_seed() -> None:
+def test_check_command_passes_on_seed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ 卡 234（T-G351）：注入**空栅栏目录** —— 这条测试不许因主仓多了条围栏就红。
+
+    栅栏从哪来：`find_gate_drift` → `pool.task.batch_dir()` 没有覆盖时读**主树根**的
+    `gates/diag/batch/`（`main_tree_root()` 用 `git rev-parse --git-common-dir` 解析 ——
+    在卡树里跑也指向主仓）。旧夹具真队列 × 真栅栏：worktree 的 SEED 是基点副本（没有卡 231），
+    主仓栅栏却是实时的（B-20261020 有成员 231）⇒ 兜底乱兜到 done 的卡 164 ⇒ 假漂移 ⇒ 红。
+    `TF_BATCH_DIR` 是既有注入点（卡 212 那族全用它）；真队列 × 真栅栏的一致性是收口时
+    `wb_plan.py check` 的事，不归夹具管。
+    """
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
     assert wb_plan.main(["check", "--backlog", str(SEED)]) == 0
 
 
@@ -1010,3 +1022,91 @@ def test_check_fails_on_gate_drift(
     err = capsys.readouterr().err
     assert code == 1, f"check 应当退 1：{err}"
     assert "B-TEST" in err and "007" in err, err
+
+
+# ================================================================ 卡 234（T-G351）：假漂移挡住收口
+#
+# ★ 兜底不许乱兜：纯数字成员号（卡号形态）只认「号 == 卡 id」，不在队列里就是认不出；
+#   别名成员（M-1）走 paths 兜底也必须「真有相交（全部兜住）且唯一最多」。
+#   三条判据：① 真围栏的成员号不在合成队列 ⇒ 不许假漂移（231→164 的病）；
+#   ② 真漂移照样能红（别名成员被唯一 done 卡全兜住 ⇒ 必须报）；③ 认不出必须有一行可见输出。
+
+
+def test_gate_drift_missing_member_number_is_not_matched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+) -> None:
+    """① 先红后绿：真围栏成员号 `231` 不在合成队列 ⇒ **不许**兜到 done 的卡 164。
+
+    复刻真读数：B-20261020 成员 231 的 paths 交到 done 卡 164 的 `src/timeflow/api/app.py`
+    （只交 1/2 个）—— 旧兜底「paths ∩ files 取相交最多」照取 ⇒ 假漂移 ⇒ 收口被挡（实咬三趟）。
+    """
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-20261020", "collecting",
+               [{"id": "231", "layer": "面层",
+                 "paths": ["src/timeflow/api/app.py", "tests/test_workbench_line.py"]}])
+    backlog = _backlog(_card("164", task="T-G264", status="done",
+                             files=("tools/wb_dispatch.py", "src/timeflow/api/app.py")))
+    assert wb_plan.find_gate_drift(backlog) == []          # 不许假报
+    err = capsys.readouterr().err
+    assert "认不出" in err and "231" in err, err           # 但不许静默
+
+
+def test_gate_drift_alias_partial_overlap_is_not_matched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+) -> None:
+    """① 续：别名成员的 paths **只被兜住一部分** ⇒ 也不算「真有相交」（不兜、不静默）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-TEST", "collecting",
+               [{"id": "M-1", "layer": "工具层",
+                 "paths": ["tools/x.py", "tools/only_in_member.py"]}])
+    backlog = _backlog(_card("007", task="T-G999", status="done",
+                             files=("tools/x.py",)))
+    assert wb_plan.find_gate_drift(backlog) == []
+    err = capsys.readouterr().err
+    assert "认不出" in err and "M-1" in err, err
+
+
+def test_gate_drift_tied_best_is_not_matched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+) -> None:
+    """① 续：paths 被**两张并列**的卡全兜住 ⇒ 「唯一最多」不成立 ⇒ 认不出（不许按顺序挑）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-TEST", "collecting",
+               [{"id": "M-1", "layer": "工具层", "paths": ["tools/shared.py"]}])
+    backlog = _backlog(_card("007", task="T-G999", status="done",
+                             files=("tools/shared.py",)),
+                       _card("008", task="T-G998", status="done",
+                             files=("tools/shared.py",)))
+    assert wb_plan.find_gate_drift(backlog) == []
+    err = capsys.readouterr().err
+    assert "认不出" in err and "M-1" in err, err
+
+
+def test_gate_drift_alias_full_cover_still_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """② 反向：真漂移**照样能红** —— 别名成员的 paths 被唯一一张 done 卡**全部**兜住 ⇒ 必须报。
+
+    （别把真漂移一起治没了：这条与卡 212 的 `test_gate_drift_done_card_collecting_gate_is_red`
+    同型，钉的是新兜底语义下 paths 匹配的判据还咬人。）
+    """
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path))
+    _make_gate(tmp_path, "B-TEST", "collecting",
+               [{"id": "M-1", "layer": "工具层",
+                 "paths": ["tools/x.py", "tests/y.py"]}])
+    backlog = _backlog(_card("007", task="T-G999", status="done",
+                             files=("tools/x.py", "tests/y.py")))
+    reports = wb_plan.find_gate_drift(backlog)
+    assert len(reports) == 1, reports
+    assert "B-TEST" in reports[0] and "007" in reports[0] and "done" in reports[0], reports
+
+
+def test_match_member_number_missing_id_returns_none() -> None:
+    """③ 单元钉子：纯数字成员号不在队列 ⇒ None（不许 paths 兜底）；别名成员才走兜底。"""
+    by_id = {"164": _card("164", status="done", files=("a.py",))}
+    assert wb_plan._match_member_to_card("231", ["a.py"], by_id) is None   # 数字号只认 ①
+    assert wb_plan._match_member_to_card(
+        "M-1", ["a.py", "c.py"], by_id) is None                            # 别名只兜住一半
+    assert wb_plan._match_member_to_card(
+        "M-1", ["a.py", "b.py"], by_id | {"X": _card("X", status="done",
+                                                     files=("a.py", "b.py"))}) is not None

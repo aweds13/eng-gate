@@ -1,0 +1,11 @@
+[entries."T-G351"]
+id = "T-G351"
+title = "假漂移挡住收口：夹具隔离 + 兜底不许乱兜"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_plan.py",
+  "file:tests/test_wb_plan.py",
+]
+gaps = "① ★ **现象**：收口**三趟**都死在门禁里同一条 `[FAIL] 批 B-20261020 成员 231 → 卡 164（T-G264）`（伴随 `tests/test_wb_plan.py::test_check_command_passes_on_seed` 红）。主控已证：队列是对的、`find_gate_drift` 在**主仓**跑一句话不说 ⇒ **真围栏 × 合成 seed 队列**串了。指针：`tests/test_wb_plan.py`。② ★ **两处一起修**：① 夹具**看不见真实栅栏**（不许仓库多一条围栏就红）② `_match_member_to_card` 的兜底**只在真有相交且唯一最多时**才算匹配，否则 `None` + **打印「认不出」**（不静默）。指针：`tools/wb_plan.py`。③ ★ **反向判据**（本卡的核心）：**真漂移必须照样能红** —— 不许把这条判据治没了；配三条反例先红后绿。指针：`tests/test_wb_plan.py`。"
+

@@ -230,20 +230,30 @@ def _match_member_to_card(
     r"""把栅栏成员对应到 backlog 卡（与 `pool.task.find_gates_for_member` 同口径，方向相反）。
 
     ① 成员号 == 卡 id ⇒ 直接（`B-20261014` 的 `210`/`211`/`212`）；
-    ② 成员 `paths` ∩ 卡 `files` 非空 ⇒ 取相交最多的那张（`B-DTREE` 的 `M-1` → 卡 203）。
-    找不到 ⇒ None。
+    ② **只给别名成员**（成员号不是纯卡号，如 `B-DTREE` 的 `M-1`）走 paths 兜底，且必须
+      「真有相交且唯一最多」：成员 paths 被**唯一**一张卡**全部**兜住（`M-1` → 卡 203）。
+    ★ 卡 234（T-G351）：纯数字成员号（=卡号形态，如 `231`/`234`）**只认 ①** —— 号不在队列里
+      就是"对不上"，不许按文件乱兜（旧版"paths ∩ files 取相交最多"哪怕只交 1 个文件、甚至
+      多张并列也照取 ⇒ `231` 被乱兜到 done 的卡 164 ⇒ 假漂移 ⇒ 收口被挡）。找不到 ⇒ None。
     """
     if member_id in by_id:
         return by_id[member_id]
+    if member_id.isdigit():          # 卡号形态的成员号不在队列里 ⇒ 认不出，不许兜
+        return None
     mpaths = set(member_paths or [])
     if not mpaths:
         return None
     best: Card | None = None
     best_n = 0
+    tied = False
     for card in by_id.values():
         n = len(mpaths & set(card.files))
         if n > best_n:
-            best, best_n = card, n
+            best, best_n, tied = card, n, False
+        elif n == best_n and n > 0:
+            tied = True
+    if best is None or tied or best_n != len(mpaths):   # 没相交 / 并列最多 / 只兜住一部分 ⇒ 不算
+        return None
     return best
 
 
@@ -256,7 +266,8 @@ def find_gate_drift(backlog: Backlog) -> list[str]:
 
     ★ 反向保护（五条都要）：
       ① 只报 `done` 的卡（`pending`/`running`/`failed` 不报 —— 它们没落地，栅栏等着是对的）；
-      ② 成员找不到对应卡 ⇒ 不报（可能还没派活 / 成员号不是卡号且 paths 不相交）；
+      ② 成员找不到对应卡 ⇒ 不报，但**打印一行「认不出」**（★ 卡 234：宁可漏报不可假报，
+        可不许静默 —— 静默 = 判据证明不了自己看得见）；
       ③ 栅栏已到终态（`awaiting-commit` / `landed` / `timeout`）⇒ 不报；
       ④ 只读成员不参与放行 ⇒ 不报；
       ⑤ 没有栅栏目录 / 单个栅栏坏了 ⇒ 优雅跳过（不崩、不当通过也不当红）。
@@ -291,7 +302,12 @@ def find_gate_drift(backlog: Backlog) -> list[str]:
                 continue
             mid = mem.get("id", "")
             card = _match_member_to_card(mid, mem.get("paths") or [], by_id)
-            if card is None or card.status != "done":
+            if card is None:
+                # ★ 卡 234：认不出的成员不报漂移（宁可漏报不可假报），但必须有一行可见输出。
+                print(f"[认不出] 批 {gate_id} 成员 {mid}：对不上队列里任何一张卡，不报漂移",
+                      file=sys.stderr)
+                continue
+            if card.status != "done":
                 continue
             reports.append(
                 f"批 {gate_id} 成员 {mid} → 卡 {card.id}（{card.task}）："

@@ -23,6 +23,11 @@
 - ★ 判据 `tests/test_auto_land.py`：四态各一条 + **两条反向**（内存紧/门禁红时**落函数被调用 0 次**，先红后绿）。
 - ★ 挂法：DSH 那条每 5 分钟的提示词**缩成一句命令**（或 Windows 计划任务）—— **不经模型判断** ✓。
 - ★ 真读数：`tests/test_auto_land.py` 9 passed · `ruff` 全过 · 断链 0。
+## 2026-10-14 —— 假漂移挡住收口：夹具隔离 + 兜底不许乱兜（T-G351）
+- **`tests/test_wb_plan.py`**：`test_check_command_passes_on_seed` 的夹具不再吃**真实栅栏目录** ⇒ 仓库里多一条围栏不再把这条测试弄红。
+- **`tools/wb_plan.py`**：`_match_member_to_card` 的兜底（`paths ∩ files`）**只在真有相交且唯一最多**时才算匹配，否则回 `None`，并**打印「认不出」**（可见、不静默）。
+- ★ 判据：三条反例**先红后绿**（真围栏×合成队列不许假漂移 · 真漂移必须照样报 · 认不出要有可见输出）。
+- ★ 真读数：`tests/test_wb_plan.py` 全过 · `ruff` 全过 · 层检查红项 0。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。
