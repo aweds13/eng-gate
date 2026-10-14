@@ -309,3 +309,25 @@ def test_doc_check_bites_when_file_scheme_missing() -> None:
     """★ 反例：拿掉 `file:` ⇒ `check` 必须红。"""
     problems = dp.check(doc=dp.INSTALL_DOC.replace("file:", "scheme:"))
     assert any("file:" in p for p in problems), problems
+
+
+# ------------------------------------------------- ★ 反例：禁列（ui-slots 无 dsh.client）
+
+
+def test_inject_lists_only_real_client_plugin_packages() -> None:
+    """★ `dsh.client.inject` 只许列**自己声明 dsh.client 的包**（禁列名单与它不交）。"""
+    inject = dp.package_manifest()["dsh"]["client"]["inject"]
+    assert not set(inject) & set(dp.CLIENT_INJECT_DENY), inject
+    assert "@deepseek-ai/dsh-client-ui-slots" not in inject
+
+
+def test_inject_check_bites_on_a_non_client_package() -> None:
+    """★ 反例：把 ui-slots（实测它 `dsh` 字段是 null）塞进 inject ⇒ 自检必须红并点名。"""
+    pkg = dp.package_manifest()
+    pkg["dsh"]["client"]["inject"] = [
+        *pkg["dsh"]["client"]["inject"],
+        "@deepseek-ai/dsh-client-ui-slots",
+    ]
+    problems = dp._check_package(pkg)
+    assert any("dsh-client-ui-slots" in x and "dsh.client" in x for x in problems), problems
+

@@ -71,6 +71,10 @@
 - **`tools/stack.py`**（新）：`start` / `stop <名>` / `status` / `list`；组件表 closer / timeflow / zentao / trae；判活 = **真进程**（tasklist）+ **真端口**（socket）；子进程全部带 `NO_WINDOW`；源码里没有 `except: pass`。
 - ★ 判据 `tests/test_stack.py`（新，5 条，**逐条先红后绿**）：身份不符必拒 / 过期 pid 如实说并清文件 / `start` 幂等（已在跑不重复起）/ `status` 缺件必须写「没起」/ 源码不许吞异常。
 - ★ 真读数：`status` 原话 —— `closer 没起：无 pid 记录` · `timeflow 没起：端口都不通，也没有活的 pid` · `zentao 没起：端口都不通，也没有活的 pid` · `trae 在跑：端口 9333；映像 Trae CN.exe`；`5 passed in 1.88s` · `ruff All checks passed!` · `tests/test_no_window.py` 8 passed。
+## 2026-10-14 —— 面板 `inject` 禁列 ui-slots（补回被卡 240 丢掉的那半修复）（T-G360）
+- **`tools/dsh_panel.py`**：`CLIENT_PACKAGE_DEPS` 去掉 `@deepseek-ai/dsh-client-ui-slots`；新增 `CLIENT_INJECT_DENY` + `_check_package` 里的禁列判据；注释里写明「这条今天已经丢过一次」。
+- **`tests/test_dsh_panel.py`**：新增 2 条判据（禁列与依赖名单不交；反例必红并点名 `dsh-client-ui-slots`）。
+- ★ 真读数：`--check` 绿（「三座位（workbench_board、zentao_gantt、timeflow_inbox）；只读 + 失败可见 + 只 GET」）· `47 passed` · emit 后 `inject` = 三项（`ui-layout` / `ui-sidebar` / `dsh-client-locale`，**无 ui-slots**）· profile 里裸导入 `OK exports: [ 'apply', 'inject' ]` · 装进 profile 的那份与仓库源**逐字节一致**（4/4 `same`）。
 ## 2026-10-13 —— 额度状态按钟表算：429 不许凭记忆（T-G303 / 卡 201）
 - 新增 `tools/pool_quota.py`：`parse_reset` / `record`（落 `gates/diag/quota-state.json`）/ `status`（**每次现算**四态）/ `wait_seconds`（`clamp(reset_at − now, 0, 上限)`）。
 - `tools/wb_dispatch.py`：`quota_error()` **只加** `reset_at`（卡 045 那两道判别闸门**一个字没动**）；撞 429 时 `record`；等待由写死的 300 秒改成按记录算。

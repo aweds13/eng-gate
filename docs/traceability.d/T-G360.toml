@@ -1,0 +1,11 @@
+[entries."T-G360"]
+id = "T-G360"
+title = "面板 inject 禁列 ui-slots（补回被卡 240 丢掉的那半修复）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+]
+gaps = "① ★ **补回被丢掉的那半修复**：卡 240 的新版是从「早上那条修复已进 stash 之后」的主树建的 ⇒ 工人基于旧底稿重写时，把「`inject` 禁列 `ui-slots`」丢了 ✗。本笔补回，并**配判据**免得再丢第三次。指针：`tools/dsh_panel.py`。② ★ 判据两处：`_check_package` 里的**禁列检查**，加 `tests/test_dsh_panel.py` 两条（①禁列名单与依赖名单不交；②把 `ui-slots` 塞进 `inject` ⇒ 自检**必须红并点名**）。指针：`tests/test_dsh_panel.py`。③ ★ 依据不是口味：DSH 安装里 `@deepseek-ai/dsh-client-ui-slots` 的 `dsh` 字段是 **null**（不声明 `dsh.client`）⇒ 它**永远不可能是客户端模块提供方**；`slots` 这个服务由浏览器半的 cordis `inject` 取，那是另一条机制。指针：`tools/dsh_panel.py`。"
+

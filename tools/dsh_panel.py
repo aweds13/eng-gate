@@ -169,13 +169,23 @@ MANIFEST = {
     "seats": list(SEAT_KEYS),
 }
 
-#: `dsh.client.inject`：本包依赖的**包名**（顺序 = 装配面）。
+#: `dsh.client.inject`：本包依赖的**客户端插件包名**（顺序 = 装配面）。
+#: ★ 判据：名单里每一项都必须是**自己声明了 `dsh.client` 的包** —— `dsh-client-modules` 只把
+#:   「声明了 `dsh.client` 的活动 Loader 行」变成可加载的浏览器 bundle（它 README 的原话），
+#:   一个不声明 `dsh.client` 的包**永远不可能是动态提供方** ⇒ 列进去等于声明一个没人能提供的依赖。
 CLIENT_PACKAGE_DEPS = (
     "@deepseek-ai/dsh-client-ui-layout",
     "@deepseek-ai/dsh-client-ui-sidebar",
-    "@deepseek-ai/dsh-client-ui-slots",
     "@deepseek-ai/dsh-client-locale",
 )
+
+#: ★ 实测禁列（2026-10-14，读 DSH 安装里各包的 `package.json`）：
+#:   `@deepseek-ai/dsh-client-ui-slots` 的 `dsh` 字段是 **null**（只有 `main`）⇒ 它是宿主侧的库、
+#:   不是客户端插件行，**不许**出现在 `inject` 里。`slots` 这个**服务**由浏览器半的
+#:   `inject = ["slots", …]`（cordis 服务名）拿到 —— 那是另一条机制，不要混。
+#:   ★ 这条 2026-10-14 早上修过一次，晚上被卡 240 的工人**从旧底稿重写时丢掉**了 ⇒ 现在补回
+#:   并配判据（`_check_package` + `tests/test_dsh_panel.py`），免得再丢第三次。
+CLIENT_INJECT_DENY = ("@deepseek-ai/dsh-client-ui-slots",)
 
 
 # ================================================================ 生成物：package.json
@@ -702,8 +712,15 @@ def _check_package(package: dict) -> list[str]:
     inject = client.get("inject")
     if not isinstance(inject, list) or not inject:
         problems.append("[package] dsh.client.inject 必须是非空列表")
-    elif "@deepseek-ai/dsh-client-ui-layout" not in inject:
-        problems.append("[package] dsh.client.inject 必须包含 ui-layout（它拥有 main 座）")
+    else:
+        if "@deepseek-ai/dsh-client-ui-layout" not in inject:
+            problems.append("[package] dsh.client.inject 必须包含 ui-layout（它拥有 main 座）")
+        for bad in CLIENT_INJECT_DENY:
+            if bad in inject:
+                problems.append(
+                    f"[package] dsh.client.inject 不许列 `{bad}`：它没声明 dsh.client，"
+                    "不可能是客户端模块提供方（会被组合判成缺提供方）"
+                )
     return problems
 
 
