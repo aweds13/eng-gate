@@ -2205,3 +2205,81 @@ risk = "high"
 status = "done"
 
 depends = []
+
+[[cards]]
+
+id = "235"
+
+task = "T-G352"
+
+title = "收口器按批跳：一笔不能自动决定，不许堵住别的"
+
+tree = ".wt/autoskip"
+
+spec = "复盘/卡/卡235-收口器按批跳.md"
+
+files = [
+
+  "tools/auto_land.py",
+
+  "tests/test_auto_land.py",
+
+]
+
+risk = "mid"
+
+status = "done"
+
+depends = []
+
+[[cards]]
+
+id = "236"
+
+task = "T-G354"
+
+title = "③″ 快预检的次序：跑到参数互斥检查前面去了"
+
+tree = ".wt/preorder"
+
+spec = "复盘/卡/卡236-预检次序.md"
+
+files = [
+
+  "tools/pool/landing.py",
+
+  "tests/test_wb_land.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = ["228"]
+
+[[cards]]
+
+id = "237"
+
+task = "T-G355"
+
+title = "228 vs 234 的语义冲突：先诊断，再判谁错"
+
+tree = ".wt/conflict"
+
+spec = "复盘/卡/卡237-228与234冲突.md"
+
+files = [
+
+  "tools/pool/landing.py",
+
+  "tests/test_wb_land.py",
+
+]
+
+risk = "high"
+
+status = "pending"
+
+depends = ["236"]

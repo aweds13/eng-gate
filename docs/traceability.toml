@@ -6483,3 +6483,25 @@ evidence = [
   "file:tests/test_wb_plan.py",
 ]
 gaps = "① ★ **现象**：收口**三趟**都死在门禁里同一条 `[FAIL] 批 B-20261020 成员 231 → 卡 164（T-G264）`（伴随 `tests/test_wb_plan.py::test_check_command_passes_on_seed` 红）。主控已证：队列是对的、`find_gate_drift` 在**主仓**跑一句话不说 ⇒ **真围栏 × 合成 seed 队列**串了。指针：`tests/test_wb_plan.py`。② ★ **两处一起修**：① 夹具**看不见真实栅栏**（不许仓库多一条围栏就红）② `_match_member_to_card` 的兜底**只在真有相交且唯一最多时**才算匹配，否则 `None` + **打印「认不出」**（不静默）。指针：`tools/wb_plan.py`。③ ★ **反向判据**（本卡的核心）：**真漂移必须照样能红** —— 不许把这条判据治没了；配三条反例先红后绿。指针：`tests/test_wb_plan.py`。"
+
+[entries."T-G344"]
+id = "T-G344"
+title = "封存顺序 + 批模式翻账 + 封存不再算未跟踪文件"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "file:tests/test_wb_land.py",
+]
+gaps = "① ★ **本笔治的是「什么时候翻 status」和「封存算的树」这两件事**：旧链 ⑤ 封存先算树指纹、⑥ 提交前才翻卡的 status ⇒ 只要翻账，**封存树与提交树必然对不上**、复核必报（今天卡 218 那笔就是）。指针：`tools/pool/landing.py`。② ★ **第二个缺陷（同一个函数）**：`--batch` 时链子传的是**批的台账号**，而判据拿它去比**每张卡自己的台账号** ⇒ **批量收口永远翻不了成员的 status** ⇒ 队列越积越脏（今天手工翻过 14 张）。指针：`tools/pool/landing.py`。③ ★ **第三个盲点（同一天第二笔真读数）**：`--seal` 把**未跟踪文件**也算进树指纹，而提交装不下它们 ⇒ 树里有未跟踪杂物时复核必报（与上面两处合起来才是完整的三处）。指针：`tests/test_wb_land.py`。"
+
+[entries."T-G352"]
+id = "T-G352"
+title = "收口器按批跳：一笔不能自动决定，不许堵住别的（+ 236/237 登记）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/auto_land.py",
+  "file:tests/test_auto_land.py",
+]
+gaps = "① ★ **现象**：`tools/auto_land.py` 遇到**一批**不能自动决定的（`B-20261017` 要动 3 棵树）⇒ 它选 **「什么都不落」** ✗ ⇒ 把本来能落的 `B-20261018`（228）也堵死 ⇒ 收口器每 5 分钟报同一句、**一笔都落不了** ✗。指针：`tools/auto_land.py`。② ★ **改法**：改成**按批跳** —— 能落的照落、不能自动决定的只跳它自己并点名，**只有「全都没法落」才退 4**。指针：`tools/auto_land.py`。③ ★ **反向判据（本卡核心）**：{不能自动决定的批 + 能落的批} ⇒ **能落的那批必须被落**（断言落函数被调用 1 次、参数是那批）—— 旧码在这条上**必红**。指针：`tests/test_auto_land.py`。"

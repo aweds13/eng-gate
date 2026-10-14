@@ -11,13 +11,16 @@ r"""`tools/auto_land.py` —— 把收口器做成**确定的程序**（卡 233 
 |---|---|---|
 | 无批 | 没有 `awaiting-commit` 的批 | **退 0、一行不打印**（每 5 分钟一次，别刷屏）|
 | 内存紧 | `wb_dispatch.memory_gate_problem()` 咬 | **什么都不落**、非零退、点名"内存紧" |
-| 门禁红 | 链子里门禁退出码 ≠ 0 | **什么都不落**、非零退、**原话带出来**；后续批不再试 |
+| 门禁红 | 链子里门禁退出码 ≠ 0 | 非零退、**原话带出来**；后续批不再试（本轮已落成的照算）|
 | 该落 | 批齐了且没有"停下来问"的东西 | 走**既定收口链**落掉；打印批号 + 提交号 |
 
-外加一条**停下来问**（非零退出 + 点名，绝不自作主张）：批里若混着
-**用户决策项**（deferred 台账号：`SR-F1.9` / `SR-F2.8` / `SR-F8.4b` 出现在批的注册 why /
-成员申请 / 文书里），或**要动用户资产**（申请的文件落在 `data/` 下 —— `docs/归置地图.md`
-的硬编码禁区），或**树的解析烂了**（卡不在队列 / 没写 tree / 树不在磁盘 / 要动多棵树）。
+外加**按批独立判定**（卡 235）：批与批互不影响 —— 能落的批**照落**（一批一批来，
+落成几笔报几笔）；某批混着不能自动决定的东西 ⇒ **只跳过它自己**、点名说清原因
+（绝不自作主张），**不堵别的批**；★ 只有「全都没法落」（没有任何一批能自动落）
+才退 4。不能自动决定的东西：**用户决策项**（deferred 台账号：`SR-F1.9` / `SR-F2.8` /
+`SR-F8.4b` 出现在批的注册 why / 成员申请 / 文书里），或**要动用户资产**（申请的文件落在
+`data/` 下 —— `docs/归置地图.md` 的硬编码禁区），或**树的解析烂了**（卡不在队列 /
+没写 tree / 树不在磁盘 / 要动多棵树）。
 
 ## 落的动作（别另写一套）
 
@@ -48,7 +51,8 @@ r"""`tools/auto_land.py` —— 把收口器做成**确定的程序**（卡 233 
   「旧判决冒充当前状态」，不许拿它预筛）—— 所以"落函数被调用 0 次"在门禁红态指的是
   **落成动作**（`_record_landed`）0 次、后续批 0 次；链子那 1 次是发现红的唯一途径。
 - 退出码：0 = 落成 / 无批 / dry-run；2 = 环境（不在主树 / 队列读不了）；3 = 内存紧；
-  4 = 停下来问；5 = 上一趟还在跑；**链子失败原码透传**（1 = 门禁红，其余见 `wb_land.py`）。
+  4 = 停下来问（**每一批**都不能自动落 ⇒ 一笔都没落）；5 = 上一趟还在跑；
+  **链子失败原码透传**（1 = 门禁红，其余见 `wb_land.py`）。
 
 用法：
     python -X utf8 tools/auto_land.py             # 有批就落（调度器挂的就是这一句）
@@ -357,7 +361,9 @@ def land_batch(plan: dict, port_base: int, main_root: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    ap = argparse.ArgumentParser(description="零 LLM 的确定性收口器（卡 233）")
+    ap = argparse.ArgumentParser(
+        description="零 LLM 的确定性收口器（卡 233；卡 235 起按批独立判定："
+                    "能落的批照落，不能自动决定的批只跳过它自己，全都没法落才退 4）")
     ap.add_argument("--dry-run", action="store_true",
                     help="只说「会落哪几批 / 会停在哪」，一行都不改")
     ap.add_argument("--port-base", type=int, default=9034,
@@ -401,15 +407,20 @@ def main(argv: list[str] | None = None) -> int:
 
     try:  # ★ 自旋锁：上一趟没跑完 ⇒ 本趟打一行就退，不叠加落
         with pool_task.spin_lock(pool_task.batch_dir() / "auto-land", timeout=0.5):
-            for p in plans:
-                if p["stop"]:
-                    print(f"★★ 停下来问：批 {p['bid']} 混着不能自动决定的东西 ⇒ 什么都不落：")
-                    for r in p["stop"]:
-                        print(f"  · {r}")
-                    return 4
+            # ---- 卡 235：按批独立判定 —— 停的只跳它自己（点名），能落的照落，互不堵
+            stops = [(p["bid"], p["stop"]) for p in plans if p["stop"]]
+            landable = [p for p in plans if not p["stop"]]
+            for bid, reasons in stops:
+                print(f"★★ 停下来问：批 {bid} 混着不能自动决定的东西 ⇒ 只跳过这一批：")
+                for r in reasons:
+                    print(f"  · {r}")
+            for p in landable:
                 rc = land_batch(p, a.port_base, main_root)
                 if rc != 0:
-                    return rc
+                    return rc  # 链子红 ⇒ 原码透传；后面的批不再试（旧口径不变）
+            if not landable:
+                print("★★ 全部批都不能自动落 ⇒ 一笔都没落（退 4）—— 人来定，别猜")
+                return 4
             return 0
     except pool_task.BatchError as exc:
         print(f"★ 上一趟 auto_land 还在跑 ⇒ 本趟不落（{exc}）")

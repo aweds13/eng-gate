@@ -10,7 +10,9 @@ r"""`tools/auto_land.py`（卡 233 · `T-G350`）的判据 —— 四态各一�
   · 内存紧   ⇒ 退 3、点名"内存紧"、**落函数被调用 0 次**；
   · 门禁红   ⇒ 退 1、门禁原话带出来、**落成被调用 0 次**、后续批不再试（链子总数 = 批数 − 1）；
   · 无批     ⇒ 退 0 且**输出为空**（别刷屏，这条也是判据）。
-外加停下来问两条（deferred SR / 用户资产）与 dry-run 只读一条。
+外加停下来问三条（deferred SR / 用户资产 / 缺收件）与 dry-run 只读一条。
+卡 235（按批跳）补两条：混批（停 + 能落）⇒ 能落的**必须被落**（链子恰好 1 次、参数是那批）；
+全部停 ⇒ 退 4、落函数 0 次。
 
 边界（如实写，未覆盖）：多成员批的台账号现算（`next_task_id`）与"上一趟还在跑"的
 自旋锁路径没在本文件钉（前者逻辑简单，后者要真并发）；卡树里拒落的守卫没钉（要在
@@ -290,3 +292,59 @@ def test_collecting_batch_is_ignored_silently(
     assert rc == 0
     assert capsys.readouterr().out == ""
     assert calls == []
+
+
+# ------------------------------------------------------------------ 卡 235：按批跳
+
+
+def test_mixed_stop_and_landable_still_lands_the_landable_batch(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+        fake_queue: None, as_main_tree: None, fake_memory_ok: None,
+        chain_recorder: list[list[str]],
+) -> None:
+    """★ 卡 235 反向（本卡核心）：{一批停 + 一批能落} ⇒ 能落的那批**必须被落**。
+
+    停的批排在前面（B-A < B-B，仿真实事故：B-20261017 堵死能落的 B-20261018）：
+    旧码在停的批上一家伙退 4 ⇒ 链子 0 次 —— 本判据在旧码上必红；
+    按批跳 ⇒ 只跳过 B-A（点名），B-B 照落（落函数恰好 1 次、参数是 B-B）。
+    """
+    bdir = _mk_batch(tmp_path, "B-A")               # 停的批：收件被清掉（没证据 ⇒ 停）
+    (bdir / "B-A.d" / "9001.json").unlink()
+    _mk_batch(tmp_path, "B-B", members=("9002",))   # 能落的批
+    monkeypatch.setenv("TF_BATCH_DIR", str(bdir))
+    landed: list[str] = []
+    monkeypatch.setattr(al, "_record_landed", lambda bid, root: landed.append(bid))
+
+    rc = al.main([])
+
+    out = capsys.readouterr().out
+    assert rc == 0                                   # 有能落的 ⇒ 不许退 4
+    assert len(chain_recorder) == 1                  # ★ 落函数恰好被调 1 次
+    argv = chain_recorder[0]
+    assert argv[argv.index("--batch") + 1] == "B-B"  # ★ 调用参数是能落的那批
+    assert landed == ["B-B"]                         # 落成也恰好这一批
+    assert "停下来问" in out and "收件" in out        # 停的批照旧点名（原因说清）
+    assert "只跳过这一批" in out and "B-B" in out     # 停的点名不再说"什么都不落"堵人
+
+
+def test_all_stopped_exits_four_and_lands_nothing(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+        fake_queue: None, as_main_tree: None, fake_memory_ok: None,
+        chain_recorder: list[list[str]],
+) -> None:
+    """★ 卡 235 边界：**全部**批都不能自动决定 ⇒ 退 4、落函数被调用 0 次（两家都点名）。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(_mk_batch(
+        tmp_path, "B-A", claims=_default_claims(("9001",), why="顺手把 SR-F2.8 的账也收了"))))
+    _mk_batch(tmp_path, "B-B", members=("9002",), claims=_default_claims(
+        ("9002",), files=["tools/a.py", "data/timeflow.db"]))
+    landed: list[str] = []
+    monkeypatch.setattr(al, "_record_landed", lambda bid, root: landed.append(bid))
+
+    rc = al.main([])
+
+    out = capsys.readouterr().out
+    assert rc == 4                                   # 全停 ⇒ 退 4
+    assert chain_recorder == []                      # ★ 落函数 0 次
+    assert landed == []
+    assert "SR-F2.8" in out and "用户资产" in out     # 两家停因都点名
+    assert out.count("停下来问") == 2                 # 两批各点各的（不是只点第一家）
