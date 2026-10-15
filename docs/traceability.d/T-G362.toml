@@ -1,0 +1,10 @@
+[entries."T-G362"]
+id = "T-G362"
+title = "队列账目：226/230/231 翻 done（228 不翻，理由在文书里）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+]
+gaps = "① ★ 三张卡的产物**早在主干**、`status` 还挂着 `pending`（226 / 230 / 231）。判据是**栅栏 landed**（不是「看起来像落了」）：`B-20261017:landed`（落地 `21a5eb6`）与 `B-20261020:landed`（落地 `13d46e62`）。指针：`docs/workbacklog.toml`。② ★ ★ **228 不翻**：它**没有任何栅栏**；它的活虽由卡 239 补完并落地（`1446298`），但那笔的 `Task:` 是 `T-G357` ≠ 228 的台账号 ⇒ 按卡 `B-STATUSFLIP` 立下的判据（看 `--task` 字段，不看「像不像」）**不许翻**。指针：`docs/workbacklog.toml`。③ ★ 本笔**只改账**（`status` 字段），不碰代码、不碰产物、不碰栅栏状态。指针：`docs/workbacklog.toml`。"
+

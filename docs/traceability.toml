@@ -6613,3 +6613,13 @@ evidence = [
   "file:tools/dsh_panel.py",
 ]
 gaps = "① ★ **在真 DSH 里跑出来的一条缺陷**：DSH 桌面版**宿主的 cwd 是 profile 目录** ⇒ 三个读数器全都报「can't open file …（找不到那个 `.py`）」✗（实测原话，路径按规矩不写成指针）。指针：`tools/dsh_panel.py`。② ★ 修法：仓库根改成 **插件行 `config.root` → 环境变量 `DSH_WORKBENCH_ROOT` → 都没有就如实吼** 三段取值，并**删掉「拿 cwd 兜底」** —— 宁可看见一条错误，也不要看见一块假板子。指针：`tools/dsh_panel.py`。③ ★ 配套：profile 的组成层那一行补 `config: { root: … }`（当数据写，不当代码写），并已用 `--dump-config` 验到合成结果里确实带上它。指针：`tools/dsh_panel.py`。"
+
+[entries."T-G362"]
+id = "T-G362"
+title = "队列账目：226/230/231 翻 done（228 不翻，理由在文书里）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+]
+gaps = "① ★ 三张卡的产物**早在主干**、`status` 还挂着 `pending`（226 / 230 / 231）。判据是**栅栏 landed**（不是「看起来像落了」）：`B-20261017:landed`（落地 `21a5eb6`）与 `B-20261020:landed`（落地 `13d46e62`）。指针：`docs/workbacklog.toml`。② ★ ★ **228 不翻**：它**没有任何栅栏**；它的活虽由卡 239 补完并落地（`1446298`），但那笔的 `Task:` 是 `T-G357` ≠ 228 的台账号 ⇒ 按卡 `B-STATUSFLIP` 立下的判据（看 `--task` 字段，不看「像不像」）**不许翻**。指针：`docs/workbacklog.toml`。③ ★ 本笔**只改账**（`status` 字段），不碰代码、不碰产物、不碰栅栏状态。指针：`docs/workbacklog.toml`。"
