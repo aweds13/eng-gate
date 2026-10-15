@@ -44,6 +44,18 @@
  *        `paths = ["tools/trae_pool.mjs"]` —— 另开测试文件就是**域外改动**（`wb_review` ⑥ 拒）。
  *   ★ 边界（诚实写）：`--target "#N"` 的 N 是**这次 `/json/list` 里的出现序号**，面板增减会漂；
  *     断了线重连时优先按 **target id / 标题**锁回原面板（同代面板的 URL 一模一样，不能靠 URL 认）。
+ *
+ * ★★ 卡 245（T-G366，2026-10-15）—— 两处硬伤：**模型切换点不到** + **残留 1 字就静默不发**（本卡只动本文件）：
+ *   ① `send` 支持 `--model <名字>`：开下拉 → 逐项扫描（目标项 `scrollIntoView` 滚进**可点区域**再点，
+ *      下拉不会自动滚 ⇒ 坐标点击会落空）→ 点选后**回读当前模型名并比对**：不一致 / 核不到 ⇒
+ *      **非零退出并打原话**（★ 不许"点了就当成功"）。名字**大小写/前后缀宽松匹配但必须唯一**，
+ *      0 个 / 多个候选 ⇒ **停手并列出候选**（照 `--target` 已有口径）。
+ *   ② 发送前先读输入框：非空**且**不是本次要发的内容 ⇒ 先清空（选区全选 + Delete，**只圈输入框自己**，
+ *      不用全局 Ctrl+A —— 免得焦点不在输入框时把会话选进去）再重新输入；清不干净 ⇒ **停手退 3**；
+ *      发送后**核验真的发出去了**（输入框变空，或会话里出现本次内容）—— 核不到 ⇒ **退 3 并说明**，
+ *      不再"只打一行警告就退 0"。
+ *   ③ 判据：`selftest` 扩充（`--model` 唯一性 / 回读比对短路 ⇒ 必须失败 / 清空短路 ⇒ 必须失败），
+ *      卡 227 既有用例（面板选择那段）一条没删。
  */
 import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -147,6 +159,106 @@ export function formatPanels(panels) {
   return panels
     .map((p) => `  #${p.index}\t${p.title || '(无标题)'}\t${p.url}\t${p.session || '会话：未探'}`)
     .join('\n') + '\n'
+}
+
+/* ------------------------------------- 卡 245：模型匹配与发送核验（纯函数，可单测、不碰 CDP） */
+
+/** 归一化：压空白 + 转小写（大小写/空白宽松匹配的底座）。 */
+function normText(s) {
+  return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
+/**
+ * ★ 卡 245 纯函数：在候选模型名里找 `wanted`。**宽松匹配但必须唯一，不许"随便挑一个"**。
+ *
+ *  · 归一化后**相等** ⇒ exact；否则**前缀/后缀**（双向）⇒ loose；
+ *  · 命中 0 个 / ≥2 个 ⇒ 停手（由调用方列候选，同 `--target` 口径）。
+ *
+ * 返回 `{ ok, code, model? }`；`code` ∈ {exact,loose,nomatch,ambiguous,empty}。
+ */
+export function matchModel(candidates, wanted) {
+  const list = (candidates || []).map((c) => String(c))
+  const nw = normText(wanted)
+  if (!nw) return { ok: false, code: 'empty', reason: '--model 不能为空' }
+  const exact = list.filter((t) => normText(t) === nw)
+  let hits = exact
+  let code = 'exact'
+  if (hits.length === 0) {
+    hits = list.filter((t) => {
+      const nt = normText(t)
+      return nt.startsWith(nw) || nw.startsWith(nt) || nt.endsWith(nw) || nw.endsWith(nt)
+    })
+    code = 'loose'
+  }
+  if (hits.length === 0) {
+    return { ok: false, code: 'nomatch',
+             reason: `--model ${JSON.stringify(String(wanted))} 没有候选匹配得上`,
+             candidates: list }
+  }
+  if (hits.length > 1) {
+    return { ok: false, code: 'ambiguous',
+             reason: `--model ${JSON.stringify(String(wanted))} 宽松匹配到 ${hits.length} 个 —— 不唯一，不许随便挑`,
+             candidates: list }
+  }
+  return { ok: true, code, model: hits[0] }
+}
+
+/**
+ * ★ 卡 245 纯函数：**切换后回读比对** —— "点了"不算成功，回读一致才算。
+ *
+ *  · 回读不到（空/没读到）⇒ `unreadable`（核验被短路就栽在这里 —— **不核验不算成功**）；
+ *  · 回读与 wanted 对不上 ⇒ `mismatch`；
+ *  · 一致（宽松口径，复用 matchModel）⇒ ok。
+ */
+export function judgeModelSwitch(wanted, readBack) {
+  const rb = String(readBack == null ? '' : readBack).replace(/\s+/g, ' ').trim()
+  if (!rb) {
+    return { ok: false, code: 'unreadable',
+             reason: '回读不到当前模型名 —— 核不到不算切换成功' }
+  }
+  const m = matchModel([rb], wanted)
+  if (!m.ok) {
+    return { ok: false, code: 'mismatch',
+             reason: `回读到的模型名是 ${JSON.stringify(rb)}，与 --model ${JSON.stringify(String(wanted))} 对不上` }
+  }
+  return { ok: true, code: m.code, model: rb }
+}
+
+/**
+ * ★ 卡 245 纯函数：**发送核验** —— 判"真的发出去了"。
+ *
+ *  · 输入框变空 ⇒ ok `input-empty`（最强信号）；
+ *  · 会话里出现本次内容 ⇒ ok `chat-match`；
+ *  · 输入框仍残留内容 ⇒ **失败** `residual`（残留不许静默）；
+ *  · 输入框读不到、会话里也没有 ⇒ **失败** `unverifiable`（核不到不许当成功）。
+ *  `prompt` 自己为空 ⇒ 无从核起，一律失败。
+ */
+export function judgeSend(prompt, { inputAfter, chatHasPrompt } = {}) {
+  const p = normText(prompt)
+  if (!p) return { ok: false, code: 'empty', reason: '要发的内容是空的，无从核验' }
+  const inp = inputAfter == null ? null : normText(inputAfter)
+  if (inp === '') return { ok: true, code: 'input-empty' }
+  if (chatHasPrompt === true) return { ok: true, code: 'chat-match' }
+  if (inp == null) {
+    return { ok: false, code: 'unverifiable',
+             reason: '发送后核不到：输入框读不到，会话里也没找到本次内容' }
+  }
+  return { ok: false, code: 'residual',
+           reason: `发送后输入框仍残留 ${inp.length} 字 —— 没发出去（残留不许静默）` }
+}
+
+/**
+ * ★ 卡 245 纯函数：发送前读到的输入框内容 ⇒ 要不要清。
+ *
+ *  · 空 ⇒ 不清（`clean`）；
+ *  · 恰是本次要发的内容（如上一轮打完没发）⇒ 不清也**不重输**（防重复），只补发送（`already-typed`）；
+ *  · 别的残留 ⇒ 必须先清（`residual`）。
+ */
+export function decideClear(before, prompt) {
+  const b = normText(before)
+  if (!b) return { clear: false, code: 'clean' }
+  if (b === normText(prompt)) return { clear: false, code: 'already-typed' }
+  return { clear: true, code: 'residual' }
 }
 
 /* ---------------------------------------------------------------- 参数解析 */
@@ -475,6 +587,221 @@ async function clickApproval(cdp) {
   })()`)
 }
 
+/* ------------------------------------------------- 卡 245：模型下拉驱动 + 发送核验（DOM） */
+
+/** 模型名字样（`gates/diag/_cdp_models.mjs` 实测正则，照抄 —— 只用来"找出像模型名的叶子"，
+ *  唯一性由 matchModel 把关，这里宁滥勿缺）。 */
+const MODEL_HINT = /GLM|DeepSeek|Kimi|Claude|GPT|Qwen|Doubao|Hunyuan|MiniMax|Flash|Pro|Max/i
+
+/** 扫页面上所有"像模型名的可见叶子"。返回 [{text,x,y,inInput}]（不去重，调用方去重）。
+ *  ★ 实测（卡 245 真机第一跑）：输入区里还有「Max」这种**模式开关**叶子也命中家族词 ——
+ *    再要求**含数字**（模型名都带版本号：GLM-5.3-FlashX / Kimi-K3 / MiMo-V2.6-Pro…；"Max"/"Pro" 裸词不算）。 */
+async function scanModelLeafs(cdp) {
+  return await cdp.eval(`(() => {
+    const RE = ${MODEL_HINT.toString()};
+    const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+    const out = [];
+    for (const el of document.querySelectorAll('div,span,li,button,p')) {
+      if (el.children.length) continue;
+      const t = norm(el.innerText);
+      if (!t || t.length > 44 || !RE.test(t) || !/\\d/.test(t)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) continue;
+      const st = getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || Number(st.opacity) === 0) continue;
+      out.push({ text: t, x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2),
+                 inInput: !!el.closest('[class*="chat-input"]') });
+    }
+    return out;
+  })()`)
+}
+
+/** 按文本去重（保持原序，同文取第一个）。 */
+function dedupLeafs(leafs) {
+  const seen = new Set()
+  const out = []
+  for (const l of leafs || []) {
+    if (!l || seen.has(l.text)) continue
+    seen.add(l.text); out.push(l)
+  }
+  return out
+}
+
+/** 读"当前模型名"：优先取**输入区里**的模型叶子；恰好一种字样才算读到了（多种 ⇒ 如实说不唯一）。 */
+async function readCurrentModel(cdp) {
+  const leafs = dedupLeafs(await scanModelLeafs(cdp))
+  const inInput = leafs.filter((l) => l.inInput)
+  const pool = inInput.length ? inInput : leafs
+  const texts = [...new Set(pool.map((l) => l.text))]
+  if (texts.length !== 1) return { ok: false, texts }
+  return { ok: true, model: texts[0], texts }
+}
+
+/** 鼠标三连（探测结论：下拉/模型项要真坐标点击，`el.click()` 不一定走 UI 事件链）。 */
+async function clickAt(cdp, x, y) {
+  const mv = { type: 'mouseMoved', x, y }
+  await cdp.send('Input.dispatchMouseEvent', mv)
+  await cdp.send('Input.dispatchMouseEvent', { ...mv, type: 'mousePressed', button: 'left', clickCount: 1 })
+  await cdp.send('Input.dispatchMouseEvent', { ...mv, type: 'mouseReleased', button: 'left', clickCount: 1 })
+}
+
+/** Esc 关下拉（开着才有关的效果；已关则无害）。 */
+async function pressEscape(cdp) {
+  const esc = { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 }
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...esc })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...esc })
+}
+
+/** 读输入框内容（contenteditable 用 innerText；读不到元素返回 null）。 */
+async function readInput(cdp) {
+  return await cdp.eval(`(() => {
+    const el = document.querySelector(${JSON.stringify(SEL_INPUT)});
+    if (!el) return null;
+    return (el.innerText || el.value || '');
+  })()`)
+}
+
+/** 清空输入框：**只圈输入框自己**的选区全选 + Delete（不用全局 Ctrl+A —— 焦点不在输入框时
+ *  会把整个会话选进去，Delete 就成删消息了）。返回全选是否成了。 */
+async function clearInput(cdp) {
+  const focused = await cdp.eval(`(() => {
+    const el = document.querySelector(${JSON.stringify(SEL_INPUT)});
+    if (!el) return false;
+    el.focus();
+    if (document.activeElement !== el) return false;
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return true;
+  })()`)
+  if (!focused) return false
+  const del = { key: 'Delete', code: 'Delete', windowsVirtualKeyCode: 46, nativeVirtualKeyCode: 46 }
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...del })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...del })
+  return true
+}
+
+/** 会话里（**刨掉输入框自己**，防"残留还在输入框里"被当成本次内容）有没有出现本次内容头。 */
+async function chatHasPrompt(cdp, head) {
+  if (!head) return false
+  return await cdp.eval(`(() => {
+    const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+    const el = document.querySelector(${JSON.stringify(SEL_INPUT)});
+    let txt = norm(document.body ? document.body.innerText : '');
+    if (el) {
+      const t = norm(el.innerText || '');
+      if (t) { const i = txt.indexOf(t); if (i >= 0) txt = txt.slice(0, i) + ' ' + txt.slice(i + t.length) }
+    }
+    return txt.includes(${JSON.stringify(head)});
+  })()`)
+}
+
+/**
+ * ★ 卡 245：把模型切到 `wanted`。返回 `{ code, model? }`。
+ *
+ *  code 0=切好且回读一致；2=没选成就停手（触发器/候选不唯一或没有候选 —— 已列候选）；
+ *  3=点了但核不到 / 回读不一致（★ 不许"点了就当成功"）。
+ *
+ *  下拉定位：点触发器开下拉 → 扫全部"像模型名的叶子"当候选 → 目标项 `scrollIntoView` 滚进
+ *  **可点区域**（实测下拉不会自动滚，坐标点击会落空）→ 真坐标点击 → Esc 收尾 → 回读比对。
+ */
+async function switchModel(cdp, wanted, { log = null } = {}) {
+  // ① 快路径：当前模型已经是它 ⇒ 不动下拉（回读一致是平凡的）。
+  let cur = null
+  try { cur = await readCurrentModel(cdp) } catch { cur = null }
+  if (cur && cur.ok) {
+    const fast = matchModel([cur.model], wanted)
+    if (fast.ok) {
+      if (log) log({ ev: 'model', ok: true, code: 'already', model: cur.model })
+      process.stderr.write(`[trae] 当前模型已是 ${cur.model}，无需切换\n`)
+      return { code: 0, model: cur.model }
+    }
+  }
+  // ② 找触发器（当前模型名那枚叶子，优先输入区里的）。
+  if (!cur || !cur.ok) {
+    const why = cur == null
+      ? '读页面失败，找不到当前模型名'
+      : (cur.texts.length === 0
+          ? '页面上找不到模型名的叶子（面板没渲染？）'
+          : `模型名叶子不唯一（${cur.texts.length} 种字样），不敢乱点：${cur.texts.join(' | ')}`)
+    if (log) log({ ev: 'model', ok: false, code: 'trigger', why })
+    process.stderr.write(`[trae] 切模型停手：${why}\n`)
+    return { code: 2 }
+  }
+  const leafs = await scanModelLeafs(cdp)
+  const trig = leafs.find((l) => l.text === cur.model && l.inInput)
+    || leafs.find((l) => l.text === cur.model)
+  if (!trig) {
+    if (log) log({ ev: 'model', ok: false, code: 'trigger', why: '读到了模型名但没有可点的叶子' })
+    process.stderr.write('[trae] 切模型停手：读到了模型名但没有可点的叶子\n')
+    return { code: 2 }
+  }
+  // ③ 开下拉。
+  await clickAt(cdp, trig.x, trig.y)
+  await sleep(1500)
+  // ④ 扫候选（下拉里的项）并匹配 —— 0/多 ⇒ 关下拉、停手、列候选。
+  const items = dedupLeafs(await scanModelLeafs(cdp))
+  const texts = items.map((l) => l.text)
+  const m = matchModel(texts, wanted)
+  if (!m.ok) {
+    await pressEscape(cdp)
+    if (log) log({ ev: 'model', ok: false, code: m.code, wanted: String(wanted), candidates: texts })
+    process.stderr.write(`[trae] 切模型停手：${m.reason}\n`)
+    process.stderr.write(`[trae] 下拉里的候选（${texts.length} 个）：\n`)
+    for (const t of texts) process.stderr.write(`  ▶ ${t}\n`)
+    return { code: 2 }
+  }
+  // ⑤ 目标项滚进**可点区域**再点（★ 下拉不滚 ⇒ 点击落空，主控实测的硬伤就是这条）。
+  const where = await cdp.eval(`(() => {
+    const RE = ${MODEL_HINT.toString()};
+    const want = ${JSON.stringify(m.model)};
+    const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    for (const el of document.querySelectorAll('div,span,li,button,p')) {
+      if (el.children.length) continue;
+      if (norm(el.innerText) !== want) continue;
+      if (!/\\d/.test(want)) continue;   // 与扫描口径一致：模型名带版本数字
+      const r0 = el.getBoundingClientRect();
+      if (r0.width <= 0 || r0.height <= 0) continue;
+      el.scrollIntoView({ block: 'center' });
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) continue;
+      if (r.y < 0 || r.y > vh || r.x < 0 || r.x > vw) continue;
+      const st = getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || Number(st.opacity) === 0) continue;
+      return JSON.stringify({ x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) });
+    }
+    return null;
+  })()`)
+  if (!where) {
+    await pressEscape(cdp)
+    if (log) log({ ev: 'model', ok: false, code: 'unreachable', wanted: m.model })
+    process.stderr.write(`[trae] 切模型失败：候选 ${JSON.stringify(m.model)} 滚不进可点区域 —— 核不到不算成功\n`)
+    return { code: 3 }
+  }
+  const pt = JSON.parse(where)
+  await clickAt(cdp, pt.x, pt.y)
+  await sleep(1200)
+  await pressEscape(cdp)
+  await sleep(600)
+  // ⑥ 回读比对 —— ★ 不许"点了就当成功"。
+  let rb = null
+  try { rb = await readCurrentModel(cdp) } catch { rb = null }
+  const j = judgeModelSwitch(wanted, rb && rb.ok ? rb.model : null)
+  if (!j.ok) {
+    const extra = rb && !rb.ok && rb.texts.length
+      ? `（页面上读到 ${rb.texts.length} 种模型字样：${rb.texts.join(' | ')}）` : ''
+    if (log) log({ ev: 'model', ok: false, code: j.code, wanted: String(wanted), reason: j.reason })
+    process.stderr.write(`[trae] 切模型失败：${j.reason}${extra} —— 退 3\n`)
+    return { code: 3 }
+  }
+  if (log) log({ ev: 'model', ok: true, code: 'switched', wanted: String(wanted), model: j.model })
+  process.stderr.write(`[trae] 模型已切到 ${j.model}（回读一致）\n`)
+  return { code: 0, model: j.model }
+}
+
 /* ---------------------------------------------------------------- 子命令 */
 
 async function cmdBalance(argv) {
@@ -509,8 +836,9 @@ async function cmdSend(argv) {
   const timeoutSec = Number(args['timeout-sec'] || 3600)
   const noLaunch = Boolean(args.noLaunch)
   const target = args.target == null ? null : String(args.target)   // ★ 卡 227：不给 ⇒ 老路
+  const modelWanted = args.model == null ? null : String(args.model).trim()   // ★ 卡 245
   if (!promptFile || !logPath || !outPath) {
-    process.stderr.write('用法：node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>]\n')
+    process.stderr.write('用法：node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>] [--model <名字>]\n')
     return 2
   }
   const log = makeLogger(logPath)
@@ -608,12 +936,44 @@ async function cmdSend(argv) {
       return 3
     }
 
+    // ★★ 卡 245①：切模型（在发指令**前**）。没选成 / 核不到 / 不一致 ⇒ 非零退出（switchModel 里已打原话）。
+    if (modelWanted != null && modelWanted !== '') {
+      let sw = null
+      try { sw = await switchModel(cdp, modelWanted, { log }) } catch (e) {
+        log({ ev: 'error', msg: 'model switch failed: ' + e.message })
+        process.stderr.write(`[trae] 切模型失败：${e.message}\n`)
+        return 3
+      }
+      if (sw.code !== 0) return sw.code
+    }
+
+    // ★★ 卡 245②：发送前先确认输入框是干净的 —— 残留别人的字就先清空（清不干净 ⇒ 停手，不静默）。
+    let preInput = null
+    try { preInput = await readInput(cdp) } catch { preInput = null }
+    const clear = decideClear(preInput, prompt)
+    log({ ev: 'input-before', len: preInput == null ? -1 : preInput.length, action: clear.code })
+    if (clear.clear) {
+      let cleaned = false
+      try { cleaned = await clearInput(cdp) } catch { cleaned = false }
+      let afterClear = null
+      try { afterClear = await readInput(cdp) } catch { afterClear = null }
+      const still = afterClear == null ? null : afterClear.replace(/\s+/g, '')
+      if (!cleaned || (still != null && still.length > 0)) {
+        log({ ev: 'error', msg: `清空输入框失败（cleaned=${cleaned}, still=${still == null ? '读不到' : still.length + '字'}）` })
+        process.stderr.write('[trae] 输入框清空失败，残留还在 —— 停手不发（残留不许静默），退 3\n')
+        return 3
+      }
+    }
+
     // ★ 记发送前的 agent 轮次数：完成判据要求"出现了**新的** agent 轮次"，防被上一轮的「完成。」骗。
     const baseline = (await readAgents(cdp)).count
 
     // 发送：insertText 打字 → Enter。★ 发指令这一刻断了**不重发**（会重复提问）—— 如实报错退 3。
+    //  ★ 卡 245②：残留恰是本次内容（already-typed）⇒ 不重复输入，只补发送。
     try {
-      await cdp.send('Input.insertText', { text: prompt })
+      if (clear.code !== 'already-typed') {
+        await cdp.send('Input.insertText', { text: prompt })
+      }
       const enter = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, text: '\r' }
       await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...enter })
       await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...enter })
@@ -623,7 +983,38 @@ async function cmdSend(argv) {
       process.stderr.write(`[trae] 发指令失败（不重发）：${e.message}\n`)
       return 3
     }
-    log({ ev: 'send', promptLen: prompt.length })
+    log({ ev: 'send', promptLen: prompt.length, action: clear.code })
+
+    // ★★ 卡 245②：发送后**核验真的发出去了**（输入框变空，或会话里出现本次内容）——
+    //   核不到 ⇒ 退 3 并说明，**不许只打一行警告就退 0**。最多核 12 秒（Enter 生效有延迟）。
+    const head = prompt.replace(/\s+/g, ' ').trim().slice(0, 30)
+    let verdict = null
+    {
+      const deadline = Date.now() + 12000
+      while (Date.now() < deadline) {
+        if (!(await ensureCdp())) { await sleep(1000); continue }
+        let inp = null
+        let chat = false
+        try {
+          inp = await readInput(cdp)
+          chat = await chatHasPrompt(cdp, head)
+        } catch (e) {
+          cdp.markDead('发送核验读页面失败：' + e.message)
+          await sleep(1000)
+          continue
+        }
+        verdict = judgeSend(prompt, { inputAfter: inp, chatHasPrompt: chat })
+        if (verdict.ok) break
+        await sleep(1000)
+      }
+    }
+    if (!verdict || !verdict.ok) {
+      const why = verdict ? verdict.reason : '发送核验 12 秒内没有得出结论（输入框没空、会话里也没找到本次内容）'
+      log({ ev: 'error', msg: 'send verify failed: ' + why })
+      process.stderr.write(`[trae] 发送核验不过：${why} —— 按"没发出去"处理，退 3\n`)
+      return 3
+    }
+    log({ ev: 'send-verified', code: verdict.code })
 
     // 盯梢：每 3 秒自动点授权 + 判完成。每一拍都先 ensureCdp（断线 ⇒ 重连 ⇒ 接着判）。
     //  完成判据（★ 只看最后一条 agent 轮次）：
@@ -754,8 +1145,53 @@ async function cmdSelftest() {
   const both = listed.includes('win=1') && listed.includes('win=2')
   if (!both) bad += 1
   process.stdout.write(`[${both ? '绿' : '红'}] 停手时列的候选清单把两个面板都列了出来\n`)
+
+  // ★★ 卡 245 判据：--model 唯一性 / 回读比对不许短路 / 残留不许静默（纯函数，不碰 Trae）。
+  //   卡 227 的 checks（面板选择那段）一条没删 —— 上面照原样跑过。
+  const MODELS = ['GLM-5.3-FlashX', 'DeepSeek-V4', 'Kimi-K3', 'MiMo-V2.6-Pro', 'Kimi-K2.8-Preview']
+  const checks245 = [
+    ['--model 唯一命中（大小写宽松）⇒ 选中原名', matchModel(MODELS, 'kimi-k3'),
+      (r) => r.ok && r.code === 'exact' && r.model === 'Kimi-K3'],
+    ['--model 前后缀宽松唯一命中 ⇒ 选中', matchModel(MODELS, 'K3'),
+      (r) => r.ok && r.code === 'loose' && r.model === 'Kimi-K3'],
+    ['反例①：--model 不存在的名字 ⇒ 停手（nomatch）且列出候选',
+      matchModel(MODELS, 'GPT-99'),
+      (r) => !r.ok && r.code === 'nomatch' && Array.isArray(r.candidates) && r.candidates.length === MODELS.length],
+    ['反例②：--model 前缀匹配多项（"Kimi" 命中两个）⇒ 停手（ambiguous，不许择一）',
+      matchModel(MODELS, 'Kimi'), (r) => !r.ok && r.code === 'ambiguous'],
+    ['--model 空串 ⇒ 停手（empty）', matchModel(MODELS, ''), (r) => !r.ok && r.code === 'empty'],
+    // "不核验不算成功"：回读被短路（读不到）⇒ 必须失败，不许 0。
+    ['回读被短路（读不到模型名）⇒ 必须失败（unreadable）',
+      judgeModelSwitch('Kimi-K3', null), (r) => !r.ok && r.code === 'unreadable'],
+    ['回读与目标不一致（还是 GLM）⇒ 必须失败（mismatch）',
+      judgeModelSwitch('Kimi-K3', 'GLM-5.3-FlashX'), (r) => !r.ok && r.code === 'mismatch'],
+    ['回读一致 ⇒ 通过', judgeModelSwitch('Kimi-K3', 'Kimi-K3'), (r) => r.ok],
+    // "残留不许静默"：清空被短路（输入框仍有别人的字、会话里也没有本次内容）⇒ 必须失败。
+    ['发送核验：输入框空 ⇒ 判已发出（input-empty）',
+      judgeSend('帮我复核', { inputAfter: '', chatHasPrompt: false }),
+      (r) => r.ok && r.code === 'input-empty'],
+    ['发送核验：会话里出现本次内容 ⇒ 判已发出（chat-match）',
+      judgeSend('帮我复核', { inputAfter: null, chatHasPrompt: true }),
+      (r) => r.ok && r.code === 'chat-match'],
+    ['发送核验：残留 1 字且会话里没有 ⇒ 必须失败（residual，不许静默）',
+      judgeSend('帮我复核', { inputAfter: '好', chatHasPrompt: false }),
+      (r) => !r.ok && r.code === 'residual'],
+    ['发送核验：输入框读不到且会话里也没有 ⇒ 核不到必须失败（unverifiable）',
+      judgeSend('帮我复核', { inputAfter: null, chatHasPrompt: false }),
+      (r) => !r.ok && r.code === 'unverifiable'],
+    ['发送前：输入框干净 ⇒ 不清', decideClear('', '随便什么'), (r) => !r.clear && r.code === 'clean'],
+    ['发送前：残留别人的字 ⇒ 必须先清（residual）',
+      decideClear('上一单的残留', '本次内容'), (r) => r.clear && r.code === 'residual'],
+    ['发送前：残留恰是本次内容 ⇒ 不清也不重输（already-typed，防重复）',
+      decideClear('本次内容', '本次内容'), (r) => !r.clear && r.code === 'already-typed'],
+  ]
+  for (const [name, got, ok] of checks245) {
+    const pass = ok(got)
+    if (!pass) bad += 1
+    process.stdout.write(`[${pass ? '绿' : '红'}] ${name}  → code=${got.code}\n`)
+  }
   process.stdout.write(bad === 0
-    ? `[OK] selftest 全绿（${checks.length + 1} 条）\n`
+    ? `[OK] selftest 全绿（${checks.length + 1 + checks245.length} 条）\n`
     : `[FAIL] selftest 有 ${bad} 条红\n`)
   return bad === 0 ? 0 : 1
 }
@@ -773,8 +1209,8 @@ async function main() {
   else {
     process.stderr.write('用法：node tools/trae_pool.mjs balance [--port 9333]\n')
     process.stderr.write('      node tools/trae_pool.mjs list [--port 9333]     # 只读：列可驱动面板（= --list）\n')
-    process.stderr.write('      node tools/trae_pool.mjs selftest                # 判据：面板选择（不需要 Trae）\n')
-    process.stderr.write('      node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>]\n')
+    process.stderr.write('      node tools/trae_pool.mjs selftest                # 判据：面板选择 + 模型匹配/发送核验（不需要 Trae）\n')
+    process.stderr.write('      node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>] [--model <名字>]\n')
     code = 2
   }
   process.exitCode = code

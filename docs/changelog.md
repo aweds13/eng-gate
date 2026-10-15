@@ -17,6 +17,10 @@
 - **`tools/dsh_panel.py`**：① 订 `mounted` ⇒ 优先 `openTabIn`、退回 `openTab`，catch 与「没起 + 怎么起」照旧；② 清单补 `peerDependencies["@deepseek-ai/dsh"]`（**真正被强制**的那个字段）；③ 产出包内 `icon.svg` + 清单 `icon`；④ 右栏页签按官方面注册（`sidebarRightTabs` + `sidebar.right.pane.tab` 座、`key` = 类型 id、探到服务才注册）。
 - ★ 判据 `tests/test_dsh_panel.py`：**74 条全过**（既有 60 条**一条没删没降级** + 新 14 条）；工人自述做法是「**先写判据（测试）跑到红，再实现**」✓。
 - ★ 真读数：`tools/dsh_panel.py --check` 绿（三座位 + 只读 + 失败可见 + 只 GET）· `74 passed` · `ruff All checks passed!` · 域内只动两个文件 ✓。
+## 2026-10-15 —— Trae 驱动器：模型切换要能点到 + 发送必须核验（T-G366）
+- **`tools/trae_pool.mjs`**：`send` 支持 `--model`（唯一匹配 / 滚到可见 / **回读比对** / 不一致非零退出）；发送前清空或防重复、发送后**必须核验**（核不到即非零退出）。
+- ★ 判据 `selftest`：**24 条全绿**，含四条反例 —— 残留 1 字且会话里没有 ⇒ **必须失败**、输入框读不到且会话也没有 ⇒ **必须失败（unverifiable）**、残留别人的字 ⇒ **必须先清**、残留恰是本次内容 ⇒ **不重输**（already-typed）✓。
+- ★ 真机读数（主控代跑）：`DONE sec=22 turns=6 disconnect=0 reconnect=0`，回话 `Kimi-K3 收到：Kimi-K3` ✓。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。

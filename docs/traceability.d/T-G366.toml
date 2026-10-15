@@ -1,0 +1,10 @@
+[entries."T-G366"]
+id = "T-G366"
+title = "Trae 驱动器：模型切换要能点到 + 发送必须核验"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/trae_pool.mjs",
+]
+gaps = "① ★ `send` 支持 **`--model`**：打开下拉后逐项扫描、把目标项**滚进可点区域再点**，切换后**回读当前模型名并比对**；名字宽松匹配但**必须唯一**（零候选或多候选**停手并列出候选**）；回读对不上 ⇒ **非零退出并打原话**（不许「点了就当成功」）。指针：`tools/trae_pool.mjs`。② ★ 发送**必须核验**：发送前先确认输入框干净（有别人的残留 ⇒ 清空重输；残留恰是本次内容 ⇒ **不重输**，防重复）；发送后核验（输入框已空 **或** 会话里出现本次内容）；**核不到就非零退出**（不许只打一行警告就退 0 ✗）。指针：`tools/trae_pool.mjs`。③ ★ **真机验收由主控代跑**（工人 harness 不许跑长命令，原话 `Reason: Background command execution is not supported in pr…`）：主控实测 `[trae] 当前模型已是 Kimi-K3，无需切换` + `DONE sec=22 turns=6 disconnect=0 reconnect=0`，回话 `Kimi-K3 收到：Kimi-K3` ⇒ **Kimi K3 那条道通了** ✓。指针：`tools/trae_pool.mjs`。"
+
