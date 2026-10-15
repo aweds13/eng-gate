@@ -2440,3 +2440,105 @@ status = "done"
 
 depends = ["241"]
 
+
+[[cards]]
+
+id = "244"
+
+task = "T-G365"
+
+title = "面板收尾：openTabIn 逃生门 + peerDependencies + 包内图标 + 右栏页签"
+
+tree = ".wt/panelpolish"
+
+spec = "复盘/卡/卡244-面板收尾.md"
+
+files = [
+
+  "tools/dsh_panel.py",
+
+  "tests/test_dsh_panel.py",
+
+]
+
+risk = "mid"
+
+status = "done"
+
+depends = ["242"]
+
+
+[[cards]]
+
+id = "245"
+
+task = "T-G366"
+
+title = "Trae 驱动器：模型切换要能点到（Kimi K3）+ 发送必须核验"
+
+tree = ".wt/traefix"
+
+spec = "复盘/卡/卡245-Trae驱动器两处硬伤.md"
+
+files = [
+
+  "tools/trae_pool.mjs",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = []
+
+[[cards]]
+
+id = "246"
+
+task = "T-G367"
+
+title = "定点深读三个候选：读实现（不是再扩词）"
+
+tree = ".wt/deepread"
+
+spec = "复盘/卡/卡246-定点深读三候选.md"
+
+files = [
+
+  "复盘/DSH插件-定点深读.md",
+
+]
+
+risk = "low"
+
+status = "pending"
+
+depends = []
+
+[[cards]]
+
+id = "247"
+
+task = "T-G368"
+
+title = "右栏常驻页签 + 包级显示链路 + 补丁层三纪律"
+
+tree = ".wt/panelresident"
+
+spec = "复盘/卡/卡247-右栏常驻页签与显示链路.md"
+
+files = [
+
+  "tools/dsh_panel.py",
+
+  "tests/test_dsh_panel.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = ["244"]
+

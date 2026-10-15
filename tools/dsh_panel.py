@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""dsh_panel —— 全局面板：把工作台三个只读面接进 DSH 的全局座位（卡 221 + 卡 240 + 卡 242）。
+"""dsh_panel —— 全局面板：把工作台三个只读面接进 DSH 的全局座位（卡 221/240/242/244）。
 
 ## 为什么有它
 
@@ -24,6 +24,23 @@
   显式写「没起 + 怎么起」。② 图标**不许再用文字符号**（`▦` 之类）—— 内联 SVG（16px、
   currentColor），几何与外壳自己的图标同口径（依据见 `makeIcon` 注释）。
   ③ 包形态改成官方 `dsh.bundle.patch`（与 `dsh.client` 共存）。
+
+★ 卡 244 的四件（对抗复核点出的缺口，逐条照收，都钉了判据）：
+  ① **逃生门**：`openTab` 内部先 `require()` 屏幕会话，无会话抛
+  `sidebarRight: no session surface is mounted`（sidebar-right/lib/client.js:6385-6396、
+  :6744-6752）；而全局面板占 `main` 时「屏幕会话」恰为 undefined（service.d.ts:141-143）
+  ⇒ 点左栏行立刻 `openTab` 第一次就会抛。改成：订 `ctx.sidebarRight.mounted` 记最后在屏的
+  sessionId，开页优先 `openTabIn(sessionId, …)`（对未 adopted 会话静默无操作，
+  client.js:6418-6421）；拿不到才退回 `openTab`，catch + 如实报错保留。
+  ② **真·兼容字段**：真正被强制的是 `peerDependencies` 里名为 `@deepseek-ai/dsh`（或以
+  `@deepseek-ai/dsh-` 开头）的 semver 范围（dsh-app-boot/lib/index.js:286-304，前缀过滤
+  :294）；`engines.dsh` 是声明性、**不被强制**（dsh-package-manifest/README.zh.md:93）。
+  ③ **包内图标**：产出 `icon.svg`（相对路径引用、远小于 256 KiB、不引绝对路径/URL，
+  host-plugin.md:45），清单写 `icon`；左栏行 glyph **继续内联 SVG**（两个面不混）。
+  ④ **右栏页签 + 自带角标**：三个目标各注册一个官方右栏页签（`sidebarRightTabs` 注册面 +
+  `sidebar.right.pane.tab` keyed 座），**探到 `ctx.get("sidebarRight")` 才注册**；
+  核心行条目只有 `{id, order, label}`、没有角标槽（sidebar/client.js:454-461）⇒
+  「未起」小点画进**自己的 glyph 内容**（probeStore），不声称是核心角标能力。
 
 ★ **只读**：面板的数据来自卡 207 / 卡 222 / 卡 223 的**唯一读数器**；面板**不写仓库、
   不起工人**（用户早先拍过：拖动只写意图、主控执行）。`check()` 把这条钉成硬判据。
@@ -62,7 +79,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 #: 面板包名（本地目录即可，⏳ 不必发布 npm）。
 PACKAGE_NAME = "dsh-client-ui-workbench-panel"
-PACKAGE_VERSION = "0.0.3"
+PACKAGE_VERSION = "0.0.4"
 
 #: 落盘时每块内容相对包根的位置。
 HOST_REL = "lib/index.js"
@@ -70,6 +87,13 @@ CLIENT_REL = "lib/client.js"
 MANIFEST_REL = "package.json"
 README_REL = "README.md"
 PATCH_REL = "cordis.patch.yml"  # 卡 242：dsh.bundle.patch 指向的包内补丁层
+ICON_REL = "icon.svg"  # 卡 244：包内图标（清单 icon 用相对路径指它）
+
+#: 卡 244：`peerDependencies["@deepseek-ai/dsh"]` 的范围 —— 故意写**宽**：
+#: 只表达「需要 dsh 运行时」，不锁小版本。实测运行时 `0.2.0-rc.2`（pre-release），
+#: app-boot 用 `semver.satisfies(runtimeVersion, range, { includePrerelease: true })`
+#: （dsh-app-boot/lib/index.js:295-296）⇒ `>=0.2.0-rc` 覆盖它。
+DSH_PEER_RANGE = ">=0.2.0-rc"
 
 #: 读数子进程超时上限（秒）；超时要如实报错，不静默返空。
 #: ★ 本仓卡树多，真读数实测 ~14s；留 30s 余量。
@@ -156,6 +180,18 @@ ICONS: dict[str, tuple[tuple[str, str], ...]] = {
         (_ICON_CLOCK_HAND, ""),
     ),
 }
+
+#: 卡 244：包内图标（`icon.svg`）—— 与左栏行的内联 SVG 是**两个面**：这份是给清单/
+#: 市场读的包内文件（相对路径引用、远小于 256 KiB、不引绝对路径/URL，
+#: cordis-plugin-development/.../host-plugin.md:45），几何与工作台那枚同口径。
+ICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"'
+    ' fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">\n'
+    f"  <path d=\"{_ICON_GAUGE_ARC}\"/>\n"
+    f"  <path d=\"{_ICON_GAUGE_NEEDLE}\"/>\n"
+    '  <circle cx="8" cy="8.5" r="1.25" fill="currentColor" stroke="none"/>\n'
+    "</svg>\n"
+)
 
 #: ★ 座位表的**唯一真源** —— `main` key 与行 id 都由它生成，不许手抄。
 #: 卡 242：label 改成三行快捷入口的文案（key **不许改名**）；glyph 字段废除，改 icon。
@@ -274,10 +310,17 @@ CLIENT_INJECT_DENY = ("@deepseek-ai/dsh-client-ui-slots",)
 
 def package_manifest() -> dict:
     """插件包的 `package.json`（写成 dict，落盘时再序列化）。"""
+    # 卡 244：peerDependencies 里名为 @deepseek-ai/dsh（或以 @deepseek-ai/dsh- 开头）的
+    # semver 范围才是**被强制的**兼容字段 —— 不满足 ⇒ 装前拒
+    # （dsh-app-boot/lib/index.js:286-304，名字前缀过滤在 :294；plugin-manager/index.js:506
+    # 装前拒、app-boot:929-930 加载时 throw）。官方 README 原话：installers and loaders
+    # do not enforce dsh.manifestVersion 或 engines.dsh（README.zh.md:93）——
+    # 所以**不许**写 engines.dsh 当强制字段。
     return {
         "name": PACKAGE_NAME,
         "version": PACKAGE_VERSION,
-        "description": "把工作台三个真实页面的快捷入口接到 DSH（卡 221 + 卡 240 + 卡 242）。",
+        "description": "把工作台三个真实页面的快捷入口接到 DSH（卡 221/240/242/244）。",
+        "icon": f"./{ICON_REL}",  # 卡 244：包内相对路径（不许 / 开头、不许 http）
         "type": "module",
         "main": HOST_REL,
         "exports": {
@@ -285,7 +328,11 @@ def package_manifest() -> dict:
             "./client": f"./{CLIENT_REL}",
             "./package.json": "./package.json",
         },
-        "peerDependencies": {"@deepseek-ai/cordis": "~4.0.4"},
+        "peerDependencies": {
+            "@deepseek-ai/cordis": "~4.0.4",
+            # 卡 244：唯一被强制的兼容字段；范围故意宽（见 DSH_PEER_RANGE 注释）。
+            "@deepseek-ai/dsh": DSH_PEER_RANGE,
+        },
         # 卡 242：bundle 是宿主层声明（官方最短形态），client 是浏览器半 —— 两者共存。
         # bundle.patch 逐字依据参考仓 dsh-ops 的 package.json：`dsh.bundle.patch`。
         "dsh": {
@@ -496,7 +543,7 @@ def _client_registrations() -> str:
             f"        order: {seat.order},\n"
             f"        label: () => t({json.dumps(seat.locale_key)}),\n"
             "        locale: NS,\n"
-            f"      }}, makeIcon({icon}, {json.dumps(seat.icon_round)})));"
+            f"      }}, makeIcon({icon}, {json.dumps(seat.icon_round)}, {key_expr})));"
         )
     return "\n".join(blocks)
 
@@ -505,7 +552,7 @@ def _client_label_map(attr: str) -> str:
     return ", ".join(f"{seat.locale_key}: {json.dumps(getattr(seat, attr))}" for seat in SEATS)
 
 
-_CLIENT_JS_TEMPLATE = r"""/* 卡 221 + 卡 240 + 卡 242 产物 · 全局面板：浏览器半 —— 三个座位各占
+_CLIENT_JS_TEMPLATE = r"""/* 卡 221/240/242/244 产物 · 全局面板：浏览器半 —— 三个座位各占
  * root 作用域 `main` keyed 座的一个 key，并在 `sidebar.panellist` 各挂一行 ⇒ 不切窗口就能看板。
  * 卡 242：三行是**快捷入口** —— 默认开**真实页面**（ctx.sidebarRight.openTab("browser",
  * { params: { url } })，依据见 QuickEntry 上方注释）；原来的自绘视图（六块/甘特/列表）
@@ -583,26 +630,77 @@ __TARGETS__
      *   并给出可点的链接（Desktop 侧栏浏览器不受 iframe 限制；Web 形态下站点可能拒绝嵌入）。
      * ★ 目标页连不上 ⇒ 探测 fetch（no-cors）失败时显式写「没起 + 怎么起」，绝不白屏。 */
     let panelCtx = null; /* apply 时接住 ctx：QuickEntry 要用 ctx.sidebarRight。 */
+    /* ---- 卡 244 · 逃生门第一半：最后在屏的 sessionId ----
+     * ★ 为什么需要：openTab/openResource 内部先 require() 屏幕会话，无会话 ⇒ 抛
+     *   "sidebarRight: no session surface is mounted"（依据
+     *   @deepseek-ai/dsh-client-ui-sidebar-right/lib/client.js:6385-6396（入口）、
+     *   :6744-6752（require() 的 throw））。而「屏幕会话」= "The Session on screen,
+     *   or undefined while none is (a global panel fills the main column, …)"
+     *   （service.d.ts:141-143）⇒ 本面板占着 main 时恰恰是 undefined 形态：
+     *   点左栏行 → 立刻 openTab，第一次点击就会抛。 */
+    let screenSessionId = null;
+    /* ---- 卡 244 · 探测状态的小仓库（模块级）：QuickEntry 写，左栏 glyph 的角标读 ----
+     * ★ 核心行条目只有 {id, order, label}，**没有角标槽**（依据
+     *   dsh-client-ui-sidebar/lib/client.js:454-461（侧栏逐条画行）、:187-197）
+     *   ⇒ 「未起」的小点只能画进**自己的 glyph 内容**里；这是我们自画的，
+     *   不是核心角标能力。 */
+    const probeStore = {
+      state: {},
+      listeners: new Set(),
+      set(key, value) {
+        if (probeStore.state[key] === value) return;
+        probeStore.state[key] = value;
+        probeStore.listeners.forEach((fn) => fn());
+      },
+      subscribe(fn) {
+        probeStore.listeners.add(fn);
+        return () => probeStore.listeners.delete(fn);
+      },
+    };
+    /* 订 probeStore 的某个 key（角标与探测共用）；探测本身由 useProbe 发起。 */
+    function useProbeState(key) {
+      const [state, setState] = react.useState(probeStore.state[key] || "none");
+      react.useEffect(() => probeStore.subscribe(
+        () => setState(probeStore.state[key] || "none")
+      ), [key]);
+      return state;
+    }
+    /* QuickEntry 的探测：fetch(no-cors) 探目标页，结果写进 probeStore（卡 244）。 */
+    function useProbe(key, url) {
+      const state = useProbeState(key);
+      react.useEffect(() => {
+        probeStore.set(key, "checking");
+        fetch(url, { mode: "no-cors" })
+          .then(() => probeStore.set(key, "up"))
+          .catch(() => probeStore.set(key, "down"));
+      }, [key, url]);
+      return state;
+    }
     function QuickEntry(props) {
       const target = props.target;
       const [mode, setMode] = react.useState("page");
       const [openError, setOpenError] = react.useState("");
-      const [probe, setProbe] = react.useState("checking");
-      react.useEffect(() => {
-        let alive = true;
-        setProbe("checking");
-        fetch(target.url, { mode: "no-cors" })
-          .then(() => { if (alive) setProbe("up"); })
-          .catch(() => { if (alive) setProbe("down"); });
-        return () => { alive = false; };
-      }, [target.url]);
+      const probe = useProbe(target.seat, target.url);
       if (mode === "embedded") {
         /* 内嵌读数（卡 240 的自绘视图，保留）：它的失败可见分支自己管。 */
         return h(props.fallback, { route: props.route });
       }
       function openInSidebar() {
         try {
-          panelCtx.sidebarRight.openTab("browser", { params: { url: target.url } });
+          /* ---- 卡 244 · 逃生门第二半：openTabIn 优先 ----
+           * 优先 openTabIn(最后在屏的 sessionId, "browser", …) —— 它对未 adopted 的
+           * 会话**静默无操作**（client.js:6418-6421：actionsFor() 拿不到就 return）；
+           * 只有拿不到 sessionId 时才退回 openTab —— 无屏幕会话时它会抛
+           * "no session surface is mounted"（client.js:6744-6752）⇒ catch 住、如实报错。
+           * ★ 已知取舍：sessionId 在屏但其 store 未 adopted 时 openTabIn 静默无操作，
+           *   界面不报错也不打开 —— 比对着裸 openTab 抛错好；探测行 + 链接兜底仍在。 */
+          const sessionId = screenSessionId;
+          if (sessionId) {
+            panelCtx.sidebarRight.openTabIn(sessionId, "browser",
+              { params: { url: target.url } });
+          } else {
+            panelCtx.sidebarRight.openTab("browser", { params: { url: target.url } });
+          }
           setOpenError("");
         } catch (error) {
           setOpenError(String((error && error.message) || error));
@@ -738,9 +836,23 @@ __TARGETS__
      * IconGaugeOutlineArtwork :2050（工作台状态）、IconClockOutlineArtwork :2017（timeflow）；
      * 禅道为同口径自画的甘特条。外壳给侧栏行画图标同款做法：
      * dsh-client-ui-schedule/lib/client.js:6196（TaskManagerIcon 用 primitives 的图标组件）。 */
-    function makeIcon(paths, round) {
+    function makeIcon(paths, round, seatKey) {
+      /* 卡 244：第三个参 seatKey —— 有它才订 probeStore 画「未起」小点。
+       * ★ 核心行条目只有 {id, order, label}，没有角标槽（sidebar/client.js:454-461、
+       *   :187-197）⇒ 角标画进**自己 glyph 的 SVG 内容**里（一个实心小圆）；
+       *   这是本插件自画的装饰，**不是**核心角标能力。 */
       return (props) => {
         const size = props && props.size ? props.size : 16;
+        const probe = seatKey ? useProbeState(seatKey) : "none";
+        const children = paths.map((pair, index) =>
+          h("path", { key: index, d: pair[0], fill: pair[1] || undefined }));
+        if (probe === "down") {
+          /* 「未起」小点：右下角实心圆（currentColor），探测数据来自 probeStore。 */
+          children.push(h("circle", {
+            key: "wb-badge", cx: 12.5, cy: 12.5, r: 2.5,
+            fill: "currentColor", stroke: "none",
+          }));
+        }
         return h("svg", {
           width: size,
           height: size,
@@ -751,8 +863,7 @@ __TARGETS__
           strokeLinecap: round ? "round" : undefined,
           "aria-hidden": "true",
           style: { flex: "none", verticalAlign: "-2px" },
-        }, paths.map((pair, index) =>
-          h("path", { key: index, d: pair[0], fill: pair[1] || undefined })));
+        }, children);
       };
     }
 
@@ -764,6 +875,19 @@ __TARGETS__
         en: { __EN__ },
       }), "dsh-panel: labels");
       const t = ctx.locale.bind(NS);
+      /* ---- 卡 244 · 逃生门第一半（订阅）：订 ctx.sidebarRight.mounted ----
+       * mounted 是 ObservableSnapshot<SessionId | undefined>（service.d.ts:148；
+       * 语义原话 :141-143）—— 读快照 + 订变化，把「最后在屏的 sessionId」记进
+       * screenSessionId，给 QuickEntry 的 openTabIn 用。 */
+      let disposeMounted = null;
+      if (panelCtx.sidebarRight && panelCtx.sidebarRight.mounted
+        && typeof panelCtx.sidebarRight.mounted.subscribe === "function") {
+        const syncMounted = () => {
+          screenSessionId = panelCtx.sidebarRight.mounted.getSnapshot() || null;
+        };
+        disposeMounted = panelCtx.sidebarRight.mounted.subscribe(syncMounted);
+        syncMounted();
+      }
 __REGISTRATIONS__
       const KEYS = __KEYS__;
       const disposeOpen = ctx.reflect.provide("workbenchPanel", {
@@ -771,7 +895,24 @@ __REGISTRATIONS__
         open: (key) => ctx.layout.selectPanel(key),
         seats: KEYS,
       });
-      return () => { disposeOpen(); };
+      /* ---- 卡 244 · 官方右栏页签：探到 sidebarRight 才注册 ----
+       * ★ 官方口子（不许猜 API）：tab 类型注册面 = ctx.get("sidebarRightTabs")
+       *   （sidebar-right/lib/client.js:9073 ctx.reflect.provide("sidebarRightTabs", tabs)；
+       *   register(definition)：{id, kind, title}，id 重复/kind 冲突会 throw，:8688-8700）；
+       *   页签内容 = keyed 座 `sidebar.right.pane.tab`，**key 必须 = 类型 id**
+       *   （渲染按 entryKey = definition.id 找注册：client.js:5579；座位声明 :9154-9158）；
+       *   guide 条目（{id, order, title()}）让页签出现在右栏「+」的向导里（:8844-8848、
+       *   :512 entry.title() 是函数）。ctx.get 是官方插件同款用法（sidebar/client.js:447）。
+       * ★ 本包 inject 已含 "sidebarRight" ⇒ 走到 apply 时服务必已提供（探测只是双保险）。 */
+      const hasSidebarRight = typeof ctx.get === "function"
+        && Boolean(ctx.get("sidebarRight")) && Boolean(ctx.get("sidebarRightTabs"));
+      if (hasSidebarRight) { /* 卡 244：探到 sidebarRight 才注册右栏页签（无条件注册 ⇒ 判据咬） */
+__RIGHT_TABS__
+      }
+      return () => {
+        disposeOpen();
+        if (disposeMounted) disposeMounted();
+      };
     }
 
     exports.apply = apply;
@@ -783,18 +924,59 @@ __REGISTRATIONS__
 
 
 def _client_targets_js() -> str:
-    """浏览器半那张 TARGETS 表（卡 242；与 SEATS 同源，key 一一对应）。"""
+    """浏览器半那张 TARGETS 表（卡 242；与 SEATS 同源，key 一一对应）。卡 244 加 seat 字段
+    （= 座位 key）：探测状态写进 probeStore 时要用它当键（左栏 glyph 的角标按 key 订）。"""
     rows = [
         f"      {json.dumps(target.seat)}: {{"
+        f" seat: {json.dumps(target.seat)},"
         f" url: {json.dumps(target.url)}, up: {json.dumps(target.up_hint)} }},"
         for target in TARGETS
     ]
     return "\n".join(rows)
 
 
+def _client_right_tabs_js() -> str:
+    """卡 244：官方右栏页签的注册体（插在「探到 sidebarRight」的 if 里，8 空格缩进）。
+
+    每座两步：① `rightTabs.register({id, kind, title, guide})` 注册 tab 类型
+    （id 不得与别家撞，kind 唯一）；② `sidebar.right.pane.tab` keyed 座挂内容，
+    **key = 类型 id**（渲染按 definition.id 找）。页签内容给内嵌读数视图
+    （`<Render>View` 直接收 reading），打开走右栏「+」向导或 `openTabIn(sessionId, kind)`。
+    """
+    rows = ['        const rightTabs = ctx.get("sidebarRightTabs");']
+    for seat in SEATS:
+        tab_id = f"workbench-panel-tab-{seat.key}"
+        kind = f"workbench-panel-{seat.key}"
+        rows.append(
+            "        {\n"
+            f"          const tabId = {json.dumps(tab_id)};\n"
+            f"          const kind = {json.dumps(kind)};\n"
+            "          rightTabs.register({\n"
+            "            id: tabId,\n"
+            "            kind: kind,\n"
+            f"            title: () => t({json.dumps(seat.locale_key)}),\n"
+            "            guide: [{ id: tabId + \"-guide\","
+            f" order: {seat.order + 1},"
+            f" title: () => t({json.dumps(seat.locale_key)}) }}],\n"
+            "          });\n"
+            '          ctx.slots.inject("sidebar.right.pane.tab", () => ctx.slots.register({\n'
+            '            name: "sidebar.right.pane.tab",\n'
+            "            key: tabId,\n"
+            "            locale: NS,\n"
+            "          }, function () {\n"
+            f"            return h(SourceShell, {{ route: {json.dumps(seat.route)},"
+            f" title: {json.dumps(seat.label_zh)},"
+            f" render: {seat.render}View }});\n"
+            "          }));\n"
+            "        }"
+        )
+    return "\n".join(rows)
+
+
 def _client_js() -> str:
     return (
         _CLIENT_JS_TEMPLATE.replace("__REGISTRATIONS__", _client_registrations())
+        .replace("__RIGHT_TABS__", _client_right_tabs_js())
         .replace("__TARGETS__", _client_targets_js())
         .replace("__ZH__", _client_label_map("label_zh"))
         .replace("__EN__", _client_label_map("label_en"))
@@ -808,7 +990,7 @@ CLIENT_JS = _client_js()
 # ================================================================ 生成物：说明文档
 
 
-INSTALL_DOC = """# 全局面板（三座位快捷入口）—— 安装 / 接线说明（卡 221 + 卡 240 + 卡 242 · T-G363）
+INSTALL_DOC = """# 全局面板（三座位快捷入口）—— 安装 / 接线说明（卡 221/240/242/244 · T-G365）
 
 把工作台**三个真实页面**接进 DSH：左栏三行是**快捷入口** —— 每行点开默认给
 「开真实页面」的入口 + 目标页连不上时的「没起 + 怎么起」；原来的自绘视图（六块/甘特/列表）
@@ -852,6 +1034,20 @@ INSTALL_DOC = """# 全局面板（三座位快捷入口）—— 安装 / 接线
   ⇒ 面板**如实报错**并给出可点的链接，**不假装打开了**。
 - **目标页连不上** ⇒ 面板里显式写「没起 + 怎么起」（上面表里那一列），**不许白屏**。
 
+### 逃生门（卡 244：先 `openTabIn`，退路才是 `openTab`）
+
+`openTab` 内部先 `require()` 屏幕会话，无会话 ⇒ 抛 `sidebarRight: no session surface is
+mounted`（`dsh-client-ui-sidebar-right/lib/client.js:6385-6396`、`:6744-6752`）；而「屏幕
+会话」= *"The Session on screen, or undefined while none is (a global panel fills the main
+column, …)"*（`service.d.ts:141-143`）⇒ **本面板占着 `main` 时恰恰是 undefined**：点左栏行
+立刻 `openTab`，第一次点击就会抛。所以面板：
+
+1. 订 `ctx.sidebarRight.mounted`（`ObservableSnapshot<SessionId | undefined>`，读快照 +
+   订变化），记住**最后在屏的 sessionId**；
+2. 点「打开」时优先 `openTabIn(sessionId, "browser", { params: { url } })` —— 它对未
+   adopted 的会话**静默无操作**（`client.js:6418-6421`），不会抛；
+3. 拿不到 sessionId 才退回 `openTab`，并**保留 catch + 如实报错**（给出可点的链接）。
+
 ## 图标（卡 242：不许再用文字符号 `▦` 之类）
 
 左栏三行用**内联 SVG**（16px、`currentColor`、viewBox 16），几何与外壳自己的图标同口径 ——
@@ -860,11 +1056,44 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 同口径自画的甘特条。外壳给侧栏行画图标就是这套做法（`dsh-client-ui-schedule/lib/client.js:6196`
 的 TaskManagerIcon 直接用 primitives 的图标组件）。
 
+**包内图标（卡 244）**：包根另有一份 `icon.svg`，清单 `package.json` 的 `icon` 字段用
+**相对路径**（`./icon.svg`）指它 —— 那是给清单/市场读的另一个面：相对路径、SVG、远小于
+256 KiB、不引用绝对路径/URL（`cordis-plugin-development/.../host-plugin.md:45`）。
+左栏行的 glyph **继续用内联 SVG**，两个面不混。
+
+## 兼容字段（卡 244：`peerDependencies` 才是被强制的）
+
+`package.json` 的 `peerDependencies` 里声明了 `"@deepseek-ai/dsh": ">=0.2.0-rc"` ——
+真正被强制的只有 `peerDependencies` 里名为 `@deepseek-ai/dsh`（或以 `@deepseek-ai/dsh-`
+开头）的 semver 范围：不满足 ⇒ 装前拒（`dsh-app-boot/lib/index.js:286-304`，前缀过滤
+在 `:294`；`plugin-manager/index.js:506`）、加载时 throw（`app-boot:929-930`）。
+官方 README 原话：*installers and loaders do not enforce `dsh.manifestVersion` or
+`engines.dsh`*（`dsh-package-manifest/README.zh.md:93`）—— **别拿 `engines.dsh` 当强制
+字段**。范围故意写宽：只表达「需要 dsh 运行时」，不锁小版本（实测运行时 `0.2.0-rc.2`
+是 pre-release，app-boot 用 `semver.satisfies(…, { includePrerelease: true })`）。
+
+## 右栏页签与角标（卡 244）
+
+三个目标各注册一个**官方右栏页签**（内容 = 对应的内嵌读数视图）：
+
+- 注册面：`ctx.get("sidebarRightTabs").register({ id, kind, title, guide })`（依据
+  `dsh-client-ui-sidebar-right/lib/client.js:9073` 的 `reflect.provide("sidebarRightTabs")`）；
+- 页签内容：keyed 座 `sidebar.right.pane.tab`，**key = 类型 id**（渲染按
+  `definition.id` 找注册，`client.js:5579`）；guide 条目让页签出现在右栏「+」的向导里；
+- **只在宿主真的有右栏服务时才注册**：包的 `dsh.client.inject` 已含
+  `sidebarRight`（没有它本包根本不装配），注册体再包一层
+  `ctx.get("sidebarRight")` 探测（双保险）。
+
+左栏行的「未起」小点：核心行条目只有 `{id, order, label}`、**没有角标槽**
+（`sidebar/client.js:454-461`、`:187-197`）⇒ 小点画进**自己 glyph 的 SVG 内容**
+（目标页探测连不上时右下角一个实心小圆）—— 这是本插件自画的，**不是**核心角标能力。
+
 ## 包里有什么
 
 | 文件 | 作用 |
 | --- | --- |
-| `package.json` | 清单：`dsh.bundle.patch` + `dsh.client`（两者共存） |
+| `package.json` | 清单：`dsh.bundle.patch` + `dsh.client` + `icon` + `peerDependencies` |
+| `icon.svg` | 包内图标（清单 `icon` 用相对路径指它；卡 244） |
 | `cordis.patch.yml` | 包内补丁层（`dsh.bundle.patch` 指向它；root 是占位符，安装者填） |
 | `lib/index.js` | **宿主半**：三个只读工具 + **一条只读缝**（三条同源路由，只 GET） |
 | `lib/client.js` | **浏览器半**：快捷入口（默认开真实页面）+ 内联 SVG 图标 + 内嵌读数分支 |
@@ -1007,6 +1236,30 @@ def _check_package(package: dict) -> list[str]:
                     f"[package] dsh.client.inject 不许列 `{bad}`：它没声明 dsh.client，"
                     "不可能是客户端模块提供方（会被组合判成缺提供方）"
                 )
+    # ---- 卡 244 判据 ----
+    peers = package.get("peerDependencies") or {}
+    dsh_peer = peers.get("@deepseek-ai/dsh")
+    if not isinstance(dsh_peer, str) or not dsh_peer.strip():
+        problems.append(
+            '[package] 缺 peerDependencies["@deepseek-ai/dsh"]'
+            "（唯一被强制的兼容字段，app-boot/lib/index.js:286-304）"
+        )
+    if "dsh" in (package.get("engines") or {}):
+        problems.append(
+            "[package] engines.dsh 不被强制（dsh-package-manifest/README.zh.md:93），"
+            "别把它当兼容判据写"
+        )
+    icon = package.get("icon")
+    if (
+        not isinstance(icon, str)
+        or not icon.startswith("./")
+        or not icon.endswith(".svg")
+        or icon.startswith("/")
+        or "http" in icon
+    ):
+        problems.append("[package] icon 必须是包内相对路径（./icon.svg；不许绝对路径 / http）")
+    elif icon != f"./{ICON_REL}":
+        problems.append(f"[package] icon 应指向 ./{ICON_REL}")
     return problems
 
 
@@ -1077,6 +1330,36 @@ def _check_client(source: str) -> list[str]:
     for needle in ("wb_dash.py", "stack.py start timeflow", "ZenPanel"):
         if needle not in source:
             problems.append(f"[浏览器半] 缺「怎么起」的命令原文（{needle}）")
+    # ---- 卡 244 判据（逃生门 / 右栏页签 / 自带角标）----
+    if "sidebarRight.mounted" not in source or "getSnapshot()" not in source:
+        problems.append(
+            "[浏览器半] 缺「订 ctx.sidebarRight.mounted 记最后在屏 sessionId」的逃生门"
+            "（卡 244：全局面板占 main 时屏幕会话为 undefined，裸 openTab 第一次就抛）"
+        )
+    if "openTabIn(" not in source:
+        problems.append(
+            "[浏览器半] 缺 openTabIn 优先的逃生门"
+            "（卡 244：对未 adopted 会话静默无操作，client.js:6418-6421）"
+        )
+    if "client.js:6418-6421" not in source or "service.d.ts:141-143" not in source:
+        problems.append(
+            "[浏览器半] 缺逃生门的源码依据注释"
+            "（client.js:6418-6421 / service.d.ts:141-143）"
+        )
+    if "const hasSidebarRight =" not in source or 'ctx.get("sidebarRight")' not in source:
+        problems.append('[浏览器半] 缺「探到 sidebarRight」的探测（ctx.get("sidebarRight")）')
+    if not re.search(r"if \(hasSidebarRight\) \{ /\* 卡 244", source):
+        problems.append(
+            "[浏览器半] 右栏页签注册没包进「探到 sidebarRight」的 if"
+            "（卡 244：不许无条件注册右栏页签）"
+        )
+    if 'name: "sidebar.right.pane.tab"' not in source:
+        problems.append("[浏览器半] 没注册官方右栏页签座位（sidebar.right.pane.tab，卡 244）")
+    if "probeStore" not in source or "sidebar/client.js:454-461" not in source:
+        problems.append(
+            "[浏览器半] 缺「角标画进自己 glyph」的 probeStore 与依据注释"
+            "（核心行没有角标槽：sidebar/client.js:454-461，卡 244）"
+        )
     problems.extend(_check_read_only("浏览器半", source))
     return problems
 
@@ -1148,6 +1431,10 @@ def _check_doc(doc: str) -> list[str]:
         ("dsh plugin add", "没写官方装法路①（dsh plugin add ⇒ bundle.patch 变 profile 层）"),
         ("cordis.patch.yml", "没写包内补丁层那份文件"),
         ("127.0.0.1:8787", "没写工作台的目标 URL（TARGETS）"),
+        ("icon.svg", "没写包内图标 icon.svg（卡 244）"),
+        ("peerDependencies", "没写「被强制的兼容字段是 peerDependencies」（卡 244）"),
+        ("右栏页签", "没写官方右栏页签（卡 244）"),
+        ("openTabIn", "没写逃生门 openTabIn（卡 244）"),
     ):
         if needle not in doc:
             problems.append(f"[说明] 缺「{why}」（找不到 `{needle}`）")
@@ -1188,6 +1475,7 @@ def package_files() -> dict[str, str]:
         CLIENT_REL: CLIENT_JS,
         README_REL: INSTALL_DOC,
         PATCH_REL: cordis_patch_yaml(),
+        ICON_REL: ICON_SVG,  # 卡 244：包内图标（清单 icon 用相对路径指它）
     }
 
 

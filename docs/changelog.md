@@ -13,6 +13,10 @@
 - **`tools/dsh_panel.py`**：三行默认走 `ctx.sidebarRight.openTab("browser", { params: { url } })` 开真实页面（座位 key 不变）；目标页没起 ⇒ 显式「没起 + 怎么起」；`openTab` 失败一律 catch 后**如实报错**；图标改内联 SVG（禁用文字符号）；生成物 `dsh` 字段补齐 `bundle.patch` + `client`，并产出包内补丁层文件。
 - ★ 判据 `tests/test_dsh_panel.py`：**60 条全过**（既有 47 条**一条没删没降级** + 新 13 条），含反例：塞回文字符号图标 ⇒ 红；缺 `openTab("browser"` 调用 ⇒ 红。
 - ★ 真读数：`tools/dsh_panel.py --check` 绿（三座位 + 只读 + 失败可见 + 只 GET）· `60 passed` · `ruff All checks passed!` · 生成物 `dsh` 字段原样（`bundle` 段指向包内补丁层 + `client.platform=web` + 四项 inject）· 包内确有补丁层文件与两半 JS（宿主半/浏览器半）。
+## 2026-10-15 —— 面板收尾：逃生门 / 真·兼容字段 / 包内图标 / 右栏页签（T-G365）
+- **`tools/dsh_panel.py`**：① 订 `mounted` ⇒ 优先 `openTabIn`、退回 `openTab`，catch 与「没起 + 怎么起」照旧；② 清单补 `peerDependencies["@deepseek-ai/dsh"]`（**真正被强制**的那个字段）；③ 产出包内 `icon.svg` + 清单 `icon`；④ 右栏页签按官方面注册（`sidebarRightTabs` + `sidebar.right.pane.tab` 座、`key` = 类型 id、探到服务才注册）。
+- ★ 判据 `tests/test_dsh_panel.py`：**74 条全过**（既有 60 条**一条没删没降级** + 新 14 条）；工人自述做法是「**先写判据（测试）跑到红，再实现**」✓。
+- ★ 真读数：`tools/dsh_panel.py --check` 绿（三座位 + 只读 + 失败可见 + 只 GET）· `74 passed` · `ruff All checks passed!` · 域内只动两个文件 ✓。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。

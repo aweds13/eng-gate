@@ -90,10 +90,17 @@ def test_package_manifest_points_at_the_right_files() -> None:
 
 
 def test_emit_writes_the_whole_package(tmp_path: Path) -> None:
-    """`emit` 把五块都落到目标目录，`package.json` 能当 JSON 解析。"""
+    """`emit` 把六块都落到目标目录，`package.json` 能当 JSON 解析。"""
     written = dp.emit(tmp_path)
     rels = {p.relative_to(tmp_path).as_posix() for p in written}
-    assert rels == {dp.MANIFEST_REL, dp.HOST_REL, dp.CLIENT_REL, dp.README_REL, dp.PATCH_REL}
+    assert rels == {
+        dp.MANIFEST_REL,
+        dp.HOST_REL,
+        dp.CLIENT_REL,
+        dp.README_REL,
+        dp.PATCH_REL,
+        dp.ICON_REL,
+    }
     json.loads((tmp_path / dp.MANIFEST_REL).read_text(encoding="utf-8"))
     for rel in (dp.HOST_REL, dp.CLIENT_REL, dp.README_REL):
         assert (tmp_path / rel).read_text(encoding="utf-8").strip()
@@ -475,4 +482,157 @@ def test_install_doc_names_both_install_paths() -> None:
     assert "dsh plugin add" in dp.INSTALL_DOC
     assert "cordis.patch.yml" in dp.INSTALL_DOC
     assert "127.0.0.1:8787" in dp.INSTALL_DOC
+
+
+# ================================================================== 卡 244 · T-G365
+# 面板收尾四件：逃生门 / 真·兼容字段 / 包内图标 / 右栏页签 + 自带角标。
+# ★ 每条先红后绿；既有判据一条不许删/降级。
+
+
+# ------------------------------------------------------------ 卡 244-a：逃生门
+
+
+def test_client_subscribes_mounted_and_prefers_open_tab_in(tmp_path: Path) -> None:
+    """a 逃生门：订 `sidebarRight.mounted` 记最后在屏 sessionId；开页优先 `openTabIn`。
+
+    依据（写进源码注释）：openTab/openResource 内部先 require() 屏幕会话，无会话抛
+    "no session surface is mounted"（sidebar-right/lib/client.js:6385-6396、:6744-6752）；
+    「屏幕会话」= The Session on screen, or undefined while none is —— 全局面板占 main
+    恰是 undefined 形态（service.d.ts:141-143）；openTabIn 对未 adopted 会话静默无操作
+    （client.js:6418-6421）。
+    """
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert "sidebarRight.mounted" in client
+    assert "getSnapshot()" in client  # mounted 是 ObservableSnapshot：读快照记 sessionId
+    assert "openTabIn(" in client
+    assert "client.js:6418-6421" in client and "service.d.ts:141-143" in client
+
+
+def test_escape_hatch_check_bites_when_open_tab_in_removed() -> None:
+    """a 反例：把 openTabIn 删掉 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("openTabIn(", "openTabGone(")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("openTabIn" in p for p in problems), problems
+
+
+def test_escape_hatch_check_bites_when_mounted_subscription_removed() -> None:
+    """a 反例：切掉 mounted 订阅 ⇒ check 必须红（退回裸 openTab，第一次点击就抛）。"""
+    broken = dp.CLIENT_JS.replace("sidebarRight.mounted", "sidebarRight.__gone__")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("mounted" in p for p in problems), problems
+
+
+# ------------------------------------------------------------ 卡 244-b：真·兼容字段
+
+
+def test_manifest_declares_enforced_dsh_peer() -> None:
+    """b 被强制的只有 peerDependencies 里名为 @deepseek-ai/dsh 的 semver 范围
+    （dsh-app-boot/lib/index.js:286-304，前缀过滤 :294）；engines.dsh 不被强制
+    （dsh-package-manifest/README.zh.md:93）⇒ 不许写。"""
+    pkg = dp.package_manifest()
+    peers = pkg["peerDependencies"]
+    assert peers["@deepseek-ai/dsh"] == dp.DSH_PEER_RANGE
+    # 宽范围：实测运行时 0.2.0-rc.2（pre-release），app-boot 用 semver.satisfies(includePrerelease)
+    assert peers["@deepseek-ai/dsh"].startswith(">=")
+    assert "dsh" not in (pkg.get("engines") or {})
+
+
+def test_peer_check_bites_when_only_engines_dsh() -> None:
+    """b 反例：改成只有 engines.dsh ⇒ check 必须红。"""
+    pkg = dp.package_manifest()
+    del pkg["peerDependencies"]["@deepseek-ai/dsh"]
+    pkg["engines"] = {"dsh": dp.DSH_PEER_RANGE}
+    problems = dp._check_package(pkg)
+    assert any("peerDependencies" in p for p in problems), problems
+
+
+# ------------------------------------------------------------ 卡 244-c：包内图标
+
+
+def test_package_icon_emitted_and_relative(tmp_path: Path) -> None:
+    """c 生成包内有 icon.svg；清单 icon 是包内相对路径（不许 / 开头、不许 http）。
+
+    图标核心规则是协议级的：相对路径、SVG/PNG/JPEG/WebP、≤256 KiB、拒绝绝对路径/URL
+    （cordis-plugin-development/.../host-plugin.md:45）。
+    """
+    dp.emit(tmp_path)
+    icon_path = tmp_path / dp.ICON_REL
+    assert icon_path.is_file()
+    svg = icon_path.read_text(encoding="utf-8")
+    assert "<svg" in svg and "</svg>" in svg
+    assert len(svg.encode("utf-8")) < 256 * 1024  # 协议上限远够
+    assert "href" not in svg and "url(" not in svg  # 不引用外部资源
+    icon = dp.package_manifest()["icon"]
+    assert icon == f"./{dp.ICON_REL}"
+    assert not icon.startswith("/") and "http" not in icon
+
+
+def test_icon_check_bites_on_absolute_path() -> None:
+    """c 反例：清单 icon 写成绝对路径 ⇒ check 必须红。"""
+    pkg = dp.package_manifest()
+    pkg["icon"] = "C:/icons/icon.svg"
+    problems = dp._check_package(pkg)
+    assert any("icon" in p for p in problems), problems
+
+
+# ------------------------------------------------------------ 卡 244-d：右栏页签守卫
+
+
+def test_right_tabs_registered_only_when_sidebar_right_probed(tmp_path: Path) -> None:
+    """d 三个目标各注册一个右栏页签，且注册体包在「探到 sidebarRight」的 if 里。
+
+    官方口子：tab 类型注册面 = ctx.get("sidebarRightTabs")（sidebar-right/lib/client.js:9073
+    reflect.provide）；页签内容 = keyed 座 sidebar.right.pane.tab，key 必须 = 类型 id
+    （渲染按 entryKey = definition.id 找注册，client.js:5579；座位声明 :9154-9158）。
+    """
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert 'name: "sidebar.right.pane.tab"' in client
+    assert 'ctx.get("sidebarRight")' in client
+    # 守卫：if (hasSidebarRight) { /* 卡 244：… */ —— 注册体必须在这层 if 里
+    assert re.search(r'if \(hasSidebarRight\) \{ /\* 卡 244', client)
+    for seat in dp.SEAT_KEYS:
+        assert f"workbench-panel-tab-{seat}" in client
+
+
+def test_right_tab_check_bites_when_guard_removed() -> None:
+    """d 反例：无条件注册（拆掉守卫）⇒ check 必须红。"""
+    broken = re.sub(
+        r'if \(hasSidebarRight\) \{ /\*[^*]*\*/', "if (true) { /*", dp.CLIENT_JS, count=1
+    )
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("右栏页签" in p for p in problems), problems
+
+
+# ------------------------------------------------------------ 卡 244-e：角标画在自己 glyph 里
+
+
+def test_badge_is_drawn_into_own_glyph_not_a_core_slot(tmp_path: Path) -> None:
+    """e 核心行条目只有 {id, order, label}，没有角标槽（sidebar/client.js:454-461、:187-197）
+    ⇒ 「未起」的小点画进自己的 glyph 内容（probeStore），且不声称是核心角标能力。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert "probeStore" in client
+    assert "sidebar/client.js:454-461" in client
+
+
+def test_badge_check_bites_when_probe_store_removed() -> None:
+    """e 反例：切掉 probeStore（角标数据源）⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("probeStore", "probeGone")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("probeStore" in p for p in problems), problems
+
+
+# ------------------------------------------------------------ 卡 244：说明文档跟上
+
+
+def test_install_doc_mentions_icon_peer_and_right_tabs() -> None:
+    """说明文档要跟上四件事：icon.svg / peerDependencies / 右栏页签 / 逃生门。"""
+    for needle in ("icon.svg", "peerDependencies", "右栏页签", "openTabIn"):
+        assert needle in dp.INSTALL_DOC, needle
 

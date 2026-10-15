@@ -6645,3 +6645,14 @@ evidence = [
   "file:tests/test_dsh_panel.py",
 ]
 gaps = "① ★ 三行改成**快捷入口**：默认**开真实页面**（`ctx.sidebarRight.openTab(「browser」, { params: { url } })`），目标页分别是 `tools/wb_dash.py` 的 `127.0.0.1:8787` / `tools/serve.py` 的 `127.0.0.1:8520` / 禅道 `127.0.0.1/zentao/`；**座位 key 一个没改**（改名会毁掉已落地的判据与左栏约定）。指针：`tools/dsh_panel.py`。② ★ 目标页**没起**时面板必须显式写「没起 + 怎么起」（工作台 `tools/wb_dash.py`；timeflow `tools/stack.py start timeflow`；禅道点 ZenPanel），**不许白屏、不许假装打开了**；`openTab` 失败（无会话在屏 / Web 形态不注册浏览器页）也一律 **catch 住如实报错**。指针：`tools/dsh_panel.py`。③ ★ 图标改成**内联 SVG**（16px、`currentColor`），并配**反例判据**：源码里再出现 `▦` 这类文字符号 ⇒ 判据必红。指针：`tests/test_dsh_panel.py`。④ ★ 包形态补成官方那种：生成物的清单文件里 清单里的 `dsh` 字段含 `bundle`（指向包内那份补丁层）与 `client` 两段，并**在包内产出一份补丁层文件**（与清单同目录，`dsh plugin add` 才会把它当 profile 层）。指针：`tools/dsh_panel.py`。"
+
+[entries."T-G365"]
+id = "T-G365"
+title = "面板收尾：逃生门 / 真·兼容字段 / 包内图标 / 右栏页签"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+]
+gaps = "① ★ **逃生门**：订 `ctx.sidebarRight.mounted`（类型是 `ObservableSnapshot<SessionId|undefined>`，`service.d.ts:148`）记住**最后在屏的 sessionId** ⇒ 开页时优先 `openTabIn(lastSessionId, 「browser」, { params: { url } })`（它对未 adopted 会话**静默无操作**，`client.js:6416-6421`），拿不到 sessionId 才退回 `openTab`，并**保留 catch 与「没起 + 怎么起」的文案**（`openTab` 在无屏会话时会抛，`client.js:6744-6752`）。指针：`tools/dsh_panel.py`。② ★ **兼容字段写成真正被强制的那个**：清单补 `peerDependencies[「@deepseek-ai/dsh」]` —— 依据 app-boot 那个包里的兼容检查（`:286-304`，前缀过滤在 `:294`）**只强制**名为 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-` 开头的 semver 范围（我们运行时是 `0.2.0-rc.2`）；`engines.dsh` **不被强制** ✗，不当强制字段写。指针：`tools/dsh_panel.py`。③ ★ **包内图标 + 右栏页签**：产出 `icon.svg`（**相对路径**引用、远小于 256 KiB、不引绝对路径/URL）并在清单写 `icon`；右栏页签走官方面 —— `ctx.get(「sidebarRightTabs」)`（`ctx.get()` 是官方用法，sidebar 那个包的 client 半 `:447`）+ keyed 座 `sidebar.right.pane.tab`（key = 类型 id，`client.js:5579`/`:9154`），且**探到服务才注册**（没有就不注册、不假装）。指针：`tools/dsh_panel.py`。"
