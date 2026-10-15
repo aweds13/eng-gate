@@ -90,10 +90,10 @@ def test_package_manifest_points_at_the_right_files() -> None:
 
 
 def test_emit_writes_the_whole_package(tmp_path: Path) -> None:
-    """`emit` 把四块都落到目标目录，`package.json` 能当 JSON 解析。"""
+    """`emit` 把五块都落到目标目录，`package.json` 能当 JSON 解析。"""
     written = dp.emit(tmp_path)
     rels = {p.relative_to(tmp_path).as_posix() for p in written}
-    assert rels == {dp.MANIFEST_REL, dp.HOST_REL, dp.CLIENT_REL, dp.README_REL}
+    assert rels == {dp.MANIFEST_REL, dp.HOST_REL, dp.CLIENT_REL, dp.README_REL, dp.PATCH_REL}
     json.loads((tmp_path / dp.MANIFEST_REL).read_text(encoding="utf-8"))
     for rel in (dp.HOST_REL, dp.CLIENT_REL, dp.README_REL):
         assert (tmp_path / rel).read_text(encoding="utf-8").strip()
@@ -330,4 +330,149 @@ def test_inject_check_bites_on_a_non_client_package() -> None:
     ]
     problems = dp._check_package(pkg)
     assert any("dsh-client-ui-slots" in x and "dsh.client" in x for x in problems), problems
+
+
+# ================================================================== 卡 242 · T-G363
+# 三行快捷入口：开真实页面 + 图标合规 + dsh.bundle.patch 化。
+# ★ 每条先红后绿；既有判据一条不许删/降级。
+
+
+# ------------------------------------------------------------ 卡 242-①：bundle.patch 声明 + 真落盘
+
+
+def test_package_manifest_declares_bundle_patch() -> None:
+    """① package.json 同时有 dsh.bundle.patch 与 dsh.client.platform，patch 指 cordis.patch.yml。"""
+    pkg = dp.package_manifest()
+    assert pkg["dsh"]["bundle"]["patch"] == "./cordis.patch.yml"
+    assert pkg["dsh"]["client"]["platform"] == "web"
+
+
+def test_bundle_patch_is_really_emitted(tmp_path: Path) -> None:
+    """① 续：patch 指向的文件在 emitted 目录里真存在，且带我们那一行 insert。"""
+    dp.emit(tmp_path)
+    patch = tmp_path / dp.PATCH_REL
+    assert patch.is_file()
+    text = patch.read_text(encoding="utf-8")
+    assert "- insert:" in text
+    assert dp.PACKAGE_NAME in text
+    assert "workbench-panel" in text and "root:" in text
+
+
+def test_bundle_check_bites_when_patch_missing() -> None:
+    """① 反例：拿掉 dsh.bundle.patch ⇒ 自检必须红。"""
+    pkg = dp.package_manifest()
+    del pkg["dsh"]["bundle"]
+    problems = dp._check_package(pkg)
+    assert any("bundle" in p for p in problems), problems
+
+
+# ------------------------------------------------ 卡 242-②：key 不改名 + TARGETS 对应
+
+
+def test_seat_keys_are_unchanged() -> None:
+    """② 三个座位 key 未改名（改名会毁掉已落地的判据与左栏 id 约定）。"""
+    assert dp.SEAT_KEYS == ("workbench_board", "zentao_gantt", "timeflow_inbox")
+
+
+def test_targets_map_three_urls_to_three_keys() -> None:
+    """② 新 TARGETS 表：三条 URL 与座位 key 一一对应（同源、只指本机 127.0.0.1）。"""
+    assert tuple(t.seat for t in dp.TARGETS) == dp.SEAT_KEYS
+    urls = {t.seat: t.url for t in dp.TARGETS}
+    assert urls == {
+        "workbench_board": "http://127.0.0.1:8787/",
+        "zentao_gantt": "http://127.0.0.1/zentao/",
+        "timeflow_inbox": "http://127.0.0.1:8520/",
+    }
+
+
+def test_targets_check_bites_on_drift() -> None:
+    """② 反例：TARGETS 与座位表错位 ⇒ 自检必须红。"""
+    problems = dp._check_targets(dp.TARGETS[:2])
+    assert problems, "少一条目标也必须被咬住"
+
+
+def test_client_labels_are_the_three_new_shortcuts(tmp_path: Path) -> None:
+    """② 三行 label：工作台状态 / 禅道 / timeflow（key 不变，只改文案）。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    for label in ("工作台状态", "禅道", "timeflow"):
+        assert label in client, label
+
+
+# ------------------------------------------------------------ 卡 242-③：开真实页面那条路必须有据
+
+
+def test_client_opens_real_pages_and_cites_evidence(tmp_path: Path) -> None:
+    """③ 「开真实页面」有据：openTab("browser") 的调用 + 源码里的依据注释（file:行号）。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert 'sidebarRight.openTab("browser"' in client
+    assert "service.d.ts:168" in client and "params.d.ts" in client
+
+
+def test_open_tab_check_bites_when_official_path_removed() -> None:
+    """③ 反例：切掉官方口子 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace(
+        'sidebarRight.openTab("browser"', 'sidebarRight.openTab("other"'
+    )
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("openTab" in p for p in problems), problems
+
+
+# ------------------------------------------------ 卡 242-④：没起要显式说怎么起
+
+
+def test_client_says_how_to_start_when_page_is_down(tmp_path: Path) -> None:
+    """④ 目标页连不上 ⇒ 「没起 + 怎么起」文案与三条启动命令都在（不许白屏）。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert "没起" in client and "怎么起" in client
+    for needle in ("wb_dash.py", "stack.py start timeflow", "ZenPanel"):
+        assert needle in client, needle
+
+
+def test_down_hint_check_bites_when_copy_removed() -> None:
+    """④ 反例：切掉「没起/怎么起」⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("没起", "").replace("怎么起", "")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("没起" in p or "怎么起" in p for p in problems), problems
+
+
+# ------------------------------------------------ 卡 242-⑤：图标合规（内联 SVG）
+
+
+def test_icons_are_inline_svg_not_text_glyphs(tmp_path: Path) -> None:
+    """⑤ 图标合规：16px viewBox + currentColor 的内联 SVG；文字符号一个不许有。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert 'viewBox: "0 0 16 16"' in client and "currentColor" in client
+    for glyph in dp.TEXT_GLYPH_BAN:
+        assert glyph not in client
+
+
+def test_glyph_ban_check_bites_when_glyph_returns() -> None:
+    """⑤ 反例：塞回一个文字符号 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS + '\nconst evil = "' + dp.TEXT_GLYPH_BAN[0] + '";\n'
+    problems = dp.check(client_js=broken)
+    assert any("文字符号" in p for p in problems), problems
+
+
+def test_icon_svg_convention_check_bites_when_removed() -> None:
+    """⑤ 反例：图标口径被改掉（viewBox 不是 16）⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace('viewBox: "0 0 16 16"', 'viewBox: "0 0 24 24"')
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("图标" in p for p in problems), problems
+
+
+# ------------------------------------------------------------ 卡 242-⑥：说明两条装路都写清
+
+
+def test_install_doc_names_both_install_paths() -> None:
+    """④ 安装说明两条路都写清：官方 dsh plugin add（bundle.patch）+ 老的手写 profile 行。"""
+    assert "dsh plugin add" in dp.INSTALL_DOC
+    assert "cordis.patch.yml" in dp.INSTALL_DOC
+    assert "127.0.0.1:8787" in dp.INSTALL_DOC
 

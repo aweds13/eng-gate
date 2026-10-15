@@ -9,6 +9,10 @@
 - **`tools/stack.py`**：组件表加 `board`（`tools/wb_dash.py`，端口 8787，白名单 `python.exe`）；`start` 改为"发起后等端口"（`wait_seconds` 注入式、默认 20s）；`trae` 启动改 `cmd.exe /c` + `System32`-only PATH；`list/status/start/stop` 四条路径自动认得新组件。
 - ★ 判据 `tests/test_stack.py`：**12 passed**（旧 5 条**一条没删没降级** + 新 7 条），且**先红后绿**有读数：先红 = `6 failed / 6 passed`，后绿 = `12 passed`。
 - ★ 真读数：`stack.py list` 里 `board` 那两行原样（`起：… tools/wb_dash.py` / `判活：端口 8787；白名单 ('python.exe',)`）· `start board` ⇒ `board：已起（端口 8787；映像 python.exe）` · `stop board` ⇒ `board：已停（pid 24828，映像 python.exe）`（**停后 status 确认没起，服务没留**）· 反例：把裸 `timeout` 塞回 trae 启动 argv ⇒ `test_trae_launch_code_has_no_bare_timeout` 红（`Left contains one more item: 'timeout'`），撤掉即绿 · `ruff All checks passed!`。
+## 2026-10-15 —— 面板改「三行快捷入口」：开真实页面 + 图标合规 + 包补 `dsh.bundle.patch`（T-G363）
+- **`tools/dsh_panel.py`**：三行默认走 `ctx.sidebarRight.openTab("browser", { params: { url } })` 开真实页面（座位 key 不变）；目标页没起 ⇒ 显式「没起 + 怎么起」；`openTab` 失败一律 catch 后**如实报错**；图标改内联 SVG（禁用文字符号）；生成物 `dsh` 字段补齐 `bundle.patch` + `client`，并产出包内补丁层文件。
+- ★ 判据 `tests/test_dsh_panel.py`：**60 条全过**（既有 47 条**一条没删没降级** + 新 13 条），含反例：塞回文字符号图标 ⇒ 红；缺 `openTab("browser"` 调用 ⇒ 红。
+- ★ 真读数：`tools/dsh_panel.py --check` 绿（三座位 + 只读 + 失败可见 + 只 GET）· `60 passed` · `ruff All checks passed!` · 生成物 `dsh` 字段原样（`bundle` 段指向包内补丁层 + `client.platform=web` + 四项 inject）· 包内确有补丁层文件与两半 JS（宿主半/浏览器半）。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。

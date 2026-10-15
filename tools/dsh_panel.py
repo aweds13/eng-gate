@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""dsh_panel —— 全局面板：把工作台三个只读面接进 DSH 的全局座位（卡 221 + 卡 240）。
+"""dsh_panel —— 全局面板：把工作台三个只读面接进 DSH 的全局座位（卡 221 + 卡 240 + 卡 242）。
 
 ## 为什么有它
 
@@ -11,13 +11,19 @@
 ## 交什么（**只在仓库侧产出**）
 
 卡 221 只注册了一个座位（工作台看板），且**宿主→浏览器那条缝不存在**（浏览器半读的
-`ctx.workbenchBoardSnapshot()` 没人提供）。本卡（卡 240 · T-G358）把两件事一起做掉：
-把 **三个座位**（工作台看板 / 禅道迭代甘特 / timeflow 待办）接进 DSH，并补上**一条只读缝**
-（三条同源路由，把对应只读工具的 JSON 原样回给浏览器）。
+`ctx.workbenchBoardSnapshot()` 没人提供）。卡 240（T-G358）把**三个座位**接进 DSH 并补上
+**一条只读缝**。卡 242（T-G363）再把三行改成**快捷入口**：
 
 1. 一个**面板插件包**的源码（`--emit` 落盘）：`package.json` + `lib/index.js`（宿主半）+
-   `lib/client.js`（浏览器半）+ `README.md`（安装/接线说明）。
+   `lib/client.js`（浏览器半）+ `cordis.patch.yml`（`dsh.bundle.patch` 的包内补丁层）+
+   `README.md`（安装/接线说明）。
 2. 一份**安装/接线说明**（`INSTALL_DOC`；`--doc` 打印，`--emit` 落成包内 `README.md`）。
+
+★ 卡 242 的三件事（都钉了判据）：① 三行默认**开真实页面**（`ctx.sidebarRight.openTab(
+  "browser", { params: { url } })`，依据写在浏览器半源码注释里）；目标页连不上 ⇒
+  显式写「没起 + 怎么起」。② 图标**不许再用文字符号**（`▦` 之类）—— 内联 SVG（16px、
+  currentColor），几何与外壳自己的图标同口径（依据见 `makeIcon` 注释）。
+  ③ 包形态改成官方 `dsh.bundle.patch`（与 `dsh.client` 共存）。
 
 ★ **只读**：面板的数据来自卡 207 / 卡 222 / 卡 223 的**唯一读数器**；面板**不写仓库、
   不起工人**（用户早先拍过：拖动只写意图、主控执行）。`check()` 把这条钉成硬判据。
@@ -56,13 +62,14 @@ ROOT = Path(__file__).resolve().parent.parent
 
 #: 面板包名（本地目录即可，⏳ 不必发布 npm）。
 PACKAGE_NAME = "dsh-client-ui-workbench-panel"
-PACKAGE_VERSION = "0.0.2"
+PACKAGE_VERSION = "0.0.3"
 
 #: 落盘时每块内容相对包根的位置。
 HOST_REL = "lib/index.js"
 CLIENT_REL = "lib/client.js"
 MANIFEST_REL = "package.json"
 README_REL = "README.md"
+PATCH_REL = "cordis.patch.yml"  # 卡 242：dsh.bundle.patch 指向的包内补丁层
 
 #: 读数子进程超时上限（秒）；超时要如实报错，不静默返空。
 #: ★ 本仓卡树多，真读数实测 ~14s；留 30s 余量。
@@ -98,22 +105,68 @@ class Seat:
     order: int  # 左栏里的次序
     label_zh: str
     label_en: str
-    glyph: str  # 左栏行的字形
+    # 卡 242：图标 = 内联 SVG 的 path 列表（(d, fill) 对；fill 空 = 不填）。
+    # ★ 不许再用文字符号（▦ 之类）当图标 —— 判据 `_check_client` 咬。
+    icon: tuple[tuple[str, str], ...]
+    icon_round: bool  # 是否 strokeLinecap: "round"（甘特条那枚要）
     route: str  # 只读缝上的路径（同源、只 GET）
     script_rel: str  # 只读工具的仓库相对路径
     needs_root: bool  # 是否把 `--root <root>` 传给它
     locale_key: str  # 浏览器半 locale 文案键
-    render: str  # 浏览器半渲染器名
+    render: str  # 浏览器半渲染器名（内嵌读数分支，卡 242 保留）
 
+
+# ---- 图标几何：逐字取自外壳自己的图标（卡 242 的依据） ----
+# 依据 @deepseek-ai/dsh-client-ui-primitives/lib/index.js：
+#   IconGaugeOutlineArtwork :2050（工作台状态）、IconClockOutlineArtwork :2017（timeflow）；
+#   禅道为同口径自画的甘特条。口径：viewBox "0 0 16 16"、fill none、stroke currentColor、
+#   strokeWidth 1（Regular）、aria-hidden。长 path 拆隐式拼接，别撞 ruff E501。
+_ICON_GAUGE_ARC = (
+    "M3.4041 13.096C2.49514 12.187 1.87614 11.0288 1.62537 9.76798C1.37459 8.50716 1.50331"
+    " 7.20028 1.99525 6.01261C2.48719 4.82494 3.32025 3.80981 4.3891 3.09557C5.45795 2.38134"
+    " 6.71458 2.00008 8.0001 2C9.28563 2.00008 10.5423 2.38134 11.6111 3.09557C12.68 3.80981"
+    " 13.513 4.82494 14.005 6.01261C14.4969 7.20028 14.6256 8.50716 14.3748 9.76798C14.1241"
+    " 11.0288 13.5051 12.187 12.5961 13.096"
+)
+_ICON_GAUGE_NEEDLE = "M8 8.49994L11.6114 4.88855"
+_ICON_GAUGE_DOT = (
+    "M8 9.75C8.69036 9.75 9.25 9.19036 9.25 8.5C9.25 7.80964 8.69036 7.25 8 7.25C7.30964"
+    " 7.25 6.75 7.80964 6.75 8.5C6.75 9.19036 7.30964 9.75 8 9.75Z"
+)
+_ICON_CLOCK_FACE = (
+    "M8 14C11.3137 14 14 11.3137 14 8C14 4.68629 11.3137 2 8 2C4.68629 2 2 4.68629 2 8"
+    "C2 11.3137 4.68629 14 8 14Z"
+)
+_ICON_CLOCK_HAND = "M8 4.31V8.46L11 10.08"
+
+#: 三枚图标（(d, fill) 对）。工作台 = 仪表盘（状态面板）；禅道 = 甘特条；timeflow = 时钟。
+ICONS: dict[str, tuple[tuple[str, str], ...]] = {
+    "workbench_board": (
+        (_ICON_GAUGE_ARC, ""),
+        (_ICON_GAUGE_NEEDLE, ""),
+        (_ICON_GAUGE_DOT, "currentColor"),
+    ),
+    "zentao_gantt": (
+        ("M2.5 4.5H10", ""),
+        ("M6 8H13.5", ""),
+        ("M2.5 11.5H8", ""),
+    ),
+    "timeflow_inbox": (
+        (_ICON_CLOCK_FACE, ""),
+        (_ICON_CLOCK_HAND, ""),
+    ),
+}
 
 #: ★ 座位表的**唯一真源** —— `main` key 与行 id 都由它生成，不许手抄。
+#: 卡 242：label 改成三行快捷入口的文案（key **不许改名**）；glyph 字段废除，改 icon。
 SEATS: tuple[Seat, ...] = (
     Seat(
         key="workbench_board",
         order=0,
-        label_zh="工作台看板",
-        label_en="Workbench board",
-        glyph="\u25a6",
+        label_zh="工作台状态",
+        label_en="Workbench status",
+        icon=ICONS["workbench_board"],
+        icon_round=False,
         route=f"{SEAM_PREFIX}/workbench-board",
         script_rel="tools/pipeline_view.py",
         needs_root=True,
@@ -123,9 +176,10 @@ SEATS: tuple[Seat, ...] = (
     Seat(
         key="zentao_gantt",
         order=1,
-        label_zh="禅道迭代甘特",
-        label_en="ZenTao gantt",
-        glyph="\u25a4",
+        label_zh="禅道",
+        label_en="ZenTao",
+        icon=ICONS["zentao_gantt"],
+        icon_round=True,
         route=f"{SEAM_PREFIX}/zentao-gantt",
         script_rel="tools/zentao_gantt.py",
         needs_root=False,
@@ -135,9 +189,10 @@ SEATS: tuple[Seat, ...] = (
     Seat(
         key="timeflow_inbox",
         order=2,
-        label_zh="timeflow 待办",
-        label_en="timeflow inbox",
-        glyph="\u25a5",
+        label_zh="timeflow",
+        label_en="timeflow",
+        icon=ICONS["timeflow_inbox"],
+        icon_round=False,
         route=f"{SEAM_PREFIX}/timeflow-inbox",
         script_rel="tools/timeflow_inbox.py",
         needs_root=True,
@@ -154,6 +209,29 @@ ROUTE_PATHS: tuple[str, ...] = tuple(seat.route for seat in SEATS)
 #: 兼容卡 221 的既有判据：第一座 = 老的面板 id。
 PANEL_ID = SEAT_KEYS[0]
 
+
+@dataclass(frozen=True)
+class Target:
+    """一个快捷入口的目标（卡 242）：与座位表同源，key 一一对应。"""
+
+    seat: str  # 对应的座位 key
+    url: str  # 真实页面的 URL（只许指本机）
+    up_hint: str  # 没起时的「怎么起」（卡 242 的原话口径）
+
+
+#: ★ TARGETS 表（卡 242）—— 三条真实页面 URL，与 SEATS 的 key 一一对应；
+#:   目标页归别的卡/别的工具（wb_dash.py / serve.py / 禅道），本面板只**指向**它们。
+TARGETS: tuple[Target, ...] = (
+    Target("workbench_board", "http://127.0.0.1:8787/", "python -X utf8 tools/wb_dash.py"),
+    Target("zentao_gantt", "http://127.0.0.1/zentao/", "点 ZenPanel（禅道只听 127.0.0.1:80）"),
+    Target(
+        "timeflow_inbox", "http://127.0.0.1:8520/", "python -X utf8 tools/stack.py start timeflow"
+    ),
+)
+
+#: 卡 242 判据：这些文字符号**不许**再当图标出现在浏览器半里（反例：塞回一个 ⇒ 红）。
+TEXT_GLYPH_BAN: tuple[str, ...] = ("\u25a6", "\u25a4", "\u25a5")
+
 #: 读数器（卡 207 的唯一读数器）；面板的宿主半只调它，不重写读逻辑。
 READER_REL = Path("tools") / "pipeline_view.py"
 
@@ -162,7 +240,7 @@ MANIFEST = {
     "id": PANEL_ID,
     "order": SEATS[0].order,
     "label": {"zh": SEATS[0].label_zh, "en": SEATS[0].label_en},
-    "icon": {"glyph": SEATS[0].glyph, "size": 16},
+    "icon": {"kind": "inline-svg", "size": 16, "viewbox": "0 0 16 16"},
     "read_only": True,
     "data_source": "tools/pipeline_view.py --json（卡 207 的唯一读数器）",
     "seat": "root 作用域 `main` keyed 座（key=workbench_board）",
@@ -176,6 +254,9 @@ MANIFEST = {
 CLIENT_PACKAGE_DEPS = (
     "@deepseek-ai/dsh-client-ui-layout",
     "@deepseek-ai/dsh-client-ui-sidebar",
+    # 卡 242：开真实页面走 ctx.sidebarRight.openTab —— 这个服务由 ui-sidebar-right 提供
+    # （它自己声明了 dsh.client，实测 package.json；官方 schedule 插件也这样列它）。
+    "@deepseek-ai/dsh-client-ui-sidebar-right",
     "@deepseek-ai/dsh-client-locale",
 )
 
@@ -196,7 +277,7 @@ def package_manifest() -> dict:
     return {
         "name": PACKAGE_NAME,
         "version": PACKAGE_VERSION,
-        "description": "把工作台三个只读面接到 DSH 的全局座位（卡 221 + 卡 240）。",
+        "description": "把工作台三个真实页面的快捷入口接到 DSH（卡 221 + 卡 240 + 卡 242）。",
         "type": "module",
         "main": HOST_REL,
         "exports": {
@@ -205,8 +286,34 @@ def package_manifest() -> dict:
             "./package.json": "./package.json",
         },
         "peerDependencies": {"@deepseek-ai/cordis": "~4.0.4"},
-        "dsh": {"client": {"platform": "web", "inject": list(CLIENT_PACKAGE_DEPS)}},
+        # 卡 242：bundle 是宿主层声明（官方最短形态），client 是浏览器半 —— 两者共存。
+        # bundle.patch 逐字依据参考仓 dsh-ops 的 package.json：`dsh.bundle.patch`。
+        "dsh": {
+            "bundle": {"patch": f"./{PATCH_REL}"},
+            "client": {"platform": "web", "inject": list(CLIENT_PACKAGE_DEPS)},
+        },
     }
+
+
+# ================================================================ 生成物：cordis.patch.yml
+
+
+def cordis_patch_yaml() -> str:
+    """包内补丁层（卡 242）：`dsh.bundle.patch` 指向的那份文件。
+
+    `dsh plugin add <包>` 时宿主把它当 **profile 层**装；root 是占位符，安装者填
+    （或照 README 换成 `!!js` 从环境读）。语义与老的手写 profile 行完全一致。
+    """
+    return (
+        "# 卡 242 产物 · 本包的 cordis 补丁层（package.json 里 dsh.bundle.patch 指向本文件）。\n"
+        "# `dsh plugin add <本包目录>` 时宿主把这一层当 profile 层装（官方路数）。\n"
+        "# ★ root 是占位符：请改成仓库绝对路径（或照 README 换成 !!js 从环境读）。\n"
+        "- insert:\n"
+        "    - id: workbench-panel\n"
+        f'      name: "{PACKAGE_NAME}"\n'
+        "      config:\n"
+        '        root: "<仓库根，请改成绝对路径>"\n'
+    )
 
 
 # ================================================================ 生成物：宿主半
@@ -369,20 +476,27 @@ def _client_registrations() -> str:
     blocks: list[str] = []
     for index, seat in enumerate(SEATS):
         key_expr = "PANEL_ID" if index == 0 else json.dumps(seat.key)
+        icon = json.dumps([list(pair) for pair in seat.icon], ensure_ascii=False)
         blocks.append(
             '      ctx.slots.inject("main", () => ctx.slots.register({\n'
             '        name: "main",\n'
             f"        key: {key_expr},\n"
             "        locale: NS,\n"
-            f"        inject: () => ({{ route: {json.dumps(seat.route)} }}),\n"
-            f"      }}, {seat.render}));\n"
+            "        inject: () => ({"
+            f" route: {json.dumps(seat.route)}, target: TARGETS[{key_expr}] }}),\n"
+            "      }, function (props) {\n"
+            "        /* 默认 = 快捷入口（开真实页面）；内嵌读数（自绘视图）保留成可选分支。 */\n"
+            "        return h(QuickEntry, {"
+            f" route: props.route, target: props.target, title: {json.dumps(seat.label_zh)},"
+            f" fallback: {seat.render} }});\n"
+            "      }));\n"
             '      ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({\n'
             '        name: "sidebar.panellist",\n'
             f"        id: {key_expr},\n"
             f"        order: {seat.order},\n"
             f"        label: () => t({json.dumps(seat.locale_key)}),\n"
             "        locale: NS,\n"
-            f"      }}, makeIcon({json.dumps(seat.glyph)})));"
+            f"      }}, makeIcon({icon}, {json.dumps(seat.icon_round)})));"
         )
     return "\n".join(blocks)
 
@@ -391,11 +505,13 @@ def _client_label_map(attr: str) -> str:
     return ", ".join(f"{seat.locale_key}: {json.dumps(getattr(seat, attr))}" for seat in SEATS)
 
 
-_CLIENT_JS_TEMPLATE = r"""/* 卡 221 + 卡 240 产物 · 全局面板：浏览器半 —— 三个座位各占 root 作用域
- * `main` keyed 座的一个 key，并在 `sidebar.panellist` 各挂一行 ⇒ 不切窗口就能看板。
- * 渲染：workbench_board 六块原样；zentao_gantt 条；timeflow_inbox 列表（纯 DOM/SVG）。
- * ★ 只读：不写仓库、不起工人；点选只写「选中态」。★ 加载失败 / 数据源缺失要看得见
- * （data-wb-state="error"），绝不静默白屏；某块缺 ⇒ data-wb-state="missing"。 */
+_CLIENT_JS_TEMPLATE = r"""/* 卡 221 + 卡 240 + 卡 242 产物 · 全局面板：浏览器半 —— 三个座位各占
+ * root 作用域 `main` keyed 座的一个 key，并在 `sidebar.panellist` 各挂一行 ⇒ 不切窗口就能看板。
+ * 卡 242：三行是**快捷入口** —— 默认开**真实页面**（ctx.sidebarRight.openTab("browser",
+ * { params: { url } })，依据见 QuickEntry 上方注释）；原来的自绘视图（六块/甘特/列表）
+ * **保留**成可选的「内嵌读数」分支。★ 只读：不写仓库、不起工人；点选只写「选中态」。
+ * ★ 加载失败 / 数据源缺失要看得见（data-wb-state="error"），绝不静默白屏；
+ * 某块缺 ⇒ data-wb-state="missing"；目标页连不上 ⇒ 显式「没起 + 怎么起」。 */
 window.__ModuleLoader__.load({
   id: "dsh-client-ui-workbench-panel",
   factory: (require) => {
@@ -406,6 +522,13 @@ window.__ModuleLoader__.load({
     const NS = "workbenchPanel";
     const PANEL_ID = "workbench_board";
     const SECTIONS = ["cards", "gates", "verdicts", "leases", "fences", "worktrees"];
+
+    /* ---- TARGETS（卡 242）：三个真实页面，与座位表同源（key 一一对应） ----
+     * up = 没起时的「怎么起」。目标页归别的工具（wb_dash.py / serve.py / 禅道），
+     * 本面板只指向它们，不代替它们。 */
+    const TARGETS = {
+__TARGETS__
+    };
 
     /* ---- 取数：同源、只 GET（宿主半那条只读缝） ---- */
     function useSource(route) {
@@ -442,6 +565,69 @@ window.__ModuleLoader__.load({
           h("p", { "data-wb-error": "" }, String(data.error || "未知错误")));
       }
       return props.render(data ? data.reading : undefined);
+    }
+
+    /* ---- 卡 242 · 快捷入口（默认视图）：开真实页面 ----
+     * ★ 官方口子（查到的依据，不许猜 API）：
+     *   - 服务名与调用形状：`ctx.sidebarRight.openTab(kind, options?)` —— 依据
+     *     @deepseek-ai/dsh-client-ui-sidebar-right/lib/types/client/service.d.ts:168
+     *     （原话：Open a page type by kind at the address this package records pages under）。
+     *   - 浏览器页的参数形状：`browser: { url?: string }` —— 依据同包
+     *     lib/types/client/contract/params.d.ts（原话：the Browser page adds
+     *     `browser: { url?: string }`）；kind = "browser"（lib/types/client/definition.d.ts:6）。
+     *   - 官方自己就这么调：@deepseek-ai/dsh-client-ui-sidebar-browser/lib/client.js:157-159
+     *     （tab.actions.openTab("browser", { params: { url }, revealIfOpened: false })）。
+     *   - 侧栏浏览器桌面版默认启用（dsh-web-app/cordis.patch.yml:277-280，Electron <webview>）。
+     * ★ 退路（明说，不假装打开了）：sidebarRight 面向**当前会话**（service.d.ts 头注释），
+     *   无会话在屏 / Web 形态（浏览器页不注册）时 openTab 会失败 ⇒ catch 住、如实报错，
+     *   并给出可点的链接（Desktop 侧栏浏览器不受 iframe 限制；Web 形态下站点可能拒绝嵌入）。
+     * ★ 目标页连不上 ⇒ 探测 fetch（no-cors）失败时显式写「没起 + 怎么起」，绝不白屏。 */
+    let panelCtx = null; /* apply 时接住 ctx：QuickEntry 要用 ctx.sidebarRight。 */
+    function QuickEntry(props) {
+      const target = props.target;
+      const [mode, setMode] = react.useState("page");
+      const [openError, setOpenError] = react.useState("");
+      const [probe, setProbe] = react.useState("checking");
+      react.useEffect(() => {
+        let alive = true;
+        setProbe("checking");
+        fetch(target.url, { mode: "no-cors" })
+          .then(() => { if (alive) setProbe("up"); })
+          .catch(() => { if (alive) setProbe("down"); });
+        return () => { alive = false; };
+      }, [target.url]);
+      if (mode === "embedded") {
+        /* 内嵌读数（卡 240 的自绘视图，保留）：它的失败可见分支自己管。 */
+        return h(props.fallback, { route: props.route });
+      }
+      function openInSidebar() {
+        try {
+          panelCtx.sidebarRight.openTab("browser", { params: { url: target.url } });
+          setOpenError("");
+        } catch (error) {
+          setOpenError(String((error && error.message) || error));
+        }
+      }
+      const button = { padding: "4px 10px", cursor: "pointer" };
+      return h("div", { "data-wb-state": "ok" },
+        h("h2", null, props.title),
+        h("p", null, "在侧栏浏览器里打开真实页面："),
+        h("p", null,
+          h("button", { style: button, onClick: openInSidebar }, "打开 " + target.url)),
+        h("p", null,
+          h("a", { href: target.url, target: "_blank", rel: "noreferrer" }, target.url)),
+        openError
+          ? h("p", { "data-wb-error": "" },
+              "开不了（原话：" + openError + "）—— 用上面的链接手动开，别当它已打开。")
+          : null,
+        probe === "down"
+          ? h("p", { "data-wb-state": "error", "data-wb-error": "probe" },
+              "没起：" + target.url + " 连不上。怎么起：" + target.up)
+          : null,
+        h("p", { "data-wb-note": "" }, "没起？怎么起：" + target.up),
+        h("p", null,
+          h("button", { style: button, onClick: () => setMode("embedded") },
+            "内嵌读数（自绘视图）")));
     }
 
     /* ---- workbench_board：六块，原样 ---- */
@@ -545,17 +731,34 @@ window.__ModuleLoader__.load({
       return h(SourceShell, props2);
     }
 
-    /* ---- 左栏行的字形 ---- */
-    function makeIcon(glyph) {
+    /* ---- 左栏行的图标（卡 242：内联 SVG，不许文字符号） ----
+     * 照外壳自己的图标口径画（依据 @deepseek-ai/dsh-client-ui-primitives/lib/index.js）：
+     * viewBox "0 0 16 16"、fill none、stroke currentColor、strokeWidth 1（Regular）、
+     * aria-hidden、size 由侧栏传入（默认 16）。几何逐字取自：
+     * IconGaugeOutlineArtwork :2050（工作台状态）、IconClockOutlineArtwork :2017（timeflow）；
+     * 禅道为同口径自画的甘特条。外壳给侧栏行画图标同款做法：
+     * dsh-client-ui-schedule/lib/client.js:6196（TaskManagerIcon 用 primitives 的图标组件）。 */
+    function makeIcon(paths, round) {
       return (props) => {
         const size = props && props.size ? props.size : 16;
-        return h("span", { style: { fontSize: size + "px", lineHeight: 1 },
-          "aria-hidden": "true" }, glyph);
+        return h("svg", {
+          width: size,
+          height: size,
+          viewBox: "0 0 16 16",
+          fill: "none",
+          stroke: "currentColor",
+          strokeWidth: 1,
+          strokeLinecap: round ? "round" : undefined,
+          "aria-hidden": "true",
+          style: { flex: "none", verticalAlign: "-2px" },
+        }, paths.map((pair, index) =>
+          h("path", { key: index, d: pair[0], fill: pair[1] || undefined })));
       };
     }
 
-    const inject = ["slots", "locale", "layout"];
+    const inject = ["slots", "locale", "layout", "sidebarRight"];
     function apply(ctx) {
+      panelCtx = ctx; /* QuickEntry 的 ctx.sidebarRight.openTab 用（卡 242）。 */
       ctx.effect(() => ctx.locale.register(NS, {
         zh: { __ZH__ },
         en: { __EN__ },
@@ -579,9 +782,20 @@ __REGISTRATIONS__
 """
 
 
+def _client_targets_js() -> str:
+    """浏览器半那张 TARGETS 表（卡 242；与 SEATS 同源，key 一一对应）。"""
+    rows = [
+        f"      {json.dumps(target.seat)}: {{"
+        f" url: {json.dumps(target.url)}, up: {json.dumps(target.up_hint)} }},"
+        for target in TARGETS
+    ]
+    return "\n".join(rows)
+
+
 def _client_js() -> str:
     return (
         _CLIENT_JS_TEMPLATE.replace("__REGISTRATIONS__", _client_registrations())
+        .replace("__TARGETS__", _client_targets_js())
         .replace("__ZH__", _client_label_map("label_zh"))
         .replace("__EN__", _client_label_map("label_en"))
         .replace("__KEYS__", json.dumps(list(SEAT_KEYS)))
@@ -594,11 +808,12 @@ CLIENT_JS = _client_js()
 # ================================================================ 生成物：说明文档
 
 
-INSTALL_DOC = """# 全局面板（三座位）—— 安装 / 接线说明（卡 221 + 卡 240 · T-G358）
+INSTALL_DOC = """# 全局面板（三座位快捷入口）—— 安装 / 接线说明（卡 221 + 卡 240 + 卡 242 · T-G363）
 
-把工作台**三个只读面**接进 DSH 的**全局座位**：每个面 = `main` 那座的一个 key +
-`sidebar.panellist` 的一行。目的只有一个 —— 用户令：*「尽量不要让我切来切去」*、
-*「开到左边栏里」*。
+把工作台**三个真实页面**接进 DSH：左栏三行是**快捷入口** —— 每行点开默认给
+「开真实页面」的入口 + 目标页连不上时的「没起 + 怎么起」；原来的自绘视图（六块/甘特/列表）
+**保留**成可选的「内嵌读数」分支。目的只有一个 —— 用户令：*「尽量不要让我切来切去」*、
+*「开到左边栏里」*、*「禅道直接跳可以吗…开真实页面」*（2026-10-15）。
 
 ## 这座位是什么
 
@@ -608,21 +823,51 @@ INSTALL_DOC = """# 全局面板（三座位）—— 安装 / 接线说明（卡
 - 左栏那一行来自 `sidebar.panellist`（list 槽）：侧栏逐条画 `{id, order, label}`，
   **点它 = `selectPanel(id)`** ⇒ 行 id 必须等于 `main` 的 key。
 
-## 三个座位（key = 左栏行 id = 会话内工具名）
+## 三个座位（key = 左栏行 id = 会话内工具名；TARGETS 与座位表同源）
 
-| key | 左栏 label（zh / en） | order | 数据源 |
+| key | 左栏 label（zh / en） | order | 目标 URL（真实页面） |
 | --- | --- | --- | --- |
-| `workbench_board` | 工作台看板 / Workbench board | 0 | `tools/pipeline_view.py --json` |
-| `zentao_gantt` | 禅道迭代甘特 / ZenTao gantt | 1 | `tools/zentao_gantt.py --json` |
-| `timeflow_inbox` | timeflow 待办 / timeflow inbox | 2 | `tools/timeflow_inbox.py --json` |
+| `workbench_board` | 工作台状态 / Workbench status | 0 | `http://127.0.0.1:8787/` |
+| `zentao_gantt` | 禅道 / ZenTao | 1 | `http://127.0.0.1/zentao/` |
+| `timeflow_inbox` | timeflow / timeflow | 2 | `http://127.0.0.1:8520/` |
+
+没起？怎么起（按 key）：
+
+- `workbench_board` ⇒ `python -X utf8 tools/wb_dash.py`
+- `zentao_gantt` ⇒ 点 ZenPanel（禅道只听 127.0.0.1:80）
+- `timeflow_inbox` ⇒ `python -X utf8 tools/stack.py start timeflow`
+
+## 「开真实页面」的官方口子（卡 242 查到的依据，不许猜 API）
+
+- **服务名与调用形状**：`ctx.sidebarRight.openTab(kind, options?)` —— 依据
+  `@deepseek-ai/dsh-client-ui-sidebar-right/lib/types/client/service.d.ts:168`；
+  浏览器页的参数形状是 `browser: { url?: string }` —— 依据同包
+  `lib/types/client/contract/params.d.ts`（原话：the Browser page adds
+  `browser: { url?: string }`）；
+  kind = `"browser"`（`dsh-client-ui-sidebar-browser/lib/types/client/definition.d.ts:6`）。
+- **官方自己就这么调**：`dsh-client-ui-sidebar-browser/lib/client.js:157-159`
+  （`tab.actions.openTab("browser", { params: { url }, revealIfOpened: false })`）。
+- 侧栏浏览器**桌面版默认启用**（`dsh-web-app/cordis.patch.yml:277-280`），用 Electron
+  `<webview>`，不受 iframe 嵌入限制；**Web 形态**下浏览器页不注册 ⇒ `openTab` 失败
+  ⇒ 面板**如实报错**并给出可点的链接，**不假装打开了**。
+- **目标页连不上** ⇒ 面板里显式写「没起 + 怎么起」（上面表里那一列），**不许白屏**。
+
+## 图标（卡 242：不许再用文字符号 `▦` 之类）
+
+左栏三行用**内联 SVG**（16px、`currentColor`、viewBox 16），几何与外壳自己的图标同口径 ——
+依据 `@deepseek-ai/dsh-client-ui-primitives/lib/index.js`：工作台状态 =
+IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017）、禅道 =
+同口径自画的甘特条。外壳给侧栏行画图标就是这套做法（`dsh-client-ui-schedule/lib/client.js:6196`
+的 TaskManagerIcon 直接用 primitives 的图标组件）。
 
 ## 包里有什么
 
 | 文件 | 作用 |
 | --- | --- |
-| `package.json` | 清单：`dsh.client.platform = "web"`、`dsh.client.inject`、`exports["./client"]` |
+| `package.json` | 清单：`dsh.bundle.patch` + `dsh.client`（两者共存） |
+| `cordis.patch.yml` | 包内补丁层（`dsh.bundle.patch` 指向它；root 是占位符，安装者填） |
 | `lib/index.js` | **宿主半**：三个只读工具 + **一条只读缝**（三条同源路由，只 GET） |
-| `lib/client.js` | **浏览器半**：三个座位 + `sidebar.panellist` 三行 + 三块渲染 |
+| `lib/client.js` | **浏览器半**：快捷入口（默认开真实页面）+ 内联 SVG 图标 + 内嵌读数分支 |
 | `README.md` | 本说明 |
 
 ## 那条只读缝（宿主 → 浏览器）
@@ -637,24 +882,29 @@ INSTALL_DOC = """# 全局面板（三座位）—— 安装 / 接线说明（卡
 每个 handler 起对应**只读**工具（`spawnSync`、`windowsHide: true`、带超时），把它的 JSON
 **原样**回给浏览器。**缺数据**（工具不在 / 非零退出 / 超时 / 输出不是 JSON / 顶层不是对象）
 ⇒ 回 `{ ok: false, error: "<原话>" }` —— ★ **绝不用空数据冒充成功**。浏览器半用
-`fetch("/dsh-panel/…")` 取数；失败 ⇒ `data-wb-state="error"` + 原话，某块缺 ⇒
-`data-wb-state="missing"`（**不许白屏**）。
+`fetch("/dsh-panel/…")` 取数（内嵌读数分支用）；失败 ⇒ `data-wb-state="error"` + 原话，
+某块缺 ⇒ `data-wb-state="missing"`（**不许白屏**）。
 
-## 怎么被 DSH 加载（照做，别手改用户配置）
+## 怎么被 DSH 加载（两条路，照做，别手改用户配置）
 
 ★ **不许去改 `~/.dsh` 里的配置文件**（那是用户的地盘）。只用官方 CLI：
 
 1. **落盘本包**：`python -X utf8 tools/dsh_panel.py --emit <你选的目录>`。
    ★ 插件源码的**真源是本仓的 `tools/dsh_panel.py`**（只在仓库侧产出，不碰 `~/.dsh`）；
    生成物建议放到派生目录（本仓 `.gitignore` 的目录，或临时目录），随时可再 emit。
-2. **装进 profile**（本地目录即可，不必发布 npm）：
-   `dsh plugin --profile web add <那个目录>`（这条会转发给 pnpm）。
+2. **路 ①（推荐，官方路数）**：`dsh plugin add <那个目录>` —— 本包 `package.json` 里声明了
+   `dsh.bundle.patch`（最短官方形态，逐字依据参考仓 dsh-ops 的 `package.json`：
+   `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`），`dsh plugin add` 会把包内
+   `cordis.patch.yml` 当 **profile 层**装。
    ★★ **装本地包必须用 `file:`，绝不可以用 `link:`**：今天实测 —— 用 `link:` 装，
    宿主半会**裸导入**、报 `ERR_MODULE_NOT_FOUND` ⇒ 整行 Loader 条目起不来 ⇒
    界面里**什么都没有**。`file:` 才会把包内容拷进 profile、按 manifest 正常解析。
-3. **在组成里加一行**：把本包加进一个 preset 的 `agent.cordis.yml`，或加进 patch 层
-   （`H\\cordis.patch.yml` / profile 的 `cordis.patch.yml`）。patch 语义是**替换整行 config**，
-   不是合并 —— 每一行要重述它拥有的全部键。
+   ★ 包内 `cordis.patch.yml` 里的 `root:` 是**占位符**，装完请改成仓库绝对路径
+   （或把 config 换成 `!!js` 从环境读：`root: !!js "process.env.DSH_WORKBENCH_ROOT"`）。
+3. **路 ②（保留兼容，老的手写 profile 行）**：把本包加进一个 preset 的 `agent.cordis.yml`，
+   或加进 patch 层（`H\\cordis.patch.yml` / profile 的 `cordis.patch.yml`；装包用
+   `dsh plugin --profile web add <那个目录>`，同样 `file:` 不 `link:`）。
+   patch 语义是**替换整行 config**，不是合并 —— 每一行要重述它拥有的全部键。
    ★★ **这一行必须带上 `config: { root: "<仓库绝对路径>" }`** —— 2026-10-15 在真 DSH 里实测：
    DSH 桌面版**宿主的 cwd 是 profile 目录**（`…\\.dsh\\profiles\\desktop`），拿 cwd 当仓库根会让
    三个读数器全报 `can't open file '…\\profiles\\desktop\\tools\\pipeline_view.py'` ✗。
@@ -669,12 +919,14 @@ INSTALL_DOC = """# 全局面板（三座位）—— 安装 / 接线说明（卡
    （也认环境变量 `DSH_WORKBENCH_ROOT`；两个都没有 ⇒ 工具会**如实吼**「没告诉我仓库根」，不猜。）
 4. **重启 profile**：★ 换已挂载包的 manifest **需要重启**（manifest 身份在进程存活期内缓存）。
 5. **选中面板**：点侧栏那一行（三行里的任意一行）；或 `ctx.layout.selectPanel("workbench_board")`；
-   `null` = 回会话，**不改变当前会话**。
+   `null` = 回会话，**不改变当前会话**。点面板里的「打开 …」按钮 = `openTab("browser")`，
+   在右侧侧栏浏览器里开真实页面。
 
 ## 只读保证
 
 数据只经**既有只读工具**（`tools/pipeline_view.py` 卡 207 / `tools/zentao_gantt.py` 卡 223 /
 `tools/timeflow_inbox.py` 卡 222）**读**；面板**不写仓库、不起工人**，路由**只 GET**。
+目标页本身（wb_dash.py / serve.py / 禅道）归别的卡，本面板只**指向**它们。
 用户早先拍过：**拖动只写意图、主控执行** —— 本面板连拖动都没有，只有选中态。
 """
 
@@ -714,8 +966,8 @@ def _check_seats() -> list[str]:
     for seat in SEATS:
         if not seat.label_zh or not seat.label_en:
             problems.append(f"[座位] {seat.key} 的 label 必须同时有 zh 与 en")
-        if not seat.glyph:
-            problems.append(f"[座位] {seat.key} 缺 glyph（左栏就没有图标）")
+        if not seat.icon:
+            problems.append(f"[座位] {seat.key} 缺图标 path（左栏就没有图标）")
         if not seat.route.startswith(SEAM_PREFIX):
             problems.append(f"[座位] {seat.key} 的路由必须挂在 {SEAM_PREFIX} 下")
     if len(set(ROUTE_PATHS)) != len(ROUTE_PATHS):
@@ -739,6 +991,10 @@ def _check_package(package: dict) -> list[str]:
     client = (package.get("dsh") or {}).get("client") or {}
     if client.get("platform") != "web":
         problems.append("[package] dsh.client.platform 必须是 'web'")
+    # 卡 242：官方 bundle 形态 —— 与 dsh.client 共存（bundle 是宿主层声明，client 是浏览器半）。
+    bundle = (package.get("dsh") or {}).get("bundle") or {}
+    if bundle.get("patch") != f"./{PATCH_REL}":
+        problems.append(f"[package] dsh.bundle.patch 必须指向 ./{PATCH_REL}（官方 bundle 形态）")
     inject = client.get("inject")
     if not isinstance(inject, list) or not inject:
         problems.append("[package] dsh.client.inject 必须是非空列表")
@@ -803,6 +1059,24 @@ def _check_client(source: str) -> list[str]:
         problems.append('[浏览器半] 缺 `data-wb-state="error"` 失败可见分支（会静默白屏）')
     if "data-wb-state" not in source or "missing" not in source:
         problems.append("[浏览器半] 缺「某块缺数据」的显式标注")
+    # ---- 卡 242 判据（三行快捷入口）----
+    for glyph in TEXT_GLYPH_BAN:
+        if glyph in source:
+            problems.append(f"[浏览器半] 又出现文字符号 {glyph} 当图标（卡 242：必须内联 SVG）")
+    if 'viewBox: "0 0 16 16"' not in source or "currentColor" not in source:
+        problems.append("[浏览器半] 缺内联 SVG 图标口径（viewBox 16 / currentColor）")
+    if 'sidebarRight.openTab("browser"' not in source:
+        problems.append(
+            '[浏览器半] 缺 ctx.sidebarRight.openTab("browser", { params: { url } })'
+            "（卡 242：默认开真实页面）"
+        )
+    if "service.d.ts:168" not in source or "params.d.ts" not in source:
+        problems.append("[浏览器半] 缺「开真实页面」的源码依据注释（service.d.ts / params.d.ts）")
+    if "没起" not in source or "怎么起" not in source:
+        problems.append("[浏览器半] 缺「没起 + 怎么起」文案（目标页连不上时要显式说）")
+    for needle in ("wb_dash.py", "stack.py start timeflow", "ZenPanel"):
+        if needle not in source:
+            problems.append(f"[浏览器半] 缺「怎么起」的命令原文（{needle}）")
     problems.extend(_check_read_only("浏览器半", source))
     return problems
 
@@ -844,6 +1118,20 @@ def _check_host(source: str) -> list[str]:
     return problems
 
 
+def _check_targets(targets: tuple[Target, ...] | None = None) -> list[str]:
+    """卡 242：TARGETS 表与座位表同源 —— key 一一对应（同序）、URL 只指本机、「怎么起」齐全。"""
+    targets = TARGETS if targets is None else targets
+    problems: list[str] = []
+    if tuple(t.seat for t in targets) != SEAT_KEYS:
+        problems.append(f"[目标] TARGETS 的座位 key 必须与 SEAT_KEYS 一一对应（同序）：{targets}")
+    for target in targets:
+        if not target.url.startswith("http://127.0.0.1"):
+            problems.append(f"[目标] {target.seat} 的 URL 只许指本机（127.0.0.1）：{target.url}")
+        if not target.up_hint:
+            problems.append(f"[目标] {target.seat} 缺「怎么起」（连不上时要显式说）")
+    return problems
+
+
 def _check_doc(doc: str) -> list[str]:
     problems: list[str] = []
     for needle, why in (
@@ -857,6 +1145,9 @@ def _check_doc(doc: str) -> list[str]:
         ("link:", "没写「不许用 link:（会 ERR_MODULE_NOT_FOUND）」"),
         ("config", "没写「插件行要写 config.root（仓库根）」"),
         ("root", "没写「config 里那个键叫 root」"),
+        ("dsh plugin add", "没写官方装法路①（dsh plugin add ⇒ bundle.patch 变 profile 层）"),
+        ("cordis.patch.yml", "没写包内补丁层那份文件"),
+        ("127.0.0.1:8787", "没写工作台的目标 URL（TARGETS）"),
     ):
         if needle not in doc:
             problems.append(f"[说明] 缺「{why}」（找不到 `{needle}`）")
@@ -877,6 +1168,7 @@ def check(
     problems: list[str] = []
     problems.extend(_check_manifest())
     problems.extend(_check_seats())
+    problems.extend(_check_targets())
     problems.extend(_check_package(package if package is not None else package_manifest()))
     problems.extend(_check_client(client_js if client_js is not None else CLIENT_JS))
     problems.extend(_check_host(host_js if host_js is not None else HOST_JS))
@@ -895,6 +1187,7 @@ def package_files() -> dict[str, str]:
         HOST_REL: HOST_JS,
         CLIENT_REL: CLIENT_JS,
         README_REL: INSTALL_DOC,
+        PATCH_REL: cordis_patch_yaml(),
     }
 
 

@@ -6634,3 +6634,14 @@ evidence = [
   "file:tests/test_stack.py",
 ]
 gaps = "① ★ 组件表补上**工作台页**：`board` = `python -X utf8 tools/wb_dash.py`（端口 8787，白名单 `python.exe`）—— 之前 `start-all.cmd` 起完，工作台那一行点开还是空的 ✗（实测 `8787: closed`）。指针：`tools/stack.py`。② ★ 修掉「**判活太快**」：`start` 改成**发起后有上限地等端口/进程**（注入式 `wait_seconds`，默认 20s、每 0.5s 探一次）；等不到就报原话「发起了，但 N 秒内端口 (…) 还没起来 —— 没活起来」+ 日志路径，**不许**把它写成成功。指针：`tools/stack.py`。③ ★ 修掉 `trae` 那条链上的 `timeout` 被抢：启动改成 `cmd.exe /c …` 并给子进程**只含 `%SYSTEMROOT%\\System32` 的 PATH**（Windows 的 `timeout.exe` 仍在、MSYS 的 GNU `timeout` 不在）—— ★ **桌面那份 cmd 一个字没动**，修的是「我们怎么调它」。指针：`tools/stack.py`。"
+
+[entries."T-G363"]
+id = "T-G363"
+title = "面板改三行快捷入口：开真实页面 + 图标合规 + 包补 dsh.bundle.patch"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+]
+gaps = "① ★ 三行改成**快捷入口**：默认**开真实页面**（`ctx.sidebarRight.openTab(「browser」, { params: { url } })`），目标页分别是 `tools/wb_dash.py` 的 `127.0.0.1:8787` / `tools/serve.py` 的 `127.0.0.1:8520` / 禅道 `127.0.0.1/zentao/`；**座位 key 一个没改**（改名会毁掉已落地的判据与左栏约定）。指针：`tools/dsh_panel.py`。② ★ 目标页**没起**时面板必须显式写「没起 + 怎么起」（工作台 `tools/wb_dash.py`；timeflow `tools/stack.py start timeflow`；禅道点 ZenPanel），**不许白屏、不许假装打开了**；`openTab` 失败（无会话在屏 / Web 形态不注册浏览器页）也一律 **catch 住如实报错**。指针：`tools/dsh_panel.py`。③ ★ 图标改成**内联 SVG**（16px、`currentColor`），并配**反例判据**：源码里再出现 `▦` 这类文字符号 ⇒ 判据必红。指针：`tests/test_dsh_panel.py`。④ ★ 包形态补成官方那种：生成物的清单文件里 清单里的 `dsh` 字段含 `bundle`（指向包内那份补丁层）与 `client` 两段，并**在包内产出一份补丁层文件**（与清单同目录，`dsh plugin add` 才会把它当 profile 层）。指针：`tools/dsh_panel.py`。"
