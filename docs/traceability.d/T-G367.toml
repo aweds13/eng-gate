@@ -1,0 +1,10 @@
+[entries."T-G367"]
+id = "T-G367"
+title = "定点深读三个候选：读实现（不是再扩词）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/DSH插件-定点深读.md",
+]
+gaps = "① ★ **读源码不读简介**：三个候选各锁到**具体版本**再读（三个仓各自的 HEAD 短 sha 写在文档正文里，**不是本仓的提交** ✗），并写了「读过哪些文件 + 行数」；每条结论带 `文件:行号` + 原样片段。指针：`复盘/DSH插件-定点深读.md`。② ★ **四条「最值钱」的机制**：widgets 的**双源声明**（`manifest.json` + `defineWidget()`，`render()` 输入 stats 快照、输出纯数据或 `null` —— 无数据就不渲染、绝不造数）；gating-hub 的**证据分型成对**（`EVIDENCE_CODES` 与 `NON_EVIDENCE_CODES`，让「为什么没禁」可查）＋ **回滚点双验**（「记录在、目录没了 = 实际不可用，不能骗用户」）；pilot 的**响亮失败即修复指令**（`stale or unknown ref … — run pilot_snapshot`）。指针：`复盘/DSH插件-定点深读.md`。③ ★ **三条指名文件的建议**：① 给六块读数落一份**机器可读单元清单**（`tools/pipeline_view.py` 里加模块级 `BLOCKS` 表，`read_*()` 与 `_report_*()` 同源 —— 现在块语义散在三处人肉同步）；② 连续监测块加 **STALE-WHILE-ERROR**（坏读数不清空，与错误码并存，依据 widgets 那个适配器文件里的 STALE-WHILE-ERROR 写法（第 10-12 行，详见文档））；③ 端口探测一律用**能不能 bind** + **验明正身**（照抄 pilot 的 `canBind`）。指针：`复盘/DSH插件-定点深读.md`。"
+

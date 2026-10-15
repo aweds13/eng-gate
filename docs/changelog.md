@@ -21,6 +21,10 @@
 - **`tools/trae_pool.mjs`**：`send` 支持 `--model`（唯一匹配 / 滚到可见 / **回读比对** / 不一致非零退出）；发送前清空或防重复、发送后**必须核验**（核不到即非零退出）。
 - ★ 判据 `selftest`：**24 条全绿**，含四条反例 —— 残留 1 字且会话里没有 ⇒ **必须失败**、输入框读不到且会话也没有 ⇒ **必须失败（unverifiable）**、残留别人的字 ⇒ **必须先清**、残留恰是本次内容 ⇒ **不重输**（already-typed）✓。
 - ★ 真机读数（主控代跑）：`DONE sec=22 turns=6 disconnect=0 reconnect=0`，回话 `Kimi-K3 收到：Kimi-K3` ✓。
+## 2026-10-15 —— 定点深读三个候选（读实现，不是再扩词）（T-G367）
+- **新增 `复盘/DSH插件-定点深读.md`**（37.9 KB）：三仓各锁版本、每问带 `文件:行号` 与**原样片段**、末尾给**三条指名文件**的可落地建议；三份 README 只作对照、**以源码为准**（本卡未发现新的 README 与源码冲突例 ✓）。
+- ★ 真读数：三仓各自的 `rev-parse --short HEAD` 都记在文档里（**别的仓的 sha，不是本仓对象** ✗）；每仓"读过哪些文件（路径 + 行数）"逐条列出 ✓；域内**只新增一个文件**（`git status` 实证 ✓）。
+- ★ 关键结论：**我们的六块读数照 widgets 的形状做成机器可读单元清单是成立的**（§1.4 + §四.1）✓。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。

@@ -6666,3 +6666,13 @@ evidence = [
   "file:tools/trae_pool.mjs",
 ]
 gaps = "① ★ `send` 支持 **`--model`**：打开下拉后逐项扫描、把目标项**滚进可点区域再点**，切换后**回读当前模型名并比对**；名字宽松匹配但**必须唯一**（零候选或多候选**停手并列出候选**）；回读对不上 ⇒ **非零退出并打原话**（不许「点了就当成功」）。指针：`tools/trae_pool.mjs`。② ★ 发送**必须核验**：发送前先确认输入框干净（有别人的残留 ⇒ 清空重输；残留恰是本次内容 ⇒ **不重输**，防重复）；发送后核验（输入框已空 **或** 会话里出现本次内容）；**核不到就非零退出**（不许只打一行警告就退 0 ✗）。指针：`tools/trae_pool.mjs`。③ ★ **真机验收由主控代跑**（工人 harness 不许跑长命令，原话 `Reason: Background command execution is not supported in pr…`）：主控实测 `[trae] 当前模型已是 Kimi-K3，无需切换` + `DONE sec=22 turns=6 disconnect=0 reconnect=0`，回话 `Kimi-K3 收到：Kimi-K3` ⇒ **Kimi K3 那条道通了** ✓。指针：`tools/trae_pool.mjs`。"
+
+[entries."T-G367"]
+id = "T-G367"
+title = "定点深读三个候选：读实现（不是再扩词）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/DSH插件-定点深读.md",
+]
+gaps = "① ★ **读源码不读简介**：三个候选各锁到**具体版本**再读（三个仓各自的 HEAD 短 sha 写在文档正文里，**不是本仓的提交** ✗），并写了「读过哪些文件 + 行数」；每条结论带 `文件:行号` + 原样片段。指针：`复盘/DSH插件-定点深读.md`。② ★ **四条「最值钱」的机制**：widgets 的**双源声明**（`manifest.json` + `defineWidget()`，`render()` 输入 stats 快照、输出纯数据或 `null` —— 无数据就不渲染、绝不造数）；gating-hub 的**证据分型成对**（`EVIDENCE_CODES` 与 `NON_EVIDENCE_CODES`，让「为什么没禁」可查）＋ **回滚点双验**（「记录在、目录没了 = 实际不可用，不能骗用户」）；pilot 的**响亮失败即修复指令**（`stale or unknown ref … — run pilot_snapshot`）。指针：`复盘/DSH插件-定点深读.md`。③ ★ **三条指名文件的建议**：① 给六块读数落一份**机器可读单元清单**（`tools/pipeline_view.py` 里加模块级 `BLOCKS` 表，`read_*()` 与 `_report_*()` 同源 —— 现在块语义散在三处人肉同步）；② 连续监测块加 **STALE-WHILE-ERROR**（坏读数不清空，与错误码并存，依据 widgets 那个适配器文件里的 STALE-WHILE-ERROR 写法（第 10-12 行，详见文档））；③ 端口探测一律用**能不能 bind** + **验明正身**（照抄 pilot 的 `canBind`）。指针：`复盘/DSH插件-定点深读.md`。"
