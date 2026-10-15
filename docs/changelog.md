@@ -1,3 +1,6 @@
+## 2026-10-15 —— 面板的仓库根：从 config 取，不许拿 cwd 兜（T-G361）
+- **`tools/dsh_panel.py`**：宿主半 `repoRoot()` 改为 `config.root → DSH_WORKBENCH_ROOT → 如实吼`；新增失败分支原话「没告诉我仓库根：请在插件行的 config 里写 root（或设 DSH_WORKBENCH_ROOT）」；判据 +3（必须能从 config 拿根 / **不许**出现 cwd 兜底 / 必须有那条吼的分支）；安装说明写明 `config.root` 这一键与理由。
+- ★ 真读数：`--check` 绿（三座位 + 只读 + 失败可见 + 只 GET）· `47 passed` · `ruff All checks passed!` · 生成物两半 `node --check` 通过 · 副本 profile 的 `--dump-config` 里那一行确实带上了 `config: root: <仓库绝对路径>` ✓。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。

@@ -1,0 +1,10 @@
+[entries."T-G361"]
+id = "T-G361"
+title = "面板的仓库根：从 config 取，不许拿 cwd 兜"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+]
+gaps = "① ★ **在真 DSH 里跑出来的一条缺陷**：DSH 桌面版**宿主的 cwd 是 profile 目录** ⇒ 三个读数器全都报「can't open file …（找不到那个 `.py`）」✗（实测原话，路径按规矩不写成指针）。指针：`tools/dsh_panel.py`。② ★ 修法：仓库根改成 **插件行 `config.root` → 环境变量 `DSH_WORKBENCH_ROOT` → 都没有就如实吼** 三段取值，并**删掉「拿 cwd 兜底」** —— 宁可看见一条错误，也不要看见一块假板子。指针：`tools/dsh_panel.py`。③ ★ 配套：profile 的组成层那一行补 `config: { root: … }`（当数据写，不当代码写），并已用 `--dump-config` 验到合成结果里确实带上它。指针：`tools/dsh_panel.py`。"
+

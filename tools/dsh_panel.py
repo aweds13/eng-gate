@@ -246,13 +246,28 @@ const SEATS = [
 __SEATS__
 ];
 
+/* ★ 仓库根从哪来（2026-10-15 实测修）：
+ *   原来只认环境变量、拿「当前工作目录」兜底 —— 而 **DSH 桌面版宿主的 cwd 是
+ *   profile 目录**（`C:/Users/example\\.dsh\\profiles\\desktop`）⇒ 三个读数器全都
+ *   `can't open file '…\\profiles\\desktop\\tools\\<工具>.py'` ✗（真 DSH 实测原话）。
+ *   现在：① 插件行的 `config.root`（组成层当数据写）→ ② 环境变量 → ③ **没有就如实吼**，
+ *   绝不拿一个错的 cwd 去猜（宁可见一条错误，也不要看见一块假板子）。 */
+let CONFIG_ROOT = "";
+
 function repoRoot() {
-  return process.env.DSH_WORKBENCH_ROOT || process.cwd();
+  return CONFIG_ROOT || process.env.DSH_WORKBENCH_ROOT || "";
 }
 
 /** 只读一次读数：调对应只读工具，缺什么如实报。 */
 function readSeat(seat) {
   const root = repoRoot();
+  if (!root) {
+    return {
+      ok: false,
+      error: "没告诉我仓库根：请在插件行的 config 里写 root（或设 DSH_WORKBENCH_ROOT）—— "
+        + "DSH 桌面版宿主的 cwd 是 profile 目录，不能拿它当仓库根。",
+    };
+  }
   const script = path.join(root, ...seat.script);
   const args = ["-X", "utf8", script, "--json"];
   if (seat.needsRoot) args.push("--root", root);
@@ -305,6 +320,9 @@ function serveSeam(req, res) {
 }
 
 export function apply(ctx) {
+  /* ★ 仓库根：插件行的 config.root 优先（组成层当数据写），没有就留给环境变量，再没有就如实吼。 */
+  const configured = ctx?.config?.root;
+  CONFIG_ROOT = typeof configured === "string" ? configured : "";
   /* 会话内三个只读工具：缺哪块如实说哪块，绝不用空数据冒充成功。 */
   for (const seat of SEATS) {
     ctx.tools.register(defineTool({
@@ -637,6 +655,18 @@ INSTALL_DOC = """# 全局面板（三座位）—— 安装 / 接线说明（卡
 3. **在组成里加一行**：把本包加进一个 preset 的 `agent.cordis.yml`，或加进 patch 层
    （`H\\cordis.patch.yml` / profile 的 `cordis.patch.yml`）。patch 语义是**替换整行 config**，
    不是合并 —— 每一行要重述它拥有的全部键。
+   ★★ **这一行必须带上 `config: { root: "<仓库绝对路径>" }`** —— 2026-10-15 在真 DSH 里实测：
+   DSH 桌面版**宿主的 cwd 是 profile 目录**（`…\\.dsh\\profiles\\desktop`），拿 cwd 当仓库根会让
+   三个读数器全报 `can't open file '…\\profiles\\desktop\\tools\\pipeline_view.py'` ✗。
+   例：
+   ```yaml
+   - insert:
+       - id: workbench-panel
+         name: "dsh-client-ui-workbench-panel"
+         config:
+           root: "D:/repo/engineering"
+   ```
+   （也认环境变量 `DSH_WORKBENCH_ROOT`；两个都没有 ⇒ 工具会**如实吼**「没告诉我仓库根」，不猜。）
 4. **重启 profile**：★ 换已挂载包的 manifest **需要重启**（manifest 身份在进程存活期内缓存）。
 5. **选中面板**：点侧栏那一行（三行里的任意一行）；或 `ctx.layout.selectPanel("workbench_board")`；
    `null` = 回会话，**不改变当前会话**。
@@ -791,6 +821,15 @@ def _check_host(source: str) -> list[str]:
         problems.append("[宿主半] 缺失败显式返回（不许静默返空）")
     if "webServer.register" not in source:
         problems.append("[宿主半] 缺只读缝（webServer.register）")
+    # ★ 2026-10-15 实测：DSH 桌面版宿主的 cwd 是 **profile 目录** ⇒ 拿 cwd 当仓库根会让三个读数器
+    #   全部 `can't open file '…\\profiles\\desktop\\tools\\*.py'` ✗。所以：必须能从 config 拿根，
+    #   且**不许**再用 `process.cwd()` 兜底。
+    if "CONFIG_ROOT" not in source or not ("ctx.config" in source or "ctx?.config" in source):
+        problems.append("[宿主半] 不能从插件行 config 拿仓库根（缺 CONFIG_ROOT / ctx.config）")
+    if "process.cwd()" in source:
+        problems.append("[宿主半] 还在拿 process.cwd() 当仓库根 —— DSH 桌面版那里是 profile 目录 ✗")
+    if "没告诉我仓库根" not in source:
+        problems.append("[宿主半] 没写「没配根就如实吼」那条分支")
     if 'kind: "prefix"' not in source:
         problems.append('[宿主半] 只读缝没按 kind: "prefix" 注册')
     if 'req.method !== "GET"' not in source:
@@ -816,6 +855,8 @@ def _check_doc(doc: str) -> list[str]:
         ("默认组合不注册任何", "没写「默认没有面板占用者」"),
         ("file:", "缺「本地包必须用 file: 装」"),
         ("link:", "没写「不许用 link:（会 ERR_MODULE_NOT_FOUND）」"),
+        ("config", "没写「插件行要写 config.root（仓库根）」"),
+        ("root", "没写「config 里那个键叫 root」"),
     ):
         if needle not in doc:
             problems.append(f"[说明] 缺「{why}」（找不到 `{needle}`）")
