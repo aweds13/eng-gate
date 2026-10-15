@@ -5,6 +5,10 @@
 - **`docs/workbacklog.toml`**：226 / 230 / 231 的 `status` 由 `pending` 改为 `done` —— 依据是各自栅栏 `state == landed` 且落地提交可查（`21a5eb6` / `13d46e62`）。
 - ★ **228 保持 `pending`**：它没有栅栏；完成它的是卡 239（`Task: T-G357`），台账号对不上 ⇒ 不翻（这条不翻是**遵守判据**，不是漏掉）。
 - ★ 真读数：`tools/wb_daily.py` 的「已落没翻 status」从 **3 张** 变 **1 张（228）**；`wb_task.py list` 的 landed 计数不变。
+## 2026-10-15 —— 把工作台页纳入一起起，并修 trae 的两处判活缺陷（T-G364）
+- **`tools/stack.py`**：组件表加 `board`（`tools/wb_dash.py`，端口 8787，白名单 `python.exe`）；`start` 改为"发起后等端口"（`wait_seconds` 注入式、默认 20s）；`trae` 启动改 `cmd.exe /c` + `System32`-only PATH；`list/status/start/stop` 四条路径自动认得新组件。
+- ★ 判据 `tests/test_stack.py`：**12 passed**（旧 5 条**一条没删没降级** + 新 7 条），且**先红后绿**有读数：先红 = `6 failed / 6 passed`，后绿 = `12 passed`。
+- ★ 真读数：`stack.py list` 里 `board` 那两行原样（`起：… tools/wb_dash.py` / `判活：端口 8787；白名单 ('python.exe',)`）· `start board` ⇒ `board：已起（端口 8787；映像 python.exe）` · `stop board` ⇒ `board：已停（pid 24828，映像 python.exe）`（**停后 status 确认没起，服务没留**）· 反例：把裸 `timeout` 塞回 trae 启动 argv ⇒ `test_trae_launch_code_has_no_bare_timeout` 红（`Left contains one more item: 'timeout'`），撤掉即绿 · `ruff All checks passed!`。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。

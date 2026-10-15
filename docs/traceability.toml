@@ -6623,3 +6623,14 @@ evidence = [
   "file:docs/workbacklog.toml",
 ]
 gaps = "① ★ 三张卡的产物**早在主干**、`status` 还挂着 `pending`（226 / 230 / 231）。判据是**栅栏 landed**（不是「看起来像落了」）：`B-20261017:landed`（落地 `21a5eb6`）与 `B-20261020:landed`（落地 `13d46e62`）。指针：`docs/workbacklog.toml`。② ★ ★ **228 不翻**：它**没有任何栅栏**；它的活虽由卡 239 补完并落地（`1446298`），但那笔的 `Task:` 是 `T-G357` ≠ 228 的台账号 ⇒ 按卡 `B-STATUSFLIP` 立下的判据（看 `--task` 字段，不看「像不像」）**不许翻**。指针：`docs/workbacklog.toml`。③ ★ 本笔**只改账**（`status` 字段），不碰代码、不碰产物、不碰栅栏状态。指针：`docs/workbacklog.toml`。"
+
+[entries."T-G364"]
+id = "T-G364"
+title = "把工作台页纳入一起起，并修 trae 的两处判活缺陷"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/stack.py",
+  "file:tests/test_stack.py",
+]
+gaps = "① ★ 组件表补上**工作台页**：`board` = `python -X utf8 tools/wb_dash.py`（端口 8787，白名单 `python.exe`）—— 之前 `start-all.cmd` 起完，工作台那一行点开还是空的 ✗（实测 `8787: closed`）。指针：`tools/stack.py`。② ★ 修掉「**判活太快**」：`start` 改成**发起后有上限地等端口/进程**（注入式 `wait_seconds`，默认 20s、每 0.5s 探一次）；等不到就报原话「发起了，但 N 秒内端口 (…) 还没起来 —— 没活起来」+ 日志路径，**不许**把它写成成功。指针：`tools/stack.py`。③ ★ 修掉 `trae` 那条链上的 `timeout` 被抢：启动改成 `cmd.exe /c …` 并给子进程**只含 `%SYSTEMROOT%\\System32` 的 PATH**（Windows 的 `timeout.exe` 仍在、MSYS 的 GNU `timeout` 不在）—— ★ **桌面那份 cmd 一个字没动**，修的是「我们怎么调它」。指针：`tools/stack.py`。"

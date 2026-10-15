@@ -1,17 +1,23 @@
-"""一起起、分别停：看门 / timeflow / 禅道 / Trae 的起停 + 现读（卡 241 · T-G359）。
+"""一起起、分别停：看门 / timeflow / 工作台页 / 禅道 / Trae 的起停 + 现读（卡 241 · T-G359）。
 
+卡 243（T-G364）：加 `board` 工作台页、修「判活太快」、修 trae 的 timeout 被抢。
 用户 2026-10-14 令「起可以绑在一起，**停要分开**」。本工具只做四件事：
 
 - `start`：把**没在跑的**起起来；已在跑的**如实说「已在跑」**、不重复起；
+  起完给**有限的等待窗口**（默认 20 秒、每 0.5 秒探一次，卡 243 修「判活太快」），
+  等不到就报原话「发起了，但 N 秒内端口 X 还没起来」，**不许谎报「已起」**；
 - `stop <名>`：**先核对 pid 身份**（映像是白名单里的那个）再审—— 不对就拒绝并点名；
 - `status`：**现读**（真进程表 + 真端口），谁没起就写「没起」，**不静默成功**；
 - `list`：这张表本身（名字 / 怎么起 / 怎么判活着 / 白名单）。
 
-边界（卡 241 §4，一条都不越）
-- 起停**只碰下表那四件**；不碰 `~/.dsh`、不碰 DSH 本体、**不注册计划任务**（用户选了手动）；
+边界（卡 241 §4 + 卡 243 §5，一条都不越）
+- 起停**只碰下表那五件**（卡 243 起加 `board`）；不碰 `~/.dsh`、不碰 DSH 本体、**不注册计划任务**；
 - `stop` 遇到**身份不符**的 pid ⇒ **拒绝动手并点名**（那可能是别人的 python/node）；
   进程已不在 ⇒ 如实说「没在跑」并**清掉过期 pid 文件**（说清做了这件事）；
-- 判活着一律**真进程 / 真端口**；拿不到就说拿不到，**不为了"看起来起了"去放宽**。
+- 判活着一律**真进程 / 真端口**；拿不到就说拿不到，**不为了"看起来起了"去放宽**；
+- trae 走 cmd 包装：给子进程一个**只含系统目录的 PATH**（卡 243）——
+  桌面那份启动 cmd 里的 `timeout /t` 因此解析到 System32 的真 timeout.exe，
+  不再被 MSYS 的 GNU timeout 抢走；桌面那份 cmd 本身一个字不动。
 
 为什么不用 `os.kill(pid, 0)` 探活：Windows 上 CPython 把它实现成 `OpenProcess` +
 `TerminateProcess` ⇒ 会**真把那个进程杀掉**（口径坑 27）。
@@ -22,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import locale
+import os
 import socket
 import subprocess
 import sys
@@ -52,7 +59,7 @@ class Component(NamedTuple):
     manual: str                      # 不能脚本起时的「手动一步」说明
 
 
-#: 组件表（卡 241 §1）。★ 只这四件，别加。
+#: 组件表（卡 241 §1；卡 243 §1 起加 `board` 工作台页，共五件）。
 COMPONENTS: dict[str, Component] = {
     "closer": Component(
         name="closer",
@@ -66,6 +73,14 @@ COMPONENTS: dict[str, Component] = {
         whitelist=("python.exe",),
         ports=(8520,),
         start=[sys.executable, "-X", "utf8", "tools/serve.py"],
+        manual="",
+    ),
+    "board": Component(
+        name="board",
+        # 卡 243：工作台页（tools/wb_dash.py，默认 127.0.0.1:8787），能脚本起。
+        whitelist=("python.exe",),
+        ports=(8787,),
+        start=[sys.executable, "-X", "utf8", "tools/wb_dash.py"],
         manual="",
     ),
     "zentao": Component(
@@ -86,7 +101,8 @@ COMPONENTS: dict[str, Component] = {
         # ⇒ 两个都收（主控若要逐字执行请删掉 "trae cn.exe"）。
         whitelist=("trae.exe", "trae cn.exe", "node.exe"),
         ports=(9333,),
-        start=["cmd", "/c", "D:\\桌面\\启动Trae-带调试口.cmd"],
+        # 卡 243：显式 cmd.exe（配合 `_child_env` 的受限 PATH，见模块头）。
+        start=["cmd.exe", "/c", "D:\\桌面\\启动Trae-带调试口.cmd"],
         manual="",
     ),
 }
@@ -222,36 +238,61 @@ def alive(name: str) -> tuple[bool, str]:
     return True, f"pid {pid}，映像 {img}"
 
 
-def _await_port(ports: tuple[int, ...], fallback: int, seconds: float = 10.0) -> int:
-    """起完等端口开；开则回**端口属主 pid**，超时回 `fallback`（不谎报"已连上"）。"""
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        for port in ports:
-            if port_open(port):
-                owner = port_owner(port)
-                return owner if owner is not None else fallback
-        time.sleep(0.3)
-    return fallback
+def _child_env(comp: Component) -> dict[str, str] | None:
+    """cmd 包装的组件（trae）⇒ 给子进程一个**只含系统目录**的 PATH（卡 243）。
+
+    桌面那份启动 cmd 里的 `timeout /t` 之前被 MSYS 的 GNU timeout 抢走
+    （PATH 里有 Git 的 usr/bin，GNU timeout 排在前面）。修法是改**我们怎么调它**：
+    子进程 PATH 只留 `%SystemRoot%\\System32`，`timeout.exe` 仍解析得到（它就在那），
+    GNU timeout 不在。桌面那份 cmd 本身**一个字不动**（那是用户的资产）。
+    非 cmd 包装的组件回 `None`（= 继承本进程环境）。
+    """
+    assert comp.start is not None, "_child_env 只对能脚本起的组件有意义"
+    if Path(comp.start[0]).name.lower() != "cmd.exe":
+        return None
+    env = dict(os.environ)
+    system_root = Path(os.environ.get("SYSTEMROOT", r"C:\\Windows"))
+    env["PATH"] = str(system_root / "System32")
+    return env
 
 
 def _launch(name: str, comp: Component) -> int:
-    """按表起这个组件；stdout/stderr 灌 `gates/diag/stack/<名>.log`，回 pid。"""
+    """按表起这个组件；stdout/stderr 灌 `gates/diag/stack/<名>.log`，回壳 pid。
+
+    ★ 这里**不等**端口（等待窗口在 `start_one`，卡 243）——先落壳 pid，
+    活起来之后由 `_adopt_owner_pid` 把 pid 文件换成真端口属主。
+    """
     assert comp.start is not None, f"{name} 不能由脚本起（该走 manual 分支）"
     STACK_DIR.mkdir(parents=True, exist_ok=True)
     with log_path(name).open("ab") as fh:
         proc = subprocess.Popen(  # noqa: S603 —— argv 是本表写死的，不是外部输入
             comp.start, cwd=str(ROOT), stdin=subprocess.DEVNULL,
-            stdout=fh, stderr=subprocess.STDOUT, **NO_WINDOW,
+            stdout=fh, stderr=subprocess.STDOUT, env=_child_env(comp), **NO_WINDOW,
         )
-    pid = proc.pid
-    if comp.ports:
-        pid = _await_port(comp.ports, fallback=proc.pid)
-    write_pidfile(name, pid)
-    return pid
+    write_pidfile(name, proc.pid)
+    return proc.pid
 
 
-def start_one(name: str) -> int:
-    """起一个：已在跑的如实说「已在跑」；不能脚本起的说清手动一步（不假装起了）。"""
+def _adopt_owner_pid(name: str, comp: Component) -> None:
+    """活起来之后把 pid 文件换成**真端口属主**（cmd 壳的 pid 对 stop 没用）。"""
+    for port in comp.ports:
+        if port_open(port):
+            owner = port_owner(port)
+            if owner is not None:
+                write_pidfile(name, owner)
+                return
+
+
+def start_one(
+    name: str, *, wait_seconds: float = 20.0, poll_seconds: float = 0.5
+) -> int:
+    """起一个：已在跑的如实说「已在跑」；不能脚本起的说清手动一步（不假装起了）。
+
+    卡 243 修「判活太快」：起完给**有限的等待窗口**（默认 20 秒、每 0.5 秒探一次
+    端口/进程），探到活就报成功；等不到就报原话「发起了，但 N 秒内端口 X 还没起来」
+    + 日志路径 —— **不许**把"还在启动中"谎报成"已起"。
+    等待窗口是**注入式**的（`wait_seconds=0` 即关掉，判据用），不改常量。
+    """
     comp = COMPONENTS[name]
     running, detail = alive(name)
     if running:
@@ -265,12 +306,26 @@ def start_one(name: str) -> int:
     except OSError as exc:
         print(f"{name}：起不来 —— {type(exc).__name__}: {exc}")
         return 1
-    time.sleep(0.5)  # 让子进程有个"站稳"的窗口，免得谎报「已起」
-    running, detail = alive(name)
-    if running:
-        print(f"{name}：已起（{detail}）")
-        return 0
-    print(f"{name}：起了但**没活起来**（{detail}）—— 看 {log_path(name)}")
+    deadline = time.monotonic() + max(wait_seconds, 0.0)
+    while True:
+        running, detail = alive(name)
+        if running:
+            _adopt_owner_pid(name, comp)
+            print(f"{name}：已起（{detail}）")
+            return 0
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(poll_seconds)
+    if comp.ports:
+        print(
+            f"{name}：发起了，但 {wait_seconds:g} 秒内端口 {comp.ports} "
+            f"还没起来 —— **没活起来**；看 {log_path(name)}"
+        )
+    else:
+        print(
+            f"{name}：发起了，但 {wait_seconds:g} 秒内进程还没站稳"
+            f"（{detail}）—— 看 {log_path(name)}"
+        )
     return 1
 
 
@@ -353,7 +408,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI 入口。"""
     parser = argparse.ArgumentParser(
         prog="stack.py",
-        description="一起起、分别停：看门 / timeflow / 禅道 / Trae（卡 241 · T-G359）",
+        description="一起起、分别停：看门 / timeflow / 工作台页 / 禅道 / Trae（卡 241；卡 243）",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
     p_start = sub.add_parser("start", help="把没在跑的起起来（已在跑的如实说）")

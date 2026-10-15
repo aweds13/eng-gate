@@ -2387,3 +2387,56 @@ risk = "mid"
 status = "done"
 
 depends = []
+
+[[cards]]
+
+id = "242"
+
+task = "T-G363"
+
+title = "面板改三行快捷入口：开真实页面 + 图标合规 + dsh.bundle.patch 化"
+
+tree = ".wt/panelfix"
+
+spec = "复盘/卡/卡242-面板改快捷入口.md"
+
+files = [
+
+  "tools/dsh_panel.py",
+
+  "tests/test_dsh_panel.py",
+
+]
+
+risk = "high"
+
+status = "pending"
+
+depends = ["240"]
+
+[[cards]]
+
+id = "243"
+
+task = "T-G364"
+
+title = "把工作台页纳入一起起，并修 trae 的两处判活缺陷（判活太快 / timeout 被抢）"
+
+tree = ".wt/stackboard"
+
+spec = "复盘/卡/卡243-栈加工作台页.md"
+
+files = [
+
+  "tools/stack.py",
+
+  "tests/test_stack.py",
+
+]
+
+risk = "mid"
+
+status = "done"
+
+depends = ["241"]
+
