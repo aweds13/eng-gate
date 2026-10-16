@@ -21,12 +21,22 @@ r"""并发调度器 CLI `tools/wb_plan.py`（外包卡 010 · 台账号 T-G99）
   stats                       队列全貌（待派 / 其它 / 批数 / 最大一批 / 占用的树）
   worktrees [--base <sha>]    打印建树命令（`--execute` 才真建）
   dispatch [--concurrency N]  打印派活命令（`--execute` 才真派）
+  merge                       把台账**分片**合并成只读总表（`--execute` 才落盘）
+
+★ 卡 262（T-G383）·分区前缀：多个主控共用一个卡池，卡号会撞（都写 261）。解法是给每个
+  主控一个**头编号**（分区前缀）—— 新卡号形如 `A261`（树 `.wt/A261`、分支 `card/A261`）。
+  **旧号（纯数字）行为一字不变**。登记表在 `docs/partitions.toml`；台账**分片**住
+  `docs/backlog/<分区>.toml`，`check` / `plan` / `dispatch` 读的是**合并后**的队列。
+  ★ 分区只解决「号不撞」，**不解决「文件不撞」**：两个分区各写一张卡、都声明同一文件时，
+  `check` 照样报「同一文件两个写者」并点名（合并后仍按 `files` 域相交判）。
 
 用法：
     python -X utf8 tools/wb_plan.py check
     python -X utf8 tools/wb_plan.py plan --concurrency 3
     python -X utf8 tools/wb_plan.py worktrees --base 1969b46
     python -X utf8 tools/wb_plan.py dispatch
+    python -X utf8 tools/wb_plan.py check --shards docs/backlog
+    python -X utf8 tools/wb_plan.py merge --execute
 
 ★ 逻辑层已抽到 `tools/pool/plan.py`（卡 106 · T-G202）：CLI 与号池 MCP 共用同一批函数，
   本文件只留**取参数 / 打印 / 会动世界的那一半**（`--execute`）。
@@ -38,11 +48,15 @@ r"""并发调度器 CLI `tools/wb_plan.py`（外包卡 010 · 台账号 T-G99）
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import tomllib
 from pool import registry as pool_registry  # noqa: E402 —— 主树根（树标签的锚点；卡 203）
 from pool.plan import (
     ACTIVE_STATUS,
@@ -78,15 +92,232 @@ __all__ = [
     "ACTIVE_STATUS", "DEFAULT_BACKLOG", "DEFAULT_CONCURRENCY", "PROTECTED_FILES",
     "VALID_RISK", "VALID_STATUS", "Backlog", "BacklogError", "Card",
     "BATCH_CLAIM_RE", "audit_batch_claims", "batch_manifest_path", "extract_batch_claim",
-    "cmd_check", "cmd_dispatch", "cmd_plan", "cmd_stats", "cmd_worktrees",
-    "build_parser", "dispatch_argv", "files_intersect", "find_cycle", "greedy_pack",
-    "find_landed_but_pending", "find_gate_drift", "in_flight", "load_backlog",
-    "main", "plan_batches",
-    "plan_report", "render_dispatch", "render_plan", "topo_layers", "validate",
+    "cmd_check", "cmd_dispatch", "cmd_merge", "cmd_plan", "cmd_stats", "cmd_worktrees",
+    "build_parser", "card_prefix", "cross_partition_writers", "dispatch_argv", "files_intersect",
+    "find_cycle", "greedy_pack",
+    "find_landed_but_pending", "find_gate_drift", "in_flight",
+    "load_backlog", "load_partitions", "load_sharded_backlog", "merge_shards",
+    "main", "partition_of", "partitions_path", "Partition", "PartitionError", "Partitions",
+    "plan_batches",
+    "plan_report", "render_dispatch", "render_merged_toml", "render_plan", "shard_dir",
+    "split_card_id", "topo_layers", "validate", "validate_partition_naming",
     "worktree_commands",
 ]
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# ================================================================ 卡 262（T-G383）：分区前缀
+#
+# 多个主控共用一个卡池，卡号会撞（都写 261）。解法：每个主控自带一个**头编号**（分区前缀），
+# 新卡号形如 `A261` —— 树 `.wt/A261`、分支 `card/A261`、任务号 `T-AG382`、批号 `A-20261016-1`。
+# **旧号（纯数字）行为一字不变**：分区只影响新卡怎么登记、怎么派活、怎么落地。
+#
+# 登记表住 `docs/partitions.toml`（谁负责 / 负责哪方面 / 树前缀）；台账**分片**住
+# `docs/backlog/<分区>.toml`，落地时合并成**只读总表**（`merge`）。
+# ★ 分区只解决「号不撞」，**不解决「文件不撞」** —— 两个分区各写一张卡、都声明同一文件时，
+#   合并后的 `validate()` 照样报「同一文件两个写者」（见 `cross_partition_writers()`）。
+
+PARTITIONS_REL = ("docs", "partitions.toml")
+SHARD_DIR_REL = ("docs", "backlog")
+#: 卡号 = 可选的分区前缀（ASCII 大写字母）+ 数字。旧号（纯数字）没有前缀。
+CARD_ID_RE = re.compile(r"^(?P<prefix>[A-Z]*)(?P<number>\d+)$")
+
+
+class PartitionError(BacklogError):
+    """分区登记表读不了 / 卡号不属于任何分区 —— 与「排班冲突」分开（前者是登记坏了）。"""
+
+
+@dataclass(frozen=True)
+class Partition:
+    """一个分区：前缀（头编号）、负责人、负责方面、树前缀（新卡的树该落在哪）。"""
+
+    prefix: str
+    owner: str
+    area: str
+    tree: str
+
+
+@dataclass(frozen=True)
+class Partitions:
+    """分区登记表（`docs/partitions.toml`）的读出来的样子。"""
+
+    legacy_default: str
+    legacy_ranges: tuple[tuple[int, int, str], ...]
+    by_prefix: dict[str, Partition]
+
+
+def partitions_path() -> Path:
+    """分区登记表路径 —— 从 `ROOT` 现算（测试会 monkeypatch `ROOT`）。"""
+    return ROOT.joinpath(*PARTITIONS_REL)
+
+
+def shard_dir() -> Path:
+    """台账**分片**目录（`docs/backlog/`）—— 从 `ROOT` 现算。"""
+    return ROOT.joinpath(*SHARD_DIR_REL)
+
+
+def split_card_id(card_id: str) -> tuple[str, str]:
+    """把卡号拆成 `(分区前缀, 号)` —— 旧号（纯数字）的前缀是 `""`。
+
+    只认两种形态：`<前缀字母><数字>`（如 `A261`）与纯数字（如 `261`）。
+    其它形态（含 `-`、下划线、空串、中文字符）⇒ 抛 `PartitionError`（**不猜**）。
+    """
+    m = CARD_ID_RE.match(str(card_id).strip())
+    if not m:
+        raise PartitionError(
+            f"卡号 {card_id!r} 既不是「前缀字母+数字」（如 A261）也不是纯数字（如 261）")
+    return m.group("prefix"), m.group("number")
+
+
+def card_prefix(card_id: str) -> str:
+    """卡号的分区前缀；认不出形态 ⇒ `""`（**不抛** —— 别名成员号如 `M-1` / `卡A` 走这条）。"""
+    try:
+        return split_card_id(card_id)[0]
+    except PartitionError:
+        return ""
+
+
+def partition_of(card_id: str, partitions: Partitions | None) -> str:
+    """这张卡属于哪个分区 —— 有前缀 ⇒ 前缀；纯数字旧号 ⇒ 按 `[legacy]` 区间 / default。
+
+    认不出卡号形态 ⇒ 抛 `PartitionError`；没有登记表（`partitions is None`）⇒ 旧号回 `""`。
+    """
+    prefix, number = split_card_id(card_id)
+    if prefix:
+        return prefix
+    if partitions is None:
+        return ""
+    for low, high, pfx in partitions.legacy_ranges:
+        if low <= int(number) <= high:
+            return pfx
+    return partitions.legacy_default
+
+
+def load_partitions(path: Path | None = None) -> Partitions | None:
+    """读分区登记表 —— 文件不在 ⇒ `None`（调用方按「不判分区」跳过，**不崩**）。
+
+    文件在但坏（TOML 解析不了 / 缺 `prefix`）⇒ 抛 `PartitionError`（**不静默**）。
+    """
+    target = Path(path) if path is not None else partitions_path()
+    if not target.is_file():
+        return None
+    try:
+        data = tomllib.loads(target.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise PartitionError(f"分区登记表读不了：{target}（{exc}）") from exc
+    legacy = data.get("legacy") or {}
+    ranges: list[tuple[int, int, str]] = []
+    for row in legacy.get("ranges") or []:
+        ranges.append((int(row["from"]), int(row["to"]), str(row["prefix"]).strip()))
+    by_prefix: dict[str, Partition] = {}
+    for raw in data.get("partitions") or []:
+        pfx = str(raw.get("prefix", "")).strip()
+        if not pfx:
+            raise PartitionError(f"分区登记缺 `prefix`：{raw!r}")
+        by_prefix[pfx] = Partition(
+            prefix=pfx,
+            owner=str(raw.get("owner", "")).strip(),
+            area=str(raw.get("area", "")).strip(),
+            tree=str(raw.get("tree", "")).strip(),
+        )
+    return Partitions(legacy_default=str(legacy.get("default", "")).strip(),
+                      legacy_ranges=tuple(ranges), by_prefix=by_prefix)
+
+
+def merge_shards(directory: Path | None = None) -> Backlog | None:
+    """把 `docs/backlog/*.toml` 各分片合并成一份队列；**没有分片 ⇒ `None`**。
+
+    每片都是一份合法的 backlog（有 `[base]` + `[[cards]]`）。卡号重复（含同号同分区）⇒
+    `BacklogError`（`卡号重复：<号>`）；`reviewed` 取第一片（分片目录里按文件名排序）。
+    """
+    folder = Path(directory) if directory is not None else shard_dir()
+    shards = sorted(folder.glob("*.toml")) if folder.is_dir() else []
+    if not shards:
+        return None
+    cards: list[Card] = []
+    seen: set[str] = set()
+    reviewed = ""
+    for shard in shards:
+        part = load_backlog(shard)
+        if not reviewed:
+            reviewed = part.reviewed
+        for card in part.cards:
+            if card.id in seen:
+                raise BacklogError(f"卡号重复：{card.id}（分片 {shard.name}）")
+            seen.add(card.id)
+            cards.append(card)
+    return Backlog(reviewed=reviewed, cards=tuple(cards))
+
+
+def load_sharded_backlog(
+    path: Path | None = None, shard_directory: Path | None = None,
+) -> Backlog:
+    """读队列：**先分片后总表**。
+
+    · 分片目录（默认 `docs/backlog/`）里有 `*.toml` ⇒ 合并它们；
+    · 否则退回**总表**（`path`，默认 `docs/workbacklog.toml`）—— **旧行为一字不变**。
+    """
+    merged = merge_shards(shard_directory)
+    if merged is not None:
+        return merged
+    return load_backlog(Path(path) if path is not None else DEFAULT_BACKLOG)
+
+
+def cross_partition_writers(backlog: Backlog, partitions: Partitions | None) -> list[str]:
+    """★ 卡 262：跨分区「同一文件两个写者」—— 报行（空 = 没有）。
+
+    分区只避免**号**撞，不避免**文件**撞：两个分区各写一张卡、声明同一文件时，
+    合并后的 `validate()` 会报「files 相交」，这里再把**分区**点名说清楚。
+    同分区的相交交给 `validate()` 自己报，这里不重复。
+    """
+    active = [card for card in backlog.cards if in_flight(card)]
+    out: list[str] = []
+    for i, first in enumerate(active):
+        pfirst = partition_of(first.id, partitions)
+        for second in active[i + 1:]:
+            hit = files_intersect(first, second)
+            if not hit:
+                continue
+            psecond = partition_of(second.id, partitions)
+            if pfirst and psecond and pfirst == psecond:
+                continue          # 同分区：由 validate() 那条报，这里不重复
+            out.append(
+                f"卡 {first.id}（分区 {pfirst or '?'}）与 {second.id}（分区 {psecond or '?'}）："
+                f"files 相交 {sorted(hit)} —— 分区只避免号撞，不避免文件撞")
+    return out
+
+
+def validate_partition_naming(
+    backlog: Backlog, partitions: Partitions | None,
+) -> list[str]:
+    """分区命名判据（**只对新卡=带前缀的卡号生效；旧号一字不变**）：
+
+    ① 带前缀 ⇒ 前缀必须**已在 `docs/partitions.toml` 登记**（没登记 ⇒ 拒）；
+    ② 带前缀且有卡树 ⇒ 树名（末段）必须以该分区前缀开头（分区 A 的树如 `.wt/A261`）。
+    """
+    if partitions is None:
+        return []
+    known = "、".join(sorted(partitions.by_prefix)) or "无"
+    problems: list[str] = []
+    for card in backlog.cards:
+        try:
+            prefix, _ = split_card_id(card.id)
+        except PartitionError as exc:
+            problems.append(f"卡 {card.id}：{exc}")
+            continue
+        if not prefix:
+            continue                       # 旧号：不判命名（行为一字不变）
+        if prefix not in partitions.by_prefix:
+            problems.append(
+                f"卡 {card.id}：分区 {prefix} 没在 {PARTITIONS_REL[0]}/{PARTITIONS_REL[1]} 登记"
+                f"（已登记：{known}）")
+            continue
+        if card.tree and not Path(card.tree).name.startswith(prefix):
+            tree = partitions.by_prefix[prefix].tree
+            problems.append(
+                f"卡 {card.id}：卡树 {card.tree} 的树名不以分区前缀 {prefix} 开头"
+                f"（分区 {prefix} 的树该如 {tree}{card.id}）")
+    return problems
 
 # ---------------------------------------------------------------- 渲染 / 命令拼装
 
@@ -238,7 +469,8 @@ def _match_member_to_card(
     """
     if member_id in by_id:
         return by_id[member_id]
-    if member_id.isdigit():          # 卡号形态的成员号不在队列里 ⇒ 认不出，不许兜
+    # 卡号形态的成员号（纯数字旧号 / 带分区前缀的新号）不在队列里 ⇒ 认不出，不许按文件乱兜。
+    if member_id.isdigit() or card_prefix(member_id):
         return None
     mpaths = set(member_paths or [])
     if not mpaths:
@@ -316,9 +548,24 @@ def find_gate_drift(backlog: Backlog) -> list[str]:
 
 
 def cmd_check(backlog: Backlog) -> int:
+    # ★ 卡 262（T-G383）：分区判据。登记表读不了 ⇒ 拒（不静默）；不在 ⇒ 不判（旧仓 / 测试沙箱）。
+    try:
+        partitions = load_partitions()
+    except PartitionError as exc:
+        print(f"[FAIL] {exc}", file=sys.stderr)
+        return 1
+    # ① 分区命名：带前缀的新卡 ⇒ 前缀已登记 + 树名以分区前缀开头。
+    naming = validate_partition_naming(backlog, partitions)
+    for line in naming:
+        print(f"[FAIL] {line}", file=sys.stderr)
+    # ② 跨分区「同一文件两个写者」—— 分区只避免号撞，不避免文件撞。
+    #    ★ 先打这一句：`validate()` 会因同一个相交拒单，这里补**分区**那一层，点名两边各属哪个分区。
+    cross = cross_partition_writers(backlog, partitions)
+    for line in cross:
+        print(f"[跨分区] {line}", file=sys.stderr)
     code = _problems_or_exit(backlog)
-    if code:
-        return code
+    if code or naming or cross:
+        return 1
     print(f"[OK ] backlog 校验通过：{len(backlog.cards)} 张卡，无冲突"
           f"（基点 {backlog.reviewed}）")
     active = [card for card in backlog.cards if in_flight(card)]
@@ -427,27 +674,90 @@ def cmd_dispatch(backlog: Backlog, limit: int, *, execute: bool) -> int:
     return 0
 
 
+def _toml_str(value: str) -> str:
+    """TOML 基本字符串 = JSON 字符串（转义同规）—— 写 TOML 的字符串一律走它（口径坑 39）。"""
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def render_merged_toml(backlog: Backlog) -> str:
+    """把（合并后的）队列渲染成**只读总表**的 TOML 文本（`merge` 用）。
+
+    ★ 只渲染本仓队列用到的字段（id/task/title/tree/spec/files/depends/risk/status）——
+      总表是**生成物**，手写注释不保留（注释留在各分片里）。
+    """
+    lines = ["[base]", f"reviewed = {_toml_str(backlog.reviewed)}", ""]
+    for card in backlog.cards:
+        lines.extend([
+            "[[cards]]",
+            f"id = {_toml_str(card.id)}",
+            f"task = {_toml_str(card.task)}",
+            f"title = {_toml_str(card.title)}",
+            f"tree = {_toml_str(card.tree)}",
+            f"spec = {_toml_str(card.spec)}",
+            f"files = [{', '.join(_toml_str(f) for f in card.files)}]",
+            f"depends = [{', '.join(_toml_str(d) for d in card.depends)}]",
+            f"risk = {_toml_str(card.risk)}",
+            f"status = {_toml_str(card.status)}",
+            "",
+        ])
+    return "\n".join(lines)
+
+
+def cmd_merge(folder: Path, out: Path, *, execute: bool) -> int:
+    """把台账**分片**合并成只读总表（`merge`）—— 默认只打印，`--execute` 才落盘。"""
+    try:
+        merged = merge_shards(folder)
+    except BacklogError as exc:
+        print(f"[FAIL] {exc}", file=sys.stderr)
+        return 2
+    if merged is None:
+        print(f"[OK ] 没有台账分片（{folder}）—— 总表不变")
+        return 0
+    text = render_merged_toml(merged)
+    if not execute:
+        print(text)
+        print(f"[dry ] 默认只打印；真要落盘加 --execute（写 {out}）", file=sys.stderr)
+        return 0
+    out.write_text(text, encoding="utf-8", newline="\n")
+    print(f"[写 ] 合并 {len(merged.cards)} 张卡 → {out}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="并发调度器：文件级冲突域 + 拓扑分层 + 同层打包（默认只打印）")
     parser.add_argument("command",
-                        choices=("check", "plan", "stats", "worktrees", "dispatch"),
+                        choices=("check", "plan", "stats", "worktrees", "dispatch", "merge"),
                         help="要做的动作")
-    parser.add_argument("--backlog", default=str(DEFAULT_BACKLOG),
-                        help=f"backlog 文件（默认 {DEFAULT_BACKLOG.name}）")
+    parser.add_argument("--backlog",
+                        help=f"总表文件（默认 {DEFAULT_BACKLOG.name}；有分片时以分片为准）")
+    parser.add_argument("--shards",
+                        help="台账分片目录（默认 docs/backlog/；各分区各写 <分区>.toml）")
     parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY,
                         help=f"并发上限（默认 {DEFAULT_CONCURRENCY}）")
     parser.add_argument("--base", default="",
                         help="建树的基点提交（默认取 backlog 的 [base].reviewed）")
     parser.add_argument("--execute", action="store_true",
-                        help="真执行（建树 / 派活）；默认只打印 —— 别真建树、别真派活")
+                        help="真执行（建树 / 派活 / merge 落盘）；默认只打印")
     return parser
+
+
+def _load_backlog_for(args: argparse.Namespace) -> Backlog:
+    """`check` / `plan` / `stats` / `worktrees` / `dispatch` 读的队列：先分片、后总表。"""
+    shards = Path(args.shards) if args.shards else None
+    if args.backlog:
+        return load_sharded_backlog(Path(args.backlog), shards)
+    return load_sharded_backlog(shard_directory=shards)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "merge":
+        folder = Path(args.shards) if args.shards else shard_dir()
+        out = Path(args.backlog) if args.backlog else DEFAULT_BACKLOG
+        return cmd_merge(folder, out, execute=args.execute)
     try:
-        backlog = load_backlog(Path(args.backlog))
+        backlog = _load_backlog_for(args)
     except BacklogError as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 2

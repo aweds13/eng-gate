@@ -1,0 +1,14 @@
+[entries."T-G383"]
+id = "T-G383"
+title = "分区前缀：卡/树/分支/任务四处 + 台账分片 + 跨分区撞车照查"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tools/wb_plan.py",
+  "file:tools/wb_task.py",
+  "file:docs/partitions.toml",
+  "file:tests/test_partitions.py",
+]
+gaps = "① ★ **四处命名一律带分区前缀**（**新卡才用**，旧号一字不动）：卡号 `A261`、树 `.wt/A261`、分支 `card/A261`、任务 `T-AG382`、批 `A-20261016-1`；`docs/partitions.toml` 登记每个分区的负责人/负责方面/树前缀，现有 **240–261 一律归 A** ✓。指针：`docs/partitions.toml`。② ★ **漏写分区必须硬拒并告诉他该写什么**：分区由环境变量 `DSH_PARTITION`、分支/树名、或登记表推断；推断不出 ⇒ **拒登记**，报错里点名该补什么 ✓。指针：`tools/wb_task.py`。③ ★ **台账分片各写各的**：`docs/backlog/<分区>.toml`，落地时合并成只读总表 ✓。指针：`tools/wb_task.py`。④ ★ **分区只解决「号不撞」，不解决「文件不撞」**：跨分区照查「同一文件两个写者」—— 两卡号不同（`A1`/`B1`）但声明同一文件 ⇒ **必须报并点名**（真机 `check --shards` exit=1 点名 A1/B1 ✓）；**同号同分区** ⇒ 拒（真机 exit=2「卡号重复：C1」✓）。指针：`tools/wb_plan.py`。"
+

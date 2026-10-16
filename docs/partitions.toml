@@ -1,0 +1,38 @@
+# 分区登记表（卡 262 · T-G383）—— 多个主控共用一个卡池，靠**头编号**（分区前缀）不撞号。
+#
+# 口径：
+#   · 卡的「分区」= 卡号的**前缀字母**：A261 属 A，B1 属 B；纯数字旧号按 [legacy] 归属。
+#   · 四处命名一律带分区前缀（**新卡才用，旧号不动**）：
+#       卡号 A261 · 树 .wt/A261 · 分支 card/A261 · 任务号 T-AG382 · 批号 A-20261016-1
+#   · ★ 分区只解决「号不撞」，**不解决「文件不撞」** —— 两个分区各写一张卡、都声明
+#     同一文件时，`python -X utf8 tools/wb_plan.py check` 照样报「同一文件两个写者」并点名。
+#   · 台账分片：各分区各写 `docs/backlog/<分区>.toml`，落地时合并成**只读总表**
+#     （`python -X utf8 tools/wb_plan.py merge --execute` 写回 docs/workbacklog.toml）。
+
+# 旧号（纯数字）的归属：**现有 240–261 一律归 A**；更早的旧号也按 default 兜底给 A
+# （A 是历史主控 —— 旧号行为一字不变）。ranges 按先后顺序取**第一个命中**。
+[legacy]
+default = "A"
+ranges = [
+  { from = 240, to = 261, prefix = "A" },
+]
+
+# 每个分区：谁负责（owner）、负责哪方面（area）、树前缀（tree）。
+# tree = 该分区新卡的卡树该落在哪：树名（末段）必须**以分区前缀开头**，如 .wt/A261。
+[[partitions]]
+prefix = "A"
+owner = "主控A"
+area = "历史线（旧号 001–261）"
+tree = ".wt/A"
+
+[[partitions]]
+prefix = "B"
+owner = "主控B"
+area = "（待指派）"
+tree = ".wt/B"
+
+[[partitions]]
+prefix = "C"
+owner = "主控C"
+area = "（待指派）"
+tree = ".wt/C"

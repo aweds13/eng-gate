@@ -141,9 +141,12 @@ from pool.plan import (  # noqa: E402 —— 队列/冲突域唯一实现（pool
     BacklogError,
     batch_manifest_path,
     extract_batch_claim,
-    load_backlog,
 )
 from pool.review import outside_allow  # noqa: E402 —— 白名单越界唯一实现（pool.review）
+
+# ★ 卡 262（T-G383）：队列读取走「先分片后总表」——新卡号带分区前缀时（A261），它登记在
+#   `docs/backlog/<分区>.toml` 分片里，只读总表就读不到它的冲突域（守卫会拒派活）。
+from wb_plan import load_sharded_backlog  # noqa: E402 —— 分片/总表读取唯一实现（tools/wb_plan.py）
 
 # ★ T-G96：Windows 上派活器自己发起的那些 `subprocess` 不加这个，Windows 11 会把控制台程序
 #   转交给**默认终端宿主**（WindowsTerminal.exe -Embedding）→ 任务栏里留下一个**空窗口**、
@@ -2340,7 +2343,9 @@ def queue_files(card: str, *, root: Path | None = None) -> tuple[list[str], str 
     """
     base = (root or ROOT) / "docs" / "workbacklog.toml"
     try:
-        backlog = load_backlog(base)
+        # ★ 卡 262：先合分片（docs/backlog/<分区>.toml）后读总表 —— 带分区前缀的卡
+        #   （A261）登记在分片里，只读总表查不到它的域（守卫会拒派活）。
+        backlog = load_sharded_backlog(base, base.parent / "backlog")
     except BacklogError as exc:
         return [], f"读不了队列（冲突域无处可查）：{base}（{exc}）"
     hit = backlog.by_id().get(str(card))
