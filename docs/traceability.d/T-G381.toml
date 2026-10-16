@@ -1,0 +1,10 @@
+[entries."T-G381"]
+id = "T-G381"
+title = "Trae 驱动器补新开对话与按对话定向"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/trae_pool.mjs",
+]
+gaps = "① ★ **新开对话要能判「真开了」**：`--new-chat` 之后不许只看「按钮点过了」——要核验三件事同时成立（会话数**恰好 +1**、新键**唯一**、当前选中的就是新键）且**历史轮次为空**，判据名 `judgeNewChat created`。指针：`tools/trae_pool.mjs`。② ★ **按对话定向要能判「话真进了那一条」**：`--conversation <键>` 的核验是 `judgeLanded body-match/turn-grew`（正文对得上 **且** 该对话轮次增长）。指针：`tools/trae_pool.mjs`。③ ★ **不许悄悄降级成「复用当前对话」**：一发现「新对话没建成」就退回复用当前 ⇒ `no-new` 必须**退 3**（响亮失败），不许静默继续。指针：`tools/trae_pool.mjs`。④ ★ **先红后绿**：20 条新用例在旧代码下必须**全红**（`code=unimplemented`），实现后 `selftest` 全绿；卡 227/245 的 24 条旧用例**逐字保持绿**。指针：`gates/diag/wb-260.report.md`。"
+

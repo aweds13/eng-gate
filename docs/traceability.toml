@@ -6698,3 +6698,13 @@ evidence = [
   "file:tests/test_landing_stamp.py",
 ]
 gaps = "① ★ **⑨ 盖章前必须先看「成员自己交没交申请」**：产物与本笔提交有交集、**但该成员没有成功申请**（且没被豁免）⇒ **拒盖章并点名**，原话要点「该卡可能未开工或未交申请；⑨ 不许代写申请、不许盖章」。指针：`tools/pool/landing.py`。② ★ **`landed` 的前置同样收紧**：任一非只读成员没有自己的成功申请 ⇒ **不标 landed**（不许因为「产物交集在」就标）。指针：`tools/pool/landing.py`。③ ★ **老调用形状不许变**：`claims` 传 `None` 时**只验产物**（卡 238 的老行为一字不变）⇒ 免得把既有落地判据搞红。指针：`tools/pool/landing.py`。④ ★ **反例判据**（新文件 `tests/test_landing_stamp.py`）：造「两成员 paths **相同**、只有甲有申请、乙没有」的假栅栏 + 假提交 ⇒ 断言**不标 landed**、**不替乙写申请**、输出**点名乙**；既有行为（两成员都有申请且产物都在）⇒ 照旧盖章。指针：`tests/test_landing_stamp.py`。"
+
+[entries."T-G381"]
+id = "T-G381"
+title = "Trae 驱动器补新开对话与按对话定向"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/trae_pool.mjs",
+]
+gaps = "① ★ **新开对话要能判「真开了」**：`--new-chat` 之后不许只看「按钮点过了」——要核验三件事同时成立（会话数**恰好 +1**、新键**唯一**、当前选中的就是新键）且**历史轮次为空**，判据名 `judgeNewChat created`。指针：`tools/trae_pool.mjs`。② ★ **按对话定向要能判「话真进了那一条」**：`--conversation <键>` 的核验是 `judgeLanded body-match/turn-grew`（正文对得上 **且** 该对话轮次增长）。指针：`tools/trae_pool.mjs`。③ ★ **不许悄悄降级成「复用当前对话」**：一发现「新对话没建成」就退回复用当前 ⇒ `no-new` 必须**退 3**（响亮失败），不许静默继续。指针：`tools/trae_pool.mjs`。④ ★ **先红后绿**：20 条新用例在旧代码下必须**全红**（`code=unimplemented`），实现后 `selftest` 全绿；卡 227/245 的 24 条旧用例**逐字保持绿**。指针：`gates/diag/wb-260.report.md`。"

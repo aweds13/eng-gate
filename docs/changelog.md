@@ -1,3 +1,7 @@
+## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
+- **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
+- ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。
+- ★ 读数：先红 —— 20 条新用例在旧代码下**全红**（`code=unimplemented`）；后绿 —— `selftest` **44 条全绿** ✓，卡 227/245 的 24 条旧用例逐字保持绿 ✓；`node --check` rc=0 ✓；域内只动 `tools/trae_pool.mjs` ✓。
 ## 2026-10-15 —— 面板的仓库根：从 config 取，不许拿 cwd 兜（T-G361）
 - **`tools/dsh_panel.py`**：宿主半 `repoRoot()` 改为 `config.root → DSH_WORKBENCH_ROOT → 如实吼`；新增失败分支原话「没告诉我仓库根：请在插件行的 config 里写 root（或设 DSH_WORKBENCH_ROOT）」；判据 +3（必须能从 config 拿根 / **不许**出现 cwd 兜底 / 必须有那条吼的分支）；安装说明写明 `config.root` 这一键与理由。
 - ★ 真读数：`--check` 绿（三座位 + 只读 + 失败可见 + 只 GET）· `47 passed` · `ruff All checks passed!` · 生成物两半 `node --check` 通过 · 副本 profile 的 `--dump-config` 里那一行确实带上了 `config: root: <仓库绝对路径>` ✓。

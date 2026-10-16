@@ -56,6 +56,24 @@
  *      不再"只打一行警告就退 0"。
  *   ③ 判据：`selftest` 扩充（`--model` 唯一性 / 回读比对短路 ⇒ 必须失败 / 清空短路 ⇒ 必须失败），
  *      卡 227 既有用例（面板选择那段）一条没删。
+ *
+ * ★★ 卡 260（T-G381，2026-10-16）—— 同一窗口里**分成多个对话**（本卡只动本文件）：
+ *   病：可驱动面板只有 1 个（`list` ⇒ `#1 Agent`），但驱动只会往「当前那个对话」里打字 ⇒
+ *       多份任务挤在同一对话里顺序跑，上下文互相污染（用户原话：258 三份要分别派给不同 trae 对话）。
+ *   ① `send --new-chat`：发送前先**新开一个对话**再发。判据（judgeNewChat）：会话数**恰 +1**、
+ *      新键唯一可认、**当前选中的就是新键**、新对话无历史轮次 —— 「新开」被"复用当前"顶替
+ *      ⇒ 会话数不增 ⇒ 必红退 3。★ 入口选择器**三层探**（类名 new/create → aria-label
+ *      「新建对话/new chat」→ 文本恰 "+"），不钉死某一版 UI —— 点错由 judgeNewChat 兜底。
+ *   ② `--conversation <标题子串|#N>`：定向到已有对话（**1 基**）；0 / ≥2 匹配 ⇒ 停手列候选
+ *      （照 `--target` 已有口径，不许随便挑）。
+ *   ③ ★ 发送后核验内容真落在目标对话（judgeLanded）：当前选中仍是目标键 且（正文出现本次内容
+ *      或 目标对话轮次比发送前多）；读不到 / 选错 / 核不到 ⇒ 一律非零退出并说明（照卡 245 口径，
+ *      不许只打一行警告就退 0）。
+ *   ④ `--log` 记 `ev:conversation` / `conversation-verified`（用的哪个对话一目了然）；
+ *      stdout done 行带 `conversation="#N:标题"`。
+ *   ⑤ 只读子命令 `conversations`（也认 `--conversations`）列会话给 `--conversation` 当索引；
+ *      判据 `selftest` 扩 20 条（pickConv 七 / judgeNewChat 六 / judgeLanded 五 / activeKeyOf
+ *      复合一条 / formatConvs 一条），卡 227/245 既有用例一条没删。
  */
 import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -261,6 +279,128 @@ export function decideClear(before, prompt) {
   return { clear: true, code: 'residual' }
 }
 
+/* ------------------------------------- 卡 260：按对话定向 + 新开对话核验（纯函数，可单测、不碰 CDP） */
+
+/**
+ * ★ 卡 260 纯函数：把会话行当 `--conversation` 的选择对象 —— **一条不改地镜像 `pickPanel` 的口径**：
+ *  · `#N`（**1 基**）⇒ 第 N 个会话；越界 ⇒ 停手；
+ *  · 其它 ⇒ 在**标题**里找子串；命中 1 个才回；0 个 / ≥2 个 ⇒ 停手（由调用方列候选，不许随便挑）。
+ *
+ * 返回 `{ ok, conv?, code?, reason? }`；`code` ∈ {index,substr,nomatch,ambiguous,none,range,empty}。
+ */
+export function pickConv(convs, sel) {
+  const list = convs || []
+  if (list.length === 0) return { ok: false, code: 'none', reason: '一个会话都读不到' }
+  const s = sel == null ? '' : String(sel)
+  if (!s) return { ok: false, code: 'empty', reason: '--conversation 不能为空' }
+  const m = /^#(\d+)$/.exec(s)
+  if (m) {
+    const n = Number(m[1])
+    if (n < 1 || n > list.length) {
+      return { ok: false, code: 'range',
+               reason: `--conversation ${s} 越界：只有 ${list.length} 个会话（1..${list.length}，**1 基**）` }
+    }
+    return { ok: true, code: 'index', conv: list[n - 1] }
+  }
+  const hits = list.filter((c) => String(c.title || '').includes(s))
+  if (hits.length === 0) {
+    return { ok: false, code: 'nomatch', reason: `--conversation ${JSON.stringify(s)} 谁都匹配不上` }
+  }
+  if (hits.length > 1) {
+    return { ok: false, code: 'ambiguous',
+             reason: `--conversation ${JSON.stringify(s)} 匹配到 ${hits.length} 个会话 —— 不唯一，不许随便挑` }
+  }
+  return { ok: true, code: 'substr', conv: hits[0] }
+}
+
+/** 把会话列成**候选清单**（「停手列候选」与 `conversations` 子命令共用一份格式）。 */
+export function formatConvs(convs) {
+  if (!convs || convs.length === 0) return '  （一个会话都读不到）\n'
+  return convs
+    .map((c) => `  #${c.index}\t${c.selected ? '[当前]' : ''}${c.title || '(无标题)'}\tkey=${c.key}`)
+    .join('\n') + '\n'
+}
+
+/**
+ * ★ 卡 260 纯函数：从会话读数里取「当前选中的键」—— **0 个或 ≥2 个标了选中 ⇒ null**（读不到，不猜）。
+ * 判据链靠它分清「选不中（wrong）」与「读不到（unreadable）」两种失败，不许混为一谈。
+ */
+export function activeKeyOf(convs) {
+  const sel = (convs || []).filter((c) => c && c.selected)
+  return sel.length === 1 ? sel[0].key : null
+}
+
+/**
+ * ★ 卡 260 纯函数：**新开对话核验** —— 防住「新开被短路成复用当前」（卡点名的反例 ✗）。
+ *
+ *  · `before` / `after` 各是 `{ count, keys, active }`（scanConversations 的读数）；
+ *  · ok 要**全部**满足：会话数**恰 +1**、新键唯一可认、**当前选中的就是那个新键**
+ *    （否则后续发送会落进旧对话）；
+ *  · `opts.activeTurns`（可选）：新建后当前对话的 agent 轮次 —— **新对话不该有历史轮次**，
+ *    读到 >0 ⇒ `not-empty`（是数字才判；读不到不判，不当失败也不当成功）。
+ *
+ * 返回 `{ ok, code?, key?, reason? }`；code ∈ {created,no-new,too-many,identity,active-unreadable,not-active,not-empty}。
+ */
+export function judgeNewChat(before, after, opts = {}) {
+  const bKeys = new Set((before && before.keys) || [])
+  const nBefore = (before && before.count) || 0
+  const nAfter = (after && after.count) || 0
+  const grown = nAfter - nBefore
+  if (grown <= 0) {
+    return { ok: false, code: 'no-new',
+             reason: `会话数没增（${nBefore} → ${nAfter}）—— 「新开」被短路成了「复用当前」？` }
+  }
+  if (grown > 1) {
+    return { ok: false, code: 'too-many',
+             reason: `会话数一下增了 ${grown} 个（${nBefore} → ${nAfter}）—— 不是「新开一个」的读数，停手` }
+  }
+  const fresh = ((after && after.keys) || []).filter((k) => !bKeys.has(k))
+  if (fresh.length !== 1) {
+    return { ok: false, code: 'identity',
+             reason: `新会话认不出/不唯一（fresh=${fresh.length} 个新键）—— 键不稳定，无法核验用的是哪个` }
+  }
+  const active = after && after.active
+  if (active == null) {
+    return { ok: false, code: 'active-unreadable',
+             reason: '读不到「当前选中」是哪个会话 —— 核不到不许当新开成功' }
+  }
+  if (active !== fresh[0]) {
+    return { ok: false, code: 'not-active',
+             reason: '新开的会话不是当前选中的 —— 后续发送会落进别的对话' }
+  }
+  const turns = opts.activeTurns
+  if (typeof turns === 'number' && turns > 0) {
+    return { ok: false, code: 'not-empty',
+             reason: `新建的对话里已有 ${turns} 轮 —— 新对话不该有历史轮次，这个「新开」不可信` }
+  }
+  return { ok: true, code: 'created', key: fresh[0] }
+}
+
+/**
+ * ★ 卡 260 纯函数：**落地核验** —— 判「本条真的落在目标对话里」（照卡 245 老口径：核不到 ⇒ 失败 ✗）。
+ *
+ *  · `activeIsTarget`：发送后当前选中的会话**还是不是**目标（true/false/null=读不到）；
+ *    null / false ⇒ 一律失败 —— 不许拿「内容出现在面板某处」冒充「落在目标对话」；
+ *  · ok：`body-match`（目标对话正文里找到本次内容）或 `turn-grew`（目标对话轮次比发送前多）；
+ *  · 都没有 ⇒ `unverifiable`（对应「非零退出并说明」的那条）。
+ */
+export function judgeLanded({ activeIsTarget, inBody, turnsBefore, turnsAfter } = {}) {
+  if (activeIsTarget == null) {
+    return { ok: false, code: 'active-unreadable',
+             reason: '发送后读不到「当前选中」是哪个会话 —— 核不到不许当落对了' }
+  }
+  if (activeIsTarget === false) {
+    return { ok: false, code: 'wrong-conversation',
+             reason: '发送后当前选中的已不是目标会话 —— 本条可能落进了别的对话' }
+  }
+  if (inBody === true) return { ok: true, code: 'body-match' }
+  if (typeof turnsAfter === 'number' && typeof turnsBefore === 'number' && turnsAfter > turnsBefore) {
+    return { ok: true, code: 'turn-grew' }
+  }
+  return { ok: false, code: 'unverifiable',
+           reason: '核不到：目标对话里既没找到本次内容，轮次也没增 —— 无法证明落进了目标对话' }
+}
+
 /* ---------------------------------------------------------------- 参数解析 */
 
 function parseArgs(argv) {
@@ -270,6 +410,7 @@ function parseArgs(argv) {
     if (a.startsWith('--')) {
       const key = a.slice(2)
       if (key === 'no-launch') { out.noLaunch = true; continue }
+      if (key === 'new-chat') { out.newChat = true; continue }   // ★ 卡 260：布尔 flag，不吞下一个参数
       out[key] = argv[++i]
     } else {
       out._.push(a)
@@ -698,6 +839,196 @@ async function chatHasPrompt(cdp, head) {
   })()`)
 }
 
+/* ------------------------------------- 卡 260：会话列表（DOM 扫描；判据全在纯函数里） */
+
+// 会话列表容器/行：**分层**给选择器（实测类名 → 结构性兜底），★ 不钉中文文案、不钉单一 hash class
+// —— UI 改版时 `conversations` 子命令会先暴露「读不到行」，而不是静默发错对话。
+const CONV_ROOT_SEL = '.task-list-group-sortable-wrapper, [class*="task-list"], [class*="conversation-list"], [class*="chat-list"], [class*="session-list"]'
+const CONV_ROW_SEL = '[data-id], [class*="task-item"], [class*="conversation-item"], [class*="chat-item"], [class*="session-item"], li, [role="button"]'
+
+/** 扫 agent 面板左侧的**会话列表**。返回 `{ ok, count, keys, active, convs }`：
+ *  `convs` = [{ index(1 基), key, title, selected, x, y }]；键优先 `data-id`，没有就用
+ *  `t:<标题>#<同标题序>`（列表序稳定的前提下稳定）；`active` 由纯函数 activeKeyOf 算
+ *  （0 / ≥2 个标选中 ⇒ null —— 读不到不猜）。读不到容器/行 ⇒ `{ ok:false, …全空 }`。
+ *  ★ 行过滤：行高 ≤200、宽 ≤520、**文本非空**（防把删除小按钮当行）；嵌套行**留最内层**。
+ */
+async function scanConversations(cdp) {
+  let raw = null
+  try {
+    raw = await cdp.eval(`(() => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+      const roots = [...document.querySelectorAll(${JSON.stringify(CONV_ROOT_SEL)})];
+      let rows = null;
+      for (const r of roots) {
+        const found = [...r.querySelectorAll(${JSON.stringify(CONV_ROW_SEL)})];
+        if (found.length) { rows = found; break }
+      }
+      if (!rows) return null;
+      const RE_SEL = /^(is-)?(active|selected|current|checked)$/;
+      const isSel = (e) => {
+        if (!e || e.nodeType !== 1) return false;
+        const cls = String(e.className || '');
+        if (cls.split(/\\s+/).some((c) => RE_SEL.test(c))) return true;
+        if (e.getAttribute('aria-selected') === 'true') return true;
+        const ac = e.getAttribute('aria-current');
+        if (ac && ac !== 'false') return true;
+        return false;
+      };
+      const all = [];
+      for (const el of rows) {
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0 || r.height > 200 || r.width > 520) continue;
+        const title = norm(el.innerText || '').slice(0, 80);
+        if (!title) continue;
+        all.push(el);
+      }
+      const keep = all.filter((el) => !all.some((o) => o !== el && o.contains(el)));
+      const out = [];
+      for (const el of keep) {
+        const r = el.getBoundingClientRect();
+        const p = el.parentElement;
+        out.push({
+          dataId: el.getAttribute('data-id') || null,
+          title: norm(el.innerText || '').slice(0, 80),
+          selected: isSel(el) || isSel(p) || isSel(p && p.parentElement),
+          x: Math.round(r.left + r.width / 2),
+          y: Math.round(r.top + r.height / 2),
+        });
+      }
+      return out;
+    })()`)
+  } catch { raw = null }
+  if (!raw || raw.length === 0) {
+    return { ok: false, count: 0, keys: [], active: null, convs: [] }
+  }
+  const convs = []
+  const same = new Map()
+  for (const r of raw) {
+    const title = r.title || ''
+    const n = (same.get(title) || 0) + 1
+    same.set(title, n)
+    convs.push({ index: convs.length + 1, key: r.dataId || `t:${title || '(空)'}#${n}`,
+                 title, selected: Boolean(r.selected), x: r.x, y: r.y })
+  }
+  return { ok: true, count: convs.length, keys: convs.map((c) => c.key), active: activeKeyOf(convs), convs }
+}
+
+/** 找「新建对话」入口。**三层策略**（aria-label 最稳 → 类名 → 文本恰 "+"），DENY 排除
+ *  delete/remove/close/clear —— ★ 不钉死某一版 UI；点错由 judgeNewChat 兜底（会话数不增即失败）。
+ *  返回 `{ how, text, x, y }` 或 null。 */
+async function findNewChatButton(cdp) {
+  let hits = null
+  try {
+    hits = await cdp.eval(`(() => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+      const DENY = /delete|remove|close|clear|trash|minimize|collapse/i;
+      const cands = [...document.querySelectorAll('button, [role="button"], [class*="new"], [class*="create"]')];
+      const out = [];
+      for (const el of cands) {
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        const cls = String(el.className || '');
+        const label = el.getAttribute('aria-label') || el.getAttribute('title') || '';
+        if (DENY.test(cls) || DENY.test(label)) continue;
+        const txt = norm(el.innerText || '');
+        const how = /新建对话|新对话|新建会话|new chat|new conversation/i.test(label) ? 'aria-label'
+          : /(^|[^a-z])(new|create)([^a-z]|$)/i.test(cls.replace(/[-_]/g, ' ')) ? 'class-new'
+          : (txt === '+' || txt === '＋') ? 'text-plus'
+          : null;
+        if (!how) continue;
+        out.push({ how, text: txt || label,
+                   x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) });
+      }
+      return out;
+    })()`)
+  } catch { hits = null }
+  if (!hits || hits.length === 0) return null
+  const pref = { 'aria-label': 0, 'class-new': 1, 'text-plus': 2 }
+  hits.sort((a, b) => (pref[a.how] ?? 9) - (pref[b.how] ?? 9))
+  return hits[0]
+}
+
+/** ★★ 卡 260：发送前把**对话**路由好。返回 `{ code, convCtx? }`：
+ *  code 0=路由好（convCtx={how,key,index,title,turnsBefore}；两个 flag 都不给 ⇒ convCtx=null 老路）；
+ *  2=定向匹配不唯一/匹配不到（已停手列候选）；3=核验不过（新开被顶替 / 点选落空 / 读不到列表）。
+ *  ★ 每一步都有核验，不许「点了就当成功」：新开要 judgeNewChat 过（防"复用当前"顶替），
+ *    定向要点完回读 selected 还是它。 */
+async function routeConversation(cdp, { newChat, convSel, log = null } = {}) {
+  if (!newChat && convSel == null) return { code: 0, convCtx: null }
+  if (newChat) {
+    const before = await scanConversations(cdp)
+    if (!before.ok) {
+      const why = `读不到会话列表 —— 没法证明「新开」真的开了（试过容器 ${CONV_ROOT_SEL}）`
+      if (log) log({ ev: 'conversation', ok: false, code: 'scan-failed', why })
+      process.stderr.write(`[trae] 新开对话停手：${why} —— 退 3\n`)
+      return { code: 3 }
+    }
+    const btn = await findNewChatButton(cdp)
+    if (!btn) {
+      const why = '页面上找不到「新建对话」入口（三层都试过：类名 new/create → aria-label「新建对话/new chat」→ 文本恰 "+"）'
+      if (log) log({ ev: 'conversation', ok: false, code: 'no-entry', why })
+      process.stderr.write(`[trae] 新开对话停手：${why} —— 退 3\n`)
+      return { code: 3 }
+    }
+    if (log) log({ ev: 'conversation', act: 'new-chat-click', how: btn.how, x: btn.x, y: btn.y,
+                   before: before.count })
+    await clickAt(cdp, btn.x, btn.y)
+    await sleep(1200)
+    const after = await scanConversations(cdp)
+    let activeTurns = null
+    try { activeTurns = (await readAgents(cdp)).count } catch { activeTurns = null }
+    const j = judgeNewChat(before, after, { activeTurns })
+    if (!j.ok) {
+      if (log) log({ ev: 'conversation', ok: false, code: j.code, reason: j.reason,
+                     before: before.count, after: after.count })
+      process.stderr.write(`[trae] 新开对话核验不过：${j.reason} —— 退 3（不许当「新开成功」）\n`)
+      return { code: 3 }
+    }
+    const conv = after.convs.find((c) => c.key === j.key) || null
+    if (log) log({ ev: 'conversation', ok: true, code: j.code, key: j.key, count: after.count,
+                   index: conv ? conv.index : null, title: conv ? conv.title : '' })
+    return { code: 0, convCtx: { how: 'new-chat', key: j.key, index: conv ? conv.index : null,
+                                 title: conv ? conv.title : '', turnsBefore: 0 } }
+  }
+  // --conversation 分支：先扫列表，再 pickConv（0/≥2 匹配 ⇒ 停手列候选，照 --target 口径）。
+  const scan = await scanConversations(cdp)
+  if (!scan.ok) {
+    const why = `读不到会话列表 —— 没法定向（试过容器 ${CONV_ROOT_SEL}）`
+    if (log) log({ ev: 'conversation', ok: false, code: 'scan-failed', why })
+    process.stderr.write(`[trae] 定向对话停手：${why} —— 退 3\n`)
+    return { code: 3 }
+  }
+  const pick = pickConv(scan.convs, convSel)
+  if (!pick.ok) {
+    if (log) log({ ev: 'conversation', ok: false, code: pick.code, reason: pick.reason })
+    process.stderr.write(`[trae] 定向对话停手：${pick.reason}\n`)
+    process.stderr.write(`[trae] 候选（本面板 ${scan.count} 个会话；--conversation 可用 "#N" 或标题子串，**1 基**）：\n`)
+    process.stderr.write(formatConvs(scan.convs))
+    return { code: 2 }
+  }
+  const conv = pick.conv
+  if (log) log({ ev: 'conversation', ok: true, how: pick.code, index: conv.index, key: conv.key,
+                 title: conv.title, selected: conv.selected })
+  if (!conv.selected) {
+    await clickAt(cdp, conv.x, conv.y)
+    await sleep(800)
+    const re = await scanConversations(cdp)
+    const nowKey = re.ok ? activeKeyOf(re.convs) : null
+    if (nowKey !== conv.key) {
+      const why = nowKey == null
+        ? '点了目标会话但回读不到「当前选中」（键不稳定或列表没刷新）'
+        : '点了目标会话但当前选中的不是它（点击可能落空）'
+      if (log) log({ ev: 'conversation', ok: false, code: 'select-failed', why, want: conv.key, got: nowKey })
+      process.stderr.write(`[trae] 定向对话核验不过：${why} —— 退 3\n`)
+      return { code: 3 }
+    }
+  }
+  let turnsBefore = null
+  try { turnsBefore = (await readAgents(cdp)).count } catch { turnsBefore = null }
+  return { code: 0, convCtx: { how: pick.code, key: conv.key, index: conv.index,
+                               title: conv.title, turnsBefore } }
+}
+
 /**
  * ★ 卡 245：把模型切到 `wanted`。返回 `{ code, model? }`。
  *
@@ -837,8 +1168,14 @@ async function cmdSend(argv) {
   const noLaunch = Boolean(args.noLaunch)
   const target = args.target == null ? null : String(args.target)   // ★ 卡 227：不给 ⇒ 老路
   const modelWanted = args.model == null ? null : String(args.model).trim()   // ★ 卡 245
+  const newChat = Boolean(args.newChat)                                 // ★ 卡 260①：发送前新开一个对话
+  const convSel = args.conversation == null ? null : String(args.conversation)   // ★ 卡 260②：定向到已有对话
+  if (newChat && convSel != null) {
+    process.stderr.write('[trae] --new-chat 和 --conversation 只能给一个（一个要新开、一个要定向到已有会话，自相矛盾）\n')
+    return 2
+  }
   if (!promptFile || !logPath || !outPath) {
-    process.stderr.write('用法：node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>] [--model <名字>]\n')
+    process.stderr.write('用法：node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>] [--model <名字>] [--new-chat] [--conversation "#N"|<标题子串>]\n')
     return 2
   }
   const log = makeLogger(logPath)
@@ -936,6 +1273,29 @@ async function cmdSend(argv) {
       return 3
     }
 
+    // ★★ 卡 260：--new-chat / --conversation —— 在发指令**前**把对话路由好（两个都不给 ⇒ convCtx=null，
+    //   整段与老行为逐字一致）。路由每一步都有核验：新开要 judgeNewChat 过（防"复用当前"顶替）、
+    //   定向要点完回读 selected；核不到 ⇒ 非零退出，不许「点了就当成功」。
+    let convCtx = null
+    if (newChat || convSel != null) {
+      let r = null
+      try { r = await routeConversation(cdp, { newChat, convSel, log }) } catch (e) {
+        log({ ev: 'error', msg: 'conversation route failed: ' + e.message })
+        process.stderr.write(`[trae] 路由对话失败：${e.message}\n`)
+        return 3
+      }
+      if (r.code !== 0) return r.code
+      convCtx = r.convCtx
+      // 路由点了列表/入口，焦点可能不在输入框 —— 重新 focus，回不去就停手（后面 insertText 需要焦点）。
+      let focused = false
+      try { focused = await focusInput(cdp) } catch { focused = false }
+      if (!focused) {
+        log({ ev: 'error', msg: 'focus input failed after conversation route' })
+        process.stderr.write('[trae] 路由对话后焦点回不到输入框 —— 退 3\n')
+        return 3
+      }
+    }
+
     // ★★ 卡 245①：切模型（在发指令**前**）。没选成 / 核不到 / 不一致 ⇒ 非零退出（switchModel 里已打原话）。
     if (modelWanted != null && modelWanted !== '') {
       let sw = null
@@ -1016,6 +1376,49 @@ async function cmdSend(argv) {
     }
     log({ ev: 'send-verified', code: verdict.code })
 
+    // ★★ 卡 260③：定向/新开对话时，发送后**必须核验内容真落在目标对话**（tri-state）：
+    //   当前选中仍是目标键 且（正文出现本次内容 或 目标对话轮次比发送前多）。
+    //   activeKeyOf 读不到 ⇒ null（读不到≠选错，judgeLanded 自己分清）；核不到 ⇒ 退 3 并说明
+    //   —— ★ 照卡 245 口径，不许只打一行警告就退 0。最多核 15 秒（正文渲染有延迟）。
+    if (convCtx) {
+      let landed = null
+      {
+        const deadline = Date.now() + 15000
+        while (Date.now() < deadline) {
+          if (!(await ensureCdp())) { await sleep(1000); continue }
+          let convsNow = null
+          let chatNow = false
+          let turnsNow = null
+          try {
+            const sc = await scanConversations(cdp)
+            convsNow = sc.convs
+            chatNow = await chatHasPrompt(cdp, head)
+            turnsNow = (await readAgents(cdp)).count
+          } catch (e) {
+            cdp.markDead('落地核验读页面失败：' + e.message)
+            await sleep(1000)
+            continue
+          }
+          const ak = activeKeyOf(convsNow)
+          const activeIsTarget = ak == null ? null : ak === convCtx.key
+          landed = judgeLanded({ activeIsTarget, inBody: chatNow,
+                                 turnsBefore: convCtx.turnsBefore, turnsAfter: turnsNow })
+          if (landed.ok) break
+          if (landed.code === 'wrong-conversation') break   // 选错不会自愈，早停早说
+          await sleep(1000)
+        }
+      }
+      if (!landed || !landed.ok) {
+        const why = landed ? landed.reason : '落地核验 15 秒内没有结论'
+        log({ ev: 'conversation-verified', ok: false, code: landed ? landed.code : 'timeout',
+              reason: why, key: convCtx.key })
+        process.stderr.write(`[trae] 落地核验不过：${why} —— 退 3\n`)
+        return 3
+      }
+      log({ ev: 'conversation-verified', ok: true, code: landed.code,
+            key: convCtx.key, index: convCtx.index, title: convCtx.title })
+    }
+
     // 盯梢：每 3 秒自动点授权 + 判完成。每一拍都先 ensureCdp（断线 ⇒ 重连 ⇒ 接着判）。
     //  完成判据（★ 只看最后一条 agent 轮次）：
     //   · 快路径：卡规格原文 `/任务耗时/`（本机实测不出现，保留以防别的版本有）；
@@ -1071,10 +1474,12 @@ async function cmdSend(argv) {
     writeFileSync(outPath, lastText, 'utf8')
     const sec = Math.round((Date.now() - startedAt) / 1000)
     const reason = done ? 'done' : (lost ? 'lost' : 'timeout')
-    log({ ev: 'done', sec, reason, disconnects, reconnects, lost })
+    log({ ev: 'done', sec, reason, disconnects, reconnects, lost,
+          conversation: convCtx ? `#${convCtx.index ?? '?'}:${convCtx.title || convCtx.key}` : null })
     process.stdout.write(
       `[trae] ${done ? 'DONE' : (lost ? 'LOST' : 'TIMEOUT')} sec=${sec} turns=${turns}`
-      + ` disconnect=${disconnects} reconnect=${reconnects} balance ${before}->${after} out=${outPath}\n`)
+      + ` disconnect=${disconnects} reconnect=${reconnects} balance ${before}->${after} out=${outPath}`
+      + `${convCtx ? ` conversation="#${convCtx.index ?? '?'}:${convCtx.title || convCtx.key}"` : ''}\n`)
     return done ? 0 : 3
   } finally {
     cdp.close()
@@ -1190,10 +1595,118 @@ async function cmdSelftest() {
     if (!pass) bad += 1
     process.stdout.write(`[${pass ? '绿' : '红'}] ${name}  → code=${got.code}\n`)
   }
+
+  // ★★ 卡 260 判据：--conversation 定向（0/≥2 匹配停手）+ --new-chat 防短路 + 落地核验（纯函数）。
+  //   卡 227 的 checks、卡 245 的 checks245 一条没删 —— 上面照原样跑过。
+  const CONVS = [
+    { index: 1, key: 'c1', title: '卡 258 dsh-web', selected: false },
+    { index: 2, key: 'c2', title: '卡 258 thoughtdag', selected: false },
+    { index: 3, key: 'c3', title: '日常杂谈', selected: true },
+  ]
+  const K9 = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8', 'k9']
+  const checks260 = [
+    ['--conversation "#2"（**1 基**）⇒ 选第 2 个会话', pickConv(CONVS, '#2'),
+      (r) => r.ok && r.code === 'index' && r.conv.key === 'c2'],
+    ['--conversation 子串唯一命中 ⇒ 选中它', pickConv(CONVS, 'thoughtdag'),
+      (r) => r.ok && r.code === 'substr' && r.conv.key === 'c2'],
+    ['反例①：--conversation 不存在的标题 ⇒ 停手（nomatch）',
+      pickConv(CONVS, '卡 259'), (r) => !r.ok && r.code === 'nomatch'],
+    ['反例②：--conversation "卡 258" 命中两个 ⇒ 停手（ambiguous，不许择一）',
+      pickConv(CONVS, '卡 258'), (r) => !r.ok && r.code === 'ambiguous'],
+    ['越界：--conversation "#9" ⇒ 停手（range）', pickConv(CONVS, '#9'),
+      (r) => !r.ok && r.code === 'range'],
+    ['--conversation 空串 ⇒ 停手（empty）', pickConv(CONVS, ''),
+      (r) => !r.ok && r.code === 'empty'],
+    ['一个会话都读不到 ⇒ 停手（none）', pickConv([], '#1'), (r) => !r.ok && r.code === 'none'],
+    ['★防短路：会话数没增（9→9）⇒ 必须失败（no-new，「新开」被复用当前顶替不许算成）',
+      judgeNewChat({ count: 9, keys: K9, active: 'k9' }, { count: 9, keys: K9, active: 'k9' }),
+      (r) => !r.ok && r.code === 'no-new'],
+    ['新开会话数一下 +2（9→11）⇒ 必须失败（too-many，不是「新开一个」的读数）',
+      judgeNewChat({ count: 9, keys: K9, active: 'k9' },
+        { count: 11, keys: [...K9, 'k10', 'k11'], active: 'k10' }),
+      (r) => !r.ok && r.code === 'too-many'],
+    ['新开会话 +1 但当前选中的还是旧键 ⇒ 必须失败（not-active，后续会发错对话）',
+      judgeNewChat({ count: 9, keys: K9, active: 'k5' },
+        { count: 10, keys: [...K9, 'k10'], active: 'k5' }),
+      (r) => !r.ok && r.code === 'not-active'],
+    ['新开会话 +1 但读不到当前选中 ⇒ 必须失败（active-unreadable）',
+      judgeNewChat({ count: 9, keys: K9, active: 'k9' },
+        { count: 10, keys: [...K9, 'k10'], active: null }),
+      (r) => !r.ok && r.code === 'active-unreadable'],
+    ['新开会话 +1 且选中新键 ⇒ 通过（created）',
+      judgeNewChat({ count: 9, keys: K9, active: 'k9' },
+        { count: 10, keys: [...K9, 'k10'], active: 'k10' }),
+      (r) => r.ok && r.code === 'created' && r.key === 'k10'],
+    ['★新开的对话里已有 3 轮 ⇒ 必须失败（not-empty，新对话不该有历史轮次）',
+      judgeNewChat({ count: 9, keys: K9, active: 'k9' },
+        { count: 10, keys: [...K9, 'k10'], active: 'k10' }, { activeTurns: 3 }),
+      (r) => !r.ok && r.code === 'not-empty'],
+    ['★落地核验：内容出现在目标对话 ⇒ 通过（body-match）',
+      judgeLanded({ activeIsTarget: true, inBody: true }),
+      (r) => r.ok && r.code === 'body-match'],
+    ['★落地核验：目标对话轮次 0→2 ⇒ 通过（turn-grew）',
+      judgeLanded({ activeIsTarget: true, inBody: false, turnsBefore: 0, turnsAfter: 2 }),
+      (r) => r.ok && r.code === 'turn-grew'],
+    ['★落地核验：当前选中已不是目标会话 ⇒ 必须失败（wrong-conversation）',
+      judgeLanded({ activeIsTarget: false, inBody: true }),
+      (r) => !r.ok && r.code === 'wrong-conversation'],
+    ['★落地核验：读不到当前选中 ⇒ 必须失败（active-unreadable）',
+      judgeLanded({ activeIsTarget: null, inBody: true }),
+      (r) => !r.ok && r.code === 'active-unreadable'],
+    ['★落地核验：内容没找到且轮次没增 ⇒ 必须失败（unverifiable，不许静默退 0）',
+      judgeLanded({ activeIsTarget: true, inBody: false, turnsBefore: 2, turnsAfter: 2 }),
+      (r) => !r.ok && r.code === 'unverifiable'],
+    ['activeKeyOf：唯一选中读出该键、多选/无选一律读不出（null）',
+      [activeKeyOf(CONVS),
+       activeKeyOf([...CONVS, { index: 4, key: 'c4', title: 'x', selected: true }]),
+       activeKeyOf(CONVS.map((c) => ({ ...c, selected: false })))],
+      ([a, b, c]) => a === 'c3' && b === null && c === null],
+    ['停手时列的候选清单把三个会话都列出来（含标题与 key）', formatConvs(CONVS),
+      (s) => s.includes('卡 258 dsh-web') && s.includes('卡 258 thoughtdag')
+        && s.includes('日常杂谈') && s.includes('c3')],
+  ]
+  for (const [name, got, ok] of checks260) {
+    const pass = ok(got)
+    if (!pass) bad += 1
+    const tail = (got && typeof got === 'object' && !Array.isArray(got) && 'code' in got)
+      ? `code=${got.code}` : `got=${JSON.stringify(got)}`
+    process.stdout.write(`[${pass ? '绿' : '红'}] ${name}  → ${tail}\n`)
+  }
   process.stdout.write(bad === 0
-    ? `[OK] selftest 全绿（${checks.length + 1 + checks245.length} 条）\n`
+    ? `[OK] selftest 全绿（${checks.length + 1 + checks245.length + checks260.length} 条）\n`
     : `[FAIL] selftest 有 ${bad} 条红\n`)
   return bad === 0 ? 0 : 1
+}
+
+/* ---------------------------------------------------------------- 卡 260：conversations */
+
+/** ★ 卡 260 只读子命令：列出 agent 面板里**当前窗口的会话**（序号 / 标题 / 是否当前），
+ *  给 `--conversation` 当索引（`list` 列的是**面板**，这个列的是面板里的**对话** —— 两层索引）。
+ *  ★ 一个字节都不写；连不上 CDP / 读不到会话列表 ⇒ 退 2 并把试过的选择器原样贴出来。 */
+async function cmdConversations(argv) {
+  const args = parseArgs(argv)
+  const port = Number(args.port || DEFAULT_PORT)
+  let cdp
+  try {
+    cdp = await attach(port, { launch: false })
+  } catch (e) {
+    process.stderr.write(`[trae] ${e.message}\n`)
+    return 2
+  }
+  if (!cdp) {
+    process.stderr.write(`[trae] 连不上 CDP（127.0.0.1:${port}）—— IDE 没开着？\n`)
+    return 2
+  }
+  try {
+    const scan = await scanConversations(cdp)
+    if (!scan.ok) {
+      process.stderr.write(`[trae] 读不到会话列表（试过容器：${CONV_ROOT_SEL}；行：${CONV_ROW_SEL}）\n`)
+      return 2
+    }
+    process.stdout.write(`面板里共 ${scan.count} 个会话（--conversation 可用 "#N" 或标题子串，**1 基**）：\n`)
+    process.stdout.write(formatConvs(scan.convs))
+    return 0
+  } finally { cdp.close() }
 }
 
 /* ---------------------------------------------------------------- 入口 */
@@ -1205,12 +1718,14 @@ async function main() {
   if (cmd === 'balance') code = await cmdBalance(argv.slice(1))
   else if (cmd === 'send') code = await cmdSend(argv.slice(1))
   else if (cmd === 'list' || cmd === '--list') code = await cmdList(argv.slice(1))
+  else if (cmd === 'conversations' || cmd === '--conversations') code = await cmdConversations(argv.slice(1))
   else if (cmd === 'selftest' || cmd === '--selftest') code = await cmdSelftest()
   else {
     process.stderr.write('用法：node tools/trae_pool.mjs balance [--port 9333]\n')
     process.stderr.write('      node tools/trae_pool.mjs list [--port 9333]     # 只读：列可驱动面板（= --list）\n')
-    process.stderr.write('      node tools/trae_pool.mjs selftest                # 判据：面板选择 + 模型匹配/发送核验（不需要 Trae）\n')
-    process.stderr.write('      node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>] [--model <名字>]\n')
+    process.stderr.write('      node tools/trae_pool.mjs conversations [--port 9333]   # 只读：列面板里的会话（= --conversations）\n')
+    process.stderr.write('      node tools/trae_pool.mjs selftest                # 判据：面板选择 + 模型匹配/发送核验 + 对话定向/新开（不需要 Trae）\n')
+    process.stderr.write('      node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>] [--model <名字>] [--new-chat] [--conversation "#N"|<标题子串>]\n')
     code = 2
   }
   process.exitCode = code
