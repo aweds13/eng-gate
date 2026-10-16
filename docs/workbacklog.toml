@@ -2040,7 +2040,12 @@ files = [
 
 risk = "mid"
 
-status = "pending"
+status = "done"
+
+# ★ 2026-10-15 主控记：228 自己的 T-G344 从未落地；它的问题由卡 239 补完
+# （提交 1446298「把 228 补完：封存树 vs 提交树的差异要排除门禁产物」T-G357）。
+# 之前一直留 pending 是因为没栅栏；现因卡 248 与它同域（tools/pool/landing.py）
+# 触发「同一文件两个写者」的账目冲突，故按实情翻 done，理由记在此处。
 
 depends = ["225"]
 
@@ -2538,7 +2543,222 @@ files = [
 
 risk = "mid"
 
-status = "pending"
+status = "done"
 
 depends = ["244"]
+
+
+[[cards]]
+
+id = "248"
+
+task = "T-G369"
+
+title = "⑨ 盖章不许代写申请：同域兄弟卡被误标 landed 的修复"
+
+tree = ".wt/stampfix"
+
+spec = "复盘/卡/卡248-盖章不许代写申请.md"
+
+files = [
+
+  "tools/pool/landing.py",
+
+  "tests/test_landing_stamp.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = []
+
+
+[[cards]]
+
+id = "249"
+
+task = "T-G370"
+
+title = "六块读数：机器可读单元清单 + 坏读数不许抹掉"
+
+tree = ".wt/blocks"
+
+spec = "复盘/卡/卡249-六块读数单元清单与不抹好读数.md"
+
+files = [
+
+  "tools/pipeline_view.py",
+
+  "tests/test_pipeline_view.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = []
+
+
+[[cards]]
+
+id = "250"
+
+task = "T-G371"
+
+title = "挑端口用能不能 bind + 接入前验明正身"
+
+tree = ".wt/portid"
+
+spec = "复盘/卡/卡250-挑端口与验明正身.md"
+
+files = [
+
+  "tools/serve.py",
+
+  "tests/test_serve_port.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = []
+
+[[cards]]
+
+id = "251"
+
+task = "T-G372"
+
+title = "面板不许硬编码颜色：甘特条改用主题令牌"
+
+tree = ".wt/tokens"
+
+spec = "复盘/卡/卡251-面板不硬编码颜色.md"
+
+files = [
+
+  "tools/dsh_panel.py",
+
+  "tests/test_dsh_panel.py",
+
+]
+
+risk = "low"
+
+status = "pending"
+
+depends = ["247"]
+
+[[cards]]
+
+id = "252"
+
+task = "T-G373"
+
+title = "定点深读第二批：证据台账与对账/墓碑两个同型"
+
+tree = ".wt/deepread2"
+
+spec = "复盘/卡/卡252-定点深读第二批.md"
+
+files = [
+
+  "复盘/DSH插件-定点深读-第二批.md",
+
+]
+
+risk = "low"
+
+status = "pending"
+
+depends = []
+
+[[cards]]
+
+id = "253"
+
+task = "T-G374"
+
+title = "面板一键启动目标页 + 把桌面 cmd 集成进来"
+
+tree = ".wt/oneclick"
+
+spec = "复盘/卡/卡253-一键启动与集成cmd.md"
+
+files = [
+
+  "tools/dsh_panel.py",
+
+  "tests/test_dsh_panel.py",
+
+  "tools/stack.py",
+
+  "tests/test_stack.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = ["251"]
+
+[[cards]]
+
+id = "254"
+
+task = "T-G375"
+
+title = "门禁峰值治理：自适应并发 + 串行化 + 受影响的测试选择"
+
+tree = ".wt/gatepeak"
+
+spec = "复盘/卡/卡254-门禁峰值治理.md"
+
+files = [
+
+  "scripts/run_gates.py",
+
+  "tools/wb_land.py",
+
+  "tests/test_gate_peak.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = []
+
+[[cards]]
+
+id = "255"
+
+task = "T-G376"
+
+title = "读数器缓存与增量：内容哈希缓存 + 只读尾部 + git 只调一次"
+
+tree = ".wt/readcache"
+
+spec = "复盘/卡/卡255-读数器缓存与增量.md"
+
+files = [
+
+  "tools/pipeline_view.py",
+
+  "tests/test_pipeline_view.py",
+
+]
+
+risk = "mid"
+
+status = "pending"
+
+depends = ["249"]
 

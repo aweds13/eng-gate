@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""dsh_panel —— 全局面板：把工作台三个只读面接进 DSH 的全局座位（卡 221/240/242/244）。
+"""dsh_panel —— 全局面板：把工作台三个只读面接进 DSH 的全局座位（卡 221/240/242/244/247）。
 
 ## 为什么有它
 
@@ -41,6 +41,14 @@
   `sidebar.right.pane.tab` keyed 座），**探到 `ctx.get("sidebarRight")` 才注册**；
   核心行条目只有 `{id, order, label}`、没有角标槽（sidebar/client.js:454-461）⇒
   「未起」小点画进**自己的 glyph 内容**（probeStore），不声称是核心角标能力。
+
+★ 卡 247（T-G368，落 复盘/DSH插件-可抄清单.md §六的三条）：① 右栏页签 id **带包名前缀**
+  （`dsh-client-ui-workbench-panel:board` / `:timeflow` / `:zentao`，dsh-session-diff:file
+  同型）+ `keepMounted: true` 常驻（sidebar-right/lib/client.js:5522）+ 正文 = 真实页面入口；
+  ② 包级显示链路：`locale/zh.json` / `locale/en.json`（meta + 三座位）+ 清单 `exports`
+  补 `./package.json` 与 `./locale/*.json`；③ 补丁层三纪律（顶层 YAML 数组 / 三处
+  id-name 一致 / 「删掉补丁层 = 插件不加载」写给人看）—— `check()` 逐条钉死；
+  ④ 左栏底部入口 `sidebar.footer.action`（保底路：main 是会话时 openTab 直接可用）。
 
 ★ **只读**：面板的数据来自卡 207 / 卡 222 / 卡 223 的**唯一读数器**；面板**不写仓库、
   不起工人**（用户早先拍过：拖动只写意图、主控执行）。`check()` 把这条钉成硬判据。
@@ -88,6 +96,9 @@ MANIFEST_REL = "package.json"
 README_REL = "README.md"
 PATCH_REL = "cordis.patch.yml"  # 卡 242：dsh.bundle.patch 指向的包内补丁层
 ICON_REL = "icon.svg"  # 卡 244：包内图标（清单 icon 用相对路径指它）
+# 卡 247：包级显示链路 —— 核心不激活插件就能读的标题/说明（配清单 exports 的 ./locale/*.json）。
+LOCALE_ZH_REL = "locale/zh.json"
+LOCALE_EN_REL = "locale/en.json"
 
 #: 卡 244：`peerDependencies["@deepseek-ai/dsh"]` 的范围 —— 故意写**宽**：
 #: 只表达「需要 dsh 运行时」，不锁小版本。实测运行时 `0.2.0-rc.2`（pre-release），
@@ -163,22 +174,44 @@ _ICON_CLOCK_FACE = (
 )
 _ICON_CLOCK_HAND = "M8 4.31V8.46L11 10.08"
 
-#: 三枚图标（(d, fill) 对）。工作台 = 仪表盘（状态面板）；禅道 = 甘特条；timeflow = 时钟。
+#: 四格仪表盘：左上/右上/左下**三个描边格**合成一条路径（省行也省一次渲染），
+#: 右下那格单独一条、用 `currentColor` 填实（视觉重心落在"右下"）。
+_ICON_TILES_OUTLINE = (
+    "M3.1 1.6h3.6a1.5 1.5 0 0 1 1.5 1.5v3.6a1.5 1.5 0 0 1-1.5 1.5H3.1a1.5 1.5 0 0 1-1.5-1.5"
+    "V3.1a1.5 1.5 0 0 1 1.5-1.5zM9.3 1.6h3.6a1.5 1.5 0 0 1 1.5 1.5v3.6a1.5 1.5 0 0 1-1.5 1.5H9.3"
+    "a1.5 1.5 0 0 1-1.5-1.5V3.1a1.5 1.5 0 0 1 1.5-1.5zM3.1 7.8h3.6a1.5 1.5 0 0 1 1.5 1.5v3.6"
+    "a1.5 1.5 0 0 1-1.5 1.5H3.1a1.5 1.5 0 0 1-1.5-1.5V9.3a1.5 1.5 0 0 1 1.5-1.5z"
+)
+_ICON_TILE_BR = (
+    "M9.3 7.8h3.6a1.5 1.5 0 0 1 1.5 1.5v3.6a1.5 1.5 0 0 1-1.5 1.5H9.3a1.5 1.5 0 0 1-1.5-1.5"
+    "V9.3a1.5 1.5 0 0 1 1.5-1.5z"
+)
+#: 分支树（主干 + 两个终点环 + 一条分枝到第三个环）。
+_ICON_TREE = (
+    "M5 2.9v10.2M6.5 4.4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0"
+    "M6.5 11.6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0"
+    "M6.4 4.4h3.05a2 2 0 0 1 2 2v1.15M12.9 9.4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0"
+)
+#: 沙漏（上下两条横梁 + 两个对顶漏斗）。
+_ICON_HOURGLASS = (
+    "M4.3 2.3h7.4M4.3 13.7h7.4"
+    "M5.6 2.3v2.1c0 1.35 1.05 2.15 2.4 3.6 1.35-1.45 2.4-2.25 2.4-3.6V2.3"
+    "M5.6 13.7v-2.1c0-1.35 1.05-2.15 2.4-3.6 1.35 1.45 2.4 2.25 2.4 3.6v2.1"
+)
+
+#: 三枚图标（(d, fill) 对）。
+#: ★ 2026-10-15 用户当日指定方向：工作台 = **B（工业刻度·四格仪表盘）**、
+#:   禅道 = **B（工业刻度·分支树）**、timeflow = **C（线条拟物·沙漏）**。
+#:   三枚都按渲染处的 **16 网格**（`viewBox 0 0 16 16`、描边 1、圆头圆角）手画；
+#:   本表只有 (d, fill) 两元组 ⇒ **圆用 arc 路径画成描边环**（不是 fill）；
+#:   颜色只用 `currentColor` 或空 ⇒ 跟主题走，**不硬编码颜色**。
 ICONS: dict[str, tuple[tuple[str, str], ...]] = {
     "workbench_board": (
-        (_ICON_GAUGE_ARC, ""),
-        (_ICON_GAUGE_NEEDLE, ""),
-        (_ICON_GAUGE_DOT, "currentColor"),
+        (_ICON_TILES_OUTLINE, ""),
+        (_ICON_TILE_BR, "currentColor"),
     ),
-    "zentao_gantt": (
-        ("M2.5 4.5H10", ""),
-        ("M6 8H13.5", ""),
-        ("M2.5 11.5H8", ""),
-    ),
-    "timeflow_inbox": (
-        (_ICON_CLOCK_FACE, ""),
-        (_ICON_CLOCK_HAND, ""),
-    ),
+    "zentao_gantt": ((_ICON_TREE, ""),),
+    "timeflow_inbox": ((_ICON_HOURGLASS, ""),),
 }
 
 #: 卡 244：包内图标（`icon.svg`）—— 与左栏行的内联 SVG 是**两个面**：这份是给清单/
@@ -186,10 +219,12 @@ ICONS: dict[str, tuple[tuple[str, str], ...]] = {
 #: cordis-plugin-development/.../host-plugin.md:45），几何与工作台那枚同口径。
 ICON_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"'
-    ' fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">\n'
-    f"  <path d=\"{_ICON_GAUGE_ARC}\"/>\n"
-    f"  <path d=\"{_ICON_GAUGE_NEEDLE}\"/>\n"
-    '  <circle cx="8" cy="8.5" r="1.25" fill="currentColor" stroke="none"/>\n'
+    ' fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"'
+    ' aria-hidden="true">\n'
+    '  <rect x="1.9" y="1.9" width="5.1" height="5.1" rx="1.5"/>\n'
+    '  <rect x="9" y="1.9" width="5.1" height="5.1" rx="1.5"/>\n'
+    '  <rect x="1.9" y="9" width="5.1" height="5.1" rx="1.5"/>\n'
+    '  <rect x="9" y="9" width="5.1" height="5.1" rx="1.5" fill="currentColor"/>\n'
     "</svg>\n"
 )
 
@@ -244,6 +279,17 @@ SEAT_BY_KEY: dict[str, Seat] = {seat.key: seat for seat in SEATS}
 ROUTE_PATHS: tuple[str, ...] = tuple(seat.route for seat in SEATS)
 #: 兼容卡 221 的既有判据：第一座 = 老的面板 id。
 PANEL_ID = SEAT_KEYS[0]
+
+#: 卡 247：官方右栏页签 id —— **带包名前缀**（dsh-session-diff 的 "dsh-session-diff:file"
+#: 同型，见 复盘/DSH插件-可抄清单.md §六.1）；后缀照卡规格点名：board / timeflow / zentao。
+RIGHT_TAB_SUFFIX: dict[str, str] = {
+    "workbench_board": "board",
+    "zentao_gantt": "zentao",
+    "timeflow_inbox": "timeflow",
+}
+RIGHT_TAB_IDS: dict[str, str] = {
+    seat: f"{PACKAGE_NAME}:{suffix}" for seat, suffix in RIGHT_TAB_SUFFIX.items()
+}
 
 
 @dataclass(frozen=True)
@@ -305,6 +351,58 @@ CLIENT_PACKAGE_DEPS = (
 CLIENT_INJECT_DENY = ("@deepseek-ai/dsh-client-ui-slots",)
 
 
+# ================================================================ 生成物：包级 locale（卡 247）
+
+#: 卡 247：三个座位的标题/说明按语言给（包级显示链路 —— 插件管理器/市场卡片不激活也能读）。
+_LOCALE_SEATS_ZH: dict[str, dict[str, str]] = {
+    "workbench_board": {
+        "title": "工作台状态",
+        "description": "工作台看板（卡/门禁/判决/租约/栅栏/工作树只读读数）与真实页面入口。",
+    },
+    "zentao_gantt": {
+        "title": "禅道",
+        "description": "禅道迭代甘特（按模型画条）与禅道真实页面入口。",
+    },
+    "timeflow_inbox": {
+        "title": "timeflow",
+        "description": "timeflow 待办（待翻/待复核/待收口）与真实页面入口。",
+    },
+}
+_LOCALE_SEATS_EN: dict[str, dict[str, str]] = {
+    "workbench_board": {
+        "title": "Workbench status",
+        "description": "Workbench board (read-only cards/gates/verdicts/leases) + real page entry.",
+    },
+    "zentao_gantt": {
+        "title": "ZenTao",
+        "description": "ZenTao iteration gantt (bars per model) + real page entry.",
+    },
+    "timeflow_inbox": {
+        "title": "timeflow",
+        "description": "timeflow inbox (to-flip/to-review/to-close) + real page entry.",
+    },
+}
+LOCALE_ZH: dict = {
+    "meta": {
+        "title": "工作台全局面板",
+        "description": "把工作台状态、禅道、timeflow 三个真实页面接进 DSH："
+        "左栏快捷入口 + 右栏常驻页签 + 底部入口。",
+    },
+    "seats": _LOCALE_SEATS_ZH,
+}
+LOCALE_EN: dict = {
+    "meta": {
+        "title": "Workbench panel",
+        "description": "Bring the three real pages (workbench / ZenTao / timeflow) into DSH: "
+        "sidebar shortcuts + persistent right tabs + footer entry.",
+    },
+    "seats": _LOCALE_SEATS_EN,
+}
+#: 落盘文本（emit 与自检共用同一份，不许两处手抄）。
+LOCALE_ZH_JSON = json.dumps(LOCALE_ZH, ensure_ascii=False, indent=2) + "\n"
+LOCALE_EN_JSON = json.dumps(LOCALE_EN, ensure_ascii=False, indent=2) + "\n"
+
+
 # ================================================================ 生成物：package.json
 
 
@@ -327,6 +425,8 @@ def package_manifest() -> dict:
             ".": f"./{HOST_REL}",
             "./client": f"./{CLIENT_REL}",
             "./package.json": "./package.json",
+            # 卡 247：包级显示链路 —— 缺了它们，插件管理器读不到显示文本（locale）与元信息。
+            "./locale/*.json": "./locale/*.json",
         },
         "peerDependencies": {
             "@deepseek-ai/cordis": "~4.0.4",
@@ -350,17 +450,34 @@ def cordis_patch_yaml() -> str:
 
     `dsh plugin add <包>` 时宿主把它当 **profile 层**装；root 是占位符，安装者填
     （或照 README 换成 `!!js` 从环境读）。语义与老的手写 profile 行完全一致。
+
+    卡 247：补丁层三纪律（照抄参考仓 cordis.patch.yml 头部注释的口径）——
+    ① 三处 id/name 完全一致：本文件 insert 的 id 与 name / package.json 的 name /
+       宿主半（lib/index.js）导出的 name；
+    ② 必须是「顶层 YAML 数组」—— 写成 mapping 会在启动时直接抛错，不是静默跳过；
+    ③ 删掉补丁层 = 插件不加载（把这一行整行删掉或注释掉并重启即可）—— 紧急禁用手段，
+       要写给人看。
     """
     return (
         "# 卡 242 产物 · 本包的 cordis 补丁层（package.json 里 dsh.bundle.patch 指向本文件）。\n"
         "# `dsh plugin add <本包目录>` 时宿主把这一层当 profile 层装（官方路数）。\n"
         "# ★ root 是占位符：请改成仓库绝对路径（或照 README 换成 !!js 从环境读）。\n"
+        "# ★ 卡 247 · 补丁层三纪律：\n"
+        "#   ① 三处 id/name 必须完全一致：本文件 insert 的 id 与 name / package.json 的 name /\n"
+        "#      lib/index.js 导出的 name（都是 " + PACKAGE_NAME + "）。\n"
+        "#   ② 本文件必须是「顶层 YAML 数组」—— 写成 mapping 会在启动时直接抛错，不是静默跳过。\n"
+        "#   ③ 删掉补丁层 = 插件不加载：把下面的 insert 行整行删掉（或注释掉）并重启，\n"
+        "#      插件就彻底不加载了 —— 这就是紧急禁用手段之一。\n"
         "- insert:\n"
-        "    - id: workbench-panel\n"
+        f"    - id: {PACKAGE_NAME}\n"
         f'      name: "{PACKAGE_NAME}"\n'
         "      config:\n"
         '        root: "<仓库根，请改成绝对路径>"\n'
     )
+
+
+#: 卡 247：补丁层文本的模块级常量（判据造反例用：check(patch=…) 的默认真产物）。
+PATCH_YAML = cordis_patch_yaml()
 
 
 # ================================================================ 生成物：宿主半
@@ -389,6 +506,9 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import { defineTool } from "@deepseek-ai/dsh-tools";
+
+/* 卡 247 · 补丁层三纪律：本导出名 = patch 行 id/name = package.json 的 name（三处一致）。 */
+export const name = __PKG_NAME__;
 
 export const inject = ["tools"];
 
@@ -505,7 +625,9 @@ export function apply(ctx) {
 
 
 def _host_js() -> str:
-    return _HOST_JS_TEMPLATE.replace("__SEATS__", _host_seats_js())
+    return _HOST_JS_TEMPLATE.replace("__SEATS__", _host_seats_js()).replace(
+        "__PKG_NAME__", json.dumps(PACKAGE_NAME)
+    )
 
 
 HOST_JS = _host_js()
@@ -552,8 +674,9 @@ def _client_label_map(attr: str) -> str:
     return ", ".join(f"{seat.locale_key}: {json.dumps(getattr(seat, attr))}" for seat in SEATS)
 
 
-_CLIENT_JS_TEMPLATE = r"""/* 卡 221/240/242/244 产物 · 全局面板：浏览器半 —— 三个座位各占
+_CLIENT_JS_TEMPLATE = r"""/* 卡 221/240/242/244/247 产物 · 全局面板：浏览器半 —— 三个座位各占
  * root 作用域 `main` keyed 座的一个 key，并在 `sidebar.panellist` 各挂一行 ⇒ 不切窗口就能看板。
+ * 卡 247：右栏三个**常驻页签**（id 带包名前缀 + keepMounted）+ 左栏底部入口（保底路）。
  * 卡 242：三行是**快捷入口** —— 默认开**真实页面**（ctx.sidebarRight.openTab("browser",
  * { params: { url } })，依据见 QuickEntry 上方注释）；原来的自绘视图（六块/甘特/列表）
  * **保留**成可选的「内嵌读数」分支。★ 只读：不写仓库、不起工人；点选只写「选中态」。
@@ -676,6 +799,30 @@ __TARGETS__
       }, [key, url]);
       return state;
     }
+    /* ---- 卡 247 · 开真实页面的唯一入口（QuickEntry 与左栏底部入口共用）----
+     * 卡 244 · 逃生门第二半：openTabIn 优先 —— 优先 openTabIn(最后在屏的 sessionId,
+     * "browser", …) —— 它对未 adopted 的会话**静默无操作**（client.js:6418-6421：
+     * actionsFor() 拿不到就 return）；只有拿不到 sessionId 时才退回 openTab ——
+     * 无屏幕会话时它会抛 "no session surface is mounted"（client.js:6744-6752）⇒
+     * catch 住、如实报错。
+     * ★ 已知取舍：sessionId 在屏但其 store 未 adopted 时 openTabIn 静默无操作，
+     *   界面不报错也不打开 —— 比对着裸 openTab 抛错好；探测行 + 链接兜底仍在。
+     * ★ 卡 247：左栏底部入口走的是「main 仍是会话、屏幕会话在」的时刻 ⇒
+     *   openTab("browser") 不需要逃生门也能用 —— 本函数两种时刻都覆盖（双保险）。 */
+    function openRealPage(target, setOpenError) {
+      try {
+        const sessionId = screenSessionId;
+        if (sessionId) {
+          panelCtx.sidebarRight.openTabIn(sessionId, "browser",
+            { params: { url: target.url } });
+        } else {
+          panelCtx.sidebarRight.openTab("browser", { params: { url: target.url } });
+        }
+        setOpenError("");
+      } catch (error) {
+        setOpenError(String((error && error.message) || error));
+      }
+    }
     function QuickEntry(props) {
       const target = props.target;
       const [mode, setMode] = react.useState("page");
@@ -686,25 +833,7 @@ __TARGETS__
         return h(props.fallback, { route: props.route });
       }
       function openInSidebar() {
-        try {
-          /* ---- 卡 244 · 逃生门第二半：openTabIn 优先 ----
-           * 优先 openTabIn(最后在屏的 sessionId, "browser", …) —— 它对未 adopted 的
-           * 会话**静默无操作**（client.js:6418-6421：actionsFor() 拿不到就 return）；
-           * 只有拿不到 sessionId 时才退回 openTab —— 无屏幕会话时它会抛
-           * "no session surface is mounted"（client.js:6744-6752）⇒ catch 住、如实报错。
-           * ★ 已知取舍：sessionId 在屏但其 store 未 adopted 时 openTabIn 静默无操作，
-           *   界面不报错也不打开 —— 比对着裸 openTab 抛错好；探测行 + 链接兜底仍在。 */
-          const sessionId = screenSessionId;
-          if (sessionId) {
-            panelCtx.sidebarRight.openTabIn(sessionId, "browser",
-              { params: { url: target.url } });
-          } else {
-            panelCtx.sidebarRight.openTab("browser", { params: { url: target.url } });
-          }
-          setOpenError("");
-        } catch (error) {
-          setOpenError(String((error && error.message) || error));
-        }
+        openRealPage(target, setOpenError);
       }
       const button = { padding: "4px 10px", cursor: "pointer" };
       return h("div", { "data-wb-state": "ok" },
@@ -726,6 +855,37 @@ __TARGETS__
         h("p", null,
           h("button", { style: button, onClick: () => setMode("embedded") },
             "内嵌读数（自绘视图）")));
+    }
+
+    /* ---- 卡 247 · 左栏底部入口（sidebar.footer.action，list 槽）----
+     * 依据：dsh-client-ui-sidebar/lib/client.js:515-518（list 槽，余额按钮就挂在这）。
+     * ★ 它走的是「main 仍是会话、屏幕会话在」的时刻 ⇒ openTab("browser") 不需要
+     *   逃生门也能用 —— 即使右栏页签那条路在某种组合下被时序坑挡住，用户总有一条
+     *   一定能开的路。实现复用 openRealPage（优先 openTabIn、退回 openTab、catch
+     *   如实报错）＝ 双保险。
+     * ★ 一个按钮一件事：点开一个极小的选择面（三项，各开各的真实页面）。 */
+    const FOOTER_LABELS = __FOOTER_LABELS__;
+    function FooterEntry() {
+      const [open, setOpen] = react.useState(false);
+      const [openError, setOpenError] = react.useState("");
+      const button = { padding: "4px 10px", cursor: "pointer" };
+      return h("div", { "data-wb-footer": "workbench-panel" },
+        h("button", { style: button, onClick: () => setOpen(!open) },
+          "工作台页面…"),
+        open
+          ? h("ul", null, Object.keys(TARGETS).map((key) =>
+              h("li", { key },
+                h("button", { style: button,
+                  onClick: () => {
+                    setOpenError("");
+                    openRealPage(TARGETS[key], setOpenError);
+                  } },
+                FOOTER_LABELS[key] + "（" + TARGETS[key].url + "）"))))
+          : null,
+        openError
+          ? h("p", { "data-wb-error": "" },
+              "开不了（原话：" + openError + "）—— 用目标页自己的入口开，别当它已打开。")
+          : null);
     }
 
     /* ---- workbench_board：六块，原样 ---- */
@@ -867,12 +1027,14 @@ __TARGETS__
       };
     }
 
-    const inject = ["slots", "locale", "layout", "sidebarRight"];
+    /* 卡 247：sidebarRightTabs 也在服务清单里（官方 dsh-session-diff 的 inject 同款：
+     * const inject = ["slots","locale","sidebarRightTabs","remote",…] —— 80-apply.js:12）。 */
+    const inject = ["slots", "locale", "layout", "sidebarRight", "sidebarRightTabs"];
     function apply(ctx) {
       panelCtx = ctx; /* QuickEntry 的 ctx.sidebarRight.openTab 用（卡 242）。 */
       ctx.effect(() => ctx.locale.register(NS, {
-        zh: { __ZH__ },
-        en: { __EN__ },
+        zh: { __ZH__, panelFooterEntry: "工作台页面…" },
+        en: { __EN__, panelFooterEntry: "Workbench pages…" },
       }), "dsh-panel: labels");
       const t = ctx.locale.bind(NS);
       /* ---- 卡 244 · 逃生门第一半（订阅）：订 ctx.sidebarRight.mounted ----
@@ -895,6 +1057,15 @@ __REGISTRATIONS__
         open: (key) => ctx.layout.selectPanel(key),
         seats: KEYS,
       });
+      /* ---- 卡 247 · 左栏底部入口：sidebar.footer.action（list 槽）挂一个入口 ----
+       * 注册形状照 panellist 行（同一类 list 槽；依据 client.js:515-518，余额按钮同款）。
+       * 无论 main 是会话还是全局面板，这一行都在 ⇒ 用户总有一条一定能开的路。 */
+      ctx.slots.inject("sidebar.footer.action", () => ctx.slots.register({
+        name: "sidebar.footer.action",
+        id: "workbench-panel-footer",
+        label: () => t("panelFooterEntry"),
+        locale: NS,
+      }, FooterEntry));
       /* ---- 卡 244 · 官方右栏页签：探到 sidebarRight 才注册 ----
        * ★ 官方口子（不许猜 API）：tab 类型注册面 = ctx.get("sidebarRightTabs")
        *   （sidebar-right/lib/client.js:9073 ctx.reflect.provide("sidebarRightTabs", tabs)；
@@ -936,37 +1107,46 @@ def _client_targets_js() -> str:
 
 
 def _client_right_tabs_js() -> str:
-    """卡 244：官方右栏页签的注册体（插在「探到 sidebarRight」的 if 里，8 空格缩进）。
+    """卡 244/247：官方右栏页签的注册体（插在「探到 sidebarRight」的 if 里，8 空格缩进）。
 
-    每座两步：① `rightTabs.register({id, kind, title, guide})` 注册 tab 类型
-    （id 不得与别家撞，kind 唯一）；② `sidebar.right.pane.tab` keyed 座挂内容，
-    **key = 类型 id**（渲染按 definition.id 找）。页签内容给内嵌读数视图
-    （`<Render>View` 直接收 reading），打开走右栏「+」向导或 `openTabIn(sessionId, kind)`。
+    卡 247：页签 id **带包名前缀**（dsh-session-diff 的 "dsh-session-diff:file" 同型，
+    可抄清单 §六.1）；`keepMounted: true` 常驻（sidebar-right/lib/client.js:5522，
+    保住滚动位置/登录态）；正文挂 `sidebar.right.pane.tab` keyed 座、**key = 该 id**
+    （渲染按 definition.id 找注册，client.js:5579）。正文内容 = 真实页面（QuickEntry：
+    browser 口子开 url +「没起 + 怎么起」兜底）。页签 kind 用自定义名 —— kind 撞官方
+    "browser" 会 throw（client.js:8688-8700），所以真实页面在正文里开。
     """
-    rows = ['        const rightTabs = ctx.get("sidebarRightTabs");']
+    rows: list[str] = []
     for seat in SEATS:
-        tab_id = f"workbench-panel-tab-{seat.key}"
+        tab_id = RIGHT_TAB_IDS[seat.key]
         kind = f"workbench-panel-{seat.key}"
         rows.append(
             "        {\n"
             f"          const tabId = {json.dumps(tab_id)};\n"
             f"          const kind = {json.dumps(kind)};\n"
-            "          rightTabs.register({\n"
+            "          /* 卡 247：id 带包名前缀（dsh-session-diff:file 同型，可抄清单 §六.1）；\n"
+            "           * keepMounted: true = 常驻真实页面（保滚动位置/登录态），依据\n"
+            "           * sidebar-right/lib/client.js:5522 与 复盘/DSH插件-可抄清单.md §六.1。 */\n"
+            "          ctx.sidebarRightTabs.register({\n"
             "            id: tabId,\n"
             "            kind: kind,\n"
             f"            title: () => t({json.dumps(seat.locale_key)}),\n"
+            "            keepMounted: true,\n"
             "            guide: [{ id: tabId + \"-guide\","
             f" order: {seat.order + 1},"
             f" title: () => t({json.dumps(seat.locale_key)}) }}],\n"
             "          });\n"
             '          ctx.slots.inject("sidebar.right.pane.tab", () => ctx.slots.register({\n'
             '            name: "sidebar.right.pane.tab",\n'
-            "            key: tabId,\n"
+            "            key: tabId, /* 卡 247：key 必须 = 页签 id（渲染按 definition.id 找） */\n"
             "            locale: NS,\n"
             "          }, function () {\n"
-            f"            return h(SourceShell, {{ route: {json.dumps(seat.route)},"
-            f" title: {json.dumps(seat.label_zh)},"
-            f" render: {seat.render}View }});\n"
+            "            /* 卡 247：正文 = 真实页面（browser 口子开 url）\n"
+            "             * +「没起 + 怎么起」兜底（沿用既有口径）。 */\n"
+            "            return h(QuickEntry, {"
+            f" route: {json.dumps(seat.route)},"
+            f" target: TARGETS[{json.dumps(seat.key)}],"
+            f" title: {json.dumps(seat.label_zh)}, fallback: {seat.render} }});\n"
             "          }));\n"
             "        }"
         )
@@ -974,10 +1154,14 @@ def _client_right_tabs_js() -> str:
 
 
 def _client_js() -> str:
+    footer_labels = json.dumps(
+        {seat.key: seat.label_zh for seat in SEATS}, ensure_ascii=False
+    )
     return (
         _CLIENT_JS_TEMPLATE.replace("__REGISTRATIONS__", _client_registrations())
         .replace("__RIGHT_TABS__", _client_right_tabs_js())
         .replace("__TARGETS__", _client_targets_js())
+        .replace("__FOOTER_LABELS__", footer_labels)
         .replace("__ZH__", _client_label_map("label_zh"))
         .replace("__EN__", _client_label_map("label_en"))
         .replace("__KEYS__", json.dumps(list(SEAT_KEYS)))
@@ -990,7 +1174,7 @@ CLIENT_JS = _client_js()
 # ================================================================ 生成物：说明文档
 
 
-INSTALL_DOC = """# 全局面板（三座位快捷入口）—— 安装 / 接线说明（卡 221/240/242/244 · T-G365）
+INSTALL_DOC = """# 全局面板（三座位快捷入口）—— 安装 / 接线说明（卡 221/240/242/244/247 · T-G368）
 
 把工作台**三个真实页面**接进 DSH：左栏三行是**快捷入口** —— 每行点开默认给
 「开真实页面」的入口 + 目标页连不上时的「没起 + 怎么起」；原来的自绘视图（六块/甘特/列表）
@@ -1072,31 +1256,62 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 字段**。范围故意写宽：只表达「需要 dsh 运行时」，不锁小版本（实测运行时 `0.2.0-rc.2`
 是 pre-release，app-boot 用 `semver.satisfies(…, { includePrerelease: true })`）。
 
-## 右栏页签与角标（卡 244）
+## 右栏页签与角标（卡 244 · 卡 247 常驻 + 带包名前缀 id）
 
-三个目标各注册一个**官方右栏页签**（内容 = 对应的内嵌读数视图）：
+三个目标各注册一个**官方右栏页签**（正文 = 真实页面的入口 +「没起 + 怎么起」兜底）：
 
+- 页签 id **带包名前缀**（卡 247）：`dsh-client-ui-workbench-panel:board` / `:timeflow` /
+  `:zentao` —— 照 `dsh-session-diff` 的 `"dsh-session-diff:file"` 同型
+  （`复盘/DSH插件-可抄清单.md` §六.1）；
 - 注册面：`ctx.get("sidebarRightTabs").register({ id, kind, title, guide })`（依据
   `dsh-client-ui-sidebar-right/lib/client.js:9073` 的 `reflect.provide("sidebarRightTabs")`）；
 - 页签内容：keyed 座 `sidebar.right.pane.tab`，**key = 类型 id**（渲染按
   `definition.id` 找注册，`client.js:5579`）；guide 条目让页签出现在右栏「+」的向导里；
+- **常驻（卡 247）**：页签定义带 `keepMounted: true`（依据
+  `sidebar-right/lib/client.js:5522`）—— 常驻真实页面，保住滚动位置/登录态；
 - **只在宿主真的有右栏服务时才注册**：包的 `dsh.client.inject` 已含
   `sidebarRight`（没有它本包根本不装配），注册体再包一层
   `ctx.get("sidebarRight")` 探测（双保险）。
+
+**左栏底部入口（卡 247）**：`sidebar.footer.action`（list 槽，依据
+`dsh-client-ui-sidebar/lib/client.js:515-518` —— 余额按钮就挂在那）挂一个
+「工作台页面…」按钮，点开一个极小的选择面（三项各开各的真实页面）。它走的是
+「main 仍是会话、屏幕会话在」的时刻 ⇒ `openTab("browser")` 不需要逃生门也能用 ——
+即使右栏页签那条路在某种组合下被时序坑挡住，用户**总有一条一定能开的路**。
+实现复用 `openRealPage`（优先 `openTabIn`、退回 `openTab`、catch 如实报错）＝ 双保险。
 
 左栏行的「未起」小点：核心行条目只有 `{id, order, label}`、**没有角标槽**
 （`sidebar/client.js:454-461`、`:187-197`）⇒ 小点画进**自己 glyph 的 SVG 内容**
 （目标页探测连不上时右下角一个实心小圆）—— 这是本插件自画的，**不是**核心角标能力。
 
+## 包级显示链路（卡 247：核心不激活插件就能读）
+
+- 包根有 `icon.svg`（清单 `icon` 用相对路径 `./icon.svg` 指它）；
+- 包根有 `locale/zh.json` 与 `locale/en.json`，各含
+  `{"meta":{"title","description"}}` + 三个座位的标题/说明（按语言给）；
+- 清单 `exports` 含 `"./package.json"` 与 `"./locale/*.json"` —— 缺了它们，
+  插件管理器/市场卡片**读不到**显示文本与元信息（插件管理器卡片 / bundle 详情 /
+  组件行 / 设置里的插件清单都吃这条）。
+
+## 补丁层三纪律（卡 247，照参考仓 cordis.patch.yml 头部注释的口径）
+
+1. **三处 id/name 必须完全一致**：包内 `cordis.patch.yml` insert 的 id 与 name /
+   `package.json` 的 name / `lib/index.js` 导出的 name（都是
+   `dsh-client-ui-workbench-panel`）—— `--check` 会咬不一致；
+2. **必须是「顶层 YAML 数组」**：写成 mapping 会在启动时**直接抛错**，不是静默跳过；
+3. **删掉补丁层 = 插件不加载**：把 `cordis.patch.yml` 里的 insert 行整行删掉（或整行
+   注释掉）并重启，插件就彻底不加载了 —— 这就是紧急禁用手段之一（写给人看）。
+
 ## 包里有什么
 
 | 文件 | 作用 |
 | --- | --- |
-| `package.json` | 清单：`dsh.bundle.patch` + `dsh.client` + `icon` + `peerDependencies` |
+| `package.json` | 清单：`dsh.bundle.patch` + `dsh.client` + `icon` + `peerDependencies` 等 |
 | `icon.svg` | 包内图标（清单 `icon` 用相对路径指它；卡 244） |
-| `cordis.patch.yml` | 包内补丁层（`dsh.bundle.patch` 指向它；root 是占位符，安装者填） |
+| `locale/zh.json` / `locale/en.json` | 包级显示文本（meta + 三座位的标题/说明；卡 247） |
+| `cordis.patch.yml` | 包内补丁层（`dsh.bundle.patch` 指向它；root 占位符，安装者填） |
 | `lib/index.js` | **宿主半**：三个只读工具 + **一条只读缝**（三条同源路由，只 GET） |
-| `lib/client.js` | **浏览器半**：快捷入口（默认开真实页面）+ 内联 SVG 图标 + 内嵌读数分支 |
+| `lib/client.js` | **浏览器半**：快捷入口 + 右栏常驻页签 + 底部入口 + 内联 SVG 图标 |
 | `README.md` | 本说明 |
 
 ## 那条只读缝（宿主 → 浏览器）
@@ -1140,7 +1355,7 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
    例：
    ```yaml
    - insert:
-       - id: workbench-panel
+       - id: dsh-client-ui-workbench-panel
          name: "dsh-client-ui-workbench-panel"
          config:
            root: "D:/repo/engineering"
@@ -1208,6 +1423,11 @@ def _check_package(package: dict) -> list[str]:
     problems: list[str] = []
     if not package.get("name"):
         problems.append("[package] 缺 name")
+    elif package.get("name") != PACKAGE_NAME:
+        problems.append(
+            f"[package] name 必须是 {PACKAGE_NAME}"
+            "（卡 247：补丁层三纪律 —— patch 行 id/name / 清单 name / 宿主半导出名 三处一致）"
+        )
     if not package.get("version"):
         problems.append("[package] 缺 version")
     if package.get("type") != "module":
@@ -1217,6 +1437,17 @@ def _check_package(package: dict) -> list[str]:
     exports = package.get("exports") or {}
     if exports.get("./client") != f"./{CLIENT_REL}":
         problems.append(f"[package] exports['./client'] 应指向 {CLIENT_REL}")
+    # 卡 247：包级显示链路 —— 缺了它们，核心不激活插件就读不到元信息/显示文本。
+    if exports.get("./package.json") != "./package.json":
+        problems.append(
+            "[package] exports 缺 \"./package.json\""
+            "（卡 247：插件管理器/市场要能不激活就读清单）"
+        )
+    if exports.get("./locale/*.json") != "./locale/*.json":
+        problems.append(
+            "[package] exports 缺 \"./locale/*.json\""
+            "（卡 247：读不到 locale 显示文本 —— 标题/说明给不出来）"
+        )
     client = (package.get("dsh") or {}).get("client") or {}
     if client.get("platform") != "web":
         problems.append("[package] dsh.client.platform 必须是 'web'")
@@ -1360,6 +1591,25 @@ def _check_client(source: str) -> list[str]:
             "[浏览器半] 缺「角标画进自己 glyph」的 probeStore 与依据注释"
             "（核心行没有角标槽：sidebar/client.js:454-461，卡 244）"
         )
+    # ---- 卡 247 判据（右栏页签带包名前缀 id / keepMounted / 左栏底部入口）----
+    if "sidebarRightTabs.register" not in source:
+        problems.append("[浏览器半] 缺 sidebarRightTabs.register（卡 247：官方右栏页签注册面）")
+    for tab_id in RIGHT_TAB_IDS.values():
+        if f'const tabId = "{tab_id}"' not in source:
+            problems.append(
+                "[浏览器半] 右栏页签 id 缺包名前缀：应有 const tabId = "
+                f"\"{tab_id}\"（卡 247：照 dsh-session-diff:file 同型）"
+            )
+    if "keepMounted: true" not in source or "client.js:5522" not in source:
+        problems.append(
+            "[浏览器半] 右栏页签缺 keepMounted: true 或其依据注释"
+            "（卡 247：常驻真实页面，依据 sidebar-right/lib/client.js:5522）"
+        )
+    if '"sidebar.footer.action"' not in source or "client.js:515-518" not in source:
+        problems.append(
+            "[浏览器半] 缺左栏底部入口（sidebar.footer.action 的注册 + 依据注释；"
+            "卡 247：main 是会话时 openTab 直接可用的保底路）"
+        )
     problems.extend(_check_read_only("浏览器半", source))
     return problems
 
@@ -1368,6 +1618,11 @@ def _check_host(source: str) -> list[str]:
     problems: list[str] = []
     if 'name: "workbench_board"' not in source:
         problems.append("[宿主半] 没注册只读工具 workbench_board")
+    if f'export const name = "{PACKAGE_NAME}"' not in source:
+        problems.append(
+            f'[宿主半] 缺导出名 name = "{PACKAGE_NAME}"'
+            "（卡 247：补丁层三纪律 —— patch 行 id/name / 清单 name / 宿主半导出名 三处一致）"
+        )
     if "defineTool" not in source:
         problems.append("[宿主半] 没注册会话内只读工具（缺 defineTool）")
     if "pipeline_view.py" not in source:
@@ -1435,9 +1690,71 @@ def _check_doc(doc: str) -> list[str]:
         ("peerDependencies", "没写「被强制的兼容字段是 peerDependencies」（卡 244）"),
         ("右栏页签", "没写官方右栏页签（卡 244）"),
         ("openTabIn", "没写逃生门 openTabIn（卡 244）"),
+        ("keepMounted", "没写右栏页签常驻（卡 247）"),
+        ("sidebar.footer.action", "没写左栏底部入口（卡 247）"),
+        ("删掉补丁层 = 插件不加载", "没写补丁层的紧急禁用手段（卡 247 三纪律）"),
+        ("locale/zh.json", "没写包级 locale 文件（卡 247：包级显示链路）"),
     ):
         if needle not in doc:
             problems.append(f"[说明] 缺「{why}」（找不到 `{needle}`）")
+    return problems
+
+
+def _check_patch(text: str) -> list[str]:
+    """卡 247：补丁层三纪律 —— 顶层 YAML 数组 / 三处 id-name 一致 / 紧急禁用说明写给人看。
+
+    ★ 顶层是否数组用**文本断言**（首行非注释内容以 '- ' 开头）：tomllib 不认 YAML，
+      PyYAML 不保证在所有跑门禁的环境里都有（有 PyYAML 的判据在 tests 里用真解析器补）。
+    """
+    problems: list[str] = []
+    first = next(
+        (ln for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")),
+        "",
+    )
+    if not first.startswith("- "):
+        problems.append(
+            "[补丁层] 顶层必须是 YAML 数组（首行非注释内容要以 '- ' 开头；"
+            "写成 mapping 会在启动时直接抛错，不是静默跳过）"
+        )
+    ids = re.findall(r"^\s*-\s*id:\s*(\S+)\s*$", text, re.M)
+    names = re.findall(r'name:\s*"([^"]+)"', text)
+    if set(ids) != {PACKAGE_NAME} or set(names) != {PACKAGE_NAME}:
+        problems.append(
+            f"[补丁层] 补丁行 id/name 必须 = {PACKAGE_NAME}"
+            "（卡 247 三纪律：patch 行 id/name / 清单 name / 宿主半导出的 name 三处一致）"
+        )
+    if "删掉补丁层 = 插件不加载" not in text:
+        problems.append(
+            "[补丁层] 缺「删掉补丁层 = 插件不加载」的紧急禁用说明（卡 247：要写给人看）"
+        )
+    return problems
+
+
+def _check_locale(zh_text: str, en_text: str) -> list[str]:
+    """卡 247：两份 locale 是合法 JSON、含 meta.title/meta.description、三个座位按语言给齐。"""
+    problems: list[str] = []
+    for name, text in (("zh", zh_text), ("en", en_text)):
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            problems.append(f"[locale] locale/{name}.json 不是合法 JSON：{exc}")
+            continue
+        if not isinstance(data, dict):
+            problems.append(f"[locale] locale/{name}.json 顶层必须是对象")
+            continue
+        meta = data.get("meta") or {}
+        if not meta.get("title") or not meta.get("description"):
+            problems.append(
+                f"[locale] locale/{name}.json 缺 meta.title / meta.description"
+                "（卡 247：包级显示链路 —— 核心不激活插件就能读标题/说明）"
+            )
+        seats = data.get("seats") or {}
+        for seat in SEAT_KEYS:
+            row = seats.get(seat) or {}
+            if not row.get("title") or not row.get("description"):
+                problems.append(
+                    f"[locale] locale/{name}.json 缺座位 {seat} 的 title/description（卡 247）"
+                )
     return problems
 
 
@@ -1447,10 +1764,14 @@ def check(
     client_js: str | None = None,
     host_js: str | None = None,
     doc: str | None = None,
+    patch: str | None = None,
+    locale_zh: str | None = None,
+    locale_en: str | None = None,
 ) -> list[str]:
     """清单/schema/座位/只读/失败可见 五项自检 —— 返回问题清单（空 = 绿）。
 
-    三个可选入参只为**判据造反例**用（默认全用真产物）：传一份「坏源码」进来，判据必须咬。
+    可选入参只为**判据造反例**用（默认全用真产物）：传一份「坏源码」进来，判据必须咬。
+    卡 247 新增 patch / locale_zh / locale_en 三个面。
     """
     problems: list[str] = []
     problems.extend(_check_manifest())
@@ -1460,6 +1781,13 @@ def check(
     problems.extend(_check_client(client_js if client_js is not None else CLIENT_JS))
     problems.extend(_check_host(host_js if host_js is not None else HOST_JS))
     problems.extend(_check_doc(doc if doc is not None else INSTALL_DOC))
+    problems.extend(_check_patch(patch if patch is not None else PATCH_YAML))
+    problems.extend(
+        _check_locale(
+            locale_zh if locale_zh is not None else LOCALE_ZH_JSON,
+            locale_en if locale_en is not None else LOCALE_EN_JSON,
+        )
+    )
     return problems
 
 
@@ -1476,6 +1804,8 @@ def package_files() -> dict[str, str]:
         README_REL: INSTALL_DOC,
         PATCH_REL: cordis_patch_yaml(),
         ICON_REL: ICON_SVG,  # 卡 244：包内图标（清单 icon 用相对路径指它）
+        LOCALE_ZH_REL: LOCALE_ZH_JSON,  # 卡 247：包级显示链路（exports ./locale/*.json）
+        LOCALE_EN_REL: LOCALE_EN_JSON,
     }
 
 

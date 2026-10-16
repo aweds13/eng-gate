@@ -90,7 +90,7 @@ def test_package_manifest_points_at_the_right_files() -> None:
 
 
 def test_emit_writes_the_whole_package(tmp_path: Path) -> None:
-    """`emit` 把六块都落到目标目录，`package.json` 能当 JSON 解析。"""
+    """`emit` 把八块都落到目标目录，`package.json` 能当 JSON 解析（卡 247：+ 两份 locale）。"""
     written = dp.emit(tmp_path)
     rels = {p.relative_to(tmp_path).as_posix() for p in written}
     assert rels == {
@@ -100,6 +100,8 @@ def test_emit_writes_the_whole_package(tmp_path: Path) -> None:
         dp.README_REL,
         dp.PATCH_REL,
         dp.ICON_REL,
+        dp.LOCALE_ZH_REL,
+        dp.LOCALE_EN_REL,
     }
     json.loads((tmp_path / dp.MANIFEST_REL).read_text(encoding="utf-8"))
     for rel in (dp.HOST_REL, dp.CLIENT_REL, dp.README_REL):
@@ -594,8 +596,9 @@ def test_right_tabs_registered_only_when_sidebar_right_probed(tmp_path: Path) ->
     assert 'ctx.get("sidebarRight")' in client
     # 守卫：if (hasSidebarRight) { /* 卡 244：… */ —— 注册体必须在这层 if 里
     assert re.search(r'if \(hasSidebarRight\) \{ /\* 卡 244', client)
-    for seat in dp.SEAT_KEYS:
-        assert f"workbench-panel-tab-{seat}" in client
+    # 卡 247：页签 id 改成带包名前缀（参照 dsh-session-diff 的 "dsh-session-diff:file"）。
+    for tab_id in dp.RIGHT_TAB_IDS.values():
+        assert f'const tabId = "{tab_id}"' in client, tab_id
 
 
 def test_right_tab_check_bites_when_guard_removed() -> None:
@@ -635,4 +638,181 @@ def test_install_doc_mentions_icon_peer_and_right_tabs() -> None:
     """说明文档要跟上四件事：icon.svg / peerDependencies / 右栏页签 / 逃生门。"""
     for needle in ("icon.svg", "peerDependencies", "右栏页签", "openTabIn"):
         assert needle in dp.INSTALL_DOC, needle
+
+
+# ================================================================== 卡 247 · T-G368
+# 右栏常驻页签（带包名前缀 id + keepMounted）+ 包级显示链路 + 补丁层三纪律 + 底部入口。
+# ★ 每条先红后绿；既有判据一条不许删/降级（244 那套原样保留，页签 id 按本卡规格迁移）。
+
+
+def test_right_tab_ids_carry_package_prefix(tmp_path: Path) -> None:
+    """① 页签 id 带包名前缀（"dsh-session-diff:file" 同型，可抄清单 §六.1）+ 正文挂对槽。
+
+    类型注册面 = ctx.sidebarRightTabs.register；正文 = keyed 座 sidebar.right.pane.tab，
+    key = 该 id（渲染按 definition.id 找注册，sidebar-right/lib/client.js:5579）。
+    """
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert "sidebarRightTabs.register" in client
+    assert '"sidebar.right.pane.tab"' in client
+    assert set(dp.RIGHT_TAB_IDS) == set(dp.SEAT_KEYS)
+    for tab_id in dp.RIGHT_TAB_IDS.values():
+        assert tab_id.startswith(dp.PACKAGE_NAME + ":"), tab_id
+        assert f'const tabId = "{tab_id}"' in client, tab_id
+    assert "key: tabId" in client  # 正文座的 key = 页签 id
+
+
+def test_right_tab_prefix_check_bites_when_prefix_stripped() -> None:
+    """① 反例：把 id 改成不带前缀 ⇒ check 必须红。"""
+    board_id = dp.RIGHT_TAB_IDS["workbench_board"]
+    broken = dp.CLIENT_JS.replace(f'const tabId = "{board_id}"', 'const tabId = "board"')
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("页签" in p and "前缀" in p for p in problems), problems
+
+
+def test_right_tab_body_opens_the_real_page(tmp_path: Path) -> None:
+    """① 正文 = 真实页面（browser 口子的入口 + url）+「没起 + 怎么起」兜底（QuickEntry）。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert "h(QuickEntry, { route:" in client  # 右栏页签正文复用快捷入口
+    assert "没起" in client and "怎么起" in client  # 兜底文案（既有口径）
+
+
+def test_right_tabs_are_keep_mounted_with_evidence(tmp_path: Path) -> None:
+    """② keepMounted 打开（常驻真实页面，保滚动位置/登录态），注释写明依据 文件:行号。
+
+    依据：sidebar-right/lib/client.js:5522（页签定义的 keepMounted 开关）；
+    复盘/DSH插件-可抄清单.md §六.1。
+    """
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert "keepMounted: true" in client
+    assert "client.js:5522" in client
+
+
+def test_keep_mounted_check_bites_when_removed() -> None:
+    """② 反例：删掉 keepMounted ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("keepMounted: true", "keepMounted: false")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("keepMounted" in p for p in problems), problems
+
+
+def test_package_display_chain_files_and_exports(tmp_path: Path) -> None:
+    """③ 包级显示链路：icon.svg + locale/zh.json + locale/en.json 都落盘；
+    清单 exports 含 ./package.json 与 ./locale/*.json（缺了插件管理器读不到显示文本/图标）。"""
+    dp.emit(tmp_path)
+    for rel in (dp.ICON_REL, dp.LOCALE_ZH_REL, dp.LOCALE_EN_REL):
+        assert (tmp_path / rel).is_file(), rel
+    pkg = dp.package_manifest()
+    assert pkg["exports"]["./package.json"] == "./package.json"
+    assert pkg["exports"]["./locale/*.json"] == "./locale/*.json"
+    assert pkg["icon"] == f"./{dp.ICON_REL}"
+
+
+def test_display_exports_check_bites_when_removed() -> None:
+    """③ 反例：exports 去掉任一 ⇒ check 必须红。"""
+    pkg = dp.package_manifest()
+    del pkg["exports"]["./locale/*.json"]
+    problems = dp._check_package(pkg)
+    assert any("locale" in p for p in problems), problems
+
+
+def test_locale_files_are_valid_json_with_meta(tmp_path: Path) -> None:
+    """④ locale/zh.json 与 en.json 是合法 JSON，各含 meta.title / meta.description，
+    且三个座位的标题/说明按语言给齐（包级显示链路：核心不激活插件就能读）。"""
+    dp.emit(tmp_path)
+    for rel in (dp.LOCALE_ZH_REL, dp.LOCALE_EN_REL):
+        data = json.loads((tmp_path / rel).read_text(encoding="utf-8"))
+        assert data["meta"]["title"], rel
+        assert data["meta"]["description"], rel
+        for seat in dp.SEAT_KEYS:
+            assert data["seats"][seat]["title"], (rel, seat)
+            assert data["seats"][seat]["description"], (rel, seat)
+
+
+def test_locale_check_bites_on_empty_object() -> None:
+    """④ 反例：locale 写成空对象 ⇒ check 必须红（不合法的显示链路要被咬住）。"""
+    problems = dp.check(locale_zh="{}", locale_en="{}")
+    assert any("locale" in p for p in problems), problems
+
+
+def test_patch_layer_is_a_top_level_yaml_array(tmp_path: Path) -> None:
+    """⑤ 补丁层是顶层 YAML 数组（cordis.patch.yml 头部原话：写成 mapping 启动时直接抛错）。
+
+    用 PyYAML 真解析（本机 6.0.3 可用）；tomllib 不认 YAML，所以这里必须另用解析器。
+    """
+    dp.emit(tmp_path)
+    import yaml  # noqa: PLC0415  —— 判据里就地 import（环境无 PyYAML 时本卡退文本断言）
+
+    text = (tmp_path / dp.PATCH_REL).read_text(encoding="utf-8")
+    first = next(
+        ln for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")
+    )
+    assert first.startswith("- "), first
+    loaded = yaml.safe_load(text)
+    assert isinstance(loaded, list) and loaded, loaded
+
+
+def test_patch_array_check_bites_on_mapping() -> None:
+    """⑤ 反例：把补丁层改成 mapping ⇒ check 必须红（且 PyYAML 会解成 dict，不是 list）。"""
+    mapping = dp.PATCH_YAML.replace("- insert:", "insert:")
+    assert mapping != dp.PATCH_YAML
+    problems = dp.check(patch=mapping)
+    assert any("数组" in p for p in problems), problems
+    import yaml  # noqa: PLC0415
+
+    assert isinstance(yaml.safe_load(mapping), dict)
+
+
+def test_patch_three_place_id_name_consistency(tmp_path: Path) -> None:
+    """补丁层三纪律之一：patch 行 id/name = 清单 name = 宿主半导出的 name，三处完全一致。"""
+    dp.emit(tmp_path)
+    patch = (tmp_path / dp.PATCH_REL).read_text(encoding="utf-8")
+    assert f"- id: {dp.PACKAGE_NAME}" in patch
+    assert f'name: "{dp.PACKAGE_NAME}"' in patch
+    assert dp.package_manifest()["name"] == dp.PACKAGE_NAME
+    host = (tmp_path / dp.HOST_REL).read_text(encoding="utf-8")
+    assert f'export const name = "{dp.PACKAGE_NAME}";' in host
+
+
+def test_patch_consistency_check_bites_when_name_drifts() -> None:
+    """反例：补丁行 name 与清单 name 错位 ⇒ check 必须红（三处一致被打破）。"""
+    drifted = dp.PATCH_YAML.replace(f'name: "{dp.PACKAGE_NAME}"', 'name: "some-other-pkg"')
+    assert drifted != dp.PATCH_YAML
+    problems = dp.check(patch=drifted)
+    assert any("三处" in p or "一致" in p for p in problems), problems
+
+
+def test_patch_emergency_disable_note_is_written_for_humans(tmp_path: Path) -> None:
+    """补丁层三纪律之三：「删掉补丁层 = 插件不加载」必须在文档与补丁层注释里出现
+    （紧急禁用手段要写给人看）。"""
+    dp.emit(tmp_path)
+    patch = (tmp_path / dp.PATCH_REL).read_text(encoding="utf-8")
+    assert "删掉补丁层 = 插件不加载" in patch
+    assert "删掉补丁层 = 插件不加载" in dp.INSTALL_DOC
+
+
+def test_emergency_note_check_bites_when_missing_from_doc() -> None:
+    """反例：文档里没这句 ⇒ check 必须红。"""
+    problems = dp.check(doc=dp.INSTALL_DOC.replace("删掉补丁层 = 插件不加载", "（已删）"))
+    assert any("插件不加载" in p for p in problems), problems
+
+
+def test_footer_action_entry_registered(tmp_path: Path) -> None:
+    """⑥ 左栏底部入口：sidebar.footer.action（list 槽，client.js:515-518）挂一个入口，
+    点开极小的选择面（三项各开各的真实页面）—— main 是会话时 openTab 直接可用。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert '"sidebar.footer.action"' in client
+    assert "client.js:515-518" in client  # 依据注释（list 槽，余额按钮就在那）
+
+
+def test_footer_action_check_bites_when_removed() -> None:
+    """⑥ 反例：拆掉底部入口 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace('"sidebar.footer.action"', '"sidebar.footer.__gone__"')
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("底部入口" in p for p in problems), problems
 

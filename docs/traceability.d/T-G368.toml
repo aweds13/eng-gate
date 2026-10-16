@@ -1,0 +1,11 @@
+[entries."T-G368"]
+id = "T-G368"
+title = "右栏常驻页签 + 包级显示链路 + 底部入口 + 三行图标按用户指定换 B/B/C"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+]
+gaps = "① ★ **三个目标各注册一个右栏页签**：页签 id 带**包名前缀**（`dsh-client-ui-workbench-panel:board` / `:timeflow` / `:zentao`），类型走 `ctx.sidebarRightTabs.register(<tabDefinition>)`，正文挂 keyed 座 `sidebar.right.pane.tab` 且 `key` = 该 id，**`keepMounted` 打开当常驻**（保住滚动位置/登录态），并保留「探到服务才注册」的守卫。指针：`tools/dsh_panel.py`。② ★ **包级显示链路**：包内产出**图标文件**与**两份语言文件**（中文/英文，各含 meta 的标题与说明），清单的 exports 补上**清单自身**与**语言文件通配**两项 —— 缺了这几样，插件管理器与商店读不到标题/图标（**核心不激活插件就要读**）。指针：`tools/dsh_panel.py`。③ ★ **补丁层三纪律**：生成的补丁层是**顶层 YAML 数组**；补丁行 `id`/`name`、清单 `name`、宿主半导出名**三处一致**；「删掉那一行并重启 = 紧急禁用」这条要写给人看。指针：`tools/dsh_panel.py`。④ ★ **底部入口**（绕时序坑）：在 `sidebar.footer.action` 挂一个入口 —— 点它的时刻 main 还是会话，「屏幕会话」在，`openTab` 直接可用，**不依赖逃生门**；这样即使方案 A 的时序坑在某种组合下复现，也总有一条一定开得通的路。指针：`tools/dsh_panel.py`。"
+

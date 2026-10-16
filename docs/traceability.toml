@@ -6676,3 +6676,14 @@ evidence = [
   "file:复盘/DSH插件-定点深读.md",
 ]
 gaps = "① ★ **读源码不读简介**：三个候选各锁到**具体版本**再读（三个仓各自的 HEAD 短 sha 写在文档正文里，**不是本仓的提交** ✗），并写了「读过哪些文件 + 行数」；每条结论带 `文件:行号` + 原样片段。指针：`复盘/DSH插件-定点深读.md`。② ★ **四条「最值钱」的机制**：widgets 的**双源声明**（`manifest.json` + `defineWidget()`，`render()` 输入 stats 快照、输出纯数据或 `null` —— 无数据就不渲染、绝不造数）；gating-hub 的**证据分型成对**（`EVIDENCE_CODES` 与 `NON_EVIDENCE_CODES`，让「为什么没禁」可查）＋ **回滚点双验**（「记录在、目录没了 = 实际不可用，不能骗用户」）；pilot 的**响亮失败即修复指令**（`stale or unknown ref … — run pilot_snapshot`）。指针：`复盘/DSH插件-定点深读.md`。③ ★ **三条指名文件的建议**：① 给六块读数落一份**机器可读单元清单**（`tools/pipeline_view.py` 里加模块级 `BLOCKS` 表，`read_*()` 与 `_report_*()` 同源 —— 现在块语义散在三处人肉同步）；② 连续监测块加 **STALE-WHILE-ERROR**（坏读数不清空，与错误码并存，依据 widgets 那个适配器文件里的 STALE-WHILE-ERROR 写法（第 10-12 行，详见文档））；③ 端口探测一律用**能不能 bind** + **验明正身**（照抄 pilot 的 `canBind`）。指针：`复盘/DSH插件-定点深读.md`。"
+
+[entries."T-G368"]
+id = "T-G368"
+title = "右栏常驻页签 + 包级显示链路 + 底部入口 + 三行图标按用户指定换 B/B/C"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+]
+gaps = "① ★ **三个目标各注册一个右栏页签**：页签 id 带**包名前缀**（`dsh-client-ui-workbench-panel:board` / `:timeflow` / `:zentao`），类型走 `ctx.sidebarRightTabs.register(<tabDefinition>)`，正文挂 keyed 座 `sidebar.right.pane.tab` 且 `key` = 该 id，**`keepMounted` 打开当常驻**（保住滚动位置/登录态），并保留「探到服务才注册」的守卫。指针：`tools/dsh_panel.py`。② ★ **包级显示链路**：包内产出**图标文件**与**两份语言文件**（中文/英文，各含 meta 的标题与说明），清单的 exports 补上**清单自身**与**语言文件通配**两项 —— 缺了这几样，插件管理器与商店读不到标题/图标（**核心不激活插件就要读**）。指针：`tools/dsh_panel.py`。③ ★ **补丁层三纪律**：生成的补丁层是**顶层 YAML 数组**；补丁行 `id`/`name`、清单 `name`、宿主半导出名**三处一致**；「删掉那一行并重启 = 紧急禁用」这条要写给人看。指针：`tools/dsh_panel.py`。④ ★ **底部入口**（绕时序坑）：在 `sidebar.footer.action` 挂一个入口 —— 点它的时刻 main 还是会话，「屏幕会话」在，`openTab` 直接可用，**不依赖逃生门**；这样即使方案 A 的时序坑在某种组合下复现，也总有一条一定开得通的路。指针：`tools/dsh_panel.py`。"

@@ -25,6 +25,11 @@
 - **新增 `复盘/DSH插件-定点深读.md`**（37.9 KB）：三仓各锁版本、每问带 `文件:行号` 与**原样片段**、末尾给**三条指名文件**的可落地建议；三份 README 只作对照、**以源码为准**（本卡未发现新的 README 与源码冲突例 ✓）。
 - ★ 真读数：三仓各自的 `rev-parse --short HEAD` 都记在文档里（**别的仓的 sha，不是本仓对象** ✗）；每仓"读过哪些文件（路径 + 行数）"逐条列出 ✓；域内**只新增一个文件**（`git status` 实证 ✓）。
 - ★ 关键结论：**我们的六块读数照 widgets 的形状做成机器可读单元清单是成立的**（§1.4 + §四.1）✓。
+## 2026-10-15 —— 右栏常驻页签 + 包级显示链路 + 底部入口（T-G368）
+- **`tools/dsh_panel.py`**：① 三个目标各注册一个**右栏页签**（`sidebarRightTabs` + `sidebar.right.pane.tab` keyed 座 + 带包名前缀的 id + `keepMounted` 常驻 + 探到服务才注册）；② 生成物补**包级显示链路**（图标文件 + 中英两份语言文件的 meta 标题/说明 + 清单 exports 补清单自身与语言文件通配）；③ 生成物自检钉住**补丁层三纪律**（顶层数组 / 三处 id-name 一致 / 删掉即禁用写给人看）；④ 在 `sidebar.footer.action` 加**底部入口**。
+- ★ **同日用户指定换图标（并入本笔）**：工作台 = **B（工业刻度·四格仪表盘）**、禅道 = **B（工业刻度·分支树）**、timeflow = **C（线条拟物·沙漏）**；三枚按渲染处的 **16 网格**重画（描边 1、圆头圆角、只用 `currentColor` 或空 fill = **不硬编码颜色**），包内 `icon.svg` 同步成工作台那枚。读数：`ruff` 全过 · `--check` 绿 · `pytest tests/test_dsh_panel.py` = 91 passed · 生成物 `lib/client.js` 里三枚新路径各出现 1 次 ✓。
+- ★ 真读数（主控复核，主干树内）：`tools/dsh_panel.py --check` 绿（三座位 + 只读 + 失败可见 + 只 GET）· `pytest tests/test_dsh_panel.py -q --no-cov` = **91 passed**（既有 74 条**一条没删没降级**）· `ruff All checks passed!` · `--emit` 后目录里**确有**图标文件与 `locale/` 下的中英两份语言文件 ✓ · 域内只动两个文件 ✓。
+- ★ 依据（两条独立证据）：参考仓的注册面（`dsh-session-diff` 的浏览器半里 `ctx.sidebarRightTabs.register(...)` + `ctx.slots.inject("sidebar.right.pane.tab", …)`，id 形如 `dsh-session-diff:file`）+ 核心 `sidebar-right` 的 `keepMounted`（`lib/client.js:5522` 与 `:5698`，主控对抗核验过 ✓）。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。
