@@ -52,6 +52,10 @@
 - **`tools/serve.py`**：① 新增 `can_bind(port, host)` 做**端口占用判定**（挑端口一律走它，不再靠 HTTP 探测）；② 判活/接入加**身份指纹**：先取 `/api/health`，比对 `status ∈ {ok,degraded}` + `database_ok` + `schema_version`，对不上判「验明失败」并给排查命令，端口无响应才判「没起」。
 - ★ 新增判据 `tests/test_serve_port.py`（**6 passed** ✓）：含"裸 socket 占位必须报忙顺延"与"冒充的 HTTP 服务必须判验明失败"两条反例；`ruff All checks passed!` ✓；域内只动 `tools/serve.py` + 新增该判据文件 ✓。
 - ★ 依据：定点深读第一批里 `dsh-pilot` 的两条做法 —— 挑端口用 bind 判定、错误信息本身就是修复指令。
+## 2026-10-15 —— 定点深读第二批：证据台账 / 对账与墓碑（T-G373）
+- **新增 `复盘/DSH插件-定点深读-第二批.md`**（30.2 KB）：`dsh-research-report`（内容寻址证据台账 + 版本化封存 + 逐条裁定）与 `dsh-session-enhance`（物理文件与 storages JSON 对账 + 墓碑防复活）两仓源码逐文件读，每条带 `文件:行号` 与片段；末尾给**三条指名文件**的建议（证据哈希双验 / 被证伪口径的墓碑表 / 收口前的交付重审计）。
+- ★ 真读数：两仓版本与"读过哪些文件 + 行数"逐条列出 ✓；域内**只新增一个文件** ✓。
+- ★ 为什么挑这两个：第三轮自举换口径量"16 个方面×零覆盖"，发现**最薄的两格**（通知告警 3、台账账目 9）恰是我们的核心地盘；在这 9 条里点出这两个同型 ✓。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。
