@@ -1,0 +1,11 @@
+[entries."T-G371"]
+id = "T-G371"
+title = "挑端口用 bind 探测 + 接入前验明正身"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/serve.py",
+  "file:tests/test_serve_port.py",
+]
+gaps = "① ★ **挑端口用「能不能 bind」判定**（照 `dsh-pilot` 的 `canBind`）：`bind` 失败（被占用 / 裸 socket 占位 / 无权限）⇒ **报忙并顺延**到下一个候选；全试完仍不行 ⇒ 非零退出并列出试过哪些端口。★ 不许靠「HTTP 探测超时」猜空闲（端口上是非 HTTP 的东西 ⇒ 会误判空闲；端口上是**别的** HTTP 服务 ⇒ 会误判「我们的活着」）。指针：`tools/serve.py`。② ★ **判活/接入前先「验明正身」**：先取 `/api/health` 的**身份指纹**，判据是 JSON 对象且 `status ∈ {ok, degraded}`、并带 `database_ok` 与 `schema_version`（本项目那个端点的固定形状）⇒ 才对「活着」；指纹**对不上** ⇒ 判「**验明失败**」并拒绝接入，错误信息里带下一步排查命令；端口**完全没响应** ⇒ 才判「没起」。指针：`tools/serve.py`。③ ★ **反例判据**（新增 `tests/test_serve_port.py`）：用**裸 socket**（只 listen 不说话）占住端口 ⇒ 必须报忙顺延（不许当空闲）；用一个**别的** HTTP 服务占住端口 ⇒ 必须判「验明失败」而不是「活着」。指针：`tests/test_serve_port.py`。"
+

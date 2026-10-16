@@ -48,6 +48,10 @@
 - **`tools/pool/landing.py`**：⑨ 推栅栏前的核验加一条 —— 产物与本笔提交有交集**但成员自己没有成功申请**（`claims[mid] != "success"` 且未被豁免）⇒ **拒盖章、不代写申请**并点名「该卡可能未开工或未交申请」；`landed` 前置同样要求"各成员都有自己的成功申请"；`claims=None` 时**保持卡 238 的老行为**（只验产物）。
 - ★ 新增判据 `tests/test_landing_stamp.py`（**10 passed** ✓）：含"同域兄弟卡未开工"的反例与"两成员都交了"的正例；`ruff All checks passed!` ✓；域内只动 `tools/pool/landing.py` + 新增该判据文件 ✓。
 - ★ 事故来源（写进代码注释）：主控 2026-10-15 把卡 244 单独落地时，`B-20261034`（卡 247 的批，**当时还没派**）被标成 landed、**还被代写了一条 success 申请** —— 根因就是旧判据只看"成员的 paths ∩ 这笔提交的文件"，而 247 与 244 **同域**（都要改 `tools/dsh_panel.py`）。
+## 2026-10-15 —— 挑端口用 bind 探测 + 接入前验明正身（T-G371）
+- **`tools/serve.py`**：① 新增 `can_bind(port, host)` 做**端口占用判定**（挑端口一律走它，不再靠 HTTP 探测）；② 判活/接入加**身份指纹**：先取 `/api/health`，比对 `status ∈ {ok,degraded}` + `database_ok` + `schema_version`，对不上判「验明失败」并给排查命令，端口无响应才判「没起」。
+- ★ 新增判据 `tests/test_serve_port.py`（**6 passed** ✓）：含"裸 socket 占位必须报忙顺延"与"冒充的 HTTP 服务必须判验明失败"两条反例；`ruff All checks passed!` ✓；域内只动 `tools/serve.py` + 新增该判据文件 ✓。
+- ★ 依据：定点深读第一批里 `dsh-pilot` 的两条做法 —— 挑端口用 bind 判定、错误信息本身就是修复指令。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。

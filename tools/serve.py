@@ -76,6 +76,119 @@ def peek(db_path: Path) -> None:
         print(f"[库内容] 读取失败（不影响启动）：{exc}")
 
 
+def can_bind(port: int, host: str = "127.0.0.1") -> bool:
+    """★ 卡 250：挑端口用「能不能 bind」判定（照 dsh-pilot 的 canBind），不靠 HTTP 探测。
+
+    HTTP 探测会骗人：端口被非 HTTP 的东西占着（裸 socket）⇒ 超时 ⇒ 误判「空闲」；
+    端口上是别的 HTTP 服务 ⇒ 探测成功 ⇒ 误判「我们的活着」。bind 不会：
+    占着就是占着（含被占用、权限不足），一次给真话。
+    """
+    import socket
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        probe.bind((host, port))
+        return True
+    except OSError:
+        return False
+    finally:
+        probe.close()
+
+
+def pick_port(
+    start: int, host: str = "127.0.0.1", tries: int = 10
+) -> tuple[int | None, list[int]]:
+    """从 `start` 起逐个试 bind：第一个能 bind 的胜出；全忙 ⇒ (None, 试过的端口清单)。"""
+    tried: list[int] = []
+    for port in range(start, start + tries):
+        tried.append(port)
+        if can_bind(port, host):
+            return port, tried
+    return None, tried
+
+
+def _health_probe(base_url: str, timeout: float) -> tuple[str, object]:
+    """取 `/api/health` 的**身份指纹**（我们服务的自述，现成端点，SR-NF13）。
+
+    返回 (verdict, 详情)：`no_response`（连不上/没回话）｜ `mismatch`（有响应但不是我们）
+    ｜ `alive`（自述对得上）。指纹判据：JSON 对象且 `status∈{ok,degraded}`、
+    带 `database_ok` 与 `schema_version` —— 这是本项目 `/api/health` 的固定形状。
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    url = base_url.rstrip("/") + "/api/health"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            raw = resp.read()
+    except urllib.error.HTTPError as exc:
+        return "mismatch", f"HTTP {exc.code}"
+    except Exception:  # noqa: BLE001 —— 拒连/超时/非 HTTP 回话都算「没响应」
+        return "no_response", None
+    try:
+        info = _json.loads(raw.decode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return "mismatch", f"非 JSON 自述：{raw[:60]!r}"
+    if (
+        isinstance(info, dict)
+        and info.get("status") in ("ok", "degraded")
+        and "database_ok" in info
+        and "schema_version" in info
+    ):
+        return "alive", info
+    return "mismatch", info
+
+
+def check_alive(base_url: str, timeout: float = 2.0) -> tuple[bool, str]:
+    """判活 + **验明正身**（卡 250）：先取 `/api/health` 指纹，再下结论。
+
+    - 指纹对 ⇒ 「活着」✓；
+    - 有响应但指纹对不上（别的服务）⇒ 「验明失败」并拒绝接入，带下一步排查命令
+      （照 pilot 的「错误即修复指令」口径）✓；
+    - 端口根本没有响应 ⇒ 「没起」✓。
+    """
+    verdict, detail = _health_probe(base_url, timeout)
+    base = base_url.rstrip("/")
+    port = base.rsplit(":", 1)[-1]
+    if verdict == "alive":
+        status = detail.get("status") if isinstance(detail, dict) else "?"  # type: ignore[union-attr]
+        return True, f"[活着] {base} 是本项目服务（/api/health 指纹对：status={status}）"
+    if verdict == "mismatch":
+        return False, (
+            f"[验明失败] {base} 上是别的服务（/api/health 指纹对不上：{detail}）"
+            f"—— 拒绝接入。\n"
+            f"  下一步：netstat -ano | findstr :{port} 看谁占着端口；"
+            f"curl {base}/api/health 核对指纹；或换端口重起："
+            f"python tools/serve.py --port <别的端口>"
+        )
+    return False, (
+        f"[没起] {base} 没有响应（连接被拒或超时）。\n"
+        f"  下一步：手动起一次看真实报错：python tools/serve.py --port {port}"
+    )
+
+
+def wait_alive(
+    base_url: str, timeout: float = 15.0, poll: float = 0.25
+) -> tuple[bool, str]:
+    """接入前的轮询判活（服务刚起还没就绪要等）；**验明失败立即返回**——
+    对方的身份不会越等越对。超时仍没起来 ⇒ 返回最后一次「没起」。"""
+    import time
+
+    deadline = time.monotonic() + timeout
+    last = (False, "")
+    while True:
+        ok, msg = check_alive(base_url)
+        if ok:
+            return True, msg
+        if "验明失败" in msg:
+            return False, msg
+        last = (ok, msg)
+        if time.monotonic() >= deadline:
+            return last
+        time.sleep(poll)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8520)
@@ -145,6 +258,20 @@ def main() -> int:
         print("      要同一 WiFi 下的手机也能连，用：python tools/serve.py --lan", file=sys.stderr)
         return 2
 
+    # ★ 卡 250：挑端口用「能不能 bind」—— bind 失败（被占用/权限不足）⇒ 报忙并顺延；
+    # 全忙 ⇒ 非零退出，把试过哪些端口原样打出来。
+    port, tried = pick_port(args.port, host)
+    if port is None:
+        print(
+            f"[端口全忙] 从 {args.port} 起连试 {len(tried)} 个端口都被占用：{tried}",
+            file=sys.stderr,
+        )
+        print("      换个起点：python tools/serve.py --port <端口>", file=sys.stderr)
+        return 2
+    if port != args.port:
+        print(f"[端口顺延] {args.port} bind 失败（被占用），顺延到 {port}")
+    args.port = port
+
     import uvicorn
 
     from timeflow.api.app import create_app
@@ -185,6 +312,14 @@ def _run_window(app: object, host: str, port: int) -> int:
     )
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
+    # ★ 卡 250：接入前先判活 + 验明正身 —— 指纹不对（端口被别的服务抢了）⇒ 拒绝接入；
+    # 一直没响应（服务没起来）⇒ 也别开窗口，把原因说出来。
+    ok, msg = wait_alive(f"http://{host}:{port}", timeout=15.0)
+    if not ok:
+        print(msg, file=sys.stderr)
+        server.should_exit = True
+        return 2
+    print(msg)
     try:
         import webview
     except Exception as exc:  # noqa: BLE001 —— 依赖缺失/导入失败都要说清

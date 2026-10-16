@@ -6740,3 +6740,14 @@ evidence = [
   "file:tests/test_partitions.py",
 ]
 gaps = "① ★ **四处命名一律带分区前缀**（**新卡才用**，旧号一字不动）：卡号 `A261`、树 `.wt/A261`、分支 `card/A261`、任务 `T-AG382`、批 `A-20261016-1`；`docs/partitions.toml` 登记每个分区的负责人/负责方面/树前缀，现有 **240–261 一律归 A** ✓。指针：`docs/partitions.toml`。② ★ **漏写分区必须硬拒并告诉他该写什么**：分区由环境变量 `DSH_PARTITION`、分支/树名、或登记表推断；推断不出 ⇒ **拒登记**，报错里点名该补什么 ✓。指针：`tools/wb_task.py`。③ ★ **台账分片各写各的**：`docs/backlog/<分区>.toml`，落地时合并成只读总表 ✓。指针：`tools/wb_task.py`。④ ★ **分区只解决「号不撞」，不解决「文件不撞」**：跨分区照查「同一文件两个写者」—— 两卡号不同（`A1`/`B1`）但声明同一文件 ⇒ **必须报并点名**（真机 `check --shards` exit=1 点名 A1/B1 ✓）；**同号同分区** ⇒ 拒（真机 exit=2「卡号重复：C1」✓）。指针：`tools/wb_plan.py`。"
+
+[entries."T-G371"]
+id = "T-G371"
+title = "挑端口用 bind 探测 + 接入前验明正身"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/serve.py",
+  "file:tests/test_serve_port.py",
+]
+gaps = "① ★ **挑端口用「能不能 bind」判定**（照 `dsh-pilot` 的 `canBind`）：`bind` 失败（被占用 / 裸 socket 占位 / 无权限）⇒ **报忙并顺延**到下一个候选；全试完仍不行 ⇒ 非零退出并列出试过哪些端口。★ 不许靠「HTTP 探测超时」猜空闲（端口上是非 HTTP 的东西 ⇒ 会误判空闲；端口上是**别的** HTTP 服务 ⇒ 会误判「我们的活着」）。指针：`tools/serve.py`。② ★ **判活/接入前先「验明正身」**：先取 `/api/health` 的**身份指纹**，判据是 JSON 对象且 `status ∈ {ok, degraded}`、并带 `database_ok` 与 `schema_version`（本项目那个端点的固定形状）⇒ 才对「活着」；指纹**对不上** ⇒ 判「**验明失败**」并拒绝接入，错误信息里带下一步排查命令；端口**完全没响应** ⇒ 才判「没起」。指针：`tools/serve.py`。③ ★ **反例判据**（新增 `tests/test_serve_port.py`）：用**裸 socket**（只 listen 不说话）占住端口 ⇒ 必须报忙顺延（不许当空闲）；用一个**别的** HTTP 服务占住端口 ⇒ 必须判「验明失败」而不是「活着」。指针：`tests/test_serve_port.py`。"
