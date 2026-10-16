@@ -6687,3 +6687,14 @@ evidence = [
   "file:tests/test_dsh_panel.py",
 ]
 gaps = "① ★ **三个目标各注册一个右栏页签**：页签 id 带**包名前缀**（`dsh-client-ui-workbench-panel:board` / `:timeflow` / `:zentao`），类型走 `ctx.sidebarRightTabs.register(<tabDefinition>)`，正文挂 keyed 座 `sidebar.right.pane.tab` 且 `key` = 该 id，**`keepMounted` 打开当常驻**（保住滚动位置/登录态），并保留「探到服务才注册」的守卫。指针：`tools/dsh_panel.py`。② ★ **包级显示链路**：包内产出**图标文件**与**两份语言文件**（中文/英文，各含 meta 的标题与说明），清单的 exports 补上**清单自身**与**语言文件通配**两项 —— 缺了这几样，插件管理器与商店读不到标题/图标（**核心不激活插件就要读**）。指针：`tools/dsh_panel.py`。③ ★ **补丁层三纪律**：生成的补丁层是**顶层 YAML 数组**；补丁行 `id`/`name`、清单 `name`、宿主半导出名**三处一致**；「删掉那一行并重启 = 紧急禁用」这条要写给人看。指针：`tools/dsh_panel.py`。④ ★ **底部入口**（绕时序坑）：在 `sidebar.footer.action` 挂一个入口 —— 点它的时刻 main 还是会话，「屏幕会话」在，`openTab` 直接可用，**不依赖逃生门**；这样即使方案 A 的时序坑在某种组合下复现，也总有一条一定开得通的路。指针：`tools/dsh_panel.py`。"
+
+[entries."T-G369"]
+id = "T-G369"
+title = "⑨ 盖章不许代写申请：同域兄弟卡被误标 landed 的修复"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "file:tests/test_landing_stamp.py",
+]
+gaps = "① ★ **⑨ 盖章前必须先看「成员自己交没交申请」**：产物与本笔提交有交集、**但该成员没有成功申请**（且没被豁免）⇒ **拒盖章并点名**，原话要点「该卡可能未开工或未交申请；⑨ 不许代写申请、不许盖章」。指针：`tools/pool/landing.py`。② ★ **`landed` 的前置同样收紧**：任一非只读成员没有自己的成功申请 ⇒ **不标 landed**（不许因为「产物交集在」就标）。指针：`tools/pool/landing.py`。③ ★ **老调用形状不许变**：`claims` 传 `None` 时**只验产物**（卡 238 的老行为一字不变）⇒ 免得把既有落地判据搞红。指针：`tools/pool/landing.py`。④ ★ **反例判据**（新文件 `tests/test_landing_stamp.py`）：造「两成员 paths **相同**、只有甲有申请、乙没有」的假栅栏 + 假提交 ⇒ 断言**不标 landed**、**不替乙写申请**、输出**点名乙**；既有行为（两成员都有申请且产物都在）⇒ 照旧盖章。指针：`tests/test_landing_stamp.py`。"

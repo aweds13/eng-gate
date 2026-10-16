@@ -744,19 +744,30 @@ def _changed_in_commit(commit_sha: str) -> list[str]:
     return [x.strip() for x in (r.stdout or "").splitlines() if x.strip()]
 
 
-def _stamp_refusals(members: list[dict], commit_files: list[str]) -> list[str]:
-    r"""★ 卡 238（T-G356）：⑨ 盖章前的核验 —— 成员的产物**真在这笔提交里吗**。
+def _stamp_refusals(
+    members: list[dict], commit_files: list[str],
+    claims: dict | None = None, waived: set[str] | None = None,
+) -> list[str]:
+    r"""⑨ 盖章前的核验（卡 238 + 卡 248）—— 产物**真在**这笔提交里 + **自己交过申请**。
 
     逐个成员取 `[[member]].paths` ∩ 该笔提交真改过的文件；fnmatch 语义与
     `pool.task.check_domain` 同规（成员的域就是它的 paths，不另写第二套匹配）：
-    · 交集为空 ⇒ **拒盖章**并点名："成员 X 的产物不在这笔提交里（paths=… / 该笔改了=…）"；
-    · 成员声明的 paths 为空 ⇒ 如实说「无法核验」，照样拒盖（宁可漏盖不可假盖）。
-    返回拒盖章的成员号清单（空 = 全体核验通过 ⇒ 照旧盖章，既有行为一字不变）。
-    动机（主控 2026-10-14 实测）：B-20261017/18/26 全被标 landed，而 225 的活不在主仓 ——
-    ⑨ 按「成员都交了申请」就盖章、没验产物真在那笔提交里 ⇒ 账目从此对不上。
+    · 成员声明的 paths 为空 ⇒ 如实说「无法核验」，照样拒盖（宁可漏盖不可假盖）；
+    · 交集为空 ⇒ **拒盖章**并点名："成员 X 的产物不在这笔提交里（paths=… / 该笔改了=…）"
+      （卡 238 · T-G356 的判据，不许删/降级）；
+    · ★ 交集**非空**、但成员自己没有成功申请（`claims[mid] != "success"` 且没被豁免）
+      ⇒ **拒盖章**并点名："…该卡可能未开工或未交申请；⑨ 不许代写申请、不许盖章"
+      （卡 248 · T-G369。动机：2026-10-15 主控实测 —— `--card 244` 顺着 paths 相交
+      匹配上**从没开工**的卡 247 的批 B-20261034，⑨ 替它写了 success 申请、还把
+      那个批标成 landed（landed.commit 记的是卡 244 的提交）。同域兄弟卡的产物
+      相交并不说明它做完了 —— **成员自己交没交申请**才是判别器）。
+    `claims` 传 None ⇒ 只验产物（卡 238 的老调用形状，行为一字不变）；
+    `waived` 是显式豁免名单（`pool.task._missing` 口径：`_ok ∪ waived` 算齐）。
+    返回拒盖章的成员号清单（空 = 全体核验通过 ⇒ 照旧盖章）。
     """
     import fnmatch
     refused: list[str] = []
+    waived = waived or set()
     for m in members:
         mid = str(m.get("id", ""))
         paths = [str(p) for p in (m.get("paths") or [])]
@@ -770,6 +781,13 @@ def _stamp_refusals(members: list[dict], commit_files: list[str]) -> list[str]:
             print(f"  ★★ 拒盖章：成员 {mid} 的产物不在这笔提交里"
                   f"（paths={paths} / 该笔改了={commit_files[:8]}）")
             refused.append(mid)
+            continue
+        if claims is not None and claims.get(mid) != "success" and mid not in waived:
+            print(f"  ★★ 拒盖章：成员 {mid} 的产物虽然在这笔提交里（{hits[:8]}），"
+                  f"但它自己没有成功申请（claims 里没有它的 success）—— "
+                  f"paths={paths} 与这笔提交相交的同域兄弟卡，产物相交不说明它做完了："
+                  f"该卡可能未开工或未交申请；⑨ 不许代写申请、不许盖章（卡 248）")
+            refused.append(mid)
     return refused
 
 
@@ -779,19 +797,34 @@ def _advance_batch_gate(batch_id: str, commit_sha: str, task: str) -> None:
     ★ 卡 238（T-G356）：盖章前先核验 —— 每个**非只读**成员的 `paths` ∩ 这笔提交
       真改过的文件必须非空；有一个成员的产物不在这笔提交里 ⇒ **全体不盖**
       （一个申请都不推、不标 landed），并点名拒盖章的成员。
-      产物真在 ⇒ 照旧盖章（既有行为一字不变）。
+    ★ 卡 248（T-G369）：产物核验之外还要核**成员自己的申请** —— 栅栏没集齐
+      （state 不在 ready/awaiting-commit，即还有成员没交成功申请也没被豁免）⇒
+      逐成员核 `claims`，缺谁的就不许替谁代写、全体不盖章、点名
+      （"该卡可能未开工或未交申请"）。栅栏已集齐（这两个状态只有人人交了
+      申请或被豁免才可达）⇒ 集体标记可信，逐成员只验产物（卡 238 既有判据）。
+      产物真在 + 判据全过 ⇒ 照旧盖章（既有行为一字不变）。
     """
-    from pool.task import load_manifest
+    from pool.task import load_manifest, read_json, state_path
     try:
         man = load_manifest(batch_id)
     except Exception as exc:
         print(f"  ★ 读不到栅栏 {batch_id}（{type(exc).__name__}: {exc}）⇒ 跳过推栅栏")
         return
     members = [m for m in man.get("member", []) if not m.get("read_only")]
-    refused = _stamp_refusals(members, _changed_in_commit(commit_sha))
+    # ★ 卡 248：claims 从栅栏状态来（state_path 的 .json 的 `claims` 字段）。
+    try:
+        st = read_json(state_path(batch_id))
+    except Exception:
+        st = {}                       # 读不到状态 ⇒ 视为人人都没申请 ⇒ 宁可漏盖
+    claims: dict = st.get("claims") or {}
+    waived: set[str] = set(st.get("waived") or [])
+    gate_full = st.get("state") in ("ready", "awaiting-commit")
+    refused = _stamp_refusals(
+        members, _changed_in_commit(commit_sha),
+        None if gate_full else claims, waived)
     if refused:
         print(f"  ★★ 栅栏 {batch_id} **不盖章**：{'、'.join(refused)} "
-              f"的产物不在这笔提交里（⑨ 核验 · 卡 238）")
+              f"（⑨ 核验 · 卡 238/248：产物不在这笔提交里，或自己没有成功申请）")
         return
     for m in members:
         mid = m["id"]
@@ -815,6 +848,11 @@ def _advance_card_gate(card_id: str, commit_sha: str, task: str,
     ★ 卡 238（T-G356）：推申请前核验**这个成员**的产物真在这笔提交里（不在 ⇒ 不推，
       免得证据写着一笔没带它产物的提交号）；要标 landed 前核验**全体成员** ——
       有人产物不在 ⇒ 不标 landed 并点名（f4d4626 假账：236 的提交号盖了三个别的批）。
+    ★ 卡 248（T-G369）：**本卡自己**（成员号 == card_id，按 id 匹配上的）的申请由
+      这次落地来交（既有行为不变）；**别的成员**（paths 相交顺带匹配上的同域
+      兄弟卡）必须已有自己的成功申请 —— 没有就**不许代写**（2026-10-15 事故：
+      `--card 244` 顺带匹配上从没开工的 247 的批，⑨ 替它写了 success 申请）。
+      推 landed 前核验**全体成员各自的申请**：有人没交 ⇒ 不标 landed 并点名。
     """
     from pool.task import find_gates_for_member, load_manifest, member_of, read_json, state_path
     gates = find_gates_for_member(card_id, match_files)
@@ -828,8 +866,21 @@ def _advance_card_gate(card_id: str, commit_sha: str, task: str,
         except Exception as exc:
             print(f"  ★ 读不到栅栏 {gate_id}（{type(exc).__name__}: {exc}）⇒ 跳过推栅栏")
             continue
-        if _stamp_refusals([member_of(man, member_id)], commit_files):
-            continue          # 点名已由 _stamp_refusals 打印；这个成员的申请不许推
+        if member_id == card_id:
+            # 本卡自己的申请：这次落地就是来交它的 —— 只验产物（卡 238 既有形状）。
+            if _stamp_refusals([member_of(man, member_id)], commit_files):
+                continue
+        else:
+            # ★ 卡 248：同域兄弟卡 —— 它的申请必须它自己交过，⑨ 不许代写。
+            try:
+                st_pre = read_json(state_path(gate_id))
+            except Exception:
+                st_pre = {}
+            mem_claims: dict = st_pre.get("claims") or {}
+            mem_waived: set[str] = set(st_pre.get("waived") or [])
+            if _stamp_refusals([member_of(man, member_id)], commit_files,
+                               mem_claims, mem_waived):
+                continue   # 点名已由 _stamp_refusals 打印；这个成员的申请不许推
         ev = f"landing.py 提交 {commit_sha[:12]}（task={task}，--card {card_id}）"
         print(f"  推栅栏 {gate_id} 成员 {member_id}：")
         _run_task_sub([sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_task.py"),
@@ -840,10 +891,14 @@ def _advance_card_gate(card_id: str, commit_sha: str, task: str,
             st = read_json(state_path(gate_id))
             if st.get("state") == "awaiting-commit":
                 need_stamp = [m for m in man.get("member", []) if not m.get("read_only")]
-                refused = _stamp_refusals(need_stamp, commit_files)
+                refused = _stamp_refusals(
+                    need_stamp, commit_files,
+                    st.get("claims") or {}, set(st.get("waived") or []))
                 if refused:
                     print(f"  ★★ 栅栏 {gate_id} 齐了也**不标 landed**："
-                          f"{'、'.join(refused)} 的产物不在这笔提交里（⑨ 核验 · 卡 238）")
+                          f"{'、'.join(refused)} "
+                          f"（⑨ 核验 · 卡 238/248：产物不在这笔提交里，"
+                          f"或自己没有成功申请）")
                     continue
                 print(f"  栅栏 {gate_id} 齐了 ⇒ 标 landed（{commit_sha[:12]}）：")
                 _run_task_sub([sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_task.py"),

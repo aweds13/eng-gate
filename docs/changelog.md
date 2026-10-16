@@ -30,6 +30,10 @@
 - ★ **同日用户指定换图标（并入本笔）**：工作台 = **B（工业刻度·四格仪表盘）**、禅道 = **B（工业刻度·分支树）**、timeflow = **C（线条拟物·沙漏）**；三枚按渲染处的 **16 网格**重画（描边 1、圆头圆角、只用 `currentColor` 或空 fill = **不硬编码颜色**），包内 `icon.svg` 同步成工作台那枚。读数：`ruff` 全过 · `--check` 绿 · `pytest tests/test_dsh_panel.py` = 91 passed · 生成物 `lib/client.js` 里三枚新路径各出现 1 次 ✓。
 - ★ 真读数（主控复核，主干树内）：`tools/dsh_panel.py --check` 绿（三座位 + 只读 + 失败可见 + 只 GET）· `pytest tests/test_dsh_panel.py -q --no-cov` = **91 passed**（既有 74 条**一条没删没降级**）· `ruff All checks passed!` · `--emit` 后目录里**确有**图标文件与 `locale/` 下的中英两份语言文件 ✓ · 域内只动两个文件 ✓。
 - ★ 依据（两条独立证据）：参考仓的注册面（`dsh-session-diff` 的浏览器半里 `ctx.sidebarRightTabs.register(...)` + `ctx.slots.inject("sidebar.right.pane.tab", …)`，id 形如 `dsh-session-diff:file`）+ 核心 `sidebar-right` 的 `keepMounted`（`lib/client.js:5522` 与 `:5698`，主控对抗核验过 ✓）。
+## 2026-10-15 —— ⑨ 盖章不许代写申请：同域兄弟卡被误标 landed 的修复（T-G369）
+- **`tools/pool/landing.py`**：⑨ 推栅栏前的核验加一条 —— 产物与本笔提交有交集**但成员自己没有成功申请**（`claims[mid] != "success"` 且未被豁免）⇒ **拒盖章、不代写申请**并点名「该卡可能未开工或未交申请」；`landed` 前置同样要求"各成员都有自己的成功申请"；`claims=None` 时**保持卡 238 的老行为**（只验产物）。
+- ★ 新增判据 `tests/test_landing_stamp.py`（**10 passed** ✓）：含"同域兄弟卡未开工"的反例与"两成员都交了"的正例；`ruff All checks passed!` ✓；域内只动 `tools/pool/landing.py` + 新增该判据文件 ✓。
+- ★ 事故来源（写进代码注释）：主控 2026-10-15 把卡 244 单独落地时，`B-20261034`（卡 247 的批，**当时还没派**）被标成 landed、**还被代写了一条 success 申请** —— 根因就是旧判据只看"成员的 paths ∩ 这笔提交的文件"，而 247 与 244 **同域**（都要改 `tools/dsh_panel.py`）。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。
