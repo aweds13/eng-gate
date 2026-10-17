@@ -7,7 +7,12 @@ r"""台账与 git 历史对账 `tools/wb_reconcile.py`（卡 A269 · T-AG387）�
 ⇒ 这种漂移永远不会变红，只能靠人去 `git log --grep` 猜。本工具补这一条。
 
 判据（两条，口径写死）：
-  ① **stale-pending（红）**：状态不是 done，但 `git log --grep <任务号>` 已有提交 ⇒ 台账落后于历史；
+  ① **stale-pending（红）**：状态仍是**活队列**（pending/todo/ready/in-progress/running），且
+     **提交标题**里已经带了该任务号 ⇒ 台账落后于历史；
+     ★ 只认**标题**、不认正文：正文/测试夹具里提到任务号不算落地（2026-10-17 撞过 ——
+     卡 146 被 A269 的提交正文误报成 stale-pending）；
+     ★ `failed` / `void` / `deferred` 等**终态**不判 stale-pending：`failed` 是「被取代 / 没做成」，
+     不代表「历史里不该有提交」（卡 146 就是被卡 166 取代、旧工作故意留着）。
   ② **stale-done（黄，只报不拒）**：状态是 done，但找不到提交 ⇒ 可能是老账（混在别的提交里）或
      真没落 —— 本仓历史上有 15 张这种老卡，所以**不拿它当红**，只列出来给人看。
 
@@ -33,18 +38,28 @@ import tomllib
 __all__ = ["check", "main"]
 
 
+LIVE_STATUSES = frozenset({"pending", "todo", "ready", "in-progress", "running"})
+
+
 def _commit_for(root: Path, task: str) -> str:
-    """`task` 在历史里的第一笔提交（短 sha）；没有 ⇒ 空串（拿不到 git 也不抛）。"""
+    """`task` 在**提交标题**里的第一笔提交（短 sha）；没有 ⇒ 空串（拿不到 git 也不抛）。
+
+    ★ 只认标题：`git log --grep` 会连正文里提到任务号的提交一起捞（测试夹具 / 复盘文里常见），
+    那不算落地 —— 卡 146 被 A269 的正文误报过一次。
+    """
     r = subprocess.run(
-        ["git", "log", "--format=%h", "--grep", task, "-1"],
+        ["git", "log", "--format=%h%x00%s", "--grep", task, "-10"],
         cwd=str(root), capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
     )
     if r.returncode != 0:
         return ""
-    lines = [x for x in (r.stdout or "").splitlines() if x.strip()]
-    return lines[0].strip() if lines else ""
+    for line in (r.stdout or "").splitlines():
+        sha, _, subject = line.partition("\x00")
+        if task in subject:
+            return sha.strip()
+    return ""
 
 
 def check(root: Path, cards: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -57,7 +72,7 @@ def check(root: Path, cards: list[dict]) -> tuple[list[dict], list[dict]]:
         if not task:
             continue
         sha = _commit_for(root, task)
-        if status != "done" and sha:
+        if status in LIVE_STATUSES and sha:
             stale_pending.append(
                 {"id": c.get("id", ""), "task": task, "status": status, "commit": sha}
             )

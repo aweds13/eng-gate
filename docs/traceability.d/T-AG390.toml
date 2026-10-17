@@ -1,0 +1,10 @@
+[entries."T-AG390"]
+id = "T-AG390"
+title = "对账器只认标题 + 终态不判红"
+group = "tools"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TAG390.md",
+]
+gaps = "① ★ 对账器误报：`git log --grep <任务号>` 会把**提交正文**里提到的任务号也算成落地，于是作废的卡 146 被 A269 的正文误报成 stale-pending；实现 `tools/wb_reconcile.py`。② ★ 终态不该判红：`failed` / `void` / `deferred` 本来就允许历史里有提交（被取代 / 弃做）；判据 `tests/test_wb_reconcile.py`。"
+

@@ -64,6 +64,10 @@
 - `tools/pipeline_view.py`：内容哈希缓存（路径+mtime_ns+size+sha256），缓存落 `gates/diag/readcache/`；`verdicts` 只读首行；`git` 收成固定 2 次；`--report` 加性能账。
 - `tests/test_pipeline_view.py`（+5 条）：命中即快、改内容必重算、冷/热逐字节相同、`git` 次数固定、坏源不掩盖。
 - 真读数：`pytest tests/test_pipeline_view.py --no-cov` = 23 passed；冷 0.3295s / 热 0.1258s；`ruff` = All checks passed!。
+## 2026-10-17 —— 对账器只认标题 + 终态不判红（T-AG390）
+- `tools/wb_reconcile.py`：`_commit_for()` 改成逐条看 **subject** 是否含任务号（正文不算）；`check()` 只对活队列状态（pending/todo/ready/in-progress/running）判 stale-pending。
+- `tests/test_wb_reconcile.py`：新增 2 条钉子（failed + 正文提到 ⇒ 不许红；pending + 只有正文 ⇒ 不许红），既有 3 条不破。
+- 真读数：`pytest tests/test_wb_reconcile.py --no-cov` = 5 passed；主仓 `wb_reconcile.py` 退出码 0、`没有 stale-pending`。
 ## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
 - **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
 - ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。

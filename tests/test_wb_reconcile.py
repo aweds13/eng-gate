@@ -66,3 +66,26 @@ def test_consistent_queue_is_green(tmp_path: Path) -> None:
     stale_pending, stale_done = wb_reconcile.check(root, cards)
     assert stale_pending == [] and stale_done == []
     assert wb_reconcile.main(["--root", str(root)]) == 0
+
+
+def test_failed_card_with_commit_is_not_red(tmp_path: Path) -> None:
+    """③a **终态不判红**：卡 146 是「被取代」，历史里有正文提到任务号的提交也不算台账落后。
+
+    ★ 2026-10-17 真撞过：A269 的提交正文里有 `T-G246`，对账器把作废的 146 报成 stale-pending。
+    """
+    root = _repo(tmp_path, _card("A3", "T-GY3", "failed"))
+    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x (T-GY0)", "-m", "正文提到 T-GY3")
+    cards = wb_reconcile.load_cards(root)
+    stale_pending, stale_done = wb_reconcile.check(root, cards)
+    assert stale_pending == []
+    assert wb_reconcile.main(["--root", str(root)]) == 0
+
+
+def test_body_mention_is_not_a_commit(tmp_path: Path) -> None:
+    """③b **只认标题**：提交正文里提到任务号 ⇒ 不算落地（pending 也不许因此点红）。"""
+    root = _repo(tmp_path, _card("A4", "T-GY4", "pending"))
+    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x (T-GY0)", "-m", "夹具里提到 T-GY4")
+    cards = wb_reconcile.load_cards(root)
+    stale_pending, stale_done = wb_reconcile.check(root, cards)
+    assert stale_pending == []
+    assert wb_reconcile.main(["--root", str(root)]) == 0

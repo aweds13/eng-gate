@@ -28,6 +28,16 @@ reviewed = "64d9d02"        # 已复核的基点提交（没登记过就不许�
 #   现在改成当时 HEAD；以后每落一批，这里跟着走。
 
 [[cards]]
+id = "A272"
+task = "T-AG390"
+title = "对账器只认标题 + 终态不判红"
+tree = ".wt/A272"
+spec = "复盘/卡/卡A272-对账器只认标题.md"
+files = ["tools/wb_reconcile.py", "tests/test_wb_reconcile.py"]
+depends = ["A269"]
+risk = "low"
+status = "done"
+[[cards]]
 id = "A271"
 task = "T-AG389"
 title = "给 T-G375 补 file: 证据指针"
