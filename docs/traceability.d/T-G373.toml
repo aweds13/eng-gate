@@ -1,10 +1,10 @@
 [entries."T-G373"]
 id = "T-G373"
-title = "定点深读第二批：证据台账 / 对账与墓碑"
-group = "ENGINEERING"
+title = "六块读数单元清单 + 不抹好读数"
+group = "tests"
 status = "done"
 evidence = [
-  "file:复盘/DSH插件-定点深读-第二批.md",
+  "file:gates/diag/_text_TG373.md",
 ]
-gaps = "① ★ **读源码不读简介**：两个同型各锁到具体版本再读（版本号记在文档里，★★ 那是**别的仓的 sha**、不是本仓对象，tarball 无 `.git` ⇒ 取自 API 并注明口径）；每仓「读过哪些文件 + 行数」逐条列出；每条结论带 `文件:行号` + 原样片段。指针：`复盘/DSH插件-定点深读-第二批.md`。② ★ **证据台账那一路**（`dsh-research-report`）：内容寻址**哈希什么**、结论与证据**怎么绑**、封存**怎么做到改不动**、**裁定的取值域与回写**、呈现接口 —— 逐条给实现依据。指针：`复盘/DSH插件-定点深读-第二批.md`。③ ★ **对账与墓碑那一路**（`dsh-session-enhance`）：对账**对的是哪两份**、不一致时**是否干跑/先备份**、**墓碑记什么/何时查**、搬移**要带哪些状态**。指针：`复盘/DSH插件-定点深读-第二批.md`。④ ★ **三条指名文件的建议**：① 成送申请的证据加「**读时重算哈希**」双验（`tools/pool/task.py`，抄 tamper-detection 的 `ok/tampered/missing` 三态）；② 给「**被证伪口径**」立落盘墓碑（新增一张机器可读的墓碑表 + 在派活前置检查里比字面哈希，命中且未撤销 ⇒ 拒派；具体文件名见卡 256 的规格）；③ 收口前对每张成员卡做「**交付前重审计**」（成送时记域内文件 sha256 快照，收口时重算比对，漂了就挡）。指针：`复盘/DSH插件-定点深读-第二批.md`。"
+gaps = "① ★ 六块读数的块语义**不许再三处人肉同步**：声明表一份（`BLOCKS`），`read_*()` 与 `--report` 都从它取口径。指针：`tools/pipeline_view.py`。② ★ 连续监测块（`gates`/`leases`）读数失败时**不许把上一份好读数抹掉**（STALE-WHILE-ERROR）；静态块仍「缺什么说什么」。指针：`tools/pipeline_view.py`。③ ★ last-good 快照**只许在监测路径写**：`build_inbox()` 那种只读路径不写，既有只读硬判据（`test_read_only_leaves_worktree_untouched`）必须仍绿。指针：`tests/test_timeflow_inbox.py:276`。"
 

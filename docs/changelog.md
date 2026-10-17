@@ -34,6 +34,11 @@
 - `tools/stack.py`：`status` 加 **RSS 账本**（每件一栏 + 合计 + 400 MB 常驻预算，超预算显式提示）；`recent_actions()` 供面板读最近动作 ✓。
 - 判据：`tests/test_dsh_panel.py` +175 行、`tests/test_stack.py` +133 行（含白名单反例、端口探测反例、日志落痕、RSS 账本）✓。
 - ★ 真读数（在卡树 `.wt/oneclick` 里实测）：`pytest tests/test_dsh_panel.py tests/test_stack.py --no-cov` 退出码 0（全绿）；`python -X utf8 tools/dsh_panel.py --check` = `[OK ] 全局面板自检通过：三座位（workbench_board、zentao_gantt、timeflow_inbox）；只读 + 失败可见`；`ruff check` = `All checks passed!`；`stack.py status` 尾行 `合计 RSS：5.2 MB（常驻预算 400 MB）` ✓。
+## 2026-10-17 —— 六块读数单元清单 + 不抹好读数（T-G373）
+- `tools/pipeline_view.py`：落模块级 **`BLOCKS` 声明表**（每块 id / 来源 / 缺源标注语 / 字段清单），`read_*()` 与 `--report` 都从它取 ✓；连续块加 **STALE-WHILE-ERROR**（`gates`/`leases`）：好读数落 `gates/diag/pipeline-view-lastgood.json`，失败时给上一份好值 + `error_code` ✓。
+- ★ 快照写入走**监测路径开关**：CLI `main()` 打开；`build_reading(..., remember=True)` 可显式开；`build_inbox()` 等库调用方**不写** ⇒ 只读硬判据仍然成立 ✓（这正是第一版会把 `test_read_only_leaves_worktree_untouched` 弄红的原因，已修）。
+- 判据：`tests/test_pipeline_view.py` +184 行（声明表一致性、`--json`/`--report` 同源、改名来源 ⇒ null + 标注语、连续块 last-good、反例手写一处不一致 ⇒ 红）✓。
+- ★ 真读数（卡树 `.wt/blocks` 内实测）：`pytest tests/test_pipeline_view.py tests/test_timeflow_inbox.py --no-cov` **全绿**（退出码 0，含只读硬判据）；`ruff check` = `All checks passed!`；`python -X utf8 tools/pipeline_view.py --json` 正常出六块，并在 `gates/diag/pipeline-view-lastgood.json` 落 2456 字节快照 ✓。
 ## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
 - **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
 - ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。
