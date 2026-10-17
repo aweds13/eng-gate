@@ -1,0 +1,10 @@
+[entries."T-G376"]
+id = "T-G376"
+title = "读数器缓存与增量：按内容变化才重算"
+group = "tools"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TG376.md",
+]
+gaps = "① ★ 只读视图每跑一次都全量重读大文件（`docs/changelog.md` 626 KB、`docs/traceability.toml` 931 KB）：一刷新就重算，慢且吃内存。② ★ 缓存不许把「命中」当「数据对」：来源坏掉/缺失时仍走既有口径（静态块 `null` + 标注语）；钉子 `tests/test_pipeline_view.py`。③ ★ 幂等不许破：`--json` 连跑两次必须逐字节相同（含冷、热各一次）；改来源一个字节该块必须重算；实现 `tools/pipeline_view.py`。④ ★ `git` 不许每块各起一次：合并成固定次数并在 `--report` 显示；读数 `gates/diag/wb-255.jsonl`。"
+

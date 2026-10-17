@@ -50,6 +50,20 @@
 ## 2026-10-17 —— 给 T-G375 补 `file:` 证据指针（T-AG389）
 - `docs/traceability.d/T-G375.toml` 的 `evidence` 补回 `file:scripts/run_gates.py`、`file:tests/test_gate_peak.py`，再由 `tools/sync_docs.py` 合并进 `docs/traceability.toml`。
 - 修复的审计红：`这一笔改了 tests/test_gate_peak.py，但台账没有任何证据指针指到它`（卡 254 落地提交 `8c8bbca`）。
+## 2026-10-17 —— 读数器缓存与增量：按内容变化才重算（T-G376）
+- `tools/pipeline_view.py`：加**内容哈希缓存**（键 = 每来源 `(相对路径, st_mtime_ns, st_size, 内容 sha256)`，多文件块覆盖全部匹配文件），
+  缓存落 `gates/diag/readcache/<块>.json`（diag 区、原子替换；只有监测路径写，库路径不写）；
+  `verdicts` 只读首行；`git` 从 `1+N` 收到固定 **2 次**；`--report` 加性能账（命中/重算/无源不缓存）。
+- `tests/test_pipeline_view.py`（新增 5 条）：a 命中即快、b 改内容必重算（还原 mtime 同长度）、c 冷/热两次逐字节相同、
+  d `git` 调用次数固定、e 坏源/无源不被缓存掩盖。
+- ★ 真读数（卡树 `.wt/readcache`）：`pytest tests/test_pipeline_view.py --no-cov` → **23 passed in 10.62s**；
+  `--json` 冷/热逐字节相同；冷 `0.3295s` / 热 `0.1258s`；`git 调用=2`（卡树 2 棵）；
+  `[readcache] 命中 2 块（cards、gates） / 重算 0 块 / 无源不缓存 3 块（verdicts、leases、fences）`。
+- 相邻消费方子集（`test_timeflow_inbox` / `test_workbench_bridge` / `test_pool_mcp_board` / `test_no_window`）：39 passed。
+## 2026-10-17 —— 读数器缓存与增量（T-G376）
+- `tools/pipeline_view.py`：内容哈希缓存（路径+mtime_ns+size+sha256），缓存落 `gates/diag/readcache/`；`verdicts` 只读首行；`git` 收成固定 2 次；`--report` 加性能账。
+- `tests/test_pipeline_view.py`（+5 条）：命中即快、改内容必重算、冷/热逐字节相同、`git` 次数固定、坏源不掩盖。
+- 真读数：`pytest tests/test_pipeline_view.py --no-cov` = 23 passed；冷 0.3295s / 热 0.1258s；`ruff` = All checks passed!。
 ## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
 - **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
 - ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。

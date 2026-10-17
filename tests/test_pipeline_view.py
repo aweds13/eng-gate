@@ -7,13 +7,17 @@ r"""`tools/pipeline_view.py`（卡 207 · T-G316）的测试 —— 一份只读
 ★ 只造**纯数据**（`tmp_path` 下的最小假仓），**不连网、不碰真仓**。
 ★ 卡 249（T-G370）追加：BLOCKS 声明表对账、缺源标注语、连续块（gates/leases）的
   STALE-WHILE-ERROR（last-good + error_code + stale_for_s）与坏态幂等反例。
+★ 卡 255（T-G376）追加：内容哈希缓存（命中不重算 / 改一个字节就重算 / 坏源不被缓存
+  掩盖）、冷跑热跑逐字节幂等、git 调用次数不随卡树数量增长（固定 2 次）。
 """
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -501,3 +505,138 @@ def test_report_missing_block_still_names_source(tmp_path: Path) -> None:
     r = pipeline_view.build_reading(root)
     assert r["fences"] == []
     assert r["fences_note"] == _spec("fences")["missing_note"]
+
+
+# ======================================================================
+# 卡 255（T-G376）：内容哈希缓存 + 只读首行 + git 固定两次
+# ======================================================================
+
+
+def _write_big_backlog(root: Path, n: int = 5000) -> None:
+    """写一份**大**队列（让「命中就不解析」能用耗时看出来，而不是靠嘴说）。"""
+    parts = ['[base]\nreviewed = "abc1234"\n']
+    for i in range(n):
+        parts.append(
+            "\n[[cards]]\n"
+            f'id = "{i:05d}"\n'
+            f'task = "T-X{i}"\n'
+            f'title = "样卡 {i}"\n'
+            'tree = ".wt/a"\n'
+            'spec = "复盘/卡/卡001.md"\n'
+            'files = ["src/a.py"]\n'
+            'depends = []\n'
+            'risk = "low"\n'
+            'status = "pending"\n')
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "workbacklog.toml").write_text("".join(parts), encoding="utf-8")
+
+
+def _cache_file(root: Path, bid: str) -> Path:
+    return root / "gates" / "diag" / "readcache" / f"{bid}.json"
+
+
+def test_cache_hit_skips_recompute_and_is_faster(tmp_path: Path, monkeypatch) -> None:
+    """判据 a：连跑两次，第二次命中缓存 ⇒ 不重算、耗时明显更短（贴两次耗时）。
+
+    反例：把缓存短路（每次都比对失败/直接 compute）⇒ `_CACHE_HITS` 断言当场红。
+    """
+    root = _full_fake_repo(tmp_path)
+    _write_big_backlog(root, 5000)
+    monkeypatch.setattr(pipeline_view, "_REMEMBER", True)  # ★ 会写缓存；跑完自动还原
+
+    t0 = time.perf_counter()
+    r1 = pipeline_view.build_reading(root)
+    cold = time.perf_counter() - t0
+    assert "cards" in pipeline_view._CACHE_MISSES, "第一次应是冷跑（重算）"
+    assert "cards" not in pipeline_view._CACHE_HITS
+
+    t0 = time.perf_counter()
+    r2 = pipeline_view.build_reading(root)
+    hot = time.perf_counter() - t0
+    print(f"\n[卡255-a] cold={cold:.4f}s hot={hot:.4f}s（{len(r1['cards'])} 张卡）")
+    assert "cards" in pipeline_view._CACHE_HITS, "第二次应命中缓存"
+    assert "cards" not in pipeline_view._CACHE_MISSES, "命中就不许重算"
+    assert hot < cold * 0.9, f"命中应明显更快：cold={cold:.4f}s hot={hot:.4f}s"
+    assert _json_bytes(r1) == _json_bytes(r2), "冷/热读数必须逐字节相同"
+    assert len(r2["cards"]) == 5000
+
+
+def test_cache_recomputes_when_content_changes(tmp_path: Path, monkeypatch) -> None:
+    """判据 b：改一个字节就必须重算 —— 连 mtime 与 size 都保持原样也要认出来。
+
+    反例：缓存键只算 mtime（或 mtime+size）⇒ 同秒同长度改内容 ⇒ 命中旧值 ⇒ 断言红。
+    """
+    root = _full_fake_repo(tmp_path)
+    monkeypatch.setattr(pipeline_view, "_REMEMBER", True)
+    backlog = root / "docs" / "workbacklog.toml"
+    before = backlog.stat()
+    r1 = pipeline_view.build_reading(root)
+    assert r1["cards"][0]["title"] == "样卡一"
+
+    text = backlog.read_text(encoding="utf-8")
+    changed = text.replace("样卡一", "样卡二")
+    assert changed != text and len(changed.encode()) == len(text.encode())
+    backlog.write_text(changed, encoding="utf-8")
+    # ★ 把 mtime 还原到改动前：只有内容 sha256 能认出这次变化。
+    os.utime(backlog, ns=(before.st_atime_ns, before.st_mtime_ns))
+
+    r2 = pipeline_view.build_reading(root)
+    print(f"\n[卡255-b] 命中={pipeline_view._CACHE_HITS} 重算={pipeline_view._CACHE_MISSES}")
+    assert "cards" in pipeline_view._CACHE_MISSES, "内容变了必须重算"
+    assert r2["cards"][0]["title"] == "样卡二", "读数必须跟着变"
+
+
+def test_cache_never_masks_broken_or_missing_source(tmp_path: Path, monkeypatch) -> None:
+    """缓存命中 ≠ 数据对：来源坏了/缺失时仍走 STALE-WHILE-ERROR（不拿旧缓存冒充）。"""
+    root = _full_fake_repo(tmp_path)
+    monkeypatch.setattr(pipeline_view, "_REMEMBER", True)
+    good = pipeline_view.build_reading(root)
+    good_gates = good["gates"]
+    assert _cache_file(root, "gates").is_file(), "成功读数应写缓存"
+
+    (root / "gates" / "last.json").write_text("{not json", encoding="utf-8")
+    broken = pipeline_view.build_reading(root)
+    assert broken["gates"] == good_gates
+    assert broken["gates_stale"]["error_code"] == "source_broken"
+
+    (root / "gates" / "last.json").unlink()
+    missing = pipeline_view.build_reading(root)
+    assert missing["gates"] == good_gates
+    assert missing["gates_stale"]["error_code"] == "source_missing"
+
+
+def test_json_identical_cold_then_hot_and_cache_location(tmp_path: Path) -> None:
+    """判据 c：`--json` 冷跑/热跑逐字节相同；缓存落在 gates/diag/readcache/（不是 docs/）。"""
+    root = _full_fake_repo(tmp_path)
+    out1 = _run_cli(root, "--json")
+    assert _cache_file(root, "cards").is_file(), "冷跑应写缓存"
+    assert _cache_file(root, "gates").is_file()
+    assert not (root / "docs" / "readcache").exists(), "缓存不许放 docs/"
+    out2 = _run_cli(root, "--json")
+    assert out1 == out2, "冷跑与热跑必须逐字节相同"
+    report = _run_cli(root, "--report")
+    assert "重算 0 块" in report, f"热跑之后应全命中：\n{report[-400:]}"
+
+
+def test_git_calls_do_not_scale_with_worktrees(tmp_path: Path) -> None:
+    """判据 d：git 调用固定 2 次（worktree list + status），不随卡树数量增长。
+
+    反例：回到「每棵树各起一次 git status」⇒ 两棵树时是 3 次 ⇒ 断言红。
+    """
+    root = _full_fake_repo(tmp_path)
+    extra = tmp_path / "wt-extra"
+    _git("worktree", "add", "-q", str(extra), "-b", "wt-extra", cwd=root)
+
+    r = pipeline_view.build_reading(root)
+    print(f"\n[卡255-d] git 调用={pipeline_view._GIT_CALLS} 卡树={len(r['worktrees'])} 棵")
+    assert pipeline_view._GIT_CALLS == 2, "一次读数固定两条 git 命令"
+    assert len(r["worktrees"]) == 2, "两棵树都要列出来"
+    root_row = next(w for w in r["worktrees"]
+                    if Path(w["path"]).resolve() == root.resolve())
+    extra_row = next(w for w in r["worktrees"]
+                     if Path(w["path"]).resolve() == extra.resolve())
+    assert root_row["dirty"] is True, "读数根有未跟踪文件 ⇒ 脏"
+    assert extra_row["dirty"] is None, "其余树没起 git ⇒ dirty=null（未知），不许冒充 false"
+    assert "worktrees_dirty_note" in r
+    report = _run_cli(root, "--report")
+    assert "[git] 本次调用 2 次" in report
