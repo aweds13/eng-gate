@@ -1,3 +1,7 @@
+## 2026-10-18 —— 面板就地渲染 + 工程工具箱（T-AG391）
+- `tools/dsh_panel.py`：`QuickEntry` 改 iframe 就地渲染；新增「工程工具箱」行与五页；宿主半新增 `/dsh-panel/skills` 只读路由，`serveSettings` 收紧为只读。
+- `tests/test_dsh_panel.py`：座位一致性判据改为「前三项逐项一致 + 额外行只许 toolbox」。
+- 真读数：`--check` 绿；`pytest tests/test_dsh_panel.py` 111 passed；生成的 `lib/client.js` / `lib/index.js` 均 `node --check` OK。
 ## 2026-10-17 T-AG385 门禁跑法不渗进子进程 + worker 数按内存自适应
 
 - `tests/test_wb_land.py`：`_ENV` 从「继承 os.environ」改为显式白名单，摘掉 `TF_PYTEST_WORKERS`、`TF_GATE_MIN_FREE_GB`——降级跑法不再被当成默认跑法（卡 184 咬过的那条）。

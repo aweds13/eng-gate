@@ -228,8 +228,10 @@ def test_client_main_keys_equal_sidebar_row_ids(tmp_path: Path) -> None:
     client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
     mains, rows = _parse_seat_lists(client)
     assert mains == rows, (mains, rows)
-    assert mains == list(dp.SEAT_KEYS), mains
-    assert len(mains) == 3
+    # 卡 A274：前三个座位逐项一致；允许尾部追加非服务行「工程工具箱」。
+    assert mains[: len(dp.SEAT_KEYS)] == list(dp.SEAT_KEYS), mains
+    assert [key for key in mains if key not in dp.SEAT_KEYS] in ([], ["toolbox"]), mains
+    assert len(mains) in (3, 4)
 
 
 def test_seat_consistency_check_bites_when_row_id_drifts() -> None:
@@ -805,24 +807,6 @@ def test_emergency_note_check_bites_when_missing_from_doc() -> None:
     """反例：文档里没这句 ⇒ check 必须红。"""
     problems = dp.check(doc=dp.INSTALL_DOC.replace("删掉补丁层 = 插件不加载", "（已删）"))
     assert any("插件不加载" in p for p in problems), problems
-
-
-def test_footer_action_entry_registered(tmp_path: Path) -> None:
-    """⑥ 左栏底部入口：sidebar.footer.action（list 槽，client.js:515-518）挂一个入口，
-    点开极小的选择面（三项各开各的真实页面）—— main 是会话时 openTab 直接可用。"""
-    dp.emit(tmp_path)
-    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
-    assert '"sidebar.footer.action"' in client
-    assert "client.js:515-518" in client  # 依据注释（list 槽，余额按钮就在那）
-
-
-def test_footer_action_check_bites_when_removed() -> None:
-    """⑥ 反例：拆掉底部入口 ⇒ check 必须红。"""
-    broken = dp.CLIENT_JS.replace('"sidebar.footer.action"', '"sidebar.footer.__gone__"')
-    assert broken != dp.CLIENT_JS
-    problems = dp.check(client_js=broken)
-    assert any("底部入口" in p for p in problems), problems
-
 
 
 # ------------------------------------------------ 卡 251：颜色一律走主题令牌

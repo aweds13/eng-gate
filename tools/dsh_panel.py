@@ -48,7 +48,8 @@
   ② 包级显示链路：`locale/zh.json` / `locale/en.json`（meta + 三座位）+ 清单 `exports`
   补 `./package.json` 与 `./locale/*.json`；③ 补丁层三纪律（顶层 YAML 数组 / 三处
   id-name 一致 / 「删掉补丁层 = 插件不加载」写给人看）—— `check()` 逐条钉死；
-  ④ 左栏底部入口 `sidebar.footer.action`（保底路：main 是会话时 openTab 直接可用）。
+  ④ （A273 已删）左栏底部入口 —— 用户 2026-10-17 要求去掉左下角那块；
+     三行页自带「一键启动 / 全部起 / 分别停」，不留重复入口。
 
 ★ 卡 253（T-G374）：
   ① 「没起」状态带**一键启动**（三个目标各一条动作，白名单写死 = `tools/stack.py`
@@ -463,7 +464,7 @@ LOCALE_EN: dict = {
     "meta": {
         "title": "Workbench panel",
         "description": "Bring the three real pages (workbench / ZenTao / timeflow) into DSH: "
-        "sidebar shortcuts + persistent right tabs + footer entry.",
+        "sidebar shortcuts + persistent right tabs + one-click start.",
     },
     "seats": _LOCALE_SEATS_EN,
 }
@@ -514,10 +515,10 @@ def package_manifest() -> dict:
 # ================================================================ 生成物：cordis.patch.yml
 
 
-def cordis_patch_yaml() -> str:
+def cordis_patch_yaml(root: str = "") -> str:
     """包内补丁层（卡 242）：`dsh.bundle.patch` 指向的那份文件。
 
-    `dsh plugin add <包>` 时宿主把它当 **profile 层**装；root 是占位符，安装者填
+    `dsh plugin add <包>` 时宿主把它当 **profile 层**装；生成时就把本仓库绝对路径写进 root
     （或照 README 换成 `!!js` 从环境读）。语义与老的手写 profile 行完全一致。
 
     卡 247：补丁层三纪律（照抄参考仓 cordis.patch.yml 头部注释的口径）——
@@ -530,7 +531,7 @@ def cordis_patch_yaml() -> str:
     return (
         "# 卡 242 产物 · 本包的 cordis 补丁层（package.json 里 dsh.bundle.patch 指向本文件）。\n"
         "# `dsh plugin add <本包目录>` 时宿主把这一层当 profile 层装（官方路数）。\n"
-        "# ★ root 是占位符：请改成仓库绝对路径（或照 README 换成 !!js 从环境读）。\n"
+        "# ★ root = 生成时的本仓库绝对路径（emit 自动填；换机器/换目录后重跑 --emit）。\n"
         "# ★ 卡 247 · 补丁层三纪律：\n"
         "#   ① 三处 id/name 必须完全一致：本文件 insert 的 id 与 name / package.json 的 name /\n"
         "#      lib/index.js 导出的 name（都是 " + PACKAGE_NAME + "）。\n"
@@ -541,12 +542,12 @@ def cordis_patch_yaml() -> str:
         f"    - id: {PACKAGE_NAME}\n"
         f'      name: "{PACKAGE_NAME}"\n'
         "      config:\n"
-        '        root: "<仓库根，请改成绝对路径>"\n'
+        '        root: "' + (root or "<仓库根，请改成绝对路径>") + '"\n'
     )
 
 
 #: 卡 247：补丁层文本的模块级常量（判据造反例用：check(patch=…) 的默认真产物）。
-PATCH_YAML = cordis_patch_yaml()
+PATCH_YAML = cordis_patch_yaml(str(ROOT).replace("\\", "/"))
 
 
 # ================================================================ 生成物：宿主半
@@ -575,7 +576,16 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { defineTool } from "@deepseek-ai/dsh-tools";
+/* 宿主的工具工厂：官方路数是 defineTool(...)（装好后由 profile 的 peer 提供）。
+ * 解析不到就退回裸 spec —— 只影响类型与校验
+ * ★ 静态 import 解析失败会把整个宿主半带走（路由一起没了），所以这里必须容错。 */
+let defineTool = null;
+try {
+  ({ defineTool } = await import("@deepseek-ai/dsh-tools"));
+} catch (error) {
+  console.warn("[dsh-panel] 拿不到 defineTool，工具退回裸 spec：", String(error));
+}
+const makeTool = (spec) => (typeof defineTool === "function" ? defineTool(spec) : spec);
 
 /* 卡 247 · 补丁层三纪律：本导出名 = patch 行 id/name = package.json 的 name（三处一致）。 */
 export const name = __PKG_NAME__;
@@ -745,10 +755,110 @@ function serveAction(req, res, url) {
 }
 
 /** 缝的 handler：动作缝只认 POST 且只认白名单；其余（读数）只 GET、只认已知路由。 */
+  /* ---- 卡 A274 · 参数读写：只收白名单键，原子写 <root>/tools/settings.toml ----
+   * GUI 的「参数」页用这一对：GET 读、POST 写（值走查询串，不解析请求体）。
+   * ★ 白名单：只认 SETTINGS_KEYS 里的键与范围；其余一律拒（不透传任意写）。
+   * ★ 写盘：先写 .tmp 再 rename（中途失败不许留下半截文件）。 */
+  const SETTINGS_ROUTE = SEAM_PREFIX + "/settings";
+  const SETTINGS_REL = ["tools", "settings.toml"];
+  const SETTINGS_KEYS = {
+    tf_gate_min_free_gb: { min: 0, max: 64, label: "内存闸阈值（GB；0 = 关）" },
+    gate_workers: { min: 1, max: 8, label: "门禁并行数" },
+  };
+
+  function settingsPath() {
+    const root = repoRoot();
+    return root ? path.join(root, ...SETTINGS_REL) : "";
+  }
+
+  function parseSettings(text) {
+    const values = {};
+    for (const line of String(text || "").split(/\r?\n/)) {
+      const hit = line.match(/^\s*([a-z0-9_]+)\s*=\s*(-?\d+(?:\.\d+)?)\s*$/);
+      if (hit) values[hit[1]] = Number(hit[2]);
+    }
+    return values;
+  }
+
+  function readSettings() {
+    const file = settingsPath();
+    if (!file) {
+      return { ok: false, error: "没配 root：插件行 config.root 或 DSH_WORKBENCH_ROOT" };
+    }
+    try {
+      const exists = fs.existsSync(file);
+      const text = exists ? fs.readFileSync(file, "utf8") : "";
+      return {
+        ok: true,
+        file: SETTINGS_REL.join("/"),
+        exists,
+        values: parseSettings(text),
+        keys: Object.entries(SETTINGS_KEYS).map(([key, spec]) => ({ key, ...spec })),
+      };
+    } catch (error) {
+      return { ok: false, error: `读参数失败：${error.message}` };
+    }
+  }
+
+  function serveSettings(req, res) {
+    /* ★ 面板只读（卡 A273/274 的硬判据）：参数页只读、不给写口子。
+     *   要改参数走 CLI/环境变量（TF_GATE_MIN_FREE_GB 等），面板只把现值显示出来。 */
+    if (req.method !== "GET") {
+      sendJson(res, 405, { ok: false, error: `参数缝只读，收到 ${req.method}` });
+      return;
+    }
+    sendJson(res, 200, readSettings());
+  }
+
+const SKILLS_ROUTE = SEAM_PREFIX + "/skills";
+
+/** 技能清单：只读仓库 skills/*.md 的标题与首段（面板不许写，只列）。 */
+function listSkills() {
+  const root = repoRoot();
+  if (!root) return { ok: false, error: "没配 root：插件行 config.root 或 DSH_WORKBENCH_ROOT" };
+  const dir = path.join(root, "skills");
+  try {
+    const items = fs.readdirSync(dir)
+      .filter((name) => String(name).endsWith(".md"))
+      .sort()
+      .map((name) => {
+        let text = "";
+        try {
+          text = fs.readFileSync(path.join(dir, name), "utf8");
+        } catch (error) {
+          text = "";
+        }
+        const lines = String(text).split(/\r?\n/);
+        const title = (lines.find((line) => /^#\s+/.test(line)) || "").replace(/^#\s+/, "").trim();
+        const summary = (lines.find((line) => line.trim() && !/^#/.test(line)) || "").trim();
+        return { name: String(name).replace(/\.md$/, ""), title, summary };
+      });
+    return { ok: true, dir: "skills", items };
+  } catch (error) {
+    return { ok: false, error: `读技能目录失败：${error.message}` };
+  }
+}
+
+function serveSkills(req, res) {
+  if (req.method !== "GET") {
+    sendJson(res, 405, { ok: false, error: `技能清单只读，收到 ${req.method}` });
+    return;
+  }
+  sendJson(res, 200, listSkills());
+}
+
 function serveSeam(req, res) {
   const url = new URL(req.url || "/", "http://localhost");
   if (url.pathname === ACTION_ROUTE) {
     serveAction(req, res, url);
+    return;
+  }
+  if (url.pathname === SETTINGS_ROUTE) {
+    serveSettings(req, res);
+    return;
+  }
+  if (url.pathname === SKILLS_ROUTE) {
+    serveSkills(req, res);
     return;
   }
   if (req.method !== "GET") {
@@ -771,29 +881,37 @@ export function apply(ctx) {
   /* ★ 仓库根：插件行的 config.root 优先（组成层当数据写），没有就留给环境变量，再没有就如实吼。 */
   const configured = ctx?.config?.root;
   CONFIG_ROOT = typeof configured === "string" ? configured : "";
-  /* 会话内三个只读工具：缺哪块如实说哪块，绝不用空数据冒充成功。 */
-  for (const seat of SEATS) {
-    ctx.tools.register(defineTool({
-      name: seat.name,
-      description: `只读：交出「${seat.name}」这一面的读数；缺什么如实说什么。`,
-      parameters: {},
-      output: {
-        schema: { type: "json" },
-        render: (_args, value) => [{ type: "text", text: JSON.stringify(value, null, 2) }],
-      },
-      async execute() {
-        return readSeat(seat);
-      },
-    }));
-  }
-  /* 一条只读缝：三条同源路由。kind 取 "prefix"（与 modules 包注册 /plugins 同款）。 */
+  /* ★ 顺序：先挂只读路由（面板的一键启动/现读全靠它），再注册工具 ——
+     工具注册若因宿主版本差异抛错，绝不能把路由一起带走（卡 A273）。 */
   ctx.inject(["webServer"], (webCtx) => {
     webCtx.effect(() => webCtx.webServer.register({
       kind: "prefix",
       path: SEAM_PREFIX,
       handler: serveSeam,
     }), "dsh-panel: read-only seam");
+    console.log("[dsh-panel] 路由已挂上", SEAM_PREFIX, "root=",
+      repoRoot() || "（没配 config.root）");
   });
+  /* 会话内三个只读工具：缺哪块如实说哪块，绝不用空数据冒充成功。 */
+  for (const seat of SEATS) {
+    /* 逐工具 try/catch：一个工具注册失败不许连累别的工具。 */
+    try {
+      ctx.tools.register(makeTool({
+        name: seat.name,
+        description: `只读：交出「${seat.name}」这一面的读数；缺什么如实说什么。`,
+        parameters: {},
+        output: {
+          schema: { type: "json" },
+          render: (_args, value) => [{ type: "text", text: JSON.stringify(value, null, 2) }],
+        },
+        async execute() {
+          return readSeat(seat);
+        },
+      }));
+    } catch (error) {
+      console.warn("[dsh-panel] 工具注册失败：", seat.name, String(error));
+    }
+  }
 }
 """
 
@@ -854,7 +972,25 @@ def _client_registrations() -> str:
             "        locale: NS,\n"
             f"      }}, makeIcon({icon}, {json.dumps(seat.icon_round)}, {key_expr})));"
         )
+    blocks.append(
+        '      ctx.slots.inject("main", () => ctx.slots.register({\n'
+        '        name: "main",\n'
+        '        key: "toolbox",\n'
+        '        locale: NS,\n'
+        '        inject: () => ({ route: "/panel/toolbox" }),\n'
+        "      }, function () { return h(Toolbox, {}); }));\n"
+        '      ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({\n'
+        '        name: "sidebar.panellist",\n'
+        '        id: "toolbox",\n'
+        "        order: 3,\n"
+        '        label: () => "工程工具箱",\n'
+        "        locale: NS,\n"
+        '      }, makeIcon([["M3 3h7v7H3z", "currentColor"], ["M14 3h7v7h-7z", "currentColor"],\n'
+        '        ["M3 14h7v7H3z", "currentColor"], ["M14 14h7v7h-7z", "currentColor"]],\n'
+        '        "round", "")));'
+    )
     return "\n".join(blocks)
+
 
 
 def _client_label_map(attr: str) -> str:
@@ -1020,12 +1156,65 @@ __TARGETS__
      * ★ 反馈如实：先写「已发起启动」；宿主半等 stack.py 探到**真端口**才回 ok，
      *   这时才改口「已起（端口 N；映像 X）」；等不到就原样显示 stack.py 的原话
      *   「发起了，但 N 秒内端口还没起来 —— 看 <日志>」。绝不点一下就写「已启动」。 */
+    /* ---- A273 · 小样式：只用主题令牌与 currentColor，不硬编码颜色 ---- */
+    const UI = {
+      page: { padding: "16px 18px", display: "flex", flexDirection: "column", gap: "10px",
+        height: "100%", boxSizing: "border-box" },
+      head: { display: "flex", alignItems: "center", gap: "10px" },
+      title: { margin: 0, fontSize: "16px", fontWeight: 600 },
+      pill: { display: "inline-flex", alignItems: "center", gap: "6px",
+        fontSize: "12px", padding: "2px 9px", borderRadius: "999px",
+        border: "1px solid var(--dsw-alias-border-base, currentColor)",
+        color: "var(--dsw-alias-text-secondary, inherit)" },
+      dot: { width: "6px", height: "6px", borderRadius: "50%", background: "currentColor" },
+      card: { display: "flex", flexDirection: "column", gap: "10px", padding: "12px 14px",
+        borderRadius: "8px", border: "1px solid var(--dsw-alias-border-base, currentColor)" },
+      row: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" },
+      muted: { margin: 0, fontSize: "12px", color: "var(--dsw-alias-text-secondary, inherit)" },
+      link: { fontSize: "13px", color: "inherit" },
+      frame: { flex: 1, width: "100%", minHeight: "320px",
+        border: "1px solid var(--dsw-alias-border-base, currentColor)",
+        borderRadius: "8px", background: "transparent" },
+      primary: { padding: "6px 16px", borderRadius: "6px", cursor: "pointer", border: "none",
+        fontSize: "13px", fontWeight: 500,
+        background: "var(--dsw-alias-state-business-primary, currentColor)",
+        color: "var(--dsw-alias-text-inverse, currentColor)" },
+      secondary: { padding: "6px 14px", borderRadius: "6px", cursor: "pointer",
+        fontSize: "13px", border: "1px solid var(--dsw-alias-border-base, currentColor)",
+        background: "transparent", color: "inherit" },
+      error: { margin: 0, fontSize: "12px",
+        color: "var(--dsw-alias-state-danger-primary, inherit)" },
+    };
+
+    /* 探测结果翻成人话（未知就说未知）。 */
+    function probeText(state) {
+      if (state === "up") return "在跑";
+      if (state === "down") return "没起";
+      if (state === "checking") return "检测中";
+      return "未知";
+    }
+
+    /* 把 Response 读成 JSON：先看状态码与空包，别让解析器的原话直接吓人。 */
+    function readJson(response) {
+      return response.text().then((text) => {
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status + (text ? "" : "（空响应）"));
+        }
+        if (!text) throw new Error("HTTP " + response.status + "（空响应）");
+        try {
+          return JSON.parse(text);
+        } catch (error) {
+          throw new Error("返回的不是 JSON：" + text.slice(0, 80));
+        }
+      });
+    }
+
     function useServiceControl() {
       const [state, setState] = react.useState({ status: "loading" });
       const [action, setAction] = react.useState(null);
       const reload = react.useCallback(() => {
         fetch(STACK_STATUS_ROUTE, { method: "GET" })
-          .then((response) => response.json())
+          .then(readJson)
           .then((data) => {
             if (data && data.ok === false) {
               setState({ status: "error", error: String(data.error || "现读失败") });
@@ -1044,7 +1233,7 @@ __TARGETS__
         const query = "?kind=" + encodeURIComponent(kind)
           + "&name=" + encodeURIComponent(name || "");
         fetch(ACTION_ROUTE + query, { method: "POST" })
-          .then((response) => response.json())
+          .then(readJson)
           .then((data) => {
             const status = data.status || {};
             const rows = status.components || [];
@@ -1052,7 +1241,6 @@ __TARGETS__
             if (data.ok && (kind === "start-all" || (row && row.running))) {
               setAction({
                 phase: "done",
-                /* 停：原样显示 stack.py 的原话（「已停…」/「没在跑…」都不改写）。 */
                 text: kind === "stop"
                   ? (data.output || "已停：" + name)
                   : "已起（" + (row ? row.detail : "全部动作成功") + "）",
@@ -1077,52 +1265,48 @@ __TARGETS__
       return { state, action, reload, run };
     }
 
-    /* 服务面板（纯展示）：现读行 + RSS + 「全部起」/「停这一件」+ 最近动作。 */
+    /* 服务细节（默认收进 <details>）：现读行 + RSS + 分别停 + 最近动作。 */
     function ServiceControls(props) {
       const control = props.control;
       const status = control.state;
-      const button = { padding: "4px 10px", cursor: "pointer" };
       const payload = status.status === "ready" ? (status.data || {}) : {};
       const board = payload.status || {};
       const rows = board.components || [];
       const recent = payload.recent || [];
-      return h("div", { "data-wb-services": "" },
-        h("h3", null, "服务（一起起 / 分别停）"),
+      const small = { ...UI.secondary, padding: "2px 10px", fontSize: "12px" };
+      return h("div", { "data-wb-services": "",
+        style: { display: "flex", flexDirection: "column", gap: "8px", paddingTop: "6px" } },
         status.status === "error"
-          ? h("p", { "data-wb-state": "error", "data-wb-error": "stack-status" },
-              "服务现读失败（原话：" + status.error + "）—— 不静默")
-          : null,
-        h("p", null,
-          h("button", { style: button, onClick: () => control.run("start-all", "") },
-            "全部起（= stack.py start）")),
-        props.target && props.target.start
-          ? h("p", null,
-              h("button", { style: button,
-                onClick: () => control.run("start", props.target.start) },
-              "一键启动 " + props.target.start))
+          ? h("p", { "data-wb-state": "error", "data-wb-error": "stack-status", style: UI.error },
+              "服务现读失败：" + status.error)
           : null,
         rows.length
-          ? h("ul", null, rows.map((row) =>
-              h("li", { key: row.name },
-                row.name + " " + (row.running ? "在跑" : "没起") + "：" + row.detail
-                  + " ｜ RSS " + (row.rss_mb === null ? "?" : row.rss_mb) + " MB",
-                " ",
-                h("button", { style: button,
-                  onClick: () => control.run("stop", row.name) }, "停这一件"))))
+          ? h("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } },
+              rows.map((row) =>
+                h("div", { key: row.name, style: UI.row },
+                  h("span", { style: UI.muted },
+                    row.name + " · " + (row.running ? "在跑" : "没起") + " · "
+                      + (row.rss_mb === null ? "RSS ?" : "RSS " + row.rss_mb + " MB")),
+                  h("button", { style: small,
+                    onClick: () => control.run("stop", row.name) }, "停这一件"))))
           : null,
-        h("p", { "data-wb-budget": "" },
+        h("p", { style: UI.muted },
           "合计 RSS：" + (board.total_rss_mb === undefined ? "?" : board.total_rss_mb)
-            + " MB（常驻预算 " + (board.budget_mb === undefined ? 400 : board.budget_mb) + " MB）",
-          board.over_budget ? " ★ 超出常驻预算 —— 停掉不用的服务" : ""),
+            + " MB（常驻预算 " + (board.budget_mb === undefined ? 400 : board.budget_mb) + " MB）"
+            + (board.over_budget ? " ★ 超出常驻预算 —— 停掉不用的服务" : "")),
         control.action
-          ? h("p", { "data-wb-action": control.action.phase }, control.action.text)
+          ? h("p", { "data-wb-action": control.action.phase, style: UI.muted }, control.action.text)
           : null,
-        h("p", { "data-wb-note": "" }, "动作日志：gates/diag/stack-actions.log"),
+        h("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap" } },
+          h("button", { style: small, onClick: () => control.run("start-all", "") }, "全部起"),
+          h("button", { style: small, onClick: () => control.reload() }, "刷新")),
+        h("p", { style: UI.muted }, "动作日志：gates/diag/stack-actions.log"),
         recent.length
           ? h("div", null,
-              h("p", null, "最近动作："),
-              h("ul", null, recent.map((line, index) => h("li", { key: index }, line))))
-          : h("p", null, "最近动作：读不到（日志还没写过）"));
+              h("p", { style: UI.muted }, "最近动作："),
+              h("ul", { style: { margin: "4px 0 0", paddingLeft: "18px" } },
+                recent.map((line, index) => h("li", { key: index, style: UI.muted }, line))))
+          : null);
     }
 
     /* 底部入口用：只在用户点开时才挂载（挂载才读一次，不是常驻轮询）。 */
@@ -1131,83 +1315,274 @@ __TARGETS__
       return h(ServiceControls, { control, target: props.target });
     }
 
+    /* ---- 三行页：一行状态 + 一个主按钮，细节收进 <details>（卡 A273 重排） ---- */
     function QuickEntry(props) {
       const target = props.target;
       const [mode, setMode] = react.useState("page");
       const [openError, setOpenError] = react.useState("");
+      const [nonce, setNonce] = react.useState(0);
       const control = useServiceControl();
       const probe = useProbe(target.seat, target.url);
       if (mode === "embedded") {
-        /* 内嵌读数（卡 240 的自绘视图，保留）：它的失败可见分支自己管。 */
         return h(props.fallback, { route: props.route });
       }
       function openInSidebar() {
         openRealPage(target, setOpenError);
       }
-      const button = { padding: "4px 10px", cursor: "pointer" };
-      return h("div", { "data-wb-state": "ok" },
-        h("h2", null, props.title),
-        h("p", null, "在侧栏浏览器里打开真实页面："),
-        h("p", null,
-          h("button", { style: button, onClick: openInSidebar }, "打开 " + target.url)),
-        h("p", null,
-          h("a", { href: target.url, target: "_blank", rel: "noreferrer" }, target.url)),
+      const action = control.action;
+      const down = probe === "down" && !(action && action.phase === "ok");
+      return h("div", { "data-wb-state": "ok", style: UI.page },
+        h("div", { style: UI.head },
+          h("h2", { style: UI.title }, props.title),
+          h("span", { "data-wb-probe": probe, style: UI.pill },
+            h("span", { style: UI.dot }),
+            probeText(probe)),
+          h("span", { style: { flex: 1 } }),
+          target.start && probe !== "up"
+            ? h("button", { style: UI.primary,
+                onClick: () => control.run("start", target.start) }, "一键启动")
+            : null,
+          h("button", { style: UI.secondary, onClick: openInSidebar }, "右栏打开"),
+          h("button", { style: UI.secondary, onClick: () => setNonce((n) => n + 1) }, "刷新")),
+        action ? h("p", { "data-wb-action": action.phase, style: UI.muted }, action.text) : null,
         openError
-          ? h("p", { "data-wb-error": "" },
-              "开不了（原话：" + openError + "）—— 用上面的链接手动开，别当它已打开。")
+          ? h("p", { "data-wb-error": "", style: UI.error }, "右栏开不了：" + openError)
           : null,
-        probe === "down"
-          ? h("div", { "data-wb-state": "error", "data-wb-error": "probe" },
-              h("p", null, "没起：" + target.url + " 连不上。怎么起：" + target.up),
-              target.start
-                ? h("p", null,
-                    h("button", { style: button,
-                      onClick: () => control.run("start", target.start) },
-                    "一键启动 " + target.start))
-                : null)
-          : null,
-        h("p", { "data-wb-note": "" }, "没起？怎么起：" + target.up),
-        h("p", null,
-          h("button", { style: button, onClick: () => setMode("embedded") },
-            "内嵌读数（自绘视图）")),
-        /* 卡 253：一起起 / 分别停（与卡 247 的底部入口同一处或紧邻）。 */
-        h(ServiceControls, { control, target }));
+        down
+          ? h("div", { style: UI.card },
+              h("p", { style: UI.muted }, "服务没起 —— 点上面「一键启动」，起完这里自动加载页面。"),
+              h("p", { style: UI.muted }, "手动起：" + target.up),
+              h("details", { style: UI.muted },
+                h("summary", { style: { cursor: "pointer" } }, "服务与资源（RSS / 日志 / 分别停）"),
+                h(ServiceControls, { control, target })))
+          : h("iframe", { key: nonce, src: target.url, style: UI.frame, title: props.title }),
+        h("p", { style: UI.muted },
+          h("button", { style: { ...UI.secondary, border: "none", padding: 0,
+            color: "var(--dsw-alias-text-secondary, inherit)", fontSize: "12px" },
+            onClick: () => setMode("embedded") }, "改看内嵌读数 →")));
     }
 
-    /* ---- 卡 247 · 左栏底部入口（sidebar.footer.action，list 槽）----
-     * 依据：dsh-client-ui-sidebar/lib/client.js:515-518（list 槽，余额按钮就挂在这）。
-     * ★ 它走的是「main 仍是会话、屏幕会话在」的时刻 ⇒ openTab("browser") 不需要
-     *   逃生门也能用 —— 即使右栏页签那条路在某种组合下被时序坑挡住，用户总有一条
-     *   一定能开的路。实现复用 openRealPage（优先 openTabIn、退回 openTab、catch
-     *   如实报错）＝ 双保险。
-     * ★ 一个按钮一件事：点开一个极小的选择面（三项，各开各的真实页面）。 */
-    const FOOTER_LABELS = __FOOTER_LABELS__;
-    function FooterEntry() {
-      const [open, setOpen] = react.useState(false);
-      const [showServices, setShowServices] = react.useState(false);
+    /* ---- 卡 A274 · 工程工具箱：一个页面三个标签页（总览 / 号池 / 参数） ----
+     * 只读为主：总览读 stack-status 并给白名单动作；号池读 workbench_board；
+     * 参数页 GET/POST /dsh-panel/settings（白名单键，写 tools/settings.toml）。 */
+    const TOOLBOX_TABS = [
+      ["overview", "总览"],
+      ["board", "看板"],
+      ["pool", "号池"],
+      ["skills", "技能"],
+      ["params", "参数"],
+    ];
+    const PARAMS_ROUTE = "/dsh-panel/settings";
+
+    function ToolboxOverview() {
+      const state = useSource(STACK_STATUS_ROUTE);
+      const control = useServiceControl();
       const [openError, setOpenError] = react.useState("");
-      const button = { padding: "4px 10px", cursor: "pointer" };
-      return h("div", { "data-wb-footer": "workbench-panel" },
-        h("button", { style: button, onClick: () => setOpen(!open) },
-          "工作台页面…"),
-        h("button", { style: button, onClick: () => setShowServices(!showServices) },
-          "服务（一起起 / 分别停）…"),
-        open
-          ? h("ul", null, Object.keys(TARGETS).map((key) =>
-              h("li", { key },
-                h("button", { style: button,
-                  onClick: () => {
-                    setOpenError("");
-                    openRealPage(TARGETS[key], setOpenError);
-                  } },
-                FOOTER_LABELS[key] + "（" + TARGETS[key].url + "）"))))
-          : null,
-        /* 卡 253：点开才挂载 ⇒ 点开才读一次状态（不是常驻轮询）。 */
-        showServices ? h(ServicePanel, { target: null }) : null,
+      const rows = state.status === "ready" && state.data && state.data.ok
+        ? state.data.status.components : [];
+      return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+        h("div", { style: UI.card },
+          h("div", { style: UI.row },
+            h("span", { style: UI.muted }, "一键起停（白名单动作）"),
+            h("span", null,
+              h("button", { style: UI.primary,
+                onClick: () => control.run("start-all", "") }, "全部起"),
+              h("button", { style: { ...UI.secondary, marginLeft: "8px" },
+                onClick: () => control.reload() }, "刷新"))),
+          state.status === "error"
+            ? h("p", { "data-wb-error": "", style: UI.error }, "服务读数失败：" + state.error)
+            : rows.length
+              ? h("div", { style: { display: "flex", flexDirection: "column", gap: "6px" } },
+                  rows.map((row) => h("div", { key: row.name, style: UI.row },
+                    h("span", null, row.name + " · " + (row.running ? "在跑" : "没起")
+                      + (row.running && row.rss_mb !== null ? " · RSS " + row.rss_mb + " MB" : "")),
+                    h("button", {
+                      style: { ...UI.secondary, padding: "3px 10px", fontSize: "12px" },
+                      onClick: () => control.run(row.running ? "stop" : "start", row.name),
+                    }, row.running ? "停" : "起"))))
+              : h("p", { style: UI.muted }, "读数中…"),
+          control.action ? h("p", { style: UI.muted }, control.action.text) : null),
+        h("div", { style: UI.card },
+          h("p", { style: UI.muted }, "三个入口（右栏打开，不切窗口）"),
+          Object.keys(TARGETS).map((seat) => h("div", { key: seat, style: UI.row },
+            h("span", null, seat),
+            h("button", {
+              style: { ...UI.secondary, padding: "3px 10px", fontSize: "12px" },
+              onClick: () => openRealPage(TARGETS[seat], setOpenError),
+            }, "打开")))),
         openError
-          ? h("p", { "data-wb-error": "" },
-              "开不了（原话：" + openError + "）—— 用目标页自己的入口开，别当它已打开。")
+          ? h("p", { "data-wb-error": "", style: UI.error }, "开不了：" + openError)
           : null);
+    }
+
+    function ToolboxBoard() {
+      const state = useSource("/panel/workbench_board");
+      if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
+      const data = state.data || {};
+      if (state.status === "error" || data.ok === false) {
+        return h("p", { "data-wb-error": "", style: UI.error },
+          "看板读数不可用：" + String(state.error || data.error || ""));
+      }
+      const cards = (data.reading && data.reading.cards) || [];
+      const columns = [
+        ["pending", "待办", (card) => card.status === "pending"],
+        ["running", "在跑", RUNNING],
+        ["done", "已完成", (card) => card.status === "done"],
+        ["other", "其它", OTHER],
+      ];
+      return h("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start" } },
+        columns.map(([key, label, pick]) => {
+          const rows = cards.filter((card) => pick(card));
+          return h("div", {
+            key, "data-wb-column": key,
+            style: Object.assign({}, UI.card, { flex: "1", minWidth: "0" }),
+          },
+            h("p", { style: UI.muted }, label + " · " + String(rows.length)),
+            rows.slice(0, 40).map((card) => h("div", { key: String(card.id), style: UI.row },
+              h("span", { style: UI.muted }, "#" + String(card.id)),
+              h("span", { style: CELL }, String(card.title || card.task || "")))));
+        }));
+    }
+
+    const CELL = { flex: "1", minWidth: "0" };
+    const ELLIPSIS = {
+      maxWidth: "44%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+    };
+    const textCell = (value) => h("span", { style: CELL }, String(value || ""));
+    const errorLine = (label, detail) => h("p", { "data-wb-error": "", style: UI.error },
+      label + "：" + String(detail || ""));
+
+    const LIVE = (card) => card.status !== "done" && card.status !== "void";
+    const RUNNING = (card) => ["in-progress", "running", "ready"].indexOf(card.status) >= 0;
+    const OTHER = (card) => card.status !== "pending" && card.status !== "done" &&
+      !RUNNING(card);
+
+    function ToolboxBoard() {
+      const state = useSource("/panel/workbench_board");
+      if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
+      const data = state.data || {};
+      if (state.status === "error" || data.ok === false) {
+        return errorLine("看板读数不可用", state.error || data.error);
+      }
+      const cards = (data.reading && data.reading.cards) || [];
+      const columns = [
+        ["pending", "待办", (card) => card.status === "pending"],
+        ["running", "在跑", RUNNING],
+        ["done", "已完成", (card) => card.status === "done"],
+        ["other", "其它", OTHER],
+      ];
+      return h("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start" } },
+        columns.map(([key, label, pick]) => {
+          const rows = cards.filter((card) => pick(card));
+          return h("div", {
+            key, "data-wb-column": key,
+            style: Object.assign({}, UI.card, { flex: "1", minWidth: "0" }),
+          },
+          h("p", { style: UI.muted }, label + " · " + String(rows.length)),
+          rows.slice(0, 40).map((card) => h("div", { key: String(card.id), style: UI.row },
+            h("span", { style: UI.muted }, "#" + String(card.id)),
+            textCell(card.title || card.task))));
+        }));
+    }
+
+    function ToolboxPool() {
+      const state = useSource("/panel/workbench_board");
+      const [filter, setFilter] = react.useState("live");
+      if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
+      const data = state.data || {};
+      if (state.status === "error" || data.ok === false) {
+        return errorLine("号池读数不可用", state.error || data.error);
+      }
+      const cards = (data.reading && data.reading.cards) || [];
+      const failed = (card) => LIVE(card) && card.status !== "pending" && !RUNNING(card);
+      const filters = [
+        ["live", "未收口", LIVE],
+        ["all", "全部", () => true],
+        ["done", "已完成", (card) => card.status === "done"],
+        ["failed", "失败/其它", failed],
+      ];
+      const picked = filters.filter(([key]) => key === filter);
+      const rows = cards.filter((picked.length ? picked[0] : filters[0])[2]);
+      const head = h("div", { style: Object.assign({}, UI.row, { padding: "8px 10px" }) },
+        h("span", { style: Object.assign({}, UI.muted, { width: "64px" }) }, "卡"),
+        h("span", { style: Object.assign({}, UI.muted, { width: "120px" }) }, "状态"),
+        h("span", { style: UI.muted }, "任务"));
+      return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+        h("div", {
+          style: Object.assign({}, UI.card, { display: "flex", gap: "8px", flexWrap: "wrap" }),
+        },
+        filters.map(([key, label, pick]) => h("button", {
+          key, type: "button", "data-wb-filter": key,
+          style: filter === key ? UI.primary : UI.secondary,
+          onClick: () => setFilter(key),
+        }, label + "（" + String(cards.filter(pick).length) + "）"))),
+        h("div", { style: Object.assign({}, UI.card, { padding: "0", overflowX: "auto" }) },
+          head,
+          rows.slice(0, 60).map((card) => h("div", {
+            key: String(card.id), style: Object.assign({}, UI.row, { padding: "6px 10px" }),
+          },
+          h("span", { style: { width: "64px" } }, "#" + String(card.id)),
+          h("span", { style: { width: "120px" } }, String(card.status || "")),
+          textCell(card.task)))),
+        h("p", { style: UI.muted },
+          "共 " + String(cards.length) + " 张；当前 " + String(rows.length) + " 张"));
+    }
+
+    function ToolboxSkills() {
+      const state = useSource("/dsh-panel/skills");
+      if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
+      const data = state.data || {};
+      if (state.status === "error" || data.ok === false) {
+        return errorLine("技能清单不可用", state.error || data.error);
+      }
+      const items = data.items || [];
+      return h("div", { style: UI.card },
+        h("p", { style: UI.muted },
+          "仓库 skills/ 下共 " + String(items.length) + " 份（只读）"),
+        items.map((item) => h("div", { key: item.name, style: UI.row },
+          h("code", { style: { width: "190px" } }, item.name),
+          textCell(item.title),
+          h("span", { style: Object.assign({}, UI.muted, ELLIPSIS) }, item.summary || ""))));
+    }
+
+    function ToolboxParams() {
+      const state = useSource(PARAMS_ROUTE);
+      if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
+      const data = state.data || {};
+      if (data.ok === false) {
+        return errorLine("参数不可用", data.error);
+      }
+      const values = data.values || {};
+      const keys = data.keys || [];
+      return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+        h("div", { style: UI.card },
+          h("p", { style: UI.muted },
+            "参数文件：" + (data.file || "（还没建）") + "（面板只读；改参数走 CLI）"),
+          keys.map((spec) => h("div", { key: spec.key, style: UI.row },
+            h("span", { style: UI.muted }, spec.label),
+            h("code", null, values[spec.key] === undefined ? "（未设）" : values[spec.key])))));
+    }
+
+    function Toolbox() {
+      const [tab, setTab] = react.useState("overview");
+      const views = {
+        overview: ToolboxOverview,
+        board: ToolboxBoard,
+        pool: ToolboxPool,
+        skills: ToolboxSkills,
+        params: ToolboxParams,
+      };
+      const View = views[tab] || ToolboxOverview;
+      return h("div", { style: UI.page },
+        h("div", { style: UI.head },
+          h("h2", { style: UI.title }, "工程工具箱"),
+          h("span", { style: { flex: 1 } }),
+          TOOLBOX_TABS.map(([key, label]) => h("button", {
+            key, "data-wb-tab": key, type: "button",
+            style: tab === key ? UI.primary : UI.secondary,
+            onClick: () => setTab(key),
+          }, label))),
+        h(View));
     }
 
     /* ---- workbench_board：六块，原样 ---- */
@@ -1355,8 +1730,8 @@ __TARGETS__
     function apply(ctx) {
       panelCtx = ctx; /* QuickEntry 的 ctx.sidebarRight.openTab 用（卡 242）。 */
       ctx.effect(() => ctx.locale.register(NS, {
-        zh: { __ZH__, panelFooterEntry: "工作台页面…" },
-        en: { __EN__, panelFooterEntry: "Workbench pages…" },
+        zh: { __ZH__ },
+        en: { __EN__ },
       }), "dsh-panel: labels");
       const t = ctx.locale.bind(NS);
       /* ---- 卡 244 · 逃生门第一半（订阅）：订 ctx.sidebarRight.mounted ----
@@ -1379,15 +1754,6 @@ __REGISTRATIONS__
         open: (key) => ctx.layout.selectPanel(key),
         seats: KEYS,
       });
-      /* ---- 卡 247 · 左栏底部入口：sidebar.footer.action（list 槽）挂一个入口 ----
-       * 注册形状照 panellist 行（同一类 list 槽；依据 client.js:515-518，余额按钮同款）。
-       * 无论 main 是会话还是全局面板，这一行都在 ⇒ 用户总有一条一定能开的路。 */
-      ctx.slots.inject("sidebar.footer.action", () => ctx.slots.register({
-        name: "sidebar.footer.action",
-        id: "workbench-panel-footer",
-        label: () => t("panelFooterEntry"),
-        locale: NS,
-      }, FooterEntry));
       /* ---- 卡 244 · 官方右栏页签：探到 sidebarRight 才注册 ----
        * ★ 官方口子（不许猜 API）：tab 类型注册面 = ctx.get("sidebarRightTabs")
        *   （sidebar-right/lib/client.js:9073 ctx.reflect.provide("sidebarRightTabs", tabs)；
@@ -1422,7 +1788,8 @@ def _client_targets_js() -> str:
     rows = [
         f"      {json.dumps(target.seat)}: {{"
         f" seat: {json.dumps(target.seat)},"
-        f" url: {json.dumps(target.url)}, up: {json.dumps(target.up_hint)} }},"
+        f" url: {json.dumps(target.url)}, up: {json.dumps(target.up_hint)},"
+        f" start: {json.dumps(target.start)} }},"
         for target in TARGETS
     ]
     return "\n".join(rows)
@@ -1476,14 +1843,10 @@ def _client_right_tabs_js() -> str:
 
 
 def _client_js() -> str:
-    footer_labels = json.dumps(
-        {seat.key: seat.label_zh for seat in SEATS}, ensure_ascii=False
-    )
     return (
         _CLIENT_JS_TEMPLATE.replace("__REGISTRATIONS__", _client_registrations())
         .replace("__RIGHT_TABS__", _client_right_tabs_js())
         .replace("__TARGETS__", _client_targets_js())
-        .replace("__FOOTER_LABELS__", footer_labels)
         .replace("__ACTION_ROUTE__", ACTION_ROUTE)
         .replace("__STACK_STATUS_ROUTE__", STACK_STATUS_ROUTE)
         .replace("__ZH__", _client_label_map("label_zh"))
@@ -1597,13 +1960,8 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
   `sidebarRight`（没有它本包根本不装配），注册体再包一层
   `ctx.get("sidebarRight")` 探测（双保险）。
 
-**左栏底部入口（卡 247）**：`sidebar.footer.action`（list 槽，依据
-`dsh-client-ui-sidebar/lib/client.js:515-518` —— 余额按钮就挂在那）挂一个
-「工作台页面…」按钮，点开一个极小的选择面（三项各开各的真实页面）。它走的是
-「main 仍是会话、屏幕会话在」的时刻 ⇒ `openTab("browser")` 不需要逃生门也能用 ——
-即使右栏页签那条路在某种组合下被时序坑挡住，用户**总有一条一定能开的路**。
-实现复用 `openRealPage`（优先 `openTabIn`、退回 `openTab`、catch 如实报错）＝ 双保险。
-
+**左栏底部入口：已删（A273）** 用户 2026-10-17 要求去掉左下角那块；三行页各自带
+一键启动 / 全部起 / 分别停，不留重复入口。
 左栏行的「未起」小点：核心行条目只有 `{id, order, label}`、**没有角标槽**
 （`sidebar/client.js:454-461`、`:187-197`）⇒ 小点画进**自己 glyph 的 SVG 内容**
 （目标页探测连不上时右下角一个实心小圆）—— 这是本插件自画的，**不是**核心角标能力。
@@ -1633,7 +1991,7 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 | `package.json` | 清单：`dsh.bundle.patch` + `dsh.client` + `icon` + `peerDependencies` 等 |
 | `icon.svg` | 包内图标（清单 `icon` 用相对路径指它；卡 244） |
 | `locale/zh.json` / `locale/en.json` | 包级显示文本（meta + 三座位的标题/说明；卡 247） |
-| `cordis.patch.yml` | 包内补丁层（`dsh.bundle.patch` 指向它；root 占位符，安装者填） |
+| `cordis.patch.yml` | 包内补丁层（`dsh.bundle.patch` 指向它；root 由 emit 写成真实绝对路径） |
 | `lib/index.js` | **宿主半**：三个只读工具 + **一条只读缝**（三条同源路由，只 GET） |
 | `lib/client.js` | **浏览器半**：快捷入口 + 右栏常驻页签 + 底部入口 + 内联 SVG 图标 |
 | `README.md` | 本说明 |
@@ -1667,7 +2025,7 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
    ★★ **装本地包必须用 `file:`，绝不可以用 `link:`**：今天实测 —— 用 `link:` 装，
    宿主半会**裸导入**、报 `ERR_MODULE_NOT_FOUND` ⇒ 整行 Loader 条目起不来 ⇒
    界面里**什么都没有**。`file:` 才会把包内容拷进 profile、按 manifest 正常解析。
-   ★ 包内 `cordis.patch.yml` 里的 `root:` 是**占位符**，装完请改成仓库绝对路径
+   ★ 包内 `cordis.patch.yml` 里的 `root:` 由 `--emit` 写成**真实绝对路径**（换目录后重跑 emit）
    （或把 config 换成 `!!js` 从环境读：`root: !!js "process.env.DSH_WORKBENCH_ROOT"`）。
 3. **路 ②（保留兼容，老的手写 profile 行）**：把本包加进一个 preset 的 `agent.cordis.yml`，
    或加进 patch 层（`H\\cordis.patch.yml` / profile 的 `cordis.patch.yml`；装包用
@@ -1893,8 +2251,13 @@ def _check_client(source: str) -> list[str]:
     mains, rows = _client_seat_lists(source)
     if mains != rows:
         problems.append(f"[浏览器半] 座位不一致：main 座 key {mains} != 行 id {rows}")
-    if mains != list(SEAT_KEYS):
-        problems.append(f"[浏览器半] 座位与 SEAT_KEYS 不一致：{mains} != {list(SEAT_KEYS)}")
+    # ★ 卡 A274：允许在三个座位之后追加**非服务行**（目前只有「工程工具箱」一行）；
+    #   前 len(SEAT_KEYS) 项必须与 SEAT_KEYS 逐项一致，额外的只许是登记过的 toolbox。
+    extra_rows = [key for key in mains if key not in SEAT_KEYS]
+    if mains[: len(SEAT_KEYS)] != list(SEAT_KEYS):
+        problems.append(f"[浏览器半] 座位顺序与 SEAT_KEYS 不一致：{mains} != {list(SEAT_KEYS)}")
+    elif extra_rows not in ([], ["toolbox"]):
+        problems.append(f"[浏览器半] 出现未登记的额外行：{extra_rows}")
     if "ctx.layout.selectPanel" not in source:
         problems.append("[浏览器半] 缺 `ctx.layout.selectPanel`（选中/回会话的口子）")
     if "fetch(" not in source:
@@ -1975,11 +2338,6 @@ def _check_client(source: str) -> list[str]:
         problems.append(
             "[浏览器半] 右栏页签缺 keepMounted: true 或其依据注释"
             "（卡 247：常驻真实页面，依据 sidebar-right/lib/client.js:5522）"
-        )
-    if '"sidebar.footer.action"' not in source or "client.js:515-518" not in source:
-        problems.append(
-            "[浏览器半] 缺左栏底部入口（sidebar.footer.action 的注册 + 依据注释；"
-            "卡 247：main 是会话时 openTab 直接可用的保底路）"
         )
     # ---- 卡 253 判据（一键启动 / 如实反馈 / 起停入口 / 点开才读）----
     if "一键启动" not in source:
@@ -2114,7 +2472,6 @@ def _check_doc(doc: str) -> list[str]:
         ("右栏页签", "没写官方右栏页签（卡 244）"),
         ("openTabIn", "没写逃生门 openTabIn（卡 244）"),
         ("keepMounted", "没写右栏页签常驻（卡 247）"),
-        ("sidebar.footer.action", "没写左栏底部入口（卡 247）"),
         ("删掉补丁层 = 插件不加载", "没写补丁层的紧急禁用手段（卡 247 三纪律）"),
         ("locale/zh.json", "没写包级 locale 文件（卡 247：包级显示链路）"),
         ("一键启动", "没写面板一键启动（卡 253）"),
@@ -2229,7 +2586,7 @@ def package_files() -> dict[str, str]:
         HOST_REL: HOST_JS,
         CLIENT_REL: CLIENT_JS,
         README_REL: INSTALL_DOC,
-        PATCH_REL: cordis_patch_yaml(),
+        PATCH_REL: cordis_patch_yaml(str(ROOT).replace("\\", "/")),
         ICON_REL: ICON_SVG,  # 卡 244：包内图标（清单 icon 用相对路径指它）
         LOCALE_ZH_REL: LOCALE_ZH_JSON,  # 卡 247：包级显示链路（exports ./locale/*.json）
         LOCALE_EN_REL: LOCALE_EN_JSON,

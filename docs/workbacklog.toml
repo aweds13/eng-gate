@@ -2838,3 +2838,14 @@ depends = ["249"]
   depends = []
   risk = "low"
   status = "done"
+
+[[cards]]
+id = "A274"
+task = "T-AG391"
+title = "面板：三行就地渲染 + 工程工具箱（总览/看板/号池/技能/只读参数）"
+tree = ".wt/A274"
+spec = "复盘/卡/卡A274-面板内嵌与工具箱.md"
+files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
+depends = []
+risk = "low"
+status = "done"
