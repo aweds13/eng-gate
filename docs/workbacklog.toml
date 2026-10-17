@@ -2849,3 +2849,14 @@ files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A275"
+task = "T-AG392"
+title = "面板路由 404 真因：inject 声明 webServer + 直接 ctx.webServer.register"
+tree = ".wt/A275"
+spec = "复盘/卡/卡A275-面板路由直挂.md"
+files = ["tools/dsh_panel.py"]
+depends = []
+risk = "low"
+status = "done"

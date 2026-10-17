@@ -590,7 +590,7 @@ const makeTool = (spec) => (typeof defineTool === "function" ? defineTool(spec) 
 /* 卡 247 · 补丁层三纪律：本导出名 = patch 行 id/name = package.json 的 name（三处一致）。 */
 export const name = __PKG_NAME__;
 
-export const inject = ["tools"];
+export const inject = ["tools", "webServer"];
 
 const SEAM_PREFIX = "/dsh-panel";
 const SEAT_TIMEOUT_MS = 30000;
@@ -883,15 +883,17 @@ export function apply(ctx) {
   CONFIG_ROOT = typeof configured === "string" ? configured : "";
   /* ★ 顺序：先挂只读路由（面板的一键启动/现读全靠它），再注册工具 ——
      工具注册若因宿主版本差异抛错，绝不能把路由一起带走（卡 A273）。 */
-  ctx.inject(["webServer"], (webCtx) => {
-    webCtx.effect(() => webCtx.webServer.register({
-      kind: "prefix",
-      path: SEAM_PREFIX,
-      handler: serveSeam,
-    }), "dsh-panel: read-only seam");
-    console.log("[dsh-panel] 路由已挂上", SEAM_PREFIX, "root=",
-      repoRoot() || "（没配 config.root）");
-  });
+  /* ★ 卡 A275：照 dsh-panel-wenyou（本机已装、真在跑）的写法 —— `inject` 里声明
+   *   `webServer`，apply 里**直接用 `ctx.webServer.register`**；不再用
+   *   `ctx.inject([...], cb)`。后者在桌面版里不保证被调用（拿不到服务时静默不跑），
+   *   实测表现为「客户端有面板、路由全 404」。 */
+  ctx.effect(() => ctx.webServer.register({
+    kind: "prefix",
+    path: SEAM_PREFIX,
+    handler: serveSeam,
+  }), "dsh-panel: read-only seam");
+  console.log("[dsh-panel] 路由已挂上", SEAM_PREFIX, "root=",
+    repoRoot() || "（没配 config.root）");
   /* 会话内三个只读工具：缺哪块如实说哪块，绝不用空数据冒充成功。 */
   for (const seat of SEATS) {
     /* 逐工具 try/catch：一个工具注册失败不许连累别的工具。 */
@@ -2391,6 +2393,10 @@ def _check_host(source: str) -> list[str]:
         problems.append("[宿主半] 缺失败显式返回（不许静默返空）")
     if "webServer.register" not in source:
         problems.append("[宿主半] 缺只读缝（webServer.register）")
+    if '"webServer"' not in source:
+        problems.append('[宿主半] inject 里没声明 webServer（桌面版要它才会挂路由）')
+    if "ctx.webServer.register" not in source:
+        problems.append("[宿主半] 路由没用 ctx.webServer.register（桌面版实测静默不挂）")
     # ★ 2026-10-15 实测：DSH 桌面版宿主的 cwd 是 **profile 目录** ⇒ 拿 cwd 当仓库根会让三个读数器
     #   全部 `can't open file '…\\profiles\\desktop\\tools\\*.py'` ✗。所以：必须能从 config 拿根，
     #   且**不许**再用 `process.cwd()` 兜底。

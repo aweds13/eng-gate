@@ -6900,3 +6900,14 @@ evidence = [
   "file:复盘/卡/卡A274-面板内嵌与工具箱.md",
 ]
 gaps = "① ★ 用户要「点开就地渲染、不是切窗口」：`QuickEntry` 主体改 `<iframe>`，顶部只留一键启动/右栏打开/刷新；没起才显示命令与细节（`tools/dsh_panel.py`）。② ★ 用户要一个统一入口：新增第 4 行「工程工具箱」，五页（总览/看板/号池/技能/参数）；号池页筛选 + 表格（`tools/dsh_panel.py`）。③ ★ 面板只读不许写仓库：参数页只读（`serveSettings` 只认 GET），技能清单走新增只读路由 `/dsh-panel/skills`（`tools/dsh_panel.py`）。④ ★ 座位判据与新增行冲突：`check` 与单测改成「前三个座位逐项一致 + 尾部只许多登记过的 toolbox」（`tools/dsh_panel.py`、`tests/test_dsh_panel.py`）。"
+
+[entries."T-AG392"]
+id = "T-AG392"
+title = "面板路由 404 真因：inject 声明 webServer + 直接 ctx.webServer.register"
+group = "ui"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:复盘/卡/卡A275-面板路由直挂.md",
+]
+gaps = "① ★ 面板路由一直 404：真因是宿主半用 `ctx.inject([「webServer」], cb)` 挂路由，桌面版里回调静默不跑；改成 `inject` 声明 `webServer` + `ctx.webServer.register` 直挂（`tools/dsh_panel.py`）。② ★ 缺回归钉子：自检新增「inject 必须含 webServer」「必须用 ctx.webServer.register」两条，反例已验证会红（`tools/dsh_panel.py`）。"

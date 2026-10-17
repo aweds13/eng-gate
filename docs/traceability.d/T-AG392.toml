@@ -1,0 +1,11 @@
+[entries."T-AG392"]
+id = "T-AG392"
+title = "面板路由 404 真因：inject 声明 webServer + 直接 ctx.webServer.register"
+group = "ui"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:复盘/卡/卡A275-面板路由直挂.md",
+]
+gaps = "① ★ 面板路由一直 404：真因是宿主半用 `ctx.inject([「webServer」], cb)` 挂路由，桌面版里回调静默不跑；改成 `inject` 声明 `webServer` + `ctx.webServer.register` 直挂（`tools/dsh_panel.py`）。② ★ 缺回归钉子：自检新增「inject 必须含 webServer」「必须用 ctx.webServer.register」两条，反例已验证会红（`tools/dsh_panel.py`）。"
+
