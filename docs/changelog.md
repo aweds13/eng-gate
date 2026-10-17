@@ -44,6 +44,12 @@
 - `tests/test_gate_peak.py`（新增）：同名工具只选集到自己的测试、改测试文件选它自己、公共模块回退全量、映射不到回退全量、文档/台账不破坏选择、例外表显式且真实、状态行首行不被破坏 ✓。
 - ★ 本卡只做用户点的那一条（1② 受影响的测试选择）；`-n` 自适应与串行化**没做**（卡规格明确排除）✓。
 - ★ 真读数（卡树 `.wt/gatepeak` 内实测）：`pytest tests/test_gate_peak.py --no-cov` 全绿；`ruff check scripts/run_gates.py tests/test_gate_peak.py` = `All checks passed!` ✓。
+## 2026-10-17 —— 给 T-G375 补 `file:` 证据指针（T-AG389）
+- `docs/traceability.d/T-G375.toml` 的 `evidence` 补回 `file:scripts/run_gates.py`、`file:tests/test_gate_peak.py`，再 `tools/sync_docs.py` 合并。
+- 修复的审计红：`这一笔改了 tests/test_gate_peak.py，但台账没有任何证据指针指到它`（卡 254 落地提交 `8c8bbca`）。
+## 2026-10-17 —— 给 T-G375 补 `file:` 证据指针（T-AG389）
+- `docs/traceability.d/T-G375.toml` 的 `evidence` 补回 `file:scripts/run_gates.py`、`file:tests/test_gate_peak.py`，再由 `tools/sync_docs.py` 合并进 `docs/traceability.toml`。
+- 修复的审计红：`这一笔改了 tests/test_gate_peak.py，但台账没有任何证据指针指到它`（卡 254 落地提交 `8c8bbca`）。
 ## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
 - **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
 - ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。

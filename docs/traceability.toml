@@ -6854,5 +6854,18 @@ group = "tests"
 status = "done"
 evidence = [
   "file:gates/diag/_text_TG375.md",
+  "file:scripts/run_gates.py",
+  "file:tests/test_gate_peak.py",
 ]
 gaps = "① ★ 不许每次落地都跑全量门禁：**改动文件 → 该跑哪些测试**要有可核查的映射（`tests/test_<x>.py` ↔ `tools/<x>.py` 命名对应 + 显式例外表）。指针：`scripts/run_gates.py`。② ★ 兜底必须保守：映射不到、或改动落在公共模块（`tools/pool/**`、`scripts/**`、`pyproject.toml`、`tests/conftest.py`）⇒ **回退全量**（不许少跑判据）。指针：`scripts/run_gates.py`。③ ★ 省内存的读数要说清：全量 vs 选集的**进程数/峰值**对比，不是「感觉快了」。指针：`tests/test_gate_peak.py`。"
+
+[entries."T-AG389"]
+id = "T-AG389"
+title = "给 T-G375 补 file: 证据指针"
+group = "docs"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TAG389.md",
+]
+gaps = "① ★ 台账片段的 `evidence` 必须点名这一笔真正改了的文件，例如 `scripts/run_gates.py`、`tests/test_gate_peak.py`；否则审计按提交文件清单找不到指针就红。② ★ 只补指针、不动代码、不动判据、不写异常表兜：`scripts/run_gates.py` 与 `tests/test_gate_peak.py` 一个字节都不许改。③ ★ 链会把台账片段重生成成只带文书一行：证据在 `docs/traceability.d/T-G375.toml` 被覆盖、`docs/traceability.toml` 里只剩 `file:gates/diag/_text_TG375.md`。"
+

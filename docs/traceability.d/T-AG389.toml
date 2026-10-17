@@ -1,0 +1,10 @@
+[entries."T-AG389"]
+id = "T-AG389"
+title = "给 T-G375 补 file: 证据指针"
+group = "docs"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TAG389.md",
+]
+gaps = "① ★ 台账片段的 `evidence` 必须点名这一笔真正改了的文件，例如 `scripts/run_gates.py`、`tests/test_gate_peak.py`；否则审计按提交文件清单找不到指针就红。② ★ 只补指针、不动代码、不动判据、不写异常表兜：`scripts/run_gates.py` 与 `tests/test_gate_peak.py` 一个字节都不许改。③ ★ 链会把台账片段重生成成只带文书一行：证据在 `docs/traceability.d/T-G375.toml` 被覆盖、`docs/traceability.toml` 里只剩 `file:gates/diag/_text_TG375.md`。"
+
