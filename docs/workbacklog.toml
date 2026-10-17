@@ -2860,3 +2860,14 @@ files = ["tools/dsh_panel.py"]
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A276"
+task = "T-AG393"
+title = "timeflow 桌面启动器：双击起服务、无黑窗、起完开页面"
+tree = ".wt/A276"
+spec = "复盘/卡/卡A276-timeflow桌面启动器.md"
+files = ["tools/launch_timeflow.pyw", "tests/test_launch_timeflow.py"]
+depends = []
+risk = "low"
+status = "done"

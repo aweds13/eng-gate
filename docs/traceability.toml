@@ -6911,3 +6911,15 @@ evidence = [
   "file:复盘/卡/卡A275-面板路由直挂.md",
 ]
 gaps = "① ★ 面板路由一直 404：真因是宿主半用 `ctx.inject([「webServer」], cb)` 挂路由，桌面版里回调静默不跑；改成 `inject` 声明 `webServer` + `ctx.webServer.register` 直挂（`tools/dsh_panel.py`）。② ★ 缺回归钉子：自检新增「inject 必须含 webServer」「必须用 ctx.webServer.register」两条，反例已验证会红（`tools/dsh_panel.py`）。"
+
+[entries."T-AG393"]
+id = "T-AG393"
+title = "timeflow 桌面启动器：双击起服务、无黑窗、起完开页面"
+group = "tools"
+status = "done"
+evidence = [
+  "file:tools/launch_timeflow.pyw",
+  "file:tests/test_launch_timeflow.py",
+  "file:复盘/卡/卡A276-timeflow桌面启动器.md",
+]
+gaps = "① ★ timeflow 不该依赖 DSH：新增双击启动器 `tools/launch_timeflow.pyw`（pythonw、无黑窗、幂等、失败弹框、`TF_LAUNCH_DRY` 自测开关）。② ★ 启动器要有人守：`tests/test_launch_timeflow.py` 三条钉子（.pyw / CREATE_NO_WINDOW / 幂等+失败可见+dry）。"

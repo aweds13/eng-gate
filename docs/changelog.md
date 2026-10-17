@@ -6,6 +6,10 @@
 - `tools/dsh_panel.py`：宿主半 `inject = ["tools", "webServer"]`，改成 `ctx.effect(() => ctx.webServer.register(...))` 直挂；照本机在跑的 `dsh-panel-wenyou` 写法。
 - `tools/dsh_panel.py`：自检补两条回归钉子（inject 含 webServer / 直挂 register）。
 - 真读数：`--check` 绿；反例（去掉 inject 里的 webServer）→ 红；`pytest tests/test_dsh_panel.py` 全绿；`node --check` OK。
+## 2026-10-18 —— timeflow 桌面启动器（T-AG393）
+- 新增 `tools/launch_timeflow.pyw`：探端口 8520 → 没起就用 `pythonw` + `CREATE_NO_WINDOW` 起 `stack.py start timeflow` → 等端口 → 开浏览器；起不来弹框。
+- 新增 `tests/test_launch_timeflow.py`：只读源码的三条钉子。
+- 真读数：`pytest tests/test_launch_timeflow.py` 3 passed；`ruff` 干净；dry 实测退出码 0 且 8520 起来后已停。
 ## 2026-10-17 T-AG385 门禁跑法不渗进子进程 + worker 数按内存自适应
 
 - `tests/test_wb_land.py`：`_ENV` 从「继承 os.environ」改为显式白名单，摘掉 `TF_PYTEST_WORKERS`、`TF_GATE_MIN_FREE_GB`——降级跑法不再被当成默认跑法（卡 184 咬过的那条）。
