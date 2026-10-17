@@ -6761,3 +6761,26 @@ evidence = [
   "file:复盘/DSH插件-定点深读-第二批.md",
 ]
 gaps = "① ★ **读源码不读简介**：两个同型各锁到具体版本再读（版本号记在文档里，★★ 那是**别的仓的 sha**、不是本仓对象，tarball 无 `.git` ⇒ 取自 API 并注明口径）；每仓「读过哪些文件 + 行数」逐条列出；每条结论带 `文件:行号` + 原样片段。指针：`复盘/DSH插件-定点深读-第二批.md`。② ★ **证据台账那一路**（`dsh-research-report`）：内容寻址**哈希什么**、结论与证据**怎么绑**、封存**怎么做到改不动**、**裁定的取值域与回写**、呈现接口 —— 逐条给实现依据。指针：`复盘/DSH插件-定点深读-第二批.md`。③ ★ **对账与墓碑那一路**（`dsh-session-enhance`）：对账**对的是哪两份**、不一致时**是否干跑/先备份**、**墓碑记什么/何时查**、搬移**要带哪些状态**。指针：`复盘/DSH插件-定点深读-第二批.md`。④ ★ **三条指名文件的建议**：① 成送申请的证据加「**读时重算哈希**」双验（`tools/pool/task.py`，抄 tamper-detection 的 `ok/tampered/missing` 三态）；② 给「**被证伪口径**」立落盘墓碑（新增一张机器可读的墓碑表 + 在派活前置检查里比字面哈希，命中且未撤销 ⇒ 拒派；具体文件名见卡 256 的规格）；③ 收口前对每张成员卡做「**交付前重审计**」（成送时记域内文件 sha256 快照，收口时重算比对，漂了就挡）。指针：`复盘/DSH插件-定点深读-第二批.md`。"
+
+[entries."T-AG385"]
+id = "T-AG385"
+title = "门禁跑法不渗进子进程 + worker 数按内存自适应"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/run_gates.py",
+  "file:tests/test_wb_land.py",
+  "file:tests/test_door_inputs_coverage.py",
+]
+gaps = "1. 门禁跑法不再渗进子进程：`tests/test_wb_land.py` 的 `_ENV` 改成显式环境清单（摘掉 `TF_PYTEST_WORKERS` 与 `TF_GATE_MIN_FREE_GB`），断言一字未动。指针 `tests/test_wb_land.py`2. worker 数默认按可用内存自适应：`scripts/run_gates.py` 的 `pytest_workers()`（<2.5 GB→1、<4 GB→2、≥4 GB→4、读不到→4），显式环境变量仍优先。指针 `scripts/run_gates.py`3. 跑法文案不再印假话：`scripts/run_gates.py` 里串行那一行改成按 worker=1 叙述（默认值现在可能因内存紧降到 1，旧文案会印假话）。指针 `scripts/run_gates.py`4. 判据只改注释不改断言：`tests/test_door_inputs_coverage.py` 的注释随默认值口径更新。指针 `tests/test_door_inputs_coverage.py`"
+
+[entries."T-G370"]
+id = "T-G370"
+title = "六块读数：BLOCKS 唯一口径源 + 连续块坏读数不许抹掉好读数"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pipeline_view.py",
+  "file:tests/test_pipeline_view.py",
+]
+gaps = "① ★ **六块读数落一张模块级 `BLOCKS` 声明表当唯一口径源**（每块：块名 / 来源 / **缺源时的标注语** / 字段清单），`read_*()` 与 `_report_*()` **都从它取**，不许再各写一份；`--json` 每块带来源回声、`--report` 每块头带同一句来源 ⇒ 两个出口对得上。指针：`tools/pipeline_view.py`。② ★ **连续监测块加 STALE-WHILE-ERROR**：`BLOCKS` 里 `continuous=True` 的**只有 `gates` / `leases`** —— 读数失败但**有上一份好读数**时，返回**上一份好值 + `<块>_stale`（`error_code` + `captured_at`）**，「坏读数不许抹掉已经显示的数字」；★ 墙钟算出的 `stale_for_s` **只进 `--report`、不进 `--json`**（否则破坏幂等 ✗）。指针：`tools/pipeline_view.py`。③ ★ **静态块保留「缺什么说什么」**：来源缺失/坏掉 ⇒ 那一块**明确标注**（`null` + 声明表里那句标注语，例如「没有 gates/last.json」），**不许用空对象冒充、不许猜** ✗。指针：`tools/pipeline_view.py`。"

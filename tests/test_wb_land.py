@@ -438,7 +438,12 @@ print("审计通过：豁免 0 项已知欠账（桩）")
 sys.exit(0)
 """
 
-_ENV = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+#: ★ 卡 A266：`_ENV` 改成**显式环境** —— 摘掉门禁自己的跑法变量
+#: （`TF_PYTEST_WORKERS` / `TF_GATE_MIN_FREE_GB`），别让跑门禁时的环境渗进子进程：
+#: 否则「**不设**变量 ⇒ 提交 trailer 不写 `Run:` 行」那条反例物理上不可能成立（必红）。
+#: 用例自己要测就在用例里自己设（`{**_ENV, "TF_PYTEST_WORKERS": "1"}` 那种写法保持能跑）。
+_ENV = {k: v for k, v in os.environ.items()
+        if k not in ("PYTHONPATH", "TF_PYTEST_WORKERS", "TF_GATE_MIN_FREE_GB")}
 
 
 # ================================================================ 加载实现模块

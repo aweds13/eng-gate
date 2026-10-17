@@ -19,7 +19,8 @@
      绑这些端口的无头浏览器）；旧清法按进程名/特征（`serve.py --fresh` / `tf-flow-profile-`）
      会跨树误杀（铁律 27）。★ 双判据缺一不可：默认端口段是**多棵树共用**的，只按端口会在
      默认模式下跨树误杀（2026-09-27 真事故，见复盘）。
-  3. `TF_PYTEST_WORKERS`：不设 = `min(4, cpu)`（机器 32 核但只有 15.2 GB 内存，`-n auto` 会
+  3. `TF_PYTEST_WORKERS`：不设 = 按**可用内存自适应**（★ 卡 A266：可用 < 2.5 GB ⇒ 1、
+     < 4 GB ⇒ 2、否则 `min(4, cpu)`；机器 32 核但只有 15.2 GB 内存，`-n auto` 会
      拉 32 个 worker → 换页）；装了 xdist 才并行，没装就串行（既有口径不动）。
 
 ★ T-G157（修 worktree 假绿）：子进程 `PYTHONPATH` 首位补上**本树 `ROOT/src`** —— 本仓是
@@ -42,7 +43,8 @@
      ★ **pytest 永不复用**：它是唯一"从行为上证明功能还在"的那层，也是唯一能发现
        "谁动了 `src/` 却以为无关"的那层。跳过它省 66 秒，代价是把整条安全网摘掉。
 
-pytest 会**并行**跑（装了 `pytest-xdist`；worker 数见 `TF_PYTEST_WORKERS`，不设 = `min(4, cpu)`）：
+pytest 会**并行**跑（装了 `pytest-xdist`；worker 数见 `TF_PYTEST_WORKERS`，不设 = 按可用内存
+自适应 —— ★ 卡 A266：可用 < 2.5 GB ⇒ 1、< 4 GB ⇒ 2、否则 `min(4, cpu)`）：
 用例之间没有共享状态（各自 tmp 库 + 各自进程内的事实总线），而每个用例都要起真 app + 真库 ——
 串行是这里唯一的瓶颈。覆盖率照旧判 70% 那道门（pytest-cov 会合并各 worker 的数据）。
 
@@ -315,19 +317,30 @@ def gate_port_set(base: int | None = None) -> list[int]:
 
 # ---------------------------------------------------------------- pytest 并发（T-G156 §2.3）
 # 机器 32 逻辑核、总内存只有 15.2 GB —— `-n auto` 会拉起最多 32 个 worker → 换页风险。
-# 读 `TF_PYTEST_WORKERS`；不设时用保守默认 `min(4, cpu)`。★「没装 xdist 就串行」的既有
-# 逻辑（`xdist_available()`）一个字不动。
+# 读 `TF_PYTEST_WORKERS`；不设时**按可用内存自适应**（★ 卡 A266）：可用 < 2.5 GB ⇒ 1、
+# < 4 GB ⇒ 2、否则 `min(4, cpu)`。★ 显式环境变量仍然优先（给了就照给）。
+# ★「没装 xdist 就串行」的既有逻辑（`xdist_available()`）一个字不动。
 #
 # ★★ 快与稳的账（卡 164 第 8 条 / T-G264 · 2026-10-03 实测留痕）：
-#   4 worker = 126~158 秒 · 1 worker = 620~700 秒（差 ~5 倍）。
+#   4 worker = 126~158 秒 · 1 worker = 620~700 秒（差 ~5 倍）；4 worker 实测峰值 865 MB
+#   （334+275+139+117，见卡 A266 §1.2）。
 #   代价 = 第 7 条那类计时 flake（真起 `Popen` 的测试在满载下 stub 落地慢 → 看门狗误判）。
-#   取舍：默认 4 worker（快），计时敏感测试给足容差（见 test_retry_round_threshold…）；
-#         若 flake 复发 → `TF_PYTEST_WORKERS=1` 串行（稳但慢 5 倍），别反复重跑到绿（第 9 条）。
+#   ★★ 卡 A266：内存紧时**不再靠人**在命令行写 `TF_PYTEST_WORKERS=1`（写了就踩"环境渗进
+#      子进程"那条雷）—— 默认自己按可用内存降档（见 `pytest_workers`），不会自己选满档。
+#   若 flake 复发 → `TF_PYTEST_WORKERS=1` 串行（稳但慢 5 倍），别反复重跑到绿（第 9 条）。
 DEFAULT_PYTEST_WORKERS = 4
 
 
 def pytest_workers() -> int:
-    """pytest 并行 worker 数：`TF_PYTEST_WORKERS`（不设 → `min(4, cpu)`）。"""
+    """pytest 并行 worker 数：`TF_PYTEST_WORKERS` 优先；不设 → 按可用内存自适应。
+
+    ★ 卡 A266：显式环境变量**仍然优先**（给了就照给，自适应不许覆盖人的显式选择）。
+    不设时按可用内存（`available_memory_gb()`）选：
+      - 可用 < 2.5 GB ⇒ 1（内存紧，串行最稳 —— 不再要人手工写那个变量）
+      - 可用 < 4 GB   ⇒ 2
+      - 否则 `min(4, cpu)`
+    读不到内存（返回 None）⇒ 退回 `min(4, cpu)`（不静默当"内存够"，也不因读不到而过度保守）。
+    """
     raw = os.environ.get("TF_PYTEST_WORKERS", "").strip()
     if raw:
         try:
@@ -336,8 +349,20 @@ def pytest_workers() -> int:
             n = 0
         if n >= 1:
             return n
-        print(f"[WARN] TF_PYTEST_WORKERS={raw!r} 不合法 → 用保守默认", file=sys.stderr, flush=True)
-    return max(1, min(DEFAULT_PYTEST_WORKERS, os.cpu_count() or 1))
+        print(f"[WARN] TF_PYTEST_WORKERS={raw!r} 不合法 → 按可用内存自适应",
+              file=sys.stderr, flush=True)
+    cap = max(1, min(DEFAULT_PYTEST_WORKERS, os.cpu_count() or 1))
+    try:
+        avail = available_memory_gb()
+    except Exception:
+        avail = None
+    if avail is None:          # 读不到内存 ⇒ 退回满档（不静默当"内存够"，也不过度保守）
+        return cap
+    if avail < 2.5:            # ★ 卡 A266：可用 < 2.5 GB ⇒ 串行
+        return 1
+    if avail < 4.0:            # ★ 卡 A266：可用 < 4 GB ⇒ 2 个 worker
+        return 2
+    return cap
 
 
 # ---------------------------------------------------------------- 门 × 输入表（T-G239）
@@ -546,7 +571,8 @@ def pytest_cmd(serial: bool = False) -> list[str]:
     `--serial` 是给"并行下偶发失败"用的对照跑法（同一条命令、单进程）。
 
     ★ T-G156：worker 数**不再 `-n auto`**（32 核会拉 32 个 worker，而机器只有 15.2 GB 内存 →
-    换页）。改成读 `TF_PYTEST_WORKERS`，不设时 `min(4, cpu)`（见 `pytest_workers`）。
+    换页）。改成读 `TF_PYTEST_WORKERS`，不设时**按可用内存自适应**（★ 卡 A266，见
+    `pytest_workers`）。
     `--serial` / 「没装 xdist 就串行」这两条既有口径一个字不动。
     """
     # ★ T-G190：**必须带 `-X utf8`**（本仓铁律：「python 一律 `python -X utf8 …`」）。
@@ -1623,7 +1649,9 @@ def main() -> int:
         mode = "串行（--serial）"
     elif xdist_available():
         w = pytest_workers()
-        mode = f"并行（pytest-xdist，-n {w}）" if w > 1 else "串行（TF_PYTEST_WORKERS=1）"
+        # ★ 卡 A266：默认值可能因**内存紧**降到 1（不一定是人设了 `TF_PYTEST_WORKERS=1`）——
+        #   文案别写死成因，免得默认降档时印出一句假话。
+        mode = f"并行（pytest-xdist，-n {w}）" if w > 1 else "串行（worker=1）"
     else:
         mode = "串行（环境里没装 pytest-xdist）"
     if not args.fast:

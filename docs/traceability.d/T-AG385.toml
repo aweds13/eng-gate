@@ -1,0 +1,12 @@
+[entries."T-AG385"]
+id = "T-AG385"
+title = "门禁跑法不渗进子进程 + worker 数按内存自适应"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/run_gates.py",
+  "file:tests/test_wb_land.py",
+  "file:tests/test_door_inputs_coverage.py",
+]
+gaps = "1. 门禁跑法不再渗进子进程：`tests/test_wb_land.py` 的 `_ENV` 改成显式环境清单（摘掉 `TF_PYTEST_WORKERS` 与 `TF_GATE_MIN_FREE_GB`），断言一字未动。指针 `tests/test_wb_land.py`2. worker 数默认按可用内存自适应：`scripts/run_gates.py` 的 `pytest_workers()`（<2.5 GB→1、<4 GB→2、≥4 GB→4、读不到→4），显式环境变量仍优先。指针 `scripts/run_gates.py`3. 跑法文案不再印假话：`scripts/run_gates.py` 里串行那一行改成按 worker=1 叙述（默认值现在可能因内存紧降到 1，旧文案会印假话）。指针 `scripts/run_gates.py`4. 判据只改注释不改断言：`tests/test_door_inputs_coverage.py` 的注释随默认值口径更新。指针 `tests/test_door_inputs_coverage.py`"
+

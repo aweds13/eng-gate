@@ -1,3 +1,9 @@
+## 2026-10-17 T-AG385 门禁跑法不渗进子进程 + worker 数按内存自适应
+
+- `tests/test_wb_land.py`：`_ENV` 从「继承 os.environ」改为显式白名单，摘掉 `TF_PYTEST_WORKERS`、`TF_GATE_MIN_FREE_GB`——降级跑法不再被当成默认跑法（卡 184 咬过的那条）。
+- `scripts/run_gates.py`：`pytest_workers()` 默认按可用物理内存自适应（<2.5 GB→1、2.5~4 GB→2、≥4 GB→4、读不到→min(4,cpu)）；显式 `TF_PYTEST_WORKERS` 仍最高优先；跑法文案改成按实际 worker 数叙述。
+- `tests/test_door_inputs_coverage.py`：只改注释，断言未动。
+- 真读数：`pytest tests/test_wb_land.py -q --no-cov` = 58 passed（先红那次 `EXIT=1`，红在旧代码的降级跑法反例上）；`tests/test_door_inputs_coverage.py` = 14 passed；`ruff check` = All checks passed。
 ## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
 - **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
 - ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。
@@ -56,6 +62,10 @@
 - **新增 `复盘/DSH插件-定点深读-第二批.md`**（30.2 KB）：`dsh-research-report`（内容寻址证据台账 + 版本化封存 + 逐条裁定）与 `dsh-session-enhance`（物理文件与 storages JSON 对账 + 墓碑防复活）两仓源码逐文件读，每条带 `文件:行号` 与片段；末尾给**三条指名文件**的建议（证据哈希双验 / 被证伪口径的墓碑表 / 收口前的交付重审计）。
 - ★ 真读数：两仓版本与"读过哪些文件 + 行数"逐条列出 ✓；域内**只新增一个文件** ✓。
 - ★ 为什么挑这两个：第三轮自举换口径量"16 个方面×零覆盖"，发现**最薄的两格**（通知告警 3、台账账目 9）恰是我们的核心地盘；在这 9 条里点出这两个同型 ✓。
+## 2026-10-15 —— 六块读数的单元清单与「坏读数不许抹掉好读数」（T-G370）
+- **`tools/pipeline_view.py`**：① 模块级 **`BLOCKS` 声明表**成为六块口径的**唯一源**（块名/来源/缺源标注语/字段），`read_*()` 与 `_report_*()` 同源；② `gates`/`leases` 两个**连续块**走 **STALE-WHILE-ERROR**（上一份好值 + `<块>_stale` 的 `error_code`/`captured_at`，快照文件由 `LASTGOOD_REL` 指定），`stale_for_s` 只进 `--report` 以保 `--json` 幂等；③ 静态块继续「缺什么说什么」。
+- ★ 真读数（主控复核，卡树内）：`pytest tests/test_pipeline_view.py -q --no-cov` = **17 passed** ✓ · `ruff All checks passed!` ✓ · **幂等不变量**：`--json` 连跑两次**逐字节相同** ✓ · `BLOCKS` 在源码里出现 14 处（表与各取用处 ✓）· 域内只动两个文件 ✓。
+- ★ 依据：定点深读第一批里 `dsh-widgets` 的两条形状 —— **单元 = 双源声明**（机器可读清单 + 代码描述符，两边一致）与 **`STALE-WHILE-ERROR`**（一次轮询失败不该把已显示的数字抹掉）。
 ## 2026-10-14 —— Trae 接成第三条道：CDP 驱动 Agent 面板 + 多会话并行（T-G331）
 - **`tools/trae_pool.mjs`**：CDP 驱动 Trae 的 Agent 面板（`solo-lite`）—— 找面板、开新任务、`Input.insertText` 派活、认收工、取回话。★ 五轮硬化：`Cdp` 类补超时与关闭拒绝（原先 `send` 不 reject、脚本会「不settled 的顶层 await」直接死）、审批词收窄到**只认授权语**（原先会误点「继续/确认」）、审批扫描限定 `button/[role=button]/a` 并排除输入框与任务列表、收工识别加 `.core-finish-card`。
 - **`tools/pool/trae_dispatch.py`** + `tests/test_trae_dispatch.py`：把「派给 Trae」包成一条只读派活路径（卡号 → 会话），7 条判据。

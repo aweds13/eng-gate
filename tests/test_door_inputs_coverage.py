@@ -89,7 +89,9 @@ def test_changing_phone_check_breaks_web_live_reuse(
 
 def test_pytest_workers_is_the_single_read_point(monkeypatch: pytest.MonkeyPatch) -> None:
     """★ 不许把 worker 数写成第二份口径：`pytest_workers()` 是唯一读取处。"""
-    # 默认（不设环境变量）→ 保守默认 min(4, cpu)
+    # ★ 卡 A266：默认（不设环境变量）**不再等于** `min(4, cpu)` —— 改成**按可用内存自适应**
+    #   （可用 < 2.5 GB ⇒ 1、< 4 GB ⇒ 2、否则 `min(4, cpu)`）。断言强度一个字不动：
+    #   三种取值都落在 1 ≤ w ≤ max(4, cpu)。
     monkeypatch.delenv("TF_PYTEST_WORKERS", raising=False)
     w = rg.pytest_workers()
     assert w >= 1

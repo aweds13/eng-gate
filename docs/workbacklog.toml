@@ -2762,3 +2762,19 @@ status = "pending"
 
 depends = ["249"]
 
+  # ★ 分区 A 的**第一批新卡**（卡 262 的分区前缀机制落地后第一次用）：卡号带前缀 A、
+  #   树 .wt/A266、任务 T-AG385；旧号 240-262 归 A 的那批一字不动。
+  [[cards]]
+  id = "A266"
+  task = "T-AG385"
+  title = "门禁跑法不渗进子进程（_ENV 显式隔离）+ worker 数按可用内存自适应"
+  tree = ".wt/A266"
+  spec = "复盘/卡/卡A266-门禁跑法与内存自适应.md"
+  files = [
+    "tests/test_wb_land.py",
+    "scripts/run_gates.py",
+    "tests/test_door_inputs_coverage.py",
+  ]
+  depends = ["254"]
+  risk = "mid"
+  status = "done"
