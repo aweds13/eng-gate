@@ -6784,3 +6784,13 @@ evidence = [
   "file:tests/test_pipeline_view.py",
 ]
 gaps = "① ★ **六块读数落一张模块级 `BLOCKS` 声明表当唯一口径源**（每块：块名 / 来源 / **缺源时的标注语** / 字段清单），`read_*()` 与 `_report_*()` **都从它取**，不许再各写一份；`--json` 每块带来源回声、`--report` 每块头带同一句来源 ⇒ 两个出口对得上。指针：`tools/pipeline_view.py`。② ★ **连续监测块加 STALE-WHILE-ERROR**：`BLOCKS` 里 `continuous=True` 的**只有 `gates` / `leases`** —— 读数失败但**有上一份好读数**时，返回**上一份好值 + `<块>_stale`（`error_code` + `captured_at`）**，「坏读数不许抹掉已经显示的数字」；★ 墙钟算出的 `stale_for_s` **只进 `--report`、不进 `--json`**（否则破坏幂等 ✗）。指针：`tools/pipeline_view.py`。③ ★ **静态块保留「缺什么说什么」**：来源缺失/坏掉 ⇒ 那一块**明确标注**（`null` + 声明表里那句标注语，例如「没有 gates/last.json」），**不许用空对象冒充、不许猜** ✗。指针：`tools/pipeline_view.py`。"
+
+[entries."T-G384"]
+id = "T-G384"
+title = "dsh-web 逐包对照（以我们为基底，只借机制）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/DSH插件-dsh-web逐包对照.md",
+]
+gaps = "1. dsh-web 那 11 个包逐个给了四栏（它怎么做 / 我们的对应物 / 该借哪条机制 / 不借什么），每条结论带 `文件:行号`。指针 `复盘/DSH插件-dsh-web逐包对照.md`2. 许可与出处单列一节（Apache-2.0 / MIT 分档），抄代码前必须先读。指针 `复盘/DSH插件-dsh-web逐包对照.md`3. 末尾五条改造是**提案**，每条指名落我们哪个文件、怎么验，各自要单独一张卡。指针 `复盘/DSH插件-dsh-web逐包对照.md`4. 没做到的部分如实写在边界一节（没装包、没建 `desktop-copy` profile、没改 `tools/tests/scripts`）。指针 `复盘/DSH插件-dsh-web逐包对照.md`"

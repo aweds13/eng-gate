@@ -2778,3 +2778,13 @@ depends = ["249"]
   depends = ["254"]
   risk = "mid"
   status = "done"
+  [[cards]]
+  id = "265"
+  task = "T-G384"
+  title = "dsh-web 逐包对照（以我们为基底，借鉴它去改造）"
+  tree = ".wt/265"
+  spec = "复盘/卡/卡265-dsh-web逐包对照.md"
+  files = ["复盘/DSH插件-dsh-web逐包对照.md"]
+  depends = []
+  risk = "low"
+  status = "done"
