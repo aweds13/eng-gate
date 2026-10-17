@@ -6,6 +6,7 @@
 
 用法（**三层速度，按需要挑**）
     python -X utf8 scripts/run_gates.py --fast   # ① 十几秒：ruff/护栏/审计（内循环，不落盘）
+                                                 #    ＋ 受影响的测试选集（卡 254，能查到改动时）
     python -X utf8 scripts/run_gates.py --quick  # ② ~90 秒：跳过真机层（提交前够用）
     python -X utf8 scripts/run_gates.py          # ③ 全量（三层一起，~3 分钟；验收/封版前用它）
     python -X utf8 scripts/run_gates.py --no-reuse   # 不信复用记录，全部真跑一遍
@@ -1527,6 +1528,190 @@ def changed_paths_from(rev: str) -> list[str]:
     return paths
 
 
+# ---------------------------------------------------------------- 受影响测试选择（卡 254 / T-G375）
+# 病灶（卡 254 §为什么）：一次全量门禁 = `pytest -n 4`（4 个 worker 实测 334+275+139+117 =
+#   865 MB）＋ mypy / ruff / 审计脚本 ⇒ **~1 GB 峰** —— 2026-10-15 两次被内存闸挡下。
+# 本卡只做用户点的那一条（1②）：**改动文件 → 该跑哪些测试**的显式映射，接进落地链的
+#   快门禁 ③″（`run_gates.py --fast`）。★ `-n` 自适应与全量串行化**本卡不做**（用户没点）。
+#
+# ★ 判据方向 = **宁多勿漏**（与 `--affected` 同一精神）：
+#   ① 映射只认**命名对应**（`tools/<x>.py` ↔ `tests/test_<x>.py`，文件真存在才算）＋ 下面这张
+#      **显式例外表** —— 不用"猜"、不用模型判断，任何人都能 `ls` / `grep` 复核；
+#   ② 映射不到、或改动落在**公共模块**（`tools/pool/**` · `scripts/**` · `pyproject.toml` 等）
+#      ⇒ **回退全量**（③″ 不裁选集；全量仍在收口链 **④** 跑，绝不在这里冒充跑过）；
+#   ③ ★ 选集**从不替代 ④ 全量**：它只是"早点发现"的一层，判提交的仍是 ④。
+#
+# ★ 记账/文档不参与选集（`docs/` · `复盘/` · `gates/` · `.wt/`）：落地链**每一笔**都会写它们，
+#   算进去 ⇒ 选集永远用不上。它们影响的用例（docs_fragments / card_doc_budget / ledger_summary…）
+#   在 ④ 全量照跑 —— 这条写在这里，免得后来人以为漏了。
+TEST_SELECTION_IGNORE_PREFIXES: tuple[str, ...] = ("docs/", "复盘/", "gates/", ".wt/")
+#: 碰这些 ⇒ 回退全量（公共模块 / 测试基础设施）。
+TEST_SELECTION_COMMON_PREFIXES: tuple[str, ...] = ("scripts/", "tools/pool/")
+TEST_SELECTION_COMMON_FILES: tuple[str, ...] = (
+    "pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini", "conftest.py",
+)
+#: ★ **显式例外表**：`tools/<x>.py` 没有**同名**测试、但有明确归属的用例。
+#: 每一条都是 `tests/` 里**真的 import 该模块**的用例（`grep -n "^import <x>\|^from <x>" tests/`
+#: 可复核）；宁缺勿滥 —— 拿不准就不写，走"映射不到 ⇒ 回退全量"。
+TEST_SELECTION_EXCEPTIONS: dict[str, tuple[str, ...]] = {
+    "tools/serve.py": ("tests/test_serve_port.py", "tests/test_lan_pairing_line.py"),
+    "tools/sync_counts.py": ("tests/test_process_tools.py",),
+    "tools/wb_verify.py": ("tests/test_wb_review.py",),
+    "tools/wb_project.py": ("tests/test_pool_projects.py",),
+    "tools/wb_registry.py": ("tests/test_pool_registry.py",),
+    "tools/pool_quota.py": ("tests/test_quota_clock.py",),
+    "tools/ui_text_audit.py": ("tests/test_ui_text_line.py",),
+    "tools/ui_hotmap.py": ("tests/test_process_tools.py",),
+    "tools/bench.py": ("tests/test_bench_tool.py",),
+    "tools/mcp_client.py": ("tests/test_mcp_client_independent.py",),
+    "tools/web_live_check.py": ("tests/test_dark_teeth.py", "tests/test_web_frontend.py"),
+}
+
+
+@dataclasses.dataclass(frozen=True)
+class TestSelectionPlan:
+    """`--fast` 这一趟的**选集记账**（选了哪几个用例 / 为什么退全量 / 哪些不算代码）。
+
+    ★ 纯数据：`note` 会原样打给操作者看，退全量时**必须**说清原因（不许静默少跑）。
+    """
+
+    inputs: tuple[str, ...]
+    tests: tuple[str, ...]
+    ignored: tuple[str, ...]
+    full_fallback: bool
+    note: str
+
+
+def select_tests(paths: Iterable[str], root: Path | None = None) -> TestSelectionPlan:
+    """按「改动文件 → 测试」的**显式映射**算出该跑哪些用例（**宁多勿漏**）。
+
+    - `tools/<x>.py` ⇒ `tests/test_<x>.py`（存在才映射）∪ `TEST_SELECTION_EXCEPTIONS[x]`；
+    - `tests/test_<x>.py` ⇒ 它自己；
+    - 公共模块 / 映射不到 / 文件不存在 ⇒ `full_fallback=True`、`tests=()`（回退全量）；
+    - 记账/文档（`docs/` · `复盘/` · `gates/` · `.wt/`）⇒ 不算代码，记进 `ignored`；
+    - 没有任何代码改动 ⇒ 空选集（不是"全量"，也没有该跑的东西）。
+    ★ 只裁"跑哪几个用例"，**不碰任何判据**；全量门禁（④）一个字不动。
+    """
+    base = ROOT if root is None else root
+    seen: set[str] = set()
+    norm = [p for p in (_norm_path(p) for p in paths) if p and not (p in seen or seen.add(p))]
+
+    ignored = tuple(p for p in norm if p.startswith(TEST_SELECTION_IGNORE_PREFIXES))
+    code = [p for p in norm if not p.startswith(TEST_SELECTION_IGNORE_PREFIXES)]
+    if not code:
+        note = ("没有代码改动（只有记账/文档）⇒ 不选集（全量仍在 ④）"
+                if norm else "没有改动 ⇒ 不选集（全量仍在 ④）")
+        return TestSelectionPlan(inputs=tuple(norm), tests=(), ignored=ignored,
+                                 full_fallback=False, note=note)
+
+    chosen: list[str] = []
+    why_full: list[str] = []
+
+    def _add(test: str) -> None:
+        if test not in chosen:
+            chosen.append(test)
+
+    for p in code:
+        if p in TEST_SELECTION_COMMON_FILES or Path(p).name in TEST_SELECTION_COMMON_FILES:
+            why_full.append(f"{p}（公共模块/测试基础设施）")
+            continue
+        if p.startswith(TEST_SELECTION_COMMON_PREFIXES):
+            why_full.append(f"{p}（公共模块）")
+            continue
+        if re.fullmatch(r"tests/test_[^/]+\.py", p):
+            if (base / p).is_file():
+                _add(p)
+            else:
+                why_full.append(f"{p}（用例文件不存在/已删）")
+            continue
+        if p.startswith("tools/"):
+            rest = p[len("tools/"):]
+            if "/" in rest or not rest.endswith(".py"):
+                why_full.append(f"{p}（映射不到：只认 tools/<x>.py）")
+                continue
+            same = f"tests/test_{rest[:-3]}.py"
+            if (base / same).is_file():
+                _add(same)
+                for extra in TEST_SELECTION_EXCEPTIONS.get(p, ()):
+                    _add(extra)
+                continue
+            extras = TEST_SELECTION_EXCEPTIONS.get(p, ())
+            if extras and all((base / t).is_file() for t in extras):
+                for t in extras:
+                    _add(t)
+                continue
+            why_full.append(f"{p}（映射不到：{same} 不存在，也不在例外表里）")
+            continue
+        why_full.append(f"{p}（映射不到）")
+
+    if why_full:
+        return TestSelectionPlan(inputs=tuple(norm), tests=(), ignored=ignored,
+                                 full_fallback=True,
+                                 note="回退全量（宁多勿漏）：" + "；".join(why_full))
+    tests = tuple(sorted(chosen))
+    return TestSelectionPlan(inputs=tuple(norm), tests=tests, ignored=ignored,
+                             full_fallback=False,
+                             note=f"选中 {len(tests)} 个用例（串行 + --no-cov）")
+
+
+def parse_status_paths(out: str) -> list[str]:
+    """`git status --porcelain` 的路径列（`-uall --no-renames` 形态）→ 仓库相对路径列表。
+
+    ★ 为什么单独成函数：`git()` 会 `.strip()` 整段输出，**第一行的状态前缀会被吃掉一个
+      字符**（实测 `" M scripts/run_gates.py"` → `"cripts/run_gates.py"`），映射就永远失败。
+      这里按"每行前 3 个字符是 XY+空格"切，空行跳过。
+    """
+    paths: list[str] = []
+    for line in out.splitlines():
+        if len(line) < 4:
+            continue
+        p = line[3:]
+        if " -> " in p:
+            p = p.split(" -> ", 1)[1]
+        p = p.strip().strip('"')
+        if p:
+            paths.append(p)
+    return paths
+
+
+def worktree_changed_paths() -> list[str] | None:
+    """此刻卡树里**已跟踪改动 + 未跟踪文件**（不含 ignored 生成物）；读不到 git ⇒ None。
+
+    ★ 复用同一套 git 口径（`core.quotepath=false` · `-uall` · `--no-renames`），但**不借
+      `git()`**：它会把整段输出 `.strip()`，第一行的 `" M "` 前缀会被吃掉一个字符
+      （实测把 `scripts/run_gates.py` 读成 `cripts/run_gates.py`）。
+    """
+    probe = subprocess.run(  # noqa: S603 —— 参数写死，无 shell
+        ["git", "-c", "core.quotepath=false", "rev-parse", "--git-dir"],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        check=False, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if probe.returncode != 0:
+        return None
+    r = subprocess.run(  # noqa: S603 —— 参数写死，无 shell
+        ["git", "-c", "core.quotepath=false", "status", "--porcelain", "-uall",
+         "--no-renames"],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        check=False, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if r.returncode != 0:
+        return None
+    return parse_status_paths((r.stdout or "").rstrip("\r\n"))
+
+
+def quick_test_job(plan: TestSelectionPlan) -> tuple[str, list[str]] | None:
+    """把选集翻成一条 pytest 命令（**串行 + `--no-cov`**）；回退/空集 ⇒ None（不跑）。
+
+    ★ 为什么串行：本卡治的是**峰值内存** —— 一个 worker 只几百 MB，`-n 4` 实测 865 MB。
+    ★ 为什么 `--no-cov`：`pyproject.toml` 的 `addopts` 带 `--cov-fail-under=70`，只跑几个
+      用例时覆盖率必然不达标（假红）；验收命令（卡 254 第 3 条）同样是 `--no-cov`。
+    """
+    if plan.full_fallback or not plan.tests:
+        return None
+    return ("pytest_sel", [PY, "-X", "utf8", "-m", "pytest", *plan.tests,
+                           "-q", "--no-cov", "-p", "no:cacheprovider"])
+
+
 def build_jobs(quick: bool, fast: bool) -> list[tuple[str, list[str]]]:
     """门清单（**默认逐字不变**）：`--fast` 只留十几秒那几道；否则除 `--quick` 外加真机浏览器层。"""
     jobs: list[tuple[str, list[str]]] = [*COMMON, *REAL_PY]
@@ -1540,7 +1725,9 @@ def build_jobs(quick: bool, fast: bool) -> list[tuple[str, list[str]]]:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="跳过真机层（提交前够用）")
-    ap.add_argument("--fast", action="store_true", help="只跑十几秒那几道（内循环；不落盘）")
+    ap.add_argument("--fast", action="store_true",
+                    help="只跑十几秒那几道（内循环；不落盘）＋ 受影响的测试选集（卡 254；"
+                         "映射不到/公共模块 ⇒ 回退全量，全量仍在 ④ 跑）")
     ap.add_argument("--serial", action="store_true", help="全串行（对照并行下的偶发失败）")
     ap.add_argument("--no-reuse", action="store_true", help="不信复用记录，真机层全部重跑")
     ap.add_argument("--seal", action="store_true", help="提交前封存：只更新 tree 字段")
@@ -1603,6 +1790,27 @@ def main() -> int:
         print(f"  [affected] {affected_plan.note}", flush=True)
         for _n, _why in affected_plan.skipped:
             print(f"  [affected] 跳 {_n:<22} {_why}", flush=True)
+
+    # ★ 卡 254（T-G375）：`--fast`（落地链 ③″ 快门禁）再补一道「受影响的测试」门 ——
+    #   只跑与**本次改动**有显式映射的那几个用例（串行 + --no-cov）。★ 它**不替代** ④ 全量：
+    #   映射不到 / 公共模块 ⇒ 回退全量（这一趟不裁选集），判提交的仍是收口链 ④。
+    if args.fast:
+        changed = worktree_changed_paths()
+        print("=== 受影响测试选择（卡 254；★ 提交前仍要 ④ 全量）===", flush=True)
+        if changed is None:
+            print("  [select] 读不到 git 改动 ⇒ 不裁选集（全量仍在 ④）", flush=True)
+        else:
+            sel = select_tests(changed)
+            print(f"  [select] 改动 {len(changed)} 条：{changed if changed else '（空）'}",
+                  flush=True)
+            print(f"  [select] {sel.note}", flush=True)
+            for _p in sel.ignored:
+                print(f"  [select] 记账/文档不参与选集（其用例在 ④ 照跑）：{_p}", flush=True)
+            quick_job = quick_test_job(sel)
+            if quick_job is not None:
+                print(f"  [select] 选集 {len(sel.tests)} 个用例（串行 + --no-cov）："
+                      f"{', '.join(sel.tests)}", flush=True)
+                jobs.append(quick_job)
 
     cmds = dict(jobs)
 

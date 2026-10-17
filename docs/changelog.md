@@ -39,6 +39,11 @@
 - ★ 快照写入走**监测路径开关**：CLI `main()` 打开；`build_reading(..., remember=True)` 可显式开；`build_inbox()` 等库调用方**不写** ⇒ 只读硬判据仍然成立 ✓（这正是第一版会把 `test_read_only_leaves_worktree_untouched` 弄红的原因，已修）。
 - 判据：`tests/test_pipeline_view.py` +184 行（声明表一致性、`--json`/`--report` 同源、改名来源 ⇒ null + 标注语、连续块 last-good、反例手写一处不一致 ⇒ 红）✓。
 - ★ 真读数（卡树 `.wt/blocks` 内实测）：`pytest tests/test_pipeline_view.py tests/test_timeflow_inbox.py --no-cov` **全绿**（退出码 0，含只读硬判据）；`ruff check` = `All checks passed!`；`python -X utf8 tools/pipeline_view.py --json` 正常出六块，并在 `gates/diag/pipeline-view-lastgood.json` 落 2456 字节快照 ✓。
+## 2026-10-17 —— 受影响的测试选择（只跑该跑的，别每次全量）（T-G375）
+- `scripts/run_gates.py`：加**受影响的测试选择** —— 改动路径 → 门输入映射（同命名 `tests/test_<x>.py` ↔ `tools/<x>.py`）+ 显式例外表 `TEST_SELECTION_EXCEPTIONS`；命中不了或落在公共模块 ⇒ `full_fallback=True` **回退全量** ✓。
+- `tests/test_gate_peak.py`（新增）：同名工具只选集到自己的测试、改测试文件选它自己、公共模块回退全量、映射不到回退全量、文档/台账不破坏选择、例外表显式且真实、状态行首行不被破坏 ✓。
+- ★ 本卡只做用户点的那一条（1② 受影响的测试选择）；`-n` 自适应与串行化**没做**（卡规格明确排除）✓。
+- ★ 真读数（卡树 `.wt/gatepeak` 内实测）：`pytest tests/test_gate_peak.py --no-cov` 全绿；`ruff check scripts/run_gates.py tests/test_gate_peak.py` = `All checks passed!` ✓。
 ## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
 - **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
 - ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。

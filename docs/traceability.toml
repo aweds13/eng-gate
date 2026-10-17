@@ -6846,3 +6846,13 @@ evidence = [
   "file:gates/diag/_text_TG374.md",
 ]
 gaps = "① ★ 「没起」状态必须配**一键启动**，而且只许起 `tools/stack.py` 组件表里那几件（白名单写死，不许任意命令）。指针：`tools/dsh_panel.py`。② ★ 「起没起来」必须**探端口**判定，不是点了就算（反例：短路端口探测 ⇒ 判据红）。指针：`tools/dsh_panel.py`。③ ★ 起停动作要留痕：每次谁、何时、起了/停了、结果 ⇒ `gates/diag/stack-actions.log`。指针：`tools/stack.py`。④ ★ 内存账本：`stack.py status` 每件加 RSS + 合计 + 400 MB 预算，超了显式提示。指针：`tools/stack.py`。"
+
+[entries."T-G375"]
+id = "T-G375"
+title = "门禁峰值治理：按改动单位选测试，保守回退全量"
+group = "tests"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TG375.md",
+]
+gaps = "① ★ 不许每次落地都跑全量门禁：**改动文件 → 该跑哪些测试**要有可核查的映射（`tests/test_<x>.py` ↔ `tools/<x>.py` 命名对应 + 显式例外表）。指针：`scripts/run_gates.py`。② ★ 兜底必须保守：映射不到、或改动落在公共模块（`tools/pool/**`、`scripts/**`、`pyproject.toml`、`tests/conftest.py`）⇒ **回退全量**（不许少跑判据）。指针：`scripts/run_gates.py`。③ ★ 省内存的读数要说清：全量 vs 选集的**进程数/峰值**对比，不是「感觉快了」。指针：`tests/test_gate_peak.py`。"
