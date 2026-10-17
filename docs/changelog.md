@@ -9,6 +9,11 @@
 - 新增一份文档 `复盘/DSH插件-dsh-web逐包对照.md`：11 个包 × 四栏，每条带 `文件:行号`；空话检查 0 命中。
 - 许可与出处、三档处置（整包用 / 抄代码 / 只借机制）、「装了不打架」硬判据、边界（如实写没做到）各成一节。
 - 末尾 5 条可落地改造：每条指名落我们哪个文件 + 怎么验，均需单独开卡（本卡不动 `tools/tests/scripts`）。
+## 2026-10-17 —— 台账同步去重：同名条目重放时原地替换（T-AG386）
+- `tools/sync_docs.py`：`_merge_traceability` 由「只追加」改成「**有同名 `[entries."X"]` 就原地替换**（到下一个 `[entries.` 或文件尾），没有才追加」；新增 `_TRACE_KEY_RE` / `_trace_key()` ✓。
+- 判据：`tests/test_docs_fragments.py::test_traceability_merge_replaces_duplicate_key`（合并两次 ⇒ 唯一同名条目 + TOML 可解析 + 旧条目不被吞）✓。
+- 为什么：同一张卡片段重放时，旧逻辑产生两个同名表 ⇒ TOML 报 `Cannot declare ('entries', 'X') twice`，整笔落地被写后自检拦住（260/262 各白跑一趟全量门禁）✓。
+- ★ 真读数：合并一次计数 1 → 再合并仍 1；`tomllib.loads` 通过、键集合 `{T-G900, T-G999}` ✓；`sync_docs.py --check` = `[OK ] 片段 ↔ 汇总一致（changelog.d=123, traceability.d=123, 交接.d=123）` ✓。
 ## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
 - **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
 - ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。

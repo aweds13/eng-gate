@@ -126,11 +126,39 @@ def _changelog_order_problems(rel_name: str, target: str) -> list[str]:
     return out
 
 
+_TRACE_KEY_RE = re.compile(r'^\[entries\.("?)([^"\]]+)\1\]', re.M)
+
+
+def _trace_key(text: str) -> str | None:
+    """片段里的台账键（`[entries."T-G370"]` → `T-G370`）；不是台账片段 → None。"""
+    m = _TRACE_KEY_RE.search(text)
+    return m.group(2) if m else None
+
+
 def _merge_traceability(target: str, pending: list[tuple[str, str]]) -> str:
-    """新 `[entries.*]` 表接在**文件尾**（现有条目的排列就是先来的在上、新条目追加在后）。"""
-    base = target.rstrip("\n")
-    body = "\n\n".join(_norm(t) for _n, t in pending)
-    return base + "\n\n" + body + "\n"
+    """新 `[entries.*]` 表接在**文件尾**；★ 已有同名条目就**原地替换**（卡 A268）。
+
+    为什么替换：以前只会「末尾追加」，而同一张卡的片段会被重放（⓪ 回退后重跑、或
+    上一趟已写进汇总又重来）⇒ 汇总里出现两个 `[entries."X"]` ⇒ TOML 直接报
+    `Cannot declare ('entries', 'X') twice`，把整个落地拦住（252/260/262 都撞过）。
+    """
+    out = target.rstrip("\n")
+    for _n, t in pending:
+        body = _norm(t).rstrip("\n")
+        key = _trace_key(body)
+        hit = None
+        if key:
+            for m in _TRACE_KEY_RE.finditer(out):
+                if m.group(2) == key:
+                    hit = m
+                    break
+        if hit is None:
+            out = out + "\n\n" + body
+            continue
+        nxt = re.compile(r'^\[entries\.', re.M).search(out, hit.end())
+        tail = out[nxt.start():] if nxt else ""
+        out = out[:hit.start()] + body + "\n" + ("\n" + tail if tail else "")
+    return out + "\n"
 
 
 def _handoff_anchor_offset(text: str) -> int:

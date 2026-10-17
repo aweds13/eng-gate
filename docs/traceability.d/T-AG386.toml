@@ -1,0 +1,10 @@
+[entries."T-AG386"]
+id = "T-AG386"
+title = "台账同步去重：同名条目重放时原地替换"
+group = "tests"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TAG386.md",
+]
+gaps = "① ★ 同一张卡的台账片段**重放**时不许再出现第二个同名表（现场：260/262 的重试都撞 `Cannot declare ('entries', 'X') twice`）。指针：`tools/sync_docs.py`。② ★ 判据钉住行为：同一片段合并两次 ⇒ 只有一个同名条目、TOML 可解析、旧条目不被吞。指针：`tests/test_docs_fragments.py`。③ ★ 撞车现场留档（谁在哪一步被拦）。指针：`gates/diag/_land_260.log`。"
+

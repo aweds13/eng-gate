@@ -6794,3 +6794,13 @@ evidence = [
   "file:复盘/DSH插件-dsh-web逐包对照.md",
 ]
 gaps = "1. dsh-web 那 11 个包逐个给了四栏（它怎么做 / 我们的对应物 / 该借哪条机制 / 不借什么），每条结论带 `文件:行号`。指针 `复盘/DSH插件-dsh-web逐包对照.md`2. 许可与出处单列一节（Apache-2.0 / MIT 分档），抄代码前必须先读。指针 `复盘/DSH插件-dsh-web逐包对照.md`3. 末尾五条改造是**提案**，每条指名落我们哪个文件、怎么验，各自要单独一张卡。指针 `复盘/DSH插件-dsh-web逐包对照.md`4. 没做到的部分如实写在边界一节（没装包、没建 `desktop-copy` profile、没改 `tools/tests/scripts`）。指针 `复盘/DSH插件-dsh-web逐包对照.md`"
+
+[entries."T-AG386"]
+id = "T-AG386"
+title = "台账同步去重：同名条目重放时原地替换"
+group = "tests"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TAG386.md",
+]
+gaps = "① ★ 同一张卡的台账片段**重放**时不许再出现第二个同名表（现场：260/262 的重试都撞 `Cannot declare ('entries', 'X') twice`）。指针：`tools/sync_docs.py`。② ★ 判据钉住行为：同一片段合并两次 ⇒ 只有一个同名条目、TOML 可解析、旧条目不被吞。指针：`tests/test_docs_fragments.py`。③ ★ 撞车现场留档（谁在哪一步被拦）。指针：`gates/diag/_land_260.log`。"

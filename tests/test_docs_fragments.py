@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import pytest
+import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
@@ -309,3 +310,20 @@ def test_audit_verdict_unchanged_by_sync() -> None:
     assert sd.run(ROOT, check=False) == 0
     assert audit() == before  # 汇总前后 audit 结论逐字不变
     assert before[0] == 0
+
+
+def test_traceability_merge_replaces_duplicate_key() -> None:
+    """卡 A268：同一张卡的台账片段**重放**时原地替换，不许出现两个 `[entries."X"]`。
+
+    为什么要这条：以前只会末尾追加 ⇒ 汇总里出现两个同名表 ⇒ TOML 报
+    `Cannot declare ('entries', 'X') twice`，把整笔落地拦住（252/260/262 都撞过）。
+    """
+    nl = "\n"
+    frag = f'[entries."T-G999"]{nl}id = "T-G999"{nl}kind = "feat"{nl}'
+    target = f'[entries."T-G900"]{nl}id = "T-G900"{nl}'
+    once = sd._merge_traceability(target, [("x", frag)])
+    twice = sd._merge_traceability(once, [("x", frag)])
+    assert once.count('[entries."T-G999"]') == 1
+    assert twice.count('[entries."T-G999"]') == 1, "重放后仍必须只有一个同名条目"
+    parsed = tomllib.loads(twice)
+    assert set(parsed["entries"]) == {"T-G900", "T-G999"}
