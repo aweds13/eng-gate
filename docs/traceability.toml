@@ -6812,5 +6812,17 @@ group = "tests"
 status = "done"
 evidence = [
   "file:gates/diag/_text_TAG387.md",
+  "file:tools/wb_reconcile.py",
+  "file:tests/test_wb_reconcile.py",
 ]
 gaps = "① ★ 状态不是 done 但历史里已有这笔 ⇒ 必须**点红**并给出提交号（现场：252/260/262 各白跑一趟全量门禁）。指针：`tools/wb_reconcile.py`。② ★ 状态 done 但找不到提交 ⇒ **只报不拒**（本仓 15 张老账，不能当红）。指针：`tools/wb_reconcile.py`。③ ★ 判据要真 git 仓，不许 mock 掉 git 行为。指针：`tests/test_wb_reconcile.py`。"
+
+[entries."T-AG388"]
+id = "T-AG388"
+title = "给 T-AG387 补 file: 证据指针"
+group = "docs"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TAG388.md",
+]
+gaps = "① ★ 台账片段的 `evidence` 必须点名**这一笔真正改了的文件**（否则审计按提交文件清单找不到 `file:` 指针就会红）。指针：`docs/traceability.d/T-AG387.toml`。② ★ 只补指针、不动代码、不动判据、不用 `[claimed_files_exempt]` 兜。指针：`scripts/audit_progress.py`。"

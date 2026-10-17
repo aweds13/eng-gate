@@ -19,6 +19,10 @@
 - 判据 `tests/test_wb_reconcile.py`：红/黄/绿三条，用真 git 仓（`git init` + 真提交），不 mock ✓。
 - ★ 为什么：队列连续撒谎（252/260/262 早已落地却写 pending ⇒ 白跑三趟全量门禁），而 `audit_progress.py` 只查 done 有没有证据、不查 pending 有没有提交 ✓。
 - ★ 真读数：`pytest tests/test_wb_reconcile.py` = **3 passed**；真机跑出 `[红] 卡 146（T-G246，状态 failed）已有提交 1005569` + 15 条 `[黄]`；`ruff` = `All checks passed!` ✓。
+## 2026-10-17 —— 给 T-AG387 补 `file:` 证据指针（T-AG388）
+- `docs/traceability.d/T-AG387.toml` 的 `evidence` 增加 `file:tools/wb_reconcile.py`、`file:tests/test_wb_reconcile.py`，并 `sync_docs.py` 合并进汇总 ✓。
+- ★ 为什么：落地链自动生成的片段只带文书一行指针，而审计是**按提交里的文件清单**去台账找 `file:` 指针的 ⇒ 新增文件必须被点名，否则 `audit_progress.py` 红 ✓。
+- ★ 真读数：`sync_docs.py` 退出码 0；改动后审计只差这一条指针 ✓。
 ## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
 - **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
 - ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。

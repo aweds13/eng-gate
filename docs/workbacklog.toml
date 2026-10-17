@@ -28,6 +28,16 @@ reviewed = "64d9d02"        # 已复核的基点提交（没登记过就不许�
 #   现在改成当时 HEAD；以后每落一批，这里跟着走。
 
 [[cards]]
+id = "A270"
+task = "T-AG388"
+title = "给 T-AG387 补 file: 证据指针"
+tree = ".wt/A270"
+spec = "复盘/卡/卡A270-补证据指针.md"
+files = ["docs/traceability.d/T-AG387.toml"]
+depends = []
+risk = "low"
+status = "done"
+[[cards]]
 id = "A269"
 task = "T-AG387"
 title = "台账与 git 历史对账：stale-pending 点红"
