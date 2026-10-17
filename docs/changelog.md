@@ -28,6 +28,12 @@
 - 新增判据 `COLOR_LITERAL_RE`（`#rrggbb`/`rgb(`/`hsl(`）+ `_check_client` 两条：生成物里出现硬编码颜色 ⇒ 点名；缺 `var(--dsw-alias-` ⇒ 点名 ✓。
 - 判据 `tests/test_dsh_panel.py` 三条：全份生成物零颜色残留、甘特条用令牌、反例（塞回 `#f0f0f0` ⇒ `check` 必须红）✓。
 - ★ 真读数：`pytest tests/test_dsh_panel.py` = 94 passed；`dsh_panel.py --check` = `[OK ] 全局面板自检通过`；`ruff` = `All checks passed!` ✓。
+## 2026-10-17 —— 面板一键启动目标页 + 把桌面 cmd 集成进来（T-G374）
+- `tools/dsh_panel.py`：三个目标各配**一条白名单启动动作**（工作台 `board`／timeflow `timeflow`／禅道 `zentao`），只从 `tools/stack.py` 组件表取；「没起」时给一键启动按钮，按下后**探端口**判「真起来了」✓。
+- 新增「全部起 / 停这一件」入口 + 最近动作（读 `gates/diag/stack-actions.log`）；动作落痕由 `tools/stack.py::log_action` 写 ✓。
+- `tools/stack.py`：`status` 加 **RSS 账本**（每件一栏 + 合计 + 400 MB 常驻预算，超预算显式提示）；`recent_actions()` 供面板读最近动作 ✓。
+- 判据：`tests/test_dsh_panel.py` +175 行、`tests/test_stack.py` +133 行（含白名单反例、端口探测反例、日志落痕、RSS 账本）✓。
+- ★ 真读数（在卡树 `.wt/oneclick` 里实测）：`pytest tests/test_dsh_panel.py tests/test_stack.py --no-cov` 退出码 0（全绿）；`python -X utf8 tools/dsh_panel.py --check` = `[OK ] 全局面板自检通过：三座位（workbench_board、zentao_gantt、timeflow_inbox）；只读 + 失败可见`；`ruff check` = `All checks passed!`；`stack.py status` 尾行 `合计 RSS：5.2 MB（常驻预算 400 MB）` ✓。
 ## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
 - **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
 - ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。

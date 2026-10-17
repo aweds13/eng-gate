@@ -50,8 +50,18 @@
   id-name 一致 / 「删掉补丁层 = 插件不加载」写给人看）—— `check()` 逐条钉死；
   ④ 左栏底部入口 `sidebar.footer.action`（保底路：main 是会话时 openTab 直接可用）。
 
+★ 卡 253（T-G374）：
+  ① 「没起」状态带**一键启动**（三个目标各一条动作，白名单写死 = `tools/stack.py`
+  组件表里的 `board` / `timeflow` / `zentao`；**没有透传任意命令的口子**）；
+  ② 反馈如实：先写「已发起启动」⇒ 宿主半跑 `stack.py`（它**探真端口**）⇒ 真起来才改口
+  「已起（端口 N；映像 X）」；超时给原话 + 日志路径；
+  ③ 面板里加「全部起 / 停这一件」+ 最近动作（`gates/diag/stack-actions.log`）+ RSS 账本；
+  ④ 面板改成**点开才读**（没有常驻定时轮询）。
+
 ★ **只读**：面板的数据来自卡 207 / 卡 222 / 卡 223 的**唯一读数器**；面板**不写仓库、
-  不起工人**（用户早先拍过：拖动只写意图、主控执行）。`check()` 把这条钉成硬判据。
+  不派工人**（用户早先拍过：拖动只写意图、主控执行）。卡 253 把这条**精确化**：
+  允许起停 `stack.py` 组件表里那几件**服务**，仍然禁止派工人 / 写仓库 / 改 `~/.dsh`；
+  `check()` 把两面**分别**钉成硬判据。
 ★ **加载失败要看得见**：数据源缺失 / 读数器非零 / 超时 ⇒ 面板与工具**都显式报错**
   （`data-wb-state="error"`），**绝不用空板子冒充成功**。
 ★ **不许去改用户的 `~/.dsh` 配置**（那是用户的地盘）；说明只交「能被照着做的事」。
@@ -81,13 +91,15 @@ _TOOLS_DIR = str(Path(__file__).resolve().parent)
 if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
 
+# 卡 253：动作白名单的**真源** = tools/stack.py 的组件表（面板只许起停表里那几件服务）。
+import stack  # noqa: E402
 from pool.no_window import NO_WINDOW  # noqa: E402  ★ 卡 148：子进程一律不弹窗（唯一真源）
 
 ROOT = Path(__file__).resolve().parent.parent
 
 #: 面板包名（本地目录即可，⏳ 不必发布 npm）。
 PACKAGE_NAME = "dsh-client-ui-workbench-panel"
-PACKAGE_VERSION = "0.0.4"
+PACKAGE_VERSION = "0.0.5"
 
 #: 落盘时每块内容相对包根的位置。
 HOST_REL = "lib/index.js"
@@ -299,17 +311,65 @@ class Target:
     seat: str  # 对应的座位 key
     url: str  # 真实页面的 URL（只许指本机）
     up_hint: str  # 没起时的「怎么起」（卡 242 的原话口径）
+    #: 卡 253：这一目标的一键启动动作 = `tools/stack.py` 组件表里的**那一个**组件名。
+    start: str = ""
 
 
-#: ★ TARGETS 表（卡 242）—— 三条真实页面 URL，与 SEATS 的 key 一一对应；
-#:   目标页归别的卡/别的工具（wb_dash.py / serve.py / 禅道），本面板只**指向**它们。
+#: ★ TARGETS 表（卡 242；卡 253 加 start 动作）—— 三条真实页面 URL，与 SEATS 的 key
+#:   一一对应；目标页归别的卡/别的工具（wb_dash.py / serve.py / 禅道），面板只**指向**它们。
+#:   ★ `start` 只许写 `tools/stack.py` 组件表里的名字（白名单见 ACTION_WHITELIST）。
 TARGETS: tuple[Target, ...] = (
-    Target("workbench_board", "http://127.0.0.1:8787/", "python -X utf8 tools/wb_dash.py"),
-    Target("zentao_gantt", "http://127.0.0.1/zentao/", "点 ZenPanel（禅道只听 127.0.0.1:80）"),
     Target(
-        "timeflow_inbox", "http://127.0.0.1:8520/", "python -X utf8 tools/stack.py start timeflow"
+        "workbench_board",
+        "http://127.0.0.1:8787/",
+        "python -X utf8 tools/stack.py start board（= tools/wb_dash.py，端口 8787）",
+        "board",
+    ),
+    Target(
+        "zentao_gantt",
+        "http://127.0.0.1/zentao/",
+        "python -X utf8 tools/stack.py start zentao（也可点 ZenPanel）",
+        "zentao",
+    ),
+    Target(
+        "timeflow_inbox",
+        "http://127.0.0.1:8520/",
+        "python -X utf8 tools/stack.py start timeflow",
+        "timeflow",
     ),
 )
+
+#: 卡 253：面板动作缝的路径（与只读缝同前缀；只收 start / stop / start-all）。
+ACTION_ROUTE = f"{SEAM_PREFIX}/actions"
+#: 卡 253：服务现读 + 最近动作的路径（GET，只读；与 `stack.py status --json` 同口径）。
+STACK_STATUS_ROUTE = f"{SEAM_PREFIX}/stack-status"
+
+#: 卡 253：**写死**的服务白名单 —— 真源是 `tools/stack.py` 的组件表（worker 不在表里，
+#: 所以面板永远派不出工人）。`start-all` 只是 `stack.py start`（无名字）的等价动作。
+SERVICE_WHITELIST: tuple[str, ...] = tuple(stack.COMPONENTS)
+ACTION_WHITELIST: dict[str, tuple[str, ...]] = {
+    "start": SERVICE_WHITELIST,
+    "stop": SERVICE_WHITELIST,
+    "start-all": (),
+}
+
+
+def resolve_action(kind: str, name: str = "") -> list[str]:
+    """卡 253：把面板动作翻成**写死的 argv**；白名单外一律拒绝并**点名**。
+
+    ★ 只接受 `(kind, name)` 两个枚举值 —— 面板**没有"透传任意命令"的口子**，
+      参数不是命令字符串，拼不进别的进程。反例（必须拒）：`rm -rf` / `board; rm -rf`。
+    """
+    if kind not in ACTION_WHITELIST:
+        raise ValueError(f"拒绝：动作 `{kind}` 不在白名单 {tuple(ACTION_WHITELIST)} 里")
+    if kind == "start-all":
+        return [sys.executable, "-X", "utf8", "tools/stack.py", "start"]
+    allowed = ACTION_WHITELIST[kind]
+    if name not in allowed:
+        raise ValueError(
+            f"拒绝：`{name}` 不在 {kind} 白名单 {allowed} 里 —— 面板只许起停这几件服务"
+        )
+    return [sys.executable, "-X", "utf8", "tools/stack.py", kind, name]
 
 #: 卡 242 判据：这些文字符号**不许**再当图标出现在浏览器半里（反例：塞回一个 ⇒ 红）。
 TEXT_GLYPH_BAN: tuple[str, ...] = ("\u25a6", "\u25a4", "\u25a5")
@@ -329,7 +389,10 @@ MANIFEST = {
     "order": SEATS[0].order,
     "label": {"zh": SEATS[0].label_zh, "en": SEATS[0].label_en},
     "icon": {"kind": "inline-svg", "size": 16, "viewbox": "0 0 16 16"},
+    # 卡 253：read_only = **不写仓库 / 不派工人**（不是「不起服务」——起停服务是允许的，
+    # 白名单写死在 ACTION_WHITELIST，真源是 tools/stack.py 的组件表）。
     "read_only": True,
+    "service_control": True,
     "data_source": "tools/pipeline_view.py --json（卡 207 的唯一读数器）",
     "seat": "root 作用域 `main` keyed 座（key=workbench_board）",
     "seats": list(SEAT_KEYS),
@@ -509,6 +572,7 @@ _HOST_JS_TEMPLATE = r"""/* 卡 221 + 卡 240 产物 · 全局面板：宿主半�
  * ★ 缺什么说什么：工具不在 / 非零 / 超时 / 输出不是 JSON / 顶层不是对象
  *   ⇒ { ok:false, error }，绝不用空数据冒充成功。★ 只读：不写仓库、不起工人。 */
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { defineTool } from "@deepseek-ai/dsh-tools";
@@ -520,6 +584,16 @@ export const inject = ["tools"];
 
 const SEAM_PREFIX = "/dsh-panel";
 const SEAT_TIMEOUT_MS = 30000;
+/* 卡 253：动作缝（POST）与服务现读（GET）—— 都在同一条 prefix 缝下面。 */
+const ACTION_ROUTE = "__ACTION_ROUTE__";
+const STACK_STATUS_ROUTE = "__STACK_STATUS_ROUTE__";
+const ACTIONS_LOG_REL = ["gates", "diag", "stack-actions.log"];
+/* ★ 卡 253：**写死**的动作白名单（真源 = tools/stack.py 的组件表）。
+ * 面板只收 {kind, name} 两个枚举值；这里不认命令字符串，没有透传口子。
+ *   start / stop：只许表里那五件服务；
+ *   start-all   ：等价于 `python tools/stack.py start`（无名字）。
+ * ★ 仍然禁止：派工人（dispatch 类工具）、写仓库、改 ~/.dsh、跑门禁。 */
+const ACTION_WHITELIST = __ACTION_WHITELIST__;
 
 /* 座位表（与浏览器半同源）：name = 会话内工具名 = 座位 key；route = 只读缝路径。 */
 const SEATS = [
@@ -584,13 +658,107 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-/** 只读缝的 handler：只 GET、只认三条已知路由。 */
+/** 卡 253：跑一次 `tools/stack.py`（argv 写死，绝不 shell）；缺根就如实报。 */
+function runStack(args, timeoutMs) {
+  const root = repoRoot();
+  if (!root) {
+    return {
+      ok: false,
+      error: "没告诉我仓库根：请在插件行的 config 里写 root（或设 DSH_WORKBENCH_ROOT）。",
+    };
+  }
+  const done = spawnSync(process.env.DSH_PYTHON || "python",
+    ["-X", "utf8", path.join(root, "tools", "stack.py"), ...args], {
+      encoding: "utf8",
+      timeout: timeoutMs,
+      windowsHide: true,
+      maxBuffer: 16 * 1024 * 1024,
+      cwd: root,
+    });
+  const output = ((done.stdout || "") + (done.stderr || "")).trim();
+  if (done.error) {
+    return { ok: false, error: `stack.py 起不来：${done.error.message}`, output };
+  }
+  return {
+    ok: done.status === 0,
+    error: done.status === 0 ? "" : `stack.py 非零退出（${done.status}）`,
+    output,
+  };
+}
+
+/** 卡 253：服务现读（与 `stack.py status --json` 同一个 status_data 真源）。 */
+function readStatus() {
+  const done = runStack(["status", "--json"], SEAT_TIMEOUT_MS);
+  if (!done.ok) return { ok: false, error: done.error || done.output };
+  try {
+    return JSON.parse(done.output);
+  } catch (error) {
+    return { ok: false, error: `status --json 输出不是 JSON：${error.message}` };
+  }
+}
+
+/** 卡 253：动作日志最后几行（读不到 ⇒ 空表 + 不假装）。 */
+function recentActions() {
+  const root = repoRoot();
+  if (!root) return [];
+  try {
+    const text = fs.readFileSync(path.join(root, ...ACTIONS_LOG_REL), "utf8");
+    return text.split(/\r?\n/).filter((line) => line.trim()).slice(-5);
+  } catch (error) {
+    return [];
+  }
+}
+
+/** 卡 253：动作缝 —— 只收白名单里的 {kind, name}，其余一律拒绝并点名。 */
+function serveAction(req, res, url) {
+  if (req.method !== "POST") {
+    sendJson(res, 405, { ok: false, error: `动作缝只接受 POST，收到 ${req.method}` });
+    return;
+  }
+  const kind = url.searchParams.get("kind") || "";
+  const name = url.searchParams.get("name") || "";
+  const allowed = ACTION_WHITELIST[kind];
+  if (allowed === undefined) {
+    sendJson(res, 400, {
+      ok: false,
+      error: `拒绝：动作 ${kind} 不在白名单 [${Object.keys(ACTION_WHITELIST).join(", ")}] 里`,
+    });
+    return;
+  }
+  if (Array.isArray(allowed) && !allowed.includes(name)) {
+    sendJson(res, 400, {
+      ok: false,
+      error: `拒绝：${name} 不在 ${kind} 白名单 [${allowed.join(", ")}] 里`,
+    });
+    return;
+  }
+  const args = ["--actor", "panel", kind];
+  if (kind !== "start-all") args.push(name);
+  const done = runStack(args, 45000);
+  sendJson(res, 200, {
+    ok: done.ok,
+    output: done.output,
+    error: done.error,
+    status: readStatus(),
+    recent: recentActions(),
+  });
+}
+
+/** 缝的 handler：动作缝只认 POST 且只认白名单；其余（读数）只 GET、只认已知路由。 */
 function serveSeam(req, res) {
+  const url = new URL(req.url || "/", "http://localhost");
+  if (url.pathname === ACTION_ROUTE) {
+    serveAction(req, res, url);
+    return;
+  }
   if (req.method !== "GET") {
     sendJson(res, 405, { ok: false, error: `只读缝只接受 GET，收到 ${req.method}` });
     return;
   }
-  const url = new URL(req.url || "/", "http://localhost");
+  if (url.pathname === STACK_STATUS_ROUTE) {
+    sendJson(res, 200, { ok: true, status: readStatus(), recent: recentActions() });
+    return;
+  }
   const seat = SEATS.find((row) => row.route === url.pathname);
   if (seat === undefined) {
     sendJson(res, 404, { ok: false, error: `未知路由：${url.pathname}` });
@@ -630,9 +798,22 @@ export function apply(ctx) {
 """
 
 
+def _action_whitelist_js() -> str:
+    """卡 253：宿主半那份**写死**的动作白名单（从 Python 的 ACTION_WHITELIST 生成）。"""
+    body = ", ".join(
+        f"{json.dumps(kind)}: {'true' if not names else json.dumps(list(names))}"
+        for kind, names in ACTION_WHITELIST.items()
+    )
+    return "{ " + body + " }"
+
+
 def _host_js() -> str:
-    return _HOST_JS_TEMPLATE.replace("__SEATS__", _host_seats_js()).replace(
-        "__PKG_NAME__", json.dumps(PACKAGE_NAME)
+    return (
+        _HOST_JS_TEMPLATE.replace("__SEATS__", _host_seats_js())
+        .replace("__ACTION_WHITELIST__", _action_whitelist_js())
+        .replace("__ACTION_ROUTE__", ACTION_ROUTE)
+        .replace("__STACK_STATUS_ROUTE__", STACK_STATUS_ROUTE)
+        .replace("__PKG_NAME__", json.dumps(PACKAGE_NAME))
     )
 
 
@@ -698,6 +879,9 @@ window.__ModuleLoader__.load({
     const NS = "workbenchPanel";
     const PANEL_ID = "workbench_board";
     const SECTIONS = ["cards", "gates", "verdicts", "leases", "fences", "worktrees"];
+    /* 卡 253：动作缝（POST，白名单在宿主半）与服务现读（GET）。 */
+    const ACTION_ROUTE = "__ACTION_ROUTE__";
+    const STACK_STATUS_ROUTE = "__STACK_STATUS_ROUTE__";
 
     /* ---- TARGETS（卡 242）：三个真实页面，与座位表同源（key 一一对应） ----
      * up = 没起时的「怎么起」。目标页归别的工具（wb_dash.py / serve.py / 禅道），
@@ -829,10 +1013,129 @@ __TARGETS__
         setOpenError(String((error && error.message) || error));
       }
     }
+    /* ---- 卡 253 · 服务控制：一起起 / 分别停 ----
+     * ★ 点开才读：挂载时读一次（面板被点开 = 挂载），**没有常驻定时轮询**；
+     *   「聚焦」也是一次现读（按钮每次动作后 reload），不做后台轮询。
+     * ★ 动作只传 {kind, name} 两个枚举值给宿主半；白名单在宿主半写死（真源 stack.py）。
+     * ★ 反馈如实：先写「已发起启动」；宿主半等 stack.py 探到**真端口**才回 ok，
+     *   这时才改口「已起（端口 N；映像 X）」；等不到就原样显示 stack.py 的原话
+     *   「发起了，但 N 秒内端口还没起来 —— 看 <日志>」。绝不点一下就写「已启动」。 */
+    function useServiceControl() {
+      const [state, setState] = react.useState({ status: "loading" });
+      const [action, setAction] = react.useState(null);
+      const reload = react.useCallback(() => {
+        fetch(STACK_STATUS_ROUTE, { method: "GET" })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data && data.ok === false) {
+              setState({ status: "error", error: String(data.error || "现读失败") });
+            } else {
+              setState({ status: "ready", data });
+            }
+          })
+          .catch((error) => setState({ status: "error", error: String(error.message || error) }));
+      }, []);
+      react.useEffect(() => { reload(); }, [reload]);
+      const run = react.useCallback((kind, name) => {
+        setAction({
+          phase: "starting",
+          text: (kind === "stop" ? "已发起停止：" : "已发起启动：") + (name || "全部"),
+        });
+        const query = "?kind=" + encodeURIComponent(kind)
+          + "&name=" + encodeURIComponent(name || "");
+        fetch(ACTION_ROUTE + query, { method: "POST" })
+          .then((response) => response.json())
+          .then((data) => {
+            const status = data.status || {};
+            const rows = status.components || [];
+            const row = rows.find ? rows.find((item) => item.name === name) : null;
+            if (data.ok && (kind === "start-all" || (row && row.running))) {
+              setAction({
+                phase: "done",
+                /* 停：原样显示 stack.py 的原话（「已停…」/「没在跑…」都不改写）。 */
+                text: kind === "stop"
+                  ? (data.output || "已停：" + name)
+                  : "已起（" + (row ? row.detail : "全部动作成功") + "）",
+              });
+            } else {
+              setAction({
+                phase: "failed",
+                text: String(data.error || "") + " " + String(data.output || ""),
+              });
+            }
+            if (status.ok === true) {
+              setState({ status: "ready", data: { ok: true, status, recent: data.recent || [] } });
+            } else {
+              reload();
+            }
+          })
+          .catch((error) => setAction({
+            phase: "failed",
+            text: "动作请求失败（原话：" + String(error.message || error) + "）",
+          }));
+      }, [reload]);
+      return { state, action, reload, run };
+    }
+
+    /* 服务面板（纯展示）：现读行 + RSS + 「全部起」/「停这一件」+ 最近动作。 */
+    function ServiceControls(props) {
+      const control = props.control;
+      const status = control.state;
+      const button = { padding: "4px 10px", cursor: "pointer" };
+      const payload = status.status === "ready" ? (status.data || {}) : {};
+      const board = payload.status || {};
+      const rows = board.components || [];
+      const recent = payload.recent || [];
+      return h("div", { "data-wb-services": "" },
+        h("h3", null, "服务（一起起 / 分别停）"),
+        status.status === "error"
+          ? h("p", { "data-wb-state": "error", "data-wb-error": "stack-status" },
+              "服务现读失败（原话：" + status.error + "）—— 不静默")
+          : null,
+        h("p", null,
+          h("button", { style: button, onClick: () => control.run("start-all", "") },
+            "全部起（= stack.py start）")),
+        props.target && props.target.start
+          ? h("p", null,
+              h("button", { style: button,
+                onClick: () => control.run("start", props.target.start) },
+              "一键启动 " + props.target.start))
+          : null,
+        rows.length
+          ? h("ul", null, rows.map((row) =>
+              h("li", { key: row.name },
+                row.name + " " + (row.running ? "在跑" : "没起") + "：" + row.detail
+                  + " ｜ RSS " + (row.rss_mb === null ? "?" : row.rss_mb) + " MB",
+                " ",
+                h("button", { style: button,
+                  onClick: () => control.run("stop", row.name) }, "停这一件"))))
+          : null,
+        h("p", { "data-wb-budget": "" },
+          "合计 RSS：" + (board.total_rss_mb === undefined ? "?" : board.total_rss_mb)
+            + " MB（常驻预算 " + (board.budget_mb === undefined ? 400 : board.budget_mb) + " MB）",
+          board.over_budget ? " ★ 超出常驻预算 —— 停掉不用的服务" : ""),
+        control.action
+          ? h("p", { "data-wb-action": control.action.phase }, control.action.text)
+          : null,
+        h("p", { "data-wb-note": "" }, "动作日志：gates/diag/stack-actions.log"),
+        recent.length
+          ? h("div", null,
+              h("p", null, "最近动作："),
+              h("ul", null, recent.map((line, index) => h("li", { key: index }, line))))
+          : h("p", null, "最近动作：读不到（日志还没写过）"));
+    }
+
+    /* 底部入口用：只在用户点开时才挂载（挂载才读一次，不是常驻轮询）。 */
+    function ServicePanel(props) {
+      const control = useServiceControl();
+      return h(ServiceControls, { control, target: props.target });
+    }
+
     function QuickEntry(props) {
       const target = props.target;
       const [mode, setMode] = react.useState("page");
       const [openError, setOpenError] = react.useState("");
+      const control = useServiceControl();
       const probe = useProbe(target.seat, target.url);
       if (mode === "embedded") {
         /* 内嵌读数（卡 240 的自绘视图，保留）：它的失败可见分支自己管。 */
@@ -854,13 +1157,21 @@ __TARGETS__
               "开不了（原话：" + openError + "）—— 用上面的链接手动开，别当它已打开。")
           : null,
         probe === "down"
-          ? h("p", { "data-wb-state": "error", "data-wb-error": "probe" },
-              "没起：" + target.url + " 连不上。怎么起：" + target.up)
+          ? h("div", { "data-wb-state": "error", "data-wb-error": "probe" },
+              h("p", null, "没起：" + target.url + " 连不上。怎么起：" + target.up),
+              target.start
+                ? h("p", null,
+                    h("button", { style: button,
+                      onClick: () => control.run("start", target.start) },
+                    "一键启动 " + target.start))
+                : null)
           : null,
         h("p", { "data-wb-note": "" }, "没起？怎么起：" + target.up),
         h("p", null,
           h("button", { style: button, onClick: () => setMode("embedded") },
-            "内嵌读数（自绘视图）")));
+            "内嵌读数（自绘视图）")),
+        /* 卡 253：一起起 / 分别停（与卡 247 的底部入口同一处或紧邻）。 */
+        h(ServiceControls, { control, target }));
     }
 
     /* ---- 卡 247 · 左栏底部入口（sidebar.footer.action，list 槽）----
@@ -873,11 +1184,14 @@ __TARGETS__
     const FOOTER_LABELS = __FOOTER_LABELS__;
     function FooterEntry() {
       const [open, setOpen] = react.useState(false);
+      const [showServices, setShowServices] = react.useState(false);
       const [openError, setOpenError] = react.useState("");
       const button = { padding: "4px 10px", cursor: "pointer" };
       return h("div", { "data-wb-footer": "workbench-panel" },
         h("button", { style: button, onClick: () => setOpen(!open) },
           "工作台页面…"),
+        h("button", { style: button, onClick: () => setShowServices(!showServices) },
+          "服务（一起起 / 分别停）…"),
         open
           ? h("ul", null, Object.keys(TARGETS).map((key) =>
               h("li", { key },
@@ -888,6 +1202,8 @@ __TARGETS__
                   } },
                 FOOTER_LABELS[key] + "（" + TARGETS[key].url + "）"))))
           : null,
+        /* 卡 253：点开才挂载 ⇒ 点开才读一次状态（不是常驻轮询）。 */
+        showServices ? h(ServicePanel, { target: null }) : null,
         openError
           ? h("p", { "data-wb-error": "" },
               "开不了（原话：" + openError + "）—— 用目标页自己的入口开，别当它已打开。")
@@ -1168,6 +1484,8 @@ def _client_js() -> str:
         .replace("__RIGHT_TABS__", _client_right_tabs_js())
         .replace("__TARGETS__", _client_targets_js())
         .replace("__FOOTER_LABELS__", footer_labels)
+        .replace("__ACTION_ROUTE__", ACTION_ROUTE)
+        .replace("__STACK_STATUS_ROUTE__", STACK_STATUS_ROUTE)
         .replace("__ZH__", _client_label_map("label_zh"))
         .replace("__EN__", _client_label_map("label_en"))
         .replace("__KEYS__", json.dumps(list(SEAT_KEYS)))
@@ -1180,7 +1498,7 @@ CLIENT_JS = _client_js()
 # ================================================================ 生成物：说明文档
 
 
-INSTALL_DOC = """# 全局面板（三座位快捷入口）—— 安装 / 接线说明（卡 221/240/242/244/247 · T-G368）
+INSTALL_DOC = """# 全局面板（快捷入口 + 一键启动）—— 安装 / 接线说明（卡 221~253）
 
 把工作台**三个真实页面**接进 DSH：左栏三行是**快捷入口** —— 每行点开默认给
 「开真实页面」的入口 + 目标页连不上时的「没起 + 怎么起」；原来的自绘视图（六块/甘特/列表）
@@ -1372,10 +1690,43 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
    `null` = 回会话，**不改变当前会话**。点面板里的「打开 …」按钮 = `openTab("browser")`，
    在右侧侧栏浏览器里开真实页面。
 
-## 只读保证
+## 一键启动与起停入口（卡 253）
+
+目标页「没起」时，面板里直接给**一键启动**按钮（不用再跳文件夹）：
+
+| 目标 | 一键启动动作（= `tools/stack.py` 组件表里那一件） |
+| --- | --- |
+| `workbench_board` | `board`（`tools/wb_dash.py`，端口 8787） |
+| `timeflow_inbox` | `timeflow`（`tools/serve.py`，端口 8520） |
+| `zentao_gantt` | `zentao`（mysqld + httpd，起前先探 3306/80，已在听就不重复起） |
+
+面板里还有「**全部起**」（= `python -X utf8 tools/stack.py start`）与每件的「**停这一件**」
+（= `stack.py stop <名>`）；状态与 `stack.py status` **同一口径**现读（端口 / pid）。
+桌面那份 cmd **原样不动**（那是用户资产）—— 这里只是 DSH 里的一条同样的路。
+
+**反馈如实**：按下先写「已发起启动」；宿主半跑 `stack.py start`，**探到真端口**才回成功，
+面板这时才改口「已起（端口 N；映像 X）」；等不到就原样显示
+「发起了，但 N 秒内端口还没起来 —— 看 `<gates/diag/stack/log>`」—— 绝不点一下就写「已启动」。
+
+**动作日志**：每次起停写一行到 `gates/diag/stack-actions.log`
+（`<时间>  <谁>  <start|stop> <组件>  <OK|FAIL>  <结果>`），面板显示最近几条。
+
+**内存账本**：`stack.py status` 每件带一行 **RSS（MB）** + 末尾**合计**与
+**常驻预算 400 MB**；超了在尾行显式提示（不是静默）。面板按同一份读数显示。
+★ 面板**点开才读**：没有 `setInterval` 常驻轮询；每次动作后现读一次。
+
+## 只读保证（卡 253 精确化）
 
 数据只经**既有只读工具**（`tools/pipeline_view.py` 卡 207 / `tools/zentao_gantt.py` 卡 223 /
-`tools/timeflow_inbox.py` 卡 222）**读**；面板**不写仓库、不起工人**，路由**只 GET**。
+`tools/timeflow_inbox.py` 卡 222）**读**；读数路由**只 GET**。
+
+卡 253 把护栏**改判据、不是删判据**：
+
+- **允许**：起/停 `tools/stack.py` 组件表里那几件**服务**（`board` / `timeflow` / `zentao` /
+  `closer` / `trae`）；动作缝只收 `{kind, name}` 两个枚举值，白名单**写死**在宿主半，
+  **没有透传任意命令的口子**（`rm -rf` 之类一律拒绝并点名）；
+- **仍然禁止**：派工人（`wb_dispatch`）、写仓库文件、改 `~/.dsh`、跑门禁。
+
 目标页本身（wb_dash.py / serve.py / 禅道）归别的卡，本面板只**指向**它们。
 用户早先拍过：**拖动只写意图、主控执行** —— 本面板连拖动都没有，只有选中态。
 """
@@ -1394,7 +1745,10 @@ def _check_manifest() -> list[str]:
     if not label.get("zh") or not label.get("en"):
         problems.append("[清单] label 必须同时有 zh 与 en")
     if MANIFEST.get("read_only") is not True:
-        problems.append("[清单] read_only 必须为 true（面板只读）")
+        problems.append("[清单] read_only 必须为 true（面板只读：不写仓库、不派工人）")
+    # 卡 253：护栏精确化 —— 允许起停 stack.py 表里那几件服务；仍然禁止派工人/写仓库。
+    if MANIFEST.get("service_control") is not True:
+        problems.append("[清单] service_control 必须为 true（卡 253：允许起停白名单服务）")
     if "pipeline_view" not in str(MANIFEST.get("data_source", "")):
         problems.append("[清单] data_source 必须点名 tools/pipeline_view.py")
     if list(MANIFEST.get("seats") or []) != list(SEAT_KEYS):
@@ -1627,6 +1981,35 @@ def _check_client(source: str) -> list[str]:
             "[浏览器半] 缺左栏底部入口（sidebar.footer.action 的注册 + 依据注释；"
             "卡 247：main 是会话时 openTab 直接可用的保底路）"
         )
+    # ---- 卡 253 判据（一键启动 / 如实反馈 / 起停入口 / 点开才读）----
+    if "一键启动" not in source:
+        problems.append("[浏览器半] 缺「一键启动」按钮（卡 253：「没起」状态要能直接起）")
+    if "已发起启动" not in source:
+        problems.append("[浏览器半] 缺「已发起启动」的即时反馈（卡 253）")
+    if "已起（" not in source:
+        problems.append("[浏览器半] 缺「已起（端口 …；映像 …）」的**真起来后**才改口（卡 253）")
+    if '(kind === "start-all" || (row && row.running))' not in source:
+        problems.append(
+            "[浏览器半] 「已起」必须由现读的 `row.running` 决定"
+            "（卡 253：不是点了就算；缺 `(kind === \"start-all\" || (row && row.running))`）"
+        )
+    if "还没起来" not in source or "stack-actions.log" not in source:
+        problems.append(
+            "[浏览器半] 缺超时原话「发起了，但 N 秒内端口还没起来 —— 看 <日志>」"
+            "或动作日志路径（卡 253：不许点一下就写「已启动」）"
+        )
+    if "全部起" not in source or "停这一件" not in source:
+        problems.append("[浏览器半] 缺「全部起 / 停这一件」（卡 253：一起起 / 分别停）")
+    if "最近动作" not in source or "RSS" not in source or "常驻预算" not in source:
+        problems.append("[浏览器半] 缺最近动作/RSS/常驻预算（卡 253：日志与内存账本要看得见）")
+    if "setInterval" in source:
+        problems.append(
+            "[浏览器半] 出现 `setInterval` 常驻轮询（卡 253：改成「点开/聚焦时才读一次」）"
+        )
+    if "ACTION_ROUTE" not in source or 'method: "POST"' not in source:
+        problems.append("[浏览器半] 缺动作缝调用（ACTION_ROUTE + POST，卡 253）")
+    if "STACK_STATUS_ROUTE" not in source:
+        problems.append("[浏览器半] 缺服务现读路由（STACK_STATUS_ROUTE，卡 253）")
     problems.extend(_check_read_only("浏览器半", source))
     return problems
 
@@ -1663,9 +2046,21 @@ def _check_host(source: str) -> list[str]:
         problems.append('[宿主半] 只读缝没按 kind: "prefix" 注册')
     if 'req.method !== "GET"' not in source:
         problems.append('[宿主半] 只读缝没钉住只 GET（缺 req.method !== "GET" 守卫）')
-    for verb in ("POST", "PUT", "DELETE", "PATCH"):
+    # 卡 253：护栏精确化 —— 读数只 GET；**动作缝**只 POST、只收白名单里的 {kind,name}。
+    for verb in ("PUT", "DELETE", "PATCH"):
         if f'"{verb}"' in source:
-            problems.append(f"[宿主半] 只读缝出现写方法 {verb}（只许 GET）")
+            problems.append(f"[宿主半] 出现写方法 {verb}（只读缝只许 GET，动作缝只许 POST）")
+    if "ACTION_WHITELIST" not in source:
+        problems.append("[宿主半] 缺动作白名单 ACTION_WHITELIST（卡 253：不许透传任意命令）")
+    if 'req.method !== "POST"' not in source:
+        problems.append('[宿主半] 动作缝没钉住只 POST（缺 req.method !== "POST" 守卫）')
+    if "ACTION_ROUTE" not in source or "STACK_STATUS_ROUTE" not in source:
+        problems.append("[宿主半] 缺动作缝 / 服务现读路由（ACTION_ROUTE / STACK_STATUS_ROUTE）")
+    if "start-all" not in source:
+        problems.append("[宿主半] 缺「全部起」（start-all）这条白名单动作（卡 253）")
+    for bad in ("shell: true", "shell:true", "exec(", "execSync"):
+        if bad in source:
+            problems.append(f"[宿主半] 出现 `{bad}` —— 不许 shell 透传命令（卡 253）")
     for seat in SEATS:
         if seat.route not in source:
             problems.append(f"[宿主半] 缺路由 {seat.route}")
@@ -1684,6 +2079,17 @@ def _check_targets(targets: tuple[Target, ...] | None = None) -> list[str]:
             problems.append(f"[目标] {target.seat} 的 URL 只许指本机（127.0.0.1）：{target.url}")
         if not target.up_hint:
             problems.append(f"[目标] {target.seat} 缺「怎么起」（连不上时要显式说）")
+        # 卡 253：三个目标各一条启动动作，且只许是 stack.py 组件表里的那几件。
+        if not target.start:
+            problems.append(f"[目标] {target.seat} 缺一键启动动作（卡 253）")
+        elif target.start not in SERVICE_WHITELIST:
+            problems.append(
+                f"[目标] {target.seat} 的启动动作 `{target.start}` 不在 stack.py 组件表 "
+                f"{SERVICE_WHITELIST} 里（白名单写死，不许透传任意命令）"
+            )
+    starts = [t.start for t in targets if t.start]
+    if len(set(starts)) != len(starts):
+        problems.append(f"[目标] 三个目标的一键启动动作必须各不相同：{starts}")
     return problems
 
 
@@ -1711,6 +2117,10 @@ def _check_doc(doc: str) -> list[str]:
         ("sidebar.footer.action", "没写左栏底部入口（卡 247）"),
         ("删掉补丁层 = 插件不加载", "没写补丁层的紧急禁用手段（卡 247 三纪律）"),
         ("locale/zh.json", "没写包级 locale 文件（卡 247：包级显示链路）"),
+        ("一键启动", "没写面板一键启动（卡 253）"),
+        ("stack-actions.log", "没写动作日志在哪（卡 253）"),
+        ("常驻预算", "没写 RSS 内存账本的常驻预算（卡 253）"),
+        ("点开才读", "没写「点开才读、没有 setInterval」（卡 253）"),
     ):
         if needle not in doc:
             problems.append(f"[说明] 缺「{why}」（找不到 `{needle}`）")

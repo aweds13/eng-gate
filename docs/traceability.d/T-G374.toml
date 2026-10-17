@@ -1,0 +1,10 @@
+[entries."T-G374"]
+id = "T-G374"
+title = "面板一键启动目标页 + 把桌面 cmd 集成进来"
+group = "tests"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TG374.md",
+]
+gaps = "① ★ 「没起」状态必须配**一键启动**，而且只许起 `tools/stack.py` 组件表里那几件（白名单写死，不许任意命令）。指针：`tools/dsh_panel.py`。② ★ 「起没起来」必须**探端口**判定，不是点了就算（反例：短路端口探测 ⇒ 判据红）。指针：`tools/dsh_panel.py`。③ ★ 起停动作要留痕：每次谁、何时、起了/停了、结果 ⇒ `gates/diag/stack-actions.log`。指针：`tools/stack.py`。④ ★ 内存账本：`stack.py status` 每件加 RSS + 合计 + 400 MB 预算，超了显式提示。指针：`tools/stack.py`。"
+

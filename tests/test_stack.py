@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -37,8 +38,12 @@ import stack  # noqa: E402 —— 需要先挂 tools/
 
 @pytest.fixture()
 def sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """把运行痕迹目录指到临时目录，并把 `terminate` 换成假杀（绝不真掐进程）。"""
+    """把运行痕迹目录指到临时目录，并把 `terminate` 换成假杀（绝不真掐进程）。
+
+    卡 253：动作日志也指到临时目录 —— 判据**不往真仓库的日志里写**。
+    """
     monkeypatch.setattr(stack, "STACK_DIR", tmp_path / "stack")
+    monkeypatch.setattr(stack, "ACTIONS_LOG", tmp_path / "stack-actions.log")
     monkeypatch.setattr(stack, "terminate", lambda pid: (True, f"（假杀 pid {pid}）"))
     return tmp_path / "stack"
 
@@ -256,3 +261,130 @@ def test_trae_child_env_restricted_to_system32() -> None:
     assert env["PATH"].lower() == expected.lower(), f"PATH 要只含 System32：{env['PATH']!r}"
     # 非 cmd 包装的组件不受影响（board 直接 python 起，继承环境即可）
     assert stack._child_env(stack.COMPONENTS["board"]) is None
+
+
+# ────────────────────────── 卡 253 · T-G374 ──────────────────────────
+# 禅道命令行起 / RSS 账本 / 动作日志 / 「探端口才算起来」。
+
+
+def test_zentao_can_be_started_from_command_line() -> None:
+    """★ 卡 253：禅道由两条写死的 argv 起（mysqld + httpd），逐条对应端口。"""
+    comp = stack.COMPONENTS["zentao"]
+    argvs = stack.start_argvs(comp)
+    assert len(argvs) == 2, argvs
+    assert "mysqld.exe" in " ".join(argvs[0]) and "--defaults-file=" in " ".join(argvs[0])
+    assert "httpd.exe" in " ".join(argvs[1]) and "-f" in argvs[1]
+    assert comp.start_ports == (3306, 80), comp.start_ports
+    assert comp.manual == "", "禅道已能命令行起，manual 必须留空"
+
+
+def test_launch_skips_a_service_whose_port_is_already_listening(
+    sandbox: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """★ 卡 253：起前先探端口 —— 3306 已在听 ⇒ 只起 httpd，不重复起 mysqld。"""
+    started: list[list[str]] = []
+
+    class FakeProc:
+        def __init__(self, argv, **_kwargs) -> None:
+            self.pid = 4000 + len(started)
+            started.append(list(argv))
+
+    monkeypatch.setattr(stack.subprocess, "Popen", FakeProc)
+    monkeypatch.setattr(stack, "port_open", lambda port, *a, **k: port == 3306)
+    stack._launch("zentao", stack.COMPONENTS["zentao"])
+    out = capsys.readouterr().out
+    assert len(started) == 1, started
+    assert "httpd.exe" in " ".join(started[0]), started
+    assert "3306 已在听" in out, out
+
+
+def test_start_judges_by_real_port_not_by_launch(
+    sandbox: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """★ 判据 b 正例：起过之后**端口真开**才报「已起」。"""
+    state = {"launched": False}
+
+    def fake_launch(name: str, _comp: object) -> int:
+        state["launched"] = True
+        stack.write_pidfile(name, os.getpid())
+        return os.getpid()
+
+    monkeypatch.setattr(stack, "_launch", fake_launch)
+    monkeypatch.setattr(stack, "port_open", lambda port, *a, **k: state["launched"])
+    monkeypatch.setattr(stack, "port_owner", lambda port: os.getpid())
+    monkeypatch.setattr(stack, "image_of", lambda pid: "python.exe")
+    rc = stack.start_one("board", wait_seconds=0.1, poll_seconds=0.01)
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "已起" in out and "8787" in out, out
+
+
+def test_start_never_reports_started_when_port_probe_is_short_circuited(
+    sandbox: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """★ 判据 b 反例：把端口探测短路（永远 False）⇒ 起过也不许报「已起」。"""
+    monkeypatch.setattr(stack, "_launch", lambda name, comp: 12345)
+    monkeypatch.setattr(stack, "port_open", lambda port, *a, **k: False)
+    monkeypatch.setattr(stack, "image_of", lambda pid: None)
+    rc = stack.start_one("board", wait_seconds=0)
+    out = capsys.readouterr().out
+    assert rc == 1, out
+    assert "发起了，但" in out and "还没起来" in out, out
+    assert "已起" not in out, out
+
+
+def test_status_prints_rss_for_every_component_and_a_total(
+    sandbox: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """★ 内存账本：每件一栏 RSS + 末尾合计；合计 = 各项之和（±5 MB）。"""
+    rss = {"closer": 10.0, "timeflow": 20.0, "board": 30.0, "zentao": 40.0, "trae": 50.0}
+    monkeypatch.setattr(stack, "alive", lambda name: (True, "桩：在跑"))
+    # 按组件名映射一个 pid（1..5），RSS 由 pid 反查 —— 每件必须是**独立读数**。
+    monkeypatch.setattr(stack, "current_pid", lambda name: list(rss).index(name) + 1)
+    monkeypatch.setattr(stack, "rss_mb", lambda pid: list(rss.values())[pid - 1])
+    rc = stack.cmd_status(None)
+    out = capsys.readouterr().out
+    assert rc == 0
+    lines = out.splitlines()
+    assert sum("RSS" in ln for ln in lines) == len(stack.COMPONENTS) + 1, out
+    values = [float(re.search(r"RSS ([\d.]+) MB", ln).group(1)) for ln in lines if "｜ RSS" in ln]
+    assert len(values) == len(stack.COMPONENTS)
+    total = float(re.search(r"合计 RSS：([\d.]+) MB", out).group(1))
+    assert abs(sum(values) - total) <= 5, (values, total)
+
+
+def test_rss_is_really_read_from_the_process_table() -> None:
+    """★ 反例：RSS 短路成常量 ⇒ 这里必红（活进程有数、不存在的 pid 必须 None）。"""
+    own = stack.rss_mb(os.getpid())
+    assert own is not None and own > 0, own
+    assert stack.rss_mb(_free_pid()) is None, "不存在的 pid 不许回一个数（说明不是真读）"
+
+
+def test_status_warns_when_resident_budget_is_exceeded(
+    sandbox: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """★ 卡 253：合计超 400 MB ⇒ 尾行**显式**提示（不是静默）。"""
+    monkeypatch.setattr(stack, "alive", lambda name: (True, "桩：在跑"))
+    monkeypatch.setattr(stack, "current_pid", lambda name: 1)
+    monkeypatch.setattr(stack, "rss_mb", lambda pid: 500.0)
+    stack.cmd_status(None)
+    out = capsys.readouterr().out
+    assert "合计 RSS" in out and "超出常驻预算" in out, out
+
+
+def test_start_and_stop_write_one_line_each_to_the_action_log(
+    sandbox: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """★ 判据 d：起/停各写**一行**（谁、何时、起了/停了、结果）到 stack-actions.log。"""
+    monkeypatch.setattr(stack, "_launch", lambda name, comp: 12345)
+    monkeypatch.setattr(stack, "port_open", lambda port, *a, **k: False)
+    monkeypatch.setattr(stack, "image_of", lambda pid: None)
+    stack.start_one("board", wait_seconds=0, actor="pytest")
+    capsys.readouterr()
+    stack.stop_one("board", actor="pytest")
+    capsys.readouterr()
+    lines = stack.ACTIONS_LOG.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2, lines
+    assert "pytest" in lines[0] and "start board" in lines[0] and "FAIL" in lines[0], lines[0]
+    assert "pytest" in lines[1] and "stop board" in lines[1] and "OK" in lines[1], lines[1]
+    assert all("T" in ln.split()[0] for ln in lines), lines  # 带时间戳

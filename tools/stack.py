@@ -1,6 +1,10 @@
 """一起起、分别停：看门 / timeflow / 工作台页 / 禅道 / Trae 的起停 + 现读（卡 241 · T-G359）。
 
 卡 243（T-G364）：加 `board` 工作台页、修「判活太快」、修 trae 的 timeout 被抢。
+卡 253（T-G374）：① 禅道改**命令行起**（mysqld + httpd，起前先探端口、已在听就不重复起）；
+② `status` 加 **RSS 账本**（每件一栏 + 合计 + 400 MB 常驻预算，超了显式提示）；
+③ 每次起停往 `gates/diag/stack-actions.log` 写**一行**（谁、何时、起了/停了、结果）；
+④ `status --json` 给面板读（与文本同一个 `status_data()` 真源）。
 用户 2026-10-14 令「起可以绑在一起，**停要分开**」。本工具只做四件事：
 
 - `start`：把**没在跑的**起起来；已在跑的**如实说「已在跑」**、不重复起；
@@ -27,6 +31,8 @@
 from __future__ import annotations
 
 import argparse
+import datetime
+import json
 import locale
 import os
 import socket
@@ -47,6 +53,12 @@ from pool.no_window import NO_WINDOW  # noqa: E402  ★ 卡 148：子进程一�
 ROOT = Path(__file__).resolve().parent.parent
 #: 运行痕迹目录：pid 文件 + 日志（`gates/diag/**` 本就 gitignore，见 .gitignore）。
 STACK_DIR = ROOT / "gates" / "diag" / "stack"
+#: 卡 253：动作日志（**一行一条**；面板读最近几条，出问题有据可查）。
+ACTIONS_LOG = ROOT / "gates" / "diag" / "stack-actions.log"
+#: 卡 253：常驻预算（RSS 合计超了就在尾行**显式**提示；不是静默）。
+RESIDENT_BUDGET_MB = 400
+#: 卡 253：禅道便携版安装根（可用 ZENTAO_ROOT 覆盖）。
+ZENTAO_ROOT = Path(os.environ.get("ZENTAO_ROOT", r"D:\zentao\ZenTao"))
 
 
 class Component(NamedTuple):
@@ -57,6 +69,10 @@ class Component(NamedTuple):
     ports: tuple[int, ...]
     start: list[str] | None          # 起它的 argv（cwd = ROOT）；None ⇒ 只能手动
     manual: str                      # 不能脚本起时的「手动一步」说明
+    #: 卡 253：多进程组件的**后续**启动条目（禅道 = mysqld + httpd）。
+    extra_starts: tuple[list[str], ...] = ()
+    #: 卡 253：与 `start` + `extra_starts` **逐条对应**的端口（0 = 不探）。
+    start_ports: tuple[int, ...] = ()
 
 
 #: 组件表（卡 241 §1；卡 243 §1 起加 `board` 工作台页，共五件）。
@@ -85,15 +101,24 @@ COMPONENTS: dict[str, Component] = {
     ),
     "zentao": Component(
         name="zentao",
-        # ★ 本机实测：ZenPanel 是 GUI，Apache/MySQL 由它渲染 conf 后拉起 ⇒ 不脚本起。
+        # ★ 卡 253：禅道已能命令行起 —— 直接拉起便携版自带的 mysqld + httpd
+        # （成品 conf 在 bin/*/conf，见 docs/禅道-怎么起.md §3）；ZenPanel 仍可当备用。
         whitelist=("httpd.exe", "mysqld.exe"),
         ports=(80, 3306),
-        start=None,
-        manual=(
-            "禅道要 ZenPanel（GUI）手动起：装到 D:\\zentao\\ 后双击 "
-            "D:\\zentao\\ZenTao\\ZenTao.exe，在面板里点启 Apache 与 MySQL"
-            "（见 docs/禅道-怎么起.md §3）。本工具**不假装起了**。"
+        start=[
+            str(ZENTAO_ROOT / "bin" / "mysql" / "bin" / "mysqld.exe"),
+            "--defaults-file=" + str(ZENTAO_ROOT / "bin" / "mysql" / "my.ini"),
+        ],
+        manual="",
+        extra_starts=(
+            [
+                str(ZENTAO_ROOT / "bin" / "apache" / "bin" / "httpd.exe"),
+                "-f",
+                str(ZENTAO_ROOT / "bin" / "apache" / "conf" / "httpd.conf"),
+            ],
         ),
+        # ★ 逐条对应：先 mysqld（3306）、后 httpd（80）；起前各探一次，已在听就跳过。
+        start_ports=(3306, 80),
     ),
     "trae": Component(
         name="trae",
@@ -147,6 +172,32 @@ def write_pidfile(name: str, pid: int) -> None:
     pidfile_path(name).write_text(str(int(pid)), encoding="utf-8")
 
 
+def log_action(actor: str, action: str, name: str, ok: bool, detail: str) -> None:
+    """卡 253：把一次起停写进 `gates/diag/stack-actions.log`（**一行一条**）。
+
+    字段（空格分隔，人读）：`<本地时间>  <谁>  <start|stop> <组件>  <OK|FAIL>  <结果>`。
+    ★ 写不进去也要在 stdout 说一声 —— 不许静默吞（日志是「出问题有据可查」的那条路）。
+    """
+    stamp = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    verdict = "OK" if ok else "FAIL"
+    line = f"{stamp}  {actor or 'cli'}  {action} {name}  {verdict}  {detail}"
+    try:
+        ACTIONS_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with ACTIONS_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(line.replace("\n", " ") + "\n")
+    except OSError as exc:
+        print(f"（动作日志写不进去：{type(exc).__name__}: {exc}）")
+
+
+def recent_actions(limit: int = 5) -> list[str]:
+    """卡 253：动作日志最后 `limit` 行（面板显示用）；读不到 ⇒ 空表 + 不假装。"""
+    try:
+        lines = ACTIONS_LOG.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    return [ln for ln in lines if ln.strip()][-limit:]
+
+
 def image_of(pid: int) -> str | None:
     """`tasklist` 拿这个 pid 的**映像名**；拿不到 ⇒ `None`（判不出，不当作"没在跑"）。"""
     try:
@@ -162,6 +213,47 @@ def image_of(pid: int) -> str | None:
     if done.returncode != 0 or not line.startswith('"'):
         return None
     return line[1:line.index('"', 1)]
+
+
+def rss_mb(pid: int | None) -> float | None:
+    """卡 253：这个 pid 的**真实驻留内存**（MB，读 `tasklist` 的 Mem Usage 列）。
+
+    ★ 这是「内存账本」的唯一读数口：不是常量、不是估算。取不到（进程不在 /
+    列解不开）⇒ `None`，由调用方如实写「取不到」，**不拿 0 冒充**。
+    """
+    if pid is None:
+        return None
+    try:
+        done = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, encoding=_console_encoding(),
+            errors="replace", **NO_WINDOW,
+        )
+    except OSError as exc:
+        print(f"tasklist 起不来（读 RSS）：{type(exc).__name__}: {exc}")
+        return None
+    line = next((ln for ln in (done.stdout or "").splitlines() if ln.strip()), "")
+    if done.returncode != 0 or not line.startswith('"'):
+        return None
+    cells = [cell.strip('"') for cell in line.split('","')]
+    if len(cells) < 5:
+        return None
+    mem = cells[-1].strip().upper().replace("K", "").replace(",", "").strip()
+    try:
+        return round(int(mem) / 1024, 1)
+    except ValueError:
+        return None
+
+
+def current_pid(name: str) -> int | None:
+    """这件**此刻**对应的 pid：端口属主优先，其次 pid 文件（卡 253 · RSS 账本用）。"""
+    comp = COMPONENTS[name]
+    for port in comp.ports:
+        if port_open(port):
+            owner = port_owner(port)
+            if owner is not None:
+                return owner
+    return read_pidfile(name)
 
 
 def port_open(port: int, host: str = "127.0.0.1", timeout: float = 0.3) -> bool:
@@ -219,6 +311,14 @@ def alive(name: str) -> tuple[bool, str]:
             if pid is not None and img is not None:
                 return False, f"pid {pid} 在，但端口 {comp.ports} 都连不上"
             return False, "端口都不通，也没有活的 pid"
+        # ★ 卡 253：多端口组件（禅道 = MySQL 3306 + Apache 80）**全部**在听才算在跑；
+        #   只起一半就报「在跑」会让用户以为页面能开（那是谎报）。
+        missing = [p for p in comp.ports if p not in open_ports]
+        if missing:
+            return False, (
+                f"端口 {'、'.join(str(p) for p in missing)} 还没起"
+                f"（在听的是 {'、'.join(str(p) for p in open_ports)}）"
+            )
         ports_txt = "、".join(str(p) for p in open_ports)
         who = img
         if who is None:
@@ -256,21 +356,37 @@ def _child_env(comp: Component) -> dict[str, str] | None:
     return env
 
 
+def start_argvs(comp: Component) -> list[list[str]]:
+    """卡 253：这件要起的**全部 argv**（单进程一件；禅道 = mysqld + httpd 两件）。"""
+    argvs = [comp.start] if comp.start is not None else []
+    return argvs + [list(argv) for argv in comp.extra_starts]
+
+
 def _launch(name: str, comp: Component) -> int:
-    """按表起这个组件；stdout/stderr 灌 `gates/diag/stack/<名>.log`，回壳 pid。
+    """按表起这个组件；stdout/stderr 灌 `gates/diag/stack/<名>.log`，回最后一个壳 pid。
 
     ★ 这里**不等**端口（等待窗口在 `start_one`，卡 243）——先落壳 pid，
     活起来之后由 `_adopt_owner_pid` 把 pid 文件换成真端口属主。
+    ★ 卡 253：逐条起；**那一条的端口已在听就跳过**（禅道先起 MySQL 再起 Apache，
+    其中一个已在跑时不重复起）。跳过的动作也**打印出来**，不静默。
     """
-    assert comp.start is not None, f"{name} 不能由脚本起（该走 manual 分支）"
+    argvs = start_argvs(comp)
+    assert argvs, f"{name} 不能由脚本起（该走 manual 分支）"
+    ports = comp.start_ports or (0,) * len(argvs)
     STACK_DIR.mkdir(parents=True, exist_ok=True)
-    with log_path(name).open("ab") as fh:
-        proc = subprocess.Popen(  # noqa: S603 —— argv 是本表写死的，不是外部输入
-            comp.start, cwd=str(ROOT), stdin=subprocess.DEVNULL,
-            stdout=fh, stderr=subprocess.STDOUT, env=_child_env(comp), **NO_WINDOW,
-        )
-    write_pidfile(name, proc.pid)
-    return proc.pid
+    last_pid = 0
+    for argv, port in zip(argvs, ports, strict=False):
+        if port and port_open(port):
+            print(f"{name}：端口 {port} 已在听 —— 跳过这一条启动（不重复起）")
+            continue
+        with log_path(name).open("ab") as fh:
+            proc = subprocess.Popen(  # noqa: S603 —— argv 是本表写死的，不是外部输入
+                argv, cwd=str(ROOT), stdin=subprocess.DEVNULL,
+                stdout=fh, stderr=subprocess.STDOUT, env=_child_env(comp), **NO_WINDOW,
+            )
+        last_pid = proc.pid
+        write_pidfile(name, proc.pid)
+    return last_pid
 
 
 def _adopt_owner_pid(name: str, comp: Component) -> None:
@@ -284,7 +400,7 @@ def _adopt_owner_pid(name: str, comp: Component) -> None:
 
 
 def start_one(
-    name: str, *, wait_seconds: float = 20.0, poll_seconds: float = 0.5
+    name: str, *, wait_seconds: float = 20.0, poll_seconds: float = 0.5, actor: str = "cli"
 ) -> int:
     """起一个：已在跑的如实说「已在跑」；不能脚本起的说清手动一步（不假装起了）。
 
@@ -292,19 +408,23 @@ def start_one(
     端口/进程），探到活就报成功；等不到就报原话「发起了，但 N 秒内端口 X 还没起来」
     + 日志路径 —— **不许**把"还在启动中"谎报成"已起"。
     等待窗口是**注入式**的（`wait_seconds=0` 即关掉，判据用），不改常量。
+    卡 253：每次动作都往 `stack-actions.log` 写一行（谁 / 何时 / 起了 / 结果）。
     """
     comp = COMPONENTS[name]
     running, detail = alive(name)
     if running:
         print(f"{name}：已在跑（{detail}）")
+        log_action(actor, "start", name, True, f"没动（已在跑：{detail}）")
         return 0
     if comp.start is None:
         print(f"{name}：没起，且这件**不能由脚本起** —— {comp.manual}")
+        log_action(actor, "start", name, False, "不能由脚本起（已给手动一步）")
         return 1
     try:
         _launch(name, comp)
     except OSError as exc:
         print(f"{name}：起不来 —— {type(exc).__name__}: {exc}")
+        log_action(actor, "start", name, False, f"起不来：{type(exc).__name__}: {exc}")
         return 1
     deadline = time.monotonic() + max(wait_seconds, 0.0)
     while True:
@@ -312,61 +432,118 @@ def start_one(
         if running:
             _adopt_owner_pid(name, comp)
             print(f"{name}：已起（{detail}）")
+            log_action(actor, "start", name, True, f"已起（{detail}）")
             return 0
         if time.monotonic() >= deadline:
             break
         time.sleep(poll_seconds)
     if comp.ports:
-        print(
-            f"{name}：发起了，但 {wait_seconds:g} 秒内端口 {comp.ports} "
-            f"还没起来 —— **没活起来**；看 {log_path(name)}"
+        detail = (
+            f"发起了，但 {wait_seconds:g} 秒内端口 {comp.ports} 还没起来 —— "
+            f"**没活起来**；看 {log_path(name)}"
         )
     else:
-        print(
-            f"{name}：发起了，但 {wait_seconds:g} 秒内进程还没站稳"
-            f"（{detail}）—— 看 {log_path(name)}"
+        detail = (
+            f"发起了，但 {wait_seconds:g} 秒内进程还没站稳（{detail}）—— "
+            f"看 {log_path(name)}"
         )
+    print(f"{name}：{detail}")
+    log_action(actor, "start", name, False, detail)
     return 1
 
 
-def stop_one(name: str) -> int:
-    """停一个：**先核对 pid 身份**；身份不符 ⇒ 拒绝点名；进程已不在 ⇒ 清过期文件。"""
+def stop_one(name: str, *, actor: str = "cli") -> int:
+    """停一个：**先核对 pid 身份**；身份不符 ⇒ 拒绝点名；进程已不在 ⇒ 清过期文件。
+
+    卡 253：多进程组件（禅道 = mysqld + httpd）把 pid 文件与各端口属主**都**收集起来，
+    逐个核对映像再逐个停；任何一个身份不符 ⇒ **整件拒绝**（不误杀别人的进程）。
+    """
     comp = COMPONENTS[name]
     path = pidfile_path(name)
+    pids: list[int] = []
     pid = read_pidfile(name)
-    if pid is None:
-        owner = None
-        for port in comp.ports:
-            if port_open(port):
-                owner = port_owner(port)
-                if owner is not None:
-                    break
-        if owner is None:
-            print(f"{name}：没在跑（没有 pid 记录，也没有在听的端口）")
-            return 0
-        pid = owner
-    img = image_of(pid)
-    if img is None:
+    if pid is not None:
+        pids.append(pid)
+    for port in comp.ports:
+        if port_open(port):
+            owner = port_owner(port)
+            if owner is not None and owner not in pids:
+                pids.append(owner)
+    if not pids:
+        print(f"{name}：没在跑（没有 pid 记录，也没有在听的端口）")
+        log_action(actor, "stop", name, True, "没动（没在跑）")
+        return 0
+    alive_pids: list[tuple[int, str]] = []
+    for candidate in pids:
+        img = image_of(candidate)
+        if img is None:
+            continue
+        if img.lower() not in comp.whitelist:
+            print(
+                f"{name}：拒绝动手 —— pid {candidate} 的映像是 {img}，"
+                f"不在白名单 {comp.whitelist} 里（可能误杀别的进程）"
+            )
+            log_action(actor, "stop", name, False, f"拒绝：pid {candidate} 映像是 {img}")
+            return 1
+        alive_pids.append((candidate, img))
+    if not alive_pids:
         if path.exists():
             path.unlink()
-            print(f"{name}：没在跑（pid {pid} 已不存在）；已清掉过期 pid 文件 {path.name}")
+            print(f"{name}：没在跑（pid {pids[0]} 已不存在）；已清掉过期 pid 文件 {path.name}")
+            log_action(actor, "stop", name, True, f"没在跑（已清过期 pid 文件 {path.name}）")
         else:
-            print(f"{name}：没在跑（pid {pid} 已不存在）")
+            print(f"{name}：没在跑（pid {pids[0]} 已不存在）")
+            log_action(actor, "stop", name, True, "没在跑（pid 已不存在）")
         return 0
-    if img.lower() not in comp.whitelist:
-        print(
-            f"{name}：拒绝动手 —— pid {pid} 的映像是 {img}，"
-            f"不在白名单 {comp.whitelist} 里（可能误杀别的进程）"
-        )
-        return 1
-    ok, detail = terminate(pid)
-    if ok and path.exists():
+    done: list[str] = []
+    for candidate, img in alive_pids:
+        ok, detail = terminate(candidate)
+        if not ok:
+            print(f"{name}：停不掉 pid {candidate} —— {detail}")
+            log_action(actor, "stop", name, False, f"pid {candidate} 停不掉：{detail}")
+            return 1
+        done.append(f"pid {candidate}，映像 {img}")
+    if path.exists():
         path.unlink()
-    if ok:
-        print(f"{name}：已停（pid {pid}，映像 {img}）")
-        return 0
-    print(f"{name}：停不掉 —— {detail}")
-    return 1
+    print(f"{name}：已停（{'；'.join(done)}）")
+    log_action(actor, "stop", name, True, f"已停（{'；'.join(done)}）")
+    return 0
+
+
+def status_data() -> dict:
+    """卡 253：现读五件 + **RSS 账本**（每件一栏、合计、常驻预算）—— 文本与 JSON 同一真源。
+
+    RSS 口径：进程在跑才读（`tasklist` 的 Mem Usage）；没起 ⇒ `0.0`（没有进程就是 0 MB）；
+    在跑但读不到 ⇒ `None`，**不拿 0 冒充**，合计只加读得到的，并在文本里写明。
+    """
+    rows: list[dict] = []
+    total = 0.0
+    unknown: list[str] = []
+    for name in COMPONENTS:
+        running, detail = alive(name)
+        pid = current_pid(name) if running else None
+        rss = rss_mb(pid) if running else 0.0
+        if running and rss is None:
+            unknown.append(name)
+        else:
+            total += float(rss or 0.0)
+        rows.append(
+            {
+                "name": name,
+                "running": running,
+                "detail": detail,
+                "pid": pid,
+                "rss_mb": rss,
+            }
+        )
+    return {
+        "ok": True,
+        "components": rows,
+        "total_rss_mb": round(total, 1),
+        "budget_mb": RESIDENT_BUDGET_MB,
+        "over_budget": total > RESIDENT_BUDGET_MB,
+        "rss_unknown": unknown,
+    }
 
 
 def cmd_start(args: argparse.Namespace) -> int:
@@ -374,22 +551,32 @@ def cmd_start(args: argparse.Namespace) -> int:
     names = [args.name] if getattr(args, "name", None) else list(COMPONENTS)
     rc = 0
     for name in names:
-        rc |= start_one(name)
+        rc |= start_one(name, actor=getattr(args, "actor", "cli"))
     return rc
 
 
 def cmd_stop(args: argparse.Namespace) -> int:
     """`stop <名>`：分开停。"""
-    return stop_one(args.name)
+    return stop_one(args.name, actor=getattr(args, "actor", "cli"))
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    """`status`：现读，谁没起就写「没起」。"""
-    del args
-    for name in COMPONENTS:
-        running, detail = alive(name)
-        flag = "在跑" if running else "没起"
-        print(f"{name:9} {flag}：{detail}")
+    """`status`：现读，谁没起就写「没起」；每件带 RSS，末尾合计 + 常驻预算。"""
+    data = status_data()
+    if getattr(args, "json", False):
+        print(json.dumps(data, ensure_ascii=False))
+        return 0
+    for row in data["components"]:
+        flag = "在跑" if row["running"] else "没起"
+        rss = "?" if row["rss_mb"] is None else f"{row['rss_mb']:.1f}"
+        print(f"{row['name']:9} {flag}：{row['detail']} ｜ RSS {rss} MB")
+    total = data["total_rss_mb"]
+    line = f"合计 RSS：{total:.1f} MB（常驻预算 {data['budget_mb']} MB）"
+    if data["over_budget"]:
+        line += f"  ★ 超出常驻预算 {total - data['budget_mb']:.1f} MB"
+    print(line)
+    if data["rss_unknown"]:
+        print(f"★ 取不到 RSS：{'、'.join(data['rss_unknown'])}（合计未计入这几件）")
     return 0
 
 
@@ -408,8 +595,10 @@ def main(argv: list[str] | None = None) -> int:
     """CLI 入口。"""
     parser = argparse.ArgumentParser(
         prog="stack.py",
-        description="一起起、分别停：看门 / timeflow / 工作台页 / 禅道 / Trae（卡 241；卡 243）",
+        description="一起起、分别停：看门 / timeflow / 工作台页 / 禅道 / Trae（卡 241/253）",
     )
+    # 卡 253：动作日志里的「谁」（面板传 panel；命令行默认 cli）。
+    parser.add_argument("--actor", default="cli", help="动作日志里的发起人（默认 cli）")
     sub = parser.add_subparsers(dest="cmd", required=True)
     p_start = sub.add_parser("start", help="把没在跑的起起来（已在跑的如实说）")
     p_start.add_argument("name", nargs="?", choices=list(COMPONENTS), help="只起这一件")
@@ -417,7 +606,9 @@ def main(argv: list[str] | None = None) -> int:
     p_stop = sub.add_parser("stop", help="停一件（先核对 pid 身份）")
     p_stop.add_argument("name", choices=list(COMPONENTS), help="要停的组件名")
     p_stop.set_defaults(func=cmd_stop)
-    sub.add_parser("status", help="现读四件的死活").set_defaults(func=cmd_status)
+    p_status = sub.add_parser("status", help="现读五件的死活 + RSS 账本")
+    p_status.add_argument("--json", action="store_true", help="给面板读的 JSON（与文本同一真源）")
+    p_status.set_defaults(func=cmd_status)
     sub.add_parser("list", help="打出这张表").set_defaults(func=cmd_list)
     args = parser.parse_args(argv)
     return int(args.func(args))

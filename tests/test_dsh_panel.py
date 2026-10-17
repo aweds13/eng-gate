@@ -244,12 +244,19 @@ def test_seat_consistency_check_bites_when_row_id_drifts() -> None:
 
 
 def test_seam_routes_are_get_only(tmp_path: Path) -> None:
-    """★ 三条只读缝路由：只 GET、写方法一个不许出现、三条路径都在宿主半。"""
+    """★ 三条**读数**路由只 GET；写方法只剩动作缝那一个 POST（卡 253 把判据精确化）。
+
+    ★ 改判据、不是删判据：读数路由仍然钉死 `req.method !== "GET"`，PUT/DELETE/PATCH
+    一个不许出现；新增的 POST **只**在 `ACTION_ROUTE` 上、且只收白名单 {kind,name}。
+    """
     dp.emit(tmp_path)
     host = (tmp_path / dp.HOST_REL).read_text(encoding="utf-8")
     assert 'req.method !== "GET"' in host
-    for verb in ("POST", "PUT", "DELETE", "PATCH"):
+    for verb in ("PUT", "DELETE", "PATCH"):
         assert f'"{verb}"' not in host, verb
+    assert "ACTION_WHITELIST" in host
+    assert 'req.method !== "POST"' in host
+    assert host.count('method === "POST"') == 0  # 只认白名单动作，不是任意 POST 都放行
     assert len(dp.ROUTE_PATHS) == 3
     for seat in dp.SEATS:
         assert seat.route in host
@@ -845,3 +852,169 @@ def test_hardcoded_color_counterexample_bites() -> None:
     broken = dp.CLIENT_JS + nl + 'const evil = "#f0f0f0";' + nl
     problems = dp.check(client_js=broken)
     assert any("硬编码颜色" in p for p in problems), problems
+
+
+# ================================================================== 卡 253 · T-G374
+# 一键启动（三条白名单动作）+ 如实反馈（探端口）+ 一起起/分别停 + 点开才读。
+# ★ 每条先红后绿；既有「不派工人 / 不写仓库」判据一条不删，只精确化（允许起停服务）。
+
+
+# ------------------------------------------------------------ a. 三个目标各一条启动动作
+
+
+def test_three_targets_have_one_whitelisted_start_action() -> None:
+    """★ 判据 a：三个目标各一条启动动作，且只许是 stack.py 组件表里的那几件。"""
+    assert tuple(t.start for t in dp.TARGETS) == ("board", "zentao", "timeflow")
+    assert tuple(dp.stack.COMPONENTS) == dp.SERVICE_WHITELIST
+    for target in dp.TARGETS:
+        assert target.start in dp.SERVICE_WHITELIST, (target.seat, target.start)
+
+
+@pytest.mark.parametrize("evil", ["rm -rf", "board; rm -rf", "python evil.py", "wb_dispatch"])
+def test_unknown_command_is_rejected_and_named(evil: str) -> None:
+    """★ 判据 a 反例：塞一条不在表里的命令 ⇒ 必须被拒并**点名**。"""
+    with pytest.raises(ValueError) as caught:
+        dp.resolve_action("start", evil)
+    message = str(caught.value)
+    assert "白名单" in message and evil in message, message
+
+
+def test_unknown_action_kind_is_rejected() -> None:
+    """★ 判据 a 反例：动作种类也不许自由发挥。"""
+    with pytest.raises(ValueError) as caught:
+        dp.resolve_action("explode", "board")
+    assert "explode" in str(caught.value)
+
+
+def test_action_argv_is_written_down_not_passthrough() -> None:
+    """★ 白名单怎么写的：argv 由枚举值**拼死**（没有命令字符串透传口子）。"""
+    assert dp.resolve_action("start", "board") == [
+        sys.executable, "-X", "utf8", "tools/stack.py", "start", "board",
+    ]
+    assert dp.resolve_action("stop", "zentao")[-2:] == ["stop", "zentao"]
+    assert dp.resolve_action("start-all") == [
+        sys.executable, "-X", "utf8", "tools/stack.py", "start",
+    ]
+
+
+def test_target_check_bites_when_start_action_is_outside_the_table() -> None:
+    """★ 判据 a 反例：把某条启动动作改成 `rm -rf` ⇒ 自检必须红并点名。"""
+    targets = list(dp.TARGETS)
+    first = targets[0]
+    targets[0] = dp.Target(first.seat, first.url, first.up_hint, "rm -rf")
+    problems = dp._check_targets(tuple(targets))
+    assert any("白名单" in p and "rm -rf" in p for p in problems), problems
+
+
+def test_host_action_seam_is_post_only_with_written_whitelist(tmp_path: Path) -> None:
+    """★ 宿主半的动作缝：只 POST、只收白名单里的 {kind,name}；没有 shell 透传。"""
+    dp.emit(tmp_path)
+    host = (tmp_path / dp.HOST_REL).read_text(encoding="utf-8")
+    assert "const ACTION_WHITELIST = {" in host
+    for name in dp.SERVICE_WHITELIST:
+        assert f'"{name}"' in host, name
+    assert "start-all" in host
+    assert 'req.method !== "POST"' in host
+    for bad in ("shell: true", "shell:true", "execSync"):
+        assert bad not in host, bad
+
+
+def test_action_seam_check_bites_when_post_guard_removed() -> None:
+    """★ 反例：拿掉动作缝的 POST 守卫 ⇒ check 必须红。"""
+    broken = dp.HOST_JS.replace('req.method !== "POST"', 'req.method === "n/a"')
+    assert broken != dp.HOST_JS
+    problems = dp.check(host_js=broken)
+    assert any("POST" in p for p in problems), problems
+
+
+def test_action_seam_check_bites_on_shell_passthrough() -> None:
+    """★ 反例：塞 `shell: true` ⇒ check 必须红（不许把命令交给 shell）。"""
+    problems = dp.check(host_js=dp.HOST_JS + "\nconst evil = { shell: true };\n")
+    assert any("shell" in p for p in problems), problems
+
+
+# ------------------------------------------------------------ b. 启动后的判定必须探端口
+
+
+def test_client_says_started_only_after_status_says_running(tmp_path: Path) -> None:
+    """★ 判据 b：面板只有 `row.running` 为真才改口「已起（端口 …；映像 …）」。
+
+    反例（必须红）：把启动判定短路成"点了就算" ⇒ 源码里不再有 row.running 这个门。
+    """
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert "已发起启动" in client
+    assert "已起（" in client
+    assert '(kind === "start-all" || (row && row.running))' in client, (
+        "「已起」必须由现读的 running 决定，不是点击本身"
+    )
+    assert "还没起来" in client and "stack-actions.log" in client
+
+
+def test_client_start_feedback_check_bites_when_running_gate_removed() -> None:
+    """★ 判据 b 反例：拆掉 running 门（改成一按就报已起）⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("(row && row.running)", "(row || true)")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("row.running" in p or "已起" in p for p in problems), problems
+
+
+# ------------------------------------------------------------ c. 护栏两面分别可验
+
+
+def test_service_control_allowed_but_dispatch_and_repo_write_still_forbidden() -> None:
+    """★ 判据 c：允许面（起服务）能走；禁止面（派工人 / 写仓库）仍然被拒。"""
+    # 允许面：白名单里的服务能翻成 argv
+    assert dp.resolve_action("start", "board")
+    assert dp.resolve_action("stop", "trae")
+    # 禁止面：派工人 / 写仓库的 token 仍然咬（分别给读数）
+    for token in ("wb_dispatch", "writeFileSync"):
+        problems = dp.check(host_js=dp.HOST_JS + f"\n// {token}\n")
+        assert any("只读" in p and token in p for p in problems), (token, problems)
+    assert "wb_dispatch" not in dp.HOST_JS
+    assert "wb_dispatch" not in dp.CLIENT_JS
+
+
+# ------------------------------------------------------------ d. 起停入口 + 日志可见
+
+
+def test_client_has_start_all_stop_each_and_recent_actions(tmp_path: Path) -> None:
+    """★ 判据 d：面板有「全部起」/「停这一件」/ 最近动作日志（一行一条）。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    for needle in ("全部起", "停这一件", "最近动作", "gates/diag/stack-actions.log"):
+        assert needle in client, needle
+    assert 'fetch(ACTION_ROUTE + query, { method: "POST" })' in client
+    assert 'fetch(STACK_STATUS_ROUTE, { method: "GET" })' in client
+
+
+# ------------------------------------------------------------ 3.5.1 内存账本 / 3.5.2 点开才读
+
+
+def test_client_shows_rss_and_budget(tmp_path: Path) -> None:
+    """★ 3.5.1：面板显示每件 RSS、合计、常驻预算（超出要显式提示）。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert "RSS" in client and "常驻预算" in client
+    assert "over_budget" in client and "超出常驻预算" in client
+
+
+def test_client_has_no_interval_polling_and_reads_on_open(tmp_path: Path) -> None:
+    """★ 3.5.2：源码里不再有常驻定时轮询；点开时仍读一次（useEffect → GET）。"""
+    dp.emit(tmp_path)
+    client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
+    assert "setInterval" not in client
+    assert "react.useEffect(() => { reload(); }, [reload])" in client
+    assert 'fetch(STACK_STATUS_ROUTE, { method: "GET" })' in client
+
+
+def test_polling_ban_bites_when_a_timer_returns() -> None:
+    """★ 3.5.2 反例：塞回一个 setInterval ⇒ check 必须红。"""
+    problems = dp.check(client_js=dp.CLIENT_JS + "\nsetInterval(() => {}, 5000);\n")
+    assert any("setInterval" in p for p in problems), problems
+
+
+def test_doc_mentions_oneclick_log_and_budget() -> None:
+    """卡 253：安装说明要写一键启动 / 日志 / 常驻预算 / 点开才读。"""
+    for needle in ("一键启动", "stack-actions.log", "常驻预算", "点开才读"):
+        assert needle in dp.INSTALL_DOC, needle
