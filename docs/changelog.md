@@ -14,6 +14,11 @@
 - 判据：`tests/test_docs_fragments.py::test_traceability_merge_replaces_duplicate_key`（合并两次 ⇒ 唯一同名条目 + TOML 可解析 + 旧条目不被吞）✓。
 - 为什么：同一张卡片段重放时，旧逻辑产生两个同名表 ⇒ TOML 报 `Cannot declare ('entries', 'X') twice`，整笔落地被写后自检拦住（260/262 各白跑一趟全量门禁）✓。
 - ★ 真读数：合并一次计数 1 → 再合并仍 1；`tomllib.loads` 通过、键集合 `{T-G900, T-G999}` ✓；`sync_docs.py --check` = `[OK ] 片段 ↔ 汇总一致（changelog.d=123, traceability.d=123, 交接.d=123）` ✓。
+## 2026-10-17 —— 台账状态与 git 历史对账（T-AG387）
+- 新增 `tools/wb_reconcile.py`：**stale-pending（红）**＝状态非 done 但 `git log --grep <任务号>` 已有提交（退出码 1，点名卡/任务/提交）；**stale-done（黄）**＝done 但找不到提交（只报不拒）✓。
+- 判据 `tests/test_wb_reconcile.py`：红/黄/绿三条，用真 git 仓（`git init` + 真提交），不 mock ✓。
+- ★ 为什么：队列连续撒谎（252/260/262 早已落地却写 pending ⇒ 白跑三趟全量门禁），而 `audit_progress.py` 只查 done 有没有证据、不查 pending 有没有提交 ✓。
+- ★ 真读数：`pytest tests/test_wb_reconcile.py` = **3 passed**；真机跑出 `[红] 卡 146（T-G246，状态 failed）已有提交 1005569` + 15 条 `[黄]`；`ruff` = `All checks passed!` ✓。
 ## 2026-10-16 —— Trae 驱动器补「新开对话」与「按对话定向」（T-G381）
 - **`tools/trae_pool.mjs`**：`send` 增两个口子 —— `--new-chat`（开一条新对话再发）与 `--conversation <键>`（定向到某条已有对话发）；两者都带**回读核验**：新对话核验「会话数恰 +1 + 新键唯一 + 当前选中新键 + 无历史轮次」，定向核验「正文匹配 + 该对话轮次增长」。
 - ★ 反例：核验不成立时**不许退化成复用当前对话** ⇒ `no-new` 退 3（响亮失败）✓。

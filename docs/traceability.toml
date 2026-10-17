@@ -6804,3 +6804,13 @@ evidence = [
   "file:gates/diag/_text_TAG386.md",
 ]
 gaps = "① ★ 同一张卡的台账片段**重放**时不许再出现第二个同名表（现场：260/262 的重试都撞 `Cannot declare ('entries', 'X') twice`）。指针：`tools/sync_docs.py`。② ★ 判据钉住行为：同一片段合并两次 ⇒ 只有一个同名条目、TOML 可解析、旧条目不被吞。指针：`tests/test_docs_fragments.py`。③ ★ 撞车现场留档（谁在哪一步被拦）。指针：`gates/diag/_land_260.log`。"
+
+[entries."T-AG387"]
+id = "T-AG387"
+title = "台账与 git 历史对账：stale-pending 点红"
+group = "tests"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TAG387.md",
+]
+gaps = "① ★ 状态不是 done 但历史里已有这笔 ⇒ 必须**点红**并给出提交号（现场：252/260/262 各白跑一趟全量门禁）。指针：`tools/wb_reconcile.py`。② ★ 状态 done 但找不到提交 ⇒ **只报不拒**（本仓 15 张老账，不能当红）。指针：`tools/wb_reconcile.py`。③ ★ 判据要真 git 仓，不许 mock 掉 git 行为。指针：`tests/test_wb_reconcile.py`。"

@@ -28,6 +28,16 @@ reviewed = "64d9d02"        # 已复核的基点提交（没登记过就不许�
 #   现在改成当时 HEAD；以后每落一批，这里跟着走。
 
 [[cards]]
+id = "A269"
+task = "T-AG387"
+title = "台账与 git 历史对账：stale-pending 点红"
+tree = ".wt/A269"
+spec = "复盘/卡/卡A269-台账与历史对账.md"
+files = ["tools/wb_reconcile.py", "tests/test_wb_reconcile.py"]
+depends = []
+risk = "low"
+status = "done"
+[[cards]]
 id = "A268"
 task = "T-AG386"
 title = "台账同步去重：同名条目重放时原地替换（不再重复声明）"
