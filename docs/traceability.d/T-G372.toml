@@ -1,0 +1,10 @@
+[entries."T-G372"]
+id = "T-G372"
+title = "面板不许硬编码颜色：甘特条改用主题令牌"
+group = "tests"
+status = "done"
+evidence = [
+  "file:gates/diag/_text_TG372.md",
+]
+gaps = "① ★ 甘特条的**底与填充**必须跟主题（令牌 + 兜底），不许硬编码颜色（现场：`#f0f0f0` + `#7aa7ff`，深色主题下刺眼）。指针：`tools/dsh_panel.py`。② ★ 全份生成物**零硬编码颜色**（`#rrggbb`/`rgb(`/`hsl(`），兜底值也得是关键字（`transparent`/`currentColor`）。指针：`tools/dsh_panel.py`。③ ★ 反例判据：塞回一个硬编码颜色 ⇒ `check` 必须点名。指针：`tests/test_dsh_panel.py`。"
+

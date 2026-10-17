@@ -314,6 +314,12 @@ TARGETS: tuple[Target, ...] = (
 #: 卡 242 判据：这些文字符号**不许**再当图标出现在浏览器半里（反例：塞回一个 ⇒ 红）。
 TEXT_GLYPH_BAN: tuple[str, ...] = ("\u25a6", "\u25a4", "\u25a5")
 
+#: 卡 251 判据：生成物里**不许出现硬编码颜色**（`#rrggbb` / `rgb(…)` / `hsl(…)`）。
+#: 一切颜色走主题令牌 `var(--dsw-alias-…, 兜底)` 或 `currentColor` —— 深色主题下
+#: 硬编码的浅底蓝条会变成一条刺眼白底（卡 251 的起因就是甘特条这一处漏网）。
+#: 兜底值也用**关键字**（`transparent` / `currentColor`）：兜底写 `#f0f0f0` 一样会被这条咬。
+COLOR_LITERAL_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(")
+
 #: 读数器（卡 207 的唯一读数器）；面板的宿主半只调它，不重写读逻辑。
 READER_REL = Path("tools") / "pipeline_view.py"
 
@@ -926,10 +932,10 @@ __TARGETS__
       const width = total > 0 ? (days / total) * 100 : 100;
       const track = { position: "relative", height: "18px" };
       track.margin = "2px 0";
-      track.background = "#f0f0f0";
+      track.background = "var(--dsw-alias-bg-base, transparent)";
       const fill = { position: "absolute", left: left + "%", width: width + "%" };
       fill.height = "100%";
-      fill.background = "#7aa7ff";
+      fill.background = "var(--dsw-alias-state-business-primary, currentColor)";
       const text = { position: "relative", paddingLeft: "4px", fontSize: "11px" };
       return h("div", { "data-bar": label, style: track },
         h("div", { style: fill }),
@@ -1547,6 +1553,17 @@ def _check_client(source: str) -> list[str]:
     for glyph in TEXT_GLYPH_BAN:
         if glyph in source:
             problems.append(f"[浏览器半] 又出现文字符号 {glyph} 当图标（卡 242：必须内联 SVG）")
+    # ---- 卡 251 判据（颜色一律走主题令牌，不许硬编码）----
+    hard_colors = [m.group(0) for m in COLOR_LITERAL_RE.finditer(source)]
+    if hard_colors:
+        problems.append(
+            "[浏览器半] 出现硬编码颜色 " + "、".join(sorted(set(hard_colors))[:4])
+            + "（卡 251：必须用 `var(--dsw-alias-…, 兜底)` 或 `currentColor` —— 深色主题下会刺眼）"
+        )
+    if "var(--dsw-alias-" not in source:
+        problems.append(
+            "[浏览器半] 缺主题令牌 `var(--dsw-alias-…)`（卡 251：甘特条底/填充必须跟主题）"
+        )
     if 'viewBox: "0 0 16 16"' not in source or "currentColor" not in source:
         problems.append("[浏览器半] 缺内联 SVG 图标口径（viewBox 16 / currentColor）")
     if 'sidebarRight.openTab("browser"' not in source:

@@ -816,3 +816,32 @@ def test_footer_action_check_bites_when_removed() -> None:
     problems = dp.check(client_js=broken)
     assert any("底部入口" in p for p in problems), problems
 
+
+
+# ------------------------------------------------ 卡 251：颜色一律走主题令牌
+
+
+def test_no_hardcoded_colors_in_emitted_artifacts(tmp_path: Path) -> None:
+    """卡 251：全份生成物零硬编码颜色（`#rrggbb` / `rgb(` / `hsl(`）。
+
+    为什么：深色主题下甘特条的 `#f0f0f0` 底 + `#7aa7ff` 条会变成一条刺眼白底蓝条。
+    """
+    dp.emit(tmp_path)
+    for rel in (dp.CLIENT_REL, "lib/index.js", "icon.svg"):
+        text = (tmp_path / rel).read_text(encoding="utf-8")
+        hits = dp.COLOR_LITERAL_RE.findall(text)
+        assert not hits, f"{rel} 里还有硬编码颜色：{sorted(set(hits))[:6]}"
+
+
+def test_gantt_uses_theme_tokens() -> None:
+    """卡 251：甘特条的底与填充必须是 `var(--dsw-alias-…)`（删掉 ⇒ 红）。"""
+    assert "var(--dsw-alias-bg-base" in dp.CLIENT_JS
+    assert "var(--dsw-alias-state-business-primary" in dp.CLIENT_JS
+
+
+def test_hardcoded_color_counterexample_bites() -> None:
+    """卡 251 反例：塞回一个硬编码颜色 ⇒ `check` 必须点名（不是静默通过）。"""
+    nl = chr(10)
+    broken = dp.CLIENT_JS + nl + 'const evil = "#f0f0f0";' + nl
+    problems = dp.check(client_js=broken)
+    assert any("硬编码颜色" in p for p in problems), problems
