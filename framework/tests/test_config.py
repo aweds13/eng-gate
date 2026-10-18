@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-
 from framework.config import ConfigError, load
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 VALID = """
 [meta]
@@ -66,7 +68,8 @@ def test_missing_required_key_reports_explicitly(tmp_path: Path):
 
 
 def test_unknown_key_reports_explicitly(tmp_path: Path):
-    broken = VALID.replace('framework_version = "0.1.0"', 'framework_version = "0.1.0"\nframewrk_version = "typo"', 1)
+    typo = 'framework_version = "0.1.0"\nframewrk_version = "typo"'
+    broken = VALID.replace('framework_version = "0.1.0"', typo, 1)
     with pytest.raises(ConfigError) as ei:
         load(_write(tmp_path, broken))
     msg = str(ei.value)

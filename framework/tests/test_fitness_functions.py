@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from framework.fitness import (
     ArchitectureFitnessInput,
@@ -22,14 +22,16 @@ from framework.fitness import (
     no_project_specific_imports,
 )
 from framework.migration import (
-    Convertibility,
     FRAMEWORK_MIGRATION,
+    Convertibility,
     MigrationItem,
     checklist_to_dict,
     framework_migration_report,
     validate_checklist,
 )
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ===========================================================================
 # G1 · 架构级 fitness function 成体系（四条，每条一条钉子）
@@ -90,13 +92,15 @@ def test_g1_dangling_references_is_red(tmp_path: Path):
 def test_g1_directory_discipline_green(tmp_path: Path):
     (tmp_path / "PIPELINE.md").write_text("x\n", encoding="utf-8")
     (tmp_path / "src").mkdir()
-    assert directory_discipline(tmp_path, DirectoryDiscipline(must_exist=("PIPELINE.md", "src"))) == []
+    spec = DirectoryDiscipline(must_exist=("PIPELINE.md", "src"))
+    assert directory_discipline(tmp_path, spec) == []
 
 
 def test_g1_directory_discipline_is_red(tmp_path: Path):
     """★ 反例钉子：期望缺失 / 不许存在的出现 ⇒ 红。"""
     (tmp_path / "junk").mkdir()
-    out = directory_discipline(tmp_path, DirectoryDiscipline(must_exist=("PIPELINE.md",), must_not_exist=("junk",)))
+    spec = DirectoryDiscipline(must_exist=("PIPELINE.md",), must_not_exist=("junk",))
+    out = directory_discipline(tmp_path, spec)
     assert len(out) == 2
 
 
@@ -118,16 +122,23 @@ def test_g1_architecture_fitness_combines(tmp_path: Path):
 
 def test_g3_no_reduction_is_green():
     b = ControlSurface(5, 3, 4)
-    assert diversity_not_reduced(DiversityChange(b, ControlSurface(5, 3, 4), justification=None)) == []
+    change = DiversityChange(b, ControlSurface(5, 3, 4), justification=None)
+    assert diversity_not_reduced(change) == []
 
 
 def test_g3_increase_is_green():
-    assert diversity_not_reduced(DiversityChange(ControlSurface(5, 3, 4), ControlSurface(6, 3, 4), justification=None)) == []
+    change = DiversityChange(
+        ControlSurface(5, 3, 4), ControlSurface(6, 3, 4), justification=None
+    )
+    assert diversity_not_reduced(change) == []
 
 
 def test_g3_reduction_without_justification_is_red():
     """★ 反例钉子：砍门且无显式论证 ⇒ 红（依据 [2510.20041]）。"""
-    out = diversity_not_reduced(DiversityChange(ControlSurface(5, 3, 4), ControlSurface(4, 3, 4), justification=None))
+    change = DiversityChange(
+        ControlSurface(5, 3, 4), ControlSurface(4, 3, 4), justification=None
+    )
+    out = diversity_not_reduced(change)
     assert len(out) == 1
     assert out[0].constraint == "G3·多样性削减"
     assert "2510.20041" in out[0].detail
@@ -142,7 +153,10 @@ def test_g3_reduction_with_justification_is_green():
 
 
 def test_g3_fallback_reduction_is_red():
-    out = diversity_not_reduced(DiversityChange(ControlSurface(5, 3, 4), ControlSurface(5, 2, 4), justification=None))
+    change = DiversityChange(
+        ControlSurface(5, 3, 4), ControlSurface(5, 2, 4), justification=None
+    )
+    out = diversity_not_reduced(change)
     assert len(out) == 1 and "兜底" in out[0].detail
 
 
@@ -163,7 +177,8 @@ def test_g5_reversible_without_rollback_is_red():
 
 
 def test_g5_one_shot_without_rollback_is_red():
-    assert len(validate_checklist([MigrationItem("抽空", Convertibility.ONE_SHOT, rollback="  ")])) == 1
+    items = [MigrationItem("抽空", Convertibility.ONE_SHOT, rollback="  ")]
+    assert len(validate_checklist(items)) == 1
 
 
 def test_g5_irreversible_empty_rollback_is_red():
@@ -174,18 +189,22 @@ def test_g5_irreversible_empty_rollback_is_red():
 
 def test_g5_irreversible_with_other_rollback_is_red():
     """★ 反例钉子：不可逆项写了别的回滚（分类标错）⇒ 红。"""
-    out = validate_checklist([MigrationItem("删原件", Convertibility.IRREVERSIBLE, rollback="git revert")])
+    items = [MigrationItem("删原件", Convertibility.IRREVERSIBLE, rollback="git revert")]
+    out = validate_checklist(items)
     assert len(out) == 1 and "分类标错" in out[0].detail
 
 
 def test_g5_irreversible_with_explicit_none_is_green():
-    assert validate_checklist([MigrationItem("删原件", Convertibility.IRREVERSIBLE, rollback="无")]) == []
+    items = [MigrationItem("删原件", Convertibility.IRREVERSIBLE, rollback="无")]
+    assert validate_checklist(items) == []
 
 
 def test_g5_unnamed_item_is_red():
-    assert len(validate_checklist([MigrationItem("  ", Convertibility.REVERSIBLE, rollback="搬回")])) == 1
+    items = [MigrationItem("  ", Convertibility.REVERSIBLE, rollback="搬回")]
+    assert len(validate_checklist(items)) == 1
 
 
 def test_g5_checklist_to_dict_shape():
-    d = checklist_to_dict([MigrationItem("x", Convertibility.REVERSIBLE, rollback="搬回", notes="n")])
+    items = [MigrationItem("x", Convertibility.REVERSIBLE, rollback="搬回", notes="n")]
+    d = checklist_to_dict(items)
     assert set(d) == {"items", "violations", "ok"} and d["ok"] is True

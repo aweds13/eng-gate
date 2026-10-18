@@ -7,21 +7,17 @@
 from __future__ import annotations
 
 import pytest
-
 from framework.selection import (
     ATTR_FLAKY,
     ATTR_RELATED,
-    ATTR_UNRELATED_ENV,
     ATTR_UNKNOWN,
-    BackstopReport,
+    ATTR_UNRELATED_ENV,
     BUILD_KINDS,
     REGRESSION_TEST_WINDOW,
     SCHEDULED_BUILD,
-    Selection,
+    TRIGGERED_STRICT_BUILD,
     SelectionError,
     StateValidationError,
-    TRIGGERED_STRICT_BUILD,
-    Transition,
     backstop_capture,
     classify_failure,
     detect_transitions,
@@ -158,7 +154,9 @@ def test_f10_lint_catches_negation_without_search_terms():
 
 def test_f10_validate_passes_when_search_terms_attached():
     text = "检索面内未见直接测量的实证文献。"
-    validate_external_evidence(text, search_terms=("nightly build", "regression"), scope="arXiv cs.SE top_k=12")
+    validate_external_evidence(
+        text, search_terms=("nightly build", "regression"), scope="arXiv cs.SE top_k=12"
+    )
 
 
 def test_f10_no_violation_when_no_negation_claim():
@@ -188,7 +186,9 @@ def _good_scheduled_state() -> dict:
     s = _good_triggered_state()
     s["build_kind"] = SCHEDULED_BUILD
     s["selection"]["build_kind"] = SCHEDULED_BUILD
-    s["backstop"] = {"failures_caught": 0, "from_skipped": 0, "skipped_gates": [], "capture_rate": 0.0}
+    s["backstop"] = {
+        "failures_caught": 0, "from_skipped": 0, "skipped_gates": [], "capture_rate": 0.0,
+    }
     s["transitions"] = []
     return s
 

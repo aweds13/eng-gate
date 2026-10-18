@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from framework import scaffold
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_init_writes_files_and_refuses_second_time(tmp_path: Path):
@@ -27,9 +30,17 @@ def test_init_writes_files_and_refuses_second_time(tmp_path: Path):
 def test_init_force_is_byte_identical(tmp_path: Path):
     target = tmp_path / "newproj"
     scaffold.init(target, repo_root=tmp_path)
-    before = {p.relative_to(target).as_posix(): p.read_bytes() for p in target.rglob("*") if p.is_file()}
+    before = {
+        p.relative_to(target).as_posix(): p.read_bytes()
+        for p in target.rglob("*")
+        if p.is_file()
+    }
     scaffold.init(target, repo_root=tmp_path, force=True)
-    after = {p.relative_to(target).as_posix(): p.read_bytes() for p in target.rglob("*") if p.is_file()}
+    after = {
+        p.relative_to(target).as_posix(): p.read_bytes()
+        for p in target.rglob("*")
+        if p.is_file()
+    }
     assert before == after  # 幂等：逐字节相同
 
 
@@ -59,7 +70,9 @@ def test_new_card_and_no_overwrite(tmp_path: Path):
     assert "T-1" in body and "第一张卡" in body and "src/a.py" in body
 
     with pytest.raises(scaffold.ScaffoldError) as ei:
-        scaffold.new_card(cards_dir=cards, spec_template=tpl, card_id="T-1", title="再来", domain=[])
+        scaffold.new_card(
+            cards_dir=cards, spec_template=tpl, card_id="T-1", title="再来", domain=[]
+        )
     assert ei.value.exit_code == 4
 
 

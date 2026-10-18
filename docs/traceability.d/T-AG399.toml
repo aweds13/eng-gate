@@ -1,0 +1,38 @@
+[entries."T-AG399"]
+id = "T-AG399"
+title = "style(ruff): framework 27 文件 + gate_lock.py 清零 112 个 ruff 错（T-AG399）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:framework/cli/main.py",
+  "file:framework/examples/minimal-notes/tests/test_nail_sample.py",
+  "file:framework/examples/minimal-notes/tests/test_notes.py",
+  "file:framework/src/framework/claim.py",
+  "file:framework/src/framework/config.py",
+  "file:framework/src/framework/evidence.py",
+  "file:framework/src/framework/fitness.py",
+  "file:framework/src/framework/gates.py",
+  "file:framework/src/framework/invariants.py",
+  "file:framework/src/framework/land.py",
+  "file:framework/src/framework/ledger.py",
+  "file:framework/src/framework/review.py",
+  "file:framework/src/framework/scaffold.py",
+  "file:framework/src/framework/selection.py",
+  "file:framework/src/framework/trace.py",
+  "file:framework/tests/test_cli.py",
+  "file:framework/tests/test_config.py",
+  "file:framework/tests/test_fitness_functions.py",
+  "file:framework/tests/test_full_run_capture.py",
+  "file:framework/tests/test_gates_run.py",
+  "file:framework/tests/test_genericity.py",
+  "file:framework/tests/test_meta_verification.py",
+  "file:framework/tests/test_pending.py",
+  "file:framework/tests/test_scaffold.py",
+  "file:framework/tests/test_selection.py",
+  "file:framework/tests/test_silent_failure_family.py",
+  "file:framework/tests/test_verdict.py",
+  "file:gates/diag/gate_lock.py",
+  "file:复盘/卡/卡A285-ruff清零.md",
+]
+gaps = "- `framework/` 不在门禁的 ruff 扫描清单里（`scripts/run_gates.py` 的 COMMON 只含 src/tests/scripts/tools/examples/harness）⇒ 这 112 个错本来不会被 ⑤ 拦住；改成 0 只让手动 `ruff check .` 可信，门禁覆盖面没变宽。- 2 处 `assert False` → `raise AssertionError`（`framework/src/framework/config.py:159`）是**行为变化**：`python -O` 会吃掉 assert、吃不掉 raise；2 处 try/except/pass → `contextlib.suppress`（`framework/src/framework/gates.py:317`）语义等价。- E501 的 72 处只折行、不合并字符串、不改字面量；以后谁调整 ruff 的 line-length，这 72 处要跟着重排（`./pyproject.toml` 没有 `framework/` 专属配置）。"
+

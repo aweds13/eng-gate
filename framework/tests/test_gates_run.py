@@ -6,8 +6,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from framework.config import load
-from framework.gates import GateSpec, Verdict, run_gate, run_gates
+from framework.config import GateSpec, load
+from framework.gates import Verdict, run_gate, run_gates
 
 FRAMEWORK = Path(__file__).resolve().parents[1]
 EXAMPLE = FRAMEWORK / "examples" / "minimal-notes"

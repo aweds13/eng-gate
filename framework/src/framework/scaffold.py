@@ -51,7 +51,8 @@ def init(
 
     src = default_template_dir(template)
     if not src.is_dir():
-        raise ScaffoldError(f"模板不存在：{src}（可用模板：{sorted(p.name for p in templates_root().glob('*') if p.is_dir())}）", 5)
+        avail = sorted(p.name for p in templates_root().glob('*') if p.is_dir())
+        raise ScaffoldError(f"模板不存在：{src}（可用模板：{avail}）", 5)
 
     if force:
         root = Path(repo_root).resolve() if repo_root is not None else Path.cwd().resolve()
@@ -99,7 +100,8 @@ def new_card(
     if not template_path.is_file():
         raise ScaffoldError(f"卡模板缺失：{template_path}", 5)
 
-    slug = "-".join("".join(ch if (ch.isalnum() or ch in "-_") else "-" for ch in card_id).split("-"))
+    kept = "".join(ch if (ch.isalnum() or ch in "-_") else "-" for ch in card_id)
+    slug = "-".join(kept.split("-"))
     slug = slug.strip("-") or "card"
     out_dir = Path(cards_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

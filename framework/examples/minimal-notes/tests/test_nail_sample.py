@@ -1,7 +1,6 @@
 """★ 反例钉子 —— 喂进坏掉的样本，断言判据会把它逮住。通过 = 有牙。"""
 
 import pytest
-
 from notes import search
 
 

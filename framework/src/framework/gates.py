@@ -4,7 +4,8 @@
   - `pass`：拿到了通过证据（退出码落在 `exit_ok` 里，**且**收集到的样例数 > 0）。
   - `fail`：拿到了**不通过**的证据（退出码不在 `exit_ok`、或超时）。
   - `inconclusive`：**判不了**（例：一条样例都没收集到 —— 空集）。
-  ★ `inconclusive` **绝不许当成 `pass`**；它**也不等于** `not-run`（没跑是 RunState，不是 Verdict）。
+  ★ `inconclusive` **绝不许当成 `pass`**；它**也不等于** `not-run`
+  （没跑是 RunState，不是 Verdict）。
 
 ★ `not-run` 是**运行状态**，不是判决：运行时依赖缺失（如没装 node）时记 `not_run`，
   **不许静默跳过当通过**（骨架设计 §2.1 的 `needs_runtime`）。
@@ -14,6 +15,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -27,8 +29,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .config import Config, GateSpec
 from .selection import (
     SCHEDULED_BUILD,
     TRIGGERED_STRICT_BUILD,
@@ -38,6 +40,9 @@ from .selection import (
     is_sole_coverage,
     select_gates,
 )
+
+if TYPE_CHECKING:
+    from .config import Config, GateSpec
 
 # 每道门的日志/状态落盘时用的子目录名（相对 evidence_dir / logs_dir）。
 STATE_SCHEMA = "pipe/1"
@@ -308,10 +313,9 @@ def _kill_tree(pid: int) -> None:
     try:
         os.killpg(os.getpgid(pid), signal.SIGKILL)
     except (ProcessLookupError, PermissionError):
-        try:
+        # 进程组已经没了 / 没权限（Windows 走上面的 taskkill）：只补一刀，杀不到就算了。
+        with contextlib.suppress(ProcessLookupError):  # pragma: no cover
             os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:  # pragma: no cover
-            pass
 
 
 def run_gate(
@@ -563,7 +567,8 @@ def write_state(config: Config, run: GatesRun) -> Path:
     """把一趟门禁结果写到 `[paths].gates_state`（结构化产物）。返回路径。"""
     state_path = config.paths["gates_state"]
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps(run.to_dict(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    payload = json.dumps(run.to_dict(), ensure_ascii=False, indent=2) + "\n"
+    state_path.write_text(payload, encoding="utf-8")
     return state_path
 
 

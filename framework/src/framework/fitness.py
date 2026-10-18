@@ -24,12 +24,14 @@
 from __future__ import annotations
 
 import ast
-import re
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from .gates import Verdict, classify
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # 产物字段：一条 fitness 违规
@@ -328,7 +330,9 @@ class ClassifyInput:
     collected: int | None
 
 
-def classify_mutable(inp: ClassifyInput, *, disable: frozenset[str] = frozenset()) -> tuple[Verdict | None, str]:
+def classify_mutable(
+    inp: ClassifyInput, *, disable: frozenset[str] = frozenset()
+) -> tuple[Verdict | None, str]:
     """`gates.classify` 的**可变异版**：复刻其逻辑，但可 `disable` 某个拒绝点。
 
     ★ 这是 G7 的被测体 —— 对它做拒绝点活性扫描（逐个删拒绝点，看本该红的会不会变绿）。
@@ -419,10 +423,22 @@ _CLASSIFY_SITES = [
 
 # 一组「本该非 pass」的 subject（每个瞄准一个拒绝点）。
 _CLASSIFY_SHOULD_FAIL = [
-    ("ran=False", ClassifyInput(ran=False, timed_out=False, exit_code=None, exit_ok=(0,), collected=None)),
-    ("timed_out=True", ClassifyInput(ran=True, timed_out=True, exit_code=124, exit_ok=(0,), collected=None)),
-    ("collected=0,exit=0", ClassifyInput(ran=True, timed_out=False, exit_code=0, exit_ok=(0,), collected=0)),
-    ("exit=1,collected=2", ClassifyInput(ran=True, timed_out=False, exit_code=1, exit_ok=(0,), collected=2)),
+    (
+        "ran=False",
+        ClassifyInput(ran=False, timed_out=False, exit_code=None, exit_ok=(0,), collected=None),
+    ),
+    (
+        "timed_out=True",
+        ClassifyInput(ran=True, timed_out=True, exit_code=124, exit_ok=(0,), collected=None),
+    ),
+    (
+        "collected=0,exit=0",
+        ClassifyInput(ran=True, timed_out=False, exit_code=0, exit_ok=(0,), collected=0),
+    ),
+    (
+        "exit=1,collected=2",
+        ClassifyInput(ran=True, timed_out=False, exit_code=1, exit_ok=(0,), collected=2),
+    ),
 ]
 
 

@@ -23,11 +23,15 @@ from __future__ import annotations
 
 import fnmatch
 import re
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
 import tomllib
-from dataclasses import dataclass, field
-from typing import Any, Callable
 
 from .exit_codes import ExitCode
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # ---------------------------------------------------------------------------
 # 检查面 ①：白名单越界（抽空 `tools/pool/review.py`）
@@ -175,7 +179,9 @@ def check_full_gate_run(
                f"affected 块={'有' if partial else '无'}")
     missing = [n for n in expected_gate_names if n not in got]
     extra = [n for n in got if n not in expected_gate_names]
-    mismatch = bool(expected_gate_names) and (len(got) != len(expected_gate_names) or set(got) != set(expected_gate_names))
+    same_len = len(got) == len(expected_gate_names)
+    same_set = set(got) == set(expected_gate_names)
+    mismatch = bool(expected_gate_names) and not (same_len and same_set)
 
     def _dump() -> str:
         return _json_dumps_compact(payload.get("affected"))[:200]
@@ -292,7 +298,8 @@ def check_seal_tree(
 ) -> tuple[list[str], str, str]:
     """封存树 vs 提交树的正面对账。
 
-    ★ 参数化（本仓版从 `run_gates.tree_without_gates` 读；框架版由调用方传 `tree_without_gates_fn`）。
+    ★ 参数化（本仓版从 `run_gates.tree_without_gates` 读；
+      框架版由调用方传 `tree_without_gates_fn`）。
     只对真产物（`tree_scope == expected_scope`）生效；旧笔只标注不判红。
     """
     scope = payload.get("tree_scope")
@@ -333,17 +340,25 @@ class ReviewConfig:
     who: str                   # 谁复核：人或机器 / 哪条命令
     what: tuple[str, ...]      # 复核什么：域 / 门数 / trailer / 分支 / 脏树
     where: str                 # 结论落哪：gates/review/<task>.json 的路径模板
-    on_fail: str               # 复核失败怎么办（照本仓口径：不挡提交，但不许把「没复核」写成「复核通过」）
+    # 复核失败怎么办（照本仓口径：不挡提交，但不许把「没复核」写成「复核通过」）
+    on_fail: str
 
     def to_dict(self) -> dict:
-        return {"who": self.who, "what": list(self.what), "where": self.where, "on_fail": self.on_fail}
+        return {
+            "who": self.who,
+            "what": list(self.what),
+            "where": self.where,
+            "on_fail": self.on_fail,
+        }
 
 
 class ReviewConfigError(Exception):
     """复核面配置读不了 / 缺键 / 未知键 —— 明确报错，不静默。"""
 
 
-_REVIEW_WHAT_ALLOWED = frozenset({"domain", "gate_count", "trailer", "branch", "dirty_tree", "seal_tree"})
+_REVIEW_WHAT_ALLOWED = frozenset(
+    {"domain", "gate_count", "trailer", "branch", "dirty_tree", "seal_tree"}
+)
 _REVIEW_ON_FAIL_ALLOWED = frozenset({"warn", "block", "mark_only"})
 
 
@@ -366,7 +381,9 @@ def load_review_config(d: dict[str, Any]) -> ReviewConfig:
         raise ReviewConfigError("[review].what 必须是非空数组（复核什么）")
     bad_what = [w for w in what if w not in _REVIEW_WHAT_ALLOWED]
     if bad_what:
-        raise ReviewConfigError(f"[review].what 出现未知项 {bad_what}（合法：{sorted(_REVIEW_WHAT_ALLOWED)}）")
+        raise ReviewConfigError(
+            f"[review].what 出现未知项 {bad_what}（合法：{sorted(_REVIEW_WHAT_ALLOWED)}）"
+        )
     if not isinstance(where, str) or not where.strip():
         raise ReviewConfigError("[review].where 必须是非空字符串（结论落哪）")
     if on_fail not in _REVIEW_ON_FAIL_ALLOWED:

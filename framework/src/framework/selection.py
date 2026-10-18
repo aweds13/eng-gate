@@ -15,7 +15,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Iterable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 # ===========================================================================
 # F11 · 术语对齐（官方词）
@@ -176,7 +179,9 @@ class Transition:
         return {"gate": self.gate, "from": self.frm, "to": self.to}
 
 
-def detect_transitions(today_results: Iterable, yesterday_state: dict[str, str]) -> list[Transition]:
+def detect_transitions(
+    today_results: Iterable, yesterday_state: dict[str, str]
+) -> list[Transition]:
     """对比今天与昨天的判决，报昨天绿今天红的门（regression transition）。"""
     out: list[Transition] = []
     for r in today_results:
@@ -285,7 +290,10 @@ def coverage_must_not_be_sole_evidence(*, emits: tuple[str, ...], other_evidence
 # 依据：主控 2026-10-03 自我纠正（`复盘/框架-验证分层的行业做法.md` §三）。
 # 判据：文本里出现「否定 + 文献」而无检索词 ⇒ 红。
 # ===========================================================================
-_EVIDENCE_NEGATION_RE = re.compile(r"(没有|不存在|未见|未检索到)[^。；;\n]{0,60}?(文献|论文|实证|arXiv)")
+_EVIDENCE_NEGATION_RE = re.compile(
+    r"(没有|不存在|未见|未检索到)[^。；;\n]{0,60}?"
+    r"(文献|论文|实证|arXiv)"
+)
 
 
 def lint_external_evidence(text: str, *, search_terms: tuple[str, ...] = (),

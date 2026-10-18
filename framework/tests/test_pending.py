@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from framework.pending import PendingError
 
 from framework import claim, invariants, land, ledger, trace
-from framework.pending import PendingError
 
 
 def test_ledger_check_raises():

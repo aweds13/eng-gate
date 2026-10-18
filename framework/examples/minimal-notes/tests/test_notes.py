@@ -1,7 +1,6 @@
 """正常路径的用例。"""
 
 import pytest
-
 from notes import add, search
 
 

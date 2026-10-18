@@ -1,8 +1,9 @@
 """配置加载 + **严格** schema 校验（读 `pipeline.toml`）。
 
 口径照本项目已立过的「白名单即 schema」：**缺键 / 拼错 / 未知键一律明确报错**，
-绝不静默兜底。差异只有一处：设计书 §2.1 给部分可选键写了**文档化默认值**，这些默认值是 schema 的一部分，
-不是「静默兜底」—— 拼错的键**不会**被当成默认值，而是当场报错（`additionalProperties: false` 的语义）。
+绝不静默兜底。差异只有一处：设计书 §2.1 给部分可选键写了**文档化默认值**，
+这些默认值是 schema 的一部分，不是「静默兜底」—— 拼错的键**不会**被当成默认值，
+而是当场报错（`additionalProperties: false` 的语义）。
 
 本模块是**纯库**：不 print、不 `sys.exit`、不读全局状态（唯一例外是 `load()` 未传 `path` 时读
 环境变量做旁路，这是**唯一的显式旁路**，不是默认值）。
@@ -13,10 +14,11 @@
 from __future__ import annotations
 
 import os
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+import tomllib
 
 CONFIG_FILENAME = "pipeline.toml"
 ENV_OVERRIDE = "PIPELINE_TOML"
@@ -50,7 +52,9 @@ class SectionSpec:
     fields: tuple[FieldSpec, ...]
 
 
-def _f(name: str, kind: str, required: bool, default: Any = _MISSING, choices: tuple[str, ...] = ()) -> FieldSpec:
+def _f(
+    name: str, kind: str, required: bool, default: Any = _MISSING, choices: tuple[str, ...] = ()
+) -> FieldSpec:
     return FieldSpec(name=name, kind=kind, required=required, default=default, choices=choices)
 
 
@@ -149,7 +153,9 @@ def _matches(value: Any, kind: str) -> bool:
     if kind == "str_list":
         return isinstance(value, list) and all(isinstance(x, str) for x in value)
     if kind == "int_list":
-        return isinstance(value, list) and all(isinstance(x, int) and not isinstance(x, bool) for x in value)
+        return isinstance(value, list) and all(
+            isinstance(x, int) and not isinstance(x, bool) for x in value
+        )
     raise AssertionError(f"未知 kind：{kind}")  # pragma: no cover - 内部错误
 
 
@@ -191,27 +197,34 @@ def _parse_gate(name: str, table: dict[str, Any], where: str) -> GateSpec:
         if spec.name not in table:
             if spec.name in GATE_REQUIRED:
                 raise ConfigError(
-                    f"门 [{name}] 缺键 {spec.name}（在 {where}；该键必填，期望 {_kind_human(spec.kind)}）"
+                    f"门 [{name}] 缺键 {spec.name}（在 {where}；该键必填，"
+                    f"期望 {_kind_human(spec.kind)}）"
                 )
             values[spec.name] = spec.default
             continue
         raw = table[spec.name]
         if not _matches(raw, spec.kind):
             raise ConfigError(
-                f"门 [{name}] 键 {spec.name} 必须是{_kind_human(spec.kind)}（在 {where}；拿到 {raw!r}）"
+                f"门 [{name}] 键 {spec.name} 必须是{_kind_human(spec.kind)}"
+                f"（在 {where}；拿到 {raw!r}）"
             )
         if spec.choices and raw not in spec.choices:
             raise ConfigError(
-                f"门 [{name}] 键 {spec.name} 取值必须是 {list(spec.choices)} 之一（在 {where}；拿到 {raw!r}）"
+                f"门 [{name}] 键 {spec.name} 取值必须是 {list(spec.choices)} 之一"
+                f"（在 {where}；拿到 {raw!r}）"
             )
         values[spec.name] = raw
 
     if not values["cmd"]:
         raise ConfigError(f"门 [{name}] 的 cmd 不许为空数组（在 {where}；argv 数组至少一条）")
     if not values["nail"].strip():
-        raise ConfigError(f"门 [{name}] 的 nail 不许为空（在 {where}；判据随件走，没有钉子不许进门）")
+        raise ConfigError(
+            f"门 [{name}] 的 nail 不许为空（在 {where}；判据随件走，没有钉子不许进门）"
+        )
     if values["timeout_s"] <= 0:
-        raise ConfigError(f"门 [{name}] 的 timeout_s 必须 > 0（在 {where}；拿到 {values['timeout_s']}）")
+        raise ConfigError(
+            f"门 [{name}] 的 timeout_s 必须 > 0（在 {where}；拿到 {values['timeout_s']}）"
+        )
     if not values["exit_ok"]:
         raise ConfigError(f"门 [{name}] 的 exit_ok 不许为空数组（在 {where}）")
 
@@ -299,7 +312,8 @@ def load(path: str | Path | None = None) -> Config:
     cfg_path = config_path(path)
     if not cfg_path.is_file():
         raise ConfigError(
-            f"配置不存在：{cfg_path}（期望一份含 [meta]/[paths]/[cards]/[gates]/[workers]/[exit_codes] 的 TOML；"
+            f"配置不存在：{cfg_path}（期望一份含 "
+            f"[meta]/[paths]/[cards]/[gates]/[workers]/[exit_codes] 的 TOML；"
             f"先跑 `pipe init` 铺一份）"
         )
     try:
@@ -312,7 +326,8 @@ def load(path: str | Path | None = None) -> Config:
     unknown_sections = sorted(set(raw) - set(SECTION_SPECS) - {"gates"})
     if unknown_sections:
         raise ConfigError(
-            f"配置出现未知段 {unknown_sections}（在 {cfg_path}；合法段：{sorted(SECTION_SPECS) + ['gates']}）"
+            f"配置出现未知段 {unknown_sections}（在 {cfg_path}；"
+            f"合法段：{sorted(SECTION_SPECS) + ['gates']}）"
             f" —— 拼错都不允许"
         )
 
@@ -325,7 +340,9 @@ def load(path: str | Path | None = None) -> Config:
                 raise ConfigError(f"配置缺段 [{section}]（在 {cfg_path}；该段必填）")
             table = {}
         if not isinstance(table, dict):
-            raise ConfigError(f"[{section}] 必须是 TOML 表（在 {cfg_path}；拿到 {type(table).__name__}）")
+            raise ConfigError(
+                f"[{section}] 必须是 TOML 表（在 {cfg_path}；拿到 {type(table).__name__}）"
+            )
         legal = {f.name for f in spec.fields}
         unknown = sorted(set(table) - legal)
         if unknown:
@@ -339,7 +356,8 @@ def load(path: str | Path | None = None) -> Config:
                 # 段缺失时只填「有默认值」的键；必填无默认的键留给下游（如 resource.port_band）。
                 if present and fspec.required:
                     raise ConfigError(
-                        f"配置缺键 {section}.{fspec.name}（在 {cfg_path}；该键必填，期望 {_kind_human(fspec.kind)}）"
+                        f"配置缺键 {section}.{fspec.name}（在 {cfg_path}；该键必填，"
+                        f"期望 {_kind_human(fspec.kind)}）"
                     )
                 if fspec.default is not _MISSING:
                     filled[fspec.name] = fspec.default
@@ -368,7 +386,9 @@ def load(path: str | Path | None = None) -> Config:
         raise ConfigError(f"配置缺键 gates.gates_dir（在 {cfg_path}；该键必填）")
     gates_dir = gates_table["gates_dir"]
     if not isinstance(gates_dir, str):
-        raise ConfigError(f"配置键 gates.gates_dir 必须是字符串（在 {cfg_path}；拿到 {gates_dir!r}）")
+        raise ConfigError(
+            f"配置键 gates.gates_dir 必须是字符串（在 {cfg_path}；拿到 {gates_dir!r}）"
+        )
     inline_gates: dict[str, GateSpec] = {}
     for gname, gtable in gates_table.items():
         if gname == "gates_dir":

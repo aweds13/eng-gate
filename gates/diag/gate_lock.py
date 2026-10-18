@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """门禁锁 —— 按端口段分把 + 全局并发上限（铁律 13 的机械化；fork/merge 并行开发必备）。
 
 为什么需要
@@ -14,8 +13,8 @@
   2. **整机并行趟数**有上限（真正的瓶颈是内存：一趟 17 门要 15–30 个无头 Edge）。
 于是锁从「跨树一把」改成「**每段一把 + 全局限额**」：
   - 锁文件按 `TF_GATE_PORT_BASE` 分把（与 `scripts/run_gates.py` 的 `port_base()` 同一口径）：
-    **不设 = `gates/diag/gates.lock`（路径逐字不变，向后兼容）**；设了 = `gates/diag/gates-<BASE>.lock`；
-    非法/越界值 → WARN 并退回默认段（同 `run_gates.py`）。
+    **不设 = `gates/diag/gates.lock`（路径逐字不变，向后兼容）**；
+    设了 = `gates/diag/gates-<BASE>.lock`；非法/越界值 → WARN 并退回默认段（同 `run_gates.py`）。
   - 新变量 `TF_GATE_MAX_CONCURRENT`（默认 2）：**同时**持锁的段数 ≤ N；=1 即退回「全局串行」旧行为。
     超限时 `acquire` 里等（打印「当前 N 把在跑，等空位」）。空位**随租约一起过期**：
     扫描名额时只数**租约内**的活锁，持有者死了/租约过期 → 名额自动回归，不会泄漏。
@@ -58,6 +57,7 @@ pid 立刻就"死"了，锁看着像僵尸 → 下一张卡把**正在跑门禁�
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import socket
@@ -138,13 +138,15 @@ def max_concurrent() -> int:
         n = int(raw)
     except ValueError:
         print(
-            f"[锁] [WARN] TF_GATE_MAX_CONCURRENT={raw!r} 不是整数 → 退回默认 {DEFAULT_MAX_CONCURRENT}",
+            f"[锁] [WARN] TF_GATE_MAX_CONCURRENT={raw!r} 不是整数"
+            f" → 退回默认 {DEFAULT_MAX_CONCURRENT}",
             flush=True,
         )
         return DEFAULT_MAX_CONCURRENT
     if n < 1:
         print(
-            f"[锁] [WARN] TF_GATE_MAX_CONCURRENT={n} < 1 不合法 → 退回默认 {DEFAULT_MAX_CONCURRENT}",
+            f"[锁] [WARN] TF_GATE_MAX_CONCURRENT={n} < 1 不合法"
+            f" → 退回默认 {DEFAULT_MAX_CONCURRENT}",
             flush=True,
         )
         return DEFAULT_MAX_CONCURRENT
@@ -282,10 +284,9 @@ def cmd_acquire(card: str, wait: int, stale_after: int) -> int:
             active = _active_locks(stale_after)
             limit = max_concurrent()
             if len(active) > limit:
-                try:
+                # 超卖了就退回自己这把（自删失败也无所谓：下一轮会按过期清掉）。
+                with contextlib.suppress(OSError):
                     p.unlink()
-                except OSError:
-                    pass
                 holders = ", ".join(
                     f"{info.get('card')}({pl.name})" for pl, info, _ in active
                 )

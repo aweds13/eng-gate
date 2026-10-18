@@ -22,18 +22,17 @@ from framework.review import (
     AuthorityDomain,
     IntegrationResult,
     ReviewConfigError,
+    changed_paths,
     check_branch,
     check_full_gate_run,
     check_gate_evidence,
     check_trailers,
-    changed_paths,
     domain_of_manifest_text,
     load_review_config,
     outside_allow,
     outside_domain,
     run_review,
 )
-
 
 # ===========================================================================
 # G7 · 拒绝点活性扫描（★ 现成读数）
@@ -71,7 +70,11 @@ def test_g7_refusal_scan_has_vacuous_pass():
 
 def test_g7_refusal_scan_reading_to_dict():
     d = [r for r in classify_refusal_scan() if r.is_vacuous_pass][0].to_dict()
-    assert set(d) == {"site", "subject", "original_verdict", "mutated_verdict", "is_vacuous_pass", "detail"}
+    expected = {
+        "site", "subject", "original_verdict", "mutated_verdict",
+        "is_vacuous_pass", "detail",
+    }
+    assert set(d) == expected
 
 
 def test_g7_empty_site_is_the_live_one():
@@ -108,8 +111,10 @@ def test_g9_fragile_validator_is_caught():
 
 
 def test_g9_classify_mutable_stable_under_exit_ok_reorder():
-    v1, _ = classify_mutable(ClassifyInput(ran=True, timed_out=False, exit_code=1, exit_ok=(0, 1), collected=2))
-    v2, _ = classify_mutable(ClassifyInput(ran=True, timed_out=False, exit_code=1, exit_ok=(1, 0), collected=2))
+    a = ClassifyInput(ran=True, timed_out=False, exit_code=1, exit_ok=(0, 1), collected=2)
+    v1, _ = classify_mutable(a)
+    b = ClassifyInput(ran=True, timed_out=False, exit_code=1, exit_ok=(1, 0), collected=2)
+    v2, _ = classify_mutable(b)
     assert v1 == v2 == Verdict.PASS
 
 
@@ -142,13 +147,17 @@ def test_g10_check_trailers():
 
 def test_g10_check_gate_evidence_rev_mismatch():
     """G10 钉子②：rev 对不上 ⇒ 红。"""
-    out = check_gate_evidence({"ok": True, "rev": "wrong", "gates": [{"name": "g1", "exit_code": 0}]}, "abc123")
+    payload = {"ok": True, "rev": "wrong", "gates": [{"name": "g1", "exit_code": 0}]}
+    out = check_gate_evidence(payload, "abc123")
     assert any("rev" in p and "wrong" in p for p in out)
 
 
 def test_g10_check_full_gate_run_affected_is_red_with_original():
     """★ G10 反例钉子③：有 affected 块 ⇒ 判红并贴原文。"""
-    payload = {"tree_scope": "x", "gates": [{"name": "a"}], "affected": {"files": ["x.py"], "reason": "部分跑"}}
+    payload = {
+        "tree_scope": "x", "gates": [{"name": "a"}],
+        "affected": {"files": ["x.py"], "reason": "部分跑"},
+    }
     problems, _, _ = check_full_gate_run(payload, expected_gate_names=["a"], expected_source="t")
     joined = " ".join(problems)
     assert "affected" in joined and "部分跑" in joined
@@ -180,12 +189,12 @@ def test_g10_review_config_green():
 def test_g10_review_config_rejects_bad():
     try:
         load_review_config({"who": "x", "what": ["nope"], "where": "x", "on_fail": "mark_only"})
-        assert False
+        raise AssertionError("[review].what 里的未知项必须报错，但没报")
     except ReviewConfigError:
         pass
     try:
         load_review_config({"who": "x", "what": ["domain"], "where": "x", "on_fail": "halt"})
-        assert False
+        raise AssertionError("[review].on_fail 的非法取值必须报错，但没报")
     except ReviewConfigError:
         pass
 
@@ -204,8 +213,14 @@ def _green_domain() -> AuthorityDomain:
 
 
 def test_g10_run_review_green():
-    r = run_review(_green_result(), _green_domain(),
-                   expected_gate_names=["g1"], expected_branch="main", default_branch="main", allow=["src/**"])
+    r = run_review(
+        _green_result(),
+        _green_domain(),
+        expected_gate_names=["g1"],
+        expected_branch="main",
+        default_branch="main",
+        allow=["src/**"],
+    )
     assert r.landed is True and r.exit_code() == 0
 
 
@@ -214,10 +229,17 @@ def test_g10_nail_no_review_record_not_landed():
     result = _green_result()
     result = IntegrationResult(
         sha=result.sha, parent_short=result.parent_short, commit_body=result.commit_body,
-        changed_files=result.changed_files, branch=result.branch, dirty=result.dirty, gates_payload={},
+        changed_files=result.changed_files, branch=result.branch, dirty=result.dirty,
+        gates_payload={},
     )
-    r = run_review(result, _green_domain(),
-                   expected_gate_names=["g1"], expected_branch="main", default_branch="main", allow=["src/**"])
+    r = run_review(
+        result,
+        _green_domain(),
+        expected_gate_names=["g1"],
+        expected_branch="main",
+        default_branch="main",
+        allow=["src/**"],
+    )
     assert r.landed is False
     assert any("没有复核记录" in p for p in r.problems)
     assert r.exit_code() == 5
@@ -231,8 +253,14 @@ def test_g10_nail_rev_mismatch_is_red():
         changed_files=result.changed_files, branch=result.branch, dirty=result.dirty,
         gates_payload={"ok": True, "rev": "WRONG", "gates": [{"name": "g1", "exit_code": 0}]},
     )
-    r = run_review(result, _green_domain(),
-                   expected_gate_names=["g1"], expected_branch="main", default_branch="main", allow=["src/**"])
+    r = run_review(
+        result,
+        _green_domain(),
+        expected_gate_names=["g1"],
+        expected_branch="main",
+        default_branch="main",
+        allow=["src/**"],
+    )
     assert r.landed is False and r.exit_code() == 1
 
 
@@ -246,8 +274,14 @@ def test_g10_nail_affected_block_is_red_with_original():
                        "gates": [{"name": "g1", "exit_code": 0}],
                        "affected": {"files": ["src/x.py"], "reason": "部分跑"}},
     )
-    r = run_review(result, _green_domain(),
-                   expected_gate_names=["g1"], expected_branch="main", default_branch="main", allow=["src/**"])
+    r = run_review(
+        result,
+        _green_domain(),
+        expected_gate_names=["g1"],
+        expected_branch="main",
+        default_branch="main",
+        allow=["src/**"],
+    )
     assert r.landed is False
     joined = " ".join(r.problems)
     assert "affected" in joined and "部分跑" in joined

@@ -1,3 +1,7 @@
+## ruff 112 → 0：framework 27 个文件 + gate_lock.py
+
+- 28 个文件：E501 折行 72 处（只折行、不改语义）、`ruff --fix` 自动项 25 处（I001 13 / F401 8 / UP035 3 / UP009 1）、TC001+TC003 共 11 处改 `if TYPE_CHECKING:`、2 处 `assert False`→`raise AssertionError`、2 处 try/except/pass→`contextlib.suppress`。
+- ruff 配置零改动；`ruff check .` 112 errors → All checks passed，`pytest framework/tests` 150 passed 不变。
 ## 台账证据补用例名：232 条 bare 文件名 → 726 条 `文件::用例`
 
 - `docs/traceability.toml`：190 条 entry 的 `test:` 证据从「只写文件名」补到用例级（232 条 bare → 726 条指针，720 条落在原文件、6 条换成更贴切的用例文件）。

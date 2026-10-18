@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import pytest
-
 from framework.selection import (
     SilentFailureError,
     check_artifact_op,

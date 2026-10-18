@@ -16,11 +16,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 from .gates import Verdict
-
 
 # ---------------------------------------------------------------------------
 # 成对给的率（分子 + 分母）
@@ -148,13 +146,15 @@ def metrics_complete(metrics: Metrics) -> list[dict]:
     只报一个「精确率 99.2%」就把 76.2% 的漏检藏住了。
     """
     d = metrics.to_dict()
-    missing = [k for k in ("false_positive_rate", "false_negative_rate", "rerun_rate") if k not in d]
+    required = ("false_positive_rate", "false_negative_rate", "rerun_rate")
+    missing = [k for k in required if k not in d]
     if missing:
         return [{"constraint": "G8·三字段不全", "detail": f"缺 {missing}"}]
     # 每个字段必须有 numerator + denominator（成对给）
     for k, v in d.items():
         if not isinstance(v, dict) or "numerator" not in v or "denominator" not in v:
-            return [{"constraint": "G8·不成对", "detail": f"{k} 不是成对的 (numerator, denominator)"}]
+            detail = f"{k} 不是成对的 (numerator, denominator)"
+            return [{"constraint": "G8·不成对", "detail": detail}]
     return []
 
 

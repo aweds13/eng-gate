@@ -1,7 +1,7 @@
 """不变式核查 —— **薄壳**（卡 179 §主控裁的范围：本轮只做最小可实现）。
 
-对齐设计 §③.2 第 7 条与 `tools/wb_invariants.py` 的口径：每条不变式有 claim / judge / nail / status，
-新能力没进表就不算做完（见 抽取清单 #99/#100）。
+对齐设计 §③.2 第 7 条与 `tools/wb_invariants.py` 的口径：
+每条不变式有 claim / judge / nail / status，新能力没进表就不算做完（见 抽取清单 #99/#100）。
 
 ★ 本模块**尚未实现**：签名在，行为未建。调用即抛 `PendingError`（**不返回假结果**）。
 """
@@ -9,9 +9,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .pending import PendingError
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass(frozen=True)

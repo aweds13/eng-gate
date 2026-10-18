@@ -11,9 +11,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from framework.config import GateSpec
 from framework.gates import (
     GateResult,
-    GateSpec,
     GatesRun,
     RunState,
     Verdict,
@@ -34,7 +34,9 @@ def _spec(**kw) -> GateSpec:
 # -- 纯函数 classify ---------------------------------------------------------
 
 def test_classify_not_run_has_no_verdict():
-    state, verdict, _ = classify(ran=False, timed_out=False, exit_code=None, exit_ok=(0,), collected=None)
+    state, verdict, _ = classify(
+        ran=False, timed_out=False, exit_code=None, exit_ok=(0,), collected=None
+    )
     assert state == RunState.NOT_RUN
     assert verdict is None  # ★ not-run 不是一种判决
 

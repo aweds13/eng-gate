@@ -103,14 +103,17 @@ def test_thin_shell_commands_report_not_implemented(tmp_path: Path):
 def test_gate_failure_exits_one(tmp_path: Path):
     (tmp_path / "gates.d").mkdir()
     (tmp_path / "gates.d" / "fail.toml").write_text(
-        '[gate]\nname = "fail"\ncmd = ["' + sys.executable.replace("\\", "/") + '", "-c", "import sys; sys.exit(1)"]\n'
+        '[gate]\nname = "fail"\ncmd = ["'
+        + sys.executable.replace("\\", "/") + '", "-c", "import sys; sys.exit(1)"]\n'
         'inputs = []\nnail = "x::y"\nreuse = "never"\nstage = "light"\ntimeout_s = 30\n',
         encoding="utf-8",
     )
     (tmp_path / "pipeline.toml").write_text(
         '[meta]\nschema_version = "0.1.0"\nframework_version = "0.1.0"\nproject_id = "p"\n'
-        '[paths]\nledger = "ledger.toml"\ninvariants = "invariants.toml"\nevidence_dir = ".pipe/e"\n'
-        'logs_dir = ".pipe/logs"\ngates_state = ".pipe/last.json"\ngates_reuse = ".pipe/reuse.json"\n'
+        '[paths]\nledger = "ledger.toml"\ninvariants = "invariants.toml"\n'
+        'evidence_dir = ".pipe/e"\n'
+        'logs_dir = ".pipe/logs"\ngates_state = ".pipe/last.json"\n'
+        'gates_reuse = ".pipe/reuse.json"\n'
         '[cards]\ncards_dir = "cards"\nspec_template = "t.md"\nbacklog = "backlog.toml"\n'
         'claims_dir = ".pipe/claims"\nauthoritative_domains = "backlog.toml"\n'
         '[gates]\ngates_dir = "gates.d"\n[workers]\nmodel_allowlist = ["m"]\ndefault_model = "m"\n'

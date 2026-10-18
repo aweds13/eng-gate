@@ -26,10 +26,11 @@ for _p in (str(_FRAMEWORK_ROOT / "src"), str(_FRAMEWORK_ROOT)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from framework import __version__, claim, gates, land, ledger, scaffold, trace  # noqa: E402
 from framework.config import ConfigError, load  # noqa: E402
 from framework.exit_codes import ExitCode  # noqa: E402
 from framework.pending import PendingError  # noqa: E402
+
+from framework import __version__, claim, gates, land, ledger, scaffold, trace  # noqa: E402
 
 EXIT_TABLE = """退出码（唯一一张表）：
   0    通过
@@ -127,7 +128,8 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     lines = [f"金丝雀自检：{len(rows)} 道门，"
              f"{'全部有牙' if all_teeth else '有门失效（判据退化成注释）'}"]
     for row in rows:
-        lines.append(f"  {row['name']:<16} {'有牙' if row['has_teeth'] else '失效'}  {row['detail']}")
+        teeth = "有牙" if row['has_teeth'] else "失效"
+        lines.append(f"  {row['name']:<16} {teeth}  {row['detail']}")
     _emit(args.json, {"command": "doctor", "all_have_teeth": all_teeth, "gates": rows}, lines)
     return int(ExitCode.OK) if all_teeth else int(ExitCode.GATE_FAIL)
 
@@ -223,7 +225,9 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"pipe {__version__}")
-    parser.add_argument("--config", help="pipeline.toml 路径（默认读 $PIPELINE_TOML 或 ./pipeline.toml）")
+    parser.add_argument(
+        "--config", help="pipeline.toml 路径（默认读 $PIPELINE_TOML 或 ./pipeline.toml）"
+    )
     parser.add_argument("--json", action="store_true", help="输出机器可读的结构化 JSON")
     sub = parser.add_subparsers(dest="command", metavar="<命令>")
 
@@ -289,9 +293,19 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return func(args)
     except ConfigError as exc:
-        return _die(str(exc), int(ExitCode.PRECONDITION), getattr(args, "json", False), kind="config")
+        return _die(
+            str(exc),
+            int(ExitCode.PRECONDITION),
+            getattr(args, "json", False),
+            kind="config",
+        )
     except PendingError as exc:
-        return _die(str(exc), int(ExitCode.PRECONDITION), getattr(args, "json", False), kind="not-implemented")
+        return _die(
+            str(exc),
+            int(ExitCode.PRECONDITION),
+            getattr(args, "json", False),
+            kind="not-implemented",
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover
