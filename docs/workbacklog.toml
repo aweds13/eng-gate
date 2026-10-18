@@ -2871,3 +2871,14 @@ files = ["tools/launch_timeflow.pyw", "tests/test_launch_timeflow.py"]
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A277"
+task = "T-AG394"
+title = "面板路由 404 第二跳：cordis 4 里 apply 必须用第二形参拿 config"
+tree = ".wt/A277"
+spec = "复盘/卡/卡A277-cordis-config第二形参.md"
+files = ["tools/dsh_panel.py", "tools/verify_panel_routes.py"]
+depends = ["A275"]
+risk = "low"
+status = "done"

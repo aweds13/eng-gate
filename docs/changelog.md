@@ -10,6 +10,11 @@
 - 新增 `tools/launch_timeflow.pyw`：探端口 8520 → 没起就用 `pythonw` + `CREATE_NO_WINDOW` 起 `stack.py start timeflow` → 等端口 → 开浏览器；起不来弹框。
 - 新增 `tests/test_launch_timeflow.py`：只读源码的三条钉子。
 - 真读数：`pytest tests/test_launch_timeflow.py` 3 passed；`ruff` 干净；dry 实测退出码 0 且 8520 起来后已停。
+## 2026-10-18 —— 面板路由 404 第二跳（T-AG394）
+- 修 `tools/dsh_panel.py` 宿主半：`export function apply(ctx, config)`，仓库根从第二个形参拿，不再读 `ctx.config`。
+- 自检加两条钉子（签名 + 禁止读 ctx.config），真机 probe profile 三条路由由 404 变 200。
+- 新增 `tools/verify_panel_routes.py`：扫本机 GUI 端口，验 `/dsh-panel/stack-status|skills|workbench-board`。
+- 真读数：probe 实例 `--port 54399` 三条路由 200 全绿；`--check` 绿；`pytest tests/test_dsh_panel.py` 111 passed；`ruff` 干净。
 ## 2026-10-17 T-AG385 门禁跑法不渗进子进程 + worker 数按内存自适应
 
 - `tests/test_wb_land.py`：`_ENV` 从「继承 os.environ」改为显式白名单，摘掉 `TF_PYTEST_WORKERS`、`TF_GATE_MIN_FREE_GB`——降级跑法不再被当成默认跑法（卡 184 咬过的那条）。

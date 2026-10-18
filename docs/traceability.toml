@@ -6923,3 +6923,16 @@ evidence = [
   "file:复盘/卡/卡A276-timeflow桌面启动器.md",
 ]
 gaps = "① ★ timeflow 不该依赖 DSH：新增双击启动器 `tools/launch_timeflow.pyw`（pythonw、无黑窗、幂等、失败弹框、`TF_LAUNCH_DRY` 自测开关）。② ★ 启动器要有人守：`tests/test_launch_timeflow.py` 三条钉子（.pyw / CREATE_NO_WINDOW / 幂等+失败可见+dry）。"
+
+[entries."T-AG394"]
+id = "T-AG394"
+title = "面板路由 404 第二跳：apply(ctx, config) 拿仓库根，不读 ctx.config"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:gates/diag/_routes_54399.txt",
+  "file:tools/dsh_panel.py",
+  "file:tools/verify_panel_routes.py",
+  "file:复盘/卡/卡A277-cordis-config第二形参.md",
+]
+gaps = "① ★ 真机 404 第二跳（`tools/dsh_panel.py` 宿主半）：cordis 4 的 `ctx.config` 要 inject 才能取，直接读会抛「cannot get property 「config」 without inject」⇒ apply 第一行就炸、路由与工具全没；改成官方签名 `apply(ctx, config)`。② ★ 自检加钉子（`tools/dsh_panel.py` 自检段）：宿主半必须 `apply(ctx, config)`，且不许再出现 `ctx?.config?.root` / `ctx.config.root`。③ ★ 路由验证器进仓（`tools/verify_panel_routes.py`）：`tools/verify_panel_routes.py`（原来躺在 gitignore 的 `gates/diag/` 里，等于没有回归钉子）。"

@@ -877,9 +877,13 @@ function serveSeam(req, res) {
   sendJson(res, 200, readSeat(seat));
 }
 
-export function apply(ctx) {
-  /* ★ 仓库根：插件行的 config.root 优先（组成层当数据写），没有就留给环境变量，再没有就如实吼。 */
-  const configured = ctx?.config?.root;
+export function apply(ctx, config) {
+  /* ★ 仓库根：插件行的 config.root 优先（组成层当数据写），没有就留给环境变量，再没有就如实吼。
+   * ★ 卡 A277：cordis 4 里 `ctx.config` 是**要 inject 才能取的属性** —— 直接读会抛
+   *   「cannot get property "config" without inject」，apply 在第一行就炸，
+   *   路由与工具全都没了（真机实测：面板能显示、/dsh-panel/* 全 404）。
+   *   官方签名是 `apply(ctx, config)`，config 走第二个参数。 */
+  const configured = config?.root;
   CONFIG_ROOT = typeof configured === "string" ? configured : "";
   /* ★ 顺序：先挂只读路由（面板的一键启动/现读全靠它），再注册工具 ——
      工具注册若因宿主版本差异抛错，绝不能把路由一起带走（卡 A273）。 */
@@ -2400,8 +2404,13 @@ def _check_host(source: str) -> list[str]:
     # ★ 2026-10-15 实测：DSH 桌面版宿主的 cwd 是 **profile 目录** ⇒ 拿 cwd 当仓库根会让三个读数器
     #   全部 `can't open file '…\\profiles\\desktop\\tools\\*.py'` ✗。所以：必须能从 config 拿根，
     #   且**不许**再用 `process.cwd()` 兜底。
-    if "CONFIG_ROOT" not in source or not ("ctx.config" in source or "ctx?.config" in source):
-        problems.append("[宿主半] 不能从插件行 config 拿仓库根（缺 CONFIG_ROOT / ctx.config）")
+    # ★ 卡 A277：cordis 4 里 `ctx.config` 要 inject 才能取，直接读会在 apply 第一行抛
+    #   "cannot get property \"config\" without inject" ⇒ 路由整条不挂（真机 404）。
+    #   官方签名 apply(ctx, config)：config 必须是**第二个形参**，且不许再碰 ctx.config。
+    if "CONFIG_ROOT" not in source or "apply(ctx, config)" not in source:
+        problems.append("[宿主半] 没按 apply(ctx, config) 拿仓库根")
+    if "ctx?.config?.root" in source or "ctx.config.root" in source:
+        problems.append("[宿主半] 还在读 ctx.config（cordis 4 会抛）")
     if "process.cwd()" in source:
         problems.append("[宿主半] 还在拿 process.cwd() 当仓库根 —— DSH 桌面版那里是 profile 目录 ✗")
     if "没告诉我仓库根" not in source:
