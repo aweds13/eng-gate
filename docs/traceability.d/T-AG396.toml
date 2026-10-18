@@ -1,0 +1,13 @@
+[entries."T-AG396"]
+id = "T-AG396"
+title = "对账器认批次围栏：26 条 stale-done 逐张定性"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_reconcile.py",
+  "file:tests/test_wb_reconcile.py",
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡A280-对账器认批次围栏.md",
+]
+gaps = "- 对账器把 26 张已完成卡报黄：`tools/wb_reconcile.py` 的 `_commit_for()` 用 `git log --grep <task> -10`，正文命中挤掉主题命中（`T-G114` 正文 31 条，真点号的 `ec2121e` 排在第 11 条后）。- 老卡是攒批收口的（`f4fd27d`、`b5f76bf`），主题只有批次级 Task 号；翻 done 的依据是围栏 `state == landed`（见 `37a079c` 提交正文），围栏在 `gates/diag/batch/*.json`。"
+

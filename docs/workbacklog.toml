@@ -2894,3 +2894,13 @@ depends = []
 risk = "low"
 status = "done"
 
+[[cards]]
+id = "A280"
+task = "T-AG396"
+title = "对账器认批次围栏：26 条 stale-done 逐张定性"
+tree = ".wt/A280"
+spec = "复盘/卡/卡A280-对账器认批次围栏.md"
+files = ["tools/wb_reconcile.py", "tests/test_wb_reconcile.py"]
+depends = []
+risk = "low"
+status = "done"

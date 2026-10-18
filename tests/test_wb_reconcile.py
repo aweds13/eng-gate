@@ -7,6 +7,7 @@ r"""`tools/wb_reconcile.py` 的判据（卡 A269 · T-AG387）。
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -40,7 +41,7 @@ def test_pending_but_committed_is_stale_red(tmp_path: Path) -> None:
     root = _repo(tmp_path, _card("A1", "T-GX1", "pending"))
     _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x (T-GX1)")
     cards = wb_reconcile.load_cards(root)
-    stale_pending, stale_done = wb_reconcile.check(root, cards)
+    stale_pending, stale_done, accounted = wb_reconcile.check(root, cards)
     assert [x["id"] for x in stale_pending] == ["A1"]
     assert stale_pending[0]["commit"]
     assert stale_done == []
@@ -51,7 +52,7 @@ def test_done_without_commit_is_advisory_only(tmp_path: Path) -> None:
     """② 状态 done 但没提交 ⇒ 只报不拒（退出码仍 0）。"""
     root = _repo(tmp_path, _card("A2", "T-GX2", "done"))
     cards = wb_reconcile.load_cards(root)
-    stale_pending, stale_done = wb_reconcile.check(root, cards)
+    stale_pending, stale_done, accounted = wb_reconcile.check(root, cards)
     assert stale_pending == []
     assert [x["id"] for x in stale_done] == ["A2"]
     assert wb_reconcile.main(["--root", str(root)]) == 0
@@ -63,7 +64,7 @@ def test_consistent_queue_is_green(tmp_path: Path) -> None:
     root = _repo(tmp_path, backlog)
     _git(root, "commit", "-q", "--allow-empty", "-m", "feat: y (T-GX4)")
     cards = wb_reconcile.load_cards(root)
-    stale_pending, stale_done = wb_reconcile.check(root, cards)
+    stale_pending, stale_done, accounted = wb_reconcile.check(root, cards)
     assert stale_pending == [] and stale_done == []
     assert wb_reconcile.main(["--root", str(root)]) == 0
 
@@ -76,7 +77,7 @@ def test_failed_card_with_commit_is_not_red(tmp_path: Path) -> None:
     root = _repo(tmp_path, _card("A3", "T-GY3", "failed"))
     _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x (T-GY0)", "-m", "正文提到 T-GY3")
     cards = wb_reconcile.load_cards(root)
-    stale_pending, stale_done = wb_reconcile.check(root, cards)
+    stale_pending, stale_done, accounted = wb_reconcile.check(root, cards)
     assert stale_pending == []
     assert wb_reconcile.main(["--root", str(root)]) == 0
 
@@ -86,6 +87,36 @@ def test_body_mention_is_not_a_commit(tmp_path: Path) -> None:
     root = _repo(tmp_path, _card("A4", "T-GY4", "pending"))
     _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x (T-GY0)", "-m", "夹具里提到 T-GY4")
     cards = wb_reconcile.load_cards(root)
-    stale_pending, stale_done = wb_reconcile.check(root, cards)
+    stale_pending, stale_done, accounted = wb_reconcile.check(root, cards)
     assert stale_pending == []
     assert wb_reconcile.main(["--root", str(root)]) == 0
+
+def _batch(root: Path, name: str, state: str, commit: str, declared: list[str]) -> None:
+    """造一份批次围栏（`gates/diag/batch/<name>.json`）。"""
+    d = root / "gates" / "diag" / "batch"
+    d.mkdir(parents=True, exist_ok=True)
+    body = {"id": name, "state": state, "declared": declared, "landed": {"commit": commit}}
+    (d / f"{name}.json").write_text(json.dumps(body), encoding="utf-8")
+
+
+def test_done_card_in_landed_batch_is_accounted_not_yellow(tmp_path: Path) -> None:
+    """done 卡没有点名 Task 提交，但它所在的批 `state=landed` ⇒ 认账（蓝），不报黄。
+
+    这是 2026-10-14 `37a079c` 翻 14 张卡用的同一条判据：围栏状态说了算。
+    """
+    root = _repo(tmp_path, _card("204", "T-G311", "done"))
+    _batch(root, "B-BATCH", "landed", "abc1234", ["204"])
+    pending, stale, accounted = wb_reconcile.check(root, wb_reconcile.load_cards(root))
+    assert not pending and not stale
+    assert [x["id"] for x in accounted] == ["204"]
+    assert accounted[0]["commit"] == "abc1234"
+
+
+def test_unlanded_batch_proves_nothing_and_stays_yellow(tmp_path: Path) -> None:
+    """批没落地（`state=draft`）就不算证据 —— 不能拿「登记了」冒充「落了」。"""
+    root = _repo(tmp_path, _card("205", "T-G312", "done"))
+    _batch(root, "B-DRAFT", "draft", "def5678", ["205"])
+    pending, stale, accounted = wb_reconcile.check(root, wb_reconcile.load_cards(root))
+    assert not pending and not accounted
+    assert [x["id"] for x in stale] == ["205"]
+
