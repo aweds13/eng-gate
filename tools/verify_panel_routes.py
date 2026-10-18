@@ -42,7 +42,7 @@ def listening_ports() -> list[int]:
 def probe(port: int, path: str) -> tuple[int, str]:
     url = f"http://127.0.0.1:{port}{path}"
     try:
-        with urllib.request.urlopen(url, timeout=4) as response:
+        with urllib.request.urlopen(url, timeout=15) as response:
             return response.status, response.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as error:
         return error.code, error.read().decode("utf-8", "replace")
@@ -58,16 +58,33 @@ CHECKS = (
 
 
 def main(argv: list[str]) -> int:
-    ports = [int(argv[1])] if len(argv) > 1 else listening_ports()
-    candidates = ports
+    """显式给端口就只探它；否则扫本机所有 LISTENING 端口，找**真正回面板读数**的那个。"""
+    explicit = len(argv) > 1
+    ports = [int(argv[1])] if explicit else listening_ports()
     failures: list[str] = []
-    for port in candidates:
+    hit_port = 0
+    for port in ports:
         status, body = probe(port, "/dsh-panel/stack-status")
         if status != 200:
             continue
-        print(f"  命中 GUI 端口 {port}")
+        try:
+            if json.loads(body).get("ok") is not True:
+                continue
+        except Exception:  # noqa: BLE001 - 200 但非 JSON ⇒ 不是面板，接着扫
+            continue
+        hit_port = port
+        break
+
+    if not hit_port:
+        if explicit:
+            failures.append(f"端口 {ports[0]} 没回 200 /dsh-panel/stack-status（宿主半没加载）")
+        else:
+            failures.append("没有任何端口回 200 /dsh-panel/stack-status（宿主半没加载）")
+        print("  ✗ 没找到能回面板读数的端口")
+    else:
+        print(f"  命中 GUI 端口 {hit_port}")
         for path, accept in CHECKS:
-            code, payload = probe(port, path)
+            code, payload = probe(hit_port, path)
             ok = code == 200
             reason = ""
             if ok:
@@ -79,19 +96,17 @@ def main(argv: list[str]) -> int:
                     reason = f"200 但解不出 JSON（{type(error).__name__}）"
             print(f"  {'✓' if ok else '✗'} {path} → HTTP {code} {reason or payload[:120]!r}")
             if not ok:
-                failures.append(f"{port}{path}: HTTP {code} {reason}")
-        break
-    else:
-        failures.append("没有任何端口回 200 /dsh-panel/stack-status（宿主半没加载）")
-        print("  ✗ 没找到能回 /dsh-panel/stack-status 的端口")
+                failures.append(f"{hit_port}{path}: HTTP {code} {reason}")
 
     if failures:
-        print("\n[FAIL] 运行时路由未全绿：")
+        print()
+        print("[FAIL] 运行时路由未全绿：")
         for item in failures:
             print("  -", item)
         print("  ⇒ 先完全退出 DSH（含托盘）再重开，然后重跑本脚本。")
         return 1
-    print("\n[OK ] 运行时路由全绿：宿主半已加载。")
+    print()
+    print("[OK ] 运行时路由全绿：宿主半已加载。")
     return 0
 
 

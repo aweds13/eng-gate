@@ -1,0 +1,12 @@
+[entries."T-AG395"]
+id = "T-AG395"
+title = "路由验证器扫端口：只认回面板 JSON 的端口，200 兜底页跳过"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:gates/diag/_routes_50124.txt",
+  "file:tools/verify_panel_routes.py",
+  "file:复盘/卡/卡A278-路由验证器扫端口.md",
+]
+gaps = "① ★ 路由验证器扫端口（`tools/verify_panel_routes.py`）：「第一个 200 就认」会被别的 DSH 实例的 HTML 兜底骗 ⇒ 改成「200 + `json.loads` + `ok is True` 才认，否则接着扫」。见 `tools/verify_panel_routes.py`。"
+

@@ -2882,3 +2882,15 @@ files = ["tools/dsh_panel.py", "tools/verify_panel_routes.py"]
 depends = ["A275"]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A278"
+task = "T-AG395"
+title = "路由验证器扫端口：200 但非 JSON 的端口要跳过"
+tree = ".wt/A278"
+spec = "复盘/卡/卡A278-路由验证器扫端口.md"
+files = ["tools/verify_panel_routes.py"]
+depends = []
+risk = "low"
+status = "done"
+

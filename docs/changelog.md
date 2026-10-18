@@ -15,6 +15,9 @@
 - 自检加两条钉子（签名 + 禁止读 ctx.config），真机 probe profile 三条路由由 404 变 200。
 - 新增 `tools/verify_panel_routes.py`：扫本机 GUI 端口，验 `/dsh-panel/stack-status|skills|workbench-board`。
 - 真读数：probe 实例 `--port 54399` 三条路由 200 全绿；`--check` 绿；`pytest tests/test_dsh_panel.py` 111 passed；`ruff` 干净。
+## 2026-10-18 —— 路由验证器扫端口（T-AG395）
+- `tools/verify_panel_routes.py`：扫端口时逐个验 JSON 读数，200 但非面板的端口跳过；显式端口认不出就点名报红。
+- 真读数：`--port 50124` 三条路由 200 全绿（`gates/diag/_routes_50124.txt`）；无参扫全端口也能命中真 GUI。
 ## 2026-10-17 T-AG385 门禁跑法不渗进子进程 + worker 数按内存自适应
 
 - `tests/test_wb_land.py`：`_ENV` 从「继承 os.environ」改为显式白名单，摘掉 `TF_PYTEST_WORKERS`、`TF_GATE_MIN_FREE_GB`——降级跑法不再被当成默认跑法（卡 184 咬过的那条）。

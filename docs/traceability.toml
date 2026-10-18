@@ -6936,3 +6936,15 @@ evidence = [
   "file:复盘/卡/卡A277-cordis-config第二形参.md",
 ]
 gaps = "① ★ 真机 404 第二跳（`tools/dsh_panel.py` 宿主半）：cordis 4 的 `ctx.config` 要 inject 才能取，直接读会抛「cannot get property 「config」 without inject」⇒ apply 第一行就炸、路由与工具全没；改成官方签名 `apply(ctx, config)`。② ★ 自检加钉子（`tools/dsh_panel.py` 自检段）：宿主半必须 `apply(ctx, config)`，且不许再出现 `ctx?.config?.root` / `ctx.config.root`。③ ★ 路由验证器进仓（`tools/verify_panel_routes.py`）：`tools/verify_panel_routes.py`（原来躺在 gitignore 的 `gates/diag/` 里，等于没有回归钉子）。"
+
+[entries."T-AG395"]
+id = "T-AG395"
+title = "路由验证器扫端口：只认回面板 JSON 的端口，200 兜底页跳过"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:gates/diag/_routes_50124.txt",
+  "file:tools/verify_panel_routes.py",
+  "file:复盘/卡/卡A278-路由验证器扫端口.md",
+]
+gaps = "① ★ 路由验证器扫端口（`tools/verify_panel_routes.py`）：「第一个 200 就认」会被别的 DSH 实例的 HTML 兜底骗 ⇒ 改成「200 + `json.loads` + `ok is True` 才认，否则接着扫」。见 `tools/verify_panel_routes.py`。"
