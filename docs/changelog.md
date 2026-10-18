@@ -1,3 +1,7 @@
+## 台账证据补用例名：232 条 bare 文件名 → 726 条 `文件::用例`
+
+- `docs/traceability.toml`：190 条 entry 的 `test:` 证据从「只写文件名」补到用例级（232 条 bare → 726 条指针，720 条落在原文件、6 条换成更贴切的用例文件）。
+- 保留 3 条 bare（`T-G61`、`T-G63`、`SR-NF15`）：文件里没有断言该行为的用例，`scripts/audit_progress.py` 的 ③b 段照旧点名、不静默；条目总数 474 不变。
 ## 面板可用性：参数可写 / 禅道反代 / 号池派活 / 技能页子目录
 
 - `tools/dsh_panel.py`：参数页 `writeSettings` 白名单 + clamp + `.tmp`→`renameSync` 原子写；新增 `/dsh-panel/proxy/z/` 禅道只读反代（抹 X-Frame-Options/CSP、改写绝对路径、cookie 透传）。

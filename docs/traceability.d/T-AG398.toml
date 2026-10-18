@@ -1,0 +1,11 @@
+[entries."T-AG398"]
+id = "T-AG398"
+title = "docs(traceability): 232 条 test: 证据补到用例级（726 指针，3 条 bare 留痕）（T-AG398）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/traceability.toml",
+  "file:复盘/卡/卡A284-台账证据补用例名.md",
+]
+gaps = "- 保留 3 条 bare 未补：`T-G61`、`T-G63`（`tests/test_ui_flow_check.py`）、`SR-NF15`（`tests/test_backup_restore_line.py`）—— 那两个文件里没有断言该行为的用例，硬补等于造假；`scripts/audit_progress.py` 的 ③b 段照旧点名，不静默降级。- 190 条 entry 是**手改共享汇总**、在片段目录里没有对应的 `<id>.toml`，所以 `tools/sync_docs.py --check` 仍一致；以后再走片段生成器的卡别拿旧片段覆盖这 190 条，动之前先看有没有片段。- 726 条用例指针里 6 条（`SR-F2.3`、`T-G47`）指向原证据没提过的测试文件（`tests/test_task_overdue_line.py`、`tests/test_gates_reuse_line.py`），是逐条看语义换的更贴切用例，不是批量替换的副产物。"
+
