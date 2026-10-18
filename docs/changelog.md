@@ -1,3 +1,7 @@
+## 面板可用性：参数可写 / 禅道反代 / 号池派活 / 技能页子目录
+
+- `tools/dsh_panel.py`：参数页 `writeSettings` 白名单 + clamp + `.tmp`→`renameSync` 原子写；新增 `/dsh-panel/proxy/z/` 禅道只读反代（抹 X-Frame-Options/CSP、改写绝对路径、cookie 透传）。
+- 同一文件：派活/放租约按钮改走 `POST /dsh-panel/pool-action?op=…&card=…`；技能页把「一个技能一个目录」的子目录形态也认了；主题令牌与排版收成一套。
 ## 对账器认批次围栏：26 条 stale-done 逐张定性
 
 - `tools/wb_reconcile.py`：去掉 `--grep` 的 `-10` 截断；新增 `_batch_landed()`/`_landed_commits()`/

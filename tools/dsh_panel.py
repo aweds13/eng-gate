@@ -342,6 +342,8 @@ TARGETS: tuple[Target, ...] = (
 
 #: 卡 253：面板动作缝的路径（与只读缝同前缀；只收 start / stop / start-all）。
 ACTION_ROUTE = f"{SEAM_PREFIX}/actions"
+#: 卡 A282：禅道反代上游（与 TARGETS 里 zentao_gantt 同源）。
+ZENTAO_URL = next(t.url for t in TARGETS if t.seat == "zentao_gantt")
 #: 卡 253：服务现读 + 最近动作的路径（GET，只读；与 `stack.py status --json` 同口径）。
 STACK_STATUS_ROUTE = f"{SEAM_PREFIX}/stack-status"
 
@@ -574,6 +576,7 @@ _HOST_JS_TEMPLATE = r"""/* 卡 221 + 卡 240 产物 · 全局面板：宿主半�
  *   ⇒ { ok:false, error }，绝不用空数据冒充成功。★ 只读：不写仓库、不起工人。 */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import process from "node:process";
 /* 宿主的工具工厂：官方路数是 defineTool(...)（装好后由 profile 的 peer 提供）。
@@ -800,39 +803,175 @@ function serveAction(req, res, url) {
     }
   }
 
-  function serveSettings(req, res) {
-    /* ★ 面板只读（卡 A273/274 的硬判据）：参数页只读、不给写口子。
-     *   要改参数走 CLI/环境变量（TF_GATE_MIN_FREE_GB 等），面板只把现值显示出来。 */
-    if (req.method !== "GET") {
-      sendJson(res, 405, { ok: false, error: `参数缝只读，收到 ${req.method}` });
+  /* ★ 卡 A282（用户令「只读有什么用，允许我改」）：参数页给写口子，但只此一处。
+   *   判据没放宽、是收窄了：只认 SETTINGS_KEYS 白名单键、值必须落在 [min,max]、
+   *   先写 .tmp 再 rename（半截文件不许留下），其余写方法/未知键一律 4xx。 */
+  function writeSettings(updates) {
+    const file = settingsPath();
+    if (!file) {
+      return { ok: false, error: "没配 root：插件行 config.root 或 DSH_WORKBENCH_ROOT" };
+    }
+    const current = readSettings().values || {};
+    const next = Object.assign({}, current);
+    for (const [key, raw] of Object.entries(updates)) {
+      const spec = SETTINGS_KEYS[key];
+      if (!spec) return { ok: false, error: `不认识的参数：${key}` };
+      const num = Number(raw);
+      if (!Number.isFinite(num)) return { ok: false, error: `参数 ${key} 不是数` };
+      next[key] = Math.min(spec.max, Math.max(spec.min, num));
+    }
+    const text = Object.keys(SETTINGS_KEYS)
+      .filter((key) => next[key] !== undefined)
+      .map((key) => `${key} = ${next[key]}`)
+      .join(String.fromCharCode(10)) + String.fromCharCode(10);
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const tmp = `${file}.tmp`;
+      fs.writeFileSync(tmp, text, "utf8");
+      fs.renameSync(tmp, file);
+    } catch (error) {
+      return { ok: false, error: `写参数失败：${error.message}` };
+    }
+    return Object.assign({ ok: true }, readSettings());
+  }
+
+  function serveSettings(req, res, url) {
+    if (req.method === "GET") {
+      sendJson(res, 200, readSettings());
       return;
     }
-    sendJson(res, 200, readSettings());
+    if (req.method !== "POST") {
+      sendJson(res, 405, { ok: false, error: `参数缝只认 GET/POST，收到 ${req.method}` });
+      return;
+    }
+    const updates = {};
+    for (const [key, value] of url.searchParams.entries()) updates[key] = value;
+    if (Object.keys(updates).length === 0) {
+      sendJson(res, 400, { ok: false, error: "没给参数（?键=值）" });
+      return;
+    }
+    sendJson(res, 200, writeSettings(updates));
+  }
+
+  /* ★ 卡 A282 · 反代：禅道页头带 `X-Frame-Options: SAMEORIGIN` + CSP
+   *   （实测 302 响应头），iframe 跨源必白屏。这里只做**本机 GET 反代**：
+   *   抹掉那两个头、把 /zentao/ 绝对路径改写到挂载点、cookie 双向透传。 */
+  const PROXY_MOUNT = SEAM_PREFIX + "/proxy/z";
+  const PROXY_BASE = __PROXY_BASE__;
+
+  function proxyRewriteHtml(text) {
+    const mount = PROXY_MOUNT + "/zentao/";
+    return text
+      .split('"/zentao/').join('"' + mount)
+      .split("'/zentao/").join("'" + mount)
+      .split("(/zentao/").join("(" + mount)
+      .split('"/zentao"').join('"' + PROXY_MOUNT + '/zentao"');
+  }
+
+  function serveProxy(req, res, url) {
+    if (req.method !== "GET") {
+      sendJson(res, 405, { ok: false, error: `反代只认 GET，收到 ${req.method}` });
+      return;
+    }
+    const rest = url.pathname.slice(PROXY_MOUNT.length) || "/";
+    const upstream = PROXY_BASE.replace(/\/$/, "") + (rest.startsWith("/") ? rest : "/" + rest);
+    const lib = http;
+    const headers = { accept: String(req.headers.accept || "*/*") };
+    if (req.headers.cookie) headers.cookie = String(req.headers.cookie);
+    const go = lib.request(upstream, { method: "GET", headers }, (up) => {
+      const out = Object.assign({}, up.headers);
+      delete out["x-frame-options"];
+      delete out["content-security-policy"];
+      delete out["content-security-policy-report-only"];
+      delete out["transfer-encoding"];
+      if (out.location && String(out.location).startsWith("/")) {
+        out.location = PROXY_MOUNT + out.location;
+      }
+      const isHtml = String(up.headers["content-type"] || "").includes("text/html");
+      if (!isHtml) {
+        res.writeHead(up.statusCode || 200, out);
+        up.pipe(res);
+        return;
+      }
+      const chunks = [];
+      up.on("data", (chunk) => chunks.push(chunk));
+      up.on("end", () => {
+        const body = proxyRewriteHtml(Buffer.concat(chunks).toString("utf8"));
+        out["content-length"] = String(Buffer.byteLength(body));
+        res.writeHead(up.statusCode || 200, out);
+        res.end(body);
+      });
+    });
+    go.on("error", (error) => {
+      try {
+        res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
+        res.end("反代失败：" + error.message);
+      } catch (ignored) {
+        /* 客户端已断开，不再写 */
+      }
+    });
+    go.end();
   }
 
 const SKILLS_ROUTE = SEAM_PREFIX + "/skills";
 
-/** 技能清单：只读仓库 skills/*.md 的标题与首段（面板不许写，只列）。 */
+/** 技能清单：顶层 skills/*.md + 子目录 skills/<名>/SKILL.md 一并列出（只读）。 */
 function listSkills() {
   const root = repoRoot();
   if (!root) return { ok: false, error: "没配 root：插件行 config.root 或 DSH_WORKBENCH_ROOT" };
   const dir = path.join(root, "skills");
+  const CR = String.fromCharCode(13);
+  const LF = String.fromCharCode(10);
+  const read = (file) => {
+    try {
+      return fs.readFileSync(file, "utf8");
+    } catch (error) {
+      return "";
+    }
+  };
+  const splitLines = (text) => String(text).split(CR).join("").split(LF);
+  const field = (lines, key) => {
+    const hit = lines.find((line) => line.startsWith(key + ":"));
+    return hit ? hit.slice(key.length + 1).trim() : "";
+  };
+  const describe = (text) => {
+    const lines = splitLines(text);
+    const stop = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
+    const head = stop > 0 ? lines.slice(0, stop) : lines;
+    const body = stop > 0 ? lines.slice(stop + 1) : lines;
+    const h1 = body.find((line) => line.startsWith("# "));
+    const isText = (line) =>
+      Boolean(line.trim()) && !line.startsWith("#") && line.trim() !== "---";
+    const first = body.find(isText);
+    return {
+      name: field(head, "name"),
+      title: h1 ? h1.slice(2).trim() : "",
+      summary: field(head, "description") || (first || "").trim(),
+    };
+  };
   try {
-    const items = fs.readdirSync(dir)
-      .filter((name) => String(name).endsWith(".md"))
-      .sort()
-      .map((name) => {
-        let text = "";
-        try {
-          text = fs.readFileSync(path.join(dir, name), "utf8");
-        } catch (error) {
-          text = "";
-        }
-        const lines = String(text).split(/\r?\n/);
-        const title = (lines.find((line) => /^#\s+/.test(line)) || "").replace(/^#\s+/, "").trim();
-        const summary = (lines.find((line) => line.trim() && !/^#/.test(line)) || "").trim();
-        return { name: String(name).replace(/\.md$/, ""), title, summary };
-      });
+    const items = [];
+    for (const name of fs.readdirSync(dir).sort()) {
+      const full = path.join(dir, name);
+      if (String(name).endsWith(".md")) {
+        const one = describe(read(full));
+        const plain = { name: name.slice(0, -3), title: one.title };
+        items.push(Object.assign(plain, { summary: one.summary, kind: "doc" }));
+        continue;
+      }
+      let info = null;
+      try {
+        info = fs.statSync(full);
+      } catch (error) {
+        info = null;
+      }
+      if (!info || !info.isDirectory()) continue;
+      const skillFile = path.join(full, "SKILL.md");
+      if (!fs.existsSync(skillFile)) continue;
+      const one = describe(read(skillFile));
+      const entry = { name: one.name || name, title: one.title || name };
+      items.push(Object.assign({ kind: "skill" }, entry));
+    }
     return { ok: true, dir: "skills", items };
   } catch (error) {
     return { ok: false, error: `读技能目录失败：${error.message}` };
@@ -845,6 +984,51 @@ function serveSkills(req, res) {
     return;
   }
   sendJson(res, 200, listSkills());
+}
+
+const POOL_ACTION_ROUTE = SEAM_PREFIX + "/pool-action";
+/* ★ 卡 A284（用户令「允许我改」）：面板的**第二个写动作**——派活 / 放租约。
+ *   判据没放宽：只认两个 op、只传 `--card`（正整数），argv 写死、绝不过 shell；
+ *   真正的判据仍在 tools/pool/*.py 里（面板不替它们做决定）。 */
+const POOL_ACTIONS = {
+  dispatch: ["tools", "pool", "trae_dispatch.py", "start"],
+  release: ["tools", "pool", "lease.py", "release"],
+};
+
+function runTool(argv, timeoutMs) {
+  const root = repoRoot();
+  if (!root) {
+    return { ok: false, error: "没告诉我仓库根：插件行 config.root 或 DSH_WORKBENCH_ROOT。" };
+  }
+  const done = spawnSync(process.env.DSH_PYTHON || "python",
+    ["-X", "utf8", path.join(root, ...argv)], {
+      encoding: "utf8", timeout: timeoutMs, windowsHide: true,
+      maxBuffer: 16 * 1024 * 1024, cwd: root,
+    });
+  const output = ((done.stdout || "") + (done.stderr || "")).trim();
+  if (done.error) return { ok: false, error: `起不来：${done.error.message}`, output };
+  const tail = output.length > 600 ? output.slice(-600) : output;
+  return { ok: done.status === 0, text: tail, exit: done.status };
+}
+
+function servePoolAction(req, res, url) {
+  if (req.method !== "POST") {
+    sendJson(res, 405, { ok: false, error: `号池动作缝只认 POST，收到 ${req.method}` });
+    return;
+  }
+  const op = String(url.searchParams.get("op") || "");
+  const card = String(url.searchParams.get("card") || "");
+  const argv = POOL_ACTIONS[op];
+  if (!argv) {
+    sendJson(res, 400, { ok: false, error: `不认识的 op：${op}（只有 dispatch / release）` });
+    return;
+  }
+  if (!/^\d{1,4}$/.test(card)) {
+    sendJson(res, 400, { ok: false, error: `卡号不合法：${card}` });
+    return;
+  }
+  const timeout = op === "release" ? 60000 : 180000;
+  sendJson(res, 200, runTool([...argv, "--card", card], timeout));
 }
 
 function serveSeam(req, res) {
@@ -934,6 +1118,7 @@ def _action_whitelist_js() -> str:
 def _host_js() -> str:
     return (
         _HOST_JS_TEMPLATE.replace("__SEATS__", _host_seats_js())
+        .replace("__PROXY_BASE__", json.dumps(ZENTAO_URL))
         .replace("__ACTION_WHITELIST__", _action_whitelist_js())
         .replace("__ACTION_ROUTE__", ACTION_ROUTE)
         .replace("__STACK_STATUS_ROUTE__", STACK_STATUS_ROUTE)
@@ -1163,33 +1348,69 @@ __TARGETS__
      *   这时才改口「已起（端口 N；映像 X）」；等不到就原样显示 stack.py 的原话
      *   「发起了，但 N 秒内端口还没起来 —— 看 <日志>」。绝不点一下就写「已启动」。 */
     /* ---- A273 · 小样式：只用主题令牌与 currentColor，不硬编码颜色 ---- */
+    /* ★ 设计系统（卡 A283）—— 高密度工程控制台。**不写任何颜色字面量**（卡 251），
+     * 全部名色映射到宿主的 `--dsw-alias-*` 主题令牌：换主题（深/浅）面板跟着走。
+     * 字：界面用 Fira Sans→Segoe UI；**数字、卡号、端口一律等宽**（对齐靠它）。
+     * 尺：4px 基准（4/8/12/16）；字号 11 辅 / 12 正文 / 13 强调 / 15 标题。
+     * 形：卡片圆 8、按钮圆 6、状态胶囊 999；分隔用 border 不用重阴影。 */
+    const FONT = 'Fira Sans, "Segoe UI", system-ui, sans-serif';
+    const MONO = '"Fira Code", "Cascadia Mono", Consolas, ui-monospace, monospace';
+    const T = {
+      bg: "var(--dsw-alias-bg-base, transparent)",
+      card: "var(--dsw-alias-bg-layer-1, transparent)",
+      raised: "var(--dsw-alias-bg-layer-2, transparent)",
+      line: "var(--dsw-alias-border-l2, currentColor)",
+      fg: "var(--dsw-alias-label-primary, inherit)",
+      dim: "var(--dsw-alias-label-secondary, inherit)",
+      faint: "var(--dsw-alias-label-tertiary, inherit)",
+      ok: "var(--dsw-alias-state-success-primary, currentColor)",
+      warn: "var(--dsw-alias-state-warn-primary, currentColor)",
+      bad: "var(--dsw-alias-state-error-primary, currentColor)",
+      brand: "var(--dsw-alias-button-primary-fill, currentColor)",
+      onBrand: "var(--dsw-alias-label-primary-foreground, currentColor)",
+      hover: "var(--dsw-alias-interactive-bg-hover, transparent)",
+    };
     const UI = {
-      page: { padding: "16px 18px", display: "flex", flexDirection: "column", gap: "10px",
-        height: "100%", boxSizing: "border-box" },
-      head: { display: "flex", alignItems: "center", gap: "10px" },
-      title: { margin: 0, fontSize: "16px", fontWeight: 600 },
-      pill: { display: "inline-flex", alignItems: "center", gap: "6px",
-        fontSize: "12px", padding: "2px 9px", borderRadius: "999px",
-        border: "1px solid var(--dsw-alias-border-base, currentColor)",
-        color: "var(--dsw-alias-text-secondary, inherit)" },
+      page: { padding: "10px 12px", display: "flex", flexDirection: "column", gap: "8px",
+        height: "100%", boxSizing: "border-box", background: T.bg, color: T.fg,
+        fontFamily: FONT, fontSize: "12px", lineHeight: 1.45 },
+      bar: { display: "flex", alignItems: "center", gap: "8px", padding: "6px 10px",
+        borderRadius: "8px", border: "1px solid " + T.line, background: T.card },
+      body: { display: "flex", flexDirection: "column", gap: "8px",
+        flex: 1, minHeight: 0, overflow: "auto" },
+      head: { display: "flex", alignItems: "center", gap: "8px" },
+      title: { margin: 0, fontSize: "15px", fontWeight: 600, letterSpacing: ".2px",
+        color: T.fg },
+      pill: { display: "inline-flex", alignItems: "center", gap: "5px",
+        fontFamily: MONO, fontSize: "11px", padding: "1px 8px", borderRadius: "999px",
+        border: "1px solid " + T.line, color: T.dim },
       dot: { width: "6px", height: "6px", borderRadius: "50%", background: "currentColor" },
-      card: { display: "flex", flexDirection: "column", gap: "10px", padding: "12px 14px",
-        borderRadius: "8px", border: "1px solid var(--dsw-alias-border-base, currentColor)" },
-      row: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" },
-      muted: { margin: 0, fontSize: "12px", color: "var(--dsw-alias-text-secondary, inherit)" },
-      link: { fontSize: "13px", color: "inherit" },
+      card: { display: "flex", flexDirection: "column", gap: "6px", padding: "10px 12px",
+        borderRadius: "8px", border: "1px solid " + T.line, background: T.card },
+      row: { display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: "10px", padding: "3px 0" },
+      muted: { margin: 0, fontSize: "11px", color: T.dim },
+      link: { fontSize: "12px", color: "inherit" },
       frame: { flex: 1, width: "100%", minHeight: "320px",
-        border: "1px solid var(--dsw-alias-border-base, currentColor)",
-        borderRadius: "8px", background: "transparent" },
-      primary: { padding: "6px 16px", borderRadius: "6px", cursor: "pointer", border: "none",
-        fontSize: "13px", fontWeight: 500,
-        background: "var(--dsw-alias-state-business-primary, currentColor)",
-        color: "var(--dsw-alias-text-inverse, currentColor)" },
-      secondary: { padding: "6px 14px", borderRadius: "6px", cursor: "pointer",
-        fontSize: "13px", border: "1px solid var(--dsw-alias-border-base, currentColor)",
-        background: "transparent", color: "inherit" },
-      error: { margin: 0, fontSize: "12px",
-        color: "var(--dsw-alias-state-danger-primary, inherit)" },
+        border: "1px solid " + T.line, borderRadius: "8px", background: T.card },
+      primary: { padding: "4px 12px", borderRadius: "6px", cursor: "pointer", border: "none",
+        fontFamily: FONT, fontSize: "12px", fontWeight: 600,
+        background: T.brand, color: T.onBrand },
+      secondary: { padding: "4px 12px", borderRadius: "6px", cursor: "pointer",
+        fontFamily: FONT, fontSize: "12px", border: "1px solid " + T.line,
+        background: "transparent", color: T.fg },
+      seg: { padding: "3px 11px", borderRadius: "6px", cursor: "pointer", border: "none",
+        fontFamily: FONT, fontSize: "12px", background: "transparent", color: T.dim },
+      segOn: { padding: "3px 11px", borderRadius: "6px", cursor: "pointer", border: "none",
+        fontFamily: FONT, fontSize: "12px", background: T.hover, color: T.fg,
+        boxShadow: "inset 0 0 0 1px " + T.line },
+      input: { padding: "3px 8px", borderRadius: "6px", width: "104px",
+        textAlign: "right", fontFamily: MONO, fontSize: "12px",
+        border: "1px solid " + T.line, background: T.raised, color: T.fg },
+      th: { textAlign: "left", padding: "5px 8px", fontSize: "11px", fontWeight: 500,
+        color: T.faint, borderBottom: "1px solid " + T.line, whiteSpace: "nowrap" },
+      td: { padding: "4px 8px", fontFamily: MONO, fontSize: "11px", borderBottom: "none" },
+      error: { margin: 0, fontSize: "11px", color: T.bad },
     };
 
     /* 探测结果翻成人话（未知就说未知）。 */
@@ -1322,6 +1543,13 @@ __TARGETS__
     }
 
     /* ---- 三行页：一行状态 + 一个主按钮，细节收进 <details>（卡 A273 重排） ---- */
+    /* ★ 卡 A282：禅道页头 `X-Frame-Options: SAMEORIGIN` + CSP 会把跨源 iframe 弄成白屏，
+     * 所以它走宿主半的反代挂载点；另两个目标没那个头，直连。 */
+    function frameSrc(target) {
+      if (target.seat === "zentao_gantt") return "/dsh-panel/proxy/z/zentao/";
+      return target.url;
+    }
+
     function QuickEntry(props) {
       const target = props.target;
       const [mode, setMode] = react.useState("page");
@@ -1338,8 +1566,7 @@ __TARGETS__
       const action = control.action;
       const down = probe === "down" && !(action && action.phase === "ok");
       return h("div", { "data-wb-state": "ok", style: UI.page },
-        h("div", { style: UI.head },
-          h("h2", { style: UI.title }, props.title),
+        h("div", { style: { ...UI.bar, padding: "3px 8px" } },
           h("span", { "data-wb-probe": probe, style: UI.pill },
             h("span", { style: UI.dot }),
             probeText(probe)),
@@ -1348,24 +1575,23 @@ __TARGETS__
             ? h("button", { style: UI.primary,
                 onClick: () => control.run("start", target.start) }, "一键启动")
             : null,
-          h("button", { style: UI.secondary, onClick: openInSidebar }, "右栏打开"),
-          h("button", { style: UI.secondary, onClick: () => setNonce((n) => n + 1) }, "刷新")),
+          h("button", { style: UI.seg, onClick: openInSidebar }, "右栏"),
+          h("button", { style: UI.seg, onClick: () => setNonce((n) => n + 1) }, "刷新"),
+          h("button", { style: UI.seg, onClick: () => setMode("embedded") }, "读数")),
         action ? h("p", { "data-wb-action": action.phase, style: UI.muted }, action.text) : null,
         openError
           ? h("p", { "data-wb-error": "", style: UI.error }, "右栏开不了：" + openError)
           : null,
         down
           ? h("div", { style: UI.card },
-              h("p", { style: UI.muted }, "服务没起 —— 点上面「一键启动」，起完这里自动加载页面。"),
+              h("p", { style: UI.muted }, "服务没起 —— 点上面「启动」，起完这里自动加载页面。"),
               h("p", { style: UI.muted }, "手动起：" + target.up),
               h("details", { style: UI.muted },
                 h("summary", { style: { cursor: "pointer" } }, "服务与资源（RSS / 日志 / 分别停）"),
                 h(ServiceControls, { control, target })))
-          : h("iframe", { key: nonce, src: target.url, style: UI.frame, title: props.title }),
-        h("p", { style: UI.muted },
-          h("button", { style: { ...UI.secondary, border: "none", padding: 0,
-            color: "var(--dsw-alias-text-secondary, inherit)", fontSize: "12px" },
-            onClick: () => setMode("embedded") }, "改看内嵌读数 →")));
+          : h("iframe", { key: nonce, src: frameSrc(target), style: UI.frame,
+            title: props.title })
+      );
     }
 
     /* ---- 卡 A274 · 工程工具箱：一个页面三个标签页（总览 / 号池 / 参数） ----
@@ -1422,7 +1648,7 @@ __TARGETS__
     }
 
     function ToolboxBoard() {
-      const state = useSource("/panel/workbench_board");
+      const state = useSource("/dsh-panel/workbench-board");
       if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
       const data = state.data || {};
       if (state.status === "error" || data.ok === false) {
@@ -1464,7 +1690,7 @@ __TARGETS__
       !RUNNING(card);
 
     function ToolboxBoard() {
-      const state = useSource("/panel/workbench_board");
+      const state = useSource("/dsh-panel/workbench-board");
       if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
       const data = state.data || {};
       if (state.status === "error" || data.ok === false) {
@@ -1492,8 +1718,20 @@ __TARGETS__
     }
 
     function ToolboxPool() {
-      const state = useSource("/panel/workbench_board");
+      const state = useSource("/dsh-panel/workbench-board");
       const [filter, setFilter] = react.useState("live");
+      const [msg, setMsg] = react.useState("");
+      /* ★ 卡 A284：派活 / 放租约。先弹确认，再把宿主半回的原话贴回来。 */
+      const poolAction = (op, id) => {
+        const verb = op === "dispatch" ? "派活" : "放租约";
+        if (!window.confirm(`${verb}：卡 ${id}？`)) return;
+        const query = `op=${encodeURIComponent(op)}&card=${encodeURIComponent(id)}`;
+        fetch(`/dsh-panel/pool-action?${query}`, { method: "POST" })
+          .then(readJson)
+          .then((body) => setMsg(`${verb} 卡 ${id}：${body.ok ? "成" : "败"}`
+            + (body.text ? `　${body.text}` : (body.error || ""))))
+          .catch((error) => setMsg(`${verb} 卡 ${id}：失败 ${error.message}`));
+      };
       if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
       const data = state.data || {};
       if (state.status === "error" || data.ok === false) {
@@ -1529,9 +1767,19 @@ __TARGETS__
           },
           h("span", { style: { width: "64px" } }, "#" + String(card.id)),
           h("span", { style: { width: "120px" } }, String(card.status || "")),
-          textCell(card.task)))),
-        h("p", { style: UI.muted },
-          "共 " + String(cards.length) + " 张；当前 " + String(rows.length) + " 张"));
+          textCell(card.task),
+          card.status === "pending"
+            ? h("button", { type: "button", style: UI.seg,
+                onClick: () => poolAction("dispatch", card.id) }, "派活")
+            : null,
+          RUNNING(card)
+            ? h("button", { type: "button", style: UI.seg,
+                onClick: () => poolAction("release", card.id) }, "放租约")
+            : null))),
+        h("p", { "data-wb-pool-msg": "", style: UI.muted },
+          msg !== "" ? msg
+            : "共 " + String(cards.length) + " 张；当前 "
+              + String(rows.length) + " 张（派活 / 放租约都要先弹确认）"));
     }
 
     function ToolboxSkills() {
@@ -1580,12 +1828,12 @@ __TARGETS__
       };
       const View = views[tab] || ToolboxOverview;
       return h("div", { style: UI.page },
-        h("div", { style: UI.head },
+        h("div", { style: UI.bar },
           h("h2", { style: UI.title }, "工程工具箱"),
           h("span", { style: { flex: 1 } }),
           TOOLBOX_TABS.map(([key, label]) => h("button", {
             key, "data-wb-tab": key, type: "button",
-            style: tab === key ? UI.primary : UI.secondary,
+            style: tab === key ? UI.segOn : UI.seg,
             onClick: () => setTab(key),
           }, label))),
         h(View));
@@ -2218,11 +2466,26 @@ def _check_package(package: dict) -> list[str]:
     return problems
 
 
+def _strip_settings_writer(source: str) -> str:
+    """把**参数写入器**那一段剔掉：卡 A282 起面板只许在这一处写盘。
+
+    判据没放宽：剩下的源码里仍然一个写词都不许有；写入器自己另有
+    正向铉子（白名单 + 夹取 + 先 .tmp 后 rename）。"""
+    start = source.find("function writeSettings(")
+    if start < 0:
+        return source
+    end = source.find("function serveSettings(", start)
+    if end < 0:
+        return source[:start]
+    return source[:start] + source[end:]
+
+
 def _check_read_only(name: str, source: str) -> list[str]:
+    scan = _strip_settings_writer(source) if name == "宿主半" else source
     return [
         f"[只读] {name} 出现越界词 `{token}`（面板不许写仓库 / 起工人）"
         for token in FORBIDDEN_WRITE_TOKENS
-        if token in source
+        if token in scan
     ]
 
 

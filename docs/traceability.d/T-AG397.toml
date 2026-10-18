@@ -1,0 +1,11 @@
+[entries."T-AG397"]
+id = "T-AG397"
+title = "feat(panel): 面板可写参数/禅道反代/号池派活/技能页子目录（T-AG397）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:复盘/卡/卡A283-面板可用性.md",
+]
+gaps = "- 参数页写盘只认白名单 + clamp：未登记的键一律拒写（静默丢），新增设置项要同步改 `tools/dsh_panel.py` 的白名单，否则面板上存不下去。- 禅道反代 `/dsh-panel/proxy/z/`（挂载点见 `tools/dsh_panel.py:1549`）只抹 `X-Frame-Options`/CSP 并改写绝对路径，不缓存、不重试；禅道侧 5xx 原样透给 iframe（只读面，不改状态）。- 号池按钮只透传 `op`/`card` 两个参数（`tools/dsh_panel.py:1729`），派活失败原因照原样回显，面板不做二次判断，也不替号池兜底。"
+
