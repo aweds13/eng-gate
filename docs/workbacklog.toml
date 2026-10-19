@@ -3069,3 +3069,14 @@ files = ["skills/pipe-card/SKILL.md", "skills/pipe-forensics/SKILL.md", "skills/
 depends = ["A292"]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A294"
+task = "T-AG408"
+title = "复盘缺口回填：P0+P1 的 52 条结论写进技能"
+tree = ".wt/A294"
+spec = "复盘/卡/卡A294-复盘缺口回填.md"
+files = ["skills/softeng-manage/SKILL.md", "skills/pipe-gate/SKILL.md", "skills/pipe-forensics/SKILL.md", "skills/pipe-workbench/SKILL.md", "skills/pipe-land/SKILL.md", "skills/pipe-init/SKILL.md", "skills/GLUE-harness.md", "skills/README.md"]
+depends = ["A293"]
+risk = "low"
+status = "pending"

@@ -1,3 +1,8 @@
+## 复盘缺口回填：P0+P1 的 52 条结论进技能
+- 52 个缺口 ID 全部落到 `skills/` 下，写法固定 `（缺口 XXn）`，可机器复算。
+- softeng-manage 的 26 条拆成五份参考：`skills/softeng-manage/references/dispatch.md`、`skills/softeng-manage/references/watchdog.md`、`skills/softeng-manage/references/safety.md`、`skills/softeng-manage/references/ai-collab.md`、`skills/softeng-manage/references/product-lines.md`、`skills/softeng-manage/references/ui-notes.md`。
+- pipe-gate 7 条、pipe-forensics 6 条、pipe-workbench 3 条、pipe-land 1 条、pipe-init 2 条、`skills/GLUE-harness.md` 2 条，各自进本技能的正文或参考层。
+- 七个技能主文件行数 77–98（例：`skills/pipe-card/SKILL.md`），仍 ≤120。
 ## 技能三层重构：七个技能按 Agent Skills 规范重写
 - frontmatter 补齐、正文 70–91 行、长表下沉 `references/`。
 - 命令口径从 `framework/cli/main.py` 迁到 `tools/wb_*`（`pipe-init` 除外）。

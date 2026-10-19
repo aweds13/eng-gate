@@ -62,6 +62,21 @@ description: 本仓（program/engineering）软件工程管理总入口——把
 | 面板 / 读数怪 | 先跑 `tools/verify_panel_routes.py`，别猜 |
 | 命令敲了没反应 | 是不是把 `pipe` CLI 当成了本仓主路径 —— 看 references 的对照表 |
 
+## 复盘缺口细则（按主题拆进 references）
+
+P0/P1 复盘结论的操作指针按主题下沉，动手前按主题读对应那份，别凭印象：
+
+- 派活（预声明 / 基点 / 白名单 / 攒批 / 增量收口）：[dispatch](references/dispatch.md)
+- 看门狗与锁租约（判活 / 掐人还租约 / 锁分把带 TTL）：[watchdog](references/watchdog.md)
+- 禁区与外部授权（宿主目录 / 外部模型用完就撤）：[safety](references/safety.md)
+- 对抗复核与长任务（反空转 / 派生物噪声 / 复核常态化）：[ai-collab](references/ai-collab.md)
+- 产品线结论（timeflow，不改本仓框架）：[product-lines](references/product-lines.md)
+- 界面判据（主题令牌 / 非文字对比度）：[ui-notes](references/ui-notes.md)
+- 文档口径：同一事实只许一处投影、第四份投影必须脚本对账（缺口 CF2）；口径漂移用「加注」治——保留原文 + 顶部加注「已被卡 N 推翻」，不原地改写（缺口 CF1）。
+- 框架两条总纲：事实层是唯一真源、AI 只写「做了什么」的事实回报、结论与产物由库/门产出（缺口 FW1）；框架要能整体提升为独立仓、先跑抽取清单、先抽后搬（缺口 FW2）—— 操作面见 `pipe-init`。
+
+依据：`复盘/INDEX.md`（§5.2 全量清单）、`复盘/文档重整方案.md`。
+
 ## 六条铁律
 
 1. **判据在库与门，不在提示词。** 技能只写「怎么用才不出错」；删掉整个 `skills/`，框架仍要完整可用。

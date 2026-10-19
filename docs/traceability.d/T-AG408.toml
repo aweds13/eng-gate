@@ -1,0 +1,23 @@
+[entries."T-AG408"]
+id = "T-AG408"
+title = "复盘缺口回填：P0+P1 的 52 条结论进技能"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:skills/GLUE-harness.md",
+  "file:skills/pipe-forensics/SKILL.md",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:skills/pipe-init/SKILL.md",
+  "file:skills/pipe-land/SKILL.md",
+  "file:skills/pipe-workbench/SKILL.md",
+  "file:skills/softeng-manage/SKILL.md",
+  "file:skills/softeng-manage/references/ai-collab.md",
+  "file:skills/softeng-manage/references/dispatch.md",
+  "file:skills/softeng-manage/references/product-lines.md",
+  "file:skills/softeng-manage/references/safety.md",
+  "file:skills/softeng-manage/references/ui-notes.md",
+  "file:skills/softeng-manage/references/watchdog.md",
+  "file:gates/diag/wb-A294.verdict.txt",
+]
+gaps = "- P2 的 6 条缺口本轮未做，清单仍在 `复盘/INDEX.md` 的 §5.2，下一轮再说。- `skills/softeng-manage/references/product-lines.md` 里的产品线结论只做索引，细节仍在 `复盘/INDEX.md`。- `skills/GLUE-harness.md` 只补了 EX1/EX2 两条，其余 harness 胶水规则未动。"
+

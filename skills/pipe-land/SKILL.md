@@ -64,6 +64,10 @@ python -X utf8 tools/wb_verify.py --tree . --expect-parent <期望父提交>
 | 增量门禁被当全量 | 给了 `--affected` 却按全量汇报 | trailer 会写「非全量」；别把它当全量读数 |
 | 复核没产物 | `--no-review` 用了，或复核跑挂 | 默认别关；挂了先看 `gates/review/` 与日志 |
 
+## 复盘缺口（队列状态收口）
+
+- （缺口 PO13）队列状态要收口：落地即翻状态（同一笔里做完），否则面板永远显示「落了没翻」—— 落地时 `--allow` 必须含队列文件；落地后用 `python -X utf8 tools/wb_reconcile.py` 核 stale，落了仍 `pending` 就是没翻。证据：`复盘/卡/卡204-落地即翻状态.md`、`复盘/并行与攒批模型.md`、`复盘/交接.d/T-G310.md`
+
 ## 落地链（八步）
 
 | 步 | 干什么 | 失败就停在哪 |
