@@ -1,68 +1,91 @@
 ---
 name: pipe-card
-description: 用 pipe card new 生成一张工作项，用 pipe claim 交一条完成申报。当你要开一张新卡、或为一张卡登记做完了没时用。
+description: 开一张工作项（卡规格 + 队列条目）、交完成申报、把卡派给工人。当你要新建/登记一张卡、判断一张卡该不该算做完、或要看工人有没有在干活时用；它给顺序与真命令，域与收口的判据在工具里。
 ---
 
-# pipe-card —— 写卡 / 认领 / 申报
+# pipe-card —— 写卡 / 派活 / 申报
+
+一张卡 = 一份卡规格 + 一条队列条目 + 工人树里的提交 + 一条申报。
+四样东西的名字与字段要能互相对上；对不上时先修名字，别急着往下走。
 
 ## 什么时候用
 
-- 开一张**新工作项（卡）**：从 `[cards].spec_template` 生成到 `[cards].cards_dir/<id>-<slug>.md`。
-- 为一张卡交**完成申报**（`success` / `failed`），带证据。
+- 要开一张卡：写卡规格、登记队列、建工人树。
+- 要把卡派出去，或查「工人动没动」。
+- 一张卡干完了，要交 `success` 申报（带证据），或显式判 `failed`。
 
 ## 什么时候别用
 
-- 想**跑门**：用 `pipe-gate`。
-- 想**集成发布**：申报只是它的输入之一；整条链用 `pipe-land`。
-- 任务号 / 成员号**没预登记**就要申报：`claim` 会退 `5`（前置条件缺失）；先把任务与成员登记了再来。
+- 要跑门：用 `pipe-gate`；要落地：用 `pipe-land`（申报只是它的输入之一）。
+- 卡规格里的 `files` 还没定就想开干：**先定域**，域是后面一切拦截的依据。
+- 想替工人改他树里的文件：一写一读，工作区归他。
+- 任务 / 成员还没登记就要申报：先 `register`，否则申报无处可落。
 
 ## 前置检查
 
-1. `pipeline.toml` 的 `[cards]` 段齐：`cards_dir` / `spec_template` / `claims_dir` / `backlog` / `authoritative_domains`。
-2. 卡模板文件在（`spec_template` 指向的那份）。
-3. `--domain` 按**实际改动的文件路径**给，别给自报清单（域检查按卡树实际改动对账）。
+1. 卡号在本仓没被用过：`docs/workbacklog.toml` 与 `复盘/卡/` 都没有这个号。
+2. 卡规格四段齐（问题 / 改法 / 判据 / 证据），且 `files` 是**你真正会碰**的文件。
+3. 台账号（`T-AG…`）与卡号分开：`Task:` 只能有一个编号。
+4. 树还没建：`git worktree list` 里没有 `.wt/<卡号>`。
+5. 派活前读 [派活分工](references/dispatch.md)：谁做实现、谁只做复核、长跑归谁。
 
 ## 真命令
 
 ```bash
-python framework/cli/main.py card new --id <卡号> --title <标题> --domain <路径> <路径>
-python framework/cli/main.py claim --task <卡号> --member <成员号> --status success --files <路径> --why <一句> --evidence <指针>
-python framework/cli/main.py claim --task <卡号> --member <成员号> --status failed
-```
+# ① 建树（分支名 card/<卡号>）
+git worktree add .wt/<卡号> -b card/<卡号>
 
-装成命令后：`pipe card new …` 与 `pipe claim …`。
+# ② 派活（默认 dry-run；--detach 不等它，--execute 才真派）
+python -X utf8 tools/wb_dispatch.py --card <卡号> --spec 复盘/卡/卡<卡号>-<短名>.md \
+    --cwd .wt/<卡号> --model <短名> --detach --execute
+python -X utf8 tools/wb_dispatch.py --card <卡号> --status
+
+# ③ 申报（任务栅栏：先注册，再逐卡交）
+python -X utf8 tools/wb_task.py register <预声明.toml>
+python -X utf8 tools/wb_task.py claim <任务> <成员> --claim success \
+    --evidence "<测试读数 / 门结论 / 原样输出>" --files <a.py,b.py> --why "<干了什么>"
+python -X utf8 tools/wb_task.py status <任务>
+
+# ④ 收口后给提交补文书（台账条目 + changelog + 交接 CHECKPOINT）
+python -X utf8 tools/wb_stage_card.py --tree .wt/<卡号> --id <台账号> --title "<标题>" \
+    --evidence <文件> --text-file gates/diag/_text_<台账号>.md
+```
 
 ## 怎么读结果
 
-> 每条口径末尾的「复核」都指着**能重跑的那个脚本**——结论别靠人眼，跑它。
-
-- `card new`：退 `0` 生成；退 `4` 卡号已存在 / 域含受保护文件；退 `5` 模板缺失。`--json` 给 `card_id` / `spec_path` / `domain`（复核 `python -X utf8 framework/cli/main.py card new --json`）。
-- `claim`：退 `0` 收下；退 `4` 投了 `failed`（**会挡住集成发布**）；退 `5` 任务 / 成员未预登记。`--json` 给 `task` / `member` / `status` / `accepted`（复核 `python -X utf8 framework/cli/main.py claim --json`）。
-- ★ **`success` 必须带 `--evidence`**：没证据不叫完成申报（复核 `python -X utf8 framework/cli/main.py claim --json`）。
-- ★ 当前实现里 `claim`（以及 `land`）是**薄壳**：签名在、行为未建，调用即抛「未实现」并退 `5`（`PRECONDITION`）。看到退 `5` 且提示未实现，**不是你的用法错**（复核 `python -X utf8 framework/cli/main.py claim --json`）。
+- 卡排不排得出来：`python -X utf8 tools/wb_plan.py plan --concurrency 2`（只认 `status = "pending"`）。
+- 队列里这张卡长什么样（`files` / `tree` / `status`）：`python -X utf8 tools/pipeline_view.py --json` 的 `cards` 块。
+- 申报收没收：`python -X utf8 tools/wb_task.py status <任务>` 给「谁交了 / 还缺谁 / history」。
+- 工人动没动：`python -X utf8 tools/wb_dispatch.py --card <卡号> --status`；日志在 `gates/diag/wb-<卡号>.jsonl`。
+- 队列与 git 对不上（落了没翻状态 / 翻了没落）：`python -X utf8 tools/wb_reconcile.py`。
 
 ## 常见错与处置
 
 | 现象 | 真因 | 处置 |
 |---|---|---|
-| `card new` 退 `4` | 卡号已存在（不覆盖） | 换卡号；要改就改现有卡文件 |
-| `claim` 退 `4` | 投了 `failed` | 这是显式挡住集成，不是异常；确认是不是真要判失败 |
-| `claim` / `land` 退 `5` 说未实现 | 薄壳（本阶段未建行为） | 照薄壳当前口径处理；这不是用法错 |
-| `claim` 退 `5` 说未预登记 | 任务 / 成员没登记 | 先登记任务与成员，再申诉 |
-| 域检查不通过 | `--domain` 与卡树实际改动不符 | 按**实际改动的文件**给域 |
-| ★ 工人在卡里空转，日志里反复同一条命令 | ★ **它的 harness 不许跑长命令**：原话 `Command rejected: … Reason: Background command execution is not supported in pr…`（2026-10-15 卡 245 实测，连试两次都被拒） | ★ **别把它当"工人不行"**：改分工 —— **工人只做秒级能跑完的那部分**（改代码 / `selftest` / 小口径 pytest），**长跑（真机、长服务、分钟级 CLI）在卡里写明"由主控跑"**；工人把**命令 + 预期 + 为什么**交回，主控用后台作业跑完把读数贴回文书 ✓ |
-| ★ 卡要求"真机验收"，工人回报"没做" | 多为上一条（长命令被拒），或环境缺失（端口/进程不在） | ★ 卡里预先写清**降级口径**：环境不具备就**如实写"没做" + 证据**（不许假装 ✓），并交回可替代的证据（离线桩 / 类型面 / 源码行号）✓ |
+| 卡排不出来 | `status` 不是 `pending`，或缺 `spec` / `files` / `depends` | 补齐字段；`depends` 指向的卡没 done 也会挡住 |
+| 申报退「域不符」 | `--files` 与卡规格的 `files` 对不上 | 按**实际改动**报；确实要扩域就改卡规格并写明理由 |
+| 申报退「任务/成员未登记」 | 直接 `claim` 没先 `register` | 先 `register`；成员号 = 卡号 |
+| 工人日志里反复同一条命令 | harness 不许跑长命令（后台执行被拒） | 秒级活归工人，长跑（真机 / 分钟级）归主控，见 references |
+| 工人说「没做」 | 上一条，或环境缺件（端口 / 进程不在） | 卡里写清降级口径：如实写「没做」+ 证据，不许假装 ✓ |
+| 派活被拒「工作区不干净」 | 派活器的前置检查看的是**当前工作区** | 先提交或收起别人的未提交改动；别顺手一起提交 |
+| 树建不出来 | 同名分支 / 目录已存在 | `git worktree list` 先看；别 `-f` 硬建 |
 
-> ★ 写卡硬规矩（2026-10-15 起）：**验收里含"真机、长跑、≥30 秒的命令"，必须在卡的「验收」段写明由谁跑** —— 秒级跑完的归工人，跑不完的归主控 ✓。否则工人会在那一步空转、日志里只剩同一条被拒的命令 ✗。
-
-> 「域检查按卡树实际改动 vs 权威域」这条**判据**在库里（`framework/src/framework/claim.py`）。本 skill 只说怎么用，不复述判据。
-
-## 派活走哪条道（用户 2026-10-16 定）
+## 派活走哪条道
 
 | 道 | 用来干什么 | 不许用来干什么 |
 |---|---|---|
-| **CodeBuddy / 备用号**（`wb_dispatch.py --account tongxue3 --model glm-5.3-flash` 等） | ★ **一切实现类卡**（改代码 / 写判据 / 落地前的活） | — |
-| **Trae 道 · Kimi K3**（`trae_pool.mjs send --model Kimi-K3`） | ★ **只做「复核 / 对抗性审查」**：证伪既有结论、开工前审规格、落地后审产物 | ★ **不许当实现工人** ✗（用户 2026-10-16 明令：*「除了复核与对抗性审查，其他以后不能开 kimiK3」*） |
-| **主控**（我自己） | 长跑（真机、门禁、落地链）、跨域决策、与用户对话 | 不许把工人的域内活抢来自己做（会撞文件 ✗） |
+| CodeBuddy（本仓默认池） | 一切**实现类**卡：改代码 / 写判据 / 落地前的活 | — |
+| 复核道（Kimi K3） | **只做复核 / 对抗性审查**：证伪结论、审规格、审产物 | 不许当实现工人 |
+| 主控 | 长跑（真机 / 全量门禁 / 落地链）、跨域决策、与用户对话 | 不许抢工人域内的活（会撞文件） |
 
-> ★ 派活前先问一句：**这张卡是「实现」还是「复核」？** 实现 ⇒ CodeBuddy ✓；复核 ⇒ 才可以上 Kimi K3 ✓。
+派活前先问一句：**这张卡是实现还是复核？** 实现走默认池，复核才上复核道。
+
+## 自查
+
+1. 卡规格、队列条目、树、分支四处的**卡号**逐字一致。
+2. `files` = 我真正会碰的文件；多一个少一个都会在后面被点出来。
+3. 申报里的 `--evidence` 是**能重跑的东西**（命令 + 读数），不是「已完成」四个字。
+4. 收工前 `git status --porcelain -uno` 在我这棵树里是 0 行。
+
+> 域怎么判、申报怎么收口、封存怎么算：判据在 `tools/pool/task.py` 与 `tools/pool/landing.py`，本技能只讲顺序。

@@ -1,3 +1,8 @@
+## 技能三层重构：七个技能按 Agent Skills 规范重写
+- frontmatter 补齐、正文 70–91 行、长表下沉 `references/`。
+- 命令口径从 `framework/cli/main.py` 迁到 `tools/wb_*`（`pipe-init` 除外）。
+- 每篇加「自查」节；判据不进技能，只留指针。
+- 新增三份参考：`skills/softeng-manage/references/commands.md`、`skills/softeng-manage/references/mapping.md`、`skills/softeng-manage/references/spec-checklist.md`。
 ## 裸卡树证据判据：gitignored 路径不算缺
 
 - `scripts/audit_progress.py` 新增 `is_gitignored()`（`git check-ignore -q` + 进程级缓存 + `CREATE_NO_WINDOW`），接进 `eval_assertion()` 的 `file:` / `text:` 两处 —— 路径不存在但被 gitignore ⇒ 不算缺、并说明「不随卡树分发」。

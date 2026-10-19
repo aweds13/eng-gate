@@ -1,54 +1,88 @@
 ---
 name: pipe-land
-description: 用 pipe land 走集成与发布七步。当你要把某张卡的结果落成一笔、或先看集成发布流水线会有哪些步骤时用。
+description: 把一张卡落成一笔提交（迁移卡树 → 文书 → 全量门禁 → 封存 → 白名单提交 → 审计 → 合流 → 复核）。当你要收口一张卡、重跑被中断的落地、或判断「这一笔算不算落成」时用；落地参数与封存口径在工具里。
 ---
 
 # pipe-land —— 集成与发布
 
+落地不是 `git commit`、也不是 `git merge`：它是 `tools/wb_land.py` 那条八步链，
+**每一步都留读数**，链红了就停，绝不带着红门禁提交。
+
 ## 什么时候用
 
-- 一张卡的结果都齐了，要**集成与发布**（回退派生物 → 迁树 → 文书 → 门禁 → 封存 → 白名单提交 → 审计 → ff）。
-- 想先看步骤、不真写：`--dry-run`。
+- 一张卡的结果齐了（提交在卡树里、申报已交），要落进主树。
+- 落地跑到一半被打断，要从断点续（`--commit-only` / `--no-reset`）。
+- 已经落了，要判断这一笔算不算数（封存 / 队列 / 台账是否一致）。
 
 ## 什么时候别用
 
-- 还没交**完成申报** —— 集齐条件不满足会被挡（退 `4`）；申报用 `pipe-card` 的 `claim`。
-- 只想跑门 —— 用 `pipe-gate`。
+- 还没交申报：入口条件不满足会被挡（不是异常，是设计上的挡）。
+- 只想跑门：用 `pipe-gate`（落地链内部会自己跑，别外面再压一趟）。
+- 想用普通 `git commit` / `git merge` 交差：那**不是**落地；封存、审计、队列翻转都会缺。
+- 工人树里还脏着（`git status --porcelain -uno` 非 0）：先让工人提交。
 
 ## 前置检查
 
-1. 卡号对应的**成员申报**已交齐（否则退 `4`）。
-2. `pipeline.toml` 读得到，且 `[cards].claims_dir` 存在。
-3. 工作区状态先看清：`git status --short`（集成前工作区该是干净的）。
+1. 申报齐：`python -X utf8 tools/wb_task.py status <任务>` 显示该卡已交。
+2. 卡树干净：在卡树里 `git status --porcelain -uno` 为 0 行。
+3. 主树干净：别人的未提交改动先收起（落地会做 `add` / `commit`，会被卷进去）。
+4. 参数齐：`--card` 与 `--batch` **恰好给一个**；`--tree` / `--task` / `--title` / `--evidence` / `--allow` 必填。
+5. 参数细则与文书三段见 [落地参数](references/land-steps.md)。
 
 ## 真命令
 
 ```bash
-python framework/cli/main.py land --task <卡号> --dry-run
-python framework/cli/main.py land --task <卡号>
-```
+# 正式落地（默认跑全量门禁 + 复核落盘）
+python -X utf8 tools/wb_land.py --card <卡号> --tree .wt/<卡号> --task <台账号> \
+    --title "<一句话>" --type feat --scope <域> \
+    --allow <文件>... --evidence <指针>... --port-base <端口段>
 
-装成命令后：
+# 门禁已绿、封存没变：⑥ 起接着走（跳过 ①②③④⑤）
+python -X utf8 tools/wb_land.py ... --commit-only
 
-```bash
-pipe land --task <卡号> --dry-run
+# 落地后一屏核实
+python -X utf8 tools/wb_verify.py --tree . --expect-parent <期望父提交>
 ```
 
 ## 怎么读结果
 
-> 每条口径末尾的「复核」都指着**能重跑的那个脚本**——结论别靠人眼，跑它。
-
-- `--json` 给每步 `step` / `ok` / `detail`；人读输出一行「集成与发布：N 步」（复核 `python -X utf8 framework/cli/main.py land --dry-run`）。
-- 退出码：`0` 落成一笔 / `1` 中间任一步红 / `2` 用法错 / `3` 资源闸 / `4` **集齐条件未满足**（还缺申报）/ `6` 被外部打断（复核 `python -X utf8 framework/cli/main.py land --dry-run`）。
-- ★ 当前实现里 `land` 是**薄壳**：签名在、行为未建，调用即退 `5`（未实现）。别把退 `5` 读成「你的申报不齐」—— 申报不齐是退 `4`，两者不是一回事（复核 `python -X utf8 framework/cli/main.py land --dry-run`）。
+- 这一笔算不算数（五块一屏：提交骨架 / 门禁 / 封存 / 台账 / 审计）：`python -X utf8 tools/wb_verify.py --tree .`。
+- 队列翻没翻（落了却仍 `pending`、或翻了却没落）：`python -X utf8 tools/wb_reconcile.py`。
+- 复核产物在不在：`gates/review/<台账号>.json`，可用 `python -X utf8 tools/wb_review.py --rev <新提交> --json` 重出一份。
+- 卡与门的当前形态：`python -X utf8 tools/pipeline_view.py --json`（`cards` / `gates` 两块）。
+- 每一步的开关与退出码：`python -X utf8 tools/wb_land.py --help`（`--commit-only` / `--no-reset` / `--affected` 都有说明）。
 
 ## 常见错与处置
 
 | 现象 | 真因 | 处置 |
 |---|---|---|
-| 退 `4` | 集齐条件未满足 | 补齐成员申报再集成 |
-| 退 `5` 说未实现 | 薄壳（本阶段未建行为） | 照薄壳当前口径处理；不是用法错 |
-| 退 `1` | 中间某步红 | 看 `--json` 的 `detail` 定位是哪一步 |
-| 担心重跑有副作用 | 集成前会回退派生物（幂等重跑） | 先 `--dry-run` 只算不写 |
+| 被挡在入口 | 申报不齐 / 卡树脏 / 参数互斥 | 先补申报；脏树先提交；`--card` 与 `--batch` 只给一个 |
+| 门禁红 | 链④真跑红了 | 修红；**不许** `--no-gate` 绕过（它会在 trailer 里如实写「没跑门禁」） |
+| 封存对不上 | `gates/last.json` 的 `rev != HEAD^` | 说明封的不是这一笔；重新落地，别手改 `last.json` |
+| 重跑报「重复合成」 | 上一趟把 changelog / 台账 / 交接合成过一遍 | 默认⓪会回退派生物；若关了 `--no-reset` 才会撞，重跑别再关 |
+| 落了但队列还是 `pending` | 状态没翻 | `--allow` 里要含队列文件；已落未翻用 `python -X utf8 tools/wb_reconcile.py --fix` 前先看清楚 |
+| 增量门禁被当全量 | 给了 `--affected` 却按全量汇报 | trailer 会写「非全量」；别把它当全量读数 |
+| 复核没产物 | `--no-review` 用了，或复核跑挂 | 默认别关；挂了先看 `gates/review/` 与日志 |
 
-> 七步的定义与幂等回退口径（`reset_derived()`）是**判据**，在库里（`framework/src/framework/land.py`）。本 skill 只说怎么用，不复述判据。
+## 落地链（八步）
+
+| 步 | 干什么 | 失败就停在哪 |
+|---|---|---|
+| ⓪ | 回退派生物（幂等重跑；`--no-reset` 可关） | 回退不干净 ⇒ 后面必撞「重复合成」 |
+| ① | 卡树迁到主树 HEAD | 冲突 ⇒ 先解，别 `checkout` 硬盖 |
+| ② | 文档件（gaps / changelog / checkpoint） | 缺 `=== gaps ===` 段 ⇒ 停 |
+| ③ | `sync_counts` | 台账分布漂 ⇒ 停 |
+| ④ | 门禁锁 + 全量门禁 | 红 ⇒ 停（链内自己跑，别外面再压） |
+| ⑤ | `seal`（写 `gates/last.json` 的 tree） | 封存指纹与提交树对不上 ⇒ 停 |
+| ⑥ | 白名单 → `add` → `commit` | `--allow` 少了文件 ⇒ 那文件没进这一笔 |
+| ⑦ | audit → 释放锁 → `ff` 合流 | 锁没释放会占全局并发名额 |
+| ⑧ | 复核落盘 `gates/review/<task>.json` | 异步、不挡提交 |
+
+## 自查
+
+1. `git status --porcelain -uno` 主树 0 行（工人的活都进了这一笔）。
+2. `python -X utf8 tools/wb_verify.py --tree .` 五块里没有 FAIL。
+3. `docs/workbacklog.toml` 里这张卡是 `done`，且 `python -X utf8 tools/wb_reconcile.py` 无 stale。
+4. 回报里写清「跑的是全量还是增量」—— 增量那次 trailer 有「非全量」字样。
+
+> 八步的定义、`--allow` 的白名单语义、封存范围（去掉 `gates/**` 的提交树）：判据在 `tools/pool/landing.py`。

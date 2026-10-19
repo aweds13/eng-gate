@@ -7528,3 +7528,28 @@ evidence = [
   "file:复盘/卡/卡A288-裸卡树证据判据.md",
 ]
 gaps = "1. `text:` 侧没有独立钉子：新钉子只钉了 `file:` 的「gitignored 缺 ⇒ 过」与「被跟踪缺 ⇒ 红」，`text:` 走同一判断却没被单独点亮；要等下次动这块才补（`tests/test_audit_tightening.py:280`）。2. `_IGNORED_CACHE` 是进程级、没有失效机制：同一进程内 `.gitignore` 改了不会重读。当前是一次性脚本所以无影响，但别把它当通用工具复用（`scripts/audit_progress.py:155`）。3. A286/A287 那两次「把主树 `gates/diag/` 运行态拷进卡树」没留命令痕迹，无法机器复核当时到底拷了什么 —— 本卡只能从「现在不需要拷」反证，不能正面审计那两次（`48f2930`）。4. 这条判据只落在 audit 的断言层；`wb_plan` / `wb_reconcile` 仍只认字段在不在，不认「证据能不能解析」，两侧口径仍可能各说各话（`docs/workbacklog.toml:3008`）。"
+
+[entries."T-AG407"]
+id = "T-AG407"
+title = "技能三层重构：7 个技能按 Agent Skills 规范重写"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:skills/pipe-card/SKILL.md",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:skills/pipe-land/SKILL.md",
+  "file:skills/pipe-workbench/SKILL.md",
+  "file:skills/softeng-manage/SKILL.md",
+  "file:skills/pipe-card/references/dispatch.md",
+  "file:skills/pipe-forensics/references/evidence-map.md",
+  "file:skills/pipe-gate/references/output.md",
+  "file:skills/pipe-init/references/scaffold.md",
+  "file:skills/pipe-land/references/land-steps.md",
+  "file:skills/pipe-workbench/references/tools.md",
+  "file:skills/softeng-manage/NOTES.md",
+  "file:skills/softeng-manage/references/commands.md",
+  "file:skills/softeng-manage/references/mapping.md",
+  "file:skills/softeng-manage/references/spec-checklist.md",
+]
+gaps = "- `skills/pipe-init/SKILL.md` 仍用 `framework/cli/main.py init`（本仓没有 `wb_init`），这是有意保留的唯一 CLI 口径，已在文内标注。- `skills/pipe-card/references/dispatch.md` 等 7 个新下沉文件尚未被任何自动化检查统计行数，只由 `skills-ref validate` 校验 frontmatter。- `tools/check_mapping.py` 只在主树存在（未进 git），工人树里跑不了，落地后在主树复跑。"
+

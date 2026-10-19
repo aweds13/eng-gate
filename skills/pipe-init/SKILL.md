@@ -1,64 +1,81 @@
 ---
 name: pipe-init
-description: 用 pipe init 把管线骨架（pipeline.toml + gates.d/ + 卡模板 + 台账壳 + 钉子树）铺到一个目录。当你要在空目录起一个新项目、或把骨架铺到别处做对照时用。
+description: 把管线骨架（pipeline.toml + gates.d/ + 卡模板 + 台账壳 + 钉子树）铺到一个空目录。当你要在新目录起一个能直接跑门禁的项目、或把同一套骨架铺到别处做对照时用；铺什么、算不算幂等在脚手架库与门里。
 ---
 
 # pipe-init —— 铺骨架
 
-把一套能直接跑 `pipe gate` 的最小项目铺到目标目录。
+铺出来的是一个**能直接跑门禁的最小项目**，不是把当前仓库复制一份。
 
 ## 什么时候用
 
-- 在一个**新目录**开一个新项目，要一套「配置 + 门 + 卡模板 + 台账壳 + 钉子树」。
-- 想把框架自带的 `minimal` 模板骨架铺到别处，做第二个项目的起点或做对照。
+- 在一个**新目录**开新项目，要一套「配置 + 门 + 卡模板 + 台账壳 + 钉子」。
+- 想把 `minimal` 模板铺到别处，做第二项目的起点或做对照实验。
 
 ## 什么时候别用
 
-- 目标目录**已经有**你的项目文件 —— `pipe init` 不合并、不覆盖；已存在就退 `5`，要覆盖必须显式 `--force`，而 `--force` 的目标还必须在仓内（否则退 `4`）。
-- 你只是想**跑门**，不是想铺骨架 —— 那用 `pipe-gate`。
-- 你想改**已有项目**的配置 —— 那要手改它自己的 `pipeline.toml`，不是重铺；重铺会把你改过的东西盖掉。
+- 目标目录**已经有**你的项目文件 —— 它不合并、不覆盖；已存在就退 `5`，要覆盖得显式 `--force`。
+- 只想**跑门**：用 `pipe-gate`。
+- 想改**已有项目**的配置：手改它自己的 `pipeline.toml`；重铺会把你改过的东西盖掉。
+- 想用 `--force` 往仓外铺：`--force` 的目标必须在仓内，仓外退 `4`。
 
 ## 前置检查
 
-1. `python` 能起来（本框架只用标准库，不用先装包）。
-2. 目标目录存在（`--dir` 不填就是当前目录）。
-3. 干跑一次帮助，看得到参数就是能跑：`python framework/cli/main.py init --help`。
+1. `python` 能起来（本框架只用标准库，不必先装包）。
+2. 目标目录**为空或不存在**（`--dir` 不填就是当前目录）。
+3. 先看帮助确认参数面：`python -X utf8 framework/cli/main.py init --help`。
+4. 想知道会铺出哪些文件：见 [骨架清单](references/scaffold.md)（真源是模板目录，不是那份清单）。
 
 ## 真命令
 
-没装包时（在本仓根，或把路径换成 CLI 的绝对路径）：
-
 ```bash
-python framework/cli/main.py init --dir <目标目录>
-python framework/cli/main.py init --dir <目标目录> --template minimal
-python framework/cli/main.py init --dir <目标目录> --force        # 目标必须在仓内
+# 没装包时（本仓根，或把路径换成 CLI 绝对路径）
+python -X utf8 framework/cli/main.py init --dir <目标目录>
+python -X utf8 framework/cli/main.py init --dir <目标目录> --template minimal
+python -X utf8 framework/cli/main.py init --dir <目标目录> --force      # 目标必须在仓内
+
+# 机器可读：--json 是**全局**开关，要写在子命令前面
+python -X utf8 framework/cli/main.py --json init --dir <目标目录>
 ```
 
-装成命令后（先 `pip install -e framework`）：
-
-```bash
-pipe init --dir <目标目录>
-```
-
-加 `--json` 拿结构化清单（`files` 清单 + `count`）。
+装成命令后（先 `pip install -e framework`）：`pipe init --dir <目标目录>`。
 
 ## 怎么读结果
 
-> 每条口径末尾的「复核」都指着**能重跑的那个脚本**——结论别靠人眼，跑它。
-
-- 退出码 `0`：铺好了 —— 人读输出有一行「铺出 N 个文件到 …」，`--json` 里有 `files` 清单和 `count`（复核 `python -X utf8 framework/cli/main.py init --json`）。
-- 退出码 `5`：**前置条件缺失** —— 目标已存在且没给 `--force`（或模板缺失）。这是「可修了再来」，不是坏了（复核 `python -X utf8 framework/cli/main.py init --json`）。
-- 退出码 `4`：**被策略拒绝** —— `--force` 的目标在仓外（越界）（复核 `python -X utf8 framework/cli/main.py init --json`）。
-- 退出码 `2`：用法 / 参数错（复核 `python -X utf8 framework/cli/main.py init --help`）。
-- 拿不准时看 `--json` 的 `error.message`；完整退出码表见 `pipe --help` 尾部（复核 `python -X utf8 framework/cli/main.py init --json`）。
+- 铺成功：退 `0`，人读输出一行「铺出 N 个文件到 …」；结构化清单用 `python -X utf8 framework/cli/main.py --json init --dir <目标目录>`（`files` 清单 + `count`）。
+- 退 `5`：前置条件缺失（目标已存在且没给 `--force`，或模板缺失）——「可修了再来」，不是坏了；同样用 `python -X utf8 framework/cli/main.py --json init --dir <目标目录>` 读 `error.message`。
+- 退 `4`：被策略拒绝（`--force` 的目标在仓外）；用 `python -X utf8 framework/cli/main.py --json init --dir <目标目录>` 读 `error.message` 确认。
+- 退 `2`：用法 / 参数错；用 `python -X utf8 framework/cli/main.py init --help` 对参数面。
+- 退出码全表（`0/1/2/3/4/5/6/7/124` 各自含义）：`python -X utf8 framework/cli/main.py --help` 尾部那一张。
 
 ## 常见错与处置
 
 | 现象 | 真因 | 处置 |
 |---|---|---|
 | 退 `5`，说目标已存在 | 没给 `--force` 且目录非空 | 换空目录；确认要覆盖再加 `--force` |
-| 退 `4`，`--force` 被拒 | 目标在仓外 | 目标放仓内，或去掉 `--force` 只铺空目录 |
-| 提示找不到 `pipe` 命令 | 没装包 | 用 `python framework/cli/main.py init …` 直接跑 |
-| 铺完 `pipe gate` 跑不起来 | 没 `cd` 进铺出的目录，或模板没铺全 | `cd` 过去再跑；先看 `pipeline.toml` 在不在 |
+| 退 `4`，`--force` 被拒 | 目标在仓外 | 放仓内，或去掉 `--force` 只铺空目录 |
+| 提示找不到 `pipe` 命令 | 没装包 | 用 `python -X utf8 framework/cli/main.py init …` |
+| `--json` 报 `unrecognized arguments` | 它是**全局**开关，写在子命令后面了 | 写成 `main.py --json init …` |
+| 铺完跑门禁失败 | 没 `cd` 进铺出的目录，或模板没铺全 | `cd` 过去再跑；先看 `pipeline.toml` 在不在 |
 
-> 哪些文件该铺、幂等语义（第二次拒绝或逐字节相同）是**判据**，在框架库里（`framework/src/framework/scaffold.py`）。本 skill 只讲怎么用，不复述判据。
+## 铺出来的是什么
+
+| 落点 | 作用 |
+|---|---|
+| `pipeline.toml` | 顶层配置（门表、路径、卡段） |
+| `gates.d/` | 各道门的配置分片 |
+| `card-template.md` + `backlog.toml` | 卡模板与队列壳 |
+| `ledger.toml` + `invariants.toml` | 台账壳与不变量壳 |
+| `src/` + `tests/` | 一个最小示例（含一条钉子样例） |
+| `README.md` + `docs/README.md` + `.gitignore` | 项目壳 |
+
+逐条清单见 [骨架清单](references/scaffold.md)。
+
+## 自查
+
+1. 目标目录在铺之前是空的（或我**明确**接受 `--force` 的覆盖后果）。
+2. 退 `0` 且 `count` 与目录里实际文件数一致。
+3. `cd` 进目标目录后 `pipeline.toml` 在，门禁能起来。
+4. 我没在仓外 `--force`，也没把已有项目重铺。
+
+> 铺哪些文件、什么算幂等（第二次拒绝还是逐字节相同）：判据在 `framework/src/framework/scaffold.py` 与 `framework/templates/`，本技能只讲怎么用。

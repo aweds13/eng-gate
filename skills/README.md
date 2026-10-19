@@ -1,13 +1,15 @@
 # skills —— 框架自带的人机接口（薄适配层）
 
-> 这一层是**核心之上的薄适配层**：它把「怎么用 `pipe` CLI 才不出错」教给 agent（和人）。
+> 这一层是**核心之上的薄适配层**：它把「怎么用才不出错」教给 agent（和人）。
 > ★ 本层的判据：**删掉整个 `skills/` 目录，框架仍然完整可用。** 做不到，就说明判据漏进 skill 了。
 
 ## 定位
 
 - 框架本体 = 核心库（`framework/src/framework/**`）+ 薄 CLI（`framework/cli/main.py`）+ 模板仓 + 例子。
 - skills = **只有操作知识**的一层：顺序、前置检查、常见错、该看哪个产物。
-- ★ skills 包的是**真实存在的命令**：`pipe init` · `pipe gate` · `pipe doctor` · `pipe card new` · `pipe claim` · `pipe land` · `pipe ledger check` · `pipe trace seal`。命令面以 `pipe --help` 为准，**不凭设计书想象命令名**。
+- 本仓主路径的命令是 `python -X utf8 tools/wb_*.py` 与 `python -X utf8 scripts/run_gates.py`；
+  框架 CLI（`python -X utf8 framework/cli/main.py <命令>`）只在 `init` 这类自带模板的动作上直接用。
+  两套命令的对照见 `skills/softeng-manage/references/mapping.md`。
 
 ## §1 ★ 分工判据：这东西该放哪
 
@@ -15,91 +17,104 @@
 |---|---|
 | **核心库**（`framework/src/framework/**`） | 逻辑与判据；不 `print`、不 `sys.exit`；换个前端照样成立 |
 | **CLI 子命令**（`pipe <命令>`） | 人 / 机器都能用的**稳定契约**：参数 / 输出 / 退出码 / `--json` |
-| **skill**（本目录） | ★ **只有**「怎么用 CLI 才不出错」这层**操作知识**：顺序、前置检查、常见错、该看哪个产物 |
+| **skill**（本目录） | ★ **只有**「怎么用才不出错」这层**操作知识**：顺序、前置检查、常见错、该看哪个产物 |
 | **不许进 skill** | 任何**判据本身**、任何**业务逻辑**、任何**只能在这一个 harness 里成立**的东西 |
 
 ### 反例（放错会怎样）
 
 1. **把一条判据塞进 skill** ⇒ 判据只在那个 harness 里成立，**换 harness 就没了**；而且库里、门里、skill 里各留一份，必漂。判据的唯一落点 = 库 / 门。
-2. **把一条操作知识留在库里** ⇒ **库被迫知道交互顺序**（顺序、前置检查、常见错都是「怎么调」的事），于是「换个前端照样成立」这条判据破了 —— 库本不该知道谁先跑、谁后跑。
-3. **把 harness 胶水塞进核心库 / CLI** ⇒ 换 harness 要**改库**；库就被一个 runtime 绑死，泛用性最差。
-4. **把 skill 当"判据真源"** ⇒ 删掉 `skills/` 后框架判据缺失 ⇒ 触发本层自检（删掉 skills 框架仍完整）失败。
+2. **把一条操作知识留在库里** ⇒ 库被迫知道交互顺序，于是「换个前端照样成立」这条判据破了。
+3. **把 harness 胶水塞进核心库 / CLI** ⇒ 换 harness 要改库。
+4. **把 skill 当判据真源** ⇒ 删掉 `skills/` 后框架判据缺失 ⇒ 本层自检失败。
 
 **一句话分界**：**判据 → 库 / 门；怎么用 → skill；换个 harness 要改的 → 只许集中在 `GLUE-harness.md`。**
 
-## §2 skills 清单
+## §2 三层结构（Agent Skills 规范）
 
-| skill | 覆盖的动作 | 包的 CLI |
+一个技能 = 一个目录，三层按需加载：
+
+| 层 | 是什么 | 本仓约定 |
 |---|---|---|
-| `pipe-init` | 铺骨架 | `pipe init` |
-| `pipe-gate` | 跑门禁并读懂三值判决 | `pipe gate` |
-| `pipe-card` | 写卡 / 认领 / 申报 | `pipe card new` · `pipe claim` |
-| `pipe-land` | 集成与发布 | `pipe land` |
-| `pipe-forensics` | 出事了从证据里查 | `pipe gate` · `pipe doctor` · `pipe ledger check` · `pipe trace seal` |
+| ① 元数据 | frontmatter 的 `name` + `description` | `name` = 目录名；`description` 写「做什么 + 什么时候用」（触发靠它） |
+| ② 正文 | `SKILL.md` | **≤120 行**；六节骨架 + 自查；只写流程 |
+| ③ 参考 | `references/*.md` | 长表（门清单、落地参数、批次围栏、状态机）按需加载；正文给**相对链接、只深一层** |
 
-每个技能目录里**两个版本**（卡 209 · `T-G318`）：
+技能目录里两份：
 
-- `SKILL.md` = **机器执行版**（给 agent 用：顺序 / 前置检查 / 真命令 / 怎么读结果 / 常见错）。
-- `NOTES.md` = **人类理解版**（给接手改它的人用：这一层在防哪类错误 / 失败过什么（带读数）/
-  脚本接口与以后怎么改）。**它不是判据的第二份抄写** —— 判据仍在库与门里，它只讲来历与接口。
+- `SKILL.md` = **机器执行版**（顺序 / 前置检查 / 真命令 / 怎么读结果 / 常见错与处置 / 自查）。
+- `NOTES.md` = **人类理解版**（这一层在防哪类错误 / 失败过什么（带读数）/ 脚本接口与以后怎么改）。
+  它不是判据的第二份抄写 —— 判据仍在库与门里，它只讲来历与接口。
 
-## §3 ★ 换 harness 要改什么（清单式）
+规范离线副本：`docs/reference/agent-skills-spec.md`；改技能时逐条过的自检表：
+`skills/softeng-manage/references/spec-checklist.md`。
 
-**通用的（一个字不改）：**
+## §3 skills 清单（7 个）
 
-- 每个 `SKILL.md` 的正文：什么时候用 / 什么时候别用 / 前置检查 / 真命令 / 怎么读结果 / 常见错与处置。只要 CLI 契约不变，这些就是**跨 harness** 的。
-- 本 README 的 §1 分工判据、§4 版本对齐。
+| skill | 覆盖的动作 | 本仓真命令 | references |
+|---|---|---|---|
+| `softeng-manage` | **总入口**：六段路由 + 六条铁律 | 只路由（细节见右列技能） | `mapping.md` · `commands.md` · `spec-checklist.md` |
+| `pipe-card` | 开卡 / 派活 / 申报 | `tools/wb_dispatch.py` · `tools/wb_task.py` · `tools/wb_stage_card.py` | `dispatch.md` |
+| `pipe-gate` | 跑门并读懂结果 | `scripts/run_gates.py` + `tools/wb_verify.py` | `output.md` |
+| `pipe-land` | 集成与落地（八步链） | `tools/wb_land.py` · `tools/wb_verify.py` | `land-steps.md` |
+| `pipe-workbench` | 工作台四件套（读数 / 巡检 / 注入 / 面板） | `tools/pipeline_view.py` · `wb_daily.py` · `workbench_bridge.py` · `wb_dash.py` | `tools.md` |
+| `pipe-forensics` | 出事了从证据里查 | `tools/wb_verify.py` · `wb_diag.py` · `wb_reconcile.py` | `evidence-map.md` |
+| `pipe-init` | 铺骨架 | `framework/cli/main.py init` | `scaffold.md` |
 
-**每个 harness 的胶水（要改的这几处；★ 全部集中在 `GLUE-harness.md`，别处不许出现）：**
+前六个是**动作技能**（一种操作一份），`softeng-manage` 是**路由技能**：它不重复动作细节，
+只给「这件事该走哪个技能 / 哪条铁律不能破 / 本仓命令与技能文档的差异」。
+装法与前六个相同，注册脚本会把它一起挂到工人技能根。
+
+## §4 ★ 换 harness 要改什么（清单式）
+
+**通用的（一个字不改）：** 每个 `SKILL.md` 的正文（六节 + 自查）、本 README 的 §1 分工判据、
+§5 版本对齐。只要命令契约不变，这些就是**跨 harness** 的。
+
+**每个 harness 的胶水（★ 全部集中在 `GLUE-harness.md`，别处不许出现）：**
 
 - **G1 注册方式** —— 把 `skills/` 目录指给该 harness 的 skill 扫描根 / 注册接口。
 - **G2 目录约定** —— skill 放哪个目录、`SKILL.md` 的文件名与目录束层级。
-- **G3 frontmatter 字段名** —— 哪些键必填、哪些键会被拒（不同 harness 不同）。
+- **G3 frontmatter 字段名** —— 哪些键必填、哪些键会被拒。
 - **G4 触发机制** —— 自动加载 vs `/点名`，以及「描述进不进上下文」。
-- **G5 调用入口** —— CLI 怎么被 harness 调起（PATH 上的 `pipe`，还是 `python framework/cli/main.py`）。
-- **G6 沙箱 / 权限** —— 该 harness 下跑 CLI 需要的权限档与工作目录。
+- **G5 调用入口** —— CLI / 工具怎么被 harness 调起。
+- **G6 沙箱 / 权限** —— 跑命令需要的权限档与工作目录。
 
-★ 除这六条外，**任何 harness 特有的路径 / 工具名都不许进 skill 正文**（卡 §三条硬要求 1）。
+★ 除这六条外，**任何 harness 特有的路径 / 工具名都不许进 skill 正文**。
 
-## §4 版本对齐
+## §5 版本对齐
 
-- **框架版本**：`framework/pyproject.toml` 里的版本（现为 `0.1.0`）。
-- **skills 版本**：跟框架**同版** —— 本目录随框架版本一起动；本版 = `0.1.0`。
+- **框架版本**：`framework/pyproject.toml` 里的版本。
+- **skills 版本**：跟框架**同版** —— 本目录随框架版本一起动。
 - **契约**：`SKILL.md` 里引用的每个命令名，必须能在**同版** `pipe --help` 里找到（钉子①机器判）。
-- **兼容规则**：CLI **加**命令 / 加字段 = 次版本（skills 可照旧，钉子仍绿）；**删**命令 / **改**命令名 / 改退出码表 = 主版本（skills 必须同版改，否则钉子①红）。
+- **兼容规则**：CLI **加**命令 / 加字段 = 次版本；**删**命令 / **改**命令名 / 改退出码表 = 主版本
+  （skills 必须同版改，否则钉子①红）。
 
-## §5 钉子（怎么自证）
+## §6 钉子（怎么自证）
 
 两道钉子都在 `nails/`，都**只读**、可用退出码判读（`0` 绿 / `1` 红）：
 
 ```bash
-python skills/nails/check_commands.py    # ① skills 里引用的命令名，都能在 CLI 帮助里找到
-python skills/nails/check_skills.py      # ② SKILL.md 格式 + 卡 209 四条加严（见下）
+python -X utf8 skills/nails/check_commands.py    # ① 引用的命令名，都能在 CLI 帮助里找到
+python -X utf8 skills/nails/check_skills.py      # ② 格式 + 卡 209 四条加严
+npx -y skills-ref@latest validate ./skills/<名>  # ③ 官方校验器
 ```
 
-- 钉子①：扫 `skills/**/SKILL.md` 里代码段 / 围栏 / 标题中的 `pipe <命令>`，与 CLI 的 `--help`（含各子命令）对账；引用不存在的命令或子命令 ⇒ 红。
-- 钉子②：扫每个 `SKILL.md`。**原有四条**：缺 frontmatter、缺 `name` / `description`、`name` 不是 kebab-case 或与目录名不符、或缺必需小节（含「什么时候别用」）⇒ 红。
-- ★ 钉子② **卡 209（`T-G318`）加严四条**（口径写在 `skills/nails/check_skills.py` 的 docstring 里，别处不复述）：
-  1. **长度上限**：`SKILL.md` ≤ **120 行** ⇒ 超出红并报实际行数；
-  2. **流程数上限**：正文「流程级」小节（非六个固定小节的那些 `##` / `###` 标题）≤ **3** ⇒ 超出红并点名；
-  3. ★★ **验收必须指向脚本**：「怎么读结果」**每条口径**都要有一个**真实存在的脚本路径**（允许的脚本根：
-     `tools/` · `skills/` · `framework/cli/`）⇒ 指不出来就红并点名是哪一条；
-  4. **人类理解版**：每个技能目录必须有 `NOTES.md` 且含三节 ⇒ 缺文件或缺节红。
-  这四条是「用户笔记《AI agent skill 的一些开发经验》」里那三条（用确定的程序验收 / 别太长 / 两个版本）
-  在本仓的落点。
+- 钉子①：扫 `skills/**/SKILL.md` 里代码段 / 围栏 / 标题中的 `pipe <命令>`，与 CLI 的 `--help` 对账。
+- 钉子②：frontmatter / `name` kebab 且等于目录名 / 六节齐；
+  **卡 209（`T-G318`）加严四条**（口径只写在 `check_skills.py` 的 docstring 里）：
+  1. **长度上限** ≤ **120 行**；
+  2. **流程级小节**（六个固定小节之外的 `##` / `###` 标题）≤ **3**；
+  3. ★★ **验收必须指向脚本**：「怎么读结果」每条口径都要有一个**真实存在**的脚本路径
+     （允许的根：`tools/` · `skills/` · `framework/cli/`）；
+  4. **人类理解版**：每个技能目录必须有 `NOTES.md` 且含三节。
 
-## §6 边界（如实写）
+## §7 边界（如实写）
 
-- skills **只有操作知识**；**框架能不能用，不由 skills 证明** —— 那是框架自己门禁的事（卡 181）。
-- 命令面里有几个是**薄壳**（`claim` / `land` / `ledger check` / `trace seal`）：签名在、行为未建，调用即退 `5`。skill 里**如实标注**了，没拿「未实现」冒充「通过」。
+- skills **只有操作知识**；**框架能不能用，不由 skills 证明** —— 那是框架自己门禁的事。
+- 命令面里有几条在**本仓主路径上走不到实现**：框架 CLI 的 `gate` / `land` / `claim` / `ledger check` /
+  `trace seal` 都要求根级 `pipeline.toml`，本仓没有 ⇒ 实测直接报「配置不存在」（退 `5`，前置条件缺失）。
+  所以这七份技能的正文一律走 `tools/wb_*.py`；`pipe` CLI 只保留在 `pipe-init`（它自带模板）。
 - 本层**不绑某个 harness**：harness 特有值只在 `GLUE-harness.md`。
-- ★ **卡 209（`T-G318`）的欠账处置 = 「补脚本指针」，不是「登记欠账」**。理由：加严第 3 条会当场咬出
-  5 份 `SKILL.md`「怎么读结果」共 **25 条口径**都没指向脚本 —— 而本仓的纪律是**不许静默豁免**。
-  两条路里选了补指针，因为「验收必须指向一个能重跑的脚本」正是这条加严要的东西，登记成欠账等于
-  把它留着不治；补完之后 `python -X utf8 skills/nails/check_skills.py` 在真仓**退 0**（5 份 SKILL + 5 份 NOTES）。
-- ★ **口径偏差如实记**：卡 209 点名的脚本根是 `tools/**` 或 `skills/**/scripts/**`，但**本仓 pipe CLI
-  在 `framework/cli/main.py`**（那五份 skill 的验收程序就是它）—— 那两个根都覆盖不到它。
-  所以加严第 3 条的允许脚本根**加列了 `framework/cli/`**（口径写在 `skills/nails/check_skills.py` 的 docstring里）。
-  这是**扩**不是**松**：原有 frontmatter / kebab / 目录名 / 六节四条判据一条没动。
-- ★ **两道钉子仍没有消费端**（`T-G280` 缺口②没被本卡治）：`skills/nails/check_commands.py` 与
-  `check_skills.py` 仍不在 `scripts/run_gates.py` 的门表里 ⇒ **加严了判据，但没接线**。别把「绿」读成「已进闸」。
+- ★ **两道钉子仍没有消费端**：`skills/nails/*` 不在 `scripts/run_gates.py` 的门表里 ⇒
+  **加严了判据，但没接线**。别把「绿」读成「已进闸」。
+- ★ **卡 A293 的读数（2026-10-19）**：7 份 `SKILL.md` 全部 `Valid skill`；`check_skills.py` 退 0；
+  正文行数 70 / 71 / 81 / 82 / 88 / 89 / 91（逐份读数见各 `NOTES.md`）。

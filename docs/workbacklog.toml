@@ -3014,3 +3014,58 @@ files = ["scripts/audit_progress.py", "tests/test_audit_tightening.py"]
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A289"
+task = "T-AG403"
+title = "首屏秒开：不拿读数中挡首帧"
+tree = ".wt/A289"
+spec = "复盘/卡/卡A289-首屏秒开.md"
+files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
+depends = []
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A290"
+task = "T-AG404"
+title = "内嵌页壳：服务停了也不出白框"
+tree = ".wt/A290"
+spec = "复盘/卡/卡A290-内嵌页壳.md"
+files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
+depends = ["A289"]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A291"
+task = "T-AG405"
+title = "项目书进 git 并与卡号对齐"
+tree = ".wt/A291"
+spec = "复盘/卡/卡A291-项目书进git.md"
+files = ["复盘/DSH三入口-项目书与接手单.md", "docs/workbacklog.toml"]
+depends = ["A289"]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A292"
+task = "T-AG406"
+title = "技能登记：DSH 与号池工人都能看见"
+tree = ".wt/A292"
+spec = "复盘/卡/卡A292-技能登记.md"
+files = ["tools/sync_worker_skills.py"]
+depends = ["A289"]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A293"
+task = "T-AG407"
+title = "技能体系三层重构（7 个技能按 Agent Skills 规范）"
+tree = ".wt/A293"
+spec = "复盘/卡/卡A293-技能三层重构.md"
+files = ["skills/pipe-card/SKILL.md", "skills/pipe-forensics/SKILL.md", "skills/pipe-gate/SKILL.md", "skills/pipe-init/SKILL.md", "skills/pipe-land/SKILL.md", "skills/pipe-workbench/SKILL.md", "skills/softeng-manage/SKILL.md", "skills/README.md", "docs/reference/agent-skills-spec.md"]
+depends = ["A292"]
+risk = "low"
+status = "done"
