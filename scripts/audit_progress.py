@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -151,14 +152,47 @@ def views() -> set[str]:
 
 
 # ---------------------------------------------------------------- 断言求值
+_IGNORED_CACHE: dict[str, bool] = {}
+
+
+def is_gitignored(rel: str) -> bool:
+    """这条路径是否被 `.gitignore` 忽略（⇒ **不随卡树分发**，不能拿"存在"当判据）。
+
+    为什么要有这一条：`.gitignore:76` 的 `gates/diag/*` 让裸 `git worktree add` 建
+    出来的卡树里没有运行态产物，而门的 cwd 就是卡树 ⇒ 台账里 `file:gates/diag/…`
+    的证据在**任何**裸卡树里都必然假红（A286/A287 两次靠人工拷文件才过）。判据不
+    放宽：被跟踪的文件缺了照样红，只有"本来就不进 git"的路径才按不适用处理。
+    """
+    rel = rel.replace("\\", "/").strip("/")
+    if rel in _IGNORED_CACHE:
+        return _IGNORED_CACHE[rel]
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(ROOT), "check-ignore", "-q", rel],
+            capture_output=True, cwd=str(ROOT), check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        ignored = r.returncode == 0
+    except OSError:
+        ignored = False
+    _IGNORED_CACHE[rel] = ignored
+    return ignored
+
+
 def eval_assertion(assertion: str) -> tuple[bool, str]:
     kind, _, rest = assertion.partition(":")
     if kind == "file":
-        return (ROOT / rest).exists(), f"文件 {rest}"
+        if (ROOT / rest).exists():
+            return True, f"文件 {rest}"
+        if is_gitignored(rest):
+            return True, f"文件 {rest}（gitignored：不随卡树分发，不算缺）"
+        return False, f"文件 {rest}"
     if kind == "text":
         path, _, pattern = rest.partition("::")
         p = ROOT / path
         if not p.exists():
+            if is_gitignored(path):
+                return True, f"文件 {path}（gitignored：不随卡树分发，跳过断言）"
             return False, f"文件不存在 {path}"
         body = p.read_text(encoding="utf-8")
         # 默认**字面包含**（断言里的 ( ) 等不该被当正则 —— 第一版就在这里崩过）；

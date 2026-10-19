@@ -1,0 +1,12 @@
+[entries."T-AG402"]
+id = "T-AG402"
+title = "裸卡树证据判据：gitignored 路径不算缺"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/audit_progress.py",
+  "file:tests/test_audit_tightening.py",
+  "file:复盘/卡/卡A288-裸卡树证据判据.md",
+]
+gaps = "1. `text:` 侧没有独立钉子：新钉子只钉了 `file:` 的「gitignored 缺 ⇒ 过」与「被跟踪缺 ⇒ 红」，`text:` 走同一判断却没被单独点亮；要等下次动这块才补（`tests/test_audit_tightening.py:280`）。2. `_IGNORED_CACHE` 是进程级、没有失效机制：同一进程内 `.gitignore` 改了不会重读。当前是一次性脚本所以无影响，但别把它当通用工具复用（`scripts/audit_progress.py:155`）。3. A286/A287 那两次「把主树 `gates/diag/` 运行态拷进卡树」没留命令痕迹，无法机器复核当时到底拷了什么 —— 本卡只能从「现在不需要拷」反证，不能正面审计那两次（`48f2930`）。4. 这条判据只落在 audit 的断言层；`wb_plan` / `wb_reconcile` 仍只认字段在不在，不认「证据能不能解析」，两侧口径仍可能各说各话（`docs/workbacklog.toml:3008`）。"
+

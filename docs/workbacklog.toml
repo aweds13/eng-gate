@@ -3003,3 +3003,14 @@ files = ["docs/workbacklog.toml", "tools/wb_daily.py", "tests/test_wb_daily.py"]
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A288"
+task = "T-AG402"
+title = "裸卡树证据判据：gitignored 路径不算缺"
+tree = ".wt/A288"
+spec = "复盘/卡/卡A288-裸卡树证据判据.md"
+files = ["scripts/audit_progress.py", "tests/test_audit_tightening.py"]
+depends = []
+risk = "low"
+status = "done"

@@ -276,3 +276,16 @@ def test_every_acknowledged_op_has_a_nonempty_reason() -> None:
         "判据本身不会红 —— 那它在真台账上绿着也没有意义"
     assert _blank_ack_reasons({"acknowledged_ops": {"OP-38": "理由在这儿"}}) == []
     assert _blank_ack_reasons(data) == [], f"这些例外没写理由：{_blank_ack_reasons(data)}"
+
+def test_gitignored_evidence_is_not_a_missing_file() -> None:
+    """卡 A288：`gates/diag/*` 被 `.gitignore` 忽略 ⇒ 裸 `git worktree add` 建出来的
+    卡树里必然没有它。判据不能把"本来就不进 git"的路径当缺（A286/A287 两次人工拷
+    文件才过门），但也**不许**放过真缺的跟踪文件。
+    """
+    ok, desc = ap.eval_assertion("file:gates/diag/_never_exists_probe.md")
+    assert ok, f"gitignored 的路径不该算缺：{desc}"
+    assert "gitignored" in desc, f"要说明为什么放过：{desc}"
+    ok, desc = ap.eval_assertion("file:tools/_never_exists_probe.py")
+    assert not ok, f"跟踪文件缺了必须红：{desc}"
+    ok, _desc = ap.eval_assertion("file:tools/stack.py")
+    assert ok, "真存在的文件照旧通过"
