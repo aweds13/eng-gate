@@ -125,7 +125,10 @@ def test_client_registers_the_global_seat_and_row(tmp_path: Path) -> None:
     client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
     assert f'const PANEL_ID = "{dp.PANEL_ID}";' in client
     assert 'name: "main"' in client and "key: PANEL_ID" in client
-    assert '"sidebar.panellist"' in client and "id: PANEL_ID" in client
+    # ★ 卡 A286：工作台状态并进工具箱后不再单挂一行，所以「id: PANEL_ID」不再是判据
+    #   （那一条仍由 ROW_KEYS 与 main 座的比对照看）；行挂载本身必须还在。
+    assert '"sidebar.panellist"' in client and "sidebar.panellist" in client
+    assert "id: " in client
     assert "ctx.layout.selectPanel" in client
 
 
@@ -227,19 +230,20 @@ def test_client_main_keys_equal_sidebar_row_ids(tmp_path: Path) -> None:
     dp.emit(tmp_path)
     client = (tmp_path / dp.CLIENT_REL).read_text(encoding="utf-8")
     mains, rows = _parse_seat_lists(client)
-    assert mains == rows, (mains, rows)
-    # 卡 A274：前三个座位逐项一致；允许尾部追加非服务行「工程工具箱」。
-    assert mains[: len(dp.SEAT_KEYS)] == list(dp.SEAT_KEYS), mains
-    assert [key for key in mains if key not in dp.SEAT_KEYS] in ([], ["toolbox"]), mains
-    assert len(mains) in (3, 4)
+    # ★ 卡 A286：main 座 = 全部座位 + 工具箱；左栏行 = ROW_KEYS + 工具箱。
+    #   两边不再逐项相等（工作台状态并入工具箱页签，不再单列一行）。
+    assert mains == list(dp.SEAT_KEYS) + ["toolbox"], mains
+    assert rows == list(dp.ROW_KEYS) + ["toolbox"], rows
+    assert set(rows) <= set(mains), (rows, mains)
+    assert dp.SEAT_BY_KEY["workbench_board"].row is False, "工作台状态不该再单挂一行"
 
 
 def test_seat_consistency_check_bites_when_row_id_drifts() -> None:
     """★ 反例：行 id 与 main key 错位 ⇒ `check` 必须红（用户点行就打不开面板）。"""
-    broken = dp.CLIENT_JS.replace('id: PANEL_ID', 'id: "workbench_board_x"')
+    broken = dp.CLIENT_JS.replace('id: "timeflow_inbox"', 'id: "timeflow_inbox_x"')
     assert broken != dp.CLIENT_JS
     problems = dp.check(client_js=broken)
-    assert any("座位" in p for p in problems), problems
+    assert any("左栏行" in p or "座位" in p for p in problems), problems
 
 
 # ------------------------------------------------------------ 10. ★ 只读缝三条路由只 GET
@@ -1002,3 +1006,68 @@ def test_doc_mentions_oneclick_log_and_budget() -> None:
     """卡 253：安装说明要写一键启动 / 日志 / 常驻预算 / 点开才读。"""
     for needle in ("一键启动", "stack-actions.log", "常驻预算", "点开才读"):
         assert needle in dp.INSTALL_DOC, needle
+
+
+def test_every_seam_handler_is_dispatched() -> None:
+    """卡 A286：处理函数定义了就必须被 serveSeam 调用。
+
+    反代与号池动作曾是这样死的：`serveProxy` / `servePoolAction` 和路由常量都在，
+    `serveSeam` 里却没有对应分支 —— 反代落到「未知路由 404」，号池动作被只读门挡成
+    405。这条用例直接盯「定义」与「调用」两件事同时存在。
+    """
+    src = dp._host_js()
+    for name in ("serveProxy", "servePoolAction"):
+        assert f"function {name}(" in src, f"{name} 没有定义"
+        assert f"{name}(req, res, url)" in src, f"{name} 定义了却没被分发"
+
+
+def test_toolbox_has_workbench_tab_and_row_is_gone() -> None:
+    """卡 A286：工作台状态收进工具箱「工作台」页签，不再单挂左栏一行。"""
+    client = dp.CLIENT_JS
+    assert '["workbench", "工作台"]' in client, "工具箱缺「工作台」页签"
+    assert "function ToolboxWorkbench()" in client
+    assert "workbench: ToolboxWorkbench" in client
+    assert dp.SEAT_BY_KEY["workbench_board"].row is False
+    assert "workbench_board" not in dp.ROW_KEYS
+
+
+def test_params_page_is_writable_with_whitelisted_keys() -> None:
+    """卡 A286：参数页可改 —— 白名单键含号池并发度，页面有保存动作。"""
+    assert "pool_concurrency" in dp._host_js(), "白名单里没有号池并发度"
+    client = dp.CLIENT_JS
+    assert "method: \"POST\"" in client, "参数页没有写动作"
+    assert "param" not in client.lower() or "PARAMS_ROUTE" in client
+
+
+def test_settings_handler_receives_url() -> None:
+    """卡 A286：`serveSettings` 用 `url.searchParams` 取键值，分发时必须把 url 传进去。
+
+    实测 bug：只传 (req, res) ⇒ POST /dsh-panel/settings 直接
+    `Cannot read properties of undefined (reading 'searchParams')`（参数页永远写不进去）。
+    """
+    host = dp._host_js()
+    assert "serveSettings(req, res, url)" in host
+    assert "serveSettings(req, res);" not in host
+
+
+def test_install_doc_lists_the_interface() -> None:
+    """卡 A286：接口要写进安装说明（读哪些、写哪三条、白名单键与范围）。"""
+    for needle in ("/dsh-panel/pool-action", "/dsh-panel/settings?",
+                   "pool_concurrency", "/dsh-panel/proxy/z/zentao"):
+        assert needle in dp.INSTALL_DOC, needle
+
+
+def test_panel_concurrency_reaches_wb_plan(tmp_path: Path) -> None:
+    """卡 A286：面板写的号池并发度必须被 wb_plan 读到（否则输入框是摆设）。"""
+    import sys
+
+    sys.path.insert(0, str(dp.ROOT / "tools"))
+    import wb_plan
+
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "settings.toml").write_text("pool_concurrency = 5\n", encoding="utf-8")
+    assert wb_plan.settings_concurrency(tmp_path) == 5
+    (tmp_path / "tools" / "settings.toml").write_text("pool_concurrency = 99\n", encoding="utf-8")
+    assert wb_plan.settings_concurrency(tmp_path) is None, "越界值不许透传"
+    (tmp_path / "tools" / "settings.toml").unlink()
+    assert wb_plan.settings_concurrency(tmp_path) is None, "没文件就退回默认"

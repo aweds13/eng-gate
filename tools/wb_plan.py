@@ -106,6 +106,24 @@ __all__ = [
 
 ROOT = Path(__file__).resolve().parent.parent
 
+
+def settings_concurrency(root: Path | None = None) -> int | None:
+    """面板「参数」页写的号池并发度（`tools/settings.toml` 的 `pool_concurrency`）。
+
+    卡 A286：面板上能改的数必须**真的生效** —— 否则那个输入框只是个摆设。
+    读不到 / 越界 / 文件不存在 ⇒ None（调用方退回 `DEFAULT_CONCURRENCY`）。
+    """
+    base = root or ROOT
+    path = base / "tools" / "settings.toml"
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    value = data.get("pool_concurrency")
+    if not isinstance(value, int) or isinstance(value, bool):
+        return None
+    return value if 1 <= value <= 8 else None
+
 # ================================================================ 卡 262（T-G383）：分区前缀
 #
 # 多个主控共用一个卡池，卡号会撞（都写 261）。解法：每个主控自带一个**头编号**（分区前缀），
@@ -733,8 +751,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help=f"总表文件（默认 {DEFAULT_BACKLOG.name}；有分片时以分片为准）")
     parser.add_argument("--shards",
                         help="台账分片目录（默认 docs/backlog/；各分区各写 <分区>.toml）")
-    parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY,
-                        help=f"并发上限（默认 {DEFAULT_CONCURRENCY}）")
+    parser.add_argument("--concurrency", type=int, default=None,
+                        help=f"并发上限（默认吃面板参数，再退 {DEFAULT_CONCURRENCY}）")
     parser.add_argument("--base", default="",
                         help="建树的基点提交（默认取 backlog 的 [base].reviewed）")
     parser.add_argument("--execute", action="store_true",
@@ -752,6 +770,8 @@ def _load_backlog_for(args: argparse.Namespace) -> Backlog:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.concurrency is None:
+        args.concurrency = settings_concurrency() or DEFAULT_CONCURRENCY
     if args.command == "merge":
         folder = Path(args.shards) if args.shards else shard_dir()
         out = Path(args.backlog) if args.backlog else DEFAULT_BACKLOG

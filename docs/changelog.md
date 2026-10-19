@@ -1,3 +1,9 @@
+## 面板层级收敛 + 参数可写 + 补分发分支
+
+- 左栏只剩 工程工具箱 / 禅道 / timeflow：`workbench_board` 座位 `row=False`，左栏行改从 `ROW_KEYS` 派生；工作台状态并进「工程工具箱 → 工作台」页签（`tools/dsh_panel.py:294`）。
+- 补 `serveProxy` / `servePoolAction` 的分发分支（在 GET 闸门之前）：反代 404、派活 405 两个症状消失（`tools/dsh_panel.py:1061`）。
+- `serveSettings(req, res, url)` 补传 `url`，POST 不再抛 `searchParams`（`tools/dsh_panel.py:1050`）；参数页改可写（数字框 + 保存），白名单加 `pool_concurrency`（1–8），越界改成 400（`tools/dsh_panel.py:774`）。
+- `tools/wb_plan.py` 没给 `--concurrency` 时读 `tools/settings.toml`，读不到 / 越界退回 `DEFAULT_CONCURRENCY`（`tools/wb_plan.py:773`）。
 ## ruff 112 → 0：framework 27 个文件 + gate_lock.py
 
 - 28 个文件：E501 折行 72 处（只折行、不改语义）、`ruff --fix` 自动项 25 处（I001 13 / F401 8 / UP035 3 / UP009 1）、TC001+TC003 共 11 处改 `if TYPE_CHECKING:`、2 处 `assert False`→`raise AssertionError`、2 处 try/except/pass→`contextlib.suppress`。

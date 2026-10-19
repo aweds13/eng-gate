@@ -162,6 +162,8 @@ class Seat:
     needs_root: bool  # 是否把 `--root <root>` 传给它
     locale_key: str  # 浏览器半 locale 文案键
     render: str  # 浏览器半渲染器名（内嵌读数分支，卡 242 保留）
+    #: 卡 A286：是否在左栏另挂一行；工作台状态并进「工程工具箱 → 工作台」后不再单挂。
+    row: bool = True
 
 
 # ---- 图标几何：逐字取自外壳自己的图标（卡 242 的依据） ----
@@ -256,6 +258,7 @@ SEATS: tuple[Seat, ...] = (
         needs_root=True,
         locale_key="panelWorkbenchBoard",
         render="WorkbenchBoard",
+        row=False,
     ),
     Seat(
         key="zentao_gantt",
@@ -288,6 +291,7 @@ SEATS: tuple[Seat, ...] = (
 #: 座位 key 的列表（顺序 = order）；判据逐项比它。
 SEAT_KEYS: tuple[str, ...] = tuple(seat.key for seat in SEATS)
 SEAT_BY_KEY: dict[str, Seat] = {seat.key: seat for seat in SEATS}
+ROW_KEYS: tuple[str, ...] = tuple(seat.key for seat in SEATS if seat.row)
 #: 三条只读缝路由。
 ROUTE_PATHS: tuple[str, ...] = tuple(seat.route for seat in SEATS)
 #: 兼容卡 221 的既有判据：第一座 = 老的面板 id。
@@ -767,6 +771,7 @@ function serveAction(req, res, url) {
   const SETTINGS_KEYS = {
     tf_gate_min_free_gb: { min: 0, max: 64, label: "内存闸阈值（GB；0 = 关）" },
     gate_workers: { min: 1, max: 8, label: "门禁并行数" },
+    pool_concurrency: { min: 1, max: 8, label: "号池并发度（pool plan）" },
   };
 
   function settingsPath() {
@@ -818,7 +823,11 @@ function serveAction(req, res, url) {
       if (!spec) return { ok: false, error: `不认识的参数：${key}` };
       const num = Number(raw);
       if (!Number.isFinite(num)) return { ok: false, error: `参数 ${key} 不是数` };
-      next[key] = Math.min(spec.max, Math.max(spec.min, num));
+      /* ★ 卡 A286：越界**报错**，不静默夹到边界 —— 夹了用户以为写进去了，实际是另一个值。 */
+      if (num < spec.min || num > spec.max) {
+        return { ok: false, error: `参数 ${key} 越界：${num}（允许 ${spec.min}–${spec.max}）` };
+      }
+      next[key] = num;
     }
     const text = Object.keys(SETTINGS_KEYS)
       .filter((key) => next[key] !== undefined)
@@ -1038,11 +1047,23 @@ function serveSeam(req, res) {
     return;
   }
   if (url.pathname === SETTINGS_ROUTE) {
-    serveSettings(req, res);
+    serveSettings(req, res, url);
     return;
   }
   if (url.pathname === SKILLS_ROUTE) {
     serveSkills(req, res);
+    return;
+  }
+  /* ★ 卡 A286：反代与号池动作是**已定义却没被分发**的死代码 —— 常量在、
+   *   处理函数在，serveSeam 里少了这两个分支，于是 /dsh-panel/proxy/z/zentao/
+   *   落到「未知路由 404」，/dsh-panel/pool-action 被下面的只读门挡成 405。
+   *   两分支必须在 GET 闸门之前（一个要 POST，一个要透传上游 302）。 */
+  if (url.pathname.startsWith(PROXY_MOUNT + "/")) {
+    serveProxy(req, res, url);
+    return;
+  }
+  if (url.pathname === POOL_ACTION_ROUTE) {
+    servePoolAction(req, res, url);
     return;
   }
   if (req.method !== "GET") {
@@ -1155,14 +1176,17 @@ def _client_registrations() -> str:
             f" route: props.route, target: props.target, title: {json.dumps(seat.label_zh)},"
             f" fallback: {seat.render} }});\n"
             "      }));\n"
-            '      ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({\n'
-            '        name: "sidebar.panellist",\n'
-            f"        id: {key_expr},\n"
-            f"        order: {seat.order},\n"
-            f"        label: () => t({json.dumps(seat.locale_key)}),\n"
-            "        locale: NS,\n"
-            f"      }}, makeIcon({icon}, {json.dumps(seat.icon_round)}, {key_expr})));"
         )
+        if seat.row:
+            blocks.append(
+                '      ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({\n'
+                '        name: "sidebar.panellist",\n'
+                f"        id: {key_expr},\n"
+                f"        order: {seat.order},\n"
+                f"        label: () => t({json.dumps(seat.locale_key)}),\n"
+                "        locale: NS,\n"
+                f"      }}, makeIcon({icon}, {json.dumps(seat.icon_round)}, {key_expr})));"
+            )
     blocks.append(
         '      ctx.slots.inject("main", () => ctx.slots.register({\n'
         '        name: "main",\n'
@@ -1391,6 +1415,9 @@ __TARGETS__
         gap: "10px", padding: "3px 0" },
       muted: { margin: 0, fontSize: "11px", color: T.dim },
       link: { fontSize: "12px", color: "inherit" },
+      input: { width: "92px", padding: "3px 6px", borderRadius: "6px",
+        border: "1px solid " + T.line, background: T.bg, color: T.fg,
+        fontFamily: MONO, fontSize: "11px" },
       frame: { flex: 1, width: "100%", minHeight: "320px",
         border: "1px solid " + T.line, borderRadius: "8px", background: T.card },
       primary: { padding: "4px 12px", borderRadius: "6px", cursor: "pointer", border: "none",
@@ -1599,6 +1626,7 @@ __TARGETS__
      * 参数页 GET/POST /dsh-panel/settings（白名单键，写 tools/settings.toml）。 */
     const TOOLBOX_TABS = [
       ["overview", "总览"],
+      ["workbench", "工作台"],
       ["board", "看板"],
       ["pool", "号池"],
       ["skills", "技能"],
@@ -1645,35 +1673,6 @@ __TARGETS__
         openError
           ? h("p", { "data-wb-error": "", style: UI.error }, "开不了：" + openError)
           : null);
-    }
-
-    function ToolboxBoard() {
-      const state = useSource("/dsh-panel/workbench-board");
-      if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
-      const data = state.data || {};
-      if (state.status === "error" || data.ok === false) {
-        return h("p", { "data-wb-error": "", style: UI.error },
-          "看板读数不可用：" + String(state.error || data.error || ""));
-      }
-      const cards = (data.reading && data.reading.cards) || [];
-      const columns = [
-        ["pending", "待办", (card) => card.status === "pending"],
-        ["running", "在跑", RUNNING],
-        ["done", "已完成", (card) => card.status === "done"],
-        ["other", "其它", OTHER],
-      ];
-      return h("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start" } },
-        columns.map(([key, label, pick]) => {
-          const rows = cards.filter((card) => pick(card));
-          return h("div", {
-            key, "data-wb-column": key,
-            style: Object.assign({}, UI.card, { flex: "1", minWidth: "0" }),
-          },
-            h("p", { style: UI.muted }, label + " · " + String(rows.length)),
-            rows.slice(0, 40).map((card) => h("div", { key: String(card.id), style: UI.row },
-              h("span", { style: UI.muted }, "#" + String(card.id)),
-              h("span", { style: CELL }, String(card.title || card.task || "")))));
-        }));
     }
 
     const CELL = { flex: "1", minWidth: "0" };
@@ -1799,28 +1798,106 @@ __TARGETS__
           h("span", { style: Object.assign({}, UI.muted, ELLIPSIS) }, item.summary || ""))));
     }
 
+    /* ---- 卡 A286 · 参数页：可改（白名单键 + 范围校验），不再「只读」----
+     * 接口：GET /dsh-panel/settings 返回全部键与范围；POST ?<键>=<值> 写一个键。
+     * 宿主半只认 SETTINGS_KEYS，越界 / 未知键一律 400；写盘先 .tmp 再 rename。 */
     function ToolboxParams() {
-      const state = useSource(PARAMS_ROUTE);
+      const [state, setState] = react.useState({ status: "loading" });
+      const [draft, setDraft] = react.useState({});
+      const [note, setNote] = react.useState("");
+      const load = react.useCallback(() => {
+        fetch(PARAMS_ROUTE, { method: "GET" }).then(readJson).then((data) => {
+          if (data && data.ok === false) {
+            setState({ status: "error", error: String(data.error || "") });
+          } else {
+            setState({ status: "ready", data });
+          }
+        }).catch((error) => setState({ status: "error", error: String(error.message || error) }));
+      }, []);
+      react.useEffect(() => { load(); }, [load]);
       if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
       const data = state.data || {};
-      if (data.ok === false) {
-        return errorLine("参数不可用", data.error);
+      if (state.status === "error" || data.ok === false) {
+        return errorLine("参数不可用", state.error || data.error);
       }
       const values = data.values || {};
       const keys = data.keys || [];
-      return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+      function save(key) {
+        const picked = draft[key] === undefined ? values[key] : draft[key];
+        const value = String(picked === undefined ? "" : picked).trim();
+        if (!value) {
+          setNote(key + "：没填值");
+          return;
+        }
+        const query = "?" + encodeURIComponent(key) + "=" + encodeURIComponent(value);
+        fetch(PARAMS_ROUTE + query, { method: "POST" }).then(readJson).then((out) => {
+          if (out && out.ok) {
+            setNote(key + "：已写入 " + String(out.file || ""));
+            load();
+          } else {
+            setNote(key + "：失败 " + String((out && out.error) || ""));
+          }
+        }).catch((error) => setNote(key + "：失败 " + String(error.message || error)));
+      }
+      return h("div", { style: UI.body },
         h("div", { style: UI.card },
           h("p", { style: UI.muted },
-            "参数文件：" + (data.file || "（还没建）") + "（面板只读；改参数走 CLI）"),
+            "参数文件：" + String(data.file || "（还没建）") + "（白名单键；写盘先 .tmp 再改名）"),
           keys.map((spec) => h("div", { key: spec.key, style: UI.row },
-            h("span", { style: UI.muted }, spec.label),
-            h("code", null, values[spec.key] === undefined ? "（未设）" : values[spec.key])))));
+            h("span", { style: UI.muted },
+              String(spec.label) + "（" + spec.min + "–" + spec.max + "）"),
+            h("span", { style: { display: "flex", gap: "6px", alignItems: "center" } },
+              h("input", {
+                type: "number", min: spec.min, max: spec.max,
+                value: draft[spec.key] === undefined
+                  ? (values[spec.key] === undefined ? "" : String(values[spec.key]))
+                  : draft[spec.key],
+                onChange: (event) => setDraft(
+                  Object.assign({}, draft, { [spec.key]: event.target.value })),
+                style: UI.input,
+              }),
+              h("button", { style: UI.secondary, onClick: () => save(spec.key) }, "保存")))),
+          note ? h("p", { "data-wb-action": "ok", style: UI.muted }, note) : null,
+          h("p", { style: UI.muted },
+            "接口：GET /dsh-panel/settings 读；POST /dsh-panel/settings?<键>=<值> 写")));
+    }
+
+    /* ---- 卡 A286 · 工作台页签：工作台状态不再单挂左栏，收进工具箱 ----
+     * 目标页（board 8787）自己就是完整 dashboard；这里只给「状态 + 打开 + 一键启动
+     * + 内嵌」，与禅道 / timeflow 的口径完全一致。 */
+    function ToolboxWorkbench() {
+      const control = useServiceControl();
+      const [openError, setOpenError] = react.useState("");
+      const target = TARGETS["workbench_board"] || { url: "", start: "", up: "" };
+      const rows = (control.status === "ready" && control.data && control.data.status)
+        ? control.data.status.components : [];
+      const row = rows.filter((item) => item.name === target.start)[0] || {};
+      const up = row.running === true;
+      return h("div", { style: UI.page },
+        h("div", { style: UI.card },
+          h("div", { style: UI.row },
+            h("span", { "data-wb-probe": up ? "up" : "down", style: UI.pill },
+              h("span", { style: UI.dot }), up ? "在跑" : "没起"),
+            h("span", { style: { display: "flex", gap: "6px" } },
+              up
+                ? h("button", { style: UI.secondary,
+                    onClick: () => openRealPage(target, setOpenError) }, "打开")
+                : h("button", { style: UI.primary,
+                    onClick: () => control.run("start", target.start || "board") }, "一键启动"),
+              h("button", { style: UI.seg,
+                onClick: () => control.run("start-all", "") }, "全部起"))),
+          h("p", { style: UI.muted },
+            up ? "工作台 dashboard：卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树六块"
+              : "没起时怎么起：" + String(target.up || ""))),
+        openError ? errorLine("打开失败", openError) : null,
+        h("iframe", { src: target.url, style: UI.frame, title: "工作台" }));
     }
 
     function Toolbox() {
       const [tab, setTab] = react.useState("overview");
       const views = {
         overview: ToolboxOverview,
+        workbench: ToolboxWorkbench,
         board: ToolboxBoard,
         pool: ToolboxPool,
         skills: ToolboxSkills,
@@ -2341,6 +2418,26 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 
 目标页本身（wb_dash.py / serve.py / 禅道）归别的卡，本面板只**指向**它们。
 用户早先拍过：**拖动只写意图、主控执行** —— 本面板连拖动都没有，只有选中态。
+
+## 接口（面板 ↔ 宿主半，全部同源、本机）
+
+| 方向 | 路径 | 方法 | 说明 |
+|---|---|---|---|
+| 读 | `/dsh-panel/stack-status` | GET | 服务现读：端口 / RSS / 日志尾 |
+| 读 | `/dsh-panel/workbench-board` | GET | 工作台六块读数 |
+| 读 | `/dsh-panel/zentao-gantt` | GET | 禅道甘特（脚本回退视图） |
+| 读 | `/dsh-panel/timeflow-inbox` | GET | 时间流收件箱 |
+| 读 | `/dsh-panel/skills` | GET | 仓库 `skills/` 清单 |
+| 读 | `/dsh-panel/settings` | GET | 参数键 + 当前值 + 允许范围 |
+| 写 | `/dsh-panel/settings?<键>=<值>` | POST | 白名单键；越界 / 未知键 400 |
+|  |  |  | 落盘 `tools/settings.toml`（先 `.tmp` 再改名） |
+| 写 | `/dsh-panel/actions?kind=&name=` | POST | 服务动作 `start` / `stop` / `start-all` |
+|  |  |  | 实现：`tools/stack.py` |
+| 写 | `/dsh-panel/pool-action?op=&card=` | POST | 号池派活 `dispatch` / 回收 `release` |
+| 读 | `/dsh-panel/proxy/z/zentao/…` | GET | 禅道反代（抹 `X-Frame-Options` / CSP，cookie 透传） |
+
+白名单键与范围：`tf_gate_min_free_gb`（0–64）、`gate_workers`（1–8）、`pool_concurrency`（1–8）。
+写方法只有上面三条 POST；其余一律 GET，非 GET 直接 405。
 """
 
 
@@ -2515,18 +2612,20 @@ def _check_client(source: str) -> list[str]:
         problems.append("[浏览器半] `main` 注册的 key 必须是 PANEL_ID")
     if '"sidebar.panellist"' not in source:
         problems.append("[浏览器半] 没在 `sidebar.panellist` 挂行（用户就找不到入口）")
-    if "id: PANEL_ID" not in source:
+    if SEAT_KEYS[0] in ROW_KEYS and "id: PANEL_ID" not in source:
         problems.append("[浏览器半] sidebar 行 id 必须是 PANEL_ID（与 main key 一致）")
     mains, rows = _client_seat_lists(source)
-    if mains != rows:
-        problems.append(f"[浏览器半] 座位不一致：main 座 key {mains} != 行 id {rows}")
+    # ★ 卡 A286：main 座仍是全部座位；左栏行只挂 seat.row 的那些（工作台状态并进
+    #   工具箱后不再单列），所以两边**不再逐项相等**，各自与自己的表比。
+    want_mains = list(SEAT_KEYS) + ["toolbox"]
+    want_rows = list(ROW_KEYS) + ["toolbox"]
+    if mains != want_mains:
+        problems.append(f"[浏览器半] main 座顺序不对：{mains} != {want_mains}")
+    if rows != want_rows:
+        problems.append(f"[浏览器半] 左栏行与 ROW_KEYS 不一致：{rows} != {want_rows}")
     # ★ 卡 A274：允许在三个座位之后追加**非服务行**（目前只有「工程工具箱」一行）；
     #   前 len(SEAT_KEYS) 项必须与 SEAT_KEYS 逐项一致，额外的只许是登记过的 toolbox。
-    extra_rows = [key for key in mains if key not in SEAT_KEYS]
-    if mains[: len(SEAT_KEYS)] != list(SEAT_KEYS):
-        problems.append(f"[浏览器半] 座位顺序与 SEAT_KEYS 不一致：{mains} != {list(SEAT_KEYS)}")
-    elif extra_rows not in ([], ["toolbox"]):
-        problems.append(f"[浏览器半] 出现未登记的额外行：{extra_rows}")
+
     if "ctx.layout.selectPanel" not in source:
         problems.append("[浏览器半] 缺 `ctx.layout.selectPanel`（选中/回会话的口子）")
     if "fetch(" not in source:
