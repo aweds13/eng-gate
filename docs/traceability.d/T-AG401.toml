@@ -1,0 +1,13 @@
+[entries."T-AG401"]
+id = "T-AG401"
+title = "队列补登记 + 巡检分报批成员"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:tools/wb_daily.py",
+  "file:tests/test_wb_daily.py",
+  "file:复盘/卡/卡A287-队列补登记与巡检分报.md",
+]
+gaps = "1. 8 张已落卡不在队列里（259–262 批 B-20261046…49，A283–A286 批 T-AG397…400）：队列是排批/巡检/翻 status 的唯一真源，不在队列里 ⇒ 已落的卡在账面上等于不存在。补登记见 `docs/workbacklog.toml:2897` 起的 8 条 `[[cards]]`，本卡自己登记在 `docs/workbacklog.toml:2996`。2. 巡检把批成员冒充成卡：`M-1`…`M-5` 从来不是卡号、永远进不了队列，却天天亮 `★`，真卡号漏登记的报警被自己的噪音稀释。分报逻辑在 `tools/wb_daily.py:375`。3. 断言只查「有个词出现」、不查「进没进 `★` 那一行」：改成整句匹配 `tests/test_wb_daily.py:238`，钉住 `M-9` 只出现在 `·` 行。4. 门抓到的额外缺口：259–262 的卡规格在磁盘上、在 `复盘/卡/` 里，但**从没进 git**，补登记后 `tests/test_card_specs_tracked.py:106` 当场点名红；本笔把 4 份规格连 A287 卡说明一起进 git。5. 卡树侧的坑（本笔实测）：裸 `git worktree add` 建出来的卡树没有 gitignored 的 `gates/diag/*`，而门恰恰在卡树里跑 ⇒ 台账里 `file:gates/diag/...` 的证据断言在**任何裸卡树**里必然假红（本次 24 条，主树同一份 audit 全绿）。同类问题在批预声明上已修过（`tools/pool/plan.py:473`），audit 这条还没修 —— 本笔靠把主树运行态拷进卡树绕过，根因仍开着。"
+

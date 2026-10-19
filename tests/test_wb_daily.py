@@ -235,7 +235,7 @@ def test_render_has_all_sections(tmp_path: Path) -> None:
         assert tag in out, f"一页里缺 {tag}"
     assert "workbacklog.toml" in out          # 来源写清
     assert "1 张已落却没翻 status" in out     # 队列里的那张（002）
-    assert "已落批成员不在队列" in out        # 不在队列的那张单独点（M-9）
+    assert "历史批成员 1 个（无卡号，不进队列）：M-9" in out   # 无卡号形态 ⇒ 不进队列，不报 ★
     assert "M-9" in out
 
 

@@ -32,6 +32,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -353,6 +354,14 @@ def _render_batches(lines: list[str], page: dict) -> None:
     _render_stale(lines, page)
 
 
+CARD_ID_RE = re.compile(r"^(?:[A-Z]+\d+|\d+)$")
+
+
+def _card_key(cid: str) -> str:
+    """卡号归一：批次围栏里写 `M-1`、队列里写 `M1`，是同一个人。"""
+    return str(cid).replace("-", "").strip()
+
+
 def _render_stale(lines: list[str], page: dict) -> None:
     stale = page.get("stale") or []
     unknown = page.get("stale_unknown") or []
@@ -363,7 +372,13 @@ def _render_stale(lines: list[str], page: dict) -> None:
         body = " ".join(f"{s['card']}({s['status']})" for s in stale)
         lines.append(f"[已落没翻 status] {len(stale)} 张：{body}")
     if unknown:
-        lines.append(f"  ★ 另有 {len(unknown)} 个已落批成员不在队列里：{' '.join(unknown)}")
+        reshaped = [u for u in unknown if CARD_ID_RE.match(str(u).strip())]
+        members = [u for u in unknown if not CARD_ID_RE.match(str(u).strip())]
+        if reshaped:
+            lines.append(f"  ★ 另有 {len(reshaped)} 个已落批成员不在队列里：{' '.join(reshaped)}")
+        if members:
+            body = " ".join(members)
+            lines.append(f"  · 历史批成员 {len(members)} 个（无卡号，不进队列）：{body}")
 
 
 def _render_memory(lines: list[str], page: dict) -> None:

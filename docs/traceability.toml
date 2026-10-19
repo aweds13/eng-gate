@@ -7503,3 +7503,17 @@ evidence = [
   "file:复盘/卡/卡A286-面板层级与参数可写.md",
 ]
 gaps = "- ① 左栏只剩 工程工具箱 / 禅道 / timeflow：座位加 row 标记（tools/dsh_panel.py:166），workbench_board 置 row=False（tools/dsh_panel.py:261），左栏行改从派生表 ROW_KEYS 出（tools/dsh_panel.py:294）；工作台状态并进「工程工具箱 → 工作台」页签（tools/dsh_panel.py:1868）。- ② serveProxy / servePoolAction 原来有定义、没分发分支：反代 404、派活被只读门挡成 405。补两支，位置在 GET 闸门之前（tools/dsh_panel.py:1061、tools/dsh_panel.py:1065）。- ③ serveSettings 分发漏传 url ⇒ POST 必抛 searchParams：改成 serveSettings(req, res, url)（tools/dsh_panel.py:1050）。- ④ 参数页从只读改成可写：白名单加 pool_concurrency（1–8，tools/dsh_panel.py:774），越界改成 400、不静默夹边界（tools/dsh_panel.py:826）。- ⑤ tools/wb_plan.py 没给 --concurrency 时读面板写的 settings.toml（pool_concurrency），读不到 / 越界退回 DEFAULT_CONCURRENCY（tools/wb_plan.py:773）。- ⑥ 证据在六条钉子用例里，扫源码的分发覆盖是 test_every_seam_handler_is_dispatched（tests/test_dsh_panel.py:1011）。"
+
+[entries."T-AG401"]
+id = "T-AG401"
+title = "队列补登记 + 巡检分报批成员"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:tools/wb_daily.py",
+  "file:tests/test_wb_daily.py",
+  "file:复盘/卡/卡A287-队列补登记与巡检分报.md",
+]
+gaps = "1. 8 张已落卡不在队列里（259–262 批 B-20261046…49，A283–A286 批 T-AG397…400）：队列是排批/巡检/翻 status 的唯一真源，不在队列里 ⇒ 已落的卡在账面上等于不存在。补登记见 `docs/workbacklog.toml:2897` 起的 8 条 `[[cards]]`，本卡自己登记在 `docs/workbacklog.toml:2996`。2. 巡检把批成员冒充成卡：`M-1`…`M-5` 从来不是卡号、永远进不了队列，却天天亮 `★`，真卡号漏登记的报警被自己的噪音稀释。分报逻辑在 `tools/wb_daily.py:375`。3. 断言只查「有个词出现」、不查「进没进 `★` 那一行」：改成整句匹配 `tests/test_wb_daily.py:238`，钉住 `M-9` 只出现在 `·` 行。4. 门抓到的额外缺口：259–262 的卡规格在磁盘上、在 `复盘/卡/` 里，但**从没进 git**，补登记后 `tests/test_card_specs_tracked.py:106` 当场点名红；本笔把 4 份规格连 A287 卡说明一起进 git。5. 卡树侧的坑（本笔实测）：裸 `git worktree add` 建出来的卡树没有 gitignored 的 `gates/diag/*`，而门恰恰在卡树里跑 ⇒ 台账里 `file:gates/diag/...` 的证据断言在**任何裸卡树**里必然假红（本次 24 条，主树同一份 audit 全绿）。同类问题在批预声明上已修过（`tools/pool/plan.py:473`），audit 这条还没修 —— 本笔靠把主树运行态拷进卡树绕过，根因仍开着。"
+

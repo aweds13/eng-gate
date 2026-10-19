@@ -2904,3 +2904,102 @@ files = ["tools/wb_reconcile.py", "tests/test_wb_reconcile.py"]
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "259"
+task = "B-20261046"
+title = "生态普查"
+tree = ".wt/259"
+spec = "复盘/卡/卡259-生态普查.md"
+files = ["复盘/卡/卡259-生态普查.md"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "260"
+task = "B-20261047"
+title = "Trae新开对话与按对话定向"
+tree = ".wt/260"
+spec = "复盘/卡/卡260-Trae新开对话与按对话定向.md"
+files = ["复盘/卡/卡260-Trae新开对话与按对话定向.md"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "261"
+task = "B-20261048"
+title = "复盘文档合并"
+tree = ".wt/261"
+spec = "复盘/卡/卡261-复盘文档合并.md"
+files = ["复盘/卡/卡261-复盘文档合并.md"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "262"
+task = "B-20261049"
+title = "分区前缀"
+tree = ".wt/262"
+spec = "复盘/卡/卡262-分区前缀.md"
+files = ["复盘/卡/卡262-分区前缀.md"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "A283"
+task = "T-AG397"
+title = "面板：内嵌页可用性 + 号池/参数三小事"
+tree = ".wt/A283"
+spec = "复盘/卡/卡A283-面板可用性.md"
+files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "A284"
+task = "T-AG398"
+title = "台账 726 条用例级证据指针"
+tree = ".wt/A284"
+spec = "复盘/卡/卡A284-台账证据补用例名.md"
+files = ["docs/traceability.d/T-AG398.toml"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "A285"
+task = "T-AG399"
+title = "ruff 112→0（配置零改动）"
+tree = ".wt/A285"
+spec = "复盘/卡/卡A285-ruff清零.md"
+files = ["tools/wb_reconcile.py", "tests/test_wb_reconcile.py"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "A286"
+task = "T-AG400"
+title = "面板层级收敛 + 参数可写 + 补分发分支"
+tree = ".wt/A286"
+spec = "复盘/卡/卡A286-面板层级与参数可写.md"
+files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py", "tools/wb_plan.py"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "A287"
+task = "T-AG401"
+title = "队列补登记 9 张 + 巡检分报批成员"
+tree = ".wt/A287"
+spec = "复盘/卡/卡A287-队列补登记与巡检分报.md"
+files = ["docs/workbacklog.toml", "tools/wb_daily.py", "tests/test_wb_daily.py"]
+depends = []
+risk = "low"
+status = "done"
