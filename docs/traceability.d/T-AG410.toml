@@ -1,0 +1,15 @@
+[entries."T-AG410"]
+id = "T-AG410"
+title = "P2 六条回填：PO8/PO14/PO15/SK1/UI3/AI1"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:skills/pipe-land/references/land-steps.md",
+  "file:skills/softeng-manage/SKILL.md",
+  "file:skills/softeng-manage/references/dispatch.md",
+  "file:skills/softeng-manage/references/ui-notes.md",
+  "file:skills/softeng-manage/references/skills-layers.md",
+  "file:gates/diag/wb-A296.verdict.txt",
+]
+gaps = "- PO8 只补了「先同步文件进卡树」的处置命令，没把落地链内部的 `staged_and_extra` 判据展开；细节在 `tools/pool/landing.py`。- PO15 的账号维度只写到「租约里记 account、派活前查」；账号字段的写入点在 `tools/wb_dispatch.py`。- SK1 的「技能登记表」写成了三处登记的口径，没有生成自动核对脚本；核对仍靠 `tools/dsh_skills_link.py --check` 与 `tools/sync_worker_skills.py --check`。"
+

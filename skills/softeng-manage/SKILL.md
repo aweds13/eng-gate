@@ -72,6 +72,7 @@ description: 本仓（program/engineering）软件工程管理总入口——把
 - 对抗复核与长任务（反空转 / 派生物噪声 / 复核常态化）：[ai-collab](references/ai-collab.md)
 - 产品线结论（timeflow，不改本仓框架）：[product-lines](references/product-lines.md)
 - 界面判据（主题令牌 / 非文字对比度）：[ui-notes](references/ui-notes.md)
+- 技能三层与登记表（索引 / 操作 / 判据）：[skills-layers](references/skills-layers.md)
 - 文档口径：同一事实只许一处投影、第四份投影必须脚本对账（缺口 CF2）；口径漂移用「加注」治——保留原文 + 顶部加注「已被卡 N 推翻」，不原地改写（缺口 CF1）。
 - 框架两条总纲：事实层是唯一真源、AI 只写「做了什么」的事实回报、结论与产物由库/门产出（缺口 FW1）；框架要能整体提升为独立仓、先跑抽取清单、先抽后搬（缺口 FW2）—— 操作面见 `pipe-init`。
 

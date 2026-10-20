@@ -1,3 +1,9 @@
+## P2 六条回填：PO8 / PO14 / PO15 / SK1 / UI3 / AI1
+- `skills/pipe-land/references/land-steps.md` 补 PO8：收口前先把要提交的文件同步进卡树，否则 `file:` 引用在卡树里不可达。
+- `skills/softeng-manage/references/dispatch.md` 补 PO14 / PO15 / AI1：巡检分三条报、派活按账号串行、长任务按续跑设计。
+- 新建 `skills/softeng-manage/references/skills-layers.md` 落 SK1：索引 / 操作 / 判据三层与三处登记维护。
+- `skills/softeng-manage/references/ui-notes.md` 补 UI3：界面不解释自己，解释进文档。
+- 六条都以 `（缺口 XXn）` 标记，可机器复算 6/6。
 ## 完工回推通道：派活即看守，收工必留痕
 - 新增 `tools/wb_notify.py`：`--once` 扫 `gates/diag/wb-<卡>.verdict.txt` 写 `gates/diag/notifications.jsonl`，`--daemon` 循环；同卡幂等，`status=done` 的卡不再产生通知。
 - `tools/wb_dispatch.py` 派活成功后自动起守护（pid 活着则跳过），失败只告警。

@@ -3101,7 +3101,7 @@ spec = "复盘/卡/卡A296-P2六条回填.md"
 files = ["skills/pipe-land/references/land-steps.md", "skills/softeng-manage/references/dispatch.md", "skills/softeng-manage/references/skills-layers.md", "skills/softeng-manage/references/ui-notes.md", "skills/softeng-manage/SKILL.md"]
 depends = ["A295"]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A297"
