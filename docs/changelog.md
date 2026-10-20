@@ -1,3 +1,6 @@
+## 面板深链：每个界面都有自己的地址
+- `tools/dsh_panel.py`：客户端加 hash 路由 #/panel/<id>，白名单 HASH_IDS，非法 id 回退 overview。
+- `tests/test_dsh_panel.py`：+10 条（白名单/回退/唯一写者/还原 + 3 条反例让自检必咬）。
 ## 服务动作留痕带一键回滚
 - `tools/stack.py`：动作日志加 `undo=`（唯一真源 UNDO_OF/undo_for），新增 undo_commands() 与 log --undo（只打印不执行）。
 - 新增 `tests/test_stack_actions.py`：14 条用例证明每条动作有非空 undo、反做回到前一态。

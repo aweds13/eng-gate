@@ -297,6 +297,27 @@ ROUTE_PATHS: tuple[str, ...] = tuple(seat.route for seat in SEATS)
 #: 兼容卡 221 的既有判据：第一座 = 老的面板 id。
 PANEL_ID = SEAT_KEYS[0]
 
+# ---- 卡 A309（T-AG423）：面板深链 `#/panel/<id>` ----
+#: 工具箱子页签的 key（浏览器半 `TOOLBOX_TABS` 的真源；`--check` 与测试逐项比这两处）。
+TOOLBOX_TAB_KEYS: tuple[str, ...] = (
+    "overview",
+    "workbench",
+    "board",
+    "pool",
+    "skills",
+    "tree",
+    "params",
+)
+#: 能当「一页」的 id：三个座位（`main` 座的 key）+ 左栏那一行「工程工具箱」。
+HASH_PAGE_IDS: tuple[str, ...] = SEAT_KEYS + ("toolbox",)
+#: 深链的**合法 id 白名单** = 三行（座位 + 工具箱）+ 工具箱子页签。
+HASH_IDS: tuple[str, ...] = HASH_PAGE_IDS + TOOLBOX_TAB_KEYS
+#: 非法 id 回退的默认页 = 工具箱第一个页签（一打开面板看到的那一页）。
+HASH_DEFAULT_ID = TOOLBOX_TAB_KEYS[0]
+#: 深链的形状（照 dsh-url-router：`#/panel/<panelId>`，见
+#: 复盘/DSH插件-参考与结论.md:94 —— 地址栏唯一写者 + 只用 replaceState）。
+HASH_PREFIX = "#/panel/"
+
 #: 卡 247：官方右栏页签 id —— **带包名前缀**（dsh-session-diff 的 "dsh-session-diff:file"
 #: 同型，见 复盘/DSH插件-可抄清单.md §六.1）；后缀照卡规格点名：board / timeflow / zentao。
 RIGHT_TAB_SUFFIX: dict[str, str] = {
@@ -1396,6 +1417,8 @@ def _client_registrations() -> str:
             f" route: {json.dumps(seat.route)}, target: TARGETS[{key_expr}] }}),\n"
             "      }, function (props) {\n"
             "        /* 默认 = 快捷入口（开真实页面）；内嵌读数（自绘视图）保留成可选分支。 */\n"
+            "        /* 卡 A309：这一页在屏 ⇒ 地址栏写 #/panel/<id>（挂载即写，不劫持点击）。 */\n"
+            f"        usePanelHash({key_expr});\n"
             "        return h(QuickEntry, {"
             f" route: props.route, target: props.target, title: {json.dumps(seat.label_zh)},"
             f" fallback: {seat.render} }});\n"
@@ -1417,7 +1440,10 @@ def _client_registrations() -> str:
         '        key: "toolbox",\n'
         '        locale: NS,\n'
         '        inject: () => ({ route: "/panel/toolbox" }),\n'
-        "      }, function () { return h(Toolbox, {}); }));\n"
+        "      }, function () {\n"
+        "        /* 卡 A309：工具箱的地址由 Toolbox 自己写（页签才是那一页的「界面」）。 */\n"
+        "        return h(Toolbox, {});\n"
+        "      }));\n"
         '      ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({\n'
         '        name: "sidebar.panellist",\n'
         '        id: "toolbox",\n'
@@ -1457,6 +1483,131 @@ window.__ModuleLoader__.load({
     /* 卡 253：动作缝（POST，白名单在宿主半）与服务现读（GET）。 */
     const ACTION_ROUTE = "__ACTION_ROUTE__";
     const STACK_STATUS_ROUTE = "__STACK_STATUS_ROUTE__";
+
+    /* ---- 卡 A309（T-AG423）· 深链：每个界面都有自己的地址 ----
+     * 形状 `#/panel/<id>` —— 照 dsh-url-router 的同款（`#/panel/<panelId>` → selectPanel(id)；
+     * 依据 复盘/DSH插件-参考与结论.md:94、复盘/DSH插件-成果盘点与待用清单.md:55）。
+     * ★ 三条纪律：
+     *   ① **不动宿主路由**：只写 hash，路径 / 查询串 / 宿主自己的 hash 一概不碰；
+     *   ② **地址栏唯一写者** = writePanelHash（整份客户端源码里 replaceState 只有这一处）；
+     *   ③ **只换当前这条历史**（不往历史栈里压新条目）—— 切页签 / 切行不是新页面。
+     * ★ 合法 id 白名单 = 三行（座位 + 工程工具箱）+ 工具箱子页签，由宿主半的
+     *   HASH_PAGE_IDS / TOOLBOX_TAB_KEYS 注入（判据逐项比这两处）；
+     *   形状对但 id 不在白名单 ⇒ **回退默认页**（HASH_DEFAULT_ID），不猜、不抛。 */
+    const HASH_PREFIX = __HASH_PREFIX__;
+    const HASH_DEFAULT_ID = __HASH_DEFAULT_ID__;
+    const HASH_PAGE_IDS = __HASH_PAGE_IDS__;
+    const HASH_TAB_IDS = __HASH_TAB_IDS__;
+    const HASH_IDS = HASH_PAGE_IDS.concat(HASH_TAB_IDS);
+    /* 工具箱子页签所属的那一页（`main` 座的 key；子页签的地址都落在这一页上）。 */
+    const TOOLBOX_PANEL_ID = "toolbox";
+
+    /* 深链的当前读数（模块级小仓库，照 probeStore 的口径）：
+     * tab = 工具箱页签，panel = 最后在屏的那一页，consumed = 启动时那一次还原来没来
+     * （失败就留到第一次挂载时兜一次 —— 那时 layout 一定挂好了），error = 原话；
+     * notify/subscribe 让**在屏的工具箱**跟着 hashchange 换页签（贴链接 = 直接到位）。 */
+    const hashStore = {
+      tab: HASH_DEFAULT_ID,
+      panel: null,
+      consumed: false,
+      error: "",
+      listeners: new Set(),
+      notify() {
+        hashStore.listeners.forEach((fn) => fn());
+      },
+      setTab(next) {
+        if (hashStore.tab === next) return;
+        hashStore.tab = next;
+        hashStore.notify();
+      },
+      setError(text) {
+        if (hashStore.error === text) return;
+        hashStore.error = text;
+        hashStore.notify();
+      },
+      subscribe(fn) {
+        hashStore.listeners.add(fn);
+        return () => {
+          hashStore.listeners.delete(fn);
+        };
+      },
+    };
+
+    function currentHash() {
+      return (typeof window !== "undefined" && window.location && window.location.hash) || "";
+    }
+
+    /* 地址栏 → 面板 id。**纯函数**（不读 window，好测）：
+     * · 不是 `#/panel/` 开头 ⇒ null（宿主自己的 hash 不归我们管 ⇒ 一个字都不动）；
+     * · 形状对但 id 不在白名单 ⇒ HASH_DEFAULT_ID（非法 id 回退默认页）。 */
+    function hashPanelId(hash) {
+      const raw = String(hash === undefined || hash === null ? "" : hash);
+      if (raw.indexOf(HASH_PREFIX) !== 0) return null;
+      const id = raw.slice(HASH_PREFIX.length);
+      if (HASH_IDS.indexOf(id) < 0) {
+        /* 非法 id ⇒ 回退默认页（不猜、不抛）。 */
+        return HASH_DEFAULT_ID;
+      }
+      return id;
+    }
+
+    /* 面板 id → 选哪一页 + 哪个页签（子页签 id 归「工程工具箱」那一页）。 */
+    function panelHashTarget(id) {
+      if (HASH_TAB_IDS.indexOf(id) >= 0) return { panel: TOOLBOX_PANEL_ID, tab: id };
+      if (id === TOOLBOX_PANEL_ID) return { panel: TOOLBOX_PANEL_ID, tab: HASH_DEFAULT_ID };
+      return { panel: id, tab: null };
+    }
+
+    /* ★ 地址栏唯一写者：只写 hash，不碰宿主路径、不压历史栈。 */
+    function writePanelHash(id) {
+      if (typeof window === "undefined" || !window.history || !window.history.replaceState) {
+        return;
+      }
+      try {
+        window.history.replaceState(null, "", HASH_PREFIX + id);
+      } catch (error) {
+        hashStore.setError(String((error && error.message) || error));
+      }
+    }
+
+    /* 地址栏 → 界面：启动时一次、hashchange 再一次，**同一段逻辑**（不抄两份）。
+     * 还原失败（layout 还没挂 / 服务不可用）就如实记原话，consumed 留 false
+     * ⇒ 第一次挂载时再兜一次 —— 绝不静默吞掉。 */
+    function restorePanelHash(hash) {
+      const id = hashPanelId(hash === undefined ? currentHash() : hash);
+      if (id === null) {
+        hashStore.consumed = true;
+        return null;
+      }
+      const target = panelHashTarget(id);
+      hashStore.setTab(target.tab || hashStore.tab);
+      if (target.panel === hashStore.panel) {
+        hashStore.consumed = true;
+        return id;
+      }
+      try {
+        if (!panelCtx || !panelCtx.layout || typeof panelCtx.layout.selectPanel !== "function") {
+          throw new Error("ctx.layout.selectPanel 不可用");
+        }
+        panelCtx.layout.selectPanel(target.panel);
+        hashStore.panel = target.panel;
+        hashStore.setError("");
+        hashStore.consumed = true;
+      } catch (error) {
+        hashStore.setError(String((error && error.message) || error));
+      }
+      return id;
+    }
+
+    /* 一页在屏 ⇒ 把地址栏写成它（切行不用劫持点击：点行 = selectPanel ⇒ 挂载 ⇒ 写地址）。
+     * 还原刚把界面换到别处时（hashStore.panel 已被改成目标页）这一页不再抢地址栏。 */
+    function usePanelHash(id) {
+      react.useEffect(() => {
+        hashStore.panel = id;
+        if (!hashStore.consumed) restorePanelHash();
+        if (hashStore.panel === id) writePanelHash(id);
+      }, [id]);
+    }
 
     /* ---- TARGETS（卡 242）：三个真实页面，与座位表同源（key 一一对应） ----
      * up = 没起时的「怎么起」。目标页归别的工具（wb_dash.py / serve.py / 禅道），
@@ -2506,7 +2657,9 @@ __TARGETS__
     }
 
     function Toolbox() {
-      const [tab, setTab] = react.useState("overview");
+      /* 卡 A309：首帧就认地址栏 —— 深链指向哪个页签，就开哪个页签（非法 id 已在
+       * hashPanelId 里回退成 HASH_DEFAULT_ID，这里不再猜）。 */
+      const [tab, setTab] = react.useState(() => hashStore.tab || HASH_DEFAULT_ID);
       const views = {
         overview: ToolboxOverview,
         workbench: ToolboxWorkbench,
@@ -2517,6 +2670,15 @@ __TARGETS__
         params: ToolboxParams,
       };
       const View = views[tab] || ToolboxOverview;
+      /* 切页签 = 换界面 ⇒ 写地址栏（首次挂载也写一次，把 `#/panel/toolbox` 落成
+       * `#/panel/<页签>`；此时 hashStore.tab 已经是地址栏指的那个，不会被默认值盖掉）。 */
+      react.useEffect(() => {
+        hashStore.tab = tab;
+        hashStore.panel = TOOLBOX_PANEL_ID;
+        writePanelHash(tab);
+      }, [tab]);
+      /* 反向：地址栏变了（贴链接 / 手改 hash）⇒ 在屏的工具箱跟着换页签。 */
+      react.useEffect(() => hashStore.subscribe(() => setTab(hashStore.tab)), []);
       return h("div", { style: UI.page },
         h("div", { style: UI.bar },
           h("h2", { style: UI.title }, "工程工具箱"),
@@ -2526,6 +2688,11 @@ __TARGETS__
             style: tab === key ? UI.segOn : UI.seg,
             onClick: () => setTab(key),
           }, label))),
+        /* 深链还原失败要看得见（原话照抄），不静默。 */
+        hashStore.error
+          ? h("p", { "data-wb-hash-error": "", style: UI.error },
+              "深链还原失败：" + hashStore.error)
+          : null,
         h(View));
     }
 
@@ -2673,6 +2840,16 @@ __TARGETS__
     const inject = ["slots", "locale", "layout", "sidebarRight", "sidebarRightTabs"];
     function apply(ctx) {
       panelCtx = ctx; /* QuickEntry 的 ctx.sidebarRight.openTab 用（卡 242）。 */
+      /* ---- 卡 A309 · 启动还原 + 跟随地址栏 ----
+       * ① 页面加载按 hash 还原一次（`#/panel/<id>` → selectPanel）；拿不到 layout
+       *    （比如 apply 早于 layout 挂载）就留到第一次挂载时兜一次，不静默。
+       * ② hashchange（贴链接 / 手改 hash / 宿主改了自己的 hash）走**同一段**还原逻辑；
+       *    我们只用 replaceState ⇒ 自己写地址不会触发 hashchange，不会绕圈。 */
+      restorePanelHash();
+      const onHashChange = () => restorePanelHash();
+      const canListenHash = typeof window !== "undefined"
+        && typeof window.addEventListener === "function";
+      if (canListenHash) window.addEventListener("hashchange", onHashChange);
       ctx.effect(() => ctx.locale.register(NS, {
         zh: { __ZH__ },
         en: { __EN__ },
@@ -2715,6 +2892,7 @@ __RIGHT_TABS__
       return () => {
         disposeOpen();
         if (disposeMounted) disposeMounted();
+        if (canListenHash) window.removeEventListener("hashchange", onHashChange);
       };
     }
 
@@ -2727,6 +2905,9 @@ __RIGHT_TABS__
     /* ★ 卡 A290：内嵌页壳的三态判定（Node 判据喂读数即可复现「停 / 起 / 超时」）。 */
     exports.__a290 = { embedShellState, embedAfterTimeout,
       EMBED_LOAD_TIMEOUT_MS, QuickEntry };
+    /* ★ 卡 A309：深链判据钩子 —— 地址栏 ↔ 界面的解析 / 写 / 还原可单独驱动（Node 判据用）。 */
+    exports.__a309 = { hashPanelId, panelHashTarget, writePanelHash, restorePanelHash,
+      HASH_IDS, HASH_DEFAULT_ID, HASH_PREFIX };
     return module.exports;
   },
 });
@@ -2800,6 +2981,10 @@ def _client_js() -> str:
         .replace("__TARGETS__", _client_targets_js())
         .replace("__ACTION_ROUTE__", ACTION_ROUTE)
         .replace("__STACK_STATUS_ROUTE__", STACK_STATUS_ROUTE)
+        .replace("__HASH_PREFIX__", json.dumps(HASH_PREFIX))
+        .replace("__HASH_DEFAULT_ID__", json.dumps(HASH_DEFAULT_ID))
+        .replace("__HASH_PAGE_IDS__", json.dumps(list(HASH_PAGE_IDS)))
+        .replace("__HASH_TAB_IDS__", json.dumps(list(TOOLBOX_TAB_KEYS)))
         .replace("__ZH__", _client_label_map("label_zh"))
         .replace("__EN__", _client_label_map("label_en"))
         .replace("__KEYS__", json.dumps(list(SEAT_KEYS)))
@@ -3228,6 +3413,69 @@ def _client_seat_lists(source: str) -> tuple[list[str], list[str]]:
     return mains, rows
 
 
+def _client_toolbox_tabs(source: str) -> list[str]:
+    """从浏览器半源码里抽出 `TOOLBOX_TABS` 的键（顺序即页签顺序）。
+
+    ★ 卡 A309：工具箱子页签既是页签顺序的真源、也是深链合法 id 的一部分 ——
+    Python 侧 `TOOLBOX_TAB_KEYS` 与它必须逐项一致（两边都不许手抄第二份）。
+    """
+    match = re.search(r"const TOOLBOX_TABS = \[(.*?)\];", source, re.S)
+    if not match:
+        return []
+    return re.findall(r'\[\s*"([^"]+)"\s*,', match.group(1))
+
+
+def _check_hash(source: str) -> list[str]:
+    """卡 A309（T-AG423）：`#/panel/<id>` 深链的判据。
+
+    ★ 三条咬人的：① 地址栏**唯一写者**（出现第二处 replaceState 就咬）；② 白名单 +
+    非法 id **回退默认页**（不猜、不抛）；③ 只写 hash —— 不压历史栈、不碰 location。
+    """
+    problems: list[str] = []
+    for name in (
+        "hashPanelId",
+        "panelHashTarget",
+        "writePanelHash",
+        "restorePanelHash",
+        "usePanelHash",
+    ):
+        if f"function {name}(" not in source:
+            problems.append(f"[浏览器半] 深链缺 `function {name}(`（卡 A309：地址栏 ↔ 界面）")
+    prefix_literal = f"const HASH_PREFIX = {json.dumps(HASH_PREFIX)};"
+    if prefix_literal not in source:
+        problems.append(f"[浏览器半] 缺 `{prefix_literal}`（卡 A309：深链形状的唯一真源）")
+    for hid in HASH_IDS:
+        if json.dumps(hid) not in source:
+            problems.append(
+                f"[浏览器半] 深链合法 id 少了 {json.dumps(hid)}（卡 A309：三行 + 工具箱子页签）"
+            )
+    if "HASH_IDS.indexOf(" not in source:
+        problems.append(
+            "[浏览器半] 深链解析没过白名单（卡 A309：`HASH_IDS.indexOf(id) >= 0` 必须在）"
+        )
+    if "return HASH_DEFAULT_ID;" not in source:
+        problems.append(
+            "[浏览器半] 非法 id 没回退默认页（卡 A309：hashPanelId 要 `return HASH_DEFAULT_ID;`）"
+        )
+    js_tabs = _client_toolbox_tabs(source)
+    if js_tabs != list(TOOLBOX_TAB_KEYS):
+        problems.append(
+            f"[浏览器半] 工具箱页签与 TOOLBOX_TAB_KEYS 不一致：{js_tabs}"
+            f" != {list(TOOLBOX_TAB_KEYS)}"
+        )
+    writers = len(re.findall(r"history\.replaceState\(", source))
+    if writers != 1:
+        problems.append(
+            f"[浏览器半] 地址栏写了 {writers} 处（卡 A309：只许 writePanelHash 一处写）"
+        )
+    for api in ("pushState(", "location.assign(", "location.replace(", "location.href ="):
+        if api in source:
+            problems.append(
+                f"[浏览器半] 出现 `{api}`（卡 A309：只写 hash，不动宿主路由 / 不压历史栈）"
+            )
+    return problems
+
+
 def _check_client(source: str) -> list[str]:
     problems: list[str] = []
     if f'const PANEL_ID = "{PANEL_ID}";' not in source:
@@ -3251,6 +3499,8 @@ def _check_client(source: str) -> list[str]:
         problems.append(f"[浏览器半] 左栏行与 ROW_KEYS 不一致：{rows} != {want_rows}")
     # ★ 卡 A274：允许在三个座位之后追加**非服务行**（目前只有「工程工具箱」一行）；
     #   前 len(SEAT_KEYS) 项必须与 SEAT_KEYS 逐项一致，额外的只许是登记过的 toolbox。
+    # ★ 卡 A309：深链（`#/panel/<id>`）的判据。
+    problems.extend(_check_hash(source))
 
     if "ctx.layout.selectPanel" not in source:
         problems.append("[浏览器半] 缺 `ctx.layout.selectPanel`（选中/回会话的口子）")

@@ -7835,3 +7835,19 @@ evidence = [
   "file:复盘/交接.d/T-AG422.md",
 ]
 gaps = "- no-op 行（已在跑 ⇒ 没动）仍写机械 undo，真按它反做会误停；边界写在 `tools/stack.py` docstring 与卡里。- 不写 start-all/stop-all 聚合动作：start 本来就逐组件各写一行，回滚天然逐个（见 `复盘/卡/卡A308-动作回滚命令.md`）。"
+
+[entries."T-AG423"]
+id = "T-AG423"
+title = "面板深链：每个界面都有自己的地址"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+  "file:复盘/卡/卡A309-面板深链.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/changelog.d/T-AG423.md",
+  "file:docs/traceability.d/T-AG423.toml",
+  "file:复盘/交接.d/T-AG423.md",
+]
+gaps = "- 只动客户端半；宿主半与路由一字未改（`tools/dsh_panel.py` 的 CLIENT_JS 区）。- 深链只覆盖三行与 7 个工具箱页签，白名单在 `tools/dsh_panel.py` 的 HASH_IDS。"

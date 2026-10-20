@@ -1405,3 +1405,121 @@ def test_client_check_bites_when_fallback_label_removed() -> None:
     problems = dp.check(client_js=broken)
     assert any("已退回内嵌" in p for p in problems), problems
 
+
+
+# ---- 卡 A309（T-AG423）：面板深链 —— 每个界面都有自己的地址 ----
+
+
+def _client_fn(name: str) -> str:
+    """切出浏览器半的一个顶层函数体（判据只看这一段，别拿整份源码蒙混）。"""
+    start = dp.CLIENT_JS.index(f"function {name}(")
+    end = dp.CLIENT_JS.find("\n    function ", start + 1)
+    return dp.CLIENT_JS[start:end if end > 0 else len(dp.CLIENT_JS)]
+
+
+def test_hash_route_functions_and_whitelist_present() -> None:
+    """★ A309 钉子①：有 hash 路由函数（解析 / 目标 / 写 / 还原 / 挂载）与合法 id 白名单。"""
+    client = dp.CLIENT_JS
+    for name in (
+        "hashPanelId",
+        "panelHashTarget",
+        "writePanelHash",
+        "restorePanelHash",
+        "usePanelHash",
+    ):
+        assert f"function {name}(" in client, name
+    assert f"const HASH_PREFIX = {json.dumps(dp.HASH_PREFIX)};" in client
+    assert "const HASH_IDS = HASH_PAGE_IDS.concat(HASH_TAB_IDS);" in client
+    assert "HASH_IDS.indexOf(" in _client_fn("hashPanelId"), "解析必须过白名单"
+    # 白名单逐项在（Python 侧是真源，JS 侧是注入的字面量）：三行 + 工具箱子页签。
+    for hid in dp.HASH_IDS:
+        assert json.dumps(hid) in client, hid
+
+
+def test_hash_whitelist_covers_three_rows_and_toolbox_tabs() -> None:
+    """★ 白名单口径 = 三行（座位 + 工程工具箱）+ 工具箱子页签；两处逐项同源。"""
+    assert set(dp.HASH_PAGE_IDS) == set(dp.SEAT_KEYS) | {"toolbox"}
+    assert set(dp.ROW_KEYS) | {"toolbox"} <= set(dp.HASH_PAGE_IDS)
+    assert list(dp.HASH_IDS) == list(dp.HASH_PAGE_IDS) + list(dp.TOOLBOX_TAB_KEYS)
+    assert not set(dp.HASH_PAGE_IDS) & set(dp.TOOLBOX_TAB_KEYS), "页 id 与子页签 id 不许撞"
+    # 浏览器半的 TOOLBOX_TABS 键必须与 Python 真源逐项一致（顺序即页签顺序）。
+    assert dp._client_toolbox_tabs(dp.CLIENT_JS) == list(dp.TOOLBOX_TAB_KEYS)
+
+
+def test_hash_invalid_id_falls_back_to_default_page() -> None:
+    """★ A309 钉子②：非法 id 回退默认页；别人的 hash 一律不碰（不劫持宿主路由）。"""
+    body = _client_fn("hashPanelId")
+    assert "if (raw.indexOf(HASH_PREFIX) !== 0) return null;" in body
+    assert "if (HASH_IDS.indexOf(id) < 0) {" in body
+    assert "return HASH_DEFAULT_ID;" in body
+    # 默认页 = 工具箱第一页（一打开面板看到的那页），不是工作台那一座。
+    assert dp.HASH_DEFAULT_ID == "overview"
+    assert dp.HASH_DEFAULT_ID in dp.HASH_IDS
+
+
+def test_hash_has_exactly_one_address_bar_writer() -> None:
+    """★ A309：地址栏唯一写者，且只写 hash —— 不压历史栈、不碰 location。"""
+    client = dp.CLIENT_JS
+    assert len(re.findall(r"history\.replaceState\(", client)) == 1, "地址栏唯一写者"
+    assert "function writePanelHash(id) {" in client
+    assert 'window.history.replaceState(null, "", HASH_PREFIX + id)' in client
+    assert not re.search(r"\bpushState\s*\(", client)
+    for api in ("location.assign(", "location.replace(", "location.href ="):
+        assert api not in client, api
+
+
+def test_hash_written_when_switching_tab_and_row() -> None:
+    """★ A309：切页签（Toolbox 的 effect）与切行（座位挂载）都写地址栏。"""
+    toolbox = _client_fn("Toolbox")
+    assert "writePanelHash(tab)" in toolbox
+    assert "hashStore.tab = tab;" in toolbox
+    assert "onClick: () => setTab(key)" in toolbox, "页签点击必须还是切页签"
+    # 切行不劫持点击：每一座在屏 ⇒ 挂载即写自己的 key（行 id 与 main key 同源）。
+    for key in dp.SEAT_KEYS:
+        expected = "usePanelHash(PANEL_ID)" if key == dp.PANEL_ID else f'usePanelHash("{key}")'
+        assert expected in dp.CLIENT_JS, key
+
+
+def test_hash_restored_on_load_and_hashchange() -> None:
+    """★ A309：页面加载按 hash 还原一次；hashchange 走同一段逻辑，卸载时摘掉。"""
+    body = _client_fn("apply")
+    assert "restorePanelHash();" in body
+    assert 'window.addEventListener("hashchange", onHashChange)' in body
+    assert 'window.removeEventListener("hashchange", onHashChange)' in body
+
+
+def test_client_exports_a309_hash_hooks() -> None:
+    """A309：判据钩子导出（不连真 DSH 也能驱动解析 / 写 / 还原）。"""
+    start = dp.CLIENT_JS.index("exports.__a309")
+    block = dp.CLIENT_JS[start:dp.CLIENT_JS.index("return module.exports;", start)]
+    for name in ("hashPanelId", "panelHashTarget", "writePanelHash", "restorePanelHash",
+                 "HASH_IDS", "HASH_DEFAULT_ID", "HASH_PREFIX"):
+        assert name in block, name
+
+
+def test_client_check_bites_when_hash_whitelist_removed() -> None:
+    """★ A309 反例：解析不过白名单 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("if (HASH_IDS.indexOf(id) < 0) {", "if (false) {")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("白名单" in p for p in problems), problems
+
+
+def test_client_check_bites_when_hash_default_fallback_removed() -> None:
+    """★ A309 反例：非法 id 不回退默认页 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("return HASH_DEFAULT_ID;", "return null;")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("回退默认页" in p for p in problems), problems
+
+
+def test_client_check_bites_when_second_address_bar_writer() -> None:
+    """★ A309 反例：地址栏出现第二个写者 ⇒ check 必须红（切页签 / 切行会各写一套）。"""
+    broken = dp.CLIENT_JS.replace(
+        "function writePanelHash(id) {",
+        'function writePanelHash(id) { window.history.replaceState(null, "", id);',
+        1,
+    )
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("地址栏写了 2 处" in p for p in problems), problems
