@@ -1,3 +1,6 @@
+## grill-me 参考接进三层（意图/规格/契约）
+- `skills/softeng-manage/references/doc-layers.md` 三层各加「决策怎么定」，指向 grill-me 参考。
+- `skills/README.md` 去掉 spec-grill 占位行，改指向 `skills/softeng-manage/references/grill-me.md`。
 ## 技能层补全：新建 / 接链 / 文档层 / 资产边界 + 命令漂移修正
 - 新增 `skills/pipe-new/`：把「框架层 `pipe-init`」与「本仓工作链 `wb_*`」分成两条路，首笔落地三个最常见失败引 `tools/pool/landing.py` 源码原话。
 - 新增 `skills/pipe-takeover/references/attach-to-chain.md`：六步接链，每步一条命令一个验收。

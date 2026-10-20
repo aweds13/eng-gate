@@ -3189,7 +3189,7 @@ spec = "复盘/卡/卡A305-spec-grill技能.md"
 files = ["skills/spec-grill/SKILL.md"]
 depends = ["A304"]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A306"

@@ -49,11 +49,11 @@
 规范离线副本：`docs/reference/agent-skills-spec.md`；改技能时逐条过的自检表：
 `skills/softeng-manage/references/spec-checklist.md`。
 
-## §3 skills 清单（9 个 + 1 个占位）
+## §3 skills 清单（9 个）
 
 | skill | 覆盖的动作 | 本仓真命令 | references |
 |---|---|---|---|
-| `softeng-manage` | **总入口**：六段路由 + 六条铁律 | 只路由（细节见右列技能） | `mapping.md` · `commands.md` · `spec-checklist.md` · `doc-layers.md` · `asset-layers.md` |
+| `softeng-manage` | **总入口**：六段路由 + 六条铁律 | 只路由（细节见右列技能） | `mapping.md` · `commands.md` · `spec-checklist.md` · `doc-layers.md` · `asset-layers.md` · `grill-me.md` |
 | `pipe-card` | 开卡 / 派活 / 申报 | `tools/wb_dispatch.py` · `tools/wb_task.py` · `tools/wb_stage_card.py` | `dispatch.md` |
 | `pipe-gate` | 跑门并读懂结果 | `scripts/run_gates.py` + `tools/wb_verify.py` | `output.md` |
 | `pipe-land` | 集成与落地（八步链） | `tools/wb_land.py` · `tools/wb_verify.py` | `land-steps.md` |
@@ -62,12 +62,13 @@
 | `pipe-new` | 在本仓内从零起一条工作链 | `tools/wb_plan.py` · `tools/wb_dispatch.py` · `tools/wb_land.py` | `first-landing.md` |
 | `pipe-init` | 铺框架骨架（框架层，唯一还用 CLI 的） | 框架 CLI 的 `init` 子命令（见技能正文） | `scaffold.md` |
 | `pipe-takeover` | 接管旧项目：勘察定类 → 映射 → 接链 | `tools/wb_takeover.py` | `classify.md` · `mapping.md` · `limits.md` · `attach-to-chain.md` |
-| `spec-grill` | **占位**：规格问询（把需求问成可验收的规格） | 待补 | 待补 |
 
-`spec-grill` 这一行是**占位**：目录与正文由后续的卡补，不在这张卡的改动范围里 ——
-别顺手写一个新技能出来。
+`spec-grill` 不再单独立技能（卡 A305 的决定）：grill-me 是意图 / 规格 / 契约三层**共用**的
+决策方法，落成参考 `skills/softeng-manage/references/grill-me.md`，由 `softeng-manage` 按需加载；
+三层各有一句指引写在 `skills/softeng-manage/references/doc-layers.md` 里 ——
+别按旧占位顺手补一个 `spec-grill` 目录出来。
 
-除 `softeng-manage`（路由）与 `spec-grill`（占位）之外，其余八个是**动作技能**（一种操作一份）：
+除 `softeng-manage`（路由）之外，其余八个是**动作技能**（一种操作一份）：
 它们不重复动作细节以外的判据，只给「这件事该走哪个工具 / 哪条铁律不能破 / 本仓命令与技能文档的差异」。
 装法相同，注册脚本会把它们一起挂到工人技能根。
 

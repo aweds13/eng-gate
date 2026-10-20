@@ -7762,3 +7762,19 @@ evidence = [
   "file:复盘/交接.d/T-AG418.md",
 ]
 gaps = "- `pipe-new` 的「首笔落地」只在纸面走通：`skills/pipe-new/references/first-landing.md` 里只有命令，还没有在真正的空目录里实测过；验证要等新仓建起来（卡 A306 的空仓验证会覆盖）。- `doc-layers.md` 里的 timeflow 实例只给路径不给摘录，读者仍需自己去 `docs/intention/needs.md` 对照。- `skills/softeng-manage/references/asset-layers.md` 的耦合点按源码口径是 8 个文件 20 处（`tools/wb_dispatch.py` 6 处最多），卡规格里写的 15 处是含 `__pycache__` 的旧读数。"
+
+[entries."T-AG419"]
+id = "T-AG419"
+title = "grill-me 参考接进三层（意图/规格/契约）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:skills/softeng-manage/references/doc-layers.md",
+  "file:skills/README.md",
+  "file:复盘/卡/卡A305-spec-grill技能.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/changelog.d/T-AG419.md",
+  "file:docs/traceability.d/T-AG419.toml",
+  "file:复盘/交接.d/T-AG419.md",
+]
+gaps = "- `skills/softeng-manage/references/spec-checklist.md` 里「spec-grill 还是占位」一句已过期，改它超出本卡域，留待后续小改。- 只接了前三层；实现/品味两层不走访谈（口径见 `skills/softeng-manage/references/doc-layers.md`）。"
