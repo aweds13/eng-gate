@@ -1071,3 +1071,75 @@ def test_panel_concurrency_reaches_wb_plan(tmp_path: Path) -> None:
     assert wb_plan.settings_concurrency(tmp_path) is None, "越界值不许透传"
     (tmp_path / "tools" / "settings.toml").unlink()
     assert wb_plan.settings_concurrency(tmp_path) is None, "没文件就退回默认"
+
+
+# ================================================================== 卡 A289 · T-AG403
+# 首屏秒开：不拿加载占位行挡首帧 —— 客户端 SWR 缓存 + 骨架 + 宿主 stack-status 缓存。
+# ★ 每条先红后绿；既有判据一条不删。
+
+
+def test_client_first_frame_reads_cache_and_marks_stale() -> None:
+    """★ A289：浏览器半有 SWR —— localStorage 缓存（键含 route、带时间戳）+「上次读数」。"""
+    client = dp.CLIENT_JS
+    assert "localStorage" in client
+    assert "readCache(" in client and "writeCache(" in client
+    assert "cacheKey(" in client
+    assert "上次读数 " in client
+
+
+def test_client_never_walls_first_frame_with_loading_text() -> None:
+    """★ A289：加载占位字面不许再独占首屏 —— 整份浏览器半零命中；骨架要有。"""
+    assert "读数中…" not in dp.CLIENT_JS
+    assert '"data-wb-state": "loading"' in dp.CLIENT_JS
+    assert "data-wb-skeleton" in dp.CLIENT_JS
+
+
+def test_client_keeps_stale_reading_on_failure() -> None:
+    """★ A289：断服务保留上次读数 + 红点 + 原话（error setState 保留 prev.data/prev.at）。"""
+    client = dp.CLIENT_JS
+    assert "prev.data" in client and "prev.at" in client
+    assert "T.bad" in client  # 红点走主题令牌，不引颜色字面量（卡 251 仍咬）
+
+
+def test_client_swr_check_bites_when_cache_removed() -> None:
+    """★ A289 反例：切掉缓存读 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("readCache(", "readGone(")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("A289" in p for p in problems), problems
+
+
+def test_client_loading_wall_check_bites_when_text_returns() -> None:
+    """★ A289 反例：塞回加载占位字面 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS + '\nconst evil = "读数中…";\n'
+    problems = dp.check(client_js=broken)
+    assert any("读数中…" in p for p in problems), problems
+
+
+def test_host_stack_status_cache_with_ttl_budget_and_flag() -> None:
+    """★ A289：宿主半 stack-status 有进程内缓存：TTL 5s + 命中 cached:true + 单次 1.5s 预算。"""
+    host = dp._host_js()
+    assert "STACK_STATUS_TTL_MS" in host
+    assert "STACK_STATUS_BUDGET_MS" in host
+    assert "cached: true" in host
+    assert "serveStackStatus(res)" in host  # 路由真走到缓存版 handler
+
+
+def test_host_stack_status_cache_invalidated_after_actions() -> None:
+    """★ A289：起停动作之后缓存就地作废（动作缝里 stackStatusCache = null）。"""
+    assert "stackStatusCache = null" in dp._host_js()
+
+
+def test_host_stack_status_cache_check_bites_when_cache_removed() -> None:
+    """★ A289 反例：拿掉 TTL 缓存 ⇒ check 必须红。"""
+    broken = dp.HOST_JS.replace("STACK_STATUS_TTL_MS", "STACK_STATUS_GONE")
+    assert broken != dp.HOST_JS
+    problems = dp.check(host_js=broken)
+    assert any("A289" in p or "缓存" in p for p in problems), problems
+
+
+def test_client_exports_a289_test_hooks() -> None:
+    """★ A289：判据钩子导出（Node 判据/计时用；DSH 只消费 apply/inject）。"""
+    assert "exports.__a289" in dp.CLIENT_JS
+    for name in ("SourceShell", "useSource", "readCache", "writeCache"):
+        assert name in dp.CLIENT_JS

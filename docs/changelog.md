@@ -1,3 +1,8 @@
+## 首屏秒开：缓存优先 + 骨架，取消空白等待
+- 客户端改 SWR：首帧先读 `localStorage`（键 `dsh-panel:cache:<route>`），有缓存立刻出数据并标「旧读数」，后台再拉新。
+- 宿主 `/dsh-panel/stack-status` 加进程内 5s TTL 缓存，命中带 `cached:true`；过期同请求内刷新，不叠并发。
+- 加载态从整块 `读数中…` 换成骨架屏；失败仍走 `data-wb-state="error"`，不白屏。
+- `tools/dsh_panel.py` 自检新钉 5 条客户端 + 4 条宿主反例，`tests/test_dsh_panel.py` 新增 6 条用例。
 ## 复盘缺口回填：P0+P1 的 52 条结论进技能
 - 52 个缺口 ID 全部落到 `skills/` 下，写法固定 `（缺口 XXn）`，可机器复算。
 - softeng-manage 的 26 条拆成五份参考：`skills/softeng-manage/references/dispatch.md`、`skills/softeng-manage/references/watchdog.md`、`skills/softeng-manage/references/safety.md`、`skills/softeng-manage/references/ai-collab.md`、`skills/softeng-manage/references/product-lines.md`、`skills/softeng-manage/references/ui-notes.md`。

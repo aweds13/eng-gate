@@ -3024,7 +3024,7 @@ spec = "复盘/卡/卡A289-首屏秒开.md"
 files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A290"

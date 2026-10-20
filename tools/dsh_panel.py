@@ -714,6 +714,39 @@ function readStatus() {
   }
 }
 
+/* ---- 卡 A289：/dsh-panel/stack-status 的进程内缓存 ----
+ * TTL 5s：命中直接回上次 JSON（外层带 cached:true）；过期同步重算，
+ * 但单次响应不得 > 1.5s（spawnSync 预算 1500ms，跑不完如实报超时原话，不静默）。
+ * 只缓存 GET /dsh-panel/stack-status 这一条路由：三条读数路由与动作缝不缓存
+ * （动作缝自己要真状态，起停之后缓存就地作废）。 */
+const STACK_STATUS_TTL_MS = 5000;
+const STACK_STATUS_BUDGET_MS = 1500;
+let stackStatusCache = null; /* { at: ms, payload: status JSON } */
+
+function readStatusFresh() {
+  const done = runStack(["status", "--json"], STACK_STATUS_BUDGET_MS);
+  if (!done.ok) return { ok: false, error: done.error || done.output };
+  try {
+    return JSON.parse(done.output);
+  } catch (error) {
+    return { ok: false, error: `status --json 输出不是 JSON：${error.message}` };
+  }
+}
+
+function serveStackStatus(res) {
+  const now = Date.now();
+  const hit = stackStatusCache !== null && now - stackStatusCache.at < STACK_STATUS_TTL_MS;
+  if (hit) {
+    sendJson(res, 200, Object.assign(
+      { ok: true, status: stackStatusCache.payload, recent: recentActions() },
+      { cached: true }));
+    return;
+  }
+  const status = readStatusFresh();
+  stackStatusCache = { at: Date.now(), payload: status };
+  sendJson(res, 200, { ok: true, status, recent: recentActions() });
+}
+
 /** 卡 253：动作日志最后几行（读不到 ⇒ 空表 + 不假装）。 */
 function recentActions() {
   const root = repoRoot();
@@ -752,6 +785,7 @@ function serveAction(req, res, url) {
   const args = ["--actor", "panel", kind];
   if (kind !== "start-all") args.push(name);
   const done = runStack(args, 45000);
+  stackStatusCache = null; /* 卡 A289：起停之后缓存作废，下一次走现读 */
   sendJson(res, 200, {
     ok: done.ok,
     output: done.output,
@@ -1071,7 +1105,7 @@ function serveSeam(req, res) {
     return;
   }
   if (url.pathname === STACK_STATUS_ROUTE) {
-    sendJson(res, 200, { ok: true, status: readStatus(), recent: recentActions() });
+    serveStackStatus(res); /* 卡 A289：TTL 5s 进程内缓存，命中带 cached:true */
     return;
   }
   const seat = SEATS.find((row) => row.route === url.pathname);
@@ -1241,41 +1275,130 @@ window.__ModuleLoader__.load({
 __TARGETS__
     };
 
-    /* ---- 取数：同源、只 GET（宿主半那条只读缝） ---- */
+    /* ---- 取数：同源、只 GET（宿主半那条只读缝）----
+     * ★ 卡 A289 · stale-while-revalidate：首帧**同步**读 localStorage（键含 route、带时间戳）
+     * —— 有旧值直接渲染旧值 + 「上次读数 hh:mm」；同时后台 fetch 刷新：成功覆盖并回写，
+     * 失败保留旧值 + 状态点变红 + 原话（HTTP 码 / 异常）。无缓存才画骨架。
+     * 绝不再拿一行「读数中」独占整屏（卡 A289 判据咬这个字面 + 省略号）。 */
+    const CACHE_PREFIX = "dsh-panel:cache:";
+    function cacheKey(route) {
+      return CACHE_PREFIX + route;
+    }
+    function readCache(route) {
+      try {
+        const raw = window.localStorage.getItem(cacheKey(route));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object" || !("data" in parsed)) return null;
+        return { data: parsed.data, at: Number(parsed.at) || 0 };
+      } catch (error) {
+        return null;
+      }
+    }
+    function writeCache(route, data) {
+      try {
+        window.localStorage.setItem(cacheKey(route), JSON.stringify({ data, at: Date.now() }));
+      } catch (error) {
+        /* 配额满 / 隐私模式写不进就算了：缓存只是加速，不影响读数本身 */
+      }
+    }
+    function hhmm(ts) {
+      if (!ts) return "??:??";
+      const d = new Date(ts);
+      const p = (n) => (n < 10 ? "0" + String(n) : String(n));
+      return p(d.getHours()) + ":" + p(d.getMinutes());
+    }
     function useSource(route) {
-      const [state, setState] = react.useState({ status: "loading" });
+      const [tick, setTick] = react.useState(0);
+      const refresh = react.useCallback(() => setTick((n) => n + 1), []);
+      const [state, setState] = react.useState(() => {
+        const cached = readCache(route);
+        return cached
+          ? { status: "stale", data: cached.data, at: cached.at }
+          : { status: "skeleton" };
+      });
       react.useEffect(() => {
         let alive = true;
         fetch(route, { method: "GET" })
-          .then((response) => response.json())
-          .then((data) => { if (alive) setState({ status: "ready", data }); })
+          .then(readJson)
+          .then((data) => {
+            if (!alive) return;
+            if (data && typeof data === "object" && data.ok === false) {
+              /* 读数失败也保留旧值 + 原话（卡 A289：失败不白屏） */
+              setState((prev) => ({ status: "error",
+                error: String(data.error || "读数失败"), data: prev.data, at: prev.at }));
+              return;
+            }
+            writeCache(route, data);
+            setState({ status: "ready", data });
+          })
           .catch((error) => {
-            if (alive) setState({ status: "error", error: String(error.message || error) });
+            if (!alive) return;
+            setState((prev) => ({ status: "error",
+              error: String(error.message || error), data: prev.data, at: prev.at }));
           });
         return () => { alive = false; };
-      }, [route]);
-      return state;
+      }, [route, tick]);
+      return { state, refresh };
     }
 
-    /* 失败可见：取数失败 / 读数失败 ⇒ data-wb-state="error" + 原话；不白屏。 */
+    /* ★ 卡 A289 · 无缓存首帧的页面骨架：标题 + 状态点 + 操作位 ——
+     * 绝不拿单行文字独占整屏（旧的那行加载字面整份浏览器半里已清零）。 */
+    function LoadingSkeleton(props) {
+      return h("div", { "data-wb-state": "loading", style: UI.page },
+        h("div", { style: UI.bar },
+          h("h2", { style: UI.title }, props.title),
+          h("span", { "data-wb-probe": "checking", style: UI.pill },
+            h("span", { style: UI.dot }), "首次读数中"),
+          h("span", { style: { flex: 1 } }),
+          h("button", { style: UI.seg, onClick: props.onRefresh }, "刷新")),
+        h("div", { "data-wb-skeleton": "", style: UI.card },
+          h("div", { style: UI.row }, h("span", { style: UI.muted }, "…")),
+          h("div", { style: UI.row }, h("span", { style: UI.muted }, "…")),
+          h("p", { style: UI.muted },
+            "没有上次读数可先显示（缓存为空）—— 读数一到就替换这块。")));
+    }
+
+    /* 失败可见：取数失败 / 读数失败 ⇒ data-wb-state="error" + 原话；不白屏。
+     * ★ 卡 A289：首帧不白等 —— 有缓存先渲染上次读数（状态点标「上次读数 hh:mm」）；
+     * 断服务保留上次读数 + 红点 + 原话，照样不白屏。 */
     function SourceShell(props) {
-      const state = useSource(props.route);
-      if (state.status === "loading") {
-        return h("div", { "data-wb-state": "loading" }, h("p", null, "读数中…"));
+      const source = useSource(props.route);
+      const state = source.state;
+      if (state.status === "skeleton") {
+        return h(LoadingSkeleton,
+          { title: props.title, route: props.route, onRefresh: source.refresh });
       }
-      if (state.status === "error") {
+      if (state.status === "error" && !state.data) {
         return h("div", { "data-wb-state": "error", "data-wb-error": "fetch" },
           h("h2", null, props.title + "：数据源不可用"),
           h("p", { "data-wb-error": "" }, state.error),
           h("p", null, "读数源缺失：" + props.route));
       }
       const data = state.data;
-      if (data && data.ok === false) {
-        return h("div", { "data-wb-state": "error", "data-wb-error": "read-failed" },
-          h("h2", null, props.title + "：读数失败"),
-          h("p", { "data-wb-error": "" }, String(data.error || "未知错误")));
-      }
-      return props.render(data ? data.reading : undefined);
+      const failing = state.status === "error";
+      const reading = data && data.reading !== undefined ? data.reading : data;
+      return h("div", {
+          "data-wb-state": failing ? "error" : "ok",
+          "data-wb-error": failing ? String(state.error || "") : undefined,
+          style: UI.page },
+        h("div", { style: UI.bar },
+          h("h2", { style: UI.title }, props.title),
+          failing
+            ? h("span", { "data-wb-probe": "down", style: UI.pill, color: T.bad },
+                h("span", { style: { ...UI.dot, background: T.bad } }),
+                "读数失败 · 上次读数 " + hhmm(state.at))
+            : state.status === "stale"
+              ? h("span", { "data-wb-stale": "", style: UI.pill },
+                  h("span", { style: UI.dot }), "上次读数 " + hhmm(state.at))
+              : null,
+          h("span", { style: { flex: 1 } }),
+          h("button", { style: UI.seg, onClick: source.refresh }, "刷新")),
+        failing
+          ? h("p", { "data-wb-error": "", style: UI.error },
+              "刷新失败（原话：" + String(state.error || "未知") + "）—— 下面保留上次读数")
+          : null,
+        props.render(reading));
     }
 
     /* ---- 卡 242 · 快捷入口（默认视图）：开真实页面 ----
@@ -1635,11 +1758,12 @@ __TARGETS__
     const PARAMS_ROUTE = "/dsh-panel/settings";
 
     function ToolboxOverview() {
-      const state = useSource(STACK_STATUS_ROUTE);
+      const source = useSource(STACK_STATUS_ROUTE);
+      const state = source.state;
       const control = useServiceControl();
       const [openError, setOpenError] = react.useState("");
-      const rows = state.status === "ready" && state.data && state.data.ok
-        ? state.data.status.components : [];
+      const rows = state.data && state.data.ok && state.data.status
+        ? state.data.status.components || [] : [];
       return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
         h("div", { style: UI.card },
           h("div", { style: UI.row },
@@ -1650,7 +1774,11 @@ __TARGETS__
               h("button", { style: { ...UI.secondary, marginLeft: "8px" },
                 onClick: () => control.reload() }, "刷新"))),
           state.status === "error"
-            ? h("p", { "data-wb-error": "", style: UI.error }, "服务读数失败：" + state.error)
+            ? h("p", { "data-wb-error": "", style: UI.error },
+                "服务读数失败（原话：" + state.error + "）—— 保留上次读数")
+            : null,
+          state.status === "skeleton"
+            ? h("p", { style: UI.muted }, "首次读数中（无缓存）")
             : rows.length
               ? h("div", { style: { display: "flex", flexDirection: "column", gap: "6px" } },
                   rows.map((row) => h("div", { key: row.name, style: UI.row },
@@ -1660,7 +1788,7 @@ __TARGETS__
                       style: { ...UI.secondary, padding: "3px 10px", fontSize: "12px" },
                       onClick: () => control.run(row.running ? "stop" : "start", row.name),
                     }, row.running ? "停" : "起"))))
-              : h("p", { style: UI.muted }, "读数中…"),
+              : null,
           control.action ? h("p", { style: UI.muted }, control.action.text) : null),
         h("div", { style: UI.card },
           h("p", { style: UI.muted }, "三个入口（右栏打开，不切窗口）"),
@@ -1688,14 +1816,7 @@ __TARGETS__
     const OTHER = (card) => card.status !== "pending" && card.status !== "done" &&
       !RUNNING(card);
 
-    function ToolboxBoard() {
-      const state = useSource("/dsh-panel/workbench-board");
-      if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
-      const data = state.data || {};
-      if (state.status === "error" || data.ok === false) {
-        return errorLine("看板读数不可用", state.error || data.error);
-      }
-      const cards = (data.reading && data.reading.cards) || [];
+    function boardColumns(cards) {
       const columns = [
         ["pending", "待办", (card) => card.status === "pending"],
         ["running", "在跑", RUNNING],
@@ -1716,8 +1837,29 @@ __TARGETS__
         }));
     }
 
+    function ToolboxBoard() {
+      const source = useSource("/dsh-panel/workbench-board");
+      const state = source.state;
+      if (state.status === "skeleton") {
+        return h(LoadingSkeleton, { title: "看板", onRefresh: source.refresh });
+      }
+      const data = state.data || {};
+      const cards = (data.reading && data.reading.cards) || [];
+      const failed = state.status === "error" || data.ok === false;
+      return h("div", {
+          "data-wb-state": failed ? "error" : "ok",
+          style: { display: "flex", flexDirection: "column", gap: "8px" } },
+        failed
+          ? h("p", { "data-wb-error": "", style: UI.error },
+              "看板读数失败（原话：" + String(state.error || data.error || "未知")
+                + "）—— 下面保留上次读数")
+          : null,
+        boardColumns(cards));
+    }
+
     function ToolboxPool() {
-      const state = useSource("/dsh-panel/workbench-board");
+      const source = useSource("/dsh-panel/workbench-board");
+      const state = source.state;
       const [filter, setFilter] = react.useState("live");
       const [msg, setMsg] = react.useState("");
       /* ★ 卡 A284：派活 / 放租约。先弹确认，再把宿主半回的原话贴回来。 */
@@ -1731,18 +1873,18 @@ __TARGETS__
             + (body.text ? `　${body.text}` : (body.error || ""))))
           .catch((error) => setMsg(`${verb} 卡 ${id}：失败 ${error.message}`));
       };
-      if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
-      const data = state.data || {};
-      if (state.status === "error" || data.ok === false) {
-        return errorLine("号池读数不可用", state.error || data.error);
+      if (state.status === "skeleton") {
+        return h(LoadingSkeleton, { title: "号池", onRefresh: source.refresh });
       }
+      const data = state.data || {};
       const cards = (data.reading && data.reading.cards) || [];
-      const failed = (card) => LIVE(card) && card.status !== "pending" && !RUNNING(card);
+      const failedPick = (card) => LIVE(card) && card.status !== "pending" && !RUNNING(card);
+      const failed = state.status === "error" || data.ok === false;
       const filters = [
         ["live", "未收口", LIVE],
         ["all", "全部", () => true],
         ["done", "已完成", (card) => card.status === "done"],
-        ["failed", "失败/其它", failed],
+        ["failed", "失败/其它", failedPick],
       ];
       const picked = filters.filter(([key]) => key === filter);
       const rows = cards.filter((picked.length ? picked[0] : filters[0])[2]);
@@ -1750,7 +1892,13 @@ __TARGETS__
         h("span", { style: Object.assign({}, UI.muted, { width: "64px" }) }, "卡"),
         h("span", { style: Object.assign({}, UI.muted, { width: "120px" }) }, "状态"),
         h("span", { style: UI.muted }, "任务"));
-      return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+      return h("div", { "data-wb-state": failed ? "error" : "ok",
+          style: { display: "flex", flexDirection: "column", gap: "10px" } },
+        failed
+          ? h("p", { "data-wb-error": "", style: UI.error },
+              "号池读数失败（原话：" + String(state.error || data.error || "未知")
+                + "）—— 下面保留上次读数")
+          : null,
         h("div", {
           style: Object.assign({}, UI.card, { display: "flex", gap: "8px", flexWrap: "wrap" }),
         },
@@ -1782,14 +1930,23 @@ __TARGETS__
     }
 
     function ToolboxSkills() {
-      const state = useSource("/dsh-panel/skills");
-      if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
+      const source = useSource("/dsh-panel/skills");
+      const state = source.state;
+      if (state.status === "skeleton") {
+        return h(LoadingSkeleton, { title: "技能", onRefresh: source.refresh });
+      }
       const data = state.data || {};
-      if (state.status === "error" || data.ok === false) {
+      const failed = state.status === "error" || data.ok === false;
+      if (failed && !state.data) {
         return errorLine("技能清单不可用", state.error || data.error);
       }
       const items = data.items || [];
-      return h("div", { style: UI.card },
+      return h("div", { "data-wb-state": failed ? "error" : "ok", style: UI.card },
+        failed
+          ? h("p", { "data-wb-error": "", style: UI.error },
+              "技能清单读数失败（原话：" + String(state.error || data.error || "未知")
+                + "）—— 下面保留上次读数")
+          : null,
         h("p", { style: UI.muted },
           "仓库 skills/ 下共 " + String(items.length) + " 份（只读）"),
         items.map((item) => h("div", { key: item.name, style: UI.row },
@@ -1815,7 +1972,17 @@ __TARGETS__
         }).catch((error) => setState({ status: "error", error: String(error.message || error) }));
       }, []);
       react.useEffect(() => { load(); }, [load]);
-      if (state.status === "loading") return h("p", { style: UI.muted }, "读数中…");
+      if (state.status === "loading") {
+        /* 卡 A289：无缓存首帧也画骨架，不拿一行字独占整页。 */
+        return h("div", { "data-wb-state": "loading", style: UI.page },
+          h("div", { style: UI.bar },
+            h("h2", { style: UI.title }, "参数"),
+            h("span", { "data-wb-probe": "checking", style: UI.pill },
+              h("span", { style: UI.dot }), "首次读数中")),
+          h("div", { "data-wb-skeleton": "", style: UI.card },
+            h("p", { style: UI.muted },
+              "参数键与允许范围读到就显示（这里不缓存，每次现读）。")));
+      }
       const data = state.data || {};
       if (state.status === "error" || data.ok === false) {
         return errorLine("参数不可用", state.error || data.error);
@@ -2107,6 +2274,10 @@ __RIGHT_TABS__
 
     exports.apply = apply;
     exports.inject = inject;
+    /* ★ 卡 A289：判据钩子 —— 不连真 DSH 也能驱动「首帧」路径（Node 判据 / 计时用）。
+     * DSH 只消费 apply / inject，多出的导出无副作用。 */
+    exports.__a289 = { SourceShell, useSource, readCache, writeCache, cacheKey,
+      LoadingSkeleton };
     return module.exports;
   },
 });
@@ -2423,7 +2594,7 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 
 | 方向 | 路径 | 方法 | 说明 |
 |---|---|---|---|
-| 读 | `/dsh-panel/stack-status` | GET | 服务现读：端口 / RSS / 日志尾 |
+| 读 | `/dsh-panel/stack-status` | GET | 服务现读：端口 / RSS / 日志尾（卡 A289：TTL 5s 缓存） |
 | 读 | `/dsh-panel/workbench-board` | GET | 工作台六块读数 |
 | 读 | `/dsh-panel/zentao-gantt` | GET | 禅道甘特（脚本回退视图） |
 | 读 | `/dsh-panel/timeflow-inbox` | GET | 时间流收件箱 |
@@ -2437,6 +2608,10 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 | 读 | `/dsh-panel/proxy/z/zentao/…` | GET | 禅道反代（抹 `X-Frame-Options` / CSP，cookie 透传） |
 
 白名单键与范围：`tf_gate_min_free_gb`（0–64）、`gate_workers`（1–8）、`pool_concurrency`（1–8）。
+stack-status 缓存口径（卡 A289）：
+
+- 进程内缓存 TTL 5s，命中带 `cached:true`；过期同步重算，单次响应预算 1.5s。
+- 起停动作后缓存作废；三条读数路由与动作缝不缓存。
 写方法只有上面三条 POST；其余一律 GET，非 GET 直接 405。
 """
 
@@ -2736,6 +2911,25 @@ def _check_client(source: str) -> list[str]:
         problems.append("[浏览器半] 缺动作缝调用（ACTION_ROUTE + POST，卡 253）")
     if "STACK_STATUS_ROUTE" not in source:
         problems.append("[浏览器半] 缺服务现读路由（STACK_STATUS_ROUTE，卡 253）")
+    # ---- 卡 A289 判据（首屏秒开：SWR + 骨架，不拿「读数中…」挡首帧）----
+    if "localStorage" not in source or "readCache(" not in source or "writeCache(" not in source:
+        problems.append(
+            "[浏览器半] 缺 stale-while-revalidate：首帧要同步读 localStorage 旧值"
+            "（readCache/writeCache，键含 route，卡 A289）"
+        )
+    if "上次读数 " not in source:
+        problems.append("[浏览器半] 缓存命中要标「上次读数 hh:mm」（卡 A289）")
+    if "读数中…" in source:
+        problems.append(
+            "[浏览器半] 又出现「读数中…」独占首屏"
+            "（卡 A289：有缓存画旧值、无缓存画骨架，绝不拿一行字挡首帧）"
+        )
+    if "data-wb-skeleton" not in source:
+        problems.append("[浏览器半] 缺无缓存首帧的页面骨架（data-wb-skeleton，卡 A289）")
+    if "prev.data" not in source or "prev.at" not in source:
+        problems.append(
+            "[浏览器半] 刷新失败要保留上次读数（setState 保留 prev.data / prev.at，卡 A289）"
+        )
     problems.extend(_check_read_only("浏览器半", source))
     return problems
 
@@ -2791,6 +2985,23 @@ def _check_host(source: str) -> list[str]:
         problems.append('[宿主半] 动作缝没钉住只 POST（缺 req.method !== "POST" 守卫）')
     if "ACTION_ROUTE" not in source or "STACK_STATUS_ROUTE" not in source:
         problems.append("[宿主半] 缺动作缝 / 服务现读路由（ACTION_ROUTE / STACK_STATUS_ROUTE）")
+    # ---- 卡 A289 判据（stack-status 进程内缓存）----
+    if "STACK_STATUS_TTL_MS" not in source or "serveStackStatus" not in source:
+        problems.append(
+            "[宿主半] /stack-status 缺进程内缓存（STACK_STATUS_TTL_MS + serveStackStatus，"
+            "卡 A289：TTL 5s，命中带 cached:true）"
+        )
+    if "cached: true" not in source:
+        problems.append("[宿主半] 缓存命中缺 cached: true 标记（卡 A289）")
+    if "STACK_STATUS_BUDGET_MS" not in source:
+        problems.append(
+            "[宿主半] 缺单次响应预算 STACK_STATUS_BUDGET_MS"
+            "（卡 A289：过期同步重算，但单次响应不得 > 1.5s）"
+        )
+    if "stackStatusCache = null" not in source:
+        problems.append(
+            "[宿主半] 起停动作后缓存不作废（卡 A289：动作缝里要 stackStatusCache = null）"
+        )
     if "start-all" not in source:
         problems.append("[宿主半] 缺「全部起」（start-all）这条白名单动作（卡 253）")
     for bad in ("shell: true", "shell:true", "exec(", "execSync"):
