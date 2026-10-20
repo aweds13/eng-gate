@@ -1143,3 +1143,110 @@ def test_client_exports_a289_test_hooks() -> None:
     assert "exports.__a289" in dp.CLIENT_JS
     for name in ("SourceShell", "useSource", "readCache", "writeCache"):
         assert name in dp.CLIENT_JS
+
+
+# ================================================================== 卡 A297 · T-AG411
+# 收工回推通道：宿主半加只读路由 /dsh-panel/notifications；总览页顶部显示状态条。
+# ★ 每条先红后绿；既有判据一条不删。
+
+
+def test_notifications_route_constant() -> None:
+    """★ A297：宿主半有 NOTIFICATIONS_ROUTE 常量 = /dsh-panel/notifications。"""
+    assert dp.NOTIFICATIONS_ROUTE == "/dsh-panel/notifications"
+    assert dp.NOTIFICATIONS_ROUTE in dp.HOST_JS
+
+
+def test_host_serves_notifications_and_dispatches() -> None:
+    """★ A297：serveNotifications 既定义又分发（卡 A286 同型坑：定义了不分发 = 死代码）。"""
+    src = dp._host_js()
+    assert "function serveNotifications(" in src, "serveNotifications 没定义"
+    assert "serveNotifications(req, res)" in src, "serveNotifications 没被 serveSeam 分发"
+
+
+def test_host_reads_done_cards_to_filter_notifications() -> None:
+    """★ A297：宿主半读 backlog 排掉已落地卡（readDoneCards；不引 TOML 解析器）。"""
+    src = dp._host_js()
+    assert "function readDoneCards()" in src
+    assert "status" in src and "done" in src  # 简单逐行扫，认 status = "done"
+
+
+def test_host_notifications_route_is_get_only() -> None:
+    """★ A297：/dsh-panel/notifications 只 GET —— serveNotifications 自带方法守卫，
+    且分发在 serveSeam 的 GET 闸门之后（双保险）。"""
+    src = dp._host_js()
+    # serveNotifications 自带 `req.method !== "GET"` ⇒ 非 GET 一律 405。
+    ns = src.find("function serveNotifications(")
+    assert ns > 0
+    guard_in_handler = src.find('req.method !== "GET"', ns)
+    end_of_handler = src.find("\n}", ns)
+    assert 0 < guard_in_handler < end_of_handler, "serveNotifications 自带 GET 守卫"
+    # 分发也在 serveSeam 的 GET 闸门之后（serveSeam 里那道 GET 闸门）。
+    seam_guard = src.rfind('req.method !== "GET"', 0, src.find("function apply("))
+    dispatch = src.rfind("serveNotifications(req, res)", 0, src.find("function apply("))
+    assert seam_guard > 0 and dispatch > 0
+    assert dispatch > seam_guard, "notifications 分发必须在 serveSeam 的 GET 闸门之后"
+
+
+def test_client_fetches_notifications_route() -> None:
+    """★ A297：客户端读 /dsh-panel/notifications（NotificationsBanner 用 useSource）。"""
+    assert "/dsh-panel/notifications" in dp.CLIENT_JS
+    assert "NotificationsBanner" in dp.CLIENT_JS
+    assert "useSource" in dp.CLIENT_JS
+
+
+def test_client_shows_unread_count_and_recent_card() -> None:
+    """★ A297：状态条文案「已收工未收口 N（最近：A289 20:14）」齐全。"""
+    for needle in ("已收工未收口", "最近：", "data-wb-notifications"):
+        assert needle in dp.CLIENT_JS, needle
+
+
+def test_client_zero_unread_hides_banner() -> None:
+    """★ A297：零未读 ⇒ 不显示状态条（return null）。"""
+    # 函数体里要有 unread === 0 的早退分支。
+    assert "if (unread === 0) return null" in dp.CLIENT_JS
+
+
+# ---- ★ 反例（先红后绿）----
+
+
+def test_host_check_bites_when_dispatch_removed() -> None:
+    """★ A297 反例：serveNotifications 定义了但 serveSeam 里不调 ⇒ check 必须红（A286 同型坑）。"""
+    broken = dp.HOST_JS.replace("serveNotifications(req, res)", "serveNotificationsGone(req, res)")
+    assert broken != dp.HOST_JS
+    problems = dp.check(host_js=broken)
+    assert any("serveNotifications" in p for p in problems), problems
+
+
+def test_host_check_bites_when_handler_undefined() -> None:
+    """★ A297 反例：连 serveNotifications 函数都没了 ⇒ check 必须红。"""
+    broken = dp.HOST_JS.replace("function serveNotifications(", "function serveNotificationsGone(")
+    assert broken != dp.HOST_JS
+    problems = dp.check(host_js=broken)
+    assert any("serveNotifications" in p for p in problems), problems
+
+
+def test_host_check_bites_when_read_done_cards_removed() -> None:
+    """★ A297 反例：拿掉 readDoneCards ⇒ check 必须红（已落地卡会冒充未读）。"""
+    broken = dp.HOST_JS.replace("function readDoneCards()", "function readDoneCardsGone()")
+    assert broken != dp.HOST_JS
+    problems = dp.check(host_js=broken)
+    assert any("readDoneCards" in p for p in problems), problems
+
+
+def test_client_check_bites_when_banner_removed() -> None:
+    """★ A297 反例：删掉 NotificationsBanner 组件名 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace(
+        "function NotificationsBanner()", "function NotificationsBannerGone()"
+    )
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("NotificationsBanner" in p for p in problems), problems
+
+
+def test_client_check_bites_when_unread_text_removed() -> None:
+    """★ A297 反例：切掉「已收工未收口」文案 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("已收工未收口", "（无未读）")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("已收工未收口" in p for p in problems), problems
+

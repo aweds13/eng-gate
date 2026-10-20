@@ -3112,7 +3112,7 @@ spec = "复盘/卡/卡A297-完工回推通道.md"
 files = ["tools/wb_notify.py", "tools/wb_dispatch.py", "tools/dsh_panel.py", "tests/test_wb_notify.py", "tests/test_dsh_panel.py"]
 depends = ["A289"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A298"

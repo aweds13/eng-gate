@@ -996,6 +996,69 @@ def spawn_detached(argv: list[str], log_path: Path) -> int:
     return proc.pid
 
 
+# ★ 卡 A297（T-AG411）· 收工回推通道：`--detach` 派活成功后自动起 `wb_notify.py --daemon`，
+#   把「收工」变成落盘事件（不靠人记着轮询）。失败只告警，**不让派活失败**。
+def _notify_daemon_alive(pid_path: Path) -> bool:
+    """`wb_notify.pid` 里那个 pid 还在不在、是不是一个 python 进程（用 tasklist/ps 判映像名）。
+
+    ★ 不许盲杀 / 不许盲起：pid 文件在但进程已死 ⇒ 返回 False（可重新起）；
+      pid 活但映像名不是 python（pid 被别的进程复用）⇒ 也返回 False。
+    ★ `tasklist` / `ps` 是子进程 —— 必须带 `NO_WINDOW`（卡 148 铁律）。
+    """
+    if not pid_path.is_file():
+        return False
+    try:
+        pid = int(pid_path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        # tasklist /FI "PID eq 1234" /FO CSV /NH  →  "python.exe","1234",...
+        try:
+            done = subprocess.run(  # noqa: S603 —— 命令本地拼好，不是外部输入
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, timeout=5, **NO_WINDOW,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+        if done.returncode != 0:
+            return False
+        line = (done.stdout or "").strip().splitlines()
+        return bool(line) and "python" in line[0].lower() and str(pid) in line[0]
+    # POSIX：ps -p <pid> -o comm=
+    try:
+        done = subprocess.run(  # noqa: S603 —— 命令本地拼好，不是外部输入
+            ["ps", "-p", str(pid), "-o", "comm="],
+            capture_output=True, text=True, timeout=5, **NO_WINDOW,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if done.returncode != 0:
+        return False
+    return "python" in (done.stdout or "").lower()
+
+
+def ensure_notify_daemon(root: Path) -> None:
+    """派活成功后起 `wb_notify.py --daemon`（若没起）—— 收工自动落盘 + 面板可见。
+
+    ★ 若 `wb_notify.pid` 的进程已活 ⇒ 跳过（不重复起）；否则用 `spawn_detached` 起一个
+      脱离窗口的守护进程（活过父进程）。失败只打印告警，**不让派活失败**（卡 A297 规格）。
+    """
+    diag = root / "gates" / "diag"
+    pid_path = diag / "wb_notify.pid"
+    if _notify_daemon_alive(pid_path):
+        return
+    log_path = diag / "wb_notify.log"
+    argv = [sys.executable, "-X", "utf8", str(root / "tools" / "wb_notify.py"),
+            "--daemon", "--interval", "60"]
+    try:
+        spawn_detached(argv, log_path)
+    except OSError as exc:
+        # ★ 守护进程起不来不能让派活失败 —— 只告警（卡 A297 规格）。
+        print(f"[告警] wb_notify 守护进程没起来（不影响派活）：{exc}", file=sys.stderr, flush=True)
+
+
 # ★ 卡 109（T-G206）：`card_artifacts()` 的**唯一实现**在 `pool.jobs`（见顶部 import）——
 #   原先这里的副本已删。别在本地重新长一份：宽 glob `wb-<卡>*` 会**串卡**
 #   （`fnmatch("wb-421.jsonl", "wb-42*.jsonl")`），卡 029 §2.9 实测挖出过。
@@ -2873,6 +2936,14 @@ def main() -> int:
               f"python -X utf8 tools/wb_watch.py --cards {args.card}", flush=True)
         print(f"[log ] {detach_log}", flush=True)
         return 0
+
+    # ★ 卡 A297（T-AG411）：派活成功后自动起 `wb_notify.py --daemon`（若没起）——
+    #   收工自动落盘 notifications.jsonl + 面板可见，不靠人记。失败只告警，不让派活失败。
+    #   ★ 放在 detach 块**之后**：父进程（--detach）已 return，这里跑的是**子进程**
+    #   （带 --detach-done）与同步 --execute 路径；用 args.detach_done 守卫 ⇒ 只在
+    #   「真脱离开跑」时起，同步 --execute（自己看着终端，没有回推缺口）不起多余的。
+    if args.detach_done:
+        ensure_notify_daemon(ROOT)
 
     max_turns = args.max_turns or max_turns_default(args.read_only)
     lean_brief = ensure_lean_brief(args.card, worker_cwd) if args.lean else ""

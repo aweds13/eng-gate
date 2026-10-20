@@ -1,3 +1,8 @@
+## 完工回推通道：派活即看守，收工必留痕
+- 新增 `tools/wb_notify.py`：`--once` 扫 `gates/diag/wb-<卡>.verdict.txt` 写 `gates/diag/notifications.jsonl`，`--daemon` 循环；同卡幂等，`status=done` 的卡不再产生通知。
+- `tools/wb_dispatch.py` 派活成功后自动起守护（pid 活着则跳过），失败只告警。
+- 面板新增只读路由 `/dsh-panel/notifications`，客户端工具箱显示未读行。
+- 新增 `tests/test_wb_notify.py`（幂等、done 过滤、追加）；面板自检仍绿。
 ## 三坑进流程 + 派活必挂看守
 - `skills/pipe-land/references/land-steps.md` 新增第 5 节：裸文件名反引号断链、未跟踪卡规格挡 ff、`--allow` 精确匹配且要逐文件证据。
 - `skills/softeng-manage/references/dispatch.md` 新增「派活后必须挂看守」：`--detach` 无回推通道，派活与挂 `tools/wb_watch.py` 是同一步。

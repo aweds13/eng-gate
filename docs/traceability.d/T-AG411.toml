@@ -1,0 +1,15 @@
+[entries."T-AG411"]
+id = "T-AG411"
+title = "完工回推通道：派活即看守，收工必留痕"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_notify.py",
+  "file:tools/wb_dispatch.py",
+  "file:tools/dsh_panel.py",
+  "file:tests/test_wb_notify.py",
+  "file:tests/test_dsh_panel.py",
+  "file:gates/diag/wb-A297.verdict.txt",
+]
+gaps = "- 守护进程（`tools/wb_notify.py --daemon`）只写留痕，不保证开机存活；可见性改由 A298 的实时路由兜底（见 `复盘/卡/卡A298-完工可见性不靠守护.md`）。- 面板路由 `/dsh-panel/notifications` 在 A297 里读 JSONL；合并实时计算留给 A298，见 `tools/dsh_panel.py` 的 `serveNotifications`。- 「派活自动起守护」的失败路径只打告警、未做重试；入口在 `tools/wb_dispatch.py` 的 `_ensure_notify_daemon`。"
+

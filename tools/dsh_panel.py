@@ -350,6 +350,9 @@ ACTION_ROUTE = f"{SEAM_PREFIX}/actions"
 ZENTAO_URL = next(t.url for t in TARGETS if t.seat == "zentao_gantt")
 #: 卡 253：服务现读 + 最近动作的路径（GET，只读；与 `stack.py status --json` 同口径）。
 STACK_STATUS_ROUTE = f"{SEAM_PREFIX}/stack-status"
+#: 卡 A297（T-AG411）：收工回推通道的只读路由 —— 返回 notifications.jsonl 里
+#: 「已收工但还没落地」的卡（最多 20 条，按时间倒序）。宿主半读 backlog 排掉已落地的。
+NOTIFICATIONS_ROUTE = f"{SEAM_PREFIX}/notifications"
 
 #: 卡 253：**写死**的服务白名单 —— 真源是 `tools/stack.py` 的组件表（worker 不在表里，
 #: 所以面板永远派不出工人）。`start-all` 只是 `stack.py start`（无名字）的等价动作。
@@ -604,6 +607,10 @@ const SEAT_TIMEOUT_MS = 30000;
 /* 卡 253：动作缝（POST）与服务现读（GET）—— 都在同一条 prefix 缝下面。 */
 const ACTION_ROUTE = "__ACTION_ROUTE__";
 const STACK_STATUS_ROUTE = "__STACK_STATUS_ROUTE__";
+/* ★ 卡 A297（T-AG411）：收工回推通道的只读路由 —— 读 notifications.jsonl，
+ *   排掉 backlog 里已落地的卡，返回最近 20 条「已收工未收口」。 */
+const NOTIFICATIONS_ROUTE = "__NOTIFICATIONS_ROUTE__";
+const NOTIFICATIONS_REL = ["gates", "diag", "notifications.jsonl"];
 const ACTIONS_LOG_REL = ["gates", "diag", "stack-actions.log"];
 /* ★ 卡 253：**写死**的动作白名单（真源 = tools/stack.py 的组件表）。
  * 面板只收 {kind, name} 两个枚举值；这里不认命令字符串，没有透传口子。
@@ -745,6 +752,93 @@ function serveStackStatus(res) {
   const status = readStatusFresh();
   stackStatusCache = { at: Date.now(), payload: status };
   sendJson(res, 200, { ok: true, status, recent: recentActions() });
+}
+
+/* ---- 卡 A297（T-AG411）：收工回推通道的只读路由 ----
+ * /dsh-panel/notifications：读 notifications.jsonl（wb_notify.py 落的），
+ * 排掉 backlog 里 status=="done" 的卡（已落地 = 已收口，不再算未读），
+ * 返回 { ok:true, unread:N, items:[{card,verdict,at}] }（最多 20 条，按时间倒序）。
+ * ★ 只读：不写任何文件；notifications.jsonl 由 wb_notify.py 追加。 */
+function readDoneCards() {
+  const root = repoRoot();
+  const done = new Set();
+  if (!root) return done;
+  /* 先分片（docs/backlog/*.toml），再总表（docs/workbacklog.toml）—— 与 wb_plan 同口径。 */
+  const files = [path.join(root, "docs", "workbacklog.toml")];
+  try {
+    const shardDir = path.join(root, "docs", "backlog");
+    if (fs.existsSync(shardDir)) {
+      for (const name of fs.readdirSync(shardDir)) {
+        if (String(name).endsWith(".toml")) files.push(path.join(shardDir, name));
+      }
+    }
+  } catch (error) { /* 分片读不到：退回总表 */ }
+  for (const file of files) {
+    let text = "";
+    try { text = fs.readFileSync(file, "utf8"); } catch (error) { continue; }
+    /* 简单逐行扫：跟踪当前 [[cards]] 块里的 id 与 status，块结束时若 status=="done" 入集合。
+     * 不引 TOML 解析器（宿主半不想多装依赖）；这个口径只认 `id = "..."` / `status = "..."`。 */
+    let curId = "";
+    let curStatus = "";
+    const commit = () => {
+      if (curId && curStatus === "done") done.add(curId);
+      curId = "";
+      curStatus = "";
+    };
+    for (const line of text.split(/\r?\n/)) {
+      if (line.startsWith("[[cards]]")) { commit(); continue; }
+      const idM = line.match(/^id\s*=\s*"([^"]+)"/);
+      if (idM) {
+        /* 新 id（同一块内出现第二个 id 也先 commit 上一个）⇒ 防畸形数据。 */
+        if (curId) commit();
+        curId = idM[1];
+        curStatus = "";
+        continue;
+      }
+      const stM = line.match(/^status\s*=\s*"([^"]+)"/);
+      if (stM) { curStatus = stM[1]; continue; }
+    }
+    commit();
+  }
+  return done;
+}
+
+function serveNotifications(req, res) {
+  if (req.method !== "GET") {
+    sendJson(res, 405, { ok: false, error: `通知路由只读，收到 ${req.method}` });
+    return;
+  }
+  const root = repoRoot();
+  if (!root) {
+    sendJson(res, 200, { ok: true, unread: 0, items: [] });
+    return;
+  }
+  let text = "";
+  try {
+    text = fs.readFileSync(path.join(root, ...NOTIFICATIONS_REL), "utf8");
+  } catch (error) {
+    /* 文件还没建（没有收工事件）⇒ 空列表，不报错（面板照常显示）。 */
+    sendJson(res, 200, { ok: true, unread: 0, items: [] });
+    return;
+  }
+  const done = readDoneCards();
+  const rows = [];
+  for (const line of text.split(/\r?\n/)) {
+    const s = line.trim();
+    if (!s) continue;
+    let row;
+    try { row = JSON.parse(s); } catch (error) { continue; }
+    if (!row || typeof row !== "object") continue;
+    /* 排掉已落地的卡（已收口不再算未读）—— 防 notifications.jsonl 里历史条目冒充未读。 */
+    if (done.has(String(row.card))) continue;
+    rows.push(row);
+  }
+  /* 按时间倒序、最多 20 条。 */
+  rows.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+  const items = rows.slice(0, 20).map((r) => ({
+    card: String(r.card || ""), verdict: String(r.verdict || ""), at: String(r.at || ""),
+  }));
+  sendJson(res, 200, { ok: true, unread: rows.length, items });
 }
 
 /** 卡 253：动作日志最后几行（读不到 ⇒ 空表 + 不假装）。 */
@@ -1108,6 +1202,11 @@ function serveSeam(req, res) {
     serveStackStatus(res); /* 卡 A289：TTL 5s 进程内缓存，命中带 cached:true */
     return;
   }
+  /* ★ 卡 A297：收工回推通道（GET，只读）—— 排掉已落地卡，返回最近 20 条未收口。 */
+  if (url.pathname === NOTIFICATIONS_ROUTE) {
+    serveNotifications(req, res);
+    return;
+  }
   const seat = SEATS.find((row) => row.route === url.pathname);
   if (seat === undefined) {
     sendJson(res, 404, { ok: false, error: `未知路由：${url.pathname}` });
@@ -1177,6 +1276,7 @@ def _host_js() -> str:
         .replace("__ACTION_WHITELIST__", _action_whitelist_js())
         .replace("__ACTION_ROUTE__", ACTION_ROUTE)
         .replace("__STACK_STATUS_ROUTE__", STACK_STATUS_ROUTE)
+        .replace("__NOTIFICATIONS_ROUTE__", NOTIFICATIONS_ROUTE)
         .replace("__PKG_NAME__", json.dumps(PACKAGE_NAME))
     )
 
@@ -1757,6 +1857,40 @@ __TARGETS__
     ];
     const PARAMS_ROUTE = "/dsh-panel/settings";
 
+    /* ---- 卡 A297（T-AG411）：收工回推通道的状态条 ----
+     * 总览页顶部一行：有未读时 `已收工未收口 N（最近：A289 20:14）`，点击展开列表；
+     * 零未读不显示这行（用户讨厌弹窗，这行只是状态条，不是阻塞）。只读、不写任何文件。 */
+    const NOTIFICATIONS_ROUTE_LOCAL = "/dsh-panel/notifications";
+    function NotificationsBanner() {
+      const source = useSource(NOTIFICATIONS_ROUTE_LOCAL);
+      const [open, setOpen] = react.useState(false);
+      const data = source.state.data || {};
+      const unread = (data && data.ok && Number(data.unread)) || 0;
+      if (unread === 0) return null;
+      const items = (data && data.items) || [];
+      const recent = items[0] || {};
+      return h("div", { "data-wb-notifications": "", style: UI.card },
+        h("div", { style: UI.row },
+          h("span", { "data-wb-probe": "unread", style: UI.pill },
+            h("span", { style: { ...UI.dot, background: T.warn } }),
+            "已收工未收口 " + String(unread)
+            + (recent.card
+              ? "（最近：" + String(recent.card) + " " + hhmm(recent.at) + "）"
+              : "")),
+          h("button", { style: UI.seg, onClick: () => setOpen(!open) },
+            open ? "收起" : "展开")),
+        open
+          ? items.map((it) => h("div", { key: String(it.card), style: UI.row },
+              h("span", { style: { fontFamily: MONO, width: "80px" } }, String(it.card)),
+              h("span", { style: { flex: 1 } }, String(it.verdict || "")),
+              h("span", { style: UI.muted }, hhmm(it.at))))
+          : null,
+        source.state.status === "error"
+          ? h("p", { "data-wb-error": "", style: UI.error },
+              "通知读数失败（原话：" + String(source.state.error || "") + "）")
+          : null);
+    }
+
     function ToolboxOverview() {
       const source = useSource(STACK_STATUS_ROUTE);
       const state = source.state;
@@ -1765,6 +1899,7 @@ __TARGETS__
       const rows = state.data && state.data.ok && state.data.status
         ? state.data.status.components || [] : [];
       return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+        h(NotificationsBanner, null),
         h("div", { style: UI.card },
           h("div", { style: UI.row },
             h("span", { style: UI.muted }, "一键起停（白名单动作）"),
@@ -2930,6 +3065,15 @@ def _check_client(source: str) -> list[str]:
         problems.append(
             "[浏览器半] 刷新失败要保留上次读数（setState 保留 prev.data / prev.at，卡 A289）"
         )
+    # ---- 卡 A297（T-AG411）：收工回推通道的总览页状态条 ----
+    if "/dsh-panel/notifications" not in source:
+        problems.append("[浏览器半] 缺 /dsh-panel/notifications 路由（卡 A297：总览页要读通知）")
+    if "function NotificationsBanner()" not in source:
+        problems.append("[浏览器半] 缺 NotificationsBanner 组件（卡 A297：总览页顶部状态条）")
+    if "已收工未收口" not in source:
+        problems.append("[浏览器半] 缺「已收工未收口 N」文案（卡 A297：有未读时显示）")
+    if "data-wb-notifications" not in source:
+        problems.append("[浏览器半] 缺 data-wb-notifications 标记（卡 A297：状态条要可被钉子认出）")
     problems.extend(_check_read_only("浏览器半", source))
     return problems
 
@@ -3002,6 +3146,19 @@ def _check_host(source: str) -> list[str]:
         problems.append(
             "[宿主半] 起停动作后缓存不作废（卡 A289：动作缝里要 stackStatusCache = null）"
         )
+    # ---- 卡 A297（T-AG411）：收工回推通道的只读路由 ----
+    if "NOTIFICATIONS_ROUTE" not in source:
+        problems.append("[宿主半] 缺收工回推路由 NOTIFICATIONS_ROUTE（卡 A297）")
+    if "function serveNotifications(" not in source:
+        problems.append(
+            "[宿主半] 缺 serveNotifications 处理函数（卡 A297：读 notifications.jsonl）"
+        )
+    if "serveNotifications(req, res)" not in source:
+        problems.append("[宿主半] serveNotifications 定义了却没被 serveSeam 分发（卡 A286 同型坑）")
+    if "function readDoneCards()" not in source:
+        problems.append("[宿主半] 缺 readDoneCards（卡 A297：要排掉 backlog 里已落地的卡）")
+    if "notifications.jsonl" not in source:
+        problems.append("[宿主半] 没指 notifications.jsonl（卡 A297：通知文件名写死）")
     if "start-all" not in source:
         problems.append("[宿主半] 缺「全部起」（start-all）这条白名单动作（卡 253）")
     for bad in ("shell: true", "shell:true", "exec(", "execSync"):
