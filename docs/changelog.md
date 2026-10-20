@@ -1,3 +1,6 @@
+## 服务动作留痕带一键回滚
+- `tools/stack.py`：动作日志加 `undo=`（唯一真源 UNDO_OF/undo_for），新增 undo_commands() 与 log --undo（只打印不执行）。
+- 新增 `tests/test_stack_actions.py`：14 条用例证明每条动作有非空 undo、反做回到前一态。
 ## 墓碑表：被证伪的结论不许再当事实
 - 新增 `docs/tombstones.toml`：孤儿工人 / openResource 口子 / run_gates 不设环境 三条真墓碑。
 - 新增 `tests/test_tombstones.py`：结构校验 + 原文照搬即红的判据（合成样例证明会咬）。

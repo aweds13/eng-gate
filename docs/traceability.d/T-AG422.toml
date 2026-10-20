@@ -1,0 +1,17 @@
+[entries."T-AG422"]
+id = "T-AG422"
+title = "服务动作留痕带一键回滚"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/stack.py",
+  "file:tests/test_stack_actions.py",
+  "file:复盘/卡/卡A308-动作回滚命令.md",
+  "file:复盘/卡/卡A308-动作回滚命令.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/changelog.d/T-AG422.md",
+  "file:docs/traceability.d/T-AG422.toml",
+  "file:复盘/交接.d/T-AG422.md",
+]
+gaps = "- no-op 行（已在跑 ⇒ 没动）仍写机械 undo，真按它反做会误停；边界写在 `tools/stack.py` docstring 与卡里。- 不写 start-all/stop-all 聚合动作：start 本来就逐组件各写一行，回滚天然逐个（见 `复盘/卡/卡A308-动作回滚命令.md`）。"
+

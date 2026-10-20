@@ -3222,7 +3222,7 @@ spec = "复盘/卡/卡A308-动作回滚命令.md"
 files = ["tools/stack.py"]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A309"

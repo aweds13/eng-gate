@@ -5,14 +5,31 @@
 ② `status` 加 **RSS 账本**（每件一栏 + 合计 + 400 MB 常驻预算，超了显式提示）；
 ③ 每次起停往 `gates/diag/stack-actions.log` 写**一行**（谁、何时、起了/停了、结果）；
 ④ `status --json` 给面板读（与文本同一个 `status_data()` 真源）。
-用户 2026-10-14 令「起可以绑在一起，**停要分开**」。本工具只做四件事：
+
+卡 A308（T-AG422）：动作留痕带**一键回滚** ——
+⑤ 每条动作行追加 `undo=<反动作>` 字段：`start board` ⇒ `undo=stop board`、
+   `stop board` ⇒ `undo=start board`（映射的唯一真源是 `UNDO_OF` / `undo_for()`）；
+   ★ 字段以「两个空格」与前面的 `OK|FAIL`、后面的 detail 分隔；`undo=` 的值固定是
+   `<start|stop> <名>`（组件名没有空格），所以**不用引号**也解析得开；
+⑥ 新增 `log` 子命令：`log` 原样打印最近几条，`log --undo` 按日志里的 `undo=` 反推出
+   **回滚命令**（**倒序**：后做的先撤），**只打印、不执行**（要执行由人复制粘贴）。
+
+★ 「一起起」的回滚口径（本卡定的，写在这里不另猜）：`start`（不带名）是**逐个组件**
+各写一行 `start <名>`，所以「一起起」的回滚天然是**逐个** `undo=stop <名>`，按倒序
+执行就等于「逐个停」；日志里**不写** `start-all` / `stop-all` 这种聚合动作 ——
+粒度只有「一件」，因为停本来就要分开（见下）。老日志（本卡之前写的）没有 `undo=`
+字段，`log --undo` 会**如实点数报出**，**不替它们编命令**。
+
+用户 2026-10-14 令「起可以绑在一起，**停要分开**」。本工具只做五件事（卡 A308 起多一个 `log`）：
 
 - `start`：把**没在跑的**起起来；已在跑的**如实说「已在跑」**、不重复起；
   起完给**有限的等待窗口**（默认 20 秒、每 0.5 秒探一次，卡 243 修「判活太快」），
   等不到就报原话「发起了，但 N 秒内端口 X 还没起来」，**不许谎报「已起」**；
 - `stop <名>`：**先核对 pid 身份**（映像是白名单里的那个）再审—— 不对就拒绝并点名；
 - `status`：**现读**（真进程表 + 真端口），谁没起就写「没起」，**不静默成功**；
-- `list`：这张表本身（名字 / 怎么起 / 怎么判活着 / 白名单）。
+- `list`：这张表本身（名字 / 怎么起 / 怎么判活着 / 白名单）；
+- `log [--last N] [--undo]`（卡 A308）：原样打印最近 N 条动作；`--undo` 则按日志里的
+  `undo=` 字段反推出**回滚命令**（倒序），**只打印、不执行**。
 
 边界（卡 241 §4 + 卡 243 §5，一条都不越）
 - 起停**只碰下表那五件**（卡 243 起加 `board`）；不碰 `~/.dsh`、不碰 DSH 本体、**不注册计划任务**；
@@ -35,6 +52,7 @@ import datetime
 import json
 import locale
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -59,6 +77,14 @@ ACTIONS_LOG = ROOT / "gates" / "diag" / "stack-actions.log"
 RESIDENT_BUDGET_MB = 400
 #: 卡 253：禅道便携版安装根（可用 ZENTAO_ROOT 覆盖）。
 ZENTAO_ROOT = Path(os.environ.get("ZENTAO_ROOT", r"D:\zentao\ZenTao"))
+#: 卡 A308：**动作 ⇒ 反动作**的唯一真源（`log_action` 写字段、`log --undo` 读字段都认它）。
+UNDO_OF: dict[str, str] = {"start": "stop", "stop": "start"}
+#: 卡 A308：日志里那一小段（`undo=stop board`）的解析式 —— 值不带空格，所以不用引号。
+#: ★ 只认「**两个空格**开头」的字段（字段边界就是两个空格），免得 detail 里恰好写着
+#: `undo=…` 时被当成本动作的回滚；老日志「缺字段」的判断也靠这条边界。
+_UNDO_RE = re.compile(r"(?:^| {2})undo=(start|stop) (\S+)")
+#: 卡 A308：`log --undo` 打印的命令前缀（**可复制执行**的那一半）。
+LOG_PROG = "python -X utf8 tools/stack.py"
 
 
 class Component(NamedTuple):
@@ -172,15 +198,34 @@ def write_pidfile(name: str, pid: int) -> None:
     pidfile_path(name).write_text(str(int(pid)), encoding="utf-8")
 
 
+def undo_for(action: str, name: str) -> str:
+    """卡 A308：这个动作的**反动作命令**（`start board` ⇒ `stop board`）。
+
+    ★ 表里没有的动作 ⇒ **抛错**（不返回空串、不假装能回滚）：日志里出现一条
+    没有反动作的行，就等于留了个撤不掉的动作 —— 这种事必须在写入时就炸，而不是
+    等到回滚那天才发现「这条没有 undo」。
+    """
+    inverse = UNDO_OF.get(action)
+    if inverse is None:
+        raise ValueError(f"没有「{action}」的反动作（只认识 {sorted(UNDO_OF)}）")
+    return f"{inverse} {name}"
+
+
 def log_action(actor: str, action: str, name: str, ok: bool, detail: str) -> None:
     """卡 253：把一次起停写进 `gates/diag/stack-actions.log`（**一行一条**）。
 
-    字段（空格分隔，人读）：`<本地时间>  <谁>  <start|stop> <组件>  <OK|FAIL>  <结果>`。
+    字段（空格分隔，人读）：
+    `<本地时间>  <谁>  <start|stop> <组件>  <OK|FAIL>  undo=<反动作>  <结果>`。
+    卡 A308：`undo=` 是**反动作命令**（`start board` ⇒ `undo=stop board`），按「两个空格」
+    自成一段；`log --undo` 就靠它反推回滚命令。
+    ★ 上面那句「反动作」是**机械**的：对 `start` 撞上「已在跑 ⇒ 没动」这种 no-op 行，
+    undo 仍是 `stop <组件>` —— detail 里已写明「没动」，执行前看 detail，别盲撤。
     ★ 写不进去也要在 stdout 说一声 —— 不许静默吞（日志是「出问题有据可查」的那条路）。
     """
+    undo = undo_for(action, name)  # 先算：算不出就在写盘之前炸，不落一条撤不掉的行
     stamp = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
     verdict = "OK" if ok else "FAIL"
-    line = f"{stamp}  {actor or 'cli'}  {action} {name}  {verdict}  {detail}"
+    line = f"{stamp}  {actor or 'cli'}  {action} {name}  {verdict}  undo={undo}  {detail}"
     try:
         ACTIONS_LOG.parent.mkdir(parents=True, exist_ok=True)
         with ACTIONS_LOG.open("a", encoding="utf-8") as fh:
@@ -196,6 +241,29 @@ def recent_actions(limit: int = 5) -> list[str]:
     except OSError:
         return []
     return [ln for ln in lines if ln.strip()][-limit:]
+
+
+def undo_commands(limit: int = 10) -> tuple[list[str], list[str]]:
+    """卡 A308：从动作日志里**反推**回滚命令 —— `(可执行命令表, 缺 undo 字段的原始行)`。
+
+    - **倒序**：后做的先撤（`recent_actions` 给的是正序，这里反过来）——
+      一条链上「先起 A 再起 B」要按 B、A 撤，正序撤会把顺序搞反；
+    - 命令一律是 `LOG_PROG <反动作>`（`undo=stop board` ⇒
+      `python -X utf8 tools/stack.py stop board`），**可复制执行**；
+    - 缺 `undo=` 的老日志 ⇒ 进第二个表**原样**交回去，由调用方如实报出，
+      **不猜、不补、不编**；
+    - 本函数**只读日志**：不调 `start_one` / `stop_one`，一个进程都不碰。
+    """
+    lines = recent_actions(limit) if limit > 0 else recent_actions(sys.maxsize)
+    commands: list[str] = []
+    missing: list[str] = []
+    for line in reversed(lines):
+        found = _UNDO_RE.search(line)
+        if found is None:
+            missing.append(line)
+            continue
+        commands.append(f"{LOG_PROG} {found.group(1)} {found.group(2)}")
+    return commands, missing
 
 
 def image_of(pid: int) -> str | None:
@@ -591,6 +659,37 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_log(args: argparse.Namespace) -> int:
+    """`log [--last N] [--undo]`：**只看**最近的动作；`--undo` 只打印回滚命令（不执行）。
+
+    卡 A308：`--undo` 不调 `start_one` / `stop_one`，一个进程都不碰 —— 要动手由人
+    复制命令去执行（「只打印」是这条子命令的边界，不是没做完）。
+    """
+    limit = int(getattr(args, "last", 10) or 0)
+    scope = "全部" if limit <= 0 else f"最后 {limit} 行"
+    if not getattr(args, "undo", False):
+        lines = recent_actions(limit) if limit > 0 else recent_actions(sys.maxsize)
+        if not lines:
+            print(f"动作日志是空的（或读不到）：{ACTIONS_LOG}")
+            return 0
+        for line in lines:
+            print(line)
+        return 0
+    commands, missing = undo_commands(limit)
+    if not commands and not missing:
+        print(f"动作日志是空的（或读不到）：{ACTIONS_LOG}")
+        return 0
+    print("# 回滚命令（**倒序**：后做的先撤）—— 本命令只**打印**，不执行")
+    print(f"# 来源：{ACTIONS_LOG}（{scope}）；共 {len(commands)} 条")
+    for command in commands:
+        print(command)
+    if missing:
+        print(f"# ★ 有 {len(missing)} 行没有 undo 字段（卡 A308 之前的旧日志）—— 不替它们编命令：")
+        for line in missing:
+            print(f"#   {line}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI 入口。"""
     parser = argparse.ArgumentParser(
@@ -610,6 +709,15 @@ def main(argv: list[str] | None = None) -> int:
     p_status.add_argument("--json", action="store_true", help="给面板读的 JSON（与文本同一真源）")
     p_status.set_defaults(func=cmd_status)
     sub.add_parser("list", help="打出这张表").set_defaults(func=cmd_list)
+    # 卡 A308：动作留痕 + 一键回滚（只打印，不执行）。
+    p_log = sub.add_parser("log", help="看最近的动作；--undo 打印回滚命令（只打印、不执行）")
+    p_log.add_argument(
+        "--last", type=int, default=10, help="只看最后 N 行（0 = 全部；默认 10）"
+    )
+    p_log.add_argument(
+        "--undo", action="store_true", help="按日志里的 undo= 反推回滚命令（倒序；不执行）"
+    )
+    p_log.set_defaults(func=cmd_log)
     args = parser.parse_args(argv)
     return int(args.func(args))
 
