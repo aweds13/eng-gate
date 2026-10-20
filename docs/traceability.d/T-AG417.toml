@@ -1,0 +1,14 @@
+[entries."T-AG417"]
+id = "T-AG417"
+title = "命令写法硬约束：拦住管道截断与 sleep 硬等"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/cmd_guard.py",
+  "file:tools/run_logged.py",
+  "file:tests/test_cmd_guard.py",
+  "file:AGENTS.md",
+  "file:skills/pipe-land/references/land-steps.md",
+]
+gaps = "- `cmd_guard.py` 只按正则拦「管道截断 / sleep」两类写法，拦不住「后台跑了但没落日志」；这类靠 `run_logged.py` 的默认用法覆盖，检查器不识别。判据在 `tools/cmd_guard.py` 的 `RULES`。- 检查器是「跑前自觉过一遍」的工具，不是 shell 钩子：会话里绕过它照样能跑管道。硬约束只在 `AGENTS.md` 的规则与 `tools/cmd_guard.py` 的 `RULES` 里，没有 shell 层拦截。- `run_logged.py` 的心跳只回显子进程最后一行输出，不回显百分比；进度百分比需要门禁自己打印，见 `tools/pool/landing.py`。"
+

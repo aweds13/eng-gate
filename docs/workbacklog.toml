@@ -3157,3 +3157,14 @@ files = ["tools/wb_tree.py", "tools/dsh_panel.py", "tests/test_wb_tree.py"]
 depends = ["A290", "A301"]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A303"
+task = "T-AG417"
+title = "命令写法硬约束：拦住管道截断与 sleep 硬等"
+tree = ".wt/A303"
+spec = "复盘/卡/卡A303-命令写法硬约束.md"
+files = ["tools/cmd_guard.py", "tools/run_logged.py", "tests/test_cmd_guard.py", "AGENTS.md", "skills/pipe-land/references/land-steps.md"]
+depends = ["A302"]
+risk = "low"
+status = "done"

@@ -1,3 +1,9 @@
+## 命令写法硬约束：拦住管道截断与 sleep 硬等
+- 新增 `tools/run_logged.py`：逐行落盘 + 定时心跳 + 结束回放最后几行，退出码透传。
+- 新增 `tools/cmd_guard.py`：命中 `| tail/head/cut` 或 `sleep N` 就退 1，并给改法。
+- 新增 `tests/test_cmd_guard.py`：6 条钉子。
+- `AGENTS.md` 增加「长命令怎么跑」三条硬规则，并纳入 git。
+- `skills/pipe-land/references/land-steps.md` 增加落地跑法一节。
 ## 卡谱系树：git 真源 + 面板谱系页
 - 新增 `tools/wb_tree.py`：从 git 历史抽卡与依赖关系，输出 JSON（`--json`）与文本树。
 - 新增 `tests/test_wb_tree.py`：30 条，覆盖单卡、依赖链、多卡合并、无 git 时退化。

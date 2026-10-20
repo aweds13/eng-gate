@@ -57,6 +57,16 @@
 | 只想在文档件上试跑 | `--no-gate`（并在回报里如实写「没跑门禁」） |
 | 锁没释放 | 按端口段释放，带同一个 `--port-base` |
 
+## 跑法：长门禁别用管道截断
+
+落地要跑全量门（8–12 分钟）。**不要**写成 `wb_land.py … | tail -3`：管道会攒到结束才吐，后台作业中途读不到任何输出，看着像卡死。一律用带日志的跑法：
+
+```bash
+python -X utf8 tools/run_logged.py --log gates/diag/land-<卡>.log -- \n    python -X utf8 tools/wb_land.py --card <卡> ...
+```
+
+进度看 `tail -n 20 gates/diag/land-<卡>.log`；跑前先过 `python -X utf8 tools/cmd_guard.py --cmd '<命令>'`。
+
 ## 5. 落地三坑（会真红的那种）
 
 > 这三条都让落地链**真红**过；写文书 / 给白名单 / 合卡树时逐条对照，别撞上了才知道。
