@@ -1270,3 +1270,138 @@ def test_client_check_bites_when_unread_text_removed() -> None:
     problems = dp.check(client_js=broken)
     assert any("已收工未收口" in p for p in problems), problems
 
+
+# ================================================================== 卡 A290 · T-AG404
+# 内嵌页壳：服务停了也不出白框（工具条先画 / 8 s 超时重试 / down 空态 / 右栏退回内嵌）。
+# ★ 每条先红后绿；既有判据一条不删。
+
+
+def _quick_entry_body() -> str:
+    """切出 QuickEntry 那一段（到工具箱注释为止），免得拿整份源码当判据。"""
+    client = dp.CLIENT_JS
+    start = client.index("function QuickEntry(props)")
+    return client[start:client.index("/* ---- 卡 A274", start)]
+
+
+def test_embed_shell_draws_toolbar_before_iframe() -> None:
+    """★ A290 ①：工具条（标题 + 状态点 + 一键启动 / 刷新 / 右栏）先画，iframe 在后。"""
+    body = _quick_entry_body()
+    assert 'h("h2", { style: UI.title }, frameTitle)' in body, "工具条要先有标题"
+    assert '"data-wb-probe": shown' in body, "状态点要以 stack-status 为准（probe 只探一次）"
+    for label in ('"一键启动"', '"右栏"', '"刷新"'):
+        assert label in body, label
+    assert body.index("UI.bar") < body.index('h("iframe"'), "工具条必须先于 iframe 画出来"
+
+
+def test_embed_shell_8s_timeout_and_retry() -> None:
+    """★ A290 ①：iframe 区先给骨架；8 s 没 load ⇒「还在加载…」+ 可点「重试」。"""
+    client = dp.CLIENT_JS
+    assert "const EMBED_LOAD_TIMEOUT_MS = 8000;" in client
+    assert 'onLoad: () => setFrameState("loaded")' in client
+    assert "setTimeout(" in client and "clearTimeout(" in client
+    assert "setFrameState((prev) => embedAfterTimeout(prev))" in client
+    assert "setInterval" not in client, "8 s 只能挂一次性定时器，不许退回常驻轮询"
+    assert "还在加载…" in client
+    assert '"重试"' in client
+    assert "data-wb-frame-overlay" in client
+    assert "data-wb-skeleton" in client
+
+
+def test_embed_shell_exports_three_state_hooks() -> None:
+    """★ A290：三态判定导出成钩子（证据脚本喂读数即可复现，不靠浏览器）。"""
+    client = dp.CLIENT_JS
+    assert "exports.__a290" in client
+    for name in ("embedShellState", "embedAfterTimeout", "EMBED_LOAD_TIMEOUT_MS"):
+        assert name in client, name
+    assert "function embedShellState(board, probe, target, frameState)" in client
+    assert "embedShellState(board, probe, target, frameState)" in client
+
+
+def test_embed_shell_check_bites_when_three_state_logic_is_inlined() -> None:
+    """★ A290 反例：把三态判定从 QuickEntry 里拿掉（各抄一份）⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace(
+        "const shell = embedShellState(board, probe, target, frameState);",
+        "const shell = { down: false, overlay: \"none\" };",
+    )
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("embedShellState" in p for p in problems), problems
+
+
+def test_embed_down_gate_skips_iframe_and_shows_reason() -> None:
+    """★ A290 ②：down（stack-status 里不是 running）⇒ 不加载 iframe，画空态 + 原因。"""
+    client = dp.CLIENT_JS
+    gate = client[client.index("function embedShellState("):]
+    gate = gate[:gate.index("function embedAfterTimeout(")]
+    assert "row.running !== true" in gate, "down 的真源必须是 stack-status 的现读"
+    body = _quick_entry_body()
+    assert "不是 running" in body and "data-wb-reason" in body, "空态要写一句原因"
+    assert "data-wb-embed-empty" in body
+    assert re.search(
+        r'down\s*\?\s*h\("div", \{ "data-wb-embed-empty"', body
+    ), "空态必须是 down 分支画出来的"
+    assert body.count('h("iframe"') == 1, "QuickEntry 里只许有一个 iframe"
+    assert body.index("data-wb-embed-empty") < body.index('h("iframe"'), (
+        "iframe 只能出现在非 down 分支（down 时连加载都不许）"
+    )
+
+
+def test_right_sidebar_unavailable_falls_back_embedded() -> None:
+    """★ A290 ③：右栏不可用 ⇒ 自动退回内嵌（留在本页），工具条标「已退回内嵌」。"""
+    client = dp.CLIENT_JS
+    assert "已退回内嵌" in client
+    assert '"data-wb-fallback": "embedded"' in client
+    start = client.index("function openInSidebar()")
+    body = client[start:client.index("function reloadFrame()", start)]
+    assert "setFellBack(true)" in body
+    assert "setMode(" not in body, "退回内嵌 = 留在本页 iframe，不是跳去「读数」视图"
+    # openRealPage 要如实回报成败（否则「不可用」无从判断）
+    open_start = client.index("function openRealPage(target, setOpenError)")
+    open_body = client[open_start:client.index("function useServiceControl()", open_start)]
+    assert "return true;" in open_body and "return false;" in open_body
+
+
+def test_embed_shell_keeps_zero_color_literals() -> None:
+    """★ A290 判据：零颜色字面量（一律主题令牌 / currentColor）。"""
+    assert not dp.COLOR_LITERAL_RE.search(dp.CLIENT_JS)
+
+
+def test_client_check_bites_when_embed_timeout_removed() -> None:
+    """★ A290 反例：拿掉 8 s 超时常量 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("EMBED_LOAD_TIMEOUT_MS = 8000", "EMBED_LOAD_TIMEOUT_MS = 0")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("A290" in p for p in problems), problems
+
+
+def test_client_check_bites_when_retry_copy_removed() -> None:
+    """★ A290 反例：切掉「还在加载…」⇒ check 必须红（超时就不再有话可说）。"""
+    broken = dp.CLIENT_JS.replace("还在加载…", "加载失败")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("还在加载" in p for p in problems), problems
+
+
+def test_client_check_bites_when_down_gate_removed() -> None:
+    """★ A290 反例：down 不看 stack-status ⇒ check 必须红（会退回「凭按钮猜」）。"""
+    broken = dp.CLIENT_JS.replace("row.running !== true", "false")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("row.running" in p for p in problems), problems
+
+
+def test_client_check_bites_when_embed_empty_state_removed() -> None:
+    """★ A290 反例：删掉空态标记 ⇒ check 必须红（down 就只剩白框）。"""
+    broken = dp.CLIENT_JS.replace('"data-wb-embed-empty": ""', '"data-wb-embed-gone": ""')
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("data-wb-embed-empty" in p for p in problems), problems
+
+
+def test_client_check_bites_when_fallback_label_removed() -> None:
+    """★ A290 反例：右栏退回内嵌却不标明 ⇒ check 必须红。"""
+    broken = dp.CLIENT_JS.replace("已退回内嵌", "（右栏不可用）")
+    assert broken != dp.CLIENT_JS
+    problems = dp.check(client_js=broken)
+    assert any("已退回内嵌" in p for p in problems), problems
+

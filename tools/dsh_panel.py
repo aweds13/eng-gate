@@ -1621,8 +1621,10 @@ __TARGETS__
           panelCtx.sidebarRight.openTab("browser", { params: { url: target.url } });
         }
         setOpenError("");
+        return true;
       } catch (error) {
         setOpenError(String((error && error.message) || error));
+        return false;
       }
     }
     /* ---- 卡 253 · 服务控制：一起起 / 分别停 ----
@@ -1681,6 +1683,11 @@ __TARGETS__
         fontFamily: MONO, fontSize: "11px" },
       frame: { flex: 1, width: "100%", minHeight: "320px",
         border: "1px solid " + T.line, borderRadius: "8px", background: T.card },
+      /* 卡 A290：iframe 外面套一层定位盒，骨架/超时提示盖在上面（先画壳，不白框）。 */
+      frameBox: { position: "relative", display: "flex", flex: 1, minHeight: "320px" },
+      overlay: { position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", gap: "8px",
+        borderRadius: "8px", border: "1px solid " + T.line, background: T.card },
       primary: { padding: "4px 12px", borderRadius: "6px", cursor: "pointer", border: "none",
         fontFamily: FONT, fontSize: "12px", fontWeight: 600,
         background: T.brand, color: T.onBrand },
@@ -1838,47 +1845,140 @@ __TARGETS__
       return target.url;
     }
 
+    /* ---- 卡 A290（T-AG404）· 内嵌页壳：服务停了也不出白框 ----
+     * 判据（照卡规格）：
+     *   ① 工具条**先画**（标题 + 状态点 + 一键启动 / 刷新 / 右栏），iframe 区先给骨架；
+     *   ② 8 s 还没 `load` ⇒ 盖「还在加载…」+ 可点「重试」（不拿白框糊过去）；
+     *   ③ 服务 down（`stack-status` 里该组件不是 running）⇒ **不加载 iframe**，
+     *      画空态：一句原因 + 一键启动 + 怎么起；
+     *   ④ 右栏不可用 ⇒ 自动退回**本页内嵌**（不跳走），工具条标「已退回内嵌」。
+     * ★ 不用常驻定时器（卡 253 禁令）：8 s 只挂一次 setTimeout，卸载/刷新就清掉。
+     * ★ 状态真源是 stack-status；读数没到手时才退回 no-cors 探测，两者都没有就**不**
+     *   擅自判「没起」（免得把其实能开的站点挡在空态后面）。 */
+    const EMBED_LOAD_TIMEOUT_MS = 8000;
+
+    /* 卡 A290：三态判定收成纯函数 —— 判据在 Node 里喂三组读数就能复现（不靠浏览器），
+     * 也保证「证据」读的和页面走的是**同一段逻辑**。
+     *   board      = 一次 stack-status 读数（{components:[{name, running}]}；null = 还没到手）
+     *   probe      = no-cors 探测结果（"up" / "down" / "checking" / "none"）
+     *   frameState = iframe 的 load 状态（"loading" / "loaded" / "timeout"）
+     * 返回 { down, frame, overlay, shown }：down ⇒ 连 iframe 都不挂（overlay = "empty"）；
+     * 否则挂 iframe，overlay = 骨架（loading）/ 超时提示（timeout）/ 无（loaded）；
+     * shown = 状态点该显示什么（有 stack-status 就以它为准 —— no-cors 探测只探一次，
+     * 起完服务后它会一直停在旧的 "down"，拿它当状态点会骗人）。 */
+    function embedShellState(board, probe, target, frameState) {
+      const rows = (board && board.components) || [];
+      const row = rows.filter((item) => item.name === (target && target.start))[0] || null;
+      const known = board !== null && board !== undefined;
+      const shown = known ? (row ? (row.running === true ? "up" : "down") : probe) : probe;
+      const down = known ? Boolean(row) && row.running !== true : probe === "down";
+      if (down) return { down: true, frame: false, overlay: "empty", shown };
+      const overlay = frameState === "loaded"
+        ? "none"
+        : (frameState === "timeout" ? "timeout" : "loading");
+      return { down: false, frame: true, overlay, shown };
+    }
+
+    /* 卡 A290：8 s 到点的下一步 —— 已经 load 过就不动它，否则落成 timeout。 */
+    function embedAfterTimeout(prev) {
+      return prev === "loaded" ? prev : "timeout";
+    }
+
     function QuickEntry(props) {
       const target = props.target;
       const [mode, setMode] = react.useState("page");
       const [openError, setOpenError] = react.useState("");
+      const [fellBack, setFellBack] = react.useState(false);
       const [nonce, setNonce] = react.useState(0);
+      const [frameState, setFrameState] = react.useState("loading");
       const control = useServiceControl();
       const probe = useProbe(target.seat, target.url);
+      const status = control.state;
+      const board = status.status === "ready" ? ((status.data && status.data.status) || {}) : null;
+      const shell = embedShellState(board, probe, target, frameState);
+      const down = shell.down;
+      const overlay = shell.overlay;
+      const shown = shell.shown;
+      react.useEffect(() => {
+        if (down) {
+          setFrameState("loading");
+          return undefined;
+        }
+        setFrameState("loading");
+        const timer = setTimeout(() => {
+          setFrameState((prev) => embedAfterTimeout(prev));
+        }, EMBED_LOAD_TIMEOUT_MS);
+        return () => clearTimeout(timer);
+      }, [down, nonce]);
       if (mode === "embedded") {
         return h(props.fallback, { route: props.route });
       }
       function openInSidebar() {
-        openRealPage(target, setOpenError);
+        if (!(panelCtx && panelCtx.sidebarRight)) {
+          setOpenError("右栏服务没提供（ctx.sidebarRight 缺失）");
+          setFellBack(true); /* 卡 A290 ④：右栏不可用 ⇒ 退回内嵌 */
+          return;
+        }
+        if (openRealPage(target, setOpenError)) {
+          setFellBack(false);
+          return;
+        }
+        setFellBack(true); /* openTab 抛了（如 no session surface is mounted）⇒ 退回内嵌 */
+      }
+      function reloadFrame() {
+        setNonce((n) => n + 1);
       }
       const action = control.action;
-      const down = probe === "down" && !(action && action.phase === "ok");
-      return h("div", { "data-wb-state": "ok", style: UI.page },
+      const frameTitle = props.title || "内嵌页";
+      return h("div", { "data-wb-state": "ok", "data-wb-embed": down ? "down" : frameState,
+        style: UI.page },
         h("div", { style: { ...UI.bar, padding: "3px 8px" } },
-          h("span", { "data-wb-probe": probe, style: UI.pill },
+          h("h2", { style: UI.title }, frameTitle),
+          h("span", { "data-wb-probe": shown, style: UI.pill },
             h("span", { style: UI.dot }),
-            probeText(probe)),
+            probeText(shown)),
+          fellBack
+            ? h("span", { "data-wb-fallback": "embedded", style: UI.pill }, "已退回内嵌")
+            : null,
           h("span", { style: { flex: 1 } }),
-          target.start && probe !== "up"
+          target.start && (down || shown !== "up")
             ? h("button", { style: UI.primary,
                 onClick: () => control.run("start", target.start) }, "一键启动")
             : null,
           h("button", { style: UI.seg, onClick: openInSidebar }, "右栏"),
-          h("button", { style: UI.seg, onClick: () => setNonce((n) => n + 1) }, "刷新"),
+          h("button", { style: UI.seg, onClick: reloadFrame }, "刷新"),
           h("button", { style: UI.seg, onClick: () => setMode("embedded") }, "读数")),
         action ? h("p", { "data-wb-action": action.phase, style: UI.muted }, action.text) : null,
         openError
           ? h("p", { "data-wb-error": "", style: UI.error }, "右栏开不了：" + openError)
           : null,
         down
-          ? h("div", { style: UI.card },
-              h("p", { style: UI.muted }, "服务没起 —— 点上面「启动」，起完这里自动加载页面。"),
-              h("p", { style: UI.muted }, "手动起：" + target.up),
+          ? h("div", { "data-wb-embed-empty": "", style: UI.card },
+              h("p", { "data-wb-reason": "down", style: UI.muted },
+                "服务没起（stack-status 里 " + String(target.start || "该组件")
+                  + " 不是 running）—— 这一页先不加载，省得你对着白框猜。"),
+              h("p", { style: UI.muted }, "点「一键启动」起服务；起完这里自动加载页面。"),
+              h("p", { style: UI.muted }, "手动起：" + String(target.up || "")),
               h("details", { style: UI.muted },
                 h("summary", { style: { cursor: "pointer" } }, "服务与资源（RSS / 日志 / 分别停）"),
                 h(ServiceControls, { control, target })))
-          : h("iframe", { key: nonce, src: frameSrc(target), style: UI.frame,
-            title: props.title })
+          : h("div", { style: UI.frameBox },
+              h("iframe", { key: nonce, src: frameSrc(target), style: UI.frame,
+                title: frameTitle,
+                onLoad: () => setFrameState("loaded") }),
+              overlay === "none"
+                ? null
+                : h("div", { "data-wb-frame-overlay": overlay, style: UI.overlay },
+                    overlay === "timeout"
+                      ? h("div", { "data-wb-timeout": "", style: UI.card },
+                          h("p", { style: UI.muted },
+                            "还在加载…（" + String(EMBED_LOAD_TIMEOUT_MS / 1000) + " s 还没出来）"),
+                          h("button", { style: UI.secondary, onClick: reloadFrame }, "重试"))
+                      : h("div", { "data-wb-skeleton": "", style: UI.card },
+                          h("div", { style: UI.row },
+                            h("span", { style: UI.muted }, "…")),
+                          h("p", { style: UI.muted },
+                            "页面先画壳，加载完就换掉（8 s 没出来就给你重试）。"))))
       );
     }
 
@@ -2451,6 +2551,9 @@ __RIGHT_TABS__
      * DSH 只消费 apply / inject，多出的导出无副作用。 */
     exports.__a289 = { SourceShell, useSource, readCache, writeCache, cacheKey,
       LoadingSkeleton };
+    /* ★ 卡 A290：内嵌页壳的三态判定（Node 判据喂读数即可复现「停 / 起 / 超时」）。 */
+    exports.__a290 = { embedShellState, embedAfterTimeout,
+      EMBED_LOAD_TIMEOUT_MS, QuickEntry };
     return module.exports;
   },
 });
@@ -3112,6 +3215,44 @@ def _check_client(source: str) -> list[str]:
         problems.append("[浏览器半] 缺「已收工未收口 N」文案（卡 A297：有未读时显示）")
     if "data-wb-notifications" not in source:
         problems.append("[浏览器半] 缺 data-wb-notifications 标记（卡 A297：状态条要可被钉子认出）")
+    # ---- 卡 A290（T-AG404）：内嵌页壳 —— 工具条先画 / 8 s 超时 / down 空态 / 右栏退回内嵌 ----
+    if "EMBED_LOAD_TIMEOUT_MS = 8000" not in source:
+        problems.append(
+            "[浏览器半] 缺内嵌页 8 s 加载超时（卡 A290：`const EMBED_LOAD_TIMEOUT_MS = 8000;`）"
+        )
+    if 'onLoad: () => setFrameState("loaded")' not in source:
+        problems.append(
+            "[浏览器半] iframe 没接 onLoad（卡 A290：只有它能把「加载中」落成「到了」）"
+        )
+    if "还在加载" not in source or '"重试"' not in source:
+        problems.append(
+            "[浏览器半] 缺「还在加载…」+ 可点「重试」（卡 A290：8 s 没 load 不许白框）"
+        )
+    if "data-wb-embed-empty" not in source:
+        problems.append(
+            "[浏览器半] 缺服务没起时的空态（data-wb-embed-empty，卡 A290：down 就不许加载 iframe）"
+        )
+    if "row.running !== true" not in source:
+        problems.append(
+            "[浏览器半] 「没起」没走 stack-status 的 row.running"
+            "（卡 A290：down 的真源是现读，不是点了按钮就算）"
+        )
+    if "function embedShellState(" not in source:
+        problems.append(
+            "[浏览器半] 缺三态判定纯函数 embedShellState（卡 A290：证据与页面必须走同一段逻辑）"
+        )
+    if "const shell = embedShellState(board, probe, target, frameState);" not in source:
+        problems.append(
+            "[浏览器半] QuickEntry 没走 embedShellState 判定（卡 A290：别把三态逻辑抄第二份）"
+        )
+    if "stack-status 里 " not in source or "不是 running" not in source:
+        problems.append(
+            "[浏览器半] 空态缺一句原因（卡 A290：要说清「stack-status 里 <组件> 不是 running」）"
+        )
+    if '"data-wb-fallback": "embedded"' not in source or "已退回内嵌" not in source:
+        problems.append(
+            "[浏览器半] 右栏不可用没退回内嵌（卡 A290：缺 data-wb-fallback / 「已退回内嵌」）"
+        )
     problems.extend(_check_read_only("浏览器半", source))
     return problems
 

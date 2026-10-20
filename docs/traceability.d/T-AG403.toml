@@ -1,13 +1,11 @@
 [entries."T-AG403"]
 id = "T-AG403"
-title = "首屏秒开：SWR 缓存优先 + 骨架，stack-status 5s 缓存"
+title = "内嵌页壳：三个入口的右栏壳与时序"
 group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:tools/dsh_panel.py",
   "file:tests/test_dsh_panel.py",
-  "file:复盘/卡/卡A289-首屏秒开.md",
-  "file:gates/diag/wb-A289.verdict.txt",
 ]
 gaps = "- 首屏缓存只做在客户端 localStorage 与宿主 5s TTL 两层，跨窗口共享缓存未做（客户端实现见 `tools/dsh_panel.py` 的 useSource）。- `tools/dsh_panel.py` 的 `_check_client` 只钉了 5 条反例，真实浏览器下的渲染耗时没有自动门（对应用例在 `tests/test_dsh_panel.py`）。- 路由验证器仍只验三条只读路由，没有覆盖本节新加的缓存头（脚本见 `tools/verify_panel_routes.py`）。"
 
