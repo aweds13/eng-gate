@@ -3135,3 +3135,25 @@ files = ["skills/pipe-takeover/SKILL.md", "skills/pipe-takeover/references/class
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "A301"
+task = "T-AG415"
+title = "落地前置检查 + 接管技能端到端验证 + 六种假成功钉子"
+tree = ".wt/A301"
+spec = "复盘/卡/卡A301-落地前置检查与接管验证.md"
+files = ["tools/wb_land.py", "skills/pipe-land/references/land-steps.md", "tests/test_takeover_e2e.py", "tests/test_false_success_pins.py"]
+depends = ["A300"]
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "A302"
+task = "T-AG416"
+title = "谱系树：从 git 历史重建前置关系"
+tree = ".wt/A302"
+spec = "复盘/卡/卡A302-卡谱系树.md"
+files = ["tools/wb_tree.py", "tools/dsh_panel.py", "tests/test_wb_tree.py"]
+depends = ["A290", "A301"]
+risk = "low"
+status = "pending"

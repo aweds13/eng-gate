@@ -1,0 +1,13 @@
+[entries."T-AG415"]
+id = "T-AG415"
+title = "落地前置快检 + 接管技能端到端 + 六种假成功钉子"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_land.py",
+  "file:skills/pipe-land/references/land-steps.md",
+  "file:tests/test_takeover_e2e.py",
+  "file:tests/test_false_success_pins.py",
+]
+gaps = "- 前置快检只拦「反引号里的裸文件名」这一族；像 `docs/changelog.md` 里手写的相对路径（含 `/`）仍由 `scripts/check_layers.py` 判，本卡不改它的判据。- 接管技能的端到端样例在 `tests/test_takeover_e2e.py` 里用 `tmp_path` 造，没在真实外部仓库上跑过；真实仓库的行为以 `tools/wb_takeover.py` 的只读勘察为准。- 六种假成功的钉子都作用在本仓数据结构上（`tests/test_false_success_pins.py`），不是对某一次具体事故的回放。"
+

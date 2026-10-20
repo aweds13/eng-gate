@@ -1,3 +1,8 @@
+## 落地前置快检 + 接管技能端到端 + 六种假成功钉子
+- `tools/wb_land.py`：② 文书生成后、③ 全量门禁前加秒级快检——反引号裸文件名（`.md/.toml/.py`）+ `scripts/check_layers.py` + `pytest tests/test_check_skills.py`，红了立刻停、不进全量门。
+- `skills/pipe-land/references/land-steps.md`：坑清单补「文书只许写仓内全路径」一条。
+- `tests/test_takeover_e2e.py`：A/B/C/D 四类样例目录，断言 `tools/wb_takeover.py` 的 kind 与 mapping_hints，并跑通 C 类「铺骨架 → 首验」路径。
+- `tests/test_false_success_pins.py`：门假绿 / 卡没人派 / 证据不存在 / done 无证据 / 骨架污染主干 / 本仓特例当通用，六条各自会咬。
 ## 接管旧项目：勘察器 + 映射表 + 限制清单
 - 新增 `skills/pipe-takeover/SKILL.md`（72 行）、`skills/pipe-takeover/NOTES.md` 与三篇 `references/`：`skills/pipe-takeover/references/classify.md` 四类判据、`skills/pipe-takeover/references/mapping.md` 映射表（`none` 是一等值）、`skills/pipe-takeover/references/limits.md` 六条禁止。
 - 新增 `tools/wb_takeover.py`：只读勘察器，`--root <目录> --json` 输出 `{ok, kind, readings, mapping_hints}`，零写盘零网络。

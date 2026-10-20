@@ -21,6 +21,7 @@
 | `--affected` / `--changed-from` | 否 | 增量门禁（默认关）；碰 `scripts/` `tools/` `gates/` 会强制回全量 |
 | `--no-review` | 否 | 跳过⑧复核落盘（默认开） |
 | `--no-preflight` | 否 | 跳过③″快门禁预检（已知道要跑全量时） |
+| `--precheck` | 否 | **壳层参数、不转发给落地链**：落地前置快检（文书裸文件名 + 两道秒级检查），见 §5.1 |
 
 ## 2. 三段文书（`gates/diag/_text_<台账号>.md`）
 
@@ -63,10 +64,19 @@
 
 ### 5.1 文书里写裸文件名反引号 → check_layers 断链
 
+- **规则一句话**：**文书只许写仓内全路径，裸文件名会被 check_layers 当路径**。
 - **症状原文**：`scripts/check_layers.py` 报「引用断裂: docs\changelog.md 引用了不存在的 SKILL.md」，814 条引用断链 2 处。
 - **根因**：`scripts/check_layers.py` 把**反引号里包着的 `.md` 词**当路径引用去查；裸文件名不是真路径，查不到就判断链。占位符、通配符一样咬。
 - **处置写法**：反引号里只写真路径（如 `skills/pipe-card/SKILL.md`）；占位符去掉反引号（写成「md 文件」）；通配符别带 `.md`。
-- **证据路径**：`复盘/口径坑.md` 坑 21/29/40；`复盘/卡/卡A295-坑进流程.md`。
+- **★ 前移到秒级（卡 A301）**：第 ② 步（文档件）跑完、进全量门禁之前，先跑
+  `python -X utf8 tools/wb_land.py --precheck <台账号>` —— 它只扫本次那两份文书
+  （`gates/diag/_text_<台账号>.md` 与 `docs/changelog.d/<台账号>.md`）里反引号包着的裸文件名
+  （无 `/` 或 `\`、以 `.md` / `.toml` / `.py` 结尾），再跑 `scripts/check_layers.py` 与
+  `tests/test_check_skills.py`；红了**退非 0 并停手**，全量门禁一步不跑（几秒 vs 几分钟）。
+  ★ 唯一的放行：**仓根下真有这个文件**（根级文件的全路径就是裸名），其余照红。
+  ★ 边界：接线（把它插在落地链 ② 与 ④ 之间）要改 `tools/pool/landing.py`，卡 A301 的 files 域里没有它 ⇒
+  眼下由落地的人手动先跑这一句。
+- **证据路径**：`复盘/口径坑.md` 坑 21/29/40；`复盘/卡/卡A295-坑进流程.md`；`tests/test_false_success_pins.py`（快检与真门同向那条）。
 
 ### 5.2 主树里未跟踪的卡规格挡住 ff 合流
 
