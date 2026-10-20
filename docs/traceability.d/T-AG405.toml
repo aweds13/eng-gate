@@ -1,0 +1,11 @@
+[entries."T-AG405"]
+id = "T-AG405"
+title = "项目书进 git 并与卡号对齐"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/DSH三入口-项目书与接手单.md",
+  "file:复盘/卡/卡A291-项目书进git.md",
+]
+gaps = "- 项目书里的验收数字（150ms / 1.2s / 50ms）来自 A289 派活前的旧测量，尚未用新壳重测；待 A302 落地后复测，复测口径写在 `复盘/DSH三入口-项目书与接手单.md` 的验收一节。- 三个入口的「首屏骨架」只覆盖右栏壳，未覆盖禅道反代失败态；失败态由 `tools/dsh_panel.py` 的 `data-wb-state=「error」` 渲染，本卡未拍新截图。"
+

@@ -1,3 +1,7 @@
+## 项目书进 git
+- `复盘/DSH三入口-项目书与接手单.md` 入库：症状、缺口、验收数字、A289–A292 拆卡。
+- `复盘/卡/卡A291-项目书进git.md` 卡规格入库。
+- `docs/workbacklog.toml`：A291 翻成 done。
 ## 落地前置快检 + 接管技能端到端 + 六种假成功钉子
 - `tools/wb_land.py`：② 文书生成后、③ 全量门禁前加秒级快检——反引号裸文件名（`.md/.toml/.py`）+ `scripts/check_layers.py` + `pytest tests/test_check_skills.py`，红了立刻停、不进全量门。
 - `skills/pipe-land/references/land-steps.md`：坑清单补「文书只许写仓内全路径」一条。

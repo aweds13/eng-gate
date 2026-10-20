@@ -3046,7 +3046,7 @@ spec = "复盘/卡/卡A291-项目书进git.md"
 files = ["复盘/DSH三入口-项目书与接手单.md", "docs/workbacklog.toml"]
 depends = ["A289"]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A292"

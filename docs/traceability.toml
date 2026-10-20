@@ -7686,3 +7686,14 @@ evidence = [
   "file:tests/test_false_success_pins.py",
 ]
 gaps = "- 前置快检只拦「反引号里的裸文件名」这一族；像 `docs/changelog.md` 里手写的相对路径（含 `/`）仍由 `scripts/check_layers.py` 判，本卡不改它的判据。- 接管技能的端到端样例在 `tests/test_takeover_e2e.py` 里用 `tmp_path` 造，没在真实外部仓库上跑过；真实仓库的行为以 `tools/wb_takeover.py` 的只读勘察为准。- 六种假成功的钉子都作用在本仓数据结构上（`tests/test_false_success_pins.py`），不是对某一次具体事故的回放。"
+
+[entries."T-AG405"]
+id = "T-AG405"
+title = "项目书进 git 并与卡号对齐"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/DSH三入口-项目书与接手单.md",
+  "file:复盘/卡/卡A291-项目书进git.md",
+]
+gaps = "- 项目书里的验收数字（150ms / 1.2s / 50ms）来自 A289 派活前的旧测量，尚未用新壳重测；待 A302 落地后复测，复测口径写在 `复盘/DSH三入口-项目书与接手单.md` 的验收一节。- 三个入口的「首屏骨架」只覆盖右栏壳，未覆盖禅道反代失败态；失败态由 `tools/dsh_panel.py` 的 `data-wb-state=「error」` 渲染，本卡未拍新截图。"
