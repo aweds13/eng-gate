@@ -62,6 +62,21 @@ python -X utf8 tools/wb_takeover.py --root <目录> --json
 
 六条禁止逐条对过才许动手：[限制清单](references/limits.md)。
 
+## 接链六步（每步一条命令 + 一个验收）
+
+定类之后不要再即兴发挥，按这六步往下走；每步的完整命令、验收与「失败的先看哪」：
+
+| 步 | 动作 | 这一步的验收 |
+|---|---|---|
+| 1 | 只读勘察（判类 + 留 JSON） | `class` 是 A/B/C/D，`signals` 说得出理由；不写任何文件 |
+| 2 | 不动原结构（六条禁止逐条过） | `git status --porcelain` 与第 1 步逐字相同，`ls-files` 计数不变 |
+| 3 | 最小骨架（只加文件；A 类跳过、D 类不铺） | 目标目录里跑得通那道新门，产物落在 `gates/last.json` |
+| 4 | 首张卡（只加一张，四段齐） | 队列里只多一张卡，`git status` 只多骨架与这张卡 |
+| 5 | 首笔落地（先小；本仓走 `wb_land`，仓外用对方的门） | 本仓 `python -X utf8 tools/wb_verify.py --tree .` 五块无 FAIL；仓外那道门 code 为 0 |
+| 6 | 回滚点（起点提交 + 第一笔 + 怎么回滚） | 交接说明三样齐，别人照着能复现 |
+
+逐步细节见 `skills/pipe-takeover/references/attach-to-chain.md`。
+
 ## 自查
 
 1. 我跑过勘察器并留了 JSON 读数（`kind` + 逐条 `readings`），不是靠口头描述定的类。

@@ -25,9 +25,9 @@
 - **「复用通过 ≠ 这道门现在是绿的」**：自己动过的门（或它的输入）必须 `--no-reuse` 真跑，
   否则等于没验（`复盘/口径坑.md` 第 11 条，卡 094 实例）。
 - **卡 209（`T-G318`）加严第一趟**：`check_skills.py` ⇒ rc=1，本技能「怎么读结果」**7 条口径一条都没指向脚本**。
-- **卡 A293（本轮）的实测现状**：旧稿 70 行里 `wb_` / `worktree` **0 次**，四条真命令全是
-  `framework/cli/main.py gate/doctor/ledger/trace` —— 实测本仓根没有 `pipeline.toml`，
-  `gate` / `doctor` 都报「配置不存在」，`ledger check` / `trace seal` 也依赖同一份配置。
+- **卡 A293（本轮）的实测现状**：旧稿 70 行里 `wb_` / `worktree` **0 次**，四条真命令全是框架 CLI 的
+  `gate` / `doctor` / `ledger` / `trace`（框架层，入口是仓里的薄 CLI）—— 实测本仓根没有
+  `pipeline.toml`，`gate` / `doctor` 都报「配置不存在」，`ledger check` / `trace seal` 也依赖同一份配置。
   新稿换成六件本仓真工具（`wb_verify` / `wb_diag` / `pipeline_view` / `wb_reconcile` + 可选的 CLI `doctor`），
   `wb_` / 树相关出现 **9 次**，89 行、绿。
 

@@ -44,11 +44,13 @@ python -X utf8 tools/pipeline_view.py --json
 
 # 队列状态与 git 历史对账（stale-pending / stale-done）
 python -X utf8 tools/wb_reconcile.py
-
-# 门本身还有没有牙（要 pipeline.toml；本仓根没有，得指向真有配置的目录）
-# ★ --json 是全局开关，写在子命令前面
-python -X utf8 framework/cli/main.py --json doctor --config <pipeline.toml>
 ```
+
+★ 层归属：上面这些全是**本仓工作链**（`tools/wb_*.py` + 根 `scripts/run_gates.py`）。
+框架层那条「门本身还有没有牙」的自检（框架 CLI 的 `doctor`，要一份 `pipeline.toml`）不在本仓主路径上 ——
+本仓根没有 `pipeline.toml`，硬跑只会报「配置不存在」。它归框架层，命令与口径见 `skills/pipe-init/SKILL.md`，
+别拿它当本仓的门。
+
 
 ## 怎么读结果
 

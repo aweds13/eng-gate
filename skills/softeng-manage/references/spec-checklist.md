@@ -43,17 +43,23 @@ description: <一句话说做什么>。当<场景 A>/<场景 B>/<关键词>时�
 反例：`Helps with PDFs.`（没说何时用）
 正例（本仓 `softeng-manage`）：`软件工程管理总入口——把「开卡 → 派活 → 跑门 → 落地 → 巡检 → 复盘」串成一条不发散的流程。当你要…时用；它只做路由与铁律，细节交给六个动作技能。`
 
-## 4. 当前 7 个技能的读数（2026-10-19，卡 A293）
+## 4. 当前 9 个技能的读数（卡 A304 之后）
 
 | 技能 | `skills-ref validate` | 正文行数 | `check_skills.py` |
 |---|---|---|---|
 | `pipe-card` | Valid | 91 | 绿 |
-| `pipe-forensics` | Valid | 89 | 绿 |
-| `pipe-gate` | Valid | 70 | 绿 |
-| `pipe-init` | Valid | 81 | 绿 |
-| `pipe-land` | Valid | 88 | 绿 |
-| `pipe-workbench` | Valid | 71 | 绿 |
-| `softeng-manage` | Valid | 82 | 绿 |
+| `pipe-forensics` | Valid | 100 | 绿 |
+| `pipe-gate` | Valid | 80 | 绿 |
+| `pipe-init` | Valid | 98 | 绿 |
+| `pipe-land` | Valid | 92 | 绿 |
+| `pipe-new` | Valid | 110 | 绿 |
+| `pipe-takeover` | Valid | 87 | 绿 |
+| `pipe-workbench` | Valid | 77 | 绿 |
+| `softeng-manage` | Valid | 104 | 绿 |
+
+`spec-grill` 还没建目录，是 `skills/README.md` 索引里的一行占位（后续卡补）。
+卡 A293 的旧表（7 个技能 / 70–91 行）已被本表取代：gate / land / workbench 在 A304 之前就已改动过，
+旧读数当时已经过期。
 
 复现：`wc -l skills/*/SKILL.md`、`python -X utf8 skills/nails/check_skills.py`、
 `npx -y skills-ref@latest validate ./skills/<名>`。行数会随改写变，**这张表是读数不是判据**。

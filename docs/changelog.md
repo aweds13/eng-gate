@@ -1,3 +1,9 @@
+## 技能层补全：新建 / 接链 / 文档层 / 资产边界 + 命令漂移修正
+- 新增 `skills/pipe-new/`：把「框架层 `pipe-init`」与「本仓工作链 `wb_*`」分成两条路，首笔落地三个最常见失败引 `tools/pool/landing.py` 源码原话。
+- 新增 `skills/pipe-takeover/references/attach-to-chain.md`：六步接链，每步一条命令一个验收。
+- 新增 `skills/softeng-manage/references/doc-layers.md` 与 `skills/softeng-manage/references/asset-layers.md`：五层文档写法（timeflow 41 篇实例）与三层资产边界。
+- 命令漂移：`framework/cli/main.py` 从 24 处降到 17 处，非 `pipe-init` 的只剩 3 处且显式标注为框架层。
+- 校验：`skills-ref validate` 两个技能 Valid、`scripts/check_layers.py` PASS（852 条引用 / 断链 0）、`tests/test_check_skills.py` 18 项绿。
 ## 命令写法硬约束：拦住管道截断与 sleep 硬等
 - 新增 `tools/run_logged.py`：逐行落盘 + 定时心跳 + 结束回放最后几行，退出码透传。
 - 新增 `tools/cmd_guard.py`：命中 `| tail/head/cut` 或 `sleep N` 就退 1，并给改法。

@@ -10,6 +10,7 @@
 - 本仓主路径的命令是 `python -X utf8 tools/wb_*.py` 与 `python -X utf8 scripts/run_gates.py`；
   框架 CLI（`python -X utf8 framework/cli/main.py <命令>`）只在 `init` 这类自带模板的动作上直接用。
   两套命令的对照见 `skills/softeng-manage/references/mapping.md`。
+- **契约**：`SKILL.md` 里引用的每个命令名，必须能在**同版** `pipe --help` 里找到（钉子①机器判）。
 
 ## §1 ★ 分工判据：这东西该放哪
 
@@ -48,22 +49,27 @@
 规范离线副本：`docs/reference/agent-skills-spec.md`；改技能时逐条过的自检表：
 `skills/softeng-manage/references/spec-checklist.md`。
 
-## §3 skills 清单（7 个）
+## §3 skills 清单（9 个 + 1 个占位）
 
 | skill | 覆盖的动作 | 本仓真命令 | references |
 |---|---|---|---|
-| `softeng-manage` | **总入口**：六段路由 + 六条铁律 | 只路由（细节见右列技能） | `mapping.md` · `commands.md` · `spec-checklist.md` |
+| `softeng-manage` | **总入口**：六段路由 + 六条铁律 | 只路由（细节见右列技能） | `mapping.md` · `commands.md` · `spec-checklist.md` · `doc-layers.md` · `asset-layers.md` |
 | `pipe-card` | 开卡 / 派活 / 申报 | `tools/wb_dispatch.py` · `tools/wb_task.py` · `tools/wb_stage_card.py` | `dispatch.md` |
 | `pipe-gate` | 跑门并读懂结果 | `scripts/run_gates.py` + `tools/wb_verify.py` | `output.md` |
 | `pipe-land` | 集成与落地（八步链） | `tools/wb_land.py` · `tools/wb_verify.py` | `land-steps.md` |
 | `pipe-workbench` | 工作台四件套（读数 / 巡检 / 注入 / 面板） | `tools/pipeline_view.py` · `wb_daily.py` · `workbench_bridge.py` · `wb_dash.py` | `tools.md` |
 | `pipe-forensics` | 出事了从证据里查 | `tools/wb_verify.py` · `wb_diag.py` · `wb_reconcile.py` | `evidence-map.md` |
-| `pipe-init` | 铺骨架 | `framework/cli/main.py init` | `scaffold.md` |
-| `pipe-takeover` | 接管旧项目：勘察定类 → 映射 → 限制 | `tools/wb_takeover.py` | `classify.md` · `mapping.md` · `limits.md` |
+| `pipe-new` | 在本仓内从零起一条工作链 | `tools/wb_plan.py` · `tools/wb_dispatch.py` · `tools/wb_land.py` | `first-landing.md` |
+| `pipe-init` | 铺框架骨架（框架层，唯一还用 CLI 的） | 框架 CLI 的 `init` 子命令（见技能正文） | `scaffold.md` |
+| `pipe-takeover` | 接管旧项目：勘察定类 → 映射 → 接链 | `tools/wb_takeover.py` | `classify.md` · `mapping.md` · `limits.md` · `attach-to-chain.md` |
+| `spec-grill` | **占位**：规格问询（把需求问成可验收的规格） | 待补 | 待补 |
 
-前六个是**动作技能**（一种操作一份），`softeng-manage` 是**路由技能**：它不重复动作细节，
-只给「这件事该走哪个技能 / 哪条铁律不能破 / 本仓命令与技能文档的差异」。
-装法与前六个相同，注册脚本会把它一起挂到工人技能根。
+`spec-grill` 这一行是**占位**：目录与正文由后续的卡补，不在这张卡的改动范围里 ——
+别顺手写一个新技能出来。
+
+除 `softeng-manage`（路由）与 `spec-grill`（占位）之外，其余八个是**动作技能**（一种操作一份）：
+它们不重复动作细节以外的判据，只给「这件事该走哪个工具 / 哪条铁律不能破 / 本仓命令与技能文档的差异」。
+装法相同，注册脚本会把它们一起挂到工人技能根。
 
 ## §4 ★ 换 harness 要改什么（清单式）
 
@@ -85,7 +91,8 @@
 
 - **框架版本**：`framework/pyproject.toml` 里的版本。
 - **skills 版本**：跟框架**同版** —— 本目录随框架版本一起动。
-- **契约**：`SKILL.md` 里引用的每个命令名，必须能在**同版** `pipe --help` 里找到（钉子①机器判）。
+- **契约（两条，别混）**：本仓工作链的命令名必须在 `tools/` / `scripts/` 里真实存在（钉子②第三条兜脚本路径）；
+  框架层的命令名（只有 `pipe-init` 还在用）必须能在**同版** `pipe --help` 里找到（钉子①机器判）。
 - **兼容规则**：CLI **加**命令 / 加字段 = 次版本；**删**命令 / **改**命令名 / 改退出码表 = 主版本
   （skills 必须同版改，否则钉子①红）。
 
@@ -113,9 +120,11 @@ npx -y skills-ref@latest validate ./skills/<名>  # ③ 官方校验器
 - skills **只有操作知识**；**框架能不能用，不由 skills 证明** —— 那是框架自己门禁的事。
 - 命令面里有几条在**本仓主路径上走不到实现**：框架 CLI 的 `gate` / `land` / `claim` / `ledger check` /
   `trace seal` 都要求根级 `pipeline.toml`，本仓没有 ⇒ 实测直接报「配置不存在」（退 `5`，前置条件缺失）。
-  所以这七份技能的正文一律走 `tools/wb_*.py`；`pipe` CLI 只保留在 `pipe-init`（它自带模板）。
+  所以各技能的正文一律走 `tools/wb_*.py`；框架 CLI 只保留在 `pipe-init`（它自带模板）。
 - 本层**不绑某个 harness**：harness 特有值只在 `GLUE-harness.md`。
 - ★ **两道钉子仍没有消费端**：`skills/nails/*` 不在 `scripts/run_gates.py` 的门表里 ⇒
   **加严了判据，但没接线**。别把「绿」读成「已进闸」。
 - ★ **卡 A293 的读数（2026-10-19）**：7 份 `SKILL.md` 全部 `Valid skill`；`check_skills.py` 退 0；
   正文行数 70 / 71 / 81 / 82 / 88 / 89 / 91（逐份读数见各 `NOTES.md`）。
+  卡 A304 之后是 **9 份**（新增 `pipe-new`，`pipe-takeover` 补了「接链六步」一节），当前行数以
+  `python -X utf8 skills/nails/check_skills.py` 的输出为准。

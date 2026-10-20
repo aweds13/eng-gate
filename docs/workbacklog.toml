@@ -3035,7 +3035,7 @@ spec = "复盘/卡/卡A290-内嵌页壳.md"
 files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
 depends = ["A298"]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A291"
@@ -3057,7 +3057,7 @@ spec = "复盘/卡/卡A292-技能登记.md"
 files = ["tools/sync_worker_skills.py"]
 depends = ["A289"]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A293"
@@ -3168,3 +3168,69 @@ files = ["tools/cmd_guard.py", "tools/run_logged.py", "tests/test_cmd_guard.py",
 depends = ["A302"]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A304"
+task = "T-AG418"
+title = "技能层补全：新建/接链/文档层/资产边界 + 命令漂移修正"
+tree = ".wt/A304"
+spec = "复盘/卡/卡A304-技能层补全.md"
+files = ["skills/softeng-manage/references/doc-layers.md", "skills/softeng-manage/references/asset-layers.md", "skills/pipe-takeover/references/attach-to-chain.md", "skills/pipe-new/SKILL.md", "skills/pipe-new/references/first-landing.md", "skills/pipe-new/NOTES.md", "skills/README.md"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "A305"
+task = "T-AG419"
+title = "spec-grill：把 grill-me 改写成需求拷问技能"
+tree = ".wt/A305"
+spec = "复盘/卡/卡A305-spec-grill技能.md"
+files = ["skills/spec-grill/SKILL.md"]
+depends = ["A304"]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A306"
+task = "T-AG420"
+title = "工具单一来源：统一 --root + pipe.cmd 壳"
+tree = ".wt/A306"
+spec = "复盘/卡/卡A306-工具单一来源.md"
+files = ["tools/wb_land.py"]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "A307"
+task = "T-AG421"
+title = "墓碑表：被证伪的结论不许再当事实"
+tree = ".wt/A307"
+spec = "复盘/卡/卡A307-墓碑表.md"
+files = ["docs/tombstones.toml"]
+depends = []
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A308"
+task = "T-AG422"
+title = "动作留痕带一键回滚"
+tree = ".wt/A308"
+spec = "复盘/卡/卡A308-动作回滚命令.md"
+files = ["tools/stack.py"]
+depends = []
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A309"
+task = "T-AG423"
+title = "面板深链：每个界面都有自己的地址"
+tree = ".wt/A309"
+spec = "复盘/卡/卡A309-面板深链.md"
+files = ["tools/dsh_panel.py"]
+depends = []
+risk = "low"
+status = "pending"

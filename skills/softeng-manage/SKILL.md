@@ -41,7 +41,11 @@ description: 本仓（program/engineering）软件工程管理总入口——把
 | ⑤ 巡检 | 今天该做什么、谁在飞 | `tools/wb_daily.py` / `tools/pipeline_view.py` | `pipe-workbench` |
 | ⑥ 复盘 | 哪一步坏了 | `tools/wb_verify.py` / `tools/wb_diag.py` / `tools/wb_reconcile.py` | `pipe-forensics` |
 
-空目录起新骨架：`pipe-init`（`python -X utf8 framework/cli/main.py init --dir <目录>`）。
+从零起一条链，先分清两条路：
+
+- **框架层（要一份自己的 `pipeline.toml` + 门表 + 钉子，铺到某个目录）**：`pipe-init`。
+  它自带模板，命令与退出码见 `skills/pipe-init/SKILL.md`；这是本仓唯一还直接用框架 CLI 的地方。
+- **本仓工作链（在本仓内新开一个项目目录，队列 / 卡 / 树 / 落地走 `wb_*`）**：`pipe-new`。
 
 ## 怎么读结果
 
@@ -73,6 +77,8 @@ description: 本仓（program/engineering）软件工程管理总入口——把
 - 产品线结论（timeflow，不改本仓框架）：[product-lines](references/product-lines.md)
 - 界面判据（主题令牌 / 非文字对比度）：[ui-notes](references/ui-notes.md)
 - 技能三层与登记表（索引 / 操作 / 判据）：[skills-layers](references/skills-layers.md)
+- 文档五层（意图 / 规格 / 契约 / 实现 / 品味，各放什么、何时升级）：[doc-layers](references/doc-layers.md)
+- 资产三层（timeflow 是产品 / pool 是谁来做 / infra 是在什么机器上）：[asset-layers](references/asset-layers.md)
 - 文档口径：同一事实只许一处投影、第四份投影必须脚本对账（缺口 CF2）；口径漂移用「加注」治——保留原文 + 顶部加注「已被卡 N 推翻」，不原地改写（缺口 CF1）。
 - 框架两条总纲：事实层是唯一真源、AI 只写「做了什么」的事实回报、结论与产物由库/门产出（缺口 FW1）；框架要能整体提升为独立仓、先跑抽取清单、先抽后搬（缺口 FW2）—— 操作面见 `pipe-init`。
 

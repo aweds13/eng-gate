@@ -1,0 +1,39 @@
+[entries."T-AG418"]
+id = "T-AG418"
+title = "技能层补全：新建/接链/文档层/资产边界 + 命令漂移修正"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:skills/GLUE-harness.md",
+  "file:skills/README.md",
+  "file:skills/pipe-forensics/NOTES.md",
+  "file:skills/pipe-forensics/SKILL.md",
+  "file:skills/pipe-gate/NOTES.md",
+  "file:skills/pipe-init/SKILL.md",
+  "file:skills/pipe-land/NOTES.md",
+  "file:skills/pipe-takeover/SKILL.md",
+  "file:skills/pipe-takeover/references/attach-to-chain.md",
+  "file:skills/softeng-manage/SKILL.md",
+  "file:skills/softeng-manage/references/mapping.md",
+  "file:skills/softeng-manage/references/spec-checklist.md",
+  "file:skills/softeng-manage/references/doc-layers.md",
+  "file:skills/softeng-manage/references/asset-layers.md",
+  "file:skills/softeng-manage/references/grill-me.md",
+  "file:skills/pipe-new/SKILL.md",
+  "file:skills/pipe-new/NOTES.md",
+  "file:skills/pipe-new/references/first-landing.md",
+  "file:docs/workbacklog.toml",
+  "file:复盘/DSH插件-成果盘点与待用清单.md",
+  "file:复盘/卡/卡A304-技能层补全.md",
+  "file:复盘/卡/卡A305-spec-grill技能.md",
+  "file:复盘/卡/卡A306-工具单一来源.md",
+  "file:复盘/卡/卡A307-墓碑表.md",
+  "file:复盘/卡/卡A308-动作回滚命令.md",
+  "file:复盘/卡/卡A309-面板深链.md",
+  "file:gates/diag/_text_TAG418.md",
+  "file:docs/changelog.d/T-AG418.md",
+  "file:docs/traceability.d/T-AG418.toml",
+  "file:复盘/交接.d/T-AG418.md",
+]
+gaps = "- `pipe-new` 的「首笔落地」只在纸面走通：`skills/pipe-new/references/first-landing.md` 里只有命令，还没有在真正的空目录里实测过；验证要等新仓建起来（卡 A306 的空仓验证会覆盖）。- `doc-layers.md` 里的 timeflow 实例只给路径不给摘录，读者仍需自己去 `docs/intention/needs.md` 对照。- `skills/softeng-manage/references/asset-layers.md` 的耦合点按源码口径是 8 个文件 20 处（`tools/wb_dispatch.py` 6 处最多），卡规格里写的 15 处是含 `__pycache__` 的旧读数。"
+

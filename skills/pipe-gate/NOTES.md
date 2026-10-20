@@ -25,8 +25,8 @@
 - **卡 A293（本轮）· 第一趟红**：改完正文跑钉子 ⇒ rc=1，两条口径没指向真脚本。真因**不是**漏写，
   而是指到了 `scripts/run_gates.py` —— 钉子 C 的允许根只有 `tools/` · `skills/` · `framework/cli/`。
   处置：改指 `tools/wb_verify.py`（一屏五块）与 `tools/pipeline_view.py`（每道门一行）。改后 70 行、绿。
-- **本轮的实测现状**：旧稿 61 行里 `wb_` / `worktree` 出现 **0 次**，命令全是
-  `framework/cli/main.py gate` —— 而本仓根**没有 `pipeline.toml`**，那条命令在主路径上跑不了。
+- **本轮的实测现状**：旧稿 61 行里 `wb_` / `worktree` 出现 **0 次**，命令全是框架层的 `gate`（薄 CLI 入口）
+  —— 而本仓根**没有 `pipeline.toml`**，那条命令在主路径上跑不了。
   新稿改成 `scripts/run_gates.py` 跑门 + `tools/wb_*.py` 读结论（实测 `--fast` 8 道全绿，最慢一道 4.96s）。
 
 ## 脚本接口与以后怎么改

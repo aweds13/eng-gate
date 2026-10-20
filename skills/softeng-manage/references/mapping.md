@@ -57,9 +57,18 @@ ls gates/diag/wb-<卡>*              # 工人的日志在不在
 | **怎么用才不出错**（顺序、前置检查、常见错） | 技能（`SKILL.md`） | 只写操作知识，不写阈值 |
 | **换 harness 要改的** | `skills/GLUE-harness.md`（G1–G6） | `SKILL.md` 里不出现某个 harness 特有路径作为前提 |
 
-## E. 与 `pipe` CLI 的关系
+## E. 与框架 CLI 的关系（层归属）
 
-框架自带一条 `python -X utf8 framework/cli/main.py <命令>` 的 CLI（`init` / `gate` / `card` /
-`claim` / `land` / `doctor` / `ledger` / `trace`）。本仓**根目录没有 `pipeline.toml`**，
-所以 `gate` / `land` 这两条在本仓主路径上用不了 —— 顺序与前置检查照技能，命令走上表 `wb_*`。
-唯一仍在用 CLI 的是 `init`（它自己带模板，不需要根级配置）。
+框架自带一条薄 CLI（`init` / `gate` / `card` / `claim` / `land` / `doctor` / `ledger` / `trace`），
+它是**框架层**的入口，不是本仓工作链的入口。本仓**根目录没有 `pipeline.toml`**，所以
+`gate` / `land` 这两条在本仓主路径上用不了 —— 顺序与前置检查照技能，命令走上表 `wb_*`。
+
+| 动作 | 本仓工作链（`wb_*`） | 框架层（薄 CLI） |
+|---|---|---|
+| 跑门 | `scripts/run_gates.py` | `gate --config <pipeline.toml>` |
+| 落地 | `tools/wb_land.py` | `land --config <pipeline.toml>` |
+| 开卡 / 申报 | 卡规格 + 队列条目 + `tools/pool_mcp.py` 写面 | `card` / `claim` |
+| 台账 / 封存 | `tools/wb_verify.py`、`tools/sync_counts.py` | `ledger` / `trace` |
+| 铺骨架 | 不走 CLI | `init --dir <目录>`（自带模板，唯一在本仓主路径还直接用的） |
+
+一句话：**框架层的命令只在「铺骨架 / 有 `pipeline.toml` 的目录」里用**；本仓里一律 `wb_*`。

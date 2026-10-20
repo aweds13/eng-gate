@@ -15,7 +15,7 @@
 | G2 | 目录约定 | 目录束 `<root>/<技能名>/SKILL.md`（也可平铺 `<root>/<技能名>.md`）；扫描根按 rank 100 / 200 / 300 / 400 / 500 排优先级，数字越小越优先 |
 | G3 | frontmatter 字段 | 必填 `name`（kebab-case）+ `description`；可选 `whenToUse`（**驼峰**，写 `when-to-use` 会被静默忽略）；旧键 `modelInvocable` / `userInvocable` / `disableModelInvocation` 会**抛错** |
 | G4 | 触发机制 | `description` 是触发器（模型靠它决定加载）；`/点名` 在直接用户消息里扫描；`disable-model-invocation: true` 可挡自动加载 |
-| G5 | 调用入口 | 在本仓根用 `python framework/cli/main.py <命令>`；装包后 `pipe <命令>`。harness 只要能把它起成子进程即可 |
+| G5 | 调用入口 | **本仓工作链**：在本仓根用 `python -X utf8 tools/wb_*.py …`（门是 `scripts/run_gates.py`）；harness 只要能把它起成子进程即可。**框架层**另有一条薄 CLI（`framework/cli/main.py`，装包后 `pipe <命令>`），只在「铺骨架 / 有 `pipeline.toml` 的目录」里用，不是本仓主路径 |
 | G6 | 沙箱 / 权限 | 写权限按工作区；读不受限；跑 CLI 时的工作目录 = 仓库根 |
 
 ## 换 harness 的检查单
@@ -24,7 +24,7 @@
 - [ ] G2 —— 核对新 harness 的目录约定与 `SKILL.md` 文件名
 - [ ] G3 —— 核对新 harness 的必填 / 被拒 frontmatter 键
 - [ ] G4 —— 核对触发机制（自动加载 vs 点名）
-- [ ] G5 —— 核对 CLI 调用入口（`pipe` 在不在 PATH）
+- [ ] G5 —— 核对调用入口（`wb_*` 起子进程时的工作目录 = 仓库根；只有框架层才需要 `pipe` 在不在 PATH）
 - [ ] G6 —— 核对权限档与工作目录
 - [ ] 改完**不动任何 `SKILL.md`**（若被迫改，说明胶水漏进正文了 —— 那是 bug）
 
