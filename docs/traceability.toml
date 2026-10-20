@@ -7647,3 +7647,14 @@ evidence = [
   "file:gates/diag/wb-A299.verdict.txt",
 ]
 gaps = "- 这只交付方案，没有实现 `pipe-takeover` 技能本体；技能骨架在 `复盘/接手能力-方案.md` 第八节列了 5 条实现顺序。- K3 第一次派活在旧账号上因余额耗尽失败（证据归档在 `gates/diag/_history/A299-quota7.jsonl`），本方案是备用号上重跑的结果。- 分类判据里的四类项目只在文档里做了纸面校验，未在真实外部仓库上试跑；判据原文见 `复盘/接手能力-方案.md` 第一节。"
+
+[entries."T-AG412"]
+id = "T-AG412"
+title = "完工可见性不靠守护进程：面板实时扫 verdict"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+]
+gaps = "- 没改 `tools/wb_daily.py`：巡检分报沿用现有输出，不把「收工未收口」再算一遍；口径只在面板路由里（`tools/dsh_panel.py`）。- `notifications.jsonl` 仍由 `tools/wb_notify.py` 追加，本次只让读侧不再依赖它；守护自身的健康检查不在本卡。"

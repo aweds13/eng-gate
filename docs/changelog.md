@@ -1,3 +1,7 @@
+## 完工可见性不靠守护进程：面板实时扫 verdict
+- `tools/dsh_panel.py`：新增 `scanVerdicts()`，`serveNotifications` 合并「实时 verdict + notifications.jsonl」并按卡去重；缺 JSONL 不再直接返回空。
+- `tools/dsh_panel.py`：自检加一条「缺 scanVerdicts 必红」。
+- `tests/test_dsh_panel.py`：两条钉子（实时扫描存在 / 删掉必报红）。
 ## 接手旧项目的能力：方案（K3 咨询稿）
 - 交付 `复盘/接手能力-方案.md`：四类项目判据、对方产物到卡/门/证据/台账的映射、接手第一笔的安全边界、最小骨架、第一步验收路径、六种假成功、本仓特例清单、下一张卡的五条实现顺序。
 - 全部结论要求可观察证据（文件/命令/退出码），不写「建议考虑」。

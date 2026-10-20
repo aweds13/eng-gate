@@ -3123,4 +3123,15 @@ spec = "复盘/卡/卡A298-完工可见性不靠守护.md"
 files = ["tools/dsh_panel.py", "tools/wb_daily.py", "tests/test_dsh_panel.py", "tests/test_wb_daily.py"]
 depends = ["A297"]
 risk = "mid"
+status = "done"
+
+[[cards]]
+id = "A300"
+task = "T-AG414"
+title = "接管旧项目：pipe-takeover 技能 + 只读勘察器"
+tree = ".wt/A300"
+spec = "复盘/卡/卡A300-接管旧项目技能.md"
+files = ["skills/pipe-takeover/SKILL.md", "skills/pipe-takeover/references/classify.md", "skills/pipe-takeover/references/mapping.md", "skills/pipe-takeover/references/limits.md", "tools/wb_takeover.py", "tests/test_wb_takeover.py", "skills/README.md"]
+depends = []
+risk = "mid"
 status = "pending"

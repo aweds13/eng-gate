@@ -1,0 +1,11 @@
+[entries."T-AG412"]
+id = "T-AG412"
+title = "完工可见性不靠守护进程：面板实时扫 verdict"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+]
+gaps = "- 没改 `tools/wb_daily.py`：巡检分报沿用现有输出，不把「收工未收口」再算一遍；口径只在面板路由里（`tools/dsh_panel.py`）。- `notifications.jsonl` 仍由 `tools/wb_notify.py` 追加，本次只让读侧不再依赖它；守护自身的健康检查不在本卡。"
+

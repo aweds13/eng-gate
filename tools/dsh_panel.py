@@ -803,6 +803,36 @@ function readDoneCards() {
   return done;
 }
 
+/** A298：直接扫 verdict 文件 —— 守护没起、重启后也能看见「已收工未收口」。
+ *  只看文件能不能开、判决行在不在；不写盘、不猜；缺判决的卡不算收工。 */
+function scanVerdicts() {
+  const root = repoRoot();
+  if (!root) return [];
+  const dir = path.join(root, "gates", "diag");
+  const out = [];
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch (error) { return out; }
+  const suffix = ".verdict.txt";
+  for (const nm of names) {
+    const name = String(nm);
+    if (!name.startsWith("wb-") || !name.endsWith(suffix)) continue;
+    const file = path.join(dir, name);
+    let text = "";
+    let at = "";
+    try {
+      text = fs.readFileSync(file, "utf8");
+      at = new Date(fs.statSync(file).mtimeMs).toISOString();
+    } catch (error) { continue; }
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    const head = lines.find((l) => l.includes("判决")) || lines[0] || "";
+    const verdict = head.trim().slice(0, 160);
+    if (!verdict) continue;
+    if (verdict.includes("还没有") || verdict.includes("没跑完")) continue;
+    out.push({ card: name.slice(3, name.length - suffix.length), verdict, at });
+  }
+  return out;
+}
+
 function serveNotifications(req, res) {
   if (req.method !== "GET") {
     sendJson(res, 405, { ok: false, error: `通知路由只读，收到 ${req.method}` });
@@ -817,20 +847,28 @@ function serveNotifications(req, res) {
   try {
     text = fs.readFileSync(path.join(root, ...NOTIFICATIONS_REL), "utf8");
   } catch (error) {
-    /* 文件还没建（没有收工事件）⇒ 空列表，不报错（面板照常显示）。 */
-    sendJson(res, 200, { ok: true, unread: 0, items: [] });
-    return;
+    /* 文件还没建也不影响：下面还会扫 verdict（A298：可见性不靠守护进程）。 */
+    text = "";
   }
-  const done = readDoneCards();
-  const rows = [];
+  const parsed = [];
   for (const line of text.split(/\r?\n/)) {
     const s = line.trim();
     if (!s) continue;
     let row;
     try { row = JSON.parse(s); } catch (error) { continue; }
     if (!row || typeof row !== "object") continue;
-    /* 排掉已落地的卡（已收口不再算未读）—— 防 notifications.jsonl 里历史条目冒充未读。 */
-    if (done.has(String(row.card))) continue;
+    parsed.push(row);
+  }
+  const done = readDoneCards();
+  const rows = [];
+  const seen = new Set();
+  /* A298：先并实时扫出来的 verdict（守护没起、关机重启后照样看得见），再并 JSONL 历史；
+   * 同卡只留一条，实时的优先（它带最新判决）。 */
+  for (const row of scanVerdicts().concat(parsed)) {
+    const card = String(row.card || "");
+    if (!card || seen.has(card)) continue;
+    seen.add(card);
+    if (done.has(card)) continue;
     rows.push(row);
   }
   /* 按时间倒序、最多 20 条。 */
@@ -3159,6 +3197,8 @@ def _check_host(source: str) -> list[str]:
         problems.append("[宿主半] 缺 readDoneCards（卡 A297：要排掉 backlog 里已落地的卡）")
     if "notifications.jsonl" not in source:
         problems.append("[宿主半] 没指 notifications.jsonl（卡 A297：通知文件名写死）")
+    if "function scanVerdicts()" not in source:
+        problems.append("[宿主半] 缺 scanVerdicts（卡 A298：可见性不许只靠守护进程）")
     if "start-all" not in source:
         problems.append("[宿主半] 缺「全部起」（start-all）这条白名单动作（卡 253）")
     for bad in ("shell: true", "shell:true", "exec(", "execSync"):

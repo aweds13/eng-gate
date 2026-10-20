@@ -1170,6 +1170,26 @@ def test_host_reads_done_cards_to_filter_notifications() -> None:
     assert "status" in src and "done" in src  # 简单逐行扫，认 status = "done"
 
 
+def test_host_scans_verdicts_live_not_only_jsonl() -> None:
+    """★ A298：可见性不许只靠守护进程 —— 宿主半要能直接扫 verdict 文件。
+
+    背景：`notifications.jsonl` 由 `wb_notify.py --daemon` 追加；关机重启后守护不在，
+    只读 JSONL 就会漏掉「已收工未收口」的卡。所以路由必须每次请求现扫
+    `gates/diag/wb-*.verdict.txt`，再与 JSONL 合并去重。
+    """
+    src = dp._host_js()
+    assert "function scanVerdicts()" in src, "缺 scanVerdicts（实时扫 verdict）"
+    assert "scanVerdicts().concat(" in src, "没把实时扫描并进通知列表"
+    # 扫描只看文件名与判决行，不写盘（宿主半只读判据见 _check_read_only）。
+    assert "verdict.txt" in src
+
+
+def test_check_bites_when_live_scan_is_removed() -> None:
+    """★ A298：把 scanVerdicts 删掉，自检必须报红（钉子会咬）。"""
+    problems = dp._check_host(dp._host_js().replace("function scanVerdicts()", "function nope()"))
+    assert any("scanVerdicts" in p for p in problems), problems
+
+
 def test_host_notifications_route_is_get_only() -> None:
     """★ A297：/dsh-panel/notifications 只 GET —— serveNotifications 自带方法守卫，
     且分发在 serveSeam 的 GET 闸门之后（双保险）。"""
