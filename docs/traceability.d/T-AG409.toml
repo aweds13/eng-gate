@@ -1,0 +1,18 @@
+[entries."T-AG409"]
+id = "T-AG409"
+title = "三坑进流程 + 派活必挂看守 + 复盘索引进 git"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:skills/pipe-land/references/land-steps.md",
+  "file:skills/softeng-manage/SKILL.md",
+  "file:skills/softeng-manage/references/dispatch.md",
+  "file:复盘/INDEX.md",
+  "file:复盘/卡/卡A295-坑进流程.md",
+  "file:复盘/卡/卡A296-P2六条回填.md",
+  "file:复盘/卡/卡A297-完工回推通道.md",
+  "file:复盘/卡/卡A298-完工可见性不靠守护.md",
+  "file:gates/diag/wb-A295.verdict.txt",
+]
+gaps = "- 这三坑只写进 `skills/pipe-land/references/land-steps.md` 与 `skills/softeng-manage/references/dispatch.md`，没有为每一条单开一节技能。- 「落地必须先同步文件进卡树」的完整命令序列未展开，只给了处置命令；细节在 `skills/pipe-land/references/land-steps.md` §5.2 与 `tools/pool/landing.py`。- 通知通道不在本卡范围，派活文档只写「挂看守」；通道本体见 `复盘/卡/卡A297-完工回推通道.md` 与 `复盘/卡/卡A298-完工可见性不靠守护.md`。"
+

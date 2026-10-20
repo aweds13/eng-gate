@@ -1,3 +1,7 @@
+## 三坑进流程 + 派活必挂看守
+- `skills/pipe-land/references/land-steps.md` 新增第 5 节：裸文件名反引号断链、未跟踪卡规格挡 ff、`--allow` 精确匹配且要逐文件证据。
+- `skills/softeng-manage/references/dispatch.md` 新增「派活后必须挂看守」：`--detach` 无回推通道，派活与挂 `tools/wb_watch.py` 是同一步。
+- `复盘/INDEX.md` 进 git（978 行索引，此前一直未跟踪）。
 ## 首屏秒开：缓存优先 + 骨架，取消空白等待
 - 客户端改 SWR：首帧先读 `localStorage`（键 `dsh-panel:cache:<route>`），有缓存立刻出数据并标「旧读数」，后台再拉新。
 - 宿主 `/dsh-panel/stack-status` 加进程内 5s TTL 缓存，命中带 `cached:true`；过期同请求内刷新，不叠并发。

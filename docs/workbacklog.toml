@@ -3033,7 +3033,7 @@ title = "内嵌页壳：服务停了也不出白框"
 tree = ".wt/A290"
 spec = "复盘/卡/卡A290-内嵌页壳.md"
 files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
-depends = ["A289"]
+depends = ["A298"]
 risk = "low"
 status = "pending"
 
@@ -3080,3 +3080,47 @@ files = ["skills/softeng-manage/SKILL.md", "skills/pipe-gate/SKILL.md", "skills/
 depends = ["A293"]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A295"
+task = "T-AG409"
+title = "把踩过的坑写进流程文档 + 复盘索引进 git"
+tree = ".wt/A295"
+spec = "复盘/卡/卡A295-坑进流程.md"
+files = ["skills/pipe-land/references/land-steps.md", "skills/softeng-manage/references/dispatch.md", "skills/softeng-manage/SKILL.md", "复盘/INDEX.md"]
+depends = ["A289"]
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "A296"
+task = "T-AG410"
+title = "P2 六条回填（PO8/PO14/PO15/SK1/UI3/AI1）"
+tree = ".wt/A296"
+spec = "复盘/卡/卡A296-P2六条回填.md"
+files = ["skills/pipe-land/references/land-steps.md", "skills/softeng-manage/references/dispatch.md", "skills/softeng-manage/references/skills-layers.md", "skills/softeng-manage/references/ui-notes.md", "skills/softeng-manage/SKILL.md"]
+depends = ["A295"]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A297"
+task = "T-AG411"
+title = "完工回推通道：派活即看守，收工必留痕"
+tree = ".wt/A297"
+spec = "复盘/卡/卡A297-完工回推通道.md"
+files = ["tools/wb_notify.py", "tools/wb_dispatch.py", "tools/dsh_panel.py", "tests/test_wb_notify.py", "tests/test_dsh_panel.py"]
+depends = ["A289"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "A298"
+task = "T-AG412"
+title = "完工可见性不靠守护进程（面板实时算）"
+tree = ".wt/A298"
+spec = "复盘/卡/卡A298-完工可见性不靠守护.md"
+files = ["tools/dsh_panel.py", "tools/wb_daily.py", "tests/test_dsh_panel.py", "tests/test_wb_daily.py"]
+depends = ["A297"]
+risk = "mid"
+status = "pending"

@@ -64,7 +64,7 @@ description: 本仓（program/engineering）软件工程管理总入口——把
 
 ## 复盘缺口细则（按主题拆进 references）
 
-P0/P1 复盘结论的操作指针按主题下沉，动手前按主题读对应那份，别凭印象：
+全量复盘入口是 `复盘/INDEX.md`（587 篇 / 58 缺口的三层索引，§5.2 是缺口清单）；下面按主题给操作指针，动手前按主题读对应那份，别凭印象：
 
 - 派活（预声明 / 基点 / 白名单 / 攒批 / 增量收口）：[dispatch](references/dispatch.md)
 - 看门狗与锁租约（判活 / 掐人还租约 / 锁分把带 TTL）：[watchdog](references/watchdog.md)

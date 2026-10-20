@@ -55,3 +55,29 @@
 | 门禁已绿、封存没变，只差提交 | `--commit-only` |
 | 只想在文档件上试跑 | `--no-gate`（并在回报里如实写「没跑门禁」） |
 | 锁没释放 | 按端口段释放，带同一个 `--port-base` |
+
+## 5. 落地三坑（会真红的那种）
+
+> 这三条都让落地链**真红**过；写文书 / 给白名单 / 合卡树时逐条对照，别撞上了才知道。
+> 同族见 `复盘/口径坑.md` 坑 21/29/40（反引号里写 `.md` 断链那一族）。
+
+### 5.1 文书里写裸文件名反引号 → check_layers 断链
+
+- **症状原文**：`scripts/check_layers.py` 报「引用断裂: docs\changelog.md 引用了不存在的 SKILL.md」，814 条引用断链 2 处。
+- **根因**：`scripts/check_layers.py` 把**反引号里包着的 `.md` 词**当路径引用去查；裸文件名不是真路径，查不到就判断链。占位符、通配符一样咬。
+- **处置写法**：反引号里只写真路径（如 `skills/pipe-card/SKILL.md`）；占位符去掉反引号（写成「md 文件」）；通配符别带 `.md`。
+- **证据路径**：`复盘/口径坑.md` 坑 21/29/40；`复盘/卡/卡A295-坑进流程.md`。
+
+### 5.2 主树里未跟踪的卡规格挡住 ff 合流
+
+- **症状原文**：`error: The following untracked working tree files would be overwritten by merge`。
+- **根因**：主树里有未跟踪的卡规格（同名的已在卡树提交里），ff 合流要写它但工作区已有一份 ⇒ git 拒绝覆盖。
+- **处置命令**：先确认内容已在卡树提交里（`git -C .wt/<卡号> log -- <规格路径>`），删主树那份，再 `git merge --ff-only <sha>`；或先把规格 `git add` 进卡树再合。
+- **证据路径**：`复盘/卡/卡A295-坑进流程.md`；ff 合流在 `tools/pool/landing.py` 落地链里。
+
+### 5.3 `--allow` 是精确路径匹配，不是 glob
+
+- **症状原文**：`tools/pool/landing.py` 的 `staged_and_extra` 里 `extra = [f for f in staged if f not in allow]`——少给一个文件，那个文件就进不来。
+- **根因**：`--allow` 是**精确路径匹配**（`f not in allow`），不是 glob；且每个改动文件都要有一条 evidence 指针，否则审计按文件点名红。
+- **处置写法**：白名单逐文件列（`--allow <路径1> --allow <路径2> …`），证据指针同样逐文件给；别指望通配或目录覆盖。
+- **证据路径**：`tools/pool/landing.py`（`staged_and_extra` / `f not in allow`）；`复盘/卡/卡A295-坑进流程.md`。
