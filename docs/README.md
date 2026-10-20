@@ -94,4 +94,5 @@ config.example.toml / pyproject.toml
 - ⏭️ 后置（第二版）：重规划/债务重组(F2.8)、AI 接口写/改/删、学校通知监测脚本(F10)、移动端 PWA 深联动。
 
 > 工程规范见 `CODING_GUIDELINES.md`；功能验收见 `ACCEPTANCE.md`；变更日志见 `changelog.md`。
+> 被证伪的结论见 `docs/tombstones.toml` —— 旧话已被实测推翻就进墓碑表，`tests/test_tombstones.py` 守着不许再当事实复述；证据路径写全路径。
 > 设计决策（know-why）：`DESIGN.md`/`LEARN.md` **经用户决定撤回、暂不建**（决策见 `../复盘/DESIGN-LEARN撤回与闭环验收恢复.md`），暂以本文件 + `changelog.md` + `specification/conventions.md` + `contracts/` 承载。

@@ -3211,7 +3211,7 @@ spec = "复盘/卡/卡A307-墓碑表.md"
 files = ["docs/tombstones.toml"]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A308"

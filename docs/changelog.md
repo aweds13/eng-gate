@@ -1,3 +1,7 @@
+## 墓碑表：被证伪的结论不许再当事实
+- 新增 `docs/tombstones.toml`：孤儿工人 / openResource 口子 / run_gates 不设环境 三条真墓碑。
+- 新增 `tests/test_tombstones.py`：结构校验 + 原文照搬即红的判据（合成样例证明会咬）。
+- `docs/README.md` 加一行指向 `docs/tombstones.toml`。
 ## 工具单一来源：--root 解析 + pipe.cmd 壳
 - 新增 `tools/_repo.py`（显式 --root > git toplevel > 脚本上级）与 `tools/pipe.cmd` 转发壳。
 - `tools/wb_daily.py` 与 `tools/wb_plan.py` 加 `--root`；四个测试文件钉住解析链与空仓提示。

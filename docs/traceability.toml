@@ -7801,3 +7801,20 @@ evidence = [
   "file:复盘/交接.d/T-AG420.md",
 ]
 gaps = "- 只接了 wb_daily/wb_plan 两条入口；其余 wb_* 仍各认自己的根（口径见 `tools/_repo.py` 头注释）。- `--root` 不改变栅栏漂移判据：check 的 find_gate_drift 仍按当前目录主树问（见 `tools/wb_plan.py` docstring）。"
+
+[entries."T-AG421"]
+id = "T-AG421"
+title = "墓碑表：被证伪的结论不许再当事实"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/tombstones.toml",
+  "file:tests/test_tombstones.py",
+  "file:docs/README.md",
+  "file:复盘/卡/卡A307-墓碑表.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/changelog.d/T-AG421.md",
+  "file:docs/traceability.d/T-AG421.toml",
+  "file:复盘/交接.d/T-AG421.md",
+]
+gaps = "- 首批只收 3 条真墓碑；「工具无互联网」反证确凿但原句没有推翻标记，已在 `docs/tombstones.toml` 头部记成待登记。- 扫描面是 `git ls-files -- '*.md'`（883 份），不含 `.wt/` 与 `gates/`（见 `tests/test_tombstones.py` docstring）。"
