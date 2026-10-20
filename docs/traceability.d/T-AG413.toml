@@ -1,0 +1,11 @@
+[entries."T-AG413"]
+id = "T-AG413"
+title = "接手旧项目的能力：方案（K3 咨询稿）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/接手能力-方案.md",
+  "file:gates/diag/wb-A299.verdict.txt",
+]
+gaps = "- 这只交付方案，没有实现 `pipe-takeover` 技能本体；技能骨架在 `复盘/接手能力-方案.md` 第八节列了 5 条实现顺序。- K3 第一次派活在旧账号上因余额耗尽失败（证据归档在 `gates/diag/_history/A299-quota7.jsonl`），本方案是备用号上重跑的结果。- 分类判据里的四类项目只在文档里做了纸面校验，未在真实外部仓库上试跑；判据原文见 `复盘/接手能力-方案.md` 第一节。"
+

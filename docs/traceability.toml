@@ -7636,3 +7636,14 @@ evidence = [
   "file:gates/diag/wb-A296.verdict.txt",
 ]
 gaps = "- PO8 只补了「先同步文件进卡树」的处置命令，没把落地链内部的 `staged_and_extra` 判据展开；细节在 `tools/pool/landing.py`。- PO15 的账号维度只写到「租约里记 account、派活前查」；账号字段的写入点在 `tools/wb_dispatch.py`。- SK1 的「技能登记表」写成了三处登记的口径，没有生成自动核对脚本；核对仍靠 `tools/dsh_skills_link.py --check` 与 `tools/sync_worker_skills.py --check`。"
+
+[entries."T-AG413"]
+id = "T-AG413"
+title = "接手旧项目的能力：方案（K3 咨询稿）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/接手能力-方案.md",
+  "file:gates/diag/wb-A299.verdict.txt",
+]
+gaps = "- 这只交付方案，没有实现 `pipe-takeover` 技能本体；技能骨架在 `复盘/接手能力-方案.md` 第八节列了 5 条实现顺序。- K3 第一次派活在旧账号上因余额耗尽失败（证据归档在 `gates/diag/_history/A299-quota7.jsonl`），本方案是备用号上重跑的结果。- 分类判据里的四类项目只在文档里做了纸面校验，未在真实外部仓库上试跑；判据原文见 `复盘/接手能力-方案.md` 第一节。"
