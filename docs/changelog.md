@@ -1,3 +1,8 @@
+## 接管旧项目：勘察器 + 映射表 + 限制清单
+- 新增 `skills/pipe-takeover/SKILL.md`（72 行）、`skills/pipe-takeover/NOTES.md` 与三篇 `references/`：`skills/pipe-takeover/references/classify.md` 四类判据、`skills/pipe-takeover/references/mapping.md` 映射表（`none` 是一等值）、`skills/pipe-takeover/references/limits.md` 六条禁止。
+- 新增 `tools/wb_takeover.py`：只读勘察器，`--root <目录> --json` 输出 `{ok, kind, readings, mapping_hints}`，零写盘零网络。
+- 新增 `tests/test_wb_takeover.py`：A/B/C/D 四类形态 + 目录不存在的负例。
+- `skills/README.md` 目录表补 `pipe-takeover` 一行。
 ## 完工可见性不靠守护进程：面板实时扫 verdict
 - `tools/dsh_panel.py`：新增 `scanVerdicts()`，`serveNotifications` 合并「实时 verdict + notifications.jsonl」并按卡去重；缺 JSONL 不再直接返回空。
 - `tools/dsh_panel.py`：自检加一条「缺 scanVerdicts 必红」。

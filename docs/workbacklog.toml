@@ -3134,4 +3134,4 @@ spec = "复盘/卡/卡A300-接管旧项目技能.md"
 files = ["skills/pipe-takeover/SKILL.md", "skills/pipe-takeover/references/classify.md", "skills/pipe-takeover/references/mapping.md", "skills/pipe-takeover/references/limits.md", "tools/wb_takeover.py", "tests/test_wb_takeover.py", "skills/README.md"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"

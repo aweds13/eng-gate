@@ -59,6 +59,7 @@
 | `pipe-workbench` | 工作台四件套（读数 / 巡检 / 注入 / 面板） | `tools/pipeline_view.py` · `wb_daily.py` · `workbench_bridge.py` · `wb_dash.py` | `tools.md` |
 | `pipe-forensics` | 出事了从证据里查 | `tools/wb_verify.py` · `wb_diag.py` · `wb_reconcile.py` | `evidence-map.md` |
 | `pipe-init` | 铺骨架 | `framework/cli/main.py init` | `scaffold.md` |
+| `pipe-takeover` | 接管旧项目：勘察定类 → 映射 → 限制 | `tools/wb_takeover.py` | `classify.md` · `mapping.md` · `limits.md` |
 
 前六个是**动作技能**（一种操作一份），`softeng-manage` 是**路由技能**：它不重复动作细节，
 只给「这件事该走哪个技能 / 哪条铁律不能破 / 本仓命令与技能文档的差异」。

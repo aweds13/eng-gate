@@ -7658,3 +7658,20 @@ evidence = [
   "file:tests/test_dsh_panel.py",
 ]
 gaps = "- 没改 `tools/wb_daily.py`：巡检分报沿用现有输出，不把「收工未收口」再算一遍；口径只在面板路由里（`tools/dsh_panel.py`）。- `notifications.jsonl` 仍由 `tools/wb_notify.py` 追加，本次只让读侧不再依赖它；守护自身的健康检查不在本卡。"
+
+[entries."T-AG414"]
+id = "T-AG414"
+title = "接管旧项目：pipe-takeover 技能 + 只读勘察器"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:skills/pipe-takeover/SKILL.md",
+  "file:skills/pipe-takeover/NOTES.md",
+  "file:skills/pipe-takeover/references/classify.md",
+  "file:skills/pipe-takeover/references/mapping.md",
+  "file:skills/pipe-takeover/references/limits.md",
+  "file:tools/wb_takeover.py",
+  "file:tests/test_wb_takeover.py",
+  "file:skills/README.md",
+]
+gaps = "- 只落了「勘察 → 映射 → 限制」三步；端到端验证与六种失败模式的钉子留给下一张卡（方案在 `复盘/接手能力-方案.md` 第八节）。- `tools/wb_takeover.py` 只认本机四类形态（A/B/C/D），不认识别的框架的门禁文件；扩展点写在 `skills/pipe-takeover/references/classify.md`。- 三处技能登记是运行态动作，不在本卡提交里；登记脚本见 `tools/dsh_skills_link.py` 与 `tools/sync_worker_skills.py`，由主控落地后执行。"
