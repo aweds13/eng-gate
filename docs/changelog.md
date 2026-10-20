@@ -1,3 +1,6 @@
+## 工具单一来源：--root 解析 + pipe.cmd 壳
+- 新增 `tools/_repo.py`（显式 --root > git toplevel > 脚本上级）与 `tools/pipe.cmd` 转发壳。
+- `tools/wb_daily.py` 与 `tools/wb_plan.py` 加 `--root`；四个测试文件钉住解析链与空仓提示。
 ## grill-me 参考接进三层（意图/规格/契约）
 - `skills/softeng-manage/references/doc-layers.md` 三层各加「决策怎么定」，指向 grill-me 参考。
 - `skills/README.md` 去掉 spec-grill 占位行，改指向 `skills/softeng-manage/references/grill-me.md`。

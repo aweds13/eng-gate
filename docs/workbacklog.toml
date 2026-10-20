@@ -3200,7 +3200,7 @@ spec = "复盘/卡/卡A306-工具单一来源.md"
 files = ["tools/wb_land.py"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A307"

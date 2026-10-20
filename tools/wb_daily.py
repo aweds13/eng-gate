@@ -37,11 +37,19 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:  # 直接跑 `tools\wb_daily.py`：`tools/` 在 sys.path[0]（正常入口）
+    import _repo
+except ImportError:  # `python -m tools.wb_daily`：包形态，同目录模块得带上前缀 —— 别崩
+    from tools import _repo
+
 ROOT = Path(__file__).resolve().parent.parent
 PIPELINE_VIEW = ROOT / "tools" / "pipeline_view.py"
 DIAG_REL = Path("gates") / "diag"
 BATCH_REL = DIAG_REL / "batch"
 REGISTRY_REL = DIAG_REL / "pool-registry.json"
+#: 卡池住哪：总表 + 分片目录（「有没有卡池」按这两处任意一处有就算有，口径同 `wb_plan`）。
+POOL_REL = Path("docs") / "workbacklog.toml"
+SHARDS_REL = Path("docs") / "backlog"
 NO_WINDOW: dict[str, int] = {"creationflags": 0x08000000} if os.name == "nt" else {}
 
 #: 终态的 status：这两种之外的卡才算「还没翻」。
@@ -54,16 +62,42 @@ DONE_STATUS = ("done", "failed")
 def main_tree_root() -> Path:
     """主工作树根（池状态住那儿）—— 唯一实现对 `pool.task.main_tree_root()`。
 
-    ★ 算不出（跑不了 git / 不在仓里）⇒ 退回本文件所在的树，并在读数里如实记一句。
+    ★ 算不出（跑不了 git / 不在仓里）⇒ 退回 `_repo.repo_root()`（本文件所在的树），
+      并在读数里如实记一句。
     """
     try:
         from pool import task as _task  # noqa: PLC0415 —— 唯一实现，别另写一份
     except ImportError:
-        return ROOT
+        return _repo.repo_root()
     try:
         return _task.main_tree_root()
     except Exception:  # noqa: BLE001 —— 定位失败只该退树，不该让「一页」打不出来
-        return ROOT
+        return _repo.repo_root()
+
+
+def resolve_root(explicit: str | None = None) -> Path:
+    """一页的**真源根**：显式 `--root`（走 `_repo.repo_root()` 归一成绝对路径）> 主工作树。
+
+    ★ 为什么默认**不是** `_repo.repo_root()`：池状态（租约 / 栅栏 / 批）住在**主工作树**，
+      而卡树里 `git rev-parse --show-toplevel` 回的是卡树自己（见 `tools/_repo.py` 头的分工）
+      ⇒ 无参数时仍走 `main_tree_root()`，**行为一字不变**；`--root` 才由调用者说了算。
+    """
+    if explicit is not None and str(explicit).strip():
+        return _repo.repo_root(explicit)
+    return main_tree_root()
+
+
+def pool_state(root: Path) -> tuple[bool, str]:
+    """这棵树**有没有卡池** —— 总表（`docs/workbacklog.toml`）或分片（`docs/backlog/*.toml`）。
+
+    返回 `(有卡池?, 一句人话)`。空目录 `git init` 之后跑本工具 ⇒ `(False, "还没有卡池 …")`：
+    那不是错，是「这棵树还没登记任何卡」—— 得明说，不能让人看一页空表猜。
+    """
+    if (root / POOL_REL).is_file():
+        return True, ""
+    if any((root / SHARDS_REL).glob("*.toml")):
+        return True, ""
+    return False, (f"还没有卡池（没有 {POOL_REL.as_posix()} / {SHARDS_REL.as_posix()}/*.toml）")
 
 
 # ================================================================ 六块读数（调 pipeline_view）
@@ -171,9 +205,12 @@ def _memory_verdict(mem: dict) -> str:
 def build_page(root: Path) -> dict:
     """把一页读成结构化数据（**缺什么留 note**，绝不编）。"""
     reading, note = read_pipeline(root)
+    has_pool, pool_note = pool_state(root)
     page: dict = {
         "today": datetime.date.today().isoformat(),
         "root": str(root),
+        "has_pool": has_pool,
+        "pool_note": pool_note,
         "pipeline": reading,
         "pipeline_note": note,
         "batch_notes": [],
@@ -292,6 +329,8 @@ def _todo(page: dict) -> list[str]:
 def render(page: dict) -> str:
     lines = [f"=== 今日一页 · 卡 220 定时巡检 · {page['today']} ===",
              f"真源：{page['root']}"]
+    if not page.get("has_pool", True):
+        lines.append(f"[卡池] ★ {page.get('pool_note') or '还没有卡池'}")
     if page.get("pipeline_note"):
         lines.append(f"[读数] ★ 读不到：{page['pipeline_note']}（其余各块按「没有」处理）")
     _render_cards(lines, page)
@@ -405,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="真源树（默认 = 主工作树；池状态住那儿）")
     parser.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
     args = parser.parse_args(argv)
-    root = Path(args.root) if args.root else main_tree_root()
+    root = resolve_root(args.root)
     page = build_page(root)
     if args.json:
         print(json.dumps(page, ensure_ascii=False, indent=2, sort_keys=True))

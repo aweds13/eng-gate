@@ -175,6 +175,42 @@ def test_missing_backlog_says_so(tmp_path: Path) -> None:
     assert "读不到" in out
 
 
+# ------------------------------------------------------------------ 3b. 空仓：还没有卡池
+
+
+def test_empty_repo_says_no_pool_yet(tmp_path: Path) -> None:
+    """空目录 `git init`（**连 `docs/` 都没有**）⇒ 明说「还没有卡池」，且退 0。
+
+    ★ 卡 A306（T-AG420）：新仓第一次跑「今日一页」时，一页空表若不说这句，人只会以为读数坏了。
+      「没有卡」不是「出错」—— 所以：要说，但**不许**退非零。
+    """
+    root = tmp_path / "empty"
+    root.mkdir()
+    _make_repo(root)
+    assert not (root / "docs").exists()
+
+    page = wb_daily.build_page(root)
+    assert page["has_pool"] is False
+    assert "还没有卡池" in wb_daily.render(page)
+
+    done = _run_cli(root)
+    assert done.returncode == 0, done.stderr
+    assert "还没有卡池" in done.stdout, done.stdout
+
+
+def test_pool_present_does_not_cry_no_pool(tmp_path: Path) -> None:
+    """有卡池 ⇒ **不**打那行（天天喊「还没有卡池」= 噪音，人就不看了）。"""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_repo(root)
+    _write_backlog(root)
+
+    page = wb_daily.build_page(root)
+    assert page["has_pool"] is True
+    assert page["pool_note"] == ""
+    assert "还没有卡池" not in wb_daily.render(page)
+
+
 # ------------------------------------------------------------------ 4. pipeline_view 挂了
 
 

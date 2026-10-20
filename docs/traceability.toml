@@ -7778,3 +7778,26 @@ evidence = [
   "file:复盘/交接.d/T-AG419.md",
 ]
 gaps = "- `skills/softeng-manage/references/spec-checklist.md` 里「spec-grill 还是占位」一句已过期，改它超出本卡域，留待后续小改。- 只接了前三层；实现/品味两层不走访谈（口径见 `skills/softeng-manage/references/doc-layers.md`）。"
+
+[entries."T-AG420"]
+id = "T-AG420"
+title = "工具单一来源：--root 解析 + pipe.cmd 壳"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/_repo.py",
+  "file:tools/pipe.cmd",
+  "file:tools/wb_daily.py",
+  "file:tools/wb_plan.py",
+  "file:tests/test_repo_root.py",
+  "file:tests/test_wb_daily.py",
+  "file:tests/test_wb_plan.py",
+  "file:tests/test_no_window.py",
+  "file:.gitattributes",
+  "file:复盘/卡/卡A306-工具单一来源.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/changelog.d/T-AG420.md",
+  "file:docs/traceability.d/T-AG420.toml",
+  "file:复盘/交接.d/T-AG420.md",
+]
+gaps = "- 只接了 wb_daily/wb_plan 两条入口；其余 wb_* 仍各认自己的根（口径见 `tools/_repo.py` 头注释）。- `--root` 不改变栅栏漂移判据：check 的 find_gate_drift 仍按当前目录主树问（见 `tools/wb_plan.py` docstring）。"

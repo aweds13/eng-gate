@@ -37,9 +37,15 @@ r"""并发调度器 CLI `tools/wb_plan.py`（外包卡 010 · 台账号 T-G99）
     python -X utf8 tools/wb_plan.py dispatch
     python -X utf8 tools/wb_plan.py check --shards docs/backlog
     python -X utf8 tools/wb_plan.py merge --execute
+    python -X utf8 tools/wb_plan.py check --root D:/别的仓    # 服务别的仓（根走 tools/_repo.py）
 
 ★ 逻辑层已抽到 `tools/pool/plan.py`（卡 106 · T-G202）：CLI 与号池 MCP 共用同一批函数，
   本文件只留**取参数 / 打印 / 会动世界的那一半**（`--execute`）。
+★ 卡 A306（T-AG420）· `--root`：不给 = 本文件所在的树（**既有行为一字不变**）；给了就服务那棵树，
+  解析链在 `tools/_repo.py`（显式 > git 顶层 > 本文件上级）。跟走的：队列（总表 / 分片）、
+  卡规格存在性、栅栏预声明、`git log`（已落却仍 pending）、`--execute` 的 cwd、面板并发参数。
+  边界（如实写）：`check` 的**栅栏漂移**仍按 `pool.task` 的口径问**当前目录**的主树 ——
+  那一条没跟 `--root` 走。
 ★ 边界（如实写）：CLI 侧的速率 / 账号并发**上界未探测** —— 本工具用 `--concurrency` 把这个量
 显式摆出来以便观测，但不声称知道它；`worktrees --execute` / `dispatch --execute` 是"会动世界"的
 那一半，默认不执行（卡 010 §8 坑 1：别真建树、别真派活）。
@@ -48,6 +54,7 @@ r"""并发调度器 CLI `tools/wb_plan.py`（外包卡 010 · 台账号 T-G99）
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import re
 import subprocess
@@ -56,7 +63,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+try:  # 直接跑 `tools\wb_plan.py`：`tools/` 在 sys.path[0]（正常入口）
+    import _repo  # 根解析的唯一实现（卡 A306）
+except ImportError:  # `python -m tools.wb_plan`：包形态，同目录模块得带上前缀 —— 别崩
+    from tools import _repo
 import tomllib
+from pool import plan as pool_plan  # noqa: E402 —— `--root` 时判据根跟着搬（卡 A306）
 from pool import registry as pool_registry  # noqa: E402 —— 主树根（树标签的锚点；卡 203）
 from pool.plan import (
     ACTIVE_STATUS,
@@ -85,7 +97,7 @@ from pool.plan import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
 
 #: 逻辑层已搬到 `pool.plan`；这里**原样转发**给既有调用方（测试 / 别的工具）—— 名字一个不少。
 __all__ = [
@@ -123,6 +135,46 @@ def settings_concurrency(root: Path | None = None) -> int | None:
     if not isinstance(value, int) or isinstance(value, bool):
         return None
     return value if 1 <= value <= 8 else None
+
+
+# ================================================================ 卡 A306（T-AG420）：根从哪儿来
+#
+# 从前「根 = 本文件所在的树」（`ROOT = Path(__file__)…`）—— 同一份 `tools/` 想服务别的仓就得
+# 各改一份。现在 `--root` 说了算，解析走 `tools/_repo.py`
+# （唯一实现：显式 > git 顶层 > 本文件上级）。
+
+
+@contextlib.contextmanager
+def _rooted(root: Path | None) -> Iterator[None]:
+    r"""`--root` 时把「本仓根」**临时**搬到那棵树（`finally` 还原）；不给 ⇒ 一个属性都不碰。
+
+    ★ 为什么连 `pool.plan` 的 `ROOT` / `DIAG` 一起搬：判据住在库里，且都**从模块级 ROOT 现算**
+      （`validate()` 查卡规格在不在、`batch_manifest_path()` 找栅栏预声明）。只改 CLI 的局部变量
+      不够 —— 那会拿**这棵树**的尺子去量**那棵树**的队列（假红假绿都算谎）。
+    ★ 只这一次调用有效：退出（含异常）就还原，别把状态漏给同进程里的下一次调用 / 别的测试。
+    ★ 无参数（`root is None`）时**什么都不改** —— 本仓既有行为一字不变。
+    """
+    if root is None:
+        yield
+        return
+    global ROOT
+    saved = (ROOT, pool_plan.ROOT, pool_plan.DIAG)
+    ROOT = root
+    pool_plan.ROOT = root
+    pool_plan.DIAG = root / "gates" / "diag"
+    try:
+        yield
+    finally:
+        ROOT, pool_plan.ROOT, pool_plan.DIAG = saved
+
+
+def _root_for(args: argparse.Namespace) -> Path | None:
+    """`--root` 指的树（解析成绝对路径）；没给 ⇒ `None`（= 走本仓，行为不变）。"""
+    explicit = getattr(args, "root", "")
+    if explicit is not None and str(explicit).strip():
+        return _repo.repo_root(explicit)
+    return None
+
 
 # ================================================================ 卡 262（T-G383）：分区前缀
 #
@@ -565,7 +617,7 @@ def find_gate_drift(backlog: Backlog) -> list[str]:
     return reports
 
 
-def cmd_check(backlog: Backlog) -> int:
+def cmd_check(backlog: Backlog, repo: Path | None = None) -> int:
     # ★ 卡 262（T-G383）：分区判据。登记表读不了 ⇒ 拒（不静默）；不在 ⇒ 不判（旧仓 / 测试沙箱）。
     try:
         partitions = load_partitions()
@@ -601,7 +653,8 @@ def cmd_check(backlog: Backlog) -> int:
           file=sys.stderr)
     # ★ 卡 204（T-G311）：已落却仍 pending —— 队列里 pending 的卡其 task 已在 git log 里 ⇒ 红。
     #   前提：一卡一号（登记/收尾提交必须用自己的簿记号；本仓已在这么做）。
-    landed = find_landed_but_pending(backlog)
+    #   ★ 卡 A306：`--root` 给了就读那棵树的 `git log`（不然拿这棵树的提交去判那棵树的队列）。
+    landed = find_landed_but_pending(backlog, repo)
     for line in landed:
         print(f"[FAIL] {line}", file=sys.stderr)
     if landed:
@@ -645,7 +698,8 @@ def cmd_stats(backlog: Backlog, limit: int) -> int:
     return 0
 
 
-def cmd_worktrees(backlog: Backlog, base: str, *, execute: bool) -> int:
+def cmd_worktrees(backlog: Backlog, base: str, *, execute: bool,
+                  root: Path | None = None) -> int:
     commands = worktree_commands(backlog, base)
     if not commands:
         print("[OK ] 没有需要建树的卡（全在主树）")
@@ -655,15 +709,18 @@ def cmd_worktrees(backlog: Backlog, base: str, *, execute: bool) -> int:
     if not execute:
         print(f"[dry ] 默认不执行；真要建树加 --execute（基点 {base}）")
         return 0
+    # 卡 A306：`--root` 给了就在那棵树里建（`git worktree add` 认 cwd）；没给 = 本仓根。
+    where = str(root or ROOT)
     for card, command in commands:
         print(f"[跑 ] 卡 {card.id}：{command}")
-        done = subprocess.run(command.split(), cwd=str(ROOT), capture_output=True,
+        done = subprocess.run(command.split(), cwd=where, capture_output=True,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                               text=True, encoding="utf-8", errors="replace")
         # ★ 卡 192：`card/<号>` 分支已存在（如旧卡 037）⇒ 退回 checkout 形式（向后兼容）
         if done.returncode != 0 and "already exists" in (done.stderr or ""):
             fallback = f"git worktree add {card.tree} card/{card.id}"
             print(f"  ↳ card/{card.id} 已存在 ⇒ 退回 checkout：{fallback}")
-            done = subprocess.run(fallback.split(), cwd=str(ROOT), capture_output=True,
+            done = subprocess.run(fallback.split(), cwd=where, capture_output=True,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                                   text=True, encoding="utf-8", errors="replace")
         body = (done.stdout or "") + (done.stderr or "")
@@ -671,7 +728,8 @@ def cmd_worktrees(backlog: Backlog, base: str, *, execute: bool) -> int:
     return 0
 
 
-def cmd_dispatch(backlog: Backlog, limit: int, *, execute: bool) -> int:
+def cmd_dispatch(backlog: Backlog, limit: int, *, execute: bool,
+                 root: Path | None = None) -> int:
     batches = plan_batches(backlog, limit)
     for i, batch in enumerate(batches, 1):
         print(f"[批 {i}] {len(batch)} 张：{'、'.join(card.id for card in batch)}")
@@ -680,11 +738,13 @@ def cmd_dispatch(backlog: Backlog, limit: int, *, execute: bool) -> int:
     if not execute:
         print("[dry ] 默认只打印；真要派活加 --execute（会真起工人）")
         return 0
+    base_root = root or ROOT   # 卡 A306：`--root` 给了就从那棵树派（派活器按 cwd 相对找 tools/）
     for batch in batches:
         for card in batch:
-            tree = ROOT / card.tree if card.tree else ROOT
+            tree = base_root / card.tree if card.tree else base_root
             print(f"[派 ] 卡 {card.id}（cwd {tree}）")
             done = subprocess.run(dispatch_argv(card), cwd=str(tree), text=True,
+                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                                   encoding="utf-8", errors="replace")
             if done.returncode:
                 print(f"[FAIL] 卡 {card.id} 派活器退出码 {done.returncode}", file=sys.stderr)
@@ -757,39 +817,58 @@ def build_parser() -> argparse.ArgumentParser:
                         help="建树的基点提交（默认取 backlog 的 [base].reviewed）")
     parser.add_argument("--execute", action="store_true",
                         help="真执行（建树 / 派活 / merge 落盘）；默认只打印")
+    parser.add_argument("--root", default="",
+                        help="服务哪棵树（默认 = 本文件所在的树；解析链见 tools/_repo.py）")
     return parser
 
 
-def _load_backlog_for(args: argparse.Namespace) -> Backlog:
-    """`check` / `plan` / `stats` / `worktrees` / `dispatch` 读的队列：先分片、后总表。"""
+def _load_backlog_for(args: argparse.Namespace, root: Path | None = None) -> Backlog:
+    """`check` / `plan` / `stats` / `worktrees` / `dispatch` 读的队列：先分片、后总表。
+
+    ★ 卡 A306：`root` 给了 ⇒ 默认的总表 / 分片都在那棵树里找（显式 `--backlog` / `--shards`
+      给了就用给定的，**相对路径按当前目录**解析 —— 调用者写了什么就是什么）。
+    """
     shards = Path(args.shards) if args.shards else None
     if args.backlog:
         return load_sharded_backlog(Path(args.backlog), shards)
-    return load_sharded_backlog(shard_directory=shards)
+    if root is None:
+        return load_sharded_backlog(shard_directory=shards)
+    return load_sharded_backlog(root / "docs" / "workbacklog.toml",
+                                shards if shards is not None else root / "docs" / "backlog")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    root = _root_for(args)
+    with _rooted(root):
+        return _run(args, root)
+
+
+def _run(args: argparse.Namespace, root: Path | None) -> int:
+    """`main` 的本体 —— 在 `_rooted(root)` 里跑：此刻 `ROOT` 已经是这次要服务的树。"""
     if args.concurrency is None:
-        args.concurrency = settings_concurrency() or DEFAULT_CONCURRENCY
+        args.concurrency = settings_concurrency(root) or DEFAULT_CONCURRENCY
     if args.command == "merge":
-        folder = Path(args.shards) if args.shards else shard_dir()
-        out = Path(args.backlog) if args.backlog else DEFAULT_BACKLOG
+        folder = Path(args.shards) if args.shards else (
+            root / "docs" / "backlog" if root is not None else shard_dir())
+        out = Path(args.backlog) if args.backlog else (
+            root / "docs" / "workbacklog.toml" if root is not None else DEFAULT_BACKLOG)
         return cmd_merge(folder, out, execute=args.execute)
     try:
-        backlog = _load_backlog_for(args)
+        backlog = _load_backlog_for(args, root)
     except BacklogError as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 2
     if args.command == "check":
-        return cmd_check(backlog)
+        return cmd_check(backlog, root)
     if args.command == "plan":
         return cmd_plan(backlog, args.concurrency)
     if args.command == "stats":
         return cmd_stats(backlog, args.concurrency)
     if args.command == "worktrees":
-        return cmd_worktrees(backlog, args.base or backlog.reviewed, execute=args.execute)
-    return cmd_dispatch(backlog, args.concurrency, execute=args.execute)
+        return cmd_worktrees(backlog, args.base or backlog.reviewed, execute=args.execute,
+                             root=root)
+    return cmd_dispatch(backlog, args.concurrency, execute=args.execute, root=root)
 
 
 if __name__ == "__main__":

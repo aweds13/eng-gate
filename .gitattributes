@@ -7,3 +7,7 @@
 # 所以给它们显式钉住：**存 LF、取出也是 LF**（`eol=lf` 而不是 `-text` ——
 # `-text` 会把文件当二进制，`git diff` 就再也看不见黄金的变化了，那等于把判据弄瞎）。
 gates/render/*.txt text eol=lf
+
+# `tools/pipe.cmd` 是批处理：cmd.exe 对 LF-only 的 `goto` 标签会走丢 ——
+# 钉住「存 LF、取出 CRLF」（T-AG420）。
+*.cmd text eol=crlf

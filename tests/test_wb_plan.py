@@ -1110,3 +1110,70 @@ def test_match_member_number_missing_id_returns_none() -> None:
     assert wb_plan._match_member_to_card(
         "M-1", ["a.py", "b.py"], by_id | {"X": _card("X", status="done",
                                                      files=("a.py", "b.py"))}) is not None
+
+
+# ------------------------------------------------------------------ 卡 A306（T-AG420）：--root
+#
+# 口径：`--root` 就是「这次服务哪棵树」。它得**整条链**跟着走（队列 / 规格 / 栅栏 / git），
+# 而不是只换个打印用的变量 —— 只换打印 = 拿这棵树的尺子量那棵树的队列，读数自洽地错。
+
+
+def test_root_flag_reads_that_repos_backlog(tmp_path: Path,
+                                            capsys: pytest.CaptureFixture[str]) -> None:
+    """`plan --root <别的仓>` ⇒ 读的是**那棵树**的队列（这里的两张卡），不是本仓的。"""
+    other = tmp_path / "other_repo"
+    (other / "docs").mkdir(parents=True)
+    (other / "specs").mkdir()
+    # 规格真存在（`validate()` 按 `ROOT/spec` 查）—— 这条钉的是「读哪棵树」，不是「规格缺失也放行」
+    for name, title in (("x", "别仓卡一"), ("y", "别仓卡二")):
+        (other / "specs" / f"{name}.md").write_text(f"# {title}", encoding="utf-8")
+    toml = """[base]
+reviewed = "abc1234"
+
+[[cards]]
+id = "901"
+task = "T-OTHER-1"
+title = "别仓一"
+tree = ".wt/901"
+spec = "specs/x.md"
+files = ["src/a.py"]
+depends = []
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "902"
+task = "T-OTHER-2"
+title = "别仓二"
+tree = ".wt/902"
+spec = "specs/y.md"
+files = ["src/b.py"]
+depends = []
+risk = "low"
+status = "pending"
+"""
+    (other / "docs" / "workbacklog.toml").write_text(toml, encoding="utf-8")
+
+    code = wb_plan.main(["plan", "--root", str(other), "--concurrency", "1"])
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "901" in out and "902" in out, out
+
+
+def test_root_flag_is_restored_after_the_call(tmp_path: Path,
+                                             capsys: pytest.CaptureFixture[str]) -> None:
+    """`--root` 只对**这一次调用**有效：退出后 `wb_plan.ROOT` / `pool.plan.ROOT|DIAG` 全还原。
+
+    ★ 为什么值当钉：那几个 `ROOT` 是**模块级**的。漏还原 = 把后面每一次调用（和别的测试）
+      都带到那棵临时树上 —— 读数自洽地错，最难查。
+    """
+    empty = tmp_path / "empty_repo"
+    empty.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=empty, check=True, capture_output=True)
+    before = (wb_plan.ROOT, pool_plan.ROOT, pool_plan.DIAG)
+
+    code = wb_plan.main(["check", "--root", str(empty)])
+    err = capsys.readouterr().err
+    assert code == 2, (code, err)                     # 没有总表 ⇒ 读不到就拒（不静默）
+    assert "workbacklog.toml" in err, err
+    assert before == (wb_plan.ROOT, pool_plan.ROOT, pool_plan.DIAG)
