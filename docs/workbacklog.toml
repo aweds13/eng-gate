@@ -3156,4 +3156,4 @@ spec = "复盘/卡/卡A302-卡谱系树.md"
 files = ["tools/wb_tree.py", "tools/dsh_panel.py", "tests/test_wb_tree.py"]
 depends = ["A290", "A301"]
 risk = "low"
-status = "pending"
+status = "done"

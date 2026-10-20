@@ -353,6 +353,9 @@ STACK_STATUS_ROUTE = f"{SEAM_PREFIX}/stack-status"
 #: 卡 A297（T-AG411）：收工回推通道的只读路由 —— 返回 notifications.jsonl 里
 #: 「已收工但还没落地」的卡（最多 20 条，按时间倒序）。宿主半读 backlog 排掉已落地的。
 NOTIFICATIONS_ROUTE = f"{SEAM_PREFIX}/notifications"
+#: 卡 A302（T-AG416）：卡谱系树（只读）—— 转 `tools/wb_tree.py --json`。
+#: 节点 = 提交、边 = 真实父链 + 卡池显式 depends；面板只按功能区折叠展示，不写任何东西。
+CARD_TREE_ROUTE = f"{SEAM_PREFIX}/card-tree"
 
 #: 卡 253：**写死**的服务白名单 —— 真源是 `tools/stack.py` 的组件表（worker 不在表里，
 #: 所以面板永远派不出工人）。`start-all` 只是 `stack.py start`（无名字）的等价动作。
@@ -611,6 +614,9 @@ const STACK_STATUS_ROUTE = "__STACK_STATUS_ROUTE__";
  *   排掉 backlog 里已落地的卡，返回最近 20 条「已收工未收口」。 */
 const NOTIFICATIONS_ROUTE = "__NOTIFICATIONS_ROUTE__";
 const NOTIFICATIONS_REL = ["gates", "diag", "notifications.jsonl"];
+/* ★ 卡 A302（T-AG416）：卡谱系树只读路由 —— 转 tools/wb_tree.py --json。
+ *   节点/边都在那边算好；本处只保证「起不来 / 非零 / 非 JSON」如实报，不返空树。 */
+const CARD_TREE_ROUTE = "__CARD_TREE_ROUTE__";
 const ACTIONS_LOG_REL = ["gates", "diag", "stack-actions.log"];
 /* ★ 卡 253：**写死**的动作白名单（真源 = tools/stack.py 的组件表）。
  * 面板只收 {kind, name} 两个枚举值；这里不认命令字符串，没有透传口子。
@@ -877,6 +883,46 @@ function serveNotifications(req, res) {
     card: String(r.card || ""), verdict: String(r.verdict || ""), at: String(r.at || ""),
   }));
   sendJson(res, 200, { ok: true, unread: rows.length, items });
+}
+
+/** 卡 A302（T-AG416）：卡谱系树 —— 只读转 `tools/wb_tree.py --json`。
+ *
+ * 与三条读数座位同口径：`spawnSync` + `windowsHide` + 超时；缺根 / 非零 / 非 JSON
+ * **一律显式报错** —— 绝不拿一棵空树冒充「历史里没有提交」。 */
+function serveCardTree(req, res) {
+  const root = repoRoot();
+  if (!root) {
+    sendJson(res, 200, {
+      ok: false,
+      error: "没告诉我仓库根：请在插件行的 config 里写 root（或设 DSH_WORKBENCH_ROOT）。",
+    });
+    return;
+  }
+  const done = spawnSync(process.env.DSH_PYTHON || "python",
+    ["-X", "utf8", path.join(root, "tools", "wb_tree.py"), "--json"], {
+      encoding: "utf8",
+      timeout: SEAT_TIMEOUT_MS,
+      windowsHide: true,
+      maxBuffer: 64 * 1024 * 1024,
+      cwd: root,
+    });
+  if (done.error) {
+    sendJson(res, 200, { ok: false, error: `谱系读数器起不来：${done.error.message}` });
+    return;
+  }
+  if (done.status !== 0) {
+    const tail = (done.stderr || "").slice(0, 400);
+    sendJson(res, 200, { ok: false, error: `谱系读数器非零退出（${done.status}）：${tail}` });
+    return;
+  }
+  let reading;
+  try {
+    reading = JSON.parse(done.stdout);
+  } catch (error) {
+    sendJson(res, 200, { ok: false, error: `谱系读数器输出不是 JSON：${error.message}` });
+    return;
+  }
+  sendJson(res, 200, { ok: true, reading });
 }
 
 /** 卡 253：动作日志最后几行（读不到 ⇒ 空表 + 不假装）。 */
@@ -1245,6 +1291,11 @@ function serveSeam(req, res) {
     serveNotifications(req, res);
     return;
   }
+  /* ★ 卡 A302：卡谱系树（GET，只读）—— 工具箱「谱系」页吃这一条。 */
+  if (url.pathname === CARD_TREE_ROUTE) {
+    serveCardTree(req, res);
+    return;
+  }
   const seat = SEATS.find((row) => row.route === url.pathname);
   if (seat === undefined) {
     sendJson(res, 404, { ok: false, error: `未知路由：${url.pathname}` });
@@ -1315,6 +1366,7 @@ def _host_js() -> str:
         .replace("__ACTION_ROUTE__", ACTION_ROUTE)
         .replace("__STACK_STATUS_ROUTE__", STACK_STATUS_ROUTE)
         .replace("__NOTIFICATIONS_ROUTE__", NOTIFICATIONS_ROUTE)
+        .replace("__CARD_TREE_ROUTE__", CARD_TREE_ROUTE)
         .replace("__PKG_NAME__", json.dumps(PACKAGE_NAME))
     )
 
@@ -1991,6 +2043,7 @@ __TARGETS__
       ["board", "看板"],
       ["pool", "号池"],
       ["skills", "技能"],
+      ["tree", "谱系"],
       ["params", "参数"],
     ];
     const PARAMS_ROUTE = "/dsh-panel/settings";
@@ -2228,6 +2281,125 @@ __TARGETS__
           h("span", { style: Object.assign({}, UI.muted, ELLIPSIS) }, item.summary || ""))));
     }
 
+    /* ---- 卡 A302 · 谱系页：按功能区折叠，展开才列（渐进披露） ----
+     * 数据 = /dsh-panel/card-tree（宿主半转 wb_tree.py --json）；只读、不写盘。
+     * 每区先给「N 笔 / 起点 M」；点节点看 sha + 卡号 + 标题 + 改动文件数。
+     * ★ card=null 的节点标「未登记」并如实显示 task 号 / 标题 —— 不猜成某张卡。 */
+    function ToolboxCardTree() {
+      const source = useSource("/dsh-panel/card-tree");
+      const state = source.state;
+      const [openArea, setOpenArea] = react.useState("");
+      const [picked, setPicked] = react.useState(null);
+      if (state.status === "skeleton") {
+        return h(LoadingSkeleton, { title: "谱系", onRefresh: source.refresh });
+      }
+      const data = state.data || {};
+      const failed = state.status === "error" || data.ok === false;
+      const reading = data.reading || {};
+      const nodes = reading.nodes || [];
+      const areas = reading.areas || [];
+      const orphans = reading.orphans || [];
+      const bySha = {};
+      nodes.forEach((node) => { bySha[node.sha] = node; });
+      const cardLabel = (node) => (node.card
+        ? "#" + String(node.card)
+        : "未登记" + (node.task ? "(" + String(node.task) + ")" : ""));
+      /* 一个区的可见子树：起点 = 父提交不在同区（含父提交出窗）；同区子节点按链缩进。 */
+      const forest = (name) => {
+        const inArea = nodes.filter((node) => node.area === name);
+        const shas = {};
+        inArea.forEach((node) => { shas[node.sha] = true; });
+        const kids = {};
+        inArea.forEach((node) => {
+          (node.children || []).forEach((child) => {
+            if (shas[child]) { (kids[node.sha] = kids[node.sha] || []).push(child); }
+          });
+        });
+        const roots = inArea.filter(
+          (node) => !(node.parents || []).some((parent) => shas[parent]));
+        const rows = [];
+        const seen = {};
+        const walk = (sha, depth) => {
+          if (seen[sha] || rows.length >= 80) return;
+          seen[sha] = true;
+          rows.push({ node: bySha[sha], depth });
+          (kids[sha] || []).forEach((child) => walk(child, depth + 1));
+        };
+        roots.forEach((node) => walk(node.sha, 0));
+        return rows;
+      };
+      const areaBlock = (area) => {
+        const open = openArea === area.name;
+        const rows = open ? forest(area.name) : [];
+        return h("div", {
+          key: area.name, "data-wb-tree-area": area.name, style: UI.card,
+        },
+        h("div", { style: UI.row },
+          h("button", {
+            type: "button",
+            style: open ? UI.segOn : UI.seg,
+            onClick: () => setOpenArea(open ? "" : area.name),
+          }, (open ? "收起 " : "展开 ") + area.name),
+          h("span", { "data-wb-tree-count": "", style: UI.muted },
+            String(area.count) + " 笔 / 起点 " + String(area.roots))),
+        open
+          ? rows.map(({ node, depth }) => h("div", {
+              key: node.sha, "data-wb-tree-node": node.sha,
+              style: Object.assign({}, UI.row, {
+                justifyContent: "flex-start", cursor: "pointer",
+                paddingLeft: String(8 + depth * 14) + "px",
+                borderTop: "1px solid " + T.line,
+              }),
+              onClick: () => setPicked(node),
+            },
+            h("code", { style: { width: "72px" } }, node.sha),
+            h("span", { style: { width: "150px" } }, cardLabel(node)),
+            h("span", { style: { flex: "1", overflow: "hidden",
+              textOverflow: "ellipsis", whiteSpace: "nowrap" } }, node.title || ""),
+            h("span", { style: UI.muted }, String(node.files || 0) + " 文件")))
+            .concat(rows.length >= 80 && area.count > rows.length
+              ? [h("p", { key: "more", style: UI.muted },
+                  "只列前 " + String(rows.length) + " 笔（共 " + String(area.count) + " 笔）")]
+              : [])
+          : null);
+      };
+      const detail = picked ? bySha[picked.sha] : null;
+      return h("div", { "data-wb-state": failed ? "error" : "ok",
+          "data-wb-card-tree": "", style: UI.page },
+        failed
+          ? errorLine("谱系读数不可用（原话）", state.error || data.error)
+          : null,
+        h("div", { style: UI.card },
+          h("p", { "data-wb-tree-summary": "", style: UI.muted },
+            "共 " + String(nodes.length) + " 笔 · 对上卡池 "
+            + String(nodes.filter((node) => node.card).length) + " 笔 · 未登记 "
+            + String(nodes.filter((node) => !node.card).length) + " 笔 · 窗口截断 "
+            + String(orphans.length) + " 处"),
+          h("p", { style: UI.muted },
+            "从 git 历史重建：父提交就是上一张卡；卡号只用任务号查卡池，"
+            + "查不到就标「未登记」，不推断。")),
+        h("div", { style: UI.body }, areas.map(areaBlock)),
+        detail
+          ? h("div", { "data-wb-tree-detail": detail.sha, style: UI.card },
+              h("div", { style: UI.row },
+                h("code", null, detail.sha),
+                h("span", null, cardLabel(detail))),
+              h("p", { style: UI.muted }, detail.title || ""),
+              h("p", { style: UI.muted },
+                String(detail.date || "") + " · 区：" + String(detail.area || "")
+                + " · 改动 " + String(detail.files || 0) + " 个文件"),
+              h("p", { style: UI.muted },
+                "父提交：" + ((detail.parents || []).join(" ") || "（窗口内没有）")),
+              (detail.depends || []).length
+                ? h("p", { style: UI.muted },
+                    "显式前置（explicit）：" + detail.depends.map(
+                      (edge) => String(edge.card)
+                        + (edge.sha ? " → " + String(edge.sha) : "（不在窗口内）"),
+                    ).join("、"))
+                : null)
+          : null);
+    }
+
     /* ---- 卡 A286 · 参数页：可改（白名单键 + 范围校验），不再「只读」----
      * 接口：GET /dsh-panel/settings 返回全部键与范围；POST ?<键>=<值> 写一个键。
      * 宿主半只认 SETTINGS_KEYS，越界 / 未知键一律 400；写盘先 .tmp 再 rename。 */
@@ -2341,6 +2513,7 @@ __TARGETS__
         board: ToolboxBoard,
         pool: ToolboxPool,
         skills: ToolboxSkills,
+        tree: ToolboxCardTree,
         params: ToolboxParams,
       };
       const View = views[tab] || ToolboxOverview;
@@ -2782,6 +2955,7 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
     /dsh-panel/workbench-board    → tools/pipeline_view.py --json --root <root>
     /dsh-panel/zentao-gantt       → tools/zentao_gantt.py --json
     /dsh-panel/timeflow-inbox     → tools/timeflow_inbox.py --json --root <root>
+    /dsh-panel/card-tree          → tools/wb_tree.py --json（卡 A302：卡谱系树，工具箱「谱系」页）
 
 每个 handler 起对应**只读**工具（`spawnSync`、`windowsHide: true`、带超时），把它的 JSON
 **原样**回给浏览器。**缺数据**（工具不在 / 非零退出 / 超时 / 输出不是 JSON / 顶层不是对象）
@@ -2874,6 +3048,7 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 | 读 | `/dsh-panel/workbench-board` | GET | 工作台六块读数 |
 | 读 | `/dsh-panel/zentao-gantt` | GET | 禅道甘特（脚本回退视图） |
 | 读 | `/dsh-panel/timeflow-inbox` | GET | 时间流收件箱 |
+| 读 | `/dsh-panel/card-tree` | GET | 卡谱系树（`tools/wb_tree.py --json`，卡 A302） |
 | 读 | `/dsh-panel/skills` | GET | 仓库 `skills/` 清单 |
 | 读 | `/dsh-panel/settings` | GET | 参数键 + 当前值 + 允许范围 |
 | 写 | `/dsh-panel/settings?<键>=<值>` | POST | 白名单键；越界 / 未知键 400 |
@@ -3253,6 +3428,22 @@ def _check_client(source: str) -> list[str]:
         problems.append(
             "[浏览器半] 右栏不可用没退回内嵌（卡 A290：缺 data-wb-fallback / 「已退回内嵌」）"
         )
+    # ---- 卡 A302（T-AG416）：工具箱「谱系」页（按功能区折叠 + 未登记如实标） ----
+    if "/dsh-panel/card-tree" not in source:
+        problems.append("[浏览器半] 缺 /dsh-panel/card-tree 路由（卡 A302：工具箱谱系页要读它）")
+    if "function ToolboxCardTree()" not in source:
+        problems.append("[浏览器半] 缺 ToolboxCardTree 组件（卡 A302：按功能区折叠的谱系页）")
+    if "未登记" not in source:
+        problems.append(
+            "[浏览器半] 缺「未登记」标注（卡 A302：card=null 不许猜成某张卡）"
+        )
+    if "data-wb-tree-area" not in source or "data-wb-tree-node" not in source:
+        problems.append(
+            "[浏览器半] 缺 data-wb-tree-area / data-wb-tree-node 标记"
+            "（卡 A302：折叠与节点要可被认出）"
+        )
+    if "起点 " not in source:
+        problems.append("[浏览器半] 缺「N 笔 / 起点 M」汇总（卡 A302：每区先给总量，展开才列）")
     problems.extend(_check_read_only("浏览器半", source))
     return problems
 
@@ -3340,6 +3531,17 @@ def _check_host(source: str) -> list[str]:
         problems.append("[宿主半] 没指 notifications.jsonl（卡 A297：通知文件名写死）")
     if "function scanVerdicts()" not in source:
         problems.append("[宿主半] 缺 scanVerdicts（卡 A298：可见性不许只靠守护进程）")
+    # ---- 卡 A302（T-AG416）：卡谱系树只读路由 ----
+    if "CARD_TREE_ROUTE" not in source or "function serveCardTree(" not in source:
+        problems.append(
+            "[宿主半] 缺卡谱系树只读路由（CARD_TREE_ROUTE + serveCardTree，卡 A302）"
+        )
+    if "serveCardTree(req, res)" not in source:
+        problems.append(
+            "[宿主半] serveCardTree 定义了却没被 serveSeam 分发（卡 A286 同型坑）"
+        )
+    if "wb_tree.py" not in source:
+        problems.append("[宿主半] 没转 tools/wb_tree.py（卡 A302：不许另起一套谱系逻辑）")
     if "start-all" not in source:
         problems.append("[宿主半] 缺「全部起」（start-all）这条白名单动作（卡 253）")
     for bad in ("shell: true", "shell:true", "exec(", "execSync"):

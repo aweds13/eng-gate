@@ -1,3 +1,8 @@
+## 卡谱系树：git 真源 + 面板谱系页
+- 新增 `tools/wb_tree.py`：从 git 历史抽卡与依赖关系，输出 JSON（`--json`）与文本树。
+- 新增 `tests/test_wb_tree.py`：30 条，覆盖单卡、依赖链、多卡合并、无 git 时退化。
+- 面板加「谱系」页签：点一张卡看它的上游/下游，数据走 `/dsh-panel/card-tree`。
+- `docs/workbacklog.toml` 里 A302 翻 done。
 ## 项目书进 git
 - `复盘/DSH三入口-项目书与接手单.md` 入库：症状、缺口、验收数字、A289–A292 拆卡。
 - `复盘/卡/卡A291-项目书进git.md` 卡规格入库。

@@ -7697,3 +7697,15 @@ evidence = [
   "file:复盘/卡/卡A291-项目书进git.md",
 ]
 gaps = "- 项目书里的验收数字（150ms / 1.2s / 50ms）来自 A289 派活前的旧测量，尚未用新壳重测；待 A302 落地后复测，复测口径写在 `复盘/DSH三入口-项目书与接手单.md` 的验收一节。- 三个入口的「首屏骨架」只覆盖右栏壳，未覆盖禅道反代失败态；失败态由 `tools/dsh_panel.py` 的 `data-wb-state=「error」` 渲染，本卡未拍新截图。"
+
+[entries."T-AG416"]
+id = "T-AG416"
+title = "卡谱系树：git 真源 + 面板谱系页"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_tree.py",
+  "file:tests/test_wb_tree.py",
+  "file:tools/dsh_panel.py",
+]
+gaps = "- 谱系只认 git 真源（提交/合并/卡规格路径），认不出「同一张卡拆成两次提交」的历史；这类情况在 `复盘/INDEX.md` 的卡义里有记录，尚未机器化。- 面板谱系页只画到二层（卡 → 依赖 → 依赖的依赖），更深的递归按需再展开；递归深度写死在 `tools/wb_tree.py` 的 `MAX_DEPTH`。- 合并提交里同时改多张卡规格时，谱系归给出「多卡」标记，不拆到逐文件；判定逻辑见 `tools/wb_tree.py` 的 `_card_from_path`。"

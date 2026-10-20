@@ -1,0 +1,12 @@
+[entries."T-AG416"]
+id = "T-AG416"
+title = "卡谱系树：git 真源 + 面板谱系页"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_tree.py",
+  "file:tests/test_wb_tree.py",
+  "file:tools/dsh_panel.py",
+]
+gaps = "- 谱系只认 git 真源（提交/合并/卡规格路径），认不出「同一张卡拆成两次提交」的历史；这类情况在 `复盘/INDEX.md` 的卡义里有记录，尚未机器化。- 面板谱系页只画到二层（卡 → 依赖 → 依赖的依赖），更深的递归按需再展开；递归深度写死在 `tools/wb_tree.py` 的 `MAX_DEPTH`。- 合并提交里同时改多张卡规格时，谱系归给出「多卡」标记，不拆到逐文件；判定逻辑见 `tools/wb_tree.py` 的 `_card_from_path`。"
+
