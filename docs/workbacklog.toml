@@ -3244,4 +3244,26 @@ spec = "复盘/卡/卡A310-安装漂移检查.md"
 files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
 depends = ["A309"]
 risk = "low"
+status = "done"
+
+[[cards]]
+id = "A311"
+task = "T-AG425"
+title = "接手判据严格化：--strict 把没覆盖的说成没覆盖"
+tree = ".wt/A311"
+spec = "复盘/卡/卡A311-接手判据严格化.md"
+files = ["tools/wb_takeover.py", "tests/test_wb_takeover.py", "AGENTS.md", "skills/pipe-takeover/SKILL.md"]
+depends = ["A310"]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A313"
+task = "T-AG427"
+title = "软工预设入库：docs/presets 真源 + 幂等安装器"
+tree = ".wt/A313"
+spec = "复盘/卡/卡A313-软工预设入库.md"
+files = ["docs/presets/softeng.patch.yml", "tools/dsh_preset.py", "tests/test_dsh_preset.py"]
+depends = ["A311"]
+risk = "low"
 status = "pending"
