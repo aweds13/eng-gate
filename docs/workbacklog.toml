@@ -3255,7 +3255,7 @@ spec = "复盘/卡/卡A311-接手判据严格化.md"
 files = ["tools/wb_takeover.py", "tests/test_wb_takeover.py", "AGENTS.md", "skills/pipe-takeover/SKILL.md"]
 depends = ["A310"]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A313"

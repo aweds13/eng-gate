@@ -1,3 +1,8 @@
+## 接手判据严格化：--strict 把没覆盖的说成没覆盖
+- `tools/wb_takeover.py` 新增 `--strict`：缺门/缺台账/缺证据时报 `strict_problems` 并以退出码 2 结束，不再只给 `ok: true`。
+- `tests/test_wb_takeover.py` 补严格模式用例（干净仓 0 条、缺文件必报）。
+- `skills/pipe-takeover/SKILL.md` 写明「接管后先跑 --strict，红了不算接管成功」。
+- `AGENTS.md` 增加接手入口一行，指向 `tools/wb_takeover.py`。
 ## 面板已装副本与生成源不许漂移
 - `tools/dsh_panel.py` 新增 `check_installed()` 与 `--check-installed DIR`：逐文件比对，缺/异都点名。
 - `tests/test_dsh_panel.py` 新增 3 条（刚 emit 即绿 / 改一字节与删文件都报 / CLI 退 1）。

@@ -28,16 +28,18 @@ description: 接管一个旧项目时的操作顺序：只读勘察定类（A/B/
 ## 真命令
 
 ```bash
-# 只读勘察（判哪类都退 0；只有「目录不存在」退非 0）
-python -X utf8 tools/wb_takeover.py --root <目录> --json
+# 只读勘察；--strict 是必须的（判据不足会退 2 —— 停手，不许猜类别）
+python -X utf8 tools/wb_takeover.py --root <目录> --strict --json
 ```
 
 ## 怎么读结果
 
-- 退 `0`，JSON 三个字段：`kind`（A/B/C/D）、`readings`（逐条读数）、`mapping_hints`（按类的映射提示）；
-  复核读数就重跑 `python -X utf8 tools/wb_takeover.py --root <目录> --json`。
-- 退 `2`：目录不存在（唯一允许的非零情形），JSON 里 `ok:false`；核对路径后重跑
-  `python -X utf8 tools/wb_takeover.py --root <目录> --json`。
+- 退 `0`，JSON 五个字段：`kind`（A/B/C/D）、`readings`（逐条读数）、`mapping_hints`（按类的映射提示）、
+  `strict_ok`、`strict_problems`；复核读数就重跑
+  `python -X utf8 tools/wb_takeover.py --root <目录> --strict --json`。
+- 退 `2` 有两种：① 目录不存在（`ok:false`）；② `--strict` 下判据不足
+  （`strict_problems` 逐条点名缺什么，如「判成 C 但目录里没有任何内容」）。
+  **第二种一律停手**：先补读数（源码/测试/CI/管线），不许猜类别往下铺骨架（判据实现见 `tools/wb_takeover.py` 的 strict_problems）。
 - `kind` 与后续动作的对应见下节；判据本身改了没有、改成什么，以 `tools/wb_takeover.py` 的输出为准，
   不以记忆为准。
 

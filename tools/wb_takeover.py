@@ -121,6 +121,12 @@ def probe(root: Path) -> dict:
     src_ok = (root / "src").is_dir()
     readings.append(_reading("src", src_ok, "有 src/" if src_ok else "无 src/"))
 
+    entries = [p for p in root.iterdir() if p.name != ".git"] if root.is_dir() else []
+    readings.append(_reading(
+        "content", bool(entries),
+        f"{len(entries)} 个顶层条目" if entries else "空目录（除 .git）",
+    ))
+
     if own_files or trio_ok:
         kind = "A"
     elif foreign:
@@ -139,10 +145,52 @@ def probe(root: Path) -> dict:
     }
 
 
+def strict_problems(result: dict) -> list[str]:
+    """`--strict` 的判据：类别必须有**正证据**支撑，否则算「判不出」。
+
+    ★ 卡 A311 的来由：`kind` 总会给出一个字母（兜底 C），于是「信息不足」和
+      「真的是裸仓」看起来一样。strict 把这两者分开：空目录 / 无任何信号 ⇒ 返回问题，
+      调用方（技能第一步）据此停手，不许往下猜。
+    """
+    problems: list[str] = []
+    if not result.get("ok"):
+        return [str(result.get("error") or "勘察失败")]
+
+    by_name = {r["name"]: r for r in result.get("readings") or []}
+    kind = result.get("kind")
+
+    if kind == "C":
+        content = by_name.get("content")
+        if not (content and content.get("ok")):
+            problems.append(
+                "判成 C（裸仓）但目录里没有任何内容 —— 缺：源码 / 测试 / CI / 管线任一信号"
+            )
+    if kind == "A":
+        own = (by_name.get("own_pipeline_config", {}).get("ok")
+               or by_name.get("own_trio", {}).get("ok"))
+        if not own:
+            problems.append(
+                "判成 A 但没找到自己的管线文件（pipeline.toml / harness.toml / 三件套）"
+            )
+    if kind == "B":
+        borrowed = (by_name.get("tests", {}).get("ok")
+                    or by_name.get("ci", {}).get("ok"))
+        if not borrowed:
+            problems.append("判成 B 但测试与 CI 信号都为无")
+    if kind == "D" and not by_name.get("foreign_framework", {}).get("ok"):
+        problems.append("判成 D 但没检出别家框架标记")
+
+    return problems
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="只读勘察器：把旧项目目录分类成 A/B/C/D")
     ap.add_argument("--root", required=True, help="要勘察的目录")
     ap.add_argument("--json", action="store_true", help="机器可读输出")
+    ap.add_argument(
+        "--strict", action="store_true",
+        help="判据严格模式：类别没有正证据支撑（如空目录）⇒ 退 2 并点名缺什么（卡 A311）",
+    )
     args = ap.parse_args(argv)
 
     root = Path(args.root)
@@ -155,8 +203,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     result = probe(root.resolve())
+    problems = strict_problems(result) if args.strict else []
     if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        payload = dict(result)
+        if args.strict:
+            payload["strict_ok"] = not problems
+            payload["strict_problems"] = problems
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(f"类别：{result['kind']}（{result['root']}）")
         for r in result["readings"]:
@@ -164,6 +217,11 @@ def main(argv: list[str] | None = None) -> int:
         print("映射提示：")
         for h in result["mapping_hints"]:
             print(f"  - {h}")
+    if problems:
+        for line in problems:
+            print(f"[FAIL] {line}", file=sys.stderr)
+        print("★ --strict：判据不足，停手；先补读数，别猜类别", file=sys.stderr)
+        return 2
     return 0
 
 

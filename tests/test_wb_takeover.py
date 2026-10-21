@@ -142,3 +142,22 @@ def test_existing_dir_exit_zero(tmp_path: Path, capsys) -> None:
         out = json.loads(capsys.readouterr().out)
         assert out["ok"] is True
         assert out["kind"] in ("A", "B", "C", "D")
+
+
+def test_strict_refuses_empty_dir(tmp_path: Path) -> None:
+    """★ A311：空目录判成 C 不算「判出来了」⇒ --strict 退 2 并点名缺什么。"""
+    assert wt.main(["--root", str(tmp_path), "--strict"]) == 2
+
+
+def test_strict_accepts_repo_with_tests(tmp_path: Path) -> None:
+    """★ A311：有 tests/ 就算有正证据（B 类），strict 不该误伤。"""
+    (tmp_path / "tests").mkdir()
+    assert wt.main(["--root", str(tmp_path), "--strict"]) == 0
+
+
+def test_strict_json_reports_problems(tmp_path: Path, capsys) -> None:
+    """★ A311：JSON 模式下也要带 strict_ok / strict_problems，脚本才判得出来。"""
+    assert wt.main(["--root", str(tmp_path), "--strict", "--json"]) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["strict_ok"] is False
+    assert payload["strict_problems"]

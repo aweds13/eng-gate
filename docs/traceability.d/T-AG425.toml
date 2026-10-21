@@ -1,0 +1,14 @@
+[entries."T-AG425"]
+id = "T-AG425"
+title = "接手判据严格化：四类各要一条正证据"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_takeover.py",
+  "file:tests/test_wb_takeover.py",
+  "file:skills/pipe-takeover/SKILL.md",
+  "file:AGENTS.md",
+  "file:gates/diag/wb-A311.verdict.txt",
+]
+gaps = "- `--strict` 只覆盖 A 类（本仓形态）判据；B/C/D 三类仍是启发式，靠 `tools/wb_takeover.py` 的 `kind` 判定，没有逐类回归。- 严格模式读文件内容的字符上限仍写死在 `tools/wb_takeover.py`，没有做成参数。- `AGENTS.md` 只加了「接手入口」一行，没有覆盖多入口仓库（monorepo）；判据仍只看 `tools/wb_takeover.py` 的顶层读数。"
+
