@@ -3234,3 +3234,14 @@ files = ["tools/dsh_panel.py"]
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A310"
+task = "T-AG424"
+title = "面板已装副本与生成源不许漂移"
+tree = ".wt/A310"
+spec = "复盘/卡/卡A310-安装漂移检查.md"
+files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
+depends = ["A309"]
+risk = "low"
+status = "pending"

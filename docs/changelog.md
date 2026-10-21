@@ -1,3 +1,6 @@
+## 面板已装副本与生成源不许漂移
+- `tools/dsh_panel.py` 新增 `check_installed()` 与 `--check-installed DIR`：逐文件比对，缺/异都点名。
+- `tests/test_dsh_panel.py` 新增 3 条（刚 emit 即绿 / 改一字节与删文件都报 / CLI 退 1）。
 ## 面板深链：每个界面都有自己的地址
 - `tools/dsh_panel.py`：客户端加 hash 路由 #/panel/<id>，白名单 HASH_IDS，非法 id 回退 overview。
 - `tests/test_dsh_panel.py`：+10 条（白名单/回退/唯一写者/还原 + 3 条反例让自检必咬）。

@@ -1523,3 +1523,32 @@ def test_client_check_bites_when_second_address_bar_writer() -> None:
     assert broken != dp.CLIENT_JS
     problems = dp.check(client_js=broken)
     assert any("地址栏写了 2 处" in p for p in problems), problems
+
+
+def test_check_installed_is_green_right_after_emit(tmp_path: Path) -> None:
+    """★ A310：刚 emit 出来的目录，check_installed 必须零差异（同一份源写两遍）。"""
+    dp.emit(tmp_path)
+    assert dp.check_installed(tmp_path) == []
+
+
+def test_check_installed_reports_drift_and_missing(tmp_path: Path) -> None:
+    """★ A310：装的那份改过一个字节 / 缺一个文件 ⇒ 必须点名，不许静默通过。"""
+    dp.emit(tmp_path)
+    drifted = tmp_path / dp.CLIENT_REL
+    drifted.write_text(dp.CLIENT_JS + "\n// local hotfix\n", encoding="utf-8")
+    (tmp_path / dp.ICON_REL).unlink()
+
+    diffs = dp.check_installed(tmp_path)
+    joined = "\n".join(diffs)
+    assert "内容漂移" in joined and dp.CLIENT_REL in joined, joined
+    assert "缺文件" in joined and dp.ICON_REL in joined, joined
+
+
+def test_check_installed_cli_exits_nonzero_on_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """★ A310：CLI 面对漂移必须退 1（脚本/巡检才能当判据用）。"""
+    dp.emit(tmp_path)
+    (tmp_path / dp.MANIFEST_REL).write_text("{}", encoding="utf-8")
+    assert dp.main(["--check-installed", str(tmp_path)]) == 1
+    assert "漂移" in capsys.readouterr().out

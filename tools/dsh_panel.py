@@ -3983,6 +3983,27 @@ def emit(dest: Path) -> list[Path]:
     return written
 
 
+def check_installed(dest: Path) -> list[str]:
+    """比对**已安装副本**与生成源是否逐字节一致；返回差异清单（空 = 一致）。
+
+    ★ 卡 A310：门禁绿但面板路由 404 的那一类事故，根因是「装的那份不是源的那份」。
+      本函数让这件事在**秒级**可见，而不是等重启后才暴露。
+    """
+    dest = Path(dest)
+    diffs: list[str] = []
+    for rel, text in package_files().items():
+        path = dest / rel
+        if not path.is_file():
+            diffs.append(f"缺文件：{rel}")
+            continue
+        got = path.read_text(encoding="utf-8", errors="replace")
+        if got != text:
+            diffs.append(
+                f"内容漂移：{rel}（装的是 {len(got)} 字符，源是 {len(text)} 字符）"
+            )
+    return diffs
+
+
 # ================================================================ 只读读数（宿主契约参考实现）
 
 
@@ -4040,6 +4061,10 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--emit", metavar="DIR", help="把插件源码（成稿）写到 DIR")
     mode.add_argument("--doc", action="store_true", help="打印安装/接线说明")
     mode.add_argument("--board", action="store_true", help="只读读数（参考实现）")
+    mode.add_argument(
+        "--check-installed", metavar="DIR",
+        help="比对已安装副本与生成源是否逐字节一致（卡 A310）",
+    )
     parser.add_argument("--root", default="", help="仓库根（默认本文件推出来）")
     parser.add_argument("--json", action="store_true", help="--board 用：输出 JSON")
     return parser
@@ -4055,6 +4080,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.doc:
         print(INSTALL_DOC)
         return 0
+    if args.check_installed:
+        diffs = check_installed(Path(args.check_installed))
+        if not diffs:
+            print(f"[OK ] 已安装副本与生成源一致：{args.check_installed}")
+            return 0
+        for line in diffs:
+            print(f"[漂移] {line}")
+        print(f"★ {len(diffs)} 处不一致 ⇒ 装的不是源的那份，重启也不会修好")
+        return 1
     if args.board:
         root = Path(args.root) if args.root else ROOT
         result = read_board(root)

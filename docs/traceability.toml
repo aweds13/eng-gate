@@ -7851,3 +7851,16 @@ evidence = [
   "file:复盘/交接.d/T-AG423.md",
 ]
 gaps = "- 只动客户端半；宿主半与路由一字未改（`tools/dsh_panel.py` 的 CLIENT_JS 区）。- 深链只覆盖三行与 7 个工具箱页签，白名单在 `tools/dsh_panel.py` 的 HASH_IDS。"
+
+[entries."T-AG424"]
+id = "T-AG424"
+title = "面板已装副本与生成源不许漂移"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+  "file:复盘/卡/卡A310-安装漂移检查.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = "- 只比对 `package_files()` 覆盖的 8 个文件；`cordis.yml` 这类**配置**不在比对范围（安装口径见 `tools/dsh_panel.py` 的 INSTALL_DOC）。- 巡检还没自动调它：`tools/wb_daily.py` 里没有这一步，留待下一张卡接（边界写在 `复盘/卡/卡A310-安装漂移检查.md`）。"
