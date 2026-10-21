@@ -7878,3 +7878,17 @@ evidence = [
   "file:gates/diag/wb-A311.verdict.txt",
 ]
 gaps = "- `--strict` 只覆盖 A 类（本仓形态）判据；B/C/D 三类仍是启发式，靠 `tools/wb_takeover.py` 的 `kind` 判定，没有逐类回归。- 严格模式读文件内容的字符上限仍写死在 `tools/wb_takeover.py`，没有做成参数。- `AGENTS.md` 只加了「接手入口」一行，没有覆盖多入口仓库（monorepo）；判据仍只看 `tools/wb_takeover.py` 的顶层读数。"
+
+[entries."T-AG427"]
+id = "T-AG427"
+title = "软工预设入库：片段 + 检查器 + 钉子"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/presets/softeng.patch.yml",
+  "file:tools/dsh_preset.py",
+  "file:tests/test_dsh_preset.py",
+  "file:gates/diag/wb-A313.verdict.txt",
+]
+gaps = "- 安装器只处理 desktop 这种「一个 profile 一份 cordis.patch.yml」的形态；多 profile 批量安装得逐次调用 `tools/dsh_preset.py`。- 片段是抄自组装后的 `preset-standard`（对照见 `docs/presets/softeng.patch.yml` 的头注释）；shipped 预设升级后需要人工比对，脚本不会自动跟版。- 预设里的 `customSkillDirs` 写死某台机器的绝对路径（真源 `docs/presets/softeng.patch.yml` 的 `customSkillDirs` 一节），换用户要改那里；安装器 `tools/dsh_preset.py` 只做结构检查与幂等装入。"
+

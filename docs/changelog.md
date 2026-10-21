@@ -1,3 +1,8 @@
+## 软工预设入库：真源 + 安装器 + 钉子
+- 新增 `docs/presets/softeng.patch.yml`：preset-softeng 的唯一真源（`- insert:` 块，18 插件，无 tool-pwsh）。
+- 新增 `tools/dsh_preset.py`：`--check` 结构检查，`--install <profile>` 幂等装入（备份 + 已存在跳过）。
+- 新增 `tests/test_dsh_preset.py`：六条钉子，覆盖 pwsh 必拒、bash 必开、裸 id 行必拒、安装幂等。
+- 预设的 persona 与技能目录随真源走，换机器只改一处。
 ## 接手判据严格化：--strict 把没覆盖的说成没覆盖
 - `tools/wb_takeover.py` 新增 `--strict`：缺门/缺台账/缺证据时报 `strict_problems` 并以退出码 2 结束，不再只给 `ok: true`。
 - `tests/test_wb_takeover.py` 补严格模式用例（干净仓 0 条、缺文件必报）。

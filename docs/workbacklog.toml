@@ -3266,4 +3266,4 @@ spec = "复盘/卡/卡A313-软工预设入库.md"
 files = ["docs/presets/softeng.patch.yml", "tools/dsh_preset.py", "tests/test_dsh_preset.py"]
 depends = ["A311"]
 risk = "low"
-status = "pending"
+status = "done"
