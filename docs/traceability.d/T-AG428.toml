@@ -1,0 +1,12 @@
+[entries."T-AG428"]
+id = "T-AG428"
+title = "面板验收三修：预算/脏卡号/截断口径"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+  "file:gates/diag/wb-A314.verdict.txt",
+]
+gaps = "- 预算只是把 1.5s 抬到 6s（`tools/dsh_panel.py` 的 `STACK_STATUS_BUDGET_MS`），没根治「五次端口探测串行 2.8s」本身；真要让冷启动也快，得把 `tools/stack.py status --json` 的探测并行化。- 通知只认台账登记过的卡号（`tools/dsh_panel.py` 的 `led.all`）；历史脏判决文件（`gates/diag/wb-000.verdict.txt` 这类）仍在盘上，只是不再显示——没做归档。- 截断用 `more` 明示、上限 50（`tools/dsh_panel.py` 的 `rows.slice(0, 50)`）；面板客户端还没把 `more` 画出来。"
+

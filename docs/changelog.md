@@ -1,3 +1,7 @@
+## 面板验收三修
+- `/dsh-panel/stack-status` 预算 1500ms → 6000ms（实测 `python tools/stack.py status --json` 2.8s），不再把「服务全停」误报成「stack.py 起不来」。
+- 通知：卡号归一（`254.r2` → `254`）、只认台账登记的卡号、done 卡不算未读、上限 50 条 + `more`。
+- `tests/test_dsh_panel.py` 加三条钉子；假 ctx 直挂宿主半对真仓实测 `unread=1 / items=1 / 含000=false`。
 ## 软工预设入库：真源 + 安装器 + 钉子
 - 新增 `docs/presets/softeng.patch.yml`：preset-softeng 的唯一真源（`- insert:` 块，18 插件，无 tool-pwsh）。
 - 新增 `tools/dsh_preset.py`：`--check` 结构检查，`--install <profile>` 幂等装入（备份 + 已存在跳过）。

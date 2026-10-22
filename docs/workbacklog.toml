@@ -3278,4 +3278,4 @@ spec = "复盘/卡/卡A314-面板验收三修.md"
 files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
 depends = ["A313"]
 risk = "low"
-status = "pending"
+status = "done"

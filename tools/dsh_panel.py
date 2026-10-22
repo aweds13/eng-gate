@@ -750,11 +750,12 @@ function readStatus() {
 
 /* ---- 卡 A289：/dsh-panel/stack-status 的进程内缓存 ----
  * TTL 5s：命中直接回上次 JSON（外层带 cached:true）；过期同步重算，
- * 但单次响应不得 > 1.5s（spawnSync 预算 1500ms，跑不完如实报超时原话，不静默）。
+ * 但单次响应必须有上限：预算 6000ms（实测 `stack.py status --json` 五次端口探测约
+ * 2.8s，原来的 1500ms 会把「服务全停」误报成「stack.py 起不来」——卡 A314）。
  * 只缓存 GET /dsh-panel/stack-status 这一条路由：三条读数路由与动作缝不缓存
  * （动作缝自己要真状态，起停之后缓存就地作废）。 */
 const STACK_STATUS_TTL_MS = 5000;
-const STACK_STATUS_BUDGET_MS = 1500;
+const STACK_STATUS_BUDGET_MS = 6000;
 let stackStatusCache = null; /* { at: ms, payload: status JSON } */
 
 function readStatusFresh() {
@@ -789,7 +790,8 @@ function serveStackStatus(res) {
 function readDoneCards() {
   const root = repoRoot();
   const done = new Set();
-  if (!root) return done;
+  const all = new Set();
+  if (!root) return { done, all };
   /* 先分片（docs/backlog/*.toml），再总表（docs/workbacklog.toml）—— 与 wb_plan 同口径。 */
   const files = [path.join(root, "docs", "workbacklog.toml")];
   try {
@@ -808,6 +810,7 @@ function readDoneCards() {
     let curId = "";
     let curStatus = "";
     const commit = () => {
+      if (curId) all.add(curId);
       if (curId && curStatus === "done") done.add(curId);
       curId = "";
       curStatus = "";
@@ -827,7 +830,7 @@ function readDoneCards() {
     }
     commit();
   }
-  return done;
+  return { done, all };
 }
 
 /** A298：直接扫 verdict 文件 —— 守护没起、重启后也能看见「已收工未收口」。
@@ -886,24 +889,28 @@ function serveNotifications(req, res) {
     if (!row || typeof row !== "object") continue;
     parsed.push(row);
   }
-  const done = readDoneCards();
+  const led = readDoneCards();
   const rows = [];
   const seen = new Set();
   /* A298：先并实时扫出来的 verdict（守护没起、关机重启后照样看得见），再并 JSONL 历史；
-   * 同卡只留一条，实时的优先（它带最新判决）。 */
+   * 同卡只留一条，实时的优先（它带最新判决）。
+   * A314：① 卡号归一（`254.r2` → `254`）；② 只认台账里登记过的卡号——派活前置失败
+   * 留下的 `000` 这类脏号不许冒充通知；③ 台账里 done 的卡不算未读。 */
   for (const row of scanVerdicts().concat(parsed)) {
-    const card = String(row.card || "");
+    const card = String(row.card || "").replace(/[.]r[0-9]+$/, "");
     if (!card || seen.has(card)) continue;
     seen.add(card);
-    if (done.has(card)) continue;
-    rows.push(row);
+    if (led.done.has(card)) continue;
+    if (led.all.size && !led.all.has(card)) continue;
+    rows.push(Object.assign({}, row, { card }));
   }
-  /* 按时间倒序、最多 20 条。 */
+  /* 按时间倒序、最多 50 条（超出的用 more 明示，不静默吞掉）。 */
   rows.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
-  const items = rows.slice(0, 20).map((r) => ({
+  const items = rows.slice(0, 50).map((r) => ({
     card: String(r.card || ""), verdict: String(r.verdict || ""), at: String(r.at || ""),
   }));
-  sendJson(res, 200, { ok: true, unread: rows.length, items });
+  const more = Math.max(0, rows.length - items.length);
+  sendJson(res, 200, { ok: true, unread: rows.length, more, items });
 }
 
 /** 卡 A302（T-AG416）：卡谱系树 —— 只读转 `tools/wb_tree.py --json`。

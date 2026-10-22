@@ -1552,3 +1552,28 @@ def test_check_installed_cli_exits_nonzero_on_drift(
     (tmp_path / dp.MANIFEST_REL).write_text("{}", encoding="utf-8")
     assert dp.main(["--check-installed", str(tmp_path)]) == 1
     assert "漂移" in capsys.readouterr().out
+
+
+def test_stack_status_budget_covers_real_probe_cost() -> None:
+    """★ A314：`stack.py status --json` 实测约 2.8s（五次端口探测）。
+
+    原预算 1500ms 会把「服务全停」误报成「stack.py 起不来」（真机验收抓到的假红）。
+    """
+    src = dp._host_js()
+    assert "const STACK_STATUS_BUDGET_MS = 6000;" in src, "预算又改回 < 实测成本了"
+    assert "STACK_STATUS_BUDGET_MS = 1500;" not in src
+
+
+def test_notifications_only_count_ledger_cards() -> None:
+    """★ A314：脏号（派活前置失败留下的 `000`）不许冒充通知；done 卡不算未读。"""
+    src = dp._host_js()
+    assert "led.all.has(card)" in src, "缺「只认台账登记过的卡号」这一条"
+    assert "led.done.has(card)" in src, "缺「done 卡不算未读」这一条"
+    assert "replace(/[.]r[0-9]+$/, \"\")" in src, "缺卡号归一（254.r2 → 254）"
+
+
+def test_notifications_truncation_is_explicit() -> None:
+    """★ A314：列表最多 50 条，超出的必须用 `more` 明示，不许 unread 与 items 悄悄打架。"""
+    src = dp._host_js()
+    assert "rows.slice(0, 50)" in src
+    assert "Math.max(0, rows.length - items.length)" in src

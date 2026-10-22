@@ -7892,3 +7892,14 @@ evidence = [
 ]
 gaps = "- 安装器只处理 desktop 这种「一个 profile 一份 cordis.patch.yml」的形态；多 profile 批量安装得逐次调用 `tools/dsh_preset.py`。- 片段是抄自组装后的 `preset-standard`（对照见 `docs/presets/softeng.patch.yml` 的头注释）；shipped 预设升级后需要人工比对，脚本不会自动跟版。- 预设里的 `customSkillDirs` 写死某台机器的绝对路径（真源 `docs/presets/softeng.patch.yml` 的 `customSkillDirs` 一节），换用户要改那里；安装器 `tools/dsh_preset.py` 只做结构检查与幂等装入。"
 
+[entries."T-AG428"]
+id = "T-AG428"
+title = "面板验收三修：预算/脏卡号/截断口径"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/dsh_panel.py",
+  "file:tests/test_dsh_panel.py",
+  "file:gates/diag/wb-A314.verdict.txt",
+]
+gaps = "- 预算只是把 1.5s 抬到 6s（`tools/dsh_panel.py` 的 `STACK_STATUS_BUDGET_MS`），没根治「五次端口探测串行 2.8s」本身；真要让冷启动也快，得把 `tools/stack.py status --json` 的探测并行化。- 通知只认台账登记过的卡号（`tools/dsh_panel.py` 的 `led.all`）；历史脏判决文件（`gates/diag/wb-000.verdict.txt` 这类）仍在盘上，只是不再显示——没做归档。- 截断用 `more` 明示、上限 50（`tools/dsh_panel.py` 的 `rows.slice(0, 50)`）；面板客户端还没把 `more` 画出来。"
