@@ -3267,3 +3267,15 @@ files = ["docs/presets/softeng.patch.yml", "tools/dsh_preset.py", "tests/test_ds
 depends = ["A311"]
 risk = "low"
 status = "done"
+
+
+[[cards]]
+id = "A314"
+task = "T-AG428"
+title = "面板验收三修：预算/脏卡号/截断口径"
+tree = ".wt/A314"
+spec = "复盘/卡/卡A314-面板验收三修.md"
+files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
+depends = ["A313"]
+risk = "low"
+status = "pending"
