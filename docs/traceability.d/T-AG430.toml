@@ -1,0 +1,13 @@
+[entries."T-AG430"]
+id = "T-AG430"
+title = "禁长等待：job 的 wait 上限压到 1 秒"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/presets/softeng.patch.yml",
+  "file:AGENTS.md",
+  "file:tests/test_dsh_preset.py",
+  "file:复盘/卡/卡A316-禁长等待.md",
+]
+gaps = "- 只影响「软工」这一档，默认档仍保留 30 秒默认等待；改的口子在 `docs/presets/softeng.patch.yml`。- 1 秒只约束工具侧等待，模型仍可连续多次短等；行为约束落在 `tests/test_dsh_preset.py` 的两条钉子与入口文档的禁令上。- 桌面档那份不在仓内、本卡判据覆盖不到；来路与实测读数记在 `复盘/卡/卡A316-禁长等待.md`。"
+

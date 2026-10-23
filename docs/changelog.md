@@ -1,3 +1,7 @@
+## 禁长等待：job 的 wait 上限压到 1 秒
+- `docs/presets/softeng.patch.yml`：`tool-jobs` 行加 `config: {waitTimeoutMs: 1000, maxWaitTimeoutMs: 1000}`。
+- `AGENTS.md`：「长命令怎么跑」加第三条禁令（`job_output(wait: true)` 不许长等）。
+- `tests/test_dsh_preset.py`：两条钉子（两个上限均为 1000；入口文档写明禁令）。
 ## 入口规则内嵌：管理先走总控、写文档先过 grill-me
 - `docs/presets/softeng.patch.yml`：persona 补两条英文规则（管理类先走 softeng-manage；写规格/五层文档/新骨架前必须 grill-me 并获确认），facts 顺延为第 7 条。
 - `skills/pipe-new/SKILL.md`、`skills/pipe-takeover/SKILL.md`：各加 §0「先问再写」硬规矩。

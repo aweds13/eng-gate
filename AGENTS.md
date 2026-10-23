@@ -20,6 +20,8 @@
 
 **也禁止** `sleep N` 硬等：长任务起后台作业，等运行时给完成通知，中途要看进度就
 `tail -n 20 <日志>` 或读作业输出（瞬间返回）。
+**也禁止** `job_output(wait: true)` 长时间阻塞：软工预设已把 `waitTimeoutMs` / `maxWaitTimeoutMs` 压到 1 秒，
+长等会被截断并回 `running` —— 等完成通知，或用 `job_output`（不带 wait）读增量 + `tail -n 20 <日志>`。
 
 **强制检查**（写法不合规直接拦下）：
 

@@ -80,3 +80,27 @@ def test_skills_require_grill_me_before_writing():
         body = (root / rel).read_text(encoding="utf-8")
         assert "grill-me" in body, f"{rel} 缺 grill-me 前置"
         assert "未确认不得动笔" in body, f"{rel} 缺「未确认不得动笔」"
+
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_job_wait_is_capped_to_one_second():
+    """禁长等待：预设里 tool-jobs 的两个等待上限都必须压到 1000ms。"""
+    import yaml
+
+    path = ROOT / "docs" / "presets" / "softeng.patch.yml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    plugins = doc[0]["insert"][0]["config"]["plugins"]
+    jobs = [row for row in plugins if isinstance(row, dict) and row.get("id") == "tool-jobs"]
+    assert jobs, "预设里缺 tool-jobs 行"
+    cfg = jobs[0].get("config") or {}
+    assert cfg.get("waitTimeoutMs") == 1000, cfg
+    assert cfg.get("maxWaitTimeoutMs") == 1000, cfg
+
+
+def test_agents_md_forbids_blocking_wait():
+    """入口文档要写明：不许用 job_output(wait: true) 长时间阻塞。"""
+    text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "job_output(wait: true)" in text
+    assert "maxWaitTimeoutMs" in text

@@ -7916,3 +7916,16 @@ evidence = [
   "file:tests/test_dsh_preset.py",
 ]
 gaps = "- persona 只是软约束，可被上下文冲淡；真正拦住「瞎补」的是 `skills/pipe-new/SKILL.md` 与 `skills/pipe-takeover/SKILL.md` 的 §0 前置步骤。- 没有自动化判据证明「真实会话里模型先调总控」；现有钉子只在 `tests/test_dsh_preset.py` 里校验关键词，行为验证靠人工观察。- 规则只写进 `docs/presets/softeng.patch.yml`，普通会话不生效（用户明确选择隔离，不铺第二层）。"
+
+[entries."T-AG430"]
+id = "T-AG430"
+title = "禁长等待：job 的 wait 上限压到 1 秒"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/presets/softeng.patch.yml",
+  "file:AGENTS.md",
+  "file:tests/test_dsh_preset.py",
+  "file:复盘/卡/卡A316-禁长等待.md",
+]
+gaps = "- 只影响「软工」这一档，默认档仍保留 30 秒默认等待；改的口子在 `docs/presets/softeng.patch.yml`。- 1 秒只约束工具侧等待，模型仍可连续多次短等；行为约束落在 `tests/test_dsh_preset.py` 的两条钉子与入口文档的禁令上。- 桌面档那份不在仓内、本卡判据覆盖不到；来路与实测读数记在 `复盘/卡/卡A316-禁长等待.md`。"

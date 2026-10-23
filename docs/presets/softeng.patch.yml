@@ -51,6 +51,10 @@
               sampleOverCapGlobResults: false
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
+            # 禁止长等待：wait:true 最多等 1 秒；超过就回 running，让模型去干别的。
+            config:
+              waitTimeoutMs: 1000
+              maxWaitTimeoutMs: 1000
           - id: skill-filesystem
             config:
               customSkillDirs:
