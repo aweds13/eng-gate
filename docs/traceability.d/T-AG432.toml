@@ -1,0 +1,16 @@
+[entries."T-AG432"]
+id = "T-AG432"
+title = "单账本第一步：状态从 git 派生（T-AG432）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_status.py",
+  "file:tools/wb_reconcile.py",
+  "file:tools/wb_land.py",
+  "file:tests/test_wb_reconcile.py",
+  "file:tests/test_wb_status.py",
+  "file:tests/test_wb_land.py",
+  "file:gates/diag/wb-A318.verdict.txt",
+]
+gaps = "- **`status` 字段没有删**：`wb_plan` / `wb_task` / 面板仍在读它，直接删会让 `wb_plan check` 把历史卡全判成「待派」并报文件冲突（实测：删掉 187 行后 `tests/test_wb_plan.py` 立刻红在 A268 与 116/158/197）。这条留给后续卡，判据见 `tools/wb_plan.py`。- **面板没改读派生视图**：看板/号池两页仍读台账字段；改法在 `tools/dsh_panel.py`（`readDoneCards` 一带），本卡没动。- **`wb_land` 拒落只覆盖「台账里没有这张卡」**：卡在台账、但 `Task:` 号对不上时仍按老路走；判据在 `tools/wb_land.py`。- 对账器现在只有红（孤儿号）与派生两态，**「黄灯」判词整个移除**；旧的 `stale-pending/stale-done/accounted` 概念不再存在，`tests/test_wb_reconcile.py` 已按新口径重写。"
+

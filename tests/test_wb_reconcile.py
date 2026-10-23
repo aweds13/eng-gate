@@ -1,8 +1,19 @@
-r"""`tools/wb_reconcile.py` 的判据（卡 A269 · T-AG387）。
+r"""`tools/wb_reconcile.py` 的派生对账判据（卡 A318 重写）。
 
-两条口径（与工具 docstring 一致，别只测 happy path）：
-  ① **stale-pending（红）**：状态不是 done 但已有提交 ⇒ 台账落后于历史；
-  ② **stale-done（黄）**：状态 done 但没提交 ⇒ 只报不拒（本仓历史上有 15 张老卡）。
+A318 之前，对账是「拿台账里的 `status` 字段跟 git 比」，于是同一件事有三份事实
+（status / 提交 trailer / 批次围栏）。现在**账本只存计划**：状态全部由
+`wb_status.derive_status()` 从 git 派生。
+
+本文件钉住派生口径（别只测 happy path）：
+
+| 钉子 | 判什么 | 会红在哪 |
+|---|---|---|
+| ① 提交 trailer ⇒ done | 有 `Task:` 的提交就是已落地 | 派生漏读 trailer |
+| ② 没提交 ⇒ pending | 不许拿"登记了"冒充"落了" | 把 pending 当 done |
+| ③ 孤儿号 ⇒ 红 | git 有 `Task:`、台账没条目 | 吞掉孤儿（A315/A316 事故形状） |
+| ④ 正文提到不算 | 只认标题里的 trailer | 正则扫了整条 commit message |
+| ⑤ 围栏 landed ⇒ done | 批收口也是证据 | 只认提交、不认围栏 |
+| ⑥ 围栏 draft ⇒ pending | 未落地的批不算证据 | 拿 draft 当 landed |
 """
 
 from __future__ import annotations
@@ -32,64 +43,10 @@ def _repo(tmp_path: Path, backlog: str) -> Path:
     return tmp_path
 
 
-def _card(cid: str, task: str, status: str) -> str:
-    return (f"[[cards]]{NL}id = {cid!r}{NL}task = {task!r}{NL}status = {status!r}{NL}")
+def _card(cid: str, task: str) -> str:
+    """一张卡的**计划**（id + task；不再有 status 字段 —— 那是派生出来的）。"""
+    return f"[[cards]]{NL}id = {cid!r}{NL}task = {task!r}{NL}"
 
-
-def test_pending_but_committed_is_stale_red(tmp_path: Path) -> None:
-    """① 状态 pending 但历史里已有这笔 ⇒ 必须点红（这正是 252/260/262 撞的那条）。"""
-    root = _repo(tmp_path, _card("A1", "T-GX1", "pending"))
-    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x (T-GX1)")
-    cards = wb_reconcile.load_cards(root)
-    stale_pending, stale_done, accounted = wb_reconcile.check(root, cards)
-    assert [x["id"] for x in stale_pending] == ["A1"]
-    assert stale_pending[0]["commit"]
-    assert stale_done == []
-    assert wb_reconcile.main(["--root", str(root)]) == 1
-
-
-def test_done_without_commit_is_advisory_only(tmp_path: Path) -> None:
-    """② 状态 done 但没提交 ⇒ 只报不拒（退出码仍 0）。"""
-    root = _repo(tmp_path, _card("A2", "T-GX2", "done"))
-    cards = wb_reconcile.load_cards(root)
-    stale_pending, stale_done, accounted = wb_reconcile.check(root, cards)
-    assert stale_pending == []
-    assert [x["id"] for x in stale_done] == ["A2"]
-    assert wb_reconcile.main(["--root", str(root)]) == 0
-
-
-def test_consistent_queue_is_green(tmp_path: Path) -> None:
-    """③ 一致：pending 没提交、done 有提交 ⇒ 两条都空、退出码 0。"""
-    backlog = _card("A3", "T-GX3", "pending") + _card("A4", "T-GX4", "done")
-    root = _repo(tmp_path, backlog)
-    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: y (T-GX4)")
-    cards = wb_reconcile.load_cards(root)
-    stale_pending, stale_done, accounted = wb_reconcile.check(root, cards)
-    assert stale_pending == [] and stale_done == []
-    assert wb_reconcile.main(["--root", str(root)]) == 0
-
-
-def test_failed_card_with_commit_is_not_red(tmp_path: Path) -> None:
-    """③a **终态不判红**：卡 146 是「被取代」，历史里有正文提到任务号的提交也不算台账落后。
-
-    ★ 2026-10-17 真撞过：A269 的提交正文里有 `T-G246`，对账器把作废的 146 报成 stale-pending。
-    """
-    root = _repo(tmp_path, _card("A3", "T-GY3", "failed"))
-    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x (T-GY0)", "-m", "正文提到 T-GY3")
-    cards = wb_reconcile.load_cards(root)
-    stale_pending, stale_done, accounted = wb_reconcile.check(root, cards)
-    assert stale_pending == []
-    assert wb_reconcile.main(["--root", str(root)]) == 0
-
-
-def test_body_mention_is_not_a_commit(tmp_path: Path) -> None:
-    """③b **只认标题**：提交正文里提到任务号 ⇒ 不算落地（pending 也不许因此点红）。"""
-    root = _repo(tmp_path, _card("A4", "T-GY4", "pending"))
-    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x (T-GY0)", "-m", "夹具里提到 T-GY4")
-    cards = wb_reconcile.load_cards(root)
-    stale_pending, stale_done, accounted = wb_reconcile.check(root, cards)
-    assert stale_pending == []
-    assert wb_reconcile.main(["--root", str(root)]) == 0
 
 def _batch(root: Path, name: str, state: str, commit: str, declared: list[str]) -> None:
     """造一份批次围栏（`gates/diag/batch/<name>.json`）。"""
@@ -99,24 +56,67 @@ def _batch(root: Path, name: str, state: str, commit: str, declared: list[str]) 
     (d / f"{name}.json").write_text(json.dumps(body), encoding="utf-8")
 
 
-def test_done_card_in_landed_batch_is_accounted_not_yellow(tmp_path: Path) -> None:
-    """done 卡没有点名 Task 提交，但它所在的批 `state=landed` ⇒ 认账（蓝），不报黄。
+def _status_of(rows: list[dict], cid: str) -> str:
+    hit = next(r for r in rows if r["id"] == cid)
+    return str(hit["status"])
 
-    这是 2026-10-14 `37a079c` 翻 14 张卡用的同一条判据：围栏状态说了算。
+
+def test_commit_trailer_derives_done(tmp_path: Path) -> None:
+    """① 历史里有 `Task: T-GX1` 的提交 ⇒ 派生 done，且不报孤儿。"""
+    root = _repo(tmp_path, _card("A1", "T-GX1"))
+    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x", "-m", "Task: T-GX1")
+    rows, orphans, _marks = wb_reconcile.check(root)
+    assert _status_of(rows, "A1") == "done"
+    assert orphans == []
+    assert wb_reconcile.main(["--root", str(root)]) == 0
+
+
+def test_no_commit_derives_pending(tmp_path: Path) -> None:
+    """② 只有计划、没有提交 ⇒ pending（不许靠人写 status）。"""
+    root = _repo(tmp_path, _card("A2", "T-GX2"))
+    _git(root, "commit", "-q", "--allow-empty", "-m", "chore: init")  # 空仓 ⇒ 判据退 2，先给一笔底
+    rows, orphans, _marks = wb_reconcile.check(root)
+    assert _status_of(rows, "A2") == "pending"
+    assert orphans == []
+    assert wb_reconcile.main(["--root", str(root)]) == 0
+
+
+def test_orphan_task_is_red(tmp_path: Path) -> None:
+    """③ git 里挂了 `Task:`、台账没有条目 ⇒ 孤儿 ⇒ 退 1。
+
+    ★ 这正是 A315/A316 的事故形状：卡落了，台账却没那条。
     """
-    root = _repo(tmp_path, _card("204", "T-G311", "done"))
+    root = _repo(tmp_path, _card("A3", "T-GX3"))
+    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: y", "-m", "Task: T-GX9")
+    rows, orphans, _marks = wb_reconcile.check(root)
+    assert "T-GX9" in orphans, orphans
+    assert wb_reconcile.main(["--root", str(root)]) == 1
+
+
+def test_body_mention_is_not_a_commit(tmp_path: Path) -> None:
+    """④ **只认 trailer**：正文里提到任务号 ⇒ 不算落地。"""
+    root = _repo(tmp_path, _card("A4", "T-GY4"))
+    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x (T-GY0)",
+         "-m", "夹具里提到 T-GY4，但标题的 trailer 是 T-GY0")
+    rows, orphans, _marks = wb_reconcile.check(root)
+    assert _status_of(rows, "A4") == "pending"
+    assert orphans == []
+
+
+def test_landed_batch_derives_done(tmp_path: Path) -> None:
+    """⑤ 批 `state=landed` ⇒ 派生 done（围栏也是证据）。"""
+    root = _repo(tmp_path, _card("204", "T-G311"))
     _batch(root, "B-BATCH", "landed", "abc1234", ["204"])
-    pending, stale, accounted = wb_reconcile.check(root, wb_reconcile.load_cards(root))
-    assert not pending and not stale
-    assert [x["id"] for x in accounted] == ["204"]
-    assert accounted[0]["commit"] == "abc1234"
+    rows, orphans, _marks = wb_reconcile.check(root)
+    hit = next(r for r in rows if r["id"] == "204")
+    assert hit["status"] == "done", hit
+    assert "B-BATCH" in hit["via"], hit
+    assert orphans == []
 
 
-def test_unlanded_batch_proves_nothing_and_stays_yellow(tmp_path: Path) -> None:
-    """批没落地（`state=draft`）就不算证据 —— 不能拿「登记了」冒充「落了」。"""
-    root = _repo(tmp_path, _card("205", "T-G312", "done"))
+def test_draft_batch_proves_nothing(tmp_path: Path) -> None:
+    """⑥ 批没落地（`state=draft`）⇒ 仍是 pending。"""
+    root = _repo(tmp_path, _card("205", "T-G312"))
     _batch(root, "B-DRAFT", "draft", "def5678", ["205"])
-    pending, stale, accounted = wb_reconcile.check(root, wb_reconcile.load_cards(root))
-    assert not pending and not accounted
-    assert [x["id"] for x in stale] == ["205"]
-
+    rows, _orphans, _marks = wb_reconcile.check(root)
+    assert _status_of(rows, "205") == "pending"

@@ -1,3 +1,8 @@
+## 单账本第一步：状态从 git 派生（T-AG432）
+- `tools/wb_status.py` 新增 `derive_status()` / `orphan_tasks()` / `derived_summary()`：提交 trailer ＞ 围栏 landed ＞ 围栏 awaiting-commit ＞ pending。
+- `tools/wb_reconcile.py` 改成纯派生视图；「没 git」退 2、「有 git 但还没有 Task 号」退 0（新仓初始态不再被当错）。
+- `tools/wb_land.py`：卡不在卡树台账里 ⇒ **拒落退 2**（不再跳过翻 status）。
+- `tests/test_wb_reconcile.py` 按新口径重写 6 条钉子；`test_wb_status` / `test_wb_land` 各改一条为派生/拒落口径。
 ## 封存比对改成比提交（T-AG433）
 - `tools/wb_review.py` 新增 `_resolve_commit()`，`check_gate_evidence()` 先比字面量、再比解析后的完整 sha。
 - `tests/test_wb_review.py` 补钉子 `test_short_sha_length_does_not_break_the_evidence_check`，并把真仓用例的字面量断言改成比提交。

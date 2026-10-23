@@ -3322,7 +3322,7 @@ spec = "复盘/卡/卡A318-单账本.md"
 files = ["tools/wb_status.py", "tools/wb_land.py", "tools/wb_reconcile.py", "tests/test_wb_status.py"]
 depends = ["A317"]
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A319"

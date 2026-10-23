@@ -1390,20 +1390,20 @@ def test_landing_does_not_flip_status_on_registration(tmp_path: Path) -> None:
     assert _backlog_card_status(repo, "T-G999") == "pending"
 
 
-def test_landing_skip_when_card_not_found(tmp_path: Path) -> None:
-    """跳过路径：找不到卡 ⇒ 打印并跳过（不崩、不翻）。"""
+def test_landing_refuses_when_card_not_registered(tmp_path: Path) -> None:
+    """A318 钉子：卡不在卡树台账里 ⇒ **拒落退 2**（不再「跳过翻 status」）。"""
     repo = _mk_repo(tmp_path)
     _write_backlog(repo, cid="203", task="T-G308", status="pending")
     _git(repo, "add", "--", "docs/workbacklog.toml")
     _git(repo, "commit", "-q", "-m", "add backlog")
     pen = _mk_pen(repo)
-    _write(pen, "code/a.py", "X = 2\n")
+    _write(pen, "code/a.py", "X = 2" + chr(10))
 
     done = _wand(repo, "--no-gate", tree=".pen", card="999")
 
     out = _out(done)
-    assert done.returncode == 0, out
-    assert "找不到卡 999" in out, out
+    assert done.returncode == 2, out
+    assert "没有卡 999 的条目" in out, out
     assert _backlog_card_status(repo, "203") == "pending"
 
 

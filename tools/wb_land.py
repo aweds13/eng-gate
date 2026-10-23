@@ -38,6 +38,13 @@ r"""主控的通用集成器 CLI `tools/wb_land.py`（卡 139 · `T-G237`）—�
   `tools/pool/landing.py`，不在卡 A301 的 files 域 ⇒ 本卡只交工具与入口，
   接线留给下一张卡；在此之前由落地的人先跑一句 `--precheck <台账号>`。
 ★ 旧的 `gates/diag/_integrate.py` 保留成**临时转发壳**（打印一行后转发到本文件）。
+★ 卡 A318（`T-AG432`）：壳层自带**台账条目守卫** —— `--card` 的卡必须在卡树台账
+  （`docs/backlog/*.toml` 分片或 `docs/workbacklog.toml`）里有条目，否则**拒绝落地、
+  退 2**。这是 A315/A316 事故的直接钉子：那两张卡落地时台账里根本没有条目，旧链
+  「找不到卡就跳过翻 status」⇒ 提交挂了 Task、台账却没记，下一轮全量门禁转红。
+  ★ 边界（如实写）：卡树里**没有台账文件** ⇒ 无法核对，打印一句并放行（假仓/沙箱
+    没有台账；真仓台账永远在）。`--batch` / `--precheck` 不走这条守卫。
+  ★ 守卫在壳层而不在 `pool.landing`：逻辑层不在卡 A318 的 files 域里。
 """
 
 from __future__ import annotations
@@ -49,6 +56,7 @@ import re
 import subprocess
 import sys
 
+import tomllib
 from pool import landing as _landing
 
 __all__ = [
@@ -56,6 +64,8 @@ __all__ = [
     "ROOT",
     "bare_names",
     "docs_for_task",
+    "guard_card_in_ledger",
+    "ledger_card_ids",
     "main",
     "precheck_docs",
     "precheck_main",
@@ -244,8 +254,70 @@ def precheck_main(argv: list[str] | None = None) -> int:
     return run_precheck(paths, base)
 
 
+def _argv_value(argv: list[str], flag: str) -> str | None:
+    """`--flag 值` 与 `--flag=值` 两种写法都认；找不到 / 值缺 ⇒ None。"""
+    for i, tok in enumerate(argv):
+        if tok == flag:
+            return argv[i + 1] if i + 1 < len(argv) else None
+        if tok.startswith(flag + "="):
+            return tok.split("=", 1)[1]
+    return None
+
+
+def ledger_card_ids(tree: pathlib.Path) -> set[str] | None:
+    """卡树台账里的全部卡号。树里**没有台账** ⇒ None（调用方据此跳过守卫）。
+
+    分片（`docs/backlog/*.toml`）优先，与 `wb_task.py` / `wb_status.py` 同口径。
+    台账在但**解析不了** ⇒ 抛 `tomllib.TOMLDecodeError`（守卫把它当「证明不了已登记」，
+    同样拒落 —— 台账坏了不该带着它落地）。
+    """
+    shards_dir = tree / "docs" / "backlog"
+    shards = sorted(shards_dir.glob("*.toml")) if shards_dir.is_dir() else []
+    single = tree / "docs" / "workbacklog.toml"
+    files = shards or ([single] if single.is_file() else [])
+    if not files:
+        return None
+    ids: set[str] = set()
+    for f in files:
+        data = tomllib.loads(f.read_text(encoding="utf-8"))
+        for c in data.get("cards") or []:
+            ids.add(str(c.get("id") or ""))
+    return ids
+
+
+def guard_card_in_ledger(argv: list[str], cwd: pathlib.Path | None = None) -> int:
+    """卡 A318 钉子：`--card` 的卡不在卡树台账里 ⇒ **拒落退 2**（落地一步没跑）。
+
+    返回 0 = 放行（卡已登记 / 树里没台账无法核对 / 不是单卡模式）。守卫只看
+    `--card` 与 `--tree`，不碰落地链的其余参数（解析全权仍在 `pool.landing`）。
+    """
+    if _argv_value(argv, "--batch") is not None or "--batch" in argv:
+        return 0
+    card = _argv_value(argv, "--card")
+    if not card:
+        return 0
+    base = pathlib.Path(cwd) if cwd is not None else pathlib.Path.cwd()
+    tree_raw = pathlib.Path(_argv_value(argv, "--tree") or ".")
+    tree = tree_raw if tree_raw.is_absolute() else base / tree_raw
+    try:
+        ids = ledger_card_ids(tree)
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        print(f"[拒落] 台账读不了（{e}）⇒ 证明不了卡 {card} 已登记，停手",
+              file=sys.stderr, flush=True)
+        return 2
+    if ids is None:
+        print(f"  [守卫] {tree} 里没有台账 ⇒ 跳过「卡须在台账里有条目」核对", flush=True)
+        return 0
+    if card not in ids:
+        print(f"[拒落] 台账里没有卡 {card} 的条目 —— 先登记（wb_task）再落地。"
+              "（卡 A318：A315/A316 落地时台账无条目、提交却挂了 Task 的事故钉子）",
+              file=sys.stderr, flush=True)
+        return 2
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    """把 argv 交给 `pool.landing.main`（逻辑全在那边，本壳只多两条壳层分支）。"""
+    """把 argv 交给 `pool.landing.main`（逻辑全在那边，本壳只多三条壳层分支）。"""
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--precheck" in argv:
         return precheck_main([x for x in argv if x != "--precheck"])
@@ -256,6 +328,9 @@ def main(argv: list[str] | None = None) -> int:
         except SystemExit:
             print(_HELP_TAIL)
             return 0
+    rc = guard_card_in_ledger(argv)
+    if rc:
+        return rc
     return _landing.main(argv)
 
 

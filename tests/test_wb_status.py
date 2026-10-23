@@ -177,3 +177,144 @@ def test_missing_log_is_a_clean_error(tmp_path: Path, monkeypatch, capsys) -> No
     monkeypatch.setattr(sys, "argv", ["wb_status.py", str(tmp_path / "没有这个.jsonl")])
     assert ws.main() == 2
     assert "找不到 log" in capsys.readouterr().err
+
+
+# ================================================================== 卡 A318
+#
+# 模式②：派生卡状态（不给 log 参数）+ 两条事故钉子（台账缺条目 ⇒ 拒落 / 对账红）。
+# 口径：状态从 git 派生（Task trailer / 批次围栏），台账只存计划。
+
+import subprocess  # noqa: E402
+
+import wb_land  # noqa: E402
+import wb_reconcile  # noqa: E402
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=str(root), check=True, capture_output=True)
+
+
+def _derive_repo(tmp_path: Path) -> Path:
+    root = tmp_path / "repo"
+    root.mkdir()
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "t@example.com")
+    _git(root, "config", "user.name", "t")
+    return root
+
+
+def _ledger(root: Path, *cards: tuple[str, str]) -> None:
+    """写一份最小台账（只有计划字段：id / task —— 没有 status，那字段退役了）。"""
+    (root / "docs").mkdir(exist_ok=True)
+    body = "".join(f'[[cards]]\nid = "{cid}"\ntask = "{task}"\n' for cid, task in cards)
+    (root / "docs" / "workbacklog.toml").write_text(body, encoding="utf-8")
+
+
+def _commit(root: Path, subject: str, task: str | None = None) -> None:
+    args = ["commit", "-q", "--allow-empty", "-m", subject]
+    if task:
+        args += ["-m", f"Task: {task}"]
+    _git(root, *args)
+
+
+def _batch(root: Path, name: str, state: str, declared: list[str]) -> None:
+    d = root / "gates" / "diag" / "batch"
+    d.mkdir(parents=True, exist_ok=True)
+    body = {"id": name, "state": state, "declared": declared,
+            "landed": {"commit": ""}}
+    (d / f"{name}.json").write_text(json.dumps(body), encoding="utf-8")
+
+
+def _row(rows: list[dict], cid: str) -> dict:
+    return next(r for r in rows if r["id"] == cid)
+
+
+def test_derive_done_from_task_trailer(tmp_path: Path) -> None:
+    """有 `Task: <task>` trailer 的提交 ⇒ done（卡规格判据第一条）。"""
+    root = _derive_repo(tmp_path)
+    _ledger(root, ("A1", "T-Z1"), ("A2", "T-Z2"))
+    _commit(root, "feat: 落了", task="T-Z1")
+    rows, _ = ws.derive_status(root)
+    assert _row(rows, "A1")["status"] == "done"
+    assert "commit" in _row(rows, "A1")["via"]
+    assert _row(rows, "A2")["status"] == "pending"
+
+
+def test_derive_from_batch_fence(tmp_path: Path) -> None:
+    """批次围栏：landed ⇒ done；awaiting-commit ⇒ awaiting-commit；collecting 不算。"""
+    root = _derive_repo(tmp_path)
+    _ledger(root, ("A1", "T-Z1"), ("A2", "T-Z2"), ("A3", "T-Z3"))
+    _batch(root, "B-L", "landed", ["A1"])
+    _batch(root, "B-A", "awaiting-commit", ["A2"])
+    _batch(root, "B-C", "collecting", ["A3"])
+    rows, _ = ws.derive_status(root)
+    assert _row(rows, "A1")["status"] == "done"
+    assert _row(rows, "A2")["status"] == "awaiting-commit"
+    assert _row(rows, "A3")["status"] == "pending"
+
+
+def test_derive_body_mention_is_not_done(tmp_path: Path) -> None:
+    """正文里**提到**任务号（不是 trailer 整行）⇒ 不算落地（卡 146 假阳的封口）。"""
+    root = _derive_repo(tmp_path)
+    _ledger(root, ("A1", "T-Z1"))
+    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: x",
+         "-m", "复盘里提到 T-Z1 这张卡")
+    rows, _ = ws.derive_status(root)
+    assert _row(rows, "A1")["status"] == "pending"
+
+
+def test_derived_json_cli_summary(tmp_path: Path, capsys) -> None:
+    """`wb_status.py --json`（无 log 参数）⇒ 机器可读摘要，含 done 数与 git 号数。"""
+    root = _derive_repo(tmp_path)
+    _ledger(root, ("A1", "T-Z1"), ("A2", "T-Z2"))
+    _commit(root, "feat: 落了", task="T-Z1")
+    assert ws.main(["--root", str(root), "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["summary"]["done"] == 1
+    assert data["summary"]["pending"] == 1
+    assert data["summary"]["tasks_in_git"] == 1
+    assert _row(data["cards"], "A1")["status"] == "done"
+
+
+def test_land_refuses_card_missing_from_ledger(tmp_path: Path, capsys) -> None:
+    """钉子①：台账缺 A999 条目 ⇒ `wb_land --card A999` 拒落退非零（一步不跑）。"""
+    root = _derive_repo(tmp_path)
+    _ledger(root, ("A1", "T-Z1"))
+    rc = wb_land.guard_card_in_ledger(["--card", "A999", "--tree", "."], cwd=root)
+    assert rc != 0
+    assert "A999" in capsys.readouterr().err
+
+
+def test_land_guard_passes_registered_card_and_sandbox(tmp_path: Path) -> None:
+    """守卫的放行面：① 卡已登记 ⇒ 过；② 树里没台账（假仓/沙箱）⇒ 打印跳过、过。"""
+    root = _derive_repo(tmp_path)
+    _ledger(root, ("A1", "T-Z1"))
+    assert wb_land.guard_card_in_ledger(["--card", "A1", "--tree", "."], cwd=root) == 0
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert wb_land.guard_card_in_ledger(["--card", "A999"], cwd=empty) == 0
+
+
+def test_reconcile_red_on_orphan_task_commit(tmp_path: Path, capsys) -> None:
+    """钉子②：提交挂了 `Task: T-A999` 而台账没有该任务 ⇒ wb_reconcile 红（退 1）。"""
+    root = _derive_repo(tmp_path)
+    _ledger(root, ("A1", "T-Z1"))
+    _commit(root, "feat: 落了但没登记", task="T-A999")
+    assert wb_reconcile.main(["--root", str(root)]) == 1
+    assert "T-A999" in capsys.readouterr().out
+    # 补登记之后 ⇒ 同一笔提交不再是孤儿，转绿。
+    _ledger(root, ("A1", "T-Z1"), ("A999", "T-A999"))
+    assert wb_reconcile.main(["--root", str(root)]) == 0
+
+
+def test_reconcile_is_fine_when_no_task_mark_yet(tmp_path: Path) -> None:
+    """A318：**没 git** 才退 2；有 git 但一笔 `Task:` 都没有是新仓初始态 ⇒ 退 0。"""
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@example.com")
+    _git(tmp_path, "config", "user.name", "t")
+    (tmp_path / "docs").mkdir()
+    text = "[[cards]]" + chr(10) + "id = " + chr(39) + "A1" + chr(39)
+    text += chr(10) + "task = " + chr(39) + "T-X1" + chr(39) + chr(10)
+    (tmp_path / "docs" / "workbacklog.toml").write_text(text, encoding="utf-8")
+    assert wb_reconcile.main(["--root", str(tmp_path)]) == 0
+
