@@ -78,3 +78,16 @@ python -X utf8 scripts/run_gates.py --seal            # 只更新 last.json 的 
 4. 每道 `not_run` 都在回报里点了名，没有混进「通过」里。
 
 > 判据（哪道门算过、三值与空集、复用规则）在 `scripts/run_gates.py` 与门表里，本技能只讲怎么跑、怎么读。
+
+## 内循环：只跑一档（卡 A321）
+
+改 `tools/**` 或 `tests/**` 时，等全量十几分钟不值得（档位按**门类**分，不按仓库）：
+
+```bash
+python -X utf8 scripts/run_gates.py --profile lang    # 本语言的门（Python 仓 = pytest/验收/ruff/mypy/自测）
+python -X utf8 scripts/run_gates.py --profile audit   # 台账与证据（audit/invariants/titles）
+python -X utf8 scripts/run_gates.py --profile product # timeflow 产品门（五层/UI/真机）
+```
+
+**默认仍是 `all`**，收口链（`tools/wb_land.py`）照旧跑全量 —— 分档只给内循环，不许当提交闸。
+档与门的对应只有一处真源：`scripts/run_gates.py` 的 `GATE_PROFILES`。

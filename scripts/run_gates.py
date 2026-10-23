@@ -104,62 +104,48 @@ REUSE = ROOT / "gates" / "reuse.json"
 LOG_DIR = ROOT / "gates" / "logs"   # 每道门的全量输出（T-G58；不进仓库）
 PY = sys.executable
 
-COMMON = [
-    ("pytest", []),                # 占位：按有没有 pytest-xdist 决定并行/串行（见 pytest_cmd）
-    # 验收层只跑 2 个用例，必须关掉全局 addopts 里的覆盖率门，否则"覆盖率不达标"会误判验收失败
-    ("acceptance", [PY, "-X", "utf8", "-m", "pytest", "-m", "acceptance", "--no-cov"]),
-    ("ruff", [PY, "-m", "ruff", "check", "src/", "tests/", "scripts/",
-              "tools/", "examples/", "harness/"]),
-    ("mypy", [PY, "-m", "mypy", "src/"]),
-    ("check_layers", [PY, "-X", "utf8", "scripts/check_layers.py"]),
-    ("check_layers_selftest", [PY, "-X", "utf8", "scripts/test_check_layers.py"]),
-    # 对比度审美门（T-G27 建 → T-G42 收紧）：令牌层的 WCAG 对比度。
-    # T-G42 把登记表清空了，所以这里换成 **--strict** —— 它从"棘轮"变成**硬门**：
-    # 任何一条不达 AA 都当场红（连"登记一下先欠着"这条退路也一并关掉）。
-    # 来由见 `复盘/视觉线第0.5步-对比度与状态色-T-G42.md`，边界见该工具的 docstring。
-    ("contrast", [PY, "-X", "utf8", "tools/contrast_audit.py", "--strict"]),
-    # 风格一致性体检（T-G29）：「融洽」里**能机器判**的那一半 —— 同形状重复 / 一次性裸值 /
-    # 缺 :hover·:focus-visible / 动效越界。它只证明「体系里没有新的破例」，**不证明好看**。
-    ("style", [PY, "-X", "utf8", "tools/style_audit.py", "--check"]),
-    # 界面文案上限门（T-G57）：≥30 汉字一条都不许、≥20 只许减不许增（棘轮）。
-    # 与 contrast/style 同一套精神：清理靠人做一次，但**得有一层拦着它长回来** ——
-    # 用户两次说的「界面上不该有没必要的解释」只写在文档里的话，第三轮必漂。
-    ("ui_text", [PY, "-X", "utf8", "tools/ui_text_audit.py", "--check"]),
-    # 命令表检查（T-G31）：四个面（界面/⌘K/CLI/AI·MCP）共用的那一个源，必须与三个真源对得上 ——
-    # 契约层的 OP、app.py 的路由、界面 ACTIONS/VIEWS。"洞"（没填出路由/入口的行）是进度不是错误。
-    ("commands", [PY, "-X", "utf8", "scripts/check_commands.py", "--check"]),
-    ("ui_dom_probe", []),          # 占位：下面按 node 是否可用来填
-    ("audit", [PY, "-X", "utf8", "scripts/audit_progress.py", "--all"]),
-    # 不变量台账核查器（卡 160 · T-G260）：「**新能力没进这张表，就不算做完**」从
-    # `复盘/不变量台账.toml` 文件头那句人话变成**一道门**。它只核 `judge` 路径与 `nail`
-    # 用例名的**存在性**（不真跑门禁）—— 台账里的 `missing` / `partial` 是**状态、不是错误**
-    # （诚实标缺口不算红），这道门只咬「指针指向不存在的东西」。
-    # ★ 门数是会变的（这一天 17 → 18）：**真源只有门表这一处**，`tools/wb_verify.py` 与
-    # `tools/wb_review.py` 都从这里**现读**，任何地方都不许写死 17 / 18（卡 147 已立的口径）。
-    ("invariants", [PY, "-X", "utf8", "tools/wb_invariants.py", "--check"]),
-    # 代理指标过期对账（卡 208 · T-G317）：把卡 202 交的**零件**（`docs/proxy-map.toml`
-    # 登记表 + `tools/proxy_audit.py --check`）接进门禁 —— 不接 ⇒ 那 5 条代理指标没有任何东西在
-    # 定期对账，「防近视」只是话（Goodhart 定律：度量被当目标就会漂）。
-    # ★ 判据**只许一份真源**：这道门调的就是 `tools/proxy_audit.py --check` 本身，
-    #   **不在这里重写**「过期怎么算」（阈值 / ISO 日期校验 / 读不到表就当不过，全在那边）。
-    ("proxy", [PY, "-X", "utf8", "tools/proxy_audit.py", "--check"]),
-    # 台账↔规格 标题对账（T-D2）：`--check` 一发现「确定错位」或「无规格对应的 SR 卡」就退 1。
-    # 2026-09-20 校正前它挂的是"信息性"（blocking=false）—— 因为台账里 F/NF 两层编号错位还没修，
-    # 一接进来就会 FAIL。T-D1 校正完（见 `复盘/台账编号校正-方案A落地.md`）后转正为阻断项。
-    ("audit_titles", [PY, "-X", "utf8", "scripts/audit_titles.py", "--check"]),
+# 门禁的**定义层**在 `gates/defs/`（卡 A321）：换语言换产品只动那份模块。
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from gates.defs import contract, lang_python, product_timeflow  # noqa: E402
+
+COMMON: list[tuple[str, list[str]]] = [
+    *lang_python.GATES,
+    *contract.GATES,
+    *product_timeflow.GATES,
 ]
+
 # 真机层：起真服务 / 真浏览器。轻的那两个（HTTP 层）跟轻门同一泳道，重的两个自己一条泳道。
-REAL_PY = [
-    ("lf1_live", [PY, "-X", "utf8", "tools/lf1_live_check.py"]),
-    ("web_live", [PY, "-X", "utf8", "tools/web_live_check.py"]),
-]
+REAL_PY: list[tuple[str, list[str]]] = list(product_timeflow.REAL)
+
 # 渲染验证层（T-G32）：真浏览器把 3 档宽度 × 14 个视图各渲染一遍，采成"几何清单"与黄金逐字节比。
 # 那一层里**每次采两遍**做确定性自检：不一致 = 工具自己不可信（退出码 4），不当成"界面变了"。
 # 退出码 3 = 起不了真浏览器 → 记 `not_run`：**NOT RUN 不是 PASS**（last.json 单列一栏 +
 # trailer 里写 NOT RUN）。
 # 行为流层（T-G34）：真浏览器 + 真点击 + 真按键，把「待人工确认」里功能性的那些搬给机器。
 # 每轮默认**跑两遍**（各自新库 + 新浏览器）比对断言指纹，不一致同样退 4。
-BROWSER = ("render", "ui_flow")
+BROWSER = product_timeflow.BROWSER
+
+# ---------------------------------------------------------------- 门禁分层（卡 A321 · T-AG434）
+# 19 道门不是一类东西：一半是**通用工程门**（任何改动都该过），另一半是 **timeflow 产品门**
+# （五层文档 / 对比度 / 风格 / 界面文案 / 命令表 / DOM 探针 / 代理指标 / 台账标题 / 真机）。
+# 分三档只是为了**内循环**少等十几分钟；`all` 仍是默认，收口链照旧跑全量。
+#
+# ★ 每道门**恰好属于一档**（钉子 `tests/test_run_gates_profiles.py` 会核）：
+#   漏一个 ⇒ 谁都不知道它归谁管；重叠 ⇒ 「按档跑」和「全量跑」会给出不同结论。
+GATE_PROFILES: dict[str, tuple[str, ...]] = {
+    # 语言门：Python 仓就是这五道。换语言 ⇒ 换 `gates/defs/lang_python.py`
+    "lang": tuple(n for n, _ in lang_python.GATES),
+    # 契约门：判的是本仓的账（证据 / 不变量 / 标题对账）
+    "audit": tuple(n for n, _ in contract.GATES),
+    # 产品门：timeflow 专属，删掉整份模块框架也照样跑
+    "product": (
+        *(n for n, _ in product_timeflow.GATES),
+        *(n for n, _ in product_timeflow.REAL),
+        *product_timeflow.BROWSER,
+    ),
+}
+
 # ① --fast：开发内循环用。挑的是"**改一行就能犯、且十几秒内查得出来**"的那几道 ——
 # 尤其 audit（TOML/台账语法，实测犯过 5 次）与 contrast/style（照抄包时最容易抄错的令牌层）。
 # ★ 卡 208：`proxy`（代理指标过期对账）也属这一类 —— 改一条 `docs/proxy-map.toml` 的
@@ -1712,19 +1698,34 @@ def quick_test_job(plan: TestSelectionPlan) -> tuple[str, list[str]] | None:
                            "-q", "--no-cov", "-p", "no:cacheprovider"])
 
 
-def build_jobs(quick: bool, fast: bool) -> list[tuple[str, list[str]]]:
+def _profile_filter(jobs: list[tuple[str, list[str]]], profile: str) -> list:
+    """按档裁门；`all` 原样返回（默认路径逐字不变）。认不出的档直接抛 ValueError。"""
+    if profile == "all":
+        return jobs
+    if profile not in GATE_PROFILES:
+        raise ValueError(f"未知档：{profile}")
+    keep = set(GATE_PROFILES[profile])
+    return [j for j in jobs if j[0] in keep]
+
+
+def build_jobs(quick: bool, fast: bool, profile: str = "all") -> list[tuple[str, list[str]]]:
     """门清单（**默认逐字不变**）：`--fast` 只留十几秒那几道；否则除 `--quick` 外加真机浏览器层。"""
     jobs: list[tuple[str, list[str]]] = [*COMMON, *REAL_PY]
     if fast:
         jobs = [j for j in jobs if j[0] in FAST]
     elif not quick:
         jobs += [(n, []) for n in BROWSER]
-    return jobs
+    return _profile_filter(jobs, profile)
 
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="跳过真机层（提交前够用）")
+    ap.add_argument(
+        "--profile", default="all", choices=("all", *GATE_PROFILES),
+        help=("只跑某一档（**内循环用**）：core=通用工程门；audit=台账/证据门；"
+              "product=timeflow 产品门。默认 all，**收口链仍跑全量**"),
+    )
     ap.add_argument("--fast", action="store_true",
                     help="只跑十几秒那几道（内循环；不落盘）＋ 受影响的测试选集（卡 254；"
                          "映射不到/公共模块 ⇒ 回退全量，全量仍在 ④ 跑）")
@@ -1772,7 +1773,7 @@ def main() -> int:
         print("  （gitignored 的输入要么删掉、要么显式豁免并写理由）", flush=True)
         return 1
 
-    jobs = build_jobs(args.quick, args.fast)
+    jobs = build_jobs(args.quick, args.fast, args.profile)
 
     # ★ T-G239（卡 140）：`--affected` / `--changed-from` —— **只裁门名单**，不碰别处。
     affected_plan: AffectedPlan | None = None

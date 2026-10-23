@@ -1,0 +1,15 @@
+[entries."T-AG434"]
+id = "T-AG434"
+title = "门禁分层：lang / audit / product 三档"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/run_gates.py",
+  "file:gates/defs/lang_python.py",
+  "file:gates/defs/contract.py",
+  "file:gates/defs/product_timeflow.py",
+  "file:tests/test_run_gates_profiles.py",
+  "file:skills/pipe-gate/SKILL.md",
+]
+gaps = "- 产品门模块是**硬 import**：`scripts/run_gates.py` 里直接 `from gates.defs import product_timeflow`，删掉该模块会 ImportError。要真正做到「没有产品门的仓也能用」，得改成可选加载（探测文件存在或 try/except ImportError），本卡没做。- `--profile` 只切门，不切 pytest 的用例选集：`--affected` 仍按全仓算，`--fast` 与 `--profile` 同时用时只有 `tests/test_run_gates_profiles.py` 覆盖了「档与档之间」的关系，没覆盖「档 × 受影响选集」的组合。- 门表搬进 `gates/defs/` 后，`gates/defs/__init__.py` 仍是空壳：「门 id 全局唯一」目前只由 `tests/test_run_gates_profiles.py` 的联合 == 全量、两两无交集间接保证，没有直接断言。"
+

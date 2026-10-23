@@ -1,3 +1,9 @@
+## 门禁分层：lang / audit / product 三档
+- `scripts/run_gates.py` 不再内联门表：改为从 `gates/defs/` 拼 `COMMON`，新增 `--profile {all,lang,audit,product}`，默认 `all` 行为逐字不变。
+- 新增 `gates/defs/lang_python.py`（pytest / 验收 / ruff / mypy / 检查器自测）、`gates/defs/contract.py`（证据审计 / 不变量台账 / 台账标题）、`gates/defs/product_timeflow.py`（timeflow 五层与真机共 11 道）。
+- 档名从 `core` 改成 `lang`：这一档装的是**本语言**的门（Python 仓就是 pytest/ruff/mypy），换语言只换 `gates/defs/lang_python.py`，`scripts/run_gates.py` 不动。
+- `skills/pipe-gate/SKILL.md` 加「内循环只跑一档」，并写明收口链仍跑全量；`skills/pipe-init/SKILL.md` 把「门表硬编码在脚本」改成「门表在 `gates/defs/`」。
+- 钉子 `tests/test_run_gates_profiles.py`：三档联合 == 全量、两两无交集、`lang` 不混 product、未知档名要响。
 ## 单账本第一步：状态从 git 派生（T-AG432）
 - `tools/wb_status.py` 新增 `derive_status()` / `orphan_tasks()` / `derived_summary()`：提交 trailer ＞ 围栏 landed ＞ 围栏 awaiting-commit ＞ pending。
 - `tools/wb_reconcile.py` 改成纯派生视图；「没 git」退 2、「有 git 但还没有 Task 号」退 0（新仓初始态不再被当错）。
