@@ -3346,6 +3346,18 @@ files = ["scripts/run_gates.py", "gates/defs/__init__.py", "gates/defs/lang_pyth
          "tests/test_run_gates_profiles.py", "skills/pipe-gate/SKILL.md",
          "skills/pipe-init/SKILL.md"]
 risk = "low"
+status = "done"
+
+[[cards]]
+id = "A324"
+task = "T-AG437"
+title = "卡归窗口：DSH 会话指纹绑定"
+tree = ".wt/A324"
+spec = "复盘/卡/卡A324-卡归窗口.md"
+files = ["tools/wb_session.py", "tools/wb_land.py", "tools/wb_dispatch.py",
+         "tests/test_wb_session.py"]
+depends = ["A321"]
+risk = "low"
 
 [[cards]]
 id = "B1"
