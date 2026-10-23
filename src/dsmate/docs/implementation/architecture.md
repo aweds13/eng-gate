@@ -43,6 +43,9 @@
 |---|---|---|
 | `net.chat` | JS→Kotlin→JS | 发起流式对话；Kotlin 推 `delta` 事件 |
 | `net.tools` | JS→Kotlin→JS | search / fetch / list-models / balance |
+
+> 工具层按 `ToolSource` 接口可插拔（decisions D16）：`OfficialSearchSource` 是默认实现，`McpSearchSource`
+> 只留注册点、不实现连接。换源只改注册表，不改 UI 与桥协议。
 | `store.*` | JS→Kotlin→JS | 读写信/会话/消息/分支/书/页 |
 | `media.*` | JS→Kotlin→JS | 拍照、选图、压缩、路径解析 |
 
