@@ -136,6 +136,8 @@ def probe(root: Path) -> dict:
     else:
         kind = "C"
 
+    readings.append(_agents_md_reading(root))
+
     return {
         "ok": True,
         "root": str(root),
@@ -143,6 +145,13 @@ def probe(root: Path) -> dict:
         "readings": readings,
         "mapping_hints": MAPPING_HINTS[kind],
     }
+
+
+def _agents_md_reading(root: Path) -> dict:
+    """入口文档：接管/新建的第 1 步必须落一份 AGENTS.md。"""
+    f = root / "AGENTS.md"
+    ok = f.is_file() and f.stat().st_size > 0
+    return _reading("agents_md", ok, "AGENTS.md 在" if ok else "缺 AGENTS.md（README 不算）")
 
 
 def strict_problems(result: dict) -> list[str]:
@@ -179,6 +188,11 @@ def strict_problems(result: dict) -> list[str]:
             problems.append("判成 B 但测试与 CI 信号都为无")
     if kind == "D" and not by_name.get("foreign_framework", {}).get("ok"):
         problems.append("判成 D 但没检出别家框架标记")
+    if not by_name.get("agents_md", {}).get("ok"):
+        problems.append(
+            "缺入口：根目录没有 AGENTS.md"
+            "（接管第 1 步要落一份，见 skills/pipe-takeover/references/agents-md.md）"
+        )
 
     return problems
 

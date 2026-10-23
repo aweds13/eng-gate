@@ -1,3 +1,8 @@
+## AGENTS.md 作为接管/新建的第 1 步
+- 新增 `skills/pipe-takeover/references/agents-md.md`：9 节模板（47 行）+ 四块必填 + 6 条写法规则。
+- `skills/pipe-takeover/SKILL.md`、`skills/pipe-new/SKILL.md`：第 1 步之前先落入口文档，缺失不许往下铺骨架。
+- `tools/wb_takeover.py`：`probe()` 增加 `agents_md` 读数；`strict_problems()` 缺入口即判不出。
+- `tests/test_wb_takeover.py`：B 类夹具补 `AGENTS.md`；新增两条钉子（模板四块、缺入口退 2）。
 ## 禁长等待：job 的 wait 上限压到 1 秒
 - `docs/presets/softeng.patch.yml`：`tool-jobs` 行加 `config: {waitTimeoutMs: 1000, maxWaitTimeoutMs: 1000}`。
 - `AGENTS.md`：「长命令怎么跑」加第三条禁令（`job_output(wait: true)` 不许长等）。

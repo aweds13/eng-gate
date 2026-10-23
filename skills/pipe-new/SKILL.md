@@ -92,6 +92,8 @@ python -X utf8 tools/wb_land.py --card <号> --tree .wt/<号> --task <T-AG…> \
 | 5 | 树 | `git worktree list` 里有 `.wt/<号>`，分支是 `card/<号>` |
 | 6 | 首笔落地 | `python -X utf8 tools/wb_verify.py --tree .` 五块无 FAIL |
 
+★ 第 2 步之后先落入口文档：`AGENTS.md` 照 `skills/pipe-takeover/references/agents-md.md` 写，命令必须是真跑过的（新仓没有历史，写 `TODO(verify)` 也要标出来）。
+
 ★ 第 4 步的 `git add` 不能省：落地脚本在全量门禁之前先跑一条「卡规格都要在索引里」的钉子，
 不满足就停手（省下的正是几分钟全量门禁）。
 

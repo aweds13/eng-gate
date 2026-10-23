@@ -1,0 +1,14 @@
+[entries."T-AG431"]
+id = "T-AG431"
+title = "AGENTS.md 作为接管/新建的第 1 步"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:skills/pipe-takeover/references/agents-md.md",
+  "file:skills/pipe-takeover/SKILL.md",
+  "file:skills/pipe-new/SKILL.md",
+  "file:tools/wb_takeover.py",
+  "file:tests/test_wb_takeover.py",
+]
+gaps = "- 模板只管「入口文档该写什么」，管不了内容是否真跑通；真命令靠 `tests/test_wb_takeover.py` 的模板断言与人工过一遍。- `--strict` 只查根目录有没有 `AGENTS.md`，不查小节是否齐全；小节齐全靠 `skills/pipe-takeover/references/agents-md.md` 的四块必填。- 老项目补文档仍要人过 grill-me，本卡只把「先落入口」写进 `skills/pipe-takeover/SKILL.md` 与 `skills/pipe-new/SKILL.md`。"
+

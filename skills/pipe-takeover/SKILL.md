@@ -75,6 +75,8 @@ python -X utf8 tools/wb_takeover.py --root <目录> --strict --json
 
 定类之后不要再即兴发挥，按这六步往下走；每步的完整命令、验收与「失败的先看哪」：
 
+**第 1 步之前先落入口文档**：目标目录没有 `AGENTS.md` 就先照 `skills/pipe-takeover/references/agents-md.md` 写一份——`--strict` 会把「缺入口」当判不出，没这份文档不许往下铺骨架。
+
 | 步 | 动作 | 这一步的验收 |
 |---|---|---|
 | 1 | 只读勘察（判类 + 留 JSON） | `class` 是 A/B/C/D，`signals` 说得出理由；不写任何文件 |

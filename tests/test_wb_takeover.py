@@ -152,6 +152,7 @@ def test_strict_refuses_empty_dir(tmp_path: Path) -> None:
 def test_strict_accepts_repo_with_tests(tmp_path: Path) -> None:
     """★ A311：有 tests/ 就算有正证据（B 类），strict 不该误伤。"""
     (tmp_path / "tests").mkdir()
+    (tmp_path / "AGENTS.md").write_text("# AGENTS.md\n", encoding="utf-8")
     assert wt.main(["--root", str(tmp_path), "--strict"]) == 0
 
 
@@ -161,3 +162,18 @@ def test_strict_json_reports_problems(tmp_path: Path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["strict_ok"] is False
     assert payload["strict_problems"]
+
+
+def test_agents_md_template_has_four_blocks() -> None:
+    """★ A317：参考模板必须让人一眼看到四块必填（能跑 / 能验 / 算完 / 下一步）。"""
+    body = (ROOT / "skills/pipe-takeover/references/agents-md.md").read_text(encoding="utf-8")
+    for block in ("Run it", "Test it", "Gates and acceptance", "Next step"):
+        assert block in body, f"模板缺小节：{block}"
+
+
+def test_strict_refuses_repo_without_agents_md(tmp_path: Path) -> None:
+    """★ A317：有源码但没 AGENTS.md ⇒ --strict 退 2 并点名「缺入口」。"""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("print(1)\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    assert wt.main(["--root", str(tmp_path), "--strict", "--json"]) == 2
