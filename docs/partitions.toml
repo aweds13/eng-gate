@@ -28,7 +28,7 @@ tree = ".wt/A"
 [[partitions]]
 prefix = "B"
 owner = "主控B"
-area = "（待指派）"
+area = "OpenMAIC 二开（把 OpenMAIC 搬进 DSH）"
 tree = ".wt/B"
 
 [[partitions]]

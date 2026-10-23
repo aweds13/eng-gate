@@ -3334,3 +3334,24 @@ files = ["tools/wb_review.py", "tests/test_wb_review.py", "docs/workbacklog.toml
 depends = ["A317"]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "A321"
+task = "T-AG434"
+title = "门禁分层：lang / audit / product 三档"
+tree = ".wt/A321"
+spec = "复盘/卡/卡A321-门禁分层.md"
+files = ["scripts/run_gates.py", "gates/defs/__init__.py", "gates/defs/lang_python.py",
+         "gates/defs/contract.py", "gates/defs/product_timeflow.py",
+         "tests/test_run_gates_profiles.py", "skills/pipe-gate/SKILL.md",
+         "skills/pipe-init/SKILL.md"]
+risk = "low"
+
+[[cards]]
+id = "B1"
+task = "T-BG001"
+title = "参考文档参数口径：parameters 是映射，不是 JSON Schema"
+tree = ".wt/B1"
+spec = "复盘/卡/卡B1-文档参数口径.md"
+files = ["DSH-技能与插件开发参考.md", "docs/workbacklog.toml"]
+risk = "low"

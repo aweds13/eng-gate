@@ -12,7 +12,7 @@ description: 把管线骨架（pipeline.toml + gates.d/ + 卡模板 + 台账壳 
 | | 框架层（本技能） | 本仓工作链 |
 |---|---|---|
 | 入口 | 框架 CLI 的 `init`（下面的命令） | `python -X utf8 tools/wb_*.py` |
-| 需要什么 | 铺出来的 `pipeline.toml` + `gates.d/` | 本仓根 `scripts/run_gates.py`（门表硬编码在脚本里） |
+| 需要什么 | 铺出来的 `pipeline.toml` + `gates.d/` | 本仓根 `scripts/run_gates.py`（门表在 `gates/defs/`，按语言/产品/契约分模块里） |
 | 用在哪 | 新目录要一套自己的门与骨架 | 在本仓内开卡 / 建树 / 落地 |
 | 谁管 | 本技能 | `pipe-new`（起链）、`pipe-card` / `pipe-gate` / `pipe-land`（日常） |
 
