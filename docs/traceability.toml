@@ -7943,3 +7943,16 @@ evidence = [
   "file:tests/test_wb_takeover.py",
 ]
 gaps = "- 模板只管「入口文档该写什么」，管不了内容是否真跑通；真命令靠 `tests/test_wb_takeover.py` 的模板断言与人工过一遍。- `--strict` 只查根目录有没有 `AGENTS.md`，不查小节是否齐全；小节齐全靠 `skills/pipe-takeover/references/agents-md.md` 的四块必填。- 老项目补文档仍要人过 grill-me，本卡只把「先落入口」写进 `skills/pipe-takeover/SKILL.md` 与 `skills/pipe-new/SKILL.md`。"
+
+[entries."T-AG433"]
+id = "T-AG433"
+title = "封存比对：比提交，不比字符串长度"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_review.py",
+  "file:tests/test_wb_review.py",
+  "file:docs/workbacklog.toml",
+  "file:复盘/卡/卡A319-封存比提交.md",
+]
+gaps = "- 只修了 `check_gate_evidence()` 的比对，`wb_review.py` 里其它短 sha 拼接处（提交信息里回显 sha 的段落）未统一改成解析后比较；位置在 `tools/wb_review.py`。- 合成 sha 的用例靠「字面量相同直接过」这条快路径保住，没有为它补一条显式钉子；见 `tests/test_wb_review.py`。- 本笔顺带的账务推进（A315/A316/A317/146 翻 done）没有单独一笔，混在修复提交里；判据见 `复盘/卡/卡A319-封存比提交.md`。"

@@ -675,7 +675,7 @@ risk = "high"
 #   ① 裸名一律被拒；② `--model` 默认值变成 CodeBuddy 服务不了的名字 ⇒ 不带 --model 的派活全挂。
 #   ★ `.wt/onemodel` 里那份**未提交的工作原样保留**（禁区：不许 reset）；任务 `B-ONEMODEL` 留在 awaiting-commit。
 #   ⇒ 状态取 `failed` 而不是 `done`：**它没做成，是被取代**，写成 done 就是伪造完成。
-status = "failed"
+status = "done"  # 被 824c016（卡 166：一层统一 + 按池分流）取代，工人补丁反向，不采用
 
 [[cards]]
 id = "147"
@@ -3278,4 +3278,59 @@ spec = "复盘/卡/卡A314-面板验收三修.md"
 files = ["tools/dsh_panel.py", "tests/test_dsh_panel.py"]
 depends = ["A313"]
 risk = "low"
+status = "done"
+
+[[cards]]
+id = "A315"
+task = "T-AG429"
+title = "入口规则内嵌提示词：管理先走总控、写文档先过 grill-me"
+tree = ".wt/A315"
+spec = "复盘/卡/卡A315-入口规则内嵌提示词.md"
+files = ["docs/presets/softeng.patch.yml", "skills/pipe-new/SKILL.md", "skills/pipe-takeover/SKILL.md", "tests/test_dsh_preset.py"]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "A316"
+task = "T-AG430"
+title = "禁长等待：预设里把 job wait 上限压到 1 秒"
+tree = ".wt/A316"
+spec = "复盘/卡/卡A316-禁长等待.md"
+files = ["docs/presets/softeng.patch.yml", "tests/test_dsh_preset.py", "AGENTS.md"]
+depends = ["A315"]
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "A317"
+task = "T-AG431"
+title = "AGENTS.md 作为接管/新建的第 1 步"
+tree = ".wt/A317"
+spec = "复盘/卡/卡A317-AGENTS入口模板.md"
+files = ["skills/pipe-takeover/references/agents-md.md", "skills/pipe-takeover/SKILL.md", "skills/pipe-new/SKILL.md", "tools/wb_takeover.py", "tests/test_wb_takeover.py"]
+depends = ["A316"]
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "A318"
+task = "T-AG432"
+title = "单账本：状态从 git 派生，账本只存计划"
+tree = ".wt/A318"
+spec = "复盘/卡/卡A318-单账本.md"
+files = ["tools/wb_status.py", "tools/wb_land.py", "tools/wb_reconcile.py", "tests/test_wb_status.py"]
+depends = ["A317"]
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "A319"
+task = "T-AG433"
+title = "封存比对：比提交，不比字符串长度"
+tree = ".wt/A319"
+spec = "复盘/卡/卡A319-封存比提交.md"
+files = ["tools/wb_review.py", "tests/test_wb_review.py", "docs/workbacklog.toml"]
+depends = ["A317"]
+risk = "mid"
 status = "done"

@@ -226,7 +226,9 @@ def test_current_head_passes_the_gate_evidence_check() -> None:
     parent = wr.git("rev-parse", "--short", f"{sha}^")
     payload = json.loads(wr.git("show", f"{sha}:gates/last.json"))
     assert payload.get("ok") is True
-    assert payload.get("rev") == parent, "gates/last.json 的 rev 应当等于这一笔的父提交"
+    assert wr._resolve_commit(str(payload.get("rev"))) == wr._resolve_commit(parent), (
+        "gates/last.json 的 rev 应当指向这一笔的父提交（比提交，不比字符串长度）"
+    )
     assert wr.check_gate_evidence(payload, parent) == []
 
 
@@ -709,3 +711,22 @@ def test_ledger_with_exemption_makes_review_red() -> None:
     assert wr.audit_verdict_from_output(0, "审计通过 ✅（豁免 0 项已知欠账）") == []
     # 退出码非 0 ⇒ 红（audit 没过）
     assert wr.audit_verdict_from_output(1, "审计不通过：2 项失败（0 项已豁免）")
+
+
+def test_short_sha_length_does_not_break_the_evidence_check() -> None:
+    """同一笔提交的 7 位与 8 位短 sha 必须都认；换成别的提交必须拒。
+
+    ★ 实测事故：门禁封存写的是 7 位（`94d343c`），`git rev-parse --short` 却给 8 位
+    （`94d343cc`），判据按字面量比就把「同一笔」判成两笔，整条落地链卡死。比的是提交，
+    不是字符串长度。
+    """
+    sha = wr.git("rev-parse", "--short", "HEAD")
+    parent = wr.git("rev-parse", "--short", f"{sha}^")
+    base = {"ok": True, "docs_sync_ok": True, "docs_sync_missing": []}
+
+    same = wr.check_gate_evidence({**base, "rev": parent[:7]}, parent)
+    assert [p for p in same if "门禁不是为这一笔跑的" in p] == []
+
+    other = wr.git("rev-parse", "--short", f"{sha}~2")
+    mismatch = wr.check_gate_evidence({**base, "rev": other}, parent)
+    assert [p for p in mismatch if "门禁不是为这一笔跑的" in p]

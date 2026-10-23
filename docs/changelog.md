@@ -1,3 +1,7 @@
+## 封存比对改成比提交（T-AG433）
+- `tools/wb_review.py` 新增 `_resolve_commit()`，`check_gate_evidence()` 先比字面量、再比解析后的完整 sha。
+- `tests/test_wb_review.py` 补钉子 `test_short_sha_length_does_not_break_the_evidence_check`，并把真仓用例的字面量断言改成比提交。
+- `docs/workbacklog.toml` 推进 A315/A316/A317/146 到 done，登记 A318（单账本）与 A319。
 ## AGENTS.md 作为接管/新建的第 1 步
 - 新增 `skills/pipe-takeover/references/agents-md.md`：9 节模板（47 行）+ 四块必填 + 6 条写法规则。
 - `skills/pipe-takeover/SKILL.md`、`skills/pipe-new/SKILL.md`：第 1 步之前先落入口文档，缺失不许往下铺骨架。

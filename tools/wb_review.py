@@ -83,6 +83,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -161,15 +162,40 @@ def check_trailers(body: str) -> tuple[list[str], dict[str, str]]:
     return problems, found
 
 
+def _resolve_commit(short: str) -> str:
+    """把短 sha 解析成完整 sha；解析不出来就返回空串。
+
+    ★ 判据比的是**提交**，不是字符串长度：git 的 `--short` 会随仓库变大而变长
+    （实测同一笔这里给 7 位、那里给 8 位），直接比字面量会把「同一笔提交」判成两笔。
+    """
+    if not short:
+        return ""
+    done = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{short}^{{commit}}"],
+        cwd=str(ROOT), capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+    )
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
 def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
     """③ 门禁是不是**为这一笔**跑的 —— `rev` 必须等于这一笔的父提交。"""
     problems: list[str] = []
     if payload.get("ok") is not True:
         problems.append(f"gates/last.json 的 ok 不是 true：{payload.get('ok')!r}")
-    if payload.get("rev") != parent_short:
+    raw_rev = str(payload.get("rev") or "")
+    same = raw_rev == parent_short  # 字面量相同就直接过（也要让合成 sha 的用例可用）
+    sealed = expected = ""
+    if not same:
+        sealed = _resolve_commit(raw_rev)
+        expected = _resolve_commit(parent_short)
+        same = bool(sealed) and sealed == expected
+    if not same:
         problems.append(
-            f"门禁不是为这一笔跑的：last.json 的 rev={payload.get('rev')!r}，"
-            f"而这一笔的父提交是 {parent_short!r}（★ 一次门禁跑完提交两笔？第二笔没验过）"
+            f"门禁不是为这一笔跑的：last.json 的 rev={payload.get('rev')!r}"
+            f"（解析={sealed[:8] or '解析不出'}），而这一笔的父提交是 {parent_short!r}"
+            f"（解析={expected[:8] or '解析不出'}）（★ 一次门禁跑完提交两笔？第二笔没验过）"
         )
     if payload.get("docs_sync_ok") is not True or payload.get("docs_sync_missing"):
         problems.append(
