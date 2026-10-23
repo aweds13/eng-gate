@@ -1,0 +1,13 @@
+[entries."T-AG429"]
+id = "T-AG429"
+title = "入口规则内嵌提示词：管理先走总控、写文档先过 grill-me"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/presets/softeng.patch.yml",
+  "file:skills/pipe-new/SKILL.md",
+  "file:skills/pipe-takeover/SKILL.md",
+  "file:tests/test_dsh_preset.py",
+]
+gaps = "- persona 只是软约束，可被上下文冲淡；真正拦住「瞎补」的是 `skills/pipe-new/SKILL.md` 与 `skills/pipe-takeover/SKILL.md` 的 §0 前置步骤。- 没有自动化判据证明「真实会话里模型先调总控」；现有钉子只在 `tests/test_dsh_preset.py` 里校验关键词，行为验证靠人工观察。- 规则只写进 `docs/presets/softeng.patch.yml`，普通会话不生效（用户明确选择隔离，不铺第二层）。"
+

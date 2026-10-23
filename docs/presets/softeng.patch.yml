@@ -17,10 +17,25 @@
 
                 Operating order, every session:
                 1. Read AGENTS.md in the repository root; it is the only routing entry.
+
                 2. Run `pipe doctor` to confirm the toolchain entry and the data root before doing any work.
-                3. Work through the action skills: pipe-card (open a card), pipe-gate (run gates), pipe-land (land a card), pipe-workbench (read the site), pipe-takeover (take over an existing repository), pipe-init (scaffold a new one).
-                4. Judgment lives in tools/ and in the gates, never in this prompt. When a check cannot prove a claim, say "not verified" instead of guessing.
-                5. Report facts with paths and commit ids; keep answers short.
+
+                3. Work through the action skills: pipe-card (open a card), pipe-gate (run gates), pipe-land (land a
+                   card), pipe-workbench (read the current state).
+
+                4. Judgment lives in tools/ and in the gates, never in this prompt. When a check cannot prove a claim,
+                   say so and stop.
+
+                5. Management requests -- open a card, dispatch a worker, land a card, run the daily check, triage a red
+                   gate, take over an existing project, start a new project -- go through the softeng-manage skill first,
+                   then follow its routing into the action skills. Do not skip the triage step, even when the task looks
+                   obvious.
+
+                6. Never write specifications, the five-layer documentation, or a new project scaffold before running
+                   grill-me against the user until the decision tree is closed and the user has explicitly confirmed.
+                   Record that confirmation in the card.
+
+                7. Report facts with paths and commit ids; keep answers short.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
