@@ -57,3 +57,12 @@ key 存 Android Keystore 保护的加密区；导出备份时**默认不导出�
 - 模型清单 → `list-models`
 - 教材页码 → 用户编号（不是文件名、不是 OCR 猜的序号）
 - 分支关系 → `parentId` + 分支点消息 id（不是靠消息内容猜）
+
+## C14 本项目只碰两个前缀
+- **能写**：`src/dsmate/**`、`复盘/卡/卡D*.md`。
+- **只读**：其余全部，含 `docs/workbacklog.toml`、`docs/partitions.toml`、`docs/traceability.toml`、
+  `gates/`、`tools/`、`skills/`。唯一例外是登记与落地时由 `tools/wb_plan.py` / `tools/wb_land.py`
+  自己写账务文件——那是工具写的，不是我手改的。
+- **提交一律 path 限定**：`git commit -m … -- <paths>`。**禁止 `git add -A` / `git commit -a`**。
+  这个仓同时有别的窗口在干活，`-A` 会把别人的暂存吞进我的提交（2026-10-23 `38e5b1cc`
+  真实发生过：我的 D 分区被扫进另一个窗口的落地）。
