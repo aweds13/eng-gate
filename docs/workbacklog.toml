@@ -3367,3 +3367,112 @@ tree = ".wt/B1"
 spec = "复盘/卡/卡B1-文档参数口径.md"
 files = ["DSH-技能与插件开发参考.md", "docs/workbacklog.toml"]
 risk = "low"
+
+# ================================================================ 分区 D：dsmate
+# 手机上自用的 DeepSeek 聊天客户端（src/dsmate/）。文档层已落地在
+# src/dsmate/docs/，卡一律「文档先行」：判据写不出测法的，不许开卡。
+
+[[cards]]
+id = "D1"
+task = "T-DG001"
+title = "骨架与通道：壳 + WebView + 桥 + 构建管线，能发一句流式回答"
+tree = ".wt/D1"
+spec = "复盘/卡/卡D1-骨架与通道.md"
+files = ["src/dsmate/app/settings.gradle.kts", "src/dsmate/app/build.gradle.kts",
+         "src/dsmate/app/src/main/AndroidManifest.xml",
+         "src/dsmate/app/src/main/java/com/dsmate/MainActivity.kt",
+         "src/dsmate/app/src/main/java/com/dsmate/bridge/Bridge.kt",
+         "src/dsmate/app/src/main/java/com/dsmate/net/ChatClient.kt",
+         "src/dsmate/web/package.json", "src/dsmate/web/vite.config.ts",
+         "src/dsmate/web/index.html", "src/dsmate/web/src/main.ts"]
+risk = "mid"
+
+[[cards]]
+id = "D2"
+task = "T-DG002"
+title = "数据层与分支树：SQLite + 分支只存增量 + 版本切换与回主干"
+tree = ".wt/D2"
+spec = "复盘/卡/卡D2-数据层与分支树.md"
+files = ["src/dsmate/app/src/main/java/com/dsmate/store/Schema.kt",
+         "src/dsmate/app/src/main/java/com/dsmate/store/Db.kt",
+         "src/dsmate/app/src/main/java/com/dsmate/store/Repo.kt",
+         "src/dsmate/web/src/store/client.ts",
+         "src/dsmate/web/src/branch/BranchBar.ts",
+         "src/dsmate/web/src/branch/TreeView.ts"]
+depends = ["D1"]
+risk = "mid"
+
+[[cards]]
+id = "D3"
+task = "T-DG003"
+title = "渲染层：markdown-it + KaTeX + Shiki + Mermaid，流式不整段重排"
+tree = ".wt/D3"
+spec = "复盘/卡/卡D3-渲染层.md"
+files = ["src/dsmate/web/src/md/renderer.ts", "src/dsmate/web/src/md/math.ts",
+         "src/dsmate/web/src/md/code.ts", "src/dsmate/web/src/md/mermaid.ts",
+         "src/dsmate/web/src/md/stream.ts"]
+depends = ["D1"]
+risk = "mid"
+
+[[cards]]
+id = "D4"
+task = "T-DG004"
+title = "模型清单与凭据：list-models 原样列出 + BYOK 三槽 + 改名降级"
+tree = ".wt/D4"
+spec = "复盘/卡/卡D4-模型清单与凭据.md"
+files = ["src/dsmate/app/src/main/java/com/dsmate/net/ModelCatalog.kt",
+         "src/dsmate/app/src/main/java/com/dsmate/secret/KeyVault.kt",
+         "src/dsmate/web/src/models/Catalog.ts",
+         "src/dsmate/web/src/settings/Credentials.ts"]
+depends = ["D1"]
+risk = "mid"
+
+[[cards]]
+id = "D5"
+task = "T-DG005"
+title = "教材库与页码唤图：一窗一书 + #p12 发送前本地解析成图像块"
+tree = ".wt/D5"
+spec = "复盘/卡/卡D5-教材库与页码唤图.md"
+files = ["src/dsmate/app/src/main/java/com/dsmate/media/Camera.kt",
+         "src/dsmate/app/src/main/java/com/dsmate/media/Compressor.kt",
+         "src/dsmate/app/src/main/java/com/dsmate/store/Books.kt",
+         "src/dsmate/web/src/books/Shelf.ts",
+         "src/dsmate/web/src/input/PageRef.ts"]
+depends = ["D1", "D2"]
+risk = "mid"
+
+[[cards]]
+id = "D6"
+task = "T-DG006"
+title = "联网搜索与引用：走官方 tools/search + fetch，计次可见"
+tree = ".wt/D6"
+spec = "复盘/卡/卡D6-联网搜索与引用.md"
+files = ["src/dsmate/app/src/main/java/com/dsmate/net/ToolsClient.kt",
+         "src/dsmate/web/src/search/SearchBar.ts",
+         "src/dsmate/web/src/search/Citations.ts"]
+depends = ["D1", "D4"]
+risk = "mid"
+
+[[cards]]
+id = "D7"
+task = "T-DG007"
+title = "计算核验条：懒加载 SymPy + 式子抽取 + 三方不一致如实摆"
+tree = ".wt/D7"
+spec = "复盘/卡/卡D7-计算核验条.md"
+files = ["src/dsmate/web/src/calc/pyodide.ts", "src/dsmate/web/src/calc/extract.ts",
+         "src/dsmate/web/src/verify/VerifyBar.ts"]
+depends = ["D3"]
+risk = "mid"
+
+[[cards]]
+id = "D8"
+task = "T-DG008"
+title = "备份/热更新/设置：导出导入 + bundle 替换生效 + 红线审计脚本"
+tree = ".wt/D8"
+spec = "复盘/卡/卡D8-备份热更新与设置.md"
+files = ["src/dsmate/app/src/main/java/com/dsmate/store/Backup.kt",
+         "src/dsmate/app/src/main/java/com/dsmate/update/BundleUpdater.kt",
+         "src/dsmate/web/src/settings/Settings.ts",
+         "src/dsmate/tools/audit_redlines.py"]
+depends = ["D1", "D2"]
+risk = "mid"

@@ -36,3 +36,9 @@ prefix = "C"
 owner = "主控C"
 area = "（待指派）"
 tree = ".wt/C"
+
+[[partitions]]
+prefix = "D"
+owner = "主控D"
+area = "dsmate：手机上自用的 DeepSeek 聊天客户端（src/dsmate/）"
+tree = ".wt/D"
