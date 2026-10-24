@@ -18,6 +18,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parent.parent
 LEDGER = ROOT / "gates" / "diag" / "session-leases.json"
@@ -49,22 +50,37 @@ def _load() -> dict:
     return data
 
 
+def _tmp_path() -> Path:
+    """给这次写盘一个**只属于自己**的临时文件名。
+
+    ★ 卡 E20：以前写死 `LEDGER.with_suffix(".tmp")`，两个 pytest worker 同时写账本时，
+    先完成的那次把 `session-leases.tmp` 换成 `session-leases.json`，后完成的那次
+    `tmp.replace()` 就报 `FileNotFoundError`（WinError 2）—— 门禁在 `-n>=2` 下必偶发红。
+    同一个目录、换个唯一名字即可：`replace` 仍在同一卷上，仍然是原子换名。
+    """
+    return LEDGER.with_name(f"{LEDGER.name}.{os.getpid()}.{uuid4().hex[:8]}.tmp")
+
+
 def _save(data: dict) -> None:
     LEDGER.parent.mkdir(parents=True, exist_ok=True)
-    tmp = LEDGER.with_suffix(".tmp")
+    tmp = _tmp_path()
     body = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
     tmp.write_text(body + chr(10), encoding="utf-8")
     for attempt in range(_SAVE_RETRIES):
         try:
             tmp.replace(LEDGER)
             return
-        except PermissionError:
-            # 只有「换名被别的进程挡了一下」才重试；其它异常（目录没了、序列化失败）立即抛。
+        except (PermissionError, FileNotFoundError):
+            # PermissionError：目标被别的进程开着（WinError 32/5）。
+            # FileNotFoundError：自己的 tmp 已被别人换走（卡 E20）。
+            # 两种都是瞬时的，隔一会儿再试；其它异常（目录没了、序列化失败）立即抛。
             if attempt == _SAVE_RETRIES - 1:
                 with contextlib.suppress(OSError):
                     tmp.unlink()  # 别把半截 tmp 留在 gates/diag 里
                 raise
             time.sleep(_SAVE_BACKOFF_MS[attempt] / 1000)
+
+
 
 
 def _stale(entry: dict, now: float) -> bool:

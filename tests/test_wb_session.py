@@ -2,6 +2,8 @@
 
 后半段是卡 E17 的钉子：`_save()` 对 Windows sharing violation（`WinError 32`）的有限重试，
 以及「测试别去写仓库真账本」的隔离。
+再往后是卡 E20 的钉子：临时文件名必须唯一、`FileNotFoundError` 也要重试
+（`-n4` 门禁的假红根因）。
 """
 
 from __future__ import annotations
@@ -143,3 +145,56 @@ def test_claim_writes_only_the_isolated_ledger(tmp_path, monkeypatch):
     assert json.loads(fake.read_text(encoding="utf-8"))["cards"]["A6"]["session"] == "sess-a"
     after = real_ledger.read_bytes() if real_ledger.exists() else None
     assert after == before, f"真仓账本被写了：{real_ledger}"
+
+
+def test_save_retries_when_its_own_tmp_was_swapped_away(tmp_path, monkeypatch):
+    """卡 E20 钉子 1：`FileNotFoundError`（自己的 tmp 被别人换走了）也要重试，别直接抛。"""
+    ledger = _use_tmp(tmp_path, monkeypatch)
+    calls = _flaky_replace(monkeypatch, failures=2, exc=FileNotFoundError(2, "没了"))
+    data = {"version": 1, "cards": {"A7": {"session": "sess-a", "since": 1}}}
+
+    wb_session._save(data)
+
+    assert calls["n"] == 3, f"FileNotFoundError 也该重试，实际只试了 {calls['n']} 次"
+    assert json.loads(ledger.read_text(encoding="utf-8")) == data
+
+
+def test_tmp_name_is_unique_per_write(tmp_path, monkeypatch):
+    """卡 E20 钉子 2：临时文件名不许是固定的 `session-leases.tmp`。"""
+    ledger = _use_tmp(tmp_path, monkeypatch)
+
+    first, second = wb_session._tmp_path(), wb_session._tmp_path()
+
+    assert first != second, "两次写盘不能共用同一个临时文件名（并发写会互相换走）"
+    assert first != ledger.with_suffix(".tmp"), "不许再退回固定名 session-leases.tmp"
+    assert first.parent == ledger.parent, "临时文件必须和目标同目录（同一卷才能原子换名）"
+
+
+def test_concurrent_saves_keep_the_ledger_readable(tmp_path, monkeypatch):
+    """卡 E20 钉子 3：两个线程同时写 20 次 ⇒ 不抛异常，最终账本仍是合法 JSON。
+
+    旧实现（固定 tmp 名）在这条上会抛 `FileNotFoundError`（实测于 `-n 4` 的门禁里）。
+    """
+    import threading
+
+    ledger = _use_tmp(tmp_path, monkeypatch)
+    errors: list[BaseException] = []
+
+    def writer(tag: str) -> None:
+        for i in range(20):
+            try:
+                payload = {"version": 1, "cards": {f"{tag}{i}": {"session": tag, "since": 1}}}
+                wb_session._save(payload)
+            except BaseException as exc:  # noqa: BLE001 - 并发用例要把异常带回来断
+                errors.append(exc)
+                return
+
+    threads = [threading.Thread(target=writer, args=(tag,)) for tag in ("t1", "t2")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"并发写抛了：{errors[:1]}"
+    assert json.loads(ledger.read_text(encoding="utf-8"))["version"] == 1
+    assert not list(ledger.parent.glob("*.tmp")), "并发写完后不该留下 tmp 文件"

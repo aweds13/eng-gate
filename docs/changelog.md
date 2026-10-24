@@ -214,6 +214,10 @@
 - `tools/wb_notify.py`、`tools/wb_daily.py`、`tools/wb_plan.py` 同口径切根；`tools/pool/` 里 6 处也改读 `pipe_root.data_root()`。
 - 默认行为不变：没设 `PIPE_HOME` / `PIPE_DATA` 时两个根重合，本仓读数与产物位置一字不动。
 - 钉子：`tests/test_pipe_root.py` 四条（`PIPE_DATA` 生效 / 按当前目录认数据根 / `wb_notify` 写数据根 / `wb_plan` 读数据根）。
+## 2026-10-24 会话账本并发写不再依赖固定临时文件名（T-AG473）
+- `tools/wb_session.py`：新增 `_tmp_path()`，临时文件名 = `<账本名>.<pid>.<随机 8 位>.tmp`，仍在同一目录（同一卷才能原子换名）。
+- `tools/wb_session.py`：`_save()` 的重试条件从 `except PermissionError` 放宽到 `except (PermissionError, FileNotFoundError)`；末次失败仍清掉自己的 tmp。
+- `tests/test_wb_session.py`：新增三条钉子 —— `FileNotFoundError` 要重试、临时文件名必须唯一、两线程并发写 20 次后账本仍是合法 JSON 且不留 tmp。
 ## 2026-10-18 —— 面板就地渲染 + 工程工具箱（T-AG391）
 - `tools/dsh_panel.py`：`QuickEntry` 改 iframe 就地渲染；新增「工程工具箱」行与五页；宿主半新增 `/dsh-panel/skills` 只读路由，`serveSettings` 收紧为只读。
 - `tests/test_dsh_panel.py`：座位一致性判据改为「前三项逐项一致 + 额外行只许 toolbox」。
