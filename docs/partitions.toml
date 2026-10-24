@@ -42,3 +42,15 @@ prefix = "D"
 owner = "主控D"
 area = "dsmate：手机上自用的 DeepSeek 聊天客户端（src/dsmate/）"
 tree = ".wt/D"
+
+[[partitions]]
+prefix = "E"
+owner = "主控E"
+area = "CI 子系统：判据前置 / TIA 选测 / 提交面算档 / 红单归并 / 合并队列 / 文档纪律"
+tree = ".wt/E"
+
+[[partitions]]
+prefix = "F"
+owner = "主控F"
+area = "文档治理：卡规格与项目书归位 / 索引机器化 / 文档门禁 / 决策记录"
+tree = ".wt/F"

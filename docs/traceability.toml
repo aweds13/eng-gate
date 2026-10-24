@@ -8173,3 +8173,133 @@ evidence = [
     "file:复盘/卡/卡D8-备份热更新与设置.md",
 ]
 gaps = "dsmate 是 2026-10-23 新起的手机端客户端（`src/dsmate/`），五层文档与卡队列先落盘、代码未开工；本条 todo 即如实记录未做，等对应卡开工后改 done。"
+
+[entries."T-AG443"]
+id = "T-AG443"
+title = "卡 E1 —— 判据前置：`wb_land --preflight` 一次说全"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E1-判据前置.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/research/文档治理-best-practice-调研.md",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+
+[entries."T-AG444"]
+id = "T-AG444"
+title = "卡 E2 —— 测试影响分析（TIA）：按覆盖映射选测"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E2-测试影响分析.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/research/文档治理-best-practice-调研.md",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+
+[entries."T-AG445"]
+id = "T-AG445"
+title = "卡 E3 —— 提交面算档 + `.gitignore` 收残留"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E3-提交面算档与残留.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/research/文档治理-best-practice-调研.md",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+
+[entries."T-AG446"]
+id = "T-AG446"
+title = "卡 E4 —— 红单归并：同 traceback 只打一次"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E4-红单归并.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/research/文档治理-best-practice-调研.md",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+
+[entries."T-AG447"]
+id = "T-AG447"
+title = "卡 E5 —— 合并队列：单写者 + 投机预检"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E5-合并队列.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/research/文档治理-best-practice-调研.md",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+
+[entries."T-AG448"]
+id = "T-AG448"
+title = "卡 E6 —— 文档纪律：卡树不许先提交"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E6-文档纪律.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/research/文档治理-best-practice-调研.md",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+
+[entries."T-AG449"]
+id = "T-AG449"
+title = "卡 F1 —— 文档归位：卡规格与项目书迁出 `复盘/`"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡F1-文档归位.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/research/文档治理-best-practice-调研.md",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+
+[entries."T-AG450"]
+id = "T-AG450"
+title = "卡 F2 —— 索引机器化：`docs/INDEX.md` 与 `复盘/INDEX.md` 由脚本生成"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡F2-索引机器化.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/research/文档治理-best-practice-调研.md",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+
+[entries."T-AG451"]
+id = "T-AG451"
+title = "卡 F3 —— 文档门禁：`scripts/check_docs.py`（判不出就报 skip）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡F3-文档门禁.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/research/文档治理-best-practice-调研.md",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+
+[entries."T-AG452"]
+id = "T-AG452"
+title = "卡 F4 —— 决策记录：`docs/decisions/NNNN-*.md`（append-only + confidence）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡F4-决策记录.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/research/文档治理-best-practice-调研.md",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""

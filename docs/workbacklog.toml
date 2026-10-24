@@ -3534,3 +3534,122 @@ files = ["docs/presets/math.patch.yml",
 depends = ["C1"]
 risk = "mid"
 
+# ---- 分区E｜判据前置：wb_land --preflight 一次说全（T-AG443）
+[[cards]]
+id = "E1"
+task = "T-AG443"
+title = "判据前置：wb_land --preflight 一次说全"
+tree = ".wt/E1"
+spec = "复盘/卡/卡E1-判据前置.md"
+files = ["tools/wb_land.py", "tools/pool/landing.py", "tests/test_wb_land.py"]
+depends = ["E6"]
+risk = "mid"
+status = "pending"
+
+# ---- 分区E｜测试影响分析（TIA）：按覆盖映射选测（T-AG444）
+[[cards]]
+id = "E2"
+task = "T-AG444"
+title = "测试影响分析（TIA）：按覆盖映射选测"
+tree = ".wt/E2"
+spec = "复盘/卡/卡E2-测试影响分析.md"
+files = ["scripts/run_gates.py", "scripts/tia_map.py", "tests/test_tia_map.py"]
+depends = ["E1"]
+risk = "mid"
+status = "pending"
+
+# ---- 分区E｜提交面算档 + 残留归收（T-AG445）
+[[cards]]
+id = "E3"
+task = "T-AG445"
+title = "提交面算档 + 残留归收"
+tree = ".wt/E3"
+spec = "复盘/卡/卡E3-提交面算档与残留.md"
+files = ["gates/defs/domains.py", "tools/pool/landing.py", ".gitignore"]
+depends = ["E1"]
+risk = "mid"
+status = "pending"
+
+# ---- 分区E｜红单归并：同 traceback 只打一次（T-AG446）
+[[cards]]
+id = "E4"
+task = "T-AG446"
+title = "红单归并：同 traceback 只打一次"
+tree = ".wt/E4"
+spec = "复盘/卡/卡E4-红单归并.md"
+files = ["scripts/run_gates.py", "tools/reseal_report.py", "tests/test_reseal_report.py"]
+depends = ["E2"]
+risk = "mid"
+status = "pending"
+
+# ---- 分区E｜合并队列：单写者 + 投机预检（T-AG447）
+[[cards]]
+id = "E5"
+task = "T-AG447"
+title = "合并队列：单写者 + 投机预检"
+tree = ".wt/E5"
+spec = "复盘/卡/卡E5-合并队列.md"
+files = ["tools/pool/landing.py", "tools/pool/queue.py", "tests/test_pool_queue.py"]
+depends = ["E3"]
+risk = "mid"
+status = "pending"
+
+# ---- 分区E｜文档纪律：卡树不许先提交（T-AG448）
+[[cards]]
+id = "E6"
+task = "T-AG448"
+title = "文档纪律：卡树不许先提交"
+tree = ".wt/E6"
+spec = "复盘/卡/卡E6-文档纪律.md"
+files = ["skills/pipe-land/SKILL.md", "tools/pool/landing.py", "tests/test_wb_land.py"]
+depends = []
+risk = "mid"
+status = "pending"
+
+# ---- 分区F｜文档归位：卡规格与项目书迁出 复盘/（T-AG449）
+[[cards]]
+id = "F1"
+task = "T-AG449"
+title = "文档归位：卡规格与项目书迁出 复盘/"
+tree = ".wt/F1"
+spec = "复盘/卡/卡F1-文档归位.md"
+files = ["tools/migrate_docs.py", "docs/migration-map.json", "tests/test_migrate_docs.py"]
+depends = ["E1"]
+risk = "mid"
+status = "pending"
+
+# ---- 分区F｜索引机器化：docs/INDEX.md 与 复盘/INDEX.md 由脚本生成（T-AG450）
+[[cards]]
+id = "F2"
+task = "T-AG450"
+title = "索引机器化：docs/INDEX.md 与 复盘/INDEX.md 由脚本生成"
+tree = ".wt/F2"
+spec = "复盘/卡/卡F2-索引机器化.md"
+files = ["scripts/gen_doc_index.py", "tests/test_gen_doc_index.py", "docs/INDEX.md"]
+depends = []
+risk = "mid"
+status = "pending"
+
+# ---- 分区F｜文档门禁：scripts/check_docs.py（判不出就报 skip）（T-AG451）
+[[cards]]
+id = "F3"
+task = "T-AG451"
+title = "文档门禁：scripts/check_docs.py（判不出就报 skip）"
+tree = ".wt/F3"
+spec = "复盘/卡/卡F3-文档门禁.md"
+files = ["scripts/check_docs.py", "docs/doc-debt-baseline.toml", "tests/test_check_docs.py"]
+depends = ["F2"]
+risk = "mid"
+status = "pending"
+
+# ---- 分区F｜决策记录：docs/decisions/NNNN-*.md（append-only + confidence）（T-AG452）
+[[cards]]
+id = "F4"
+task = "T-AG452"
+title = "决策记录：docs/decisions/NNNN-*.md（append-only + confidence）"
+tree = ".wt/F4"
+spec = "复盘/卡/卡F4-决策记录.md"
+files = ["docs/decisions/README.md", "scripts/check_docs.py", "tests/test_check_docs.py"]
+depends = ["F3"]
+risk = "mid"
+status = "pending"
