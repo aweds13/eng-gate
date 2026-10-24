@@ -1,3 +1,7 @@
+## 卡 E1：落地前一次只读体检（T-AG443）
+- `tools/pool/landing.py`：新增 `preflight(...)` 与 11 条判据本体，抽出 `_scan_blocks()` / `parse_text_doc()` / `gates_trailer_template()`，体检与落地链共用同一份判据。
+- `tools/wb_land.py`：新增 `--preflight`（只读、不 fail-fast、跑完再退出；与 `--card` 同给 = 体检绿后继续落地）。
+- `tests/test_wb_land.py`：五条钉子（全绿退 0 且只读 / 缺文书退 1 并报路径 / offender 退 1 且清单一致 / 与 `--card` 同给后接着落地）。
 ## 卡 E2：测试影响分析：按覆盖映射选测（T-AG444）
 - 新增 TIA 映射与选测脚本（落地后见 scripts/tia_map.py）。
 - `scripts/run_gates.py`：`resolve_cmd` 接受 `pytest_args`，不启用时命令逐字不变。

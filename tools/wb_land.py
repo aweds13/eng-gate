@@ -45,6 +45,15 @@ r"""主控的通用集成器 CLI `tools/wb_land.py`（卡 139 · `T-G237`）—�
   ★ 边界（如实写）：卡树里**没有台账文件** ⇒ 无法核对，打印一句并放行（假仓/沙箱
     没有台账；真仓台账永远在）。`--batch` / `--precheck` 不走这条守卫。
   ★ 守卫在壳层而不在 `pool.landing`：逻辑层不在卡 A318 的 files 域里。
+★ 卡 E1（`T-AG443`）：`--preflight` —— 落地**前**的一次零副作用只读体检：
+  把「这一趟会踩的线」**全部**说出来（不 fail-fast），11 条判据逐条 ✅/❌ + 一句怎么修，
+  0=全绿 / 1=有 ❌。判据本体在 `pool.landing.preflight`（与落地链**同一批函数**，
+  不复制第二份）；本壳只做「取参数 → 转发」。`--preflight` 单独给 = 体检完就退；
+  与 `--card` / `--batch` 一起给 = 体检绿后**接着落地**（体检只跑这一趟，不重复）。
+  判据清单见 `docs/subsystems/ci/事后判据清单.md` A 表。
+  ★ 耗时边界（如实）：本仓 `audit_progress.py --all` 自己就要 9~15 s（它的
+    封存未跟踪清单逐个文件起 git 进程），所以整趟体检在**本机实测 20 s 上下**；
+    卡 §判据 3 写的 15 s 是按 audit 0.6 s 估的，那条**没达标**（见复盘）。
 """
 
 from __future__ import annotations
@@ -69,6 +78,7 @@ __all__ = [
     "main",
     "precheck_docs",
     "precheck_main",
+    "preflight_main",
     "run_precheck",
 ]
 
@@ -95,13 +105,22 @@ STEP_TIMEOUT = 180
 #: `--help` 末尾补的一行：壳层参数不在 landing 的 parser 里，不补就等于没入口。
 _HELP_TAIL = (
     "壳层参数（不转发给落地链）：--precheck <台账号|文书路径…>  落地前置快检"
-    "（文书裸文件名 + check_layers + test_check_skills；红了不进全量门禁）"
+    "（文书裸文件名 + check_layers + test_check_skills；红了不进全量门禁）\n"
+    "                  --preflight  落地前置体检（11 条判据一次说全；只读；"
+    "0=全绿 1=有 ❌）"
 )
 
 #: `--precheck` 的 argparse 描述（help 里能看到判据在干什么）。
 _PRECHECK_DESC = (
     "落地前置快检：文书里的裸文件名 + scripts/check_layers.py + "
     "tests/test_check_skills.py（红了不进全量门禁；只读，不写任何文件）"
+)
+
+#: `--preflight` 的 argparse 描述（卡 E1：11 条判据一次说全）。
+_PREFLIGHT_DESC = (
+    "落地前置体检（卡 E1）：卡树 HEAD 祖先 / 文书三段齐 / changelog 首行 / 文书预算与指针 / "
+    "队列 spec 已进 git / 卡域有产物 / 主树 offender / 队列卡块 status / audit --all / "
+    "ruff 快检 / Gates: trailer 模板。★ 只读（不碰任何文件）；0=全绿 1=有 ❌"
 )
 
 
@@ -264,6 +283,28 @@ def _argv_value(argv: list[str], flag: str) -> str | None:
     return None
 
 
+def preflight_main(argv: list[str]) -> int:
+    r"""`--preflight` 的入口（卡 E1）—— 只体检；给了 `--card` / `--batch` 就体检完继续落地。
+
+    用 `parse_known_args`：落地链自己的参数（`--title` / `--evidence` / `--type` …）
+    一起给也**不报错** —— 这一趟既体检又落地是常规用法。判据全在
+    `pool.landing.preflight`（壳层不重复一份）。
+    """
+    ap = argparse.ArgumentParser(prog="wb_land.py --preflight", description=_PREFLIGHT_DESC)
+    ap.add_argument("--card", help="队列卡号（也用来查它的 task / files）")
+    ap.add_argument("--batch", help="批号（与 --card 二选一；体检口径同）")
+    ap.add_argument("--tree", default=".", help="卡树（默认当前树）")
+    ap.add_argument("--task", default="", help="台账号；不给就查队列里那张卡的 task")
+    ap.add_argument("--allow", nargs="*", default=None, help="卡域；不给就用队列 files")
+    a, _rest = ap.parse_known_args(argv)
+    return _landing.preflight(
+        _landing.ROOT / a.tree, task=a.task, card=a.card, batch=a.batch, allow=a.allow,
+        no_gate="--no-gate" in argv, commit_only="--commit-only" in argv,
+        incremental=("--affected" in argv
+                     or any(x.startswith("--changed-from") for x in argv)),
+    )
+
+
 def ledger_card_ids(tree: pathlib.Path) -> set[str] | None:
     """卡树台账里的全部卡号。树里**没有台账** ⇒ None（调用方据此跳过守卫）。
 
@@ -352,6 +393,16 @@ def _session_gate(argv: list[str]) -> tuple[int, list[str]]:
 def main(argv: list[str] | None = None) -> int:
     """把 argv 交给 `pool.landing.main`（逻辑全在那边，本壳只多三条壳层分支）。"""
     argv = list(sys.argv[1:] if argv is None else argv)
+    if "--preflight" in argv:
+        # ★ 卡 E1（T-AG443）：先体检（只读）；红了**不落地**（退 1、一步都没动）。
+        #   给了 --card / --batch ⇒ 体检绿后接着落地（判据 5：体检只跑这一趟，不重复）。
+        rest = [x for x in argv if x != "--preflight"]
+        rc = preflight_main(rest)
+        if rc != 0:
+            return rc
+        if _argv_value(rest, "--card") is None and _argv_value(rest, "--batch") is None:
+            return 0  # 只体检、早退
+        argv = rest
     if "--precheck" in argv:
         return precheck_main([x for x in argv if x != "--precheck"])
     if "-h" in argv or "--help" in argv:

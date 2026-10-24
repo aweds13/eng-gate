@@ -57,9 +57,11 @@ import datetime
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import threading
+import time
 
 # ★ 2026-10-02：ROOT 原来是硬编码绝对路径（换机器即碎）。本位置 `tools/pool/` 上两级 = 仓库根，
 #   与旧位置 `gates/diag/` 的 `parents[2]` 结果一致 ⇒ 这一行搬过来不用改（已核对）。
@@ -254,7 +256,6 @@ def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str, *,
     返回 `True` ⇒ 翻了（调用方应把 `docs/workbacklog.toml` 加进 `allow`）。
     返回 `False` ⇒ 没翻。
     """
-    import re
     backlog_rel = "docs/workbacklog.toml"
     backlog_path = wt / backlog_rel
     if not backlog_path.is_file():
@@ -263,53 +264,34 @@ def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str, *,
     raw = backlog_path.read_bytes()
     sep = b"\r\n" if b"\r\n" in raw else b"\n"
     lines = raw.split(sep)
-    kv = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
-    n = len(lines)
-    i = 0
-    while i < n:
-        if lines[i].decode("utf-8", "replace").strip() != "[[cards]]":
-            i += 1
-            continue
-        cid_val: str | None = None
-        task_val: str | None = None
-        status_idx: int | None = None
-        status_val: str | None = None
-        j = i + 1
-        while j < n:
-            t = lines[j].decode("utf-8", "replace").strip()
-            if t == "[[cards]]" or (t.startswith("[") and not t.startswith("[[")):
-                break
-            m = kv.match(t)
-            if m:
-                key, val = m.group(1), m.group(2)
-                if key == "id":
-                    cid_val = val
-                elif key == "task":
-                    task_val = val
-                elif key == "status":
-                    status_idx, status_val = j, val
-            j += 1
+    # ★ 卡 E1（T-AG443）：逐块解析抽成 `_scan_blocks` —— `--preflight` 的
+    #   「队列卡块有 status 行」用的是**同一套**口径（不许复制第二份，卡 E1 判据 5）。
+    for _start, _end, fields in _scan_blocks(lines):
+        cid_val = fields["id"]
+        task_val = fields["task"]
         is_target = ((cid_val == card_id) if card_id is not None
                      else (task_val == task))
-        if is_target:
-            if require_task_match and task_val != task:
-                print(f"  [队列] 卡 {cid_val}：--task={task} ≠ 卡.task={task_val}"
-                      f"（登记型提交）⇒ 不翻 status")
-                return False
-            if status_idx is None or status_val is None:
-                print(f"  [队列] 卡 {cid_val}：找不到 status 行 ⇒ 跳过")
-                return False
-            if status_val == "done":
-                print(f"  [队列] 卡 {cid_val}：已是 done ⇒ 跳过")
-                return False
-            old_line = lines[status_idx].decode("utf-8", "replace")
-            new_line = re.sub(r'(status\s*=\s*)"[^"]*"', r'\1"done"', old_line)
-            lines[status_idx] = new_line.encode("utf-8")
-            backlog_path.write_bytes(sep.join(lines))
-            print(f"  [队列] 卡 {cid_val}：{status_val} → done"
-                  f"（这一笔是它的落地）")
-            return True
-        i = j
+        if not is_target:
+            continue
+        if require_task_match and task_val != task:
+            print(f"  [队列] 卡 {cid_val}：--task={task} ≠ 卡.task={task_val}"
+                  f"（登记型提交）⇒ 不翻 status")
+            return False
+        status_idx = fields["status_idx"]
+        status_val = fields["status"]
+        if status_idx is None or status_val is None:
+            print(f"  [队列] 卡 {cid_val}：找不到 status 行 ⇒ 跳过")
+            return False
+        if status_val == "done":
+            print(f"  [队列] 卡 {cid_val}：已是 done ⇒ 跳过")
+            return False
+        old_line = lines[status_idx].decode("utf-8", "replace")
+        new_line = re.sub(r'(status\s*=\s*)"[^"]*"', r'\1"done"', old_line)
+        lines[status_idx] = new_line.encode("utf-8")
+        backlog_path.write_bytes(sep.join(lines))
+        print(f"  [队列] 卡 {cid_val}：{status_val} → done"
+              f"（这一笔是它的落地）")
+        return True
     if card_id is not None:
         print(f"  [队列] 找不到卡 {card_id} ⇒ 跳过翻 status")
     else:
@@ -641,6 +623,397 @@ def _allow_hits(path: str, allow: set[str]) -> bool:
         if path.startswith(pat.rstrip("/") + "/"):
             return True
     return False
+
+
+# -------------------------------------------------- 卡 E1（T-AG443）：判据前置
+# ★ 卖点：一趟只读体检把「这一趟会踩的线」**一次说全**（不 fail-fast、不碰任何文件）；
+#   别等到第 12 分钟才红。（耗时大头是 audit --all 自己，见 `preflight` 的实测记录。）
+# ★ 判据不另写一份：文书断言 / 队列 status 扫描 / 主树 offender / `Gates:` 模板
+#   都是本文件里落地链**正在用**的同一批函数（卡 E1 判据 5）。
+
+#: 文书的三个段（`wb_stage_card.py --text-file` 的解析口径，顺序固定）。
+TEXT_SECTIONS = ("gaps", "changelog", "checkpoint")
+
+#: preflight 里两条子进程检查的硬超时（audit 实测 10~15 s、ruff ~1.3 s）。
+PF_TIMEOUT = 300
+
+#: ruff 快检扫的目录（与 `gates/defs/lang_python.py` 的 ruff 门同款；只扫存在的）。
+RUFF_DIRS = ("src", "tests", "scripts", "tools", "examples", "harness")
+
+_BACKLOG_KV = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
+_BACKLOG_FILES = re.compile(r"files\s*=\s*\[(.*?)\]", re.S)
+_BACKLOG_KEYS = ("id", "task", "spec", "status")
+
+
+def _scan_blocks(lines: list[bytes]) -> list[tuple[int, int, dict[str, object]]]:
+    r"""把队列按 `[[cards]]` 切成块，返回 `[(起行, 止行, 字段)]`（**只读**）。
+
+    ★ CRLF 感知 + 逐块解析：`flip_card_status`（要改写 status 行，用得上行号）与
+      `--preflight`（只读体检）共用这一份 —— 两边口径不可能分叉（卡 E1 判据 5）。
+    """
+    out: list[tuple[int, int, dict[str, object]]] = []
+    n = len(lines)
+    i = 0
+    while i < n:
+        if lines[i].decode("utf-8", "replace").strip() != "[[cards]]":
+            i += 1
+            continue
+        fields: dict[str, object] = {"id": None, "task": None, "spec": None,
+                                     "status": None, "status_idx": None, "files": []}
+        j = i + 1
+        while j < n:
+            t = lines[j].decode("utf-8", "replace").strip()
+            if t == "[[cards]]" or (t.startswith("[") and not t.startswith("[[")):
+                break
+            m = _BACKLOG_KV.match(t)
+            if m:
+                key, val = m.group(1), m.group(2)
+                if key in _BACKLOG_KEYS:
+                    fields[key] = val
+                if key == "status":
+                    fields["status_idx"] = j
+            j += 1
+        body = b"\n".join(lines[i:j]).decode("utf-8", "replace")
+        fm = _BACKLOG_FILES.search(body)
+        fields["files"] = re.findall(r'"([^"]*)"', fm.group(1)) if fm else []
+        out.append((i, j, fields))
+        i = j
+    return out
+
+
+def backlog_blocks(wt: pathlib.Path) -> list[dict[str, object]] | None:
+    r"""读取卡树队列的全部卡块（**只读**）；树里没有队列 ⇒ `None`（假仓/沙箱）。"""
+    path = wt / "docs" / "workbacklog.toml"
+    if not path.is_file():
+        return None
+    raw = path.read_bytes()
+    sep = b"\r\n" if b"\r\n" in raw else b"\n"
+    return [f for _s, _e, f in _scan_blocks(raw.split(sep))]
+
+
+def parse_text_doc(text: pathlib.Path) -> tuple[dict[str, str], str]:
+    r"""读 `_text_<台账号>.md` 的三段 —— 返回 `(段字典, 问题一句)`（空串 = 合规）。
+
+    ★ 只有这一份实现：`main()` 的「缺文档件」断言与 `--preflight` 的
+      「存在 + 三段齐」都调它（卡 E1 判据 5）。
+    """
+    if not text.is_file():
+        return {}, f"缺文档件：{text}"
+    parts: dict[str, str] = {}
+    cur: str | None = None
+    for line in text.read_text(encoding="utf-8", errors="replace").splitlines():
+        s = line.strip()
+        if s.startswith("=== ") and s.endswith(" ==="):
+            cur = s.strip("= ").strip()
+            parts[cur] = ""
+            continue
+        if cur:
+            parts[cur] += line + "\n"
+    missing = [k for k in TEXT_SECTIONS if not parts.get(k, "").strip()]
+    if missing:
+        return parts, (f"文书 {text} 缺 {' / '.join(missing)} 段"
+                       "（三段：gaps / changelog / checkpoint）")
+    return parts, ""
+
+
+def queue_status_problems(wt: pathlib.Path, card: str | None = None) -> list[str]:
+    r"""**这张卡**的队列块必须有 `status` 行（没有它，翻账会静默跳过 —— A 表第 9 条）。
+
+    ★ 只判**这一趟要落的那张卡**（`card`）：队列里别的卡缺 status 是它们的欠账，
+      不该把这一趟的落地挡红（工具一旦常红就没人看了）。不给 `card` ⇒ 判不了，
+      如实说（不假装通过）。
+    """
+    blocks = backlog_blocks(wt)
+    if blocks is None:
+        return ["这棵树没有 docs/workbacklog.toml ⇒ 落地后翻账会静默跳过"]
+    if not card:
+        return ["没给 --card ⇒ 说不清要判哪张卡的 status（--batch 请逐成员看）"]
+    hits = [b for b in blocks if b["id"] == card]
+    if not hits:
+        return [f"队列里没有卡 {card} 的块（翻账会静默跳过）"]
+    return [f"卡 {card} 的块里没有 status 行" for b in hits if b["status"] is None]
+
+
+def _tracked_paths(wt: pathlib.Path) -> set[str]:
+    r"""`git ls-files -z` 一次取全部已跟踪路径（别一卡起一个进程）。"""
+    r0 = run(["git", "-c", "core.quotepath=false", "ls-files", "-z"], cwd=wt, check=False)
+    return {p.replace("\\", "/") for p in (r0.stdout or "").split("\0") if p}
+
+
+def queue_spec_problems(wt: pathlib.Path) -> list[str]:
+    r"""队列里每条 `spec=` 必须**存在且已进 git**（卡 116 的判据，只读版）。"""
+    blocks = backlog_blocks(wt)
+    if blocks is None:
+        return ["这棵树没有 docs/workbacklog.toml ⇒ 核不了 spec"]
+    tracked = _tracked_paths(wt)
+    bad: list[str] = []
+    for b in blocks:
+        spec = str(b["spec"] or "")
+        if not spec:
+            bad.append(f"卡 {b['id']}：spec 是空的")
+        elif not (wt / spec).is_file():
+            bad.append(f"卡 {b['id']}：spec 文件不存在 {spec}")
+        elif spec.replace("\\", "/") not in tracked:
+            bad.append(f"卡 {b['id']}：spec 未进 git（git ls-files 不认）{spec}")
+    return bad
+
+
+def card_domain_changes(
+    wt: pathlib.Path, allow: list[str]
+) -> tuple[list[str], list[str], list[str]]:
+    r"""卡树里被 `--allow`（卡域）覆盖的改动：`(暂存, 未暂存, 未跟踪)`。
+
+    ★ 只读：**不跑 `git add`**（那是 ⑤′ 的事）。判的是「卡域里有没有东西可落」——
+      空卡域走到 ⑥ 一定 `return 2`，这一条把它提前到 10 秒内说。
+    """
+    raw = run(["git", "-c", "core.quotepath=false", "status", "--porcelain", "-uall",
+               "--no-renames"], cwd=wt, check=False).stdout or ""
+    allow_set = set(allow)
+    staged: list[str] = []
+    unstaged: list[str] = []
+    untracked: list[str] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].split(" -> ")[-1].strip().strip('"')
+        if path.startswith(("gates/", ".wt/", "__pycache__/")):
+            continue
+        if not _allow_hits(path, allow_set):
+            continue
+        if line.startswith("??"):
+            untracked.append(path)
+            continue
+        if line[0] not in " ?":
+            staged.append(path)
+        if line[1] not in " ":
+            unstaged.append(path)
+    return staged, unstaged, untracked
+
+
+def _budget_problems(parts: dict[str, str], wt: pathlib.Path) -> list[str]:
+    r"""文书结构预算 + 指针 —— 判据真源是 `tools/card_doc_budget.py`（卡 164/193）。"""
+    import card_doc_budget
+
+    gaps = parts.get("gaps", "")
+    bad = card_doc_budget.check_budget(
+        checkpoint=parts.get("checkpoint", ""),
+        gaps=gaps,
+        changelog=parts.get("changelog", ""),
+    )
+    if gaps.strip():
+        bad += card_doc_budget.check_pointers(gaps, root=wt)
+    return bad
+
+
+def _pf_run(cmd: list[str], wt: pathlib.Path) -> subprocess.CompletedProcess[str]:
+    r"""preflight 的子进程跑法：显式 utf-8、硬超时、**不弹窗**（卡 148）。"""
+    return subprocess.run(
+        cmd, cwd=str(wt), capture_output=True, text=True, encoding="utf-8",
+        errors="replace", timeout=PF_TIMEOUT,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+
+def audit_problems(wt: pathlib.Path) -> list[str]:
+    r"""`scripts/audit_progress.py --all` 只读跑一趟；红 ⇒ 它点名的前两条原话。"""
+    if not (wt / "scripts" / "audit_progress.py").is_file():
+        return ["这棵树没有 scripts/audit_progress.py ⇒ 核不了台账"]
+    try:
+        r0 = _pf_run([sys.executable, "-X", "utf8", "scripts/audit_progress.py", "--all"], wt)
+    except subprocess.TimeoutExpired:
+        return [f"audit --all 超时（{PF_TIMEOUT}s）⇒ 当红"]
+    if r0.returncode == 0:
+        return []
+    bad = [ln.strip() for ln in (r0.stdout or "").splitlines() if "[FAIL" in ln]
+    return bad[:2] or [f"audit --all 退出码 {r0.returncode}"]
+
+
+def ruff_problems(wt: pathlib.Path) -> list[str]:
+    r"""ruff 快检（`--no-cache`：preflight 要零副作用）；只扫**存在**的那些目录。"""
+    dirs = [d for d in RUFF_DIRS if (wt / d).is_dir()]
+    if not dirs:
+        return []
+    try:
+        r0 = _pf_run([sys.executable, "-m", "ruff", "check", "--no-cache", *dirs], wt)
+    except subprocess.TimeoutExpired:
+        return [f"ruff 超时（{PF_TIMEOUT}s）⇒ 当红"]
+    if r0.returncode == 0:
+        return []
+    keep = [ln.strip() for ln in (r0.stdout or "").splitlines()
+            if ln.strip() and not ln.startswith(("Found ", "All checks"))]
+    return keep[:2] or [f"ruff 退出码 {r0.returncode}"]
+
+
+def gates_trailer_template(*, no_gate: bool = False, commit_only: bool = False,
+                           incremental: bool = False) -> str:
+    r"""⑥ 的 `Gates:` trailer **模板**（落地链与 `--preflight` 共用这一份字面）。
+
+    ★ 全量分支的字面「全量门禁绿 + seal」**一字不动** —— 卡 133 的 6 个钉子钉着它
+      （伪造门禁结论那条判据的机器版）；增量分支用**不同**字面（含「非全量」）。
+    """
+    if no_gate:
+        return "Gates: ★ 本笔**没跑门禁**（--no-gate）—— 这行不是门禁结论，别当证据用"
+    if commit_only:
+        return "Gates: 复用已绿的那一趟（--commit-only，封存未变）；真读数见 gates/last.json"
+    if incremental:
+        return ("Gates: 增量门禁（--affected，非全量；"
+                "真读数见 gates/last.json 的 affected 块）"
+                "+ seal —— 卡 147 护栏会咬：把增量产物当全量交 ⇒ 红")
+    return "Gates: 全量门禁绿 + seal（跑前先拿门禁锁；★ 提交之后再跑 audit）"
+
+
+def gates_trailer_problem(line: str, *, runs_gates: bool) -> str:
+    r"""`Gates:` 模板必须与「这一趟到底跑没跑门禁」对得上（卡 133 同向，提前到 10 秒）。
+
+    会跑门禁 ⇒ 模板**必须**声称跑过（含「门禁绿 / 全绿 / seal」）；
+    `--no-gate` / `--commit-only` ⇒ 模板**必须**主动披露（含「没跑 / 复用」）。
+    """
+    green = any(w in line for w in ("门禁绿", "全绿", "seal"))
+    skip = any(w in line for w in ("没跑", "复用"))
+    if runs_gates and not green:
+        return "模板没声称跑过门禁（缺「门禁绿 / 全绿 / seal」）⇒ 复核会判「声称与事实不符」"
+    if not runs_gates and not skip:
+        return "模板没披露「没跑门禁」⇒ 复核会当它冒充门禁绿（卡 133）"
+    return ""
+
+
+def _rel_short(p: pathlib.Path, base: pathlib.Path) -> str:
+    r"""报错里的路径 —— 能相对仓库根就相对（绝对路径在 11 行体检里太占地方）。"""
+    try:
+        return pathlib.Path(p).resolve().relative_to(base.resolve()).as_posix()
+    except (ValueError, OSError):
+        return pathlib.Path(p).as_posix()
+
+
+def preflight(wt: pathlib.Path, *, task: str = "", card: str | None = None,
+              batch: str | None = None, allow: list[str] | None = None,
+              no_gate: bool = False, commit_only: bool = False,
+              incremental: bool = False, out=None) -> int:
+    r"""落地前置体检（卡 E1）：11 条判据**全部跑完再说**，全程只读、不 fail-fast。
+
+    退出码：`0` 全绿（可以直接落地）/ `1` 有 ❌（修完重跑 `--preflight`）。
+    ★ 只读的判据：不跑 `git add`、不建索引、不写 `gates/**`（ruff 带 `--no-cache`）。
+    ★ `card` 给了且没给 `task` ⇒ 拿队列里那张卡的 `task`；`allow` 没给 ⇒ 用它的 `files`。
+    ★ `batch` 给了 ⇒ 第 ⑧ 条不逐卡判（批成员翻账走 `flip_batch_member_statuses`）。
+    """
+    say = out or (lambda line: print(line, flush=True))
+    t0 = time.monotonic()
+    blocks = backlog_blocks(wt)
+    block = next((b for b in (blocks or []) if card is not None and b["id"] == card), None)
+    if block is None and task and blocks:
+        block = next((b for b in blocks if b["task"] == task), None)
+    if not task and block is not None:
+        task = str(block["task"] or "")
+    domain = list(allow or [])
+    if not domain and block is not None:
+        domain = [str(x) for x in (block["files"] or [])]
+
+    items: list[tuple[str, bool, str, str]] = []
+
+    # ① 卡树 HEAD 是主树 HEAD 的祖先（否则 ① 的 checkout 会抹掉已提交的改动）
+    cur = git("rev-parse", "HEAD", cwd=wt, check=False) if wt.is_dir() else ""
+    main_head = git("rev-parse", "HEAD", cwd=_main_tree_root(), check=False)
+    if not cur or not main_head:
+        items.append(("卡树 HEAD 是主树祖先", False, "读不到 HEAD（卡树不存在或不是 git 仓）",
+                      f"确认 {_rel_short(wt, ROOT)} 是 worktree"))
+    elif cur == main_head:
+        items.append(("卡树 HEAD 是主树祖先", True, f"两边都是 {cur[:8]}", ""))
+    elif is_ancestor(cur, main_head, wt):
+        items.append(("卡树 HEAD 是主树祖先", True, f"{cur[:8]} 是 {main_head[:8]} 的祖先", ""))
+    else:
+        items.append(("卡树 HEAD 是主树祖先", False,
+                      f"卡树 {cur[:8]} 不是主树 {main_head[:8]} 的祖先（checkout 会抹掉改动）",
+                      "在卡树里 rebase 到主树 HEAD（坑 33 的姿势）"))
+
+    # ②③④ 文书：存在 + 三段齐 / changelog 首行 / 预算与指针
+    if task:
+        text = pathlib.Path(str(TEXT).format(task=task.replace("-", "")))
+        parts, bad = parse_text_doc(text)
+        shown = _rel_short(text, ROOT)
+    else:
+        parts, bad, shown = {}, "没给 --task，队列里也查不到这张卡的 task", "（未知）"
+    items.append(("文书三段齐", not bad,
+                  bad or f"{shown} 的 gaps/changelog/checkpoint 都在",
+                  "照三段写好那份文书再重跑（段名：gaps / changelog / checkpoint）"))
+    first = next((ln.strip() for ln in parts.get("changelog", "").splitlines()
+                  if ln.strip()), "")
+    ok3 = first.startswith("## ")
+    items.append(("changelog 段首行是 ##", ok3,
+                  f"首行 = {first[:36]}" if first else "changelog 段是空的",
+                  "首行写成「## 2026-… · 一句话」（坑 23：bullet 插到标题之上会卡死下一张卡）"))
+    budget = _budget_problems(parts, wt) if parts else ["文书没读到，预算无从核"]
+    items.append(("文书预算与指针", not budget,
+                  "；".join(budget[:2]) if budget else "结构预算与指针全过",
+                  "按它点名的节 / 指针改（判据真源 tools/card_doc_budget.py）"))
+
+    # ⑤ 队列 spec= 存在且已进 git
+    spec_bad = queue_spec_problems(wt)
+    items.append(("队列 spec 已进 git", not spec_bad,
+                  (spec_bad[0] + (f"（另有 {len(spec_bad) - 1} 条）" if len(spec_bad) > 1 else ""))
+                  if spec_bad else f"{len(blocks or [])} 条 spec 都在且已跟踪",
+                  "把卡规格搬进 复盘/卡/ 并 git add（卡 116）"))
+
+    # ⑥ 卡域内有产物可落地（暂存 / 未暂存 / 未跟踪都算）
+    staged, unstaged, untracked = (card_domain_changes(wt, domain) if wt.is_dir()
+                                   else ([], [], []))
+    n_domain = len(set(staged) | set(unstaged) | set(untracked))
+    if not domain:
+        items.append(("卡域内有产物", False, "没有卡域（--allow 与队列 files 都空）",
+                      "给 --allow，或让队列那张卡有 files"))
+    else:
+        items.append(("卡域内有产物", n_domain > 0,
+                      f"暂存 {len(staged)} / 未暂存 {len(unstaged)} / 未跟踪 {len(untracked)}"
+                      f"（卡域 {len(domain)} 条）",
+                      "卡域里没有产物 ⇒ 没东西可落地（核对 --allow 与卡文件域）"))
+
+    # ⑦ 主树 offender 为空（与 ④ 之前那道守卫**同一个函数**）
+    offenders = main_tree_offenders(domain, wt) if wt.is_dir() else []
+    items.append(("主树 offender 为空", not offenders,
+                  "；".join(o.strip() for o in offenders[:2]) if offenders
+                  else "主树没有白名单外的跟踪改动",
+                  "把那些改动挪进卡分支（git stash / 卡树里重做）"))
+
+    # ⑧ 队列卡块有 status 行（只判**这一趟要落的这张卡**；别的卡缺是它们的欠账）
+    if batch:
+        # 批模式：成员翻账走 `flip_batch_member_statuses`（按产物 ∩ 暂存判）⇒ 不逐卡判
+        items.append(("队列卡块有 status 行", True,
+                      "批模式：成员翻账按产物走（不逐卡判）", ""))
+    else:
+        st_bad = queue_status_problems(wt, card or (str(block["id"]) if block else None))
+        items.append(("队列卡块有 status 行", not st_bad,
+                      st_bad[0] if st_bad else "这张卡的块里有 status 行",
+                      "给缺的那块补一行 status（没有它，落地后翻账会静默跳过）"))
+
+    # ⑨⑩ 两条子进程检查
+    audit_bad = audit_problems(wt) if wt.is_dir() else ["卡树不存在"]
+    items.append(("audit --all 绿", not audit_bad, audit_bad[0] if audit_bad else "审计通过",
+                  "跑 `python -X utf8 scripts/audit_progress.py --all` 看它点名的那条"))
+    ruff_bad = ruff_problems(wt) if wt.is_dir() else ["卡树不存在"]
+    items.append(("ruff 快检绿", not ruff_bad, ruff_bad[0] if ruff_bad else "All checks passed",
+                  "按行号修（E501 按显示宽度算，CJK 算 2 列）"))
+
+    # ⑪ `Gates:` trailer 模板合规（与 ⑥ 共用 `gates_trailer_template`）
+    line = gates_trailer_template(no_gate=no_gate, commit_only=commit_only,
+                                  incremental=incremental)
+    tpl_bad = gates_trailer_problem(line, runs_gates=not (no_gate or commit_only))
+    items.append(("Gates: trailer 模板合规", not tpl_bad,
+                  tpl_bad or f"这一趟会写「{line[:30]}…」",
+                  "改 gates_trailer_template 的措辞（全量那支必须含「全量门禁绿 + seal」）"))
+
+    say("=== 落地前置体检（--preflight · 只读 · 11 条一次说全，不 fail-fast）===")
+    for name, ok, detail, fix in items:
+        flat = detail.replace("\n", " ")[:150]
+        if ok:
+            say(f"  ✅ {name}：{flat}")
+        else:
+            say(f"  ❌ {name}：{flat} —— 修：{fix}")
+    n_bad = sum(1 for _n, ok, _d, _f in items if not ok)
+    secs = time.monotonic() - t0
+    if n_bad:
+        say(f"★ 有 {n_bad} 条 ❌ ⇒ 修完重跑 `--preflight`"
+            f"（这一趟没碰任何文件；{secs:.1f}s）")
+        return 1
+    say(f"✓ {len(items)} 条全绿（{secs:.1f}s，只读）⇒ 可以直接落地")
+    return 0
 
 
 # -------------------------------------------------- 卡 212（T-G323）：攒批收口固定进工作流
@@ -1096,7 +1469,10 @@ def main(argv: list[str] | None = None) -> int:
 
     wt = ROOT / a.tree
     text = pathlib.Path(str(TEXT).format(task=a.task.replace("-", "")))
-    assert text.is_file(), f"缺文档件：{text}"
+    # ★ 卡 E1（T-AG443）：存在性 + 三段齐与 `--preflight` 是**同一份**判据
+    #   （`parse_text_doc`）；缺件/缺段都停在这里，话术仍是「缺文档件：<路径>」。
+    _text_bad = parse_text_doc(text)[1]
+    assert not _text_bad, _text_bad
 
     env = {"TF_GATE_PORT_BASE": str(a.port_base), "PATH": os.environ.get("PATH", "")}
     # ★ 卡 118（T-G216）：**任何**退出路径都要还锁 —— 今晚收 B-DOC1 那趟失败后，`card=B-DOC1`
@@ -1421,16 +1797,11 @@ def main(argv: list[str] | None = None) -> int:
     #   （跑了几道 / 哪些被跳），复用卡 147 的判据（last.json 的 affected 块照写）。
     #   ★ 全量分支字面「全量门禁绿 + seal」**一字不动** —— 卡 133 的 6 个钉子钉着它（伪造门禁
     #   结论那条判据的机器版）。增量分支用**不同**字面（含「非全量」），不撞那 6 个钉子。
-    if a.no_gate:
-        gates_line = "Gates: ★ 本笔**没跑门禁**（--no-gate）—— 这行不是门禁结论，别当证据用"
-    elif a.commit_only:
-        gates_line = "Gates: 复用已绿的那一趟（--commit-only，封存未变）；真读数见 gates/last.json"
-    elif incremental_run:
-        gates_line = ("Gates: 增量门禁（--affected，非全量；"
-                      "真读数见 gates/last.json 的 affected 块）"
-                      "+ seal —— 卡 147 护栏会咬：把增量产物当全量交 ⇒ 红")
-    else:
-        gates_line = "Gates: 全量门禁绿 + seal（跑前先拿门禁锁；★ 提交之后再跑 audit）"
+    # ★ 卡 E1（T-AG443）：四种形态的字面搬进 `gates_trailer_template` ——
+    #   `--preflight` 判「这一趟会写的 trailer 合不合规」用的是**同一份**字面，
+    #   改措辞只有一处可改（不复制第二份）。字面本身一字未动（卡 133 的 6 个钉子）。
+    gates_line = gates_trailer_template(
+        no_gate=a.no_gate, commit_only=a.commit_only, incremental=incremental_run)
     # ★ 卡 184 边界纪律：降级跑法必须机器可读地留痕 —— 写进 trailer 并点名。
     #   判据（wb_review.py 那半属卡 161）：跑法字段缺失、或与默认不同却没有 trailer 声明 ⇒ 红。
     #   这里只做"声明"那一半：环境变量被设了（非默认）⇒ 在 trailer 里点名。

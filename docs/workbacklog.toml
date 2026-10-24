@@ -3544,7 +3544,7 @@ spec = "复盘/卡/卡E1-判据前置.md"
 files = ["tools/wb_land.py", "tools/pool/landing.py", "tests/test_wb_land.py"]
 depends = ["E6"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 # ---- 分区E｜测试影响分析（TIA）：按覆盖映射选测（T-AG444）
 [[cards]]

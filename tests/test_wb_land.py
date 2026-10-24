@@ -99,7 +99,9 @@ _TEXT = """=== gaps ===
 > **2026-10-02 · CHECKPOINT（合成）**：钉子用。
 """
 
-_MAYBE = "import sys\nprint('stub')\nsys.exit(0)\n"
+#: ★ 卡 E1：桩也要 ruff 干净（`--preflight` 的 ruff 快检会扫 `scripts/`、`tools/`）——
+#:   import 块与正文之间空一行（否则 `I001` 让体检红在**夹具**上，不是在代码上）。
+_MAYBE = "import sys\n\nprint('stub')\nsys.exit(0)\n"
 
 #: stage_card 桩（**故意失败**）：把链冻在「⓪ 回退派生物」之后、② 真改文档之前，
 #: 好断言「回退真的发生、且只发生在派生物上」（⑧⑨ 用）。
@@ -162,7 +164,9 @@ sys.exit(0)
 """
 
 #: 全量门禁桩：只留一个「门禁跑过」的印记（永不真起服务）。
-_RUN_GATES = """import pathlib, sys
+_RUN_GATES = """import pathlib
+import sys
+
 pathlib.Path("gate_ran.marker").write_text("ran", encoding="utf-8")
 print("stub-run_gates")
 sys.exit(0)
@@ -1313,11 +1317,14 @@ def test_stage_card_toml_str_produces_valid_toml() -> None:
 #   ★ CRLF 感知：workbacklog.toml 是纯 CRLF，flip_card_status 按字节读写。
 
 def _write_backlog(repo: Path, *, cid: str = "T-G999", task: str = "T-G999",
-                   status: str = "pending", extra_pending: str | None = None) -> None:
+                   status: str = "pending", extra_pending: str | None = None,
+                   spec: str = "") -> None:
     """往假仓库写一份 workbacklog.toml（纯 CRLF，与真文件一致）。
 
     `extra_pending`：再附一张**永远 pending** 的卡（卡 228 红钉用）—— 主卡翻 done 之后
     账里仍有 `pending` 字样，封存后的翻账动作才有真内容可改。
+    `spec`（卡 E1）：这张卡的规格路径；`--preflight` 要核「存在且已进 git」，默认空串
+    保持老用例一字不变（它们不关心 spec）。
     """
     body = (
         f'[base]\nreviewed = "abc1234"\n\n'
@@ -1326,7 +1333,7 @@ def _write_backlog(repo: Path, *, cid: str = "T-G999", task: str = "T-G999",
         f'task = "{task}"\n'
         f'title = "测试卡"\n'
         f'tree = ""\n'
-        f'spec = ""\n'
+        f'spec = "{spec}"\n'
         f'files = ["code/a.py"]\n'
         f'depends = []\n'
         f'risk = "low"\n'
@@ -2013,3 +2020,113 @@ def test_flip_card_status_require_task_match_flag(
     assert flipped2 is False
     assert _backlog_card_status(repo, "302") == "pending"
     assert "登记型" in capsys.readouterr().out
+
+
+# ================================================ 卡 E1（T-AG443）：--preflight 判据前置
+#
+# 定义：落地**前**一次零副作用的只读体检，11 条判据一次说全（不 fail-fast）。
+# 三条钉子（照卡 §交付）：全绿退 0 / 缺文书退 1 且报出路径 / 有 offender 退 1 且清单一致；
+# 外加两条同族：只读（前后 git status 逐字相同）、与 --card 同给时体检完继续落地。
+
+
+def _preflight(repo: Path, *extra: str) -> subprocess.CompletedProcess:
+    """在假仓库里跑一次 `wb_land.py --preflight ...`（走壳层入口，不另造第二套）。"""
+    cmd = [sys.executable, "-X", "utf8", str(repo / "tools" / "wb_land.py"),
+           "--preflight", *extra]
+    return subprocess.run(cmd, cwd=str(repo), env=_ENV, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+
+
+def _mk_preflight_repo(tmp: Path) -> Path:
+    """绿色体检的最小真仓：队列里的卡 `C1`（task T-G999）+ 它那份已进 git 的规格。"""
+    repo = _mk_repo(tmp)
+    # ★ 卡 E1：ruff 的判据要带**真仓同一份**规则表 —— 没有 pyproject 时 ruff 会退回默认
+    #   规则集（多出 RUF/PLW…），体检就在**夹具**上红，跟代码没关系。
+    _write(repo, "pyproject.toml",
+           "[tool.ruff]\nline-length = 100\n\n[tool.ruff.lint]\n"
+           "select = [\"E\", \"W\", \"F\", \"I\", \"N\", \"UP\", \"B\", \"SIM\", \"TCH\"]\n")
+    _write(repo, "复盘/卡/卡C1-合成.md", "# 合成卡规格\n")
+    _write_backlog(repo, cid="C1", task="T-G999", status="pending",
+                   spec="复盘/卡/卡C1-合成.md")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "queue")
+    return repo
+
+
+def _guard_offenders(repo: Path, allow: list[str]) -> list[str]:
+    """用**假仓库里那份** landing 现算 offender 清单（体检的清单一字不差地对它）。"""
+    code = (
+        "import pathlib, sys\n"
+        "sys.path.insert(0, 'tools')\n"
+        "from pool import landing\n"
+        f"print(chr(10).join(landing.main_tree_offenders({allow!r},"
+        " pathlib.Path('.pen'))))\n"
+    )
+    done = subprocess.run([sys.executable, "-X", "utf8", "-c", code], cwd=str(repo),
+                          env=_ENV, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+    return [ln for ln in (done.stdout or "").splitlines() if ln.strip()]
+
+
+def test_preflight_all_green_exits_zero_and_is_read_only(tmp_path: Path) -> None:
+    """全绿 ⇒ 退 0 + 「可以直接落地」；且 `--preflight` **只读**（前后 status 逐字相同）。"""
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")      # 卡域里真有产物（否则第 ⑥ 条该红）
+    before = _git(repo, "status", "--porcelain").stdout
+
+    # ★ 只给 --task（不给 --card）= 纯体检、体检完早退（判据 4：全绿退 0）
+    done = _preflight(repo, "--task", "T-G999", "--tree", ".", "--allow", "code")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    assert "可以直接落地" in out, out
+    assert "❌" not in out, out
+    after = _git(repo, "status", "--porcelain").stdout
+    assert after == before, "preflight 改了工作区/索引 —— 判据 2 要求前后 status 逐字相同"
+
+
+def test_preflight_missing_text_exits_one_and_names_the_path(tmp_path: Path) -> None:
+    """缺 `_text_<台账号>.md` ⇒ 退 1、**报出路径**，且 11 条判据照跑（不 fail-fast）。"""
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+    (repo / "gates" / "diag" / "_text_TG999.md").unlink()
+
+    done = _preflight(repo, "--task", "T-G999", "--tree", ".", "--allow", "code")
+
+    out = _out(done)
+    assert done.returncode == 1, out
+    assert "缺文档件" in out and "_text_TG999.md" in out, out
+    marks = [ln for ln in out.splitlines() if ln.startswith(("  ✅", "  ❌"))]
+    assert len(marks) == 11, f"判据没跑全（fail-fast 了？）：{len(marks)} 条\n{out}"
+    assert "修完重跑" in out, out
+
+
+def test_preflight_offender_list_matches_the_guard(tmp_path: Path) -> None:
+    """主树有白名单外的跟踪改动 ⇒ 退 1，且**列出来的就是守卫那一份**（不另算一套）。"""
+    repo = _mk_preflight_repo(tmp_path)
+    pen = _mk_pen(repo)
+    _write(pen, "code/a.py", "X = 2\n")
+    _write(repo, "README.md", "hand edited in the main tree\n")
+
+    expected = _guard_offenders(repo, ["code"])
+    assert expected, "夹具没造出 offender ⇒ 下面的断言没有意义"
+
+    done = _preflight(repo, "--task", "T-G999", "--tree", ".pen", "--allow", "code")
+
+    out = _out(done)
+    assert done.returncode == 1, out
+    for line in expected:
+        assert line.strip() in out, f"清单不一致：体检漏了 {line!r}\n{out}"
+
+
+def test_preflight_with_card_continues_into_landing(tmp_path: Path) -> None:
+    """`--preflight` 与 `--card` 同给：体检绿后**接着落地**（缺必填参数 ⇒ 落地链退 2）。"""
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _preflight(repo, "--card", "C1", "--tree", ".", "--allow", "code")
+
+    out = _out(done)
+    assert "可以直接落地" in out, out      # 体检这一趟真跑了且全绿
+    assert done.returncode == 2, out      # 然后进落地链：缺 --task/--title ⇒ argparse 退 2
+    assert "required" in out.lower(), out

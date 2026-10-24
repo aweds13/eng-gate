@@ -1,0 +1,11 @@
+[entries."T-AG443"]
+id = "T-AG443"
+title = "落地前体检：13 处最后一刻才说的规矩压进一次只读体检"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E1-判据前置.md",
+  "file:gates/diag/wb-E1.report.md",
+]
+gaps = "- **判据 3「≤15 s」未达标：实测 21.9–23.2 s**。根因不在体检本身 —— `scripts/audit_progress.py --all` 单独就要 12.6–15.3 s（`check_seal_untracked` 对 215 个文件每个起一次 git 进程）。该脚本不在本卡文件域，按规矩停下、留给后续卡（规格 复盘/卡/卡E1-判据前置.md）。- **主控没有逐行读工人的实现。** 复核的是工人自跑单测（`tests/test_wb_land.py` 62 passed）+ 落地链全量门禁（规格 复盘/卡/卡E1-判据前置.md）。- **体检只覆盖清单里列的那 11 项**，门禁档位与封存指纹仍归落地链正文与门禁本体；第 ⑧ 条只判「这一趟要落的那张卡」（全判会让本仓永久红灯，队列里另有 11 个卡块缺 `status` 行，属另一笔账）（规格 复盘/卡/卡E1-判据前置.md）。- **`tools/pool/landing.py` 与卡 E6 同文件**，落地时按 E6 → E1 顺序重放改动（规格 复盘/卡/卡E6-文档纪律.md）。"
+
