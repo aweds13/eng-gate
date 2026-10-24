@@ -217,11 +217,24 @@ def test_cli_commit_with_only_allow_and_derived_passes(
     assert "派生物（预期）" in out
 
 
-# ------------------------------------------------------------------ 数据层：真仓库
+# ------------------------------------------------------------------ 数据层：真 git（自建仓）
 
 
-def test_current_head_passes_the_gate_evidence_check() -> None:
-    """本项目的提交流程应当让 HEAD 通过第 ③ 条 —— 拿真仓库验一次（假的会被这里抓到）。"""
+def test_a_seal_commit_passes_the_gate_evidence_check(tmp_path: Path, monkeypatch) -> None:
+    """拿**真 git** 验第 ③ 条：封存笔里 `gates/last.json` 的 `rev` 指**这一笔的父提交**。
+
+    ★ 老版本断言的是**本仓 HEAD 这一笔**（「本项目的提交流程应当让 HEAD 通过」）—— 那是时序错位：
+    门禁在**提交前**跑，HEAD 那时还是父提交，它带的 `last.json` 是**上一笔**封的。只要中间夹一笔
+    文档提交（台账 / 卡规格 / 决策记录），`rev` 就再也追不上 `parent`，这条**从此永远红**；而
+    `seal()` 又不许在 `ok=false` 时写封存（`scripts/run_gates.py` 里先判 `ok`）⇒ 死锁，谁也没法再
+    封一次。同一棵树「提交前绿、提交后红」是判据自己的毛病，不是被查对象变了（同 `T-G87` 那颗
+    定时炸弹的族，本文件下半段已有先例）。
+
+    现在自己搭仓：`_derived_repo` 造出来的正是「**父提交封的，这一笔把它带上**」的形态；
+    `monkeypatch` 只换 `wb_review.ROOT`，`tools/` 一行不动，判据不再依赖真实历史的运气。
+    """
+    repo = _derived_repo(tmp_path)
+    monkeypatch.setattr(wr, "ROOT", repo)
     sha = wr.git("rev-parse", "--short", "HEAD")
     parent = wr.git("rev-parse", "--short", f"{sha}^")
     payload = json.loads(wr.git("show", f"{sha}:gates/last.json"))
