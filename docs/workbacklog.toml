@@ -3358,6 +3358,7 @@ files = ["tools/wb_session.py", "tools/wb_land.py", "tools/wb_dispatch.py",
          "tests/test_wb_session.py"]
 depends = ["A321"]
 risk = "low"
+status = "done"
 
 [[cards]]
 id = "A326"
@@ -3372,6 +3373,7 @@ files = ["tools/pipe_root.py", "tests/test_pipe_root.py", "scripts/run_gates.py"
          "tools/pool/model_registry.py"]
 depends = ["A306"]
 risk = "low"
+status = "pending"
 
 [[cards]]
 id = "B1"
