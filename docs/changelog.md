@@ -1,3 +1,7 @@
+## 卡 F1：文档归位：卡规格与项目书迁出 复盘/（T-AG449）
+- `tools/migrate_docs.py`：`--dry-run` / `--apply`，按映射搬文件并改写引用。
+- 机械码落盘，可反向查（落地后见 docs/migration-map.json）。
+- 假仓测试验证搬运与引用改写。
 ## 卡 F3：文档门禁：判不出就报 skip（T-AG451）
 - 新增文档检查脚本（落地后见 scripts/check_docs.py）：死指针 / drift 债 / superseded 未标注。
 - `--doctor` 打印「扫了多少 / 判出几条 / 判不出几条」，skip 必须显式计数。

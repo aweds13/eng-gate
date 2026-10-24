@@ -1,0 +1,236 @@
+{
+  "version": 1,
+  "_note": [
+    "文档归位迁移表（卡 F1 · T-AG449）。口径见 tools/migrate_docs.py 文件头与 docs/文档架构.md §4。",
+    "moves 按『期』分组：二期 = 卡规格；三期 = 复盘根层项目书/计划/设计（需先批准）。",
+    "candidates 里 verdict=pending 的一律不动 —— 三期要人先分类（回头看 vs 往前做），脚本不替人下判断。",
+    "skip 是『路径是拓扑数据/历史描述，机械改会把语义改没』的文件：脚本只报『需人工』，不改。",
+    "code_probes 是代码里把目录写成路径分量的地方：路径串改不动它，必须人手改（脚本迁移后照样会点名）。"
+  ],
+  "moves": [
+    {
+      "id": "cards",
+      "phase": "二期",
+      "glob": "复盘/卡/*.md",
+      "to_dir": "docs/cards",
+      "why": "卡规格是在飞的工作定义，不是历史（docs/文档架构.md §4 二期）"
+    }
+  ],
+  "rewrite": {
+    "roots": [
+      "docs",
+      "skills",
+      "tools",
+      "scripts",
+      "tests",
+      "src",
+      "复盘"
+    ],
+    "suffixes": [
+      ".md",
+      ".toml",
+      ".py",
+      ".json",
+      ".txt",
+      ".yml",
+      ".yaml",
+      ".mjs",
+      ".js",
+      ".ps1",
+      ".sh"
+    ],
+    "skip": [
+      "docs/migration-map.json",
+      "docs/文档架构.md",
+      "tests/test_wb_tree.py"
+    ]
+  },
+  "code_probes": [
+    {
+      "path": "tools/pool/plan.py",
+      "pattern": "ROOT / \"复盘\" / \"卡\"",
+      "why": "find_spec 的搜索根：卡规格搬走后这里必须跟着指向 docs/cards（否则找卡全落空）"
+    },
+    {
+      "path": "tests/test_wb_tree.py",
+      "pattern": "\"复盘/卡/卡A302.md\"",
+      "why": "提交区判定的拓扑钉子：路径改到 docs/cards 后这条断言要按『docs 区的卡』重写，不是替换字符串"
+    }
+  ],
+  "candidates": [
+    {
+      "path": "复盘/DSH三入口-项目书与接手单.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/dsh/"
+    },
+    {
+      "path": "复盘/DSH插件-dsh-web逐包对照.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/dsh/"
+    },
+    {
+      "path": "复盘/DSH插件-协议与事实.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/dsh/"
+    },
+    {
+      "path": "复盘/DSH插件-参考与结论.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/dsh/"
+    },
+    {
+      "path": "复盘/DSH插件-可抄清单.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/dsh/"
+    },
+    {
+      "path": "复盘/DSH插件-定点深读-第二批.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/dsh/"
+    },
+    {
+      "path": "复盘/DSH插件-定点深读.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/dsh/"
+    },
+    {
+      "path": "复盘/DSH插件-成果盘点与待用清单.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/dsh/"
+    },
+    {
+      "path": "复盘/DSH插件-长任务计划.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/dsh/"
+    },
+    {
+      "path": "复盘/DSH插件协议-权威清单.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/dsh/"
+    },
+    {
+      "path": "复盘/Trae-接入结论.md",
+      "verdict": "pending"
+    },
+    {
+      "path": "复盘/全量补充执行计划.md",
+      "verdict": "pending"
+    },
+    {
+      "path": "复盘/决策-框架居所与推进.md",
+      "verdict": "pending",
+      "group": "docs/decisions/"
+    },
+    {
+      "path": "复盘/前端现状评估与接缝重构方案.md",
+      "verdict": "pending"
+    },
+    {
+      "path": "复盘/号池MCP-使用与设计.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/pool/"
+    },
+    {
+      "path": "复盘/合并白名单-决策单.md",
+      "verdict": "pending",
+      "group": "docs/decisions/"
+    },
+    {
+      "path": "复盘/外包工具-整体审查-GLM5.3.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/outsourcing/"
+    },
+    {
+      "path": "复盘/外包工具-需求与架构.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/outsourcing/"
+    },
+    {
+      "path": "复盘/接手能力-方案.md",
+      "verdict": "pending"
+    },
+    {
+      "path": "复盘/文档重整方案.md",
+      "verdict": "pending"
+    },
+    {
+      "path": "复盘/架构审议-外包与门禁.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/outsourcing/"
+    },
+    {
+      "path": "复盘/框架-git-多人协作口径.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/framework/"
+    },
+    {
+      "path": "复盘/框架-可控性与安全修改.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/framework/"
+    },
+    {
+      "path": "复盘/框架-并行度与内存.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/framework/"
+    },
+    {
+      "path": "复盘/框架-并行改同一件.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/framework/"
+    },
+    {
+      "path": "复盘/框架-抽取清单.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/framework/"
+    },
+    {
+      "path": "复盘/框架-术语表与契约.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/framework/"
+    },
+    {
+      "path": "复盘/框架-独立仓提升.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/framework/"
+    },
+    {
+      "path": "复盘/框架-验证分层的行业做法.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/framework/"
+    },
+    {
+      "path": "复盘/框架-骨架设计.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/framework/"
+    },
+    {
+      "path": "复盘/段2设计决策-提醒与附件打开方式.md",
+      "verdict": "pending",
+      "group": "docs/decisions/"
+    },
+    {
+      "path": "复盘/留痕与配额策略.md",
+      "verdict": "pending"
+    },
+    {
+      "path": "复盘/视觉线地图.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/visual/"
+    },
+    {
+      "path": "复盘/门禁去留提案.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/gates/"
+    },
+    {
+      "path": "复盘/门禁四要素.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/gates/"
+    },
+    {
+      "path": "复盘/门禁改进清单.md",
+      "verdict": "pending",
+      "group": "docs/subsystems/gates/"
+    }
+  ]
+}

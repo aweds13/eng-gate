@@ -1,0 +1,11 @@
+[entries."T-AG449"]
+id = "T-AG449"
+title = "文档归位：migrate_docs.py 与迁移表（先 dry-run）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡F1-文档归位.md",
+  "file:gates/diag/wb-F1.report.md",
+]
+gaps = "- **只落了工具与机械码，没有真迁。** `docs/cards/` 还没生成（规格 复盘/卡/卡F1-文档归位.md）。- **改路径的四处投影没实测。** 台账 `file:`、队列 `spec=`、`wb_brief.py` 的 glob、索引链接，脚本里有改写逻辑，但没在真仓跑过全量（规格 复盘/卡/卡F1-文档归位.md）。- **回滚只是记录，不是事务。** 机械码能反查，`--revert` 未做成原子操作（规格 复盘/卡/卡F1-文档归位.md）。"
+
