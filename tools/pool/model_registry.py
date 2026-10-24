@@ -41,7 +41,16 @@ id 是**裸名**（``deepseek-v4.1-flash`` / ``glm-5.3-flash``）⇒ 合并后�
 
 from __future__ import annotations
 
+try:
+    import pipe_root
+except ImportError:
+    try:
+        from tools import pipe_root
+    except ImportError:  # pragma: no cover —— 落地桩/独立拷贝的树里没有 pipe_root
+        pipe_root = None  # type: ignore[assignment]
+
 import os
+import pathlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -52,7 +61,8 @@ import tomllib
 from pool.models import find_pool_dir, load_switches
 
 #: 本模块所在的仓库根（``tools/pool/`` 上两级）。
-ROOT = Path(__file__).resolve().parents[2]
+_FILE_ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pipe_root.data_root() if pipe_root is not None else _FILE_ROOT
 #: 注册表文件名（与本模块同目录）。
 REGISTRY_FILE = "model-registry.toml"
 #: 覆盖注册表路径的环境变量（★ 只给测试与离线用）。

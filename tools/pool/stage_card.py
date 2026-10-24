@@ -29,11 +29,20 @@ r"""通用文档件生成器（主控用，实现层）：给一张卡的提交�
 """
 from __future__ import annotations
 
+try:
+    import pipe_root
+except ImportError:
+    try:
+        from tools import pipe_root
+    except ImportError:  # pragma: no cover —— 落地桩/独立拷贝的树里没有 pipe_root
+        pipe_root = None  # type: ignore[assignment]
+
 import argparse
 import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+_FILE_ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pipe_root.data_root() if pipe_root is not None else _FILE_ROOT
 ANCHOR = "> **给新对话窗口用的交接文档。** 读完本文 + §五 的必读清单，即可无缝接手。"
 
 # ★ 卡 193（T-G293）：把 tools/ 挂上 path 以便 import 压缩文书判据

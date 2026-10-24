@@ -53,9 +53,18 @@ r"""并发调度器 CLI `tools/wb_plan.py`（外包卡 010 · 台账号 T-G99）
 
 from __future__ import annotations
 
+try:
+    import pipe_root
+except ImportError:
+    try:
+        from tools import pipe_root
+    except ImportError:  # pragma: no cover —— 落地桩/独立拷贝的树里没有 pipe_root
+        pipe_root = None  # type: ignore[assignment]
+
 import argparse
 import contextlib
 import json
+import pathlib
 import re
 import subprocess
 import sys
@@ -116,7 +125,8 @@ __all__ = [
     "worktree_commands",
 ]
 
-ROOT = Path(__file__).resolve().parent.parent
+_FILE_ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pipe_root.data_root() if pipe_root is not None else _FILE_ROOT  # 台账住哪（卡 A326）
 
 
 def settings_concurrency(root: Path | None = None) -> int | None:

@@ -167,6 +167,12 @@
 - `tools/wb_dispatch.py` 同一道闸（同样有 `--take-over`），拒单零副作用。
 - 没有 `DSH_SESSION_ID` 的调用（CI、手工命令、工人子进程）一律放行 —— 闸只咬「有指纹的窗口」。
 - 顺带堵漏：`scripts/run_gates.py` 把 `--profile` 写进 `gates/last.json`，`tools/wb_review.py` 见「不是 all」就拒绝，单档跑不能再冒充全量。
+## 2026-10-24 T-AG441 工具根 / 数据根切分：同一份 tools/ 服务别的仓（A326）
+- 新增 `tools/pipe_root.py`：`home_root()`（`PIPE_HOME` 或 `tools/` 的上一级）/ `data_root(explicit=None)`（显式 > `PIPE_DATA` > 当前目录像数据根 > `home_root()`）/ `describe()`，`--check` 打印两个根。
+- `scripts/run_gates.py`：`TOOL_ROOT` 找门表与 `gates.defs`，`ROOT = data_root()` 放 `gates/last.json`、`gates/reuse.json`、`gates/logs`。
+- `tools/wb_notify.py`、`tools/wb_daily.py`、`tools/wb_plan.py` 同口径切根；`tools/pool/` 里 6 处也改读 `pipe_root.data_root()`。
+- 默认行为不变：没设 `PIPE_HOME` / `PIPE_DATA` 时两个根重合，本仓读数与产物位置一字不动。
+- 钉子：`tests/test_pipe_root.py` 四条（`PIPE_DATA` 生效 / 按当前目录认数据根 / `wb_notify` 写数据根 / `wb_plan` 读数据根）。
 ## 2026-10-18 —— 面板就地渲染 + 工程工具箱（T-AG391）
 - `tools/dsh_panel.py`：`QuickEntry` 改 iframe 就地渲染；新增「工程工具箱」行与五页；宿主半新增 `/dsh-panel/skills` 只读路由，`serveSettings` 收紧为只读。
 - `tests/test_dsh_panel.py`：座位一致性判据改为「前三项逐项一致 + 额外行只许 toolbox」。

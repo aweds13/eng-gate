@@ -28,10 +28,19 @@ r"""今日一页（卡 220 · T-G334）—— **只读**，一条命令回答「
 
 from __future__ import annotations
 
+try:
+    import pipe_root
+except ImportError:
+    try:
+        from tools import pipe_root
+    except ImportError:  # pragma: no cover —— 落地桩/独立拷贝的树里没有 pipe_root
+        pipe_root = None  # type: ignore[assignment]
+
 import argparse
 import datetime
 import json
 import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -42,7 +51,8 @@ try:  # 直接跑 `tools\wb_daily.py`：`tools/` 在 sys.path[0]（正常入口�
 except ImportError:  # `python -m tools.wb_daily`：包形态，同目录模块得带上前缀 —— 别崩
     from tools import _repo
 
-ROOT = Path(__file__).resolve().parent.parent
+_FILE_ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pipe_root.data_root() if pipe_root is not None else _FILE_ROOT  # 台账/产物住哪（卡 A326）
 PIPELINE_VIEW = ROOT / "tools" / "pipeline_view.py"
 DIAG_REL = Path("gates") / "diag"
 BATCH_REL = DIAG_REL / "batch"

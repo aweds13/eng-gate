@@ -8007,14 +8007,23 @@ gaps = "- 本条是**账务条目**，不是卡：收的是 2026-10-23~24 那一
 id = "T-AG441"
 title = "工具根 / 数据根切分：同一份 tools/ 服务别的仓"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
-  "file:复盘/卡/卡A326-工具根与数据根切分.md",
   "file:tools/pipe_root.py",
   "file:tests/test_pipe_root.py",
-  "file:docs/workbacklog.toml",
+  "file:scripts/run_gates.py",
+  "file:tools/wb_daily.py",
+  "file:tools/wb_plan.py",
+  "file:tools/wb_notify.py",
+  "file:tools/pool/plan.py",
+  "file:tools/pool/models.py",
+  "file:tools/pool/projects.py",
+  "file:tools/pool/snapshot.py",
+  "file:tools/pool/stage_card.py",
+  "file:tools/pool/model_registry.py",
+  "file:复盘/卡/卡A326-工具根与数据根切分.md",
 ]
-gaps = "- 本条是**补记**：卡 A326 的规格与工作树（`.wt/A326`，分支 `card/A326`）早就在那儿，台账却一直没有条目 —— 审计 ② 拿不到号，本笔补上，状态如实记 todo。- 实现已在卡树里（`cec85289`）：`tools/pipe_root.py` 定两个根，`scripts/run_gates.py` 的门表跟工具根、产物跟数据根，`wb_daily`/`wb_plan`/`wb_notify`/`pool/{plan,models,projects,snapshot,stage_card,model_registry}` 统一走 `data_root()`；主树里两个根同值 ⇒ 老行为不变。- 刻意不动：`pool.registry.main_tree_root()` / `pool.task.main_tree_root()`（问的是主工作树，卡 117 的钉子直接 monkeypatch `__file__`）、`pool.landing.ROOT`（落地链编排的是主树根）、`pool/registry.py:97` 与 `pool/task.py:124`（工具树锚）。- 未落地：卡树 1 笔提交还没迁进主树，本条翻 done 要等那一笔。"
+gaps = "- 只切了「台账/产物」这一类：`gates/defs/`、`skills/`、`tools/` 仍按工具根读，`PIPE_HOME` 只能指到工具根的家。指针 `tools/pipe_root.py`- 三处**按设计不动**：`tools/pool/landing.py` 编排的是主树根（不是数据根）、`tools/pool/task.py` 与 `tools/pool/registry.py` 的工作树锚认 `__file__`（卡 117 钉子）。指针 `tools/pool/registry.py`- 没有 `--check` 之外的可观测面：数据根选错时只有 `python -X utf8 tools/pipe_root.py --check` 能看出来，门禁本身不打印用的是哪个根。指针 `tools/pipe_root.py`- 跨仓落地仍要手工把 `tools/` 带过去（没有安装器 / 打包），本卡只保证同一份 `tools/` 能服务第二个仓。指针 `复盘/卡/卡A326-工具根与数据根切分.md`"
 
 [entries."T-AG442"]
 id = "T-AG442"

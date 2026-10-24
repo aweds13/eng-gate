@@ -12,6 +12,15 @@ r"""队列 / 冲突域 / 排批（从 `tools/wb_plan.py` 抽，卡 106 · T-G202
 
 from __future__ import annotations
 
+try:
+    import pipe_root
+except ImportError:
+    try:
+        from tools import pipe_root
+    except ImportError:  # pragma: no cover —— 落地桩/独立拷贝的树里没有 pipe_root
+        pipe_root = None  # type: ignore[assignment]
+
+import pathlib
 import re
 from collections import deque
 from dataclasses import dataclass
@@ -23,7 +32,8 @@ import tomllib
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-ROOT = Path(__file__).resolve().parents[2]
+_FILE_ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pipe_root.data_root() if pipe_root is not None else _FILE_ROOT
 DIAG = ROOT / "gates" / "diag"
 DEFAULT_BACKLOG = ROOT / "docs" / "workbacklog.toml"
 DEFAULT_CONCURRENCY = 2

@@ -23,11 +23,21 @@ r"""**零风险快照**（卡 192 · T-G292）：把任意工作区压成一个 
 """
 from __future__ import annotations
 
+try:
+    import pipe_root
+except ImportError:
+    try:
+        from tools import pipe_root
+    except ImportError:  # pragma: no cover —— 落地桩/独立拷贝的树里没有 pipe_root
+        pipe_root = None  # type: ignore[assignment]
+
 import datetime
+import pathlib
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+_FILE_ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pipe_root.data_root() if pipe_root is not None else _FILE_ROOT
 LEDGER = ROOT / "gates" / "diag" / "_snapshots.txt"
 
 

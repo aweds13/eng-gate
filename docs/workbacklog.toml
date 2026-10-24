@@ -3373,7 +3373,7 @@ files = ["tools/pipe_root.py", "tests/test_pipe_root.py", "scripts/run_gates.py"
          "tools/pool/model_registry.py"]
 depends = ["A306"]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A327"

@@ -32,8 +32,17 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+TOOL_ROOT = Path(__file__).resolve().parent.parent   # 代码住哪（卡 A326）
+sys.path.insert(0, str(TOOL_ROOT / "tools"))
+
+try:
+    from pipe_root import data_root  # noqa: E402 —— 数据根解析唯一实现（卡 A326）
+except ImportError:  # pragma: no cover —— 落地桩/独立拷贝的树里没有 pipe_root
+    data_root = None  # type: ignore[assignment]
+
+# 判决 / 通知 / 队列住哪：跟着**数据根**走，不再等于工具所在那棵树；
+# 独立拷贝的树（没有 pipe_root）退回工具根 —— 落地桩要能跑。
+ROOT = data_root() if data_root is not None else TOOL_ROOT
 
 # ★ 判据只有一份真源 —— 都在 tools/ 里：backlog 读取走 wb_plan（先分片后总表），
 #   卡号匹配口径照抄 pool.jobs（精确正则，别宽 glob —— 卡 029 §2.9 串卡坑）。

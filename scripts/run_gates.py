@@ -98,15 +98,30 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
-ROOT = Path(__file__).resolve().parent.parent
+# ------------------------------------------------------- 工具根 vs 数据根（卡 A326 · T-AG441）
+# 以前只有一个根（`Path(__file__)…parent.parent`），于是「工具住在哪个仓」与「台账/门禁产物住在
+# 哪个仓」被绑死：同一份 `tools/` 想服务别的仓，读的仍是工具自己那棵树的账。
+# 现在切两刀 —— **门表跟工具走**（`gates/defs/` 是判据，属于框架），
+# **产物跟数据走**（`gates/last.json`、`gates/logs/`、门命令的 cwd 与 `src/` 都是被判那个仓的）。
+TOOL_ROOT = Path(__file__).resolve().parent.parent
+"""工具根：门表（`gates/defs/`）、技能、脚本住的地方 —— **只用来 import 判据，不读账本**。"""
+
+if str(TOOL_ROOT / "tools") not in sys.path:
+    sys.path.insert(0, str(TOOL_ROOT / "tools"))
+from pipe_root import data_root  # noqa: E402 —— 数据根解析的唯一实现（卡 A326）
+
+ROOT = data_root()
+# 数据根：台账、门禁产物、`src/` 住的地方。★ 没设 `PIPE_DATA` 且当前目录不像数据根
+# ⇒ 等于工具根（老行为逐字不变）。
+
 GATES = ROOT / "gates" / "last.json"
 REUSE = ROOT / "gates" / "reuse.json"
 LOG_DIR = ROOT / "gates" / "logs"   # 每道门的全量输出（T-G58；不进仓库）
 PY = sys.executable
 
-# 门禁的**定义层**在 `gates/defs/`（卡 A321）：换语言换产品只动那份模块。
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+# 门禁的**定义层**在 `gates/defs/`（卡 A321）：换语言换产品只动那份模块 —— 这份**跟工具根走**。
+if str(TOOL_ROOT) not in sys.path:
+    sys.path.insert(0, str(TOOL_ROOT))
 from gates.defs import contract, lang_python, product_timeflow  # noqa: E402
 
 COMMON: list[tuple[str, list[str]]] = [

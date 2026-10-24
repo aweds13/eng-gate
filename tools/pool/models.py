@@ -11,8 +11,17 @@ r"""号池模型的**只读**读取（从 `tools/pool_mcp.py` 抽，卡 106 · T
 
 from __future__ import annotations
 
+try:
+    import pipe_root
+except ImportError:
+    try:
+        from tools import pipe_root
+    except ImportError:  # pragma: no cover —— 落地桩/独立拷贝的树里没有 pipe_root
+        pipe_root = None  # type: ignore[assignment]
+
 import json
 import os
+import pathlib
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -101,7 +110,9 @@ def switch_file_path(pool_dir: Path | None = None) -> Path | None:
         return Path(override)
     if pool_dir is not None:
         return Path(pool_dir) / SWITCH_FILE_NAME
-    pool = find_pool_dir(Path(__file__).resolve().parents[2])
+    root = (pipe_root.data_root() if pipe_root is not None
+            else pathlib.Path(__file__).resolve().parents[2])
+    pool = find_pool_dir(root)
     return None if pool is None else pool / SWITCH_FILE_NAME
 
 

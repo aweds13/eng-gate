@@ -18,7 +18,16 @@ r"""项目索引（`infra/pool/projects.toml`）的只读读取 + 三条硬判�
 
 from __future__ import annotations
 
+try:
+    import pipe_root
+except ImportError:
+    try:
+        from tools import pipe_root
+    except ImportError:  # pragma: no cover —— 落地桩/独立拷贝的树里没有 pipe_root
+        pipe_root = None  # type: ignore[assignment]
+
 import os
+import pathlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -49,7 +58,9 @@ def tree_root() -> Path:
     ★ 卡树里回的是**卡树**、主树里回的是主树 —— 反查"主树属于哪个项目"时只问它是不是某
       项目根的**后代**，两种情形都对（见 `find_by_tree`）。
     """
-    return Path(__file__).resolve().parents[2]
+    if pipe_root is None:  # pragma: no cover —— 独立拷贝的树
+        return pathlib.Path(__file__).resolve().parents[2]
+    return pipe_root.data_root()
 
 
 def index_path() -> Path:

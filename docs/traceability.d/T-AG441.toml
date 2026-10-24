@@ -1,0 +1,22 @@
+[entries."T-AG441"]
+id = "T-AG441"
+title = "工具根 / 数据根切分：同一份 tools/ 服务别的仓"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pipe_root.py",
+  "file:tests/test_pipe_root.py",
+  "file:scripts/run_gates.py",
+  "file:tools/wb_daily.py",
+  "file:tools/wb_plan.py",
+  "file:tools/wb_notify.py",
+  "file:tools/pool/plan.py",
+  "file:tools/pool/models.py",
+  "file:tools/pool/projects.py",
+  "file:tools/pool/snapshot.py",
+  "file:tools/pool/stage_card.py",
+  "file:tools/pool/model_registry.py",
+  "file:复盘/卡/卡A326-工具根与数据根切分.md",
+]
+gaps = "- 只切了「台账/产物」这一类：`gates/defs/`、`skills/`、`tools/` 仍按工具根读，`PIPE_HOME` 只能指到工具根的家。指针 `tools/pipe_root.py`- 三处**按设计不动**：`tools/pool/landing.py` 编排的是主树根（不是数据根）、`tools/pool/task.py` 与 `tools/pool/registry.py` 的工作树锚认 `__file__`（卡 117 钉子）。指针 `tools/pool/registry.py`- 没有 `--check` 之外的可观测面：数据根选错时只有 `python -X utf8 tools/pipe_root.py --check` 能看出来，门禁本身不打印用的是哪个根。指针 `tools/pipe_root.py`- 跨仓落地仍要手工把 `tools/` 带过去（没有安装器 / 打包），本卡只保证同一份 `tools/` 能服务第二个仓。指针 `复盘/卡/卡A326-工具根与数据根切分.md`"
+
