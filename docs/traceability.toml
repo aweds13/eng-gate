@@ -8299,3 +8299,87 @@ evidence = [
 ]
 gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
 外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+
+[entries."T-AG453"]
+id = "T-AG453"
+title = "卡 E7 —— 工人完工事件接进派活链：派活即看守"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E7-完工通知.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
+看守形态依据见 复盘/卡/卡E7-完工通知.md 的「为什么默认专属」一节。"""
+
+[entries."T-AG454"]
+id = "T-AG454"
+title = "卡 E8 —— 封存未跟踪检查：215 次 git 进程 → 1 次"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E8-封存未跟踪一次扫描.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记，来源＝卡 E1 的边界如实报告）。落地那一笔再翻 done；
+基线实测：audit_progress --all 25.2 s（215 条未跟踪逐条起 git），git ls-files -z 一次 0.10 s。"""
+
+[entries."T-AG455"]
+id = "T-AG455"
+title = "卡 E9 —— 队列补 status 行（11 块）+ 体检第 ⑧ 条放开全判"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E9-队列补status.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记，来源＝卡 E1 顺手发现的欠账）。落地那一笔再翻 done；
+欠账清单：B1、D1–D8、C1、C2 共 11 块缺 status 行（`wb_plan.py check` 可点名）。"""
+
+[entries."T-AG456"]
+id = "T-AG456"
+title = "卡 G1 —— 技能-工具对账机器化：133 处命令引用没有一处被机器核过"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡G1-技能工具对账.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。实测 skills/**/*.md 共 133 处
+`python -X utf8 tools/<x>.py` 引用、28 个工具，现有结构门一条都不核参数是否存在。"""
+
+[entries."T-AG457"]
+id = "T-AG457"
+title = "卡 G2 —— 新机制写进技能：五处口径现在一个字都没有"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡G2-新机制进技能.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = """规格已立、正文未改（2026-10-24 由主控登记）。grep 实测：pipe_root 0 处、
+引用完整性 0 处、status 行 0 处、审计 ⑫ 0 处（仅 doc-layers 的「反向」同字不同义）。"""
+
+[entries."T-AG458"]
+id = "T-AG458"
+title = "卡 G3 —— preflight 同名不同义：旧的「跳过预检」与新的「只读体检」"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡G3-preflight消歧.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = """规格已立、代码未改（2026-10-24 由主控登记）。旧义在
+skills/pipe-land/references/land-steps.md:23（--no-preflight），新义在卡 E1（--preflight 只读体检）。"""
+
+[entries."T-AG459"]
+id = "T-AG459"
+title = "卡 G4 —— 旧设置退役表：哪条还活着、哪条已死、哪条改了名"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡G4-旧设置退役表.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = """规格已立、表未写（2026-10-24 由主控登记）。至少五行已实测：全量 19 道已改判、
+封存/提交顺序已改判、preflight 同名冲突、数据根解析已改判、卡树先提交半冲突。"""

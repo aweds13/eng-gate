@@ -54,3 +54,9 @@ prefix = "F"
 owner = "主控F"
 area = "文档治理：卡规格与项目书归位 / 索引机器化 / 文档门禁 / 决策记录"
 tree = ".wt/F"
+
+[[partitions]]
+prefix = "G"
+owner = "主控G"
+area = "软工技能（skills/）：口径对账 / 新机制补全 / 冲突消歧 / 旧设置退役表"
+tree = ".wt/G"

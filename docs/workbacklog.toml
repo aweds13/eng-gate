@@ -3395,6 +3395,7 @@ title = "参考文档参数口径：parameters 是映射，不是 JSON Schema"
 tree = ".wt/B1"
 spec = "复盘/卡/卡B1-文档参数口径.md"
 files = ["DSH-技能与插件开发参考.md", "docs/workbacklog.toml"]
+depends = ["E9"]
 risk = "low"
 
 # ================================================================ 分区 D：dsmate
@@ -3428,7 +3429,6 @@ files = ["src/dsmate/app/src/main/java/com/dsmate/store/Schema.kt",
          "src/dsmate/web/src/store/client.ts",
          "src/dsmate/web/src/branch/BranchBar.ts",
          "src/dsmate/web/src/branch/TreeView.ts"]
-depends = ["D1"]
 risk = "mid"
 
 [[cards]]
@@ -3566,7 +3566,7 @@ title = "提交面算档 + 残留归收"
 tree = ".wt/E3"
 spec = "复盘/卡/卡E3-提交面算档与残留.md"
 files = ["gates/defs/domains.py", "tools/pool/landing.py", ".gitignore"]
-depends = ["E1"]
+depends = ["E1", "E9"]
 risk = "mid"
 status = "pending"
 
@@ -3651,5 +3651,82 @@ tree = ".wt/F4"
 spec = "复盘/卡/卡F4-决策记录.md"
 files = ["docs/decisions/README.md", "scripts/check_docs.py", "tests/test_check_docs.py"]
 depends = ["F3"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "E7"
+task = "T-AG453"
+title = "工人完工事件接进派活链：派活即看守"
+tree = ".wt/E7"
+spec = "复盘/卡/卡E7-完工通知.md"
+files = ["tools/wb_dispatch.py", "tools/wb_watch.py", "tests/test_wb_dispatch_watch.py", "skills/README.md", "skills/pipe-card/references/dispatch.md", "skills/pipe-workbench/SKILL.md", "skills/pipe-land/SKILL.md"]
+depends = ["E6"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "E8"
+task = "T-AG454"
+title = "封存未跟踪检查：215 次 git 进程 → 1 次"
+tree = ".wt/E8"
+spec = "复盘/卡/卡E8-封存未跟踪一次扫描.md"
+files = ["scripts/audit_progress.py", "tests/test_seal_untracked.py"]
+depends = ["E1"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "E9"
+task = "T-AG455"
+title = "队列补 status 行（11 块）+ 体检第 ⑧ 条放开全判"
+tree = ".wt/E9"
+spec = "复盘/卡/卡E9-队列补status.md"
+files = ["docs/workbacklog.toml", "tools/pool/landing.py", "tests/test_wb_land.py"]
+depends = ["E1"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "G1"
+task = "T-AG456"
+title = "技能-工具对账机器化：133 处命令引用没有一处被机器核过"
+tree = ".wt/G1"
+spec = "复盘/卡/卡G1-技能工具对账.md"
+files = ["tools/check_skills_claims.py", "tests/test_check_skills_claims.py"]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "G2"
+task = "T-AG457"
+title = "新机制写进技能：五处口径现在一个字都没有"
+tree = ".wt/G2"
+spec = "复盘/卡/卡G2-新机制进技能.md"
+files = ["skills/README.md", "skills/pipe-land/SKILL.md", "skills/pipe-gate/SKILL.md", "skills/pipe-card/references/dispatch.md", "skills/softeng-manage/references/commands.md"]
+depends = ["E1", "E7", "G1"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "G3"
+task = "T-AG458"
+title = "preflight 同名不同义：旧的「跳过预检」与新的「只读体检」"
+tree = ".wt/G3"
+spec = "复盘/卡/卡G3-preflight消歧.md"
+files = ["tools/wb_land.py", "skills/pipe-land/SKILL.md", "skills/pipe-land/references/land-steps.md", "tests/test_wb_land.py"]
+depends = ["E1", "E7", "G2", "E9"]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "G4"
+task = "T-AG459"
+title = "旧设置退役表：哪条还活着、哪条已死、哪条改了名"
+tree = ".wt/G4"
+spec = "复盘/卡/卡G4-旧设置退役表.md"
+files = ["skills/README.md", "skills/softeng-manage/SKILL.md", "skills/softeng-manage/references/commands.md"]
+depends = ["G2", "E7"]
 risk = "mid"
 status = "pending"
