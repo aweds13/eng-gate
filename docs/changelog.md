@@ -213,6 +213,10 @@
 ## 2026-10-25 看守判「这一轮产物」给文件时间戳留 1 秒粒度容差（T-AG475）
 - `tools/wb_watch.py`：新增 `_MTIME_GRANULARITY_SLACK = 1.0`（注释写明实测 1.4 ms / NTFS ~15.6 ms 与「1 秒不会把真·上一轮判决混进来」）；`_fresh()` 改判 `mtime >= since - _MTIME_GRANULARITY_SLACK`，docstring 补「★ 卡 E22」一段。
 - `tests/test_wb_dispatch_watch.py`：新增 `test_fresh_tolerates_a_file_timestamp_behind_the_wall_clock`（`since = mtime + 0.0014` 必须判 `STATE_DONE`，复现真现场）；`test_old_verdict_is_not_this_rounds_completion` 的旧件改成 5 秒前造（原写法考的是时钟精度，本身会闪）。
+## 2026-10-25 · 技能根守卫：默认预设必须看得见仓库技能根（T-AG472）
+- 新增只读守卫 `tools/dsh_skills_guard.py`：`--check` 退 0/1/2，`--profile` 换 profile，`--expect` 换期望根；逐段打印「默认预设 / 其它预设」与各自的根。
+- 新增 5 条钉子 `tests/test_dsh_skills_guard.py`：正常绿 / 缺根点名默认预设 / 文件缺失判不了 / `!!js` 折行原样保留 / 真 profile 上跑一次（存在才跑）。
+- 来由：2026-10-24 21:54 那次 profile 重写后 9 个软工技能从会话里消失，主控手工补根但没有机器判据守着（复盘/卡/卡E19-技能根守卫.md）。
 ## 2026-10-24 T-AG437 卡归窗口：落地 / 派活前过 DSH 会话闸（A324）
 - 新增 `tools/wb_session.py`：`session_id` / `owner` / `claim` / `release` / `listing`，租约写 `gates/diag/session-leases.json`（gitignored），TTL 24 小时。
 - `tools/wb_land.py` 加 `_session_gate(argv)`：按 `--card` 认领，卡归别的窗口就退 2；`--take-over` 显式换手并留痕。

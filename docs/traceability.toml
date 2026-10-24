@@ -8545,11 +8545,14 @@ gaps = "- 两张卡各自只跑单档门禁（G2 18 条技能门、E17 218 条�
 
 [entries."T-AG472"]
 id = "T-AG472"
-title = "技能根守卫：两个预设都要看见仓库 skills/"
+title = "技能根守卫：默认预设必须看得见仓库技能根（T-AG472）"
 group = "ENGINEERING"
-status = "todo"
-evidence = ["file:复盘/卡/卡E19-技能根守卫.md"]
-gaps = "- 只读检查 profile 补丁，不改别人的配置（写操作留给用户）。- 默认预设那段是 `!!js` 表达式，只做子串包含判断、不展开求值。"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E19-技能根守卫.md",
+  "file:gates/diag/batch/T-AG472.toml",
+]
+gaps = "- **只守一条判据**：默认预设的 `customSkillDirs` 必须含仓库技能根。别的东西（其它预设的根、预设开关、插件禁用位）**只报不判**，别把它当 profile 的全面体检（规格 复盘/卡/卡E19-技能根守卫.md）。- **解析是按行的，不是 YAML 解析**：`cordis.patch.yml` 里有 `!!js` 标签，安全载入会报错，所以按行扫。若以后补丁被压成流式 YAML（`customSkillDirs: [a, b]` 一行写完），守卫会退 2「判不了」，**不会错判成绿**（判定口径见 复盘/卡/卡E19-技能根守卫.md）。- **刻意不接进门禁**：profile 是每台机器自己的状态，接进 19 道门会让别人机器无脑红（规格 复盘/卡/卡E19-技能根守卫.md）。要连跑就人手动跑一次。- **真实 profile 那条钉子是条件执行**：`tests/test_dsh_skills_guard.py` 在没有那份 profile 的机器上直接返回（不硬造夹具冒充真机），（同上规格）。- **没有做「自动修」**：守卫只读、只报告，改 profile 仍是人的动作（规格 复盘/卡/卡E19-技能根守卫.md 的「不许做」）。"
 
 [entries."T-AG473"]
 id = "T-AG473"
