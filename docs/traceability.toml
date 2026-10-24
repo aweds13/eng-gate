@@ -8385,15 +8385,16 @@ gaps = "- **别名还在**：`--no-preflight` 仍收（只提示改名），所�
 
 [entries."T-AG459"]
 id = "T-AG459"
-title = "卡 G4 —— 旧设置退役表：哪条还活着、哪条已死、哪条改了名"
+title = "旧设置退役表（T-AG459）"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡G4-旧设置退役表.md",
-  "file:docs/workbacklog.toml",
+  "file:gates/diag/batch/T-AG459.toml",
+  "file:skills/softeng-manage/references/retired-settings.md",
+  "file:skills/README.md",
 ]
-gaps = """规格已立、表未写（2026-10-24 由主控登记）。至少五行已实测：全量 19 道已改判、
-封存/提交顺序已改判、preflight 同名冲突、数据根解析已改判、卡树先提交半冲突。"""
+gaps = "- **只列已知变过的九条**：没进表的老说法仍散在 `复盘/` 历史页里，刻意不动它们（历史就是历史），门槛写在页尾「怎么用这一页」第 4 条，见 `skills/softeng-manage/references/retired-settings.md`。- **不自动校验表是否过时**：本卡只给一页人读表，没有「表里某行与代码不符就红」的钉子；要那层得另开卡（`skills/README.md` 的路由行只指路）。- **`ACTIVE` 那一档没写行**：今天没找到「原样仍作数」的争议口径 —— 空着比编一条好；判据口径见 `skills/softeng-manage/references/retired-settings.md` 页尾第 4 条。"
 
 [entries."T-AG468"]
 id = "T-AG468"

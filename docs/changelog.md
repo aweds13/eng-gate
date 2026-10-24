@@ -1,3 +1,6 @@
+## 旧设置退役表（T-AG459）
+
+- 新增 `skills/softeng-manage/references/retired-settings.md`（九行：`已改判` / `已改名` / `半冲突`，每行指回卡 + 一条能重跑的命令）；`skills/README.md` 加一行路由。
 ## `preflight` 两个词根分层（T-AG458）
 
 - 落地链内层的「跳过快门禁预检」改名 `--skip-preflight`；旧写法 `--no-preflight` 仍在（提示已改名）；壳层 `--preflight`（卡 E1 只读体检）不动。

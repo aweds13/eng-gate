@@ -36,6 +36,8 @@
 | 门禁锁与并发闸 | 两趟全量并行 = 假红；锁消失 = 那趟收口 | `TF_GATE_PORT_BASE=<段> python -X utf8 gates/diag/gate_lock.py release --card <卡> --force` | `pipe-gate` 前置检查 ⑤ |
 | `tools/auto_land.py` | 收口时机曾靠 agent 读自然语言 | `python -X utf8 tools/auto_land.py --dry-run`（0 / 2 / 3 / 4 / 5） | 命令速查 ⓪-8 |
 
+★ **旧口径还作数吗**：`skills/softeng-manage/references/retired-settings.md` 一页退役表（`active` / `已改判` / `已改名` / `半冲突`，每行指回改成它的卡与一条能重跑的命令）。
+
 ★ **云门禁机**（多会话共享一台）**本卡不写规矩** —— 正式口径等卡 E18 落地，在那之前只写「见卡 E18」。
 
 ## 定位

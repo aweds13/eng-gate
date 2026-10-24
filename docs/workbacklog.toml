@@ -3737,10 +3737,10 @@ task = "T-AG459"
 title = "旧设置退役表：哪条还活着、哪条已死、哪条改了名"
 tree = ".wt/G4"
 spec = "复盘/卡/卡G4-旧设置退役表.md"
-files = ["skills/README.md", "skills/softeng-manage/SKILL.md", "skills/softeng-manage/references/commands.md"]
+files = ["skills/README.md", "skills/softeng-manage/references/retired-settings.md"]
 depends = ["G2", "E7"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E17"
