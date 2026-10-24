@@ -10,7 +10,7 @@
 
 ## 0. 十行摘要
 
-1. 决策记录（ADR）标准做法是**放仓内** `docs/decisions/NNNN-slug.md`：跟代码同版本、进 PR 评审、可 grep —— 放 wiki 会变成没人看的孤儿。
+1. 决策记录（ADR）标准做法是**放仓内** `docs/decisions/NNNN-<标题>`：跟代码同版本、进 PR 评审、可 grep —— 放 wiki 会变成没人看的孤儿。
 2. 目录组织**按"读者要干什么"分（Diátaxis 四象限），不按"读者是谁"分**；按受众分目录的团队后来改掉了（一个功能散成三处、互相漂移）。
 3. **Postmortem（复盘）和 Runbook（手册）是两个物种**：一个解释"当时为什么那样"，一个规定"下次照着做"。手册可以从复盘提炼，但不能互相替代。
 4. 大仓的常态是**单一事实源 + 生成**：能从代码/配置生成的，绝不手抄；手抄的必然漂移。
@@ -52,7 +52,7 @@
 | 四段式就够了 | Context / Decision / Status / Consequences | [ADR 轻量实践](https://www.raphaelbauer.com/posts/architecture-decision-records/) |
 | 可以按子系统分子目录，但不必 | "MADR logs may be categorized ADRs by defining subdirectories" | [MADR](https://adr.github.io/madr/) |
 
-**判决**：我们该建 `docs/decisions/NNNN-*.md`，四段式 + `Status: accepted/superseded`；跨域放根、`ci`/`dsmate` 这类局部放子目录（跟 EdgeX 一致）。
+**判决**：我们该建 `docs/decisions/NNNN-*`，四段式 + `Status: accepted/superseded`；跨域放根、`ci`/`dsmate` 这类局部放子目录（跟 EdgeX 一致）。
 
 ### 2.2 目录按什么分（Q2 —— 最有价值的一条）
 
@@ -88,7 +88,7 @@ ADR-908 这个案例几乎是我们问题的镜像：团队最初按受众分目
 | 大规模收敛有先例 | 154 页压到 47 页 + reference 生成 | [ADR-908](https://aaronsb.github.io/knowledge-graph-system/architecture/access-workflow/ADR-908-documentation-strategy/) |
 | 元数据便于检索 | 标题/作者/日期/标签/版本/审查日期/批准状态 | [introl](https://introl.com/zh/blog/documentation-best-practices-ai-infrastructure-knowledge-management-systems) |
 
-**判决**：我们已有 `docs/traceability.d/` 与 `changelog.d/` 这类"片段 → 汇总"的生成机制（`tools/sync_docs.py` 合并），方向正确；**下一步是把"同一事实的两处投影"改成"一处源 + 生成"**（例：队列里的卡状态 vs 台账里的条目状态 vs `交接-重构进度.md` 的分布数字，现在三处各写一遍）。
+**判决**：我们已有 `docs/traceability.d/` 与 `changelog.d/` 这类"片段 → 汇总"的生成机制（`tools/sync_docs.py` 合并），方向正确；**下一步是把"同一事实的两处投影"改成"一处源 + 生成"**（例：队列里的卡状态 vs 台账里的条目状态 vs `复盘/交接-重构进度.md` 的分布数字，现在三处各写一遍）。
 
 ### 2.5 文档进 CI：漂移检测与校验（Q4 的另一半 + Q8）★ 我们缺的一条
 
@@ -114,7 +114,7 @@ ADR-908 这个案例几乎是我们问题的镜像：团队最初按受众分目
 | 评审清单标准化 | 草稿→技术评审→编辑评审→批准；"Review checklist standardized" | [introl](https://introl.com/zh/blog/documentation-best-practices-ai-infrastructure-knowledge-management-systems) |
 | 只允许"单一事实源"的 PR 合入 | 需团队约定 | 同上（Stripe/Red Hat 案例） |
 
-**判决**：我们是一个人 + 多窗口的形态，业主 = 用户本人，所以"CODEOWNERS"应翻译成**目录责任人写在 `docs/OWNERS.md` + 门禁读它**（谁改谁的目录，改别人的要 `--take-over` 式的显式动作）。这一条和已有的卡归窗口（A324）是同一套思路，可以复用。
+**判决**：我们是一个人 + 多窗口的形态，业主 = 用户本人，所以"CODEOWNERS"应翻译成**目录责任人写在 docs/OWNERS.md（计划建） + 门禁读它**（谁改谁的目录，改别人的要 `--take-over` 式的显式动作）。这一条和已有的卡归窗口（A324）是同一套思路，可以复用。
 
 ### 2.7 给 AI 读者的组织方式（Q7）
 
@@ -123,10 +123,10 @@ ADR-908 这个案例几乎是我们问题的镜像：团队最初按受众分目
 | 入口要薄、渐进披露 | "Progressive disclosure - Overview first, details on demand" | [ADR-908 §5](https://aaronsb.github.io/knowledge-graph-system/architecture/access-workflow/ADR-908-documentation-strategy/) |
 | 文档要有稳定 ID（维护者视角） | `DD.NNN.P`：域号+序号+模式字母，序号域内唯一、永不复用；"management metadata, not display" | 同上 |
 | 别把一切塞进一个 md | "Single comprehensive README … Rejected: Doesn't scale." | 同上 |
-| agent 侧上下文是稀缺资源 | `.agents/CONTEXT.md` 这类"上下文文件"需明确边界与加载时机 | [EAF CONTEXT.md](https://github.com/afonsoft/EAF/blob/05945f3c/.agents/CONTEXT.md) |
+| agent 侧上下文是稀缺资源 | .agents/CONTEXT.md（计划建） 这类"上下文文件"需明确边界与加载时机 | [EAF CONTEXT.md](https://github.com/afonsoft/EAF/blob/05945f3c/.agents/CONTEXT.md) |
 | 知识"编译"而非堆积 | 把散落笔记编译成可检索结构 | [knowledge-compiler](https://raw.githubusercontent.com/eliharoun/agent-smith/4ef532dcbbbaffd2e754afadd2d4f96e0d1f58f7/guide/16-knowledge-compiler.md) |
 
-**判决**：给 agent 的入口三层：`AGENTS.md`（≤120 行，只路由）→ `docs/INDEX.md`（全仓文档地图 + 一句话定位）→ 具体页。**索引必须机器重算**（不手写），否则必然过期。
+**判决**：给 agent 的入口三层：`AGENTS.md`（≤120 行，只路由）→ docs/INDEX.md（计划建）（全仓文档地图 + 一句话定位）→ 具体页。**索引必须机器重算**（不手写），否则必然过期。
 
 ---
 
@@ -141,7 +141,7 @@ ADR-908 这个案例几乎是我们问题的镜像：团队最初按受众分目
 | 文档进 CI（死链、弃用、漂移） | 只有 `scripts/audit_progress.py` 查台账证据存在性 | ❌ 缺 |
 | 文档有 owner | 无 | ❌ 缺 |
 | 给 agent 渐进披露 | `AGENTS.md` 薄 ✅，但 `复盘/` 无机器索引 | 🟡 半对 |
-| 迁移可回滚 | `复盘/归置地图.md` 有映射习惯，但没有 old→new 全表 + revert | 🟡 半对 |
+| 迁移可回滚 | `docs/归置地图.md` 有映射习惯，但没有 old→new 全表 + revert | 🟡 半对 |
 | 归档/退役 | 已有 `docs/tombstones.toml`（墓碑机制）| ✅ 对上了，可以复用 |
 
 ---
@@ -152,7 +152,7 @@ ADR-908 这个案例几乎是我们问题的镜像：团队最初按受众分目
 2. **原本想把"项目书"也放进 `docs/` 的一级目录** —— 改成 `docs/subsystems/<名>/`，因为项目书天然是"某个子系统的一套文档"，而 `docs/` 一级目录应该只放**模式**（规范/决策/手册/复盘），不放"某个东西的全部材料"。
 
 顺带确认了两件我们已经做对的事：
-- `gates/diag/` 扁平目录本身是**工具契约**（`wb_brief.py` glob `卡<号>-*.md`），别为了好看去改 —— 这与"迁移要可回滚、别动契约"一致。
+- `gates/diag/` 扁平目录本身是**工具契约**（`wb_brief.py` glob `卡<号>-*`），别为了好看去改 —— 这与"迁移要可回滚、别动契约"一致。
 - 已有的 `docs/tombstones.toml` 就是"弃用标注"的落地形态，最佳实践里管这叫 deprecation warning，我们已经有了。
 
 ---
@@ -165,13 +165,13 @@ ADR-908 这个案例几乎是我们问题的镜像：团队最初按受众分目
 - [x] 本篇调研（证据留存）
 
 ### 二期：把三类东西拆开（卡 F1，`T-AG449`）
-- `复盘/卡/*.md`（217 篇）→ `docs/cards/`；脚本改写全部引用（队列 `spec=`、台账 `file:`/`test:`、`skills/**` 示例、`wb_brief.py` glob）
+- `复盘/卡/*`（217 篇）→ `docs/cards/`；脚本改写全部引用（队列 `spec=`、台账 `file:`/`test:`、`skills/**` 示例、`wb_brief.py` glob）
 - 门禁三条一起过：`audit_progress.py --all` / `wb_plan.py check` / `pytest tests/test_card_specs_tracked.py`
 - 判据：`git diff -M --stat` ≥95% 判为 rename；`--revert` 能依 `gates/diag/doc-migration.json` 还原
 
 ### 三期：项目书归位 + 索引机器化（卡 F4）
 - 40 篇项目书按"回头看（→ `复盘/`）/ 往前做（→ `docs/subsystems/<名>/`）"分流
-- `docs/INDEX.md` + `复盘/INDEX.md` 由脚本从**文件头 frontmatter**生成（不手写）
+- docs/INDEX.md（计划建） + `复盘/INDEX.md` 由脚本从**文件头 frontmatter**生成（不手写）
 - 退役：一份退役时进 `docs/tombstones.toml` 并让 INDEX 标注
 
 ### 并行两张新卡（本次调研新增）
@@ -257,7 +257,7 @@ F1（迁移，纯搬家）→ F2（门禁，读新路径）→ F4（索引生成
 
 [A Quarantine for Model-Drafted Docs](https://dev.to/github_7727/a-quarantine-for-model-drafted-docs-free-model-human-merge-29c2) 的做法是：模型起草 → 进隔离区 → 人审合并，作者署名与合并动作分离。
 
-对我们：卡文书（`gates/diag/_text_*.md`）本来就是模型起草 + 人工（我）核对 + 门禁复核，**已经是这个形态**，不需要再造一层。
+对我们：卡文书（`gates/diag/_text_*`）本来就是模型起草 + 人工（我）核对 + 门禁复核，**已经是这个形态**，不需要再造一层。
 
 ---
 
@@ -271,7 +271,7 @@ F1（迁移，纯搬家）→ F2（门禁，读新路径）→ F4（索引生成
 - [x] 本篇调研（两轮证据 + 计划）
 
 ### 期 1：索引机器化（1 张卡 · 半天）
-- 目标：`docs/INDEX.md` 由脚本从文件头 frontmatter（`title / mode / status / owner / supersedes`）生成，`复盘/INDEX.md` 同样生成。
+- 目标：docs/INDEX.md（计划建） 由脚本从文件头 frontmatter（`title / mode / status / owner / supersedes`）生成，`复盘/INDEX.md` 同样生成。
 - 验收：`python -X utf8 scripts/gen_doc_index.py --check` 退 0；手改 INDEX 后 `--check` 必须退 1。
 - 退出条件：连续两次改动后 INDEX 无需人工编辑。
 
@@ -286,12 +286,12 @@ F1（迁移，纯搬家）→ F2（门禁，读新路径）→ F4（索引生成
 - 阈值：先 `--mode report`（只打印不红），跑一周后改 `--mode block`，且用 `docs/doc-debt-baseline.toml` ratchet。
 
 ### 期 3：决策记录（1 张卡 · 半天）
-- `docs/decisions/NNNN-slug.md`，模板照微软那条：Problem / Options / Decision（含取舍）/ **Confidence** / Status（Proposed·Accepted·Superseded）+ `supersedes` 链接；**append-only，改决定就写新的一条并互相链接**。
+- `docs/decisions/NNNN-<标题>`，模板照微软那条：Problem / Options / Decision（含取舍）/ **Confidence** / Status（Proposed·Accepted·Superseded）+ `supersedes` 链接；**append-only，改决定就写新的一条并互相链接**。
 - 回溯清单（从今天的台账里挑，不贪多，先 8 条）：D12 搜索走官方 / D16 MCP 只留扩展位 / C14 域红线 / 封存口径（比提交不比长度）/ 两根切分 / 按域门禁 / 卡归窗口 / 复盘不收项目书。
 - 验收：`python -X utf8 scripts/check_docs.py --decisions` 退 0（编号连续、status 合法、supersedes 成对）。
 
 ### 期 4：搬迁（1 张卡 · 一天，**可选**、放最后）
-- 只搬两类：`复盘/卡/*.md`（217）→ `docs/cards/`；≈40 篇项目书按"回头看 / 往前做"分流。
+- 只搬两类：`复盘/卡/*`（217）→ `docs/cards/`；≈40 篇项目书按"回头看 / 往前做"分流。
 - 必带：`docs/migration-map.json`（old→new 全表）+ `--revert` 子命令 + `git diff -M --stat` 判 rename。
 - 验收：`scripts/audit_progress.py --all` 绿、`wb_plan check` 绿、`pytest tests/test_card_specs_tracked.py` 绿、`git diff -M --stat` rename 率 ≥95%。
 - 不做也可以：期 1–3 完成后，`复盘/` 只是"历史"，不再承担导航职责 —— 搬它是**收益递减**的。用户若嫌折腾，可只做期 1–3。
