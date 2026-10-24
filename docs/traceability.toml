@@ -8256,6 +8256,11 @@ status = "done"
 evidence = [
   "file:复盘/卡/卡F1-文档归位.md",
   "file:gates/diag/wb-F1.report.md",
+  "file:tools/migrate_docs.py",
+  "file:docs/migration-map.json",
+  "file:tests/test_migrate_docs.py",
+  "test:test_migrate_docs.py::test_dry_run_does_not_touch_disk",
+  "test:test_migrate_docs.py::test_apply_moves_and_rewrites",
 ]
 gaps = "- **只落了工具与机械码，没有真迁。** `docs/cards/` 还没生成（规格 复盘/卡/卡F1-文档归位.md）。- **改路径的四处投影没实测。** 台账 `file:`、队列 `spec=`、`wb_brief.py` 的 glob、索引链接，脚本里有改写逻辑，但没在真仓跑过全量（规格 复盘/卡/卡F1-文档归位.md）。- **回滚只是记录，不是事务。** 机械码能反查，`--revert` 未做成原子操作（规格 复盘/卡/卡F1-文档归位.md）。"
 
