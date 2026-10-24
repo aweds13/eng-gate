@@ -8496,3 +8496,23 @@ evidence = [
 ]
 gaps = "还没开工：卡 E15 未派活。缺的是体检第 12 条 —— 文书里反引号内的 `.md` 必须在「片段目录 / docs / 仓库根」三基准解析得到，否则提示补 `skills/` 前缀。今晚卡 E7 就是被这条咬的（changelog 片段写了 `pipe-land/SKILL.md` 短路径，check_layers 判 6 处断链）。规格见 复盘/卡/卡E15-文书引用体检.md。"
 
+[entries."T-AG469"]
+id = "T-AG469"
+title = "攒批第二例：红单归并 + 文档索引机器化"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E4-红单归并.md",
+  "file:复盘/卡/卡F2-索引机器化.md",
+  "file:gates/diag/wb-E4.report.md",
+  "file:gates/diag/wb-F2.report.md",
+  "file:tools/failure_group.py",
+  "file:scripts/gen_doc_index.py",
+  "file:scripts/run_gates.py",
+  "file:tests/fixtures/pytest-34fail.txt",
+  "file:docs/INDEX.md",
+  "test:test_failure_group.py",
+  "test:test_gen_doc_index.py",
+]
+gaps = "- **这是攒批第二例**：两张卡合成一笔提交，粒度比单卡粗 —— 要回滚就是回滚一批；成员卡的「自己的落地」由落地链按「产物 ∩ 暂存清单」判定（规格 复盘/卡/卡E5-合并队列.md）。- **E4 的归并口径只按「同一测试文件 + 同一异常类型」聚，不跨文件合并**：34 条红归成 1 组是本机实测样本，别的形状未必；本批没验证「跨文件同因」这种形态（规格 复盘/卡/卡E4-红单归并.md）。- **F2 生成的索引是派生物（本批新建），只覆盖 `docs/` 这一块**：`复盘/` 与 `src/dsmate/docs/` 两块索引还没接进来（规格 复盘/卡/卡F2-索引机器化.md）。- **主控没有逐行读两张卡的实现**，复核靠工人自跑单测（E4 与 F2 各自 pytest 全绿）与本趟全量门禁（规格 复盘/卡/卡E4-红单归并.md）。"
+

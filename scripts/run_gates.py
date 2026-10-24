@@ -109,6 +109,11 @@ TOOL_ROOT = Path(__file__).resolve().parent.parent
 
 if str(TOOL_ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(TOOL_ROOT / "tools"))
+from failure_group import (  # noqa: E402 —— 红单归并（卡 E4）：同因只打一行
+    group_failures,
+    parse_pytest_output,
+    report_lines,
+)
 from pipe_root import data_root  # noqa: E402 —— 数据根解析的唯一实现（卡 A326）
 
 ROOT = data_root()
@@ -1350,10 +1355,23 @@ def finish_gate(
             mark = "[OK ]" if exit_code == 0 else "[FAIL]"
             print(f"{mark} {tag}  {item['summary']}")
         if failed and out:
-            tail = [ln.rstrip() for ln in out.splitlines() if ln.strip()][-12:]
-            print(f"       ↳ 这道门的输出尾部（全量在 gates/logs/{name}.log）：")
-            for ln in tail:
-                print(f"         {ln[:160]}")
+            groups = []
+            if name == "pytest":
+                # ★ 卡 E4：34 条并列 → ≤3 行「同因 + 计数 + 一条示例」。
+                #   只压**屏幕**这一层：全量输出上面已经整份落进 gates/logs/pytest.log；
+                #   归并明细同时进 last.json 的 pytest_failure_groups（供 wb_review / 面板读）。
+                groups = group_failures(parse_pytest_output(out))
+                item["pytest_failure_groups"] = [g.as_dict() for g in groups]
+            if groups:
+                print(f"       ↳ 红单归并（全量输出在 gates/logs/{name}.log）：")
+                for ln in report_lines(groups):
+                    print(f"         {ln}")
+            else:
+                # 认不出 FAILED 行（输出形状变了）→ 退回旧的「尾部 12 行」，**不丢信息**。
+                tail = [ln.rstrip() for ln in out.splitlines() if ln.strip()][-12:]
+                print(f"       ↳ 这道门的输出尾部（全量在 gates/logs/{name}.log）：")
+                for ln in tail:
+                    print(f"         {ln[:160]}")
     return item
 
 
@@ -2175,6 +2193,16 @@ def main() -> int:
             + [f"{n} NOT RUN" for n in not_run]
         ) or "（无通过项）",
     }
+    # ★ 卡 E4：红单归并的明细（列表明细，供 wb_review 与面板读）。
+    #   只在**这一趟 pytest 红过**时出现 —— 绿跑时 `last.json` 形状逐字不变，
+    #   读的人用 `.get("pytest_failure_groups", [])` 就够。
+    pytest_groups = next(
+        (r.get("pytest_failure_groups") for r in results
+         if r["name"] == "pytest" and "pytest_failure_groups" in r),
+        None,
+    )
+    if pytest_groups:
+        payload["pytest_failure_groups"] = pytest_groups
     # ★ T-G239（卡 140）：`--affected` 是**部分跑** —— 把"跑了/跳了/为什么跳"记进 `affected` 块。
     #   ★ `ok` 的语义一个字不动（仍 = "这一趟**真跑的**阻断门全过"）；本块只**披露范围**，
     #   让事后能从产物里看出"这不是一轮全量门禁"。默认（不给 `--affected`）**不加这个键**

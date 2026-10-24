@@ -1,3 +1,8 @@
+## 攒批第二例：红单归并 + 文档索引机器化（T-AG469）
+- `scripts/run_gates.py`：34 条红按「同一文件 + 同一异常」归并成一组，失败摘要先给组号再给首条堆栈
+- 新增 `tools/failure_group.py` 归并器 + `tests/test_failure_group.py` 3 条钉子 + 样本 `tests/fixtures/pytest-34fail.txt`
+- 新增 `scripts/gen_doc_index.py`（扫 docs 生成索引，`--check` 不一致退 1）与派生 `docs/INDEX.md`
+- 新增 `tests/test_gen_doc_index.py`：索引与磁盘一致、`--check` 能判红两条钉子
 ## 攒批 T-AG460：E8 + E9 + G1（一次全量门禁、一笔提交）
 - `scripts/audit_progress.py`：封存未跟踪清单改成**一次** `git ls-files -z` 取集合（215 次进程 → 1 次），判据语义一条未改；`tests/test_seal_untracked.py` 加四条钉子（含「215 条 ⇒ 进程数 == 1」）。
 - `docs/workbacklog.toml`：补齐 11 个缺 `status` 行的卡块；`tools/pool/landing.py` 体检第 ⑧ 条恢复全判（复用 `_scan_blocks()`）；`tests/test_wb_land.py` 加三条钉子（66 passed）。

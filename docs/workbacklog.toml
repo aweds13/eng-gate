@@ -3591,7 +3591,7 @@ spec = "复盘/卡/卡E4-红单归并.md"
 files = ["scripts/run_gates.py", "tools/reseal_report.py", "tests/test_reseal_report.py"]
 depends = ["E2"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 # ---- 分区E｜合并队列：单写者 + 投机预检（T-AG447）
 [[cards]]
@@ -3639,7 +3639,7 @@ spec = "复盘/卡/卡F2-索引机器化.md"
 files = ["scripts/gen_doc_index.py", "tests/test_gen_doc_index.py", "docs/INDEX.md"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 # ---- 分区F｜文档门禁：scripts/check_docs.py（判不出就报 skip）（T-AG451）
 [[cards]]
