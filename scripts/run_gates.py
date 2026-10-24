@@ -122,7 +122,12 @@ PY = sys.executable
 # 门禁的**定义层**在 `gates/defs/`（卡 A321）：换语言换产品只动那份模块 —— 这份**跟工具根走**。
 if str(TOOL_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOL_ROOT))
-from gates.defs import contract, lang_python, product_timeflow  # noqa: E402
+from gates.defs import (  # noqa: E402
+    contract,
+    domains,
+    lang_python,
+    product_timeflow,
+)
 
 COMMON: list[tuple[str, list[str]]] = [
     *lang_python.GATES,
@@ -1713,17 +1718,36 @@ def quick_test_job(plan: TestSelectionPlan) -> tuple[str, list[str]] | None:
                            "-q", "--no-cov", "-p", "no:cacheprovider"])
 
 
-def _profile_filter(jobs: list[tuple[str, list[str]]], profile: str) -> list:
-    """按档裁门；`all` 原样返回（默认路径逐字不变）。认不出的档直接抛 ValueError。"""
-    if profile == "all":
+def _profile_filter(
+    jobs: list[tuple[str, list[str]]], profile: str | tuple[str, ...] | list[str]
+) -> list:
+    """按档裁门；`all`（或含 `all`）原样返回 —— 默认路径逐字不变。
+
+    ★ 卡 A327：允许一次给**多档**（`--profiles lang,audit`），门清单取各档门名的并集；
+      认不出/不认识的档直接抛 ValueError（拿不准不放过）。
+    """
+    wanted = (profile,) if isinstance(profile, str) else tuple(profile)
+    if not wanted or "all" in wanted:
         return jobs
-    if profile not in GATE_PROFILES:
-        raise ValueError(f"未知档：{profile}")
-    keep = set(GATE_PROFILES[profile])
+    keep: set[str] = set()
+    for one in wanted:
+        if one not in GATE_PROFILES:
+            raise ValueError(f"未知档：{one}")
+        keep |= set(GATE_PROFILES[one])
     return [j for j in jobs if j[0] in keep]
 
 
-def build_jobs(quick: bool, fast: bool, profile: str = "all") -> list[tuple[str, list[str]]]:
+def profiles_covered(jobs: list[tuple[str, list[str]]]) -> list[str]:
+    """这一趟**真跑全了**哪几档（按门名判，不看参数）—— 产物里要记的是这个。"""
+    names = {n for n, _ in jobs}
+    if all(set(GATE_PROFILES[p]) <= names for p in GATE_PROFILES):
+        return ["all"]
+    return sorted(p for p in GATE_PROFILES if set(GATE_PROFILES[p]) <= names)
+
+
+def build_jobs(
+    quick: bool, fast: bool, profile: str | tuple[str, ...] | list[str] = "all"
+) -> list[tuple[str, list[str]]]:
     """门清单（**默认逐字不变**）：`--fast` 只留十几秒那几道；否则除 `--quick` 外加真机浏览器层。"""
     jobs: list[tuple[str, list[str]]] = [*COMMON, *REAL_PY]
     if fast:
@@ -1740,6 +1764,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile", default="all", choices=("all", *GATE_PROFILES),
         help=("只跑某一档（**内循环用**）：core=通用工程门；audit=台账/证据门；"
               "product=timeflow 产品门。默认 all，**收口链仍跑全量**"),
+    )
+    ap.add_argument(
+        "--profiles", default="", metavar="档,档",
+        help=("一次跑**多档**（卡 A327）：`--profiles lang,audit`。落地链按改动面算必需档后用它 —— "
+              "必需档跟 `gates/defs/domains.py` 同一张表，`last.json` 里记 profiles_run。"),
     )
     ap.add_argument("--fast", action="store_true",
                     help="只跑十几秒那几道（内循环；不落盘）＋ 受影响的测试选集（卡 254；"
@@ -1788,7 +1817,25 @@ def main() -> int:
         print("  （gitignored 的输入要么删掉、要么显式豁免并写理由）", flush=True)
         return 1
 
-    jobs = build_jobs(args.quick, args.fast, args.profile)
+    wanted: str | tuple[str, ...] = args.profile
+    auto_need: frozenset[str] | None = None
+    auto_paths: list[str] = []
+    if args.profiles.strip() == "auto":
+        # ★ 卡 A327：落地链用它 —— 改动面由 git 现算，必需档问 `gates/defs/domains.py`
+        #   （同一张表，不在这里写第二份规则）。判不出 ⇒ 全量（fail closed）。
+        auto_paths = (changed_paths_from(args.changed_from) if args.changed_from
+                      else worktree_changed_paths())
+        auto_need = domains.required_profiles(auto_paths)
+        wanted = tuple(sorted(auto_need))
+        print(f"=== --profiles auto：{domains.explain(auto_paths)}"
+              f"（改动 {len(auto_paths)} 个文件）===", flush=True)
+    elif args.profiles.strip():
+        wanted = tuple(x.strip() for x in args.profiles.split(",") if x.strip())
+    try:
+        jobs = build_jobs(args.quick, args.fast, wanted)
+    except ValueError as exc:
+        print(f"[FAIL] {exc}", flush=True)
+        return 2
 
     # ★ T-G239（卡 140）：`--affected` / `--changed-from` —— **只裁门名单**，不碰别处。
     affected_plan: AffectedPlan | None = None
@@ -2070,6 +2117,26 @@ def main() -> int:
         payload["profile"] = args.profile
         payload["trailer"] = (
             f"【--profile {args.profile}：只跑了这一档，未跑全量】" + str(payload["trailer"])
+        )
+    # ★ 卡 A327：产物里记「这一趟**真跑全了**哪几档」——判提交的人只看这个，不看参数。
+    #   全量那趟仍**不写**（`last.json` 形状逐字不变，卡 A327 §4 硬要求）。
+    ran_profiles = profiles_covered(jobs)
+    if ran_profiles != ["all"]:
+        payload["profiles_run"] = ran_profiles
+        payload["trailer"] = (
+            f"【只跑全了 {'+'.join(ran_profiles)} 档，未跑全量】" + str(payload["trailer"])
+        )
+    # ★ 卡 A327：给 `--profiles` / `--changed-from` 时同时记「这次改动按表需要哪几档」
+    #   —— 让「够不够」能事后复核，而不是只信当次命令行。
+    if args.profiles.strip() or args.changed_from:
+        need_paths = auto_paths if auto_need is not None else (
+            changed_paths_from(args.changed_from) if args.changed_from else [])
+        need = auto_need if auto_need is not None else domains.required_profiles(need_paths)
+        payload["required_profiles"] = sorted(need)
+        payload["changed_paths"] = sorted(set(need_paths))
+        payload["trailer"] = (
+            f"【{domains.explain(need_paths)}；真跑全了 {'+'.join(ran_profiles)}】"
+            + str(payload["trailer"])
         )
     GATES.parent.mkdir(parents=True, exist_ok=True)
     GATES.write_text(

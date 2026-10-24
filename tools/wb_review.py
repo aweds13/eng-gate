@@ -184,12 +184,33 @@ def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
     problems: list[str] = []
     # ★ A324：封存里记了 `profile`（≠ all）⇒ 这是**只跑了一档**，不能当提交闸用。
     #   这条堵的是「挑一档跑绿冒充全量」—— 档位是给人做内循环的，不是给提交用的。
-    ran_profile = payload.get("profile")
-    if ran_profile not in (None, "all"):
-        problems.append(
-            f"门禁只跑了 --profile {ran_profile} 这一档，不是全量 —— "
-            "提交闸必须是全量（重跑一次不带 --profile 的门禁）"
-        )
+    # ★ 卡 A327：档不再"必须全量"，改按 `gates/defs/domains.py` 的同一张表判
+    #   「这次改动**必需**的档 ⊆ 产物里**真跑全了**的档」。拿不准（没有 required_profiles /
+    #   没有 profiles_run）仍按老口径拦 —— 宁可多跑，不许漏跑。
+    ran = payload.get("profiles_run")
+    if ran is None:
+        ran_profile = payload.get("profile")
+        if ran_profile not in (None, "all"):
+            problems.append(
+                f"门禁只跑了 --profile {ran_profile} 这一档，且没有 profiles_run 记账 —— "
+                "分不清是自查还是提交闸（重跑一次带 --profiles 的门禁）"
+            )
+    else:
+        ran_list = [str(x) for x in ran] if isinstance(ran, list) else [str(ran)]
+        required = [str(x) for x in (payload.get("required_profiles") or [])]
+        if "all" not in ran_list:
+            if not required:
+                problems.append(
+                    f"门禁只跑全了 {ran_list} 档，而 last.json 里没有 required_profiles —— "
+                    "没法证明够用（重跑时带 --profiles / --changed-from，让产物自己记账）"
+                )
+            else:
+                missing = [x for x in required if x not in ran_list]
+                if missing:
+                    problems.append(
+                        f"这次改动需要 {'+'.join(required)} 档，产物里只跑全了 "
+                        f"{'+'.join(ran_list)}（缺 {'+'.join(missing)}）—— 缺档不许当提交证据"
+                    )
     if payload.get("ok") is not True:
         problems.append(f"gates/last.json 的 ok 不是 true：{payload.get('ok')!r}")
     raw_rev = str(payload.get("rev") or "")
@@ -230,6 +251,18 @@ def _run_gates_module() -> object:
         sys.path.insert(0, scripts)
     import run_gates  # 延迟 import：避免 wb_review 被 import 时就依赖 scripts/ 的运行时
     return run_gates
+
+
+def _profile_doors(profiles: list[str]) -> list[str]:
+    """档名 → 门名（从 `run_gates.GATE_PROFILES` 现读，**不在这里造第二份门表**）。"""
+    try:
+        table = _run_gates_module().GATE_PROFILES
+    except Exception:  # 读不到就回空 —— 调用方据此退回"按全量比对"
+        return []
+    doors: list[str] = []
+    for one in profiles:
+        doors += [str(n) for n in table.get(one, ())]
+    return doors
 
 
 def expected_gate_names() -> tuple[list[str], str]:
@@ -286,6 +319,13 @@ def check_full_gate_run(payload: dict) -> tuple[list[str], str, str]:
     gates = payload.get("gates") or []
     got = [str(g.get("name")) for g in gates if isinstance(g, dict)]
     expected, source = expected_gate_names()
+    # ★ 卡 A327：产物自己记了「跑全了哪几档」时，"应有"就按那几档算（不再要求 19 道全到）；
+    #   没记（老产物 / 全量那趟）仍按全量比对 —— 老口径逐字不变。
+    ran = payload.get("profiles_run")
+    if ran and isinstance(ran, list) and [str(x) for x in ran] != ["all"]:
+        profile_doors = _profile_doors([str(x) for x in ran])
+        if profile_doors:
+            expected, source = profile_doors, f"profiles_run={[str(x) for x in ran]}"
     partial = _affected_marks_partial_run(payload)
     reading = (f"门数={len(got)}，应有={len(expected) if expected else '?'}（{source}）；"
                f"affected 块={'有' if partial else '无'}")

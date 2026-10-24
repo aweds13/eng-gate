@@ -95,3 +95,8 @@ python -X utf8 scripts/run_gates.py --profile product # timeflow 产品门（五
 **★ 提交闸只认全量**：`last.json` 里若记了 `profile`（≠ all），落地链直接拒 ——「挑一档跑绿」
 不能冒充「全量跑绿」；默认不给 `--profile` 时封存形状逐字不变。档位成员的真源在 `gates/defs/`。
 
+**★ 按域选档（卡 A327 · T-AG442）**：落地链默认不再一律全量 —— 它传 `--profiles auto`，
+改动面 → 必需档查 `gates/defs/domains.py` 这一张表（判不出 ⇒ 全量），产物里记
+`profiles_run / required_profiles / changed_paths`；提交闸（`wb_review` ③ / ③′）按
+「必需档 ⊆ 已跑档」判。改 `scripts/**`、`tools/**`、`gates/**`（判据本体）仍强制全量。
+

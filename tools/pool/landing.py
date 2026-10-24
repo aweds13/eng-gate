@@ -1213,6 +1213,10 @@ def main(argv: list[str] | None = None) -> int:
             #   ②.1 判据本体改了（scripts/**/tools/**/gates/**）/ ②.2 空计划 / ②.3 今天还没跑过全量
             gate_cmd = [sys.executable, "-X", "utf8", "scripts/run_gates.py"]
             force_full_reason = ""
+            # ★ 卡 A327：默认不再"一律全量"—— 按本笔改动面查表（`gates/defs/domains.py`，
+            #   由 run_gates 自己算，落地链不造第二份规则）。判据本体（scripts/**、tools/**、
+            #   gates/**）改了 ⇒ 仍走下面的 ②.1 强制全量；判不出档 ⇒ run_gates 自己退全量。
+            auto_profiles = False
             if a.affected is not None or a.changed_from:
                 aff_paths = list(a.affected or [])
                 if a.changed_from:
@@ -1241,6 +1245,17 @@ def main(argv: list[str] | None = None) -> int:
                                 gate_cmd += ["--affected", *a.affected]
                             if a.changed_from:
                                 gate_cmd += ["--changed-from", a.changed_from]
+            has_domains = (wt / "gates" / "defs" / "domains.py").is_file()
+            if not force_full_reason and a.affected is None and not a.changed_from and has_domains:
+                # 没人显式要增量 ⇒ 走按域选档（A327）。判据本体那三条 ②.1 仍在上面拦着。
+                # ★ 只在映射表真存在时启用（老仓 / 测试假仓没有 domains.py ⇒ 照旧全量）。
+                judge_now = _touched_judge_body(_touched_paths(wt))
+                if judge_now:
+                    force_full_reason = (f"②.1 判据本体改了：碰了 {len(judge_now)} 个"
+                                         f" scripts/**/tools/**/gates/** 文件：{judge_now[:5]}")
+                else:
+                    gate_cmd += ["--profiles", "auto"]
+                    auto_profiles = True
             if force_full_reason:
                 print(f"  ★ 强制全量（不传 --affected）：{force_full_reason}")
             print(f"=== ④ 锁（段 {a.port_base}）→ 门禁（硬超时 1800s；"
@@ -1278,7 +1293,7 @@ def main(argv: list[str] | None = None) -> int:
                 renew_stop.set()
             tail = out.strip().splitlines()[-22:]
             print("\n".join(tail))
-            mode = "增量" if incremental_run else "全量"
+            mode = "按域" if auto_profiles else ("增量" if incremental_run else "全量")
             print(f"★★ 门禁退出码 = {rc}（124 = 硬超时掐的）【{mode}】")
             if rc != 0:
                 print("★ 不绿 ⇒ 不提交")

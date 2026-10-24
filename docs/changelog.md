@@ -1,3 +1,9 @@
+## 按域跑必需门：提交闸按改动面算必需档（T-AG442）
+- 提交闸不再要求 19 道全量：按改动面查 `gates/defs/domains.py` 算出必需档，跑完必需档即可收口（判不出 ⇒ 全量）。
+- `scripts/run_gates.py` 新增 `--profiles a,b` 与 `--profiles auto`；`last.json` 记 `profiles_run / required_profiles / changed_paths`（全量那趟形状不变）。
+- `tools/wb_review.py` ③ / ③′ 改按「必需档 ⊆ 已跑档」判，缺档点名拒；旧 `profile` 记法仍拦。
+- `tools/pool/landing.py` 默认传 `--profiles auto`（判据本体仍强制全量；没有 domains.py 的仓照旧全量）。
+- 典型收益：只改 `skills/**` / 文档从 ~13 分钟降到 ~1 分钟（audit 3 道）。
 ## 门禁分层：lang / audit / product 三档
 - `scripts/run_gates.py` 不再内联门表：改为从 `gates/defs/` 拼 `COMMON`，新增 `--profile {all,lang,audit,product}`，默认 `all` 行为逐字不变。
 - 新增 `gates/defs/lang_python.py`（pytest / 验收 / ruff / mypy / 检查器自测）、`gates/defs/contract.py`（证据审计 / 不变量台账 / 台账标题）、`gates/defs/product_timeflow.py`（timeflow 五层与真机共 11 道）。

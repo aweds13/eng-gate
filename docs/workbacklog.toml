@@ -3386,7 +3386,7 @@ files = ["gates/defs/domains.py", "scripts/run_gates.py", "tools/wb_review.py",
          "tests/test_wb_review.py"]
 depends = ["A324", "A326"]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "B1"

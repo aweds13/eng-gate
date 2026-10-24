@@ -759,3 +759,52 @@ def test_partial_profile_seal_is_rejected(tmp_path):
     }
     problems = wb_review.check_gate_evidence(payload, "abcdef1")
     assert any("只跑了 --profile lang" in p for p in problems), problems
+
+
+def test_profiles_covering_required_profiles_pass(tmp_path):
+    """卡 A327：产物记了 profiles_run 且覆盖 required_profiles ⇒ 放行（不再要求 19 道全量）。"""
+    from tools import wb_review
+
+    payload = {
+        "ok": True,
+        "rev": "abcdef1",
+        "docs_sync_ok": True,
+        "docs_sync_missing": [],
+        "gates": [{"name": "pytest", "exit_code": 0}],
+        "profiles_run": ["lang", "audit"],
+        "required_profiles": ["lang", "audit"],
+    }
+    assert wb_review.check_gate_evidence(payload, "abcdef1") == []
+
+
+def test_profiles_missing_a_required_one_are_rejected(tmp_path):
+    """卡 A327：缺一档就点名拒 —— 「改 src 只跑 audit」不许当提交证据。"""
+    from tools import wb_review
+
+    payload = {
+        "ok": True,
+        "rev": "abcdef1",
+        "docs_sync_ok": True,
+        "docs_sync_missing": [],
+        "gates": [{"name": "pytest", "exit_code": 0}],
+        "profiles_run": ["audit"],
+        "required_profiles": ["lang", "audit"],
+    }
+    problems = wb_review.check_gate_evidence(payload, "abcdef1")
+    assert any("缺 lang" in p for p in problems), problems
+
+
+def test_partial_profiles_without_required_are_rejected(tmp_path):
+    """卡 A327：只记了 profiles_run、没有 required_profiles ⇒ 证明不了够用，判红。"""
+    from tools import wb_review
+
+    payload = {
+        "ok": True,
+        "rev": "abcdef1",
+        "docs_sync_ok": True,
+        "docs_sync_missing": [],
+        "gates": [{"name": "pytest", "exit_code": 0}],
+        "profiles_run": ["lang"],
+    }
+    problems = wb_review.check_gate_evidence(payload, "abcdef1")
+    assert any("没有 required_profiles" in p for p in problems), problems

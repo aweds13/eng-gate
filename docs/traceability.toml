@@ -8027,22 +8027,20 @@ gaps = "- 只切了「台账/产物」这一类：`gates/defs/`、`skills/`、`t
 
 [entries."T-AG442"]
 id = "T-AG442"
-title = "按域跑必需门：提交闸按改动面判必需档"
+title = "按域跑必需门：提交闸按改动面算必需档"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
-  "file:复盘/卡/卡A327-按域跑必需门.md",
-  "file:docs/workbacklog.toml",
   "file:gates/defs/domains.py",
+  "file:scripts/run_gates.py",
   "file:tools/wb_review.py",
   "file:tools/pool/landing.py",
+  "file:tests/test_run_gates_domains.py",
+  "file:tests/test_wb_review.py",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:复盘/卡/卡A327-按域跑必需门.md",
 ]
-gaps = """
-本条随卡 A327 一并登记，规格先立、代码后写（映射表 / last.json 字段 / 提交闸三处）。
-判据只立一条硬线：缺档一律判红，判不出就退回全量（fail closed）。
-刻意不碰的：`tests/test_run_gates_profiles.py` 的既有断言（分层本身不动）、
-`--affected` 的三条强制全量规则。
-"""
+gaps = "- `--profiles auto` 只按「改动面」选档，**没算依赖传播**：改了 `tools/` 里被判的门用的夹具、却只碰 `docs/` 的提交，理论上仍可能漏掉 lang 档。指针：`gates/defs/domains.py`。- 映射表的前缀（`src/` `tools/` …）是**本仓**的形状；换仓要改表本身（`PIPE_HOME` 适配时一起改）。指针：`gates/defs/domains.py`。- 判据本体（`scripts/**`、`tools/**`、`gates/**`）仍强制全量 —— 所以**改这张表自己**那一笔省不掉 13 分钟。指针：`tools/pool/landing.py`。- `last.json` 新增三个键（`profiles_run` / `required_profiles` / `changed_paths`）只在非全量时写；老产物没有它们时按老口径判，**没有回填**。指针：`scripts/run_gates.py`。- 测试只覆盖映射表与提交闸两侧，**没有**端到端「改 docs 只跑 audit」的集成用例（落地链那层靠真跑验）。指针：`tests/test_run_gates_domains.py`。"
 
 [entries."T-AG437"]
 id = "T-AG437"
