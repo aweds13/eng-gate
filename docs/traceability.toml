@@ -8536,3 +8536,19 @@ evidence = [
   "file:gates/diag/wb-E17.report.md",
 ]
 gaps = "- 两张卡各自只跑单档门禁（G2 18 条技能门、E17 218 条两文件，见 `gates/diag/wb-G2.report.md`、`gates/diag/wb-E17.report.md`），全量 19 道由这趟批次门禁统一跑。- 主控补过 E17 三处：`tests/test_wb_dispatch.py` 夹具漏 import `wb_session`（补前全片 NameError）、该行 E402、`tools/wb_session.py` 的 SIM105（`try/except/pass` → `contextlib.suppress`）。- 主控没逐行读 G2 的 202 行技能正文（`skills/README.md`、`skills/softeng-manage/references/commands.md`），只验了技能门与行数上限；措辞待人复核。- E17 只对 `PermissionError` 重试，目标目录被删等真错立刻抛 —— 设计如此，见 `tools/wb_session.py`。"
+
+[entries."T-AG472"]
+id = "T-AG472"
+title = "技能根守卫：两个预设都要看见仓库 skills/"
+group = "ENGINEERING"
+status = "todo"
+evidence = ["file:复盘/卡/卡E19-技能根守卫.md"]
+gaps = "- 只读检查 profile 补丁，不改别人的配置（写操作留给用户）。- 默认预设那段是 `!!js` 表达式，只做子串包含判断、不展开求值。"
+
+[entries."T-AG473"]
+id = "T-AG473"
+title = "会话账本并发写：临时文件名必须唯一（-n4 门禁的假红根因）"
+group = "ENGINEERING"
+status = "todo"
+evidence = ["file:复盘/卡/卡E20-会话账本并发写.md"]
+gaps = "- 只修 `_save` 的临时文件名与重试条件，不改账本的语义（租约 TTL、take_over 规则不动）。- 并发用例用线程，不保证覆盖真·多进程竞态（已用 -n4 全量连跑两次做旁证）。"

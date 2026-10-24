@@ -3848,3 +3848,25 @@ files = ["docs/subsystems/ci/云门禁机.md", "scripts/check_cloud_box.py", "te
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E19"
+task = "T-AG472"
+title = "技能根守卫：两个预设都要看见仓库 skills/"
+tree = ".wt/E19"
+spec = "复盘/卡/卡E19-技能根守卫.md"
+files = ["tools/dsh_skills_guard.py", "tests/test_dsh_skills_guard.py"]
+depends = []
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "E20"
+task = "T-AG473"
+title = "会话账本并发写：临时文件名必须唯一（-n4 门禁的假红根因）"
+tree = ".wt/E20"
+spec = "复盘/卡/卡E20-会话账本并发写.md"
+files = ["tools/wb_session.py", "tests/test_wb_session.py"]
+depends = []
+risk = "low"
+status = "pending"
