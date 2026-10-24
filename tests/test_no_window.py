@@ -195,8 +195,6 @@ EXEMPT: dict[tuple[str, str, str], str] = {
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/audit_progress.py", "run", "5c4acac0d2b2"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
-    ("scripts/audit_progress.py", "run", "91bf5b614da9"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/check_layers.py", "run", "40528a732194"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/check_toml.py", "run", "0f5a39dfab46"):

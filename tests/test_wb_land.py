@@ -1318,13 +1318,17 @@ def test_stage_card_toml_str_produces_valid_toml() -> None:
 
 def _write_backlog(repo: Path, *, cid: str = "T-G999", task: str = "T-G999",
                    status: str = "pending", extra_pending: str | None = None,
-                   spec: str = "") -> None:
+                   spec: str = "", omit_status: bool = False,
+                   extra_missing_status: str | None = None) -> None:
     """往假仓库写一份 workbacklog.toml（纯 CRLF，与真文件一致）。
 
     `extra_pending`：再附一张**永远 pending** 的卡（卡 228 红钉用）—— 主卡翻 done 之后
     账里仍有 `pending` 字样，封存后的翻账动作才有真内容可改。
     `spec`（卡 E1）：这张卡的规格路径；`--preflight` 要核「存在且已进 git」，默认空串
     保持老用例一字不变（它们不关心 spec）。
+    `omit_status`（卡 E9）：主卡块**不写** status 行（注入「目标卡自己缺 status」）。
+    `extra_missing_status`（卡 E9）：再附一块缺 status 的卡 —— 用来钉「目标卡**之外**的
+    那块缺 status 也要被判出来」（半瞎 → 全判）。
     """
     body = (
         f'[base]\nreviewed = "abc1234"\n\n'
@@ -1336,8 +1340,9 @@ def _write_backlog(repo: Path, *, cid: str = "T-G999", task: str = "T-G999",
         f'spec = "{spec}"\n'
         f'files = ["code/a.py"]\n'
         f'depends = []\n'
-        f'risk = "low"\n'
-        f'status = "{status}"\n')
+        f'risk = "low"\n')
+    if not omit_status:
+        body += f'status = "{status}"\n'
     if extra_pending:
         body += (
             f'\n[[cards]]\n'
@@ -1350,6 +1355,17 @@ def _write_backlog(repo: Path, *, cid: str = "T-G999", task: str = "T-G999",
             f'depends = []\n'
             f'risk = "low"\n'
             f'status = "pending"\n')
+    if extra_missing_status:
+        body += (
+            f'\n[[cards]]\n'
+            f'id = "{extra_missing_status}"\n'
+            f'task = "T-G{extra_missing_status}"\n'
+            f'title = "缺 status 的卡"\n'
+            f'tree = ""\n'
+            f'spec = "{spec}"\n'          # ⑤ 要 spec 存在且已跟踪 —— 借主卡那一份
+            f'files = ["code/a.py"]\n'
+            f'depends = []\n'
+            f'risk = "low"\n')
     _write(repo, "docs/workbacklog.toml", body, crlf=True)
 
 
@@ -2130,3 +2146,70 @@ def test_preflight_with_card_continues_into_landing(tmp_path: Path) -> None:
     assert "可以直接落地" in out, out      # 体检这一趟真跑了且全绿
     assert done.returncode == 2, out      # 然后进落地链：缺 --task/--title ⇒ argparse 退 2
     assert "required" in out.lower(), out
+
+
+# ------------------------------------------------ 卡 E9（T-AG455）：⑧ 从「只看目标卡」改成**全判**
+#
+# 为什么（卡 E9 §现在疼在哪）：卡 E1 把第 ⑧ 条收窄成只判「这一趟要落的这张卡」，因为队列里
+# 11 块没有 status 行；数据已补齐（本轮），判据恢复全判 —— 判据不该为了迁就数据而降级。
+# 三条钉子：全队列干净 ⇒ ✅ / 目标卡自己缺 ⇒ ❌ 点名 / **目标卡之外**那块缺 ⇒ ❌ 点名（半瞎→全判）。
+
+
+def _item_line(out: str, name: str) -> str:
+    """取体检里某一条判据的那一行（✅/❌ 都算）。"""
+    hits = [ln for ln in out.splitlines()
+            if ln.strip().startswith(("✅", "❌")) and name in ln]
+    assert hits, f"体检没输出「{name}」这一条：\n{out}"
+    return hits[0]
+
+
+def test_preflight_status_check_is_green_on_clean_queue(tmp_path: Path) -> None:
+    """全队列都有 status ⇒ 第 ⑧ 条 ✅（整队列一块不缺时不许报 ❌）。"""
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _preflight(repo, "--task", "T-G999", "--tree", ".", "--allow", "code")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    line = _item_line(out, "队列卡块有 status 行")
+    assert line.lstrip().startswith("✅"), line
+
+
+def test_preflight_status_check_red_when_target_card_lacks_status(tmp_path: Path) -> None:
+    """目标卡自己的块缺 status ⇒ 第 ⑧ 条 ❌ 且点名这张卡（老行为不许丢）。"""
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+    _write_backlog(repo, cid="C1", task="T-G999",
+                   spec="复盘/卡/卡C1-合成.md", omit_status=True)
+
+    done = _preflight(repo, "--task", "T-G999", "--tree", ".", "--allow", "code")
+
+    out = _out(done)
+    assert done.returncode == 1, out
+    line = _item_line(out, "队列卡块有 status 行")
+    assert line.lstrip().startswith("❌"), line
+    assert "卡 C1" in line, line
+
+
+def test_preflight_status_check_red_on_other_card_missing_status(tmp_path: Path) -> None:
+    """★★ 本卡核心：缺 status 的是**目标卡之外**那一块 ⇒ 照样 ❌ 且点名它。
+
+    改前（只判目标卡）这一段必定红：目标卡 C1 的 status 齐 ⇒ 第 ⑧ 条报 ✅，D9 被静默放过
+    —— 这正是「半瞎」。
+    """
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+    _write_backlog(repo, cid="C1", task="T-G999", spec="复盘/卡/卡C1-合成.md",
+                   extra_missing_status="D9")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "queue with a status-less block")
+
+    done = _preflight(repo, "--task", "T-G999", "--tree", ".", "--allow", "code")
+
+    out = _out(done)
+    assert done.returncode == 1, out
+    line = _item_line(out, "队列卡块有 status 行")
+    assert line.lstrip().startswith("❌"), line
+    assert "卡 D9" in line, line
+    assert "卡 C1" not in line, f"目标卡 C1 有 status，不该被点名：{line}"

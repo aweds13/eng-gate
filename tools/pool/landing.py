@@ -716,22 +716,22 @@ def parse_text_doc(text: pathlib.Path) -> tuple[dict[str, str], str]:
     return parts, ""
 
 
-def queue_status_problems(wt: pathlib.Path, card: str | None = None) -> list[str]:
-    r"""**这张卡**的队列块必须有 `status` 行（没有它，翻账会静默跳过 —— A 表第 9 条）。
+def queue_status_problems(blocks: list[dict[str, object]] | None,
+                          card: str | None = None) -> list[str]:
+    r"""**全队列**每个卡块都必须有 `status` 行（没有它，翻账会静默跳过 —— A 表第 9 条）。
 
-    ★ 只判**这一趟要落的那张卡**（`card`）：队列里别的卡缺 status 是它们的欠账，
-      不该把这一趟的落地挡红（工具一旦常红就没人看了）。不给 `card` ⇒ 判不了，
-      如实说（不假装通过）。
+    ★ 卡 E9（T-AG455）：从前只判**这一趟要落的那张卡**（别的卡缺 status 是它们的欠账）——
+      于是这条判据长期半瞎：队列里 11 块缺 status 也照绿。数据补齐之后**全判**：
+      判据不该为了迁就数据而降级。缺的每块都点名。
+    ★ 入参是 `backlog_blocks()` 已经读出来的 `blocks`（内部就是 `_scan_blocks()` 的结果）——
+      与 `flip_card_status` 同一份解析口径，**不额外读文件**（卡 E9 §判据 2）。
     """
-    blocks = backlog_blocks(wt)
     if blocks is None:
         return ["这棵树没有 docs/workbacklog.toml ⇒ 落地后翻账会静默跳过"]
-    if not card:
-        return ["没给 --card ⇒ 说不清要判哪张卡的 status（--batch 请逐成员看）"]
-    hits = [b for b in blocks if b["id"] == card]
-    if not hits:
-        return [f"队列里没有卡 {card} 的块（翻账会静默跳过）"]
-    return [f"卡 {card} 的块里没有 status 行" for b in hits if b["status"] is None]
+    problems = [f"卡 {b['id']} 的块里没有 status 行" for b in blocks if b["status"] is None]
+    if card and not any(b["id"] == card for b in blocks):
+        problems.append(f"队列里没有卡 {card} 的块（翻账会静默跳过）")
+    return problems
 
 
 def _tracked_paths(wt: pathlib.Path) -> set[str]:
@@ -972,15 +972,20 @@ def preflight(wt: pathlib.Path, *, task: str = "", card: str | None = None,
                   else "主树没有白名单外的跟踪改动",
                   "把那些改动挪进卡分支（git stash / 卡树里重做）"))
 
-    # ⑧ 队列卡块有 status 行（只判**这一趟要落的这张卡**；别的卡缺是它们的欠账）
+    # ⑧ 队列卡块有 status 行（★ 卡 E9：**全队列**扫描 —— 任何一块缺都 ❌ 并点名）
     if batch:
         # 批模式：成员翻账走 `flip_batch_member_statuses`（按产物 ∩ 暂存判）⇒ 不逐卡判
         items.append(("队列卡块有 status 行", True,
                       "批模式：成员翻账按产物走（不逐卡判）", ""))
     else:
-        st_bad = queue_status_problems(wt, card or (str(block["id"]) if block else None))
-        items.append(("队列卡块有 status 行", not st_bad,
-                      st_bad[0] if st_bad else "这张卡的块里有 status 行",
+        st_bad = queue_status_problems(blocks, card or (str(block["id"]) if block else None))
+        if not st_bad:
+            detail = f"队列 {len(blocks or [])} 块都有 status 行"
+        elif len(st_bad) == 1:
+            detail = st_bad[0]
+        else:
+            detail = f"{st_bad[0]}（另有 {len(st_bad) - 1} 条）"
+        items.append(("队列卡块有 status 行", not st_bad, detail,
                       "给缺的那块补一行 status（没有它，落地后翻账会静默跳过）"))
 
     # ⑨⑩ 两条子进程检查

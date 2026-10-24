@@ -1,3 +1,7 @@
+## 攒批 T-AG460：E8 + E9 + G1（一次全量门禁、一笔提交）
+- `scripts/audit_progress.py`：封存未跟踪清单改成**一次** `git ls-files -z` 取集合（215 次进程 → 1 次），判据语义一条未改；`tests/test_seal_untracked.py` 加四条钉子（含「215 条 ⇒ 进程数 == 1」）。
+- `docs/workbacklog.toml`：补齐 11 个缺 `status` 行的卡块；`tools/pool/landing.py` 体检第 ⑧ 条恢复全判（复用 `_scan_blocks()`）；`tests/test_wb_land.py` 加三条钉子（66 passed）。
+- `tools/check_skills_claims.py`：技能-工具对账机器化（141 处引用 / 30 个工具；对不上 1 条、判不出 51 条记 `not verified`）；`tests/test_check_skills_claims.py` 四条钉子。
 ## 卡 E7：派活即看守（T-AG453）
 - `tools/wb_dispatch.py`：新增 `--watch one|shared`（默认 `one`）与 `--no-watch`；抽出 `_spawn()`，新增 `spawn_watcher()` / `ensure_watch()` / `watch_horizon()` / `no_watch_notice()`；detach 与同步 `--execute` 两条路都自动起看守。
 - `tools/wb_watch.py`：新增 `--write-done` / `--mode` / `--since`；写 `.done`（六字段）、逐张进 `notifications.jsonl`、`watch-registry.json` 维护合用看守的引用计数与 `batch-done`；心跳过期判 `watcher-stale`（退 5），超时不写 `.done`（退 4）。

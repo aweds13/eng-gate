@@ -585,13 +585,28 @@ def _in_fragment_dir(rel: str) -> bool:
     return any(norm.startswith(d) for d in FRAGMENT_DIRS)
 
 
-def _is_tracked(repo: Path, rel: str) -> bool:
-    """`rel` 现在被 git 跟踪吗（`git ls-files --error-unmatch` 退 0 才算）。"""
+def _tracked_paths(repo: Path = ROOT) -> set[str]:
+    """★ 卡 E8：**一次** `git ls-files -z` 取全量跟踪路径（`/` 归一后装进 set）。
+
+    为什么改：原先每查一个路径起一次 `git ls-files --error-unmatch` 子进程，
+    `gates/last.json.untracked` 实测 215 条 ⇒ 215 次进程 ⇒ `--all` 白花十几秒
+    （卡 E8 量到 25.2 s；同一份清单换成一次 `ls-files -z` 只要 0.10 s）。
+    命中集合只在**这一次调用内**建好再逐个比 —— **不做**模块级缓存（跨进程/跨调用
+    复用会读到过期快照，卡 §4 明说不许）。
+    """
     done = subprocess.run(
-        ["git", "-c", "core.quotepath=false", "ls-files", "--error-unmatch", "--", rel],
-        cwd=repo, capture_output=True, text=True, check=False,
+        ["git", "-c", "core.quotepath=false", "ls-files", "-z"],
+        cwd=repo, capture_output=True, check=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
     )
-    return done.returncode == 0
+    if done.returncode != 0:
+        return set()
+    # `-z` 输出是 NUL 分隔的原始字节：显式按 UTF-8 解，别指望本机区域编码（坑 19）
+    tracked = {
+        p.replace("\\", "/") for p in done.stdout.decode("utf-8", "replace").split("\0") if p
+    }
+    print(f"  已用一次 ls-files 取到 {len(tracked)} 条跟踪路径")
+    return tracked
 
 
 def check_seal_untracked(repo: Path = ROOT, gates_path: Path | None = None) -> list[str]:
@@ -603,7 +618,8 @@ def check_seal_untracked(repo: Path = ROOT, gates_path: Path | None = None) -> l
     门禁算的"封存树"包含了那些未跟踪片段，却**没人**拿它跟"提交树"比；`sync_docs.py --check`
     又只查"现有片段在不在汇总里"、少文件照样 PASS ⇒ 这个缺口零判据。
     `run_gates.py --seal` 现在把当时未跟踪的清单写进 `gates/last.json.untracked`，
-    本函数就是那条**机器判据**：逐条 `git ls-files --error-unmatch`，谁还没被跟踪就点名。
+    本函数就是那条**机器判据**：拿一份全量跟踪路径（`_tracked_paths()` 一次 `git ls-files -z`
+    取到，卡 E8），谁还没被跟踪就点名。
 
     口径（卡 §1 定，别扩大）：
     - 只查**这份清单**（封存那一刻未跟踪的），不查"封存树 == 提交树"（那三个派生的共享文档
@@ -630,9 +646,12 @@ def check_seal_untracked(repo: Path = ROOT, gates_path: Path | None = None) -> l
         return []
     fails: list[str] = []
     ignored: list[str] = []
-    for rel in untracked:
-        rel = str(rel)
-        if not rel or _is_tracked(repo, rel):
+    rels = [str(rel) for rel in untracked if str(rel)]
+    if not rels:  # 空清单 ⇒ 连 git 进程都不起（省掉空跑）
+        return []
+    tracked = _tracked_paths(repo)  # ★ 卡 E8：一次取全量 ⇒ N 条清单只起 1 次进程
+    for rel in rels:
+        if rel.replace("\\", "/") in tracked:  # 先查集合（顺序：先查集合，再看是否还在盘上）
             continue
         if not (repo / rel).exists():  # 干脆不存在了 → 不算"生成了却没进提交"
             continue

@@ -1,0 +1,17 @@
+[entries."T-AG460"]
+id = "T-AG460"
+title = "攒批第一例：E8 封存扫描提速 + E9 队列补 status + G1 技能-工具对账"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E8-封存未跟踪一次扫描.md",
+  "file:复盘/卡/卡E9-队列补status.md",
+  "file:复盘/卡/卡G1-技能工具对账.md",
+  "file:gates/diag/wb-E8.report.md",
+  "file:gates/diag/wb-E9.report.md",
+  "file:gates/diag/wb-G1.report.md",
+  "file:tools/check_skills_claims.py",
+  "file:tests/test_check_skills_claims.py",
+]
+gaps = "- **这是本仓第一例攒批落地**：三张卡合成一笔提交，粒度比单卡粗 —— 要回滚就是回滚一批；成员卡的「自己的落地」由落地链按产物 ∩ 暂存清单判定（规格 复盘/卡/卡E5-合并队列.md）。- **E8 卡上那份「25.2 s」在本机复现不出来**：同一台机器同口径实测是 10.77 s → 3.40 s（判据看的是「215 次 git 进程 → 1 次」，实测取到 1690 条跟踪路径）（规格 复盘/卡/卡E8-封存未跟踪一次扫描.md）。- **G1 查出一条真漂移，修字不在本批**：`skills/pipe-land/SKILL.md` 第 67 行的 `wb_reconcile.py --fix` 这个参数不存在（该工具只有 `--root` / `--json`）—— 技能正文归卡 G2 改，本批一个字没动技能（规格 复盘/卡/卡G2-新机制进技能.md）。- **主控没有逐行读三张卡的实现**，复核靠工人自跑单测（E8 10 passed / E9 66 passed / G1 对账退 1 为真）与本趟全量门禁（规格 复盘/卡/卡E8-封存未跟踪一次扫描.md）。"
+

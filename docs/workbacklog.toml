@@ -3397,6 +3397,7 @@ spec = "复盘/卡/卡B1-文档参数口径.md"
 files = ["DSH-技能与插件开发参考.md", "docs/workbacklog.toml"]
 depends = ["E9"]
 risk = "low"
+status = "pending"
 
 # ================================================================ 分区 D：dsmate
 # 手机上自用的 DeepSeek 聊天客户端（src/dsmate/）。文档层已落地在
@@ -3416,6 +3417,7 @@ files = ["src/dsmate/app/settings.gradle.kts", "src/dsmate/app/build.gradle.kts"
          "src/dsmate/web/package.json", "src/dsmate/web/vite.config.ts",
          "src/dsmate/web/index.html", "src/dsmate/web/src/main.ts"]
 risk = "mid"
+status = "pending"
 
 [[cards]]
 id = "D2"
@@ -3430,6 +3432,7 @@ files = ["src/dsmate/app/src/main/java/com/dsmate/store/Schema.kt",
          "src/dsmate/web/src/branch/BranchBar.ts",
          "src/dsmate/web/src/branch/TreeView.ts"]
 risk = "mid"
+status = "pending"
 
 [[cards]]
 id = "D3"
@@ -3442,6 +3445,7 @@ files = ["src/dsmate/web/src/md/renderer.ts", "src/dsmate/web/src/md/math.ts",
          "src/dsmate/web/src/md/stream.ts"]
 depends = ["D1"]
 risk = "mid"
+status = "pending"
 
 [[cards]]
 id = "D4"
@@ -3455,6 +3459,7 @@ files = ["src/dsmate/app/src/main/java/com/dsmate/net/ModelCatalog.kt",
          "src/dsmate/web/src/settings/Credentials.ts"]
 depends = ["D1"]
 risk = "mid"
+status = "pending"
 
 [[cards]]
 id = "D5"
@@ -3469,6 +3474,7 @@ files = ["src/dsmate/app/src/main/java/com/dsmate/media/Camera.kt",
          "src/dsmate/web/src/input/PageRef.ts"]
 depends = ["D1", "D2"]
 risk = "mid"
+status = "pending"
 
 [[cards]]
 id = "D6"
@@ -3481,6 +3487,7 @@ files = ["src/dsmate/app/src/main/java/com/dsmate/net/ToolsClient.kt",
          "src/dsmate/web/src/search/Citations.ts"]
 depends = ["D1", "D4"]
 risk = "mid"
+status = "pending"
 
 [[cards]]
 id = "D7"
@@ -3492,6 +3499,7 @@ files = ["src/dsmate/web/src/calc/pyodide.ts", "src/dsmate/web/src/calc/extract.
          "src/dsmate/web/src/verify/VerifyBar.ts"]
 depends = ["D3"]
 risk = "mid"
+status = "pending"
 
 [[cards]]
 id = "D8"
@@ -3505,6 +3513,7 @@ files = ["src/dsmate/app/src/main/java/com/dsmate/store/Backup.kt",
          "src/dsmate/tools/audit_redlines.py"]
 depends = ["D1", "D2"]
 risk = "mid"
+status = "pending"
 
 # ================================================================ 分区 C：数学与研究预设
 # DSH 的数学 / 研究 / 个人知识库预设：项目书 docs/presets/math/，补丁 docs/presets/math.patch.yml。
@@ -3521,6 +3530,7 @@ files = ["docs/presets/math/README.md",
          "docs/presets/math/implementation.md",
          "docs/presets/math/CHANGELOG.md"]
 risk = "low"
+status = "pending"
 
 [[cards]]
 id = "C2"
@@ -3533,6 +3543,7 @@ files = ["docs/presets/math.patch.yml",
          "tests/test_dsh_preset.py"]
 depends = ["C1"]
 risk = "mid"
+status = "pending"
 
 # ---- 分区E｜判据前置：wb_land --preflight 一次说全（T-AG443）
 [[cards]]
@@ -3674,7 +3685,7 @@ spec = "复盘/卡/卡E8-封存未跟踪一次扫描.md"
 files = ["scripts/audit_progress.py", "tests/test_seal_untracked.py"]
 depends = ["E1"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E9"
@@ -3685,7 +3696,7 @@ spec = "复盘/卡/卡E9-队列补status.md"
 files = ["docs/workbacklog.toml", "tools/pool/landing.py", "tests/test_wb_land.py"]
 depends = ["E1"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "G1"
@@ -3696,7 +3707,7 @@ spec = "复盘/卡/卡G1-技能工具对账.md"
 files = ["tools/check_skills_claims.py", "tests/test_check_skills_claims.py"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "G2"
