@@ -8496,6 +8496,14 @@ evidence = [
 ]
 gaps = "还没开工：卡 E15 未派活。缺的是体检第 12 条 —— 文书里反引号内的 `.md` 必须在「片段目录 / docs / 仓库根」三基准解析得到，否则提示补 `skills/` 前缀。今晚卡 E7 就是被这条咬的（changelog 片段写了 `pipe-land/SKILL.md` 短路径，check_layers 判 6 处断链）。规格见 复盘/卡/卡E15-文书引用体检.md。"
 
+[entries."T-AG470"]
+id = "T-AG470"
+title = "云门禁机：多会话共享的一台机器，口径与停机护栏"
+group = "ENGINEERING"
+status = "todo"
+evidence = ["file:复盘/卡/卡E18-云门禁机.md"]
+gaps = "- 只交口径与体检脚本，不实现关机/开机、不调云 API（留后面单独一张卡）。- 云机尚未开通，脚本在真云机上的读数未验（本机验的是判据）。- 「谁算数」的前提是 `git remote -v` 非空，现实里它现在是空的。"
+
 [entries."T-AG469"]
 id = "T-AG469"
 title = "攒批第二例：红单归并 + 文档索引机器化"

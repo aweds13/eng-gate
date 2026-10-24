@@ -3837,3 +3837,14 @@ files = ["tools/pool/landing.py", "tests/test_wb_land.py"]
 depends = ["E13"]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E18"
+task = "T-AG470"
+title = "云门禁机：多会话共享的一台机器，口径与停机护栏"
+tree = ".wt/E18"
+spec = "复盘/卡/卡E18-云门禁机.md"
+files = ["docs/subsystems/ci/云门禁机.md", "scripts/check_cloud_box.py", "tests/test_check_cloud_box.py"]
+depends = []
+risk = "mid"
+status = "pending"
