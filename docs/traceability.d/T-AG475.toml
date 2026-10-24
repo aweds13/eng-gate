@@ -1,0 +1,11 @@
+[entries."T-AG475"]
+id = "T-AG475"
+title = "看守判「这一轮产物」给文件时间戳留粒度容差（T-AG475）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E22-看守时间粒度容错.md",
+  "file:gates/diag/batch/T-AG475.toml",
+]
+gaps = "- 2026-10-25 01:16，F1 落地门禁在本机 4 个 worker 下偶发红一条：`tests/test_wb_dispatch_watch.py::test_shared_registry_rebuilds_from_disk_after_restart`（`AssertionError: 已出判决的卡（402）不许再算进未完成  assert 3 == 2`），日志见 `gates/diag/gate-F1d.log`。- 根因（实测）：`tools/wb_watch.py` 的 `_fresh()` 用 `mtime >= since` 判「这一轮的产物」，而 Windows 文件时间戳比墙钟粗 —— 同一次 `write_text` 的 mtime 比 `time.time()` 早 1.4 ms（NTFS 更新周期约 15.6 ms），复现读数 `since=1792862663.2439` / `mtime=1792862663.2402365` ⇒ 刚写的判决被判成上一轮，`rebuild_registry` 把已收工的卡算进未完成。- 影响面不止测试：派活器 `--since` 走同一条判据（`wb_dispatch` 派活后立刻起看守），真现场同样会偶发「刚出判决却仍算在飞」（`复盘/卡/卡E22-看守时间粒度容错.md`）。- 没做的：只加时间容差，没改 `--since` 的语义窗口；派活器侧没加独立用例 —— `tools/wb_dispatch.py` 与看守共用 `tools/wb_watch.py:176 _fresh()`，所以两条路一起被这次修复覆盖。"
+

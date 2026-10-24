@@ -6,6 +6,11 @@ status = "done"
 evidence = [
   "file:复盘/卡/卡F3-文档门禁.md",
   "file:gates/diag/wb-F3.report.md",
+  "file:scripts/check_docs.py",
+  "file:docs/doc-debt-baseline.toml",
+  "file:tests/test_check_docs.py",
+  "test:test_check_docs.py::test_dead_pointer_is_reported",
+  "test:test_check_docs.py::test_skip_is_counted_and_never_called_a_pass",
 ]
 gaps = "- **默认 report，不拦提交。** 第一版只报告；等欠账基线稳定再切 `block`（规格 复盘/卡/卡F3-文档门禁.md）。- **判定能力有边界：** 死指针 / 文本 superseded / drift 三类能判；「文档写得对不对」判不了（规格 复盘/卡/卡F3-文档门禁.md）。- **没有挂进 19 道门。** `gates/defs/contract.py` 没动 —— 挂门要连带改门清单与钉子，留到下一步（规格 复盘/卡/卡F3-文档门禁.md）。- **主控没有逐行读工人的实现。** 复核的是工人自跑单测 + `--doctor` 输出形态（规格 复盘/卡/卡F3-文档门禁.md）。"
 

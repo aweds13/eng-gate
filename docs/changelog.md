@@ -206,6 +206,9 @@
 - `tools/wb_reconcile.py`：去掉 `--grep` 的 `-10` 截断；新增 `_batch_landed()`/`_landed_commits()`/
   `_spec_commit_in()`，按围栏 `state == landed` 认账；`check()` 第三份 `accounted_done` 打 `[蓝]`。
 - `tests/test_wb_reconcile.py`：5 条断言改三份解包 + 2 条新钉子（landed 认账 / draft 不算证据）。
+## 2026-10-25 看守判「这一轮产物」给文件时间戳留 1 秒粒度容差（T-AG475）
+- `tools/wb_watch.py`：新增 `_MTIME_GRANULARITY_SLACK = 1.0`（注释写明实测 1.4 ms / NTFS ~15.6 ms 与「1 秒不会把真·上一轮判决混进来」）；`_fresh()` 改判 `mtime >= since - _MTIME_GRANULARITY_SLACK`，docstring 补「★ 卡 E22」一段。
+- `tests/test_wb_dispatch_watch.py`：新增 `test_fresh_tolerates_a_file_timestamp_behind_the_wall_clock`（`since = mtime + 0.0014` 必须判 `STATE_DONE`，复现真现场）；`test_old_verdict_is_not_this_rounds_completion` 的旧件改成 5 秒前造（原写法考的是时钟精度，本身会闪）。
 ## 2026-10-24 T-AG437 卡归窗口：落地 / 派活前过 DSH 会话闸（A324）
 - 新增 `tools/wb_session.py`：`session_id` / `owner` / `claim` / `release` / `listing`，租约写 `gates/diag/session-leases.json`（gitignored），TTL 24 小时。
 - `tools/wb_land.py` 加 `_session_gate(argv)`：按 `--card` 认领，卡归别的窗口就退 2；`--take-over` 显式换手并留痕。

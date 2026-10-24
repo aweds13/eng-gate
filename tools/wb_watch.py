@@ -173,19 +173,30 @@ def _codearts_artifacts(logs_dir: Path, card: str, suffix: str) -> list[Path]:
                   key=lambda p: p.stat().st_mtime)
 
 
+#: 文件时间戳粒度容差（秒）—— Windows 上 mtime 可落后墙钟数毫秒（卡 E22 实测 1.4 ms，
+#: NTFS 更新周期约 15.6 ms）。判「这一轮的产物」时留这么多余量，见 `_fresh`。
+_MTIME_GRANULARITY_SLACK = 1.0
+
+
 def _fresh(paths: list[Path], since: float | None) -> list[Path]:
     """只留**这一轮**的产物（mtime ≥ `since`）—— 上一轮的旧判决 / 旧日志不许冒充当前状态。
 
     ★ 卡 E7 的真现场：`--force` 重派同一张卡时，旧 `wb-<卡>.jsonl` 还在、也早就静默
       ⇒ 新起的看守一上来就会把它读成「判死」并退 3（假死，比不挂看守更误导）。
       派活器用 `--since`（这一轮开跑的时刻）把旧证据切掉。`since=None`（手动跑）照旧全认。
+
+    ★ 卡 E22：**文件时间戳比墙钟粗**（Windows 实测同一次写入的 mtime 比 `time.time()`
+      早 1.4 ms；NTFS 更新周期 ~15.6 ms）⇒ 刚写的判决会被 `mtime >= since` 判成「上一轮」，
+      表现为 `rebuild_registry` 把已收工的卡算进未完成（多进程下偶发红）。留 1 秒容差：
+      派活到工人出判决隔着秒级以上，1 秒不会把真·上一轮的判决混进这一轮。
     """
     if since is None:
         return paths
+    cutoff = since - _MTIME_GRANULARITY_SLACK
     kept: list[Path] = []
     for path in paths:
         try:
-            if path.stat().st_mtime >= since:
+            if path.stat().st_mtime >= cutoff:
                 kept.append(path)
         except OSError:                              # 边读边被删 ⇒ 这一份不认
             continue

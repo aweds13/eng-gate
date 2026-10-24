@@ -229,11 +229,29 @@ def test_old_silent_log_is_not_a_death_for_this_round(tmp_path: Path) -> None:
 
 
 def test_old_verdict_is_not_this_rounds_completion(tmp_path: Path) -> None:
-    """★ 旧判决同理：比 `since` 旧的判决不是这一轮的收工信号（归档失败时尤其要防）。"""
+    """★ 旧判决同理：比 `since` 旧的判决不是这一轮的收工信号（归档失败时尤其要防）。
+
+    ★ 卡 E22 改口径：旧件用 **5 秒前** 造（原来是"刚写完就拿 `time.time()` 当 since"）——
+      文件时间戳粒度粗（实测 mtime 可落后墙钟 1.4 ms、NTFS 更新周期 ~15.6 ms），
+      差几毫秒的写法考不出"旧件"，考的是时钟精度，本身就是条会闪的钉子。
+    """
     _cb_verdict(tmp_path, "E7")
     assert wb_watch.probe_card("E7", tmp_path, time.time()).kind == wb_watch.FINISHED
+    os.utime(_cb_verdict(tmp_path, "E7"), (time.time() - 5, time.time() - 5))
     assert wb_watch.probe_card("E7", tmp_path, time.time(),
                                since=time.time()).kind != wb_watch.FINISHED
+
+
+def test_fresh_tolerates_a_file_timestamp_behind_the_wall_clock(tmp_path: Path) -> None:
+    """★ 卡 E22：刚写的判决必须算这一轮 —— 哪怕文件 mtime 比 `since` 早几毫秒。
+
+    真现场（2026-10-25 01:23 本机 `-n 4` 门禁）：`rebuild_registry` 把已收工的卡
+    算进未完成 ⇒ `test_shared_registry_rebuilds_from_disk_after_restart` 偶发红。
+    """
+    _cb_verdict(tmp_path, "E7")
+    mtime = (tmp_path / "gates" / "diag" / "wb-E7.verdict.txt").stat().st_mtime
+    reg = wb_watch.register_cards(tmp_path, ["E7"], since=mtime + 0.0014)
+    assert reg["cards"]["E7"] == wb_watch.STATE_DONE, reg["cards"]
 
 
 def test_register_records_the_cutoff_and_ignores_the_old_round(tmp_path: Path) -> None:

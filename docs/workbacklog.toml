@@ -3870,3 +3870,13 @@ files = ["tools/wb_session.py", "tests/test_wb_session.py"]
 depends = []
 risk = "low"
 status = "done"
+[[cards]]
+id = "E22"
+task = "T-AG475"
+title = "看守判「这一轮产物」要给文件时间戳留粒度容差（-n4 偶发假红）"
+tree = ".wt/E22"
+spec = "复盘/卡/卡E22-看守时间粒度容错.md"
+files = ["tools/wb_watch.py", "tests/test_wb_dispatch_watch.py", "docs/traceability.d/T-AG451.toml"]
+depends = []
+risk = "low"
+status = "done"
