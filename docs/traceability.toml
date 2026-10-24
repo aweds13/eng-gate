@@ -7987,3 +7987,145 @@ evidence = [
   "file:skills/pipe-gate/SKILL.md",
 ]
 gaps = "- 产品门模块是**硬 import**：`scripts/run_gates.py` 里直接 `from gates.defs import product_timeflow`，删掉该模块会 ImportError。要真正做到「没有产品门的仓也能用」，得改成可选加载（探测文件存在或 try/except ImportError），本卡没做。- `--profile` 只切门，不切 pytest 的用例选集：`--affected` 仍按全仓算，`--fast` 与 `--profile` 同时用时只有 `tests/test_run_gates_profiles.py` 覆盖了「档与档之间」的关系，没覆盖「档 × 受影响选集」的组合。- 门表搬进 `gates/defs/` 后，`gates/defs/__init__.py` 仍是空壳：「门 id 全局唯一」目前只由 `tests/test_run_gates_profiles.py` 的联合 == 全量、两两无交集间接保证，没有直接断言。"
+
+[entries."T-AG440"]
+id = "T-AG440"
+title = "dsmate 文档底座 + 分区 C/D 登记 + 历史 `Task:` 补记"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:src/dsmate/README.md",
+  "file:src/dsmate/ACCEPTANCE.md",
+  "file:复盘/卡/卡D1-骨架与通道.md",
+  "file:复盘/卡/卡C1-数学预设项目书.md",
+  "file:docs/workbacklog.toml",
+  "file:docs/traceability.toml",
+]
+gaps = "- 本条是**账务条目**，不是卡：收的是 2026-10-23~24 那一串「文档底座 + 登记」提交 —— `src/dsmate/` 五层文档与 AC 表、分区 D 八张卡（D1–D8）与分区 C 两张卡（C1/C2）的登记、卡 A324 入场。- 这 7 笔提交原本都没有 `Task:` trailer（审计 ⑧ 判红），2026-10-24 用 `git rebase --exec be9574fe` 逐笔重写挂上本条编号：`Task:` 是**事后补挂**的，不是当时就有；重写后 `be9574fe` 之后的所有 sha 都变了（`gates/last.json` 的 `rev` 随之失效，须重跑全量门禁重封存）。- 不覆盖实现：`T-DG001..T-DG008` 仍全部 todo（dsmate 代码未开工），`T-AG437/438/439` 也仍是 todo —— 本条挂的是「文档与登记已落盘」，不是卡做完了。"
+
+[entries."T-AG437"]
+id = "T-AG437"
+title = "卡归窗口：DSH 会话指纹绑定"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡A324-卡归窗口.md",
+  "file:docs/workbacklog.toml",
+  "file:tools/wb_session.py",
+  "file:tests/test_wb_session.py",
+]
+gaps = "- 本条是**补记**：卡 A324 早已登记进队列（`38522420`、`070e8e10` 两笔），台账却一直没有条目，审计 ② 拿不到号，本笔补上，状态如实记 todo。- 接线没做：`tools/wb_land.py` / `tools/wb_dispatch.py` 里 grep 不到 `wb_session|session_gate|take_over`，卡树 `.wt/A324` 有 0 笔自己的提交。- `tools/wb_session.py` 与 `tests/test_wb_session.py` 目前是**未跟踪**文件，evidence 指得动但不在 git 里，落地那一笔才入库。"
+
+[entries."T-AG438"]
+id = "T-AG438"
+title = "数学与研究预设：项目书（意图 / 规格 / 实现）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡C1-数学预设项目书.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = "- 本条是**补记**：卡 C1 在 `a4fe2115` 登记进队列（分区 C），台账无条目，本笔补上，状态如实记 todo。- 项目书尚未落盘：仓库里只有卡规格 `复盘/卡/卡C1-数学预设项目书.md`，没有项目书本体。"
+
+[entries."T-AG439"]
+id = "T-AG439"
+title = "数学与研究预设：补丁 + 安装器 + 技能目录"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡C2-数学预设落地.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = "- 本条是**补记**，同 C1：`a4fe2115` 登记进队列、台账缺条目，本笔补上。- 依赖 C1 的项目书与 A324 那一类的接线，尚未开工；`docs/presets/` 里还没有数学预设的补丁。"
+
+[entries."T-DG001"]
+id = "T-DG001"
+title = "骨架与通道：壳 + WebView + 桥 + 构建管线，能发一句流式回答"
+group = "主控D"
+status = "todo"
+evidence = [
+    "file:复盘/卡/卡D1-骨架与通道.md",
+    "file:src/dsmate/ACCEPTANCE.md",
+    "file:src/dsmate/README.md",
+    "file:src/dsmate/docs/contracts/flows.md",
+    "file:src/dsmate/docs/contracts/interactions.md",
+    "file:src/dsmate/docs/implementation/architecture.md",
+    "file:src/dsmate/docs/implementation/modules.md",
+    "file:src/dsmate/docs/intention/decisions.md",
+    "file:src/dsmate/docs/intention/evidence.md",
+    "file:src/dsmate/docs/intention/needs.md",
+    "file:src/dsmate/docs/specification/conventions.md",
+    "file:src/dsmate/docs/specification/functional.md",
+    "file:src/dsmate/docs/specification/nonfunctional.md",
+]
+gaps = "dsmate 是 2026-10-23 新起的手机端客户端（`src/dsmate/`），五层文档与卡队列先落盘、代码未开工；本条 todo 即如实记录未做，等对应卡开工后改 done。"
+
+[entries."T-DG002"]
+id = "T-DG002"
+title = "数据层与分支树：SQLite + 分支只存增量 + 版本切换与回主干"
+group = "主控D"
+status = "todo"
+evidence = [
+    "file:复盘/卡/卡D2-数据层与分支树.md",
+]
+gaps = "dsmate 是 2026-10-23 新起的手机端客户端（`src/dsmate/`），五层文档与卡队列先落盘、代码未开工；本条 todo 即如实记录未做，等对应卡开工后改 done。"
+
+[entries."T-DG003"]
+id = "T-DG003"
+title = "渲染层：markdown-it + KaTeX + Shiki + Mermaid，流式不整段重排"
+group = "主控D"
+status = "todo"
+evidence = [
+    "file:复盘/卡/卡D3-渲染层.md",
+]
+gaps = "dsmate 是 2026-10-23 新起的手机端客户端（`src/dsmate/`），五层文档与卡队列先落盘、代码未开工；本条 todo 即如实记录未做，等对应卡开工后改 done。"
+
+[entries."T-DG004"]
+id = "T-DG004"
+title = "模型清单与凭据：list-models 原样列出 + BYOK 三槽 + 改名降级"
+group = "主控D"
+status = "todo"
+evidence = [
+    "file:复盘/卡/卡D4-模型清单与凭据.md",
+]
+gaps = "dsmate 是 2026-10-23 新起的手机端客户端（`src/dsmate/`），五层文档与卡队列先落盘、代码未开工；本条 todo 即如实记录未做，等对应卡开工后改 done。"
+
+[entries."T-DG005"]
+id = "T-DG005"
+title = "教材库与页码唤图：一窗一书 + #p12 发送前本地解析成图像块"
+group = "主控D"
+status = "todo"
+evidence = [
+    "file:复盘/卡/卡D5-教材库与页码唤图.md",
+]
+gaps = "dsmate 是 2026-10-23 新起的手机端客户端（`src/dsmate/`），五层文档与卡队列先落盘、代码未开工；本条 todo 即如实记录未做，等对应卡开工后改 done。"
+
+[entries."T-DG006"]
+id = "T-DG006"
+title = "联网搜索与引用：走官方 tools/search + fetch，计次可见"
+group = "主控D"
+status = "todo"
+evidence = [
+    "file:复盘/卡/卡D6-联网搜索与引用.md",
+]
+gaps = "dsmate 是 2026-10-23 新起的手机端客户端（`src/dsmate/`），五层文档与卡队列先落盘、代码未开工；本条 todo 即如实记录未做，等对应卡开工后改 done。"
+
+[entries."T-DG007"]
+id = "T-DG007"
+title = "计算核验条：懒加载 SymPy + 式子抽取 + 三方不一致如实摆"
+group = "主控D"
+status = "todo"
+evidence = [
+    "file:复盘/卡/卡D7-计算核验条.md",
+]
+gaps = "dsmate 是 2026-10-23 新起的手机端客户端（`src/dsmate/`），五层文档与卡队列先落盘、代码未开工；本条 todo 即如实记录未做，等对应卡开工后改 done。"
+
+[entries."T-DG008"]
+id = "T-DG008"
+title = "备份/热更新/设置：导出导入 + bundle 替换生效 + 红线审计脚本"
+group = "主控D"
+status = "todo"
+evidence = [
+    "file:复盘/卡/卡D8-备份热更新与设置.md",
+]
+gaps = "dsmate 是 2026-10-23 新起的手机端客户端（`src/dsmate/`），五层文档与卡队列先落盘、代码未开工；本条 todo 即如实记录未做，等对应卡开工后改 done。"
