@@ -10,8 +10,13 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from tools import wb_session
 
@@ -131,20 +136,62 @@ def test_one_retry_degrades_the_flaky_save(tmp_path, monkeypatch):
     assert not ledger.exists()
 
 
-def test_claim_writes_only_the_isolated_ledger(tmp_path, monkeypatch):
-    """钉子 3：`LEDGER` 指到 tmp 上的假 `gates/diag/` ⇒ 真仓账本字节不变。"""
-    real_ledger = wb_session.LEDGER
-    before = real_ledger.read_bytes() if real_ledger.exists() else None
+_SENTINEL = "sess-e23-" + uuid.uuid4().hex[:8]
 
+
+def _mentions(path: Path, sentinel: str) -> bool:
+    """这份账本里有没有这个哨兵（读不出来就当没有）。"""
+    try:
+        return sentinel in path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
+def test_claim_writes_only_the_isolated_ledger(tmp_path, monkeypatch):
+    r"""钉子 3：把 `LEDGER` 指到 tmp 上的假 `gates/diag/` ⇒ 真仓账本里不许出现这次写入。
+
+    ★ 卡 E23：以前这里比的是「真账本前后字节相等」。xdist 跑 `-n 4` 时另一个 worker
+    里别的用例会真的读写同一个真账本 ⇒ 这条会闪红（2026-10-25 F1 落地门禁实测：
+    `真仓账本被写了：...\session-leases.json`）。判据真正要的是「**这一次**没写到真账本」，
+    所以按**唯一哨兵**判，不按字节判。
+    """
+    real = wb_session.LEDGER          # ★ 先记下真路径：monkeypatch 之后 LEDGER 就指到假的了
     fake = tmp_path / "gates" / "diag" / "session-leases.json"
     monkeypatch.setattr(wb_session, "LEDGER", fake)
-    monkeypatch.setenv("DSH_SESSION_ID", "sess-a")
+    monkeypatch.setenv("DSH_SESSION_ID", _SENTINEL)
     ok, _ = wb_session.claim("A6")
 
     assert ok
-    assert json.loads(fake.read_text(encoding="utf-8"))["cards"]["A6"]["session"] == "sess-a"
-    after = real_ledger.read_bytes() if real_ledger.exists() else None
-    assert after == before, f"真仓账本被写了：{real_ledger}"
+    assert json.loads(fake.read_text(encoding="utf-8"))["cards"]["A6"]["session"] == _SENTINEL
+    assert not _mentions(real, _SENTINEL), f"真仓账本被这一次写进去了：{real}"
+
+
+def test_byte_identity_pin_would_be_wrong_when_another_worker_writes(
+    tmp_path, monkeypatch
+) -> None:
+    """反空转钉子：真账本在执行期间被别人写过时，老写法必红、新写法必绿。
+
+    模拟：先把 `LEDGER` 指回真路径写一次（扮演"别的 worker"），再走被测路径。
+    老判据（前后字节相等）在这里会红；新判据（哨兵不出现）照样绿。
+    """
+    pretend_real = tmp_path / "pretend-real" / "session-leases.json"
+    pretend_real.parent.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(wb_session, "LEDGER", pretend_real)
+    before = pretend_real.read_bytes() if pretend_real.exists() else None
+    wb_session._save({"version": 1, "cards": {"ZZ": {"session": "other-worker", "since": 1}}})
+    after_concurrent_write = pretend_real.read_bytes() if pretend_real.exists() else None
+    assert after_concurrent_write != before, "夹具没造出『别人写过』：这份账本没变"
+
+    fake = tmp_path / "gates" / "diag" / "session-leases.json"
+    monkeypatch.setattr(wb_session, "LEDGER", fake)
+    monkeypatch.setenv("DSH_SESSION_ID", _SENTINEL)
+    ok, _ = wb_session.claim("A6")
+
+    assert ok
+    # 老写法在这里会红（「这份账本」的字节已经被别人改过），新写法不会：
+    assert pretend_real.read_bytes() != before
+    assert _SENTINEL not in pretend_real.read_text(encoding="utf-8"), "哨兵漏进账本了"
 
 
 def test_save_retries_when_its_own_tmp_was_swapped_away(tmp_path, monkeypatch):

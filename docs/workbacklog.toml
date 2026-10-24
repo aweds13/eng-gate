@@ -3901,4 +3901,4 @@ spec = "复盘/卡/卡E23-并行下钉子的隔离判据.md"
 files = ["tests/test_wb_session.py"]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"

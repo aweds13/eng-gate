@@ -1,0 +1,11 @@
+[entries."T-AG476"]
+id = "T-AG476"
+title = "并行下钉子的隔离判据：比哨兵不比字节（T-AG476）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E23-并行下钉子的隔离判据.md",
+  "file:gates/diag/batch/T-AG476.toml",
+]
+gaps = "- **只治这一条钉子。** 同类「真仓产物前后比字节」的写法还有三条（`tests/test_auto_land.py:215-223`、`tests/test_tf_group.py:150-154`、`tests/test_trae_dispatch.py:145-149`），但都在 `tmp_path` 上、跑不到真仓账本，不会跨 worker 抢，故不改（规格 `复盘/卡/卡E23-并行下钉子的隔离判据.md`）。- **没有加「必须单 worker」的禁令。** 单 worker 仍是降级手段（761 s），不是常态；本卡只是让它不再是**必须**（规格 `复盘/卡/卡E23-并行下钉子的隔离判据.md`）。- **没有做「全仓并行钉子体检」。** 只按 `grep -rn 「read_bytes()」 tests/*.py` 带 before/after 的那几条人工过了一遍（清单与行号见 `复盘/卡/卡E23-并行下钉子的隔离判据.md` 的「实测」节）。"
+
