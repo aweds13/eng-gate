@@ -3730,3 +3730,14 @@ files = ["skills/README.md", "skills/softeng-manage/SKILL.md", "skills/softeng-m
 depends = ["G2", "E7"]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E12"
+task = "T-AG463"
+title = "跨分区写者判据认 depends（与 validate 同一条规则）"
+tree = ".wt/E12"
+spec = "复盘/卡/卡E12-跨分区写者认depends.md"
+files = ["tools/wb_plan.py", "tests/test_wb_plan.py"]
+depends = []
+risk = "low"
+status = "pending"

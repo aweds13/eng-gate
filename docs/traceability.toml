@@ -8383,3 +8383,14 @@ evidence = [
 ]
 gaps = """规格已立、表未写（2026-10-24 由主控登记）。至少五行已实测：全量 19 道已改判、
 封存/提交顺序已改判、preflight 同名冲突、数据根解析已改判、卡树先提交半冲突。"""
+
+[entries."T-AG463"]
+id = "T-AG463"
+title = "卡 E12 —— 跨分区写者判据认 depends（与 validate 同一条规则）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E12-跨分区写者认depends.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = """规格已立、判据未改（2026-10-24 由主控登记）。实测五条跨分区相交全都有 depends，而 tools/wb_plan.py:346 只按 files 相交判 ⇒ wb_plan check 退 1 ⇒ tests/test_wb_plan.py::test_check_command_passes_on_seed 红，E7 落地被挡。"""
