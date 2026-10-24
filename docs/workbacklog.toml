@@ -3847,7 +3847,7 @@ spec = "复盘/卡/卡E18-云门禁机.md"
 files = ["docs/subsystems/ci/云门禁机.md", "scripts/check_cloud_box.py", "tests/test_check_cloud_box.py"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E19"
