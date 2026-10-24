@@ -1,0 +1,15 @@
+[entries."T-AG458"]
+id = "T-AG458"
+title = "preflight 同名不同义：分层命名（T-AG458）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡G3-preflight消歧.md",
+  "file:gates/diag/batch/T-AG458.toml",
+  "file:tools/pool/landing.py",
+  "file:skills/pipe-land/references/land-steps.md",
+  "file:skills/softeng-manage/references/commands.md",
+  "file:tests/test_wb_land.py",
+]
+gaps = "- **别名还在**：`--no-preflight` 仍收（只提示改名），所以「一个 preflight 词根」只做到一半 —— 要彻底删别名得等外部脚本迁完，口径见 `复盘/卡/卡G3-preflight消歧.md`。- **只改了内层名字**：`--preflight`（壳层只读体检，卡 E1）一行未动，它的 `--help` 措辞沿用 E1 那版，见 `tools/wb_land.py`。- **技能只同步两页**：`skills/pipe-land/references/land-steps.md` 与 `skills/softeng-manage/references/commands.md`；其余出现 `--no-preflight` 的地方都是历史 changelog（`docs/changelog.md` 等），刻意不改。"
+

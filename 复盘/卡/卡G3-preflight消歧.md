@@ -32,3 +32,19 @@
 ## 不许做
 
 - 不许靠「反正两个都能跑」放着不管（这正是本卡要消的那条歧义）。
+
+## 实测与选定（2026-10-25 落地）
+
+**选法**：分层命名（不改名 E1 那条）—— 理由：`--preflight` 已在 `skills/README.md`、
+`skills/softeng-manage/references/commands.md`、`复盘/交接-重构进度.md` 等多处被写成「只读体检」，
+改名会把这些一起打歪；而「跳过快门禁预检」是**落地链内层**的开关，改它只动一处代码 + 一处表行。
+
+- `tools/pool/landing.py`：新增 `--skip-preflight`（内层：跳过 ③″ `run_gates.py --fast`）；
+  `--no-preflight` 保留为**已改名**的别名，收到就打印一行「已改名 `--skip-preflight`…这次照旧生效」。
+  判定处改成 `not a.skip_preflight and not a.no_preflight`。
+- `skills/pipe-land/references/land-steps.md`：表行改成 `--skip-preflight`，并注明旧写法仍收。
+- `skills/softeng-manage/references/commands.md`：E1 小节加一行「别和 `--skip-preflight` 混」。
+- 钉子 `tests/test_wb_land.py` 两条：
+  `test_preflight_flags_live_on_two_layers`（落地链帮助里有 `--skip-preflight`、有旧写法、**没有** `--preflight`）、
+  `test_legacy_no_preflight_still_works_and_says_it_was_renamed`（旧写法照旧生效且当场说改名）。
+- 向后兼容：旧写法**仍在**（不删），所以 `docs/changelog.d/T-AG458.md` 只写一行「旧写法仍在」。

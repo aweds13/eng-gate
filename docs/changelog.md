@@ -1,3 +1,6 @@
+## `preflight` 两个词根分层（T-AG458）
+
+- 落地链内层的「跳过快门禁预检」改名 `--skip-preflight`；旧写法 `--no-preflight` 仍在（提示已改名）；壳层 `--preflight`（卡 E1 只读体检）不动。
 ## 落地翻账不许抹掉证据指针（T-AG479）
 
 - `tools/pool/stage_card.py` 片段模式改成合并 `evidence`：已有条目原样保留、本次 `--evidence` 追加在后、去重；`gaps`/`title`/`status` 仍按本次写。

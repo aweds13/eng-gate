@@ -3726,10 +3726,10 @@ task = "T-AG458"
 title = "preflight 同名不同义：旧的「跳过预检」与新的「只读体检」"
 tree = ".wt/G3"
 spec = "复盘/卡/卡G3-preflight消歧.md"
-files = ["tools/wb_land.py", "skills/pipe-land/SKILL.md", "skills/pipe-land/references/land-steps.md", "tests/test_wb_land.py"]
+files = ["tools/pool/landing.py", "skills/pipe-land/references/land-steps.md", "skills/softeng-manage/references/commands.md", "tests/test_wb_land.py"]
 depends = ["E1", "E7", "G2", "E9", "E15"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "G4"

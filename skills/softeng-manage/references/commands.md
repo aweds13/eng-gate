@@ -62,6 +62,7 @@ python -X utf8 scripts/audit_progress.py --all          # 只对账台账 + 重�
 
 - **疼在哪**：落地链 ④ 全量要十几分钟；参数写错 / 卡域空 / 文书缺段这类错，以前都拖到第 12 分钟才红。
 - **口径**：`--preflight` 一次说全 **11 条判据**（不 fail-fast），**只读**、一步都不动，约十几秒
+- **别和 `--skip-preflight` 混**：那个是落地链**内层**旗标（跳过③″快门禁预检，`tools/pool/landing.py`）；`--preflight` 是**壳层**只读体检（`tools/wb_land.py`，卡 E1）。同名不同义已在卡 G3 消掉
   （大头是 audit 那 10~15 秒）。给了 `--card` / `--batch` 时，体检绿了**才**接着落地，且只体检一次。
 - **命令与退出码**：
 

@@ -49,8 +49,10 @@ r"""钉 `tools/wb_land.py`（收口链搬进 git；卡 139 · `T-G237`）。
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -2213,3 +2215,33 @@ def test_preflight_status_check_red_on_other_card_missing_status(tmp_path: Path)
     assert line.lstrip().startswith("❌"), line
     assert "卡 D9" in line, line
     assert "卡 C1" not in line, f"目标卡 C1 有 status，不该被点名：{line}"
+
+
+# ============================================ 卡 G3（T-AG458）：preflight 两层次分层命名
+def test_preflight_flags_live_on_two_layers(capsys) -> None:
+    """★ 卡 G3：`--preflight`（壳层只读体检）与 `--skip-preflight`（内层跳过快门禁预检）分层。
+
+    反例：两个旗标同义、或落地链里又叫 `--no-preflight` 又叫 `--preflight` ⇒ 本钉子红。
+    """
+    from tools.pool import landing
+
+    buf = io.StringIO()
+    with contextlib.suppress(SystemExit), contextlib.redirect_stdout(buf):
+        landing.main(["--help"])
+    help_text = buf.getvalue()
+    assert "--skip-preflight" in help_text, (
+        f"落地链帮助里没有 `--skip-preflight`：{help_text[:400]}")
+    assert "--no-preflight" in help_text, "旧写法 `--no-preflight` 要留着（已发布过）"
+    assert "  --preflight" not in help_text, (
+        "落地链**不该**自己收 `--preflight` —— 那是壳层的只读体检（卡 E1），两层不许同名")
+
+
+def test_legacy_no_preflight_still_works_and_says_it_was_renamed(capsys) -> None:
+    """旧写法照旧生效，但必须当场说「已改名」——静默改名比报错更难查。"""
+    from tools.pool import landing
+
+    rc = landing.main(["--tree", ".wt/x", "--task", "T-1", "--title", "t",
+                       "--evidence", "e", "--allow", "a", "--no-preflight"])
+    out = capsys.readouterr().out
+    assert rc == 6, "缺 --card/--batch 应在解析后退 6（参数检查最先）"
+    assert "已改名" in out and "--skip-preflight" in out, out

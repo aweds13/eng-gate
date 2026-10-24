@@ -20,7 +20,7 @@
 | `--commit-only` | 否 | 门禁已绿、封存没变：⑥ 起接着走 |
 | `--affected` / `--changed-from` | 否 | 增量门禁（默认关）；碰 `scripts/` `tools/` `gates/` 会强制回全量 |
 | `--no-review` | 否 | 跳过⑧复核落盘（默认开） |
-| `--no-preflight` | 否 | 跳过③″快门禁预检（已知道要跑全量时） |
+| `--skip-preflight` | 否 | 跳过③″快门禁预检（已知道要跑全量时）。**旧写法 `--no-preflight` 已改名，仍收但会提示** |
 | `--precheck` | 否 | **壳层参数、不转发给落地链**：落地前置快检（文书裸文件名 + 两道秒级检查），见 §5.1 |
 
 ## 2. 三段文书（`gates/diag/_text_<台账号>.md`）

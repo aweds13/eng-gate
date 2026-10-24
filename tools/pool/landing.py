@@ -1455,9 +1455,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-review", action="store_true",
                     help="★ 卡 184：跳过 ⑧ 复核落盘（默认会跑 wb_review.py --rev <新提交> --json "
                          "并落盘 gates/review/<task>.json；★ 复核异步、不挡提交）")
+    # ★ 卡 G3（T-AG458）：`preflight` 两个词根**必须分层**，不许同名不同义 ——
+    #   · `--preflight`（**壳层**，`tools/wb_land.py`）= 落地前的只读体检（卡 E1，11 条判据）
+    #   · `--skip-preflight`（**本脚本**）= 跳过 ③″ 那一趟快门禁预检（run_gates.py --fast）
+    #   旧写法 `--no-preflight` 仍收（已发布过），但只在帮助里留一行「已改名」并当场提示。
+    ap.add_argument("--skip-preflight", action="store_true",
+                    help="★ 卡 G3：跳过 ③″ 快门禁预检（run_gates.py --fast，不落盘）—— "
+                         "这是**落地链内层**的旗标；壳层的 `--preflight` 是只读体检，"
+                         "两者不是一个东西。给「已经知道全量要跑」的场景；"
+                         "默认会先预检（参数检查之后、④ 全量之前）")
     ap.add_argument("--no-preflight", action="store_true",
-                    help="★ 卡 226/236：跳过 ③″ 快门禁预检（run_gates.py --fast，不落盘）；"
-                         "给「已经知道全量要跑」的场景。默认会先预检（参数检查之后、④ 全量之前）")
+                    help="（已改名）旧写法，等价 `--skip-preflight`；保留只为不打断既有脚本")
+    a = ap.parse_args(argv)
+    if a.no_preflight:
+        print("  ★ `--no-preflight` 已改名 `--skip-preflight`（它跳过的是③″快门禁预检，"
+              "不是卡 E1 的 `--preflight` 只读体检）；这次照旧生效。")
     a = ap.parse_args(argv)
     if bool(a.card) == bool(a.batch):
         # ★ 卡 236（T-G354）：参数合法性检查必须**最先**跑 —— 非法 ⇒ 立刻退 6 + 原话，
@@ -1589,7 +1601,8 @@ def main(argv: list[str] | None = None) -> int:
         # ★ 卡 236（T-G354）：③″ 快门禁预检的**次序** —— 必须在参数合法性检查
         #   （--card/--batch 恰好给一个 ⇒ 退 6）**之后**、全量门禁 ④ **之前**
         #   （卡 226 的动机不变：秒级失败别烧全量那 3~4 分钟）。
-        if not a.no_gate and not a.no_preflight and not fast_preflight(wt, env):
+        if (not a.no_gate and not a.skip_preflight and not a.no_preflight
+                and not fast_preflight(wt, env)):
             return 7    # ★ 预检红 ⇒ 停手（全量门禁 ④ 一步没跑、锁也没拿）
 
         if not a.no_gate:
