@@ -1,3 +1,8 @@
+## 卡 E7：派活即看守（T-AG453）
+- `tools/wb_dispatch.py`：新增 `--watch one|shared`（默认 `one`）与 `--no-watch`；抽出 `_spawn()`，新增 `spawn_watcher()` / `ensure_watch()` / `watch_horizon()` / `no_watch_notice()`；detach 与同步 `--execute` 两条路都自动起看守。
+- `tools/wb_watch.py`：新增 `--write-done` / `--mode` / `--since`；写 `.done`（六字段）、逐张进 `notifications.jsonl`、`watch-registry.json` 维护合用看守的引用计数与 `batch-done`；心跳过期判 `watcher-stale`（退 5），超时不写 `.done`（退 4）。
+- `tests/test_wb_dispatch_watch.py`：新增 309 行、15 条钉子，覆盖卡的 8 条判据（含「派 3 张、2 张先完成 ⇒ refcount==1」「看守重启从磁盘重建计数」）。
+- 技能四处同步：`skills/README.md` 顶部三条口径改四条、`skills/pipe-card/references/dispatch.md` 新增「派活必带看守」、`skills/pipe-workbench/SKILL.md` 新增「看完工信号」、`skills/pipe-land/SKILL.md` 前置检查补第 8/9/10 条。
 ## T-AG463 跨分区写者判据认 depends（与 validate 对齐）
 - `tools/wb_plan.py`：`cross_partition_writers()` 对 `dependency_path(first, second, backlog.cards)` 为真的对子不再报（`validate()` 早就这么判）；报行原句保留，补「（有 `depends` 串起来的对子不报）」。`dependency_path` 导入并进 `__all__`。
 - `tests/test_wb_plan.py`：新增 3 条钉子 —— 跨分区相交 + depends ⇒ 不报且 `check` 退 0；同样相交无 depends ⇒ 报且退 1（并核对原句与新补句）；反向依赖同样不报。

@@ -3663,7 +3663,7 @@ spec = "复盘/卡/卡E7-完工通知.md"
 files = ["tools/wb_dispatch.py", "tools/wb_watch.py", "tests/test_wb_dispatch_watch.py", "skills/README.md", "skills/pipe-card/references/dispatch.md", "skills/pipe-workbench/SKILL.md", "skills/pipe-land/SKILL.md"]
 depends = ["E6"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E8"

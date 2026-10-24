@@ -64,3 +64,27 @@ Command rejected: … Reason: Background command execution is not supported in p
 - 工作区干净（**当前工作区**，不是 `--cwd` 那棵树）；
 - 日志不覆盖（`--force` 才覆盖）；
 - 端口 / 内存 / 登录自检。
+
+## 6. 派活必带看守（卡 E7 —— 派完别再人肉轮询）
+
+★ **默认就有，不用你另起命令**：`wb_dispatch.py --execute` 起完工**自动**挂一份
+`tools/wb_watch.py` 盯着这张卡，出判决就落事件。派完那一屏会打一行 `[看 ] 看守已起（pid …）`；
+**没看到这行** = 看守没起来（脚本不在 / 起不来会打告警），这时才需要自己处理。
+
+| 你怎么想 | 加什么 | 结果 |
+|---|---|---|
+| 默认（推荐） | 什么都不加 | `--watch one`：这张卡一个看守，出判决写 `.done` + 通知一行，然后退出 |
+| 大批判跑、不想刷屏 | `--watch shared` | 全局**一份**合用看守：每派一张 `refcount +1`、每出判决 `-1`、归 0 写一条 `batch-done` 并退 |
+| 明确不要看守 | `--no-watch` | 不起看守，并**明说**「已关看守：完工后请自己轮询」（静默 = 骗人，卡里禁止） |
+
+★ **完工信号只看磁盘**：`gates/diag/wb-<卡>.done`（一行 JSON：`card` / `task` / `exit_code` /
+`at` / `log` / `report`）+ `gates/diag/notifications.jsonl` 末尾那一行。
+看守不判断内容对不对（那是主控复核），也**不把「没判决」当成功**：超时只写 `state:"timeout"`。
+★ 合用看守的计数与心跳落 `gates/diag/watch-registry.json`（`refcount` / `cards` / `pid` / 心跳）；
+心跳过期且还有卡没判决 ⇒ 写 `state:"watcher-stale"` 事件并退 **5** —— 看到它就说明「这批没人守了」，
+别以为还在盯。
+★ 手动单看 / 重挂：`python -X utf8 tools/wb_watch.py --cards <卡号>`（只读）；
+要它顺手落事件就加 `--write-done`。
+★ 派活器还会给看守一个 `--since`（这一轮**开跑的时刻**）：比它旧的判决 / 日志一律不认 ——
+所以 `--force` 重派时，上一轮那份静默日志不会被新看守读成「判死」。手动跑不给 `--since`
+就全认（看历史），要避开旧件就自己给一个时刻。

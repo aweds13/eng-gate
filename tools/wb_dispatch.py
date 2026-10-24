@@ -110,6 +110,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import pool_quota  # noqa: E402 —— 额度按钟表算（卡 201）：429 不许凭记忆，按记录时间 vs 现实时间
 import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（别写第二份）
+import wb_watch  # noqa: E402 —— 看守唯一实现（卡 E7）：登记表 / 心跳 / .done 都在那儿
 import workbench_bridge  # noqa: E402 —— 工作台状态一处真源（卡 224）：只调它，别在这儿现拼
 
 # ★ 卡 109（T-G206）/ 卡 125（T-G223）：这些判据**只有一份真源**，都在 `tools/pool/` 包里
@@ -974,8 +975,8 @@ def detached_argv(argv: list[str]) -> list[str]:
             "--no-preflight", "--detach-done"]
 
 
-def spawn_detached(argv: list[str], log_path: Path) -> int:
-    """把派活**扔出去单独跑**（我的窗口关了它照样跑）：返回子进程 pid，输出落到 `log_path`。
+def _spawn(argv: list[str], log_path: Path) -> int:
+    """把**任何**后台活扔出去单独跑（脱离窗口）：返回 pid，输出落到 `log_path`。
 
     Windows 用 `DETACHED_PROCESS`（没有控制台，不随父进程退出）；别的平台用 `start_new_session`。
     ★ T-G96：Windows 上再叠一个 `CREATE_NO_WINDOW` —— 用户 2026-09-26 看到任务栏里留着一个
@@ -994,6 +995,11 @@ def spawn_detached(argv: list[str], log_path: Path) -> int:
             stderr=subprocess.STDOUT, **kwargs,
         )
     return proc.pid
+
+
+def spawn_detached(argv: list[str], log_path: Path) -> int:
+    """把派活**扔出去单独跑**（我的窗口关了它照样跑）：返回子进程 pid，输出落到 `log_path`。"""
+    return _spawn(argv, log_path)
 
 
 # ★ 卡 A297（T-AG411）· 收工回推通道：`--detach` 派活成功后自动起 `wb_notify.py --daemon`，
@@ -1057,6 +1063,95 @@ def ensure_notify_daemon(root: Path) -> None:
     except OSError as exc:
         # ★ 守护进程起不来不能让派活失败 —— 只告警（卡 A297 规格）。
         print(f"[告警] wb_notify 守护进程没起来（不影响派活）：{exc}", file=sys.stderr, flush=True)
+
+
+# ★ 卡 E7（T-AG453）· 派活即看守：`--execute` 成功起工人后**自动**挂一份看守 ——
+#   「等通知」不再退化成「轮询」（今天第一批 5 张卡是靠每 2 分钟敲 `--status` 才发现的）。
+#   看守不猜成功：只读 `gates/diag/wb-<卡>.verdict.txt`，出判决才写 `wb-<卡>.done`。
+WATCH_INTERVAL = 30.0      # 看守查一次文件（卡 E7：这批最多 10 张卡，单看守成本可忽略）
+
+
+def watch_log_for(card: str) -> Path:
+    """看守自己的 log（和工人的 `wb-<卡>.jsonl` 分开放，免得混成一锅）。"""
+    return ROOT / "gates" / "diag" / f"watch-{card}.log"
+
+
+def watch_horizon(timeout: int, retries: int) -> float:
+    """看守的硬超时：工人的**每一轮**都可能跑到 `--timeout`，被中断还自动续 `retries` 次。
+
+    ★ 看守的期限必须**盖过所有这些轮**（再留 10 分钟收尾），否则它会在工人正续跑时
+      提前写一条 `state:"timeout"` 然后退出 —— 那是「假超时」，比不挂看守更误导人。
+    """
+    return float(timeout) * (max(0, retries) + 1) + 600.0
+
+
+def spawn_watcher(card: str, *, mode: str, timeout: float,
+                  interval: float = WATCH_INTERVAL,
+                  since: float | None = None) -> int | None:
+    """起一份**后台看守**（`wb_watch.py`），盯这张卡直到出判决。
+
+    ★ 脚本跟着 `ROOT/tools/` 走；没有那份脚本（测试沙箱 / 独立拷贝的树）⇒ **跳过并说明**，
+      不让派活失败（看守是锦上添花，不是派活的前提）。
+    ★ `since` = 这一轮开跑的时刻（默认现在）：比它旧的判决 / 日志一律不认 ——
+      否则 `--force` 重派时，上一轮那份静默日志会被新看守读成「判死」（假死比不挂更误导）。
+    ★ 走 `_spawn` 而不是 `spawn_detached`：后者被调用方与测试当成「把派活扔出去」的唯一入口
+      （`tests/test_wb_watch.py` 钉着 detach 只扔一次），看守不该混进那个计数。
+    """
+    script = ROOT / "tools" / "wb_watch.py"
+    if not script.is_file():
+        print(f"[告警] 没找到看守脚本 {script} ⇒ 这张卡**没有**看守（完工不会自动通知）",
+              file=sys.stderr, flush=True)
+        return None
+    argv = [sys.executable, "-X", "utf8", "-u", str(script),
+            "--cards", card, "--root", str(ROOT), "--mode", mode,
+            "--write-done", "--timeout", str(timeout), "--interval", str(interval),
+            "--since", str(time.time() if since is None else since)]
+    return _spawn(argv, watch_log_for(card))
+
+
+def ensure_watch(card: str, *, mode: str = "one", timeout: float = DEFAULT_TIMEOUT) -> str:
+    """派活成功后挂看守；返回**要打印的那句话**（主控据此就知道「谁在替我等收工」）。
+
+    · `one`（默认）= 这张卡一个看守，出判决就写 `.done` + 通知并退出（推送粒度最细）。
+    · `shared` = 全局一份合用看守：引用计数 +1 / 出判决 -1 / 归 0 写 `batch-done`；
+      已有活着的合用看守 ⇒ **只登记、不再起进程**。
+    ★ 计数和心跳全在 `gates/diag/watch-registry.json`（写入方是 `wb_watch`；派活器只登记，
+      不碰心跳 —— 派活器写心跳等于冒充「看守还活着」）。
+    ★ `timeout` 要用 `watch_horizon()` 算出来的**看守期限**，别直接传工人的 `--timeout`。
+    """
+    if mode == "one":
+        pid = spawn_watcher(card, mode=mode, timeout=timeout, since=time.time())
+        if pid is None:
+            return "[看 ] 看守没起来（见上面的告警）—— 完工不会自动通知，请自己轮询"
+        return (f"[看 ] 看守已起（pid {pid}，one 专属）：出判决自动写 "
+                f"gates/diag/wb-{card}.done 并追加 gates/diag/notifications.jsonl；退出码随判决")
+    cutoff = time.time()          # 这一轮的开跑时刻：比它旧的判决 / 日志不认（见 spawn_watcher）
+    # ---- shared：先看上一个看守是不是死了（卡 E7 判据 8）
+    # ★ 「还活着吗」用小窗口（几分钟），**不是**看守的硬期限（那要盖过工人的全部轮次）。
+    stale = wb_watch.registry_stale(ROOT, timeout=wb_watch.ALIVE_WINDOW)
+    if stale is not None:
+        wb_watch.write_stale_event(ROOT, stale)
+        print(f"[告警] 上一个合用看守心跳停在 {stale['heartbeat'] or '（空）'}"
+              f"（超过 {wb_watch.ALIVE_WINDOW:.0f}s 没心跳）—— "
+              f"还没判决的卡：{'、'.join(stale['cards'])}；已写 watcher-stale 事件，重起一份。",
+              file=sys.stderr, flush=True)
+        wb_watch.rebuild_registry(ROOT, pid=None, heartbeat="")
+    if wb_watch.watcher_alive(ROOT, timeout=wb_watch.ALIVE_WINDOW):
+        reg = wb_watch.register_cards(ROOT, [card], since=cutoff)
+        return (f"[看 ] 已挂到现有合用看守（refcount={reg.get('refcount')}；出判决减 1，"
+                "归 0 写 batch-done）")
+    reg = wb_watch.register_cards(ROOT, [card], since=cutoff)
+    pid = spawn_watcher(card, mode=mode, timeout=timeout, since=cutoff)
+    if pid is None:
+        return "[看 ] 合用看守没起来（见上面的告警）—— 完工不会自动通知，请自己轮询"
+    return (f"[看 ] 合用看守已起（pid {pid}，refcount={reg.get('refcount')}）："
+            "逐张写 gates/diag/wb-<卡>.done，计数归 0 写 batch-done")
+
+
+# ---------------------------------------------------------------- 看守的开关提示
+def no_watch_notice() -> str:
+    """`--no-watch` 的原话 —— **明说，不静默**（卡 E7 判据 3 逐字钉着这句）。"""
+    return "已关看守：完工后请自己轮询"
 
 
 # ★ 卡 109（T-G206）：`card_artifacts()` 的**唯一实现**在 `pool.jobs`（见顶部 import）——
@@ -2760,6 +2855,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--detach", action="store_true",
                         help="把这次派活**扔出去单独跑**（我的窗口关了它照样跑；过夜/长任务用）")
     parser.add_argument("--detach-done", action="store_true", help=argparse.SUPPRESS)
+    # ★ 卡 E7（T-AG453）：派活即看守。默认 `one`（一张卡一个看守 = 一张卡一次通知）。
+    parser.add_argument("--watch", choices=("one", "shared"), default="one",
+                        help="派活成功后挂哪种看守（默认 one=专属：出判决就写 "
+                             "gates/diag/wb-<卡>.done 并退出；shared=全局一份合用看守，"
+                             "引用计数 +1 / 出判决 -1 / 归 0 写 batch-done）")
+    parser.add_argument("--no-watch", action="store_true",
+                        help="不起看守 —— ★ 会明说「已关看守：完工后请自己轮询」，不静默")
     parser.add_argument("--status", action="store_true",
                         help="只看状态（心跳/判决/会话/log 尾巴），不派活、不用给 --spec")
     return parser
@@ -2946,9 +3048,19 @@ def main() -> int:
         print(f"[看 ] 进度：python -X utf8 tools/wb_dispatch.py --card {args.card} --status",
               flush=True)
         # ★ 卡 215（T-G328）：`--detach` 出去之后**没有回推通道**，别靠人记着轮询 ——
-        #   挂上 `wb_watch`（只读看守）就默认收工出结论。**只加这一行提示**，派活/守卫逻辑一字不动。
-        print(f"[看 ] 挂看守（收工自动出结论，不用人轮询）："
-              f"python -X utf8 tools/wb_watch.py --cards {args.card}", flush=True)
+        #   挂上 `wb_watch`（只读看守）就默认收工出结论。
+        # ★ 卡 E7（T-AG453）：这行从「请你自己挂」改成「已经替你挂好了」——
+        #   真挂看守在下面（`ensure_watch`）；这里保留可照抄的重挂命令（老窗口的肌肉记忆）。
+        print(f"[看 ] 重挂/单看：python -X utf8 tools/wb_watch.py --cards {args.card}"
+              f" --write-done", flush=True)
+        # ★ 卡 E7 判据 1/3：真派活才挂看守；`--no-watch` 必须**明说**（不静默）。
+        if args.execute:
+            if args.no_watch:
+                print(no_watch_notice(), flush=True)
+            else:
+                print(ensure_watch(args.card, mode=args.watch,
+                                  timeout=watch_horizon(args.timeout, args.retry)),
+                      flush=True)
         print(f"[log ] {detach_log}", flush=True)
         return 0
 
@@ -2999,6 +3111,17 @@ def main() -> int:
     if not args.execute:
         print("[dry ] 这是 dry-run；真想派活加 --execute", flush=True)
         return 0
+
+    # ★ 卡 E7（T-AG453）判据 1：**派活即看守** —— 真起工人之前把看守挂上（免得人记着起）。
+    #   `--detach` 的父进程已在上面那一段挂过；这里只管同步 `--execute` 与内部 `--detach-done`
+    #   （后者父进程已挂，跳过 —— 一份活只要一份看守）。
+    if not args.detach and not args.detach_done:
+        if args.no_watch:
+            print(no_watch_notice(), flush=True)
+        else:
+            print(ensure_watch(args.card, mode=args.watch,
+                                  timeout=watch_horizon(args.timeout, args.retry)),
+                      flush=True)
 
     # ★ 卡 029 §2.7：每次真开跑记规格指纹；续跑且指纹变了 → 硬塞「先读规格」进续跑提示词。
     spec_digest = spec_fingerprint(args.spec)

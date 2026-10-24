@@ -3,7 +3,7 @@
 > 这一层是**核心之上的薄适配层**：它把「怎么用才不出错」教给 agent（和人）。
 > ★ 本层的判据：**删掉整个 `skills/` 目录，框架仍然完整可用。** 做不到，就说明判据漏进 skill 了。
 
-> ★ **2026-10-24 起三条新口径**（老窗口若还按旧写法干，门禁会拦下并说明原因）：
+> ★ **2026-10-24 起四条新口径**（老窗口若还按旧写法干，门禁会拦下并说明原因）：
 > 1. **一张卡只归一个对话窗口**（卡 A324）：别的窗口的卡要显式 `--take-over` 才让过，
 >    `wb_land` / `wb_dispatch` 被挡时退 2 并打印持有者；没 `DSH_SESSION_ID` 的环境（工人 / cron）照常放行。
 >    看谁的卡：`python -X utf8 tools/wb_session.py --list`。
@@ -13,6 +13,10 @@
 > 3. **提交闸按域要档，不再一律 19 道**（卡 A327）：`gates/defs/domains.py` 一张表算必需档，
 >    `last.json` 记 `profiles_run / required_profiles`；判不出或碰判据本体（`scripts/**` `tools/**` `gates/**`）
 >    仍强制全量。缺档提交会被 `wb_review` 点名拒。
+> 4. **派活即看守**（卡 E7）：`tools/wb_dispatch.py --execute` 起完工**自动**挂一份 `tools/wb_watch.py`
+>    （默认 `--watch one`；`--watch shared` = 全局一份、引用计数归 0 写 `batch-done`）。
+>    完工信号落 `gates/diag/wb-<卡>.done` + `gates/diag/notifications.jsonl`。
+>    ★ 只有显式 `--no-watch` 才不起 —— 那时它**明说**「已关看守：完工后请自己轮询」，别当成已经有人盯。
 
 ## 定位
 
@@ -68,7 +72,7 @@
 | `pipe-card` | 开卡 / 派活 / 申报 | `tools/wb_dispatch.py` · `tools/wb_task.py` · `tools/wb_stage_card.py` | `dispatch.md` |
 | `pipe-gate` | 跑门并读懂结果 | `scripts/run_gates.py` + `tools/wb_verify.py` | `output.md` |
 | `pipe-land` | 集成与落地（八步链） | `tools/wb_land.py` · `tools/wb_verify.py` | `land-steps.md` |
-| `pipe-workbench` | 工作台四件套（读数 / 巡检 / 注入 / 面板） | `tools/pipeline_view.py` · `wb_daily.py` · `workbench_bridge.py` · `wb_dash.py` | `tools.md` |
+| `pipe-workbench` | 工作台四件套（读数 / 巡检 / 注入 / 面板）+ 收工看守 | `tools/pipeline_view.py` · `wb_daily.py` · `workbench_bridge.py` · `wb_dash.py` · `tools/wb_watch.py` | `tools.md` |
 | `pipe-forensics` | 出事了从证据里查 | `tools/wb_verify.py` · `wb_diag.py` · `wb_reconcile.py` | `evidence-map.md` |
 | `pipe-new` | 在本仓内从零起一条工作链 | `tools/wb_plan.py` · `tools/wb_dispatch.py` · `tools/wb_land.py` | `first-landing.md` |
 | `pipe-init` | 铺框架骨架（框架层，唯一还用 CLI 的） | 框架 CLI 的 `init` 子命令（见技能正文） | `scaffold.md` |

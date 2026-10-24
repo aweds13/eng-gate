@@ -1,6 +1,6 @@
 ---
 name: pipe-workbench
-description: 用本仓「工作台」四件套看现场——一份读数（pipeline_view）→ 今日一页（wb_daily）→ 给工人注入状态（workbench_bridge）→ 工人面板（wb_dash）。当你要回答「现在谁在飞 / 今天该做什么 / 给工人什么开场白 / 工人动没动」时用；四件套全只读。
+description: 用本仓「工作台」四件套看现场——一份读数（pipeline_view）→ 今日一页（wb_daily）→ 给工人注入状态（workbench_bridge）→ 工人面板（wb_dash）；外加派活后的收工看守（wb_watch）。当你要回答「现在谁在飞 / 今天该做什么 / 给工人什么开场白 / 工人动没动 / 那张卡收工没有」时用；全部只读（wb_watch 只有加 --write-done 才落事件）。
 ---
 
 # pipe-workbench —— 工作台四件套
@@ -14,6 +14,7 @@ description: 用本仓「工作台」四件套看现场——一份读数（pipe
 - 每天**巡检**「今天该做什么」：待派几张、在飞几张、哪些批到收口、落了没翻状态。
 - 派活时给工人的开场白要一段**同源**状态（我在哪张卡 / 谁在飞 / 域占用 / 该看哪个产物）。
 - 要盯**工人动没动**（在不在跑、跑到哪、有没有被掐）。
+- 要确认**那张卡收工没有**（`wb_watch` 的收工信号，见下面「看完工信号」）。
 
 ## 什么时候别用
 
@@ -49,6 +50,24 @@ python -X utf8 tools/wb_dash.py --port 8787        # ④ 面板（默认只绑�
 - 面板读法（每组一行「卡 / 在不在动 / 在跑什么与卡死阈值 / 判决」，最新活动在最上面）：`python -X utf8 tools/wb_dash.py`（口径同它的 docstring）。
 - 「没数据」不等于「没人干活」：租约为空先确认注册表读没读到，`python -X utf8 tools/pipeline_view.py --json` 会给 `null` 带 note。
 
+## 看完工信号（wb_watch，卡 E7）
+
+派活器**默认**已经挂好收工看守（`tools/wb_dispatch.py --execute` 后那一屏有 `[看 ] 看守已起`），
+所以「工人收工了吗」不用靠每两分钟敲一次 `--status`。要自己看或重挂：
+
+```bash
+python -X utf8 tools/wb_watch.py --cards <卡号>                 # 只读：盯到收工 / 判死 / 超时
+python -X utf8 tools/wb_watch.py --cards <卡号> --write-done    # 顺手写 wb-<卡>.done + 通知一行
+python -X utf8 tools/wb_watch.py --cards <卡号> --mode shared   # 合用看守：引用计数 +1/-1/归 0
+```
+
+- **收工事件**：`gates/diag/wb-<卡>.done`（一行 JSON：`card` / `task` / `exit_code` / `at` /
+  `log` / `report`）；中间态看 `gates/diag/notifications.jsonl` 末尾那一行。
+- **退出码怎么读**：`0` 全部收工 · `3` 有卡判死（没跑完就断了）· `4` 超时
+  （**没判决不算成功**）· `5` 合用看守心跳过期（已写 `watcher-stale`：这批没人守了）· `2` 用法 / 批次读不到。
+- **合用看守的计数**在 `gates/diag/watch-registry.json`：派一张 `+1`、出判决 `-1`、
+  归 `0` 才写一条 `batch-done` —— 想看中间态就看这份文件，别等最后的通知。
+
 ## 复盘缺口（一份读数 / 容错 / 端口）
 
 - （缺口 PN1）面板只认「一份读数」单一入口（pipeline_view）：各面板不许自己再算一遍，否则同一现场两个数 —— 任何新读数需求先加进 `python -X utf8 tools/pipeline_view.py --json`，下游只加工。证据：`复盘/卡/卡207-一份读数.md`、`复盘/卡/卡231-W7收口面.md`、`复盘/问题清单-组3.md`
@@ -63,6 +82,7 @@ python -X utf8 tools/wb_dash.py --port 8787        # ④ 面板（默认只绑�
 | `wb_daily` 读不到租约 / 批 | 从非主树跑，池状态在主树 `gates/diag/` | 加 `--root <主树>` |
 | 面板看不到别的树 | 从某棵 worktree 里起的 | 回主工作区起 `wb_dash` |
 | 注入说「查不到卡 X」 | `--card` 与队列 `id` 对不上 | 用 `cards` 块里的 `id` 原样传 |
+| 工人收工了却没人知道 | 派活时用了 `--no-watch`（那一屏会明说） | 用 `python -X utf8 tools/wb_watch.py --cards <卡号>` 单看，或看 `.done` 在不在 |
 | 同输入两次输出不同 | 工具被改出非幂等（时戳 / 遍历序） | 口径破洞：停手报主控，别手工圆 |
 | 想靠面板判「内容对不对」 | 面板只报在不在动 | 内容对错看判决文件与主控复核 |
 

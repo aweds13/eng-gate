@@ -1,0 +1,14 @@
+[entries."T-AG453"]
+id = "T-AG453"
+title = "派活即看守：工人收工自动回来报"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E7-完工通知.md",
+  "file:gates/diag/wb-E7.report.md",
+  "test:test_wb_dispatch_watch.py",
+  "file:tools/wb_dispatch.py",
+  "file:tools/wb_watch.py",
+]
+gaps = "- **卡的验收命令原样照跑会退非零**：pytest（本卡新增的钉子文件 + 技能门自测） 全过，但仓库全局 `addopts` 带 `--cov-fail-under=70`，子集跑出 0% 覆盖率 ⇒ 整条命令非零。本卡代码无关，加 `--no-cov` 跑同一条 **33 passed**（规格 复盘/卡/卡E7-完工通知.md）。- **工人没跑全量门禁**（卡规格没要求），门禁结论由落地链这一趟给（规格 复盘/卡/卡E7-完工通知.md）。- **主控没有逐行读实现**，复核的是工人自跑单测 33 passed + 回归 244 passed + 真进程冒烟（超时/收工/合用三种，未碰仓库 `gates/diag`）（规格 复盘/卡/卡E7-完工通知.md）。- **上一趟（第三趟）落地红在两条 pytest，都不是本卡的活**：①`tests/test_wb_plan.py::test_check_command_passes_on_seed` —— 登记提交 `dc1f024c` 引入的五条 `[跨分区]` 把 `wb_plan check` 弄成退 1（已由卡 **E12 / T-AG463** 修掉：`tools/wb_plan.py` 的 `cross_partition_writers()` 认得 `depends`）；②`tests/test_wb_review.py::test_chinese_paths_are_not_escaped` 在本机偶发 `PermissionError`（临时仓起子进程时），主树单跑 4 次全过，与 E7 改动无关（规格 复盘/卡/卡E7-完工通知.md、`复盘/卡/卡E12-跨分区写者认depends.md`）。- **本卡改的四处技能与卡 G2 同面**：G2（新机制进技能）依赖 E7，落地后要在新 HEAD 上重放，免得把「派活即看守」写成旧口径（规格 复盘/卡/卡G2-新机制进技能.md）。"
+
