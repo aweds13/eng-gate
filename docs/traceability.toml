@@ -8507,7 +8507,7 @@ id = "T-AG470"
 title = "云门禁机：多会话共享的一台机器，口径与停机护栏"
 group = "ENGINEERING"
 status = "todo"
-evidence = ["file:复盘/卡/卡E18-云门禁机.md"]
+evidence = ["file:复盘/卡/卡E18-云门禁机.md", "file:docs/subsystems/ci/云门禁机.md", "file:gates/diag/cloud_run_gate.sh", "file:gates/diag/cloud_bootstrap.ps1"]
 gaps = "- 只交口径与体检脚本，不实现关机/开机、不调云 API（留后面单独一张卡）。- 云机尚未开通，脚本在真云机上的读数未验（本机验的是判据）。- 「谁算数」的前提是 `git remote -v` 非空，现实里它现在是空的。"
 
 [entries."T-AG469"]
