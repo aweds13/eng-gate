@@ -8627,3 +8627,16 @@ evidence = [
   "file:tests/test_pipeline_view.py",
 ]
 gaps = "- **只改了这一条。** `tests/test_pipeline_view.py` 里其余性能相关断言未动；下次谁再写「比墙钟」的钉子，仍可能假红（见 `复盘/卡/卡E26-缓存命中的判据不比墙钟.md` 的「不做什么」）。- **计数器只盯 `_read_cards`。** 命中路径里若还有别的重活（`_fingerprint` 走一遍目录、last-good 刷新），本判据不管；那部分耗时照旧由打印出来的 `cold/hot` 观察（读数在 `tests/test_pipeline_view.py` 的 `[卡255-a]` 那行）。- **不证明缓存更快，只证明不重算。** 「命中省了几个百分点」这类话从此没有门禁背书，要看就只能看 `tests/test_pipeline_view.py` 里打印的 `[卡255-a] cold/hot` 耗时。"
+
+[entries."T-AG479"]
+id = "T-AG479"
+title = "落地翻账不许抹掉证据指针（T-AG479）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E25-落地翻账不许抹掉证据指针.md",
+  "file:gates/diag/batch/T-AG479.toml",
+  "file:tools/pool/stage_card.py",
+  "file:tests/test_stage_card_evidence_merge.py",
+]
+gaps = "- **只保「不抹掉」**：片段里已有条目一律保留。若某条目确实该删（比如指向已删文件），本卡不会替你删 —— 得手改汇总台账 `docs/traceability.toml` 里那一条，口径见 `复盘/卡/卡E25-落地翻账不许抹掉证据指针.md`。- **不校验 `--evidence`**：给的文件存不存在、在不在卡域内，本卡不查（域检查在 `tools/pool/task.py` 的 claim 一侧，见 `tests/test_stage_card_evidence_merge.py` 里只测合并）。- **非片段模式没改**：片段目录不存在时走的那段是「已有就跳过」，本来不覆盖，判据仍在 `tools/pool/stage_card.py` 的 `main()` 里。"

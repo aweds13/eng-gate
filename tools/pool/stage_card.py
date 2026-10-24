@@ -296,11 +296,35 @@ def _fragments_mode(wt: pathlib.Path, a, gaps: str, cl: str, cp: str,
     print(f"  片段 {frag.relative_to(wt)}（{frag.stat().st_size} 字节）")
 
     # ② 台账片段（与旧写法同一个表）
+    # ★ 卡 E25（T-AG479）：**合并**而不是覆盖 —— 这个片段可能就是人刚补过指针的那份。
+    #   实测踩过两轮：台账里已有 6 条（含 `file:tests/xxx.py` / `test:xxx.py::用例`），
+    #   落地链 ② 一走就把 evidence 换成本次 `--evidence` 的 N 条（N 常常是 2），
+    #   随后审计 ⑫「这一笔改了 X 但台账没有指针」当场红（E24 落地两趟白跑 240 s/趟）。
+    #   口径：**已有的条目原样在前，本次新增的追加在后，去重**；`gaps`/`title`/`status` 仍按本次写。
+    frag2 = trc_d / f"{a.id}.toml"
+    carried: list[str] = []
+    import tomllib as _tomllib  # 局部导入：这个文件其余部分刻意不依赖 tomllib
+    if frag2.is_file():
+        try:
+            old_data = _tomllib.loads(frag2.read_text(encoding="utf-8"))
+            entry = old_data.get("entries", {}).get(a.id, {})
+            carried = [str(x) for x in entry.get("evidence", [])]
+        except (OSError, _tomllib.TOMLDecodeError):
+            carried = []
+    fresh = ['file:' + _unescape_git_quoted(e) for e in a.evidence]
+    seen: set[str] = set()
+    merged: list[str] = []
+    for item in carried + fresh:
+        if item and item not in seen:
+            seen.add(item)
+            merged.append(item)
     lines = [f'[entries."{a.id}"]', f'id = "{a.id}"', f'title = "{a.title}"',
              f'group = "{a.group}"', 'status = "done"', "evidence = ["]
-    lines += [f"  {_toml_str('file:' + _unescape_git_quoted(e))}," for e in a.evidence]
+    lines += [f"  {_toml_str(item)}," for item in merged]
     lines += ["]", 'gaps = "' + quote_safe(gaps) + '"', ""]
-    frag2 = trc_d / f"{a.id}.toml"
+    dropped = [x for x in carried if x not in merged]
+    if dropped:
+        print(f"  ★ 台账片段里这些证据没进本次提交（域外文件？）：{dropped}")
     frag2.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"  片段 {frag2.relative_to(wt)}（{frag2.stat().st_size} 字节）")
 

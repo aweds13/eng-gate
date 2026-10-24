@@ -1,3 +1,6 @@
+## 落地翻账不许抹掉证据指针（T-AG479）
+
+- `tools/pool/stage_card.py` 片段模式改成合并 `evidence`：已有条目原样保留、本次 `--evidence` 追加在后、去重；`gaps`/`title`/`status` 仍按本次写。
 ## 台账证据的 `test:` 指针去用例后缀（T-AG474）
 
 - `tools/evidence_map.assertion_path()` 的 `test:` 分支先剥 `::用例名` 再拼 `tests/`，审计 ⑫ 反向判据不再把「用 `test:` 声称过的测试文件」判成没声称；`scripts/audit_progress.py` 的 `evidence_file_set()` 补口径注释。

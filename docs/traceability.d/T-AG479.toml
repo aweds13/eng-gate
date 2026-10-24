@@ -1,0 +1,13 @@
+[entries."T-AG479"]
+id = "T-AG479"
+title = "落地翻账不许抹掉证据指针（T-AG479）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E25-落地翻账不许抹掉证据指针.md",
+  "file:gates/diag/batch/T-AG479.toml",
+  "file:tools/pool/stage_card.py",
+  "file:tests/test_stage_card_evidence_merge.py",
+]
+gaps = "- **只保「不抹掉」**：片段里已有条目一律保留。若某条目确实该删（比如指向已删文件），本卡不会替你删 —— 得手改汇总台账 `docs/traceability.toml` 里那一条，口径见 `复盘/卡/卡E25-落地翻账不许抹掉证据指针.md`。- **不校验 `--evidence`**：给的文件存不存在、在不在卡域内，本卡不查（域检查在 `tools/pool/task.py` 的 claim 一侧，见 `tests/test_stage_card_evidence_merge.py` 里只测合并）。- **非片段模式没改**：片段目录不存在时走的那段是「已有就跳过」，本来不覆盖，判据仍在 `tools/pool/stage_card.py` 的 `main()` 里。"
+

@@ -3924,3 +3924,14 @@ files = ["tests/test_pipeline_view.py"]
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E25"
+task = "T-AG479"
+title = "落地翻账不许抹掉证据指针"
+tree = ".wt/E25"
+spec = "复盘/卡/卡E25-落地翻账不许抹掉证据指针.md"
+files = ["tools/pool/stage_card.py", "tests/test_stage_card_evidence_merge.py"]
+depends = []
+risk = "mid"
+status = "done"
