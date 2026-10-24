@@ -8386,6 +8386,31 @@ evidence = [
 gaps = """规格已立、表未写（2026-10-24 由主控登记）。至少五行已实测：全量 19 道已改判、
 封存/提交顺序已改判、preflight 同名冲突、数据根解析已改判、卡树先提交半冲突。"""
 
+[entries."T-AG468"]
+id = "T-AG468"
+title = "会话账本写盘抖动重试 + 派活测试不许碰真账本"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "text:复盘/卡/卡E17-会话账本抖动.md",
+  "text:docs/workbacklog.toml",
+  "file:tools/wb_session.py",
+  "file:tests/test_wb_dispatch.py",
+]
+gaps = "还没开工：卡 E17 未派活。缺的是：`tests/test_wb_dispatch.py` 里调 `wd.main()` 的用例会写真仓 `gates/diag/session-leases.json`，与落地链在同一工作树抢同一文件（PermissionError: [WinError 32]）；`tools/wb_session.py:48 _save()` 对 `PermissionError` 没有重试。规格见 复盘/卡/卡E17-会话账本抖动.md。"
+
+[entries."T-AG467"]
+id = "T-AG467"
+title = "门禁锁三处静默：等锁有进度、死主自动清、体检先说锁"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E16-门禁锁三处静默.md",
+  "file:gates/diag/gate_lock.py",
+  "file:tools/pool/landing.py",
+]
+gaps = "还没开工：卡 E16 未派活。缺的是三处静默：① 等门禁锁的进度被 `subprocess.run(capture_output=True)` 吞掉（今晚批落地因此白等 28 分钟）；② 死主留下的锁要人工 `--force` 才能清；③ `--preflight` 不报告锁现场（谁持有、活没活、剩多少租约）。规格见 复盘/卡/卡E16-门禁锁三处静默.md。"
+
 [entries."T-AG463"]
 id = "T-AG463"
 title = "跨分区写者判据认 depends：与 validate 同一条规则"
@@ -8413,3 +8438,61 @@ evidence = [
   "file:tests/test_check_skills_claims.py",
 ]
 gaps = "- **这是本仓第一例攒批落地**：三张卡合成一笔提交，粒度比单卡粗 —— 要回滚就是回滚一批；成员卡的「自己的落地」由落地链按产物 ∩ 暂存清单判定（规格 复盘/卡/卡E5-合并队列.md）。- **E8 卡上那份「25.2 s」在本机复现不出来**：同一台机器同口径实测是 10.77 s → 3.40 s（判据看的是「215 次 git 进程 → 1 次」，实测取到 1690 条跟踪路径）（规格 复盘/卡/卡E8-封存未跟踪一次扫描.md）。- **G1 查出一条真漂移，修字不在本批**：`skills/pipe-land/SKILL.md` 第 67 行的 `wb_reconcile.py --fix` 这个参数不存在（该工具只有 `--root` / `--json`）—— 技能正文归卡 G2 改，本批一个字没动技能（规格 复盘/卡/卡G2-新机制进技能.md）。- **主控没有逐行读三张卡的实现**，复核靠工人自跑单测（E8 10 passed / E9 66 passed / G1 对账退 1 为真）与本趟全量门禁（规格 复盘/卡/卡E8-封存未跟踪一次扫描.md）。"
+
+[entries."T-AG461"]
+id = "T-AG461"
+title = "卡 E10 —— 批次并入派活链：机制早就在，入口散在三处"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E10-批次并入派活链.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = """规格已立、工具未写（2026-10-24 由主控登记）。现状实测：攒批机制早已存在
+（卡 228 / T-G344：wb_task.py register 多成员预声明 + wb_land.py --batch +
+tools/pool/landing.py:303 flip_batch_member_statuses），但合一个批要手写三样
+（成员 TOML、_text_<批号>.md、把卡树补丁合进批次树的临时脚本 mk_batch460.py）；
+wb_dispatch.py 只有 --card 不认批、wb_plan.py plan 不算「哪些卡能合成一批」。"""
+
+[entries."T-AG462"]
+id = "T-AG462"
+title = "卡 E11 —— 批次二分：批红了要能自己指出是哪张卡"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E11-批次二分.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = """规格已立、代码未写（2026-10-24 由主控登记）。现状：批红只有一行 exit≠0，
+连「批里有哪几张卡」「哪一轮红的」都没落盘；定位靠人工逐个重跑。"""
+
+[entries."T-AG464"]
+id = "T-AG464"
+title = "批集成按卡号精确匹配（别把 F1 当成 G1）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E13-批集成精确匹配.md"
+]
+gaps = "还没开工：卡 E13 未派活。缺的是「①′ 多树集成按数字匹配卡号」—— 把 `G1` 认成 `.wt/F1`/`.wt/B1`/`.wt/D1`/`.wt/C1`/`.wt/E1` 的成员（今晚批 T-AG460 把 F1 的三个文件合了进来）。要改成「树名必须是 `.wt/<成员 id>`，数字回退必须唯一否则停手」，并补钉子。规格见 复盘/卡/卡E13-批集成精确匹配.md。"
+
+[entries."T-AG465"]
+id = "T-AG465"
+title = "起子进程的钉子用例遇 PermissionError 要重试"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E14-进程抖动重试.md"
+]
+gaps = "还没开工：卡 E14 未派活。缺的是「起子进程偶发 PermissionError 的重试」—— `tests/test_wb_review.py::test_chinese_paths_are_not_escaped` 在临时仓调 git 时偶发失败（本机单跑 4 次全过、全量里偶发一次），要在 `tests/conftest.py` 给一个最多重试 3 次的共享助手，断言一条不改。规格见 复盘/卡/卡E14-进程抖动重试.md。"
+
+[entries."T-AG466"]
+id = "T-AG466"
+title = "体检第 12 条：文书里反引号包住的 .md 必须解析得到"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E15-文书引用体检.md"
+]
+gaps = "还没开工：卡 E15 未派活。缺的是体检第 12 条 —— 文书里反引号内的 `.md` 必须在「片段目录 / docs / 仓库根」三基准解析得到，否则提示补 `skills/` 前缀。今晚卡 E7 就是被这条咬的（changelog 片段写了 `pipe-land/SKILL.md` 短路径，check_layers 判 6 处断链）。规格见 复盘/卡/卡E15-文书引用体检.md。"
+
