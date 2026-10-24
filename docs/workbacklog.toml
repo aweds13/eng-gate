@@ -3376,6 +3376,19 @@ risk = "low"
 status = "pending"
 
 [[cards]]
+id = "A327"
+task = "T-AG442"
+title = "按域跑必需门：提交闸从 19 道全量改成必需那几档"
+tree = ".wt/A327"
+spec = "复盘/卡/卡A327-按域跑必需门.md"
+files = ["gates/defs/domains.py", "scripts/run_gates.py", "tools/wb_review.py",
+         "tools/pool/landing.py", "tests/test_run_gates_domains.py",
+         "tests/test_wb_review.py"]
+depends = ["A324", "A326"]
+risk = "low"
+status = "pending"
+
+[[cards]]
 id = "B1"
 task = "T-BG001"
 title = "参考文档参数口径：parameters 是映射，不是 JSON Schema"
