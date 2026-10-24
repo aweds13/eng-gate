@@ -3604,7 +3604,7 @@ spec = "复盘/卡/卡E6-文档纪律.md"
 files = ["skills/pipe-land/SKILL.md", "tools/pool/landing.py", "tests/test_wb_land.py"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 # ---- 分区F｜文档归位：卡规格与项目书迁出 复盘/（T-AG449）
 [[cards]]

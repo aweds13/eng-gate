@@ -1424,6 +1424,28 @@ def test_landing_skip_when_already_done(tmp_path: Path) -> None:
     assert _backlog_card_status(repo, "T-G999") == "done"
 
 
+# -------------------------------------------------- 卡 E6（T-AG448）：卡树 HEAD 非主树祖先
+def test_card_tree_head_not_ancestor_says_cherry_pick(tmp_path: Path) -> None:
+    """卡树 HEAD 不是主树 HEAD 的祖先 ⇒ ① 停手退 3，且**报错文本含 `cherry-pick -n`**。
+
+    这一条钉的是「先 commit 再落地」那条返工姿势的出口：守卫本来就会停手（`return 3`），
+    但停手话术里没有把「已提交」的还原姿势写出来 ⇒ 人会去猜。
+    坏掉的写法（删掉那句 print）：`returncode == 3` 照样成立，只有 `cherry-pick -n` 那条会红。
+    """
+    repo = _mk_repo(tmp_path)
+    pen = _mk_pen(repo)
+    _write(pen, "code/a.py", "X = 2\n")
+    _git(pen, "add", "--", "code/a.py")
+    _git(pen, "commit", "-q", "-m", "卡树里先 commit（就是要被挡的那种活）")
+
+    done = _wand(repo, "--no-gate", tree=".pen")
+
+    out = _out(done)
+    assert done.returncode == 3, out
+    assert "祖先" in out, out
+    assert "cherry-pick -n" in out, out
+
+
 # -------------------------------------------------- 卡 212（T-G323）：攒批收口固定进工作流
 
 sys.path.insert(0, str(TOOLS))

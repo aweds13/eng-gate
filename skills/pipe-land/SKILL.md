@@ -25,10 +25,13 @@ description: 把一张卡落成一笔提交（迁移卡树 → 文书 → 按域
 
 1. 申报齐：`python -X utf8 tools/wb_task.py status <任务>` 显示该卡已交。
 2. 卡树干净：在卡树里 `git status --porcelain -uno` 为 0 行。
-3. 主树干净：别人的未提交改动先收起（落地会做 `add` / `commit`，会被卷进去）。
-4. 卡归谁：卡若归别的对话窗口，会退 2 并打印持有者（卡 A324）—— 确要接手就加 `--take-over`，别反复重试。
-5. 参数齐：`--card` 与 `--batch` **恰好给一个**；`--tree` / `--task` / `--title` / `--evidence` / `--allow` 必填。
-6. 参数细则与文书三段见 [落地参数](references/land-steps.md)。
+3. 卡上的活留在**工作区**，不要先在卡树里 commit；要暂存就 `git add -N`
+   （落地链 ① 会 `git checkout` 主树 HEAD —— 已提交、主树没有的提交会被挡下退 3；
+   这一条优先于上一条：卡树里**允许**有工作区改动，**不许**有主树没有的提交）。
+4. 主树干净：别人的未提交改动先收起（落地会做 `add` / `commit`，会被卷进去）。
+5. 卡归谁：卡若归别的对话窗口，会退 2 并打印持有者（卡 A324）—— 确要接手就加 `--take-over`，别反复重试。
+6. 参数齐：`--card` 与 `--batch` **恰好给一个**；`--tree` / `--task` / `--title` / `--evidence` / `--allow` 必填。
+7. 参数细则与文书三段见 [落地参数](references/land-steps.md)。
 
 ## 真命令
 

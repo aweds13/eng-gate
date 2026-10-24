@@ -1,3 +1,7 @@
+## 卡 E6：卡树先提交的返工姿势，落地链自己说清楚（T-AG448）
+- `tools/pool/landing.py` ① 停手时多打一句「已提交就 `git cherry-pick -n <sha>` + `git reset` 还原」。
+- `skills/pipe-land/SKILL.md` 前置检查补第 3 条：卡上的活留在工作区，要暂存用 `git add -N`。
+- `tests/test_wb_land.py` 新增钉子 `test_card_tree_head_not_ancestor_says_cherry_pick`（退 3 且文本含 `cherry-pick -n`）。
 ## 按域跑必需门：提交闸按改动面算必需档（T-AG442）
 - 提交闸不再要求 19 道全量：按改动面查 `gates/defs/domains.py` 算出必需档，跑完必需档即可收口（判不出 ⇒ 全量）。
 - `scripts/run_gates.py` 新增 `--profiles a,b` 与 `--profiles auto`；`last.json` 记 `profiles_run / required_profiles / changed_paths`（全量那趟形状不变）。

@@ -8241,16 +8241,14 @@ gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地�
 
 [entries."T-AG448"]
 id = "T-AG448"
-title = "卡 E6 —— 文档纪律：卡树不许先提交"
+title = "卡树先提交的返工姿势：落地链自己说清楚"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E6-文档纪律.md",
-  "file:docs/workbacklog.toml",
-  "file:docs/research/文档治理-best-practice-调研.md",
+  "file:gates/diag/wb-E6.report.md",
 ]
-gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
-外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+gaps = "- **只补了话术，没有自动还原树。** ① 停手后仍要人跑 `git cherry-pick -n <sha>`；自动改树属写操作，按本仓规矩必须人确认（源见 tools/pool/landing.py:1159-1161）。- **「先 commit」的根因没消。** 卡树 HEAD 非祖先仍退 3；这次的改动只是让人不用猜怎么救（`tests/test_wb_land.py:1427`）。- **SKILL 里三处「全量/按域」措辞没重排。** 本卡只补了第 3 条纪律，措辞统一留给 F 区（`skills/pipe-land/SKILL.md:25-35`）。"
 
 [entries."T-AG449"]
 id = "T-AG449"

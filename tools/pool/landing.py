@@ -1156,6 +1156,10 @@ def main(argv: list[str] | None = None) -> int:
                 print("     处置（坑 33）：`git checkout -q <主树 HEAD>` → "
                       "`git checkout <那笔提交> -- <本卡的代码/测试文件…>` → "
                       "`git reset -q` → 再重跑本脚本。")
+                # ★ 卡 E6（T-AG448）：卡上的活本该留在工作区 —— 有人先 commit 了就成了这条。
+                #   给一句能照抄的还原姿势（**只打印，不自动改树**：写操作必须人确认）。
+                print("     如果你已经提交了：`git cherry-pick -n <那笔 sha>` 后 "
+                      "`git reset` 还原成工作区改动，再重跑本脚本。")
                 return 3
             run(["git", "checkout", main_head], cwd=wt)
         print("  树内 HEAD =", git("rev-parse", "--short", "HEAD", cwd=wt))
