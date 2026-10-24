@@ -3476,3 +3476,32 @@ files = ["src/dsmate/app/src/main/java/com/dsmate/store/Backup.kt",
          "src/dsmate/tools/audit_redlines.py"]
 depends = ["D1", "D2"]
 risk = "mid"
+
+# ================================================================ 分区 C：数学与研究预设
+# DSH 的数学 / 研究 / 个人知识库预设：项目书 docs/presets/math/，补丁 docs/presets/math.patch.yml。
+
+[[cards]]
+id = "C1"
+task = "T-AG438"
+title = "数学与研究预设：项目书（意图 / 规格 / 实现）"
+tree = ".wt/C1"
+spec = "复盘/卡/卡C1-数学预设项目书.md"
+files = ["docs/presets/math/README.md",
+         "docs/presets/math/intent.md",
+         "docs/presets/math/spec.md",
+         "docs/presets/math/implementation.md",
+         "docs/presets/math/CHANGELOG.md"]
+risk = "low"
+
+[[cards]]
+id = "C2"
+task = "T-AG439"
+title = "数学与研究预设：补丁 + 安装器 + 技能目录"
+tree = ".wt/C2"
+spec = "复盘/卡/卡C2-数学预设落地.md"
+files = ["docs/presets/math.patch.yml",
+         "tools/dsh_preset.py",
+         "tests/test_dsh_preset.py"]
+depends = ["C1"]
+risk = "mid"
+
