@@ -240,6 +240,28 @@ def test_unclaimed_changed_file_is_named() -> None:
     assert ap.check_claimed_files(["config.example.toml"], data2) == []
 
 
+def test_evidence_file_set_strips_the_case_name_from_test_pointers() -> None:
+    """★ 卡 E21：`test:xxx.py::用例名` 要当成 `tests/xxx.py`，不是 `tests/xxx.py::用例名`。
+
+    红读数（实现前）：集合里是 `tests/test_x.py::case_a` ⇒ 与历史提交里的
+    `tests/test_x.py` 对不上，审计 ⑫ 反向判据假红（2026-10-25 F1 落地现场）。
+    """
+    data = {"entries": {"T-X": {"status": "done",
+                                "evidence": ["test:test_x.py::case_a", "file:tools/a.py"]}}}
+    claimed = ap.evidence_file_set(data)
+    assert "tests/test_x.py" in claimed, claimed
+    assert "tests/test_x.py::case_a" not in claimed, claimed
+    assert "tools/a.py" in claimed, claimed
+
+
+def test_check_claimed_files_accepts_a_test_pointer_with_a_case_name() -> None:
+    """同一条判据的反向入口：被 `test:` 带用例名声称过的测试文件 ⇒ 不算"没声称"。"""
+    data = {"entries": {"T-X": {"status": "done", "evidence": ["test:test_x.py::case_a"]}}}
+    assert ap.check_claimed_files(["tests/test_x.py"], data) == []
+    # 反空转：没被任何指针指到的文件仍要点名
+    assert ap.check_claimed_files(["tests/test_y.py"], data) != []
+
+
 def test_real_repo_history_files_are_all_claimed() -> None:
     """数据层：真台账的证据指针集合，要能盖住最近几笔真实提交的改动（豁免清单除外）。
 

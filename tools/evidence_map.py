@@ -67,7 +67,12 @@ def assertion_path(assertion: str) -> str | None:
         path, has_sep, _pattern = rest.partition("::")
         return norm_path(path) if has_sep else None
     if kind == "test":
-        return norm_path("tests/" + rest)   # audit 的 test: 解析成 tests/<rest>
+        # ★ 卡 E21：`test:` 允许带 `::用例名`。文件名要先剥掉用例那一段 ——
+        # 否则 `norm_path("tests/" + "a.py::case")` 得到 `tests/a.py::case`，
+        # 永远对不上历史提交里的 `tests/a.py`（审计 ⑫ 反向判据因此假红，
+        # 现场见 2026-10-25 的 F1 落地：`台账没声称过 tests/test_check_docs.py`）。
+        fname, _sep, _case = rest.partition("::")
+        return norm_path("tests/" + fname)  # audit 的 test: 解析成 tests/<文件>
     return None
 
 

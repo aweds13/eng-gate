@@ -277,7 +277,13 @@ def claimed_files_exempt(data: dict) -> tuple[str, ...]:
 
 
 def evidence_file_set(data: dict) -> set[str]:
-    """台账全部证据指针指到的仓库文件集合（file:/text:/test: 三类；复用 evidence_map 的取法）。"""
+    """台账全部证据指针指到的仓库文件集合（file:/text:/test: 三类；复用 evidence_map 的取法）。
+
+    ★ 卡 E21：`test:文件::用例名` 里的用例名在这一层**已经剥掉**（由
+    `tools/evidence_map.assertion_path()` 的 `if kind == "test"` 分支收紧）。
+    这里要的是「**文件**集合」，用例名属于断言级信息，不参与 ⑫ 的反向比对；
+    用例级语义只在审计自己那条「用例名必须真的在文件里」的判据里用（见本文件 :222）。
+    """
     tools = str(ROOT / "tools")
     if tools not in sys.path:
         sys.path.insert(0, tools)

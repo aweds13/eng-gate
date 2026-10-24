@@ -1,3 +1,6 @@
+## 台账证据的 `test:` 指针去用例后缀（T-AG474）
+
+- `tools/evidence_map.assertion_path()` 的 `test:` 分支先剥 `::用例名` 再拼 `tests/`，审计 ⑫ 反向判据不再把「用 `test:` 声称过的测试文件」判成没声称；`scripts/audit_progress.py` 的 `evidence_file_set()` 补口径注释。
 ## 缓存命中判据不比墙钟（T-AG478）
 
 - `test_cache_hit_skips_recompute_and_is_faster` 去掉 `hot < cold * 0.9`（4 worker 全量门禁下假红两次：cold=0.4870s/hot=0.6039s、0.4938s vs 0.6910s），改成把 `pipeline_view._read_cards` 换成计数器、命中时必须 0 次；耗时只打印。

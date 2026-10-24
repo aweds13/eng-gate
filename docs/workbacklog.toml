@@ -3890,7 +3890,7 @@ spec = "复盘/卡/卡E21-台账证据被翻账抹掉.md"
 files = ["scripts/audit_progress.py", "tools/evidence_map.py", "tests/test_audit_tightening.py"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E23"

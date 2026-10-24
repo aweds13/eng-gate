@@ -8581,11 +8581,16 @@ gaps = "- 2026-10-25 01:16，F1 落地门禁在本机 4 个 worker 下偶发红�
 
 [entries."T-AG474"]
 id = "T-AG474"
-title = "台账证据被「翻账」抹掉 / test: 声称对不上文件"
+title = "台账证据的 test: 指针去用例后缀（T-AG474）"
 group = "ENGINEERING"
-status = "todo"
-evidence = ["file:复盘/卡/卡E21-台账证据被翻账抹掉.md"]
-gaps = "- 一半在 `tools/pool/landing.py` 第 ⑤ 步（翻账按 claim 重写条目），该文件已有 5 张卡声明为写者，故本卡先只收敛到 `scripts/audit_progress.py` + `tools/evidence_map.py`；另一半另起卡（暂记 E24）。- 尚未实现，只登记（规格 复盘/卡/卡E21-台账证据被翻账抹掉.md）。"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E21-台账证据被翻账抹掉.md",
+  "file:gates/diag/batch/T-AG474.toml",
+  "file:tools/evidence_map.py",
+  "file:tests/test_audit_tightening.py",
+]
+gaps = "- **只做了一半。** 落地链第 ⑤ 步「翻账」仍会按 claim 重写 `evidence`（在 `tools/pool/landing.py`，同一文件已有 5 张卡声明为写者），拆到 E24（见 `复盘/卡/卡E21-台账证据被翻账抹掉.md`「留给 E24」）。- **技能口径补丁没写。** 「片段是源、汇总是生成物；翻账不许改 evidence」本该进 `skills/pipe-land/SKILL.md` 前置检查，同属 E24（同上规格）。- **没有扫全仓其它 `kind` 分支。** `file:` / `text:` 两类照旧，只动了 `test:`（`tools/evidence_map.py:59`）。"
 
 [entries."T-AG476"]
 id = "T-AG476"
