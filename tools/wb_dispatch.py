@@ -2673,6 +2673,8 @@ def build_parser() -> argparse.ArgumentParser:
     """命令行解析器 —— 抽成函数，好让测试**真读帮助文本**（卡 125 §2.9：帮助与常量同源）。"""
     parser = argparse.ArgumentParser(description="派活给 CodeBuddy CLI（默认 dry-run）")
     parser.add_argument("--card", required=True, help="卡号（用来命名 log，如 001）")
+    parser.add_argument("--take-over", action="store_true",
+                        help="卡归别的对话窗口时，显式换手到当前窗口（会留痕）")
     parser.add_argument("--spec", default="", help="卡规格文件（相对仓库根；--status 时不必给）")
     parser.add_argument("--cwd", default="",
                         help="工人进程的 cwd（绝对/相对都行，会解析成绝对路径）—— 让工人"
@@ -2770,6 +2772,19 @@ def main() -> int:
     if args.status:
         print(status_report(args.card), flush=True)
         return 0
+    # ★ 卡归窗口：一张卡默认只归一个 DSH 窗口；没有指纹（工人/CLI）一律放行。
+    try:
+        from tools import wb_session
+    except ModuleNotFoundError:  # `python tools/wb_land.py` 时 sys.path[0] 是 tools/
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import wb_session  # type: ignore[no-redef]
+
+    ok, msg = wb_session.claim(args.card, take_over=getattr(args, "take_over", False))
+    if not ok:
+        print(f"  ★ {msg}", file=sys.stderr, flush=True)
+        return 2
+    if msg:
+        print(f"  [窗口] {msg}", flush=True)
     # ★ 卡 203（T-G307）：跑的是**树里那份**派活器 ⇒ 一句人话提示（**不拒跑**，理由见该函数）。
     wrong_copy = wrong_copy_warning()
     if wrong_copy:

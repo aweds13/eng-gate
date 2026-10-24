@@ -316,6 +316,39 @@ def guard_card_in_ledger(argv: list[str], cwd: pathlib.Path | None = None) -> in
     return 0
 
 
+def _session_gate(argv: list[str]) -> tuple[int, list[str]]:
+    """卡归窗口：别的窗口的卡要 `--take-over` 才让落；没有指纹（工人/CLI）一律放行。"""
+    try:
+        from tools import wb_session
+    except ModuleNotFoundError:  # `python tools/wb_land.py` 时 sys.path[0] 是 tools/
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        try:
+            import wb_session  # type: ignore[no-redef]
+        except ModuleNotFoundError:
+            # 临时仓 / 只拷了 wb_land.py 的落地桩：这棵树没有会话模块 ⇒ 不设闸，但明说
+            print("  [卡归窗口] 这棵树没有 wb_session 模块 ⇒ 跳过会话闸", flush=True)
+            return 0, [a for a in argv if a != "--take-over"]
+
+    take_over = "--take-over" in argv
+    rest = [a for a in argv if a != "--take-over"]
+    card = ""
+    for i, token in enumerate(rest):
+        if token in {"--card"} and i + 1 < len(rest):
+            card = rest[i + 1]
+            break
+        if token.startswith("--card="):
+            card = token.split("=", 1)[1]
+            break
+    if not card:
+        return 0, rest
+    ok, msg = wb_session.claim(card, take_over=take_over)
+    if not ok:
+        print(f"  ★ {msg}", file=sys.stderr)
+        return 2, rest
+    if msg:
+        print(f"  [窗口] {msg}")
+    return 0, rest
+
 def main(argv: list[str] | None = None) -> int:
     """把 argv 交给 `pool.landing.main`（逻辑全在那边，本壳只多三条壳层分支）。"""
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -329,6 +362,9 @@ def main(argv: list[str] | None = None) -> int:
             print(_HELP_TAIL)
             return 0
     rc = guard_card_in_ledger(argv)
+    if rc:
+        return rc
+    rc, argv = _session_gate(argv)
     if rc:
         return rc
     return _landing.main(argv)

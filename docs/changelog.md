@@ -161,6 +161,12 @@
 - `tools/wb_reconcile.py`：去掉 `--grep` 的 `-10` 截断；新增 `_batch_landed()`/`_landed_commits()`/
   `_spec_commit_in()`，按围栏 `state == landed` 认账；`check()` 第三份 `accounted_done` 打 `[蓝]`。
 - `tests/test_wb_reconcile.py`：5 条断言改三份解包 + 2 条新钉子（landed 认账 / draft 不算证据）。
+## 2026-10-24 T-AG437 卡归窗口：落地 / 派活前过 DSH 会话闸（A324）
+- 新增 `tools/wb_session.py`：`session_id` / `owner` / `claim` / `release` / `listing`，租约写 `gates/diag/session-leases.json`（gitignored），TTL 24 小时。
+- `tools/wb_land.py` 加 `_session_gate(argv)`：按 `--card` 认领，卡归别的窗口就退 2；`--take-over` 显式换手并留痕。
+- `tools/wb_dispatch.py` 同一道闸（同样有 `--take-over`），拒单零副作用。
+- 没有 `DSH_SESSION_ID` 的调用（CI、手工命令、工人子进程）一律放行 —— 闸只咬「有指纹的窗口」。
+- 顺带堵漏：`scripts/run_gates.py` 把 `--profile` 写进 `gates/last.json`，`tools/wb_review.py` 见「不是 all」就拒绝，单档跑不能再冒充全量。
 ## 2026-10-18 —— 面板就地渲染 + 工程工具箱（T-AG391）
 - `tools/dsh_panel.py`：`QuickEntry` 改 iframe 就地渲染；新增「工程工具箱」行与五页；宿主半新增 `/dsh-panel/skills` 只读路由，`serveSettings` 收紧为只读。
 - `tests/test_dsh_panel.py`：座位一致性判据改为「前三项逐项一致 + 额外行只许 toolbox」。

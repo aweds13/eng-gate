@@ -8018,16 +8018,21 @@ gaps = "- 本条是**补记**：卡 A326 的规格与工作树（`.wt/A326`，�
 
 [entries."T-AG437"]
 id = "T-AG437"
-title = "卡归窗口：DSH 会话指纹绑定"
+title = "卡归窗口：落地/派活前过 DSH 会话闸"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
-  "file:复盘/卡/卡A324-卡归窗口.md",
-  "file:docs/workbacklog.toml",
   "file:tools/wb_session.py",
   "file:tests/test_wb_session.py",
+  "file:tools/wb_land.py",
+  "file:tools/wb_dispatch.py",
+  "file:tools/wb_review.py",
+  "file:tests/test_wb_review.py",
+  "file:scripts/run_gates.py",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:复盘/卡/卡A324-卡归窗口.md",
 ]
-gaps = "- 本条是**补记**：卡 A324 早已登记进队列（`38522420`、`070e8e10` 两笔），台账却一直没有条目，审计 ② 拿不到号，本笔补上，状态如实记 todo。- 接线没做：`tools/wb_land.py` / `tools/wb_dispatch.py` 里 grep 不到 `wb_session|session_gate|take_over`，卡树 `.wt/A324` 有 0 笔自己的提交。- `tools/wb_session.py` 与 `tests/test_wb_session.py` 目前是**未跟踪**文件，evidence 指得动但不在 git 里，落地那一笔才入库。"
+gaps = "- 闸只接了落地与派活两条入口：`tools/wb_task.py` 的 claim 与批通道 `--batch` 还没过闸 —— 卡规格只要这两条入口，其余单独立卡。指针 `复盘/卡/卡A324-卡归窗口.md`- 指纹只有 `DSH_SESSION_ID` 一层环境变量，伪造得了；闸的语义是「防两个窗口撞车」，不是防恶意接管。指针 `tools/wb_session.py`- 租约 TTL 固定 24 小时，没有续租 / 吊销命令；`--release` 谁都能放（只留痕、不罚）。指针 `tools/wb_session.py`- `gates/diag/session-leases.json` 是 gitignored 运行时产物，换机器或清 diag 目录即失效，不做持久化。指针 `tools/wb_land.py`- 本卡没动 `tools/pool/landing.py` 的门禁调用链；`--profile` 那条补充只落在 `tools/wb_review.py` 的封存判据上。指针 `tools/wb_review.py`"
 
 [entries."T-AG438"]
 id = "T-AG438"

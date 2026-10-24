@@ -182,6 +182,14 @@ def _resolve_commit(short: str) -> str:
 def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
     """③ 门禁是不是**为这一笔**跑的 —— `rev` 必须等于这一笔的父提交。"""
     problems: list[str] = []
+    # ★ A324：封存里记了 `profile`（≠ all）⇒ 这是**只跑了一档**，不能当提交闸用。
+    #   这条堵的是「挑一档跑绿冒充全量」—— 档位是给人做内循环的，不是给提交用的。
+    ran_profile = payload.get("profile")
+    if ran_profile not in (None, "all"):
+        problems.append(
+            f"门禁只跑了 --profile {ran_profile} 这一档，不是全量 —— "
+            "提交闸必须是全量（重跑一次不带 --profile 的门禁）"
+        )
     if payload.get("ok") is not True:
         problems.append(f"gates/last.json 的 ok 不是 true：{payload.get('ok')!r}")
     raw_rev = str(payload.get("rev") or "")

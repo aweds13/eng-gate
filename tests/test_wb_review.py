@@ -743,3 +743,19 @@ def test_short_sha_length_does_not_break_the_evidence_check() -> None:
     other = wr.git("rev-parse", "--short", f"{sha}~2")
     mismatch = wr.check_gate_evidence({**base, "rev": other}, parent)
     assert [p for p in mismatch if "门禁不是为这一笔跑的" in p]
+
+
+def test_partial_profile_seal_is_rejected(tmp_path):
+    """只跑了一档（last.json 里有 profile）的封存，不能当提交闸用。"""
+    from tools import wb_review
+
+    payload = {
+        "ok": True,
+        "rev": "abcdef1",
+        "docs_sync_ok": True,
+        "docs_sync_missing": [],
+        "gates": [{"name": "pytest", "exit_code": 0}],
+        "profile": "lang",
+    }
+    problems = wb_review.check_gate_evidence(payload, "abcdef1")
+    assert any("只跑了 --profile lang" in p for p in problems), problems

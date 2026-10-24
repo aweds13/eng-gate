@@ -2049,6 +2049,13 @@ def main() -> int:
         payload["affected"] = affected_plan.to_payload()
         payload["trailer"] = ("【--affected：只跑了受影响的 "
                               f"{len(jobs)} 道门，未跑全量】" + str(payload["trailer"]))
+    # ★ A324：**只跑一档**时把档名写进封存 —— 让「挑一档冒充全量」在产物上可见；
+    #   默认 `all` 不写这个键，`last.json` 形状逐字不变（A321 §4 硬要求）。
+    if args.profile != "all":
+        payload["profile"] = args.profile
+        payload["trailer"] = (
+            f"【--profile {args.profile}：只跑了这一档，未跑全量】" + str(payload["trailer"])
+        )
     GATES.parent.mkdir(parents=True, exist_ok=True)
     GATES.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"

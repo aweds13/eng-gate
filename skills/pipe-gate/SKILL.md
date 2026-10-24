@@ -91,3 +91,7 @@ python -X utf8 scripts/run_gates.py --profile product # timeflow 产品门（五
 
 **默认仍是 `all`**，收口链（`tools/wb_land.py`）照旧跑全量 —— 分档只给内循环，不许当提交闸。
 档与门的对应只有一处真源：`scripts/run_gates.py` 的 `GATE_PROFILES`。
+
+**★ 提交闸只认全量**：`last.json` 里若记了 `profile`（≠ all），落地链直接拒 ——「挑一档跑绿」
+不能冒充「全量跑绿」；默认不给 `--profile` 时封存形状逐字不变。档位成员的真源在 `gates/defs/`。
+
