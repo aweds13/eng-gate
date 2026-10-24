@@ -8524,3 +8524,15 @@ evidence = [
 ]
 gaps = "- **这是攒批第二例**：两张卡合成一笔提交，粒度比单卡粗 —— 要回滚就是回滚一批；成员卡的「自己的落地」由落地链按「产物 ∩ 暂存清单」判定（规格 复盘/卡/卡E5-合并队列.md）。- **E4 的归并口径只按「同一测试文件 + 同一异常类型」聚，不跨文件合并**：34 条红归成 1 组是本机实测样本，别的形状未必；本批没验证「跨文件同因」这种形态（规格 复盘/卡/卡E4-红单归并.md）。- **F2 生成的索引是派生物（本批新建），只覆盖 `docs/` 这一块**：`复盘/` 与 `src/dsmate/docs/` 两块索引还没接进来（规格 复盘/卡/卡F2-索引机器化.md）。- **主控没有逐行读两张卡的实现**，复核靠工人自跑单测（E4 与 F2 各自 pytest 全绿）与本趟全量门禁（规格 复盘/卡/卡E4-红单归并.md）。"
 
+[entries."T-AG471"]
+id = "T-AG471"
+title = "攒批第三例：新机制进技能 · 会话账本抖动"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡G2-新机制进技能.md",
+  "file:复盘/卡/卡E17-会话账本抖动.md",
+  "file:gates/diag/wb-G2.report.md",
+  "file:gates/diag/wb-E17.report.md",
+]
+gaps = "- 两张卡各自只跑单档门禁（G2 18 条技能门、E17 218 条两文件，见 `gates/diag/wb-G2.report.md`、`gates/diag/wb-E17.report.md`），全量 19 道由这趟批次门禁统一跑。- 主控补过 E17 三处：`tests/test_wb_dispatch.py` 夹具漏 import `wb_session`（补前全片 NameError）、该行 E402、`tools/wb_session.py` 的 SIM105（`try/except/pass` → `contextlib.suppress`）。- 主控没逐行读 G2 的 202 行技能正文（`skills/README.md`、`skills/softeng-manage/references/commands.md`），只验了技能门与行数上限；措辞待人复核。- E17 只对 `PermissionError` 重试，目标目录被删等真错立刻抛 —— 设计如此，见 `tools/wb_session.py`。"

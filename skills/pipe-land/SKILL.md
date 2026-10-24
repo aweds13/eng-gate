@@ -39,6 +39,9 @@ description: 把一张卡落成一笔提交（迁移卡树 → 文书 → 按域
    （`python -X utf8 tools/card_doc_budget.py --gaps-file <文件> --root .` 可先自检）。
 10. **`--evidence` 是文件路径，不是散文**：每个改动文件至少要有一条指针；写一句「改好了」不算证据 ——
    审计会按文件点名红。
+11. **攒批**：`--batch` 走多成员预声明（`gates/diag/batch/<批号>.toml`，`register` 一次收齐）；
+   **批要小（≤4）** —— 批树合不上就整批停，小批才二分得动「是哪张卡」。★ 入口还是散的：
+   `wb_batch.py`（plan / make / land）在**卡 E10**，落地前没有它，别照着名字敲。
 
 ## 真命令
 
@@ -50,6 +53,14 @@ python -X utf8 tools/wb_land.py --card <卡号> --tree .wt/<卡号> --task <台�
 
 # 门禁已绿、封存没变：⑥ 起接着走（跳过 ①②③④⑤）
 python -X utf8 tools/wb_land.py ... --commit-only
+
+# 只体检不落地（卡 E1）：11 条判据一次说全、只读、约十几秒
+python -X utf8 tools/wb_land.py --preflight --task <台账号> --allow <文件>...
+#   0 = 全绿（可以直接落地）/ 1 = 有 ❌（逐条点名）。给了 --card / --batch ⇒ 绿了才接着落地。
+
+# 攒批落地（批号来自多成员预声明；--card 与 --batch 恰好给一个）
+python -X utf8 tools/wb_task.py register gates/diag/batch/<批号>.toml
+python -X utf8 tools/wb_land.py --batch <批号> --tree .wt/batch<号> --task <台账号> ...
 
 # 落地后一屏核实
 python -X utf8 tools/wb_verify.py --tree . --expect-parent <期望父提交>
@@ -71,7 +82,10 @@ python -X utf8 tools/wb_verify.py --tree . --expect-parent <期望父提交>
 | 门禁红 | 链④真跑红了 | 修红；**不许** `--no-gate` 绕过（它会在 trailer 里如实写「没跑门禁」） |
 | 封存对不上 | `gates/last.json` 的 `rev != HEAD^` | 说明封的不是这一笔；重新落地，别手改 `last.json` |
 | 重跑报「重复合成」 | 上一趟把 changelog / 台账 / 交接合成过一遍 | 默认⓪会回退派生物；若关了 `--no-reset` 才会撞，重跑别再关 |
-| 落了但队列还是 `pending` | 状态没翻 | `--allow` 里要含队列文件；已落未翻用 `python -X utf8 tools/wb_reconcile.py --fix` 前先看清楚 |
+| 落了但队列还是 `pending` | 卡块缺 `status` 行 ⇒ 翻状态**静默跳过**（卡 E9） | `--allow` 里要含队列文件；**补 `status`** 后重核 `python -X utf8 tools/wb_plan.py check`（0 / 1） |
+| 链②停「文书指针不存在」 | gaps / evidence 指向计划中或已改名的文件 | 指针只认**落地时那棵树里真实存在**的文件；先 `python -X utf8 tools/card_doc_budget.py --gaps-file <文件> --root .` 自检 |
+| 链⑦ audit 咬「某文件没人声称」 | 审计 ⑫ 反向：本笔实际改的文件 ⊆ 台账指针（`file:` / `text:` / `test:`）∪ `[exceptions]` | 按**文件**补 `--evidence`；别只写一句「改好了」。单跑 `python -X utf8 scripts/audit_progress.py --rev <提交>`（0 / 1） |
+| 落到 ⑦ 报「锁没释放 / 别人还在等」 | 锁还在（`gates/diag/gates-*.lock`） | 正常是链自己放；真泄漏才 `TF_GATE_PORT_BASE=<段> python -X utf8 gates/diag/gate_lock.py release --card <卡> --force` |
 | 增量门禁被当全量 | 给了 `--affected` 却按全量汇报 | trailer 会写「非全量」；别把它当全量读数 |
 | 复核没产物 | `--no-review` 用了，或复核跑挂 | 默认别关；挂了先看 `gates/review/` 与日志 |
 

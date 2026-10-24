@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -21,6 +22,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 LEDGER = ROOT / "gates" / "diag" / "session-leases.json"
 TTL_SECONDS = 24 * 3600
+
+#: `os.replace` 的总尝试次数（含第一次）。Windows 上它撞到「别人正开着目标文件」会抛
+#: `PermissionError`（`WinError 32` sharing violation / `WinError 5` access denied），
+#: 而这**是瞬时的** —— 隔几十毫秒再来一次就过去了。
+_SAVE_RETRIES = 3
+#: 每次失败后等多久再试（毫秒）。索引 = 第几次失败；最后一次失败**不再等**、直接抛
+#: （末位 200 是预算上界，只在把 `_SAVE_RETRIES` 调大时才用得上）。
+_SAVE_BACKOFF_MS = (50, 100, 200)
 
 
 def session_id() -> str:
@@ -45,7 +54,17 @@ def _save(data: dict) -> None:
     tmp = LEDGER.with_suffix(".tmp")
     body = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
     tmp.write_text(body + chr(10), encoding="utf-8")
-    tmp.replace(LEDGER)
+    for attempt in range(_SAVE_RETRIES):
+        try:
+            tmp.replace(LEDGER)
+            return
+        except PermissionError:
+            # 只有「换名被别的进程挡了一下」才重试；其它异常（目录没了、序列化失败）立即抛。
+            if attempt == _SAVE_RETRIES - 1:
+                with contextlib.suppress(OSError):
+                    tmp.unlink()  # 别把半截 tmp 留在 gates/diag 里
+                raise
+            time.sleep(_SAVE_BACKOFF_MS[attempt] / 1000)
 
 
 def _stale(entry: dict, now: float) -> bool:

@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import wb_dispatch as wd  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂上
+import wb_session as wb_session  # noqa: E402 —— 卡 E17：账本要能指到 tmp_path
 
 
 class _Done:
@@ -52,6 +53,18 @@ files = ["sandbox-{cid}.md"]
 """
     for cid in _SANDBOX_CARD_IDS
 )
+
+
+@pytest.fixture(autouse=True)
+def isolated_session_ledger(tmp_path: Path, monkeypatch) -> Path:
+    """★ 卡 E17：`wd.main()` 会调 `wb_session.claim()` 写「卡归窗口」账本，而账本路径
+    默认指**真仓** `gates/diag/session-leases.json` ⇒ 本文件的用例会去写真账本、和
+    落地链抢同一个文件（Windows 上就是 `WinError 32`）。整份文件统一隔离到 `tmp_path`，
+    省得每条 `wd.main()` 用例各记一次。
+    """
+    ledger = tmp_path / "gates" / "diag" / "session-leases.json"
+    monkeypatch.setattr(wb_session, "LEDGER", ledger)
+    return ledger
 
 
 @pytest.fixture()

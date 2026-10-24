@@ -1,8 +1,15 @@
-"""卡归窗口的闸：没指纹放行、首次认领、别人的卡要 --take-over、释放后可再认领。"""
+"""卡归窗口的闸：没指纹放行、首次认领、别人的卡要 --take-over、释放后可再认领。
+
+后半段是卡 E17 的钉子：`_save()` 对 Windows sharing violation（`WinError 32`）的有限重试，
+以及「测试别去写仓库真账本」的隔离。
+"""
 
 from __future__ import annotations
 
 import json
+import os
+
+import pytest
 
 from tools import wb_session
 
@@ -48,3 +55,91 @@ def test_release_frees_the_card(tmp_path, monkeypatch):
     monkeypatch.setenv("DSH_SESSION_ID", "sess-c")
     ok, _ = wb_session.claim("A4")
     assert ok
+
+
+# --------------------------------------------------- 卡 E17：写盘抖动 + 测试隔离
+
+
+def _flaky_replace(monkeypatch, failures: int, exc: Exception | None = None) -> dict:
+    """把 `os.replace` 换成桩：前 `failures` 次抛异常，之后走真实现。
+
+    返回调用计数（`{"n": ...}`），让用例能证明「到底试了几次」。
+    """
+    real = os.replace
+    calls = {"n": 0}
+
+    def fake(src, dst):
+        calls["n"] += 1
+        if calls["n"] <= failures:
+            raise exc or PermissionError(13, "另一个程序正在使用此文件", str(dst))
+        return real(src, dst)
+
+    monkeypatch.setattr(wb_session.os, "replace", fake)
+    return calls
+
+
+def test_save_retries_a_transient_sharing_violation(tmp_path, monkeypatch):
+    """钉子 1：前两次 PermissionError、第三次成功 ⇒ `_save()` 成功且账本内容正确。"""
+    ledger = _use_tmp(tmp_path, monkeypatch)
+    calls = _flaky_replace(monkeypatch, failures=2)
+    data = {"version": 1, "cards": {"A5": {"session": "sess-a", "since": 1}}}
+
+    wb_session._save(data)
+
+    assert calls["n"] == 3, f"应该试 3 次，实际 {calls['n']} 次"
+    assert json.loads(ledger.read_text(encoding="utf-8")) == data
+
+
+def test_save_raises_the_original_error_when_every_attempt_fails(tmp_path, monkeypatch):
+    """钉子 2：三次都抛 ⇒ 原样抛 PermissionError，且不留半截 tmp。"""
+    ledger = _use_tmp(tmp_path, monkeypatch)
+    calls = _flaky_replace(monkeypatch, failures=10)
+
+    with pytest.raises(PermissionError):
+        wb_session._save({"version": 1, "cards": {}})
+
+    assert calls["n"] == wb_session._SAVE_RETRIES, "失败后试的次数必须等于 _SAVE_RETRIES"
+    assert not ledger.with_suffix(".tmp").exists(), "失败后不许留下半截 session-leases.tmp"
+    assert not ledger.exists(), "一次都没换名成功，账本不该出现"
+
+
+def test_only_permission_errors_are_retried(tmp_path, monkeypatch):
+    """判据 2：别的异常（这里是 OSError 的父类情形）第一次就抛，不许重试。"""
+    _use_tmp(tmp_path, monkeypatch)
+    calls = _flaky_replace(monkeypatch, failures=10, exc=IsADirectoryError(21, "是个目录"))
+
+    with pytest.raises(IsADirectoryError):
+        wb_session._save({"version": 1, "cards": {}})
+
+    assert calls["n"] == 1, "非 PermissionError 不该重试"
+
+
+def test_one_retry_degrades_the_flaky_save(tmp_path, monkeypatch):
+    """钉子 4（反空转）：把 `_SAVE_RETRIES` 改成 1 ⇒ 钉子 1 那个场景必须红。
+
+    这不是「额外的用例」，是把「钉子 1 真咬重试」这件事本身钉死：少了重试，
+    同样的抖动就得抛出去。
+    """
+    ledger = _use_tmp(tmp_path, monkeypatch)
+    monkeypatch.setattr(wb_session, "_SAVE_RETRIES", 1)
+    _flaky_replace(monkeypatch, failures=2)
+
+    with pytest.raises(PermissionError):
+        wb_session._save({"version": 1, "cards": {}})
+    assert not ledger.exists()
+
+
+def test_claim_writes_only_the_isolated_ledger(tmp_path, monkeypatch):
+    """钉子 3：`LEDGER` 指到 tmp 上的假 `gates/diag/` ⇒ 真仓账本字节不变。"""
+    real_ledger = wb_session.LEDGER
+    before = real_ledger.read_bytes() if real_ledger.exists() else None
+
+    fake = tmp_path / "gates" / "diag" / "session-leases.json"
+    monkeypatch.setattr(wb_session, "LEDGER", fake)
+    monkeypatch.setenv("DSH_SESSION_ID", "sess-a")
+    ok, _ = wb_session.claim("A6")
+
+    assert ok
+    assert json.loads(fake.read_text(encoding="utf-8"))["cards"]["A6"]["session"] == "sess-a"
+    after = real_ledger.read_bytes() if real_ledger.exists() else None
+    assert after == before, f"真仓账本被写了：{real_ledger}"

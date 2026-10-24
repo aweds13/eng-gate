@@ -3718,7 +3718,7 @@ spec = "复盘/卡/卡G2-新机制进技能.md"
 files = ["skills/README.md", "skills/pipe-land/SKILL.md", "skills/pipe-gate/SKILL.md", "skills/pipe-card/references/dispatch.md", "skills/softeng-manage/references/commands.md"]
 depends = ["E1", "E7", "G1"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "G3"
@@ -3755,7 +3755,7 @@ files = [
 ]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E16"

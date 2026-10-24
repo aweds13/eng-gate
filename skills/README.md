@@ -18,6 +18,26 @@
 >    完工信号落 `gates/diag/wb-<卡>.done` + `gates/diag/notifications.jsonl`。
 >    ★ 只有显式 `--no-watch` 才不起 —— 那时它**明说**「已关看守：完工后请自己轮询」，别当成已经有人盯。
 
+## §0 新机制八条：落点索引（卡 G2 · 2026-10-24）
+
+> 以前这八条在本目录里**一个字都没有** ⇒ 规矩只在最后时刻说话（18 处断链等到落地第 20 分钟才红）。
+> 每条都按「疼在哪 + 命令 + 退出码」写在**明细页**：`skills/softeng-manage/references/commands.md` 的 ⓪ 节。
+> 这里只给**一句话 + 去哪看**，别在别处再抄一遍（抄三份必漂）。
+
+| 机制 | 一句话（疼在哪） | 命令 / 退出码（短版） | 明细 |
+|---|---|---|---|
+| 工具根 ≠ 数据根（A326） | 两根绑死 ⇒ 复用 `tools/` 时账本被写回工具仓 | `python -X utf8 tools/pipe_root.py --check`（0 / 2） | 命令速查 ⓪-1 |
+| 引用完整性（`check_link_integrity`） | 反引号里的 `.md` 被当真路径查 ⇒ 断链连坐两道门 | `python -X utf8 scripts/check_layers.py`（0 / 1） | 命令速查 ⓪-2 |
+| 队列 `status` 行（E9） | 缺这一行 ⇒ 落地翻状态**静默跳过**（已落仍 pending） | `python -X utf8 tools/wb_plan.py check`（0 / 1） | 命令速查 ⓪-3 |
+| 审计 ⑫ 反向 | 「实际改的文件」没人声称 ⇒ 审计咬下来重跑 | `python -X utf8 scripts/audit_progress.py --rev <提交>`（0 / 1） | 命令速查 ⓪-4 |
+| E1 `--preflight` | 参数 / 文书 / 卡域的错拖到第 12 分钟才红 | `python -X utf8 tools/wb_land.py --preflight --task <台账号> --allow <文件>...`（0 / 1） | 命令速查 ⓪-5 |
+| E7 派活即看守 | 派完靠人肉轮询，忘了就过夜 | `python -X utf8 tools/wb_dispatch.py --card <卡号> --status` | `pipe-card` 的分派页 §6 |
+| 攒批（`--batch`） | 一张卡两趟门禁；栅栏按卡建则永远攒不成 | `python -X utf8 tools/wb_task.py register gates/diag/batch/<批号>.toml` + `wb_land.py --batch` | 命令速查 ⓪-7 · `pipe-card` 分派页 §7 |
+| 门禁锁与并发闸 | 两趟全量并行 = 假红；锁消失 = 那趟收口 | `TF_GATE_PORT_BASE=<段> python -X utf8 gates/diag/gate_lock.py release --card <卡> --force` | `pipe-gate` 前置检查 ⑤ |
+| `tools/auto_land.py` | 收口时机曾靠 agent 读自然语言 | `python -X utf8 tools/auto_land.py --dry-run`（0 / 2 / 3 / 4 / 5） | 命令速查 ⓪-8 |
+
+★ **云门禁机**（多会话共享一台）**本卡不写规矩** —— 正式口径等卡 E18 落地，在那之前只写「见卡 E18」。
+
 ## 定位
 
 - 框架本体 = 核心库（`framework/src/framework/**`）+ 薄 CLI（`framework/cli/main.py`）+ 模板仓 + 例子。

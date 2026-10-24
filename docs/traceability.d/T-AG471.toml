@@ -1,0 +1,13 @@
+[entries."T-AG471"]
+id = "T-AG471"
+title = "攒批第三例：新机制进技能 · 会话账本抖动"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡G2-新机制进技能.md",
+  "file:复盘/卡/卡E17-会话账本抖动.md",
+  "file:gates/diag/wb-G2.report.md",
+  "file:gates/diag/wb-E17.report.md",
+]
+gaps = "- 两张卡各自只跑单档门禁（G2 18 条技能门、E17 218 条两文件，见 `gates/diag/wb-G2.report.md`、`gates/diag/wb-E17.report.md`），全量 19 道由这趟批次门禁统一跑。- 主控补过 E17 三处：`tests/test_wb_dispatch.py` 夹具漏 import `wb_session`（补前全片 NameError）、该行 E402、`tools/wb_session.py` 的 SIM105（`try/except/pass` → `contextlib.suppress`）。- 主控没逐行读 G2 的 202 行技能正文（`skills/README.md`、`skills/softeng-manage/references/commands.md`），只验了技能门与行数上限；措辞待人复核。- E17 只对 `PermissionError` 重试，目标目录被删等真错立刻抛 —— 设计如此，见 `tools/wb_session.py`。"
+

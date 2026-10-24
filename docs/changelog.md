@@ -1,3 +1,8 @@
+## 攒批第三例：新机制进技能 · 会话账本抖动（T-AG471）
+- 技能补齐八处口径：工具根/数据根、引用完整性、status 行、审计 ⑫、`--preflight`、看守、门禁锁、`auto_land`。
+- 新增 `skills/softeng-manage/references/commands.md` 一节讲门禁锁与 `auto_land` 四态。
+- `tools/wb_session.py` 的 `_save()` 对 `os.replace` 的 PermissionError 重试 3 次（50/100/200 ms），三次都败才抛且不留半截 tmp。
+- `tests/test_wb_dispatch.py` 用 autouse 夹具把账本指到 `tmp_path`，不再写真仓账本。
 ## 攒批第二例：红单归并 + 文档索引机器化（T-AG469）
 - `scripts/run_gates.py`：34 条红按「同一文件 + 同一异常」归并成一组，失败摘要先给组号再给首条堆栈
 - 新增 `tools/failure_group.py` 归并器 + `tests/test_failure_group.py` 3 条钉子 + 样本 `tests/fixtures/pytest-34fail.txt`
