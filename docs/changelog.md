@@ -1,3 +1,6 @@
+## 分档门禁的复核口径（T-AG477）
+
+- `tools/wb_verify.expected_gate_names()` 接受 `profiles`，`check_gates()` 把 `gates/last.json` 的 `profiles_run` 传下去：说跑了哪几档就按那几档算应有门名，缺字段/`all` 仍按全量 19 道，档名不认识判红。
 ## 并行下钉子的隔离判据：比哨兵不比字节（T-AG476）
 
 - `test_claim_writes_only_the_isolated_ledger` 改按唯一哨兵 `sess-e23-<uuid8>` 判（不再比真账本前后字节）；新增 `test_byte_identity_pin_would_be_wrong_when_another_worker_writes` 反空转；`-n 4` 连跑 3 次 13 passed，不再逼落地退回单 worker。

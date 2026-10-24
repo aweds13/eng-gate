@@ -93,7 +93,9 @@ def _git(cwd: Path, *args: str) -> str:
     return out.strip() if rc == 0 else ""
 
 
-def expected_gate_names(tree: Path) -> tuple[list[str], str]:
+def expected_gate_names(
+    tree: Path, profiles: list[str] | tuple[str, ...] | None = None
+) -> tuple[list[str], str]:
     """该仓**当前应有**的门清单 —— 从门表现读（卡 160 · T-G260）。
 
     ★ **门数真源只有一处**：`<tree>/scripts/run_gates.py::build_jobs(quick=False, fast=False)`
@@ -101,6 +103,11 @@ def expected_gate_names(tree: Path) -> tuple[list[str], str]:
       两处一起改 —— 凡是写死的数字都是会漂的第二真源（卡 147 已立同一条口径）。现在改成
       **按 `--tree` 指向的那棵树现读**（核的是那棵树的门表，不是本进程所在树的）。
     读不到（import 失败 / 门表坏了）→ `([], 原因)`：调用方据此**判红**（拿不准不放过）。
+
+    ★ **分档门禁**（卡 A327 的 `--profiles auto`，卡 E24）：`gates/last.json` 记着这一趟真跑全了
+      哪几档（`profiles_run`）。只跑 `audit+lang` 的那一趟**本来就只有 8 道门**，不是漏跑 ——
+      所以传了 `profiles` 就按档派生期望集合；不传 / 传 `all` / 字段缺失（旧笔）仍是全量 19 道。
+      未知档名 ⇒ 空集合 ⇒ 调用方判红（fail closed，别把「看不懂」当「都跑过了」）。
     """
     scripts = str(tree / "scripts")
     if scripts not in sys.path:
@@ -110,7 +117,21 @@ def expected_gate_names(tree: Path) -> tuple[list[str], str]:
         names = [str(n) for n, _ in run_gates.build_jobs(False, False)]
     except Exception as exc:  # 读不到就如实说，别猜（"无法判断"优于猜）
         return [], f"读不到门表（{type(exc).__name__}: {exc}）"
-    return names, f"run_gates.build_jobs(False, False)（{len(names)} 道）"
+    want = [str(p) for p in (profiles or []) if str(p).strip()]
+    if not want or "all" in want:
+        return names, f"run_gates.build_jobs(False, False)（{len(names)} 道）"
+    keep: set[str] = set()
+    unknown: list[str] = []
+    for one in want:
+        got = run_gates.GATE_PROFILES.get(one)
+        if got is None:
+            unknown.append(one)
+            continue
+        keep |= set(got)
+    if unknown:
+        return [], f"profiles_run 里有不认识的档 {unknown}"
+    picked = [n for n in names if n in keep]
+    return picked, f"last.json 记的是 {'+'.join(want)} 档（{len(picked)} 道）"
 
 
 def _tree_without_gates(tree: Path, rev: str) -> str:
@@ -187,7 +208,10 @@ def check_gates(s: Screen, tree: Path, parent: str) -> None:
     rev_short = rev[:len(parent)] if parent else rev
     rev_ok = bool(rev) and parent.startswith(rev)
     # ★ 门数**从门表现读**（不是写死 17）—— 见 `expected_gate_names()`。
-    expected, source = expected_gate_names(tree)
+    # ★ 分档（卡 E24）：`profiles_run` 说这一趟只跑了哪几档，期望集合就按那几档算；
+    #   字段缺失（旧笔）⇒ 仍按全量 19 道核。
+    ran = [str(x) for x in (payload.get("profiles_run") or [])]
+    expected, source = expected_gate_names(tree, ran)
     got = [str(g.get("name")) for g in gates if isinstance(g, dict)]
     missing = [n for n in expected if n not in got]
     extra = [n for n in got if n not in expected]

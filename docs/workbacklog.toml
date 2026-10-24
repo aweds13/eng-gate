@@ -3902,3 +3902,14 @@ files = ["tests/test_wb_session.py"]
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E24"
+task = "T-AG477"
+title = "分档门禁的复核口径：wb_verify 按 profiles_run 算应有门数"
+tree = ".wt/E24"
+spec = "复盘/卡/卡E24-分档门禁的复核口径.md"
+files = ["tools/wb_verify.py", "tests/test_wb_verify_profiles.py"]
+depends = []
+risk = "low"
+status = "done"
