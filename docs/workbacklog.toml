@@ -3651,7 +3651,7 @@ spec = "复盘/卡/卡F3-文档门禁.md"
 files = ["scripts/check_docs.py", "docs/doc-debt-baseline.toml", "tests/test_check_docs.py"]
 depends = ["F2"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 # ---- 分区F｜决策记录：docs/decisions/NNNN-*.md（append-only + confidence）（T-AG452）
 [[cards]]

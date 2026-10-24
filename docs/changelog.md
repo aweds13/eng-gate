@@ -1,3 +1,7 @@
+## 卡 F3：文档门禁：判不出就报 skip（T-AG451）
+- 新增文档检查脚本（落地后见 scripts/check_docs.py）：死指针 / drift 债 / superseded 未标注。
+- `--doctor` 打印「扫了多少 / 判出几条 / 判不出几条」，skip 必须显式计数。
+- 欠账基线落盘（落地后见 docs/doc-debt-baseline.toml），只许降不许涨。
 ## 攒批第三例：新机制进技能 · 会话账本抖动（T-AG471）
 - 技能补齐八处口径：工具根/数据根、引用完整性、status 行、审计 ⑫、`--preflight`、看守、门禁锁、`auto_land`。
 - 新增 `skills/softeng-manage/references/commands.md` 一节讲门禁锁与 `auto_land` 四态。

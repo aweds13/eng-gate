@@ -8276,16 +8276,14 @@ gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地�
 
 [entries."T-AG451"]
 id = "T-AG451"
-title = "卡 F3 —— 文档门禁：`scripts/check_docs.py`（判不出就报 skip）"
+title = "文档门禁：scripts/check_docs.py（判不出就报 skip）"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡F3-文档门禁.md",
-  "file:docs/workbacklog.toml",
-  "file:docs/research/文档治理-best-practice-调研.md",
+  "file:gates/diag/wb-F3.report.md",
 ]
-gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
-外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+gaps = "- **默认 report，不拦提交。** 第一版只报告；等欠账基线稳定再切 `block`（规格 复盘/卡/卡F3-文档门禁.md）。- **判定能力有边界：** 死指针 / 文本 superseded / drift 三类能判；「文档写得对不对」判不了（规格 复盘/卡/卡F3-文档门禁.md）。- **没有挂进 19 道门。** `gates/defs/contract.py` 没动 —— 挂门要连带改门清单与钉子，留到下一步（规格 复盘/卡/卡F3-文档门禁.md）。- **主控没有逐行读工人的实现。** 复核的是工人自跑单测 + `--doctor` 输出形态（规格 复盘/卡/卡F3-文档门禁.md）。"
 
 [entries."T-AG452"]
 id = "T-AG452"
@@ -8554,4 +8552,3 @@ evidence = [
   "file:复盘/卡/卡E20-会话账本并发写.md",
 ]
 gaps = "- 2026-10-24 23:43，F3 落地门禁在本机 4 个 worker 下红了唯一一条：`tests/test_wb_dispatch.py::test_execute_auto_resumes_an_interrupted_run`，报 `FileNotFoundError: [WinError 2] ... session-leases.tmp -> session-leases.json`。- 根因：`tools/wb_session.py` 的 `_save()` 把临时文件名写死成 `LEDGER.with_suffix(「.tmp」)`；两个 worker 同时写账本时，先完成者把 tmp 换成 json，后完成者 replace 找不到源文件；原有重试只捕 `PermissionError`。- 影响面：本机 `-n 4` 全量 341 s（`gates/diag/land-F3.log`）、云机 `-n 4` 336 s（`docs/subsystems/ci/云门禁机.md` §7）都踩到过 ⇒ 「多 worker 跑门禁」在此前不可信（`复盘/卡/卡E20-会话账本并发写.md`）。- 没做的：没改账本语义（租约 TTL、`take_over` 规则原样，见 `tools/wb_session.py` 顶部三条口径）；并发用例用线程，没有构造真·多进程竞态（用 `-n 4` 全量连跑做旁证）。"
-
