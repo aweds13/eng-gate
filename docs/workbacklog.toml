@@ -3740,4 +3740,4 @@ spec = "复盘/卡/卡E12-跨分区写者认depends.md"
 files = ["tools/wb_plan.py", "tests/test_wb_plan.py"]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"

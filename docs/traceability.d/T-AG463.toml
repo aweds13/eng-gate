@@ -1,0 +1,11 @@
+[entries."T-AG463"]
+id = "T-AG463"
+title = "跨分区写者判据认 depends：与 validate 同一条规则"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E12-跨分区写者认depends.md",
+  "file:gates/diag/wb-E12.report.md",
+]
+gaps = "1. 只验了子集与真队列读数，**没跑全量**：本卡自证是 `pytest tests/test_wb_plan.py tests/test_partitions.py -o addopts= -q` → 112 passed、`python -X utf8 tools/wb_plan.py check` → 退出码 0。全量 19 道交给落地链，红在别处请先看 `.wt/E12/gates/logs/`。2. 真队列读数是在**卡树 `.wt/E12`** 里跑的（那份 `docs/workbacklog.toml` 与主树同版本 `680494e4`），主树此刻还没有这个修复。3. `ruff format --check` 对 `tools/wb_plan.py` / `tests/test_wb_plan.py` 两文件在 HEAD 就**不合格式**，本卡不动格式（整文件重排会淹掉判据 diff）。4. 突变检验只做了①③（把 `tools/wb_plan.py` 里 `dependency_path` 短路成 `False` ⇒ 2 failed），②没做突变 —— 它断言 `tests/test_wb_plan.py` 里的原句与新补句，不依赖新判据变绿。"
+

@@ -1,3 +1,7 @@
+## T-AG463 跨分区写者判据认 depends（与 validate 对齐）
+- `tools/wb_plan.py`：`cross_partition_writers()` 对 `dependency_path(first, second, backlog.cards)` 为真的对子不再报（`validate()` 早就这么判）；报行原句保留，补「（有 `depends` 串起来的对子不报）」。`dependency_path` 导入并进 `__all__`。
+- `tests/test_wb_plan.py`：新增 3 条钉子 —— 跨分区相交 + depends ⇒ 不报且 `check` 退 0；同样相交无 depends ⇒ 报且退 1（并核对原句与新补句）；反向依赖同样不报。
+- 真队列：`wb_plan.py check` 从「rc=1 + 五条 [跨分区]」变成 **rc=0**（222 张卡，待派 26）。
 ## 卡 E1：落地前一次只读体检（T-AG443）
 - `tools/pool/landing.py`：新增 `preflight(...)` 与 11 条判据本体，抽出 `_scan_blocks()` / `parse_text_doc()` / `gates_trailer_template()`，体检与落地链共用同一份判据。
 - `tools/wb_land.py`：新增 `--preflight`（只读、不 fail-fast、跑完再退出；与 `--card` 同给 = 体检绿后继续落地）。

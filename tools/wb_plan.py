@@ -29,6 +29,8 @@ r"""并发调度器 CLI `tools/wb_plan.py`（外包卡 010 · 台账号 T-G99）
   `docs/backlog/<分区>.toml`，`check` / `plan` / `dispatch` 读的是**合并后**的队列。
   ★ 分区只解决「号不撞」，**不解决「文件不撞」**：两个分区各写一张卡、都声明同一文件时，
   `check` 照样报「同一文件两个写者」并点名（合并后仍按 `files` 域相交判）。
+  ★ 卡 E12（T-AG463）：有 `depends` 依赖路径的对子**不算两个写者** —— 与 `validate()` 同一条
+  规则（`pool.plan.dependency_path()`，任一方向、含传递）；没有依赖路径的照旧报并退 1。
 
 用法：
     python -X utf8 tools/wb_plan.py check
@@ -92,6 +94,7 @@ from pool.plan import (
     Card,
     audit_batch_claims,
     batch_manifest_path,
+    dependency_path,
     extract_batch_claim,
     files_intersect,
     find_cycle,
@@ -112,7 +115,8 @@ if TYPE_CHECKING:
 __all__ = [
     "ACTIVE_STATUS", "DEFAULT_BACKLOG", "DEFAULT_CONCURRENCY", "PROTECTED_FILES",
     "VALID_RISK", "VALID_STATUS", "Backlog", "BacklogError", "Card",
-    "BATCH_CLAIM_RE", "audit_batch_claims", "batch_manifest_path", "extract_batch_claim",
+    "BATCH_CLAIM_RE", "audit_batch_claims", "batch_manifest_path", "dependency_path",
+    "extract_batch_claim",
     "cmd_check", "cmd_dispatch", "cmd_merge", "cmd_plan", "cmd_stats", "cmd_worktrees",
     "build_parser", "card_prefix", "cross_partition_writers", "dispatch_argv", "files_intersect",
     "find_cycle", "greedy_pack",
@@ -349,6 +353,10 @@ def cross_partition_writers(backlog: Backlog, partitions: Partitions | None) -> 
     分区只避免**号**撞，不避免**文件**撞：两个分区各写一张卡、声明同一文件时，
     合并后的 `validate()` 会报「files 相交」，这里再把**分区**点名说清楚。
     同分区的相交交给 `validate()` 自己报，这里不重复。
+
+    ★ 卡 E12（T-AG463）：**有 `depends` 依赖路径的对子不报** —— 与 `validate()` 用同一条规则
+      （`pool.plan.dependency_path()`，任一方向、含传递）。串起来 = 后动手的等前面落完 ⇒
+      同一个文件仍然只有一个写者。没有依赖路径的对子照旧报，`cmd_check()` 照旧退 1。
     """
     active = [card for card in backlog.cards if in_flight(card)]
     out: list[str] = []
@@ -358,12 +366,15 @@ def cross_partition_writers(backlog: Backlog, partitions: Partitions | None) -> 
             hit = files_intersect(first, second)
             if not hit:
                 continue
+            if dependency_path(first, second, backlog.cards):
+                continue          # 卡 E12：串起来了 ⇒ 不同批 ⇒ 不是两个写者
             psecond = partition_of(second.id, partitions)
             if pfirst and psecond and pfirst == psecond:
                 continue          # 同分区：由 validate() 那条报，这里不重复
             out.append(
                 f"卡 {first.id}（分区 {pfirst or '?'}）与 {second.id}（分区 {psecond or '?'}）："
-                f"files 相交 {sorted(hit)} —— 分区只避免号撞，不避免文件撞")
+                f"files 相交 {sorted(hit)} —— 分区只避免号撞，不避免文件撞"
+                f"（有 `depends` 串起来的对子不报）")
     return out
 
 

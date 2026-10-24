@@ -1177,3 +1177,110 @@ def test_root_flag_is_restored_after_the_call(tmp_path: Path,
     assert code == 2, (code, err)                     # 没有总表 ⇒ 读不到就拒（不静默）
     assert "workbacklog.toml" in err, err
     assert before == (wb_plan.ROOT, pool_plan.ROOT, pool_plan.DIAG)
+
+
+# ================================================== 卡 E12（T-AG463）：跨分区写者认 `depends`
+#
+# ★ 同一判据只有一套语义：`validate()` 早就认 `depends`（有依赖路径 ⇒ 同域两卡共存、不同批），
+#   而 `cross_partition_writers()` 只按 files 相交判 ⇒ 真队列五对已串起来的卡被报成跨分区冲突、
+#   `check` 退 1、`test_check_command_passes_on_seed` 红。三条钉子：
+#   ① 跨分区相交 + `depends` ⇒ 不报且 `check` 退 0；
+#   ② 同样相交但没有 `depends` ⇒ 照旧报且退 1（不许把判据整体废掉）；
+#   ③ 反向依赖（前一张依赖后一张）同样不报（方向无关，与 `dependency_path()` 同口径）。
+
+_XPART_TOML = """\
+[base]
+reviewed = "abc1234"
+
+[[cards]]
+id = "A7"
+task = "T-AG9001"
+title = "跨分区样卡一"
+tree = ".wt/A7"
+spec = ""
+files = ["tools/shared.py"]
+depends = [@A_DEP@]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "B3"
+task = "T-AG9002"
+title = "跨分区样卡二"
+tree = ".wt/B3"
+spec = ""
+files = ["tools/shared.py"]
+depends = [@B_DEP@]
+risk = "low"
+status = "pending"
+"""
+
+
+def _xpart_backlog(tmp_path: Path, *, a_dep: str = "", b_dep: str = "") -> Path:
+    """两张**不同分区**（A7 / B3）且 files 相交的卡；`depends` 由参数给（空 = 不串）。"""
+
+    def dep(value: str) -> str:
+        return f'"{value}"' if value else ""
+
+    return _write(tmp_path, _XPART_TOML.replace("@A_DEP@", dep(a_dep))
+                  .replace("@B_DEP@", dep(b_dep)))
+
+
+def _xpart_partitions() -> object:
+    return wb_plan.load_partitions(ROOT / "docs" / "partitions.toml")
+
+
+def test_cross_partition_overlap_with_depends_is_not_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """① 跨分区相交 + `depends` ⇒ 不报，且 `check` 退 **0** 并打印 `[OK ]`。
+
+    ★ 这就是真队列那五对的形态（B1↔E9、E7↔G2/G3/G4、E9↔G3 都有依赖路径）。
+    """
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    path = _xpart_backlog(tmp_path, b_dep="A7")          # B3 等 A7 落完
+    backlog = wb_plan.load_backlog(path)
+    assert wb_plan.cross_partition_writers(backlog, _xpart_partitions()) == []
+    assert wb_plan.validate(backlog) == []               # 同一条规则：validate 也不报
+    assert wb_plan.main(["check", "--backlog", str(path)]) == 0
+    out = capsys.readouterr()
+    assert "[OK ]" in out.out, out.out
+    assert "[跨分区]" not in out.err, out.err
+
+
+def test_cross_partition_overlap_without_depends_is_still_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """② 同样相交但**没有** `depends` ⇒ 照旧报（分区 + 文件都点名）且 `check` 退 **1**。
+
+    ★ 反空转：判据被整体废掉 / 降级成只报，这条当场红。
+    """
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    path = _xpart_backlog(tmp_path)
+    backlog = wb_plan.load_backlog(path)
+    writers = wb_plan.cross_partition_writers(backlog, _xpart_partitions())
+    assert len(writers) == 1, writers
+    assert "A7" in writers[0] and "B3" in writers[0] and "tools/shared.py" in writers[0], writers
+    # ★ 卡 E12 ③：报行保留原句并补一句「（有 `depends` 串起来的对子不报）」
+    assert "分区只避免号撞，不避免文件撞" in writers[0], writers[0]
+    assert "（有 `depends` 串起来的对子不报）" in writers[0], writers[0]
+    code = wb_plan.main(["check", "--backlog", str(path)])
+    err = capsys.readouterr().err
+    assert code == 1, err
+    assert "[跨分区]" in err and "A7" in err and "B3" in err, err
+
+
+def test_cross_partition_reverse_dependency_is_not_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """③ 反向依赖（前一张 `A7` 依赖后一张 `B3`）同样不报 —— 判据方向无关。
+
+    `dependency_path()` 两头都查（`b.id in reachable(a)` 或 `a.id in reachable(b)`），
+    这里钉住调用方没有退化成「只看 first→second」。
+    """
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    path = _xpart_backlog(tmp_path, a_dep="B3")
+    backlog = wb_plan.load_backlog(path)
+    assert wb_plan.cross_partition_writers(backlog, _xpart_partitions()) == []
+    assert wb_plan.validate(backlog) == []
+    assert wb_plan.main(["check", "--backlog", str(path)]) == 0
