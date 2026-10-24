@@ -8189,16 +8189,16 @@ gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地�
 
 [entries."T-AG444"]
 id = "T-AG444"
-title = "卡 E2 —— 测试影响分析（TIA）：按覆盖映射选测"
+title = "测试影响分析（TIA）：按覆盖映射选测"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E2-测试影响分析.md",
-  "file:docs/workbacklog.toml",
-  "file:docs/research/文档治理-best-practice-调研.md",
+  "file:gates/diag/wb-E2.report.md",
+  "file:scripts/tia_map.py",
+  "file:tests/test_tia_map.py",
 ]
-gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
-外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+gaps = "- **默认关闭（`TF_TIA=1` 才启用）。** 不设变量时 `pytest_args` 为空 ⇒ 命令逐字不变（scripts/run_gates.py:1238）。- **映射是文件级，不是用例级。** 同名模块被多处 import 会多选（宁可多跑）；精度要等拿 `git log` 回放才知道（规格 复盘/卡/卡E2-测试影响分析.md）。- **主控没有逐行读工人的新脚本。** 复核的是工人自跑单测 + 落地链全量门禁 + 「不设环境变量就逐字不变」这条边界（规格 复盘/卡/卡E2-测试影响分析.md）。"
 
 [entries."T-AG445"]
 id = "T-AG445"

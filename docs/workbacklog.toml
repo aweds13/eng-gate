@@ -3556,7 +3556,7 @@ spec = "复盘/卡/卡E2-测试影响分析.md"
 files = ["scripts/run_gates.py", "scripts/tia_map.py", "tests/test_tia_map.py"]
 depends = ["E1"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 # ---- 分区E｜提交面算档 + 残留归收（T-AG445）
 [[cards]]

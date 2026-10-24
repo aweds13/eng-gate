@@ -82,6 +82,7 @@ import concurrent.futures
 import contextlib
 import dataclasses
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -1234,18 +1235,22 @@ def kill_gate_tree(pid: int) -> tuple[bool, int, str]:
         return False, n_children, f"{type(exc).__name__}: {exc}"
 
 
-def resolve_cmd(name: str, cmds: dict[str, list[str]], serial: bool) -> list[str] | None:
+def resolve_cmd(
+    name: str, cmds: dict[str, list[str]], serial: bool,
+    pytest_args: list[str] | None = None,
+) -> list[str] | None:
     """把占位命令填实（node 不在 → None = 这一门没跑，记 `not_run`，不算通过）。
 
     ★ 顺序有讲究（T-G47 实测踩到）：**先**看"是不是占位门"，**再**从 `cmds` 取字面命令。
     反过来写的话（第一版就是），`jobs` 里 `("pytest", [])` / `("render", [])` 这些**空占位**
     会先被 `name in cmds` 命中 → 返回 `[]` → `Popen([])` 在 Windows 上抛
     `OSError: [WinError 87]`（"参数错误"，看不出跟命令有关）→ 那 4 道门全记成"起不来"。
+    ★ 卡 E2：`pytest_args` 是 TIA 选集（`TF_TIA=1` 才非空）；不给 ⇒ 命令逐字不变。
     """
     if name in NODE_CMD:
         return NODE_CMD[name]()
     if name == "pytest":
-        return pytest_cmd(serial=serial)
+        return [*pytest_cmd(serial=serial), *(pytest_args or [])]
     loaded = cmds.get(name)
     return loaded if loaded else None
 
@@ -1718,6 +1723,47 @@ def quick_test_job(plan: TestSelectionPlan) -> tuple[str, list[str]] | None:
                            "-q", "--no-cov", "-p", "no:cacheprovider"])
 
 
+# ---------------------------------------------------------------- TIA 选测（卡 E2 · T-AG444）
+# 病灶：全量 pytest 427 秒，而一次改动只碰一两个模块。`TF_TIA=1` 时按**覆盖映射**
+#   （`gates/tia.json`，`scripts/tia_map.py --build` 产出）把 pytest 门裁成相关子集。
+# ★ 方向与上面的 `select_tests` 同一条：**宁可多跑不许漏跑** ——
+#   映射缺失 / 过期 / 判不出某个被改文件 ⇒ **退回全量**，并打印原因（不许静默少跑）。
+# ★ 选测只是**提速**：它不替代收口链 ④ 全量，`last.json` 里用 `tia` 块与 `tests_run`/
+#   `tests_total` 把"这一趟不是全量"写清楚。
+_TIA_MODULE = None
+
+
+def _tia_module():
+    """加载同目录的 `tia_map.py`（只在 `TF_TIA=1` 时才付这份 import 成本）。"""
+    global _TIA_MODULE
+    if _TIA_MODULE is not None:
+        return _TIA_MODULE
+    path = TOOL_ROOT / "scripts" / "tia_map.py"
+    spec = importlib.util.spec_from_file_location("tia_map_for_gates", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"找不到 TIA 模块：{path}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    _TIA_MODULE = mod
+    return mod
+
+
+def tia_payload_fields(plan, enabled: bool) -> dict[str, object]:
+    """`last.json` 里多记的字段（不启用 ⇒ `{}`，形状逐字不变）。
+
+    ★ 卡 E2 判据 4 要的就是 `tests_run` / `tests_total`；`tia` 块只是把
+      「这一趟是不是全量」也写明白，省得事后有人拿选集冒充全量。
+    """
+    if not enabled or plan is None:
+        return {}
+    return {
+        "tests_run": int(plan.run_count),
+        "tests_total": int(plan.total),
+        "tia": {"full": bool(plan.full), "note": str(plan.note)},
+    }
+
+
 def _profile_filter(
     jobs: list[tuple[str, list[str]]], profile: str | tuple[str, ...] | list[str]
 ) -> list:
@@ -1877,6 +1923,32 @@ def main() -> int:
 
     cmds = dict(jobs)
 
+    # ★ 卡 E2（T-AG444）：`TF_TIA=1` ⇒ pytest 门按**覆盖映射**选测；判不出就退回全量。
+    tia_plan = None
+    pytest_args: list[str] = []
+    if os.environ.get("TF_TIA") == "1":
+        if args.fast:
+            print("=== TF_TIA：--fast 档里没有 pytest 门（选集只作用于 pytest 门）===")
+        else:
+            print("=== TF_TIA：按覆盖映射选测（判不出 ⇒ 全量）===", flush=True)
+            try:
+                changed = worktree_changed_paths()
+                tia_plan = _tia_module().plan(
+                    [] if changed is None else changed, root=ROOT
+                )
+                print(f"  [tia] {tia_plan.note}", flush=True)
+                if changed is not None:
+                    print(f"  [tia] 改动 {len(changed)} 条：{changed if changed else '（空）'}",
+                          flush=True)
+                if not tia_plan.full:
+                    # `--no-cov`：只跑几条用例时覆盖率必然不达 70（与 quick_test_job 同理）。
+                    pytest_args = [*tia_plan.tests, "--no-cov"]
+                    print(f"  [tia] 选集 {len(tia_plan.tests)} 条"
+                          f"（/全量 {tia_plan.total}）", flush=True)
+            except Exception as exc:  # 选测算不出来 ⇒ 全量（绝不让它把门禁带崩）
+                tia_plan = None
+                print(f"  [tia] 选测失败 ⇒ 全量（{type(exc).__name__}: {exc}）", flush=True)
+
     ok_docs: bool = True                     # --fast 不判"文档同提交"（那是提交闸的事）
     missing: list[str] = []
     if args.fast:
@@ -1947,7 +2019,7 @@ def main() -> int:
             reused[name] = mark
             print(f"[REUSE] {name:<22} 输入未变（{mark}）→ 复用上次通过判定")
             continue
-        cmd = resolve_cmd(name, cmds, args.serial)
+        cmd = resolve_cmd(name, cmds, args.serial, pytest_args)
         if cmd is None:
             print(f"[WARN] {name:<22} 跳过：环境里没有 node（未验证，不算通过）")
             not_run.append(name)
@@ -2138,6 +2210,18 @@ def main() -> int:
             f"【{domains.explain(need_paths)}；真跑全了 {'+'.join(ran_profiles)}】"
             + str(payload["trailer"])
         )
+    # ★ 卡 E2：启用 `TF_TIA` 时把「跑了几条 / 全量几条 / 是不是退回全量」写进产物。
+    #   不启用 ⇒ 不加这两个键，`last.json` 形状逐字不变（既有审计按老形状读）。
+    tia_fields = tia_payload_fields(tia_plan, os.environ.get("TF_TIA") == "1")
+    if tia_fields:
+        payload.update(tia_fields)
+        if tia_plan is not None and tia_plan.full:
+            payload["trailer"] = f"【TIA 退回全量：{tia_plan.note}】" + str(payload["trailer"])
+        elif tia_plan is not None:
+            payload["trailer"] = (
+                f"【TIA 选测 {tia_plan.run_count}/{tia_plan.total}，非全量】"
+                + str(payload["trailer"])
+            )
     GATES.parent.mkdir(parents=True, exist_ok=True)
     GATES.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"

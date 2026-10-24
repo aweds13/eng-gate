@@ -1,3 +1,7 @@
+## 卡 E2：测试影响分析：按覆盖映射选测（T-AG444）
+- 新增 TIA 映射与选测脚本（落地后见 scripts/tia_map.py）。
+- `scripts/run_gates.py`：`resolve_cmd` 接受 `pytest_args`，不启用时命令逐字不变。
+- 配套单测三条钉子（映射 / 选集 / 兜底）。
 ## 卡 E6：卡树先提交的返工姿势，落地链自己说清楚（T-AG448）
 - `tools/pool/landing.py` ① 停手时多打一句「已提交就 `git cherry-pick -n <sha>` + `git reset` 还原」。
 - `skills/pipe-land/SKILL.md` 前置检查补第 3 条：卡上的活留在工作区，要暂存用 `git add -N`。
