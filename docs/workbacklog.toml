@@ -3360,6 +3360,20 @@ depends = ["A321"]
 risk = "low"
 
 [[cards]]
+id = "A326"
+task = "T-AG441"
+title = "工具根 / 数据根切分：同一份 tools/ 服务别的仓"
+tree = ".wt/A326"
+spec = "复盘/卡/卡A326-工具根与数据根切分.md"
+files = ["tools/pipe_root.py", "tests/test_pipe_root.py", "scripts/run_gates.py",
+         "tools/wb_daily.py", "tools/wb_plan.py", "tools/wb_notify.py",
+         "tools/pool/plan.py", "tools/pool/models.py", "tools/pool/projects.py",
+         "tools/pool/snapshot.py", "tools/pool/stage_card.py",
+         "tools/pool/model_registry.py"]
+depends = ["A306"]
+risk = "low"
+
+[[cards]]
 id = "B1"
 task = "T-BG001"
 title = "参考文档参数口径：parameters 是映射，不是 JSON Schema"
