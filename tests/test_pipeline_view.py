@@ -550,13 +550,24 @@ def test_cache_hit_skips_recompute_and_is_faster(tmp_path: Path, monkeypatch) ->
     assert "cards" in pipeline_view._CACHE_MISSES, "第一次应是冷跑（重算）"
     assert "cards" not in pipeline_view._CACHE_HITS
 
+    # ★ 卡 E26：判「命中就不许重算」不许比墙钟 —— 4 worker 全量门禁下 hot 会被邻居抢核
+    # 拖慢（实测 cold=0.4870s hot=0.6039s、0.4938s vs 0.6910s 两次假红），比的是机器忙不忙，
+    # 不是缓存灵不灵。改成数「重算路径被调了几次」：命中就必须是 0 次。
+    calls = {"cards": 0}
+    real_read_cards = pipeline_view._read_cards
+
+    def _counting_read_cards(path):
+        calls["cards"] += 1
+        return real_read_cards(path)
+
+    monkeypatch.setattr(pipeline_view, "_read_cards", _counting_read_cards)
     t0 = time.perf_counter()
     r2 = pipeline_view.build_reading(root)
     hot = time.perf_counter() - t0
     print(f"\n[卡255-a] cold={cold:.4f}s hot={hot:.4f}s（{len(r1['cards'])} 张卡）")
     assert "cards" in pipeline_view._CACHE_HITS, "第二次应命中缓存"
     assert "cards" not in pipeline_view._CACHE_MISSES, "命中就不许重算"
-    assert hot < cold * 0.9, f"命中应明显更快：cold={cold:.4f}s hot={hot:.4f}s"
+    assert calls["cards"] == 0, f"命中还重算了解析路径：{calls['cards']} 次"
     assert _json_bytes(r1) == _json_bytes(r2), "冷/热读数必须逐字节相同"
     assert len(r2["cards"]) == 5000
 

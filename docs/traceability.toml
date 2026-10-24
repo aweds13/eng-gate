@@ -8610,3 +8610,15 @@ evidence = [
   "file:tests/test_wb_verify_profiles.py",
 ]
 gaps = "- **只修了复核一侧。** 档映射仍由 `gates/defs/domains.py` 决定（改 `tools/` ⇒ `lang+audit`）；本卡没有去动「哪些路径应当要求全量」，那是另一条口径（卡 A327 的范围）。- **旧笔不追溯。** `gates/last.json` 没有 `profiles_run` 的历史提交仍按全量 19 道核（fail closed）；如果要给旧笔补字段，得另开卡重跑封存。- **未知档名只判红、没说怎么修。** 报错文案是「读不到应有的门数」，具体档名清单要去 `scripts/run_gates.py:162 GATE_PROFILES` 里对。"
+
+[entries."T-AG478"]
+id = "T-AG478"
+title = "缓存命中的判据不比墙钟（T-AG478）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E26-缓存命中的判据不比墙钟.md",
+  "file:gates/diag/batch/T-AG478.toml",
+  "file:tests/test_pipeline_view.py",
+]
+gaps = "- **只改了这一条。** `tests/test_pipeline_view.py` 里其余性能相关断言未动；下次谁再写「比墙钟」的钉子，仍可能假红（见 `复盘/卡/卡E26-缓存命中的判据不比墙钟.md` 的「不做什么」）。- **计数器只盯 `_read_cards`。** 命中路径里若还有别的重活（`_fingerprint` 走一遍目录、last-good 刷新），本判据不管；那部分耗时照旧由打印出来的 `cold/hot` 观察（读数在 `tests/test_pipeline_view.py` 的 `[卡255-a]` 那行）。- **不证明缓存更快，只证明不重算。** 「命中省了几个百分点」这类话从此没有门禁背书，要看就只能看 `tests/test_pipeline_view.py` 里打印的 `[卡255-a] cold/hot` 耗时。"

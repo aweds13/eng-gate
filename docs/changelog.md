@@ -1,3 +1,6 @@
+## 缓存命中判据不比墙钟（T-AG478）
+
+- `test_cache_hit_skips_recompute_and_is_faster` 去掉 `hot < cold * 0.9`（4 worker 全量门禁下假红两次：cold=0.4870s/hot=0.6039s、0.4938s vs 0.6910s），改成把 `pipeline_view._read_cards` 换成计数器、命中时必须 0 次；耗时只打印。
 ## 分档门禁的复核口径（T-AG477）
 
 - `tools/wb_verify.expected_gate_names()` 接受 `profiles`，`check_gates()` 把 `gates/last.json` 的 `profiles_run` 传下去：说跑了哪几档就按那几档算应有门名，缺字段/`all` 仍按全量 19 道，档名不认识判红。

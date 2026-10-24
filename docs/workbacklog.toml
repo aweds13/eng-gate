@@ -3913,3 +3913,14 @@ files = ["tools/wb_verify.py", "tests/test_wb_verify_profiles.py"]
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E26"
+task = "T-AG478"
+title = "缓存命中的判据不比墙钟"
+tree = ".wt/E26"
+spec = "复盘/卡/卡E26-缓存命中的判据不比墙钟.md"
+files = ["tests/test_pipeline_view.py"]
+depends = []
+risk = "low"
+status = "done"
