@@ -3,6 +3,17 @@
 > 这一层是**核心之上的薄适配层**：它把「怎么用才不出错」教给 agent（和人）。
 > ★ 本层的判据：**删掉整个 `skills/` 目录，框架仍然完整可用。** 做不到，就说明判据漏进 skill 了。
 
+> ★ **2026-10-24 起三条新口径**（老窗口若还按旧写法干，门禁会拦下并说明原因）：
+> 1. **一张卡只归一个对话窗口**（卡 A324）：别的窗口的卡要显式 `--take-over` 才让过，
+>    `wb_land` / `wb_dispatch` 被挡时退 2 并打印持有者；没 `DSH_SESSION_ID` 的环境（工人 / cron）照常放行。
+>    看谁的卡：`python -X utf8 tools/wb_session.py --list`。
+> 2. **工具根 ≠ 数据根**（卡 A326）：门表跟 `tools/` 走，台账 / 门禁产物跟**数据根**走
+>    （`PIPE_DATA` > 当前目录像数据根 > 工具根）。默认两根同值，行为不变；
+>    同一份 `tools/` 服务别的仓时才需要设 `PIPE_DATA`。
+> 3. **提交闸按域要档，不再一律 19 道**（卡 A327）：`gates/defs/domains.py` 一张表算必需档，
+>    `last.json` 记 `profiles_run / required_profiles`；判不出或碰判据本体（`scripts/**` `tools/**` `gates/**`）
+>    仍强制全量。缺档提交会被 `wb_review` 点名拒。
+
 ## 定位
 
 - 框架本体 = 核心库（`framework/src/framework/**`）+ 薄 CLI（`framework/cli/main.py`）+ 模板仓 + 例子。

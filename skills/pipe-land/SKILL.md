@@ -1,6 +1,6 @@
 ---
 name: pipe-land
-description: 把一张卡落成一笔提交（迁移卡树 → 文书 → 全量门禁 → 封存 → 白名单提交 → 审计 → 合流 → 复核）。当你要收口一张卡、重跑被中断的落地、或判断「这一笔算不算落成」时用；落地参数与封存口径在工具里。
+description: 把一张卡落成一笔提交（迁移卡树 → 文书 → 按域门禁 → 封存 → 白名单提交 → 审计 → 合流 → 复核）。当你要收口一张卡、重跑被中断的落地、或判断「这一笔算不算落成」时用；落地参数与封存口径在工具里。
 ---
 
 # pipe-land —— 集成与发布
@@ -26,13 +26,14 @@ description: 把一张卡落成一笔提交（迁移卡树 → 文书 → 全量
 1. 申报齐：`python -X utf8 tools/wb_task.py status <任务>` 显示该卡已交。
 2. 卡树干净：在卡树里 `git status --porcelain -uno` 为 0 行。
 3. 主树干净：别人的未提交改动先收起（落地会做 `add` / `commit`，会被卷进去）。
-4. 参数齐：`--card` 与 `--batch` **恰好给一个**；`--tree` / `--task` / `--title` / `--evidence` / `--allow` 必填。
-5. 参数细则与文书三段见 [落地参数](references/land-steps.md)。
+4. 卡归谁：卡若归别的对话窗口，会退 2 并打印持有者（卡 A324）—— 确要接手就加 `--take-over`，别反复重试。
+5. 参数齐：`--card` 与 `--batch` **恰好给一个**；`--tree` / `--task` / `--title` / `--evidence` / `--allow` 必填。
+6. 参数细则与文书三段见 [落地参数](references/land-steps.md)。
 
 ## 真命令
 
 ```bash
-# 正式落地（默认跑全量门禁 + 复核落盘）
+# 正式落地（默认按改动面跑必需档 —— 卡 A327；判不出 / 碰判据本体仍全量）
 python -X utf8 tools/wb_land.py --card <卡号> --tree .wt/<卡号> --task <台账号> \
     --title "<一句话>" --type feat --scope <域> \
     --allow <文件>... --evidence <指针>... --port-base <端口段>
@@ -76,7 +77,7 @@ python -X utf8 tools/wb_verify.py --tree . --expect-parent <期望父提交>
 | ① | 卡树迁到主树 HEAD | 冲突 ⇒ 先解，别 `checkout` 硬盖 |
 | ② | 文档件（gaps / changelog / checkpoint） | 缺 `=== gaps ===` 段 ⇒ 停 |
 | ③ | `sync_counts` | 台账分布漂 ⇒ 停 |
-| ④ | 门禁锁 + 全量门禁 | 红 ⇒ 停（链内自己跑，别外面再压） |
+| ④ | 门禁锁 + 门禁（按域；碰判据本体则全量） | 红 ⇒ 停（链内自己跑，别外面再压） |
 | ⑤ | `seal`（写 `gates/last.json` 的 tree） | 封存指纹与提交树对不上 ⇒ 停 |
 | ⑥ | 白名单 → `add` → `commit` | `--allow` 少了文件 ⇒ 那文件没进这一笔 |
 | ⑦ | audit → 释放锁 → `ff` 合流 | 锁没释放会占全局并发名额 |
