@@ -8578,3 +8578,19 @@ evidence = [
   "file:gates/diag/batch/T-AG475.toml",
 ]
 gaps = "- 2026-10-25 01:16，F1 落地门禁在本机 4 个 worker 下偶发红一条：`tests/test_wb_dispatch_watch.py::test_shared_registry_rebuilds_from_disk_after_restart`（`AssertionError: 已出判决的卡（402）不许再算进未完成  assert 3 == 2`），日志见 `gates/diag/gate-F1d.log`。- 根因（实测）：`tools/wb_watch.py` 的 `_fresh()` 用 `mtime >= since` 判「这一轮的产物」，而 Windows 文件时间戳比墙钟粗 —— 同一次 `write_text` 的 mtime 比 `time.time()` 早 1.4 ms（NTFS 更新周期约 15.6 ms），复现读数 `since=1792862663.2439` / `mtime=1792862663.2402365` ⇒ 刚写的判决被判成上一轮，`rebuild_registry` 把已收工的卡算进未完成。- 影响面不止测试：派活器 `--since` 走同一条判据（`wb_dispatch` 派活后立刻起看守），真现场同样会偶发「刚出判决却仍算在飞」（`复盘/卡/卡E22-看守时间粒度容错.md`）。- 没做的：只加时间容差，没改 `--since` 的语义窗口；派活器侧没加独立用例 —— `tools/wb_dispatch.py` 与看守共用 `tools/wb_watch.py:176 _fresh()`，所以两条路一起被这次修复覆盖。"
+
+[entries."T-AG474"]
+id = "T-AG474"
+title = "台账证据被「翻账」抹掉 / test: 声称对不上文件"
+group = "ENGINEERING"
+status = "todo"
+evidence = ["file:复盘/卡/卡E21-台账证据被翻账抹掉.md"]
+gaps = "- 一半在 `tools/pool/landing.py` 第 ⑤ 步（翻账按 claim 重写条目），该文件已有 5 张卡声明为写者，故本卡先只收敛到 `scripts/audit_progress.py` + `tools/evidence_map.py`；另一半另起卡（暂记 E24）。- 尚未实现，只登记（规格 复盘/卡/卡E21-台账证据被翻账抹掉.md）。"
+
+[entries."T-AG476"]
+id = "T-AG476"
+title = "并行下胶水钉子的隔离判据（比哨兵不比字节）"
+group = "ENGINEERING"
+status = "todo"
+evidence = ["file:复盘/卡/卡E23-并行下钉子的隔离判据.md"]
+gaps = "- 尚未实现，只登记（规格 复盘/卡/卡E23-并行下钉子的隔离判据.md）。- 是否还有别的「真仓产物 before/after 比字节」的钉子，需按规格第 3 条 grep 一遍才算数。"

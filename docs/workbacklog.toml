@@ -3880,3 +3880,25 @@ files = ["tools/wb_watch.py", "tests/test_wb_dispatch_watch.py", "docs/traceabil
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E21"
+task = "T-AG474"
+title = "台账证据被「翻账」抹掉：test: 声称必须能对上文件"
+tree = ".wt/E21"
+spec = "复盘/卡/卡E21-台账证据被翻账抹掉.md"
+files = ["scripts/audit_progress.py", "tools/evidence_map.py", "tests/test_audit_tightening.py"]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "E23"
+task = "T-AG476"
+title = "并行下「胶水钉子」的隔离判据：比哨兵不比字节"
+tree = ".wt/E23"
+spec = "复盘/卡/卡E23-并行下钉子的隔离判据.md"
+files = ["tests/test_wb_session.py"]
+depends = []
+risk = "low"
+status = "pending"
