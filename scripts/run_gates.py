@@ -1801,6 +1801,39 @@ def tia_payload_fields(plan, enabled: bool) -> dict[str, object]:
     }
 
 
+# ------------------------------------------------- 台账驱动选测（卡 E51 · 段 1 / E36）
+# 与上面的 `select_tests`（按文件命名映射）不同：本档的映射源是**台账**
+#   `docs/traceability.toml` 的 `test:` 指针（唯一真源），三道闸任一不过 ⇒ 全量：
+#   ① 台账闸（没有 entry / 没有 test: 指针 / 指针指向的文件不存在）
+#   ② 夜间闸（最近一次全量绿 >24h 或没有记录，见 `tools/wb_nightly.py`）
+#   ③ 判据本体闸（`scripts/run_gates.py`、`gates/defs/**`、本工具、pytest 配置）
+# ★ 选测只决定「跑哪些用例」，**不改变 `exit_code` 语义**；不给 `--select`（且没设
+#   `TF_SELECT=1`）时，门清单/命令/`last.json` 形状逐字不变。
+_SELECT_MODULE = None
+_SELECT_ENV = "TF_SELECT"
+
+
+def _select_module():
+    """加载 `tools/pytest_select.py`（只在启用选测时才付这份 import 成本）。"""
+    global _SELECT_MODULE
+    if _SELECT_MODULE is not None:
+        return _SELECT_MODULE
+    path = TOOL_ROOT / "tools" / "pytest_select.py"
+    spec = importlib.util.spec_from_file_location("pytest_select_for_gates", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"找不到选测模块：{path}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    _SELECT_MODULE = mod
+    return mod
+
+
+def select_enabled(args) -> bool:
+    """`--select` 或落地链（`tools/wb_land.py`）设的 `TF_SELECT=1` —— 两个入口同一套判据。"""
+    return bool(getattr(args, "select", False)) or os.environ.get(_SELECT_ENV) == "1"
+
+
 def _profile_filter(
     jobs: list[tuple[str, list[str]]], profile: str | tuple[str, ...] | list[str]
 ) -> list:
@@ -1870,6 +1903,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--changed-from", metavar="REV",
         help=("同 --affected，但路径由 git 现算：git diff --name-only <REV> + 未跟踪文件"
               "（排生成物与 gates/**）。同样只是「改完一小块自查」，不替代全量。"),
+    )
+    ap.add_argument(
+        "--select", action="store_true",
+        help=("台账驱动选测（卡 E51 / E36）：pytest 门只跑台账 `test:` 指针选出的那批。"
+              "三道闸（台账 / 夜间全量 ≤24h / 判据本体）任一不过 ⇒ 退回全量并说明；"
+              "不给本开关时命令与产物形状逐字不变。落地链默认打开（TF_SELECT=1）。"),
     )
     return ap
 
@@ -1992,10 +2031,39 @@ def main() -> int:
 
     cmds = dict(jobs)
 
+    # ★ 卡 E51 · 段 1（E36）：台账驱动选测。映射源 = 台账 `test:` 指针（唯一真源），
+    #   三道闸任一不过就退回全量；**与 TF_TIA 的覆盖映射互斥**（不引入第二套真相）。
+    pytest_args: list[str] = []
+    select_plan = None
+    if select_enabled(args):
+        if args.fast:
+            print("=== 选测（--select / TF_SELECT）：--fast 档走它自己的受影响用例门，"
+                  "本开关只作用于 pytest 门 ===", flush=True)
+        else:
+            changed = (changed_paths_from(args.changed_from) if args.changed_from
+                       else worktree_changed_paths())
+            print("=== 台账驱动选测（卡 E51 / E36；判不出 ⇒ 全量）===", flush=True)
+            if changed is None:
+                print("  [select] 读不到 git 改动 ⇒ 退回全量（宁可多跑）", flush=True)
+            else:
+                try:
+                    select_plan = _select_module().select(changed, root=ROOT)
+                except Exception as exc:  # 选测算不出来 ⇒ 全量（不让它把门禁带崩）
+                    select_plan = None
+                    print(f"  [select] 选测失败 ⇒ 全量（{type(exc).__name__}: {exc}）",
+                          flush=True)
+                else:
+                    print(f"  [select] {select_plan.reason}", flush=True)
+                    print(f"  [select] 改动 {len(changed)} 条："
+                          f"{changed if changed else '（空）'}", flush=True)
+                    pytest_args = select_plan.pytest_args
+                    if select_plan.fallback:
+                        print("  [select] ★ 退回全量：pytest 命令逐字不变（判据一个字没动）",
+                              flush=True)
+
     # ★ 卡 E2（T-AG444）：`TF_TIA=1` ⇒ pytest 门按**覆盖映射**选测；判不出就退回全量。
     tia_plan = None
-    pytest_args: list[str] = []
-    if os.environ.get("TF_TIA") == "1":
+    if os.environ.get("TF_TIA") == "1" and not select_enabled(args):
         if args.fast:
             print("=== TF_TIA：--fast 档里没有 pytest 门（选集只作用于 pytest 门）===")
         else:
@@ -2302,6 +2370,19 @@ def main() -> int:
         elif tia_plan is not None:
             payload["trailer"] = (
                 f"【TIA 选测 {tia_plan.run_count}/{tia_plan.total}，非全量】"
+                + str(payload["trailer"])
+            )
+    # ★ 卡 E51 · 段 1（E36）：启用台账选测时写 `select` 块（跑了哪些 / 是不是退回全量）。
+    #   不启用 ⇒ 不加这个键，`last.json` 形状逐字不变（既有审计按老形状读）。
+    if select_plan is not None:
+        payload["select"] = _select_module().payload(select_plan)
+        if select_plan.fallback:
+            payload["trailer"] = (
+                f"【选测退回全量：{select_plan.reason}】" + str(payload["trailer"])
+            )
+        elif select_plan.tests:
+            payload["trailer"] = (
+                f"【选测 {len(select_plan.tests)} 个用例文件，非全量】"
                 + str(payload["trailer"])
             )
     GATES.parent.mkdir(parents=True, exist_ok=True)

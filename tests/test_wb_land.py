@@ -73,6 +73,8 @@ TOOLS = ROOT / "tools"
 #:   会 `from pool.review import changed_paths / outside_allow`，假仓库里没有它就 ImportError。
 _NEW_TOOLS = (
     "tools/wb_land.py",
+    # ★ 卡 E51：`wb_land.select_env()` 会 `import pytest_select`（选测口径的唯一真源）
+    "tools/pytest_select.py",
     "tools/pool/__init__.py",
     "tools/pool/landing.py",
     "tools/pool/review.py",

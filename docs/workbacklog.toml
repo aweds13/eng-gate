@@ -4012,7 +4012,7 @@ spec = "复盘/卡/卡E51-用例面治理合一.md"
 files = ["tools/pytest_select.py", "tools/wb_nightly.py", "tests/test_pytest_select.py", "scripts/run_gates.py", "tools/wb_land.py", "tools/mutate_report.py", "tests/test_mutate_report.py", "tests/test_properties.py", "pyproject.toml"]
 depends = ["E35", "E44", "E49"]
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E52"

@@ -9013,14 +9013,15 @@ gaps = "合并卡（用户 2026-10-25 裁定）——成员 E30 + E32 + E33，�
 
 [entries."T-AG501"]
 id = "T-AG501"
-title = "卡 E51 —— 用例面治理合一（合并卡，T-AG501）"
+title = "用例面治理合一：台账驱动选测（TIA）+ 变异驱动汰换（E36+E37）"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E51-用例面治理合一.md",
   "file:docs/workbacklog.toml",
+  "file:gates/diag/_text_TAG501.md",
 ]
-gaps = "合并卡（用户 2026-10-25 裁定）——成员 E36 + E37，原任务 T-AG490/T-AG491 全部转 deferred。判据逐字继承，见 `复盘/卡/卡E51-用例面治理合一.md`。缺的东西：①两段都没开工，卡树 `.wt/E51` 要新建；②TIA 回放样本只有最近 20 笔提交，覆盖不全；③「最近一次全量绿 ≤24 小时」依赖 `tools/wb_nightly.py` 真在跑，而它本身没有告警；④变异引擎（mutmut / cosmic-ray）未选型，装不上要 fail closed 不许静默跳过；⑤参数化合并要逐族人工确认 `ids` 可追溯，机械合并会丢原用例名。"
+gaps = "- 真变异会话没跑：score 与零独有击杀无读数，删除上限 3% 无批次可批：见 tools/mutate_report.py。- 用例函数 3153 → ≤2700 与 43 族合并不做（清册要人判，卡明说别自动改）：见 tests/test_mutate_report.py。- 选测加速表与 nightly 真跑未取（本卡禁跑全量门禁）⇒ 闸二在真实树上 fail closed 退全量：见 tools/wb_nightly.py。- 变异引擎只有 cosmic-ray 一条可用路径，mutmut 原生 Windows 拒绝运行（要 WSL）：见 tests/test_pytest_select.py。"
 
 [entries."T-AG502"]
 id = "T-AG502"

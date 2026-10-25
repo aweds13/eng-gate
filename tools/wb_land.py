@@ -54,6 +54,14 @@ r"""主控的通用集成器 CLI `tools/wb_land.py`（卡 139 · `T-G237`）—�
   ★ 耗时边界（如实）：本仓 `audit_progress.py --all` 自己就要 9~15 s（它的
     封存未跟踪清单逐个文件起 git 进程），所以整趟体检在**本机实测 20 s 上下**；
     卡 §判据 3 写的 15 s 是按 audit 0.6 s 估的，那条**没达标**（见复盘）。
+★ 卡 E51 · 段 1（E36）：落地链**默认走台账选测**（壳层给落地链设 `TF_SELECT=1`，
+  `scripts/run_gates.py --select` 认同一个开关）。两条硬边界：
+  ① **碰判据本体 ⇒ 全量**：本笔改动里出现 `scripts/run_gates.py` / `gates/defs/**` /
+     选测工具自身 / pytest 配置 ⇒ 不设开关（判据来源在 `tools/pytest_select.py`，
+     壳层只问它，不写第二份规则）；
+  ② **读不到 git 改动 ⇒ 全量**（判不出就不省）。
+  `--no-select` 关掉这一层（命令行为回到改动前的全量口径）。选测只裁 pytest 的用例集，
+  `exit_code` 语义与其余门一个字不动。
 """
 
 from __future__ import annotations
@@ -80,6 +88,7 @@ __all__ = [
     "precheck_main",
     "preflight_main",
     "run_precheck",
+    "select_env",
 ]
 
 #: 仓库根（本文件在 `tools/` 下）。
@@ -107,8 +116,12 @@ _HELP_TAIL = (
     "壳层参数（不转发给落地链）：--precheck <台账号|文书路径…>  落地前置快检"
     "（文书裸文件名 + check_layers + test_check_skills；红了不进全量门禁）\n"
     "                  --preflight  落地前置体检（11 条判据一次说全；只读；"
-    "0=全绿 1=有 ❌）"
+    "0=全绿 1=有 ❌）\n"
+    "                  --no-select  关掉台账选测（落地链默认走选测；碰判据本体仍强制全量）"
 )
+
+#: 落地链给 `scripts/run_gates.py` 的选测开关（与 `--select` 同一个判据，见卡 E51）。
+SELECT_ENV = "TF_SELECT"
 
 #: `--precheck` 的 argparse 描述（help 里能看到判据在干什么）。
 _PRECHECK_DESC = (
@@ -357,6 +370,62 @@ def guard_card_in_ledger(argv: list[str], cwd: pathlib.Path | None = None) -> in
     return 0
 
 
+def select_env(argv: list[str], cwd: pathlib.Path | None = None) -> tuple[dict[str, str], str]:
+    """落地链的选测口径：默认打开，**碰判据本体 / 读不到 git 改动 ⇒ 全量**。
+
+    返回 `({环境变量: 值}, 一句话原因)`；空 dict = 这一趟不启用选测（命令逐字不变）。
+    判据来源是 `tools/pytest_select.judge_body_hits`（与 `run_gates --select` 同一张表）。
+    """
+    if "--no-select" in argv:
+        return {}, "--no-select：这一趟跑全量"
+    if "--no-gate" in argv or "--commit-only" in argv:
+        return {}, "这一趟不跑门禁 ⇒ 选测不适用"
+    tree_raw = pathlib.Path(_argv_value(argv, "--tree") or ".")
+    base = pathlib.Path(cwd) if cwd is not None else pathlib.Path.cwd()
+    tree = tree_raw if tree_raw.is_absolute() else base / tree_raw
+    paths = worktree_paths(tree)
+    if paths is None:
+        return {}, "读不到 git 改动 ⇒ 全量（判不出就不省）"
+    try:
+        import pytest_select
+    except ModuleNotFoundError:  # `python tools/wb_land.py` 时 sys.path[0] 是 tools/
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        try:
+            import pytest_select  # type: ignore[no-redef]
+        except ModuleNotFoundError:
+            # ★ 半棵树/桩仓库里没有选测工具：判不出就不省（与本函数上面几条同口径），
+            #   不许把落地链崩成 traceback —— 那会让『缺一个可选模块』变成『落不了地』。
+            return {}, "缺 tools/pytest_select.py ⇒ 退回全量（判不出就不省）"
+    hits = pytest_select.judge_body_hits(paths)
+    if hits:
+        return {}, f"碰判据本体 {hits[:5]} ⇒ 全量（改判据的人要把判据自己检一遍）"
+    return {SELECT_ENV: "1"}, f"默认走台账选测（改动 {len(paths)} 条）"
+
+
+def worktree_paths(tree: pathlib.Path) -> list[str] | None:
+    """卡树里**已跟踪改动 + 未跟踪文件**（POSIX 化）；读不到 git ⇒ None。"""
+    if not tree.is_dir():
+        return None
+    done = subprocess.run(  # noqa: S603 —— 参数写死，无 shell
+        ["git", "-c", "core.quotepath=false", "status", "--porcelain", "-uall", "--no-renames"],
+        cwd=str(tree), capture_output=True, text=True, encoding="utf-8", errors="replace",
+        check=False, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if done.returncode != 0:
+        return None
+    paths: list[str] = []
+    for line in (done.stdout or "").splitlines():
+        if len(line) < 4:
+            continue
+        p = line[3:]
+        if " -> " in p:
+            p = p.split(" -> ", 1)[1]
+        p = p.strip().strip('"')
+        if p:
+            paths.append(p.replace("\\", "/"))
+    return paths
+
+
 def _session_gate(argv: list[str]) -> tuple[int, list[str]]:
     """卡归窗口：别的窗口的卡要 `--take-over` 才让落；没有指纹（工人/CLI）一律放行。"""
     try:
@@ -418,7 +487,20 @@ def main(argv: list[str] | None = None) -> int:
     rc, argv = _session_gate(argv)
     if rc:
         return rc
-    return _landing.main(argv)
+    # ★ 卡 E51 · 段 1（E36）：落地链默认走台账选测；碰判据本体 / 读不到 git ⇒ 不设开关（全量）。
+    extra, why = select_env(argv)
+    print(f"  [选测] {why}", flush=True)
+    argv = [x for x in argv if x != "--no-select"]
+    saved = {k: os.environ.get(k) for k in extra}
+    os.environ.update(extra)
+    try:
+        return _landing.main(argv)
+    finally:
+        for key, old in saved.items():
+            if old is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = old
 
 
 if __name__ == "__main__":

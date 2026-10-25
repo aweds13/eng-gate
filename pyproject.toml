@@ -27,6 +27,14 @@ dev = [
     "pytest-xdist",
     "mypy",
     "ruff",
+    # 属性测试（卡 E51 / E37）：`tests/test_properties.py` 的 @given；没装 = 那个文件收不了。
+    "hypothesis",
+]
+
+# 变异体检（卡 E51 / E37）：**周期性体检**，不进必跑门（太慢）。
+# 没装 ⇒ `tools/mutate_report.py` fail closed（明确报「引擎不在」），绝不静默跳过。
+mutation = [
+    "cosmic-ray>=8",
 ]
 
 [project.scripts]

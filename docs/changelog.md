@@ -303,6 +303,11 @@
 - 不再注入 TF_MODEL_REGISTRY：仓外白名单只描述码道池（[[approved]]），当注册表用会让 load_registry() 找不到 [[model]]。
 - 新增 0.35/5 步：每趟把本机仓外配置推上云机（云机那份 model-switches.toml 是 10-02 旧账，缺 glm-5.2 = true）。
 - tests/test_model_registry.py 自带临时码道白名单；补丁守卫：空补丁跳过 apply、apply 失败退 5。
+## 2026-10-25 · 用例面治理合一：台账选测 + 变异汰换（E36+E37 合并，T-AG501）
+- 新增 tools/pytest_select.py：台账→用例、三闸 fail closed、--replay 回放上限 3 笔。
+- 新增 tools/wb_nightly.py：独立 worktree 跑全量、记录、24h 判定；scripts/run_gates.py 接 --select。
+- 新增 tools/mutate_report.py：零独有击杀、报告形状、删除上限、族清册、引擎缺失 fail closed。
+- pyproject.toml 加 hypothesis 与 mutation 可选组；钉子三个新测试文件。
 ## 2026-10-24 T-AG437 卡归窗口：落地 / 派活前过 DSH 会话闸（A324）
 - 新增 `tools/wb_session.py`：`session_id` / `owner` / `claim` / `release` / `listing`，租约写 `gates/diag/session-leases.json`（gitignored），TTL 24 小时。
 - `tools/wb_land.py` 加 `_session_gate(argv)`：按 `--card` 认领，卡归别的窗口就退 2；`--take-over` 显式换手并留痕。
