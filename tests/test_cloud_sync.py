@@ -30,9 +30,12 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
@@ -96,8 +99,32 @@ def _git(*args: str):
     return _run(["git", *args])
 
 
+def _find_bash() -> str:
+    """找 bash：PATH 上优先，其次 Git for Windows 的默认安装位置 —— 卡 E49。
+
+    云门禁机（裸 Windows）装完 Git 2.47.1 后 `bash.exe` 不在 PATH 上（装配脚本从不改 PATH）
+    ⇒ 原来 `["bash", ...]` 直接 `FileNotFoundError`，把「脚本口径没钉住」和「这台机器 PATH
+    干净」混成了同一条红。找法就是**人找它的同一套办法**；真找不到才如实失败（不 skip 掩盖）。
+    """
+    found = shutil.which("bash")
+    if found:
+        return found
+    for cand in (
+        Path("C:/Program Files/Git/bin/bash.exe"),
+        Path("C:/Program Files/Git/usr/bin/bash.exe"),
+        Path("C:/Program Files (x86)/Git/bin/bash.exe"),
+    ):
+        if cand.is_file():
+            return str(cand)
+    pytest.fail(
+        "找不到 bash：本仓的门禁与云脚本都靠 Git Bash 跑。云机装配里 Git for Windows 是必装项"
+        "（scripts/cloud/bootstrap.ps1），装了就在 C:/Program Files/Git/bin/bash.exe；本机同理。"
+        "这条失败是「这台机器缺前置」，不是脚本坏 —— 装完重跑。"
+    )
+
+
 def _bash(*args: str, env: dict[str, str] | None = None):
-    return _run(["bash", *args], env=env)
+    return _run([_find_bash(), *args], env=env)
 
 
 def _bootstrap_text() -> str:
@@ -156,9 +183,7 @@ def test_run_gate_cleans_ignored_files() -> None:
     assert "git clean -xfdq" in text, "清树必须带 -x（`git clean -xfdq`）"
     # 反向：不许别处还留一条不带 -x 的清树
     offenders = [
-        line.strip()
-        for line in text.splitlines()
-        if "clean -fdq" in line and "-xfdq" not in line
+        line.strip() for line in text.splitlines() if "clean -fdq" in line and "-xfdq" not in line
     ]
     assert not offenders, f"还有不带 -x 的清树：{offenders}"
 
@@ -273,3 +298,143 @@ def test_doc_keeps_controlled_ab_numbers() -> None:
     for number in ("403.46", "417", "684.27"):
         assert number in text, f"§7.1 少了实测数 {number}"
     assert re.search(r"37\s*failed", text), "§7.1 少了云机 37 failed 那个读数"
+
+
+def test_run_gate_provisions_pool_config_for_walk_up() -> None:
+    """仓外配置必须铺到「向上找」认得的位置（C:/infra/pool），不是只放 C:/poolcfg。
+
+    ★ 卡 E49：云机 22 红里 12 条是池索引/账本类，真因是 **配置没按约定落位** ——
+    `tools/pool/*.py` 从 cwd 逐级向上找 `infra/pool/<文件>`：开发机上是
+    `D:/repo/infra/pool/`（仓的祖父目录），云机上仓库在 `C:/eng` ⇒ 对应
+    `C:/infra/pool/`。只把文件 scp 到 `C:/poolcfg/` 再靠 `TF_PROJECTS_TOML` 注入，
+    救不了那些**自己 `delenv` 去测"向上找"**的用例。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    assert "C:/infra/pool" in text, "配置要铺到向上找认得的位置（C:/infra/pool）"
+    assert "TF_POOL_CFG_DIR" in text, "配置源要可换（TF_POOL_CFG_DIR）"
+    assert "0.4/5" in text, "铺配置必须是门禁之前的独立一步（可见的进度条）"
+    # 铺配置那一步失败不许静默继续
+    idx = text.index("0.4/5")
+    tail = text[idx : idx + 1600]
+    assert "exit 5" in tail, "配置铺不动必须 fail fast（退非零），不许继续跑门禁"
+    # 反向：铺配置要在跑门禁（4/5）之前
+    assert text.index("0.4/5") < text.index("=== 4/5"), "铺配置必须早于跑门禁"
+
+
+def test_project_index_template_replaces_the_dev_root() -> None:
+    """项目索引不能原样搬上云：模板里的 `root` 必须是占位符，由同步步渲染成云机路径。
+
+    ★ 卡 E49：`infra/pool/projects.toml` 的 `[project.engineering].root` 是开发机绝对路径。
+    原样 scp ⇒ 云机上那个目录不存在 ⇒ 项目守卫「宁拒不许猜」拒掉 ⇒
+    `test_mem_guard` / `test_pool_*` / `test_wb_plan` 一片红（实测 `assert 1 == 0`、
+    `problems == ['项目索引读不了…D:/repo/engineering…']`）。
+    """
+    tmpl = SCRIPT_DIR / "pool-config" / "projects.toml.tmpl"
+    assert tmpl.is_file(), f"没有云机项目索引模板：{tmpl}"
+    text = tmpl.read_text(encoding="utf-8")
+    assert "__REPO_ROOT__" in text, "模板必须留 `__REPO_ROOT__` 占位（不许写死某台机器的路径）"
+    assert 'root = "__REPO_ROOT__"' in text
+    # 注释里可以讲「开发机那份指着哪」（那是给人读的），**有效配置行**里不许出现开发机路径。
+    effective = [ln for ln in text.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+    offenders = [ln for ln in effective if "文档/jelly_ware" in ln]
+    assert not offenders, f"模板的有效配置行里还留着开发机路径：{offenders}"
+    # 渲染步要真去替换它，且失败要 fail fast
+    run_gate = RUN_GATE.read_text(encoding="utf-8")
+    assert "0.45/5" in run_gate, "渲染项目索引必须是独立一步（可见的进度条）"
+    idx = run_gate.index("0.45/5")
+    tail = run_gate[idx : idx + 1600]
+    assert "__REPO_ROOT__" in tail, "渲染步要提到占位符"
+    assert "exit 6" in tail, "渲染不了必须 fail fast"
+
+
+def test_step2_seeds_previous_reading_instead_of_trusting_the_commit() -> None:
+    """★ 卡 E49：`gates/last.json` / `gates/reuse.json` 是**入库文件**，
+
+    `git clean -xfdq` 只清未跟踪/被忽略文件 ⇒ 清不掉它们；`git checkout -f` 还会把它们
+    恢复成提交里那份陈旧读数，被自指钉子当成「上一轮」。
+    所以第二步必须**显式删**再断言不在 —— 这条钉子钉住「别退回只靠 clean」。
+    """
+    script = RUN_GATE.read_text(encoding="utf-8")
+    step2_start = script.index("=== 2/5")
+    step3_start = script.index("=== 3/5")
+    step2 = script[step2_start:step3_start]
+    assert "TF_LAST_SEED" in step2, "第二步要支持用本机那份「绿的上一趟」播种"
+    assert "last.json" in step2 and "reuse.json" in step2
+    assert "scp" in step2, "播种必须是把本机那份传上去（不许沿用提交里的基线）"
+    # 播种要发生在断言之前（先放再说「有」）
+    assert step2.index("scp") < step2.index("if exist gates")
+
+
+def test_run_gate_kills_leftover_remote_processes_before_patching() -> None:
+    """跑门禁前必须清掉云机上的残留 python（否则补丁在被占的文件上失败）。
+
+    ★ 卡 E49 实测：`ssh` 中途 `Connection reset` 断掉后，云机上的 xdist worker 还活着，
+    下一次 `git apply` 报 `unable to unlink 'docs/traceability.toml': Invalid argument` +
+    `unable to write file ... Permission denied` —— 补丁半途而废，门禁在**坏树**上跑完，
+    读数还"看起来正常"。这是把"跑了一趟"误当成"验了一趟"的典型场面。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    assert "1.5/5" in text, "清残留必须是补丁/对齐之前的独立一步（可见的进度条）"
+    idx = text.index("1.5/5")
+    tail = text[idx : idx + 1200]
+    assert "Stop-Process" in tail, "要真停掉残留 python 进程（Stop-Process）"
+    assert "exit 4" in tail, "清不掉必须 fail fast，不许带着残留继续 apply 补丁"
+    assert text.index("1.5/5") < text.index("=== 2/5"), "清残留必须早于对齐/打补丁"
+
+
+def test_run_gate_checks_out_the_card_tree_commit_not_the_caller_commit() -> None:
+    """云机 checkout 的必须是**卡树**的 HEAD，不是调用者（主仓）的 HEAD。
+
+    ★ 卡 E49 pass7 实测：`head="$(git rev-parse HEAD)"` 在调用者 cwd 求值 ⇒ 主仓一往前走，
+    云机就 checkout 到主仓 HEAD，而补丁是按卡树 HEAD 做的 diff ⇒
+    `git apply` 报 `patch failed: 复盘/交接-重构进度.md:3871`，门禁跑在**错的树**上，
+    读数还写得挺像回事。判据：这两行必须带 `git -C`。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    head_lines = [
+        ln.strip() for ln in text.splitlines() if ln.strip().startswith(("head=", "short="))
+    ]
+    assert head_lines, "找不到 head/short 的赋值行"
+    for ln in head_lines:
+        assert "git -C" in ln, f"提交号必须从卡树取（当前：{ln}）"
+    assert ".wt/$card" in " ".join(head_lines), "取提交号的树必须是 .wt/$card"
+
+
+def test_run_gate_patch_excludes_the_seeded_baseline_files() -> None:
+    """补丁不许带 `gates/last.json` / `gates/reuse.json`（它们由 2/5 步播种）。
+
+    ★ 卡 E49 pass6 实测：这两件是**入库文件**，2/5 步先从本机拷到云机，
+    3/5 步再 `git apply` 一份**含它们**的补丁 ⇒
+    `error: patch failed: gates/last.json:1 / patch does not apply`，
+    整份补丁不生效，门禁跑在裸提交上 —— 出来 14 条红全是假红。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    assert "diff HEAD --binary" in text, "找不到导出补丁的那一行"
+    assert ":(exclude)gates/last.json" in text, "补丁必须排除 gates/last.json（否则与播种冲突）"
+    assert ":(exclude)gates/reuse.json" in text, "补丁必须排除 gates/reuse.json（同上）"
+    export_at = text.index("diff HEAD --binary")
+    assert export_at < text.index(":(exclude)gates/last.json"), "排除要挂在导出补丁这条命令上"
+    assert export_at < text.index("=== 3/5"), "排除要在 3/5 传补丁之前生效"
+
+
+def test_run_gate_seeds_from_a_read_only_dir_and_never_from_the_return_dir() -> None:
+    """播种目录 ≠ 回传目录（卡 E49 pass8 实测的第四个坑）。
+
+    原来 `seed_dir` 默认 `.wt/<卡>/gates`，而 `5/5` 又把云机那份读数 scp 回同一个目录
+    ⇒ 第二趟播的是**上一趟的红读数**，自指钉子（真 last.json 必须绿）当场判红自己。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    assert 'seed_dir="${TF_LAST_SEED:-gates/diag/seed-$card}"', (
+        "播种源要落在 gates/diag/seed-<卡>（gitignored、只读），不许再用回传目录"
+    )
+    # 回传仍然落在 .wt/<卡>/gates（那是产物目录，可以被覆盖）
+    assert '".wt/$card/gates/last.json"' in text
+
+
+def test_run_gate_refuses_a_red_seed_snapshot() -> None:
+    """播种前必须验「这份读数是不是绿的」—— 拿红读数当上一趟，红的是判据自己。"""
+    text = RUN_GATE.read_text(encoding="utf-8")
+    assert "exit_code" in text and "sys.exit(4)" in text, (
+        "要有绿读数校验（按 exit_code 判，不看 ok 字段的脸色）"
+    )
+    assert "不许拿红读数当「上一趟」" in text, "拒绝时要讲清为什么、以及怎么补一份绿的"

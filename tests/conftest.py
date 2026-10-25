@@ -30,6 +30,8 @@ import tempfile
 import time
 from pathlib import Path
 
+import pytest
+
 _TEST_EXPORT_DIR = tempfile.mkdtemp(prefix="timeflow-tests-export-")
 os.environ.setdefault("TIMEFLOW_EXPORT__DIR", _TEST_EXPORT_DIR)
 
@@ -90,3 +92,31 @@ def run_git(*args: str, **kwargs: object) -> subprocess.CompletedProcess:
             print(f"[retry] git {' '.join(args)} {type(exc).__name__}（第 {attempt} 次）")
             time.sleep(GIT_RETRY_DELAY_S)
     raise AssertionError("run_git(): 不可达")  # 只为静态检查：上面必然 return 或 raise
+
+
+## 宿主注入的仓外配置**不许渗进判据**（卡 E49 · T-AG499）
+#
+# 云机跑门禁时 `scripts/cloud/run_gate.sh` 会注入 `TF_PROJECTS_TOML` /
+# `TF_MODEL_REGISTRY` / `TF_MODEL_WHITELIST` / `TF_POOL_CFG_DIR`（那些路径在云机上存在），
+# 而本机没有。有些用例读的是**默认解析**（自己再 setenv 一份），注入一变就换了判对象：
+# 云机 pass8 上 `test_account_auth_uses_the_profile_env_and_model` 因此报
+# 「模型注册表不存在：C:\infra\pool\models.whitelist.toml」，本机则通过。
+# ⇒ 统一在测试进程里摘掉这四个变量；**需要它们的用例自己 `monkeypatch.setenv`**
+#   （`tests/test_wb_dispatch.py` 的 `sandbox` 夹具就是这么做的），不会被本夹具覆盖。
+_HOST_CONFIG_ENV = (
+    "TF_PROJECTS_TOML",
+    "TF_MODEL_REGISTRY",
+    "TF_MODEL_WHITELIST",
+    "TF_POOL_CFG_DIR",
+)
+
+
+def strip_host_config_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """把宿主注入的四个仓外配置从测试进程里摘掉（判据钉在 `tests/test_wb_dispatch.py`）。"""
+    for key in _HOST_CONFIG_ENV:
+        monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_host_config_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    strip_host_config_env(monkeypatch)

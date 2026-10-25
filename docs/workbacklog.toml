@@ -3978,7 +3978,7 @@ spec = "复盘/卡/卡E49-云机红单归因与可移植性.md"
 files = ["tests/test_gates_reuse_line.py", "tests/test_concurrency.py", "tests/test_pool_lib.py", "tests/test_pool_guards.py", "tests/test_pool_accounts.py", "tests/test_contract_audit.py", "tests/test_mem_guard.py", "tests/test_cloud_sync.py", "tests/test_wb_land.py", "pyproject.toml", "scripts/cloud/bootstrap.ps1", "scripts/cloud/run_gate.sh", "docs/subsystems/ci/云门禁机.md"]
 depends = ["E50"]
 risk = "high"
-status = "pending"
+status = "done"
 
 
 [[cards]]

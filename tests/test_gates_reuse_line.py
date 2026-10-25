@@ -357,9 +357,7 @@ def test_real_content_change_still_changes_hash(
     assert rg.input_hash(PATTERNS) != before
 
 
-def test_mixed_newlines_hash_equals_all_lf(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_mixed_newlines_hash_equals_all_lf(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """★ 同一文件里 CRLF 与 LF 混着 → 与全 LF 版**相等**（归一化逐对吃掉 `\r\n`）。"""
     mixed = tmp_path / "mixed"
     all_lf = tmp_path / "all_lf"
@@ -394,25 +392,33 @@ def test_double_star_matches_deep_files(tmp_path: Path, monkeypatch: pytest.Monk
     assert rg.input_hash(PATTERNS) != before, "`X/**` 没把更深层的新文件算进输入"
 
 
-def test_expand_double_star_equals_glob_semantics(
+def test_expand_double_star_returns_exactly_the_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """★ `_expand` 与「本机 glob 的旧口径」结果集**逐字相同**（3.14 上不许改判据口径）。
+    """★ `_expand("src/**")` 只返回**文件**，且集合与面 3.14 的旧口径**逐字相同**。
 
-    这就是"修完既有 `gates/reuse.json` 记录不失效"的机器凭证：换实现不改结论。
+    这里刻意**不**拿活解释器的 `tmp_path.glob("src/**")` 当期望值 —— 卡 E49：
+    `Path.glob` 对裸 `**` 的语义随版本变（3.12/3.13 只给目录、3.14 才给文件），
+    拿它当期望就等于「钉子的答案取决于跑它的解释器」，云机（3.12.8）上必红。
+    期望值写死成面量：三个文件、不含任何目录。
     """
     monkeypatch.setattr(rg, "ROOT", tmp_path)
     for rel in ("src/a.py", "src/deep/b.py", "src/deep/er/c.py", "tools/serve.py"):
         _seed(tmp_path, rel, rel)
 
-    legacy = {p.as_posix() for p in tmp_path.glob("src/**") if p.is_file()}
+    rels = ("src/a.py", "src/deep/b.py", "src/deep/er/c.py")
+    expected = {(tmp_path / rel).as_posix() for rel in rels}
     now = {p.as_posix() for p in rg._expand("src/**")}
-    assert now == legacy, f"展开结果集变了：新增 {now - legacy} / 丢失 {legacy - now}"
+    assert now == expected, f"展开结果集不对：多 {now - expected} / 少 {expected - now}"
+
+    # 旧口径只作参照（3.14 上它与上面那组相等；3.12 上它是空集）—— 不作判据。
+    legacy = {p.as_posix() for p in tmp_path.glob("src/**") if p.is_file()}
+    assert ((tmp_path / "src/a.py").as_posix() in legacy) or (not legacy), (
+        "活 glob 给出了既非空集、又不含 src/a.py 的怪结果，先查解释器语义"
+    )
 
 
-def test_expand_still_excludes_generated(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_expand_still_excludes_generated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """★ 生成物在 `rglob` 这条路上同样被排掉（T-G181 的口径不许在新路径上漏）。"""
     monkeypatch.setattr(rg, "ROOT", tmp_path)
     _seed(tmp_path, "src/a.py", "A")
@@ -474,6 +480,7 @@ def _other_interpreter() -> str | None:
         if path.is_file() and path.resolve() != me:
             return str(path)
     return None
+
 
 def test_payload_records_python_version() -> None:
     """★ `gates/last.json` 必须记下「这份绿是哪版解释器跑的」（形如 `3.14.6`）。"""

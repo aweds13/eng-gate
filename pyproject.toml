@@ -53,6 +53,13 @@ warn_unused_configs = true
 module = ["numpy"]
 ignore_errors = true
 
+# 桌面窗口壳是**可选**依赖（`optional-dependencies[pc]`），且 `src/timeflow/app/main.py`
+# 已经用 `try: import webview` 兜住「没装就退回浏览器」。门禁跑在没装它的机器上
+# （云门禁机、只想用浏览器的人）不该因此判红 —— 卡 E49：这是「可选依赖被判成硬依赖」。
+[[tool.mypy.overrides]]
+module = ["webview"]
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 100
 

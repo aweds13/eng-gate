@@ -107,38 +107,44 @@ CONTRACTS: list[Contract] = [
     Contract(
         cid="CX-03",
         source=("harness/README.md", "复制体**不依赖 `tools/`**"),
-        judge=("pytest",
-               "tests/test_harness_manifest.py::test_card205_harness_copies_do_not_import_tools"),
+        judge=(
+            "pytest",
+            "tests/test_harness_manifest.py::test_card205_harness_copies_do_not_import_tools",
+        ),
         note="卡 205 装的牙：复制体不挂 sys.path、不 from tools...；钉子扫 import 语句",
     ),
     Contract(
         cid="CX-04",
         source=("harness/README.md", "拿掉 `tools/` 后仍能跑"),
-        judge=("pytest",
-               "tests/test_harness_manifest.py::test_card205_harness_copies_do_not_import_tools"),
+        judge=(
+            "pytest",
+            "tests/test_harness_manifest.py::test_card205_harness_copies_do_not_import_tools",
+        ),
         note="CX-03 同一条钉子：不 import tools ⇒ 拿掉 tools 仍能跑",
     ),
     Contract(
         cid="CX-05",
         source=("harness/README.md", "原件/复制体输出逐字节相同"),
-        judge=("pytest",
-               "tests/test_harness_manifest.py::test_card205_replica_renders_the_same_dispatch_as_original"),
-        note=("卡 205 装的牙：逐字比较 render_dispatch；卡 203 改对原件、复制体没跟上正是从前"
-              "没判据。★ 锚点原为「渲染的派活命令逐字节相同」，批 1（卡 214）把这句话改写成表格、"
-              "措辞变成「输出逐字节相同」⇒ 集成时按现行文本更新锚点（判据本条未动）"),
+        judge=(
+            "pytest",
+            "tests/test_harness_manifest.py::test_card205_replica_renders_the_same_dispatch_as_original",
+        ),
+        note=(
+            "卡 205 装的牙：逐字比较 render_dispatch；卡 203 改对原件、复制体没跟上正是从前"
+            "没判据。★ 锚点原为「渲染的派活命令逐字节相同」，批 1（卡 214）把这句话改写成表格、"
+            "措辞变成「输出逐字节相同」⇒ 集成时按现行文本更新锚点（判据本条未动）"
+        ),
     ),
     Contract(
         cid="CX-06",
         source=("harness/README.md", "不登记 = 未知键，加载即报错"),
-        judge=("pytest",
-               "tests/test_harness_manifest.py::test_unknown_key_is_a_typo_not_silent"),
+        judge=("pytest", "tests/test_harness_manifest.py::test_unknown_key_is_a_typo_not_silent"),
         note="manifest.py 的 SCHEMA 白名单：多一个键 = 拼错，当场报错而不是静默忽略",
     ),
     Contract(
         cid="CX-07",
         source=("harness/README.md", "**无静默默认值**"),
-        judge=("pytest",
-               "tests/test_harness_manifest.py::test_missing_key_named"),
+        judge=("pytest", "tests/test_harness_manifest.py::test_missing_key_named"),
         note="缺键 ⇒ ManifestError 指名道姓，不许偷偷用默认值",
     ),
     # ---------------------------------------------------------- 复盘/ 台账层
@@ -256,8 +262,17 @@ def run_judge(judge: tuple[str, ...], root: Path) -> JudgeResult:
     if kind == "pytest":
         test_id = judge[1]
         argv = [
-            sys.executable, "-X", "utf8", "-m", "pytest", test_id,
-            "-q", "--no-cov", "--no-header", "-p", "no:cacheprovider",
+            sys.executable,
+            "-X",
+            "utf8",
+            "-m",
+            "pytest",
+            test_id,
+            "-q",
+            "--no-cov",
+            "--no-header",
+            "-p",
+            "no:cacheprovider",
         ]
     elif kind == "cmd":
         argv = list(judge[1])
@@ -293,45 +308,115 @@ def audit(contracts: Sequence[Contract], root: Path = ROOT) -> list[ClauseResult
     步骤：
       1. 去源文件找锚点子串 ⇒ 找不到 = source_missing（红）；
       2. 有 no_judge ⇒ 如实标（不算 judge_ok，退出码非零）；
-      3. 有 judge ⇒ 当场跑一次 ⇒ rc=0 是 judge_ok，rc≠0 是 judge_red（红）。
+      3. 有 judge ⇒ 当场跑一次 ⇒ rc=0 是 judge_ok，rc≠0 是 judge_red（红）；
+         **例外：rc=3 = 判据自报「未验证」（这台机器缺前置，比如没有 CLI）
+         ⇒ 记 no_judge 如实计入：不算 judge_ok，但也不算红**（卡 E49）。
     """
     results: list[ClauseResult] = []
     for c in contracts:
         rel_path, anchor = c.source
         path = root / rel_path
         if not path.exists():
-            results.append(ClauseResult(
-                c.cid, rel_path, None, "", "source_missing",
-                "", None, "", "源文件不存在", c.note,
-            ))
+            results.append(
+                ClauseResult(
+                    c.cid,
+                    rel_path,
+                    None,
+                    "",
+                    "source_missing",
+                    "",
+                    None,
+                    "",
+                    "源文件不存在",
+                    c.note,
+                )
+            )
             continue
         found = find_clause(path, anchor)
         if found is None:
-            results.append(ClauseResult(
-                c.cid, rel_path, None, "", "source_missing",
-                "", None, "", "锚点子串在源文件里找不到", c.note,
-            ))
+            results.append(
+                ClauseResult(
+                    c.cid,
+                    rel_path,
+                    None,
+                    "",
+                    "source_missing",
+                    "",
+                    None,
+                    "",
+                    "锚点子串在源文件里找不到",
+                    c.note,
+                )
+            )
             continue
         line_no, text = found
         if c.no_judge:
-            results.append(ClauseResult(
-                c.cid, rel_path, line_no, text, "no_judge",
-                "", None, "", c.no_judge, c.note,
-            ))
+            results.append(
+                ClauseResult(
+                    c.cid,
+                    rel_path,
+                    line_no,
+                    text,
+                    "no_judge",
+                    "",
+                    None,
+                    "",
+                    c.no_judge,
+                    c.note,
+                )
+            )
             continue
         if c.judge is None:
-            results.append(ClauseResult(
-                c.cid, rel_path, line_no, text, "source_missing",
-                "", None, "", "既没 judge 也没 no_judge（配置错）", c.note,
-            ))
+            results.append(
+                ClauseResult(
+                    c.cid,
+                    rel_path,
+                    line_no,
+                    text,
+                    "source_missing",
+                    "",
+                    None,
+                    "",
+                    "既没 judge 也没 no_judge（配置错）",
+                    c.note,
+                )
+            )
             continue
         jr = run_judge(c.judge, root)
+        if jr.rc == 3:
+            # 判据自报「未验证」：环境缺前置（云机没 CLI / 没某个解释器），不是契约违约。
+            # 如实落 no_judge —— 既不当绿（那会漏掉真违约），也不当红（那是假红）。
+            results.append(
+                ClauseResult(
+                    c.cid,
+                    rel_path,
+                    line_no,
+                    text,
+                    "no_judge",
+                    c.judge[0],
+                    jr.rc,
+                    jr.tail,
+                    "判据自报未验证（rc=3）：这台机器缺前置，见读数",
+                    c.note,
+                )
+            )
+            continue
         status = "judge_ok" if jr.rc == 0 else "judge_red"
         reason = jr.error or ("" if jr.rc == 0 else f"判据退 {jr.rc}")
-        results.append(ClauseResult(
-            c.cid, rel_path, line_no, text, status,
-            c.judge[0], jr.rc, jr.tail, reason, c.note,
-        ))
+        results.append(
+            ClauseResult(
+                c.cid,
+                rel_path,
+                line_no,
+                text,
+                status,
+                c.judge[0],
+                jr.rc,
+                jr.tail,
+                reason,
+                c.note,
+            )
+        )
     return results
 
 
@@ -349,11 +434,15 @@ def print_report(results: list[ClauseResult], contracts: Sequence[Contract]) -> 
     by_status: dict[str, int] = {}
     for r in results:
         by_status[r.status] = by_status.get(r.status, 0) + 1
-    parts = [f"{k} {v}" for k, v in
-             (("judge_ok", by_status.get("judge_ok", 0)),
-              ("no_judge", by_status.get("no_judge", 0)),
-              ("judge_red", by_status.get("judge_red", 0)),
-              ("source_missing", by_status.get("source_missing", 0)))]
+    parts = [
+        f"{k} {v}"
+        for k, v in (
+            ("judge_ok", by_status.get("judge_ok", 0)),
+            ("no_judge", by_status.get("no_judge", 0)),
+            ("judge_red", by_status.get("judge_red", 0)),
+            ("source_missing", by_status.get("source_missing", 0)),
+        )
+    ]
     print(f"=== 契约段 ↔ 判据对账（卡 217 · T-G330）：{n} 条 ===")
     print(f"分布：{' / '.join(parts)}")
     print()
@@ -377,7 +466,8 @@ def print_report(results: list[ClauseResult], contracts: Sequence[Contract]) -> 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="契约段 ↔ 判据的对账器：扫文档里的契约段，对每条当场跑判据贴读数")
+        description="契约段 ↔ 判据的对账器：扫文档里的契约段，对每条当场跑判据贴读数"
+    )
     parser.add_argument("--json", action="store_true", help="结构化输出（JSON 数组）")
     parser.add_argument("--report", action="store_true", help="人读报告（默认）")
     args = parser.parse_args(argv)

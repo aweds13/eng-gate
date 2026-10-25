@@ -159,24 +159,54 @@ def test_typo_in_judge_name_bites(tmp_path: Path) -> None:
 # ------------------------------------------------------------------ ⑥ ★ 真仓对账如实
 
 
-def test_real_repo_audit_has_expected_shape() -> None:
-    """★ 真仓 13 条契约段：10 judge_ok / 3 no_judge / 0 judge_red / 0 source_missing。
+def _cli_available() -> bool:
+    """本仓 CLI 在不在（决定 CX-02 是「真判」还是「未验证」）。"""
+    import shutil
 
-   钉的是「别美化」：no_judge 必须如实 = 3（框架泛用性三条目标态，现状不满足），
-    不许为了绿而放宽或漏列。judge_red 必须为 0（有判据的那 10 条都得守住）。
+    return (ca.ROOT / "framework" / "cli" / "main.py").is_file() or bool(shutil.which("pipe"))
+
+
+def test_real_repo_audit_has_expected_shape() -> None:
+    """★ 真仓 13 条契约段：0 judge_red / 0 source_missing，且 judge_ok + no_judge == 13。
+
+    钉的是「别美化」：
+      · 有 CLI 的机器 —— 10 judge_ok / 3 no_judge（框架泛用性三条目标态，一条都不许漏列）；
+      · 没有 CLI 的机器（云机）—— 9 / 4：CX-02 自报未验证（rc=3），如实落 no_judge。
+        卡 E49：既不许把未验证算成绿（漏真违约），也不许算成红（假红）。
     """
     results = ca.audit(ca.CONTRACTS, ca.ROOT)
     by_status: dict[str, int] = {}
     for r in results:
         by_status[r.status] = by_status.get(r.status, 0) + 1
-    assert by_status.get("source_missing", 0) == 0, (
-        "源文件或锚点找不到 ⇒ 配置烂了，不是契约问题")
-    assert by_status.get("judge_red", 0) == 0, (
-        "判据跑红 ⇒ 有判据的那几条契约没守住")
-    assert by_status.get("judge_ok", 0) == 10, (
-        f"judge_ok 应为 10，实 {by_status.get('judge_ok', 0)}")
-    assert by_status.get("no_judge", 0) == 3, (
-        f"no_judge 应如实 = 3（框架泛用性三条目标态），实 {by_status.get('no_judge', 0)}")
+    assert sum(by_status.values()) == 13, f"契约段应为 13 条，实 {sum(by_status.values())}"
+    assert by_status.get("source_missing", 0) == 0, "源文件或锚点找不到 ⇒ 配置烂了，不是契约问题"
+    reds = [r.cid for r in results if r.status == "judge_red"]
+    assert by_status.get("judge_red", 0) == 0, f"判据跑红 ⇒ 有判据的那几条契约没守住：{reds}"
+    ok, no = by_status.get("judge_ok", 0), by_status.get("no_judge", 0)
+    assert ok + no == 13, f"judge_ok({ok}) + no_judge({no}) 应等于 13"
+    if _cli_available():
+        assert (ok, no) == (10, 3), f"有 CLI 时应 10 judge_ok / 3 no_judge，实 {ok}/{no}"
+    else:
+        assert (ok, no) == (9, 4), f"没有 CLI 时应 9 judge_ok / 4 no_judge，实 {ok}/{no}"
+
+
+def test_judge_reporting_not_verified_is_neither_green_nor_red(tmp_path: Path) -> None:
+    """★ 卡 E49：判据退 **3**（自报未验证）⇒ 落 no_judge，不算 judge_ok，也不算 judge_red。
+
+    反向意义：把 rc=3 当红 ⇒ 云机（没 CLI）上 CX-02 假红；当绿 ⇒ 真违约被漏掉。
+    """
+    _write_doc(tmp_path, "# 规矩\n某不变量。\n")
+    script = tmp_path / "unverified.py"
+    script.write_text("import sys\nprint('这台机器缺前置')\nsys.exit(3)\n", encoding="utf-8")
+    c = ca.Contract(
+        cid="CX-NV",
+        source=("rules.md", "某不变量"),
+        judge=("cmd", ["python", str(script)]),
+    )
+    r = ca.audit([c], tmp_path)[0]
+    assert r.status == "no_judge", f"rc=3 应落 no_judge，实 {r.status}"
+    assert r.judge_rc == 3
+    assert "未验证" in r.reason
 
 
 def test_main_returns_nonzero_when_there_are_no_judge(

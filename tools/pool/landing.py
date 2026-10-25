@@ -797,7 +797,11 @@ def parse_text_doc(text: pathlib.Path) -> tuple[dict[str, str], str]:
       「存在 + 三段齐」都调它（卡 E1 判据 5）。
     """
     if not text.is_file():
-        return {}, f"缺文档件：{text}"
+        # ★ 卡 E49（T-AG499）：报**仓库相对**路径。理由是真踩过的坑 —— `--preflight`
+        #   打印时 `detail[:150]` 会截断，云机/长临时目录下绝对路径一长，`_text_TG999.md`
+        #   的 `.md` 正好被切掉，日志上看着像「工具要的是没有后缀的文件」。相对路径短、
+        #   换机器不变，且与同一份体检里 ② 的成功话术（`shown`）同口径。
+        return {}, f"缺文档件：{_rel_short(text, ROOT)}"
     parts: dict[str, str] = {}
     cur: str | None = None
     for line in text.read_text(encoding="utf-8", errors="replace").splitlines():

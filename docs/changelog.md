@@ -300,6 +300,11 @@
 - 新增只读守卫 `tools/dsh_skills_guard.py`：`--check` 退 0/1/2，`--profile` 换 profile，`--expect` 换期望根；逐段打印「默认预设 / 其它预设」与各自的根。
 - 新增 5 条钉子 `tests/test_dsh_skills_guard.py`：正常绿 / 缺根点名默认预设 / 文件缺失判不了 / `!!js` 折行原样保留 / 真 profile 上跑一次（存在才跑）。
 - 来由：2026-10-24 21:54 那次 profile 重写后 9 个软工技能从会话里消失，主控手工补根但没有机器判据守着（复盘/卡/卡E19-技能根守卫.md）。
+## 2026-10-25 · 云机红单归因：按宿主机语义写的判据逐条拆掉（T-AG499）
+- C 类：`pywebview` 属 `optional-dependencies[pc]` ⇒ `pyproject.toml` 加 `[[tool.mypy.overrides]] module = ["webview"]`。
+- B 类：仓外项目索引的 `root` 是开发机绝对路径 ⇒ 新增 `scripts/cloud/pool-config/projects.toml.tmpl` + `run_gate.sh` 的 0.4/0.45/2 三步（铺配置、渲染根、显式删入库的 `last.json`）。
+- D/E 类：账本查找改 `monkeypatch.chdir`；`test_pool_lib` 加 hermetic 夹具；`_find_bash()` 探不到就 **fail**（Git for Windows 是必装项）。
+- F 类（新）：`skills/nails/check_commands.py` 子进程输出 UTF-8 硬解在中文控制台炸 ⇒ 三档解码；缺 CLI 退 3=未验证，`tools/contract_audit.py` 映射成 `no_judge`。
 ## 2026-10-24 T-AG437 卡归窗口：落地 / 派活前过 DSH 会话闸（A324）
 - 新增 `tools/wb_session.py`：`session_id` / `owner` / `claim` / `release` / `listing`，租约写 `gates/diag/session-leases.json`（gitignored），TTL 24 小时。
 - `tools/wb_land.py` 加 `_session_gate(argv)`：按 `--card` 认领，卡归别的窗口就退 2；`--take-over` 显式换手并留痕。

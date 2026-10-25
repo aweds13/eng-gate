@@ -59,14 +59,24 @@ KEY="$HOME/.ssh/id_ed25519_cloud"
 HOST="${CLOUD_HOST:-administrator@203.0.113.12}"
 SSHOPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
 TMP="$(mktemp -d)"
-head="$(git rev-parse HEAD)"
-short="$(git rev-parse --short HEAD)"
+# ★ 卡 E49 pass7 实测：原来这两行按**调用者 cwd**（主仓）取提交 —— 主仓一往前走，
+#   云机就 checkout 到主仓的 HEAD，而补丁是拿**卡树**的 HEAD 做的 diff ⇒
+#   `git apply` 报 `patch failed: 复盘/交接-重构进度.md:3871`，门禁跑在错的树上。
+#   ⇒ 提交号必须从卡树取。
+head="$(git -C ".wt/$card" rev-parse HEAD)"
+short="$(git -C ".wt/$card" rev-parse --short HEAD)"
 
 # 云机侧的环境注入串：TF_PROJECTS_TOML 必给；模型注册表给了就一并注入。
 # （模型注册表的**真名**是 TF_MODEL_REGISTRY，不是 TF_MODELS_TOML —— 见 tools/pool/model_registry.py:69。）
 envset="set \"TF_GATE_PORT_BASE=$port\" && set \"TF_PROJECTS_TOML=$projects_toml\""
 if [ -n "$model_registry" ]; then
   envset="$envset && set \"TF_MODEL_REGISTRY=$model_registry\""
+fi
+# 卡 E49：码道池条目是**从这份白名单派生**的（tools/pool/model_registry.py 的 CODEARTS_SOURCE_ENV）
+# —— 不注入就只剩 codebuddy 池，`test_model_registry` 的「跨池串用」「要有 codearts 条目」在云机必红。
+model_whitelist="${TF_MODEL_WHITELIST:-}"
+if [ -n "$model_whitelist" ]; then
+  envset="$envset && set \"TF_MODEL_WHITELIST=$model_whitelist\""
 fi
 
 echo "=== 0/5 把主树这条分支同步到云机（目标 $cloud_dir）==="
@@ -80,6 +90,51 @@ else
   ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && git fetch -q C:/eng line/impl-v1 && git rev-parse --short FETCH_HEAD"
 fi
 
+# 仓外配置的**落位约定**（卡 E49）：pool 工具的默认发现方式是「从 cwd 逐级向上找
+# infra/pool/<文件>」。开发机上是 D:/repo/infra/pool/（仓的祖父目录）；
+# 云机上仓库在 C:/eng ⇒ 对应位置是 C:/infra/pool/。配置只放 C:/poolcfg 而不铺到这里，
+# test_pool_* / test_pool_task / test_wb_dispatch 这些「向上找」的用例在云机必红
+# —— 那批红曾经被当成「代码不可移植」，其实是配置没按约定落位。
+pool_cfg_src="${TF_POOL_CFG_DIR:-C:/poolcfg}"
+pool_cfg_dst="${TF_POOL_CFG_DST:-C:/infra/pool}"
+
+echo "=== 0.4/5 铺仓外配置到 $pool_cfg_dst（向上找的约定）==="
+if ! ssh $SSHOPTS -i "$KEY" "$HOST" \
+    "powershell -NoProfile -Command \"if (-not (Test-Path '$pool_cfg_src')) { exit 5 } ; New-Item -ItemType Directory -Force '$pool_cfg_dst' | Out-Null ; Copy-Item (Join-Path '$pool_cfg_src' '*') '$pool_cfg_dst' -Force ; exit 0\""; then
+  echo "✗ 云机上没有配置源 $pool_cfg_src（或铺不动 $pool_cfg_dst）—— fail fast，门禁一步都没跑。" >&2
+  echo "  处置：本机 scp 四个仓外配置上去（scp infra/pool/*.toml $HOST:$pool_cfg_src/），" >&2
+  echo "  或用 TF_POOL_CFG_DIR 指到已在云机上的那份。见 docs/subsystems/ci/云门禁机.md 的「仓外配置」表。" >&2
+  rm -rf "$TMP"
+  exit 5
+fi
+echo "✓ 配置已铺：$pool_cfg_src → $pool_cfg_dst"
+
+# 项目索引里 `root` 是**绝对路径**：开发机那份指着 D:/repo/engineering。
+# 原样 scp 到云机 ⇒ `[project.engineering].root` 不存在 ⇒ 项目守卫拒（宁拒不许猜）⇒
+# 云机上一片「项目索引读不了」。所以项目索引**由仓内模板渲染**（根换成云机的仓库目录）。
+#
+# ★ 模板**从本机传**、不从云机 checkout 读：模板本身可能是这张卡树里的新文件（卡 E49），
+#   而补丁要 3/5 才 apply —— 让供给步去读一个还没上传的文件必然失败（实测 exit 6）。
+tmpl_rel="scripts/cloud/pool-config/projects.toml.tmpl"
+tmpl_local=""
+if [ -f ".wt/$card/$tmpl_rel" ]; then tmpl_local=".wt/$card/$tmpl_rel"
+elif [ -f "$tmpl_rel" ]; then tmpl_local="$tmpl_rel"
+fi
+if [ -z "$tmpl_local" ]; then
+  echo "✗ 本机找不到项目索引模板 $tmpl_rel（卡树与主树都没有）—— fail fast。" >&2
+  rm -rf "$TMP"
+  exit 6
+fi
+echo "=== 0.45/5 按云机仓库根渲染项目索引（模板来自 $tmpl_local）==="
+scp $SSHOPTS -i "$KEY" "$tmpl_local" "$HOST:$pool_cfg_dst/projects.toml.tmpl" >/dev/null
+if ! ssh $SSHOPTS -i "$KEY" "$HOST" \
+    "powershell -NoProfile -Command \"\$t = Join-Path '$pool_cfg_dst' 'projects.toml.tmpl'; if (-not (Test-Path \$t)) { exit 6 } ; \$c = [IO.File]::ReadAllText(\$t, [Text.Encoding]::UTF8) -replace '__REPO_ROOT__', '$cloud_dir' ; [IO.File]::WriteAllText((Join-Path '$pool_cfg_dst' 'projects.toml'), \$c, (New-Object System.Text.UTF8Encoding(\$false))) ; exit 0\""; then
+  echo "✗ 云机渲染不了项目索引（$tmpl_rel）—— fail fast，门禁一步都没跑。" >&2
+  echo "  处置：确认本机有 $tmpl_rel；或 TF_POOL_CFG_DIR 里放一份 root 已改成云机路径的 projects.toml。" >&2
+  rm -rf "$TMP"
+  exit 6
+fi
+echo "✓ 项目索引已按 $cloud_dir 渲染 → $pool_cfg_dst/projects.toml"
 echo "=== 0.5/5 云机侧核对仓外配置（缺就不往下走）==="
 if ! ssh $SSHOPTS -i "$KEY" "$HOST" "if exist \"$projects_toml\" (exit 0) else (exit 1)"; then
   echo "✗ 云机上找不到 TF_PROJECTS_TOML：$projects_toml（fail fast，门禁一步都还没跑）" >&2
@@ -90,18 +145,75 @@ echo "✓ 云机侧配置就位：$projects_toml"
 
 echo "=== 1/5 导出卡树补丁（卡片 $card @ $short）==="
 git -C ".wt/$card" add -A -N
-git -C ".wt/$card" diff HEAD --binary > "$TMP/$card.patch"
+# ★ 卡 E49 pass6 实测：`gates/last.json` / `gates/reuse.json` 是**入库文件**，且由 2/5 步
+#   从本机显式播种到云机 —— 若补丁里也带着它们，`git apply` 会 `patch does not apply`
+#   （整份补丁不生效 ⇒ 门禁跑在裸树上，14 条红全是假红）。⇒ 导出补丁必须排除这两件。
+git -C ".wt/$card" diff HEAD --binary -- . \
+  ':(exclude)gates/last.json' ':(exclude)gates/reuse.json' > "$TMP/$card.patch"
 git -C ".wt/$card" reset -q
 echo "补丁 $(wc -c < "$TMP/$card.patch") 字节 / $(grep -c '^diff --git' "$TMP/$card.patch") 个文件"
 
-echo "=== 2/5 云机对齐到同一提交 + 清树（带 -x）+ 断言无残留 ==="
+echo "=== 1.5/5 清掉云机上的残留门禁进程（上一趟 ssh 断了会留孤儿）==="
+# ★ 卡 E49 实测：ssh 中途 `Connection reset` 后，远端 xdist worker 继续活着，
+#   下一次 `git apply` 就会 `unable to unlink ... Permission denied`（文件被占）⇒ 补丁半途而废、
+#   门禁在**坏树**上跑。所以对齐提交之前先把残留 python 全停，并确认树是干净的。
 if ! ssh $SSHOPTS -i "$KEY" "$HOST" \
-  "cd $cloud_dir && git checkout -f --detach $head && git clean -xfdq && if exist gates\\last.json (echo RESIDUAL_LAST_JSON & exit 4) else (git log --oneline -1)"; then
-  echo "✗ 云机清树后仍有 gates/last.json 残留（或 checkout 失败）—— 不跑门禁" >&2
+    "powershell -NoProfile -Command \"Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 1; exit 0\""; then
+  echo "✗ 云机上清残留进程失败 —— 不跑门禁（否则补丁会在被占的文件上失败）" >&2
   rm -rf "$TMP"
   exit 4
 fi
-
+echo "✓ 云机残留进程已清"
+echo "=== 2/5 云机对齐到同一提交 + 清树（带 -x）+ 播种上一趟读数 ==="
+# ★ `gates/last.json` / `gates/reuse.json` 是**入库文件**（骨架里有一份基线），
+#   所以 `git clean -xfdq` 清不掉（clean 只清未跟踪/被忽略），`checkout` 还会把它恢复成
+#   提交里那份**陈旧读数**，自指钉子（test_false_success_pins）就把那一趟当成「上一轮」；
+#   反过来**删掉**也不行：审计 ⑫ 的台账 evidence 引着它们，钉子也要读它们。
+#   ⇒ 唯一正确做法是**显式播种**一份绿的上一趟读数（卡 E49 实测出来的第三版）。
+# ★ 卡 E49 pass8 实测的第四个坑：播种目录**不能**就是回传目录。
+#   原来 seed 默认 `.wt/$card/gates`，而 `5/5` 又把云机那份读数 scp 回同一个目录 ⇒
+#   第二趟就播了**上一趟的红读数**，自指钉子（真 last.json 必须是绿的）当场判红自己。
+seed_dir="${TF_LAST_SEED:-gates/diag/seed-$card}"  # 播种源：只读，永远不被回传覆盖
+for f in last.json reuse.json; do
+  if [ ! -f "$seed_dir/$f" ]; then
+    echo "✗ 本机没有可播种的 $seed_dir/$f —— 云机跑门禁需要一份**绿的上一趟**读数。" >&2
+    echo "  处置：先在卡树跑一趟（或从主树 cp gates/$f .wt/$card/gates/），再重跑本脚本。" >&2
+    rm -rf "$TMP"
+    exit 4
+  fi
+done
+# ★ 播种前先验「这份读数是不是绿的」：`ok` 与每道门的 `exit_code` 都要干净。
+#   拿红读数播种 ⇒ 云机上的自指钉子必红（`test_pin_gate_green_is_exit_codes_not_the_ok_field`），
+#   而那条钉子红的是「判据自己坏了」，最容易被误读成被测代码坏了。
+if ! python -X utf8 - "$seed_dir/last.json" <<'PYCHECK'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+bad = [g.get("name") for g in d.get("gates", []) if g.get("exit_code") not in (0,)]
+if bad or not d.get("ok"):
+    print("✗ 播种源不是绿的：ok=%r 红门=%r" % (d.get("ok"), bad), file=sys.stderr)
+    sys.exit(4)
+print("✓ 播种源是绿的：%d 道门全 exit_code=0（rev=%s）" % (len(d.get("gates", [])), d.get("rev")))
+PYCHECK
+then
+  echo "✗ $seed_dir/last.json 不是绿的 —— 不许拿红读数当「上一趟」。" >&2
+  echo "  处置：在卡树把门禁跑绿，再把那份 last.json + reuse.json 复制到 $seed_dir/（该目录 gitignored）。" >&2
+  rm -rf "$TMP"
+  exit 4
+fi
+if ! ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && git checkout -f --detach $head && git clean -xfdq && git log --oneline -1"; then
+  echo "✗ 云机对齐 $head 失败 —— 不跑门禁" >&2
+  rm -rf "$TMP"
+  exit 4
+fi
+for f in last.json reuse.json; do
+  scp $SSHOPTS -i "$KEY" "$seed_dir/$f" "$HOST:$cloud_dir/gates/$f" >/dev/null
+done
+if ! ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && if exist gates\last.json (if exist gates\reuse.json (exit 0) else (exit 4)) else (exit 4)"; then
+  echo "✗ 云机上没有播种成功的 gates/last.json + gates/reuse.json —— 不跑门禁" >&2
+  rm -rf "$TMP"
+  exit 4
+fi
+echo "✓ 上一趟读数已从 $seed_dir 播种（提交里那份基线被覆盖）"
 echo "=== 3/5 传补丁并应用 ==="
 scp $SSHOPTS -i "$KEY" "$TMP/$card.patch" "$HOST:C:/card-$card.patch" >/dev/null
 ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && git apply --binary C:/card-$card.patch && git status --porcelain | find /c /v \"\""

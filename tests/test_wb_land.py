@@ -2246,6 +2246,24 @@ def test_preflight_missing_text_exits_one_and_names_the_path(tmp_path: Path) -> 
     assert "修完重跑" in out, out
 
 
+def test_missing_text_message_survives_the_display_budget(tmp_path: Path) -> None:
+    """缺件话术必须报**仓库相对**路径 —— 绝对路径会被 150 字预算连 `.md` 一起切掉。
+
+    ★ 卡 E49（T-AG499）实测：云机的基础临时目录长（`…\\pytest-of-Administrator\\
+      pytest-70\\popen-gw2\\test_preflight_missing_text_ex0\\repo\\…`），绝对路径超过
+      `--preflight` 打印时的 `detail[:150]` ⇒ 日志上只剩 `_text_TG999`，看着像「工具要的
+      是没有后缀的文件」；本机短路径不复现，单人单跑也不复现。判据不能靠「路径刚好够短」。
+    """
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+    (repo / "gates" / "diag" / "_text_TG999.md").unlink()
+
+    out = _out(_preflight(repo, "--task", "T-G999", "--tree", ".", "--allow", "code"))
+
+    assert "缺文档件：gates/diag/_text_TG999.md" in out, out
+    assert str(tmp_path) not in out, f"缺件话术里带了绝对路径 ⇒ 长路径下会被截断\n{out}"
+
+
 def test_preflight_offender_list_matches_the_guard(tmp_path: Path) -> None:
     """主树有白名单外的跟踪改动 ⇒ 退 1，且**列出来的就是守卫那一份**（不另算一套）。"""
     repo = _mk_preflight_repo(tmp_path)

@@ -107,6 +107,12 @@ def ledger(tmp_path, monkeypatch):
     p.parent.mkdir(parents=True)
     p.write_text(LEDGER, encoding="utf-8")
     monkeypatch.delenv("TF_ACCOUNTS_TOML", raising=False)
+    # ★ 卡 E49：`find_ledger()` 从**cwd** 逐级向上找 `infra/pool/accounts.toml`。
+    # 不 chdir 的话它会走到真仓的祖父目录，于是在开发机上"恰好"找到
+    # D:/repo/infra/pool/ —— 换个机器（云门禁机 C:/eng）就找不到
+    # ⇒ 这批钉子其实钉的是「本机有这份账本」。chdir 到 tmp（里面已有
+    # tmp/infra/pool/accounts.toml）后，"向上找"这件事本身仍被钉住，但不再依赖宿主机。
+    monkeypatch.chdir(tmp_path)
     return p
 
 

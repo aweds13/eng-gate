@@ -3775,3 +3775,23 @@ def test_resolve_node_falls_back_to_newest_and_then_pinned(tmp_path: Path) -> No
     empty = tmp_path / "nohome"
     empty.mkdir()
     assert wd._resolve_node(empty) == empty / wd.NODE_REL_FALLBACK
+
+
+def test_host_injected_config_env_is_stripped_for_every_test(monkeypatch) -> None:
+    """卡 E49：宿主注入的仓外配置必须被 `tests/conftest.py` 摘掉。
+
+    云机 pass8 上 `test_account_auth_uses_the_profile_env_and_model` 红在
+    「模型注册表不存在：C:/infra/pool/models.whitelist.toml」—— 那是 `run_gate.sh` 注入的
+    `TF_MODEL_REGISTRY`（云机有、本机没有），跟着环境渗进了判据。摘掉之后，需要它的用例
+    自己 `monkeypatch.setenv`（`sandbox` 夹具就是这么干的）。
+    """
+    import os
+
+    import conftest as _conftest  # 判据就钉在那个夹具上：删了它，这条必红
+
+    keys = ("TF_PROJECTS_TOML", "TF_MODEL_REGISTRY", "TF_MODEL_WHITELIST", "TF_POOL_CFG_DIR")
+    for key in keys:  # 假装宿主刚刚注入了这四个（云机的样子）
+        monkeypatch.setenv(key, "C:/infra/pool/x.toml")
+    _conftest.strip_host_config_env(monkeypatch)  # 夹具本体调的就是它
+    for key in keys:
+        assert os.environ.get(key) is None, f"{key} 没被摘掉 —— 注入会换掉判据的对象"

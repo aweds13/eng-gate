@@ -99,6 +99,19 @@ class SwitchFileError(ValueError):
     """
 
 
+def _line_of(exc: BaseException) -> int | None:
+    """TOML 解析错的行号（3.13+ 有 lineno 属性；3.12 只能从消息里取）。
+
+    ★ 卡 E49：`getattr(exc, "lineno", None)` 在 3.12 上恒为 None ⇒ 「点名哪一行」的判据在云机
+      退化成「没有行号」，钉子当场红。两路都取：先属性，再从 `at line N, column M` 里抓。
+    """
+    attr = getattr(exc, "lineno", None)
+    if isinstance(attr, int):
+        return attr
+    m = re.search(r"at line (\d+)", str(exc))
+    return int(m.group(1)) if m else None
+
+
 def switch_file_path(pool_dir: Path | None = None) -> Path | None:
     """开关文件路径：`TF_MODEL_SWITCHES` 覆盖 > 显式 `pool_dir` > `find_pool_dir()`。
 
@@ -163,7 +176,7 @@ def load_switches(pool_dir: Path | None = None, *, pool: str | None = None) -> d
     try:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
-        line = getattr(exc, "lineno", None)
+        line = _line_of(exc)
         where = f"{path}（第 {line} 行）" if line else str(path)
         raise SwitchFileError(f"模型开关文件解析失败：{where} —— {exc}") from exc
     switch = data.get("switch")

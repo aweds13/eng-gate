@@ -17,10 +17,8 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import pytest
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
@@ -72,6 +70,26 @@ status = "done"
 """
 
 
+@pytest.fixture()
+def hermetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """把「规格在哪、预声明在哪」都指到 tmp —— 卡 E49。
+
+    原来这三条用例只写合成 backlog、却让 `validate()` 去**真仓**找规格与
+    `gates/diag/batch/<批号>.toml`：开发机上 `gates/diag/batch/` 恰好有文件所以绿，
+    云门禁机 `git clean -xfdq` 之后整个目录没了 ⇒ 红。判据本身（声称批次 ⇒ 预声明必须
+    在）一个字不改，只把它要查的两处位置搬进 tmp。
+    """
+    spec = tmp_path / "复盘" / "卡" / "卡160-台账接进门.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("任务 `B-INVGATE` 的 **M-1** 成员：样例。", encoding="utf-8")
+    diag = tmp_path / "batch"
+    diag.mkdir()
+    (diag / "B-INVGATE.toml").write_text('id = "B-INVGATE"', encoding="utf-8")
+    monkeypatch.setattr(pool_plan, "ROOT", tmp_path)
+    monkeypatch.setattr(pool_plan, "DIAG", tmp_path)  # batch_manifest_path 会在其后拼 batch/
+    return tmp_path
+
+
 def _write_backlog(tmp_path: Path, body: str = _BACKLOG) -> Path:
     path = tmp_path / "workbacklog.toml"
     path.write_text(body, encoding="utf-8")
@@ -81,7 +99,7 @@ def _write_backlog(tmp_path: Path, body: str = _BACKLOG) -> Path:
 # ================================================================ ① 直测：pool.plan
 
 
-def test_plan_load_validate_and_batches(tmp_path: Path) -> None:
+def test_plan_load_validate_and_batches(tmp_path: Path, hermetic: Path) -> None:
     backlog = pool_plan.load_backlog(_write_backlog(tmp_path))
     assert [c.id for c in backlog.cards] == ["001", "002", "003"]
     assert pool_plan.validate(backlog) == []
@@ -95,7 +113,7 @@ def test_plan_validate_rejects_intersection(tmp_path: Path) -> None:
     assert any("相交" in p for p in problems), problems
 
 
-def test_plan_report_is_a_pure_function(tmp_path: Path) -> None:
+def test_plan_report_is_a_pure_function(tmp_path: Path, hermetic: Path) -> None:
     backlog = pool_plan.load_backlog(_write_backlog(tmp_path))
     code, out, err = pool_plan.plan_report(backlog, 2)
     assert code == 0 and err == ""
@@ -116,14 +134,24 @@ def test_plan_find_spec(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 
 def _log_lines() -> list[str]:
     return [
-        json.dumps({"type": "system", "subtype": "init", "model": "m1", "tools": ["Bash"]},
-                   ensure_ascii=False),
-        json.dumps({"type": "assistant",
-                    "message": {"content": [{"type": "tool_use", "name": "Bash",
-                                             "input": {"command": "git status"}}]}},
-                   ensure_ascii=False),
-        json.dumps({"type": "result", "subtype": "success", "result": "改完了"},
-                   ensure_ascii=False),
+        json.dumps(
+            {"type": "system", "subtype": "init", "model": "m1", "tools": ["Bash"]},
+            ensure_ascii=False,
+        ),
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "tool_use", "name": "Bash", "input": {"command": "git status"}}
+                    ]
+                },
+            },
+            ensure_ascii=False,
+        ),
+        json.dumps(
+            {"type": "result", "subtype": "success", "result": "改完了"}, ensure_ascii=False
+        ),
     ]
 
 
@@ -147,12 +175,13 @@ def test_jobs_card_artifacts_does_not_cross_cards(tmp_path: Path) -> None:
 def test_jobs_classify_and_scan_by_evidence(tmp_path: Path) -> None:
     diag = tmp_path / "gates" / "diag"
     diag.mkdir(parents=True)
-    (diag / "wb-101.jsonl").write_text("{}", encoding="utf-8")            # 新 → 在跑
-    (diag / "wb-102.jsonl").write_text("{}", encoding="utf-8")            # 静默 → 断了
-    (diag / "wb-103.jsonl").write_text("{}", encoding="utf-8")            # 有判决 → 已判决
+    (diag / "wb-101.jsonl").write_text("{}", encoding="utf-8")  # 新 → 在跑
+    (diag / "wb-102.jsonl").write_text("{}", encoding="utf-8")  # 静默 → 断了
+    (diag / "wb-103.jsonl").write_text("{}", encoding="utf-8")  # 有判决 → 已判决
     (diag / "wb-103.verdict.txt").write_text("ok", encoding="utf-8")
     now = 1_700_000_000.0
     import os
+
     old = now - jobs.STALL_SECONDS - 60
     os.utime(diag / "wb-102.jsonl", (old, old))
     rows = {r["card"]: r["state"] for r in jobs.scan_jobs(diag, now=now)}
@@ -187,10 +216,19 @@ def test_models_find_and_load(tmp_path: Path) -> None:
     pool.mkdir(parents=True)
     (pool / "pool_models.py").write_text("", encoding="utf-8")
     (pool / "models.whitelist.toml").write_text(
-        '[[approved]]\nmodel = "p/GLM-5.2"\n', encoding="utf-8")
-    (pool / "models.live.json").write_text(json.dumps(
-        {"at": "2026-10-01 00:00:00", "live": ["p/GLM-5.2", "p/other"],
-         "live_names": {"p/GLM-5.2": "GLM-5.2"}}, ensure_ascii=False), encoding="utf-8")
+        '[[approved]]\nmodel = "p/GLM-5.2"\n', encoding="utf-8"
+    )
+    (pool / "models.live.json").write_text(
+        json.dumps(
+            {
+                "at": "2026-10-01 00:00:00",
+                "live": ["p/GLM-5.2", "p/other"],
+                "live_names": {"p/GLM-5.2": "GLM-5.2"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
     assert models.find_pool_dir(tmp_path) == pool
     info = models.load_pool_models(pool)
@@ -212,8 +250,9 @@ def test_wb_plan_cli_and_library_agree(tmp_path: Path, capsys: pytest.CaptureFix
     assert cli_out == lib_out
 
 
-def test_wb_status_cli_and_library_agree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-                                         capsys: pytest.CaptureFixture) -> None:
+def test_wb_status_cli_and_library_agree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
     """`wb_status <log>` 的 CLI 输出 == 直接调 `pool.jobs` 渲染的同一段（逐字）。"""
     log = tmp_path / "wb-9.jsonl"
     log.write_text("\n".join(_log_lines()) + "\n", encoding="utf-8")
@@ -229,9 +268,10 @@ def test_wb_status_cli_and_library_agree(tmp_path: Path, monkeypatch: pytest.Mon
 def test_wb_review_check_files_uses_the_library() -> None:
     """`wb_review.check_files()` 的越界判据就是 `pool.review.outside_allow()` 的结论。"""
     files = ["src/a.py", "docs/x.md"]
-    assert wb_review.check_files(files, read_only=False, allow=["src/**"]) == \
-        [f"有 {len(review.outside_allow(files, ['src/**']))} 个改动不在白名单里："
-         f"{review.outside_allow(files, ['src/**'])[:8]}"]
+    assert wb_review.check_files(files, read_only=False, allow=["src/**"]) == [
+        f"有 {len(review.outside_allow(files, ['src/**']))} 个改动不在白名单里："
+        f"{review.outside_allow(files, ['src/**'])[:8]}"
+    ]
     assert wb_review.check_files(["src/a.py"], read_only=False, allow=["src/**"]) == []
 
 
@@ -258,6 +298,6 @@ def test_whitelist_three_entries_agree_including_chinese() -> None:
 
     review_outside = review.outside_allow(paths, allow)
     stage_outside = tf_stage_guard.outside_allow(paths, allow)
-    dirty = [f" M {p}" for p in paths]   # 真 porcelain：`XY ` 三字符前缀
+    dirty = [f" M {p}" for p in paths]  # 真 porcelain：`XY ` 三字符前缀
     dispatch_outside = wb_dispatch.outside_allow(_porcelain_paths(dirty), allow)
     assert review_outside == stage_outside == dispatch_outside == expected

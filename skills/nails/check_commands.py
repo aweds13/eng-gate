@@ -10,6 +10,7 @@
 只读：不改任何文件。
 CLI 解析顺序：优先本仓 `framework/cli/main.py`（确定性），否则 PATH 上的 `pipe`。
 """
+
 from __future__ import annotations
 
 import re
@@ -18,8 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-SKILLS_ROOT = Path(__file__).resolve().parents[1]        # skills/
-REPO_ROOT = SKILLS_ROOT.parent                            # 仓库根
+SKILLS_ROOT = Path(__file__).resolve().parents[1]  # skills/
+REPO_ROOT = SKILLS_ROOT.parent  # 仓库根
 FRAMEWORK_CLI = REPO_ROOT / "framework" / "cli" / "main.py"
 
 FENCE_RE = re.compile(r"^\s*```")
@@ -28,19 +29,39 @@ REF_RE = re.compile(r"\bpipe\s+([a-z][a-z0-9-]*)(?:\s+([a-z][a-z0-9-]*))?")
 POSITIONAL_RE = re.compile(r"^ {4}([a-z][a-z0-9-]*)\b")
 
 
-def _cli_argv() -> list[str]:
-    """返回调用 CLI 的 argv 前缀。"""
+EXIT_NOT_VERIFIED = 3
+
+
+def _cli_argv() -> list[str] | None:
+    """返回调用 CLI 的 argv 前缀；**找不到就返回 None**（这不是红）。
+
+    ★ 卡 E49：原来这里 `raise SystemExit(...)`，云机（没装 DSH、PATH 上没有 `pipe`）
+    直接崩，对账器把非 0 一律当「判据红」⇒ CX-02 假红。
+    **环境缺前置 ≠ 契约被违反**：真违约是「CLI 里确实没有这个命令」。
+    """
     if FRAMEWORK_CLI.is_file():
         return [sys.executable, str(FRAMEWORK_CLI)]
     on_path = shutil.which("pipe")
     if on_path:
         return [on_path]
-    raise SystemExit("找不到 CLI：既没有 framework/cli/main.py，也没有 PATH 上的 pipe")
+    return None
 
 
 def _run_help(argv: list[str]) -> str:
-    proc = subprocess.run(argv + ["--help"], capture_output=True, text=True, encoding="utf-8")
-    return (proc.stdout or "") + (proc.stderr or "")
+    """跑一次 `--help`；**解码失败不许把整颗钉子炸掉**。
+
+    ★ 卡 E49：云机 Windows 中文控制台按本地代码页（GBK）输出，按 UTF-8 硬解会
+    `UnicodeDecodeError: 'utf-8' codec can't decode byte 0xc3 in position 57`，
+    于是解析出空命令集、整片假红。这里 UTF-8 → GBK → 替换解码兜底。
+    """
+    proc = subprocess.run(argv + ["--help"], capture_output=True)
+    out, err = proc.stdout or b"", proc.stderr or b""
+    for enc in ("utf-8", "gbk"):
+        try:
+            return out.decode(enc) + err.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return out.decode("utf-8", "replace") + err.decode("utf-8", "replace")
 
 
 def _positional_tokens(help_text: str) -> list[str]:
@@ -86,7 +107,15 @@ def command_refs(text: str):
 
 def main() -> int:
     base = _cli_argv()
+    if base is None:
+        # ★ 卡 E49：如实报「未验证」，既不冒充绿（那才会漏掉真违约），也不冒充红。
+        print("钉子① 未验证：这台机器既没有 framework/cli/main.py，也没有 PATH 上的 pipe")
+        print("  —— 判据没跑，不代表契约成立；要真判请在有 CLI 的机器上跑这一条")
+        return EXIT_NOT_VERIFIED
     top, groups = discover_commands(base)
+    if not top:
+        print("钉子① 未验证：CLI 的 --help 里解析不出任何命令（帮助文本格式变了或输出读不出）")
+        return EXIT_NOT_VERIFIED
     problems: list[str] = []
     skill_files = sorted(SKILLS_ROOT.rglob("SKILL.md"))
     for path in skill_files:
