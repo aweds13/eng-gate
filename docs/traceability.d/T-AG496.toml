@@ -1,0 +1,12 @@
+[entries."T-AG496"]
+id = "T-AG496"
+title = "账号账本与只读探测：平台能力表 + 仓外账本 + discover/probe（T-AG496）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E45-账号账本与只读探测.md",
+  "file:docs/subsystems/pool/README.md",
+  "file:tools/pool_mcp.py",
+  "file:tools/pool/projects.py",
+]
+gaps = "- **七个平台的端点都是读参考实现得来的，本机只有 codearts 与 codebuddy 有真号**：workbuddy / trae / qoder / minimax / lobsterai 的 `claim_flow` 只能进能力表、`probe` 探不出就写「未探测」，不许照抄端点当已验证，见 `复盘/卡/卡E45-账号账本与只读探测.md` §3。\n- **账本在仓外，没有 git 兜底**：`infra/pool/accounts.toml` 只能靠原子替换 + 墓碑防丢，写坏没人能 checkout 回来，见 §4 三条硬规矩。\n- **`discover` 与凭据泄漏只隔一层**：五个平台目录里 `pool.env`、cookie 库都是明文，实现时只许 `stat()`，钉子要靠 monkeypatch 断言没有 `open()` 读内容，见 §5 判据 4。\n- **MCP 侧加只读工具要同步改三处**：`tools/pool_mcp.py:266` 的 schema、`:1648` 的分发表、`:1703` 的说明文本，漏一处工具就不可见，见 §2 第 4 件。"

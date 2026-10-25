@@ -4019,3 +4019,25 @@ depends = ["E42", "E36"]
 risk = "mid"
 status = "pending"
 
+
+[[cards]]
+id = "E45"
+task = "T-AG496"
+title = "账号账本与只读探测：平台能力表 + 仓外账本 + discover/probe"
+tree = ".wt/E45"
+spec = "复盘/卡/卡E45-账号账本与只读探测.md"
+files = ["tools/pool/platforms.toml", "tools/pool_accounts.py", "tests/test_pool_accounts.py", "tools/pool_mcp.py"]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "E48"
+task = "T-AG497"
+title = "手动签到与聚合入口：一条命令签完所有平台（拉取式，不做定时）"
+tree = ".wt/E48"
+spec = "复盘/卡/卡E48-手动签到与聚合入口.md"
+files = ["tools/pool_accounts.py", "tools/pool/checkin.py", "tests/test_pool_checkin.py", "tools/wb_daily.py", "tools/pool_mcp.py"]
+depends = ["E45"]
+risk = "high"
+status = "pending"
