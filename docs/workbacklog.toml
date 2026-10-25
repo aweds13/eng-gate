@@ -3945,3 +3945,13 @@ files = ["docs/subsystems/pool/README.md", "docs/subsystems/pool/派活口径.md
 depends = []
 risk = "mid"
 status = "pending"
+[[cards]]
+id = "E27"
+task = "T-AG481"
+title = "Trae 送任务通道修复：选择器 / Enter 提交 / 并发上限"
+tree = ".wt/E27"
+spec = "复盘/卡/卡E27-Trae送任务通道修复.md"
+files = ["tools/trae_pool.mjs", "tests/test_trae_pool_selectors.py"]
+depends = []
+risk = "low"
+status = "pending"

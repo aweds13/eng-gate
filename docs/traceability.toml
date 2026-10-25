@@ -8651,3 +8651,10 @@ group = "ENGINEERING"
 status = "todo"
 evidence = ["file:复盘/卡/卡F5-pool子系统文档.md"]
 gaps = "五篇尚未写；旧三篇尚未加注；片段与汇总需 sync_docs 对齐"
+[entries."T-AG481"]
+id = "T-AG481"
+title = "Trae 送任务通道修复：选择器 / Enter 提交 / 并发上限"
+group = "ENGINEERING"
+status = "todo"
+evidence = ["file:复盘/卡/卡E27-Trae送任务通道修复.md"]
+gaps = "选择器与提交键按 2026-10-25 实测值固定；面板再改版时这张卡会红，届时按同一节重测。"
