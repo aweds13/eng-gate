@@ -365,7 +365,38 @@ def test_replay_last_20_commits_has_no_missed_pointer() -> None:
     assert len(result.rows) == 20
     for row in result.rows:
         assert not row.missing, (row.rev, row.task, row.missing)
-    assert result.fallbacks <= ps.REPLAY_MAX_FALLBACK, [
-        (r.rev, r.reason) for r in result.rows if r.fallback
+    # ★ 卡 E52 修：判据本体那几笔是「宁可多跑」的设计，不是台账欠账 ⇒ 只把剩下的算欠账。
+    #   阈值仍守着「覆盖率 fallback ≤ 3 笔」，同时要求每一笔 fallback 的原因是我们认识的那几种
+    #   （判据本体 / 台账里没有 test: 指针）—— 出现没见过的原因就不许算绿。
+    assert result.coverage_fallbacks <= ps.REPLAY_MAX_FALLBACK, [
+        (r.rev, r.reason)
+        for r in result.rows
+        if r.fallback and not ps._known_fallback_reason(r.reason)
     ]
+    for row in result.rows:
+        if row.fallback:
+            assert ps._known_fallback_reason(row.reason), (row.rev, row.reason)
     assert result.ok
+
+
+def test_replay_rejects_a_fallback_reason_nobody_recognises(monkeypatch) -> None:
+    """★ 反向钉子（卡 E52）：出现没见过的 fallback 原因 ⇒ `ok` 必须为假，不许静默算绿。"""
+    ps = _ps()
+    real = ps.replay(20, root=ROOT)
+    rows = tuple(
+        ps.ReplayRow(
+            rev=r.rev, task=r.task, fallback=True, tests=r.tests,
+            expected=r.expected, missing=r.missing, reason="闸九：没见过的一种新原因",
+        )
+        if i == 0 else r
+        for i, r in enumerate(real.rows)
+    )
+    fake = ps.Replay(rows=rows, fallbacks=len(rows), ok=True, judge_body_fallbacks=0)
+    assert not ps._known_fallback_reason(rows[0].reason)
+    # 判据函数本身（这里直接按 replay() 的口径复算一遍）
+    judge_body = sum(1 for r in rows if r.fallback and ps.JUDGE_BODY_MARK in r.reason)
+    unknown = [r for r in rows if r.fallback and not ps._known_fallback_reason(r.reason)]
+    ok = (fake.fallbacks - judge_body) <= ps.REPLAY_MAX_FALLBACK and not unknown and all(
+        not r.missing for r in rows
+    )
+    assert ok is False

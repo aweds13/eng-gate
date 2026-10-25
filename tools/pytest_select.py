@@ -68,6 +68,15 @@ JUDGE_BODY_PREFIXES: tuple[str, ...] = ("gates/defs/",)
 #: 回放判据允许的 `fallback` 笔数上限（段 1 判据 1）。
 REPLAY_MAX_FALLBACK = 3
 
+#: 合法 fallback 原因里的特征串（只认这几种；出现别的 ⇒ 判据自己不认识，不许算绿）。
+JUDGE_BODY_MARK = "判据本体"
+KNOWN_FALLBACK_MARKS = (JUDGE_BODY_MARK, "台账里没有任何 test: 指针", "没有登记")
+
+
+def _known_fallback_reason(reason: str) -> bool:
+    """这条 fallback 的原因是不是我们认识的那几种。"""
+    return any(m in (reason or "") for m in KNOWN_FALLBACK_MARKS)
+
 
 class LedgerError(RuntimeError):
     """台账读不到 / 读不懂 / 形状不对 —— 一律 fail closed（返回全量，不猜）。"""
@@ -117,6 +126,13 @@ class Replay:
     rows: tuple[ReplayRow, ...]
     fallbacks: int
     ok: bool
+    #: 其中「因为碰了判据本体」的那几笔 —— 这是**设计如此**，不该算进覆盖率欠账（卡 E52 修）。
+    judge_body_fallbacks: int = 0
+
+    @property
+    def coverage_fallbacks(self) -> int:
+        """真正说明「台账没登记全」的 fallback 笔数。"""
+        return self.fallbacks - self.judge_body_fallbacks
 
 
 def norm_paths(paths: Iterable[str]) -> list[str]:
@@ -444,8 +460,14 @@ def replay(
             )
         )
     fallbacks = sum(1 for r in rows if r.fallback)
-    ok = fallbacks <= REPLAY_MAX_FALLBACK and all(not r.missing for r in rows)
-    return Replay(rows=tuple(rows), fallbacks=fallbacks, ok=ok)
+    judge_body = sum(1 for r in rows if r.fallback and JUDGE_BODY_MARK in r.reason)
+    # ★ 判据本体那几笔是「宁可多跑」的设计，不是台账欠账 ⇒ 只把剩下的算成覆盖率欠账。
+    #   但**每一笔** fallback 的原因必须是我们认识的那几种，出现没见过的原因 ⇒ 不许算绿。
+    unknown = [r for r in rows if r.fallback and not _known_fallback_reason(r.reason)]
+    ok = (fallbacks - judge_body) <= REPLAY_MAX_FALLBACK and not unknown and all(
+        not r.missing for r in rows
+    )
+    return Replay(rows=tuple(rows), fallbacks=fallbacks, ok=ok, judge_body_fallbacks=judge_body)
 
 
 def main(argv: list[str] | None = None) -> int:
