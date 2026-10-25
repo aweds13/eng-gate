@@ -3996,3 +3996,26 @@ files = ["docs/doc-debt-baseline.toml", "scripts/check_docs.py", "tests/test_che
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E42"
+task = "T-AG494"
+title = "门禁默认上云：本机只编排、云机当门禁池"
+tree = ".wt/E42"
+spec = "复盘/卡/卡E42-门禁默认上云.md"
+files = ["tools/wb_land.py", "tools/pool/landing.py", "tools/gate_pool.py", "tests/test_gate_pool.py", "tests/test_wb_land_gate_on.py"]
+depends = ["E35", "E36", "E38"]
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "E43"
+task = "T-AG495"
+title = "测试流程五维设计：档位/域/选测/夜间/异机 + 只重跑红门那道"
+tree = ".wt/E43"
+spec = "复盘/卡/卡E43-测试流程五维设计.md"
+files = ["docs/subsystems/ci/测试流程.md", "scripts/run_gates.py", "tests/test_ci_docs.py"]
+depends = ["E42", "E36"]
+risk = "mid"
+status = "pending"
+

@@ -8851,3 +8851,34 @@ evidence = [
 ]
 gaps = "- **`skip` 1532 条未收敛**：`check_docs` 现在诚实报「判不出 1532 条」，但没能力把它们判成真/假 —— 口径改对了、欠账还在，见 `scripts/check_docs.py` 的 `classify()`。- **基线是「当前树」的快照**：主树每前进一笔提交，`dead_refs` 就可能变；本卡只保证「重刷是一条命令 + 连跑两次字节不变」，**不保证**基线长期不过期，见 `docs/doc-debt-baseline.toml` 头部注释。- **`drift` 379 仍是纯报告量**：为什么不 ratchet 它，理由写在 `scripts/check_docs.py` 文件头；这条口径与「宁可报 skip 也不许当 PASS」是同一个取舍，尚未在技能层落一行。- **没接进门表**：`check_docs` 至今不在 19 道门里（只在 `scripts/` 下手工跑），所以「基线被顶破」不会让门禁红 —— 要不要接、接进哪一档，见 `docs/subsystems/ci/云门禁机.md` 的待办一节。"
 
+[entries."T-AG494"]
+id = "T-AG494"
+title = "门禁默认上云：本机只编排、云机当门禁池（T-AG494）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E42-门禁默认上云.md",
+  "file:tools/wb_land.py",
+  "file:tools/pool/landing.py",
+  "file:tools/gate_pool.py",
+  "test:test_gate_pool.py",
+  "test:test_wb_land_gate_on.py",
+  "file:scripts/cloud/run_gate.sh",
+  "file:docs/subsystems/ci/云门禁机.md",
+]
+gaps = "- **云机只有 4 vCPU，槽位算出来就是 1**：`--gate-on cloud` 落地后并行度还是 1，想真并行得变配 8 vCPU（约 ¥0.87/时），这条要在卡里量一次 pytest 是否真回落到 ~390 s，见 `复盘/卡/卡E42-门禁默认上云.md` 的判据 3。\n- **`last.json` 今天没有 `host` 字段**：五条回传校验里第 3 条要靠新字段，落地时必须同步改 `scripts/run_gates.py` 的 payload 与 `tools/wb_verify.py` 的读取，见 `tools/wb_verify.py`。\n- **封存指纹要拿干净 worktree 复算**：主树里别的窗口的未跟踪文件会污染 `seal()`（E35 踩过），本卡要把「干净 worktree 复算」做成默认路径，见 `scripts/run_gates.py` 的 `seal()`。\n- **断连续跑没有先例**：云机侧要 `Start-Process` 起（`ssh` 一断就被掐，`C:\bench-cloud.log` 只剩 1 行是前科），PID/日志落 `C:/pool/logs/`，见 `gates/diag/cloud-verify-E35.sh`。"
+
+[entries."T-AG495"]
+id = "T-AG495"
+title = "测试流程五维设计：档位/域/选测/夜间/异机（T-AG495）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E43-测试流程五维设计.md",
+  "file:docs/subsystems/ci/测试流程.md",
+  "file:scripts/run_gates.py",
+  "test:test_ci_docs.py",
+  "file:gates/defs/domains.py",
+  "file:docs/subsystems/ci/云门禁机.md",
+]
+gaps = "- **`run_gates.py` 今天没有 `--only`**：`--help` 实测只有 `--profile/--profiles/--fast/--affected/--changed-from`，而 `--affected` 是按路径选门不是按门名 ⇒ 「只重跑红了那一道」这件事本卡才补，见 `scripts/run_gates.py` 的 `parse_args()`。\n- **19 道门的耗时是抽样值**：文档里每条耗时都要标来自哪份日志（`gates/last.json` / `gates/diag/*.log`），本卡不许写没出处的数字，见 `docs/subsystems/ci/测试流程.md`。\n- **夜间全量还没有排程**：`tools/wb_nightly.py` 是 E36 的设计，尚未落地；本卡只能在文档里把它写成「未落地」并指回 E36，见 `复盘/卡/卡E36-台账驱动选测.md`。\n- **「半趟不许当全量」需要工具判据**：`--only` 产生的 `last.json` 必须让 `wb_verify` 判红，这条与 A327 的 `profiles_run` 口径要并在一起看，见 `tools/wb_verify.py`。"
