@@ -57,6 +57,31 @@
 | 只想在文档件上试跑 | `--no-gate`（并在回报里如实写「没跑门禁」） |
 | 锁没释放 | 按端口段释放，带同一个 `--port-base` |
 
+## 4.1 `--commit-only` 的五步前置（全漏过一遍，各红一次）
+
+`--commit-only` 在 `tools/pool/landing.py` 里**跳过 ①~⑤**（含 ② 文书、③ `sync_counts`、⑤ 封存），
+只做 ⑤′ 翻账 + ⑥ 提交 + ⑦ 审计 + ⑧ 复核。所以那五步得**先手工做到位**，顺序不许换：
+
+1. **卡树 realign 到主树 HEAD**：`git -C .wt/<卡> reset --hard <主树HEAD>`（在卡树里直接建、基点落后时，
+   ⑥ 出的提交会在 rebase 时撞 `docs/workbacklog.toml` / `docs/traceability.toml` 冲突，工具判「非派生物」停手退 3）。
+   换基点又不想丢改动：`git branch -f parked <旧提交>` → `reset --hard <新基点>` → `cherry-pick -n parked`。
+2. **派生文件按“主树版 + 重算”解**：冲突里的 `docs/traceability.toml` / `docs/changelog.md` /
+   `复盘/交接-重构进度.md` 都是生成物 ⇒ 取主树版后用 `tools/sync_docs.py` + `tools/sync_counts.py` 重算；
+   **`docs/workbacklog.toml` 是非派生物，只能人来判**（一般只有本卡的 `status` 要翻 `done`，其余取主树版）。
+3. **三个片段先 `git add`（不提交）**：`docs/changelog.d/<台账号>.md`、`docs/traceability.d/<台账号>.toml`、
+   `复盘/交接.d/<台账号>.md`。漏了这一步，审计 ⑪ 会判「封存时未跟踪、现在仍未被 git 跟踪 ⇒ 集成时 `--allow` 漏了它」，
+   并连带 `tests/test_docs_fragments.py::test_audit_verdict_unchanged_by_sync` 红 —— 红得像“门禁坏了”。
+4. **本树 `gates/last.json` 必须是绿的上一趟**：钉子 `tests/test_false_success_pins.py::
+   test_pin_gate_green_is_exit_codes_not_the_ok_field` 读的是**本树**那份，上一轮红过就把自己判红
+   （`真 last.json 被判红 —— 判据先自己坏了`，读数里会写 `exit_code 非零 2 道：['pytest','audit']`）。
+   处置：`cp gates/last.json .wt/<卡>/gates/last.json`（主树那份绿的；该钉子会把 `rev` 归一化到 `HEAD^`，所以能借用）。
+5. **跑全量门禁 → `--seal` → 收口**：`TF_PYTEST_WORKERS=4 TF_GATE_PORT_BASE=<段> python -X utf8 scripts/run_gates.py`
+   在**卡树里**跑（`run_logged.py` 用 `../../tools/run_logged.py`、日志写 `../../gates/diag/…`），
+   绿了再 `scripts/run_gates.py --seal`，最后 `wb_land.py --commit-only`。
+
+另两条同族硬约束：`gates/diag/batch/<批号>.toml` **不许**进 `--allow`（`gates/diag/*` 被 `.gitignore` 忽略，
+链里 `git add` 不带 `-f` ⇒ 直接退 2）；`--title` / `--evidence` / `--allow` 三者必填（漏了 argparse 退 2）。
+
 ## 跑法：长门禁别用管道截断
 
 落地要跑全量门（8–12 分钟）。**不要**写成 `wb_land.py … | tail -3`：管道会攒到结束才吐，后台作业中途读不到任何输出，看着像卡死。一律用带日志的跑法：

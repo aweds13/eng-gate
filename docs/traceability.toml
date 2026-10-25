@@ -8393,6 +8393,8 @@ evidence = [
   "file:gates/diag/batch/T-AG459.toml",
   "file:skills/softeng-manage/references/retired-settings.md",
   "file:skills/README.md",
+  "file:skills/pipe-land/SKILL.md",
+  "file:skills/pipe-land/references/land-steps.md",
 ]
 gaps = "- **只列已知变过的九条**：没进表的老说法仍散在 `复盘/` 历史页里，刻意不动它们（历史就是历史），门槛写在页尾「怎么用这一页」第 4 条，见 `skills/softeng-manage/references/retired-settings.md`。- **不自动校验表是否过时**：本卡只给一页人读表，没有「表里某行与代码不符就红」的钉子；要那层得另开卡（`skills/README.md` 的路由行只指路）。- **`ACTIVE` 那一档没写行**：今天没找到「原样仍作数」的争议口径 —— 空着比编一条好；判据口径见 `skills/softeng-manage/references/retired-settings.md` 页尾第 4 条。"
 
