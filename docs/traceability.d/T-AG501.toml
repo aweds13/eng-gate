@@ -1,0 +1,10 @@
+[entries."T-AG501"]
+id = "T-AG501"
+title = "卡 E51 —— 用例面治理合一（合并卡，T-AG501）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E51-用例面治理合一.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = "合并卡（用户 2026-10-25 裁定）——成员 E36 + E37，原任务 T-AG490/T-AG491 全部转 deferred。判据逐字继承，见 `复盘/卡/卡E51-用例面治理合一.md`。缺的东西：①两段都没开工，卡树 `.wt/E51` 要新建；②TIA 回放样本只有最近 20 笔提交，覆盖不全；③「最近一次全量绿 ≤24 小时」依赖 `tools/wb_nightly.py` 真在跑，而它本身没有告警；④变异引擎（mutmut / cosmic-ray）未选型，装不上要 fail closed 不许静默跳过；⑤参数化合并要逐族人工确认 `ids` 可追溯，机械合并会丢原用例名。"

@@ -2,7 +2,7 @@
 id = "T-AG487"
 title = "e2e 模板仓（T-AG487）"
 group = "ENGINEERING"
-status = "todo"
+status = "deferred"
 evidence = [
   "file:复盘/卡/卡E33-e2e模板仓.md",
   "file:tests/conftest.py",
@@ -10,4 +10,4 @@ evidence = [
   "file:tests/test_wb_land.py",
   "file:tests/test_contract_audit.py",
 ]
-gaps = "- 只覆盖 `tests/test_wb_land.py` 与 `tests/test_contract_audit.py` 两文件的准备动作，其余 e2e（`test_evidence_map` / `test_card_specs_tracked` / `test_partitions`）未纳入，见本票 §判据 1。- 模板仓与真仓骨架「同构」是靠钉子钉的，真仓新增骨架文件时模板要跟着改，见 `tests/test_template_repo.py` 的骨架清单。- 若实测收益 <20%，本卡收口成「测过不改」，读数进 `docs/subsystems/ci/`。"
+gaps = "- 只覆盖 `tests/test_wb_land.py` 与 `tests/test_contract_audit.py` 两文件的准备动作，其余 e2e（`test_evidence_map` / `test_card_specs_tracked` / `test_partitions`）未纳入，见本票 §判据 1。- 模板仓与真仓骨架「同构」是靠钉子钉的，真仓新增骨架文件时模板要跟着改，见 `tests/test_template_repo.py` 的骨架清单。- 若实测收益 <20%，本卡收口成「测过不改」，读数进 `docs/subsystems/ci/`。 ★ 2026-10-25 用户裁定：本卡并入 **E50**（并行度与门禁编排三件合一）—— 同改 `tests/conftest.py` 与 e2e 夹具，与 E30/E32 同一棵树。判据逐字保留在 `复盘/卡/卡E50-并行度与门禁编排三件合一.md`。"

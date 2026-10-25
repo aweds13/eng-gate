@@ -1,0 +1,10 @@
+[entries."T-AG500"]
+id = "T-AG500"
+title = "卡 E50 —— 并行度与门禁编排三件合一（合并卡，T-AG500）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E50-并行度与门禁编排三件合一.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = "合并卡（用户 2026-10-25 裁定）——成员 E30 + E32 + E33，原任务 T-AG484/T-AG486/T-AG487 全部转 deferred。判据逐字继承，见 `复盘/卡/卡E50-并行度与门禁编排三件合一.md`。缺的东西：①三段都没开工，卡树 `.wt/E50` 要新建；②`workers_for()` 内存分档阈值（10/6/4/2.5 GB）是拍的，没做过「压到换页再退档」验证；③快慢分层改了「一道门 vs 两道门」的口径，`gates/defs/domains.py` 的 `required_profiles()` 必须同步，否则出现「落地只跑默认门」的空子；④e2e 模板仓若实测收益 <20%，收口成「测过不改」并写进 `docs/subsystems/ci/`。"

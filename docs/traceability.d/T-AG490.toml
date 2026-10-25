@@ -2,7 +2,7 @@
 id = "T-AG490"
 title = "台账驱动选测 TIA（T-AG490）"
 group = "ENGINEERING"
-status = "todo"
+status = "deferred"
 evidence = [
   "file:复盘/卡/卡E36-台账驱动选测.md",
   "file:tools/pytest_select.py",
@@ -11,4 +11,4 @@ evidence = [
   "file:scripts/run_gates.py",
   "file:tools/wb_land.py",
 ]
-gaps = "- 回放判据用最近 20 笔提交做样本，样本小、且这 20 笔未必覆盖所有受影响路径，见 `tests/test_pytest_select.py` 的回放断言。- 「最近一次全量绿 ≤24 小时」依赖 `tools/wb_nightly.py` 的计划任务真的在跑；计划任务本身没有自动告警（只有 notifications.jsonl 追加），见 `tools/wb_nightly.py`。- 覆盖率统计口径：选测时只跑子集，`--cov-fail-under=70` 仍按子集算，与全量覆盖率不可直接比较，需与 E31 的结论一起复核，见 `docs/subsystems/ci/`。"
+gaps = "- 回放判据用最近 20 笔提交做样本，样本小、且这 20 笔未必覆盖所有受影响路径，见 `tests/test_pytest_select.py` 的回放断言。- 「最近一次全量绿 ≤24 小时」依赖 `tools/wb_nightly.py` 的计划任务真的在跑；计划任务本身没有自动告警（只有 notifications.jsonl 追加），见 `tools/wb_nightly.py`。- 覆盖率统计口径：选测时只跑子集，`--cov-fail-under=70` 仍按子集算，与全量覆盖率不可直接比较，需与 E31 的结论一起复核，见 `docs/subsystems/ci/`。 ★ 2026-10-25 用户裁定：本卡并入 **E51**（用例面治理合一）—— 都与「哪批用例该跑/该删」有关、共享台账 `test:` 指针。判据逐字保留在 `复盘/卡/卡E51-用例面治理合一.md`。"

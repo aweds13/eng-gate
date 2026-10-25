@@ -2,7 +2,7 @@
 id = "T-AG494"
 title = "门禁默认上云：本机只编排、云机当门禁池（T-AG494）"
 group = "ENGINEERING"
-status = "todo"
+status = "deferred"
 evidence = [
   "file:复盘/卡/卡E42-门禁默认上云.md",
   "file:tools/wb_land.py",
@@ -13,4 +13,4 @@ evidence = [
   "file:scripts/cloud/run_gate.sh",
   "file:docs/subsystems/ci/云门禁机.md",
 ]
-gaps = "- **云机只有 4 vCPU，槽位算出来就是 1**：`--gate-on cloud` 落地后并行度还是 1，想真并行得变配 8 vCPU（约 ¥0.87/时），这条要在卡里量一次 pytest 是否真回落到 ~390 s，见 `复盘/卡/卡E42-门禁默认上云.md` 的判据 3。\n- **`last.json` 今天没有 `host` 字段**：五条回传校验里第 3 条要靠新字段，落地时必须同步改 `scripts/run_gates.py` 的 payload 与 `tools/wb_verify.py` 的读取，见 `tools/wb_verify.py`。\n- **封存指纹要拿干净 worktree 复算**：主树里别的窗口的未跟踪文件会污染 `seal()`（E35 踩过），本卡要把「干净 worktree 复算」做成默认路径，见 `scripts/run_gates.py` 的 `seal()`。\n- **断连续跑没有先例**：云机侧要 `Start-Process` 起（`ssh` 一断就被掐，`C:\bench-cloud.log` 只剩 1 行是前科），PID/日志落 `C:/pool/logs/`，见 `gates/diag/cloud-verify-E35.sh`。"
+gaps = "- **云机只有 4 vCPU，槽位算出来就是 1**：`--gate-on cloud` 落地后并行度还是 1，想真并行得变配 8 vCPU（约 ¥0.87/时），这条要在卡里量一次 pytest 是否真回落到 ~390 s，见 `复盘/卡/卡E42-门禁默认上云.md` 的判据 3。\n- **`last.json` 今天没有 `host` 字段**：五条回传校验里第 3 条要靠新字段，落地时必须同步改 `scripts/run_gates.py` 的 payload 与 `tools/wb_verify.py` 的读取，见 `tools/wb_verify.py`。\n- **封存指纹要拿干净 worktree 复算**：主树里别的窗口的未跟踪文件会污染 `seal()`（E35 踩过），本卡要把「干净 worktree 复算」做成默认路径，见 `scripts/run_gates.py` 的 `seal()`。\n- **断连续跑没有先例**：云机侧要 `Start-Process` 起（`ssh` 一断就被掐，`C:\bench-cloud.log` 只剩 1 行是前科），PID/日志落 `C:/pool/logs/`，见 `gates/diag/cloud-verify-E35.sh`。 ★ 2026-10-25 用户裁定：本卡并入 **E52**（落地链主干合一）—— 与 E43/E11 同改落地链主干。判据逐字保留在 `复盘/卡/卡E52-落地链主干合一.md`。"
