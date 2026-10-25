@@ -8804,3 +8804,17 @@ evidence = [
 ]
 gaps = "- B 类 15 条里 `test_gates_reuse_line` 10 条的根因仍未定位（云机 `C:/eng` 下确有 `src` 目录，但 `rg.input_hash` 对 `src/**` 返回空树哈希），见本票 §现在疼在哪 第 1 条 B 类。- 速度差（云机 684 s vs 本机 403 s）是 vCPU 数（4 vs 32）问题，本卡不负责提速，见 `docs/subsystems/ci/云门禁机.md` §7.1。- 云机上第二 checkout 的并行验证（`CLOUD_DIR`）未做，多槽云池属 E34 的后续，见 `scripts/cloud/run_gate.sh`。"
 
+[entries."T-AG490"]
+id = "T-AG490"
+title = "台账驱动选测 TIA（T-AG490）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E36-台账驱动选测.md",
+  "file:tools/pytest_select.py",
+  "file:tools/wb_nightly.py",
+  "file:tests/test_pytest_select.py",
+  "file:scripts/run_gates.py",
+  "file:tools/wb_land.py",
+]
+gaps = "- 回放判据用最近 20 笔提交做样本，样本小、且这 20 笔未必覆盖所有受影响路径，见 `tests/test_pytest_select.py` 的回放断言。- 「最近一次全量绿 ≤24 小时」依赖 `tools/wb_nightly.py` 的计划任务真的在跑；计划任务本身没有自动告警（只有 notifications.jsonl 追加），见 `tools/wb_nightly.py`。- 覆盖率统计口径：选测时只跑子集，`--cov-fail-under=70` 仍按子集算，与全量覆盖率不可直接比较，需与 E31 的结论一起复核，见 `docs/subsystems/ci/`。"

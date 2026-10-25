@@ -3975,3 +3975,14 @@ files = ["scripts/cloud/bootstrap.ps1", "scripts/cloud/run_gate.sh", "tests/test
 depends = []
 risk = "high"
 status = "pending"
+
+[[cards]]
+id = "E36"
+task = "T-AG490"
+title = "台账驱动选测（TIA）：改动文件 → 台账 test: 指针 → 只跑该跑的那批"
+tree = ".wt/E36"
+spec = "复盘/卡/卡E36-台账驱动选测.md"
+files = ["tools/pytest_select.py", "tools/wb_nightly.py", "tests/test_pytest_select.py", "scripts/run_gates.py", "tools/wb_land.py"]
+depends = ["E30", "E31", "E35"]
+risk = "high"
+status = "pending"
