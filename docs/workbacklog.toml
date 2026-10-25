@@ -3954,7 +3954,7 @@ spec = "复盘/卡/卡E35-云机确定性.md"
 files = ["scripts/cloud/bootstrap.ps1", "scripts/cloud/run_gate.sh", "tests/test_cloud_sync.py", "docs/subsystems/ci/云门禁机.md"]
 depends = []
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E36"

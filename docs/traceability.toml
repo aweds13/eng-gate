@@ -81,6 +81,7 @@ trailer_baseline = "593ea6c"
 # OP-32 的例外已在 T-G21 销掉（2026-09-24）：AI 写事实回报进展落地，那条操作挂上卡了。
 
 [exceptions]
+T-AG489 = "卡 E35 只落了配置/脚本半边（装配入库 + -xfdq + fail fast + 文档补正），云机两趟全绿与 B 类 15 条未取证 ⇒ 台账如实记 partial。等云机复跑取到读数后翻 done，并删掉这条豁免。"
 # T-B5 的豁免已删除（2026-09-18）：用户选 B′ 后通知通道已落地，条目转 done —— 修一条删一条。
 # 删掉的三条豁免（2026-09-20，编号校正 T-D1 时）：SR-NF12（编号错位已修，条目转 done）、
 # T-D1（校正已完成）、T-D2（门禁已转阻断）—— 修一条删一条。
@@ -8791,9 +8792,9 @@ gaps = "- 槽数公式（可用内存减 2 GB 预留，再除 3 GB）是拍的�
 
 [entries."T-AG489"]
 id = "T-AG489"
-title = "云机确定性（T-AG489）"
+title = "云机确定性：装配与同步脚本入库、清残留、仓外配置 fail fast（T-AG489）"
 group = "ENGINEERING"
-status = "todo"
+status = "partial"
 evidence = [
   "file:复盘/卡/卡E35-云机确定性.md",
   "file:scripts/cloud/bootstrap.ps1",
@@ -8801,7 +8802,7 @@ evidence = [
   "file:tests/test_cloud_sync.py",
   "file:docs/subsystems/ci/云门禁机.md",
 ]
-gaps = "- B 类 15 条里 `test_gates_reuse_line` 10 条的根因仍未定位（云机 `C:/eng` 下确有 `src` 目录，但 `rg.input_hash` 对 `src/**` 返回空树哈希），见本票 §现在疼在哪 第 1 条 B 类。- 速度差（云机 684 s vs 本机 403 s）是 vCPU 数（4 vs 32）问题，本卡不负责提速，见 `docs/subsystems/ci/云门禁机.md` §7.1。- 云机上第二 checkout 的并行验证（`CLOUD_DIR`）未做，多槽云池属 E34 的后续，见 `scripts/cloud/run_gate.sh`。"
+gaps = "- **云机没有复跑，判据 1/2 未取证**：卡判据要求「云机全量门禁连续两趟 `exit 0`、A 类 22 条真绿」，本轮云机已停机、未重启，读数只有此前那趟 `684.27 s / 3008 passed / 37 failed / 34 skipped`（`gates/diag/bench-cloud4.log`）。复跑清单见 `scripts/cloud/run_gate.sh` 的用法注释；未取证部分不许当「已绿」。- **B 类 15 条一条都没动**：`test_gates_reuse_line` 10 条（空树哈希 = `sha256(「」)`，即扫描目录没命中，根因仍未定位，原始读数见 `gates/diag/bench-cloud4.log`）、`test_run_gates_timeout` 4 条、`test_concurrency` 1 条 —— 卡要求「改成环境无关，否则显式 `known-env-red` 点名」，这 15 条既没改绿也没声明，`git grep known-env-red` 现在是空的。- **`TF_PROJECTS_TOML` 的真身仍在仓外**：`D:/repo/infra/pool/projects.toml`，脚本只是「缺了就报错」，没有为 CI 造最小 fixture（卡允许，但要在申报里写差异 —— 本轮没造，所以没差异可写）。- **A 类 22 条未逐条验证**：`ruff` 版本差异（0.17.2 vs 0.16.6）与内存阈值这两条已在装配/文档里处理，但「云机上真绿」没有原始输出，见 `tests/test_cloud_sync.py` 只断言了「脚本里写了什么」、不断言「云机上跑成什么」。"
 
 [entries."T-AG490"]
 id = "T-AG490"
