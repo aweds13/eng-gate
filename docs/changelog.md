@@ -1,3 +1,6 @@
+## 卡 E54 立卡（T-AG505）
+
+- 云机 pass12 的 6 failed + 1 error 拆成三条可移植性缺陷：依赖面不同源、仓外配置过渡供给、树陈旧无拦。
 - `T-AG504` `tools/pool_accounts.find_ledger()` 起点改 `TOOL_ROOT`（仓库根）、不再跟 cwd 走；`tests/conftest.py` 的宿主配置隔离清单补 `TF_POOL_CFG_DST`；`tests/test_pool_accounts.py` 夹具把仓库根钉到 tmp。
 - `T-AG503` `tools/pool_accounts.find_ledger()` 起点改 `TOOL_ROOT`（仓库根）、不再跟 cwd 走；`tests/conftest.py` 的宿主配置隔离清单补 `TF_POOL_CFG_DST`；`tests/test_pool_accounts.py` 夹具把仓库根钉到 tmp。
 ## 变更

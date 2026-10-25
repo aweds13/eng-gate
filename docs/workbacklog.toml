@@ -4024,3 +4024,14 @@ files = ["tools/wb_land.py", "tools/pool/landing.py", "tools/gate_pool.py", "tes
 depends = ["E10", "E35", "E38", "E49", "E51"]
 risk = "high"
 status = "pending"
+
+[[cards]]
+id = "E54"
+task = "T-AG505"
+title = "云机门禁的给定面收紧：仓外配置只铺判据需要的 + 依赖面单一真源 + 树陈旧 fail closed"
+tree = ".wt/E54"
+spec = "复盘/卡/卡E54-云机给定面收紧.md"
+files = ["scripts/cloud/bootstrap.ps1", "scripts/cloud/run_gate.sh", "tests/test_cloud_sync.py"]
+status = "pending"
+risk = "low"
+depends = ["E35"]

@@ -9050,3 +9050,16 @@ evidence = [
   "test:test_pool_accounts.py",
 ]
 gaps = "- 云机 pass11 仍红 4 条：`tests/test_pool_lib.py::test_wb_plan_cli_and_library_agree`、`tests/test_pool_accounts.py::test_find_ledger_missing_explains`、`tests/test_pool_accounts.py::test_main_exit_2_when_ledger_missing`、`tests/test_wb_dispatch.py::test_account_auth_uses_the_profile_env_and_model` 见 tests/test_pool_accounts.py。- 根因：账本锚点从 cwd 向上找，云机「给门禁推配置」的那层目录里就有账本 ⇒ 必被撞见；`TF_POOL_CFG_DST` 也没进宿主配置隔离清单，见 tests/conftest.py。- 待证：同一 commit 下云机 `pytest` 与 `mypy` 双 exit 0（这是 `tests/test_cloud_sync.py` 口径下的判据，等云机 pass12 读数）；本轮只有本机读数。"
+
+[entries."T-AG505"]
+id = "T-AG505"
+title = "云机门禁给定面收紧：仓外配置白名单 + 依赖面单一真源 + 树陈旧 fail closed"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:scripts/cloud/bootstrap.ps1",
+  "file:scripts/cloud/run_gate.sh",
+  "file:tests/test_cloud_sync.py",
+  "test:test_cloud_sync.py",
+]
+gaps = "- 云机 pass12 的 6 failed + 1 error 全部分类完成（见 复盘/卡/卡E54-云机给定面收紧.md §1 表）：hypothesis 未装、私账与模型开关被推上云机、远端停在旧 commit 050fa3d。待实现：bootstrap 走 `.[dev]`、run_gate 配置白名单 + 清旧账、开跑前断言远端 HEAD == 目标 commit（退 7）。"
