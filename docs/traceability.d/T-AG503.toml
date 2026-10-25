@@ -1,0 +1,13 @@
+[entries."T-AG503"]
+id = "T-AG503"
+title = "文档门禁基线两侧不对称：源侧照扫未入库文档 ⇒ 基线采自卡树、主树必红"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/check_docs.py",
+  "file:tests/test_check_docs.py",
+  "file:复盘/卡/卡E53-文档门禁基线两侧不对称.md",
+  "test:test_check_docs.py",
+  "text:复盘/卡/卡E53-文档门禁基线两侧不对称.md",
+]
+gaps = ""

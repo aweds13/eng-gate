@@ -3999,7 +3999,7 @@ title = "文档门禁基线两侧不对称：基线采自卡树、判据在主�
 tree = ".wt/E53"
 spec = "复盘/卡/卡E53-文档门禁基线两侧不对称.md"
 files = ["scripts/check_docs.py", "docs/doc-debt-baseline.toml", "tests/test_check_docs.py"]
-status = "pending"
+status = "done"
 risk = "low"
 depends = []
 
@@ -4032,6 +4032,6 @@ title = "云机门禁的给定面收紧：仓外配置只铺判据需要的 + �
 tree = ".wt/E54"
 spec = "复盘/卡/卡E54-云机给定面收紧.md"
 files = ["scripts/cloud/bootstrap.ps1", "scripts/cloud/run_gate.sh", "tests/test_cloud_sync.py"]
-status = "pending"
+status = "done"
 risk = "low"
 depends = ["E35"]

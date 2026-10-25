@@ -469,3 +469,67 @@ def test_real_tree_passes():
     """真仓库（本树）必须先过：docs/decisions 里的记录没有一条是坏的。"""
     assert cd.check(ROOT).problems == []
 
+
+
+# ------------------------------------------- 卡 E53：未入库的源文档不进判据（双侧对称）
+def _committed_repo(tmp_path: Path) -> Path:
+    """一棵**提交过一次**的合成树：`docs/ok.md` 自指合法。"""
+    root = _tree(tmp_path)
+    _seed_git(root)
+    return root
+
+
+def test_untracked_source_doc_is_skipped_not_judged(tmp_path):
+    """★ 未跟踪的 `.md` 不是判据的输入：它照扫不误就会让「同一 HEAD 两棵树读数不同」。
+
+    主树盘上躺着的私有速查、别的窗口的半成品都属这一类（`git check-ignore` 对它们退 1，
+    所以只问 ignored 是**问错了问题**）。判据要求：这条断链不进 `dead_refs`，
+    而是出现在 skip 明细里，并点名理由。
+    """
+    root = _committed_repo(tmp_path)
+    private = root / "复盘"
+    private.mkdir()
+    (private / "mine.md").write_text("看 `复盘/missing.md` 这一句\n", encoding="utf-8")
+
+    report = cd.scan(root)
+    assert [i.line() for i in report.dead_refs] == [], report.dead_refs
+    reasons = {s.where: s.reason for s in report.skips if s.where == "复盘/mine.md"}
+    assert reasons.get("复盘/mine.md") == "未入库文档（未跟踪，不随树分发）", report.skips
+
+    # 反面：把它提交进库，它立刻回到判据里（证明不是「凡 notes/ 下都放过」）
+    assert _git(root, "add", "-A").returncode == 0
+    assert _git(root, "-c", "user.name=t", "-c", "user.email=t@e.invalid",
+                "commit", "-q", "-m", "track").returncode == 0
+    assert [i.line() for i in cd.scan(root).dead_refs] == ["复盘/mine.md:1 → 复盘/missing.md"]
+
+
+def test_gitignored_source_doc_is_skipped_not_judged(tmp_path):
+    """★ gitignored 的源文档同样不进判据，理由与「未跟踪」分开记（产物 vs 私有）。"""
+    root = _committed_repo(tmp_path)
+    (root / ".gitignore").write_text("scratch/\n", encoding="utf-8")
+    scratch = root / "复盘" / "scratch"
+    scratch.mkdir(parents=True)
+    (scratch / "tmp.md").write_text("看 `复盘/scratch/gone.md` 这一句\n", encoding="utf-8")
+
+    report = cd.scan(root)
+    assert report.dead_refs == [], report.dead_refs
+    reasons = {s.where: s.reason for s in report.skips}
+    assert reasons.get("复盘/scratch/tmp.md") == "gitignored 文档（本机产物，不随树分发）", reasons
+
+
+def test_real_tree_judges_only_tracked_docs():
+    """真仓库：判出问题的源文件必须都在库内（否则就是又被本地文件带偏了）。"""
+    tracked = cd.tracked_docs(ROOT)
+    assert tracked, "git ls-files 一条都没读到 —— 这条钉子等于空转"
+    report = cd.scan(ROOT)
+    sources = {item.where.split(":")[0] for item in report.dead_refs}
+    assert sources <= tracked, sorted(sources - tracked)[:5]
+    for skip in report.skips:
+        if skip.where.endswith(".md") and "/" in skip.where:
+            assert skip.reason in {
+                "未入库文档（未跟踪，不随树分发）",
+                "gitignored 文档（本机产物，不随树分发）",
+                "文件不存在",
+                "路径在仓外，判不了",
+                "模板占位符，判不了",
+            } or skip.reason, skip

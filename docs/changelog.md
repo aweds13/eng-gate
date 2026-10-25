@@ -1,4 +1,25 @@
+## 卡 E49c 第二笔：台账查找起点与测试隔离（T-AG504）
+
+- `T-AG504`：`tools/pool_accounts.find_ledger()` 起点改 `TOOL_ROOT`（仓库根）、不再跟 cwd 走；
+  `tests/conftest.py` 的宿主配置隔离清单补 `TF_POOL_CFG_DST`；
+  `tests/test_pool_accounts.py` 夹具把仓库根钉到 tmp。
+- 为什么单列一笔：`find_ledger()` 原来跟着 cwd 走，落地链在卡树里跑就会去找卡树那份（不存在的）账本，
+  云机与本地会给出两套答案。
 - `T-AG504` `tools/pool_accounts.find_ledger()` 起点改 `TOOL_ROOT`（仓库根）、不再跟 cwd 走；`tests/conftest.py` 的宿主配置隔离清单补 `TF_POOL_CFG_DST`；`tests/test_pool_accounts.py` 夹具把仓库根钉到 tmp。
+## 卡 E53 文档门禁两侧不对称：源侧也问「入库没有」（T-AG503）
+
+- 立卡：同一 HEAD、同一份基线，`check_docs.py` 在主树读 `死指针 363 / superseded 6`（红）、
+  在卡树读 `superseded 5`（绿）—— 基线采自卡树，主树永远红。
+- **实测纠正了卡里的一句话**：这些文件**不是 gitignored**（`git check-ignore` 退 1，真忽略会退 0），
+  而是**未跟踪**。所以「照着目标侧的 `ignored()` 抄」修不好本卡 —— 问错问题只会得到空集。
+- `scripts/check_docs.py`：新增 `tracked_docs()`（`git ls-files -z`）与 `iter_docs_split()`
+  —— 未入库的 markdown 文件不进判据，两种理由分开记（未跟踪 / gitignored），在 `skip` 明细里点名，不静默吞掉。
+- 读数（HEAD `ad162da`）：主树 `死指针 327 / superseded 5 / drift 429`；干净树（`git worktree add`）
+  `346 / 5 / 429`；主树独有 **0** 条，干净树独有 19 条全部是「引用指向未入库文件」的真债。
+- 判据 2 原话「两棵树读数一致」经实测**不可达**，卡里改成两条可证伪形态（源侧对称 + 真树单调），
+  并在卡里写清为什么（未跟踪文件在两侧天然不同）。
+- `docs/doc-debt-baseline.toml` **一个字节都没动**（判据 3）：主树现在 `327 < 343`，靠的是判据修好，不是把基线抬上去。
+- `tests/test_check_docs.py` +3 条钉子（未跟踪 / gitignored / 真树只看库内源文件），反向验证取到红样（327→365、5→6）。
 ## 卡 E54 云机门禁的给定面收紧（T-AG505）
 
 - 立卡：云机 pass12 的 `6 failed + 1 error` 拆成三条可移植性缺陷 —— 依赖面不同源、仓外配置过渡供给、树陈旧无拦。
@@ -10,6 +31,14 @@
 - `tests/test_cloud_sync.py` +5 条钉子，四条反向验证逐条验红。
 - `docs/subsystems/ci/云门禁机.md` 新增「给云机喂什么：白名单」表，装配第 4 步改口径。
 
+### 第二笔（云机真跑才撞到的两处）
+
+- `scripts/cloud/bootstrap.ps1`：`C:/pins.txt` 是 **constraints** 文件，pip 明确拒绝带 extras
+  （`ERROR: Constraints cannot have extras`）⇒ 落盘前剥掉 `[...]`；`extras` 那一份另存 `C:/reqs.txt`
+  给回退分支用（"要装的东西" 与 "约束" 不能混成一份）。
+- `scripts/cloud/run_gate.sh`：`-notcontains $_.Name` 里的 `$_` 在 bash 双引号里被**本地先展开**
+  ⇒ 远端 PowerShell 语法错、`0.4/5` 退 5，报错却像「云机上没有配置源」。改成 `\$_`。
+- `tests/test_cloud_sync.py` +2 条钉子（两条都是"云机才撞到、本机看不出来"的形态）。
 ## 变更
 - 新增 `tools/pool/checkin.py`：六态结论码 + 华为云 `SDK-HMAC-SHA256` 签名 + 五个平台的领取客户端，写动作只住这一个模块。
 - `tools/pool_accounts.py`：新增 `checkin` 子命令（`--all/--probe/--platform/--json/--spacing`）、留档原子写、账本健康态与额度样本回写。

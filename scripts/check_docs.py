@@ -236,6 +236,53 @@ def iter_docs(root: Path) -> list[Path]:
     return docs
 
 
+def tracked_docs(root: Path) -> set[str]:
+    """问 git：这些仓库相对路径里哪些**已入库**（`ls-files`，一次问完）。"""
+    try:
+        proc = subprocess.run(
+            ["git", "-c", "core.quotePath=false", "ls-files", "-z"],
+            cwd=str(root), capture_output=True, **NO_WINDOW,
+        )
+    except OSError:
+        return set()
+    if proc.returncode != 0:
+        return set()
+    return {p for p in proc.stdout.decode("utf-8", "replace").split("\0") if p}
+
+
+def iter_docs_split(root: Path) -> tuple[list[Path], list[tuple[Path, str]]]:
+    """扫源文件时**也问一遍 git**：没入库的 `.md` 不进判据，记 `skip` 点名（卡 E53 · T-AG503）。
+
+    ── 为什么必须对称 ──
+    目标侧（被引用的路径）早就用 `ignored()` 把 gitignored 的记 `skip`；源侧原来用
+    `base.rglob("*.md")` 照扫不误 ⇒ **同一 HEAD 在主树与卡树读数不同**：
+    `git worktree add` 只铺入库文件，主树盘上却躺着本机私有速查文档（**未跟踪**，
+    不是 gitignored —— `git check-ignore` 对它退 1）⇒ 基线采自卡树、主树永远红，
+    `docs/doc-debt-baseline.toml` 头部的「只许降不许升」被这种伪债顶破。
+
+    ⇒ 判据管的是**仓库里的文档**，不是本地笔记本。两个理由分开记，别混成一个：
+      · 未跟踪（`ls-files` 里没有）：本机私有速查、别的窗口的半成品；
+      · gitignored：`gates/diag/**` 这类产物。
+    """
+    docs = iter_docs(root)
+    tracked = tracked_docs(root)
+    names = [rel(path, root) for path in docs]
+    ign = ignored(root, [n for n in names if n and not n.startswith("/")])
+    kept: list[Path] = []
+    dropped: list[tuple[Path, str]] = []
+    for path, name in zip(docs, names, strict=False):
+        if not name or name.startswith("/") or ":" in name:
+            kept.append(path)              # 仓外/绝对路径：不参与入库判定
+            continue
+        if name in ign or name.rstrip("/") in ign:
+            dropped.append((path, "gitignored 文档（本机产物，不随树分发）"))
+        elif tracked and name not in tracked:
+            dropped.append((path, "未入库文档（未跟踪，不随树分发）"))
+        else:
+            kept.append(path)
+    return kept, dropped
+
+
 def rel(path: Path, root: Path) -> str:
     """仓内相对路径（posix 分隔符）；不在根下就原样给绝对路径。"""
     try:
@@ -719,7 +766,9 @@ def write_baseline_file(root: Path, report: Report) -> tuple[Path, bool]:
 def scan(root: Path) -> Report:
     """跑完四条判据，收成一份读数（纯读：一个字节都不写）。"""
     report = Report(root=root)
-    docs = iter_docs(root)
+    docs, dropped_docs = iter_docs_split(root)
+    for path, reason in dropped_docs:
+        report.skips.append(Skip(rel(path, root), "-", reason))
     report.scanned["文件"] = len(docs)
     for name in SCAN_DIRS:
         report.scanned[name] = sum(1 for d in docs if rel(d, root).startswith(f"{name}/"))
