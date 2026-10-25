@@ -1,6 +1,6 @@
 ---
 name: pipe-workbench
-description: 用本仓「工作台」四件套看现场——一份读数（pipeline_view）→ 今日一页（wb_daily）→ 给工人注入状态（workbench_bridge）→ 工人面板（wb_dash）；外加派活后的收工看守（wb_watch）。当你要回答「现在谁在飞 / 今天该做什么 / 给工人什么开场白 / 工人动没动 / 那张卡收工没有」时用；全部只读（wb_watch 只有加 --write-done 才落事件）。
+description: 用本仓「工作台」四件套看现场——一份读数（pipeline_view）→ 今日一页（wb_daily）→ 给工人注入状态（workbench_bridge）→ 工人面板（wb_dash）；外加派活后的收工看守（wb_watch / Trae 侧的 trae_watch）。当你要回答「现在谁在飞 / 今天该做什么 / 给工人什么开场白 / 工人动没动 / 那张卡收工没有」时用；全部只读（wb_watch 只有加 --write-done 才落事件）。
 ---
 
 # pipe-workbench —— 工作台四件套
@@ -67,6 +67,12 @@ python -X utf8 tools/wb_watch.py --cards <卡号> --mode shared   # 合用看守
   （**没判决不算成功**）· `5` 合用看守心跳过期（已写 `watcher-stale`：这批没人守了）· `2` 用法 / 批次读不到。
 - **合用看守的计数**在 `gates/diag/watch-registry.json`：派一张 `+1`、出判决 `-1`、
   归 `0` 才写一条 `batch-done` —— 想看中间态就看这份文件，别等最后的通知。
+- **Trae 侧另有一份看守**（`tools/trae_watch.py`，卡 E29）：面板里的任务没有进程、也没有判决，
+  它每拍采一次 DOM（图标 / 正文长度 / 正文哈希 / 是否被终止）判四态，落点是**三种不同的文件** ——
+  · **收工**（图标 `chat-icon-stop` → `chat-icon-arrow-up`）⇒ `gates/diag/wb-<卡>.done`（与工人同一种行）+ 通知 `done`；
+  · **被终止**（正文出现「手动终止输出」）⇒ `gates/diag/trae-<卡>.stopped` + 通知 `trae-stopped`，退 **5**；
+  · **空转塌陷**（图标仍 stop、正文 ≥ `--stale-min` 一字未变、给了 `--tree` 时树也不动）⇒ 同一个 `.stopped` + 通知 `trae-stalled`，退 **5**。
+  不给 `--write-done` 就只读；每拍明细在 `gates/diag/trae-watch.jsonl`。
 
 ## 复盘缺口（一份读数 / 容错 / 端口）
 

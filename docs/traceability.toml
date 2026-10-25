@@ -8707,8 +8707,16 @@ gaps = "- **真仓只跑到 `make` 前置为止**：`wb_batch.py make` / `land` 
 
 [entries."T-AG483"]
 id = "T-AG483"
-title = "Trae 完工看守：把「Trae 停了」变成可发现的"
+title = "Trae 完工看守：把「Trae 停了」变成可发现的（T-AG483）"
 group = "ENGINEERING"
-status = "todo"
-evidence = ["file:复盘/卡/卡E29-Trae完工看守.md"]
-gaps = "四态（finished / terminated / stalled / running）要各有钉子；真机那一次必须真落事件，只见日志不算。"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E29-Trae完工看守.md",
+  "file:tools/trae_pool.mjs",
+  "file:tools/trae_watch.py",
+  "file:tests/test_trae_watch.py",
+  "file:skills/pipe-workbench/SKILL.md",
+  "file:gates/diag/_text_TAG483.md",
+]
+gaps = "- **`chat-icon-stop` 没有真机读数**：面板当下 30 个任务项 `running 0`，只有纯函数判据覆盖 stop 态；等下一次真有任务在跑时才能补一条真机读数，见 `tests/test_trae_watch.py` 的 `ScriptedSampler`。- **`finished` 的真机转变没打过**：真机只验到「第一拍就是 arrow-up ⇒ 拒绝写 `.done`」（诚实边界）；`stop → arrow-up` 那条转变要等一个真在跑的会话，见 `tools/trae_watch.py` 的 `judge_sample()`。- **没接进派活器**：`wb_dispatch` 不认 Trae 卡（卡明确不许），所以「派活即起看守」只到 `tools/trae_watch.py` 手起为止，见 `skills/pipe-workbench/SKILL.md` 的那一行。- **`--stale-min 0` 是「关掉空转判定」不是「0 分钟没动」**：语义靠 docstring 与钉子表达，没有独立开关，见 `tools/trae_watch.py:178` 的注。"
+

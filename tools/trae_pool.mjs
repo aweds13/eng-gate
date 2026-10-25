@@ -89,6 +89,24 @@
  *   （面板 / 任务项（带 running 标记）/ 并发是否满，一屏读完）。`list` 也带上了任务项 + running。
  *   ★ 边界（诚实写）：这四条都只能**真机**验最后一步（要有带调试口的 Trae），本卡机器上跑的是
  *     纯函数判据 + 静态选择器钉 + 「空 prompt 退非零」；真机四步没跑过。
+ *
+ * ★★ 卡 E29（T-AG483，2026-10-25）—— **只读采样**，把「Trae 停了」变成可发现的：
+ *   病：Trae 是「一轮一交还」的模型，**没有常驻进程** ⇒「它停了」没有任何事实来源。三次真现场：
+ *   ① 发送键在运行中**兼作停止键**（`span[data-testid]` 由 `chat-icon-arrow-up` 变 `chat-icon-stop`），
+ *      10:39 误点一下 ⇒ 会话里出现「手动终止输出」、卡树一小时零改动，**没人知道**；
+ *   ② 一轮跑完交还（E27）⇒ `gates/diag/wb-<卡>.done` 不出现，`wb_watch` 只认号池工人的日志；
+ *   ③ 看起来在跑其实空转（图标还不是空闲、正文一小时没动）—— 比停了更贵，一直占并发位。
+ *   本卡只加**看守**（`tools/trae_watch.py`），不接派活（卡 218 已裁定）：
+ *   ① 新增只读子命令 `sample --task "<标题子串>" [--json]`，一次吐一行 JSON：
+ *      `{"ok":true,"task":…,"icon":"chat-icon-stop|chat-icon-arrow-up|unknown","running":bool,
+ *        "bodyLen":N,"bodyHash":"…","terminated":bool}`；
+ *   ② 判定抽成**纯函数** `judgeTraeSample(prev, cur, opts)`（与 `judgeSubmit` / `judgeEnter` 一族同构）：
+ *      四态 `finished` / `terminated` / `stalled` / `running`，`selftest` 逐条钉住；
+ *   ③ **采样路径只读 DOM**：只 `document.querySelectorAll` + `innerText`，**一个 click 都不发**
+ *      （运行中发送键就是停止键 —— 这条是卡的「不许做」，也是本卡的真现场）。
+ *   ★ 边界（诚实写）：`icon` 只认 `span[data-testid]` 上**逐字相等**的两个实测值，其余一律 `unknown`
+ *     （`startsWith` 会把 `chat-icon-stop-hover` 这类变体也认成 stop）；`bodyHash` 是 FNV-1a 32 位，
+ *     只用来判「变没变」，不是内容指纹；`sample` 的真机读数本卡没跑（主控跑）。
  */
 import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -534,6 +552,90 @@ export function formatTasks(tasks) {
     .join('\n') + '\n'
 }
 
+/* -------------------------- 卡 E29：只读采样（纯函数，可单测、不碰 CDP） */
+
+/** 实测的两种发送键图标：**运行中**是 `chat-icon-stop`，**空闲**是 `chat-icon-arrow-up`（卡 E29）。
+ *  ★ 顺序是 `[stop, arrow-up]`：与卡的写法一致，也提醒「先想停止键」。 */
+export const TRAE_ICONS = ['chat-icon-stop', 'chat-icon-arrow-up']
+/** 「被手动终止」的正文原话（2026-10-25 10:39 误点停止键后，E10 会话正文里出现的就是这六个字）。 */
+export const TERMINATED_HINT = '手动终止输出'
+/** 空转判定的默认门槛（分钟）—— ★ 与 python 侧 `trae_watch.DEFAULT_STALE_MIN` 同值，改一处要改两处。 */
+export const DEFAULT_STALE_MIN = 10
+
+/** ★ 纯函数：`data-testid` 原值 → 三种读数（两个实测值 + `unknown`）。
+ *  **只认逐字相等**：`startsWith('chat-icon-stop')` 会把 `chat-icon-stop-hover` 这类变体也认成
+ *  stop ⇒ 空转判据在面板改版后会假响。认不出就老实说 `unknown`（调用方据此只判 running）。 */
+export function judgeTraeIcon(raw) {
+  const t = String(raw == null ? '' : raw).trim()
+  return TRAE_ICONS.includes(t) ? t : 'unknown'
+}
+
+/** ★ 纯函数：正文 → 32 位 FNV-1a（十六进制 8 位）。只用来判「这一拍跟上一拍是不是同一段字」，
+ *  **不当内容指纹**（碰撞不可怕，把「变了」判成「没变」才可怕 —— 32 位对 10 分钟窗口够用）。 */
+export function hashText(text) {
+  const s = String(text == null ? '' : text)
+  let h = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 0x01000193) >>> 0
+  }
+  return h.toString(16).padStart(8, '0')
+}
+
+/** ★ 纯函数：一次采样的**读数** —— `sample --json` 的字段就在这里定型（键名卡 E29 钉着）。
+ *  `running` 的判据只有一条：图标是 `chat-icon-stop`（运行中它兼作停止键）。 */
+export function summarizeTrae({ icon, body } = {}) {
+  const text = String(body == null ? '' : body)
+  const id = judgeTraeIcon(icon)
+  return {
+    icon: id,
+    running: id === 'chat-icon-stop',
+    bodyLen: text.length,
+    bodyHash: hashText(text),
+    terminated: text.includes(TERMINATED_HINT),
+  }
+}
+
+/**
+ * ★ 纯函数：两拍采样 → 四态（与 `tools/trae_watch.py:judge_sample` **同口径**，两边各由
+ * selftest / pytest 钉住，别只改一边）。
+ *
+ *  · `prev` 是**锚点**：正文上一次变样的那一拍（正文一直不变 ⇒ 锚点不动 ⇒ 能量出「多久没动」）；
+ *  · `terminated` 优先于一切：正文出现「手动终止输出」⇒ 这一轮是被掐掉的，跟图标无关；
+ *  · `finished`：图标由 `stop` → `arrow-up`（★ 必须有 prev，**一次采样说不了「收工」**）；
+ *  · `stalled`：图标仍 `stop` 且 `bodyHash` 与锚点相同、且已过 ≥ `staleMin` 分钟
+ *    （给了 `--tree` 时还要 `opts.treeIdle !== false` —— 树在动 = 还在干活，不算空转）；
+ *  · 其余 = `running`。
+ *
+ *  ★ `staleMin <= 0` ⇒ **关掉空转判定**（`0 分钟没动`不是读数，是「别判空转」的开关写法）。
+ */
+export function judgeTraeSample(prev, cur, opts = {}) {
+  const c = cur || {}
+  // ★ 两种输入都认：`summarizeTrae()` 出来的读数（`terminated` 已经算好），或原始采样（带 `body`）。
+  const terminated = c.terminated === true || String(c.body == null ? '' : c.body).includes(TERMINATED_HINT)
+  if (terminated) {
+    return { state: 'terminated', code: 'terminated',
+             reason: `正文出现「${TERMINATED_HINT}」—— 这一轮是被手动掐掉的` }
+  }
+  const icon = judgeTraeIcon(c.icon)
+  const prevIcon = prev ? judgeTraeIcon(prev.icon) : ''
+  if (prevIcon === 'chat-icon-stop' && icon === 'chat-icon-arrow-up') {
+    return { state: 'finished', code: 'finished',
+             reason: '图标由 chat-icon-stop → chat-icon-arrow-up（真收工）' }
+  }
+  const staleMin = opts.staleMin == null ? DEFAULT_STALE_MIN : Number(opts.staleMin)
+  if (prev && icon === 'chat-icon-stop' && prev.bodyHash === c.bodyHash
+      && staleMin > 0 && opts.treeIdle !== false) {
+    const minutes = ((Number(c.at) || 0) - (Number(prev.at) || 0)) / 60
+    if (minutes >= staleMin) {
+      return { state: 'stalled', code: 'stalled',
+               reason: `图标仍 stop，正文已有 ${minutes.toFixed(1)} 分钟一字未变（>=${staleMin} 分钟）` }
+    }
+  }
+  return { state: 'running', code: 'running',
+           reason: `icon=${icon} bodyLen=${Number(c.bodyLen) || 0}` }
+}
+
 /* ---------------------------------------------------------------- 参数解析 */
 
 function parseArgs(argv) {
@@ -544,6 +646,7 @@ function parseArgs(argv) {
       const key = a.slice(2)
       if (key === 'no-launch') { out.noLaunch = true; continue }
       if (key === 'new-chat') { out.newChat = true; continue }   // ★ 卡 260：布尔 flag，不吞下一个参数
+      if (key === 'json') { out.json = true; continue }          // ★ 卡 E29：同上（`sample --json`）
       out[key] = argv[++i]
     } else {
       out._.push(a)
@@ -1028,6 +1131,43 @@ async function probePanelState(panel) {
 async function readBodyText(cdp) {
   const st = await readAgents(cdp)
   return String((st && st.last) || '')
+}
+
+/* --------------------- 卡 E29：采样的两只「眼睛」（**只读 DOM**，一个 click 都不发） */
+
+/** ★ 卡 E29：读发送键/停止键的 `data-testid`（`span[data-testid]` 里 `chat-icon-*` 的那一个，取最后一个
+ *  = DOM 最内层的那个）。读不到 ⇒ 空串（由 `judgeTraeIcon` 落成 `unknown`）。
+ *  ★ **不许点它**：运行中它兼作停止键（10:39 就是这么把 E10 掐掉的）。 */
+async function readChatIconRaw(cdp) {
+  let raw = null
+  try {
+    raw = await cdp.eval(`(() => {
+      const ids = [...document.querySelectorAll('span[data-testid]')]
+        .map((el) => el.getAttribute('data-testid') || '')
+        .filter((s) => s.startsWith('chat-icon-'));
+      return ids.length ? ids[ids.length - 1] : '';
+    })()`)
+  } catch { raw = null }
+  return raw == null ? '' : String(raw)
+}
+
+/** ★ 卡 E29：读对话正文（**刨掉输入框自己** —— 否则「还没发出去的字」进了 bodyHash，
+ *  空转判据就变成「输入框里有没有残留」）。读不到 ⇒ 空串（让 `bodyHash` 稳定，不伪造变化）。 */
+async function readChatText(cdp) {
+  let raw = null
+  try {
+    raw = await cdp.eval(`(() => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+      const el = document.querySelector(${JSON.stringify(SELECTORS.input)});
+      let txt = norm(document.body ? document.body.innerText : '');
+      if (el) {
+        const t = norm(el.innerText || '');
+        if (t) { const i = txt.indexOf(t); if (i >= 0) txt = txt.slice(0, i) + ' ' + txt.slice(i + t.length) }
+      }
+      return txt;
+    })()`)
+  } catch { raw = null }
+  return raw == null ? '' : String(raw)
 }
 
 /**
@@ -1919,17 +2059,86 @@ async function cmdStatus(argv) {
   return 0
 }
 
+/** ★ 卡 E29 只读子命令：**采一拍**（图标 / 正文长度 / 正文哈希 / 是否被终止），一次吐一行 JSON。
+ *
+ *  `sample --task "<标题子串>" [--json] [--target "#N"|子串] [--port 9333]`
+ *
+ *  ★ **只读**：只 `querySelectorAll` + `innerText`；不点发送键（运行中它是停止键）、不点任务项
+ *    （所以正文读的是**当前正在显示的那个对话** —— 要与 `--task` 对得上，得保证那任务就在这个面板里；
+ *    读到的 task 是**从任务列表里选中的那条标题**，选不唯一 ⇒ 停手列候选，不猜）。
+ *  ★ 退出码：`0` 采到了 · `2` 用法 / 连不上 CDP / 选不出来 · `3` 页面读不到任务项（不粉饰）。
+ *  ★ 失败时也吐一行 JSON（`{"ok":false,"code":…,"reason":…}`），调用方永远拿得到机读结论。
+ */
+async function cmdSample(argv) {
+  const args = parseArgs(argv)
+  const port = Number(args.port || DEFAULT_PORT)
+  const asJson = args.json === true
+  const emit = (obj) => process.stdout.write(asJson
+    ? `${JSON.stringify(obj)}\n` : `[trae] sample ${JSON.stringify(obj)}\n`)
+  const wanted = args.task == null ? null : String(args.task)
+  if (wanted == null || wanted.trim() === '') {
+    process.stderr.write('用法：node tools/trae_pool.mjs sample --task "<标题子串>" [--json]'
+      + ' [--target "#N"|子串] [--port 9333]\n')
+    return 2
+  }
+  const panels = await fetchPanels(port, 2000)
+  if (panels == null) {
+    process.stderr.write(`[trae] 连不上 CDP（127.0.0.1:${port}）—— IDE 没开着？\n`)
+    emit({ ok: false, code: 'no-cdp', reason: `连不上 CDP（127.0.0.1:${port}）` })
+    return 2
+  }
+  if (!panels.length) {
+    process.stderr.write('[trae] 连上了 CDP，但一个可驱动面板都没有（solo-lite 没开？）\n')
+    emit({ ok: false, code: 'no-panel', reason: '一个可驱动面板都没有' })
+    return 2
+  }
+  const picked = pickPanel(panels, args.target == null ? null : String(args.target))
+  if (!picked.ok) {
+    process.stderr.write(`[trae] 选面板停手：${picked.reason}\n`)
+    process.stderr.write(formatPanels(panels))
+    emit({ ok: false, code: picked.code || 'panel', reason: picked.reason })
+    return 2
+  }
+  let cdp = null
+  try {
+    cdp = await connectPage(picked.panel)
+  } catch (e) {
+    process.stderr.write(`[trae] 连不上面板 #${picked.panel.index}：${e.message}\n`)
+    emit({ ok: false, code: 'no-connect', reason: e.message })
+    return 2
+  }
+  try {
+    const tasks = await readTasks(cdp)
+    if (!tasks.ok) {
+      process.stderr.write(`[trae] 读不到任务项（试过 ${SELECTORS.taskItem}）—— 退 3\n`)
+      emit({ ok: false, code: 'no-tasks', reason: '读不到任务项' })
+      return 3
+    }
+    const pick = pickTask(tasks.tasks, wanted)
+    if (!pick.ok) {
+      process.stderr.write(`[trae] 选任务停手：${pick.reason}\n`)
+      process.stderr.write(formatTasks(tasks.tasks))
+      emit({ ok: false, code: pick.code, reason: pick.reason })
+      return 2
+    }
+    const summary = summarizeTrae({ icon: await readChatIconRaw(cdp), body: await readChatText(cdp) })
+    emit({ ok: true, task: pick.task.title, ...summary })
+    return 0
+  } finally { cdp.close() }
+}
+
 /** ★ 卡 E27：`--help` —— 四个主命令（list / send / switch / status）先列出来，退 0。
  *  ★ 以前没有 `--help`：不带参数就退 2 打用法 ⇒ "查一下有哪些子命令"都算失败。 */
 async function cmdHelp() {
   process.stdout.write('用法：node tools/trae_pool.mjs <子命令> [选项]\n')
-  process.stdout.write('\n四个主命令（卡 E27）：\n')
+  process.stdout.write('\n四个主命令（卡 E27）+ 一个只读采样（卡 E29）：\n')
   process.stdout.write('  list    [--port 9333] [--target "#N"|子串]   # 只读：面板 + 任务项（带 running 标记）\n')
   process.stdout.write('  send    --prompt <文本> | --prompt-file <文件>  --log <jsonl> --out <md>\n')
   process.stdout.write('          [--workspace <目录>] [--port 9333] [--timeout-sec 3600] [--no-launch]\n')
   process.stdout.write('          [--target "#N"|<子串>] [--model <名字>] [--new-chat] [--conversation "#N"|<标题子串>]\n')
   process.stdout.write('  switch  --title "#N"|<标题子串> [--port 9333]   # 切任务并等正文换掉（最多 10 s）\n')
   process.stdout.write('  status  [--port 9333] [--target "#N"|子串]     # 一屏：面板 / 任务项 / 并发是否满\n')
+  process.stdout.write('  sample  --task "<标题子串>" [--json]          # 只读采一拍（图标 / 正文长度 / 哈希 / 被终止）\n')
   process.stdout.write('\n另有（只读/自检）：\n')
   process.stdout.write('  balance [--port 9333]                          # 读免费积分\n')
   process.stdout.write('  conversations [--port 9333]                    # 列面板里的会话（= --conversations）\n')
@@ -2165,8 +2374,64 @@ async function cmdSelftest() {
       ? `code=${got.code}` : `got=${JSON.stringify(got)}`
     process.stdout.write(`[${pass ? '绿' : '红'}] ${name}  → ${tail}\n`)
   }
+
+  // ★★ 卡 E29 判据：图标三个读数 / terminated 命中与不命中 / bodyHash 变与不变 / 四态分类。
+  //   卡 227/245/260/E27 的用例一条没删 —— 上面照原样跑过。
+  const stopSample = summarizeTrae({ icon: 'chat-icon-stop', body: '正在跑 10%' })
+  const upSample = summarizeTrae({ icon: 'chat-icon-arrow-up', body: '正在跑 10%' })
+  const t0 = 1_000_000
+  const at = (sec, base) => ({ ...base, at: t0 + sec })
+  const checksE29 = [
+    // ① 图标：两个实测值 + 认不出。
+    ['icon 实测值：运行中 chat-icon-stop 原样认', judgeTraeIcon('chat-icon-stop'),
+      (s) => s === 'chat-icon-stop'],
+    ['icon 实测值：空闲 chat-icon-arrow-up 原样认', judgeTraeIcon('chat-icon-arrow-up'),
+      (s) => s === 'chat-icon-arrow-up'],
+    ['★反例：认不出的 testid ⇒ unknown（不许猜成 idle/running）',
+      [judgeTraeIcon('chat-icon-stop-hover'), judgeTraeIcon(''), judgeTraeIcon(null)],
+      (rs) => rs.every((r) => r === 'unknown')],
+    // ② terminated：命中 / 不命中（正文原话逐字）。
+    ['★正文出现「手动终止输出」⇒ terminated',
+      judgeTraeSample(null, { icon: 'chat-icon-stop', body: '…手动终止输出', at: t0 }, {}),
+      (r) => r.state === 'terminated' && r.code === 'terminated'],
+    ['★反例：正文没有那句话 ⇒ 不许判 terminated（照常 running）',
+      judgeTraeSample(null, { icon: 'chat-icon-stop', body: '还在写代码', at: t0 }, {}),
+      (r) => r.state === 'running'],
+    // ③ bodyHash：变 / 不变（同一段字必须同哈希，差一个字必须不同）。
+    ['bodyHash：同一段正文 ⇒ 哈希相同',
+      [hashText('同一个正文'), hashText('同一个正文')],
+      ([a, b]) => a === b && a.length === 8],
+    ['★bodyHash：正文差一个字 ⇒ 哈希必须变（否则空转判据永远响）',
+      [hashText('同一个正文'), hashText('同一个正文！')],
+      ([a, b]) => a !== b],
+    // ④ 四态分类（剩下三态；terminated 已在上面钉过）。
+    ['四态 finished：图标 stop → arrow-up ⇒ 收工',
+      judgeTraeSample(at(0, stopSample), at(30, upSample), {}),
+      (r) => r.state === 'finished' && r.code === 'finished'],
+    ['★四态 stalled：图标仍 stop、正文 12 分钟没变（门槛 10）⇒ 空转',
+      judgeTraeSample(at(0, stopSample), at(720, stopSample), { staleMin: 10 }),
+      (r) => r.state === 'stalled' && r.code === 'stalled'],
+    ['★反例：门槛调 0 = 关掉空转判定（0 分钟没动不是读数）',
+      judgeTraeSample(at(0, stopSample), at(720, stopSample), { staleMin: 0 }),
+      (r) => r.state === 'running'],
+    ['★反例：树 mtime 还在动（treeIdle=false）⇒ 不算空转',
+      judgeTraeSample(at(0, stopSample), at(720, stopSample), { staleMin: 10, treeIdle: false }),
+      (r) => r.state === 'running'],
+    ['★反例：正文变了（哈希不同）⇒ 不算空转，判 running',
+      judgeTraeSample(at(0, stopSample), at(720, summarizeTrae({ icon: 'chat-icon-stop', body: '换了内容' })),
+        { staleMin: 10 }),
+      (r) => r.state === 'running'],
+  ]
+  for (const [name, got, ok] of checksE29) {
+    const pass = ok(got)
+    if (!pass) bad += 1
+    const tail = (got && typeof got === 'object' && !Array.isArray(got) && 'code' in got)
+      ? `code=${got.code}` : `got=${JSON.stringify(got)}`
+    process.stdout.write(`[${pass ? '绿' : '红'}] ${name}  → ${tail}\n`)
+  }
   process.stdout.write(bad === 0
-    ? `[OK] selftest 全绿（${checks.length + 1 + checks245.length + checks260.length + checksE27.length} 条）\n`
+    ? `[OK] selftest 全绿（${checks.length + 1 + checks245.length + checks260.length
+      + checksE27.length + checksE29.length} 条）\n`
     : `[FAIL] selftest 有 ${bad} 条红\n`)
   return bad === 0 ? 0 : 1
 }
@@ -2214,6 +2479,7 @@ async function main() {
   else if (cmd === 'list' || cmd === '--list') code = await cmdList(argv.slice(1))
   else if (cmd === 'switch') code = await cmdSwitch(argv.slice(1))
   else if (cmd === 'status') code = await cmdStatus(argv.slice(1))
+  else if (cmd === 'sample') code = await cmdSample(argv.slice(1))
   else if (cmd === 'conversations' || cmd === '--conversations') code = await cmdConversations(argv.slice(1))
   else if (cmd === 'selftest' || cmd === '--selftest') code = await cmdSelftest()
   else {

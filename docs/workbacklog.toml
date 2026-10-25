@@ -3913,4 +3913,4 @@ spec = "复盘/卡/卡E29-Trae完工看守.md"
 files = ["tools/trae_pool.mjs", "tools/trae_watch.py", "tests/test_trae_watch.py", "skills/pipe-workbench/SKILL.md"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"

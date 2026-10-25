@@ -1,3 +1,7 @@
+## Trae 完工看守：把「Trae 停了」变成可发现的（E29 · T-AG483）
+- `tools/trae_pool.mjs` 新增只读子命令 `sample --task "<子串>" [--json]`（一行 `{ok,task,icon,running,bodyLen,bodyHash,terminated}`），判定抽成纯函数 `judgeTraeSample()`，`selftest` 补 12 条（合计 74 条全绿）：改面板只改 `SELECTORS` 一处。
+- 新增 `tools/trae_watch.py`：两拍采样判四态 —— `finished`（只认 `chat-icon-stop → chat-icon-arrow-up` 的转变）/`terminated`（正文出现「手动终止输出」）/`stalled`（图标仍 stop 且正文 ≥ `--stale-min` 分钟一字未变）/`running`；事件层**复用** `wb_watch` 的 `diag_dir`/`done_path`/`append_notification`，`--write-done` 缺席时一个字节都不写。
+- **工具根与数据根分开**（卡 A326 口径）：`TOOL_ROOT` 给 `trae_pool.mjs`、`ROOT` 经 `pipe_root.data_root()` 给事件 —— 第一版按文件位置算根，在卡树里跑把 `trae-watch.jsonl` 写进了卡树 `gates/diag/`，主控看的数据根等于没落。
 ## 落地链五件合并：批集成精确匹配 / 文书引用体检 / 门禁锁三处静默 / auto 判档 fail-closed / 合并队列（E28 · T-AG482）
 - `tools/pool/landing.py` 的批集成候选改成**按卡号整词**匹配（`_digits()` / `_own_tree()`），G1 不再被 `F1`/`B1`/`D1`/`E1` 命中、E4 不再夹带 F4 的文件；同文件卡在 `make` 前置检查就被**点名**拒绝（判据 6 的「点名卡与路径」）。
 - 新增 `doc_ref_problems()` / `md_ref_resolves()` / `_ref_fix_hint()`：落地 ③ 之前扫本笔改到的 Markdown 反引号引用，死链当场点名并给修法（**这是 preflight 的第 12 条**），不再等 `check_layers` 门红了才说。
