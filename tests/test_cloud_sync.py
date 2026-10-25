@@ -300,6 +300,81 @@ def test_doc_keeps_controlled_ab_numbers() -> None:
     assert re.search(r"37\s*failed", text), "§7.1 少了云机 37 failed 那个读数"
 
 
+# ------------------------------------------------------------------ 卡 E54：给定面收紧
+def test_bootstrap_installs_dev_extras_as_the_single_source() -> None:
+    """★ 卡 E54：依赖**集合**只能来自仓里 `pyproject.toml` 的 `[dev]`，bootstrap 自己不许再当家。
+
+    云机 pass12 的 `tests/test_properties.py` 收集期 `ModuleNotFoundError: No module named
+    'hypothesis'` —— 因为 E51 把 hypothesis 加进了 dev extras，而 bootstrap 按手抄清单装包。
+    """
+    text = _bootstrap_text()
+    assert '-e "$Repo[dev]"' in text, "bootstrap 必须按仓里 pyproject 的 [dev] 装依赖"
+    assert "$pinsFile" in text, "版本钉要单独落成 constraints 文件（-c），不能再当包清单"
+    # 反向：任何把 pytest/ruff/mypy 直接当包名装的写法都不许回来
+    forbidden_forms = (
+        "pip install --quiet @Packages",
+        "pip install --quiet pytest",
+        "pip install pytest",
+    )
+    for forbidden in forbidden_forms:
+        assert forbidden not in text, f"又回到手抄清单装包了：{forbidden!r}"
+
+
+def test_run_gate_pushes_only_the_whitelisted_config() -> None:
+    """★ 卡 E54：供给面只许白名单，不许 `scp *.toml *.json` 把本机私账与私有开关推上云机。
+
+    实测污染：`test_pool_accounts.py` 两条「账本缺失要报错」在云机判不出来，
+    `test_wb_dispatch.py::test_account_auth_uses_the_profile_env_and_model` 被判「未授权模型」。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    assert 'cfg_allow=(models.whitelist.toml)' in text, "白名单要写死成数组（可读、可核）"
+    assert '"$cfg_local"/*.toml' not in text, "不许再通配推 *.toml（会把 accounts.toml 推上去）"
+    assert '"$cfg_local"/*.json' not in text, "不许再通配推 *.json"
+    # 只看**可执行行**：注释里点名是解释来龙去脉（E54 就写在注释里），不算供给面。
+    code_lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
+    code = chr(10).join(code_lines)
+    for forbidden in ("accounts.toml", "model-switches.toml"):
+        assert forbidden not in code, f"私账/私有开关不许出现在供给面（可执行行）：{forbidden}"
+    assert "fail fast" in text and "exit 5" in text, "白名单缺件必须 fail fast"
+
+
+def test_run_gate_cleans_stale_config_before_provisioning() -> None:
+    """铺配置前要先清掉上一次的旧账（否则上一趟推上去的 accounts.toml 继续污染）。"""
+    text = RUN_GATE.read_text(encoding="utf-8")
+    idx = text.index("0.4/5")
+    tail = text[idx : idx + 1200]
+    assert "Get-ChildItem" in tail and "Remove-Item" in tail, "铺之前必须先删白名单之外的文件"
+    for keep in ("projects.toml", "models.whitelist.toml"):
+        assert keep in tail, f"白名单里的 {keep} 必须保留"
+
+
+def test_run_gate_asserts_the_remote_tree_matches_the_target_commit() -> None:
+    """★ 卡 E54：远端 HEAD 必须等于本次目标提交，不等就 fail closed（退 7）。
+
+    实测：云机停在旧提交 `050fa3d`（trailer 还是 T-AG503）时，`test_wb_plan.py` 报
+    「卡 E53：已落却仍 pending」—— 拿陈旧树判新队列，结论写进 last.json 的 rev。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    assert "2.5/5" in text, "树一致性断言要是独立一步（可见的进度条）"
+    idx = text.index("2.5/5")
+    tail = text[idx : idx + 900]
+    assert 'git rev-parse HEAD' in tail, "要读远端 HEAD"
+    assert "exit 7" in tail, "不一致必须 fail closed（退 7），不许警告继续"
+    assert text.index("2.5/5") < text.index("=== 4/5"), "断言必须在跑门禁之前"
+
+
+def test_run_gate_syncs_dev_extras_before_running_gates() -> None:
+    """每趟开跑前按 extras 同步一次依赖（已满足时只花几秒；缺件会退 8 而不是给假红）。"""
+    text = RUN_GATE.read_text(encoding="utf-8")
+    assert "3.5/5" in text, "依赖同步要是独立一步"
+    idx = text.index("3.5/5")
+    tail = text[idx : idx + 900]
+    assert ".[dev]" in tail, "同步要按 pyproject 的 [dev]"
+    assert "C:/pins.txt" in tail, "版本钉来自 bootstrap 落的 C:/pins.txt"
+    assert "exit 8" in tail, "同步失败必须 fail closed（退 8）"
+    assert text.index("3.5/5") < text.index("=== 4/5"), "同步必须早于跑门禁"
+
+
 def test_run_gate_provisions_pool_config_for_walk_up() -> None:
     """仓外配置必须铺到「向上找」认得的位置（C:/infra/pool），不是只放 C:/poolcfg。
 

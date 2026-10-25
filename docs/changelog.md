@@ -1,8 +1,15 @@
-## 卡 E54 立卡（T-AG505）
-
-- 云机 pass12 的 6 failed + 1 error 拆成三条可移植性缺陷：依赖面不同源、仓外配置过渡供给、树陈旧无拦。
 - `T-AG504` `tools/pool_accounts.find_ledger()` 起点改 `TOOL_ROOT`（仓库根）、不再跟 cwd 走；`tests/conftest.py` 的宿主配置隔离清单补 `TF_POOL_CFG_DST`；`tests/test_pool_accounts.py` 夹具把仓库根钉到 tmp。
-- `T-AG503` `tools/pool_accounts.find_ledger()` 起点改 `TOOL_ROOT`（仓库根）、不再跟 cwd 走；`tests/conftest.py` 的宿主配置隔离清单补 `TF_POOL_CFG_DST`；`tests/test_pool_accounts.py` 夹具把仓库根钉到 tmp。
+## 卡 E54 云机门禁的给定面收紧（T-AG505）
+
+- 立卡：云机 pass12 的 `6 failed + 1 error` 拆成三条可移植性缺陷 —— 依赖面不同源、仓外配置过渡供给、树陈旧无拦。
+- `scripts/cloud/bootstrap.ps1`：依赖**集合**改由仓里 `pyproject.toml` 的 `[dev]` 决定，自带那份清单降级成
+  `C:/pins.txt` 版本钉；新增 `-Repo` 参数，读不到 `pyproject.toml` 就明说退回只按钉装。
+- `scripts/cloud/run_gate.sh`：`0.35/5` 供给面收成白名单（`models.whitelist.toml`，缺件 `exit 5`）、
+  `0.4/5` 铺盘前先删白名单之外的旧账、新增 `2.5/5` 断言远端 HEAD == 目标提交（`exit 7`）、
+  `3.5/5` 每趟按 extras 同步依赖（`exit 8`）。
+- `tests/test_cloud_sync.py` +5 条钉子，四条反向验证逐条验红。
+- `docs/subsystems/ci/云门禁机.md` 新增「给云机喂什么：白名单」表，装配第 4 步改口径。
+
 ## 变更
 - 新增 `tools/pool/checkin.py`：六态结论码 + 华为云 `SDK-HMAC-SHA256` 签名 + 五个平台的领取客户端，写动作只住这一个模块。
 - `tools/pool_accounts.py`：新增 `checkin` 子命令（`--all/--probe/--platform/--json/--spacing`）、留档原子写、账本健康态与额度样本回写。

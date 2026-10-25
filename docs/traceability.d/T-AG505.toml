@@ -2,11 +2,14 @@
 id = "T-AG505"
 title = "云机门禁给定面收紧：仓外配置白名单 + 依赖面单一真源 + 树陈旧 fail closed"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:scripts/cloud/bootstrap.ps1",
   "file:scripts/cloud/run_gate.sh",
   "file:tests/test_cloud_sync.py",
+  "file:docs/subsystems/ci/云门禁机.md",
+  "file:复盘/卡/卡E54-云机给定面收紧.md",
   "test:test_cloud_sync.py",
+  "text:复盘/卡/卡E54-云机给定面收紧.md",
 ]
-gaps = "- 云机 pass12 的 6 failed + 1 error 全部分类完成（见 复盘/卡/卡E54-云机给定面收紧.md §1 表）：hypothesis 未装、私账与模型开关被推上云机、远端停在旧 commit 050fa3d。待实现：bootstrap 走 `.[dev]`、run_gate 配置白名单 + 清旧账、开跑前断言远端 HEAD == 目标 commit（退 7）。"
+gaps = ""

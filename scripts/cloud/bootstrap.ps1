@@ -25,6 +25,8 @@
 #   TF_PROJECTS_TOML（项目索引）由 scripts/cloud/run_gate.sh 显式注入并在跑之前断言存在。
 
 param(
+  # 仓库位置：有 pyproject.toml 就按它的 `[dev]` extras 装（集合单一真源，卡 E54）。
+  [string]$Repo = 'C:/eng',
   [string]$IndexUrl = 'https://pypi.tuna.tsinghua.edu.cn/simple',
   [string]$PythonUrl = 'https://registry.npmmirror.com/-/binary/python/3.12.8/python-3.12.8-amd64.exe',
   [string]$GitUrl = 'https://registry.npmmirror.com/-/binary/git-for-windows/v2.47.1.windows.1/Git-2.47.1-64-bit.exe'
@@ -37,7 +39,11 @@ function Log($m) { $t = Get-Date -Format 'HH:mm:ss'; "$t $m" | Tee-Object -FileP
 Log "=== 开始装配（scripts/cloud/bootstrap.ps1）==="
 $env:PATH = "C:\Program Files\Python312;C:\Program Files\Python312\Scripts;C:\Program Files\Git\cmd;" + $env:PATH
 
-# ---- 依赖清单：★ 每条都带版本，改这里等于改判据口径（tests/test_cloud_sync.py 逐条核）----
+# ---- 依赖清单：★ 这里只负责**钉版本**（constraints），**集合来自仓里 pyproject.toml 的 [dev]** ----
+# 卡 E54 实测的教训：原来这份清单同时当「装哪些包」，于是 E51 往 dev extras 加了 hypothesis，
+# 云机没跟上 ⇒ `tests/test_properties.py` 收集期 ModuleNotFoundError。现在两侧同源：
+#   `pip install -e "<repo>[dev]" -c C:/pins.txt`（pins.txt 由下面这份清单生成）。
+# 每条都带版本，改这里等于改判据口径（tests/test_cloud_sync.py 逐条核）。
 # httpx / fsrs / psutil 三条是 2026-10-25 实测缺了必红的（见 docs/subsystems/ci/云门禁机.md §7.3）：
 #   缺 httpx ⇒ starlette.testclient 起不来（65 条收集错误）；缺 fsrs ⇒ 39 条 ModuleNotFoundError；
 #   缺 psutil ⇒ 53 条红（判据「psutil 不可用，判不了有没有进程」）。
@@ -94,7 +100,16 @@ $py = 'C:\Program Files\Python312\python.exe'
 & $py -m pip config set global.index-url $IndexUrl 2>&1 | Out-Null
 Log "安装门禁依赖（钉版本，镜像 $IndexUrl）"
 & $py -m pip install --quiet --upgrade pip 2>&1 | Tee-Object -FilePath $log -Append | Out-Null
-& $py -m pip install --quiet @Packages 2>&1 | Tee-Object -FilePath $log -Append | Out-Null
+# ① 先把这份清单落成 constraints 文件（只管版本）② 再去装仓里 extras 声明的那一整套
+$pinsFile = 'C:/pins.txt'
+($Packages -join "`r`n") + "`r`n" | Set-Content -Path $pinsFile -Encoding ASCII
+if (Test-Path (Join-Path $Repo 'pyproject.toml')) {
+  Log "安装门禁依赖：-e '$Repo' 的 [dev] extras + 版本钉 $pinsFile"
+  & $py -m pip install --quiet -e "$Repo[dev]" -c $pinsFile 2>&1 | Tee-Object -FilePath $log -Append | Out-Null
+} else {
+  Log "✗ 仓库里没有 pyproject.toml（$Repo）—— 退回只按版本钉装，并在日志里说清实话"
+  & $py -m pip install --quiet -r $pinsFile 2>&1 | Tee-Object -FilePath $log -Append | Out-Null
+}
 
 # ---------- 装完自检：三条必须**逐字**对上，对不上就响亮说出来（别让人半信半疑地开跑）----------
 $frozen = & $py -m pip freeze 2>&1

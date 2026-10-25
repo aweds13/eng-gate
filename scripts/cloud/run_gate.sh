@@ -100,22 +100,36 @@ fi
 pool_cfg_src="${TF_POOL_CFG_DIR:-C:/poolcfg}"
 pool_cfg_dst="${TF_POOL_CFG_DST:-C:/infra/pool}"
 
-echo "=== 0.35/5 把本机仓外配置推上云机（云机那份可能是旧账，卡 E49 pass9 实测）==="
+echo "=== 0.35/5 把本机仓外配置推上云机（白名单，卡 E54）==="
+# ★ 卡 E54 实测：原来这里 `scp *.toml *.json`，把本机**私有账本** accounts.toml 与
+#   **私有模型开关** model-switches.toml 一起推上云机 ⇒ 云机的判据输入被本机私有状态污染：
+#   `test_pool_accounts.py` 两条「账本缺失要报错」判不出来（DID NOT RAISE / 走成崩溃）、
+#   `test_wb_dispatch.py::test_account_auth_uses_the_profile_env_and_model` 被判「未授权模型」。
+#   ⇒ 供给面收成**白名单**：门禁判据真正需要的只有项目索引（由模板渲染）与模型白名单。
 cfg_local="${TF_POOL_CFG_SOURCE_DIR:-D:/repo/infra/pool}"
+cfg_allow=(models.whitelist.toml)
 if [ -d "$cfg_local" ]; then
   ssh $SSHOPTS -i "$KEY" "$HOST" "if not exist "$pool_cfg_src" mkdir "$pool_cfg_src"" >/dev/null 2>&1
-  if ! scp $SSHOPTS -i "$KEY" "$cfg_local"/*.toml "$cfg_local"/*.json "$HOST:$pool_cfg_src/" >/dev/null; then
-    echo "✗ 配置推不上云机（$cfg_local -> $pool_cfg_src）—— fail fast。" >&2
-    rm -rf "$TMP"
-    exit 5
-  fi
-  echo "✓ 本机配置已推上云机：$cfg_local -> $pool_cfg_src"
+  for f in "${cfg_allow[@]}"; do
+    if [ ! -f "$cfg_local/$f" ]; then
+      echo "✗ 本机缺 $cfg_local/$f —— 它是判据需要的输入（models.whitelist.toml 派生码道池条目），" >&2
+      echo "  少了它云机会判「整池消失」而不是「配置没给」。fail fast。" >&2
+      rm -rf "$TMP"
+      exit 5
+    fi
+    if ! scp $SSHOPTS -i "$KEY" "$cfg_local/$f" "$HOST:$pool_cfg_src/$f" >/dev/null; then
+      echo "✗ 配置推不上云机（$cfg_local/$f -> $pool_cfg_src）—— fail fast。" >&2
+      rm -rf "$TMP"
+      exit 5
+    fi
+  done
+  echo "✓ 白名单配置已推上云机：${cfg_allow[*]} -> $pool_cfg_src"
 else
   echo "（本机没有 $cfg_local：沿用云机上已有的 $pool_cfg_src）"
 fi
 echo "=== 0.4/5 铺仓外配置到 $pool_cfg_dst（向上找的约定）==="
 if ! ssh $SSHOPTS -i "$KEY" "$HOST" \
-    "powershell -NoProfile -Command \"if (-not (Test-Path '$pool_cfg_src')) { exit 5 } ; New-Item -ItemType Directory -Force '$pool_cfg_dst' | Out-Null ; Copy-Item (Join-Path '$pool_cfg_src' '*') '$pool_cfg_dst' -Force ; exit 0\""; then
+    "powershell -NoProfile -Command \"if (-not (Test-Path '$pool_cfg_src')) { exit 5 } ; New-Item -ItemType Directory -Force '$pool_cfg_dst' | Out-Null ; Get-ChildItem -Path '$pool_cfg_dst' -File -ErrorAction SilentlyContinue | Where-Object { @('projects.toml','projects.toml.tmpl','models.whitelist.toml') -notcontains $_.Name } | Remove-Item -Force -ErrorAction SilentlyContinue ; Copy-Item (Join-Path '$pool_cfg_src' 'models.whitelist.toml') '$pool_cfg_dst' -Force -ErrorAction SilentlyContinue ; exit 0\""; then
   echo "✗ 云机上没有配置源 $pool_cfg_src（或铺不动 $pool_cfg_dst）—— fail fast，门禁一步都没跑。" >&2
   echo "  处置：本机 scp 四个仓外配置上去（scp infra/pool/*.toml $HOST:$pool_cfg_src/），" >&2
   echo "  或用 TF_POOL_CFG_DIR 指到已在云机上的那份。见 docs/subsystems/ci/云门禁机.md 的「仓外配置」表。" >&2
@@ -229,6 +243,19 @@ if ! ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && if exist gates\last.json (
   exit 4
 fi
 echo "✓ 上一趟读数已从 $seed_dir 播种（提交里那份基线被覆盖）"
+echo "=== 2.5/5 断言云机树就是目标提交（防「陈旧树判新队列」，卡 E54）==="
+# ★ 卡 E54 实测：云机停在旧提交 050fa3d（那笔的 trailer 还是 T-AG503，后来 amend 成 T-AG504）时，
+#   `tests/test_wb_plan.py` 会报「卡 E53：已落却仍 pending」并把结论写进 last.json 的 rev ——
+#   看着像代码缺陷，其实是**树陈旧**。⇒ 开跑前 fail closed，别让旧树说话。
+remote_head="$(ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && git rev-parse HEAD" 2>/dev/null | tr -d '\r')"
+if [ "$remote_head" != "$head" ]; then
+  echo "✗ 云机 HEAD（$remote_head）≠ 目标提交（$head）—— 不许在陈旧树上跑门禁。" >&2
+  echo "  处置：确认 0/5 的 bundle 已 fetch（或删 C:/eng/gates/last.json 后重跑），别手工 checkout。" >&2
+  rm -rf "$TMP"
+  exit 7
+fi
+echo "✓ 云机 HEAD == 目标提交（${head:0:7}）"
+
 echo "=== 3/5 传补丁并应用 ==="
 scp $SSHOPTS -i "$KEY" "$TMP/$card.patch" "$HOST:C:/card-$card.patch" >/dev/null
 if [ ! -s "$TMP/$card.patch" ]; then
@@ -238,6 +265,17 @@ elif ! ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && git apply --binary C:/ca
   rm -rf "$TMP"
   exit 5
 fi
+
+echo "=== 3.5/5 同步 dev 依赖（集合来自仓里 pyproject 的 [dev]，版本钉 C:/pins.txt）==="
+# ★ 卡 E54 实测：云机缺 hypothesis（`tests/test_properties.py` 收集期 ModuleNotFoundError），
+#   因为 bootstrap 按手抄清单装包、不走 extras。⇒ 每趟开跑前按 extras 同步一次（已满足时只花几秒）。
+if ! ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && \"C:/Program Files/Python312/python.exe\" -m pip install --quiet -e \".[dev]\" -c C:/pins.txt"; then
+  echo "✗ 云机 dev 依赖同步失败 —— 不跑门禁（否则读数是「环境缺包」而不是代码结论）。" >&2
+  echo "  处置：先跑 scripts/cloud/bootstrap.ps1 生成 C:/pins.txt，再重跑本脚本。" >&2
+  rm -rf "$TMP"
+  exit 8
+fi
+echo "✓ dev 依赖已按 pyproject 的 [dev] 同步"
 
 echo "=== 4/5 云机跑全量门禁（端口段 $port；TF_PROJECTS_TOML 已注入）==="
 start=$(date +%s)
