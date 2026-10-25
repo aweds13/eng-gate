@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -156,3 +157,248 @@ def test_real_repo_is_actually_scanned() -> None:
     counts, why = cd.load_baseline(ROOT / "docs" / "doc-debt-baseline.toml")
     assert why == "", why
     assert "dead_refs" in counts and "superseded" in counts, counts
+
+# ------------------------------------------------------------ 卡 F4：决策记录（--decisions）
+def _record(
+    number: str = "0001",
+    *,
+    status: str = "Accepted",
+    supersedes: str = "",
+    superseded_by: str = "",
+    source: str = "台账 T-AG452",
+) -> str:
+    """一条结构完整的记录（默认 Accepted）。"""
+    return (
+        f"# {number} 演示决策\n"
+        "\n"
+        f"Status: {status}\n"
+        f"Supersedes: {supersedes}\n"
+        f"Superseded-by: {superseded_by}\n"
+        f"来源: {source}\n"
+        "\n"
+        "## 背景与问题\n"
+        "\n"
+        "当时没有决策记录，改主意没人知道原委。\n"
+        "\n"
+        "## 候选方案\n"
+        "\n"
+        "A 继续散在复盘里；B 单独成篇。\n"
+        "\n"
+        "## 决定\n"
+        "\n"
+        "选 B，代价是多一份文档要维护。\n"
+        "\n"
+        "## 把握程度\n"
+        "\n"
+        "high —— 微软 Well-Architected 也是这么做的。\n"
+    )
+
+
+def _adr_tree(tmp_path: Path, files: dict[str, str]) -> Path:
+    """在临时目录里铺一棵 docs/decisions 树。"""
+    directory = tmp_path / "docs" / "decisions"
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "README.md").write_text("# 决策记录\n", encoding="utf-8")
+    for name, text in files.items():
+        (directory / name).write_text(text, encoding="utf-8")
+    return tmp_path
+
+
+def _problems(tmp_path: Path) -> list[str]:
+    return cd.check(tmp_path, head=cd.NO_HEAD).problems
+
+
+# ------------------------------------------------------------------ 零件层：绿
+def test_complete_record_passes(tmp_path):
+    tree = _adr_tree(tmp_path, {"0001-first.md": _record()})
+    result = cd.check(tree, head=cd.NO_HEAD)
+    assert result.problems == [], result.problems
+    assert result.count == 1 and result.span == "0001..0001"
+
+
+def test_readme_is_not_a_record(tmp_path):
+    """README 不参与编号与模板检查（它是说明，不是决策）。"""
+    result = cd.check(_adr_tree(tmp_path, {"0001-first.md": _record()}), head=cd.NO_HEAD)
+    assert result.count == 1
+
+
+# ------------------------------------------------------------------ 零件层：红
+def test_numbering_gap_bites(tmp_path):
+    tree = _adr_tree(tmp_path, {"0001-a.md": _record("0001"), "0003-c.md": _record("0003")})
+    problems = _problems(tree)
+    assert any("连续" in p and "0002" in p for p in problems), problems
+
+
+def test_duplicate_number_bites(tmp_path):
+    tree = _adr_tree(tmp_path, {"0001-a.md": _record("0001"), "0001-b.md": _record("0001")})
+    assert any("重号" in p for p in _problems(tree)), _problems(tree)
+
+
+def test_filename_must_be_lowercase_slug(tmp_path):
+    tree = _adr_tree(tmp_path, {"0001-Bad_Slug.md": _record()})
+    assert any("文件名不合规" in p for p in _problems(tree)), _problems(tree)
+
+
+def test_illegal_status_bites(tmp_path):
+    tree = _adr_tree(tmp_path, {"0001-a.md": _record(status="Done")})
+    assert any("status 不合法" in p for p in _problems(tree)), _problems(tree)
+
+
+def test_missing_section_bites(tmp_path):
+    text = _record().replace("## 候选方案", "## 别的标题")
+    tree = _adr_tree(tmp_path, {"0001-a.md": text})
+    problems = _problems(tree)
+    assert any("缺段落 `## 候选方案`" in p for p in problems), problems
+
+
+def test_extra_section_bites(tmp_path):
+    tree = _adr_tree(tmp_path, {"0001-a.md": _record() + "\n## 后果\n\n多出来的一段。\n"})
+    assert any("多出段落" in p for p in _problems(tree)), _problems(tree)
+
+
+def test_empty_section_bites(tmp_path):
+    text = _record().replace("当时没有决策记录，改主意没人知道原委。", "")
+    tree = _adr_tree(tmp_path, {"0001-a.md": text})
+    assert any("`## 背景与问题` 是空的" in p for p in _problems(tree)), _problems(tree)
+
+
+def test_section_order_bites(tmp_path):
+    text = _record()
+    swapped = text.replace("## 背景与问题", "@@A@@").replace("## 候选方案", "## 背景与问题")
+    swapped = swapped.replace("@@A@@", "## 候选方案")
+    tree = _adr_tree(tmp_path, {"0001-a.md": swapped})
+    assert any("段落顺序不对" in p for p in _problems(tree)), _problems(tree)
+
+
+def test_confidence_needs_level_and_reason(tmp_path):
+    text = _record().replace("high —— 微软 Well-Architected 也是这么做的。", "挺有把握的。")
+    tree = _adr_tree(tmp_path, {"0001-a.md": text})
+    assert any("把握程度" in p and "high" in p for p in _problems(tree)), _problems(tree)
+
+
+def test_confidence_reason_too_short_bites(tmp_path):
+    text = _record().replace("high —— 微软 Well-Architected 也是这么做的。", "high —— 行。")
+    tree = _adr_tree(tmp_path, {"0001-a.md": text})
+    assert any("为什么" in p and "太短" in p for p in _problems(tree)), _problems(tree)
+
+
+def test_supersedes_must_be_reciprocal(tmp_path):
+    """A 说取代 0002，而 0002 没写 Superseded-by / 没改状态 ⇒ 两条红。"""
+    tree = _adr_tree(
+        tmp_path,
+        {"0002-old.md": _record("0002"), "0003-new.md": _record("0003", supersedes="0002")},
+    )
+    problems = _problems(tree)
+    assert any("`Superseded-by`" in p and "不是 0003" in p for p in problems), problems
+    assert any("status 还是 Accepted" in p for p in problems), problems
+
+
+def test_superseded_without_link_bites(tmp_path):
+    tree = _adr_tree(tmp_path, {"0001-a.md": _record(status="Superseded")})
+    assert any("却没写 `Superseded-by:`" in p for p in _problems(tree)), _problems(tree)
+
+
+def test_self_reference_bites(tmp_path):
+    tree = _adr_tree(tmp_path, {"0001-a.md": _record(supersedes="0001")})
+    assert any("指向自己" in p for p in _problems(tree)), _problems(tree)
+
+
+def test_accepted_body_must_be_frozen(tmp_path):
+    before = _record()
+    after = before.replace("选 B，代价是多一份文档要维护。", "选 A 了，改主意。")
+    tree = _adr_tree(tmp_path, {"0001-a.md": after})
+    head = {"docs/decisions/0001-a.md": before}
+    problems = cd.check(tree, head=head).problems
+    assert any("正文被改过" in p for p in problems), problems
+
+
+def test_header_beyond_two_allowed_lines_is_frozen(tmp_path):
+    before = _record()
+    after = before.replace("台账 T-AG452", "台账 T-AG999")
+    tree = _adr_tree(tmp_path, {"0001-a.md": after})
+    problems = cd.check(tree, head={"docs/decisions/0001-a.md": before}).problems
+    assert any("头信息被改过" in p for p in problems), problems
+
+
+def test_metadata_only_change_is_allowed(tmp_path):
+    """Accepted → Superseded + 双链：正文不动、头信息只动两行 ⇒ 绿。"""
+    old = _record("0001")
+    new = _record("0002", supersedes="0001")
+    flipped = _record("0001", status="Superseded", superseded_by="0002")
+    tree = _adr_tree(tmp_path, {"0001-a.md": flipped, "0002-b.md": new})
+    result = cd.check(tree, head={"docs/decisions/0001-a.md": old})
+    assert result.problems == [], result.problems
+    assert result.links == 1
+
+
+def test_status_downgrade_bites(tmp_path):
+    before = _record(status="Superseded", superseded_by="0002")
+    after = _record(status="Accepted")
+    tree = _adr_tree(
+        tmp_path, {"0001-a.md": after, "0002-b.md": _record("0002", supersedes="0001")}
+    )
+    problems = cd.check(tree, head={"docs/decisions/0001-a.md": before}).problems
+    assert any("status 倒退" in p for p in problems), problems
+
+
+def test_deleted_record_bites(tmp_path):
+    tree = _adr_tree(tmp_path, {})
+    problems = cd.check(tree, head={"docs/decisions/0001-a.md": _record()}).problems
+    assert any("不许删" in p for p in problems), problems
+
+
+def test_missing_directory_bites(tmp_path):
+    assert any("不存在" in p for p in cd.check(tmp_path).problems)
+
+
+# ------------------------------------------------------------------ 真东西：git
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        **cd.NO_WINDOW,
+    )
+
+
+def _git_repo(tmp_path: Path, files: dict[str, str]) -> Path:
+    """真起一个仓库并提交；不碰真仓库。"""
+    tree = _adr_tree(tmp_path, files)
+    assert _git(tree, "init", "-q").returncode == 0
+    assert _git(tree, "add", "-A").returncode == 0
+    commit = _git(
+        tree, "-c", "user.name=test", "-c", "user.email=test@example.invalid",
+        "commit", "-q", "-m", "seed",
+    )
+    assert commit.returncode == 0, commit.stderr
+    return tree
+
+
+def test_default_loader_reads_real_head(tmp_path):
+    """★ 命门：默认路径（不问 stub）真能读到 HEAD 里的那一版，改正文就红。"""
+    tree = _git_repo(tmp_path, {"0001-a.md": _record()})
+    assert cd.check(tree).problems == []
+
+    path = tree / "docs" / "decisions" / "0001-a.md"
+    path.write_text(_record().replace("选 B，代价是", "选 A，代价是"), encoding="utf-8")
+    problems = cd.check(tree).problems
+    assert any("正文被改过" in p for p in problems), problems
+
+
+def test_cli_exit_codes(tmp_path, capsys):
+    good = _git_repo(tmp_path / "repo", {"0001-a.md": _record()})
+    assert cd.main_decisions(["--decisions", "--root", str(good)]) == 0
+    assert "[OK ]" in capsys.readouterr().out
+
+    plain = _adr_tree(tmp_path / "plain", {"0001-a.md": _record()})
+    assert cd.main_decisions(["--decisions", "--root", str(plain)]) == 3
+    assert "[skip]" in capsys.readouterr().out
+
+
+def test_real_tree_passes():
+    """真仓库（本树）必须先过：docs/decisions 里的记录没有一条是坏的。"""
+    assert cd.check(ROOT).problems == []
+

@@ -1,3 +1,7 @@
+## 决策记录 `docs/decisions/`：只追加 + 固定五段 + 把握程度（F4 · T-AG452）
+- 新增 `docs/decisions/`：`README.md`（模板 + 什么时候该开一条）+ 回溯首批 8 条 ADR（`0001`–`0008`），回答「当时为什么这么定、当时有多大把握」。
+- `scripts/check_docs.py` 增加 `--decisions` 模式：编号连续 / 文件名小写 slug / status 合法 / supersedes 双向成对 / **Accepted 正文冻结**（比对 HEAD 与工作区）；与 F3 的死指针模式同一入口、两个子模式，互不覆盖。
+- 判据落在脚本里不在文档里：五段名与顺序、把握程度必须「级别 + 一句为什么」、头信息只允许两行。
 ## Trae 送任务通道：选择器集中 / 提交走 Enter / 并发满退 3（E27 · T-AG481）
 - `tools/trae_pool.mjs` 新增导出 `SELECTORS`（输入框 / 发送键 / 任务项 / 任务标题 / 新建任务五个实测值），改面板只改这一处。
 - `send` 的提交路径改成 `submit()`：`focus()` → `execCommand('insertText')` → Enter 键序；打完字发送键仍 `disabled` ⇒ **非零退出并说原因**，不再静默退 0。

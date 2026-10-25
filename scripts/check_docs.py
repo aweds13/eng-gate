@@ -54,6 +54,53 @@ python -X utf8 scripts/check_docs.py --json        # 机器可读
 退出码：`0` 报告完毕 / `1` 红（基线被顶破；`block` 档下还有死指针等也算）/
 `3` **没判完**（`block` 档下 skip > 0 —— 不许让"没判"冒充"通过"）。
 `--root <路径>` 换一棵树（自检拿它喂合成坏样例，**真实仓库一个字节都不写**）。
+
+## 决策记录（`--decisions`，卡 F4 / T-AG452）
+
+## 为什么有它
+
+决策散在台账、复盘正文和脑子里：改主意时没人知道原来为什么那么定，也没人知道当时
+有多大把握。ADR 的规矩是**只追加**——已 Accepted 的正文不许改，改主意就新写一条并
+双向链接。这条规矩靠人记必然失效（评审时看不出来），所以用 git 做判据：
+
+- **看得见的**：编号、文件名、五段模板、status、supersedes 成对、正文与冻结头信息是否被改。
+- **看不见的**：出处是否真实、决定对不对、候选方案是否穷尽 —— 机器判不了，不编假判据。
+
+## 四条判据（口径写死在这里，改口径先改这段）
+
+1. **编号连续**：文件名 `NNNN-slug.md`（4 位数字 + 小写字母数字连字符）；编号从 `0001`
+   起无空洞、无重号（重号会让 `Supersedes: 0003` 指向两条）。
+2. **模板固定五段**：头信息 `Status:` + `## 背景与问题` / `## 候选方案` / `## 决定` /
+   `## 把握程度`，顺序固定、每段非空、不许多出别的二级标题。`## 决定` 里的取舍由人看，
+   机器只判这段有没有内容。
+3. **status 合法**：`Proposed` / `Accepted` / `Superseded`。`Superseded` 必须带
+   `Superseded-by`，非 `Superseded` 不许带；`Supersedes` / `Superseded-by` 必须**互指**
+   （A 取代 B ⇔ B 的 `Superseded-by` 是 A），且不许自指。
+4. **只追加**：HEAD 里已经是 `Accepted` / `Superseded` 的记录——
+   - 正文（第一个二级标题之后）**一个字不许改**；
+   - 头信息里只许改 `Status` 与 `Superseded-by` 两行（标题 / 来源 / `Supersedes` 冻结）；
+   - status 不许倒退（`Accepted` 只能到 `Superseded`；`Superseded` 不许变回去）；
+   - 记录**不许删**（HEAD 有、工作区没有 ⇒ 红）。
+
+## 为什么不用「看文件时间」
+
+`mtime` 会被 checkout / 拷贝改掉，`Date:` 行是人写的。唯一可信的「原来长什么样」是
+git 里的那一版（`git show HEAD:<path>`），所以判据 4 的基准是 HEAD —— **不是**
+暂存区，也不是上一次提交（第一版足够：正文冻结是逐版比较的）。
+
+## 判不出就报 skip
+
+没有 HEAD（新仓库 / 不是 git 仓库）⇒ 判据 4 没判，打 `[skip]` 并以**退出码 3** 收场：
+不许让「没判」冒充「通过」。
+
+## 用法
+
+```
+python -X utf8 scripts/check_docs.py --decisions          # 判真仓库
+python -X utf8 scripts/check_docs.py --decisions --root <路径>   # 换一棵树（测试用）
+```
+
+退出码：`0` 通过 / `1` 不通过 / `3` 没判完（没有 HEAD）。
 """
 from __future__ import annotations
 
@@ -758,11 +805,409 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--doctor", action="store_true",
                         help="自证这道门真在跑：打印我在跑 / 扫了几个文件 / 判出几条 / 判不出几条")
     parser.add_argument("--json", action="store_true", help="输出 JSON")
+    parser.add_argument("--decisions", action="store_true",
+                        help="检查 docs/decisions/ 的决策记录（卡 F4；不做死指针/drift）")
     parser.add_argument("--root", default=None,
                         help="查哪棵树（默认 = 本脚本所在仓库根）")
     return parser.parse_args(argv)
 
 
+
+
+# --------------------------------------------------------------------------- 决策记录（卡 F4）
+# 判据 4 的基准是 git 的 HEAD；本节的函数来自卡 F4 / T-AG452 的实现，原样并入。
+#: ★ 卡 148：起子进程一律不弹窗（口径与 `tools/pipeline_view.py` 同款）。
+NO_WINDOW: dict[str, int] = (
+    {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
+)
+
+#: 记录住哪（相对仓库根）。
+DECISIONS_DIR = "docs/decisions"
+
+#: 文件名：4 位编号 + 连字符 + slug（小写字母 / 数字 / 连字符）。
+NAME_RE = re.compile(r"^([0-9]{4})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$")
+
+#: 合法 status（大小写不敏感读入，统一成这个写法）。
+STATUSES = ("Proposed", "Accepted", "Superseded")
+
+#: 四段标题：顺序固定，一段不许少、不许空。
+REQUIRED_SECTIONS = ("背景与问题", "候选方案", "决定", "把握程度")
+
+H2_RE = re.compile(r"(?m)^##[ \t]+(.+?)[ \t]*$")
+FIELD_RE = re.compile(r"(?mi)^[ \t]*(status|supersedes|superseded-by)[ \t]*:[ \t]*(.*?)[ \t]*$")
+CONFIDENCE_RE = re.compile(
+    r"(?m)^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?(high|medium|low)(?:\*\*)?[ \t]*"
+    r"(?:——|—|–|-|:|：)[ \t]*(\S.*)$",
+    re.I,
+)
+
+#: `check(head=...)` 的哨兵：明确表示「这棵树没有 HEAD 可比」。
+NO_HEAD = object()
+
+
+@dataclass(frozen=True)
+class Record:
+    """一条解析出来的决策记录。"""
+
+    number: int
+    status: str
+    supersedes: str | None
+    superseded_by: str | None
+    frozen_header: str
+    body: str
+
+
+@dataclass
+class Result:
+    """一次检查的读数。"""
+
+    problems: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    count: int = 0
+    span: str = "-"
+    links: int = 0
+    incomplete: bool = False
+
+
+# --------------------------------------------------------------------------- 解析
+def split_header(text: str) -> tuple[str, str]:
+    """切成（头信息, 正文）；正文从第一个二级标题那一行起。"""
+    normal = text.replace("\r\n", "\n")
+    for index, line in enumerate(normal.split("\n")):
+        if re.match(r"^##[ \t]", line):
+            head = "\n".join(normal.split("\n")[:index])
+            body = "\n".join(normal.split("\n")[index:])
+            return head, body
+    return normal, ""
+
+
+def _frozen_header(header: str) -> str:
+    """冻结的头信息：去掉唯一允许改的两行（`Status` / `Superseded-by`）。"""
+    keep = [
+        line.rstrip()
+        for line in header.split("\n")
+        if not re.match(r"^[ \t]*(status|superseded-by)[ \t]*:", line, re.I)
+    ]
+    return "\n".join(keep).strip()
+
+
+def _parse_ref(raw: str) -> tuple[str | None, str | None]:
+    """`Supersedes: 0003` → `0003`；留空 → `(None, None)`；格式不对 → `(None, 说明)`。"""
+    value = raw.strip()
+    if not value:
+        return None, None
+    match = re.match(r"^([0-9]{4})(?:[-._ ]|$)", value)
+    if not match:
+        return None, f"要写 4 位编号（拿到的是 {value!r}）"
+    return match.group(1), None
+
+
+def _sections(body: str) -> list[tuple[str, str]]:
+    """`[(标题, 正文), …]`；正文到下一个二级标题为止。"""
+    hits = list(H2_RE.finditer(body))
+    out: list[tuple[str, str]] = []
+    for index, hit in enumerate(hits):
+        start = body.find("\n", hit.end())
+        start = len(body) if start < 0 else start + 1
+        end = hits[index + 1].start() if index + 1 < len(hits) else len(body)
+        out.append((hit.group(1), body[start:end].strip()))
+    return out
+
+
+def parse_record(rel: str, text: str, number: int) -> tuple[Record | None, list[str]]:
+    """一条记录的结构判据；返回（记录, 问题）。结构坏到没法建记录时记录为 None。"""
+    problems: list[str] = []
+    head, body = split_header(text)
+    fields: dict[str, str] = {}
+    for match in FIELD_RE.finditer(head):
+        key = match.group(1).lower()
+        if key in fields:
+            problems.append(f"{rel}: 头信息 `{match.group(1)}` 写了不止一次")
+        fields[key] = match.group(2)
+
+    raw_status = fields.get("status", "").strip()
+    status = raw_status[:1].upper() + raw_status[1:].lower() if raw_status else ""
+    if not raw_status:
+        problems.append(f"{rel}: 缺 `Status:`（Proposed / Accepted / Superseded）")
+    elif status not in STATUSES:
+        problems.append(f"{rel}: status 不合法（{raw_status!r}；只许 {' / '.join(STATUSES)}）")
+
+    supersedes, bad_up = _parse_ref(fields.get("supersedes", ""))
+    superseded_by, bad_down = _parse_ref(fields.get("superseded-by", ""))
+    for bad in (bad_up, bad_down):
+        if bad:
+            problems.append(f"{rel}: Supersedes / Superseded-by {bad}")
+
+    problems += _template_problems(rel, body)
+
+    if not raw_status or status not in STATUSES:
+        return None, problems
+    return (
+        Record(
+            number=number,
+            status=status,
+            supersedes=supersedes,
+            superseded_by=superseded_by,
+            frozen_header=_frozen_header(head),
+            body=body.replace("\r\n", "\n").rstrip(),
+        ),
+        problems,
+    )
+
+
+def _template_problems(rel: str, body: str) -> list[str]:
+    """五段模板：齐全 / 顺序 / 不许多 / 不许空 / 把握程度带一句为什么。"""
+    problems: list[str] = []
+    sections = _sections(body)
+    names = [name for name, _ in sections]
+
+    for name in REQUIRED_SECTIONS:
+        if name not in names:
+            problems.append(f"{rel}: 缺段落 `## {name}`")
+    for name in names:
+        if name not in REQUIRED_SECTIONS:
+            problems.append(
+                f"{rel}: 多出段落 `## {name}`"
+                f"（模板只有四段：{' / '.join(REQUIRED_SECTIONS)}）"
+            )
+    for name in sorted({name for name in names if names.count(name) > 1}):
+        problems.append(f"{rel}: 段落 `## {name}` 写了两遍")
+
+    present = [name for name in names if name in REQUIRED_SECTIONS]
+    expected = [name for name in REQUIRED_SECTIONS if name in present]
+    if present != expected:
+        problems.append(f"{rel}: 段落顺序不对（要 {' → '.join(REQUIRED_SECTIONS)}）")
+
+    for name, content in sections:
+        if name in REQUIRED_SECTIONS and not content:
+            problems.append(f"{rel}: 段落 `## {name}` 是空的")
+
+    confidence = dict(sections).get("把握程度", "")
+    matches = CONFIDENCE_RE.findall(confidence)
+    if "把握程度" in names and not matches:
+        problems.append(
+            f"{rel}: `## 把握程度` 要以 high / medium / low 开头并跟一句为什么"
+            "（例：medium —— 只在单机验过）"
+        )
+    elif matches and len(matches[0][1].strip()) < 4:
+        problems.append(f"{rel}: `## 把握程度` 的「为什么」太短（至少几个字）")
+    return problems
+
+
+# --------------------------------------------------------------------------- git
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """跑一条 git；★ 带 NO_WINDOW，重定向走了就不会闪窗。"""
+    return subprocess.run(
+        ["git", "-C", str(root), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        **NO_WINDOW,
+    )
+
+
+def _has_head(root: Path) -> bool:
+    return _git(root, "rev-parse", "--verify", "HEAD").returncode == 0
+
+
+def _head_texts(root: Path) -> dict[str, str]:
+    """HEAD 里 `docs/decisions/` 下每份文件的原文（相对路径 → 文本）。"""
+    listing = _git(root, "ls-tree", "-r", "--name-only", "HEAD", "--", DECISIONS_DIR + "/")
+    if listing.returncode != 0:
+        return {}
+    out: dict[str, str] = {}
+    for name in (line.strip() for line in listing.stdout.splitlines()):
+        if not name or not NAME_RE.match(name.rsplit("/", 1)[-1]):
+            continue
+        shown = _git(root, "show", f"HEAD:{name}")
+        if shown.returncode == 0:
+            out[name] = shown.stdout
+    return out
+
+
+# --------------------------------------------------------------------------- 检查
+def _load(directory: Path, res: Result) -> dict[str, Record]:
+    """扫目录，返回（相对路径 → 记录）；结构问题直接记进 res。"""
+    records: dict[str, Record] = {}
+    for path in sorted(directory.iterdir()):
+        if not path.is_file() or path.suffix != ".md" or path.name == "README.md":
+            continue
+        rel = f"{DECISIONS_DIR}/{path.name}"
+        match = NAME_RE.match(path.name)
+        if not match:
+            res.problems.append(
+                f"{rel}: 文件名不合规（要 0001-小写slug.md，slug 只用小写字母、数字、连字符）"
+            )
+            continue
+        record, problems = parse_record(rel, path.read_text(encoding="utf-8"), int(match.group(1)))
+        res.problems += problems
+        if record is not None:
+            records[rel] = record
+    return records
+
+
+def _numbering(records: dict[str, Record], res: Result) -> None:
+    numbers = sorted(record.number for record in records.values())
+    res.span = f"{numbers[0]:04d}..{numbers[-1]:04d}" if numbers else "-"
+    if not numbers:
+        return
+    expected = list(range(1, len(numbers) + 1))
+    if numbers == expected:
+        return
+    missing = sorted(set(expected) - set(numbers))
+    dupes = sorted({number for number in numbers if numbers.count(number) > 1})
+    detail = "编号必须从 0001 起连续"
+    if missing:
+        detail += "；缺 " + "、".join(f"{number:04d}" for number in missing)
+    if dupes:
+        detail += "；重号 " + "、".join(f"{number:04d}" for number in dupes)
+    res.problems.append(f"{DECISIONS_DIR}/: {detail}")
+
+
+def _status_links(records: dict[str, Record], res: Result) -> None:
+    by_number = {record.number: record for record in records.values()}
+    for rel, record in records.items():
+        own = f"{record.number:04d}"
+        for label, ref in (("Supersedes", record.supersedes),
+                           ("Superseded-by", record.superseded_by)):
+            if ref == own:
+                res.problems.append(f"{rel}: {label} 指向自己")
+
+        if record.status == "Superseded" and not record.superseded_by:
+            res.problems.append(f"{rel}: status 是 Superseded，却没写 `Superseded-by:`")
+        if record.status != "Superseded" and record.superseded_by:
+            res.problems.append(
+                f"{rel}: 写了 `Superseded-by:` 却没把 status 改成 Superseded"
+                f"（现在是 {record.status}）"
+            )
+
+        if record.supersedes:
+            other = by_number.get(int(record.supersedes))
+            if other is None:
+                res.problems.append(f"{rel}: Supersedes 指向不存在的 {record.supersedes}")
+            else:
+                res.links += 1
+                if other.superseded_by != own:
+                    res.problems.append(
+                        f"{rel}: 取代了 {record.supersedes}，但它的 `Superseded-by` "
+                        f"是 {other.superseded_by or '（空）'}，不是 {own}"
+                    )
+                if other.status != "Superseded":
+                    res.problems.append(
+                        f"{rel}: 取代了 {record.supersedes}，但它的 status 还是 {other.status}"
+                    )
+        if record.superseded_by:
+            other = by_number.get(int(record.superseded_by))
+            if other is None:
+                res.problems.append(f"{rel}: Superseded-by 指向不存在的 {record.superseded_by}")
+            elif other.supersedes != own:
+                res.problems.append(
+                    f"{rel}: Superseded-by 是 {record.superseded_by}，但它的 `Supersedes` "
+                    f"是 {other.supersedes or '（空）'}，不是 {own}"
+                )
+
+
+def _append_only(records: dict[str, Record], head: dict[str, str], res: Result) -> None:
+    """HEAD 里已 Accepted / Superseded 的记录：正文与冻结头信息不许改、不许删、不许倒退。"""
+    head_records: dict[str, Record] = {}
+    for rel, text in head.items():
+        match = NAME_RE.match(rel.rsplit("/", 1)[-1])
+        if not match:
+            continue
+        record, _ = parse_record(rel, text, int(match.group(1)))
+        if record is not None:
+            head_records[rel] = record
+
+    for rel, before in head_records.items():
+        after = records.get(rel)
+        if after is None:
+            res.problems.append(f"{rel}: HEAD 里已有、工作区不见了 —— 决策记录不许删")
+            continue
+        if before.status not in ("Accepted", "Superseded"):
+            continue
+        if after.body != before.body:
+            res.problems.append(
+                f"{rel}: 正文被改过（HEAD 里已是 {before.status}）—— 改主意要新写一条并双向链接"
+            )
+        if after.frozen_header != before.frozen_header:
+            res.problems.append(
+                f"{rel}: 头信息被改过（只许改 `Status` 与 `Superseded-by` 两行）"
+            )
+        allowed = {"Accepted": ("Accepted", "Superseded"), "Superseded": ("Superseded",)}
+        if after.status not in allowed[before.status]:
+            res.problems.append(
+                f"{rel}: status 倒退了（HEAD={before.status} → 现在={after.status}）"
+            )
+
+
+def check(root: Path, head: dict[str, str] | object | None = None) -> Result:
+    """检查一棵树；`head` 不给 = 问 git，`NO_HEAD` = 当作没有 HEAD，dict = 测试注入。"""
+    res = Result()
+    directory = root / DECISIONS_DIR
+    if not directory.is_dir():
+        res.problems.append(f"{DECISIONS_DIR}/ 不存在 —— 决策记录没有家")
+        return res
+
+    records = _load(directory, res)
+    res.count = len(records)
+    _numbering(records, res)
+    _status_links(records, res)
+
+    if head is None:
+        if not _has_head(root):
+            res.notes.append("只追加：没有 HEAD（新仓库 / 不是 git 仓库）—— 这一条没判")
+            res.incomplete = True
+            return res
+        head = _head_texts(root)
+    if head is NO_HEAD:
+        res.notes.append("只追加：明确跳过（调用方说这棵树没有 HEAD）")
+        res.incomplete = True
+        return res
+    _append_only(records, head, res)
+    return res
+def build_decisions_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="check_docs.py",
+        description="文档门禁：决策记录（docs/decisions）的只追加与固定五段",
+    )
+    parser.add_argument(
+        "--decisions", action="store_true", help="检查决策记录（本卡唯一模式）",
+    )
+    parser.add_argument(
+        "--root", default=None, help="换一棵树（测试用；默认 = 本脚本所在仓库根）",
+    )
+    return parser
+
+
+def main_decisions(argv: list[str] | None = None) -> int:
+    parser = build_decisions_parser()
+    args = parser.parse_args(argv)
+    if not args.decisions:
+        parser.print_help()
+        return 2
+    root = Path(args.root).resolve() if args.root else ROOT
+    res = check(root)
+
+    print(
+        f"[info] 决策记录：扫到 {res.count} 条（编号 {res.span}），"
+        f"supersedes 链 {res.links} 对"
+    )
+    for note in res.notes:
+        print(f"[skip] {note}")
+    for problem in res.problems:
+        print(f"[FAIL] {problem}")
+    if res.problems:
+        print(f"[FAIL] 共 {len(res.problems)} 处不通过")
+        return 1
+    if res.incomplete:
+        print("[WARN] 有判据没判完（见上面的 skip）—— 这不算通过")
+        return 3
+    print("[OK ] 决策记录检查通过")
+    return 0
 if __name__ == "__main__":
     args = parse_args()
+    if args.decisions:
+        sys.exit(main_decisions(["--decisions", *(["--root", args.root] if args.root else [])]))
     sys.exit(main(args.root, args.mode, args.doctor, args.json))

@@ -8295,16 +8295,25 @@ gaps = "- **默认 report，不拦提交。** 第一版只报告；等欠账基�
 
 [entries."T-AG452"]
 id = "T-AG452"
-title = "卡 F4 —— 决策记录：`docs/decisions/NNNN-*.md`（append-only + confidence）"
+title = "决策记录 docs/decisions（append-only + 把握程度）（T-AG452）"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡F4-决策记录.md",
-  "file:docs/workbacklog.toml",
   "file:docs/research/文档治理-best-practice-调研.md",
+  "file:docs/decisions/README.md",
+  "file:docs/decisions/0001-official-search-api.md",
+  "file:docs/decisions/0002-mcp-extension-slot.md",
+  "file:docs/decisions/0003-domain-red-line.md",
+  "file:docs/decisions/0004-seal-by-commit-not-length.md",
+  "file:docs/decisions/0005-tool-root-vs-data-root.md",
+  "file:docs/decisions/0006-required-gates-by-domain.md",
+  "file:docs/decisions/0007-card-belongs-to-session.md",
+  "file:docs/decisions/0008-no-project-docs-in-retro.md",
+  "file:scripts/check_docs.py",
+  "file:tests/test_check_docs.py",
 ]
-gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地那一笔再翻 done；
-外部依据见 docs/research/文档治理-best-practice-调研.md 的 Q5–Q12。"""
+gaps = "- **只追加靠 git 比正文**：判「Accepted 正文被改过」是 `HEAD` 与工作区两份文本比对，**改了就红**；但「改名 / 搬目录」会让旧编号消失，此时只能靠人判，见 `scripts/check_docs.py` 的 `_append_only`。- **回溯那 8 条里有些查不到正式比较**：口语编号 D12 / D16 / C14 在仓里只有 `复盘/卡/卡D6-联网搜索与引用.md` 一处正文痕迹，没有台账卡号；按规格写「当时没有正式比较过」，**没有编造候选方案**，见 `docs/decisions/0001-official-search-api.md`。- **F1 的搬迁没实际执行**：`tools/migrate_docs.py` 与 `docs/migration-map.json` 在，但 `docs/cards/` 还不存在、台账 `spec=` 仍指 `复盘/卡/`，ADR `0008` 如实记了这个边界。- **`--decisions` 不查死指针**：它只判决策记录的结构与只追加；死指针 / drift 仍归 F3 那个模式，两个模式必须分别跑，见 `scripts/check_docs.py` 的 `parse_args()`。"
 
 [entries."T-AG453"]
 id = "T-AG453"
