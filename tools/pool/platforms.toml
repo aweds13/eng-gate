@@ -1,0 +1,192 @@
+# 平台能力表（卡 E45 / T-AG496）
+#
+# 用途：`tools/pool_accounts.py` 读这张表决定「这个平台能不能探、怎么探、探哪个端点」。
+# 铁律：
+#   * 这里**只放端点、流程、坑与来源**，绝不放任何凭据、cookie、token；
+#   * `source` 必须写清「哪份参考实现、哪个文件」，或「本机实测」；
+#   * 未真机验证过的平台把 `verified = false`，探测结论只能是 `uncertain`/`not-supported`，
+#     不许伪造 `claimed`（那是 E48 的事）。
+#
+# 凭据来自环境变量，名字写在各段 `token_env`（多个用 / 分隔，取第一个非空的）。
+# 账本只存「位置指针」，不存明文 —— 见 复盘/卡/卡E45-账号账本与只读探测.md §4。
+
+[meta]
+schema = 1
+updated_at = "2026-10-25"
+note = "端点与坑来自 gates/diag/repos/ref/ 的五个参考仓存档；本机只有 codearts / codebuddy 有真号。"
+
+# ---------------------------------------------------------------- codearts（华为云码道）
+
+[platform.codearts]
+label = "华为云 CodeArts（码道）"
+supported = "both"
+auth_kind = "sdk-hmac-sha256"
+probe = "unsupported"
+verified = true
+base_urls = ["https://snap-access.cn-north-4.myhuaweicloud.com"]
+token_env = "TF_CODEARTS_AK/TF_CODEARTS_SK/TF_CODEARTS_SECURITY_TOKEN"
+source = "github:anye-99/dsh-codearts-auth/src/codearts-credits.ts:20-60"
+local_archive = "gates/diag/repos/ref/dsh-codearts-auth/src_codearts-credits.ts"
+claim_flow = [
+  "GET  {base}/snap-manager/v1/statistics/plugin  —— 先判 package.is_credit_package，Token 计费账户不在活动内",
+  "GET  {base}/v1/ops/delivery?channel=IDE  —— 活动列表，取 claimable 的 campaignId",
+  "POST {base}/v1/ops/claim {campaignId, channel:'IDE'}",
+  "若响应 id !== null：POST {base}/v1/ops/confirm {campaignId}  —— 漏了积分停在「待确认」不入账",
+]
+quota_flow = "积分余额来自活动列表与 statistics/plugin；单位 credits"
+pitfalls = [
+  "portal BFF 走浏览器 Cookie：无会话时带不带 AK/SK 都返回 IAM 跳转 HTML（HTTP 200），故必须走 snap-access",
+  "幂等靠活动列表的 claimable/status 预检（服务端业务码与客户端 idempotencyKey 都不适用）",
+]
+
+# ---------------------------------------------------------------- workbuddy（腾讯）
+
+[platform.workbuddy]
+label = "腾讯 WorkBuddy"
+supported = "both"
+auth_kind = "bearer"
+probe = "http"
+verified = false
+base_urls = ["https://copilot.tencent.com"]
+probe_url = "{base}/v2/billing/meter/get-user-resource"
+unit = "点"
+token_env = "TF_WORKBUDDY_TOKEN"
+source = "github:a1141171521/dsh-multi-agent-gateway/lib/adapters/buddy.js:79-80,1031,1081"
+local_archive = "gates/diag/repos/ref/dsh-multi-agent-gateway/lib_adapters_buddy.js"
+claim_flow = [
+  "GET  {base}/v2/billing/meter/checkin-activity-status  —— 状态",
+  "POST {base}/v2/billing/meter/daily-checkin            —— 领取",
+]
+quota_flow = "GET {base}/v2/billing/meter/get-user-resource"
+pitfalls = [
+  "状态接口 404 ⇒ 判 not-supported（上游没这能力，不是故障）",
+  "/v2/billing/meter/checkin-status 是占位路径，别当能力",
+]
+
+# ---------------------------------------------------------------- qoder
+
+[platform.qoder]
+label = "Qoder"
+supported = "both"
+auth_kind = "bearer"
+probe = "http"
+verified = false
+base_urls = ["https://openapi.qoder.com.cn"]
+probe_url = "{base}/sash/api/v2/me/usage"
+unit = "credits"
+token_env = "TF_QODER_TOKEN"
+source = "github:a1141171521/dsh-multi-agent-gateway/lib/vendor/qoder/qoder-credits.js:11-12,128,157-158"
+local_archive = "gates/diag/repos/ref/dsh-multi-agent-gateway/lib_vendor_qoder_qoder-credits.js"
+claim_flow = [
+  "GET  {openApiBase}/sash/api/v1/me/campaigns",
+  "POST {openApiBase}/sash/api/v1/me/campaigns/{campaignId}/claim   —— 请求体是空串",
+]
+quota_flow = "GET {openApiBase}/sash/api/v2/me/usage"
+pitfalls = [
+  "活动每日 10:00（UTC+8）刷新，边界前探会得到「还没开始」",
+  "领取成功后列表仍非空 ⇒ 不能拿「列表空」判已领",
+]
+
+# ---------------------------------------------------------------- trae
+
+[platform.trae]
+label = "Trae"
+supported = "both"
+auth_kind = "cookie"
+probe = "http"
+verified = false
+base_urls = ["https://api.trae.cn"]
+probe_url = "{base}/api/v2/pay/ide_user_ent_usage"
+unit = "credits"
+token_env = "TF_TRAE_TOKEN"
+source = "github:a1141171521/dsh-multi-agent-gateway/lib/vendor/trae/trae-credits.js:355,383"
+local_archive = "gates/diag/repos/ref/dsh-multi-agent-gateway/lib_vendor_trae_trae-credits.js"
+claim_flow = [
+  "GET  {ug}/trae/api/v2/ug/checkin_credits/status",
+  "POST {ug}/trae/api/v2/ug/checkin_credits/claim",
+]
+quota_flow = "GET {ug}/trae/api/v2/pay/ide_user_ent_usage（单位 credits）；活动 {ug}/trae/api/v2/ug/activity/info"
+pitfalls = ["上游声明为流式客户端入口，非浏览器 UA 可能被拒；本机未真机验证"]
+
+# ---------------------------------------------------------------- minimax
+
+[platform.minimax]
+label = "MiniMax Code"
+supported = "both"
+auth_kind = "bearer"
+probe = "http"
+verified = false
+base_urls = ["https://api.minimax.chat"]
+probe_url = "{base}/minimax-cloud/api/v1/credit/details"
+unit = "积分"
+token_env = "TF_MINIMAX_TOKEN"
+source = "github:anye-99/dsh-codearts-auth/src/minimax-credits.ts:1-40"
+local_archive = "gates/diag/repos/ref/dsh-codearts-auth/src_minimax-credits.ts"
+claim_flow = [
+  "GET  {host}/minimax-cloud/api/v1/signin/status?timezone_id=<IANA>",
+  "POST {host}/minimax-cloud/api/v1/signin/claim?timezone_id=<IANA>   —— body {}",
+]
+quota_flow = "GET {host}/minimax-cloud/api/v1/credit/details"
+pitfalls = [
+  "timezone_id 是必填 query：放请求头无效、缺了报 invalid timezone_id、非法时区名也报错",
+  "业务码在 base_resp.status_code，且 invalid timezone_id 也是 HTTP 200 ⇒ 只看 HTTP 状态会误判成功",
+  "points 是总数、bonus_points 是其中「额外」部分，不得相加（会虚高一倍）",
+  "「今日已领」判据是 is_today && status === 3，不能用「没有 Claimable」反推",
+]
+
+# ---------------------------------------------------------------- lobsterai
+
+[platform.lobsterai]
+label = "LobsterAI"
+supported = "both"
+auth_kind = "bearer"
+probe = "manual"
+verified = false
+base_urls = []
+token_env = "TF_LOBSTERAI_TOKEN"
+source = "github:anye-99/dsh-codearts-auth/src/lobsterai-credits.ts:1-30"
+local_archive = "gates/diag/repos/ref/dsh-codearts-auth/src_lobsterai-credits.ts"
+claim_flow = [
+  "GET  {base}/api/client-activities/slot?…",
+  "GET  {base}/api/client-activities/{activityCode}/context?…",
+  "POST {base}/api/client-activities/{activityCode}/actions/check_in",
+]
+quota_flow = "GET {base}/api/user/profile-summary"
+pitfalls = ["幂等靠客户端 idempotencyKey（与 codearts 的服务端预检不同）", "本机无该平台账号，base_url 也未确认"]
+
+# ---------------------------------------------------------------- opencode
+
+[platform.opencode]
+label = "OpenCode"
+supported = "quota"
+auth_kind = "none"
+probe = "manual"
+verified = true
+base_urls = []
+token_env = ""
+source = "github:a1141171521/dsh-multi-agent-gateway/README.md:100-119"
+local_archive = "gates/diag/repos/a1141171521_dsh-multi-agent-gateway.md"
+claim_flow = []
+quota_flow = "免费层零凭据即可用；过门三件事：stream:true + 请求里有 read 工具 + 规范 x-opencode-session"
+pitfalls = [
+  "上游没有签到接口（不是故障，别去猜路径）",
+  "Authorization/x-opencode-request/x-opencode-project 去掉照样过，缺了那三件事才是 403",
+]
+
+# ---------------------------------------------------------------- codebuddy（本机实测，参考仓无适配器）
+
+[platform.codebuddy]
+label = "CodeBuddy（腾讯，DSH 号池主力）"
+supported = "quota"
+auth_kind = "dir"
+probe = "manual"
+verified = true
+base_urls = []
+token_env = ""
+source = "local:infra/pool/codebuddy_accounts.py:1"
+claim_flow = []
+quota_flow = "无官方额度接口；429 表示额度或并发用尽（本机 codebuddy CLI 的判决字段是 result.is_error/subtype）"
+pitfalls = [
+  "429 曾被 wb_dispatch/wb_watch 判成「退出码=0」⇒ 假绿；判决必须读 result.is_error/subtype（卡 E41）",
+  "切换账号前必须先存快照，否则正在跑的实例会把旧号覆盖掉（infra/pool/codebuddy_accounts.py 已实现）",
+]

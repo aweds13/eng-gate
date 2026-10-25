@@ -356,6 +356,22 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
     {
+        "name": "account_status",
+        "description": ("账号账本读数（卡 E45）：有哪些号、哪个平台、额度观测值、凭据位点"
+                        "（打码）。只读仓外账本，**不探测、不联网、不动凭据**。"
+                        "账本本体在 D:/repo/infra/pool/accounts.toml。"),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "platform": {"type": "string", "description": "只看某个平台（如 codearts）"},
+                "id": {"type": "string", "description": "只看某个账号 id"},
+            },
+            "required": [],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
         "name": "workbench_board",
         "description": ("工作台一份读数（卡 213）：卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树六块"
                         "收成一份（只读，走 pipeline_view.py --json，不重写判据）。"
@@ -419,7 +435,7 @@ TASK_TOOL_SPECS: list[dict[str, Any]] = [
 
 
 def tool_list() -> list[dict[str, Any]]:
-    """十一个只读工具（八个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补四个写工具。"""
+    """十二个只读工具（九个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补四个写工具。"""
     specs = [*TOOL_SPECS, *TASK_TOOL_SPECS]
     if write_enabled():
         specs += [*WRITE_TOOL_SPECS, *TASK_WRITE_TOOL_SPECS]
@@ -865,6 +881,61 @@ def tool_quota_status(arguments: dict[str, Any], root: Path = ROOT
     st = pool_quota.status(card=card, model=model, now=now, root=root)
     text = pool_quota.render(st)
     return _result(text, st, is_error=False)
+
+
+# ============================================================ 工具 7.5：account_status（卡 E45）
+
+
+def tool_account_status(arguments: dict[str, Any], root: Path = ROOT
+                       ) -> tuple[str, dict[str, Any], bool]:
+    """账号账本读数（卡 E45）—— **只读账本，不探测、不联网、不动凭据**。
+
+    ★ 为什么不在这里顺手探一下额度：探测要发网络请求、要用凭据、会被 429 咬；
+      「看一眼有哪些号」不该有副作用。真探测是 `tools/pool_accounts.py probe`（人手动跑）。
+    """
+    import pool_accounts  # noqa: PLC0415 —— 同一个 tools/ 目录
+
+    platform = str(arguments.get("platform") or "").strip() or None
+    wanted = str(arguments.get("id") or "").strip() or None
+
+    ledger = None
+    try:
+        ledger = pool_accounts.find_ledger()
+    except pool_accounts.LedgerError:
+        for base in (root, *root.parents):
+            cand = base / "infra" / "pool" / "accounts.toml"
+            if cand.is_file():
+                ledger = cand.resolve()
+                break
+    if ledger is None:
+        text = ("没有：从当前目录与仓库根向上都没找到 infra/pool/accounts.toml"
+                "（账本在仓外，可用 TF_ACCOUNTS_TOML 指定；建账本见卡 E45 的 add 动作）。")
+        return _result(text, {"found": False, "ledger": None}, is_error=True)
+
+    try:
+        data = pool_accounts.load_ledger(ledger)
+    except pool_accounts.LedgerError as exc:
+        return _result(f"账本读不了：{exc}", {"found": False, "ledger": str(ledger)}, is_error=True)
+
+    rows = pool_accounts.list_rows(data, platform, False)
+    if wanted:
+        rows = [r for r in rows if r["id"] == wanted]
+        if not rows:
+            return _result(f"账本 {ledger.as_posix()} 里没有账号 {wanted!r}",
+                           {"found": True, "ledger": str(ledger), "accounts": []}, is_error=True)
+
+    lines = [f"账号账本（account_status）—— 读 {ledger.as_posix()}（★ 仓外文件，不进 git）"]
+    for row in rows:
+        models = "、".join(row["models"]) if row["models"] else "（未批准任何模型 ⇒ 不许派活）"
+        lines.append(
+            f"- {row['id']} · {row['platform']} · {row['state']}"
+            f" · 额度 {row['quota']} · 批准 {models}"
+        )
+    if not rows:
+        lines.append("（这个筛选条件下一个号都没有）")
+    lines.append("只读读数，不探测；要真探额度请人手动跑 tools/pool_accounts.py probe。")
+    return _result("\n".join(lines), {"found": True, "ledger": str(ledger), "accounts": rows},
+                   is_error=False)
 
 
 # ================================================================ 工具 8：workbench_board（卡 213）
@@ -1652,6 +1723,7 @@ _HANDLERS: dict[str, Any] = {
     "lock_status": tool_lock_status,
     "pool_models": tool_pool_models,
     "quota_status": tool_quota_status,
+    "account_status": tool_account_status,
     "workbench_board": tool_workbench_board,
     "pool_dispatch": tool_pool_dispatch,
     "pool_cancel": tool_pool_cancel,
@@ -1702,7 +1774,7 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
             "外包号池：默认是**只读**面 —— pool_plan / job_list / job_status / job_result / "
             "lock_status / pool_models / quota_status / workbench_board，加任务面的 "
             "task_list / task_status / task_pool，"
-            "十一个都只读（不写文件、不派活、不抢锁、不要 env）。"
+            "十二个都只读（不写文件、不派活、不抢锁、不要 env）。"
             "quota_status（卡 201）按「记录时间 vs 现实时间」判额度四态 —— "
             "限流中 / 已过期，需重新探测 / 余额耗尽 / 未记录，不猜、不探测。"
             "workbench_board（卡 213）把 pipeline_view 的一份读数（卡 / 门禁 / 判决 / 租约 / "

@@ -121,11 +121,12 @@ def test_relative_git_common_dir_resolves_against_git_cwd(
     assert not os.path.samefile(got, elsewhere)     # 老代码会落到进程 cwd（这条就红）
 
 
-#: 号池 MCP 的十一个只读 + 四个写工具名（写工具要服务端 `POOL_MCP_WRITE=1` 才列）。
+#: 号池 MCP 的十二个只读 + 四个写工具名（写工具要服务端 `POOL_MCP_WRITE=1` 才列）。
 POOL_TOOL_NAMES = [
     "pool_plan", "job_list", "job_status", "job_result", "lock_status", "pool_models",
     # ★ 卡 201（T-G303）：第 10 个只读工具 —— 额度状态按钟表算
     "quota_status",
+    "account_status",  # ★ 卡 E45（T-AG496）：账号账本（不探测、不联网）
     # ★ 卡 213（T-G325）：第 11 个只读工具 —— 工作台读数（调 pipeline_view）
     "workbench_board",
     "task_list", "task_status", "task_pool",

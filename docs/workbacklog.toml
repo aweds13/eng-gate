@@ -4029,7 +4029,7 @@ spec = "复盘/卡/卡E45-账号账本与只读探测.md"
 files = ["tools/pool/platforms.toml", "tools/pool_accounts.py", "tests/test_pool_accounts.py", "tools/pool_mcp.py"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E48"

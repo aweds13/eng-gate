@@ -6,7 +6,7 @@ r"""号池 MCP **写面**（`tools/pool_mcp.py` 的 `pool_dispatch` / `pool_canc
 | 判据 | 判什么 |
 |---|---|
 | ① 授权 | 没 `POOL_MCP_WRITE=1` 只列 11 个；写调用还要 `arguments.confirm == 卡号` |
-| ② 清单形状 | 有 env 时 15 个；十一个 `readOnlyHint` 仍 true；写工具的 `annotations` |
+| ② 清单形状 | 有 env 时 16 个；十二个 `readOnlyHint` 仍 true；写工具的 `annotations` |
 | ③ 干跑四咬 | 树冲突 / 域相交 / 日志已存在 / 锁在跑 → **不派活** + 逐条原因 |
 | ④ 真派活用桩 | argv 逐字（有 `--detach --execute --cwd`；无 `--force/--allow` 等）+ 先占后起 |
 | ⑤ 回滚 | 起不来 ⇒ 租约被释放（`list_reservations` 验） |
@@ -41,6 +41,7 @@ READ_TOOL_NAMES = [
     "pool_plan", "job_list", "job_status", "job_result", "lock_status", "pool_models",
     # ★ 卡 201（T-G303）：第 10 个只读工具 —— 额度状态按钟表算
     "quota_status",
+    "account_status",  # ★ 卡 E45（T-AG496）：账号账本，不探测、不联网
     # ★ 卡 213（T-G325）：第 11 个只读工具 —— 工作台读数（调 pipeline_view）
     "workbench_board",
     "task_list", "task_status", "task_pool",
@@ -129,7 +130,7 @@ def _dispatch_args(**over: Any) -> dict[str, Any]:
 
 
 def test_write_tools_are_hidden_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """没 `POOL_MCP_WRITE=1` → 只列十一个只读工具，写工具当"没有这个工具"。"""
+    """没 `POOL_MCP_WRITE=1` → 只列十二个只读工具，写工具当"没有这个工具"。"""
     monkeypatch.delenv("POOL_MCP_WRITE", raising=False)
     names = [t["name"] for t in pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]]
     assert names == READ_TOOL_NAMES
@@ -138,7 +139,7 @@ def test_write_tools_are_hidden_without_env(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_write_tools_listed_and_shaped_with_env(write_on: None) -> None:
-    """有 env → 15 个；十一个 `readOnlyHint: true`；两个号池写工具的 annotations 逐字。"""
+    """有 env → 16 个；十二个 `readOnlyHint: true`；两个号池写工具的 annotations 逐字。"""
     tools = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
     assert [t["name"] for t in tools] == [*READ_TOOL_NAMES, *WRITE_TOOL_NAMES]
     by_name = {t["name"]: t for t in tools}

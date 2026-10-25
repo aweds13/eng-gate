@@ -1,3 +1,8 @@
+## 账号账本与只读探测：能力表 + 仓外账本 + discover/probe（E45 · T-AG496）
+- 新增 `tools/pool/platforms.toml`（进 git、可审、零凭据）：八个平台各一节，字段 `label/supported/auth_kind/probe/verified/base_urls/token_env/probe_url/unit/source/claim_flow/quota_flow/pitfalls`；`source` 一律写成 `github:<owner>/<repo>/<path>:<lines>` 或 `local:<path>:<line>`，指不到的存档路径另放 `local_archive`（`gates/diag/repos/` 是 gitignored，不能当唯一出处）。
+- 新增 `tools/pool_accounts.py`（进 git、40 条钉子）：四个只读子命令 `list / show / discover / probe`；账本路径解析与 `tools/pool/projects.py` 同口径（`TF_ACCOUNTS_TOML` → 逐级向上找 `infra/pool/accounts.toml` → 找不到就退 2 并打印找过的目录，不猜）。
+- 新增 MCP 只读工具 `account_status`（`tools/pool_mcp.py`）：`platform?`/`id?`，只读账本、**不探测、不联网、不动凭据**；只读面从十一个变十二个（`tests/test_pool_mcp*.py` 的清单与计数钉子同步更新，没放松判据）。
+- 仓外账本 `infra/pool/accounts.toml` 按实测建起来（4 个号：`codearts-1` 带两个已批准模型、`codebuddy-tongxue3`、`workbuddy-1`、`trae-1`）；**没探测过就省掉 `amount`**（TOML 没有 null，写 0 等于编数据），`approved_models = []` 的语义是「这个号不许派活」。
 ## 派生文档链：改标题不再留旧块、两个 sync 走数据根、落地笔默认带 Refs（T-AG492）
 
 - `tools/sync_docs.py` 与 `tools/pool/stage_card.py` 改成按「台账号 + 块类型」**替换**已有块，找不不到才插入；`--check` 新增「孤儿块」判据，汇总里多出不属于任何片段的块会报红。

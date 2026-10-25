@@ -7,7 +7,7 @@ r"""外包号池 MCP 只读面（`tools/pool_mcp.py` · 卡 105 · 台账号 T-G
 | 钉子 | 判什么 |
 |---|---|
 | ① 报文形状 | `initialize` / `tools/list` **照先例**（`src/timeflow/mcp/server.py`）的字段 |
-| ② 只读 | 十一个工具（八个号池 + 三个任务）**都返回**，且跑前后工作区**不比多文件** |
+| ② 只读 | 十二个工具（九个号池 + 三个任务）**都返回**，且跑前后工作区**不比多文件** |
 | ③ 未知工具 | 明确报错（`-32602`）且**进程不崩**（坏请求之后还能接着服务） |
 | ④ 缺产物/缺锁 | 说清"**没有**" —— **不许**把"没找到"写成"空成功" |
 
@@ -37,9 +37,11 @@ sys.path.insert(0, str(ROOT / "tools"))
 import pool_mcp  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂上
 
 SERVER_SNIPPET = "import sys; from pool_mcp import serve; raise SystemExit(serve(sys.argv[1:]))"
-#: 十一个只读工具：八个号池（含卡 201 的 quota_status、卡 213 的 workbench_board）+ 三个任务面。
+#: 十二个只读工具：九个号池（含卡 201 的 quota_status、卡 213 的 workbench_board、
+#: 卡 E45 的 account_status）+ 三个任务面。
 TOOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_status", "pool_models",
-              "quota_status", "workbench_board", "task_list", "task_status", "task_pool"]
+              "quota_status", "account_status",
+              "workbench_board", "task_list", "task_status", "task_pool"]
 
 
 # ---------------------------------------------------------------- 报文小工具（照先例）
@@ -140,7 +142,7 @@ def test_initialize_shape_matches_the_precedent() -> None:
 
 
 def test_tools_list_shape_is_pinned() -> None:
-    """`tools/list`：十一个只读工具、每个 inputSchema 是 object、annotations 说只读。"""
+    """`tools/list`：十二个只读工具、每个 inputSchema 是 object、annotations 说只读。"""
     reply = pool_mcp.handle(_req(1, "tools/list"))
     assert reply is not None
     tools = reply["result"]["tools"]
@@ -168,11 +170,11 @@ def test_notification_ping_and_unknown_method() -> None:
     assert bad is not None and bad["error"]["code"] == pool_mcp.JSONRPC_METHOD_NOT_FOUND
 
 
-# ================================================================ 钉子②：十一个工具返回、都不写文件
+# ================================================================ 钉子②：十二个工具返回、都不写文件
 
 
 def test_nine_tools_return_and_write_nothing() -> None:
-    """十一个工具都返回内容，且跑一遍**工作区不多出一个文件**（只读的机器判据）。"""
+    """十二个工具都返回内容，且跑一遍**工作区不多出一个文件**（只读的机器判据）。"""
     before, before_hashes = _git_status(), _hashes()
     for name in TOOL_NAMES:
         if name in ("job_status", "job_result"):

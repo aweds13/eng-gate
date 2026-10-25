@@ -52,6 +52,7 @@ READ_POOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_st
                    "pool_models",
                    # ★ 卡 201（T-G303）：第 10 个只读工具 —— 额度状态按钟表算
                    "quota_status",
+                   "account_status",  # ★ 卡 E45（T-AG496）：账号账本，不探测、不联网
                    # ★ 卡 213（T-G325）：第 11 个只读工具 —— 工作台读数（调 pipeline_view）
                    "workbench_board"]
 READ_TASK_NAMES = ["task_list", "task_status", "task_pool"]
@@ -665,18 +666,19 @@ def test_claim_kill_failure_is_reported_not_swallowed(batch: Path, write_on: Non
 
 
 def test_tools_list_counts_unchanged(batch: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """④ 工具清单没变：没 env = **11**（全只读）；`POOL_MCP_WRITE=1` = **15**。
+    """④ 工具清单没变：没 env = **12**（全只读）；`POOL_MCP_WRITE=1` = **16**。
 
     ★ 卡 201（T-G303）：加了第 10 个只读工具 `quota_status`（额度按钟表算，只读）⇒
       9/13 → 10/14。★ 卡 213（T-G325）：加了第 11 个只读工具 `workbench_board`
-      （工作台读数，调 pipeline_view，只读）⇒ 10/14 → 11/15。**没人放松判据** ——
+      ★ 卡 E45（T-AG496）：加第 12 个只读工具 `account_status` ⇒ 11/15 → 12/16。
+      **没人放松判据** ——
       只是把新工具如实计进来。
     """
     monkeypatch.delenv("POOL_MCP_WRITE", raising=False)
-    eleven = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
-    assert len(eleven) == 11, [t["name"] for t in eleven]
-    assert all(t["annotations"]["readOnlyHint"] is True for t in eleven), eleven
+    twelve = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    assert len(twelve) == 12, [t["name"] for t in twelve]
+    assert all(t["annotations"]["readOnlyHint"] is True for t in twelve), twelve
 
     monkeypatch.setenv("POOL_MCP_WRITE", "1")
-    fifteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
-    assert len(fifteen) == 15, [t["name"] for t in fifteen]
+    sixteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    assert len(sixteen) == 16, [t["name"] for t in sixteen]

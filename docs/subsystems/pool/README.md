@@ -29,6 +29,8 @@
 | `tools/pool/jobs.py` | 325 | 日志三态判据 / 产物定位（只读） | `wb_status.py` |
 | `tools/pool/trae_dispatch.py` | 316 | 面板道进账（**刻意不接进派活**，卡 218） | 本文件即入口 |
 | `tools/pool/no_window.py` | 29 | 起子进程不弹窗的常量 | 无 |
+| `tools/pool/platforms.toml` | 192 | **平台能力表**（八个平台的端点 / 凭据形态 / 结论码 / 出处）：进 git、可审、**零凭据** | 无（被 `pool_accounts.py` 读） |
+| `tools/pool_accounts.py` | 739 | **账号账本**只读面：`list` / `show` / `discover` / `probe`（在 `tools/` 根，不在 `tools/pool/`） | 本文件即入口 |
 | `tools/pool/__init__.py` | 25 | 包说明 | — |
 
 两张**账**分开住，这是理解本子系统的关键：
@@ -37,9 +39,12 @@
 |---|---|---|---|
 | 租约账 | 主树的 `gates/diag/pool-registry.json` | 谁占了哪棵树、哪个冲突域 | `tools/pool/registry.py` |
 | 任务账 | 主树的 `gates/diag/batch/<任务>.toml` + `<任务>.json` | 这个任务要哪些卡、谁交了申请 | `tools/pool/task.py` |
+| 账号账 | **仓外** `infra/pool/accounts.toml`（`TF_ACCOUNTS_TOML` 可覆盖） | 我有哪些号、每号批了哪些模型、额度最后观测是什么时候 | `tools/pool_accounts.py` |
 
-> 两者都锚在**主工作树**（`git rev-parse --git-common-dir` 的父目录），不在卡树 ——
+> 前两张都锚在**主工作树**（`git rev-parse --git-common-dir` 的父目录），不在卡树 ——
 > 卡树里的 `gates/diag/` 是 gitignore 的，写进去等于没写（`tools/pool/registry.py:72`、`tools/pool/task.py:119`）。
+> 账号账**故意在仓外**：只存凭据指针（`~/.codeartsdoer/pool.env` 之类），不存凭据本身；
+> 没有 git 兜底，所以写入一律原子替换，删号打墓碑（`tools/pool_accounts.py` 的 `save_ledger()`）。
 
 ## 2. 度量（2026-10-25 实测）
 
@@ -117,6 +122,7 @@ pool 只做**派活与收口**。下面三张表是全卡的主判据：写偏�
 | `tools/pool/stage_card.py` | `tools/wb_stage_card.py` | `wb_stage_card.py:22` —— `from pool import stage_card as _stage_card` |
 | `tools/pool/models.py` / `model_registry.py` | `tools/wb_state.py`、`tools/wb_dispatch.py` | `wb_state.py:70`（惰性 import）、`wb_dispatch.py:123` |
 | `tools/pool/projects.py` | `tools/wb_project.py` | `wb_project.py:30` —— `from pool import projects, registry` |
+| `tools/pool/platforms.toml` / `tools/pool_accounts.py` | `tools/pool_mcp.py`（`account_status`） | `pool_mcp.py` 的 `tool_account_status()` —— `import pool_accounts`，MCP 面只读账本、不探测不联网 |
 | `tools/pool/trae_dispatch.py` | **无**（刻意不接进派活，卡 218 已裁定） | 全仓 `grep -rn trae_dispatch` 只命中 `tests/test_trae_dispatch.py` |
 
 ### 表 B · pool 不做的事（每条写「归谁」+ 证据）

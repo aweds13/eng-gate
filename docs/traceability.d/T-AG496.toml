@@ -1,12 +1,20 @@
 [entries."T-AG496"]
 id = "T-AG496"
-title = "账号账本与只读探测：平台能力表 + 仓外账本 + discover/probe（T-AG496）"
+title = "账号账本与只读探测：平台能力表 + 仓外账本 + discover/probe"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E45-账号账本与只读探测.md",
   "file:docs/subsystems/pool/README.md",
   "file:tools/pool_mcp.py",
   "file:tools/pool/projects.py",
+  "file:tools/pool/platforms.toml",
+  "file:tools/pool_accounts.py",
+  "test:test_pool_accounts.py",
+  "file:docs/changelog.d/T-AG496.md",
+  "file:复盘/交接.d/T-AG496.md",
+  "file:gates/diag/_text_TAG496.md",
+  "file:tests/test_pool_accounts.py",
 ]
-gaps = "- **七个平台的端点都是读参考实现得来的，本机只有 codearts 与 codebuddy 有真号**：workbuddy / trae / qoder / minimax / lobsterai 的 `claim_flow` 只能进能力表、`probe` 探不出就写「未探测」，不许照抄端点当已验证，见 `复盘/卡/卡E45-账号账本与只读探测.md` §3。\n- **账本在仓外，没有 git 兜底**：`infra/pool/accounts.toml` 只能靠原子替换 + 墓碑防丢，写坏没人能 checkout 回来，见 §4 三条硬规矩。\n- **`discover` 与凭据泄漏只隔一层**：五个平台目录里 `pool.env`、cookie 库都是明文，实现时只许 `stat()`，钉子要靠 monkeypatch 断言没有 `open()` 读内容，见 §5 判据 4。\n- **MCP 侧加只读工具要同步改三处**：`tools/pool_mcp.py:266` 的 schema、`:1648` 的分发表、`:1703` 的说明文本，漏一处工具就不可见，见 §2 第 4 件。"
+gaps = "- **七个平台的端点都是读参考实现得来的，本机只有 codearts 与 codebuddy 有真号**：workbuddy / trae / qoder / minimax / lobsterai / opencode 的 `claim_flow` 只能进能力表；`probe` 探不出时一律`uncertain`，不许照抄端点当已验证，见 `复盘/卡/卡E45-账号账本与只读探测.md` §3。- **`probe` 对四个号全是 `uncertain`（本机今天的真读数）**：codearts 读取也要 SDK-HMAC-SHA256 签名、codebuddy 参考实现里没有只读额度入口、workbuddy/trae 账本只存指针没有凭据可发 —— 这不是 bug，是「不猜」；要真探得先有 token（`TF_WORKBUDDY_TOKEN`/`TF_TRAE_TOKEN`）或等 E48 把签名实现上，见 `tools/pool_accounts.py:probe_account()`。- **账本在仓外，没有 git 兜底**：仓外那份账本（`TF_ACCOUNTS_TOML` 或逐级向上找）只能靠原子替换 + 墓碑防丢，写坏没人能 checkout 回来；`samples` 只留最近 20 条 —— 原子写与截断口径见 `tools/pool_accounts.py` 的 `save_ledger()`，格式与三条硬规矩见 `复盘/卡/卡E45-账号账本与只读探测.md` §4。- **`discover` 与凭据泄漏只隔一层**：五个平台目录里 `pool.env`、cookie 库都是明文，实现只 `stat()` 目录项 —— 见 `tools/pool_accounts.py` 的 `discover()`，钉子 `tests/test_pool_accounts.py::test_discover_only_stats` 用 monkeypatch 的 `builtins.open` 哨兵断言「一次都没读内容」。- **MCP 侧加只读工具要同步改四处**：`tools/pool_mcp.py` 的 schema、`_HANDLERS` 分发表、`_initialize()` 的 instructions 文本、以及四份测试里钉死的工具名/计数 —— 见 `tests/test_pool_mcp.py` 的 `TOOL_NAMES`、`tests/test_pool_mcp_write.py` 的 `READ_TOOL_NAMES`、`tests/test_pool_mcp_task.py::test_tools_list_counts_unchanged`、`tests/test_pool_registry.py` 的 `POOL_TOOL_NAMES`，漏一处工具就不可见或钉子红。- **能力表里没有的平台现在不再让 `list` 崩**：`list` 走 `strict=False`，如实列出并在表头示警「能力表里没有的平台（不许派活、probe 会拒）」；`probe`/派活仍走 `strict=True` 直接拒 —— 宁可点名，不许静默跳过：实现见 `tools/pool_accounts.py` 的 `load_ledger(strict=...)`，反向钉子 `tests/test_pool_accounts.py::test_unknown_platform_still_listed_but_not_dispatchable`。"
+
