@@ -3883,7 +3883,7 @@ spec = "复盘/卡/卡F5-pool子系统文档.md"
 files = ["docs/subsystems/pool/README.md", "docs/subsystems/pool/派活口径.md", "docs/subsystems/pool/模型与号池.md", "docs/subsystems/pool/租约与锁.md", "docs/subsystems/pool/事后判据清单.md", "复盘/号池MCP-使用与设计.md", "复盘/派活器三合一-T-G114.md", "复盘/外包派活脚本-T-G82.md"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 [[cards]]
 id = "E27"
 task = "T-AG481"

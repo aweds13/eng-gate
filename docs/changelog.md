@@ -1,3 +1,7 @@
+## pool 子系统文档：把 7143 行实现写成五篇可核的说明书（T-AG480）
+
+- 新增 `docs/subsystems/pool/` 五篇（README 144 / 派活口径 129 / 模型与号池 92 / 租约与锁 72 / 事后判据 50 行），边界三表钉死「谁唯一实现 / pool 不做什么 / 与 CI·文档治理·技能怎么接」。
+- 三份旧复盘（`复盘/号池MCP-使用与设计.md`、`复盘/派活器三合一-T-G114.md`、`复盘/外包派活脚本-T-G82.md`）顶部各加一行加注指向新 README，原文一字未改。
 ## 旧设置退役表（T-AG459）
 
 - 新增 `skills/softeng-manage/references/retired-settings.md`（九行：`已改判` / `已改名` / `半冲突`，每行指回卡 + 一条能重跑的命令）；`skills/README.md` 加一行路由。

@@ -8648,11 +8648,22 @@ evidence = [
 gaps = "- **只保「不抹掉」**：片段里已有条目一律保留。若某条目确实该删（比如指向已删文件），本卡不会替你删 —— 得手改汇总台账 `docs/traceability.toml` 里那一条，口径见 `复盘/卡/卡E25-落地翻账不许抹掉证据指针.md`。- **不校验 `--evidence`**：给的文件存不存在、在不在卡域内，本卡不查（域检查在 `tools/pool/task.py` 的 claim 一侧，见 `tests/test_stage_card_evidence_merge.py` 里只测合并）。- **非片段模式没改**：片段目录不存在时走的那段是「已有就跳过」，本来不覆盖，判据仍在 `tools/pool/stage_card.py` 的 `main()` 里。"
 [entries."T-AG480"]
 id = "T-AG480"
-title = "pool 子系统文档：五篇可核的说明书"
+title = "pool 子系统文档五篇（T-AG480）"
 group = "ENGINEERING"
-status = "todo"
-evidence = ["file:复盘/卡/卡F5-pool子系统文档.md"]
-gaps = "五篇尚未写；旧三篇尚未加注；片段与汇总需 sync_docs 对齐"
+status = "done"
+evidence = [
+  "file:docs/subsystems/pool/README.md",
+  "file:gates/diag/batch/T-AG480.toml",
+  "file:docs/subsystems/pool/派活口径.md",
+  "file:docs/subsystems/pool/模型与号池.md",
+  "file:docs/subsystems/pool/租约与锁.md",
+  "file:docs/subsystems/pool/事后判据清单.md",
+  "file:复盘/号池MCP-使用与设计.md",
+  "file:复盘/派活器三合一-T-G114.md",
+  "file:复盘/外包派活脚本-T-G82.md",
+]
+gaps = "- **只写说明书不写判据**：判据仍在 `gates/defs/*` 与 `tools/pool/*.py`，本卡边界见 `docs/subsystems/pool/README.md` 的边界三表。- **旧三篇只加一行加注**：原文未改，口径差异以 `docs/subsystems/pool/派活口径.md` 为准。- **未覆盖 MCP 传输层**：那是仓库外基础设施，本卡只读引用，范围见 `docs/subsystems/pool/模型与号池.md` 的「仓库外」一行。- **五篇里的事实靠复核命令**：文件用 `git ls-files`、函数用 `grep -n 「def <name>」`，出处行号写在 `docs/subsystems/pool/派活口径.md` 的表格里。"
+
 [entries."T-AG481"]
 id = "T-AG481"
 title = "Trae 送任务通道修复：选择器 / Enter 提交 / 并发上限"
