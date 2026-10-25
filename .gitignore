@@ -101,3 +101,12 @@ node_modules/
 # 项目级技能 junction（卡 206）：`tools/dsh_skills_link.py` 在 `.dsh/skills/<名>` 建的
 # 目录联接是本机派生物（真源仍在 `skills/`，入库、被钉子扫）——整目录不入版本管理。
 .dsh/
+
+# ★ 卡 E3（T-AG445）：**工作区残留**不是改动面。
+# 为什么要 ignore 而不是删：它们是别人/上一趟留下的证据或探针产物（卡明说「只 ignore、不许删」），
+# 但只要它们挂在 `git status` 里，`--profiles auto` 就会被「判不出档」拖成**三档全量**。
+blobs/
+.dsh-probe/
+.dsh-probedump-*.txt
+# E2 的产物（`tools/tia.py --plan` 落盘的那份计划表）
+gates/tia.json

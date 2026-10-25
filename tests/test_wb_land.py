@@ -89,6 +89,9 @@ _NEW_TOOLS = (
     "tools/pool/plan.py",
     "tools/pool/projects.py",
     "tools/wb_task.py",
+    # ★ 卡 E5（T-AG447）：`landing.py` 的 ④′ 合并队列要 `from pool import queue`
+    #   ⇒ 沙箱少这一份，落地一进 ④′ 就 ImportError。
+    "tools/pool/queue.py",
 )
 
 _TEXT = """=== gaps ===
@@ -1622,8 +1625,8 @@ def test_integrate_multi_tree_ignores_cards_outside_the_fence(
     wt = tmp_path / "wt"
     (wt / "docs").mkdir(parents=True)
     (wt / "docs" / "workbacklog.toml").write_text(
-        '[[cards]]\nid = "215"\ntree = ".wt/t215"\n\n'
-        '[[cards]]\nid = "216"\ntree = ".wt/t216"\n\n'
+        '[[cards]]\nid = "215"\ntree = ".wt/215"\n\n'
+        '[[cards]]\nid = "216"\ntree = ".wt/216"\n\n'
         '[[cards]]\nid = "999"\ntree = ".wt/stale-tree"\n',
         encoding="utf-8")
     monkeypatch.setattr(_landing, "ROOT", tmp_path)
@@ -1634,6 +1637,126 @@ def test_integrate_multi_tree_ignores_cards_outside_the_fence(
     assert "2 棵" in out, out
     assert "216" in out, out              # 真成员必须被认出来（恒真条件下恒不出现）
     assert "stale-tree" not in out, out   # 批外卡 999 的树不许进集成名单
+
+
+# -------------------------------------------------- 卡 E13（T-AG464）：匹配**不许猜**
+def _mk_src_tree(root: Path, name: str, changed: dict[str, str]) -> Path:
+    """在 `<root>/.wt/<name>` 造一棵**真 git 树**：提交一个基点，再把 `changed` 写成工作区改动。
+
+    `_integrate_multi_tree` 靠 `git diff --name-only HEAD` + `git ls-files -o` 认「这棵树
+    改了什么」，所以夹具必须是真仓库（不是空目录）。
+    """
+    d = root / ".wt" / name
+    d.mkdir(parents=True, exist_ok=True)
+    _git(d, "init", "-q")
+    _git(d, "config", "user.email", "nail@example.invalid")
+    _git(d, "config", "user.name", "nail")
+    _git(d, "config", "commit.gpgsign", "false")
+    (d / "base.txt").write_text("base\n", encoding="utf-8")
+    _git(d, "add", "-A")
+    _git(d, "commit", "-q", "-m", "base")
+    for rel, body in changed.items():
+        p = d / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body, encoding="utf-8")
+    return d
+
+
+def _mk_backlog(wt: Path, blocks: list[tuple[str, str]]) -> None:
+    """`wt/docs/workbacklog.toml` 里写若干 `[[cards]]`（只带 id / tree）。"""
+    (wt / "docs").mkdir(parents=True, exist_ok=True)
+    (wt / "docs" / "workbacklog.toml").write_text(
+        "".join(f'[[cards]]\nid = "{cid}"\ntree = "{tree}"\n\n' for cid, tree in blocks),
+        encoding="utf-8")
+
+
+def test_batch_member_matches_exact_id_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """★ 卡 E13 钉子 1：批里只有 `G1`（+`H2`）时，`.wt/F1` 的改动**一个都不许**进批树。
+
+    旧码（数字键相等即认）在 `F1` 上必红：`F1` 的数字键是 `1`，与成员 `G1` 相同 ⇒
+    旧码把 `(G1, .wt/F1)` 收进集成名单 ⇒ 批树里冒出 `f1_only.py`（正是第五处机制那次事故）。
+    """
+    bd = tmp_path / "batch"
+    monkeypatch.setenv("TF_BATCH_DIR", str(bd))
+    _mk_gate212(bd, "B-EXACT", "awaiting-commit", [
+        {"id": "G1", "layer": "工具层", "paths": ["g1.py"]},
+        {"id": "H2", "layer": "工具层", "paths": ["h2.py"]},
+    ])
+    _mk_src_tree(tmp_path, "G1", {"g1.py": "G1 = 1\n"})
+    _mk_src_tree(tmp_path, "H2", {"h2.py": "H2 = 2\n"})
+    _mk_src_tree(tmp_path, "F1", {"f1_only.py": "F1 = 3\n"})   # 批外，数字键撞 G1
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    _mk_backlog(wt, [("G1", ".wt/G1"), ("H2", ".wt/H2"), ("F1", ".wt/F1")])
+    monkeypatch.setattr(_landing, "ROOT", tmp_path)
+
+    assert _landing._integrate_multi_tree(wt, "B-EXACT", "T-G999") is True, \
+        capsys.readouterr().out
+    assert (wt / "g1.py").is_file(), "成员 G1 的改动必须合进来"
+    assert (wt / "h2.py").is_file(), "成员 H2 的改动必须合进来"
+    assert not (wt / "f1_only.py").exists(), \
+        "★ .wt/F1 不是成员（数字键撞车不许冒充）—— 它的文件进了批树 = 别人的活被夹带"
+
+
+def test_numeric_fallback_must_be_unique(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """★ 卡 E13 钉子 2：数字键撞车且**没有精确 id 可判** ⇒ 点名两个卡号并停手（返回 False）。
+
+    栅栏成员是 `E1` / `G1`（数字键都是 `1`），backlog 里只有一张 `F1`（同样键 `1`，
+    且没有精确命中）⇒ 谁都不许猜 ⇒ `_integrate_multi_tree` 必须返回 False（调用方退 3）。
+    """
+    bd = tmp_path / "batch"
+    monkeypatch.setenv("TF_BATCH_DIR", str(bd))
+    _mk_gate212(bd, "B-CLASH", "awaiting-commit", [
+        {"id": "E1", "layer": "工具层", "paths": ["e1.py"]},
+        {"id": "G1", "layer": "工具层", "paths": ["g1.py"]},
+    ])
+    _mk_src_tree(tmp_path, "E1", {"e1.py": "E1 = 1\n"})
+    _mk_src_tree(tmp_path, "G1", {"g1.py": "G1 = 1\n"})
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    _mk_backlog(wt, [("F1", ".wt/F1")])
+    monkeypatch.setattr(_landing, "ROOT", tmp_path)
+
+    assert _landing._integrate_multi_tree(wt, "B-CLASH", "T-G999") is False
+    out = capsys.readouterr().out
+    assert "数字键撞车" in out, out
+    assert "E1" in out and "G1" in out, out      # 点名两个候选成员（不猜）
+    assert not (wt / "g1.py").exists(), "停手之后不许把任何一棵树合进来"
+
+
+def test_member_tree_must_be_dot_wt_card(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """★ 卡 E13 钉子 3：成员声明的树不是它自己的树 ⇒ 点名并停手（防呆）。
+
+    精确命中的 `G1` 在 backlog 里写的却是 `.wt/somebody-else` —— 那说明这条 backlog
+    块其实不是它的（同名不同树）⇒ 匹配错了，必须停手，不许照样合。
+    """
+    bd = tmp_path / "batch"
+    monkeypatch.setenv("TF_BATCH_DIR", str(bd))
+    _mk_gate212(bd, "B-TREE", "awaiting-commit", [
+        {"id": "G1", "layer": "工具层", "paths": ["g1.py"]},
+        {"id": "H2", "layer": "工具层", "paths": ["h2.py"]},
+    ])
+    _mk_src_tree(tmp_path, "G1", {"g1.py": "G1 = 1\n"})
+    _mk_src_tree(tmp_path, "H2", {"h2.py": "H2 = 2\n"})
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    _mk_backlog(wt, [("G1", ".wt/somebody-else"), ("H2", ".wt/H2")])
+    monkeypatch.setattr(_landing, "ROOT", tmp_path)
+
+    assert _landing._integrate_multi_tree(wt, "B-TREE", "T-G999") is False
+    out = capsys.readouterr().out
+    assert "声明的树是 .wt/somebody-else" in out, out
+    assert "停手" in out, out
+    assert not (wt / "h2.py").exists(), "停手之后一棵树都不许合"
 
 
 def test_advance_card_gate_no_gate_skips(
@@ -2047,11 +2170,15 @@ def test_flip_card_status_require_task_match_flag(
 # 外加两条同族：只读（前后 git status 逐字相同）、与 --card 同给时体检完继续落地。
 
 
-def _preflight(repo: Path, *extra: str) -> subprocess.CompletedProcess:
-    """在假仓库里跑一次 `wb_land.py --preflight ...`（走壳层入口，不另造第二套）。"""
+def _preflight(repo: Path, *extra: str,
+               env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """在假仓库里跑一次 `wb_land.py --preflight ...`（走壳层入口，不另造第二套）。
+
+    `env` 覆写子进程环境（卡 E16 的锁读数要指定端口段 —— `_ENV` 是 import 时的快照）。
+    """
     cmd = [sys.executable, "-X", "utf8", str(repo / "tools" / "wb_land.py"),
            "--preflight", *extra]
-    return subprocess.run(cmd, cwd=str(repo), env=_ENV, capture_output=True, text=True,
+    return subprocess.run(cmd, cwd=str(repo), env=env or _ENV, capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
 
 
@@ -2115,7 +2242,7 @@ def test_preflight_missing_text_exits_one_and_names_the_path(tmp_path: Path) -> 
     assert done.returncode == 1, out
     assert "缺文档件" in out and "_text_TG999.md" in out, out
     marks = [ln for ln in out.splitlines() if ln.startswith(("  ✅", "  ❌"))]
-    assert len(marks) == 11, f"判据没跑全（fail-fast 了？）：{len(marks)} 条\n{out}"
+    assert len(marks) == 12, f"判据没跑全（fail-fast 了？）：{len(marks)} 条\n{out}"
     assert "修完重跑" in out, out
 
 
@@ -2245,3 +2372,352 @@ def test_legacy_no_preflight_still_works_and_says_it_was_renamed(capsys) -> None
     out = capsys.readouterr().out
     assert rc == 6, "缺 --card/--batch 应在解析后退 6（参数检查最先）"
     assert "已改名" in out and "--skip-preflight" in out, out
+
+
+# ============================================ 卡 E15（T-AG466）：文书引用体检（第 12 条）
+#
+# 痛点（实测）：`check_layers` 的「引用完整性」只扫 `docs/**/*.md`，一条写错的短路径要等
+# **全量门禁**（≈15 分钟）才红，而且同时打红 `check_layers` 与 `check_layers_selftest` 两道门。
+# 这条判据把它提前到体检（10 秒内说），且**只扫本次要提交的三份文书**（不跑全量 check_layers）。
+
+#: 合成文书：changelog 段里**故意**写一条解析不到的短路径。
+_TEXT_BAD_REF = """=== gaps ===
+**边界**：合成卡，仅供钉子用（指针 `code/a.py`）。
+=== changelog ===
+## 2026-10-02 · 钉子用
+- 照抄的短路径 `pipe-land/SKILL.md`（解析不到）
+=== checkpoint ===
+> **2026-10-02 · CHECKPOINT（合成）**：钉子用。
+"""
+
+
+def test_preflight_doc_ref_red_names_section_token_and_fix(tmp_path: Path) -> None:
+    """★ 钉子 1：文书里 `pipe-land/SKILL.md` 解析不到 ⇒ 退 1，报行点名 **changelog 段** +
+    token + **可照抄的修法**（`skills/` 前缀）。"""
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+    # 技能**真的在** `skills/pipe-land/SKILL.md`，文书只是写成了短路径 ⇒ 修法才有的可照抄
+    _write(repo, "skills/pipe-land/SKILL.md", "# 技能\n")
+    _write(repo, "gates/diag/_text_TG999.md", _TEXT_BAD_REF)
+
+    done = _preflight(repo, "--task", "T-G999", "--tree", ".", "--allow", "code")
+
+    out = _out(done)
+    assert done.returncode == 1, out
+    line = _item_line(out, "文书引用解析得到")
+    assert line.lstrip().startswith("❌"), line
+    assert "文书引用解析不到" in line, line
+    assert "changelog 段" in line, line
+    assert "pipe-land/SKILL.md" in line, line
+    assert "skills/pipe-land/SKILL.md 才对" in line, line   # 判据 2：修法可照抄
+
+
+def test_preflight_doc_ref_green_when_prefix_fixed(tmp_path: Path) -> None:
+    """★ 钉子 2：同一个 token 改成 `skills/pipe-land/SKILL.md` ⇒ 该条转绿（其余照样绿）。"""
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+    _write(repo, "skills/pipe-land/SKILL.md", "# 技能\n")
+    _write(repo, "gates/diag/_text_TG999.md",
+           _TEXT_BAD_REF.replace("`pipe-land/SKILL.md`", "`skills/pipe-land/SKILL.md`"))
+
+    done = _preflight(repo, "--task", "T-G999", "--tree", ".", "--allow", "code")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    line = _item_line(out, "文书引用解析得到")
+    assert line.lstrip().startswith("✅"), line
+    assert "1 条 .md 引用" in line, line
+
+
+def test_preflight_doc_ref_skip_when_no_md(tmp_path: Path) -> None:
+    """★ 钉子 3：文书里没有 `.md` 引用 ⇒ `[skip]`，**不拖红**（整趟仍退 0）。"""
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _preflight(repo, "--task", "T-G999", "--tree", ".", "--allow", "code")
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    line = _item_line(out, "文书引用解析得到")
+    assert "[skip]" in line and "没有 .md 引用" in line, line
+
+
+def test_preflight_doc_ref_runs_without_card_or_task(tmp_path: Path) -> None:
+    """★ 钉子 4：**不给 `--card` / `--task`** 也照跑（判据 5：这条不依赖卡号）——
+    扫 `docs/changelog.d/*.md` 的片段，坏 token 照样被点名。"""
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+    _write(repo, "docs/changelog.d/T-G999.md",
+           "## 2026-10-02 · 片段\n\n- 短路径 `pipe-card/references/dispatch.md`\n")
+
+    done = _preflight(repo, "--tree", ".", "--allow", "code")
+
+    out = _out(done)
+    line = _item_line(out, "文书引用解析得到")
+    assert line.lstrip().startswith("❌"), f"没给 --task 就不跑这条了？\n{out}"
+    assert "pipe-card/references/dispatch.md" in line, line
+
+
+def test_md_ref_resolution_matches_check_layers(tmp_path: Path) -> None:
+    """★ 交叉钉子：本条的三基准解析与**真** `scripts/check_layers.check_link_integrity` 同口径。
+
+    同一棵合成树，两边对同一批 token 的判断必须**逐条一致**（相/不相都算数）——
+    否则「复用判据」就成了一句空话（两边一漂，体检绿了门禁还红）。
+    """
+    spec = importlib.util.spec_from_file_location(
+        "check_layers_under_test", ROOT / "scripts" / "check_layers.py")
+    assert spec and spec.loader
+    cl = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cl)
+
+    landing = _load_landing()
+    tree = tmp_path / "tree"
+    docs = tree / "docs"
+    docs.mkdir(parents=True)
+    (docs / "ok.md").write_text("# ok\n", encoding="utf-8")
+    (tree / "skills" / "pipe-land").mkdir(parents=True)
+    (tree / "skills" / "pipe-land" / "SKILL.md").write_text("# s\n", encoding="utf-8")
+    tokens = ["ok.md", "skills/pipe-land/SKILL.md", "nope/missing.md",
+              "pipe-land/SKILL.md", "own.md"]
+    (docs / "own.md").write_text("# own\n", encoding="utf-8")
+    (docs / "x.md").write_text(
+        "".join(f"- `{t}`\n" for t in tokens), encoding="utf-8")
+
+    problems, _notes, _checked = cl.check_link_integrity(root=tree)
+    bad = {p.rsplit(" ", 1)[-1] for p in problems}
+    assert "nope/missing.md" in bad and "pipe-land/SKILL.md" in bad, \
+        f"合成树没造出断链，这条钉子没有意义：{problems}"
+    for tok in tokens:
+        mine = not landing.md_ref_resolves(tree, docs / "x.md", tok)
+        assert mine == (tok in bad), (
+            f"{tok!r}：体检判 {'断链' if mine else '解析得到'}，"
+            f"check_layers 判 {'断链' if tok in bad else '解析得到'} —— 两边口径漂了")
+
+
+# ======================================== 卡 E16（T-AG467）：门禁锁的三处静默，落地链这两处
+#
+# ① 等锁**有进度**：`gate_lock.py` 每 60s 打的 `[锁] 等门禁锁 Ns…` 必须出现在落地日志里
+#    （原来 `capture_output` + `print(stdout[-400:])` 把它们全吞了，日志空白 28 分钟）。
+# ② 体检**先说锁**：第一屏就把「本段锁 card / pid / 已持有秒数 / 持有者还活着吗 / 剩余租约」
+#    说出来；判不了就明说 `not verified`。
+
+#: 会「啰嗦」的锁桩：acquire 时打 40 行等锁进度（判据 = 每一行都要进落地日志）。
+_GATE_LOCK_CHATTY = """import pathlib, sys
+
+with pathlib.Path("gate_lock_calls.log").open("a", encoding="utf-8") as fh:
+    fh.write(" ".join(sys.argv[1:]) + chr(10))
+mk = pathlib.Path("lock.marker")
+if "acquire" in sys.argv:
+    for i in range(1, 41):
+        print(f"[锁] 等门禁锁 {i}s… 本段锁被占：card=OTHER pid=1（合成）", flush=True)
+    mk.write_text("locked", encoding="utf-8")
+elif "release" in sys.argv and mk.exists():
+    mk.unlink()
+sys.exit(0)
+"""
+
+
+def test_lock_progress_is_streamed_into_the_landing_log(tmp_path: Path) -> None:
+    """★ E16 钉子 6：拿锁那一步改成**流式** ⇒ 锁桩打的第一行也必须出现在落地输出里。
+
+    旧码（`capture_output` + 只打尾部 400 字符）在 40 行 × ≈40 字符面前必红：
+    第 1 行早就被截掉了 —— 那正是「日志空白 28 分钟」的机制。
+    """
+    repo = _mk_repo(tmp_path)
+    _write(repo, "gates/diag/gate_lock.py", _GATE_LOCK_CHATTY)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "chatty gate_lock stub")
+
+    done = _wand(repo)
+    out = _out(done)
+
+    assert "[锁] 等门禁锁 1s…" in out, f"等锁进度被吞了（没流式）：\n{out[-1500:]}"
+    assert "[锁] 等门禁锁 40s…" in out, f"最后一行也没了：\n{out[-1500:]}"
+
+
+def test_preflight_says_lock_first_with_liveness(tmp_path: Path) -> None:
+    """★ E16 判据 3：体检**先说锁** —— 第一屏打出 card / pid / 已持有秒数 / 活着吗 / 剩余租约。
+
+    造法：假仓库里放**真** `gate_lock.py`（读数就是它），再放一把「持有者 pid 不存在」的锁。
+    断言 ① 锁那几行出现在「落地前置体检」标题**之前**；② 报出 `已不存在`（不是猜的）。
+    """
+    repo = _mk_preflight_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+    gate_lock_src = ROOT / "gates" / "diag" / "gate_lock.py"
+    _write(repo, "gates/diag/gate_lock.py", gate_lock_src.read_text(encoding="utf-8"))
+    _write(repo, "tools/pool/no_window.py",
+           (TOOLS / "pool" / "no_window.py").read_text(encoding="utf-8"))
+    dead_pid = 4_000_004
+    (repo / "gates" / "diag" / "gates-9477.lock").write_text(
+        json.dumps({"card": "LOCKHOLDER", "pid": dead_pid, "base": 9477,
+                    "lease": 10800, "at": "2026-10-25T00:00:00"}, ensure_ascii=False),
+        encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "real gate_lock + a stale-by-pid lock")
+
+    done = _preflight(repo, "--task", "T-G999", "--tree", ".", "--allow", "code",
+                      env={**_ENV, "TF_GATE_PORT_BASE": "9477"})
+
+    out = _out(done)
+    lines = out.splitlines()
+    head = next(i for i, ln in enumerate(lines) if "落地前置体检" in ln)
+    lock_lines = [ln for ln in lines[:head] if ln.startswith("[锁]")]
+    assert lock_lines, f"体检没有「先说锁」：\n{out}"
+    blob = "\n".join(lock_lines)
+    assert "LOCKHOLDER" in blob, blob
+    assert str(dead_pid) in blob, blob
+    assert "已持有" in blob and "剩余租约" in blob, blob
+    assert "已不存在" in blob, f"持有者进程的读数不对（应是「已不存在」）：{blob}"
+    assert "★ 本段" in blob, f"没标出哪把是本次要用的段：{blob}"
+
+
+# ============================================ 卡 E3（T-AG445）：提交面算档 + 残留只 ignore
+#
+# ★ 域内/域外界线（如实）：E3 的 `required_profiles(..., source=)` 与 `.gitignore` 收残留
+#   在本卡域内，两条钉子钉在这里；**payload 落进 `gates/last.json`** 那一半在
+#   `scripts/run_gates.py`（不在 E28 的 8 文件域内）⇒ 这里钉的是**它的形状**
+#   （`profiles_payload`），落地链接管时直接 `payload.update(...)` 即可。
+
+def _load_domains() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "domains_under_test", ROOT / "gates" / "defs" / "domains.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_domains_profiles_payload_marks_committed_face() -> None:
+    """★ E3 判据 1/5：`source="committed"` ⇒ payload 里 `profiles_source` **如实**写 committed。
+
+    提交面 vs 工作区是**两个来源**（判据 5 要求各一条钉子）；这条钉提交面。
+    """
+    domains = _load_domains()
+    payload = domains.profiles_payload(["tools/pool/landing.py", "docs/changelog.md"],
+                                       source="committed")
+    assert payload["profiles_source"] == "committed", payload
+    assert payload["required_profiles"] == ["audit", "lang"], payload
+
+
+def test_domains_profiles_payload_defaults_to_worktree() -> None:
+    """★ E3 判据 1/5：不给 `source` ⇒ 老口径（工作区），且 payload 里写明 `worktree`。
+
+    这条钉住「手工跑门禁行为不变」那一半：默认值一漂，所有老调用点的含义都会变。
+    """
+    domains = _load_domains()
+    assert domains.required_profiles(["tools/x.py"]) == frozenset({"lang", "audit"})
+    payload = domains.profiles_payload(["tools/x.py"])
+    assert payload["profiles_source"] == "worktree", payload
+    with pytest.raises(ValueError):
+        domains.required_profiles(["tools/x.py"], source="guess")   # 来源不许猜
+
+
+def test_gitignore_covers_worktree_residue(tmp_path: Path) -> None:
+    """★ E3 判据 3：`blobs/`、`.dsh-probe/`、`.dsh-probedump-*.txt`、`gates/tia.json` 被忽略。
+
+    判据问的是 **git 自己**（`git check-ignore`），不是读一遍 .gitignore 的文本 ——
+    文本对不等于行为对（顺序 / `!` 例外都会改结果）。
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / ".gitignore").write_bytes((ROOT / ".gitignore").read_bytes())
+    for rel in ("blobs/x.bin", ".dsh-probe/p.txt", ".dsh-probedump-1.txt",
+                "gates/tia.json"):
+        done = _git(repo, "check-ignore", "-q", "--", rel)
+        assert done.returncode == 0, f"{rel} 没被忽略 ⇒ 又会被算进改动面：{_out(done)}"
+    # 反例：真正的源文件不许被这条连坐（只 ignore 残留，不 ignore 代码）
+    assert _git(repo, "check-ignore", "-q", "--", "tools/pool/landing.py").returncode == 1
+
+
+def test_domains_derived_residue_does_not_force_full_profiles() -> None:
+    """★ E3：被 `.gitignore` 收掉的**派生 / 残留**不算改动面 —— 不许把算档拖成三档全量；
+    派生目录**之外**的改动照常算（`tools/` ⇒ lang+audit）。
+
+    反例那一半同样要钉：判不出档、又**没被 ignore** 的路径 ⇒ 仍然 fail closed 到全量
+    （宁可多跑，不许漏跑 —— 这不是「为了变绿放松判据」）。
+    """
+    domains = _load_domains()
+    got = domains.required_profiles(
+        ["blobs/x.bin", "export/old.md", ".dsh-probe/p.txt", ".dsh/skills/x",
+         "tools/pool/landing.py"])
+    assert got == frozenset({"lang", "audit"}), got
+    # 反例：`weird/blob.bin` 不在 .gitignore 里 ⇒ 判不出档 ⇒ 全量（fail closed 不动）
+    assert domains.required_profiles(["blobs/x.bin", "weird/blob.bin"]) \
+        == domains.ALL_PROFILES
+
+
+# ============================================ 卡 E5（T-AG447）：落地链接入合并队列
+#
+# 单写者段 = ④–⑦。钉子只钉**接入点**（纯状态机在 tests/test_pool_queue.py 里逐条钉）：
+# ① 单笔落地 ⇒ 进队、位置 1/1、落地完出队（队列不许留残渣）；
+# ② 前面有人 ⇒ **不许抢**（位置 2、等超时退 8、自己从队列摘掉）；
+# ③ 排队期间主树前进 ⇒ 投机预检作废 ⇒ **重跑 ③″**（结果不许复用）。
+
+def _queue_state(repo: Path) -> dict:
+    p = repo / "gates" / "diag" / "merge-queue.json"
+    return json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
+
+
+def test_landing_joins_queue_and_leaves_it_empty(tmp_path: Path) -> None:
+    """★ 判据 1/3：单笔落地要进队（位置 1/1），ff 合流后**出队**（队列不许留残渣）。"""
+    repo = _mk_repo(tmp_path)
+
+    done = _wand(repo)
+    out = _out(done)
+
+    assert "=== ④′ 合并队列" in out, out[-1500:]
+    assert "位置 1/1" in out, out[-1500:]
+    st = _queue_state(repo)
+    assert st.get("head") is None and st.get("waiting") == [], \
+        f"落地完队列还有残渣（会堵死下一笔）：{st}"
+
+
+def test_landing_refuses_to_cut_in_line(tmp_path: Path) -> None:
+    """★ 判据 2（单写者）：前面已经有人 ⇒ 位置 2、等超时退 8，且**自己摘掉**不占位。"""
+    repo = _mk_repo(tmp_path)
+    (repo / "gates" / "diag" / "merge-queue.json").write_text(
+        json.dumps({"head": {"task": "OTHER", "tree": ".wt/other", "base": "abc"},
+                    "waiting": []}, ensure_ascii=False), encoding="utf-8")
+
+    done = _wand(repo, "--queue-wait", "0.3")
+    out = _out(done)
+
+    assert done.returncode == 8, out[-1500:]
+    assert "位置 2" in out, out[-1500:]
+    assert "等队首超时" in out, out[-1500:]
+    st = _queue_state(repo)
+    assert st["head"]["task"] == "OTHER", f"别人的队首被抢了：{st}"
+    assert not [e for e in st["waiting"] if e.get("task") == "T-G999"], \
+        f"等超时的这一笔要自己摘掉：{st}"
+
+
+def test_join_queue_reruns_speculative_preflight_when_main_moved(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture) -> None:
+    """★ 判据 3：排队期间主树前进 ⇒ **投机预检作废**，③″ 必须重跑一次（不许复用）。"""
+    repo = _mk_repo(tmp_path)
+    monkeypatch.setenv("TF_MERGE_QUEUE", str(repo / "gates" / "diag" / "merge-queue.json"))
+
+    calls: list[int] = []
+
+    def _fake_fast(wt, env):          # noqa: ANN001 —— 只记「重跑了几次」
+        calls.append(1)
+        return True
+
+    # 入队时读到 sha-old；轮到队首时主树已前进到 sha-new（= 前一笔刚 ff 合流）
+    _heads = iter(["sha-old", "sha-new"])
+    monkeypatch.setattr(_landing, "ROOT", repo)
+    monkeypatch.setattr(_landing, "git", lambda *a, **k: next(_heads, "sha-new"))
+    monkeypatch.setattr(_landing, "fast_preflight", _fake_fast)
+
+    class _Args:
+        tree = "."
+        task = "T-G999"
+        queue_wait = 1.0
+
+    rc = _landing._join_merge_queue(_Args(), repo, {})
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "投机预检作废" in out, out
+    assert len(calls) == 1, f"投机预检没重跑（结果被复用了）：{calls}"

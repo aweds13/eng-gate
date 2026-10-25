@@ -1,3 +1,9 @@
+## 落地链五件合并：批集成精确匹配 / 文书引用体检 / 门禁锁三处静默 / auto 判档 fail-closed / 合并队列（E28 · T-AG482）
+- `tools/pool/landing.py` 的批集成候选改成**按卡号整词**匹配（`_digits()` / `_own_tree()`），G1 不再被 `F1`/`B1`/`D1`/`E1` 命中、E4 不再夹带 F4 的文件；同文件卡在 `make` 前置检查就被**点名**拒绝（判据 6 的「点名卡与路径」）。
+- 新增 `doc_ref_problems()` / `md_ref_resolves()` / `_ref_fix_hint()`：落地 ③ 之前扫本笔改到的 Markdown 反引号引用，死链当场点名并给修法（**这是 preflight 的第 12 条**），不再等 `check_layers` 门红了才说。
+- `gates/diag/gate_lock.py` 新增 `DEFAULT_GRACE = 60` / `_pid_alive()` / `_same_machine()` / `liveness_text()` / `cmd_acquire(wait, stale_after, grace)`：锁的持有者死了**当场判死**（同机看 pid、异机看租约时间），不再让一笔被 kill 的落地把树锁满 3 小时；三处静默（陈旧锁、跨机锁、grace 期）都改成打印判据。
+- `gates/defs/domains.py` 的 `required_profiles()` 遇**判不出档**的路径一律 fail closed 退回全量，并新增 `profiles_payload()` / `explain()` 说明为什么退回；`.gitignore` 收 `blobs/`、`.dsh-probe/`、`.dsh-probedump-*.txt`、`gates/tia.json`（工作区残留不算改动面）。
+- 新增 `tools/pool/queue.py`：落地链 ④–⑦ 是**单写者**段，于是每笔先 `enqueue` 占位、队首直接干、其余继续做①②③，到 ④ 前 `wait_turn`；投机预检（③″）在变队首时**核对基点**，变了就 `respec_required` 重跑（投机结果不许复用）。冲突永远人来判，模块不删分支、不动工作区。
 ## 决策记录 `docs/decisions/`：只追加 + 固定五段 + 把握程度（F4 · T-AG452）
 - 新增 `docs/decisions/`：`README.md`（模板 + 什么时候该开一条）+ 回溯首批 8 条 ADR（`0001`–`0008`），回答「当时为什么这么定、当时有多大把握」。
 - `scripts/check_docs.py` 增加 `--decisions` 模式：编号连续 / 文件名小写 slug / status 合法 / supersedes 双向成对 / **Accepted 正文冻结**（比对 HEAD 与工作区）；与 F3 的死指针模式同一入口、两个子模式，互不覆盖。

@@ -3903,7 +3903,7 @@ spec = "复盘/卡/卡E28-落地链五件合并.md"
 files = ["tools/pool/landing.py", "tools/pool/queue.py", "gates/diag/gate_lock.py", "gates/defs/domains.py", ".gitignore", "tests/test_wb_land.py", "tests/test_gate_lock.py", "tests/test_pool_queue.py"]
 depends = []
 risk = "high"
-status = "pending"
+status = "done"
 [[cards]]
 id = "E29"
 task = "T-AG483"

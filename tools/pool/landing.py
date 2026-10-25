@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import datetime
+import importlib.util
 import json
 import os
 import pathlib
@@ -228,6 +229,91 @@ def release_lock(lock_label: str, wt: pathlib.Path, env: dict) -> None:
             cwd=str(wt), env={**os.environ, **env},
             capture_output=True, text=True,
         )
+
+
+def acquire_gate_lock(lock_label: str, wt: pathlib.Path, env: dict, *,
+                      wait: int = 5400) -> int:
+    r"""④ 拿门禁锁 —— **流式**：`gate_lock.py` 打印的每一行都出现在落地日志里。
+
+    ★ 卡 E16（T-AG467）的缺陷现场：原来是 `subprocess.run(capture_output=True)` 再
+      `print(stdout[-400:])` ⇒ `gate_lock` 每 60s 打的 `[锁] 等门禁锁 Ns…` 全被吞在返回值里，
+      落地日志从「起跑」直接空白 28 分钟，人只能当它卡死。
+    ★ 现在 `Popen` + 逐行转发到**本进程的 stdout**（落地日志就是它）⇒ 等锁时**有进度**。
+      ★ 注意这是**同步阻塞**的流式读（不是开线程）：「拿锁」这一步本来就要等出结果；
+        超时判据在 `gate_lock` 自己（`--wait`），本函数不另设超时（免得造第二份判据）。
+    ★ 返回值 = `gate_lock acquire` 的退出码（0 = 拿到；3 = 等超时）。
+    """
+    cmd = [sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
+           "acquire", "--card", lock_label, "--wait", str(wait)]
+    proc = subprocess.Popen(
+        cmd, cwd=str(wt), env={**os.environ, **env},
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, encoding="utf-8", errors="replace", bufsize=1,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        print(line.rstrip("\r\n"), flush=True)
+    return proc.wait()
+
+
+def _gate_lock_module():
+    r"""按**路径**加载卡树里的 `gates/diag/gate_lock.py`（拿锁/看锁同一份实现）。
+
+    不 `import gate_lock`：`gates/diag/` 不是包，而且铁律 24 要求 `python -P` 跑它
+    （同目录里的同名脚本会顶掉标准库）。读不到 / 不是那一份（缺读数接口）⇒ `None`。
+    """
+    p = ROOT / "gates" / "diag" / "gate_lock.py"
+    if not p.is_file():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("_wb_gate_lock_for_readout", p)
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    except SystemExit:
+        # ★ 沙箱/桩里的 `gate_lock.py` 可能在**import 期**就 `sys.exit`（它会跑一遍全文件）
+        #   —— 那不是"读锁失败"，是"这不是那一份实现"⇒ 老实说 not verified，不许把
+        #   体检整趟带退出（真踩过：桩一 import 就把 --preflight 变成 `stub-gate_lock …`）。
+        return None
+    except Exception:      # noqa: BLE001 —— 读数失败**不许**挡住体检（那是只读附加信息）
+        return None
+    need = ("all_lock_paths", "_read", "_age", "_lease_of", "_pid_alive",
+            "liveness_text", "DEFAULT_STALE_AFTER")
+    return mod if all(hasattr(mod, n) for n in need) else None
+
+
+def lock_readout() -> list[str]:
+    r"""卡 E16 · 体检**先说锁**：本端口段（以及全局各段）当前锁的读数。
+
+    每条打印 `card / pid / 已持有秒数 / 持有者进程是否还活着 / 剩余租约`；
+    判断不了就明说 `not verified`（**不许**猜、也不许把「读不到」当成「没锁」）。
+    ★ 只读：不建锁、不清锁、不写任何文件（`all_lock_paths` 只 glob）。
+    """
+    mod = _gate_lock_module()
+    if mod is None:
+        return ["[锁] 本树没有可用的 gates/diag/gate_lock.py ⇒ 锁状态 not verified"]
+    try:
+        paths = mod.all_lock_paths()
+    except Exception as exc:      # noqa: BLE001
+        return [f"[锁] 读锁目录失败（{type(exc).__name__}: {exc}）⇒ 锁状态 not verified"]
+    base = os.environ.get("TF_GATE_PORT_BASE", "").strip() or "(默认段)"
+    if not paths:
+        return [f"[锁] 本段 base={base}：空着（没有任何段的锁）"]
+    lines: list[str] = []
+    for p in paths:
+        info = mod._read(p)
+        age = int(mod._age(p))
+        lease = int(mod._lease_of(p, info, mod.DEFAULT_STALE_AFTER))
+        mine = "★ 本段" if str(info.get("base")) == base else ""
+        lines.append(
+            f"[锁] 段 base={info.get('base')} 文件={p.name}{mine}："
+            f"card={info.get('card')} pid={info.get('pid')}"
+            f" 已持有 {age}s / 剩余租约 {lease - age}s"
+            f" / 持有者进程 {mod.liveness_text(info)}")
+    lines.append(f"[锁] 全局：{len(paths)} 把锁文件（租约内的才算占名额；"
+                 f"上限看 TF_GATE_MAX_CONCURRENT，默认 2）")
+    return lines
 
 
 # ---------------------------------------------------------------- 卡 204（T-G311）：落地即翻 status
@@ -884,11 +970,112 @@ def _rel_short(p: pathlib.Path, base: pathlib.Path) -> str:
         return pathlib.Path(p).as_posix()
 
 
+# ---------------------------------------------------------------- 卡 E15（T-AG466）
+#: 反引号里的 `.md` token —— 与 `scripts/check_layers.check_link_integrity` 的
+#: `re.compile(r"`([^\s`]*?\.md)`")` **逐字同一个口径**（那边不在本卡域内，只能同口径照抄；
+#: 两条实现是否一致由 `tests/test_wb_land.py` 的交叉钉子对着真 `check_layers` 验）。
+_MD_REF = re.compile(r"`([^\s`]*?\.md)`")
+
+#: 与 `check_layers.check_link_integrity` 同一份「文档里已声明待建」豁免。
+_DOC_REF_KNOWN_MISSING = frozenset({"DESIGN.md", "LEARN.md"})
+
+
+def _git_ignored(wt: pathlib.Path, p: pathlib.Path) -> bool:
+    r"""问 git 这条路径是否被忽略（口径同 `check_layers.is_git_ignored`）。
+
+    gitignored 的产物（`gates/diag/**` 这类）**不随树分发** ⇒ worktree 里必然找不到，
+    那不是断链。问的是**卡树**（这一趟要提交的就是这棵树）。
+    """
+    return run(["git", "check-ignore", "-q", "--", _rel_short(p, wt)],
+               cwd=wt, check=False).returncode == 0
+
+
+def md_ref_resolves(wt: pathlib.Path, doc: pathlib.Path, token: str) -> bool:
+    r"""这个 `.md` token 解析得到吗 —— 三基准与 `check_layers` **完全相同**。
+
+    依次试 ① 相对当前文档目录 ② 相对 `docs/` 根 ③ 相对仓库根；
+    裸文件名（无目录分隔）再加一条：在 `docs/` 下递归找同名文件。
+    被 gitignore 的候选不算断链（同 `check_layers` 的 T-G127 豁免）。
+    """
+    cands = [doc.parent / token, wt / "docs" / token, wt / token]
+    if "/" not in token and "\\" not in token:
+        cands += list((wt / "docs").rglob(token))
+    if any(c.exists() for c in cands):
+        return True
+    # 存在性没命中：若候选落在 gitignored 的产物里（不随树分发）⇒ 也不算断链
+    return any(_git_ignored(wt, c) for c in cands)
+
+
+def _ref_fix_hint(wt: pathlib.Path, token: str) -> str:
+    r"""可照抄的修法：`skills/` 前缀能解析时就直说（卡 E15 判据 2 要求的形状）。"""
+    if (wt / "skills" / token).exists():
+        return f"说成 skills/{token} 才对"
+    return "改成能解析的相对路径（相对当前文档 / docs 根 / 仓库根之一），或去掉反引号"
+
+
+def doc_ref_problems(wt: pathlib.Path, task: str,
+                     parts: dict[str, str] | None = None) -> tuple[list[str], int]:
+    r"""卡 E15 · 体检第 12 条：**本次要提交的三份文书**里反引号包住的 `.md` 必须解析得到。
+
+    三份 = `gates/diag/_text_<任务>.md`（按段扫：gaps / changelog / checkpoint）
+    + `docs/changelog.d/<任务>.md` + `docs/traceability.d/<任务>.toml`。
+    ★ 没给 `task` 时**照样跑**（判据 5：这条不依赖卡号）—— 扫 `docs/changelog.d/*.md`
+      与 `docs/traceability.d/*.toml` 的全部片段。`gates/diag/_text_*.md` 是 gitignored
+      的 scratch（不随树分发、也进不了提交），它的内容会**原文照搬**进 changelog 片段 ⇒
+      扫片段就够，不必去扫一目录别人的 `_text_*.md`（那会拿别人的欠账咬这一趟）。
+    返回 `(problems, checked)`：`problems` 每条都带**段名 + token + 可照抄的修法**；
+    `checked` 是实际核对过的引用条数（`0` ⇒ 调用方打 `[skip]`，不算错）。
+    """
+    text_doc = pathlib.Path(str(TEXT).format(task=task.replace("-", ""))) if task else None
+    docs: list[tuple[str, pathlib.Path, str]] = []
+
+    def _text(p: pathlib.Path) -> str:
+        try:
+            return p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+
+    if task:
+        secs = parts if parts is not None else parse_text_doc(text_doc)[0]
+        for sec in TEXT_SECTIONS:
+            body = secs.get(sec, "")
+            if body and body.strip():
+                docs.append((f"{sec} 段", text_doc, body))
+        for label, rel in (("changelog 段", f"docs/changelog.d/{task}.md"),
+                           ("traceability 段", f"docs/traceability.d/{task}.toml")):
+            p = wt / rel
+            if p.is_file():
+                docs.append((label, p, _text(p)))
+    else:
+        for label, pat in (("changelog 段", "docs/changelog.d/*.md"),
+                           ("traceability 段", "docs/traceability.d/*.toml")):
+            for p in sorted(wt.glob(pat)):
+                docs.append((label, p, _text(p)))
+
+    problems: list[str] = []
+    checked = 0
+    seen: set[tuple[str, str]] = set()
+    for label, doc, body in docs:
+        for m in _MD_REF.finditer(body):
+            token = m.group(1)
+            if token.startswith(("http", "/")) or re.match(r"^[A-Za-z]:[\\/]", token):
+                continue                      # 项目外引用，不属这条（同 check_layers）
+            if pathlib.Path(token).name in _DOC_REF_KNOWN_MISSING:
+                continue
+            if (label, token) in seen:
+                continue                      # 同一段里重复写同一个 token 只报一次
+            seen.add((label, token))
+            checked += 1
+            if not md_ref_resolves(wt, doc, token):
+                problems.append(f"{label} `{token}`（{_ref_fix_hint(wt, token)}）")
+    return problems, checked
+
+
 def preflight(wt: pathlib.Path, *, task: str = "", card: str | None = None,
               batch: str | None = None, allow: list[str] | None = None,
               no_gate: bool = False, commit_only: bool = False,
               incremental: bool = False, out=None) -> int:
-    r"""落地前置体检（卡 E1）：11 条判据**全部跑完再说**，全程只读、不 fail-fast。
+    r"""落地前置体检（卡 E1 + 卡 E15）：12 条判据**全部跑完再说**，全程只读、不 fail-fast。
 
     退出码：`0` 全绿（可以直接落地）/ `1` 有 ❌（修完重跑 `--preflight`）。
     ★ 只读的判据：不跑 `git add`、不建索引、不写 `gates/**`（ruff 带 `--no-cache`）。
@@ -1004,7 +1191,32 @@ def preflight(wt: pathlib.Path, *, task: str = "", card: str | None = None,
                   tpl_bad or f"这一趟会写「{line[:30]}…」",
                   "改 gates_trailer_template 的措辞（全量那支必须含「全量门禁绿 + seal」）"))
 
-    say("=== 落地前置体检（--preflight · 只读 · 11 条一次说全，不 fail-fast）===")
+    # ⑫ 文书引用体检（卡 E15 · T-AG466）：本次三份文书里反引号包住的 `.md` 必须解析得到
+    #   ★ 为什么要提前到体检：`check_layers` 的「引用完整性」只扫 `docs/**/*.md`，
+    #     一条写错的短路径要等**全量门禁**（≈15 分钟）才红，而且同时打红两道门
+    #     （`check_layers` + `check_layers_selftest`）。这一条在文书写下后 10 秒内说。
+    if not wt.is_dir():
+        items.append(("文书引用解析得到", False, "卡树不存在", "确认卡树路径"))
+    else:
+        ref_bad, ref_checked = doc_ref_problems(wt, task, parts or None)
+        if ref_bad:
+            items.append(("文书引用解析得到", False,
+                          "文书引用解析不到：" + "；".join(ref_bad[:2])
+                          + (f"（另有 {len(ref_bad) - 2} 处）" if len(ref_bad) > 2 else ""),
+                          "按报行点名的 token 改（`skills/` 前缀能解析就补前缀；"
+                          "或去掉反引号）⇒ 改完重跑 --preflight"))
+        elif ref_checked == 0:
+            items.append(("文书引用解析得到", True, "[skip] 文书里没有 .md 引用", ""))
+        else:
+            items.append(("文书引用解析得到", True,
+                          f"{ref_checked} 条 .md 引用全部解析得到 "
+                          f"（三基准同 check_layers）", ""))
+
+    # ★ 卡 E16（T-AG467）：**先说锁** —— 等锁 28 分钟才被发现的代价太大，
+    #   体检第一屏就把「这一趟会不会排在别人后面」说出来（只读：不清锁、不写文件）。
+    for _ln in lock_readout():
+        say(_ln)
+    say("=== 落地前置体检（--preflight · 只读 · 12 条一次说全，不 fail-fast）===")
     for name, ok, detail, fix in items:
         flat = detail.replace("\n", " ")[:150]
         if ok:
@@ -1301,10 +1513,12 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
         return True  # 读不到栅栏 ⇒ 不做集成（现有逻辑不变）
     # 读 backlog 找各成员卡的 tree
     card_files_map: dict[str, tuple[str, ...]] = {}
+    member_by_id: dict[str, dict] = {}
     for m in man.get("member", []):
         mid = m["id"]
         cfiles = _card_files_from_backlog(into_wt, mid, None) or (m.get("paths") or [])
         card_files_map[mid] = tuple(cfiles)
+        member_by_id[mid] = m
     # 找各成员卡的 tree（从 backlog）
     backlog_path = into_wt / "docs" / "workbacklog.toml"
     if not backlog_path.is_file():
@@ -1314,7 +1528,7 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
     sep = b"\r\n" if b"\r\n" in raw else b"\n"
     lines = raw.split(sep)
     kv = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
-    member_trees: list[tuple[str, pathlib.Path]] = []
+    blocks: list[tuple[str, str]] = []   # backlog 里的 (卡号, 声明的树)
     n = len(lines)
     i = 0
     while i < n:
@@ -1336,19 +1550,60 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
                     tree_val = m2.group(2)
             j += 1
         if cid_val and tree_val:
-            # ★ 卡 212 跟进（2026-10-14 主控，批 2 收口被挡时逮到）：
-            #   原条件的第二项是 `set(cfiles) & set(card_files_map.get(mid, ()))`
-            #   —— 而 `cfiles` **就是** `card_files_map.get(mid)` ⇒ **自己跟自己求交**，
-            #   只要非空就恒真 ⇒ 批里每一条带 `tree` 的 backlog 卡都被认成
-            #   "第一个成员"，**陈旧卡树**于是全被当成成员拉进来，报出
-            #   `X 和 X 都改了 <同一个文件>` 的**假冲突** ⇒ `--batch` 收口全被挡。
-            #   改成**按卡号**匹配（容忍 `卡215` / `215` 这种口径差）。
-            key = re.sub(r"\D", "", cid_val)
-            for mid in card_files_map:
-                if mid == cid_val or (key and re.sub(r"\D", "", mid) == key):
-                    member_trees.append((mid, ROOT / tree_val))
-                    break
+            blocks.append((cid_val, tree_val))
         i = j
+
+    # ★ 卡 E13（T-AG464）：匹配**不许猜**。本函数的历史口径是「卡号里的数字相等就算同一个成员」，
+    #   而 `G1` / `F1` / `E1` / `B1` / `D1` 的数字键**都是 1** ⇒ 批里只有成员 G1 时，
+    #   backlog 里别的 `*1` 卡也被认成 G1，把 `.wt/F1` 的改动合进批树（第五处机制那次事故）。
+    #   现在三层口径，逐层收紧：
+    #     ① 精确优先：卡号 == 成员号 ⇒ 命中，**不做任何模糊匹配**；
+    #     ② 数字回退只兜**没精确命中的成员**（别人的卡不再有机会冒充），且必须**唯一**：
+    #        同一数字键对上不止一个成员 ⇒ 点名「数字键撞车」并**停手**（不许只打印继续）；
+    #     ③ 树必须是这位成员自己的树：`f".wt/{mid}"`，或栅栏里给该成员写的 `tree`；
+    #        对不上 ⇒ 点名并**停手**（说明匹配到的其实是别人的卡块）。
+    def _digits(s: str) -> str:
+        return re.sub(r"\D", "", s)
+
+    def _own_tree(mid: str) -> str:
+        return str(member_by_id[mid].get("tree") or f".wt/{mid}")
+
+    member_trees: list[tuple[str, pathlib.Path]] = []
+    matched: set[str] = set()
+    used: set[int] = set()
+    # ① 精确优先（按 backlog 顺序 ⇒ 可复现）
+    for idx, (cid_val, tree_val) in enumerate(blocks):
+        if cid_val not in card_files_map or cid_val in matched:
+            continue
+        if tree_val != _own_tree(cid_val):
+            print(f"  ★ {cid_val} 声明的树是 {tree_val}，但成员 {cid_val} 的树是 "
+                  f"{_own_tree(cid_val)} ⇒ 停手")
+            return False
+        member_trees.append((cid_val, ROOT / tree_val))
+        matched.add(cid_val)
+        used.add(idx)
+    # ② 数字回退：只给还没精确命中的成员兜底
+    for idx, (cid_val, tree_val) in enumerate(blocks):
+        if idx in used:
+            continue
+        key = _digits(cid_val)
+        if not key:
+            continue
+        cands = [mid for mid in card_files_map if mid not in matched and _digits(mid) == key]
+        if not cands:
+            continue            # 这张卡不是任何（还没命中的）成员 ⇒ 与批无关，跳过
+        if len(cands) > 1:
+            print(f"  ★ 数字键撞车：卡 {cid_val} 的数字键 {key} 同时对上成员 "
+                  f"{'、'.join(cands)} ⇒ **停手**（不许猜、不许跳过静默继续）")
+            return False
+        mid = cands[0]
+        if tree_val != _own_tree(mid):
+            print(f"  ★ {cid_val} 声明的树是 {tree_val}，但成员 {mid} 的树是 "
+                  f"{_own_tree(mid)} ⇒ 停手")
+            return False
+        member_trees.append((mid, ROOT / tree_val))
+        matched.add(mid)
+        used.add(idx)
     # 去重：同一棵树只取一次
     seen_trees: set[pathlib.Path] = set()
     unique: list[tuple[str, pathlib.Path]] = []
@@ -1359,6 +1614,7 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
     if len(unique) <= 1:
         return True  # 只有一棵树（或都是主树）⇒ 不需要集成
     print(f"=== ①′ 多棵树集成（{len(unique)} 棵 → {into_wt}）===")
+    print(f"  参加集成的树：{'、'.join(str(src) for _mid, src in unique)}")
     seen_files: dict[str, str] = {}
     total = 0
     for member_id, src_wt in unique:
@@ -1415,6 +1671,82 @@ def fast_preflight(wt: pathlib.Path, env: dict) -> bool:
     return True
 
 
+def _join_merge_queue(a, wt: pathlib.Path, env: dict) -> int:
+    r"""卡 E5（`T-AG447`）：进**合并队列**，等到自己成为队首（单写者 ④–⑦）。
+
+    次序是判据的一部分：①②③（迁树 / 文书 / sync_counts）与 ③″ 快预检**已经在队外**做完
+    ⇒ 排队的那些不是空等；到了 ④ 之前才来抢单写者段。
+
+    返回 `0` 继续 / `8` 等队首超时（已从队列里摘掉）。
+
+    ★ 投机预检**不许复用**（判据 3）：入队时记下当时的**主树 HEAD**；轮到队首时主树若已
+      前进（前一笔刚 ff 合流），`respec_required()` ⇒ 重跑一次 ③″，再往下走。
+    ★ 边界（如实）：**不替别人 rebase 脏卡树** —— 卡树里是工人未提交的改动，
+      `git rebase` 会拒绝（`cannot rebase: You have unstaged changes`），强来就是丢活。
+      所以「下一个的卡树 rebase 到新 HEAD」这一步做成**尽力而为**（干净才 rebase），
+      失败就留给它自己落地时的 ①（迁树）——两边都不静默（都打印）。
+    """
+    from pool import queue as merge_queue
+
+    base = git("rev-parse", "HEAD")
+    mine = tuple(getattr(a, "allow", ()) or ())
+    pos = merge_queue.enqueue(a.tree, a.task, base=base, files=mine)
+    print("=== ④′ 合并队列（单写者：④–⑦ 同时只许一笔在跑）===")
+    # ★ 卡 E5：**同文件卡不许同批** —— 域相交的那几笔各自占一个批，不许并排（单据在 queue.py）。
+    peers = merge_queue.same_file_conflicts(a.task)
+    if peers:
+        print(f"  ★ 同文件卡不许同批：{a.task} 的域（{'、'.join(mine) or '未记'}）与 "
+              f"{'、'.join(peers)} 相交 ⇒ 排在它们后面（不并行进同一批）")
+    print(f"  [队列] {a.task} 位置 {pos['position']}/{pos['total']}"
+          f"（队首 {pos['head']}；基点 {base[:8]}）")
+    if not merge_queue.wait_turn(a.task, timeout=a.queue_wait, say=print):
+        merge_queue.drop(a.task)
+        return 8
+    main_now = git("rev-parse", "HEAD")
+    if merge_queue.respec_required(a.task, base=main_now):
+        print(f"  [队列] ★ 主树在排队期间前进到 {main_now[:8]}（入队时 {base[:8]}）"
+              f"⇒ **投机预检作废**，重跑 ③″（结果不复用）")
+        if not fast_preflight(wt, env):
+            return 7
+    return 0
+
+
+def _prepare_next_member(entry: dict | None) -> None:
+    r"""卡 E5 判据 3：队首 ff 合流后，把**下一个**的卡树 rebase 到新 HEAD（尽力而为）。
+
+    ★ 只在卡树**干净**时真 rebase。工人改到一半的卡树（未提交改动）rebase 会被 git 拒绝，
+      强来 = 丢活（坑 33 同族）⇒ 跳过并打印「由它自己 ① 迁树」。
+    ★ 不管 rebase 成没成，**都不许**替它"重跑门禁"：门禁只能在它自己的进程里跑（锁 / 端口 /
+      卡树 cwd 都在那边）。它变队首时 `respec_required()` 会咬 ⇒ 它自己重跑 ③″–④。
+    """
+    if not entry:
+        print("  [队列] 没人排队了（单写者段归还）")
+        return
+    from pool import queue as merge_queue
+
+    task = str(entry.get("task") or "")
+    wt = ROOT / str(entry.get("tree") or "")
+    new_head = git("rev-parse", "HEAD")
+    print(f"=== ④″ 交接：下一个是 {task}（树 {entry.get('tree')}）===")
+    if not wt.is_dir():
+        print(f"  ★ 卡树 {wt} 不存在 ⇒ 摘掉它（它要落地得先建树）")
+        merge_queue.drop(task)
+        return
+    dirty = [x for x in git("status", "--porcelain", "-uno", cwd=wt,
+                            check=False).splitlines() if x.strip()]
+    if dirty:
+        print(f"  · 卡树有 {len(dirty)} 个未提交改动 ⇒ **不替它 rebase**"
+              f"（那会丢工作区改动）⇒ 由它自己落地时 ① 迁树")
+        return
+    r = run(["git", "rebase", new_head], cwd=wt, check=False)
+    if r.returncode != 0:
+        print(f"  ★ rebase 失败（{(r.stderr or '').strip()[:160]}）⇒ **需人工**"
+              f"（不自动择一）；它的 ③″ 结论已作废，变队首时会重跑")
+        run(["git", "rebase", "--abort"], cwd=wt, check=False)
+        return
+    print(f"  ✓ {task} 的卡树已 rebase 到 {new_head[:8]}（它的投机预检作废 ⇒ 变队首时重跑）")
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser()
@@ -1466,6 +1798,9 @@ def main(argv: list[str] | None = None) -> int:
                          "默认会先预检（参数检查之后、④ 全量之前）")
     ap.add_argument("--no-preflight", action="store_true",
                     help="（已改名）旧写法，等价 `--skip-preflight`；保留只为不打断既有脚本")
+    ap.add_argument("--queue-wait", type=float, default=3600.0,
+                    help="★ 卡 E5：合并队列里最多等多久轮到自己（秒，默认 3600）；"
+                         "超时 ⇒ 从队列摘掉并退 8（不白占着单写者段）")
     a = ap.parse_args(argv)
     if a.no_preflight:
         print("  ★ `--no-preflight` 已改名 `--skip-preflight`（它跳过的是③″快门禁预检，"
@@ -1606,6 +1941,13 @@ def main(argv: list[str] | None = None) -> int:
             return 7    # ★ 预检红 ⇒ 停手（全量门禁 ④ 一步没跑、锁也没拿）
 
         if not a.no_gate:
+            # ★ 卡 E5（T-AG447）：**进合并队列**（单写者 = ④–⑦）。①②③ 与 ③″ 已在队外做完
+            #   ⇒ 排队的不空等；轮到队首才发现主树前进 ⇒ 重跑 ③″（投机预检不许复用）。
+            _q = _join_merge_queue(a, wt, env)
+            if _q != 0:
+                return _q
+
+        if not a.no_gate:
             # ★ 卡 184（T-G284）：算要不要跑增量 —— 默认全量；只有显式给 --affected /
             #   --changed-from 才考虑增量，且三条强制全量任何一条命中就跑全量：
             #   ②.1 判据本体改了（scripts/**/tools/**/gates/**）/ ②.2 空计划 / ②.3 今天还没跑过全量
@@ -1658,16 +2000,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  ★ 强制全量（不传 --affected）：{force_full_reason}")
             print(f"=== ④ 锁（段 {a.port_base}）→ 门禁（硬超时 1800s；"
                   f"{'增量' if incremental_run else '全量'}）===")
-            r = subprocess.run([sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
-                                "acquire", "--card", lock_label, "--wait", "5400"],
-                               cwd=str(wt), env={**os.environ, **env},
-                               capture_output=True, text=True, encoding="utf-8", errors="replace",
-                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            print(r.stdout.strip()[-400:])
+            # ★ 卡 E16（T-AG467）：拿锁改成**流式**（`acquire_gate_lock`）—— `gate_lock`
+            #   每 60s 的「等门禁锁 Ns…」必须出现在落地日志里；`capture_output` 会全吞掉。
+            lock_rc = acquire_gate_lock(lock_label, wt, env, wait=5400)
             # ★ 卡 163 INV-28：拿锁后起续租线程 —— 门禁跑期间锁不会被判陈旧。
             #   不传 --stale-after ⇒ 用 gate_lock.DEFAULT_STALE_AFTER（唯一真源，不写第二份）。
             renew_stop = threading.Event()
-            if r.returncode == 0:
+            if lock_rc == 0:
                 _interval = float(os.environ.get("TF_GATE_RENEW_INTERVAL", "300"))
                 threading.Thread(
                     target=_renewer_loop,
@@ -1883,6 +2222,12 @@ def main(argv: list[str] | None = None) -> int:
                 print("  ★★ `rebase --continue` 也失败 ⇒ **停手**：")
                 print("  ", (cont.stdout or "")[-400:].strip())
                 print("  ", (cont.stderr or "")[-400:].strip())
+                # ★ 卡 E5 判据 4：自动 rebase（含派生物自动解决）一次仍失败 ⇒ **出队 + 需人工**
+                if not a.no_gate and not a.commit_only:
+                    from pool import queue as _mq
+                    _mq.drop(a.task)
+                    print(f"  ★ 卡 E5：{a.task} 已从合并队列出队 ⇒ **需人工**"
+                          f"（下一笔可以接着跑，但它自己得人来判冲突）")
                 return 3
             print("  ★ 派生物冲突已**自动解决**：三个共享文档取基线版 + **按片段重汇总**；"
                   "门禁产物取本笔的")
@@ -1909,10 +2254,22 @@ def main(argv: list[str] | None = None) -> int:
             print("     就 `git -C <主树> checkout -- <那个文件>` 丢掉它，"
                   "再手工 `git merge --ff-only "
                   f"{new[:12]}`。")
+        # ★ 卡 E5 判据 4：主树前进导致 ff 失败 ⇒ 上面已自动 rebase 过一次；这次 ff 仍失败
+        #   ⇒ **出队 + 打印需人工**（不许让它永远占着队首，把后面所有卡一起堵死）。
+        if not a.no_gate and not a.commit_only:
+            from pool import queue as _mq
+            _mq.drop(a.task)
+            print(f"  ★ 卡 E5：{a.task} 已从合并队列出队 ⇒ **需人工**")
         return 2
     print("  ff 合流完成：主树 →", git("rev-parse", "--short", "HEAD"))
     print("  主树 HEAD =", git("rev-parse", "--short", "HEAD"), "| -uno =",
           len([x for x in git("status", "--porcelain", "-uno").splitlines() if x.strip()]), "行")
+    # ★ 卡 E5 判据 3：队首 ff 成功 ⇒ **出队**，下一个自动变队首；把它的卡树
+    #   尽力 rebase 到新 HEAD（脏树不碰），它的投机预检由它自己变队首时重跑。
+    if not a.no_gate and not a.commit_only:
+        from pool import queue as _mq
+        _next = _mq.advance()
+        _prepare_next_member(_next)
 
     # ★ 卡 184（T-G284）⑧ 复核落盘（追加三）：跑 wb_review.py --rev <新提交> --json，
     #   写 gates/review/<task>.json。★ 口径照卡 143：「提交之后 · 异步 · 不挡提交」——

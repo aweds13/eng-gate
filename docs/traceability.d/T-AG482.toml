@@ -1,0 +1,18 @@
+[entries."T-AG482"]
+id = "T-AG482"
+title = "落地链五件合并修：批集成精确匹配 / 文书引用体检 / 门禁锁判死 / auto 判档 fail-closed / 合并队列（T-AG482）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E28-落地链五件合并.md",
+  "file:tools/pool/landing.py",
+  "file:tools/pool/queue.py",
+  "file:gates/diag/gate_lock.py",
+  "file:gates/defs/domains.py",
+  "file:.gitignore",
+  "file:tests/test_wb_land.py",
+  "file:tests/test_gate_lock.py",
+  "file:tests/test_pool_queue.py",
+]
+gaps = "- **真仓只跑到 `make` 前置为止**：`wb_batch.py make` / `land` 在真仓没跑过（会往主仓 `gates/diag` 写运行时状态、建 `.wt/batch<号>`），见 `tools/pool/landing.py` 的 `_join_merge_queue` 与 `tools/pool/queue.py` 文件头「★ 边界（如实）」。- **`git apply --3way` 的真冲突分支没被单测直接打中**：同文件两卡在 `make` 前置检查就被点名拒绝，冲突那条路径只被「点名卡与路径」覆盖，见 `tests/test_wb_land.py` 里 `test_preflight_*` 那一组。- **`wb_dispatch --batch --execute` 的逐成员真起工人未验证**：dry-run 与两条拒绝路径已测，真起进程那一步没有钉子，见 `tools/wb_dispatch.py` 的 `--batch` 分支。- **合并队列只有本机状态**：运行态落成 gitignored 的 `merge-queue.json`（不入库、跨机不共享）；「把下一棵卡树 rebase 到新 HEAD」仍写在 `tools/pool/landing.py`，本模块只管状态。"
+

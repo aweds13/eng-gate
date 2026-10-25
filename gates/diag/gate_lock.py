@@ -27,7 +27,10 @@
 pid 立刻就"死"了，锁看着像僵尸 → 下一张卡把**正在跑门禁的活锁**偷走 → 又撞端口。
 现在改成**按锁文件的年龄**（租约）判：
   - 锁比 `--stale-after`（默认 10800s = 3 小时）旧 → 视为陈旧，清掉重拿（会大声打印）；
-  - 否则一律**等**（不管 pid 活不活）。
+  - 否则**等**（不管 pid 活不活）。
+    ★ 卡 E16（`T-AG467`）给这一条加了一个**收窄的**例外：租约内 + **同机** + 持有者进程
+      **确实已不存在**（`OpenProcess` 只问不杀）⇒ 宽限期满才清（见下面「用法」与 `cmd_acquire`）。
+      判不了（跨机 / 无 pid / 探活不可用）⇒ 仍然一律等。
 
 ★ 2026-09-27 续租（T-G161）：租约是**从 `acquire` 起算的静态计时**，而跑门禁期间锁文件没人动。
 一张反证卡要连跑三趟全量门禁（≈30 分钟）时，旧的 1800s 租约会在它还在跑时到期
@@ -39,9 +42,17 @@ pid 立刻就"死"了，锁看着像僵尸 → 下一张卡把**正在跑门禁�
 锁文件固定在**主仓**的 `gates/diag/`（用 git 的 common dir 定位，
 所以在 `.wt/xxx` 这样的 worktree 里跑也指向同一处）。
 
+★ 卡 E16（`T-AG467`）补的那一处：租约**没到期**但**持有者进程已经不存在**（同机可判）时，
+以前只能人肉 `cat` 锁文件 + `--force`。现在 `acquire` 会**再等一个宽限期 `--grace`（默认 60s，
+防 pid 复用）**，仍不存在就清掉并打印 `[锁] 清掉死主的锁（card=… pid=… 进程已不存在）`。
+★ 租约语义**没松**（T-G169 原意不变）：判据仍是「锁文件里写的租约 + 锁文件 mtime」；
+死主清锁只处理「租约内 + 进程已不存在」，跨机 / 锁里没有 pid / 探活不可用 ⇒ **一律不清、只等**。
+
 用法（在自己那棵树里）
 ----------------------
     python -P -X utf8 gates/diag/gate_lock.py acquire --card 057 --wait 5400
+    #   --grace 0 = 关掉死主清理（回到卡 E16 之前的行为）
+    python -P -X utf8 gates/diag/gate_lock.py acquire --card 057 --wait 5400 --grace 0
     python -P -X utf8 scripts/run_gates.py          # 只有拿到锁才跑
     python -P -X utf8 scripts/run_gates.py --seal
     python -P -X utf8 gates/diag/gate_lock.py renew --card 057   # 长任务：定期续租（刷新 mtime）
@@ -81,6 +92,14 @@ GATE_PORTS = (8531, 8532, 8541, 8542, 8543, 8544)
 DEFAULT_STALE_AFTER = 10800
 DEFAULT_PORT_BASE = 8531
 DEFAULT_MAX_CONCURRENT = 2
+
+#: ★ 卡 E16（T-AG467）：死主宽限期 —— 判「同机 + pid 不存在 + 租约未过期」之后**再等**
+#: 这么多秒才清（防 pid 复用）。`--grace 0` 关掉（回到卡 E16 之前的行为）。
+DEFAULT_GRACE = 60
+
+#: 等锁的轮询间隔（秒）。宽限期内的那一轮会缩短到「离宽限到期还差多少」，
+#: 免得为了等 60s 宽限白转四圈 15s（判据仍以宽限期本身为准，不是这个数）。
+POLL_INTERVAL = 15.0
 
 
 def segment_base() -> int:
@@ -241,6 +260,68 @@ def _active_locks(stale_default: int) -> list[tuple[Path, dict, float]]:
     return out
 
 
+def _pid_alive(pid: object) -> bool | None:
+    r"""持有者进程还活着吗：`True` 活着 / `False` 已不存在 / `None` **判不了**。
+
+    ★★ 坑 27：Windows 上**不许**用 `os.kill(pid, 0)` 探活 —— CPython 把它实现成
+      `OpenProcess` + `TerminateProcess`，那一行会**真的把持有者的门禁进程杀掉**
+      （退出码 0，看起来还像探活成功）。这里 Windows 走 `OpenProcess`，**只问不杀**：
+        · 拿不到句柄：`ERROR_INVALID_PARAMETER(87)` = 没这个 pid ⇒ 死；
+          `ERROR_ACCESS_DENIED(5)` 等其它错 = 有进程但问不了 ⇒ **当活着**（跨权限失败不算死）。
+        · 拿到句柄：`GetExitCodeProcess == STILL_ACTIVE(259)` ⇒ 活着。
+      ② POSIX 上 `os.kill(pid, 0)` 是**真探活**（该平台没有那个坑），照用。
+    ★ `None` 一律**不清锁**：拿不准时宁可等（卡 E16「不许在跨机/判不了身份时清锁」）。
+    """
+    try:
+        n = int(pid)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if n <= 0:
+        return None
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = k32.OpenProcess(0x1000, False, n)   # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            err = ctypes.get_last_error()
+            return err != 87                          # 87 = 没这个 pid；别的都当活着
+        try:
+            code = wintypes.DWORD()
+            if not k32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return None
+            return int(code.value) == 259            # STILL_ACTIVE
+        finally:
+            k32.CloseHandle(handle)
+    try:
+        os.kill(n, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return None
+    return True
+
+
+def liveness_text(info: dict) -> str:
+    """给 status / 体检用的一句：`活着` / `已不存在` / `not verified（原因）`。"""
+    pid = info.get("pid")
+    if pid is None:
+        return "not verified（锁文件里没有 pid 字段）"
+    alive = _pid_alive(pid)
+    if alive is None:
+        return "not verified（进程探活不可用）"
+    return "活着" if alive else "已不存在"
+
+
+def _same_machine(info: dict) -> bool:
+    """这把锁是不是**本机**写的。锁文件里没有 `host`（卡 E16 之前的旧锁）⇒ 当本机。"""
+    host = str(info.get("host") or "")
+    return not host or host == socket.gethostname()
+
+
 def _ports_busy() -> list[str]:
     """门禁端口有没有人在听（只报，不掐）。★ T-G156：端口段跟随 `TF_GATE_PORT_BASE`。"""
     hits: list[str] = []
@@ -257,12 +338,30 @@ def _ports_busy() -> list[str]:
     return hits
 
 
-def cmd_acquire(card: str, wait: int, stale_after: int) -> int:
+def cmd_acquire(card: str, wait: int, stale_after: int, grace: int = DEFAULT_GRACE) -> int:
+    r"""拿锁（拿不到就等）。★ 卡 E16（T-AG467）：三种「静默」各修一处。
+
+    1. **等锁有进度**：每 60s 打一行 `[锁] 等门禁锁 Ns… <谁占着>`（消费方要**流式**读，
+       见 `tools/pool/landing.py::acquire_gate_lock`：不流式 ⇒ 这些行全被 `capture_output` 吞掉）；
+    2. **死主自动清**：`FileExistsError` 时除了看租约，再看持有者**进程是否还活着**。
+       判定「同机 + pid 不存在 + 租约未过期」⇒ **再等宽限期 `grace`**（默认 60s，防 pid 复用），
+       仍不存在（且锁文件里还是那个 pid）才清掉并打印
+       `[锁] 清掉死主的锁（card=… pid=… 进程已不存在）`；
+    3. **判不了就不清**：跨机（`host` 不同）/ 锁里没有 `pid` / 探活不可用 ⇒ **保持原样等待**，
+       并在报行里明说「判不了持有者身份」。
+
+    ★ 租约语义**一字不动**（T-G169：陈旧判定以锁文件里写的租约为准）：`age > 租约` 那一支
+      仍在最前面、行为不变；死主清锁只处理「租约**内**但进程已不存在」这一种。
+    """
     p = lock_path()
     t0 = time.time()
     printed = 0.0
+    dead_since: float | None = None      # 这个 pid 第一次被判「不存在」的时刻
+    dead_pid: int | None = None
+    unverified_said = False
     while True:
         blocked = ""
+        nap = POLL_INTERVAL
         try:
             fd = os.open(str(p), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -270,6 +369,7 @@ def cmd_acquire(card: str, wait: int, stale_after: int) -> int:
                     {
                         "card": card,
                         "pid": os.getpid(),
+                        "host": socket.gethostname(),
                         "cwd": str(Path.cwd()),
                         "base": segment_base(),
                         "lease": stale_after,
@@ -337,6 +437,52 @@ def cmd_acquire(card: str, wait: int, stale_after: int) -> int:
                 f"本段锁被占：card={info.get('card')} pid={info.get('pid')}"
                 f"（已 {int(age)}s）"
             )
+            # ★ 卡 E16：租约内仍然要问一句「持有者还活着吗」—— 但**只在同机能判**时。
+            pid_raw = info.get("pid")
+            pid = int(pid_raw) if isinstance(pid_raw, int) or str(pid_raw or "").isdigit() else None
+            if not _same_machine(info):
+                blocked += f"；持有者在另一台机器（{info.get('host')}）⇒ 判不了，只等"
+                dead_pid, dead_since = None, None
+            elif pid is None:
+                blocked += "；判不了持有者身份（锁文件里没有 pid）⇒ 不清，只等"
+                if not unverified_said:
+                    print("[锁] 判不了持有者身份（锁文件里没有 pid 字段）⇒ 清不了，只能等",
+                          flush=True)
+                    unverified_said = True
+                dead_pid, dead_since = None, None
+            elif grace <= 0:
+                dead_pid, dead_since = None, None      # --grace 0 ⇒ 回到卡 E16 之前的行为
+            else:
+                alive = _pid_alive(pid)
+                if alive is True:
+                    dead_pid, dead_since = None, None
+                elif alive is None:
+                    blocked += "；判不了持有者身份（进程探活不可用）⇒ 不清，只等"
+                    dead_pid, dead_since = None, None
+                else:
+                    now = time.time()
+                    if dead_pid != pid or dead_since is None:
+                        dead_pid, dead_since = pid, now
+                    waited_dead = now - dead_since
+                    blocked += (f"；持有者进程 {pid} 已不存在"
+                                f"（宽限 {int(waited_dead)}/{grace}s）")
+                    if waited_dead >= grace:
+                        # 再确认一次：① 进程确实还不存在（防 pid 复用）
+                        #              ② 锁文件里还是**这个** pid（防别人在这期间换过锁）
+                        again = _read(p)
+                        if _pid_alive(pid) is False and again.get("pid") == pid:
+                            try:
+                                p.unlink()
+                                print(
+                                    f"[锁] 清掉死主的锁（card={again.get('card')} pid={pid}"
+                                    f" 进程已不存在；宽限 {grace}s 已满）",
+                                    flush=True,
+                                )
+                                dead_pid, dead_since = None, None
+                                continue
+                            except OSError:
+                                pass
+                    nap = max(0.1, min(POLL_INTERVAL, grace - waited_dead))
         waited = time.time() - t0
         if waited >= wait:
             print(f"[锁] ★ 等超时（{wait}s）——{blocked}", flush=True)
@@ -349,29 +495,60 @@ def cmd_acquire(card: str, wait: int, stale_after: int) -> int:
                 f"（端口{'忙:' + ','.join(busy) if busy else '空'}）",
                 flush=True,
             )
-        time.sleep(15)
+        # ★ 睡不过期：宁可多转几圈，也不许「本来 wait 已经到了还多睡一轮」
+        #   （判据是 `--wait`，不是轮询间隔；宽限期那一支已经把 nap 压到离到期还差多少）。
+        time.sleep(max(0.1, min(nap, wait - waited)))
 
 
 def cmd_release(card: str, force: bool) -> int:
-    p = lock_path()
-    if not p.exists():
+    r"""放锁。★ 卡 E16（`T-AG467`）：**不再只看当前 cwd 的端口段**。
+
+    病灶（`tools/tf_commit.py:41` 记过原话）：锁按段分把（`gates-<base>.lock`），而
+    `release` 只认 `lock_path()` 那一把 ⇒ 在另一段 / 另一棵树里跑 `release --card X`
+    得到「没有锁，无需释放」退 0，真正的那把锁还挂在那里（人只能 `cat` 锁 + `--force`，
+    它还会白占一个全局并发名额）。
+    现在先扫**全部段**：
+      ① 你的卡就在某段 ⇒ 逐个释放并点出段号；
+      ② 你的卡哪段都不在、但别的段有锁 ⇒ **点名持有者**（段 / card / pid）并退 4
+         （不许把「锁在别的段」静默说成「没有锁」）；
+      ③ 当前段那把不是你的 ⇒ `--force` 语义不变（人工兜底），不加就退 4 并点名。
+    ★ 判据仍是「锁文件里的 `card` 是不是你」；租约语义一字不动（本函数不看租约）。
+    """
+    holders = [(p, _read(p)) for p in all_lock_paths()]
+    mine = [(p, info) for p, info in holders if info.get("card") == card]
+    if mine:
+        rc = 0
+        for p, info in mine:
+            try:
+                p.unlink()
+            except OSError as exc:
+                print(f"[锁] 删不掉 {p.name}：{exc}", flush=True)
+                rc = 4
+                continue
+            print(f"[锁] 已释放（card={card} 段 base={info.get('base')} 文件={p.name}）",
+                  flush=True)
+        return rc
+    if not holders:
         print("[锁] 没有锁，无需释放", flush=True)
         return 0
-    info = _read(p)
-    if info.get("card") != card and not force:
+    for p, info in holders:
         print(
-            f"[锁] ★ 锁不是你的（持有者 card={info.get('card')} pid={info.get('pid')}）；"
-            f"确要强解加 --force",
+            f"[锁] ★ {card} 不是这把锁的持有者：段 base={info.get('base')}"
+            f" 文件={p.name} card={info.get('card')} pid={info.get('pid')}",
             flush=True,
         )
-        return 4
-    try:
-        p.unlink()
-    except OSError as exc:
-        print(f"[锁] 删不掉：{exc}", flush=True)
-        return 4
-    print(f"[锁] 已释放（card={card}）", flush=True)
-    return 0
+    cur = lock_path()
+    if force and cur.exists():
+        try:
+            cur.unlink()
+        except OSError as exc:
+            print(f"[锁] 删不掉：{exc}", flush=True)
+            return 4
+        print(f"[锁] ★ 已强解当前段那把（card={card} 并非持有者；--force 人工兜底）",
+              flush=True)
+        return 0
+    print("[锁] ★ 不释放别人的锁；确要强解当前段那把加 --force", flush=True)
+    return 4
 
 
 def cmd_renew(card: str) -> int:
@@ -420,6 +597,7 @@ def cmd_status(stale_after: int) -> int:
             f" pid={info.get('pid')} 起于 {info.get('at')}"
             f"（已 {age}s / 租约剩 {remain}s；"
             f"{'★ 超过租约，可被清' if age > lease else '租约内'}）"
+            f" 持有者进程={liveness_text(info)}"
             f" cwd={info.get('cwd')}",
             flush=True,
         )
@@ -456,6 +634,13 @@ def main() -> int:
         default=DEFAULT_STALE_AFTER,
         help=f"锁多久没动算陈旧（默认 {DEFAULT_STALE_AFTER}s）",
     )
+    a.add_argument(
+        "--grace",
+        type=int,
+        default=DEFAULT_GRACE,
+        help=f"判出「同机 + 持有者进程已不存在 + 租约未过期」后再等多少秒才清锁"
+             f"（默认 {DEFAULT_GRACE}s，防 pid 复用；=0 关掉，回到卡 E16 之前的行为）",
+    )
     r = sub.add_parser("release", help="放锁")
     r.add_argument("--card", required=True)
     r.add_argument("--force", action="store_true")
@@ -465,7 +650,7 @@ def main() -> int:
     s.add_argument("--stale-after", type=int, default=DEFAULT_STALE_AFTER)
     ns = ap.parse_args()
     if ns.cmd == "acquire":
-        return cmd_acquire(ns.card, ns.wait, ns.stale_after)
+        return cmd_acquire(ns.card, ns.wait, ns.stale_after, ns.grace)
     if ns.cmd == "release":
         return cmd_release(ns.card, ns.force)
     if ns.cmd == "renew":
