@@ -3983,6 +3983,17 @@ title = "台账驱动选测（TIA）：改动文件 → 台账 test: 指针 → 
 tree = ".wt/E36"
 spec = "复盘/卡/卡E36-台账驱动选测.md"
 files = ["tools/pytest_select.py", "tools/wb_nightly.py", "tests/test_pytest_select.py", "scripts/run_gates.py", "tools/wb_land.py"]
-depends = ["E30", "E31", "E35"]
+depends = ["E30", "E31", "E34", "E35"]
 risk = "high"
 status = "pending"
+[[cards]]
+id = "E37"
+task = "T-AG491"
+title = "变异驱动的用例汰换：找出零独有击杀的用例，参数化合并并补属性测试"
+tree = ".wt/E37"
+spec = "复盘/卡/卡E37-变异驱动用例汰换.md"
+files = ["tools/mutate_report.py", "tests/test_mutate_report.py", "tests/test_properties.py", "pyproject.toml"]
+depends = ["E32", "E33"]
+risk = "high"
+status = "pending"
+

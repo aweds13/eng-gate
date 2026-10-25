@@ -8818,3 +8818,12 @@ evidence = [
   "file:tools/wb_land.py",
 ]
 gaps = "- 回放判据用最近 20 笔提交做样本，样本小、且这 20 笔未必覆盖所有受影响路径，见 `tests/test_pytest_select.py` 的回放断言。- 「最近一次全量绿 ≤24 小时」依赖 `tools/wb_nightly.py` 的计划任务真的在跑；计划任务本身没有自动告警（只有 notifications.jsonl 追加），见 `tools/wb_nightly.py`。- 覆盖率统计口径：选测时只跑子集，`--cov-fail-under=70` 仍按子集算，与全量覆盖率不可直接比较，需与 E31 的结论一起复核，见 `docs/subsystems/ci/`。"
+
+[entries."T-AG491"]
+title = "变异驱动的用例汰换：零独有击杀用例 + 参数化合并 + 属性测试"
+kind = "card"
+status = "todo"
+partition = "E"
+card = "E37"
+evidence = ["file:复盘/卡/卡E37-变异驱动用例汰换.md", "file:tools/mutate_report.py", "test:test_mutate_report.py", "test:test_properties.py", "file:pyproject.toml"]
+gaps = ["变异引擎（mutmut / cosmic-ray）尚未选型，两者都没装时 fail closed —— 见 `tools/mutate_report.py`", "97 个参数化族要逐族人工确认 `ids` 可追溯，机械合并会丢原用例名 —— 见 `复盘/卡/卡E37-变异驱动用例汰换.md` 判据 2", "删除上限 3% 与「变异分下降 ≤0.5」需要在真跑一轮变异报告后才有数 —— 见判据 4", "属性测试只覆盖纯函数族，带子进程与文件写的用例不适用 —— 见 `tests/test_properties.py`"]
