@@ -1,0 +1,13 @@
+[entries."T-AG488"]
+id = "T-AG488"
+title = "门禁请求队列（T-AG488）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E34-门禁请求队列.md",
+  "file:tools/gate_queue.py",
+  "file:tests/test_gate_queue.py",
+  "file:tools/wb_land.py",
+  "file:gates/diag/gate_lock.py",
+]
+gaps = "- 槽数公式（可用内存减 2 GB 预留，再除 3 GB）是拍的，没有实测每条槽的真实峰值，见 `tools/gate_queue.py` 的槽位计算。- 只在**本机**做过两槽验证；云机多槽（E35 之后）未验证，见 `docs/subsystems/ci/云门禁机.md`。- `wb_land --from-queue` 只认「该卡最近一条 done 且 rev 等于父提交」，跨卡复用读数不做，见 `tools/pool/landing.py` 的 ⑦ 复核段。"

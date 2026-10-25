@@ -8720,3 +8720,87 @@ evidence = [
 ]
 gaps = "- **`chat-icon-stop` 没有真机读数**：面板当下 30 个任务项 `running 0`，只有纯函数判据覆盖 stop 态；等下一次真有任务在跑时才能补一条真机读数，见 `tests/test_trae_watch.py` 的 `ScriptedSampler`。- **`finished` 的真机转变没打过**：真机只验到「第一拍就是 arrow-up ⇒ 拒绝写 `.done`」（诚实边界）；`stop → arrow-up` 那条转变要等一个真在跑的会话，见 `tools/trae_watch.py` 的 `judge_sample()`。- **没接进派活器**：`wb_dispatch` 不认 Trae 卡（卡明确不许），所以「派活即起看守」只到 `tools/trae_watch.py` 手起为止，见 `skills/pipe-workbench/SKILL.md` 的那一行。- **`--stale-min 0` 是「关掉空转判定」不是「0 分钟没动」**：语义靠 docstring 与钉子表达，没有独立开关，见 `tools/trae_watch.py:178` 的注。"
 
+[entries."T-AG484"]
+id = "T-AG484"
+title = "并行度自适应与分片策略（T-AG484）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E30-并行度自适应与分片策略.md",
+  "file:scripts/run_gates.py",
+  "file:tests/test_run_gates_workers.py",
+]
+gaps = "- 档口阈值是拍的（10/6/4/2.5 GB），没有做过「压到换页再退档」的压力验证，见 `scripts/run_gates.py` 的 `pytest_workers()`。- 「在跑多少个 worker 就扣多少」读的是 `gates/diag/*.lock` 与队列快照，E34 落地前队列文件不存在，只能退化成看 lock，见 `gates/diag/gate_lock.py`。- 分片策略三档实测受机器负载影响，读数只在同机同时段可比，见本票 §判据 2。"
+
+[entries."T-AG485"]
+id = "T-AG485"
+title = "覆盖率开销：--cov 的固定税（T-AG485）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E31-覆盖率开销.md",
+  "file:pyproject.toml",
+  "file:scripts/run_gates.py",
+  "file:gates/defs/lang_python.py",
+  "file:tests/test_run_gates_cov.py",
+  "file:scripts/sitecustomize.py",
+]
+gaps = "- `COVERAGE_CORE=sysmon` 在本仓是未测状态（2026-10-25 那组读数被 shell 引号搞坏已作废），见本票 §现在疼在哪 第 2 条。- 若实测无效，本卡收口成「测过不改」，读数只写进 `docs/subsystems/ci/`，不落代码。- `PYTHONPATH` 相关改动须复用 `scripts/run_gates.py` 的 `tree_pythonpath()`（卡 063 / `T-G157` 假绿的前科），见 `复盘/门禁假绿-PYTHONPATH-T-G157.md`。"
+
+[entries."T-AG486"]
+id = "T-AG486"
+title = "快慢分层：e2e 移出默认门（T-AG486）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E32-快慢分层.md",
+  "file:pyproject.toml",
+  "file:gates/defs/lang_python.py",
+  "file:gates/defs/domains.py",
+  "file:tools/wb_land.py",
+  "file:tests/test_gate_split.py",
+]
+gaps = "- 22 条打标清单以本票 §现在疼在哪 第 1 条为准，其余 10-15 s 档慢用例未纳入，见 `tests/test_gate_split.py` 的清单常量。- 默认门 ≤150 s 是目标值，实测写进申报；与 `--cov` 开销（E31）耦合，两卡落地顺序不可颠倒，见 `docs/workbacklog.toml` 的 depends。- 分层改变了「一道门 vs 两道门」的口径，`domains.py` 的 `required_profiles()` 必须同步改，否则出现「落地只跑默认门」的空子。"
+
+[entries."T-AG487"]
+id = "T-AG487"
+title = "e2e 模板仓（T-AG487）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E33-e2e模板仓.md",
+  "file:tests/conftest.py",
+  "file:tests/test_template_repo.py",
+  "file:tests/test_wb_land.py",
+  "file:tests/test_contract_audit.py",
+]
+gaps = "- 只覆盖 `tests/test_wb_land.py` 与 `tests/test_contract_audit.py` 两文件的准备动作，其余 e2e（`test_evidence_map` / `test_card_specs_tracked` / `test_partitions`）未纳入，见本票 §判据 1。- 模板仓与真仓骨架「同构」是靠钉子钉的，真仓新增骨架文件时模板要跟着改，见 `tests/test_template_repo.py` 的骨架清单。- 若实测收益 <20%，本卡收口成「测过不改」，读数进 `docs/subsystems/ci/`。"
+
+[entries."T-AG488"]
+id = "T-AG488"
+title = "门禁请求队列（T-AG488）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E34-门禁请求队列.md",
+  "file:tools/gate_queue.py",
+  "file:tests/test_gate_queue.py",
+  "file:tools/wb_land.py",
+  "file:gates/diag/gate_lock.py",
+]
+gaps = "- 槽数公式（可用内存减 2 GB 预留，再除 3 GB）是拍的，没有实测每条槽的真实峰值，见 `tools/gate_queue.py` 的槽位计算。- 只在**本机**做过两槽验证；云机多槽（E35 之后）未验证，见 `docs/subsystems/ci/云门禁机.md`。- `wb_land --from-queue` 只认「该卡最近一条 done 且 rev 等于父提交」，跨卡复用读数不做，见 `tools/pool/landing.py` 的 ⑦ 复核段。"
+
+[entries."T-AG489"]
+id = "T-AG489"
+title = "云机确定性（T-AG489）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E35-云机确定性.md",
+  "file:scripts/cloud/bootstrap.ps1",
+  "file:scripts/cloud/run_gate.sh",
+  "file:tests/test_cloud_sync.py",
+  "file:docs/subsystems/ci/云门禁机.md",
+]
+gaps = "- B 类 15 条里 `test_gates_reuse_line` 10 条的根因仍未定位（云机 `C:/eng` 下确有 `src` 目录，但 `rg.input_hash` 对 `src/**` 返回空树哈希），见本票 §现在疼在哪 第 1 条 B 类。- 速度差（云机 684 s vs 本机 403 s）是 vCPU 数（4 vs 32）问题，本卡不负责提速，见 `docs/subsystems/ci/云门禁机.md` §7.1。- 云机上第二 checkout 的并行验证（`CLOUD_DIR`）未做，多槽云池属 E34 的后续，见 `scripts/cloud/run_gate.sh`。"
+

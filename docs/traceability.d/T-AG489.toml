@@ -1,0 +1,13 @@
+[entries."T-AG489"]
+id = "T-AG489"
+title = "云机确定性（T-AG489）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E35-云机确定性.md",
+  "file:scripts/cloud/bootstrap.ps1",
+  "file:scripts/cloud/run_gate.sh",
+  "file:tests/test_cloud_sync.py",
+  "file:docs/subsystems/ci/云门禁机.md",
+]
+gaps = "- B 类 15 条里 `test_gates_reuse_line` 10 条的根因仍未定位（云机 `C:/eng` 下确有 `src` 目录，但 `rg.input_hash` 对 `src/**` 返回空树哈希），见本票 §现在疼在哪 第 1 条 B 类。- 速度差（云机 684 s vs 本机 403 s）是 vCPU 数（4 vs 32）问题，本卡不负责提速，见 `docs/subsystems/ci/云门禁机.md` §7.1。- 云机上第二 checkout 的并行验证（`CLOUD_DIR`）未做，多槽云池属 E34 的后续，见 `scripts/cloud/run_gate.sh`。"

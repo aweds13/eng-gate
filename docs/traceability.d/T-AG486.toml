@@ -1,0 +1,14 @@
+[entries."T-AG486"]
+id = "T-AG486"
+title = "快慢分层：e2e 移出默认门（T-AG486）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E32-快慢分层.md",
+  "file:pyproject.toml",
+  "file:gates/defs/lang_python.py",
+  "file:gates/defs/domains.py",
+  "file:tools/wb_land.py",
+  "file:tests/test_gate_split.py",
+]
+gaps = "- 22 条打标清单以本票 §现在疼在哪 第 1 条为准，其余 10-15 s 档慢用例未纳入，见 `tests/test_gate_split.py` 的清单常量。- 默认门 ≤150 s 是目标值，实测写进申报；与 `--cov` 开销（E31）耦合，两卡落地顺序不可颠倒，见 `docs/workbacklog.toml` 的 depends。- 分层改变了「一道门 vs 两道门」的口径，`domains.py` 的 `required_profiles()` 必须同步改，否则出现「落地只跑默认门」的空子。"

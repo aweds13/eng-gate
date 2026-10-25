@@ -1,0 +1,14 @@
+[entries."T-AG485"]
+id = "T-AG485"
+title = "覆盖率开销：--cov 的固定税（T-AG485）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E31-覆盖率开销.md",
+  "file:pyproject.toml",
+  "file:scripts/run_gates.py",
+  "file:gates/defs/lang_python.py",
+  "file:tests/test_run_gates_cov.py",
+  "file:scripts/sitecustomize.py",
+]
+gaps = "- `COVERAGE_CORE=sysmon` 在本仓是未测状态（2026-10-25 那组读数被 shell 引号搞坏已作废），见本票 §现在疼在哪 第 2 条。- 若实测无效，本卡收口成「测过不改」，读数只写进 `docs/subsystems/ci/`，不落代码。- `PYTHONPATH` 相关改动须复用 `scripts/run_gates.py` 的 `tree_pythonpath()`（卡 063 / `T-G157` 假绿的前科），见 `复盘/门禁假绿-PYTHONPATH-T-G157.md`。"

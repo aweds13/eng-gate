@@ -1,0 +1,11 @@
+[entries."T-AG484"]
+id = "T-AG484"
+title = "并行度自适应与分片策略（T-AG484）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E30-并行度自适应与分片策略.md",
+  "file:scripts/run_gates.py",
+  "file:tests/test_run_gates_workers.py",
+]
+gaps = "- 档口阈值是拍的（10/6/4/2.5 GB），没有做过「压到换页再退档」的压力验证，见 `scripts/run_gates.py` 的 `pytest_workers()`。- 「在跑多少个 worker 就扣多少」读的是 `gates/diag/*.lock` 与队列快照，E34 落地前队列文件不存在，只能退化成看 lock，见 `gates/diag/gate_lock.py`。- 分片策略三档实测受机器负载影响，读数只在同机同时段可比，见本票 §判据 2。"

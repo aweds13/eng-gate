@@ -3914,3 +3914,64 @@ files = ["tools/trae_pool.mjs", "tools/trae_watch.py", "tests/test_trae_watch.py
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E30"
+task = "T-AG484"
+title = "并行度自适应与分片策略：把 4 个 worker 的硬顶拆成按内存分档"
+tree = ".wt/E30"
+spec = "复盘/卡/卡E30-并行度自适应与分片策略.md"
+files = ["scripts/run_gates.py", "tests/test_run_gates_workers.py"]
+depends = []
+risk = "mid"
+status = "pending"
+[[cards]]
+id = "E31"
+task = "T-AG485"
+title = "覆盖率开销：把 --cov 从每次门禁的固定税里拿掉"
+tree = ".wt/E31"
+spec = "复盘/卡/卡E31-覆盖率开销.md"
+files = ["pyproject.toml", "scripts/run_gates.py", "gates/defs/lang_python.py", "tests/test_run_gates_cov.py", "scripts/sitecustomize.py"]
+depends = ["E30"]
+risk = "mid"
+status = "pending"
+[[cards]]
+id = "E32"
+task = "T-AG486"
+title = "快慢分层：把起真子进程跑落地链的 e2e 移出默认 pytest 门"
+tree = ".wt/E32"
+spec = "复盘/卡/卡E32-快慢分层.md"
+files = ["pyproject.toml", "gates/defs/lang_python.py", "gates/defs/domains.py", "tools/wb_land.py", "tests/test_gate_split.py"]
+depends = ["E31"]
+risk = "high"
+status = "pending"
+[[cards]]
+id = "E33"
+task = "T-AG487"
+title = "e2e 模板仓：把每条用例自己建一遍仓换成复制一份"
+tree = ".wt/E33"
+spec = "复盘/卡/卡E33-e2e模板仓.md"
+files = ["tests/conftest.py", "tests/test_template_repo.py", "tests/test_wb_land.py", "tests/test_contract_audit.py"]
+depends = []
+risk = "mid"
+status = "pending"
+[[cards]]
+id = "E34"
+task = "T-AG488"
+title = "门禁请求队列：多会话并发时不再抢内存不再撞端口"
+tree = ".wt/E34"
+spec = "复盘/卡/卡E34-门禁请求队列.md"
+files = ["tools/gate_queue.py", "tests/test_gate_queue.py", "tools/wb_land.py", "gates/diag/gate_lock.py"]
+depends = ["E32"]
+risk = "high"
+status = "pending"
+[[cards]]
+id = "E35"
+task = "T-AG489"
+title = "云机确定性：让换一台机器跑门禁从 37 红变成 0 红"
+tree = ".wt/E35"
+spec = "复盘/卡/卡E35-云机确定性.md"
+files = ["scripts/cloud/bootstrap.ps1", "scripts/cloud/run_gate.sh", "tests/test_cloud_sync.py", "docs/subsystems/ci/云门禁机.md"]
+depends = []
+risk = "high"
+status = "pending"
