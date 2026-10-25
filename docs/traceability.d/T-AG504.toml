@@ -1,0 +1,17 @@
+[entries."T-AG504"]
+id = "T-AG504"
+title = "云机剩下 4 条红：账本锚点不跟 cwd 走 + 宿主仓外配置摘干净"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pytest_select.py",
+  "file:tests/test_pytest_select.py",
+  "file:tests/conftest.py",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_pool_accounts.py",
+  "file:docs/changelog.d/T-AG504.md",
+  "file:复盘/交接.d/T-AG504.md",
+  "test:test_pool_accounts.py",
+]
+gaps = "- 云机 pass11 仍红 4 条：`tests/test_pool_lib.py::test_wb_plan_cli_and_library_agree`、`tests/test_pool_accounts.py::test_find_ledger_missing_explains`、`tests/test_pool_accounts.py::test_main_exit_2_when_ledger_missing`、`tests/test_wb_dispatch.py::test_account_auth_uses_the_profile_env_and_model` 见 tests/test_pool_accounts.py。- 根因：账本锚点从 cwd 向上找，云机「给门禁推配置」的那层目录里就有账本 ⇒ 必被撞见；`TF_POOL_CFG_DST` 也没进宿主配置隔离清单，见 tests/conftest.py。- 待证：同一 commit 下云机 `pytest` 与 `mypy` 双 exit 0（这是 `tests/test_cloud_sync.py` 口径下的判据，等云机 pass12 读数）；本轮只有本机读数。"
+

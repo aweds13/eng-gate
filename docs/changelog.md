@@ -1,3 +1,5 @@
+- `T-AG504` `tools/pool_accounts.find_ledger()` 起点改 `TOOL_ROOT`（仓库根）、不再跟 cwd 走；`tests/conftest.py` 的宿主配置隔离清单补 `TF_POOL_CFG_DST`；`tests/test_pool_accounts.py` 夹具把仓库根钉到 tmp。
+- `T-AG503` `tools/pool_accounts.find_ledger()` 起点改 `TOOL_ROOT`（仓库根）、不再跟 cwd 走；`tests/conftest.py` 的宿主配置隔离清单补 `TF_POOL_CFG_DST`；`tests/test_pool_accounts.py` 夹具把仓库根钉到 tmp。
 ## 变更
 - 新增 `tools/pool/checkin.py`：六态结论码 + 华为云 `SDK-HMAC-SHA256` 签名 + 五个平台的领取客户端，写动作只住这一个模块。
 - `tools/pool_accounts.py`：新增 `checkin` 子命令（`--all/--probe/--platform/--json/--spacing`）、留档原子写、账本健康态与额度样本回写。

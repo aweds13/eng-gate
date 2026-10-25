@@ -113,6 +113,9 @@ def ledger(tmp_path, monkeypatch):
     # ⇒ 这批钉子其实钉的是「本机有这份账本」。chdir 到 tmp（里面已有
     # tmp/infra/pool/accounts.toml）后，"向上找"这件事本身仍被钉住，但不再依赖宿主机。
     monkeypatch.chdir(tmp_path)
+    # ★ 卡 E49：判据从**仓库根**向上找锚点（不跟 cwd 走）⇒ 夹具把仓库根也钉到 tmp，
+    #   这样钉子不再依赖宿主机上「恰好」存在的 infra/pool。
+    monkeypatch.setattr(pa, "TOOL_ROOT", tmp_path)
     return p
 
 
@@ -133,11 +136,17 @@ def test_find_ledger_prefers_explicit(ledger):
     assert pa.find_ledger(str(ledger)) == ledger.resolve()
 
 
-def test_find_ledger_walks_up(ledger, monkeypatch):
+def test_find_ledger_walks_up_from_repo_root(ledger, monkeypatch):
+    """锚点从**仓库根**向上找，与 cwd 无关（卡 E49）。
+
+    坏掉的写法（改回 `Path.cwd()` 起点）：在 chdir 到别处之后仍会命中
+    宿主机上任何一层的 infra/pool/accounts.toml —— 云机上 `C:/infra/pool` 就是这种层。
+    """
     sub = ledger.parent.parent.parent / "deep" / "sub"
     sub.mkdir(parents=True)
     monkeypatch.chdir(sub)
     assert pa.find_ledger() == ledger.resolve()
+    assert pa.find_ledger() == ledger.resolve()  # 再调一次：cwd 变了结果不变
 
 
 def test_find_ledger_env(ledger, monkeypatch):
@@ -148,6 +157,7 @@ def test_find_ledger_env(ledger, monkeypatch):
 
 def test_find_ledger_missing_explains(monkeypatch, tmp_path):
     monkeypatch.delenv("TF_ACCOUNTS_TOML", raising=False)
+    monkeypatch.setattr(pa, "TOOL_ROOT", tmp_path)  # 判据只看仓库根，不看 cwd
     monkeypatch.chdir(tmp_path)
     with pytest.raises(pa.LedgerError) as ei:
         pa.find_ledger()
@@ -156,6 +166,7 @@ def test_find_ledger_missing_explains(monkeypatch, tmp_path):
 
 def test_main_exit_2_when_ledger_missing(monkeypatch, tmp_path, capsys):
     monkeypatch.delenv("TF_ACCOUNTS_TOML", raising=False)
+    monkeypatch.setattr(pa, "TOOL_ROOT", tmp_path)
     monkeypatch.chdir(tmp_path)
     assert pa.main(["list"]) == pa.EXIT_USAGE
     assert "账号账本" in capsys.readouterr().err

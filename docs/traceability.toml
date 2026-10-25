@@ -9034,14 +9034,19 @@ evidence = [
 ]
 gaps = "合并卡（用户 2026-10-25 裁定）——成员 E42 + E43 + E11，原任务 T-AG494/T-AG495/T-AG462 全部转 deferred。判据逐字继承，见 `复盘/卡/卡E52-落地链主干合一.md`。缺的东西：①三段都没开工，卡树 `.wt/E52` 要新建；②硬前提是 E49 先落（云机红单不清零，`--gate-on cloud` 落地即假绿）；③云机只有 4 vCPU，槽位算出来 = 1，真并行要变配 8 vCPU，需在卡里量一次；④`last.json` 今天没有 `host` 字段，五条回传校验第 3 条要靠新字段；⑤`scripts/run_gates.py` 今天没有 `--only <门名>`，E43 的「只重跑红了那一道」要补，且半趟必须让 `wb_verify` 判红。"
 
-[entries."T-AG503"]
-id = "T-AG503"
-title = "卡 E53 —— 文档门禁基线两侧不对称（T-AG503）"
+[entries."T-AG504"]
+id = "T-AG504"
+title = "云机剩下 4 条红：账本锚点不跟 cwd 走 + 宿主仓外配置摘干净"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
-  "file:复盘/卡/卡E53-文档门禁基线两侧不对称.md",
-  "file:scripts/check_docs.py",
-  "file:docs/doc-debt-baseline.toml",
+  "file:tools/pytest_select.py",
+  "file:tests/test_pytest_select.py",
+  "file:tests/conftest.py",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_pool_accounts.py",
+  "file:docs/changelog.d/T-AG504.md",
+  "file:复盘/交接.d/T-AG504.md",
+  "test:test_pool_accounts.py",
 ]
-gaps = "缺的东西：①`scripts/check_docs.py` 扫源文件（`scripts/check_docs.py:231` 的 `base.rglob(\"*.md\")`）还没走 `ignored()`，主树读 363 条死指针 vs 卡树绿；②`docs/doc-debt-baseline.toml` 的数字本轮不许动（头部第 ④ 条），修判据后要重跑两次确认字节一致；③探针钉子（造一个 gitignored 的 `复盘/探针-断链.md`，主树读数不变、`--json` 的 `skip` 里点名它）还没写；④`--doctor` 要能把被 skip 的 ignored 文档列出来，别静默吞掉；⑤反向验证红样（把源侧 `ignored()` 摘掉 ⇒ 钉子必红）还没取。"
+gaps = "- 云机 pass11 仍红 4 条：`tests/test_pool_lib.py::test_wb_plan_cli_and_library_agree`、`tests/test_pool_accounts.py::test_find_ledger_missing_explains`、`tests/test_pool_accounts.py::test_main_exit_2_when_ledger_missing`、`tests/test_wb_dispatch.py::test_account_auth_uses_the_profile_env_and_model` 见 tests/test_pool_accounts.py。- 根因：账本锚点从 cwd 向上找，云机「给门禁推配置」的那层目录里就有账本 ⇒ 必被撞见；`TF_POOL_CFG_DST` 也没进宿主配置隔离清单，见 tests/conftest.py。- 待证：同一 commit 下云机 `pytest` 与 `mypy` 双 exit 0（这是 `tests/test_cloud_sync.py` 口径下的判据，等云机 pass12 读数）；本轮只有本机读数。"

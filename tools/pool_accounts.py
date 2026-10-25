@@ -87,7 +87,10 @@ def find_ledger(explicit: str | None = None) -> Path:
             raise LedgerError(f"TF_ACCOUNTS_TOML 指向的文件不存在：{p}")
         return p.resolve()
 
-    start = Path.cwd().resolve()
+    # ★ 卡 E49：锚点从**仓库根**向上找，不跟 cwd 走 —— 曾经的 `Path.cwd()` 版本
+    #   在云机上会一路走到 `C:\infra\pool\accounts.toml`（那是给门禁推配置的宿主机路径），
+    #   于是「账本不存在」的用例在云机必红、本机却绿。判据不许跟宿主目录形状绑定。
+    start = TOOL_ROOT.resolve()
     for base in (start, *start.parents):
         cand = base.joinpath(*ANCHOR)
         if cand.is_file():
