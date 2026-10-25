@@ -1,3 +1,7 @@
+## 起子进程的钉子遇「拒绝访问」要重试（E14 · T-AG465）
+- `tests/conftest.py` 新增 `run_git()` / `_is_spawn_denied()` / `GIT_MAX_TRIES = 3` / `GIT_RETRY_DELAY_S = 0.05`：只对 `PermissionError` 与 `winerror == 5` 重试，三次全失败抛原异常（不 skip、不吞）。
+- `tests/test_wb_review.py` 里 28 处起 `git` 子进程改用它；`plain()` 也换过去，`test_chinese_paths_are_not_escaped` 的断言一条未改。
+- 新增六条钉子：单次抖动照过 / 三次全失败抛原异常 / 正常路径零重试 / `winerror 5` 也算抖动 / 别的 `OSError` 立刻抛 / 中文路径用例带抖动能过。
 ## pool 子系统文档：把 7143 行实现写成五篇可核的说明书（T-AG480）
 
 - 新增 `docs/subsystems/pool/` 五篇（README 144 / 派活口径 129 / 模型与号池 92 / 租约与锁 72 / 事后判据 50 行），边界三表钉死「谁唯一实现 / pool 不做什么 / 与 CI·文档治理·技能怎么接」。

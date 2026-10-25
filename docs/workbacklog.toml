@@ -3775,7 +3775,7 @@ spec = "复盘/卡/卡E14-进程抖动重试.md"
 files = ["tests/conftest.py", "tests/test_wb_review.py"]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E18"

@@ -1,0 +1,12 @@
+[entries."T-AG465"]
+id = "T-AG465"
+title = "起子进程的钉子遇 PermissionError 要重试（T-AG465）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E14-进程抖动重试.md",
+  "file:tests/conftest.py",
+  "file:tests/test_wb_review.py",
+]
+gaps = "- **只治「起进程被拒」这一类抖动**：别的偶发（超时、句柄被占但错误码不同）不重试，判据在 `tests/conftest.py` 的 `_is_spawn_denied()`；要扩大得另开卡。- **没有改被测代码**：`tools/wb_review.py` 一行未动，本卡只动测试夹具与用例，见 `tests/test_wb_review.py`。- **重试上限写死常量**：`GIT_MAX_TRIES = 3` 是硬编码，不做环境变量覆盖 —— 理由是规格判据 1 要求「最多重试 3 次」，放在 `tests/conftest.py` 顶部便于复核。- **没有统计重试次数**：只在重试时打印 `[retry]` 一行，不落盘、不进断言；要看真实发生率得另加埋点，见 `tests/conftest.py` 的 `run_git()`。"
+

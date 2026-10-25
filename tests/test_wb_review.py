@@ -14,12 +14,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.append(str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "tests"))
 
 import run_gates as rg  # noqa: E402 —— 第 ③′ 档的门表真源（卡 147）
 import wb_review as wr  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂上
+from conftest import run_git  # noqa: E402 —— 起 git 子进程要能重试（卡 E14）
 
 
 def _body(**trailers: str) -> str:
@@ -261,8 +265,8 @@ def test_chinese_paths_are_not_escaped(tmp_path: Path, monkeypatch) -> None:
 
     def plain(*args: str) -> str:
         """不带 `core.quotepath=false` 的 git —— 用来证明这个夹具真看得见转义。"""
-        done = subprocess.run(
-            ["git", *args], cwd=str(repo), capture_output=True, text=True,
+        done = run_git(
+            *args, cwd=str(repo), capture_output=True, text=True,
             encoding="utf-8", errors="replace",
         )
         assert done.returncode == 0, done.stderr
@@ -294,8 +298,8 @@ def test_chinese_paths_are_not_escaped(tmp_path: Path, monkeypatch) -> None:
 
 
 def _run_git(repo: Path, *args: str) -> str:
-    done = subprocess.run(
-        ["git", *args], cwd=str(repo), capture_output=True, text=True,
+    done = run_git(
+        *args, cwd=str(repo), capture_output=True, text=True,
         encoding="utf-8", errors="replace",
     )
     assert done.returncode == 0, done.stderr
@@ -808,3 +812,93 @@ def test_partial_profiles_without_required_are_rejected(tmp_path):
     }
     problems = wb_review.check_gate_evidence(payload, "abcdef1")
     assert any("没有 required_profiles" in p for p in problems), problems
+
+# ---------------------------------------- 起子进程抖动重试（卡 E14 · T-AG465）
+#
+# 来路：落地链全量门禁里 `test_chinese_paths_are_not_escaped` 连续两趟在同一行起 `git` 时
+# 报 `PermissionError: [WinError 5] 拒绝访问。`，而它在主树单跑 4 次全过、同趟其余 2987 条
+# 也全过 ⇒ 临时目录里起进程的**瞬时**抖动，不是被测代码的毛病，却把整趟落地判红。
+# 修法：`tests/conftest.py::run_git` 只在「起进程被拒」时重试，**不删、不跳过**任何用例。
+# 钉子：① 抛一次 ⇒ 目标用例照过且只留一行 `[retry]`；② 三次全抛 ⇒ **失败**且抛的是原异常；
+#       ③ 正常路径 ⇒ 零重试（调用计数 1）；④ 只有 `winerror == 5` 才重试。
+
+
+def _winerror_5() -> OSError:
+    """真正的 `[WinError 5] 拒绝访问` 形态（`OSError` 带 `winerror=5`）。"""
+    exc = OSError(13, "[WinError 5] 拒绝访问。")
+    exc.winerror = 5
+    return exc
+
+
+def _flaky_run(monkeypatch, fail_times: int, exc_factory=None):
+    """把 `subprocess.run` 换成「前 `fail_times` 次抛、之后转给真 run」的桩；返回调用记录。"""
+    real_run = subprocess.run
+    calls: list[list[str]] = []
+
+    def fake(cmd, *args, **kwargs):
+        calls.append(list(cmd))
+        if len(calls) <= fail_times:
+            raise (exc_factory or _winerror_5)()
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake)
+    return calls
+
+
+def test_the_chinese_path_case_survives_one_spawn_failure(
+    tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    """钉子①：`subprocess.run` **第一次抛、第二次成功** ⇒ 目标用例**照过**（断言一条没改），
+    且 `[retry]` 只出现一行。"""
+    calls = _flaky_run(monkeypatch, 1)
+    test_chinese_paths_are_not_escaped(tmp_path, monkeypatch)
+    out = capsys.readouterr().out
+    assert len(calls) >= 2
+    assert out.count("[retry]") == 1, out
+    assert "PermissionError" in out
+
+
+def test_run_git_raises_the_original_error_after_three_failures(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """钉子②：三次全抛 ⇒ **失败**（不是 skip），抛出的就是**原异常对象**。"""
+    boom = PermissionError(13, "[WinError 5] 拒绝访问。")
+    calls: list[list[str]] = []
+
+    def always(cmd, *args, **kwargs):
+        calls.append(list(cmd))
+        raise boom
+
+    monkeypatch.setattr(subprocess, "run", always)
+    with pytest.raises(PermissionError) as info:
+        run_git("--version", cwd=str(tmp_path))
+    assert info.value is boom, "抛出的不是原异常（被换成了别的异常）"
+    assert len(calls) == 3, f"应当正好尝试 3 次，实际 {len(calls)} 次"
+
+
+def test_run_git_normal_path_does_not_retry(tmp_path: Path, monkeypatch, capsys) -> None:
+    """钉子③：一次就成功 ⇒ **零**重试（调用计数 == 1、输出里没有 `[retry]`）。"""
+    calls = _flaky_run(monkeypatch, 0)
+    done = run_git("--version", cwd=str(tmp_path))
+    assert done.returncode == 0, done.stderr
+    assert len(calls) == 1, f"正常路径不该重试，实际调用 {len(calls)} 次"
+    assert "[retry]" not in capsys.readouterr().out
+
+
+def test_winerror_5_is_retried(tmp_path: Path, monkeypatch) -> None:
+    """钉子④：`OSError(winerror == 5)` 是瞬时抖动 ⇒ 重试一次就过。"""
+    calls = _flaky_run(monkeypatch, 1, _winerror_5)
+    done = run_git("--version", cwd=str(tmp_path))
+    assert done.returncode == 0, done.stderr
+    assert len(calls) == 2, f"winerror==5 应当重试，实际调用 {len(calls)} 次"
+
+
+def test_other_oserrors_are_raised_at_once(tmp_path: Path, monkeypatch) -> None:
+    """钉子⑤（红线）：**别的** `OSError`（如 winerror == 2）不许当抖动 ⇒ 立刻原样抛、只调 1 次。"""
+    other = OSError(2, "[WinError 2] 系统找不到指定的文件。")
+    other.winerror = 2
+    calls = _flaky_run(monkeypatch, 1, lambda: other)
+    with pytest.raises(OSError) as info:
+        run_git("--version", cwd=str(tmp_path))
+    assert info.value is other
+    assert len(calls) == 1, f"非 winerror==5 不该重试，实际调用 {len(calls)} 次"
