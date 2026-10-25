@@ -1,6 +1,6 @@
 [entries."T-AG499"]
 id = "T-AG499"
-title = "云机红单归因与可移植性：本机语义的钉子 / 仓外配置 / 未声明依赖"
+title = "云机门禁注入口径修正：注册表留在仓里、仓外配置每趟推上云机、空补丁守卫"
 group = "ENGINEERING"
 status = "done"
 evidence = [
@@ -35,6 +35,7 @@ evidence = [
   "file:tests/test_wb_land.py",
   "test:test_wb_land.py",
   "test:test_wb_dispatch.py",
+  "file:gates/diag/_text_TAG499b.md",
 ]
-gaps = "- 云机第 9 趟尚未跑：收官判据是同一 commit 下 `pytest` 与 `mypy` 双 exit 0（第 8 趟 1 门红 / 3 条失败，两条真因已修）：见 gates/diag/cloud-gate-E49j.log。- `test_pool_guards` 两条自己 `monkeypatch.delenv('TF_PROJECTS_TOML')`，渲染过的索引只对「向上找」生效 —— 判据自身写法，未改：见 tests/test_pool_guards.py。- 「Git for Windows 必装」只在测试侧大声失败，装配脚本自己没断言：见 scripts/cloud/bootstrap.ps1。- preflight 之谜已定位为**报错话术被截断**（绝对路径截到 150 字时把 `.md` 吃掉），修法改仓库相对路径、不放宽截断：见 tools/pool/landing.py。"
+gaps = "- 云机第 10 趟待跑：收官判据仍是同一 commit 下 pytest 与 mypy 双 exit 0：见 gates/diag/cloud-gate-E49-final.log。- Git 未装只在测试侧大声失败、装配脚本自己没断言：见 tests/test_cloud_sync.py。- test_pool_guards 两条自摘 TF_PROJECTS_TOML，注入对它无效：见 tests/test_pool_guards.py。"
 

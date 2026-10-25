@@ -59,6 +59,21 @@ def _point_switches(tmp_path: Path, content: str, monkeypatch) -> Path:
     return path
 
 
+def _point_whitelist(
+    tmp_path: Path,
+    monkeypatch,
+    models: tuple[str, ...] = ("huaweicloud-maas/GLM-5.2",),
+) -> Path:
+    """写一份临时码道白名单并指过去（卡 E49：判据不许依赖宿主的「号池目录」）。"""
+    path = tmp_path / "models.whitelist.toml"
+    rows = ["# 临时白名单 —— 判据自带一份，别去读宿主上那份", ""]
+    for model in models:
+        rows += ["[[approved]]", f'model = "{model}"', ""]
+    path.write_text(chr(10).join(rows) + chr(10), encoding="utf-8")
+    monkeypatch.setenv("TF_MODEL_WHITELIST", str(path))
+    return path
+
+
 # ---------------------------------------------------------------- ① 单层
 def test_wb_dispatch_constants_are_read_from_registry(tmp_path, monkeypatch) -> None:  # noqa: ANN001
     """① wb_dispatch 的 MODEL_WHITELIST / DEFAULT_MODEL / ALLOWED_MODELS 是"读出来的结果"。
@@ -150,7 +165,8 @@ def test_main_default_is_pool_default_not_first(tmp_path, monkeypatch, capsys) -
 
 
 # ---------------------------------------------------------------- ③ 跨池串用被拒
-def test_cross_pool_usage_refused() -> None:
+def test_cross_pool_usage_refused(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    _point_whitelist(tmp_path, monkeypatch)
     """③ codearts 的 id 给 codebuddy 池 ⇒ PoolMismatchError；反过来同理。"""
     # codearts 的 id（provider/model 形式）给 codebuddy 池 ⇒ 拒
     with pytest.raises(PoolMismatchError) as excinfo:
@@ -165,6 +181,7 @@ def test_cross_pool_usage_refused() -> None:
 
 
 def test_main_refuses_cross_pool_with_exit_2(tmp_path, monkeypatch, capsys) -> None:  # noqa: ANN001
+    _point_whitelist(tmp_path, monkeypatch)
     """③ ★ 真跑读数：``--pool codebuddy --model huaweicloud-maas/GLM-5.2`` ⇒ 退 2、点名跨池串用。"""
     _point_switches(tmp_path, "", monkeypatch)
     monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000",
@@ -358,7 +375,8 @@ def test_list_dispatch_logs_scans_both_patterns(tmp_path, monkeypatch) -> None: 
 
 
 # ---------------------------------------------------------------- 注册表条目结构
-def test_registry_has_codebuddy_and_codearts_entries() -> None:
+def test_registry_has_codebuddy_and_codearts_entries(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    _point_whitelist(tmp_path, monkeypatch)
     """注册表含两个池的条目（codebuddy 内联 + codearts 引用派生）。"""
     entries = load_registry()
     pools = {e.pool for e in entries}

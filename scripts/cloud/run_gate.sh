@@ -66,12 +66,14 @@ TMP="$(mktemp -d)"
 head="$(git -C ".wt/$card" rev-parse HEAD)"
 short="$(git -C ".wt/$card" rev-parse --short HEAD)"
 
-# 云机侧的环境注入串：TF_PROJECTS_TOML 必给；模型注册表给了就一并注入。
-# （模型注册表的**真名**是 TF_MODEL_REGISTRY，不是 TF_MODELS_TOML —— 见 tools/pool/model_registry.py:69。）
+# 云机侧的环境注入串：TF_PROJECTS_TOML 必给；码道池白名单给了就一并注入。
+# ★ 卡 E49 落地后回归（云机 pass9）：**不许注入 TF_MODEL_REGISTRY** ——
+#   注册表的真源是仓里那份 tools/pool/model-registry.toml（含 [[model]] 与
+#   [pool.codearts] 引用）；仓外 models.whitelist.toml 只描述码道池（[[approved]]）。
+#   把它当注册表注入，load_registry() 就找不到任何 [[model]] 条目 ⇒
+#   test_model_registry / test_wb_dispatch 在云机集体红（实测 5 条）。
+#   codearts 条目由 TF_MODEL_WHITELIST（CODEARTS_SOURCE_ENV）派生，注它就够。
 envset="set \"TF_GATE_PORT_BASE=$port\" && set \"TF_PROJECTS_TOML=$projects_toml\""
-if [ -n "$model_registry" ]; then
-  envset="$envset && set \"TF_MODEL_REGISTRY=$model_registry\""
-fi
 # 卡 E49：码道池条目是**从这份白名单派生**的（tools/pool/model_registry.py 的 CODEARTS_SOURCE_ENV）
 # —— 不注入就只剩 codebuddy 池，`test_model_registry` 的「跨池串用」「要有 codearts 条目」在云机必红。
 model_whitelist="${TF_MODEL_WHITELIST:-}"
@@ -98,6 +100,19 @@ fi
 pool_cfg_src="${TF_POOL_CFG_DIR:-C:/poolcfg}"
 pool_cfg_dst="${TF_POOL_CFG_DST:-C:/infra/pool}"
 
+echo "=== 0.35/5 把本机仓外配置推上云机（云机那份可能是旧账，卡 E49 pass9 实测）==="
+cfg_local="${TF_POOL_CFG_SOURCE_DIR:-D:/repo/infra/pool}"
+if [ -d "$cfg_local" ]; then
+  ssh $SSHOPTS -i "$KEY" "$HOST" "if not exist "$pool_cfg_src" mkdir "$pool_cfg_src"" >/dev/null 2>&1
+  if ! scp $SSHOPTS -i "$KEY" "$cfg_local"/*.toml "$cfg_local"/*.json "$HOST:$pool_cfg_src/" >/dev/null; then
+    echo "✗ 配置推不上云机（$cfg_local -> $pool_cfg_src）—— fail fast。" >&2
+    rm -rf "$TMP"
+    exit 5
+  fi
+  echo "✓ 本机配置已推上云机：$cfg_local -> $pool_cfg_src"
+else
+  echo "（本机没有 $cfg_local：沿用云机上已有的 $pool_cfg_src）"
+fi
 echo "=== 0.4/5 铺仓外配置到 $pool_cfg_dst（向上找的约定）==="
 if ! ssh $SSHOPTS -i "$KEY" "$HOST" \
     "powershell -NoProfile -Command \"if (-not (Test-Path '$pool_cfg_src')) { exit 5 } ; New-Item -ItemType Directory -Force '$pool_cfg_dst' | Out-Null ; Copy-Item (Join-Path '$pool_cfg_src' '*') '$pool_cfg_dst' -Force ; exit 0\""; then
@@ -216,7 +231,13 @@ fi
 echo "✓ 上一趟读数已从 $seed_dir 播种（提交里那份基线被覆盖）"
 echo "=== 3/5 传补丁并应用 ==="
 scp $SSHOPTS -i "$KEY" "$TMP/$card.patch" "$HOST:C:/card-$card.patch" >/dev/null
-ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && git apply --binary C:/card-$card.patch && git status --porcelain | find /c /v \"\""
+if [ ! -s "$TMP/$card.patch" ]; then
+  echo "（补丁为空：卡树与主树同 HEAD，跳过 apply）"
+elif ! ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && git apply --binary C:/card-$card.patch && git status --porcelain | find /c /v \"\""; then
+  echo "✗ 补丁应用失败 —— 不许在错的树上跑门禁（卡 E49 pass9 实测：空补丁只打一行 error 就继续跑）" >&2
+  rm -rf "$TMP"
+  exit 5
+fi
 
 echo "=== 4/5 云机跑全量门禁（端口段 $port；TF_PROJECTS_TOML 已注入）==="
 start=$(date +%s)
