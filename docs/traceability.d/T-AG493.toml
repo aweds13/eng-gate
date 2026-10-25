@@ -1,0 +1,8 @@
+[entries."T-AG493"]
+title = "文档欠账基线重刷 + check_docs 判不出要报 skip"
+kind = "card"
+status = "todo"
+partition = "E"
+card = "E39"
+evidence = ["file:复盘/卡/卡E39-云文档补正与欠账基线.md", "file:scripts/check_docs.py", "file:docs/doc-debt-baseline.toml", "test:test_check_docs.py"]
+gaps = ["云门禁机那篇的 §2/§7 补正已并入 E35（同改一个文件）—— 见本卡「不许做」第 3 条", "`check_docs.py` 目前可能没有 `--write-baseline` —— 见判据 4"]

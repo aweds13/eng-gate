@@ -1,0 +1,8 @@
+[entries."T-AG492"]
+title = "派生文档链三处静默 + 并行假红 + 落地笔默认 Refs"
+kind = "card"
+status = "todo"
+partition = "E"
+card = "E38"
+evidence = ["file:复盘/卡/卡E38-派生链三处静默与并行假红.md", "file:tools/sync_docs.py", "file:tools/sync_counts.py", "file:tools/pool/stage_card.py", "file:tools/pool/landing.py", "test:test_sync_docs_replaces_block.py", "test:test_sync_counts_root.py", "test:test_docs_fragments.py"]
+gaps = ["重复块替换后，历史遗留的孤儿块仍需一次人工清理 —— 见判据 1", "并行假红的根因尚未钉死 —— 见判据 3 的三次连跑", "`Refs:` 默认值两种改法只能选一种，需要落地时定 —— 见判据 4"]

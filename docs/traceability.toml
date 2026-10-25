@@ -8827,3 +8827,22 @@ partition = "E"
 card = "E37"
 evidence = ["file:复盘/卡/卡E37-变异驱动用例汰换.md", "file:tools/mutate_report.py", "test:test_mutate_report.py", "test:test_properties.py", "file:pyproject.toml"]
 gaps = ["变异引擎（mutmut / cosmic-ray）尚未选型，两者都没装时 fail closed —— 见 `tools/mutate_report.py`", "97 个参数化族要逐族人工确认 `ids` 可追溯，机械合并会丢原用例名 —— 见 `复盘/卡/卡E37-变异驱动用例汰换.md` 判据 2", "删除上限 3% 与「变异分下降 ≤0.5」需要在真跑一轮变异报告后才有数 —— 见判据 4", "属性测试只覆盖纯函数族，带子进程与文件写的用例不适用 —— 见 `tests/test_properties.py`"]
+
+[entries."T-AG492"]
+title = "派生文档链三处静默 + 并行假红 + 落地笔默认 Refs"
+kind = "card"
+status = "todo"
+partition = "E"
+card = "E38"
+evidence = ["file:复盘/卡/卡E38-派生链三处静默与并行假红.md", "file:tools/sync_docs.py", "file:tools/sync_counts.py", "file:tools/pool/stage_card.py", "file:tools/pool/landing.py", "test:test_sync_docs_replaces_block.py", "test:test_sync_counts_root.py", "test:test_docs_fragments.py"]
+gaps = ["重复块替换后，历史遗留的孤儿块仍需一次人工清理 —— 见判据 1", "并行假红的根因尚未钉死 —— 见判据 3 的三次连跑", "`Refs:` 默认值两种改法只能选一种，需要落地时定 —— 见判据 4"]
+
+[entries."T-AG493"]
+title = "文档欠账基线重刷 + check_docs 判不出要报 skip"
+kind = "card"
+status = "todo"
+partition = "E"
+card = "E39"
+evidence = ["file:复盘/卡/卡E39-云文档补正与欠账基线.md", "file:scripts/check_docs.py", "file:docs/doc-debt-baseline.toml", "test:test_check_docs.py"]
+gaps = ["云门禁机那篇的 §2/§7 补正已并入 E35（同改一个文件）—— 见本卡「不许做」第 3 条", "`check_docs.py` 目前可能没有 `--write-baseline` —— 见判据 4"]
+
