@@ -1,0 +1,14 @@
+[entries."T-AG461"]
+id = "T-AG461"
+title = "攒批并入派活链：一条入口 plan/make/land（T-AG461）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E10-批次并入派活链.md",
+  "file:tools/wb_batch.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_batch.py",
+  "file:gates/diag/_text_TAG461.md",
+]
+gaps = "- **没在真仓跑 `make` / `land`**：会写主仓 `gates/diag` 运行态并建 `.wt/batch<号>`，与「主仓只读」冲突 ⇒ 只在 `tmp_path` 仓里验证，见 `tests/test_wb_batch.py:190` 的 `test_make_manifest_is_accepted_by_register`。- **`git apply --3way` 的真冲突分支没被单测直接打到**：同文件两卡在 `make` 前置检查就被点名拒绝（见 `tools/wb_batch.py:217` 的 `overlap_notes()`），冲突分支只由既有的 `tools/pool/landing.py` 覆盖。- **`wb_dispatch --batch --execute` 的逐成员真起工人未验证**：dry-run 与两条拒绝路径已测（`tests/test_wb_batch.py:257`、`:269`），真起工人的路径见 `tools/wb_dispatch.py` 的 `--batch` 分派。"
+

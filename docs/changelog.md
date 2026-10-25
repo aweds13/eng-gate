@@ -1,3 +1,7 @@
+## 攒批并入派活链：一条入口 `plan` / `make` / `land`（E10 · T-AG461）
+- 新增 `tools/wb_batch.py`：把仓里早就有的攒批能力收成一条入口 —— `plan`（挑出文件不相交、依赖已满足的卡打包）/ `make`（写批预声明 + 台账 evidence 并集 + 三段文书骨架）/ `land`（批集成落地）；批上限 `BATCH_LIMIT = 4`，超了报数并给依据。
+- `tools/wb_dispatch.py` 接 `--batch`：按批号一次起多个成员，干跑与拒绝路径先走同一套守卫（成员不在预声明 / 卡已 landed 两种都点名拒绝）。
+- 新增 `tests/test_wb_batch.py` 11 条钉子，含三条反向（同文件两卡不许同批 / 超 `BATCH_LIMIT` / `depends` 未满足）。
 ## Trae 完工看守：把「Trae 停了」变成可发现的（E29 · T-AG483）
 - `tools/trae_pool.mjs` 新增只读子命令 `sample --task "<子串>" [--json]`（一行 `{ok,task,icon,running,bodyLen,bodyHash,terminated}`），判定抽成纯函数 `judgeTraeSample()`，`selftest` 补 12 条（合计 74 条全绿）：改面板只改 `SELECTORS` 一处。
 - 新增 `tools/trae_watch.py`：两拍采样判四态 —— `finished`（只认 `chat-icon-stop → chat-icon-arrow-up` 的转变）/`terminated`（正文出现「手动终止输出」）/`stalled`（图标仍 stop 且正文 ≥ `--stale-min` 分钟一字未变）/`running`；事件层**复用** `wb_watch` 的 `diag_dir`/`done_path`/`append_notification`，`--write-done` 缺席时一个字节都不写。

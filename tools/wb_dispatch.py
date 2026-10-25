@@ -119,6 +119,7 @@ import workbench_bridge  # noqa: E402 —— 工作台状态一处真源（卡 2
 #   `wb_dispatch --execute` 时不变量 ①②③⑤ 全部失效、且对其他窗口不可见（一树两写者不会被咬）。
 from pool import guards as pool_guards  # noqa: E402 —— 守卫唯一实现（pool.guards）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
+from pool import task as pool_task  # noqa: E402 —— 批次预声明 / 状态（卡 E10：--batch）
 from pool.jobs import card_artifacts  # noqa: E402 —— 产物定位唯一实现（pool.jobs）
 from pool.model_registry import (  # noqa: E402 —— 一层注册表 + 按池分流（卡 166 · T-G266）
     DEFAULT_POOL,
@@ -2764,10 +2765,97 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
     return problems, log
 
 
+# ---------------------------------------------------------------- 卡 E10：--batch
+def batch_gate_problem(batch: str, card: str | None) -> str | None:
+    r"""★ 卡 E10 判据 7：`--batch` 的三道响亮拒绝（`None` = 放行）。
+
+    · 批号没有可用预声明（缺 / 不合法）⇒ 拒绝并点名（先 `wb_batch.py make`
+      或 `wb_task.py register`）；
+    · `--card` 不在成员名单里 ⇒ 拒绝（名单外的派活不算数 —— 防夹带）；
+    · 批已 `landed` ⇒ 拒绝并给现状（它字段里挂着那笔 commit，不许复活）。
+    """
+    try:
+        man = pool_task.load_manifest(batch)
+    except Exception as exc:  # noqa: BLE001 —— 缺 / 坏都要响亮拒绝，理由原样带出
+        return (f"批 {batch} 读不到可用预声明：{exc}"
+                "（先 `wb_batch.py make <批号>` 或 `wb_task.py register <预声明>`）")
+    members = [str(m.get("id", "")) for m in man.get("member") or []]
+    if card and card not in members:
+        return (f"卡 {card} 不在批 {batch} 的成员名单里（名单：{'、'.join(members)}）"
+                "—— 不在名单里的派活不算数（防夹带）")
+    state = None
+    try:
+        state = pool_task.read_json(pool_task.state_path(batch))
+    except Exception:  # noqa: BLE001 —— 还没登记（或状态坏了）：下一步 ensure_batch_task 处理
+        state = None
+    if isinstance(state, dict) and state.get("state") == "landed":
+        landed = state.get("landed") or {}
+        return (f"批 {batch} 已经 landed（commit {landed.get('commit', '?')}，"
+                f"{landed.get('at', '')}）—— 不再派活；"
+                f"现状：state=landed / 成员 {len(members)} 张")
+    return None
+
+
+def ensure_batch_task(batch: str) -> str | None:
+    """★ `--batch` 派活时就把成员登记进**同一任务**（状态缺 ⇒ 按预声明 register）。"""
+    if pool_task.state_path(batch).exists():
+        return None
+    try:
+        rc = pool_task.cmd_register(
+            argparse.Namespace(manifest=str(pool_task.manifest_path(batch)), force=False))
+    except pool_task.BatchError as exc:
+        return f"批 {batch} 登记进任务失败：{exc}"
+    return None if rc == 0 else f"批 {batch} 登记进任务失败（退出码 {rc}）"
+
+
+def dispatch_batch(args: argparse.Namespace) -> int:
+    """`--batch` 不给 `--card`：按预声明成员逐个派活（dry-run 只打印命令）。"""
+    man = pool_task.load_manifest(args.batch)
+    members = [str(m.get("id", "")) for m in man.get("member") or []]
+    try:
+        backlog = load_sharded_backlog(
+            ROOT / "docs" / "workbacklog.toml", ROOT / "docs" / "backlog")
+    except BacklogError as exc:
+        print(f"[FAIL] 读不了队列（{exc}）⇒ 不派批", file=sys.stderr, flush=True)
+        return 2
+    by_id = backlog.by_id()
+    main_root = pool_task.main_tree_root()
+    for member_id in members:
+        card = by_id.get(member_id)
+        if card is None:
+            print(f"[FAIL] 批 {args.batch} 成员 {member_id} 不在队列里 ⇒ 不派",
+                  file=sys.stderr, flush=True)
+            return 2
+        argv = [sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_dispatch.py"),
+                "--card", member_id, "--spec", card.spec, "--batch", args.batch]
+        if card.tree:
+            argv += ["--cwd", str((main_root / card.tree).resolve())]
+        if args.model:
+            argv += ["--model", args.model]
+        if args.account:
+            argv += ["--account", args.account]
+        if args.execute:
+            argv.append("--execute")
+        if args.detach:
+            argv.append("--detach")
+        print(f"[派 ] {' '.join(argv)}", flush=True)
+        if args.execute:
+            done = subprocess.run(argv, cwd=str(ROOT), **NO_WINDOW)
+            if done.returncode:
+                return int(done.returncode)
+    if not args.execute:
+        print("[dry ] 默认只打印；真要派活加 --execute（会逐成员起工人）", flush=True)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """命令行解析器 —— 抽成函数，好让测试**真读帮助文本**（卡 125 §2.9：帮助与常量同源）。"""
     parser = argparse.ArgumentParser(description="派活给 CodeBuddy CLI（默认 dry-run）")
-    parser.add_argument("--card", required=True, help="卡号（用来命名 log，如 001）")
+    parser.add_argument("--card", default="",
+                        help="卡号（用来命名 log，如 001）；★ 给 --batch 单独时可省（一次派整批）")
+    parser.add_argument("--batch", default="",
+                        help="★ 批号（gates/diag/batch/<批号>.toml）：成员派进同一任务；"
+                             "卡不在预声明里 / 批已 landed ⇒ 响亮拒绝")
     parser.add_argument("--take-over", action="store_true",
                         help="卡归别的对话窗口时，显式换手到当前窗口（会留痕）")
     parser.add_argument("--spec", default="", help="卡规格文件（相对仓库根；--status 时不必给）")
@@ -2872,8 +2960,29 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.status:
+        if not args.card:
+            print("[FAIL] --status 要给 --card（批状态看 wb_task.py status <批号>）",
+                  file=sys.stderr, flush=True)
+            return 2
         print(status_report(args.card), flush=True)
         return 0
+    # ★ 卡 E10（T-AG461）判据 7：`--batch` 先过三道响亮拒绝（缺预声明 / 夹带 / 已 landed），
+    #   再把成员登记进同一任务（状态缺就按预声明 register）；不给 --card ⇒ 逐成员派出去。
+    if args.batch:
+        problem = batch_gate_problem(args.batch, args.card or None)
+        if problem:
+            print(f"[FAIL] {problem}", file=sys.stderr, flush=True)
+            return 2
+        registered = ensure_batch_task(args.batch)
+        if registered:
+            print(f"[FAIL] {registered}", file=sys.stderr, flush=True)
+            return 2
+        if not args.card:
+            return dispatch_batch(args)
+    if not args.card:
+        print("[FAIL] 派活得给 --card（或 --batch <批号> 一次派整批）",
+              file=sys.stderr, flush=True)
+        return 2
     # ★ 卡归窗口：一张卡默认只归一个 DSH 窗口；没有指纹（工人/CLI）一律放行。
     try:
         from tools import wb_session

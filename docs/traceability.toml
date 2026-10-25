@@ -8462,18 +8462,17 @@ gaps = "- **这是本仓第一例攒批落地**：三张卡合成一笔提交，
 
 [entries."T-AG461"]
 id = "T-AG461"
-title = "卡 E10 —— 批次并入派活链：机制早就在，入口散在三处"
+title = "攒批并入派活链：一条入口 plan/make/land（T-AG461）"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E10-批次并入派活链.md",
-  "file:docs/workbacklog.toml",
+  "file:tools/wb_batch.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_wb_batch.py",
+  "file:gates/diag/_text_TAG461.md",
 ]
-gaps = """规格已立、工具未写（2026-10-24 由主控登记）。现状实测：攒批机制早已存在
-（卡 228 / T-G344：wb_task.py register 多成员预声明 + wb_land.py --batch +
-tools/pool/landing.py:303 flip_batch_member_statuses），但合一个批要手写三样
-（成员 TOML、_text_<批号>.md、把卡树补丁合进批次树的临时脚本 mk_batch460.py）；
-wb_dispatch.py 只有 --card 不认批、wb_plan.py plan 不算「哪些卡能合成一批」。"""
+gaps = "- **没在真仓跑 `make` / `land`**：会写主仓 `gates/diag` 运行态并建 `.wt/batch<号>`，与「主仓只读」冲突 ⇒ 只在 `tmp_path` 仓里验证，见 `tests/test_wb_batch.py:190` 的 `test_make_manifest_is_accepted_by_register`。- **`git apply --3way` 的真冲突分支没被单测直接打到**：同文件两卡在 `make` 前置检查就被点名拒绝（见 `tools/wb_batch.py:217` 的 `overlap_notes()`），冲突分支只由既有的 `tools/pool/landing.py` 覆盖。- **`wb_dispatch --batch --execute` 的逐成员真起工人未验证**：dry-run 与两条拒绝路径已测（`tests/test_wb_batch.py:257`、`:269`），真起工人的路径见 `tools/wb_dispatch.py` 的 `--batch` 分派。"
 
 [entries."T-AG462"]
 id = "T-AG462"
@@ -8845,4 +8844,3 @@ partition = "E"
 card = "E39"
 evidence = ["file:复盘/卡/卡E39-云文档补正与欠账基线.md", "file:scripts/check_docs.py", "file:docs/doc-debt-baseline.toml", "test:test_check_docs.py"]
 gaps = ["云门禁机那篇的 §2/§7 补正已并入 E35（同改一个文件）—— 见本卡「不许做」第 3 条", "`check_docs.py` 目前可能没有 `--write-baseline` —— 见判据 4"]
-

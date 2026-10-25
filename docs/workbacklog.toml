@@ -3753,7 +3753,7 @@ spec = "复盘/卡/卡E10-批次并入派活链.md"
 files = ["tools/wb_batch.py", "tools/wb_dispatch.py", "tests/test_wb_batch.py"]
 depends = ["E7", "E9"]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E11"
