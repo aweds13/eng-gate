@@ -8668,11 +8668,16 @@ gaps = "- **只写说明书不写判据**：判据仍在 `gates/defs/*` 与 `too
 
 [entries."T-AG481"]
 id = "T-AG481"
-title = "Trae 送任务通道修复：选择器 / Enter 提交 / 并发上限"
+title = "Trae 送任务通道修复（T-AG481）"
 group = "ENGINEERING"
-status = "todo"
-evidence = ["file:复盘/卡/卡E27-Trae送任务通道修复.md"]
-gaps = "选择器与提交键按 2026-10-25 实测值固定；面板再改版时这张卡会红，届时按同一节重测。"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E27-Trae送任务通道修复.md",
+  "file:tools/trae_pool.mjs",
+  "file:tests/test_trae_pool_selectors.py",
+]
+gaps = "- **真机四步没验**：本卡机器上只有纯函数判据 + 选择器静态钉 + 「空 prompt 退非零」；真机「新建任务 → 粘贴 → Enter → 收工」这一串没跑过，靠的还是手工 CDP 脚本，见 `tools/trae_pool.mjs` 文件头「★ 边界（诚实写）」。- **不许接进派活器**：`tools/wb_dispatch.py` 一行未动 —— 面板会重载、驱动会假死，口径见 `docs/subsystems/pool/派活口径.md` 的 trae 行。- **并发上限只认文案**：判据靠面板文案匹配，文案改了就判不出（会退回「照发」），见 `tools/trae_pool.mjs` 的 `judgeParallelLimit`。- **切任务等正文有 10 s 上限**：等不到就报错，不重试 —— 见 `tools/trae_pool.mjs` 的 `switch` 子命令。"
+
 [entries."T-AG482"]
 id = "T-AG482"
 title = "落地链五件合并修（E13+E15+E16+E3+E5）"

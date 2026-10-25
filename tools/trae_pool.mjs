@@ -74,6 +74,21 @@
  *   ⑤ 只读子命令 `conversations`（也认 `--conversations`）列会话给 `--conversation` 当索引；
  *      判据 `selftest` 扩 20 条（pickConv 七 / judgeNewChat 六 / judgeLanded 五 / activeKeyOf
  *      复合一条 / formatConvs 一条），卡 227/245 既有用例一条没删。
+ *
+ * ★★ 卡 E27（T-AG481，2026-10-25 实测 Trae CN 新版 solo-lite 面板）—— 送任务通道**静默失效**：
+ *   `send` 报「找不到输入框」却**退 0**（调用方以为发出去了）。三处实测病根 ⇒ 三条修法：
+ *   ① **选择器全过时** ⇒ 集中到文件头的 `SELECTORS`（五个实测值：输入框 / 发送键 / 任务项 /
+ *      任务文本 / 新建任务）；`tests/test_trae_pool_selectors.py` **逐字**钉住它们。
+ *   ② **发送键点不动**（空输入时带 `disabled`，`click()` 与指针序列一律无效）⇒ 提交只走
+ *      `submit()`：输入框 `focus()` → `document.execCommand('insertText')` → Enter 键序
+ *      （keydown/keypress/keyup）。★ 打完字发送键**仍是 disabled** ⇒ 非零退出并说原因，不许静默成功。
+ *   ③ **并发上限静默**（面板弹「您已达到 10 个云端并行任务上限」）⇒ 送任务前先探
+ *      `judgeParallelLimit`，命中即 `[trae] 并发已满（10）` 退 3。
+ *   另加两个只读/诊断子命令：`switch --title <子串>`（点 `div.taskItem` 后**轮询等正文变化**，
+ *   最多 10 s；等不到就报「切过去了但读不到正文」，**不返回旧任务内容**）与 `status`
+ *   （面板 / 任务项（带 running 标记）/ 并发是否满，一屏读完）。`list` 也带上了任务项 + running。
+ *   ★ 边界（诚实写）：这四条都只能**真机**验最后一步（要有带调试口的 Trae），本卡机器上跑的是
+ *     纯函数判据 + 静态选择器钉 + 「空 prompt 退非零」；真机四步没跑过。
  */
 import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -90,7 +105,30 @@ const DEFAULT_PORT = 9333
 
 // 实测选择器（探测结论 §三 表；★ 别钉中文文案，文案会随语言/改版变）。
 const SEL_BALANCE = '.icube-titlebar-cn-free-upgrade-button' // 免费积分按钮（文本如 4,650）
-const SEL_INPUT = '.chat-input-v2-input-box-editable' // 输入框（role=textbox，需先 focus）
+
+/* ★★ 卡 E27：**所有**面板选择器集中在这一个常量里（2026-10-25 实测 Trae CN 新版 solo-lite 面板）。
+ *   · input     输入框（contenteditable，先 focus 再 execCommand('insertText')）
+ *   · send      发送键（空输入时带 disabled；**不要点它** —— 实测 click 与指针序列全部无效）
+ *   · taskItem  左侧任务项 / taskText 任务项标题
+ *   · newTask   新建任务入口
+ *   ★ `tests/test_trae_pool_selectors.py` 对这五个值**逐字**断言 —— 改这里就得同步改判据。
+ */
+export const SELECTORS = {
+  input: 'div.chat-input-v2-input-box-editable',
+  send: 'button.chat-input-v2-send-button',
+  taskItem: 'div.taskItem',
+  taskText: 'span.taskText',
+  newTask: 'span.task-list-new-task-text',
+}
+
+/** 云端并行任务上限（面板文案「您已达到 10 个云端并行任务上限」里的那个 10）。 */
+export const MAX_PARALLEL = 10
+/** 并发已满的判据：面板正文含这四个字（★ 只钉这一截，不钉整句 —— 整句带数字/标点，会随版本变）。 */
+export const FULL_HINT = '并行任务上限'
+/** "这个任务项还在跑"的判据：项内有 spinner / loading / running 类名（或进度条角色）。 */
+export const RUNNING_HINT = '[class*="spin"], [class*="loading"], [class*="running"], [role="progressbar"]'
+
+const SEL_INPUT = SELECTORS.input // 输入框（role=textbox，需先 focus）
 // ★★ 卡 218（2026-10-13 CDP 实测）：新版「Agent」界面（`solo-lite`）里，**agent 的最终回答**
 //   落在 **`.core-finish-card`**（实测链路：`p.markdown-p` → `.markdown-renderer` →
 //   `.core-finish-card__summary` → **`.core-finish-card`** → `.agent-plan-item`）；
@@ -401,6 +439,101 @@ export function judgeLanded({ activeIsTarget, inBody, turnsBefore, turnsAfter } 
            reason: '核不到：目标对话里既没找到本次内容，轮次也没增 —— 无法证明落进了目标对话' }
 }
 
+/* ------------------------ 卡 E27：并发上限 / 提交 / 任务切换（纯函数，可单测、不碰 CDP） */
+
+/**
+ * ★ 卡 E27 纯函数：并发上限判据 —— 面板正文含 `FULL_HINT`（「并行任务上限」）就算满。
+ *
+ * ★ 为什么只钉这一截：面板原话是「您已达到 10 个云端并行任务上限」，数字与标点会随版本变，
+ *   「并行任务上限」才是这句话的骨架。命中 ⇒ 调用方必须 `[trae] 并发已满（10）` 退 3（不许照发）。
+ */
+export function judgeParallelLimit(text) {
+  const t = String(text == null ? '' : text)
+  if (t.includes(FULL_HINT)) {
+    return { full: true, code: 'full',
+             reason: `面板提示「${FULL_HINT}」（上限 ${MAX_PARALLEL} 个云端并行任务）—— 再发也发不出去` }
+  }
+  return { full: false, code: 'idle' }
+}
+
+/**
+ * ★ 卡 E27 纯函数：**提交前**的三道闸 —— "点了/打了字"都不算数，按下面前提判。
+ *
+ *  · 输入框找不到 ⇒ `no-input`（★ 这条以前是**退 0 静默**，卡 E27 的病根之一）；
+ *  · 拿不到焦点 ⇒ `no-focus`（后面 execCommand 会打到别处）；
+ *  · 打完字发送键**仍 disabled** ⇒ `send-disabled`（★ 不许静默成功，必须非零退出）。
+ */
+export function judgeSubmit({ hasInput, focused, sendDisabled } = {}) {
+  if (hasInput === false) {
+    return { ok: false, code: 'no-input', reason: '找不到输入框（面板没渲染出来？）' }
+  }
+  if (focused === false) {
+    return { ok: false, code: 'no-focus', reason: '输入框拿不到焦点 —— 面板没就绪，不敢打字' }
+  }
+  if (sendDisabled === true) {
+    return { ok: false, code: 'send-disabled',
+             reason: '发送键仍是 disabled —— 字没进输入框，发了也是白发' }
+  }
+  return { ok: true, code: 'ready' }
+}
+
+/**
+ * ★ 卡 E27 纯函数：**Enter 之后**的回读判据 —— 只判一种失败：
+ *  **输入框还有字 且 发送键 disabled** ⇒ `noop`（Enter 没触发发送）。
+ *
+ *  · 字没了 ⇒ `sent`（最强信号：面板接收了）；
+ *  · 读不到输入框（null）⇒ 这里**不判死**，交给调用方后面 12 秒的 `judgeSend` 核验
+ *    （那条把"读不到"判成 `unverifiable`，照样非零退出）—— 避免同一件事两套口径。
+ */
+export function judgeEnter({ inputAfter, sendDisabled } = {}) {
+  const left = inputAfter == null ? null : String(inputAfter)
+  if (left != null && left.trim() !== '' && sendDisabled === true) {
+    return { ok: false, code: 'noop',
+             reason: 'Enter 之后发送键仍是 disabled、输入框还有字 —— 没发出去' }
+  }
+  return { ok: true, code: 'sent' }
+}
+
+/**
+ * ★ 卡 E27 纯函数：把任务项当 `switch --title` 的选择对象 —— **一条不改地镜像 `pickConv` 的口径**：
+ *  · `#N`（**1 基**）⇒ 第 N 个任务；越界 ⇒ 停手；
+ *  · 其它 ⇒ 在**标题**里找子串；命中 1 个才回；0 个 / ≥2 个 ⇒ 停手（由调用方列候选，不许随便挑）。
+ *
+ * 返回 `{ ok, task?, code?, reason? }`；`code` ∈ {index,substr,nomatch,ambiguous,none,range,empty}。
+ */
+export function pickTask(tasks, sel) {
+  const list = tasks || []
+  if (list.length === 0) return { ok: false, code: 'none', reason: '一个任务项都读不到' }
+  const s = sel == null ? '' : String(sel)
+  if (!s.trim()) return { ok: false, code: 'empty', reason: '--title 不能为空' }
+  const m = /^#(\d+)$/.exec(s)
+  if (m) {
+    const n = Number(m[1])
+    if (n < 1 || n > list.length) {
+      return { ok: false, code: 'range',
+               reason: `--title ${s} 越界：只有 ${list.length} 个任务项（1..${list.length}，**1 基**）` }
+    }
+    return { ok: true, code: 'index', task: list[n - 1] }
+  }
+  const hits = list.filter((t) => String(t.title || '').includes(s))
+  if (hits.length === 0) {
+    return { ok: false, code: 'nomatch', reason: `--title ${JSON.stringify(s)} 谁都匹配不上` }
+  }
+  if (hits.length > 1) {
+    return { ok: false, code: 'ambiguous',
+             reason: `--title ${JSON.stringify(s)} 匹配到 ${hits.length} 个任务项 —— 不唯一，不许随便挑` }
+  }
+  return { ok: true, code: 'substr', task: hits[0] }
+}
+
+/** 把任务项列成清单（`list` / `status` / 「停手列候选」共用一份格式）—— **带 `running` 标记**。 */
+export function formatTasks(tasks) {
+  if (!tasks || tasks.length === 0) return '  （没有任务项）\n'
+  return tasks
+    .map((t) => `  #${t.index}\t${t.running ? 'running' : 'idle'}\t${t.title || '(无标题)'}`)
+    .join('\n') + '\n'
+}
+
 /* ---------------------------------------------------------------- 参数解析 */
 
 function parseArgs(argv) {
@@ -684,7 +817,7 @@ async function readAgents(cdp) {
     }
     const busy = /思考中|正在执行命令|正在规划下一步|执行中/.test(last);
     const specDone = /任务耗时/.test(last) && !busy;
-    const sb = document.querySelector('.chat-input-v2-send-button');
+    const sb = document.querySelector(${JSON.stringify(SELECTORS.send)});
     const sendDisabled = sb ? sb.hasAttribute('disabled') : false;
     return { count: agents.length, last, busy, specDone, sendDisabled };
   })()`)
@@ -714,7 +847,7 @@ async function clickApproval(cdp) {
       if (!t || t.length >= 16) continue;
       if (el.children.length) continue;
       if (!RE.test(t) || DENY.test(t)) continue;
-      if (el.closest('.chat-input-v2-input-box-editable, .task-list-group-sortable-wrapper, [class*="task-list"]')) continue;
+      if (el.closest(${JSON.stringify(SELECTORS.input + ', .task-list-group-sortable-wrapper, [class*="task-list"]')})) continue;
       const r = el.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) continue;
       const st = getComputedStyle(el);
@@ -837,6 +970,162 @@ async function chatHasPrompt(cdp, head) {
     }
     return txt.includes(${JSON.stringify(head)});
   })()`)
+}
+
+/* ----------------------- 卡 E27：任务项扫描 / 并发探测 / 提交 / 切任务（DOM 动作） */
+
+/**
+ * ★ 卡 E27：扫左侧任务列表（`div.taskItem` + `span.taskText`）。返回 `{ ok, tasks }`：
+ *  `tasks` = [{ index(1 基), title, running, x, y }]；`running` = 项内命中 `RUNNING_HINT`。
+ *  读不到（页面抛错 / 断线）⇒ `{ ok:false, tasks: [] }`；**读到 0 个**是合法读数（还没任务），
+ *  两者靠 `ok` 分清，不混为一谈。
+ */
+async function readTasks(cdp) {
+  let raw = null
+  try {
+    raw = await cdp.eval(`(() => {
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+      const items = [...document.querySelectorAll(${JSON.stringify(SELECTORS.taskItem)})];
+      const out = [];
+      for (const el of items) {
+        const r = el.getBoundingClientRect();
+        const txt = el.querySelector(${JSON.stringify(SELECTORS.taskText)});
+        const title = norm((txt ? txt.innerText : el.innerText) || '').slice(0, 120);
+        out.push({
+          title,
+          running: !!el.querySelector(${JSON.stringify(RUNNING_HINT)}),
+          x: Math.round(r.left + r.width / 2),
+          y: Math.round(r.top + r.height / 2),
+        });
+      }
+      return out;
+    })()`)
+  } catch { raw = null }
+  if (!Array.isArray(raw)) return { ok: false, tasks: [] }
+  return {
+    ok: true,
+    tasks: raw.map((t, i) => ({ index: i + 1, title: t.title || '', running: Boolean(t.running),
+                                x: t.x, y: t.y })),
+  }
+}
+
+/** ★ 卡 E27：只读探一个面板的并发上限 + 任务项（`list` / `status` 共用）。**绝不写页面**。 */
+async function probePanelState(panel) {
+  let cdp = null
+  try {
+    cdp = await connectPage(panel)
+    const text = await cdp.eval(`document.body ? document.body.innerText : ''`)
+    const tasks = await readTasks(cdp)
+    return { ok: true, limit: judgeParallelLimit(text), tasks }
+  } catch {
+    return { ok: false, limit: null, tasks: { ok: false, tasks: [] } }
+  } finally {
+    if (cdp) cdp.close()
+  }
+}
+
+/** ★ 卡 E27：当前对话正文（最后一条 agent 轮次）。`switchTask` 拿它判「正文真的换了」。 */
+async function readBodyText(cdp) {
+  const st = await readAgents(cdp)
+  return String((st && st.last) || '')
+}
+
+/**
+ * ★ 卡 E27：提交一条内容 —— **只剩这一条路径**（旧的 `sendButton.click()` 实测点不动，已删）。
+ *
+ *  `focus()` → `document.execCommand('insertText')` → Enter 键序（keydown/keypress/keyup）。
+ *  ★ 三道闸全走 `judgeSubmit`：找不到输入框 / 拿不到焦点 / 打完字发送键**仍 disabled** ⇒ 返回
+ *    `{ ok:false, code, reason }`，调用方**非零退出**（不许像以前那样"以为发了"）。
+ *  ★ `insert:false`（`already-typed`：上一轮打好的字还在）⇒ 不重输，只补 Enter。
+ */
+async function submit(cdp, text, { insert = true } = {}) {
+  const before = await cdp.eval(`(() => {
+    const el = document.querySelector(${JSON.stringify(SELECTORS.input)});
+    const sb = document.querySelector(${JSON.stringify(SELECTORS.send)});
+    if (!el) return { hasInput: false, focused: false, sendDisabled: true };
+    el.focus();
+    return {
+      hasInput: true,
+      focused: document.activeElement === el,
+      sendDisabled: sb ? sb.hasAttribute('disabled') : false,
+    };
+  })()`)
+  const st = before || { hasInput: false, focused: false, sendDisabled: true }
+  if (insert) {
+    // ★ 先打字再判闸：空输入时发送键本来就 disabled，那不算"点不动"。
+    const typed = await cdp.eval(`(() => {
+      const el = document.querySelector(${JSON.stringify(SELECTORS.input)});
+      if (!el) return { hasInput: false, focused: false, sendDisabled: true };
+      const ok = document.execCommand('insertText', false, ${JSON.stringify(String(text))});
+      const sb = document.querySelector(${JSON.stringify(SELECTORS.send)});
+      const now = (el.innerText || el.value || '');
+      return {
+        hasInput: true,
+        focused: document.activeElement === el,
+        sendDisabled: sb ? sb.hasAttribute('disabled') : false,
+        execOK: ok,
+        len: now.length,
+      };
+    })()`)
+    const g = judgeSubmit(typed || { hasInput: false })
+    if (!g.ok) return g
+    if (typed && typed.len === 0) {
+      // execCommand 返回 true 但字没进去（面板变了）—— 同属"发送键可能仍 disabled"，按没打进去处理。
+      return { ok: false, code: 'no-text', reason: '输入框里没打出字 —— 面板不接受 execCommand(insertText)' }
+    }
+  } else {
+    const g = judgeSubmit(st)
+    if (!g.ok) return g
+  }
+  // Enter 键序（★ 实测只有键序能把话真发出去；click 与指针序列无效）。
+  const enter = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, text: '\r' }
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...enter })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keypress', ...enter })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...enter })
+  const after = await cdp.eval(`(() => {
+    const el = document.querySelector(${JSON.stringify(SELECTORS.input)});
+    const sb = document.querySelector(${JSON.stringify(SELECTORS.send)});
+    return {
+      inputAfter: el ? (el.innerText || el.value || '') : null,
+      sendDisabled: sb ? sb.hasAttribute('disabled') : false,
+    };
+  })()`)
+  return judgeEnter(after || {})
+}
+
+/**
+ * ★ 卡 E27：切到 title 指定的任务，并**等正文真的换掉**（最多 `timeoutMs`，默认 10 s）。
+ *
+ *  ★ 点完就返回旧正文 = 谎报（用户看到的是上一个任务的回话）⇒ 这里**轮询**到正文变化为止；
+ *    等不到就 `{ ok:false, code:'no-body', reason:'切过去了但读不到正文' }`，**不返回旧内容**。
+ */
+async function switchTask(cdp, title, { timeoutMs = 10000, log = null } = {}) {
+  const scan = await readTasks(cdp)
+  if (!scan.ok) {
+    return { ok: false, code: 'unreadable', reason: `读不到任务项（${SELECTORS.taskItem} 一个都没扫到）` }
+  }
+  const pick = pickTask(scan.tasks, title)
+  if (!pick.ok) {
+    return { ok: false, code: pick.code, reason: pick.reason, candidates: scan.tasks }
+  }
+  const task = pick.task
+  let before = ''
+  try { before = await readBodyText(cdp) } catch { before = '' }
+  if (log) log({ ev: 'switch', act: 'click', index: task.index, title: task.title, x: task.x, y: task.y })
+  await clickAt(cdp, task.x, task.y)
+  const deadline = Date.now() + timeoutMs
+  let last = ''
+  while (Date.now() < deadline) {
+    await sleep(500)
+    try { last = await readBodyText(cdp) } catch { last = '' }
+    if (last && last !== before) {
+      if (log) log({ ev: 'switch', ok: true, index: task.index, len: last.length })
+      return { ok: true, code: 'switched', task, text: last }
+    }
+  }
+  if (log) log({ ev: 'switch', ok: false, code: 'no-body', index: task.index, waitedMs: timeoutMs })
+  return { ok: false, code: 'no-body', task,
+           reason: `切过去了但读不到正文（${Math.round(timeoutMs / 1000)} s 内正文没变化）` }
 }
 
 /* ------------------------------------- 卡 260：会话列表（DOM 扫描；判据全在纯函数里） */
@@ -1162,6 +1451,7 @@ async function cmdSend(argv) {
   const port = Number(args.port || DEFAULT_PORT)
   const workspace = args.workspace || null
   const promptFile = args['prompt-file']
+  const promptInline = args.prompt == null ? null : String(args.prompt)   // ★ 卡 E27：内联内容
   const logPath = args.log
   const outPath = args.out
   const timeoutSec = Number(args['timeout-sec'] || 3600)
@@ -1174,12 +1464,25 @@ async function cmdSend(argv) {
     process.stderr.write('[trae] --new-chat 和 --conversation 只能给一个（一个要新开、一个要定向到已有会话，自相矛盾）\n')
     return 2
   }
-  if (!promptFile || !logPath || !outPath) {
-    process.stderr.write('用法：node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>] [--model <名字>] [--new-chat] [--conversation "#N"|<标题子串>]\n')
+  if (promptInline != null && promptFile) {
+    process.stderr.write('[trae] --prompt 和 --prompt-file 只能给一个\n')
+    return 2
+  }
+  // ★ 卡 E27：空内容**先**拦下（不给"以为发了"留口子）—— 这一条不连 CDP 也能判。
+  if (promptInline != null && promptInline.trim() === '') {
+    process.stderr.write('[trae] --prompt 为空 —— 没有可发的内容，不发（退 2）\n')
+    return 2
+  }
+  if ((!promptFile && promptInline == null) || !logPath || !outPath) {
+    process.stderr.write('用法：node tools/trae_pool.mjs send --workspace <目录> (--prompt <文本> | --prompt-file <文件>) --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>] [--model <名字>] [--new-chat] [--conversation "#N"|<标题子串>]\n')
     return 2
   }
   const log = makeLogger(logPath)
-  const prompt = readFileSync(promptFile, 'utf8')
+  const prompt = promptFile ? readFileSync(promptFile, 'utf8') : promptInline
+  if (String(prompt).trim() === '') {
+    process.stderr.write('[trae] 要发的内容是空的 —— 不发（退 2）\n')
+    return 2
+  }
 
   // ★★ 卡 227：`--target` 给就**先选面板再连**（选不成直接停手，见 connectTarget）；
   //   不给 `--target` ⇒ `attach`（取第一个面板）—— 老行为**逐字不变**。
@@ -1273,6 +1576,21 @@ async function cmdSend(argv) {
       return 3
     }
 
+    // ★★ 卡 E27③：送任务前先探并发上限 —— 面板提示含「并行任务上限」⇒ 退 3（不许"以为发了"）。
+    let limit = { full: false, code: 'idle' }
+    try {
+      const pageText = await cdp.eval('document.body ? document.body.innerText : ""')
+      limit = judgeParallelLimit(pageText)
+    } catch (e) {
+      // 读不到不算"满了"（不猜），后续 submit 的判据会兜底"输入框/发送键"读不到那种失败。
+      log({ ev: 'parallel', ok: false, msg: e.message })
+    }
+    log({ ev: 'parallel', full: limit.full, code: limit.code, max: MAX_PARALLEL })
+    if (limit.full) {
+      process.stderr.write('[trae] 并发已满（10）\n')
+      return 3
+    }
+
     // ★★ 卡 260：--new-chat / --conversation —— 在发指令**前**把对话路由好（两个都不给 ⇒ convCtx=null，
     //   整段与老行为逐字一致）。路由每一步都有核验：新开要 judgeNewChat 过（防"复用当前"顶替）、
     //   定向要点完回读 selected；核不到 ⇒ 非零退出，不许「点了就当成功」。
@@ -1328,15 +1646,17 @@ async function cmdSend(argv) {
     // ★ 记发送前的 agent 轮次数：完成判据要求"出现了**新的** agent 轮次"，防被上一轮的「完成。」骗。
     const baseline = (await readAgents(cdp)).count
 
-    // 发送：insertText 打字 → Enter。★ 发指令这一刻断了**不重发**（会重复提问）—— 如实报错退 3。
+    // 发送：★ 卡 E27 —— 唯一路径是 `submit()`（focus → execCommand('insertText') → Enter 键序）。
+    //  旧的 `sendButton.click()` 实测点不动（空输入 disabled + 点击不触发事件链），已删除。
+    //  ★ 发指令这一刻断了**不重发**（会重复提问）—— 如实报错退 3。
     //  ★ 卡 245②：残留恰是本次内容（already-typed）⇒ 不重复输入，只补发送。
     try {
-      if (clear.code !== 'already-typed') {
-        await cdp.send('Input.insertText', { text: prompt })
+      const sub = await submit(cdp, prompt, { insert: clear.code !== 'already-typed' })
+      if (!sub.ok) {
+        log({ ev: 'error', msg: `submit failed: ${sub.code} —— ${sub.reason}` })
+        process.stderr.write(`[trae] ${sub.reason} —— 不发，退 3\n`)
+        return 3
       }
-      const enter = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, text: '\r' }
-      await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...enter })
-      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...enter })
     } catch (e) {
       cdp.markDead('发指令时读页面失败：' + e.message)
       log({ ev: 'error', msg: 'send failed（不重发，避免重复提问）: ' + e.message })
@@ -1489,7 +1809,9 @@ async function cmdSend(argv) {
 /* ---------------------------------------------------------------- 卡 227：list / selftest */
 
 /** 只读子命令：列出**所有可驱动面板**（序号 / 标题 / URL / 是否已有会话），给 `--target` 当索引。
- *  ★ 一个字节都不写（只读 CDP）；连不上 CDP ⇒ 退 2 并说清。`list` 与 `--list` 两种写法都认。 */
+ *  ★ 一个字节都不写（只读 CDP）；连不上 CDP ⇒ 退 2 并说清。`list` 与 `--list` 两种写法都认。
+ *  ★ 卡 E27：末尾**再列一次任务项**（`div.taskItem` + `span.taskText`），带 `running` 标记 ——
+ *    以前只看得见面板、看不见"哪些任务还在跑"。读不到就**如实写读不到**（不猜、不当 0 个）。 */
 async function cmdList(argv) {
   const args = parseArgs(argv)
   const port = Number(args.port || DEFAULT_PORT)
@@ -1504,6 +1826,114 @@ async function cmdList(argv) {
   process.stdout.write(`[trae] 可驱动面板 ${panels.length} 个`
     + `（--target 用 "#N"（1 基）或 URL/标题子串）：\n`)
   process.stdout.write(formatPanels(panels))
+  // ★ 卡 E27：任务项 + running（默认看第一个面板；给了 --target 就按它选）。
+  if (panels.length) {
+    const picked = pickPanel(panels, args.target == null ? null : String(args.target))
+    if (!picked.ok) {
+      process.stdout.write(`[trae] 任务项：没选面板（${picked.reason}）—— 跳过\n`)
+      return 0
+    }
+    const st = await probePanelState(picked.panel)
+    if (!st.ok || !st.tasks.ok) {
+      process.stdout.write(`[trae] 任务项：读不到（面板没渲染出来？试过 ${SELECTORS.taskItem}）\n`)
+    } else {
+      const running = st.tasks.tasks.filter((t) => t.running).length
+      process.stdout.write(`[trae] 面板 #${picked.panel.index} 任务项 ${st.tasks.tasks.length} 个`
+        + `（running ${running}）：\n`)
+      process.stdout.write(formatTasks(st.tasks.tasks))
+    }
+  }
+  return 0
+}
+
+/* ------------------------------------------------------ 卡 E27：switch / status / help */
+
+/** ★ 卡 E27 子命令：切到某个任务，**等正文真的换掉**再打印（等不到 ⇒ 退 3 并说明，不打印旧内容）。
+ *  `--title "#N"|子串`（1 基序号或标题子串，0/≥2 命中 ⇒ 停手列候选）。 */
+async function cmdSwitch(argv) {
+  const args = parseArgs(argv)
+  const port = Number(args.port || DEFAULT_PORT)
+  const wanted = args.title == null ? null : String(args.title)
+  if (wanted == null || wanted.trim() === '') {
+    process.stderr.write('用法：node tools/trae_pool.mjs switch --title "#N"|<标题子串> [--port 9333]\n')
+    return 2
+  }
+  let cdp
+  try {
+    cdp = await attach(port, { launch: false })
+  } catch (e) {
+    process.stderr.write(`[trae] ${e.message}\n`)
+    return 2
+  }
+  if (!cdp) {
+    process.stderr.write(`[trae] 连不上 CDP（127.0.0.1:${port}）—— IDE 没开着？\n`)
+    return 2
+  }
+  try {
+    const r = await switchTask(cdp, wanted)
+    if (!r.ok) {
+      process.stderr.write(`[trae] 切任务停手：${r.reason}\n`)
+      if (r.candidates && r.candidates.length) {
+        process.stderr.write(`[trae] 候选（本面板 ${r.candidates.length} 个任务项；--title 可用 "#N" 或标题子串，**1 基**）：\n`)
+        process.stderr.write(formatTasks(r.candidates))
+      }
+      return r.code === 'nomatch' || r.code === 'ambiguous' || r.code === 'range'
+        || r.code === 'empty' || r.code === 'none' ? 2 : 3
+    }
+    process.stdout.write(r.text.endsWith('\n') ? r.text : r.text + '\n')
+    return 0
+  } finally { cdp.close() }
+}
+
+/** ★ 卡 E27 子命令：一屏读数（只读）—— 面板 / 任务项（带 running）/ 并发是否满 / 余额。
+ *  连不上 CDP ⇒ 退 2；页面读不到 ⇒ 退 3（读不到不等于"没任务"，不粉饰）。 */
+async function cmdStatus(argv) {
+  const args = parseArgs(argv)
+  const port = Number(args.port || DEFAULT_PORT)
+  const panels = await fetchPanels(port, 2000)
+  if (panels == null) {
+    process.stderr.write(`[trae] 连不上 CDP（127.0.0.1:${port}）—— IDE 没开着？\n`)
+    return 2
+  }
+  if (!panels.length) {
+    process.stderr.write(`[trae] 连上了 CDP，但一个可驱动面板都没有（solo-lite 没开？）\n`)
+    return 2
+  }
+  const picked = pickPanel(panels, args.target == null ? null : String(args.target))
+  if (!picked.ok) {
+    process.stderr.write(`[trae] 选面板停手：${picked.reason}\n`)
+    process.stderr.write(formatPanels(panels))
+    return 2
+  }
+  const st = await probePanelState(picked.panel)
+  if (!st.ok || !st.tasks.ok) {
+    process.stderr.write(`[trae] 读不到面板内容（任务项 ${SELECTORS.taskItem} 没扫到）—— 退 3\n`)
+    return 3
+  }
+  const tasks = st.tasks.tasks
+  const running = tasks.filter((t) => t.running).length
+  process.stdout.write(`[trae] 面板 #${picked.panel.index} ${picked.panel.title || '(无标题)'}\n`)
+  process.stdout.write(`[trae] 并发 ${st.limit.full ? '已满' : '未满'}（上限 ${MAX_PARALLEL}）\n`)
+  process.stdout.write(`[trae] 任务项 ${tasks.length} 个（running ${running}）：\n`)
+  process.stdout.write(formatTasks(tasks))
+  return 0
+}
+
+/** ★ 卡 E27：`--help` —— 四个主命令（list / send / switch / status）先列出来，退 0。
+ *  ★ 以前没有 `--help`：不带参数就退 2 打用法 ⇒ "查一下有哪些子命令"都算失败。 */
+async function cmdHelp() {
+  process.stdout.write('用法：node tools/trae_pool.mjs <子命令> [选项]\n')
+  process.stdout.write('\n四个主命令（卡 E27）：\n')
+  process.stdout.write('  list    [--port 9333] [--target "#N"|子串]   # 只读：面板 + 任务项（带 running 标记）\n')
+  process.stdout.write('  send    --prompt <文本> | --prompt-file <文件>  --log <jsonl> --out <md>\n')
+  process.stdout.write('          [--workspace <目录>] [--port 9333] [--timeout-sec 3600] [--no-launch]\n')
+  process.stdout.write('          [--target "#N"|<子串>] [--model <名字>] [--new-chat] [--conversation "#N"|<标题子串>]\n')
+  process.stdout.write('  switch  --title "#N"|<标题子串> [--port 9333]   # 切任务并等正文换掉（最多 10 s）\n')
+  process.stdout.write('  status  [--port 9333] [--target "#N"|子串]     # 一屏：面板 / 任务项 / 并发是否满\n')
+  process.stdout.write('\n另有（只读/自检）：\n')
+  process.stdout.write('  balance [--port 9333]                          # 读免费积分\n')
+  process.stdout.write('  conversations [--port 9333]                    # 列面板里的会话（= --conversations）\n')
+  process.stdout.write('  selftest                                       # 纯函数判据（不需要 Trae）\n')
   return 0
 }
 
@@ -1672,8 +2102,71 @@ async function cmdSelftest() {
       ? `code=${got.code}` : `got=${JSON.stringify(got)}`
     process.stdout.write(`[${pass ? '绿' : '红'}] ${name}  → ${tail}\n`)
   }
+
+  // ★★ 卡 E27 判据：选择器逐字 / 并发上限 / 提交三道闸 / Enter 回读 / 任务选择 / running 标记。
+  //   卡 227/245/260 的用例一条没删 —— 上面照原样跑过。
+  const TASKS = [
+    { index: 1, title: '卡 E27 Trae 通道修复', running: true },
+    { index: 2, title: '卡 E26 别的活', running: false },
+    { index: 3, title: '卡 E27 第二份', running: false },
+  ]
+  const checksE27 = [
+    // ① 选择器：五个实测值逐字（★ 与 tests/test_trae_pool_selectors.py 同一份口径）。
+    ['SELECTORS 五个实测值逐字相符', SELECTORS,
+      (s) => s.input === 'div.chat-input-v2-input-box-editable'
+        && s.send === 'button.chat-input-v2-send-button'
+        && s.taskItem === 'div.taskItem' && s.taskText === 'span.taskText'
+        && s.newTask === 'span.task-list-new-task-text'],
+    // ② 并发上限：命中就报满（退 3 由调用方做）；没命中不许瞎报。
+    ['并发上限：面板含「并行任务上限」⇒ 判满（full）',
+      judgeParallelLimit('您已达到 10 个云端并行任务上限'), (r) => r.full && r.code === 'full'],
+    ['并发上限：面板干净 ⇒ 判未满（idle，不许瞎报）',
+      judgeParallelLimit('任务都跑完了'), (r) => !r.full && r.code === 'idle'],
+    // ③ 提交三道闸：找不到输入框 / 没焦点 / 发送键仍 disabled ⇒ 一律失败且带一句原因。
+    ['提交闸：找不到输入框 ⇒ 必须失败（no-input）',
+      judgeSubmit({ hasInput: false, focused: false, sendDisabled: true }),
+      (r) => !r.ok && r.code === 'no-input' && r.reason.length > 0],
+    ['提交闸：拿不到焦点 ⇒ 必须失败（no-focus）',
+      judgeSubmit({ hasInput: true, focused: false, sendDisabled: false }),
+      (r) => !r.ok && r.code === 'no-focus'],
+    ['★反例：打完字发送键仍 disabled ⇒ 必须失败（send-disabled，不许静默退 0）',
+      judgeSubmit({ hasInput: true, focused: true, sendDisabled: true }),
+      (r) => !r.ok && r.code === 'send-disabled'],
+    ['提交闸：三项都过 ⇒ 放行（ready）',
+      judgeSubmit({ hasInput: true, focused: true, sendDisabled: false }), (r) => r.ok],
+    // ④ Enter 之后：字还在 + 发送键 disabled ⇒ 没发出去（noop）；字没了 ⇒ 放行。
+    ['★Enter 回读：输入框还有字且发送键 disabled ⇒ 必须失败（noop）',
+      judgeEnter({ inputAfter: '帮我复核', sendDisabled: true }),
+      (r) => !r.ok && r.code === 'noop'],
+    ['Enter 回读：输入框已清空 ⇒ 放行（sent）',
+      judgeEnter({ inputAfter: '', sendDisabled: true }), (r) => r.ok && r.code === 'sent'],
+    // ⑤ 任务选择：镜像 pickConv 的口径（1 基 / 唯一 / 越界 / 空）。
+    ['switchTask 选任务："#2"（1 基）⇒ 第 2 个', pickTask(TASKS, '#2'),
+      (r) => r.ok && r.code === 'index' && r.task.index === 2],
+    ['switchTask 选任务：子串唯一命中 ⇒ 选中它', pickTask(TASKS, 'E26'),
+      (r) => r.ok && r.code === 'substr' && r.task.index === 2],
+    ['★反例：子串命中两个 ⇒ 必须停手（ambiguous，不许择一）', pickTask(TASKS, '卡 E27'),
+      (r) => !r.ok && r.code === 'ambiguous'],
+    ['反例：子串谁都不匹配 ⇒ 停手（nomatch）', pickTask(TASKS, 'zzz'), (r) => !r.ok && r.code === 'nomatch'],
+    ['越界："#9" ⇒ 停手（range）', pickTask(TASKS, '#9'), (r) => !r.ok && r.code === 'range'],
+    ['空 --title ⇒ 停手（empty）', pickTask(TASKS, '  '), (r) => !r.ok && r.code === 'empty'],
+    ['一个任务项都没有 ⇒ 停手（none）', pickTask([], '#1'), (r) => !r.ok && r.code === 'none'],
+    // ⑥ list / status 的 running 标记：running 的项打 running，其余打 idle。
+    ['formatTasks 给 running 的项打 running 标记', formatTasks(TASKS),
+      (s) => s.includes('running') && s.includes('idle')
+        && /#1\s+running/.test(s) && /#2\s+idle/.test(s)],
+    ['formatTasks 空列表 ⇒ 明说没有，不打印空串', formatTasks([]),
+      (s) => s.includes('没有任务项')],
+  ]
+  for (const [name, got, ok] of checksE27) {
+    const pass = ok(got)
+    if (!pass) bad += 1
+    const tail = (got && typeof got === 'object' && !Array.isArray(got) && 'code' in got)
+      ? `code=${got.code}` : `got=${JSON.stringify(got)}`
+    process.stdout.write(`[${pass ? '绿' : '红'}] ${name}  → ${tail}\n`)
+  }
   process.stdout.write(bad === 0
-    ? `[OK] selftest 全绿（${checks.length + 1 + checks245.length + checks260.length} 条）\n`
+    ? `[OK] selftest 全绿（${checks.length + 1 + checks245.length + checks260.length + checksE27.length} 条）\n`
     : `[FAIL] selftest 有 ${bad} 条红\n`)
   return bad === 0 ? 0 : 1
 }
@@ -1715,17 +2208,16 @@ async function main() {
   const argv = process.argv.slice(2)
   const cmd = argv[0]
   let code
-  if (cmd === 'balance') code = await cmdBalance(argv.slice(1))
+  if (cmd === '--help' || cmd === '-h' || cmd === 'help') code = await cmdHelp()
+  else if (cmd === 'balance') code = await cmdBalance(argv.slice(1))
   else if (cmd === 'send') code = await cmdSend(argv.slice(1))
   else if (cmd === 'list' || cmd === '--list') code = await cmdList(argv.slice(1))
+  else if (cmd === 'switch') code = await cmdSwitch(argv.slice(1))
+  else if (cmd === 'status') code = await cmdStatus(argv.slice(1))
   else if (cmd === 'conversations' || cmd === '--conversations') code = await cmdConversations(argv.slice(1))
   else if (cmd === 'selftest' || cmd === '--selftest') code = await cmdSelftest()
   else {
-    process.stderr.write('用法：node tools/trae_pool.mjs balance [--port 9333]\n')
-    process.stderr.write('      node tools/trae_pool.mjs list [--port 9333]     # 只读：列可驱动面板（= --list）\n')
-    process.stderr.write('      node tools/trae_pool.mjs conversations [--port 9333]   # 只读：列面板里的会话（= --conversations）\n')
-    process.stderr.write('      node tools/trae_pool.mjs selftest                # 判据：面板选择 + 模型匹配/发送核验 + 对话定向/新开（不需要 Trae）\n')
-    process.stderr.write('      node tools/trae_pool.mjs send --workspace <目录> --prompt-file <文件> --log <jsonl> --out <md> [--port 9333] [--timeout-sec 3600] [--no-launch] [--target "#N"|<子串>] [--model <名字>] [--new-chat] [--conversation "#N"|<标题子串>]\n')
+    await cmdHelp()   // ★ 卡 E27：打法用走 stdout（--help 退 0；没认出子命令仍退 2）
     code = 2
   }
   process.exitCode = code

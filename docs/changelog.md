@@ -1,3 +1,7 @@
+## Trae 送任务通道：选择器集中 / 提交走 Enter / 并发满退 3（E27 · T-AG481）
+- `tools/trae_pool.mjs` 新增导出 `SELECTORS`（输入框 / 发送键 / 任务项 / 任务标题 / 新建任务五个实测值），改面板只改这一处。
+- `send` 的提交路径改成 `submit()`：`focus()` → `execCommand('insertText')` → Enter 键序；打完字发送键仍 `disabled` ⇒ **非零退出并说原因**，不再静默退 0。
+- 送任务前先探并发上限（命中「10 个云端并行任务上限」⇒ 退 3）；新增只读 `status` 与 `switch --title`（轮询等正文，等不到不许回旧任务内容）。
 ## 起子进程的钉子遇「拒绝访问」要重试（E14 · T-AG465）
 - `tests/conftest.py` 新增 `run_git()` / `_is_spawn_denied()` / `GIT_MAX_TRIES = 3` / `GIT_RETRY_DELAY_S = 0.05`：只对 `PermissionError` 与 `winerror == 5` 重试，三次全失败抛原异常（不 skip、不吞）。
 - `tests/test_wb_review.py` 里 28 处起 `git` 子进程改用它；`plain()` 也换过去，`test_chinese_paths_are_not_escaped` 的断言一条未改。

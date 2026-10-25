@@ -3893,7 +3893,7 @@ spec = "复盘/卡/卡E27-Trae送任务通道修复.md"
 files = ["tools/trae_pool.mjs", "tests/test_trae_pool_selectors.py"]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"
 [[cards]]
 id = "E28"
 task = "T-AG482"
