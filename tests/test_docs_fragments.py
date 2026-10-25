@@ -283,21 +283,81 @@ def test_shared_file_two_branches_conflict(tmp_path: Path) -> None:
 
 # ---------------------------------------------------------------- 4. 真仓库：汇总不动文档 + audit
 
+#: 真仓里这条链涉到的六处（三份汇总 + 三个片段目录）—— 副本只搬这些，够跑汇总与核对。
+_REAL_PARTS = (
+    "docs/changelog.md",
+    "docs/traceability.toml",
+    "复盘/交接-重构进度.md",
+    "docs/changelog.d",
+    "docs/traceability.d",
+    "复盘/交接.d",
+)
 
-def test_real_repo_is_in_sync_and_merge_is_noop() -> None:
+
+def _copy_real_docs(tmp_path: Path) -> Path:
+    """把真仓的「三份汇总 + 三个片段目录」搬进临时目录，回那份副本的根。
+
+    ★ 副本要有个 git 仓、且把**三份汇总**提交一次：`--check` 的「同一台账号多块」判据靠
+      `git show HEAD:<汇总>` 区分**历史欠账**与**新增孤儿块**（非 git 树里一律按"新增"判红）。
+      把副本的 HEAD 做成与工作区一致 ⇒ 真仓里那些已提交的老块在副本里也认成"老账"。
+    """
+    import shutil
+
+    for rel in _REAL_PARTS:
+        src = ROOT / rel
+        dst = tmp_path / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if src.is_dir():
+            shutil.copytree(src, dst)
+        else:
+            shutil.copy2(src, dst)
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", "core.quotepath=false", "-c", "user.name=t", "-c", "user.email=t@e",
+             *args],
+            cwd=tmp_path, capture_output=True, check=True,
+        )
+
+    git("init", "-q")
+    git("add", "--", *_REAL_PARTS[:3])
+    git("commit", "-q", "-m", "copy of the three summaries")
+    return tmp_path
+
+
+def test_real_repo_is_in_sync_and_merge_is_noop(tmp_path: Path) -> None:
+    """★ 卡 E38（T-AG492）：这条用例**只读副本，不在原地汇总**。
+
+    为什么不能原地读（F4 那趟门禁的真现场）：`sync_docs` 会**写**共享文档，而本用例读的正是
+    活文件 `docs/traceability.d/`；`pytest -n 4` 下另一个 worker / 另一个池的落地链同时在往
+    同一个片段目录落文件 ⇒ 汇总那一刻"有待汇总片段：['traceability']" ⇒ **假红**
+    （同一棵树门禁跑完单独跑 `--check` 却是 `[OK ]`）。
+
+    改成：把真仓的汇总件与片段目录**复制**到临时目录，在副本上断言
+    「无待汇总片段 + 汇总逐字不变 + 片段 ↔ 汇总一致」；同时**钉住活文件没被本用例改动**。
+    """
+    live_before = _docs_hashes(ROOT)
+    copy = _copy_real_docs(tmp_path)
+
     changed = [
         ch.name
-        for ch in sd.build_channels(ROOT)
+        for ch in sd.build_channels(copy)
         if sd._collect_pending(ch, sd._norm(sd._read_target(ch)))
     ]
     assert changed == [], f"提交前应无未汇总片段，但这些通道有待汇总片段：{changed}"
-    before = _docs_hashes(ROOT)
-    assert sd.run(ROOT, check=False) == 0  # 空片段 → no-op
-    assert _docs_hashes(ROOT) == before  # 三个共享文档逐字不变
-    assert sd.run(ROOT, check=True) == 0  # 片段 ↔ 汇总一致
+    before = _docs_hashes(copy)
+    assert sd.run(copy, check=False) == 0  # 空片段 → no-op
+    assert _docs_hashes(copy) == before  # 三份汇总逐字不变
+    assert sd.run(copy, check=True) == 0  # 片段 ↔ 汇总一致
+    assert _docs_hashes(ROOT) == live_before, "本用例不许动活仓库的共享文档（并行下会咬别人）"
 
 
-def test_audit_verdict_unchanged_by_sync() -> None:
+def test_audit_verdict_unchanged_by_sync(tmp_path: Path) -> None:
+    """汇总**不改审计结论**：在副本上汇总，活仓库的 audit 读数前后逐字不变。
+
+    ★ 卡 E38：汇总那一步也挪到副本上了 —— 原来直接 `sd.run(ROOT)`，并行时会替别人合并片段
+      （写活文件），既会假红也会干扰别的 worker。
+    """
     def audit() -> tuple[int, str]:
         r = subprocess.run(
             [sys.executable, "-X", "utf8", "scripts/audit_progress.py", "--all"],
@@ -307,7 +367,8 @@ def test_audit_verdict_unchanged_by_sync() -> None:
         return r.returncode, (r.stdout or "") + (r.stderr or "")
 
     before = audit()
-    assert sd.run(ROOT, check=False) == 0
+    copy = _copy_real_docs(tmp_path)
+    assert sd.run(copy, check=False) == 0
     assert audit() == before  # 汇总前后 audit 结论逐字不变
     assert before[0] == 0
 

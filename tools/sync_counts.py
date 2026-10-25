@@ -9,6 +9,11 @@
 判据与 audit 完全同一套正则（**一处格式来源**）：`台账进度：done a / partial b / todo c /
 deferred d（共 N 条…`，只替换那五个数字，其余文字原样保留。
 
+★ 卡 E38（T-AG492）：根不再按**文件位置**推（原来是
+`ROOT = Path(__file__).resolve().parent.parent`）—— 在卡树里用 `../../tools/sync_counts.py`
+跑，改的是**主树**的交接文档（E38 现场把主树弄脏过一次）。现在走 `tools/pipe_root.py`：
+`PIPE_DATA` > 当前目录（像不像数据根）> 工具所在仓；写法与 `tools/wb_daily.py:54-55` 一致。
+
     python -X utf8 tools/sync_counts.py            # 直接改（只动那五个数字）
     python -X utf8 tools/sync_counts.py --check     # 只查，漂了就退 1（可当门禁用）
 """
@@ -21,9 +26,21 @@ from pathlib import Path
 
 import tomllib
 
-ROOT = Path(__file__).resolve().parent.parent
+try:
+    import pipe_root
+except ImportError:  # pragma: no cover —— 独立拷贝的树里没有 pipe_root
+    try:
+        from tools import pipe_root  # type: ignore[no-redef]
+    except ImportError:
+        pipe_root = None  # type: ignore[assignment]
+
+#: 工具根：只用来找本工具，不当数据根。
+_TOOL_ROOT = Path(__file__).resolve().parent.parent
+#: 台账与交接文档住在**选中的那棵树**里（`pipe_root.data_root()`；没有 pipe_root 时降级回工具根）。
+ROOT = pipe_root.data_root() if pipe_root is not None else _TOOL_ROOT
 LEDGER = ROOT / "docs" / "traceability.toml"
 HANDOFFS = (ROOT / "复盘" / "长任务执行协议.md", ROOT / "复盘" / "交接-重构进度.md")
+
 
 # 与 `scripts/audit_progress.py` 的 `_HANDOFF_NUM` 同一形状，但**保留分组边界**以便只换数字
 NUM = re.compile(

@@ -8829,13 +8829,24 @@ evidence = ["file:复盘/卡/卡E37-变异驱动用例汰换.md", "file:tools/mu
 gaps = ["变异引擎（mutmut / cosmic-ray）尚未选型，两者都没装时 fail closed —— 见 `tools/mutate_report.py`", "97 个参数化族要逐族人工确认 `ids` 可追溯，机械合并会丢原用例名 —— 见 `复盘/卡/卡E37-变异驱动用例汰换.md` 判据 2", "删除上限 3% 与「变异分下降 ≤0.5」需要在真跑一轮变异报告后才有数 —— 见判据 4", "属性测试只覆盖纯函数族，带子进程与文件写的用例不适用 —— 见 `tests/test_properties.py`"]
 
 [entries."T-AG492"]
-title = "派生文档链三处静默 + 并行假红 + 落地笔默认 Refs"
-kind = "card"
-status = "todo"
-partition = "E"
-card = "E38"
-evidence = ["file:复盘/卡/卡E38-派生链三处静默与并行假红.md", "file:tools/sync_docs.py", "file:tools/sync_counts.py", "file:tools/pool/stage_card.py", "file:tools/pool/landing.py", "test:test_sync_docs_replaces_block.py", "test:test_sync_counts_root.py", "test:test_docs_fragments.py"]
-gaps = ["重复块替换后，历史遗留的孤儿块仍需一次人工清理 —— 见判据 1", "并行假红的根因尚未钉死 —— 见判据 3 的三次连跑", "`Refs:` 默认值两种改法只能选一种，需要落地时定 —— 见判据 4"]
+id = "T-AG492"
+title = "派生文档链三处静默：改标题不留旧块、sync 走数据根、落地笔默认带 Refs（T-AG492）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡E38-派生链三处静默与并行假红.md",
+  "file:tools/sync_docs.py",
+  "file:tools/sync_counts.py",
+  "file:tools/pool/stage_card.py",
+  "file:tools/pool/landing.py",
+  "test:test_sync_docs_replaces_block.py",
+  "test:test_sync_counts_root.py",
+  "test:test_docs_fragments.py",
+  "file:tests/test_sync_docs_replaces_block.py",
+  "file:tests/test_sync_counts_root.py",
+  "file:tests/test_docs_fragments.py",
+]
+gaps = "- **并行假红的真因只钉到「不假红」没钉到「为什么」**：`tests/test_docs_fragments.py` 那条读活文件的用例改成在临时副本上断言，`-n 4` 连跑三次全绿；但没有把「同一份 `docs/traceability.d/T-AG492.toml` 被并行写者抢」这一机制在测试里显式复现，见 `tests/test_docs_fragments.py`。- **孤儿块判据只在 changelog 通道有正向样例**：`traceability` 与 `交接` 两个通道靠同一个函数路径，钉子里各只覆盖一次，见 `tests/test_sync_docs_replaces_block.py`。- **`Refs:` 默认值改变是「松」还是「绑」还没在技能层落一行**：`skills/pipe-land/references/land-steps.md` 仍写着「单卡笔不写 Refs」，与本笔行为相反，见 `tools/pool/landing.py` 的 `effective_refs()`。- **`stage_card` 的去重键新增了块类型维度**：先前只按标题去重，现在按「台账号 + 块类型」，老片段（同号不同型）不会被误替换；这条只在本笔的钉子里验过，没有历史片段做回归，见 `tools/pool/stage_card.py`。"
 
 [entries."T-AG493"]
 id = "T-AG493"

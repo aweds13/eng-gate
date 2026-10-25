@@ -3985,7 +3985,7 @@ spec = "复盘/卡/卡E38-派生链三处静默与并行假红.md"
 files = ["tools/sync_docs.py", "tools/sync_counts.py", "tools/pool/stage_card.py", "tools/pool/landing.py", "tests/test_sync_docs_replaces_block.py", "tests/test_sync_counts_root.py", "tests/test_docs_fragments.py"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 [[cards]]
 id = "E39"
 task = "T-AG493"

@@ -194,6 +194,19 @@ def changelog_body(text: pathlib.Path) -> str:
     return "\n".join(lines).strip()
 
 
+def effective_refs(task: str, refs: str) -> str:
+    r"""`Refs:` 这一行的**实际取值**（卡 E38 · T-AG492）。
+
+    病（一天里踩了四次）：单卡笔不给 `--refs` ⇒ 消息里**没有** `Refs:` 行 ⇒
+    `wb_verify` 报 `trailer 不是各一条：['Refs']`，每次都要 `git commit --amend` 手补。
+
+    口径（**二者选一，写死在这里**）：落地链不放开 `wb_verify` 的"四行各一条"（那是提交骨架的
+    硬判据），改成**单卡笔默认写本笔台账号** —— 没给 `--refs` 就退回 `task`；给了就原样用。
+    这样"单卡笔不带 `--refs`"的实际产物也是四行齐，`wb_verify` 与落地链**同一口径**。
+    """
+    return (refs or "").strip() or task.strip()
+
+
 def expand_allow(wt: pathlib.Path, allow: list[str]) -> list[str]:
     """把 `--allow` 里的**目录**用 `git ls-files` 展开；文件原样留着。
 
@@ -1764,7 +1777,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--evidence", nargs="+", required=True)
     ap.add_argument("--allow", nargs="+", required=True)
     ap.add_argument("--port-base", type=int, default=9034)
-    ap.add_argument("--refs", default="")
+    ap.add_argument("--refs", default="",
+                    help="其它台账号（牵扯到的别的卡）；★ 不给时单卡笔默认写本笔台账号（卡 E38）")
     ap.add_argument("--no-gate", action="store_true", help="★ 只在文档件/白名单上试跑时用")
     ap.add_argument("--no-reset", action="store_true",
                     help="关掉开跑时的「⓪ 回退派生物」；★ **默认会回退**"
@@ -2171,7 +2185,9 @@ def main(argv: list[str] | None = None) -> int:
     msg = (f"{a.type}({a.scope}): {a.title}（{a.task}）\n\n"
            + changelog_body(text)
            + f"\n\nTask: {a.task}\n"
-           + (f"Refs: {a.refs}\n" if a.refs else "")
+           # ★ 卡 E38（T-AG492）：单卡笔不给 --refs 也**必写**这一行（默认 = 本笔台账号），
+           #   否则 wb_verify 的「四行各一条」当场红（E38 一天里踩了四次，每次手补 --amend）。
+           + f"Refs: {effective_refs(a.task, a.refs)}\n"
            + f"Ledger: 新增 {a.task}（{a.group}/done，{len(a.evidence)} 条证据）；"
            + "done 的数字以 sync_counts.py 的实测输出为准\n"
            + gates_line + "\n")

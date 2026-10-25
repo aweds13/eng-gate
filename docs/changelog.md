@@ -1,3 +1,8 @@
+## 派生文档链：改标题不再留旧块、两个 sync 走数据根、落地笔默认带 Refs（T-AG492）
+
+- `tools/sync_docs.py` 与 `tools/pool/stage_card.py` 改成按「台账号 + 块类型」**替换**已有块，找不不到才插入；`--check` 新增「孤儿块」判据，汇总里多出不属于任何片段的块会报红。
+- `tools/sync_docs.py` / `tools/sync_counts.py` 改走 `tools/pipe_root.py`：`TOOL_ROOT` 找自身资源、`ROOT = pipe_root.data_root()` 读写选中的树，`try import pipe_root / except` 降级与 `tools/wb_daily.py` 同款；在卡树里跑不再改主树。
+- `tools/pool/landing.py` 新增 `effective_refs(task, refs)`：单卡笔不给 `--refs` 时默认写本笔台账号，落地链与 `wb_verify` 的「四行 trailer 各一条」口径统一。
 ## 文档欠账基线重刷 + `check_docs` 的「判不出」口径（E39 · T-AG493）
 - `docs/doc-debt-baseline.toml` 按当前树重刷（`dead_refs 343 / drift 379 / superseded 5`），并新增 `--write-baseline` 一条命令就能重刷 —— 以前要手工抄读数，抄漏了就是「基线自己过期」。
 - `scripts/check_docs.py` 收紧三种口径：①`drift` 只报告**不参与 ratchet**（每一笔代码提交都会动它，当判据用会把门变成噪音）②`skip`（判不出）**绝不记进基线**，整趟结尾明确打「没判完（有 skip）—— 不许当 PASS」，不再让「不确定」混成「合格」③超基线时点名单条而不是只报总数。
