@@ -38,17 +38,21 @@ r"""文档门禁（卡 F3 / T-AG451）：死指针 / drift 债 / superseded 未�
 
 `dead_refs` / `superseded` 记当前欠账条数，**只能降不能升**：现在比基线多 ⇒ 红
 （**report 档也红** —— ratchet 是"只许降"，与档位无关）。
-`drift` / `skip` **不写进基线**（一个随每笔提交变、一个跟本机环境变，记下来第二天就是假数字），
-只每次打印 —— 理由见判据 2 / 判据 4。
+`drift` 也记进基线（卡 E39），但它是**可漂移量**（每一笔代码提交都会动它），
+输出里只做对照、**不参与 ratchet**；`skip` **绝不写进基线**（把不确定当合格等于自欺）。
 基线文件本身不存在 ⇒ **skip 一条**（"没有基线"），不给通过结论。
+
+★ 输出口径（卡 E39）：欠账与「判不出」**分两行** —— `CHECK_DOCS: 死指针 N（基线 M，±k）`
+一行、`CHECK_DOCS: 判不出 K 条（skip）—— 这不是 PASS` 一行；skip 永不并入红/绿判定。
 
 ## 用法
 
 ```
-python -X utf8 scripts/check_docs.py --doctor      # 自证这道门真在跑（四类计数都打印）
-python -X utf8 scripts/check_docs.py --mode report # 默认：只报告（有债不红，基线被顶破才红）
-python -X utf8 scripts/check_docs.py --mode block  # 判出东西就非零退出（第一版**不挂**这个档）
-python -X utf8 scripts/check_docs.py --json        # 机器可读
+python -X utf8 scripts/check_docs.py --doctor          # 自证这道门真在跑（四类计数都打印）
+python -X utf8 scripts/check_docs.py --mode report     # 默认：只报告（有债不红，超基线才红）
+python -X utf8 scripts/check_docs.py --mode block      # 判出东西就非零退出（第一版**不挂**这个档）
+python -X utf8 scripts/check_docs.py --json            # 机器可读
+python -X utf8 scripts/check_docs.py --write-baseline  # 重刷基线（幂等：连跑两次字节不变）
 ```
 
 退出码：`0` 报告完毕 / `1` 红（基线被顶破；`block` 档下还有死指针等也算）/
@@ -111,6 +115,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import tomllib
@@ -127,6 +132,12 @@ SCAN_FILES = ("AGENTS.md",)
 
 #: 基线（相对仓库根）。
 BASELINE_REL = "docs/doc-debt-baseline.toml"
+
+#: `--write-baseline` 落盘时写进文件头的重刷命令（判据 1 要的格式）。
+BASELINE_REFRESH_CMD = "python -X utf8 scripts/check_docs.py --write-baseline"
+
+#: 重刷基线记哪张卡（文件头 `task`）。
+BASELINE_TASK = "T-AG493"
 
 #: 过程产物目录：卡里点名要记 skip 的那一族。
 DIAG_PREFIX = "gates/diag/"
@@ -186,6 +197,8 @@ class Report:
     skips: list[Skip] = field(default_factory=list)
     ratchet: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    baseline: dict[str, int] = field(default_factory=dict)
+    drift_judged: bool = True
 
     @property
     def findings(self) -> list[Finding]:
@@ -633,6 +646,75 @@ def ratchet(counts: dict[str, int], baseline: dict[str, int]) -> list[str]:
     return out
 
 
+def render_baseline(
+    values: dict[str, int], generated_at: str, *, drift_judged: bool = True
+) -> str:
+    """基线文件全文：文件头写**重刷命令**与**生成时间**（卡 E39 判据 1 的格式）。
+
+    `drift` 记下来但当"可漂移量"看；它这一次判不了（没有 git / 台账）时**不落盘** ——
+    把不确定的数写成 0 等于把"判不出"当合格。
+    """
+    lines = [
+        "# 文档门禁欠账基线（卡 F3 / T-AG451；卡 E39 / T-AG493 重刷）"
+        "—— `scripts/check_docs.py` 的地板。",
+        "#",
+        "# 重刷命令（同一组读数连跑两次，本文件字节不变）：",
+        f"#   {BASELINE_REFRESH_CMD}",
+        f"# 生成时间：{generated_at}",
+        "#",
+        "# 口径（要改先读 `scripts/check_docs.py` 的文件头 —— 判据与边界都写在那里）：",
+        "#   ① `dead_refs` / `superseded` 记**当前欠账条数**，只能降不能升：",
+        "#      现在比这里多 ⇒ 那道门当场红（`--mode report` 也红）。降了之后请把这里调低。",
+        "#   ② `drift` 也记下来，但它是**可漂移量**（每一笔代码提交都会动它）：",
+        "#      输出里只做对照，**不参与 ratchet**。",
+        "#   ③ `skip`（判不出）**绝不记在这里**：把不确定当合格等于自欺。",
+        "#   ④ 这张表只许跟着**真还债**下调，不许为了让门变绿往上调（那等于把判据改软）。",
+        "[baseline]",
+        f'updated = "{generated_at[:10]}"',
+        f'task = "{BASELINE_TASK}"',
+        f"dead_refs = {values['dead_refs']}",
+    ]
+    if drift_judged:
+        lines.append(f"drift = {values['drift']}")
+    else:
+        lines.append("# drift 本次判不了（见 skip），没写基线 —— 不确定的数不落盘")
+    lines.append(f"superseded = {values['superseded']}")
+    return "\n".join(lines) + "\n"
+
+
+def write_baseline_file(root: Path, report: Report) -> tuple[Path, bool]:
+    """把当前读数写成基线；**同一组读数重复跑不重写**（文件字节不变）。
+
+    返回（基线路径, 这次有没有改文件）。第二次跑不改文件 —— 生成时间也就不会变，
+    判据 1（两次跑字节相同）才成立。
+    """
+    path = root / BASELINE_REL
+    counts = report.counts()
+    values = {
+        "dead_refs": counts["dead_refs"],
+        "drift": counts["drift"],
+        "superseded": counts["superseded"],
+    }
+    if path.is_file():
+        old, why = load_baseline(path)
+        same = (
+            old.get("dead_refs") == values["dead_refs"]
+            and old.get("superseded") == values["superseded"]
+            and (not report.drift_judged or old.get("drift") == values["drift"])
+        )
+        if not why and same and "重刷命令" in read_text(path):
+            return path, False
+    text = render_baseline(
+        values,
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        drift_judged=report.drift_judged,
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
+    return path, True
+
+
 # --------------------------------------------------------------------------- 汇合
 def scan(root: Path) -> Report:
     """跑完四条判据，收成一份读数（纯读：一个字节都不写）。"""
@@ -651,12 +733,14 @@ def scan(root: Path) -> Report:
     report.superseded = check_superseded(root, docs)
     drift, drift_skips = check_drift(root)
     report.drift = drift
+    report.drift_judged = not drift_skips
     report.skips.extend(drift_skips)
 
     baseline, why = load_baseline(root / BASELINE_REL)
     if why:
         report.skips.append(Skip(BASELINE_REL, "-", f"{why} ⇒ ratchet 判不了"))
     else:
+        report.baseline = baseline
         report.ratchet = ratchet(report.counts(), baseline)
     return report
 
@@ -699,11 +783,26 @@ def print_report(report: Report, mode: str = "report", out=None) -> None:
     for line in report.ratchet:
         say(f"[ratchet] {line}")
 
+    # ★ 卡 E39：欠账与「判不出」**分两行** —— 前者参与红/绿判定，后者永远是独立一行。
+    counts = report.counts()
+    for key, label in (("dead_refs", "死指针"), ("drift", "drift"), ("superseded", "superseded")):
+        now = counts[key]
+        if key in report.baseline:
+            was = report.baseline[key]
+            tail = " · 可漂移量，只报告" if key == "drift" else ""
+            say(f"CHECK_DOCS: {label} {now}（基线 {was}，{now - was:+d}{tail}）")
+        else:
+            say(f"CHECK_DOCS: {label} {now}（基线未记）")
+    if report.skips:
+        say(f"CHECK_DOCS: 判不出 {len(report.skips)} 条（skip）—— 这不是 PASS")
+    else:
+        say("CHECK_DOCS: 判不出 0 条（skip）—— 判完了")
+
     code = exit_code(report, mode)
     over = any("涨到" in line for line in report.ratchet)
     total = len(report.dead_refs) + len(report.superseded) + len(report.drift)
     if code == 1 and over:
-        say("CHECK_DOCS: FAIL ❌（基线被顶破：只许降不许升）")
+        say("CHECK_DOCS: FAIL ❌（超基线：只许降不许升）")
     elif code == 1:
         say(f"CHECK_DOCS: FAIL ❌（--mode block：上面 {total} 条债逐条列了）")
     elif code == 3:
@@ -780,10 +879,27 @@ def main(
     doctor: bool = False,
     json_out: bool = False,
     out=None,
+    write_baseline: bool = False,
 ) -> int:
-    """跑一遍；`root` 不给 = 真仓库根（自检拿合成小树喂坏样例）。"""
+    """跑一遍；`root` 不给 = 真仓库根（自检拿合成小树喂坏样例）。
+
+    `write_baseline=True` 时把当前读数写成基线后退出（`--write-baseline`）；
+    ★ 幂等：同一组读数第二次跑只打印「未变」，**不重写文件**。
+    """
     base = Path(root).resolve() if root is not None else ROOT.resolve()
     report = scan(base)
+    if write_baseline:
+        say = out or (lambda line: print(line, flush=True))
+        if not report.scanned.get("文件"):
+            say("CHECK_DOCS: FAIL ❌（一个文件都没扫到，不写基线）")
+            return 1
+        path, changed = write_baseline_file(base, report)
+        counts = report.counts()
+        drift = f"drift {counts['drift']}" if report.drift_judged else "drift 判不了（未写）"
+        say(f"[write] 基线：{rel(path, base)}（{'已更新' if changed else '未变，字节不动'}）")
+        say(f"CHECK_DOCS: 基线已重刷 → dead_refs {counts['dead_refs']} / {drift}"
+            f" / superseded {counts['superseded']}")
+        return 0
     if json_out:
         print(json.dumps(as_json(report), ensure_ascii=False, indent=2))
     else:
@@ -794,7 +910,7 @@ def main(
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """命令行：`--mode report|block` / `--doctor` / `--json` / `--root`。"""
+    """命令行：`--mode report|block` / `--doctor` / `--json` / `--write-baseline` / `--root`。"""
     parser = argparse.ArgumentParser(
         description="文档门禁：死指针 / drift 债 / superseded 未标注（判不出就报 skip）"
     )
@@ -805,6 +921,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--doctor", action="store_true",
                         help="自证这道门真在跑：打印我在跑 / 扫了几个文件 / 判出几条 / 判不出几条")
     parser.add_argument("--json", action="store_true", help="输出 JSON")
+    parser.add_argument("--write-baseline", action="store_true",
+                        help="把当前 dead_refs / drift / superseded 写成基线"
+                             "（幂等：连跑两次字节不变）")
     parser.add_argument("--decisions", action="store_true",
                         help="检查 docs/decisions/ 的决策记录（卡 F4；不做死指针/drift）")
     parser.add_argument("--root", default=None,
@@ -1210,4 +1329,4 @@ if __name__ == "__main__":
     args = parse_args()
     if args.decisions:
         sys.exit(main_decisions(["--decisions", *(["--root", args.root] if args.root else [])]))
-    sys.exit(main(args.root, args.mode, args.doctor, args.json))
+    sys.exit(main(args.root, args.mode, args.doctor, args.json, write_baseline=args.write_baseline))

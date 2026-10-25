@@ -33,6 +33,17 @@ def _tree(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def _seed_git(root: Path) -> None:
+    """把合成树变成一个**提交过一次**的 git 仓（drift 才判得出来）。"""
+    assert _git(root, "init", "-q").returncode == 0
+    assert _git(root, "add", "-A").returncode == 0
+    commit = _git(
+        root, "-c", "user.name=test", "-c", "user.email=test@example.invalid",
+        "commit", "-q", "-m", "seed",
+    )
+    assert commit.returncode == 0, commit.stderr
+
+
 def _run(root: Path, mode: str, **kwargs) -> tuple[int, str]:
     """跑一遍 `main()` 并把输出收成一段文本。"""
     lines: list[str] = []
@@ -121,6 +132,62 @@ def test_baseline_ratchet_only_goes_down(tmp_path: Path) -> None:
     baseline.unlink()
     report = cd.scan(root)
     assert any("没有基线" in item.reason for item in report.skips)
+
+
+# ----------------------------------------------------------- 卡 E39：基线重刷
+def test_write_baseline_file_format(tmp_path: Path) -> None:
+    """★ 判据 1 的格式面：文件头写重刷命令 + 生成时间，三项读数都落盘。"""
+    root = _tree(tmp_path)
+    (root / "docs" / "bad.md").write_text("`docs/missing.md`\n", encoding="utf-8")
+    (root / "docs" / "traceability.toml").write_text("[entries]\n", encoding="utf-8")
+    _seed_git(root)
+
+    assert cd.main(root, out=lambda _line: None, write_baseline=True) == 0
+    path = root / "docs" / "doc-debt-baseline.toml"
+    text = path.read_text(encoding="utf-8")
+    assert "重刷命令" in text and "--write-baseline" in text, text
+    assert "生成时间" in text, text
+
+    counts, why = cd.load_baseline(path)
+    assert why == "", why
+    assert counts["dead_refs"] == 1, counts
+    assert counts["superseded"] == 0, counts
+    assert counts["drift"] == 0, counts
+
+
+def test_write_baseline_is_idempotent(tmp_path: Path) -> None:
+    """★ 判据 1：`--write-baseline` 连跑两次，基线文件**字节不变**（第二次不重写）。"""
+    root = _tree(tmp_path)
+    (root / "docs" / "bad.md").write_text("`docs/missing.md`\n", encoding="utf-8")
+    path = root / "docs" / "doc-debt-baseline.toml"
+
+    assert cd.main(root, out=lambda _line: None, write_baseline=True) == 0
+    first = path.read_bytes()
+    assert cd.main(root, out=lambda _line: None, write_baseline=True) == 0
+    assert path.read_bytes() == first
+
+
+def test_default_output_separates_debt_and_skip(tmp_path: Path) -> None:
+    """★ 判据 2/3：欠账一行、判不出一行；基线内不报红，超基线报红。"""
+    root = _tree(tmp_path)
+    (root / "docs" / "bad.md").write_text("`docs/missing.md`\n", encoding="utf-8")
+    baseline = root / "docs" / "doc-debt-baseline.toml"
+
+    baseline.write_text("[baseline]\ndead_refs = 1\nsuperseded = 0\n", encoding="utf-8")
+    code, text = _run(root, "report")
+    lines = text.splitlines()
+    assert "CHECK_DOCS: 死指针 1（基线 1，+0）" in lines, text
+    assert any(
+        line.startswith("CHECK_DOCS: 判不出 ") and line.endswith("这不是 PASS")
+        for line in lines
+    ), text
+    assert "基线被顶破" not in text, text
+    assert code == 0, text
+
+    baseline.write_text("[baseline]\ndead_refs = 0\nsuperseded = 0\n", encoding="utf-8")
+    code, text = _run(root, "report")
+    assert code == 1, text
+    assert "CHECK_DOCS: FAIL" in text, text
 
 
 # --------------------------------------------------------------------- 判据 5

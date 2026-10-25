@@ -3995,4 +3995,4 @@ spec = "复盘/卡/卡E39-文档欠账基线.md"
 files = ["docs/doc-debt-baseline.toml", "scripts/check_docs.py", "tests/test_check_docs.py"]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"

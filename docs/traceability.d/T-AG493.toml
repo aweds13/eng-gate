@@ -1,8 +1,14 @@
 [entries."T-AG493"]
-title = "文档欠账基线重刷 + check_docs 判不出要报 skip"
-kind = "card"
-status = "todo"
-partition = "E"
-card = "E39"
-evidence = ["file:复盘/卡/卡E39-云文档补正与欠账基线.md", "file:scripts/check_docs.py", "file:docs/doc-debt-baseline.toml", "test:test_check_docs.py"]
-gaps = ["云门禁机那篇的 §2/§7 补正已并入 E35（同改一个文件）—— 见本卡「不许做」第 3 条", "`check_docs.py` 目前可能没有 `--write-baseline` —— 见判据 4"]
+id = "T-AG493"
+title = "文档欠账基线重刷 + check_docs 的判不出口径（T-AG493）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/check_docs.py",
+  "file:docs/doc-debt-baseline.toml",
+  "test:test_check_docs.py",
+  "file:复盘/卡/卡E39-文档欠账基线.md",
+  "file:tests/test_check_docs.py",
+]
+gaps = "- **`skip` 1532 条未收敛**：`check_docs` 现在诚实报「判不出 1532 条」，但没能力把它们判成真/假 —— 口径改对了、欠账还在，见 `scripts/check_docs.py` 的 `classify()`。- **基线是「当前树」的快照**：主树每前进一笔提交，`dead_refs` 就可能变；本卡只保证「重刷是一条命令 + 连跑两次字节不变」，**不保证**基线长期不过期，见 `docs/doc-debt-baseline.toml` 头部注释。- **`drift` 379 仍是纯报告量**：为什么不 ratchet 它，理由写在 `scripts/check_docs.py` 文件头；这条口径与「宁可报 skip 也不许当 PASS」是同一个取舍，尚未在技能层落一行。- **没接进门表**：`check_docs` 至今不在 19 道门里（只在 `scripts/` 下手工跑），所以「基线被顶破」不会让门禁红 —— 要不要接、接进哪一档，见 `docs/subsystems/ci/云门禁机.md` 的待办一节。"
+
