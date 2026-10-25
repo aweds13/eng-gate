@@ -3993,6 +3993,17 @@ risk = "high"
 status = "pending"
 
 [[cards]]
+id = "E53"
+task = "T-AG503"
+title = "文档门禁基线两侧不对称：基线采自卡树、判据在主树跑，ignored 源文件照扫 ⇒ 主树必红"
+tree = ".wt/E53"
+spec = "复盘/卡/卡E53-文档门禁基线两侧不对称.md"
+files = ["scripts/check_docs.py", "docs/doc-debt-baseline.toml", "tests/test_check_docs.py"]
+status = "pending"
+risk = "low"
+depends = []
+
+[[cards]]
 id = "E51"
 task = "T-AG501"
 title = "用例面治理合一：台账驱动选测（TIA）+ 变异驱动汰换（并 E36/E37）"

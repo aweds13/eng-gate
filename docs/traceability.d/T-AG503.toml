@@ -1,0 +1,11 @@
+[entries."T-AG503"]
+id = "T-AG503"
+title = "卡 E53 —— 文档门禁基线两侧不对称（T-AG503）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E53-文档门禁基线两侧不对称.md",
+  "file:scripts/check_docs.py",
+  "file:docs/doc-debt-baseline.toml",
+]
+gaps = "缺的东西：①`scripts/check_docs.py` 扫源文件（`scripts/check_docs.py:231` 的 `base.rglob(\"*.md\")`）还没走 `ignored()`，主树读 363 条死指针 vs 卡树绿；②`docs/doc-debt-baseline.toml` 的数字本轮不许动（头部第 ④ 条），修判据后要重跑两次确认字节一致；③探针钉子（造一个 gitignored 的 `复盘/探针-断链.md`，主树读数不变、`--json` 的 `skip` 里点名它）还没写；④`--doctor` 要能把被 skip 的 ignored 文档列出来，别静默吞掉；⑤反向验证红样（把源侧 `ignored()` 摘掉 ⇒ 钉子必红）还没取。"
