@@ -3922,7 +3922,7 @@ title = "并行度自适应 + 覆盖率开销：把 4 个 worker 硬顶与 --cov
 tree = ".wt/E30"
 spec = "复盘/卡/卡E30-并行度自适应与分片策略.md"
 files = ["scripts/run_gates.py", "tests/test_run_gates_workers.py", "tests/test_run_gates_cov.py", "pyproject.toml", "gates/defs/lang_python.py", "scripts/sitecustomize.py", "tests/test_gates_reuse_line.py"]
-depends = []
+depends = ["E44"]
 risk = "mid"
 status = "pending"
 [[cards]]
@@ -3963,7 +3963,7 @@ title = "台账驱动选测（TIA）：改动文件 → 台账 test: 指针 → 
 tree = ".wt/E36"
 spec = "复盘/卡/卡E36-台账驱动选测.md"
 files = ["tools/pytest_select.py", "tools/wb_nightly.py", "tests/test_pytest_select.py", "scripts/run_gates.py", "tools/wb_land.py"]
-depends = ["E30", "E32", "E35"]
+depends = ["E30", "E32", "E35", "E44"]
 risk = "high"
 status = "pending"
 [[cards]]
@@ -4015,7 +4015,7 @@ title = "测试流程五维设计：档位/域/选测/夜间/异机 + 只重跑�
 tree = ".wt/E43"
 spec = "复盘/卡/卡E43-测试流程五维设计.md"
 files = ["docs/subsystems/ci/测试流程.md", "scripts/run_gates.py", "tests/test_ci_docs.py"]
-depends = ["E42", "E36"]
+depends = ["E42", "E36", "E44"]
 risk = "mid"
 status = "pending"
 
@@ -4041,3 +4041,15 @@ files = ["tools/pool_accounts.py", "tools/pool/checkin.py", "tests/test_pool_che
 depends = ["E45"]
 risk = "high"
 status = "pending"
+[[cards]]
+id = "E44"
+task = "T-AG498"
+title = "复用哈希随解释器版本变（X/** 在 3.12 里不匹文件）+ 假门不许依赖 PATH 上的 sleep"
+tree = ".wt/E44"
+spec = "复盘/卡/卡E44-复用哈希随解释器版本变.md"
+files = ["scripts/run_gates.py", "tests/test_gates_reuse_line.py", "tests/test_run_gates_timeout.py", "scripts/cloud/bootstrap.ps1"]
+depends = []
+risk = "high"
+status = "pending"
+
+

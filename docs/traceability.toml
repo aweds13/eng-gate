@@ -8926,3 +8926,17 @@ evidence = [
   "file:tools/pool_mcp.py",
 ]
 gaps = "- **先落 E45 才有账本可签**：本卡 `depends = [\"E45\"]`，没有账本与能力表时 `checkin` 无处读平台端点，见 `复盘/卡/卡E48-手动签到与聚合入口.md` §2。\n- **只有 codearts 有端到端参考实现（四步含 confirm）**：其余平台按参考仓的响应形状写，但没有真号验证过；未验证的平台必须在输出里如实标「未探」，不许伪装成 `claimed`，见 §4 第 6 条。\n- **真领取是唯一写动作，闸门要硬**：写客户端只许放 `tools/pool/checkin.py`，入口唯一 `checkin_apply()`；钉子用 AST 扫，见 §6 判据 10。\n- **「今天已领」各平台判据不同**：qoder 领取成功后列表仍非空、minimax 是 `is_today && status===3`、codearts 看 `claimable/status`；统一按「没有 Claimable 就领」会重复领取，见 §3 硬规矩 1。"
+
+[entries."T-AG498"]
+id = "T-AG498"
+title = "复用哈希随解释器版本变（X/** 在 3.12 里不匹文件）+ 假门不许依赖 PATH 上的 sleep（T-AG498）"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡E44-复用哈希随解释器版本变.md",
+  "file:scripts/run_gates.py",
+  "file:tests/test_gates_reuse_line.py",
+  "file:tests/test_run_gates_timeout.py",
+  "file:scripts/cloud/bootstrap.ps1",
+]
+gaps = "- **缺陷今天是「静默」不是「红」**：`input_hash()` 在 3.12 上把 `src/**` 展开成空集 ⇒ 门输入哈希恒为 `sha256(\"\")`，`skip_reused()` 会心安理得复用上一次的绿，见 `scripts/run_gates.py`。\n- **版本语义已被实测钉死**：本机 Python 3.14.6 的 `Path.glob('src/**')` 含文件，云机 3.12.8 只含目录 —— 见 `复盘/卡/卡E44-复用哈希随解释器版本变.md` 的复现表。\n- **假门依赖 PATH 上的 `sleep`**：裸 Windows（云机）造不出假门，4 条红；要改 `sys.executable -c`，见 `tests/test_run_gates_timeout.py`。\n- **本卡还没开工**：`.wt/E44` 未建、解释器版本线未钉进 `scripts/cloud/bootstrap.ps1`，见 `scripts/cloud/bootstrap.ps1`。"
