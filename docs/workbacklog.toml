@@ -4023,7 +4023,7 @@ spec = "复盘/卡/卡E52-落地链主干合一.md"
 files = ["tools/wb_land.py", "tools/pool/landing.py", "tools/gate_pool.py", "tests/test_gate_pool.py", "tests/test_wb_land_gate_on.py", "docs/subsystems/ci/测试流程.md", "scripts/run_gates.py", "tests/test_ci_docs.py", "tools/wb_batch.py", "tests/test_wb_batch_bisect.py"]
 depends = ["E10", "E35", "E38", "E49", "E51"]
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E54"

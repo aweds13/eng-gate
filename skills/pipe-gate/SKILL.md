@@ -88,6 +88,7 @@ python -X utf8 scripts/run_gates.py --seal            # 只更新 last.json 的 
 4. 每道 `not_run` 都在回报里点了名，没有混进「通过」里。
 
 > 判据（哪道门算过、三值与空集、复用规则）在 `scripts/run_gates.py` 与门表里，本技能只讲怎么跑、怎么读。
+> 该跑哪一档、跑在哪台机器（本机 / 云机）、何时选测与夜间：见 `docs/subsystems/ci/测试流程.md`（五维口径与决策树）。
 
 ## 内循环：只跑一档（卡 A321）
 

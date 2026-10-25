@@ -9025,14 +9025,30 @@ gaps = "- 真变异会话没跑：score 与零独有击杀无读数，删除上�
 
 [entries."T-AG502"]
 id = "T-AG502"
-title = "卡 E52 —— 落地链主干合一（合并卡，T-AG502）"
+title = "落地链主干合一：门禁默认上云 + 测试流程五维 + 批次二分（并 E42/E43/E11）"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E52-落地链主干合一.md",
-  "file:docs/workbacklog.toml",
+  "file:tools/gate_pool.py",
+  "file:tests/test_gate_pool.py",
+  "file:tests/test_wb_land_gate_on.py",
+  "file:tools/wb_land.py",
+  "file:tools/pool/landing.py",
+  "file:scripts/run_gates.py",
+  "file:tests/test_ci_docs.py",
+  "file:docs/subsystems/ci/测试流程.md",
+  "file:tools/wb_batch.py",
+  "file:tests/test_wb_batch_bisect.py",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:docs/changelog.d/T-AG502.md",
+  "file:复盘/交接.d/T-AG502.md",
+  "test:test_gate_pool.py",
+  "test:test_wb_land_gate_on.py",
+  "test:test_ci_docs.py",
+  "test:test_wb_batch_bisect.py",
+  "test:test_wb_batch.py",
 ]
-gaps = "合并卡（用户 2026-10-25 裁定）——成员 E42 + E43 + E11，原任务 T-AG494/T-AG495/T-AG462 全部转 deferred。判据逐字继承，见 `复盘/卡/卡E52-落地链主干合一.md`。缺的东西：①三段都没开工，卡树 `.wt/E52` 要新建；②硬前提是 E49 先落（云机红单不清零，`--gate-on cloud` 落地即假绿）；③云机只有 4 vCPU，槽位算出来 = 1，真并行要变配 8 vCPU，需在卡里量一次；④`last.json` 今天没有 `host` 字段，五条回传校验第 3 条要靠新字段；⑤`scripts/run_gates.py` 今天没有 `--only <门名>`，E43 的「只重跑红了那一道」要补，且半趟必须让 `wb_verify` 判红。"
 
 [entries."T-AG504"]
 id = "T-AG504"

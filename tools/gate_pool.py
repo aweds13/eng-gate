@@ -1,0 +1,755 @@
+r"""云侧门禁池（卡 E42 · `T-AG494`）—— 只标准库。
+
+为什么有它：本机跑一趟全量门禁时 `available_memory_gb()` 实测掉到 0.6–1.0 GB，工人
+被挤到没内存；两趟并行还会把 `pytest` 从 341 s 拖到 506 s（卡 E42 §1 的真读数）。
+云机（`docs/subsystems/ci/云门禁机.md` §1）跑得慢（同 commit pytest 684.27 s vs 本机
+403.46 s），但**不占本机**。所以口径改成：**本机只编排，云机当门禁池**。
+
+本模块只管云那半边（本机编排在 `tools/pool/landing.py` 的 ④）：
+
+1. **槽位**：云机上 N 个独立 checkout，槽位数 = `min(cpu // 4, (avail_gb - 3) // 4)`，
+   下限 1（4 vCPU ⇒ 1 槽；8 vCPU ⇒ 2 槽；内存不够 ⇒ 1 槽）。
+2. **端口段**：每槽一段 `9200 + slot * 40`（步长 40 ≥ 一趟全量用掉的 20 个端口），
+   段与段不重叠。
+3. **队列**：`gates/diag/gate-pool-queue.json`，形状对齐 `tools/pool/queue.py`
+   （`{"head": …, "waiting": [...]}`）再补 `done` 与 `slots`；**单写者 + 原子替换**
+   （tmp + `os.replace`），并发写不丢行。同一槽的并发提交**排队**，不并行。
+4. **槽锁**：`gates/diag/gate-pool-slot<n>.lock`，语义照 `gates/diag/gate_lock.py`：
+   文件 mtime 旧于 `DEFAULT_STALE_AFTER` 视为陈旧可抢，`release` 删文件。
+5. **回传校验（fail closed，五条一条都不能松）**：见 `validate_cloud_return`。
+   任何一条不满足 ⇒ 判红，**不许**当成功。
+
+★ 不许做的事（卡 E42 §4 逐字）：不把云机慢当理由把默认改回本机；不在云机上跑工人；
+  不跳过封存指纹核验；不让云机与本地各跑一半门（档位整体在一边）。
+★ 边界（如实写）：本模块**没有**在真云机上跑过（工人这一轮没有云机 SSH，卡规格也明说
+  「云机实测由主控做」）。它交付的是：口径 + 原子队列 + 五条校验 + 钉子（假 `host` /
+  假回传数据）。`SshTransport` 是唯一碰网络的实现，单测一律注入假 transport。
+"""
+
+from __future__ import annotations
+
+import contextlib
+import datetime
+import json
+import os
+import pathlib
+import socket
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # 只在注解里用（本文件已开 `from __future__ import annotations`）
+    from collections.abc import Callable
+
+# ---------------------------------------------------------------- 槽位 / 端口段
+#: 一槽至少 4 个 vCPU（云机 4 vCPU ⇒ 1 槽；8 vCPU ⇒ 2 槽）。
+CPU_PER_SLOT = 4
+#: 留给系统 / sshd / 结算的余量（GB）。8 vCPU 16 GiB ⇒ (16-3)//4 = 3 槽，但 CPU 只给 2。
+MIN_AVAIL_GB = 3.0
+#: 每槽再要 4 GiB（一趟全量 = pytest -n 4 + 两道真浏览器）。
+MEM_PER_SLOT_GB = 4.0
+#: 端口池起点与每槽步长（一趟全量实际用掉 ≤ 20 个端口，步长 40 留足余量）。
+POOL_PORT_BASE = 9200
+SLOT_PORT_STRIDE = 40
+
+#: 槽锁陈旧阈值（秒）—— 与 `gates/diag/gate_lock.py` 的 `DEFAULT_STALE_AFTER` 同值。
+DEFAULT_STALE_AFTER = 10800.0
+
+#: 队列文件（相对仓库根）；`TF_GATE_POOL_QUEUE` 可覆写（测试 / 演练）。
+QUEUE_REL = ("gates", "diag", "gate-pool-queue.json")
+
+#: `pytest.log` 里 `N passed` 的取法（末行那种 `3303 passed, 1513 warnings in 270.28s`）。
+PASSED_MIN_RATIO = 0.95
+
+
+def slot_count(cpu_count: int, avail_gb: float) -> int:
+    """槽位数 = `min(cpu // 4, (avail_gb - 3) // 4)`，**下限 1**。
+
+    判据（卡 E42 §2.2）：4 vCPU / 15.5 GB ⇒ 1；8 vCPU / 16 GB ⇒ 2；8 vCPU / 6 GB ⇒ 1
+    （内存那条把 0 压成 1 —— 一台能跑门禁的机器至少给一个槽，不给 0 等于「永远不跑」）。
+    """
+    cpu_slots = int(cpu_count) // CPU_PER_SLOT
+    mem_slots = int((float(avail_gb) - MIN_AVAIL_GB) // MEM_PER_SLOT_GB)
+    return max(1, min(cpu_slots, mem_slots))
+
+
+def port_base_for(slot: int) -> int:
+    """第 `slot` 槽的端口段起点：`9200 + slot * 40`（`slot` 从 0 起）。"""
+    if int(slot) < 0:
+        raise ValueError(f"槽号不能为负：{slot}")
+    return POOL_PORT_BASE + int(slot) * SLOT_PORT_STRIDE
+
+
+def port_segment(slot: int) -> tuple[int, int]:
+    """第 `slot` 槽的端口段 `[起, 止]`（闭区间，长度 = 步长）。"""
+    base = port_base_for(slot)
+    return base, base + SLOT_PORT_STRIDE - 1
+
+
+def port_segments(count: int) -> list[tuple[int, int]]:
+    """前 `count` 个槽的端口段 —— 钉子核「两两不重叠」直接读它。"""
+    if int(count) < 1:
+        raise ValueError(f"槽数必须 ≥ 1：{count}")
+    return [port_segment(i) for i in range(int(count))]
+
+
+def port_base_of_slot_choice(slots: list[int]) -> dict[int, int]:
+    """`{槽号: 端口段起点}` —— 给落地链挑段用。"""
+    return {int(s): port_base_for(int(s)) for s in slots}
+
+
+# ---------------------------------------------------------------- 时间 / 路径小工具
+def _now() -> str:
+    return datetime.datetime.now().isoformat(timespec="seconds")
+
+
+def _default_queue_path(root: pathlib.Path | None = None) -> pathlib.Path:
+    env = os.environ.get("TF_GATE_POOL_QUEUE", "").strip()
+    if env:
+        return pathlib.Path(env)
+    base = pathlib.Path(root) if root is not None else pathlib.Path(__file__).resolve().parents[1]
+    return base.joinpath(*QUEUE_REL)
+
+
+def _empty_state() -> dict:
+    return {"head": None, "waiting": [], "done": [], "slots": {}}
+
+
+def _norm_state(raw: object) -> dict:
+    data = raw if isinstance(raw, dict) else {}
+    head = data.get("head")
+    out = _empty_state()
+    out["head"] = head if isinstance(head, dict) else None
+    for key in ("waiting", "done"):
+        value = data.get(key)
+        out[key] = [x for x in value if isinstance(x, dict)] if isinstance(value, list) else []
+    slots = data.get("slots")
+    out["slots"] = {str(k): v for k, v in slots.items()
+                    if isinstance(v, dict)} if isinstance(slots, dict) else {}
+    return out
+
+
+# ---------------------------------------------------------------- 队列（单写者 + 原子写）
+@dataclass
+class PoolQueue:
+    """云机门禁队列（`gates/diag/gate-pool-queue.json`）。
+
+    ★ **单写者**：`submit` 只在**没有可并行槽**时把条目放进 `waiting`；同一槽上的第二次
+      提交一定排队（钉子 `test_same_slot_submissions_queue`）。
+    ★ **原子替换**：每次读改写后 `tmp + os.replace`，别的进程读到的永远是完整的一份。
+    """
+
+    path: pathlib.Path
+    timeout: float = 10.0
+
+    # ······························································ 读 / 写
+    def load(self) -> dict:
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return _empty_state()
+        return _norm_state(raw)
+
+    def save(self, state: dict) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+        tmp.write_text(json.dumps(_norm_state(state), ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8", newline="\n")
+        os.replace(tmp, self.path)
+
+    @contextlib.contextmanager
+    def locked(self, timeout: float | None = None):
+        """读改写期间的短锁（`<队列>.lock`，`O_CREAT|O_EXCL`）；超时照样往下写。
+
+        与 `tools/pool/queue.py::_locked` 同一套语义：这把锁保护的是「读 → 改 → 写回」
+        这几毫秒，**不是**门禁锁。
+        """
+        lock = self.path.with_suffix(self.path.suffix + ".lock")
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        wait = self.timeout if timeout is None else float(timeout)
+        t0 = time.time()
+        fd = None
+        while True:
+            try:
+                fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                break
+            except FileExistsError:
+                if time.time() - t0 >= wait:
+                    break
+                time.sleep(0.02)
+        try:
+            yield
+        finally:
+            if fd is not None:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+                with contextlib.suppress(OSError):
+                    lock.unlink()
+
+    # ······························································ 槽 / 提交
+    @staticmethod
+    def busy_slots(state: dict) -> set[int]:
+        """正在占槽的槽号（`waiting` 里的条目不算 —— 它们还没上槽）。"""
+        used: set[int] = set()
+        running = [x for x in state.get("waiting", []) if x.get("state") == "running"]
+        head = state.get("head")
+        if isinstance(head, dict) and head.get("state") == "running":
+            running.append(head)
+        for row in running:
+            with contextlib.suppress(TypeError, ValueError):
+                used.add(int(row.get("slot")))
+        return used
+
+    @classmethod
+    def free_slots(cls, state: dict, n_slots: int) -> list[int]:
+        """空闲槽（`0..n_slots-1` 里没被占的），按槽号升序。"""
+        busy = cls.busy_slots(state)
+        return [s for s in range(int(n_slots)) if s not in busy]
+
+    def submit(self, entry: dict, *, n_slots: int = 1) -> tuple[dict, bool]:
+        """提交一次门禁请求。返回 `(队列行, 是否排队)`。
+
+        - 同一 `commit` 已在队列里 ⇒ **幂等**：原样返回那一行（`queued=False` 表示它已上槽）。
+        - 有空闲槽 ⇒ 直接上槽（`state="running"`，`head` 空则当队首）。
+        - 没有空闲槽 ⇒ 进 `waiting`（`state="waiting"`，`queued=True`）—— **同一槽的并发
+          提交被排队，不是并行**。
+        """
+        commit = str(entry.get("commit") or "")
+        if not commit:
+            raise ValueError("提交门禁必须带 commit（找回结果靠它）")
+        with self.locked():
+            state = self.load()
+            existing = self.find(commit, state=state)
+            if existing is not None:
+                return existing, existing.get("state") == "waiting"
+            row = dict(entry)
+            row.setdefault("at", _now())
+            row.setdefault("state", "")
+            free = self.free_slots(state, n_slots)
+            want = row.get("slot")
+            if free and (want is None or int(want) in free):
+                slot = int(want) if want is not None else free[0]
+                row["slot"] = slot
+                row["port_base"] = port_base_for(slot)
+                row["state"] = "running"
+                if state["head"] is None:
+                    state["head"] = row
+                else:
+                    state["waiting"].append(row)
+                self.save(state)
+                return row, False
+            row.pop("slot", None)
+            row["state"] = "waiting"
+            state["waiting"].append(row)
+            self.save(state)
+            return row, True
+
+    def promote(self, *, n_slots: int) -> dict | None:
+        """把 `waiting` 里最前面那条放到空出来的槽上；没得放 / 没空槽 ⇒ None。"""
+        with self.locked():
+            state = self.load()
+            if not state["waiting"]:
+                return None
+            free = self.free_slots(state, n_slots)
+            if not free:
+                return None
+            row = next((x for x in state["waiting"] if x.get("state") == "waiting"), None)
+            if row is None:
+                return None
+            row["slot"] = free[0]
+            row["port_base"] = port_base_for(free[0])
+            row["state"] = "running"
+            row["at"] = _now()
+            if state["head"] is None:
+                state["head"] = row
+                state["waiting"] = [x for x in state["waiting"] if x is not row]
+            self.save(state)
+            return row
+
+    def mark_done(self, commit: str, *, ok: bool, rev: str, host: str = "",
+                  result_dir: str = "", seconds: float = 0.0,
+                  port_base: int | None = None) -> dict:
+        """把一条标成 `done` —— **必须带 `ok / rev / port_base`**（判据 1）。
+
+        `port_base` 不给就沿用上槽时算的那一段；连那段都没有 ⇒ 抛 ValueError
+        （「done 行没有端口段」等于结果对不上是哪一槽的）。
+        """
+        key = str(commit)
+        with self.locked():
+            state = self.load()
+            row = self.find(key, state=state)
+            if row is None:
+                raise KeyError(f"队列里没有 commit={key} 的请求（别凭空写 done 行）")
+            row["state"] = "done"
+            row["done_at"] = _now()
+            row["ok"] = bool(ok)
+            row["rev"] = str(rev)
+            row["host"] = str(host)
+            row["result_dir"] = str(result_dir)
+            row["seconds"] = round(float(seconds), 2)
+            if port_base is None:
+                port_base = row.get("port_base")
+            if port_base is None:
+                raise ValueError(f"commit={key} 的 done 行没有 port_base（对不上是哪一槽）")
+            row["port_base"] = int(port_base)
+            if state["head"] is row:
+                state["head"] = None
+            state["waiting"] = [x for x in state["waiting"] if x is not row]
+            state["done"].append(row)
+            self.save(state)
+            return row
+
+    # ······························································ 查找（断连可续）
+    def find(self, commit: str, *, state: dict | None = None) -> dict | None:
+        """按 `commit` 找回这一趟（`done` 优先，然后 running/waiting）。
+
+        ★ 卡 E42 §2.2「断连可续」：本机 ssh 断了不影响远端继续；重连后**只按 commit**
+          找回结果（不按下标、不按 task —— 一次重试会换 task 但 commit 不变）。
+        """
+        key = str(commit)
+        st = self.load() if state is None else state
+        rows: list[dict] = ([*st.get("done", []), *st.get("waiting", [])]
+                            + ([st["head"]] if st.get("head") else []))
+        for row in rows:
+            if str(row.get("commit") or "") == key:
+                return row
+        return None
+
+    def done_row(self, commit: str) -> dict | None:
+        """`done` 里的那一行（没有 ⇒ None）。"""
+        row = self.find(commit, state=self.load())
+        return row if row and row.get("state") == "done" else None
+
+
+# ---------------------------------------------------------------- 槽锁
+def slot_lock_path(lock_dir: pathlib.Path, slot: int) -> pathlib.Path:
+    """第 `slot` 槽的锁文件：`gates/diag/gate-pool-slot<n>.lock`。"""
+    if int(slot) < 0:
+        raise ValueError(f"槽号不能为负：{slot}")
+    return pathlib.Path(lock_dir) / f"gate-pool-slot{int(slot)}.lock"
+
+
+def _lock_age(path: pathlib.Path, now: float | None = None) -> float:
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return 0.0
+    return max(0.0, (time.time() if now is None else float(now)) - mtime)
+
+
+def acquire_slot_lock(lock_dir: pathlib.Path, slot: int, *, card: str,
+                      now: float | None = None,
+                      stale_after: float = DEFAULT_STALE_AFTER,
+                      timeout: float = 0.0) -> bool:
+    """抢槽锁。语义与 `gates/diag/gate_lock.py` 同族：`O_CREAT|O_EXCL` 建文件，
+    文件 mtime 旧于 `stale_after` ⇒ 视为陈旧、可清掉重抢；`timeout` 秒内抢不到 ⇒ False。
+    """
+    path = slot_lock_path(lock_dir, slot)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+    while True:
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            if _lock_age(path, now) >= stale_after:
+                with contextlib.suppress(OSError):
+                    path.unlink()
+                continue
+            if time.time() - t0 >= float(timeout):
+                return False
+            time.sleep(0.02)
+            continue
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"card": card, "slot": int(slot), "pid": os.getpid(), "at": _now()},
+                      fh, ensure_ascii=False)
+        return True
+
+
+def release_slot_lock(lock_dir: pathlib.Path, slot: int) -> bool:
+    """还槽锁（有就删）。返回是否真删到了。"""
+    path = slot_lock_path(lock_dir, slot)
+    try:
+        path.unlink()
+        return True
+    except OSError:
+        return False
+
+
+# ---------------------------------------------------------------- 回传校验（五条）
+def _rev_matches(got: str, want: str) -> bool:
+    """`rev` 与期望父提交比 —— 短 sha 对全长 / 全长对短 sha 都算对上（反之不算）。"""
+    a, b = str(got), str(want)
+    if not a or not b:
+        return False
+    return a == b or a.startswith(b) or b.startswith(a)
+
+
+def parse_pytest_passed(log_text: str) -> int:
+    r"""从 `pytest.log` 里取 `N passed`（取**最后**一条；没有 ⇒ 0）。
+
+    `run_gates` 的 pytest 门输出末尾是 `3303 passed, 1513 warnings in 270.28s (0:04:30)`
+    这一形（`gates/last.json` 的 pytest summary 同形）。取不到就是 0 —— 调用方按
+    「0 < 95%」判红（**不许**默认当通过）。
+    """
+    import re
+
+    last = 0
+    for match in re.finditer(r"(\d+)\s+passed", log_text or ""):
+        last = int(match.group(1))
+    return last
+
+
+def validate_cloud_return(
+    payload: dict,
+    *,
+    expected_rev: str,
+    expected_doors: list[str] | tuple[str, ...],
+    pytest_passed: int,
+    pytest_total: int,
+    workspace_clean: bool,
+    expect_host: str = "",
+) -> list[str]:
+    r"""云机 `last.json` 回传的**五条 fail-closed 校验**（卡 E42 §2.3 逐条）。
+
+    返回问题清单；**空列表 = 五条全过**。任一条不满足 ⇒ 调用方判红，不许当成功。
+
+    ① `rev == <卡树基点提交>`（云机跑的是不是这一笔的父提交）
+    ② `ok is True` 且门数/门名 == 该档应有的那一批（A327 `required_profiles()` 派生）
+    ③ `host` 存在且非空（证明真在云机跑的，不是本地冒名）；给了 `expect_host` 还要一致
+    ④ `pytest.log` 的 `N passed` ≥ 全量的 95%（防「跑了个子集当全量」）
+    ⑤ 云机侧 `git status --porcelain` 为空（`run_gate.sh` 的 `require_no_residue()`）
+    """
+    problems: list[str] = []
+    data = payload if isinstance(payload, dict) else {}
+
+    # ① rev == 父提交
+    got_rev = str(data.get("rev") or "")
+    if not _rev_matches(got_rev, expected_rev):
+        problems.append(f"① rev 对不上：last.json.rev={got_rev or '(空)'}"
+                        f" ≠ 期望父提交 {expected_rev or '(空)'}")
+
+    # ② ok + 门数/门名
+    want = [str(x) for x in expected_doors]
+    rows = data.get("gates") or []
+    got = [str(g.get("name")) for g in rows if isinstance(g, dict)]
+    not_run = [str(x) for x in (data.get("not_run") or [])]
+    if data.get("ok") is not True:
+        problems.append(f"② ok 不是 True（last.json.ok={data.get('ok')!r}）")
+    if sorted(got) != sorted(want):
+        missing = sorted(set(want) - set(got))
+        extra = sorted(set(got) - set(want))
+        problems.append(f"② 门数对不上：应有 {len(want)} 道（required_profiles 派生），"
+                        f"last.json 只有 {len(got)} 道；少 {missing}；多 {extra}")
+    if not_run:
+        problems.append(f"② 有门 not_run（未验证 ≠ 通过）：{not_run}")
+
+    # ③ host 字段
+    host = str(data.get("host") or "")
+    if not host.strip():
+        problems.append("③ host 字段缺失/为空（证明不了是云机跑的）")
+    elif expect_host and host.strip() != str(expect_host).strip():
+        problems.append(f"③ host 不是这台云机：last.json.host={host!r} ≠ {expect_host!r}")
+
+    # ④ pytest 用例数 ≥ 全量的 95%
+    total = int(pytest_total or 0)
+    passed = int(pytest_passed or 0)
+    if total <= 0:
+        problems.append("④ 不知道全量用例数（没有基线）⇒ 无法核 95%，按红")
+    elif passed < total * PASSED_MIN_RATIO:
+        need = int(total * PASSED_MIN_RATIO)
+        problems.append(f"④ pytest 用例数不够：{passed} passed < 全量 {total} 的 95%"
+                        f"（至少要 {need}）—— 像「跑了个子集当全量」")
+
+    # ⑤ 云机工作区干净
+    if workspace_clean is not True:
+        problems.append("⑤ 云机工作区不干净（git status --porcelain 非空）")
+    return problems
+
+
+def gates_on_line(*, gate_on: str, host: str = "") -> str:
+    """落地笔的 `Gates-on:` 行（卡 E42 §2.1）——`cloud@<host>` 或 `local`。"""
+    if gate_on == "cloud":
+        return f"Gates-on: cloud@{host or '(未知云机)'}"
+    return "Gates-on: local"
+
+
+def check_gates_on_trailer(body: str, *, expect: str) -> str:
+    r"""`Gates-on:` 与实际对不对得上（空串 = 对得上，否则一句问题）。
+
+    规则：必须**恰好一行**；`cloud` 那一支必须带 `@<host>`；`local` 那一支必须是裸 `local`。
+    """
+    lines = [ln.strip() for ln in (body or "").splitlines() if ln.strip().startswith("Gates-on:")]
+    if len(lines) != 1:
+        return f"`Gates-on:` 必须恰好一行，现在 {len(lines)} 行：{lines}"
+    got = lines[0].split(":", 1)[1].strip()
+    want = expect.split(":", 1)[1].strip()
+    if got != want:
+        return f"`Gates-on:` 与实际不符：trailer={got!r}，实际={want!r}"
+    if got.startswith("cloud") and "@" not in got:
+        return f"`Gates-on: cloud` 必须带云机名（cloud@<host>），现在是 {got!r}"
+    return ""
+
+
+# ---------------------------------------------------------------- 基线（用例数）
+def baseline_path(root: pathlib.Path) -> pathlib.Path:
+    """`gates/diag/pytest_baseline.json` —— 「全量用例数」的落盘基线。"""
+    return pathlib.Path(root) / "gates" / "diag" / "pytest_baseline.json"
+
+
+def read_pytest_baseline(root: pathlib.Path) -> int:
+    """读基线（`{"passed": N}`）；读不到 / 坏了 ⇒ 0（调用方判红，不猜）。
+
+    优先级由调用方定：`TF_PYTEST_BASELINE` 环境变量 > 本文件 > 上一趟 `gates/last.json`。
+    """
+    env = os.environ.get("TF_PYTEST_BASELINE", "").strip()
+    if env:
+        try:
+            return int(env)
+        except ValueError:
+            return 0
+    try:
+        data = json.loads(baseline_path(root).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    with contextlib.suppress(TypeError, ValueError):
+        return int((data or {}).get("passed") or 0)
+    return 0
+
+
+def write_pytest_baseline(root: pathlib.Path, passed: int, *, rev: str = "") -> None:
+    """把这一趟实测的用例数写成基线（只在**五条校验全过**之后调）。"""
+    path = baseline_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"passed": int(passed), "rev": str(rev), "at": _now()}
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8", newline="\n")
+
+
+# ---------------------------------------------------------------- 传输（唯一碰网络的一层）
+class CloudUnreachable(RuntimeError):  # noqa: N818 —— 名字就是判据原文「云机不可达」
+    """云机不可达 —— 落地链据此**退 2 并明说**，绝不回落到本机。"""
+
+
+@dataclass
+class SshTransport:
+    """真云机传输：ssh + scp（`scripts/cloud/run_gate.sh` 的口径）。
+
+    ★ 单测**一律**注入假 transport（假 `host` / 假回传数据）；本类不在任何钉子路径上。
+    """
+
+    host: str
+    user: str = "administrator"
+    key: str = str(pathlib.Path.home() / ".ssh" / "id_ed25519_cloud")
+    repo: str = "C:/eng"
+
+    def _ssh(self, *args: str, timeout: float = 30.0) -> subprocess.CompletedProcess:
+        cmd = ["ssh", "-i", self.key, "-o", "BatchMode=yes",
+               "-o", f"ConnectTimeout={int(timeout)}",
+               f"{self.user}@{self.host}", *args]
+        return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=timeout + 5,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+    def reachable(self, timeout: float = 8.0) -> bool:
+        """云机可达吗 —— 先 TCP 22，再问一句 python 版本（省得「端口开着但机没起」）。"""
+        if not self.host:
+            return False
+        try:
+            with socket.create_connection((self.host, 22), timeout=timeout):
+                pass
+        except OSError:
+            return False
+        try:
+            done = self._ssh("python -V", timeout=timeout)
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return done.returncode == 0
+
+    def run_gate(self, entry: dict, tree: pathlib.Path) -> dict[str, Any]:
+        """在云机上跑一趟门禁并回传 `last.json` + `gates/logs/*.log`。
+
+        ★ 真跑法照 `scripts/cloud/run_gate.sh`（导出补丁 → 云机 `checkout -f --detach` →
+          `clean -xfdq` → 断言 `last.json` 不存在 → apply → 跑门禁 → 回传）。
+          本卡**不真连**（卡规格：云机实测由主控做）；这里只把「怎么跑」留成一条命令，
+          任何失败都按 `CloudUnreachable` 抛出（宁可退 2，不许带假绿往下走）。
+        """
+        raise CloudUnreachable(
+            "SshTransport.run_gate 未在本卡实现（不许真连云机）："
+            "请用主控的 scripts/cloud/run_gate.sh 跑这一趟，或注入假 transport 做单测")
+
+
+@dataclass
+class FakeTransport:
+    """假云机（**只许单测**）：`reachable` / 回传数据全从一份 JSON 来。
+
+    卡 E42 判据 2 明写「用假的 `host` / 假回传数据做单测」—— 真云机实测由主控做。
+    JSON 形状（`TF_GATE_CLOUD_FAKE` 指向它）：
+    ```json
+    {"reachable": true,
+     "payload": {"rev": "…", "ok": true, "host": "fake-cloud", "gates": [{"name": "pytest"}]},
+     "pytest_log": "3303 passed in 270s", "workspace_clean": true,
+     "logs": {"pytest.log": "…"}}
+    ```
+    `run_gate` 抛 `CloudUnreachable` 当 `reachable` 为假（与真 transport 同一支）。
+    """
+
+    data: dict = field(default_factory=dict)
+
+    @classmethod
+    def from_file(cls, path: str | pathlib.Path) -> FakeTransport:
+        return cls(data=json.loads(pathlib.Path(path).read_text(encoding="utf-8")))
+
+    def reachable(self) -> bool:
+        return bool(self.data.get("reachable", True))
+
+    def run_gate(self, entry: dict, tree: pathlib.Path) -> dict[str, Any]:
+        if not self.reachable():
+            raise CloudUnreachable("假云机设为不可达（reachable=false）")
+        logs = dict(self.data.get("logs") or {})
+        if "pytest_log" in self.data and "pytest.log" not in logs:
+            logs["pytest.log"] = str(self.data["pytest_log"])
+        return {"payload": dict(self.data.get("payload") or {}), "logs": logs,
+                "workspace_clean": self.data.get("workspace_clean", True)}
+
+
+@dataclass
+class CloudResult:
+    """一趟云门禁的结果（落地链只读它，不自己解释 `last.json`）。"""
+
+    ok: bool
+    problems: list[str] = field(default_factory=list)
+    payload: dict = field(default_factory=dict)
+    host: str = ""
+    pytest_passed: int = 0
+    pytest_total: int = 0
+    workspace_clean: bool = False
+    seconds: float = 0.0
+    port_base: int = 0
+    slot: int = 0
+    logs: dict[str, str] = field(default_factory=dict)
+
+
+def _write_back(wt: pathlib.Path, payload: dict, logs: dict[str, str]) -> pathlib.Path:
+    """把云机回传的 `last.json` 与 `gates/logs/*.log` 写进卡树（只读回传，不反向写云机）。"""
+    gates = pathlib.Path(wt) / "gates"
+    gates.mkdir(parents=True, exist_ok=True)
+    target = gates / "last.json"
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                      encoding="utf-8", newline="\n")
+    if logs:
+        log_dir = gates / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        for name, text in logs.items():
+            path = log_dir / pathlib.Path(str(name)).name
+            path.write_text(str(text), encoding="utf-8", newline="\n")
+    return target
+
+
+def run_cloud_gate(
+    *,
+    wt: pathlib.Path,
+    card: str,
+    task: str,
+    commit: str,
+    transport: Any,
+    host: str,
+    expected_doors: list[str] | tuple[str, ...],
+    pytest_total: int,
+    queue: PoolQueue,
+    n_slots: int = 1,
+    lock_dir: pathlib.Path | None = None,
+    clock: Callable[[], float] = time.time,
+) -> CloudResult:
+    r"""编排一趟云门禁：**可达性 → 上槽 → 跑 → 回传 → 五条校验**。
+
+    ★ 云机不可达 ⇒ `CloudUnreachable`（落地链退 2 并明说，**不回落本机**）。
+    ★ 同一槽已有请求 ⇒ 进 `waiting`（等前面的完再上槽；本函数**不**并行抢同一槽）。
+    ★ 五条校验任一不过 ⇒ `CloudResult.ok=False`，问题清单原样带回（落地链判红）。
+    """
+    if not host:
+        raise CloudUnreachable("没有配置云机（`TF_GATE_CLOUD_HOST`）⇒ 云机不可达，未跑门禁")
+    try:
+        up = bool(transport.reachable())
+    except Exception as exc:  # transport 自己的异常也算不可达（不许把「探不通」当通）
+        raise CloudUnreachable(f"云机不可达（探测抛 {type(exc).__name__}: {exc}）") from exc
+    if not up:
+        raise CloudUnreachable(f"云机 {host} 不可达（TCP 22 / ssh 都没通）⇒ 未跑门禁")
+
+    entry = {"task": task, "card": card, "commit": commit, "host": host}
+    row, queued = queue.submit(entry, n_slots=n_slots)
+    if queued:
+        print(f"  [池] 槽都占着 ⇒ 排到 waiting（共 {len(queue.load()['waiting'])} 条在等）",
+              flush=True)
+        row = queue.promote(n_slots=n_slots) or row
+    slot = int(row.get("slot") or 0)
+    port_base = int(row.get("port_base") or port_base_for(slot))
+    lock_dir = (pathlib.Path(lock_dir) if lock_dir is not None
+                else pathlib.Path(wt) / "gates" / "diag")
+    if not acquire_slot_lock(lock_dir, slot, card=card, timeout=0.0):
+        print(f"  [池] 槽 {slot} 的锁被占着 ⇒ **停手**（不并行抢同一槽）", flush=True)
+        raise CloudUnreachable(f"云机槽 {slot} 的锁被占着（等下一趟或人工收锁）")
+
+    t0 = clock()
+    try:
+        artifacts = transport.run_gate({**row, "port_base": port_base}, pathlib.Path(wt))
+    finally:
+        release_slot_lock(lock_dir, slot)
+    seconds = max(0.0, clock() - t0)
+
+    payload = dict((artifacts or {}).get("payload") or {})
+    logs = dict((artifacts or {}).get("logs") or {})
+    pytest_log = str(logs.get("pytest.log") or (artifacts or {}).get("pytest_log") or "")
+    passed = parse_pytest_passed(pytest_log)
+    clean = bool((artifacts or {}).get("workspace_clean"))
+    problems = validate_cloud_return(
+        payload, expected_rev=commit, expected_doors=expected_doors,
+        pytest_passed=passed, pytest_total=int(pytest_total or 0),
+        workspace_clean=clean, expect_host=host)
+    result = CloudResult(
+        ok=not problems, problems=problems, payload=payload,
+        host=str(payload.get("host") or ""), pytest_passed=passed,
+        pytest_total=int(pytest_total or 0), workspace_clean=clean,
+        seconds=round(seconds, 2), port_base=port_base, slot=slot, logs=logs)
+    result_dir = str((pathlib.Path(wt) / "gates" / "diag" / "pool" / card).resolve())
+    queue.mark_done(commit, ok=result.ok, rev=str(payload.get("rev") or ""),
+                    host=result.host or host, result_dir=result_dir,
+                    seconds=result.seconds, port_base=port_base)
+    if payload:
+        _write_back(pathlib.Path(wt), payload, logs)
+    return result
+
+
+#: `python tools/gate_pool.py status|slots` —— 只读自查（运维用；不改任何文件）。
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is not None else argv)
+    if not argv or argv[0] in {"-h", "--help"}:
+        print("用法：python -X utf8 tools/gate_pool.py status [--root <树>]\n"
+              "  status  打印队列（head / waiting / done）与各槽端口段\n"
+              "  slots   打印槽位计算：slot_count(cpu, avail_gb)")
+        return 0
+    root = pathlib.Path(argv[argv.index("--root") + 1]) if "--root" in argv else None
+    if argv[0] == "status":
+        q = PoolQueue(_default_queue_path(root))
+        state = q.load()
+        print(json.dumps({"path": str(q.path), "head": state["head"],
+                          "waiting": state["waiting"], "done": state["done"]},
+                         ensure_ascii=False, indent=2))
+        return 0
+    if argv[0] == "slots":
+        cpu = os.cpu_count() or 1
+        try:
+            from scripts.run_gates import available_memory_gb  # noqa: PLC0415
+            avail = available_memory_gb() or 0.0
+        except Exception:  # 读不到就按 0 算（下限 1 槽，不猜）
+            avail = 0.0
+        n = slot_count(cpu, avail)
+        print(f"cpu={cpu} avail_gb={avail:.1f} ⇒ {n} 槽；端口段 {port_segments(n)}")
+        return 0
+    print(f"未知子命令：{argv[0]}（只认 status / slots）", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

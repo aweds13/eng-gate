@@ -349,6 +349,12 @@
 - 新增 tools/wb_nightly.py：独立 worktree 跑全量、记录、24h 判定；scripts/run_gates.py 接 --select。
 - 新增 tools/mutate_report.py：零独有击杀、报告形状、删除上限、族清册、引擎缺失 fail closed。
 - pyproject.toml 加 hypothesis 与 mutation 可选组；钉子三个新测试文件。
+## 2026-10-25 · 落地链主干合一：门禁默认上云 + 测试流程五维 + 批次二分（E42+E43+E11，T-AG502）
+- 新增 `tools/gate_pool.py`：云机门禁槽位（`min(cpu//4,(avail_gb-3)//4)`）、每槽端口段 `9200+slot*40`、队列表、五条 fail-closed 回传校验（rev/门数/host/pytest 用例数/工作区干净）。
+- `tools/wb_land.py` 加 `--gate-on cloud|local`（默认 cloud；云机不可达退 2，**不许静默回落**）。
+- `scripts/run_gates.py` 加 `--only <门名>`（半趟必须被 `wb_verify` 判红，不许冒充全量）。
+- `docs/subsystems/ci/测试流程.md`：档位×域×选测×夜间×异机的五维设计 + 决策树 + 三张表。
+- `tools/wb_batch.py` 加 `bisect`（批红了能点名是哪张卡；`gates/diag/bisect.json`）。
 ## 2026-10-24 T-AG437 卡归窗口：落地 / 派活前过 DSH 会话闸（A324）
 - 新增 `tools/wb_session.py`：`session_id` / `owner` / `claim` / `release` / `listing`，租约写 `gates/diag/session-leases.json`（gitignored），TTL 24 小时。
 - `tools/wb_land.py` 加 `_session_gate(argv)`：按 `--card` 认领，卡归别的窗口就退 2；`--take-over` 显式换手并留痕。

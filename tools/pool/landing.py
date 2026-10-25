@@ -947,16 +947,21 @@ def ruff_problems(wt: pathlib.Path) -> list[str]:
 
 
 def gates_trailer_template(*, no_gate: bool = False, commit_only: bool = False,
-                           incremental: bool = False) -> str:
+                           incremental: bool = False, profiles: str = "") -> str:
     r"""⑥ 的 `Gates:` trailer **模板**（落地链与 `--preflight` 共用这一份字面）。
 
     ★ 全量分支的字面「全量门禁绿 + seal」**一字不动** —— 卡 133 的 6 个钉子钉着它
       （伪造门禁结论那条判据的机器版）；增量分支用**不同**字面（含「非全量」）。
+    ★ 卡 E42：`profiles` 非空且不是 `all` ⇒ 第三支「按域门禁绿（非全量）」——
+      分支是**追加**的，上面两支字面一字未动。
     """
     if no_gate:
         return "Gates: ★ 本笔**没跑门禁**（--no-gate）—— 这行不是门禁结论，别当证据用"
     if commit_only:
         return "Gates: 复用已绿的那一趟（--commit-only，封存未变）；真读数见 gates/last.json"
+    if profiles and profiles != "all":
+        return (f"Gates: 按域门禁绿（--profiles {profiles}，非全量）+ seal"
+                "（真读数见 gates/last.json 的 profiles_run 块）")
     if incremental:
         return ("Gates: 增量门禁（--affected，非全量；"
                 "真读数见 gates/last.json 的 affected 块）"
@@ -977,6 +982,173 @@ def gates_trailer_problem(line: str, *, runs_gates: bool) -> str:
     if not runs_gates and not skip:
         return "模板没披露「没跑门禁」⇒ 复核会当它冒充门禁绿（卡 133）"
     return ""
+
+
+# ---------------------------------------------------------------- 卡 E42（T-AG494）：门禁在哪跑
+#: `--gate-on` 的两个合法值。**默认 cloud**（本机只编排，云机当门禁池）。
+GATE_ON_VALUES = ("cloud", "local")
+DEFAULT_GATE_ON = "cloud"
+
+
+def resolve_gate_on(cli_value: str | None) -> str:
+    """门禁在哪跑：`--gate-on` > `TF_GATE_ON` > **cloud**（卡 E42 §2.1）。
+
+    ★ 非法值 ⇒ `ValueError`（**不许**猜成本机：那样「门禁到底在哪跑」就再也审计不了）。
+    """
+    raw = str(cli_value if cli_value is not None else os.environ.get("TF_GATE_ON", "")
+              or DEFAULT_GATE_ON).strip().lower()
+    if raw not in GATE_ON_VALUES:
+        raise ValueError(f"`--gate-on` 只认 {' / '.join(GATE_ON_VALUES)}，收到 {raw!r}")
+    return raw
+
+
+def load_gate_pool():
+    """按路径拿 `tools/gate_pool.py`；**这棵树没有** ⇒ None（沙箱/临时仓，调用方明说）。
+
+    ★ 为什么不写死 import：`tests/test_wb_land.py` 的沙箱只拷 `_NEW_TOOLS` 里那几份
+      （卡 E42 不在那张清单的域里）⇒ 少一份就 ImportError，把三条既有钉子带崩。
+      与 `wb_session` / `pool/no_window` 同款兜底，但**必须明说**（不许静默）。
+    """
+    try:
+        import gate_pool  # noqa: PLC0415 —— 运行时按本树 sys.path（tools/ 已在前）找
+        return gate_pool
+    except ModuleNotFoundError:
+        return None
+
+
+def cloud_host() -> str:
+    """云机名（`TF_GATE_CLOUD_HOST`）。不给 ⇒ 空串 —— 调用方判「云机不可达」。"""
+    return os.environ.get("TF_GATE_CLOUD_HOST", "").strip()
+
+
+def make_cloud_transport(host: str):
+    """云机传输：默认 `SshTransport`；`TF_GATE_CLOUD_FAKE=<json>` ⇒ 假回传（**只许单测**）。
+
+    ★ 假回传这一缝是卡 E42 明写的交付形状：「用假的 `host` / 假回传数据做单测」。
+      它**大声说明**自己在被用（不许装成真云机跑的）。
+    """
+    gp = load_gate_pool()
+    if gp is None:
+        raise RuntimeError("这棵树没有 tools/gate_pool.py ⇒ 云门禁池不可用")
+    fake = os.environ.get("TF_GATE_CLOUD_FAKE", "").strip()
+    if fake:
+        print(f"  ★ 用假云机回传（TF_GATE_CLOUD_FAKE={fake}）—— 这只许单测，"
+              "真落地不许设（门禁**没在云机上跑过**）", flush=True)
+        return gp.FakeTransport.from_file(fake)
+    return gp.SshTransport(host=host)
+
+
+def expected_cloud_doors(wt: pathlib.Path) -> tuple[list[str], str]:
+    """云机这一趟**应有**的门名与档位（与本机 ④ 同一套口径，不造第二份规则）。
+
+    · 判据本体（`scripts/**`/`tools/**`/`gates/**`）改了 ⇒ 全量三档；
+    · 有 `gates/defs/domains.py` ⇒ 按 `domains.required_profiles()` 派生（A327）；
+    · 都没有（老仓 / 假仓）⇒ 全量。
+    返回 `(门名, 档位串)`：档位串给 `run_gates.py --profiles` 与 trailer 用。
+    """
+    scripts = str(wt / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        import run_gates  # noqa: PLC0415 —— 按**这棵树**的门表现读（门数真源只有一处）
+        profiles = "all"
+        if (wt / "gates" / "defs" / "domains.py").is_file():
+            touched = _touched_paths(wt)
+            hits = _touched_judge_body(touched)
+            if hits:
+                print(f"  ★ 判据本体改了（{len(hits)} 个 scripts/**/tools/**/gates/** 文件："
+                      f"{hits[:5]}）⇒ 云机也跑全量三档")
+            else:
+                need = run_gates.domains.required_profiles(touched)
+                profiles = ",".join(sorted(need)) or "all"
+        jobs = run_gates.build_jobs(False, False, profiles)
+    except (Exception, SystemExit) as exc:
+        # ★ 门表读不到就**拿不准不放过**：import 别人的 `run_gates.py` 时，桩脚本可能在
+        #   import 期就 `sys.exit`（沙箱里的桩就是这样）—— 那种树不许上云。
+        raise LookupError(f"读不到这棵树的门表（{type(exc).__name__}: {exc}）") from exc
+    return [str(name) for name, _cmd in jobs], profiles
+
+
+def previous_pytest_total(wt: pathlib.Path) -> tuple[int, str]:
+    """「全量用例数」的基线：**先本卡基线文件，再上一趟 `gates/last.json`**（0 = 不知道）。
+
+    ★ 判据 4（`N passed ≥ 全量 95%`）要一个**独立**的全量数：不能拿云机自己那趟的
+      读数当分母（那是循环论证）。基线读不到 ⇒ 返回 0 ⇒ 落地链判红并说清怎么补。
+    """
+    gp = load_gate_pool()
+    if gp is not None:
+        got = gp.read_pytest_baseline(ROOT)
+        if got:
+            return got, "gates/diag/pytest_baseline.json"
+    try:
+        payload = json.loads((wt / "gates" / "last.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0, ""
+    if payload.get("ok") is not True:
+        return 0, ""
+    for row in payload.get("gates") or []:
+        if str(row.get("name")) == "pytest":
+            n = gp.parse_pytest_passed(str(row.get("summary") or "")) if gp else 0
+            if n:
+                return n, "上一趟 gates/last.json 的 pytest 读数"
+    return 0, ""
+
+
+def cloud_gate_step(*, a, wt: pathlib.Path, card: str) -> tuple[int, bool, str]:
+    r"""④ 的**云机那一支**（卡 E42 §2.2/§2.3）：提交 → 等回传 → 五条校验 → 写回卡树。
+
+    返回 `(退出码, 是否为非全量, 档位串)`：`0` = 绿（继续 ⑤ 封存）；`1` = 回传判红；
+    `2` = 云机不可达（**不回落本机**）。
+    """
+    gp = load_gate_pool()
+    if gp is None:  # 调用方已挡住；这里再兜一次，绝不静默
+        print("★★ 这棵树没有 tools/gate_pool.py ⇒ 无法上云；**停手**"
+              "（要本机跑请显式 `--gate-on local`）")
+        return 2, False, "all"
+    host = cloud_host()
+    try:
+        expected, profiles = expected_cloud_doors(wt)
+    except LookupError as exc:
+        print(f"★★ {exc} ⇒ 拿不准不放过：**不许上云**（要本机跑请显式 `--gate-on local`）")
+        return 2, False, "all"
+    total, total_src = previous_pytest_total(wt)
+    commit = git("rev-parse", "--short", "HEAD", cwd=wt)
+    n_slots = 1
+    with contextlib.suppress(TypeError, ValueError):
+        # ★ 槽数按**云机**规格算，不按本机：本机只编排。云机规格由 `TF_GATE_CLOUD_CPU/GB` 给。
+        n_slots = gp.slot_count(int(os.environ.get("TF_GATE_CLOUD_CPU", "4") or 4),
+                                float(os.environ.get("TF_GATE_CLOUD_GB", "16") or 16))
+    queue = gp.PoolQueue(wt / "gates" / "diag" / "gate-pool-queue.json")
+    print(f"=== ④ 云机门禁（host={host or '(未配置)'}；槽 {n_slots}；"
+          f"应跑 {len(expected)} 道；档位 {profiles}；基点 {commit}）===")
+    print(f"  [基线] 全量用例数 = {total or '(不知道)'}"
+          f"{'（' + total_src + '）' if total_src else ''}")
+    t0 = time.time()
+    try:
+        result = gp.run_cloud_gate(
+            wt=wt, card=card, task=a.task, commit=commit,
+            transport=make_cloud_transport(host),
+            host=host, expected_doors=expected, pytest_total=total,
+            queue=queue, n_slots=n_slots,
+            lock_dir=wt / "gates" / "diag")
+    except gp.CloudUnreachable as exc:
+        print(f"★★ 云机不可达：{exc}")
+        print("★★ **停手**：这一趟没跑门禁（不回落本机；要本机跑请显式 `--gate-on local`）")
+        return 2, False, profiles
+    print(f"  [池] 槽 {result.slot} / 端口段 {result.port_base} / "
+          f"{result.seconds:.1f}s / host={result.host or '(空)'}")
+    print(f"  [回传] pytest {result.pytest_passed} passed / 全量 {result.pytest_total}；"
+          f"云机工作区{'干净' if result.workspace_clean else '**不干净**'}")
+    if not result.ok:
+        for line in result.problems:
+            print(f"  [红] {line}")
+        print(f"★★ 云机回传**五条校验没过**（{len(result.problems)} 条）⇒ 判红，不提交")
+        return 1, profiles != "all", profiles
+    if result.pytest_total and result.pytest_passed:
+        gp.write_pytest_baseline(ROOT, result.pytest_passed, rev=commit)
+    print(f"  ✓ 云机门禁绿（{len(expected)} 道全跑，回传五条全过；"
+          f"本机没跑门禁 pytest，墙钟 {time.time() - t0:.1f}s）")
+    return 0, profiles != "all", profiles
 
 
 def _rel_short(p: pathlib.Path, base: pathlib.Path) -> str:
@@ -1688,7 +1860,7 @@ def fast_preflight(wt: pathlib.Path, env: dict) -> bool:
     return True
 
 
-def _join_merge_queue(a, wt: pathlib.Path, env: dict) -> int:
+def _join_merge_queue(a, wt: pathlib.Path, env: dict, *, allow_preflight: bool = True) -> int:
     r"""卡 E5（`T-AG447`）：进**合并队列**，等到自己成为队首（单写者 ④–⑦）。
 
     次序是判据的一部分：①②③（迁树 / 文书 / sync_counts）与 ③″ 快预检**已经在队外**做完
@@ -1723,6 +1895,11 @@ def _join_merge_queue(a, wt: pathlib.Path, env: dict) -> int:
     if merge_queue.respec_required(a.task, base=main_now):
         print(f"  [队列] ★ 主树在排队期间前进到 {main_now[:8]}（入队时 {base[:8]}）"
               f"⇒ **投机预检作废**，重跑 ③″（结果不复用）")
+        if not allow_preflight:
+            # ★ 卡 E42：云机模式本机不跑 pytest（判据 5）；云那趟的基点已经换成 main_now。
+            print("  [队列] 云机模式：不重跑 ③″（本机 pytest 恒为 0）；"
+                  "④ 用新的基点提交给云机")
+            return 0
         if not fast_preflight(wt, env):
             return 7
     return 0
@@ -1819,6 +1996,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--queue-wait", type=float, default=3600.0,
                     help="★ 卡 E5：合并队列里最多等多久轮到自己（秒，默认 3600）；"
                          "超时 ⇒ 从队列摘掉并退 8（不白占着单写者段）")
+    # ★ 卡 E42（T-AG494）：「门禁在哪跑」的开关 —— **默认 cloud**（本机只编排，云机当门禁池）。
+    #   云机不可达 ⇒ 退 2 并明说，**不许**静默回落本机；要本机跑必须人显式给 local。
+    ap.add_argument("--gate-on", dest="gate_on", default=None, choices=(*GATE_ON_VALUES,),
+                    help="★ 卡 E42：门禁在哪跑 —— `cloud`（默认；云机门禁池）或 `local`"
+                         "（今天的老行为：本机跑）。默认读 `TF_GATE_ON`，再默认 cloud。"
+                         "★ 云机不可达 ⇒ 退 2 且**没有**继续落地（不回落本机）。")
     a = ap.parse_args(argv)
     if a.no_preflight:
         print("  ★ `--no-preflight` 已改名 `--skip-preflight`（它跳过的是③″快门禁预检，"
@@ -1831,6 +2014,18 @@ def main(argv: list[str] | None = None) -> int:
         return 6
     lock_label = a.card or a.batch   # 门禁锁的标签（批号也行）
     incremental_run = False          # 卡 184：--affected 那一趟 = True（gates_line 用）
+    profile_label = ""               # 卡 E42：云机那趟真跑全了哪几档（trailer 用）
+    # ★ 卡 E42（T-AG494）：先定「门禁在哪跑」，再把云机不可达这一条**在第一个写操作之前**
+    #   说清（判据：退 2 且**没有**继续落地）。
+    #   · 这棵树没有 tools/gate_pool.py（沙箱/临时仓）⇒ 明说「按本机跑」并继续；
+    #     真仓永远有它（钉子 test_real_tree_has_gate_pool_module 盯着）。
+    #   · 云机不可达 / 没配云机 ⇒ **退 2 且一步都不跑**（卡 E42 §2.4：不许静默回落本机）。
+    try:
+        gate_on = resolve_gate_on(a.gate_on)
+    except ValueError as exc:
+        print(f"★ {exc}")
+        return 2
+    runs_gate_trip = not a.no_gate and not a.commit_only
 
     # ★ 卡 212（T-G323）：单张落地时警告 —— 这张卡属于某栅栏且该栅栏还有别的成员。
     #   选了警告而非拒绝（理由见 _warn_if_card_in_batch docstring）。
@@ -1843,6 +2038,31 @@ def main(argv: list[str] | None = None) -> int:
     #   （`parse_text_doc`）；缺件/缺段都停在这里，话术仍是「缺文档件：<路径>」。
     _text_bad = parse_text_doc(text)[1]
     assert not _text_bad, _text_bad
+
+    # ★ 卡 E42：云机探测放在「缺文档件」这条**只读**前置之后、任何写之前 ——
+    #   文书都不齐就不该去连云机（也保住既有钉子「缺文书 ⇒ 停手并点名」的原话）。
+    if runs_gate_trip and gate_on == "cloud" and load_gate_pool() is None:
+        print("  ★ 这棵树没有 tools/gate_pool.py（沙箱/临时仓）⇒ 云门禁池不可用；"
+              "本趟按**本机**跑 —— ★ 明说，不是静默回落（真仓删掉这份文件会被钉子咬）")
+        gate_on = "local"
+    if runs_gate_trip and gate_on == "cloud":
+        host = cloud_host()
+        if not host:
+            print("★★ 云机不可达：没有配置云机（`TF_GATE_CLOUD_HOST`）⇒ **未跑门禁**")
+            print("★★ 停手退 2（不回落本机）。要本机跑请显式 `--gate-on local`。")
+            return 2
+        try:
+            reachable = bool(make_cloud_transport(host).reachable())
+        except Exception as exc:  # 探测自己崩了也算不可达
+            print(f"★★ 云机不可达（探测抛 {type(exc).__name__}: {exc}）⇒ **未跑门禁**")
+            return 2
+        if not reachable:
+            print(f"★★ 云机不可达（host={host}，TCP 22 / ssh 都没通）⇒ **未跑门禁**")
+            print("★★ 停手退 2（不回落本机）。要本机跑请显式 `--gate-on local`。")
+            return 2
+        print(f"=== 门禁位置：cloud@{host}（本机只编排；卡 E42）===")
+    elif runs_gate_trip:
+        print("=== 门禁位置：local（本机跑；卡 E42 的 --gate-on local）===")
 
     env = {"TF_GATE_PORT_BASE": str(a.port_base), "PATH": os.environ.get("PATH", "")}
     # ★ 卡 118（T-G216）：**任何**退出路径都要还锁 —— 今晚收 B-DOC1 那趟失败后，`card=B-DOC1`
@@ -1927,7 +2147,7 @@ def main(argv: list[str] | None = None) -> int:
         print(run([sys.executable, "-X", "utf8", "tools/sync_counts.py"], cwd=wt).stdout.strip())
         print(run([sys.executable, "-X", "utf8", "scripts/check_toml.py"], cwd=wt).stdout.strip())
 
-        if not a.no_gate:
+        if not a.no_gate and gate_on == "local":
             # ★ 2026-10-02 加（本主控**第二次**被它咬：登记了队列条目却没在门禁前
             #   `git add` 卡规格 ⇒ 白跑 9 分钟全量门禁，口径坑第 41 条）。
             #   **fail fast**：门禁之前先跑那条**权威钉子**本身（不另写一份判据，
@@ -1954,18 +2174,30 @@ def main(argv: list[str] | None = None) -> int:
         # ★ 卡 236（T-G354）：③″ 快门禁预检的**次序** —— 必须在参数合法性检查
         #   （--card/--batch 恰好给一个 ⇒ 退 6）**之后**、全量门禁 ④ **之前**
         #   （卡 226 的动机不变：秒级失败别烧全量那 3~4 分钟）。
-        if (not a.no_gate and not a.skip_preflight and not a.no_preflight
-                and not fast_preflight(wt, env)):
+        # ★ 卡 E42：`--gate-on cloud` 时 ③′/③″ **不在本机跑** —— 它们会起本机 pytest，
+        #   而判据 5 要求「云那趟全程本机 pytest 进程数为 0」。那两关的判据由云机那趟
+        #   全量门禁里的同名用例覆盖（`tests/test_card_specs_tracked.py` 是全量的一部分）。
+        if (not a.no_gate and gate_on == "local" and not a.skip_preflight
+                and not a.no_preflight and not fast_preflight(wt, env)):
             return 7    # ★ 预检红 ⇒ 停手（全量门禁 ④ 一步没跑、锁也没拿）
+        if not a.no_gate and gate_on == "cloud":
+            print("  ★ 云机模式：③′ fail-fast / ③″ 快预检**不在本机跑**"
+                  "（本机 pytest 进程数必须为 0；那两条判据由云机全量门禁覆盖）")
 
         if not a.no_gate:
             # ★ 卡 E5（T-AG447）：**进合并队列**（单写者 = ④–⑦）。①②③ 与 ③″ 已在队外做完
             #   ⇒ 排队的不空等；轮到队首才发现主树前进 ⇒ 重跑 ③″（投机预检不许复用）。
-            _q = _join_merge_queue(a, wt, env)
+            _q = _join_merge_queue(a, wt, env, allow_preflight=(gate_on == "local"))
             if _q != 0:
                 return _q
 
-        if not a.no_gate:
+        if not a.no_gate and gate_on == "cloud":
+            # ★ 卡 E42：④ = **提交给云机门禁池 → 等回传 → 五条 fail-closed 校验**。
+            rc, incremental_run, profile_label = cloud_gate_step(a=a, wt=wt, card=lock_label)
+            if rc != 0:
+                return rc
+
+        if not a.no_gate and gate_on == "local":
             # ★ 卡 184（T-G284）：算要不要跑增量 —— 默认全量；只有显式给 --affected /
             #   --changed-from 才考虑增量，且三条强制全量任何一条命中就跑全量：
             #   ②.1 判据本体改了（scripts/**/tools/**/gates/**）/ ②.2 空计划 / ②.3 今天还没跑过全量
@@ -2176,7 +2408,8 @@ def main(argv: list[str] | None = None) -> int:
     #   `--preflight` 判「这一趟会写的 trailer 合不合规」用的是**同一份**字面，
     #   改措辞只有一处可改（不复制第二份）。字面本身一字未动（卡 133 的 6 个钉子）。
     gates_line = gates_trailer_template(
-        no_gate=a.no_gate, commit_only=a.commit_only, incremental=incremental_run)
+        no_gate=a.no_gate, commit_only=a.commit_only, incremental=incremental_run,
+        profiles=profile_label)
     # ★ 卡 184 边界纪律：降级跑法必须机器可读地留痕 —— 写进 trailer 并点名。
     #   判据（wb_review.py 那半属卡 161）：跑法字段缺失、或与默认不同却没有 trailer 声明 ⇒ 红。
     #   这里只做"声明"那一半：环境变量被设了（非默认）⇒ 在 trailer 里点名。
@@ -2195,6 +2428,24 @@ def main(argv: list[str] | None = None) -> int:
            + f"Ledger: 新增 {a.task}（{a.group}/done，{len(a.evidence)} 条证据）；"
            + "done 的数字以 sync_counts.py 的实测输出为准\n"
            + gates_line + "\n")
+    # ★ 卡 E42（T-AG494）：门禁**实际在哪跑**必须进 trailer —— `cloud@<host>` / `local`。
+    #   没跑门禁的那两支（--no-gate / --commit-only）不写这行（那两趟没有"实际位置"可记）。
+    if not a.no_gate and not a.commit_only:
+        host_of_trip = ""
+        if gate_on == "cloud":
+            try:
+                payload = json.loads((wt / "gates" / "last.json").read_text(encoding="utf-8"))
+                host_of_trip = str(payload.get("host") or "")
+            except (OSError, json.JSONDecodeError):
+                host_of_trip = ""
+            if not host_of_trip:
+                # ★ 卡 E42 判据 2：`Gates-on: cloud` 时 last.json 必须有 host —— 没有就不许提交。
+                print("★★ 回传的 gates/last.json 没有 host 字段 ⇒ 证明不了是云机跑的 ⇒ **不提交**")
+                return 1
+        gp_mod = load_gate_pool()
+        line = (gp_mod.gates_on_line(gate_on=gate_on, host=host_of_trip)
+                if gp_mod is not None else f"Gates-on: {gate_on}")
+        msg += line + "\n"
     if run_degraded:
         msg += f"Run: 降级跑法（{'; '.join(run_degraded)}）—— 非默认，卡 184 咬\n"
     msgfile = ROOT / "gates" / "diag" / f"_msg_{a.task}.txt"

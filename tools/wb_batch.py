@@ -1,10 +1,11 @@
 r"""批次并入派活链 CLI `tools/wb_batch.py`（卡 E10 · T-AG461）—— 只标准库。
 
-三个入口（`--help` 里也写着这三行）：
+四个入口（`--help` 里也写着）：
 
     plan    只读：从队列取**待落卡**，算候选批（成员 files 两两不相交 / depends 已满足 / ≤4）
     make    写盘：生成预声明 + 三方文书骨架 + 台账证据并集 + 批次树
-    land    起门禁：转发 `wb_land.py --batch <批号>`
+    land    起门禁：转发 `wb_land.py --batch <批号>`；**批红了自动二分**（卡 E11）
+    bisect  批红定位：`--dry-run` 只打印会怎么拆；真二分在 land 红时自动发生
 
 **为什么有它**：攒批能力本仓早就有（卡 228 · T-G344：`wb_task.py register` 收多成员预声明、
 `wb_land.py --batch` 逐成员按「产物 ∩ 暂存」翻 status），但入口散在三处 —— 预声明手打、
@@ -17,9 +18,9 @@ r"""批次并入派活链 CLI `tools/wb_batch.py`（卡 E10 · T-AG461）—— 
   · 分层 = `pool.plan.topo_layers()`；
   · 预声明合法性 = `pool.task._validate_manifest()`（`make` 落盘前**真跑一遍**，见卡判据 3）。
 ★ 批大小上限 **4** 写在这里（不是文档）：`BATCH_LIMIT`；超限拒单并打印 `LIMIT_WHY`。
-★ 边界（如实写）：只治单机（门禁锁本来就全仓一把）；批次失败目前只能人工逐个重跑
-  （自动二分是卡 E11）；时间估算用本机实测均值（一趟全量 ≈19 min，pytest 占 1024 s / 约 90%），
-  不是"省 N 小时"的营销数。
+★ 边界（如实写）：只治单机（门禁锁本来就全仓一把）；批失败现在**自动二分定位到单卡**
+  （卡 E11；轮数 ≤ `ceil(log2 n)+1`，卡号**精确匹配**），但「绿的那些重新合批」仍由人决定；
+  时间估算用本机实测均值（一趟全量 ≈19 min，pytest 占 1024 s / 约 90%），不是"省 N 小时"的营销数。
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -627,6 +629,291 @@ def make_batch(
             "traceability": trace_path, "tree": tree, "trace_rel": Path(trace_rel)}
 
 
+# ================================================================ bisect（卡 E11 · T-AG462）
+#: 二分只在**同一把门禁锁**下串行跑 ⇒ 「多花的时间」≈ 轮数 × 单趟全量（卡 E11 边界）。
+BISECT_SKIP_AUDIT = (
+    "审计红不二分：审计红是文书/台账问题（缺证据指针 / 台账 status 对不上），"
+    "逐卡修比二分快（卡 E11 §不许做 第 1 条）")
+
+#: 一轮里每个子集的输出尾巴（原文引用够定位，又不把 JSON 撑爆）。
+TAIL_CHARS = 2000
+
+#: `[ERR] <门名> exit=<码>` 这类红行（`run_gates.py` 与落地链都按这个形状打）。
+_RED_LINE = re.compile(
+    r"(?:\[ERR\]|\bERR\b)?\s*(?P<gate>[a-z][a-z0-9_]*)\s+exit[= ]\s*(?P<code>\d+)")
+
+
+@dataclass
+class GateOutcome:
+    """一次子集门禁的读数：退出码 + 末尾输出（原文，供「红的原文」引用）。"""
+
+    rc: int
+    output: str = ""
+    seconds: float = 0.0
+
+
+def is_audit_red(output: str) -> bool:
+    """这批红是不是**审计红**（审计/台账/文书）—— 是 ⇒ 不二分。
+
+    只在输出里出现审计类字样、且**没有**门禁门的失败字样时才算（避免 pytest 的
+    traceback 里提到 audit 就误判）。判据宁窄勿宽：拿不准 ⇒ 照常二分（二分本身不改判据）。
+    """
+    text = output or ""
+    audit_hits = [w for w in ("审计不通过", "audit_progress", "证据指针", "台账", "audit")
+                  if w in text]
+    gate_hits = [w for w in ("FAILED", "passed", "门禁退出码", "[ERR]", "failed")
+                 if w in text]
+    return bool(audit_hits) and not gate_hits
+
+
+def parse_red_gate(output: str) -> tuple[str, str]:
+    """从一份红输出里取 `(红的门名, 红色原文那一行)`。
+
+    取法：先找 `[ERR] <门> exit=N` 形状的行；找不到就取第一行含 FAIL/ERROR 的行；
+    再找不到就取**最后一条非空行**（原文引用，不 paraphrase —— 卡 E11 §判据 3）。
+    """
+    lines = [ln.strip() for ln in (output or "").splitlines() if ln.strip()]
+    for line in lines:
+        m = _RED_LINE.search(line)
+        if m and m.group("gate") not in {"exit", "code"}:
+            return m.group("gate"), line
+    for line in lines:
+        if "FAIL" in line or "ERROR" in line or "Traceback" in line:
+            return "", line
+    return "", (lines[-1] if lines else "")
+
+
+def _tail(output: str, limit: int = TAIL_CHARS) -> str:
+    return (output or "")[-limit:]
+
+
+def plan_bisect_split(members: list[str]) -> list[list[str]]:
+    """`bisect --dry-run` 用的拆分计划：逐层对半，直到单卡（只打印，不跑任何门）。"""
+    plan: list[list[str]] = [list(members)]
+    pending = list(members)
+    while len(pending) > 1:
+        half = max(1, len(pending) // 2)
+        pending = pending[:half] if len(pending) > 2 else pending[:1]
+        plan.append(list(pending))
+    return plan
+
+
+def bisect_batch(
+    *, batch_id: str, members: list[str], runner, batch_output: str = "",
+    batch_seconds: float = 0.0, clock=time.time, say=print,
+) -> dict:
+    r"""批红 ⇒ **对半二分**定位到单卡（卡 E11 §要做成什么样）。
+
+    - 轮 0 = 那次**已经跑红**的整批（不重跑：判据 2「不许原地重跑整批」）；
+    - 之后每轮把上一轮的**红的那一半**再对半；每轮成员都是上一轮的真子集；
+    - `runner(members)` 返回 `GateOutcome`（真实现在 `make_default_bisect_runner`，
+      单测注入假 runner）；
+    - 定位到单卡 ⇒ `culprit` = 那张卡号 + `culprit_gate` + `culprit_raw`（原文）；
+    - 全绿但批仍红（环境/非确定性）⇒ `culprit=None` + `not_located=True` + **明说「未能定位」**，
+      **不许编一个**（判据 3）。
+    ★ 卡号一律**精确匹配**（按 `id` 字符串相等 / `list.__contains__`），不做子串匹配：
+      `G1` 不许命中 `F1`/`B1`/`D1`/`C1`/`E1`，`E4` 不许命中 `F4`（本仓踩过的真坑）。
+    """
+    if not members:
+        raise BatchPlanError("二分需要成员名单（批是空的，无从拆）")
+    rounds: list[dict] = [{
+        "round": 0, "subsets": [list(members)],
+        "red": [] if not batch_output else [m for m in members], "seconds": round(batch_seconds, 2),
+        "rc": 1, "source": "批次那一趟（不重跑）", "output_tail": _tail(batch_output),
+    }]
+    seen: dict[tuple[str, ...], GateOutcome] = {}
+    green: list[str] = []
+    pending = list(members)
+    culprit: str | None = None
+    culprit_gate = ""
+    culprit_raw = ""
+    not_located = False
+    level = 1
+
+    def run(subset: list[str]) -> GateOutcome:
+        key = tuple(sorted(subset))
+        if key in seen:
+            return seen[key]
+        t0 = clock()
+        out = runner(list(subset))
+        seconds = out.seconds or max(0.0, clock() - t0)
+        seen[key] = GateOutcome(rc=int(out.rc), output=str(out.output or ""),
+                                seconds=float(seconds))
+        return seen[key]
+
+    while len(pending) > 1:
+        half = max(1, len(pending) // 2)
+        left, right = pending[:half], pending[half:]
+        outcomes = []
+        for subset in (left, right):
+            out = run(subset)
+            outcomes.append((subset, out))
+            say(f"  [二分] 轮 {level}：{'+'.join(subset)} ⇒ "
+                f"{'绿' if out.rc == 0 else '红'}（{out.seconds:.1f}s）")
+        rounds.append({
+            "round": level,
+            "subsets": [list(left), list(right)],
+            "red": [m for subset, out in outcomes if out.rc != 0 for m in subset],
+            "seconds": round(sum(out.seconds for _, out in outcomes), 2),
+            "rc": 0 if all(out.rc == 0 for _, out in outcomes) else 1,
+            "source": "子集重跑",
+            "output_tail": {",".join(subset): _tail(out.output) for subset, out in outcomes
+                            if out.rc != 0},
+        })
+        green += [m for subset, out in outcomes if out.rc == 0 for m in subset]
+        reds = [subset for subset, out in outcomes if out.rc != 0]
+        if not reds:
+            not_located = True
+            say("  [二分] ★ 两半都绿而整批仍红 ⇒ **未能定位**（环境/非确定性；不编 culprit）")
+            break
+        pending = reds[0]
+        level += 1
+
+    if not not_located:
+        if len(pending) == 1:
+            out = run(pending)
+            if out.rc != 0:
+                culprit = pending[0]
+                culprit_gate, culprit_raw = parse_red_gate(out.output)
+                say(f"  [二分] ★ 定位到单卡：{culprit}"
+                    f"（红门 {culprit_gate or '(没解析出)'}）；原文：{culprit_raw[:160]}")
+            else:
+                not_located = True
+                say("  [二分] ★ 单卡单独跑是绿的 ⇒ **未能定位**（集合才红 = 交互/非确定性）")
+        else:
+            not_located = True
+
+    measured = sum(float(r["seconds"]) for r in rounds)
+    extra = measured - float(batch_seconds)
+    regroup = ("python -X utf8 tools/wb_batch.py make "
+               f"{batch_id}-green --cards {' '.join(green) or '<无绿卡>'}"
+               if green else "（这一批没有实测绿的卡，无从合批）")
+    return {
+        "batch": batch_id,
+        "members": list(members),
+        "batch_seconds": round(float(batch_seconds), 2),
+        "rounds": rounds,
+        "total_seconds": round(measured, 2),
+        "extra_seconds": round(max(0.0, extra), 2),
+        "green": list(green),
+        "culprit": culprit,
+        "culprit_gate": culprit_gate,
+        "culprit_raw": culprit_raw,
+        "not_located": not_located,
+        "regroup_cmd": regroup,
+        "note": ("未能定位：二分没能把红归到单卡（环境/非确定性）" if not_located
+                 else (f"定位到 {culprit}" if culprit else "整批全绿（不应触发二分）")),
+    }
+
+
+def render_bisect_report(result: dict) -> str:
+    """`bisect` 的人读版（钉子在测的是这份字面里的几个关键词）。"""
+    lines = [f"[二分] 批 {result['batch']}（{len(result['members'])} 张）⇒ "
+             f"{len(result['rounds'])} 轮，额外 {result['extra_seconds'] / 60:.1f} 分钟"]
+    if result["culprit"]:
+        lines.append(f"[二分] 红的卡：{result['culprit']}；红的门："
+                     f"{result['culprit_gate'] or '（没解析出）'}")
+        lines.append(f"[二分] 红色原文：{result['culprit_raw']}")
+    elif result["not_located"]:
+        lines.append("[二分] ★ **未能定位**：每张卡单独看都不红，但整批红 "
+                     "⇒ 环境/非确定性（culprit=null，不编一个）")
+    if result["green"]:
+        lines.append(f"[二分] 这一轮实测绿：{'、'.join(result['green'])}")
+        lines.append(f"[二分] 绿卡重新合批（人确认后再跑）：{result['regroup_cmd']}")
+    return "\n".join(lines)
+
+
+def bisect_ledger_line(result: dict) -> str:
+    """台账那一行（卡 E11 判据 5 的原话：批 N 张、二分 K 轮、多花 M 分钟）。"""
+    return (f"- 批 {result['batch']}：批 {len(result['members'])} 张、"
+            f"二分 {len(result['rounds'])} 轮、多花 {result['extra_seconds'] / 60:.1f} 分钟"
+            f"（culprit={result['culprit'] or 'null'}）")
+
+
+def write_bisect_json(path: Path, result: dict) -> Path:
+    """`gates/diag/batch/<批号>.bisect.json`（**绿批不产生** —— 只在批红时写）。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8", newline="\n")
+    return path
+
+
+def append_bisect_ledger(env: Env, batch_id: str, result: dict) -> Path:
+    """把「批 N 张、二分 K 轮、多花 M 分钟」写进 `docs/changelog.d/<批号>.md`。"""
+    path = env.root / "docs" / "changelog.d" / f"{batch_id}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = bisect_ledger_line(result)
+    old = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if line in old:
+        return path
+    body = old + ("" if old.endswith("\n") or not old else "\n") + line + "\n"
+    path.write_text(body, encoding="utf-8", newline="\n")
+    return path
+
+
+def make_default_bisect_runner(env: Env, batch_id: str, base_rev: str):
+    """真实 runner：给每个子集建一棵**临时批次树**（只合这几张卡的补丁），跑全量门禁。
+
+    ★ 为什么每轮重建树：批次树里合了**全部**成员的补丁，没法"只判一半"—— 要判子集就得
+      只合那一半（`git apply --3way` 的语义与 `make` 同一份实现：`export_patch` +
+      `build_batch_tree`）。
+    ★ 边界（如实写）：本函数**没有在本卡里实测**（卡规格：不许跑全量门禁、云机实测由主控做）；
+      它交付的是结构与口径，真实读数由主控第一趟批红时贴回来。
+    """
+    backlog = load_queue(env.root)
+    by_id = backlog.by_id()
+    counter = {"n": 0}
+
+    def runner(members: list[str]) -> GateOutcome:
+        counter["n"] += 1
+        tag = f"bisect{counter['n']}"
+        patches = []
+        for card_id in members:            # ★ 精确取卡（dict 按 id 查，不做子串匹配）
+            card = by_id.get(card_id)
+            if card is None or not card.tree:
+                raise BatchPlanError(f"二分要判的卡 {card_id} 在队列里找不到/没有卡树")
+            patches.append((card, export_patch(env.main / card.tree, base_rev, card_id)))
+        tree = build_batch_tree(env, f"{batch_id}{tag}", patches)
+        try:
+            core = subprocess.run(
+                [sys.executable, "-X", "utf8", "scripts/run_gates.py"],
+                cwd=str(tree), capture_output=True, text=True, encoding="utf-8",
+                errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            out = ((core.stdout or "") + (core.stderr or ""))
+            return GateOutcome(rc=int(core.returncode), output=out, seconds=0.0)
+        finally:
+            _drop_batch_tree(env, tree, f"batch/{tree.name.rsplit('batch', 1)[-1]}")
+
+    return runner
+
+
+def bisect_after_red(env: Env, batch_id: str, members: list[str], *, batch_output: str,
+                     batch_seconds: float = 0.0, runner=None) -> dict:
+    """批红之后的**自动**二分入口（绿批根本不会走到这里 ⇒ 不产生 bisect.json）。"""
+    if is_audit_red(batch_output):
+        print(f"[二分] {BISECT_SKIP_AUDIT}", flush=True)
+        return {"batch": batch_id, "skipped": "audit-red", "culprit": None,
+                "not_located": True, "note": "审计红不二分", "members": list(members),
+                "rounds": [], "batch_seconds": round(batch_seconds, 2),
+                "total_seconds": round(batch_seconds, 2),
+                "extra_seconds": 0.0, "green": [], "culprit_gate": "",
+                "culprit_raw": "", "regroup_cmd": ""}
+    real_runner = runner or make_default_bisect_runner(env, batch_id, _main_head(env))
+    result = bisect_batch(batch_id=batch_id, members=members, runner=real_runner,
+                          batch_output=batch_output, batch_seconds=batch_seconds)
+    json_path = write_bisect_json(env.batch_dir / f"{batch_id}.bisect.json", result)
+    ledger = append_bisect_ledger(env, batch_id, result)
+    print(render_bisect_report(result), flush=True)
+    print(f"[二分] 读数落盘：{json_path}", flush=True)
+    print(f"[二分] 台账补一行：{ledger}", flush=True)
+    return result
+
+
+def _main_head(env: Env) -> str:
+    return (_git_text(["rev-parse", "HEAD"], env.main).stdout or "").strip()
+
+
 # ================================================================ land
 def load_manifest(env: Env, batch_id: str) -> dict:
     """读预声明并**过栅栏的同一套校验**（不合法 ⇒ 拒，不带着坏名单去起门禁）。"""
@@ -639,8 +926,14 @@ def load_manifest(env: Env, batch_id: str) -> dict:
     return manifest
 
 
-def land_batch(env: Env, batch_id: str, extra: list[str]) -> int:
-    """一条命令走到 `wb_land.py --batch <批号>`；缺省参数由预声明/批次树补齐，`extra` 原样透传。"""
+def land_batch(env: Env, batch_id: str, extra: list[str], *, runner=None,
+               clock=time.time) -> int:
+    """一条命令走到 `wb_land.py --batch <批号>`；缺省参数由预声明/批次树补齐，`extra` 原样透传。
+
+    ★ 卡 E11（`T-AG462`）：批**红了自动二分**（不靠人记得加参数；绿批根本不触发、
+      `bisect.json` 不产生）。落地输出同时落 `gates/diag/batch/<批号>.land.log`，
+      二分要引用的「红色原文」就从这份日志里取（不 paraphrase）。
+    """
     manifest = load_manifest(env, batch_id)
     state_path = env.batch_dir / f"{batch_id}.json"
     if state_path.is_file():
@@ -674,10 +967,26 @@ def land_batch(env: Env, batch_id: str, extra: list[str]) -> int:
     ]
     argv += [token for token in extra if token != "--"]
     print(f"[跑 ] {' '.join(argv)}", flush=True)
-    done = subprocess.run(
-        argv, cwd=str(env.main),
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    return int(done.returncode)
+    log_path = env.batch_dir / f"{batch_id}.land.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    t0 = clock()
+    with log_path.open("w", encoding="utf-8", newline="\n") as fh:
+        rc = int(subprocess.run(argv, cwd=str(env.main), stdout=fh,
+                                stderr=subprocess.STDOUT,
+                                creationflags=getattr(
+                                    subprocess, "CREATE_NO_WINDOW", 0)).returncode)
+    seconds = max(0.0, clock() - t0)
+    output = log_path.read_text(encoding="utf-8", errors="replace")
+    print(f"[读 ] 落地日志：{log_path}", flush=True)
+    tail = [ln for ln in output.splitlines() if ln.strip()][-12:]
+    for line in tail:
+        print(f"  {line}", flush=True)
+    if rc != 0:
+        ids = [str(m.get("id")) for m in members if m.get("id")]
+        print("[二分] 批红了 ⇒ **自动触发二分**（不靠人记得加参数；卡 E11 判据 1）", flush=True)
+        bisect_after_red(env, batch_id, ids, batch_output=output,
+                         batch_seconds=seconds, runner=runner)
+    return rc
 
 
 # ================================================================ 子命令
@@ -706,6 +1015,33 @@ def cmd_land(env: Env, args: argparse.Namespace) -> int:
     return land_batch(env, args.batch, args.rest)
 
 
+def cmd_bisect(env: Env, args: argparse.Namespace) -> int:
+    """`bisect <批号>`：`--dry-run` 只打印拆分计划（判据「只打印会怎么拆」）。
+
+    真二分**自动**发生在 `land` 红的时候（判据 1）；手工复盘就从落地日志重放：
+    没有那份日志 ⇒ 拒（不许凭空重跑整批来"造"二分）。
+    """
+    manifest = load_manifest(env, args.batch)
+    members = [str(m.get("id")) for m in manifest.get("member") or [] if m.get("id")]
+    if not members:
+        raise BatchPlanError(f"批 {args.batch} 的预声明里没有成员")
+    if args.dry_run:
+        print(f"[二分] 批 {args.batch}（{len(members)} 张）：成员 {'、'.join(members)}")
+        for level, subset in enumerate(plan_bisect_split(members)):
+            print(f"  轮 {level}：{'、'.join(subset)}"
+                  f"{'（整批那一趟，不重跑）' if level == 0 else ''}")
+        print("  ★ 这只是拆分计划；真二分在 `land` 红时自动发生（--dry-run 不跑任何门）")
+        return 0
+    log_path = env.batch_dir / f"{args.batch}.land.log"
+    if not log_path.is_file():
+        raise BatchPlanError(
+            f"批 {args.batch} 没有落地日志：{log_path} ⇒ 不知道红的原文，"
+            "拒绝凭空重跑整批（先用 `--dry-run` 看拆分）")
+    output = log_path.read_text(encoding="utf-8", errors="replace")
+    bisect_after_red(env, args.batch, members, batch_output=output)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """三个入口的关系写在 `--help` 里（判据 1）：plan 只读 / make 写盘 / land 起门禁。"""
     parser = argparse.ArgumentParser(
@@ -716,7 +1052,9 @@ def build_parser() -> argparse.ArgumentParser:
             "  plan  只读，不改任何文件；给 make 挑成员（文件不相交 / 依赖已满足 / ≤4）\n"
             "  make  写盘：预声明的栅栏清单 + 三方文书骨架 + 台账证据并集 + "
             "批次树（.wt/batch<号>）\n"
-            "  land  起门禁：转发 `wb_land.py --batch <批号>`（参数透传）\n"
+            "  land  起门禁：转发 `wb_land.py --batch <批号>`（参数透传）；"
+            "★ 红了**自动二分**（卡 E11），不用人记得加参数\n"
+            "  bisect 批红定位：`--dry-run` 只打印会怎么拆（真二分在 land 红时自动跑）\n"
             "★ 批仍要人显式说：make + land 两步都由人敲；派活侧只提供入口。\n"
             f"★ {LIMIT_WHY}。"),
     )
@@ -742,6 +1080,13 @@ def build_parser() -> argparse.ArgumentParser:
     land.add_argument("rest", nargs=argparse.REMAINDER,
                       help="原样透传给 wb_land.py（如 --port-base 9034 --evidence … --allow …）")
     land.set_defaults(func=cmd_land)
+
+    bisect = sub.add_parser("bisect",
+                            help="批红后定位：--dry-run 只打印拆分计划（真二分在 land 红时自动跑）")
+    bisect.add_argument("batch", help="批号")
+    bisect.add_argument("--dry-run", action="store_true",
+                        help="只打印会怎么拆（不跑任何门、不写任何文件）")
+    bisect.set_defaults(func=cmd_bisect)
     return parser
 
 
