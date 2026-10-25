@@ -102,13 +102,20 @@ Log "安装门禁依赖（钉版本，镜像 $IndexUrl）"
 & $py -m pip install --quiet --upgrade pip 2>&1 | Tee-Object -FilePath $log -Append | Out-Null
 # ① 先把这份清单落成 constraints 文件（只管版本）② 再去装仓里 extras 声明的那一整套
 $pinsFile = 'C:/pins.txt'
-($Packages -join "`r`n") + "`r`n" | Set-Content -Path $pinsFile -Encoding ASCII
+# ★ 卡 E54 实测：`-c` 是 **constraints** 文件，pip 明确拒绝带 extras 的形式
+#   （`ERROR: Constraints cannot have extras` —— `uvicorn[standard]==0.52.4` 直接让整步退非零）。
+#   ⇒ constraints 只留「名字+版本」，extras 由 `-e "$Repo[dev]"` 那一侧声明；
+#   回退用的 requirements 文件仍保留 extras（那份是**要装的东西**，不是约束）。
+$pinsOnly = $Packages | ForEach-Object { $_ -replace '\[[^\]]+\]', '' }
+($pinsOnly -join "`r`n") + "`r`n" | Set-Content -Path $pinsFile -Encoding ASCII
+$reqFile = 'C:/reqs.txt'
+($Packages -join "`r`n") + "`r`n" | Set-Content -Path $reqFile -Encoding ASCII
 if (Test-Path (Join-Path $Repo 'pyproject.toml')) {
   Log "安装门禁依赖：-e '$Repo' 的 [dev] extras + 版本钉 $pinsFile"
   & $py -m pip install --quiet -e "$Repo[dev]" -c $pinsFile 2>&1 | Tee-Object -FilePath $log -Append | Out-Null
 } else {
   Log "✗ 仓库里没有 pyproject.toml（$Repo）—— 退回只按版本钉装，并在日志里说清实话"
-  & $py -m pip install --quiet -r $pinsFile 2>&1 | Tee-Object -FilePath $log -Append | Out-Null
+  & $py -m pip install --quiet -r $reqFile 2>&1 | Tee-Object -FilePath $log -Append | Out-Null
 }
 
 # ---------- 装完自检：三条必须**逐字**对上，对不上就响亮说出来（别让人半信半疑地开跑）----------

@@ -127,9 +127,11 @@ if [ -d "$cfg_local" ]; then
 else
   echo "（本机没有 $cfg_local：沿用云机上已有的 $pool_cfg_src）"
 fi
+# ★ 卡 E54 实测：PowerShell 的 `$_` 在 bash 双引号里会被**先在本地展开**（变成上一条命令的最后一个参数），
+#   远端收到的是被啃坏的命令 ⇒ 那行整段语法错、退 5。写法：`\$_`。
 echo "=== 0.4/5 铺仓外配置到 $pool_cfg_dst（向上找的约定）==="
 if ! ssh $SSHOPTS -i "$KEY" "$HOST" \
-    "powershell -NoProfile -Command \"if (-not (Test-Path '$pool_cfg_src')) { exit 5 } ; New-Item -ItemType Directory -Force '$pool_cfg_dst' | Out-Null ; Get-ChildItem -Path '$pool_cfg_dst' -File -ErrorAction SilentlyContinue | Where-Object { @('projects.toml','projects.toml.tmpl','models.whitelist.toml') -notcontains $_.Name } | Remove-Item -Force -ErrorAction SilentlyContinue ; Copy-Item (Join-Path '$pool_cfg_src' 'models.whitelist.toml') '$pool_cfg_dst' -Force -ErrorAction SilentlyContinue ; exit 0\""; then
+    "powershell -NoProfile -Command \"if (-not (Test-Path '$pool_cfg_src')) { exit 5 } ; New-Item -ItemType Directory -Force '$pool_cfg_dst' | Out-Null ; Get-ChildItem -Path '$pool_cfg_dst' -File -ErrorAction SilentlyContinue | Where-Object { @('projects.toml','projects.toml.tmpl','models.whitelist.toml') -notcontains \$_.Name } | Remove-Item -Force -ErrorAction SilentlyContinue ; Copy-Item (Join-Path '$pool_cfg_src' 'models.whitelist.toml') '$pool_cfg_dst' -Force -ErrorAction SilentlyContinue ; exit 0\""; then
   echo "✗ 云机上没有配置源 $pool_cfg_src（或铺不动 $pool_cfg_dst）—— fail fast，门禁一步都没跑。" >&2
   echo "  处置：本机 scp 四个仓外配置上去（scp infra/pool/*.toml $HOST:$pool_cfg_src/），" >&2
   echo "  或用 TF_POOL_CFG_DIR 指到已在云机上的那份。见 docs/subsystems/ci/云门禁机.md 的「仓外配置」表。" >&2

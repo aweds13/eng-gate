@@ -513,3 +513,37 @@ def test_run_gate_refuses_a_red_seed_snapshot() -> None:
         "要有绿读数校验（按 exit_code 判，不看 ok 字段的脸色）"
     )
     assert "不许拿红读数当「上一趟」" in text, "拒绝时要讲清为什么、以及怎么补一份绿的"
+
+
+# ------------------------------------------------- 卡 E54（第二笔）：两个「云机才撞到」的坑
+def test_bootstrap_constraints_have_no_extras() -> None:
+    """`-c` 是 **constraints** 文件：pip 先驳 extras（`ERROR: Constraints cannot have extras`）。
+
+    ★ 卡 E54 实测：装配清单里写着 `uvicorn[standard]==0.52.4`，`Set-Content $pinsFile` 原样落盘，
+    于是 **extras 那份清单被当成约束**喂给 `pip install -e "$Repo[dev]" -c $pinsFile`
+    ⇒ 整步退非零、云机一个门禁都不跑。判据：落 constraints 之前必须剥掉 `[...]`，
+    而「要装什么」另存一份 requirements（那份**保留** extras）。
+    """
+    text = _bootstrap_text()
+    assert "$pinsOnly" in text, "constraints 必须由剥掉 extras 的那份清单生成"
+    assert "-replace '" in text and "[^" in text, "剥法必须是真的正则（不是手抄一份）"
+    assert "$reqFile" in text, ("回退用的 requirements 要单独一份"
+                               "（extras 是「要装的东西」，不是约束）")
+    # 反向：回退分支不许再拿 constraints 当 requirements 装
+    assert "-r $pinsFile" not in text, "回退分支拿 -r 去装 constraints ⇒ extras 全丢"
+
+
+def test_run_gate_escapes_powershell_current_item_variable() -> None:
+    """`$_` 在 bash 双引号里会**先在本地展开**，远端收到的是被啃坏的命令。
+
+    ★ 卡 E54 实测：`ssh ... "powershell -Command \"... -notcontains $_.Name ...\""`
+    本地把 `$_` 换成上一条命令的最后一个参数 ⇒ 远端 PowerShell 语法错 ⇒ `0.4/5` 退 5，
+    而错误信息读起来像「云机上没有配置源」（误导性极强）。判据：必须写成 `\\$_`。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    assert "$_.Name" in text, "这条钉子得有一行真的用到 PowerShell 的 $_（否则空转）"
+    bare = [
+        line for line in text.splitlines()
+        if "$_.Name" in line and r"\$_.Name" not in line
+    ]
+    assert not bare, f"这些行里的 $_ 会被本地 bash 先展开：{bare[:1]}"
