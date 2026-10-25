@@ -3973,7 +3973,7 @@ title = "变异驱动的用例汰换：找出零独有击杀的用例，参数�
 tree = ".wt/E37"
 spec = "复盘/卡/卡E37-变异驱动用例汰换.md"
 files = ["tools/mutate_report.py", "tests/test_mutate_report.py", "tests/test_properties.py", "pyproject.toml"]
-depends = ["E32", "E33"]
+depends = ["E32", "E33", "E49"]
 risk = "high"
 status = "pending"
 [[cards]]
@@ -4053,3 +4053,13 @@ risk = "high"
 status = "done"
 
 
+[[cards]]
+id = "E49"
+task = "T-AG499"
+title = "云机红单归因与可移植性：本机语义的钉子 / 仓外配置 / 未声明依赖"
+tree = ".wt/E49"
+spec = "复盘/卡/卡E49-云机红单归因与可移植性.md"
+files = ["tests/test_gates_reuse_line.py", "tests/test_concurrency.py", "tests/test_pool_lib.py", "tests/test_pool_guards.py", "tests/test_pool_accounts.py", "tests/test_contract_audit.py", "tests/test_mem_guard.py", "tests/test_cloud_sync.py", "tests/test_wb_land.py", "pyproject.toml", "scripts/cloud/bootstrap.ps1", "scripts/cloud/run_gate.sh", "docs/subsystems/ci/云门禁机.md"]
+depends = ["E32", "E33"]
+risk = "high"
+status = "pending"
