@@ -8202,7 +8202,7 @@ gaps = "- **默认关闭（`TF_TIA=1` 才启用）。** 不设变量时 `pytest_
 id = "T-AG445"
 title = "卡 E3 —— 提交面算档 + `.gitignore` 收残留"
 group = "ENGINEERING"
-status = "todo"
+status = "deferred"
 evidence = [
   "file:复盘/卡/卡E3-提交面算档与残留.md",
   "file:docs/workbacklog.toml",
@@ -8228,7 +8228,7 @@ gaps = """规格已立、代码未写（2026-10-24 由主控登记）。落地�
 id = "T-AG447"
 title = "卡 E5 —— 合并队列：单写者 + 投机预检"
 group = "ENGINEERING"
-status = "todo"
+status = "deferred"
 evidence = [
   "file:复盘/卡/卡E5-合并队列.md",
   "file:docs/workbacklog.toml",
@@ -8413,7 +8413,7 @@ gaps = "还没开工：卡 E17 未派活。缺的是：`tests/test_wb_dispatch.p
 id = "T-AG467"
 title = "门禁锁三处静默：等锁有进度、死主自动清、体检先说锁"
 group = "ENGINEERING"
-status = "todo"
+status = "deferred"
 evidence = [
   "file:复盘/卡/卡E16-门禁锁三处静默.md",
   "file:gates/diag/gate_lock.py",
@@ -8480,7 +8480,7 @@ gaps = """规格已立、代码未写（2026-10-24 由主控登记）。现状�
 id = "T-AG464"
 title = "批集成按卡号精确匹配（别把 F1 当成 G1）"
 group = "ENGINEERING"
-status = "todo"
+status = "deferred"
 evidence = [
   "file:复盘/卡/卡E13-批集成精确匹配.md"
 ]
@@ -8500,7 +8500,7 @@ gaps = "还没开工：卡 E14 未派活。缺的是「起子进程偶发 Permis
 id = "T-AG466"
 title = "体检第 12 条：文书里反引号包住的 .md 必须解析得到"
 group = "ENGINEERING"
-status = "todo"
+status = "deferred"
 evidence = [
   "file:复盘/卡/卡E15-文书引用体检.md"
 ]
@@ -8658,3 +8658,10 @@ group = "ENGINEERING"
 status = "todo"
 evidence = ["file:复盘/卡/卡E27-Trae送任务通道修复.md"]
 gaps = "选择器与提交键按 2026-10-25 实测值固定；面板再改版时这张卡会红，届时按同一节重测。"
+[entries."T-AG482"]
+id = "T-AG482"
+title = "落地链五件合并修（E13+E15+E16+E3+E5）"
+group = "ENGINEERING"
+status = "todo"
+evidence = ["file:复盘/卡/卡E28-落地链五件合并.md"]
+gaps = "五份原规格判据逐条成立才算绿；风险集中，红一条整卡红。"

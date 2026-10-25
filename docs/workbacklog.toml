@@ -3571,18 +3571,6 @@ status = "done"
 
 # ---- 分区E｜提交面算档 + 残留归收（T-AG445）
 [[cards]]
-id = "E3"
-task = "T-AG445"
-title = "提交面算档 + 残留归收"
-tree = ".wt/E3"
-spec = "复盘/卡/卡E3-提交面算档与残留.md"
-files = ["gates/defs/domains.py", "tools/pool/landing.py", ".gitignore"]
-depends = ["E1", "E9", "E16"]
-risk = "mid"
-status = "pending"
-
-# ---- 分区E｜红单归并：同 traceback 只打一次（T-AG446）
-[[cards]]
 id = "E4"
 task = "T-AG446"
 title = "红单归并：同 traceback 只打一次"
@@ -3594,18 +3582,6 @@ risk = "mid"
 status = "done"
 
 # ---- 分区E｜合并队列：单写者 + 投机预检（T-AG447）
-[[cards]]
-id = "E5"
-task = "T-AG447"
-title = "合并队列：单写者 + 投机预检"
-tree = ".wt/E5"
-spec = "复盘/卡/卡E5-合并队列.md"
-files = ["tools/pool/landing.py", "tools/pool/queue.py", "tests/test_pool_queue.py"]
-depends = ["E3"]
-risk = "mid"
-status = "pending"
-
-# ---- 分区E｜文档纪律：卡树不许先提交（T-AG448）
 [[cards]]
 id = "E6"
 task = "T-AG448"
@@ -3727,7 +3703,7 @@ title = "preflight 同名不同义：旧的「跳过预检」与新的「只读�
 tree = ".wt/G3"
 spec = "复盘/卡/卡G3-preflight消歧.md"
 files = ["tools/pool/landing.py", "skills/pipe-land/references/land-steps.md", "skills/softeng-manage/references/commands.md", "tests/test_wb_land.py"]
-depends = ["E1", "E7", "G2", "E9", "E15"]
+depends = ["E1", "E7", "G2", "E9", "E28"]
 risk = "mid"
 status = "done"
 
@@ -3756,21 +3732,6 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
-
-[[cards]]
-id = "E16"
-task = "T-AG467"
-title = "门禁锁三处静默：等锁有进度、死主自动清、体检先说锁"
-tree = ".wt/E16"
-spec = "复盘/卡/卡E16-门禁锁三处静默.md"
-files = [
-  "gates/diag/gate_lock.py",
-  "tools/pool/landing.py",
-  "tests/test_gate_lock.py",
-]
-depends = ["E15"]
-risk = "mid"
-status = "pending"
 
 [[cards]]
 id = "E12"
@@ -3806,17 +3767,6 @@ risk = "mid"
 status = "pending"
 
 [[cards]]
-id = "E13"
-task = "T-AG464"
-title = "批集成按卡号精确匹配（别把 F1 当成 G1）"
-tree = ".wt/E13"
-spec = "复盘/卡/卡E13-批集成精确匹配.md"
-files = ["tools/pool/landing.py", "tests/test_wb_land.py"]
-depends = ["E9"]
-risk = "mid"
-status = "pending"
-
-[[cards]]
 id = "E14"
 task = "T-AG465"
 title = "起子进程的钉子用例遇 PermissionError 要重试"
@@ -3825,17 +3775,6 @@ spec = "复盘/卡/卡E14-进程抖动重试.md"
 files = ["tests/conftest.py", "tests/test_wb_review.py"]
 depends = []
 risk = "low"
-status = "pending"
-
-[[cards]]
-id = "E15"
-task = "T-AG466"
-title = "体检第 12 条：文书里反引号包住的 .md 必须解析得到"
-tree = ".wt/E15"
-spec = "复盘/卡/卡E15-文书引用体检.md"
-files = ["tools/pool/landing.py", "tests/test_wb_land.py"]
-depends = ["E13"]
-risk = "mid"
 status = "pending"
 
 [[cards]]
@@ -3954,4 +3893,14 @@ spec = "复盘/卡/卡E27-Trae送任务通道修复.md"
 files = ["tools/trae_pool.mjs", "tests/test_trae_pool_selectors.py"]
 depends = []
 risk = "low"
+status = "pending"
+[[cards]]
+id = "E28"
+task = "T-AG482"
+title = "落地链五件合并修（E13+E15+E16+E3+E5）"
+tree = ".wt/E28"
+spec = "复盘/卡/卡E28-落地链五件合并.md"
+files = ["tools/pool/landing.py", "tools/pool/queue.py", "gates/diag/gate_lock.py", "gates/defs/domains.py", ".gitignore", "tests/test_wb_land.py", "tests/test_gate_lock.py", "tests/test_pool_queue.py"]
+depends = []
+risk = "high"
 status = "pending"
