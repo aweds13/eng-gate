@@ -8694,3 +8694,10 @@ group = "ENGINEERING"
 status = "todo"
 evidence = ["file:复盘/卡/卡E28-落地链五件合并.md"]
 gaps = "五份原规格判据逐条成立才算绿；风险集中，红一条整卡红。"
+[entries."T-AG483"]
+id = "T-AG483"
+title = "Trae 完工看守：把「Trae 停了」变成可发现的"
+group = "ENGINEERING"
+status = "todo"
+evidence = ["file:复盘/卡/卡E29-Trae完工看守.md"]
+gaps = "四态（finished / terminated / stalled / running）要各有钉子；真机那一次必须真落事件，只见日志不算。"
