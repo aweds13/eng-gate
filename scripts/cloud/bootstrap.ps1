@@ -10,6 +10,13 @@
 #   云机 ruff 0.17.2 vs 本机 0.16.6，`I001` 判出不同结果 ⇒ tests/test_wb_land.py
 #   的 test_preflight_* 4 条在云机红。钉子：tests/test_cloud_sync.py::test_bootstrap_pins_*。
 #
+# ★ 解释器版本（卡 E44）：这里钉的是 3.12.8，比本机（3.14.x）低 —— 2026-10-25 之前这会让
+#   门禁的**输入哈希**退化：`scripts/run_gates.py` 曾用 `ROOT.glob("X/**")` 展开门输入，而
+#   裸 `**` 语义随解释器版本变（3.12 只给目录 ⇒ `is_file()` 一滤就空集 ⇒ 哈希恒为
+#   sha256("") ⇒ 复用判定永远「没变」）。现在 `_expand()` 走 `rglob`，与版本解耦，
+#   所以云机可以继续用 3.12；但**下限是 3.11**（`run_gates.py` 的 `MIN_PYTHON` 会在开跑前拦）。
+#   换版本时两处一起改：这里的 `-PythonUrl` 与 `run_gates.py` 的 `MIN_PYTHON`。
+#
 # ★ 这份文件必须存成「UTF-8 with BOM」：PowerShell 5.1 读无 BOM 的中文 .ps1 会按 ANSI 解，
 #   报「字符串缺少终止符」，且报的位置与真因无关。钉子同上（看首 3 字节 EF BB BF）。
 # ★ .ps1 里不要嵌 `python -c "..."`：PowerShell 会先吃掉里层引号，python 收到半句话。

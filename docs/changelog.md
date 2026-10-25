@@ -1,3 +1,9 @@
+## 变更
+- `scripts/run_gates.py`：门输入展开改用 `_expand()`（以 `/**` 结尾走 `rglob`），复用哈希不再随解释器版本变。
+- `scripts/run_gates.py`：新增 `MIN_PYTHON = (3, 11)` 与 `python_too_old()`，`main()` 开跑前拦旧解释器（退 2）。
+- `scripts/run_gates.py`：`gates/last.json` payload 新增 `python` 字段（`payload_env_fields()`）。
+- `tests/test_run_gates_timeout.py`：假门改 `sys.executable -c "time.sleep(N)"`，裸 Windows 也造得出来。
+- `scripts/cloud/bootstrap.ps1`、`docs/subsystems/ci/云门禁机.md`、`skills/pipe-gate/SKILL.md`：写清版本与哈希的关系。
 ## 账号账本与只读探测：能力表 + 仓外账本 + discover/probe（E45 · T-AG496）
 - 新增 `tools/pool/platforms.toml`（进 git、可审、零凭据）：八个平台各一节，字段 `label/supported/auth_kind/probe/verified/base_urls/token_env/probe_url/unit/source/claim_flow/quota_flow/pitfalls`；`source` 一律写成 `github:<owner>/<repo>/<path>:<lines>` 或 `local:<path>:<line>`，指不到的存档路径另放 `local_archive`（`gates/diag/repos/` 是 gitignored，不能当唯一出处）。
 - 新增 `tools/pool_accounts.py`（进 git、40 条钉子）：四个只读子命令 `list / show / discover / probe`；账本路径解析与 `tools/pool/projects.py` 同口径（`TF_ACCOUNTS_TOML` → 逐级向上找 `infra/pool/accounts.toml` → 找不到就退 2 并打印找过的目录，不猜）。

@@ -31,6 +31,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -371,3 +372,114 @@ def test_mixed_newlines_hash_equals_all_lf(
     h_lf = rg.input_hash(PATTERNS)
 
     assert h_mixed == h_lf
+
+
+# ---------------------------------------------------------------- 卡 E44 钉子
+
+
+def test_double_star_matches_deep_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★★ 卡 E44：`X/**` 必须命中**更深层**的文件（不只是一层）。
+
+    修之前靠 `Path.glob("src/**")`，而它对裸 `**` 的语义随解释器版本变 ——
+    3.12/3.13 只给目录、3.14 才给文件。这条钉子只认「文件被算进输入」这个结果，
+    与解释器版本无关。
+    """
+    monkeypatch.setattr(rg, "ROOT", tmp_path)
+    _seed(tmp_path, "src/a/b/c.py", "C")
+    before = rg.input_hash(PATTERNS)
+
+    rels = [p.relative_to(tmp_path).as_posix() for p in rg._expand("src/**")]
+    assert "src/a/b/c.py" in rels, f"`X/**` 没命中更深层文件：{rels}"
+    _seed(tmp_path, "src/a/b/d.py", "D")
+    assert rg.input_hash(PATTERNS) != before, "`X/**` 没把更深层的新文件算进输入"
+
+
+def test_expand_double_star_equals_glob_semantics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ `_expand` 与「本机 glob 的旧口径」结果集**逐字相同**（3.14 上不许改判据口径）。
+
+    这就是"修完既有 `gates/reuse.json` 记录不失效"的机器凭证：换实现不改结论。
+    """
+    monkeypatch.setattr(rg, "ROOT", tmp_path)
+    for rel in ("src/a.py", "src/deep/b.py", "src/deep/er/c.py", "tools/serve.py"):
+        _seed(tmp_path, rel, rel)
+
+    legacy = {p.as_posix() for p in tmp_path.glob("src/**") if p.is_file()}
+    now = {p.as_posix() for p in rg._expand("src/**")}
+    assert now == legacy, f"展开结果集变了：新增 {now - legacy} / 丢失 {legacy - now}"
+
+
+def test_expand_still_excludes_generated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ 生成物在 `rglob` 这条路上同样被排掉（T-G181 的口径不许在新路径上漏）。"""
+    monkeypatch.setattr(rg, "ROOT", tmp_path)
+    _seed(tmp_path, "src/a.py", "A")
+    before = rg.input_hash(PATTERNS)
+
+    _seed(tmp_path, "src/__pycache__/a.cpython-312.pyc", "生成物")
+    _seed(tmp_path, "src/sub.egg-info/PKG-INFO", "生成物")
+
+    assert rg.input_hash(PATTERNS) == before
+
+
+def test_python_version_too_old_is_reported() -> None:
+    """★ 解释器太旧要在开跑前说清（不是默默跑出一份不可信的绿）。"""
+    assert rg.python_too_old((3, 10)) is not None
+    assert rg.python_too_old((3, 11)) is None
+    assert rg.python_too_old(rg.MIN_PYTHON) is None
+
+
+def test_hash_is_interpreter_independent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★★ 同一棵树、两个解释器 → 门输入哈希**相同**（卡 E44 判据 5 的本机可验部分）。
+
+    判据原文要的是「本机与云机对同一份提交算出同一哈希」。跨机比较要等 E42 的云机池，
+    但那件事的**根**是「哈希只由内容决定、不由解释器决定」—— 这一条今天就能钉：
+    在 3.14（当前解释器）与 3.12（若有）上分别算 `input_hash`，结果必须逐字相同。
+    """
+    monkeypatch.setattr(rg, "ROOT", tmp_path)
+    _seed(tmp_path, "src/a.py", "A")
+    _seed(tmp_path, "src/deep/b/c.py", "C")
+    here = rg.input_hash(PATTERNS)
+
+    other = _other_interpreter()
+    if other is None:
+        # ★ 这里**故意不用跳过/预期失败那类标记**：`test_known_env_red_list_covers_only_b_class`
+        #   把源码里出现这类标记当作「拿跳过来掩盖红」的迹象（会红）。没有第二个解释器 =>
+        #   这条无处可测，直接返回（本机有 uv 装的 3.12 会真跑；云机上退化成不跑，卡里已写明）。
+        return
+    code = (
+        "import sys; sys.path.insert(0, sys.argv[1]);"
+        "import run_gates as rg; from pathlib import Path; rg.ROOT = Path(sys.argv[2]);"
+        "print(rg.input_hash((sys.argv[3], sys.argv[4])))"
+    )
+    done = subprocess.run(
+        [other, "-c", code, str(ROOT / "scripts"), str(tmp_path), *PATTERNS],
+        capture_output=True,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+    theirs = done.stdout.decode("utf-8", "replace").strip().splitlines()[-1]
+    assert theirs == here, f"同一棵树两个解释器算出不同哈希：{here} vs {theirs}"
+
+
+def _other_interpreter() -> str | None:
+    """找一个与当前不同的 python（取 uv 装的 3.12，没有就 None —— 不假红）。"""
+    import glob as _glob
+
+    me = Path(sys.executable).resolve()
+    for cand in _glob.glob("C:/Users/*/AppData/Roaming/uv/python/cpython-3.12*/python.exe"):
+        path = Path(cand)
+        if path.is_file() and path.resolve() != me:
+            return str(path)
+    return None
+
+def test_payload_records_python_version() -> None:
+    """★ `gates/last.json` 必须记下「这份绿是哪版解释器跑的」（形如 `3.14.6`）。"""
+    import platform
+    import re as _re
+
+    fields = rg.payload_env_fields()
+    assert fields == {"python": platform.python_version()}
+    assert _re.fullmatch(r"\d+\.\d+\.\d+", fields["python"]), fields["python"]

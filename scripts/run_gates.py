@@ -85,6 +85,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import platform
 import re
 import shutil
 import socket
@@ -444,6 +445,24 @@ def is_generated(path: Path) -> bool:
     )
 
 
+def _expand(pattern: str) -> list[Path]:
+    """把一条门输入图案展开成**文件**清单（卡 E44：不许依赖 `Path.glob` 的版本语义）。
+
+    ★ 病根：`X/**` 在 `pathlib.Path.glob` 里的语义**随解释器版本变** ——
+    Python 3.14 的 `Path.glob("src/**")` 同时给 `src`（目录）与 `src/a.py`（文件），
+    而 3.12/3.13 只给目录。`input_hash` 再用 `is_file()` 一滤就是空集 ⇒ 哈希恒等于
+    `sha256("")` ⇒ `skip_reused()` 永远判「没变」，改了 `src/**` 也复用上一次的绿
+    （**静默的安全洞**。主控实测：云机 3.12.8 上 10 条 `test_gates_reuse_line` 红，
+    每道门的输入哈希都是 `e3b0c44298fc1c14`）。
+    所以：以 `/**` 结尾的图案改走 `rglob("*")`（3.9+ 语义稳定，含更深层文件），
+    其余仍走 `glob()`；生成物过滤与 CRLF 归一一行不动（T-G181 的口径）。
+    对本机 3.14 的**结果集逐字相同** ⇒ 既有 `gates/reuse.json` 记录不失效。
+    """
+    if pattern.endswith("/**"):
+        base = ROOT / pattern[: -len("/**")]
+        return [p for p in base.rglob("*") if p.is_file() and not is_generated(p)]
+    return [p for p in ROOT.glob(pattern) if p.is_file() and not is_generated(p)]
+
 def input_hash(patterns: tuple[str, ...]) -> str:
     """把一组 glob 命中的**文件内容**哈希起来（路径 + 内容，稳定排序）。
 
@@ -471,7 +490,7 @@ def input_hash(patterns: tuple[str, ...]) -> str:
     digest = hashlib.sha256()
     files: list[Path] = []
     for pattern in patterns:
-        files.extend(p for p in ROOT.glob(pattern) if p.is_file() and not is_generated(p))
+        files.extend(_expand(pattern))
     for path in sorted(set(files), key=lambda p: p.as_posix()):
         digest.update(path.relative_to(ROOT).as_posix().encode("utf-8"))
         digest.update(b"\0")
@@ -1855,7 +1874,39 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+MIN_PYTHON = (3, 11)
+
+
+def python_too_old(version: tuple[int, int] | None = None) -> str | None:
+    """解释器太旧就返回原因（卡 E44）；够用返回 None。
+
+    ★ 为什么必须在**开跑前**拦：`scripts/run_gates.py` 的门输入哈希曾靠 `Path.glob("X/**")`
+    展开，而那条路径的语义随解释器版本变（3.12/3.13 不匹文件 ⇒ 哈希恒为 `sha256("")` ⇒
+    复用判定永远「没变」）。现在 `_expand()` 已与版本解耦，但仓库 `pyproject.toml` 的
+    `requires-python` 同样是 3.11 起 —— 换机器时两处口径要一起说，不许一个说 3.11、
+    另一个默默跑 3.9。
+    """
+    ver = version or (sys.version_info.major, sys.version_info.minor)
+    if ver < MIN_PYTHON:
+        want = ".".join(str(x) for x in MIN_PYTHON)
+        have = ".".join(str(x) for x in ver)
+        return f"需要 Python ≥ {want}（当前 {have}）—— 低于此刻跑门禁的解释器口径不受支持"
+    return None
+
+
+def payload_env_fields() -> dict[str, str]:
+    """`gates/last.json` 里记「这份绿是哪版解释器跑的」（卡 E44）。
+
+    单独成函数是为了让钉子能直接钉它 —— payload 由 `main()` 内联拼装，没有别的入口。
+    """
+    return {"python": platform.python_version()}
+
+
 def main() -> int:
+    too_old = python_too_old()
+    if too_old is not None:
+        print(f"[FAIL] 解释器版本不够：{too_old}", flush=True)
+        return 2
     ap = build_parser()
     args = ap.parse_args()
     if args.seal:
@@ -2149,6 +2200,9 @@ def main() -> int:
 
     payload = {
         "rev": git("rev-parse", "--short", "HEAD"),
+        # ★ 卡 E44：这份绿是哪版解释器跑的，必须可查 —— 门输入哈希的展开语义
+        #   曾随 `Path.glob("X/**")` 的版本变（3.12 不匹文件 ⇒ 哈希恒为 sha256("")）。
+        **payload_env_fields(),
         # ★ T-G179 封存指纹：除 gates/** 外即将提交内容的 tree 哈希（可复现固定点）。
         # 为什么摘掉 gates/：gates/last.json 自己在那棵树里，写进它自己的哈希会让树变化 →
         # 永远追不上（自指悖论）。它不是"完整提交的 tree"，也**不含门禁产物**。

@@ -1,13 +1,21 @@
 [entries."T-AG498"]
 id = "T-AG498"
-title = "复用哈希随解释器版本变（X/** 在 3.12 里不匹文件）+ 假门不许依赖 PATH 上的 sleep（T-AG498）"
+title = "复用哈希随解释器版本变 + 假门不依赖 sleep（T-AG498）"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E44-复用哈希随解释器版本变.md",
   "file:scripts/run_gates.py",
   "file:tests/test_gates_reuse_line.py",
   "file:tests/test_run_gates_timeout.py",
   "file:scripts/cloud/bootstrap.ps1",
+  "file:docs/subsystems/ci/云门禁机.md",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:gates/diag/_text_TAG498.md",
+  "file:docs/changelog.d/T-AG498.md",
+  "file:复盘/交接.d/T-AG498.md",
+  "test:test_gates_reuse_line.py",
+  "test:test_run_gates_timeout.py",
 ]
-gaps = "- **缺陷今天是「静默」不是「红」**：`input_hash()` 在 3.12 上把 `src/**` 展开成空集 ⇒ 门输入哈希恒为 `sha256(\"\")`，`skip_reused()` 会心安理得复用上一次的绿，见 `scripts/run_gates.py`。\n- **版本语义已被实测钉死**：本机 Python 3.14.6 的 `Path.glob('src/**')` 含文件，云机 3.12.8 只含目录 —— 见 `复盘/卡/卡E44-复用哈希随解释器版本变.md` 的复现表。\n- **假门依赖 PATH 上的 `sleep`**：裸 Windows（云机）造不出假门，4 条红；要改 `sys.executable -c`，见 `tests/test_run_gates_timeout.py`。\n- **本卡还没开工**：`.wt/E44` 未建、解释器版本线未钉进 `scripts/cloud/bootstrap.ps1`，见 `scripts/cloud/bootstrap.ps1`。"
+gaps = "- 反向验证的红样只能在 3.12 上取到（本机默认 3.14 上旧实现不会红）：已用 uv 的 cpython-3.12.14 复现旧实现哈希恒为空串的 sha256，见 `复盘/卡/卡E44-复用哈希随解释器版本变.md`。- 云机那 33 条红里本卡只解释 10 条空哈希 + `sleep` 一族；池索引仓外、`test_mem_guard`、E35 自建钉不可移植仍挂在云机复跑上，见 `docs/subsystems/ci/云门禁机.md`。- `gates/last.json` 的 `python` 字段今天只写不读 —— 没有判据断言「同一提交在两个解释器上哈希相同」，见 `scripts/run_gates.py`。"
+

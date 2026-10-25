@@ -24,7 +24,6 @@
 
 from __future__ import annotations
 
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -36,13 +35,16 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import run_gates as rg  # noqa: E402 —— 需要先用 sys.path 把 scripts/ 挂上
 
-SLEEP = shutil.which("sleep")
-
 
 def _sleep_cmd(seconds: float) -> list[str]:
-    """假门：`sleep <seconds>`（就这一件事，跑不出别的读数）。"""
-    assert SLEEP, "本机 PATH 里没有 sleep，假门造不出来"
-    return [SLEEP, str(seconds)]
+    """假门：睡 `seconds` 秒然后退出（就这一件事，跑不出别的读数）。
+
+    ★ 卡 E44：**不许依赖 PATH 上的 `sleep`**。裸 Windows（云机 Windows Server）上没有
+    这个可执行文件，`shutil.which("sleep")` 返回 None ⇒ 一整族「假门」用例在那里直接红
+    （主控实测：云机 pass1 报「本机 PATH 里没有 sleep，假门造不出来」）。改用解释器自己，
+    跨平台且版本跟着 `sys.executable` 走。
+    """
+    return [sys.executable, "-c", f"import time; time.sleep({float(seconds)})"]
 
 
 def _alive(pid: int) -> bool:
@@ -178,11 +180,11 @@ def test_timeout_kills_the_whole_tree(
     pidfile = tmp_path / "child.pid"
     code = (
         "import subprocess, sys, time\n"
-        "child = subprocess.Popen([sys.argv[1], '60'])\n"
+        "child = subprocess.Popen([sys.argv[1], '-c', 'import time; time.sleep(60)'])\n"
         "open(sys.argv[2], 'w').write(str(child.pid))\n"
         "time.sleep(60)\n"
     )
-    cmd = [sys.executable, "-c", code, SLEEP, str(pidfile)]
+    cmd = [sys.executable, "-c", code, sys.executable, str(pidfile)]
 
     proc, t0, why = rg.start_gate("tree", cmd)
     assert proc is not None, why
@@ -196,3 +198,16 @@ def test_timeout_kills_the_whole_tree(
     while _alive(child_pid) and time.time() < deadline:
         time.sleep(0.1)
     assert not _alive(child_pid), f"子进程 {child_pid} 还活着 —— 整树没掐干净"
+
+
+def test_fake_gate_runs_without_sleep_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 卡 E44：PATH 上没有 `sleep` 时假门照样造得出来（裸 Windows 的形态）。
+
+    这就是「换到云机 Windows Server 不许整族红」的机器钉子 —— 修之前 `_sleep_cmd`
+    直接 `assert SLEEP`，PATH 一收窄就红。
+    """
+    import subprocess as _sp
+
+    monkeypatch.setenv("PATH", str(Path(sys.executable).parent))
+    done = _sp.run(_sleep_cmd(0.05), capture_output=True, timeout=30)
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
