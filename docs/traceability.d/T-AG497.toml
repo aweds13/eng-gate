@@ -1,12 +1,23 @@
 [entries."T-AG497"]
 id = "T-AG497"
-title = "手动签到与聚合入口：一条命令签完所有平台（T-AG497）"
+title = "手动签到与聚合入口：一条命令签完所有平台（拉取式）"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E48-手动签到与聚合入口.md",
   "file:复盘/卡/卡E45-账号账本与只读探测.md",
+  "file:tools/pool/checkin.py",
+  "file:tools/pool_accounts.py",
   "file:tools/wb_daily.py",
   "file:tools/pool_mcp.py",
+  "file:docs/subsystems/pool/README.md",
+  "test:test_pool_checkin.py",
+  "test:test_pool_accounts.py",
+  "test:test_pool_mcp.py",
+  "test:test_pool_mcp_write.py",
+  "test:test_pool_mcp_task.py",
+  "test:test_pool_registry.py",
+  "test:test_wb_daily.py",
 ]
-gaps = "- **先落 E45 才有账本可签**：本卡 `depends = [\"E45\"]`，没有账本与能力表时 `checkin` 无处读平台端点，见 `复盘/卡/卡E48-手动签到与聚合入口.md` §2。\n- **只有 codearts 有端到端参考实现（四步含 confirm）**：其余平台按参考仓的响应形状写，但没有真号验证过；未验证的平台必须在输出里如实标「未探」，不许伪装成 `claimed`，见 §4 第 6 条。\n- **真领取是唯一写动作，闸门要硬**：写客户端只许放 `tools/pool/checkin.py`，入口唯一 `checkin_apply()`；钉子用 AST 扫，见 §6 判据 10。\n- **「今天已领」各平台判据不同**：qoder 领取成功后列表仍非空、minimax 是 `is_today && status===3`、codearts 看 `claimable/status`；统一按「没有 Claimable 就领」会重复领取，见 §3 硬规矩 1。"
+gaps = "- 真领取只在 codearts 上做了端到端读数；workbuddy / trae / qoder / minimax 四家是**假 fetcher 回放**真实响应形状（六态、幂等、二次跑 already-claimed 都有钉子），没有真凭据跑过，见`复盘/卡/卡E48-手动签到与聚合入口.md`。- 本机四个号目前只有 codearts-1 声明了批准模型，其余三个 `approved_models=[]` ⇒ 派活读账本时会被拒；签到的 `uncertain` 也主要来自「账本只存指针、环境变量没设」，见 `tools/pool_accounts.py`。- `--spacing 2.0` 是固定值，没有按平台退避（参考仓的错峰预约没抄）；429 只记 `uncertain` 不重放，真要跨天补签得人来跑，见 `docs/subsystems/pool/README.md`。- `checkin_status` 与今日一页读的是**当天留档**：留档在卡树（数据根）而主树读主树目录，跨树跑时会看到「今天没跑过」，见 `tools/wb_daily.py`。"
+

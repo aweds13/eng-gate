@@ -38,13 +38,21 @@ import wb_dispatch  # noqa: E402
 from pool import registry  # noqa: E402
 
 READ_TOOL_NAMES = [
-    "pool_plan", "job_list", "job_status", "job_result", "lock_status", "pool_models",
+    "pool_plan",
+    "job_list",
+    "job_status",
+    "job_result",
+    "lock_status",
+    "pool_models",
     # ★ 卡 201（T-G303）：第 10 个只读工具 —— 额度状态按钟表算
     "quota_status",
     "account_status",  # ★ 卡 E45（T-AG496）：账号账本，不探测、不联网
+    "checkin_status",  # ★ 卡 E48（T-AG497）：今日签到读数，永不触发签到
     # ★ 卡 213（T-G325）：第 11 个只读工具 —— 工作台读数（调 pipeline_view）
     "workbench_board",
-    "task_list", "task_status", "task_pool",
+    "task_list",
+    "task_status",
+    "task_pool",
 ]
 WRITE_TOOL_NAMES = ["pool_dispatch", "pool_cancel", "task_register", "task_claim"]
 
@@ -157,8 +165,9 @@ def test_write_tools_listed_and_shaped_with_env(write_on: None) -> None:
     assert by_name["pool_cancel"]["inputSchema"]["required"] == ["card"]
 
 
-def test_confirm_must_equal_card(write_on: None, reg: Path, worktree: Path,
-                                 no_spawn: list[list[str]]) -> None:
+def test_confirm_must_equal_card(
+    write_on: None, reg: Path, worktree: Path, no_spawn: list[list[str]]
+) -> None:
     """`arguments.confirm` 不等于卡号 → 拒绝（防手滑），且**不派活**。"""
     result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(confirm="999"), root=worktree)
     assert result is not None and result["isError"] is True
@@ -176,8 +185,9 @@ def test_initialize_instructions_describe_write_authorization(write_on: None) ->
 # ================================================================ ③ 干跑四咬
 
 
-def test_dry_run_bites_on_tree_conflict(write_on: None, reg: Path, worktree: Path,
-                                        quiet_lock: None, no_spawn: list[list[str]]) -> None:
+def test_dry_run_bites_on_tree_conflict(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, no_spawn: list[list[str]]
+) -> None:
     registry.reserve("900", tree=".wt/poolmcp2", files=["docs/other.md"])
     result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(), root=worktree)
     assert result is not None and result["isError"] is True
@@ -185,9 +195,9 @@ def test_dry_run_bites_on_tree_conflict(write_on: None, reg: Path, worktree: Pat
     assert no_spawn == []
 
 
-def test_dry_run_bites_on_domain_intersection(write_on: None, reg: Path, worktree: Path,
-                                              quiet_lock: None,
-                                              no_spawn: list[list[str]]) -> None:
+def test_dry_run_bites_on_domain_intersection(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, no_spawn: list[list[str]]
+) -> None:
     registry.reserve("900", tree=".wt/other", files=["tools/pool_mcp.py"])
     result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(), root=worktree)
     assert result is not None and result["isError"] is True
@@ -195,8 +205,9 @@ def test_dry_run_bites_on_domain_intersection(write_on: None, reg: Path, worktre
     assert no_spawn == []
 
 
-def test_dry_run_bites_on_existing_log(write_on: None, reg: Path, worktree: Path,
-                                       quiet_lock: None, no_spawn: list[list[str]]) -> None:
+def test_dry_run_bites_on_existing_log(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, no_spawn: list[list[str]]
+) -> None:
     (worktree / "gates" / "diag" / "wb-111.jsonl").write_text("{}\n", encoding="utf-8")
     result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(), root=worktree)
     assert result is not None and result["isError"] is True
@@ -204,11 +215,17 @@ def test_dry_run_bites_on_existing_log(write_on: None, reg: Path, worktree: Path
     assert no_spawn == []
 
 
-def test_dry_run_bites_on_running_gate_lock(write_on: None, reg: Path, worktree: Path,
-                                            monkeypatch: pytest.MonkeyPatch,
-                                            no_spawn: list[list[str]]) -> None:
-    body = ("[锁] 段 base=9034 文件=gate.lock: card=111 pid=999 "
-            "起于 2026-10-01 23:37:00（已 12s / 租约剩 10788s；租约内） cwd=D:/eng")
+def test_dry_run_bites_on_running_gate_lock(
+    write_on: None,
+    reg: Path,
+    worktree: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    no_spawn: list[list[str]],
+) -> None:
+    body = (
+        "[锁] 段 base=9034 文件=gate.lock: card=111 pid=999 "
+        "起于 2026-10-01 23:37:00（已 12s / 租约剩 10788s；租约内） cwd=D:/eng"
+    )
     monkeypatch.setattr(registry, "read_lock_body", lambda *a, **k: body)
     result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(), root=worktree)
     assert result is not None and result["isError"] is True
@@ -216,12 +233,13 @@ def test_dry_run_bites_on_running_gate_lock(write_on: None, reg: Path, worktree:
     assert no_spawn == []
 
 
-def test_unknown_card_in_backlog_is_refused(write_on: None, reg: Path, worktree: Path,
-                                            quiet_lock: None,
-                                            no_spawn: list[list[str]]) -> None:
+def test_unknown_card_in_backlog_is_refused(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, no_spawn: list[list[str]]
+) -> None:
     """backlog 里没有这张卡 ⇒ 没有冲突域 ⇒ 拒（**别猜空域**）。"""
-    result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(card="999", confirm="999"),
-                                root=worktree)
+    result = pool_mcp.call_tool(
+        "pool_dispatch", _dispatch_args(card="999", confirm="999"), root=worktree
+    )
     assert result is not None and result["isError"] is True
     assert "冲突域" in _text(result)
     assert no_spawn == []
@@ -231,8 +249,8 @@ def test_unknown_card_in_backlog_is_refused(write_on: None, reg: Path, worktree:
 
 
 def test_dispatch_argv_is_pinned_and_reserves_first(
-        write_on: None, reg: Path, worktree: Path, quiet_lock: None,
-        monkeypatch: pytest.MonkeyPatch) -> None:
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """桩验 argv 逐字 + 租约**先占后起**。"""
     seen: dict[str, Any] = {}
 
@@ -268,22 +286,24 @@ def test_dispatch_argv_is_pinned_and_reserves_first(
 
 
 def test_dispatch_rolls_back_when_worker_fails(
-        write_on: None, reg: Path, worktree: Path, quiet_lock: None,
-        monkeypatch: pytest.MonkeyPatch) -> None:
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """起不来 ⇒ 释放刚占的租约，如实报错。"""
+
     def boom(argv: list[str], root: Path) -> tuple[int, str, str]:
         raise OSError("起不来：模拟失败")
 
     monkeypatch.setattr(pool_mcp, "_spawn_worker", boom)
     result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(), root=worktree)
     assert result is not None and result["isError"] is True
-    assert registry.list_reservations() == []           # 租约被释放
+    assert registry.list_reservations() == []  # 租约被释放
 
 
 def test_dispatch_rolls_back_when_preflight_fails(
-        write_on: None, reg: Path, worktree: Path, quiet_lock: None,
-        monkeypatch: pytest.MonkeyPatch) -> None:
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """wb_dispatch 前置检查没过（退 2、无 pid）⇒ 回滚 + 把原文带回来。"""
+
     def fake(argv: list[str], root: Path) -> tuple[int, str, str]:
         return 2, "", "[FAIL] 不派活 —— 前置检查没过：\n  · 内存不够\n"
 
@@ -294,10 +314,10 @@ def test_dispatch_rolls_back_when_preflight_fails(
     assert registry.list_reservations() == []
 
 
-def test_invalid_model_is_refused(write_on: None, reg: Path, worktree: Path,
-                                  no_spawn: list[list[str]]) -> None:
-    result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(model="gpt-99"),
-                                root=worktree)
+def test_invalid_model_is_refused(
+    write_on: None, reg: Path, worktree: Path, no_spawn: list[list[str]]
+) -> None:
+    result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(model="gpt-99"), root=worktree)
     assert result is not None and result["isError"] is True
     assert "未授权模型" in _text(result)
     assert no_spawn == []
@@ -312,41 +332,43 @@ def _seed_lease(card: str, pid: int, worktree: Path) -> None:
 
 
 def test_cancel_refuses_when_image_is_not_a_worker(
-        write_on: None, reg: Path, worktree: Path, quiet_lock: None,
-        monkeypatch: pytest.MonkeyPatch) -> None:
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """映像名不是 node.exe/python.exe ⇒ **拒绝动手**，且**没有**调用 taskkill。"""
     _seed_lease("111", 4242, worktree)
     kills: list[int] = []
     monkeypatch.setattr(pool_mcp, "_image_name", lambda pid: "chrome.exe")
     monkeypatch.setattr(pool_mcp, "_kill", lambda pid: (kills.append(pid), (True, ""))[1])
-    result = pool_mcp.call_tool("pool_cancel", {"card": "111", "confirm": "111",
-                                                "reason": "手滑取消"}, root=worktree)
+    result = pool_mcp.call_tool(
+        "pool_cancel", {"card": "111", "confirm": "111", "reason": "手滑取消"}, root=worktree
+    )
     assert result is not None and result["isError"] is True
     assert "拒绝动手" in _text(result)
     assert kills == []
-    assert "tasklist" in _text(result) and "taskkill" in _text(result)   # 人工怎么做
+    assert "tasklist" in _text(result) and "taskkill" in _text(result)  # 人工怎么做
     # 拒绝后租约还在（没动任何东西）
     assert [r["card"] for r in registry.list_reservations()] == ["111"]
 
 
-def test_cancel_refuses_when_no_lease(write_on: None, reg: Path, worktree: Path,
-                                      quiet_lock: None) -> None:
-    result = pool_mcp.call_tool("pool_cancel", {"card": "111", "confirm": "111"},
-                                root=worktree)
+def test_cancel_refuses_when_no_lease(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None
+) -> None:
+    result = pool_mcp.call_tool("pool_cancel", {"card": "111", "confirm": "111"}, root=worktree)
     assert result is not None and result["isError"] is True
     assert "租约" in _text(result)
 
 
 def test_cancel_kills_and_releases_and_writes_note(
-        write_on: None, reg: Path, worktree: Path, quiet_lock: None,
-        monkeypatch: pytest.MonkeyPatch) -> None:
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """身份对 → 杀、写 `wb-111.cancel.txt`、释放租约。"""
     _seed_lease("111", 4242, worktree)
     killed: list[int] = []
     monkeypatch.setattr(pool_mcp, "_image_name", lambda pid: "node.exe")
     monkeypatch.setattr(pool_mcp, "_kill", lambda pid: (killed.append(pid), (True, "已结束"))[1])
-    result = pool_mcp.call_tool("pool_cancel", {"card": "111", "confirm": "111",
-                                                "reason": "用户叫停"}, root=worktree)
+    result = pool_mcp.call_tool(
+        "pool_cancel", {"card": "111", "confirm": "111", "reason": "用户叫停"}, root=worktree
+    )
     assert result is not None and result["isError"] is False
     assert killed == [4242]
     assert registry.list_reservations() == []
@@ -388,8 +410,11 @@ def test_serve_without_env_still_lists_six(monkeypatch: pytest.MonkeyPatch) -> N
 
 def _expected_console_encoding() -> str:
     """测试侧独立算一遍"该用哪个编码"——**不**调 `pool_mcp` 的那个函数（否则是循环自证）。"""
-    return (locale.getencoding() if hasattr(locale, "getencoding")
-            else locale.getpreferredencoding(False)) or "utf-8"
+    return (
+        locale.getencoding()
+        if hasattr(locale, "getencoding")
+        else locale.getpreferredencoding(False)
+    ) or "utf-8"
 
 
 def test_kill_and_image_decode_with_console_encoding(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -417,8 +442,7 @@ def test_kill_and_image_decode_with_console_encoding(monkeypatch: pytest.MonkeyP
         assert call["errors"] == "replace", call["argv"]
 
 
-def test_kill_reads_system_encoded_output_as_human_text(
-        monkeypatch: pytest.MonkeyPatch) -> None:
+def test_kill_reads_system_encoded_output_as_human_text(monkeypatch: pytest.MonkeyPatch) -> None:
     """行为性：`taskkill` 吐的**系统编码**回话要能读成人话（不出替换字符 `\\ufffd`）；
     坏字节只许被 `replace` 掉，**绝不许抛**（掐进程这条路不能被解码带崩）。"""
     system_enc = _expected_console_encoding()
@@ -439,7 +463,7 @@ def test_kill_reads_system_encoded_output_as_human_text(
     monkeypatch.setattr(pool_mcp.subprocess, "run", fake_run)
     ok, detail = pool_mcp._kill(4242)
     assert ok is True
-    assert "\ufffd" not in detail          # 编码对 → 没有人话被替换成 U+FFFD（utf-8 老写法会中招）
+    assert "\ufffd" not in detail  # 编码对 → 没有人话被替换成 U+FFFD（utf-8 老写法会中招）
     assert "成功" in detail and "已终止" in detail
 
     def fake_bad(argv: list[str], **kwargs: Any) -> _Done:
@@ -447,6 +471,6 @@ def test_kill_reads_system_encoded_output_as_human_text(
         return _Done(b"\xff\xfe\xff".decode(kwargs["encoding"], errors=kwargs["errors"]))
 
     monkeypatch.setattr(pool_mcp.subprocess, "run", fake_bad)
-    ok2, detail2 = pool_mcp._kill(4242)    # 没抛出来 = 过
+    ok2, detail2 = pool_mcp._kill(4242)  # 没抛出来 = 过
     assert isinstance(detail2, str)
-    assert "\ufffd" in detail2             # 坏字节被 replace 掉
+    assert "\ufffd" in detail2  # 坏字节被 replace 掉

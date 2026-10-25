@@ -37,11 +37,23 @@ sys.path.insert(0, str(ROOT / "tools"))
 import pool_mcp  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂上
 
 SERVER_SNIPPET = "import sys; from pool_mcp import serve; raise SystemExit(serve(sys.argv[1:]))"
-#: 十二个只读工具：九个号池（含卡 201 的 quota_status、卡 213 的 workbench_board、
-#: 卡 E45 的 account_status）+ 三个任务面。
-TOOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_status", "pool_models",
-              "quota_status", "account_status",
-              "workbench_board", "task_list", "task_status", "task_pool"]
+#: 十三个只读工具：十个号池（含卡 201 的 quota_status、卡 213 的 workbench_board、
+#: 卡 E45 的 account_status、卡 E48 的 checkin_status）+ 三个任务面。
+TOOL_NAMES = [
+    "pool_plan",
+    "job_list",
+    "job_status",
+    "job_result",
+    "lock_status",
+    "pool_models",
+    "quota_status",
+    "account_status",
+    "checkin_status",
+    "workbench_board",
+    "task_list",
+    "task_status",
+    "task_pool",
+]
 
 
 # ---------------------------------------------------------------- 报文小工具（照先例）
@@ -105,8 +117,14 @@ READ_ONLY_INPUTS = (
 
 def _git_status() -> set[str]:
     """工作区快照（**只数未跟踪条目** —— 已跟踪文件的改动别的门会重生成，不能归因给本工具）。"""
-    done = subprocess.run(["git", "status", "--porcelain", "-uall"], cwd=str(ROOT),
-                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+    done = subprocess.run(
+        ["git", "status", "--porcelain", "-uall"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     return {line for line in (done.stdout or "").splitlines() if line.strip()}
 
 
@@ -210,11 +228,13 @@ def test_machine_block_survives_a_report_that_quotes_json(tmp_path: Path) -> Non
     (diag / "wb-105.jsonl").write_text('{"type":"assistant"}\n', encoding="utf-8")
     (diag / "wb-105.verdict.txt").write_text("判决：过\n", encoding="utf-8")
     # 正文里的样例：JSON 字符串内**裸换行**（非法 JSON，真报告里就是这么被引用的）
-    sample = ('```json\n{"jsonrpc":"2.0","id":2,"result":{"tools":[\n'
-              ' {"name":"pool_plan"}\n]}}\n```')
+    sample = '```json\n{"jsonrpc":"2.0","id":2,"result":{"tools":[\n {"name":"pool_plan"}\n]}}\n```'
     (diag / "wb-105.report.md").write_text(
         "# 卡 105 报告\n\n正文引用了一份 tools/list 报文样例（★ 不是工具的机器块）：\n\n"
-        + sample + "\n\n以上是样例，下面是结论。\n", encoding="utf-8")
+        + sample
+        + "\n\n以上是样例，下面是结论。\n",
+        encoding="utf-8",
+    )
 
     for name in TOOL_NAMES:
         if name in ("job_status", "job_result"):
@@ -287,8 +307,10 @@ def test_missing_artifacts_say_meiyou(tmp_path: Path) -> None:
 
 def test_missing_lock_says_no_lock(monkeypatch: pytest.MonkeyPatch) -> None:
     """门禁锁空着时，`lock_status` **明说"没有锁"**（这条用喂进来的原样输出判，不靠机器现场）。"""
-    canned = ("[锁] 空着（没有任何段的锁）\n"
-              "[锁] 全局并发上限 TF_GATE_MAX_CONCURRENT=2，当前租约内 0 把在跑\n")
+    canned = (
+        "[锁] 空着（没有任何段的锁）\n"
+        "[锁] 全局并发上限 TF_GATE_MAX_CONCURRENT=2，当前租约内 0 把在跑\n"
+    )
 
     def fake_run(argv: list[str], cwd: Path) -> tuple[int, str, str]:
         return 0, canned, ""
@@ -346,15 +368,19 @@ def test_job_result_shows_totals_when_truncating(tmp_path: Path) -> None:
 # ================================================================ 真 stdio（子进程 · 照先例）
 
 
-def _talk(messages: list[dict[str, Any]], args: list[str]
-          ) -> tuple[list[dict[str, Any]], bytes, str, int]:
+def _talk(
+    messages: list[dict[str, Any]], args: list[str]
+) -> tuple[list[dict[str, Any]], bytes, str, int]:
     """真起一个子进程，按字节喂 UTF-8、按字节收回（照 `test_mcp_line.py` 的口径）。"""
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "tools")
     proc = subprocess.Popen(
         [sys.executable, "-c", SERVER_SNIPPET, *args],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        env=env, cwd=str(ROOT),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        cwd=str(ROOT),
     )
     payload = b"".join((json.dumps(m, ensure_ascii=False) + "\n").encode("utf-8") for m in messages)
     out, err = proc.communicate(payload, timeout=180)
@@ -385,11 +411,17 @@ def test_real_stdio_survives_a_bad_line() -> None:
     payload = b"\xff\xfe\x00 not utf-8\n{not json\n"
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "tools")
-    proc = subprocess.Popen([sys.executable, "-c", SERVER_SNIPPET],
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            env=env, cwd=str(ROOT))
+    proc = subprocess.Popen(
+        [sys.executable, "-c", SERVER_SNIPPET],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        cwd=str(ROOT),
+    )
     out, _err = proc.communicate(
-        payload + json.dumps(_req(4, "tools/list")).encode("utf-8") + b"\n", timeout=180)
+        payload + json.dumps(_req(4, "tools/list")).encode("utf-8") + b"\n", timeout=180
+    )
     replies = [json.loads(x.decode("utf-8")) for x in out.split(b"\n") if x.strip()]
     assert len(replies) == 3, replies
     codes = [r.get("error", {}).get("code") for r in replies]
@@ -402,7 +434,7 @@ def test_real_stdio_survives_a_bad_line() -> None:
 
 
 def test_thresholds_match_the_dispatch_tool() -> None:
-    """"断了"的阈值必须与派活器**同口径**（不然两个窗口会对同一现场给出不同结论）。"""
+    """ "断了"的阈值必须与派活器**同口径**（不然两个窗口会对同一现场给出不同结论）。"""
     import wb_dispatch  # noqa: PLC0415 —— tools/ 已在 sys.path 上
 
     assert pool_mcp.STALL_SECONDS == wb_dispatch.STALL_SECONDS

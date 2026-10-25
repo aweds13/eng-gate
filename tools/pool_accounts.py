@@ -31,7 +31,18 @@ from pathlib import Path
 
 import tomllib
 
+try:  # 与 tools/pool/*.py 同一套降级：落地桩只拷部分文件，缺 pipe_root 也不许炸
+    import pipe_root
+except ImportError:
+    try:
+        from tools import pipe_root  # type: ignore[no-redef]
+    except ImportError:  # pragma: no cover —— 独立拷贝的树
+        pipe_root = None  # type: ignore[assignment]
+
 TOOL_ROOT = Path(__file__).resolve().parent.parent
+#: 留档与日志落**数据根**（门禁在卡树跑时数据根就是卡树，见 tools/pipe_root.py）——
+#: 不许用 `__file__` 推，那样门禁在卡树跑会把留档写回主树。
+DATA_ROOT = pipe_root.data_root() if pipe_root is not None else TOOL_ROOT
 ANCHOR = ("infra", "pool", "accounts.toml")
 TZ = timezone(timedelta(hours=8))
 SAMPLES_CAP = 20
@@ -40,6 +51,8 @@ CRED_KINDS = ("file", "dir", "keychain", "cookie_jar", "env", "none")
 SECRET_RE = re.compile(r"(?i)(bearer\s+)?(sk-|ak-|ghp_|xoxb-)[A-Za-z0-9_\-]{8,}")
 
 EXIT_OK, EXIT_USAGE = 0, 2
+#: 有号需要人看（uncertain/failed）—— 与「用法错」分开，脚本能分辨
+EXIT_NEEDS_HUMAN = 1
 
 
 class LedgerError(Exception):
@@ -231,8 +244,8 @@ def _dump_toml(data: dict) -> str:
     for acc in data.get("account", []):
         lines.append("[[account]]")
         for key, value in acc.items():
-            if isinstance(value, dict):
-                continue
+            if key.startswith("_") or isinstance(value, dict):
+                continue  # `_platform_known` 之类是**读侧**临时字段，绝不写回账本
             if isinstance(value, list):
                 inner = ", ".join(_q(v) for v in value)
                 lines.append(f"{key} = [{inner}]")
@@ -244,6 +257,8 @@ def _dump_toml(data: dict) -> str:
                 continue
             lines.append(f"[account.{sub}]")
             for key, value in block.items():
+                if key.startswith("_"):
+                    continue
                 if isinstance(value, list):
                     lines.append(f"{key} = [")
                     for item in value:
@@ -628,6 +643,174 @@ def cmd_probe(args) -> int:
     return EXIT_OK
 
 
+def _ck():
+    """取 `tools/pool/checkin.py`（写动作的唯一所在地）。
+
+    两种跑法都要能 import：直跑脚本 / 测试里 `import pool_accounts`（`tools/` 在
+    sys.path 上 ⇒ `from pool import checkin`）与被 `import tools.pool_accounts`（⇒ 包路径）。
+    懒加载：落地桩只拷部分 tools 文件，顶层 import 会让整套炸成 ModuleNotFoundError。
+    """
+    try:
+        from pool import checkin as mod
+    except ImportError:  # pragma: no cover —— 以包形式 import 时
+        from tools.pool import checkin as mod
+    return mod
+
+
+def _checkin_archive(date: str) -> Path:
+    """留档：`gates/diag/checkin-<YYYYMMDD>.json`（gitignored，进不了库）。"""
+    return DATA_ROOT / "gates" / "diag" / f"checkin-{date}.json"
+
+
+def run_checkin(
+    data: dict,
+    platforms: dict,
+    *,
+    apply: bool = True,
+    platform: str | None = None,
+    environ: dict | None = None,
+    fetcher=None,
+    now: datetime | None = None,
+    sleep=None,
+    spacing: float = 2.0,
+) -> list[dict]:
+    """串行跑一遍签到（卡 §3 三条硬规矩）。
+
+    * **串行**、每号**一次**、平台间 ``spacing`` 秒 —— 拿并发换取「429 更少」不值得；
+    * ``apply=False`` 即 ``--probe``：只读状态，一条写请求都不发；
+    * 结论码原样上抛，`uncertain` 不重放。
+    """
+    import time as _time
+
+    ck = _ck()
+
+    environ = dict(os.environ if environ is None else environ)
+    fetch = fetcher or ck.http_fetch
+    nap = sleep or _time.sleep
+    rows: list[dict] = []
+    todo = [acc for acc in visible_accounts(data) if not platform or acc["platform"] == platform]
+    for index, acc in enumerate(todo):
+        plat = platforms.get(acc["platform"])
+        if plat is None:
+            outcome = ck.Outcome(
+                ck.NOT_SUPPORTED, message=f"平台 {acc['platform']!r} 不在能力表（不许猜）"
+            )
+        else:
+            outcome = ck.claim_for_platform(
+                acc["platform"],
+                plat,
+                ck.tokens_from_env(plat, environ),
+                fetch,
+                apply=apply,
+            )
+        row = {
+            "id": acc["id"],
+            "platform": acc["platform"],
+            "kind": outcome.kind,
+            "credit": outcome.credit,
+            "unit": outcome.unit or str(plat.get("unit", "") if plat else ""),
+            "detail": outcome.summary,
+        }
+        rows.append(row)
+        stamp = _iso(now or _now())
+        _record_checkin(acc, row, stamp)
+        # 平台之间留间隔（串行、不连环打）；最后一个不空等
+        if apply and index + 1 < len(todo) and spacing:
+            nap(spacing)
+    return rows
+
+
+def _record_checkin(acc: dict, row: dict, stamp: str) -> None:
+    """回写账本：健康态 + 额度样本。**不碰 amount**（amount 是余额，不是本次发放）。"""
+    health = acc.setdefault("health", {})
+    previous = health.get("last_checkin")
+    health["last_probe"] = stamp
+    health["last_checkin"] = row["kind"]
+    if row["kind"] in ("uncertain", "failed"):
+        health["consecutive_failures"] = int(health.get("consecutive_failures", 0) or 0) + 1
+    else:
+        health["consecutive_failures"] = 0
+    # `samples` 记的是**额度发放**，不是「跑过一次」：只有真领到才追加（卡 §6 判据 7）。
+    # `uncertain` 只涨 `consecutive_failures`，不许在额度账上留下 0 —— 那会被读成「今天发 0 个」。
+    if row["kind"] != "claimed" and not row.get("credit"):
+        return
+    quota = acc.setdefault("quota", {})
+    samples = quota.setdefault("samples", [])
+    entry = {"at": stamp, "kind": row["kind"]}
+    if row.get("credit"):
+        entry["credit"] = row["credit"]
+    if previous and previous != row["kind"]:
+        entry["was"] = previous
+    samples.append(entry)
+
+
+def write_checkin_archive(date: str, payload: dict) -> Path:
+    path = _checkin_archive(date)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".checkin-", suffix=".json", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+    return path
+
+
+def cmd_checkin(args) -> int:
+    """`checkin`：用户开口才跑一次（拉取式，无后台定时）。"""
+    ck = _ck()
+
+    ledger = find_ledger(args.ledger)
+    platforms = load_platforms()
+    data = load_ledger(ledger, platforms, strict=not args.all)
+    apply = not args.probe
+    now = _now()
+    rows = run_checkin(
+        data,
+        platforms,
+        apply=apply,
+        platform=args.platform,
+        spacing=args.spacing,
+    )
+    stamp = _iso(now)
+    date = now.strftime("%Y-%m-%d")
+    needs_human = [r for r in rows if r["kind"] in ck.NEEDS_HUMAN]
+    payload = {
+        "date": date,
+        "generated_at": stamp,
+        "ledger": str(ledger),
+        "applied": apply,
+        "results": rows,
+    }
+    archive = write_checkin_archive(date, payload)
+    save_ledger(ledger, data)
+
+    if args.json:
+        print(json.dumps({**payload, "archive": str(archive)}, ensure_ascii=False, indent=2))
+    else:
+        head = "签到（已领取）" if apply else "签到探针（只读，不发写请求）"
+        print(f"{head}   {stamp}   账本：{ledger}")
+        _print_table(
+            rows,
+            [
+                ("id", "账号"),
+                ("platform", "平台"),
+                ("kind", "结论"),
+                ("credit", "本次"),
+                ("detail", "说明"),
+            ],
+        )
+        counts: dict[str, int] = {}
+        for row in rows:
+            counts[row["kind"]] = counts.get(row["kind"], 0) + 1
+        print("\n小计：" + " · ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+        print(f"留档：{archive}")
+    return EXIT_NEEDS_HUMAN if needs_human else EXIT_OK
+
+
 def selftest() -> int:
     """不碰真实账本/网络的自检：证据用。"""
     sample = {
@@ -712,6 +895,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_disc.add_argument("--json", action="store_true")
     p_disc.add_argument("--path", action="append", help="额外位点，可重复")
 
+    p_ck = sub.add_parser("checkin", help="签到（用户开口才跑；--probe 只读）")
+    p_ck.add_argument("--json", action="store_true")
+    p_ck.add_argument(
+        "--all", action="store_true", help="含能力表里没有的平台（如实报 not-supported）"
+    )
+    p_ck.add_argument("--probe", action="store_true", help="只探不领：一条写请求都不发")
+    p_ck.add_argument("--platform")
+    p_ck.add_argument("--spacing", type=float, default=2.0, help="平台间隔秒数（默认 2）")
+
     p_probe = sub.add_parser("probe", help="只读探测（额度）")
     p_probe.add_argument("--json", action="store_true")
     p_probe.add_argument("--offline", action="store_true", help="不发网络请求")
@@ -723,7 +915,13 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.selftest:
         return selftest()
-    handlers = {"list": cmd_list, "show": cmd_show, "discover": cmd_discover, "probe": cmd_probe}
+    handlers = {
+        "list": cmd_list,
+        "show": cmd_show,
+        "discover": cmd_discover,
+        "probe": cmd_probe,
+        "checkin": cmd_checkin,
+    }
     handler = handlers.get(args.cmd or "")
     if handler is None:
         build_parser().print_help()

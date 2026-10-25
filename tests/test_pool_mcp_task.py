@@ -48,13 +48,21 @@ sys.path.insert(0, str(ROOT / "tools"))
 import pool_mcp  # noqa: E402 —— tools/ 已在 sys.path 上
 from pool import task  # noqa: E402
 
-READ_POOL_NAMES = ["pool_plan", "job_list", "job_status", "job_result", "lock_status",
-                   "pool_models",
-                   # ★ 卡 201（T-G303）：第 10 个只读工具 —— 额度状态按钟表算
-                   "quota_status",
-                   "account_status",  # ★ 卡 E45（T-AG496）：账号账本，不探测、不联网
-                   # ★ 卡 213（T-G325）：第 11 个只读工具 —— 工作台读数（调 pipeline_view）
-                   "workbench_board"]
+READ_POOL_NAMES = [
+    "pool_plan",
+    "job_list",
+    "job_status",
+    "job_result",
+    "lock_status",
+    "pool_models",
+    # ★ 卡 201（T-G303）：第 10 个只读工具 —— 额度状态按钟表算
+    "quota_status",
+    "account_status",  # ★ 卡 E45（T-AG496）：账号账本，不探测、不联网
+    # ★ 卡 E48（T-AG497）：今日签到读数（读留档，永不触发签到）
+    "checkin_status",
+    # ★ 卡 213（T-G325）：第 11 个只读工具 —— 工作台读数（调 pipeline_view）
+    "workbench_board",
+]
 READ_TASK_NAMES = ["task_list", "task_status", "task_pool"]
 READ_TOOL_NAMES = [*READ_POOL_NAMES, *READ_TASK_NAMES]
 WRITE_TOOL_NAMES = ["pool_dispatch", "pool_cancel", "task_register", "task_claim"]
@@ -143,8 +151,14 @@ def _files_under(d: Path) -> set[str]:
 
 
 def _untracked() -> set[str]:
-    done = subprocess.run(["git", "status", "--porcelain", "-uall"], cwd=str(ROOT),
-                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+    done = subprocess.run(
+        ["git", "status", "--porcelain", "-uall"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     return {ln for ln in (done.stdout or "").splitlines() if ln.startswith("??")}
 
 
@@ -196,8 +210,7 @@ def test_task_status_unknown_task_says_clearly(batch: Path) -> None:
 # ================================================================ ② 授权（tools/list）
 
 
-def test_tools_list_without_env_is_nine_read(batch: Path,
-                                             monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tools_list_without_env_is_nine_read(batch: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """没 env ⇒ **11 个只读**；两个任务写工具当"没有这个工具"（`-32602`）。"""
     monkeypatch.delenv("POOL_MCP_WRITE", raising=False)
     names = [t["name"] for t in pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]]
@@ -220,9 +233,15 @@ def test_tools_list_with_env_adds_two_task_writes(batch: Path, write_on: None) -
     reg = by_name["task_register"]["annotations"]
     claim = by_name["task_claim"]["annotations"]
     assert (reg["readOnlyHint"], reg["destructiveHint"], reg["idempotentHint"]) == (
-        False, False, False)
+        False,
+        False,
+        False,
+    )
     assert (claim["readOnlyHint"], claim["destructiveHint"], claim["idempotentHint"]) == (
-        False, False, True)
+        False,
+        False,
+        True,
+    )
     assert by_name["task_status"]["inputSchema"]["required"] == ["task"]
     assert by_name["task_register"]["inputSchema"]["required"] == ["confirm"]
     assert by_name["task_claim"]["inputSchema"]["required"] == ["task", "member", "confirm"]
@@ -233,8 +252,7 @@ def test_tools_list_with_env_adds_two_task_writes(batch: Path, write_on: None) -
 
 def test_register_confirm_must_equal_manifest_id(batch: Path, write_on: None) -> None:
     """★ `task_register` 的 `confirm` 不等于 TOML 里的 `id` ⇒ **拒**，且**不落盘**。"""
-    result = pool_mcp.call_tool(
-        "task_register", {"manifest_text": MANIFEST, "confirm": "T-9"})
+    result = pool_mcp.call_tool("task_register", {"manifest_text": MANIFEST, "confirm": "T-9"})
     assert result is not None and result["isError"] is True
     text = _text(result)
     assert "confirm" in text and "T-1" in text
@@ -245,8 +263,16 @@ def test_claim_confirm_must_equal_task(batch: Path, write_on: None) -> None:
     """★ `task_claim` 的 `confirm` 不等于任务号 ⇒ **拒**，且没留下任何申请。"""
     _seed(batch)
     result = pool_mcp.call_tool(
-        "task_claim", {"task": "T-1", "member": "卡A", "claim": "success",
-                       "evidence": "pytest", "files": ["tools/a/x.py"], "confirm": "T-2"})
+        "task_claim",
+        {
+            "task": "T-1",
+            "member": "卡A",
+            "claim": "success",
+            "evidence": "pytest",
+            "files": ["tools/a/x.py"],
+            "confirm": "T-2",
+        },
+    )
     assert result is not None and result["isError"] is True
     assert "confirm" in _text(result)
     assert not (batch / "T-1.d" / "卡A.json").exists()
@@ -261,13 +287,21 @@ def test_claim_out_of_domain_is_refused_and_named(batch: Path, write_on: None) -
     """★★ `task_claim` 带域外文件 ⇒ **拒并点名**（守卫在 MCP 这条路上也不能绕）。"""
     _seed(batch)
     result = pool_mcp.call_tool(
-        "task_claim", {"task": "T-1", "member": "卡A", "claim": "success",
-                       "evidence": "pytest 3 passed", "files": ["docs/别的.md"],
-                       "why": "越界", "confirm": "T-1"})
+        "task_claim",
+        {
+            "task": "T-1",
+            "member": "卡A",
+            "claim": "success",
+            "evidence": "pytest 3 passed",
+            "files": ["docs/别的.md"],
+            "why": "越界",
+            "confirm": "T-1",
+        },
+    )
     assert result is not None and result["isError"] is True
     text = _text(result)
-    assert "自己域外" in text and "docs/别的.md" in text      # 点名到文件
-    assert "tools/a/*" in text                                # 并指出这张卡的域
+    assert "自己域外" in text and "docs/别的.md" in text  # 点名到文件
+    assert "tools/a/*" in text  # 并指出这张卡的域
     # 越界那次**没留下**申请、状态没动
     assert not (batch / "T-1.d" / "卡A.json").exists()
     assert task.read_json(batch / "T-1.json")["claims"] == {}
@@ -280,15 +314,31 @@ def test_claim_and_register_happy_path(batch: Path, write_on: None) -> None:
     assert (batch / "T-1.json").exists() and (batch / "T-1.toml").exists()
     assert _json_block(_text(reg))["declared"] == ["卡A", "卡B"]
 
-    a = pool_mcp.call_tool("task_claim", {"task": "T-1", "member": "卡A", "claim": "success",
-                                          "evidence": "pytest 3 passed",
-                                          "files": ["tools/a/x.py"], "confirm": "T-1"})
+    a = pool_mcp.call_tool(
+        "task_claim",
+        {
+            "task": "T-1",
+            "member": "卡A",
+            "claim": "success",
+            "evidence": "pytest 3 passed",
+            "files": ["tools/a/x.py"],
+            "confirm": "T-1",
+        },
+    )
     assert a is not None and a["isError"] is False
     assert _json_block(_text(a))["success"] == 1
 
-    b = pool_mcp.call_tool("task_claim", {"task": "T-1", "member": "卡B", "claim": "success",
-                                          "evidence": "ui 三张图都过",
-                                          "files": ["ui/c.png"], "confirm": "T-1"})
+    b = pool_mcp.call_tool(
+        "task_claim",
+        {
+            "task": "T-1",
+            "member": "卡B",
+            "claim": "success",
+            "evidence": "ui 三张图都过",
+            "files": ["ui/c.png"],
+            "confirm": "T-1",
+        },
+    )
     assert b is not None and b["isError"] is False
     st = task.read_json(batch / "T-1.json")
     assert st["state"] == "awaiting-commit" and len(task._ok(st)) == 2
@@ -308,8 +358,7 @@ def test_register_from_path(batch: Path, write_on: None, tmp_path: Path) -> None
     """`manifest_path` 走文件（相对仓库根或绝对都行）。"""
     man = tmp_path / "T-1.toml"
     man.write_text(MANIFEST, encoding="utf-8", newline="\n")
-    result = pool_mcp.call_tool(
-        "task_register", {"manifest_path": str(man), "confirm": "T-1"})
+    result = pool_mcp.call_tool("task_register", {"manifest_path": str(man), "confirm": "T-1"})
     assert result is not None and result["isError"] is False
     assert (batch / "T-1.json").exists()
 
@@ -317,7 +366,8 @@ def test_register_from_path(batch: Path, write_on: None, tmp_path: Path) -> None
 def test_register_bad_toml_is_refused(batch: Path, write_on: None) -> None:
     """预声明不是合法 TOML ⇒ 拒（不落盘）。"""
     result = pool_mcp.call_tool(
-        "task_register", {"manifest_text": "id = , not toml {", "confirm": "T-1"})
+        "task_register", {"manifest_text": "id = , not toml {", "confirm": "T-1"}
+    )
     assert result is not None and result["isError"] is True
     assert "TOML" in _text(result)
 
@@ -325,17 +375,23 @@ def test_register_bad_toml_is_refused(batch: Path, write_on: None) -> None:
 # ================================================================ 真 stdio 端到端
 
 
-def _talk(messages: list[dict[str, Any]], env_extra: dict[str, str | None]
-          ) -> tuple[list[dict[str, Any]], bytes, str, int]:
+def _talk(
+    messages: list[dict[str, Any]], env_extra: dict[str, str | None]
+) -> tuple[list[dict[str, Any]], bytes, str, int]:
     env: dict[str, str] = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "tools")
     env.update({k: v for k, v in env_extra.items() if v is not None})
     for key, value in env_extra.items():
         if value is None:
             env.pop(key, None)  # `None` = 显式把它从环境里拿掉（"不设 env"）
-    proc = subprocess.Popen([sys.executable, "-c", SERVER_SNIPPET],
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            env=env, cwd=str(ROOT))
+    proc = subprocess.Popen(
+        [sys.executable, "-c", SERVER_SNIPPET],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        cwd=str(ROOT),
+    )
     payload = b"".join((json.dumps(m, ensure_ascii=False) + "\n").encode("utf-8") for m in messages)
     out, err = proc.communicate(payload, timeout=180)
     replies = [json.loads(line.decode("utf-8")) for line in out.split(b"\n") if line.strip()]
@@ -347,24 +403,53 @@ def test_real_stdio_task_tools_round_trip(batch: Path) -> None:
     replies, _raw, err, code = _talk(
         [
             _req(1, "tools/list"),
-            _req(2, "tools/call", {"name": "task_register",
-                                   "arguments": {"manifest_text": MANIFEST, "confirm": "T-1"}}),
-            _req(3, "tools/call",
-                 {"name": "task_claim",
-                  "arguments": {"task": "T-1", "member": "卡A", "claim": "success",
-                                "evidence": "pytest 3 passed", "files": ["tools/a/x.py"],
-                                "confirm": "T-1"}}),
-            _req(4, "tools/call",
-                 {"name": "task_claim",
-                  "arguments": {"task": "T-1", "member": "卡B", "claim": "success",
-                                "evidence": "x", "files": ["docs/别的.md"], "confirm": "T-1"}}),
+            _req(
+                2,
+                "tools/call",
+                {
+                    "name": "task_register",
+                    "arguments": {"manifest_text": MANIFEST, "confirm": "T-1"},
+                },
+            ),
+            _req(
+                3,
+                "tools/call",
+                {
+                    "name": "task_claim",
+                    "arguments": {
+                        "task": "T-1",
+                        "member": "卡A",
+                        "claim": "success",
+                        "evidence": "pytest 3 passed",
+                        "files": ["tools/a/x.py"],
+                        "confirm": "T-1",
+                    },
+                },
+            ),
+            _req(
+                4,
+                "tools/call",
+                {
+                    "name": "task_claim",
+                    "arguments": {
+                        "task": "T-1",
+                        "member": "卡B",
+                        "claim": "success",
+                        "evidence": "x",
+                        "files": ["docs/别的.md"],
+                        "confirm": "T-1",
+                    },
+                },
+            ),
         ],
         {"TF_BATCH_DIR": str(batch), "POOL_MCP_WRITE": "1"},
     )
     assert code == 0, err
     assert [r["id"] for r in replies] == [1, 2, 3, 4], (replies, err)
-    assert [t["name"] for t in replies[0]["result"]["tools"]] == [*READ_TOOL_NAMES,
-                                                                  *WRITE_TOOL_NAMES]
+    assert [t["name"] for t in replies[0]["result"]["tools"]] == [
+        *READ_TOOL_NAMES,
+        *WRITE_TOOL_NAMES,
+    ]
     assert _json_block(replies[1]["result"]["content"][0]["text"])["registered"] is True
     assert _json_block(replies[2]["result"]["content"][0]["text"])["success"] == 1
     oob = replies[3]["result"]
@@ -374,8 +459,9 @@ def test_real_stdio_task_tools_round_trip(batch: Path) -> None:
 
 def test_real_stdio_without_env_hides_task_writes(batch: Path) -> None:
     """端到端（不设 env）：`tools/list` 里**没有**那两个任务写工具。"""
-    replies, _raw, err, code = _talk([_req(1, "tools/list")],
-                                     {"TF_BATCH_DIR": str(batch), "POOL_MCP_WRITE": None})
+    replies, _raw, err, code = _talk(
+        [_req(1, "tools/list")], {"TF_BATCH_DIR": str(batch), "POOL_MCP_WRITE": None}
+    )
     assert code == 0, err
     names = [t["name"] for t in replies[0]["result"]["tools"]]
     assert names == READ_TOOL_NAMES
@@ -391,15 +477,22 @@ def test_real_stdio_without_env_hides_task_writes(batch: Path) -> None:
 
 def _claim_args(**over: Any) -> dict[str, Any]:
     """一份能过写门/域守卫的 `task_claim` 参数（要挪就覆盖个别键）。"""
-    args: dict[str, Any] = {"task": "T-1", "member": "卡A", "claim": "success",
-                            "evidence": "pytest 3 passed", "files": ["tools/a/x.py"],
-                            "why": "自证", "confirm": "T-1"}
+    args: dict[str, Any] = {
+        "task": "T-1",
+        "member": "卡A",
+        "claim": "success",
+        "evidence": "pytest 3 passed",
+        "files": ["tools/a/x.py"],
+        "why": "自证",
+        "confirm": "T-1",
+    }
     args.update(over)
     return args
 
 
-def test_claim_runs_in_a_subprocess_not_inprocess(batch: Path, write_on: None,
-                                                  monkeypatch: pytest.MonkeyPatch) -> None:
+def test_claim_runs_in_a_subprocess_not_inprocess(
+    batch: Path, write_on: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """⑦ 真走子进程：`task_claim` 起 `wb_task.py claim …`，**不许**进程内调 `task.cmd_claim`。
 
     ★ 卡 136 起执行改走 `Popen` + `communicate(timeout=…)` —— 原因：`subprocess.run` 超时只杀
@@ -444,8 +537,9 @@ def test_claim_runs_in_a_subprocess_not_inprocess(batch: Path, write_on: None,
     assert timeouts and min(timeouts) >= 1800, calls
 
 
-def test_claim_subprocess_nonzero_exit_is_surfaced(batch: Path, write_on: None,
-                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+def test_claim_subprocess_nonzero_exit_is_surfaced(
+    batch: Path, write_on: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """⑨ 子进程非零退出 ⇒ 回话里**既有退出码又有原文**（不许吞、不许假装成功）。"""
     _seed(batch)
 
@@ -468,8 +562,9 @@ def test_claim_subprocess_nonzero_exit_is_surfaced(batch: Path, write_on: None,
     assert data["claimed"] is False and data["exit_code"] == 2, data
 
 
-def test_claim_subprocess_timeout_is_not_success(batch: Path, write_on: None,
-                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+def test_claim_subprocess_timeout_is_not_success(
+    batch: Path, write_on: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """⑩ 子进程超时 ⇒ 回话写"没跑完/超时"，**不许**当成成功（卡 136 起还会带走整棵树）。"""
     _seed(batch)
 
@@ -507,10 +602,12 @@ def _slow_manifest(seconds: int = SLOW_GATE_SECONDS) -> str:
       **慢门禁桩** `tools/_slow_gate_stub.py`（合法形态 + 真的会慢）。
     """
     gate = json.dumps(f"python -X utf8 tools/_slow_gate_stub.py {seconds}")
-    return ("id = \"T-SLOW\"\nwhy = \"慢门禁自证\"\n"
-            f"gate_cmd = {gate}\non_complete = [\"gate\", \"draft\"]\n\n"
-            "[[member]]\nid = \"卡A\"\nlayer = \"门禁层\"\nwhat = \"慢门禁\"\n"
-            "paths = [\"tools/a/*\"]\n")
+    return (
+        'id = "T-SLOW"\nwhy = "慢门禁自证"\n'
+        f'gate_cmd = {gate}\non_complete = ["gate", "draft"]\n\n'
+        '[[member]]\nid = "卡A"\nlayer = "门禁层"\nwhat = "慢门禁"\n'
+        'paths = ["tools/a/*"]\n'
+    )
 
 
 def test_stdio_not_frozen_while_claim_runs(batch: Path) -> None:
@@ -524,9 +621,14 @@ def test_stdio_not_frozen_while_claim_runs(batch: Path) -> None:
     env["PYTHONPATH"] = str(ROOT / "tools")
     env["TF_BATCH_DIR"] = str(batch)
     env["POOL_MCP_WRITE"] = "1"
-    proc = subprocess.Popen([sys.executable, "-c", SERVER_SNIPPET],
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            env=env, cwd=str(ROOT))
+    proc = subprocess.Popen(
+        [sys.executable, "-c", SERVER_SNIPPET],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        cwd=str(ROOT),
+    )
     got: dict[int, float] = {}
 
     def _read() -> None:
@@ -541,11 +643,23 @@ def test_stdio_not_frozen_while_claim_runs(batch: Path) -> None:
         proc.stdin.flush()  # type: ignore[union-attr]
 
     try:
-        _send(_req(1, "tools/call", {"name": "task_claim",
-                                     "arguments": {"task": "T-SLOW", "member": "卡A",
-                                                   "claim": "success", "evidence": "自证",
-                                                   "files": ["tools/a/x.py"],
-                                                   "confirm": "T-SLOW"}}))
+        _send(
+            _req(
+                1,
+                "tools/call",
+                {
+                    "name": "task_claim",
+                    "arguments": {
+                        "task": "T-SLOW",
+                        "member": "卡A",
+                        "claim": "success",
+                        "evidence": "自证",
+                        "files": ["tools/a/x.py"],
+                        "confirm": "T-SLOW",
+                    },
+                },
+            )
+        )
         time.sleep(1.0)
         t_status = time.monotonic()
         _send(_req(2, "tools/call", {"name": "task_status", "arguments": {"task": "T-SLOW"}}))
@@ -584,9 +698,9 @@ def _wait_until(pred: Any, timeout: float = 15.0) -> bool:
     return bool(pred())
 
 
-def test_claim_timeout_carries_away_the_grandchild(batch: Path, write_on: None,
-                                                   monkeypatch: pytest.MonkeyPatch,
-                                                   tmp_path: Path) -> None:
+def test_claim_timeout_carries_away_the_grandchild(
+    batch: Path, write_on: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """① ★★ 孙进程也死了：门禁桩**真起一个孙进程**，claim 超时 ⇒ 用 `psutil` 核它已不在。
 
     先红后绿：改前 `subprocess.run` 超时只杀直连子进程（桩），孙进程被留成孤儿 ⇒ **红**；
@@ -606,9 +720,12 @@ def test_claim_timeout_carries_away_the_grandchild(batch: Path, write_on: None,
         "                         stderr=subprocess.DEVNULL)\n"
         "open(sys.argv[1], 'w').write(str(child.pid))\n"
         "time.sleep(120)\n",
-        encoding="utf-8", newline="\n")
-    monkeypatch.setattr(pool_mcp, "_claim_argv",
-                        lambda *a, **k: [sys.executable, str(stub), str(pidfile)])
+        encoding="utf-8",
+        newline="\n",
+    )
+    monkeypatch.setattr(
+        pool_mcp, "_claim_argv", lambda *a, **k: [sys.executable, str(stub), str(pidfile)]
+    )
     monkeypatch.setattr(pool_mcp, "CLAIM_TIMEOUT_SECONDS", 3)
 
     psutil = pytest.importorskip("psutil")
@@ -619,7 +736,7 @@ def test_claim_timeout_carries_away_the_grandchild(batch: Path, write_on: None,
         gone = _wait_until(lambda: not psutil.pid_exists(grandchild), timeout=15.0)
         assert gone, f"孙进程 pid {grandchild} 仍在 —— 整棵没被带走（本卡要治的孤儿门禁）\n{text}"
     finally:
-        with contextlib.suppress(Exception):      # 红的时候自己收尸，别留睡眠子进程
+        with contextlib.suppress(Exception):  # 红的时候自己收尸，别留睡眠子进程
             psutil.Process(grandchild).kill()
 
 
@@ -635,9 +752,9 @@ def test_claim_normal_path_unchanged(batch: Path, write_on: None) -> None:
     assert "没跑完" not in text and "超时" not in text, text
 
 
-def test_claim_kill_failure_is_reported_not_swallowed(batch: Path, write_on: None,
-                                                      monkeypatch: pytest.MonkeyPatch,
-                                                      tmp_path: Path) -> None:
+def test_claim_kill_failure_is_reported_not_swallowed(
+    batch: Path, write_on: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """③ 杀不掉要如实说：`kill_tree` 抛异常 ⇒ 回话**点名"没带走 / 残留 pid"**，不许吞。"""
     pytest.importorskip("psutil")  # 残留判定要 psutil 才判得了
     _seed(batch)
@@ -676,9 +793,69 @@ def test_tools_list_counts_unchanged(batch: Path, monkeypatch: pytest.MonkeyPatc
     """
     monkeypatch.delenv("POOL_MCP_WRITE", raising=False)
     twelve = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
-    assert len(twelve) == 12, [t["name"] for t in twelve]
+    assert len(twelve) == 13, [t["name"] for t in twelve]
     assert all(t["annotations"]["readOnlyHint"] is True for t in twelve), twelve
 
     monkeypatch.setenv("POOL_MCP_WRITE", "1")
     sixteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
-    assert len(sixteen) == 16, [t["name"] for t in sixteen]
+    assert len(sixteen) == 17, [t["name"] for t in sixteen]
+
+
+# --------------------------------------- 卡 E48：checkin_status（只读留档，永不触发签到）
+
+
+def test_checkin_status_says_missing_when_no_archive(tmp_path) -> None:
+    """没有留档 ⇒ found=False + 明说「今天还没跑过」，并指出真签要人跑哪条命令。"""
+    text, payload, is_error = pool_mcp.tool_checkin_status({"date": "2026-01-02"}, root=tmp_path)
+    assert is_error is False
+    assert payload["found"] is False
+    assert payload["date"] == "2026-01-02"
+    assert "没有留档" in text
+    assert "pool_accounts.py checkin" in text
+
+
+def test_checkin_status_reads_archive(tmp_path) -> None:
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    (diag / "checkin-2026-01-02.json").write_text(
+        json.dumps(
+            {
+                "date": "2026-01-02",
+                "applied": False,
+                "results": [
+                    {"id": "x", "platform": "trae", "kind": "uncertain", "detail": "缺 token"},
+                    {"id": "y", "platform": "codebuddy", "kind": "not-supported"},
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    text, payload, is_error = pool_mcp.tool_checkin_status({"date": "2026-01-02"}, root=tmp_path)
+    assert is_error is False
+    assert payload["found"] is True
+    assert payload["applied"] is False
+    assert payload["results"][0]["id"] == "x"
+    assert "只探未领" in text
+    assert "not-supported=1" in text and "uncertain=1" in text
+
+
+def test_checkin_status_is_offline_and_never_writes(tmp_path, monkeypatch) -> None:
+    """★ 判据本体：这个工具只读 —— 断网照常出读数，且源码里没有领取端点。"""
+
+    def _boom(*a, **k):  # pragma: no cover —— 被调用就说明它联网了
+        raise AssertionError("checkin_status 不许联网")
+
+    monkeypatch.setattr("urllib.request.urlopen", _boom)
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    (diag / "checkin-2026-01-02.json").write_text(
+        json.dumps({"date": "2026-01-02", "applied": True, "results": []}), encoding="utf-8"
+    )
+    text, payload, is_error = pool_mcp.tool_checkin_status({"date": "2026-01-02"}, root=tmp_path)
+    assert is_error is False
+    assert payload["found"] is True
+
+    src = Path(pool_mcp.__file__).read_text(encoding="utf-8")
+    for needle in ("/v1/ops/claim", "/daily-checkin", "checkin_credits/claim", "/signin/claim"):
+        assert needle not in src, f"MCP 只读面里不许出现写端点：{needle}"

@@ -113,6 +113,42 @@ def pool_state(root: Path) -> tuple[bool, str]:
 # ================================================================ 六块读数（调 pipeline_view）
 
 
+def checkin_state(root: Path) -> dict:
+    """今日签到读数（卡 E48）—— 只读留档，**不触发签到**。
+
+    留档是 `gates/diag/checkin-<日期>.json`（`pool_accounts.py checkin` 写的）。
+    没有就如实说「没跑过」，不拿账本里的 last_checkin 冒充今天的结果。
+    """
+    date = datetime.date.today().isoformat()
+    path = root / "gates" / "diag" / f"checkin-{date}.json"
+    out: dict = {
+        "date": date,
+        "archive": str(path),
+        "found": path.is_file(),
+        "counts": {},
+        "applied": None,
+        "note": "",
+    }
+    if not path.is_file():
+        out["note"] = "今天没跑过签到"
+        return out
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        out["found"] = False
+        out["note"] = f"留档读不了：{exc}"
+        return out
+    rows = data.get("results") or []
+    counts: dict[str, int] = {}
+    for row in rows:
+        key = str(row.get("kind"))
+        counts[key] = counts.get(key, 0) + 1
+    out["counts"] = counts
+    out["applied"] = data.get("applied")
+    out["total"] = len(rows)
+    return out
+
+
 def read_pipeline(root: Path) -> tuple[dict | None, str]:
     """一份读数（六块）—— 一律调 `tools/pipeline_view.py --json`。
 
@@ -121,7 +157,11 @@ def read_pipeline(root: Path) -> tuple[dict | None, str]:
     try:
         done = subprocess.run(
             [sys.executable, "-X", "utf8", str(PIPELINE_VIEW), "--json", "--root", str(root)],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", **NO_WINDOW,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            **NO_WINDOW,
         )
     except OSError as exc:
         return None, f"起不来 pipeline_view：{exc}"
@@ -197,15 +237,16 @@ def memory_reading() -> dict:
 
 
 def _memory_verdict(mem: dict) -> str:
-    """"够 / 不够 / 读不到" —— 拿不准则说读不到，**不**猜。"""
+    """ "够 / 不够 / 读不到" —— 拿不准则说读不到，**不**猜。"""
     gb, threshold = mem.get("gb"), mem.get("threshold")
     if gb is None or threshold is None:
         return f"读不到（{mem.get('note') or '没有读数'}）"
     if float(threshold) <= 0:
         return f"可用 {gb:.1f} GB，闸已关（阈值 {threshold:g}）⇒ 放行"
     if float(gb) < float(threshold):
-        return (f"可用 {gb:.1f} GB < 闸 {threshold:g} GB ⇒ **不够**跑门禁"
-                "（可 `TF_PYTEST_WORKERS=1`）")
+        return (
+            f"可用 {gb:.1f} GB < 闸 {threshold:g} GB ⇒ **不够**跑门禁（可 `TF_PYTEST_WORKERS=1`）"
+        )
     return f"可用 {gb:.1f} GB ≥ 闸 {threshold:g} GB ⇒ 够跑门禁"
 
 
@@ -234,6 +275,7 @@ def build_page(root: Path) -> dict:
         "stale": [],
         "stale_unknown": [],
         "gates": None,
+        "checkin": checkin_state(root),
         "todo": [],
     }
     if reading is None:
@@ -275,9 +317,13 @@ def _fill_leases(page: dict, reading: dict, root: Path) -> None:
         page["leases_note"] = str(reading.get("leases_note", "读不到租约"))
         return
     page["leases"] = [
-        {"card": str(lc.get("card", "")), "tree": str(lc.get("tree", "")),
-         "owner": str(lc.get("owner", "")), "at": str(lc.get("at", "")),
-         "ttl_seconds": lc.get("ttl_seconds")}
+        {
+            "card": str(lc.get("card", "")),
+            "tree": str(lc.get("tree", "")),
+            "owner": str(lc.get("owner", "")),
+            "at": str(lc.get("at", "")),
+            "ttl_seconds": lc.get("ttl_seconds"),
+        }
         for lc in leases
     ]
     if not page["leases"] and not (root / REGISTRY_REL).exists():
@@ -298,8 +344,7 @@ def _fill_batches(page: dict, reading: dict, root: Path) -> None:
     landed: list[str] = []
     for tid in sorted(states):
         row = states[tid]
-        item = {"id": tid, "state": row["state"], "ok": row["ok"],
-                "declared": row["declared"]}
+        item = {"id": tid, "state": row["state"], "ok": row["ok"], "declared": row["declared"]}
         if row["state"] == "awaiting-commit":
             page["waiting"].append(item)
         elif row["state"] == "collecting":
@@ -337,8 +382,7 @@ def _todo(page: dict) -> list[str]:
 
 
 def render(page: dict) -> str:
-    lines = [f"=== 今日一页 · 卡 220 定时巡检 · {page['today']} ===",
-             f"真源：{page['root']}"]
+    lines = [f"=== 今日一页 · 卡 220 定时巡检 · {page['today']} ===", f"真源：{page['root']}"]
     if not page.get("has_pool", True):
         lines.append(f"[卡池] ★ {page.get('pool_note') or '还没有卡池'}")
     if page.get("pipeline_note"):
@@ -348,6 +392,7 @@ def render(page: dict) -> str:
     _render_batches(lines, page)
     _render_memory(lines, page)
     _render_gates(lines, page)
+    _render_checkin(lines, page)
     todo = page.get("todo") or []
     if todo:
         lines.append("⇒ 今天该做：")
@@ -378,8 +423,10 @@ def _render_leases(lines: list[str], page: dict) -> None:
     tail = f"（{page['leases_note']}）" if page.get("leases_note") else ""
     lines.append(f"[在飞] {len(leases)} 条租约{tail}（来源 gates/diag/pool-registry.json）：")
     for lc in leases:
-        lines.append(f"  · 卡 {lc['card'] or '?'} → {lc['tree'] or '(不明)'}"
-                     f"  owner={lc['owner']}  at={lc['at']}  ttl={lc['ttl_seconds']}s")
+        lines.append(
+            f"  · 卡 {lc['card'] or '?'} → {lc['tree'] or '(不明)'}"
+            f"  owner={lc['owner']}  at={lc['at']}  ttl={lc['ttl_seconds']}s"
+        )
 
 
 def _render_batches(lines: list[str], page: dict) -> None:
@@ -387,11 +434,14 @@ def _render_batches(lines: list[str], page: dict) -> None:
         lines.append(f"[批] ★ {n}")
     waiting = page.get("waiting") or []
     if waiting:
-        lines.append(f"[批·等到提交] {len(waiting)} 个"
-                     "（来源 gates/diag/batch/<批>.json 的 state=awaiting-commit）：")
+        lines.append(
+            f"[批·等到提交] {len(waiting)} 个"
+            "（来源 gates/diag/batch/<批>.json 的 state=awaiting-commit）："
+        )
         for b in waiting:
-            lines.append(f"  · {b['id']}（{len(b['ok'])}/{len(b['declared'])} 齐）"
-                         f" ← 该补『为什么』并提交")
+            lines.append(
+                f"  · {b['id']}（{len(b['ok'])}/{len(b['declared'])} 齐） ← 该补『为什么』并提交"
+            )
     else:
         lines.append("[批·等到提交] 0 个")
     collecting = page.get("collecting") or []
@@ -431,8 +481,20 @@ def _render_stale(lines: list[str], page: dict) -> None:
 
 
 def _render_memory(lines: list[str], page: dict) -> None:
-    lines.append(f"[内存] {_memory_verdict(page.get('memory') or {})}"
-                 "（来源 scripts/run_gates.py 的内存闸）")
+    lines.append(
+        f"[内存] {_memory_verdict(page.get('memory') or {})}（来源 scripts/run_gates.py 的内存闸）"
+    )
+
+
+def _render_checkin(lines: list[str], page: dict) -> None:
+    """一行「今日签到」—— 聚合入口（卡 E48）；签不签由人决定，这里只报读数。"""
+    ck = page.get("checkin") or {}
+    if not ck.get("found"):
+        lines.append(f"[签到] {ck.get('note') or '没有留档'}")
+        return
+    mode = "已真签" if ck.get("applied") else "只探未领"
+    counts = " · ".join(f"{k}={v}" for k, v in sorted((ck.get("counts") or {}).items()))
+    lines.append(f"[签到] {mode} · {ck.get('total', 0)} 个号 · {counts or '0 个号'}")
 
 
 def _render_gates(lines: list[str], page: dict) -> None:
@@ -440,18 +502,18 @@ def _render_gates(lines: list[str], page: dict) -> None:
     if gates is None:
         lines.append("[门禁] ★ 读不到最近一次门禁（没有 gates/last.json 或坏了）")
         return
-    lines.append(f"[门禁] 最近一次 rev={gates['rev']} ok={gates['ok']}"
-                 f"（{gates['count']} 道，来源 gates/last.json）")
+    lines.append(
+        f"[门禁] 最近一次 rev={gates['rev']} ok={gates['ok']}"
+        f"（{gates['count']} 道，来源 gates/last.json）"
+    )
 
 
 # ================================================================ CLI
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="今日一页：只读，回答「现在该做什么」（卡 220）")
-    parser.add_argument("--root", default="",
-                        help="真源树（默认 = 主工作树；池状态住那儿）")
+    parser = argparse.ArgumentParser(description="今日一页：只读，回答「现在该做什么」（卡 220）")
+    parser.add_argument("--root", default="", help="真源树（默认 = 主工作树；池状态住那儿）")
     parser.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
     args = parser.parse_args(argv)
     root = resolve_root(args.root)

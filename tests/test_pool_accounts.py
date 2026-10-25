@@ -398,8 +398,21 @@ def test_codearts_probe_is_honest_uncertain():
 
 
 def test_module_contains_no_write_endpoints():
+    """E45 的「本模块只读」判据。
+
+    ★ E48 改判据：原来拿 `/checkin` 当写动作的标记，但 E48 给本模块加了 `checkin`
+    子命令（写动作在 `tools/pool/checkin.py`），那个字符串会命中**模块路径**而不是端点。
+    改成点名真端点数 —— 判据的意思没变松：本模块里一条写端点、一个 POST 都不许有。
+    """
     src = (ROOT / "tools" / "pool_accounts.py").read_text(encoding="utf-8")
-    for needle in ("/claim", "/checkin", "/signin", 'method="POST"', "method='POST'"):
+    for needle in (
+        "/v1/ops/claim",
+        "/daily-checkin",
+        "checkin_credits/claim",
+        "/signin/claim",
+        'method="POST"',
+        "method='POST'",
+    ):
         assert needle not in src, f"E45 不许出现写动作：{needle}"
 
 

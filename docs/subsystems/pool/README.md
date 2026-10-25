@@ -31,6 +31,7 @@
 | `tools/pool/no_window.py` | 29 | 起子进程不弹窗的常量 | 无 |
 | `tools/pool/platforms.toml` | 192 | **平台能力表**（八个平台的端点 / 凭据形态 / 结论码 / 出处）：进 git、可审、**零凭据** | 无（被 `pool_accounts.py` 读） |
 | `tools/pool_accounts.py` | 739 | **账号账本**只读面：`list` / `show` / `discover` / `probe`（在 `tools/` 根，不在 `tools/pool/`） | 本文件即入口 |
+| `tools/pool/checkin.py` | 690 | **签到写动作的唯一住所**（卡 E48）：六态结论码 + 华为云 `SDK-HMAC-SHA256` 签名 + 五个平台的领取客户端；`apply=False` 即只探不领 | 无（被 `pool_accounts.py checkin` 调） |
 | `tools/pool/__init__.py` | 25 | 包说明 | — |
 
 两张**账**分开住，这是理解本子系统的关键：
@@ -123,6 +124,7 @@ pool 只做**派活与收口**。下面三张表是全卡的主判据：写偏�
 | `tools/pool/models.py` / `model_registry.py` | `tools/wb_state.py`、`tools/wb_dispatch.py` | `wb_state.py:70`（惰性 import）、`wb_dispatch.py:123` |
 | `tools/pool/projects.py` | `tools/wb_project.py` | `wb_project.py:30` —— `from pool import projects, registry` |
 | `tools/pool/platforms.toml` / `tools/pool_accounts.py` | `tools/pool_mcp.py`（`account_status`） | `pool_mcp.py` 的 `tool_account_status()` —— `import pool_accounts`，MCP 面只读账本、不探测不联网 |
+| `tools/pool/checkin.py` / `gates/diag/checkin-<日期>.json` | `tools/pool_mcp.py`（`checkin_status`）+ `tools/wb_daily.py`（一行） | 只读**留档**：MCP 与今日一页都不触发签到、不联网；真要签得人跑 `pool_accounts.py checkin --all` |
 | `tools/pool/trae_dispatch.py` | **无**（刻意不接进派活，卡 218 已裁定） | 全仓 `grep -rn trae_dispatch` 只命中 `tests/test_trae_dispatch.py` |
 
 ### 表 B · pool 不做的事（每条写「归谁」+ 证据）

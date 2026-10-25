@@ -340,15 +340,19 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "quota_status",
-        "description": ("额度四态（卡 201）：按「记录时间 vs 现实时间」判 —— 限流中 / 已过期，"
-                        "需重新探测 / 余额耗尽 / 未记录。只读，当场算，不探测。"),
+        "description": (
+            "额度四态（卡 201）：按「记录时间 vs 现实时间」判 —— 限流中 / 已过期，"
+            "需重新探测 / 余额耗尽 / 未记录。只读，当场算，不探测。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "card": {"type": "string", "description": "卡号，例如 201"},
                 "model": {"type": "string", "description": "模型名"},
-                "now": {"type": "string",
-                        "description": "注入「现在」（ISO-8601；测试用，不许靠真实钟表）"},
+                "now": {
+                    "type": "string",
+                    "description": "注入「现在」（ISO-8601；测试用，不许靠真实钟表）",
+                },
             },
             "required": ["card", "model"],
             "additionalProperties": False,
@@ -357,9 +361,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "account_status",
-        "description": ("账号账本读数（卡 E45）：有哪些号、哪个平台、额度观测值、凭据位点"
-                        "（打码）。只读仓外账本，**不探测、不联网、不动凭据**。"
-                        "账本本体在 D:/repo/infra/pool/accounts.toml。"),
+        "description": (
+            "账号账本读数（卡 E45）：有哪些号、哪个平台、额度观测值、凭据位点"
+            "（打码）。只读仓外账本，**不探测、不联网、不动凭据**。"
+            "账本本体在 D:/repo/infra/pool/accounts.toml。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -372,10 +378,32 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
     {
+        "name": "checkin_status",
+        "description": (
+            "今日签到读数（卡 E48）：读当天留档 gates/diag/checkin-<日期>.json "
+            "与账本 health.last_checkin。**永不触发签到、永不联网** —— "
+            "真要签得人跑 tools/pool_accounts.py checkin --all。"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "description": "看哪一天（YYYY-MM-DD；默认今天，本地时区）",
+                },
+            },
+            "required": [],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
         "name": "workbench_board",
-        "description": ("工作台一份读数（卡 213）：卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树六块"
-                        "收成一份（只读，走 pipeline_view.py --json，不重写判据）。"
-                        "section 不给=一次看全六块；某块缺来源会如实给 null + 说明。"),
+        "description": (
+            "工作台一份读数（卡 213）：卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树六块"
+            "收成一份（只读，走 pipeline_view.py --json，不重写判据）。"
+            "section 不给=一次看全六块；某块缺来源会如实给 null + 说明。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -396,8 +424,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
 TASK_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "task_list",
-        "description": ("任务栅栏现状：所有任务一行（任务号 / 状态 / 成送申请进度 / 一句话 why）。"
-                        "只读，不要 env。"),
+        "description": (
+            "任务栅栏现状：所有任务一行（任务号 / 状态 / 成送申请进度 / 一句话 why）。"
+            "只读，不要 env。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -408,8 +438,9 @@ TASK_TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "task_status",
-        "description": ("一个任务的详情：每张卡的层与域、交没交、history 尾部。"
-                        "参数 task。只读，不要 env。"),
+        "description": (
+            "一个任务的详情：每张卡的层与域、交没交、history 尾部。参数 task。只读，不要 env。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -435,7 +466,7 @@ TASK_TOOL_SPECS: list[dict[str, Any]] = [
 
 
 def tool_list() -> list[dict[str, Any]]:
-    """十二个只读工具（九个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补四个写工具。"""
+    """十三个只读工具（十个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补四个写工具。"""
     specs = [*TOOL_SPECS, *TASK_TOOL_SPECS]
     if write_enabled():
         specs += [*WRITE_TOOL_SPECS, *TASK_WRITE_TOOL_SPECS]
@@ -450,17 +481,23 @@ WRITE_ENV = "POOL_MCP_WRITE"
 WRITE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "pool_dispatch",
-        "description": ("派活：干跑守卫 → 先占树 → 起工人（--detach，立刻返回）。"
-                        "只在服务端 POOL_MCP_WRITE=1 时可见；arguments.confirm 必须等于卡号。"),
+        "description": (
+            "派活：干跑守卫 → 先占树 → 起工人（--detach，立刻返回）。"
+            "只在服务端 POOL_MCP_WRITE=1 时可见；arguments.confirm 必须等于卡号。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "card": {"type": "string", "description": "卡号，例如 111"},
                 "tree": {"type": "string", "description": "工人干活树（相对主树根；'' = 主树）"},
-                "spec": {"type": "string",
-                         "description": "卡规格文件（仓库相对）；不给就按 backlog 登记的路径"},
-                "model": {"type": "string",
-                          "description": "模型；不给用默认；必须在 wb_dispatch 白名单里"},
+                "spec": {
+                    "type": "string",
+                    "description": "卡规格文件（仓库相对）；不给就按 backlog 登记的路径",
+                },
+                "model": {
+                    "type": "string",
+                    "description": "模型；不给用默认；必须在 wb_dispatch 白名单里",
+                },
                 "pool": {"type": "string", "description": "号池名（记进租约）"},
                 "note": {"type": "string", "description": "备注（记进租约）"},
                 "confirm": {"type": "string", "description": "★ 防手滑：必须等于 card"},
@@ -472,8 +509,10 @@ WRITE_TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "pool_cancel",
-        "description": ("取消本机登记里那张卡的工人（先核对 pid 身份再动手）。"
-                        "只在服务端 POOL_MCP_WRITE=1 时可见；arguments.confirm 必须等于卡号。"),
+        "description": (
+            "取消本机登记里那张卡的工人（先核对 pid 身份再动手）。"
+            "只在服务端 POOL_MCP_WRITE=1 时可见；arguments.confirm 必须等于卡号。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -500,13 +539,16 @@ TASK_WRITE_TOOL_SPECS: list[dict[str, Any]] = [
         "description": (
             "★ 注册一个任务（预声明它需要哪些卡 / 每张卡属于哪层 / 各自域）。给 manifest_text"
             "（整段 TOML）或 manifest_path；只在服务端 POOL_MCP_WRITE=1 时可见；arguments.confirm"
-            " 必须等于 TOML 里的 id。"),
+            " 必须等于 TOML 里的 id。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "manifest_text": {"type": "string", "description": "整段预声明 TOML 文本"},
-                "manifest_path": {"type": "string",
-                                  "description": "预声明 TOML 的路径（相对仓库根或绝对）"},
+                "manifest_path": {
+                    "type": "string",
+                    "description": "预声明 TOML 的路径（相对仓库根或绝对）",
+                },
                 "confirm": {"type": "string", "description": "★ 防手滑：必须等于 TOML 里的 id"},
             },
             "required": ["confirm"],
@@ -518,18 +560,27 @@ TASK_WRITE_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "task_claim",
         "description": (
             "★ 一张卡交成送申请（success 必带证据；failed ⇒ 挡住收口）。只在服务端 "
-            "POOL_MCP_WRITE=1 时可见；arguments.confirm 必须等于 task；碰了域外文件会被拒并点名。"),
+            "POOL_MCP_WRITE=1 时可见；arguments.confirm 必须等于 task；碰了域外文件会被拒并点名。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "task": {"type": "string", "description": "任务号，例如 T-1"},
                 "member": {"type": "string", "description": "卡号，例如 卡115"},
-                "claim": {"type": "string", "enum": ["success", "failed"],
-                          "description": "success（成送申请）/ failed（不通过 ⇒ 挡住收口）"},
-                "evidence": {"type": "string",
-                             "description": "★ success 必填：测试读数 / 门禁结论 / 原样输出"},
-                "files": {"type": "array", "items": {"type": "string"},
-                          "description": "碰过的文件（**要过这张卡自己的域检查**）"},
+                "claim": {
+                    "type": "string",
+                    "enum": ["success", "failed"],
+                    "description": "success（成送申请）/ failed（不通过 ⇒ 挡住收口）",
+                },
+                "evidence": {
+                    "type": "string",
+                    "description": "★ success 必填：测试读数 / 门禁结论 / 原样输出",
+                },
+                "files": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "碰过的文件（**要过这张卡自己的域检查**）",
+                },
                 "why": {"type": "string", "description": "这张卡干了什么（会进文书骨架）"},
                 "confirm": {"type": "string", "description": "★ 防手滑：必须等于 task"},
             },
@@ -565,8 +616,13 @@ def _run(argv: list[str], cwd: Path) -> tuple[int | None, str, str]:
     """
     try:
         done = subprocess.run(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
-            argv, cwd=str(cwd), capture_output=True, text=True,
-            encoding="utf-8", errors="replace", **NO_WINDOW,
+            argv,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            **NO_WINDOW,
         )
     except OSError as exc:
         return None, "", f"跑不起来：{type(exc).__name__}: {exc}"
@@ -582,8 +638,14 @@ def _run_bounded(argv: list[str], cwd: Path, timeout: float) -> tuple[int | None
     """
     try:
         done = subprocess.run(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
-            argv, cwd=str(cwd), capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=timeout, **NO_WINDOW,
+            argv,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            **NO_WINDOW,
         )
     except subprocess.TimeoutExpired:
         return None, "", f"超时：超过 {timeout:g}s 还没跑完，已掐掉（`{_cmd_text(argv)}`）。"
@@ -642,7 +704,10 @@ def _parse_plan(text: str) -> list[dict[str, Any]] | None:
             continue
         if current is not None and (m := _PLAN_CARD_RE.match(line)) is not None:
             card = {
-                "id": m.group(1), "task": m.group(2), "tree": m.group(3), "title": m.group(4),
+                "id": m.group(1),
+                "task": m.group(2),
+                "tree": m.group(3),
+                "title": m.group(4),
                 "files": [],
             }
             current["cards"].append(card)
@@ -655,8 +720,9 @@ def _parse_plan(text: str) -> list[dict[str, Any]] | None:
     return [] if "[计划]" in text else None
 
 
-def tool_pool_plan(arguments: dict[str, Any], root: Path = ROOT
-                   ) -> tuple[str, dict[str, Any], bool]:
+def tool_pool_plan(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """队列与冲突域 —— **import** `tools/pool/plan.py`（只读、不建树、不派活，不 shell 出去）。
 
     ★ `command` 字段仍给**人能照抄的 CLI 命令**（那是同一份逻辑的 CLI 说法）。
@@ -667,8 +733,15 @@ def tool_pool_plan(arguments: dict[str, Any], root: Path = ROOT
         concurrency = 2
     if concurrency < 1:
         concurrency = 2
-    argv = [sys.executable, "-X", "utf8", "tools/wb_plan.py",
-            "plan", "--concurrency", str(concurrency)]
+    argv = [
+        sys.executable,
+        "-X",
+        "utf8",
+        "tools/wb_plan.py",
+        "plan",
+        "--concurrency",
+        str(concurrency),
+    ]
     command = _cmd_text(argv)
     try:
         backlog = load_backlog(root / "docs" / "workbacklog.toml")
@@ -677,13 +750,19 @@ def tool_pool_plan(arguments: dict[str, Any], root: Path = ROOT
         code, out, err = 2, "", f"[FAIL] {exc}\n"
     body = (out + ("\n" + err if err.strip() else "")).strip()
     if code != 0:
-        text = (f"pool_plan：我没有拿到计划。我是跑 `{command}` 得到这个的"
-                f"（退出码 {code}）：\n{body}")
-        return _result(text, {"command": command, "exit_code": code, "batches": None},
-                       is_error=True)
+        text = (
+            f"pool_plan：我没有拿到计划。我是跑 `{command}` 得到这个的（退出码 {code}）：\n{body}"
+        )
+        return _result(
+            text, {"command": command, "exit_code": code, "batches": None}, is_error=True
+        )
     text = f"外包队列与冲突域（pool_plan）—— 来自 `{command}`：\n{body}"
-    data = {"command": command, "exit_code": code, "concurrency": concurrency,
-            "batches": _parse_plan(out)}
+    data = {
+        "command": command,
+        "exit_code": code,
+        "concurrency": concurrency,
+        "batches": _parse_plan(out),
+    }
     return _result(text, data, is_error=False)
 
 
@@ -697,10 +776,11 @@ def tool_job_list(arguments: dict[str, Any], root: Path = ROOT) -> tuple[str, di
     counts: dict[str, int] = {}
     for row in rows:
         counts[row["state"]] = counts.get(row["state"], 0) + 1
-    head = (f"外包派活台账（job_list）—— 扫 {diag.as_posix()}\n"
-            f"共 {len(rows)} 个日志"
-            + ("：" + " · ".join(f"{k} {v}" for k, v in sorted(counts.items()))
-               if counts else "（一个都没有）"))
+    head = f"外包派活台账（job_list）—— 扫 {diag.as_posix()}\n共 {len(rows)} 个日志" + (
+        "：" + " · ".join(f"{k} {v}" for k, v in sorted(counts.items()))
+        if counts
+        else "（一个都没有）"
+    )
     if not rows:
         head += "\n（一个 wb-*.jsonl 都没有 —— 我没有假装有）"
     lines = [head]
@@ -718,24 +798,32 @@ def tool_job_list(arguments: dict[str, Any], root: Path = ROOT) -> tuple[str, di
 # ================================================================ 工具 3：job_status(card)
 
 
-def tool_job_status(arguments: dict[str, Any], root: Path = ROOT
-                    ) -> tuple[str, dict[str, Any], bool]:
+def tool_job_status(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """一张卡现在到哪了 —— **import** `tools/pool/jobs.py` 读 log 并渲染（不再起进程）。
 
     ★ `command` 字段仍给 CLI 说法；输出形状与 `wb_status.py <log> --repo` **逐字一致**。
     """
     card = str(arguments.get("card") or "").strip()
     if not card:
-        text = ("job_status：得给我一个卡号（card）。我是照 `card` 参数找 "
-                "`gates/diag/wb-<卡>*.jsonl` 的。")
+        text = (
+            "job_status：得给我一个卡号（card）。我是照 `card` 参数找 "
+            "`gates/diag/wb-<卡>*.jsonl` 的。"
+        )
         return _result(text, {"card": None, "found": False}, is_error=True)
     diag = diag_dir(root)
     logs = card_artifacts(diag, card, ".jsonl")
     if not logs:
-        text = (f"没有：卡 {card} 在 {diag.as_posix()} 里没有 `wb-{card}.jsonl`"
-                f"（连 r2… 也没有）—— 还没派过，或日志不在这个树里。")
-        return _result(text, {"card": card, "found": False, "log": None,
-                              "diag_dir": diag.as_posix()}, is_error=True)
+        text = (
+            f"没有：卡 {card} 在 {diag.as_posix()} 里没有 `wb-{card}.jsonl`"
+            f"（连 r2… 也没有）—— 还没派过，或日志不在这个树里。"
+        )
+        return _result(
+            text,
+            {"card": card, "found": False, "log": None, "diag_dir": diag.as_posix()},
+            is_error=True,
+        )
     log = logs[-1]
     argv = [sys.executable, "-X", "utf8", "tools/wb_status.py", log.name, "--repo"]
     command = _cmd_text(argv)
@@ -764,38 +852,53 @@ def _read_capped(path: Path, cap: int) -> dict[str, Any]:
     }
 
 
-def tool_job_result(arguments: dict[str, Any], root: Path = ROOT
-                    ) -> tuple[str, dict[str, Any], bool]:
+def tool_job_result(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """读 `wb-<卡>.report.md` 与 `wb-<卡>.verdict.txt` 的**原文**（缺就说"没有"）。"""
     card = str(arguments.get("card") or "").strip()
     if not card:
-        text = ("job_result：得给我一个卡号（card）。我照它找 "
-                "`gates/diag/wb-<卡>.report.md` 与 `wb-<卡>.verdict.txt`。")
+        text = (
+            "job_result：得给我一个卡号（card）。我照它找 "
+            "`gates/diag/wb-<卡>.report.md` 与 `wb-<卡>.verdict.txt`。"
+        )
         return _result(text, {"card": None, "found": False}, is_error=True)
     diag = diag_dir(root)
     verdicts = card_artifacts(diag, card, ".verdict.txt")
     reports = card_artifacts(diag, card, ".report.md")
     if not verdicts and not reports:
-        text = (f"没有：卡 {card} 在 {diag.as_posix()} 里既没有 `wb-{card}.report.md`，"
-                f"也没有 `wb-{card}.verdict.txt`（含 r2…）—— 没跑完 / 没派过 / 不在这个树里。")
-        return _result(text, {"card": card, "found": False, "diag_dir": diag.as_posix(),
-                              "verdict": {"exists": False}, "report": {"exists": False}},
-                       is_error=True)
+        text = (
+            f"没有：卡 {card} 在 {diag.as_posix()} 里既没有 `wb-{card}.report.md`，"
+            f"也没有 `wb-{card}.verdict.txt`（含 r2…）—— 没跑完 / 没派过 / 不在这个树里。"
+        )
+        return _result(
+            text,
+            {
+                "card": card,
+                "found": False,
+                "diag_dir": diag.as_posix(),
+                "verdict": {"exists": False},
+                "report": {"exists": False},
+            },
+            is_error=True,
+        )
     blocks = [f"卡 {card} 的结果（job_result）—— 读 {diag.as_posix()} 下的原文："]
     vdata: dict[str, Any] = {"exists": False}
     rdata: dict[str, Any] = {"exists": False}
     if verdicts:
         vdata = _read_capped(verdicts[-1], REPORT_MAX_CHARS)
         tail = "（已截断）" if vdata["truncated"] else ""
-        blocks.append(f"[判决] {vdata['path']}（共 {vdata['total_chars']} 字{tail}）："
-                      f"\n{vdata['text']}")
+        blocks.append(
+            f"[判决] {vdata['path']}（共 {vdata['total_chars']} 字{tail}）：\n{vdata['text']}"
+        )
     else:
         blocks.append("[判决] （没有）")
     if reports:
         rdata = _read_capped(reports[-1], REPORT_MAX_CHARS)
         tail = "（已截断）" if rdata["truncated"] else ""
-        blocks.append(f"[摘要] {rdata['path']}（共 {rdata['total_chars']} 字{tail}）："
-                      f"\n{rdata['text']}")
+        blocks.append(
+            f"[摘要] {rdata['path']}（共 {rdata['total_chars']} 字{tail}）：\n{rdata['text']}"
+        )
     else:
         blocks.append("[摘要] （没有）")
     data = {"card": card, "found": True, "verdict": vdata, "report": rdata}
@@ -805,8 +908,9 @@ def tool_job_result(arguments: dict[str, Any], root: Path = ROOT
 # ================================================================ 工具 5：lock_status
 
 
-def tool_lock_status(arguments: dict[str, Any], root: Path = ROOT
-                     ) -> tuple[str, dict[str, Any], bool]:
+def tool_lock_status(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """门禁锁现状 —— 跑 `gates/diag/gate_lock.py status`（只列不拿，不抢锁）。
 
     ★ 卡 106：命令与"空着"判据走 `pool.locks`；**这一处 subprocess 是本模块唯一保留的** ——
@@ -830,20 +934,26 @@ def tool_lock_status(arguments: dict[str, Any], root: Path = ROOT
 # ================================================================ 工具 6：pool_models
 
 
-def tool_pool_models(arguments: dict[str, Any], root: Path = ROOT
-                     ) -> tuple[str, dict[str, Any], bool]:
+def tool_pool_models(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """号池可用模型：批准集 ∩ 可用集 —— 读快照，**只读、不联网、不写快照**。"""
     pool = find_pool_dir(root)
     if pool is None:
         searched = " 、 ".join(
-            (base / "infra" / "pool").as_posix() for base in (root, *root.parents))
-        text = (f"没有：从 {root.as_posix()} 向上没找到号池目录"
-                f"（找的是各级 `<祖先>/infra/pool/pool_models.py`）。找过：{searched}")
+            (base / "infra" / "pool").as_posix() for base in (root, *root.parents)
+        )
+        text = (
+            f"没有：从 {root.as_posix()} 向上没找到号池目录"
+            f"（找的是各级 `<祖先>/infra/pool/pool_models.py`）。找过：{searched}"
+        )
         return _result(text, {"found": False, "pool_dir": None}, is_error=True)
     info = load_pool_models(pool)
     if not info["whitelist_exists"] and not info["snapshot_exists"]:
-        text = (f"没有：号池目录 {pool.as_posix()} 里既没有 {info['whitelist']}，"
-                f"也没有 {info['snapshot']}。")
+        text = (
+            f"没有：号池目录 {pool.as_posix()} 里既没有 {info['whitelist']}，"
+            f"也没有 {info['snapshot']}。"
+        )
         return _result(text, {"found": False, **info}, is_error=True)
     lines = [
         f"号池可用模型（pool_models）—— 读 {pool.as_posix()}（★ 快照，非现场拉取；"
@@ -855,16 +965,19 @@ def tool_pool_models(arguments: dict[str, Any], root: Path = ROOT
     if info["approved_but_missing"]:
         lines.append("批准了但快照里没有（派它必失败）：" + "、".join(info["approved_but_missing"]))
     if info["live_but_unapproved"]:
-        lines.append("服务端有但未批准（只报告，绝不自动启用 → 等你一句「批 X」）："
-                     + "、".join(info["live_but_unapproved"]))
+        lines.append(
+            "服务端有但未批准（只报告，绝不自动启用 → 等你一句「批 X」）："
+            + "、".join(info["live_but_unapproved"])
+        )
     return _result("\n".join(lines), info, is_error=False)
 
 
 # ================================================================ 工具 7：quota_status（卡 201）
 
 
-def tool_quota_status(arguments: dict[str, Any], root: Path = ROOT
-                     ) -> tuple[str, dict[str, Any], bool]:
+def tool_quota_status(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """额度四态（卡 201）—— 按「记录时间 vs 现实时间」判，**只读、当场算、不探测**。
 
     ★ 用户原话：「429 了不要凭记忆确定是否 429，要根据记录时间和现实时间对比」。
@@ -872,6 +985,7 @@ def tool_quota_status(arguments: dict[str, Any], root: Path = ROOT
       不是人的记忆。四态都不猜：`未记录` 不当可用、`已过期` 不当可用。
     """
     import pool_quota  # noqa: PLC0415 —— 同一个 tools/ 目录
+
     card = str(arguments.get("card") or "").strip()
     model = str(arguments.get("model") or "").strip()
     now = arguments.get("now") or None
@@ -886,8 +1000,9 @@ def tool_quota_status(arguments: dict[str, Any], root: Path = ROOT
 # ============================================================ 工具 7.5：account_status（卡 E45）
 
 
-def tool_account_status(arguments: dict[str, Any], root: Path = ROOT
-                       ) -> tuple[str, dict[str, Any], bool]:
+def tool_account_status(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """账号账本读数（卡 E45）—— **只读账本，不探测、不联网、不动凭据**。
 
     ★ 为什么不在这里顺手探一下额度：探测要发网络请求、要用凭据、会被 429 咬；
@@ -908,8 +1023,10 @@ def tool_account_status(arguments: dict[str, Any], root: Path = ROOT
                 ledger = cand.resolve()
                 break
     if ledger is None:
-        text = ("没有：从当前目录与仓库根向上都没找到 infra/pool/accounts.toml"
-                "（账本在仓外，可用 TF_ACCOUNTS_TOML 指定；建账本见卡 E45 的 add 动作）。")
+        text = (
+            "没有：从当前目录与仓库根向上都没找到 infra/pool/accounts.toml"
+            "（账本在仓外，可用 TF_ACCOUNTS_TOML 指定；建账本见卡 E45 的 add 动作）。"
+        )
         return _result(text, {"found": False, "ledger": None}, is_error=True)
 
     try:
@@ -921,8 +1038,11 @@ def tool_account_status(arguments: dict[str, Any], root: Path = ROOT
     if wanted:
         rows = [r for r in rows if r["id"] == wanted]
         if not rows:
-            return _result(f"账本 {ledger.as_posix()} 里没有账号 {wanted!r}",
-                           {"found": True, "ledger": str(ledger), "accounts": []}, is_error=True)
+            return _result(
+                f"账本 {ledger.as_posix()} 里没有账号 {wanted!r}",
+                {"found": True, "ledger": str(ledger), "accounts": []},
+                is_error=True,
+            )
 
     lines = [f"账号账本（account_status）—— 读 {ledger.as_posix()}（★ 仓外文件，不进 git）"]
     for row in rows:
@@ -934,8 +1054,67 @@ def tool_account_status(arguments: dict[str, Any], root: Path = ROOT
     if not rows:
         lines.append("（这个筛选条件下一个号都没有）")
     lines.append("只读读数，不探测；要真探额度请人手动跑 tools/pool_accounts.py probe。")
-    return _result("\n".join(lines), {"found": True, "ledger": str(ledger), "accounts": rows},
-                   is_error=False)
+    return _result(
+        "\n".join(lines), {"found": True, "ledger": str(ledger), "accounts": rows}, is_error=False
+    )
+
+
+# ================================================= 工具 7.6：checkin_status（卡 E48）
+
+
+_CHECKIN_DIR = Path("gates") / "diag"
+
+
+def _today_local() -> str:
+    """本地时区（UTC+8）的今天 —— 与 `tools/pool_accounts.py checkin` 的留档口径一致。"""
+    from datetime import datetime, timedelta, timezone  # noqa: PLC0415
+
+    return datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+
+
+def tool_checkin_status(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
+    """今日签到读数（卡 E48）—— **只读留档 + 账本，不联网、永不触发签到**。
+
+    ★ 为什么不在这里顺手签一下：签到是**写动作**（会真领积分、会打上游、会被 429 咬）。
+      只读入口给"今天签了没"，签不签由人开口（卡 §1 的拉取式定形）。
+    """
+    import json  # noqa: PLC0415
+
+    date = str(arguments.get("date") or "").strip() or _today_local()
+    archive = root / _CHECKIN_DIR / f"checkin-{date}.json"
+
+    payload: dict[str, Any] = {"date": date, "archive": str(archive), "found": archive.is_file()}
+    lines = [f"今日签到（checkin_status）—— {date}"]
+    if archive.is_file():
+        try:
+            data = json.loads(archive.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            return _result(f"留档读不了：{exc}", {**payload, "found": False}, is_error=True)
+        rows = data.get("results") or []
+        payload.update({"applied": bool(data.get("applied")), "results": rows})
+        for row in rows:
+            tail = f"（{row['detail']}）" if row.get("detail") else ""
+            credit = f" +{row['credit']}" if row.get("credit") else ""
+            lines.append(
+                f"- {row.get('id')} · {row.get('platform')} · {row.get('kind')}{credit}{tail}"
+            )
+        counts: dict[str, int] = {}
+        for row in rows:
+            counts[str(row.get("kind"))] = counts.get(str(row.get("kind")), 0) + 1
+        mode = "已真签" if data.get("applied") else "只探未领"
+        lines.append(
+            f"小计（{mode}）："
+            + (" · ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "0 个号")
+        )
+    else:
+        lines.append(f"没有留档：{archive.as_posix()}")
+        lines.append(
+            "今天还没跑过签到（或那天没跑）——要签就人跑 tools/pool_accounts.py checkin --all。"
+        )
+    lines.append("只读读数：不触发签到、不联网。")
+    return _result(chr(10).join(lines), payload, is_error=False)
 
 
 # ================================================================ 工具 8：workbench_board（卡 213）
@@ -966,13 +1145,16 @@ def _board_line(section: str, reading: dict[str, Any]) -> str:
         return f"  · {section}：{len(val)} 项{extra}{tail}"
     if section == "gates" and isinstance(val, dict):
         items = val.get("items") or []
-        return (f"  · gates：ok={val.get('ok')} rev={val.get('rev')} 共 {len(items)} 道"
-                f"{(' —— ' + note) if note else ''}")
+        return (
+            f"  · gates：ok={val.get('ok')} rev={val.get('rev')} 共 {len(items)} 道"
+            f"{(' —— ' + note) if note else ''}"
+        )
     return f"  · {section}：{json.dumps(val, ensure_ascii=False, sort_keys=True)}"
 
 
-def tool_workbench_board(arguments: dict[str, Any], root: Path = ROOT
-                        ) -> tuple[str, dict[str, Any], bool]:
+def tool_workbench_board(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """工作台一份读数（卡 213）—— **只调** `tools/pipeline_view.py --json`，**不重写判据**。
 
     ★ 判据只许一份真源（卡 207 的 `pipeline_view` 把六块收成一份）：这里**不**读队列 /
@@ -983,8 +1165,11 @@ def tool_workbench_board(arguments: dict[str, Any], root: Path = ROOT
     """
     section = str(arguments.get("section") or "").strip() or None
     if section is not None and section not in WORKBENCH_SECTIONS:
-        text = (f"workbench_board：不认识的 section={section!r}；六块是："
-                + "、".join(WORKBENCH_SECTIONS) + "。不给 section 就一次给全。")
+        text = (
+            f"workbench_board：不认识的 section={section!r}；六块是："
+            + "、".join(WORKBENCH_SECTIONS)
+            + "。不给 section 就一次给全。"
+        )
         return _result(text, {"section": section, "reading": None}, is_error=True)
     argv = [sys.executable, "-X", "utf8", str(PIPELINE_VIEW), "--json", "--root", str(root)]
     command = _cmd_text(argv)
@@ -992,28 +1177,57 @@ def tool_workbench_board(arguments: dict[str, Any], root: Path = ROOT
     if code != 0:
         body = "\n".join(x for x in (out.strip(), err.strip()) if x) or "（子进程没有输出）"
         what = "没跑起来（起不来或超时）" if code is None else f"退出码 {code}（不是 0）"
-        text = (f"workbench_board：**没能拿到读数** —— 我是跑 `{command}`，它 {what}。\n"
-                f"pipeline_view 的原样输出：\n{body}\n"
-                f"（★ 我没拿一个空板子糊弄你：非零/超时就是没读到读数。）")
-        return _result(text, {"command": command, "exit_code": code, "section": section,
-                              "reading": None, "stdout": out, "stderr": err}, is_error=True)
+        text = (
+            f"workbench_board：**没能拿到读数** —— 我是跑 `{command}`，它 {what}。\n"
+            f"pipeline_view 的原样输出：\n{body}\n"
+            f"（★ 我没拿一个空板子糊弄你：非零/超时就是没读到读数。）"
+        )
+        return _result(
+            text,
+            {
+                "command": command,
+                "exit_code": code,
+                "section": section,
+                "reading": None,
+                "stdout": out,
+                "stderr": err,
+            },
+            is_error=True,
+        )
     try:
         reading = json.loads(out)
     except json.JSONDecodeError as exc:
-        text = (f"workbench_board：`{command}` 退 0，但 stdout 不是 JSON（{exc}）。"
-                f"原样输出：\n{out.strip()}")
-        return _result(text, {"command": command, "exit_code": code, "section": section,
-                              "reading": None, "stdout": out}, is_error=True)
+        text = (
+            f"workbench_board：`{command}` 退 0，但 stdout 不是 JSON（{exc}）。"
+            f"原样输出：\n{out.strip()}"
+        )
+        return _result(
+            text,
+            {
+                "command": command,
+                "exit_code": code,
+                "section": section,
+                "reading": None,
+                "stdout": out,
+            },
+            is_error=True,
+        )
     if not isinstance(reading, dict):
         text = f"workbench_board：`{command}` 的 JSON 顶层不是对象（是 {type(reading).__name__}）。"
-        return _result(text, {"command": command, "exit_code": code, "section": section,
-                              "reading": None}, is_error=True)
+        return _result(
+            text,
+            {"command": command, "exit_code": code, "section": section, "reading": None},
+            is_error=True,
+        )
     shown = [section] if section is not None else list(WORKBENCH_SECTIONS)
-    lines = [f"工作台读数（workbench_board）—— 来自 `{command}`"
-             f"（卡 207 的一份读数，六块）："]
+    lines = [f"工作台读数（workbench_board）—— 来自 `{command}`（卡 207 的一份读数，六块）："]
     lines += [_board_line(sec, reading) for sec in shown]
-    data = {"command": command, "exit_code": 0, "section": section,
-            "reading": _board_subset(reading, section)}
+    data = {
+        "command": command,
+        "exit_code": 0,
+        "section": section,
+        "reading": _board_subset(reading, section),
+    }
     return _result("\n".join(lines), data, is_error=False)
 
 
@@ -1046,69 +1260,93 @@ def _load_tasks() -> list[dict[str, Any]]:
     return out
 
 
-def tool_task_list(arguments: dict[str, Any], root: Path = ROOT
-                   ) -> tuple[str, dict[str, Any], bool]:
+def tool_task_list(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """所有任务一行：任务号 / 状态 / 成送申请进度 / 一句话 why（**只读**）。"""
     try:
         root_dir = _task_batch_dir()
         states = _load_tasks()
     except task.BatchError as exc:
-        return _result(f"task_list：读不了任务目录：{exc}", {"count": 0, "tasks": []},
-                       is_error=True)
+        return _result(
+            f"task_list：读不了任务目录：{exc}", {"count": 0, "tasks": []}, is_error=True
+        )
     head = f"任务栅栏（task_list）—— 读 {root_dir.as_posix()}"
     if not states:
-        return _result(head + "\n（一个任务都没有）",
-                       {"batch_dir": root_dir.as_posix(), "count": 0, "tasks": []},
-                       is_error=False)
+        return _result(
+            head + "\n（一个任务都没有）",
+            {"batch_dir": root_dir.as_posix(), "count": 0, "tasks": []},
+            is_error=False,
+        )
     lines = [head + f"（共 {len(states)} 个任务）"]
     rows: list[dict[str, Any]] = []
     for st in states:
         ok = task._ok(st)
         waived = list(st.get("waived") or [])
         missing = task._missing(st)
-        rows.append({"id": st.get("id"), "state": st.get("state"), "need": st.get("need"),
-                     "success": len(ok), "waived": waived, "missing": missing,
-                     "why": st.get("why")})
+        rows.append(
+            {
+                "id": st.get("id"),
+                "state": st.get("state"),
+                "need": st.get("need"),
+                "success": len(ok),
+                "waived": waived,
+                "missing": missing,
+                "why": st.get("why"),
+            }
+        )
         extra = f"（豁免 {len(waived)}）" if waived else ""
-        lines.append(f"  · {st.get('id')}  [{st.get('state')}]  成送申请 {len(ok)}/{st.get('need')}"
-                     f"{extra}  还缺：{missing or '（齐了）'}  —— {st.get('why')}")
+        lines.append(
+            f"  · {st.get('id')}  [{st.get('state')}]  成送申请 {len(ok)}/{st.get('need')}"
+            f"{extra}  还缺：{missing or '（齐了）'}  —— {st.get('why')}"
+        )
     data = {"batch_dir": root_dir.as_posix(), "count": len(states), "tasks": rows}
     return _result("\n".join(lines), data, is_error=False)
 
 
-def tool_task_status(arguments: dict[str, Any], root: Path = ROOT
-                     ) -> tuple[str, dict[str, Any], bool]:
+def tool_task_status(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """一个任务的详情：每张卡的**层**与**域**、交没交、history 尾部（**只读**）。"""
     task_id = str(arguments.get("task") or "").strip()
     if not task_id:
-        return _result("task_status：得给我一个任务号（task）。我是照 `task` 找 "
-                       "`<批目录>/<任务号>.json` 的。", {"task": None, "found": False},
-                       is_error=True)
+        return _result(
+            "task_status：得给我一个任务号（task）。我是照 `task` 找 `<批目录>/<任务号>.json` 的。",
+            {"task": None, "found": False},
+            is_error=True,
+        )
     try:
         root_dir = _task_batch_dir()
         sp = task.state_path(task_id)
     except task.BatchError as exc:
-        return _result(f"task_status：算不出任务目录：{exc}", {"task": task_id, "found": False},
-                       is_error=True)
+        return _result(
+            f"task_status：算不出任务目录：{exc}", {"task": task_id, "found": False}, is_error=True
+        )
     if not sp.exists():
         return _result(
             f"没有：{root_dir.as_posix()} 里没有任务 {task_id} 的状态文件（{sp.name}）"
             f"—— 还没注册，或不在这个树里（我不假装有）。",
             {"task": task_id, "found": False, "batch_dir": root_dir.as_posix()},
-            is_error=True)
+            is_error=True,
+        )
     try:
         st = task.read_json(sp)
         man = task.load_manifest(task_id)
     except task.BatchError as exc:
-        return _result(f"task_status：读不了任务 {task_id}：{exc}",
-                       {"task": task_id, "found": True}, is_error=True)
+        return _result(
+            f"task_status：读不了任务 {task_id}：{exc}",
+            {"task": task_id, "found": True},
+            is_error=True,
+        )
     claims = st.get("claims") or {}
     waived = list(st.get("waived") or [])
-    lines = [f"任务 {task_id}：{st.get('why')}",
-             f"  状态 **{st.get('state')}** · 层 {'、'.join(st.get('layers') or [])}"
-             f" · 自动 {st.get('auto')} · 期限 {st.get('deadline') or '（无）'}",
-             f"  成送申请 {len(task._ok(st))}/{st.get('need')} · 豁免 {len(waived)}"
-             f" · 还缺 {task._missing(st) or '（齐了）'}"]
+    lines = [
+        f"任务 {task_id}：{st.get('why')}",
+        f"  状态 **{st.get('state')}** · 层 {'、'.join(st.get('layers') or [])}"
+        f" · 自动 {st.get('auto')} · 期限 {st.get('deadline') or '（无）'}",
+        f"  成送申请 {len(task._ok(st))}/{st.get('need')} · 豁免 {len(waived)}"
+        f" · 还缺 {task._missing(st) or '（齐了）'}",
+    ]
     members: list[dict[str, Any]] = []
     for mem in man["member"]:
         mid = mem["id"]
@@ -1121,37 +1359,61 @@ def tool_task_status(arguments: dict[str, Any], root: Path = ROOT
             tag = "✗不通过"
         else:
             tag = "…还缺"
-        members.append({"id": mid, "layer": mem["layer"], "what": mem.get("what"),
-                        "paths": list(mem.get("paths") or []), "claim": kind,
-                        "waived": mid in waived})
-        lines.append(f"  [{tag:<8}] {mid} · 层 {mem['layer']} · 域 "
-                     f"{'、'.join(mem.get('paths') or [])}")
+        members.append(
+            {
+                "id": mid,
+                "layer": mem["layer"],
+                "what": mem.get("what"),
+                "paths": list(mem.get("paths") or []),
+                "claim": kind,
+                "waived": mid in waived,
+            }
+        )
+        lines.append(
+            f"  [{tag:<8}] {mid} · 层 {mem['layer']} · 域 {'、'.join(mem.get('paths') or [])}"
+        )
     history = list(st.get("history") or [])
     lines.append("  --- history（尾部）---")
     for row in history[-8:]:
         lines.append(f"  {row.get('at')} {row.get('from')}→{row.get('to')} {row.get('note')}")
-    data = {"task": task_id, "found": True, "state": st.get("state"), "why": st.get("why"),
-            "layers": st.get("layers"), "need": st.get("need"), "success": len(task._ok(st)),
-            "waived": waived, "missing": task._missing(st), "claims": claims,
-            "members": members, "history": history, "history_total": len(history),
-            "batch_dir": root_dir.as_posix()}
+    data = {
+        "task": task_id,
+        "found": True,
+        "state": st.get("state"),
+        "why": st.get("why"),
+        "layers": st.get("layers"),
+        "need": st.get("need"),
+        "success": len(task._ok(st)),
+        "waived": waived,
+        "missing": task._missing(st),
+        "claims": claims,
+        "members": members,
+        "history": history,
+        "history_total": len(history),
+        "batch_dir": root_dir.as_posix(),
+    }
     return _result("\n".join(lines), data, is_error=False)
 
 
-def tool_task_pool(arguments: dict[str, Any], root: Path = ROOT
-                   ) -> tuple[str, dict[str, Any], bool]:
+def tool_task_pool(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """待办登记表：还没定卡的活，**按层**（只读）。"""
     try:
         root_dir = _task_batch_dir()
         rows = task._load_pool()
     except task.BatchError as exc:
-        return _result(f"task_pool：读不了待办表：{exc}",
-                       {"found": False, "count": 0, "pool": []}, is_error=True)
+        return _result(
+            f"task_pool：读不了待办表：{exc}",
+            {"found": False, "count": 0, "pool": []},
+            is_error=True,
+        )
     if not rows:
-        return _result(f"待办登记（task_pool）—— {root_dir.as_posix()} 里没有待办"
-                       f"（pool.json 不存在或为空）。",
-                       {"batch_dir": root_dir.as_posix(), "found": True, "count": 0,
-                        "layers": {}, "pool": []}, is_error=False)
+        return _result(
+            f"待办登记（task_pool）—— {root_dir.as_posix()} 里没有待办（pool.json 不存在或为空）。",
+            {"batch_dir": root_dir.as_posix(), "found": True, "count": 0, "layers": {}, "pool": []},
+            is_error=False,
+        )
     by_layer: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_layer.setdefault(str(row.get("layer") or "（没写层）"), []).append(row)
@@ -1161,9 +1423,13 @@ def tool_task_pool(arguments: dict[str, Any], root: Path = ROOT
         for row in items:
             domain = "、".join(row.get("files") or []) or "——"
             lines.append(f"    · {row.get('id')}  {row.get('what')}  域 {domain}")
-    data = {"batch_dir": root_dir.as_posix(), "found": True, "count": len(rows),
-            "layers": {lay: [r.get("id") for r in items] for lay, items in by_layer.items()},
-            "pool": rows}
+    data = {
+        "batch_dir": root_dir.as_posix(),
+        "found": True,
+        "count": len(rows),
+        "layers": {lay: [r.get("id") for r in items] for lay, items in by_layer.items()},
+        "pool": rows,
+    }
     return _result("\n".join(lines), data, is_error=False)
 
 
@@ -1181,11 +1447,13 @@ def _backlog_for(root: Path) -> Any:
 
 def _how_to_pass() -> str:
     """干跑被咬时附给人看的"怎么才能通过"（逐条对得上守卫的措辞）。"""
-    return ("怎么才能通过：\n"
-            "  · 树被占 → 等那张卡的租约释放，或换一棵树（tree）；\n"
-            "  · 冲突域相交 → 换一张域不相交的卡，或等对方收工；\n"
-            "  · 日志已存在 → 由 wb_dispatch 自己挑 wb-<卡>.r2.jsonl，或先归档旧日志；\n"
-            "  · 门禁还在跑 → 等这趟门禁结束（用 lock_status 看进度）。")
+    return (
+        "怎么才能通过：\n"
+        "  · 树被占 → 等那张卡的租约释放，或换一棵树（tree）；\n"
+        "  · 冲突域相交 → 换一张域不相交的卡，或等对方收工；\n"
+        "  · 日志已存在 → 由 wb_dispatch 自己挑 wb-<卡>.r2.jsonl，或先归档旧日志；\n"
+        "  · 门禁还在跑 → 等这趟门禁结束（用 lock_status 看进度）。"
+    )
 
 
 def _dispatch_argv(card: str, spec: str, cwd: Path, model: str) -> list[str]:
@@ -1197,9 +1465,22 @@ def _dispatch_argv(card: str, spec: str, cwd: Path, model: str) -> list[str]:
       被自己判"被占"）⇒ 派活必被拒。带上它 = wb_dispatch **只跳过**守卫与占/还树，别的前置照走。
     """
     return [
-        sys.executable, "-X", "utf8", "tools/wb_dispatch.py",
-        "--card", card, "--spec", spec, "--cwd", str(cwd), "--model", model,
-        "--lean", "--detach", "--execute", "--already-reserved",
+        sys.executable,
+        "-X",
+        "utf8",
+        "tools/wb_dispatch.py",
+        "--card",
+        card,
+        "--spec",
+        spec,
+        "--cwd",
+        str(cwd),
+        "--model",
+        model,
+        "--lean",
+        "--detach",
+        "--execute",
+        "--already-reserved",
     ]
 
 
@@ -1209,8 +1490,13 @@ def _spawn_worker(argv: list[str], root: Path) -> tuple[int | None, str, str]:
     返回 `(退出码 | None, stdout, stderr)`；跑不起来**不抛**（调用方据 `OSError` 回滚租约）。
     """
     done = subprocess.run(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
-        argv, cwd=str(root), capture_output=True, text=True,
-        encoding="utf-8", errors="replace", **NO_WINDOW,
+        argv,
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        **NO_WINDOW,
     )
     return done.returncode, done.stdout or "", done.stderr or ""
 
@@ -1241,8 +1527,11 @@ def _console_encoding() -> str:
     那会让它回 `utf-8`（UTF-8 模式）→ 等于没修；`locale.getencoding()` 仍回系统区域编码（cp936）。
     ★ 解不开的字节仍走 `errors="replace"`，绝不让解码把掐进程这条路带崩。
     """
-    return (locale.getencoding() if hasattr(locale, "getencoding")
-            else locale.getpreferredencoding(False)) or "utf-8"
+    return (
+        locale.getencoding()
+        if hasattr(locale, "getencoding")
+        else locale.getpreferredencoding(False)
+    ) or "utf-8"
 
 
 def _image_name(pid: int) -> str | None:
@@ -1250,7 +1539,10 @@ def _image_name(pid: int) -> str | None:
     try:
         done = subprocess.run(  # noqa: S603 —— pid 来自本机登记，不是外部输入
             ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, encoding=_console_encoding(), errors="replace",
+            capture_output=True,
+            text=True,
+            encoding=_console_encoding(),
+            errors="replace",
             **NO_WINDOW,
         )
     except OSError:
@@ -1258,7 +1550,7 @@ def _image_name(pid: int) -> str | None:
     line = next((ln for ln in (done.stdout or "").splitlines() if ln.strip()), "")
     if done.returncode != 0 or not line.startswith('"'):
         return None
-    return line[1:line.index('"', 1)]
+    return line[1 : line.index('"', 1)]
 
 
 def _kill(pid: int) -> tuple[bool, str]:
@@ -1266,7 +1558,10 @@ def _kill(pid: int) -> tuple[bool, str]:
     try:
         done = subprocess.run(  # noqa: S603 —— pid 来自本机登记，不是外部输入
             ["taskkill", "/F", "/T", "/PID", str(int(pid))],
-            capture_output=True, text=True, encoding=_console_encoding(), errors="replace",
+            capture_output=True,
+            text=True,
+            encoding=_console_encoding(),
+            errors="replace",
             **NO_WINDOW,
         )
     except OSError as exc:
@@ -1274,8 +1569,9 @@ def _kill(pid: int) -> tuple[bool, str]:
     return done.returncode == 0, ((done.stdout or "") + (done.stderr or "")).strip()
 
 
-def tool_pool_dispatch(arguments: dict[str, Any], root: Path = ROOT
-                       ) -> tuple[str, dict[str, Any], bool]:
+def tool_pool_dispatch(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """派活：干跑守卫 → `registry.reserve` 先占位 → 起工人（`--detach`）→ 起不来就回滚。"""
     card = str(arguments.get("card") or "").strip()
     tree = str(arguments.get("tree") or "").strip()
@@ -1294,14 +1590,18 @@ def tool_pool_dispatch(arguments: dict[str, Any], root: Path = ROOT
     if hit is None or not hit.files:
         return _result(
             f"pool_dispatch：backlog 里没有卡 {card} 的冲突域 ⇒ 不许派活（别猜空域）。",
-            {"card": card, "found": False}, is_error=True)
+            {"card": card, "found": False},
+            is_error=True,
+        )
     files = list(hit.files)
     spec = str(arguments.get("spec") or "").strip() or hit.spec
     model = str(arguments.get("model") or "").strip() or wb_dispatch.DEFAULT_MODEL
-    if model not in wb_dispatch.MODEL_WHITELIST:      # ⑥ 模型白名单（硬闸门）
-        return _result(wb_dispatch.model_rejected(model),
-                       {"card": card, "model": model,
-                        "allowed": list(wb_dispatch.MODEL_WHITELIST)}, is_error=True)
+    if model not in wb_dispatch.MODEL_WHITELIST:  # ⑥ 模型白名单（硬闸门）
+        return _result(
+            wb_dispatch.model_rejected(model),
+            {"card": card, "model": model, "allowed": list(wb_dispatch.MODEL_WHITELIST)},
+            is_error=True,
+        )
 
     # ② 干跑：三条自家守卫 + 登记里的租约判据（import 调用，不 shell 出去）
     stamp = time.time()
@@ -1312,31 +1612,47 @@ def tool_pool_dispatch(arguments: dict[str, Any], root: Path = ROOT
     except registry.RegistryError as exc:
         return _result(f"pool_dispatch：读登记失败：{exc}", {"card": card}, is_error=True)
     problems = [
-        *guards.tree_guard(tree, live, stamp),                          # ① 一棵树一个写者
-        *guards.domain_guard(files, live, stamp),                       # ② 冲突域不相交
-        *guards.lock_guard(card, tree, lock_body, root=main_root),      # ③ 门禁还在跑
-        *guards.log_guard(log_path),                                    # ⑤ 日志不许覆盖
+        *guards.tree_guard(tree, live, stamp),  # ① 一棵树一个写者
+        *guards.domain_guard(files, live, stamp),  # ② 冲突域不相交
+        *guards.lock_guard(card, tree, lock_body, root=main_root),  # ③ 门禁还在跑
+        *guards.log_guard(log_path),  # ⑤ 日志不许覆盖
     ]
     if problems:
-        text = ("pool_dispatch：干跑没过，**不派活**（逐条原因）：\n"
-                + "".join(f"  · {item}\n" for item in problems) + "\n" + _how_to_pass())
-        return _result(text, {"card": card, "dispatched": False, "problems": problems},
-                       is_error=True)
+        text = (
+            "pool_dispatch：干跑没过，**不派活**（逐条原因）：\n"
+            + "".join(f"  · {item}\n" for item in problems)
+            + "\n"
+            + _how_to_pass()
+        )
+        return _result(
+            text, {"card": card, "dispatched": False, "problems": problems}, is_error=True
+        )
 
     # ③ 先占位（并发安全的关键：不能"先派活后登记"）
     try:
-        lease = registry.reserve(card, task=hit.task, tree=tree, files=files,
-                                 pool=str(arguments.get("pool") or ""), model=model,
-                                 log=log_path.as_posix(), note=str(arguments.get("note") or ""),
-                                 lock_body=lock_body)
+        lease = registry.reserve(
+            card,
+            task=hit.task,
+            tree=tree,
+            files=files,
+            pool=str(arguments.get("pool") or ""),
+            model=model,
+            log=log_path.as_posix(),
+            note=str(arguments.get("note") or ""),
+            lock_body=lock_body,
+        )
     except registry.GuardError as exc:
-        text = ("pool_dispatch：占位时被守卫拦下，**不派活**：\n"
-                + "".join(f"  · {item}\n" for item in exc.problems) + "\n" + _how_to_pass())
-        return _result(text, {"card": card, "dispatched": False, "problems": exc.problems},
-                       is_error=True)
+        text = (
+            "pool_dispatch：占位时被守卫拦下，**不派活**：\n"
+            + "".join(f"  · {item}\n" for item in exc.problems)
+            + "\n"
+            + _how_to_pass()
+        )
+        return _result(
+            text, {"card": card, "dispatched": False, "problems": exc.problems}, is_error=True
+        )
     except registry.RegistryError as exc:
-        return _result(f"pool_dispatch：登记失败（未派活）：{exc}", {"card": card},
-                       is_error=True)
+        return _result(f"pool_dispatch：登记失败（未派活）：{exc}", {"card": card}, is_error=True)
 
     # ④ 起工人（--detach：立刻返回）；起不来就回滚刚占的租约
     cwd = Path(tree) if Path(tree).is_absolute() else (main_root / tree if tree else main_root)
@@ -1345,8 +1661,11 @@ def tool_pool_dispatch(arguments: dict[str, Any], root: Path = ROOT
         code, out, err = _spawn_worker(argv, root)
     except OSError as exc:
         registry.release(card)
-        return _result(f"pool_dispatch：工人起不来，已回滚租约：{type(exc).__name__}: {exc}",
-                       {"card": card, "dispatched": False, "rolled_back": True}, is_error=True)
+        return _result(
+            f"pool_dispatch：工人起不来，已回滚租约：{type(exc).__name__}: {exc}",
+            {"card": card, "dispatched": False, "rolled_back": True},
+            is_error=True,
+        )
     preflight = (out + ("\n" + err if err.strip() else "")).strip()
     pid_hit = _PID_RE.search(preflight)
     if code != 0 or pid_hit is None:
@@ -1354,27 +1673,45 @@ def tool_pool_dispatch(arguments: dict[str, Any], root: Path = ROOT
         return _result(
             f"pool_dispatch：wb_dispatch 没把工人扔出去（退出码 {code}），"
             f"已回滚租约：\n{preflight}",
-            {"card": card, "dispatched": False, "rolled_back": True, "exit_code": code,
-             "preflight": preflight}, is_error=True)
+            {
+                "card": card,
+                "dispatched": False,
+                "rolled_back": True,
+                "exit_code": code,
+                "preflight": preflight,
+            },
+            is_error=True,
+        )
     pid = int(pid_hit.group(1))
     _record_pid(card, pid)
 
     dispatch_log = log_path.with_name(f"wb-{card}.dispatch.log")
-    data = {"card": card, "tree": tree or "（主树）", "cwd": cwd.as_posix(), "spec": spec,
-            "model": model, "log": log_path.as_posix(),
-            "dispatch_log": dispatch_log.as_posix(), "pid": pid, "preflight": preflight,
-            "lease": {**lease, "pid": pid}}
-    text = (f"pool_dispatch：卡 {card} 已派（pid {pid}）—— 来自 `{_cmd_text(argv)}`\n"
-            f"  log：{log_path.as_posix()}\n"
-            f"  dispatch.log：{dispatch_log.as_posix()}\n"
-            f"  租约：树 {tree or '（主树）'}｜域 {'、'.join(files)}\n"
-            f"  前置检查原文：\n{preflight}\n"
-            f"  ★ 用 job_status(card='{card}') 看进度。")
+    data = {
+        "card": card,
+        "tree": tree or "（主树）",
+        "cwd": cwd.as_posix(),
+        "spec": spec,
+        "model": model,
+        "log": log_path.as_posix(),
+        "dispatch_log": dispatch_log.as_posix(),
+        "pid": pid,
+        "preflight": preflight,
+        "lease": {**lease, "pid": pid},
+    }
+    text = (
+        f"pool_dispatch：卡 {card} 已派（pid {pid}）—— 来自 `{_cmd_text(argv)}`\n"
+        f"  log：{log_path.as_posix()}\n"
+        f"  dispatch.log：{dispatch_log.as_posix()}\n"
+        f"  租约：树 {tree or '（主树）'}｜域 {'、'.join(files)}\n"
+        f"  前置检查原文：\n{preflight}\n"
+        f"  ★ 用 job_status(card='{card}') 看进度。"
+    )
     return _result(text, data, is_error=False)
 
 
-def tool_pool_cancel(arguments: dict[str, Any], root: Path = ROOT
-                     ) -> tuple[str, dict[str, Any], bool]:
+def tool_pool_cancel(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """取消本机登记里那张卡的工人 —— **先核对 pid 身份**，不对就拒绝动手。"""
     card = str(arguments.get("card") or "").strip()
     reason = str(arguments.get("reason") or "").strip()
@@ -1386,27 +1723,38 @@ def tool_pool_cancel(arguments: dict[str, Any], root: Path = ROOT
         return _result(f"pool_cancel：读登记失败：{exc}", {"card": card}, is_error=True)
     hit = next((row for row in live if str(row.get("card")) == card), None)
     if hit is None:
-        return _result(f"pool_cancel：本机登记里没有卡 {card} 的**活租约** —— 不动手。",
-                       {"card": card, "found": False}, is_error=True)
+        return _result(
+            f"pool_cancel：本机登记里没有卡 {card} 的**活租约** —— 不动手。",
+            {"card": card, "found": False},
+            is_error=True,
+        )
     pid = hit.get("pid")
-    manual = (f"人工怎么做（先看清是不是本卡的活）：\n"
-              f"  tasklist /FI \"PID eq {pid or '<pid>'}\" /FO CSV\n"
-              f"  taskkill /F /T /PID {pid or '<pid>'}")
+    manual = (
+        f"人工怎么做（先看清是不是本卡的活）：\n"
+        f'  tasklist /FI "PID eq {pid or "<pid>"}" /FO CSV\n'
+        f"  taskkill /F /T /PID {pid or '<pid>'}"
+    )
     if not isinstance(pid, int):
         return _result(
             f"pool_cancel：这条租约里没记 pid（不是本 MCP 派的活）→ **拒绝动手**。\n{manual}",
-            {"card": card, "found": True, "pid": None}, is_error=True)
+            {"card": card, "found": True, "pid": None},
+            is_error=True,
+        )
     image = _image_name(pid)
     if image is None or image.lower() not in ("node.exe", "python.exe"):
         return _result(
             f"pool_cancel：**拒绝动手** —— PID {pid} 的映像是 {image or '（查不到，判不出）'}，"
             f"不是 node.exe / python.exe（pid 会被复用，杀错树 = 杀掉别人的东西）。\n{manual}",
-            {"card": card, "found": True, "pid": pid, "image": image}, is_error=True)
+            {"card": card, "found": True, "pid": pid, "image": image},
+            is_error=True,
+        )
     ok, detail = _kill(pid)
     if not ok:
-        return _result(f"pool_cancel：taskkill 没成功（pid {pid}），租约**没动**：{detail}",
-                       {"card": card, "pid": pid, "image": image, "killed": False},
-                       is_error=True)
+        return _result(
+            f"pool_cancel：taskkill 没成功（pid {pid}），租约**没动**：{detail}",
+            {"card": card, "pid": pid, "image": image, "killed": False},
+            is_error=True,
+        )
     note_path = diag_dir(root) / f"wb-{card}.cancel.txt"
     note_path.parent.mkdir(parents=True, exist_ok=True)
     note_path.write_text(
@@ -1415,13 +1763,23 @@ def tool_pool_cancel(arguments: dict[str, Any], root: Path = ROOT
         f"pid={pid}（映像 {image}）\n"
         f"为什么：{reason or '（没写理由）'}\n"
         f"结果：taskkill /F /T /PID {pid}\n{detail}\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     released = registry.release(card)
-    data = {"card": card, "pid": pid, "image": image, "killed": True, "released": released,
-            "cancel_txt": note_path.as_posix(), "reason": reason}
-    text = (f"pool_cancel：卡 {card} 的工人已结束（pid {pid}，映像 {image}）\n"
-            f"  已写 {note_path.as_posix()}（谁 / 什么时候 / 为什么）\n"
-            f"  租约{'已释放' if released else '本来就没有'}。")
+    data = {
+        "card": card,
+        "pid": pid,
+        "image": image,
+        "killed": True,
+        "released": released,
+        "cancel_txt": note_path.as_posix(),
+        "reason": reason,
+    }
+    text = (
+        f"pool_cancel：卡 {card} 的工人已结束（pid {pid}，映像 {image}）\n"
+        f"  已写 {note_path.as_posix()}（谁 / 什么时候 / 为什么）\n"
+        f"  租约{'已释放' if released else '本来就没有'}。"
+    )
     return _result(text, data, is_error=False)
 
 
@@ -1448,11 +1806,21 @@ def _capture(fn: Any) -> tuple[int, str]:
     return int(rc), buf.getvalue()
 
 
-def _claim_argv(root: Path, task_id: str, member: str, claim: str,
-                evidence: str, files_arg: str, why: str) -> list[str]:
+def _claim_argv(
+    root: Path, task_id: str, member: str, claim: str, evidence: str, files_arg: str, why: str
+) -> list[str]:
     """拼 `wb_task.py claim …` 的命令行 —— 与 `pool.task.cmd_claim` 的 CLI 口径**逐字一致**。"""
-    argv = [sys.executable, "-X", "utf8", str(root / "tools" / "wb_task.py"),
-            "claim", task_id, member, "--claim", claim]
+    argv = [
+        sys.executable,
+        "-X",
+        "utf8",
+        str(root / "tools" / "wb_task.py"),
+        "claim",
+        task_id,
+        member,
+        "--claim",
+        claim,
+    ]
     if evidence:
         argv += ["--evidence", evidence]
     if files_arg:
@@ -1464,8 +1832,10 @@ def _claim_argv(root: Path, task_id: str, member: str, claim: str,
 
 def _confirm_reject(tool: str, got: str, want: str, what: str) -> tuple[str, dict[str, Any], bool]:
     """`confirm` 与应值不一致 ⇒ **拒**，并把"为什么"说清（防手滑）。`what` 自带引号。"""
-    text = (f"{tool}：**拒绝** —— arguments.confirm（{got or '空'}）必须等于{what}（{want}）。"
-            f"这是防手滑：真要害的是一个任务，就把{what}再写一遍。")
+    text = (
+        f"{tool}：**拒绝** —— arguments.confirm（{got or '空'}）必须等于{what}（{want}）。"
+        f"这是防手滑：真要害的是一个任务，就把{what}再写一遍。"
+    )
     return _result(text, {"rejected": True, "confirm": got, "expected": want}, is_error=True)
 
 
@@ -1532,9 +1902,14 @@ def _reap_claim_tree(proc: subprocess.Popen[str]) -> dict[str, Any]:
             with contextlib.suppress(Exception):
                 proc.communicate(timeout=10)  # 排空管道（树已死 → 应立刻返回）
     residual = [pid for pid in pids if _pid_alive(pid) is True]
-    return {"alive_before": alive_before, "killed": killed, "pids": pids,
-            "kill_note": kill_note, "residual": residual,
-            "psutil": _optional_psutil() is not None}
+    return {
+        "alive_before": alive_before,
+        "killed": killed,
+        "pids": pids,
+        "kill_note": kill_note,
+        "residual": residual,
+        "psutil": _optional_psutil() is not None,
+    }
 
 
 def _reap_line(reap: dict[str, Any]) -> str:
@@ -1542,8 +1917,10 @@ def _reap_line(reap: dict[str, Any]) -> str:
     if not reap.get("alive_before"):
         return "  · 进程树：子进程已退出（没有活子树可带）。"
     pids = "、".join(str(p) for p in reap.get("pids") or []) or "（无）"
-    head = (f"  · 杀树：wb_dispatch.kill_tree → {reap.get('kill_note')}\n"
-            f"  · 目标 pid（直连 + 后代）：{pids}")
+    head = (
+        f"  · 杀树：wb_dispatch.kill_tree → {reap.get('kill_note')}\n"
+        f"  · 目标 pid（直连 + 后代）：{pids}"
+    )
     residual = reap.get("residual") or []
     if residual:
         left = "、".join(str(p) for p in residual)
@@ -1553,8 +1930,9 @@ def _reap_line(reap: dict[str, Any]) -> str:
     return f"{head}\n  · 残留：判不了（psutil 不在，没能核对）"
 
 
-def tool_task_register(arguments: dict[str, Any], root: Path = ROOT
-                       ) -> tuple[str, dict[str, Any], bool]:
+def tool_task_register(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """注册一个任务：`manifest_text`（整段 TOML）或 `manifest_path`；`confirm` = TOML 里的 id。"""
     text_arg = arguments.get("manifest_text")
     mpath = str(arguments.get("manifest_path") or "").strip()
@@ -1566,12 +1944,16 @@ def tool_task_register(arguments: dict[str, Any], root: Path = ROOT
         try:
             man = tomllib.loads(raw)
         except tomllib.TOMLDecodeError as exc:
-            return _result(f"task_register：预声明不是合法 TOML：{exc}",
-                           {"registered": False, "error": "toml"}, is_error=True)
+            return _result(
+                f"task_register：预声明不是合法 TOML：{exc}",
+                {"registered": False, "error": "toml"},
+                is_error=True,
+            )
         task_id = str(man.get("id") or "").strip()
         if not task_id:
-            return _result("task_register：预声明里没写 `id`（任务号）。",
-                           {"registered": False}, is_error=True)
+            return _result(
+                "task_register：预声明里没写 `id`（任务号）。", {"registered": False}, is_error=True
+            )
         if confirm != task_id:
             return _confirm_reject("task_register", confirm, task_id, "「TOML 里的 id」")
         try:
@@ -1580,42 +1962,57 @@ def tool_task_register(arguments: dict[str, Any], root: Path = ROOT
             tmp_src = batch / f".{task_id}.mcp-src.toml"
             tmp_src.write_text(raw, encoding="utf-8", newline="\n")
         except (task.BatchError, OSError) as exc:
-            return _result(f"task_register：写临时预声明失败：{exc}",
-                           {"registered": False}, is_error=True)
+            return _result(
+                f"task_register：写临时预声明失败：{exc}", {"registered": False}, is_error=True
+            )
         src = tmp_src
     elif mpath:
         src = Path(mpath)
         if not src.is_absolute():
             src = root / src
         if not src.exists():
-            return _result(f"task_register：找不到预声明文件：{src.as_posix()}",
-                           {"registered": False}, is_error=True)
+            return _result(
+                f"task_register：找不到预声明文件：{src.as_posix()}",
+                {"registered": False},
+                is_error=True,
+            )
         try:
             with src.open("rb") as fh:
                 man = tomllib.load(fh)
         except (tomllib.TOMLDecodeError, OSError) as exc:
-            return _result(f"task_register：读不了预声明：{exc}",
-                           {"registered": False}, is_error=True)
+            return _result(
+                f"task_register：读不了预声明：{exc}", {"registered": False}, is_error=True
+            )
         task_id = str(man.get("id") or "").strip()
         if not task_id:
-            return _result("task_register：预声明里没写 `id`（任务号）。",
-                           {"registered": False}, is_error=True)
+            return _result(
+                "task_register：预声明里没写 `id`（任务号）。", {"registered": False}, is_error=True
+            )
         if confirm != task_id:
             return _confirm_reject("task_register", confirm, task_id, "「TOML 里的 id」")
     else:
-        return _result("task_register：得给 `manifest_text`（整段 TOML）或 `manifest_path`。",
-                       {"registered": False}, is_error=True)
+        return _result(
+            "task_register：得给 `manifest_text`（整段 TOML）或 `manifest_path`。",
+            {"registered": False},
+            is_error=True,
+        )
 
     try:
         _rc, out = _capture(
-            lambda: task.cmd_register(argparse.Namespace(manifest=str(src), force=False)))
+            lambda: task.cmd_register(argparse.Namespace(manifest=str(src), force=False))
+        )
     except task.RefuseError as exc:
-        return _result("task_register：**拒收**：\n" + "\n".join(f"  · {r}" for r in exc.reasons),
-                       {"registered": False, "task": task_id, "reasons": exc.reasons},
-                       is_error=True)
+        return _result(
+            "task_register：**拒收**：\n" + "\n".join(f"  · {r}" for r in exc.reasons),
+            {"registered": False, "task": task_id, "reasons": exc.reasons},
+            is_error=True,
+        )
     except task.BatchError as exc:
-        return _result(f"task_register：注册失败（没落成）：{exc}",
-                       {"registered": False, "task": task_id}, is_error=True)
+        return _result(
+            f"task_register：注册失败（没落成）：{exc}",
+            {"registered": False, "task": task_id},
+            is_error=True,
+        )
     finally:
         if tmp_src is not None:
             with contextlib.suppress(OSError):
@@ -1623,18 +2020,28 @@ def tool_task_register(arguments: dict[str, Any], root: Path = ROOT
 
     st = task.read_json(task.state_path(task_id))
     manifest = task.manifest_path(task_id)
-    data = {"registered": True, "task": task_id, "state": st.get("state"), "need": st.get("need"),
-            "layers": st.get("layers"), "declared": st.get("declared"),
-            "manifest": manifest.as_posix(), "cli": out.strip()}
-    text = (f"task_register：任务 {task_id} 注册好了（复用 `pool.task.cmd_register`，进程内）。\n"
-            f"  {st.get('need')} 张卡 · 层 {'、'.join(st.get('layers') or [])}\n"
-            f"  ★ 放行判据：名单上每一张卡都交了**成功申请**（或缺席者被显式豁免）—— 不看数量。\n"
-            f"  预声明：{manifest.as_posix()}")
+    data = {
+        "registered": True,
+        "task": task_id,
+        "state": st.get("state"),
+        "need": st.get("need"),
+        "layers": st.get("layers"),
+        "declared": st.get("declared"),
+        "manifest": manifest.as_posix(),
+        "cli": out.strip(),
+    }
+    text = (
+        f"task_register：任务 {task_id} 注册好了（复用 `pool.task.cmd_register`，进程内）。\n"
+        f"  {st.get('need')} 张卡 · 层 {'、'.join(st.get('layers') or [])}\n"
+        f"  ★ 放行判据：名单上每一张卡都交了**成功申请**（或缺席者被显式豁免）—— 不看数量。\n"
+        f"  预声明：{manifest.as_posix()}"
+    )
     return _result(text, data, is_error=False)
 
 
-def tool_task_claim(arguments: dict[str, Any], root: Path = ROOT
-                    ) -> tuple[str, dict[str, Any], bool]:
+def tool_task_claim(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
     """一张卡交成送申请：`confirm` = task；★ 逐卡域守卫照走，越界**逐条点名**。"""
     task_id = str(arguments.get("task") or "").strip()
     member = str(arguments.get("member") or "").strip()
@@ -1650,21 +2057,37 @@ def tool_task_claim(arguments: dict[str, Any], root: Path = ROOT
     if not task_id:
         return _result("task_claim：得给我一个任务号（task）。", {"claimed": False}, is_error=True)
     if not member:
-        return _result("task_claim：得给我一个卡号（member）。",
-                       {"task": task_id, "claimed": False}, is_error=True)
+        return _result(
+            "task_claim：得给我一个卡号（member）。",
+            {"task": task_id, "claimed": False},
+            is_error=True,
+        )
     if claim not in ("success", "failed"):
-        return _result(f"task_claim：claim 只能是 success / failed（收到 {claim!r}）。",
-                       {"task": task_id, "member": member, "claimed": False}, is_error=True)
+        return _result(
+            f"task_claim：claim 只能是 success / failed（收到 {claim!r}）。",
+            {"task": task_id, "member": member, "claimed": False},
+            is_error=True,
+        )
     if confirm != task_id:
         return _confirm_reject("task_claim", confirm, task_id, "「任务号（task）」")
     argv = _claim_argv(root, task_id, member, claim, evidence, files_arg, why)
     try:
         proc = subprocess.Popen(  # noqa: S603 —— 命令是本地拼死的，不是外部输入
-            argv, cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, encoding="utf-8", errors="replace", **NO_WINDOW)
+            argv,
+            cwd=str(root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            **NO_WINDOW,
+        )
     except OSError as exc:
-        return _result(f"task_claim：子进程起不来：{type(exc).__name__}: {exc}",
-                       {"task": task_id, "member": member, "claimed": False}, is_error=True)
+        return _result(
+            f"task_claim：子进程起不来：{type(exc).__name__}: {exc}",
+            {"task": task_id, "member": member, "claimed": False},
+            is_error=True,
+        )
     try:
         out, err = proc.communicate(timeout=CLAIM_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
@@ -1676,18 +2099,23 @@ def tool_task_claim(arguments: dict[str, Any], root: Path = ROOT
             f"{_reap_line(reap)}\n"
             f"  ★ 别当成成功 —— 门禁/状态可能没落盘；稍后用 `task_status` 看现状。",
             {"task": task_id, "member": member, "claimed": False, "timeout": True, **reap},
-            is_error=True)
+            is_error=True,
+        )
     except OSError as exc:
         # 排空/读写出错也是失败路径 —— 同样把树带走（卡 136），别留孤儿。
         reap = _reap_claim_tree(proc)
         return _result(
             f"task_claim：子进程读写出错：{type(exc).__name__}: {exc}\n{_reap_line(reap)}",
-            {"task": task_id, "member": member, "claimed": False, **reap}, is_error=True)
+            {"task": task_id, "member": member, "claimed": False, **reap},
+            is_error=True,
+        )
     except Exception as exc:  # noqa: BLE001 —— 执行边界：任何别的失败也把树带走，别留孤儿
         reap = _reap_claim_tree(proc)
         return _result(
             f"task_claim：子进程执行出错：{type(exc).__name__}: {exc}\n{_reap_line(reap)}",
-            {"task": task_id, "member": member, "claimed": False, **reap}, is_error=True)
+            {"task": task_id, "member": member, "claimed": False, **reap},
+            is_error=True,
+        )
     rc = int(proc.returncode)
     out = out or ""
     err = err or ""
@@ -1699,16 +2127,35 @@ def tool_task_claim(arguments: dict[str, Any], root: Path = ROOT
         return _result(
             f"task_claim：卡 {member} 的申请**没跑通**（子进程退出码 {rc}）。\n{detail}\n"
             f"{_reap_line(reap)}",
-            {"task": task_id, "member": member, "claimed": False, "exit_code": rc,
-             "stdout": out, "stderr": err, **reap},
-            is_error=True)
+            {
+                "task": task_id,
+                "member": member,
+                "claimed": False,
+                "exit_code": rc,
+                "stdout": out,
+                "stderr": err,
+                **reap,
+            },
+            is_error=True,
+        )
     st = task.read_json(task.state_path(task_id))
-    data = {"task": task_id, "member": member, "claim": claim, "claimed": True,
-            "state": st.get("state"), "success": len(task._ok(st)), "need": st.get("need"),
-            "missing": task._missing(st), "exit_code": rc, "cli": out.strip()}
-    text = (f"task_claim：卡 {member} 的申请收了（走 `wb_task.py claim`，子进程）。\n"
-            f"  任务 {task_id} 现在：**{st.get('state')}** · 成功申请 "
-            f"{len(task._ok(st))}/{st.get('need')} · 还缺 {task._missing(st) or '（齐了）'}")
+    data = {
+        "task": task_id,
+        "member": member,
+        "claim": claim,
+        "claimed": True,
+        "state": st.get("state"),
+        "success": len(task._ok(st)),
+        "need": st.get("need"),
+        "missing": task._missing(st),
+        "exit_code": rc,
+        "cli": out.strip(),
+    }
+    text = (
+        f"task_claim：卡 {member} 的申请收了（走 `wb_task.py claim`，子进程）。\n"
+        f"  任务 {task_id} 现在：**{st.get('state')}** · 成功申请 "
+        f"{len(task._ok(st))}/{st.get('need')} · 还缺 {task._missing(st) or '（齐了）'}"
+    )
     return _result(text, data, is_error=False)
 
 
@@ -1724,6 +2171,7 @@ _HANDLERS: dict[str, Any] = {
     "pool_models": tool_pool_models,
     "quota_status": tool_quota_status,
     "account_status": tool_account_status,
+    "checkin_status": tool_checkin_status,
     "workbench_board": tool_workbench_board,
     "pool_dispatch": tool_pool_dispatch,
     "pool_cancel": tool_pool_cancel,
@@ -1735,8 +2183,7 @@ _HANDLERS: dict[str, Any] = {
 }
 
 
-def call_tool(name: str, arguments: dict[str, Any], *, root: Path = ROOT
-              ) -> dict[str, Any] | None:
+def call_tool(name: str, arguments: dict[str, Any], *, root: Path = ROOT) -> dict[str, Any] | None:
     """跑一个工具；`None` = **不认识这个名字**（调用方翻成 `-32602`，不崩）。
 
     ★ 写工具多两道门：① 服务端要有 `POOL_MCP_WRITE=1`（没有就当"没有这个工具"）；
@@ -1751,10 +2198,16 @@ def call_tool(name: str, arguments: dict[str, Any], *, root: Path = ROOT
             return None
         card = str(args.get("card") or "").strip()
         if not card or str(args.get("confirm") or "").strip() != card:
-            return {"content": [{"type": "text", "text":
-                    f"pool_mcp：写调用被拒 —— arguments.confirm 必须等于卡号"
-                    f"（card={card or '?'}）。这是防手滑：真要害的一张卡，就把卡号再写一遍。"}],
-                    "isError": True}
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"pool_mcp：写调用被拒 —— arguments.confirm 必须等于卡号"
+                        f"（card={card or '?'}）。这是防手滑：真要害的一张卡，就把卡号再写一遍。",
+                    }
+                ],
+                "isError": True,
+            }
     if name in TASK_WRITE_NAMES and not write_enabled():
         return None  # 没 env ⇒ 当"没有这个工具"（"存在性即授权"）；confirm 判据在 handler 里
     text, _data, is_error = handler(args, root)
@@ -1772,14 +2225,17 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
         "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
         "instructions": (
             "外包号池：默认是**只读**面 —— pool_plan / job_list / job_status / job_result / "
-            "lock_status / pool_models / quota_status / workbench_board，加任务面的 "
+            "lock_status / pool_models / quota_status / account_status / checkin_status / "
+            "workbench_board，加任务面的 "
             "task_list / task_status / task_pool，"
-            "十二个都只读（不写文件、不派活、不抢锁、不要 env）。"
+            "十三个都只读（不写文件、不派活、不抢锁、不要 env）。"
             "quota_status（卡 201）按「记录时间 vs 现实时间」判额度四态 —— "
             "限流中 / 已过期，需重新探测 / 余额耗尽 / 未记录，不猜、不探测。"
             "workbench_board（卡 213）把 pipeline_view 的一份读数（卡 / 门禁 / 判决 / 租约 / "
             "栅栏 / 卡树六块）收成一份端到会话内 —— 不给 section 就一次看全六块，"
             "某块缺来源会如实给 null + 说明（不洗成空对象）。"
+            "account_status（卡 E45）读仓外账号账本，checkin_status（卡 E48）读当天签到留档 —— "
+            "两个都只读、都不联网、都**不触发**任何动作（签到要人跑 pool_accounts.py checkin）。"
             "**写工具**（pool_dispatch 派活 / pool_cancel 取消 / task_register 注册任务 / "
             "task_claim 交成送申请）只有在**服务端**设了 POOL_MCP_WRITE=1 时才列出来 —— 那是"
             "「存在性即授权」：没这个 env 就没有写工具。号池写工具每次调用还要 arguments.confirm "
@@ -1827,8 +2283,11 @@ def handle(message: dict[str, Any], *, root: Path = ROOT) -> dict[str, Any] | No
         result = call_tool(name, arguments if isinstance(arguments, dict) else {}, root=root)
         if result is None:
             listed = "、".join(spec["name"] for spec in tool_list())
-            extra = ("" if write_enabled() else
-                     "（本服务现在只有只读工具 —— 写工具要服务端设 POOL_MCP_WRITE=1 才列出来。）")
+            extra = (
+                ""
+                if write_enabled()
+                else "（本服务现在只有只读工具 —— 写工具要服务端设 POOL_MCP_WRITE=1 才列出来。）"
+            )
             return bad(JSONRPC_INVALID_PARAMS, f"没有这个工具：{name!r}；有：{listed}。{extra}")
         return ok(result)
     return bad(JSONRPC_METHOD_NOT_FOUND, f"不支持的方法：{method}")
@@ -1847,8 +2306,8 @@ def _usage() -> str:
         "task_list / task_status(task) / task_pool。\n"
         "写工具（要服务端 env POOL_MCP_WRITE=1 才列出来）：pool_dispatch / pool_cancel"
         "（confirm=卡号）、task_register（confirm=TOML 里的 id）、task_claim（confirm=task）。\n"
-        "客户端配置（示例）：command = python，args = [\"-X\", \"utf8\", "
-        "\"tools/pool_mcp.py\"]。stdout 只走协议。\n"
+        '客户端配置（示例）：command = python，args = ["-X", "utf8", '
+        '"tools/pool_mcp.py"]。stdout 只走协议。\n'
     )
 
 
@@ -1908,10 +2367,14 @@ def serve(tail: list[str]) -> int:
             answer = handle(message, root=ROOT)
         except Exception as exc:  # noqa: BLE001 —— 协议边界：任何异常只换一条错误回话
             print(f"[pool_mcp] 处理这条消息时出错：{type(exc).__name__}: {exc}", file=sys.stderr)
-            answer = {"jsonrpc": "2.0", "id": message.get("id"),
-                      "error": {"code": JSONRPC_INTERNAL_ERROR,
-                                "message": (f"服务端处理这条消息时出错："
-                                            f"{type(exc).__name__}: {exc}")}}
+            answer = {
+                "jsonrpc": "2.0",
+                "id": message.get("id"),
+                "error": {
+                    "code": JSONRPC_INTERNAL_ERROR,
+                    "message": (f"服务端处理这条消息时出错：{type(exc).__name__}: {exc}"),
+                },
+            }
         if answer is not None:
             _emit_locked(answer)
 
@@ -1929,9 +2392,13 @@ def serve(tail: list[str]) -> int:
         try:
             line = _read_line()
         except UnicodeDecodeError as exc:
-            _emit_locked({"jsonrpc": "2.0", "id": None,
-                          "error": {"code": JSONRPC_PARSE_ERROR,
-                                    "message": f"这一行不是 UTF-8：{exc}"}})
+            _emit_locked(
+                {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {"code": JSONRPC_PARSE_ERROR, "message": f"这一行不是 UTF-8：{exc}"},
+                }
+            )
             continue
         if line is None:  # EOF：客户端走了
             break
@@ -1941,13 +2408,22 @@ def serve(tail: list[str]) -> int:
         try:
             message = json.loads(text)
         except ValueError as exc:
-            _emit_locked({"jsonrpc": "2.0", "id": None,
-                          "error": {"code": JSONRPC_PARSE_ERROR,
-                                    "message": f"不是合法 JSON：{exc}"}})
+            _emit_locked(
+                {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {"code": JSONRPC_PARSE_ERROR, "message": f"不是合法 JSON：{exc}"},
+                }
+            )
             continue
         if not isinstance(message, dict):
-            _emit_locked({"jsonrpc": "2.0", "id": None,
-                          "error": {"code": JSONRPC_PARSE_ERROR, "message": "消息必须是对象"}})
+            _emit_locked(
+                {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {"code": JSONRPC_PARSE_ERROR, "message": "消息必须是对象"},
+                }
+            )
             continue
         if _is_claim_call(message):
             pending.put(message)  # 慢工具 → 后台串行跑，主循环继续读

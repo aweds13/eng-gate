@@ -4040,7 +4040,7 @@ spec = "复盘/卡/卡E48-手动签到与聚合入口.md"
 files = ["tools/pool_accounts.py", "tools/pool/checkin.py", "tests/test_pool_checkin.py", "tools/wb_daily.py", "tools/pool_mcp.py"]
 depends = ["E45"]
 risk = "high"
-status = "pending"
+status = "done"
 [[cards]]
 id = "E44"
 task = "T-AG498"

@@ -1,4 +1,10 @@
 ## 变更
+- 新增 `tools/pool/checkin.py`：六态结论码 + 华为云 `SDK-HMAC-SHA256` 签名 + 五个平台的领取客户端，写动作只住这一个模块。
+- `tools/pool_accounts.py`：新增 `checkin` 子命令（`--all/--probe/--platform/--json/--spacing`）、留档原子写、账本健康态与额度样本回写。
+- `tools/wb_daily.py`：今日一页加一行 `[签到]`（无留档说「今天还没跑过」）。
+- `tools/pool_mcp.py`：新增只读工具 `checkin_status`（读留档，不联网、不触发签到），工具面 12 → 13。
+- `docs/subsystems/pool/README.md`：模块表与薄壳表各加一行（签到写动作的唯一住所）。
+## 变更
 - `scripts/run_gates.py`：门输入展开改用 `_expand()`（以 `/**` 结尾走 `rglob`），复用哈希不再随解释器版本变。
 - `scripts/run_gates.py`：新增 `MIN_PYTHON = (3, 11)` 与 `python_too_old()`，`main()` 开跑前拦旧解释器（退 2）。
 - `scripts/run_gates.py`：`gates/last.json` payload 新增 `python` 字段（`payload_env_fields()`）。

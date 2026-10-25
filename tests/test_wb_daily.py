@@ -25,8 +25,14 @@ import wb_daily  # noqa: E402,I001 —— 需要先把 tools/ 挂上
 
 
 def _git(*a: str, cwd: Path) -> None:
-    r = subprocess.run(["git", *a], cwd=str(cwd), capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
+    r = subprocess.run(
+        ["git", *a],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     assert r.returncode == 0, r.stderr
 
 
@@ -53,39 +59,68 @@ def _write_backlog(root: Path) -> None:
         '[[cards]]\nid = "003"\ntask = "T-G3"\ntitle = "样卡三"\n'
         'tree = ".wt/c"\nspec = "x.md"\nfiles = ["src/c.py"]\ndepends = []\n'
         'risk = "low"\nstatus = "done"\n',
-        encoding="utf-8")
+        encoding="utf-8",
+    )
 
 
 def _write_gates_last(root: Path) -> None:
     (root / "gates").mkdir(parents=True, exist_ok=True)
-    (root / "gates" / "last.json").write_text(json.dumps({
-        "ok": True, "rev": "deadbee",
-        "gates": [{"name": "pytest", "exit_code": 0, "seconds": 1.5}],
-    }, ensure_ascii=False), encoding="utf-8")
+    (root / "gates" / "last.json").write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "rev": "deadbee",
+                "gates": [{"name": "pytest", "exit_code": 0, "seconds": 1.5}],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
 
 def _write_registry(root: Path) -> None:
     diag = root / "gates" / "diag"
     diag.mkdir(parents=True, exist_ok=True)
-    (diag / "pool-registry.json").write_text(json.dumps([{
-        "card": "001", "tree": ".wt/a", "files": ["src/a.py"],
-        "owner": "host:1", "at": "2026-10-13T12:00:00", "ttl_seconds": 21600.0,
-    }], ensure_ascii=False), encoding="utf-8")
+    (diag / "pool-registry.json").write_text(
+        json.dumps(
+            [
+                {
+                    "card": "001",
+                    "tree": ".wt/a",
+                    "files": ["src/a.py"],
+                    "owner": "host:1",
+                    "at": "2026-10-13T12:00:00",
+                    "ttl_seconds": 21600.0,
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
 
-def _write_batch(root: Path, tid: str, state: str, declared: list[str],
-                 ok: list[str]) -> None:
+def _write_batch(root: Path, tid: str, state: str, declared: list[str], ok: list[str]) -> None:
     """一个批的**两处**：`.toml`（`fences` 的清单）+ `.json`（`state`/`claims`）。"""
     batch = root / "gates" / "diag" / "batch"
     batch.mkdir(parents=True, exist_ok=True)
-    members = "\n".join(f'[[member]]\nid = "{m}"\nlayer = "工具层"\npaths = ["tools/x.py"]\n'
-                        for m in declared)
+    members = "\n".join(
+        f'[[member]]\nid = "{m}"\nlayer = "工具层"\npaths = ["tools/x.py"]\n' for m in declared
+    )
     (batch / f"{tid}.toml").write_text(
-        f'id = "{tid}"\nwhy = "测试"\non_complete = ["draft"]\n\n{members}', encoding="utf-8")
-    (batch / f"{tid}.json").write_text(json.dumps({
-        "id": tid, "state": state, "declared": declared,
-        "claims": {m: "success" for m in ok},
-    }, ensure_ascii=False), encoding="utf-8")
+        f'id = "{tid}"\nwhy = "测试"\non_complete = ["draft"]\n\n{members}', encoding="utf-8"
+    )
+    (batch / f"{tid}.json").write_text(
+        json.dumps(
+            {
+                "id": tid,
+                "state": state,
+                "declared": declared,
+                "claims": {m: "success" for m in ok},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
 
 def _full_fake_repo(tmp_path: Path) -> Path:
@@ -103,16 +138,28 @@ def _full_fake_repo(tmp_path: Path) -> Path:
     batch = root / "gates" / "diag" / "batch"
     (batch / "B-BROKEN.toml").write_text(
         'id = "B-BROKEN"\nwhy = "测试"\non_complete = ["draft"]\n\n'
-        '[[member]]\nid = "M-1"\nlayer = "工具层"\npaths = ["tools/x.py"]\n', encoding="utf-8")
+        '[[member]]\nid = "M-1"\nlayer = "工具层"\npaths = ["tools/x.py"]\n',
+        encoding="utf-8",
+    )
     (batch / "B-BROKEN.json").write_text("{not json", encoding="utf-8")
     return root
 
 
 def _run_cli(root: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-X", "utf8", str(ROOT / "tools" / "wb_daily.py"),
-         "--root", str(root), *extra],
-        capture_output=True, text=True, encoding="utf-8", **wb_daily.NO_WINDOW,
+        [
+            sys.executable,
+            "-X",
+            "utf8",
+            str(ROOT / "tools" / "wb_daily.py"),
+            "--root",
+            str(root),
+            *extra,
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        **wb_daily.NO_WINDOW,
     )
 
 
@@ -236,7 +283,7 @@ def test_empty_lease_file_absent_vs_empty(tmp_path: Path) -> None:
     _make_repo(root)
     _write_backlog(root)
     _write_gates_last(root)
-    page = wb_daily.build_page(root)          # ★ 没写 pool-registry.json
+    page = wb_daily.build_page(root)  # ★ 没写 pool-registry.json
     assert page["leases"] == []
     assert "pool-registry.json" in page["leases_note"]
 
@@ -266,12 +313,19 @@ def test_render_has_all_sections(tmp_path: Path) -> None:
     """人读的一页：五块 + 内存 + 门禁 + 「今天该做」都在。"""
     root = _full_fake_repo(tmp_path)
     out = wb_daily.render(wb_daily.build_page(root))
-    for tag in ("[待派]", "[在飞]", "[批·等到提交]", "[已落没翻 status]", "[内存]", "[门禁]",
-                "⇒ 今天该做："):
+    for tag in (
+        "[待派]",
+        "[在飞]",
+        "[批·等到提交]",
+        "[已落没翻 status]",
+        "[内存]",
+        "[门禁]",
+        "⇒ 今天该做：",
+    ):
         assert tag in out, f"一页里缺 {tag}"
-    assert "workbacklog.toml" in out          # 来源写清
-    assert "1 张已落却没翻 status" in out     # 队列里的那张（002）
-    assert "历史批成员 1 个（无卡号，不进队列）：M-9" in out   # 无卡号形态 ⇒ 不进队列，不报 ★
+    assert "workbacklog.toml" in out  # 来源写清
+    assert "1 张已落却没翻 status" in out  # 队列里的那张（002）
+    assert "历史批成员 1 个（无卡号，不进队列）：M-9" in out  # 无卡号形态 ⇒ 不进队列，不报 ★
     assert "M-9" in out
 
 
@@ -307,7 +361,72 @@ def test_todo_says_nothing_when_nothing(tmp_path: Path) -> None:
         '[base]\nreviewed = "abc1234"\n\n'
         '[[cards]]\nid = "003"\ntask = "T-G3"\ntitle = "样卡三"\n'
         'tree = ".wt/c"\nspec = "x.md"\nfiles = ["src/c.py"]\ndepends = []\n'
-        'risk = "low"\nstatus = "done"\n', encoding="utf-8")
+        'risk = "low"\nstatus = "done"\n',
+        encoding="utf-8",
+    )
     page = wb_daily.build_page(root)
     assert page["todo"] == []
     assert "（读数里没读出要办的事）" in wb_daily.render(page)
+
+
+# -------------------------------------------------- 10. 今日签到一行（卡 E48 聚合入口）
+
+
+def test_checkin_line_says_not_run_when_no_archive(tmp_path: Path) -> None:
+    """没有当天留档 ⇒ 说「今天没跑过签到」，绝不拿账本里的 last_checkin 冒充。"""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_repo(root)
+    _write_gates_last(root)
+    _write_registry(root)
+    page = wb_daily.build_page(root)
+    assert page["checkin"]["found"] is False
+    assert "今天没跑过签到" in wb_daily.render(page)
+
+
+def test_checkin_line_reads_archive_counts(tmp_path: Path) -> None:
+    """留档在 ⇒ 一行报数（模式 + 总数 + 各结论码）。"""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_repo(root)
+    _write_gates_last(root)
+    _write_registry(root)
+    diag = root / "gates" / "diag"
+    diag.mkdir(parents=True, exist_ok=True)
+    day = wb_daily.datetime.date.today().isoformat()
+    (diag / f"checkin-{day}.json").write_text(
+        json.dumps(
+            {
+                "date": day,
+                "applied": True,
+                "results": [
+                    {"id": "a", "platform": "codearts", "kind": "claimed", "credit": 1000},
+                    {"id": "b", "platform": "workbuddy", "kind": "already-claimed"},
+                    {"id": "c", "platform": "trae", "kind": "uncertain"},
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    page = wb_daily.build_page(root)
+    assert page["checkin"]["found"] is True
+    assert page["checkin"]["counts"] == {"claimed": 1, "already-claimed": 1, "uncertain": 1}
+    text = wb_daily.render(page)
+    assert "[签到] 已真签 · 3 个号 · already-claimed=1 · claimed=1 · uncertain=1" in text
+
+
+def test_checkin_line_is_honest_about_broken_archive(tmp_path: Path) -> None:
+    """留档坏了 ⇒ 说读不了，不当成「没跑过」也不当成「签完了」。"""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_repo(root)
+    _write_gates_last(root)
+    _write_registry(root)
+    diag = root / "gates" / "diag"
+    diag.mkdir(parents=True, exist_ok=True)
+    day = wb_daily.datetime.date.today().isoformat()
+    (diag / f"checkin-{day}.json").write_text("{ 坏 json", encoding="utf-8")
+    page = wb_daily.build_page(root)
+    assert page["checkin"]["found"] is False
+    assert "留档读不了" in wb_daily.render(page)
