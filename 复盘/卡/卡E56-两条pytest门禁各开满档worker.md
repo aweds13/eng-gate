@@ -1,4 +1,17 @@
-# 卡 E56 —— 两条 pytest 门禁各开满档 worker，4 vCPU 上互相饿死
+# 卡 E56 —— 云机门禁的三处「看宿主脸色」（双门超时已换机消失，判据改判）
+
+> ★ **2026-10-26 换机后重判**（本文件 §3–§5 已按新判据重写，§7 保留原归因纠正，§1–§2 是当时现场）：
+>
+> - 原症状「两条 pytest 门禁同时撞 1800 s」**在新机器上不再出现**：pass15 对 `34eba7f2`
+>   全量 20 门跑完只用了 **417 s**（`pytest 395 s`、`pytest_chain` 未超时），
+>   ⇒ §7 的「4 vCPU 只兑现约 1 核算力」是旧机器的病，换机即解；§3 原方案「按泳道分薄 worker」
+>   **不必做**（做了也没坏处，但它不是通过云机门禁的必要条件，本卡不再承担）。
+> - 换机后仍剩 **2 条云机红**，与本卡的原始疼点不同源，是同一族缺陷（**判据读宿主机的仓外配置**，
+>   E49 家族的漏网之鱼）：`tests/test_pool_lib.py::test_wb_plan_cli_and_library_agree`
+>   与 `tests/test_wb_dispatch.py::test_account_auth_uses_the_profile_env_and_model`。
+> - 顺带在本机抓到第三个缺陷：`tests/test_wb_dispatch.py` 用 `import wb_session` 拿到的
+>   模块对象**不是**生产侧 `from tools import wb_session` 那一个 ⇒ 夹具 patch 打空，
+>   宿主带 `DSH_SESSION_ID` 时该文件 **69 条红**。
 
 > 来源：云机 pass14（对 `0f80f5bf`）实测。**不是**代码回归，是**调度容量**缺陷。
 
@@ -37,36 +50,51 @@ for name, cmd in light:
 本机 32 逻辑核能吸收这个超额（本地 `pytest 350 s ∥ pytest_chain 175 s` 双绿），
 云机 4 vCPU 不能 ⇒ 双门同时超时。E50 加第 20 道门时只验证了本机，没有 4 vCPU 的读数。
 
-## 3. 做成什么样
+## 3. 做成什么样（2026-10-26 重写）
 
-1. **pytest 家族共享一份 worker 预算**：`build_jobs` 时把「会同时跑的 pytest 门」数量算进来，
-   每道门拿 `max(1, tier // n_pytest_doors)`。判据放在 `scripts/run_gates.py` 里（`workers_for`
-   的入参加一个 `siblings` 或调用点先算好），**不许**在云机脚本里写死 `TF_PYTEST_WORKERS` ——
-   那是「环境渗进子进程」的老雷（卡 A266）。
-2. **门禁自己的日志要说清楚**：`[并行] workers=… dist=…（同泳道还有 N 道 pytest 门 ⇒ 各分 W）`，
-   让下一次看日志就能判断是不是被分薄了。
-3. 云机 `run_gate.sh` 不需要改（判据在库里，不在调用点）。
+三处，判据本身**一个字不改**，只把「它要问的东西」从宿主机搬进 tmp 或显式声明：
+
+1. **`tests/test_pool_lib.py::test_wb_plan_cli_and_library_agree` 加上同文件已有的
+   `hermetic` 夹具**（它把 `pool_plan.ROOT`/`DIAG` 指到 tmp，并在 tmp 里铺
+   `复盘/卡/卡160-台账接进门.md` 与 `batch/B-INVGATE.toml`）。这条用例是**唯一漏掉**该夹具的
+   同族用例 —— 开发机上 `gates/diag/batch/` 恰好有文件所以绿，云机 `git clean -xfdq` 之后红。
+2. **`tests/test_wb_dispatch.py::test_account_auth_uses_the_profile_env_and_model` 隔离模型开关**：
+   `monkeypatch.setenv("TF_MODEL_SWITCHES", <tmp 下不存在的路径>)` 先把宿主开关摘掉，
+   再用 `monkeypatch.setattr(wd, "ONE_OFF_MODELS", ("glm-5.2",))` 显式一次性授权该模型。
+   ⇒ 「闸门放行」不再取决于宿主机 `infra/pool/model-switches.toml` 里恰好开着谁。
+3. **`tests/test_wb_dispatch.py` 的 `wb_session` 导入改成 `from tools import wb_session`**，
+   与生产侧 `tools/wb_dispatch.py:2988` 同一条路径 ⇒ 同一个模块对象 ⇒
+   `isolated_session_ledger` 夹具的 `LEDGER` 真的指回 tmp_path。
+   另外把 `test_the_lease_is_returned_even_when_the_dispatcher_raises` 的**子进程**环境里的
+   `DSH_SESSION_ID` 摘掉（子进程拿不到进程内夹具，带指纹会先在会话闸被拦、优雅退 0 ⇒ 假红）。
 
 ## 4. 判据
 
-1. `workers_for(avail_gb=13.3, cpu=4, siblings=2)` ⇒ **2**；`siblings=1` ⇒ 4（单跑不吃亏）。
-2. `pytest` 与 `pytest_chain` 两条命令里的 `-n` 数值之和 ≤ 该档位（钉子直接解析 `build_jobs` 产物）。
-3. 反向验证：把 `siblings` 恒写成 1 ⇒ 钉子① 红（说明这条判据真的在起作用）。
-4. 云机复跑一趟（同 commit）：两道门都 exit=0，且 `pytest` 用时 < 1800 s。本机读数不许退化
-   （`pytest` 用时不得比现状 350 s 高出 20%）。
-5. 日志行含 `siblings` 或「同泳道」字样（可核对，不靠猜）。
+1. **反向验证（开关）**：把第 2 条的两行删掉、并保留宿主机开关文件存在 ⇒ 该用例在本机也红
+   （证明它原来真的在看宿主脸色）。
+2. **反向验证（夹具）**：把第 1 条的 `hermetic` 参数删掉，并在 `gates/diag/batch/` 取走
+   `B-INVGATE.toml` 的情况下跑 ⇒ 红（证明这条用例的红绿取决于外部目录）。
+3. **反向验证（模块身份）**：把第 3 条改回 `import wb_session`，在 `DSH_SESSION_ID` 有值的环境下
+   跑 `tests/test_wb_dispatch.py` ⇒ 69 条红（今天的实测就是这个数）。
+4. **云机复跑**：全量 20 门，`pytest` / `pytest_chain` 都 exit=0，`last.json ok=True`。
+5. 本机 `tests/test_wb_dispatch.py` 在 `DSH_SESSION_ID` 有值**与**无值两种环境下都 210 passed。
 
 ## 5. 不许做
 
-- 不许把 `DEFAULT_DOOR_TIMEOUT` 从 1800 调高来"解决"（那是把体温计泡热水）。
-- 不许在 `scripts/cloud/run_gate.sh` 里 export `TF_PYTEST_WORKERS`（环境渗进子进程，卡 A266 踩过）。
-- 不许把 `pytest_chain` 挪回默认门（那是 E50 刚拆出来的，覆盖面会丢）。
-- 不许把两道门改成串行就算了 —— 本机那趟并行是免费的一半，退回去等于白丢。
+- 不许把 `DEFAULT_DOOR_TIMEOUT` 从 1800 调高来「解决」超时（体温计泡热水）—— 换机后已不超时，更没理由。
+- 不许在 `scripts/cloud/run_gate.sh` 里 export `TF_PYTEST_WORKERS` / `TF_MODEL_SWITCHES`
+  （环境渗进子进程，卡 A266 踩过）。判据要自己在测试里声明依赖。
+- 不许把 `tests/test_pool_lib.py` 的两条用例改成 `skipif` 跳过（那是拿 skip 掩盖红，
+  `tests/test_cloud_sync.py::test_known_env_red_list_covers_only_b_class` 会咬）。
+- 不许为了让 `test_account_auth_...` 绿而把 `glm-5.2` 塞进 `MODEL_WHITELIST`
+  （名单是下限、轮换链，不是一次性授权；一次性授权走 `ONE_OFF_MODELS`）。
 
 ## 6. 证据
 
 - 云机读数：`gates/diag/cloud-gate-E49-p14.log`、`.wt/E49/gates/last.json`、`.wt/E49/gates/logs/pytest.log`
 - 代码位置：`scripts/run_gates.py:2283-2305`（泳道与起进程）、`:326 workers_for()`、`:157 DEFAULT_DOOR_TIMEOUT`
+- 2026-10-26 换机后：`gates/diag/cloud-gate-E49-p15.log`（417 s，只剩 2 条红）
+- 模块身份实测：`sys.path.insert(0,'tools'); import wb_session` 与 `from tools import wb_session` 是**两个不同对象**
 - 前一轮对照：pass13（单道 pytest，4 worker）`pytest 807 s` 通过
 
 ## 7. 归因纠正（2026-10-26 实测，主控补记）

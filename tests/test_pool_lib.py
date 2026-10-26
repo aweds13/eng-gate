@@ -240,7 +240,9 @@ def test_models_find_and_load(tmp_path: Path) -> None:
 # ================================================================ ② CLI 与库同一结论
 
 
-def test_wb_plan_cli_and_library_agree(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+def test_wb_plan_cli_and_library_agree(
+    tmp_path: Path, capsys: pytest.CaptureFixture, hermetic: Path
+) -> None:
     """`wb_plan plan` 的 CLI 输出 == 直接调 `pool.plan.plan_report` 的 stdout（逐字）。"""
     path = _write_backlog(tmp_path)
     code = wb_plan.main(["plan", "--concurrency", "2", "--backlog", str(path)])

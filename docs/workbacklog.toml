@@ -4050,13 +4050,13 @@ depends = ["E35"]
 [[cards]]
 id = "E56"
 task = "T-AG508"
-title = "两条 pytest 门禁各开满档 worker：4 vCPU 上双门同时硬超时"
+title = "云机门禁的三处宿主依赖：CLI 一致性用例缺 hermetic 夹具 / 模型开关泄进测试 / wb_session 双模块对象"
 tree = ".wt/E56"
 spec = "复盘/卡/卡E56-两条pytest门禁各开满档worker.md"
-files = ["scripts/run_gates.py", "tests/test_run_gates_workers.py"]
-risk = "high"
+files = ["tests/test_pool_lib.py", "tests/test_wb_dispatch.py"]
+risk = "mid"
 depends = ["E50"]
-status = "pending"
+status = "done"
 [[cards]]
 id = "E55"
 task = "T-AG507"

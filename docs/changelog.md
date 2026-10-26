@@ -1,3 +1,8 @@
+## 卡 E56 云机门禁的三处宿主依赖（T-AG508）
+
+- `tests/test_pool_lib.py::test_wb_plan_cli_and_library_agree` 补 `hermetic` 夹具：本机跑到别人的批次台账时会红，云机无此目录反而绿。
+- `tests/test_wb_dispatch.py::test_account_auth_uses_the_profile_env_and_model` 显式把 `TF_MODEL_SWITCHES` 指向不存在的路径：宿主机 `infra/pool/model-switches.toml` 里的 `glm-5.2=true` 会漏进判据。
+- `tests/test_wb_dispatch.py` 的租约子进程摘掉 `DSH_SESSION_ID`：子进程拿不到进程内夹具，带指纹会先在会话归属闸被拦、优雅退 0，断言假红。
 ## 卡 E55 门禁池队列的锁等待 10 s → 30 s（T-AG507）
 
 - `tools/gate_pool.py` 新增 `LOCK_WAIT_S = 30.0`（`PoolQueue.timeout` 的默认值改成它），`tools/pool/queue.py` 同值新增 `LOCK_WAIT_S`（`_locked()` 默认值改成它）——两处必须同值，由钉子守住。

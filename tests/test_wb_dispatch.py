@@ -29,7 +29,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import wb_dispatch as wd  # noqa: E402 —— 需要先用 sys.path 把 tools/ 挂上
-import wb_session as wb_session  # noqa: E402 —— 卡 E17：账本要能指到 tmp_path
+
+from tools import wb_session as wb_session  # noqa: E402 —— 卡 E17：账本要能指到 tmp_path
+
+# ★ 卡 E56：`wb_session` 必须写成 `from tools import ...` —— 生产侧
+#   `wb_dispatch.main()` 走的就是这条；而 `import wb_session`（`tools/` 在 sys.path 上）
+#   拿到的是**另一个模块对象**，夹具 patch 错对象 ⇒ `LEDGER` 指不回 tmp_path，
+#   宿主一旦带 `DSH_SESSION_ID`，那道闸就去读真账本，把本文件 69 条用例判红。
 
 
 class _Done:
@@ -3057,9 +3063,14 @@ def test_the_lease_is_returned_even_when_the_dispatcher_raises(sandbox: Path) ->
     ★ 为什么必须**子进程**真跑：`atexit` 只在**解释器退出**时跑；进程内抛异常时它还没跑，
       就地断言会假红。子进程炸了（退出码非 0）而登记里没有卡 001 = 兜底真生效。
     """
+    # ★ 卡 E56：子进程拿不到 `isolated_session_ledger` 夹具（那是进程内的），所以这里
+    #   把 `DSH_SESSION_ID` 摘掉 —— 本用例判的是 atexit 还租约，不是会话归属闸；
+    #   带指纹时子进程会先在 `wb_session.claim` 那道闸被拦、优雅退 0，断言就假红。
+    env = {k: v for k, v in os.environ.items() if k != "DSH_SESSION_ID"}
     done = subprocess.run([sys.executable, "-X", "utf8", "-c", _LEASE_SUBPROCESS,
                            str(ROOT / "tools"), str(sandbox)],
-                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+                          capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          env=env)
     assert done.returncode != 0, f"这个子进程本来就该炸：\n{done.stdout}\n{done.stderr}"
     assert (sandbox / "reached_runner.txt").exists(), "没跑到工人那一步 ⇒ 这条用例没咬到点上"
     assert "[还树] 租约已释放" in done.stdout, done.stdout + done.stderr
@@ -3429,7 +3440,15 @@ def test_auth_ok_probe_carries_the_model_when_given(monkeypatch) -> None:
 
 
 def test_account_auth_uses_the_profile_env_and_model(sandbox: Path, monkeypatch) -> None:
-    """F1 集成：给了 --account --model ⇒ auth_ok 收到 profile 环境 + 那个 model（判对对象）。"""
+    """F1 集成：给了 --account --model ⇒ auth_ok 收到 profile 环境 + 那个 model（判对对象）。
+
+    ★ 卡 E56（2026-10-26）：这条原来只靠宿主机 `infra/pool/model-switches.toml` 恰好打开了
+      `glm-5.2` 才绿 —— 云门禁机上没有那份文件（`git clean -xfdq` 也没了），`model_rejected`
+      判 `glm-5.2` 未授权、`main()` 退 2，`assert 2 == 0`。判据本身不动，把开关**隔离**掉
+      （指到不存在的路径），再显式把 `glm-5.2` 一次性授权 —— 于是「闸门放行」不再看环境脸色。
+    """
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(sandbox / "absent-switches.toml"))
+    monkeypatch.setattr(wd, "ONE_OFF_MODELS", ("glm-5.2",))
     stub = _account_stub(sandbox, {"demo": _demo_vars()})
     monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
     seen: dict = {}
