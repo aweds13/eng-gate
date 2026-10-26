@@ -4056,7 +4056,7 @@ spec = "复盘/卡/卡E57-测试把本机会话账本当真输入.md"
 files = ["tests/conftest.py", "tests/test_wb_session.py", "docs/subsystems/ci/测试流程.md"]
 risk = "mid"
 depends = []
-status = "pending"
+status = "done"
 [[cards]]
 id = "E56"
 task = "T-AG508"

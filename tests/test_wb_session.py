@@ -245,3 +245,44 @@ def test_concurrent_saves_keep_the_ledger_readable(tmp_path, monkeypatch):
     assert not errors, f"并发写抛了：{errors[:1]}"
     assert json.loads(ledger.read_text(encoding="utf-8"))["version"] == 1
     assert not list(ledger.parent.glob("*.tmp")), "并发写完后不该留下 tmp 文件"
+
+# ------------------------------------------- 卡 E57：宿主指纹不是被测物
+
+
+def test_host_fingerprint_is_stripped_by_the_global_fixture() -> None:
+    """★ 正面：`tests/conftest.py` 的 autouse 夹具把宿主指纹摘掉了。
+
+    没有这一条，门禁在带 `DSH_SESSION_ID` 的 shell 里跑就会去读**本机**那份真账本
+    （`gates/diag/session-leases.json`，gitignored），判据于是吃进「这台机器上谁持有哪张卡」。
+    """
+    assert os.environ.get("DSH_SESSION_ID", "") == ""
+    assert wb_session.session_id() == ""
+
+
+def test_real_ledger_is_never_consulted_without_a_fingerprint(tmp_path, monkeypatch) -> None:
+    """★ 正面：没有指纹时 `claim()` 一律放行、且**一个字都不写**真账本。"""
+    existed_before = wb_session.LEDGER.exists()
+    ok, msg = wb_session.claim("E57-PROBE")
+    assert (ok, msg) == (True, "")
+    assert wb_session.LEDGER.exists() == existed_before, "工人口径不该动真账本"
+
+
+def test_the_gate_bites_again_once_a_fingerprint_is_back(tmp_path, monkeypatch) -> None:
+    """★ 反向（证明夹具是承重的，不是摆设）：把指纹塞回来，同一个闸立刻开始判归属。"""
+    _use_tmp(tmp_path, monkeypatch)
+    monkeypatch.setenv("DSH_SESSION_ID", "sess-e57-host")
+    assert wb_session.claim("E57-PROBE") == (True, "卡 E57-PROBE 归当前窗口（首次接触即认领）")
+    monkeypatch.setenv("DSH_SESSION_ID", "sess-e57-other")
+    ok, msg = wb_session.claim("E57-PROBE")
+    assert not ok and "另一个对话窗口" in msg
+
+
+def test_conftest_keeps_the_host_fingerprint_stripper() -> None:
+    """★ 防回退钉子：`tests/conftest.py` 里那个 autouse 夹具被删掉 ⇒ 红。"""
+    from pathlib import Path
+
+    src = Path("tests/conftest.py").read_text(encoding="utf-8")
+    assert "def _no_host_session_id" in src
+    assert 'monkeypatch.delenv("DSH_SESSION_ID", raising=False)' in src
+    fixture_at = src.index("def _no_host_session_id")
+    assert "@pytest.fixture(autouse=True)" in src[:fixture_at][-400:], "夹具必须 autouse"

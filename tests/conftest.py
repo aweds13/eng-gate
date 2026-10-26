@@ -123,6 +123,27 @@ def _no_host_config_env(monkeypatch: pytest.MonkeyPatch) -> None:
     strip_host_config_env(monkeypatch)
 
 
+## 宿主给对话窗口的**指纹**也不是被测物（卡 E57 · T-AG509）
+#
+# `DSH_SESSION_ID` 是宿主注入的稳定窗口标识。门禁一旦在带指纹的 shell 里跑，
+# `tools/wb_session.py` 就认为进程是「另一个对话窗口」而不是工人/CLI，于是
+# `claim()` 走「换手要显式 `--take-over`」那条分支 —— 而它的账本
+# `gates/diag/session-leases.json` 是 gitignored 的**本机状态**（当时 60 张卡里
+# 58 张还挂着上一窗口）。两个条件一叠，判据就吃进了「这台机器上谁持有哪张卡」：
+# 2026-10-26 落一份纯文档改动时，`test_mem_guard` / `test_model_registry` /
+# `test_wb_land` / `test_wb_watch` 因此集体假红 9 条，与改动内容毫无关系。
+#
+# ⇒ 统一摘掉指纹，**需要它的用例自己 `monkeypatch.setenv`**（`tests/test_wb_session.py`
+#   就是这么写的，不会被本夹具覆盖）。这与 `wb_session` 自己的口径一致：
+#   「没有指纹就当工人/CLI，一律放行」。
+
+
+@pytest.fixture(autouse=True)
+def _no_host_session_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """把宿主的窗口指纹从测试进程里摘掉（判据钉在 `tests/test_wb_session.py`）。"""
+    monkeypatch.delenv("DSH_SESSION_ID", raising=False)
+
+
 ## 快慢分层（卡 E50 段2 · 并 E32）：`chain` 标记的**唯一清单**
 #
 # 为什么清单收在 `conftest.py` 一处，而不是逐个用例头上加 `@pytest.mark.chain`：
