@@ -3993,6 +3993,17 @@ risk = "high"
 status = "pending"
 
 [[cards]]
+id = "E41"
+task = "T-AG506"
+title = "号池判决不许把 429 读成「正常收工」：看守与派活共用同一份额度判据"
+tree = ".wt/E41"
+spec = "复盘/卡/卡E41-号池判决不许把429读成正常收工.md"
+files = ["tools/wb_watch.py", "tests/test_wb_watch.py", "docs/subsystems/pool/事后判据清单.md"]
+status = "pending"
+risk = "mid"
+depends = []
+
+[[cards]]
 id = "E53"
 task = "T-AG503"
 title = "文档门禁基线两侧不对称：基线采自卡树、判据在主树跑，ignored 源文件照扫 ⇒ 主树必红"
