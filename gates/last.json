@@ -1,107 +1,102 @@
 {
-  "rev": "cf139920",
+  "rev": "78c11d62",
   "python": "3.14.6",
-  "tree": "9edfdeef84b622c24b1dd384c1359ce5e2112b2f",
+  "tree": "9c0bf912a1b5908e8e4deaf2e2bc4fcb226b44b7",
   "tree_scope": "worktree-minus-gates",
-  "parent": "1abae0bb",
-  "branch": "HEAD",
-  "dirty": false,
-  "at": "2026-10-26T16:36:15",
+  "parent": "78c11d62",
+  "branch": "line/impl-v1",
+  "dirty": true,
+  "at": "2026-10-26T17:09:38",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
   "ok": true,
   "workers": 2,
   "pytest_mode": "并行（pytest-xdist，-n 2）",
-  "slow_doors": [
-    {
-      "name": "pytest",
-      "seconds": 615.41
-    }
-  ],
+  "slow_doors": [],
   "gates": [
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 615.41,
-      "summary": "3427 passed, 1512 warnings in 612.86s (0:10:12)"
+      "seconds": 572.14,
+      "summary": "3427 passed, 1511 warnings in 570.56s (0:09:30)"
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 42.4,
-      "summary": "2 passed, 3449 deselected, 1 warning in 40.08s"
+      "seconds": 31.41,
+      "summary": "2 passed, 3449 deselected, 1 warning in 29.70s"
     },
     {
       "name": "pytest_chain",
       "exit_code": 0,
-      "seconds": 219.17,
-      "summary": "22 passed, 3429 deselected, 1 warning in 217.02s (0:03:37)"
+      "seconds": 194.1,
+      "summary": "22 passed, 3429 deselected, 1 warning in 192.61s (0:03:12)"
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 0.44,
+      "seconds": 0.26,
       "summary": "All checks passed!"
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 2.36,
+      "seconds": 1.27,
       "summary": "Success: no issues found in 58 source files"
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 12.89,
+      "seconds": 5.74,
       "summary": "SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）"
     },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 11.12,
+      "seconds": 2.57,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）"
     },
     {
       "name": "invariants",
       "exit_code": 0,
-      "seconds": 0.53,
+      "seconds": 0.33,
       "summary": "[OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）"
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 0.64,
+      "seconds": 0.38,
       "summary": "OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位"
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 8.13,
+      "seconds": 3.05,
       "summary": "LAYER CHECKS: PASS ✅"
     },
     {
       "name": "contrast",
       "exit_code": 0,
-      "seconds": 0.62,
+      "seconds": 0.38,
       "summary": "对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）"
     },
     {
       "name": "style",
       "exit_code": 0,
-      "seconds": 0.6,
+      "seconds": 0.36,
       "summary": "风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）"
     },
     {
       "name": "ui_text",
       "exit_code": 0,
-      "seconds": 0.58,
+      "seconds": 0.35,
       "summary": "[OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）"
     },
     {
       "name": "commands",
       "exit_code": 0,
-      "seconds": 2.15,
+      "seconds": 1.22,
       "summary": "说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。"
     },
     {
@@ -115,7 +110,7 @@
     {
       "name": "proxy",
       "exit_code": 0,
-      "seconds": 2.12,
+      "seconds": 1.13,
       "summary": "[OK  ] 5 条全新鲜（阈值 30 天）"
     },
     {
@@ -159,7 +154,13 @@
     "render": "33f26cd463f18439",
     "ui_flow": "cb3f022def76bb06"
   },
-  "untracked": [],
-  "trailer": "pytest 3427 passed, 1512 warnings in 612.86s (0:10:12); acceptance 2 passed, 3449 deselected, 1 warning in 40.08s; pytest_chain 22 passed, 3429 deselected, 1 warning in 217.02s (0:03:37); ruff All checks passed!; mypy Success: no issues found in 58 source files; check_layers_selftest SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）; audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; check_layers LAYER CHECKS: PASS ✅; contrast 对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。; ui_dom_probe 复用上次通过判定（输入未变 fbee641f843c539a）; proxy [OK  ] 5 条全新鲜（阈值 30 天）; lf1_live 复用上次通过判定（输入未变 3e06cfb0a0741f6c）; web_live 复用上次通过判定（输入未变 58d1656d4d8aac98）; render 复用上次通过判定（输入未变 33f26cd463f18439）; ui_flow 复用上次通过判定（输入未变 cb3f022def76bb06）",
-  "sealed_at": "2026-10-26T16:45:29"
+  "untracked": [
+    "DSH-窗口化方案.md",
+    "Hermes-数据位置.md",
+    "dsh-skill-docs-report.zh.md",
+    "tools/check_mapping.py",
+    "tools/replay_worker_edits.py",
+    "tools/sync_worker_skills.py"
+  ],
+  "trailer": "pytest 3427 passed, 1511 warnings in 570.56s (0:09:30); acceptance 2 passed, 3449 deselected, 1 warning in 29.70s; pytest_chain 22 passed, 3429 deselected, 1 warning in 192.61s (0:03:12); ruff All checks passed!; mypy Success: no issues found in 58 source files; check_layers_selftest SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）; audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; check_layers LAYER CHECKS: PASS ✅; contrast 对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。; ui_dom_probe 复用上次通过判定（输入未变 fbee641f843c539a）; proxy [OK  ] 5 条全新鲜（阈值 30 天）; lf1_live 复用上次通过判定（输入未变 3e06cfb0a0741f6c）; web_live 复用上次通过判定（输入未变 58d1656d4d8aac98）; render 复用上次通过判定（输入未变 33f26cd463f18439）; ui_flow 复用上次通过判定（输入未变 cb3f022def76bb06）"
 }
