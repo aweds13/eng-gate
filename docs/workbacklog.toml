@@ -4048,6 +4048,16 @@ risk = "low"
 depends = ["E35"]
 
 [[cards]]
+id = "E56"
+task = "T-AG508"
+title = "两条 pytest 门禁各开满档 worker：4 vCPU 上双门同时硬超时"
+tree = ".wt/E56"
+spec = "复盘/卡/卡E56-两条pytest门禁各开满档worker.md"
+files = ["scripts/run_gates.py", "tests/test_run_gates_workers.py"]
+risk = "high"
+depends = ["E50"]
+status = "pending"
+[[cards]]
 id = "E55"
 task = "T-AG507"
 title = "门禁池队列的锁等待 10 s 偏紧：高负载下把记账写成丢行"

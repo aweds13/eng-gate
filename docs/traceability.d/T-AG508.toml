@@ -1,0 +1,16 @@
+[entries."T-AG508"]
+id = "T-AG508"
+title = "卡 E56 —— 两条 pytest 门禁各开满档 worker（4 vCPU 上双门同时硬超时）"
+group = "ENGINEERING"
+status = "todo"
+gaps = [
+  "「按泳道分薄 worker」今天是结构性无判据的：`scripts/run_gates.py` 的 `workers_for()` 只按可用内存分档，不知道同泳道还有另一道 pytest 门在起 worker（参见 `复盘/卡/卡E56-两条pytest门禁各开满档worker.md` 的 §2）。",
+  "本机 32 逻辑核吸收了这个超额（`scripts/run_gates.py` 的默认档位），所以本地门禁一直绿；只有 4 vCPU 的云机才暴露（`gates/diag/cloud-gate-E49-p14.log`）。",
+]
+evidence = [
+  "file:复盘/卡/卡E56-两条pytest门禁各开满档worker.md",
+  "file:scripts/run_gates.py",
+  "file:tests/test_run_gates_workers.py",
+  "test:test_run_gates_workers.py",
+  "text:复盘/卡/卡E56-两条pytest门禁各开满档worker.md",
+]
