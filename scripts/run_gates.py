@@ -295,8 +295,8 @@ def gate_port_set(base: int | None = None) -> list[int]:
 
 # ---------------------------------------------------------------- pytest 并发（T-G156 §2.3）
 # 机器 32 逻辑核、总内存只有 15.2 GB —— `-n auto` 会拉起最多 32 个 worker → 换页风险。
-# 读 `TF_PYTEST_WORKERS`；不设时**按可用内存自适应**（★ 卡 A266）：可用 < 2.5 GB ⇒ 1、
-# < 4 GB ⇒ 2、否则 `min(4, cpu)`。★ 显式环境变量仍然优先（给了就照给）。
+# 读 `TF_PYTEST_WORKERS`；不设时**按可用内存分档**（★ 卡 E30：4 的硬顶拆成五档，见
+# `workers_for`）。★ 显式环境变量仍然优先（给了就照给）。
 # ★「没装 xdist 就串行」的既有逻辑（`xdist_available()`）一个字不动。
 #
 # ★★ 快与稳的账（卡 164 第 8 条 / T-G264 · 2026-10-03 实测留痕）：
@@ -306,18 +306,87 @@ def gate_port_set(base: int | None = None) -> list[int]:
 #   ★★ 卡 A266：内存紧时**不再靠人**在命令行写 `TF_PYTEST_WORKERS=1`（写了就踩"环境渗进
 #      子进程"那条雷）—— 默认自己按可用内存降档（见 `pytest_workers`），不会自己选满档。
 #   若 flake 复发 → `TF_PYTEST_WORKERS=1` 串行（稳但慢 5 倍），别反复重跑到绿（第 9 条）。
+# ★ 卡 E30：`DEFAULT_PYTEST_WORKERS` 从「硬顶」降成「**没有内存读数时的兜底**」——
+#   真实档位由纯函数 `workers_for()` 给（五档）；上限 8（实测 4→8 是免费的一半，
+#   8 以上基本无收益，见卡 E30 §检索证据）。
 DEFAULT_PYTEST_WORKERS = 4
+MAX_PYTEST_WORKERS = 8
+# 一个 worker 的实测峰值（4 worker 实测 865 MB，卡 A266 §1.2）—— 按 0.5 GB/个 折算。
+WORKER_MEM_GB = 0.5
+# 档口（可用内存 GB, worker 数）；**从高到低**匹配，第一条命中的就是档位。
+MEM_TIERS: tuple[tuple[float, int], ...] = ((10.0, 8), (6.0, 6), (4.0, 4), (2.5, 2))
+# 分片策略：`TF_PYTEST_DIST` 可覆盖；默认取实测最快的那一档（卡 E30 §判据 2，
+# 读数见 `gates/diag/bench-e30-summary.txt`）。
+DIST_MODES: tuple[str, ...] = ("load", "loadfile", "worksteal", "loadscope", "loadgroup")
+DEFAULT_PYTEST_DIST = "worksteal"
+# 锁文件里没写 `lease` 时的回退租约（与 `gates/diag/gate_lock.py` 的默认值同口径）。
+LOCK_LEASE_FALLBACK = 10800
+
+
+def workers_for(avail_gb: float | None, cpu: int, inflight: int = 0) -> int:
+    """按**可用内存**给 worker 档位（卡 E30：把写死的 4 拆成五档）。
+
+    · 档口：≥10 GB ⇒ 8 / ≥6 ⇒ 6 / ≥4 ⇒ 4 / ≥2.5 ⇒ 2 / 否则 1；
+    · **上限恒为 `min(8, cpu)`**（★ 卡 A266：32 核会拉满 → 15.2 GB 内存必换页）；
+    · 先按「别的门禁在跑」**扣掉**它们占的内存（`inflight × WORKER_MEM_GB`）再定档；
+    · 读不到内存（`None`）⇒ 退回 `min(DEFAULT_PYTEST_WORKERS, cpu)`：不静默当「内存够」
+      升到 8，也不因读不到而降成 1。
+    """
+    cap = max(1, min(MAX_PYTEST_WORKERS, int(cpu) or 1))
+    if avail_gb is None:
+        return max(1, min(DEFAULT_PYTEST_WORKERS, cap))
+    head = float(avail_gb) - max(0, int(inflight)) * WORKER_MEM_GB
+    for floor, n in MEM_TIERS:
+        if head >= floor:
+            return max(1, min(n, cap))
+    return 1
+
+
+def _segment_lock_name() -> str:
+    """本段那把锁的文件名（与 `gates/diag/gate_lock.py::lock_path()` 同一口径）。"""
+    base = port_base()
+    return "gates.lock" if base == DEFAULT_PORT_BASE else f"gates-{base}.lock"
+
+
+def inflight_workers(root: Path | None = None) -> int:
+    """**别的门禁**此刻占着的 worker 数（数 `gates/diag/gates*.lock` 里租约内的活锁）。
+
+    · 每把锁按锁里写的 `workers` 算；老锁没有这个键 ⇒ 按 `DEFAULT_PYTEST_WORKERS` 估；
+    · **本段那把锁不算**：它就是我们自己（算进去等于自己扣自己，白降一档）；
+    · 过期锁不算（与 `gate_lock._active_locks` 同判据：空位随租约一起回归）；
+    · 读不到（没目录 / 没锁 / JSON 坏）⇒ 0 = **不扣**（卡 E30：宁快不宁慢）。
+    """
+    diag = (ROOT if root is None else root) / "gates" / "diag"
+    if not diag.is_dir():
+        return 0
+    mine = _segment_lock_name()
+    total = 0
+    for p in sorted(diag.glob("gates*.lock")):
+        if p.name == mine:
+            continue
+        try:
+            info = json.loads(p.read_text(encoding="utf-8"))
+            age = max(0.0, time.time() - p.stat().st_mtime)
+        except (OSError, ValueError):
+            continue
+        try:
+            lease = int(info.get("lease", LOCK_LEASE_FALLBACK))
+        except (TypeError, ValueError):
+            lease = LOCK_LEASE_FALLBACK
+        if age > lease:                 # 租约过期 ⇒ 那把锁的名额已经回归
+            continue
+        try:
+            total += max(0, int(info.get("workers", DEFAULT_PYTEST_WORKERS)))
+        except (TypeError, ValueError):
+            total += DEFAULT_PYTEST_WORKERS
+    return total
 
 
 def pytest_workers() -> int:
-    """pytest 并行 worker 数：`TF_PYTEST_WORKERS` 优先；不设 → 按可用内存自适应。
+    """pytest 并行 worker 数：`TF_PYTEST_WORKERS` 优先；不设 → 按可用内存分档。
 
     ★ 卡 A266：显式环境变量**仍然优先**（给了就照给，自适应不许覆盖人的显式选择）。
-    不设时按可用内存（`available_memory_gb()`）选：
-      - 可用 < 2.5 GB ⇒ 1（内存紧，串行最稳 —— 不再要人手工写那个变量）
-      - 可用 < 4 GB   ⇒ 2
-      - 否则 `min(4, cpu)`
-    读不到内存（返回 None）⇒ 退回 `min(4, cpu)`（不静默当"内存够"，也不因读不到而过度保守）。
+    不设时 = `workers_for(可用内存, cpu, 在跑的别人)`（卡 E30，见那个纯函数）。
     """
     raw = os.environ.get("TF_PYTEST_WORKERS", "").strip()
     if raw:
@@ -329,18 +398,42 @@ def pytest_workers() -> int:
             return n
         print(f"[WARN] TF_PYTEST_WORKERS={raw!r} 不合法 → 按可用内存自适应",
               file=sys.stderr, flush=True)
-    cap = max(1, min(DEFAULT_PYTEST_WORKERS, os.cpu_count() or 1))
     try:
         avail = available_memory_gb()
     except Exception:
         avail = None
-    if avail is None:          # 读不到内存 ⇒ 退回满档（不静默当"内存够"，也不过度保守）
-        return cap
-    if avail < 2.5:            # ★ 卡 A266：可用 < 2.5 GB ⇒ 串行
-        return 1
-    if avail < 4.0:            # ★ 卡 A266：可用 < 4 GB ⇒ 2 个 worker
-        return 2
-    return cap
+    return workers_for(avail, os.cpu_count() or 1, inflight_workers())
+
+
+def pytest_dist() -> str:
+    """分片策略：`TF_PYTEST_DIST` 覆盖；不设 / 不认识 ⇒ 默认 `DEFAULT_PYTEST_DIST`。"""
+    raw = os.environ.get("TF_PYTEST_DIST", "").strip()
+    if not raw:
+        return DEFAULT_PYTEST_DIST
+    if raw in DIST_MODES:
+        return raw
+    print(f"[WARN] TF_PYTEST_DIST={raw!r} 不认识（只认 {'/'.join(DIST_MODES)}）"
+          f" → 用 {DEFAULT_PYTEST_DIST}", file=sys.stderr, flush=True)
+    return DEFAULT_PYTEST_DIST
+
+
+def parallel_note() -> str:
+    """日志里那一行 `[并行] …`（卡 E30 §4：几个 worker、依据是什么，都要打出来）。
+
+    **worker 数只从 `pytest_workers()` 取** —— 不给第二份口径（否则日志与真跑会两样）。
+    """
+    workers = pytest_workers()
+    raw = os.environ.get("TF_PYTEST_WORKERS", "").strip()
+    if raw:
+        why = f"TF_PYTEST_WORKERS={raw}（显式优先）"
+    else:
+        try:
+            avail = available_memory_gb()
+        except Exception:
+            avail = None
+        mem = "读不到" if avail is None else f"{avail:.1f} GB"
+        why = f"可用 {mem} / cpu {os.cpu_count() or 1} / 在跑 {inflight_workers()}"
+    return f"[并行] workers={workers}（{why}）dist={pytest_dist()}"
 
 
 # ---------------------------------------------------------------- 门 × 输入表（T-G239）
@@ -579,7 +672,8 @@ def pytest_cmd(serial: bool = False) -> list[str]:
     if not serial and xdist_available():
         workers = pytest_workers()
         if workers > 1:
-            cmd += ["-n", str(workers)]
+            # ★ 卡 E30：分片策略也进命令（默认 worksteal，`TF_PYTEST_DIST` 可覆盖）。
+            cmd += ["-n", str(workers), "--dist", pytest_dist()]
     return cmd
 
 
@@ -2139,6 +2233,7 @@ def main() -> int:
         mode = "串行（环境里没装 pytest-xdist）"
     if not args.fast:
         print(f"=== pytest 跑法：{mode} ===")
+        print(f"=== {parallel_note()} ===")
 
     # ★ T-G196 每道门硬超时：整轮只解析一次（到点就掐整棵树，掐完记 124 判红）。
     timeout = door_timeout()

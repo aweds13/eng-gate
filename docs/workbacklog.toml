@@ -3990,18 +3990,7 @@ spec = "复盘/卡/卡E50-并行度与门禁编排三件合一.md"
 files = ["scripts/run_gates.py", "tests/test_run_gates_workers.py", "tests/test_run_gates_cov.py", "pyproject.toml", "gates/defs/lang_python.py", "scripts/sitecustomize.py", "tests/test_gates_reuse_line.py", "gates/defs/domains.py", "tools/wb_land.py", "tests/test_gate_split.py", "tools/gate_queue.py", "tests/test_gate_queue.py", "gates/diag/gate_lock.py", "tests/conftest.py", "tests/test_template_repo.py", "tests/test_wb_land.py", "tests/test_contract_audit.py"]
 depends = ["E44"]
 risk = "high"
-status = "pending"
-
-[[cards]]
-id = "E41"
-task = "T-AG506"
-title = "号池判决不许把 429 读成「正常收工」：看守与派活共用同一份额度判据"
-tree = ".wt/E41"
-spec = "复盘/卡/卡E41-号池判决不许把429读成正常收工.md"
-files = ["tools/wb_watch.py", "tests/test_wb_watch.py", "docs/subsystems/pool/事后判据清单.md"]
-status = "pending"
-risk = "mid"
-depends = []
+status = "done"
 
 [[cards]]
 id = "E53"

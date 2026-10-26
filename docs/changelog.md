@@ -334,6 +334,17 @@
 - `tools/wb_reconcile.py`：去掉 `--grep` 的 `-10` 截断；新增 `_batch_landed()`/`_landed_commits()`/
   `_spec_commit_in()`，按围栏 `state == landed` 认账；`check()` 第三份 `accounted_done` 打 `[蓝]`。
 - `tests/test_wb_reconcile.py`：5 条断言改三份解包 + 2 条新钉子（landed 认账 / draft 不算证据）。
+## 2026-10-26 · 并行度与门禁编排三件合一（E30+E32+E33，T-AG500）
+
+- `scripts/run_gates.py`：worker 数改按**可用内存分五档**（≥10GB⇒8 / ≥6⇒6 / ≥4⇒4 / ≥2.5⇒2 / 否则 1，
+  上限 `min(8, cpu)`），并**按在跑门禁的租约扣减**（`inflight_workers()` 数 `gates/diag/gates*.lock`）；
+  `--dist` 默认 `worksteal`（`TF_PYTEST_DIST` 覆盖）。`TF_PYTEST_WORKERS` 显式优先与「<2.5GB 串行」守则一字未动。
+- 快慢分层：`pyproject.toml` 注册 `chain` marker，默认门 addopts 改成 `-m "not acceptance and not chain"`；
+  `gates/defs/lang_python.py` 新增第 20 道门 `pytest_chain`（`-m chain --no-cov`，22 条真链路 e2e），
+  进 `lang` 档与全量趟。`tests/conftest.py` 用 `CHAIN_MANIFEST` 集中打标（只加 marker，不删用例、不改断言、不 skip）。
+- e2e 模板仓**测过不改**：收益上界 5.6% < 20% 门槛（`_mk_repo()` 0.509 s/次 × 43 处 ÷ 96.91 s×4），
+  `tests/conftest.py` 的 `run_git` / `_mk_repo` 一个字节没动。
+- 门表 19 → 20：`docs/subsystems/ci/测试流程.md` 表一插 `pytest_chain` 行，`tests/test_ci_docs.py` 口径同步。
 ## 2026-10-25 看守判「这一轮产物」给文件时间戳留 1 秒粒度容差（T-AG475）
 - `tools/wb_watch.py`：新增 `_MTIME_GRANULARITY_SLACK = 1.0`（注释写明实测 1.4 ms / NTFS ~15.6 ms 与「1 秒不会把真·上一轮判决混进来」）；`_fresh()` 改判 `mtime >= since - _MTIME_GRANULARITY_SLACK`，docstring 补「★ 卡 E22」一段。
 - `tests/test_wb_dispatch_watch.py`：新增 `test_fresh_tolerates_a_file_timestamp_behind_the_wall_clock`（`since = mtime + 0.0014` 必须判 `STATE_DONE`，复现真现场）；`test_old_verdict_is_not_this_rounds_completion` 的旧件改成 5 秒前造（原写法考的是时钟精度，本身会闪）。

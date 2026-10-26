@@ -48,8 +48,14 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # 覆盖率门槛写进配置（2026-09-18 审计 GAP-NF-08：以前只写在文档与手敲命令里，换个人跑就绕过去了）
-addopts = "-q -m \"not acceptance\" --cov=timeflow --cov-fail-under=70"
-markers = ["acceptance: 可执行验收层（默认排除；显式 -m acceptance 运行）"]
+addopts = "-q -m \"not acceptance and not chain\" --cov=timeflow --cov-fail-under=70"
+markers = [
+    "acceptance: 可执行验收层（默认排除；显式 -m acceptance 运行）",
+    # 快慢分层（卡 E50 段2 / 并 E32）：起**真子进程**跑一遍完整落地链 / 审计的 e2e。
+    # 默认门**排除**它们（`addopts` 的 `not chain`），由 `pytest_chain` 那道门单独跑 ——
+    # 不是不跑，是换一道门跑（3 分钟 vs 6 分钟，卡 E32 实测）。
+    "chain: 起真子进程跑完整链路（默认排除；`pytest_chain` 门与落地趟 / 夜间跑）",
+]
 
 [tool.mypy]
 strict = true

@@ -121,3 +121,55 @@ def strip_host_config_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def _no_host_config_env(monkeypatch: pytest.MonkeyPatch) -> None:
     strip_host_config_env(monkeypatch)
+
+
+## 快慢分层（卡 E50 段2 · 并 E32）：`chain` 标记的**唯一清单**
+#
+# 为什么清单收在 `conftest.py` 一处，而不是逐个用例头上加 `@pytest.mark.chain`：
+#   · 本卡的 `files` 域只覆盖 `tests/test_wb_land.py` 与 `tests/test_contract_audit.py`；
+#     清单里另外 6 个文件（`test_partitions.py` / `test_evidence_map.py` /
+#     `test_wb_dispatch.py` / `test_docs_fragments.py` / `test_card_specs_tracked.py` /
+#     `test_wb_plan.py`）是**别的卡的域**，不许动。打标动作因此收在**一处**（这张表），
+#     不散成 22 处；
+#   · 判据认的也正是这张表：`tests/test_gate_split.py` 钉「标记集合 == 清单」，并钉清单里
+#     每一个 nodeid 都真能被 collect 到（改名 / 删用例 ⇒ 红，不会静默少打）。
+#
+# 口径（卡 E32 §判据 2）：**一条用例都不许删、一条断言都不许改** —— 这里只加标记，
+# 默认门靠 `pyproject.toml` 的 `not chain` 把它们排掉，`pytest_chain` 那道门再单独跑。
+CHAIN_MANIFEST: tuple[str, ...] = (
+    "tests/test_card_specs_tracked.py::test_every_registered_spec_exists_and_is_tracked",
+    "tests/test_contract_audit.py::test_real_repo_audit_has_expected_shape",
+    "tests/test_docs_fragments.py::test_real_repo_is_in_sync_and_merge_is_noop",
+    "tests/test_docs_fragments.py::test_audit_verdict_unchanged_by_sync",
+    "tests/test_evidence_map.py::test_stale_on_the_real_ledger_matches_audit",
+    "tests/test_partitions.py::test_same_number_different_partition_is_allowed",
+    "tests/test_partitions.py::test_check_without_backlog_option_uses_shards",
+    "tests/test_wb_dispatch.py::test_retry_round_threshold_eats_only_its_own_log",
+    "tests/test_wb_land.py::test_second_run_of_same_landing_hits_no_duplicate",
+    "tests/test_wb_land.py::test_no_reset_really_disables",
+    "tests/test_wb_land.py::test_affected_passes_through_when_no_force_full",
+    "tests/test_wb_land.py::test_touching_tools_forces_full",
+    "tests/test_wb_land.py::test_empty_plan_forces_full",
+    "tests/test_wb_land.py::test_incremental_trailer_says_not_full",
+    "tests/test_wb_land.py::test_full_run_marks_daily_full",
+    "tests/test_wb_land.py::test_degraded_run_trailer",
+    "tests/test_wb_land.py::test_landing_renews_lock_during_gate",
+    "tests/test_wb_land.py::test_full_chain_review_green_e2e",
+    "tests/test_wb_land.py::test_gate_artifacts_present_or_changed_keep_review_green_e2e",
+    "tests/test_wb_land.py::test_tamper_after_seal_review_red_e2e",
+    "tests/test_wb_land.py::test_batch_landing_flips_member_status_e2e",
+    "tests/test_wb_plan.py::test_check_passes_when_no_landed_but_pending",
+)
+
+
+def _chain_key(nodeid: str) -> str:
+    """collect 出来的 nodeid → 清单里的键（只统一斜杠：xdist 不改 nodeid 前缀）。"""
+    return nodeid.replace("\\", "/")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """给清单里的用例补 `chain` 标记（**只加标记**，不动断言、不 skip）。"""
+    want = set(CHAIN_MANIFEST)
+    for item in items:
+        if _chain_key(item.nodeid) in want:
+            item.add_marker(pytest.mark.chain)
