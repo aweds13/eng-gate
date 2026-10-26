@@ -13,10 +13,16 @@ r"""一次盯**多张卡**，收工就出结论（卡 215 · T-G328）—— 派
 真轮询（每 `--interval` 秒醒一次、打印一行带「现在到哪了」的心跳）+ **硬超时**（默认 2 小时）。
 
 **收工信号按池分别判**（这是本卡的核心，不写死一条路）：
-  · CodeBuddy：`<树>/gates/diag/wb-<卡>.verdict.txt` 出现且**非空**；
-  · 码道：`<号池>/logs/card-<卡>-<日期>-<时刻>.meta.json` 里的 `finished == true`。
+  · CodeBuddy：`<树>/gates/diag/wb-<卡>.verdict.txt` 出现后**按三态判**（卡 E41）——
+    没有额度痕迹 ⇒ 收工；命中额度类 ⇒ 判死（`detail` 带「额度：…」，通知流写 `state:"quota"`）；
+    判不出 ⇒ 交给日志静默那一路（**不许**判收工）；
+  · 码道：`<号池>/logs/card-<卡>-<日期>-<时刻>.meta.json` 里的 `finished == true`，
+    但 meta 的 `errors` / `verdict` 命中额度类 ⇒ 判死（**不是**收工）。
 两条路都**现读**、每轮都查；读不到就如实说「这张卡我看不见信号」——
 ★ **不许**把「看不见」当成「已完成」（空信号文件同理，也不算完成）。
+★ **额度判据只有一份真源**：一律调 `wb_dispatch.quota_error`（卡 029 / 045 / 201）——
+  本模块**不写** needle 列表，也**不看退出码**（额度错误长得像成功：退出码 0 + 空回话，
+  旧写法「文件非空即收工」就是这么把额度失败读成正常收工的，卡 E41）。
 
 **判死**（没跑完就断了）：复用在跑的判据、**不另写一份**——
   · CodeBuddy：没有判决 + 日志静默超过 `pool.jobs.STALL_SECONDS` → `classify_job_state` 判「断了」；
@@ -106,6 +112,8 @@ STATE_DEAD = "dead"
 STATE_STALE = "watcher-stale"
 STATE_TIMEOUT = "timeout"
 STATE_BATCH_DONE = "batch-done"
+#: 卡 E41：额度类判死单独一个 state —— 「这趟没跑」与「卡做错了」处置不同（别混成 dead）。
+STATE_QUOTA = "quota"
 
 _KEEP = object()           # 哨兵：`rebuild_registry()` 里「这一项保持原样」
 
@@ -119,6 +127,9 @@ _LOG_SUFFIX = ".jsonl"
 _EXIT_CODE_RE = re.compile(r"退出码=(-?\d+)")
 _BEGIN_RE = re.compile(r"开始于=(\S+)")
 _END_RE = re.compile(r"结束于=(\S+)")
+#: 判决文件里那句「判决：…」（`wb_dispatch.write_verdict` / `pool.trae_dispatch` 同一形状）。
+#: 没有这一句 = 只有退出码之类的半截货 ⇒ **判不出**，不许当收工（卡 E41 §2.2 第三类）。
+_REASON_RE = re.compile(r"^判决：(.*)$", re.M)
 
 
 # ---------------------------------------------------------------- 收工信号（按池）
@@ -133,6 +144,7 @@ class CardSignal:
     exit_code: int | None = None
     duration_s: float | None = None
     detail: str = ""              # 一句人话：为什么这么判
+    quota: str = ""               # 非空 = 额度类判死（`quota_error` 的 `why`，卡 E41）
 
 
 def _first_nonempty(text: str) -> str:
@@ -153,6 +165,65 @@ def _parse_verdict(text: str) -> tuple[str, int | None, float | None]:
         except ValueError:
             duration = None
     return first, code, duration
+
+
+def _verdict_reason(text: str) -> str:
+    """判决文件里「判决：」那句话；没有 / 是空的 ⇒ 空串（半截写 / 只有退出码）。"""
+    hit = _REASON_RE.search(text)
+    return hit.group(1).strip() if hit else ""
+
+
+def _quota_error(lines: list[str]) -> dict | None:
+    """调**唯一那份**额度判据：`wb_dispatch.quota_error`（卡 029 / 045 / 201）。
+
+    ★ 函数内 import：`wb_dispatch` 反过来在模块级 import 本模块（派活即看守），
+      模块级互引会把两个模块的初始化绕成一团 —— 这里只在真要判的时候取一下。
+    ★ 本模块**不抄** needle 列表、不抄两道闸门：判据漂了只会漂一处。
+    """
+    import wb_dispatch  # noqa: PLC0415 —— 见上：避免与 wb_dispatch 模块级互引
+
+    return wb_dispatch.quota_error(lines)
+
+
+def _quota_of_text(text: str) -> dict | None:
+    """把一段**判决文案**喂给同一份判据（码道 meta 的 `verdict` / 判决文件的正文）。
+
+    ★ 判决文案不是事件流 ⇒ 包成一条 `is_error` 的 `result` 事件，让那两道闸门照常说话
+      （候选闸门 + 结构化字段优先）；本模块仍然**一个 needle 都不写**。
+    """
+    if not text.strip():
+        return None
+    event = json.dumps({"type": "result", "subtype": "error_during_execution",
+                        "is_error": True, "result": "", "errors": text},
+                       ensure_ascii=False)
+    return _quota_error([event])
+
+
+def _verdict_log_lines(verdict: Path, diag: Path, card: str,
+                       since: float | None) -> list[str]:
+    """这一轮判决**对应的**日志行（`wb-<卡>[.rN].jsonl`）；同一份都读不到 ⇒ 空列表。
+
+    ★ 先认**同轮**那份（判决名换后缀，与 `wb_dispatch.verdict_file_for` 同一口径）——
+      多轮时别拿第 2 轮的判决去读第 1 轮的日志；换不出来再退回这一轮最新那份日志。
+    """
+    sibling = verdict.with_name(verdict.name[: -len(_CB_VERDICT_SUFFIX)] + _LOG_SUFFIX)
+    paths = [sibling] if sibling.is_file() else _fresh(
+        card_artifacts(diag, card, _LOG_SUFFIX), since)[-1:]
+    for path in reversed(paths):
+        try:
+            return path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+    return []
+
+
+def _quota_signal(card: str, pool: str, quota: dict, *, verdict: str = "",
+                  code: int | None = None, dur: float | None = None,
+                  where: str = "") -> CardSignal:
+    """额度类 ⇒ 一律 `DEAD`（**不是** `FAILED`：卡没做错，是这趟没跑）+ 「额度：<why>」。"""
+    tail = f"（{where}）" if where else ""
+    return CardSignal(card, DEAD, pool, verdict, code, dur,
+                      detail=f"额度：{quota['why']}{tail}", quota=quota["why"])
 
 
 def _read_meta(path: Path) -> dict | None:
@@ -205,8 +276,13 @@ def _fresh(paths: list[Path], since: float | None) -> list[Path]:
 
 def _probe_codebuddy(card: str, root: Path, now: float,
                      since: float | None = None) -> CardSignal | None:
-    """CodeBuddy 池的读数：`gates/diag/wb-<卡>.verdict.txt` 非空 = 收工；否则按日志静默判。
+    """CodeBuddy 池的读数：判决文件**按三态判**（卡 E41）；没有判决按日志静默判。
 
+    ★ 三态：无额度痕迹 ⇒ 收工；命中额度类 ⇒ 判死（`detail` 带「额度：…」）；
+      空判决 / 判不出 ⇒ **不许**收工，交给日志静默那一路（`classify_job_state`）。
+    ★ 额度判据**只有一份**（`wb_dispatch.quota_error`）：先喂这一轮的**日志事件**，
+      再喂判决文案本体 —— 两样都过同一道闸门，本模块不写 needle。
+    ★ 退出码**不参与判定**（额度错误就是退出码 0 + 空回话），只写进 detail 给人看。
     读不到任何证据（无判决、无日志）→ None（这条池看不见这张卡）。
     ★ 给了 `since` ⇒ 只认这一轮之后的判决 / 日志（旧件不许冒充）。
     """
@@ -218,11 +294,17 @@ def _probe_codebuddy(card: str, root: Path, now: float,
             text = verdict.read_text(encoding="utf-8", errors="replace")
         except OSError:
             text = ""
-        if text.strip():
+        if text.strip() and _verdict_reason(text):
             line, code, dur = _parse_verdict(text)
+            quota = (_quota_error(_verdict_log_lines(verdict, diag, card, since))
+                     or _quota_of_text(text))
+            if quota is not None:
+                return _quota_signal(card, "codebuddy", quota, verdict=line,
+                                     code=code, dur=dur, where=verdict.name)
             return CardSignal(card, FINISHED, "codebuddy", line, code, dur,
                               detail=f"判决文件 {verdict.name}")
-        # ★ 空判决文件：**不许**当成已完成（卡 215 反例）—— 落到日志静默那一路去判。
+        # ★ 空判决 / 只有退出码（没写「判决：」那句）= **判不出** ⇒ 不许收工（卡 215 反例 /
+        #   卡 E41 §2.2 第三类），落到日志静默那一路去判。
     logs = _fresh(card_artifacts(diag, card, _LOG_SUFFIX), since)
     if not logs:
         return None
@@ -237,6 +319,8 @@ def _probe_codearts(card: str, root: Path, now: float,
                     since: float | None = None) -> CardSignal | None:
     """码道池的读数：`.meta.json` 的 `finished == true` = 收工；`finished` 非 true = 判死。
 
+    ★ 卡 E41：`finished=true` 也要过**同一道额度判据** —— meta 的 `errors` / `verdict`
+      命中额度类 ⇒ `DEAD`（detail 带「额度：…」），不是收工；判据仍然只有 `wb_dispatch` 那一份。
     没有 meta（工人还在跑，或派活器还没来得及落 meta）→ 看日志在不在：在 → 在跑，不在 → 看不见。
     ★ 给了 `since` ⇒ 上一轮的 meta / 日志一律不认（同 `_probe_codebuddy` 的理由）。
     """
@@ -245,13 +329,22 @@ def _probe_codearts(card: str, root: Path, now: float,
     if metas:
         meta_path = metas[-1]
         data = _read_meta(meta_path)
-        if data is not None and data.get("finished") is True:
+        if data is not None:
             seconds = data.get("seconds")
+            code = data.get("exit_code") if isinstance(data.get("exit_code"), int) else None
+            dur = float(seconds) if isinstance(seconds, (int, float)) else None
+            words = " ".join(str(data.get(key) or "")
+                              for key in ("verdict", "errors", "errors_info"))
+            quota = _quota_of_text(words)
+            if quota is not None:
+                return _quota_signal(card, "codearts", quota,
+                                     verdict=str(data.get("verdict") or ""),
+                                     code=code, dur=dur, where=meta_path.name)
+        if data is not None and data.get("finished") is True:
             return CardSignal(
                 card, FINISHED, "codearts",
                 verdict_line=str(data.get("verdict") or "正常收工"),
-                exit_code=data.get("exit_code") if isinstance(data.get("exit_code"), int) else None,
-                duration_s=float(seconds) if isinstance(seconds, (int, float)) else None,
+                exit_code=code, duration_s=dur,
                 detail=f"meta.json {meta_path.name}（finished=true）")
         if data is not None:
             # meta 有内容但 finished 不是 true（被看门狗 / 超时掐了，或没见到收工）→ 判死，
@@ -490,14 +583,32 @@ def _refcount(states: dict[str, str]) -> int:
     return sum(1 for value in states.values() if value == STATE_WATCHING)
 
 
-def _resolved(card: str, root: Path, now: float, *, since: float | None = None) -> str | None:
-    """这张卡出结论了吗：`done` / `dead` / None（没有判决 = 还没完）。"""
+def _resolution(card: str, root: Path, now: float,
+                *, since: float | None = None) -> tuple[str, str]:
+    """这张卡出结论了吗：`(登记态, 额度原因)`；没结论 ⇒ `(watching, "")`。
+
+    ★ 额度原因非空 ⇒ 判死的原因是额度（事件写 `state:"quota"`，处置与「卡做错了」不同）。
+    """
     sig = probe_card(card, root, now, since)
     if sig.kind == FINISHED:
-        return STATE_DONE
+        return STATE_DONE, ""
     if sig.kind == DEAD:
-        return STATE_DEAD
-    return None
+        return STATE_DEAD, sig.quota
+    return STATE_WATCHING, ""
+
+
+def _resolved(card: str, root: Path, now: float, *, since: float | None = None) -> str | None:
+    """这张卡出结论了吗：`done` / `dead` / None（没有判决 = 还没完）。"""
+    got = _resolution(card, root, now, since=since)[0]
+    return None if got == STATE_WATCHING else got
+
+
+def _dead_event(root: Path, card: str, quota: str, *, now: float) -> None:
+    """判死落一行通知：额度类写 `state:"quota"`（带「额度：…」），别的仍是 `state:"dead"`。"""
+    if quota:
+        write_card_event(root, card, STATE_QUOTA, verdict=f"额度：{quota}", now=now)
+    else:
+        write_card_event(root, card, STATE_DEAD, now=now)
 
 
 def register_cards(root: Path, cards: Iterable[str], *, now: float | None = None,
@@ -610,8 +721,8 @@ def shared_tick(root: Path, *, now: float | None = None,
     for card in sorted(states):
         if states[card] != STATE_WATCHING:
             continue
-        got = _resolved(card, root, now, since=since.get(card))
-        if got is None:
+        got, quota = _resolution(card, root, now, since=since.get(card))
+        if got == STATE_WATCHING:
             continue
         states[card] = got
         resolved.append(card)
@@ -620,8 +731,9 @@ def shared_tick(root: Path, *, now: float | None = None,
             where = done_path(root, card).name if done is not None else "（判决读不出详情）"
             emit(f"[完 ] 卡 {card} 出判决 → 写 {where} + 通知流一行")
         else:
-            write_card_event(root, card, STATE_DEAD, now=now)
-            emit(f"[断 ] 卡 {card} 判死（没跑完就断了）→ 通知流一行（**不算成功**）")
+            _dead_event(root, card, quota, now=now)
+            why = f"额度：{quota}" if quota else "没跑完就断了"
+            emit(f"[断 ] 卡 {card} 判死（{why}）→ 通知流一行（**不算成功**）")
     refcount = _refcount(states)
     reg.update({"cards": states, "since": since, "refcount": refcount,
                 "heartbeat": _iso(now)})
@@ -726,10 +838,12 @@ def watch(cards: Iterable[str], *,
         if dead:
             if write_done:
                 for card in dead:
-                    write_card_event(root, card, STATE_DEAD, now=now)
+                    _dead_event(root, card, signals[card].quota, now=now)
             for line in _conclusion_lines(target, signals):
                 emit(line)
-            emit(f"[FAIL] 有卡判死（没跑完就断了）：{'、'.join(dead)}")
+            said = "、".join(f"{card}（额度：{signals[card].quota}）" if signals[card].quota
+                            else card for card in dead)
+            emit(f"[FAIL] 有卡判死（没跑完就断了）：{said}")
             return EXIT_DEAD
         elapsed = now - start
         if elapsed >= timeout:

@@ -9107,9 +9107,10 @@ gaps = ""
 id = "T-AG506"
 title = "卡 E41 —— 号池判决不许把 429 读成「正常收工」（看重复用派活侧判据）"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E41-号池判决不许把429读成正常收工.md",
-  "file:docs/workbacklog.toml",
+  "file:tools/wb_watch.py",
+  "file:docs/subsystems/pool/事后判据清单.md",
+  "test:test_wb_watch.py",
 ]
-gaps = "假绿现场已实测：`tools/wb_watch.py` 的 `_probe_codebuddy` 只看 `wb-<卡>.verdict.txt` 非空即判 FINISHED，而 `tools/wb_dispatch.py::quota_error` 早有额度判据（卡 029/045）却没被看守复用。缺的东西：①`probe_card` 三态化（正常/额度 DEAD/判不出不许 FINISHED）；②码道池 `_probe_codearts` 同源过同一道判据；③AST 钉子保证 `wb_watch` 里没有第二份额度 needle 列表；④`docs/subsystems/pool/事后判据清单.md` 判决口径同步。"

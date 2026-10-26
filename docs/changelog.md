@@ -345,6 +345,15 @@
 - e2e 模板仓**测过不改**：收益上界 5.6% < 20% 门槛（`_mk_repo()` 0.509 s/次 × 43 处 ÷ 96.91 s×4），
   `tests/conftest.py` 的 `run_git` / `_mk_repo` 一个字节没动。
 - 门表 19 → 20：`docs/subsystems/ci/测试流程.md` 表一插 `pytest_chain` 行，`tests/test_ci_docs.py` 口径同步。
+## 2026-10-26 · 号池判决不许把 429 读成「正常收工」（E41，T-AG506）
+
+- `tools/wb_watch.py`：CodeBuddy 收工判据从「判决文件非空即 FINISHED」改成**三态**——
+  无额度痕迹 ⇒ 收工；命中额度类 ⇒ `DEAD` 且 `detail` 带「额度：…」、通知流写 `state:"quota"`；
+  判不出（空文件 / 半截写 / 只有退出码）⇒ 交给日志静默那一路，**不许**判收工。
+- 额度判据**只有一份真源**：一律调 `tools/wb_dispatch.py::quota_error`（卡 029/045/201）；
+  `wb_watch.py` 里不写 needle 列表，由 AST 钉子 `test_wb_watch_owns_no_quota_needle_list` 守住。
+- 码道池同源：meta `finished=true` 但 `errors`/`verdict` 命中额度类 ⇒ `DEAD`，不再是 FINISHED。
+- 退出码永不作为依据（「退出码 0 + 空回话」正是额度失败长出来的样子）。
 ## 2026-10-25 看守判「这一轮产物」给文件时间戳留 1 秒粒度容差（T-AG475）
 - `tools/wb_watch.py`：新增 `_MTIME_GRANULARITY_SLACK = 1.0`（注释写明实测 1.4 ms / NTFS ~15.6 ms 与「1 秒不会把真·上一轮判决混进来」）；`_fresh()` 改判 `mtime >= since - _MTIME_GRANULARITY_SLACK`，docstring 补「★ 卡 E22」一段。
 - `tests/test_wb_dispatch_watch.py`：新增 `test_fresh_tolerates_a_file_timestamp_behind_the_wall_clock`（`since = mtime + 0.0014` 必须判 `STATE_DONE`，复现真现场）；`test_old_verdict_is_not_this_rounds_completion` 的旧件改成 5 秒前造（原写法考的是时钟精度，本身会闪）。

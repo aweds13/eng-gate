@@ -52,6 +52,33 @@ CB_VERDICT = (
     "判决：正常收工（工人退出码 0）\n"
 )
 
+#: 卡 E41 的真现场：额度被挡住的这一趟**照样落了判决**，退出码还是 0 ——
+#: 判决第 2 行是 `finish_verdict` 写的「没跑完：… 429 限流（额度重置时间：…）」。
+CB_QUOTA_VERDICT = (
+    "card=213 第=1 次 退出码=0 会话=（无） 开始于=2026-10-13T10:00:00 结束于=2026-10-13T10:00:03\n"
+    "判决：没跑完：`result.subtype = error_during_execution` —— 429 限流"
+    "（额度重置时间：2026-10-27T07:38:00）；依据：log 第 9 行 result 事件，"
+    "字段 errors 命中「429」\n"
+)
+
+#: 一条真的 429 `result` 事件（`wb_dispatch.quota_error` 认得的就是这个形状）。
+CB_QUOTA_EVENT = json.dumps({
+    "type": "result", "subtype": "error_during_execution", "is_error": True, "result": "",
+    "errors": [{"status": 429, "category": "quota",
+                "message": "您的使用量已超出频率限制，将在 2026-10-27T07:38:00 重置"}],
+}, ensure_ascii=False)
+
+
+def _assert_finished(sig) -> None:
+    """「收工」这条结论的**完整**口径：收工 **且** 没有额度痕迹（卡 E41 §3.5）。
+
+    ★ 只断言 `kind == FINISHED` 挡不住「把额度类改回收工却只改了文案」——
+      以后谁再把额度读成收工，`detail` / `quota` 这两个字段会当场把它供出来。
+    """
+    assert sig.kind == wb_watch.FINISHED, f"应当收工，实际 {sig.kind}（{sig.detail}）"
+    assert "额度" not in sig.detail, f"判成收工却带着额度痕迹：{sig.detail}"
+    assert not sig.quota, f"判成收工却带额度原因：{sig.quota}"
+
 
 def _cb_verdict(root: Path, card: str, *, age: float = 0.0, text: str = CB_VERDICT) -> Path:
     return _write(root / "gates" / "diag" / f"wb-{card}.verdict.txt", text, age=age)
@@ -82,10 +109,10 @@ def _ca_log(root: Path, card: str, *, age: float = 0.0) -> Path:
 
 # ---------------------------------------------------------------- 两种池的信号各自认得出
 def test_codebuddy_verdict_is_a_finish_signal(tmp_path: Path) -> None:
-    """CodeBuddy：`wb-<卡>.verdict.txt` 出现且非空 = 收工；判决首行 / 退出码 / 时长都读得出。"""
+    """CodeBuddy：判决文件非空**且没有额度痕迹** = 收工；判决首行 / 退出码 / 时长都读得出。"""
     _cb_verdict(tmp_path, "213")
     sig = wb_watch.probe_card("213", tmp_path, time.time())
-    assert sig.kind == wb_watch.FINISHED
+    _assert_finished(sig)
     assert sig.pool == "codebuddy"
     assert sig.exit_code == 0
     assert sig.duration_s == 720.0                    # 10:00:00 → 10:12:00
@@ -96,7 +123,7 @@ def test_codearts_meta_finished_true_is_a_finish_signal(tmp_path: Path) -> None:
     """码道：`card-<卡>-*.meta.json` 里 `finished == true` = 收工；退出码 / 时长从 meta 读。"""
     _ca_meta(tmp_path, "900", finished=True, exit_code=0, seconds=600)
     sig = wb_watch.probe_card("900", tmp_path, time.time())
-    assert sig.kind == wb_watch.FINISHED
+    _assert_finished(sig)
     assert sig.pool == "codearts"
     assert sig.exit_code == 0
     assert sig.duration_s == 600.0
@@ -113,8 +140,10 @@ def test_both_pools_are_seen_not_just_one(tmp_path: Path) -> None:
     _cb_verdict(tmp_path, "213")
     _ca_meta(tmp_path, "900", finished=True)
     by = {c: wb_watch.probe_card(c, tmp_path, time.time()) for c in ("213", "900")}
-    assert by["213"].kind == wb_watch.FINISHED and by["213"].pool == "codebuddy"
-    assert by["900"].kind == wb_watch.FINISHED and by["900"].pool == "codearts"
+    _assert_finished(by["213"])
+    assert by["213"].pool == "codebuddy"
+    _assert_finished(by["900"])
+    assert by["900"].pool == "codearts"
 
 
 # ---------------------------------------------------------------- 反例：空信号文件
@@ -128,6 +157,24 @@ def test_empty_verdict_file_is_not_finished(tmp_path: Path) -> None:
     sig = wb_watch.probe_card("213", tmp_path, time.time())
     assert sig.kind != wb_watch.FINISHED
     assert sig.kind == wb_watch.RUNNING
+    # ★ 卡 E41：空判决既不是收工、也不是「额度判死」—— 没证据就只说「在跑」。
+    assert "额度" not in sig.detail and not sig.quota
+
+
+def test_exit_code_only_verdict_is_not_finished(tmp_path: Path) -> None:
+    """★ 卡 E41 §3.3：判决文件里**只有退出码**（没写「判决：」那句）= 判不出 ⇒ 不许收工。
+
+    半截写的现场：第一行落了、正文还没落 —— 退出码在，但「这一轮到底干完没有」没人说。
+    退出码本来就不许当依据（卡 029）。
+    """
+    _cb_verdict(tmp_path, "213",
+                text=("card=213 第=1 次 退出码=0 开始于=2026-10-13T10:00:00 "
+                      "结束于=2026-10-13T10:00:01\n"))
+    _cb_log(tmp_path, "213", age=0)
+    sig = wb_watch.probe_card("213", tmp_path, time.time())
+    assert sig.kind == wb_watch.RUNNING
+    assert sig.kind != wb_watch.FINISHED
+    assert "额度" not in sig.detail and not sig.quota
 
 
 def test_empty_meta_file_is_not_finished(tmp_path: Path) -> None:
@@ -141,7 +188,127 @@ def test_empty_meta_file_is_not_finished(tmp_path: Path) -> None:
     assert sig.kind == wb_watch.RUNNING
 
 
-# ---------------------------------------------------------------- 判死 / 超时 / 收工
+# ---------------------------------------------------------------- 额度判决（卡 E41）
+def test_quota_verdict_is_dead_with_quota_detail(tmp_path: Path) -> None:
+    """★ 卡 E41 §3.1：判决文案点名额度 ⇒ `DEAD` + detail 带「额度」，**不许**当收工。
+
+    真现场：工人被 429 挡住、回话为空、**退出码 0**，派活器照样落了判决文件 ——
+    旧判据「非空即收工」会把这一趟读成 `FINISHED`（假绿：主控以为卡跑完了）。
+    """
+    _cb_verdict(tmp_path, "213", text=CB_QUOTA_VERDICT)
+    _cb_log(tmp_path, "213")
+    sig = wb_watch.probe_card("213", tmp_path, time.time())
+    assert sig.kind == wb_watch.DEAD
+    assert sig.kind != wb_watch.FINISHED
+    assert "额度" in sig.detail
+    assert sig.quota                       # 额度原因非空 ⇒ 事件要写 state:"quota"
+    assert sig.exit_code == 0              # 退出码照实读给人看，但**不参与判定**
+
+
+def test_quota_events_in_the_log_are_dead_even_if_the_verdict_looks_normal(
+        tmp_path: Path) -> None:
+    """★ 卡 E41 §2.1：判的是**同一份** `quota_error`（日志事件那一路）——
+
+    判决文案写着「正常收工」也不许放过日志里的 429 `result` 事件。
+    """
+    _cb_verdict(tmp_path, "213")                                   # 文案像正常收工
+    _write(tmp_path / "gates" / "diag" / "wb-213.jsonl",
+           '{"type":"system","subtype":"init"}\n' + CB_QUOTA_EVENT + "\n")
+    sig = wb_watch.probe_card("213", tmp_path, time.time())
+    assert sig.kind == wb_watch.DEAD
+    assert "额度" in sig.detail and sig.quota
+
+
+def test_codearts_finished_true_but_quota_verdict_is_dead(tmp_path: Path) -> None:
+    """★ 卡 E41 §3.4：码道 `finished=true` 但 meta 的 `verdict` 命中额度类 ⇒ `DEAD`（不是收工）。"""
+    _ca_meta(tmp_path, "900", finished=True,
+             verdict="429 限流（额度重置时间：2026-10-27T07:38:00）")
+    sig = wb_watch.probe_card("900", tmp_path, time.time())
+    assert sig.kind == wb_watch.DEAD
+    assert "额度" in sig.detail and sig.quota
+
+
+def test_quota_death_writes_a_quota_event_and_never_a_done(tmp_path: Path) -> None:
+    """★ 卡 E41 §2.2：额度类判死 ⇒ `state:"quota"` 一行（**不写** `.done`：没跑完不算完）。"""
+    _cb_verdict(tmp_path, "213", text=CB_QUOTA_VERDICT)
+    _cb_log(tmp_path, "213")
+    clock = FakeClock(time.time())
+    said: list[str] = []
+    rc = wb_watch.watch(["213"], root=tmp_path, timeout=7200, interval=45,
+                        clock=clock, sleep=clock.sleep, emit=said.append, write_done=True)
+    assert rc == wb_watch.EXIT_DEAD
+    assert not (tmp_path / "gates" / "diag" / "wb-213.done").exists(), "额度没跑完不许写完工事件"
+    rows = [json.loads(ln) for ln in
+            (tmp_path / "gates" / "diag" / "notifications.jsonl")
+            .read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert [r["state"] for r in rows if r.get("card") == "213"] == ["quota"]
+    assert "额度" in "\n".join(said)
+
+
+def test_shared_tick_marks_quota_death_as_quota(tmp_path: Path) -> None:
+    """合用看守同一口径：额度类落 `state:"quota"`，不混进「卡做错了」那一堆 `dead`。"""
+    wb_watch.register_cards(tmp_path, ["701"])
+    _cb_verdict(tmp_path, "701", text=CB_QUOTA_VERDICT)
+    _cb_log(tmp_path, "701")
+    resolved, refcount = wb_watch.shared_tick(tmp_path, emit=lambda _s: None)
+    assert resolved == ["701"] and refcount == 0
+    rows = [json.loads(ln) for ln in
+            (tmp_path / "gates" / "diag" / "notifications.jsonl")
+            .read_text(encoding="utf-8").splitlines() if ln.strip()]
+    mine = [r["state"] for r in rows if r.get("card") == "701"]
+    assert mine == ["quota"], mine
+    assert not (tmp_path / "gates" / "diag" / "wb-701.done").exists()
+
+
+def test_wb_watch_owns_no_quota_needle_list() -> None:
+    """★ 卡 E41 §3.6：判据唯一性 —— `wb_watch.py` 里**不许**出现第二份额度 needle。
+
+    扫的是**代码里的字符串常量**（注释与 docstring 不算 —— 说明文里必须能写判据的名字）：
+    一旦有人把 needle 列表贴回来，这里当场红。
+    ★ 唯一放行的**代码**常量是事件 token `"quota"`（`state:"quota"` 是卡 E41 §2.2 逐字钉的产出），
+      它不是 needle 列表 —— 判据本体仍然只在 `wb_dispatch.quota_error` 里。
+    """
+    import ast
+
+    import wb_dispatch as wd
+
+    needles = tuple(wd.QUOTA_STATUS_NEEDLES) + tuple(wd.QUOTA_TEXT_NEEDLES)
+    tree = ast.parse((ROOT / "tools" / "wb_watch.py").read_text(encoding="utf-8"))
+
+    def _docstrings() -> set[int]:
+        """所有 docstring 的常量节点（`id()` 身份）—— 说明文不是判据。"""
+        found: set[int] = set()
+        nodes = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        for node in ast.walk(tree):
+            if not isinstance(node, nodes):
+                continue
+            body = getattr(node, "body", [])
+            if (body and isinstance(body[0], ast.Expr)
+                    and isinstance(body[0].value, ast.Constant)
+                    and isinstance(body[0].value.value, str)):
+                found.add(id(body[0].value))
+        return found
+
+    prose = _docstrings()
+
+    # ① 任何「字符串序列」都不许命中额度短语（防有人整份抄回来）
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            words = [e.value for e in node.elts
+                     if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+            if len(words) >= 2 and any(n in w for w in words for n in needles):
+                raise AssertionError(f"wb_watch 里又抄了一份额度 needle 列表：{words}")
+
+    # ② 单个代码常量也不许含 needle（唯一例外 = 事件 token 本身）
+    stray = [node.value for node in ast.walk(tree)
+             if isinstance(node, ast.Constant) and isinstance(node.value, str)
+             and id(node) not in prose
+             and any(n in node.value for n in needles)
+             and node.value != wb_watch.STATE_QUOTA]
+    assert stray == [], f"wb_watch 里出现了额度短语常量：{stray}"
+
+
+
 def test_dead_card_returns_nonzero_and_names_it(tmp_path: Path) -> None:
     """★ 反例（卡 215 §3）：某张卡**没有信号且已判死** ⇒ 退出码非零并点名。
 
@@ -182,6 +349,7 @@ def test_all_finished_returns_zero_and_prints_conclusions(tmp_path: Path) -> Non
     text = "\n".join(said)
     for token in ("收工结论", "判决首行", "退出码", "时长", "卡 213", "卡 900"):
         assert token in text
+    assert "额度" not in text, "两张好卡全收工的结论里不该出现额度痕迹（卡 E41 §3.5）"
 
 
 def test_heartbeat_says_where_it_is_now(tmp_path: Path) -> None:
