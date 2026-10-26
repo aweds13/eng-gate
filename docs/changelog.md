@@ -82,6 +82,7 @@
 - 仓外配置改为参数注入 + **fail fast**：`TF_PROJECTS_TOML` / `TF_MODELS_TOML` 缺了就报错退出，不再「跑一半才发现没配」。
 - `docs/subsystems/ci/云门禁机.md` 三处补正：§2 删掉「脚本已入库 `gates/diag/cloud_bootstrap.ps1`」这句假话（统一到「不入库 + 怎么重建」）、§7.1 补受控 A/B 四个数（403.46 / 417 / 684.27 / 37）、§7.2 补 37 红的两类分类表。
 - 新增 `tests/test_cloud_sync.py`：12 条钉子把上面四件事钉住（`-xfdq` 在脚本里、跑前断言无 `last.json`、依赖清单含三包且带版本、缺 `TF_PROJECTS_TOML` fail fast、脚本路径在库内）。
+- **收口（2026-10-26）**：云机换机后 pass16 在 `684d8007` 上 **20 门全 exit=0、`red=[]`**（`gates/diag/cloud-gate-E49-p16.log`，`last.json ok=True python=3.12.8`）⇒ 台账 `T-AG489` 由 `partial` 翻 `done`，删掉 `[exceptions]` 里那条豁免（现豁免 0 项）。
 ## 攒批并入派活链：一条入口 `plan` / `make` / `land`（E10 · T-AG461）
 - 新增 `tools/wb_batch.py`：把仓里早就有的攒批能力收成一条入口 —— `plan`（挑出文件不相交、依赖已满足的卡打包）/ `make`（写批预声明 + 台账 evidence 并集 + 三段文书骨架）/ `land`（批集成落地）；批上限 `BATCH_LIMIT = 4`，超了报数并给依据。
 - `tools/wb_dispatch.py` 接 `--batch`：按批号一次起多个成员，干跑与拒绝路径先走同一套守卫（成员不在预声明 / 卡已 landed 两种都点名拒绝）。

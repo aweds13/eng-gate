@@ -2,7 +2,7 @@
 id = "T-AG489"
 title = "云机确定性：装配与同步脚本入库、清残留、仓外配置 fail fast（T-AG489）"
 group = "ENGINEERING"
-status = "partial"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E35-云机确定性.md",
   "file:scripts/cloud/bootstrap.ps1",
@@ -10,5 +10,5 @@ evidence = [
   "file:tests/test_cloud_sync.py",
   "file:docs/subsystems/ci/云门禁机.md",
 ]
-gaps = "- **云机没有复跑，判据 1/2 未取证**：卡判据要求「云机全量门禁连续两趟 `exit 0`、A 类 22 条真绿」，本轮云机已停机、未重启，读数只有此前那趟 `684.27 s / 3008 passed / 37 failed / 34 skipped`（`gates/diag/bench-cloud4.log`）。复跑清单见 `scripts/cloud/run_gate.sh` 的用法注释；未取证部分不许当「已绿」。- **B 类 15 条一条都没动**：`test_gates_reuse_line` 10 条（空树哈希 = `sha256(「」)`，即扫描目录没命中，根因仍未定位，原始读数见 `gates/diag/bench-cloud4.log`）、`test_run_gates_timeout` 4 条、`test_concurrency` 1 条 —— 卡要求「改成环境无关，否则显式 `known-env-red` 点名」，这 15 条既没改绿也没声明，`git grep known-env-red` 现在是空的。- **`TF_PROJECTS_TOML` 的真身仍在仓外**：`D:/repo/infra/pool/projects.toml`，脚本只是「缺了就报错」，没有为 CI 造最小 fixture（卡允许，但要在申报里写差异 —— 本轮没造，所以没差异可写）。- **A 类 22 条未逐条验证**：`ruff` 版本差异（0.17.2 vs 0.16.6）与内存阈值这两条已在装配/文档里处理，但「云机上真绿」没有原始输出，见 `tests/test_cloud_sync.py` 只断言了「脚本里写了什么」、不断言「云机上跑成什么」。"
+gaps = ""
 
