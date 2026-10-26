@@ -57,6 +57,12 @@ SLOT_PORT_STRIDE = 40
 #: 槽锁陈旧阈值（秒）—— 与 `gates/diag/gate_lock.py` 的 `DEFAULT_STALE_AFTER` 同值。
 DEFAULT_STALE_AFTER = 10800.0
 
+#: 队列短锁的等待窗口（秒）。卡 E55（`T-AG507`）：10.0 在这台机器上被调度饥饿打穿过
+#: （`avail 0.73 GB / used 95.2%` 时 12 线程抢锁，等满 10 s 就无锁写 ⇒ 丢行）。
+#: 临界区实测是毫秒级，30 s 是三倍余量；**与 `tools/pool/queue.py::LOCK_WAIT_S` 必须同值**
+#: （钉子 `test_queue_lock_wait_defaults_agree` 守住）。
+LOCK_WAIT_S = 30.0
+
 #: 队列文件（相对仓库根）；`TF_GATE_POOL_QUEUE` 可覆写（测试 / 演练）。
 QUEUE_REL = ("gates", "diag", "gate-pool-queue.json")
 
@@ -142,7 +148,7 @@ class PoolQueue:
     """
 
     path: pathlib.Path
-    timeout: float = 10.0
+    timeout: float = LOCK_WAIT_S
 
     # ······························································ 读 / 写
     def load(self) -> dict:

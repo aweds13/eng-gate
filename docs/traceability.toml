@@ -9119,15 +9119,14 @@ evidence = [
 id = "T-AG507"
 title = "卡 E55 —— 门禁池队列的锁等待 10 s 偏紧（高负载下把记账写成丢行）"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E55-门禁池队列锁等待过紧.md",
   "file:tools/gate_pool.py",
   "file:tools/pool/queue.py",
+  "file:tests/test_gate_pool.py",
+  "file:tests/test_pool_queue.py",
   "test:test_gate_pool.py",
   "test:test_pool_queue.py",
+  "text:复盘/卡/卡E55-门禁池队列锁等待过紧.md",
 ]
-gaps = """
-判据还没实现：两处默认值仍是 10.0（tools/gate_pool.py 与 tools/pool/queue.py），
-钉子与反向验证都没写，见 复盘/卡/卡E55-门禁池队列锁等待过紧.md。
-"""

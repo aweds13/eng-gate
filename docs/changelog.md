@@ -1,3 +1,9 @@
+## 卡 E55 门禁池队列的锁等待 10 s → 30 s（T-AG507）
+
+- `tools/gate_pool.py` 新增 `LOCK_WAIT_S = 30.0`（`PoolQueue.timeout` 的默认值改成它），`tools/pool/queue.py` 同值新增 `LOCK_WAIT_S`（`_locked()` 默认值改成它）——两处必须同值，由钉子守住。
+- 疼点：`avail 0.73 GB / used 95.2%` 时 12 线程抢队列短锁，临界区只有毫秒级却被调度饿住 10 s，`locked()` 等满就 `break` 出去照样写 ⇒ 行被后写者盖掉；`tests/test_gate_pool.py::test_concurrent_submits_lose_no_rows` 在整趟全量门禁里红过两次（`gate-E50f.log`），单跑与整文件复跑全绿。
+- 三条新钉子：`test_pool_queue_timeout_defaults_to_thirty`（`>=30` 且两处同值）、`test_queue_lock_wait_defaults_agree`（同）、`test_locked_default_waits_for_a_slow_holder` + `test_locked_short_timeout_still_gives_up`（等待窗口可调、超时分支行为一字未改）。
+- 反向验证：把任一处改回 `10.0` ⇒ 两条钉子红；两处同时改回 `10.0` ⇒ 仍红（「同值」不够，还要 `>=30`）。
 ## 卡 E49c 第二笔：台账查找起点与测试隔离（T-AG504）
 
 - `T-AG504`：`tools/pool_accounts.find_ledger()` 起点改 `TOOL_ROOT`（仓库根）、不再跟 cwd 走；

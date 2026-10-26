@@ -43,6 +43,10 @@ STATE_REL = ("gates", "diag", "merge-queue.json")
 #: 轮询间隔（秒）。`TF_QUEUE_POLL` 可覆写（测试要快）。
 DEFAULT_POLL = 2.0
 
+#: 读改写短锁的等待窗口（秒）。卡 E55（`T-AG507`）：与 `tools/gate_pool.py::LOCK_WAIT_S`
+#: **必须同值**（同族口径不许漂，钉子 `test_queue_lock_wait_defaults_agree` 守住）。
+LOCK_WAIT_S = 30.0
+
 
 def _root(root: pathlib.Path | None = None) -> pathlib.Path:
     if root is not None:
@@ -99,12 +103,14 @@ def _save(state: dict, root: pathlib.Path | None = None) -> None:
 
 
 @contextlib.contextmanager
-def _locked(root: pathlib.Path | None = None, timeout: float = 10.0):
+def _locked(root: pathlib.Path | None = None, timeout: float = LOCK_WAIT_S):
     r"""读改写期间拿一把**短**锁（`<state>.lock`，`O_CREAT|O_EXCL`）。
 
     ★ 这**不是**门禁锁（那把保护的是端口/内存，粒度是「整趟门禁」）；这把只保护
       「读队列 → 改 → 写回」这几毫秒，**不许**拿它当单写者的判据（单写者看 `head`）。
-      超时（10s）⇒ 照样往下写（队列是**记账**，不是闸：卡 E5 要防的是白跑，不是数据一致性）。
+      超时（`LOCK_WAIT_S`）⇒ 照样往下写（队列是**记账**，不是闸：卡 E5 要防的是白跑，
+      不是数据一致性）。等待窗口从 10 s 放宽到 30 s 是卡 E55：10 s 在满载机器上被
+      调度饥饿打穿过，等满就无锁写、把行盖掉。
     """
     lock = state_path(root).with_suffix(".lock")
     lock.parent.mkdir(parents=True, exist_ok=True)

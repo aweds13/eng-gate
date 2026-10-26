@@ -170,3 +170,70 @@ def test_no_files_recorded_means_no_conflict_claim(q) -> None:
     q.enqueue(".wt/b", "T-B")
     assert q.same_file_conflicts("T-A") == [], "没记域却报了冲突"
     assert q.batches() == [["T-A", "T-B"]], q.batches()
+
+# ---------------------------------------------------------------- 卡 E55：锁等待窗口
+def test_queue_lock_wait_defaults_agree(q) -> None:
+    """两处短锁的等待窗口**必须同值且 >= 30 s**（卡 E55 · `T-AG507`）。
+
+    疼点实测：`avail 0.73 GB / used 95.2%` 时 12 线程抢锁，临界区只有毫秒级却被
+    调度饿住 10 s ⇒ 等满 `break` 出去**照样往下写** ⇒ 行被后写者盖掉
+    （`tests/test_gate_pool.py::test_concurrent_submits_lose_no_rows` 在整趟门禁里红过两次）。
+    """
+    import sys as _sys
+
+    root = Path(__file__).resolve().parents[1]
+    if str(root / "tools") not in _sys.path:
+        _sys.path.insert(0, str(root / "tools"))
+    import gate_pool as _gp
+
+    assert q.LOCK_WAIT_S >= 30.0, f"pool/queue.py 的 LOCK_WAIT_S={q.LOCK_WAIT_S}，小于 30 s"
+    assert _gp.LOCK_WAIT_S == q.LOCK_WAIT_S, (
+        f"同族口径漂了：gate_pool.LOCK_WAIT_S={_gp.LOCK_WAIT_S} vs "
+        f"queue.LOCK_WAIT_S={q.LOCK_WAIT_S}"
+    )
+
+
+def test_locked_default_waits_for_a_slow_holder(q) -> None:
+    """默认参数下，持锁者慢一点也要**等到**（不是等满就走）。
+
+    这里只等 1.0 s（证明「确实在等」）；能不能扛住 10 s 的饥饿由上面的常量钉子守
+    —— 同一个数同时喂给 `PoolQueue.timeout` 与 `_locked`。
+    """
+    import threading
+    import time as _time
+
+    lock = q.state_path().with_suffix(".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text("holder", encoding="utf-8")
+    released = threading.Event()
+
+    def _release_later() -> None:
+        _time.sleep(1.0)
+        lock.unlink(missing_ok=True)
+        released.set()
+
+    threading.Thread(target=_release_later, daemon=True).start()
+    t0 = _time.time()
+    with q._locked():
+        waited = _time.time() - t0
+    assert waited >= 0.8, f"没等到持锁者：只等了 {waited:.3f}s"
+
+
+def test_locked_short_timeout_still_gives_up(q) -> None:
+    """显式给短 `timeout` ⇒ 该放弃就放弃（等待窗口可调，不是写死）。
+
+    反向：把 `timeout` 参数改成忽略入参 ⇒ 这条红。
+    """
+    import time as _time
+
+    lock = q.state_path().with_suffix(".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text("holder", encoding="utf-8")
+    try:
+        t0 = _time.time()
+        with q._locked(timeout=0.05):
+            pass
+        spent = _time.time() - t0
+        assert 0.04 <= spent < 3.0, f"短的 timeout 没生效：等了 {spent:.3f}s"
+    finally:
+        lock.unlink(missing_ok=True)

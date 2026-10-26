@@ -292,3 +292,24 @@ def test_gates_on_line_and_trailer_check() -> None:
     assert "不符" in gp.check_gates_on_trailer(f"x\n{local}\n", expect=cloud)
     assert "恰好一行" in gp.check_gates_on_trailer(f"{cloud}\n{cloud}\n", expect=cloud)
     assert "云机名" in gp.check_gates_on_trailer("Gates-on: cloud\n", expect="Gates-on: cloud")
+
+# ---------------------------------------------------------------- ⑪ 卡 E55：锁等待
+def test_pool_queue_timeout_defaults_to_thirty(tmp_path: Path) -> None:
+    """`PoolQueue.timeout` 默认 >= 30 s，且与 `pool/queue.py::LOCK_WAIT_S` 同值（卡 E55）。
+
+    疼点：`avail 0.73 GB / used 95.2%` 时这条链上的 12 线程抢锁被调度饿住 10 s，
+    `locked()` 等满就 `break` 出去**照样写** ⇒ `test_concurrent_submits_lose_no_rows`
+    在整趟全量门禁里红过两次（`gate-E50f.log`），单跑全绿。
+    """
+    assert gp.PoolQueue(tmp_path / "q.json").timeout >= 30.0
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "pool_queue_for_agree", ROOT / "tools" / "pool" / "queue.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.LOCK_WAIT_S == gp.LOCK_WAIT_S, (
+        f"同族口径漂了：gate_pool.LOCK_WAIT_S={gp.LOCK_WAIT_S} vs "
+        f"queue.LOCK_WAIT_S={mod.LOCK_WAIT_S}"
+    )
