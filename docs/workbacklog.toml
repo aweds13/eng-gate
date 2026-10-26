@@ -3982,6 +3982,17 @@ status = "done"
 
 
 [[cards]]
+id = "E41"
+task = "T-AG506"
+title = "号池判决不许把 429 读成「正常收工」：看守与派活共用同一份额度判据"
+tree = ".wt/E41"
+spec = "复盘/卡/卡E41-号池判决不许把429读成正常收工.md"
+files = ["tools/wb_watch.py", "tests/test_wb_watch.py", "docs/subsystems/pool/事后判据清单.md"]
+status = "done"
+risk = "mid"
+depends = []
+
+[[cards]]
 id = "E50"
 task = "T-AG500"
 title = "并行度与门禁编排三件合一：worker 分档 + 快慢分层/槽位队列 + e2e 模板仓（并 E30/E32/E33）"
