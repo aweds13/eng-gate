@@ -4048,6 +4048,16 @@ risk = "low"
 depends = ["E35"]
 
 [[cards]]
+id = "E57"
+task = "T-AG509"
+title = "测试把本机的会话租约账本当成真输入：宿主 DSH_SESSION_ID 一注入就假红 9 条"
+tree = ".wt/E57"
+spec = "复盘/卡/卡E57-测试把本机会话账本当真输入.md"
+files = ["tests/conftest.py", "tests/test_wb_session.py", "docs/subsystems/ci/测试流程.md"]
+risk = "mid"
+depends = []
+status = "pending"
+[[cards]]
 id = "E56"
 task = "T-AG508"
 title = "云机门禁的三处宿主依赖：CLI 一致性用例缺 hermetic 夹具 / 模型开关泄进测试 / wb_session 双模块对象"

@@ -9143,3 +9143,22 @@ evidence = [
   "test:test_wb_dispatch.py",
   "text:复盘/卡/卡E56-两条pytest门禁各开满档worker.md",
 ]
+
+[entries."T-AG509"]
+id = "T-AG509"
+title = "卡 E57 —— 测试把本机的会话租约账本当成真输入（DSH_SESSION_ID 一注入就假红 9 条）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E57-测试把本机会话账本当真输入.md",
+  "file:tests/conftest.py",
+  "file:tests/test_wb_session.py",
+  "file:docs/subsystems/ci/测试流程.md",
+  "text:复盘/卡/卡E57-测试把本机会话账本当真输入.md",
+]
+gaps = [
+  "真因已定位但修法未落地：`tests/conftest.py` 还没有摘 `DSH_SESSION_ID` 的 autouse 夹具（疼点与红样记在 复盘/卡/卡E57-测试把本机会话账本当真输入.md）。",
+  "`wb_session.LEDGER` 是模块导入时的常量（`tools/wb_session.py:24`），测试沙箱改了 `wb_dispatch.ROOT` 却改不到它 —— 这条结构性欠账本卡不修，需另开卡（见 tests/conftest.py）。",
+  "反向验证（关掉夹具必须变红）尚未取到红样，等实现后补。",
+]
