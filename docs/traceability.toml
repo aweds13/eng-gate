@@ -9158,3 +9158,56 @@ evidence = [
   "test:test_wb_session.py",
   "text:复盘/卡/卡E57-测试把本机会话账本当真输入.md",
 ]
+
+[entries."T-AG510"]
+id = "T-AG510"
+title = "卡 F6 —— 文档门的判据成立与索引重建（死指针 / 漂移 / 已废弃三判据 + 索引机器生成）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡F6-文档门成立与索引重建.md",
+  "file:scripts/check_docs.py",
+  "file:scripts/gen_doc_index.py",
+  "file:gates/defs/contract.py",
+  "file:docs/doc-debt-baseline.toml",
+  "file:tests/test_check_docs.py",
+  "file:tests/test_doc_debt_ratchet.py",
+  "file:tests/test_gate_docs.py",
+  "file:tests/test_false_success_pins.py",
+]
+gaps = """规格已立、改动已在工作区做成，待攒批落地那一笔翻 done；
+改动实测：check_docs 三判据修好（行号列表 / `../` 层级按 `os.path.normpath(os.path.join(os.path.dirname(文件), '../' + token))` 归一 / 未入库 .md 记 skip）、docs 门接进 audit 档（门表 20→21）、`PINNED_FLOOR` 地板钉子补上（实测：把基线数字抬高门不会红，ratchet 只有读数没有地板）。
+如实留档的欠账：`复盘/` 769 篇零 frontmatter ⇒ 判据 3 在 `复盘/` 上只能靠正文句式；基线与真值仍有差（`docs/doc-debt-baseline.toml` 现写 dead_refs 152 / drift 432 / superseded 1）。"""
+
+[entries."T-AG511"]
+id = "T-AG511"
+title = "卡 F7 —— 复盘索引的生成器入库（六支 retro_*.py 从 gitignored 的 diag 搬进入库目录）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡F7-复盘索引生成器入库.md",
+  "file:scripts/retro/retro_index.py",
+  "file:scripts/retro/retro_extract.py",
+  "file:复盘/INDEX.md",
+]
+gaps = """规格已立、生成器已从 gitignored 的 `gates/diag/` 搬进入库的 `scripts/retro/`，待落地那一笔翻 done；
+为什么必须搬：产物 `复盘/INDEX.md` 入库而生成器不入库 = 不可重跑（卡 E53 · T-AG503 的判据）。
+如实留档的欠账：`复盘/INDEX.md` 里宣称的 `--write` / `--extract` 两个旗标在脚本里**不存在**（只有 `--preview` / `--sample` / `--only` / `--show` / `--id` / `--all` / `--full` / `--top` / `--grep`）⇒ 索引正文与生成器口径仍有一处对不上，待下一张卡收。"""
+
+[entries."T-AG512"]
+id = "T-AG512"
+title = "卡 G5 —— 技能去陈旧与退出码诚实（11 份 skills + 对账脚本判不出时不再退 0）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡G5-技能去陈旧与退出码诚实.md",
+  "file:skills/README.md",
+  "file:tools/check_skills_claims.py",
+  "file:tests/test_check_skills_claims.py",
+]
+gaps = """规格已立、`skills/` 11 份与四个工具的改动已在工作区，待攒批落地那一笔翻 done；
+疼在哪（实测）：`skills/pipe-gate/SKILL.md:33`「卡 E16 在修等锁没进度」、`skills/README.md:41` 与 `skills/softeng-manage/references/commands.md:127-128`「等卡 E18 落地」、`commands.md:95`「在卡 E10」—— 台账实测 E16 已并入 E28 落地、E18 done（T-AG470）、E10 done ⇒ 三处「等卡 X」全部过期。另 `tools/check_skills_claims.py --check` 报 `[FAIL] 引用 173 / 对得上 100 / 对不上 1 / 判不出 72` 却**退 0**。
+如实留档的欠账：72 条「判不出」不是偷懒（全是模板占位 / 仓外路径 / diag 产物 / gitignored），但退出码没有把它们与「全对得上」区分开。"""

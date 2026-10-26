@@ -1,0 +1,20 @@
+[entries."T-AG510"]
+id = "T-AG510"
+title = "卡 F6 —— 文档门的判据成立与索引重建（死指针 / 漂移 / 已废弃三判据 + 索引机器生成）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡F6-文档门成立与索引重建.md",
+  "file:scripts/check_docs.py",
+  "file:scripts/gen_doc_index.py",
+  "file:gates/defs/contract.py",
+  "file:docs/doc-debt-baseline.toml",
+  "file:tests/test_check_docs.py",
+  "file:tests/test_doc_debt_ratchet.py",
+  "file:tests/test_gate_docs.py",
+  "file:tests/test_false_success_pins.py",
+]
+gaps = """规格已立、改动已在工作区做成，待攒批落地那一笔翻 done；
+改动实测：check_docs 三判据修好（行号列表 / `../` 层级按 `os.path.normpath(os.path.join(os.path.dirname(文件), '../' + token))` 归一 / 未入库 .md 记 skip）、docs 门接进 audit 档（门表 20→21）、`PINNED_FLOOR` 地板钉子补上（实测：把基线数字抬高门不会红，ratchet 只有读数没有地板）。
+如实留档的欠账：`复盘/` 769 篇零 frontmatter ⇒ 判据 3 在 `复盘/` 上只能靠正文句式；基线与真值仍有差（`docs/doc-debt-baseline.toml` 现写 dead_refs 152 / drift 432 / superseded 1）。"""

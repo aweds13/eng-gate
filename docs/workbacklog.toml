@@ -4077,3 +4077,36 @@ files = ["tools/gate_pool.py", "tools/pool/queue.py", "tests/test_gate_pool.py",
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "F6"
+task = "T-AG510"
+title = "文档门的判据成立与索引重建：死指针能判行号列表、层级少一层不再误报、漂移基线有地板"
+tree = ".wt/F6"
+spec = "复盘/卡/卡F6-文档门成立与索引重建.md"
+files = ["docs/INDEX.md", "docs/changelog.d/T-AG489.md", "docs/contracts/domains/F1-tasks.md", "docs/contracts/domains/F2-ledger.md", "docs/contracts/domains/F3-focus.md", "docs/contracts/domains/F4-feedback.md", "docs/contracts/domains/F5-academic.md", "docs/contracts/domains/F6-review.md", "docs/contracts/domains/F7-team.md", "docs/contracts/domains/F8-memo.md", "docs/contracts/domains/F9-storage-sync.md", "docs/contracts/domains/F10-notify.md", "docs/specification/domains/F1-tasks.md", "docs/specification/domains/F2-ledger.md", "docs/specification/domains/F3-focus.md", "docs/specification/domains/F4-feedback.md", "docs/specification/domains/F5-academic.md", "docs/specification/domains/F6-review.md", "docs/specification/domains/F7-team.md", "docs/specification/domains/F8-memo.md", "docs/specification/domains/F9-storage-sync.md", "docs/specification/domains/F10-notify.md", "docs/specification/domains/_CROSS.md", "docs/subsystems/ci/云门禁机.md", "docs/subsystems/ci/测试流程.md", "docs/workbuddy-cli-使用指南.md", "docs/定时巡检.md", "docs/归置地图.md", "docs/文档架构.md", "docs/doc-debt-baseline.toml", "gates/defs/contract.py", "scripts/check_docs.py", "scripts/gen_doc_index.py", "tests/test_check_docs.py", "tests/test_ci_docs.py", "tests/test_doc_debt_ratchet.py", "tests/test_false_success_pins.py", "tests/test_gate_docs.py"]
+risk = "mid"
+depends = []
+status = "pending"
+
+[[cards]]
+id = "F7"
+task = "T-AG511"
+title = "复盘索引的生成器入库：INDEX.md 必须能被重跑，不许只有产物没有发生器"
+tree = ".wt/F7"
+spec = "复盘/卡/卡F7-复盘索引生成器入库.md"
+files = ["scripts/retro/retro_extract.py", "scripts/retro/retro_gaps.py", "scripts/retro/retro_index.py", "scripts/retro/retro_lines.py", "scripts/retro/retro_phrases.py", "scripts/retro/retro_themes.py", "复盘/INDEX.md"]
+risk = "low"
+depends = []
+status = "pending"
+
+[[cards]]
+id = "G5"
+task = "T-AG512"
+title = "技能去陈旧与退出码诚实：三处「等卡 E16/E18/E10」早已落地，对账脚本判不出也退 0"
+tree = ".wt/G5"
+spec = "复盘/卡/卡G5-技能去陈旧与退出码诚实.md"
+files = ["skills/README.md", "skills/pipe-card/references/dispatch.md", "skills/pipe-gate/SKILL.md", "skills/pipe-init/references/scaffold.md", "skills/pipe-land/SKILL.md", "skills/pipe-land/references/land-steps.md", "skills/pipe-takeover/references/classify.md", "skills/softeng-manage/SKILL.md", "skills/softeng-manage/references/commands.md", "skills/softeng-manage/references/retired-settings.md", "skills/softeng-manage/references/spec-checklist.md", "tools/check_mapping.py", "tools/check_skills_claims.py", "tools/replay_worker_edits.py", "tools/sync_worker_skills.py", "tests/test_check_skills_claims.py"]
+risk = "mid"
+depends = []
+status = "pending"

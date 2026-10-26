@@ -1,0 +1,15 @@
+[entries."T-AG511"]
+id = "T-AG511"
+title = "卡 F7 —— 复盘索引的生成器入库（六支 retro_*.py 从 gitignored 的 diag 搬进入库目录）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡F7-复盘索引生成器入库.md",
+  "file:scripts/retro/retro_index.py",
+  "file:scripts/retro/retro_extract.py",
+  "file:复盘/INDEX.md",
+]
+gaps = """规格已立、生成器已从 gitignored 的 `gates/diag/` 搬进入库的 `scripts/retro/`，待落地那一笔翻 done；
+为什么必须搬：产物 `复盘/INDEX.md` 入库而生成器不入库 = 不可重跑（卡 E53 · T-AG503 的判据）。
+如实留档的欠账：`复盘/INDEX.md` 里宣称的 `--write` / `--extract` 两个旗标在脚本里**不存在**（只有 `--preview` / `--sample` / `--only` / `--show` / `--id` / `--all` / `--full` / `--top` / `--grep`）⇒ 索引正文与生成器口径仍有一处对不上，待下一张卡收。"""
