@@ -4046,3 +4046,14 @@ files = ["scripts/cloud/bootstrap.ps1", "scripts/cloud/run_gate.sh", "tests/test
 status = "done"
 risk = "low"
 depends = ["E35"]
+
+[[cards]]
+id = "E55"
+task = "T-AG507"
+title = "门禁池队列的锁等待 10 s 偏紧：高负载下把记账写成丢行"
+tree = ".wt/E55"
+spec = "复盘/卡/卡E55-门禁池队列锁等待过紧.md"
+files = ["tools/gate_pool.py", "tools/pool/queue.py", "tests/test_gate_pool.py", "tests/test_pool_queue.py"]
+status = "pending"
+risk = "mid"
+depends = []
