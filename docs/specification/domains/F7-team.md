@@ -70,12 +70,12 @@ assigned → in_progress → done
 
 ## 7. 测试映射
 
-- 现有：`../../tests/test_team_memo.py`、`../../tests/test_team_line.py`。
-- 视角切换（T-G12 / OP-33）：`../../tests/test_team_view_line.py`（13 条）+ 真机自检
-  `../../tools/web_live_check.py` 的团队一组（默认视角 / 分组 / 只给自己的 / 没填名字不猜 /
+- 现有：`../../../tests/test_team_memo.py`、`../../../tests/test_team_line.py`。
+- 视角切换（T-G12 / OP-33）：`../../../tests/test_team_view_line.py`（13 条）+ 真机自检
+  `../../../tools/web_live_check.py` 的团队一组（默认视角 / 分组 / 只给自己的 / 没填名字不猜 /
   非法参数 400 / 任务进回收站后记录留着）+ DOM 探针「团队视角 1/1」。
-- AI 边界（T-G6）：`../../tests/test_ai_line.py`（23 条）+ 真机自检 `../../tools/web_live_check.py`
+- AI 边界（T-G6）：`../../../tests/test_ai_line.py`（23 条）+ 真机自检 `../../../tools/web_live_check.py`
   的 AI 一组（默认关 403 / 能读能建 / 勾你建的 400 / 改删 403 / 跨站 403 / 事实可回溯）。
 - 回报进展（T-G21 / OP-32）：同上文件（+5 条：报告不改任务字段 / 空话·多传字段·已删 400 /
   完成后仍可真事实 / 撤销是追加且一层层往回撤 / AI 自己读得回来）+ 真机自检 4 条 + DOM 探针
-  「AI 接口 4/4」+ `../../tests/test_web_frontend.py` 的接线一条（卡片与详情都看得见、可撤销）。
+  「AI 接口 4/4」+ `../../../tests/test_web_frontend.py` 的接线一条（卡片与详情都看得见、可撤销）。

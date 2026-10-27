@@ -121,5 +121,5 @@ python -X utf8 tools/wb_land.py --batch <批号> --tree .wt/batch<号> --task <�
 
 ★ **失败怎么定位**：落地按「产物 ∩ 暂存清单」逐成员认领再翻 `status` —— 没认领到谁的产物就点名谁；
 批树 `git apply` 合不上 ⇒ 整批停并点出冲突的卡与路径。
-★ **入口还是散的（如实写）**：`wb_batch.py`（`plan` / `make` / `land`）在**卡 E10**，还没落 ——
-在那之前预声明 TOML 要手写，别照着 E10 的名字敲命令。
+★ **入口**：`tools/wb_batch.py`（`plan` / `make` / `land`）**已随卡 E10 落地**；
+预声明 TOML 仍要手写（模板见 `gates/diag/batch/`）。

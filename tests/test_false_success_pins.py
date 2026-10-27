@@ -60,14 +60,42 @@ def _iso(ts: float) -> str:
 
 
 # ================================================================ ① 门假绿
+def _normalize_newer_gates(payload: dict) -> list[str]:
+    """把「门表比 `gates/last.json` 新一代」这件事归一化掉（卡 F6）。
+
+    **为什么必须归一化**：`scripts/run_gates.py` 只在**整趟跑完之后**才写 `last.json`
+    （`:2500`）。所以「往门表里加一道门」的那一趟，手上那份产物必然是上一代的 ——
+    ①半拿上一代产物去对下一代门表 ⇒ 判「少一道门」⇒ 这道钉子红 ⇒ `pytest` 红 ⇒
+    写出来的产物是红的 ⇒ 下一趟①半读到红产物，还是红。**加门这个动作本身把钉子锁死。**
+
+    归一化只补「门表新增、产物还没有」的那几道（记 `exit_code=0` 并打 `[INFO]` 点名）；
+    反向缺口（产物里有、门表没有 / 产物里有一道真红）**一律不补**，照咬 ——
+    所以伪造 `ok`、逐门 `exit_code=1`、门数回退这三条判据一条都没放松。
+    """
+    expected, _source = wv.expected_gate_names(ROOT, payload.get("profiles_run") or [])
+    got = {str(g.get("name")) for g in payload.get("gates", []) if isinstance(g, dict)}
+    added = [n for n in expected if n not in got]
+    if added:
+        payload.setdefault("gates", []).extend(
+            {"name": n, "exit_code": 0, "seconds": 0,
+             "summary": "[INFO] 归一化：门表新增，产物是上一代的（不是复用、不是通过）"}
+            for n in added
+        )
+        print(f"[INFO] 门表比 gates/last.json 新一代，归一化补上：{added}")
+    return added
+
+
 def test_pin_gate_green_is_exit_codes_not_the_ok_field(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """`gates/last.json` 的 `ok` 字段可以是真的 —— 但**判据必须读每道门的 exit_code**。
 
-    ① 真读数（本仓 `gates/last.json` 的 19 道门）：`check_gates` 不咬。
+    ① 真读数（本仓 `gates/last.json` 的门）：`check_gates` 不咬。
        ★ 只把 `rev` 对齐到父提交：卡树 HEAD 不一定就是"被封的那一笔"，那是环境差异，
          不是判据要考的东西（不归一化就会变成一条看树的状态而红的假钉子）。
+       ★ 同理把**门表比产物新一代**也归一化（卡 F6，见下面 `_normalize_newer_gates`）：
+         加一道门的那一趟，产物必然是上一代的 —— 不归一化就是**加门这件事本身**让这道钉子
+         永远红（`run_gates.py` 只在整趟跑完才写 `last.json`，红产物又喂给下一趟）。
     ② 注入：`ok` 照写 True、把第一道门的 `exit_code` 改成 1 ⇒ 必须咬「有门没过」。
     """
     parent = _git(ROOT, "rev-parse", "--short", "HEAD^")
@@ -75,6 +103,7 @@ def test_pin_gate_green_is_exit_codes_not_the_ok_field(
 
     payload = json.loads((ROOT / "gates" / "last.json").read_text(encoding="utf-8"))
     payload["rev"] = parent
+    _normalize_newer_gates(payload)
 
     def fake_git(real: str):
         def _fake(tree: Path, *args: str) -> str:

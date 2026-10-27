@@ -39,6 +39,6 @@
 
 ## 5. 测试映射
 
-- `../../tests/test_school_notify_line.py`（18 条：默认关 / 去重 / 扩展位 / 转任务 / 忽略 / 接口 / 迁移）。
-- 真机自检 `../../tools/web_live_check.py` 的「学校通知」一组（9 条，真 HTTP）。
-- DOM 探针 `../../tools/ui_dom_probe.mjs`「设置·学校通知」1 档（三种状态三种按钮 + 两种空态）。
+- `../../../tests/test_school_notify_line.py`（18 条：默认关 / 去重 / 扩展位 / 转任务 / 忽略 / 接口 / 迁移）。
+- 真机自检 `../../../tools/web_live_check.py` 的「学校通知」一组（9 条，真 HTTP）。
+- DOM 探针 `../../../tools/ui_dom_probe.mjs`「设置·学校通知」1 档（三种状态三种按钮 + 两种空态）。

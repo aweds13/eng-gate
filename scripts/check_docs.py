@@ -26,9 +26,12 @@ r"""文档门禁（卡 F3 / T-AG451）：死指针 / drift 债 / superseded 未�
    **只报告，不参与 ratchet**（每一笔代码提交都会动这个数，拿它做阈值必然假红）。
    判据取 `git log --name-only` 一次全历史（517 条提交 ≈ 0.3 秒），不比祖先关系——
    提交时间戳同秒时 ADDA 的"祖先后代"判法会判不出，这里退化成"谁的时间戳更晚"。
-3. **superseded 未标注**：正文命中「已废弃 / 被取代 / 不再适用」却没有 frontmatter
-   `status: superseded` + `supersedes:` ⇒ 报一条。词表就是卡里点名的三个（`等词` 没扩——
-   扩词等于自己加产品口径，卡里没写）。
+3. **superseded 未标注**：**文档自己声明自己过时**（不是正文里出现那个词）却没有 frontmatter
+   `status: superseded` + `supersedes:` ⇒ 报一条。认两种声明：标题行 `# 已废弃：xxx`（标题
+   整句就是这个意思），和正文里**带主语**的句子（`本/本文件/本文档/本卡片/本文 + 已废弃/…`
+   或 `不再适用，请见 X`）。裸词不算——第一版按裸词判，6 条命中全是误报（自动生成文件、
+   文件名带这词、文档在讨论这个词本身），卡 A308 收窄成现在这样。`GENERATED` 首行锚点的
+   自动生成文件直接不判。详见 `superseded_declarations()` 的收窄史。
 4. **判不出来就报 skip**：仓外绝对路径（`D:\…`）、模板占位（含 `<…>` `*` `{…}` `…`）、
    `..` 逃逸、`gates/diag/**` 产物、gitignored 产物、反引号不成对的行 —— 全部记 `skip`
    并**计数打印**（按原因分组）。`skip > 0` 时输出**不许**给干净结论（照 ADDA：
@@ -143,7 +146,49 @@ BASELINE_TASK = "T-AG493"
 DIAG_PREFIX = "gates/diag/"
 
 #: 判据 3 的词表（卡里点名的三个；要扩词先改卡）。
+# 判据 3 只认**「文档自己声明自己过时」**，不认裸词（卡 A308 收窄）。
+#
+# 第一版是「正文里出现 `已废弃 / 被取代 / 不再适用` 就报」，实测 6 条命中**全是误报**：
+# 自动生成的索引、文件名里带这个词的文件、在讨论/定义这个词表的卡、讲这个概念的调研
+# 文章、以及偶然写进句子里的词。判据本意是「这份文档自己声明自己过时了」，
+# 而裸词出现的位置与"谁在声明"无关 —— 所以改成只认自声明句式。
 SUPERSEDED_WORDS = ("已废弃", "被取代", "不再适用")
+
+# 自声明必须有**主语**：本/此 + 文档类称谓（本文档 / 本文件 / 本卡 / 本复盘 …）。
+SELF_SUBJECTS = ("本", "此")
+SELF_NAMES = ("文档", "文件", "文", "篇", "页", "卡", "复盘", "索引")
+
+_KW = r"(?P<kw>已废弃|被取代|不再适用)"
+_SUBJ = r"(?P<subj>(?:本|此)(?:" + "|".join(SELF_NAMES) + r")[^，,。；;！!？?]{0,12}?)"
+
+# 三种句式，其余一律不算（名字 + 该句式适用的守卫）：
+#   ① 主语 + 关键词：`本文档已废弃` / `本文不再适用，请见 …`（关键词落在句末也算，
+#      只要主语在；`本文档不再适用。` 命中）
+#      守卫：主语到关键词之间点名了别的文档 ⇒ 在说别人。
+#   ② 主语 + 被 X 取代：`本文件被 docs/new.md 取代`
+#      ★ 这里的 X **就是**接任者，所以**不**套"点了别的文档"守卫；
+#      但主语里夹了「的」就不算（`本文档的旧入口已被 … 取代` 说的是旧入口）。
+#   ③ 标题即声明：`# 已废弃：xxx` / `# 被取代｜xxx`
+#
+# ★ 没有主语、只靠「关键词落在句末」的句子**不认**（`这条路现已废弃。`）。
+#   那正是误报的入口：复盘里写 `旧路由表已废弃。` 说的是那个表，不是这份文档。
+#   卡 A308 的判据是「主语 + 关键词 + 同句」三件齐备；本仓实测这种无主语句式
+#   **0 条独有命中**（唯一那条真欠账靠标题句式就能判出），所以收紧没有损失。
+SUPERSEDED_PATTERNS = (
+    (re.compile(_SUBJ + _KW), ("object", "other_doc")),
+    (re.compile(_SUBJ + r"被[^。；;！!？?]{0,24}?(?P<kw>取代)"), ("object",)),
+)
+SUPERSEDED_HEADING = re.compile(
+    r"^ {0,3}#{1,6} *(?P<kw>已废弃|被取代|不再适用)(?= *[：:｜|—–-])", re.M
+)
+
+# 否定：「并非不再适用」「未被取代」都不是声明。看关键词**前面**那一小段。
+_NEGATION = re.compile(r"(?:并非|不是|并未|未被|没有被|没被|不能算)$")
+
+# 「被取代」说的常常是**别的**东西：`本文档的 A 已被 B 取代` 里被取代的是 A。
+# 主语到关键词之间夹了「的」⇒ 主语不是被取代的那个对象，不算自声明。
+_OBJECT_MARK = "的"
+
 
 #: 证据前缀（台账 / changelog 里那一族写法）：先剥掉再当路径判。
 EVIDENCE_PREFIXES = ("file:", "text:", "test:", "route:", "ui:", "column:", "table:")
@@ -297,6 +342,12 @@ def normalize(token: str) -> str:
     台账 / changelog 里同一族写法都要认（否则每条都是假断链）：
     `file:docs/x.md` / `text:src/y.py::def f` / `tests/t.py::test_a` / `tools/z.py:294`
     / `tools/serve.py --window`（命令行：只取第一段）。
+
+    ★ 卡 F6：行号有四种写法，旧版只认第一种，把 `:23,145` 整段当文件名 ⇒ 假断链。
+      `:294`（单行）/ `:294-300`（区间）/ `:23,145` `:14,45`（多行逗号）/
+      `:127-131,`（区间尾逗号）/ `：34,431`（**全角冒号**，中文正文里很常见）。
+      另有 `文件.成员()`、`文件.成员` 这种「指到某个函数/常量」的写法
+      （`tools/evidence_map.assertion_path()`）—— 落盘时要按 `文件.py` 找。
     """
     text = token.strip()
     for prefix in EVIDENCE_PREFIXES:
@@ -305,11 +356,30 @@ def normalize(token: str) -> str:
             break
     text = text.split("::", 1)[0].strip()
     text = text.split()[0] if text else ""
-    text = re.sub(r":\d+(-\d+)?$", "", text)
+    # 行号：半角/全角冒号 + 单行/区间/逗号列表 + 可能的尾逗号
+    text = re.sub(r"[:：]\d+(?:[-–,，]\d+)*[,，]?$", "", text)
     text = text.split("#", 1)[0].strip()
     if text.startswith("./"):
         text = text[2:]
     return "" if text in (".", "..") else text
+
+
+#: 本仓跟踪过的扩展名（`git ls-files` 实测；`_EXT_SNAPSHOT` 由 `tests/` 之外的复核脚本维护）。
+#: 判据 1 用它划「别仓路径」的界：`.ts` / `.php` / `.go` 这种本仓**从来没有**的类型，
+#: 只可能是引用了别人的仓（`复盘/DSH插件-*.md` 里 50 条 `src/core/verification.ts` 就是这种）。
+OWN_EXTS = frozenset({
+    ".md", ".markdown", ".py", ".pyw", ".toml", ".txt", ".mjs", ".json", ".js",
+    ".yml", ".yaml", ".ps1", ".sh", ".cmd", ".html", ".css", ".tmpl", ".png",
+    ".gitignore", ".gitattributes", ".gitkeep", ".ini", ".cfg", ".lock", ".svg",
+})
+
+
+def ext_of(token: str) -> str:
+    """末段的扩展名（小写，含点）；没有就空串。`.gitignore` 这种算扩展名。"""
+    last = token.replace("\\", "/").rsplit("/", 1)[-1]
+    if last.startswith(".") and last.count(".") == 1:
+        return last.lower()
+    return ("." + last.rsplit(".", 1)[-1].lower()) if "." in last else ""
 
 
 def is_path_shaped(token: str) -> bool:
@@ -525,12 +595,45 @@ def repo_rel(token: str, md: Path, root: Path, kind: str) -> str:
 
 
 # --------------------------------------------------------------------------- 判据
+def symbol_variants(token: str) -> list[str]:
+    """「指到某个函数/常量」的写法 → 可能的文件路径，由近到远。
+
+    `tools/evidence_map.assertion_path()` → `tools/evidence_map.py`、`tools/evidence_map`
+    `tools/pool/queue.py:Entry.state`    → 先按上面的 `normalize` 已剥行号，落到 `.py` 本体
+
+    ★ 卡 F6：本仓的 changelog / 卡规格大量写「`tools/wb_verify.expected_gate_names()`」
+      这种「文件.成员()」—— 它指的是**存在的模块里的成员**，旧判据把它整串当文件名 ⇒ 假断链。
+    """
+    clean = normalize(token)
+    if not clean:
+        return []
+    out: list[str] = []
+    head, _, last = clean.replace("\\", "/").rpartition("/")
+    # 末段形如 `name.member` / `name.member()`：把 `.member` 当成成员名剥掉
+    bare = re.sub(r"(\(\))?$", "", last)
+    m = re.match(r"^(.+?)\.[A-Za-z_][A-Za-z0-9_]*$", bare)
+    if m and ext_of(bare) not in OWN_EXTS:
+        stem = m.group(1)
+        for suffix in ("", ".py", ".toml", ".md", ".json"):
+            cand = (head + "/" if head else "") + stem + suffix
+            if ext_of(cand) in OWN_EXTS or suffix == "":
+                out.append(cand)
+    return out
+
+
 def check_dead_refs(root: Path, docs: list[Path]) -> tuple[list[Finding], list[Skip]]:
     """判据 1：死指针（判不出的地方如实记 skip）。
 
     ★ 边界（与文件头一致）：外链 / 路由 / 子命令 / 裸文件名 / 第一段不在仓根的相对路径
       **不是指针**（不判也不记 skip）；绝对路径 / 模板占位 / `..` 逃逸 / `gates/diag`
       产物 / gitignored 产物 / 反引号不成对的行 ⇒ **skip**（判不出）。
+
+    ★ 卡 F6 追加两条边界（都是实测出来的假阳性，不是「放宽」）：
+      ① **别仓类型**：末段扩展名不在 `OWN_EXTS`（本仓从来没跟踪过 `.ts`/`.php`/`.go`…）
+         ⇒ 它引的是**别人的仓**（`复盘/DSH插件-*.md` 里 50 条 `src/core/verification.ts`）。
+         记 skip 不记 finding —— skip 不算 PASS，数字仍看得见。
+      ② **成员引用**：`tools/evidence_map.assertion_path()` 这种「文件.成员()」先按
+         `symbol_variants` 落到 `文件.py` 再判，落得住就不算断链。
     """
     findings: list[Finding] = []
     skips: list[Skip] = []
@@ -560,7 +663,14 @@ def check_dead_refs(root: Path, docs: list[Path]) -> tuple[list[Finding], list[S
                 if outside_repo(token, md, root, root_nc=root_nc):
                     skips.append(Skip(where, token, "指到仓库外面去了"))
                     continue
+                if ext_of(token) and ext_of(token) not in OWN_EXTS:
+                    skips.append(Skip(where, token,
+                                      f"`{ext_of(token)}` 不是本仓跟踪过的类型 ⇒ 判为别仓路径"))
+                    continue
                 if resolve(token, md, root, kind, root_nc=root_nc) is not None:
+                    continue
+                if any(resolve(cand, md, root, kind, root_nc=root_nc) is not None
+                       for cand in symbol_variants(token)):
                     continue
                 if token.replace("\\", "/").startswith(DIAG_PREFIX):
                     skips.append(Skip(where, token, "gates/diag 产物（不随 worktree 分发）"))
@@ -578,13 +688,79 @@ def check_dead_refs(root: Path, docs: list[Path]) -> tuple[list[Finding], list[S
     return findings, skips
 
 
+GENERATED = "<!-- generated by scripts/gen_doc_index.py; do not edit -->"
+
+# 句子里点名了**别的**文档（卡 A272 / 0003 / docs/x.md）时，那多半在说别人过时，
+# 不是在说本文档自己。只在主语与关键词之间这一段里看。
+_OTHER_DOC = re.compile(r"卡[A-Za-z]*\d|[A-Z]\d{1,3}|\d{3,4}|docs/|\.md")
+
+
+def superseded_declarations(body: str) -> list[str]:
+    """正文里**自己声明自己过时**的句子；裸词不算。
+
+    认的三种句式见 `SUPERSEDED_PATTERNS` / `SUPERSEDED_HEADING` 上方注释：
+    带主语的句子（`本文档已废弃` / `本文档不再适用。`）、主语 + 被 X 取代、标题即声明。
+    否定句（`并非不再适用`）、主语与关键词之间夹了「的」的「被取代」（说的是别的对象）、
+    以及**没有主语**只靠关键词落句末的（`这条路现已废弃。`）都不算。
+
+    返回命中的片段（去重，按出现顺序），只用于拼 finding 的说明文字。
+    """
+    hits: list[str] = []
+
+    def self_claim(kw: str, gap: str, before: str, guards: tuple[str, ...]) -> bool:
+        """`gap` 是主语到关键词之间那段；`before` 是原文里关键词前面那一小段。
+
+        `guards` 由句式决定（见 `SUPERSEDED_PATTERNS`）：不是每个守卫都适用。
+        """
+        if chr(10) in gap:                      # 不跨行：声明必须落在同一行里
+            return False
+        if _NEGATION.search(before.strip()):    # `并非不再适用` / `未被取代`
+            return False
+        if "object" in guards and _OBJECT_MARK in gap:
+            return False                        # `本文档的 A 已被 B 取代` → 说的是 A
+        return not ("other_doc" in guards and _OTHER_DOC.search(gap))
+
+    for pattern, guards in SUPERSEDED_PATTERNS:
+        for match in pattern.finditer(body):
+            kw = match.group("kw")
+            span = match.group(0)
+            gap = match.groupdict().get("gap")
+            if gap is None:
+                gap = span[: span.rindex(kw)]
+            # 否定词常常落在**匹配起点之前**（`本文档并非|不再适用`），
+            # 所以取原文里关键词前面那一小段，而不是只取命中文案自己。
+            kw_at = match.start() + span.rindex(kw)
+            before = body[max(0, kw_at - 8): kw_at].rsplit(chr(10), 1)[-1]
+            if not self_claim(kw, gap, before, guards):
+                continue
+            hits.append(span.strip())
+    for match in SUPERSEDED_HEADING.finditer(body):
+        end = body.find(chr(10), match.start())
+        line = body[match.start(): end if end >= 0 else len(body)]
+        hits.append(line.strip().lstrip("#").strip())
+    return list(dict.fromkeys(hits))
+
+
 def check_superseded(root: Path, docs: list[Path]) -> list[Finding]:
-    """判据 3：正文说"已废弃"却没有 `status: superseded` + `supersedes:`。"""
+    """判据 3：**文档自己声明自己过时**，却没有 `status: superseded` + `supersedes:`。
+
+    收窄史（卡 A308）：第一版是「正文任意位置出现 `已废弃 / 被取代 / 不再适用` 就报」，
+    实测 6 条命中全是误报 —— 自动生成的索引、文件名里带这个词、在讨论/定义词表的卡、
+    讲这个概念的调研文章。**裸词与"谁在声明"无关**，所以只认自声明句式。
+
+    不判的三类（都不算"判不出"，故不进 skips 通道）：
+    - 首行是 `GENERATED` 锚点的自动生成文件（内容由 scripts/gen_doc_index.py 派生）；
+    - 只搜正文与标题，**不搜文件名**（`复盘/已废弃-xxx.md` 这种是文件名，不是声明）；
+    - frontmatter 已有 `status: superseded` + `supersedes:` 的，已标注，跳过。
+    """
     findings: list[Finding] = []
     for md in docs:
         text = read_text(md)
+        first = text.lstrip(chr(0xFEFF)).split(chr(10), 1)[0].strip()
+        if first == GENERATED:
+            continue  # 自动生成文件：正文不是人写的，声明与否都不算欠账
         meta, body, _ = split_frontmatter(text)
-        hits = [word for word in SUPERSEDED_WORDS if word in body]
+        hits = superseded_declarations(body)
         if not hits:
             continue
         labeled = meta.get("status", "").strip().lower() == "superseded" and bool(
@@ -595,7 +771,7 @@ def check_superseded(root: Path, docs: list[Path]) -> list[Finding]:
         where = rel(md, root)
         findings.append(Finding(
             "superseded", where,
-            f"正文命中「{'/'.join(hits)}」，但没有 frontmatter status: superseded + supersedes:",
+            f"正文自声明「{hits[0]}」，但没有 frontmatter status: superseded + supersedes:",
         ))
     return findings
 

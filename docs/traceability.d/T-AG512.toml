@@ -9,6 +9,19 @@ evidence = [
   "file:skills/README.md",
   "file:tools/check_skills_claims.py",
   "file:tests/test_check_skills_claims.py",
+  "file:skills/pipe-card/references/dispatch.md",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:skills/pipe-init/references/scaffold.md",
+  "file:skills/pipe-land/SKILL.md",
+  "file:skills/pipe-land/references/land-steps.md",
+  "file:skills/pipe-takeover/references/classify.md",
+  "file:skills/softeng-manage/SKILL.md",
+  "file:skills/softeng-manage/references/commands.md",
+  "file:skills/softeng-manage/references/retired-settings.md",
+  "file:skills/softeng-manage/references/spec-checklist.md",
+  "file:tools/check_mapping.py",
+  "file:tools/replay_worker_edits.py",
+  "file:tools/sync_worker_skills.py",
 ]
 gaps = """规格已立、`skills/` 11 份与四个工具的改动已在工作区，待攒批落地那一笔翻 done；
 疼在哪（实测）：`skills/pipe-gate/SKILL.md:33`「卡 E16 在修等锁没进度」、`skills/README.md:41` 与 `skills/softeng-manage/references/commands.md:127-128`「等卡 E18 落地」、`commands.md:95`「在卡 E10」—— 台账实测 E16 已并入 E28 落地、E18 done（T-AG470）、E10 done ⇒ 三处「等卡 X」全部过期。另 `tools/check_skills_claims.py --check` 报 `[FAIL] 引用 173 / 对得上 100 / 对不上 1 / 判不出 72` 却**退 0**。

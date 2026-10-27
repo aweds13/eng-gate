@@ -32,10 +32,16 @@
 要放行的条目写进下面 `EXEMPT`（`"skills/x.md:12" -> 理由`）。**空理由算红** ——
 豁免是给人看的账，不是让门变绿的开关。
 
-## 退出码
+## 退出码（三态，与 `scripts/check_docs.py` 同一惯例）
 
-`--check`：有「对不上」⇒ 逐条点名并退 `1`；一条都没有 ⇒ 退 `0` 并打一行计数。
-`not verified` 只影响计数，不单独判红（它没被判「对不上」）。
+- `0` —— 判完且干净：每条引用都对得上；
+- `1` —— 有「对不上」：逐条点 `文件:行` 与工具/参数名。**压过 `3`**（红比没判完更急）；
+- `3` —— 没有对不上，但有条目**判不出**（`not verified`）。★ 它**不是**通过：
+  这些条目在结构上看不见，比没有门更糟。门禁侧 `exit 3` 记「没判完」，
+  既不算绿也不算红 —— 于是「判不出」不会被悄悄洗成「对得上」。
+
+改前这里只分两态（`1` / `0`），72 条 `not verified` 与全绿退同一个 `0`，
+等于把「我没判」和「我判过了、没问题」写进同一个码里。
 """
 
 from __future__ import annotations
@@ -334,6 +340,16 @@ def _judge(claim: Claim, root: Path, exempt: dict[str, str], hit: set[str]) -> N
             claim.exempt_reason = reason
 
 
+def _label(report: Report) -> str:
+    """末行前缀：`1` 红 ⇒ FAIL，`3` 没判完 ⇒ WARN，`0` ⇒ OK。
+
+    ★ 判不出时不许打 `[OK  ]` —— 那行会被当成「这门过了」抄进回话，
+    而同一趟的退出码是 3（没判完），自相矛盾。
+    """
+    code = exit_code(report)
+    return {1: "FAIL", 3: "WARN", 0: "OK  "}[code]
+
+
 def _print_report(report: Report) -> None:
     for claim in report.failed:
         print(f"[FAIL] {claim.key}  {claim.command}")
@@ -348,7 +364,24 @@ def _print_report(report: Report) -> None:
             print(f"[SKIP] {claim.key}  豁免：{claim.exempt_reason}")
     for key in report.unused_exempt:
         print(f"[WARN] 豁免没命中任何引用：{key}（删掉或改对行号）")
-    print(f"[{'OK  ' if not report.failed else 'FAIL'}] {report.summary_line()}")
+    print(f"[{_label(report)}] {report.summary_line()}")
+    if report.not_verified and not report.failed:
+        print(
+            f"★ 上面这 {len(report.not_verified)} 条我判不出 —— 它们**不是**通过"
+            "（结构上看不见，比没有门更糟）；本次退 3「没判完」。"
+        )
+
+
+def exit_code(report: Report) -> int:
+    """三态退出码，与 `scripts/check_docs.py` 同一惯例。
+
+    `1` 压过 `3`：有真漂移就先修漂移，再谈「判不出」。
+    """
+    if report.failed:
+        return 1
+    if report.not_verified:
+        return 3
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -367,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report.to_json(), ensure_ascii=False, indent=2))
     else:
         _print_report(report)
-    return 1 if report.failed else 0
+    return exit_code(report)
 
 
 if __name__ == "__main__":

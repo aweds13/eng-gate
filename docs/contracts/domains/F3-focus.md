@@ -92,4 +92,4 @@
 ## FLOW 与验收
 
 - 对应 LC-3/4、LF-1/3。
-- 测试：`../../tests/test_focus_feedback.py`、`../../tests/test_facts.py`；B4 补全链路与并发。
+- 测试：`../../../tests/test_focus_feedback.py`、`../../../tests/test_facts.py`；B4 补全链路与并发。

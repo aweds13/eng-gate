@@ -199,23 +199,15 @@ EXEMPT: dict[tuple[str, str, str], str] = {
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/check_toml.py", "run", "0f5a39dfab46"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
-    ("scripts/run_gates.py", "run", "6bedb702c1c1"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/run_gates.py", "run", "dbf3b5aee387"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/run_gates.py", "run", "e3912547e912"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
-    ("scripts/run_gates.py", "run", "95d887907f1e"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/run_gates.py", "run", "47b8c3182682"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
-    ("scripts/run_gates.py", "run", "923ba1926a48"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/run_gates.py", "run", "7a9a113f7203"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/run_gates.py", "run", "101a0fb0a0e8"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
-    ("scripts/run_gates.py", "run", "2b778b5b3c78"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/run_gates.py", "Popen", "af1f19f56107"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",

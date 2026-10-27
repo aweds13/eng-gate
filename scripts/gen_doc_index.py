@@ -60,8 +60,9 @@ EXCLUDE_PARTS = ("gates/diag", ".wt", ".git")
 #: 接管之后（`--adopt` 跑一次写盘）这条**必须删掉**，否则 `--strict` 会一直红。
 PENDING: dict[str, str] = {
     "复盘/INDEX.md": (
-        "盘上是 145 KB 手写版：卡 F2 白名单外（files 只有 scripts/tests/docs 三件），"
-        "改它归卡 F1（规格 §1 改写链接 / §3 重算）"
+        "归 scripts/retro/retro_index.py 全量生成（769 篇 / 14 主题 / 每篇一句话结论）；"
+        "本脚本的 render_retro 只会按路径前缀分段，接管会丢掉主题分区与逐篇结论 ⇒ 不接管。"
+        "重算：python -X utf8 scripts/retro/retro_extract.py && ... retro_themes/lines/gaps/index"
     ),
 }
 

@@ -100,32 +100,32 @@
 
 ## 7. 测试映射
 
-- 现有：`../../tests/test_tasks.py`、`../../tests/test_groups.py`、`../../tests/test_api.py`。
-- 第 2 步（任务线发事实）：`../../tests/test_task_line.py` —— 完成发 `task.completed`、撤销发 `task.uncompleted`、幂等与 API 全链路。
-- 第 3 步（旧数据迁移）：`../../tests/test_facts.py` 中的 v5 用例 —— 历史已完成任务回填 `task.completed`、
+- 现有：`../../../tests/test_tasks.py`、`../../../tests/test_groups.py`、`../../../tests/test_api.py`。
+- 第 2 步（任务线发事实）：`../../../tests/test_task_line.py` —— 完成发 `task.completed`、撤销发 `task.uncompleted`、幂等与 API 全链路。
+- 第 3 步（旧数据迁移）：`../../../tests/test_facts.py` 中的 v5 用例 —— 历史已完成任务回填 `task.completed`、
   幂等可重入、缺列旧库不失败、回填不进入投入口径。
-- 第 5 步（OP-8 Repeat）：`../../tests/test_task_repeat.py` —— 完成即生成下一次、基准为完成时间、只生成一次、继承与边界。
-- 第 5 步（OP-6 软删除）：`../../tests/test_task_delete.py` —— 软删除隐藏于默认视图、撤销恢复、幂等、留事实、API 全链路。
-- F1 段1（收口到界面）：`../../tests/test_task_groups_line.py`（分组）、`../../tests/test_task_subtasks_line.py`（子任务树）、
-  `../../tests/test_task_edit_line.py`（编辑）。
-- F1 段2（任务字段地基）：`../../tests/test_task_note_line.py` —— schema v6 加列幂等、备注可写可清空、
-  不发事实不动账本、同步合并不丢备注；`../../tests/test_task_priority_line.py` —— schema v7 加列幂等、
+- 第 5 步（OP-8 Repeat）：`../../../tests/test_task_repeat.py` —— 完成即生成下一次、基准为完成时间、只生成一次、继承与边界。
+- 第 5 步（OP-6 软删除）：`../../../tests/test_task_delete.py` —— 软删除隐藏于默认视图、撤销恢复、幂等、留事实、API 全链路。
+- F1 段1（收口到界面）：`../../../tests/test_task_groups_line.py`（分组）、`../../../tests/test_task_subtasks_line.py`（子任务树）、
+  `../../../tests/test_task_edit_line.py`（编辑）。
+- F1 段2（任务字段地基）：`../../../tests/test_task_note_line.py` —— schema v6 加列幂等、备注可写可清空、
+  不发事实不动账本、同步合并不丢备注；`../../../tests/test_task_priority_line.py` —— schema v7 加列幂等、
   三档与默认值、非法拒绝、**三处排序统一**、Repeat 继承、同步合并；
-  `../../tests/test_task_views_line.py` —— schema v8 标记位、**三视图口径**（Important=高优先级 /
+  `../../../tests/test_task_views_line.py` —— schema v8 标记位、**三视图口径**（Important=高优先级 /
   Planned=有截止日 / Flagged=手动标记）、基线（隐藏归档已删、完成仍显示）、未知视图拒绝；
-  `../../tests/test_attach_line.py` —— schema v9 附件两列、打开规则矩阵（网址/目录/文件/不存在）、
+  `../../../tests/test_attach_line.py` —— schema v9 附件两列、打开规则矩阵（网址/目录/文件/不存在）、
   白名单压过模式、可执行类永不直接打开、失败降级为复制路径、跨站来源 403、跨端合并；
-  `../../tests/test_remind_line.py` —— schema v10 提醒列、本地时间校验与归一、空=清除、
+  `../../../tests/test_remind_line.py` —— schema v10 提醒列、本地时间校验与归一、空=清除、
   四档界面口径（over/today/soon/later）、完成后不再催、`due_reminders` 只取活着的且有序、
   Repeat 不继承、跨端合并（**不含**通知通道）。
-- C 批 · T-C12（任务类型 + 所属课程）：`../../tests/test_task_course_line.py` —— schema v11 两列幂等与缺表安全、
+- C 批 · T-C12（任务类型 + 所属课程）：`../../../tests/test_task_course_line.py` —— schema v11 两列幂等与缺表安全、
   老行回落「普通」+ 无课程、非法类型拒绝、课程存在性、**「普通」不挂课程**（建/改两条路 + 只传一列的组合）、
   清空存 NULL、不发事实不动账本、Repeat 继承、课程删除后仍能生成、跨端合并（带了覆盖 / 没带保留）；
-  `../../tests/test_web_frontend.py::test_task_type_and_course_are_wired_in_frontend` —— 卡片徽标、编辑入口、
+  `../../../tests/test_web_frontend.py::test_task_type_and_course_are_wired_in_frontend` —— 卡片徽标、编辑入口、
   保存带上、下拉禁用规则、`data-change` 委托、学业页反向列出与 `task-open`。
-- C 批 · T-C4 + T-C11（产出分两类 + 今天做成了什么）：`../../tests/test_today_done_line.py` ——
+- C 批 · T-C4 + T-C11（产出分两类 + 今天做成了什么）：`../../../tests/test_today_done_line.py` ——
   `summary` 两类分列与撤销不计、空态、完成的任务/子步骤分开、父任务进度、只算今天、完成又撤销不算、
   完成→撤销→再完成去重、已撤销产出如实标注、父任务被硬删不炸、API 形状与 `day` 覆盖/非法 400；
-  `../../tests/test_web_frontend.py::test_today_done_section_is_expandable_inline` —— 三个可点开的项、
+  `../../../tests/test_web_frontend.py::test_today_done_section_is_expandable_inline` —— 三个可点开的项、
   原地展开（不许弹窗）、父任务进度文案。
 - 待补（B4）：创建→加入 My Day→完成→撤销的 API 全链路验收（已由 `test_task_line.py` 覆盖完成/撤销段）。

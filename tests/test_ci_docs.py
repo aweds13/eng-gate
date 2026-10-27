@@ -4,7 +4,7 @@ r"""测试流程文档的钉子（卡 E43 · `T-AG495` 判据 3 至少 5 条 + �
 
 | # | 钉子 | 坏掉会红在哪 |
 |---|---|---|
-| ① | 20 道门名与 `gates/defs/*.py` 的 `GATES` **逐字一致** | 门表加了一道/文档抄错一个字 ⇒ 红 |
+| ① | 21 道门名与 `gates/defs/*.py` 的 `GATES` **逐字一致** | 门表加了一道/文档抄错一个字 ⇒ 红 |
 | ② | 五维关键词（档位 / 域 / 选测 / 夜间 / 异机）都在 | 少一维 ⇒ 红 |
 | ③ | 决策树里的档位名都是**真参数**（两个 parser 都认） | 文档写了一个不存在的开关 ⇒ 红 |
 | ④ | 指向 `skills/pipe-gate/SKILL.md` 的链接在，且文件真存在 | 链到一篇不存在的文档 ⇒ 红 |
@@ -70,11 +70,11 @@ def doc_door_names(text: str) -> list[str]:
 
 # ---------------------------------------------------------------- ① 门名逐字一致
 def test_doc_exists_and_door_names_match_defs() -> None:
-    """文档存在，20 道门名与 `gates/defs/*.py` 的 `GATES` **逐字一致**（顺序也一致）。"""
+    """文档存在，21 道门名与 `gates/defs/*.py` 的 `GATES` **逐字一致**（顺序也一致）。"""
     assert DOC.is_file(), f"缺文档：{DOC}"
     text = DOC.read_text(encoding="utf-8")
     want = door_table_names()
-    assert len(want) == 20, f"门表里现在是 {len(want)} 道（本页口径按 20 道写）"
+    assert len(want) == 21, f"门表里现在是 {len(want)} 道（本页口径按 21 道写）"
     assert doc_door_names(text) == want, (
         f"门名对不上：\n文档 {doc_door_names(text)}\n门表 {want}")
 
@@ -99,7 +99,7 @@ def test_five_dimensions_present() -> None:
 def test_three_tables_present() -> None:
     """三张表（门清单 / 红门处置 / 时机）都在。"""
     text = DOC.read_text(encoding="utf-8")
-    for title in ("表一：20 道门清单表", "表二：红门处置表", "表三：时机表"):
+    for title in ("表一：21 道门清单表", "表二：红门处置表", "表三：时机表"):
         assert title in text, f"缺 {title}"
     assert text.count("`--only ") >= 10, "红门处置表没有逐门给 `--only` 重跑命令"
 
@@ -235,7 +235,7 @@ def test_only_payload_is_red_in_wb_verify(tmp_path: Path) -> None:
     wb_verify.check_gates(s, repo, head)
     assert s.fails >= 1, "半趟读数（只跑了 1 道门）居然判绿"
 
-    # 对照：同一份产物补齐 20 道门 ⇒ 不红（证明这条不是「永远红」）
+    # 对照：同一份产物补齐 21 道门 ⇒ 不红（证明这条不是「永远红」）
     full = {**payload, "gates": [{"name": n, "exit_code": 0} for n in doors], "not_run": []}
     full.pop("only")
     full.pop("only_counts")

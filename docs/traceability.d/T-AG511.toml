@@ -9,6 +9,10 @@ evidence = [
   "file:scripts/retro/retro_index.py",
   "file:scripts/retro/retro_extract.py",
   "file:复盘/INDEX.md",
+  "file:scripts/retro/retro_gaps.py",
+  "file:scripts/retro/retro_lines.py",
+  "file:scripts/retro/retro_phrases.py",
+  "file:scripts/retro/retro_themes.py",
 ]
 gaps = """规格已立、生成器已从 gitignored 的 `gates/diag/` 搬进入库的 `scripts/retro/`，待落地那一笔翻 done；
 为什么必须搬：产物 `复盘/INDEX.md` 入库而生成器不入库 = 不可重跑（卡 E53 · T-AG503 的判据）。

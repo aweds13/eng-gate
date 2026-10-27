@@ -97,7 +97,7 @@
 - `docs/subsystems/ci/云门禁机.md` 三处补正：§2 删掉「脚本已入库 `gates/diag/cloud_bootstrap.ps1`」这句假话（统一到「不入库 + 怎么重建」）、§7.1 补受控 A/B 四个数（403.46 / 417 / 684.27 / 37）、§7.2 补 37 红的两类分类表。
 - 新增 `tests/test_cloud_sync.py`：12 条钉子把上面四件事钉住（`-xfdq` 在脚本里、跑前断言无 `last.json`、依赖清单含三包且带版本、缺 `TF_PROJECTS_TOML` fail fast、脚本路径在库内）。
 - **收口（2026-10-26）**：云机换机后 pass16 在 `684d8007` 上 **20 门全 exit=0、`red=[]`**（`gates/diag/cloud-gate-E49-p16.log`，`last.json ok=True python=3.12.8`）⇒ 台账 `T-AG489` 由 `partial` 翻 `done`，删掉 `[exceptions]` 里那条豁免（现豁免 0 项）。
-- **运维文档换机更正（2026-10-26）**：`docs/subsystems/ci/云门禁机.md` 的机器表改成实测值（`ecs.e-c1m4.xlarge`、2 物理核 / 4 vCPU / 15.7 GiB）、公网 IP 全量换成 `203.0.113.11`；新增 **§4.1**「不降频 ≠ 算力够」（旧机并行总吞吐只 1.05–1.08×，换机后全量门禁 807 s → 417 s）与 **§7.1.1** 换机后的两趟读数（pass15 417 s / pass16 480 s、20 门全绿）。
+- **运维文档换机更正（2026-10-26）**：`docs/subsystems/ci/云门禁机.md` 的机器表改成实测值（`ecs.u1-c1m4.xlarge`、2 物理核 / 4 vCPU / 15.7 GiB）、公网 IP 全量换成 `203.0.113.11`；新增 **§4.1**「不降频 ≠ 算力够」（旧机并行总吞吐只 1.05–1.08×，换机后全量门禁 835 s → 417 s）与 **§7.1.1** 换机后的两趟读数（pass15 417 s / pass16 420 s / pass17 426 s、20 门全绿）。
 ## 攒批并入派活链：一条入口 `plan` / `make` / `land`（E10 · T-AG461）
 - 新增 `tools/wb_batch.py`：把仓里早就有的攒批能力收成一条入口 —— `plan`（挑出文件不相交、依赖已满足的卡打包）/ `make`（写批预声明 + 台账 evidence 并集 + 三段文书骨架）/ `land`（批集成落地）；批上限 `BATCH_LIMIT = 4`，超了报数并给依据。
 - `tools/wb_dispatch.py` 接 `--batch`：按批号一次起多个成员，干跑与拒绝路径先走同一套守卫（成员不在预声明 / 卡已 landed 两种都点名拒绝）。
@@ -361,6 +361,11 @@
 - `tools/wb_reconcile.py`：去掉 `--grep` 的 `-10` 截断；新增 `_batch_landed()`/`_landed_commits()`/
   `_spec_commit_in()`，按围栏 `state == landed` 认账；`check()` 第三份 `accounted_done` 打 `[蓝]`。
 - `tests/test_wb_reconcile.py`：5 条断言改三份解包 + 2 条新钉子（landed 认账 / draft 不算证据）。
+## 2026-10-27 · 文档治理第二批：文档门成立 + 复盘索引机器化 + 技能去陈旧（F6+F7+G5，T-AG513）
+- F6 · 文档门成立：`check_docs` 三条判据修好（行号列表归一、`../` 按 `normpath(join(dirname, '../' + token))` 判、未入库的 .md 文件记 skip），docs 门接进 audit 档（门表 20→21），`PINNED_FLOOR` 地板钉子补上（实测：把基线数字抬到 199 门照样绿 ⇒ 原 ratchet 只有读数没有地板）。
+- F6 · 索引重建：`docs/INDEX.md` 改由 `scripts/gen_doc_index.py` 机器生成；`.gitignore` 补上 `gates/review/` —— `tools/pool/landing.py` 的注释一直宣称它已忽略，实测这条规则**此前不存在**，于是「这台机器跑过几次落地」会让死指针读数漂 2 条（四格实验：新克隆 154/基线 152 红，加规则后落回 152）。
+- F7 · 生成器入库：六支 `retro_*.py` 从被 `.gitignore` 遮住的 `gates/diag/` 搬进入库的 `scripts/retro/` —— 产物 `复盘/INDEX.md` 入库而生成器不入库就是不可重跑；搬完复算三趟逐字节一致（幂等）。
+- G5 · 技能去陈旧：`skills/` 11 份里三处「等卡 E16/E18/E10」全部过期（实测 E16 已并入 E28 落地、E18 done T-AG470、E10 done），改指真脚本与真读数；`tools/check_skills_claims.py --check` 在「判不出」时不再退 0——「全对得上」与「判不出来」从此是两个退出码。
 ## 2026-10-26 · 并行度与门禁编排三件合一（E30+E32+E33，T-AG500）
 
 - `scripts/run_gates.py`：worker 数改按**可用内存分五档**（≥10GB⇒8 / ≥6⇒6 / ≥4⇒4 / ≥2.5⇒2 / 否则 1，

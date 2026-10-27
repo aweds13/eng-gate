@@ -4,8 +4,11 @@
 
 1. 死指针报红（`--mode block` 退 1；`--mode report` 不红 —— 第一版先不挂 block）；
 2. skip 计数：判不出的东西**必须**出现在输出里，且**不许**给 PASS 结论（block 档退 3）；
-3. superseded 报红：正文说「已废弃」而没有 `status: superseded` + `supersedes:`；
+3. superseded 报红：**文档自己声明自己过时**（`本文档已废弃` / `本文档不再适用。` /
+   `本文档被 docs/new.md 取代` / `# 已废弃：xxx`）而没有 `status: superseded` + `supersedes:`；
+   ★ 判据是「主语 + 关键词 + 同句」三件齐备 —— 无主语的 `这条路现已废弃。` 不算；
    补了 frontmatter 就不报（反面钉子：证明它不是"命中就红"）；
+   裸词（讨论词表、文件名里带这词、自动生成索引）**不许**报 —— 卡 A308 收窄；
 4. baseline ratchet：比基线多一条 ⇒ 连 report 档也红；持平 ⇒ 不红（只许降不许升）；
 5. `--doctor` 输出含「我在跑 / 我扫了 N 个文件 / 判出 M 条 / 判不出 K 条」四类读数。
 
@@ -105,13 +108,60 @@ def test_skip_is_counted_and_never_called_a_pass(tmp_path: Path) -> None:
 def test_superseded_needs_frontmatter(tmp_path: Path) -> None:
     """★ superseded：正文说「已废弃」却没标注 ⇒ 报；补了 `status` + `supersedes` ⇒ 不报。"""
     root = _tree(tmp_path)
-    (root / "docs" / "old.md").write_text("这条路已废弃。\n", encoding="utf-8")
+    (root / "docs" / "old.md").write_text("本文档已废弃。\n", encoding="utf-8")
     (root / "docs" / "gone.md").write_text(
-        "---\nstatus: superseded\nsupersedes: docs/old.md\n---\n\n这条路已废弃。\n",
+        "---\nstatus: superseded\nsupersedes: docs/old.md\n---\n\n本文档已废弃。\n",
         encoding="utf-8",
     )
     flagged = [item.where for item in cd.scan(root).superseded]
     assert flagged == ["docs/old.md"], flagged
+
+
+def test_superseded_accepts_every_declaration_shape(tmp_path: Path) -> None:
+    """★ 收窄后三种句式**都要认得**（收窄不许窄到真声明也漏）。"""
+    root = _tree(tmp_path)
+    shapes = {
+        "subject.md": "本文档已废弃，内容并进 `docs/ok.md`。\n",   # 主语 + 关键词
+        "this.md": "本文件被 `docs/new.md` 取代。\n",              # 「被取代」的另一种说法
+        "tail.md": "本文档不再适用。\n",                           # 主语在，关键词落句末
+        "heading.md": "# 已废弃：老的通知聚合\n\n只留路标。\n",      # 标题即声明
+    }
+    for name, text in shapes.items():
+        (root / "docs" / name).write_text(text, encoding="utf-8")
+    flagged = {item.where for item in cd.scan(root).superseded}
+    assert flagged == {f"docs/{name}" for name in shapes}, flagged
+
+
+def test_superseded_ignores_bare_word(tmp_path: Path) -> None:
+    """★ 卡 A308：**裸词不算**。讨论词表、文件名带词、自动生成文件、说别人过时、否定，都不报。"""
+    root = _tree(tmp_path)
+    # ① 在讨论/定义词表本身（原来卡 F3 就是这样被误报的）
+    (root / "docs" / "wordlist.md").write_text(
+        "判据 3 的词表是「已废弃 / 被取代 / 不再适用」三个词，命中就报。\n",
+        encoding="utf-8",
+    )
+    # ② 文件名里带这个词，正文只是引用别处（原来 复盘/已废弃-xxx.md 这样被误报）
+    (root / "docs" / "已废弃-老平台.md").write_text(
+        "归档在 `docs/ok.md`，详见废弃记录。\n", encoding="utf-8",
+    )
+    # ③ 自动生成文件：首行锚点 ⇒ 不判（原来 复盘/INDEX.md 这样被误报）
+    (root / "docs" / "index.md").write_text(
+        cd.GENERATED + "\n\n# 索引\n\n- 已废弃：某页\n", encoding="utf-8",
+    )
+    # ④ 说的是**别的**对象过时，不是自己：`本文档的 A 已被 B 取代`
+    (root / "docs" / "object.md").write_text(
+        "本文档的旧入口已被 `docs/ok.md` 取代。\n", encoding="utf-8",
+    )
+    # ⑤ 否定句
+    (root / "docs" / "negated.md").write_text(
+        "本文档并非不再适用，仍在维护。\n", encoding="utf-8",
+    )
+    # ⑥ 无主语、只靠关键词落句末：说的是那条路，不是这份文档
+    (root / "docs" / "nosubject.md").write_text(
+        "旧路由表那条路现已废弃。\n", encoding="utf-8",
+    )
+    flagged = [item.where for item in cd.scan(root).superseded]
+    assert flagged == [], flagged
 
 
 # ----------------------------------------------------------- 基线 ratchet

@@ -59,7 +59,7 @@
 
 ## 7. 测试映射
 
-- 现有：`../../tests/test_focus_feedback.py`（含进行中态 / 并行拒绝 / 结束幂等）、`../../tests/test_facts.py`。
-- 第 2 步：`../../tests/test_focus_line.py`（事实 → 反馈/任务/读口径）。
-- 第 4 步：`../../tests/test_web_frontend.py`（前端依赖的 API 契约 + 主链）；真机 `../../tools/lf1_live_check.py`。
+- 现有：`../../../tests/test_focus_feedback.py`（含进行中态 / 并行拒绝 / 结束幂等）、`../../../tests/test_facts.py`。
+- 第 2 步：`../../../tests/test_focus_line.py`（事实 → 反馈/任务/读口径）。
+- 第 4 步：`../../../tests/test_web_frontend.py`（前端依赖的 API 契约 + 主链）；真机 `../../../tools/lf1_live_check.py`。
 - 待补（B4）：番茄到点自动提示、应用重开恢复（当前已支持 `GET /api/focus/active` 恢复计时）。

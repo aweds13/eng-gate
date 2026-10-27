@@ -57,7 +57,7 @@
   - 拒绝都 **400 带原话**：今天没复习过 / 跟原来一样 / 非法档；卡不存在 404；
   - `GET /api/review/today` 给界面「今天复习过的」那一段（含这次记的是哪一档）；
     三档中文由 `GET /api/review/meta` 的 `ratings` 给（**词表只在后端一处**）。
-  - 验证：`../../tests/test_review_regrade_line.py`（11 条）+ 真机自检 9 条 + DOM 探针「复习·改判」1 档。
+  - 验证：`../../../tests/test_review_regrade_line.py`（11 条）+ 真机自检 9 条 + DOM 探针「复习·改判」1 档。
 
 ## OP-28 到期列表 / 进 My Day
 
@@ -107,6 +107,6 @@
 ## 验收与测试
 
 - 对应 AC-20。
-- 测试：`../../tests/test_academic_review.py`；B4 补全链路。
-- 改判（T-G13）：`../../tests/test_review_regrade_line.py` + `../../tests/test_web_frontend.py`
-  （三档中文来自后端 / 只给另外两档 / 说清代价）+ 真机自检 `../../tools/web_live_check.py`。
+- 测试：`../../../tests/test_academic_review.py`；B4 补全链路。
+- 改判（T-G13）：`../../../tests/test_review_regrade_line.py` + `../../../tests/test_web_frontend.py`
+  （三档中文来自后端 / 只给另外两档 / 说清代价）+ 真机自检 `../../../tools/web_live_check.py`。

@@ -11,4 +11,8 @@ GATES: list[tuple[str, list[str]]] = [
     ("invariants", [PY, "-X", "utf8", "tools/wb_invariants.py", "--check"]),
     # 台账 ↔ 规格 标题对账：确定错位或无规格对应的 SR 卡就退 1。
     ("audit_titles", [PY, "-X", "utf8", "scripts/audit_titles.py", "--check"]),
+    # 文档门的底账（卡 F3 / T-AG451）：死指针 / 漂移 / 已废弃未标注 —— ratchet 只许降不许升。
+    # ★ 第一版用 `--mode report`：有债不红，**基线被顶破才红**。
+    # （block 档会让那 152 条债把每趟门禁都染红。）
+    ("docs", [PY, "-X", "utf8", "scripts/check_docs.py", "--mode", "report"]),
 ]

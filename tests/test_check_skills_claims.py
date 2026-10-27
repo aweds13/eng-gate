@@ -115,11 +115,11 @@ def test_flag_value_is_taken_before_equals(tmp_path, monkeypatch, capsys) -> Non
 def test_placeholder_is_not_verified_and_not_green(
     tmp_path, monkeypatch, capsys
 ) -> None:  # type: ignore[no-untyped-def]
-    """★ 反例③：写的是 `<卡号>` ⇒ 记 `not verified`，**不许**算进「对得上」。"""
+    """★ 反例③：写的是 `<卡号>` ⇒ 记 `not verified`，**不许**算进「对得上」，也**不许**退 0。"""
     body = "```bash\npython -X utf8 tools/wb_plan.py --card <卡号>\n```"
     _tree(tmp_path, body)
     rc, out = _run(tmp_path, monkeypatch, capsys)
-    assert rc == 0, out
+    assert rc == 3, out  # 「判不出」不是通过 ⇒ 退 3「没判完」，不是 0
     assert "not verified" in out
     assert "判不出 1" in out
     assert "对得上 0" in out
@@ -135,11 +135,11 @@ def test_placeholder_does_not_hide_a_bad_flag(tmp_path, monkeypatch, capsys) -> 
 
 
 def test_wildcard_tool_is_not_verified(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
-    """`tools/wb_*.py` 点不出是哪个脚本 ⇒ `not verified`，不算绿也不算红（退 0）。"""
+    """`tools/wb_*.py` 点不出是哪个脚本 ⇒ `not verified`：不算绿（退 0）也不算红（退 1），退 3。"""
     body = "```bash\npython -X utf8 tools/wb_*.py --check\n```"
     _tree(tmp_path, body)
     rc, out = _run(tmp_path, monkeypatch, capsys)
-    assert rc == 0, out
+    assert rc == 3, out
     assert "通配" in out
     assert "对得上 0" in out
 

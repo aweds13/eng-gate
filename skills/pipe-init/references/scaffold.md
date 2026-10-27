@@ -18,11 +18,11 @@
 | 7 | `invariants.toml` | 不变量壳 |
 | 8 | `ledger.toml` | 台账壳 |
 | 9 | `pipeline.toml` | 顶层配置 |
-| 10 | `src/notes/__init__.py` | 示例包 |
-| 11 | `src/notes/evidence.py` | 示例模块 |
+| 10 | `<新仓>/src/notes/__init__.py` | 示例包 |
+| 11 | `<新仓>/src/notes/evidence.py` | 示例模块 |
 | 12 | `tests/conftest.py` | 测试夹具 |
-| 13 | `tests/test_evidence.py` | 示例判据 |
-| 14 | `tests/test_nail_sample.py` | 钉子样例（证明门真的会咬） |
+| 13 | `<新仓>/tests/test_evidence.py` | 示例判据 |
+| 14 | `<新仓>/tests/test_nail_sample.py` | 钉子样例（证明门真的会咬） |
 
 `count = 14`。换模板（`--template <名>`）时清单不同 —— 以该模板的 `--json` 读数为准。
 

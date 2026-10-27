@@ -104,20 +104,20 @@
 
 ## 7. 测试映射
 
-- 现有：`../../tests/test_sync.py`（LWW 单元 + 状态）、`../../tests/test_facts.py`（含 v4/v5 迁移与幂等）。
-- 同步包与合并（T-G8）：`../../tests/test_sync_pack_line.py`（30 条：包身份与排除表 / 坏包四连拒 /
+- 现有：`../../../tests/test_sync.py`（LWW 单元 + 状态）、`../../../tests/test_facts.py`（含 v4/v5 迁移与幂等）。
+- 同步包与合并（T-G8）：`../../../tests/test_sync_pack_line.py`（30 条：包身份与排除表 / 坏包四连拒 /
   LWW 两向 / 只增行 / 关系行 / 墓碑防复活 / 远程墓碑不删本地 / dry_run 不动库 / 幂等 /
   六张表触碰 + tasks 的刻意例外 / 五种硬删留墓碑 / app_settings 不跨端 / API 与跨站）；
-  真机自检 10 条（`../../tools/web_live_check.py`）。
-- 手机离线记（T-G10，场景 ①）：`../../tests/test_offline_phone_line.py`（14 条：Node 用**页面同一份**
+  真机自检 10 条（`../../../tools/web_live_check.py`）。
+- 手机离线记（T-G10，场景 ①）：`../../../tests/test_offline_phone_line.py`（14 条：Node 用**页面同一份**
   `offline.js` 造真包 → 真导入真库 → 验账本 `gain_count` / 撤销归零 / 白名单列与 `PRAGMA` 对账 /
   幂等 / 不动本机设置 / 不删本地行 / 冲突留痕 / 设备号不撞车）；
-  造包自检 `../../tools/phone_check.mjs`；假 DOM 探针「手机离线记 1/1」（内存 IndexedDB 真入队真打包）；
+  造包自检 `../../../tools/phone_check.mjs`；假 DOM 探针「手机离线记 1/1」（内存 IndexedDB 真入队真打包）；
   真机自检 10 条（服务真发 `/offline.js`、页面真引、sw 真预缓存、手机包真导入、再导一次幂等）。
-- 手机直接上传（T-G15）：`../../tests/test_phone_upload_line.py`（5 条：配对设备能传内容并合并 /
+- 手机直接上传（T-G15）：`../../../tests/test_phone_upload_line.py`（5 条：配对设备能传内容并合并 /
   局域网指路径被 403 而本机照旧 / 没配对 401 / 与文件导入同一套判断（幂等 + 保留本地 + 留痕）/
   前端护栏"失败不清队列"）；真机自检 4 条（**真局域网地址 + 真配对码**把真手机包当内容传）。
-- 手机上更完整的"看"（T-G16）：`../../tests/test_phone_view_line.py`（6 条：**要缓存的接口必须真的
+- 手机上更完整的"看"（T-G16）：`../../../tests/test_phone_view_line.py`（6 条：**要缓存的接口必须真的
   存在**（拿 `app.routes` 对账）/ 那几个接口真答得上来 / 只读区没有任何写动作 /
   两句实话（不是实时、只标不通知）/ 可写清单也带提醒时间 / 缓存清单从 4 条扩到 9 条）；
   真机自检 3 条（四份清单真答得上来 + **口径由后端算好**：逾期天数与提醒状态）；

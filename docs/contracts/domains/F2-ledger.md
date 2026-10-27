@@ -91,9 +91,9 @@
   任务可属多分组（SR-F1.3）⇒ 各组之和**可能大于**总投入，界面须注明「可重复计数」；
   无分组任务归入「未分组」；手工投入不参与分组归因。
 - 热力图口径：债务维度是**当日快照**（未完成且当时已逾期，已删/归档不计），不是"当天新增债务"。
-- 测试：`../../tests/test_insights.py`。
+- 测试：`../../../tests/test_insights.py`。
 
 ## FLOW 与验收
 
 - 对应 LC-5/7、LF-1/2。
-- 测试：`../../tests/test_ledger_summary.py`、`../../tests/test_facts.py`；B4 补全链路。
+- 测试：`../../../tests/test_ledger_summary.py`、`../../../tests/test_facts.py`；B4 补全链路。

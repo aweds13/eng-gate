@@ -44,5 +44,5 @@
 
 ## 5. 测试映射
 
-- 现有：`../../tests/test_facts.py`、`../../tests/test_focus_feedback.py`、`../../tests/test_ledger_summary.py`。
+- 现有：`../../../tests/test_facts.py`、`../../../tests/test_focus_feedback.py`、`../../../tests/test_ledger_summary.py`。
 - 待补（B4）：C1–C5 全链路可执行验收；C6–C12 逐条。

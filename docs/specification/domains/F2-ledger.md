@@ -86,13 +86,13 @@
 
 ## 7. 测试映射
 
-- 现有：`../../tests/test_ledger_summary.py`、`../../tests/test_facts.py`、`../../tests/test_team_memo.py`。
-- 第 2 步补充：`../../tests/test_task_line.py`（完成事实不得混入投入口径）、`../../tests/test_focus_line.py`
-  （专注事实→反馈/自检口径、读口径只认 facts）、`../../tests/test_review_line.py`（复习投入计张数）。
-- 第 5 步补充：`../../tests/test_output_axis.py`（产出事实 + 撤销 + `output_count` 与投入分离）、
-  `../../tests/test_invest_axis.py`（手动投入事实按秒 + 撤销 + `manual_hours` 与 invest_hours 分离）。
-- 第 6 步补充：`../../tests/test_week_summary.py`（周边界/跨月跨年/四项聚合/撤销扣除/债务快照/温和提示/API）。
-- 第 7 步补充：`../../tests/test_insights.py`（逐日时序/债务快照/撤销扣除/分组分布与「未分组」/未绑定不计入/
+- 现有：`../../../tests/test_ledger_summary.py`、`../../../tests/test_facts.py`、`../../../tests/test_team_memo.py`。
+- 第 2 步补充：`../../../tests/test_task_line.py`（完成事实不得混入投入口径）、`../../../tests/test_focus_line.py`
+  （专注事实→反馈/自检口径、读口径只认 facts）、`../../../tests/test_review_line.py`（复习投入计张数）。
+- 第 5 步补充：`../../../tests/test_output_axis.py`（产出事实 + 撤销 + `output_count` 与投入分离）、
+  `../../../tests/test_invest_axis.py`（手动投入事实按秒 + 撤销 + `manual_hours` 与 invest_hours 分离）。
+- 第 6 步补充：`../../../tests/test_week_summary.py`（周边界/跨月跨年/四项聚合/撤销扣除/债务快照/温和提示/API）。
+- 第 7 步补充：`../../../tests/test_insights.py`（逐日时序/债务快照/撤销扣除/分组分布与「未分组」/未绑定不计入/
   时间热力图多指标与 400 天上限/API 边界）。
-- 真实运行验证：`../../tools/lf1_live_check.py`（起真服务走 LF-1 主链 8 步）。
+- 真实运行验证：`../../../tools/lf1_live_check.py`（起真服务走 LF-1 主链 8 步）。
 - 待补（B4）：复习的「卡片+进度条」与今日完成度进度环（SR-NF3 列举的其余形态）。

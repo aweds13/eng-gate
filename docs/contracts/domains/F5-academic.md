@@ -61,7 +61,7 @@
   - 未绑定任务的专注、以及**任务被彻底清理**后剩的历史专注 → 全部计入 `unbound_hours`
     （**单列、不归入任何一边**，不猜它属于哪一类 —— 与 `group_insights` 同一取向）；
   - **手动投入不参与**（它按口径就不绑定任务）；不折算、不设目标、**不做"学业该占多少"的建议**。
-- 测试：`../../tests/test_insights.py`（口径四条）+ `../../tests/test_web_frontend.py`（界面接线）。
+- 测试：`../../../tests/test_insights.py`（口径四条）+ `../../../tests/test_web_frontend.py`（界面接线）。
 
 ## OP-23 录成绩 / GPA
 
@@ -97,7 +97,7 @@
   - 与 `course_assessments` 的考核项**不强制互链**（考核项回答"有哪些考核/占比/成绩"，任务回答"我要做什么"）；
   - 硬约束逾期不可重组清零：沿用 R3 的强弱提醒分级（学校硬考核强提醒 = T-C8）。
 - **现状（T-C12，2026-09-19）**：已实现（`tasks.task_type` / `tasks.course_id`，schema v11；
-  测试 `../../tests/test_task_course_line.py`）。
+  测试 `../../../tests/test_task_course_line.py`）。
 
 ## 学业闭环
 
@@ -106,5 +106,5 @@
 ## 验收与测试
 
 - 对应 AC-18/19。
-- 测试：`../../tests/test_academic_review.py`（历史）、`../../tests/test_academic_line.py`（提醒 + 增删，第 10 步）；
+- 测试：`../../../tests/test_academic_review.py`（历史）、`../../../tests/test_academic_line.py`（提醒 + 增删，第 10 步）；
   B4 补全链路。

@@ -76,7 +76,7 @@
    （`真 last.json 被判红 —— 判据先自己坏了`，读数里会写 `exit_code 非零 2 道：['pytest','audit']`）。
    处置：`cp gates/last.json .wt/<卡>/gates/last.json`（主树那份绿的；该钉子会把 `rev` 归一化到 `HEAD^`，所以能借用）。
 5. **跑全量门禁 → `--seal` → 收口**：`TF_PYTEST_WORKERS=4 TF_GATE_PORT_BASE=<段> python -X utf8 scripts/run_gates.py`
-   在**卡树里**跑（`run_logged.py` 用 `../../tools/run_logged.py`、日志写 `../../gates/diag/…`），
+   在**卡树里**跑（`run_logged.py` 用 `../../../tools/run_logged.py`、日志写 `../../gates/diag/…`），
    绿了再 `scripts/run_gates.py --seal`，最后 `wb_land.py --commit-only`。
 
 另两条同族硬约束：`gates/diag/batch/<批号>.toml` **不许**进 `--allow`（`gates/diag/*` 被 `.gitignore` 忽略，

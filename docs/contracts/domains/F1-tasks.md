@@ -202,7 +202,7 @@
 - 边界：**只读事实层**（`task.completed` + `output.manual`），不新造派生表；
   今天完成又被撤销的**不算**"做成了"（数字不许比明细多）；昨天的完成不算今天；
   父任务被硬删时明细仍在、父标题显示"（父任务已不在）"，整页不报错。
-- 现状（T-C4 + T-C11，2026-09-19/20）：已实现（测试 `../../tests/test_today_done_line.py`）。
+- 现状（T-C4 + T-C11，2026-09-19/20）：已实现（测试 `../../../tests/test_today_done_line.py`）。
 
 ## FLOW-1 / FLOW-2 扩展
 
@@ -212,4 +212,4 @@
 ## 验收与测试
 
 - 对应 LC-1/2/5/6/8、LF-1/2；B4 补 API 全链路验收。
-- 现有测试：`../../tests/test_tasks.py`、`../../tests/test_groups.py`、`../../tests/test_api.py`。
+- 现有测试：`../../../tests/test_tasks.py`、`../../../tests/test_groups.py`、`../../../tests/test_api.py`。

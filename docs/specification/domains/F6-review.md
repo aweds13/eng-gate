@@ -58,7 +58,7 @@
 
 ## 7. 测试映射
 
-- 现有：`../../tests/test_academic_review.py`。
-- 第 2 步（复习线发事实）：`../../tests/test_review_line.py` —— 完成事实/事件、当日去重、账本 `review_count`、到期进 My Day、API 全链路。
+- 现有：`../../../tests/test_academic_review.py`。
+- 第 2 步（复习线发事实）：`../../../tests/test_review_line.py` —— 完成事实/事件、当日去重、账本 `review_count`、到期进 My Day、API 全链路。
 - 第 5 步（撤销反馈）：同文件 —— `undo_review` 回退 FSRS 字段与账目、幂等、无完成事实时空操作、撤销后可重新入账。
 - 待补（B4）：外部执行源。

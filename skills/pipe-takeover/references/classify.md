@@ -41,7 +41,7 @@ A / D / B 的信号**全无**（有 `src/` 算 C；空目录也算 C）。
 A 不成立，且检出别家 agent 框架标记（任一）：
 
 `CLAUDE.md` · `.claude/` · `.cursor/` · `.cursorrules` · `.windsurfrules` · `.aider.conf.yml` ·
-`.github/copilot-instructions.md`
+`<对方仓>/.github/copilot-instructions.md`（别人的仓里的标记，不是本仓路径）
 
 含义：它已经在别人的 harness 下跑 ⇒ **只勘察、不落任何文件**；要接也是先对齐别人的框架，
 不把我们的骨架铺进去。

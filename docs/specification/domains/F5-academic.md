@@ -58,12 +58,12 @@
 
 ## 7. 测试映射
 
-- 现有：`../../tests/test_academic_review.py`。
+- 现有：`../../../tests/test_academic_review.py`。
 - 第 9 步（可视化）：`GET /api/grades`（成绩明细，`academic.all_grade_rows`）+ 学业页「多维概览」
   （GPA、加权平均、平均分、学分、课程覆盖的多维雷达 + 条形）；前端图形由 `src/web/index.html` 渲染。
-- 第 11 步（制式切换 + 加权平均）：`../../tests/test_academic_line.py` ——
+- 第 11 步（制式切换 + 加权平均）：`../../../tests/test_academic_line.py` ——
   加权公式手算对照、与 GPA 口径不同、学分为 0 不参与、删除后重算、`/api/gpa` 返回
   `weighted_average`/`weighted_credits`、非法制式 400。
-- F1/F5 段2·T-B4（要求链接）：`../../tests/test_attach_line.py` —— 考核项挂/删要求链接、
+- F1/F5 段2·T-B4（要求链接）：`../../../tests/test_attach_line.py` —— 考核项挂/删要求链接、
   列表与临期提醒都带 `attach`、越界 400、考核项不存在 404（打开规则本身见 F1 侧用例）。
 - 待补（B4）：课程→考核→成绩→GPA 全链路；合流任务；考核项提醒。

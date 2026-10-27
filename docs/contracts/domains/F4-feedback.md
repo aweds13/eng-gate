@@ -58,4 +58,4 @@
 ## 验收与测试
 
 - 对应 LF-4、AC-15/16/17。
-- 测试：`../../tests/test_focus_feedback.py`；B4 补全链路。
+- 测试：`../../../tests/test_focus_feedback.py`；B4 补全链路。

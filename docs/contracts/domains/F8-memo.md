@@ -55,4 +55,4 @@
 ## 验收与测试
 
 - 对应 AC-22。
-- 测试：`../../tests/test_team_memo.py`；B4 补全链路。
+- 测试：`../../../tests/test_team_memo.py`；B4 补全链路。

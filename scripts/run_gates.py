@@ -645,7 +645,9 @@ NODE_CMD = {
 def xdist_available() -> bool:
     """装了 `pytest-xdist` 吗？没装就串行跑 —— **不谎报**，也不因为缺插件把门禁弄红。"""
     probe = subprocess.run(
-        [PY, "-c", "import xdist"], capture_output=True, text=True, check=False
+        [PY, "-c", "import xdist"], capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     return probe.returncode == 0
 
@@ -848,9 +850,11 @@ def git(*args: str) -> str:
     # 于是"复盘/xxx.md 有没有一起改"这类判断会永远为假（实测踩到，等于中文文档的同步检查失效）。
     r = subprocess.run(
         ["git", "-c", "core.quotepath=false", *args],
-        cwd=ROOT, capture_output=True, text=True, check=False,
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        check=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
-    return r.stdout.strip()
+    return (r.stdout or "").strip()
 
 
 def untracked_files() -> list[str]:
@@ -1089,7 +1093,9 @@ def _kill_pid(pid: int) -> tuple[bool, str]:
             return False, f"psutil:{type(exc).__name__}"
     try:
         r = subprocess.run(["taskkill", "/PID", str(pid), "/F"],
-                           capture_output=True, text=True, check=False)
+                           capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", check=False,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return r.returncode == 0, f"taskkill rc={r.returncode}"
     except OSError as exc:
         return False, f"{type(exc).__name__}"
@@ -2204,7 +2210,9 @@ def main() -> int:
     #   既不让两道门白跑一趟，也不用我去数列号。
     pre = subprocess.run(
         [PY, "-X", "utf8", str(ROOT / "scripts" / "check_toml.py")],
-        cwd=ROOT, capture_output=True, text=True, check=False,
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        check=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     if pre.returncode != 0:
         print("=== ⓪ TOML 语法预检（门禁开跑之前）===")
