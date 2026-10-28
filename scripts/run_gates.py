@@ -111,8 +111,8 @@ REAL_PY: list[tuple[str, list[str]]] = list(product_timeflow.REAL)
 
 # 渲染验证层（T-G32）：真浏览器把 3 档宽度 × 14 个视图各渲染一遍，采成"几何清单"与黄金逐字节比。
 # 那一层里**每次采两遍**做确定性自检：不一致 = 工具自己不可信（退出码 4），不当成"界面变了"。
-# 退出码 3 = 起不了真浏览器 → 记 `not_run`：**NOT RUN 不是 PASS**（last.json 单列一栏 +
-# trailer 里写 NOT RUN）。
+# 退出码 3 = **这一层没验证**（起不了真浏览器／没有 node／block 档有 skip 没判完）
+# → 记 `not_run`：**NOT RUN 不是 PASS**（last.json 单列一栏 + trailer 里写 NOT RUN）。
 # 行为流层（T-G34）：真浏览器 + 真点击 + 真按键，把「待人工确认」里功能性的那些搬给机器。
 # 每轮默认**跑两遍**（各自新库 + 新浏览器）比对断言指纹，不一致同样退 4。
 BROWSER = product_timeflow.BROWSER
@@ -1413,10 +1413,16 @@ def finish_gate(
         item["timeout_seconds"] = timeout
         item["killed_pid"] = proc.pid
         item["killed_children"] = killed_children
-    if name in NODE_CMD and exit_code == 3:
+    # ★ 卡 E59（T-AG517）：**退出码 3 = 没验证过**，不限是浏览器那三道。
+    #   本仓已有几处用 3 表达「没判完」：`check_docs.py`（没 HEAD / block 档有 skip）、
+    #   `check_skills_claims.py --mode block`、`web_live_check.py`（没 node 做不了语法解析）。
+    #   旧写法只认 `name in NODE_CMD`，于是 web_live 在云机（没 node）**永远假绿**。
+    #   读法上 `failed = exit_code not in (0, 3)` 早已把 3 当「不是失败」，这里只是把
+    #   `status`/`blocking` 跟上，免得 last.json 里写着 exit=3 却不是 NOT RUN。
+    if exit_code == 3:
         item["blocking"] = False
         item["status"] = "NOT RUN"
-        item["note"] = "起不了真浏览器：这一层**没有验证**，不算通过"
+        item["note"] = "这一层**没有验证**，不算通过"
     # ★ T-G58：**失败时把这道门的输出留下**。原来只印一行摘要、输出直接丢掉 —— 于是
     # 「全量跑红了」之后唯一的办法是**把这道门单独再跑一遍**（render 110 秒、ui_flow 176 秒），
     # 而它往往是随机的，重跑还未必复现（T-G51 就在这上面白花了两轮）。现在：全量输出落
@@ -1431,7 +1437,7 @@ def finish_gate(
     with PRINT_LOCK:
         tag = f"{name:<22} exit={exit_code}  {item['seconds']}s"
         if item.get("status") == "NOT RUN":
-            print(f"[SKIP] {tag}  （起不了真浏览器）")
+            print(f"[SKIP] {tag}  （没验证：这一层跑不了，NOT RUN 不是 PASS）")
         elif timed_out:
             print(f"[FAIL] {tag}  ★ {item['summary']}")
         else:
@@ -1972,7 +1978,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--select", action="store_true",
         help=("台账驱动选测（卡 E51 / E36）：pytest 门只跑台账 `test:` 指针选出的那批。"
               "三道闸（台账 / 夜间全量 ≤24h / 判据本体）任一不过 ⇒ 退回全量并说明；"
-              "不给本开关时命令与产物形状逐字不变。落地链默认打开（TF_SELECT=1）。"),
+              "不给本开关时命令与产物形状逐字不变。落地链默认打开（TF_SELECT=1）。"),
     )
     # ★ 卡 E43（T-AG495）：`--only <门名>` —— 按**门名**选门（`--affected` 是按**路径**选）。
     #   存量的 `--profile` / `--profiles` 是"按档"、`--affected` 是"按路径"，都不是"点哪道跑哪道"。
@@ -2377,6 +2383,11 @@ def main() -> int:
         # ★ 卡 E44：这份绿是哪版解释器跑的，必须可查 —— 门输入哈希的展开语义
         #   曾随 `Path.glob("X/**")` 的版本变（3.12 不匹文件 ⇒ 哈希恒为 sha256("")）。
         **payload_env_fields(),
+        # ★ CI 可复现性（判据 A）：这趟是哪台机器跑的，必须可查。
+        #   回传没有 host → 落地链的「必须是云机跑的」永远判不过；
+        #   机器 hostname 不是本机私有状态（两台机器天生不同）。
+        #   不许塞进 payload_env_fields()：tests/test_gates_reuse_line.py 精锁它的键集。
+        "host": socket.gethostname(),
         # ★ T-G179 封存指纹：除 gates/** 外即将提交内容的 tree 哈希（可复现固定点）。
         # 为什么摘掉 gates/：gates/last.json 自己在那棵树里，写进它自己的哈希会让树变化 →
         # 永远追不上（自指悖论）。它不是"完整提交的 tree"，也**不含门禁产物**。
@@ -2406,7 +2417,7 @@ def main() -> int:
             key=lambda x: x["seconds"], reverse=True,
         ),
         "gates": results,
-        # 没验证成的门（当前只有渲染层会遇到：起不了真浏览器）。**不是"通过"**，
+        # 没验证成的门（起不了真浏览器／没有 node／没判完）。**不是"通过"**，
         # 单列一栏 + 写进 trailer，让"这次提交哪些东西没被验证过"有据可查。
         "not_run": not_run,
         # 复用了上次判定的门（T-G47）：单列一栏 + 带上输入哈希。**不是"通过"的同义词** ——

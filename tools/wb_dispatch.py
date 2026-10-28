@@ -1023,9 +1023,12 @@ def _notify_daemon_alive(pid_path: Path) -> bool:
     if os.name == "nt":
         # tasklist /FI "PID eq 1234" /FO CSV /NH  →  "python.exe","1234",...
         try:
+            # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+            # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
             done = subprocess.run(  # noqa: S603 —— 命令本地拼好，不是外部输入
                 ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                capture_output=True, text=True, timeout=5, **NO_WINDOW,
+                capture_output=True, text=True, timeout=5,
+                                encoding="utf-8", errors="replace", **NO_WINDOW,
             )
         except (OSError, subprocess.SubprocessError):
             return False
@@ -1035,9 +1038,12 @@ def _notify_daemon_alive(pid_path: Path) -> bool:
         return bool(line) and "python" in line[0].lower() and str(pid) in line[0]
     # POSIX：ps -p <pid> -o comm=
     try:
+        # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+        # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
         done = subprocess.run(  # noqa: S603 —— 命令本地拼好，不是外部输入
             ["ps", "-p", str(pid), "-o", "comm="],
-            capture_output=True, text=True, timeout=5, **NO_WINDOW,
+            capture_output=True, text=True, timeout=5,
+                            encoding="utf-8", errors="replace", **NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError):
         return False

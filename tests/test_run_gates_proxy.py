@@ -59,7 +59,7 @@ def _run(cmd: list[str], *extra: str) -> tuple[int, str]:
         cwd=ROOT,
         capture_output=True,
         text=True,
-        encoding="utf-8",
+        encoding="utf-8", errors="replace",
         **NO_WINDOW,
     )
     return proc.returncode, (proc.stdout or "") + (proc.stderr or "")

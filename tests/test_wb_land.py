@@ -586,8 +586,11 @@ def _mk_pen(repo: Path) -> Path:
     放进卡树，⑤/⑥ 才测得到、主树也才是干净的（否则守卫先咬，测的就不是原来那条路了）。
     """
     pen = repo / ".pen"
+    # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+    # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
     subprocess.run(["git", "worktree", "add", "--detach", str(pen), "HEAD"],
                    cwd=str(repo), env=_ENV, capture_output=True, text=True, check=False,
+                   encoding="utf-8", errors="replace",
                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return pen
 

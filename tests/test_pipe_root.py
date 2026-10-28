@@ -75,7 +75,7 @@ def test_wb_notify_reads_and_writes_the_data_root(tmp_path: Path) -> None:
         env=_env(PIPE_DATA=str(tmp_path)),
         capture_output=True,
         text=True,
-        encoding="utf-8",
+        encoding="utf-8", errors="replace",
         timeout=120,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
@@ -94,7 +94,7 @@ def test_wb_plan_reads_the_ledger_from_the_data_root(tmp_path: Path) -> None:
         env=_env(PIPE_DATA=str(tmp_path)),
         capture_output=True,
         text=True,
-        encoding="utf-8",
+        encoding="utf-8", errors="replace",
         timeout=180,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )

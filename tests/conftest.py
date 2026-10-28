@@ -41,6 +41,25 @@ if _WORKER:  # 只有 xdist 的分身进程才有这个变量
         "TF_LOG_PATH", os.path.join(_TEST_EXPORT_DIR, f"timeflow-{_WORKER}.jsonl")
     )
 
+## ★ 卡 E58：宿主的窗口指纹必须在**本文件导入时**就摘掉，不能只在夹具里摘
+#
+# 卡 E57（T-AG509）加的是 `_no_host_session_id` 夹具 —— 它在**用例执行时**删
+# `DSH_SESSION_ID`，这对「测试进程自己」够用。但另有 **8 处**测试文件在**模块导入时**
+# 就把 `os.environ` 快照成 `_ENV` 传给子进程（`tests/test_wb_land.py:464`、
+# `tests/test_landing_stamp.py:63`、`tests/test_wb_plan.py:788/802`、
+# `tests/test_wb_queue_audit.py:48/65`、`tests/test_pool_registry.py:176`、
+# `tests/test_sync_counts_root.py:43`）—— conftest 导入在前、那些模块导入在后，
+# 于是夹具删得再干净，快照里**照样带着指纹**，指纹还是进了子进程。
+#
+# 后果与 E57 完全同型（2026-10-28 实测）：壳里带着 `session-c5ee5ccd-…` 时，
+# `tests/test_wb_land.py::test_card_and_batch_is_exactly_one` 拿到的不是「恰好给一个」，
+# 而是 `★ 卡 T-G999 归另一个对话窗口（session-…）；换手要显式加 --take-over` ——
+# 因为 `gates/diag/session-leases.json`（gitignored 的本机状态）里恰好挂着 `T-G999`。
+#
+# ⇒ 在**导入时**从源头摘一次，8 处快照与夹具两条路一起干净。
+#   需要指纹的用例自己 `monkeypatch.setenv("DSH_SESSION_ID", ...)`，不受影响。
+os.environ.pop("DSH_SESSION_ID", None)
+
 ## worktree 导入口径（T-G134）：测试必须 import **本树**的 src
 #
 # 背景：miniconda 的 editable 安装（`__editable__.timeflow-0.1.0.pth`）硬指主树的
@@ -140,7 +159,11 @@ def _no_host_config_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _no_host_session_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    """把宿主的窗口指纹从测试进程里摘掉（判据钉在 `tests/test_wb_session.py`）。"""
+    """把宿主的窗口指纹从测试进程里摘掉（判据钉在 `tests/test_wb_session.py`）。
+
+    ★ 卡 E58：这里只是**第二道**保险。第一道是文件顶部 `os.environ.pop`（导入时）——
+    没有那一道，本夹具救不了「模块导入时快照环境」的 8 处 `_ENV`。
+    """
     monkeypatch.delenv("DSH_SESSION_ID", raising=False)
 
 

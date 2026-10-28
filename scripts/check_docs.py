@@ -195,6 +195,10 @@ EVIDENCE_PREFIXES = ("file:", "text:", "test:", "route:", "ui:", "column:", "tab
 
 #: 模板占位 / 通配：判不了（`<卡号>`、`*.md`、`{a,b}`）。
 PLACEHOLDER_CHARS = ("<", ">", "*", "{", "}", "…", "$", "|")
+#: 占位符的另一种写法：**单字母大写词干**（`X.py` / `N.md` / `卡X.md` 里那一段 `X`）。
+#: 正文拿它当「示例文件名」，`:156` 那种写法本仓到处都是。实测本仓跟踪的 1964 个文件里
+#: 末段是这种形状的 **0 个**，盘上（不含 `.git`/`.wt`）也是 **0 个** ⇒ 不会吃掉真文件。
+PLACEHOLDER_STEM = re.compile(r"^[A-Z](?:\.[A-Za-z0-9]+)?$")
 
 #: 外链前缀：**不是**仓内指针（不判、不记 skip —— 记了只会把 skip 灌成噪声）。
 URL_PREFIXES = ("http://", "https://", "ftp://", "mailto:", "www.")
@@ -356,22 +360,69 @@ def normalize(token: str) -> str:
             break
     text = text.split("::", 1)[0].strip()
     text = text.split()[0] if text else ""
-    # 行号：半角/全角冒号 + 单行/区间/逗号列表 + 可能的尾逗号
-    text = re.sub(r"[:：]\d+(?:[-–,，]\d+)*[,，]?$", "", text)
+    # 行号：半角/全角冒号 + 单行/区间/逗号列表 + 可能的尾逗号 + 可能的尾冒号
+    # ★ 卡 F6 补：`文件.py:68:`（行号后面还跟一个冒号）实测是本仓真有的写法
+    #   （`复盘/卡/卡E49-*.md:22`、`复盘/外包-卡表与规矩.md:1298`、
+    #   `复盘/派活器三合一-T-G114.md:171` 三处），旧正则只认 `:68` 不认 `:68:`，
+    #   于是整串 `x.py:68:` 落到「扩展名 `py:` 不在 OWN_EXTS ⇒ 别仓路径」上白跳过。
+    text = re.sub(r"[:：]\d+(?:[-–,，]\d+)*[,，]?[:：]?$", "", text)
+    # 裸尾冒号（`tests/t.py:`）同理：冒号不会是路径的一部分，只可能是排版残渣。
+    # 只对「看起来像路径」的串剥（含 `/`，或末段含点）—— 免得把 `mailto:` 剥成 `mailto`。
+    if re.search(r"[/\\.]", text):
+        text = re.sub(r"[:：]$", "", text)
     text = text.split("#", 1)[0].strip()
     if text.startswith("./"):
         text = text[2:]
     return "" if text in (".", "..") else text
 
 
-#: 本仓跟踪过的扩展名（`git ls-files` 实测；`_EXT_SNAPSHOT` 由 `tests/` 之外的复核脚本维护）。
-#: 判据 1 用它划「别仓路径」的界：`.ts` / `.php` / `.go` 这种本仓**从来没有**的类型，
-#: 只可能是引用了别人的仓（`复盘/DSH插件-*.md` 里 50 条 `src/core/verification.ts` 就是这种）。
+#: 本仓跟踪过的扩展名 —— **手写集合 + 由测试钉在 `git ls-files` 上**（不运行时现算）。
+#:
+#: ── 为什么不选「运行时从 `git ls-files` 现算」（实测理由，不是图省事）──
+#: ① 非 git 树（`tmp_path` 合成夹具、`git archive` 导出的目录、拷来的一份）里
+#:    `git ls-files` 一条不回 ⇒ 集合为空 ⇒ **凡带扩展名的引用全落进「别仓路径」skip**，
+#:    真死指针被静默吞掉（skip 不是 PASS，但它确实不再进 findings）。这是**放宽**。
+#: ② 集合会随「谁刚 add 过」漂 ⇒ 同一 HEAD 在两棵树上读数不同（卡 E53 踩过：判据只认
+#:    仓库里的东西，读数必须可复现，否则基线 ratchet 被伪债顶破）。
+#: ③ 现算出来的集合**比这里小**（实测跟踪过 19 种，这里 25 个）⇒ 正是「不许缩小」的反面。
+#: ⇒ 集合留在源码里当**声明**，由
+#:   `tests/test_check_docs.py::test_own_exts_covers_every_tracked_extension` 反向钉住：
+#:   `git ls-files` 实测到的每个扩展名都必须在集合里（漏一个 = 把本仓文件误判成别仓）；
+#:   集合里每个成员要么有跟踪样本，要么在 `OWN_EXTS_UNTRACKED_REASONS` 里有一条理由。
+#:
+#: ── 判据 1 怎么用它（完整顺序见 `check_dead_refs` 的 docstring）──
+#: **只在「文件确实不存在」之后**才拿它兜底推「别仓路径」：`.ts` / `.php` / `.go` 这种
+#: 本仓从来没有的类型，不存在时最可能是引用了别人的仓（`复盘/DSH插件-*.md` 里那批
+#: `src/core/verification.ts`）。存在性优先于类型猜测 —— `.ts` 真在仓里它就是仓里的。
+#:
+#: ── 为什么不把 `.jsonl` / `.log` / `.db` 加进来（它们确实躺在盘上）──
+#: 那些是**本机运行产物**（`.gitignore` 的 `logs/`、`gates/diag/`、`*.db-*` 各自挡着），
+#: 加进来等于宣布「本仓跟踪日志/数据库」：哪天这类引用真的写错（文件没了、也没被
+#: ignore），它就不再是「别仓路径」skip 而是**死指针** —— 那是收紧，会凭空顶破
+#: `docs/doc-debt-baseline.toml` 的 dead_refs 基线。它们现在走存在性分支（
+#: `logs/timeflow.jsonl` 存在 ⇒ 正常）或 gitignore 分支（不存在但被 ignore ⇒
+#: skip「gitignored 产物」），两条理由都比「按类型猜」准。
 OWN_EXTS = frozenset({
     ".md", ".markdown", ".py", ".pyw", ".toml", ".txt", ".mjs", ".json", ".js",
     ".yml", ".yaml", ".ps1", ".sh", ".cmd", ".html", ".css", ".tmpl", ".png",
     ".gitignore", ".gitattributes", ".gitkeep", ".ini", ".cfg", ".lock", ".svg",
 })
+
+#: `OWN_EXTS` 里**当前没有跟踪样本**的成员 —— 每个都得有一条存在理由，否则就是"猜进去的"。
+#: `tests/test_check_docs.py::test_every_own_ext_is_justified` 钉住三件事：
+#: ① 没样本的成员必须在这里有理由，且理由非空；② 理由表与跟踪样本**不相交**
+#: （某个成员哪天被真正跟踪了，测试会要求把理由删掉 —— 理由会腐烂，腐烂得被抓出来）；
+#: ③ 理由表里不许有不在 `OWN_EXTS` 的成员。
+#: ★ 它**证明不了**的一件事：有人把某个「本来就没样本」的成员从 `OWN_EXTS` 里删掉，
+#:   上面三条都看不见（跟踪过的扩展名一个没少、理由也没多）。要记这里，别假装钉住了。
+OWN_EXTS_UNTRACKED_REASONS = {
+    ".markdown": "`README.markdown` 是正规写法，本仓目前只用 `.md`，但文档里会引到",
+    ".yaml": "`yml` 的孪生写法；本仓跟踪 `.yml`，同一种格式不该按后缀二选一",
+    ".svg": "`docs/` 里的矢量图；本仓跟踪 `.png`（`src/web/icon-192.png`），同类资源",
+    ".ini": "`pytest.ini` / `setup.ini` 一类，删了会把这类引用误判成别仓",
+    ".cfg": "`setup.cfg` / `tox.cfg` 一类 Python 打包配置，与 `.toml` 同类",
+    ".lock": "锁文件（`*.lock`）；认不出它只会把依赖清单当成别仓路径",
+}
 
 
 def ext_of(token: str) -> str:
@@ -624,20 +675,38 @@ def symbol_variants(token: str) -> list[str]:
 def check_dead_refs(root: Path, docs: list[Path]) -> tuple[list[Finding], list[Skip]]:
     """判据 1：死指针（判不出的地方如实记 skip）。
 
-    ★ 边界（与文件头一致）：外链 / 路由 / 子命令 / 裸文件名 / 第一段不在仓根的相对路径
-      **不是指针**（不判也不记 skip）；绝对路径 / 模板占位 / `..` 逃逸 / `gates/diag`
-      产物 / gitignored 产物 / 反引号不成对的行 ⇒ **skip**（判不出）。
+    ★ **判据顺序就是判据**（改这条顺序 = 改判据，不是重构）。逐条：
+        外链（`URL_PREFIXES`）           ⇒ 不是指针（不判，也不记 skip）
+      → 绝对路径 / `~`                   ⇒ skip「仓外/绝对路径」
+      → 模板占位 / 通配                  ⇒ skip「模板占位」
+      → `..` 逃逸                        ⇒ skip「指到仓库外面去了」
+      → `resolve()` 命中                 ⇒ **正常**（存在就是存在，扩展名不算数）
+      → `symbol_variants()` 命中         ⇒ **正常**（`文件.成员()` 的成员引用）
+      → gitignore 命中                   ⇒ skip「gitignored 产物（不随树分发）」
+      → `gates/diag/` 前缀               ⇒ skip「gates/diag 产物（不随 worktree 分发）」
+      → 扩展名不在 `OWN_EXTS`            ⇒ skip「别仓路径」（**兜底猜测**，只在确实不存在之后）
+      → 其余                             ⇒ **死指针**
+    另：反引号不成对的行整行 skip（判不了）。
 
-    ★ 卡 F6 追加两条边界（都是实测出来的假阳性，不是「放宽」）：
+    ★ 为什么「存在性」必须排在「扩展名猜测」前面（实测，不是审美）：
+      旧顺序把扩展名启发式放在 `resolve()` 之前 ⇒ 实测 245 条「别仓类型」skip 里
+      **135 条的文件就躺在磁盘上**（`gates/diag/notifications.jsonl`、`logs/timeflow.jsonl`、
+      `data/timeflow.db` …），17 条其实是成员引用，25 条其实是 gitignored 产物
+      （理由还写反了：记成「别仓」而不是「产物」），只有 68 条真该判别仓。
+      口径因此改成：**存在就是存在**；只有「不存在 **且** 本仓从不跟踪这个类型」才推定为
+      别仓引用。这样 skip 只覆盖「真判不出」，不再拿类型当先行筛子把真文件挡在外面。
+
+    ★ 两条 F6 边界保留但不先行（都是实测出来的假阳性，不是「放宽」）：
       ① **别仓类型**：末段扩展名不在 `OWN_EXTS`（本仓从来没跟踪过 `.ts`/`.php`/`.go`…）
-         ⇒ 它引的是**别人的仓**（`复盘/DSH插件-*.md` 里 50 条 `src/core/verification.ts`）。
+         ⇒ 它引的是**别人的仓**（`复盘/DSH插件-*.md` 里那批 `src/core/verification.ts`）。
          记 skip 不记 finding —— skip 不算 PASS，数字仍看得见。
       ② **成员引用**：`tools/evidence_map.assertion_path()` 这种「文件.成员()」先按
          `symbol_variants` 落到 `文件.py` 再判，落得住就不算断链。
     """
     findings: list[Finding] = []
     skips: list[Skip] = []
-    missing: list[tuple[str, str, str]] = []  # (where, token, derived rel)
+    # (where, token, derived rel, 扩展名)：留到最后批量判 gitignore / diag / 别仓兜底
+    missing: list[tuple[str, str, str, str]] = []
     root_nc = os.path.normcase(_norm(root))
     heads: dict[str, bool] = {}
 
@@ -655,34 +724,47 @@ def check_dead_refs(root: Path, docs: list[Path]) -> tuple[list[Finding], list[S
                 if token.startswith(URL_PREFIXES):
                     continue  # 外链不在判据 1 的范围里（不判，也不冒充 skip）
                 if DRIVE.match(token) or token.startswith(("/", "~")):
+                    # ★ 存在性优先：盘符绝对路径**盘上真有**就说明它指向的东西在
+                    #   （`D:/repo/infra/pool/projects.toml` 实测 120 条这种），
+                    #   这时既不判死也不该记 skip —— skip 只能留给「真判不出」。
+                    #   `/` 开头与 `~` 开头仍一律 skip：前者在 Windows 上不是真路径，
+                    #   后者展开到谁的 home 取决于环境，判了也是假读数。
+                    if DRIVE.match(token) and os.path.exists(os.path.normpath(token)):
+                        continue
                     skips.append(Skip(where, token, "仓外/绝对路径，判不了"))
                     continue
-                if any(ch in token for ch in PLACEHOLDER_CHARS):
+                if any(ch in token for ch in PLACEHOLDER_CHARS) or PLACEHOLDER_STEM.match(
+                    token.replace("\\", "/").rsplit("/", 1)[-1]
+                ):
                     skips.append(Skip(where, token, "模板占位/通配，判不了"))
                     continue
                 if outside_repo(token, md, root, root_nc=root_nc):
                     skips.append(Skip(where, token, "指到仓库外面去了"))
                     continue
-                if ext_of(token) and ext_of(token) not in OWN_EXTS:
-                    skips.append(Skip(where, token,
-                                      f"`{ext_of(token)}` 不是本仓跟踪过的类型 ⇒ 判为别仓路径"))
-                    continue
+                # ★ 存在性优先于类型猜测：# 命中的话它就在仓里，扩展名不算数
                 if resolve(token, md, root, kind, root_nc=root_nc) is not None:
                     continue
                 if any(resolve(cand, md, root, kind, root_nc=root_nc) is not None
                        for cand in symbol_variants(token)):
                     continue
-                if token.replace("\\", "/").startswith(DIAG_PREFIX):
-                    skips.append(Skip(where, token, "gates/diag 产物（不随 worktree 分发）"))
-                    continue
-                missing.append((where, token, repo_rel(token, md, root, kind)))
+                # 到这儿还不存在 ⇒ 剩下的理由要问 git / 问前缀 / 才轮到扩展名兜底，
+                # 而 git 只能批量问（一次子进程问完），所以先攒着，出循环再判。
+                missing.append((where, token, repo_rel(token, md, root, kind), ext_of(token)))
 
     # 一次问 git：这些不存在的路径里，哪些是 gitignored 产物（跳过，不算断链）
-    ignored_set = ignored(root, sorted({derived for _, _, derived in missing}))
+    ignored_set = ignored(root, sorted({derived for _, _, derived, _ in missing}))
     ignored_flat = {path.rstrip("/") for path in ignored_set}
-    for where, token, derived in missing:
+    for where, token, derived, ext in missing:
         if derived in ignored_set or derived.rstrip("/") in ignored_flat:
             skips.append(Skip(where, token, "gitignored 产物（不随树分发）"))
+            continue
+        if token.replace("\\", "/").startswith(DIAG_PREFIX):
+            skips.append(Skip(where, token, "gates/diag 产物（不随 worktree 分发）"))
+            continue
+        # ★ 兜底猜测排在最后：不存在 **且** 本仓从不跟踪这个类型，才推「别仓引用」
+        if ext and ext not in OWN_EXTS:
+            skips.append(Skip(where, token,
+                              f"`{ext}` 不是本仓跟踪过的类型 ⇒ 判为别仓路径"))
             continue
         findings.append(Finding("dead_ref", where, token))
     return findings, skips

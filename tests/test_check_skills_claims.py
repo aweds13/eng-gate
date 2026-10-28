@@ -55,10 +55,18 @@ def _run(
     monkeypatch,
     capsys,
     exempt: dict[str, str] | None = None,
+    mode: str | None = None,
 ) -> tuple[int, str]:  # type: ignore[no-untyped-def]
-    """跑 CLI（`--check`），返回 `(退出码, stdout)`；豁免表按用例给。"""
+    """跑 CLI（`--check`），返回 `(退出码, stdout)`；豁免表按用例给。
+
+    `mode=None` ⇒ **不传** `--mode`，走工具自己的默认档 —— 正是要钉的东西：
+    默认必须是 `block`（三态），否则上面十几条反例钉会在无声中全部失效。
+    """
     monkeypatch.setattr(cs, "EXEMPT", exempt if exempt is not None else {})
-    rc = cs.main(["--check", "--root", str(tmp_path)])
+    argv = ["--check", "--root", str(tmp_path)]
+    if mode is not None:
+        argv += ["--mode", mode]
+    rc = cs.main(argv)
     return rc, capsys.readouterr().out
 
 
@@ -211,3 +219,52 @@ def test_continuation_line_stays_one_command(tmp_path, monkeypatch, capsys) -> N
     rc, out = _run(tmp_path, monkeypatch, capsys)
     assert rc == 1, out
     assert "参数不存在：--gone" in out
+
+
+# ------------------------------------------------------------------ --mode report / block
+
+
+def test_report_mode_is_green_but_still_prints_the_number(
+    tmp_path, monkeypatch, capsys
+) -> None:  # type: ignore[no-untyped-def]
+    """★ `--mode report`：只有「判不出」时退 **0**（门禁不红），但读数必须在脸上。
+
+    这是接门的全部理由：技能正文里的 `<卡号>` / `...` / `tools/wb_*.py` 是指令文档的
+    固有形态，压不到 0 条；block 档会让每趟门禁都红。★ 但退 0 **不是** PASS ——
+    汇总行与 `[DEBT]` 行必须把「判不出 1」写出来，且不许出现 `[OK  ]`。
+    """
+    body = "```bash\npython -X utf8 tools/wb_plan.py --card <卡号>\n```"
+    _tree(tmp_path, body)
+    rc, out = _run(tmp_path, monkeypatch, capsys, mode="report")
+    assert rc == 0, out  # 判不出不红（这正是 report 档存在的理由）
+    assert "判不出" in out and "判不出 1" in out, out  # 读数照打，一位都不省
+    assert "对不上 0" in out, out
+    assert "[OK" not in out, f"report 档判不出时不许打 OK 行（会被当成过了）：\n{out}"
+    assert "[DEBT]" in out, out
+
+
+def test_block_mode_is_still_three_on_not_verified(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """★ 防回退：**不给 `--mode`** 时默认是 `block`，同样输入必须退 3。
+
+    加 `--mode` 最容易出的事故是「顺手把默认改了」—— 那样上面所有反例钉（以及仓里
+    任何直接调 `cs.main([...])` 的地方）都会在无声中失去意义：判不出重新变成退 0，
+    也就是「没判」重新冒充「通过」。这条钉把默认档钉死在 block。
+    """
+    body = "```bash\npython -X utf8 tools/wb_plan.py --card <卡号>\n```"
+    _tree(tmp_path, body)
+    rc, out = _run(tmp_path, monkeypatch, capsys)  # 刻意不传 mode
+    assert rc == 3, out
+    assert "判不出 1" in out
+    # 显式写 block 也必须一样（默认值 == block，不是两套语义）
+    rc2, out2 = _run(tmp_path, monkeypatch, capsys, mode="block")
+    assert rc2 == 3, out2
+
+
+def test_report_mode_is_still_red_on_real_drift(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """★ `--mode report` 不是「什么都放过」：有**真对不上**照样退 1 并点名。"""
+    body = "```bash\npython -X utf8 tools/wb_plan.py --card <卡号> --gone\n```"
+    _tree(tmp_path, body)
+    rc, out = _run(tmp_path, monkeypatch, capsys, mode="report")
+    assert rc == 1, out  # report 只放过「判不出」，不放过「对不上」
+    assert "参数不存在：--gone" in out
+    assert "[FAIL]" in out, out

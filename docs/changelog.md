@@ -343,7 +343,7 @@
 - 左栏只剩 工程工具箱 / 禅道 / timeflow：`workbench_board` 座位 `row=False`，左栏行改从 `ROW_KEYS` 派生；工作台状态并进「工程工具箱 → 工作台」页签（`tools/dsh_panel.py:294`）。
 - 补 `serveProxy` / `servePoolAction` 的分发分支（在 GET 闸门之前）：反代 404、派活 405 两个症状消失（`tools/dsh_panel.py:1061`）。
 - `serveSettings(req, res, url)` 补传 `url`，POST 不再抛 `searchParams`（`tools/dsh_panel.py:1050`）；参数页改可写（数字框 + 保存），白名单加 `pool_concurrency`（1–8），越界改成 400（`tools/dsh_panel.py:774`）。
-- `tools/wb_plan.py` 没给 `--concurrency` 时读 `tools/settings.toml`，读不到 / 越界退回 `DEFAULT_CONCURRENCY`（`tools/wb_plan.py:773`）。
+- `tools/wb_plan.py` 没给 `--concurrency` 时读 tools/settings.toml（面板「参数」页运行期写出的本地文件，未入库、仓里默认没有；读取分支 `tools/wb_plan.py:136`），读不到 / 越界退回 `DEFAULT_CONCURRENCY`（默认 2，见 `tools/pool/plan.py:39`）。
 ## ruff 112 → 0：framework 27 个文件 + gate_lock.py
 
 - 28 个文件：E501 折行 72 处（只折行、不改语义）、`ruff --fix` 自动项 25 处（I001 13 / F401 8 / UP035 3 / UP009 1）、TC001+TC003 共 11 处改 `if TYPE_CHECKING:`、2 处 `assert False`→`raise AssertionError`、2 处 try/except/pass→`contextlib.suppress`。
@@ -361,6 +361,13 @@
 - `tools/wb_reconcile.py`：去掉 `--grep` 的 `-10` 截断；新增 `_batch_landed()`/`_landed_commits()`/
   `_spec_commit_in()`，按围栏 `state == landed` 认账；`check()` 第三份 `accounted_done` 打 `[蓝]`。
 - `tests/test_wb_reconcile.py`：5 条断言改三份解包 + 2 条新钉子（landed 认账 / draft 不算证据）。
+## 2026-10-28 · 文档治理第三批：文档读数与意图导航、判据自证与技能对账接门、CI 跨宿主可复现（F8+G6+E59，T-AG517）
+
+三张卡一笔落地。三条改动都动同一棵树上被判据读的读数 —— F8 改的是 `docs/INDEX.md` 与门数、G6 改的是 `scripts/check_docs.py` 自己的 skip 面、E59 改的是 `.gitignore` 与 `scripts/run_gates.py`；单独落地时任意一笔都会让另外两张卡的读数暂时对不上（`docs` 门的死指针、审计的证据表），并集才稳定。
+
+- **F8 文档读数与意图导航**：三份总览的过期计数按当场读数校正（`复盘/` **773** 篇 / `卡/` **283** / `tests/` 下 **225** 个 Python 文件、**3443** 用例 / 工作树 **28** 棵）；`docs/文档架构.md` 的「presets 是项目书」实测证伪（`docs/presets/softeng.patch.yml` 是 DSH 预设配置与 persona 前缀，不是项目书）；`docs/subsystems/ci/云门禁机.md` 的云机身份从「换机」更正为「同一 `instance-id` 变配」（`i-0123456789abcdef0`，`ecs.e-c1m2.xlarge` → `ecs.u1-c1m4.xlarge`），IP 换成实测的 `203.0.113.10`，并把之前凭推断写下的 `807 s` / `480 s` 换成日志真值 `835 s` / `420 s`；ci 两页的门数 `19` / `21` → **22**；新增 `docs/文档系统导航.md`（按意图分五类路由，90 条引用全部实测存在），`AGENTS.md` 加一行指过去。
+- **G6 判据自证与技能对账接门**：`scripts/check_docs.py` 的判据顺序错（扩展名启发式排在存在性检查**之前**）实测让 **134 条真实存在**的引用被白跳过 —— 改成存在性优先；`OWN_EXTS` 从「写死一张表」改成「表 + 目录里真有的后缀」自证；`gates/gate-selfproof.toml` + `tests/test_gate_selfproof.py` 把「台账里的门都在真门表」「真门表每道门都有行」「`reverse_case` 指的 nodeid 真实存在」三向钉住；`tools/check_skills_claims.py --check` 原来报 `[FAIL]` 却退 **0**，现在 `--mode report` 退 0 / `--mode block` 退 3，并作为第 **22** 道门 `skills_claims` 接进 `audit` 档。
+- **E59 CI 跨宿主可复现**：23 处 `subprocess` 缺 `encoding`、23 处缺 `errors`（云机 locale 是 cp936，中文能直接把读线程打崩 ⇒ `AttributeError: 'NoneType' object has no attribute 'strip'`）；`tests/test_no_window.py` 的防窗指纹随之漂移，一并补齐；`scripts/cloud/run_gate.sh` 不再带一个**已失效的默认云机地址**（现在缺 `CLOUD_HOST` 退 9，fail fast）；3.5/5 装依赖的解释器与 4/5 跑门禁的解释器固定成同一个绝对路径（原来可以是两个）；`gates/last.json` 的 `host` 字段复核为**原本就对**（只由真跑门禁的 `main()` 写，`--seal` 不补写），所以云机回传带 `host` 必须真跑一趟；本机私有状态（`.wt/`）写进入库的 `.gitignore`（原来只在 `.git/info/exclude` 里 ⇒ 云机上那 20 条 `.wt/...` 引用被算成死指针）；新增 `docs/subsystems/ci/云门禁-可复现性清单.md`（R1–R16 十六行，每行的「判据」列都是能解析到的 pytest 节点 id）与 `tests/test_ci_portability.py`（20 个用例）。
 ## 2026-10-27 · 文档治理第二批：文档门成立 + 复盘索引机器化 + 技能去陈旧（F6+F7+G5，T-AG513）
 - F6 · 文档门成立：`check_docs` 三条判据修好（行号列表归一、`../` 按 `normpath(join(dirname, '../' + token))` 判、未入库的 .md 文件记 skip），docs 门接进 audit 档（门表 20→21），`PINNED_FLOOR` 地板钉子补上（实测：把基线数字抬到 199 门照样绿 ⇒ 原 ratchet 只有读数没有地板）。
 - F6 · 索引重建：`docs/INDEX.md` 改由 `scripts/gen_doc_index.py` 机器生成；`.gitignore` 补上 `gates/review/` —— `tools/pool/landing.py` 的注释一直宣称它已忽略，实测这条规则**此前不存在**，于是「这台机器跑过几次落地」会让死指针读数漂 2 条（四格实验：新克隆 154/基线 152 红，加规则后落回 152）。
@@ -1710,7 +1717,7 @@
 - 判据（主控三趟对照）：跑 A 满载 → `test_run_bg` 挂 + `ui_flow` 挂 2/26（⑮ Obsidian）；跑 B **低负载** →
   两道门**都绿**；跑 C 满载 → `test_run_bg` **还是同一条**、`ui_flow` 换成挂 1/26（⑪ 备份与恢复）。
   ⇒ **① 每次挂同一条 = 墙钟敏感；② 每次挂不同条 = 竞态/时序。** 这两道门让任何卡的提交在满载下都过不去。
-- `.tests/test_run_bg.py`：删掉墙钟断言 `elapsed < 1.5`，改为**行为断言**（`run` 返回后 status 仍为 running）；
+- `tests/test_run_bg.py`：删掉墙钟断言 `elapsed < 1.5`，改为**行为断言**（`run` 返回后 status 仍为 running）；
   被测命令 sleep 2→5s 并注明"那是被测时长、不是断言阈值"。
 - `scripts/run_gates.py`：浏览器层（render/ui_flow）改**内部串行**（原来两个真浏览器实例争资源）；
   轻门泳道仍与浏览器层并行。代价：总时长 ≈ render+ui_flow，在 gate_lock 90 分钟预算内。
@@ -6009,7 +6016,7 @@ T-F7 顺手登记的缺陷：`ledger.summary` 的 `debt_count` 取 `len(overdue_
 - **问题复盘**：`复盘/文档偏移与约束框架复盘.md`（用户指出三件事 → 我的核实 → 决策与边界）。
 - **机器可读台账**：新增 `docs/traceability.toml`（88 条：done 42 / partial 22 / todo 22 / deferred 2），
   每条 = 状态 + **可验证断言**（file/text/route/table/column/ui/test）+ gaps；
-  生成器 `scripts/seed_traceability.py`（一次性初始化，之后台账本身是真源）。
+  生成器（一次性初始化脚本，未入库；之后台账本身是真源 `docs/traceability.toml`）。
 - **六项对账**：`scripts/audit_progress.py` —— ①提交带 `Task:` ②任务号已登记 ③**声称=证据**（逐条实跑断言）
   ④**文档与代码同提交** ⑤门禁有落盘产物 ⑥进度可从 git 重建；**不通过退出码 1 → 不许提交**。
 - **门禁落盘**：`scripts/run_gates.py` 跑全套门禁并把结果写 `gates/last.json`（入库），

@@ -32,6 +32,17 @@
 要放行的条目写进下面 `EXEMPT`（`"skills/x.md:12" -> 理由`）。**空理由算红** ——
 豁免是给人看的账，不是让门变绿的开关。
 
+## 两个档位（`--mode`，与 `scripts/check_docs.py` 同一惯例）
+
+`--mode` 只改**退码**，不改判据：`scan()` 与 `Report` 的口径一个字都没动 ——
+「判不出」永远不算「对得上」。
+
+- `--mode block`（**默认**，三态）：`0` 判完且干净 / `1` 有对不上 / `3` 没判完；
+- `--mode report`：**只有真「对不上」才退 `1`**；判不出退 `0`，但读数照打
+  （`对不上 N / 判不出 M`），末行打 `[DEBT]` 而**不是** `[OK  ]` —— 有债不红，但债看得见。
+  为什么需要这一档：技能正文里 `<卡号>` / `<文件>` / `...` / `tools/wb_*.py` 这类占位符与
+  通配名是**指令文档的固有形态**，压不到 0 条；block 档会让每趟门禁都红。
+
 ## 退出码（三态，与 `scripts/check_docs.py` 同一惯例）
 
 - `0` —— 判完且干净：每条引用都对得上；
@@ -39,6 +50,8 @@
 - `3` —— 没有对不上，但有条目**判不出**（`not verified`）。★ 它**不是**通过：
   这些条目在结构上看不见，比没有门更糟。门禁侧 `exit 3` 记「没判完」，
   既不算绿也不算红 —— 于是「判不出」不会被悄悄洗成「对得上」。
+  （只有 `--mode block` 会退 `3`；`--mode report` 下这个数照样出现在汇总行与 `[DEBT]` 行里，
+  一条都不许省略。）
 
 改前这里只分两态（`1` / `0`），72 条 `not verified` 与全绿退同一个 `0`，
 等于把「我没判」和「我判过了、没问题」写进同一个码里。
@@ -340,17 +353,25 @@ def _judge(claim: Claim, root: Path, exempt: dict[str, str], hit: set[str]) -> N
             claim.exempt_reason = reason
 
 
-def _label(report: Report) -> str:
-    """末行前缀：`1` 红 ⇒ FAIL，`3` 没判完 ⇒ WARN，`0` ⇒ OK。
+def _label(report: Report, mode: str = "block") -> str:
+    """末行前缀：`1` 红 ⇒ FAIL，`3` 没判完 ⇒ WARN，`0` ⇒ OK；report 档有债 ⇒ DEBT。
 
     ★ 判不出时不许打 `[OK  ]` —— 那行会被当成「这门过了」抄进回话，
     而同一趟的退出码是 3（没判完），自相矛盾。
+    ★ `--mode report` 下判不出退 `0`，但**更不许**打 `[OK  ]`（同一个自相矛盾，
+    只是换到另一个档位）：有 `not verified` 就打 `[DEBT]` —— 不红，但看得见。
     """
-    code = exit_code(report)
-    return {1: "FAIL", 3: "WARN", 0: "OK  "}[code]
+    code = exit_code(report, mode)
+    if code == 1:
+        return "FAIL"
+    if code == 3:
+        return "WARN"
+    if report.not_verified:
+        return "DEBT"
+    return "OK  "
 
 
-def _print_report(report: Report) -> None:
+def _print_report(report: Report, mode: str = "block") -> None:
     for claim in report.failed:
         print(f"[FAIL] {claim.key}  {claim.command}")
         for problem in claim.problems:
@@ -364,21 +385,41 @@ def _print_report(report: Report) -> None:
             print(f"[SKIP] {claim.key}  豁免：{claim.exempt_reason}")
     for key in report.unused_exempt:
         print(f"[WARN] 豁免没命中任何引用：{key}（删掉或改对行号）")
-    print(f"[{_label(report)}] {report.summary_line()}")
+    print(f"[{_label(report, mode)}] {report.summary_line()}")
+    if mode == "report":
+        # ★ 这一行是 report 档的全部理由：不红，但「欠着多少」必须写在脸上。
+        print(
+            f"report 档读数：对不上 {len(report.failed)} / 判不出 {len(report.not_verified)}"
+            " —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），"
+            "**这不是 PASS**；`--mode block` 会按三态退码。"
+        )
     if report.not_verified and not report.failed:
+        tail = (
+            "本次退 3「没判完」。"
+            if mode != "report"
+            else "本次 --mode report 退 0（不阻门），`--mode block` 会退 3「没判完」。"
+        )
         print(
             f"★ 上面这 {len(report.not_verified)} 条我判不出 —— 它们**不是**通过"
-            "（结构上看不见，比没有门更糟）；本次退 3「没判完」。"
+            f"（结构上看不见，比没有门更糟）；{tail}"
         )
 
 
-def exit_code(report: Report) -> int:
+def exit_code(report: Report, mode: str = "block") -> int:
     """三态退出码，与 `scripts/check_docs.py` 同一惯例。
 
     `1` 压过 `3`：有真漂移就先修漂移，再谈「判不出」。
+
+    `--mode block`（**默认**）：`1` 对不上 / `3` 判不出 / `0` 全绿 —— 三态一个都不少。
+    `--mode report`：**只有真「对不上」才退 `1`**；判不出退 `0`。这一档是为门禁开的：
+    技能正文里那 73 条 `<卡号>` / `...` / `tools/wb_*.py` 是指令文档的固有形态，
+    压不到 0 条，block 档会让每趟门禁都红。★ 退 `0` **不是** PASS ——
+    `_print_report` 会把「判不出 N」与 `[DEBT]` 行照打，口径一个字没改。
     """
     if report.failed:
         return 1
+    if mode == "report":
+        return 0
     if report.not_verified:
         return 3
     return 0
@@ -392,6 +433,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="跑一遍并给判决（默认就是这个行为）")
     parser.add_argument("--json", action="store_true", help="机器可读输出")
     parser.add_argument("--root", default=None, help="仓库根（默认本文件上一级）")
+    parser.add_argument(
+        "--mode",
+        choices=("report", "block"),
+        default="block",
+        help=(
+            "block（默认，三态：1 对不上 / 3 判不出 / 0 全绿）或 "
+            "report（只有对不上才退 1；判不出退 0，但读数照打、末行打 [DEBT] 而非 [OK  ]）"
+        ),
+    )
     args = parser.parse_args(argv)
 
     root = Path(args.root).resolve() if args.root else REPO_ROOT
@@ -399,8 +449,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(report.to_json(), ensure_ascii=False, indent=2))
     else:
-        _print_report(report)
-    return exit_code(report)
+        _print_report(report, args.mode)
+    return exit_code(report, args.mode)
 
 
 if __name__ == "__main__":

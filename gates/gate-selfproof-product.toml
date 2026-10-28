@@ -1,0 +1,324 @@
+# 门自证台账 —— product 档 11 道（卡：门自证矩阵 · product 分组）
+#
+# 姊妹文件：`gates/gate-selfproof.toml`（全 22 道门的主台账）。这一份是 **product 档 11 道**的
+# 细粒度版：主台账只记「反向用例的 nodeid 在哪」，这一份多记两样让它能被**手工复核**的东西：
+#
+#   · `probe`    —— 一段**可复现的造错命令或脚本片段**（不是「看代码就知道会红」）；
+#   · `evidence` —— 一条**真读数**（退出码 + 失败断言原文），2026-10-27 实测落盘。
+#
+# 为什么要有这一份：主台账的 `reverse_case` 指向 pytest 用例，但 product 档里
+# `lf1_live` / `web_live` / `render` / `ui_flow` 这四道门要**真起 uvicorn / 真开 Edge**，
+# 在 pytest 里起不了，只能人工跑一遍留痕。留痕如果不写清「退出码几 / 它到底说了什么」，
+# 下一个人复核时就没法判断这条证据是不是真读数，还是从别处抄来的。
+#
+# 字段（一道门一条，全部必填；判据在 `tests/test_gate_selfproof_product.py`）：
+#   door        门名。必须与 `scripts/run_gates.py` 的 `GATE_PROFILES['product']` 逐字一致；
+#               多一个 / 少一个 / 写错一个，钉子都红。
+#   kind        怎么造反向案例 —— 一句说清**注入面**（换根 / 换模块常量 / 改合成输入 /
+#               让产品行为出错）。这道门的输入从哪来，决定它能不能被自证。
+#   probe       可复现的造错命令或脚本片段。能一行命令跑完的就写命令；要造数据的写脚本名。
+#   expect      期望的结果，写**退出码 / 断言值**，不写「会失败」这种话。
+#   verified_at 哪天实测的（ISO 日期）。判据会跟着门表变，日期是复核锚点。
+#   evidence    一条**真实读数**：退出码 + 失败断言原文。必须是能 grep 到的字符串。
+#   residue     诚实交代盲区：这道门里有没有**反向用例没盖住的那一层**。
+#               没有盲区写 `none` —— 但写 `none` 之前先想清楚「真跑那一层了吗」。
+#
+# 一条门要算「会咬」，两个条件缺一不可：
+#   ① 造错时必须退非零（不只是「会跑」）；
+#   ② 必须**点名**造的那个错（报出具体是哪条、哪个值），而不是笼统说"失败"。
+# 只有 ① 的是「会跑」；只有 ② 而没有 ① 的是「会说话但不拦」。
+
+version = 1
+#: 全表实测日。下面每条的 verified_at 都是这一天（同一轮探针跑出来的）。
+verified_on = "2026-10-27"
+
+# ── Tier A：判据是纯函数 / CLI，能在临时目录里造完整反例（7 道）─────────────
+# 这七道门的输入是文件（CSS / toml / 目录树）或可替换的模块常量，所以反例造得彻底：
+# 绿基线 + 红反例 + 「改回去又绿」三段都能在同一台机器上跑，不需要服务、不需要浏览器。
+
+[[gate]]
+door = "check_layers"
+kind = """
+换根 + 合成目录树：`scripts/check_layers.py` 有一等公民 `--root`，把一份最小的合成骨架
+铺到临时目录，删掉其中一个域的规格文件。
+"""
+probe = """
+python -X utf8 gates/diag/_probe_product_a.py check_layers
+# 内里等价于（`scripts/test_check_layers.py` 的 `skeleton_files()` + `run_on_synthetic()`）：
+#   base = tcl.skeleton_files()
+#   del base["docs/specification/domains/F5-合成.md"]
+#   tcl.run_on_synthetic(base)
+"""
+expect = "正向 exit=0；删一个域规格 exit=1；约定层少 N 来源标注 exit=1"
+verified_at = "2026-10-27"
+evidence = """
+正向 `LAYER CHECKS: PASS ✅`（exit 0）；
+反向① `[FAIL] 缺详细规格: docs/specification/domains/F5-*.md` + `LAYER CHECKS: FAIL ❌`（exit 1）；
+反向② `[FAIL] 约定层有 1 条规则未标注来源 N：`（exit 1）。
+"""
+residue = "none —— `--root` 是完整注入口，绿基线 / 反例 / 复位三段都在临时目录里跑过。"
+
+[[gate]]
+door = "contrast"
+kind = """
+换 CSS 文件：`tools/contrast_audit.py --css <path>` 读任意一份 CSS。把亮色主题的主文字
+令牌 `--ink` 改成和底色一样 ⇒ 对比度掉到 1.05，必然低于 4.5。
+"""
+probe = """
+cp src/web/app.css "$TMP/bad.css"   # 在临时目录里改，不动真仓
+# 把 `  --ink: #1e293b;` 换成 `  --ink: #f8fafc;`（亮底上的字 = 亮底色）
+python -X utf8 tools/contrast_audit.py --strict --css "$TMP/bad.css"
+"""
+expect = "真 CSS exit=0；改坏的那份 exit=1，并逐行点名欠账的组合"
+verified_at = "2026-10-27"
+evidence = """
+正向 `对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0`
+（exit 0）；反向 exit=1，逐条列出
+`light:--toast-ink on --toast-bg  1.05 < 4.5  新欠账 ｜ .toast：toast 底上的字`、
+`light:图形 --ink on --panel  1.05 < 3.0  新欠账 ｜ .swatch.on：选中态的非文字图形 / 底`。
+"""
+residue = "none —— `--css` 是完整注入面。"
+
+[[gate]]
+door = "style"
+kind = """
+喂字符串给纯函数：`tools/style_audit.py` 的 `collect(css)` 吃字符串。追加一条
+「全表只出现一次的字面量」（`.probe-orphan { gap: 2px }`）即触发 `literal:*` 新欠账。
+"""
+probe = """
+python -X utf8 gates/diag/_probe_product_a.py style
+# 等价于：
+#   css = Path("src/web/app.css").read_text()
+#   bad = style_audit.collect(css + "\\n.probe-orphan { gap: 2px }\\n")
+#   style_audit.evaluate(bad, style_audit.load_baseline())
+#   ⇒ [f for f in bad if f.verdict == "NEW"] 必须非空
+"""
+expect = "真 CSS 的 NEW 集合为空；追加孤儿字面量后 NEW 集合含 `literal:gap:2px`"
+verified_at = "2026-10-27"
+evidence = """
+正向 `green_new = []`；反向
+`[('literal:gap:2px', 'NEW', '`gap: 2px` 全表只出现 1 次（.probe-orphan）—— 只出现一次的值就是没进体系')]`
+（该条已由 `evaluate()` 判 NEW ⇒ 门 main() 退 1）。
+"""
+residue = "none —— `collect()` / `evaluate()` 是判据与打印分离的纯函数。"
+
+[[gate]]
+door = "ui_text"
+kind = """
+往片段列表里塞一条超长界面文案：`tools/ui_text_audit.py` 的 `verdicts(frags, known, limit)`
+吃列表。加一条 35 字的中文句子就会同时突破 `≥20 字` 棘轮（基线 4）与 `≥30 字` 硬上限（0）。
+"""
+probe = """
+python -X utf8 gates/diag/_probe_product_a.py ui_text
+# 等价于：
+#   known, limit = ui_text_audit.load()
+#   frags = ui_text_audit.scan.fragments() + [(7, len(long_one), long_one)]
+#   fails, notes, n_over, n_hard = ui_text_audit.verdicts(frags, known, limit)
+"""
+expect = "真界面 fails=0 / n_over=4 / n_hard=0；塞一条长句后 fails 非空、n_over=5、n_hard=1"
+verified_at = "2026-10-27"
+evidence = """
+正向 `green = (0, 4, 0)`；反向
+`red = (['L7  35 字：把复盘写进产品的典型句子就是这一条它长得离谱而且没有任何理由留在界面上',
+'≥20 字的片段 5 条 > 基线 4 条（这一档只许减）'], 5, 1)`。
+"""
+residue = "none —— `verdicts()` 纯函数，两侧都在同一台机器上跑过。"
+
+[[gate]]
+door = "commands"
+kind = """
+换一份命令表：`scripts/check_commands.py` 的模块常量 `COMMANDS` 可替换。把 OP-1 的
+`routes` 改成一个 `app.py` 里不存在的路径 ⇒ 与真源对不上，硬冲突。
+"""
+probe = """
+python -X utf8 gates/diag/_probe_product_b.py commands
+# 判据没有 --commands 入参，所以直接换模块常量：
+#   import check_commands as cc
+#   cc.COMMANDS = tmp/"commands_bad.toml"
+#   sys.argv = ["check_commands.py", "--check"]; cc.main()
+"""
+expect = "真表 exit=0；改一条路由后 exit=1，并点名「路由在 app.py 里不存在」与「CLI 投影跟着错」"
+verified_at = "2026-10-27"
+evidence = """
+正向 `命令表与四个真源一致 ✅（没有硬冲突）`（exit 0）；反向 exit=1，原文
+`[FAIL] OP-1：路由 'POST /api/tasksPROBE' 在 app.py 里不存在（手抄或过期）` 与
+`[FAIL] CLI timeflow add-task：路由 'POST /api/tasks' 不是 OP-1 的路由（那条 OP 现在有 ['POST /api/tasksPROBE']）`；
+换回真表 exit=0。
+"""
+residue = "none —— 绿 / 红 / 复位三段都实测过。"
+
+[[gate]]
+door = "ui_dom_probe"
+kind = """
+换根：`tools/ui_dom_probe.mjs` 把页面路径写死成 `HERE/../src/web/index.html`，没有 `--root`。
+复制 `tools/` + `src/` 到临时目录，在副本里把 `renderTasks` 改成不存在的符号 ⇒ 渲染 tasks
+视图时抛 `ReferenceError` ⇒ 画布留空 0B。
+"""
+probe = """
+python -X utf8 gates/diag/_probe_product_heavy.py dom
+# 必须同时把副本的 src 顶到 PYTHONPATH 最前（editable 安装会把 `timeflow` 解析回真仓）：
+#   env["PYTHONPATH"] = str(dst/"src")
+# 副本里：`if(name==='tasks')return paint(renderTasks);`
+#      →  `if(name==='tasks')return paint(renderTasksPROBE);`
+"""
+expect = "原样副本 exit=0（14/14 视图正常）；改坏一个视图后 exit=1，且该视图 main 报 0B"
+verified_at = "2026-10-27"
+evidence = """
+正向 `✅ 假 DOM 渲染探针：14/14 个视图正常渲染，详情面板 2/2 正常…`（exit 0，3.0s）；
+反向 exit=1，`⚠️  tasks     main      0B  rail   76B`，stderr 原文
+`ReferenceError: renderTasksPROBE is not defined`。
+"""
+residue = """
+node 侧的 DOM 桩不是真浏览器 —— 它验「渲染函数会不会抛 / 画布空不空」，不验 CSS 布局与
+真实点击。真浏览器那一层由 `render` / `ui_flow` 两道门盖。
+"""
+
+# ── Tier B：要真起 uvicorn（2 道）───────────────────────────────────────────
+# 这两道门的输入是「跑起来的服务」，没有文件可换。但**产品行为**可以被中间件改写 ——
+# 于是反例造在「让产品返回错的东西」上，这正是它们要抓的东西（行为退化）。
+
+[[gate]]
+door = "proxy"
+kind = """
+换一份代理指标表：`tools/proxy_audit.py --check --map <path>`。把每个 `last_verified`
+推到 2020-01-01 ⇒ 超过 30 天阈值，逐条判过期。
+"""
+probe = """
+cp docs/proxy-map.toml "$TMP/stale.toml"
+# 把 last_verified 全部改成 2020-01-01
+python -X utf8 tools/proxy_audit.py --check --map "$TMP/stale.toml"
+"""
+expect = "真表 exit=0（5 条全新鲜）；把日期推旧后 exit=1，并逐条点名 id + 过期天数"
+verified_at = "2026-10-27"
+evidence = """
+正向 `[OK  ] 5 条全新鲜（阈值 30 天）`（exit 0）；反向 exit=1，原文
+`[FAIL] 5 条过期（阈值 30 天）：` + `  · done-count 过期 2462 天（上次验证 2020-01-01，距今 2492 天）`（5 条同型）。
+"""
+residue = "none —— `--map` 是完整注入面。"
+
+[[gate]]
+door = "lf1_live"
+kind = """
+让产品行为出错：这道门没有输入文件（真起 uvicorn + 走 LF-1 主链 ①~⑨），所以用 ASGI
+中间件把 `POST /api/tasks/{id}/complete` 的响应体改写成错状态。
+"""
+probe = """
+python -X utf8 gates/diag/_probe_product_b.py lf1_live
+# 注入：lf1_live_check.create_app = lambda db: _RewriteBody(orig(db), "/complete",
+#                                                          {"status": "PROBE-未开始"})
+#      然后 lf1_live_check.main()（sys.argv 不传端口 ⇒ 走 free_port()）
+"""
+expect = "真产品 exit=0（`LF-1 真实运行验证：PASS`）；改写 complete 响应后 exit=1，断言 ⑦ 红"
+verified_at = "2026-10-27"
+evidence = """
+正向 `LF-1 真实运行验证：PASS`（exit 0）；反向 exit=1，原文
+`[FAIL] ⑦ 任务状态: got='PROBE-未开始' want='完成'` +
+`LF-1 真实运行验证：FAIL（1 项：⑦ 任务状态）`；
+同轮 `服务已启动：http://127.0.0.1:57303` 证明 uvicorn 真起来了。
+"""
+residue = """
+盲区只有一层：`main()` 里的端口是 `free_port()` 现取的，pytest 里两个进程抢同一个空闲口
+理论上仍可能撞（概率极低，撞了会红而不是假绿）。反向**已进 pytest**
+（`tests/test_gate_selfproof_product.py::test_lf1_live_bites_on_a_wrong_complete_response`，
+绿 0.7s / 红 0.5s，真起 uvicorn、真走完 ①~⑨、用临时库不写项目库）。
+"""
+
+[[gate]]
+door = "web_live"
+kind = """
+换根：`app.py` 的 `web_dir` 是 `src/web`，把副本的 `src` 顶到 PYTHONPATH 最前就能换掉
+被服务的页面。删掉 `index.html` 的事件委托监听 ⇒ 判据缺一条。
+"""
+probe = """
+python -X utf8 gates/diag/_probe_product_b.py web_live
+# 副本必须一起搬 `tools/phone_check.mjs`（它从 `HERE/../src/web/offline.js` 造包；
+# 漏搬会让**绿基线**因「造包脚本不存在」而假红 —— 这一步踩过）
+# 注入：`document.addEventListener('click'` → `document.addEventListener('clickPROBE'`
+"""
+expect = "原样副本 exit=0（13 组 live_* 检查全过）；删掉事件委托监听后 exit=1，点名缺这一条"
+verified_at = "2026-10-27"
+evidence = """
+正向 exit=0（`[OK ] 手机侧造包自检通过` / `[OK ] 局域网：对码配对成功` 等全绿）；
+反向 exit=1，原文 `[FAIL] 有事件委托监听`（仅此一条，其余仍绿 —— 说明它精确定位而不是整页崩）。
+"""
+residue = """
+反向只盖住页面判据这一层。13 组 live_* 的真服务检查（attach/remind/ai/team/focus/repeat/
+regrade/notify/phone/sync/offline/lan）这次**也真跑过**（正向 exit=0，6.2s），
+但它们在 pytest 里要 ~6s + 真起 uvicorn + 造手机包，**没进 pytest** —— 这是本门剩余的盲区。
+"""
+
+# ── Tier C：要真浏览器（2 道）───────────────────────────────────────────────
+# 这两道门起真 Edge（`tools/tf_browser.mjs`，不走 playwright）+ CDP。反向案例靠
+# **改坏页面让真浏览器采到不同的东西**，不是靠 mock。
+
+[[gate]]
+door = "render"
+kind = """
+换根 + 改文案：`tools/render_check.mjs` 把页面路径写死，但可以整棵树复制到临时目录。
+改掉侧栏标题 `timeflow ·` ⇒ 真浏览器采到的清单与黄金逐字节不一致。
+"""
+probe = """
+python -X utf8 gates/diag/_probe_product_heavy.py render
+# 副本里：`timeflow ·` → `timeflow PROBE ·`，然后
+#   node tools/render_check.mjs --only today --port 9462
+"""
+expect = "原样副本 exit=0（3 份清单与黄金逐字节一致）；改一个字后 exit=1，报「渲染与黄金不一致」"
+verified_at = "2026-10-27"
+evidence = """
+正向 `[OK ] 3 份清单与黄金逐字节一致（3 档宽度 × 14 个视图 + 1 个浮层）` +
+`渲染验证层通过 ✅`（exit 0，12.4s）；反向 exit=1，原文
+`❌ 渲染与黄金不一致：3 份不同、0 份多余`。
+"""
+residue = """
+就自证而言 none —— 真 Edge + CDP 采集这一段这次真跑了，反向也是真浏览器采出来的差异。
+真正的盲区是**别的机器**：没有 Edge 时它退 3 = NOT RUN，那时它不咬（但也不算过）。
+pytest 里只钉了「不依赖浏览器」的那一半（改黄金不写理由 / 未知参数两类硬拒），
+采集层本身不在 pytest 里跑。
+"""
+
+[[gate]]
+door = "ui_flow"
+kind = """
+换根 + 改文案：真浏览器跑行为流 ⑦，断言 `t.has('在下面的输入框写下一件要做的事')`。
+把原句改成「在下面写一件要做的事」⇒ `includes()` 变 false ⇒ 该流失败。
+"""
+probe = """
+python -X utf8 gates/diag/_probe_product_heavy.py flow
+# ★ 不能只往后追加字：`t.has` 的真身是 `hay.includes(needle)`（tools/ui_flow_check.mjs:153），
+#   原句仍是子串就照样通过 —— 实测「追加一个字」的变异绿了两次，是**假探针**。
+#   必须改掉原句中间的字。
+# 副本里改完跑：node tools/ui_flow_check.mjs --only ⑦ --port 9472
+"""
+expect = "原样副本 exit=0（1 条流 / 7 项断言）；改掉原句后 exit=1，点名 ⑦ 与那句原文"
+verified_at = "2026-10-27"
+evidence = """
+正向 `[OK ] ⑦ 新手引导：首次出现、关掉不再来、设置里能再看  7 项断言  9.2s` +
+`行为流层通过 ✅`（exit 0，11.9s）；反向 exit=1，原文
+`[FAIL] ⑦ 新手引导：首次出现、关掉不再来、设置里能再看  （替 前端批次③ ⑦ 今日页新手引导卡片）` +
+`❌ 行为流有失败：1/1 条` +
+`· 卡片上说清了第一步做什么 —— 在这段里没找到「在下面的输入框写下一件要做的事」`。
+"""
+residue = """
+反向只跑了 ⑦ 一条流（`--only ⑦` 隔离）。其余 25 条流的断言这次没有逐条造反例 ——
+注入面同型（都是 `t.has` / `t.eq` 对页面文案与状态的断言），但没有逐条实测。
+pytest 里钉的是「不依赖浏览器」的那三档（未知参数 / 过滤后零条流 / 人工清单对账），
+真浏览器跑流不在 pytest 里。
+"""
+
+# ── 汇总（判据核对 total 与 GATE_PROFILES['product'] 的门数一致）────────────
+[summary]
+tier_a = 7
+tier_b = 2
+tier_c = 2
+total = 11
+can_self_prove = 11
+manual_only = 0
+note = """
+11 道全部造出了反向案例并实测退非零 —— 包括 4 道「要真服务 / 真浏览器」的门：
+本机 Edge 在（`C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe`），
+`tools/tf_browser.mjs` 走 CDP 不走 playwright，所以 render / ui_flow 这次是真跑真咬的。
+其中 8 道进了 pytest（7 道 Tier A + lf1_live；lf1 真起 uvicorn 只要 0.7s，先前的
+「要 30s、不进 pytest」是没实测过的猜测，已被推翻）。剩下 3 道只在本文书 + 探针里留痕：
+web_live（要 ~6s + 真起服务）、render / ui_flow（要真 Edge + ~12s/道 + 抢端口）。
+`can_self_prove` 的口径是「造得出反向案例并实测退非零」，不是「能写进 pytest」。
+"""

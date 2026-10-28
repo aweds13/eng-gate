@@ -158,7 +158,7 @@ def _run_cli(root: Path, *extra: str) -> subprocess.CompletedProcess[str]:
         ],
         capture_output=True,
         text=True,
-        encoding="utf-8",
+        encoding="utf-8", errors="replace",
         **wb_daily.NO_WINDOW,
     )
 

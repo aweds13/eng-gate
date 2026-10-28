@@ -125,13 +125,16 @@ def test_pointer_to_real_file_is_green(tmp_path):
     not ROOT.joinpath(".git").exists(), reason="不在 git 仓里"
 )
 def test_pointer_to_real_sha_is_green():
+    # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+    # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
     r = subprocess.run(
         ["git", "rev-parse", "--short=7", "HEAD"],
-        cwd=str(ROOT), capture_output=True, text=True, check=False,
+        cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
+                check=False,
     )
     if r.returncode != 0:
         pytest.skip("git 不可用")
-    sha = r.stdout.strip()
+    sha = (r.stdout or "").strip()
     gp = f"1. 见提交 {sha}。"
     assert budget.check_pointers(gp, root=ROOT) == []
 

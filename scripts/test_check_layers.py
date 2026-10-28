@@ -36,7 +36,8 @@ def run_check() -> tuple[int, str]:
     """对**真实仓库**跑一次（只读 —— 本自测唯一读真实仓库的入口）。"""
     p = subprocess.run(
         [sys.executable, "-X", "utf8", str(SCRIPT)],
-        capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT),
+        capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(ROOT),
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
@@ -49,7 +50,7 @@ def run_check_at(root: Path) -> tuple[int, str]:
     """
     p = subprocess.run(
         [sys.executable, "-X", "utf8", str(SCRIPT), "--root", str(root)],
-        capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT),
+        capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(ROOT),
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
     return p.returncode, (p.stdout or "") + (p.stderr or "")

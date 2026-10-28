@@ -112,8 +112,11 @@ def test_relative_git_common_dir_resolves_against_git_cwd(
     """
     fake_root = tmp_path / "fake-repo"
     (fake_root / "tools" / "pool").mkdir(parents=True)
+    # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+    # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
     subprocess.run(
-        ["git", "init", "-q", str(fake_root)], check=True, capture_output=True, text=True
+        ["git", "init", "-q", str(fake_root)], check=True, capture_output=True,
+                text=True, encoding="utf-8", errors="replace"
     )
     monkeypatch.setattr(registry, "__file__", str(fake_root / "tools" / "pool" / "registry.py"))
     elsewhere = tmp_path / "elsewhere"

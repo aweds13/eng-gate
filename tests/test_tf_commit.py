@@ -49,7 +49,8 @@ tf = _load()
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-c", "core.quotepath=false", *args],
-        cwd=str(repo), check=True, capture_output=True, text=True, encoding="utf-8",
+        cwd=str(repo), check=True, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
     )
 
 

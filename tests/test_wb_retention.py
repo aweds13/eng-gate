@@ -197,7 +197,8 @@ def test_cli_summary_json(repo):
     import subprocess
     r = subprocess.run([sys.executable, "-X", "utf8", str(REPO / "tools" / "wb_retention.py"),
                         "--root", str(repo), "summary", "--json"],
-                       capture_output=True, text=True, encoding="utf-8", check=False)
+                       capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", check=False)
     assert r.returncode == 0, r.stderr
     payload = json.loads(r.stdout)
     assert "worktrees" in payload and "n_jsonl" in payload
@@ -209,7 +210,8 @@ def test_cli_archive_dry_run(repo):
     _touch(d / "wb-400.jsonl", mtime_days_ago=30)
     r = subprocess.run([sys.executable, "-X", "utf8", str(REPO / "tools" / "wb_retention.py"),
                         "--root", str(repo), "archive"],
-                       capture_output=True, text=True, encoding="utf-8", check=False)
+                       capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", check=False)
     assert r.returncode == 0, r.stderr
     assert (d / "wb-400.jsonl").exists(), "dry-run 不该移文件"
     assert "待归档" in r.stdout, r.stdout

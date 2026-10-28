@@ -247,9 +247,9 @@ def test_json_idempotent_via_cli(tmp_path: Path) -> None:
     """CLI 连跑两次 `--json` 逐字节相同。"""
     root = _full_fake_repo(tmp_path)
     argv = [sys.executable, "-X", "utf8", str(TOOL), "--json", "--root", str(root)]
-    out1 = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
+    out1 = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace",
                           **pipeline_view.NO_WINDOW).stdout
-    out2 = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
+    out2 = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace",
                           **pipeline_view.NO_WINDOW).stdout
     assert out1 == out2
     assert json.loads(out1)["root"] == root.as_posix()
@@ -263,7 +263,8 @@ def test_report_has_three_buckets(tmp_path: Path) -> None:
     root = _full_fake_repo(tmp_path)
     done = subprocess.run(
         [sys.executable, "-X", "utf8", str(TOOL), "--report", "--root", str(root)],
-        capture_output=True, text=True, encoding="utf-8", **pipeline_view.NO_WINDOW)
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace", **pipeline_view.NO_WINDOW)
     assert done.returncode == 0
     for tag in ("[待收口的批]", "[待复核的卡]", "[待翻 status 的卡]"):
         assert tag in done.stdout, f"报告里缺 {tag}"

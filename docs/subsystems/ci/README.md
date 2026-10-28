@@ -8,7 +8,7 @@
 
 | 件 | 位置 | 职责 |
 |---|---|---|
-| 门表 | `gates/defs/{lang_python,contract,product_timeflow}.py` | 19 道门的**定义**（命令/超时/说明） |
+| 门表 | `gates/defs/{lang_python,contract,product_timeflow}.py` | **22** 道门的**定义**（命令/超时/说明）—— 真值以 `scripts/run_gates.py` 的 `GATE_PROFILES` 为准（`lang` 6 + `audit` 5 + `product` 11，去重 **22**；2026-10-27 实测）。门数会随卡增长：卡 F6 把 `docs` 门接进 `audit` 档（20→21），本批又把 `skills_claims` 接进来（21→22） |
 | 编排 | `scripts/run_gates.py` | 选档、跑门、复用、封存（`seal()`）、落 `gates/last.json` |
 | 选档 | `gates/defs/domains.py` | 改动面 → 必需档（`--profiles auto`，fail closed） |
 | 落地链 | `tools/pool/landing.py` | 八步：迁树→文书→快门禁→全量→封存→白名单提交→审计→ff→复核 |

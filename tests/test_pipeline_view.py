@@ -269,12 +269,14 @@ def test_json_idempotent_via_cli(tmp_path: Path) -> None:
     out1 = subprocess.run(
         [sys.executable, "-X", "utf8", str(ROOT / "tools" / "pipeline_view.py"),
          "--json", "--root", str(root)],
-        capture_output=True, text=True, encoding="utf-8", **pipeline_view.NO_WINDOW,
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace", **pipeline_view.NO_WINDOW,
     ).stdout
     out2 = subprocess.run(
         [sys.executable, "-X", "utf8", str(ROOT / "tools" / "pipeline_view.py"),
          "--json", "--root", str(root)],
-        capture_output=True, text=True, encoding="utf-8", **pipeline_view.NO_WINDOW,
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace", **pipeline_view.NO_WINDOW,
     ).stdout
     assert out1 == out2
 
@@ -347,7 +349,8 @@ def _run_cli(root: Path, flag: str) -> str:
     return subprocess.run(
         [sys.executable, "-X", "utf8", str(ROOT / "tools" / "pipeline_view.py"),
          flag, "--root", str(root)],
-        capture_output=True, text=True, encoding="utf-8", **pipeline_view.NO_WINDOW,
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace", **pipeline_view.NO_WINDOW,
     ).stdout
 
 

@@ -66,8 +66,14 @@ def dark_declared_tokens(css: str) -> set[str]:
     return {m.group(1) for m in ca._TOKEN.finditer(dark_block_text(css))}
 
 
-def check_js_syntax(tmp: Path) -> tuple[bool, str]:
-    """页面脚本 + 手机离线引擎 + service worker 都过一遍 `node --check`。
+def check_js_syntax(tmp: Path) -> tuple[bool | str, str]:
+    """★ 三态：True / False / `"unverified"`。
+
+    `"unverified"` = 环境没 node，**没验证过**。它不等于 False（不能说脏），
+    也不等于 True（不能说好）。`main()` 把它映成**退出码 3**，
+    与 `scripts/run_gates.py` 的 `not_run` 口径对齐（“NOT RUN 不是 PASS”）。
+
+    页面脚本 + 手机离线引擎 + service worker 都过一遍 `node --check`。
 
     `offline.js` 与 `sw.js` 是**独立文件**（不是页面里那段内联脚本），所以各查一次 ——
     一个语法错就能让离线记整块失效，而字符串护栏看不出来。
@@ -79,7 +85,10 @@ def check_js_syntax(tmp: Path) -> tuple[bool, str]:
     js_file = tmp / "app_extract.mjs"
     js_file.write_text(m.group(1), encoding="utf-8")
     if not node:
-        return True, "跳过：环境没有 node，无法做语法解析（未验证）"
+        # ★ 卡 E59（T-AG517）：这里**不许**返 True。返 True = 「没 node也算过」，
+        #   与 `scripts/run_gates.py:114` 的写死口径「NOT RUN 不是 PASS」直接矛盾。
+        #   云机（Windows Server）就没 node：旧写法让这一道在云机**永远绿**。
+        return ("unverified", "未验证：环境没有 node，无法做语法解析")
     proc = subprocess.run(
         [node, "--check", str(js_file)], capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=60,
@@ -860,7 +869,9 @@ def live_lan_checks(tmp: Path, port: int | None = None) -> dict[str, bool]:
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="r2_"))
     ok, detail = check_js_syntax(tmp)
-    print(f"[{'OK ' if ok else 'FAIL'}] JS 语法：{detail}")
+    # ★ 卡 E59："unverified" 不是 True 也不是 False —— 单独一栏，最后映成退出码 3。
+    _tag = "OK " if ok is True else ("SKIP" if ok == "unverified" else "FAIL")
+    print(f"[{_tag}] JS 语法：{detail}")
 
     # 临时库 → markdown 也写临时目录（别往仓库 `export/` 里写合成数据，见 T-G4）
     os.environ.setdefault("TIMEFLOW_EXPORT__DIR", str(tmp / "export"))
@@ -949,6 +960,10 @@ def main() -> int:
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")
     server.should_exit = True
     thread.join(timeout=10)
+    # ★ 卡 E59：`"unverified"` → 退出码 3（`scripts/run_gates.py:1416` 把 3 记成 `not_run`，
+    #   不算通过也不算失败）。
+    if ok == "unverified":
+        return 3
     return 0 if ok and all(checks.values()) else 1
 
 

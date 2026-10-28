@@ -50,7 +50,10 @@ def _git_init(tmp_path: Path) -> Path:
                 ["git", "config", "user.email", "nail@example.invalid"],
                 ["git", "config", "user.name", "nail"],
                 ["git", "config", "commit.gpgsign", "false"]):
-        subprocess.run(cmd, cwd=str(repo), env=env, capture_output=True, text=True)
+        # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+        # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
+        subprocess.run(cmd, cwd=str(repo), env=env, capture_output=True,
+                text=True, encoding="utf-8", errors="replace")
     return repo
 
 
@@ -63,13 +66,17 @@ def _commit(repo: Path, task: str, *, subject: str = "test", path: str = "f.txt"
     target = repo / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(task + "\n", encoding="utf-8")
+    # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+    # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
     subprocess.run(["git", "add", "-A"], cwd=str(repo), env=env,
-                   capture_output=True, text=True)
+                   capture_output=True, text=True, encoding="utf-8", errors="replace")
     subprocess.run(["git", "commit", "-q", "-m", f"{subject}\n\nTask: {task}"],
-                   cwd=str(repo), env=env, capture_output=True, text=True)
-    return subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                   cwd=str(repo), env=env, capture_output=True, text=True,
+                   encoding="utf-8", errors="replace")
+    done = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                           cwd=str(repo), env=env, capture_output=True,
-                          text=True).stdout.strip()
+                          text=True, encoding="utf-8", errors="replace")
+    return (done.stdout or "").strip()
 
 
 # ------------------------------------------------ ① 孤儿号 ⇒ 红并点名

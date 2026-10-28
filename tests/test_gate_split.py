@@ -64,13 +64,17 @@ def _collect(marker: str) -> list[str]:
     """
     cmd = [sys.executable, "-X", "utf8", "-m", "pytest", "--collect-only", "-q",
            "-m", marker, "-o", "addopts=", "-p", "no:cacheprovider"]
+    # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+    # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
     done = subprocess.run(
-        cmd, cwd=str(ROOT), capture_output=True, text=True, check=False, **_NO_WINDOW,
+        cmd, cwd=str(ROOT), capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=False, **_NO_WINDOW,
     )
-    assert done.returncode == 0, f"collect 都失败了：\n{done.stdout[-2000:]}\n{done.stderr[-2000:]}"
+    out, err = done.stdout or "", done.stderr or ""
+    assert done.returncode == 0, f"collect 都失败了：\n{out[-2000:]}\n{err[-2000:]}"
     return sorted(
         line.strip().replace("\\", "/")
-        for line in done.stdout.splitlines()
+        for line in out.splitlines()
         if "::" in line and line.strip().startswith("tests/")
     )
 

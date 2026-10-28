@@ -8,6 +8,7 @@
 | 你要干的活 | 先读 |
 |---|---|
 | **OpenMAIC 二开**（`../OpenMAIC`） | **`../OpenMAIC/AGENTS.md`** —— 维护手册：改哪一层、文件地图、证据命令、坑<br>再看 `../OpenMAIC/复盘/新窗口交接卡.md` —— **当前状态 + 新窗口开场白** |
+| **找不到文档 / 不知道某份该不该读** | `docs/文档系统导航.md` —— 六份索引各管什么、按意图路由（改代码 / 查某张卡 / 门怎么判 / 规矩来历 / 发新功能）、哪些地方**不是权威** |
 | `pipe` 框架本身的门禁 / 派活 / 台账 | `skills/README.md`（分工判据，**顶部有三条 2026-10-24 新口径**）+ `复盘/新窗口交接卡.md`（当前状态） |
 | **接手一个已存在的项目 / 新起一个项目** | `skills/pipe-takeover/`（接手）或 `skills/pipe-new/`（新起）：**第一步**先跑 `python -X utf8 tools/wb_takeover.py --root <目录> --strict`（判据不足会退 2 —— 不许猜类别） |
 | 接别的 harness | `skills/GLUE-harness.md` |

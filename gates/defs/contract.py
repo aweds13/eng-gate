@@ -15,4 +15,14 @@ GATES: list[tuple[str, list[str]]] = [
     # ★ 第一版用 `--mode report`：有债不红，**基线被顶破才红**。
     # （block 档会让那 152 条债把每趟门禁都染红。）
     ("docs", [PY, "-X", "utf8", "scripts/check_docs.py", "--mode", "report"]),
+    # 技能正文 ↔ tools/ 源码的对账（卡 G1 / T-AG456）：技能里写的
+    # `python -X utf8 tools/<x>.py --flag` 逐个核工具存在性与参数注册；
+    # 工具改名 / 参数退役时，技能照旧写着旧写法 —— 只有这条能拦。
+    # ★ 第一版用 `--mode report`：判不出不红（那 73 条 `<卡号>` / `...` / `tools/wb_*.py` 是占位符
+    #   与通配名，属于指令文档的固有形态，压不到 0 条），**真漂移才红**。
+    # （block 档会让这 73 条把每趟门禁都染红，与 `docs` 门同一个理由。）
+    (
+        "skills_claims",
+        [PY, "-X", "utf8", "tools/check_skills_claims.py", "--check", "--mode", "report"],
+    ),
 ]

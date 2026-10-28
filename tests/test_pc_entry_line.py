@@ -80,11 +80,14 @@ print("OK-NO-WEBVIEW")
 """
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+    # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
     proc = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=str(ROOT)
+        [sys.executable, "-c", code], capture_output=True, text=True,
+        encoding="utf-8", errors="replace", env=env, cwd=str(ROOT)
     )
-    assert proc.returncode == 0, proc.stderr
-    assert "OK-NO-WEBVIEW" in proc.stdout
+    assert proc.returncode == 0, (proc.stderr or "")
+    assert "OK-NO-WEBVIEW" in (proc.stdout or "")
 
 
 def _install_stubs(monkeypatch, events: list, db_path: Path, *, allow_lan: bool) -> dict:

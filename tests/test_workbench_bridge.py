@@ -227,9 +227,9 @@ def test_idempotent_via_cli(tmp_path: Path) -> None:
     root = _full_fake_repo(tmp_path)
     argv = [sys.executable, "-X", "utf8", str(ROOT / "tools" / "workbench_bridge.py"),
             "--card", "001", "--tree", ".wt/a", "--batch", "B-TEST", "--root", str(root)]
-    out1 = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
+    out1 = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace",
                           **pipeline_view.NO_WINDOW).stdout
-    out2 = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
+    out2 = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace",
                           **pipeline_view.NO_WINDOW).stdout
     assert out1 == out2
     assert "我在哪张卡" in out1

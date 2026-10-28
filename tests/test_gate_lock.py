@@ -50,7 +50,10 @@ def _mk_repo(tmp: Path) -> Path:
     repo.mkdir()
     for args in (("init", "-q"), ("config", "user.email", "nail@example.invalid"),
                  ("config", "user.name", "nail")):
-        subprocess.run(["git", *args], cwd=str(repo), capture_output=True, text=True,
+        # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+        # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
+        subprocess.run(["git", *args], cwd=str(repo), capture_output=True,
+                text=True, encoding="utf-8", errors="replace",
                        check=False)
     (repo / "gates" / "diag").mkdir(parents=True)
     return repo

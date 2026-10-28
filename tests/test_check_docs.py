@@ -583,3 +583,233 @@ def test_real_tree_judges_only_tracked_docs():
                 "路径在仓外，判不了",
                 "模板占位符，判不了",
             } or skip.reason, skip
+
+
+# ------------------------------- 卡 F6：判据顺序换了，钉子跟着换（反向用例 · 每条都得能咬）
+def test_ref_with_line_number_list_resolves(tmp_path: Path) -> None:
+    """钉子 1：文件真在、引用带**行号列表**（`:23,161`）⇒ 判得出存在，不判死也不 skip。
+
+    行号是**排版**不是路径：`normalize()` 剥掉它之后必须落回 `docs/deep.md`。
+    改坏了会怎样：`docs/deep.md:23,161` 的扩展名变成 `.md:23,161` ⇒ 不在 `OWN_EXTS`
+    ⇒ 落进「别仓路径」白跳过（旧顺序正是这样白跳过的）。
+    """
+    root = _tree(tmp_path)
+    (root / "docs" / "deep.md").write_text("x\n" * 40, encoding="utf-8")
+    (root / "docs" / "refs.md").write_text("看 `docs/deep.md:23,161` 这两行\n", encoding="utf-8")
+    assert cd.normalize("docs/deep.md:23,161") == "docs/deep.md"
+    assert cd.is_pointer("docs/deep.md:23,161", root), "这条钉子拿的不是指针 ⇒ 等于空转"
+
+    report = cd.scan(root)
+    assert [item.line() for item in report.dead_refs] == [], report.dead_refs
+    refs_skips = [s.reason for s in report.skips if s.where.startswith("docs/refs.md")]
+    assert refs_skips == [], report.skips
+
+
+def test_trailing_colon_after_line_number_is_not_foreign(tmp_path: Path) -> None:
+    """钉子 2：`文件.py:` / `文件.py:68:` 这种**尾冒号**写法不该被判成「别仓类型」。
+
+    三处实测（`复盘/卡/卡E49-云机红单归因与可移植性.md:22`、`复盘/外包-卡表与规矩.md:1298`、
+    `复盘/派活器三合一-T-G114.md:171`）都是本仓真文件后面多打了一个冒号。
+    改坏了会怎样：扩展名变成 `.py:` ⇒ 不在 `OWN_EXTS` ⇒ 理由写着「别仓路径」，白跳过。
+    """
+    root = _tree(tmp_path)
+    (root / "tests").mkdir()
+    (root / "tests" / "test_wb_dispatch.py").write_text("x = 1\n", encoding="utf-8")
+    (root / "src").mkdir()
+    (root / "src" / "main.py").write_text("y = 2\n", encoding="utf-8")
+    (root / "docs" / "refs.md").write_text(
+        "看 `tests/test_wb_dispatch.py:` 与 `src/main.py:68:`\n", encoding="utf-8"
+    )
+    assert cd.normalize("tests/test_wb_dispatch.py:") == "tests/test_wb_dispatch.py"
+    assert cd.normalize("src/main.py:68:") == "src/main.py"
+
+    report = cd.scan(root)
+    assert [item.line() for item in report.dead_refs] == [], report.dead_refs
+    mine = [s.reason for s in report.skips if s.where.startswith("docs/refs.md")]
+    assert mine == [], mine
+
+
+def test_absolute_path_that_exists_is_not_skipped(tmp_path: Path) -> None:
+    """钉子 3：盘符绝对路径**盘上真有** ⇒ 正常（存在就是存在）；不存在的仍 skip。
+
+    两半都钉：只钉「真在的放过」证明不了它不是「凡是绝对路径都放过」。
+    `D:/repo/infra/pool/projects.toml` 实测 120 条这种真存在的仓外绝对路径。
+    """
+    root = _tree(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    real = outside / "real.toml"
+    real.write_text("k = 1\n", encoding="utf-8")
+    gone = outside / "gone.toml"
+    (root / "docs" / "abs.md").write_text(
+        f"真在的：`{real.as_posix()}`\n不存在的：`{gone.as_posix()}`\n", encoding="utf-8"
+    )
+    assert cd.is_pointer(real.as_posix(), root), "这条钉子拿的不是指针 ⇒ 等于空转"
+    assert cd.is_pointer(gone.as_posix(), root), "这条钉子拿的不是指针 ⇒ 等于空转"
+
+    report = cd.scan(root)
+    assert [item.line() for item in report.dead_refs] == [], report.dead_refs
+    reasons = {s.token: s.reason for s in report.skips}
+    assert real.as_posix() not in reasons, reasons
+    assert reasons.get(gone.as_posix()) == "仓外/绝对路径，判不了", reasons
+
+
+def test_gitignored_artifact_reason_is_accurate(tmp_path: Path) -> None:
+    """钉子 4：被 `.gitignore` 遮住的产物 ⇒ 理由写「gitignored 产物」，**不是**「别仓路径」。
+
+    旧顺序把扩展名猜测排在 gitignore 之前 ⇒ `logs/gone.jsonl` 会被记成「别仓类型」。
+    理由写反不只是文案问题：它把「我知道这是产物」和「我猜这是别人的文件」混成一类。
+    """
+    root = _committed_repo(tmp_path)
+    (root / ".gitignore").write_text("logs/\n", encoding="utf-8")
+    (root / "logs").mkdir()
+    (root / "docs" / "refs.md").write_text("产物：`logs/gone.jsonl`\n", encoding="utf-8")
+    assert _git(root, "add", "-A").returncode == 0
+    assert _git(
+        root, "-c", "user.name=t", "-c", "user.email=t@e.invalid", "commit", "-q", "-m", "refs"
+    ).returncode == 0
+    assert cd.is_pointer("logs/gone.jsonl", root), "这条钉子拿的不是指针 ⇒ 等于空转"
+
+    report = cd.scan(root)
+    assert [item.line() for item in report.dead_refs] == [], report.dead_refs
+    reasons = [s.reason for s in report.skips if s.where.startswith("docs/refs.md")]
+    assert reasons == ["gitignored 产物（不随树分发）"], reasons
+
+
+def test_placeholder_stem_and_angle_bracket_are_skipped(tmp_path: Path) -> None:
+    """钉子 5：`docs/<卡号>.md` 与 `src/X.py` 是**占位符**，skip 不判死。
+
+    `X.py` 这种「单字母大写词干」在正文里满地都是；实测本仓跟踪的 1964 个文件里
+    末段是这种形状的 **0 个** ⇒ 认它不会吃掉真文件。
+    改坏了会怎样：`src/X.py` 不存在、扩展名 `.py` 又在 `OWN_EXTS` 里 ⇒ 直接落成死指针（假红）。
+    """
+    root = _tree(tmp_path)
+    (root / "src").mkdir()
+    (root / "docs" / "ph.md").write_text("模板：`docs/<卡号>.md`\n示例：`src/X.py`\n",
+                                         encoding="utf-8")
+    assert cd.is_pointer("src/X.py", root), "这条钉子拿的不是指针 ⇒ 等于空转"
+
+    report = cd.scan(root)
+    assert [item.line() for item in report.dead_refs] == [], report.dead_refs
+    reasons = {s.token: s.reason for s in report.skips if s.where.startswith("docs/ph.md")}
+    assert reasons.get("docs/<卡号>.md") == "模板占位/通配，判不了", reasons
+    assert reasons.get("src/X.py") == "模板占位/通配，判不了", reasons
+
+
+def test_existing_file_with_unknown_ext_is_not_skipped(tmp_path: Path) -> None:
+    """钉子 6：`.jsonl` **真在盘上** ⇒ 正常，既不判死也不算 skip。
+
+    这是卡 F6 的正题：`gates/diag/notifications.jsonl`、`logs/timeflow.jsonl`、
+    `data/timeflow.db` 这类文件实测在本仓真实存在（134 条），旧顺序靠扩展名先判
+    ⇒ 全被写成「别仓路径」白跳过了。**存在就是存在，扩展名不算数。**
+    """
+    root = _tree(tmp_path)
+    (root / "logs").mkdir()
+    (root / "logs" / "timeflow.jsonl").write_text("{}\n", encoding="utf-8")
+    (root / "docs" / "refs.md").write_text("日志：`logs/timeflow.jsonl`\n", encoding="utf-8")
+    assert cd.ext_of("logs/timeflow.jsonl") == ".jsonl"
+    assert ".jsonl" not in cd.OWN_EXTS, "OWN_EXTS 若收了 .jsonl，这条钉子就失去意义"
+    assert cd.is_pointer("logs/timeflow.jsonl", root), "这条钉子拿的不是指针 ⇒ 等于空转"
+
+    report = cd.scan(root)
+    assert [item.line() for item in report.dead_refs] == [], report.dead_refs
+    refs_skips = [s.reason for s in report.skips if s.where.startswith("docs/refs.md")]
+    assert refs_skips == [], report.skips
+
+
+def test_unknown_ext_and_missing_is_skipped_as_foreign(tmp_path: Path) -> None:
+    """钉子 7：**不存在 且 类型本仓从不跟踪** ⇒ 才能推定为「别仓路径」。
+
+    与钉子 6 成对：存在性优先不等于取消兜底。两条一起才说明「先查存在、再猜类型」，
+    而不是简单的「不再看扩展名」。`src/core/verification.ts` 是 `复盘/DSH插件-*.md`
+    里 50 条真实写法（引用的是别人的仓）。
+    """
+    root = _tree(tmp_path)
+    (root / "src" / "core").mkdir(parents=True)
+    (root / "docs" / "refs.md").write_text("别仓：`src/core/verification.ts`\n", encoding="utf-8")
+    assert cd.ext_of("src/core/verification.ts") == ".ts"
+    assert ".ts" not in cd.OWN_EXTS
+    assert cd.is_pointer("src/core/verification.ts", root), "这条钉子拿的不是指针 ⇒ 等于空转"
+
+    report = cd.scan(root)
+    assert [item.line() for item in report.dead_refs] == [], report.dead_refs
+    reasons = {s.token: s.reason for s in report.skips if s.where.startswith("docs/refs.md")}
+    assert reasons.get("src/core/verification.ts") == (
+        "`.ts` 不是本仓跟踪过的类型 ⇒ 判为别仓路径"
+    ), reasons
+
+
+def test_member_reference_resolves_after_reorder(tmp_path: Path) -> None:
+    """钉子 8：`模块.成员()` 这种成员引用在重排后仍要解析，不能被当死指针。
+
+    `tools/evidence_map.assertion_path()` 的扩展名是 `.assertion_path()` —— 不在 `OWN_EXTS`。
+    旧顺序在这里直接判「别仓路径」；新顺序靠 `symbol_variants()` 在扩展名兜底**之前**
+    把它摊回 `tools/evidence_map.py`。改坏了会怎样：它落进「别仓路径」桶里，
+    于是「成员引用」这个边界名存实亡。
+    """
+    root = _tree(tmp_path)
+    (root / "tools").mkdir()
+    (root / "tools" / "evidence_map.py").write_text("def assertion_path():\n    return 1\n",
+                                                   encoding="utf-8")
+    token = "tools/evidence_map.assertion_path()"
+    (root / "docs" / "refs.md").write_text(f"成员：`{token}`\n", encoding="utf-8")
+    assert cd.ext_of(token) == ".assertion_path()", cd.ext_of(token)
+    assert cd.is_pointer(token, root), "这条钉子拿的不是指针 ⇒ 等于空转"
+    hits = [c for c in cd.symbol_variants(token)
+            if cd.resolve(c, root / "docs" / "refs.md", root, "backtick") is not None]
+    assert hits, f"symbol_variants 一个都没命中 ⇒ 这条钉子空转：{cd.symbol_variants(token)}"
+
+    report = cd.scan(root)
+    assert [item.line() for item in report.dead_refs] == [], report.dead_refs
+    reasons = {s.token: s.reason for s in report.skips if s.where.startswith("docs/refs.md")}
+    assert token not in reasons, reasons
+
+
+# ------------------------ 卡 F6 / OWN_EXTS：手写集合必须能被 `git ls-files` 现证（不是自说自话）
+def _tracked_exts() -> set[str]:
+    """本仓**真跟踪过**的扩展名（`git ls-files` 实测；空集合就说明这条钉子空转）。"""
+    out = _git(ROOT, "-c", "core.quotePath=false", "ls-files", "-z")
+    assert out.returncode == 0, out.stderr
+    return {cd.ext_of(p) for p in out.stdout.split("\0") if p}
+
+
+def test_own_exts_covers_every_tracked_extension() -> None:
+    """钉子 9：本仓跟踪过的扩展名**一个都不许落在** `OWN_EXTS` 外面。
+
+    `OWN_EXTS` 是手写的（选 (b) 不选现算，理由写在 `scripts/check_docs.py` 里：非 git 树
+    现算为空 ⇒ 一切落「别仓」= 放宽；且会随 `git add` 漂 ⇒ 同 HEAD 两树读数不同）。
+    手写就得有东西钉住它，否则谁把 `.json` 删了都不会有人发现。
+    放宽方向（加成员）这条不拦，收紧方向（删成员）当场红。
+    """
+    tracked = _tracked_exts()
+    assert len(tracked) > 10, f"只读到 {len(tracked)} 种扩展名 ⇒ 这条钉子空转"
+    assert "" not in cd.OWN_EXTS
+    missing = sorted(tracked - set(cd.OWN_EXTS))
+    assert missing == [], f"本仓真跟踪、却不在 OWN_EXTS 里（会全被判别仓）：{missing}"
+
+
+def test_every_own_ext_is_justified() -> None:
+    """钉子 10：`OWN_EXTS` 里每个成员**都要有理由** —— 要么有跟踪样本，要么写明为什么留。
+
+    没有这条，`OWN_EXTS` 会慢慢长成一个「什么都不拒绝」的空集：每加一个成员，
+    「别仓路径」这条边界就松一寸，而读数上看不出来。反向：删掉一条理由也红。
+    """
+    tracked = _tracked_exts()
+    reasons = cd.OWN_EXTS_UNTRACKED_REASONS
+    # ① 每个成员都得有理由：要么真有跟踪样本，要么在理由表里
+    unexplained = sorted(
+        ext for ext in cd.OWN_EXTS if ext not in tracked and ext not in reasons
+    )
+    assert unexplained == [], (
+        f"这些成员既没有跟踪样本、也没写理由（说明不了它们为什么在集合里）：{unexplained}"
+    )
+    # ② 理由非空
+    blank = sorted(ext for ext, why in reasons.items() if not why.strip())
+    assert blank == [], f"理由表里有空理由：{blank}"
+    # ③ 与跟踪样本**不相交**：理由表只放「当前没样本」的成员
+    rotten = sorted(ext for ext in reasons if ext in tracked)
+    assert rotten == [], (
+        f"这些成员已经被本仓跟踪了，理由会腐烂 —— 把它们从理由表里删掉：{rotten}"
+    )
+    stripped = sorted(set(reasons) - set(cd.OWN_EXTS))
+    assert stripped == [], f"理由表里有不在 OWN_EXTS 的成员：{stripped}"

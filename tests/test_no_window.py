@@ -128,16 +128,12 @@ EXEMPT: dict[tuple[str, str, str], str] = {
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("tools/pool/landing.py", "run", "26e0a544b96a"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
-    ("tools/pool/landing.py", "run", "23188a3f9713"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("tools/pool/landing.py", "run", "e00e6c3091d9"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("tools/pool/landing.py", "run", "3cec796c7340"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
 
     # ★ 2026-10-04：卡 163 给 landing.py 的 acquire/renew 加了防窗旗（原登记已删）。
-    ("tools/pool/landing.py", "run", "c28ff8284e2a"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("tools/pool/landing.py", "run", "501976f736bb"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     # ★ 2026-10-04：卡 184 给 `landing.py` 的三处调用加了防窗旗 ⇒ 这条登记**失效**（已删）。
@@ -193,8 +189,6 @@ EXEMPT: dict[tuple[str, str, str], str] = {
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("tools/wt_prune.py", "run", "d24399250819"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
-    ("scripts/audit_progress.py", "run", "5c4acac0d2b2"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/check_layers.py", "run", "40528a732194"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/check_toml.py", "run", "0f5a39dfab46"):
@@ -214,8 +208,6 @@ EXEMPT: dict[tuple[str, str, str], str] = {
     ("scripts/run_gates.py", "run", "f505b7780efd"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     ("scripts/run_gates.py", "run", "5f428634055b"):
-        "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
-    ("scripts/test_check_layers.py", "run", "bee01e0c70df"):
         "★ 需加 NO_WINDOW（起 console 子进程）；本卡白名单外 → 回报 §6",
     # —— 真相不是「缺 flag」：flag 经间接通道传入，字面量看不到（不算债）——
     ("tools/wb_dispatch.py", "Popen", "4deca24157fe"):

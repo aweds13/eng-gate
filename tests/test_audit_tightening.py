@@ -275,7 +275,7 @@ def test_real_repo_history_files_are_all_claimed() -> None:
     exempts = ap.claimed_files_exempt(data)
     log = subprocess.run(
         ["git", "-c", "core.quotepath=false", "log", "-6", "--name-only", "--format="],
-        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
     ).stdout
     files = {ln.strip().replace("\\", "/") for ln in log.splitlines() if ln.strip()}
     unclaimed = sorted(

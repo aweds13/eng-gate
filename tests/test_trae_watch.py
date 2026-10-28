@@ -53,7 +53,8 @@ def test_events_follow_pipe_data_not_the_script_location(tmp_path):
     )
     env = dict(os.environ, PIPE_DATA=str(data))
     done = subprocess.run([sys.executable, "-X", "utf8", "-c", code],
-                         capture_output=True, text=True, encoding="utf-8", env=env,
+                         capture_output=True, text=True,
+                         encoding="utf-8", errors="replace", env=env,
                          check=True)
     out = done.stdout
     got_data, got_tool = [Path(line.strip()) for line in out.strip().splitlines()]

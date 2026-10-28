@@ -236,11 +236,15 @@ def staged_and_extra(wt: pathlib.Path, allow: list[str]) -> tuple[list[str], lis
 def release_lock(lock_label: str, wt: pathlib.Path, env: dict) -> None:
     """释放门禁锁（任何退出路径都调它 —— 无锁时 `release` 是空操作、退 0）。"""
     with contextlib.suppress(Exception):
+        # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+        # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
         subprocess.run(
             [sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
              "release", "--card", lock_label],
             cwd=str(wt), env={**os.environ, **env},
-            capture_output=True, text=True,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            # ★ 防窗旗（卡 163 的口径）：起 console 子进程时 Windows 上不许弹窗。
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
 
@@ -627,11 +631,14 @@ def _renewer_loop(lock_label: str, wt: pathlib.Path, env: dict,
     """
     while not stop.wait(interval):
         with contextlib.suppress(Exception):
+            # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+            # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
             subprocess.run(
                 [sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
                  "renew", "--card", lock_label],
                 cwd=str(wt), env={**os.environ, **env},
                 capture_output=True, text=True, timeout=30,
+                                encoding="utf-8", errors="replace",
                 # ★ 防窗旗（卡 163）：续租每 5 分钟起一次进程，Windows 上不许弹窗。
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
@@ -2144,8 +2151,10 @@ def main(argv: list[str] | None = None) -> int:
              "--evidence", *a.evidence, "--text-file", str(text)], cwd=ROOT)
 
         print("=== ③ sync_counts ===")
-        print(run([sys.executable, "-X", "utf8", "tools/sync_counts.py"], cwd=wt).stdout.strip())
-        print(run([sys.executable, "-X", "utf8", "scripts/check_toml.py"], cwd=wt).stdout.strip())
+        print((run([sys.executable, "-X", "utf8", "tools/sync_counts.py"],
+                   cwd=wt).stdout or "").strip())
+        print((run([sys.executable, "-X", "utf8", "scripts/check_toml.py"],
+                   cwd=wt).stdout or "").strip())
 
         if not a.no_gate and gate_on == "local":
             # ★ 2026-10-02 加（本主控**第二次**被它咬：登记了队列条目却没在门禁前
@@ -2294,10 +2303,14 @@ def main(argv: list[str] | None = None) -> int:
                             print(f"  {lg}:")
                             for x in bad[:5]:
                                 print("   ", x.strip()[:150])
+                # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+                # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
                 subprocess.run([sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
                                 "release", "--card", lock_label],
                                cwd=str(wt), env={**os.environ, **env},
-                               capture_output=True, text=True)
+                               capture_output=True, text=True,
+                               encoding="utf-8", errors="replace",
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),)
                 return 1
             # ★ 卡 228（T-G344）：⑤ seal 从这里**挪走** —— 原来封存在翻账/暂存**之前**
             #   算树指纹，⑥ 提交前才翻 status ⇒ 只要这笔翻了账，封存树与提交树
@@ -2352,10 +2365,14 @@ def main(argv: list[str] | None = None) -> int:
         #   （今天真漏过一次：卡 106 白名单失败后 9034 的锁挂了 5 分钟）。
         #   release 必须给**同一段**（TF_GATE_PORT_BASE）。
         if not a.commit_only and not a.no_gate:
+            # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+            # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
             subprocess.run([sys.executable, "-X", "utf8", "gates/diag/gate_lock.py", "release",
                             "--card", lock_label], cwd=str(wt),
                            env={**os.environ, "TF_GATE_PORT_BASE": str(a.port_base)},
-                           capture_output=True, text=True)
+                           capture_output=True, text=True,
+                           encoding="utf-8", errors="replace",
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),)
             print("  （已顺手释放门禁锁）")
         return 2
 
@@ -2372,7 +2389,7 @@ def main(argv: list[str] | None = None) -> int:
     if not a.no_gate and not a.commit_only:
         print("=== ⑤ seal（翻账/暂存已就绪 ⇒ 封存算的是最终树）===")
         sealed = run([sys.executable, "-X", "utf8", "scripts/run_gates.py", "--seal"], cwd=wt)
-        print(sealed.stdout.strip()[-300:])
+        print((sealed.stdout or "").strip()[-300:])
         # ★ 卡 184：全量那一趟落盘每日记录（增量不落盘——它不是全量兜底）。
         #   「今天跑过全量没有」必须机器可判，不许靠人记。
         if not incremental_run:
@@ -2387,7 +2404,7 @@ def main(argv: list[str] | None = None) -> int:
         t1 = _sealed_tree()
         print("=== ⑤″ 兜底重封存（幂等；不重跑门禁）===")
         resealed = run([sys.executable, "-X", "utf8", "scripts/run_gates.py", "--seal"], cwd=wt)
-        print(resealed.stdout.strip()[-300:])
+        print((resealed.stdout or "").strip()[-300:])
         t2 = _sealed_tree()
         if t1 and t2 and t2 != t1:
             print(f"  ★ 兜底抓住漂移：第一次封存 tree={t1} ≠ 重封存 tree={t2}"
@@ -2461,11 +2478,15 @@ def main(argv: list[str] | None = None) -> int:
 
     print("=== ⑦ audit → release → ff 合流 ===")
     audit = run([sys.executable, "-X", "utf8", "scripts/audit_progress.py"], cwd=wt)
-    print(audit.stdout.strip()[-260:])
+    print((audit.stdout or "").strip()[-260:])
     if not a.no_gate:
+        # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+        # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
         subprocess.run([sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
                         "release", "--card", lock_label],
-                       cwd=str(wt), env={**os.environ, **env}, capture_output=True, text=True)
+                       cwd=str(wt), env={**os.environ, **env}, capture_output=True,
+                       text=True, encoding="utf-8", errors="replace",
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),)
     new = git("rev-parse", "HEAD", cwd=wt)
     # ★ ff 守卫（2026-10-01 加）：主树可能已经被**另一笔**推进过（并发/插队）。
     #   原来这里是 `check=False` + `or 兜底` ⇒ git 报 fatal 时照样打印"ff 合流完成"，

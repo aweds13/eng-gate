@@ -118,3 +118,12 @@ gates/review/
 
 # worktrees
 .wt/
+
+# ⑨ 面板「参数」页写的本机参数（写口子 tools/dsh_panel.py:1010 的
+#   SETTINGS_REL = ["tools", "settings.toml"]，先写 .tmp 再 rename）。
+#   入库文档（docs/changelog.d/T-AG400.md:6、docs/changelog.md:346）早就写着它
+#   「未入库、仓里默认没有」，但和事故二的 gates/review/ 一样，这条规则此前并不存在 ——
+#   于是本机点一次面板改并发度，tools/settings.toml 就成了永久未跟踪文件：
+#   云机（克隆仓）默认没有它、也不该有它，check_docs 判死指针的结果会跟着这台机器漂。
+tools/settings.toml
+tools/settings.toml.tmp

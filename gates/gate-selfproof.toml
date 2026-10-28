@@ -1,0 +1,158 @@
+# 门自证台账（卡：门自证矩阵）—— 每道门「会咬」的证据在哪
+#
+# 为什么要有这份台账：立仓原则是「一道从不红的门，等于没有门」。门绿只说明进程退 0，
+# 不说明它**看得见**问题。所以要为每道门指一条**反向用例**：故意造坏输入 ⇒ 断言门会红。
+# 光有「跑一遍应该绿」不算 —— 那种用例在门坏掉时会跟着一起绿，证明不了门会咬。
+#
+# 字段（一行一道门，全部必填）：
+#   name        门名。必须与真实门表（gates/defs/*.py 经 scripts/run_gates.py 装配出的
+#               build_jobs）里的名字逐字一致；台账里多一个 / 少一个都会红。
+#   reverse_case 反向用例的 nodeid：`tests/<文件>::<用例名>`，也认
+#               `scripts/<自测脚本>::<用例名>`（自定义自测脚本不是 pytest 用例）。
+#               或写 `none` —— 表示这道门目前**没有**反向用例。
+#   why_no_case 两用，都不许写空话：
+#               ① `reverse_case = "none"` 时**必须写**，说清为什么造不出反向用例
+#                  （例如「要真服务/真浏览器」）。这时留空 ⇒ 红。
+#               ② 有反向用例、但门里还有**没盖住的层**时，把那一层写成盲区
+#                  （例如真机采集、真浏览器行为流）。这是诚实清单，不是免责声明。
+#   since       这一行是哪天核过的（ISO 日期）。判据会跟着门表变，日期是复核锚点。
+#
+# 判据在 tests/test_gate_selfproof.py（这份台账自己也有反向用例：把 reverse_case 改到
+# 一个不存在的 nodeid ⇒ 钉子必须红）。只读矩阵在 gates/diag/_gate_selfproof_audit.py。
+
+schema = 1
+
+# ── lang 档（gates/defs/lang_python.py）──────────────────────────────────────
+[[gate]]
+name = "pytest"
+reverse_case = "tests/test_gate_selfproof.py::test_pytest_door_bites_on_a_deliberately_failing_test"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "acceptance"
+reverse_case = "tests/test_gate_selfproof.py::test_marker_door_bites_on_a_marked_failure[acceptance]"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "pytest_chain"
+reverse_case = "tests/test_gate_selfproof.py::test_marker_door_bites_on_a_marked_failure[chain]"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "ruff"
+reverse_case = "tests/test_gate_selfproof.py::test_ruff_door_bites_on_an_unused_import"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "mypy"
+reverse_case = "tests/test_gate_selfproof.py::test_mypy_door_bites_on_a_type_error"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "check_layers_selftest"
+reverse_case = "scripts/test_check_layers.py::case_broken_link_bites"
+why_no_case = ""
+since = "2026-10-27"
+
+# ── audit 档（gates/defs/contract.py）────────────────────────────────────────
+[[gate]]
+name = "audit"
+reverse_case = "tests/test_audit_tightening.py::test_uncovered_contract_op_fails"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "invariants"
+reverse_case = "tests/test_wb_invariants.py::test_check_bites_when_judge_path_is_missing"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "audit_titles"
+reverse_case = "tests/test_gate_selfproof.py::test_audit_titles_door_bites_on_a_misaligned_title"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "docs"
+reverse_case = "tests/test_gate_docs.py::test_debt_over_baseline_is_red_even_in_report_mode"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "skills_claims"
+reverse_case = "tests/test_check_skills_claims.py::test_missing_tool_is_named"
+why_no_case = ""
+since = "2026-10-27"
+
+# ── product 档（gates/defs/product_timeflow.py）─────────────────────────────
+[[gate]]
+name = "check_layers"
+reverse_case = "tests/test_false_success_pins.py::test_precheck_agrees_with_the_real_gate"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "contrast"
+reverse_case = "tests/test_contrast_audit.py::test_new_shortfall_is_a_failure_not_a_pass"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "style"
+reverse_case = "tests/test_style_audit.py::test_shape_duplicate_is_detected"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "ui_text"
+reverse_case = "tests/test_ui_text_line.py::test_verdicts_are_a_ratchet_not_a_blanket_ban"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "commands"
+reverse_case = "tests/test_check_commands.py::test_cli_projection_conflict_is_reported"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "ui_dom_probe"
+reverse_case = "tests/test_gate_selfproof.py::test_ui_dom_probe_door_bites_on_a_throwing_view"
+why_no_case = "余：这条反向用例跑的是真 node 探针工具本身（合成一渲染就抛错的 index.html ⇒ 退 1，真页面 ⇒ 退 0），但没有经过 scripts/run_gates.py 的装配层。装配层本身已有反向用例：tests/test_ci_docs.py::test_only_payload_is_red_in_wb_verify 证明 not_run 非空 ⇒ wb_verify 判红，即「没跑」不会被当成「过了」。"
+since = "2026-10-27"
+
+[[gate]]
+name = "proxy"
+reverse_case = "tests/test_proxy_audit.py::test_one_expired_returns_nonzero_and_names_id_and_days"
+why_no_case = ""
+since = "2026-10-27"
+
+[[gate]]
+name = "lf1_live"
+reverse_case = "tests/test_gate_selfproof.py::test_lf1_check_helper_bites"
+why_no_case = "余：反向用例只盖住「不一致会被收进 FAILURES ⇒ main() 退 1」这条判据骨架；真起 uvicorn + 走完 LF-1 主链那一段仍是盲区（要在本机起真服务，pytest 里起不了）。这道门目前靠三样东西证明自己没坏：①反向用例（上面那条）；②tools/lf1_live_check.py 自己逐条打印 [OK ]/[FAIL] 与最终 PASS/FAIL；③落地前人工跑一次留痕（实测 `timeout 180 python -X utf8 tools/lf1_live_check.py` ⇒ exit 0）。"
+since = "2026-10-27"
+
+[[gate]]
+name = "web_live"
+reverse_case = "tests/test_gate_selfproof.py::test_web_live_js_syntax_bites"
+why_no_case = "余：反向用例只盖住 JS 语法解析这一条（合成坏 <script> ⇒ check_js_syntax 回 False ⇒ 门退 1），以及 app.css 暗色块这类纯函数层（tests/test_dark_teeth.py 的变异用例）。真起服务后的 13 组 live_* 检查（attach/remind/ai/team/focus/repeat/regrade/notify/phone/sync/offline/lan）仍是盲区：要真 uvicorn。目前靠门退 3/not_run 不算 PASS + 人工跑 tools/web_live_check.py 留痕。"
+since = "2026-10-27"
+
+[[gate]]
+name = "render"
+reverse_case = "tests/test_render_signatures.py::test_the_check_bites_on_a_wrong_screen"
+why_no_case = "余：反向用例盖住的是「签名判据看得见错屏」（把 tasks 屏喂给今天屏的签名 ⇒ 必须报出 must 缺失），而门本体 tools/render_check.mjs 在真浏览器里采集 + 比对黄金这一层仍是盲区：要 Edge/Chrome。起不了浏览器时它退 3 = NOT RUN，run_gates 记 blocking=false，所以**不跑不等于过**；但「跑了且绿」这件事目前只靠人工跑一次留痕。"
+since = "2026-10-27"
+
+[[gate]]
+name = "ui_flow"
+reverse_case = "tests/test_ui_flow_check.py::test_coverage_bites_on_an_unclaimed_item"
+why_no_case = "余：反向用例盖住的是「未对账项会被点名 ⇒ 退 1」（合成清单里塞一条没人认账的 F-99）。真浏览器跑行为流（含每次采两遍的确定性自检，不一致退 4）仍是盲区：要 Edge/Chrome + 真服务。起不了浏览器时退 3 = NOT RUN，不算 PASS。"
+since = "2026-10-27"

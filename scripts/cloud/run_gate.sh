@@ -49,14 +49,25 @@ model_registry="${TF_MODEL_REGISTRY:-}"
 
 if [ -z "$projects_toml" ]; then
   echo "✗ 缺 TF_PROJECTS_TOML：仓外项目索引必须显式注入（卡 E35 判据 3，fail fast）。" >&2
-  echo "  它不在仓里（真身例：D:/repo/infra/pool/projects.toml），缺了 cloud 上" >&2
+echo "  它不在仓里（真身就在**仓的祖父目录**下的 infra/pool/projects.toml），缺了 cloud 上" >&2
   echo "  test_pool_* / test_contract_audit 会集体红 —— 那是配置没给，不是代码坏。" >&2
-  echo "  例：TF_PROJECTS_TOML='D:/池/infra/pool/projects.toml' bash scripts/cloud/run_gate.sh E35" >&2
+echo "  例：TF_PROJECTS_TOML='/<仓的祖父目录>/infra/pool/projects.toml' \\" >&2
+echo "        bash scripts/cloud/run_gate.sh E35" >&2
   exit 2
 fi
 
 KEY="$HOME/.ssh/id_ed25519_cloud"
-HOST="${CLOUD_HOST:-administrator@203.0.113.12}"
+# ★ CI 可复现性：**不给默认云机**。原来这里带一个默认地址（变配前的公网 IP，早已
+#   失效，见 docs/subsystems/ci/云门禁机.md §1 的历史读数）—— 等于「没配就默默去连
+#   一台死机器」，失败现场看起来像网络问题、不像配置问题。改成 fail fast。
+#   exit 9 = 没配云机（与 exit 2 缺 projects_toml 并列，都是「配置没给、不是代码坏」）。
+if [ -z "${CLOUD_HOST:-}" ]; then
+  echo "✗ 缺 CLOUD_HOST：云机地址必须显式注入（不再有已失效的默认 IP）。" >&2
+  echo "  例：CLOUD_HOST=administrator@<云机地址> TF_PROJECTS_TOML=<路径> \\" >&2
+  echo "        bash scripts/cloud/run_gate.sh <卡号> [端口段]" >&2
+  exit 9
+fi
+HOST="$CLOUD_HOST"
 SSHOPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
 TMP="$(mktemp -d)"
 # ★ 卡 E49 pass7 实测：原来这两行按**调用者 cwd**（主仓）取提交 —— 主仓一往前走，
@@ -93,7 +104,7 @@ else
 fi
 
 # 仓外配置的**落位约定**（卡 E49）：pool 工具的默认发现方式是「从 cwd 逐级向上找
-# infra/pool/<文件>」。开发机上是 D:/repo/infra/pool/（仓的祖父目录）；
+# infra/pool/<文件>」。开发机上它就在**仓的祖父目录**下的 infra/pool/（不写盘符：
 # 云机上仓库在 C:/eng ⇒ 对应位置是 C:/infra/pool/。配置只放 C:/poolcfg 而不铺到这里，
 # test_pool_* / test_pool_task / test_wb_dispatch 这些「向上找」的用例在云机必红
 # —— 那批红曾经被当成「代码不可移植」，其实是配置没按约定落位。
@@ -140,7 +151,7 @@ if ! ssh $SSHOPTS -i "$KEY" "$HOST" \
 fi
 echo "✓ 配置已铺：$pool_cfg_src → $pool_cfg_dst"
 
-# 项目索引里 `root` 是**绝对路径**：开发机那份指着 D:/repo/engineering。
+# 项目索引里 `root` 是**绝对路径**：开发机那份指着本机的仓目录（带盘符的绝对路径）。
 # 原样 scp 到云机 ⇒ `[project.engineering].root` 不存在 ⇒ 项目守卫拒（宁拒不许猜）⇒
 # 云机上一片「项目索引读不了」。所以项目索引**由仓内模板渲染**（根换成云机的仓库目录）。
 #
@@ -281,7 +292,7 @@ echo "✓ dev 依赖已按 pyproject 的 [dev] 同步"
 
 echo "=== 4/5 云机跑全量门禁（端口段 $port；TF_PROJECTS_TOML 已注入）==="
 start=$(date +%s)
-ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && $envset && python -X utf8 scripts/run_gates.py && python -X utf8 scripts/run_gates.py --seal" > "$TMP/gate.out" 2>&1
+ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && $envset && \"C:/Program Files/Python312/python.exe\" -X utf8 scripts/run_gates.py && \"C:/Program Files/Python312/python.exe\" -X utf8 scripts/run_gates.py --seal" > "$TMP/gate.out" 2>&1
 rc=$?
 echo "门禁退出码=$rc 用时=$(( $(date +%s) - start ))s"
 tail -6 "$TMP/gate.out"
@@ -292,7 +303,14 @@ scp $SSHOPTS -i "$KEY" "$HOST:$cloud_dir/gates/last.json" ".wt/$card/gates/last.
 scp $SSHOPTS -i "$KEY" "$HOST:$cloud_dir/gates/logs/*.log" ".wt/$card/gates/logs/" >/dev/null 2>&1
 mkdir -p gates/diag
 cp "$TMP/gate.out" "gates/diag/cloud-gate-$card.log"
-python -X utf8 -c "import json,sys; d=json.load(open('.wt/$card/gates/last.json',encoding='utf-8')); print('last.json ok=',d.get('ok'),'rev=',d.get('rev'))"
+python -X utf8 -c "import json,sys; d=json.load(open('.wt/$card/gates/last.json',encoding='utf-8')); print('last.json ok=',d.get('ok'),'rev=',d.get('rev'),'host=',d.get('host'))"
+# ★ CI 可复现性（判据 A 的可核读数）：host 是「这趟真在哪台机器跑的」的唯一凭证。
+#   空 ⇒ 落地链 tools/pool/landing.py 会拒提交（「证明不了是云机跑的」）。
+#   这里不改 rc：强制点在 tools/gate_pool.py::validate_cloud_return ③（已 fail closed）。
+python -X utf8 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); h=str(d.get('host') or ''); sys.exit(0 if h.strip() else 1)" ".wt/$card/gates/last.json" || {
+  echo "★★ 回传的 last.json 没有非空 host 字段 ⇒ 证明不了是云机跑的 ⇒ 这趟不能直接落地。" >&2
+  echo "   处置：确认云机上 scripts/run_gates.py 含 host 字段（判据 A：socket.gethostname()）。" >&2
+}
 echo "日志：gates/diag/cloud-gate-$card.log ；产物：.wt/$card/gates/"
 rm -rf "$TMP"
 exit "$rc"

@@ -87,7 +87,7 @@ def write_ledger(tmp_path: Path, text: str) -> Path:
 def run(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, "-X", "utf8", str(TOOL), *args],
-        cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+        cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
 
 

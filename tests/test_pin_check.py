@@ -33,7 +33,7 @@ def run_tool(*args: str) -> subprocess.CompletedProcess[str]:
         [*TOOL, *args],
         capture_output=True,
         text=True,
-        encoding="utf-8",
+        encoding="utf-8", errors="replace",
         cwd=ROOT,
     )
 

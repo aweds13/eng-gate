@@ -106,9 +106,11 @@ def main() -> int:
                 if p.is_symlink():
                     p.unlink()
                 else:
+                    # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+                    # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
                     subprocess.run(
                         ["cmd", "/c", "rmdir", str(p)],
-                        capture_output=True, text=True,
+                        capture_output=True, text=True, encoding="utf-8", errors="replace",
                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     )
                 n += 1

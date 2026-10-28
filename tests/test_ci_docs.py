@@ -4,7 +4,7 @@ r"""测试流程文档的钉子（卡 E43 · `T-AG495` 判据 3 至少 5 条 + �
 
 | # | 钉子 | 坏掉会红在哪 |
 |---|---|---|
-| ① | 21 道门名与 `gates/defs/*.py` 的 `GATES` **逐字一致** | 门表加了一道/文档抄错一个字 ⇒ 红 |
+| ① | 表一的门名与**门表全量**（现读 `build_jobs`）**逐字一致** | 门表加一道/抄错一个字 ⇒ 红 |
 | ② | 五维关键词（档位 / 域 / 选测 / 夜间 / 异机）都在 | 少一维 ⇒ 红 |
 | ③ | 决策树里的档位名都是**真参数**（两个 parser 都认） | 文档写了一个不存在的开关 ⇒ 红 |
 | ④ | 指向 `skills/pipe-gate/SKILL.md` 的链接在，且文件真存在 | 链到一篇不存在的文档 ⇒ 红 |
@@ -12,6 +12,9 @@ r"""测试流程文档的钉子（卡 E43 · `T-AG495` 判据 3 至少 5 条 + �
 | ⑥ | `--only` 产生的**半趟**读数被 `wb_verify` 判红 | 半趟能被当全量 ⇒ 红 |
 
 ★ 反向验证（判据 5 的第二条）做在 ① 里：把某个门名改错一个字，同一个检查函数必须报出来。
+★ **门数不写死**（卡 208 §2：写死的门数是会漂的第二真源）：`door_table_names()` 现读
+  `run_gates.build_jobs(False, False)`，门表加一道门本文件**一行都不用改**；会红的只有
+  「表一 ≠ 真门表」。这条由 `test_added_gate_needs_no_test_edit_but_doc_drift_still_bites` 守着。
 """
 
 from __future__ import annotations
@@ -52,12 +55,19 @@ def _load(name: str, path: Path) -> ModuleType:
 
 # ---------------------------------------------------------------- 门名（唯一真源）
 def door_table_names() -> list[str]:
-    """门表里的全部门名（`gates/defs/` 三份模块 + 真机层 + 浏览器层，顺序即真源顺序）。"""
-    from gates.defs import contract, lang_python, product_timeflow
+    """**全量档**的门名（顺序即门表顺序）。
 
-    return [str(n) for n, _ in (*lang_python.GATES, *contract.GATES,
-                                *product_timeflow.GATES, *product_timeflow.REAL)] \
-        + [str(n) for n in product_timeflow.BROWSER]
+    ★ **现读**真门表 `run_gates.build_jobs(False, False)`，**不写死**门数/名单 —— 口径同
+      `tests/test_run_gates_affected.py:37-43` 与 `tools/wb_verify.py` 的
+      `expected_gate_names()`：写死的门数是会漂的第二真源（卡 208 §2）。
+      门表加一道门 ⇒ 这份名单自己变长，本文件一行都不用改；会红的只有
+      「文档表一的门名 ≠ 这份名单」，判据在 `door_table_diff()`。
+    ★ 2026-10-27 实测：这份顺序与 `gates/defs/` 三份模块 + 真机层 + 浏览器层声明的顺序
+      **逐字相同**（道数也一致），所以取「真跑的哪一份」就够，不再抄第二份顺序。
+    """
+    import run_gates as rg
+
+    return [str(n) for n, _ in rg.build_jobs(False, False)]
 
 
 def doc_door_names(text: str) -> list[str]:
@@ -68,23 +78,105 @@ def doc_door_names(text: str) -> list[str]:
     return re.findall(r"^\|\s*`([a-z0-9_]+)`\s*\|", section, re.M)
 
 
+def door_table_diff(got: list[str], want: list[str]) -> str:
+    """文档门表 vs 真门表的**逐字**对账（返回空串 = 一致）。
+
+    ★ 判据只比两份名单，**不数常量**：门表多一道门 ⇒ `want` 自己变长，这里没有
+      任何「本页口径按 N 道写」的字面量（卡 208 §2）。文档少一行 / 多一行 /
+      改一个字 / 换顺序 ⇒ 都返回非空 —— 那才是要咬的。
+    """
+    if got == want:
+        return ""
+    missing = [n for n in want if n not in got]
+    extra = [n for n in got if n not in want]
+    lines = [f"文档表一 {len(got)} 道 / 真门表 {len(want)} 道"]
+    if missing:
+        lines.append(f"文档缺：{missing}")
+    if extra:
+        lines.append(f"文档多：{extra}")
+    if not missing and not extra:
+        lines.append("门名集合一致，但**顺序不同**（表一必须照门表顺序写）")
+    for i, (a, b) in enumerate(zip(got, want, strict=False)):
+        if a != b:
+            lines.append(f"顺序第 {i} 位就不合：文档 {a!r} / 门表 {b!r}")
+            break
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------- ① 门名逐字一致
 def test_doc_exists_and_door_names_match_defs() -> None:
-    """文档存在，21 道门名与 `gates/defs/*.py` 的 `GATES` **逐字一致**（顺序也一致）。"""
+    """文档存在，表一的门名与**真门表全量**逐字一致（顺序也一致）。
+
+    ★ 门数**不写死**：`want` 是现读的门表全量，加一道门这里跟着走、本文件不用改；
+      会红的只有「表一 ≠ 真门表」（由 `door_table_diff()` 判，不数常量）。
+    """
     assert DOC.is_file(), f"缺文档：{DOC}"
     text = DOC.read_text(encoding="utf-8")
     want = door_table_names()
-    assert len(want) == 21, f"门表里现在是 {len(want)} 道（本页口径按 21 道写）"
-    assert doc_door_names(text) == want, (
-        f"门名对不上：\n文档 {doc_door_names(text)}\n门表 {want}")
+    assert want, "真门表读出来是空的（取数口径坏了，不是文档的问题）"
+    assert len(set(want)) == len(want), f"真门表里有重名门：{want}"
+    diff = door_table_diff(doc_door_names(text), want)
+    assert diff == "", f"表一与真门表对不上：\n{diff}"
 
 
 def test_doc_door_drift_is_caught() -> None:
-    """★ 反向验证：把某道门名改错一个字，同一个检查函数必须报出来。"""
+    """★ 反向验证：把某道门名改错一个字（或凭空多一个），同一个检查函数必须报出来。"""
     text = DOC.read_text(encoding="utf-8")
-    assert doc_door_names(text) == door_table_names()
-    broken = text.replace("| `ruff` |", "| `ruf` |", 1)
-    assert doc_door_names(broken) != door_table_names(), "门名改错了却照样判一致"
+    want = door_table_names()
+    assert door_table_diff(doc_door_names(text), want) == ""
+    for broken_name in ("| `ruf` |", "| `ruffx` |"):  # 改错一个字 / 追加一个假名
+        broken = text.replace("| `ruff` |", broken_name, 1)
+        assert doc_door_names(broken) != want, f"{broken_name} 却照样判一致"
+        assert door_table_diff(doc_door_names(broken), want) != "", broken_name
+
+
+def test_added_gate_needs_no_test_edit_but_doc_drift_still_bites(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据：**门表加一道门 ⇒ 本文件不用改**；文档没跟上 ⇒ 必须红。
+
+    做法（不碰 `gates/defs/contract.py`、不落盘）：在内存里把门表多塞一道假门，
+    然后把文档门名喂给**同一条**对账函数，多一道、少一道两个方向都试；
+    最后把 `door_table_names` 打桩成「多一道门」再跑**真的那个测试函数**，看它咬不咬。
+    """
+    text = DOC.read_text(encoding="utf-8")
+    want = door_table_names()
+    doc = doc_door_names(text)
+    extra = "probe_added_door"
+    assert extra not in want and extra not in doc
+
+    # ① 门表多了一道、文档没补 ⇒ 钉子必须咬（报的是**集合不同**，不是「数不对」）
+    bigger = [*want, extra]
+    diff = door_table_diff(doc, bigger)
+    assert extra in diff, f"门表多了一道门而文档没补，居然没报出来：{diff!r}"
+
+    # ② 反方向：门表**少一道** ⇒ 文档那行成了多余的，必须报「文档多」。
+    #    靶子取「文档里有、门表里也有」的最后一道门 —— 不假设 doc 与 want 此刻同步
+    #    （真加门、文档还没补的那一刻，它们本来就不该同步）。
+    target = next((n for n in reversed(doc) if n in set(want)), "")
+    assert target, f"文档门表与真门表没有任何交集：doc={doc} / want={want}"
+    smaller = [n for n in want if n != target]
+    diff_smaller = door_table_diff(doc, smaller)
+    assert target in diff_smaller, f"门表少了一道门，文档那行却没被报出来：{diff_smaller!r}"
+
+    # ③ 文档照门表顺序补上那一行 ⇒ 同一个函数判绿（这里没有任何门数常量）。
+    #    用一张**自造的小表**验，免得把「真文档此刻同步与否」这个前提混进来。
+    fake = ("## 4. 表一：x 道门清单表\n\n| 门 | 判什么 |\n| --- | --- |\n"
+            "| `alpha` | a |\n| `beta` | b |\n\n## 5. 表二\n")
+    assert doc_door_names(fake) == ["alpha", "beta"]
+    assert door_table_diff(doc_door_names(fake), ["alpha", "beta"]) == ""
+    fake2 = fake.replace("| `beta` | b |", "| `beta` | b |\n| `gamma` | c |", 1)
+    assert doc_door_names(fake2) == ["alpha", "beta", "gamma"]
+    assert door_table_diff(doc_door_names(fake2), ["alpha", "beta", "gamma"]) == ""
+    assert "gamma" in door_table_diff(doc_door_names(fake2), ["alpha", "beta"])
+
+    # ④ 打桩成「多一道门」跑**真测试函数**：必须红，且红的是「文档缺那一行」，
+    #    不是旧写法那句「门表里现在是 N 道」。
+    monkeypatch.setattr(sys.modules[__name__], "door_table_names", lambda: bigger)
+    with pytest.raises(AssertionError) as caught:
+        test_doc_exists_and_door_names_match_defs()
+    msg = str(caught.value)
+    assert extra in msg, msg
+    assert "本页口径按" not in msg, f"还在按写死的门数判：{msg}"
 
 
 # ---------------------------------------------------------------- ② 五维
@@ -99,8 +191,11 @@ def test_five_dimensions_present() -> None:
 def test_three_tables_present() -> None:
     """三张表（门清单 / 红门处置 / 时机）都在。"""
     text = DOC.read_text(encoding="utf-8")
-    for title in ("表一：21 道门清单表", "表二：红门处置表", "表三：时机表"):
-        assert title in text, f"缺 {title}"
+    # 表一标题里的门数**由门表现算**（测试不写死数字）：文档写死一个对不上就红。
+    titles = (f"表一：{len(door_table_names())} 道门清单表",
+              "表二：红门处置表", "表三：时机表")
+    for title in titles:
+        assert title in text, f"缺 {title}（门表加了一道 ⇒ 表一体与标题都要跟着改）"
     assert text.count("`--only ") >= 10, "红门处置表没有逐门给 `--only` 重跑命令"
 
 
@@ -214,9 +309,8 @@ def _repo_with_last_json(tmp_path: Path, payload: dict) -> tuple[Path, str]:
 
 
 def _all_doors() -> list[str]:
-    import run_gates as rg
-
-    return [str(n) for n, _ in rg.build_jobs(False, False)]
+    """全量门名 —— 与 `door_table_names()` 同一处真源（不在本文件里抄第二份取法）。"""
+    return door_table_names()
 
 
 def test_only_payload_is_red_in_wb_verify(tmp_path: Path) -> None:
@@ -235,7 +329,7 @@ def test_only_payload_is_red_in_wb_verify(tmp_path: Path) -> None:
     wb_verify.check_gates(s, repo, head)
     assert s.fails >= 1, "半趟读数（只跑了 1 道门）居然判绿"
 
-    # 对照：同一份产物补齐 21 道门 ⇒ 不红（证明这条不是「永远红」）
+    # 对照：同一份产物补齐**全部门**（现算）⇒ 不红（证明这条不是「永远红」）
     full = {**payload, "gates": [{"name": n, "exit_code": 0} for n in doors], "not_run": []}
     full.pop("only")
     full.pop("only_counts")

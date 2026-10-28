@@ -46,11 +46,16 @@ OK, FAIL, WARN = "[OK ]", "[FAIL]", "[WARN]"
 def git(*args: str) -> str:
     # core.quotepath=false：否则中文路径会变成八进制转义，凡是"文件名比对"的判断都会失效
     # （run_gates 的文档同步检查实测踩过这个坑）。
+    # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
+    # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
     r = subprocess.run(
         ["git", "-c", "core.quotepath=false", *args],
-        cwd=ROOT, capture_output=True, text=True, check=False,
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        check=False,
+        # ★ 防窗旗（卡 163 的口径）：audit 在落地链⑦里每次提交都跑，不许弹窗。
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
-    return r.stdout.strip()
+    return (r.stdout or "").strip()
 
 
 # ---------------------------------------------------------------- 仓库事实
