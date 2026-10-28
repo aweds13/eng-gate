@@ -396,6 +396,30 @@
 撤 `run_gate.sh` 的 `blocking and` ⇒ `test_seed_check_reads_the_same_way_as_the_gate` 红；
 撤 `wb_verify` / `framework/review` / `wb_review` 的 `blocking` ⇒ 各自对应钉子红（2/2/2 条）。
 新钉子 `tests/test_two_rulers.py` 9 passed；全仓 `ruff check .` = All checks passed。
+## 2026-10-28 · 判不出来的时候不许说没事：混行尾让翻 status 静默跳过（E61，T-AG519）
+
+`tools/pool/landing.py` 里「把队列切成行」这件事有**两把尺子**。`flip_card_status` 在卡 E60 落地那次真的发作了：卡的 `status` 从 `pending` 翻 `done` 被**静默跳过**，走完落地链之后退出码 0、控制台只有一句「找不到 status 行 ⇒ 跳过」，结果是队列说 `pending`、台账说 `done`，两边不一致而**没有任何人报错**。
+
+**病灶：先嗅行尾，再拿它 split。** 五处写法都是
+
+```python
+sep = b"\r\n" if b"\r\n" in raw else b"\n"
+lines = raw.split(sep)
+```
+
+`docs/workbacklog.toml` 是纯 CRLF，但里面的卡块有手写成分。只要有一块用裸 LF，`raw.split(b"\r\n")` 就会把那一整块当成**一行**；`_scan_blocks` 于是根本看不见这张卡 —— 不抛错、不警告，只是「找不到」。而 `flip_card_status` 的返回类型是 `bool`：`False` 同时表示「本来就不该翻（已是 done / 登记型提交）」与「该翻却翻不动（读不到 status 行）」，调用方**无法区分**这两种，于是把后者也当成正常收场。
+
+**判据一：一处读取口径。** 新增 `_split_blocks(raw: bytes) -> list[bytes]`，实现是 `raw.splitlines(keepends=True)` —— 它只认 `\r\n` / `\n` / `\r`（与 TOML 的行尾定义一致，不像 `str.splitlines` 还会在 `\v` `\f` `\x1c` 上切），不需要先知道这份文件用哪种行尾，也就不存在第二份判断逻辑。逐行**带行尾**返回，所以 `b"".join(lines)` 与原字节逐字节相同，写回去时无损。五处「先嗅再 split」全部换成它（`flip_card_status`、`backlog_blocks`、`_card_files_from_backlog`、`_integrate_multi_tree`、`_scan_blocks` 的调用方）。
+
+**判据二：三态返回值。** `flip_card_status` 的 `bool` 改成 `str`：`"flipped"` / `"not-needed"`（按判据本就不该翻）/ `"unflippable"`（该翻却翻不动）。返回 `bool` 时那句「找不到 status 行 ⇒ 跳过」是真话，但说这话的人没权决定要不要继续 —— 现在这个判断被显式交回调用方。
+
+**判据三：翻不动就让落地链停手。** 单卡路径与批路径两条调用链都改成拿到 `"unflippable"` 就 `git reset` + `return 2`，并**点名是哪张卡**。批路径的 `flip_batch_member_statuses` 返回 `(flipped_any, unflippable)`，非空即停手 —— 「队列与台账不一致」不许以退出码 0 收场。
+
+**判据四：写入也不许再造混行尾。** `flip_card_status` 写回时用 `b"".join(lines)` 而不是 `sep.join(lines)`：带行尾的行拼回去，行尾原样保留，不会因为「嗅出来的那种」而给别的行多插一个行尾。
+
+★ 取证修正：卡规格原写「`pool/stage_card.py:90` 是第六处病灶」——**这是错的**。复核后那三处是 `assert lf == 0`（纯 CRLF 前置断言，混行尾会直接停手，不会静默出错），且它根本不写 `workbacklog.toml`。本卡没有改 `stage_card.py`，交付清单与判据 4 都已按实测改写。
+
+**反向验证五处全部会咬。** 撤 `_split_blocks` ⇒ 4 红；撤三态 ⇒ 2 红；撤调用方那条 `if _verdict == "unflippable"` ⇒ `wb_land` 一路走到 ⑥ 提交、**exit 0**；撤 `b"".join(lines)` 改回 `sep.join` ⇒ 多插行尾，红；撤全仓扫描钉子本身（造一处假写法）⇒ 红。新钉子 `tests/test_mixed_endings.py` 9 passed，`tests/test_wb_land.py` + `tests/test_pool_lib.py` 回归全绿，`ruff check` = All checks passed。
 ## 2026-10-27 · 文档治理第二批：文档门成立 + 复盘索引机器化 + 技能去陈旧（F6+F7+G5，T-AG513）
 - F6 · 文档门成立：`check_docs` 三条判据修好（行号列表归一、`../` 按 `normpath(join(dirname, '../' + token))` 判、未入库的 .md 文件记 skip），docs 门接进 audit 档（门表 20→21），`PINNED_FLOOR` 地板钉子补上（实测：把基线数字抬到 199 门照样绿 ⇒ 原 ratchet 只有读数没有地板）。
 - F6 · 索引重建：`docs/INDEX.md` 改由 `scripts/gen_doc_index.py` 机器生成；`.gitignore` 补上 `gates/review/` —— `tools/pool/landing.py` 的注释一直宣称它已忽略，实测这条规则**此前不存在**，于是「这台机器跑过几次落地」会让死指针读数漂 2 条（四格实验：新克隆 154/基线 152 红，加规则后落回 152）。

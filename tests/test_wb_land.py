@@ -2154,7 +2154,9 @@ def test_flip_card_status_require_task_match_flag(
     _write_backlog(repo, cid="301", task="T-G333", status="pending")
 
     flipped = _landing.flip_card_status(repo, "301", "", require_task_match=False)
-    assert flipped is True
+    # 卡 E61（T-AG519）：返回值改成三态（"flipped" / "not-needed" / "unflippable"），
+    # 「不用翻」与「该翻却翻不动」不许再共用一个布尔值。
+    assert flipped == "flipped"
     _git(repo, "add", "--", "docs/workbacklog.toml")
     _git(repo, "commit", "-q", "-m", "flip 301")
     assert _backlog_card_status(repo, "301") == "done"
@@ -2163,7 +2165,7 @@ def test_flip_card_status_require_task_match_flag(
     _git(repo, "add", "--", "docs/workbacklog.toml")
     _git(repo, "commit", "-q", "-m", "add 302")
     flipped2 = _landing.flip_card_status(repo, "302", "T-G999")  # 默认：task 不匹配 ⇒ 拒
-    assert flipped2 is False
+    assert flipped2 == "not-needed"
     assert _backlog_card_status(repo, "302") == "pending"
     assert "登记型" in capsys.readouterr().out
 

@@ -335,7 +335,7 @@ def lock_readout() -> list[str]:
 
 # ---------------------------------------------------------------- 卡 204（T-G311）：落地即翻 status
 def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str, *,
-                     require_task_match: bool = True) -> bool:
+                     require_task_match: bool = True) -> str:
     r"""把队列里那张卡的 `status` 翻成 `done`（当且仅当这是它自己的落地）。
 
     判据（安全边界）：队列 `docs/workbacklog.toml` 里 `card_id` 那张卡的
@@ -356,17 +356,21 @@ def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str, *,
     · 找不到卡 / 找不到 `status` 行 / 那行已经是 `done` / `task` 不匹配
       ⇒ 打印一句并**跳过**（不许崩、不许猜、不许新建卡）。
 
-    返回 `True` ⇒ 翻了（调用方应把 `docs/workbacklog.toml` 加进 `allow`）。
-    返回 `False` ⇒ 没翻。
+    返回**三态**（卡 E61 · T-AG519：翻不动不许沉默）：
+    · `"flipped"`    真翻了（调用方应把 `docs/workbacklog.toml` 加进 `allow`）；
+    · `"not-needed"` 按判据本就不该翻（已是 done / 登记型提交 / 卡不存在）；
+    · `"unflippable"` 该翻却翻不动（读不到 status 行）。
+      ★ 为什么不能一个 `False`：原写法把「本来就不该翻」与
+      「该翻却没翻成」混成一个值，调用方无法区分
+      —— E60 那次就是这样静默跳过的。
     """
     backlog_rel = "docs/workbacklog.toml"
     backlog_path = wt / backlog_rel
     if not backlog_path.is_file():
         print(f"  [队列] 找不到 {backlog_rel} ⇒ 跳过翻 status")
-        return False
+        return "not-needed"
     raw = backlog_path.read_bytes()
-    sep = b"\r\n" if b"\r\n" in raw else b"\n"
-    lines = raw.split(sep)
+    lines = _split_blocks(raw)
     # ★ 卡 E1（T-AG443）：逐块解析抽成 `_scan_blocks` —— `--preflight` 的
     #   「队列卡块有 status 行」用的是**同一套**口径（不许复制第二份，卡 E1 判据 5）。
     for _start, _end, fields in _scan_blocks(lines):
@@ -379,32 +383,32 @@ def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str, *,
         if require_task_match and task_val != task:
             print(f"  [队列] 卡 {cid_val}：--task={task} ≠ 卡.task={task_val}"
                   f"（登记型提交）⇒ 不翻 status")
-            return False
+            return "not-needed"
         status_idx = fields["status_idx"]
         status_val = fields["status"]
         if status_idx is None or status_val is None:
-            print(f"  [队列] 卡 {cid_val}：找不到 status 行 ⇒ 跳过")
-            return False
+            print(f"  [队列] 卡 {cid_val}：找不到 status 行 ⇒ **翻不动**")
+            return "unflippable"
         if status_val == "done":
             print(f"  [队列] 卡 {cid_val}：已是 done ⇒ 跳过")
-            return False
+            return "not-needed"
         old_line = lines[status_idx].decode("utf-8", "replace")
         new_line = re.sub(r'(status\s*=\s*)"[^"]*"', r'\1"done"', old_line)
         lines[status_idx] = new_line.encode("utf-8")
-        backlog_path.write_bytes(sep.join(lines))
+        backlog_path.write_bytes(b"".join(lines))
         print(f"  [队列] 卡 {cid_val}：{status_val} → done"
               f"（这一笔是它的落地）")
-        return True
+        return "flipped"
     if card_id is not None:
         print(f"  [队列] 找不到卡 {card_id} ⇒ 跳过翻 status")
     else:
         print(f"  [队列] 找不到 task={task} 的卡 ⇒ 跳过翻 status")
-    return False
+    return "not-needed"
 
 
 # -------------------------------------------------- 卡 228（T-G344）：批模式按栅栏成员翻
 def flip_batch_member_statuses(wt: pathlib.Path, batch_id: str,
-                               staged: list[str]) -> bool:
+                               staged: list[str]) -> tuple[bool, list[str]]:
     r"""★ 卡 228：`--batch` 落地即翻**成员卡**的 status —— 按批清单逐个成员判定。
 
     ★ 来路（缺陷）：老链里批模式走 `flip_card_status(wt, None, a.task)`，而批模式的
@@ -418,7 +422,11 @@ def flip_batch_member_statuses(wt: pathlib.Path, batch_id: str,
     · 清单读不到 ⇒ 打印一句并跳过（不崩、不猜——批状态只活在主树，
       假仓/无清单环境优雅跳过）。
 
-    返回 `True` ⇒ 至少翻了一张（调用方应把 `docs/workbacklog.toml` 加进 allow）。
+    返回 `(flipped_any, unflippable)`：
+    · `flipped_any`  至少翻了一张（调用方应把 `docs/workbacklog.toml` 加进 allow）；
+    · `unflippable`  该翻却翻不动的成员卡号。
+      卡 E61（T-AG519）：非空就是「队列与台账不一致」，
+      调用方必须 `return 2` 停手（不许 exit 0 收场）。
     """
     from pool.task import load_manifest  # 延迟 import：单卡路径不背这个依赖
     try:
@@ -426,8 +434,9 @@ def flip_batch_member_statuses(wt: pathlib.Path, batch_id: str,
     except Exception as exc:
         print(f"  [队列] 批 {batch_id}：读不到批清单 ⇒ 跳过翻成员 status"
               f"（{type(exc).__name__}: {exc}）")
-        return False
+        return False, []
     flipped_any = False
+    unflippable: list[str] = []
     for m in man.get("member") or []:
         mid = str(m.get("id", ""))
         if m.get("read_only"):
@@ -438,9 +447,12 @@ def flip_batch_member_statuses(wt: pathlib.Path, batch_id: str,
         if not hits:
             print(f"  [队列] 成员卡 {mid}：产物不在这一笔的暂存里 ⇒ 不翻 status")
             continue
-        if flip_card_status(wt, mid, "", require_task_match=False):
+        verdict = flip_card_status(wt, mid, "", require_task_match=False)
+        if verdict == "flipped":
             flipped_any = True
-    return flipped_any
+        elif verdict == "unflippable":
+            unflippable.append(mid)
+    return flipped_any, unflippable
 
 
 # ---------------------------------------------------------------- 卡 184（T-G284）：增量门禁
@@ -750,6 +762,28 @@ _BACKLOG_KV = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
 _BACKLOG_FILES = re.compile(r"files\s*=\s*\[(.*?)\]", re.S)
 _BACKLOG_KEYS = ("id", "task", "spec", "status")
 
+def _split_blocks(raw: bytes) -> list[bytes]:
+    r"""把队列按**任何行尾**切成行：一处读取口径（卡 E61 · T-AG519）。
+
+    ★ 旧写法是「先嗅行尾，再拿它 split」：
+    ```python
+    sep = b"\r\n" if b"\r\n" in raw else b"\n"   # 见到 CRLF 就只按 CRLF 切
+    lines = raw.split(sep)
+    ```
+    队列里只要有一块用裸 LF（手写的卡片段就会），
+    整块会被当成**一行**，`_scan_blocks` 于是看不见它 ——
+    **但不抛错**。真发作过：
+    `卡 E60` 落地时翻 status 被静默跳过，
+    队列（pending）与台账（done）不一致。
+
+    改用 `bytes.splitlines(keepends=True)`：它只认 `\r\n` / `\n` / `\r`
+    （与 TOML 的行尾定义一致 —— 不像 `str.splitlines` 还会在 `\v` `\f` `\x1c` 上切），
+    不需要先知道这份文件用哪种行尾，也就**不存在第二份判断逻辑**。
+    逐行**带行尾**返回（`b"".join(lines)` 与原字节逐字节相同，无损）；
+    调用方 `.strip()` 后比 `[[cards]]`，写回去时只改一行，其余字节原样拼回。
+    """
+    return raw.splitlines(keepends=True)
+
 
 def _scan_blocks(lines: list[bytes]) -> list[tuple[int, int, dict[str, object]]]:
     r"""把队列按 `[[cards]]` 切成块，返回 `[(起行, 止行, 字段)]`（**只读**）。
@@ -793,8 +827,7 @@ def backlog_blocks(wt: pathlib.Path) -> list[dict[str, object]] | None:
     if not path.is_file():
         return None
     raw = path.read_bytes()
-    sep = b"\r\n" if b"\r\n" in raw else b"\n"
-    return [f for _s, _e, f in _scan_blocks(raw.split(sep))]
+    return [f for _s, _e, f in _scan_blocks(_split_blocks(raw))]
 
 
 def parse_text_doc(text: pathlib.Path) -> tuple[dict[str, str], str]:
@@ -1442,8 +1475,7 @@ def _card_files_from_backlog(wt: pathlib.Path, card_id: str | None, task: str) -
     if not backlog_path.is_file():
         return []
     raw = backlog_path.read_bytes()
-    sep = b"\r\n" if b"\r\n" in raw else b"\n"
-    lines = raw.split(sep)
+    lines = _split_blocks(raw)
     kv = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
     n = len(lines)
     i = 0
@@ -1721,8 +1753,7 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
         return True
     import re
     raw = backlog_path.read_bytes()
-    sep = b"\r\n" if b"\r\n" in raw else b"\n"
-    lines = raw.split(sep)
+    lines = _split_blocks(raw)
     kv = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
     blocks: list[tuple[str, str]] = []   # backlog 里的 (卡号, 声明的树)
     n = len(lines)
@@ -2348,12 +2379,23 @@ def main(argv: list[str] | None = None) -> int:
     #     「产物 ∩ 暂存」，命中才翻；翻了账重暂存一次（workbacklog 进这一笔）。
     if a.batch:
         staged, extra = staged_and_extra(wt, allow)
-        if flip_batch_member_statuses(wt, a.batch, staged):
+        _flipped, _unflippable = flip_batch_member_statuses(wt, a.batch, staged)
+        if _unflippable:
+            print("★ 队列与台账不一致 ⇒ 停手：这些成员卡该翻 status 却翻不动 —— "
+                  + ", ".join(_unflippable))
+            git("reset", cwd=wt, check=False)
+            return 2
+        if _flipped:
             if "docs/workbacklog.toml" not in allow:
                 allow.append("docs/workbacklog.toml")
             staged, extra = staged_and_extra(wt, allow)  # 翻了账 ⇒ 重暂存、重列清单
     else:
-        if flip_card_status(wt, a.card, a.task) and "docs/workbacklog.toml" not in allow:
+        _verdict = flip_card_status(wt, a.card, a.task)
+        if _verdict == "unflippable":
+            print(f"★ 队列与台账不一致 ⇒ 停手：卡 {a.card} 该翻 status 却翻不动")
+            git("reset", cwd=wt, check=False)
+            return 2
+        if _verdict == "flipped" and "docs/workbacklog.toml" not in allow:
             allow.append("docs/workbacklog.toml")
         staged, extra = staged_and_extra(wt, allow)
     print("  staged =", staged)

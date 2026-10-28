@@ -7,12 +7,14 @@
 id = "T-AG519"
 title = "判不出来的时候不许说没事：混行尾让翻 status 静默跳过"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 owner = "controller"
 evidence = [
   "file:复盘/卡/卡E61-判不出来的时候不许说没事.md",
   "file:gates/diag/land-E60.log",
-  "text:tools/pool/landing.py::sep = b\"\r\n\" if b\"\r\n\" in raw else b\"\n\"",
+  "file:tests/test_mixed_endings.py",
+  "file:tests/test_wb_land.py",
+  "text:tools/pool/landing.py::raw.splitlines(keepends=True)",
 ]
 gaps = """
 - 混行尾本身不修「数据」，只修读法：`docs/workbacklog.toml` 的现有内容一字不动。

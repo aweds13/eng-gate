@@ -4172,11 +4172,11 @@ tree = ".wt/E61"
 spec = "复盘/卡/卡E61-判不出来的时候不许说没事.md"
 files = [
   "tools/pool/landing.py",
-  "tools/pool/stage_card.py",
   "tests/test_mixed_endings.py",
+  "tests/test_wb_land.py",
   "复盘/卡/卡E61-判不出来的时候不许说没事.md",
 ]
-status = "pending"
+status = "done"
 risk = "mid"
 depends = []
 
