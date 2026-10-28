@@ -4309,3 +4309,21 @@ files = [
 status = "pending"
 risk = "low"
 depends = ["E65"]
+
+[[cards]]
+id = "E66"
+task = "T-AG526"
+title = "没跑完也把上一趟的绿搬回来了：云门禁断线后回传的产物不是这一趟的"
+tree = ".wt/E66"
+spec = "复盘/卡/卡E66-没跑完也把上一趟的绿搬回来了.md"
+files = [
+  "tools/gate_pool.py",
+  "scripts/cloud/run_gate.sh",
+  "tests/test_cloud_product_freshness.py",
+  "复盘/卡/卡E66-没跑完也把上一趟的绿搬回来了.md",
+  "docs/subsystems/ci/云门禁机.md",
+  "docs/subsystems/ci/云门禁-可复现性清单.md",
+]
+status = "pending"
+risk = "mid"
+depends = ["E65"]

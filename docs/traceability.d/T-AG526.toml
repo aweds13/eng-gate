@@ -1,0 +1,14 @@
+[entries."T-AG526"]
+id = "T-AG526"
+title = "没跑完也把上一趟的绿搬回来了：云门禁断线后回传的产物不是这一趟的"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E66-没跑完也把上一趟的绿搬回来了.md",
+  "file:scripts/cloud/run_gate.sh",
+]
+gaps = [
+  """- 立卡时未实现：`scripts/cloud/run_gate.sh` 的 5/5 仍无条件回传 `gates/last.json`。
+- 本卡只改「产物自证是不是这一趟写的」；播种源本身该不该放在 `gates/diag/seed-<卡>/` 不在此卡讨论。"""
+]
