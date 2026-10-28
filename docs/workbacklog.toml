@@ -4209,6 +4209,7 @@ files = [
   "tools/pool/landing.py",
   "tools/wb_land.py",
   "scripts/cloud/run_gate.sh",
+  "tools/wb_nightly.py",
   "gates/gate-selfproof.toml",
   "tests/test_gate_selfproof.py",
   "tests/test_no_vacuous_pass.py",
