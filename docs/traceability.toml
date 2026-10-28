@@ -9443,3 +9443,19 @@ gaps = """
 - `ui_dom_probe` 的 DOM 桩不是真浏览器、别的机器没 Edge 时 `render`/`ui_flow` 退 3 = NOT RUN —— 这两条盲区仍成立（NOT RUN 不是 PASS），已写在 `docs/subsystems/ci/门禁自证-product.md` §3.3。
 - 反向验证两次踩「变异代码语法错 ⇒ node 退 1 ⇒ 看起来咬住了」，靠基线读数揪出。这类「只记录非零退出码」的空真验证法，仓里别处有多少本卡没有普查。
 """
+[entries."T-AG521"]
+id = "T-AG521"
+title = "一道门都没跑也算通过：空真、not_run 非空、跨机复用冒充本机真跑"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E63-一道门都没跑也算通过.md",
+  "file:gates/diag/_probe_vacuous.txt",
+  "file:gates/diag/_probe_zero_door.txt",
+  "file:gates/diag/cloud-gate-E62b.log",
+]
+gaps = """
+- 立卡时只做到「取证」：三条读数已落盘，判据本体一行未改。
+- 云机昨晚之前没有 node（有 Edge），`render`/`ui_flow`/`ui_dom_probe` 在云上要么 NOT RUN、要么靠跨机复用继承本机结论；2026-10-28 已给云机装 node v22.14.0，但「装上之后 render 在云机上到底过不过」尚未实测。
+"""

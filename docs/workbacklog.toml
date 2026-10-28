@@ -4197,3 +4197,23 @@ files = [
 status = "done"
 risk = "low"
 depends = []
+[[cards]]
+id = "E63"
+task = "T-AG521"
+title = "一道门都没跑也算通过：gates_ok([])==True、not_run 非空仍 ok=True、跨机复用冒充本机真跑"
+tree = ".wt/E63"
+spec = "复盘/卡/卡E63-一道门都没跑也算通过.md"
+files = [
+  "scripts/run_gates.py",
+  "tools/gate_pool.py",
+  "tools/pool/landing.py",
+  "tools/wb_land.py",
+  "scripts/cloud/run_gate.sh",
+  "gates/gate-selfproof.toml",
+  "tests/test_gate_selfproof.py",
+  "tests/test_no_vacuous_pass.py",
+  "复盘/卡/卡E63-一道门都没跑也算通过.md",
+]
+status = "pending"
+risk = "mid"
+depends = []
