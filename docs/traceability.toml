@@ -9240,3 +9240,71 @@ evidence = [
   "file:gates/diag/_text_TAG513.md",
 ]
 gaps = "- 攒批粒度比单卡粗：这批是 F6/F7/G5 三张卡合成一笔提交，要回滚就是回滚一批；成员卡的「自己落地了没有」由落地链按「产物 ∩ 暂存清单」判定，不在人手里（规格 复盘/卡/卡F6-文档门成立与索引重建.md）。- 文档门第一版用 `--mode report`（有债不红、基线被顶破才红），债的真值仍在 152 死指针 / 434 漂移上；`复盘/` 769 篇零 frontmatter ⇒ 判据 3 在这片上只能靠正文句式，同一事实两处口径（规格 复盘/卡/卡F6-文档门成立与索引重建.md）。- `复盘/INDEX.md` 正文宣称的 `--write` / `--extract` 两个旗标在六支生成器里**不存在**（只有 `--preview` / `--sample` / `--only` / `--show` / `--id` / `--all` / `--full` / `--top` / `--grep`）—— 入库的是生成器本体，索引正文与它的口径差这一处仍留着（规格 复盘/卡/卡F7-复盘索引生成器入库.md）。- 「别仓路径」这一档判据只按扩展名划界不够：`OWN_EXTS` 含 `.js` 与 `.md`，于是真·别仓的 js/md 引用仍被算成本仓死指针（实测 3 条，全在 `复盘/` 证据层），要开卡收（规格 复盘/卡/卡G5-技能去陈旧与退出码诚实.md）。"
+
+[entries."T-AG514"]
+id = "T-AG514"
+title = "卡 F8 —— 文档的读数与意图导航（三份总览的过期计数、P2 的 presets 断言证伪、云门禁机 IP/变配、按意图路由页）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡F8-文档读数与意图导航.md",
+  "file:docs/文档系统导航.md",
+  "file:docs/文档架构.md",
+  "file:docs/归置地图.md",
+  "file:复盘/架构索引-分层图.md",
+  "file:docs/subsystems/ci/云门禁机.md",
+  "file:docs/subsystems/ci/README.md",
+  "file:docs/subsystems/ci/测试流程.md",
+  "file:AGENTS.md",
+]
+gaps = """规格已立、改动已在工作区做成，待攒批落地那一笔翻 done；
+改动实测：三份总览的计数按当场读数校正（`复盘/` 773 篇、`卡/` 283 篇、`tests/` 225 个 .py / 3443 用例、工作树 28 棵）；`docs/文档架构.md` 的 P2「presets 是项目书」证伪（实测 `docs/presets/softeng.patch.yml` 是 DSH 预设配置 / persona 前缀）；`docs/subsystems/ci/云门禁机.md` 的 IP 换成实测的 `203.0.113.10`，并把「换机」更正为「同一 instance-id 变配」（`ecs.e-c1m2.xlarge` → `ecs.u1-c1m4.xlarge`）；`docs/subsystems/ci/README.md` 与 `docs/subsystems/ci/测试流程.md` 的门数 19/21 → 22；新增 `docs/文档系统导航.md` 并按意图分五类路由，`AGENTS.md` 加一行指过去。
+如实留档的欠账：`复盘/架构索引-分层图.md` 的其它结构性描述（分层图本身）仍是手绘，没有机器判据咬它 —— 它只被这一轮按读数校正过（规格 复盘/卡/卡F8-文档读数与意图导航.md）。"""
+
+[entries."T-AG515"]
+id = "T-AG515"
+title = "卡 G6 —— 判据自己也得有牙齿（check_docs 判据顺序、OWN_EXTS 两方向钉子、22 道门的反向用例台账、技能对账接门）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡G6-判据自证与技能对账接门.md",
+  "file:scripts/check_docs.py",
+  "file:tests/test_check_docs.py",
+  "file:gates/gate-selfproof.toml",
+  "file:tests/test_gate_selfproof.py",
+  "file:gates/defs/contract.py",
+  "file:tools/check_skills_claims.py",
+  "file:tests/test_check_skills_claims.py",
+  "file:scripts/test_check_layers.py",
+  "file:tools/sync_worker_skills.py",
+]
+gaps = """规格已立、改动已在工作区做成，待攒批落地那一笔翻 done；
+改动实测：`check_dead_refs()` 的判据顺序改成「存在性优先于类型猜测」（skip 1274 → 1115，实测 134 条真实存在的引用不再被白跳过）；`OWN_EXTS` 用 `git ls-files` 钉两个方向（跟踪到的扩展名必须在内；无跟踪样本的成员必须写理由且理由表与样本不相交）；新增 `gates/gate-selfproof.toml` + `tests/test_gate_selfproof.py`（22 道门逐门一条反向用例，`reverse_case` 走真 `pytest --collect-only` 判 nodeid 存不存在）；`tools/check_skills_claims.py` 加 `--mode report|block`，`skills_claims` 门接进 audit 档（门表 21 → 22）。
+如实留档的欠账：`skills_claims` 门第一版挂 `--mode report`（那 73 条 `<卡号>` / `...` 是占位符与通配名，压不到 0 条，`block` 会把每趟门禁染红）；`gates/gate-selfproof.toml` 里有门的 `reverse_case = "none"` 靠 `why_no_case` 免责（要真浏览器/真网络的 product 门），宽度靠最小字数钉住而不是靠人自觉（规格 复盘/卡/卡G6-判据自证与技能对账接门.md）。"""
+
+[entries."T-AG516"]
+id = "T-AG516"
+title = "卡 E59 —— 让 CI 真的能在另一台机器上复现（subprocess 编码/防窗、run_gate.sh 去默认云机、last.json 的 host、私有状态进 gitignore）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E59-CI跨宿主可复现.md",
+  "file:tests/test_subprocess_encoding.py",
+  "file:tests/test_ci_portability.py",
+  "file:docs/subsystems/ci/云门禁-可复现性清单.md",
+  "file:scripts/cloud/run_gate.sh",
+  "file:scripts/run_gates.py",
+  "file:tests/test_no_window.py",
+  "file:tests/conftest.py",
+  "file:tests/test_host_fingerprint_moat.py",
+  "file:.gitignore",
+  "file:tools/pool/landing.py",
+  "file:tools/wb_dispatch.py",
+  "file:scripts/audit_progress.py",
+]
+gaps = """规格已立、改动已在工作区做成，待攒批落地那一笔翻 done；
+改动实测：AST 扫出并修掉 23 处 `subprocess.run` 缺 `encoding=`、23 处给了 `encoding=` 但缺 `errors=`（`tests/test_subprocess_encoding.py` 634 行判据，过期豁免会红）；`scripts/cloud/run_gate.sh` 去掉失效的默认云机 `203.0.113.12`（缺 `CLOUD_HOST` ⇒ exit 9）与开发机绝对路径；`scripts/run_gates.py` 写 `host: socket.gethostname()`（不进 `payload_env_fields()`）并补 4 处防窗旗；`.gitignore` 补 `.wt/`、`gates/review/`、`tools/settings.toml`(+`.tmp`) 三条私有状态规则（`.wt/` 只写在 `.git/info/exclude` 正是云机 20 条假死指针的成因）。
+如实留档的欠账：`tests/test_no_window.py` 用行内容指纹锁调用点，任何改动都会让它红 —— 这一轮就红了两趟（补旗 5 处、删 3 条过期豁免）；`host` 只写进 `last.json` 而不进复用台账的键集，所以「这趟真在哪台机器跑的」只有 `last.json` 一处凭据（规格 复盘/卡/卡E59-CI跨宿主可复现.md）。"""

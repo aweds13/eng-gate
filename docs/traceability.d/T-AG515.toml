@@ -1,0 +1,21 @@
+[entries."T-AG515"]
+id = "T-AG515"
+title = "卡 G6 —— 判据自己也得有牙齿（check_docs 判据顺序、OWN_EXTS 两方向钉子、22 道门的反向用例台账、技能对账接门）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡G6-判据自证与技能对账接门.md",
+  "file:scripts/check_docs.py",
+  "file:tests/test_check_docs.py",
+  "file:gates/gate-selfproof.toml",
+  "file:tests/test_gate_selfproof.py",
+  "file:gates/defs/contract.py",
+  "file:tools/check_skills_claims.py",
+  "file:tests/test_check_skills_claims.py",
+  "file:scripts/test_check_layers.py",
+  "file:tools/sync_worker_skills.py",
+]
+gaps = """规格已立、改动已在工作区做成，待攒批落地那一笔翻 done；
+改动实测：`check_dead_refs()` 的判据顺序改成「存在性优先于类型猜测」（skip 1274 → 1115，实测 134 条真实存在的引用不再被白跳过）；`OWN_EXTS` 用 `git ls-files` 钉两个方向（跟踪到的扩展名必须在内；无跟踪样本的成员必须写理由且理由表与样本不相交）；新增 `gates/gate-selfproof.toml` + `tests/test_gate_selfproof.py`（22 道门逐门一条反向用例，`reverse_case` 走真 `pytest --collect-only` 判 nodeid 存不存在）；`tools/check_skills_claims.py` 加 `--mode report|block`，`skills_claims` 门接进 audit 档（门表 21 → 22）。
+如实留档的欠账：`skills_claims` 门第一版挂 `--mode report`（那 73 条 `<卡号>` / `...` 是占位符与通配名，压不到 0 条，`block` 会把每趟门禁染红）；`gates/gate-selfproof.toml` 里有门的 `reverse_case = "none"` 靠 `why_no_case` 免责（要真浏览器/真网络的 product 门），宽度靠最小字数钉住而不是靠人自觉（规格 复盘/卡/卡G6-判据自证与技能对账接门.md）。"""

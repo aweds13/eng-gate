@@ -1,0 +1,24 @@
+[entries."T-AG516"]
+id = "T-AG516"
+title = "卡 E59 —— 让 CI 真的能在另一台机器上复现（subprocess 编码/防窗、run_gate.sh 去默认云机、last.json 的 host、私有状态进 gitignore）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E59-CI跨宿主可复现.md",
+  "file:tests/test_subprocess_encoding.py",
+  "file:tests/test_ci_portability.py",
+  "file:docs/subsystems/ci/云门禁-可复现性清单.md",
+  "file:scripts/cloud/run_gate.sh",
+  "file:scripts/run_gates.py",
+  "file:tests/test_no_window.py",
+  "file:tests/conftest.py",
+  "file:tests/test_host_fingerprint_moat.py",
+  "file:.gitignore",
+  "file:tools/pool/landing.py",
+  "file:tools/wb_dispatch.py",
+  "file:scripts/audit_progress.py",
+]
+gaps = """规格已立、改动已在工作区做成，待攒批落地那一笔翻 done；
+改动实测：AST 扫出并修掉 23 处 `subprocess.run` 缺 `encoding=`、23 处给了 `encoding=` 但缺 `errors=`（`tests/test_subprocess_encoding.py` 634 行判据，过期豁免会红）；`scripts/cloud/run_gate.sh` 去掉失效的默认云机 `203.0.113.12`（缺 `CLOUD_HOST` ⇒ exit 9）与开发机绝对路径；`scripts/run_gates.py` 写 `host: socket.gethostname()`（不进 `payload_env_fields()`）并补 4 处防窗旗；`.gitignore` 补 `.wt/`、`gates/review/`、`tools/settings.toml`(+`.tmp`) 三条私有状态规则（`.wt/` 只写在 `.git/info/exclude` 正是云机 20 条假死指针的成因）。
+如实留档的欠账：`tests/test_no_window.py` 用行内容指纹锁调用点，任何改动都会让它红 —— 这一轮就红了两趟（补旗 5 处、删 3 条过期豁免）；`host` 只写进 `last.json` 而不进复用台账的键集，所以「这趟真在哪台机器跑的」只有 `last.json` 一处凭据（规格 复盘/卡/卡E59-CI跨宿主可复现.md）。"""

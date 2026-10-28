@@ -1,0 +1,20 @@
+[entries."T-AG514"]
+id = "T-AG514"
+title = "卡 F8 —— 文档的读数与意图导航（三份总览的过期计数、P2 的 presets 断言证伪、云门禁机 IP/变配、按意图路由页）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡F8-文档读数与意图导航.md",
+  "file:docs/文档系统导航.md",
+  "file:docs/文档架构.md",
+  "file:docs/归置地图.md",
+  "file:复盘/架构索引-分层图.md",
+  "file:docs/subsystems/ci/云门禁机.md",
+  "file:docs/subsystems/ci/README.md",
+  "file:docs/subsystems/ci/测试流程.md",
+  "file:AGENTS.md",
+]
+gaps = """规格已立、改动已在工作区做成，待攒批落地那一笔翻 done；
+改动实测：三份总览的计数按当场读数校正（`复盘/` 773 篇、`卡/` 283 篇、`tests/` 225 个 .py / 3443 用例、工作树 28 棵）；`docs/文档架构.md` 的 P2「presets 是项目书」证伪（实测 `docs/presets/softeng.patch.yml` 是 DSH 预设配置 / persona 前缀）；`docs/subsystems/ci/云门禁机.md` 的 IP 换成实测的 `203.0.113.10`，并把「换机」更正为「同一 instance-id 变配」（`ecs.e-c1m2.xlarge` → `ecs.u1-c1m4.xlarge`）；`docs/subsystems/ci/README.md` 与 `docs/subsystems/ci/测试流程.md` 的门数 19/21 → 22；新增 `docs/文档系统导航.md` 并按意图分五类路由，`AGENTS.md` 加一行指过去。
+如实留档的欠账：`复盘/架构索引-分层图.md` 的其它结构性描述（分层图本身）仍是手绘，没有机器判据咬它 —— 它只被这一轮按读数校正过（规格 复盘/卡/卡F8-文档读数与意图导航.md）。"""

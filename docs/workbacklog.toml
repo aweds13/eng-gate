@@ -4110,3 +4110,36 @@ files = ["skills/README.md", "skills/pipe-card/references/dispatch.md", "skills/
 risk = "mid"
 depends = []
 status = "done"
+
+[[cards]]
+id = "F8"
+task = "T-AG514"
+title = "文档的读数与意图导航：三份总览的过期计数（769 篇/2034 用例/26 棵树）、文档架构 P2 的 presets 断言是错的、云门禁机 IP 已失效且「换机」实为「变配」、缺一张按意图路由的页"
+tree = ".wt/F8"
+spec = "复盘/卡/卡F8-文档读数与意图导航.md"
+files = ["AGENTS.md", "docs/INDEX.md", "docs/changelog.d/T-AG400.md", "docs/subsystems/ci/README.md", "docs/subsystems/ci/云门禁机.md", "docs/subsystems/ci/测试流程.md", "docs/归置地图.md", "docs/文档架构.md", "docs/文档系统导航.md", "复盘/INDEX.md", "复盘/卡/卡F8-文档读数与意图导航.md", "复盘/架构索引-分层图.md"]
+risk = "low"
+depends = []
+status = "pending"
+
+[[cards]]
+id = "G6"
+task = "T-AG515"
+title = "判据自己也得有牙齿：check_docs 判据顺序错导致 134 条真实存在的引用被白跳过、OWN_EXTS 没人钉、22 道门没有反向用例、技能对账脚本报 FAIL 却退 0"
+tree = ".wt/G6"
+spec = "复盘/卡/卡G6-判据自证与技能对账接门.md"
+files = ["gates/defs/contract.py", "gates/gate-selfproof.toml", "scripts/check_docs.py", "scripts/test_check_layers.py", "tests/test_card_doc_budget.py", "tests/test_check_docs.py", "tests/test_check_skills_claims.py", "tests/test_ci_docs.py", "tests/test_gate_lock.py", "tests/test_gate_selfproof.py", "tests/test_gate_split.py", "tools/check_skills_claims.py", "tools/sync_worker_skills.py", "复盘/卡/卡G6-判据自证与技能对账接门.md"]
+risk = "mid"
+depends = []
+status = "pending"
+
+[[cards]]
+id = "E59"
+task = "T-AG516"
+title = "让 CI 真的能在另一台机器上复现：23 处 subprocess 缺 encoding、23 处缺 errors、防窗指纹漂移、run_gate.sh 写死失效默认云机、last.json 无 host、本机私有状态只在 info/exclude"
+tree = ".wt/E59"
+spec = "复盘/卡/卡E59-CI跨宿主可复现.md"
+files = [".gitignore", "docs/subsystems/ci/云门禁-可复现性清单.md", "scripts/audit_progress.py", "scripts/cloud/pool-config/projects.toml.tmpl", "scripts/cloud/run_gate.sh", "scripts/run_gates.py", "tests/conftest.py", "tests/test_audit_tightening.py", "tests/test_ci_portability.py", "tests/test_dark_teeth.py", "tests/test_gate_env_parity.py", "tests/test_host_fingerprint_moat.py", "tests/test_no_window.py", "tests/test_pc_entry_line.py", "tests/test_pin_check.py", "tests/test_pipe_root.py", "tests/test_pipeline_view.py", "tests/test_pool_registry.py", "tests/test_run_gates_proxy.py", "tests/test_subprocess_encoding.py", "tests/test_tf_cardgen.py", "tests/test_tf_commit.py", "tests/test_tf_group.py", "tests/test_timeflow_inbox.py", "tests/test_trae_watch.py", "tests/test_wb_daily.py", "tests/test_wb_land.py", "tests/test_wb_plan.py", "tests/test_wb_queue_audit.py", "tests/test_wb_retention.py", "tests/test_workbench_bridge.py", "tools/pool/landing.py", "tools/wb_dispatch.py", "复盘/卡/卡E59-CI跨宿主可复现.md"]
+risk = "mid"
+depends = []
+status = "pending"
