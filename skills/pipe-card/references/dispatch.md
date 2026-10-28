@@ -43,8 +43,13 @@ python -X utf8 tools/wb_plan.py check          # 0 = 队列合法；1 = 点名�
 | 道 | 用来干什么 | 不许 |
 |---|---|---|
 | CodeBuddy（默认池） | 实现类卡：改代码 / 写判据 / 落地前的活 | 模型名要短名，写 `vendor/model` 会被拒 |
-| 复核道（Kimi K3） | 只做复核 / 对抗性审查：证伪既有结论、开工前审规格、落地后审产物 | 不许当实现工人 |
+| 复核道（`--model kimi-k3-1`） | 只做复核 / 对抗性审查：证伪既有结论、开工前审规格、落地后审产物 | 不许当实现工人 |
 | 主控 | 长跑（真机 / 全量门禁 / 落地链）、跨域决策、与用户对话 | 不许抢工人域内的活 |
+
+★ **批准集是现算的，不许凭记忆写**：真源 = `tools/pool/model-registry.toml` 里该池的条目（codebuddy 池 =
+`deepseek-v4.1-flash` 默认 / `glm-5.3-flash`）＋ 仓外开关 `infra/pool/model-switches.toml` 里打开的（只做加法）
+＋ `wb_dispatch.ONE_OFF_MODELS`（今天为空）。写错一律拒单并**原样列出允许集** —— 2026-10-28 实测那份是
+`deepseek-v4.1-flash` / `glm-5.3-flash` / `glm-5.3` / `kimi-k3-1` / `glm-5.2`；429 轮换链只走注册表那两条，不掺开关。
 
 ★ **派活/落地前先过会话闸**（卡 A324）：卡归另一个对话窗口 ⇒ 退 2 并打印持有者；
 确要接手加 `--take-over`（留痕）。看谁是持有者：`python -X utf8 tools/wb_session.py --list`。
@@ -121,5 +126,5 @@ python -X utf8 tools/wb_land.py --batch <批号> --tree .wt/batch<号> --task <�
 
 ★ **失败怎么定位**：落地按「产物 ∩ 暂存清单」逐成员认领再翻 `status` —— 没认领到谁的产物就点名谁；
 批树 `git apply` 合不上 ⇒ 整批停并点出冲突的卡与路径。
-★ **入口**：`tools/wb_batch.py`（`plan` / `make` / `land`）**已随卡 E10 落地**；
+★ **入口**：`tools/wb_batch.py`（`plan` / `make` / `land` / `bisect`；现读 `python -X utf8 tools/wb_batch.py plan` 可跑）；
 预声明 TOML 仍要手写（模板见 `gates/diag/batch/`）。

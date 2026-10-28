@@ -4269,7 +4269,7 @@ files = [
   "复盘/门禁四要素.md",
   "复盘/卡/卡G7-技能与文档口径校正.md",
 ]
-status = "pending"
+status = "done"
 risk = "low"
 depends = []
 

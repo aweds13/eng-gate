@@ -10,9 +10,11 @@
 > 2. **工具根 ≠ 数据根**（卡 A326）：门表跟 `tools/` 走，台账 / 门禁产物跟**数据根**走
 >    （`PIPE_DATA` > 当前目录像数据根 > 工具根）。默认两根同值，行为不变；
 >    同一份 `tools/` 服务别的仓时才需要设 `PIPE_DATA`。
-> 3. **提交闸按域要档，不再一律 19 道**（卡 A327）：`gates/defs/domains.py` 一张表算必需档，
+> 3. **提交闸按域要档**（卡 A327）：`gates/defs/domains.py` 一张表算必需档，
 >    `last.json` 记 `profiles_run / required_profiles`；判不出或碰判据本体（`scripts/**` `tools/**` `gates/**`）
 >    仍强制全量。缺档提交会被 `wb_review` 点名拒。
+>    ★ **门数不写死**：以 `python -X utf8 scripts/run_gates.py` 落盘的 `gates/last.json` 的 `gates[]` 条数为准
+>    （**2026-10-28 现读 22 道**）。门表一变，任何写死了的老数字都在说错话。
 > 4. **派活即看守**（卡 E7）：`tools/wb_dispatch.py --execute` 起完工**自动**挂一份 `tools/wb_watch.py`
 >    （默认 `--watch one`；`--watch shared` = 全局一份、引用计数归 0 写 `batch-done`）。
 >    完工信号落 `gates/diag/wb-<卡>.done` + `gates/diag/notifications.jsonl`。
@@ -38,7 +40,7 @@
 
 ★ **旧口径还作数吗**：`skills/softeng-manage/references/retired-settings.md` 一页退役表（`active` / `已改判` / `已改名` / `半冲突`，每行指回改成它的卡与一条能重跑的命令）。
 
-★ **云门禁机**（多会话共享一台）的正式口径在 `docs/subsystems/ci/云门禁机.md`（卡 E18 · `T-AG470` 已落地）。
+★ **云门禁机**（多会话共享一台）的正式口径在 `docs/subsystems/ci/云门禁机.md` —— 本页不写推断，别自己发明排队规矩；那台机器现在能不能上，读那份里的自检命令，别读某张卡的进度。
 
 ## 定位
 
@@ -47,7 +49,9 @@
 - 本仓主路径的命令是 `python -X utf8 tools/wb_*.py` 与 `python -X utf8 scripts/run_gates.py`；
   框架 CLI（`python -X utf8 framework/cli/main.py <命令>`）只在 `init` 这类自带模板的动作上直接用。
   两套命令的对照见 `skills/softeng-manage/references/mapping.md`。
-- **契约**：`SKILL.md` 里引用的每个命令名，必须能在**同版** `pipe --help` 里找到（钉子①机器判）。
+- **契约（两条，别拿一条的绿当另一条也绿）**：`SKILL.md` 里引用的每个命令名，必须能在**同版** `pipe --help` 里找到
+  （钉子①，只覆盖框架 CLI 那一条接法）；本仓主路径那种「`tools/` 下的脚本 + 某个 `--flag`」的写法，由
+  `python -X utf8 tools/check_skills_claims.py --check`（门名 `skills_claims`）对 `tools/` 源码逐个核。
 
 ## §1 ★ 分工判据：这东西该放哪
 
@@ -160,8 +164,9 @@ npx -y skills-ref@latest validate ./skills/<名>  # ③ 官方校验器
   `trace seal` 都要求根级 `pipeline.toml`，本仓没有 ⇒ 实测直接报「配置不存在」（退 `5`，前置条件缺失）。
   所以各技能的正文一律走 `tools/wb_*.py`；框架 CLI 只保留在 `pipe-init`（它自带模板）。
 - 本层**不绑某个 harness**：harness 特有值只在 `GLUE-harness.md`。
-- ★ **两道钉子仍没有消费端**：`skills/nails/*` 不在 `scripts/run_gates.py` 的门表里 ⇒
-  **加严了判据，但没接线**。别把「绿」读成「已进闸」。
+- ★ **两道钉子仍没有消费端**（2026-10-28 现读 `gates/defs/`）：`skills/nails/*` 不在门表里 ⇒
+  **加严了判据，但没接线**。门表里管技能的只有 `skills_claims`（= `tools/check_skills_claims.py --check --mode report`，
+  核的是「技能里引用的 `tools/` 脚本与它的 `--flag` ↔ `tools/` 源码」，**不是** nails 那两条）—— 两把尺子，别互相顶班。
 - ★ **卡 A293 的读数（2026-10-19）**：7 份 `SKILL.md` 全部 `Valid skill`；`check_skills.py` 退 0；
   正文行数 70 / 71 / 81 / 82 / 88 / 89 / 91（逐份读数见各 `NOTES.md`）。
   卡 A304 之后是 **9 份**（新增 `pipe-new`，`pipe-takeover` 补了「接链六步」一节），当前行数以

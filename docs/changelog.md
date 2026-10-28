@@ -372,6 +372,42 @@
 改成双向对齐：任一方是另一方的前缀即算同一次提交，但两侧都短于 `MIN_SHA_LEN = 7`
 时判不成立（太短没分辨率，宁可红）。反向钉子 `tests/test_wb_verify_rev.py` 13 条，
 含「差异必须落在可比位上」这条分辨率说明。
+## 2026-10-29 · 技能与文档的口径校正：加注规矩分作用域、门数不写死（G7，T-AG523）
+
+
+
+- `skills/softeng-manage/SKILL.md` 的「口径漂移用加注治」原来是一条**无作用域的口号**，于是
+  reference 类运维文档也被加注一层的旧结论糊住。改成按文档类型分：**reference / how-to 就地改成
+  当前真值**（证据进卡规格 + changelog + 台账，不进那份文档）；**explanation / 历史复盘才加注**
+  （保留原文 + 顶部加注「已被卡 N 推翻」，带日期与台账号）。判据一句话：
+  「这份文档的读者会拿它当『现在的事实』用吗？会 ⇒ 就地改；不会（它讲的是历史）⇒ 加注。」
+- `skills/README.md` 不再写死门数：「提交闸按域要档，不再一律 19 道」改成按域要档 + 一句
+  「门数以 `gates/last.json` 的 `gates[]` 条数为准（2026-10-28 现读 22 道），门表一变，任何写死了的
+  老数字都在说错话」。同时把 `skills/nails/*`（钉技能体例）与 `skills_claims`（核技能里引用的
+  `tools/` 脚本与 `--flag`）写成**两把尺子、不互相顶班**，并如实留着「nails 仍未进闸」。
+- `skills/README.md` 的「契约」拆成两条：`pipe <命令>` 由钉子①机器判（只覆盖框架 CLI 那一条接法）；
+  本仓主路径那种「`tools/` 下的脚本 + 某个 `--flag`」由 `tools/check_skills_claims.py --check`
+  （门名 `skills_claims`）逐个核 —— 别拿一条的绿当另一条也绿。
+- 云门禁机那段不再拿某张卡的进度当口径（原文指「卡 E18 · `T-AG470` 已落地」），改成指那份文档里的
+  自检命令。
+- 四份总览的计数校正到现读值（门 19→22、`tests/` 2034→3443 用例、`复盘/` 769→773 篇、
+  工作树 26→28），并把「`pytest` 一趟 ≈5 分钟」这类**没有出处的墙钟**删掉 —— 本页自己的数字纪律
+  就是「没有出处的数字一律不写」。
+- `docs/subsystems/ci/云门禁机.md`：把「换机」改回「**同一实例变配**」的实测结论（同一个
+  `instance-id` `i-0123456789abcdef0`，`ecs.e-c1m2.xlarge` → `ecs.e-c1m2.2xlarge` →
+  `ecs.u1-c1m4.xlarge`；IP 只是随变配/重启漂的，不是机器标识），并把两处**没有日志出处**的数字
+  （旧机 `807 s`、新机 `480 s`）换成日志里的实测值（`835 s` / `420 s`，另补 `pass17` `426 s`）。
+- `docs/subsystems/ci/测试流程.md` 的夜间那一维原写「本仓**没有**专门的夜间脚本」——
+  `tools/wb_nightly.py --run` 实测存在且在独立 worktree 里跑全量；改成「有入口脚本、但脚本不装
+  系统计划任务（那一步在 OS 那边）」。
+- ★ 云门禁第二趟红在 `pytest_chain` 的 `tests/test_contract_audit.py::test_real_repo_audit_has_expected_shape`：
+  `tools/contract_audit.py:101` 的 `CX-02` 契约拿 **`skills/README.md` 里一段逐字文本**当锚点
+  （`"里引用的每个命令名，必须能在"`）。改 `skills/README.md` 的契约段时把那半句改写了 ⇒ 锚点找不到 ⇒
+  `source_missing=1`。已把该半句**原样放回**（新写法仍保留「两条契约、别拿一条的绿当另一条也绿」的意思）。
+  ⇒ 教训：`docs/**`、`skills/**` 里被契约当锚点的句子是**机器判据的一部分**，改写前先
+  `grep -n "<原句片段>" tools/contract_audit.py`；而咬住它的只有 `pytest_chain` 那道门（轻门里看不到）。
+- 本卡**不改**任何门表与钉子：`skills/nails/*` 仍未进闸、`skills_claims` 仍是 `--mode report` 档
+  （「判不出」不红，但也不是通过），这两条如实留在文档与 gaps 里。
 ## 2026-10-28 · 文档治理第三批：文档读数与意图导航、判据自证与技能对账接门、CI 跨宿主可复现（F8+G6+E59，T-AG517）
 
 三张卡一笔落地。三条改动都动同一棵树上被判据读的读数 —— F8 改的是 `docs/INDEX.md` 与门数、G6 改的是 `scripts/check_docs.py` 自己的 skip 面、E59 改的是 `.gitignore` 与 `scripts/run_gates.py`；单独落地时任意一笔都会让另外两张卡的读数暂时对不上（`docs` 门的死指针、审计的证据表），并集才稳定。

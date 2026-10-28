@@ -91,7 +91,8 @@ python -X utf8 tools/wb_dispatch.py --card <卡号> --status   # 0 = 打印这�
   等于逐张落地只是换了个写法。
 - **规矩**：**一天一个栅栏**（如 `B-<日期>`），成员逐个列进去；`--card` 与 `--batch` **恰好给一个**；
   **批要小（≤4）** —— 批树合不上时整批停，只有小批才二分得动「是哪张卡」；成员域必须两两不相交。
-- **现状**：入口 `tools/wb_batch.py`（plan / make / land）**已随卡 E10 落地**；
+- **现状**：入口 `tools/wb_batch.py`，子命令 `plan` / `make` / `land` / `bisect`
+  （现读：`python -X utf8 tools/wb_batch.py plan` 能跑，`--help` 那份 usage 列的就是这四个）；
   预声明 TOML 仍要手写（模板见 `gates/diag/batch/`）。
 - **命令与退出码**：
 
@@ -124,8 +125,9 @@ python -X utf8 tools/auto_land.py             # 有批就落（调度器挂的�
 
 ### 9) 云门禁机（多会话共享一台）
 
-- **正式口径**：`docs/subsystems/ci/云门禁机.md`（卡 E18 · `T-AG470` 已落地）。
+- **正式口径**：`docs/subsystems/ci/云门禁机.md`。
   共享机器怎么排队、什么时候开机、内存闸多少 —— 都在那份，别按想象写。
+  那台机器今天开没开、锁在谁手里：读工具（`python -X utf8 gates/diag/gate_lock.py status`），别读记忆里某张卡的进度。
 
 ## ① 开卡
 

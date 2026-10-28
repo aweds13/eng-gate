@@ -6,7 +6,9 @@ description: 判断「现在这棵树过不过门」，并读懂门禁结果（�
 # pipe-gate —— 跑门禁并读懂结果
 
 跑门用 `scripts/run_gates.py`，读结论看 `gates/last.json` 与 `gates/logs/`。
-本仓门数是**现算**的（门表只有一处真源），任何文档都不许写死数字。
+本仓门数是**现算**的（门表只有一处真源）：以 `python -X utf8 scripts/run_gates.py` 落盘的
+`gates/last.json` 的 `gates[]` 条数为准（**2026-10-28 现读 22 道**）。文档可以写**带日期**的读数，
+但**不许**把数字当常量引用 —— 门表一变，写死的老数字就在骗人。
 
 ## 什么时候用
 
@@ -29,11 +31,13 @@ description: 判断「现在这棵树过不过门」，并读懂门禁结果（�
 4. 读法细则（每行字段、未跑、复用、退出码）见 [输出读法](references/output.md)。
 5. ★ **全量门禁只有一把锁**：`gates/diag/gates.lock`（没给段）/ `gates/diag/gates-<端口段>.lock`（给了段）。
    `TF_GATE_MAX_CONCURRENT=2` 是**并发上限，不是目标**。锁在 = 有人正在跑这趟 —— **等锁不是卡死**；
-   锁文件消失 = 那趟收口了。被判「卡死」之前先 `cat gates/diag/gates-*.lock` 看里面的 `pid` 还活着吗
-   （实测：死主锁的租约默认 **10800 s**，`--stale-after` 可调；卡 E16 已并入 E28 落地）。
+   锁文件消失 = 那趟收口了。被判「卡死」之前先读账本：`python -X utf8 gates/diag/gate_lock.py status`
+   （它给每段的持有者与**租约剩余**；★ 它自己写着「别看 pid 判活」—— 租约才是判活依据，默认 **10800 s**，
+   `--stale-after` 可调）。这一段只读工具读数，不追某张卡的进度。
    人工兜底**只有一条**：`TF_GATE_PORT_BASE=<段> python -X utf8 gates/diag/gate_lock.py release --card <卡> --force`
    —— 不带段会在默认段里找锁、报「没有锁，无需释放」，真锁照样泄漏。
-6. **跨会话共享一台机**（云门禁机）的口径见 `docs/subsystems/ci/云门禁机.md`（卡 E18 · `T-AG470` 已落地）—— 本页不写推断，别自己发明排队规矩。
+6. **跨会话共享一台机**（云门禁机）的口径见 `docs/subsystems/ci/云门禁机.md` —— 本页不写推断，别自己发明排队规矩；
+   那台机器现在能不能上，读那份里的自检命令，别读某张卡的进度。
 
 ## 真命令
 
@@ -59,12 +63,12 @@ python -X utf8 scripts/run_gates.py --seal            # 只更新 last.json 的 
 | 现象 | 真因 | 处置 |
 |---|---|---|
 | `--fast` 全绿就改了提交 | `--fast` **不落盘**、只覆盖「改一行就能犯」那几类 | 提交前跑 `--quick` 或全量；`--fast` 不是提交闸 |
-| 有门 `not_run` 却当通过 | 运行状态 ≠ 判决 | 补依赖再跑；在回报里如实写「未跑」 |
+| 有门 `not_run` 却当通过；或门是绿的但 summary 写着「没判完 / 判不出 N」 | 运行状态 ≠ 判决；「判不出」也不是判过 | 补依赖再跑；`docs` / `skills_claims` 两门跑 `--mode report` ⇒ **判不出也退 0**，要看它们 summary 里的 `判不出 N` / `[DEBT]`（`--mode block` 才退 `3`）；回报里如实写「未跑」「判不出」，别折成绿 |
 | 门全绿但结论是上一棵树的 | 在别的 worktree 里读到了自己的 `gates/last.json` | 用 `rev` / 树路径对齐；`wb_verify` 会报 `rev` 与父提交关系 |
 | 自己改过的门显示复用 | 增量执行读了缓存 | `--no-reuse` 真跑；别拿复用当验证 |
-| 整趟门禁卡住几十分钟 | 某道门卡死，门禁本身**没有逐门超时** | 自己套 `timeout 1800`；按 PID 人工收，别杀用户的浏览器 |
+| 整趟门禁卡住几十分钟 | 某道门卡死（**门禁有逐门硬超时**，不是没有） | 先看 `gates/last.json` 里那道门是不是 `exit_code = 124` + `timeout=True`（超时口径在 `scripts/run_gates.py`：`DEFAULT_DOOR_TIMEOUT = 1800.0` 秒，`TF_GATE_DOOR_TIMEOUT` 可覆盖、`0` = 关掉；到点掐整棵进程树并判红）；清洗残留按 PID 收，别杀用户的浏览器 |
 | 两趟门禁同时跑 | 重活并发 | 串行；两个池也别同时满载 |
-| 一直等锁 / 报「卡死」 | 死主没清锁（租约 10800 s，E16 已并入 E28 落地） | 先 `cat gates/diag/gates-*.lock` 看 `pid`；确实死了才按上面第 5 条的**一条**兜底命令强放，别反复重试 |
+| 一直等锁 / 报「卡死」 | 死主没清锁（租约默认 10800 s） | 先 `python -X utf8 gates/diag/gate_lock.py status` 看是哪一段、持有者是谁、租约还剩多久（**别看 pid 判活**）；确实过了租约才按上面第 5 条的**一条**兜底命令强放，别反复重试 |
 | `check_layers` 报「引用断裂」 | `docs/` 里反引号包了个**不存在 / 计划中**的 `.md`（通配符也算） | 单跑 `python -X utf8 scripts/check_layers.py`（0 / 1）点名到"哪篇引了哪个"；改成「路径（计划建）」并去掉反引号，或把文件真建出来 |
 | 换机器后自己的门莫名「复用」| 解释器版本不同会改门输入哈希的展开语义（卡 E44：3.12 的 `Path.glob("X/**")` 只给目录 ⇒ 哈希恒为 `sha256("")`）| 看 `gates/last.json` 的 `python` 字段与 `rev`；`python < 3.11` 会被开跑前拦下。别把「哈希一样」当「文件没变」 |
 

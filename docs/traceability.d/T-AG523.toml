@@ -2,13 +2,41 @@
 id = "T-AG523"
 title = "技能与文档的口径校正：加注规矩分作用域、门数不写死"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 owner = "controller"
 evidence = [
-  "file:复盘/卡/卡G7-技能与文档口径校正.md",
-  "file:skills/softeng-manage/SKILL.md",
   "file:skills/README.md",
+  "file:skills/pipe-card/SKILL.md",
+  "file:skills/pipe-card/references/dispatch.md",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:skills/pipe-gate/references/output.md",
+  "file:skills/softeng-manage/SKILL.md",
+  "file:skills/softeng-manage/references/commands.md",
+  "file:skills/softeng-manage/references/product-lines.md",
+  "file:docs/subsystems/ci/云门禁机.md",
+  "file:docs/subsystems/ci/测试流程.md",
+  "file:docs/归置地图.md",
+  "file:docs/文档架构.md",
+  "file:docs/文档系统导航.md",
+  "file:复盘/架构索引-分层图.md",
+  "file:复盘/门禁四要素.md",
+  "text:skills/softeng-manage/SKILL.md::会 ⇒ 就地改；不会（它讲的是历史）⇒ 加注",
+  "text:skills/README.md::2026-10-28 现读 22 道",
 ]
 gaps = [
-  """- 本卡只校正**口径文字**，不改任何门表或钉子：`skills/nails/*` 仍未进闸，这条如实留着。""",
+  """- 本卡只校正**口径文字**，不改任何门表或钉子：`skills/nails/*` 仍未进闸，这条如实留着。
+  判据 1 的范围按「当前真值 vs 历史记录」分：历史记录（changelog / decisions / 退役表 / `复盘/`）
+  里的「19 道 / 20 道」是史实，改掉等于篡改证据 ⇒ 不适用本条。
+- `docs/subsystems/ci/测试流程.md` 的 stash 版本被**丢弃**：它基于 77dc71cb，之后 E63 已把同一段
+  改得更新（云机补装 node v22.14.0、`render` 记 `EXCLUDED`、`not_run`/`EXCLUDED`/红三态统一由
+  `tools/gate_verdict.py:judge()` 判）。本卡只在该文件里修一处**仍是假话**的地方：夜间那一维原写
+  「本仓没有专门的夜间脚本」，而 `tools/wb_nightly.py --run` 实测存在且能跑。
+- 契约锚点是**逐字文本**：`tools/contract_audit.py` 里 `CX-02` 盯 `skills/README.md` 一句原话，
+  本卡改写时撞掉了它（`source_missing=1`，只有 `pytest_chain` 抓得到）。已原样放回，但**没有**给
+  「改动被契约当锚点的句子」加任何机器守卫 —— 那是另一张卡的事（现有 `tests/test_contract_audit.py`
+  只在跑链档时才咬）。
+- `docs/subsystems/ci/README.md` 第 2 节标题仍写「2026-10-24 实测，全量 19 道」：带日期的历史读数，
+  不在本卡域内，未改。
+- 「19 道 → 22 道」这三次增门（`pytest_chain` / `docs` / `skills_claims`）的归因来自 changelog.d 与
+  门表实读，没有独立实验。""",
 ]
