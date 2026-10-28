@@ -9565,3 +9565,19 @@ gaps = [
   """- 立卡时未实现：`co_tenants` 采集与 `SUSPECT` 三态都还不存在。
 - 本卡只治「读法」，不治「慢」：分片、加核、`--no-cov` 的税是另外的事（速度调查里已写明不可混为一谈）。"""
 ]
+
+[entries."T-AG525"]
+id = "T-AG525"
+title = "产物索引与真目录脱节：验收命令没人跑，行尾还被写死"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡F9-产物索引与真目录脱节.md",
+  "file:tests/test_gen_doc_index.py",
+  "file:scripts/gen_doc_index.py",
+]
+gaps = [
+  """- 立卡时未实现：`docs/INDEX.md` 仍自报 297 篇（盘上 305 篇），`--check` 仍退 1。
+- 判据 3 明确不加第 23 道门：新鲜度靠 pytest 门守，这是取舍不是遗漏。"""
+]

@@ -4293,3 +4293,19 @@ files = [
 status = "pending"
 risk = "mid"
 depends = []
+[[cards]]
+id = "F9"
+task = "T-AG525"
+title = "产物索引与真目录脱节：验收命令没人跑，行尾还被写死"
+tree = ".wt/F9"
+spec = "复盘/卡/卡F9-产物索引与真目录脱节.md"
+files = [
+  "scripts/gen_doc_index.py",
+  "docs/INDEX.md",
+  "tests/test_gen_doc_index_fresh.py",
+  "docs/subsystems/ci/测试流程.md",
+  "复盘/卡/卡F9-产物索引与真目录脱节.md",
+]
+status = "pending"
+risk = "low"
+depends = ["E65"]
