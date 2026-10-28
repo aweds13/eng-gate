@@ -4229,3 +4229,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E64"
+task = "T-AG522"
+title = "同一个提交，两把尺子量出两个 sha（短 sha 前缀比较）"
+tree = ".wt/E64"
+spec = "复盘/卡/卡E64-同一个提交两把尺子量出两个sha.md"
+files = [
+  "tools/wb_verify.py",
+  "tests/test_wb_verify_rev.py",
+  "docs/subsystems/ci/测试流程.md",
+  "复盘/卡/卡E64-同一个提交两把尺子量出两个sha.md",
+]
+status = "pending"
+risk = "low"
+depends = []

@@ -9483,3 +9483,14 @@ gaps = """
 - 云机装上 node 之后 `render` 在云上到底过不过**仍未实测**：本轮只做到「不是采集机就记 EXCLUDED 并写明理由」，没有在云机上真跑一次完整门禁验证这条路。
 - `docs/subsystems/ci/测试流程.md` 只改了「云机没有 node」那两处，全文其余读数（各门墙钟、门数）未逐个复核。
 """
+
+[entries."T-AG522"]
+id = "T-AG522"
+title = "同一个提交，两把尺子量出两个 sha（短 sha 前缀比较）"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E64-同一个提交两把尺子量出两个sha.md",
+]
+gaps = ["短 sha 前缀比较修完只覆盖 rev 一条判据；并发指纹（co_tenants）另开 E65。"]
