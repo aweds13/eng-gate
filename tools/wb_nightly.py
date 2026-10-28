@@ -125,6 +125,25 @@ def latest_record(root: Path | None = None) -> dict[str, Any] | None:
     return best
 
 
+def _same_tree(a: str, b: str) -> bool:
+    """两个路径是不是同一棵树（Windows 上大小写不敏感、正反斜杠都算同一棵树）。"""
+
+    def norm(raw: object) -> str:
+        return str(raw or "").replace(chr(92), "/").rstrip("/").lower()
+
+    na, nb = norm(a), norm(b)
+    return bool(na) and na == nb
+
+
+def _head_and_tree(base: Path) -> tuple[str, str]:
+    """当前 HEAD 短提交 + 本树根（读不到就给空串，调用方 fail closed）。"""
+    rc, out = _git(["rev-parse", "--short", "HEAD"], base)
+    head = out.strip() if rc == 0 else ""
+    rc, out = _git(["rev-parse", "--show-toplevel"], base)
+    top = out.strip() if rc == 0 else ""
+    return head, top
+
+
 def recent_full_ok(
     root: Path | None = None, *, now: dt.datetime | None = None, hours: float = MAX_AGE_HOURS
 ) -> tuple[bool, str]:
@@ -146,6 +165,37 @@ def recent_full_ok(
         )
     if age > hours:
         return False, f"最近一次夜间全量绿是 {age:.1f} 小时前（上限 {hours:g}h）"
+    # ★ 卡 E63（T-AG521）判据 4：记录必须说清「哪棵树的哪个提交」——
+    #   老闸二只看 at / ok，于是三天前旧提交上跑绿的记录、甚至从云机 scp 回来的记录，
+    #   都能给今天这棵新树开绿灯。判不出来源就**当没有记录**（fail closed），不许猜。
+    base = Path(root) if root is not None else ROOT
+    head, top = _head_and_tree(base)
+    rev = str(record.get("rev") or "").strip()
+    if not rev:
+        return False, (
+            f"最近一份夜间记录没有 rev（判不出是哪一笔的读数 ⇒ 当没有记录；"
+            f"at={record.get('at')}）"
+        )
+    if not head:
+        return False, f"读不到当前 HEAD（{base}）⇒ 没法核对夜间记录的 rev={rev}（fail closed）"
+    if rev != head:
+        return False, (
+            f"最近一次夜间全量的 rev 对不上：记录 rev={rev}，当前 HEAD={head}"
+            "（旧提交上跑绿的记录不许给新树开绿灯）"
+        )
+    tree = str(record.get("tree") or "").strip()
+    if not tree:
+        return False, (
+            f"最近一份夜间记录没有 tree（判不出是哪棵树跑的 ⇒ 当没有记录；"
+            f"at={record.get('at')}）"
+        )
+    if not top:
+        return False, f"读不到本树根（{base}）⇒ 没法核对夜间记录的 tree={tree}（fail closed）"
+    if not _same_tree(tree, top):
+        return False, (
+            f"最近一次夜间全量是**别的树**跑的（记录 tree={tree}，本树 {top}）"
+            "—— 跨树结论不算本树全量"
+        )
     return True, f"最近一次夜间全量绿于 {record.get('at')}（{age:.1f} 小时前）"
 
 
@@ -184,6 +234,7 @@ def run_once(
         "at": at.isoformat(timespec="seconds"),
         "record": name,
         "rev": "",
+        "tree": "",
         "ok": False,
         "exit_code": None,
         "seconds": 0.0,
@@ -198,6 +249,8 @@ def run_once(
         append_notification(record, base)
         return record
     record["rev"] = _git(["rev-parse", "--short", "HEAD"], base)[1].strip()
+    # ★ 卡 E63：记录里必须写明**是哪棵树**跑的（闸二 `recent_full_ok()` 要核这一条）。
+    record["tree"] = _git(["rev-parse", "--show-toplevel"], base)[1].strip() or str(base)
 
     if wt.exists():
         _git(["worktree", "remove", "--force", str(wt)], base)

@@ -121,9 +121,24 @@ def test_render_only_zero_match_never_writes_the_update_log() -> None:
 # 这条要真起服务 + 真起浏览器（约 10 秒）。它与判据 1 配对：**「红」和「绿」两侧都要有
 # 真读数**。为什么绿侧不能省：撤掉判据 1 时，判据 2 靠 `--only today` 的旧行为也能过 ——
 # 一个只测「红的会红」的钉子，在有人把整段判据删掉时**不会响**。
+def _golden_host_reason() -> str | None:
+    """金样本绑在哪台机器上？不是本机 ⇒ 返回理由。
+
+    ★ 与 `scripts/run_gates.py` 的 `golden_host_reason()` **同一份判据**（卡 E63）：金样本
+      `gates/render/*.txt` 是采集机的显示栈渲出来的，字形度量随 Edge 版本 / 字体 / DPI 变。
+      在别的机器上比逐字节**没有意义** —— 那不是回归，是「这台机器做不到这件事」。
+    """
+    import run_gates as rg
+
+    return rg.golden_host_reason("render")
+
+
 @pytest.mark.parametrize("view", ["today"])
 def test_render_only_with_a_real_view_captures_at_least_one(view: str) -> None:
     """★ 判据 2：`--only <真视图>` ⇒ 采到 ≥1 份（3 档宽度 ⇒ 3 份）且退 0。"""
+    why = _golden_host_reason()
+    if why:
+        pytest.skip(f"金样本主机专用（卡 E63）：{why}")
     proc = run_render("--only", view)
     out = proc.stdout + proc.stderr
     if "找不到真浏览器" in out or "CDP 端点连不上" in out:

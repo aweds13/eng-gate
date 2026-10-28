@@ -437,6 +437,27 @@ lines = raw.split(sep)
 **反向验证四条全部会咬**（驱动 `gates/diag/_rev_E62b.py`，读数 `gates/diag/rev-E62e.log`）：①撤零匹配检查 ⇒ 判据二接住但钉子红，**两道都撤** ⇒ 退出码变回 0、那句自相矛盾的 OK 行回来、钉子红；②把检查挪进 `--update` 分支 ⇒ 静态位置钉子红；③`ui_flow` 改成退 0 ⇒ 对称性钉子红；④白名单塞假条目 ⇒ 自证钉子红。四条撤完三个文件**逐字节还原**（实测 True/True/True）。新钉子 `tests/test_only_selector_parity.py` 7 passed，相邻三套 `test_render_check.py` + `test_wb_land.py` 一起跑 85 passed，`ruff check tools/ tests/` = All checks passed。
 
 ★ 这轮反向验证我自己踩了两次坑，两次都是**变异代码有语法错** ⇒ `node` 抛 `SyntaxError` 退 1 ⇒ 看起来「咬住了」，其实咬的是语法错。教训与卡 E61 同型：**只记录「撤掉后退出码非零」的验证会骗人**，必须同时记录「撤掉前的基线读数」，才能拿到「撤掉后它真的翻成 0 了」这个对照。
+## 2026-10-28 · 一道门都没跑也算通过：空集算全过、`not_run` 非空照算绿、跨机复用冒充本机真跑（E63，T-AG521）
+
+`all([])` 为真是数学性质，不是判据。门禁以前把「一道门都没跑」当成「全过」：`--only <写错的参数>`、全部阻断门都被跳过、整趟只跑了不阻断的门 —— 三种形状都退 0 并打印「质量门 + 文档同步通过 ✅」。红是安全的，**假的绿不是**。
+
+**判据一：零门就是红。** `scripts/run_gates.py:gates_ok()` 在空表上返回 `False`：`results == []`（零门）或一条阻断门都没有（全是 NOT RUN / 信息性门）⇒ 这趟什么都没证明 ⇒ 红。绿对照同一函数里钉住（`[{exit_code:0}]` 必须为真），否则写成 `return False` 也能「过」这条判据。
+
+**判据二～六：判据本体只留一份。** 新增 `tools/gate_verdict.py:judge()`，三把尺子（门禁自己、`tools/wb_verify.py`、`tools/wb_review.py`）与云机侧（`tools/gate_pool.py`）全部改成读它 —— 这是卡 E60「两把尺子必须说同一句话」的续篇，卡 E61「判不出来就不许出声」的落地。六条判据：①零门 ②零阻断门 ③`not_run` 非空 ④门行自己写着未验证（`status=NOT RUN` 或 `exit_code==3`）+ 复用条目的来源 ⑤产物必须说得出 `host`，`expect_host`/`not_host` 给了就必须对得上 ⑥`EXCLUDED` 是豁免不是「跑过了」：只许声明过的门、必须带得出去的人话理由、且不许既豁免又阻断。
+
+**判据六是这轮新增的真需求。** 云机上 `render` 的金样本与本机显示栈绑定（同一份金样本在两台机器上 39/45 份不一致，差异全是字形度量），所以云机不能跑 `render`；给它豁免的最省事写法是「记 exit 0」——那正好是拿豁免洗绿。改成 `EXCLUDED` 行（`exit 0`、`blocking=False`、理由非空），并新增 `gates/render/CAPTURED_ON.json` 记下金样本的采集主机：本机 == 采集机 ⇒ 真跑；不是 ⇒ `EXCLUDED` 并写清理由；记录读不到 ⇒ **按未验证处理**，不许因为读不出来就静默跳过。
+
+**连带的夹具修正。** 判据 ②′「阻断门那一行没写 `exit_code` ⇒ 未验证」上线后，`tests/test_gate_pool.py` 里 `{"name": "pytest"}` 那种老形状当场变红；那两处夹具代表的是「真跑过且绿」的产物（真产物一定带 `exit_code`）⇒ 补 `exit_code: 0`，并把该文件补进本卡域（20 条）。
+
+**反向验证四处全部咬住**（`gates/diag/_rev_E63.py`，读数 `gates/diag/rev-E63b.log`，撤完逐字节还原）：①去掉「至少一道阻断门」⇒ 6 条红；②`not_run_row_problems` 恒不报 ⇒ 2 条红；③`host_problems` 恒不报 ⇒ **第一次跑没咬住**（见下）；④`golden_host_reason` 恒返 `None` ⇒ 4 条红。
+
+★ **反向验证撕出一个真洞**：M3（把来源判据改成恒不报）第一轮**一条钉子都不红** —— 因为所有夹具都老老实实写了 `host`，没人钉「没写会怎样」。补了 `test_a_product_without_a_host_is_red` 与 `test_a_product_from_another_host_is_red` 之后 M3 才咬。**判据没有反向钉子就等于没判据**，这与卡 E61 的教训同型。
+
+★ 同轮还修掉两个「跟着判据一起该改」的东西：夹具不写 `host` 而现在没 `host` 就是判红（`tests/test_ci_docs.py`、`tests/test_wb_verify_profiles.py` 各补一处）；两条读**树上当前** `gates/last.json` 的钉子（`test_false_success_pins.py`、`test_two_rulers.py`）在产物自己红着的时候没有判别力，改成显式 `pytest.skip` 并写清原因（注入那半照跑），另把「软行」（`exit 3 / blocking=False`）那一条从「读真读数」改成合成读数 —— 判据改严之后，**一份绿的产物里不可能再有非阻断非零门**，原来那句在绿树下只会退化成空真。
+
+`.gitignore` 补 `gates/review/`：`tools/pool/landing.py` 的注释从第一天起就说这个目录是「运行时产物、已 gitignore」，实际从来没写过规则 —— 93 个复核产物成了永久未跟踪文件，而复盘证据引用 `gates/review/<task>.json` 又被文档门判成死指针。实测：一个干净克隆上没有这条规则时死指针 154 > 基线 152（门红），加上之后落回 152。
+
+本卡改 22 个文件（16 个域内 + 台账/changelog/交接三份汇总是自动合并的）。`ruff check .` 全绿；`tests/test_gates_ok_vacuous.py` 24 passed。
 ## 2026-10-27 · 文档治理第二批：文档门成立 + 复盘索引机器化 + 技能去陈旧（F6+F7+G5，T-AG513）
 - F6 · 文档门成立：`check_docs` 三条判据修好（行号列表归一、`../` 按 `normpath(join(dirname, '../' + token))` 判、未入库的 .md 文件记 skip），docs 门接进 audit 档（门表 20→21），`PINNED_FLOOR` 地板钉子补上（实测：把基线数字抬到 199 门照样绿 ⇒ 原 ratchet 只有读数没有地板）。
 - F6 · 索引重建：`docs/INDEX.md` 改由 `scripts/gen_doc_index.py` 机器生成；`.gitignore` 补上 `gates/review/` —— `tools/pool/landing.py` 的注释一直宣称它已忽略，实测这条规则**此前不存在**，于是「这台机器跑过几次落地」会让死指针读数漂 2 条（四格实验：新克隆 154/基线 152 红，加规则后落回 152）。

@@ -66,13 +66,43 @@ def _tree(tmp_path: Path, *relpaths: str) -> Path:
     return tmp_path
 
 
+def _git_tree(root: Path) -> tuple[str, str]:
+    """把 tmp 目录变成一个**真 git 树**，返回 (`rev-parse --short HEAD`, `--show-toplevel`)。
+
+    ★ 卡 E63（T-AG521）：夜间记录现在必须能自证「这份读数是**哪棵树的哪一笔**跑的」——
+      `recent_full_ok()` 缺 rev / rev 对不上 HEAD / tree 不是本树 ⇒ 一律当「没有记录」
+      （fail closed）。所以夹具必须是真树：从前那种 `rev="deadbee"` 的合成记录会让闸二
+      永久不放行，而且它本身就是 E63 要修的那个病（跨 rev / 跨树结论冒充本树全量）。
+    """
+
+    def run(*a: str) -> str:
+        done = subprocess.run(  # noqa: S603 —— 参数写死，无 shell
+            ["git", *a],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        return done.stdout.strip()
+
+    run("init", "-q")
+    run("config", "user.email", "nightly@example.invalid")
+    run("config", "user.name", "nightly")
+    run("config", "commit.gpgsign", "false")
+    run("commit", "-q", "--allow-empty", "-m", "tip")
+    return run("rev-parse", "--short", "HEAD"), run("rev-parse", "--show-toplevel")
+
+
 def _nightly_record(root: Path, *, at: dt.datetime, ok: bool) -> None:
     nightly = _nightly()
+    rev, tree = _git_tree(root)
     nightly.write_record(
         {
             "at": at.isoformat(timespec="seconds"),
             "record": f"nightly-{at.strftime('%Y%m%d-%H%M%S')}.json",
-            "rev": "deadbee",
+            "rev": rev,
+            "tree": tree,
             "ok": ok,
             "exit_code": 0 if ok else 1,
             "seconds": 1.0,
@@ -299,10 +329,12 @@ def test_nightly_record_and_notification(tmp_path: Path) -> None:
     """`wb_nightly` 写记录 + 追加一行通知；闸二从记录里读得出「24h 内绿」。"""
     nightly = _nightly()
     now = dt.datetime(2026, 10, 25, 12, 0, 0)
+    rev, tree = _git_tree(tmp_path)
     record = {
         "at": now.isoformat(timespec="seconds"),
         "record": nightly.record_name(now),
-        "rev": "abc1234",
+        "rev": rev,
+        "tree": tree,
         "ok": True,
         "exit_code": 0,
         "seconds": 12.5,
@@ -315,7 +347,7 @@ def test_nightly_record_and_notification(tmp_path: Path) -> None:
     notify = nightly.append_notification(record, tmp_path)
     lines = [ln for ln in notify.read_text(encoding="utf-8").splitlines() if ln.strip()]
     assert len(lines) == 1 and json.loads(lines[0])["kind"] == "nightly"
-    assert nightly.latest_record(tmp_path)["rev"] == "abc1234"
+    assert nightly.latest_record(tmp_path)["rev"] == rev
     ok, why = nightly.recent_full_ok(tmp_path, now=now)
     assert ok and "0.0 小时前" in why
 

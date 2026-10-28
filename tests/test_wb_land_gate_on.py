@@ -176,8 +176,9 @@ def test_cloud_unreachable_exits_2_and_touches_nothing(tmp_path: Path) -> None:
 def test_cloud_fake_green_lands_with_gates_on_trailer(tmp_path: Path) -> None:
     """回传五条全过 ⇒ 落地成功；trailer 有 `Gates-on: cloud@fake-cloud`，`last.json` 有 host。"""
     repo = _cloud_repo(tmp_path)
+    gates = [{"name": "pytest", "exit_code": 0}, {"name": "ruff", "exit_code": 0}]
     payload = {"rev": _head(repo)[:12], "ok": True, "host": "fake-cloud",
-               "gates": [{"name": "pytest"}, {"name": "ruff"}], "not_run": []}
+               "gates": gates, "not_run": []}
     fake = _fake(tmp_path, payload)
     done = _wand_mod._wand(repo, "--no-review", tree=".pen", env=_env(fake))
     out = _wand_mod._out(done)
@@ -196,8 +197,9 @@ def test_cloud_fake_green_lands_with_gates_on_trailer(tmp_path: Path) -> None:
 
 # ---------------------------------------------------------------- ⑤ 五条回传校验
 def _ok_payload(**over: object) -> dict:
+    gates = [{"name": "pytest", "exit_code": 0}, {"name": "ruff", "exit_code": 0}]
     data = {"rev": "abc1234", "ok": True, "host": "fake-cloud",
-            "gates": [{"name": "pytest"}, {"name": "ruff"}], "not_run": []}
+            "gates": gates, "not_run": []}
     data.update(over)
     return data
 

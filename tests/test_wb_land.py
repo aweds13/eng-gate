@@ -94,6 +94,9 @@ _NEW_TOOLS = (
     # ★ 卡 E5（T-AG447）：`landing.py` 的 ④′ 合并队列要 `from pool import queue`
     #   ⇒ 沙箱少这一份，落地一进 ④′ 就 ImportError。
     "tools/pool/queue.py",
+    # ★ 卡 E63（T-AG521）：`landing.py` 起把门禁产物再判一遍（`import gate_verdict`）
+    #   ⇒ 沙箱少这一份，`--preflight` 一 import 就 ModuleNotFoundError（实测）。
+    "tools/gate_verdict.py",
 )
 
 _TEXT = """=== gaps ===
@@ -274,6 +277,8 @@ def _main():
         ran_doors = list(aff.ran)
     gates = [{"name": d, "exit_code": 0} for d in ran_doors]
     payload = {"ok": True, "rev": "", "gates": gates,
+               # ★ 卡 E63：真产物一定带 `host`；桩也得带（落地链 check_host=True）。
+               "host": __import__("socket").gethostname(),
                "tree_scope": "worktree-minus-gates"}
     if aff is not None:
         payload["affected"] = aff.to_payload()
@@ -366,6 +371,7 @@ def _main():
     payload = {{"ok": True, "rev": rev, "docs_sync_ok": True, "docs_sync_missing": [],
                "gates": [{{"name": n, "exit_code": 0}}
                          for n, _ in build_jobs(False, False)],
+               "host": __import__("socket").gethostname(),
                "tree_scope": _real.TREE_SCOPE}}
     last = pathlib.Path("gates") / "last.json"
     last.parent.mkdir(exist_ok=True)
@@ -431,6 +437,7 @@ def _main():
     payload = {{"ok": True, "rev": rev, "docs_sync_ok": True, "docs_sync_missing": [],
                "gates": [{{"name": n, "exit_code": 0}}
                          for n, _ in build_jobs(False, False)],
+               "host": __import__("socket").gethostname(),
                "tree_scope": _real.TREE_SCOPE}}
     last = pathlib.Path("gates") / "last.json"
     last.parent.mkdir(exist_ok=True)

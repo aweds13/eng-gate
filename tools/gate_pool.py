@@ -40,6 +40,11 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+try:  # `tools/` 在 sys.path 上时（脚本与多数钉子）直接导入
+    import gate_verdict  # 三把尺子共用的判据（卡 E63：零门 / 未验证 / 复用来源）
+except ModuleNotFoundError:  # pragma: no cover —— 被当包导入时（`from tools import gate_pool`）
+    from tools import gate_verdict  # type: ignore[no-redef]
+
 if TYPE_CHECKING:  # 只在注解里用（本文件已开 `from __future__ import annotations`）
     from collections.abc import Callable
 
@@ -450,6 +455,12 @@ def validate_cloud_return(
                         f"last.json 只有 {len(got)} 道；少 {missing}；多 {extra}")
     if not_run:
         problems.append(f"② 有门 not_run（未验证 ≠ 通过）：{not_run}")
+
+    # ②′ 卡 E63（T-AG521）：空真 / 零阻断门 / 未验证 / 复用来源 —— 与本地尺子、落地链
+    #    调**同一份**判据（`tools/gate_verdict.py`）。这里 `check_host=False`：
+    #    ③ 比得更严（非空 + 等于这台云机），别拿两份 host 判据互相打架。
+    for one in gate_verdict.judge(data, check_host=False).problems:
+        problems.append(f"②′ {one}")
 
     # ③ host 字段
     host = str(data.get("host") or "")

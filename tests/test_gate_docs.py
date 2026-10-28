@@ -161,8 +161,21 @@ def test_any_nonzero_exit_code_is_not_a_pass() -> None:
         assert _ok(code) is False, f"exit_code={code} 被当成了通过"
     # 门禁层不许把 3 当「跳过」：blocking 缺省为真 ⇒ 参与判定
     assert rg.gates_ok([{"name": "docs", "exit_code": 3}]) is False
-    # 真正被标成 blocking=False 的（例如没起浏览器）才不参与判定
-    assert rg.gates_ok([{"name": "docs", "exit_code": 3, "blocking": False}]) is True
+    # 真正被标成 blocking=False 的（例如没起浏览器）不参与判定 —— 但它也**不证明什么**：
+    # ★ 卡 E63（T-AG521）：一条阻断门都没有 ⇒ 这趟什么都没验证，不算通过。判据本体在
+    #   `tools/gate_verdict.py`；`all()` 在空表上返 True 是数学性质，不是判据。
+    assert rg.gates_ok([{"name": "docs", "exit_code": 3, "blocking": False}]) is False
+    assert rg.gates_ok([]) is False, "零门被判成绿了（卡 E63 判据 1）"
+    # 有阻断门且它绿了 ⇒ NOT RUN 那条不影响结论（老含义仍在）
+    assert (
+        rg.gates_ok(
+            [
+                {"name": "docs", "exit_code": 0},
+                {"name": "render", "exit_code": 3, "blocking": False},
+            ]
+        )
+        is True
+    )
 
 
 def test_skip_count_is_loud_but_does_not_red_report_mode(tmp_path: Path) -> None:
@@ -210,7 +223,10 @@ def test_only_docs_runs_only_that_door(monkeypatch: pytest.MonkeyPatch, tmp_path
     monkeypatch.setenv("TF_GATE_MIN_FREE_GB", "0")  # 内存闸与本卡无关，关掉免得看机器脸色
     monkeypatch.setattr(sys, "argv", ["run_gates.py", "--only", "docs", "--serial"])
 
-    assert rg.main() == 0
+    # ★ 卡 E63（T-AG521）：半趟（--only）**不再是 0** —— 有门没跑就是「未验证」，
+    #   产物里 `ok=False` + `verdict.state == "unverified"`，退出码 3（=「未验证」，
+    #   与 `_ok()` 的「只有 0 算绿」同口径）。这是**更严**，不是放松。
+    assert rg.main() == 3
     assert started == ["docs"], started  # 只起了这一道
 
     payload = json.loads(last.read_text(encoding="utf-8"))

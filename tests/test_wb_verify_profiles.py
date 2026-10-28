@@ -34,6 +34,9 @@ def _payload(profiles: list[str] | None, names: list[str]) -> dict:
     data: dict = {
         "ok": True,
         "rev": "abc1234",
+        # ★ 卡 E63（T-AG521）判据 ⑤：产物必须说得出是哪台机器跑的；
+        #   夹具以前没写 host，现在没有 host 就是「证明不了」⇒ 判红。
+        "host": "test-host",
         "gates": [{"name": n, "exit_code": 0} for n in names],
         "not_run": [],
         "reused": {},

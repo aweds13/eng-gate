@@ -1,0 +1,9 @@
+{
+  "host": "DEV-HOST",
+  "edge": "156.0.4314.42",
+  "python": "3.14.6",
+  "captured_at": "2026-10-28",
+  "goldens": 45,
+  "why": "gates/render/*.txt 与该机器的显示栈绑定（字体/渲染引擎/DPI）。换了机器逐字节比对没有意义，所以这道门记 EXCLUDED 而不是红、也不是 not_run。重新采集请在这台机器上跑 node tools/render_check.mjs --update --reason \"...\"",
+  "how_to_rebind": "在另一台机器上跑 `node tools/render_check.mjs --update --reason \"…\"` 重出全部黄金，然后把本文件的 host 改成那台机器（python -c \"import platform;print(platform.node())\"）。"
+}

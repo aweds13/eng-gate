@@ -68,6 +68,7 @@ import time
 #   与旧位置 `gates/diag/` 的 `parents[2]` 结果一致 ⇒ 这一行搬过来不用改（已核对）。
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
+import gate_verdict  # noqa: E402 —— 三把尺子共用的判据（卡 E63）
 
 from pool.snapshot import take_snapshot  # noqa: E402 —— 卡 192：快照挂 ref（唯一实现）
 
@@ -2336,6 +2337,45 @@ def main(argv: list[str] | None = None) -> int:
                                 print("   ", x.strip()[:150])
                 # text=True 必给 encoding：云机 cp936 解码中文会崩，本机 utf-8 看不出来。
                 # errors="replace"：宁可拿到带替换符的中文，也不要整条炸掉。
+                subprocess.run([sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
+                                "release", "--card", lock_label],
+                               cwd=str(wt), env={**os.environ, **env},
+                               capture_output=True, text=True,
+                               encoding="utf-8", errors="replace",
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),)
+                return 1
+            # ★ 卡 E63（T-AG521）判据 3/4/5：`rc == 0` 只说明**子进程退 0**，不是判据 ——
+            #   产物自己写着「哪台机器跑的 / 哪些门没跑 / 哪些是复用的」，只信 rc 就是
+            #   「一道门都没跑也算通过」。这里把产物再判一遍（判据本体 tools/gate_verdict.py）。
+            last_json = wt / "gates" / "last.json"
+            if not last_json.is_file():
+                print("★ rc=0 但没有 gates/last.json ⇒ 证明不了跑过哪几道门 ⇒ 不提交")
+                return 1
+            try:
+                payload_gates = json.loads(
+                    last_json.read_text(encoding="utf-8", errors="replace") or "{}")
+                # 空对象 = **没做任何声明**（夹具里的最小桩就是这样）：没有可判的谎言，
+                # 也拿不出「跑过哪几道门」。★ 这里不是放宽：`gates: []`（显式声明零门）
+                # 照样红 —— 判据 1 的零门红钉在 product 侧三处（gates_ok / 云机尺子 /
+                # wb_verify），落地链不重复钉它，只钉「产物与 rc 矛盾」这一半。
+                if not (isinstance(payload_gates, dict) and payload_gates):
+                    print("★★ 门禁产物判据（卡 E63）：last.json 是空对象 ⇒ 产物没做任何声明")
+                    payload_gates = None
+            except json.JSONDecodeError as exc:
+                print(f"★★ 门禁产物判据（卡 E63）：产物读不懂：{exc}")
+                return 1
+            if payload_gates is not None:
+                # 这一段的门禁是**本机**起的（cwd=wt、env 是本机的）⇒ 产物必须自称本机
+                # 产出的。★ 2026-10-28 对抗复核：原来写 `judge(check_host=False)` 再加
+                # `if where and …`，于是**产物根本没写 host** 时整段跳过、照绿 —— 同一份
+                # 产物在 `judge()` 默认口径下是红的。缺 host 一律判红（不是放宽，是收严）。
+                me = gate_verdict.local_host()
+                verdict = gate_verdict.judge(payload_gates, expect_host=me)
+                print(f"★★ 门禁产物判据（卡 E63）：{verdict.line()}")
+            if payload_gates is not None and not verdict.ok:
+                for one in verdict.problems:
+                    print(f"   - {one}")
+                print("★ 产物说的和退出码说的不是一件事 ⇒ 不提交")
                 subprocess.run([sys.executable, "-X", "utf8", "gates/diag/gate_lock.py",
                                 "release", "--card", lock_label],
                                cwd=str(wt), env={**os.environ, **env},

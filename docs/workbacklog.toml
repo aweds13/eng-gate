@@ -4205,16 +4205,27 @@ tree = ".wt/E63"
 spec = "复盘/卡/卡E63-一道门都没跑也算通过.md"
 files = [
   "scripts/run_gates.py",
+  "tools/gate_verdict.py",
   "tools/gate_pool.py",
+  "tools/wb_verify.py",
   "tools/pool/landing.py",
-  "tools/wb_land.py",
-  "scripts/cloud/run_gate.sh",
   "tools/wb_nightly.py",
-  "gates/gate-selfproof.toml",
-  "tests/test_gate_selfproof.py",
+  "gates/render/CAPTURED_ON.json",
+  "docs/subsystems/ci/测试流程.md",
+  "tests/test_ci_docs.py",
+  "tests/test_false_success_pins.py",
+  "tests/test_gates_ok_vacuous.py",
   "tests/test_no_vacuous_pass.py",
+  "tests/test_two_rulers.py",
+  "tests/test_gate_docs.py",
+  "tests/test_only_selector_parity.py",
+  "tests/test_pytest_select.py",
+  "tests/test_wb_land.py",
+  "tests/test_wb_verify_profiles.py",
+  "tests/test_gate_pool.py",
+  "tests/test_wb_land_gate_on.py",
   "复盘/卡/卡E63-一道门都没跑也算通过.md",
 ]
-status = "pending"
+status = "done"
 risk = "mid"
 depends = []

@@ -88,7 +88,7 @@ TOOL_ROOT = Path(__file__).resolve().parent.parent
 
 if str(TOOL_ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(TOOL_ROOT / "tools"))
-from failure_group import (  # noqa: E402 —— 红单归并（卡 E4）：同因只打一行    group_failures,    parse_pytest_output,    report_lines,)from pipe_root import data_root  # noqa: E402 —— 数据根解析的唯一实现（卡 A326）ROOT = data_root()
+from failure_group import (  # noqa: E402 —— 红单归并（卡 E4）：同因只打一行    group_failures,    parse_pytest_output,    report_lines,)from gate_verdict import GOLDEN_PINNED, judge  # noqa: E402 —— 三把尺子共用的判据（卡 E63）from pipe_root import data_root  # noqa: E402 —— 数据根解析的唯一实现（卡 A326）ROOT = data_root()
 # 数据根：台账、门禁产物、`src/` 住的地方。★ 没设 `PIPE_DATA` 且当前目录不像数据根
 # ⇒ 等于工具根（老行为逐字不变）。
 
@@ -641,6 +641,59 @@ NODE_CMD = {
     "ui_flow": ui_flow_cmd,
 }
 
+
+# -------------------------------------------------------- 金样本主机专用门（卡 E63 · T-AG521）
+# `gates/render/*.txt` 这 45 份金样本是**某台机器的显示栈**渲出来的：字形推进宽度随 Edge 版本 /
+# 字体 / DPI 变，换一台机器就逐字节不同（实测云机 45 份里 39 份不一致，差异全是文字度量，结构
+# 一致）。所以「render 跨机跑」本身没有意义 —— 不是「没验证」，是「在这种机器上比不了」。
+#
+# 以前它在别的机器上有两种表现，两种都在说假话：
+#   ① 没装 node ⇒ 记 `not_run`，可整趟 `ok` 仍是 True（门没跑，产物却说这一趟过了）；
+#   ② 装了 node ⇒ 红，把显示栈差异当成代码回归。
+#
+# 现在记成 `EXCLUDED`：**不跑、不说通过、把「为什么这台机器不跑」写进产物**。收紧的判据在
+# `tools/gate_verdict.py:excluded_row_problems` —— 只有 `GOLDEN_PINNED` 里声明的门才许排除，
+# 且理由不许空。表也放在那边（判据与其表必须在一起，否则三把尺子会各拿一半）。
+def golden_host_reason(name: str) -> str | None:
+    """这门是金样本主机专用的吗？返回「为什么本机不跑」的人话；不适用返回 `None`。
+
+    读不到采集记录 / 记录为空 ⇒ 也返回理由（**按未验证处理**，不许因为读不出来就静默跳过）。
+    """
+    rel = GOLDEN_PINNED.get(name)
+    if rel is None:
+        return None
+    p = ROOT / rel
+    try:
+        rec = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return (f"读不到金样本的采集主机记录（{rel}：{type(exc).__name__}）"
+                " —— 无法确认本机显示栈与金样本一致，按未验证处理")
+    want = str(rec.get("host") or "").strip()
+    if not want:
+        return f"金样本的采集主机记录为空（{rel}）—— 无法确认，按未验证处理"
+    here = platform.node()
+    if want == here:
+        return None
+    return (f"金样本采集自主机 {want}（{rel}），本机是 {here}：字形度量随 Edge 版本 / 字体 /"
+            " DPI 变，本机做不到逐字节比对；这道门只在采集机那台上跑")
+
+
+def excluded_rows(excluded: dict[str, str]) -> list[dict[str, object]]:
+    """金样本主机专用门在**本机没跑**时的那几行（`EXCLUDED`）。
+
+    ★ 为什么 `exit_code` 写 0、`blocking` 写 False：三把尺子与 `scripts/cloud/run_gate.sh`
+      的播种检查都先按**退出码**判红，排除不该伪装成红。真判据只有一处 ——
+      `tools/gate_verdict.py:excluded_row_problems`（声明的表 + 非空理由）。
+    ★ 单独抽成函数是为了能被钉子直接钉住形状（原来这几行内联在 `main()` 里，只能读源码）。
+    """
+    return [
+        {
+            "name": name, "exit_code": 0, "seconds": 0,
+            "summary": f"本机不跑（金样本主机专用）：{why}",
+            "blocking": False, "status": "EXCLUDED", "excluded_reason": why,
+        }
+        for name, why in excluded.items()
+    ]
 
 def xdist_available() -> bool:
     """装了 `pytest-xdist` 吗？没装就串行跑 —— **不谎报**，也不因为缺插件把门禁弄红。"""
@@ -1496,13 +1549,20 @@ def skip_reused(name: str, records: dict[str, dict[str, str]], no_reuse: bool) -
 
 
 def gates_ok(results: list[dict[str, object]]) -> bool:
-    """整趟是否通过：**所有阻断门**都 `exit_code == 0`。
+    """整趟是否通过：**至少一道阻断门**，且所有阻断门都 `exit_code == 0`。
 
     单独抽出来（T-G196）是为了让"一道门被超时掐 → 整趟退非 0"这条**有机器钉子**：
     `exit_code = 124` 一样落进 `!= 0` → 整趟非 0，超时**不会被别的门的通过吞掉**。
     `blocking=False` 的（NOT RUN 渲染层、信息性门）照旧不计。
+
+    ★ 卡 E63（T-AG521）：`all()` 在**空表**上返 `True` 是数学性质，不是判据 ——
+      「一道门都没跑」不许算通过。`results == []`（零门）或一条阻断门都没有
+      （全是 NOT RUN / 信息性门）⇒ 这趟**什么都没证明** ⇒ 红。
+      判据本体在 `tools/gate_verdict.py`（三把尺子共用一份），这里只补"至少一道"。
     """
     blocking = [r for r in results if r.get("blocking", True)]
+    if not blocking:
+        return False
     return all(int(str(r["exit_code"])) == 0 for r in blocking)
 
 
@@ -1963,6 +2023,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="只跑十几秒那几道（内循环；不落盘）＋ 受影响的测试选集（卡 254；"
                          "映射不到/公共模块 ⇒ 回退全量，全量仍在 ④ 跑）")
     ap.add_argument("--serial", action="store_true", help="全串行（对照并行下的偶发失败）")
+    ap.add_argument(
+        "--no-write",
+        action="store_true",
+        help="只算不写盘：不碰 gates/last.json 与 gates/reuse.json（卡 E63：钉退出码时不许"
+             "污染真产物）。结论照打，退出码语义与默认一致。",
+    )
     ap.add_argument("--no-reuse", action="store_true", help="不信复用记录，真机层全部重跑")
     ap.add_argument("--seal", action="store_true", help="提交前封存：只更新 tree 字段")
     ap.add_argument(
@@ -2141,6 +2207,14 @@ def main() -> int:
         print(f"  [only] 实跑 {len(jobs)}/{len(all_door_names)} 道："
               f"{', '.join(str(n) for n, _ in jobs)}", flush=True)
 
+    # ★ 卡 E63（T-AG521）：一道门都没选出来（`--profiles` / `--affected` / `--quick`
+    #   把门名单清空）⇒ **未验证**，退 3。原来这条路上 `results=[]` 且 `not_run=[]`，
+    #   产物是一份「零门但看起来正常」的东西 —— 正是本卡要修的病。
+    if not jobs:
+        print("[FAIL] 一道门都没选出来（--profiles / --affected / --quick 把门名单清空了）"
+              " ⇒ 未验证，不算通过", flush=True)
+        return 3
+
     cmds = dict(jobs)
 
     # ★ 卡 E51 · 段 1（E36）：台账驱动选测。映射源 = 台账 `test:` 指针（唯一真源），
@@ -2263,13 +2337,30 @@ def main() -> int:
     # 复用判定：只对"输入确实是那几样"的真机门做（--quick 里本来就没有真机层，--fast 更不碰）。
     records = load_reuse()
     reused: dict[str, str] = {}
+    reused_host: dict[str, str] = {}
     todo: list[tuple[str, list[str]]] = []
     not_run: list[str] = []
+    excluded: dict[str, str] = {}
     for name, _ in jobs:
         mark = None if args.fast else skip_reused(name, records, args.no_reuse)
         if mark is not None:
+            # ★ 卡 E63（T-AG521）判据 4：复用记录必须能追到**本机** —— 记录里没有 host，
+            #   或 host 不是本机 ⇒ 判不出来源 ⇒ 真跑（fail closed，不许拿别处的结论冒充本机）。
+            why_stale = reuse_host_problem(records.get(name) or {}, socket.gethostname())
+            if why_stale is not None:
+                print(f"[WARN] {name:<22} 复用记录不可信：{why_stale} ⇒ 真跑")
+                mark = None
+        if mark is not None:
             reused[name] = mark
-            print(f"[REUSE] {name:<22} 输入未变（{mark}）→ 复用上次通过判定")
+            reused_host[name] = str((records.get(name) or {}).get("host") or "")
+            print(f"[REUSE] {name:<22} 输入未变（{mark}）→ 复用上次通过判定"
+                  f"（host={reused_host[name]}）")
+            continue
+        # ★ 卡 E63：金样本主机专用门 —— 本机不跑，理由进产物（`excluded` 那一栏）。
+        why_excl = None if args.fast else golden_host_reason(name)
+        if why_excl:
+            print(f"[EXCL] {name:<22} 本机不跑：{why_excl}")
+            excluded[name] = why_excl
             continue
         cmd = resolve_cmd(name, cmds, args.serial, pytest_args)
         if cmd is None:
@@ -2331,6 +2422,7 @@ def main() -> int:
             "summary": f"复用上次通过判定（输入未变 {mark}）",
             "reused": True,
             "inputs_hash": mark,
+            "host": reused_host.get(name, ""),
         })
     for name in not_run:
         results.append({
@@ -2338,6 +2430,7 @@ def main() -> int:
             "summary": "环境里没有 node：未验证，不算通过",
             "blocking": False, "status": "NOT RUN",
         })
+    results.extend(excluded_rows(excluded))
     # 结果按**固定顺序**排（而不是完成顺序）：last.json 要能逐字节比较，trailer 也要稳定
     results.sort(key=lambda r: order.get(str(r["name"]), 99))
 
@@ -2374,6 +2467,9 @@ def main() -> int:
     passed = [r for r in blocking if int(str(r["exit_code"])) == 0]
 
     if args.fast:
+        if not blocking:
+            print("\n★ 卡 E63：--fast 里**没有一道门真的跑过** —— 未验证 ≠ 通过，不当绿")
+            return 1
         bad = [r for r in blocking if int(str(r["exit_code"])) != 0]
         if bad:
             print(f"\n[FAIL] --fast 里 {len(bad)} 道不通过：{[r['name'] for r in bad]}")
@@ -2423,6 +2519,8 @@ def main() -> int:
         # 没验证成的门（起不了真浏览器／没有 node／没判完）。**不是"通过"**，
         # 单列一栏 + 写进 trailer，让"这次提交哪些东西没被验证过"有据可查。
         "not_run": not_run,
+        # ★ 卡 E63：金样本主机专用门在本机**没跑**，单列一栏 + 带理由。
+        "excluded": dict(excluded),
         # 复用了上次判定的门（T-G47）：单列一栏 + 带上输入哈希。**不是"通过"的同义词** ——
         # 它是"这一层的输入一个字节都没变，所以上次那个判定仍然成立"，写出来才禁得住问。
         "reused": {k: v for k, v in reused.items()},
@@ -2433,6 +2531,7 @@ def main() -> int:
         "trailer": "; ".join(
             [f"{r['name']} {r['summary']}" for r in passed]
             + [f"{n} NOT RUN" for n in not_run]
+            + [f"{n} EXCLUDED" for n in excluded]
         ) or "（无通过项）",
     }
     # ★ 卡 E4：红单归并的明细（列表明细，供 wb_review 与面板读）。
@@ -2519,10 +2618,19 @@ def main() -> int:
                 f"【选测 {len(select_plan.tests)} 个用例文件，非全量】"
                 + str(payload["trailer"])
             )
-    GATES.parent.mkdir(parents=True, exist_ok=True)
-    GATES.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
-    )
+    # ★ 卡 E63（T-AG521）：`ok` 由**成品 payload** 复核一次 —— 零门 / 零阻断门 /
+    #   `not_run` 非空 / 复用来源不明 ⇒ 一律不算通过。判据本体在 `tools/gate_verdict.py`。
+    payload = _apply_vacuous_verdict(payload, ok)
+    ok = payload.get("ok") is True
+    if args.no_write:
+        print("\n[不落盘] --no-write：gates/last.json 与 gates/reuse.json 都没动（结论照打）")
+    else:
+        GATES.parent.mkdir(parents=True, exist_ok=True)
+        GATES.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
     # 复用记录只在**这一轮真跑且通过**时更新（复用过的门保持原记录：哈希本来就一样）
     for name in REUSABLE:
         if name in reused:
@@ -2536,17 +2644,62 @@ def main() -> int:
                 "verdict": "pass",
                 "at": datetime.now().isoformat(timespec="seconds"),
                 "what": "输入哈希一致时可复用这条判定（T-G47）",
+                "host": socket.gethostname(),
             }
-    save_reuse(records)
-    print(f"\n[落盘] gates/last.json  ok={ok}  rev={payload['rev']}")
+    if not args.no_write:
+        save_reuse(records)
+        print(f"\n[落盘] gates/last.json  ok={ok}  rev={payload['rev']}")
     used = ", ".join(f"{k}({v})" for k, v in reused.items()) or "无"
     print(f"[复用] {used}")
     print(f"[建议 trailer] Gates: {str(payload['trailer'])[:200]}")
     if not ok:
+        if str((payload.get("verdict") or {}).get("state")) == "unverified":
+            # 退 3 = 「未验证」（不是红）：本仓老口径里 3 就是 NOT RUN。
+            print("\n未验证（不是红，也绝不算通过）—— **不许提交**（用户约定；卡 E63）。")
+            return 3
         print("\n质量门或文档同步未通过 —— **不许提交**（用户约定）。")
         return 1
     print("\n质量门 + 文档同步通过 ✅（下一步：commit 并带上 Task:/Refs:/Gates: trailer）")
     return 0
+
+
+def reuse_host_problem(record: dict[str, object], here: str) -> str | None:
+    """这条复用记录能不能证明是**本机**做的判定（卡 E63 判据 4）。返回原因或 None。
+
+    ★ 老记录没有 `host` 字段（卡 E63 之前写的）⇒ 判不出来源 ⇒ 不许复用（fail closed）。
+      升级后第一趟 `render` / `ui_flow` 会真跑一次 —— 那正是要的：宁可多花两分钟，
+      也不拿「不知道哪台机器做的判定」当本机通过。
+    """
+    src = str(record.get("host") or "").strip()
+    if not src:
+        return "记录里没有 host（判不出这条判定是哪台机器做的）"
+    if src.lower() != str(here or "").strip().lower():
+        return f"记录来自 {src}，不是本机 {here}"
+    return None
+
+
+def _apply_vacuous_verdict(payload: dict[str, object], ok: bool) -> dict[str, object]:
+    """卡 E63（T-AG521）判据 1/2/4/5：`ok` 不许和产物自相矛盾。
+
+    到这里为止 `ok` 只说明「阻断门都绿了 + 文档同步过了」；但它有可能**一道门都没跑**
+    （`--only render` 在没有 node 的机器上：`results=[]`、`not_run=['render']`）——
+    这时产物里 `ok=True` 与 `not_run` 并存，**自己打自己**（卡 E62 就是这么落的卡）。
+
+    治法：把成品 payload 交给 `tools/gate_verdict.py` 重算一次（三把尺子同一份判据）。
+    不绿时写 `verdict` 块并把 `ok` 改成 `False`；健康的一趟**不加任何键**
+    （`last.json` 形状逐字不变，既有审计按老形状读）。
+    """
+    if not ok:
+        return payload          # 已经是红的：别把「门真红了」洗成「未验证」
+    verdict = judge(payload)
+    if verdict.ok:
+        return payload
+    payload["ok"] = False
+    payload["verdict"] = verdict.as_payload()
+    print(f"\n[判据] {verdict.line()}")
+    print("[判据] 判据本体：tools/gate_verdict.py（卡 E63）—— "
+          "零门 / 零阻断门 / not_run 非空 / 复用来源不明 ⇒ 都不算通过")
+    return payload
 
 
 if __name__ == "__main__":

@@ -141,7 +141,8 @@ def test_find_result_by_commit_after_disconnect(tmp_path: Path) -> None:
 # ---------------------------------------------------------------- ⑦ 五条回传校验
 def _ok_payload() -> dict:
     return {"rev": "abc1234", "ok": True, "host": "fake-cloud",
-            "gates": [{"name": "pytest"}, {"name": "ruff"}], "not_run": []}
+            "gates": [{"name": "pytest", "exit_code": 0}, {"name": "ruff", "exit_code": 0}],
+            "not_run": []}
 
 
 def test_return_check_all_five_pass() -> None:
@@ -265,7 +266,8 @@ def test_run_cloud_gate_writes_back_and_marks_done(tmp_path: Path) -> None:
     fake = gp.FakeTransport(data={
         "reachable": True,
         "payload": {"rev": "abc1234", "ok": True, "host": "fake-cloud",
-                    "gates": [{"name": "pytest"}], "not_run": []},
+                    "gates": [{"name": "pytest", "exit_code": 0}],
+                    "not_run": []},
         "pytest_log": "10 passed in 1s", "workspace_clean": True})
     q = gp.PoolQueue(tmp_path / "queue.json")
     result = gp.run_cloud_gate(

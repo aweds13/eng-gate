@@ -9447,15 +9447,39 @@ gaps = """
 id = "T-AG521"
 title = "一道门都没跑也算通过：空真、not_run 非空、跨机复用冒充本机真跑"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 owner = "controller"
 evidence = [
   "file:复盘/卡/卡E63-一道门都没跑也算通过.md",
   "file:gates/diag/_probe_vacuous.txt",
   "file:gates/diag/_probe_zero_door.txt",
   "file:gates/diag/cloud-gate-E62b.log",
+  "file:gates/diag/rev-E63b.log",
+  "file:scripts/run_gates.py",
+  "file:tools/gate_verdict.py",
+  "file:tools/gate_pool.py",
+  "file:tools/wb_verify.py",
+  "file:tools/pool/landing.py",
+  "file:tools/wb_nightly.py",
+  "file:tests/test_gates_ok_vacuous.py",
+  "file:tests/test_no_vacuous_pass.py",
+  "file:tests/test_two_rulers.py",
+  "file:tests/test_gate_docs.py",
+  "file:tests/test_only_selector_parity.py",
+  "file:tests/test_pytest_select.py",
+  "file:tests/test_wb_land.py",
+  "file:tests/test_ci_docs.py",
+  "file:tests/test_false_success_pins.py",
+  "file:tests/test_wb_verify_profiles.py",
+  "file:tests/test_gate_pool.py",
+  "file:tests/test_wb_land_gate_on.py",
+  "file:gates/render/CAPTURED_ON.json",
+  "file:docs/subsystems/ci/测试流程.md",
+  "text:tests/test_gates_ok_vacuous.py::def test_a_product_without_a_host_is_red",
+  "text:tools/gate_verdict.py::def judge(",
 ]
 gaps = """
-- 立卡时只做到「取证」：三条读数已落盘，判据本体一行未改。
-- 云机昨晚之前没有 node（有 Edge），`render`/`ui_flow`/`ui_dom_probe` 在云上要么 NOT RUN、要么靠跨机复用继承本机结论；2026-10-28 已给云机装 node v22.14.0，但「装上之后 render 在云机上到底过不过」尚未实测。
+- 反向验证只覆盖四处判据（零门 / not_run 行 / 来源 host / 金样本绑定），**没有**覆盖「零阻断门」与「EXCLUDED 三条件」各自的独立变异；后两者目前只有正向用例。
+- 云机装上 node 之后 `render` 在云上到底过不过**仍未实测**：本轮只做到「不是采集机就记 EXCLUDED 并写明理由」，没有在云机上真跑一次完整门禁验证这条路。
+- `docs/subsystems/ci/测试流程.md` 只改了「云机没有 node」那两处，全文其余读数（各门墙钟、门数）未逐个复核。
 """

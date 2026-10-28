@@ -33,10 +33,8 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import pytest
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_GATES = ROOT / "scripts" / "run_gates.py"
@@ -128,14 +126,24 @@ def _gates_ok(results: list[dict]) -> bool:
 
 def test_not_run_gate_is_not_red_but_a_real_red_still_is() -> None:
     """三档：NOT RUN 不算红 / 缺 `blocking` 字段按阻断算 / 显式 true 照报。"""
-    not_run = [{"name": "web_live", "exit_code": 3, "blocking": False}]
-    assert _gates_ok(not_run) is True, "门禁侧把 NOT RUN 判红了？"
+    mixed = [
+        {"name": "ruff", "exit_code": 0},
+        {"name": "web_live", "exit_code": 3, "blocking": False},
+    ]
+    assert _gates_ok(mixed) is True, "门禁侧把 NOT RUN 判红了？"
 
     legacy = [{"name": "audit", "exit_code": 1}]  # 老产物没有 blocking 字段
     assert _gates_ok(legacy) is False, "门禁侧漏了老产物里的真红？"
 
     explicit = [{"name": "audit", "exit_code": 1, "blocking": True}]
     assert _gates_ok(explicit) is False, "门禁侧漏了显式阻断的红？"
+
+    # ★ 卡 E63（T-AG521）：NOT RUN 不算红，但**一条阻断门都没有**更不算绿 ——
+    #   那时这趟什么都没证明过（`all()` 在空表上的真值不是判据）。判据本体在
+    #   `tools/gate_verdict.py`；这一条与 `tests/test_no_vacuous_pass.py` 同一件事。
+    only_not_run = [{"name": "web_live", "exit_code": 3, "blocking": False}]
+    assert _gates_ok(only_not_run) is False, "全是 NOT RUN 也被判成绿了（卡 E63 判据 1）"
+    assert _gates_ok([]) is False, "零门被判成绿了（卡 E63 判据 1）"
 
 
 def test_real_last_json_reads_the_same_way_on_both_sides(
@@ -200,6 +208,13 @@ def test_seed_check_reads_the_same_way_as_the_gate(tmp_path: Path) -> None:
     反向验证过：把判据改回「所有 exit_code != 0 都算红」⇒ 本条红。
     """
     real = json.loads((ROOT / "gates" / "last.json").read_text(encoding="utf-8"))
+    if any(int(g.get("exit_code", 0)) != 0 for g in real.get("gates", [])) or real.get(
+        "not_run"
+    ):
+        # ★ 卡 E63（T-AG521）：树上那份 last.json 现在不是绿的（上一次跑红 / 云机回传），
+        #   「播种判定不许把真·全绿读数当红」这半没有判别力。软行那一条另有钉子
+        #   （`test_the_real_reading_needs_a_not_run_gate_to_prove_anything`，改成合成读数）。
+        pytest.skip("树上当前 gates/last.json 不是绿的 ⇒「真·全绿读数」这半无判别力")
 
     code, out = _run_seed_check(tmp_path, real)
     assert _gates_ok(real.get("gates", [])) is True, "真 last.json 在门禁侧竟然是红的？"
@@ -237,12 +252,12 @@ _EXIT_CODE_RULERS = {
 #: 扫出但**不是**「判红」的行 —— 每条都必须写清为什么不是。少一条会红（漏判），
 #: 多一条也会红（白名单不许悄悄膨胀成「什么都放行」，与 `test_ci_portability` 同规矩）。
 _NOT_A_RED_RULER = {
-    "scripts/run_gates.py:1469": (
+    "scripts/run_gates.py:1523": (
         "`failed = exit_code not in (0, 3)` —— 3 已被显式当成 NOT RUN 排除，"
         "这是「要不要印这段输出」，不是判红"
     ),
-    "scripts/run_gates.py:1538": "`gates_ok()` docstring 里的说明文字，不是可执行判据",
-    "scripts/run_gates.py:2567": (
+    "scripts/run_gates.py:1592": "`gates_ok()` docstring 里的说明文字，不是可执行判据",
+    "scripts/run_gates.py:2676": (
         "复用记账：只有 exit_code==0 的门才可复用 —— 比 blocking 更严，"
         "NOT RUN 不复用是对的，它不是在判红"
     ),
@@ -382,10 +397,25 @@ def test_the_real_reading_needs_a_not_run_gate_to_prove_anything() -> None:
     没有它，上面那条同结论测试就是空真 —— 三处判据就算全错也照样绿。
     这也是本轮改判据时先踩的坑：本机读数里 `web_live` 是 exit 0，什么都证明不了。
     """
-    real = json.loads((ROOT / "gates" / "last.json").read_text(encoding="utf-8"))
-    soft = [g for g in real.get("gates", []) if g.get("exit_code") and not g.get("blocking", True)]
-    nonzero = [(g.get("name"), g.get("exit_code")) for g in real["gates"] if g.get("exit_code")]
-    assert soft, (
-        "真 gates/last.json 里没有「非阻断非零门」—— 本轮的同结论钉子退化成空真。"
-        f"当前非零门：{nonzero}"
+    # ★ 卡 E63（T-AG521）：这条前提**不能**再读真 last.json —— 判据改严之后，
+    #   任何 `exit > 0` 或 `status=NOT RUN` 的门行（哪怕 `blocking=False`）都会让整趟变成
+    #   「未验证」，所以一份**绿的**产物里不可能再有「非阻断非零门」。原来那句在绿树下
+    #   只会退化成空真。改成在**合成读数**上钉同一件事：
+    soft = {
+        "name": "web_live",
+        "exit_code": 3,
+        "blocking": False,
+        "status": "NOT RUN",
+        "summary": "环境里没有浏览器：这一层没有验证，不算通过",
+    }
+    gates = [{"name": "ruff", "exit_code": 0}, soft]
+    assert _gates_ok(gates) is True, "门禁侧把 blocking=False 的非零门当成红了（两把尺子又不一致）"
+
+    sys.path.insert(0, str(ROOT / "tools"))
+    from gate_verdict import judge  # noqa: PLC0415 —— 判据本体，按需导入
+
+    verdict = judge({"ok": True, "host": "test-host", "gates": gates, "not_run": []})
+    assert verdict.ok is False and verdict.state == "unverified", (
+        f"软行居然算通过了（卡 E63 判据 ④：门行自己写着未验证）—— {verdict}"
     )
+    assert "web_live" in " ".join(verdict.problems), verdict.problems

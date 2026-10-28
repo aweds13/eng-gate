@@ -318,6 +318,9 @@ def test_only_payload_is_red_in_wb_verify(tmp_path: Path) -> None:
     doors = _all_doors()
     payload = {
         "ok": True, "tree": "", "tree_scope": "worktree-minus-gates",
+        # ★ 卡 E63（T-AG521）判据 ⑤：没有 host 就证明不了是哪台机器跑的 ⇒ 连「全量形状」
+        #   的反例都会被判红，那就证明不了「这条不是永远红」。夹具补上自己的 host。
+        "host": "test-host",
         "gates": [{"name": "ruff", "exit_code": 0, "seconds": 0.2,
                    "summary": "All checks passed!"}],
         "not_run": [n for n in doors if n != "ruff"],

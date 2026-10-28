@@ -229,6 +229,19 @@ def check_gates(s: Screen, tree: Path, parent: str) -> None:
     problems: list[str] = []
     if payload.get("ok") is not True:
         problems.append("ok 不是 True")
+    # ★ 卡 E63（T-AG521）：本地、云机、落地后这三把尺子必须说同一句话 ——
+    #   「这份产物自身说通过吗」只问 `tools/gate_verdict.py` 的 `judge()`。
+    #   它补的是这里以前看不见的那几样：零门、零阻断门、`exit_code == 3`、复用来源不明。
+    _tools = str(tree / "tools")
+    if _tools not in sys.path:
+        sys.path.insert(0, _tools)
+    try:
+        import gate_verdict as _gv  # noqa: PLC0415 —— 按 --tree 的那棵树 import
+        _verdict = _gv.judge(payload)
+    except Exception as _exc:                                 # noqa: BLE001
+        problems.append(f"判据本体不可用（{type(_exc).__name__}: {_exc}）—— 拿不准不放过")
+    else:
+        problems.extend(str(x) for x in _verdict.problems)
     if not rev_ok:
         problems.append("rev != 父提交（一次门禁跑完提交两笔？第二笔没验过）")
     if not expected:
