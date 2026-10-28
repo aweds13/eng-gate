@@ -331,8 +331,7 @@ async function collectAll(cdp, url, port) {
     if (pageDay !== CAPTURE_DAY) {
       throw new Error(`浏览器时钟没钉住：页面以为是 ${pageDay}，期望 ${CAPTURE_DAY}（垫片没生效）`)
     }
-    for (const view of [...VIEWS, ...Object.keys(PSEUDO_VIEWS)]) {
-      if (ARGS.only && ARGS.only !== view) continue
+    for (const view of selectedViews()) {
       const res = await collectView(cdp, vp, view)
       out.set(`${vp.name}/${view}`, { header: res, text: manifestText(res) })
       // ★ 采完**当场**核对签名（T-G69）：不成立就抛，绝不让它落成黄金 ——
@@ -354,6 +353,19 @@ async function collectAll(cdp, url, port) {
     void port
   }
   return out
+}
+
+/* `--only` 挑选视图：**只有这一处判定**（卡 E62 · T-AG520）。
+   选零个 = 调用方打错字了，不是“通过” —— 见 main() 开头那一段。
+   `tools/ui_flow_check.mjs` 对同样的情形也退 1；两道门的判据由
+   `tests/test_only_selector_parity.py` 钉住必须说同一句话。 */
+function allViews() {
+  return [...VIEWS, ...Object.keys(PSEUDO_VIEWS)]
+}
+
+function selectedViews() {
+  if (!ARGS.only) return allViews()
+  return allViews().filter((v) => v === ARGS.only)
 }
 
 /* ---------------------------------------------------------------- 比对 */
@@ -389,6 +401,21 @@ async function main() {
   const t0 = Date.now()
   const url = `http://127.0.0.1:${ARGS.port}/`
   const result = { ok: false, code: 1, views: 0, changed: [], notRun: false, notes: [] }
+
+  // ★ 卡 E62（T-AG520）：`--only` 一个都没匹配上时**必须红**，不许打一行 OK 就退 0。
+  //   病灶原文（HEAD ab66da19）：`--only 根本没有这个视图` ⇒
+  //   `[OK ] 0 份清单与黄金逐字节一致（3 档宽度 × 14 个视图 + 1 个浮层）`，退出码 0
+  //   —— 一行里既说 0 份又说 14 个视图。拼错一个字的代价是
+  //   “这条门等于没跑，却报通过”——比报红坏得多。
+  //   ★ 位置在 `ARGS.update` 分支之前：零匹配时**不许**写出
+  //   `gates/render/LAST_UPDATE.md` 的「0 份改动」假记录。
+  if (ARGS.only && selectedViews().length === 0) {
+    console.log(`❌ --only「${ARGS.only}」一个视图都没匹配上。现有这些：`)
+    for (const v of allViews()) console.log('   · ' + v)
+    result.notes.push('--only 没匹配到任何视图')
+    result.code = 1
+    return result
+  }
 
   const browserPath = findBrowser()
   if (!browserPath) {
@@ -465,6 +492,15 @@ async function main() {
       throw exc
     }
     result.views = pass1.size
+    // ★ 卡 E62 判据 2：挑中了就必须真采到。上面那条拦的是
+    //   “一个都没挑中”，这条拦的是“挑中了但采回来是空集”——
+    //   将来谁把过滤挪错位置（或视图从界面上消失）就会在这里现形。
+    if (pass1.size === 0) {
+      console.log('❌ --only 挑中了视图，但采回来是 0 份清单 —— 采集链路自己断了，不许当通过。')
+      result.notes.push('采集为空：pass1.size === 0')
+      result.code = 1
+      return result
+    }
 
     // ③ 确定性自检：同一个界面采两遍必须**一模一样**，否则是这个工具自己不可信
     const unstable = []

@@ -4194,6 +4194,6 @@ files = [
   "docs/subsystems/ci/门禁自证-product.md",
   "复盘/卡/卡E62-一条都没挑中的时候不许说全绿.md",
 ]
-status = "pending"
+status = "done"
 risk = "low"
 depends = []

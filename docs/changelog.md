@@ -420,15 +420,23 @@ lines = raw.split(sep)
 ★ 取证修正：卡规格原写「`pool/stage_card.py:90` 是第六处病灶」——**这是错的**。复核后那三处是 `assert lf == 0`（纯 CRLF 前置断言，混行尾会直接停手，不会静默出错），且它根本不写 `workbacklog.toml`。本卡没有改 `stage_card.py`，交付清单与判据 4 都已按实测改写。
 
 **反向验证五处全部会咬。** 撤 `_split_blocks` ⇒ 4 红；撤三态 ⇒ 2 红；撤调用方那条 `if _verdict == "unflippable"` ⇒ `wb_land` 一路走到 ⑥ 提交、**exit 0**；撤 `b"".join(lines)` 改回 `sep.join` ⇒ 多插行尾，红；撤全仓扫描钉子本身（造一处假写法）⇒ 红。新钉子 `tests/test_mixed_endings.py` 9 passed，`tests/test_wb_land.py` + `tests/test_pool_lib.py` 回归全绿，`ruff check` = All checks passed。
-## 2026-10-28 · 一条都没挑中的时候不许说全绿：`--only` 空真与两道门的不对称（E62 / T-AG520）
+## 2026-10-28 · 一条都没挑中的时候不许说全绿：`render --only` 零匹配退 0、两道门判据不对称（E62，T-AG520）
 
-- `node tools/render_check.mjs --only 根本没有这个视图` 在 HEAD `ab66da19` 上退 **0**，并打印
-  `[OK ] 0 份清单与黄金逐字节一致（3 档宽度 × 14 个视图 + 1 个浮层）` —— 同一行既说 0 份又说 14 个视图。
-  上一行 `[OK ] 确定性自检：0 份清单各采两遍，逐字节一致` 同样是空真（两遍空集合当然一致）。
-- 同一族的 `tools/ui_flow_check.mjs:2068` 对同样的情形退 1 并列出全部流名。两道门对同一件事说相反的话，
-  没有任何一处钉子钉住它们必须一致。
-- `--force --update --only <零匹配>` 还会往 `gates/render/LAST_UPDATE.md` 追加一条「0 份改动」的假记录。
-- 与 E60（两把尺子）、E61（翻不动就不出声）同一个病：判不出来的时候当没事。
+`node tools/render_check.mjs --only <写错的参数>` 以前**退 0**，还打一行 `[OK ] 0 份清单与黄金逐字节一致（3 档宽度 × 14 个视图 + 1 个浮层）` —— 一句话里既说「0 份」又说「14 个视图」。这是**空真**：0 份清单当然全都一致。拼错一个字的代价是这条门等于没跑、却报通过 —— 比报红坏得多。
+
+**根因**：`--only` 的过滤发生在 `VIEWS.filter(...)` 之后，可后面的比对与汇总都只看「通过了几份」，没人在意「挑中了几份」。而 `tools/ui_flow_check.mjs` 在同一个位置是有守卫的（退 1 并发流名清单）—— **两道门对同一件事说不同的话**，这正是卡 E60 挖出的那类「两把尺子」。
+
+**判据一：零匹配必须红，并且点名。** `render_check.mjs` 的 `main()` 开头新增守卫：`--only` 给了但 `selectedViews().length === 0` ⇒ 打印 `❌ --only「…」一个视图都没匹配上。现有的视图有这些：` + 逐行列出 14 个视图名 + `return { ...result, code: 1 }`。退 1 与 `ui_flow` 对齐。
+
+**判据二：匹配到就必须真采到。** 新增的 `selectedViews()` 是 `--only` 挑视图的**唯一判定点**（原来 `VIEWS.filter` 的内联写法散在 `main()` 里）。反过来也钉了：`--only today` ⇒ `pass1.size` ≥ 1 且退 0 —— 「红」与「绿」两侧都有真读数，否则撤掉判据一时判据二靠旧行为也能过。
+
+**判据三：两道门的判据写在一处、被一条钉子钉住一致。** 新文件 `tests/test_only_selector_parity.py` 静态读两个 `.mjs` 的源码，断言两边都有 `selectedXxx().length === 0` 这个形状，且零匹配分支真的给出 `code = 1` 或 `code: 1`（两种返回体例都认 —— 判的是语义，不是某一种语句形状）。
+
+**判据四：`--update` 不许写出空记录。** 零匹配守卫的位置在 `if (ARGS.update)` 分支**之前**，静态钉子读源码钉住这个先后顺序；另一条动态钉子断言零匹配时 `gates/render/LAST_UPDATE.md` 字节不变。
+
+**反向验证四条全部会咬**（驱动 `gates/diag/_rev_E62b.py`，读数 `gates/diag/rev-E62e.log`）：①撤零匹配检查 ⇒ 判据二接住但钉子红，**两道都撤** ⇒ 退出码变回 0、那句自相矛盾的 OK 行回来、钉子红；②把检查挪进 `--update` 分支 ⇒ 静态位置钉子红；③`ui_flow` 改成退 0 ⇒ 对称性钉子红；④白名单塞假条目 ⇒ 自证钉子红。四条撤完三个文件**逐字节还原**（实测 True/True/True）。新钉子 `tests/test_only_selector_parity.py` 7 passed，相邻三套 `test_render_check.py` + `test_wb_land.py` 一起跑 85 passed，`ruff check tools/ tests/` = All checks passed。
+
+★ 这轮反向验证我自己踩了两次坑，两次都是**变异代码有语法错** ⇒ `node` 抛 `SyntaxError` 退 1 ⇒ 看起来「咬住了」，其实咬的是语法错。教训与卡 E61 同型：**只记录「撤掉后退出码非零」的验证会骗人**，必须同时记录「撤掉前的基线读数」，才能拿到「撤掉后它真的翻成 0 了」这个对照。
 ## 2026-10-27 · 文档治理第二批：文档门成立 + 复盘索引机器化 + 技能去陈旧（F6+F7+G5，T-AG513）
 - F6 · 文档门成立：`check_docs` 三条判据修好（行号列表归一、`../` 按 `normpath(join(dirname, '../' + token))` 判、未入库的 .md 文件记 skip），docs 门接进 audit 档（门表 20→21），`PINNED_FLOOR` 地板钉子补上（实测：把基线数字抬到 199 门照样绿 ⇒ 原 ratchet 只有读数没有地板）。
 - F6 · 索引重建：`docs/INDEX.md` 改由 `scripts/gen_doc_index.py` 机器生成；`.gitignore` 补上 `gates/review/` —— `tools/pool/landing.py` 的注释一直宣称它已忽略，实测这条规则**此前不存在**，于是「这台机器跑过几次落地」会让死指针读数漂 2 条（四格实验：新克隆 154/基线 152 红，加规则后落回 152）。

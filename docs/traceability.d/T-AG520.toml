@@ -1,21 +1,31 @@
-# T-AG520 · 卡 E62 —— 一条都没挑中的时候不许说全绿（`--only` 空真）
-
+# T-AG520 · 卡 E62 —— 一条都没挑中的时候不许说全绿（`render --only` 零匹配退 0）
+#
 # 立卡于 2026-10-28。病灶与判据见 `复盘/卡/卡E62-一条都没挑中的时候不许说全绿.md`。
-# 本卡与 E60（T-AG518）、E61（T-AG519）同一个病：判不出来的时候当没事。
+# 本卡与卡 E60（T-AG518）、卡 E61（T-AG519）同一个病：同一件事两把尺子，
+# 两把尺子说不同的话，而且**判不出来的时候当成没事**。
 
 [entries."T-AG520"]
 id = "T-AG520"
-title = "一条都没挑中的时候不许说全绿：--only 零匹配退 0、两道门判据不对称"
+title = "一条都没挑中的时候不许说全绿：`render --only` 零匹配退 0"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 owner = "controller"
 evidence = [
   "file:复盘/卡/卡E62-一条都没挑中的时候不许说全绿.md",
+  "file:gates/diag/rev-E62e.log",
+  "file:gates/diag/_rev_E62_result.txt",
+  "file:tests/test_only_selector_parity.py",
   "file:tools/render_check.mjs",
   "file:tools/ui_flow_check.mjs",
-  "file:gates/gate-selfproof-product.toml",
+  "file:docs/subsystems/ci/门禁自证-product.md",
+  "file:gates/diag/_rev_E62b.py",
+  "text:tools/render_check.mjs::selectedViews().length === 0",
+  "text:tools/ui_flow_check.mjs::selectedFlows().length === 0",
 ]
 gaps = """
-- 本卡只修 `--only` 零匹配这一条空真；`render_check.mjs` 与 `ui_flow_check.mjs` 还有别的静默面（`--seed-only` 按设计不判、`style_audit`/`ui_text_audit` 不传 `--check` 时恒退 0）不在判据里，如实记在此。
-- 三道浏览器门（`render`/`ui_flow`/`ui_dom_probe`）在没装 node 或没装 Edge 的机器上记 `not_run` 而不是红；本卡不改这个口径，只保证「跑了但一个都没挑中」不许变成绿。
+- 本卡只修 `render` 一侧的判据，`gates/render/` 下的黄金样本一字未动 —— 改的是「一条都没挑中时说什么」，不是「挑出来的东西对不对」。
+- 判据 4 的动态钉子只在「检查被整个删掉」时咬；钉住「位置」的是静态钉子。已如实写进卡规格的反向验证一节。
+- 白名单 `_NOT_A_ONLY_SELECTOR` 空着是合法且正确的（AST 排除字符串字面量后没有需要豁免的行）；钉子改成「空着合法，填了就必须是活的」。
+- `ui_dom_probe` 的 DOM 桩不是真浏览器、别的机器没 Edge 时 `render`/`ui_flow` 退 3 = NOT RUN —— 这两条盲区仍成立（NOT RUN 不是 PASS），已写在 `docs/subsystems/ci/门禁自证-product.md` §3.3。
+- 反向验证两次踩「变异代码语法错 ⇒ node 退 1 ⇒ 看起来咬住了」，靠基线读数揪出。这类「只记录非零退出码」的空真验证法，仓里别处有多少本卡没有普查。
 """
