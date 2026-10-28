@@ -814,7 +814,10 @@ def tree_without_gates(
     if include_worktree:
         _git_i("add", "-A")
     if exclude_gates:
-        _git_i("rm", "-r", "--cached", "--ignore-unmatch", "--quiet", "gates")
+        # -f 必须有：read-tree 建出来的临时索引里，gates/ 下的条目与工作区、HEAD 都不一致
+        # （gates/last.json 每趟都被改写），git 会以「staged content different from both」拒删，
+        # 于是 gates/ 摘不掉、write-tree 返回的是**含 gates 的全树**，封存指纹变成假的（实测踩到）。
+        _git_i("rm", "-r", "--cached", "--ignore-unmatch", "--quiet", "-f", "gates")
     written = _git_i("write-tree")
     with contextlib.suppress(OSError):
         if index_path.exists():

@@ -94,6 +94,41 @@ def test_fingerprint_ignores_gates_changes(tmp_path: Path) -> None:
     assert before == after
 
 
+def test_old_rev_still_has_gates_stripped(tmp_path: Path) -> None:
+    """★ 会咬：`rev` **不是 HEAD** 时也必须真的把 `gates/` 摘掉（2026-10-28 实测踩到）。
+
+    病灶：`read-tree <旧 rev>` 建出来的临时索引里，`gates/` 下的条目与工作区、HEAD
+    都不一致（`gates/last.json` 每趟都被改写），`git rm --cached` 于是以
+    「staged content different from both the file and the HEAD」**拒删**并退 1。
+    后果不是"少摘一个文件"，而是 `write-tree` 返回**整棵树**（含 gates/）——
+    封存指纹退化成"完整提交树"，自指的那条定义被悄悄换掉。
+
+    ⇒ 必须带 `-f`。这条钉子钉的就是它：拿**上一笔提交**当 rev，指纹仍不许含 gates/。
+    """
+    _init_repo(tmp_path)
+    before_head = _git(tmp_path, "rev-parse", "HEAD")  # 上一笔（gates/ 里的内容与它不同）
+
+    _seed(tmp_path, "gates/last.json", '{"tree":"新一趟写进去的，与上一笔不一致"}')
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "第二笔：只动 gates/")
+
+    fingerprint = rg.tree_without_gates(tmp_path, before_head, exclude_gates=True)
+    full = rg.tree_without_gates(tmp_path, before_head, exclude_gates=False)
+
+    assert fingerprint and full
+    # ① 摘干净了：与"完整树"必须不同
+    assert fingerprint != full, "rev 不是 HEAD 时 gates/ 没被摘掉 —— 封存指纹变成完整树的别名"
+    # ② 而且等于"上一笔减去 gates/"的那棵树（不是 HEAD，不是工作区）
+    expect = _git(tmp_path, "rev-parse", f"{before_head}^{{tree}}")
+    gates_tree = _git(tmp_path, "rev-parse", f"{before_head}:gates")
+    assert full == expect
+    assert fingerprint != gates_tree
+    ls = _git(tmp_path, "ls-tree", "-r", "--name-only", fingerprint)
+    assert not [ln for ln in ls.splitlines() if ln.startswith("gates/")], (
+        f"指纹里还留着 gates/ 条目：{ls}"
+    )
+
+
 def test_fingerprint_is_not_the_full_tree(tmp_path: Path) -> None:
     """指纹**不等于**完整提交的 tree（`exclude_gates=False` 时才是完整树）——"""
     _init_repo(tmp_path)

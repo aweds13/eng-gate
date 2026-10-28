@@ -9338,10 +9338,33 @@ gaps = """- 三张卡的域声明是「按文件逐字列出」的 —— 不含
 id = "T-AG518"
 title = "两把尺子各自说各话：封存指纹在旧 rev 上静默退化成整棵树、复核脚本把 NOT RUN 当红"
 group = "ENGINEERING"
-status = "todo"
-owner = "controller"
-evidence = ["file:复盘/卡/卡E60-两把尺子必须说同一句话.md"]
+status = "done"
+evidence = [
+  "file:scripts/run_gates.py",
+  "file:scripts/cloud/run_gate.sh",
+  "file:tools/wb_review.py",
+  "file:tools/wb_verify.py",
+  "file:framework/src/framework/review.py",
+  "file:tests/test_gate_fingerprint.py",
+  "file:tests/test_wb_review.py",
+  "file:tests/test_two_rulers.py",
+  "file:复盘/卡/卡E60-两把尺子必须说同一句话.md",
+  "file:gates/diag/_text_TAG518.md",
+  "test:test_gate_fingerprint.py::test_old_rev_still_has_gates_stripped",
+  "test:test_two_rulers.py::test_old_rev_still_has_gates_stripped",
+  "test:test_two_rulers.py::test_the_force_flag_is_actually_there",
+  "test:test_two_rulers.py::test_not_run_gate_is_not_red_but_a_real_red_still_is",
+  "test:test_two_rulers.py::test_real_last_json_reads_the_same_way_on_both_sides",
+  "test:test_two_rulers.py::test_seed_check_reads_the_same_way_as_the_gate",
+  "test:test_two_rulers.py::test_wb_verify_and_framework_really_run_their_own_ruler",
+  "test:test_two_rulers.py::test_no_exit_code_ruler_forgets_blocking",
+  "test:test_two_rulers.py::test_the_allow_list_is_not_stale_and_says_why",
+  "test:test_two_rulers.py::test_the_real_reading_needs_a_not_run_gate_to_prove_anything",
+  "test:test_wb_review.py::test_not_run_gate_is_not_red_but_a_real_red_still_is",
+  "test:test_wb_review.py::test_real_last_json_reads_the_same_way_on_both_sides",
+]
 gaps = """
-- 卡 B-20261052（5885f28f）自身的 3 文件漂移**不在本卡范围内**：那是封存于 50e9a6c8 之后补证据 + amend 造成的真漂移，本卡只修「尺子」，下一趟门禁重跑时自然对齐。
-- `wb_review.py` 的 `blocking` 缺省按**阻断**算，这是宁可多报的选择；代价是「老产物里没有 blocking 字段的门」在复核侧一律当红，需要落地链那边确认老 `last.json` 的处理口径。
+- `wb_review.py` 的 `blocking` 缺省按阻断算（宁可多报）。代价是老产物里没有该字段的门在复核侧一律当红，这是有意取舍，不是遗漏。
+- 本卡只修尺子，不追 5885f28f 自身那 3 个文件的封存漂移：那是封存于 50e9a6c8 之后补证据并 amend 造成的真漂移，下一趟门禁重跑时自然对齐，本卡不改写历史提交。
+- 修 `-f` 之后 `last.json.tree` 对旧 rev 的含义变了（不再是整棵树）。历史 14 笔的旧指纹不回头重算，只保证从这一笔起该字段名副其实。
 """

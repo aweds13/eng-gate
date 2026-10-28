@@ -230,11 +230,19 @@ done
 if ! python -X utf8 - "$seed_dir/last.json" <<'PYCHECK'
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
-bad = [g.get("name") for g in d.get("gates", []) if g.get("exit_code") not in (0,)]
+# 判据必须与门禁侧一致：只数**阻断门**（scripts/run_gates.py 的 gates_ok() 就是这么判的）。
+# blocking=False 的门（NOT RUN 渲染层、信息性门）不算红 —— 否则一份真·全绿读数会被当成红、云机根本起不来（卡 E60）。
+bad = [g.get("name") for g in d.get("gates", []) if g.get("blocking", True) and g.get("exit_code") not in (0,)]
 if bad or not d.get("ok"):
     print("✗ 播种源不是绿的：ok=%r 红门=%r" % (d.get("ok"), bad), file=sys.stderr)
     sys.exit(4)
-print("✓ 播种源是绿的：%d 道门全 exit_code=0（rev=%s）" % (len(d.get("gates", [])), d.get("rev")))
+gates = d.get("gates", [])
+soft = [g.get("name") for g in gates
+        if not g.get("blocking", True) and g.get("exit_code") not in (0,)]
+msg = "✓ 播种源是绿的：%d 道阻断门全 exit_code=0（rev=%s）" % (len(gates) - len(soft), d.get("rev"))
+if soft:
+    msg += "；不计红的非阻断门：" + "、".join(soft)
+print(msg)
 PYCHECK
 then
   echo "✗ $seed_dir/last.json 不是绿的 —— 不许拿红读数当「上一趟」。" >&2

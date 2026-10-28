@@ -201,7 +201,13 @@ def check_gates(s: Screen, tree: Path, parent: str) -> None:
         s.bad("门禁：gates/last.json 不是合法 JSON")
         return
     gates = payload.get("gates", [])
-    nonzero = [g.get("name") for g in gates if g.get("exit_code") != 0]
+    # ★ T-AG518：口径必须与门禁侧 gates_ok() 逐字一致——只数**阻断门**。
+    #   病根：这里原先无条件数 exit_code != 0 ⇒ 把 NOT RUN（exit_code=3, blocking=false）
+    #   判成有门没过，而同一份 last.json 在门禁侧是 ok=true。
+    nonzero = [
+        g.get("name") for g in gates
+        if g.get("exit_code") != 0 and g.get("blocking", True)
+    ]
     not_run = payload.get("not_run", [])
     reused = payload.get("reused", {})
     rev = str(payload.get("rev") or "")

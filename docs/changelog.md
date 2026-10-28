@@ -368,6 +368,34 @@
 - **F8 文档读数与意图导航**：三份总览的过期计数按当场读数校正（`复盘/` **773** 篇 / `卡/` **283** / `tests/` 下 **225** 个 Python 文件、**3443** 用例 / 工作树 **28** 棵）；`docs/文档架构.md` 的「presets 是项目书」实测证伪（`docs/presets/softeng.patch.yml` 是 DSH 预设配置与 persona 前缀，不是项目书）；`docs/subsystems/ci/云门禁机.md` 的云机身份从「换机」更正为「同一 `instance-id` 变配」（`i-0123456789abcdef0`，`ecs.e-c1m2.xlarge` → `ecs.u1-c1m4.xlarge`），IP 换成实测的 `203.0.113.10`，并把之前凭推断写下的 `807 s` / `480 s` 换成日志真值 `835 s` / `420 s`；ci 两页的门数 `19` / `21` → **22**；新增 `docs/文档系统导航.md`（按意图分五类路由，90 条引用全部实测存在），`AGENTS.md` 加一行指过去。
 - **G6 判据自证与技能对账接门**：`scripts/check_docs.py` 的判据顺序错（扩展名启发式排在存在性检查**之前**）实测让 **134 条真实存在**的引用被白跳过 —— 改成存在性优先；`OWN_EXTS` 从「写死一张表」改成「表 + 目录里真有的后缀」自证；`gates/gate-selfproof.toml` + `tests/test_gate_selfproof.py` 把「台账里的门都在真门表」「真门表每道门都有行」「`reverse_case` 指的 nodeid 真实存在」三向钉住；`tools/check_skills_claims.py --check` 原来报 `[FAIL]` 却退 **0**，现在 `--mode report` 退 0 / `--mode block` 退 3，并作为第 **22** 道门 `skills_claims` 接进 `audit` 档。
 - **E59 CI 跨宿主可复现**：23 处 `subprocess` 缺 `encoding`、23 处缺 `errors`（云机 locale 是 cp936，中文能直接把读线程打崩 ⇒ `AttributeError: 'NoneType' object has no attribute 'strip'`）；`tests/test_no_window.py` 的防窗指纹随之漂移，一并补齐；`scripts/cloud/run_gate.sh` 不再带一个**已失效的默认云机地址**（现在缺 `CLOUD_HOST` 退 9，fail fast）；3.5/5 装依赖的解释器与 4/5 跑门禁的解释器固定成同一个绝对路径（原来可以是两个）；`gates/last.json` 的 `host` 字段复核为**原本就对**（只由真跑门禁的 `main()` 写，`--seal` 不补写），所以云机回传带 `host` 必须真跑一趟；本机私有状态（`.wt/`）写进入库的 `.gitignore`（原来只在 `.git/info/exclude` 里 ⇒ 云机上那 20 条 `.wt/...` 引用被算成死指针）；新增 `docs/subsystems/ci/云门禁-可复现性清单.md`（R1–R16 十六行，每行的「判据」列都是能解析到的 pytest 节点 id）与 `tests/test_ci_portability.py`（20 个用例）。
+## 2026-10-28 · 封存指纹与复核判据：两把尺子必须说同一句话（E60，T-AG518）
+
+落地 B-20261052（`5885f28f`）之后复核这一笔，`tools/wb_review.py` 报 3 条 FAIL。逐条查下去，
+两条是真缺陷，而且都属同一类病：**同一件事有两把尺子，两把尺子给出不同答案，没人钉住它们必须一致**。
+
+**缺陷一：封存指纹在旧 rev 上静默退化成整棵树。** `scripts/run_gates.py` 的 `tree_without_gates()`
+用 `git rm -r --cached --ignore-unmatch --quiet gates` 把 `gates/` 从临时索引里摘掉，**缺 `-f`**。
+`read-tree <旧 rev>` 建出来的索引里，`gates/` 下的条目与工作区、HEAD 都不一致（`gates/last.json`
+每趟都被改写），git 于是以「staged content different from both the file and the HEAD」拒删并退 1；
+而返回值没人看 ⇒ `write-tree` 返回含 `gates/` 的**整棵树**。后果不是「少摘一个文件」：
+`last.json.tree` 这条「摘掉 gates 的固定点」的定义被悄悄换成「完整提交树」，自指解药失效。
+14 笔实测：不加 `-f` 时 **13 笔退 1**。
+
+**缺陷二：复核侧与门禁侧对「什么叫红」判得不一样。** `scripts/run_gates.py` 的 `gates_ok()` 只数
+`blocking` 门；`tools/wb_review.py` 却是无条件把所有 `exit_code != 0` 当红。于是
+`web_live exit_code=3 blocking=false status=NOT RUN` 这一道「没验证」的门，同一份 `last.json`
+在门禁侧判绿、在复核侧判红。
+
+**同一个病还有三处。** 把「按 `exit_code` 判红」的每一行扫了一遍，又挖出三处漏看 `blocking`：
+`scripts/cloud/run_gate.sh` 的播种判定（这一处最要命 —— `gates/last.json` 长期带
+`web_live exit_code=3 blocking=false`，旧判据会把它当成「不绿」，云门禁在第 2/5 步就退 2）、
+`tools/wb_verify.py:204`、`framework/src/framework/review.py:133`。一份 `last.json` 被 5 个地方读，
+没有一处钉住「必须说同一句话」—— 所以只把这 5 处改对不够，还得钉住「不许再写第六处」。
+
+五处判据全部做了反向验证（真会咬）：撤 `-f` ⇒ `test_the_force_flag_is_actually_there` 红；
+撤 `run_gate.sh` 的 `blocking and` ⇒ `test_seed_check_reads_the_same_way_as_the_gate` 红；
+撤 `wb_verify` / `framework/review` / `wb_review` 的 `blocking` ⇒ 各自对应钉子红（2/2/2 条）。
+新钉子 `tests/test_two_rulers.py` 9 passed；全仓 `ruff check .` = All checks passed。
 ## 2026-10-27 · 文档治理第二批：文档门成立 + 复盘索引机器化 + 技能去陈旧（F6+F7+G5，T-AG513）
 - F6 · 文档门成立：`check_docs` 三条判据修好（行号列表归一、`../` 按 `normpath(join(dirname, '../' + token))` 判、未入库的 .md 文件记 skip），docs 门接进 audit 档（门表 20→21），`PINNED_FLOOR` 地板钉子补上（实测：把基线数字抬到 199 门照样绿 ⇒ 原 ratchet 只有读数没有地板）。
 - F6 · 索引重建：`docs/INDEX.md` 改由 `scripts/gen_doc_index.py` 机器生成；`.gitignore` 补上 `gates/review/` —— `tools/pool/landing.py` 的注释一直宣称它已忽略，实测这条规则**此前不存在**，于是「这台机器跑过几次落地」会让死指针读数漂 2 条（四格实验：新克隆 154/基线 152 红，加规则后落回 152）。

@@ -902,3 +902,62 @@ def test_other_oserrors_are_raised_at_once(tmp_path: Path, monkeypatch) -> None:
         run_git("--version", cwd=str(tmp_path))
     assert info.value is other
     assert len(calls) == 1, f"非 winerror==5 不该重试，实际调用 {len(calls)} 次"
+
+def test_not_run_gate_is_not_red_but_a_real_red_still_is() -> None:
+    """★ T-AG518 钉子：NOT RUN（`exit_code=3` + `blocking=false`）**既不是 PASS 也不是红**。
+
+    病根：复核这边曾无条件数 `exit_code != 0`，而门禁自己那份 `gates_ok()` 只数
+    `blocking` 门 ⇒ **同一份 `last.json` 两个结论**（实测 5885f28f：门禁 ok=True、
+    复核报「有门没过：['web_live']」）。这条钉子把两边钉在一起：
+    NOT RUN 不计红；但 `blocking` 门（默认 True，缺字段也按 True）红了照旧必须报。
+    """
+    not_run = [
+        {"name": "pytest", "exit_code": 0},
+        {"name": "web_live", "exit_code": 3, "blocking": False, "status": "NOT RUN"},
+    ]
+    problems = wr.check_gate_evidence(_payload(gates=not_run), "abc1234")
+    assert not any("有门没过" in p for p in problems), (
+        f"NOT RUN 被当成红了（环境没 node 的渲染层不许判红）：{problems}"
+    )
+
+    # 缺 `blocking` 字段 ⇒ 按阻断门算（宁可多报，不许漏报）—— 这是老口径，不许回退
+    silent_red = [
+        {"name": "pytest", "exit_code": 0},
+        {"name": "audit", "exit_code": 1},
+    ]
+    problems = wr.check_gate_evidence(_payload(gates=silent_red), "abc1234")
+    assert any("有门没过" in p and "audit" in p for p in problems)
+
+    # 显式 blocking=true 的红，当然也要报
+    loud_red = [
+        {"name": "audit", "exit_code": 1, "blocking": True},
+        {"name": "web_live", "exit_code": 3, "blocking": False},
+    ]
+    problems = wr.check_gate_evidence(_payload(gates=loud_red), "abc1234")
+    assert any("有门没过" in p and "audit" in p for p in problems)
+    assert not any("web_live" in p for p in problems)
+
+
+def test_real_last_json_reads_the_same_way_on_both_sides() -> None:
+    """★ 真产物对账：仓库里那份 `gates/last.json`，复核与门禁必须给同一个结论。
+
+    这条不构造数据 —— 它读**真文件**。NOT RUN 之所以能混进来，就是因为谁都没拿
+    真产物对过账（两份实现各自绿）。拿不到文件就跳过，不假装对过。
+    """
+    import json as _json
+
+    last = wr.ROOT / "gates" / "last.json"
+    if not last.is_file():
+        pytest.skip("仓库里没有 gates/last.json（干净克隆？）")
+    payload = _json.loads(last.read_text(encoding="utf-8"))
+    if not payload.get("gates"):
+        pytest.skip("last.json 里没有门结果（不是真跑过的产物）")
+
+    module = wr._run_gates_module()
+    gate_side = bool(module.gates_ok(payload["gates"]))
+    review_side = not any("有门没过" in p for p in wr.check_gate_evidence(payload, "0" * 7))
+    assert review_side == gate_side, (
+        f"两边对同一份 last.json 判得不一样：门禁 gates_ok()={gate_side}，"
+        f"复核={review_side}。门列表="
+        f"{[(g.get('name'), g.get('exit_code'), g.get('blocking')) for g in payload['gates']]}"
+    )

@@ -128,7 +128,12 @@ def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
             f"门禁不是为这一笔跑的：last.json 的 rev={payload.get('rev')!r}，"
             f"而这一笔的父提交是 {parent_short!r}（★ 一次门禁跑完提交两笔？第二笔没验过）"
         )
-    bad = [g for g in payload.get("gates", []) if g.get("exit_code") != 0]
+    # ★ T-AG518：口径必须与门禁 gates_ok() 一致（只数阻断门）：
+    #   NOT RUN 不是 PASS，但也不是红。
+    bad = [
+        g for g in payload.get("gates", [])
+        if g.get("exit_code") != 0 and g.get("blocking", True)
+    ]
     if bad:
         problems.append(f"有门没过：{[g.get('name') for g in bad]}")
     if not payload.get("gates"):

@@ -231,7 +231,18 @@ def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
             f"台账/交接数字没同步：docs_sync_ok={payload.get('docs_sync_ok')!r}，"
             f"missing={payload.get('docs_sync_missing')!r}"
         )
-    bad = [g for g in payload.get("gates", []) if g.get("exit_code") != 0]
+    # ★ T-AG518：口径必须与门禁自己那份 `gates_ok()` **逐字一致** —— 只数 `blocking` 门。
+    #   病根：这里原先无条件 `exit_code != 0` ⇒ 把 NOT RUN（`exit_code=3, blocking=false`，
+    #   环境没 node 的渲染层）判成"有门没过"，而同一份 `last.json` 在门禁侧是 `ok=true`。
+    #   实测 5885f28f：门禁 `ok=True`、`gates_ok()` 返回 True，复核却报"有门没过：['web_live']"
+    #   ⇒ 同一份产物两个结论，复核会把合法提交判成"不算数"。
+    #   NOT RUN 不是 PASS，但**也不是红** —— 它在 `gates_ok` 里不计，这里同样不计；
+    #   真值（"这一层没验证"）由 `status`/`note` 照原样留在 `last.json` 里，不靠复核来记。
+    bad = [
+        g
+        for g in payload.get("gates", [])
+        if g.get("exit_code") != 0 and g.get("blocking", True)
+    ]
     if bad:
         problems.append(f"有门没过：{[g.get('name') for g in bad]}")
     if not payload.get("gates"):
