@@ -9549,3 +9549,19 @@ gaps = [
 - 「19 道 → 22 道」这三次增门（`pytest_chain` / `docs` / `skills_claims`）的归因来自 changelog.d 与
   门表实读，没有独立实验。""",
 ]
+
+[entries."T-AG524"]
+id = "T-AG524"
+title = "抢 CPU 的时候，红门不算数：门禁记同租户、超时门标 SUSPECT"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E65-抢cpu的时候红门不算数.md",
+  "file:gates/diag/_spec_E65.md",
+  "file:gates/diag/cloud-gate-E63e.log",
+]
+gaps = [
+  """- 立卡时未实现：`co_tenants` 采集与 `SUSPECT` 三态都还不存在。
+- 本卡只治「读法」，不治「慢」：分片、加核、`--no-cov` 的税是另外的事（速度调查里已写明不可混为一谈）。"""
+]
