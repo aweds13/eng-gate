@@ -1,0 +1,21 @@
+# T-AG520 · 卡 E62 —— 一条都没挑中的时候不许说全绿（`--only` 空真）
+
+# 立卡于 2026-10-28。病灶与判据见 `复盘/卡/卡E62-一条都没挑中的时候不许说全绿.md`。
+# 本卡与 E60（T-AG518）、E61（T-AG519）同一个病：判不出来的时候当没事。
+
+[entries."T-AG520"]
+id = "T-AG520"
+title = "一条都没挑中的时候不许说全绿：--only 零匹配退 0、两道门判据不对称"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E62-一条都没挑中的时候不许说全绿.md",
+  "file:tools/render_check.mjs",
+  "file:tools/ui_flow_check.mjs",
+  "file:gates/gate-selfproof-product.toml",
+]
+gaps = """
+- 本卡只修 `--only` 零匹配这一条空真；`render_check.mjs` 与 `ui_flow_check.mjs` 还有别的静默面（`--seed-only` 按设计不判、`style_audit`/`ui_text_audit` 不传 `--check` 时恒退 0）不在判据里，如实记在此。
+- 三道浏览器门（`render`/`ui_flow`/`ui_dom_probe`）在没装 node 或没装 Edge 的机器上记 `not_run` 而不是红；本卡不改这个口径，只保证「跑了但一个都没挑中」不许变成绿。
+"""

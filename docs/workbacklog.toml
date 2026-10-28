@@ -4180,3 +4180,20 @@ status = "done"
 risk = "mid"
 depends = []
 
+
+[[cards]]
+id = "E62"
+task = "T-AG520"
+title = "一条都没挑中的时候不许说全绿：--only 零匹配退 0、两道门判据不对称"
+tree = ".wt/E62"
+spec = "复盘/卡/卡E62-一条都没挑中的时候不许说全绿.md"
+files = [
+  "tools/render_check.mjs",
+  "tools/ui_flow_check.mjs",
+  "tests/test_only_selector_parity.py",
+  "docs/subsystems/ci/门禁自证-product.md",
+  "复盘/卡/卡E62-一条都没挑中的时候不许说全绿.md",
+]
+status = "pending"
+risk = "low"
+depends = []

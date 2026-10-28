@@ -420,6 +420,15 @@ lines = raw.split(sep)
 ★ 取证修正：卡规格原写「`pool/stage_card.py:90` 是第六处病灶」——**这是错的**。复核后那三处是 `assert lf == 0`（纯 CRLF 前置断言，混行尾会直接停手，不会静默出错），且它根本不写 `workbacklog.toml`。本卡没有改 `stage_card.py`，交付清单与判据 4 都已按实测改写。
 
 **反向验证五处全部会咬。** 撤 `_split_blocks` ⇒ 4 红；撤三态 ⇒ 2 红；撤调用方那条 `if _verdict == "unflippable"` ⇒ `wb_land` 一路走到 ⑥ 提交、**exit 0**；撤 `b"".join(lines)` 改回 `sep.join` ⇒ 多插行尾，红；撤全仓扫描钉子本身（造一处假写法）⇒ 红。新钉子 `tests/test_mixed_endings.py` 9 passed，`tests/test_wb_land.py` + `tests/test_pool_lib.py` 回归全绿，`ruff check` = All checks passed。
+## 2026-10-28 · 一条都没挑中的时候不许说全绿：`--only` 空真与两道门的不对称（E62 / T-AG520）
+
+- `node tools/render_check.mjs --only 根本没有这个视图` 在 HEAD `ab66da19` 上退 **0**，并打印
+  `[OK ] 0 份清单与黄金逐字节一致（3 档宽度 × 14 个视图 + 1 个浮层）` —— 同一行既说 0 份又说 14 个视图。
+  上一行 `[OK ] 确定性自检：0 份清单各采两遍，逐字节一致` 同样是空真（两遍空集合当然一致）。
+- 同一族的 `tools/ui_flow_check.mjs:2068` 对同样的情形退 1 并列出全部流名。两道门对同一件事说相反的话，
+  没有任何一处钉子钉住它们必须一致。
+- `--force --update --only <零匹配>` 还会往 `gates/render/LAST_UPDATE.md` 追加一条「0 份改动」的假记录。
+- 与 E60（两把尺子）、E61（翻不动就不出声）同一个病：判不出来的时候当没事。
 ## 2026-10-27 · 文档治理第二批：文档门成立 + 复盘索引机器化 + 技能去陈旧（F6+F7+G5，T-AG513）
 - F6 · 文档门成立：`check_docs` 三条判据修好（行号列表归一、`../` 按 `normpath(join(dirname, '../' + token))` 判、未入库的 .md 文件记 skip），docs 门接进 audit 档（门表 20→21），`PINNED_FLOOR` 地板钉子补上（实测：把基线数字抬到 199 门照样绿 ⇒ 原 ratchet 只有读数没有地板）。
 - F6 · 索引重建：`docs/INDEX.md` 改由 `scripts/gen_doc_index.py` 机器生成；`.gitignore` 补上 `gates/review/` —— `tools/pool/landing.py` 的注释一直宣称它已忽略，实测这条规则**此前不存在**，于是「这台机器跑过几次落地」会让死指针读数漂 2 条（四格实验：新克隆 154/基线 152 红，加规则后落回 152）。
