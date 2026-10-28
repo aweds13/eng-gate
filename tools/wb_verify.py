@@ -93,6 +93,11 @@ def _git(cwd: Path, *args: str) -> str:
     return out.strip() if rc == 0 else ""
 
 
+# ★ 卡 E64（T-AG522）：短 sha 的**最小分辨率**。低于它两侧怎么比都没意义
+#   （7 位是 git 自己 `--short` 的下限，也是本仓 `gates/last.json` 里最短的 rev 长度）。
+MIN_SHA_LEN = 7
+
+
 def expected_gate_names(
     tree: Path, profiles: list[str] | tuple[str, ...] | None = None
 ) -> tuple[list[str], str]:
@@ -211,8 +216,17 @@ def check_gates(s: Screen, tree: Path, parent: str) -> None:
     not_run = payload.get("not_run", [])
     reused = payload.get("reused", {})
     rev = str(payload.get("rev") or "")
+    # ★ 卡 E64（T-AG522）：这里原来写 `parent.startswith(rev)`。
+    #   实测两侧长度不同：门禁产物记 **10 位**（`scripts/run_gates.py` 记 `rev[:10]`），
+    #   而 `parent` 来自 `git rev-parse --short`（**8 位**）⇒ `"77dc71cb".startswith("77dc71cb77")`
+    #   恒为 False，**每一笔落地都误判「rev != 父提交」**（真缺陷与正常落地读出来一模一样）。
+    #   判据改成「把两侧对齐到短的那一方再比」：任一方是另一方的前缀就算同一次提交；
+    #   但两侧都短于 `MIN_SHA_LEN` 时判不成立 —— 太短没有分辨率，宁可红。
     rev_short = rev[:len(parent)] if parent else rev
-    rev_ok = bool(rev) and parent.startswith(rev)
+    _pair = (rev_short, parent)
+    rev_ok = bool(rev) and bool(parent) and min(len(rev_short), len(parent)) >= MIN_SHA_LEN and (
+        parent.startswith(rev_short) or rev_short.startswith(parent)
+    )
     # ★ 门数**从门表现读**（不是写死 17）—— 见 `expected_gate_names()`。
     # ★ 分档（卡 E24）：`profiles_run` 说这一趟只跑了哪几档，期望集合就按那几档算；
     #   字段缺失（旧笔）⇒ 仍按全量 19 道核。

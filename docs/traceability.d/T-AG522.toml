@@ -1,0 +1,22 @@
+[entries."T-AG522"]
+id = "T-AG522"
+title = "同一个提交，两把尺子量出两个 sha（短 sha 前缀比较）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E64-同一个提交两把尺子量出两个sha.md",
+  "file:tools/wb_verify.py",
+  "file:tests/test_wb_verify_rev.py",
+  "test:test_wb_verify_rev.py",
+  "text:tools/wb_verify.py::MIN_SHA_LEN = 7",
+  "text:tests/test_wb_verify_rev.py::差异必须落在**可比的位**上",
+]
+gaps = [
+  """- 只修了 rev 这一条判据。**并发指纹（同一台机上别人的负载让超时类门假红）仍是盲区**，
+  实测依据：云机 `ui_flow` 单独跑 26 条流 / 362 项断言全绿 365.6 s，与 pytest 泳道并跑时
+  每趟红的流不同（`⑮`、`㉒`、`⑦③`…），全是墙钟超时 ⇒ 另开 E65（`co_tenants` + `SUSPECT`），
+  本卡不碰。
+- 短 sha 分辨率下限写死 `MIN_SHA_LEN = 7`：为什么不是 8 或 6，依据是 git `--short` 的下限
+  与本仓 `gates/last.json` 里最短 rev 实测长度，**没有独立实验**证明 7 最优。""",
+]

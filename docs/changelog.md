@@ -361,6 +361,17 @@
 - `tools/wb_reconcile.py`：去掉 `--grep` 的 `-10` 截断；新增 `_batch_landed()`/`_landed_commits()`/
   `_spec_commit_in()`，按围栏 `state == landed` 认账；`check()` 第三份 `accounted_done` 打 `[蓝]`。
 - `tests/test_wb_reconcile.py`：5 条断言改三份解包 + 2 条新钉子（landed 认账 / draft 不算证据）。
+## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
+
+`tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成
+**10** 位（`scripts/run_gates.py` 记 `rev[:10]`），而 `parent` 来自 `git rev-parse --short`
+（**8** 位）⇒ `"77dc71cb".startswith("77dc71cb77")` 恒为 False。**每一笔落地都会被判
+「rev != 父提交」**，于是真缺陷（一次门禁跑完提交两笔）与正常落地读出来一模一样 ——
+判据还在说话，但说的是错话，等于没有分辨力。
+
+改成双向对齐：任一方是另一方的前缀即算同一次提交，但两侧都短于 `MIN_SHA_LEN = 7`
+时判不成立（太短没分辨率，宁可红）。反向钉子 `tests/test_wb_verify_rev.py` 13 条，
+含「差异必须落在可比位上」这条分辨率说明。
 ## 2026-10-28 · 文档治理第三批：文档读数与意图导航、判据自证与技能对账接门、CI 跨宿主可复现（F8+G6+E59，T-AG517）
 
 三张卡一笔落地。三条改动都动同一棵树上被判据读的读数 —— F8 改的是 `docs/INDEX.md` 与门数、G6 改的是 `scripts/check_docs.py` 自己的 skip 面、E59 改的是 `.gitignore` 与 `scripts/run_gates.py`；单独落地时任意一笔都会让另外两张卡的读数暂时对不上（`docs` 门的死指针、审计的证据表），并集才稳定。

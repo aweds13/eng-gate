@@ -4242,6 +4242,6 @@ files = [
   "docs/subsystems/ci/测试流程.md",
   "复盘/卡/卡E64-同一个提交两把尺子量出两个sha.md",
 ]
-status = "pending"
+status = "done"
 risk = "low"
 depends = []
