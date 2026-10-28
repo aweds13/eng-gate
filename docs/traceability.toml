@@ -9506,3 +9506,18 @@ gaps = [
 - 短 sha 分辨率下限写死 `MIN_SHA_LEN = 7`：为什么不是 8 或 6，依据是 git `--short` 的下限
   与本仓 `gates/last.json` 里最短 rev 实测长度，**没有独立实验**证明 7 最优。""",
 ]
+
+[entries."T-AG523"]
+id = "T-AG523"
+title = "技能与文档的口径校正：加注规矩分作用域、门数不写死"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡G7-技能与文档口径校正.md",
+  "file:skills/softeng-manage/SKILL.md",
+  "file:skills/README.md",
+]
+gaps = [
+  """- 本卡只校正**口径文字**，不改任何门表或钉子：`skills/nails/*` 仍未进闸，这条如实留着。""",
+]

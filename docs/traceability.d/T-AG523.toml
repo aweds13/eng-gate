@@ -1,0 +1,14 @@
+[entries."T-AG523"]
+id = "T-AG523"
+title = "技能与文档的口径校正：加注规矩分作用域、门数不写死"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡G7-技能与文档口径校正.md",
+  "file:skills/softeng-manage/SKILL.md",
+  "file:skills/README.md",
+]
+gaps = [
+  """- 本卡只校正**口径文字**，不改任何门表或钉子：`skills/nails/*` 仍未进闸，这条如实留着。""",
+]

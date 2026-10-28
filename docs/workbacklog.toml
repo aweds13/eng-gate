@@ -4245,3 +4245,31 @@ files = [
 status = "done"
 risk = "low"
 depends = []
+[[cards]]
+id = "G7"
+task = "T-AG523"
+title = "技能与文档的口径校正：加注规矩分作用域、门数不写死"
+tree = ".wt/G7"
+spec = "复盘/卡/卡G7-技能与文档口径校正.md"
+files = [
+  "skills/README.md",
+  "skills/pipe-card/SKILL.md",
+  "skills/pipe-card/references/dispatch.md",
+  "skills/pipe-gate/SKILL.md",
+  "skills/pipe-gate/references/output.md",
+  "skills/softeng-manage/SKILL.md",
+  "skills/softeng-manage/references/commands.md",
+  "skills/softeng-manage/references/product-lines.md",
+  "docs/subsystems/ci/云门禁机.md",
+  "docs/subsystems/ci/测试流程.md",
+  "docs/归置地图.md",
+  "docs/文档架构.md",
+  "docs/文档系统导航.md",
+  "复盘/架构索引-分层图.md",
+  "复盘/门禁四要素.md",
+  "复盘/卡/卡G7-技能与文档口径校正.md",
+]
+status = "pending"
+risk = "low"
+depends = []
+
