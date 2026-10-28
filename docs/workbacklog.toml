@@ -4164,3 +4164,19 @@ files = [
 risk = "mid"
 depends = []
 status = "done"
+[[cards]]
+id = "E61"
+task = "T-AG519"
+title = "判不出来的时候不许说没事：混行尾让翻 status 静默跳过"
+tree = ".wt/E61"
+spec = "复盘/卡/卡E61-判不出来的时候不许说没事.md"
+files = [
+  "tools/pool/landing.py",
+  "tools/pool/stage_card.py",
+  "tests/test_mixed_endings.py",
+  "复盘/卡/卡E61-判不出来的时候不许说没事.md",
+]
+status = "pending"
+risk = "mid"
+depends = []
+

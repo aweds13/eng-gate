@@ -1,0 +1,20 @@
+# T-AG519 · 卡 E61 —— 判不出来的时候不许说没事（混行尾让翻 status 静默跳过）
+#
+# 立卡于 2026-10-28。病灶与判据见 `复盘/卡/卡E61-判不出来的时候不许说没事.md`。
+# 本卡与卡 E60（T-AG518）同一个病：同一件事两把尺子，两把尺子说不同的话，没人钉住它们。
+
+[entries."T-AG519"]
+id = "T-AG519"
+title = "判不出来的时候不许说没事：混行尾让翻 status 静默跳过"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E61-判不出来的时候不许说没事.md",
+  "file:gates/diag/land-E60.log",
+  "text:tools/pool/landing.py::sep = b\"\r\n\" if b\"\r\n\" in raw else b\"\n\"",
+]
+gaps = """
+- 混行尾本身不修「数据」，只修读法：`docs/workbacklog.toml` 的现有内容一字不动。
+- 全仓扫描钉子的白名单初始为空；若扫出非队列块的写法，必须写明理由再入白名单。
+"""
