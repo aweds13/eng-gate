@@ -9332,3 +9332,16 @@ evidence = [
   "text:docs/subsystems/ci/云门禁-可复现性清单.md::判据 B：CI 脚本不许依赖本机私有状态",
 ]
 gaps = """- 三张卡的域声明是「按文件逐字列出」的 —— 不含 `docs/changelog.toml`、`gates/review/` 这类派生或已 ignore 的产物；`E59` 改了 `.gitignore`（补 `.wt/` 与一条 `gates/review/` 之外的注释），这是本轮唯一一处「改的是判据赖以分辨「哪些文件算本仓」的规则本身」，如实记在这里（规格 `复盘/卡/卡E59-CI跨宿主可复现.md` §判据 3）。 - `tools/gate_pool.py:576` 的 `SshTransport.run_gate()` 仍是刻意占位（raise `CloudUnreachable`）⇒ `wb_land --gate-on cloud` 依然走不通，云门禁的唯一真跑法是 `scripts/cloud/run_gate.sh <卡号> [端口段]` + 落地时 `--commit-only`。这一条没修，因为修它等于重写云门禁的传输层，不在三张卡的判据里（规格 `复盘/卡/卡E59-CI跨宿主可复现.md`，清单 `docs/subsystems/ci/云门禁-可复现性清单.md` §4.3）。 - `scripts/cloud/run_gate.sh:120` 的 `cfg_local` 本机 D 盘默认值（R2）与 `scripts/audit_progress.py:789` 的 120 秒裸本地钟窗口（R12）是**已登记的结构性欠账**：三张卡的判据只要求「把它钉住、谁改口径谁红」，不要求现在改取值方式（`docs/subsystems/ci/云门禁-可复现性清单.md` §2 的 R2/R12 行）。 - 22 道门里仍有门只有「造现场」而没有「反向用例」（`gates/gate-selfproof.toml` 的 `why_no_case` 逐条写明理由）；本卡把「台账里的门都在真门表」「真门表每道门都有行」两向都钉住了，但**没有**给每道门补一条真能咬的反向用例 —— 那是下一张卡的量（规格 `复盘/卡/卡G6-判据自证与技能对账接门.md` 判据 2）。"""
+
+
+[entries."T-AG518"]
+id = "T-AG518"
+title = "两把尺子各自说各话：封存指纹在旧 rev 上静默退化成整棵树、复核脚本把 NOT RUN 当红"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = ["file:复盘/卡/卡E60-两把尺子必须说同一句话.md"]
+gaps = """
+- 卡 B-20261052（5885f28f）自身的 3 文件漂移**不在本卡范围内**：那是封存于 50e9a6c8 之后补证据 + amend 造成的真漂移，本卡只修「尺子」，下一趟门禁重跑时自然对齐。
+- `wb_review.py` 的 `blocking` 缺省按**阻断**算，这是宁可多报的选择；代价是「老产物里没有 blocking 字段的门」在复核侧一律当红，需要落地链那边确认老 `last.json` 的处理口径。
+"""

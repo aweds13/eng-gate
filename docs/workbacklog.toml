@@ -4143,3 +4143,14 @@ files = [".gitignore", "docs/subsystems/ci/云门禁-可复现性清单.md", "sc
 risk = "mid"
 depends = []
 status = "done"
+
+[[cards]]
+id = "E60"
+task = "T-AG518"
+title = "两把尺子各自说各话：封存指纹在旧 rev 上静默退化成整棵树、复核脚本把 NOT RUN 当红"
+tree = ".wt/E60"
+spec = "复盘/卡/卡E60-两把尺子必须说同一句话.md"
+files = ["scripts/run_gates.py", "tools/wb_review.py", "tests/test_gate_fingerprint.py", "tests/test_wb_review.py", "复盘/卡/卡E60-两把尺子必须说同一句话.md", ]
+risk = "mid"
+depends = []
+status = "pending"
