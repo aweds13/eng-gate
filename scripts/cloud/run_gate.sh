@@ -300,6 +300,9 @@ echo "✓ dev 依赖已按 pyproject 的 [dev] 同步"
 
 echo "=== 4/5 云机跑全量门禁（端口段 $port；TF_PROJECTS_TOML 已注入）==="
 start=$(date +%s)
+# ★ 卡 E66（T-AG526）：记下**本机**起跑时刻，供 5/5 判断产物是不是这一趟写的。
+#   不用云机时钟：云机断电重启后 RTC 不可信，而 `at` 正是云机本地时间写的。
+started_at=$(date -Iseconds)
 ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && $envset && \"C:/Program Files/Python312/python.exe\" -X utf8 scripts/run_gates.py && \"C:/Program Files/Python312/python.exe\" -X utf8 scripts/run_gates.py --seal" > "$TMP/gate.out" 2>&1
 rc=$?
 echo "门禁退出码=$rc 用时=$(( $(date +%s) - start ))s"
@@ -311,6 +314,20 @@ scp $SSHOPTS -i "$KEY" "$HOST:$cloud_dir/gates/last.json" ".wt/$card/gates/last.
 scp $SSHOPTS -i "$KEY" "$HOST:$cloud_dir/gates/logs/*.log" ".wt/$card/gates/logs/" >/dev/null 2>&1
 mkdir -p gates/diag
 cp "$TMP/gate.out" "gates/diag/cloud-gate-$card.log"
+
+# ★ 卡 E66（T-AG526）：上一趟的绿播种在云机同一个路径上，云机中途死掉时 5/5 搬回来的
+#   就是那份播种 —— 它绿、host 是云机、rev 也对得上，落地链的 ok/host/tree 三道自检全过。
+#   所以这里必须问一句「这是这一趟写的吗」，判不出来就**不许把它留在卡树里**。
+if ! python -X utf8 tools/gate_pool.py check-product-fresh \
+      ".wt/$card/gates/last.json" --started-at "$started_at" \
+      --seed "$seed_dir/last.json"; then
+  rm -f ".wt/$card/gates/last.json"
+  echo "★★ 回传的 last.json 不是这一趟跑出来的（rc=$rc，起跑 $started_at）⇒ 已删除卡树里那份。" >&2
+  echo "   处置：看一下 gates/diag/cloud-gate-$card.log 的 4/5 段；机器可能被关机/断线。" >&2
+  echo "   日志照常保留：gates/diag/cloud-gate-$card.log" >&2
+  rm -rf "$TMP"
+  exit 9
+fi
 python -X utf8 -c "import json,sys; d=json.load(open('.wt/$card/gates/last.json',encoding='utf-8')); print('last.json ok=',d.get('ok'),'rev=',d.get('rev'),'host=',d.get('host'))"
 # ★ CI 可复现性（判据 A 的可核读数）：host 是「这趟真在哪台机器跑的」的唯一凭证。
 #   空 ⇒ 落地链 tools/pool/landing.py 会拒提交（「证明不了是云机跑的」）。

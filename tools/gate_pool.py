@@ -485,6 +485,63 @@ def validate_cloud_return(
     return problems
 
 
+def parse_instant(text: str) -> datetime.datetime | None:
+    r"""把 ISO-8601 字符串解成「瞬间」；解不出就 None（**不猜、不补默认值**）。
+
+    带偏移（`+08:00` / `Z`）的原样保留；不带偏移的按「与本机同一墙上时钟」处理 ——
+    本仓的 `gates/last.json.at` 就是云机本地时间写的朴素串，而云机与本地同一时区
+    （2026-10-29 实测：云机产物 `at=2026-10-29T00:31:14`，本地文件 mtime `00:31:19`）。
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        return datetime.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def product_is_from_this_run(
+    payload: dict,
+    *,
+    started_at: str,
+    shipped_text: str = "",
+    seed_text: str = "",
+) -> tuple[bool, str]:
+    r"""回传的 `last.json` 是不是**这一趟**跑出来的（卡 E66 · T-AG526）。
+
+    三条独立证据，任一不过即判「不新鲜」（返回 `(False, 原因)`）：
+
+    ① `at` 能解出、且不早于 `started_at`（本趟 4/5 的起跑时刻）；
+    ② `at` **缺失/解不出 ⇒ 直接判不新鲜**（fail closed —— 判不出来的时候不许说没事）；
+    ③ 给了 `seed_text` 时，产物**不许与播种源逐字相同**。
+
+    ③ 是最硬的一条：`run_gate.sh` 的 2/5 会把上一趟的绿播种到云机同一个路径上，
+    云机中途死掉时 5/5 搬回来的就是那份播种 —— 它与本机 `gates/diag/seed-<卡>/last.json`
+    **逐字节相同**。这条判据不依赖任何时钟，也不依赖两台机器的表走得准不准。
+    """
+    data = payload if isinstance(payload, dict) else {}
+    at_raw = str(data.get("at") or "")
+    at = parse_instant(at_raw)
+    if at is None:
+        return False, f"② 产物没有可解的 at（at={at_raw!r}）⇒ 证明不了是这一趟写的"
+    start = parse_instant(started_at)
+    if start is None:
+        return False, f"② 起跑时刻不可解（started_at={started_at!r}）⇒ 判不了"
+    if at.tzinfo is not None and start.tzinfo is None:
+        start = start.replace(tzinfo=at.tzinfo)
+    elif start.tzinfo is not None and at.tzinfo is None:
+        at = at.replace(tzinfo=start.tzinfo)
+    if at < start:
+        return False, (f"① 产物 at={at_raw} 早于本趟起跑 {started_at}"
+                       f" ⇒ 这是上一趟留下的读数")
+    if seed_text and shipped_text and shipped_text.strip() == seed_text.strip():
+        return False, "③ 产物与播种源逐字相同 ⇒ 云机没写新读数（这趟没跑出来）"
+    return True, ""
+
+
 def gates_on_line(*, gate_on: str, host: str = "") -> str:
     """落地笔的 `Gates-on:` 行（卡 E42 §2.1）——`cloud@<host>` 或 `local`。"""
     if gate_on == "cloud":
@@ -764,7 +821,36 @@ def main(argv: list[str] | None = None) -> int:
         n = slot_count(cpu, avail)
         print(f"cpu={cpu} avail_gb={avail:.1f} ⇒ {n} 槽；端口段 {port_segments(n)}")
         return 0
-    print(f"未知子命令：{argv[0]}（只认 status / slots）", file=sys.stderr)
+    if argv[0] == "check-product-fresh":
+        # 卡 E66（T-AG526）：bash 侧只调这一支，不在 shell 里写时间比较。
+        rest = argv[1:]
+        if not rest:
+            print("用法：gate_pool.py check-product-fresh <last.json> "
+                  "--started-at <ISO> [--seed <seed.json>]", file=sys.stderr)
+            return 2
+        target = pathlib.Path(rest[0])
+        started = rest[rest.index("--started-at") + 1] if "--started-at" in rest else ""
+        seed = pathlib.Path(rest[rest.index("--seed") + 1]) if "--seed" in rest else None
+        try:
+            shipped_text = target.read_text(encoding="utf-8")
+            payload = json.loads(shipped_text)
+        except (OSError, ValueError) as exc:
+            print(f"[stale] 读不出产物：{exc}", file=sys.stderr)
+            return 3
+        seed_text = ""
+        if seed is not None:
+            try:
+                seed_text = seed.read_text(encoding="utf-8")
+            except OSError:
+                seed_text = ""
+        fresh, why = product_is_from_this_run(
+            payload, started_at=started, shipped_text=shipped_text, seed_text=seed_text)
+        if not fresh:
+            print(f"[stale] {why}", file=sys.stderr)
+            return 3
+        print(f"[fresh] at={payload.get('at')} ≥ {started}")
+        return 0
+    print(f"未知子命令：{argv[0]}（只认 status / slots / check-product-fresh）", file=sys.stderr)
     return 2
 
 

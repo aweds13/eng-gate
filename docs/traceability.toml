@@ -91,16 +91,27 @@ trailer_baseline = "593ea6c"
 id = "T-AG526"
 title = "没跑完也把上一趟的绿搬回来了：云门禁断线后回传的产物不是这一趟的"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 owner = "controller"
 evidence = [
   "file:复盘/卡/卡E66-没跑完也把上一趟的绿搬回来了.md",
+  "file:tools/gate_pool.py",
   "file:scripts/cloud/run_gate.sh",
+  "file:tests/test_cloud_product_freshness.py",
+  "file:docs/subsystems/ci/云门禁-可复现性清单.md",
+  "test:test_cloud_product_freshness.py",
+  "test:test_ci_portability.py",
+  "test:test_cloud_sync.py",
+  "text:复盘/卡/卡E66-没跑完也把上一趟的绿搬回来了.md::不依赖任何时钟",
+  "text:scripts/cloud/run_gate.sh::check-product-fresh",
 ]
 gaps = [
-  """- 立卡时未实现：`scripts/cloud/run_gate.sh` 的 5/5 仍无条件回传 `gates/last.json`。
-- 本卡只改「产物自证是不是这一趟写的」；播种源本身该不该放在 `gates/diag/seed-<卡>/` 不在此卡讨论。"""
+  """- 只修「回传的产物不许冒充这一趟」；没有解决「云机 03:00 定时停机」本身（那是控制台侧设置，本仓改不了）。
+- `at` 是云机本地时间写的朴素串（R12 已登记「两台都是裸本地钟」）：本卡把「与播种源逐字相同」当作不依赖时钟的主判据，时钟只做辅助；
+  若将来两台时钟差到让 `at` 晚于起跑，这条辅助判据会失效，但主判据仍会咬住「机器根本没写新读数」的那一类。
+- 反向验证只在**本机**跑（两个变异 M1/M2 都咬住）；「云机 4/5 真被关机」这一路径没有在云机上复现过（云机当次已停机）。"""
 ]
+
 [entries."T-00"]
 id = "T-00"
 title = "强制框架：git + 台账 + 门禁三方对账"
