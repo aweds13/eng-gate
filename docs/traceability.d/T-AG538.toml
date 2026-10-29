@@ -1,0 +1,26 @@
+[entries."T-AG538"]
+id = "T-AG538"
+title = "判不出来就不动手：magpie 的具名拒绝族移植进 pool"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A336-判不出来就不动手.md",
+  "file:tools/pool/failclosed.py",
+  "file:tools/pool/limits.py",
+  "file:tools/pool/guards.py",
+  "file:tools/pool/registry.py",
+  "file:tools/pool/model_registry.py",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_pool_failclosed.py",
+  "test:test_pool_failclosed.py",
+  "text:tools/pool/failclosed.py::class NotServing(RuntimeError):",
+  "text:tools/pool/failclosed.py::def refuse(problem: str, *, what: str, where: str) -> NotServing:",
+  "text:tools/pool/limits.py::def assert_serving(card: str, limits: Mapping[str, object], *, path: Path | str) -> None:",
+]
+gaps = [
+  """`load_limits()` 读不出回 `{}` ⇒「表坏了、不知此卡有无声明」与「根本没声明表」在 `{}` 里长得一样 —— 修它要让 `load_limits` 换成「保留声明位」的形态，那是 F33 建 `limits.toml` 时一并定的，本卡不做。
+接入点未接：`tools/wb_dispatch.py` 四道闸之后没有 `except NotServing` 退 2 —— 具名族立好了但还没人被它咬，留给 F22（并发闸）/ F23（rpm）/ F33（key 限额）/ F35（账号白名单）。
+明确不移植 magpie 的 fail open 那一侧：pool 没有「可选扩展点」架构，造 fail-open 点等于放松判据（违能力映射表的 D5）。这是有意的不移植，不是漏。
+""",
+]

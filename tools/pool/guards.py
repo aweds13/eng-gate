@@ -93,7 +93,12 @@ def _tree_label(tree: object) -> str:
 
 
 def tree_guard(tree: object, reservations: Iterable[dict], now: float | None = None) -> list[str]:
-    """一棵树同时只能有一个活租约（主树尤其）—— 空列表 = 没被咬。"""
+    """一棵树同时只能有一个活租约（主树尤其）—— 空列表 = 没被咬。
+
+    失败方向：fail closed —— 读不到租约会话（`reservations` 给 None）今天抛 `TypeError`，
+    **不回 `[]`**；F70 的类型化出口（`pool.failclosed.NotServing`）留给调用方包一层
+    （本卡 A336 只加这一行 docstring，`if` 一个字没改）。
+    """
     want = _norm(tree)
     problems: list[str] = []
     for res in reservations:
@@ -172,6 +177,10 @@ def domain_guard(files: Iterable[str], reservations: Iterable[dict],
          「同文件**同符号**」与「整个文件（不写 `::`）」照旧**拒**。
       ★ 细判按**文件部分**成对，所以连「`X.py` × `X.py::sym`」也拦得住（粗筛看不见它）。
     ★ 空域 = 不与任何东西相交 = 绕过这条守卫 —— 所以调用方（CLI）**不许把查不到的卡猜成空域**。
+    失败方向：fail closed —— **空域不是「过了」而是「没东西可判」**（上面那句已有注释）；
+    符号级判不出来时走 `_pair_verdict` 的**保守拒**（拒的理由带在返回值里），今天仍回 `list[str]`。
+    F70 的类型化出口是 `pool.failclosed.NotServing`，留给调用方（本卡只加这几行 docstring，
+    `if` 一个字没改）。
     """
     mine = [str(item) for item in files] if isinstance(files, (list, tuple, set)) else []
     request = _as_card("?", mine)

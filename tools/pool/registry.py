@@ -148,6 +148,9 @@ def load(path: Path | str | None = None) -> list[dict]:
 
     冷启动读到坏文件时先读 `.bak`（卡 A330 / magpie F77 的 `internal/lastgood`）：恢复会往
     stderr 打一行；两边都坏才抛 `RegistryError`，消息里写明 `.bak` 也坏了。坏文件一个字都不动。
+
+    失败方向：已 fail closed（「坏了，**不清空**」）—— 这是 F70 的**存储面**：
+    它抛 `RegistryError` 而不是回 `[]`，与本卡的 `NotServing` 同族同向（卡 A336 只加这一段）。
     """
     target = Path(path) if path is not None else registry_path()
     if not target.exists() and not lastgood.backup_path(target).exists():

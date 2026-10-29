@@ -116,6 +116,8 @@ class PoolNotWiredError(RuntimeError):
     """该池的**调用还没接**（卡 166：只留接口 + 拒绝路径）。
 
     ★ 不许静默回落到别的池，也不许拿裸名去试（判据 ④ / 边界）。
+    失败方向：已 fail closed（响亮抛）—— 这是 F70 的**数据面**，与
+    `pool.failclosed.NotServing` **同族同向**（卡 A336 只加这几行，继承链与本类一个字没改）。
     """
 
 

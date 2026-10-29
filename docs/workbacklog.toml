@@ -4466,3 +4466,22 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A336"
+task = "T-AG538"
+title = "判不出来就不动手：magpie 的具名拒绝族移植进 pool"
+tree = ".wt/A336"
+spec = "复盘/卡/卡A336-判不出来就不动手.md"
+files = [
+  "tools/pool/failclosed.py",
+  "tools/pool/limits.py",
+  "tools/pool/guards.py",
+  "tools/pool/registry.py",
+  "tools/pool/model_registry.py",
+  "tools/pool_accounts.py",
+  "tests/test_pool_failclosed.py",
+]
+status = "done"
+risk = "mid"
+depends = []

@@ -123,7 +123,11 @@ def _check_account(
     base_whitelist: set[str] | None = None,
     strict: bool = True,
 ) -> None:
-    """逐字段校验，报错要点名「第几个 + 哪个字段」，不许只说格式错。"""
+    """逐字段校验，报错要点名「第几个 + 哪个字段」，不许只说格式错。
+
+    失败方向：已 fail closed（「没探测过就不许填数」，见下方 `[account.quota]` 那条）——
+    这是 F70 的**数据面**：抛 `LedgerError` 而不是当「未观测」放行（卡 A336 只加这一行）。
+    """
     where = f"第 {idx + 1} 个账号"
     if not isinstance(acc.get("id"), str) or not acc.get("id"):
         raise LedgerError(f"{where} 缺 id")

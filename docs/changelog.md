@@ -1,3 +1,32 @@
+## {date} · {title}（{card}，{task}）
+
+magpie 的三个扩展点里两个 **fail closed**、一个 fail open。fail closed 的两个各带一条**具名错误**：
+`ErrUnmasked`（`internal/gwmw/gwmw.go:250-252`）与 `ErrUnlimited`（`internal/gwbudget/gwbudget.go:97-99`）。
+本仓缺的正是这一层：判据散在五处、各自写「判不了就拒」，没有共同的**具名空值**，于是下游
+`except Exception` 一律把「判不了」与「真坏了」混成一句话。
+
+这一笔只立**形状与读法**，不动任何既有 `if`：
+
+- `tools/pool/failclosed.py`（66 行）：`NotServing(RuntimeError)` / `NotLimited(NotServing)` /
+  `refuse(problem, *, what, where)`。★ 继承 `RuntimeError` 而**不**继承 `ValueError`（后者在本仓表示
+  「配置坏了」）；**不 import 任何 pool 模块**（`guards.py` 是纯函数模块，防环）。
+- `tools/pool/limits.py`（132 行）：`LIMITS_PATH` / `limits_path()` / `load_limits()` / `has_requirement()` /
+  `assert_serving(card, limits, *, path)`。**两个方向都判**（只抄一半会把没设限额的卡全停掉）：
+  有要求且表读不出 ⇒ 抛 `NotLimited`；没要求 ⇒ 一律不抛 —— 逐字对应 magpie
+  `gwbudget.go:102` 的 `if who.KeyID == "" || len(who.Limits()) == 0 { return nil, nil }`。
+- 五条既有判据**只加 docstring**（`guards.py` 的 `tree_guard` / `domain_guard`、`registry.py` 的 `load`、
+  `model_registry.py` 的 `PoolNotWiredError`、`pool_accounts.py` 的 `_check_account`）：
+  用 AST 抹掉 docstring 后逐节点比对，四份全 `ast_equal_wo_doc=True` —— 这条不是口头保证，是机器口径。
+
+**明确不移植 fail open**：pool 没有「可选扩展点」架构，造一个 fail-open 点等于主动放松判据，
+违能力映射表的 D5「只有用户能放松判据」。
+
+如实记两处边界：①`load_limits()` 读不出回 `{}` ⇒「表坏了、不知此卡有无声明」与「根本没声明表」
+长得一样（留给 F33 建数据文件时一并定）；②接入点（`wb_dispatch.py` 四道闸之后 `except NotServing` 退 2）
+**未接** —— 那是 F22/F23/F33/F35 的活。
+
+读数：`tests/test_pool_failclosed.py` 9 passed；`tests/test_pool_guards.py + test_pool_registry.py +
+test_model_registry.py` 79 passed（与加 docstring 前一字不差）；反向验证 8/8 咬住。
 ## 卡 E57 落地（T-AG509）
 
 - `tests/conftest.py` 新增 autouse 夹具 `_no_host_session_id`：把宿主的 `DSH_SESSION_ID` 从测试进程里摘掉。
