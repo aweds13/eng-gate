@@ -1,0 +1,20 @@
+[entries."T-AG530"]
+id = "T-AG530"
+title = "额度等待要有等待子命令：magpie quota wait 移植进 pool"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A328-额度等待要有等待子命令.md",
+  "file:tools/pool_quota.py",
+  "file:tests/test_quota_wait.py",
+  "test:test_quota_wait.py",
+  "text:tools/pool_quota.py::WAIT_MIN_S = 60",
+  "text:tools/pool_quota.py::def round_wait(back_at: str | None, *, now: datetime | str | None = None) -> tuple[int, str]:",
+  "text:tools/pool_quota.py::EXIT_OK, EXIT_TIMEOUT, EXIT_USAGE, EXIT_INTERRUPT = 0, 1, 2, 130",
+]
+gaps = [
+  """- `wait` 只等记录、不自己探测（探测在 `tools/pool_accounts.py:439 probe_account`），
+  `refresh` 只回答要不要重新探测、不触发探测 ⇒ 真正的自动刷新循环属后续卡。
+""",
+]

@@ -4374,3 +4374,17 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A328"
+task = "T-AG530"
+title = "额度等待要有等待子命令：magpie quota wait 移植进 pool"
+tree = ".wt/A328"
+spec = "复盘/卡/卡A328-额度等待要有等待子命令.md"
+files = [
+  "tools/pool_quota.py",
+  "tests/test_quota_wait.py",
+]
+status = "done"
+risk = "mid"
+depends = []

@@ -418,6 +418,35 @@ fallback 原因的是同一个文件里的 f-string —— 两边早就脱节了
   （合跑 `21 passed in 1.26s`）。反向验证 `gates/diag/_rev_E67.py` 逐条把修法改回去，
   **9/9 全部咬住**（`_rev_E67.log` 末行「结论：9/9 条全部咬住，收尾绿。」）。
 - 门禁读数：`--only pytest` ⇒ `[OK ] pytest exit=0 247.66s 3679 passed, 3 skipped`。
+## 2026-10-30 · 额度等待要有等待子命令：magpie quota wait 移植进 pool（A328，T-AG530）
+
+`tools/pool_quota.py` 一直只有 `status` 一个子命令 —— 它能告诉你「现在能不能派」，
+却没有「等到能派为止」的入口。于是每个调用方各自发明等待策略：`tools/wb_dispatch.py:3452`
+拿 `wait_seconds(reset_at, args.quota_wait)` 算一个数，其余靠 `DEFAULT_QUOTA_WAIT = 300`
+（`tools/wb_dispatch.py:218`）睡死 5 分钟，撞 429 再 `:3468` 换模型。睡死一个常数既不看记录、
+也不许早醒，是 magpie 早就解决过的问题。
+
+- 移植 magpie 的 `quota wait`（`internal/cli/quota_wait.go`）：新增 `wait` 子命令，
+  退出码照抄 `// Exits 0 then, 1 on --timeout, 2 on a name it doesn't know, 130 on Ctrl+C.`
+  ⇒ `EXIT_OK, EXIT_TIMEOUT, EXIT_USAGE, EXIT_INTERRUPT = 0, 1, 2, 130`。
+- 一轮睡多久由 `round_wait(back_at, *, now)` 算：`clamp(diff + 30, 60, 600)`，三个常数照抄
+  magpie 的 `quotaWaitMargin = 30s` / `quotaWaitMin = 1m` / `quotaWaitMax = 10m`。
+  续期未知 ⇒ 睡满 600（**不是** `DEFAULT_QUOTA_WAIT = 300`）。
+- 新增 `refresh` 子命令 + `gates/diag/quota-refresh.json`：30 秒内已问过就跳过
+  （照 magpie `quotaRefreshGap = 30s`）。时间戳读不懂 ⇒ **当作没问过、立刻可问** ——
+  坏 JSON 不许把刷新能力冻住。
+- ★ **一条口径上的有意分歧**：magpie 的 `wait` 自己 `AskUsage()` 读 vendor，pool 只有记录、
+  **不许联网**（探测在 `tools/pool_accounts.py:439 probe_account`，两者不许合并）。
+  所以 `已过期，需重新探测` **不能**直接判成功 —— 必须看到一条 `recorded_at` 严格晚于本次
+  等待起点的记录，才退 `EXIT_OK`；否则一路等到超时退 1。**过期 ≠ 可用**。
+- `wait_seconds()`（`tools/pool_quota.py:248`）**逐字节未变** ⇒ `tools/wb_dispatch.py:3452`
+  与 `tests/test_quota_clock.py:99 test_wait_follows_record_not_fixed_300` 不受影响。
+- 新增 `tests/test_quota_wait.py` 10 条（含一条反向钉子和一条「零网络」钉子），
+  虚拟钟（`--now` 注入 + `monkeypatch` 替 `time.sleep`）⇒ 一条真实睡眠都没有。
+- 读数：`pytest tests/test_quota_wait.py tests/test_quota_clock.py` ⇒ **19 passed in 0.54s**；
+  `ruff check` ⇒ All checks passed；反向验证 `gates/diag/_rev_A328.py` ⇒ **7/7 全部咬住**；
+  CLI 实测 `wait --timeout 2s` 在「未记录」上退 1，`refresh --json` 连跑两次
+  `seconds_since_last = 12.45 / probe = false`（30 秒抑制生效）。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成
