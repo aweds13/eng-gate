@@ -2,14 +2,22 @@
 id = "T-AG524"
 title = "抢 CPU 的时候，红门不算数：门禁记同租户、超时门标 SUSPECT"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 owner = "controller"
 evidence = [
+  "file:scripts/run_gates.py",
+  "file:tools/gate_verdict.py",
+  "file:tests/test_gate_co_tenants.py",
+  "file:tests/test_two_rulers.py",
+  "file:docs/subsystems/ci/测试流程.md",
+  "file:docs/subsystems/ci/云门禁机.md",
   "file:复盘/卡/卡E65-抢cpu的时候红门不算数.md",
-  "file:gates/diag/_spec_E65.md",
-  "file:gates/diag/cloud-gate-E63e.log",
+  "test:test_gate_co_tenants.py",
+  "text:tests/test_gate_co_tenants.py::test_suspect_is_its_own_state_and_still_not_ok",
+  "text:tools/gate_verdict.py::SUSPECT = \"suspect\"",
 ]
 gaps = [
-  """- 立卡时未实现：`co_tenants` 采集与 `SUSPECT` 三态都还不存在。
-- 本卡只治「读法」，不治「慢」：分片、加核、`--no-cov` 的税是另外的事（速度调查里已写明不可混为一谈）。"""
+  """- 本卡只治「读法」，不治「慢」：分片、加核、`--no-cov` 的税是另外的事（速度调查已写明）。
+- `co_tenants` 只数同类进程数，不测 CPU 占用；精确负载仍要外部监视（未建）。
+- `SUSPECT` 只认 `SUSPECT_SHAPES` 里那几种「等不到东西」的措辞，没覆盖到的超时仍记普通红。"""
 ]

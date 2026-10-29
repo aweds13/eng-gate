@@ -256,8 +256,8 @@ _NOT_A_RED_RULER = {
         "`failed = exit_code not in (0, 3)` —— 3 已被显式当成 NOT RUN 排除，"
         "这是「要不要印这段输出」，不是判红"
     ),
-    "scripts/run_gates.py:1592": "`gates_ok()` docstring 里的说明文字，不是可执行判据",
-    "scripts/run_gates.py:2676": (
+    "scripts/run_gates.py:1657": "`gates_ok()` docstring 里的说明文字，不是可执行判据",
+    "scripts/run_gates.py:2749": (
         "复用记账：只有 exit_code==0 的门才可复用 —— 比 blocking 更严，"
         "NOT RUN 不复用是对的，它不是在判红"
     ),

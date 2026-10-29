@@ -374,8 +374,6 @@
 含「差异必须落在可比位上」这条分辨率说明。
 ## 2026-10-29 · 技能与文档的口径校正：加注规矩分作用域、门数不写死（G7，T-AG523）
 
-
-
 - `skills/softeng-manage/SKILL.md` 的「口径漂移用加注治」原来是一条**无作用域的口号**，于是
   reference 类运维文档也被加注一层的旧结论糊住。改成按文档类型分：**reference / how-to 就地改成
   当前真值**（证据进卡规格 + changelog + 台账，不进那份文档）；**explanation / 历史复盘才加注**
@@ -418,6 +416,42 @@
 判据五条（产物必须自证是这一趟写的 / 不新鲜就不许留下且退 9 / 不信 rc 只信产物 /
 四个反向用例 / 不放宽既有 host-ok-tree 三条），交付与验收见
 `复盘/卡/卡E66-没跑完也把上一趟的绿搬回来了.md`。
+## 2026-10-29 · 抢 CPU 的时候，红门不算数：门禁记同租户、超时门标 SUSPECT（E65，T-AG524）
+
+云门禁 2026-10-29 三趟在**同一棵树**上红的浏览器流各不相同（`⑬` / `㉒` / `⑮` / `web_live`），
+而把 `ui_flow` 单跑是 26 条流 362 项断言全绿 —— 说明「红不红」当场取决于机器忙不忙。
+同一台机上两套负载叠加，`pytest` 门从 435.16 s 涨到 529.0 s（**+21.6%**）。
+产物里原本只有「红」一种，于是「该改代码」和「该换台空机重跑」长得一模一样。
+
+改动：
+
+- `scripts/run_gates.py`：新增 `co_tenant_snapshot()`（同机 `python*` / `node*` 进程数，
+  采集失败记 `collected: false` + 理由，**不写 0**）、`SUSPECT_SHAPES`（只认「等不到东西」这一类症状）、
+  `mark_suspect_rows()`（**只标不改判**：`exit_code` / `blocking` 一字不动）；payload 新增 `co_tenants`。
+- `tools/gate_verdict.py`：新增第三种状态 `SUSPECT`。`judge()` 里 `SUSPECT` 行**不进**「真红」清单，
+  但整趟 `ok` 仍 `False`、`state` 为 `suspect`；标了 `SUSPECT` 却缺 `co_tenants` / 缺 `suspect_reason` /
+  本身 `exit_code=0` 的，直接判**红**（想把红洗干净比不标更严重）。
+- `tests/test_gate_co_tenants.py`（新，12 条）：判据 1/2/3/4/5 各一组，四种变异各自都能把钉子咬红。
+- `docs/subsystems/ci/测试流程.md` §5.1「三种红」表；`docs/subsystems/ci/云门禁机.md` §4.2 争抢实测代价。
+
+口径：`SUSPECT` **不是绿、不是跳过** —— 它只把「该改代码」和「该换机重跑」分开；
+同租户数多大都不会把 `ok` 变成 `True`。
+
+## 连带修掉的两处行尾事故
+
+G7（`a5610c78`）落地时带进主树的两份片段里各有两处多余的 CR（写盘脚本对**已经带 CRLF** 的
+字符串又做了一次换行翻译）：`docs/changelog.d/T-AG523.md`、`复盘/交接.d/T-AG523.md`。
+本卡跑本机门禁时 `tests/test_gate_env_parity.py::test_known_multi_cr_files_still_carry_double_cr`
+把这两条抓红（它要求「带双重 CR 的文件」恰好只有登记过的三份），已用字节级 `re.sub(rb"\r+\n", b"\r\n")`
+归一成纯 CRLF —— **只删多余的 CR，正文一字未改**。
+
+## 读数出处：本趟是本机跑的（用户授权）
+
+`gates/last.json` 的 `host` 是 `DEV-HOST`，不是云机 `gates-runner-host`。
+原因是云机 `203.0.113.10` 自 2026-10-29 03:00 定时关机后一直 `Connection timed out`
+（当天 8 次探测全失败），云门禁跑不成。**用户 m27225 直接授权「跑本地」**，因此这一笔用本机
+全量读数落地 —— 这是对 m12391「门禁必须上云」的一次性改口，不是把那条规矩废掉。
+落地脚本里的云机 `host` 闸保留，只在显式 `--allow-local-host` 时放行，且会把这句话打进证据。
 ## 2026-10-28 · 文档治理第三批：文档读数与意图导航、判据自证与技能对账接门、CI 跨宿主可复现（F8+G6+E59，T-AG517）
 
 三张卡一笔落地。三条改动都动同一棵树上被判据读的读数 —— F8 改的是 `docs/INDEX.md` 与门数、G6 改的是 `scripts/check_docs.py` 自己的 skip 面、E59 改的是 `.gitignore` 与 `scripts/run_gates.py`；单独落地时任意一笔都会让另外两张卡的读数暂时对不上（`docs` 门的死指针、审计的证据表），并集才稳定。

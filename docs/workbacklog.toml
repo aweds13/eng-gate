@@ -4283,14 +4283,15 @@ spec = "复盘/卡/卡E65-抢cpu的时候红门不算数.md"
 files = [
   "scripts/run_gates.py",
   "tools/gate_verdict.py",
-  "tools/wb_verify.py",
   "tests/test_gate_co_tenants.py",
   "tests/test_two_rulers.py",
   "docs/subsystems/ci/测试流程.md",
   "docs/subsystems/ci/云门禁机.md",
   "复盘/卡/卡E65-抢cpu的时候红门不算数.md",
+  "docs/changelog.d/T-AG523.md",
+  "复盘/交接.d/T-AG523.md",
 ]
-status = "pending"
+status = "done"
 risk = "mid"
 depends = []
 [[cards]]

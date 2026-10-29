@@ -57,3 +57,9 @@ python -X utf8 tools/wb_verify.py --tree .             # 五块无 FAIL
 - 不许为这条卡放宽任何现有超时阈值（那是把症状藏起来）。
 - 不许在门禁里写「本机核数」之类的硬编码；采集失败就记 `null`。
 - 不许顺手改 `TF_PYTEST_WORKERS` 的默认值（那是另一张卡的事，且云机已用 `setx` 定成 2）。
+
+## 附带修掉的两处（本卡门禁自己咬出来的，2026-10-29）
+
+- `docs/subsystems/ci/测试流程.md` §8 那句耗时没写出处（`tests/test_ci_docs.py::test_every_duration_has_a_source` 咬住）⇒ 补 `源：gates/diag/_speed_shard_plan.md §2.3`。
+- `docs/changelog.d/T-AG523.md` / `复盘/交接.d/T-AG523.md` 带**双重 CR**（G7 落地时片段脚本的行尾转换留下的残留，`tests/test_gate_env_parity.py::test_known_multi_cr_files_still_carry_double_cr` 咬住）⇒ 归一成纯 CRLF。
+  ★ 这两处不是本卡的活儿，是本卡让那道钉子**真会咬**之后咬出来的真缺陷；顺手修，是因为不修则每一次全量门禁都红，且它们与本卡同一类问题（行尾/读数的完整性）。若审核认为该另开卡，可从这里摘出去。

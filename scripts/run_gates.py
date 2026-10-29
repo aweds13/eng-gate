@@ -1548,6 +1548,71 @@ def skip_reused(name: str, records: dict[str, dict[str, str]], no_reuse: bool) -
     return current if record.get("hash") == current else None
 
 
+#: 卡 E65 / T-AG524：哪些**症状形状**像「机器忙」而不是「代码错」。
+#:
+#: ★ 只认「等不到东西」这一类：超时 / 没等到 / timed out。**不认**断言值不符 ——
+#:   那是代码错，机器再忙也只会更慢，不会把 true 变成 false。
+SUSPECT_SHAPES: tuple[str, ...] = (
+    "没等到",
+    "超时",
+    "timeout",
+    "timed out",
+    "等了约",
+)
+
+
+def co_tenant_snapshot() -> dict[str, object]:
+    """同一台机器上还有多少**同类进程**（判据 1）。
+
+    为什么要有这份读数：2026-10-29 云门禁 e/f/g 三趟在**同一棵树上**红的浏览器流各不相同，
+    而把 `ui_flow` 单跑是 26 条流 362 项断言全绿 —— 「红不红」当场取决于机器忙不忙。
+    没有读数时这件事只能靠聊天记录，有了它，产物自己说得清。
+
+    ★ 采集失败要显式 `collected=False` + 理由，**不许写 0 蒙人**（判据 1）：
+      「没采到」和「确实没有」在判据里必须分得开。
+    ★ 故意只数同类进程而不是「CPU 占用率」：占用率是一瞬间的，进程数是稳定的；
+      判据要的是「这台机上还有别人在跑同类活」，不是精确负载。
+    """
+    me = os.getpid()
+    try:
+        import psutil  # 局部 import：门禁主路径不强依赖它
+    except Exception as exc:  # noqa: BLE001 - 采集失败就是判不出来
+        return {"collected": False, "reason": f"没有 psutil：{exc}", "self_pid": me}
+    try:
+        mine: set[int] = {me}
+        # 拿不到子进程就只算自己（不是判据，只是别把自己数成同租户）
+        with contextlib.suppress(Exception):
+            mine |= {p.pid for p in psutil.Process(me).children(recursive=True)}
+        like = 0
+        for proc in psutil.process_iter(["name"]):
+            if proc.info.get("pid") in mine:
+                continue
+            name = str(proc.info.get("name") or "").lower()
+            if name.startswith(("python", "node")):
+                like += 1
+        return {"collected": True, "like": like, "self_pid": me}
+    except Exception as exc:  # noqa: BLE001 - 同上
+        return {"collected": False, "reason": f"枚举进程失败：{exc}", "self_pid": me}
+
+
+def mark_suspect_rows(results: list[dict[str, object]], snap: dict[str, object]) -> None:
+    """判据 2：红的门里，症状像「等不到东西」的，标成 `SUSPECT` 并记当时的同租户读数。
+
+    ★ 只**标**不改判：`exit_code` 一个字不动、`blocking` 一个字不动 ⇒ 整趟该红还是红。
+      这条卡治的是「红得有没有理由怀疑是机器忙」，不是「把红变绿」。
+    """
+    for row in results:
+        if int(str(row.get("exit_code", 0) or 0)) == 0:
+            continue
+        blob = f"{row.get('summary') or ''} {row.get('detail') or ''}".lower()
+        hit = next((s for s in SUSPECT_SHAPES if s.lower() in blob), None)
+        if hit is None:
+            continue
+        row["status"] = "SUSPECT"
+        row["co_tenants"] = snap
+        row["suspect_reason"] = f"症状命中「{hit}」：等不到东西，不像断言不符"
+
+
 def gates_ok(results: list[dict[str, object]]) -> bool:
     """整趟是否通过：**至少一道阻断门**，且所有阻断门都 `exit_code == 0`。
 
@@ -2477,6 +2542,11 @@ def main() -> int:
         print("\n--fast 全过 ✅（只覆盖「改一行就能犯」那几类；提交前仍要 --quick 或全量）")
         return 0
 
+    # ★ 卡 E65（T-AG524）：先采一次同租户读数，再把「等不到东西」的红门标成 SUSPECT。
+    #   顺序不能反：标注要用到这份读数，采晚了就成「事后追认」。
+    co_tenants = co_tenant_snapshot()
+    mark_suspect_rows(results, co_tenants)
+
     payload = {
         "rev": git("rev-parse", "--short", "HEAD"),
         # ★ 卡 E44：这份绿是哪版解释器跑的，必须可查 —— 门输入哈希的展开语义
@@ -2505,6 +2575,9 @@ def main() -> int:
         #   让"我手打 1 个 worker（pytest 612s 占全趟 86%）"从静默变成会被发现的事。
         #   ★ worker 数只读 `pytest_workers()` 一处（不写第二份口径）。
         "workers": pytest_workers(),
+        # ★ 卡 E65（T-AG524）：这趟跑的时候，同一台机上还有多少同类进程。
+        #   没有它，「红门是代码错还是机器忙」在产物里分不开（判据 1）。
+        "co_tenants": co_tenants,
         "pytest_mode": mode,
         # 慢门清单（卡 161 §2 验收）：把「哪道门多少秒」打出来——"盯着慢"的第一份真读数。
         #   阈值 `TF_GATE_DOOR_BUDGET`（默认 600s，`=0` 关）；告警不阻断

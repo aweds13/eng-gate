@@ -64,6 +64,11 @@ GOLDEN_PINNED: dict[str, str] = {"render": "gates/render/CAPTURED_ON.json"}
 GREEN = "green"
 UNVERIFIED = "unverified"
 RED = "red"
+#: 第三种状态（卡 E65 / T-AG524）：**红了，但红得有理由怀疑是「机器忙」而不是「代码错」**。
+#:
+#: ★ 它**不是绿**：`ok` 仍是 `False`。它只是把「该去修代码」和「该换台空机重跑」分开 ——
+#:   没有它的时候，两种情况在产物里长得一模一样，人只能靠记忆和聊天记录区分。
+SUSPECT = "suspect"
 
 _PROV = "来源不明"
 
@@ -162,8 +167,11 @@ def red_door_problems(payload: Any) -> list[str]:
       `missing_exit_code_problems()` 判成「未验证」。分界是：**说了数字就按数字判
       （非零即红），没说就记未验证**；「没写」既不等于绿、也不必冒充红。
     """
+    suspect = {id(row) for row in suspect_rows(payload)}
     out: list[str] = []
     for row in blocking_rows(payload):
+        if id(row) in suspect:
+            continue  # 标了 SUSPECT 的行走第三条路（见 judge 的 state）
         if "exit_code" not in row:
             continue
         code = row.get("exit_code")
@@ -262,6 +270,41 @@ def host_problems(
     return out
 
 
+def suspect_rows(payload: Any) -> list[dict[str, Any]]:
+    """标了 `status="SUSPECT"` 的门行（顺序同产物）。"""
+    return [
+        row
+        for row in gate_rows(payload)
+        if str(row.get("status") or "").strip().upper() == "SUSPECT"
+    ]
+
+
+def suspect_row_problems(payload: Any) -> list[str]:
+    """判据 2′：`SUSPECT` 是一条**有证据的怀疑**，不是一句免责声明。
+
+    要标它，必须同时给三样东西，缺一条就是「想把红洗干净」：
+      ① 门自己非零退出（没红就别标 SUSPECT —— 那是另一回事）；
+      ② `co_tenants`：当时同机还有多少同类进程（采集失败要显式记 null，不许写 0 蒙人）；
+      ③ `suspect_reason`：为什么怀疑是争抢（要能念给人听，比如命中的超时形状）。
+    """
+    out: list[str] = []
+    for row in suspect_rows(payload):
+        name = str(row.get("name") or "?")
+        code = row.get("exit_code")
+        try:
+            zero = int(str(code)) == 0
+        except (TypeError, ValueError):
+            zero = False
+        if zero:
+            out.append(f"门 {name} 标了 SUSPECT 却写着 exit_code=0 —— 没红就不许标怀疑")
+        if "co_tenants" not in row:
+            out.append(
+                f"门 {name} 标了 SUSPECT 却没给 co_tenants —— 「当时忙」必须能指到一份读数")
+        if not str(row.get("suspect_reason") or "").strip():
+            out.append(f"门 {name} 标了 SUSPECT 却没写 suspect_reason —— 怀疑要能念给人听")
+    return out
+
+
 def excluded_row_problems(payload: Any) -> list[str]:
     """⑥ 排除是**豁免**，不是「跑过了」：只许声明过的门、且必须能念给人听。
 
@@ -321,11 +364,28 @@ def judge(
         unverified.append(f"阻断门没写 exit_code（未声明 ≠ 跑过）：{rows_no_code}")
     red += reused_problems(payload)
     red += excluded_row_problems(payload)
+    bad_suspect = suspect_row_problems(payload)
+    red += bad_suspect
+    suspect_names = [
+        f"{row.get('name')}(exit={row.get('exit_code')})" for row in suspect_rows(payload)
+    ]
     if check_host:
         red += host_problems(payload, expect_host=expect_host, not_host=not_host)
     problems = red + unverified
-    if not problems:
+    if not problems and not suspect_names:
         return Verdict(ok=True, state=GREEN, problems=())
+    if not red and not unverified and suspect_names:
+        # ★ 只有「机器忙」这一种红：仍然 ok=False（判定不变软），只是把成因说清楚。
+        return Verdict(
+            ok=False,
+            state=SUSPECT,
+            problems=(
+                f"这些门红了，但同机有别的负载在抢（co_tenants 已记在产物里）：{suspect_names}"
+                " —— 换台空机重跑再下结论，别直接改代码",
+            ),
+        )
+    if suspect_names:
+        problems = [*problems, f"另有怀疑是争抢的红门：{suspect_names}"]
     return Verdict(ok=False, state=(RED if red else UNVERIFIED), problems=tuple(problems))
 
 
