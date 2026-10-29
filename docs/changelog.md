@@ -391,6 +391,33 @@ fallback 原因的是同一个文件里的 f-string —— 两边早就脱节了
   **3/3 全部咬住，收尾绿**（`gates/diag/rev-E68.log`）。
 - 判据一条也没放宽：`REPLAY_MAX_FALLBACK` 仍是 3、`ok` 里 `not unknown` 那条照旧、
   没给 T-BG001 补任何指向不存在用例的 `test:` 证据。
+## 2026-10-30 · 红门的摘要不许是绿的：`detail` 没人写，超时只剩裸 traceback（E67，T-AG528）
+
+`scripts/run_gates.py` 的 `summarize(out)` 不看退出码：它从日志末尾往前找第一条能匹配
+框架摘要正则的行，而那个正则里含 `OK \]` —— 于是**红的门配一条绿的摘要**。云机那一趟
+`web_live` 就是这样：22 门里唯一红的那道，trailer 上写着
+`[OK ] JS 语法：node --check 通过…`，而同一份日志的末行是 `TimeoutError: timed out`。
+第二个缺陷让它彻底失明：`mark_suspect_rows()` 读 `detail` 字段，而**全仓没有一处写它**
+（`grep -n '"detail"' scripts/run_gates.py` 只有一处 `row.get('detail')`），所以摘要一旦
+被挑成绿行，症状就再没有第二条路能浮现。第三个：`tools/web_live_check.py` 的 `_json_call`
+把 `timeout=10` 写死、且只接 `HTTPError`，慢机上一超时就是裸 traceback。
+
+- `summarize(out, exit_code)` 改成看退出码分三支：`0` 逐字保留原行为；`3`（NOT RUN）打
+  `[SKIP] `；其余非 0 **只从失败形状行里挑**（`FAIL_SHAPES` 13 条：`timed out` / `timeout` /
+  `超时` / `没等到` / `refused` / `拒绝` …），一条都挑不出就显式打 `[FAIL] `，绝不退回绿行；
+  选中的行自带 `[OK ]` 一律先摘掉再打标记。
+- `finish_gate()` 的红门条目开始写 `detail`（输出末 20 行、上限 2000 字符）；**绿门与 NOT RUN 写空**
+  —— 宁可不写，也不写一句假话。
+- `tools/web_live_check.py` 加 `LiveCallError`（带 endpoint / method / 实际秒数 / 原始异常类型）
+  与 `call_timeout()`（env `TF_WEB_LIVE_TIMEOUT`，默认仍是 10 秒，坏值退回默认）；`_json_call`
+  收 `timeout` 形参并接 `OSError`；13 组 `live_*` 接住它、落 `checks[...] = False`（`mark_live_error()`）。
+  云侧 `scripts/cloud/run_gate.sh:98` 注入 `TF_WEB_LIVE_TIMEOUT=30` —— 这是**调等待窗**，不是放宽判据。
+- 顺带修掉第三处：`exit_code == 3`（NOT RUN）原先被写成 `[FAIL]`，现改 `[SKIP]`。它不在原
+  任务书的三个缺陷里，是本轮 pytest 门照出来的。
+- 新增 21 条钉子：`tests/test_gate_summary_truthful.py` 12 条 + `tests/test_web_live_timeout.py` 9 条
+  （合跑 `21 passed in 1.26s`）。反向验证 `gates/diag/_rev_E67.py` 逐条把修法改回去，
+  **9/9 全部咬住**（`_rev_E67.log` 末行「结论：9/9 条全部咬住，收尾绿。」）。
+- 门禁读数：`--only pytest` ⇒ `[OK ] pytest exit=0 247.66s 3679 passed, 3 skipped`。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

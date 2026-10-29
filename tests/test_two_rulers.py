@@ -252,12 +252,13 @@ _EXIT_CODE_RULERS = {
 #: 扫出但**不是**「判红」的行 —— 每条都必须写清为什么不是。少一条会红（漏判），
 #: 多一条也会红（白名单不许悄悄膨胀成「什么都放行」，与 `test_ci_portability` 同规矩）。
 _NOT_A_RED_RULER = {
-    "scripts/run_gates.py:1523": (
-        "`failed = exit_code not in (0, 3)` —— 3 已被显式当成 NOT RUN 排除，"
-        "这是「要不要印这段输出」，不是判红"
+    "scripts/run_gates.py:832": (
+        "`gate_failed()` —— 判的是**单道门自己**红不红，且已把 3（NOT RUN）显式排除；"
+        "整趟过不过看 `gates_ok()`（只数 `blocking` 门）。它不看 `blocking` 是因为"
+        "`blocking` 本身就是从这个口径派生的（`exit_code == 3` ⇒ 不阻断）"
     ),
-    "scripts/run_gates.py:1657": "`gates_ok()` docstring 里的说明文字，不是可执行判据",
-    "scripts/run_gates.py:2749": (
+    "scripts/run_gates.py:1758": "`gates_ok()` docstring 里的说明文字，不是可执行判据",
+    "scripts/run_gates.py:2850": (
         "复用记账：只有 exit_code==0 的门才可复用 —— 比 blocking 更严，"
         "NOT RUN 不复用是对的，它不是在判红"
     ),

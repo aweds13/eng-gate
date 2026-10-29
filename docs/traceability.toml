@@ -9682,3 +9682,32 @@ gaps = [
   原本就不在表里，真出现时仍会被判「不认识」。本卡没有把它们全部收进白名单——那等于放宽判据。
 """,
 ]
+
+[entries."T-AG528"]
+id = "T-AG528"
+title = "红门的摘要不许是绿的：detail 没人写，超时只剩裸 traceback"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E67-红门的摘要不许是绿的.md",
+  "file:scripts/run_gates.py",
+  "file:tools/web_live_check.py",
+  "file:tests/test_gate_summary_truthful.py",
+  "file:tests/test_web_live_timeout.py",
+  "test:test_gate_summary_truthful.py",
+  "test:test_web_live_timeout.py",
+  "text:scripts/run_gates.py::def summarize(out: str, exit_code: int) -> str:",
+  "text:scripts/run_gates.py::def gate_detail(out: str) -> str:",
+  "text:tools/web_live_check.py::class LiveCallError(RuntimeError):",
+]
+gaps = [
+  """- 缺陷 C 的「云机（2 物理核 / 4 逻辑核、内存紧）上 30 秒等待窗真能过」**未实测**：本卡没碰云机
+  （SSH 一直 `Permission denied (publickey)`）。改动只保证超时会如实点名 endpoint + method + 秒数 +
+  原始异常类型，且云上等待窗由 `scripts/cloud/run_gate.sh:98` 注入为 30 秒（原来写死 10 秒）。
+- `docs` 门在落地前会把本卡规格列为「未入库文档（未跟踪）」并归进 skip —— 卡规格与台账同笔提交后
+  自然消失，**不许**为此改 `check_docs`。
+- 本卡顺带修掉第三处：`exit_code == 3`（NOT RUN）原先被写成 `[FAIL]`，现改为 `[SKIP]`。
+  它不在原任务书的三个缺陷里，是本轮 pytest 门照出来的。
+""",
+]

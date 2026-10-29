@@ -115,19 +115,83 @@ def _rail_nav(html: str) -> str:
     return html.split('class="rail"', 1)[1].split("</nav>", 1)[0]
 
 
+#: 真机自检的**单次 HTTP 等待窗**（秒）。卡 E67：不许写死在每个调用点上。
+#:
+#: 云机（2 物理核 / 4 逻辑核、内存紧）实测单次建课就要 2.1 秒（`api_write POST /api/courses
+#: ms=2127.2`）；13 组 `live_*` 检查串起来时，某一次 `urlopen(timeout=10)` 被耗光 ⇒
+#: `TimeoutError: timed out` 抛穿，整道门只剩一条裸 traceback、还说不清断在哪。
+#: 调法照 `TF_PYTEST_WORKERS` 那套先例：**调等待窗，不放宽判据** —— 判据仍是「全部检查通过」。
+DEFAULT_CALL_TIMEOUT = 10.0
+CALL_TIMEOUT_ENV = "TF_WEB_LIVE_TIMEOUT"
+
+
+class LiveCallError(RuntimeError):
+    """一次 HTTP 调用没等到结果 —— **带点名**的错误，不是裸 traceback（卡 E67）。
+
+    带 `method` / `url` / `seconds` / `kind`（原始异常类型）：慢机器上排障先要看出
+    「哪个接口、等了几秒、是超时还是拒连」。调用方据此记 FAIL（`mark_live_error()`），
+    **不许把它洗成通过**。
+    """
+
+    def __init__(self, method: str, url: str, seconds: float, cause: BaseException) -> None:
+        self.method = method
+        self.url = url
+        self.seconds = seconds
+        self.kind = type(cause).__name__
+        reason = getattr(cause, "reason", None) or cause
+        super().__init__(
+            f"{method} {url} 等了 {seconds:g} 秒没等到（{self.kind}: {reason}）"
+            f"；慢机器调大等待窗：env {CALL_TIMEOUT_ENV}=<秒>（默认 {DEFAULT_CALL_TIMEOUT:g}）"
+        )
+
+
+def call_timeout() -> float:
+    """单次 HTTP 等待窗（秒）：默认 `DEFAULT_CALL_TIMEOUT`，env `TF_WEB_LIVE_TIMEOUT` 可调。
+
+    坏值 / 非正数 ⇒ 退回默认（不静默变成「永不超时」，那等于把判据放宽了）。
+    """
+    raw = os.environ.get(CALL_TIMEOUT_ENV, "").strip()
+    if not raw:
+        return DEFAULT_CALL_TIMEOUT
+    try:
+        val = float(raw)
+    except ValueError:
+        return DEFAULT_CALL_TIMEOUT
+    return val if val > 0 else DEFAULT_CALL_TIMEOUT
+
+
+def mark_live_error(checks: dict[str, bool], err: LiveCallError) -> None:
+    """把「没等到」记成一条 FAIL（卡 E67）：**不许洗成通过**，也不许把整趟带崩。
+
+    名字里带方法与 endpoint，排障时一眼看出断在哪一处。
+    """
+    name = f"真机自检没跑完：{err.method} {err.url}"
+    checks[name] = False
+    print(f"[FAIL] {name}  ★ {err}")
+
+
 def _json_call(base: str, path: str, method: str = "GET", payload: dict | None = None,
-               headers: dict | None = None) -> tuple[int, object]:
-    """打真服务的 JSON 接口，返回 (状态码, 解析结果)。"""
+               headers: dict | None = None, timeout: float | None = None) -> tuple[int, object]:
+    """打真服务的 JSON 接口，返回 (状态码, 解析结果)。
+
+    ★ 卡 E67：等不到（超时 / 拒连）**不抛裸 traceback** —— 抛 `LiveCallError`，消息里
+    写清哪个 endpoint、什么方法、等了多久、原始异常类型。等待窗走 `call_timeout()`
+    （env `TF_WEB_LIVE_TIMEOUT` 可调），调用方也允许按次覆盖。
+    """
+    url = f"{base}{path}"
+    wait = call_timeout() if timeout is None else timeout
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    req = urllib.request.Request(f"{base}{path}", data=data, method=method)
+    req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Content-Type", "application/json")
     for k, v in (headers or {}).items():
         req.add_header(k, v)
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=wait) as resp:
             return resp.status, json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:  # 4xx/5xx 也要看得到状态码
         return e.code, None
+    except OSError as e:  # ★ 卡 E67：TimeoutError / URLError 原先没人接 ⇒ 抛穿成裸 traceback
+        raise LiveCallError(method, url, wait, e) from e
 
 
 def live_remind_checks(base: str) -> dict[str, bool]:
@@ -888,15 +952,24 @@ def main() -> int:
         time.sleep(0.05)
 
     base = f"http://127.0.0.1:{port}"
-    html = urllib.request.urlopen(f"{base}/", timeout=10).read().decode("utf-8")
-    css = urllib.request.urlopen(f"{base}/app.css", timeout=10).read().decode("utf-8")
-    cfg = json.loads(
-        urllib.request.urlopen(f"{base}/api/config", timeout=10).read().decode("utf-8")
-    )
-    # 右栏计时器的数据源：新库没有进行中的专注，应返回 null（而不是 500）
-    active = json.loads(
-        urllib.request.urlopen(f"{base}/api/focus/active", timeout=10).read().decode("utf-8")
-    )
+    # ★ 卡 E67：这几处原先硬写 `timeout=10`，等不到就抛裸 traceback。改走 `call_timeout()`
+    # （可调），并且失败也要**说得清是哪个地址、等了几秒**。
+    wait = call_timeout()
+    try:
+        html = urllib.request.urlopen(f"{base}/", timeout=wait).read().decode("utf-8")
+        css = urllib.request.urlopen(f"{base}/app.css", timeout=wait).read().decode("utf-8")
+        cfg = json.loads(
+            urllib.request.urlopen(f"{base}/api/config", timeout=wait).read().decode("utf-8")
+        )
+        # 右栏计时器的数据源：新库没有进行中的专注，应返回 null（而不是 500）
+        active = json.loads(
+            urllib.request.urlopen(f"{base}/api/focus/active", timeout=wait).read().decode("utf-8")
+        )
+    except OSError as e:
+        print(f"[FAIL] 起服务后读首页/样式/config 没等到：{LiveCallError('GET', base, wait, e)}")
+        server.should_exit = True
+        thread.join(timeout=10)
+        return 1
 
     checks = {
         "无内联事件处理器": "onclick=" not in html and "onkeydown=" not in html,
@@ -943,19 +1016,24 @@ def main() -> int:
     checks["data-view 全部有落点"] = not unknown
     if unknown:
         print(f"[提示] 以下 data-view 既不是视图也没注册动作：{unknown}")
-    checks.update(live_attach_checks(base, tmp))
-    checks.update(live_remind_checks(base))
-    checks.update(live_c_line_checks(base))
-    checks.update(live_ai_checks(base))
-    checks.update(live_team_checks(base))
-    checks.update(live_repeat_rhythm_checks(base))
-    checks.update(live_focus_mirror_checks(base))
-    checks.update(live_regrade_checks(base))
-    checks.update(live_notify_checks(base))
-    checks.update(live_phone_view_checks(base))
-    checks.update(live_sync_checks(base, tmp))
-    checks.update(live_offline_checks(base, tmp))
-    checks.update(live_lan_checks(tmp))
+    # ★ 卡 E67：这一串里任何一次「没等到」都记一条 FAIL（点名 + 耗时），
+    # 不许抛穿成裸 traceback，更不许洗成通过。
+    try:
+        checks.update(live_attach_checks(base, tmp))
+        checks.update(live_remind_checks(base))
+        checks.update(live_c_line_checks(base))
+        checks.update(live_ai_checks(base))
+        checks.update(live_team_checks(base))
+        checks.update(live_repeat_rhythm_checks(base))
+        checks.update(live_focus_mirror_checks(base))
+        checks.update(live_regrade_checks(base))
+        checks.update(live_notify_checks(base))
+        checks.update(live_phone_view_checks(base))
+        checks.update(live_sync_checks(base, tmp))
+        checks.update(live_offline_checks(base, tmp))
+        checks.update(live_lan_checks(tmp))
+    except LiveCallError as err:
+        mark_live_error(checks, err)
     for name, passed in checks.items():
         print(f"[{'OK ' if passed else 'FAIL'}] {name}")
     server.should_exit = True

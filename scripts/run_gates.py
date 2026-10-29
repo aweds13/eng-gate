@@ -758,13 +758,112 @@ def env() -> dict[str, str]:
     return tree_pythonpath(dict(os.environ))
 
 
-def summarize(out: str) -> str:
+#: 失败形状（卡 E67）：门是红的时候（`exit_code != 0`），摘要优先从这些行里挑。
+#:
+#: 为什么单列一张表：`summary_re` 里含 `OK \]`，而红门的输出尾部**可能还留着**某道检查
+#: 的 `[OK ] …`（`web_live` 实测就是这样：`exit_code=1`、日志尾是 `TimeoutError: timed out`，
+#: 摘要却写成 `[OK ] JS 语法：node --check 通过…`）⇒ 红门配绿摘要，产物在骗人。
+FAIL_SHAPES: tuple[str, ...] = (
+    "Traceback",
+    "Error",
+    "ERROR",
+    "error:",
+    "FAIL",
+    "failed",
+    "timed out",
+    "timeout",
+    "超时",
+    "没等到",
+    "等了约",
+    "refused",
+    "拒绝",
+)
+
+#: 红门摘要的统一前缀：连一条失败形状都挑不出来时，也要让人一眼看出这是红的。
+FAIL_PREFIX = "[FAIL] "
+
+#: `exit_code == 3`（NOT RUN，卡 E59）的摘要前缀：**未验证 ≠ 通过，也 ≠ 失败**。
+SKIP_PREFIX = "[SKIP] "
+
+
+def gate_failed(exit_code: int) -> int | bool:
+    """这道门算不算**红**：`0` 绿、`3` NOT RUN（未验证），其余全算红。
+
+    只说一次「3 既不是绿也不是红」—— `summarize()` 与 `detail` 的取舍都问这里。
+    ★ 它**不是判据本体**：整趟过不过看 `gates_ok()`（只数 `blocking` 门）。
+    """
+    return exit_code not in (0, 3)
+
+#: 门禁条目的 `detail`：输出尾部留多少（卡 E67）。
+#:
+#: 为什么要有这个字段：`mark_suspect_rows()` 判「等不到东西」时读 `row['detail']`，但
+#: 本卡之前**全仓没有任何地方写它** ⇒ 判据只能看 `summary` 一行；`summary` 一旦被挑成
+#: 绿的那一行（同卡的缺陷 A），`TimeoutError: timed out` 就整条失明、`web_live` 也标不上
+#: `SUSPECT`。体积口径：只留尾部 20 行、上限 2000 字符 —— `gates/last.json` 是入库产物，
+#: 不许把整段输出塞进去。
+DETAIL_TAIL_LINES = 20
+DETAIL_MAX_CHARS = 2000
+
+
+def gate_detail(out: str) -> str:
+    """输出尾部若干行（给条目里的 `detail` 用）。
+
+    末 `DETAIL_TAIL_LINES` 行、上限 `DETAIL_MAX_CHARS` 字 —— 原始 traceback 与
+    「timed out / 超时」这类症状行都在尾部，前面的进度日志留着只是撑大入库产物。
+    """
+    tail = [ln.rstrip() for ln in (out or "").splitlines() if ln.strip()]
+    return "\n".join(tail[-DETAIL_TAIL_LINES:])[-DETAIL_MAX_CHARS:]
+
+
+def _strip_green(text: str) -> str:
+    """把行首的 `[OK ]` / `[OK]` 摘掉 —— 红门上不许留绿的形状（卡 E67）。"""
+    for mark in ("[OK ]", "[OK]"):
+        if text.startswith(mark):
+            return text[len(mark):].lstrip()
+    return text
+
+
+def _label(text: str, prefix: str) -> str:
+    """给一行加标记：先摘掉它自带的标记，再加这个前缀（红 / 未验证上都用）。
+
+    已有的 `[OK ]` / `[SKIP]` / `[FAIL]` 都要摘掉，否则会叠成 `[SKIP] [SKIP] …`。
+    """
+    body = text
+    for mark in ("[OK ]", "[OK]", "[SKIP] ", "[SKIP]", "[FAIL] ", "[FAIL]"):
+        if body.startswith(mark):
+            body = body[len(mark):].lstrip()
+            break
+    return f"{prefix}{body}"[:160] if body else prefix.strip()
+
+
+def summarize(out: str, exit_code: int) -> str:
     """抓一行结论（供 trailer 用）。
 
+    ★ 卡 E67：**必须知道这道门的退出码**。三种退出码三种写法：
+    - `0`：绿。行为不变 —— 优先匹配测试框架的**汇总行**，并跳过各类 warning。
+    - `3`：`NOT RUN`（卡 E59）—— 这一层**没有验证**，既不写成绿的，也不写成红的，
+      统一加 `[SKIP] ` 前缀。
+    - 其余非 0：红。摘要绝不许以绿的形态出现 —— ① 优先取一条**真正失败形状**的行
+      （`Error` / `Traceback` / `FAIL` / `failed` / `timed out` / `超时` …，见表
+      `FAIL_SHAPES`）；② 一条都挑不出来就显式加 `[FAIL] ` 前缀；③ 都不许退回成绿的那一行。
+
     注意：Windows 命令输出里常有中文警告，直接取"最后一行含关键词"会抓到 ResourceWarning
-    （第一版就抓错了）。所以优先匹配测试框架的**汇总行**，并跳过各类 warning。
+    （第一版就抓错了）。
     """
     lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    if exit_code == 3:  # NOT RUN：这一层**没有验证** —— 不写成绿的，也不写成红的
+        for line in reversed(lines):
+            if "Warning" in line or line.startswith("ResourceWarning"):
+                continue
+            return _label(line, SKIP_PREFIX)
+        return SKIP_PREFIX.strip()
+    if gate_failed(exit_code):
+        for line in reversed(lines):
+            if "Warning" in line or line.startswith("ResourceWarning"):
+                continue
+            if any(k in line for k in FAIL_SHAPES):
+                return _strip_green(line)[:160]
+        return _label(lines[-1], FAIL_PREFIX) if lines else FAIL_PREFIX.strip()
     summary_re = re.compile(r"\d+\s+(passed|failed|error|deselected)|no issues found|checks passed|"
                             r"LAYER CHECKS|SELF-TEST|PASS（|审计通过|OK \]")
     for line in reversed(lines):
@@ -1457,7 +1556,9 @@ def finish_gate(
         "name": name,
         "exit_code": exit_code,
         "seconds": round(time.time() - t0, 2),
-        "summary": summarize(out or ""),
+        "summary": summarize(out or "", exit_code),
+        # ★ 卡 E67：原始 traceback 要留得住 —— `mark_suspect_rows()` 只认这个字段。
+        "detail": gate_detail(out or "") if gate_failed(exit_code) else "",
     }
     if timed_out:
         item["summary"] = (
@@ -1483,7 +1584,7 @@ def finish_gate(
     # 「全量跑红了」之后唯一的办法是**把这道门单独再跑一遍**（render 110 秒、ui_flow 176 秒），
     # 而它往往是随机的，重跑还未必复现（T-G51 就在这上面白花了两轮）。现在：全量输出落
     # `gates/logs/<门名>.log`（不进仓库），**并且**当场印尾部若干行 —— 红的时候立刻能看到原因。
-    failed = exit_code not in (0, 3)
+    failed = gate_failed(exit_code)
     if out:
         try:
             LOG_DIR.mkdir(parents=True, exist_ok=True)

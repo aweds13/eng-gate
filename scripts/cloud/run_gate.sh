@@ -91,6 +91,12 @@ model_whitelist="${TF_MODEL_WHITELIST:-}"
 if [ -n "$model_whitelist" ]; then
   envset="$envset && set \"TF_MODEL_WHITELIST=$model_whitelist\""
 fi
+# 卡 E67：真机自检的单次 HTTP 等待窗。云机（2 物理核/4 逻辑核、内存紧）实测单次建课
+# 2.1 秒，默认 10 秒在并发写时会被耗光 ⇒ `TimeoutError: timed out` 抛穿、web_live 只报
+# 一条裸 traceback。云上给 30 秒。★ **这是调等待窗，不是放宽判据** —— 判据仍是
+# 「全部检查通过」；超时照样记 FAIL（`tools/web_live_check.py` 的 `mark_live_error()`）。
+web_live_timeout="${TF_WEB_LIVE_TIMEOUT:-30}"
+envset="$envset && set \"TF_WEB_LIVE_TIMEOUT=$web_live_timeout\""
 
 echo "=== 0/5 把主树这条分支同步到云机（目标 $cloud_dir）==="
 if [ "$cloud_dir" = "C:/eng" ]; then

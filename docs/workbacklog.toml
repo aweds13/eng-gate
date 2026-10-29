@@ -4357,3 +4357,20 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E67"
+task = "T-AG528"
+title = "红门的摘要不许是绿的：detail 没人写，超时只剩裸 traceback"
+tree = ".wt/E67"
+spec = "复盘/卡/卡E67-红门的摘要不许是绿的.md"
+files = [
+  "scripts/run_gates.py",
+  "tools/web_live_check.py",
+  "scripts/cloud/run_gate.sh",
+  "tests/test_gate_summary_truthful.py",
+  "tests/test_web_live_timeout.py",
+]
+status = "done"
+risk = "mid"
+depends = []
