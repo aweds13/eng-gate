@@ -32,10 +32,39 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import importlib.util
 import json
 import os
 import pathlib
 import time
+
+#: `lastgood` 的模块句柄（懒加载；`None` = 还没加载过）。
+_LASTGOOD = None
+
+
+def _lastgood():
+    r"""懒加载 `pool.lastgood`（卡 A330 的写盘纪律）。
+
+    ★ 本模块会被**按文件路径** exec（`tests/test_pool_queue.py` 就按路径加载它），那时既没有
+    `pool` 包、也不保证 `tools/` 在 `sys.path` 上 ⇒ 三档兜底，最后一档按同级文件路径加载。
+    """
+    global _LASTGOOD
+    if _LASTGOOD is not None:
+        return _LASTGOOD
+    try:
+        from . import lastgood as mod
+    except ImportError:
+        try:
+            from pool import lastgood as mod
+        except ImportError:
+            here = pathlib.Path(__file__).resolve().with_name("lastgood.py")
+            spec = importlib.util.spec_from_file_location("pool_lastgood_by_path", here)
+            if spec is None or spec.loader is None:  # pragma: no cover —— 文件被搬走才会到这
+                raise
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+    _LASTGOOD = mod
+    return mod
 
 #: 状态文件（相对仓库根）。`TF_MERGE_QUEUE` 可覆写（测试 / 演练用）。
 STATE_REL = ("gates", "diag", "merge-queue.json")
@@ -92,14 +121,21 @@ def load(root: pathlib.Path | None = None) -> dict:
             "waiting": [x for x in (waiting or []) if isinstance(x, dict)]}
 
 
+def _validate_state_text(text: str) -> None:
+    r"""判「这份队列快照还能不能当 lastgood」：解得开且顶层是对象（卡 A330）。"""
+    if not isinstance(json.loads(text), dict):
+        raise ValueError("队列快照顶层应是对象")
+
+
 def _save(state: dict, root: pathlib.Path | None = None) -> None:
-    r"""原子写（tmp + `os.replace`）：别的进程读到的永远是**完整**的一份。"""
+    r"""原子写（tmp + `os.replace`）：别的进程读到的永远是**完整**的一份。
+
+    走 `lastgood.write_atomic`（卡 A330）：旧的好就先顶成 `.bak`（`.bak` 落后一次写）。
+    """
     p = state_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(p.suffix + ".tmp")
-    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n",
-                   encoding="utf-8", newline="\n")
-    os.replace(tmp, p)
+    body = json.dumps(state, ensure_ascii=False, indent=2) + "\n"
+    _lastgood().write_atomic(p, body, validate=_validate_state_text)
 
 
 @contextlib.contextmanager

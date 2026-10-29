@@ -45,6 +45,11 @@ try:  # `tools/` 在 sys.path 上时（脚本与多数钉子）直接导入
 except ModuleNotFoundError:  # pragma: no cover —— 被当包导入时（`from tools import gate_pool`）
     from tools import gate_verdict  # type: ignore[no-redef]
 
+try:  # ★ 写盘纪律（卡 A330）：同上 —— `tools/` 在 sys.path 上时 `pool` 可导；落地桩里退回包路径
+    from pool import lastgood
+except ModuleNotFoundError:  # pragma: no cover —— 被当包导入时（`from tools import gate_pool`）
+    from tools.pool import lastgood  # type: ignore[no-redef]
+
 if TYPE_CHECKING:  # 只在注解里用（本文件已开 `from __future__ import annotations`）
     from collections.abc import Callable
 
@@ -142,6 +147,12 @@ def _norm_state(raw: object) -> dict:
     return out
 
 
+def _validate_queue_text(text: str) -> None:
+    """判「这份队列快照还能不能当 lastgood」：解得开且顶层是对象（卡 A330）。"""
+    if not isinstance(json.loads(text), dict):
+        raise ValueError("队列快照顶层应是对象")
+
+
 # ---------------------------------------------------------------- 队列（单写者 + 原子写）
 @dataclass
 class PoolQueue:
@@ -164,11 +175,10 @@ class PoolQueue:
         return _norm_state(raw)
 
     def save(self, state: dict) -> None:
+        """原子写；旧的好就先顶成 `.bak`（卡 A330：`lastgood.write_atomic`）。"""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(json.dumps(_norm_state(state), ensure_ascii=False, indent=2) + "\n",
-                       encoding="utf-8", newline="\n")
-        os.replace(tmp, self.path)
+        body = json.dumps(_norm_state(state), ensure_ascii=False, indent=2) + "\n"
+        lastgood.write_atomic(self.path, body, validate=_validate_queue_text)
 
     @contextlib.contextmanager
     def locked(self, timeout: float | None = None):

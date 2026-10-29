@@ -72,6 +72,11 @@ try:  # ★ 项目索引（卡 120）：同上 —— 包上下文相对导入�
 except ImportError:  # pragma: no cover - 直接以脚本方式运行时才走这条
     from projects import ProjectsError, find_by_tree  # type: ignore[no-redef]
 
+try:  # ★ 写盘纪律（卡 A330）：同上 —— 包上下文相对导入，直接跑脚本退回同级绝对导入。
+    from . import lastgood
+except ImportError:  # pragma: no cover - 直接以脚本方式运行时才走这条
+    import lastgood
+
 #: 任务相关文件都放这儿（相对主工作树根）。
 BATCH_REL = ("gates", "diag", "batch")
 
@@ -176,12 +181,18 @@ def whoami() -> str:
 # ================================================================ 原子写 / 自旋锁
 
 
+def _validate_json_text(text: str) -> None:
+    """判「这份 JSON 还能不能当 lastgood」：解得开就算（卡 A330）。"""
+    json.loads(text)
+
+
 def write_json_atomic(target: Path, payload: object) -> None:
-    """同目录 `tmp` + `os.replace`（同文件系统 ⇒ 原子）：读者只会看到旧整份或新整份。"""
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, target)
+    """同目录 `tmp` + `os.replace`：读者只会看到旧整份或新整份；旧的好就先顶成 `.bak`。
+
+    走 `pool.lastgood.write_atomic`（卡 A330）：`.bak` 故意落后一次写，冷启动读不了有兜底。
+    """
+    body = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    lastgood.write_atomic(target, body, validate=_validate_json_text)
 
 
 def _lock_ttl() -> float:

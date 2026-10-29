@@ -1,0 +1,29 @@
+[entries."T-AG532"]
+id = "T-AG532"
+title = "写坏了要能回上一份：magpie lastgood 移植进 pool"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A330-写坏了要能回上一份.md",
+  "file:tools/pool/lastgood.py",
+  "file:tools/pool/registry.py",
+  "file:tools/pool/task.py",
+  "file:tools/pool/queue.py",
+  "file:tools/pool_accounts.py",
+  "file:tools/gate_pool.py",
+  "file:tools/pool/__init__.py",
+  "file:tests/test_wb_land.py",
+  "file:tests/test_pool_lastgood.py",
+  "test:test_pool_lastgood.py",
+  "text:tools/pool/lastgood.py::def write_atomic(",
+  "text:tools/pool/lastgood.py::def read_with_fallback(",
+  "text:tools/pool/lastgood.py::def read_strict(",
+  "text:tools/pool/registry.py::def _validate_registry_text(text: str) -> None:",
+]
+gaps = [
+  """多进程互斥没动：pool 现在是 `O_CREAT|O_EXCL` 自旋锁、**等满照样往下写**（照 magpie `internal/filelock` 的 `Wait` 语义），改它要动并发语义，另开卡。
+`.bak` 只落后一次写：连坏两次（写坏 A、再写坏 B）之后兜底也救不回来 —— 这是 magpie 的原始取舍（省一份副本），不是本卡遗漏。
+口径边界：`read_with_fallback()` 的 `validate` 是调用方传入的判断，本模块只保证「抛了就不当 lastgood」，不判断什么算「好」。
+""",
+]

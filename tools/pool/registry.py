@@ -34,11 +34,12 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pool import guards, jobs, projects
+from pool import guards, jobs, lastgood, projects
 from pool import locks as pool_locks
 
 if TYPE_CHECKING:
@@ -128,32 +129,52 @@ def default_owner() -> str:
 # ================================================================ 读 / 写（原子）
 
 
-def load(path: Path | str | None = None) -> list[dict]:
-    """读登记文件的全部条目；文件不存在 → `[]`；**坏文件 → 抛错，不清空**。"""
-    target = Path(path) if path is not None else registry_path()
-    if not target.exists():
-        return []
-    text = target.read_text(encoding="utf-8")
-    if not text.strip():
-        return []
+def _validate_registry_text(text: str) -> None:
+    """判「这份登记还能不能当 lastgood」：能解析且顶层是数组（卡 A330）。
+
+    ★ 把 `json.JSONDecodeError` 归一成 `ValueError`：后者能被单参复刻，兜底失败时才能
+    把「`.bak` 也坏了」拼进消息里而不丢异常类型（`JSONDecodeError` 要三个参数）。
+    """
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
+        raise ValueError(f"JSON 解析失败：{exc}") from exc
+    if not isinstance(data, list):
+        raise RegistryError("登记文件结构不对（顶层应是数组）")
+
+
+def load(path: Path | str | None = None) -> list[dict]:
+    """读登记文件的全部条目；文件不存在 → `[]`；**坏文件 → 抛错，不清空**。
+
+    冷启动读到坏文件时先读 `.bak`（卡 A330 / magpie F77 的 `internal/lastgood`）：恢复会往
+    stderr 打一行；两边都坏才抛 `RegistryError`，消息里写明 `.bak` 也坏了。坏文件一个字都不动。
+    """
+    target = Path(path) if path is not None else registry_path()
+    if not target.exists() and not lastgood.backup_path(target).exists():
+        return []
+    if target.exists() and not target.read_text(encoding="utf-8").strip():
+        return []  # 旧语义：空文件当空账（空 ≠ 坏，不走兜底）
+    try:
+        text, _recovered = lastgood.read_with_fallback(
+            target,
+            validate=_validate_registry_text,
+            log=lambda msg: print(msg, file=sys.stderr),
+        )
+    except RegistryError:
+        raise  # 结构不对 / 两边都坏 —— 消息里已带 `.bak` 的实情
+    except Exception as exc:
         raise RegistryError(
             f"登记文件坏了，**不清空**：{target}（{exc}）—— 请人工修好或删掉再重试") from exc
-    if not isinstance(data, list):
-        raise RegistryError(f"登记文件结构不对（顶层应是数组）：{target}")
+    data = json.loads(text)
     return [row for row in data if isinstance(row, dict)]
 
 
 def save(reservations: Iterable[dict], path: Path | str | None = None) -> Path:
-    """原子落盘：同目录 `tmp` + `os.replace`（读者只看到旧整份或新整份）。返回真实路径。"""
+    """原子落盘：旧的好就先顶成 `.bak`，再同目录 `tmp` + `os.replace`。返回真实路径。"""
     target = Path(path) if path is not None else registry_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f"{target.name}.tmp.{os.getpid()}")
     body = json.dumps(list(reservations), ensure_ascii=False, indent=2) + "\n"
-    tmp.write_text(body, encoding="utf-8")
-    os.replace(tmp, target)
+    lastgood.write_atomic(target, body, validate=_validate_registry_text)
     return target
 
 

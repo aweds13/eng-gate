@@ -4445,3 +4445,24 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A330"
+task = "T-AG532"
+title = "写坏了要能回上一份：magpie lastgood 移植进 pool"
+tree = ".wt/A330"
+spec = "复盘/卡/卡A330-写坏了要能回上一份.md"
+files = [
+  "tools/pool/lastgood.py",
+  "tools/pool/registry.py",
+  "tools/pool/task.py",
+  "tools/pool/queue.py",
+  "tools/pool_accounts.py",
+  "tools/gate_pool.py",
+  "tools/pool/__init__.py",
+  "tests/test_wb_land.py",
+  "tests/test_pool_lastgood.py",
+]
+status = "done"
+risk = "mid"
+depends = []

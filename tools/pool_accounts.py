@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -190,10 +191,16 @@ def _approved_models_from_whitelist() -> set[str] | None:
 
 
 def load_ledger(path: Path, platforms: dict | None = None, strict: bool = True) -> dict:
+    """读账本。**凭据账本不许从 `.bak` 复活（照 F77 的 caller-keys 纪律）**。
+
+    只读正式文件：若允许从 `.bak` 兜底，一次写坏就能把**已撤的凭据**顶回来 ——
+    「撤过的凭据不许复活」比「读不到就停」更重要 ⇒ 走 `lastgood.read_strict`（永不看 `.bak`），
+    读不了就抛（文件不存在仍是 `FileNotFoundError`，行为与从前一致）。
+    """
     plat = platforms if platforms is not None else load_platforms()
     try:
-        with open(path, "rb") as fh:
-            data = tomllib.load(fh)
+        text = _lastgood().read_strict(path, validate=_validate_ledger_toml)
+        data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise LedgerError(f"账本 TOML 解析失败（{path}）：{exc}") from exc
     accounts = data.get("account")
@@ -224,14 +231,8 @@ def save_ledger(path: Path, data: dict) -> None:
             quota["samples"] = quota["samples"][-SAMPLES_CAP:]
     payload = _dump_toml(data)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".accounts-", suffix=".tmp", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(payload)
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    # 写走 lastgood（`.bak` 落后一次写）；**读**却用 read_strict（见 load_ledger）。
+    _lastgood().write_atomic(path, payload, validate=_validate_ledger_toml)
 
 
 def _q(value) -> str:
@@ -644,6 +645,36 @@ def cmd_probe(args) -> int:
         counts[row["kind"]] = counts.get(row["kind"], 0) + 1
     print("\n小计：" + " · ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     return EXIT_OK
+
+
+#: `lastgood` 的模块句柄（懒加载；`None` = 还没加载过）。
+_LASTGOOD = None
+
+
+def _lastgood():
+    """懒加载 `lastgood`（卡 A330 的写盘纪律）：包导入 / 裸模块导入 / 按路径 exec 都要能用。"""
+    global _LASTGOOD
+    if _LASTGOOD is not None:
+        return _LASTGOOD
+    try:
+        from pool import lastgood as mod
+    except ImportError:  # pragma: no cover —— 以包形式 import 时
+        try:
+            from tools.pool import lastgood as mod
+        except ImportError:
+            here = Path(__file__).resolve().with_name("lastgood.py")
+            spec = importlib.util.spec_from_file_location("pool_lastgood_by_path", here)
+            if spec is None or spec.loader is None:  # pragma: no cover —— 文件被搬走才会到这
+                raise
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+    _LASTGOOD = mod
+    return mod
+
+
+def _validate_ledger_toml(text: str) -> None:
+    """判「这份账本还能不能当 lastgood」：TOML 解得开就算（卡 A330）。"""
+    tomllib.loads(text)
 
 
 def _ck():

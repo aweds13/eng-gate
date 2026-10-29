@@ -534,6 +534,30 @@ return e
 - `pytest tests/test_gate_child_encoding.py` ⇒ **6 passed**；`pytest tests/test_gate_summary_truthful.py tests/test_door_inputs_coverage.py` ⇒ **26 passed**；`ruff check scripts/run_gates.py tests/test_gate_child_encoding.py` ⇒ All checks passed。
 - 反向验证 `gates/diag/rev-A337.log` ⇒ **5/5 条全部咬住，收尾绿**（每条定点变异后按原始字节还原，复查逐字节相同 + 三重 CRLF 仍在）。
 - ★ 反向验证第 ② 条**一开始没咬住**（唯一红灯）：本机环境恰好带着 `PYTHONIOENCODING=utf-8`，删掉 `env()` 里那行也能靠继承通过 —— 等于假钉子。已在新钉子开头 `monkeypatch.delenv` 摘掉宿主那两个变量，重跑才 5/5。
+## 2026-10-30 · 写坏了要能回上一份：magpie lastgood 移植进 pool（A330，T-AG532）
+
+五处写盘（`pool/registry.py` / `pool/task.py` / `pool/queue.py` / `pool_accounts.py` / `gate_pool.py`）
+原先各写一套 `tmp` + `os.replace`，**`.bak` 一处都没有**：登记文件读到半截就整条链停摆，
+而且没人知道「上一份好的长什么样」——`registry.load()` 遇到坏 JSON 只能抛 `RegistryError`。
+
+这一笔把 magpie `internal/lastgood` 的写盘纪律移进来，**判据只写一遍**：
+
+- `tools/pool/lastgood.py`（新增 171 行）：`write_atomic()` / `read_with_fallback()` / `read_strict()` /
+  `backup_path()`。三条硬规矩 —— ①坏文件不许当 lastgood（解析不了 ⇒ 字节不进 `.bak`）；
+  ②`.bak` **落后一次写**（写 B 之前把 A 顶成 `.bak`，冷启动至多丢一次写）；③恢复要留痕（读成功必须 `log`）。
+- 五处写盘接上：`registry.py`(+49/−14) / `task.py`(+21/−4) / `queue.py`(+46/−6) /
+  `pool_accounts.py`(+51/−9) / `gate_pool.py`(+18/−4)，`pool/__init__.py` 登记新模块。
+- `registry.load()` 语义不变：不存在 ⇒ `[]`；**空文件 ⇒ `[]`**（空 ≠ 坏，不走兜底）；坏文件 ⇒ 先读 `.bak`
+  并往 stderr 打一行；两边都坏才抛，消息里写明 `.bak` 也坏了；**坏文件一个字都不动**。
+- **账号账本不从 `.bak` 复活**：撤掉的凭据不许自己回来（`read_strict` 的用武之地）。
+
+★ `tools/pool/registry.py` 的 `_validate_registry_text()` 把 `json.JSONDecodeError` 归一成 `ValueError`：
+后者能被单参复刻，兜底失败时才能把「`.bak` 也坏了」拼进消息里而不丢异常类型。
+
+★ `tests/test_wb_land.py` 的 `_NEW_TOOLS` 最小仓库清单加了一行 `pool/lastgood.py` —— 沙箱契约
+也要跟着长，否则那份沙箱一 import 就 `ImportError`。这是「新增模块必须同时改清单」的既有约定。
+
+读数：`tests/test_pool_lastgood.py` 11 passed；反向验证 5/5 咬住；全量 22 门全绿（3719 passed）。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

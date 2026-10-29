@@ -90,6 +90,10 @@ _NEW_TOOLS = (
     "tools/pool/task.py",
     "tools/pool/plan.py",
     "tools/pool/projects.py",
+    # ★ 卡 A330（T-AG532）：task.py / queue.py / registry.py / pool_accounts.py 起都
+    #   `import lastgood`（原子写 + `.bak` 落后一次写 + fail-closed 读）
+    #   ⇒ 沙箱少这一份，收口链一 import 就 ModuleNotFoundError（实测 40 条红）。
+    "tools/pool/lastgood.py",
     "tools/wb_task.py",
     # ★ 卡 E5（T-AG447）：`landing.py` 的 ④′ 合并队列要 `from pool import queue`
     #   ⇒ 沙箱少这一份，落地一进 ④′ 就 ImportError。
