@@ -479,6 +479,30 @@ fallback 原因的是同一个文件里的 f-string —— 两边早就脱节了
 读数：`pytest tests/test_pool_rest.py tests/test_quota_wait.py tests/test_quota_clock.py` ⇒ **50 passed in 0.68s**；`ruff check` ⇒ All checks passed；反向验证 `gates/diag/_rev_A332.py` ⇒ **6/6 咬红**（off 分支删掉 / creditRest 改成 900 / 退避位移改线性 / 不认的 why 静默回 other / reset_at 无值时 capped=False / status() 里插一行网络调用），逐条还原后整份 `tests/test_pool_rest.py` 仍 **31 passed**，原文逐字节还原且纯 CRLF。
 
 ★ 如实边界：`by` 只实现了 `off` / `credit` / `quota` / `resets` / `retry-after` / `backoff` / `cooldown` 七种，magpie 还有 `credits` / `window` / `restricted` / `verify` 四种**没搬**（要 credits 账、`c.full()` 与验证态，本仓都没有）；**没接线** `tools/wb_dispatch.py`（`DEFAULT_QUOTA_WAIT = 300` 与 `:3452` 的 429 主流程原样），接线另开卡。
+## 2026-10-30 · 排批要按额度续期排：magpie Smart 移植进 pool（A329，T-AG531）
+
+pool 一直记着每个「卡 × 模型」的 `reset_at`，排批却**一条排序键都没有**：`greedy_pack()` 按传入原序 first-fit，而 `plan_batches()` 喂给它的就是台账登记顺序。续期只剩 3 分钟的号会排在还有 5 小时的号前面，排进去只能撞 429 干等。这次把 magpie 的 `Smart` 搬进来。
+
+### 移植的形状
+
+- `tools/pool/route.py`（新增 306 行）：`LOW_SHARE = 90.0` / `USED_SHARE = 98.0` / `RouteError` / `tier()` / `Seat` / `smart_order()` / `apply_order()` / `reset_for()` / `model_until()` / `seconds_left()`。
+- `tools/pool/plan.py`（+104/−4）：新增 `model_of()` / `_remaining_tier()` / `ordered()`；`plan_batches()` 加 `*, now=None, root=None` 并改成 `greedy_pack(ordered(layer, …), limit)`。**`greedy_pack()` 的函数体一字未改** —— `limit` / 树唯一 / 文件不相交三条安全判据原样，动的只是「谁先被放进批」。
+
+### 判据照抄，不自己发明
+
+- `tier(share)`：`>= 98` ⇒ 2、`>= 90` ⇒ 1、其余 0（`strategies.go:15-29` 逐字）。越界 / `NaN` / `bool` ⇒ **抛 `RouteError`，绝不 clamp** —— `101` 是「这个数从哪来」，压成 100 等于把上游形状错误洗成一次成功派活。
+- `smart_order()` 是**逐级稳定排序**（原件就是一串 `sort.SliceStable`，后一级只在前一级打平时才动）：按 `tier` 分三桶 → `fine` 桶内 `left` → `lapse`（截到小时）→ `soon`（逐窗口截到小时，前缀相同则窗口多的在前）→ 拼 `fine + low + spent` → `resting` 沉最后。**全程打平的号保持原序**（保 prompt cache）。
+- `apply_order()` 不是排列就 fail-open 回 `identity`（`routes.go:143`）：排位是优化，坏掉的排位不该让整轮派活停摆。
+- `reset_for(model)` 跨全部卡取 `recorded_at` **最大**那条（额度是「最后知道的算数」），再走 `pool_quota.parse_reset` —— 不自己写第三份正则。没有记录 / 坏 JSON / 形状不对 ⇒ `(None, "")`，**不抛**。
+- `ordered()`：**没有额度记录时逐项等于输入顺序**（硬约束）；有记录时「有得等的在前、已过期需重探的次之、**不知道的最后**」——「不知道」不许当 0 秒、也不许当余额耗尽。
+
+### 读数
+
+- `pytest tests/test_pool_route.py tests/test_wb_plan.py` ⇒ **115 passed in 8.32s**（卡规格初稿写的 `tests/test_pool_plan.py` 本仓不存在，已换成真文件 `tests/test_wb_plan.py`）。
+- `ruff check tools/pool/route.py tools/pool/plan.py tests/test_pool_route.py` ⇒ All checks passed；全量 `pytest tests` ⇒ **3710 passed, 1 skipped**。
+- 反向验证 `gates/diag/rev-A329.log` ⇒ **8/8 条全部咬住，收尾绿**（截时、未知 soon、tier 顺序、fail-open、resting 沉底、`reset_for` 取 min、`ordered` 把没记录排最前、`left` 方向，每条定点变异后逐字节还原）。
+
+★ 踩过一条**自己造成的**回归并已根治：初版在 `tools/pool/plan.py` 顶部 `from pool import model_registry/route`，让 `tests/test_wb_land.py::_stage_tools` 的最小假仓库（`_NEW_TOOLS` 清单里没有这两个新文件）一 import 就 ImportError ⇒ 全量 **40 failed**。用对照实验归因后把两条 import 下沉进函数体（`model_of(card, *, pool=None)`），40 条归零。**没改任何既有测试** —— 那份沙箱清单是既有契约，不该为迁就我的 import 去改它。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

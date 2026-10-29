@@ -5,7 +5,7 @@ r"""队列 / 冲突域 / 排批（从 `tools/wb_plan.py` 抽，卡 106 · T-G202
 拓扑分层 + 同层贪心打包，拒绝任何会冲突的组合。
 
 本模块是 `wb_plan.py` 的**逻辑层**：数据模型（`Card` / `Backlog`）、冲突判据（`validate`）、
-排批（`topo_layers` / `greedy_pack` / `plan_batches`）、计划渲染（`render_plan`）与一条
+排批（`topo_layers` / `greedy_pack` / `ordered` / `plan_batches`）、计划渲染（`render_plan`）与一条
 "跑一条命令会印什么"的纯函数（`plan_report`）。CLI 的打印 / 取参数仍留在 `wb_plan.py`。
 搬进来时**语义一字未改**（`wb_plan.py` 里那一整段连同注释原样迁到这里）。
 """
@@ -31,6 +31,7 @@ import tomllib
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from datetime import datetime
 
 _FILE_ROOT = pathlib.Path(__file__).resolve().parents[2]
 ROOT = pipe_root.data_root() if pipe_root is not None else _FILE_ROOT
@@ -450,16 +451,115 @@ def greedy_pack(cards: Sequence[Card], limit: int) -> list[list[Card]]:
     return batches
 
 
-def plan_batches(backlog: Backlog, limit: int = DEFAULT_CONCURRENCY) -> list[list[Card]]:
-    """**待派队列**的批次 = 逐层贪心打包（批次不跨层：依赖靠层保证顺序）。
+# ====================================================== 额度接线（卡 A329 · F16 Smart routing）
+#
+# 这一段只回答一个问题：**同一层里的卡，谁先排进批**。原来 `greedy_pack` 按传入原序 first-fit，
+# 而 `plan_batches` 喂进去的是 `topo_layers()` 的层内顺序（= `docs/workbacklog.toml` 的登记序），
+# 于是"哪张卡先撞上额度墙"全看台账怎么排。这里按**模型额度什么时候回来**给层内卡排序，
+# 原件是 magpie 的 Smart 路由（判据在 `tools/pool/route.py`，本文件只做接线）。
+
+_NO_ETA = float("inf")  # 「不知道额度什么时候回来」的剩余秒数占位：永远比任何已知的大。
+
+
+def model_of(card: Card, *, pool: str | None = None) -> str:
+    """这张卡该按**哪个模型**的额度排 —— 池默认（注册表说了算），拿不到就**抛**。
+
+    ★ `Card` 没有 model 字段（队列记的是"哪张卡、碰哪些文件"，不是"用哪个号"）⇒ 只能问
+      注册表要**池默认**（`pool.model_registry.default_model_for`，卡 166 起默认就是按池取）。
+    ★ **拿不到就抛，不许猜首项**：那张函数的原话是「默认必须确定，不许取首项冒充」。这里一个字
+      不改地沿用 —— 宁可这一轮排不了序，也不许拿"列表里第一个"冒充默认模型（那会把
+      "注册表坏了"悄悄变成"换了个号跑"）。
+    ★ `card` 目前不参与计算（它没有模型信息）；留着是因为调用方按卡问、且以后 `Card` 真长出
+      `model` 字段时，这里就是唯一的改动点。`pool` 也是给"以后分池"留的口子。
+    ★ **为什么不在模块顶部 import**：`tests/test_wb_land.py::_stage_tools` 把本文件拷进最小
+      假仓库时会照 `_NEW_TOOLS` 清单走，清单里没有 `pool/model_registry.py` —— 顶部 import
+      会让那份沙箱一 import 就 ImportError（A329 实测 40 条 `test_wb_land*` 因此红）。
+      本模块 docstring 第一句就是「只标准库」⇒ 依赖留给真正要用的函数，模块本身仍可裸跑。
+    """
+    # ★ 延迟导入：见函数 docstring 末段「为什么不在模块顶部」。
+    from pool import model_registry as pool_model_registry
+
+    entry = pool_model_registry.default_model_for(
+        pool if pool is not None else pool_model_registry.DEFAULT_POOL
+    )
+    return entry.alias
+
+
+def _remaining_tier(remaining: float | None) -> int:
+    """剩余秒数 → 三档（照 magpie `tier()` 的形状：0 有得等、1 得探、2 不知道）。
+
+    - `remaining is None`（**没有任何额度记录**）⇒ 2，排在最后；
+    - `remaining <= 0`（记录的重置时间已经过去）⇒ 1：`pool_quota.status()` 对这一态的判词是
+      「已过期，需重新探测 —— 过期 ≠ 可用，要探」，所以它排在有得等的之后、在"不知道"之前；
+    - 其余 ⇒ 0。
+    """
+    if remaining is None:
+        return 2
+    if remaining <= 0:
+        return 1
+    return 0
+
+
+def ordered(cards: Sequence[Card], *, now: datetime | str | None = None,
+            root: Path | None = None) -> list[Card]:
+    """把一层的卡按**额度剩余**排一遍（稳定），返回新列表 —— 不改入参、不写盘。
+
+    排序键 `(tier_of_remaining, known_flag, remaining, 原序位置, id)`：
+
+    1. `tier_of_remaining`：见 `_remaining_tier()` —— 有得等的在前、得探探的次之、**不知道的最后**；
+    2. `known_flag`：`0` = 有记录、`1` = 没记录（与上一档同向，写出来是为了让"未知最后"
+       在键里看得见，而不是只藏在 `_NO_ETA` 里）；
+    3. `remaining`：秒数小的在前（快回来的先上）；
+    4. **原序位置**：`id` 之前 —— 因为「一条额度记录都没有时 `ordered()` 逐项等于输入顺序」是
+       硬约束（既有排批断言与 prompt cache 都靠它），而 id 序**不**保证等于登记序
+       （真队列里是 `A272, A271, …`）。稳定排序本来就会保住原序，把它写进键里是为了让这条
+       约束显式、可被读出来；
+    5. `id`：所有前置键都相等时的确定性兜底（同一位置不可能重复，故实际不改结果）。
+
+    ★ **未知排最后，不排最前**：`reset_at is None` 是"没记录"，不是"余额 0 秒"、也不是
+      "无穷大" —— 与 `pool_quota.status()` 的「未记录 ⇒ 不猜（不许默认当可用）」同一条铁律。
+    ★ 同一个模型只读一次状态文件（层内卡大多同模型，别为每张卡各读一遍）。
+    """
+    # ★ 延迟导入：见 `model_of` docstring 末段（沙箱只拷 plan.py 的那份契约）。
+    from pool import route as pool_route
+
+    if not cards:
+        return []
+    until: dict[str, datetime | None] = {}
+    keyed: list[tuple[int, int, float, int, str, Card]] = []
+    for position, card in enumerate(cards):
+        model = model_of(card)
+        if model not in until:
+            until[model] = pool_route.reset_for(model, now=now, root=root)[0]
+        remaining = pool_route.seconds_left(until[model], now=now)
+        keyed.append((
+            _remaining_tier(remaining),
+            0 if remaining is not None else 1,
+            _NO_ETA if remaining is None else remaining,
+            position,
+            card.id,
+            card,
+        ))
+    keyed.sort(key=lambda row: row[:5])
+    return [row[5] for row in keyed]
+
+
+def plan_batches(backlog: Backlog, limit: int = DEFAULT_CONCURRENCY, *,
+                 now: datetime | str | None = None, root: Path | None = None) -> list[list[Card]]:
+    """**待派队列**的批次 = 逐层按额度排序（`ordered`）后贪心打包（批次不跨层）。
 
     ★ T-G119：只排 `pending` / `running` —— `done` / `failed` 是历史、不进批次。
     （`depends` 指向已完成卡也没关系：`topo_layers()` 对"不在集合里的依赖"是忽略的。）
+    ★ 卡 A329：层内先过一遍 `ordered()` 再 `greedy_pack()` —— **三条安全判据（`limit` / 树唯一 /
+      文件不相交）一个字没动**，动的只是"谁先被放进批"这个顺序。
+    ★ `now` / `root` 只透传给额度读取（`now` 给测试钉时钟、`root` 指别的树）；都不给时
+      `ordered()` 在**没有任何额度记录**的树上逐项回原序 —— 所以既有调用方（
+      `tools/wb_plan.py` 两处、`pool.plan.plan_report()`）行为不变。
     """
     queue = [card for card in backlog.cards if in_flight(card)]
     out: list[list[Card]] = []
     for layer in topo_layers(queue):
-        out.extend(greedy_pack(layer, limit))
+        out.extend(greedy_pack(ordered(layer, now=now, root=root), limit))
     return out
 
 

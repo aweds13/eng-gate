@@ -9776,3 +9776,29 @@ gaps = [
 `tests/test_quota_wait.py::test_wait_and_refresh_never_touch_network` 会扫整份 `pool_quota.py` 源码文本找 `requests` 字样 —— 这条钉子对「别把网络库带进这个模块」有效，但它也把 magpie 原文的备选词 `too many requests` 逼掉了。是判据的副作用，不是判据的错，记在这里免得下次又踩。
 """,
 ]
+
+[entries."T-AG531"]
+id = "T-AG531"
+title = "排批要按额度续期排：magpie Smart 移植进 pool"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A329-排批要按额度续期排.md",
+  "file:tools/pool/route.py",
+  "file:tools/pool/plan.py",
+  "file:tests/test_pool_route.py",
+  "test:test_pool_route.py",
+  "test:test_wb_plan.py",
+  "text:tools/pool/route.py::def smart_order(",
+  "text:tools/pool/route.py::LOW_SHARE = 90.0",
+  "text:tools/pool/plan.py::def ordered(",
+]
+gaps = [
+  """- 本笔门禁读数是**本机**跑的（用户 m27225 授权），不是云机 —— 对 m12391 的一次性改口；落地脚本的云机 `host` 闸保留，只在显式 `--allow-local-host` 时放行。
+- 没做设计稿里**可选**的 `wb_dispatch.best_model()`：`tools/wb_dispatch.py` 3533 行、被大量用例钉着，接线另开卡。本卡只到「排批顺序」这一层。
+- `Card` 没有 `model` 字段 ⇒ 只能问注册表要**池默认**（`model_registry.default_model_for`）；分池/按卡指定模型的排序还没数据支撑。
+- `Seat.learns` 未移植（magpie 有「先试一次」的探测位）：pool 没有对应的探测回路，搬过来只是死字段。
+- 沙箱依赖清单（`tests/test_wb_land.py::_NEW_TOOLS`）没加 `route.py` / `model_registry.py`：本卡用函数内延迟导入绕开了，清单本身仍是潜在坑（下一个在 `plan.py` 顶部加 import 的人会再踩一次）。
+""",
+]

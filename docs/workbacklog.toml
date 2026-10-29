@@ -4416,3 +4416,18 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A329"
+task = "T-AG531"
+title = "排批要按额度续期排：magpie Smart 移植进 pool"
+tree = ".wt/A329"
+spec = "复盘/卡/卡A329-排批要按额度续期排.md"
+files = [
+  "tools/pool/route.py",
+  "tools/pool/plan.py",
+  "tests/test_pool_route.py",
+]
+status = "done"
+risk = "mid"
+depends = []
