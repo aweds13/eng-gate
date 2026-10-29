@@ -361,6 +361,36 @@
 - `tools/wb_reconcile.py`：去掉 `--grep` 的 `-10` 截断；新增 `_batch_landed()`/`_landed_commits()`/
   `_spec_commit_in()`，按围栏 `state == landed` 认账；`check()` 第三份 `accounted_done` 打 `[蓝]`。
 - `tests/test_wb_reconcile.py`：5 条断言改三份解包 + 2 条新钉子（landed 认账 / draft 不算证据）。
+## 2026-10-30 · 白名单里的串必须有产出方：一条死话术把整道 pytest 门判红（E68，T-AG529）
+
+`tools/pytest_select.py` 的 `KNOWN_FALLBACK_MARKS` 是**手抄**的一份话术表，而真正会生成
+fallback 原因的是同一个文件里的 f-string —— 两边早就脱节了。表里写的是
+`台账里没有任何 test: 指针`，产出方 `:355` 写的是 `的条目没有 test: 指针`；
+`git log -S'台账里没有任何 test: 指针'` 只有卡 E52 那一笔 ⇒ **这个串从写下那天起就没有产出方**。
+另一个串 `没有登记` 同样是死的（其余命中全在 `tools/contrast_audit.py` / `tools/wb_plan.py`
+的无关注释里）。
+
+后果不是「少认一种」：`replay()` 的 `ok` 里有一条 `not unknown`，只要有一笔 fallback 的原因
+不在表里，整道 pytest 门就红。2026-10-30 的全量门禁就是这样被 `3bfabad5`（T-BG001）判红的 ——
+它改的是 `DSH-技能与插件开发参考.md`，台账条目**确实**没有 `test:` 指针（`tests/` 下零命中覆盖），
+属于闸一 `empty_entry` 的正常欠账，却被读成「判据自己不认识」。于是 E67 那一趟 22 门里唯一的红
+落在了不属于它的域上。
+
+- 新增两个常量 `LEDGER_NO_ENTRY_MARK = "在台账里没有 entry 指向"` /
+  `LEDGER_NO_TEST_MARK = "的条目没有 test: 指针"`，`KNOWN_FALLBACK_MARKS` 改为引用它们；
+  `:351` / `:355` 两个产出方的 f-string **直接引用常量拼**，不再出现手抄串 ——
+  白名单与产出方从此同源，物理上不可能再脱节。
+- 表上方写清来历与纪律（「必须由产出方引用、不许照文档手抄」），把这次的病灶留在代码里。
+- 新增 3 条钉子：①逐串跑**真** `select()` 拿它自己吐的 `reason` 比对，证明表里每个串都有
+  产出方（死串 ⇒ 红；表与场景集合不一致 ⇒ 红）；②回放最近 20 笔，**每一笔**真 fallback 的
+  原因都必须被认识（抓的就是 `3bfabad5` 那种）且 `result.ok` 为真；③反向钉子 ——
+  卡 E52 的死串不许再被认回来。
+- 读数：`pytest tests/test_pytest_select.py` ⇒ `23 passed`（原 20 条不动）；
+  `tools/pytest_select.py --replay 20 --json` ⇒ `ok=true` / `fallbacks=3`（`3bfabad5` +
+  `0a74c4c0` + `63746025` 三笔全被认）；反向验证 `gates/diag/_rev_E68.py` ⇒
+  **3/3 全部咬住，收尾绿**（`gates/diag/rev-E68.log`）。
+- 判据一条也没放宽：`REPLAY_MAX_FALLBACK` 仍是 3、`ok` 里 `not unknown` 那条照旧、
+  没给 T-BG001 补任何指向不存在用例的 `test:` 证据。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

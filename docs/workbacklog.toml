@@ -4343,3 +4343,17 @@ files = [
 status = "done"
 risk = "low"
 depends = []
+
+[[cards]]
+id = "E68"
+task = "T-AG529"
+title = "白名单里的串必须有产出方：一条死话术把整道 pytest 门判红"
+tree = ".wt/E68"
+spec = "复盘/卡/卡E68-白名单里的串必须有产出方.md"
+files = [
+  "tools/pytest_select.py",
+  "tests/test_pytest_select.py",
+]
+status = "done"
+risk = "mid"
+depends = []

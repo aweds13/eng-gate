@@ -9661,3 +9661,24 @@ evidence = [
   "file:docs/workbacklog.toml",
 ]
 gaps = "1. 只清 `parameters` / `output` 这一处口径（§4.7），没有整篇重写、没动别的章节；文档其余地方若还有旧口径，留给后续卡。指针 `复盘/卡/卡B1-文档参数口径.md`2. 验收是「照抄能不能挂上」这一步人为可复现（写一个带参插件 → 重启 → 工具表里必须出现），没有新增钉子去自动解析 markdown 示例（脆）。指针 `gates/diag/wb-B1.report.md`3. 没碰 `D:/repo/_tools/dsh-plugins/` 里的插件代码（已在 OpenMAIC 侧修好并验过 5/5），也没改宿主 `defineTool` 实现。指针 `复盘/卡/卡B1-文档参数口径.md`4. 「参数根是开放的，所以 `additionalProperties` 兜不了底」这条真结论保留，但已写明它不是可以在 `parameters` 顶层写的键 —— 差别在「位置」而不是「结论对错」。指针 `docs/workbacklog.toml`"
+
+[entries."T-AG529"]
+id = "T-AG529"
+title = "白名单里的串必须有产出方：一条死话术把整道 pytest 门判红"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E68-白名单里的串必须有产出方.md",
+  "file:tools/pytest_select.py",
+  "file:tests/test_pytest_select.py",
+  "test:test_pytest_select.py",
+  "text:tools/pytest_select.py::LEDGER_NO_TEST_MARK = \"的条目没有 test: 指针\"",
+  "text:tools/pytest_select.py::def _known_fallback_reason(reason: str) -> bool:",
+]
+gaps = [
+  """- 「`KNOWN_FALLBACK_MARKS` 覆盖了 `select()` 全部 fallback 产出方」只对**特征串**成立：
+  `闸一：台账读不懂` / `闸一：没有台账索引却要判` / `闸二：…` / `用例文件不存在/已删` 这几支
+  原本就不在表里，真出现时仍会被判「不认识」。本卡没有把它们全部收进白名单——那等于放宽判据。
+""",
+]

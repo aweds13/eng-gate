@@ -69,8 +69,17 @@ JUDGE_BODY_PREFIXES: tuple[str, ...] = ("gates/defs/",)
 REPLAY_MAX_FALLBACK = 3
 
 #: 合法 fallback 原因里的特征串（只认这几种；出现别的 ⇒ 判据自己不认识，不许算绿）。
+#:
+#: ★ 卡 E68：这些串**必须由产出方自己引用**（`select()` 的 f-string 里直接用常量拼），
+#:   不许照文档手抄话术 —— 手抄必然与产出方脱节。实测：卡 E52 写下的
+#:   `台账里没有任何 test: 指针` 从落地那天起就**没有任何产出方**会生成它，
+#:   而真正会生成的 `的条目没有 test: 指针` 反而不在表里 ⇒ 回放判据把一笔
+#:   正常的台账欠账（T-BG001）判成「原因不认识」，整道门红。
+#:   `tests/test_pytest_select.py` 里有钉子逐串核「表里每个串都有产出方会生成」。
 JUDGE_BODY_MARK = "判据本体"
-KNOWN_FALLBACK_MARKS = (JUDGE_BODY_MARK, "台账里没有任何 test: 指针", "没有登记")
+LEDGER_NO_ENTRY_MARK = "在台账里没有 entry 指向"
+LEDGER_NO_TEST_MARK = "的条目没有 test: 指针"
+KNOWN_FALLBACK_MARKS = (JUDGE_BODY_MARK, LEDGER_NO_ENTRY_MARK, LEDGER_NO_TEST_MARK)
 
 
 def _known_fallback_reason(reason: str) -> bool:
@@ -347,12 +356,14 @@ def select(
 
     if unmapped:
         return _fallback(
-            norm, f"闸一：{unmapped[:5]} 在台账里没有 entry 指向 ⇒ 判不出 ⇒ 全量", "ledger"
+            norm,
+            f"闸一：{unmapped[:5]} {LEDGER_NO_ENTRY_MARK} ⇒ 判不出 ⇒ 全量",
+            "ledger",
         )
     if empty_entry:
         return _fallback(
             norm,
-            f"闸一：{empty_entry[:5]} 的条目没有 test: 指针 ⇒ 选集为空 ⇒ 全量",
+            f"闸一：{empty_entry[:5]} {LEDGER_NO_TEST_MARK} ⇒ 选集为空 ⇒ 全量",
             "ledger",
         )
     missing = [t for t in chosen if not (base / t).is_file()]

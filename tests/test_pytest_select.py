@@ -9,7 +9,9 @@ r"""钉「台账驱动选测」（卡 E51 · 段 1 / E36）。
 4. `--json` 键名固定；
 5. 台账读不懂 ⇒ fail closed；
 6. 选测集合为空 ⇒ fail closed（空集不许伪装成"跑过了"）；
-7. 回放最近 20 笔提交：台账登记的 `test:` 指针全部落在选测集合里，且 `fallback` ≤3 笔。
+7. 回放最近 20 笔提交：台账登记的 `test:` 指针全部落在选测集合里，且 `fallback` ≤3 笔；
+8. 卡 E68：`KNOWN_FALLBACK_MARKS` 里**每个**特征串都必须有真实产出方会生成它（死串 ⇒ 红），
+   而且卡 E52 留下、从来没有产出方的那条死串不许再被认成「认识的原因」。
 
 ## 怎么跑（★ 不跑真门禁、不改真仓库）
 
@@ -432,3 +434,52 @@ def test_replay_rejects_a_fallback_reason_nobody_recognises(monkeypatch) -> None
         not r.missing for r in rows
     )
     assert ok is False
+
+
+# ------------------------------------------------------------------ ⑩ 白名单 ↔ 产出方同源（卡 E68）
+def test_every_known_fallback_mark_has_a_real_producer(tmp_path: Path) -> None:
+    """★ 卡 E68：白名单里每个特征串都必须有**真实产出方**会生成它，否则就是死串。
+
+    病灶：卡 E52 写下的 `台账里没有任何 test: 指针` 从落地那天起没有任何产出方会生成它，
+    而真正会生成的 `的条目没有 test: 指针` 反而不在表里 ⇒ 回放判据把一笔正常的台账欠账
+    （T-BG001）判成「原因不认识」，整道 pytest 门红。所以这里逐串跑**真** `select()`，
+    拿它自己吐出来的 `reason` 比对 —— 不靠正则猜、不靠手抄话术。
+    """
+    ps = _ps()
+    _tree(tmp_path, "src/a.py", "src/nobody.py", "tests/test_a.py", "scripts/run_gates.py")
+    mapped = _ledger(("E1", ["file:src/a.py", "test:test_a.py"]))
+    no_test = _ledger(("E1", ["file:src/a.py", "route:GET /api/x"]))
+    scenarios = {
+        ps.JUDGE_BODY_MARK: ["scripts/run_gates.py"],
+        ps.LEDGER_NO_ENTRY_MARK: ["src/a.py", "src/nobody.py"],
+        ps.LEDGER_NO_TEST_MARK: ["src/a.py"],
+    }
+    assert set(scenarios) == set(ps.KNOWN_FALLBACK_MARKS), (
+        "白名单里有串没有场景（或场景里有多余的串）：改这张表就要同步加/删场景（卡 E68）",
+        set(ps.KNOWN_FALLBACK_MARKS) ^ set(scenarios),
+    )
+    for mark, paths in scenarios.items():
+        data = no_test if mark == ps.LEDGER_NO_TEST_MARK else mapped
+        sel = ps.select(list(paths), root=tmp_path, ledger=data, nightly_ok=True)
+        assert sel.fallback, (mark, sel.reason)
+        assert mark in sel.reason, (mark, sel.reason)
+        assert ps._known_fallback_reason(sel.reason), (mark, sel.reason)
+
+
+def test_replay_recognises_every_real_fallback_reason() -> None:
+    """回放最近 20 笔：**每一笔**真 fallback 的原因都必须被认识（卡 E68 抓的是 T-BG001 那条）。"""
+    ps = _ps()
+    result = ps.replay(20, root=ROOT)
+    seen = [(r.rev, r.task, r.reason) for r in result.rows if r.fallback]
+    assert seen, "最近 20 笔一笔 fallback 都没有 ⇒ 这条钉子失去意义（口径变了要重看）"
+    for rev, task, reason in seen:
+        assert ps._known_fallback_reason(reason), (rev, task, reason)
+    assert result.ok, [(r.rev, r.reason) for r in result.rows if r.fallback]
+
+
+def test_dead_mark_from_card_e52_is_not_whitelisted_anymore() -> None:
+    """★ 反向钉子（卡 E68）：没有产出方的死串不许再算「认识」—— 它正是这次门禁红的原因。"""
+    ps = _ps()
+    dead = "闸一：台账里没有任何 test: 指针 ⇒ 选集为空 ⇒ 全量"
+    assert not ps._known_fallback_reason(dead)
+    assert all("台账里没有任何" not in m for m in ps.KNOWN_FALLBACK_MARKS)
