@@ -1,0 +1,21 @@
+[entries."T-AG539"]
+id = "T-AG539"
+title = "门禁子进程要按 UTF-8 说话：GBK 把症状洗成了乱码"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A337-门禁子进程要按UTF-8说话.md",
+  "file:scripts/run_gates.py",
+  "file:tests/test_gate_child_encoding.py",
+  "test:test_gate_child_encoding.py",
+  "test:test_gate_summary_truthful.py",
+  "text:scripts/run_gates.py::PYTHONIOENCODING",
+  "text:scripts/run_gates.py::def env() -> dict[str, str]:",
+]
+gaps = [
+  """- 本笔门禁读数是**本机**跑的（用户 m27225 授权），不是云机 —— 对 m12391 的一次性改口；落地脚本的云机 `host` 闸保留，只在显式 `--allow-local-host` 时放行。修复本身要在下一趟云门禁上复核（那趟才能证明云机不再假红）。
+- 云门禁 A328 的另一条红 `web_live`（`手机直传：没配对传不进来（401）`）未在本卡处置：云上日志里 `/api/sync/import` 确实回了 401，但 `nopair[0] == 401` 判 False，根因未定论（本机复跑全绿 ⇒ 云机独有），另开卡。
+- 未覆盖非 Windows 宿主（Linux/macOS 本来就不会走到 GBK 这条路径），判据只钉「两件都给且覆盖」。
+""",
+]

@@ -4431,3 +4431,17 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A337"
+task = "T-AG539"
+title = "门禁子进程要按 UTF-8 说话：GBK 把症状洗成了乱码"
+tree = ".wt/A337"
+spec = "复盘/卡/卡A337-门禁子进程要按UTF-8说话.md"
+files = [
+  "scripts/run_gates.py",
+  "tests/test_gate_child_encoding.py",
+]
+status = "done"
+risk = "mid"
+depends = []

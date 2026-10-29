@@ -503,6 +503,37 @@ pool 一直记着每个「卡 × 模型」的 `reset_at`，排批却**一条排�
 - 反向验证 `gates/diag/rev-A329.log` ⇒ **8/8 条全部咬住，收尾绿**（截时、未知 soon、tier 顺序、fail-open、resting 沉底、`reset_for` 取 min、`ordered` 把没记录排最前、`left` 方向，每条定点变异后逐字节还原）。
 
 ★ 踩过一条**自己造成的**回归并已根治：初版在 `tools/pool/plan.py` 顶部 `from pool import model_registry/route`，让 `tests/test_wb_land.py::_stage_tools` 的最小假仓库（`_NEW_TOOLS` 清单里没有这两个新文件）一 import 就 ImportError ⇒ 全量 **40 failed**。用对照实验归因后把两条 import 下沉进函数体（`model_of(card, *, pool=None)`），40 条归零。**没改任何既有测试** —— 那份沙箱清单是既有契约，不该为迁就我的 import 去改它。
+## 2026-10-30 · 门禁子进程要按 UTF-8 说话：GBK 把症状洗成了乱码（A337，T-AG539）
+
+云门禁 A328 那一趟（宿主 `gates-runner-host`，`at=2026-10-30T04:30:09`）唯一红的 pytest 是 `tests/test_gate_summary_truthful.py::test_detail_makes_the_suspect_shape_visible_again`，`detail` 原文是 `'[FAIL] û�ȵ���Ӧ������Լ 12 ��\nFAILED tests/test_live.py::test_x'`。判据没错 —— 是**编码把症状洗掉了**。
+
+### 病灶
+
+`scripts/run_gates.py` 读子进程钉死 utf-8（`:1516` `text=True, encoding="utf-8", errors="replace"`），写的一方却继承宿主 locale。云机 `sys.stdout.encoding` 实测 **`gbk`**、`locale.getpreferredencoding(False)` **`cp936`**（本机都是 `utf-8`），于是子进程把 `[FAIL] 没等到响应，等了约 12 秒` 按 GBK 写进管道，按 utf-8 解出来就是乱码 ⇒ `SUSPECT_SHAPES`（`没等到` / `超时` / `timeout` / `timed out` / `等了约`）一条都匹配不上 ⇒ `mark_suspect_rows()` 标不上 `SUSPECT`。
+
+这一次失明的不是一条钉子，是**所有按中文形状做的判据**（`FAIL_SHAPES` 的 `超时`、`acceptance` 的中文摘要、`ui_text` 的中文断言都靠同一份解码）。
+
+### 改法
+
+只改 `env()` 一处（`:757`），两件都给：
+
+```python
+e = tree_pythonpath(dict(os.environ))
+e["PYTHONUTF8"] = "1"
+e["PYTHONIOENCODING"] = "utf-8"
+return e
+```
+
+只给 `PYTHONUTF8` 不够：`PYTHONIOENCODING` 的优先级**高于** UTF-8 模式，外部已有的 `PYTHONIOENCODING=gbk` 仍会赢；必须是覆盖，不能写成 `setdefault`。读的一方一个字都没改。
+
+`scripts/run_gates.py` 的行尾是 `\r\r\r\n`（三重 CR，2902 行），本次改动按字节替换，改后仍是 `LF=2902 · 三重CRLF=2902`，未破坏。
+
+### 读数
+
+- 探针 `gates/diag/probe-A337.log` 三项全成立：修前 `首行 repr = '[FAIL] û�ȵ���Ӧ������Լ 12 ��'`；修后 `首行 repr = '[FAIL] 没等到响应，等了约 12 秒'`；走真 `start_gate()`→`finish_gate()`→`mark_suspect_rows()` 得到 `status = 'SUSPECT'`、`suspect_reason = '症状命中「没等到」：等不到东西，不像断言不符'`。
+- `pytest tests/test_gate_child_encoding.py` ⇒ **6 passed**；`pytest tests/test_gate_summary_truthful.py tests/test_door_inputs_coverage.py` ⇒ **26 passed**；`ruff check scripts/run_gates.py tests/test_gate_child_encoding.py` ⇒ All checks passed。
+- 反向验证 `gates/diag/rev-A337.log` ⇒ **5/5 条全部咬住，收尾绿**（每条定点变异后按原始字节还原，复查逐字节相同 + 三重 CRLF 仍在）。
+- ★ 反向验证第 ② 条**一开始没咬住**（唯一红灯）：本机环境恰好带着 `PYTHONIOENCODING=utf-8`，删掉 `env()` 里那行也能靠继承通过 —— 等于假钉子。已在新钉子开头 `monkeypatch.delenv` 摘掉宿主那两个变量，重跑才 5/5。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

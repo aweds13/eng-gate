@@ -755,7 +755,29 @@ def tree_pythonpath(e: dict[str, str]) -> dict[str, str]:
 
 
 def env() -> dict[str, str]:
-    return tree_pythonpath(dict(os.environ))
+    """给每道门构造子进程环境：本树 `src` 在 `PYTHONPATH` 首位 + **钉死 UTF-8 stdio**。
+
+    ★ 卡 A337（T-AG539）实测：云机是 Windows Server、locale=cp936，
+    `python -c "import sys;print(sys.stdout.encoding)"` 回 **`gbk`**（本机回 `utf-8`）。
+    而 `start_gate()` 按 `encoding="utf-8", errors="replace"` 解码子进程输出 ⇒ 子进程写出的
+    GBK 字节被当成 UTF-8 解 ⇒ 中文全成乱码 ⇒ `SUSPECT_SHAPES`（"没等到"/"超时"/"timed out"…）
+    一条都匹配不上 ⇒ `mark_suspect_rows()` 标不上 `SUSPECT`。实测红：云门禁
+    `tests/test_gate_summary_truthful.py::test_detail_makes_the_suspect_shape_visible_again`
+    的 `detail` 是 `'[FAIL] û�ȵ���Ӧ������Լ 12 ��'`。判据没错，是编码把症状洗掉了。
+
+    **两个变量都要给**，理由不是洁癖：
+    - `PYTHONUTF8=1` 打开 UTF-8 模式（stdio + 文件系统编码 + `open()` 默认编码）；
+    - `PYTHONIOENCODING` 的**优先级高于** UTF-8 模式 —— 只给前者时，外部环境里已有的
+      `PYTHONIOENCODING=gbk` 仍会赢，于是「修好了」在别人的机器上复现不了。
+    仓库既有先例：`tools/wb_land.py`、`tools/wb_nightly.py` 都写了 `PYTHONUTF8: "1"`。
+
+    ★ **覆盖**而不是 `setdefault`：门禁要的是同一份读数，外部环境想改编码得改门本身，
+    不许靠一个环境变量把结论悄悄换掉。
+    """
+    e = tree_pythonpath(dict(os.environ))
+    e["PYTHONUTF8"] = "1"
+    e["PYTHONIOENCODING"] = "utf-8"
+    return e
 
 
 #: 失败形状（卡 E67）：门是红的时候（`exit_code != 0`），摘要优先从这些行里挑。
