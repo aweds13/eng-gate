@@ -392,6 +392,26 @@ def _brief(entries: list[Entry]) -> str:
     return " / ".join(parts)
 
 
+def _existing_newline(path: Path) -> str:
+    """目标文件现在的行尾（`"\n"` / `"\r\n"` / `"\r"`）；读不到就用 CRLF。
+
+    ★ 只看**第一个行尾**就够：本仓文件是「纯一种行尾」的（混行尾另有一组钉子管），
+      这里不做归一 —— 归一属于改内容，不属于写盘。
+    ★ 卡 F9（T-AG525）：原来写死 `newline="\n"`，而工作区是 CRLF ⇒ 一重算就整文件
+      行尾翻转（405 行全改），与本仓「行尾不许无声归一」的既有钉子同一族问题。
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return "\r\n"
+    for i, byte in enumerate(raw):
+        if byte == 0x0A:
+            return "\r\n" if i and raw[i - 1] == 0x0D else "\n"
+        if byte == 0x0D:
+            return "\r" if i + 1 < len(raw) and raw[i + 1] != 0x0A else "\r\n"
+    return "\r\n"
+
+
 def write_target(root: Path, target: Target, adopt: bool) -> tuple[bool, list[str]]:
     """写盘。盘上是手写版且没 `--adopt` ⇒ 拒写（不许悄悄覆盖别人的文件）。"""
     entries = collect(root, target)
@@ -405,7 +425,8 @@ def write_target(root: Path, target: Target, adopt: bool) -> tuple[bool, list[st
             return True, [f"[FAIL] {target.output}：{reason} —— 不覆盖（真接管请加 --adopt）"]
     expected = RENDER[target.kind](entries, target)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(expected, encoding="utf-8", newline="\n")
+    newline = _existing_newline(out_path)
+    out_path.write_text(expected, encoding="utf-8", newline=newline)
     return False, [f"[write] {target.output}（{len(entries)} 篇：{_brief(entries)}）"]
 
 

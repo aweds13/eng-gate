@@ -4306,7 +4306,7 @@ files = [
   "tests/test_gen_doc_index_fresh.py",
   "复盘/卡/卡F9-产物索引与真目录脱节.md",
 ]
-status = "pending"
+status = "done"
 risk = "low"
 depends = ["E65"]
 
