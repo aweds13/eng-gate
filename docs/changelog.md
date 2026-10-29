@@ -447,6 +447,24 @@ fallback 原因的是同一个文件里的 f-string —— 两边早就脱节了
   `ruff check` ⇒ All checks passed；反向验证 `gates/diag/_rev_A328.py` ⇒ **7/7 全部咬住**；
   CLI 实测 `wait --timeout 2s` 在「未记录」上退 1，`refresh --json` 连跑两次
   `seconds_since_last = 12.45 / probe = false`（30 秒抑制生效）。
+## 2026-10-30 · 沉底要有沉底序：magpie Sink 移植进 pool（A331，T-AG533）
+
+429 打过的候选要沉到次序末尾，且先沉的排在后续沉者之前 —— 本仓原来一行都没有。
+这次把 magpie `internal/gateway/sink.go` 的序号 + 稳定排序搬成 `tools/pool/sink.py`。
+
+- `sink()` / `sunk_at()` / `unsink()` / `unsink_all()` / `sink_order()` / `sink_last()` /
+  `sinks()` / `should_sink()`；状态落 `gates/diag/pool-sink.json`（gitignored 运行状态）。
+- `sink_order()` 的 key 是两段式 `(0, 0) if seq[i] == 0 else (1, seq[i])`：未沉的在前且保原序，
+  沉者按沉序 —— 单段写法制服不了「从未沉 vs 沉过」的分段。
+- **只因「限流」沉**：`should_sink()` 硬拦 `余额耗尽`（magpie 的 `failQuota` / `failCredit` 分支
+  里没有任何 `sink(` 调用 —— 余额耗尽沉下去不会自己回来）。
+- 12 条钉子 + 9 条定点变异反向验证（`gates/diag/rev-A331.log` 末行 `结论：9/9 条全部咬住，收尾绿。`）。
+
+★ 如实边界：本仓**没有** magpie `c.full()` 的等价物（`tools/pool/registry.py` 只有 `model`，无用量读数）
+⇒ 「有配额却 429」这一前提是**假定**成立、由调用方保证，**不算已核实**。这句写在 `sink()` 的 docstring 里。
+
+★ 本卡**不接线** `tools/wb_dispatch.py`（3533 行、被大量用例钉着，接线另开卡），也不做 TTL /
+到期自动 unsink（那是 rest 的语义，不是 sink）。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

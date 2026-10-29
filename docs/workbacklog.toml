@@ -4388,3 +4388,17 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A331"
+task = "T-AG533"
+title = "沉底要有沉底序：magpie Sink 移植进 pool"
+tree = ".wt/A331"
+spec = "复盘/卡/卡A331-沉底要有沉底序.md"
+files = [
+  "tools/pool/sink.py",
+  "tests/test_pool_sink.py",
+]
+status = "done"
+risk = "mid"
+depends = []

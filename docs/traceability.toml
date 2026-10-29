@@ -9732,3 +9732,24 @@ gaps = [
   `refresh` 只回答要不要重新探测、不触发探测 ⇒ 真正的自动刷新循环属后续卡。
 """,
 ]
+
+[entries."T-AG533"]
+id = "T-AG533"
+title = "沉底要有沉底序：magpie Sink 移植进 pool"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A331-沉底要有沉底序.md",
+  "file:tools/pool/sink.py",
+  "file:tests/test_pool_sink.py",
+  "text:tools/pool/sink.py::def should_sink(",
+  "text:tools/pool/sink.py::idx.sort(key=lambda i: (0, 0) if seq[i] == 0 else (1, seq[i]))",
+]
+gaps = [
+  """- `sink.py` 尚未接线 `tools/wb_dispatch.py`：429 主流程（`:3440-3475`）仍按原序换模型。接线要另开卡 —— 那个文件 3533 行、被大量用例钉着。
+- 没有 TTL / 到期自动 unsink：magpie 的 sink 自己也不带到期时间（只有手动 `unsink` 或重启才回原位）；加 TTL 是另一种语义（rest），属别的卡。
+- 读改写不做跨进程互斥：两个进程同时沉可能拿到同一个 `n`。只影响它俩彼此的先后，不影响「沉者排在未沉者之后」这条主判据。
+- 反向验证里设计节点名的「单段但保留 seq」写法（`key=lambda i: seq[i]`）在本仓与两段式**数学同序**、跑不出红 ⇒ 真正的牙是「丢掉 seq 退化成常数 0」那条变异，已写进 `_rev_A331.py` 的结论段，没有假报咬住。
+""",
+]
