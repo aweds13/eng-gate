@@ -2,15 +2,23 @@
 id = "T-AG527"
 title = "一行判不了就把整行扔掉：同一行里成对的引用也没人判"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 owner = "controller"
 evidence = [
   "file:复盘/卡/卡F10-判不了的那一段不许连累同行.md",
   "file:scripts/check_docs.py",
   "file:tests/test_check_docs.py",
+  "test:test_check_docs.py",
+  "text:scripts/check_docs.py::行尾反引号不成对，这一段判不了",
+  "text:tests/test_check_docs.py::def test_unpaired_backtick_does_not_hide_the_paired_ref(",
 ]
 gaps = [
-  """- 立卡态：判据 1~5 均未开工，证据只有卡规格与探针读数。
-- 探针 `gates/diag/_probe_tail5b.py` 与 `gates/diag/_probe_v6.py` 都在 gitignored 的
-  `gates/diag/` 下 ⇒ 读数无法随树分发，落地时必须把结论写进卡规格与 changelog 正文。"""
+  """- 剩下 8 条「行尾反引号不成对，这一段判不了」全是反引号**跨行**（如
+  `复盘/卡/卡E49-云机红单归因与可移植性.md:12` 的 mypy 报错跨两行、
+  `skills/pipe-land/references/land-steps.md:74` 的钉子名跨行）——要判得先做跨行 code span
+  解析，那是另一张卡的事，本卡不做。
+- `skip` 总量的绝对值**没有**钉死在卡规格里：它随 `docs/changelog.md` 等派生物内容逐笔
+  变化（同一棵树现读 1045 / 1059 / 1063 三次）。本卡钉的是「反引号这一类 102 → ≤ 8」。
+- 探针 `gates/diag/_probe_tail5b.py`、`gates/diag/_probe_v6.py`、`gates/diag/_probe_tail.py`
+  都在 gitignored 的 `gates/diag/` 下 ⇒ 读数无法随树分发，结论已写进卡规格与 changelog 正文。"""
 ]

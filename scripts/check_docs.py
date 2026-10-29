@@ -33,7 +33,7 @@ r"""文档门禁（卡 F3 / T-AG451）：死指针 / drift 债 / superseded 未�
    文件名带这词、文档在讨论这个词本身），卡 A308 收窄成现在这样。`GENERATED` 首行锚点的
    自动生成文件直接不判。详见 `superseded_declarations()` 的收窄史。
 4. **判不出来就报 skip**：仓外绝对路径（`D:\…`）、模板占位（含 `<…>` `*` `{…}` `…`）、
-   `..` 逃逸、`gates/diag/**` 产物、gitignored 产物、反引号不成对的行 —— 全部记 `skip`
+   `..` 逃逸、`gates/diag/**` 产物、gitignored 产物、**行尾反引号不成对的那一段** —— 全部记 `skip`
    并**计数打印**（按原因分组）。`skip > 0` 时输出**不许**给干净结论（照 ADDA：
    「a green check that was structurally blind is worse than no check」）。
 
@@ -206,6 +206,9 @@ URL_PREFIXES = ("http://", "https://", "ftp://", "mailto:", "www.")
 BACKTICK = re.compile(r"`([^`\n]+)`")
 MD_LINK = re.compile(r"\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 FENCE = re.compile(r"^\s*(```+|~~~+)")
+# 卡 F10：行尾没配对的那一段按空白/标点切词，逐个问 is_pointer()
+TAIL_SPLIT = re.compile(r"[\s（）()，、；;：`]+")
+PUNCT_ONLY = re.compile(r"^[^\w]+$")
 DRIVE = re.compile(r"^[A-Za-z]:[\\/]")
 FM_DELIM = re.compile(r"^---\s*$")
 
@@ -525,18 +528,33 @@ def body_lines(text: str):
 def refs_in_line(
     line: str, root: Path, heads: dict[str, bool] | None = None
 ) -> tuple[list[tuple[str, str]], bool]:
-    """一行里的候选引用 `(记号, backtick|link)`；第二项 = 这行判不了（反引号不成对）。"""
-    if line.count("`") % 2:
-        return [], True
+    """一行里的候选引用 `(记号, backtick|link)`；第二项 = **行尾那一段**判不了。
+
+    卡 F10 改的口径：旧写法见到奇数个反引号就 `return [], True` 整行丢掉，于是同一行里
+    **成对**的引用一条都不判 —— 判据自己制造盲区（合成树实测：一行「见 `docs/ghost.md`，
+    尾 `docs/nothere.md」旧实现报 0 条死指针，真断链没人看见）。现在**成对的照判**，
+    只有最后一个配对之后的尾巴里那个没配对的反引号，才让这一段记 skip；而且尾巴里
+    **得像引用**（过 `is_pointer()`）才算，纯代码原文 / 纯标点不算（那本来就不含引用）。
+    """
     refs: list[tuple[str, str]] = []
+    last_end = 0
     for match in BACKTICK.finditer(line):
         token = normalize(match.group(1))
+        last_end = match.end()
         if is_pointer(token, root, heads):
             refs.append((token, "backtick"))
     for match in MD_LINK.finditer(line):
         token = normalize(match.group(1))
+        last_end = max(last_end, match.end())
         if token:
             refs.append((token, "link"))
+    tail = line[last_end:]
+    if "`" in tail:
+        for raw in TAIL_SPLIT.split(tail[tail.index("`") + 1:]):
+            if not raw or PUNCT_ONLY.match(raw):
+                continue
+            if is_pointer(normalize(raw), root, heads):
+                return refs, True
     return refs, False
 
 
@@ -686,7 +704,8 @@ def check_dead_refs(root: Path, docs: list[Path]) -> tuple[list[Finding], list[S
       → `gates/diag/` 前缀               ⇒ skip「gates/diag 产物（不随 worktree 分发）」
       → 扩展名不在 `OWN_EXTS`            ⇒ skip「别仓路径」（**兜底猜测**，只在确实不存在之后）
       → 其余                             ⇒ **死指针**
-    另：反引号不成对的行整行 skip（判不了）。
+    另：行尾反引号不成对 ⇒ **只**把尾巴那一段记 skip，同一行里成对的引用照判（卡 F10：
+    整行丢掉会让判得了的也漏掉）。
 
     ★ 为什么「存在性」必须排在「扩展名猜测」前面（实测，不是审美）：
       旧顺序把扩展名启发式放在 `resolve()` 之前 ⇒ 实测 245 条「别仓类型」skip 里
@@ -716,9 +735,10 @@ def check_dead_refs(root: Path, docs: list[Path]) -> tuple[list[Finding], list[S
         for lineno, line in body_lines(text):
             refs, unparsable = refs_in_line(line, root, heads)
             if unparsable:
+                # ★ 不 continue：这一行**成对的**引用照判，只是尾巴那一段记 skip。
+                #   旧写法 `continue` 会把判得了的一起丢掉（卡 F10）。
                 skips.append(Skip(f"{where_file}:{lineno}", line.strip()[:40],
-                                  "行内反引号不成对，这一行判不了"))
-                continue
+                                  "行尾反引号不成对，这一段判不了"))
             for token, kind in refs:
                 where = f"{where_file}:{lineno}"
                 if token.startswith(URL_PREFIXES):

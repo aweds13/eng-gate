@@ -82,6 +82,48 @@ def test_existing_and_out_of_scope_refs_are_not_dead(tmp_path: Path) -> None:
     (root / "AGENTS.md").write_text("入口\n", encoding="utf-8")
     assert cd.scan(root).dead_refs == []
 
+# --------------------------------------- 判据 1（卡 F10）：一行判不了别连累同行
+def test_unpaired_backtick_does_not_hide_the_paired_ref(tmp_path: Path) -> None:
+    """★ 卡 F10 反向钉子：成对引用 + 行尾游离反引号 ⇒ 死指针**照样**要报。
+
+    旧实现（`if line.count("`") % 2: return [], True` + 主循环 `continue`）见到奇数个
+    反引号就把整行扔掉，于是同一行里成对的引用一条都不判 ⇒ 这条真断链**报 0 条**。
+    判据自己制造盲区，比不判更坏：它诚实地写着「判不了」，却把判得了的一起丢了。
+    """
+    root = _tree(tmp_path)
+    (root / "docs" / "half.md").write_text(
+        "见 `docs/ghost.md`，尾还挂着一个没配对的反引号 `\n", encoding="utf-8"
+    )
+    detail = [item.line() for item in cd.scan(root).dead_refs]
+    assert detail == ["docs/half.md:1 → docs/ghost.md"], detail
+
+
+def test_unpaired_backtick_skip_is_narrowed_to_the_tail(tmp_path: Path) -> None:
+    """★ 判不了的那一段仍要如实报，但口径是「这一段」不是「这一行」。"""
+    root = _tree(tmp_path)
+    (root / "docs" / "tailref.md").write_text(
+        "见 `docs/ok.md`，尾巴 `docs/<卡号>.md\n", encoding="utf-8"
+    )
+    report = cd.scan(root)
+    assert report.dead_refs == [], [item.line() for item in report.dead_refs]
+    reasons = [item.reason for item in report.skips]
+    assert "行尾反引号不成对，这一段判不了" in reasons, reasons
+    assert "行内反引号不成对，这一行判不了" not in reasons, reasons
+
+
+def test_unpaired_backtick_before_plain_code_is_not_a_skip(tmp_path: Path) -> None:
+    """★ 尾巴里只是代码原文 / 纯标点 ⇒ 不记 skip（它本来就不含引用，记了是灌噪声）。"""
+    root = _tree(tmp_path)
+    (root / "docs" / "code.md").write_text(
+        "调用 `min(a, b)` 时尾部多一个反引号 ` 以及 get_group / rename_group\n",
+        encoding="utf-8",
+    )
+    report = cd.scan(root)
+    backtick = [s for s in report.skips if "反引号" in s.reason]
+    assert backtick == [], [s.reason for s in backtick]
+    assert report.dead_refs == [], [item.line() for item in report.dead_refs]
+
+
 
 # --------------------------------------------------------------------- 判据 4
 def test_skip_is_counted_and_never_called_a_pass(tmp_path: Path) -> None:

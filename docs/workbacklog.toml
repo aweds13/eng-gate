@@ -4340,6 +4340,6 @@ files = [
   "tests/test_check_docs.py",
   "复盘/卡/卡F10-判不了的那一段不许连累同行.md",
 ]
-status = "pending"
+status = "done"
 risk = "low"
 depends = []
