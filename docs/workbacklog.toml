@@ -4402,3 +4402,17 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A332"
+task = "T-AG534"
+title = "休息时长要有四个真值：magpie restAfterMarked 移植进 pool"
+tree = ".wt/A332"
+spec = "复盘/卡/卡A332-休息时长要有四个真值.md"
+files = [
+  "tools/pool_quota.py",
+  "tests/test_pool_rest.py",
+]
+status = "done"
+risk = "mid"
+depends = []

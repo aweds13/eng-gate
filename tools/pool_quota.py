@@ -65,6 +65,88 @@ WAIT_MAX_S = 600         # magpie quotaWaitMax = 10 * time.Minute
 WAIT_MARGIN_S = 30       # magpie quotaWaitMargin = 30 * time.Second
 REFRESH_GAP_S = 30       # magpie quotaRefreshGap = 30 * time.Second
 
+# ---- rest 时长四真值（卡 A332 · T-AG534）—— 照 magpie `restAfterMarked`（F20）
+# 常量原件：`internal/gateway/routing.go:165-202` + `:974`、`fallback.go:37`、
+# `internal/provider/concurrency.go:212/:333`。四真值 = credit / quota 有续期 /
+# quota 无续期 / rate，外加「无因失败」的退避 —— 一条都不许省。
+# ★ 不是 `wb_dispatch.DEFAULT_QUOTA_WAIT = 300`（那是派活器兜底，不是 rest 时长）。
+CREDIT_REST_S = 30 * 60              # routing.go:166 creditRest —— 没钱了，充上之前一直歇
+QUOTA_REST_S = 15 * 60               # :167 quotaRest —— 额度用光、又没说何时重置
+LONGEST_WAIT_S = 3600                # :168 longestWait —— 供应商「何时再来」最多信一小时
+LONGEST_QUOTA_S = 8 * 24 * 3600      # :172 longestQuota
+LONGEST_RETRY_S = 10 * 60            # :173 longestRetry —— 一错再错
+LONGEST_RATE_REST_S = 30 * 60        # :177 longestRateRest
+RATE_FORGET_S = 30 * 60              # :180 rateForget —— 半小时没再限流就重新数
+COOLDOWN_S = 60                      # fallback.go:37 fallbackCooldown —— 退避的起点
+LONGEST_MONTHLY_S = 35 * 24 * 3600   # :974 longestMonthly —— 月额度用光，35 天
+REST_CAP_OFF = -1                    # concurrency.go:333 RestCapOff —— 无因失败不 rest
+MAX_QUOTA_REST_MIN = 8 * 24 * 60     # :212 MaxQuotaRest（分钟，= 8 天）
+
+#: 五种失败分类（`routing.go:288-299` 的子集）。`auth` 在 `restAfterMarked` 的 switch 里
+#: 没有自己的 case，落 `default` ⇒ 与 `other` 同一条退避路（但**不**享 `off`，见 `:1182`）。
+WHY_KINDS = ("credit", "quota", "rate", "other", "auth")
+
+# ---- 分类正则：只搬 `failure()`（`routing.go:391-444`）用到的那几条，pattern 逐字照抄。
+_CREDIT_RE = re.compile(
+    r"insufficient.?(balance|credit|fund)|balance|credit|billing|payment|arrear"
+    r"|overdue|suspended|余额|欠费|充值|账户.*(不足|停)",
+    re.IGNORECASE,
+)
+_BROKE_RE = re.compile(
+    r"insufficient.?(balance|credit|fund)|\bcredits? (are )?exhausted\b|余额不足|欠费|请充值",
+    re.IGNORECASE,
+)
+_USED_UP_RE = re.compile(
+    r"quota|usage.?limit|out of budget|budget (exceeded|exhausted)|limit.?reached"
+    r"|hit your .*limit|limit.{0,24}resets|exceeded.*(plan|limit)|额度|用量|套餐|上限",
+    re.IGNORECASE,
+)
+_RATE_RE = re.compile(
+    # ★ 比 magpie 少了「请求太多」那一条备选：它只在 `status == 429` 里被查，
+    #   而 `:440` 的兜底已把剩下的 429 全归 rate ⇒ 无观察差异。
+    #   另：`tests/test_quota_wait.py` 的那条零网络钉子会扫整份源码文本，
+    #   所以连注释里都不许出现网络库的名字（A328 落的钉子）。
+    r"rate.?limit|frequency.?limit|per.?(second|sec|minute|min)\b"
+    r"|\b[rt]pm\b|频率|太频繁",
+    re.IGNORECASE,
+)
+_PLANNED_RE = re.compile(
+    r"quota|usage.?limit|hit your .*limit|limit.{0,24}resets|per.?(day|week|month)"
+    r"|daily|weekly|monthly|额度|用量|套餐|限额已用完",
+    re.IGNORECASE,
+)
+_MINUTE_RE = re.compile(
+    r"per.?(second|minute)|per.?(sec|min)\b|\b[rt]p[ms]\b"
+    r"|(token|call|request) rate limit|每分钟|每秒",
+    re.IGNORECASE,
+)
+_LONG_RE = re.compile(
+    r"usage.?limit|hit your .*limit|limit.{0,24}resets|per.?(hour|day|week|month)"
+    r"|\bhours?\b|hourly|daily|weekly|monthly|\b[rt]p[dh]\b"
+    r"|额度已用|用量|套餐|限额已用完|小时|每天|每日|每周|每月",
+    re.IGNORECASE,
+)
+_URL_RE = re.compile(r"https?://\S+")
+_QUOTA_CODES_RE = re.compile(
+    r"limit reached\|\d{10}\b|usage_limit_reached|RESOURCE_EXHAUSTED", re.IGNORECASE
+)
+_RESETS_WHEN_RE = re.compile(
+    r"(?:\bresets? at|将在|将于)\s*(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2}):(\d{2})"
+    r"\s*(?:(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?|([+-])(\d{2})(\d{2}) (?-i:[A-Z]{2,5}))"
+    r"(?:\s*(?:重置|[,.;，。；]))",
+    re.IGNORECASE,
+)
+_TRY_AGAIN_RE = re.compile(
+    r"try again in (?:(\d+)\s*d(?:ays?)?\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\s*)?"
+    r"(?:(\d+)\s*m(?:in(?:utes?|s)?)?)?",
+    re.IGNORECASE,
+)
+
+#: magpie `soonest = provider.PatienceLongest`（`routing.go:894` / `group.go:148` = 240 秒）——
+#: 「供应商说多久再来」短于这个数才算「马上就好」。
+SOONEST_S = 240
+
+
 #: 退出码（`--card` / `--model` 缺参由 argparse 直接退 2 = `EXIT_USAGE`）。
 EXIT_OK, EXIT_TIMEOUT, EXIT_USAGE, EXIT_INTERRUPT = 0, 1, 2, 130
 
@@ -186,6 +268,184 @@ def record(*, card: str, model: str, pool: str, kind: str,
     return rec
 
 
+# ================================================================ rest 时长四真值（卡 A332）
+
+
+def _minute_limit(body: str) -> bool:
+    """magpie `minuteLimit`（`routing.go:1136`）：分钟级限流，且不是长期/欠费那几种。"""
+    body = _URL_RE.sub(" ", body)
+    return bool(
+        _MINUTE_RE.search(body)
+        and not _LONG_RE.search(body)
+        and not _BROKE_RE.search(body)
+        and "insufficient_quota" not in body
+    )
+
+
+def _back_in(body: str) -> int:
+    """magpie `backIn` → `spanWritten`（`routing.go:916/:948`）：`try again in 3m` 里那个秒数。
+
+    ★ 只搬「写成人话的时长」这一路。unix 时间戳 / `resets at` 那几路要「现在」，
+      本函数是纯的（不读钟表），所以那几路交给 `rest_after(reset_at=...)`。
+    """
+    m = _TRY_AGAIN_RE.search(body)
+    if m is None:
+        return 0
+    days, hours, minutes = (int(g) if g else 0 for g in m.groups())
+    return days * 86400 + hours * 3600 + minutes * 60
+
+
+def classify(status: int, body: str) -> str:
+    """一次失败分到五种之一：`credit` / `quota` / `rate` / `other` / `auth`。
+
+    照 `routing.go:391-444` `failure()` 的判断顺序（`failureOf` 的 auth 那两行在 `:486-490`）。
+    ★ 只搬这五类：`proxy` / `verify` / `restricted` / `refused` / `canceled` 等
+      在 pool 侧没有对应动作，不搬（它们原先的落点是 `other` 之外的东西，本卡不碰）。
+    """
+    text = _URL_RE.sub(" ", body or "")
+    if status == 402 and _USED_UP_RE.search(text) and not _CREDIT_RE.search(text) \
+            and "insufficient_quota" not in text:
+        return "quota"                                        # :406
+    if (status == 402 or (_CREDIT_RE.search(text) and (status != 429 or _BROKE_RE.search(text)))
+            or "insufficient_quota" in text):
+        return "credit"                                       # :412
+    if status == 429 and _RESETS_WHEN_RE.search(text):
+        return "quota"                                        # :419
+    if status == 429 and _minute_limit(text):
+        return "rate"                                         # :422
+    if status == 429 and not _CREDIT_RE.search(text) and 0 < _back_in(text) <= SOONEST_S:
+        return "rate"                                         # :425
+    if status == 429 and _RATE_RE.search(text) and not _PLANNED_RE.search(text):
+        return "rate"                                         # :428
+    if ((status >= 500 and _QUOTA_CODES_RE.search(text))
+            or (status < 500 and _USED_UP_RE.search(text))
+            or (status == 429 and _PLANNED_RE.search(text))):
+        return "quota"                                        # :436
+    if status == 429:
+        return "rate"                                         # :440
+    if status in (401, 403):
+        return "auth"                                         # :486-490
+    return "other"                                            # :444
+
+
+def _cap_or(rest_cap_s: int | None, default: int) -> int:
+    """magpie `RestCapOr`（`concurrency.go:349`）：`None` / `0` / `off` 都用 magpie 自己的默认值。
+
+    ★ `REST_CAP_OFF` 在这里**不生效** —— off 只挡「无因失败」（`:1182` 的 `why == failOther`）。
+    """
+    if rest_cap_s is None or rest_cap_s <= 0:
+        return default
+    return int(rest_cap_s)
+
+
+def _longest_for(full_until: str | None, now_dt: datetime) -> int:
+    """有续期的 quota rest 的上限：月窗口命中 ⇒ 35 天（`:1145-1147`），否则 8 天（`:1148`）。"""
+    full = parse_reset(full_until)
+    if full is not None and _to_aware(full) > now_dt:
+        return LONGEST_MONTHLY_S
+    return LONGEST_QUOTA_S
+
+
+def rest_after(
+    *,
+    why: str,
+    status: int,
+    reset_at: str | None,
+    own_rest_s: int | None = None,     # None = 「magpie 自己的」（= REST cap 未设）
+    rest_cap_s: int | None = None,     # None = 默认；REST_CAP_OFF = off
+    failures: int = 1,
+    full_until: str | None = None,
+    now: datetime | str | None = None,
+) -> dict[str, Any]:
+    """一次失败该歇多久 → `{"seconds", "by", "why", "rest_until", "capped"}`。
+
+    照 magpie `restAfterMarked`（`routing.go:1032`）的四真值：
+      · `credit` ⇒ 30 分钟（`:1094-1095`）；
+      · `quota` 有 `reset_at` ⇒ 歇到那时，上限 8 天 / 月窗口 35 天（`:1126/:1145-1148`）；
+      · `quota` 无 `reset_at` ⇒ 15 分钟 + `capped=True`（`:1143` 的 `guessed`）；
+      · `rate` ⇒ `min(60 << (n-1), 30min)` 指数退避，供应商说更久就听它的（`:1436/:1452`）；
+      · 其余（`other` / `auth`）⇒ `min(60 << (n-1), 10min)`；`rest_cap_s == REST_CAP_OFF` 时
+        **只对 `other`** 生效且 `status in (401, 403)` 挡在 off 之外（`:1182`）。
+
+    ★ **纯函数**：不读文件、不联网、不睡、不看真实钟表（`now` 由调用方注入）。
+    ★ `rest_until` **不许**替代 `reset_at`：前者是「magpie 会歇多久」，后者是
+      「vendor 什么时候重置」—— `capped=True` 时两者不是一回事。
+    ★ 多号同续期：本函数一次只算一个，多号由调用方逐个调用后取 `min`。
+
+    `by` 取值照 magpie：`off` / `credit` / `quota` / `resets` / `retry-after` / `backoff` /
+    `cooldown`（`credits` / `window` / `restricted` / `verify` 属于条件更足的通道，本卡不搬；
+    月窗口在本函数里表现为「上限换 35 天」，`by` 仍是 `resets`）。
+    """
+    if why not in WHY_KINDS:
+        raise ValueError(f"不认的失败分类：{why!r}")
+    if rest_cap_s is not None and (rest_cap_s < -1 or rest_cap_s > MAX_QUOTA_REST_MIN * 60):
+        raise ValueError(
+            f"最长的休息是 0（magpie 自己的）到 {MAX_QUOTA_REST_MIN} 分钟（8 天）或 off，"
+            f"不是 {rest_cap_s} 秒"
+        )
+    now_dt = _resolve_now(now)
+    n = max(int(failures), 1)
+    seconds, by, capped = 0, "off", False
+    if why == "credit":
+        # :1094-1095 —— 没钱了：creditRest = 30 分钟（**不是** quotaRest 的 15 分钟）。
+        # `capped` 在 magpie 里只对应 quota 的 `guessed`（`:1143`），credit 分支不置。
+        seconds, by = CREDIT_REST_S, "credit"
+    elif why == "quota":
+        resets = parse_reset(reset_at)
+        if resets is None:
+            # :1143 —— 没有续期时间：magpie 自己的 quotaRest，`guessed = own <= 0`。
+            seconds = QUOTA_REST_S if not own_rest_s else int(own_rest_s)
+            by = "quota"
+            capped = (own_rest_s or 0) <= 0
+        else:
+            # :1126-1127 —— 供应商说了何时重置就算到那时；上限见 `_longest_for`。
+            left = int((_to_aware(resets) - now_dt).total_seconds())
+            longest = _longest_for(full_until, now_dt)
+            seconds = max(0, min(left, longest))
+            by = "resets"
+            capped = seconds < max(0, left)
+    elif why == "rate":
+        cap_s = _cap_or(rest_cap_s, LONGEST_RATE_REST_S)
+        raw = COOLDOWN_S << min(n - 1, 10)                    # :1436
+        seconds, capped = min(raw, cap_s), min(raw, cap_s) < raw
+        by = "backoff" if n > 1 else "cooldown"               # :1437-1439
+        said = parse_reset(reset_at)
+        if said is not None:
+            raw_w = int((_to_aware(said) - now_dt).total_seconds())
+            if raw_w > 0:
+                w = min(raw_w, LONGEST_WAIT_S)                # :1592-1619
+                if w >= seconds:                              # :1452-1454
+                    seconds, by, capped = w, "retry-after", w < raw_w
+    elif why == "other" and rest_cap_s == REST_CAP_OFF and status not in (401, 403):
+        # :1182 守卫 —— `off` 只挡「无因失败」，且 401/403 永远挡在 off 之外。
+        seconds, by, capped = 0, "off", False
+    else:
+        # :1221（`other` 的退避）/ default（`auth` 在 magpie 的 switch 里没有 case，同一条路，
+        # 但 `why == failOther` 是 off 的硬条件，所以 `auth` 永远拿不到 off）。
+        cap_s = _cap_or(rest_cap_s, LONGEST_RETRY_S)
+        raw = COOLDOWN_S << min(n - 1, 10)
+        seconds, capped = min(raw, cap_s), min(raw, cap_s) < raw
+        by = "backoff"
+    return {
+        "seconds": int(seconds),
+        "by": by,
+        "why": why,
+        "rest_until": (now_dt + timedelta(seconds=int(seconds))).isoformat(),
+        "capped": bool(capped),
+    }
+
+
+def _rest_keys(*, reset_at: str | None, now: datetime) -> dict[str, Any]:
+    """`status()` 多回的两个键 —— **只加不改**（四态名字与 `why` 文案一个字都不动）。
+
+    记录里只有 `kind` / `reset_at`，没有响应体 ⇒ `classify()` 在这里无从调用；
+    能确定的只有「有没有续期时间」：有 ⇒ `by="resets"`（歇到那时），没有 ⇒ `by="quota"`
+    （15 分钟兜底、`capped=True`）。这两个键是**派生视图**，不参与四态判定。
+    """
+    st = rest_after(why="quota", status=429, reset_at=reset_at, now=now)
+    return {"rest_until": st["rest_until"], "rest_by": st["by"]}
+
+
 # ================================================================ 四态（每次现算）
 
 
@@ -204,6 +464,7 @@ def status(*, card: str, model: str, now: datetime | str | None = None,
         "reset_at": None, "recorded_at": None, "now": now_iso,
         "remaining_seconds": None, "expired_seconds": None,
         "can_dispatch": False, "need_probe": True,
+        "rest_until": None, "rest_by": None,
     }
     if rec is None:
         return {**base, "state": "未记录",
@@ -213,18 +474,22 @@ def status(*, card: str, model: str, now: datetime | str | None = None,
     base["recorded_at"] = recorded_at
     if reset_at_raw is None:
         return {**base, "state": "余额耗尽", "reset_at": None,
+                **_rest_keys(reset_at=None, now=now_dt),
                 "why": "有记录但没有重置时间 ⇒ 不自动等，只能探"}
     try:
         reset_dt = _to_aware(datetime.fromisoformat(reset_at_raw))
     except ValueError:
         return {**base, "state": "余额耗尽", "reset_at": reset_at_raw,
+                **_rest_keys(reset_at=reset_at_raw, now=now_dt),
                 "why": "reset_at 解析失败 ⇒ 不自动等，只能探"}
     diff = (reset_dt - _to_aware(now_dt)).total_seconds()
     if diff > 0:
         return {**base, "state": "限流中", "reset_at": reset_at_raw,
+                **_rest_keys(reset_at=reset_at_raw, now=now_dt),
                 "remaining_seconds": int(diff), "need_probe": False,
                 "why": f"reset_at > now（剩余 {int(diff)} 秒）"}
     return {**base, "state": "已过期，需重新探测", "reset_at": reset_at_raw,
+            **_rest_keys(reset_at=reset_at_raw, now=now_dt),
             "expired_seconds": int(-diff),
             "why": f"reset_at <= now（过期 {int(-diff)} 秒）—— 过期 ≠ 可用，要探"}
 

@@ -465,6 +465,20 @@ fallback 原因的是同一个文件里的 f-string —— 两边早就脱节了
 
 ★ 本卡**不接线** `tools/wb_dispatch.py`（3533 行、被大量用例钉着，接线另开卡），也不做 TTL /
 到期自动 unsink（那是 rest 的语义，不是 sink）。
+## 2026-10-30 · 休息时长要有四个真值：magpie restAfterMarked 移植进 pool（A332，T-AG534）
+
+移植 magpie 的 `restAfterMarked`（`internal/provider/routing.go:1032`）与同节十一条常量：失败之后「歇多久」不再是一律 300 秒，而是按**原因**分四类真值 —— 没钱 30 分钟、额度用光 15 分钟、速率 429 指数退避、其它失败 5→10 分钟封顶。
+
+改了 `tools/pool_quota.py`（**纯新增 265 行，零删改**）：
+
+- 常量（`tools/pool_quota.py:73-87`，连 `WHY_KINDS` 一起）：`CREDIT_REST_S=1800` / `QUOTA_REST_S=900` / `LONGEST_WAIT_S=3600` / `LONGEST_QUOTA_S=8d` / `LONGEST_RETRY_S=600` / `LONGEST_RATE_REST_S=1800` / `RATE_FORGET_S=1800` / `COOLDOWN_S=60` / `LONGEST_MONTHLY_S=35d` / `REST_CAP_OFF=-1` / `MAX_QUOTA_REST_MIN=11520`（分钟，= 8 天），每个都标了 magpie 源行号。
+- `classify(status, body)`（`:298`）：把一次失败归成 `credit` / `quota` / `rate` / `auth` / `other` 五类。★ 刻意**不**把 `too many requests` 当 rate 的备选词 —— `tests/test_quota_wait.py::test_wait_and_refresh_never_touch_network` 会扫整份 `pool_quota.py` 源码找 `requests`，写进去就红；语义无差，`:440` 的兜底同样归 rate。
+- `rest_after(...)`（`:349`）：按 `why` 分支给出 `seconds` / `by` / `why` / `rest_until` / `capped`。`retry-after` 先被 `LONGEST_WAIT_S=3600` 压过再比较（`now+3000s` ⇒ 3000/`retry-after`；`now+7200s` ⇒ 3600/`capped=True`）；`capped` 只对应 magpie 的 `guessed`；`off` 只挡 `other`，`auth` 在 magpie 的 switch 里没有 case、落 default，所以它走 other 退避但**永远拿不到 off**（`test_rest_auth_never_gets_off` 钉着）。
+- `status()` **只加不改**：四支 return 各插一行 `**_rest_keys(...)`，多出 `rest_until` / `rest_by` 两键；四态名字与四句 `why` 一字未动。
+
+读数：`pytest tests/test_pool_rest.py tests/test_quota_wait.py tests/test_quota_clock.py` ⇒ **50 passed in 0.68s**；`ruff check` ⇒ All checks passed；反向验证 `gates/diag/_rev_A332.py` ⇒ **6/6 咬红**（off 分支删掉 / creditRest 改成 900 / 退避位移改线性 / 不认的 why 静默回 other / reset_at 无值时 capped=False / status() 里插一行网络调用），逐条还原后整份 `tests/test_pool_rest.py` 仍 **31 passed**，原文逐字节还原且纯 CRLF。
+
+★ 如实边界：`by` 只实现了 `off` / `credit` / `quota` / `resets` / `retry-after` / `backoff` / `cooldown` 七种，magpie 还有 `credits` / `window` / `restricted` / `verify` 四种**没搬**（要 credits 账、`c.full()` 与验证态，本仓都没有）；**没接线** `tools/wb_dispatch.py`（`DEFAULT_QUOTA_WAIT = 300` 与 `:3452` 的 429 主流程原样），接线另开卡。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

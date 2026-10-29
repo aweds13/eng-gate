@@ -9753,3 +9753,26 @@ gaps = [
 - 反向验证里设计节点名的「单段但保留 seq」写法（`key=lambda i: seq[i]`）在本仓与两段式**数学同序**、跑不出红 ⇒ 真正的牙是「丢掉 seq 退化成常数 0」那条变异，已写进 `_rev_A331.py` 的结论段，没有假报咬住。
 """,
 ]
+
+[entries."T-AG534"]
+id = "T-AG534"
+title = "休息时长要有四个真值：magpie restAfterMarked 移植进 pool"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A332-休息时长要有四个真值.md",
+  "file:tools/pool_quota.py",
+  "file:tests/test_pool_rest.py",
+  "test:test_pool_rest.py",
+  "text:tools/pool_quota.py::def rest_after(",
+  "text:tools/pool_quota.py::CREDIT_REST_S = 30 * 60",
+  "text:tools/pool_quota.py::def classify(status: int, body: str) -> str:",
+]
+gaps = [
+  """`by` 只实现 `off`/`credit`/`quota`/`resets`/`retry-after`/`backoff`/`cooldown` 七种；magpie 另有 `credits`/`window`/`restricted`/`verify` 四种没搬 —— 它们分别要 credits 账、`c.full()` 的窗口、受限态与验证态，本仓三样都没有，硬搬就是编数。
+**没接线** `tools/wb_dispatch.py`（3533 行、`:3452` 的 429 主流程与 `DEFAULT_QUOTA_WAIT=300` 原样未动）。rest 现在只是「说得出口的判据」，还没有人用；接线要另开卡并连带那一片用例。
+`RATE_FORGET_S` / `COOLDOWN_S` / `LONGEST_MONTHLY_S` 三个常量按 magpie 原值落库，但本仓**没有**对应的失败计数衰减与月窗口状态，所以它们目前只被计算、不被任何状态机读取。
+`tests/test_quota_wait.py::test_wait_and_refresh_never_touch_network` 会扫整份 `pool_quota.py` 源码文本找 `requests` 字样 —— 这条钉子对「别把网络库带进这个模块」有效，但它也把 magpie 原文的备选词 `too many requests` 逼掉了。是判据的副作用，不是判据的错，记在这里免得下次又踩。
+""",
+]
