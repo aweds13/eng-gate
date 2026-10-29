@@ -9625,3 +9625,20 @@ gaps = [
   不加门的理由：门表每加一道就要同步 `gates/gate-selfproof.toml` 与域表，而这条判据的
   失败模式是「产物过期」而非「产物骗人」，用钉子足够，属取舍不属遗漏。"""
 ]
+
+[entries."T-AG527"]
+id = "T-AG527"
+title = "一行判不了就把整行扔掉：同一行里成对的引用也没人判"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡F10-判不了的那一段不许连累同行.md",
+  "file:scripts/check_docs.py",
+  "file:tests/test_check_docs.py",
+]
+gaps = [
+  """- 立卡态：判据 1~5 均未开工，证据只有卡规格与探针读数。
+- 探针 `gates/diag/_probe_tail5b.py` 与 `gates/diag/_probe_v6.py` 都在 gitignored 的
+  `gates/diag/` 下 ⇒ 读数无法随树分发，落地时必须把结论写进卡规格与 changelog 正文。"""
+]

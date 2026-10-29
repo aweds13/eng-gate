@@ -4328,3 +4328,18 @@ files = [
 status = "done"
 risk = "mid"
 depends = ["E65"]
+
+[[cards]]
+id = "F10"
+task = "T-AG527"
+title = "一行判不了就把整行扔掉：同一行里成对的引用也没人判"
+tree = ".wt/F10"
+spec = "复盘/卡/卡F10-判不了的那一段不许连累同行.md"
+files = [
+  "scripts/check_docs.py",
+  "tests/test_check_docs.py",
+  "复盘/卡/卡F10-判不了的那一段不许连累同行.md",
+]
+status = "pending"
+risk = "low"
+depends = []
