@@ -1,0 +1,11 @@
+[entries."T-BG001"]
+id = "T-BG001"
+title = "参考文档参数口径：parameters 是映射，不是 JSON Schema"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:DSH-技能与插件开发参考.md",
+  "file:docs/workbacklog.toml",
+]
+gaps = "1. 只清 `parameters` / `output` 这一处口径（§4.7），没有整篇重写、没动别的章节；文档其余地方若还有旧口径，留给后续卡。指针 `复盘/卡/卡B1-文档参数口径.md`2. 验收是「照抄能不能挂上」这一步人为可复现（写一个带参插件 → 重启 → 工具表里必须出现），没有新增钉子去自动解析 markdown 示例（脆）。指针 `gates/diag/wb-B1.report.md`3. 没碰 `D:/repo/_tools/dsh-plugins/` 里的插件代码（已在 OpenMAIC 侧修好并验过 5/5），也没改宿主 `defineTool` 实现。指针 `复盘/卡/卡B1-文档参数口径.md`4. 「参数根是开放的，所以 `additionalProperties` 兜不了底」这条真结论保留，但已写明它不是可以在 `parameters` 顶层写的键 —— 差别在「位置」而不是「结论对错」。指针 `docs/workbacklog.toml`"
+

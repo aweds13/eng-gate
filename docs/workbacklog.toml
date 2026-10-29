@@ -3397,7 +3397,7 @@ spec = "复盘/卡/卡B1-文档参数口径.md"
 files = ["DSH-技能与插件开发参考.md", "docs/workbacklog.toml"]
 depends = ["E9"]
 risk = "low"
-status = "pending"
+status = "done"
 
 # ================================================================ 分区 D：dsmate
 # 手机上自用的 DeepSeek 聊天客户端（src/dsmate/）。文档层已落地在

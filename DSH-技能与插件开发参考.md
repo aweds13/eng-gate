@@ -271,7 +271,37 @@ patch 语义：**替换整行 config，不是合并** —— 每一行要重述�
 - `code.host` / `code.client` 是**纯 JS 函数体**，返回一个 Cordis Plugin 对象；无 TS/JSX/import
 - 宿主半可用 Builtin：`ctx`（**只有 get/on/provide/effect**）、`harness`（`handle` / `defineTool` / `registerTool`）、`console`、`btoa`/`atob`、`TextEncoder`/`TextDecoder`
 - 客户端 React 必须 `React.createElement(...)`；UI 必须注册进查询到的 Slot
-- ⚠️ `harness.defineTool` 的 `parameters` **不能写 `additionalProperties: false`**（隐式参数根是开放的）✅
+- ⚠️ `harness.defineTool` 的 **`parameters` 是「参数名 → 参数描述」的映射，不是 JSON Schema**（✅ 2026-10-23 实测）：
+
+  ```js
+  // ✅ 正确形状：每个键就是一个参数名；参数描述只认 type / required / description / items
+  parameters: {
+    path:     { type: "string", required: true, description: "本机文件绝对路径（.pdf/.docx/.pptx 等）" },
+    maxChars: { type: "number", description: "markdown 最多回多少字符（默认 20000）" },
+    texts:    { type: "array", items: { type: "string" }, required: true, description: "要转向量的文本列表" },
+  },
+  output: { schema: { type: "json" }, render: (_args, value) => textOut(value) },
+  ```
+
+  **零参工具写 `parameters: {}`**。`output` 是**另一段**，与 `parameters` 平级（见上例）——
+  别把 `output` 塞进 `parameters` 里，也别把 `parameters` 写成 `{ type: "object", properties: … }`。
+
+  ```js
+  // ❌ 错误形状：把 parameters 当成了 JSON Schema 的根
+  parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+  ```
+
+  **可观测症状**：这个工具**不出现在工具表里**（重启后也没有），启动日志只有一句
+  `failed to load N plugin(s): Cannot read properties of undefined (reading 'properties')`。
+  同一个插件里**零参工具照挂、带参工具静默丢弃**（2026-10-23 实测：5 个工具只挂上 1 个）。
+
+  **原来那条真结论仍然成立**：参数根是**开放**的，所以别指望 `additionalProperties` 兜底
+  （拼错的参数名不会被拦）。但 `additionalProperties` **不是可以在 `parameters` 顶层写的键** ——
+  写了会报 schema 错，省略即可。
+
+  **验收（可证伪，不需要新工具）**：照上面 ✅ 的样例写一个**带参**动态插件 → 重启 profile →
+  工具表里必须出现它；**不出现就是这份文档错了**，不用怀疑自己。零参挂得上、带参挂不上，
+  基本就是本节被写反了。
 - Client 半需要一次授权；**审批被关掉时，这类请求会被自动拒绝**
 
 ### 4.8 上线路径

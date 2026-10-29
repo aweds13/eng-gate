@@ -665,6 +665,12 @@ lines = raw.split(sep)
 - `tools/wb_session.py`：新增 `_tmp_path()`，临时文件名 = `<账本名>.<pid>.<随机 8 位>.tmp`，仍在同一目录（同一卷才能原子换名）。
 - `tools/wb_session.py`：`_save()` 的重试条件从 `except PermissionError` 放宽到 `except (PermissionError, FileNotFoundError)`；末次失败仍清掉自己的 tmp。
 - `tests/test_wb_session.py`：新增三条钉子 —— `FileNotFoundError` 要重试、临时文件名必须唯一、两线程并发写 20 次后账本仍是合法 JSON 且不留 tmp。
+## 2026-10-23 T-BG001 参考文档里 parameters 的口径写成正面版
+
+- `DSH-技能与插件开发参考.md` §4.7：`parameters` 改成「参数名 → 参数描述」的映射口径，零参写 `parameters: {}`，`output` 与它平级。
+- 附错误 → 正确的最小对照，并写明错误形状的可观测症状（工具不出现在工具表 / 启动日志 `Cannot read properties of undefined (reading 'properties')`）。
+- 补一条可证伪验收：照文档示例写带参插件 → 重启 → 工具表必须出现它；不出现就是文档错。
+- 保留原真结论（参数根开放、`additionalProperties` 兜不了底），但说明它不是 `parameters` 顶层的合法键。
 ## 2026-10-18 —— 面板就地渲染 + 工程工具箱（T-AG391）
 - `tools/dsh_panel.py`：`QuickEntry` 改 iframe 就地渲染；新增「工程工具箱」行与五页；宿主半新增 `/dsh-panel/skills` 只读路由，`serveSettings` 收紧为只读。
 - `tests/test_dsh_panel.py`：座位一致性判据改为「前三项逐项一致 + 额外行只许 toolbox」。
