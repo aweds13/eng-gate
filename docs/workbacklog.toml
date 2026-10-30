@@ -3399,6 +3399,39 @@ depends = ["E9"]
 risk = "low"
 status = "done"
 
+[[cards]]
+id = "B2"
+task = "T-BG002"
+title = "工作台搬进 DSH：先把「要搬什么」盘成一张能派活的表"
+tree = ".wt/B2"
+spec = "复盘/卡/卡B2-工作台搬进DSH的盘点与分批.md"
+files = ["docs/implementation/迁移DSH.md", "docs/implementation/迁移DSH-盘点表.csv"]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "B3"
+task = "T-BG003"
+title = "pika 包与散落旧版的比对回填：先证明「谁是谁的新版」"
+tree = ".wt/B3"
+spec = "复盘/卡/卡B3-pika新旧比对与回填方案.md"
+files = ["复盘/pika迁移-新旧比对.md", "复盘/pika迁移-回填方案.md", "tools/pika_migrate.py"]
+depends = []
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "B4"
+task = "T-BG004"
+title = "程天学的功能架构：把「一个学生账号能看到的全部能力」画成图"
+tree = ".wt/B4"
+spec = "复盘/卡/卡B4-程天学功能架构.md"
+files = ["docs/research/程天学-功能架构.md", "docs/research/程天学-截图索引.md"]
+depends = []
+risk = "low"
+status = "pending"
+
 # ================================================================ 分区 D：dsmate
 # 手机上自用的 DeepSeek 聊天客户端（src/dsmate/）。文档层已落地在
 # src/dsmate/docs/，卡一律「文档先行」：判据写不出测法的，不许开卡。

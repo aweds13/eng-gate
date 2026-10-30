@@ -9662,6 +9662,53 @@ evidence = [
 ]
 gaps = "1. 只清 `parameters` / `output` 这一处口径（§4.7），没有整篇重写、没动别的章节；文档其余地方若还有旧口径，留给后续卡。指针 `复盘/卡/卡B1-文档参数口径.md`2. 验收是「照抄能不能挂上」这一步人为可复现（写一个带参插件 → 重启 → 工具表里必须出现），没有新增钉子去自动解析 markdown 示例（脆）。指针 `gates/diag/wb-B1.report.md`3. 没碰 `D:/repo/_tools/dsh-plugins/` 里的插件代码（已在 OpenMAIC 侧修好并验过 5/5），也没改宿主 `defineTool` 实现。指针 `复盘/卡/卡B1-文档参数口径.md`4. 「参数根是开放的，所以 `additionalProperties` 兜不了底」这条真结论保留，但已写明它不是可以在 `parameters` 顶层写的键 —— 差别在「位置」而不是「结论对错」。指针 `docs/workbacklog.toml`"
 
+[entries."T-AG555"]
+id = "T-AG555"
+title = "三个任务登记成卡：B2/B3/B4 入队 + 交付物入库"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/workbacklog.toml",
+  "file:docs/implementation/迁移DSH.md",
+  "file:docs/research/程天学-功能架构.md",
+  "file:复盘/卡/卡B2-工作台搬进DSH的盘点与分批.md",
+]
+gaps = "1. 三张卡只登记、未派活（队列里 B2/B3/B4 都是 pending），实际交付仍由主控的 subagent 产出，没有走 wb_dispatch。指针 docs/workbacklog.toml2. 只跑了 audit 档 5 道门，未跑全量（pytest/acceptance/pytest_chain/ruff/mypy 与真机层都没跑）—— 按 domains.py 的映射，这次改动面只有 docs/ 与 复盘/ 与 tools 规划文件，audit 档是必需档。指针 gates/last.json3. skills_claims 判不出 73 条、docs 门有 skip，两门都**不是 PASS**，如实记。指针 gates/logs/skills_claims.log"
+
+[entries."T-BG002"]
+id = "T-BG002"
+title = "工作台搬进 DSH：先把「要搬什么」盘成一张能派活的表"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:docs/implementation/迁移DSH.md",
+  "file:docs/implementation/迁移DSH-盘点表.csv",
+  "file:复盘/卡/卡B2-工作台搬进DSH的盘点与分批.md",
+]
+gaps = "1. 盘点表原 CSV 9 列与判据④要的 6 列对不上，按位置重映射（分类在「迁移路径」列、判据在「备注」列），未重写数据。指针 复盘/卡/卡B2-工作台搬进DSH的盘点与分批.md2. F43（答题记录折叠）原本在盘点表与判断表里都有、分批计划里从未排期 —— 已排进批次 6，但**尚未实际迁移**，只验到它在 tsx 下会报 ERR_PACKAGE_PATH_NOT_EXPORTED。指针 docs/implementation/迁移DSH.md3. agent 自报 6 条路径写错（scene-diagnostics/page-review/materials-library/reading-navigation/study-mode/assessment-mode 的真实位在 lib/server/agent-runtime/ 或 lib/playback/ 下），已改正但未逐条复核全部 90 个功能点的路径。指针 docs/implementation/迁移DSH.md"
+
+[entries."T-BG003"]
+id = "T-BG003"
+title = "pika 包与散落旧版的比对回填：先证明「谁是谁的新版」"
+group = "ENGINEERING"
+status = "todo"
+evidence = [
+  "file:复盘/卡/卡B3-pika新旧比对与回填方案.md",
+]
+gaps = "1. 勘察已完成（仓外 D:/repo/_tools/pika-迁移/inventory/勘察报告.md 675 行），但比对结论与回填方案这两份交付物**尚未产出**，本卡仍是 todo。指针 复盘/卡/卡B3-pika新旧比对与回填方案.md2. 11 篇 vault 笔记的三方（git/磁盘/zip）逐篇 diff **没做**，勘察报告 §6 已如实写「不知道」。指针 D:/repo/_tools/pika-迁移/inventory/勘察报告.md3. 11 项裁决待用户拍板，其中第 0 项（会复活 2 个用户主动删掉的 SVG，2.87 MB）与第 0b 项（三方不一致）必须先定。指针 复盘/卡/卡B3-pika新旧比对与回填方案.md"
+
+[entries."T-BG004"]
+id = "T-BG004"
+title = "程天学的功能架构：把「一个学生账号能看到的全部能力」画成图"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/research/程天学-功能架构.md",
+  "file:docs/research/程天学-截图索引.md",
+  "file:复盘/卡/卡B4-程天学功能架构.md",
+]
+gaps = "1. 教师侧/管理员侧功能只有帮助页文字依据，无教师账号、任务禁止自行登录 ⇒ 全部归 C 级并明确标注未实测。指针 docs/research/程天学-功能架构.md2. 掌握度四分类与心流 ZONE 无任何截图看到实际渲染（本样本课程教师未建知识图谱，空态原文「老师还没有建立本课程的知识图谱，暂时无法分析」）⇒ 标为「文档 + 部分 UI 印证」。指针 docs/research/程天学-功能架构.md3. 86 张 PNG（15 MB）与 _evidence.jsonl（43 条）留在仓外 D:/repo/_tools/acm/，未入本仓提交；截图索引里逐张写明「证明了什么」作为替代。指针 D:/repo/_tools/acm/analysis/截图索引.md"
+
 [entries."T-AG529"]
 id = "T-AG529"
 title = "白名单里的串必须有产出方：一条死话术把整道 pytest 门判红"

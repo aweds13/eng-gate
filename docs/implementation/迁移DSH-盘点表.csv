@@ -1,0 +1,91 @@
+功能点,现状实现,分类,批次,判据,风险
+F01 课程列表,主页课程库 · app/page.tsx（2411 行）,A 已有,已完成,工具 openmaic_courses；读 document_stages/document_scenes 聚合；插件无参调用,低
+F02 按文件夹分组浏览,主页课程库 · lib/db.mjs（129 行）,A 已有,已完成,工具 openmaic_courses；SQL 已 left join document_folders 并回落出 folder 名，分组折叠是 UI 的事,低
+F03 页列表（序/类型/标题）,页侧栏 · components/stage/scene-sidebar.tsx（601 行）,A 已有,已完成,工具 openmaic_scenes；select scene_order/id/data->>'title'/data->>'type',低
+F04 单页 slide 原生渲染,编辑/播放画布 · components/edit/surfaces/slide/SlideCanvas.tsx（（见备注） 行）,A 已有,已完成,工具 openmaic_page；★ @openmaic/renderer 的 SlideCanvas({slide})，面板侧 page.content/page.type；冒烟 11 条钉住,低
+F05 当前页进对话上下文,面板选中 · openmaic-course/lib/index.js（697 行）,A 已有,已完成,工具 openmaic_active；读插件进程内 active，重启即空；面板选中走 POST /dsh-openmaic/active,低
+F06 非 slide 页只读文本,quiz/pbl/interactive · openmaic-course/lib/index.js（697 行）,A 已有,已完成,工具 openmaic_page_text；sceneText() 逐题拆 question/options/answer/analysis；不能通用 walk,低
+F07 quiz 页交互（答题/交卷/批改）,场景渲染器 · components/scene-renderers/quiz-renderer.tsx（83 行）,C 加面板,9,渲染器只有 83 行但依赖 quiz-view.tsx 与 runtime_records 写入侧,中
+F08 PBL 页渲染与操作,场景渲染器 · components/scene-renderers/pbl-renderer.tsx（541 行）,D 留原生,不迁,541 行渲染器 + lib/pbl/v2/ 五个 API 路由（evaluate/instructor/open-task/simulator/task-update）,高
+F09 interactive 页运行,场景渲染器 · components/scene-renderers/interactive-renderer.tsx（65 行）,D 留原生,不迁,InteractiveIframeHost 沙箱 + postMessage 协议；DSH 面板里跑等价于跨域沙箱,高
+F10 库内全文关键词搜索,检索 · lib/db.mjs（129 行）,A 已有,已完成,工具 openmaic_search；sc.data::text ilike，limit 20，%_ 已转义,低
+F11 本地课程库 6 万门 BM25,课程库检索 · lib/chat/pi/tools/course-search.ts（312 行）,A 已有,已完成,工具 course_search；peek/full 两档在 OpenMAIC 侧；插件只透传 query/topk,低
+F12 页缩略图导航栏,编辑外壳 · components/edit/SlideNavRail/SlideNavRail.tsx（476 行）,C 加面板,9,476 行拖拽排序 + 插入区；缩略图靠 scene-thumbnail-content.tsx,中
+F13 阅读页滚轮翻页,播放层 · lib/playback/reading-navigation.ts（127 行）,C 加面板,9,WHEEL_TURN_MIN_DELTA=12 / COOLDOWN=450ms / SCROLL_EDGE_SLACK_PX=1；零依赖,低
+F14 播放引擎（讲稿/圆桌 live）,播放层 · lib/playback/engine.ts（985 行）,D 留原生,不迁,idle→playing→paused→live 状态机，直接消费 actions，无中间编译步,高
+F15 课堂模式整页,课堂 · components/classroom/ClassroomSurface.tsx（377 行）,D 留原生,不迁,377 行 + /classroom/[id] 路由（10 行薄壳）,高
+F16 单页局部改 + CAS,写入 · openmaic-course/lib/db-write.mjs（72 行）,A 已有,已完成,工具 openmaic_patch_stage；document_scenes 无版本列 ⇒ CAS 靠 WHERE data = $base::jsonb,低
+F17 版面差集（改前判据）,写入 · openmaic-course/lib/index.js（697 行）,A 已有,已完成,工具 openmaic_patch_stage；added/removed/moved/resized/textChanged/markupChanged/restyled；默认 dryRun=true,低
+F18 可视化画布编辑（拖/改/删）,编辑画布 · components/edit/surfaces/slide/（（见备注） 行）,C 加面板,9,16 个文件：RendererEditorCanvas/ElementPickLayer/AnchoredBar×3/ColorPicker/ImagePicker/TableInsertPicker…,高
+F19 quiz 表单编辑（题/选项/解析）,quiz 画布 · components/edit/surfaces/quiz/QuizForm.tsx（（见备注） 行）,D 留原生,不迁,9 个文件；quiz-edit-session.ts 是编辑会话状态，服务端无对等物,高
+F20 元素引用 / 拾取回话,元素引用 · lib/workbench/element-refs.ts（482 行）,D 留原生,不迁,482 行；把画布元素 id 塞进 composer 再发给模型，链路全是客户端状态,高
+F21 页面增 / 删 / 排序,编辑外壳 · components/edit/EditShell/EditShell.tsx（381 行）,C 加面板,9,InsertionZone + CanvasPager；写入侧对应 document_scenes.scene_order,中
+F22 阶段（课）增删改 / 归文件夹,课程编排 · lib/server/agent-runtime/curriculum-tools.ts（621 行）,B 加工具,6,工具 openmaic_stage_admin；对应 6 个工具：create_stage/create_folder/move_to_folder/rename_stage/list_folder_stages/read_stage_outline,中
+F23 发布 / 撤回 / 新鲜度,阶段元数据 · app/api/stages/[id]/publish/route.ts（（见备注） 行）,D 留原生,不迁,还有 unpublish/freshness/status/generation-complete 共 6 条；单机自用场景下用不到,中
+F24 agent 会话循环 + 租约恢复,运行宿主 · lib/server/agent-runtime/runner.ts（2477 行）,D 留原生,不迁,★ pi-agent-core Session + PostgreSQL 租约/event ordering/cancel/resume；DSH 有自己的 agent loop，换宿主＝重写,极高
+F25 工具装配 + 系统提示词组装,运行宿主 · lib/server/agent-runtime/runner-contract.ts（16 行）,D 留原生,不迁,assembleRunnerTools() 平铺 18 组；courseSystemPrompt() 是前缀缓存整体，改一字节整段重算,极高
+F26 生成一页（generate_scene）,生成工具 · lib/server/agent-runtime/generation-tools.ts（1004 行）,D 留原生,不迁,buildCompleteScene() 在 @openmaic/generation 包内，需要整份 brief（course-design.ts 253 行定其必写项）,极高
+F27 生成动作 / 讲稿（generate_actions）,生成工具 · lib/server/agent-runtime/generation-tools.ts（1004 行）,D 留原生,不迁,generateSceneActions()；与上一页讲稿、学习者画像、语言指令耦合,极高
+F28 多阶段课程编排,课程编排 · lib/server/agent-runtime/curriculum-tools.ts（621 行）,B 加工具,6,工具 openmaic_stage_admin；「一句话 7 天 python，一个会话跑到底」的另一半；纯 PG CRUD，可脱离 agent loop,中
+F29 阶段冻结（准入闸）,写入闸 · lib/server/agent-runtime/plan-freeze-tools.ts（622 行）,B 加工具,3,工具 openmaic_plan_freeze；status/add/backfill/freeze/revise 五动作；状态落 data/plan-freeze/，写盘 mkdir→.tmp→rename,中
+F30 计划依赖校验,写入闸 · lib/quiz/plan-check.ts（251 行）,B 加工具,1,工具 openmaic_plan_check；超前引用/无归属/预算三条，只输出「补」和「挪」；tsx 实测可跑,低
+F31 课程级审计（承接率）,审计 · lib/server/agent-runtime/audit-tools.ts（190 行）,B 加工具,2,工具 openmaic_course_audit；auditCourse() 纯函数；NOVEL_P90=60 只对 slide 有效（pbl p50=95 是别的量纲）,中
+F32 写后诊断（一页）,审计 · lib/server/agent-runtime/scene-diagnostics.ts（271 行）,B 加工具,2,工具 openmaic_scene_diagnostics；sceneWriteDiagnostics()；THIN_PAGE_CHARS=120 / OVERFLOW_RISK_CHARS=800；tsx 实测可跑,低
+F33 覆盖缺口（题干词是否讲过）,审计 · lib/quiz/coverage-gap.ts（457 行）,B 加工具,1,工具 openmaic_coverage_gap；findCourseCoverageGaps()；零外部依赖；按内容块切不比字符,低
+F34 版面检查（溢出/重叠/装不下/字号）,审计 · lib/quiz/layout-check.ts（500 行）,B 加工具,1,工具 openmaic_layout_check；checkLayout()；CANVAS 1000×562.5、MIN_READABLE_FONT_PX=14；不碰「好不好看」,低
+F35 对抗性课程审查,审查 · lib/server/agent-runtime/review-tools.ts（555 行）,B 加工具,7,工具 openmaic_review_course；★ 无会话历史/无画像/无工具的隔离调用；输入是学生看得见的文字；按字符预算分批,高
+F36 写后带上下文审查（一页+上文）,审查 · lib/server/agent-runtime/page-review.ts（175 行）,B 加工具,7,工具 openmaic_page_review；reviewPageWithContext()；★ 输了绝不能让写入失败（结论进回话、抛错被吞）,中
+F37 草稿纸（source→claim 落点）,工作记忆 · lib/server/agent-runtime/scratch-tools.ts（451 行）,B 加工具,4,工具 openmaic_scratch；两层 open/promoted；编号 s001 永不复用；promote 只记指针不写材料库,中
+F38 材料库（INDEX + 主题文件）,材料 · lib/server/agent-runtime/materials-library.ts（388 行）,B 加工具,4,工具 openmaic_materials；read_materials/update_materials 两工具；清单是产出不是输入；INDEX 每次注入、主题文件按需读,中
+F39 材料清单（列/读/搜/抽取/等待）,材料 · lib/server/agent-runtime/material-tools.ts（1207 行）,B 加工具,4,工具 openmaic_material_ops；5 个工具：list/read/search/extract/wait_for_materials；抽取是 MinerU 异步任务,中
+F40 材料库文件夹（建/改名/移动）,材料 · lib/server/agent-runtime/material-library-tools.ts（359 行）,B 加工具,4,工具 openmaic_material_folders；5 个工具；薄适配层，底层是 lib/persistence/material-library 的共享操作,中
+F41 练习脚手架（一页课→可跑文件夹）,练习 · lib/server/agent-runtime/practice-tools.ts（406 行）,B 加工具,5,工具 openmaic_practice_scaffold；落 课程与学习\练习\<stageId>\<NN-标题>\；★ 不覆盖已有、不起进程；agent 只写 checks.json,中
+F42 练习结果读回,练习 · lib/server/agent-runtime/practice-tools.ts（406 行）,B 加工具,5,工具 openmaic_practice_result；固定三层深度读 result.json；只读不碰写,低
+F43 答题记录折叠成学习状态,学习状态 · lib/quiz/attempt-fold.ts（389 行）,B 加工具,6,工具 openmaic_quiz_fold；★ 值导入 @openmaic/dsl ⇒ tsx 直接跑会报 ERR_PACKAGE_PATH_NOT_EXPORTED，须走 Next 或有别的编译路径,高
+F44 学习状态渲染器,学习状态 · lib/quiz/learner-state.ts（207 行）,D 留原生,不迁,renderLearnerState() 依赖 attempt-fold 的折叠结果；同 F43 的编译路径问题,高
+F45 学习者画像注入提示词,系统提示词 · lib/server/agent-runtime/learner-profile.ts（69 行）,D 留原生,不迁,整份 个人数据\学习画像.md 注入每次运行；DSH 的提示词组装是另一套,高
+F46 上下文压缩（durable compaction）,上下文 · lib/server/agent-runtime/compaction.ts（407 行）,D 留原生,不迁,★ usageAnchorIsStale()：用量锚点比最新 compaction 还旧就不采信；DSH 有自己的压缩（本项目 ACP 那套）,极高
+F47 `/compact` 手动挡命令,会话命令 · lib/server/agent-runtime/session-commands.ts（71 行）,D 留原生,不迁,COMMAND_PATTERN 锚空白不锚 \b；不剥 token（读侧改写会让 prompt 与 durable 记录不一致）,高
+F48 外部 MCP 服务器接入,MCP · lib/server/agent-runtime/mcp-client.ts（266 行）,D 留原生,不迁,★ DSH 已原生支持 MCP（本会话就有 arxiv/dblp/literature/github/metaso/pool 六个），这一层直接作废,中
+F49 向用户提问（ask_user）,交互 · lib/server/agent-runtime/ask-user.ts（127 行）,A 已有,已完成,工具 ask_user_question；★ 不是插件工具，是 DSH 宿主自带；OpenMAIC 靠「结束本轮」实现，DSH 原生就有,低
+F50 24 个 SKILL 技能包,技能 · skills/agent-runtime/（（见备注） 行）,D 留原生,不迁,★ 53 个文件、24 个 SKILL 目录（slide-craft/stage-design/feynman-learning…）；DSH skills 是另一套目录与发现机制,极高
+F51 技能自建 / 读取 / 修改,技能 · lib/server/agent-runtime/skill-edit-tools.ts（412 行）,A 已有,已完成,工具 create_skill；★ DSH 自带 create_skill + skill 加载；复刻这层没意义（记 D 也行，选 A 因为能力已在）,低
+F52 翻自己以前的会话,个人历史 · lib/server/agent-runtime/personal-history-tools.ts（600 行）,D 留原生,不迁,4 个工具：search_classrooms/read_classroom/search_chats/read_chat；★ 值导入 pi Session,高
+F53 花名册 / 音色表,课堂 · lib/server/agent-runtime/roster-tools.ts（414 行）,D 留原生,不迁,set_roster/list_voices；roster 落 stage.generatedAgentConfigs，与 TTS 强绑,中
+F54 声音克隆（切片/登记）,媒体 · lib/server/agent-runtime/voice-clone-tools.ts（479 行）,D 留原生,不迁,clip_audio 从音视频里切单人独白再回存成 session material,高
+F55 图片生成,媒体 · lib/server/agent-runtime/generate-image.ts（390 行）,D 留原生,不迁,值导入 @openmaic/storage 的 AssetStore,高
+F56 PPTX 导入成一门课,导入 · lib/server/agent-runtime/import-pptx.ts（687 行）,D 留原生,不迁,布局保留路径；687 行,高
+F57 页面渲染成 PNG 给 agent 看,生成 · lib/server/agent-runtime/scene-preview.ts（253 行）,D 留原生,不迁,★ buildScenePreviewTools() 没配服务就 return []，工具压根不注册——本部署大概率没配,中
+F58 网页搜索,抓取 · lib/server/agent-runtime/web-search.ts（（见备注） 行）,A 已有,已完成,工具 web_search；★ DSH 自带 web_search；OpenMAIC 这层是自建供应商抽象,低
+F59 URL 抓取（含 SSRF 信任闸）,抓取 · lib/server/agent-runtime/fetch-url.ts（314 行）,D 留原生,不迁,lookup + isIP 做本机信任边界；★ 这是安全判据，别在宿主侧重写一份,中
+F60 真浏览器抓页,抓取 · lib/server/agent-runtime/browse-url.ts（153 行）,A 已有,已完成,工具 browse_page；★ 本机 8730 被 fake-IP 拦（环境如此，不是坏了）,低
+F61 读文档（整篇）,抓取 · lib/chat/pi/tools/read-document.ts（326 行）,B 加工具,6,工具 openmaic_read_document；与 course_search 的 peek/full 配套；3091 份可整篇读的文档,中
+F62 子 agent 调用,编排 · lib/chat/pi/tools/call-agent.ts（1046 行）,D 留原生,不迁,1046 行；DSH 有自己的 subagent/workflow 机制，语义不等价,极高
+F63 白板（native-whiteboard）,白板 · lib/chat/pi/tools/native-whiteboard.ts（1199 行）,E 该删,删,1199 行 + components/whiteboard/ 3 文件 + /eval/whiteboard 路由；单机自学场景没有协作白板需求,低
+F64 课堂动作（讲到哪/打断）,课堂 · lib/chat/pi/tools/classroom-actions.ts（812 行）,D 留原生,不迁,812 行；与播放引擎 live 态强绑,高
+F65 生成 run 引擎（复刻 1.1.x 预览）,生成管线 · lib/server/generation/run/engine.ts（7004 行）,D 留原生,不迁,run/ 目录 17 文件 7004 行；每步 checkpoint/next state/events 一个事务、按租约代数围栏,极高
+F66 生成十步（research→outline→…→narration）,生成管线 · lib/server/generation/steps/outline.ts（2748 行）,D 留原生,不迁,steps/ 10 文件 2748 行；outline.ts 810、material-analysis.ts 467,极高
+F67 生成预览页（outline 确认交互）,生成管线 · app/generation-preview/page.tsx（606 行）,D 留原生,不迁,606 行；outlineReview: auto/countdown 两种确认节奏都在服务端引擎里,高
+F68 无头生成 API（generate-classroom）,生成管线 · app/api/generate-classroom/route.ts（（见备注） 行）,D 留原生,不迁,3 条路由；靠 assertWorkspaceModelsAuthorized + resolveAgentsForOwner 一整条授权链,高
+F69 图片 / TTS / 视频 / 语音四个生成 API,媒体 · app/api/generate/（（见备注） 行）,D 留原生,不迁,"4 组路由 + verify-{image,model,pdf,video}-provider + provider/probe-models",高
+F70 视频导出（渲染任务）,媒体 · app/api/export-video/render/route.ts（（见备注） 行）,D 留原生,不迁,4 条路由（capability/render/render-[jobId]/download）；本机没配渲染服务时 capability 应报不可用,高
+F71 音频转录,媒体 · app/api/transcription/route.ts（（见备注） 行）,D 留原生,不迁,单条路由,中
+F72 媒体字节代理,媒体 · app/api/proxy-media/route.ts（（见备注） 行）,D 留原生,不迁,给浏览器绕同源限制用；DSH 桌面版是 Electron <webview>，不适用,中
+F73 PBL v2（五条 API）,PBL · lib/pbl/v2/operations/（（见备注） 行）,D 留原生,不迁,evaluate/instructor/open-task/simulator/task-update；agents+prompts+runtime 四层,极高
+F74 圆桌讨论（多人 agent 对话）,课堂 · components/roundtable/index.tsx（（见备注） 行）,D 留原生,不迁,4 个文件 + presentation-speech-overlay；与播放引擎 live 态强绑,高
+F75 单课导出（pptx / interactive html / maic.zip）,导出 · lib/export/use-export-pptx.ts（1621 行）,B 加工具,8,工具 openmaic_export_course；★ 三个 builder 都在浏览器端（Blob + saveAs）；服务端要重做 pptxgenjs 那条，interactive/maic.zip 可直接搬,高
+F76 批量导出（多课→一个 ZIP）,导出 · lib/export/batch-export.ts（384 行）,B 加工具,8,工具 openmaic_export_batch；buildBatchExportZip() 可在 Node 跑（tsx 实测过了）；缺的是三个 builder 的服务端版本,中
+F77 批量下载对话框,导出 · components/workbench/workspace/BatchDownloadDialog.tsx（454 行）,C 加面板,9,★ 入口在课程标签页工具栏，默认是对话标签（这条曾经踩过）,中
+F78 访问码（access-code）,认证 · components/access-code-guard.tsx（（见备注） 行）,E 该删,删,单机自用；DSH 自己有认证墙（签名 cookie，见结论库 1.13），两套认证并存只会打架,低
+F79 owner 身份 / 旧数据迁移绑定,身份 · app/api/identity/claim/route.ts（（见备注） 行）,D 留原生,不迁,OwnerPrincipal + withRequestOwner；★ 插件读库时目前不分 owner（单机单用户可接受，多 owner 就得补）,中
+F80 whoami 一次性诊断,诊断 · app/api/whoami/route.ts（82 行）,B 加工具,6,工具 openmaic_whoami；回显 5 个运行期目录 + planGate/selfStudy 等模块加载时求值的开关真实值,低
+F81 模型设置 / 供应商探测,设置 · components/settings/（（见备注） 行）,E 该删,删,28 个文件；模型选择在 DSH 里是 profile 的事，两处并存会互相覆盖,低
+F82 语言切换 / 主题切换 / 用量统计,设置 · components/language-switcher.tsx（（见备注） 行）,E 该删,删,DSH 有 locale 扩展点与自己的主题；用量统计是 3000 API 的概念,低
+F83 音效 / 音频指示,媒体 · components/audio/（（见备注） 行）,E 该删,删,1 个文件；随 F14 播放引擎一起走,低
+F84 三栏工作台外壳,工作台 UI · components/workbench/workspace/WorkspaceShell.tsx（1981 行）,C 加面板,9,1981 行；DSH 侧用 main 座位 + sidebar.panellist，参考 gates/diag/panel-plugin,高
+F85 左栏（课程树 / 材料库入口 / 历史）,工作台 UI · components/workbench/workspace/WorkspaceRail.tsx（2491 行）,C 加面板,9,2491 行，全仓最大的 UI 组件,高
+F86 对话主面板,工作台 UI · components/workbench/WorkbenchChat.tsx（1371 行）,D 留原生,不迁,★ DSH 自己有对话界面；搬过去等于把两套 chat 拼一起，不建议,极高
+F87 材料库整页,工作台 UI · components/workbench/workspace/MaterialLibraryPage.tsx（1964 行）,C 加面板,9,1964 行；材料是 F38/F39/F40 的 UI 面,高
+F88 课程标签页,工作台 UI · components/workbench/workspace/WorkspaceCourseTabs.tsx（259 行）,C 加面板,9,259 行；批量下载入口就在这,中
+F89 请求活动面板（agent 在干什么）,工作台 UI · components/workbench/workspace/WorkspaceRequestActivity.tsx（812 行）,C 加面板,9,812 行；DSH 侧对应的是会话工具卡片，可参考,高
+F90 工作台会话状态存储,客户端状态 · lib/workbench/session-store.ts（2347 行）,D 留原生,不迁,★ lib/workbench/ 共 68 文件 12412 行，全是浏览器端状态；换宿主＝整层作废,极高
