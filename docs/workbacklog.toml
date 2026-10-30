@@ -4682,3 +4682,21 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A345"
+task = "T-AG547"
+title = "同一张卡别每次换号：magpie 会话亲和移植进 pool（F18）"
+tree = ".wt/A345"
+spec = "复盘/卡/卡A345-同一张卡别每次换号.md"
+files = [
+  "tools/pool/sticky.py",
+  "tools/wb_dispatch.py",
+  "tools/pool_mcp.py",
+  "tests/test_pool_sticky.py",
+  "tests/test_wb_dispatch.py",
+  "复盘/卡/卡A345-同一张卡别每次换号.md",
+]
+status = "done"
+risk = "mid"
+depends = []

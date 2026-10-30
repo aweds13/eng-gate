@@ -507,6 +507,13 @@ WRITE_TOOL_SPECS: list[dict[str, Any]] = [
                     ),
                 },
                 "note": {"type": "string", "description": "备注（记进租约）"},
+                "sticky": {
+                    "type": "boolean",
+                    "description": (
+                        "卡粘性（卡 A345）：同一张卡第二次派活时还用它上次答过的那个号。"
+                        "只在本轮没给 account 时生效；不给 / false 就不透传 --sticky"
+                    ),
+                },
                 "confirm": {"type": "string", "description": "★ 防手滑：必须等于 card"},
             },
             "required": ["card", "tree"],
@@ -1469,12 +1476,15 @@ def _dispatch_argv(
     cwd: Path,
     model: str,
     account: str = "",
+    sticky: bool = False,
 ) -> list[str]:
     """给 `wb_dispatch.py` 的 argv —— **写死**，不透传危险项。
 
     不透传：`--force` / `--allow` / `--resume` / `--no-preflight`。
     ★ 卡 A341（F34）：`--account` **要**透传 —— 工人侧得按同一个账号收窄模型白名单
       （白名单只能收窄不能放宽）；空串就不带这个参数（= 不按账号收窄）。
+    ★ 卡 A345（T-AG547）：`--sticky` **要**透传 —— 粘性只在 `wb_dispatch` 那一侧生效
+      （它要读 `gates/diag/pool-sticky.json` 并复查账本）；`False` 就不带 ⇒ 既有 argv 逐字不变。
     ★ 卡 125：带 `--already-reserved` —— 本函数**上游**（`tool_pool_dispatch`）已经
       `registry.reserve` 过这条树；不带它会撞上 wb_dispatch 新接的 `tree_guard`（自己占的树
       被自己判"被占"）⇒ 派活必被拒。带上它 = wb_dispatch **只跳过**守卫与占/还树，别的前置照走。
@@ -1497,6 +1507,7 @@ def _dispatch_argv(
         "--execute",
         "--already-reserved",
         *(("--account", account) if account else ()),
+        *(("--sticky",) if sticky else ()),
     ]
 
 
@@ -1722,7 +1733,8 @@ def tool_pool_dispatch(
 
     # ④ 起工人（--detach：立刻返回）；起不来就回滚刚占的租约
     cwd = Path(tree) if Path(tree).is_absolute() else (main_root / tree if tree else main_root)
-    argv = _dispatch_argv(card, spec, cwd, model, account)
+    argv = _dispatch_argv(card, spec, cwd, model, account,
+                          sticky=bool(arguments.get("sticky")))
     try:
         code, out, err = _spawn_worker(argv, root)
     except OSError as exc:

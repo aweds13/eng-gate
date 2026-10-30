@@ -1,3 +1,16 @@
+同一张卡别每次换号。
+
+magpie 的 `affinity.go` 记着「这段对话上次是谁答的」，下一轮优先还找它 —— 换了 provider，上游那侧的 prompt 缓存就白丢了。本笔把它的**粘性层**搬进 pool：`tools/pool/sticky.py` 记「这张卡上次是谁答的」，`tools/wb_dispatch.py` 在挑号之前先问它一句。
+
+**只搬两层**：谁答过（`Stick`）+「为什么不留」（十一取值里的七个）。没搬的是 `turnIn()` 的轮次判断、`cacheWorth=1024` 的缓存收益门槛、以及 `strict` / `resting` / `spent` / `main` 四个路由态 —— pool 没有 token 用量到「这段对话值不值得粘」的换算，硬搬会造出一堆永远为假的判据。
+
+**为什么留的理由要分「留」和「走」两族**：`session` / `card` / `first` 是留的理由，`off` / `gone` / `spent` / `cold` 是走的理由，两族不许有交集（反向验证 M1 把 `spent` 塞进 `REASONS_KEEP` 当场红）。`spent` 的判据复用 `tools/pool/route.py:75 USED_SHARE = 98.0`，不另立一套阈值。
+
+**24 小时过期、最多 512 条**：超期的粘性不是「旧偏好」而是「上一个号可能已经在别处被限流了」，继续粘等于把卡往坏号上钉。修剪按 `at` 倒序取前 512（反向验证 M5 把 `reverse=True` 去掉就红）。
+
+**两个接入点**：①挑号之前（`tools/wb_dispatch.py:3276`，在 `resolve_account()` / `caller_model_rejected()` / `account_env()` / rpm 闸 / `reserve()` 全部之前，这样换来的号会被后面每一道闸按新号重算）②记下这次是谁答的（`:3791`，与用量落账同一处）。
+
+**默认不粘**：`--sticky` 是显式开关，且显式给 `--account` 时粘性让位（用户说了算）。
 额度曲线：容器与判据搬完了，数据源搬不了。
 
 magpie 的 `quota_history.go` 用一条时间序列回答「这个号什么时候回血」。本笔把它的五个常量、六个分支的「新周期」判定、三点合一的取舍、45 天 / 6000 点的修剪，以及「一个窗口在某个瞬间的刻度」逐字搬进 `tools/pool/quota_history.py`，并在账本唯一写入口 `record_probe_result()` 里插一行调用。

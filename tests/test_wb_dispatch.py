@@ -3985,3 +3985,136 @@ def test_unmatched_name_is_announced_as_not_working(sandbox: Path, monkeypatch,
     assert "今天等于不生效" in err, f"这一步必须明说闸没生效：{err}"
     assert note["account"] == "demo", "回落时租约里记的就是原名（与查表一致）"
 
+# ----------------------------------------------------------------- 卡 A345：卡粘性
+
+
+#: 账本替身：两个 active 号 —— `demo` 会被粘性用上，`other` 用来证明「显式号说了算」。
+#: ★ `gone` / `spent` 那两支不在这里造：它们的判据是**纯函数级**的（`pool_sticky.choose()`），
+#:   已经在 `tests/test_pool_sticky.py::test_gone_account_falls_back` /
+#:   `test_spent_account_falls_back` 里逐支钉过（含 `disabled`/`limited`/`exhausted`/`expired`
+#:   四种非 active 与 `used_percent` 的边界）。这里再抄一份只会多一处要同步的账本。
+_STICKY_LEDGER = """
+[[account]]
+id = "demo"
+label = "号池 demo"
+platform = "codebuddy"
+state = "active"
+added_at = "2026-09-30"
+approved_models = []
+
+[account.credential]
+kind = "none"
+
+[[account]]
+id = "other"
+label = "号池 other"
+platform = "codebuddy"
+state = "active"
+added_at = "2026-09-30"
+approved_models = []
+
+[account.credential]
+kind = "none"
+"""
+
+
+def _sticky_store(tmp_path: Path, monkeypatch, *, ledger: str = "") -> Path:
+    """粘性记录 + 账号账本都指到 tmp（**绝不**碰真的 `gates/diag/` 与仓外账本）。
+
+    ★ 账本必须显式指：`find_ledger()` 从仓库根向上找，开发机上会走到
+      `D:/repo/infra/pool/accounts.toml`（真账本）—— 判据就会跟宿主机绑定。
+    """
+    ledger_path = tmp_path / "accounts.toml"
+    ledger_path.write_text(ledger or _STICKY_LEDGER, encoding="utf-8")
+    monkeypatch.setenv("TF_ACCOUNTS_TOML", str(ledger_path))
+    store = tmp_path / "gates" / "diag" / "pool-sticky.json"
+    monkeypatch.setenv(wd.pool_sticky.ENV_STICKY, str(store))
+    return store
+
+
+def _seed_stick(store: Path, *, account: str = "demo", why: str = "card",
+                at: float | None = None, card: str = "001") -> None:
+    """手写一条粘性记录（模拟「上一次派活答过」）。"""
+    store.parent.mkdir(parents=True, exist_ok=True)
+    body = {"stick": {card: {
+        "card": card, "account": account, "tree": "", "session": "sid-last",
+        "model": "", "at": time.time() if at is None else at, "why": why,
+    }}}
+    store.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _read_stick(store: Path, card: str = "001") -> dict:
+    body = json.loads(store.read_text(encoding="utf-8"))
+    return body["stick"][card]
+
+
+def test_sticky_off_by_default(sandbox: Path, monkeypatch, capsys) -> None:
+    """① 不给 `--sticky` ⇒ `reserve()` 的入参、`lease_note`、判决文案与今天**逐字相等**。
+
+    ★ 关键：哪怕粘性记录里**明明有**这张卡，不给 `--sticky` 也不许读它、不许写它。
+      坏法：把 `--sticky` 写成默认开、或让接入点 1 不判 `args.sticky` ⇒ 这条必红。
+    """
+    store = _sticky_store(sandbox, monkeypatch)
+    _seed_stick(store, account="demo")
+    before = store.read_bytes()
+
+    seen: dict = {}
+    monkeypatch.setattr(wd, "run_worker", _capture_worker(seen))
+    note = _spy_reserve(monkeypatch)
+    _account_argv(monkeypatch, "--execute")
+    assert wd.main() == 0
+
+    assert seen["worker_env"] is None, "不给 --sticky 时不许因记录里的号给工人另塞环境"
+    assert note["note"] == "spec=spec.md", f"租约 note 被改了：{note['note']!r}"
+    # ★ rebase 到 A344 之后（`e1c2b5eb`）：`reserve()` 现在**总是**带 `account=`（A344 把 profile
+    #   名换成稳定 id，空名字就是空串）。所以这里的判据不是「没有 account 这个键」，而是
+    #   「那个键必须是空的」—— 记录里明明有 `demo`，一旦漏判 `args.sticky` 它就会变成 demo。
+    assert note.get("account") == "", (
+        f"不给 --sticky 时 reserve() 的 account 只能是空串（A344 的既有口径），"
+        f"不许是粘来的号：{note.get('account')!r}"
+    )
+    assert store.read_bytes() == before, "不给 --sticky 时一个字节也不许写粘性记录"
+    assert "[粘 ]" not in capsys.readouterr().err, "默认关时不许打粘性那行话"
+
+
+def test_first_dispatch_records_card_why(sandbox: Path, monkeypatch) -> None:
+    """② 首次派卡到号 A ⇒ 记录里 `account == "A"`、`why == "card"`（有人答过）。"""
+    store = _sticky_store(sandbox, monkeypatch)
+    stub = _account_stub(sandbox, {"demo": _demo_vars(), "other": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    seen: dict = {}
+    monkeypatch.setattr(wd, "run_worker", _capture_worker(seen))
+    _account_argv(monkeypatch, "--account", "demo", "--sticky", "--execute")
+    assert wd.main() == 0
+
+    row = _read_stick(store)
+    assert row["account"] == "demo", f"没记下这次是谁答的：{row}"
+    assert row["why"] == "card", f"显式给了号 ⇒ why 应是 card（有人答过），实际 {row['why']!r}"
+    assert row["session"] == "sid-test", f"会话号没记下来：{row['session']!r}"
+    assert row["at"] > 0.0, "时间戳必须是 epoch 秒"
+
+
+def test_second_dispatch_reuses_account(sandbox: Path, monkeypatch, capsys) -> None:
+    """③ 二次派同一张卡、不给 `--account`、给 `--sticky` ⇒ 还用上次那个号。
+
+    钉三处：① `reserve(account=…)` **收到**了那个号（租约里可判，lane 闸才数得到）；
+    ② 工人环境按那个号注入（否则号的切换只活在纸面上）；③ 记录被刷新成同一号。
+    """
+    store = _sticky_store(sandbox, monkeypatch)
+    _seed_stick(store, account="demo", at=time.time() - 60)
+    stub = _account_stub(sandbox, {"demo": _demo_vars(), "other": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    seen: dict = {}
+    monkeypatch.setattr(wd, "run_worker", _capture_worker(seen))
+    note = _spy_reserve(monkeypatch)
+    _account_argv(monkeypatch, "--sticky", "--execute")
+    assert wd.main() == 0
+
+    assert note.get("account") == "demo", f"reserve() 没收到粘来的号：{note.get('account')!r}"
+    assert note["note"] == "spec=spec.md｜account=demo", f"note 没跟上：{note['note']!r}"
+    env = seen["worker_env"]
+    assert env is not None and env["USERPROFILE"] == _demo_vars()["USERPROFILE"], \
+        "粘来的号没进工人环境 ⇒ 工人跑在默认号上，换成别的号等于没粘"
+    err = capsys.readouterr().err
+    assert "上次在号 demo 上答过" in err and "why=card" in err, err
+    assert _read_stick(store)["account"] == "demo", "记录应被刷新成同一号"

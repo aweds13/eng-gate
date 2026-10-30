@@ -108,6 +108,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
+import pool_accounts  # noqa: E402 —— 账本读数（卡 A345：粘性命中要复查这号还在不在）
 import pool_quota  # noqa: E402 —— 额度按钟表算（卡 201）：429 不许凭记忆，按记录时间 vs 现实时间
 import wb_status  # noqa: E402 —— 同一个目录，渲染复用状态器（别写第二份）
 import wb_watch  # noqa: E402 —— 看守唯一实现（卡 E7）：登记表 / 心跳 / .done 都在那儿
@@ -121,6 +122,7 @@ from pool import account_id as pool_account_id  # noqa: E402 —— 名字↔号
 from pool import guards as pool_guards  # noqa: E402 —— 守卫唯一实现（pool.guards）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
 from pool import rpm as pool_rpm  # noqa: E402 —— 每分钟派活闸（卡 A340，magpie 的 MaxRPM）
+from pool import sticky as pool_sticky  # noqa: E402 —— 卡粘性（卡 A345，magpie affinity）
 from pool import task as pool_task  # noqa: E402 —— 批次预声明 / 状态（卡 E10：--batch）
 from pool.jobs import card_artifacts  # noqa: E402 —— 产物定位唯一实现（pool.jobs）
 from pool.model_registry import (  # noqa: E402 —— 一层注册表 + 按池分流（卡 166 · T-G266）
@@ -684,6 +686,29 @@ def account_env(name: str) -> dict[str, str]:
         raise AccountError(f"profile「{name}」没输出任何环境变量（`profile env` 回话认不出）"
                            f"→ 拒绝派活（不许悄悄退回默认号）")
     return out
+
+
+def ledger_accounts() -> list[dict]:
+    """账本里的 `[[account]]` 原始行（粘性要判「这号还在不在 / 还 active 不 active」）。
+
+    ★ 为什么不用 `pool_accounts.list_rows()`：它把 `quota` 洗成人读的文本，拿不到
+      `used_percent` —— 而粘性的 `spent` 判据正要用它。
+    ★ 判不了（账本找不到 / 读坏了 / 形状不对）⇒ **空表**：粘性 fail-open，判不了就当没有，
+      **绝不**因此拦派活（与 `pool.route.apply_order()` 同一条纪律）。
+    ★★ **与 `_account_rows()`（卡 A344）故意相反，别合并**：那个是 **fail-closed** ——
+      `--account` 给了名字却判不出是哪个号，就退 2 拒派（闸按名字查表等于没生效，不许装作派得动）。
+      这里是 **fail-open** —— 粘性是省钱的优化，账本读不到只是「这次不粘」，**不许**把一句
+      本来能跑的派活变成退 2。两边同名函数看着像重复，语义正好相反，合并就会悄悄改掉
+      其中一张卡的判据（A345 判据 7 / A344 判据 2）。
+    """
+    try:
+        data = pool_accounts.load_ledger(pool_accounts.find_ledger())
+    except (pool_accounts.LedgerError, OSError, ValueError):
+        return []
+    rows = data.get("account")
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def _account_env_probe(env: dict[str, str], expected: dict[str, str]) -> tuple[bool, str]:
@@ -3048,6 +3073,8 @@ def dispatch_batch(args: argparse.Namespace) -> int:
             argv += ["--model", args.model]
         if args.account:
             argv += ["--account", args.account]
+        if args.sticky:
+            argv.append("--sticky")   # 卡 A345：逐成员 re-exec 不许丢
         if args.execute:
             argv.append("--execute")
         if args.detach:
@@ -3154,6 +3181,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input-budget", type=int, default=DEFAULT_INPUT_BUDGET,
                         help=f"单卡 input tokens 预算（默认 {DEFAULT_INPUT_BUDGET:,}）—— "
                              "超了就止损掐掉，不许自动续跑（防空烧）")
+    # ★ 卡 A345（T-AG547）：卡粘性 —— 同一张卡第二次派活别换号。**默认关**，
+    #   不给时 reserve() 的入参 / lease_note / 判决文案与以前逐字相等。
+    parser.add_argument("--sticky", action="store_true",
+                        help="同一张卡第二次派活时，还用它上次答过的那个号"
+                             "（只在本轮没给 --account 时生效；"
+                             "记录见 gates/diag/pool-sticky.json）")
     parser.add_argument("--detach", action="store_true",
                         help="把这次派活**扔出去单独跑**（我的窗口关了它照样跑；过夜/长任务用）")
     parser.add_argument("--detach-done", action="store_true", help=argparse.SUPPRESS)
@@ -3236,6 +3269,33 @@ def main() -> int:
     if rejected:
         print(f"[FAIL] {rejected}", file=sys.stderr, flush=True)
         return 2
+    # ★ 卡 A345（T-AG547）：接入点 1 —— 粘性（**占树之前**，也在 caller 白名单之前：
+    #   换了号就得按新的号重判白名单）。粘性是省钱的优化：判不了就当没有，绝不拦派活。
+    sticky_why = ""
+    sticky_age = 0.0
+    if args.sticky and not args.account:
+        sticky_hit = pool_sticky.stick_for(args.card)
+        if sticky_hit is not None:
+            sticky_why = pool_sticky.choose(sticky_hit, ledger_accounts())[1]
+            sticky_age = time.time() - sticky_hit.at
+            if sticky_why in pool_sticky.REASONS_KEEP:
+                # ★ 最后一道自证：记录里的名字**这轮真能用**吗？粘性只许「照旧」，不许
+                #   把一句本来能跑的派活变成退 2 —— 记录里的名字若认不出（A344 落地后账本里
+                #   是稳定 id，而 `--account` 仍收 profile 名，见卡规格缺口 3），就当没粘。
+                try:
+                    account_env(sticky_hit.account)
+                except AccountError as sticky_exc:
+                    print(f"[粘 ] 卡 {args.card} 上次的号 {sticky_hit.account} 这轮认不出"
+                          f"（{sticky_exc}）⇒ 正常挑号", file=sys.stderr, flush=True)
+                    sticky_why = ""
+                else:
+                    args.account = sticky_hit.account
+                    print(f"[粘 ] 卡 {args.card} 上次在号 {args.account} 上答过"
+                          f"（why={sticky_why}，{pool_sticky.age_text(sticky_age)}）⇒ 这次还用它",
+                          file=sys.stderr, flush=True)
+            if sticky_why and sticky_why not in pool_sticky.REASONS_KEEP:
+                print(f"[粘 ] 卡 {args.card} 上次的号 {sticky_hit.account} 已 {sticky_why}"
+                      " ⇒ 正常挑号", file=sys.stderr, flush=True)
     # ★ 卡 A341（T-AG543 · F34）：第 ③ 步 —— caller（账号）白名单**只收窄**。
     #   前两步（①resolve_model 跨池 / ②model_rejected 池内）一字不改；本步只是在外面加一层
     #   收窄，`not patterns` ⇒ 不收窄（照 magpie Restricted() 「空 = 不受限」）。
@@ -3640,6 +3700,10 @@ def main() -> int:
         #     （给 lanes 守卫查表用的）—— 两者都要，别合并：一个给人读、一个给判据读。
         lease_note = f"spec={args.spec}" + (f"｜account={args.account}" if args.account else "")
         try:
+            # ★ 卡 A345（rebase 到 A344 之后）：`account=` 由 **A344** 传（稳定 id，给 lanes
+            #   守卫查表用）—— 本卡原来那句 `account_kw` 已被它取代，**删掉不重复传**：
+            #   粘性命中的号同样是走 `args.account` ⇒ 这里自动跟着它走，判据 7 的
+            #   「`reserve(account=…)` 收到那个号」由 A344 这一行满足。
             lease = pool_registry.reserve(args.card, tree=reserve_tree, files=reserve_files,
                                           project=args.project or "", model=args.model,
                                           log=lease_log,
@@ -3722,6 +3786,17 @@ def main() -> int:
             usage_total[key] += usage[key]
         append_usage_line(card=args.card, model=model, attempt=attempts,
                           started_at=attempt_started, usage=usage, code=code, reason=reason)
+        # ★ 卡 A345（T-AG547）：接入点 2 —— 记下「这张卡这次是谁答的」。与用量落账**同一处**
+        #   （同一缩进层级、同一轮）：写在 dry-run 之后，`--execute` 之前那段一个字节没碰。
+        if args.sticky:
+            try:
+                pool_sticky.note(pool_sticky.Stick(
+                    card=args.card, account=args.account or "", tree=reserve_tree,
+                    session=sid or "", model=model, at=time.time(),
+                    why=pool_sticky.WHY_CARD if args.account else pool_sticky.WHY_FIRST))
+            except (OSError, ValueError) as sticky_exc:   # 记不下来不许影响派活
+                print(f"[粘 ] 记录没写成：{sticky_exc}（不影响这次派活）",
+                      file=sys.stderr, flush=True)
         # ★ T-G95：**每一条退出路径都落一份摘要**（含"被掐后再续跑"的每一轮），主控只读它。
         report = write_report(log_k, card=args.card, code=code, reason=reason, scene=scene,
                               sid=sid, attempts=attempts, lines=round_lines,
