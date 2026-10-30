@@ -11,6 +11,7 @@
     python -X utf8 tools/pool_accounts.py show <账号 id> [--json]
     python -X utf8 tools/pool_accounts.py discover [--json]
     python -X utf8 tools/pool_accounts.py probe [--json] [--offline] [--platform X]
+    python -X utf8 tools/pool_accounts.py due [--json] [--now ISO] [--platform X]
     python -X utf8 tools/pool_accounts.py --selftest
 
 退出码：0 = 正常（含「未探测」）；2 = 用法/账本缺失/账本格式错。
@@ -1148,6 +1149,82 @@ def _record_checkin(acc: dict, row: dict, stamp: str) -> None:
     samples.append(entry)
 
 
+def _stamp_or_none(raw: object) -> datetime | None:
+    """账本里的 ISO 时刻 → aware `datetime`；认不出 ⇒ `None`（**当没有**，不猜）。
+
+    不带时区的那种按 `TZ` 解释：这份账本只由本工具写，口径就是 `TZ`（卡 A343 §判据 5）。
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.strip())
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=TZ)
+
+
+def recheck_rows(
+    data: dict, platforms: dict, *, now: datetime | None = None, platform: str | None = None
+) -> list[dict]:
+    """哪些号此刻该再问一次签到（**只读**：不签到、不写账本、不写留档）。
+
+    判据全在 `tools/pool/checkin.py`（`due_for_recheck()` / `provisional()`）；这里只做
+    「把账本里的历史形状读成判据要的输入」+ 稳定排序 `(platform, id)`。
+
+    ★ 本函数（整张卡）**唯一**的 fail-open：`health["last_checkin"]` 认不出、或时刻坏了，
+    一律当「从没问过」⇒ 会去复查。方向是对的 —— 复查签到是**幂等**动作（再问一次只是重新
+    读一遍「签没签」），比「时间戳坏了就永远不复查」安全得多。
+
+    读得懂的历史形状（账本在仓外、跨版本累计，必须容忍）：
+      · `last_checkin = "claimed"` 这类**结论码字符串**（今天唯一在写的形状）⇒ 结论码有了，
+        时刻取同一行 `health["last_probe"]`（签到与探测都在那一刻写它）；
+      · `last_checkin = "2026-10-25T18:30:46+08:00"` 这类**ISO 时刻**（老账本）⇒ 只知道
+        「什么时候问过」、不知道结论 ⇒ 按 `uncertain` 算（没定论比「当成签过了」诚实）；
+      · 时刻不带时区 ⇒ 按 `TZ` 解释。
+
+    「平台压根没有签到接口」不算从没问过：能力表 `claim_flow` 为空 ⇒ 结论码补
+    `not-supported`，`due_for_recheck()` 那边直接给「平台不支持签到」（不问）。
+    """
+    ck = _ck()
+    moment = now if now is not None else _now()
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=TZ)
+    rows: list[dict] = []
+    for acc in visible_accounts(data):
+        name = str(acc.get("platform", ""))
+        if platform and name != platform:
+            continue
+        health = acc.get("health") or {}
+        raw = health.get("last_checkin")
+        at: datetime | None = None
+        kind = ""
+        if isinstance(raw, str) and raw.strip():
+            text = raw.strip()
+            if text in ck.KINDS:
+                kind = text
+                at = _stamp_or_none(health.get("last_probe"))
+            else:
+                at = _stamp_or_none(text)
+                if at is not None:
+                    kind = ck.UNCERTAIN
+        if not kind and name in platforms and not ck.platform_supports_claim(platforms[name]):
+            kind = ck.NOT_SUPPORTED
+        outcome = ck.Outcome(kind) if kind else None
+        need, why = ck.due_for_recheck(outcome, at=at, now=moment, timezone=TZ, platform=name)
+        if not need:
+            continue
+        morning = bool(
+            outcome is not None
+            and at is not None
+            and ck.provisional(outcome, at=at, now=moment, timezone=TZ)
+        )
+        rows.append(
+            {"id": str(acc.get("id", "")), "platform": name, "why": why, "provisional": morning}
+        )
+    rows.sort(key=lambda row: (row["platform"], row["id"]))
+    return rows
+
+
 def write_checkin_archive(date: str, payload: dict) -> Path:
     path = _checkin_archive(date)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1213,6 +1290,45 @@ def cmd_checkin(args) -> int:
         print("\n小计：" + " · ".join(f"{k}={v}" for k, v in sorted(counts.items())))
         print(f"留档：{archive}")
     return EXIT_NEEDS_HUMAN if needs_human else EXIT_OK
+
+
+def cmd_due(args) -> int:
+    """`due`：哪些号现在该再问一次签到（**只读**；不签到、不写账本、不写留档）。"""
+    ledger = find_ledger(args.ledger)
+    platforms = load_platforms()
+    data = load_ledger(ledger, platforms)
+    now: datetime | None = None
+    if args.now:
+        try:
+            now = datetime.fromisoformat(args.now)
+        except ValueError:
+            print(f"--now 认不出：{args.now!r}（要 ISO-8601）", file=sys.stderr)
+            return EXIT_USAGE
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=TZ)
+    rows = recheck_rows(data, platforms, now=now, platform=args.platform)
+    moment = _iso(now or _now())
+    if args.json:
+        print(
+            json.dumps(
+                {"ledger": str(ledger), "now": moment, "results": rows},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return EXIT_OK
+    print(f"账本：{ledger}   现在：{moment}   该复查：{len(rows)} 个")
+    if rows:
+        _print_table(
+            rows,
+            [
+                ("id", "账号"),
+                ("platform", "平台"),
+                ("provisional", "上午那句"),
+                ("why", "为什么"),
+            ],
+        )
+    return EXIT_OK
 
 
 def selftest() -> int:
@@ -1312,6 +1428,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_probe.add_argument("--json", action="store_true")
     p_probe.add_argument("--offline", action="store_true", help="不发网络请求")
     p_probe.add_argument("--platform")
+    p_due = sub.add_parser("due", help="哪些号现在该再问一次签到（只读；不签到）")
+    p_due.add_argument("--json", action="store_true")
+    p_due.add_argument("--now", default=None, help="注入『现在』（ISO-8601；测试不许靠真实钟表）")
+    p_due.add_argument("--platform")
     return ap
 
 
@@ -1325,6 +1445,7 @@ def main(argv: list[str] | None = None) -> int:
         "discover": cmd_discover,
         "probe": cmd_probe,
         "checkin": cmd_checkin,
+        "due": cmd_due,
     }
     handler = handlers.get(args.cmd or "")
     if handler is None:

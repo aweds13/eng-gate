@@ -25,7 +25,11 @@ import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
+
+if TYPE_CHECKING:  # 只在注解里用（本文件已开 `from __future__ import annotations`）
+    from datetime import tzinfo
 
 # ---------------------------------------------------------------- 结论码
 
@@ -48,6 +52,28 @@ NEEDS_HUMAN: frozenset[str] = frozenset({UNCERTAIN, FAILED})
 Fetcher = Callable[[str, str, Mapping[str, str] | None, bytes | None], tuple[int, str]]
 
 TIMEOUT_S = 30.0
+
+# ---------------------------------------------------------------- 复查判据的常量
+#
+# ★ 只移植**判据**，不移植**触发方式**：magpie 那边由每分钟一次的后台节拍自己复查
+#   （`workbuddy_checkin.go:565-593 keepCheckedIn`）；pool 的形状是「人开口一次」
+#   （见本文件 :1-16），所以这里只留判据 —— 没有循环、没有定时器、没有后台线程。
+
+#: 几点之前「已经签过了」不算数（magpie `checkinSureHour`，`workbuddy_checkin.go:147`）。
+#: 来历见 `:140-147` 与 issue `#3326`：北京日刚过零点时六家全回「already claimed」，
+#: 10:54 再问才是真签到 —— 上午那句「已签过」说的大概率是**昨天**。
+#: ★ 不许改成可配置：magpie 侧是 `const`，这个值来自那次事故的读数，不是策略旋钮。
+CHECKIN_SURE_HOUR = 12
+#: 上午的「已签过」多久复查一次（magpie `wbCheckinEvery`，`:53`）＝ 30 分钟。
+RECHECK_EVERY_S = 30 * 60
+#: 失败 / 没定论的重问间隔（magpie `wbCheckinRetry`，`:56`）＝ 30 分钟（在线恒此值）。
+RETRY_AFTER_S = 30 * 60
+#: 离线退避的起点（magpie `wbCheckinSoon`，`:87`）＝ 1 分钟；按次数翻倍、封顶 `RETRY_AFTER_S`。
+RETRY_FLOOR_S = 60
+
+#: 只有「活动类」平台要按时复查（magpie `checkin.go:105-110` + `qoder_checkin.go:289`）。
+#: 平台清单的真源是 `tools/pool/platforms.toml`；这里**只列要复查的**，没列 = 不复查。
+RECHECK_PLATFORMS: frozenset[str] = frozenset({"qoder"})
 
 
 @dataclass(slots=True)
@@ -92,6 +118,100 @@ class Outcome:
 
 def _fmt(value: float) -> str:
     return f"{value:g}" if isinstance(value, float) else str(value)
+
+
+# ---------------------------------------------------------------- 复查判据（纯函数）
+#
+# 三个函数都是**纯判据**：不读钟（`now` 必须传进来）、不读文件、不发网络。
+# `timezone` 由调用方给（全仓真源是 `tools/pool_accounts.py` 的 `TZ`），本文件不另造时区。
+
+
+def provisional(outcome: Outcome, *, at: datetime, now: datetime, timezone: tzinfo) -> bool:
+    """这句「已经签过了」算不算数？不算数 ⇒ 要复查（magpie `provisional()`，`:160-173`）。
+
+    三件事同时成立才是「上午那句不可信」：
+      ① 结论是「说已经签过」那一类（`ALREADY_CLAIMED` / `INACTIVE`）—— `CLAIMED` 是真签到，
+         不在此列；`NOT_SUPPORTED` / `UNCERTAIN` / `FAILED` 说的根本不是「签过了」；
+      ② `at` 与 `now` 是**同一个时区日**（跨天 ⇒ 那句说的是昨天，不归这里判）；
+      ③ `now` 还没到 `CHECKIN_SURE_HOUR`（中午之前）。
+
+    `at` / `now` 必须带时区：naive ⇒ `ValueError`（时区只有一个真源，绝不猜）。
+    """
+    if at.tzinfo is None or now.tzinfo is None:
+        raise ValueError("provisional 的时刻必须带时区（naive 不许猜时区）")
+    if outcome.kind not in (ALREADY_CLAIMED, INACTIVE):
+        return False
+    stamp = at.astimezone(timezone)
+    moment = now.astimezone(timezone)
+    if stamp.date() != moment.date():
+        return False
+    return moment.hour < CHECKIN_SURE_HOUR
+
+
+def retry_after_s(*, offline: bool, tries: int) -> int:
+    """`FAILED` 之后多久再问一次（magpie `retryAfter()`，`:201-206`）。
+
+    在线恒 `RETRY_AFTER_S`（30 分钟，别打快）；离线按次数指数退避：
+    `min(RETRY_AFTER_S, RETRY_FLOOR_S << min(tries, 5))` ⇒ 1/2/4/8/16 分钟，
+    第 5 次起封顶 30 分钟。`tries < 0` ⇒ `ValueError`。
+    """
+    if tries < 0:
+        raise ValueError(f"tries 不许为负：{tries}")
+    if not offline:
+        return RETRY_AFTER_S
+    return min(RETRY_AFTER_S, RETRY_FLOOR_S << min(tries, 5))
+
+
+def due_for_recheck(
+    last: Outcome | None,
+    *,
+    at: datetime | None,
+    now: datetime,
+    timezone: tzinfo,
+    platform: str,
+    offline: bool = False,
+    tries: int = 0,
+) -> tuple[bool, str]:
+    """现在该不该再问一次签到 —— `(要不要问, 为什么)`（magpie `settled()`，`:190-195`）。
+
+    **顺序即优先级**，先命中的那条说了算：
+      ① 从没问过 ⇒ 问：`(True, "从没问过")`；
+      ② 平台根本没有签到接口 ⇒ 不问：`(False, "平台不支持签到")`（`NOT_SUPPORTED` 不是故障）；
+      ③ `at` 不是今天 ⇒ 跨天了，问：`(True, "跨天了")`；
+      ④ 上次 `FAILED` 且过了 `retry_after_s()` ⇒ 问：`(True, "失败到期重问")`；
+      ⑤ 上次 `UNCERTAIN` 且过了 `RETRY_AFTER_S` ⇒ 问：`(True, "没定论，复查窗口到了")`；
+      ⑥ 上次那句是「上午的已签过」且过了 `RECHECK_EVERY_S` ⇒ 问（本卡的主角）：
+         `(True, "上午的「已签过」不可信，复查窗口到了")`；
+      ⑦ 活动类平台（`RECHECK_PLATFORMS`）过了一个复查窗口 ⇒ 问：
+         `(True, "活动类平台复查窗口到了")`；
+      ⑧ 其余 ⇒ 不问：`(False, "当日已定案")`。
+
+    `now` 必须带时区（naive ⇒ `ValueError`）。`at` 缺 / naive ⇒ 当「从没问过」：
+    复查签到是幂等动作，比「时刻坏了就永远不复查」安全。
+    ★ 纯判据：不读钟、不读文件、不发网络。
+    """
+    if now.tzinfo is None:
+        raise ValueError("due_for_recheck 的 now 必须带时区（naive 不许猜时区）")
+    if last is None:
+        return True, "从没问过"
+    if last.kind == NOT_SUPPORTED:
+        return False, "平台不支持签到"
+    if at is None or at.tzinfo is None:
+        return True, "从没问过"
+    moment = now.astimezone(timezone)
+    stamp = at.astimezone(timezone)
+    if stamp.date() != moment.date():
+        return True, "跨天了"
+    elapsed = (moment - stamp).total_seconds()
+    if last.kind == FAILED and elapsed >= retry_after_s(offline=offline, tries=tries):
+        return True, "失败到期重问"
+    if last.kind == UNCERTAIN and elapsed >= RETRY_AFTER_S:
+        return True, "没定论，复查窗口到了"
+    if provisional(last, at=at, now=now, timezone=timezone) and elapsed >= RECHECK_EVERY_S:
+        return True, "上午的「已签过」不可信，复查窗口到了"
+    if platform in RECHECK_PLATFORMS and elapsed >= RECHECK_EVERY_S:
+        return True, "活动类平台复查窗口到了"
+    return False, "当日已定案"
 
 
 # ---------------------------------------------------------------- 默认 fetcher

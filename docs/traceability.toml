@@ -10094,3 +10094,33 @@ gaps = [
 - **`maxGlobs=4096` 只当量级参考**：本卡选「缓存 + 满即清」，不做上限拒单（拒单会出现「同一份 patterns 昨天能派今天被拒」）。magpie 满 4096 到底清还是拒，**只核了常量存在、没读它的 cache 实现**。
 """,
 ]
+
+[entries."T-AG545"]
+id = "T-AG545"
+title = "中午之前的已签过不算数：magpie 签到复查窗口移植进 pool（F29）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A343-中午之前的已签过不算数.md",
+  "file:tools/pool/checkin.py",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_pool_due.py",
+  "test:test_pool_due.py",
+  "text:tools/pool/checkin.py::CHECKIN_SURE_HOUR = 12",
+  "text:tools/pool/checkin.py::def provisional(",
+  "text:tools/pool/checkin.py::def retry_after_s(",
+  "text:tools/pool/checkin.py::def due_for_recheck(",
+  "text:tools/pool_accounts.py::def recheck_rows(",
+  "text:tools/pool_accounts.py::def cmd_due(",
+]
+gaps = [
+  """- **只移植判据，不移植触发**：magpie 的 `keepCheckedIn`（`workbuddy_checkin.go:565-593`，每分钟看钟）**没有**移植。本仓 `tools/pool/checkin.py` 的形状是「人开口一次」，所以复查要靠人跑 `tools/pool_accounts.py due` 再决定跑不跑 `checkin`。今天没有任何东西会自己到点复查。
+- **`RECHECK_PLATFORMS` 只有 `qoder`，而 `tools/pool/platforms.toml` 里没有 qoder 段** ⇒ `due_for_recheck()` 的第 ⑦ 支（活动类平台到期复查）今天在真账本上走不到。这一支只有钉子覆盖，没有真数据验证。
+- **「什么时候签的」只能近似到「最后一次探测」**：账本里 `last_checkin` 存的是结论码、`health.last_probe` 才是时刻，签到与探测共用同一个 `last_probe`。所以 `provisional()` 拿到的 `at` 严格说是「最后一次探测的时刻」，不是「签到那次」。账本跨版本累计、只加不改，这个形状没动。
+- **`recheck_rows()` 有一处故意 fail-open**：`last_checkin` 认不出、或时刻解析失败 ⇒ 当「从没问过」⇒ 会去复查。方向是对的（复查签到是幂等动作），但代价是「时间戳坏了就永远不复查」被换成了「坏了就多问几次」。
+- **「上午是 provisional」不留独立痕迹**：当日留档 `gates/diag/checkin-<date>.json` 一天跑第二次就覆盖，这件事只能靠账本 `health` 的 `last_checkin` + `last_probe` 反推。卡规格明确不许改这个覆盖行为。
+- **真账本上今天走不到 provisional 分支**：四个号的 `last_probe` 都是 `2026-10-25T18:30:46+08:00`，所以 `due` 实测全判「跨天了」。判据 6 只有钉子（含反向钉子）覆盖，没有真签到数据验证过。
+- **本卡没做**：`checkin` 子命令没有 `--recheck` 之类的开关把它和 `due` 串起来；`due` 的退出码恒 0（只有账本读不到/参数坏才是 2），不表达「有几个该复查」。
+""",
+]

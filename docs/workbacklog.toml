@@ -4599,3 +4599,18 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A343"
+task = "T-AG545"
+title = "中午之前的已签过不算数：magpie 签到复查窗口移植进 pool（F29）"
+tree = ".wt/A343"
+spec = "复盘/卡/卡A343-中午之前的已签过不算数.md"
+files = [
+  "tools/pool/checkin.py",
+  "tools/pool_accounts.py",
+  "tests/test_pool_due.py",
+]
+status = "done"
+risk = "mid"
+depends = []

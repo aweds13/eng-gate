@@ -1,135 +1,140 @@
 {
-  "rev": "1f99077b",
+  "rev": "17f29c7f",
   "python": "3.14.6",
   "host": "DEV-HOST",
-  "tree": "bd858c19565387c57fb68a97f9fa4b5cff14a96d",
+  "tree": "99d545b1a2d519b83952443781d693373cc66706",
   "tree_scope": "worktree-minus-gates",
-  "parent": "1f99077b",
-  "branch": "card/A341",
+  "parent": "17f29c7f",
+  "branch": "card/A343",
   "dirty": true,
-  "at": "2026-10-30T12:11:56",
+  "at": "2026-10-30T13:59:50",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
   "ok": true,
-  "workers": 2,
+  "workers": 4,
   "co_tenants": {
     "collected": true,
     "like": 13,
-    "self_pid": 18256
+    "self_pid": 12528
   },
-  "pytest_mode": "并行（pytest-xdist，-n 2）",
-  "slow_doors": [],
+  "pytest_mode": "串行（worker=1）",
+  "slow_doors": [
+    {
+      "name": "pytest",
+      "seconds": 1069.62
+    }
+  ],
   "gates": [
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 551.91,
-      "summary": "3887 passed, 1 skipped, 1511 warnings in 549.67s (0:09:09)",
+      "seconds": 1069.62,
+      "summary": "3897 passed, 1 skipped, 24 deselected, 1514 warnings in 1061.77s (0:17:41)",
       "detail": ""
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 24.46,
-      "summary": "2 passed, 3910 deselected, 1 warning in 21.15s",
+      "seconds": 22.53,
+      "summary": "2 passed, 3920 deselected, 1 warning in 19.79s",
       "detail": ""
     },
     {
       "name": "pytest_chain",
       "exit_code": 0,
-      "seconds": 291.65,
-      "summary": "22 passed, 3890 deselected, 1 warning in 288.65s (0:04:48)",
+      "seconds": 218.66,
+      "summary": "22 passed, 3900 deselected, 1 warning in 215.88s (0:03:35)",
       "detail": ""
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 10.97,
+      "seconds": 0.91,
       "summary": "All checks passed!",
       "detail": ""
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 29.54,
+      "seconds": 22.11,
       "summary": "Success: no issues found in 58 source files",
       "detail": ""
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 28.15,
+      "seconds": 8.79,
       "summary": "SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）",
       "detail": ""
     },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 23.95,
+      "seconds": 8.55,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）",
       "detail": ""
     },
     {
       "name": "invariants",
       "exit_code": 0,
-      "seconds": 4.32,
+      "seconds": 0.8,
       "summary": "[OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）",
       "detail": ""
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 1.61,
+      "seconds": 0.79,
       "summary": "OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位",
       "detail": ""
     },
     {
       "name": "docs",
       "exit_code": 0,
-      "seconds": 5.44,
+      "seconds": 4.99,
       "summary": "CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS",
       "detail": ""
     },
     {
       "name": "skills_claims",
       "exit_code": 0,
-      "seconds": 2.8,
+      "seconds": 2.44,
       "summary": "report 档读数：对不上 0 / 判不出 73 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。",
       "detail": ""
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 17.79,
+      "seconds": 5.84,
       "summary": "LAYER CHECKS: PASS ✅",
       "detail": ""
     },
     {
       "name": "contrast",
       "exit_code": 0,
-      "seconds": 5.4,
+      "seconds": 4.96,
       "summary": "对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）",
       "detail": ""
     },
     {
       "name": "style",
       "exit_code": 0,
-      "seconds": 5.38,
+      "seconds": 4.93,
       "summary": "风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）",
       "detail": ""
     },
     {
       "name": "ui_text",
       "exit_code": 0,
-      "seconds": 5.36,
+      "seconds": 4.92,
       "summary": "[OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）",
       "detail": ""
     },
     {
       "name": "commands",
       "exit_code": 0,
-      "seconds": 5.34,
+      "seconds": 4.88,
       "summary": "说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。",
       "detail": ""
     },
@@ -145,7 +150,7 @@
     {
       "name": "proxy",
       "exit_code": 0,
-      "seconds": 5.31,
+      "seconds": 4.86,
       "summary": "[OK  ] 5 条全新鲜（阈值 30 天）",
       "detail": ""
     },
@@ -196,9 +201,9 @@
     "ui_flow": "cb3f022def76bb06"
   },
   "untracked": [
-    "docs/changelog.d/T-AG543.md",
-    "docs/traceability.d/T-AG543.toml",
-    "复盘/交接.d/T-AG543.md"
+    "docs/changelog.d/T-AG545.md",
+    "docs/traceability.d/T-AG545.toml",
+    "复盘/交接.d/T-AG545.md"
   ],
-  "trailer": "pytest 3887 passed, 1 skipped, 1511 warnings in 549.67s (0:09:09); acceptance 2 passed, 3910 deselected, 1 warning in 21.15s; pytest_chain 22 passed, 3890 deselected, 1 warning in 288.65s (0:04:48); ruff All checks passed!; mypy Success: no issues found in 58 source files; check_layers_selftest SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）; audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 73 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; check_layers LAYER CHECKS: PASS ✅; contrast 对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。; ui_dom_probe 复用上次通过判定（输入未变 fbee641f843c539a）; proxy [OK  ] 5 条全新鲜（阈值 30 天）; lf1_live 复用上次通过判定（输入未变 3e06cfb0a0741f6c）; web_live 复用上次通过判定（输入未变 8c856aa637e9fe21）; render 复用上次通过判定（输入未变 95138b2fe43ab771）; ui_flow 复用上次通过判定（输入未变 cb3f022def76bb06）"
+  "trailer": "pytest 3897 passed, 1 skipped, 24 deselected, 1514 warnings in 1061.77s (0:17:41); acceptance 2 passed, 3920 deselected, 1 warning in 19.79s; pytest_chain 22 passed, 3900 deselected, 1 warning in 215.88s (0:03:35); ruff All checks passed!; mypy Success: no issues found in 58 source files; check_layers_selftest SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）; audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 73 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; check_layers LAYER CHECKS: PASS ✅; contrast 对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。; ui_dom_probe 复用上次通过判定（输入未变 fbee641f843c539a）; proxy [OK  ] 5 条全新鲜（阈值 30 天）; lf1_live 复用上次通过判定（输入未变 3e06cfb0a0741f6c）; web_live 复用上次通过判定（输入未变 8c856aa637e9fe21）; render 复用上次通过判定（输入未变 95138b2fe43ab771）; ui_flow 复用上次通过判定（输入未变 cb3f022def76bb06）"
 }
