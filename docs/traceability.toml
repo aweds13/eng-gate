@@ -10528,3 +10528,19 @@ gaps = [
 本笔门禁读数是本机跑的（用户 m27225 授权），不是云机 —— 对 m12391 的一次性改口；落地脚本的云机 host 闸保留，只在显式 `--allow-local-host` 时放行。
 """,
 ]
+
+[entries."T-AG558"]
+id = "T-AG558"
+title = "两条全量 pytest 红：OWN_EXTS 缺 .csv / E68 回放窗口窗口期空转"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:scripts/check_docs.py",
+  "file:tests/test_pytest_select.py",
+  "test:test_check_docs.py::test_own_exts_covers_every_tracked_extension",
+  "test:test_pytest_select.py::test_replay_recognises_every_real_fallback_reason",
+  "text:scripts/check_docs.py::OWN_EXTS = frozenset({",
+  "text:tests/test_pytest_select.py::REPLAY_PROBE_STEPS = (20, 30, 40, 50, 60)",
+]
+gaps = "1. 红 2 没有改断言值：assert seen 仍在，只是窗口从固定 20 变成逐档放大到第一笔 fallback 为止（上限 60）。代价是这条钉子从约 2.0 s 涨到最多约 5.4 s（实测 replay(20) 2.0–3.0 s / replay(60) 5.4 s）。指针 tests/test_pytest_select.py2. 上限 60 是拍的：实测 60 笔内有 9 笔 fallback，够覆盖三种已知原因（JUDGE_BODY / LEDGER_NO_ENTRY / LEDGER_NO_TEST）。如果将来 60 笔内也空转，会重新红 —— 那时要再放大或改判据本体，本笔没有做更根本的修法。指针 tests/test_pytest_select.py3. 红 1 只补了 .csv 一种扩展名。OWN_EXTS 仍是手写 frozenset，下一次新增别的扩展名（例如 .parquet）照样会红 —— 没有做成「运行时从 git ls-files 现算」。为什么不做：注释明说手写是因为要区分「本仓自己的」与「别仓路径」，现算会把两边混起来。指针 scripts/check_docs.py"

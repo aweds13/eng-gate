@@ -1,5 +1,60 @@
 ### 病灶
 
+全量门禁跑出 `2 failed, 4014 passed, 1 skipped`（`gates/diag/full-gates-B2.log`）。两条红分别：
+
+1. `tests/test_check_docs.py::test_own_exts_covers_every_tracked_extension` ——
+   `AssertionError: 本仓真跟踪、却不在 OWN_EXTS 里（会全被判为别仓）：['.csv']`
+2. `tests/test_pytest_select.py::test_replay_recognises_every_real_fallback_reason` ——
+   `AssertionError: 最近 20 笔一笔 fallback 都没有 ⇒ 这条钉子失去意义（口径变了要重看）`
+
+第一条是 B2 那张卡的副产品：`docs/implementation/迁移DSH-盘点表.csv` 是本仓**第一个**被
+跟踪的 `.csv`，而 `scripts/check_docs.py` 的 `OWN_EXTS` 是手写 frozenset、注释明说「不运行时
+现算」⇒ 新扩展名没有任何机制会提醒你补进去。
+
+第二条早于本次工作：在父提交 `20a6c0e4` 建 detached worktree 跑同一条，**同样红**。
+
+### 改法
+
+**红 1**：`OWN_EXTS` 加一行 `".csv",`。走「有跟踪样本」那一支，**不需要**在
+`OWN_EXTS_UNTRACKED_REASONS` 写理由（那条支路只对没有样本的成员要求依据）。
+
+**红 2**：`fallback` 是「碰了判据本体 `scripts/run_gates.py` / 台账条目没有 `test:` 指针」
+才发生的**事件**，不是每笔提交都有。实测 `ps.replay(n, root='.')`：
+
+| n | fallback 笔数 | 备注 |
+|---|---|---|
+| 20 | 0 | 钉子空转 |
+| 24 / 26 | 1 | `03cd6a21`（T-AG539） |
+| 30 | 3 | + `17cc103a`（T-AG528）/ `87a87d78`（T-AG529） |
+| 60 | 9 | 8 笔判据本体 + 1 笔 `cov_fb=1` |
+
+`03cd6a21` 实测落在窗口第 **24** 位（`git rev-list --count 03cd6a21..HEAD` = 23），
+被 20 笔窗口挤出去 ⇒ 那条 `assert seen` 从「检查原因认不认得」退化成「检查最近 20 笔的运气」。
+
+改成**逐档放大到第一笔 fallback 为止**：`REPLAY_PROBE_STEPS = (20, 30, 40, 50, 60)`，
+找到就停。覆盖面不缩（每一笔真 fallback 仍要被认识），也不依赖某几笔恰好排进窗口。
+理由整段写进那条测试的 docstring，常量放模块顶层。
+
+★ **没有放宽卡 E68 明令不许动的判据**：`REPLAY_MAX_FALLBACK` 仍是 3，
+`_known_fallback_reason()` 未改一行，`not unknown` 没删。
+
+### 读数
+
+- `python -X utf8 -m pytest tests/test_pytest_select.py tests/test_check_docs.py
+  -p no:cacheprovider --no-cov` → **75 passed in 25.89s**，exit=0。
+- `tests/test_check_docs.py` 单独 52 passed；两条目标钉子双绿。
+- 反向验证红 1：拿掉 `.csv` → `tests/test_check_docs.py:830` 报
+  `Left contains one more item: '.csv'`，红。
+- 反向验证红 2：把 `tools/pytest_select.py` 的 `_known_fallback_reason()` 改成恒 `False`
+  ⇒ 钉子立刻红（`tests\test_pytest_select.py:498`），还原后绿 ⇒ 窗口放宽后**仍然咬得住**。
+- `check_docs.py --mode report` 加/不加 `.csv` 读数完全一致（死指针 152 / drift 491）
+  ⇒ 加它没有把 11 个裸 `.csv` 引用从 skip 洗成死指针。
+- `python -X utf8 scripts/run_gates.py --profile audit` → 五道门全 `[OK ]`，末行
+  `质量门 + 文档同步通过 ✅`。
+- `python -X utf8 scripts/gen_doc_index.py` → `[write] docs/INDEX.md（340 篇）`；
+  `--check` → `[OK  ] docs/INDEX.md（340 篇）`。
+### 病灶
+
 `tools/web_live_check.py` 有**两个** HTTP 客户端：`_json_call` 走 `call_timeout()`（卡 E67 把等待窗做成 env 可调、超时抛 `LiveCallError`），`_lan_json` 却自带一份 `timeout: int = 3` 硬编码窗，结尾还把 `urllib.error.URLError` 与 `OSError` 一律吞成 `(0, None)`。
 
 `TimeoutError` 是 `OSError` 的子类，所以 `_lan_json` 等不到时也返回 `(0, None)` —— 与「防火墙 / 没有局域网地址」同一个壳。云机 `web_live` 的 `[FAIL] 手机直传：没配对传不进来（401）` 就是这么来的：服务端真的回了 401（云机日志 `POST /api/sync/import status 401` 有据），客户端 3 秒没等够，看到的是 0。
