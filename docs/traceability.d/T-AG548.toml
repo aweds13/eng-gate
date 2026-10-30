@@ -1,0 +1,31 @@
+[entries."T-AG548"]
+id = "T-AG548"
+title = "额度曲线要能看出回血：magpie 配额历史曲线移植进 pool（F27）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A346-额度曲线要能看出回血.md",
+  "file:tools/pool/quota_history.py",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_pool_quota_history.py",
+  "file:复盘/卡/卡A346-额度曲线要能看出回血.md",
+  "test:test_pool_quota_history.py",
+  "text:tools/pool/quota_history.py::HISTORY_REL: tuple[str, ...] = ",
+  "text:tools/pool/quota_history.py::KEPT_DAYS = ",
+  "text:tools/pool/quota_history.py::REFILL_PCT = ",
+  "text:tools/pool/quota_history.py::def new_cycle(",
+  "text:tools/pool/quota_history.py::def point_of(",
+  "text:tools/pool/quota_history.py::def hist_key(scope: str, account: str) -> str:",
+  "text:tools/pool_accounts.py::note_quota_history(accounts, by_id, at=_stamp_unix(stamp))",
+]
+gaps = [
+  """数据源不存在：账本四个真号的 `[account.quota]` 没有 `used_percent`、没有窗口起止，`source` 全 `unknown` ⇒ `point_of()` 跳过所有窗口，`gates/diag/quota-history.json` 落地后**不会生成**。本笔验的是判据的判别力（23 条钉子 + 8 条变异），不是「真画出一条曲线」。要真出曲线，得先有「谁写 used_percent」那张卡。
+跨机合并没搬：magpie 的 `mergeQuotaHist` 会并两台机器的曲线（并集 + 稳定排序 + 相邻 30 秒内且不同周期丢旧的）。pool 的曲线只在本机 `gates/diag/`，本笔不做合并。
+`SubscriptionQuota` / `QuotaWindow` / `LineName()` 三个类型没搬：那是 magpie 厂商订阅模型的一层，pool 的账本没有对应结构，硬搬会造出一堆永远为空的字段。
+`quota-state.json` 不进曲线：`tools/pool_quota.py` 的那份状态是「四态 + rest」的派生视图，没有时间序列，且它的 `_save` 是非原子写 —— 本笔既不复用它，也不去改它。
+`samples` 仍是 20 条上限（`tools/pool_accounts.py:63 SAMPLES_CAP = 20`）、仍不带 `reset_at` —— 本笔只读它、不扩它。要扩是另一张卡，且会改账本形状。
+`test_real_ledger_produces_no_curve_today` 是对**夹具**跑的不是对真账本跑的：卡规格明令源码与测试不许出现仓外路径，所以夹具按真账本形状裁到两个号。真文件的结论（`used_percent` / `reset` / `span` 零命中）另行只读 grep 过，是旁证不是自动化验证。
+`pipe doctor` 在本仓不存在（无 `tools/pipe.py`、根目录无 `pipeline.toml`），所以这一条没验。
+""",
+]

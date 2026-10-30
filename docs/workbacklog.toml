@@ -4666,3 +4666,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A346"
+task = "T-AG548"
+title = "额度曲线要能看出回血：magpie 配额历史曲线移植进 pool（F27）"
+tree = ".wt/A346"
+spec = "复盘/卡/卡A346-额度曲线要能看出回血.md"
+files = [
+  "tools/pool/quota_history.py",
+  "tools/pool_accounts.py",
+  "tests/test_pool_quota_history.py",
+  "复盘/卡/卡A346-额度曲线要能看出回血.md",
+]
+status = "done"
+risk = "mid"
+depends = []

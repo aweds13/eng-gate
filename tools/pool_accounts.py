@@ -892,8 +892,67 @@ def record_probe_result(
         quota.setdefault("samples", []).append({"at": stamp, "kind": row["kind"]})
         touched = True
 
+    note_quota_history(accounts, by_id, at=_stamp_unix(stamp))
+
     if touched:
         save_ledger(ledger_path, data)
+
+
+def _qh():
+    """取 `tools/pool/quota_history.py`（曲线的判据模块，卡 A346）。
+
+    两种跑法都要能 import：直跑脚本 / `import pool_accounts`（`tools/` 在 sys.path 上）与被
+    `import tools.pool_accounts`（包路径）。懒加载：曲线缺席时账本照样能写。
+    """
+    try:
+        from pool import quota_history as mod
+    except ImportError:  # pragma: no cover —— 以包形式 import 时
+        from tools.pool import quota_history as mod
+    return mod
+
+
+def _stamp_unix(stamp: str) -> int:
+    """账本里那个 ISO 时刻 → unix 秒（曲线的 `at` 与 `samples` 的 `at` 是同一刻）。"""
+    return int(datetime.fromisoformat(stamp).timestamp())
+
+
+def note_quota_history(
+    accounts: list, by_id: dict[str, dict], *, at: int, root: Path | None = None
+) -> Path | None:
+    """把这次探测里**画得出点**的窗口记进曲线；画不出（今天全部）一个字节都不写。
+
+    * 只有 `row` 同时有窗口百分比（`used`）与已解析的时刻才记：`used` 能不能画交给
+      `quota_history.point_of()`（判据只写一次）。今天的四个真账号没有 `used` ⇒ 文件不生成。
+    * `at` 是本次探测的时刻（unix 秒），与 `samples` 项的 `at` 同一刻。
+    * **fail-open**：曲线读不出当空、写不进去就回 `None` —— `OSError` 一律吞掉，绝不许抛到
+      `record_probe_result()` 的调用方之外（账本是主）。
+    """
+    qh = _qh()
+    base = DATA_ROOT if root is None else root
+    try:
+        hist = qh.load_history(root=base)
+        noted = False
+        for acc in accounts:
+            if not isinstance(acc, dict):
+                continue
+            row = by_id.get(acc.get("id"))
+            if row is None or not row.get("kind"):
+                continue
+            window = dict(row)
+            if not window.get("name"):
+                window["name"] = acc.get("id")
+            point = qh.point_of(window, at=int(at))
+            if point is None:
+                continue
+            scope = str(acc.get("platform") or row.get("platform") or "")
+            key = qh.hist_key(scope, str(acc.get("id")))
+            hist[key] = qh.prune(qh.add_point(hist.get(key, []), point), now=int(at))
+            noted = True
+        if not noted:
+            return None
+        return qh.save_history(hist, root=base)
+    except Exception:  # 曲线是旁路：任何毛病都不许拦住账本那一笔
+        return None
 
 
 def _print_table(rows: list[dict], columns: list[tuple[str, str]]) -> None:
