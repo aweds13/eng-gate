@@ -124,6 +124,11 @@ def _rail_nav(html: str) -> str:
 DEFAULT_CALL_TIMEOUT = 10.0
 CALL_TIMEOUT_ENV = "TF_WEB_LIVE_TIMEOUT"
 
+#: 卡 E71：**等不到**的那两个异常类型。`socket.timeout` 在现代 Python 里就是 `TimeoutError`
+#: 的别名，写成常量给 `except` 与 `isinstance` 共用（直接写
+#: `except (TimeoutError, socket.timeout)` 会撞 ruff UP041）。
+WAIT_TIMEOUTS: tuple[type[BaseException], ...] = (TimeoutError, socket.timeout)
+
 
 class LiveCallError(RuntimeError):
     """一次 HTTP 调用没等到结果 —— **带点名**的错误，不是裸 traceback（卡 E67）。
@@ -802,14 +807,30 @@ def live_offline_checks(base: str, tmp: Path) -> dict[str, bool]:
 
 
 def _lan_json(base: str, path: str, method: str = "GET",
-              payload: dict | None = None, headers: dict | None = None, timeout: int = 3):
-    """打局域网地址用的 HTTP（**绕开系统代理** —— 否则 192.168.x 会被丢给代理，白测一场）。"""
+              payload: dict | None = None, headers: dict | None = None,
+              timeout: float | None = None) -> tuple[int, object]:
+    """打局域网地址用的 HTTP（**绕开系统代理** —— 否则 192.168.x 会被丢给代理，白测一场）。
+
+    ★ 卡 E71：这个函数原来是**第二份**自己写死 `timeout: int = 3` 的 HTTP 客户端 ——
+    不认 `call_timeout()`，也不认 env `TF_WEB_LIVE_TIMEOUT`；结尾
+    `except (urllib.error.URLError, OSError): return 0, None` 又把 `TimeoutError`
+    （`OSError` 的子类）一起吞成「连不上」。于是服务端明明回了 401，调用点
+    `nopair[0] == 401` 只看到 0 —— 门报「手机直传：没配对传不进来（401）」失败。
+    **判据没错，诊断错了**：真因是客户端那 3 秒没等够（云机 2 物理核，带整包体的
+    `POST /api/sync/import` 慢过 3 秒是常态）。
+
+    现在三态分明：拿到状态码 / 抛 `LiveCallError`（**等不到**，点名 endpoint 与秒数）/
+    `(0, None)`（**真的连不上**：连接被拒、无路由）。等待窗与 `_json_call` 同源。
+    """
+    url = f"{base}{path}"
+    wait = call_timeout() if timeout is None else timeout
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    req = urllib.request.Request(f"{base}{path}", data=data, method=method)
+    req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Content-Type", "application/json")
     for k, v in (headers or {}).items():
         req.add_header(k, v)
+
     def _body(raw: bytes) -> object:
         try:
             return json.loads(raw.decode("utf-8") or "null")
@@ -817,12 +838,18 @@ def _lan_json(base: str, path: str, method: str = "GET",
             return None      # 静态壳回的是 HTML —— 这一路只看状态码
 
     try:
-        with opener.open(req, timeout=timeout) as resp:
+        with opener.open(req, timeout=wait) as resp:
             return resp.status, _body(resp.read())
     except urllib.error.HTTPError as e:
         return e.code, _body(e.read())
-    except (urllib.error.URLError, OSError):
-        return 0, None      # 连不上（防火墙 / 没有局域网地址）—— 由调用方决定怎么报
+    except urllib.error.URLError as e:   # ★ 卡 E71：URLError 只是**外壳**，要看 reason 是谁
+        if isinstance(e.reason, WAIT_TIMEOUTS):
+            raise LiveCallError(method, url, wait, e) from e
+        return 0, None      # 连接被拒 / 无路由 —— 真的连不上，由调用方决定怎么报
+    except WAIT_TIMEOUTS as e:   # ★ 卡 E71：超时不再混进「连不上」
+        raise LiveCallError(method, url, wait, e) from e
+    except OSError:
+        return 0, None      # 其它 OS 层错误（防火墙 / 没有局域网地址）
 
 
 def _free_port() -> int:
@@ -846,6 +873,11 @@ def live_lan_checks(tmp: Path, port: int | None = None) -> dict[str, bool]:
 
     连不上自己的局域网地址（没连网 / 防火墙拦了）→ 打印 `[SKIP]` **明说跳过**，
     不谎报"通过"（`checks` 里不加条目，退出码不受影响）。
+
+    ★ 卡 E71：一条地址「等不到」不再是整组的死刑，也不再被吞成「连不上」：
+      ① 地址探测循环里单个地址抛 `LiveCallError` ⇒ 打 `[提示] … 换下一个` 后 `continue`；
+      ② 主体里任何一步抛 `LiveCallError` ⇒ **已经算出来的 checks 全部保留**，再补一条
+         点名 False（`局域网：有一步没等到（…）`）后返回 —— 不许把整组丢掉只剩一条笼统 FAIL。
     """
     from timeflow.core import lan as lan_mod
 
@@ -866,9 +898,12 @@ def live_lan_checks(tmp: Path, port: int | None = None) -> dict[str, bool]:
     addrs = [a for a in lan_mod.local_addresses(port) if "127." not in a]
     reachable = ""
     for addr in addrs:
-        if _lan_json(addr, "/")[0] == 200:
-            reachable = addr
-            break
+        try:
+            if _lan_json(addr, "/")[0] == 200:
+                reachable = addr
+                break
+        except LiveCallError as err:   # ★ 卡 E71：一个地址等不到，不许杀整组检查
+            print(f"  [提示] {addr} 等不到（{err.seconds:g} 秒），换下一个")
     if not reachable:
         print(f"  [SKIP] 局域网真机检查：这台机器连不上自己的局域网地址"
               f"（{addrs or '没查到地址'}）—— 本机防火墙/网络原因，未验证（不算通过）")
@@ -876,58 +911,72 @@ def live_lan_checks(tmp: Path, port: int | None = None) -> dict[str, bool]:
         thread.join(timeout=10)
         return {}
 
-    shell = _lan_json(reachable, "/")[0]
-    blocked_code, blocked = _lan_json(reachable, "/api/health")
-    pair_bad = _lan_json(reachable, "/api/lan/pair", "POST", {"code": "000000"})[0]
-    paired = _lan_json(reachable, "/api/lan/pair", "POST", {"code": code})[0]
-    auth = {"X-Timeflow-Pair": code}
-    ok_code, health = _lan_json(reachable, "/api/health", headers=auth)
-    seen_code = (_lan_json(reachable, "/api/settings/lan", headers=auth)[1] or {}).get("code")
-    local_ok = _json_call(local, "/api/health")[0] == 200   # 本机自己不受影响（关服务之前问）
-    # 本机自检（T-G10c）：服务真的绑在 0.0.0.0 上时，它应当报"本机可达"
-    _sc_code, self_check = _json_call(local, "/api/lan/selfcheck", "POST", {})
+    # ★ 卡 E71：check 边算边落地（原来全算完再拼 dict）—— 只有这样，某一步「等不到」时
+    #   前面已经算出来的那些才留得住；收口在 `except LiveCallError` 里补一条点名 False。
+    checks: dict[str, bool] = {}
+    try:
+        shell = _lan_json(reachable, "/")[0]
+        checks["局域网：静态壳能打开（否则手机没处输配对码）"] = shell == 200
 
-    # 手机**直接上传**同步包（G 批 · T-G15）：走的就是手机那条路 —— 包里带上内容（不是路径），
-    # 从局域网地址打过来，带着配对码。没配对必须传不进来（这是那道门的意义）。
-    upload: dict[str, bool] = {}
-    pack_path = _phone_pack(tmp, "phone-lan.json")
-    if pack_path is None:
-        print("  [SKIP] 手机直传：造不出手机包（缺 node？）—— 未验证（不算通过）")
-    else:
-        body = {"pack": json.loads(pack_path.read_text(encoding="utf-8"))}
-        nopair = _lan_json(reachable, "/api/sync/import", "POST", body)
-        up = _lan_json(reachable, "/api/sync/import", "POST", body, headers=auth)
-        again = _lan_json(reachable, "/api/sync/import", "POST", body, headers=auth)
-        up_totals = (up[1] or {}).get("totals", {}) if up[0] == 200 else {}
-        again_totals = (again[1] or {}).get("totals", {}) if again[0] == 200 else {}
-        upload = {
-            "手机直传：没配对传不进来（401）": nopair[0] == 401,
-            "手机直传：配对后能把包传上来并合并": up[0] == 200
-            and up_totals.get("inserted", 0) >= 5,
-            "手机直传：同一份包再传一次是幂等的": again[0] == 200
-            and again_totals.get("inserted", 0) == 0,
-            "手机直传：认得出来源设备（ph-）":
-                str((up[1] or {}).get("from_device", "")).startswith("ph-"),
-        }
-    server.should_exit = True
-    thread.join(timeout=10)
+        blocked_code, blocked = _lan_json(reachable, "/api/health")
+        detail = (blocked or {}).get("detail", "") if isinstance(blocked, dict) else ""
+        checks["局域网：没配对读不到数据（401 + 原话）"] = (
+            blocked_code == 401 and "配对码" in str(detail)
+        )
 
-    detail = (blocked or {}).get("detail", "") if isinstance(blocked, dict) else ""
-    sc = self_check if isinstance(self_check, dict) else {}
-    return {
-        "局域网：静态壳能打开（否则手机没处输配对码）": shell == 200,
-        "局域网：没配对读不到数据（401 + 原话）": blocked_code == 401 and "配对码" in str(detail),
-        "局域网：错码被拒": pair_bad == 401,
-        "局域网：对码配对成功": paired == 200,
-        "局域网：配对后能读数据": ok_code == 200 and isinstance(health, dict),
-        "局域网：配对码不会通过局域网漏出去": seen_code == "",
-        "局域网：本机自己不受影响": local_ok,
-        "局域网：自检说得出本机可达": sc.get("self_reachable") is True
-        and bool(sc.get("addresses")),
-        "局域网：自检把校园网/热点写进排查顺序": "校园网" in str(sc.get("hint", ""))
-        and "移动热点" in str(sc.get("hint", "")),
-        **upload,
-    }
+        pair_bad = _lan_json(reachable, "/api/lan/pair", "POST", {"code": "000000"})[0]
+        checks["局域网：错码被拒"] = pair_bad == 401
+        paired = _lan_json(reachable, "/api/lan/pair", "POST", {"code": code})[0]
+        checks["局域网：对码配对成功"] = paired == 200
+
+        auth = {"X-Timeflow-Pair": code}
+        ok_code, health = _lan_json(reachable, "/api/health", headers=auth)
+        checks["局域网：配对后能读数据"] = ok_code == 200 and isinstance(health, dict)
+        seen_code = (_lan_json(reachable, "/api/settings/lan", headers=auth)[1] or {}).get("code")
+        checks["局域网：配对码不会通过局域网漏出去"] = seen_code == ""
+
+        # 本机自己不受影响（关服务之前问）
+        checks["局域网：本机自己不受影响"] = _json_call(local, "/api/health")[0] == 200
+        # 本机自检（T-G10c）：服务真的绑在 0.0.0.0 上时，它应当报"本机可达"
+        _sc_code, self_check = _json_call(local, "/api/lan/selfcheck", "POST", {})
+        sc = self_check if isinstance(self_check, dict) else {}
+        checks["局域网：自检说得出本机可达"] = sc.get("self_reachable") is True and bool(
+            sc.get("addresses")
+        )
+        checks["局域网：自检把校园网/热点写进排查顺序"] = (
+            "校园网" in str(sc.get("hint", "")) and "移动热点" in str(sc.get("hint", ""))
+        )
+
+        # 手机**直接上传**同步包（G 批 · T-G15）：走的就是手机那条路 —— 包里带上内容（不是路径），
+        # 从局域网地址打过来，带着配对码。没配对必须传不进来（这是那道门的意义）。
+        pack_path = _phone_pack(tmp, "phone-lan.json")
+        if pack_path is None:
+            print("  [SKIP] 手机直传：造不出手机包（缺 node？）—— 未验证（不算通过）")
+        else:
+            body = {"pack": json.loads(pack_path.read_text(encoding="utf-8"))}
+            nopair = _lan_json(reachable, "/api/sync/import", "POST", body)
+            up = _lan_json(reachable, "/api/sync/import", "POST", body, headers=auth)
+            again = _lan_json(reachable, "/api/sync/import", "POST", body, headers=auth)
+            up_totals = (up[1] or {}).get("totals", {}) if up[0] == 200 else {}
+            again_totals = (again[1] or {}).get("totals", {}) if again[0] == 200 else {}
+            checks["手机直传：没配对传不进来（401）"] = nopair[0] == 401
+            checks["手机直传：配对后能把包传上来并合并"] = (
+                up[0] == 200 and up_totals.get("inserted", 0) >= 5
+            )
+            checks["手机直传：同一份包再传一次是幂等的"] = (
+                again[0] == 200 and again_totals.get("inserted", 0) == 0
+            )
+            checks["手机直传：认得出来源设备（ph-）"] = str(
+                (up[1] or {}).get("from_device", "")
+            ).startswith("ph-")
+    except LiveCallError as err:   # ★ 卡 E71：已经算出来的那一串一条都不许丢
+        name = f"局域网：有一步没等到（{err.method} {err.url}）"
+        checks[name] = False
+        print(f"[FAIL] {name}  ★ {err}")
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
+    return checks
 
 
 def main() -> int:

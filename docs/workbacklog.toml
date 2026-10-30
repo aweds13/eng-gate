@@ -4758,3 +4758,18 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E71"
+task = "T-AG554"
+title = "局域网客户端自己那份 3 秒窗：超时不再混进「连不上」（E71）"
+tree = ".wt/E71"
+spec = "复盘/卡/卡E71-局域网客户端自己那份3秒窗.md"
+files = [
+  "tools/web_live_check.py",
+  "tests/test_web_live_lan_timeout.py",
+  "复盘/卡/卡E71-局域网客户端自己那份3秒窗.md",
+]
+status = "done"
+risk = "mid"
+depends = []

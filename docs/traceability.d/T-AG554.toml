@@ -1,0 +1,24 @@
+[entries."T-AG554"]
+id = "T-AG554"
+title = "局域网客户端自己那份 3 秒窗：超时不再混进「连不上」（E71）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E71-局域网客户端自己那份3秒窗.md",
+  "file:tools/web_live_check.py",
+  "file:tests/test_web_live_lan_timeout.py",
+  "file:复盘/卡/卡E71-局域网客户端自己那份3秒窗.md",
+  "test:test_web_live_lan_timeout.py",
+  "text:tools/web_live_check.py::WAIT_TIMEOUTS: tuple[type[BaseException], ...] = (TimeoutError, socket.timeout)",
+  "text:tools/web_live_check.py::if isinstance(e.reason, WAIT_TIMEOUTS):",
+  "text:tools/web_live_check.py::except WAIT_TIMEOUTS as e:",
+  "text:tools/web_live_check.py::def _lan_json(",
+]
+gaps = [
+  """没在真云机复核：判据 3 是在回环上用「真起 ThreadingHTTPServer + 服务端睡 5 秒再回 401」模拟 2 物理核慢机，云机 `gates/diag/cloud-gate-A328.log:37` 的原始红行没有重跑对照。为什么本卡不做：云机要真起整套服务 + 传包，属于 E 系云门禁那一条线，本卡只治客户端判据。
+探针与反向脚本在 gitignored 的 `gates/diag/` 下（`_probe_lan_timeout.py` / `_rev_E71.py`），不随树分发 —— 读数无法复跑，结论已写进卡规格与 changelog 正文。
+`_lan_json` 的其余 9 个调用点（地址探测 / health / 配对 / 读配对码）现在也会在等不到时抛 `LiveCallError` 而不是回 `(0, None)` —— 这是行为变化，判据 2 要求如此，但「真机上某个慢端点让整门变 3（未验证）」这条后果本卡没有实测。
+本笔门禁读数是本机跑的（用户 m27225 授权），不是云机 —— 对 m12391 的一次性改口；落地脚本的云机 host 闸保留，只在显式 `--allow-local-host` 时放行。
+""",
+]
