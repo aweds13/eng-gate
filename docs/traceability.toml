@@ -10225,3 +10225,30 @@ gaps = [
 交付的钉子比卡规格多：卡写 9 条，实际 `tests/test_pool_account_id.py` 11 条、`tests/test_wb_dispatch.py` 追加 5 条。多出来的三条都在咬「说的和做的不一致」（③ 步推断成功却说成不生效、三步都不中却静默派活、第 ③ 步歧义不点名）。
 """,
 ]
+
+[entries."T-AG549"]
+id = "T-AG549"
+title = "白名单不许靠行号站着：判红清单的键从行号改成锚点原文（判据层）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E69-白名单不许靠行号站着.md",
+  "file:tests/test_two_rulers.py",
+  "file:复盘/卡/卡E69-白名单不许靠行号站着.md",
+  "test:test_two_rulers.py",
+  "text:tests/test_two_rulers.py::_NOT_A_RED_RULER: dict[tuple[str, str], str] = {",
+  "text:tests/test_two_rulers.py::def _anchor_hits(text: str, anchor: str) -> list[tuple[int, ",
+  "text:tests/test_two_rulers.py::def _nearest_line(text: str, anchor: str) -> tuple[int, str] | None:",
+  "text:tests/test_two_rulers.py::def _allow_list_problems(",
+  "text:tests/test_two_rulers.py::def test_a_shifted_line_number_no_longer_breaks_the_allow_list() -> None:",
+  "text:tests/test_two_rulers.py::def test_allow_list_anchor_must_be_unique() -> None:",
+]
+gaps = [
+  """「一行一个理由」的语义重复不解决：三条理由里「不看 blocking 是因为 blocking 就是这么派生的」这种重复，锚点方案治不了，它只消灭了「位置漂移」这一种假红。
+锚点失效仍要人手工改：那一行内容真变了（不是漂移），测试会红并给最近似行，但改白名单仍是人工动作 —— 没有自动迁移，也不该有（自动迁移等于让判据自己改判据）。
+「锚点不唯一」分支的判别力靠合成文本用例（3 次重复 + 报第 2/4/6 行），不是靠真实文件里恰好存在的重复行 —— 实测真实重复行（如 `with contextlib.suppress(OSError):` 出现 4 次）都不含 `exit_code`，扫不出来。这条已在回执里如实标为「只验判别力」。
+`tests/test_mixed_endings.py:293` 与 `tests/test_only_selector_parity.py:224` 的说明文字仍写着旧的行号键说法，按卡规格「不许改别的卡的测试」未动 —— 已知缺口。
+判据 6 的真文件级字节插入与恢复由 `gates/diag/_rev_E69.py` 完成（`gates/diag/*` 被 `.gitignore:76` 忽略，不随树分发，与历史 `_rev_E66.py` 一致）；本文书只记读数，探针本身不入库。
+""",
+]

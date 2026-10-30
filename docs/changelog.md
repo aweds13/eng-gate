@@ -1,3 +1,12 @@
+白名单的键从位置换成内容：三条「扫出来但不是判红」的例外，原来用 `scripts/run_gates.py:854` 这种行号当代号，现在改用「仓库相对路径 + 那一行 strip 之后的逐字原文」二元组。
+
+**为什么必须换**：行号是位置不是身份。卡 E67 给 `scripts/run_gates.py` 加了 182 行，三条键当场全部错位，`_python_ruler_sites()` 漏跳那三行，`test_no_exit_code_ruler_forgets_blocking` 立刻假红，只能手工把 `:672/:1598/:2690` 挨个推成 `:854/:1780/:2872`。这不是判据在工作，是判据被行号拖着走。
+
+**换成锚点之后**：内容不变时行号随便飘（判据 6：文件头插 3 行，11 passed 全绿，`scripts/run_gates.py` 的 sha256 插入前与还原后逐字相同）；内容一改立刻走「过期」分支，并用 `difflib` 找出最像的一行（相似度门槛 0.5）报出**真行号**，不再让人自己去三千行里翻。
+
+**过期与歧义分得开**：锚点 0 次报「白名单过期」并给最近似行；命中多于 1 次报「锚点不唯一」并列出每一处的行号 —— 后者是新分支，`with contextlib.suppress(OSError):` 这种在文件里出现 4 次的写法当场被拦住。
+
+**三条理由文字一字未动**，只换了键的形状；既有 9 条用例全部保留，新增 2 条（`test_a_shifted_line_number_no_longer_breaks_the_allow_list`、`test_allow_list_anchor_must_be_unique`）。`tests/test_two_rulers.py` 从 20792 B / 422 行变为 27495 B / 565 行，仍纯 CRLF、0 个裸 LF。
 ## {date} · {title}（{card}，{task}）
 
 magpie 的三个扩展点里两个 **fail closed**、一个 fail open。fail closed 的两个各带一条**具名错误**：

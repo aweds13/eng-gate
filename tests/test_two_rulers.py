@@ -28,11 +28,16 @@ r"""「两把尺子」钉子（卡 E60 · T-AG518）。
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # 只为类型标注（`from __future__ import annotations` 已开，运行时用不到）
+    from collections.abc import Callable
 
 import pytest
 
@@ -251,34 +256,66 @@ _EXIT_CODE_RULERS = {
 
 #: 扫出但**不是**「判红」的行 —— 每条都必须写清为什么不是。少一条会红（漏判），
 #: 多一条也会红（白名单不许悄悄膨胀成「什么都放行」，与 `test_ci_portability` 同规矩）。
-_NOT_A_RED_RULER = {
-    "scripts/run_gates.py:854": (
+#:
+#: ★ 卡 E69（T-AG549）：键从**行号**换成 **(rel, 锚点原文)** —— 锚点 = 那一行 `.strip()`
+#:   后的逐字原文。行号是**位置**不是**身份**：文件头加一行注释就整体错位（E67 给
+#:   `scripts/run_gates.py` 加了 182 行，三条键当场假红，只能手工从 `:672/:1598/:2690`
+#:   推到 `:854/:1780/:2872`）。内容不变时行号随便飘；内容一改立刻走「过期」分支并报真行号。
+#:   三条理由文字一字未动，只换了键的形状。
+_NOT_A_RED_RULER: dict[tuple[str, str], str] = {
+    ("scripts/run_gates.py", "return exit_code not in (0, 3)"): (
         "`gate_failed()` —— 判的是**单道门自己**红不红，且已把 3（NOT RUN）显式排除；"
         "整趟过不过看 `gates_ok()`（只数 `blocking` 门）。它不看 `blocking` 是因为"
         "`blocking` 本身就是从这个口径派生的（`exit_code == 3` ⇒ 不阻断）"
     ),
-    "scripts/run_gates.py:1780": "`gates_ok()` docstring 里的说明文字，不是可执行判据",
-    "scripts/run_gates.py:2872": (
+    (
+        "scripts/run_gates.py",
+        "`exit_code = 124` 一样落进 `!= 0` → 整趟非 0，超时**不会被别的门的通过吞掉**。",
+    ): "`gates_ok()` docstring 里的说明文字，不是可执行判据",
+    (
+        "scripts/run_gates.py",
+        'if entry is None or int(str(entry["exit_code"])) != 0:',
+    ): (
         "复用记账：只有 exit_code==0 的门才可复用 —— 比 blocking 更严，"
         "NOT RUN 不复用是对的，它不是在判红"
     ),
 }
 
 
-def _python_ruler_sites() -> dict[str, list[tuple[int, str]]]:
-    """扫出「按 exit_code 判红」的可执行行，按文件归组（注释与白名单里的不算）。"""
+def _read_rel(rel: str) -> str:
+    """按仓库相对的 `rel` 读源码（已归一化 CR）。测试要喂合成文本时替换这一个口。"""
+    return _src(ROOT / rel)
+
+
+def _anchor_hits(text: str, anchor: str) -> list[tuple[int, str]]:
+    """锚点在该文件里逐字命中哪几行：每行 `.strip()` 后**全等**，不许子串/前缀匹配。"""
+    return [
+        (n, s)
+        for n, s in enumerate((line.strip() for line in text.splitlines()), 1)
+        if s == anchor
+    ]
+
+
+def _python_ruler_sites(
+    read: Callable[[str], str] = _read_rel,
+) -> dict[str, list[tuple[int, str]]]:
+    """扫出「按 exit_code 判红」的可执行行，按文件归组（注释与白名单里的不算）。
+
+    ★ 卡 E69：白名单按 `(rel, 这一行的原文)` 判，**不再**拼 `f"{rel}:{n}"` ——
+      行号降级成报错里的展示信息，位置漂移不许改变判定（判据 2）。
+    """
     out: dict[str, list[tuple[int, str]]] = {}
     for rel in _EXIT_CODE_RULERS:
         if not rel.endswith(".py"):
             continue
-        text = _src(ROOT / rel)
+        text = read(rel)
         hits = []
         for n, line in enumerate(text.splitlines(), 1):
             s = line.strip()
             if s.startswith("#"):
                 continue
             if "exit_code" in s and ("!= 0" in s or "not in (0" in s) and "blocking" not in s:
-                if f"{rel}:{n}" in _NOT_A_RED_RULER:
+                if (rel, s) in _NOT_A_RED_RULER:
                     continue
                 hits.append((n, s))
         if hits:
@@ -286,25 +323,68 @@ def _python_ruler_sites() -> dict[str, list[tuple[int, str]]]:
     return out
 
 
-def test_the_allow_list_is_not_stale_and_says_why() -> None:
-    """白名单自己也要被钉住：每条都要写理由，且必须**真的**出现在源码那一行。
+def _nearest_line(text: str, anchor: str) -> tuple[int, str] | None:
+    """锚点 0 次时给一条**仅供参考**的真行号（最像的那一行），别让人自己去翻三千行。
 
-    少一条（那行被改了/删了）⇒ 白名单在骗人；理由空着 ⇒ 烂成「什么都放行」。
+    只用于报错定位，**不参与判定** —— 判定只认「`.strip()` 后逐字全等」（判据 3）。
     """
-    bad: list[str] = []
-    for key, why in _NOT_A_RED_RULER.items():
-        rel, _, num = key.rpartition(":")
-        assert rel in _EXIT_CODE_RULERS, f"{key} 不在扫描范围里（白名单写了没用）"
-        if not str(why).strip():
-            bad.append(f"{key}: 没写理由")
-        lines = _src(ROOT / rel).splitlines()
-        if not (num.isdigit() and 1 <= int(num) <= len(lines)):
-            bad.append(f"{key}: 行号越界（文件共 {len(lines)} 行）")
+    best: tuple[float, int, str] | None = None
+    for n, line in enumerate(text.splitlines(), 1):
+        s = line.strip()
+        if not s:
             continue
-        actual = lines[int(num) - 1].strip()
-        if "exit_code" not in actual:
-            bad.append(f"{key}: 那一行已经不是判据了（现在是 {actual[:60]!r}）—— 白名单过期")
+        score = difflib.SequenceMatcher(None, s, anchor).ratio()
+        if best is None or score > best[0]:
+            best = (score, n, s)
+    if best is None or best[0] < 0.5:
+        return None
+    return best[1], best[2]
+
+
+def _allow_list_problems(
+    allow: dict[tuple[str, str], str] | None = None,
+    read: Callable[[str], str] = _read_rel,
+) -> list[str]:
+    """白名单自证：理由非空 / 锚点在该文件里**恰好 1 次** / rel 在扫描范围里（判据 3）。
+
+    判据 4：「过期」（0 次）与「不唯一」（>1 次）必须**分得开**，且都报出真行号。
+    """
+    todo = _NOT_A_RED_RULER if allow is None else allow
+    bad: list[str] = []
+    for (rel, anchor), why in todo.items():
+        if not str(why).strip():
+            bad.append(f"({rel}, {anchor!r}): 没写理由")
+        if rel not in _EXIT_CODE_RULERS:
+            bad.append(f"({rel}, {anchor!r}): {rel} 不在扫描范围里（白名单写了没用）")
+            continue
+        text = read(rel)
+        where = [n for n, _ in _anchor_hits(text, anchor)]
+        if not where:
+            near = _nearest_line(text, anchor)
+            hint = (
+                f"（最接近的是第 {near[0]} 行：{near[1][:80]!r}）"
+                if near
+                else f"（文件共 {len(text.splitlines())} 行，一行都不像）"
+            )
+            bad.append(f"白名单过期：这条原文已经不在 {rel} 里了{hint}")
+        elif len(where) > 1:
+            spots = "、".join(f"第 {n} 行" for n in where)
+            bad.append(
+                f"锚点不唯一：`{anchor}` 在 {rel} 里出现 {len(where)} 次（{spots}），"
+                "分不清是哪一行"
+            )
+    return bad
+
+
+def test_the_allow_list_is_not_stale_and_says_why() -> None:
+    """白名单自己也要被钉住：每条都要写理由，锚点必须**逐字**在源码里恰好出现 1 次。
+
+    ★ 卡 E69：不再读行号、不再要求「那一行还含 `exit_code`」—— 位置会漂，内容才是身份。
+    锚点 0 次 ⇒「白名单过期」；>1 次 ⇒「锚点不唯一」（分不清钉的是哪一行）。
+    """
+    bad = _allow_list_problems()
     assert not bad, "白名单有不能自证的行：\n  " + "\n  ".join(bad)
+
 
 
 def test_no_exit_code_ruler_forgets_blocking() -> None:
@@ -325,6 +405,69 @@ def test_no_exit_code_ruler_forgets_blocking() -> None:
         + f"\n\n已知会说同一句话的 {len(_EXIT_CODE_RULERS)} 处："
         + "、".join(f"`{rel}`（{why}）" for rel, (_, why) in _EXIT_CODE_RULERS.items())
     )
+
+
+def test_a_shifted_line_number_no_longer_breaks_the_allow_list() -> None:
+    """判据 6 的**判别力**：文件头插 3 行注释（行号整体 +3），白名单一条都不许漏跳。
+
+    E67 的病根就在这里：键是行号，`scripts/run_gates.py` 加 182 行后三条全部错位 ⇒
+    `_python_ruler_sites()` 漏跳那三行 ⇒ 假红，只能手工推行号。这里在**内存副本**上
+    把行号真的挪 3 行（真文件一个字节都不动；真文件级的字节插入与恢复由
+    `gates/diag/_rev_E69.py` 做并打印 sha256），要求扫出来的结论仍是「一条都不剩」。
+    """
+    base = _read_rel("scripts/run_gates.py")
+    shifted = "".join(f"# [E69 行号漂移自证] 第 {i} 行\n" for i in (1, 2, 3)) + base
+
+    def read(rel: str) -> str:
+        return shifted if rel == "scripts/run_gates.py" else _read_rel(rel)
+
+    anchors = [a for (rel, a) in _NOT_A_RED_RULER if rel == "scripts/run_gates.py"]
+    at = sorted(n for a in anchors for n, _ in _anchor_hits(shifted, a))
+    assert at and all(n > 3 for n in at), f"三条锚点没落在插行之后：{at}"
+
+    candidates: list[int] = []
+    for n, line in enumerate(shifted.splitlines(), 1):
+        s = line.strip()
+        if s.startswith("#"):
+            continue
+        if "exit_code" in s and ("!= 0" in s or "not in (0" in s) and "blocking" not in s:
+            candidates.append(n)
+    assert set(candidates) == set(at), (
+        "行号整体 +3 之后「候选行」与白名单锚点对不上（锚点没落在被扫的那几行上）："
+        f"多出来的候选={sorted(set(candidates) - set(at))}、"
+        f"没被扫到的锚点={sorted(set(at) - set(candidates))}"
+    )
+
+    leftovers = _python_ruler_sites(read)
+    assert leftovers == {}, (
+        "行号整体 +3 后那三行又漏跳了（白名单还在靠行号站着，这正是 E67 的假红）："
+        f"{leftovers}"
+    )
+
+
+def test_allow_list_anchor_must_be_unique() -> None:
+    """判据 4：「锚点不唯一」必须报出**全部**命中行号，且与「过期」分得开。"""
+    rel = "scripts/run_gates.py"
+    dup = "with contextlib.suppress(OSError):"
+    text = f"a = 1\n{dup}\nb = 2\n{dup}\nc = 3\n{dup}\n"
+    allow = {(rel, dup): "（理由只在本用例里用，不进真白名单）"}
+
+    many = _allow_list_problems(allow, read=lambda _rel: text)
+    assert len(many) == 1, many
+    msg = many[0]
+    assert msg.startswith("锚点不唯一："), msg
+    assert "出现 3 次" in msg, msg
+    for n in (2, 4, 6):
+        assert f"第 {n} 行" in msg, f"没报出第 {n} 行：{msg}"
+    assert "过期" not in msg, f"两个分支分不开：「不唯一」的报错里出现了「过期」—— {msg}"
+
+    gone = _allow_list_problems(allow, read=lambda _rel: "a = 1\nb = 2\nc = 3\n")
+    assert len(gone) == 1, gone
+    assert "白名单过期：这条原文已经不在" in gone[0], gone[0]
+    assert "不唯一" not in gone[0], gone[0]
+
+    once = _allow_list_problems(allow, read=lambda _rel: f"a = 1\n{dup}\nb = 2\n")
+    assert once == [], f"恰好 1 次也被判成不能自证（过严）：{once}"
 
 
 def _gate_payloads() -> list[tuple[str, dict]]:
