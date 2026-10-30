@@ -4583,3 +4583,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A341"
+task = "T-AG543"
+title = "一个号只能调哪些模型：magpie 每 caller 模型白名单移植进 pool（F34）"
+tree = ".wt/A341"
+spec = "复盘/卡/卡A341-一个号只能调哪些模型.md"
+files = [
+  "tools/pool/model_registry.py",
+  "tools/wb_dispatch.py",
+  "tools/pool_mcp.py",
+  "tests/test_pool_model_scope.py",
+]
+status = "done"
+risk = "mid"
+depends = []

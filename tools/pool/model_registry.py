@@ -54,11 +54,14 @@ import pathlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import tomllib
 
 from pool.models import find_pool_dir, load_switches
+
+if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解（ruff TCH）
+    from collections.abc import Sequence
 
 #: 本模块所在的仓库根（``tools/pool/`` 上两级）。
 _FILE_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -358,6 +361,175 @@ def effective_allowed_for(pool: str, entries: list[ModelEntry] | None = None) ->
     return tuple(out)
 
 
+# ------------------------------------------------ caller 收窄（卡 A341 · F34）
+#: caller 的模型白名单**最多**多少条（逐字照 magpie `internal/access/models.go:31`
+#: 「A key can list at most 500 models」）。
+MAX_CALLER_PATTERNS = 500
+#: caller 的模型白名单**单条**最长多少字符（逐字照 magpie `internal/access/models.go:15`）。
+MAX_PATTERN_CHARS = 300
+#: glob 编译缓存的条数上限（逐字照 magpie `internal/access/models.go:80` 的 `maxGlobs = 4096`）。
+MAX_GLOBS = 4096
+
+_GLOB_CACHE: dict[str, re.Pattern[str]] = {}
+
+
+def _glob_re(pattern: str) -> re.Pattern[str]:
+    """把一条 caller pattern 编译成**锚定**的正则（`*` ⇒ `.*`，**跨斜杠**）。
+
+    ★ 逐字照 magpie `compileGlob`（`internal/access/models.go:99-105`）：
+      `regexp.MustCompile("(?is)^" + strings.Join(parts, ".*") + "$")`
+      —— `*` 换成「任意长度（含斜杠）」，`(?is)` = 大小写不敏感 + `.` 也匹配换行。
+    ★ 与 magpie 的唯一差别：本实现把 `*` **之外**的字面片段 `re.escape()` 掉。
+      magpie 直接把片段拼进正则，所以 `(` / `.` 这类字符在那边是正则元字符（能编译就直接当
+      正则用、编不过就 panic）；本实现要的是「`*` 是唯一通配符」这条语义，字面片段一律按字面
+      匹配。`*` 的行为**一字不变**（跨斜杠）。
+    ★ 只在 `narrow_for_caller()` 内部用 —— **不导出**，也**不许**被冲突域判据
+      （`tools/pool/plan.py:64` 的 `WILDCARD_CHARS`，那里是见通配就拒）借去用：
+      两处不是同一套语义，口径记录点仍是 `tools/pool/plan.py:169-179` 那段 docstring。
+    """
+    cached = _GLOB_CACHE.get(pattern)
+    if cached is not None:
+        return cached
+    body = ".*".join(re.escape(part) for part in pattern.split("*"))
+    compiled = re.compile("(?is)^" + body + "$")
+    if len(_GLOB_CACHE) >= MAX_GLOBS:
+        _GLOB_CACHE.clear()  # 满即清（缓存口径见 narrow_for_caller 的 docstring）
+    _GLOB_CACHE[pattern] = compiled
+    return compiled
+
+
+def _pattern_hits(pattern: str, model: str) -> bool:
+    """一条 pattern（**已剥掉池前缀之后**）是否命中一个 model 名。
+
+    ★ 两支照 magpie `ModelAllowed`（`internal/access/models.go:55-70`）：
+      · 与 model **大小写不敏感**逐字相等 ⇒ 命中（照 ``strings.EqualFold``）；
+      · 含 ``*`` 且 glob 编译后命中 ⇒ 命中（``*`` **跨斜杠**，照 `compileGlob` `:99-105`）。
+    ★ 只在 `narrow_for_caller()` 内部用 —— **不导出**。
+    """
+    if pattern.lower() == model.lower():
+        return True
+    return "*" in pattern and _glob_re(pattern).match(model) is not None
+
+
+def narrow_for_caller(
+    pool: str,
+    allowed: Sequence[str],
+    patterns: Sequence[str],
+) -> tuple[str, ...]:
+    """把一个**全局允许集**按 caller 的 `patterns` 收窄（卡 A341 · T-AG543 · F34）。
+
+    ★ 语义逐字抄 magpie `internal/access/models.go:55-70` 的 `ModelAllowed`：
+      · ``not patterns`` ⇒ **原样返回** ``tuple(allowed)``（空 = 不受限，逐字对应
+        `:37` 的 ``Restricted()``）；
+      · 每条 `p` 与 `id` **大小写不敏感**逐字相等 ⇒ 命中（照 ``strings.EqualFold``）；
+        或 `p` 含 ``*`` 且 glob 编译后命中 ⇒ 命中（``*`` 跨斜杠，照 `compileGlob` `:99-105`）；
+      · **结果 ⊆ `allowed`** —— 本函数只能**收窄**，绝不新增任何允许。这是它的全部意义：
+        放宽等于绕过 `--pool` / 注册表 / 开关文件三重判据。
+    ★ **纯函数**：不读文件、不读环境、不碰网络（`tools/pool_mcp.py` 的干跑路径要复用它）。
+    ★ **大小写两层口径不同是有意的，不许「统一」掉**：本函数大小写不敏感（照 magpie
+      ``EqualFold``：caller 手写的 patterns 允许含糊）；而 `tools/wb_dispatch.py:415` 的
+      ``model_rejected()`` 保持**逐字**比较（注册表里叫什么就叫什么）。两层各自都对，
+      把任一层「统一」成另一层都会改变一条真判据。
+    ★ **glob 缓存口径（本卡的选择：缓存 + 满即清，不做上限拒单）**：照 magpie
+      ``maxGlobs = 4096`` 的量级做进程内小缓存，满了整体清空重来。理由：本函数必须是纯函数，
+      缓存只是「编译结果复用」的实现细节、不参与判据；若把上限做成**拒单**，就会出现
+      「同样的 patterns 昨天能派活、今天被拒」，而 magpie 的 4096 也只是缓存条数。
+    ★ **池前缀可省（本卡对 magpie 的唯一一处放宽式适配，裁定见下）**：除按 pattern 原样匹配
+      之外，若 pattern 以 ``f"{pool}/"`` 开头（**大小写不敏感**，两边都 ``.lower()`` 比），
+      则**再**拿剥掉这段前缀的剩余部分匹配一次；两次命中任一即算命中（布尔或）。
+      语义：`codebuddy` 池下 ``codebuddy/glm-5.3`` / ``codebuddy/deepseek*`` / ``codebuddy/*``
+      都能命中**裸名**别名（``glm-5.3`` / ``deepseek-v4.1-flash`` …）；`codearts` 池别名自带
+      provider（``huaweicloud-maas/GLM-5.2``），原样匹配就命中，不受影响。
+      ★ **只剥当前池自己的前缀**：别的池的前缀**一律不剥** —— 否则 ``codearts/x`` 会在
+        `codebuddy` 池里命中，那就是**放宽**。
+      ★ 剥完是空串（pattern 就是 ``"codebuddy/"``）按**不命中**处理，**不许**退化成「全命中」。
+      ★ **后果如实写**：`codebuddy/*` 剥成裸 `*` 之后，`*` 跨斜杠（照 `compileGlob`），所以它会
+        命中**任何**形状的别名 —— 包括自带 provider 的 `other/a/b`。这是裁定的直接后果、不是
+        放宽（结果仍 ⊆ `allowed`，只是 `allowed` 里条条都中）。想只命中裸名就写得更具体：
+        `codebuddy/glm-*` / `codebuddy/deepseek*` 之类别带「整条只剩 `*`」的写法。
+      ★ 这不放开 `clean_caller_patterns()` 的 ``/`` 规则：那条是 magpie `CleanModels` 的合规
+        边界（一条 pattern 必须长得像 ``<provider>/<model>``），**一字不动**；本函数只是在
+        「拿它去比哪个别名」这一侧给每个池一个**自己的命名空间前缀**。所以 ``glm-5.3`` 裸名
+        直接写进 ``models`` **仍然非法**（清洗就抛），必须写成 ``codebuddy/glm-5.3``。
+      ★ 不对称是**故意**的：清洗侧管「写下来的东西合规」，匹配侧管「合规的东西怎么落到别名上」。
+        放宽清洗 = 允许非法数据入库；放宽匹配 = 允许合规数据用得上。只做后者。
+    """
+    if not patterns:
+        return tuple(allowed)
+    prefix = f"{pool}/".lower() if pool else ""
+    out: list[str] = []
+    for model in allowed:
+        for pattern in patterns:
+            if _pattern_hits(pattern, model):
+                out.append(model)
+                break
+            if prefix and pattern.lower().startswith(prefix):
+                rest = pattern[len(prefix):]
+                if rest and _pattern_hits(rest, model):
+                    out.append(model)
+                    break
+    return tuple(out)
+
+
+def clean_caller_patterns(raw: Sequence[str]) -> tuple[str, ...]:
+    """校验并清洗 caller 的模型白名单：trim、去重（不区分大小写）、形状与两条上限。
+
+    ★ 逐字对应 magpie `CleanModels`（`internal/access/models.go:15`）：trim、去重（不分大小写）、
+      必须含 ``/`` 且不以 ``/`` 开头或结尾、长度 ≤ 300、最多 500 条
+      （``a/*/x`` 合法：``*`` 跨斜杠；``/a`` 与 ``a/`` 非法）。
+    ★ 越界 ⇒ `ModelRegistryError`（本模块已有的异常，`:80`），**不许**静默丢掉越界那条 ——
+      丢一条 = 悄悄放宽一条。
+    ★★ **与 `approved_models` 的分歧（照实写清，不许沉默）**：`tools/pool_accounts.py:147-151`
+      里 ``approved_models = []`` 的语义是「这个号**不许派活**」（一个都没批就写空数组）；
+      而本卡的 ``models = []``（即 ``patterns = []``）按 magpie ``Restricted()`` `:37` 的口径是
+      「**不收窄**」（空 = 不受限）。两处空列表**含义相反，这是故意的**：前者是合规边界
+      （默认拒绝），后者是安全边界的「没设防」（magpie 语义）。改任何一边都会放松另一边的语义。
+    ★★ **与裸名别名的冲突：已用「pool 前缀可省」解决，本函数的 ``/`` 规则一字不动**。
+      背景：本仓 `codebuddy` 池的注册表别名是**裸名**（`deepseek-v4.1-flash` / `glm-5.3-flash` …，
+      不含 ``/``），而本函数照 magpie `CleanModels` 要求每条 pattern 必须含 ``/``。若匹配侧
+      照原样比，两者相交为空 ⇒ 给 `codebuddy` 账号配了 ``models`` 就等于**全禁**。
+      解法（用户裁定）：**不放宽清洗，改匹配口径** —— `narrow_for_caller()` 对每条 pattern
+      额外剥掉**恰好等于当前池**的前缀（``codebuddy/``）再匹配一次，所以
+      ``codebuddy/glm-5.3`` 能命中裸名 ``glm-5.3``、``codebuddy/*`` 能命中全部裸名。
+      ★ 仍然**非法**的写法：裸名 ``glm-5.3``（不含 ``/``）直接写进 ``models`` —— 清洗就抛；
+        别的池的前缀 ``codearts/x`` 写在 `codebuddy` 账号下 —— 清洗能过但**匹配不上**
+        （前缀只剥当前池自己的），结果等同不命中，**不是**放宽。
+      为什么不对称：清洗规则是**合规边界**（管「写下来的东西长得对不对」，放宽 = 允许非法数据
+      入库）；匹配侧的池前缀是**命名空间**（管「合规的写法怎么落到这个池的别名上」）。
+      只做后者，前者一字不动。
+    """
+    if len(raw) > MAX_CALLER_PATTERNS:
+        raise ModelRegistryError(
+            f"caller 的模型白名单最多 {MAX_CALLER_PATTERNS} 条，实际 {len(raw)} 条"
+            f"（magpie access/models.go:31「A key can list at most 500 models」）；"
+            f"越界不静默丢：丢一条 = 悄悄放宽一条。")
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            raise ModelRegistryError(
+                f"caller 的模型白名单只收字符串，实际有 {type(item).__name__}：{item!r}")
+        pattern = item.strip()
+        if not pattern:
+            raise ModelRegistryError(
+                "caller 的模型白名单里有 trim 之后为空串的条目 —— 空条目等于没写，明说出来。")
+        if len(pattern) > MAX_PATTERN_CHARS:
+            raise ModelRegistryError(
+                f"caller 的模型白名单单条最长 {MAX_PATTERN_CHARS} 字符，"
+                f"实际 {len(pattern)} 字符：{pattern!r}")
+        if "/" not in pattern or pattern.startswith("/") or pattern.endswith("/"):
+            raise ModelRegistryError(
+                f"caller 的模型白名单条目必须是 `<provider>/<model>` 形状"
+                f"（含 `/`、不以 `/` 开头或结尾）：{pattern!r}（照 magpie CleanModels）")
+        key = pattern.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(pattern)
+    return tuple(out)
+
+
+
 # ---------------------------------------------------------------- 适配器（按池分流）
 @dataclass(frozen=True)
 class PoolAdapter:
@@ -463,8 +635,10 @@ __all__ = [
     "PoolNotWiredError", "PoolAdapter",
     "ROOT", "REGISTRY_FILE", "REGISTRY_ENV", "KNOWN_POOLS", "DEFAULT_POOL",
     "MINIMUM_RULESET_KEYS",
+    "MAX_CALLER_PATTERNS", "MAX_PATTERN_CHARS", "MAX_GLOBS",
     "registry_path", "load_registry", "entries_for", "resolve_model",
     "default_model_for", "rotation_chain_for", "effective_allowed_for",
+    "narrow_for_caller", "clean_caller_patterns",
     "get_adapter", "minimum_ruleset", "minimum_ruleset_text",
     "dispatch_log_dirs", "list_dispatch_logs",
 ]

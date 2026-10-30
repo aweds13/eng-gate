@@ -1,0 +1,29 @@
+[entries."T-AG543"]
+id = "T-AG543"
+title = "一个号只能调哪些模型：magpie 每 caller 模型白名单移植进 pool（F34）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A341-一个号只能调哪些模型.md",
+  "file:tools/pool/model_registry.py",
+  "file:tools/wb_dispatch.py",
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_model_scope.py",
+  "test:test_pool_model_scope.py",
+  "text:tools/pool/model_registry.py::MAX_CALLER_PATTERNS = 500",
+  "text:tools/pool/model_registry.py::def narrow_for_caller(",
+  "text:tools/pool/model_registry.py::def clean_caller_patterns(",
+  "text:tools/wb_dispatch.py::def caller_model_patterns(",
+  "text:tools/wb_dispatch.py::def caller_model_rejected(",
+  "text:tools/pool_mcp.py::卡 A341（F34）第 ③ 步",
+]
+gaps = [
+  """- **仓外 `infra/pool/limits.toml` 今天不存在** ⇒ `caller_model_patterns()` 恒返回空 ⇒ 这道闸今天**不生效**（`not patterns` = 不收窄）。这一轮验的是判据的判别力（11 条钉子 + 11 条变异），不是「真拦下过一次派活」。表名 `[accounts.\"<id>\"].models` 只有设计原件作依据，**没有任何真实数据核过**。
+- **`codebuddy/*` 剥成裸 `*` 会命中任何形状的别名**（含 `other/a/b`）：这是「池前缀可省」裁定的直接后果，已在 `tests/test_pool_model_scope.py::test_narrow_glob_crosses_slash` 里照实钉住，免得日后被当 bug 修掉。想只命中裸名要写 `codebuddy/glm-*` 这类更具体的。
+- **`codearts` 池端到端没跑过**：只验了 `narrow_for_caller()` 函数级命中（`(\"huaweicloud-maas/*\",)` / `(\"*/deepseek*\",)`），没走真实 `wb_dispatch.py --pool codearts --account ...` 的进程。
+- **`tools/pool_mcp.py` 的 `account` 只做了 schema + argv + 干跑三处**，没跑真实 MCP 端到端派活（测试里 monkeypatch 了 `_spawn_worker`）。
+- **`from pool import limits as pool_limits` 落在两个函数体内**（`caller_model_patterns()` / `caller_model_rejected()` 各一次）：本文件 pool 依赖块整块在 `sys.path.insert` 之后（ruff E402），而卡规格铁律禁用豁免注释。CPython 走 `sys.modules` 缓存，开销可忽略。
+- **`maxGlobs=4096` 只当量级参考**：本卡选「缓存 + 满即清」，不做上限拒单（拒单会出现「同一份 patterns 昨天能派今天被拒」）。magpie 满 4096 到底清还是拒，**只核了常量存在、没读它的 cache 实现**。
+""",
+]

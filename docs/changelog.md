@@ -711,6 +711,37 @@ magpie 的每分钟闸在 `internal/gateway/rpm.go`：一个号在窗口内有�
 ### ⑤ 读数
 
 `pytest tests/test_pool_rpm.py` **10 passed**（合跑 `tests/test_wb_dispatch.py` 220 passed / 63.86 秒）；`ruff check` 三文件 `All checks passed!`；`mypy tools/pool/rpm.py` `Success`；反向验证 `gates/diag/_rev_A340.py` 末行「结论：8/8 条全部咬住，收尾绿。」（8 条变异：窗口去 slack、`>=` 改 `>`、give_back 的 `==` 改 `>=`、删空不清理等）。
+## 2026-10-30 · 一个号只能调哪些模型：magpie 每 caller 模型白名单移植进 pool（F34）（卡 A341，T-AG543）
+
+### ① 病灶：白名单只到「池」，没到「谁在用」
+
+magpie 的模型白名单挂在 caller（key）上：`internal/access/models.go` 的 `ModelAllowed`（`:55-70`）决定「这个 key 能调哪些模型」，`CleanModels`（`:15`）管写下来的形状，`maxGlobs=4096`（`:80`）是 glob 缓存量级，「一个 key 最多 500 条」在 `:31`。pool 侧**一条都没有** —— 允许集只有 `tools/pool/model_registry.py:345 effective_allowed_for(pool, entries=None)` 这一处按**池**算，判据只有 `tools/wb_dispatch.py:415 model_rejected(model, pool)` 这一份按**池**判。同一个池里，A 号与 B 号能调的模型完全一样。
+
+### ② 判据落在哪（`tools/pool/model_registry.py` +175/−1）
+
+- `MAX_CALLER_PATTERNS = 500`（`:367`）/ `MAX_PATTERN_CHARS = 300`（`:369`）：照 magpie `access/models.go:31` 与 `:15`。
+- `narrow_for_caller(pool, allowed, patterns) -> tuple[str, ...]`（`:414`）：**只收窄**的纯函数。`not patterns` ⇒ 原样返回 `tuple(allowed)`（照 `Restricted()` `:37` 的「空 = 不受限」）；结果 **⊆ `allowed`**、保持原序；大小写不敏感（照 `EqualFold`）；含 `*` 时 glob 命中（`*` **跨斜杠**，照 `compileGlob` `:99-105`）。
+- `clean_caller_patterns(raw)`（`:474`）：trim、去重、必须含 `/` 且不以 `/` 开头结尾、≤300 字符、≤500 条；越界**响亮地**抛已有的 `ModelRegistryError`，**不静默丢**（丢一条 = 悄悄放宽一条）。
+- ★ **两个空列表含义相反，docstring 逐字写清**：本卡的 `models = []`（= `patterns=()`）是「**不收窄**」（magpie 语义）；而 `tools/pool_accounts.py` 的 `approved_models = []` 是「这个号**不许派活**」（合规边界）。
+
+### ③ ★ 裁定：池前缀可省（本卡对 magpie 唯一一处适配）
+
+现场撞车：`codebuddy` 池的注册表别名是**裸名**（`deepseek-v4.1-flash` / `glm-5.3-flash` / `glm-5.3` / `kimi-k3-1` / `glm-5.2`），而 `clean_caller_patterns()` 照 magpie 强制每条 pattern 含 `/` ⇒ 照原样匹配时相交为空，**给 codebuddy 账号配 models 等于全禁**。
+
+解法（用户 2026-10-30 裁定）：**不放宽清洗，只改匹配口径** —— `narrow_for_caller()` 除原样匹配外，若 pattern 以「当前池名 + 斜杠」开头（两边 `.lower()` 比）就再拿剥掉前缀的剩余部分匹配一次；两次命中任一即算命中。只剥**当前池自己**的前缀（`codearts/x` 写在 `codebuddy` 下匹配不上，结果等同不命中，**不是**放宽）；剥完是空串按不命中（不许退化成全命中）。
+
+★ **后果照实钉住**：`codebuddy/*` 剥成裸 `*` 后会命中**任何**形状的别名（含自带 provider 的 `other/a/b`）—— 这是裁定的直接后果、不是放宽（结果仍 ⊆ `allowed`）。要只命中裸名就写 `codebuddy/glm-*` 这类更具体的。
+
+### ④ 接线：三步顺序固定，两个接入点调同一个函数
+
+顺序 `①resolve_model(model, pool)` → `②model_rejected(model, pool)` → `③caller_model_rejected(model, pool, account)`，**不许调换**（调换会让上一步的拒单文案被吞掉）。
+
+- `tools/wb_dispatch.py`（+81/−0）：`caller_model_patterns(account)`（`:439`）读仓外 `limits.toml` 的 `[accounts."<id>"].models` —— **复用** `pool.limits.load_limits()` / `limits_path()`，不另立第二套路径/env；读不到 / 段不存在 / 没写 `models` ⇒ 空 ⇒ 不收窄；写了但读不懂 ⇒ 抛 `ModelRegistryError`（**不静默当「不收窄」**）。`caller_model_rejected(model, pool, account)`（`:474`）返回空串 = 放行、返回文案 = 退 2，**零副作用**（不起进程、不建 log、不改树）。派活主路径在 `:3177` 后接第 ③ 步。
+- `tools/pool_mcp.py`（+37/−2）：干跑路径同一层（`:1621` 的 ⑥b），`account` 进 `pool_dispatch` 的 schema 并透传 `--account`（`--force`/`--allow`/`--resume` 照旧**不透传**）。
+
+### ⑤ 读数
+
+`pytest tests/test_pool_model_scope.py` **11 passed**；邻居 `tests/test_model_registry.py + tests/test_pool_models.py + tests/test_pool_guards.py` **72 passed**；`ruff check` 四文件 `All checks passed!`；回归旁证（`test_pool_mcp_write + test_pool_mcp + test_pool_failclosed + test_wb_dispatch + test_pool_accounts`）**307 passed**；反向验证 `gates/diag/_rev_A341.py` 末行「结论：11/11 条全部咬住，收尾绿。」
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

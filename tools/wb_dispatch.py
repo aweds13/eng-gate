@@ -128,10 +128,12 @@ from pool.model_registry import (  # noqa: E402 —— 一层注册表 + 按池�
     PoolMismatchError,
     PoolNotWiredError,
     UnknownPoolError,
+    clean_caller_patterns,
     default_model_for,
     effective_allowed_for,
     get_adapter,
     minimum_ruleset_text,
+    narrow_for_caller,
     resolve_model,
     rotation_chain_for,
 )
@@ -432,6 +434,73 @@ def model_rejected(model: str, pool: str = DEFAULT_POOL) -> str:
             f"{'、'.join(allowed)}\n"
             "  默认拒绝：既不在名单、也没在开关文件里打开的模型一律调不动"
             "（用户 2026-09-26 令：黑名单锁死）。")
+
+
+def caller_model_patterns(account: str | None) -> tuple[str, ...]:
+    """读**这个账号**的模型白名单（`limits.toml` 的 `[accounts."<id>"].models`；卡 A341 · F34）。
+
+    ★ 数据在**仓外** `D:/repo/infra/pool/limits.toml`（与 F33 共用同一份策略表）；
+      路径与 `TF_POOL_LIMITS` 覆盖口径**复用** `pool.limits`（不在这里另立第二套路径/env）。
+    ★ 键用 `accounts.toml` 的 **id**（不是 email）。
+    ★ **读不到 / 段不存在 / 没写 `models` ⇒ 空元组 ⇒ 不收窄**（照 magpie `Restricted()` `:37`
+      「空 = 不受限」）。这条与 `tools/pool_accounts.py:147-151` 的 `approved_models = []`
+      （= 这个号**不许派活**）**含义相反，是故意的** —— 见 `clean_caller_patterns()` 的 docstring。
+    ★ 写了的条目走 `clean_caller_patterns()` 校验：越界**响亮地**抛 `ModelRegistryError`，
+      **不许**静默丢掉越界那条（丢一条 = 悄悄放宽一条）。
+    """
+    if not account:
+        return ()
+    # 本文件的 pool 依赖块整块落在 `sys.path.insert` 之后（ruff E402）⇒ 常规写法都要
+    # 一条豁免注释；卡 A341 的铁律禁用那类注释，所以这只读一次的 import 放函数内。
+    from pool import limits as pool_limits
+
+    table = pool_limits.load_limits(pool_limits.limits_path())
+    accounts = table.get("accounts")
+    if not isinstance(accounts, dict):
+        return ()
+    section = accounts.get(account)
+    if not isinstance(section, dict):
+        return ()
+    raw = section.get("models")
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ModelRegistryError(
+            f"{pool_limits.limits_path()} 里 [accounts.{account!r}].models 必须是数组，"
+            f"实际是 {type(raw).__name__} —— 读不懂就**响亮地**失败，不静默当「不收窄」。")
+    return clean_caller_patterns(raw)
+
+
+def caller_model_rejected(
+    model: str,
+    pool: str = DEFAULT_POOL,
+    account: str | None = None,
+) -> str:
+    """第 ③ 步：caller（账号）白名单**只收窄**的硬闸门（卡 A341 · F34）。
+
+    ★ 顺序固定三步、不许调换（调换会让上一步的拒单文案被吞掉）：
+      ①`resolve_model(model, pool)` → ②`model_rejected(model, pool)` → ③本函数。
+    ★ 本函数**不改**前两步的判据：它只是在 `effective_allowed_models(pool)` **外面**加一层
+      `narrow_for_caller()` —— 而 `narrow_for_caller()` 的返回**必然 ⊆ `allowed`**，所以这里
+      不可能放开任何前两步拒掉的模型（反向验证见 `tests/test_pool_model_scope.py` 第 8 条钉子）。
+    ★ 两个接入点（`tools/wb_dispatch.py` 派活主路径 / `tools/pool_mcp.py` 干跑路径）**都调本函数**，
+      判据只有一份（`tools/pool/__init__.py:1-25` 逐字「它只 import 本包、不在这里重写判据」）。
+    ★ 返回空串 = 放行；返回文案 = 退 2 / 回 isError（**零副作用**：不起进程、不建 log、不改树）。
+    """
+    patterns = caller_model_patterns(account)
+    if not patterns:
+        return ""
+    narrowed = narrow_for_caller(pool, effective_allowed_models(pool), patterns)
+    if model in narrowed:
+        return ""
+    from pool import limits as pool_limits
+
+    shown = "、".join(narrowed) or "（空：等于全禁）"
+    return (
+        f"该账号的模型白名单不含 {model}（账号 {account}）；它被允许的是：{shown}\n"
+        f"  —— 白名单只能**收窄**不能放宽（照 magpie access/models.go:55-70；"
+        f"数据在 {pool_limits.limits_path()} 的 [accounts.\"{account}\"].models）"
+    )
 
 
 def next_whitelist_model(model: str, pool: str = DEFAULT_POOL) -> str | None:
@@ -3107,6 +3176,18 @@ def main() -> int:
         return 2
     if rejected:
         print(f"[FAIL] {rejected}", file=sys.stderr, flush=True)
+        return 2
+    # ★ 卡 A341（T-AG543 · F34）：第 ③ 步 —— caller（账号）白名单**只收窄**。
+    #   前两步（①resolve_model 跨池 / ②model_rejected 池内）一字不改；本步只是在外面加一层
+    #   收窄，`not patterns` ⇒ 不收窄（照 magpie Restricted() 「空 = 不受限」）。
+    #   读表/清洗坏了要**响亮地**失败（不静默当「不收窄」），仍在起进程之前（零副作用），退 2。
+    try:
+        caller_rejected = caller_model_rejected(args.model, pool, args.account)
+    except ModelRegistryError as exc:
+        print(f"[FAIL] {exc}", file=sys.stderr, flush=True)
+        return 2
+    if caller_rejected:
+        print(f"[FAIL] {caller_rejected}", file=sys.stderr, flush=True)
         return 2
     # ★ 卡 167（T-G267）：--effort 白名单硬校验（照 --model 闸门那套）—— 非法值退 2、
     #   零副作用（不起进程、不建 log、不写判决）、点名合法值。值域以 CLI --help 为准。

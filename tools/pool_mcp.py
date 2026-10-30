@@ -499,6 +499,13 @@ WRITE_TOOL_SPECS: list[dict[str, Any]] = [
                     "description": "模型；不给用默认；必须在 wb_dispatch 白名单里",
                 },
                 "pool": {"type": "string", "description": "号池名（记进租约）"},
+                "account": {
+                    "type": "string",
+                    "description": (
+                        "账号 id（accounts.toml 的 id，不是 email）；给了就按"
+                        " limits.toml 的 [accounts.<id>].models 收窄模型白名单"
+                    ),
+                },
                 "note": {"type": "string", "description": "备注（记进租约）"},
                 "confirm": {"type": "string", "description": "★ 防手滑：必须等于 card"},
             },
@@ -1456,10 +1463,18 @@ def _how_to_pass() -> str:
     )
 
 
-def _dispatch_argv(card: str, spec: str, cwd: Path, model: str) -> list[str]:
+def _dispatch_argv(
+    card: str,
+    spec: str,
+    cwd: Path,
+    model: str,
+    account: str = "",
+) -> list[str]:
     """给 `wb_dispatch.py` 的 argv —— **写死**，不透传危险项。
 
     不透传：`--force` / `--allow` / `--resume` / `--no-preflight`。
+    ★ 卡 A341（F34）：`--account` **要**透传 —— 工人侧得按同一个账号收窄模型白名单
+      （白名单只能收窄不能放宽）；空串就不带这个参数（= 不按账号收窄）。
     ★ 卡 125：带 `--already-reserved` —— 本函数**上游**（`tool_pool_dispatch`）已经
       `registry.reserve` 过这条树；不带它会撞上 wb_dispatch 新接的 `tree_guard`（自己占的树
       被自己判"被占"）⇒ 派活必被拒。带上它 = wb_dispatch **只跳过**守卫与占/还树，别的前置照走。
@@ -1481,6 +1496,7 @@ def _dispatch_argv(card: str, spec: str, cwd: Path, model: str) -> list[str]:
         "--detach",
         "--execute",
         "--already-reserved",
+        *(("--account", account) if account else ()),
     ]
 
 
@@ -1602,6 +1618,25 @@ def tool_pool_dispatch(
             {"card": card, "model": model, "allowed": list(wb_dispatch.MODEL_WHITELIST)},
             is_error=True,
         )
+    # ⑥b 卡 A341（F34）第 ③ 步：caller（账号）白名单**只收窄** —— 与 wb_dispatch 的派活主路径
+    #   调**同一个** `caller_model_rejected()`（判据只有一份）。池名用 DEFAULT_POOL：下面的
+    #   `_dispatch_argv` 不透传 `--pool`，工人侧就是按默认池跑的，两边口径必须一致。
+    account = str(arguments.get("account") or "").strip()
+    try:
+        caller_rejected = wb_dispatch.caller_model_rejected(
+            model, wb_dispatch.DEFAULT_POOL, account or None)
+    except wb_dispatch.ModelRegistryError as exc:
+        return _result(
+            f"账号白名单读不懂，已拒绝派活：{exc}",
+            {"card": card, "model": model, "account": account},
+            is_error=True,
+        )
+    if caller_rejected:
+        return _result(
+            caller_rejected,
+            {"card": card, "model": model, "account": account},
+            is_error=True,
+        )
 
     # ② 干跑：三条自家守卫 + 登记里的租约判据（import 调用，不 shell 出去）
     stamp = time.time()
@@ -1656,7 +1691,7 @@ def tool_pool_dispatch(
 
     # ④ 起工人（--detach：立刻返回）；起不来就回滚刚占的租约
     cwd = Path(tree) if Path(tree).is_absolute() else (main_root / tree if tree else main_root)
-    argv = _dispatch_argv(card, spec, cwd, model)
+    argv = _dispatch_argv(card, spec, cwd, model, account)
     try:
         code, out, err = _spawn_worker(argv, root)
     except OSError as exc:
