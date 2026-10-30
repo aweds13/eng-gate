@@ -687,6 +687,30 @@ return e
 - `pytest tests/test_quota_clock.py tests/test_quota_wait.py tests/test_pool_rest.py` ⇒ **50 passed in 1.04s**（三份既有额度判据不受影响）。
 - `ruff check` 四文件 ⇒ All checks passed；`mypy` 三源文件 ⇒ Success。
 - 反向验证 `gates/diag/_rev_A338.py` ⇒ **8/8 条全部咬住**：`>=`→`>` / `cache_reads` 默认改 True / week 起点改周日 / 放开 `MAX_LIMITS` / 坏 TOML 回 一张空表 / 去掉 `max(...,1)` / `sums` 右端改闭区间 / month 续期改 +30 天，每条还原后逐字节相同且纯 CRLF。
+## 2026-10-30 · 一分钟里派得太快就不派：magpie 每分钟闸移植进 pool（F23）（卡 A340，T-AG542）
+
+### ① 病灶：同一个号一分钟能派无数次
+
+magpie 的每分钟闸在 `internal/gateway/rpm.go`：一个号在窗口内有次数上限，超了就等下次。pool 侧**一条都没有** —— `tools/wb_dispatch.py` 占树只看冲突域与门禁锁，同一个号连着派十张卡也不会被拦，只会一起撞上厂商的 429。
+
+### ② 判据落在哪（新增 `tools/pool/rpm.py`，290 行）
+
+- `WINDOW_S = 61`（`tools/pool/rpm.py:76`）：照 magpie 的 `rpmWindow + rpmSlack`。多出来那 1 秒不是凑整，`rpm.go:46-51` 的注释写着理由：窗口边界按整秒对齐，不留 1 秒 slack 会把「刚好 60 秒前」的那一次算成窗口内，白等一轮。
+- `decide(account, stamps, *, limit, now, longest=LONGEST_WAIT_S)`（`tools/pool/rpm.py:130`）：先 `alive = sorted(s for s in given if s > floor)` 丢掉滑出窗口的戳，再取倒数第 `limit` 个加一个窗口 —— 到了就是「最早能派的那一刻」。`longest > 0` 且等待超过它 ⇒ 拒绝并说「超过最长等待」。
+- `note_stamp()` / `give_back()`（`tools/pool/rpm.py:248` / `:262`）：持锁追加、失败按值回滚。**这是 magpie `reserve()` + `giveBack()` 的两步口径**（`rpm.go:122-138` / `:141-154`）—— 判与写在同一次持锁里，没真派出去就把那一个戳还回去。
+- 上限表 `tools/pool/rpm.toml`：今天**故意是空表**，理由在文件头第 8-13 行，见 §④。
+
+### ③ 接线：占树之前一道闸，失败要还
+
+`tools/wb_dispatch.py` 新增 `RPM_LOCK_WAIT = 5.0`（`:460`）与闸体（`:3403` 写戳、`:3413` 的 `give_back_stamp()`）；两条占树失败出口各还一次 —— `:3474`（`GuardError`，占树被守卫拦下）与 `:3478`（`RegistryError`，登记坏了）。还不上不许盖掉原失败，只在 stderr 喊一句「这一趟白占一个分钟位，61 秒后自己滑出窗口」。锁等待取 5 秒（`spin_lock` 默认 10 秒）：闸在占树之前，拿不到锁应当快速失败而不是拖住派活。
+
+### ④ 今天这道闸谁也不拦（如实说）
+
+`--account` 收的是 **profile 名**（`codebuddy_accounts.py list` 只认 `tongxue3`），账本里的稳定 id 是 `codebuddy-tongxue3`，仓内**零映射代码**（只体现在 `credential.locator` 末段）。所以写四个真 id 进 `rpm.toml` 只会让 `.get("tongxue3", 0)` 恒落 0 —— 看着配了实际谁也不拦，那正是本仓最恨的「假装生效的闸」。⇒ 表里只留注释示例，映射与接线另开卡。
+
+### ⑤ 读数
+
+`pytest tests/test_pool_rpm.py` **10 passed**（合跑 `tests/test_wb_dispatch.py` 220 passed / 63.86 秒）；`ruff check` 三文件 `All checks passed!`；`mypy tools/pool/rpm.py` `Success`；反向验证 `gates/diag/_rev_A340.py` 末行「结论：8/8 条全部咬住，收尾绿。」（8 条变异：窗口去 slack、`>=` 改 `>`、give_back 的 `==` 改 `>=`、删空不清理等）。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

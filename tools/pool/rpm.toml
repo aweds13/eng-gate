@@ -1,0 +1,19 @@
+# 每分钟派活闸（卡 A340 / T-AG542，依据 magpie 的 MaxRPM）
+#
+# 用途：同一个号一分钟里最多派几趟（一道「主动」闸；撞 429 之后才等的那条是被动的）。
+# 铁律：键用账本的**稳定 id**（tools/pool_accounts.py:320 list_rows 的那个 id），不是 email；
+#       0 = 不限（关闸）；不在本表里的号 = 没开闸；越界（负数 / 超 10000）= RpmError，绝不静默当 0。
+# 口径：这里数的是**派活趟数**（一趟背后是一整个 CLI 会话），不是 HTTP 请求数 ——
+#       防不了 vendor 侧 RPM 429（那个归 tools/pool_quota.py 的四态）。
+# ★ 今天**故意是空表**（卡 A340 裁定 2）：`wb_dispatch.py` 的 `--account` 收的是
+#   `codebuddy_accounts.py` 的 **profile 名**（如 `tongxue3`），而本表的键是 `infra/pool/accounts.toml`
+#   的**稳定 id**（如 `codebuddy-tongxue3`）—— 两者的对应关系今天**没有映射代码**，
+#   只体现在 `credential.locator` 的末段。填上真号也只会 `.get("tongxue3", 0)` 落 0，
+#   看着配了、实际谁也不拦 —— 那正是本仓最恨的「假装生效的闸」。
+#   ⇒ 映射卡开出来之前本表保持空 ⇒ 0 = 没闸，本闸今天**默认不生效**；键的正确口径仍是稳定 id。
+[accounts]
+# 示例（开映射卡之后再启用；键 = 账本稳定 id，值 = 每分钟最多几趟，0 = 不限）：
+# "codearts-1" = 2
+# "codebuddy-tongxue3" = 2
+# "workbuddy-1" = 2
+# "trae-1" = 2

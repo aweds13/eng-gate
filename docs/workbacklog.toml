@@ -4567,3 +4567,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A340"
+task = "T-AG542"
+title = "一分钟里派得太快就不派：magpie 每分钟闸移植进 pool（F23）"
+tree = ".wt/A340"
+spec = "复盘/卡/卡A340-一分钟里派得太快就不派.md"
+files = [
+  "tools/pool/rpm.py",
+  "tools/pool/rpm.toml",
+  "tools/wb_dispatch.py",
+  "tests/test_pool_rpm.py",
+]
+status = "done"
+risk = "mid"
+depends = []

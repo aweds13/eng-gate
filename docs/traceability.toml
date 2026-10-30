@@ -10035,3 +10035,32 @@ mypy 单文件检查在本仓有既有的「同名双路径」坑（`Source file
 `cost` 是**金额**，但本仓没有计价表（`_port_design_gates_keys.md` 已记），所以今天的 `cost` 只能由调用方算好传进来；`ledger_spend` 只负责存与求和。
 """,
 ]
+
+[entries."T-AG542"]
+id = "T-AG542"
+title = "一分钟里派得太快就不派：magpie 每分钟闸移植进 pool（F23）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A340-一分钟里派得太快就不派.md",
+  "file:tools/pool/rpm.py",
+  "file:tools/pool/rpm.toml",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_pool_rpm.py",
+  "test:test_pool_rpm.py",
+  "text:tools/pool/rpm.py::WINDOW_S = 61",
+  "text:tools/pool/rpm.py::def decide(",
+  "text:tools/pool/rpm.py::def give_back(",
+  "text:tools/wb_dispatch.py::RPM_LOCK_WAIT = 5.0",
+  "text:tools/pool/rpm.toml::[accounts]",
+]
+gaps = [
+  """- **今天这道闸整体不生效**：`rpm.toml` 是空表 ⇒ `load_rpm()` 恒空 ⇒ `limit` 恒 0 ⇒ `decide()` 恒放行。这一轮验的是判据的判别力（10 条钉子 + 8 条变异），不是「闸真的拦住过一次派活」。
+- **profile 名与账本稳定 id 没有映射**：`--account` 收 `tongxue3`，账本是 `codebuddy-tongxue3`，仓内零映射代码。映射 + 填表 + 真接线要另开一张卡（否则填了也是谁也不拦）。
+- **进程被强杀不会还戳**：只还两条能捕获的占树失败路径。magpie 靠 ctx 取消给回，pool 没有等价的可取消边界 ⇒ 强杀后只能等 61 秒滑出窗口。
+- **`give_back_stamp` 在真派活路径上被调用过这一点没验**：`tests/test_wb_dispatch.py` 里没有把 `pool_registry.reserve` 打桩抛 `GuardError` 再断言账本被还回去的用例；加它要动那个文件（不在本卡交付清单）。**这条是真没验，不是绿。**
+- **数的是派活趟数，防不了厂商 429**：本闸按「派了几趟」计数，不读响应体；magpie 的 `rpmTransport` 也是同一口径。真正的 429 退避归 F20 的 rest 与 F19 的 Sink。
+- 卡树 `.wt/A340` 里 `tests/test_pool_rpm.py` 单跑要加 `--no-cov`：仓级 `addopts` 带 `--cov=timeflow --cov-fail-under=70`，单文件跑覆盖率为 0 ⇒ 退出 1。全量门禁跑全量用例，不受影响。
+""",
+]

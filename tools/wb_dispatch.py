@@ -119,6 +119,7 @@ import workbench_bridge  # noqa: E402 —— 工作台状态一处真源（卡 2
 #   `wb_dispatch --execute` 时不变量 ①②③⑤ 全部失效、且对其他窗口不可见（一树两写者不会被咬）。
 from pool import guards as pool_guards  # noqa: E402 —— 守卫唯一实现（pool.guards）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
+from pool import rpm as pool_rpm  # noqa: E402 —— 每分钟派活闸（卡 A340，magpie 的 MaxRPM）
 from pool import task as pool_task  # noqa: E402 —— 批次预声明 / 状态（卡 E10：--batch）
 from pool.jobs import card_artifacts  # noqa: E402 —— 产物定位唯一实现（pool.jobs）
 from pool.model_registry import (  # noqa: E402 —— 一层注册表 + 按池分流（卡 166 · T-G266）
@@ -455,6 +456,8 @@ def next_whitelist_model(model: str, pool: str = DEFAULT_POOL) -> str | None:
 #   两份一漂，这里就会让工人**悄悄跑到别的号**上 —— 本仓最恨的"看着成了其实用错号"）。
 ACCOUNT_SCRIPT_ENV = "TF_ACCOUNT_SCRIPT"   # ★ 只给测试用：覆盖 profile 工具路径（生产别设）
 ACCOUNT_TIMEOUT = 120
+#: 卡 A340：每分钟派活闸取锁的上限（秒）—— 锁本身有界，**不许**自旋等（判据 5）。
+RPM_LOCK_WAIT = 5.0
 #: `KEY=VALUE` 行的合法形状 —— 只收**像变量名**的 key（`export X=…` / `$env:X = …` 自然被滤掉）。
 _ENV_LINE_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
@@ -3368,6 +3371,66 @@ def main() -> int:
         except pool_registry.RegistryError as exc:
             print(f"[FAIL] 算不出主工作树 ⇒ 不占树、不派活：{exc}", file=sys.stderr, flush=True)
             return 2
+        # ★ 卡 A340（T-AG542）：**每分钟派活闸** —— magpie 的 MaxRPM 移植
+        #   （判据在 tools/pool/rpm.py）。
+        #   ① 位置固定在**占树之前**：判不过 ⇒ 一眼 exit 2、**不占树、零副作用**（判据 4）。
+        #   ② 不给 `--account` ⇒ 整套跳过（今天的行为逐字不变）。
+        #   ③ 「读 → 判 → 写」在**同一把** `spin_lock` 里（判据 5）：两个窗口同时派同一个号时，
+        #      只有第一个看得到空账本；拆成两段持锁就会双双放行。
+        #   ④ 只有**开了闸**（limit > 0）的号才落时刻：0 = 不限，账本不给没开闸的号留垃圾。
+        #   ⑤ ★ 卡 A340 裁定 1：判完就写（同一把锁内），**占树没成就还回去** —— 照 magpie 的
+        #      `reserve()`（`rpm.go:122-138`，持锁时就追加）+
+        #      `giveBack()`（`:141-154`，没派成按值删回）。
+        #      如实说的缺口：magpie 的回滚挂在 ctx 取消上，pool 没有等价的可取消边界 ——
+        #      进程被强杀 / 异常退出**不会**还，只能等那一趟 61 秒后自己滑出窗口。
+        #   ★ `stamps_target` 在闸外就算出来：`give_back_stamp` 也要用它
+        #     （同一把锁 = 同一个锁文件）。
+        stamps_target = ROOT.joinpath(*pool_rpm.STAMPS_REL)
+        rpm_at: datetime | None = None
+        if args.account:
+            try:
+                with pool_task.spin_lock(stamps_target, timeout=RPM_LOCK_WAIT):
+                    rpm_now = pool_rpm.now_tz()
+                    rpm_limit = pool_rpm.load_rpm().get(args.account, 0)
+                    rpm_stamps = pool_rpm.read_stamps(root=ROOT).get(args.account, [])
+                    rpm_verdict = pool_rpm.decide(args.account, rpm_stamps,
+                                                  limit=rpm_limit, now=rpm_now)
+                    if not rpm_verdict.allowed:
+                        print(f"[FAIL] 每分钟派活闸：号「{args.account}」{rpm_verdict.why}"
+                              " ⇒ 不占树、不派活", file=sys.stderr, flush=True)
+                        return 2
+                    if rpm_limit > 0:
+                        pool_rpm.note_stamp(args.account, rpm_now, root=ROOT)
+                        rpm_at = rpm_now
+            except pool_rpm.RpmError as exc:
+                print(f"[FAIL] 每分钟派活闸判不了（配置/账本坏了，**不猜**）：{exc}",
+                      file=sys.stderr, flush=True)
+                return 2
+            except pool_task.BatchError as exc:
+                print(f"[FAIL] 每分钟派活闸拿不到锁 ⇒ 不派活：{exc}", file=sys.stderr, flush=True)
+                return 2
+
+        def give_back_stamp(why: str) -> None:
+            """把这一趟的分钟位**还回去** —— 对应 magpie 的 `giveBack`（幂等，还没记过就是空操作）.
+
+            ★ **同一条路径不许还两次**：还完就把 `rpm_at` 抹成 None（重复还只是白做一次读写）。
+            ★ 还不上**不许**盖掉原本的失败原因：只白占一个分钟位（61 秒后自己滑出窗口），
+              所以这里吞掉异常、但**必须**喊一声 —— 静默吞掉下一个人会以为账本干净。
+            """
+            nonlocal rpm_at
+            if rpm_at is None:
+                return
+            stamp, rpm_at = rpm_at, None
+            try:
+                with pool_task.spin_lock(stamps_target, timeout=RPM_LOCK_WAIT):
+                    pool_rpm.give_back(args.account, stamp, root=ROOT)
+            except (pool_rpm.RpmError, pool_task.BatchError, OSError) as exc:
+                print(f"[FAIL] 每分钟派活闸还不回去（{why}）：{exc}"
+                      " ⇒ 这一趟白占一个分钟位，61 秒后自己滑出窗口",
+                      file=sys.stderr, flush=True)
+                return
+            print(f"[还闸] 已去掉这一趟的派活记录（卡 {args.card}；{why}）", flush=True)
+
         reserve_tree = worker_tree_label(worker_cwd, reserve_root)
         released = False
 
@@ -3408,9 +3471,11 @@ def main() -> int:
             print("[FAIL] 占树被守卫拦下，**不派活**：", file=sys.stderr, flush=True)
             for item in exc.problems:
                 print(f"  · {item}", file=sys.stderr, flush=True)
+            give_back_stamp("占树被守卫拦下")
             return 2
         except pool_registry.RegistryError as exc:
             print(f"[FAIL] 占树失败（登记坏了），**不派活**：{exc}", file=sys.stderr, flush=True)
+            give_back_stamp("占树失败（登记坏了）")
             return 2
         # ★ 照卡 118 给门禁锁做的兜底：进程怎么退都 release 一次（已还过 = 空操作）。
         atexit.register(release_tree, "进程退出兜底")
