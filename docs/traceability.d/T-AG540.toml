@@ -1,0 +1,29 @@
+[entries."T-AG540"]
+id = "T-AG540"
+title = "限额要在派活之前拦：magpie key limits 移植进 pool（F33）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A338-限额要在派活之前拦.md",
+  "file:tools/pool/limits_policy.py",
+  "file:tools/pool/ledger_spend.py",
+  "file:tools/pool/limits_check.py",
+  "file:tests/test_pool_limits.py",
+  "test:test_pool_limits.py",
+  "text:tools/pool/limits_policy.py::MAX_LIMITS = 5",
+  "text:tools/pool/limits_policy.py::def parse_limit(",
+  "text:tools/pool/limits_policy.py::def window(",
+  "text:tools/pool/limits_policy.py::def load_limits(",
+  "text:tools/pool/ledger_spend.py::def append(",
+  "text:tools/pool/ledger_spend.py::def sums(",
+  "text:tools/pool/limits_check.py::def check(",
+  "text:tools/pool/ledger_spend.py::pool-spend.jsonl",
+]
+gaps = [
+  """**没有接线**：`tools/wb_dispatch.py` 一行都没动（卡规格明确不许，A335 在飞同文件）。这三个模块今天是**可用的判据**，不是生效的闸 —— 派活路径上仍然只有 `DEFAULT_INPUT_BUDGET`（`tools/wb_dispatch.py:219`，一次派活内的熔断，只看 input、无窗口、跑起来才拦）。接线是下一张卡的事。
+`limits_check.check()` 的 `spent` 要调用方自己按 `window(limits[i], now)` 算好再传，两边必须用同一个 `now`；这个「同一个 now」靠约定不靠类型，写错会得出「窗口错位」的判而不会报错。
+mypy 单文件检查在本仓有既有的「同名双路径」坑（`Source file found twice under different module names`）：`limits_policy.py` 要 `pool_accounts.TZ`，直接 import 会连带把 `tools/pool/__init__.py` 拉进检查而报错。落地写法是 `if TYPE_CHECKING: ... TZ: tzinfo` / `else: from pool_accounts import TZ` —— 运行时仍是 `pool_accounts.TZ` 本体（`pin_01` 用 `is` 钉住同一性），没有新造时区。这个 shim 的存在理由只是让 `mypy 三源文件` 这条验收能绿。
+`cost` 是**金额**，但本仓没有计价表（`_port_design_gates_keys.md` 已记），所以今天的 `cost` 只能由调用方算好传进来；`ledger_spend` 只负责存与求和。
+""",
+]

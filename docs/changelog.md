@@ -660,6 +660,33 @@ return e
 - `pytest tests/test_pool_lanes.py tests/test_pool_lease.py tests/test_pool_registry.py tests/test_pool_guards.py` ⇒ **68 passed in 4.59s**（rebase 到 `5525683c` 后重跑）。
 - `ruff check` 五文件 ⇒ All checks passed。
 - 反向验证 `gates/diag/_rev_A339.py` ⇒ **7/7 条全部咬住**：`running < limit`→`<=` / 删掉「0 = 关闸」/ 不按账号数 / 坏 TOML 静默回空表 / 缺文件也抛 / `account` 不落成键 / `live`→`rows`（不清死租约）。每条都先跑基线必绿，变异后目标用例点名红，`finally` 按原始字节还原且 sha 一致、纯 CRLF。
+## 2026-10-30 · 限额要在派活之前拦：magpie key limits 移植进 pool（F33）（卡 A338，T-AG540）
+
+三件事：①**限额的声明与校验**（几条、多长、什么周期）②**花费账本**（谁花了多少、哪一行算账）③**派活之前的判**（任一条不够就拒，并说清卡在哪一条、几点续上、等多久）。
+
+### ① 声明与窗口（`tools/pool/limits_policy.py`）
+- `MAX_LIMITS = 5`（`:56`，magpie `internal/access/limit.go:39`）、`MAX_DAYS = 3650`（`:58`）、`MAX_HOURS = 8760`（`:60`）、`PERIODS = ("day","week","month","days","hours")`（`:62`）、`COST_ROUND = 4`（`:64`，对应 `math.Round(v*1e4)/1e4`）。
+- `parse_limit()` 把 TOML 段解析成 `Limit`；任何越界抛 `LimitError`，**root 顺手补齐而不是悄悄当成合法值** —— 写错配置要立刻说。
+- `window(limit, now)` 算当前窗口：`day`/`week`（周一）/`month`（1 号）/`days`/`hours` 五种，`since` 给了就从它起算。
+- `load_limits(path)` 文件不存在 ⇒ 一张空表（一条限额都没声明 = 不过问）；坏 TOML ⇒ `LimitError`。
+
+### ② 花费账本（`tools/pool/ledger_spend.py`）
+- 独立一行一条 JSON：`SPEND_REL = ("gates","diag","pool-spend.jsonl")`（`:40`），**另开一份**，不动 `gates/diag/wb-usage.jsonl`（它有两个既有读者 `tools/wb_dash.py:154-159`、`tools/wt_prune.py:514-521`）。
+- `append()` 永远 `open("a")` 追加、绝不覆盖；`sums(account, start, end, *, cache_reads=False)` 只算 `start <= at < end`（**左闭右开**），返回 `(tokens, cost, calls)`。
+- ★ `cache_reads` 默认 **False**：magpie 的 `counts()`（`internal/budget/budget.go:69-75`）只把 `cacheRead` 计进去当且仅当那条 limit 的 `cacheReads` 为真。
+- `audit()` 额外给一份可读数（`lines` / `usable` / `damaged`），把「坏行跳过了几条」从沉默变成数字；`forget(account, before)` 清旧行。
+
+### ③ 派活之前的判（`tools/pool/limits_check.py`）
+- `check(limits, *, spent, now, inflight_tokens=0, inflight_cost=0) -> Verdict`：每条都看余量，**任一条不够就拒**；判据用 `>=` 不是 `>`（到点就算满，照 `budget.go` 的同向口径）。
+- `Verdict` 五字段 `allowed` / `binding` / `reset_at` / `retry_after_s` / `why`；被判时 `binding` 指出卡在第几条、`reset_at` 说窗口几点续上、`retry_after_s` 至少 1 秒（`retry_after()` 里 `max(...,1)`，照 magpie `Refusal.RetryAfter` `budget.go:318-320`）。
+- 多条第越界时按 **续期最晚 → share 最大** 挑一条报（`share()` 独立成函数，「为什么是这条」可被单独断言）。
+- 没有声明任何限额 ⇒ `allowed=True`、`why` 写明「永不过问」。
+
+### 读数
+- `pytest tests/test_pool_limits.py` ⇒ **27 passed in 0.96s**（rebase 到 `4110cfe0` 后重跑）。
+- `pytest tests/test_quota_clock.py tests/test_quota_wait.py tests/test_pool_rest.py` ⇒ **50 passed in 1.04s**（三份既有额度判据不受影响）。
+- `ruff check` 四文件 ⇒ All checks passed；`mypy` 三源文件 ⇒ Success。
+- 反向验证 `gates/diag/_rev_A338.py` ⇒ **8/8 条全部咬住**：`>=`→`>` / `cache_reads` 默认改 True / week 起点改周日 / 放开 `MAX_LIMITS` / 坏 TOML 回 一张空表 / 去掉 `max(...,1)` / `sums` 右端改闭区间 / month 续期改 +30 天，每条还原后逐字节相同且纯 CRLF。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

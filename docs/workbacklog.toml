@@ -4551,3 +4551,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A338"
+task = "T-AG540"
+title = "限额要在派活之前拦：magpie key limits 移植进 pool（F33）"
+tree = ".wt/A338"
+spec = "复盘/卡/卡A338-限额要在派活之前拦.md"
+files = [
+  "tools/pool/limits_policy.py",
+  "tools/pool/ledger_spend.py",
+  "tools/pool/limits_check.py",
+  "tests/test_pool_limits.py",
+]
+status = "done"
+risk = "mid"
+depends = []
