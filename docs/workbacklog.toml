@@ -4502,3 +4502,20 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A334"
+task = "T-AG536"
+title = "整窗估算要有五因：magpie 整窗估算移植进 pool"
+tree = ".wt/A334"
+spec = "复盘/卡/卡A334-整窗估算要有五因.md"
+files = [
+  "tools/pool/holds.py",
+  "tools/wb_dispatch.py",
+  "tools/pool_accounts.py",
+  "tests/test_holds_window.py",
+  "tests/test_pool_accounts.py",
+]
+status = "done"
+risk = "mid"
+depends = []

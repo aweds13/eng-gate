@@ -483,6 +483,38 @@ def test_unknown_source_must_not_carry_amount(patched, tmp_path):
     assert "amount" in str(ei.value)
 
 
+@pytest.mark.parametrize("value", ["0", "100", "37", "0.5"])
+def test_used_percent_in_range_is_accepted(patched, tmp_path, value):
+    """卡 A334：`[account.quota].used_percent` 有值且在 [0, 100] ⇒ 放行（它是整窗估算的分母）。"""
+    good = LEDGER.replace('unit = "点"', f'unit = "点"\nused_percent = {value}', 1)
+    assert "used_percent" in good  # 替换真命中了，否则这条断言是空的
+    data = pa.load_ledger(_write(tmp_path, good))
+    wb = [a for a in data["account"] if a["id"] == "wb-1"][0]
+    assert wb["quota"]["used_percent"] == float(value)  # 原值原样过，不夹不截
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["-0.5", "100.5", "101", "-1", '"半窗"', "true"],
+)
+def test_used_percent_out_of_range_is_refused(patched, tmp_path, value):
+    """卡 A334：越界/非数 ⇒ `LedgerError` 且**点名**是哪个账号 —— 口径坏了不许静默。"""
+    bad = LEDGER.replace('unit = "点"', f'unit = "点"\nused_percent = {value}', 1)
+    assert "used_percent" in bad
+    p = _write(tmp_path, bad)
+    with pytest.raises(pa.LedgerError) as ei:
+        pa.load_ledger(p)
+    assert "used_percent" in str(ei.value)
+    assert "wb-1" in str(ei.value)  # 点名到账号，不是「某个账号」
+
+
+def test_used_percent_absent_means_unmeasured(patched, tmp_path):
+    """卡 A334：整个省掉 = 未观测 ⇒ 合法（不许把「没这个数」当成 0 逼着填）。"""
+    data = pa.load_ledger(_write(tmp_path, LEDGER))
+    wb = [a for a in data["account"] if a["id"] == "wb-1"][0]
+    assert "used_percent" not in wb["quota"]
+
+
 # ---------------------------------------------------------------- ⑲ ~ ㉓ 补 §5 未覆盖的四条
 
 

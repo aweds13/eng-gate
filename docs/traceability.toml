@@ -9914,3 +9914,34 @@ gaps = [
 magpie 的 `claudeAskFloor`/`claudeUsageWaitMin`/`claudeUsageWaitMax`（订阅额度专用等待）未搬：本仓没有订阅制额度模型。
 """,
 ]
+
+[entries."T-AG536"]
+id = "T-AG536"
+title = "整窗估算要有五因：magpie 整窗估算移植进 pool"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A334-整窗估算要有五因.md",
+  "file:tools/pool/holds.py",
+  "file:tools/wb_dispatch.py",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_holds_window.py",
+  "file:tests/test_pool_accounts.py",
+  "test:test_holds_window.py",
+  "test:test_pool_accounts.py",
+  "text:tools/pool/holds.py::HOLDS_FLOOR: float = 5.0",
+  "text:tools/pool/holds.py::HOLDS_UNKNOWN",
+  "text:tools/pool/holds.py::def bounds(",
+  "text:tools/pool/holds.py::def estimate(",
+  "text:tools/wb_dispatch.py::def usage_in(",
+  "text:tools/pool_accounts.py::used_percent",
+]
+gaps = [
+  """账本**没有 `used` 字段**（`[account.quota]` 只有 `unit`/`source`/`observed_at`/`samples`）⇒ `estimate` 的 `used` 由调用方给，本卡只验形状（`used_percent ∈ [0,100]`），不做「从 vendor 读 used」那一步。
+`usage_in()` 的金额恒为 0.0：仓里没有计价表（哪家模型每百万 token 多少钱），`routed_cost` 无法算。本卡只把 token 数算准。
+`cache_read` 是否已含在 `input_tokens` 里没有权威口径 ⇒ 三字段直接相加、不做减法；若后续查实有重复，数字会偏大。
+`gates/diag/wb-usage.jsonl` 的时间是**秒级无时区后缀**，本卡按 `+08:00` 解释（与 `tools/pool_accounts.py:47` 的 `TZ` 同口径）；跨时区跑会把边界上的行分错窗。
+magpie 的 `LongestMonthly = 35d` 与 `RestCapOff` 的交互未搬（那是 F20 的 rest 面，A332 已落一部分）。
+""",
+]

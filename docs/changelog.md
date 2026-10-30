@@ -599,6 +599,18 @@ return e
 账本侧：`tools/pool_accounts.py` 新增 `record_probe_result()` 并接进 `cmd_probe()` 的两条出口。此前 `probe_account()` 真发网络、`cmd_probe` 却**只 print 不落盘**（`save_ledger` 全仓只在 `run_checkin` 里被调），探测等于不留痕；现在探测结果进 `[account.quota]` 的 `observed_at` / `samples`，**不写 `state`、不写 `approved_models`**。
 
 读数：`pytest tests/test_quota_read_policy.py tests/test_pool_accounts.py tests/test_pool_rest.py tests/test_quota_wait.py tests/test_quota_clock.py` ⇒ 105 passed；`ruff check` 四文件全过；反向验证 8 条定点变异全咬（含「`REREAD_AFTER_S` 改成 `REFRESH_GAP_S * 2`」「假账本状态本来就是 active」两处一开始的假变异已按现场形状重做）。
+## 2026-10-30 · 整窗估算要有五因：magpie 整窗估算移植进 pool（A334，T-AG536）
+
+依 magpie 的**整窗估算与 holdsWhy**（`internal/provider/window_holds.go:40` 的 `HoldsFloor = 5.0`、五个因串 `low`/`clock`/`log`/`none`/`credits`，算式 `scale = 100 / w.Used` 在 `internal/usage/window_holds.go:288`），新增 `tools/pool/holds.py`（288 行，纯函数零网络）：
+
+- `HOLDS_FLOOR = 5.0` 与五个因串**逐字照抄**（不翻译、不改大小写）。
+- `bounds(read_at, *, resets_at=None, reset_secs=None) -> tuple[datetime, datetime] | None`：`ResetsAt` 优先、`ResetSecs` 次之、都没有 ⇒ 不估；`span == 30d` 走**日历减一月**，否则 `end - span`。
+- `estimate(*, window, used, routed_tokens, routed_cost, first_call, read_at)`：判定顺序与 magpie 一致 —— 四类不估（`q.Error`/`q.From`/`q.User`/`q.Balance` 任一非空）⇒ `-`；`used < 5.0` ⇒ `low`；`bounds` 失败 ⇒ `clock`；时间不在区间 ⇒ `-`；`first.IsZero() || first.After(start)` ⇒ `log`；`routed.Tokens <= 0` ⇒ `none`；有按 credits 付的调用 ⇒ `credits`；其余才估算。
+- ★ `HOLDS_UNKNOWN = "-"`（不估）与 `HOLDS_OK = ""`（估出来了、没因）**必须分开**：第一稿混用会让成功估算被当成「不估」而归零。
+
+配套：`tools/wb_dispatch.py` 只加 `usage_in(model, start, end, *, root)`（按**模型**与 `[start, end)` 半开区间汇总 `gates/diag/wb-usage.jsonl`；顶层的 `append_usage_line()` 与 `usage_summary()` 一个字节未动；函数内局部导入 `timedelta, timezone` 以免动顶层 import）；`tools/pool_accounts.py` 的 `_check_account()` 加 `used_percent ∈ [0, 100]` 校验（缺失 = `None` 合法，**不许当 0**）。
+
+读数：`pytest tests/test_holds_window.py tests/test_pool_accounts.py` 等三档 ⇒ 152 passed；`mypy tools/pool/holds.py` ⇒ Success（本仓 `[tool.mypy] strict = true`）；`ruff check` 六文件全过；反向验证 9 条定点变异全咬。真数据旁证：`usage_in('glm-5.3-flash', 2026-09-26T20:00+08, 22:00+08)` ⇒ `(54956835, 0.0)`，与手工扫同一窗 7 行逐数吻合。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

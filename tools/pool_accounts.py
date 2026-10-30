@@ -174,6 +174,22 @@ def _check_account(
             "（TOML 没有 null：要表达「未观测」就把 amount 整个省掉）"
         )
 
+    # 卡 A334 · T-AG536：`used_percent` 是整窗估算的**唯一**分母（tools/pool/holds.py）。
+    # 越界不是「数据脏」而是「口径坏了」：0 会让 scale 变成 100/0，>100 会估出比整窗还大的数。
+    # 只校验、不写入 —— 写入归卡 A333。
+    percent = quota.get("used_percent") if isinstance(quota, dict) else None
+    if percent is not None:
+        if isinstance(percent, bool) or not isinstance(percent, (int, float)):
+            raise LedgerError(
+                f"{where} 的 [account.quota].used_percent={percent!r} 不是数"
+                "（要么整个省掉表示「未观测」，要么填 0~100 的数）"
+            )
+        if not 0 <= percent <= 100:
+            raise LedgerError(
+                f"{where} 的 [account.quota].used_percent={percent!r} 越界"
+                "（必须在 [0, 100]：0 会让整窗估算除以零，>100 会估出比整窗还大的数）"
+            )
+
 
 def _approved_models_from_whitelist() -> set[str] | None:
     """号池白名单（仓外 models.whitelist.toml）里的模型名。

@@ -1470,6 +1470,83 @@ def usage_summary(card: str) -> str:
     return " ｜ ".join(parts)
 
 
+def usage_in(model: str, start: datetime, end: datetime, *,
+             root: Path = ROOT) -> tuple[int, float]:
+    """按**模型**与时间区间 `[start, end)` 汇总 `gates/diag/wb-usage.jsonl`（卡 A334 · T-AG536）。
+
+    为什么要有它：`usage_summary(card)` 只按「卡」聚合，pool 要的是「某个**模型**在某个
+    **窗口**里路由了多少」—— 那是整窗估算的分子（`tools/pool/holds.py::estimate`）。本函数
+    **只读不改**，`append_usage_line()` 的签名与 `usage_summary()` 的行为一个字节都不动。
+
+    口径（逐条写清，做不到的写做不到）：
+
+    * **时区钉死 +08:00**：行里的 `开始` / `结束` 是秒级、**无时区**的本地串
+      （`_iso_local()` 用 `datetime.fromtimestamp().isoformat()`）。这里按
+      `tools/pool_accounts.py:47` 的同一口径 `UTC+8` 补上 tzinfo 再比，
+      **不用 `astimezone()` 猜**、不读系统时区。入参 `start` / `end` 必须自带 tzinfo；
+      给 naive 的会抛 `TypeError`（故意不兜底 —— 猜时区比报错糟）。
+    * **区间** `[start, end)`，按 `开始` 落点算（与 `append_usage_line()` 写的那个字段一致）。
+    * **dry run 不计入**：`判决` / `退出码` 里带 `dry` 字样的行跳过。★ 如实写：现行
+      `append_usage_line()` 只在真跑完时调用，落盘行**没有** dry-run 字段，所以这条现在是
+      防御性的（照 `window_holds.go:100`/`:108` 的 `dryRun`/`dryRuns` 口径先把闸门留好）。
+    * **token 口径**：`input_tokens + output_tokens + cache_read` 三个字段全加。★ 为什么不去重：
+      本机没有权威说明 `cache_read` 是否已含在 `input_tokens` 里（两种 API 口径都存在），
+      猜错会系统性少算或多算 ⇒ **不做减法**，原样相加并在文档里说清（这是「没核到的」一条）。
+    * **金额恒 0.0**：仓里没有计价表（`model-registry.toml` 里 `price|cost|单价` 零命中），
+      第二档不编单价，等有计价表再填。
+    * 读不出来 / 没有这个文件 / 某行 JSON 坏 / `开始` 解不开 ⇒ **跳过或回 (0, 0.0)**，
+      不猜、不抛（与 `usage_summary()` 的「读不出来就空串」同一种态度）。
+    """
+    from datetime import timedelta, timezone  # 本函数是 wb_dispatch 里唯一的时区用法
+
+    tz = timezone(timedelta(hours=8))
+    path = root / "gates" / "diag" / "wb-usage.jsonl"
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return 0, 0.0
+
+    def number(value: object) -> int:
+        """JSONL 里的 token 数：只认 int/float，别的（缺字段 / 字符串）当 0 —— 不猜。"""
+        if isinstance(value, (int, float)):
+            return int(value)
+        return 0
+
+    def local(raw: object) -> datetime | None:
+        """无时区的本地串 → 带 +08:00 的时刻；解不开 ⇒ None（跳过这一行）。"""
+        if not isinstance(raw, str) or not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw).replace(tzinfo=tz)
+        except ValueError:
+            return None
+
+    tokens = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        if row.get("模型") != model:
+            continue
+        verdict = f"{row.get('判决') or ''} {row.get('退出码') or ''}".lower()
+        if "dry" in verdict:
+            continue
+        began = local(row.get("开始"))
+        if began is None:
+            continue
+        if not start <= began < end:
+            continue
+        tokens += number(row.get("input_tokens"))
+        tokens += number(row.get("output_tokens"))
+        tokens += number(row.get("cache_read"))
+    return tokens, 0.0
+
+
 # ============================================ 429 / 额度三拍（卡 029 §2.5）：等 → 按序换 → 全挂就停
 
 def quota_error(lines: list[str]) -> dict | None:
