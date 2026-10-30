@@ -811,6 +811,51 @@ pool 侧此前零命中（`grep -rniE "caller|api_key|per-key" tools/pool/` 全�
 - 邻层 `test_pool_guards + test_pool_lanes + test_pool_lease + test_wb_dispatch + test_pool_mcp + test_pool_mcp_write` ⇒ 284 passed（rebase 后复跑）。
 - `ruff check` 五文件 ⇒ All checks passed。
 - 反向 `gates/diag/_rev_A342.py` ⇒ 11/11 条全部咬住（rebase 后重跑同结论）。
+## 2026-10-30 · 名字与号对不上闸就永远不生效：profile 名解析成账本稳定 id 并接进三条闸（卡 A344，T-AG546）
+
+### ① 病灶：配了闸，闸却永远查不到人
+
+`--account` 收的是**仓外 profile 名**（`tongxue3`），而三张表 —— `tools/pool/lanes.toml`、`tools/pool/rpm.toml`、仓外 `limits.toml` —— 的键是**账本稳定 id**（`codebuddy-tongxue3`）。两边不是一套命名空间，且仓内**零映射代码**。
+
+后果是三条已落地的闸一条都不会拦：
+
+- `tools/wb_dispatch.py` 的每分钟闸按 `.get("tongxue3", 0)` 查表 ⇒ 恒 0 ⇒ 恒放行（卡 A340）。
+- `registry.reserve(..., account="")` 的生产调用方**一处都不传** `account` ⇒ `lane_guard("", ...)` 立即回空 ⇒ 并发闸恒空跑（卡 A339）。
+- 模型白名单读的也是 id 键（卡 A341）。
+
+卡 A342 的账号白名单同样继承了这条坑，它当时如实写了「合一留给 A344」。
+
+### ② 怎么搬的
+
+新模块 `tools/pool/account_id.py`（160 行）用**三步固定顺序**把一个 profile 名解析成稳定 id：
+
+1. `profile` 键精确命中（账本的显式声明，永远最权威）；
+2. 名字本身就是一个 id（已经是 id 的直接过）；
+3. `credential.locator` 的末段 == profile 名，且**只认 `kind == "dir"`**。
+
+第 ③ 步只认目录是这条判据的骨头：**一个目录 = 一个号**（`~/codebuddy-accounts/tongxue3` 的末段就是那个号的目录名，推断成立）；**一个文件 ≠ 一个号**（`~/.codeartsdoer/pool.env` 是所有 codearts 号共用的存储文件，末段是**存储名不是号名**，拿它当账号名属范畴错误）。
+
+步与步之间多命中就抛 `AccountMapError` 点名，三步都不中则回落原名并**明说「账本里没有这个 profile 的稳定 id」** —— 不许静默派活。
+
+`tools/wb_dispatch.py` 加 `resolve_account()`，把解析结果接进七处：`caller_model_rejected`、`load_rpm().get`、`read_stamps().get`、`decide`、`note_stamp`、`give_back`、`reserve(account=)`。
+
+### ③ 两个用途，两种名字
+
+口径钉死：**查表 / 记账 / 派活判据用稳定 id；给人读的文案（`lease_note`）与给工人取环境（`account_env`）用 profile 名**。
+
+原因不是洁癖 —— `account_env()` 跑的是仓外 `codebuddy_accounts.py profile env <名>`，那个脚本只认 profile 名；而租约备注是给人看的，写 id 会让人对不上自己点的那个号。
+
+### ④ 它自己发现并修掉的一处「说的和做的不一致」
+
+初版 `resolve_account()` 只写了 `if why:`，于是第 ③ 步**推断成功**（闸其实**生效**）也会打「…今天等于不生效」。这与本卡的病根同类。已改三分支：`why == NO_STABLE_ID` 打判据 2 的逐字文案；其余非空 why 打「按<依据>解析成稳定 id「Y」⇒ 三条闸按这个 id 查表」；空 why 不打。补两条钉子 + 两条变异咬住这两个方向。
+
+### ⑤ 读数
+
+- `pytest tests/test_pool_account_id.py -q -o addopts= --no-cov` ⇒ 11 passed。
+- `pytest tests/test_wb_dispatch.py -q -o addopts= --no-cov` ⇒ 215 passed。
+- 邻层 `test_pool_lanes + test_pool_rpm + test_model_registry + test_pool_mcp` ⇒ 57 passed。
+- `ruff check` 六文件 ⇒ All checks passed。
+- 反向 `gates/diag/_rev_A344.py` ⇒ 9/9 条全部咬住（rebase 后重跑同结论）。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

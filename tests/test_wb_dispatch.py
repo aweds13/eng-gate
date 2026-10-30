@@ -3814,3 +3814,174 @@ def test_host_injected_config_env_is_stripped_for_every_test(monkeypatch) -> Non
     _conftest.strip_host_config_env(monkeypatch)  # 夹具本体调的就是它
     for key in keys:
         assert os.environ.get(key) is None, f"{key} 没被摘掉 —— 注入会换掉判据的对象"
+
+
+# ============================================ 卡 A344 · T-AG546：名字 ↔ 号
+#
+# ★ 病根：`--account` 收的是**人给的名字**（`codebuddy_accounts.py` 的 profile 名，如 `demo`），
+#   而三条闸查表的键是 `infra/pool/accounts.toml` 的**稳定 id**（如 `codebuddy-demo`）。
+#   两边不对上，闸就永远不生效 —— 配了、看着生效、实际谁也不拦。
+# ★ 下面三条钉的是**行为**（不是文本存在性）：
+#   · ① 租约里 `account=` 是 id，`note` 里仍是人能读的 profile 名（一个给判据、一个给人）；
+#   · ② 每分钟闸按 id 查表 —— 按名字查的话限值会落 0（= 不限），第二趟照放行 ⇒ 这里必红；
+#   · ③ 名字对不上唯一的号（歧义 / 账本读不到）⇒ 退 2 拒派并点名，**不许**按原名悄悄派活。
+
+
+def _ledger_with_profiles(tmp_path: Path, *rows: tuple[str, str, str]) -> Path:
+    """造一份沙箱账本：`(稳定 id, profile 键（空 = 不写）, locator)` 逐条落成 `[[account]]`。
+
+    ★ 每行都带齐 `load_ledger(strict=True)` 要求的字段（id/label/platform/state/added_at/
+      approved_models + `[account.credential]` 的 kind/locator），少一个就直接抛 `LedgerError`。
+      `profile` 是**本卡引入的口径**（账本今天一条都没有）；`_check_account` 不校验未知键 ⇒ 合法。
+    """
+    blocks: list[str] = []
+    for ident, profile, locator in rows:
+        lines = [
+            "[[account]]",
+            f'id = "{ident}"',
+            f'label = "{ident}"',
+            'platform = "codebuddy"',
+            'state = "active"',
+            'added_at = "2026-10-01"',
+            "approved_models = []",
+        ]
+        if profile:
+            lines.append(f'profile = "{profile}"')   # ★ 必须在 [account.credential] 之前
+        lines += ["", "[account.credential]", 'kind = "dir"', f'locator = "{locator}"']
+        blocks.append("\n".join(lines))
+    path = tmp_path / "accounts.toml"
+    path.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
+    return path
+
+
+def _use_ledger(monkeypatch, ledger: Path) -> None:
+    """把 `find_ledger()` 钉到沙箱账本 —— 否则 `resolve_account()` 会摸宿主机上那份真账本。"""
+    import pool_accounts as _pa  # 与 wb_dispatch 里 `import pool_accounts` 是同一个模块对象
+
+    monkeypatch.setenv("TF_ACCOUNTS_TOML", str(ledger))
+    # 白名单判据另行钉住（test_model_registry 那组）；这里不依赖本机 approved 表。
+    monkeypatch.setattr(_pa, "_approved_models_from_whitelist", lambda: None)
+
+
+def test_lease_records_the_stable_account_id(sandbox: Path, monkeypatch, capsys) -> None:
+    """钉子 10：租约 `account=` 落的是**稳定 id**，而给人读的 `note` 仍是 profile 名。"""
+    ledger = _ledger_with_profiles(
+        sandbox, ("codebuddy-demo", "demo", "~/codebuddy-accounts/demo"))
+    _use_ledger(monkeypatch, ledger)
+    stub = _account_stub(sandbox, {"demo": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    dispatched: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(dispatched))
+    note = _spy_reserve(monkeypatch)
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 0
+    assert note["account"] == "codebuddy-demo", (
+        f"租约里该记稳定 id（三条闸的键），实际 {note.get('account')!r}")
+    assert "account=demo" in note["note"], f"note 是给人读的，该留名字：{note.get('note')!r}"
+    assert "没有稳定 id" not in capsys.readouterr().err, "精确命中 profile 键时不该说这句实话"
+
+
+def test_rpm_gate_uses_the_stable_id(sandbox: Path, monkeypatch, capsys) -> None:
+    """钉子 11：每分钟闸按**稳定 id** 查表 —— 按 profile 名查的话限值恒落 0（= 不限）。
+
+    ★ 前提自证：账本里 `demo` → `codebuddy-demo`；`rpm` 表只给 `codebuddy-demo` 开上限 1，
+      并且账本里**已经有一趟**该 id 的记录。按 id 查 ⇒ 第二趟被拦（退 2）；
+     （若实现退回按名字查表，limit=0 = 不限 ⇒ 派活成功、退 0 ⇒ 这条必红。）
+    """
+    ledger = _ledger_with_profiles(
+        sandbox, ("codebuddy-demo", "demo", "~/codebuddy-accounts/demo"))
+    _use_ledger(monkeypatch, ledger)
+    stub = _account_stub(sandbox, {"demo": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    # ★ 不碰仓内那份 rpm.toml（正文必须保持空表）：只把读表函数换掉。
+    monkeypatch.setattr(wd.pool_rpm, "load_rpm", lambda *a, **k: {"codebuddy-demo": 1})
+    stamps = sandbox / "gates" / "diag" / "pool-rpm.json"
+    stamps.parent.mkdir(parents=True, exist_ok=True)
+    stamps.write_text(
+        json.dumps({"codebuddy-demo": [wd.pool_rpm.now_tz().isoformat()]}),
+        encoding="utf-8",
+    )
+    dispatched: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(dispatched))
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 2, "账本里已有一趟该 id 的记录 + 上限 1 ⇒ 这一趟必须被拦"
+    err = capsys.readouterr().err
+    assert "每分钟派活闸" in err, err
+    assert "demo" in err, f"拒派要能认出是人给的名字：{err}"
+    assert dispatched == [], "被闸拦下时一个工人都不能起"
+
+
+def test_unresolvable_profile_refuses_and_names_it(sandbox: Path, monkeypatch, capsys) -> None:
+    """钉子 12：名字对不上唯一的号 ⇒ 退 2 拒派并点名（歧义 / 账本读不到，两种都拦）。"""
+    # ① 歧义：两条都声称 profile = demo ⇒ 不许取第一条。
+    ledger = _ledger_with_profiles(
+        sandbox,
+        ("codebuddy-a", "demo", "~/codebuddy-accounts/a"),
+        ("codebuddy-b", "demo", "~/codebuddy-accounts/b"),
+    )
+    _use_ledger(monkeypatch, ledger)
+    dispatched: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(dispatched))
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 2, "歧义必须拒派，不许替人挑一个号"
+    err = capsys.readouterr().err
+    assert "demo" in err and "歧义" in err, err
+    assert "codebuddy-a" in err and "codebuddy-b" in err, f"点名到具体几条 id：{err}"
+    assert dispatched == []
+
+    # ② 账本读不到 ⇒ 也拒派（不按原名悄悄派活 —— 那正是本卡的病根）。
+    monkeypatch.setenv("TF_ACCOUNTS_TOML", str(sandbox / "nope" / "accounts.toml"))
+    monkeypatch.setattr(sys, "argv",
+                        ["wb_dispatch.py", "--card", "000", "--spec", "spec.md",
+                         "--account", "demo", "--execute"])
+    assert wd.main() == 2, "账本读不到就判不出「这个名字是哪个号」⇒ 退 2"
+    err = capsys.readouterr().err
+    assert "账本" in err and "拒派" in err, err
+    assert dispatched == [], "判不出来时一个工人都不能起"
+
+def test_locator_inference_is_announced_as_working(sandbox: Path, monkeypatch,
+                                                  capsys) -> None:
+    """钉子 13：③ 步（locator 末段）推断出 id 时，stderr 必须说「闸按这个 id 查表」。
+
+    ★ 为什么单列一条：判据 2 那行逐字文案（「…今天等于不生效」）**只**属于「三步都不中」。
+      把 ③ 步这种**已经生效**的情形也说成「等于不生效」，是同一类谎 —— 卡的病根是
+      「说的和做的不一致」，反向也要咬住。今天真账本里 `codebuddy-tongxue3` 正是这条路。
+    """
+    ledger = _ledger_with_profiles(
+        sandbox, ("codebuddy-demo", "", "~/codebuddy-accounts/demo"))
+    _use_ledger(monkeypatch, ledger)
+    stub = _account_stub(sandbox, {"demo": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    dispatched: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(dispatched))
+    note = _spy_reserve(monkeypatch)
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 0
+    err = capsys.readouterr().err
+    assert "codebuddy-demo" in err, f"要说清解析成了哪个 id：{err}"
+    assert "等于不生效" not in err, (
+        f"③ 步推断出来的闸是**生效**的，不许说成「等于不生效」：{err}")
+    assert note["account"] == "codebuddy-demo"
+
+def test_unmatched_name_is_announced_as_not_working(sandbox: Path, monkeypatch,
+                                                   capsys) -> None:
+    """钉子 14：三步都不中 ⇒ stderr 必须逐字说「今天等于不生效」（判据 2 那行）。
+
+    ★ 这一条钉的是**说实话**：闸按 profile 名查表时它确实没生效，不许静默派活。
+      与钉子 13 是一对：一个咬「该说的话必须说」，一个咬「不该说的话不许说」。
+    """
+    ledger = _ledger_with_profiles(
+        sandbox, ("codebuddy-other", "", "~/codebuddy-accounts/other"))
+    _use_ledger(monkeypatch, ledger)
+    stub = _account_stub(sandbox, {"demo": _demo_vars()})
+    monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
+    dispatched: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(dispatched))
+    note = _spy_reserve(monkeypatch)
+    _account_argv(monkeypatch, "--account", "demo", "--execute")
+    assert wd.main() == 0, "名字对不上号不是拒派理由（回落原名），但必须把实话打出来"
+    err = capsys.readouterr().err
+    assert "账本里没有这个 profile 的稳定 id" in err, err
+    assert "今天等于不生效" in err, f"这一步必须明说闸没生效：{err}"
+    assert note["account"] == "demo", "回落时租约里记的就是原名（与查表一致）"
+

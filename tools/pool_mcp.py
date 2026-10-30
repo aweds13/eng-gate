@@ -1622,9 +1622,21 @@ def tool_pool_dispatch(
     #   调**同一个** `caller_model_rejected()`（判据只有一份）。池名用 DEFAULT_POOL：下面的
     #   `_dispatch_argv` 不透传 `--pool`，工人侧就是按默认池跑的，两边口径必须一致。
     account = str(arguments.get("account") or "").strip()
+    # ★ 卡 A344（T-AG546）：先解析再判 —— 判据 5「两处判据只有一份」。`caller_model_rejected()`
+    #   的第三参是**账本稳定 id**（仓外 limits.toml 的 `[accounts."<id>"]`），而这里收到的是
+    #   profile 名 ⇒ 不解析就永远查不到表（闸等于不生效）。
+    #   解析器也只有一份：`wb_dispatch.resolve_account`。
+    try:
+        account_id, _account_why = wb_dispatch.resolve_account(account)
+    except wb_dispatch.AccountMapError as exc:
+        return _result(
+            f"账号名字判不出是哪个号，已拒绝派活：{exc}",
+            {"card": card, "model": model, "account": account},
+            is_error=True,
+        )
     try:
         caller_rejected = wb_dispatch.caller_model_rejected(
-            model, wb_dispatch.DEFAULT_POOL, account or None)
+            model, wb_dispatch.DEFAULT_POOL, account_id or None)
     except wb_dispatch.ModelRegistryError as exc:
         return _result(
             f"账号白名单读不懂，已拒绝派活：{exc}",

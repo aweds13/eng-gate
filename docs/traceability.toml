@@ -10190,3 +10190,38 @@ MCP 面没加 schema 属性：`pool_dispatch` 的 `inputSchema.properties` 不�
 """,
 
 ]
+
+[entries."T-AG546"]
+id = "T-AG546"
+title = "名字与号对不上闸就永远不生效：profile 名解析成账本稳定 id 并接进三条闸（F22/F23/F34）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A344-名字与号对不上闸就永远不生效.md",
+  "file:tools/pool/account_id.py",
+  "file:tools/wb_dispatch.py",
+  "file:tools/pool_mcp.py",
+  "file:tools/pool/lanes.toml",
+  "file:tools/pool/rpm.toml",
+  "file:tests/test_pool_account_id.py",
+  "file:tests/test_wb_dispatch.py",
+  "file:复盘/卡/卡A344-名字与号对不上闸就永远不生效.md",
+  "test:test_pool_account_id.py",
+  "test:test_wb_dispatch.py",
+  "text:tools/pool/account_id.py::NO_STABLE_ID = ",
+  "text:tools/pool/account_id.py::LOCATOR_KIND = ",
+  "text:tools/pool/account_id.py::def resolve_account_id(",
+  "text:tools/wb_dispatch.py::def resolve_account(",
+  "text:tools/wb_dispatch.py::account=account_id",
+  "text:tools/pool_mcp.py::resolve_account(",
+]
+gaps = [
+  """真账本四行**没有一条**有 `profile` 键 ⇒ 只有 codebuddy 那个号能靠第 ③ 步对上（`codearts-1` 的 locator 末段是 `pool.env`、`workbuddy-1` 是 `.workbuddy`、`trae-1` 是 `.trae`，按裁定 A 全部跳过）。长期解是账本加 `profile` 键，本卡一个字节都不动账本。
+另外四处 `registry.reserve(...)` 仍然不传 `account=`：`tools/wb_registry.py:140`、`tools/pool/trae_dispatch.py:134`、`tools/pool_mcp.py:1680`、`tools/pool/lease.py:50`。本卡只接 `tools/wb_dispatch.py` 那一处主派活路径。（卡规格原写的 `tools/wb_lease.py` / `tools/trae_dispatch.py` 两个路径**不存在**，已按实测改正。）
+两张表今天仍是空表：`tools/pool/lanes.toml` 是 `[default] limit/queue/wait=0` + 空 `[accounts]`，`tools/pool/rpm.toml` 只剩 `[accounts]` ⇒ 落地当天三条闸**仍然不拦任何派活**。这一轮验的是「名字能对上号」与判据的判别力，不是「闸真拦过一次」。
+`account_env()` 仍只认 codebuddy（`account_script_path()` → 仓外 `codebuddy_accounts.py`）；codearts / workbuddy / trae 三个平台的 profile 名在仓内**无来源**、`available_profiles()` 也不覆盖 ⇒ 不敢猜，如实留空。
+解析会真读账本：既有 `--account demo` / `--account other` 用例走的都是「三步不中 ⇒ 回落原名」，行为不变（反证：把 `TF_ACCOUNTS_TOML` 指向不存在的路径，`test_account_is_recorded_in_the_lease_note_and_the_log` 立刻红，报错原文「账号账本读不到，判不出这个名字是哪个号 ⇒ 拒派」）。
+交付的钉子比卡规格多：卡写 9 条，实际 `tests/test_pool_account_id.py` 11 条、`tests/test_wb_dispatch.py` 追加 5 条。多出来的三条都在咬「说的和做的不一致」（③ 步推断成功却说成不生效、三步都不中却静默派活、第 ③ 步歧义不点名）。
+""",
+]

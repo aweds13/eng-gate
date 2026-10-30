@@ -4632,3 +4632,23 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A344"
+task = "T-AG546"
+title = "名字与号对不上闸就永远不生效：profile 名解析成账本稳定 id 并接进三条闸（F22/F23/F34）"
+tree = ".wt/A344"
+spec = "复盘/卡/卡A344-名字与号对不上闸就永远不生效.md"
+files = [
+  "tools/pool/account_id.py",
+  "tools/wb_dispatch.py",
+  "tools/pool_mcp.py",
+  "tools/pool/lanes.toml",
+  "tools/pool/rpm.toml",
+  "tests/test_pool_account_id.py",
+  "tests/test_wb_dispatch.py",
+  "复盘/卡/卡A344-名字与号对不上闸就永远不生效.md",
+]
+status = "done"
+risk = "mid"
+depends = []

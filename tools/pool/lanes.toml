@@ -8,6 +8,13 @@
 # 排序键 `(platform, id)`，例如 `codearts-1`、`trae-1`）—— **不是** email / 用户名：
 # 后者会变，租约里存不住，改一次就全对不上了。
 #
+# ★ 卡 A344（T-AG546）补的口径：`wb_dispatch.py --account` 收到的是 `codebuddy_accounts.py` 的
+#   **profile 名**（如 `tongxue3`），所以**先**经 `tools/pool/account_id.py::resolve_account_id()`
+#   解析成上边那个稳定 id，**再**查本表（`registry.reserve(account=…)` 收的已是 id）。
+#   解析依据：①账本里的 `profile` 键 ②名字本身就是 id ③`credential.kind == "dir"` 的
+#   locator 末段；三步都不中 ⇒ 按原名查表并在 stderr 明说「今天等于不生效」（不静默）。
+#   ⇒ 写本表时**直接写稳定 id**，别写 profile 名。
+#
 # ★★ **0 = 不限**（这是 magpie `concurrency.go:82` 的口径，也是本仓的口径）：
 #    `limit = 0` 是"关掉这条闸"，**不是**"一张都不许派"。整份文件不存在同样等于没闸。
 #

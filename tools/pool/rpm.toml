@@ -5,14 +5,17 @@
 #       0 = 不限（关闸）；不在本表里的号 = 没开闸；越界（负数 / 超 10000）= RpmError，绝不静默当 0。
 # 口径：这里数的是**派活趟数**（一趟背后是一整个 CLI 会话），不是 HTTP 请求数 ——
 #       防不了 vendor 侧 RPM 429（那个归 tools/pool_quota.py 的四态）。
-# ★ 今天**故意是空表**（卡 A340 裁定 2）：`wb_dispatch.py` 的 `--account` 收的是
-#   `codebuddy_accounts.py` 的 **profile 名**（如 `tongxue3`），而本表的键是 `infra/pool/accounts.toml`
-#   的**稳定 id**（如 `codebuddy-tongxue3`）—— 两者的对应关系今天**没有映射代码**，
-#   只体现在 `credential.locator` 的末段。填上真号也只会 `.get("tongxue3", 0)` 落 0，
-#   看着配了、实际谁也不拦 —— 那正是本仓最恨的「假装生效的闸」。
-#   ⇒ 映射卡开出来之前本表保持空 ⇒ 0 = 没闸，本闸今天**默认不生效**；键的正确口径仍是稳定 id。
+# ★ 键的口径（卡 A344 / T-AG546 定稿）：`--account` 给的名字**先**经
+#   `tools/pool/account_id.py::resolve_account_id()` 解析成账本稳定 id，**再**查本表。
+#   `wb_dispatch.py` 的读侧（`read_stamps` / `load_rpm().get`）与写侧（`note_stamp` /
+#   `give_back`）用的是**同一个**解析后的 id —— 只改一侧会让闸恒放行（记在 id 名下、读在名字名下）。
+#   解析依据：①账本里的 `profile` 键 ②名字本身就是 id ③`credential.kind == "dir"` 的
+#   locator 末段。三步都不中 ⇒ 按原名查表，并在 stderr 明说「今天等于不生效」（不静默）。
+#   三个平台（codearts / workbuddy / trae）今天账本里没有 `profile` 键、locator 末段也不是
+#   profile 名 ⇒ 它们**仍然对不上**；这是设计使然，长期解是账本加 `profile` 键（本卡不动账本）。
+#   ⇒ 本表正文仍是空 ⇒ 0 = 没闸：这是**表没配**，不是映射没打通。
 [accounts]
-# 示例（开映射卡之后再启用；键 = 账本稳定 id，值 = 每分钟最多几趟，0 = 不限）：
+# 示例（按需启用 —— 映射已由卡 A344 打通，键照旧写**稳定 id**；值 = 每分钟最多几趟，0 = 不限）：
 # "codearts-1" = 2
 # "codebuddy-tongxue3" = 2
 # "workbuddy-1" = 2

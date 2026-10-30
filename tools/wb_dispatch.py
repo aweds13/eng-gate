@@ -117,6 +117,7 @@ import workbench_bridge  # noqa: E402 —— 工作台状态一处真源（卡 2
 #   —— 这里只 import、只调用，不另写一份（本地副本各删一处；判据漂一次就会越界 / 串卡）。
 #   ★ 卡 125 的来路（GLM-5.3 审查 2.1）：从前只有 MCP 写面与手工 CLI 接守卫，走**默认派活器**
 #   `wb_dispatch --execute` 时不变量 ①②③⑤ 全部失效、且对其他窗口不可见（一树两写者不会被咬）。
+from pool import account_id as pool_account_id  # noqa: E402 —— 名字↔号 唯一映射（卡 A344）
 from pool import guards as pool_guards  # noqa: E402 —— 守卫唯一实现（pool.guards）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
 from pool import rpm as pool_rpm  # noqa: E402 —— 每分钟派活闸（卡 A340，magpie 的 MaxRPM）
@@ -533,6 +534,64 @@ _ENV_LINE_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
 class AccountError(Exception):
     """拿不到某个 profile 的那组环境变量 —— 点名 profile 与原因（**绝不悄悄退回默认号**）。"""
+
+
+#: `--account` 的名字在账本里对不上唯一的号（歧义 / 账本读不到）—— 拒派并点名。
+#: 类型来自 `pool.account_id`（**只有一份**），这里只是给调用方一个本地名字。
+AccountMapError = pool_account_id.AccountMapError
+
+
+def _account_rows() -> list[dict]:
+    """读一次仓外账本，回 `[[account]]` 行；读不到 ⇒ `AccountMapError`（点名 + 原因）。
+
+    ★ 为什么读不到要**拒派**而不是「按原名继续」：`--account` 一旦给了名字，三条闸
+      （并发 A339 / 每分钟 A340 / 白名单 A341）都要拿**稳定 id** 查表。账本读不到就没法判
+      「这个名字到底是哪个号」—— 按原名继续等于闸照旧不生效，而人以为配了（本卡的病根）。
+    """
+    try:
+        import pool_accounts  # noqa: E402 —— 见 caller_model_patterns 的同款理由（E402）
+    except ImportError:  # pragma: no cover —— 从仓根跑（tools/ 不在 sys.path 最前）时走这条
+        from tools import pool_accounts  # type: ignore[no-redef]  # noqa: E402
+    try:
+        path = pool_accounts.find_ledger()
+        data = pool_accounts.load_ledger(path)
+    except (pool_accounts.LedgerError, OSError) as exc:
+        raise AccountMapError(
+            f"账号账本读不到，判不出「这个名字是哪个号」⇒ 拒派（不许按原名悄悄派活）：{exc}"
+        ) from exc
+    rows = data.get("account")
+    return list(rows) if isinstance(rows, list) else []
+
+
+def resolve_account(arg: str | None) -> tuple[str, str]:
+    """`--account` 给的名字 → `(稳定 id, 依据)`；空名字 → `("", "")`。
+
+    ★ 卡 A344 判据 2：三条闸（`lanes.toml` / `rpm.toml` / 仓外 `limits.toml`）的键都是
+      `infra/pool/accounts.toml` 的**稳定 id**（如 `codebuddy-tongxue3`），而 `--account` 收的是
+      `codebuddy_accounts.py` 的 **profile 名**（如 `tongxue3`）。两边不对上，闸就永远不生效 ——
+      这个函数是**唯一**把那两个名字对起来的地方（映射逻辑在 `pool.account_id`，只有一份）。
+    ★ 歧义 / 账本读不到 ⇒ 抛 `AccountMapError`（调用方退 2 拒派，**不许猜第一条**）。
+    ★ 两种情况都说话，但**说的必须是实话**：
+      · 三步都不中（依据 == `NO_STABLE_ID`）⇒ stderr 打判据 2 那行逐字文案：
+        这个号今天按名字查表，等于闸没生效；
+      · ③ 步推断出来了（依据非空但**有** id）⇒ 闸是**生效**的，只能说「按 locator 解析成
+        稳定 id「X」」。把生效的闸说成「等于不生效」是同一类谎（本卡要消灭的就是这个）。
+    """
+    want = str(arg or "").strip()
+    if not want:
+        return "", ""
+    ident, why = pool_account_id.resolve_account_id(want, _account_rows())
+    if why == pool_account_id.NO_STABLE_ID:
+        # 判据 2 的**逐字**文案：三步都不中 ⇒ 闸按这个名字查表，等于不生效。
+        print(f"[账号] profile「{want}」{why} ⇒ 三条闸按这个名字查表（今天等于不生效）",
+              file=sys.stderr, flush=True)
+    elif why:
+        # ③ 步推断出来的（非空依据但**有**稳定 id）⇒ 闸照旧生效，别吓人。
+        #   ★ 判据 2 那行只属于「没有稳定 id」那一种，不许拿来套这一种：
+        #     把生效的闸说成「等于不生效」是同一类谎（本卡要消灭的就是「说的和做的不一致」）。
+        print(f"[账号] profile「{want}」按{why}解析成稳定 id「{ident}」⇒ 三条闸按这个 id 查表",
+              file=sys.stderr, flush=True)
+    return ident, why
 
 
 def account_script_path(root: Path | None = None) -> Path | None:
@@ -3181,8 +3240,16 @@ def main() -> int:
     #   前两步（①resolve_model 跨池 / ②model_rejected 池内）一字不改；本步只是在外面加一层
     #   收窄，`not patterns` ⇒ 不收窄（照 magpie Restricted() 「空 = 不受限」）。
     #   读表/清洗坏了要**响亮地**失败（不静默当「不收窄」），仍在起进程之前（零副作用），退 2。
+    # ★ 卡 A344（T-AG546）：本文件**唯一**把 `--account` 的 profile 名换成账本稳定 id 的地方。
+    #   三条闸（lanes A339 / rpm A340 / caller 白名单 A341）的键都是那个稳定 id，全在它之后查表。
+    #   账本读不到 / 名字对不上唯一的号 ⇒ 退 2 拒派并点名（**不许**按原名悄悄派活）。
     try:
-        caller_rejected = caller_model_rejected(args.model, pool, args.account)
+        account_id, _account_why = resolve_account(args.account)
+    except AccountMapError as exc:
+        print(f"[FAIL] {exc}", file=sys.stderr, flush=True)
+        return 2
+    try:
+        caller_rejected = caller_model_rejected(args.model, pool, account_id or None)
     except ModelRegistryError as exc:
         print(f"[FAIL] {exc}", file=sys.stderr, flush=True)
         return 2
@@ -3493,20 +3560,23 @@ def main() -> int:
         #     （同一把锁 = 同一个锁文件）。
         stamps_target = ROOT.joinpath(*pool_rpm.STAMPS_REL)
         rpm_at: datetime | None = None
-        if args.account:
+        # ★ 卡 A344：闸的键是**账本稳定 id**（`rpm.toml` 的 `[accounts."codebuddy-tongxue3"]`），
+        #   不是 `--account` 收到的 profile 名 `tongxue3`。读写两侧都用同一个 `account_id` ——
+        #   只改写侧不改读侧，闸会恒放行（记在 id 名下、读在名字名下）。
+        if account_id:
             try:
                 with pool_task.spin_lock(stamps_target, timeout=RPM_LOCK_WAIT):
                     rpm_now = pool_rpm.now_tz()
-                    rpm_limit = pool_rpm.load_rpm().get(args.account, 0)
-                    rpm_stamps = pool_rpm.read_stamps(root=ROOT).get(args.account, [])
-                    rpm_verdict = pool_rpm.decide(args.account, rpm_stamps,
+                    rpm_limit = pool_rpm.load_rpm().get(account_id, 0)
+                    rpm_stamps = pool_rpm.read_stamps(root=ROOT).get(account_id, [])
+                    rpm_verdict = pool_rpm.decide(account_id, rpm_stamps,
                                                   limit=rpm_limit, now=rpm_now)
                     if not rpm_verdict.allowed:
                         print(f"[FAIL] 每分钟派活闸：号「{args.account}」{rpm_verdict.why}"
                               " ⇒ 不占树、不派活", file=sys.stderr, flush=True)
                         return 2
                     if rpm_limit > 0:
-                        pool_rpm.note_stamp(args.account, rpm_now, root=ROOT)
+                        pool_rpm.note_stamp(account_id, rpm_now, root=ROOT)
                         rpm_at = rpm_now
             except pool_rpm.RpmError as exc:
                 print(f"[FAIL] 每分钟派活闸判不了（配置/账本坏了，**不猜**）：{exc}",
@@ -3529,7 +3599,7 @@ def main() -> int:
             stamp, rpm_at = rpm_at, None
             try:
                 with pool_task.spin_lock(stamps_target, timeout=RPM_LOCK_WAIT):
-                    pool_rpm.give_back(args.account, stamp, root=ROOT)
+                    pool_rpm.give_back(account_id, stamp, root=ROOT)
             except (pool_rpm.RpmError, pool_task.BatchError, OSError) as exc:
                 print(f"[FAIL] 每分钟派活闸还不回去（{why}）：{exc}"
                       " ⇒ 这一趟白占一个分钟位，61 秒后自己滑出窗口",
@@ -3566,12 +3636,15 @@ def main() -> int:
             lease_log = lease_log_for(log)
         # ★ 卡 149：留痕 —— 这一趟是哪个号跑的，一眼可查（与 `project` / `model` 同一风格）。
         #   ★ 不给 `--account` 时**逐字不变**（仍是 `spec=…`），免得打穿既有读数。
+        #   ★ 卡 A344：note 里留的是**人给的名字**（给人看的），而 `account=` 传的是**稳定 id**
+        #     （给 lanes 守卫查表用的）—— 两者都要，别合并：一个给人读、一个给判据读。
         lease_note = f"spec={args.spec}" + (f"｜account={args.account}" if args.account else "")
         try:
             lease = pool_registry.reserve(args.card, tree=reserve_tree, files=reserve_files,
                                           project=args.project or "", model=args.model,
                                           log=lease_log,
                                           note=lease_note,
+                                          account=account_id,
                                           lock_body=pool_registry.read_lock_body())
         except pool_registry.GuardError as exc:
             print("[FAIL] 占树被守卫拦下，**不派活**：", file=sys.stderr, flush=True)
