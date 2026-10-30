@@ -9945,3 +9945,31 @@ gaps = [
 magpie 的 `LongestMonthly = 35d` 与 `RestCapOff` 的交互未搬（那是 F20 的 rest 面，A332 已落一部分）。
 """,
 ]
+
+[entries."T-AG537"]
+id = "T-AG537"
+title = "刷新令牌只能有一个持有者：magpie renew lock 移植进 pool（F31）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A335-刷新令牌只能有一个持有者.md",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_renew_lock.py",
+  "test:test_renew_lock.py",
+  "test:test_pool_accounts.py",
+  "text:tools/pool_accounts.py::RENEW_MARGIN_S: int = 5 * 60",
+  "text:tools/pool_accounts.py::def jwt_exp(token: str) -> float | None:",
+  "text:tools/pool_accounts.py::def needs_renew(",
+  "text:tools/pool_accounts.py::def refresh_failed(status: int, agent: str, msg: str) -> Exception:",
+  "text:tools/pool_accounts.py::def mask_token(token: str) -> str:",
+  "text:tools/pool_accounts.py::def renew_lock(",
+  "text:tools/pool_accounts.py::def revoked_mark(reason: str, *, salt: str",
+]
+gaps = [
+  """本卡只提供**判据与锁**，不接任何真实的刷新调用点：`cmd_refresh` 这类入口一条都没改，今天的行为逐字不变。接线要等下一张卡（会同时动 `wb_dispatch.py` 的凭证路径）。
+`saved_refresh_failed()` 把吊销标记写进 `[account.health]`（`revoked` / `revoked_at`）—— 选择理由是 `_dump_toml()` 只序列化 `credential`/`quota`/`health` 三个子表加平坦键，另开 `[account.X]` 块会被静默丢掉。**未核实**：这条链没有对着真实刷新流程跑过（判据与卡铁律都不许发网络请求），也没有真账本上的端到端验证。
+mypy 那一条在本仓是**预存红**：`python -X utf8 -m mypy tools/pool_accounts.py` 在动手前就退 2（`Source file found twice under different module names: \"tools.pool.lastgood\" and \"pool.lastgood\"`，`errors prevented further checking`）。用 `--explicit-package-bases` 让它真检查后，改前 50 错 / 改后 50 错，规范化后多重集 diff **新增 0 / 消失 0**，新段落零错误 ⇒ 本卡零新增，但**不能报绿**。本仓真正的 mypy 门只覆盖 `src/`（`gates/defs/lang_python.py:18`），`tools/` 从未被门过。
+`class RefreshRefused` 触发 ruff `N818`（异常名要带 `Error` 后缀），按仓里既有先例（`tools/gate_pool.py:615 CloudUnreachable`、`tools/pool/failclosed.py:30 NotServing`）加了带中文理由的 `# noqa: N818` —— 名字是卡规格与我下的判据都硬性点名的，不是拿 noqa 蒙一个真失败。
+""",
+]

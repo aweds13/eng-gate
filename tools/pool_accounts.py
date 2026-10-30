@@ -14,23 +14,36 @@
     python -X utf8 tools/pool_accounts.py --selftest
 
 退出码：0 = 正常（含「未探测」）；2 = 用法/账本缺失/账本格式错。
+
+★ 账本写入只有一处例外：`saved_refresh_failed()`（卡 A335 —— **供应商拒绝刷新**才打吊销标记，
+  其余一律一个字节都不写）；本卡的 CLI 面仍无任何写动作。
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
+import contextlib
+import hashlib
 import importlib.util
 import json
 import os
 import re
+import socket
 import sys
 import tempfile
+import threading
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import tomllib
+
+if TYPE_CHECKING:  # 只在注解里用（本文件已开 `from __future__ import annotations`）
+    from collections.abc import Iterator
 
 try:  # 与 tools/pool/*.py 同一套降级：落地桩只拷部分文件，缺 pipe_root 也不许炸
     import pipe_root
@@ -296,6 +309,285 @@ def _dump_toml(data: dict) -> str:
                     lines.append(f"{key} = {_q(value)}")
         lines.append("")
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# 刷新令牌：单持有者、吊销判定、标记（卡 A335 / T-AG537）
+#
+# 依据 magpie 的刷新单持有者（internal/provider/logins_on.go:22-26 逐字：
+# "the second would spend a refresh token the first just rotated"）——
+# 供应商的 refresh token 是**轮换**的，第二次拿旧的去刷会把第一次刚拿到的作废。
+# 本段只做**判定函数 + 锁**，不做真正的 HTTP 刷新调用（谁要接刷新，另开卡）。
+# --------------------------------------------------------------------------
+
+#: 到期前多久才刷（照 logins_on.go:275 的 `5*time.Minute`）。
+RENEW_MARGIN_S: int = 5 * 60
+#: SIWC 那条口径的余量（照 chatgpt_api.go:68 的 `3*time.Minute`）。
+SIWC_MARGIN_S: int = 3 * 60
+#: 拿不到锁时最多等多久（照 filelock.go:20 的 `10*time.Second`）。
+LOCK_WAIT_S: float = 10.0
+#: 锁的租约（秒）：超时就按陈旧接管 —— **只按时间判，绝不按 pid 探活**。
+RENEW_LOCK_TTL_S: float = 120.0
+
+
+class RefreshRefused(Exception):  # noqa: N818 —— 名字就是判据原文（照 gate_pool.CloudUnreachable 的口径）
+    """供应商**答复并拒绝**了这个 refresh token（400 invalid_grant / 401）。
+
+    与「这一次没成」（403 / 5xx / 网络错）分开：照 `internal/provider/account.go:860-872`，
+    只有这两个码算「这个号得重新登录」。判据标识：**只有**本类能让调用方去写吊销标记。
+    """
+
+
+def jwt_exp(token: str) -> float | None:
+    """读 JWT 第二段的 `exp`（秒）。**读不出来一律回 None —— 不抛、不打印 token 片段。**
+
+    非三段式 / base64 解不开 / 没有 `exp` / `exp` 不是数 —— 四条都回 None（卡 §判据 2）。
+    """
+    if not isinstance(token, str):
+        return None
+    parts = token.split(".")
+    if len(parts) != 3 or not parts[1]:
+        return None
+    seg = parts[1]
+    try:
+        raw = base64.urlsafe_b64decode(seg + "=" * (-len(seg) % 4))
+        claims = json.loads(raw.decode("utf-8"))
+    except ValueError:  # 含 binascii.Error / UnicodeDecodeError / JSONDecodeError
+        return None
+    if not isinstance(claims, dict):
+        return None
+    exp = claims.get("exp")
+    if isinstance(exp, bool) or not isinstance(exp, (int, float)):
+        return None
+    return float(exp)
+
+
+def needs_renew(
+    access_token: str,
+    *,
+    force: bool = False,
+    now: datetime | None = None,
+    margin_s: float = RENEW_MARGIN_S,
+) -> bool:
+    """现在该不该去刷？ —— 照 `logins_on.go:275` 的 `!force && (exp == 0 || Until(exp) > 5m)`。
+
+    `force` 恒 True；**读不出 `exp` 恒 True**（宁可多刷一次，也别拿着过期 token 去撞供应商）。
+    """
+    if force:
+        return True
+    exp = jwt_exp(access_token)
+    if exp is None:
+        # 读不出来 ⇒ 一律当该刷（卡 §判据 2：宁可多刷，不许拿着过期 token 去撞供应商）
+        return True
+    current = now if now is not None else _now()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=TZ)
+    return (exp - current.timestamp()) <= margin_s
+
+
+def refresh_failed(status: int, agent: str, msg: str) -> Exception:
+    """这一次刷新没成 —— 是「号死了」还是「这一次没成」？照 `account.go:867-872`。
+
+    只有 **400 / 401**（供应商答复并拒绝）回 `RefreshRefused`；403 / 5xx / 0（超时、连不上）
+    一律只是「这一次没成」—— 403 更可能是代理或风控挡了一道，不是供应商对 token 的答复。
+    """
+    if status in (400, 401):
+        return RefreshRefused(msg)
+    return RuntimeError(f"{agent} token refresh failed (HTTP {status})：{msg}")
+
+
+def revoked_mark(reason: str, *, salt: str = "") -> str:
+    """吊销标记：**只存 sha256 前 8 字节 hex**（照 `quota_last.go:52-55 keyTag()`），永不存明文。"""
+    digest = hashlib.sha256((salt + reason).encode("utf-8")).hexdigest()[:16]
+    return "revoked " + digest
+
+
+def mask_token(token: str) -> str:
+    """JWT 打码：三段式只留 `header.payload` 的前 6 字符 + `…`，其余一律 `"<token>"`。
+
+    既有 `mask()` 只认 `sk-/ak-/ghp-/xoxb-` 前缀，**管不到 JWT** —— 日志出口一律走本函数。
+    """
+    if not isinstance(token, str) or not token:
+        return "<token>"
+    parts = token.split(".")
+    if len(parts) != 3 or not parts[0] or not parts[1]:
+        return "<token>"
+    return (parts[0] + "." + parts[1])[:6] + "…"
+
+
+def saved_refresh_failed(
+    ledger_path: Path,
+    *,
+    account_id: str,
+    agent: str,
+    exc: Exception,
+    now: datetime | None = None,
+) -> bool:
+    """刷新失败了要不要在账本上留痕？—— 照 `logins_on.go:318` 逐字：
+
+    「A refresh that never got an answer marks nothing.」⇒ **只有 `RefreshRefused`** 才写吊销标记
+    并回 True；网络错 / 403 / 5xx 回 False 且**账本一个字节都不变**（连读都不读）。
+    """
+    if not isinstance(exc, RefreshRefused):
+        return False
+    ledger = Path(ledger_path)
+    data = load_ledger(ledger)
+    stamp = _iso(now or _now())
+    reason = f"refresh refused: {agent}/{account_id}: {exc}"[:200]
+    mark = revoked_mark(reason)
+    for acc in data.get("account", []):
+        if acc.get("id") != account_id:
+            continue
+        health = acc.setdefault("health", {})
+        health["revoked"] = mark
+        health["revoked_at"] = stamp
+        save_ledger(ledger, data)
+        return True
+    raise LedgerError(f"账本里没有账号 {account_id}：{ledger}")
+
+
+#: 进程内互斥：**按账本路径**取锁（不是按号 —— 两个号并发写同一份账本一样要串行）。
+_RENEW_LOCKS: dict[str, threading.Lock] = {}
+_RENEW_LOCKS_GUARD = threading.Lock()
+
+
+def _renew_thread_lock(key: str) -> threading.Lock:
+    with _RENEW_LOCKS_GUARD:
+        lock = _RENEW_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _RENEW_LOCKS[key] = lock
+        return lock
+
+
+def _renew_ledger(root: Path | None) -> Path:
+    """账本路径：`root` 给了就按锚点拼（测试/自证用），否则走 `find_ledger()`。"""
+    if root is None:
+        return find_ledger(None)
+    return Path(root).joinpath(*ANCHOR)
+
+
+def renew_lock_file(root: Path | None = None) -> Path:
+    """锁文件：**吸附在账本自己旁边**（`<账本>.renew.lock`）。
+
+    与 magpie `loginsPath()+`.renew.lock`` 同构。
+
+    按号加锁不够：两个号并发刷新会互相覆盖 `save_ledger()` 的原子写。
+    """
+    ledger = _renew_ledger(root)
+    return ledger.with_name(ledger.name + ".renew.lock")
+
+
+def _whoami() -> str:
+    window = os.environ.get("TF_WINDOW_ID", "").strip()
+    return window or f"{socket.gethostname()}:{os.getpid()}"
+
+
+def _renew_lock_payload(lock: Path) -> dict[str, object]:
+    """读锁里写的「谁拿的 / 什么时候拿的」（读不了或坏了当空 —— 那种锁按 mtime 判陈旧）。"""
+    try:
+        raw = json.loads(lock.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _renew_lock_age(lock: Path, payload: dict[str, object]) -> float:
+    """锁多久没动了 —— ★ 优先锁里写的 `at`（ISO），**退化到锁文件 mtime**。
+
+    照 `tools/pool/task.py:231 _lock_age()` 的口径：**按时间判陈旧**，不做 pid 探活
+    （`tools/pool/registry.py:18-30` 是硬禁令）。
+    """
+    raw = payload.get("at")
+    at: datetime | None = None
+    if isinstance(raw, str) and raw:
+        try:
+            at = datetime.fromisoformat(raw)
+        except ValueError:
+            at = None
+    if at is not None:
+        now = datetime.now(at.tzinfo) if at.tzinfo is not None else datetime.now()
+        return max(0.0, (now - at).total_seconds())
+    try:
+        return max(0.0, time.time() - lock.stat().st_mtime)
+    except OSError:
+        return 0.0
+
+
+def _warn_without_lock(wait_s: float, payload: dict[str, object]) -> None:
+    """fail-open 的那一行（照 `filelock.go:57`：打一行然后照样往下走）。"""
+    holder = payload.get("owner") or "（未知）"
+    print(f"另一个持有者占了 {wait_s:g} 秒，无锁继续（{holder}）", file=sys.stderr)
+
+
+def _spin_renew_file_lock(lock: Path, *, account_id: str, wait_s: float) -> bool:
+    """`O_CREAT|O_EXCL` 自旋拿跨进程锁；**拿不到就 fail-open 回 False，绝不抛**。"""
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + max(0.0, float(wait_s))
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            holder: dict[str, object] = _renew_lock_payload(lock)
+            if _renew_lock_age(lock, holder) <= RENEW_LOCK_TTL_S:
+                if time.monotonic() > deadline:
+                    _warn_without_lock(wait_s, holder)
+                    return False
+                time.sleep(0.05)
+                continue
+            # 陈旧（**只按时间判**）⇒ 接管：清掉重拿。清不掉也要认超时，否则会自旋到天荒地老
+            with contextlib.suppress(OSError):
+                lock.unlink()
+            if time.monotonic() > deadline:
+                _warn_without_lock(wait_s, holder)
+                return False
+            continue
+        payload: dict[str, object] = {
+            "owner": _whoami(),
+            "pid": os.getpid(),
+            "task": account_id,
+            "at": _iso(_now()),
+        }
+        try:
+            os.write(fd, (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
+        finally:
+            os.close(fd)
+        return True
+
+
+@contextlib.contextmanager
+def renew_lock(
+    account_id: str,
+    *,
+    root: Path | None = None,
+    wait_s: float = LOCK_WAIT_S,
+) -> Iterator[bool]:
+    """同一个账本的刷新**只能有一个持有者**：先进程内互斥，再跨进程 `O_EXCL`。
+
+    yield 的值就是 `held`：拿到双锁 ⇒ True；`wait_s` 内没拿到 ⇒ **fail-open 回 False**
+    （照 `filelock.go:57`：打一行然后照样往下走 —— 超时抛错会把一次可用的刷新变成硬失败）。
+
+    ★ `yield` 必须在**取到锁之后、循环之外**：放进 `while` 里，上下文正常退出后生成器会绕回
+    循环再 yield 一次，`contextlib` 直接报 `RuntimeError: generator didn't stop`。
+    """
+    lock = renew_lock_file(root)
+    tlock = _renew_thread_lock(str(lock))
+    got_thread = tlock.acquire(timeout=max(0.0, float(wait_s)))
+    held = False
+    try:
+        if got_thread:
+            held = _spin_renew_file_lock(lock, account_id=account_id, wait_s=wait_s)
+        else:
+            _warn_without_lock(wait_s, {})
+        yield held
+    finally:
+        try:
+            if held:
+                with contextlib.suppress(OSError):
+                    lock.unlink()
+        finally:
+            if got_thread:
+                tlock.release()
 
 
 # --------------------------------------------------------------------------

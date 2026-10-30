@@ -611,6 +611,29 @@ return e
 配套：`tools/wb_dispatch.py` 只加 `usage_in(model, start, end, *, root)`（按**模型**与 `[start, end)` 半开区间汇总 `gates/diag/wb-usage.jsonl`；顶层的 `append_usage_line()` 与 `usage_summary()` 一个字节未动；函数内局部导入 `timedelta, timezone` 以免动顶层 import）；`tools/pool_accounts.py` 的 `_check_account()` 加 `used_percent ∈ [0, 100]` 校验（缺失 = `None` 合法，**不许当 0**）。
 
 读数：`pytest tests/test_holds_window.py tests/test_pool_accounts.py` 等三档 ⇒ 152 passed；`mypy tools/pool/holds.py` ⇒ Success（本仓 `[tool.mypy] strict = true`）；`ruff check` 六文件全过；反向验证 9 条定点变异全咬。真数据旁证：`usage_in('glm-5.3-flash', 2026-09-26T20:00+08, 22:00+08)` ⇒ `(54956835, 0.0)`，与手工扫同一窗 7 行逐数吻合。
+## 2026-10-30 · 刷新令牌只能有一个持有者：magpie renew lock 移植进 pool（F31）（卡 A335，T-AG537）
+
+三个缺陷一口气补齐：①**刷新前的余量判断** ②**哪些失败算「这个号废了」** ③**同一时刻只能有一个进程去刷**。
+
+### ① 余量判断（`needs_renew` / `jwt_exp`）
+- `RENEW_MARGIN_S: int = 5 * 60`（`tools/pool_accounts.py:308`，magpie `logins_on.go:275`）、`SIWC_MARGIN_S: int = 3 * 60`（`:310`，`chatgpt_api.go:68`）。
+- `jwt_exp(token)` 读 `exp`；非三段 / base64 坏 / 无 `exp` / `exp` 非数 ⇒ 一律 `None`，**不抛、不打印 token 片段**。
+- `needs_renew()` 见 `exp is None` 回 **True**（宁可多刷一次，也不拿一个读不出过期时间的令牌去撞 401）。
+
+### ② 两类失败必须分开（`refresh_failed` / `saved_refresh_failed` / `revoked_mark`）
+- `400/401` ⇒ `RefreshRefused`；`403`/`5xx`/超时/连不上 ⇒ `RuntimeError`。**只有 `RefreshRefused` 能让调用方写吊销标记** —— 网络没答话不等于这把令牌废了（magpie `logins_on.go:318`「A refresh that never got an answer marks nothing.」）。
+- `saved_refresh_failed()` 只在 `isinstance(exc, RefreshRefused)` 时把 `revoked` / `revoked_at` 写进 `[account.health]`；其余一律返回 `False` 且**账本一字节不变**。
+- `revoked_mark(reason, *, salt="")` = `"revoked " + sha256((salt+reason))[:16]`；`mask_token()` 三段式只留 `header.payload` 前 6 字符 + `…`（既有 `mask()` 只认 `sk-/ak-/ghp-/xoxb-`，管不到 JWT）。
+
+### ③ 单一持有者（`renew_lock`）
+- 进程内先过模块级 `dict[str, threading.Lock]`，跨进程再 `O_CREAT|O_EXCL` 抢 `<账本>.renew.lock`；锁内写 owner / pid / task / at 四个字段。
+- 陈旧判定**只按时间**（`RENEW_LOCK_TTL_S = 120.0`，优先锁内 ISO `at`、退化 mtime）—— 复用 `tools/pool/task.py:242-291 spin_lock` 的口径，`registry.py:21-26` 那条「**绝对不许用 `os.kill(pid, 0)` 探活**」是硬的。
+- 拿不到锁 **fail-open**：`wait_s`（`LOCK_WAIT_S = 10.0`）内没抢到就 stderr 说一行「另一个持有者占了 N 秒，无锁继续」+ `yield False`，让调用方能做更保守的事，而不是把整条刷新链掐死。
+
+### 读数
+- `pytest tests/test_renew_lock.py tests/test_pool_accounts.py tests/test_holds_window.py` ⇒ **71 passed in 2.45s**（rebase 到 `4110cfe0` 之后重跑）。
+- `ruff check tools/pool_accounts.py tests/test_renew_lock.py` ⇒ All checks passed。
+- 反向验证 `gates/diag/_rev_A335.py` ⇒ **7/7 条全部咬住**（`needs_renew` 读不出当不用刷 / 锁超时改 raise / 403 也算 Refused / 不看类型一律写标记 / 过期锁永不接管 / `jwt_exp` 不吞坏 base64 / `mask_token` 原样回显），每条还原后逐字节相同且纯 CRLF。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

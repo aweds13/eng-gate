@@ -4519,3 +4519,17 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A335"
+task = "T-AG537"
+title = "刷新令牌只能有一个持有者：magpie renew lock 移植进 pool（F31）"
+tree = ".wt/A335"
+spec = "复盘/卡/卡A335-刷新令牌只能有一个持有者.md"
+files = [
+  "tools/pool_accounts.py",
+  "tests/test_renew_lock.py",
+]
+status = "done"
+risk = "mid"
+depends = []
