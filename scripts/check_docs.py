@@ -409,6 +409,7 @@ OWN_EXTS = frozenset({
     ".md", ".markdown", ".py", ".pyw", ".toml", ".txt", ".mjs", ".json", ".js",
     ".yml", ".yaml", ".ps1", ".sh", ".cmd", ".html", ".css", ".tmpl", ".png",
     ".gitignore", ".gitattributes", ".gitkeep", ".ini", ".cfg", ".lock", ".svg",
+    ".csv",
 })
 
 #: `OWN_EXTS` 里**当前没有跟踪样本**的成员 —— 每个都得有一条存在理由，否则就是"猜进去的"。

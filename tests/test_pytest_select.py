@@ -35,6 +35,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+#: 回放窗口的探测序列（卡 E68 的钉子用）：从 START 起逐档放大，找到第一笔真 fallback 就停。
+#: 理由写在 `test_replay_recognises_every_real_fallback_reason` 的 docstring 里 —— 固定 20 笔
+#: 会随历史推进周期性空转（fallback 是事件、不是每笔都有）。
+REPLAY_PROBE_START = 20
+REPLAY_PROBE_STEPS = (20, 30, 40, 50, 60)
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -467,11 +473,27 @@ def test_every_known_fallback_mark_has_a_real_producer(tmp_path: Path) -> None:
 
 
 def test_replay_recognises_every_real_fallback_reason() -> None:
-    """回放最近 20 笔：**每一笔**真 fallback 的原因都必须被认识（卡 E68 抓的是 T-BG001 那条）。"""
+    """回放最近 N 笔：**每一笔**真 fallback 的原因都必须被认识（卡 E68 抓的是 T-BG001 那条）。
+
+    ★ 为什么窗口不是固定 20（2026-10-31 改）：`fallback` 是「碰了判据本体 / 台账条目没有
+      `test:` 指针」才发生的**事件**，不是每笔提交都有。20 笔窗口在 T-AG539（`03cd6a21`，
+      实测落在第 24 位）之后整段不含任何 fallback ⇒ 原来的 `assert seen` 空转，这条钉子从
+      「检查原因认不认得」退化成「检查最近 20 笔的运气」。所以改成**向大找到第一笔 fallback
+      为止**（上限 60）：覆盖面不缩（每一笔真 fallback 仍要认），也不再依赖某几笔恰好排进窗口。
+      上限 60 是代价与覆盖的折中 —— 实测 replay(60) 约 5.4 s、含 9 笔 fallback（8 笔判据本体
+      + 1 笔台账欠账），而 replay(20) 约 2.0 s。窗口再大就没必要：判据本体的改动本来就不频繁。
+    """
     ps = _ps()
-    result = ps.replay(20, root=ROOT)
-    seen = [(r.rev, r.task, r.reason) for r in result.rows if r.fallback]
-    assert seen, "最近 20 笔一笔 fallback 都没有 ⇒ 这条钉子失去意义（口径变了要重看）"
+    used = REPLAY_PROBE_START
+    for used in REPLAY_PROBE_STEPS:
+        result = ps.replay(used, root=ROOT)
+        seen = [(r.rev, r.task, r.reason) for r in result.rows if r.fallback]
+        if seen:
+            break
+    assert seen, (
+        f"最近 {used} 笔（上限 {max(REPLAY_PROBE_STEPS)}）一笔 fallback 都没有"
+        " ⇒ 这条钉子失去意义（口径变了要重看）"
+    )
     for rev, task, reason in seen:
         assert ps._known_fallback_reason(reason), (rev, task, reason)
     assert result.ok, [(r.rev, r.reason) for r in result.rows if r.fallback]
