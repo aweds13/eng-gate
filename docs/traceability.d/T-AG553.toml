@@ -1,0 +1,26 @@
+[entries."T-AG553"]
+id = "T-AG553"
+title = "白名单的锚点不许跟宿主目录形状走：ledger_path 改成 find_ledger 的一层皮"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E70-白名单的锚点不许跟宿主目录形状走.md",
+  "file:tools/pool/accounts_scope.py",
+  "file:tests/test_pool_account_scope.py",
+  "test:test_pool_account_scope.py",
+  "text:tools/pool/accounts_scope.py::def ledger_path(explicit: str | None = None) -> Path:",
+  "text:tools/pool/accounts_scope.py::return Path(pool_accounts.find_ledger(explicit))",
+  "text:tools/pool/accounts_scope.py::return ledger_path().with_name(SCOPE_NAME)",
+  "text:tests/test_pool_account_scope.py::def test_ledger_path_wiring_is_read_from_the_bytecode_not_the_text(",
+  "text:tests/test_pool_account_scope.py::def test_host_shape_without_an_anchor_still_follows_the_env(",
+]
+gaps = [
+  """云机那 13 条里只有 11 条真的走白名单：test_missing_profile_refuses_and_names_it 与 test_account_refuses_when_the_profile_login_fails 在 profile 不存在 / 登录失败时就退 2，根本不碰白名单闸 —— 所以「旧实现让 13 条全红」这个说法不准，正确说法是 11 条。
+没在真云机上复核这 13 条是否转绿：本卡用「把 TOOL_ROOT 指到没有锚点的临时目录」在本机模拟了云机形状并验证（现状 13/13 绿、旧实现 11 红），但云机本身没有重跑。云机回归要等下一次带这张卡的云门禁。
+ledger_path() 多了一个可选参数 explicit：判据 1 要求「显式 path 这一档与 find_ledger 对齐」，不开口子做不到。现有唯一调用点 default_path() 不传参，向后兼容。
+find_ledger(explicit=\"\") 因 `if explicit:` 为假会静默落到环境变量档 —— 空串等于「没给」。不算 bug，但调用方若拿空串表示「显式给了但为空」会被吞掉。已记录，未改（改它要动 pool_accounts.py，超出本卡域）。
+ruff format --check 仍有 11 个 hunk 想改，全落在未改动的既有代码上；本卡验收项是 ruff check（绿），没顺手动既有格式。
+反向验证脚本与日志在 gitignored 的 gates/diag/ 下：读数无法随树分发，结论已写进本片段与 changelog 正文；主树先例如此。
+""",
+]

@@ -59,11 +59,11 @@ MAX_SCOPES = 500
 MAX_SCOPE_CHARS = 300
 #: 策略文件名（与账本同目录，仓外）
 SCOPE_NAME = "account-scopes.toml"
-#: 根推导的锚点 —— 与 `tools/pool_accounts.py:60 ANCHOR` 逐字同口径
-LEDGER_ANCHOR = ("infra", "pool", "accounts.toml")
 #: 三种 caller 由窄到宽（`guards.account_guard` 的判序）
 CALLER_KINDS = ("card", "project", "pool")
-#: 本树根（`tools/pool/accounts_scope.py` 往上三层）
+#: 本树根（`tools/pool/accounts_scope.py` 往上三层）。
+#: ★ 卡 E70：**不参与**找账本 —— 找账本是 `pool_accounts.find_ledger()` 的唯一职责；
+#:   这里留着只是给测试当「宿主目录形状」的旋钮（改它不该改变账本路径）。
 TOOL_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
@@ -83,18 +83,21 @@ class Scope:
     patterns: tuple[str, ...]  # 形如 ("codebuddy/codebuddy-tongxue3", "codearts/*")
 
 
-def ledger_path() -> Path:
-    """按 `pool_accounts.find_ledger` 的锚点逐级向上找账本（**不跟 cwd 走**）。"""
-    start = TOOL_ROOT.resolve()
-    for base in (start, *start.parents):
-        cand = base.joinpath(*LEDGER_ANCHOR)
-        if cand.is_file():
-            return cand
-    raise ScopeError(
-        "找不到账号账本（账号白名单判不了）：从 "
-        f"{start} 起逐级向上都没有 {'/'.join(LEDGER_ANCHOR)}；"
-        "账本本体在仓外 D:/repo/infra/pool/accounts.toml"
-    )
+def ledger_path(explicit: str | None = None) -> Path:
+    """账本路径 = `pool_accounts.find_ledger(explicit)` 的一层皮（**本文件不许有第二份锚点**）。
+
+    ★ 卡 E70：这里曾经自己写了一遍「从 `TOOL_ROOT` 向上找 `infra/pool/accounts.toml`」，
+      那份副本**不认** `TF_ACCOUNTS_TOML`，于是「本机绿、云机红」——判据跟着宿主目录
+      形状走了。`find_ledger()` 的顺序是：显式参数 > `TF_ACCOUNTS_TOML` > 从仓库根向上找。
+    """
+    try:
+        import pool_accounts
+    except ImportError as exc:  # pragma: no cover —— tools/ 不在 sys.path 上
+        raise ScopeError(f"读不到 tools/pool_accounts.py，账号白名单判不了：{exc}") from exc
+    try:
+        return Path(pool_accounts.find_ledger(explicit))
+    except pool_accounts.LedgerError as exc:
+        raise ScopeError(f"找不到账号账本（账号白名单判不了）：{exc}") from exc
 
 
 def default_path() -> Path:

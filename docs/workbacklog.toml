@@ -4744,3 +4744,17 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E70"
+task = "T-AG553"
+title = "白名单的锚点不许跟宿主目录形状走：ledger_path 改成 find_ledger 的一层皮"
+tree = ".wt/E70"
+spec = "复盘/卡/卡E70-白名单的锚点不许跟宿主目录形状走.md"
+files = [
+  "tools/pool/accounts_scope.py",
+  "tests/test_pool_account_scope.py",
+]
+status = "done"
+risk = "mid"
+depends = []

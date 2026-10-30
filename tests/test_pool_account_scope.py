@@ -21,10 +21,24 @@ r"""卡 A342（`T-AG544`）：谁可以用哪些号 —— 移植 magpie F35 的
 
 ★ 导入用 `importlib`：`tools/` 不在 `sys.path` 上，且本仓禁 `# noqa`，所以不能像别的
   测试那样在 `sys.path.insert` 之后写 import 语句 —— 那会踩 E402。
+
+卡 E70 追加的钉子（账本锚点不许跟宿主目录形状走）：
+
+- `test_ledger_path_is_a_thin_skin_over_find_ledger` —— 判据 1：显式 path /
+  `TF_ACCOUNTS_TOML` / 向上找三种情形，`ledger_path()` 与 `find_ledger()` 回同一路径。
+- `test_default_path_follows_the_env_ledger` —— 判据 2：账本在沙箱里，默认策略文件就落在
+  沙箱旁边（**不是**宿主账本旁边那份私有策略）。
+- `test_missing_ledger_still_raises_scope_error` —— 判据 3：找不到账本仍是 `ScopeError`
+  （`LedgerError` 漏出来 ⇒ 调用方只捕 `ScopeError`，会变成未捕获异常）。
+- `test_host_shape_without_an_anchor_still_follows_the_env` —— 判据 4 的云机形状：宿主
+  向上没有账本，只靠 `TF_ACCOUNTS_TOML` 也必须找到。
+- `test_ledger_path_wiring_is_read_from_the_bytecode_not_the_text` —— 判据 5：字节码里
+  必须真的 `LOAD_ATTR find_ledger`（源码子串会被「行为相同但独立实现」的副本骗过）。
 """
 
 from __future__ import annotations
 
+import dis
 import importlib
 import sys
 from pathlib import Path
@@ -363,3 +377,112 @@ def test_wiring_calls_the_same_guard_before_reserving() -> None:
     guard_head = '    account = str(arguments.get("account") or "").strip()' + "\n"
     guard_head += "    if account:\n"
     assert guard_head in mcp, "pool_mcp：账号判据要真接上（整行逐字）"
+
+
+# ================================================================ 附加：账本锚点（卡 E70）
+
+
+def test_ledger_path_is_a_thin_skin_over_find_ledger(monkeypatch, tmp_path: Path) -> None:
+    """判据 1：三种情形下 `ledger_path()` 与 `pool_accounts.find_ledger()` 回**同一个**路径。
+
+    ★ 三种都要对：只对上「向上找」一档，等于把 `TF_ACCOUNTS_TOML` 那档丢了 ——
+      云机仓向上没有账本，那一档是唯一的活路。
+    """
+    pool_accounts = importlib.import_module("pool_accounts")
+    sandbox = tmp_path / "sandbox"
+    sandbox.mkdir()
+    ledger = sandbox / "accounts.toml"
+    ledger.write_text('[[account]]\nid = "codearts-1"\n', encoding="utf-8", newline="\n")
+    want = ledger.resolve()
+
+    # ① 显式 path
+    assert accounts_scope.ledger_path(str(ledger)) == want
+    assert pool_accounts.find_ledger(str(ledger)) == want
+
+    # ② TF_ACCOUNTS_TOML
+    monkeypatch.setenv("TF_ACCOUNTS_TOML", str(ledger))
+    assert accounts_scope.ledger_path() == want
+    assert pool_accounts.find_ledger() == want
+
+    # ③ 都没有 ⇒ 向上找；把「宿主目录形状」换成一棵临时树，两边看的是同一棵
+    monkeypatch.delenv("TF_ACCOUNTS_TOML", raising=False)
+    host = tmp_path / "host"
+    (host / "infra" / "pool").mkdir(parents=True)
+    walked = host / "infra" / "pool" / "accounts.toml"
+    walked.write_text('[[account]]\nid = "codearts-1"\n', encoding="utf-8", newline="\n")
+    monkeypatch.setattr(pool_accounts, "TOOL_ROOT", host)
+    assert accounts_scope.ledger_path() == walked.resolve()
+    assert pool_accounts.find_ledger() == walked.resolve()
+
+
+def test_default_path_follows_the_env_ledger(monkeypatch, tmp_path: Path) -> None:
+    """判据 2：`TF_ACCOUNTS_TOML` 指哪份账本，默认策略文件就落在**它旁边**。
+
+    ★ 这一条钉的是本卡真正的风险：退回到「从宿主目录向上找」时，默认策略会摸到真账本
+      旁边那份**宿主的私有白名单** —— 测试读到别人的策略，比读不到更坏。
+    """
+    ledger = tmp_path / "accounts.toml"
+    ledger.write_text('[[account]]\nid = "codearts-1"\n', encoding="utf-8", newline="\n")
+    monkeypatch.setenv("TF_ACCOUNTS_TOML", str(ledger))
+    assert accounts_scope.default_path() == (tmp_path / "account-scopes.toml").resolve()
+    # ★ 不是只算对路径：`load_scopes()` 必须真读到沙箱旁边那份
+    (tmp_path / "account-scopes.toml").write_text(
+        '[card."A1"]\naccounts = ["codearts/*"]\n', encoding="utf-8", newline="\n"
+    )
+    scopes = accounts_scope.load_scopes()
+    assert scopes[("card", "A1")].patterns == ("codearts/*",)
+
+
+def test_missing_ledger_still_raises_scope_error(monkeypatch, tmp_path: Path) -> None:
+    """判据 3：找不到账本抛的必须仍是 `ScopeError`，且文案说得出「三种修法」。
+
+    ★ `wb_dispatch` / `pool_mcp` 只捕 `ScopeError`；`LedgerError` 漏出来会把「退 2 + 一句
+      FAIL」变成未捕获异常（fail-closed 还在，但报错形状变了）。
+    """
+    pool_accounts = importlib.import_module("pool_accounts")
+    monkeypatch.delenv("TF_ACCOUNTS_TOML", raising=False)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setattr(pool_accounts, "TOOL_ROOT", empty)
+    try:
+        accounts_scope.ledger_path()
+    except ScopeError as exc:
+        text = str(exc)
+        assert "TF_ACCOUNTS_TOML" in text, f"文案里没有「往哪放账本」的修法：{text}"
+        assert "--ledger" in text, f"文案里没有显式修法：{text}"
+        return
+    except pool_accounts.LedgerError as exc:
+        raise AssertionError(f"LedgerError 漏出来了（调用方只捕 ScopeError）：{exc!r}") from exc
+    raise AssertionError("找不到账本却静默回了路径（fail-closed 被放宽）")
+
+
+def test_host_shape_without_an_anchor_still_follows_the_env(monkeypatch, tmp_path: Path) -> None:
+    """判据 4 的云机形状：`TOOL_ROOT` 向上**没有**账本，只靠 `TF_ACCOUNTS_TOML` 也得找到。"""
+    leaf = tmp_path / "cloud" / "eng"
+    leaf.mkdir(parents=True)
+    ledger = tmp_path / "true-ledger" / "accounts.toml"
+    ledger.parent.mkdir()
+    ledger.write_text('[[account]]\nid = "codearts-1"\n', encoding="utf-8", newline="\n")
+    monkeypatch.setenv("TF_ACCOUNTS_TOML", str(ledger))
+    # ★ 改这个常量模拟「宿主目录形状」（云机 `C:/eng` 那种向上什么都没有的形状）
+    monkeypatch.setattr(accounts_scope, "TOOL_ROOT", leaf)
+    assert accounts_scope.ledger_path() == ledger.resolve()
+    assert accounts_scope.default_path() == ledger.resolve().with_name("account-scopes.toml")
+
+
+def test_ledger_path_wiring_is_read_from_the_bytecode_not_the_text() -> None:
+    """判据 5：字节码里必须真的 `LOAD_ATTR find_ledger` —— 不看源码文本。
+
+    ★ 卡 A342 的教训：`assert "if args.account:" in src` 被 `if False and args.account:`
+      骗过去了。同理「调了 `find_ledger`」不能靠子串断言 —— 一份「行为相同、自己实现」
+      的副本里根本没有这个名字，却能把同样的路径算出来。
+    """
+    code = accounts_scope.ledger_path.__code__
+    instrs = list(dis.get_instructions(code))
+    loads = [(ins.opname, ins.argval) for ins in instrs if ins.opname.startswith("LOAD_")]
+    assert ("LOAD_ATTR", "find_ledger") in loads, f"没调 find_ledger：{loads}"
+    assert "pool_accounts" in code.co_names, f"没从 pool_accounts 拿：{code.co_names}"
+    # ★ 反向：本函数不许再留第二份「向上找」实现（留着就迟早又被谁走一次）
+    seen = set(code.co_names) | {ins.argval for ins in instrs if isinstance(ins.argval, str)}
+    for bad in ("joinpath", "is_file", "parents", "LEDGER_ANCHOR"):
+        assert bad not in seen, f"ledger_path 里又出现了自己找账本的写法：{bad}"
