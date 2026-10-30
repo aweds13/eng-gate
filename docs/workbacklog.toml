@@ -4614,3 +4614,21 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A342"
+task = "T-AG544"
+title = "点了一个号其它号就关上：magpie 每 caller 账号白名单移植进 pool（F35）"
+tree = ".wt/A342"
+spec = "复盘/卡/卡A342-点了一个号其它号就关上.md"
+files = [
+  "tools/pool/accounts_scope.py",
+  "tools/pool/guards.py",
+  "tools/wb_dispatch.py",
+  "tools/pool_mcp.py",
+  "tests/test_pool_account_scope.py",
+  "复盘/卡/卡A342-点了一个号其它号就关上.md",
+]
+status = "done"
+risk = "mid"
+depends = []

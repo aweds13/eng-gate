@@ -773,6 +773,44 @@ magpie 的模型白名单挂在 caller（key）上：`internal/access/models.go`
 ### ④ 今天不生效的部分（如实说）
 
 `RECHECK_PLATFORMS` 只有 `qoder`，而 `tools/pool/platforms.toml` 里**没有 qoder 段** ⇒ 第 ⑦ 支今天空转。真正在起作用的是「上午的已签过」那一支（判据 6）与失败/没定论重问两支。
+## 2026-10-30 · 点了一个号其它号就关上：magpie 每 caller 账号白名单移植进 pool（F35）（卡 A342，T-AG544）
+
+### ① 病灶：一份名单点名了一个号，其它号照样能派
+
+magpie 的账号白名单（internal/access/accounts.go:63-83）是三支判据：名单空 ⇒ 放行；`provider/号` 逐字命中 ⇒ 放行；命中了某个 provider 的前缀但没点名这个号 ⇒ **记一笔 named=true**，最后 `return !named`。
+
+那个取反是整条判据的骨头：**你点名了 codebuddy 的某一个号，codebuddy 的其它号就全关上**，没点名的 provider 一个都不动。方向永远只朝「更窄」走，靠写错配置放宽是不可能的。
+
+pool 侧此前零命中（`grep -rniE "caller|api_key|per-key" tools/pool/` 全空），派活器对账号维度**没有任何白名单**。
+
+### ② 怎么搬的
+
+新模块 `tools/pool/accounts_scope.py`（280 行）：
+
+- `MAX_SCOPES = 500` / `MAX_SCOPE_CHARS = 300`，照 magpie `CleanAccounts` 的上限。
+- `Scope(caller_kind, caller_id, patterns)` 冻结点；`load_scopes()` 读仓外策略文件，**没有文件就是空表**（不是「随便用」）。
+- `narrow(candidates, patterns, *, provider_of)` 三支逐字照抄；`provider_of` **必须注入不许猜** —— 账本 id 是 `<platform>-<n>` 的形状，按减号前那段启发式猜会把 `codearts-doer-1` 猜错。
+- `account_guard()`（放进 `tools/pool/guards.py`，与另外六个守卫同住）做三级由窄到宽 card > project > pool，**只删不增**。
+
+接入两处，判据只有一份：`tools/wb_dispatch.py` 在占树之前（还没 `reserve()`、零副作用）、`tools/pool_mcp.py` 的干跑路径。
+
+### ③ 两个「空」是两种意思，绝不统一
+
+- 本卡的 `patterns=()` ⇒ **不收窄**（没点名就谁都不关）。
+- 账本里 `approved_models=[]` ⇒ **这个号不许派活**（tools/pool_accounts.py 的既有文案）。
+
+这两条长得像，语义相反。卡里明写了不许统一，钉子 `test_empty_patterns_never_narrows` 钉着。
+
+### ④ 最反直觉的那一支也钉住了
+
+`patterns=("codebuddy/不存在的号",)` ⇒ **所有** `codebuddy/*` 被删。因为判据用的是前缀 `HasPrefix`，它不看那个号存不存在。这不是 bug，是 magpie 的原意，钉子 `test_naming_a_nonexistent_account_closes_the_provider` 把它固定下来。
+
+### ⑤ 读数
+
+- `pytest tests/test_pool_account_scope.py -q -o addopts= --no-cov` ⇒ 13 passed。
+- 邻层 `test_pool_guards + test_pool_lanes + test_pool_lease + test_wb_dispatch + test_pool_mcp + test_pool_mcp_write` ⇒ 284 passed（rebase 后复跑）。
+- `ruff check` 五文件 ⇒ All checks passed。
+- 反向 `gates/diag/_rev_A342.py` ⇒ 11/11 条全部咬住（rebase 后重跑同结论）。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

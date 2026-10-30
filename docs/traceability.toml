@@ -10124,3 +10124,69 @@ gaps = [
 - **本卡没做**：`checkin` 子命令没有 `--recheck` 之类的开关把它和 `due` 串起来；`due` 的退出码恒 0（只有账本读不到/参数坏才是 2），不表达「有几个该复查」。
 """,
 ]
+
+[entries."T-AG544"]
+
+id = "T-AG544"
+
+title = "点了一个号其它号就关上：magpie 每 caller 账号白名单移植进 pool（F35）"
+
+group = "ENGINEERING"
+
+status = "done"
+
+owner = "controller"
+
+evidence = [
+
+  "file:复盘/卡/卡A342-点了一个号其它号就关上.md",
+
+  "file:tools/pool/accounts_scope.py",
+
+  "file:tools/pool/guards.py",
+
+  "file:tools/wb_dispatch.py",
+
+  "file:tools/pool_mcp.py",
+
+  "file:tests/test_pool_account_scope.py",
+
+  "file:复盘/卡/卡A342-点了一个号其它号就关上.md",
+
+  "test:test_pool_account_scope.py",
+
+  "text:tools/pool/accounts_scope.py::MAX_SCOPES = 500",
+
+  "text:tools/pool/accounts_scope.py::def narrow(",
+
+  "text:tools/pool/accounts_scope.py::def load_scopes(",
+
+  "text:tools/pool/guards.py::def account_guard(",
+
+  "text:tools/pool/guards.py::def _scope_provider_of(",
+
+  "text:tools/wb_dispatch.py::from pool import accounts_scope as pool_accounts_scope",
+
+  "text:tools/pool_mcp.py::from pool import accounts_scope, guards, registry, task",
+
+]
+
+gaps = [
+
+  """读面隔离没做：magpie 在 6 个端点上对被拦的 key 直接回 403，pool 的 MCP 是单租户本地面、`tool_account_status` / `tool_checkin_status` 的 caller 面一律没碰 —— 本卡只做派活面，读面如实标「未落地，仅设计」。
+
+`--account` 收的是 profile 名（`tongxue3`），白名单里写的是账本稳定 id（`codebuddy-tongxue3`）—— 今天两者不是一套命名空间，接线处**不映射不猜**，把传入的串当不透明键。合一留给卡 A344。
+
+仓外策略文件在今天（2026-10-30）**不存在** ⇒ `load_scopes()` 恒回空表 ⇒ 白名单今天一次也不会拒。这一轮验的是判据的判别力（13 钉子 + 11 变异），不是「真的拒过一次派活」。
+
+`account_guard()` 比规格多一条 fail-closed：白名单只按 `provider/...` 写、传进来是裸 id 时，`narrow` 拿不到 provider，按「判不动不算有罪」会全放行；实测不加这条 `account_guard(\"codebuddy-tongxue3\", scopes, card=...)` 回空 ⇒ 裸 id 必须能在名单里逐字反查出 provider，否则拒。仍绝不看减号。
+
+MCP 面没加 schema 属性：`pool_dispatch` 的 `inputSchema.properties` 不加 `account`（`tests/test_pool_mcp_write.py:164` 钉着 `required == [\"card\",\"tree\"]` 且 `additionalProperties: False`），从 `arguments` dict 按 `str(arguments.get(\"account\") or \"\").strip()` 读。
+
+`mypy` 裸命令在本仓跑不通是基线问题（`tools/pool/__init__.py: error: Source file found twice under different module names`），要 `--explicit-package-bases --follow-imports=skip --ignore-missing-imports` 才绿；同行 baseline 还有 `tools/pool/projects.py` 5 errors、`tools/pool/limits.py` 2 errors。
+
+接线钉子最初写成子串断言 `assert \"if args.account:\" in dispatch`，被变异 `if False and args.account:` 骗过去了 ⇒ 改成整行逐字比对才真咬住。教训：别用子串钉接线。
+
+""",
+
+]

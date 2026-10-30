@@ -41,12 +41,13 @@ from typing import TYPE_CHECKING
 #   ★ 不写 `::` 的声明恒判 `WHOLE_FILE` ⇒ **行为与今天逐字相同**（向后兼容是硬要求）。
 from domain_symbols import overlap as _symbol_overlap
 
+from pool import accounts_scope as pool_accounts_scope
 from pool import locks as pool_locks
 from pool import projects as pool_projects
 from pool.plan import Card, files_intersect
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable, Mapping
 
 
 def _norm(path: object) -> str:
@@ -378,6 +379,102 @@ def lane_guard(account: object, reservations: Iterable[dict], *, limit: int,
             f" —— 等它收工（或换个号）再派"]
 
 
+
+
+# ================================================================ 守卫⑦ 账号白名单（卡 A342）
+
+
+def _scope_provider_of(patterns: tuple[str, ...]) -> Callable[[str], str]:
+    """从**这份名单自己**推出「裸 id → provider」，判不动就回空串（**不猜 id 形状**）。
+
+    ★ 只认名单里**逐字点名**的那种（`provider/id`、不带 `*`）：`codebuddy-tongxue3`
+      能查到它属于 `codebuddy`，是因为名单里就写着 `codebuddy/codebuddy-tongxue3`。
+    ★ **绝不**看「减号前面就是 platform」：那是本卡判据 3 明令禁的启发式
+      （`codearts-doer-1` 会猜错）。猜 provider 的活只有
+      `pool.accounts_scope.load_providers`（读账本的 `platform` 字段）干一份。
+    ★ 同一个裸 id 出现在两个 provider 下 ⇒ 也回空串（有歧义 = 判不动）。
+    """
+    owners: dict[str, set[str]] = {}
+    for item in patterns:
+        text = str(item).strip().lower()
+        provider, _, rest = text.partition("/")
+        if not provider or not rest or "*" in text:
+            continue
+        owners.setdefault(rest, set()).add(provider)
+
+    def resolve(account: str) -> str:
+        got = owners.get(str(account).strip().lower(), set())
+        return next(iter(got)) if len(got) == 1 else ""
+
+    return resolve
+
+
+#: 三级 caller 的中文名（只给文案用）
+_KIND_LABEL = {"card": "卡", "project": "项目", "pool": "号池"}
+
+
+def account_guard(
+    account: object,
+    scopes: Mapping[tuple[str, str], object],
+    *,
+    card: object = "",
+    project: object = "",
+    pool: object = "",
+) -> list[str]:
+    """这条派活的账号**在不在**该 caller 的账号白名单里 ⇒ 一条问题；否则空列表。
+
+    纯函数：吃「账号 id」+「三张 caller 表」+「要派的 caller 三元组」，一个字都不写。
+    ★ 三级 caller 由**窄到宽**依次判：card > project > pool。任一层的名单收窄了就按它判，
+      都不收窄 ⇒ 放行（= 今天的行为）。
+    ★ `account` 为空 ⇒ 返回 `[]`（没点名账号 = 今天的行为）。
+    ★ **本函数只删不增**：名单只能让「本来能派的」变「不能派」，不可能让「本来不能派的」变「能派」。
+    ★ 本函数**不读** `account-scopes.toml` / `accounts.toml`：读文件在 `pool.accounts_scope`，
+      守卫只吃**已读好的映射**（与同模块另五条同一纪律「不写文件、不 print、不起进程」）。
+    ★ 收窄语义**只有一份**：一律调 `pool.accounts_scope.narrow`（不在这里重写）。
+    ★ 判不动就**拒**（fail-closed，与 `pool.accounts_scope.ScopeError` 同一句：
+      静默放行 = 悄悄放宽）。「判得动」只有两种：账号自带 `provider/id` 前缀，或裸 id
+      能在这份名单里被**逐字点名**反查出 provider。名单只按 provider 写、而传进来的
+      账号裸着且对不上任何一条 ⇒ 拒，并在文案里点名这件事。
+    """
+    who = str(account or "").strip()
+    if not who:
+        return []
+    for kind, cid in (("card", card), ("project", project), ("pool", pool)):
+        key = str(cid or "").strip()
+        if not key:
+            continue
+        scope = scopes.get((kind, key))
+        if scope is None:
+            continue
+        patterns = tuple(getattr(scope, "patterns", ()) or ())
+        if not patterns:
+            continue  # 这一层没设防（= 不收窄）⇒ 往宽的那层看
+        where = f"{_KIND_LABEL[kind]}「{key}」"
+        listed = "、".join(patterns)
+        resolver = _scope_provider_of(patterns)
+        # ★ 先判「判得动判不动」：裸 id 必须有 provider 才谈得上按 provider 收窄
+        if "/" not in who and not resolver(who):
+            return [
+                f"账号 {who} 判不动它属于哪个 provider，{where}的账号白名单卡住了它"
+                f"（名单：{listed}）—— 名单按 provider 写，账号要写成 provider/id；"
+                "守卫不猜「减号前面就是 provider」（判不动 ⇒ 不派活）"
+            ]
+        keep = pool_accounts_scope.narrow((who,), patterns, provider_of=resolver)
+        if keep:
+            return []
+        return [
+            f"账号 {who} 不在{where}的账号白名单里（名单：{listed}）"
+            " —— 名单只许收窄，不许换号"
+        ]
+    return []
+
+
 __all__ = [
-    "domain_guard", "lane_guard", "lock_guard", "log_guard", "project_guard", "tree_guard",
+    "account_guard",
+    "domain_guard",
+    "lane_guard",
+    "lock_guard",
+    "log_guard",
+    "project_guard",
+    "tree_guard",
 ]

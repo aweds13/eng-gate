@@ -3292,6 +3292,31 @@ def main() -> int:
                      sid="", attempts=1, lines=[], started_at=None)
         return 2
 
+    # ★ 卡 A342：账号白名单（每 caller）。放在**占树之前** —— 这里还没 `reserve()`、
+    #   也没归档，拒了就是零副作用；`--detach` 的父进程也会在把工人扔出去之前先拒。
+    #   `--account` 今天传的是 profile 名，白名单里写的是账本 id（卡 A344 之后两者合一）：
+    #   这里**不映射、不猜形状**，只把它当不透明的键交给 `account_guard` 查表。
+    if args.account:
+        from pool import accounts_scope as pool_accounts_scope
+
+        try:
+            scopes = pool_accounts_scope.load_scopes()
+        except pool_accounts_scope.ScopeError as exc:
+            print(f"[FAIL] 账号白名单读不了，**不派活**：{exc}", file=sys.stderr, flush=True)
+            return 2
+        account_problems = pool_guards.account_guard(
+            args.account,
+            scopes,
+            card=args.card,
+            project=args.project or "",
+            pool=args.pool,
+        )
+        if account_problems:
+            print("[FAIL] 账号不在白名单里，**不派活**：", file=sys.stderr, flush=True)
+            for item in account_problems:
+                print(f"  · {item}", file=sys.stderr, flush=True)
+            return 2
+
     # ★ 留痕（不是判据；判据是上面的子进程侧读数）。
     if args.account and worker_env:
         print(f"[账号] profile「{args.account}」并入 {len(account_vars)} 个环境变量："

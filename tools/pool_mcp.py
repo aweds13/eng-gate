@@ -155,7 +155,7 @@ from typing import TYPE_CHECKING
 
 import tomllib
 import wb_dispatch  # noqa: PLC0415 —— 模型白名单 / 默认模型的**唯一**真源（卡 111 §2 ⑥）
-from pool import guards, registry, task
+from pool import accounts_scope, guards, registry, task
 from pool.jobs import (
     HEARTBEAT_SECONDS,
     REPORT_MAX_CHARS,
@@ -1652,6 +1652,25 @@ def tool_pool_dispatch(
         *guards.lock_guard(card, tree, lock_body, root=main_root),  # ③ 门禁还在跑
         *guards.log_guard(log_path),  # ⑤ 日志不许覆盖
     ]
+    # ★ 卡 A342：账号白名单（每 caller）—— 调**同一个** `guards.account_guard`，
+    #   不另写一份 if（理由见 `tools/pool/__init__.py`：判据只许一份）。
+    account = str(arguments.get("account") or "").strip()
+    if account:
+        try:
+            scopes = accounts_scope.load_scopes()
+        except accounts_scope.ScopeError as exc:
+            problems = [*problems, f"账号白名单读不了（不许当「不收窄」）：{exc}"]
+        else:
+            problems = [
+                *problems,
+                *guards.account_guard(
+                    account,
+                    scopes,
+                    card=card,
+                    project=str(arguments.get("project") or ""),
+                    pool=str(arguments.get("pool") or ""),
+                ),
+            ]
     if problems:
         text = (
             "pool_dispatch：干跑没过，**不派活**（逐条原因）：\n"
