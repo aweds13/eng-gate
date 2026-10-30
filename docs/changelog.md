@@ -603,6 +603,29 @@ test_model_registry.py` 79 passed（与加 docstring 前一字不差）；反向
 - `tools/wb_reconcile.py`：去掉 `--grep` 的 `-10` 截断；新增 `_batch_landed()`/`_landed_commits()`/
   `_spec_commit_in()`，按围栏 `state == landed` 认账；`check()` 第三份 `accounted_done` 打 `[蓝]`。
 - `tests/test_wb_reconcile.py`：5 条断言改三份解包 + 2 条新钉子（landed 认账 / draft 不算证据）。
+### 病灶
+
+`docs/subsystems/pool/README.md` 的 §1 体量句与 §2 度量表是**手抄的文件系统事实**：`:11` 写「17 个 py、7143 行」，`:54` 再写一遍，而实测是 **40 个文件（36 py + 4 toml）/ 13817 行**。模块表只列 19 项，`tools/pool/` 里真有的 21 个模块一个都没进表（`route.py` `sink.py` `holds.py` `sticky.py` `usage_ingest.py` `callers.py` 这些 F 系 magpie 移植的判据模块全不在）。四个会漂的数字也都过期：队列卡数 239→295、批预声明 132→152、派活日志 224→242。
+
+失败模式不是「抄错一个字」，是**记录方式本身错了**：记的是文件系统的事实，由人手维护，而没有任何门在看（`grep -rn 7143 tests/ scripts/` 零命中）。
+
+### 做了什么
+
+- 新 `scripts/gen_pool_readme.py`（416 行）：只重写 README 里 `<!-- pool-margin:begin -->` 与 `<!-- pool-margin:end -->` 两处标记**之间**的内容，标记之外的字节一个都不动。`--check` 一致退 0、不一致退 1 并逐行点名。
+- 新 `docs/subsystems/pool/modules.toml`：40 条 `[[module]]`（`name` / `duty` / `cli`），职责与命令壳的**单一真源**。仓里有、清单里没有的模块 ⇒ 退 1 并点名；清单里有、仓里没有 ⇒ 同样退 1；`duty` 空串 ⇒ 退 1。
+- README §1 + §2 换成生成物，§3–§5（决策 / 卡表 / 边界三表）逐字未动。
+- 日期口径：不是「今天」，是「**这块内容最后一次变化的那天**」—— 把现有块里的日期抹掉与现算块比对，一致就沿用（没改动的仓永远绿），不一致才取今天。否则 `--check` 会每天假红。
+- 新 `tests/test_pool_readme_counts.py` 6 条钉子：真仓 `--check` 退 0 / 未知模块点名 / 空 `duty` 点名 / 手改一行行数报到行号 / 改标记外仍退 0 且该行逐字未变 / CRLF 目标重算后 `\r\n` 数不变且裸 LF 为 0。
+
+### 读数
+
+- `--check` ⇒ 退 0：`[OK  ] docs/subsystems/pool/README.md 与现算一致（40 个文件 / 13817 行 / 2026-10-31）`。
+- `pytest tests/test_pool_readme_counts.py` ⇒ `6 passed`；`tests/test_gen_doc_index.py` ⇒ `9 passed`（未连累索引）。
+- 反向验证 **7/7 全咬**。两轮教训：第一轮 M4 / M6 没咬住，原因不是用例没牙，是**变异没真正改变可观测行为**（一个不改变行为、一个因当天日期恰等于现值两分支同结果）—— 换成真改变行为的变异才咬住。
+- `ruff check` ⇒ `All checks passed!`。
+- `check_docs` 死指针 **145 未涨**；`docs` / `check_layers` / `audit_titles` 三门绿。
+- 旧数字零残留：`7143` 0、`17 个 py` 0、`2026-10-25` 0。
+- 全量 22 门：`ok=True`、`pytest` 全绿。
 ## 2026-10-30 · 白名单里的串必须有产出方：一条死话术把整道 pytest 门判红（E68，T-AG529）
 
 `tools/pytest_select.py` 的 `KNOWN_FALLBACK_MARKS` 是**手抄**的一份话术表，而真正会生成

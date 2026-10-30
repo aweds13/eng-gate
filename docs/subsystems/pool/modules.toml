@@ -1,0 +1,223 @@
+# `tools/pool/` 的模块清单 —— **职责与命令壳的唯一真源**（卡 F11 · T-AG559）
+#
+# 为什么有它：项目书 `docs/subsystems/pool/README.md` §1 那张表原先手抄，21 个模块
+# 一个都没提，行数也停在 7143（实测 13817）。手抄的失败模式不是「抄错一个字」，是
+# **必然过期** —— 它记的是文件系统的事实（模块个数、行数、命令壳是谁），却由人维护。
+# 所以：**行数与模块名单由 `scripts/gen_pool_readme.py` 现算**，这里只留机器算不出来的
+# 那两列（职责 / 命令壳）。
+#
+# 三个键（一个都不能少，多一个也不行）：
+#   name = "guards.py"   相对 `tools/pool/` 的文件名（py 与 toml 都算，40 条）
+#   duty = "……"          它**管什么** —— 不许写成模块名的同义重复（`guards.py` 写「守卫」
+#                        就是没写：读者据此判断该不该改它，写同义词等于没给判据）
+#   cli  = "……"          命令壳（本包一律薄壳：只解析参数 + 打印）；**没有命令壳写 "无"**，
+#                        不许留空（留空看不出是「没有」还是「忘了填」）
+#
+# 判据在生成器里（不在这里）：
+#   · `tools/pool/` 里有、本清单没有 ⇒ 退 1 并点名那个文件（不许静默跳过 —— 漏一个模块
+#     读者就以为它不存在）；
+#   · 本清单里有、`tools/pool/` 里没有 ⇒ 同样退 1 并点名（清单本身成了死指针）；
+#   · `duty` 为空串 ⇒ 退 1（空职责等于没写）。
+#   · 条目顺序不参与渲染：表按文件名排（`__init__.py` 在前），改顺序不影响产物。
+#
+# ★ 本文件**只描述，不放判据**：判据一律在 `tools/pool/**` 的 docstring 与库里。
+
+[[module]]
+name = "__init__.py"
+duty = "包说明与模块地图；只解释分工，不放判据"
+cli = "无"
+
+[[module]]
+name = "account_id.py"
+duty = "人给的名字 ↔ 账本稳定 id 的唯一映射（纯函数：吃 rows，不读文件不读环境）"
+cli = "无（被 `wb_dispatch` 调）"
+
+[[module]]
+name = "accounts_scope.py"
+duty = "调用方名册 → 可见号的收窄：只删候选、从不加（空名单 = 不收窄）"
+cli = "无（被 `pool.guards`、`pool_mcp` 调）"
+
+[[module]]
+name = "callers.py"
+duty = "调用方名册的只读解析：谁能花哪个号的哪些模型；撤人改成 `off = true`，不删行"
+cli = "无（被 `wb_dispatch` 调）"
+
+[[module]]
+name = "checkin.py"
+duty = "五个平台的签到**写动作唯一住所**：六态结论码 + 幂等 + 华为云 `SDK-HMAC-SHA256` 签名（`apply=False` 只探不领）"
+cli = "无（被 `pool_accounts.py checkin` 调）"
+
+[[module]]
+name = "failclosed.py"
+duty = "判不出来时拒还是放：`NotServing`（遮蔽器不在就不发）与 `NotLimited`（限额拿不到就不发）两条语义"
+cli = "无"
+
+[[module]]
+name = "guards.py"
+duty = "树 / 冲突域 / 门禁锁 / 日志 / 项目五条守卫，**纯函数**（吃已读好的数据回 `list[str]`，不写文件不 print）"
+cli = "无（被 `wb_dispatch`、`wb_registry` 调）"
+
+[[module]]
+name = "holds.py"
+duty = "整窗用量的下限 + 五因估算（magpie `window_holds` 移植）：`bounds` / `holds_bounds` / `estimate`"
+cli = "无"
+
+[[module]]
+name = "jobs.py"
+duty = "作业日志三态判据（在跑 / 已判决 / 断了）+ 产物定位；只读、无副作用"
+cli = "`wb_status.py`、`pool_mcp` 的 `job_list` / `job_status`"
+
+[[module]]
+name = "landing.py"
+duty = "落地链八步（⓪ 回退 → ⑧ 复核落盘）：迁树 / 文书 / 门禁 / 封存 / 提交 / 合流，一笔提交的编排全在这里"
+cli = "`wb_land.py`"
+
+[[module]]
+name = "lanes.py"
+duty = "读 `lanes.toml`：一个号同时最多几张卡（数据面；判据在 `guards.lane_guard`）"
+cli = "无（被 `pool.registry` 调）"
+
+[[module]]
+name = "lastgood.py"
+duty = "写盘纪律：原子替换 + `.bak` 落后一次 + fail-closed 读；`read_strict` 从不读 `.bak`（撤过的凭据不许复活）"
+cli = "无（被 `pool.registry`、`pool.task`、`pool.queue`、`pool_accounts`、`gate_pool` 调）"
+
+[[module]]
+name = "lease.py"
+duty = "码道派活那条路并进**同一本**租约账的命令行（不并账，守卫就瞎一半）"
+cli = "本文件即入口"
+
+[[module]]
+name = "ledger_spend.py"
+duty = "按账号累计花费的账（`pool-spend.jsonl`，一行一次派活）；**不内置价目表**，`cost` 由调用方给"
+cli = "无（被 `pool.limits_check` / `limits_policy` 调）"
+
+[[module]]
+name = "limits.py"
+duty = "限额策略的读法与「表读不出 = 拒」那条 `NotLimited`（magpie `ErrUnlimited` 移植）"
+cli = "无（被 `wb_dispatch` 调）"
+
+[[module]]
+name = "limits_check.py"
+duty = "派活**之前**的预算授权：这个号这个窗口还有余量吗 + `Retry-After`（`budget.Reserve` 移植）"
+cli = "无"
+
+[[module]]
+name = "limits_policy.py"
+duty = "限额策略的窗口与 `Limit` 形状（magpie `access/limit.go` 移植）；与 `--input-budget` 熔断的语义差写在文件头"
+cli = "无"
+
+[[module]]
+name = "locks.py"
+duty = "门禁锁的只读封装：`status_argv` / `parse_entries`（拿/放/续租仍归 `gates/diag/gate_lock.py`）"
+cli = "无（被 `pool_mcp` 调）"
+
+[[module]]
+name = "model_registry.py"
+duty = "一层模型注册表、按池分流：`resolve_model` / `effective_allowed_for`（裸名 vs `provider/model` 两套 id 体系）"
+cli = "无（被 `wb_dispatch`、`wb_watch`、`pool.plan` 调）"
+
+[[module]]
+name = "models.py"
+duty = "号池模型的只读读取：批准集 ∩ 可用集；读快照（带 `at`），不联网、不写快照"
+cli = "`wb_state.py`、`pool_mcp`"
+
+[[module]]
+name = "no_window.py"
+duty = "起子进程「不弹窗」的 `CREATE_NO_WINDOW` 常量 —— 全仓唯一真源"
+cli = "无（被十几个入口 import）"
+
+[[module]]
+name = "plan.py"
+duty = "队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（`wb_plan.py` 的逻辑层，拒绝会冲突的组合）"
+cli = "`wb_plan.py`、`wb_batch.py`"
+
+[[module]]
+name = "projects.py"
+duty = "项目索引（`infra/pool/projects.toml`）只读 + 三条硬判据：root 存在 / 两项目不撞 root / 树在白名单内"
+cli = "`wb_project.py`"
+
+[[module]]
+name = "queue.py"
+duty = "落地合并队列：单写者段排队 + 投机预检（`gates/diag/merge-queue.json`）；投机结果**不许复用**"
+cli = "无（被 `pool.landing` 调）"
+
+[[module]]
+name = "quota_history.py"
+duty = "额度历史曲线：留点 / 回血检测（`new_cycle`）/ 去抖 / 剪枝（magpie `quota_history.go` 移植）"
+cli = "无（被 `pool_accounts.py` 调）"
+
+[[module]]
+name = "registry.py"
+duty = "租约账：`reserve` / `release` / `list_reservations` / `is_dead`，落在**主树** `gates/diag/pool-registry.json`"
+cli = "`wb_registry.py`、`wb_dispatch`"
+
+[[module]]
+name = "review.py"
+duty = "白名单越界 / 实际改动 vs 权威域（`outside_allow` / `changed_paths` / `outside_domain`）—— 全仓唯一实现"
+cli = "无（被 `wb_dispatch`、`wb_impact`、`wb_batch` 调）"
+
+[[module]]
+name = "route.py"
+duty = "Smart 路由：给「哪个号先上」排序（`tier` / `apply_order`），只标准库 + 只读"
+cli = "无（被 `wb_dispatch`、`pool.plan`、`pool.sticky` 调）"
+
+[[module]]
+name = "rpm.py"
+duty = "每号每分钟派活**趟数**闸（`decide`）；防不了 vendor 侧 RPM 429（那个归 `pool_quota.py` 的四态）"
+cli = "无（被 `wb_dispatch` 调）"
+
+[[module]]
+name = "sink.py"
+duty = "429 且「还有配额」的候选沉底到次序末尾（`sink` / `unsink` / `unsink_all` / `sunk_at`，进程内状态）"
+cli = "无"
+
+[[module]]
+name = "snapshot.py"
+duty = "零风险快照：`git stash create` 造 commit 再挂 `refs/snapshots/*`（完全不动工作区；不挂 ref 会被 gc）"
+cli = "无（被 `pool.landing` 调）"
+
+[[module]]
+name = "stage_card.py"
+duty = "三段文书片段生成器：台账条目 + changelog + 交接 CHECKPOINT（只写片段，汇总归 `sync_docs`）"
+cli = "`wb_stage_card.py`"
+
+[[module]]
+name = "sticky.py"
+duty = "卡粘性：同一张卡第二次派活别换号（`STICK_KEEP_S` / `note` / `pick`），省重发上下文的 token"
+cli = "无（被 `wb_dispatch` 调）"
+
+[[module]]
+name = "task.py"
+duty = "任务栅栏：批预声明 → 每张卡交成送申请 → 集齐才收口；含自旋锁与逐卡域检查"
+cli = "`wb_task.py`、`auto_land.py`"
+
+[[module]]
+name = "trae_dispatch.py"
+duty = "面板道（CDP 驱动 Trae）进账：一次跑落成租约 + 日志 + 判决；**刻意不接进派活**"
+cli = "本文件即入口；`wb_watch.py`"
+
+[[module]]
+name = "usage_ingest.py"
+duty = "外部用量上报：整批校验 + `rid` 幂等 + 上报行不计入限额（不经过派活器的调用也要进账）"
+cli = "无"
+
+[[module]]
+name = "lanes.toml"
+duty = "每账号并发闸的数据：稳定 id → 同时最多几张卡（随仓走、由人改，改完不用重启）"
+cli = "无（被 `pool.lanes` 读）"
+
+[[module]]
+name = "model-registry.toml"
+duty = "跨池统一层：CodeBuddy 池的真源 + 码道池的引用（只引用不复制，不许有第二份可写名单）"
+cli = "无（被 `pool.model_registry` 读）"
+
+[[module]]
+name = "platforms.toml"
+duty = "平台能力表：八个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false`"
+cli = "无（被 `pool_accounts.py` 读）"
+
+[[module]]
+name = "rpm.toml"
+duty = "每分钟派活闸的数据：稳定 id → 每分最多几趟（0 = 关闸，越界报 `RpmError` 不静默当 0）"
+cli = "无（被 `pool.rpm` 读）"

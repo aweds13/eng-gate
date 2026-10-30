@@ -1,0 +1,30 @@
+[entries."T-AG559"]
+id = "T-AG559"
+title = "pool 项目书不许手抄体量：40 个文件 / 13817 行改成现算（F11）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡F11-pool项目书自己就是过期的.md",
+  "file:scripts/gen_pool_readme.py",
+  "file:docs/subsystems/pool/modules.toml",
+  "file:docs/subsystems/pool/README.md",
+  "file:tests/test_pool_readme_counts.py",
+  "file:复盘/卡/卡F11-pool项目书自己就是过期的.md",
+  "test:test_pool_readme_counts.py",
+  "text:scripts/gen_pool_readme.py::def render_block(",
+  "text:scripts/gen_pool_readme.py::def main_tree_root(",
+  "text:scripts/gen_pool_readme.py::def resolve_date(",
+  "text:docs/subsystems/pool/README.md::<!-- pool-margin:begin -->",
+  "text:docs/subsystems/pool/modules.toml::# 所以：**行数与模块名单由",
+  "text:docs/subsystems/pool/modules.toml::# 三个键（一个都不能少，多一个也不行）：",
+  "text:tests/test_pool_readme_counts.py::def test_unknown_module_is_named(",
+  "text:tests/test_pool_readme_counts.py::def test_outside_marker_is_untouched(",
+]
+gaps = [
+  """度量表里「最近一份跑完的」与「单次派活墙钟」两行按判据 4 退化成口径句（只写怎么取、不写死数字）—— 这两行仍然不是现算值，读者看不到具体数字。为什么本卡不做：这两项要真跑一趟派活才有读数，属派活器那一侧，本卡只治「能现算的必须现算」。
+生成器按 `main_tree_root()` 从 `__file__` 推根，在卡树里跑会写卡树 —— 落地链在卡树 cwd 跑 `sync_docs` / `sync_counts` / `gen_doc_index` 时不会自动重算本 README（没有任何调用方接它）。今天靠 `tests/test_pool_readme_counts.py` 第 ① 条钉子在全量门禁里咬住，接进 `sync_docs` 是另一张卡。
+反向验证第一轮 M4 / M6 没咬住，暴露的是反向验证方法本身的一个盲点：**变异必须真的改变可观测行为**。这一条没有做成钉子自动检查，只写进了本卡 changelog。
+本笔门禁读数是本机跑的（用户 m27225 授权），不是云机 —— 对 m12391 的一次性改口；落地脚本的云机 host 闸保留，只在显式 `--allow-local-host` 时放行。
+""",
+]

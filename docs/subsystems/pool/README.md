@@ -1,6 +1,6 @@
 # pool 子系统（分区 G 的执行侧）—— 项目书
 
-> 立项：2026-10-25（卡 F5 · `T-AG480`）。依赖：F3 的 `scripts/check_docs.py` 已落。
+> 立项：2026 年 10 月 25 日（卡 F5 · `T-AG480`）。依赖：F3 的 `scripts/check_docs.py` 已落。
 > 一句话：**pool 不是"跑门禁的那堆工具"，是仓库里唯一一处"派活与收口"的执行侧** ——
 > 它决定「哪张卡、谁在改、改完怎么收成一笔提交」，但**不判门过不过、不写判据、不下审计结论**。
 > 与 `docs/subsystems/ci/README.md` 同构：本篇只回答「是什么 / 多大 / 定了什么 / 边界在哪」，
@@ -8,31 +8,53 @@
 
 ## 1. 它现在是什么（代码边际）
 
-`tools/pool/` = 17 个 py（16 个模块 + `__init__.py`）、**7143 行**（`wc -l tools/pool/*.py`，2026-10-25 实测）。
+<!-- pool-margin:begin -->
+`tools/pool/` = 36 个 py（35 个模块 + `__init__.py`）、**13817 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
+
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
-| 模块 | 行 | 职责 | 命令壳 |
+| 模块（`tools/pool/`） | 行 | 职责 | 命令壳 |
 |---|---|---|---|
-| `tools/pool/guards.py` | 321 | 树 / 域 / 门禁锁 / 日志 / 项目五条守卫，**纯函数**（吃数据回 `list[str]`） | 无（被 `wb_dispatch` 调） |
-| `tools/pool/registry.py` | 345 | 租约账：`reserve` / `release` / `list_reservations` / `is_dead` | `wb_dispatch`、`wb_registry` |
-| `tools/pool/lease.py` | 109 | 租约命令行（把码道那条路接进同一本账） | 本文件即入口 |
-| `tools/pool/locks.py` | 76 | 门禁锁的**只读**封装：`status_argv` / `parse_entries` | 无 |
-| `tools/pool/task.py` | 1565 | 任务栅栏：批目录 / 收件箱 / 自旋锁 / 域检查 | `wb_task.py` |
-| `tools/pool/landing.py` | 1962 | 落地链八步（⓪ 回退 → ⑧ 复核落盘） | `wb_land.py` |
-| `tools/pool/review.py` | 92 | 白名单越界 / 实际改动 vs 权威域（`outside_allow` / `outside_domain`） | 无 |
-| `tools/pool/plan.py` | 575 | 队列校验（`validate`）、冲突域、排批 | `wb_plan.py` |
-| `tools/pool/stage_card.py` | 363 | 三段文书片段生成器 | `wb_stage_card.py` |
-| `tools/pool/models.py` | 245 | 号池快照读取（批准集 ∩ 可用集）+ 外部开关文件 | `wb_state.py` |
-| `tools/pool/model_registry.py` | 468 | 一层注册表、按池分流（`resolve_model` / `effective_allowed_for`） | `wb_dispatch` |
-| `tools/pool/projects.py` | 223 | 项目索引只读 + 三条硬判据 | `wb_project.py` |
-| `tools/pool/snapshot.py` | 104 | 零风险快照（`stash create` + 挂 ref） | 无 |
-| `tools/pool/jobs.py` | 325 | 日志三态判据 / 产物定位（只读） | `wb_status.py` |
-| `tools/pool/trae_dispatch.py` | 316 | 面板道进账（**刻意不接进派活**，卡 218） | 本文件即入口 |
-| `tools/pool/no_window.py` | 29 | 起子进程不弹窗的常量 | 无 |
-| `tools/pool/platforms.toml` | 192 | **平台能力表**（八个平台的端点 / 凭据形态 / 结论码 / 出处）：进 git、可审、**零凭据** | 无（被 `pool_accounts.py` 读） |
-| `tools/pool_accounts.py` | 739 | **账号账本**只读面：`list` / `show` / `discover` / `probe`（在 `tools/` 根，不在 `tools/pool/`） | 本文件即入口 |
-| `tools/pool/checkin.py` | 690 | **签到写动作的唯一住所**（卡 E48）：六态结论码 + 华为云 `SDK-HMAC-SHA256` 签名 + 五个平台的领取客户端；`apply=False` 即只探不领 | 无（被 `pool_accounts.py checkin` 调） |
-| `tools/pool/__init__.py` | 25 | 包说明 | — |
+| `__init__.py` | 26 | 包说明与模块地图；只解释分工，不放判据 | 无 |
+| `account_id.py` | 160 | 人给的名字 ↔ 账本稳定 id 的唯一映射（纯函数：吃 rows，不读文件不读环境） | 无（被 `wb_dispatch` 调） |
+| `accounts_scope.py` | 283 | 调用方名册 → 可见号的收窄：只删候选、从不加（空名单 = 不收窄） | 无（被 `pool.guards`、`pool_mcp` 调） |
+| `callers.py` | 215 | 调用方名册的只读解析：谁能花哪个号的哪些模型；撤人改成 `off = true`，不删行 | 无（被 `wb_dispatch` 调） |
+| `checkin.py` | 823 | 五个平台的签到**写动作唯一住所**：六态结论码 + 幂等 + 华为云 `SDK-HMAC-SHA256` 签名（`apply=False` 只探不领） | 无（被 `pool_accounts.py checkin` 调） |
+| `failclosed.py` | 66 | 判不出来时拒还是放：`NotServing`（遮蔽器不在就不发）与 `NotLimited`（限额拿不到就不发）两条语义 | 无 |
+| `guards.py` | 480 | 树 / 冲突域 / 门禁锁 / 日志 / 项目五条守卫，**纯函数**（吃已读好的数据回 `list[str]`，不写文件不 print） | 无（被 `wb_dispatch`、`wb_registry` 调） |
+| `holds.py` | 288 | 整窗用量的下限 + 五因估算（magpie `window_holds` 移植）：`bounds` / `holds_bounds` / `estimate` | 无 |
+| `jobs.py` | 325 | 作业日志三态判据（在跑 / 已判决 / 断了）+ 产物定位；只读、无副作用 | `wb_status.py`、`pool_mcp` 的 `job_list` / `job_status` |
+| `landing.py` | 2693 | 落地链八步（⓪ 回退 → ⑧ 复核落盘）：迁树 / 文书 / 门禁 / 封存 / 提交 / 合流，一笔提交的编排全在这里 | `wb_land.py` |
+| `lanes.py` | 154 | 读 `lanes.toml`：一个号同时最多几张卡（数据面；判据在 `guards.lane_guard`） | 无（被 `pool.registry` 调） |
+| `lanes.toml` | 45 | 每账号并发闸的数据：稳定 id → 同时最多几张卡（随仓走、由人改，改完不用重启） | 无（被 `pool.lanes` 读） |
+| `lastgood.py` | 171 | 写盘纪律：原子替换 + `.bak` 落后一次 + fail-closed 读；`read_strict` 从不读 `.bak`（撤过的凭据不许复活） | 无（被 `pool.registry`、`pool.task`、`pool.queue`、`pool_accounts`、`gate_pool` 调） |
+| `lease.py` | 109 | 码道派活那条路并进**同一本**租约账的命令行（不并账，守卫就瞎一半） | 本文件即入口 |
+| `ledger_spend.py` | 223 | 按账号累计花费的账（`pool-spend.jsonl`，一行一次派活）；**不内置价目表**，`cost` 由调用方给 | 无（被 `pool.limits_check` / `limits_policy` 调） |
+| `limits.py` | 132 | 限额策略的读法与「表读不出 = 拒」那条 `NotLimited`（magpie `ErrUnlimited` 移植） | 无（被 `wb_dispatch` 调） |
+| `limits_check.py` | 136 | 派活**之前**的预算授权：这个号这个窗口还有余量吗 + `Retry-After`（`budget.Reserve` 移植） | 无 |
+| `limits_policy.py` | 283 | 限额策略的窗口与 `Limit` 形状（magpie `access/limit.go` 移植）；与 `--input-budget` 熔断的语义差写在文件头 | 无 |
+| `locks.py` | 76 | 门禁锁的只读封装：`status_argv` / `parse_entries`（拿/放/续租仍归 `gates/diag/gate_lock.py`） | 无（被 `pool_mcp` 调） |
+| `model-registry.toml` | 43 | 跨池统一层：CodeBuddy 池的真源 + 码道池的引用（只引用不复制，不许有第二份可写名单） | 无（被 `pool.model_registry` 读） |
+| `model_registry.py` | 644 | 一层模型注册表、按池分流：`resolve_model` / `effective_allowed_for`（裸名 vs `provider/model` 两套 id 体系） | 无（被 `wb_dispatch`、`wb_watch`、`pool.plan` 调） |
+| `models.py` | 258 | 号池模型的只读读取：批准集 ∩ 可用集；读快照（带 `at`），不联网、不写快照 | `wb_state.py`、`pool_mcp` |
+| `no_window.py` | 29 | 起子进程「不弹窗」的 `CREATE_NO_WINDOW` 常量 —— 全仓唯一真源 | 无（被十几个入口 import） |
+| `plan.py` | 675 | 队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（`wb_plan.py` 的逻辑层，拒绝会冲突的组合） | `wb_plan.py`、`wb_batch.py` |
+| `platforms.toml` | 192 | 平台能力表：八个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false` | 无（被 `pool_accounts.py` 读） |
+| `projects.py` | 223 | 项目索引（`infra/pool/projects.toml`）只读 + 三条硬判据：root 存在 / 两项目不撞 root / 树在白名单内 | `wb_project.py` |
+| `queue.py` | 364 | 落地合并队列：单写者段排队 + 投机预检（`gates/diag/merge-queue.json`）；投机结果**不许复用** | 无（被 `pool.landing` 调） |
+| `quota_history.py` | 369 | 额度历史曲线：留点 / 回血检测（`new_cycle`）/ 去抖 / 剪枝（magpie `quota_history.go` 移植） | 无（被 `pool_accounts.py` 调） |
+| `registry.py` | 377 | 租约账：`reserve` / `release` / `list_reservations` / `is_dead`，落在**主树** `gates/diag/pool-registry.json` | `wb_registry.py`、`wb_dispatch` |
+| `review.py` | 92 | 白名单越界 / 实际改动 vs 权威域（`outside_allow` / `changed_paths` / `outside_domain`）—— 全仓唯一实现 | 无（被 `wb_dispatch`、`wb_impact`、`wb_batch` 调） |
+| `route.py` | 306 | Smart 路由：给「哪个号先上」排序（`tier` / `apply_order`），只标准库 + 只读 | 无（被 `wb_dispatch`、`pool.plan`、`pool.sticky` 调） |
+| `rpm.py` | 290 | 每号每分钟派活**趟数**闸（`decide`）；防不了 vendor 侧 RPM 429（那个归 `pool_quota.py` 的四态） | 无（被 `wb_dispatch` 调） |
+| `rpm.toml` | 22 | 每分钟派活闸的数据：稳定 id → 每分最多几趟（0 = 关闸，越界报 `RpmError` 不静默当 0） | 无（被 `pool.rpm` 读） |
+| `sink.py` | 227 | 429 且「还有配额」的候选沉底到次序末尾（`sink` / `unsink` / `unsink_all` / `sunk_at`，进程内状态） | 无 |
+| `snapshot.py` | 104 | 零风险快照：`git stash create` 造 commit 再挂 `refs/snapshots/*`（完全不动工作区；不挂 ref 会被 gc） | 无（被 `pool.landing` 调） |
+| `stage_card.py` | 363 | 三段文书片段生成器：台账条目 + changelog + 交接 CHECKPOINT（只写片段，汇总归 `sync_docs`） | `wb_stage_card.py` |
+| `sticky.py` | 306 | 卡粘性：同一张卡第二次派活别换号（`STICK_KEEP_S` / `note` / `pick`），省重发上下文的 token | 无（被 `wb_dispatch` 调） |
+| `task.py` | 1576 | 任务栅栏：批预声明 → 每张卡交成送申请 → 集齐才收口；含自旋锁与逐卡域检查 | `wb_task.py`、`auto_land.py` |
+| `trae_dispatch.py` | 316 | 面板道（CDP 驱动 Trae）进账：一次跑落成租约 + 日志 + 判决；**刻意不接进派活** | 本文件即入口；`wb_watch.py` |
+| `usage_ingest.py` | 655 | 外部用量上报：整批校验 + `rid` 幂等 + 上报行不计入限额（不经过派活器的调用也要进账） | 无 |
 
 两张**账**分开住，这是理解本子系统的关键：
 
@@ -47,17 +69,17 @@
 > 账号账**故意在仓外**：只存凭据指针（`~/.codeartsdoer/pool.env` 之类），不存凭据本身；
 > 没有 git 兜底，所以写入一律原子替换，删号打墓碑（`tools/pool_accounts.py` 的 `save_ledger()`）。
 
-## 2. 度量（2026-10-25 实测）
+## 2. 度量（2026-10-31 现算）
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | 7143 行 / 17 个 py | `wc -l tools/pool/*.py` |
-| 队列卡数 | 239 张（218 done / 21 pending） | 读 `docs/workbacklog.toml` 的 `cards` |
-| 批预声明 | 132 份 | `ls gates/diag/batch/*.toml \| wc -l`（只主仓有） |
-| 派活日志 | 224 份（不含用量账与当前这轮） | 主树 `gates/diag/wb-*.jsonl` 共 226 个文件，减 `wb-usage.jsonl` 与当前这张卡 |
-| 单次派活墙钟 | 中位 **681 s**、均值 909 s、最长 6858 s（222 份有 ≥2 个时间戳的样本） | 每份日志首个/末个 `__timestamp` 之差 |
-| 最近一份跑完的 | `wb-E13.jsonl` 396 s（2026-10-24） | 同上 |
-
+| 实现体量 | **13817 行** / **36 个文件**（35 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 299 张（287 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
+| 派活日志 | 241 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
+| 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |
+| 最近一份跑完的 | 不写死：见右列 | 同上；取 `gates/diag/wb-*.jsonl` 里 mtime 最新、且 ≥2 个 `__timestamp` 的那份 |
+<!-- pool-margin:end -->
 口径两条（别读错）：① 只统计**有 ≥2 个 `__timestamp`** 的日志，`wb-usage.jsonl`（用量账）不计；
 ② 耗时是**工人进程的墙钟**，不含主控自己的落地链（那条 11–15 min 记在 CI 子系统的度量里）。
 
