@@ -551,7 +551,7 @@
    ★ 判据是「**值导入** `@openmaic/*` 才会炸」——`batch-export` 也 import `@openmaic/dsl` 却能过，因为它是 type-only。
    **影响**：F43/F44 这两个功能点不能在 DSH 侧靠 `tsx` 现跑，必须走别的编译路径。
    **不知道**：Next 的 bundler 能不能直接吃，因为这需要真跑一次 Next 构建；本轮不跑测试所以没验。
-3. **反引号里的 Markdown 文件名会被当真实文件校验**。`scripts/check-layers.py:193` 的正则只匹配
+3. **反引号里的 Markdown 文件名会被当真实文件校验**。`scripts/check_layers.py` 的引用判据 的正则只匹配
    反引号内以 dot-m-d 结尾的串（形如：反引号 + 路径 + .md 后缀 + 反引号）；裸文件名还会在 `docs` 下 `rglob`。
    所以写文档时**反引号里只能放真实存在的 Markdown 文件**，举例也不行。判据：`python -X utf8 scripts/check-layers.py`
    末行 `LAYER CHECKS: PASS ✅`，且应打 `[info] 引用完整性：这次实际检查了 N 条引用（断链 0 处）`。

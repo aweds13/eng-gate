@@ -9662,6 +9662,17 @@ evidence = [
 ]
 gaps = "1. 只清 `parameters` / `output` 这一处口径（§4.7），没有整篇重写、没动别的章节；文档其余地方若还有旧口径，留给后续卡。指针 `复盘/卡/卡B1-文档参数口径.md`2. 验收是「照抄能不能挂上」这一步人为可复现（写一个带参插件 → 重启 → 工具表里必须出现），没有新增钉子去自动解析 markdown 示例（脆）。指针 `gates/diag/wb-B1.report.md`3. 没碰 `D:/repo/_tools/dsh-plugins/` 里的插件代码（已在 OpenMAIC 侧修好并验过 5/5），也没改宿主 `defineTool` 实现。指针 `复盘/卡/卡B1-文档参数口径.md`4. 「参数根是开放的，所以 `additionalProperties` 兜不了底」这条真结论保留，但已写明它不是可以在 `parameters` 顶层写的键 —— 差别在「位置」而不是「结论对错」。指针 `docs/workbacklog.toml`"
 
+[entries."T-AG557"]
+id = "T-AG557"
+title = "迁移DSH 里一处死指针：check-layers 拼错成连字符"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/implementation/迁移DSH.md",
+  "file:scripts/check_layers.py",
+]
+gaps = "1. 只修了这一处；新增四份文档（迁移DSH + 两份程天学 + 三张卡规格）里其余引用都过了一遍 ratchet，但 drift 债从 379 涨到 492（+113）—— drift 只报告不红，未逐条核对这 113 条是真的漂移还是误判。指针 gates/logs/docs.log2. 判不出 1114 条（skip）没有逐条看。指针 gates/logs/docs.log"
+
 [entries."T-AG556"]
 id = "T-AG556"
 title = "B2/B4 翻 done：按实际到手的交付物结账，B3 因为交付物不存在保持 pending"
