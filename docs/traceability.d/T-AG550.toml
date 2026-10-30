@@ -1,0 +1,26 @@
+[entries."T-AG550"]
+id = "T-AG550"
+title = "外面报来的用量也得进账：magpie 外部用量上报解析移植进 pool（F43）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A347-外面报来的用量也得进账.md",
+  "file:tools/pool/usage_ingest.py",
+  "file:tests/test_pool_usage_ingest.py",
+  "test:test_pool_usage_ingest.py",
+  "text:tools/pool/usage_ingest.py::class IngestRefusedError",
+  "text:tools/pool/usage_ingest.py::def parse_batch(",
+  "text:tools/pool/usage_ingest.py::def merged_tokens(",
+  "text:tools/pool/usage_ingest.py::MAX_RECORDS = 5000",
+  "text:tools/pool/usage_ingest.py::REPORTED_MARK = ",
+]
+gaps = [
+  """传输层没移植：magpie 的 415/413/403 是 HTTP 中间件行为，本仓没有 HTTP 入口，本卡只做函数级入口，这层由将来的调用方负责。
+读端零消费者：`merged_tokens()` 今天没有任何生产调用方，把上报行真正并进限额判断是下一张卡（读端接线）的活。
+`cost` 只存不核：字段收下并校验上限，但不参与任何扣费或限额判定，因为本仓没有计价表。
+两本账并存：`gates/diag/usage-reported.jsonl` 与 `gates/diag/wb-usage.jsonl` 分开落盘，既有三个读者（`usage_summary` / `usage_in` / `jobs.USAGE_LOG_RE`）看不见直连账，这是有意的隔离，不是遗漏。
+`_known_rids()` 每次全扫：没有增量位点，账本变大后每次上报都是 O(n)，上限 `MAX_RECORDS` 收在 5000 但历史累积无界。
+反向验证脚本与日志在 gitignored 的 `gates/diag/` 下：读数无法随树分发，结论已写进本片段与 changelog 正文；主树先例如此（`git ls-files gates/diag` 只有 `gate_lock.py`）。
+""",
+]

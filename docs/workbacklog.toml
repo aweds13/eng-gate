@@ -4700,3 +4700,17 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A347"
+task = "T-AG550"
+title = "外面报来的用量也得进账：magpie 外部用量上报解析移植进 pool（F43）"
+tree = ".wt/A347"
+spec = "复盘/卡/卡A347-外面报来的用量也得进账.md"
+files = [
+  "tools/pool/usage_ingest.py",
+  "tests/test_pool_usage_ingest.py",
+]
+status = "done"
+risk = "mid"
+depends = []

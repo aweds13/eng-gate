@@ -1,3 +1,24 @@
+### 做了什么
+
+magpie 允许外面的调用方把「这一通到底花了多少」报回来（`internal/gateway/usage_ingest.go`，F43），本仓 pool 此前完全没有这条入口：`gates/diag/wb-usage.jsonl` 只有本仓自己派活时写的行，外面直连花掉的 token 进不了任何一本账。
+
+新增 `tools/pool/usage_ingest.py`（655 行），把上报批次的解析与记账逐条搬过来：
+
+- **九条上限逐字照抄**：`MAX_BODY = 32 << 20` / `MAX_RECORDS = 5000` / `MAX_TOKENS = 100_000_000` / `MAX_MILLIS = 86_400_000` / `MAX_COST = 10_000.0` / `MAX_TEXT = 256` / `FUTURE_S = 3600` / `EARLIEST = datetime(2000, 1, 1, tz=utc)` / `FIELDS` 二十个字段。
+- **全有或全无**：`parse_batch()` 逐条 `_parse_one()`，任何一条不合规就 `raise IngestRefusedError(faults)` 并**一个字节都不写盘**（`usage_ingest.go` 的整批拒收语义）。`Fault` 同时带 `index` / `field` / `msg`，`error_text()` 两种分支逐字对齐原件。
+- **幂等**：`_known_rids()` 先按 `REPORTED_MARK` 子串粗筛再逐行 parse，同一 `rid` 第二次上报记为 `skipped` 而不是重复入账；同一批内重复也只算一次。
+- **读端默认不计入**：`merged_tokens(model, start, end, include_reported=False)` —— 默认值 `False` 就是「上报行不计入任何限额」这条规则的**唯一一处**落地。
+
+### 为什么这么修
+
+两本账（本仓直连、外部上报）时间口径不同：本仓那本钉死 `+08:00`，上报行自带偏移量。工人自查出真 bug 并已修 —— 初版 `_reported_tokens` 用了 `_local()`（强覆 `+08:00`），会把 `09:00Z` 解析成 `09:00+08:00`、凭空错八小时；改为 `_moment()`（无 tzinfo 才回落，自带偏移量原样保留）。
+
+### 读数
+
+- `pytest tests/test_pool_usage_ingest.py` ⇒ 14 passed（12 条卡规格点名 + 2 条补测）。
+- `ruff check` 三文件 ⇒ All checks passed；`mypy tools/pool/usage_ingest.py` ⇒ Success: no issues found。
+- 反向验证 `gates/diag/_rev_A347.py` ⇒ 结论：6/6 条全部咬住，收尾绿。每条跑完都回读 sha256 与原文逐字节比对，收尾再核一次。
+- **零接线**：`git diff --stat -- tools/wb_dispatch.py` 为空，六份 PROTECTED_FILES 未动。
 同一张卡别每次换号。
 
 magpie 的 `affinity.go` 记着「这段对话上次是谁答的」，下一轮优先还找它 —— 换了 provider，上游那侧的 prompt 缓存就白丢了。本笔把它的**粘性层**搬进 pool：`tools/pool/sticky.py` 记「这张卡上次是谁答的」，`tools/wb_dispatch.py` 在挑号之前先问它一句。
