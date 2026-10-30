@@ -4729,3 +4729,18 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A348"
+task = "T-AG551"
+title = "谁在花谁的钱：magpie 调用方名册移植进 pool（F32）"
+tree = ".wt/A348"
+spec = "复盘/卡/卡A348-谁在花谁的钱.md"
+files = [
+  "tools/pool/callers.py",
+  "tools/wb_dispatch.py",
+  "tests/test_pool_callers.py",
+]
+status = "done"
+risk = "mid"
+depends = []

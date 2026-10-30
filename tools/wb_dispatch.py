@@ -3122,6 +3122,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--account", default=None,
                         help="★ 多号（卡 149）：把工人跑在指定 profile 里的那组环境变量现取注入；"
                              "不给 = 今天家目录、逐字不变；名字不存在 / 取不到 ⇒ 拒派并点名")
+    parser.add_argument("--caller", default=None,
+                        help="★ 调用方（卡 A348）：名册 `infra/pool/callers.toml` 里的 id —— "
+                             "答「谁在花谁的钱」，与 `--account`（用哪个号）正交；"
+                             "不给 = 按 `TF_WINDOW_ID` / `<hostname>:<pid>` 认；"
+                             "这个人被撤（`off = true`）⇒ 拒派并点名（走前置检查出口、退 2）")
     parser.add_argument("--cli", default=None,
                         help="CLI 入口覆盖（默认优先用独立安装的那份）")
     parser.add_argument("--permission-mode", default=DEFAULT_PERMISSION_MODE,
@@ -3368,6 +3373,27 @@ def main() -> int:
             account_vars = account_env(args.account)
         except AccountError as exc:
             problems.append(str(exc))
+
+    # ★ 卡 A348（F32 调用方名册）：这个人还在吗 —— 撤了（`off = true`）就**不派活**。
+    #   ★ 名册是**加法**：文件不在 / 这个人没登记 ⇒ 一律放行（落地当天零行为变化）。
+    #   ★ 名册**在但读不懂** ⇒ 拒派并点名（`CallersError`）—— 坏配置绝不当「没配」。
+    #   ★ 复用下面的 `problems` 出口（打印 + 退 2）：不新开退出码、不碰 `reserve()` 签名。
+    #     pool 依赖块整块在 `sys.path.insert` 之后（E402）⇒ 照 `caller_model_patterns()`
+    #     的先例走**函数内 import**（本文件铁律：不写那类豁免注释）。
+    from pool import callers as pool_callers
+
+    try:
+        this_caller = pool_callers.resolve(
+            args.caller or "", env_window=os.environ.get("TF_WINDOW_ID", "")
+        )
+    except pool_callers.CallersError as exc:
+        problems.append(f"调用方名册读不了，**不派活**：{exc}")
+    else:
+        if pool_callers.is_off(this_caller):
+            problems.append(
+                f"调用方 {this_caller.id}（{this_caller.label or '无名'}）已撤"
+                "（off = true）—— 不许派活"
+            )
 
     # ★ 卡 149：profile 取到了 ⇒ 与现进程环境合成一份交给工人（**不给 = None = 逐字继承**）。
     #   ★ 放在 `--detach` **之前**：坏 profile 在**父进程**就拒（脱离子进程带 `--detach-done`，
@@ -3704,7 +3730,11 @@ def main() -> int:
         #   ★ 不给 `--account` 时**逐字不变**（仍是 `spec=…`），免得打穿既有读数。
         #   ★ 卡 A344：note 里留的是**人给的名字**（给人看的），而 `account=` 传的是**稳定 id**
         #     （给 lanes 守卫查表用的）—— 两者都要，别合并：一个给人读、一个给判据读。
+        # ★ 卡 A348：`caller=` 与 `account=` **并列**（一个答「谁在用」、一个答「用哪个号」），
+        #   不给 `--caller` 时逐字不变 —— 免得打穿既有读数。
         lease_note = f"spec={args.spec}" + (f"｜account={args.account}" if args.account else "")
+        if args.caller:
+            lease_note += f"｜caller={args.caller}"
         try:
             # ★ 卡 A345（rebase 到 A344 之后）：`account=` 由 **A344** 传（稳定 id，给 lanes
             #   守卫查表用）—— 本卡原来那句 `account_kw` 已被它取代，**删掉不重复传**：

@@ -1,0 +1,29 @@
+[entries."T-AG551"]
+id = "T-AG551"
+title = "谁在花谁的钱：magpie 调用方名册移植进 pool（F32）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A348-谁在花谁的钱.md",
+  "file:tools/pool/callers.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_pool_callers.py",
+  "test:test_pool_callers.py",
+  "text:tools/pool/callers.py::class CallersError",
+  "text:tools/pool/callers.py::def resolve(",
+  "text:tools/pool/callers.py::def is_off(",
+  "text:tools/pool/callers.py::CALLERS_NAME = ",
+  "text:tools/pool/callers.py::def load_callers(",
+  "text:tools/wb_dispatch.py::from pool import callers as pool_callers",
+]
+gaps = [
+  """反向验证脚本不入库：gates/diag/_rev_A348.py 命中既有 .gitignore 规则（该目录唯一例外是 gate_lock.py），所以那 12 条变异证据不随卡落地，是一次性证据。要让它入库得另开一张改 .gitignore 的卡。
+Caller.models 与 Caller.accounts 今天零消费者：只有本模块内的 _as_names() 与一条静态钉子在读。按模型/号收窄派活是下一张卡的事（F34/F35 那两套已经在 model_registry 与 accounts_scope 里落地，两者如何汇到 caller 这一维没有设计）。
+--caller 没有在 --batch 模式往下透传：dispatch_batch() 拼子进程 argv 时透传了 --model / --account / --execute / --detach，没加 --caller；后果是批量派活时调用方身份退回窗口身份（= 全放行，不会误拒），这是保守方向的缺口。
+off 只挡 wb_dispatch 这一条派活路：tools/pool_mcp.py 的写面与 pool_registry.reserve() 都不认 caller。撤掉一个人挡不住别人直接调 MCP 工具或直接调 reserve()。
+钉子跑的是真 wd.main() 全路径（含前置检查、占树、派活），但 run_worker 是替身 —— 验的是判据与出口，不是「真 node 进程没起」。
+名册今天在仓外锚点下不存在（本机从仓根向上能找到祖父目录里的 infra/pool，该目录下没有 callers.toml）⇒ 落地当天零行为变化是按「文件不在」这条路成立的，真实策略文件端到端没跑过。
+反向验证脚本与日志在 gitignored 的 gates/diag/ 下：读数无法随树分发，结论已写进本片段与 changelog 正文；主树先例如此。
+""",
+]

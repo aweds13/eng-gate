@@ -1,5 +1,31 @@
 ### 做了什么
 
+magpie 有一份「调用方名册」（`internal/access`，F32）——谁说自己在花谁的钱、这个人撤了没有、他能用哪些模型和号。本仓 pool 此前完全不知道「谁在派活」：`wb_dispatch` 只有一个 `--account`（用哪个号），没有「谁」这一维。
+
+新增 `tools/pool/callers.py`（215 行）：
+
+- `Caller` 五个字段 `id` / `label` / `off` / `models` / `accounts` —— **没有 secret / masked / key / token 任何一个**（有钉子静态钉住整个文件）。
+- `resolve(caller, env_window)` 三级链：显式 `--caller` > `TF_WINDOW_ID` > `<hostname>:<pid>`；`load_callers()` 读 `infra/pool/callers.toml`；`callers_path()` 从 `TOOL_ROOT` 锚点推、跟 `TF_POOL_CALLERS` 覆盖、**不跟 cwd**。
+- **名册是加法**：文件不在 / 这个人没登记 ⇒ 一律放行（落地当天零行为变化）；**名册在但读不懂** ⇒ `CallersError`，坏配置绝不当「没配」。
+- `is_off()` 是唯一的撤销开关：`off = true` ⇒ 拒派并点名。
+
+`tools/wb_dispatch.py` 一处接入（+30/−0）：`--caller` 参数 + `problems.append(...)` 走**既有**前置检查出口（打印 `[FAIL] 不派活 —— 前置检查没过：` 加逐条，退 2）。
+
+### 为什么这么接
+
+**不新开退出码、不动 `reserve()` 签名**：撤一个人是「前置检查没过」这一类，不是新的一种失败；复用同一个出口意味着 `--status`、判决文件、留痕行为全都自动继承。
+
+**函数内 import**：`wb_dispatch.py` 的 pool 依赖块整块在 `sys.path.insert` 之后（E402），照既有 `caller_model_patterns()` 的先例走函数内 import，不用豁免注释。
+
+### 读数
+
+- `pytest tests/test_pool_callers.py` ⇒ 12 passed。
+- 邻层 `test_pool_lanes.py` + `test_pool_guards.py` ⇒ 35 passed；`test_wb_dispatch.py` ⇒ 215 passed。
+- `ruff check` 四文件 ⇒ All checks passed。
+- 反向验证 `gates/diag/_rev_A348.py` ⇒ 结论：12/12 条全部咬住，收尾绿。每条真改真跑真复原，sha256 逐字节比对。
+- 主树未碰：全程只在卡树读写，`git status --porcelain` 在主树为空。
+### 做了什么
+
 magpie 有一层「全都忙就歇一会儿再问」（`internal/gateway/patience.go`，F21）——候选组里每个成员都以**会过去**的方式失败（overloaded / busy / 短暂限流）时，暂停后重问，每轮更久，永不短于成员自报的 `Retry-After`，直到组预算耗尽。本仓 pool 此前撞了 `限流` 只有一处固定等待，没有递增、没有预算、不会重问。
 
 **算术层逐字搬，两层明确不搬：**
