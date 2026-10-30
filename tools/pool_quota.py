@@ -579,6 +579,53 @@ def round_wait(back_at: str | None, *, now: datetime | str | None = None) -> tup
     seconds = min(max(int(diff) + WAIT_MARGIN_S, WAIT_MIN_S), WAIT_MAX_S)
     return seconds, f"最早续期 + {WAIT_MARGIN_S}s（clamp 到 {WAIT_MIN_S}..{WAIT_MAX_S}）"
 
+# ================================================================ 耐心（magpie F21 移植，卡 A349）
+
+
+# ---- 「全都忙就歇一会儿再问」的算术 —— 六个常量逐字搬 magpie，出处行号写在每条后面：
+RETRY_PAUSE_S = 1                      # magpie fallback.go:1610 retryPause = time.Second
+REPLAN_LONGEST_S = 30 * RETRY_PAUSE_S  # magpie patience.go:52 replanLongest() = 30 * retryPause
+PATIENCE_OFF = -1                      # magpie provider/group.go:145-149 PatienceOff = -1
+PATIENCE_DEFAULT_S = 60                # magpie provider/group.go:145-149 PatienceDefault = 60
+PATIENCE_LONGEST_S = 240               # magpie provider/group.go:145-149 PatienceLongest = 240
+REPLAN_ROUNDS = 12                     # magpie patience.go:48 replanRounds = 12
+
+# ★ 三个数字三件事，别合并（与上面的 `WAIT_*` 更是两套语义）：
+#   `PATIENCE_DEFAULT_S` = 「没配」时给多少预算（**0 不是关**，`PATIENCE_OFF` 才是关）；
+#   `PATIENCE_LONGEST_S` = 整张卡的耐心预算上限（配 3600 也只给 240）；
+#   `REPLAN_LONGEST_S`   = **单次**重问间隔的上限（第 4 轮起封顶 30 秒）；
+#   `REPLAN_ROUNDS`      = 最多重问几轮（与预算谁先到就听谁的 —— 两道闸都在，不互相替代）。
+
+
+def patience_waits(patience: int | None) -> int:
+    """把 `--patience` 折成**总预算秒数** —— 三支，顺序与边界照 magpie `patience.go:91`。
+
+    ① `None` / `< 0` ⇒ `0`（**`PATIENCE_OFF = -1` 是「关」，不是「最短」**）；
+    ② `== 0` ⇒ `PATIENCE_DEFAULT_S`（0 是「没配」，不是关 —— 关只有一个数）；
+    ③ 其余 ⇒ `min(patience, PATIENCE_LONGEST_S)`（配 3600 也只给 240）。
+    ★ 与 `round_wait()` 是两件事：那个算「按记录等**一次**多久」（clamp 60..600），
+      这个算「**整张卡**还能歇几秒」；两者不许互相调用。
+    """
+    if patience is None or patience <= PATIENCE_OFF:
+        return 0
+    if patience == 0:
+        return PATIENCE_DEFAULT_S
+    return min(patience, PATIENCE_LONGEST_S)
+
+
+def replan_wait(round_no: int, *, soonest_s: int = 0) -> int:
+    """第 `round_no` 次重问之前歇多久：`min(RETRY_PAUSE_S << (round_no + 1), REPLAN_LONGEST_S)`。
+
+    再取 `max(…, soonest_s)` —— **成员自报的续期只做下限、不做上限**（报 9999 就等 9999）。
+    照 magpie `patience.go:52 replanLongest()` 与 `routing.go:894 soonest`。
+    取值实测：`0⇒2 / 1⇒4 / 2⇒8 / 3⇒16 / 4⇒30 / 5⇒30 / 12⇒30`（第 4 轮起封顶 30 秒）。
+    `round_no < 0` ⇒ `ValueError`（没有「第 -1 轮」这种问法，别让负数悄悄变成一次短睡）。
+    """
+    if round_no < 0:
+        raise ValueError(f"重问轮次不许为负：{round_no}")
+    wait = min(RETRY_PAUSE_S << (round_no + 1), REPLAN_LONGEST_S)
+    return max(wait, int(soonest_s))
+
 
 # ---------------------------------------------------------------- 刷新时间戳
 

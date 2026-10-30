@@ -3178,6 +3178,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--quota-wait", type=int, default=DEFAULT_QUOTA_WAIT,
                         help=f"撞 429 先等几秒再探（默认 {DEFAULT_QUOTA_WAIT}；用户 2026-09-26："
                              "「你先等一下」；0 = 测试用）")
+    parser.add_argument("--patience", type=int, default=0,
+                        help=f"全都忙时「歇一会儿再问」的总预算（秒）—— 默认 0 = 用标准预算 "
+                             f"{pool_quota.PATIENCE_DEFAULT_S}s（0 不是关！）；-1 = 关"
+                             "（行为与没有这个参数逐字相同）；"
+                             f"上限收 {pool_quota.PATIENCE_LONGEST_S}"
+                             f"（配 3600 实际用 {pool_quota.PATIENCE_LONGEST_S}）")
     parser.add_argument("--input-budget", type=int, default=DEFAULT_INPUT_BUDGET,
                         help=f"单卡 input tokens 预算（默认 {DEFAULT_INPUT_BUDGET:,}）—— "
                              "超了就止损掐掉，不许自动续跑（防空烧）")
@@ -3735,6 +3741,10 @@ def main() -> int:
     model = args.model                       # 429 三拍会按序换（只换白名单里的）
     quota_seen: dict[str, str] = {}          # 每个模型撞的额度错（全挂就停时写进判决）
     usage_total = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0}
+    # ★ 卡 A349：耐心预算（0 = 关）+ 已重问几轮 + `--quota-wait` 原件（每轮复位用）
+    patience_left_s = pool_quota.patience_waits(args.patience)
+    patience_round = 0
+    quota_wait_s = args.quota_wait
 
     def beat(line: str) -> None:
         """心跳：既打出来，也**落成文件** —— 过夜跑时读一个文件就知道它还在不在动。"""
@@ -3827,6 +3837,28 @@ def main() -> int:
                 pool_quota.record(card=args.card, model=model, pool=pool,
                                   kind=quota["kind"], reset_raw=quota["reset"],
                                   source_log=log_k.name, root=ROOT)
+            # ★ 卡 A349：全都忙就歇一会儿再问（算术只在 pool_quota 里，判据一份真源）。
+            #   只有「限流」进门：「余额耗尽」是硬挡，等多久都不会好 —— 照旧走到界出口。
+            #   耐心不越过下面卡 045 的 `--retry` 界：它只管这一歇歇多久、还能歇多久。
+            args.quota_wait = quota_wait_s    # 每轮先复位：耐心不生效时与今天逐字相同
+            if quota.get("kind") == "限流" and patience_left_s > 0 \
+                    and patience_round < pool_quota.REPLAN_ROUNDS:
+                # 成员自报的续期只做下限：先按记录折成秒（没记录就是 0）。
+                # ★ `upper` 给一个大数 = 「只解析、不封顶」：`wait_seconds` 默认把 fallback
+                #   当**上限**，传 0 会恒得 0（那就等于这一层没接）—— 这里要的是原始 diff。
+                soonest_s = pool_quota.wait_seconds(quota.get("reset_at"), 0, upper=10 ** 9)
+                pause = pool_quota.replan_wait(patience_round, soonest_s=soonest_s)
+                if pause > patience_left_s:
+                    print(f"[耐心] 这一歇要 {pause}s，预算只剩 {patience_left_s}s"
+                          " → 不再重问（照旧走到界出口，退出码不变）",
+                          file=sys.stderr, flush=True)
+                else:
+                    patience_left_s -= pause
+                    patience_round += 1
+                    args.quota_wait = pause   # 这一歇就是下游 wait_seconds 的封顶
+                    print(f"[耐心] 第 {patience_round} 次重问：最多歇 {pause}s"
+                          f"（预算还剩 {patience_left_s}s）",
+                          file=sys.stderr, flush=True)
             # ★★ 卡 045（T-G136）续跑封顶 —— 界就是这一行：额度续跑与中断续跑**共用
             #   `--retry` 这一个界**（已续跑 attempts-1 次 ≥ retry → 到界，写判决、退出码 7）。
             #   R029 真撞过：旧代码这里无界，探针通过就永远「同一模型接着干」，白跑 3 轮。

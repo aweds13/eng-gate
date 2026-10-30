@@ -1,0 +1,29 @@
+[entries."T-AG552"]
+id = "T-AG552"
+title = "全都忙就歇一会儿再问：magpie 组的耐心移植进 pool（F21）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A349-全都忙就歇一会儿再问.md",
+  "file:tools/pool_quota.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_pool_patience.py",
+  "test:test_pool_patience.py",
+  "text:tools/pool_quota.py::def patience_waits(",
+  "text:tools/pool_quota.py::def replan_wait(",
+  "text:tools/pool_quota.py::PATIENCE_LONGEST_S = 240",
+  "text:tools/pool_quota.py::REPLAN_LONGEST_S = 30 * RETRY_PAUSE_S",
+  "text:tools/wb_dispatch.py::patience_left_s = pool_quota.patience_waits(",
+  "text:tools/wb_dispatch.py::and patience_round < pool_quota.REPLAN_ROUNDS",
+]
+gaps = [
+  """「组」没有真源：magpie 的 Patience 挂在候选组上（组有预算、成员各有 Retry-After），pool 有三套已有的「一组号」但都不是这个语义。本卡不造第四套，耐心作用于「这一轮这一张卡的重试」，预算是单卡单轮。
+触发层搬不过来：magpie 的 busy(status, body) 读 HTTP 状态码，而 pool 的工人是子进程，事件里没有状态码。本卡只认 quota_error() 两档 kind，overloaded / 503 / 529 那一族今天根本到不了这里。
+保活层完全不可移植：pauseAlive / didNotStream / protectionRefused / failOther / failRate 都是 HTTP 网关「还没开始发」的形态，pool 没有等价边界。
+REPLAN_ROUNDS 在当前默认下不可达：默认 60 秒预算配 2/4/8/16/30 的递增，第 5 轮就超预算，所以「轮次闸」这个分支只有把 --patience 配到 240 才有机会走到，逆向验证没有针对它的变异。
+真 429 没打过：所有集成钉子都用 fake run_worker 加 fake quota_probe_ok，没有一个真去撞厂商限流。--patience 在真号池里的手感（多跑几轮到底值不值）判不了。
+mypy 一条存量错：tools/pool_quota.py:251 _load 的 no-any-return，在 HEAD 上复现同一条，不是本卡引入，也没顺手修（超域）。
+反向验证脚本与日志在 gitignored 的 gates/diag/ 下：读数无法随树分发，结论已写进本片段与 changelog 正文；主树先例如此。
+""",
+]

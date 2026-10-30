@@ -4714,3 +4714,18 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A349"
+task = "T-AG552"
+title = "全都忙就歇一会儿再问：magpie 组的耐心移植进 pool（F21）"
+tree = ".wt/A349"
+spec = "复盘/卡/卡A349-全都忙就歇一会儿再问.md"
+files = [
+  "tools/pool_quota.py",
+  "tools/wb_dispatch.py",
+  "tests/test_pool_patience.py",
+]
+status = "done"
+risk = "mid"
+depends = []
