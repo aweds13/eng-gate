@@ -1,0 +1,32 @@
+[entries."T-AG535"]
+id = "T-AG535"
+title = "读额度要有读取纪律：magpie F25 移植进 pool"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A333-读额度要有读取纪律.md",
+  "file:tools/pool_quota.py",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_quota_read_policy.py",
+  "file:tests/test_pool_accounts.py",
+  "file:tests/test_pool_failclosed.py",
+  "test:test_quota_read_policy.py",
+  "test:test_pool_accounts.py",
+  "test:test_pool_failclosed.py",
+  "text:tools/pool_quota.py::FIRST_WAIT_S = 3.0",
+  "text:tools/pool_quota.py::REREAD_AFTER_S = 60.0",
+  "text:tools/pool_quota.py::def read_policy(",
+  "text:tools/pool_quota.py::def merge_latest(",
+  "text:tools/pool_quota.py::def mark_stale(",
+  "text:tools/pool_accounts.py::def record_probe_result(",
+  "text:tests/test_pool_failclosed.py::CARD_COMMIT = os.environ.get(",
+]
+gaps = [
+  """`read_policy`/`merge_latest`/`mark_stale` 三个函数**零生产调用点**（`status()`/`wait_until()`/`refresh_once()` 一行未改）—— 接线是下一张卡，本卡只立判据与钉子。
+`mark_stale` 的留痕借用了 refresh 文件（`gates/diag/quota-refresh.json`）而不是另立状态文件：好处是不多造文件，代价是「谁写在什么时候」要靠 key 的 `card|model` 前缀分辨。
+晚到响应的顺序号 `read_seq` 由调用方给，本仓还没有真正的并发读路径（`probe_account()` 是同步单发）⇒ `merge_latest` 的正确性目前只有单测钉着，没有生产流量验证。
+账本 `samples` 有上限（`SAMPLES_CAP = 20`），探测频率高于 20 次/窗口时最早的观测会被挤掉；本卡不处理淘汰策略。
+magpie 的 `claudeAskFloor`/`claudeUsageWaitMin`/`claudeUsageWaitMax`（订阅额度专用等待）未搬：本仓没有订阅制额度模型。
+""",
+]

@@ -65,6 +65,17 @@ WAIT_MAX_S = 600         # magpie quotaWaitMax = 10 * time.Minute
 WAIT_MARGIN_S = 30       # magpie quotaWaitMargin = 30 * time.Second
 REFRESH_GAP_S = 30       # magpie quotaRefreshGap = 30 * time.Second
 
+# ★ 两套语义，别混 —— magpie 的 `#1295` 就是混出来的：
+#   `REFRESH_GAP_S`  = 「**用户手动**刷新」的抑制窗口：同一条读数 30 秒内不许再问一次供应商；
+#   `REREAD_AFTER_S` = 「**后台**读额度」的重读阈值：读数超过 60 秒才算旧、才值得重读。
+#   一个管「人按了一次刷新」，一个管「这次读该不该去问」。两者不是倍数关系 ——
+#   不许把 `REREAD_AFTER_S` 改写成 `REFRESH_GAP_S * 2`：那样动一个常量会悄悄改掉另一套语义。
+
+# ---- 读取纪律（卡 A333 · magpie F25「配额读取纪律」）—— 照
+# ---- `internal/provider/routing.go:191` 的 firstWait 与 `:589` 的重读阈值 `time.Minute`。
+FIRST_WAIT_S = 3.0      # routing.go:191 firstWait = 3 * time.Second —— 首次最多等这么久
+REREAD_AFTER_S = 60.0   # :589 —— 读数超过 1 分钟才算旧（后台重读阈值，不是刷新抑制）
+
 # ---- rest 时长四真值（卡 A332 · T-AG534）—— 照 magpie `restAfterMarked`（F20）
 # 常量原件：`internal/gateway/routing.go:165-202` + `:974`、`fallback.go:37`、
 # `internal/provider/concurrency.go:212/:333`。四真值 = credit / quota 有续期 /
@@ -620,6 +631,87 @@ def note_refreshed(key: str, *, now: datetime | str | None = None,
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(stamps, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(tmp, path)
+
+
+# ---------------------------------------------------------------- 读取纪律（F25）
+
+
+def read_policy(*, first: bool, last_read_at: float | None, now: float) -> str:
+    """这一次该「等 / 重读 / 用缓存」—— 纯函数：不看钟表、不碰盘、不猜。
+
+    ★ `"wait"` 的意思是「**最多**等 `FIRST_WAIT_S` 秒，到点无论如何继续」：它不是失败，
+      调用方不许把它当阻塞失败处理。
+    ★ 时钟倒流（`now - last_read_at < 0`）按 `"use_cached"`：倒流的真因通常是时区 / 夏令时，
+      这时候重读只会打穿供应商的速率限制；但它**不是**永久缓存 —— 时间正常之后照样 `"reread"`。
+    """
+    if first and last_read_at is None:
+        return "wait"
+    if last_read_at is None or now - last_read_at >= REREAD_AFTER_S:
+        return "reread"
+    return "use_cached"
+
+
+def merge_latest(kept: dict[str, Any], got: dict[str, Any], seq: int) -> dict[str, Any]:
+    """晚到的读数不许盖新的 —— 照 magpie `cacheCards()`（`quota_refresh.go:170`）与
+    `mergeCards()`（`:189`）：只有 `got["read_seq"] >= kept["read_seq"]` 才替换。
+
+    两边 `read_seq` **任一缺失**都按「`got` 无序号 ⇒ 不替换」处理 —— 缺证据就不许改事实；
+    丢弃时往 stderr 说一行，不许静默吞掉。
+
+    `seq` 是调用方给本次读的单调序号：它只能把记录里的 `read_seq` **往上抬**，不许压低。
+    """
+    held = kept.get("read_seq")
+    arriving = got.get("read_seq")
+    if not isinstance(held, int) or not isinstance(arriving, int):
+        print(
+            f"晚到的读数被丢弃（read_seq 不可比：缓存 {held!r} / 新读 {arriving!r}）",
+            file=sys.stderr,
+        )
+        return kept
+    if arriving < held:
+        print(f"晚到的读数被丢弃（read_seq {arriving} < 缓存里的 {held}）", file=sys.stderr)
+        return kept
+    merged = dict(got)
+    merged["read_seq"] = max(arriving, seq)
+    return merged
+
+
+def mark_stale(card: str, model: str, *, now: datetime | str | None = None,
+               root: Path = ROOT) -> None:
+    """作废一条读数并留痕 —— 删 `cards[card][model]`，同时在**既有**的 refresh 文件里记一条
+    `stale` 时间戳（key 用既有 `refresh_key()`，不新增文件；写盘 tmp + `os.replace`）。
+
+    ★ 只作废这一条：别的卡 / 别的模型不受牵连。
+    ★ 删完 `read_record(card, model)` 必须回 `None` —— 「没有记录」≠「可用」，见 `status()`。
+    ★ 记在 `refresh_key()` 那把 key 上（不是新造 key 命名空间）：作废之后这条读数不再可信，
+      连「30 秒内别再问」的抑制也不该留着 —— 下一次问必须是新的问。
+      值是 `{"stale": <iso>}`（仍是 dict 而非时间字符串）⇒ `refreshed_within()` 读不懂它，
+      按既有口径「读不懂就当作没问过，立刻可问」处理。
+    """
+    data = _load(root)
+    cards = data.get("cards")
+    touched = False
+    if isinstance(cards, dict):
+        per_card = cards.get(card)
+        if isinstance(per_card, dict) and model in per_card:
+            del per_card[model]
+            touched = True
+            if not per_card:
+                del cards[card]
+    if touched:
+        path = _state_path(root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        os.replace(tmp, path)
+
+    stamps = _load_refresh(root)
+    stamps[refresh_key(card, model)] = {"stale": _to_aware(_resolve_now(now)).isoformat()}
+    stamp_path = refresh_stamp_path(root)
+    stamp_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = stamp_path.with_name(stamp_path.name + ".tmp")
+    tmp.write_text(json.dumps(stamps, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, stamp_path)
 
 
 # ---------------------------------------------------------------- 时长解析

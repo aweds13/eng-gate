@@ -4485,3 +4485,20 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A333"
+task = "T-AG535"
+title = "读额度要有读取纪律：magpie F25 移植进 pool"
+tree = ".wt/A333"
+spec = "复盘/卡/卡A333-读额度要有读取纪律.md"
+files = [
+  "tools/pool_quota.py",
+  "tools/pool_accounts.py",
+  "tests/test_quota_read_policy.py",
+  "tests/test_pool_accounts.py",
+  "tests/test_pool_failclosed.py",
+]
+status = "done"
+risk = "mid"
+depends = []

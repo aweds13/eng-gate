@@ -34,6 +34,7 @@ import builtins
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -547,6 +548,82 @@ def test_unknown_platform_still_listed_but_not_dispatchable(
     with pytest.raises(pa.LedgerError) as ei:
         pa.load_ledger(patched, strict=True)
     assert "不在 tools/pool/platforms.toml 里" in str(ei.value)
+
+
+def test_record_probe_result_only_touches_observed_at_and_samples(patched, tmp_path):
+    """⑲ `record_probe_result` 只写 `[account.quota]` 的 `observed_at` 与 `samples`。
+
+    ★ 卡 A333 判据 6：`state` 是人工判定的（`STATES` 五行），`approved_models` 是派活
+    白名单 —— 探测一次读数**都不许**碰它们。六结论码原样进 `samples`，一条都不许压平。
+    """
+    before = pa.load_ledger(patched)
+    raw_before = patched.read_bytes()
+    stamp_now = datetime(2026, 10, 26, 12, 0, 0, tzinfo=pa.TZ)
+    # ★ `record_probe_result` 原地改传进去的 `data`（跟 `_record_checkin` 一样），
+    #   所以旧值必须在调用**之前**快照下来，否则拿到的就是被改过的自己。
+    old = {
+        acc["id"]: {
+            "observed_at": acc.get("quota", {}).get("observed_at"),
+            "state": acc.get("state"),
+            "approved_models": acc.get("approved_models"),
+            "amount": acc.get("quota", {}).get("amount"),
+        }
+        for acc in before["account"]
+    }
+
+    rows = [
+        {"id": "codearts-1", "platform": "codearts", "kind": "ok", "amount": 99},
+        {"id": "wb-1", "platform": "workbuddy", "kind": "uncertain", "detail": "HTTP 429"},
+    ]
+    pa.record_probe_result(patched, before, rows, now=stamp_now)
+
+    after = pa.load_ledger(patched)
+    by_id = {acc["id"]: acc for acc in after["account"]}
+
+    # ① observed_at 变了
+    assert by_id["codearts-1"]["quota"]["observed_at"] == "2026-10-26T12:00:00+08:00"
+    assert by_id["codearts-1"]["quota"]["observed_at"] != old["codearts-1"]["observed_at"]
+    assert by_id["wb-1"]["quota"]["observed_at"] == "2026-10-26T12:00:00+08:00"
+
+    # ② samples 各多一条，形状只有 at/kind（没有 reset_at，也不许塞 amount）
+    for aid, kind in (("codearts-1", "ok"), ("wb-1", "uncertain")):
+        samples = by_id[aid]["quota"]["samples"]
+        assert len(samples) == 1, f"{aid} 的 samples 应该只多一条，实际 {samples}"
+        assert samples[-1] == {"at": "2026-10-26T12:00:00+08:00", "kind": kind}
+
+    # ③ state / approved_models / amount 一个都不许被探测结果改写
+    for aid in ("codearts-1", "wb-1"):
+        assert by_id[aid]["state"] == old[aid]["state"]
+        assert by_id[aid].get("approved_models") == old[aid]["approved_models"]
+    assert by_id["codearts-1"]["quota"]["amount"] == old["codearts-1"]["amount"] == 12
+
+    # ④ 账本确实落盘了（不是只改内存）
+    assert patched.read_bytes() != raw_before
+
+
+def test_record_probe_result_refuses_unknown_source_with_amount(patched, tmp_path):
+    """⑳ `source=unknown` 却带 `amount` ⇒ `LedgerError`，账本**一个字节都不变**。
+
+    ★ 卡 A333 判据 7：照 `_check_account():166-170` 的口径 —— 没探测过就不许填数。
+    """
+    before = pa.load_ledger(patched)
+    raw_before = patched.read_bytes()
+    stamp_now = datetime(2026, 10, 26, 12, 0, 0, tzinfo=pa.TZ)
+
+    rows = [
+        {
+            "id": "codearts-1",
+            "platform": "codearts",
+            "kind": "ok",
+            "amount": 0,
+            "source": "unknown",
+        }
+    ]
+    with pytest.raises(pa.LedgerError) as ei:
+        pa.record_probe_result(patched, before, rows, now=stamp_now)
+    assert "amount" in str(ei.value)
+
+    assert patched.read_bytes() == raw_before, "拒写时账本不许有半个字节的改动"
 
 
 def test_mcp_account_status_is_offline(patched, monkeypatch):

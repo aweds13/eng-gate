@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -52,6 +53,12 @@ GOLDEN_DOMAIN_HIT = ("冲突域相交：与活租约卡 108（树 .wt/a）相交
                      " —— 同一文件不许两个写者")
 GOLDEN_TREE_DOC = "一棵树同时只能有一个活租约（主树尤其）—— 空列表 = 没被咬。"
 
+#: 卡 A336 落地的那一笔（`git log --grep T-AG538`）。「只加 docstring」的比对锚在这笔身上，
+#: **不是** `HEAD` —— 拿 `HEAD` 比会把后来每一张正常改这四个文件的卡都判红。
+CARD_COMMIT = os.environ.get("TF_CARD_A336_COMMIT", "e3641bb9aa150e660b3b771a34b0116fd3736250")
+#: 卡 A336 只加 docstring 的四个文件。
+CARD_FILES = ("tools/pool/guards.py", "tools/pool/registry.py",
+              "tools/pool/model_registry.py", "tools/pool_accounts.py")
 NOW = 1_700_000_000.0
 
 
@@ -267,24 +274,31 @@ def test_existing_guard_verdicts_unchanged(tmp_path: Path) -> None:
         pool_accounts._check_account(0, acc, {"codebuddy": {}})
     assert "没探测过就不许填数" in str(excinfo.value), "_check_account 的文案变了"
 
-    # ⑥ 「只加 docstring」的**机器口径**：拿 `git show HEAD:<rel>`（本卡落地前的版本）
-    #    与工作区版本各解一遍 AST，**去掉 docstring 之后逐节点比对**。
-    #    ★ 如实：本卡落地进 HEAD 之后，HEAD 也带上这些 docstring ⇒ 这条比对退化为自比，
-    #      判别力归零。真正的防线是上面 ①–⑤ 的行为黄金值，与 `gates/diag/_rev_A336.py`
-    #      的 7 条定点变异 —— 这里不是唯一一道。
-    for rel in ("tools/pool/guards.py", "tools/pool/registry.py",
-                "tools/pool/model_registry.py", "tools/pool_accounts.py"):
-        now_src = (ROOT / rel).read_bytes()
-        head_src = subprocess.run(["git", "show", f"HEAD:{rel}"], cwd=ROOT,
-                                  capture_output=True, check=False)
-        assert head_src.returncode == 0, (
-            f"前提：取不到 {rel} 的 HEAD 版本：{head_src.stderr.decode('utf-8', 'replace')}")
-        now_tree = ast.parse(now_src.decode("utf-8"))
-        head_tree = ast.parse(head_src.stdout.decode("utf-8"))
-        if now_src == head_src.stdout:  # 已经落地：比对退化为自比，如实说，不假装在比
+    # ⑥ 「只加 docstring」的**机器口径**：把那一笔的父子两端各解一遍 AST，
+    #    **去掉 docstring 之后逐节点比对**。判的是「那一笔改了什么」，所以
+    #    后续任何卡怎么改这些文件都与它无关（改坏了有各自的钉子）。
+    # ★ 这条判的是**卡 A336 那一笔自己的形状**（那笔 vs 它的父提交），不是「工作区 vs 那笔」。
+    #   写成后者等于断言「此后再没有任何卡碰过这四个文件」—— 后来每张正常改动它们
+    #   （比如加一个函数）的卡都会被判红，那是过期前提，不是判据。
+    #   一笔的判据要锚在那一笔的两个端点之间（同 `audit_progress` 用父提交判门禁产物的口径）。
+    for rel in CARD_FILES:
+        before = subprocess.run(["git", "show", f"{CARD_COMMIT}^:{rel}"], cwd=ROOT,
+                                capture_output=True, check=False)
+        after = subprocess.run(["git", "show", f"{CARD_COMMIT}:{rel}"], cwd=ROOT,
+                               capture_output=True, check=False)
+        assert before.returncode == 0, (
+            f"前提：取不到 {rel} 的 {CARD_COMMIT[:8]}^ 版本："
+            f"{before.stderr.decode('utf-8', 'replace')}")
+        assert after.returncode == 0, (
+            f"前提：取不到 {rel} 的 {CARD_COMMIT[:8]} 版本："
+            f"{after.stderr.decode('utf-8', 'replace')}")
+        if before.stdout == after.stdout:  # 那笔根本没动这个文件 ⇒ 无可判，如实跳过
             continue
-        assert _without_docstrings(now_tree) == _without_docstrings(head_tree), (
-            f"{rel} 除 docstring 之外还有别的改动 —— 本卡只许加 docstring")
+        before_tree = ast.parse(before.stdout.decode("utf-8"))
+        after_tree = ast.parse(after.stdout.decode("utf-8"))
+        assert _without_docstrings(before_tree) == _without_docstrings(after_tree), (
+            f"{rel} 在 {CARD_COMMIT[:8]} 那笔里除 docstring 之外还有别的改动 —— "
+            "卡 A336 只许加 docstring")
     assert guards.tree_guard.__doc__.startswith(GOLDEN_TREE_DOC), (
         "tree_guard 的原 docstring 首句必须原样保留（本卡只往后追加）")
 

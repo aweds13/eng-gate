@@ -587,6 +587,18 @@ return e
 也要跟着长，否则那份沙箱一 import 就 `ImportError`。这是「新增模块必须同时改清单」的既有约定。
 
 读数：`tests/test_pool_lastgood.py` 11 passed；反向验证 5/5 咬住；全量 22 门全绿（3719 passed）。
+## 2026-10-30 · 读额度要有读取纪律：magpie F25 移植进 pool（A333，T-AG535）
+
+依 magpie 的**读取纪律**（`internal/provider/routing.go:191` 的 `firstWait = 3s`、`:589` 的 `time.Minute` 重读阈值、`internal/cli/quota_refresh_cli.go:20` 的 `quotaRefreshGap = 30s`），给 `tools/pool_quota.py` 加三件纯函数与两个常量：
+
+- `FIRST_WAIT_S = 3.0` / `REREAD_AFTER_S = 60.0`（照 magpie 的值，不四舍五入、不写成倍数）。
+- `read_policy(*, first, last_read_at, now) -> str`：只回 `wait` / `reread` / `use_cached` 三个字符串。首次且手上什么都没有 ⇒ `wait`；从没读过 ⇒ `reread`；`now - last_read_at >= REREAD_AFTER_S` ⇒ `reread`（**恰好到阈值就算旧**，`>=` 不是 `>`）；时钟倒流按 `use_cached` 但它不是永久缓存。
+- `mark_stale(card, model, *, now=None, root=ROOT)`：只作废**一条**记录（别的卡/模型不牵连），删记录 + 在既有 refresh 文件里留一条 `stale` 记号（值是一个 ISO 时刻），`tmp` + `os.replace`，**不多造一个文件**。留痕写成 dict 而非字符串，是为了让 `refreshed_within()` 的 `isinstance(raw, str)` 判定自然失效 ⇒ 作废后不留 30 秒抑制。
+- `merge_latest(kept, got, seq)`：晚到的响应不许盖新的（`quotaRefreshGap` 那条纪律的另一面）；`got` 的 `read_seq` 不比 `kept` 新就不替换，保留旧值并往 stderr 说一行。
+
+账本侧：`tools/pool_accounts.py` 新增 `record_probe_result()` 并接进 `cmd_probe()` 的两条出口。此前 `probe_account()` 真发网络、`cmd_probe` 却**只 print 不落盘**（`save_ledger` 全仓只在 `run_checkin` 里被调），探测等于不留痕；现在探测结果进 `[account.quota]` 的 `observed_at` / `samples`，**不写 `state`、不写 `approved_models`**。
+
+读数：`pytest tests/test_quota_read_policy.py tests/test_pool_accounts.py tests/test_pool_rest.py tests/test_quota_wait.py tests/test_quota_clock.py` ⇒ 105 passed；`ruff check` 四文件全过；反向验证 8 条定点变异全咬（含「`REREAD_AFTER_S` 改成 `REFRESH_GAP_S * 2`」「假账本状态本来就是 active」两处一开始的假变异已按现场形状重做）。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

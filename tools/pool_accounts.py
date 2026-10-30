@@ -532,6 +532,61 @@ def probe_all(
 # --------------------------------------------------------------------------
 
 
+def record_probe_result(
+    ledger_path: Path, data: dict, rows: list[dict], *, now: datetime | None = None
+) -> None:
+    """把一次探测的结论留进账本 —— **只**写 `[account.quota]` 的 `observed_at` 与 `samples`。
+
+    ★ 不写 `state`：`STATES` 那五行（`active/limited/exhausted/expired/disabled`）是**人**判定
+      的，一次探测读到的数字不许把它改掉。
+    ★ 不写 `approved_models`：能不能派活是白名单的事，不是额度读数的事。
+    ★ 不写 `amount`：探测读到多少就写在 `samples` 里；`amount` 是余额口径，由探针之外的人/流程填。
+    ★ `samples` 项只有 `{"at": stamp, "kind": <六结论码之一>}`，**没有 `reset_at`**；上限继续由
+      `save_ledger()` 的 `SAMPLES_CAP` 截。六结论码原样落账，一条都不许压平。
+    ★ `source == "unknown"` 的读数带 `amount` ⇒ 拒写并抛 `LedgerError`（照 `_check_account()` 的
+      「没探测过就不许填数」）—— 这种情况下**一个字节都不写**，先全量校验再动手。
+    """
+    stamp = _iso(now if now is not None else _now())
+    by_id: dict[str, dict] = {}
+    for row in rows:
+        if isinstance(row, dict) and isinstance(row.get("id"), str):
+            by_id[row["id"]] = row
+
+    accounts = data.get("account", [])
+    if not isinstance(accounts, list):
+        raise LedgerError(f"账本里没有 [[account]] 表（{ledger_path}）")
+
+    # ---- 先校验（拒写时账本一个字节不变），再统一写
+    for acc in accounts:
+        if not isinstance(acc, dict):
+            continue
+        row = by_id.get(acc.get("id"))
+        if row is None:
+            continue
+        if row.get("source") == "unknown" and "amount" in row:
+            raise LedgerError(
+                f"账号 {acc.get('id')} 的探测结论 source=unknown 却带了 amount"
+                " —— 没探测过就不许填数"
+            )
+
+    touched = False
+    for acc in accounts:
+        if not isinstance(acc, dict):
+            continue
+        row = by_id.get(acc.get("id"))
+        if row is None or not row.get("kind"):
+            continue
+        quota = acc.setdefault("quota", {})
+        if not isinstance(quota, dict):
+            quota = acc["quota"] = {}
+        quota["observed_at"] = stamp
+        quota.setdefault("samples", []).append({"at": stamp, "kind": row["kind"]})
+        touched = True
+
+    if touched:
+        save_ledger(ledger_path, data)
+
+
 def _print_table(rows: list[dict], columns: list[tuple[str, str]]) -> None:
     widths = {key: len(title) for key, title in columns}
     for row in rows:
@@ -623,8 +678,10 @@ def cmd_probe(args) -> int:
     platforms = load_platforms()
     data = load_ledger(ledger, platforms)
     rows = probe_all(data, platforms, offline=args.offline, platform=args.platform)
-    stamp = _iso(_now())
+    now_dt = _now()
+    stamp = _iso(now_dt)
     if args.json:
+        record_probe_result(ledger, data, rows, now=now_dt)
         print(
             json.dumps(
                 {"ledger": str(ledger), "observed_at": stamp, "results": rows},
@@ -633,6 +690,7 @@ def cmd_probe(args) -> int:
             )
         )
         return EXIT_OK
+    record_probe_result(ledger, data, rows, now=now_dt)
     print(f"账本：{ledger}   观测时刻：{stamp}")
     _print_table(
         rows,
