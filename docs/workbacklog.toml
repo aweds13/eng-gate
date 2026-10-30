@@ -3408,7 +3408,7 @@ spec = "复盘/卡/卡B2-工作台搬进DSH的盘点与分批.md"
 files = ["docs/implementation/迁移DSH.md", "docs/implementation/迁移DSH-盘点表.csv"]
 depends = []
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "B3"
@@ -3430,7 +3430,7 @@ spec = "复盘/卡/卡B4-程天学功能架构.md"
 files = ["docs/research/程天学-功能架构.md", "docs/research/程天学-截图索引.md"]
 depends = []
 risk = "low"
-status = "pending"
+status = "done"
 
 # ================================================================ 分区 D：dsmate
 # 手机上自用的 DeepSeek 聊天客户端（src/dsmate/）。文档层已落地在
