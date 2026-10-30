@@ -634,6 +634,32 @@ return e
 - `pytest tests/test_renew_lock.py tests/test_pool_accounts.py tests/test_holds_window.py` ⇒ **71 passed in 2.45s**（rebase 到 `4110cfe0` 之后重跑）。
 - `ruff check tools/pool_accounts.py tests/test_renew_lock.py` ⇒ All checks passed。
 - 反向验证 `gates/diag/_rev_A335.py` ⇒ **7/7 条全部咬住**（`needs_renew` 读不出当不用刷 / 锁超时改 raise / 403 也算 Refused / 不看类型一律写标记 / 过期锁永不接管 / `jwt_exp` 不吞坏 base64 / `mask_token` 原样回显），每条还原后逐字节相同且纯 CRLF。
+## 2026-10-30 · 一个号同时只能派几张：magpie 每账号并发闸移植进 pool（F22）（卡 A339，T-AG541）
+
+到这张卡之前，pool 的租约账里**没有 `account` 这一键** —— 派活时可以传 `--account`，但那个值只进了租约的 `note` 字符串（`tools/wb_dispatch.py:3323`），账本本身数不出来「这个号现在有几张卡在跑」。所以「一个号同时只能派几张」这件事，此前在 pool 里**判不了**。
+
+### ① 租约账多一列（`tools/pool/registry.py`）
+- `reserve()` 末位加纯加法形参 `account: str = ""`（放在 `lock_body` 之后，不破坏任何位置参数）；`entry` 追加第 13 键 `account`。既有 12 键的顺序与语义一字未动（`tests/test_pool_lease.py:138` 钉着 `owner` / `at` / `ttl_seconds` 三键必须在）。
+- 新增钉子 `test_reserve_records_account_as_own_key`（`tests/test_pool_lease.py:165`）：`--account` 的值必须落成**自己的键**，不许只躺在 `note` 里。
+
+### ② 判据是纯函数（`tools/pool/guards.py`）
+- `lane_guard(account, reservations, *, limit, queue=0, now=None) -> list[str]`（`tools/pool/guards.py:336`）：数 `res["account"] == account` 的条数，**`>= limit` 就是满**（不是 `>`：到点就算满，与额度判据同向）。
+- `limit <= 0` ⇒ 永远回空列表 —— **0 是「关掉这个闸」，不是「一张都不许派」**。这条方向搞反会让所有派活立刻全挂。
+- `account` 空串/非字符串 ⇒ 回空列表（没传账号就没有这条闸）。
+- 只吃调用方已经过 `registry.is_dead()` 的 `live` 列表；`now` 收下不用 —— 在 guard 里重判「租约死活」就是第二份真源，而且会让「忘了清死租约」这件事永远测不出来。
+
+### ③ 上限从哪来（`tools/pool/lanes.py` + `tools/pool/lanes.toml`）
+- `LANES_REL = "tools/pool/lanes.toml"`；`MAX_LIMIT = 1000` / `MAX_QUEUE_LIMIT = 10000` / `MAX_QUEUE_WAIT = 3600`；`LanesError(ValueError)`。
+- `[default]` 段 + `[accounts."<稳定 id>"]` 段，键用账号账本里的 **id**（不是 email）。
+- 文件不存在 ⇒ 回空表（一条都没声明 = 不过问）；**坏 TOML 或越界一律 `LanesError` 直冒**，不许静默当成 0 —— 静默当成 0 会让一个写坏的配置表现为「闸被关掉了」，这正是最危险的方向。
+
+### ④ 接进派活路径（`tools/pool/registry.py:336`）
+- `problems` 五条顺序：`tree_guard` → `domain_guard` → **`lane_guard`** → `lock_guard` → `log_guard`。放在 domain 之后，是因为「域冲突」比「这号忙」更该先说。
+
+### 读数
+- `pytest tests/test_pool_lanes.py tests/test_pool_lease.py tests/test_pool_registry.py tests/test_pool_guards.py` ⇒ **68 passed in 4.59s**（rebase 到 `5525683c` 后重跑）。
+- `ruff check` 五文件 ⇒ All checks passed。
+- 反向验证 `gates/diag/_rev_A339.py` ⇒ **7/7 条全部咬住**：`running < limit`→`<=` / 删掉「0 = 关闸」/ 不按账号数 / 坏 TOML 静默回空表 / 缺文件也抛 / `account` 不落成键 / `live`→`rows`（不清死租约）。每条都先跑基线必绿，变异后目标用例点名红，`finally` 按原始字节还原且 sha 一致、纯 CRLF。
 ## 2026-10-29 · 同一个提交，两把尺子量出两个 sha（E64，T-AG522）
 
 `tools/wb_verify.py` 的 rev 判据原来写 `parent.startswith(rev)`：门禁产物把 rev 记成

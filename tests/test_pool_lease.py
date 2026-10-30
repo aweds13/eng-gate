@@ -157,3 +157,37 @@ def test_nail_3_claim_record_is_readable_by_existing_guards(
     registry_entry = json.loads(reg.read_text(encoding="utf-8"))[0]
     assert set(lease_entry.keys()) == set(registry_entry.keys()), (
         "lease 与 registry.reserve 写的字段集合不一致 ⇒ 守卫读到的形状不同")
+
+
+# ================================================================ ④ account 是独立可判的键
+
+
+def test_reserve_records_account_as_own_key(reg: Path, quiet_lock: None) -> None:
+    """钉子④（卡 A339 · T-AG541）：`reserve(account=…)` 落盘后 `entry["account"]` **正是**它。
+
+    ★ 为什么值当测：每账号并发闸（`guards.lane_guard`）数的是 `res.get("account")` 这个**键**。
+      账号若只写进 `note` 的显示文本（`｜account=…`），判据就只能从人读的字符串里反推 ——
+      改一次文案就悄悄松开判据。这条钉子把「账号是一个独立、可判的键」钉死。
+
+    ★ 故意坏掉会红：把 `entry` 里的 `"account": str(account),` 删掉（或只留 `note` 里那段文本）
+      ⇒ `entry["account"]` 抛 `KeyError` ⇒ 本用例红。既有 12 个键不许受影响 —— 下面顺带钉着
+      它们的名字，与上面钉子③「两边同形」一起把纯加法这件事钉住。
+    """
+    entry = registry.reserve("210", tree=".wt/x", files=["z.py"], account="codebuddy/9f3c",
+                             now=NOW)
+    assert entry["account"] == "codebuddy/9f3c"
+
+    rows = json.loads(reg.read_text(encoding="utf-8"))
+    assert len(rows) == 1
+    assert rows[0]["account"] == "codebuddy/9f3c"
+
+    # 既有 12 键的名字与语义一个字都没动（`account` 是纯加法，排在最后）
+    for key in ("card", "task", "tree", "files", "project", "pool", "model", "log", "owner",
+                "at", "ttl_seconds", "note"):
+        assert key in rows[0], f"既有键 {key} 没了"
+
+    # 不传 `account=` 的老调用照样写空串（不是 None、不是缺键）
+    reg.unlink()
+    plain = registry.reserve("211", tree=".wt/y", files=["y.py"], now=NOW)
+    assert plain["account"] == ""
+    assert json.loads(reg.read_text(encoding="utf-8"))[0]["account"] == ""

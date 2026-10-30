@@ -4533,3 +4533,21 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A339"
+task = "T-AG541"
+title = "一个号同时只能派几张：magpie 每账号并发闸移植进 pool（F22）"
+tree = ".wt/A339"
+spec = "复盘/卡/卡A339-一个号同时只能派几张.md"
+files = [
+  "tools/pool/registry.py",
+  "tools/pool/guards.py",
+  "tools/pool/lanes.py",
+  "tools/pool/lanes.toml",
+  "tests/test_pool_lanes.py",
+  "tests/test_pool_lease.py",
+]
+status = "done"
+risk = "mid"
+depends = []

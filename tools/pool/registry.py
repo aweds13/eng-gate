@@ -39,7 +39,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pool import guards, jobs, lastgood, projects
+from pool import guards, jobs, lanes, lastgood, projects
 from pool import locks as pool_locks
 
 if TYPE_CHECKING:
@@ -307,12 +307,16 @@ def reserve(card: str, *, task: str = "", tree: str = "", files: Iterable[str] =
             project: str = "", pool: str = "", model: str = "", log: str = "", note: str = "",
             owner: str | None = None, ttl_seconds: float = DEFAULT_TTL,
             now: float | None = None, path: Path | str | None = None,
-            lock_body: str | None = None) -> dict:
+            lock_body: str | None = None, account: str = "") -> dict:
     """登记一条租约：**先读全部 → 清死租约 → 过守卫 → 再落盘**（原子）。
 
-    过的守卫 = 树（`tree_guard`）+ 冲突域（`domain_guard`）+ 门禁锁（`lock_guard`）
+    过的守卫 = 树（`tree_guard`）+ 冲突域（`domain_guard`）+ 每账号并发闸
+    （`lane_guard`，给了 `account` 才查）+ 门禁锁（`lock_guard`）
     + 日志不许覆盖（`log_guard`，给了 `log` 才查）。
     ★ 卡 120：租约里记下 `project`（占树时定下来）—— 不给则按 `tree` 反查（`_resolve_project`）。
+    ★ 卡 A339：租约里记下 `account`（号池的稳定 id，如 `codearts-1`）—— **纯加法**，不给就是空串
+      （空串 = 没点名账号 = 不设并发闸）。上限从 `lanes.toml` 读；那份文件**坏了**（`LanesError`）
+      会**冒到本函数外面**，绝不当成"没配"放过 —— 判不出来就不动手。
     守卫咬 → `GuardError`（`problems` 逐条点名）；环境 / 文件坏 → `RegistryError`；
     两者都**不落盘**。`lock_body` 不给就现跑一次 `gate_lock.py status`。
     """
@@ -324,9 +328,12 @@ def reserve(card: str, *, task: str = "", tree: str = "", files: Iterable[str] =
     live = [row for row in rows if not is_dead(row, stamp, log_base=log_base)]
     body = lock_body if lock_body is not None else read_lock_body(target)
     probe = _log_probe(log, log_base)
+    # ★ lanes.toml 坏 ⇒ LanesError 从这里冒出去（不 catch 成 {}）—— 判不出来就不动手
+    lane = lanes.lane_for(account, lanes.load_lanes())
     problems = [
         *guards.tree_guard(tree, live, stamp),
         *guards.domain_guard(files, live, stamp),
+        *guards.lane_guard(account, live, limit=lane.limit, queue=lane.queue, now=stamp),
         *guards.lock_guard(card, tree, body, root=_lock_root(target)),
         *(guards.log_guard(probe) if probe is not None else []),
     ]
@@ -346,6 +353,7 @@ def reserve(card: str, *, task: str = "", tree: str = "", files: Iterable[str] =
         "at": datetime.datetime.fromtimestamp(stamp).isoformat(timespec="seconds"),
         "ttl_seconds": float(ttl_seconds),
         "note": str(note),
+        "account": str(account),
     }
     save([*live, entry], target)
     return entry

@@ -13,6 +13,9 @@ r"""自家守卫 —— **纯函数**：吃数据 → 回 `list[str]` 问题。
   （"这趟门禁还在跑，别动手"）。解析在 `pool.locks.parse_entries`。
 - `project_guard` —— **项目守卫（卡 120 · T-G232）**：没登记过的项目 / 树不落在该项目
   `tree_prefixes` 里 / 反查不到 ⇒ 拒。数据来自**只读**的 `pool.projects` 索引。
+- `lane_guard`   —— **每账号并发闸（卡 A339）**：同一个号同时在跑的活租约到上限 ⇒ 拒
+  （`limit` / `queue` 由调用方从 `pool.lanes` 读好传进来 —— 本模块**不碰 TOML**，不然就破了
+  下面那条"不写文件"的规矩）。
 
 **哪三条是别人判的（本模块明确"委托"，重写就是第三份真源）**：
 - **内存闸** —— `tools/wb_dispatch.py` 的前置检查（`TF_GATE_MIN_FREE_GB`）是唯一实现；
@@ -327,4 +330,54 @@ def project_guard(tree_rel: object, project: object = None) -> list[str]:
             f"（允许：{'、'.join(entry['tree_prefixes'])}）"]
 
 
-__all__ = ["domain_guard", "lock_guard", "log_guard", "project_guard", "tree_guard"]
+# ================================================================ 守卫⑥ 每账号并发闸（卡 A339）
+
+
+def lane_guard(account: object, reservations: Iterable[dict], *, limit: int,
+               queue: int = 0, now: float | None = None) -> list[str]:
+    """每账号并发闸：这个号**同时在跑的活租约**已经到上限了吗 ⇒ 回 1 条问题。
+
+    **防什么**：同一个号（`accounts.toml` 的稳定 id）同时派好几张卡，会一起撞 vendor 的限流，
+    也会一起抢本机的内存与端口。★ 移植的是 magpie 每账号并发闸（`concurrency.go`）的
+    **形状与判据，不是它的理由**：magpie 防的是"同一个 key 打太多 → 429"；pool 这边若不设限，
+    真正的瓶颈是**本机内存**（`gates/diag/gate_lock.py` 原文：一趟 17 门要 15–30 个无头 Edge）。
+
+    判据（三条，缺一条就有洞）：
+      - ★ `limit <= 0` ⇒ 永远 `[]`。照抄 magpie `concurrency.go:82`：**0 = 关掉闸**，
+        **不是**"一个都不许"（写成 `>= 0` 会让所有派活都派不出去）。
+      - `account` 空 / 非字符串 ⇒ `[]`：没点名账号 = 没闸（老租约里没有 `account` 键，
+        也不该因此把它们算到某个号头上）。
+      - 数 `res["account"] == account` 的条数，`>= limit` ⇒ 回 1 条问题（**不是** `>`：
+        "上限 2"的意思是同账号最多 2 张，第 3 张才该被拒，而 `>= limit` 判的是**派这张之前**
+        已经在跑的条数 —— 已经有 2 张在跑就轮到它排队了）。
+
+    ★ `now` 收下但**不在这里判活**：入参 `reservations` 必须是调用方（`registry.reserve`）
+      已经过 `registry.is_dead()` 的 `live`。在这里重判一遍 = 造第二份"死租约"真源，
+      而且会让"忘了清死租约"这个真 bug 测不出来（本卡的 `test_reverse_lane_guard_*` 就钉这个）。
+      收下 `now` 只为本模块四条守卫签名同形，便于调用方统一传参。
+
+    ★ `queue` 的语义**说实话**：magpie 的 QueueLimit 是**真队列**（进不去就排队等）；pool 的派活
+      是同步的，**没有"在等"这个状态** ⇒ 本函数里 `queue` 只能表达"允许多少个派活进程在闸门口等"，
+      `queue == 0` = 不排队、直接拒。本卡**不实现等待**（`wait` 留给下一张卡），所以
+      `queue > 0` 时判据与 `queue == 0` **完全相同**（都按 `limit` 判），只在文案里多一句
+      "队列上限 q 张" —— 绝不写 `while True: sleep`。
+
+    ★ 纯函数：不读文件 / 不读环境 / 不 `print` / 不起进程（同模块另四条的规矩）。
+      `limit` / `queue` 是调用方从 `pool.lanes` 读好之后传进来的整数 —— 本模块不碰 TOML。
+    """
+    name = str(account).strip() if isinstance(account, str) else ""
+    if not name:
+        return []
+    if limit <= 0:
+        return []
+    running = sum(1 for res in reservations if str(res.get("account") or "").strip() == name)
+    if running < limit:
+        return []
+    tail = f"，队列上限 {queue} 张" if queue > 0 else ""
+    return [f"这个号已经占满：账号 {name} 同时在跑 {running} 张，上限 {limit} 张{tail}"
+            f" —— 等它收工（或换个号）再派"]
+
+
+__all__ = [
+    "domain_guard", "lane_guard", "lock_guard", "log_guard", "project_guard", "tree_guard",
+]

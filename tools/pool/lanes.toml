@@ -1,0 +1,38 @@
+# 每账号并发闸（卡 A339 · T-AG541）
+#
+# 这个文件回答一件事：**一个号同时最多派几张卡**。
+# 判据在 `tools/pool/guards.py:lane_guard`（纯函数），读文件在 `tools/pool/lanes.py`。
+# 本文件**随仓走、由人改** —— 改完不用重启任何东西，下一次 `registry.reserve` 就读到。
+#
+# 键是 `infra/pool/accounts.toml` 里的**稳定 id**（`tools/pool_accounts.py` 的 `list_rows`
+# 排序键 `(platform, id)`，例如 `codearts-1`、`trae-1`）—— **不是** email / 用户名：
+# 后者会变，租约里存不住，改一次就全对不上了。
+#
+# ★★ **0 = 不限**（这是 magpie `concurrency.go:82` 的口径，也是本仓的口径）：
+#    `limit = 0` 是"关掉这条闸"，**不是**"一张都不许派"。整份文件不存在同样等于没闸。
+#
+# ★ 本文件**坏了就是坏了**：语法错 / 值不是整数 / 超过上界 ⇒ `pool.lanes.LanesError`，
+#   它会一路冒到 `registry.reserve()` 外面（判不出来就不动手）。**绝不会**被当成"没配"。
+#   `limit` 允许 0..1000，`queue` 允许 0..10000，`wait` 允许 0..3600 秒。
+#
+# ★ `queue` / `wait` 现在**只进文案**：pool 的派活是同步的，没有"在等"这个状态，
+#   本卡也不实现排队（`wait` 留给下一张卡）。所以 `queue > 0` 时判据与 `queue = 0` 相同，
+#   都按 `limit` 判 —— 别以为写了 `queue = 5` 就真的会等 5 个。
+
+[default]
+# 没点名账号（或账号没在下面单独配）时用这一段。
+# 0 = 不限：保持今天的行为，不给任何号加闸。
+limit = 0
+queue = 0
+wait = 0
+
+[accounts]
+# 按号单独收紧。例子（把 `#` 去掉再改数字）：
+#
+# [accounts."codearts-1"]
+# limit = 2        # 这个号同时最多 2 张卡
+# queue = 0        # 不排队，直接拒（本卡不实现排队）
+# wait = 0         # 秒；留给下一张卡
+#
+# [accounts."trae-1"]
+# limit = 1        # 一次只派一张

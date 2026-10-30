@@ -9973,3 +9973,35 @@ mypy 那一条在本仓是**预存红**：`python -X utf8 -m mypy tools/pool_acc
 `class RefreshRefused` 触发 ruff `N818`（异常名要带 `Error` 后缀），按仓里既有先例（`tools/gate_pool.py:615 CloudUnreachable`、`tools/pool/failclosed.py:30 NotServing`）加了带中文理由的 `# noqa: N818` —— 名字是卡规格与我下的判据都硬性点名的，不是拿 noqa 蒙一个真失败。
 """,
 ]
+
+[entries."T-AG541"]
+id = "T-AG541"
+title = "一个号同时只能派几张：magpie 每账号并发闸移植进 pool（F22）"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A339-一个号同时只能派几张.md",
+  "file:tools/pool/registry.py",
+  "file:tools/pool/guards.py",
+  "file:tools/pool/lanes.py",
+  "file:tools/pool/lanes.toml",
+  "file:tests/test_pool_lanes.py",
+  "file:tests/test_pool_lease.py",
+  "test:test_pool_lanes.py",
+  "test:test_pool_lease.py",
+  "text:tools/pool/registry.py::def reserve(card: str, *, task: str",
+  "text:tools/pool/registry.py::*guards.lane_guard(account, live, limit=lane.limit, queue=lane.queue, now=stamp),",
+  "text:tools/pool/guards.py::def lane_guard(account: object, reservations: Iterable[dict], *, limit: int,",
+  "text:tools/pool/lanes.py::MAX_LIMIT = 1000",
+  "text:tools/pool/lanes.py::class LanesError(ValueError)",
+  "text:tools/pool/lanes.py::def load_lanes(",
+  "text:tools/pool/lanes.py::def lane_for(",
+]
+gaps = [
+  """**排队没有实现**：`queue` / `wait` 现在只进文案。pool 的派活是同步的、不存在「在等」这个状态，所以 `queue > 0` 与 `queue == 0` 的**判据完全相同**，只在拒绝文案里多一句「队列上限 q 张」。真要做排队是另一张卡（要在派活路径上加等待循环，且得有「在等」这个可观测状态）。`tools/pool/lanes.toml` 头注释也照实写着「别以为写了 queue = 5 就真的会等 5 个」。
+`lane_guard` 的 `now` 参数收下但不用：判活仍归 `registry.is_dead()`。在 guard 里重判会造第二份「死租约」真源，也会让「忘了清死租约」这件事永远测不出来（反向验证第 7 条就是钉这个）。这是判据的**收窄**，不是遗漏。
+mypy 这条验收命令在本仓**环境性不可满足**，与本卡无关：单跑 `tools/pool/lanes.py` 是 `Success`，而 `guards.py` 会撞 HEAD 上就有的 `Source file found twice under different module names: tools.pipe_root / pipe_root`（根因是 `tools/pool/plan.py:16-19` 等五处的 `try: import pipe_root / except: from tools import pipe_root` 双路导入；把 HEAD 版 `guards.py` 原字节单跑也报同一条）。仓内口径：`gates/defs/lang_python.py:18` 的 mypy 门只查 `src/`，`docs/changelog.d/T-G237.md:12` 明写「tools/ 不在 mypy 门禁范围」。要真过这条得另开一张卡修 pipe_root 双导入。
+`tools/pool/__init__.py` 的模块表没加 `pool.lanes` 一行（不在本卡交付清单，怕超域）—— 下次改那张表时顺手补。
+""",
+]
