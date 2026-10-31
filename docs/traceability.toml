@@ -11082,3 +11082,29 @@ gaps = [
 - 只在本机 win32 验过。
 """,
 ]
+
+[entries."T-AG578"]
+id = "T-AG578"
+title = "外部用量上报没有入口：给它开一个 MCP 写工具"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A364-外部用量上报没有入口.md",
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp_task.py",
+  "file:tests/test_pool_mcp_write.py",
+  "test:test_pool_usage_ingest.py",
+  "text:tools/pool_mcp.py::USAGE_WRITE_NAMES = ",
+  "text:tools/pool_mcp.py::def _usage_faults_reply(",
+  "text:tools/pool_mcp.py::def tool_usage_report(",
+  "text:tools/pool_mcp.py::if name in WRITE_NAMES - USAGE_WRITE_NAMES:",
+]
+gaps = [
+  """- 传输层三条判据仍未落地（415 / 413 / 403）：卡 A347 已如实记「HTTP 面没有对应物」。MCP stdio 也没有 Content-Type，415 仍无对应物；413 那半（`MAX_BODY = 32 << 20`）判据层已有，本卡不重造。
+- `merged_tokens(include_reported=True)` 仍**没有生产调用方** —— 谁在什么界面上看「含上报的总量」是本卡范围之外的事。
+- `rid` 幂等的两段式不加锁（判据层自己写着「第二段只是尽量缩小窗口，不是互斥」）。本卡不改。
+- 判据③的钉子扫 `pool_mcp.py` 里 13 个判据层标识符（实测全 0）—— 这是**结构性**钉子，能抓「抄第二份判据」，抓不住「换个名字抄一遍」（那种只能靠人看）。
+- 只在本机 win32 验过。
+""",
+]

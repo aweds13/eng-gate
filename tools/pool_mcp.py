@@ -119,6 +119,22 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 - ★ 子进程带 `NO_WINDOW` 且**限时**（`WORKBENCH_TIMEOUT`）：非零 / 超时 / 起不来都**如实报错**
   （`isError=true`、`reading=null`），**绝不**返回一个"看起来正常"的空板子。
 
+## ★★ 外部用量上报入口（卡 A364 · T-AG578）：`usage_report` —— 只开入口，不动判据
+
+判据层是卡 A347 的 `tools/pool/usage_ingest.py`（`ingest()` / `parse_batch()`），它的 docstring
+逐字写着「**不经过派活器的调用，今天完全不进账。**」—— 本卡补的就是那**一个**入口。
+
+- ★ **判据只有一份**：本工具**只调** `usage_ingest.ingest()` / `usage_ingest.parse_batch()`，
+  **不重写**任何一条校验（字段表、条数上限、去重口径全在判据层）。
+- ★ `confirm` 是**这一批的记录条数**（不是卡号 —— 这一批的规模就是最该先看一眼的东西）；
+  条数由判据层自己数出来，所以"能报几条"与"该确认几"永远是同一个数。
+- ★ 顺序固定：**先**解析（全量校验，一条坏就整包拒）→ **再**核 `confirm`（此时一个字节都还没
+  写）→ **才** `ingest()`。全有或全无，拒单时目标文件行数与 mtime 都不动。
+- ★ 上报行落 `gates/diag/usage-reported.jsonl`，**绝不**混进派活器自己的 `wb-usage.jsonl`
+  （那本账认"这一行是谁写的"，混了就永久不可判）。
+- ★ 拒单 ⇒ `isError: true` 且回话里**逐条带 faults 原文**；成功 ⇒ 判据层的
+  `{"accepted", "skipped", "records"}` **原样**透出（不翻译字段名）。
+
 ## 诚实边界（如实写）
 
 - `pool_models` 读的是**快照** `models.live.json`（带 `at` 时间戳），**不是现场拉取**：
@@ -155,7 +171,7 @@ from typing import TYPE_CHECKING
 
 import tomllib
 import wb_dispatch  # noqa: PLC0415 —— 模型白名单 / 默认模型的**唯一**真源（卡 111 §2 ⑥）
-from pool import accounts_scope, guards, registry, task
+from pool import accounts_scope, guards, registry, task, usage_ingest
 from pool.jobs import (
     HEARTBEAT_SECONDS,
     REPORT_MAX_CHARS,
@@ -536,7 +552,7 @@ TASK_TOOL_SPECS: list[dict[str, Any]] = [
 
 
 def tool_list() -> list[dict[str, Any]]:
-    """十三个只读工具（十个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补四个写工具。"""
+    """十三个只读工具（十个号池 + 三个任务）；有 `POOL_MCP_WRITE=1` 时再补五个写工具。"""
     specs = [*TOOL_SPECS, *TASK_TOOL_SPECS]
     if write_enabled():
         specs += [*WRITE_TOOL_SPECS, *TASK_WRITE_TOOL_SPECS]
@@ -609,10 +625,49 @@ WRITE_TOOL_SPECS: list[dict[str, Any]] = [
         },
         "annotations": {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True},
     },
+    {
+        "name": "usage_report",
+        "description": (
+            "★ 外部用量上报（不经派活器的那一笔也进账）。"
+            "body 给一条 JSON 记录或一组（整段文本，也可直接给对象/数组）；"
+            "只在服务端 POOL_MCP_WRITE=1 时可见；arguments.confirm 必须等于**这一批的记录条数**"
+            "（防手滑 —— 一屏 300 条和一条，手滑的代价不一样）。"
+            "校验一条都不在这里：全在 tools/pool/usage_ingest.py（本工具只开入口）；"
+            "上报行落 gates/diag/usage-reported.jsonl，同一个记录号重复上报会被跳过（不写第二行），"
+            "**不进**派活器自己的 wb-usage.jsonl。"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string",
+                    "description": (
+                        "一条 JSON 记录，或一组记录的 JSON 数组（也可以直接传对象/数组，"
+                        "这里只做 JSON 化、不校验字段）"
+                    ),
+                },
+                "confirm": {
+                    "type": "string",
+                    "description": "★ 防手滑：必须等于这一批的记录条数（十进制串，例如 \"3\"）",
+                },
+            },
+            "required": ["body"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True},
+    },
 ]
 
-#: 两个号池写工具的名字 —— 授权门 / `confirm` 校验用。
+#: 号池写工具的名字 —— 授权门用（`confirm` 判据见 `USAGE_WRITE_NAMES`）。
 WRITE_NAMES = frozenset(spec["name"] for spec in WRITE_TOOL_SPECS)
+
+#: ★ 卡 A364（T-AG578）：`confirm` **不**等于卡号、而是**等于这一批的记录条数**的写工具。
+#:   它**在** `WRITE_NAMES` 里（否则授权门不知道它是写工具、没 env 就会漏列出来 ——
+#:   那不是「漏登记」，是**刻意留在**里面）；这里另立一集，只为从 `call_tool` 那条
+#:   「`confirm == card`」的**通用门**里排除掉：它的判据是 `confirm == 这一批的记录条数`，
+#:   让通用门先咬一口，回话就不再是卡规格要的那一句（收到 N 条 / confirm 给的 M）。
+#:   照 `TASK_WRITE_NAMES` 成例单独排除，`confirm` 判据在 handler 里判。
+USAGE_WRITE_NAMES = frozenset({"usage_report"})
 
 #: 任务面两个**写**工具（卡 121 §2）—— 同样只在 `POOL_MCP_WRITE=1` 时列出。
 #: ★ `confirm` 的判据与号池写工具**不同**：register 要等于 TOML 里的 `id`、claim 要等于 `task`，
@@ -2307,6 +2362,86 @@ def tool_task_claim(
     return _result(text, data, is_error=False)
 
 
+# ============================================ 工具 18：usage_report（卡 A364 · T-AG578）
+
+
+def _usage_faults_reply(faults: list[Any]) -> tuple[str, dict[str, Any], bool]:
+    """判据层拒单 ⇒ **逐条**把 faults 原文端出来（吞成"失败了"就等于把原因丢了）。"""
+    lines = [f"  · {fault.error_text()}" for fault in faults]
+    text = (
+        "usage_report：**拒收** —— 判据层（tools/pool/usage_ingest.py）一条都没写盘。\n"
+        + "\n".join(lines)
+        + "\n（全有或全无：这一批里只要有一条坏，整包都不进账。）"
+    )
+    data = {
+        "accepted": 0,
+        "skipped": 0,
+        "records": [],
+        "faults": [
+            {
+                "index": fault.index,
+                "field": fault.field,
+                "msg": fault.msg,
+                "text": fault.error_text(),
+            }
+            for fault in faults
+        ],
+    }
+    return _result(text, data, is_error=True)
+
+
+def tool_usage_report(
+    arguments: dict[str, Any], root: Path = ROOT
+) -> tuple[str, dict[str, Any], bool]:
+    """外部用量上报（卡 A364）—— **只开入口，不动判据**：校验全在 `pool.usage_ingest`。
+
+    ★ 为什么 `confirm` 是**记录条数**而不是卡号：这一批的规模就是最该先看一眼的东西。
+      条数由判据层的 `parse_batch()` 数出来（**不在这里重数字段、重判一遍**），
+      所以"能报几条"与"该确认几"永远是同一个数。
+    ★ 顺序固定：先解析（判据层全量校验）→ 再核 `confirm`（此时一个字节都还没写）→ 才 `ingest()`。
+      判据层是**全有或全无**，所以拒单时目标文件行数与 mtime 都不动。
+    """
+    body = arguments.get("body")
+    if isinstance(body, (list, dict)):  # 直接给对象/数组也认：这里只做 JSON 化，不校验
+        raw = json.dumps(body, ensure_ascii=False)
+    else:
+        raw = "" if body is None else str(body)
+    confirm = str(arguments.get("confirm") or "").strip()
+    when = datetime.datetime.now(datetime.timezone.utc)
+
+    try:
+        rows = usage_ingest.parse_batch(raw, now=when)  # ★ 判据层自己数：一条坏就整包拒
+    except usage_ingest.IngestRefused as exc:
+        return _usage_faults_reply(list(exc.faults))
+
+    want = str(len(rows))
+    if confirm != want:
+        given = confirm or "空"
+        text = (
+            f"usage_report：**拒绝** —— arguments.confirm（{given}）必须等于这一批的记录条数："
+            f"收到 {want} 条，confirm 给的 {given}。"
+            f"这是防手滑：这一批有 {want} 条，就把 {want} 再写一遍。什么也没写。"
+        )
+        data = {"rejected": True, "confirm": confirm, "expected": want, "records": []}
+        return _result(text, data, is_error=True)
+
+    try:
+        payload = usage_ingest.ingest(raw, now=when, root=root)
+    except usage_ingest.IngestRefused as exc:  # 两次解析之间文件变了 ⇒ 照实拒，不吞
+        return _usage_faults_reply(list(exc.faults))
+
+    accepted = int(payload["accepted"])
+    skipped = int(payload["skipped"])
+    ledger = usage_ingest.reported_path(root)
+    text = (
+        f"usage_report：收了 {accepted} 条，跳过 {skipped} 条（同一个记录号已经报过）。\n"
+        f"  账本：{ledger.as_posix()}\n"
+        f"  ★ 判据全在 tools/pool/usage_ingest.py（本工具只开入口）；这一行**不进**"
+        f" wb-usage.jsonl —— 那是派活器自己的账。"
+    )
+    return _result(text, payload, is_error=False)
+
+
 # ================================================================ tools/call 调度
 
 
@@ -2328,6 +2463,7 @@ _HANDLERS: dict[str, Any] = {
     "task_pool": tool_task_pool,
     "task_register": tool_task_register,
     "task_claim": tool_task_claim,
+    "usage_report": tool_usage_report,
 }
 
 
@@ -2341,9 +2477,9 @@ def call_tool(name: str, arguments: dict[str, Any], *, root: Path = ROOT) -> dic
     if handler is None:
         return None
     args = arguments or {}
-    if name in WRITE_NAMES:
-        if not write_enabled():
-            return None
+    if name in WRITE_NAMES and not write_enabled():
+        return None  # 没 env ⇒ 当"没有这个工具"（"存在性即授权"）
+    if name in WRITE_NAMES - USAGE_WRITE_NAMES:
         card = str(args.get("card") or "").strip()
         if not card or str(args.get("confirm") or "").strip() != card:
             return {
@@ -2385,10 +2521,15 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
             "account_status（卡 E45）读仓外账号账本，checkin_status（卡 E48）读当天签到留档 —— "
             "两个都只读、都不联网、都**不触发**任何动作（签到要人跑 pool_accounts.py checkin）。"
             "**写工具**（pool_dispatch 派活 / pool_cancel 取消 / task_register 注册任务 / "
-            "task_claim 交成送申请）只有在**服务端**设了 POOL_MCP_WRITE=1 时才列出来 —— 那是"
+            "task_claim 交成送申请 / usage_report 外部用量上报）只有在**服务端**设了 "
+            "POOL_MCP_WRITE=1 时才列出来 —— 那是"
             "「存在性即授权」：没这个 env 就没有写工具。号池写工具每次调用还要 arguments.confirm "
-            "**等于卡号**；任务写工具里 task_register 的 confirm 等于 TOML 里的 id、"
+            "**等于卡号**（usage_report 例外：它的 confirm 等于**这一批的记录条数**）；"
+            "任务写工具里 task_register 的 confirm 等于 TOML 里的 id、"
             "task_claim 的 confirm 等于 task（防手滑）。"
+            "usage_report（卡 A364）是外部用量上报的唯一入口 —— 判据全在 "
+            "tools/pool/usage_ingest.py（本工具只开入口、不重写校验），上报行落 "
+            "gates/diag/usage-reported.jsonl，**不进**派活器自己的 wb-usage.jsonl。"
             "pool_dispatch 的顺序固定：先干跑守卫（被咬就不派活、逐条给原因）→ 先占树 → 起工人"
             "（--detach，立刻返回）→ 起不来就回滚租约；危险参数一律不透传。"
             "pool_cancel 只取消本机登记里那张卡的工人，**先核对 pid 身份**（映像必须是 node.exe / "
@@ -2453,7 +2594,8 @@ def _usage() -> str:
         "lock_status / pool_models / quota_status(card,model) / workbench_board(section?) / "
         "task_list / task_status(task) / task_pool。\n"
         "写工具（要服务端 env POOL_MCP_WRITE=1 才列出来）：pool_dispatch / pool_cancel"
-        "（confirm=卡号）、task_register（confirm=TOML 里的 id）、task_claim（confirm=task）。\n"
+        "（confirm=卡号）、task_register（confirm=TOML 里的 id）、task_claim（confirm=task）、"
+        "usage_report（confirm=这一批的记录条数）。\n"
         '客户端配置（示例）：command = python，args = ["-X", "utf8", '
         '"tools/pool_mcp.py"]。stdout 只走协议。\n'
     )

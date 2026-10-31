@@ -6,7 +6,7 @@ r"""号池 MCP **写面**（`tools/pool_mcp.py` 的 `pool_dispatch` / `pool_canc
 | 判据 | 判什么 |
 |---|---|
 | ① 授权 | 没 `POOL_MCP_WRITE=1` 只列 11 个；写调用还要 `arguments.confirm == 卡号` |
-| ② 清单形状 | 有 env 时 16 个；十二个 `readOnlyHint` 仍 true；写工具的 `annotations` |
+| ② 清单形状 | 有 env 时 18 个；十三个 `readOnlyHint` 仍 true；写工具的 `annotations` |
 | ③ 干跑四咬 | 树冲突 / 域相交 / 日志已存在 / 锁在跑 → **不派活** + 逐条原因 |
 | ④ 真派活用桩 | argv 逐字（有 `--detach --execute --cwd`；无 `--force/--allow` 等）+ 先占后起 |
 | ⑤ 回滚 | 起不来 ⇒ 租约被释放（`list_reservations` 验） |
@@ -54,7 +54,14 @@ READ_TOOL_NAMES = [
     "task_status",
     "task_pool",
 ]
-WRITE_TOOL_NAMES = ["pool_dispatch", "pool_cancel", "task_register", "task_claim"]
+WRITE_TOOL_NAMES = [
+    "pool_dispatch",
+    "pool_cancel",
+    # ★ 卡 A364（T-AG578）：第 5 个写工具 —— 外部用量上报（confirm = 这一批的条数）
+    "usage_report",
+    "task_register",
+    "task_claim",
+]
 
 BACKLOG = """\
 [base]
@@ -147,7 +154,7 @@ def test_write_tools_are_hidden_without_env(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_write_tools_listed_and_shaped_with_env(write_on: None) -> None:
-    """有 env → 16 个；十二个 `readOnlyHint: true`；两个号池写工具的 annotations 逐字。"""
+    """有 env → 18 个；十三个 `readOnlyHint: true`；两个号池写工具的 annotations 逐字。"""
     tools = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
     assert [t["name"] for t in tools] == [*READ_TOOL_NAMES, *WRITE_TOOL_NAMES]
     by_name = {t["name"]: t for t in tools}

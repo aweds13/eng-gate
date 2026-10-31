@@ -146,6 +146,7 @@ POOL_TOOL_NAMES = [
     "task_pool",
     "pool_dispatch",
     "pool_cancel",
+    "usage_report",  # ★ 卡 A364（T-AG578）：第 5 个写工具 —— 外部用量上报入口
     "task_register",
     "task_claim",
 ]
@@ -166,7 +167,7 @@ def test_server_from_foreign_cwd_still_locates_main_tree(
 ) -> None:
     """★ 端到端（卡 114）：真起 `tools/pool_mcp.py`，**子进程 cwd 在仓库外**。
 
-    - `tools/list` ⇒ 15 个工具（11 只读 + 4 写）（顺带钉住"注册环境里 `POOL_MCP_WRITE=1`"）；
+    - `tools/list` ⇒ 18 个工具（13 只读 + 5 写）（顺带钉住"注册环境里 `POOL_MCP_WRITE=1`"）；
     - `tools/call pool_cancel {"card":"999","confirm":"999"}` ⇒ 走"本机登记里没有活租约"的
       正常路径；改之前这里是「算不出主工作树」。
 

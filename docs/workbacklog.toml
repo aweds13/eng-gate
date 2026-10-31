@@ -5023,3 +5023,18 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A364"
+task = "T-AG578"
+title = "外部用量上报没有入口：给它开一个 MCP 写工具"
+tree = ".wt/A364"
+spec = "复盘/卡/卡A364-外部用量上报没有入口.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_task.py",
+  "tests/test_pool_mcp_write.py",
+]
+status = "done"
+risk = "mid"
+depends = []

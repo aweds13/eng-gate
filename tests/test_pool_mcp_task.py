@@ -21,6 +21,19 @@ r"""任务栅栏接到外包面（MCP 的任务类工具）的钉子 —— 卡 
 | ⑨ 失败如实带出 | 子进程非零退出 ⇒ 回话里**既有退出码又有原文**（不许吞、不许假装成功） |
 | ⑩ 超时不当成功 | 子进程超时 ⇒ 回话写"没跑完"，**不许**当成成功 |
 
+★ 卡 A364（`usage_report` 开外部用量上报的入口）另加七条：
+
+| 钉子 | 判什么 |
+|---|---|
+| ⑪ 只开入口 | 没 `POOL_MCP_WRITE=1` 不列出来；有 env 才列，且 `readOnlyHint` 必须是 false |
+| ⑫ `confirm` = 条数 | `confirm` 必须等于**这一批的记录条数**；不符 ⇒ 拒且点名「收到 N 条」 |
+| ⑬ 判据只有一份 | `pool_mcp.py` 里**没有**第二份字段表/上限/`rid` 判据；写盘的是
+  `usage_ingest.ingest()` |
+| ⑭ faults 原文 | 判据层拒单 ⇒ 回话带**逐条** `faults` 原文，一条都不写盘 |
+| ⑮ 回执原样 | 成功回 `{"accepted","skipped","records"}` —— 字段名一个都不翻译 |
+| ⑯ `isError` 跟判决 | 拒单 `true` / 成功 `false` —— 四条拒单路径逐条过 |
+| ⑰ 不碰派活器的账 | `gates/diag/wb-usage.jsonl` **一个字节不变**（sha256 前后比） |
+
 ★ 一律把 `TF_BATCH_DIR` 指到临时目录 —— 一个字节都不写进真的 `gates/diag/batch/`。
 ★ 导入口径照既有测试：把 `tools/` 挂上 `sys.path` 再 `import pool_mcp` / `pool.task`。
 """
@@ -28,6 +41,7 @@ r"""任务栅栏接到外包面（MCP 的任务类工具）的钉子 —— 卡 
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import subprocess
@@ -65,7 +79,14 @@ READ_POOL_NAMES = [
 ]
 READ_TASK_NAMES = ["task_list", "task_status", "task_pool"]
 READ_TOOL_NAMES = [*READ_POOL_NAMES, *READ_TASK_NAMES]
-WRITE_TOOL_NAMES = ["pool_dispatch", "pool_cancel", "task_register", "task_claim"]
+WRITE_TOOL_NAMES = [
+    "pool_dispatch",
+    "pool_cancel",
+    # ★ 卡 A364（T-AG578）：第 5 个写工具 —— 外部用量上报（confirm = 这一批的条数）
+    "usage_report",
+    "task_register",
+    "task_claim",
+]
 
 SERVER_SNIPPET = "import sys; from pool_mcp import serve; raise SystemExit(serve(sys.argv[1:]))"
 
@@ -783,22 +804,23 @@ def test_claim_kill_failure_is_reported_not_swallowed(
 
 
 def test_tools_list_counts_unchanged(batch: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """④ 工具清单没变：没 env = **12**（全只读）；`POOL_MCP_WRITE=1` = **16**。
+    """④ 工具清单没变：没 env = **13**（全只读）；`POOL_MCP_WRITE=1` = **18**。
 
     ★ 卡 201（T-G303）：加了第 10 个只读工具 `quota_status`（额度按钟表算，只读）⇒
       9/13 → 10/14。★ 卡 213（T-G325）：加了第 11 个只读工具 `workbench_board`
       ★ 卡 E45（T-AG496）：加第 12 个只读工具 `account_status` ⇒ 11/15 → 12/16。
+      ★ 卡 A364（T-AG578）：加第 5 个写工具 `usage_report`（外部用量上报的入口）⇒ 13/17 → 13/18。
       **没人放松判据** ——
-      只是把新工具如实计进来。
+      只是把新工具如实记进来。
     """
     monkeypatch.delenv("POOL_MCP_WRITE", raising=False)
-    twelve = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
-    assert len(twelve) == 13, [t["name"] for t in twelve]
-    assert all(t["annotations"]["readOnlyHint"] is True for t in twelve), twelve
+    thirteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    assert len(thirteen) == 13, [t["name"] for t in thirteen]
+    assert all(t["annotations"]["readOnlyHint"] is True for t in thirteen), thirteen
 
     monkeypatch.setenv("POOL_MCP_WRITE", "1")
-    sixteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
-    assert len(sixteen) == 17, [t["name"] for t in sixteen]
+    eighteen = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    assert len(eighteen) == 18, [t["name"] for t in eighteen]
 
 
 # --------------------------------------- 卡 E48：checkin_status（只读留档，永不触发签到）
@@ -859,3 +881,283 @@ def test_checkin_status_is_offline_and_never_writes(tmp_path, monkeypatch) -> No
     src = Path(pool_mcp.__file__).read_text(encoding="utf-8")
     for needle in ("/v1/ops/claim", "/daily-checkin", "checkin_credits/claim", "/signin/claim"):
         assert needle not in src, f"MCP 只读面里不许出现写端点：{needle}"
+# --------------------------------------- 卡 A364：usage_report（外部用量上报的入口）
+
+USAGE_REPORTED_REL = ("gates", "diag", "usage-reported.jsonl")
+
+
+def _usage_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """把上报账本钉到临时 root —— 一个字节都不写进真的 `gates/diag/`。"""
+    monkeypatch.delenv("TF_POOL_REPORTED", raising=False)
+    return tmp_path / "root"
+
+
+def _usage_record(rid: str, **over: Any) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "rid": rid,
+        "agent": "a",
+        "provider": "p",
+        "model": "m",
+        "status": 200,
+        "t": "2026-10-13T08:00:00Z",
+    }
+    row.update(over)
+    return row
+
+
+def _usage_body(*rows: dict[str, Any]) -> str:
+    return json.dumps(list(rows), ensure_ascii=False)
+
+
+def _usage_ledger(root: Path) -> Path:
+    return root.joinpath(*USAGE_REPORTED_REL)
+
+
+def test_usage_report_is_hidden_without_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⑪ 判据①：没 `POOL_MCP_WRITE=1` ⇒ **不列出来**，调用回 `-32602`（"没有这个工具"）。"""
+    root = _usage_root(tmp_path, monkeypatch)
+    monkeypatch.delenv("POOL_MCP_WRITE", raising=False)
+
+    names = [t["name"] for t in pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]]
+    assert "usage_report" not in names
+    assert pool_mcp.call_tool("usage_report", {"body": "{}", "confirm": "1"}, root=root) is None
+
+    reply = pool_mcp.handle(_call("usage_report", {"body": "{}", "confirm": "1"}), root=root)
+    assert reply["error"]["code"] == pool_mcp.JSONRPC_INVALID_PARAMS
+    assert "没有这个工具" in reply["error"]["message"]
+    assert not _usage_ledger(root).exists()
+
+
+def test_usage_report_is_a_write_tool_with_env(
+    write_on: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⑪ 判据①：有 env ⇒ 列出来，且是**写**工具 —— `readOnlyHint` 必须是 false。"""
+    _usage_root(tmp_path, monkeypatch)
+
+    tools = pool_mcp.handle(_req(1, "tools/list"))["result"]["tools"]
+    by_name = {t["name"]: t for t in tools}
+    assert "usage_report" in by_name
+    assert "usage_report" in pool_mcp.WRITE_NAMES
+    assert "usage_report" not in pool_mcp.TASK_WRITE_NAMES
+    assert "usage_report" not in [t["name"] for t in tools if t["annotations"]["readOnlyHint"]]
+
+    ann = by_name["usage_report"]["annotations"]
+    assert ann["readOnlyHint"] is False
+    assert ann["destructiveHint"] is False
+    assert ann["idempotentHint"] is True
+
+    schema = by_name["usage_report"]["inputSchema"]
+    assert schema["required"] == ["body"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["properties"]) == {"body", "confirm"}
+
+
+def test_usage_confirm_must_equal_record_count(
+    write_on: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⑫ 判据②：`confirm` 必须等于**记录条数**的十进制串；不符 ⇒ 拒且点名「收到 N 条」。"""
+    root = _usage_root(tmp_path, monkeypatch)
+    body = _usage_body(_usage_record("u1"), _usage_record("u2"))
+
+    missing = pool_mcp.call_tool("usage_report", {"body": body}, root=root)
+    assert missing is not None
+    assert missing["isError"] is True
+    assert "收到 2 条" in _text(missing)
+    assert "confirm 给的 空" in _text(missing)
+    assert not _usage_ledger(root).exists()
+
+    wrong = pool_mcp.call_tool("usage_report", {"body": body, "confirm": "3"}, root=root)
+    assert wrong is not None
+    assert wrong["isError"] is True
+    assert "收到 2 条" in _text(wrong)
+    assert "confirm 给的 3" in _text(wrong)
+    assert not _usage_ledger(root).exists()
+
+    good = pool_mcp.call_tool("usage_report", {"body": body, "confirm": "2"}, root=root)
+    assert good is not None
+    assert good["isError"] is False
+    assert len(_usage_ledger(root).read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_usage_report_keeps_the_only_criteria_in_usage_ingest(
+    write_on: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⑬ 判据③：正文里**只有一份判据** —— 入口不许再抄一遍字段表 / 上限 / `rid` 判据。"""
+    _usage_root(tmp_path, monkeypatch)
+    src = Path(pool_mcp.__file__).read_text(encoding="utf-8")
+    for needle in (
+        "FIELDS",
+        "MAX_RECORDS",
+        "MAX_TOKENS",
+        "MAX_MILLIS",
+        "MAX_TEXT",
+        "MAX_BODY",
+        "REQUIRED_TEXT",
+        "_parse_one",
+        "_known_rids",
+        "_append_rows",
+        "SOURCE_REPORTED",
+        "REPORTED_REL",
+        "EARLIEST",
+    ):
+        assert needle not in src, f"入口里冒出了第二份判据：{needle}"
+    assert "usage_ingest.ingest(" in src
+
+
+def test_usage_report_hands_the_body_to_the_criteria_layer(
+    write_on: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⑬ 判据③：入口**只开入口** —— 真写盘的是 `usage_ingest.ingest()`（换成桩就看得见）。"""
+    _usage_root(tmp_path, monkeypatch)
+    seen: dict[str, Any] = {}
+    stub = {
+        "accepted": 7,
+        "skipped": 1,
+        "records": [{"index": 0, "rid": "spy", "status": "accepted"}],
+    }
+
+    def _spy(text: str, *, now: Any = None, root: Any = None) -> dict[str, Any]:
+        seen["text"] = text
+        seen["root"] = root
+        return stub
+
+    monkeypatch.setattr(pool_mcp.usage_ingest, "ingest", _spy)
+    body = _usage_body(_usage_record("u9"))
+    result = pool_mcp.call_tool(
+        "usage_report", {"body": body, "confirm": "1"}, root=tmp_path / "root"
+    )
+    assert result is not None
+    assert result["isError"] is False
+    assert seen["text"] == body
+    assert seen["root"] == tmp_path / "root"
+    assert _json_block(_text(result)) == stub
+    assert not _usage_ledger(tmp_path / "root").exists()
+
+
+def test_usage_report_surfaces_every_fault_verbatim(
+    write_on: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⑭ 判据④：判据层拒单 ⇒ 回话带**逐条** faults 原文；一个字节都不写盘。"""
+    root = _usage_root(tmp_path, monkeypatch)
+    body = _usage_body(
+        _usage_record("v1"),
+        _usage_record("v2", **{"in": -1}),
+        _usage_record("v3", zzz=1),
+    )
+
+    result = pool_mcp.call_tool("usage_report", {"body": body, "confirm": "3"}, root=root)
+    assert result is not None
+    assert result["isError"] is True
+    text = _text(result)
+    # ★ 人读的那一半必须自己带原因：只把原文塞进机器块里不算 —— 报错信息没人看得见
+    human = text.split(JSON_MARKER, 1)[0]
+    assert "record 1: in: must not be negative" in human
+    assert "record 2: zzz: is not a field a call has" in human
+
+    payload = _json_block(text)
+    assert [f["text"] for f in payload["faults"]] == [
+        "record 1: in: must not be negative",
+        "record 2: zzz: is not a field a call has",
+    ]
+    assert payload["accepted"] == 0
+    assert payload["skipped"] == 0
+    assert payload["records"] == []
+    assert not _usage_ledger(root).exists()
+
+
+def test_usage_report_success_payload_is_verbatim(
+    write_on: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⑮ 判据⑤：成功回 `{"accepted","skipped","records"}` —— 字段名**一个都不翻译**。"""
+    root = _usage_root(tmp_path, monkeypatch)
+    body = _usage_body(_usage_record("w1"), _usage_record("w2"))
+
+    first = pool_mcp.call_tool("usage_report", {"body": body, "confirm": "2"}, root=root)
+    assert first is not None
+    assert first["isError"] is False
+    payload = _json_block(_text(first))
+    assert set(payload) == {"accepted", "skipped", "records"}
+    assert payload["accepted"] == 2
+    assert payload["skipped"] == 0
+    assert payload["records"] == [
+        {"index": 0, "rid": "w1", "status": "accepted"},
+        {"index": 1, "rid": "w2", "status": "accepted"},
+    ]
+
+    lines = _usage_ledger(root).read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+    assert all(json.loads(line)["source"] == "reported" for line in lines)
+
+    again = pool_mcp.call_tool("usage_report", {"body": body, "confirm": "2"}, root=root)
+    assert again is not None
+    assert again["isError"] is False
+    second = _json_block(_text(again))
+    assert second["accepted"] == 0
+    assert second["skipped"] == 2
+    assert {r["status"] for r in second["records"]} == {"skipped"}
+    assert len(_usage_ledger(root).read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_usage_report_is_error_flag_follows_the_verdict(
+    write_on: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⑯ 判据⑥：拒单 `isError=true`、成功 `false` —— 四条拒单路径逐条过。"""
+    root = _usage_root(tmp_path, monkeypatch)
+    cases: list[tuple[str, dict[str, Any]]] = [
+        ("空 body", {"body": "", "confirm": "1"}),
+        ("不是 JSON", {"body": "not json", "confirm": "1"}),
+        ("条数不符", {"body": _usage_body(_usage_record("x1")), "confirm": "9"}),
+        ("一条坏", {"body": _usage_body(_usage_record("x2", status=99)), "confirm": "1"}),
+    ]
+    for label, args in cases:
+        result = pool_mcp.call_tool("usage_report", args, root=root)
+        assert result is not None, label
+        assert result["isError"] is True, label
+    assert not _usage_ledger(root).exists()
+
+    good = pool_mcp.call_tool(
+        "usage_report", {"body": _usage_body(_usage_record("x3")), "confirm": "1"}, root=root
+    )
+    assert good is not None
+    assert good["isError"] is False
+
+
+def test_usage_report_never_touches_wb_usage_jsonl(
+    write_on: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⑰ 判据⑦：`gates/diag/wb-usage.jsonl` **一个字节都不变**（混进去就永久不可判）。"""
+    root = _usage_root(tmp_path, monkeypatch)
+    diag = root / "gates" / "diag"
+    diag.mkdir(parents=True)
+    own = diag / "wb-usage.jsonl"
+    original = (
+        b'{"source": "dispatch", "card": "111", "model": "m", "in": 10, "out": 5}\n'
+        b'{"source": "dispatch", "card": "112", "model": "m", "in": 1, "out": 2}\n'
+    )
+    own.write_bytes(original)
+    before = hashlib.sha256(own.read_bytes()).hexdigest()
+    before_stat = own.stat()
+
+    # ① 成功一单 ② 判据层拒单 ③ confirm 不符 —— 三条路径都不许碰这本账
+    pool_mcp.call_tool(
+        "usage_report", {"body": _usage_body(_usage_record("y1")), "confirm": "1"}, root=root
+    )
+    pool_mcp.call_tool(
+        "usage_report", {"body": _usage_body(_usage_record("y2", **{"in": -1})), "confirm": "1"},
+        root=root,
+    )
+    pool_mcp.call_tool(
+        "usage_report", {"body": _usage_body(_usage_record("y3")), "confirm": "9"}, root=root
+    )
+
+    after_stat = own.stat()
+    assert hashlib.sha256(own.read_bytes()).hexdigest() == before
+    assert own.read_bytes() == original
+    assert (after_stat.st_size, after_stat.st_mtime_ns) == (
+        before_stat.st_size,
+        before_stat.st_mtime_ns,
+    )
+    assert _usage_ledger(root).exists()
+    assert sorted(p.name for p in diag.iterdir()) == ["usage-reported.jsonl", "wb-usage.jsonl"]
