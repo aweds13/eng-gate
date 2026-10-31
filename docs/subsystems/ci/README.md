@@ -18,15 +18,22 @@
 
 口径：**判据住代码，技能只讲顺序**。这条不变。
 
-## 2. 度量（2026-10-24 实测，全量 19 道）
+## 2. 度量（2026-10-30 实测，全量 22 道；门数现读 `scripts/run_gates.py` 的 `build_jobs()`，由 `tests/test_ci_docs_counts.py` 与真门表对账）
+
+读数取**同一趟**：`gates/last.json`（`at = 2026-10-30T21:46:41`、`rev = 2fdaba1f`、
+`tree = 72a05a17`、4 worker、`pytest 4006 passed`）。`0 s` 表示那趟**复用**上次通过判定、
+没有真跑（源：同一份 `gates/last.json` 的 `reused` 块）。收集条数是**快照**不是常量：
+2026-10-31 实测 `python -X utf8 -m pytest --collect-only -q -o addopts= --no-cov`
+⇒ **4040 条**（每加一个用例它就变，重跑这条命令即可对账）。
 
 | 门 | 耗时 | 备注 |
 |---|---|---|
-| pytest | 350–910 s（2955 条） | 唯一逐次全跑的；今天最高 910 s（34 红那趟） |
-| `ui_flow` | 367 s | 真浏览器；多数日子可复用 |
-| `render` | 105 s | 45 份清单逐字节比对 |
-| 其余 16 道 | 合计 < 40 s | ruff 1 s、audit 0.6 s、check_layers 5 s |
-| **整趟** | **11–15 min** | 今天跑了 5 趟 = 约 45 分钟 |
+| `pytest` | 414.77 s | 唯一逐次全跑的（源：`gates/last.json` 的 `gates[].seconds`） |
+| `pytest_chain` | 177.68 s | 慢 e2e 单独一道门跑（同源） |
+| `acceptance` | 19.62 s | 验收层 2 条（同源） |
+| `mypy` | 17.36 s | `src/` 全量型检查（同源） |
+| 其余 18 道 | 合计 40.71 s | 含 5 道复用（`ui_dom_probe` / `lf1_live` / `web_live` / `render` / `ui_flow`，各 0 s）；真跑的最大 `check_layers_selftest` 7.06 s、`audit` 6.58 s、`check_layers` 4.72 s、`ruff` 0.79 s（同源） |
+| **整趟** | **670.14 s ≈ 11.2 min** | 22 道逐门 `seconds` 相加（同源） |
 
 落地尝试 8 次，**5 次失败在"走到那一步才说的规矩"**（缺文书、卡树祖先、spec 未跟踪、changelog 首行、队列缺 status、ruff 未用 import）。
 

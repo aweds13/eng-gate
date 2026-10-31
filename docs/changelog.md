@@ -1447,6 +1447,7 @@ lines = raw.split(sep)
 - 附错误 → 正确的最小对照，并写明错误形状的可观测症状（工具不出现在工具表 / 启动日志 `Cannot read properties of undefined (reading 'properties')`）。
 - 补一条可证伪验收：照文档示例写带参插件 → 重启 → 工具表必须出现它；不出现就是文档错。
 - 保留原真结论（参数根开放、`additionalProperties` 兜不了底），但说明它不是 `parameters` 顶层的合法键。
+CI 项目书里那句「全量 19 道 / 其余 2955 条」是 2026-10-20 的读数，门表早已是 22 道（`docs` 与 `skills_claims` 两道先后接入）。两张表（门数与耗时）改成**现读**口径并在正文标出处，另加 `tests/test_ci_docs_counts.py` 九条钉子把「文档说的」与「门表现算的」钉在一起：门数、耗时算术、收集条数、过期串、行尾各一对（正样例 + 变异咬红）。
 ## 2026-10-18 —— 面板就地渲染 + 工程工具箱（T-AG391）
 - `tools/dsh_panel.py`：`QuickEntry` 改 iframe 就地渲染；新增「工程工具箱」行与五页；宿主半新增 `/dsh-panel/skills` 只读路由，`serveSettings` 收紧为只读。
 - `tests/test_dsh_panel.py`：座位一致性判据改为「前三项逐项一致 + 额外行只许 toolbox」。
