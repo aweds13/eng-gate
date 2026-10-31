@@ -128,6 +128,11 @@ duty = "起子进程「不弹窗」的 `CREATE_NO_WINDOW` 常量 —— 全仓�
 cli = "无（被十几个入口 import）"
 
 [[module]]
+name = "outcomes.py"
+duty = "按**请求**而不是按轮算结局（magpie `Totals.count()` 移植）：`is_failed` / `is_outcome` / `request_of` / `count_requests`；只读账本，不改一个字节"
+cli = "无（被 `wb_dispatch` 的 `append_usage_line` / `usage_summary` 调）"
+
+[[module]]
 name = "plan.py"
 duty = "队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（`wb_plan.py` 的逻辑层，拒绝会冲突的组合）"
 cli = "`wb_plan.py`、`wb_batch.py`"

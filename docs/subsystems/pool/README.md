@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 37 个 py（36 个模块 + `__init__.py`）、**14808 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
+`tools/pool/` = 38 个 py（37 个模块 + `__init__.py`）、**14983 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -38,6 +38,7 @@
 | `model_registry.py` | 982 | 一层模型注册表、按池分流：`resolve_model` / `effective_allowed_for`（裸名 vs `provider/model` 两套 id 体系） | 无（被 `wb_dispatch`、`wb_watch`、`pool.plan` 调） |
 | `models.py` | 258 | 号池模型的只读读取：批准集 ∩ 可用集；读快照（带 `at`），不联网、不写快照 | `wb_state.py`、`pool_mcp` |
 | `no_window.py` | 29 | 起子进程「不弹窗」的 `CREATE_NO_WINDOW` 常量 —— 全仓唯一真源 | 无（被十几个入口 import） |
+| `outcomes.py` | 175 | 按**请求**而不是按轮算结局（magpie `Totals.count()` 移植）：`is_failed` / `is_outcome` / `request_of` / `count_requests`；只读账本，不改一个字节 | 无（被 `wb_dispatch` 的 `append_usage_line` / `usage_summary` 调） |
 | `plan.py` | 675 | 队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（`wb_plan.py` 的逻辑层，拒绝会冲突的组合） | `wb_plan.py`、`wb_batch.py` |
 | `platforms.toml` | 192 | 平台能力表：八个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false` | 无（被 `pool_accounts.py` 读） |
 | `projects.py` | 223 | 项目索引（`infra/pool/projects.toml`）只读 + 三条硬判据：root 存在 / 两项目不撞 root / 树在白名单内 | `wb_project.py` |
@@ -74,8 +75,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **14808 行** / **37 个文件**（36 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 305 张（293 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **14983 行** / **38 个文件**（37 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 306 张（294 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 241 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

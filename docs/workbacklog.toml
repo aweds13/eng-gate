@@ -4917,3 +4917,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A355"
+task = "T-AG568"
+title = "按请求算结局，不按轮"
+tree = ".wt/A355"
+spec = "复盘/卡/卡A355-按请求算结局.md"
+files = [
+  "tools/pool/outcomes.py",
+  "tools/wb_dispatch.py",
+  "tests/test_pool_outcomes.py",
+  "复盘/卡/卡A355-按请求算结局.md",
+]
+status = "done"
+risk = "mid"
+depends = []

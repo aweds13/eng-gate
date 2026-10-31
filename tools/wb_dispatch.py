@@ -120,6 +120,7 @@ import workbench_bridge  # noqa: E402 —— 工作台状态一处真源（卡 2
 #   `wb_dispatch --execute` 时不变量 ①②③⑤ 全部失效、且对其他窗口不可见（一树两写者不会被咬）。
 from pool import account_id as pool_account_id  # noqa: E402 —— 名字↔号 唯一映射（卡 A344）
 from pool import guards as pool_guards  # noqa: E402 —— 守卫唯一实现（pool.guards）
+from pool import outcomes as pool_outcomes  # noqa: E402 —— 按请求算结局，判据唯一真源（卡 A355）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
 from pool import rpm as pool_rpm  # noqa: E402 —— 每分钟派活闸（卡 A340，magpie 的 MaxRPM）
 from pool import sink as pool_sink  # noqa: E402 —— 沉底（卡 A351，magpie sinkOrder）
@@ -1589,9 +1590,20 @@ def result_usage(lines: list[str]) -> dict[str, int]:
 
 
 def append_usage_line(*, card: str, model: str, attempt: int, started_at: float | None,
-                      usage: dict[str, int], code: int, reason: str) -> Path:
+                      usage: dict[str, int], code: int, reason: str,
+                      tries: int = 1, handed_on: bool = False, stop: str = "") -> Path:
     """每张卡每轮跑完（无论成败）往 `gates/diag/wb-usage.jsonl` 追加一行用量（只数 token，
-    **不做金额换算**——用户明说「不用太担心怎么计价」）。该文件在 gitignore 里，不脏树。"""
+    **不做金额换算**——用户明说「不用太担心怎么计价」）。该文件在 gitignore 里，不脏树。
+
+    ★ 卡 A355：多三列**结局**（`tries` / `handed_on` / `stop`）——「每行一轮」不变，结局判据
+    只看 `tools/pool/outcomes.py` 那一份（`count_requests()`），这里只负责**写一次**。
+    ★ 三个新参数**全有默认值**：`usage_in()` 的 docstring 逐字承诺本函数的签名与
+      `usage_summary()` 的行为一个字节都不动 —— 老调用点照旧一行不用改。
+    ★ `handed_on` 必须由**写侧一次算好**（`row` 只写一次，**不许**回头补写第二行）：判据是
+      「这一轮失败 **且** 之后确实会续」—— 缺任一条都是把「交出去了」写宽或写窄。
+    ★ `stop` 今天**没有写方**（pool 派的是 CLI，拿不到上游自报的结束原因）⇒ 恒 `""`，
+      而 `""` 正是「上游没报」的正确取值（**不许**写 `"none"` / `"unknown"` 顶替）。
+    """
     path = ROOT / "gates" / "diag" / "wb-usage.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     end = time.time()
@@ -1604,6 +1616,9 @@ def append_usage_line(*, card: str, model: str, attempt: int, started_at: float 
         "output_tokens": usage["output_tokens"],
         "cache_read": usage["cache_read"],
         "退出码": code, "判决": reason or "正常收工",
+        # ★ 卡 A355 的三个结局列（口径见 `tools/pool/outcomes.py`）。三个 `tier_*`
+        #   今天在 pool 侧没有任何输入面 ⇒ **不写**空键（读方按缺键读成 `""`，不造假）。
+        "tries": tries, "handed_on": handed_on, "stop": stop,
     }
     with path.open("a", encoding="utf-8") as out:
         out.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -1624,8 +1639,14 @@ def usage_summary(card: str) -> str:
         return ""
     def total(items: list[dict], field: str) -> int:
         return sum(int(r.get(field) or 0) for r in items)
+    # ★ 卡 A355：多一行**按请求**的结局 —— 上面那行「本卡 N 轮」说的是**轮**（是对的，
+    #   一个字都不改）；这一行说的是「这些轮最终算几次请求」：交出去的试不计请求、不计失败，
+    #   失败被接住算「重试答上」。口径只有一份（`tools/pool/outcomes.py`）。
+    counts = pool_outcomes.count_requests(rows, card=card)
     parts = [f"本卡 {len(mine)} 轮：input {total(mine, 'input_tokens'):,} / "
              f"output {total(mine, 'output_tokens'):,} / cache_read {total(mine, 'cache_read'):,}",
+             f"请求 {counts['requests']} / 失败 {counts['errors']} / "
+             f"重试答上 {counts['retried']}",
              f"累计（所有卡）：input {total(rows, 'input_tokens'):,} / "
              f"output {total(rows, 'output_tokens'):,} / cache_read {total(rows, 'cache_read'):,}"]
     return " ｜ ".join(parts)
@@ -3892,8 +3913,29 @@ def main() -> int:
             except (OSError, ValueError) as spend_exc:   # 记不下来不许影响派活
                 print(f"[账 ] 用量没记进限额账本：{spend_exc}（不影响这次派活）",
                       file=sys.stderr, flush=True)
+        # ★ 卡 A355（判据 2）：`handed_on` 必须在**写之前**就知道 —— 所以把下面 `:4020`
+        #   那次 `should_resume()` 前移到这里算**一次**、存成局部变量，两处复用同一份结论
+        #   （判据只有一份：**不许**在 `:4020` 再调一次，也不许写完再回头补第二行）。
+        #   `handed_on = 这一轮失败 且 之后确实会续`（两条缺一不可：不失败就不是交出去，
+        #   不会续就没人接住）。
+        #   ★ 如实记一处落差：429 三拍那段（下面 `quota is not None`）也会 `attempts += 1`
+        #     接着干，但它的判断在**本行之后**（`quota_error(round_lines)` 在那里才解析）⇒
+        #     那一轮的 `handed_on` 会留在 `False`。本卡不动 A351 的地盘，这条写进回执与变更
+        #     记录：额度换模型那条路今天**低估** `handed_on`（如实，不补写）。
+        #   ★ 还有一条同型的：下面「预算用尽」那一支也会 `break`（止损，不是失败）——
+        #     它同样在**本行之后**才判，所以这里把它一并算进来：会被预算掐掉的那一轮
+        #     也不算「交出去」（没人接住）。`usage_total` 在上面已经加过这一轮的用量，
+        #     所以这里算出来的结论与下面那一支**逐字一致**（判据仍然只有一份）。
+        resume_next = should_resume(reason, attempts, args.retry)
+        budget_stop = bool(args.input_budget
+                           and usage_total["input_tokens"] >= args.input_budget)
+        handed_on = pool_outcomes.is_failed(code, reason) and resume_next and not budget_stop
         append_usage_line(card=args.card, model=model, attempt=attempts,
-                          started_at=attempt_started, usage=usage, code=code, reason=reason)
+                          started_at=attempt_started, usage=usage, code=code, reason=reason,
+                          # `tries` 只写在**结局**行上（判据 5）：交出去的行恒 1；
+                          # 结局行 = 本请求到这一轮为止试了几轮（含自己）。
+                          tries=1 if handed_on else attempts - first_attempt + 1,
+                          handed_on=handed_on, stop="")
         # ★ 卡 A345（T-AG547）：接入点 2 —— 记下「这张卡这次是谁答的」。与用量落账**同一处**
         #   （同一缩进层级、同一轮）：写在 dry-run 之后，`--execute` 之前那段一个字节没碰。
         if args.sticky:
@@ -4034,7 +4076,7 @@ def main() -> int:
                 vf.write(f"\n★★ 预算判决：{reason}（止损，不是失败）\n")
             print(f"[掐 ] {reason}", file=sys.stderr, flush=True)
             break
-        if not should_resume(reason, attempts, args.retry):
+        if not resume_next:      # ★ 卡 A355：复用上面**写之前**算好的那一份结论，不调第二次
             break
         attempts += 1
         print(f"[续 ] 第 {attempts} 次：带同一会话接着干（原因：{reason}）", file=sys.stderr,

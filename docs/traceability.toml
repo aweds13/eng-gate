@@ -10764,3 +10764,31 @@ gaps = [
 只在合成读数上验过：真 `quota-state.json` 里 18 条记录只有「一只限流」与「一堆余额耗尽」两种、且 `kind`（账本字段）与 `state`（`status()` 产出的四个中文字面量）是**两套字面量**（`\"限流\"` ≠ `\"限流中\"`）⇒ 只能用合成夹具验。
 """,
 ]
+
+[entries."T-AG568"]
+id = "T-AG568"
+title = "按请求算结局，不按轮"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A355-按请求算结局.md",
+  "file:tools/pool/outcomes.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_pool_outcomes.py",
+  "file:复盘/卡/卡A355-按请求算结局.md",
+  "test:test_pool_outcomes.py",
+  "text:tools/pool/outcomes.py::OUTCOME_TRIES = ",
+  "text:tools/pool/outcomes.py::def is_failed(",
+  "text:tools/pool/outcomes.py::def count_requests(",
+  "text:tools/wb_dispatch.py::resume_next = should_resume(",
+]
+gaps = [
+  """`tries` / `handed_on` / `stop` / `tier_*` 四样只在 pool 的**续跑循环**语义下成立，与 magpie 的**路由重试**不是同一层：magpie 的重试是「换上游再试一次」，pool 的续跑是「同一个工人带同一会话接着干」。`Tries` 在 pool 侧实为「续了几轮」。
+magpie 有 `RouteID` 能把同一次请求的多个 try 串起来；pool 没有这种 id，只能按「同卡、连续轮次、前一轮 `handed_on`」串 —— **这是弱口径**。若将来出现「同卡并发两条流水」或「轮次跳号」，这个串法会错，届时要加显式 id。
+429 三拍那段（A351 的地盘）今天**低估 `handed_on`**：它的判断在写行**之后**才解析（`quota_error(round_lines)`）⇒ 那一轮 `handed_on` 留在 `False`。补写就是二次改写（判据 2 明令禁止），所以只在 `wb_dispatch.py` 的注释里标明，没有补。
+`tier_*` 与 `stop` 今天**没有写方**：上游（`usage_ingest.py` 的二十字段）不报任何 `tier_*`，所以三个键恒为 `\"\"`；`stop` 同样恒为 `\"\"`（而 `\"\"` 恰好就是「上游没报」的正确取值）。本卡只把容器与判据备好，不造假数据。
+老行读出来是 `tries=1, handed_on=False`，与「一轮一请求」同义 —— 这不是修复，是「老行就是不知道」。
+设计原件 §F40 的变异 ② 预期与实测相反（原件说「钉子 2 红、钉子 1 仍绿」，实测钉子 1 红、钉子 2 仍绿）⇒ 反向验证脚本按实测写 `expect`，没有改设计原件。
+""",
+]
