@@ -5068,3 +5068,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E78"
+task = "T-AG581"
+title = "落地链每笔都新增一篇 md，docs/INDEX.md 却没人重算"
+tree = ".wt/E78"
+spec = "复盘/卡/卡E78-落地链每笔都新增一篇md却没人重算INDEX.md"
+files = [
+  "scripts/check_derived_docs.py",
+  "tools/pool/landing.py",
+  "tools/wb_land.py",
+  "docs/subsystems/pool/README.md",
+]
+status = "done"
+risk = "mid"
+depends = []

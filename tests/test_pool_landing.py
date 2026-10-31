@@ -63,6 +63,10 @@ BACKLOG_REL = "docs/workbacklog.toml"
 GEN_REL = "scripts/gen_pool_readme.py"
 #: ★ 卡 E77：两条腿共同调用的**独立检查器**（生成器的调用方，不含现算口径）。
 CHECKER_REL = "scripts/check_derived_docs.py"
+#: ★ 卡 E78：同一个病的**第二个面** —— 落地链每笔自动补 `docs/changelog.d/{task}.md`，
+#: 而 `docs/INDEX.md` 是按目录数篇数 + 算总字数的投影 ⇒ 每落一张卡它也过期一次。
+INDEX_REL = "docs/INDEX.md"
+INDEX_GEN_REL = "scripts/gen_doc_index.py"
 BEGIN = "<!-- pool-margin:begin -->"
 END = "<!-- pool-margin:end -->"
 
@@ -231,12 +235,23 @@ def _run_gen(repo: Path, *args: str) -> subprocess.CompletedProcess:
     )
 
 
+def _run_index_gen(repo: Path, *args: str) -> subprocess.CompletedProcess:
+    """在树里跑**真** `scripts/gen_doc_index.py`（`--target docs`：不碰 `复盘/INDEX.md`）。"""
+    return subprocess.run(
+        [sys.executable, "-X", "utf8", INDEX_GEN_REL, "--target", "docs", *args],
+        cwd=str(repo), env=_ENV, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=False, creationflags=_NO_WINDOW,
+    )
+
+
 def _mk_repo(tmp_path: Path) -> Path:
     """造一个「够收口链走到 ⑥」且**现算文档自洽**的假仓库。
 
-    与 `tests/test_wb_land.py::_mk_repo` 同体例，只多铺三样（本卡的被测面）：
+    与 `tests/test_wb_land.py::_mk_repo` 同体例，多铺这几样（本卡的被测面）：
     `scripts/gen_pool_readme.py`（**真件**）、`docs/subsystems/pool/modules.toml`（按实际文件
-    生成）、`docs/subsystems/pool/README.md`（夹具末尾由真生成器写成自洽态）。
+    生成）、`docs/subsystems/pool/README.md`（夹具末尾由真生成器写成自洽态）；
+    ★ 卡 E78：`scripts/gen_doc_index.py`（**真件**）+ `docs/INDEX.md`（同样由真生成器写成
+    自洽态）—— 少了这两样，多目标检查器会走「这棵树里没有它」那一支，第二个面就测不到。
     """
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -276,6 +291,12 @@ def _mk_repo(tmp_path: Path) -> Path:
     made = _run_gen(repo)
     assert made.returncode == 0, made.stdout + made.stderr
     assert STALE_LINE in (repo / README_REL).read_text(encoding="utf-8")
+    # ★ 卡 E78：第二个面（`docs/INDEX.md` ← `scripts/gen_doc_index.py`）。
+    #   必须在真生成器写完 README 之后跑 —— 否则 INDEX 里那一篇项目的路径还没出现。
+    _write(repo, INDEX_GEN_REL, (ROOT / INDEX_GEN_REL).read_bytes().decode("utf-8"))
+    indexed = _run_index_gen(repo)
+    assert indexed.returncode == 0, indexed.stdout + indexed.stderr
+    assert (repo / INDEX_REL).is_file(), "夹具：INDEX 没生成出来"
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "init")
     return repo
@@ -359,7 +380,10 @@ def test_recount_is_quiet_when_nothing_changed(tmp_path: Path) -> None:
 
     assert done.returncode == 0, out
     assert "[OK  ] " + README_REL + " 已是最新，未写盘" in out, out
-    assert "★ 重算改了它" not in out, out
+    # ★ 卡 E78：`docs/` 不再「全都不变」了 —— ⑤′ 自动补的 `docs/changelog.d/T-G888.md`
+    #   是这一笔自己带进来的新文件，INDEX 依约要跟着变。所以这条钉子的口径收窄到
+    #   **README 安静**（它原本要测的就是这个），INDEX 的安静另有一条钉子。
+    assert "★ 重算改了它 ⇒ 随这一笔提交：" + README_REL not in out, out
     assert README_REL not in _head_files(repo), _head_files(repo)
 
 
@@ -436,6 +460,7 @@ def test_recount_brings_in_no_unexpected_files(tmp_path: Path) -> None:
         "docs/changelog.d/T-G999.md",
         "docs/traceability.d/T-G999.toml",
         "复盘/交接.d/T-G999.md",
+        INDEX_REL,          # ★ 卡 E78：第二个面（篇数表跟着新片段一起变）
     }
     surprise = files - allowed
     assert not surprise, f"这一笔多带了计划外的文件：{sorted(surprise)}"
@@ -679,3 +704,234 @@ def test_pre_leg_refuses_to_start_on_a_dirty_tree(tmp_path: Path) -> None:
     assert "[队列] 卡 T-G999：pending → done" not in out
     assert _git(repo, "rev-parse", "HEAD").stdout.strip() == head_before, "前置腿红了还往前走了"
     assert readme.read_bytes() == dirty, "★ 前置腿写盘了 —— 它必须只读"
+
+
+# ================================================================ 卡 E78：第二个面
+#
+# 病：落地链每笔都会 ⑤′ 自动补 `docs/changelog.d/{task}.md`、② 重写 `docs/changelog.md`，
+# 而 `docs/INDEX.md` 是 `docs/**` 的**投影**（按目录数篇数 + 算总字数）⇒ 每落一张卡它也
+# 过期一次。修法与 E76/E77 同一个：复用**三条腿**（前置腿只读 / 腿① ⑤′.5 写盘 / 腿② 壳层
+# 写盘），判决权只在 `scripts/gen_doc_index.py`，`scripts/check_derived_docs.py` 只管调它。
+#
+# 五条判据各至少一枚钉子：
+#   1. 落地链必须重算 `docs/INDEX.md`           → test_landing_recomputes_the_derived_index
+#                                                 test_recount_leaves_the_index_quiet_when_unchanged
+#   2. checker 扩成多目标、仍不含现算口径        → test_checker_declares_both_targets
+#                                                 test_checker_still_has_no_recount_logic
+#   3. `gen_doc_index.py --check` 仍逐行点名     → test_index_check_still_names_the_line
+#   3b. 只缺 INDEX 生成器也要响亮停手
+#       → test_checker_is_loud_when_only_the_index_gen_is_missing
+#   4. `--commit-only` 那条路也被覆盖
+#       → test_commit_only_path_also_recomputes_the_index
+#   5. 生成器与既有钉子一字节不动
+#       → test_index_generator_and_its_pins_are_not_weakened
+
+
+# ---------------------------------------------------------------- 判据 1
+def test_landing_recomputes_the_derived_index(tmp_path: Path) -> None:
+    r"""判据 1：翻账 + 自动补片段之后，`docs/INDEX.md` 必须**真写盘**并随这一笔提交。
+
+    ★ 坏掉的写法（本卡开工前就是这样）：`RECOUNT_DOCS` 只有 README 一项 ⇒ 这一笔把
+      `docs/changelog.d/T-G999.md` 带进库，而 INDEX 的篇数表还是旧的 ⇒ 每落一张卡过期一次。
+    """
+    repo = _mk_repo(tmp_path)
+    assert _run_index_gen(repo, "--check").returncode == 0, "前提：夹具里 INDEX 自洽"
+    before = (repo / INDEX_REL).read_text(encoding="utf-8")
+    assert "docs/changelog.d/T-G999.md" not in before, "前提：落地前片段还不存在"
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--no-gate", "--no-review")
+    out = _out(done)
+
+    assert done.returncode == 0, out
+    assert "[队列] 卡 T-G999：pending → done" in out, out
+    # 落地链自己把 INDEX 补进了这一笔（`★ 重算改了它 ⇒ 随这一笔提交：`）
+    assert "★ 重算改了它 ⇒ 随这一笔提交：" + INDEX_REL in out, out
+    assert INDEX_REL in _head_files(repo), _head_files(repo)
+    # 提交里那份 INDEX 已经**看见**这一笔新增的片段（这才是「重算」的证据）
+    assert "docs/changelog.d/T-G999.md" in _head_text(repo, INDEX_REL)
+    # 交完之后假仓库自己也是自洽的
+    assert _run_index_gen(repo, "--check").returncode == 0
+
+
+def test_recount_leaves_the_index_quiet_when_unchanged(tmp_path: Path) -> None:
+    """判据 1 的另一半：`docs/` 真的没变时 INDEX **不许被拖进这一笔**（不制造空改动）。
+
+    ★ 为什么用 `--commit-only` 造这个现场：这条路的 ①~⑤ 全跳过 ⇒ 不会自动补
+      `docs/changelog.d/{task}.md`（那是 ② 的产物）⇒ 整棵树里 `docs/` 一字节不变。
+      普通单卡落地永远会补片段，所以造不出「docs 不变」的现场。
+    """
+    repo = _mk_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+    before = (repo / INDEX_REL).read_bytes()
+
+    done = _wand(repo, "--no-gate", "--commit-only", "--no-reset", "--no-review")
+    out = _out(done)
+
+    assert done.returncode == 0, out
+    assert "①~⑤ 跳过" in out, out
+    # 检查器照旧点名 INDEX（腿② 仍在看第二个面）……
+    assert "[OK  ] " + INDEX_REL + "（" in out, out
+    # ……但 INDEX 没进这一笔（`recount_derived` 只收**真被改**的）
+    assert INDEX_REL not in _head_files(repo), _head_files(repo)
+    assert (repo / INDEX_REL).read_bytes() == before, "INDEX 被无谓改写了"
+
+
+# ---------------------------------------------------------------- 判据 2
+def test_checker_declares_both_targets() -> None:
+    """判据 2：检查器的目标表必须**同时**声明两个面（README + INDEX），各带自己的生成器。
+
+    ★ 这条是「删掉 INDEX 那一支」的钉子：目标表里少了 INDEX ⇒ 判据 1 的三条腿一起哑掉。
+    """
+    src = (ROOT / CHECKER_REL).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    targets = next(
+        node for node in tree.body
+        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == "TARGETS"
+    )
+    pairs: list[tuple[str, str]] = []
+    for call in targets.value.elts:                          # type: ignore[union-attr]
+        got = {
+            kw.arg: kw.value.value                             # type: ignore[attr-defined]
+            for kw in call.keywords
+            if isinstance(kw.value, ast.Constant)             # `gen_args` 是 Tuple，跳过
+        }
+        pairs.append((got.get("doc", ""), got.get("gen", "")))
+    assert (README_REL, GEN_REL) in pairs, pairs
+    assert (INDEX_REL, INDEX_GEN_REL) in pairs, pairs
+    # INDEX 必须限定 `--target docs`：`复盘/INDEX.md` 归 `scripts/retro/retro_index.py`，不接管
+    index_call = next(
+        call for call in targets.value.elts                     # type: ignore[union-attr]
+        if any(kw.arg == "doc" and kw.value.value == INDEX_REL for kw in call.keywords)
+    )
+    args = next(
+        kw.value for kw in index_call.keywords if kw.arg == "gen_args"
+    )
+    assert [e.value for e in args.elts] == ["--target", "docs"], ast.dump(args)
+
+
+def test_checker_still_has_no_recount_logic() -> None:
+    """判据 2：检查器**仍不含任何现算口径** —— 数行数、扫目录、数篇数、渲染都不许长在这里。"""
+    checker = (ROOT / CHECKER_REL).read_text(encoding="utf-8")
+    for token in ("rglob", "render_docs", "def count", "collect(",
+                  "import gen_pool_readme", "import gen_doc_index",
+                  "def scan_pool", "def backlog_metrics", "def render_block", "DIFF_LIMIT"):
+        assert token not in checker, f"检查器里长出了第二份现算口径：{token}"
+    assert "subprocess.run(" in checker, "检查器不再以子进程跑生成器"
+
+
+# ---------------------------------------------------------------- 判据 3
+def test_index_check_still_names_the_line(tmp_path: Path) -> None:
+    """判据 3：`gen_doc_index.py --check` 遇过期仍退非零并**逐行点名**（本卡不许削弱它）。"""
+    repo = _mk_repo(tmp_path)
+    assert _run_index_gen(repo, "--check").returncode == 0, "前提：自洽"
+
+    raw = (repo / INDEX_REL).read_bytes().decode("utf-8")
+    lines = raw.replace("\r\n", "\n").split("\n")
+    target = next(i for i, line in enumerate(lines) if "docs/changelog.md" in line)
+    lines[target] = "- `docs/不该存在.md`"
+    (repo / INDEX_REL).write_bytes("\n".join(lines).replace("\n", "\r\n").encode("utf-8"))
+
+    done = _run_index_gen(repo, "--check")
+
+    assert done.returncode == 1, done.stdout
+    assert f"第 {target + 1} 行" in done.stdout, done.stdout
+    assert "docs/不该存在.md" in done.stdout, done.stdout
+
+
+def test_checker_is_loud_when_only_the_index_gen_is_missing(tmp_path: Path) -> None:
+    """判据 3：**只缺 INDEX 的生成器**也要响亮停手（退 2），不许静默跳过。"""
+    half = tmp_path / "half"
+    (half / "docs").mkdir(parents=True)
+    (half / INDEX_REL).write_text("x\n", encoding="utf-8")
+    loud = subprocess.run(
+        [sys.executable, "-X", "utf8", str(ROOT / CHECKER_REL), "--check", "--root", str(half)],
+        cwd=str(ROOT), env=_ENV, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=False, creationflags=_NO_WINDOW,
+    )
+    loud_out = (loud.stdout or "") + (loud.stderr or "")
+
+    assert loud.returncode == 2, loud_out
+    assert INDEX_REL in loud_out and "停手" in loud_out, loud_out
+
+
+# ---------------------------------------------------------------- 判据 4
+def test_commit_only_path_also_covers_the_index(tmp_path: Path) -> None:
+    r"""判据 4：`--commit-only` 那条路**同样**被覆盖 —— 两半都测，不许静默。
+
+    ★ 为什么两半都得测：这条路 ①~⑤ 全跳过 ⇒ 不会自动补 `docs/changelog.d/{task}.md`，
+      也不会重写 `docs/changelog.md`。所以 `docs/` 在**这条路自己手里**永远不变，
+      「重算写盘」那一半造不出正面现场。可达的现实只有两种，两种都钉：
+        ① 树是干净的 ⇒ 检查器**照样点名 INDEX**（证明这道腿没被这条路绕开，且不制造空改动）；
+        ② 树已经过期 ⇒ **响亮停手**（rc=3、点名、一个字节都不提交）——
+           卡里写的「或 loud failure，不许静默」就是这一半。
+      ★ 顺带钉住一件真会踩的事：过期的 INDEX 若能被 `--commit-only` 静默带过，
+        那它就是又一条「落地即过期」的路。
+    """
+    # ---- ① 干净树：这条路照旧把两个面都过一遍（安静，且不制造空改动）
+    (tmp_path / "clean").mkdir()
+    clean = _mk_repo(tmp_path / "clean")
+    assert _run_index_gen(clean, "--check").returncode == 0, "前提：夹具里 INDEX 自洽"
+    _write(clean, "code/a.py", "X = 2\n")
+    before = (clean / INDEX_REL).read_bytes()
+
+    ok = _wand(clean, "--no-gate", "--commit-only", "--no-reset", "--no-review")
+    ok_out = _out(ok)
+
+    assert ok.returncode == 0, ok_out
+    assert "①~⑤ 跳过" in ok_out, ok_out                      # 确认真走的是这条路
+    assert "[OK  ] " + INDEX_REL + "（" in ok_out, ok_out     # 这条路也看了第二个面
+    assert (clean / INDEX_REL).read_bytes() == before, "INDEX 被无谓改写了"
+
+    # ---- ② 过期树：这条路必须响亮停手（rc=3），不许把过期悄悄带进提交
+    (tmp_path / "stale").mkdir()
+    stale = _mk_repo(tmp_path / "stale")
+    _write(stale, "code/a.py", "X = 2\n")
+    # 新增一篇笔记 ⇒ INDEX 的篇数表过期（不重算：模拟「有人手改文档又忘了重算」）
+    _write(stale, "docs/extra_note.md", "# 忘了重算的一篇\n")
+    head_before = _git(stale, "rev-parse", "HEAD").stdout.strip()
+
+    # 先拿检查器的**完整**输出（`_run_step` 只留末尾 8 行，`[FAIL]` 那行会被截掉，
+    # 所以「点名了哪个面」要直接问检查器，别从腿的尾巴里猜）。
+    seen = _run_checker(stale, "--check")
+    assert seen.returncode == 1, _out(seen)
+    assert "[FAIL] " + INDEX_REL in seen.stdout, _out(seen)   # 点名的是第二个面
+    assert "[OK  ] " + README_REL in seen.stdout, _out(seen)  # 第一个面本来是好的
+
+    refused = _wand(stale, "--no-gate", "--commit-only", "--no-reset", "--no-review")
+    bad_out = _out(refused)
+
+    assert refused.returncode == 3, bad_out
+    assert "落地链开跑前" in bad_out, bad_out
+    assert _git(stale, "rev-parse", "HEAD").stdout.strip() == head_before, "过期的树竟被提交了"
+
+
+# ---------------------------------------------------------------- 判据 5
+def test_index_generator_and_its_pins_are_not_weakened() -> None:
+    """判据 5：`scripts/gen_doc_index.py` 的现算口径与既有钉子一条都不许削弱。"""
+    gen = (ROOT / INDEX_GEN_REL).read_text(encoding="utf-8")
+    for token in ("def collect(", "rglob", "def render_docs", "def check_target",
+                  "def write_target", "第 {index + 1} 行", "[OK  ]", "[FAIL]",
+                  "--target"):
+        assert token in gen, f"索引生成器的现算口径被动了：{token}"
+    pins = (ROOT / "tests" / "test_gen_doc_index_fresh.py").read_text(encoding="utf-8")
+    for name in ("test_the_real_index_matches_the_real_tree",
+                 "test_hand_edit_is_red_and_names_the_line"):
+        assert name in pins, f"既有钉子被删了：{name}"
+
+
+# ---------------------------------------------------------------- 三条腿都覆盖 INDEX
+def test_every_leg_checks_the_index(tmp_path: Path) -> None:
+    """三条腿都要点名 INDEX：前置腿/腿② 走真树 `--check`，腿① 由上面判据 1 的 e2e 覆盖。"""
+    real = _run_checker(ROOT, "--check")
+    real_out = (real.stdout or "") + (real.stderr or "")
+    assert real.returncode == 0, real_out
+    assert "[OK  ] " + INDEX_REL + "（" in real_out, real_out
+
+    repo = _mk_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+    _drop_landing_leg(repo)
+    stale = _wand(repo, "--no-gate", "--commit-only", "--no-reset", "--no-review")
+    out = _out(stale)
+    assert stale.returncode == 4, out
+    assert INDEX_REL in out, out                            # 腿② 的不一致里点了 INDEX 的名

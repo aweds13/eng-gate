@@ -93,14 +93,21 @@ GATE_ARTIFACTS = GATES
 RESET_FRAGMENTS = ("docs/changelog.d/{task}.md", "docs/traceability.d/{task}.toml",
                    "复盘/交接.d/{task}.md")
 
-#: 卡 E76（`T-AG579`）：落地链**自己会改**的**现算文档** —— 翻账改了台账的 done/pending
-#: 分布，而这份 README 的「队列卡数」是从台账现算的 ⇒ 必须由落地链自己重算（真写盘）。
-RECOUNT_DOCS = ("docs/subsystems/pool/README.md",)
+#: 卡 E76（`T-AG579`）+ 卡 E78（`T-AG581`）：落地链**自己会改**的**现算文档**。
+#: · README：翻账改了台账的 done/pending 分布，它的「队列卡数」是从台账现算的；
+#: · `docs/INDEX.md`：本链 ⑤′ 会**自动补** `docs/changelog.d/{task}.md`、② 会重写
+#:   `docs/changelog.md`，而这份索引是按目录数篇数 + 算总字数的投影。
+#: ⇒ 每落一张卡这两份都过期一次，必须由落地链自己重算（真写盘）。
+RECOUNT_DOCS = ("docs/subsystems/pool/README.md", "docs/INDEX.md")
 
-#: 重算用的生成器（相对**卡树**根；权威副本在 git 里）。**不带** `--check` 才真写盘。
-#: ★ 卡 E77：本链**不再直跑它** —— ⑤′.5 改调 `DERIVED_CHECKER`（生成器的调用方，
-#:   不含任何现算口径）。保留这个常量是因为「只有它不在」仍要**响亮失败**（判据 3）。
-POOL_README_GEN = "scripts/gen_pool_readme.py"
+#: 重算用的生成器（相对**卡树**根；权威副本在 git 里），与 `RECOUNT_DOCS` **一一对应**。
+#: ★ 卡 E77：本链**不再直跑它们** —— ⑤′.5 改调 `DERIVED_CHECKER`（生成器的调用方，
+#:   不含任何现算口径）。保留这张表，是因为「某份文档在、它的生成器不在」仍要
+#:   **响亮失败**（判据 3），而不是静默跳过。
+RECOUNT_GENS = ("scripts/gen_pool_readme.py", "scripts/gen_doc_index.py")
+
+#: 卡 E77 的旧名（README 那个生成器）—— 注释与 `tests/test_pool_landing.py` 都还认它。
+POOL_README_GEN = RECOUNT_GENS[0]
 
 #: ★★ 卡 E77（`T-AG580`）：⑤′.5 的**独立检查器** —— 与 `wb_land.py` 壳层腿②互为备份。
 #: 为什么不能直接调 `POOL_README_GEN`：一笔提交若改的正是**本文件**（`tools/pool/landing.py`），
@@ -263,13 +270,18 @@ def recount_derived(wt: pathlib.Path) -> list[str]:
     （`tests/test_pool_readme_counts.py` / `tests/test_pool_jobs.py`）只在**下一次**
     有人跑门禁时才说话 —— 那时已经错了。⇒ **每落一张卡，主树 README 就错一次。**
 
+    ★ 第二个面（卡 E78 · `T-AG581`）：同一笔还会自动补 `docs/changelog.d/{task}.md`、
+    ② 会重写 `docs/changelog.md` —— 二者都在 `docs/**` 下，而 `docs/INDEX.md` 是
+    按目录数篇数 + 算总字数的**投影** ⇒ **每落一张卡它也过期一次**。同一个病，同一个
+    治法：一并交给 `DERIVED_CHECKER`（它自己逐目标跑生成器），本函数不另立口径。
+
     口径（三条钉死）：
       ★ **真写盘**：不带 `--check` 跑生成器。只跑 `--check` 然后失败 = 把活推给人，不是验证。
       ★ **响亮失败**：生成器非零（读不出清单 / 没有可写区域 / 台账读不出来）⇒ 退 2，
         绝不带着过期文档提交；生成器/文档不存在也退 2，**不静默跳过**。
-      ★ **唯一的跳过**：这棵树里 `RECOUNT_DOCS` 与生成器**两样都不在** ⇒ 它不是
-        本仓那种维护现算文档的树（测试假仓、老仓）⇒ 打印一行说明后返回空表。只要
-        二者有一样在，就按上面三条严格办（缺另一样 ⇒ 同样响亮退 2）。
+      ★ **唯一的跳过**：这棵树里 `RECOUNT_DOCS` 与 `RECOUNT_GENS` **全都两样不在** ⇒
+        它不是本仓那种维护现算文档的树（测试假仓、老仓）⇒ 打印一行说明后返回空表。
+        只要**任何一对**里有一半在，就按上面三条严格办（缺另一半 ⇒ 同样响亮退 2）。
       ★ **返回真被写盘的那些相对路径**：调用方必须把它们补进 `allow`，否则
         `staged_and_extra()` 会把它们判成「计划外暂存」而停手
         （卡 E74 / A362 的落地日志里都留着这条原文）。
@@ -277,14 +289,20 @@ def recount_derived(wt: pathlib.Path) -> list[str]:
     为什么位置是「翻账之后、暂存之前」：翻账是本笔对**台账**的最后一次改动，
     重算必须看到翻完之后的分布；暂存必须在重算之后，写下去的 README 才进这一笔。
     """
-    if not (wt / RECOUNT_DOCS[0]).is_file() and not (wt / POOL_README_GEN).is_file():
-        print(f"  · 重算现算文档：这棵树里既没有 {RECOUNT_DOCS[0]} 也没有"
-              f" {POOL_README_GEN} ⇒ 没有会因翻账过期的现算文档（跳过）")
+    present: list[str] = []
+    for doc, gen in zip(RECOUNT_DOCS, RECOUNT_GENS, strict=True):
+        has_doc, has_gen = (wt / doc).is_file(), (wt / gen).is_file()
+        if has_doc and not has_gen:
+            print(f"★ 重算现算文档失败：这棵树里有 {doc} 却没有 {gen}"
+                  " ⇒ 证明不了它是最新的 ⇒ 停手")
+            sys.exit(2)
+        if has_doc or has_gen:
+            present.append(doc)
+    if not present:
+        print("  · 重算现算文档：这棵树里既没有 " + " / ".join(RECOUNT_DOCS)
+              + " 也没有 " + " / ".join(RECOUNT_GENS)
+              + " ⇒ 没有会因翻账过期的现算文档（跳过）")
         return []
-    if not (wt / POOL_README_GEN).is_file():
-        print(f"★ 重算现算文档失败：这棵树里没有 {POOL_README_GEN}"
-              " ⇒ 证明不了 README 是最新的 ⇒ 停手")
-        sys.exit(2)
     if not (wt / DERIVED_CHECKER).is_file():
         print(f"★ 重算现算文档失败：这棵树里没有 {DERIVED_CHECKER}"
               " ⇒ 走不了独立检查器（**不许改回直跑生成器**：那正是卡 E76 的病） ⇒ 停手")

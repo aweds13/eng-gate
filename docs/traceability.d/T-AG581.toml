@@ -1,0 +1,26 @@
+[entries."T-AG581"]
+id = "T-AG581"
+title = "落地链每笔都新增一篇 md，docs/INDEX.md 却没人重算"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E78-落地链每笔都新增一篇md却没人重算INDEX.md",
+  "file:scripts/check_derived_docs.py",
+  "file:tools/pool/landing.py",
+  "file:tools/wb_land.py",
+  "file:docs/subsystems/pool/README.md",
+  "test:test_pool_landing.py",
+  "text:scripts/check_derived_docs.py::class Derived",
+  "text:scripts/check_derived_docs.py::TARGETS",
+  "text:tools/pool/landing.py::RECOUNT_GENS = ",
+  "text:tools/wb_land.py::DERIVED_TARGETS = ",
+]
+gaps = [
+  """- `复盘/INDEX.md` 由 `scripts/retro/retro_index.py` 全量生成（769 篇 / 14 主题），落地链**不管它**；它会不会因新增 `复盘/交接.d/*.md` 而过期，本卡**不查**（`gen_doc_index.py --check` 对它固定打 `[SKIP]`）。
+- 收窄了一条既有钉子的口径：`test_recount_is_quiet_when_nothing_changed` 的 `\"★ 重算改了它\" not in out` 限定到 `README_REL`（因为 ⑤′ 对登记型提交也补片段，原断言在 INDEX 上线后必红）；语义不变，INDEX 的安静另立了新钉子 `test_recount_leaves_the_index_quiet_when_unchanged`。
+- `tests/test_pool_landing.py` 的 `_mk_repo` 现在多铺 `scripts/gen_doc_index.py`（真件）+ `docs/INDEX.md`（真生成器写成的自洽态），否则多目标 checker 会走「这棵树里没有它」那支、第二个面测不到。
+- `gates/diag/` 下的变异脚本与探针被 `.gitignore` 覆盖，不进提交（与 E66/F10/A336/E77 同体例）。
+- 只在本机 win32 验过。
+""",
+]

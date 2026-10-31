@@ -114,11 +114,19 @@ _HELP_TAIL = (
 #: 落地链给 `scripts/run_gates.py` 的选测开关（与 `--select` 同一个判据，见卡 E51）。
 SELECT_ENV = "TF_SELECT"
 
-#: ★ 卡 E77（`T-AG580`）：腿② 要的三样（相对**卡树**根）。本壳只**转发**给检查器，
-#: 不含任何现算口径 —— 口径仍只在 `scripts/gen_pool_readme.py`，检查器是它的调用方。
+#: ★ 卡 E77（`T-AG580`）：三条腿要的东西（相对**卡树**根）。本壳只**转发**给检查器，
+#: 不含任何现算口径 —— 口径仍只在两个生成器里，检查器是它们的调用方。
+#: ★ 卡 E78（`T-AG581`）：目标从一个变两个 —— `docs/INDEX.md` 是同一个病的第二个面
+#: （落地链每笔自动补 `docs/changelog.d/{task}.md`，而它按目录数篇数）。这里只用这张表
+#: 判「文件在不在」，篇数/行数一概不碰；顺序与 `scripts/check_derived_docs.py` 的
+#: `TARGETS` 一致。
 DERIVED_CHECKER = "scripts/check_derived_docs.py"
-DERIVED_DOC = "docs/subsystems/pool/README.md"
-DERIVED_GEN = "scripts/gen_pool_readme.py"
+DERIVED_TARGETS = (
+    ("docs/subsystems/pool/README.md", "scripts/gen_pool_readme.py"),
+    ("docs/INDEX.md", "scripts/gen_doc_index.py"),
+)
+_DERIVED_DOCS = " / ".join(doc for doc, _ in DERIVED_TARGETS)
+_DERIVED_GENS = " / ".join(gen for _, gen in DERIVED_TARGETS)
 
 #: `--precheck` 的 argparse 描述（help 里能看到判据在干什么）。
 _PRECHECK_DESC = (
@@ -456,6 +464,30 @@ def _session_gate(argv: list[str]) -> tuple[int, list[str]]:
         print(f"  [窗口] {msg}")
     return 0, rest
 
+def _derived_no_checker(root: pathlib.Path, leg: str) -> int:
+    """检查器不在时的口径（卡 E77 立、卡 E78 扩成**多目标**）：只看文件在不在，不现算。
+
+    · 这棵树里一个派生目标都没有 ⇒ 没有会过期的派生文档，跳过（退 0）。
+    · 有文档却没有配对的生成器 ⇒ **响亮失败**（退 2）：证明不了它是最新的。
+    · 文档与生成器都在、只缺检查器 ⇒ 也退 2：**不许**绕过检查器直跑生成器
+      （那正是卡 E76 的病 —— 直跑生成器只能证明「生成器跑得动」，证明不了「口径没被绕过」）。
+    """
+    alive = [(doc, gen) for doc, gen in DERIVED_TARGETS if (root / doc).is_file()]
+    if not alive:
+        print(f"  [派生文档] {leg}：这棵树里既没有 {_DERIVED_DOCS} 也没有 {_DERIVED_GENS}"
+              " ⇒ 没有会过期的派生文档（跳过）", flush=True)
+        return 0
+    bare = [(doc, gen) for doc, gen in alive if not (root / gen).is_file()]
+    if bare:
+        for doc, gen in bare:
+            print(f"  ★ 派生文档检查失败（{leg}）：这棵树里有 {doc} 却没有 {gen}"
+                  " ⇒ 证明不了它是最新的 ⇒ 停手", flush=True)
+        return 2
+    print(f"  ★ 派生文档检查失败（{leg}）：这棵树里没有 {DERIVED_CHECKER}"
+          f" ⇒ 证明不了 {_DERIVED_DOCS} 是最新的 ⇒ 停手", flush=True)
+    return 2
+
+
 def derived_before_land(argv: list[str]) -> int:
     """前置腿（卡 E77）：**开跑前**复核派生文档 —— **只读**，绝不写盘。
 
@@ -476,19 +508,13 @@ def derived_before_land(argv: list[str]) -> int:
     root = (_landing.ROOT / tree).resolve()
     checker = root / DERIVED_CHECKER
     if not checker.is_file():
-        if not (root / DERIVED_DOC).is_file() and not (root / DERIVED_GEN).is_file():
-            print(f"  [派生文档] 前置腿：这棵树里既没有 {DERIVED_DOC} 也没有 {DERIVED_GEN}"
-                  " ⇒ 没有会过期的派生文档（跳过）", flush=True)
-            return 0
-        print(f"  ★ 派生文档检查失败（前置腿）：这棵树里没有 {DERIVED_CHECKER}"
-              f" ⇒ 证明不了 {DERIVED_DOC} 是最新的 ⇒ 停手", flush=True)
-        return 2
+        return _derived_no_checker(root, "前置腿")
     rc, tail = _run_step((DERIVED_CHECKER, "--check"), root)
     for line in tail.splitlines():
         print(f"  {line}", flush=True)
     if rc == 0:
         return 0
-    print(f"  ★ 落地链开跑前 {DERIVED_DOC} 已与现算不一致 ⇒ 先修好再落"
+    print("  ★ 落地链开跑前派生文档已与现算不一致 ⇒ 先修好再落"
           "（`python -X utf8 scripts/check_derived_docs.py`；本腿只读，不替你改）。", flush=True)
     return 3
 
@@ -519,19 +545,13 @@ def derived_after_land(argv: list[str]) -> int:
     root = (_landing.ROOT / tree).resolve()
     checker = root / DERIVED_CHECKER
     if not checker.is_file():
-        if not (root / DERIVED_DOC).is_file() and not (root / DERIVED_GEN).is_file():
-            print(f"  [派生文档] 腿②：这棵树里既没有 {DERIVED_DOC} 也没有 {DERIVED_GEN}"
-                  " ⇒ 没有会过期的派生文档（跳过）", flush=True)
-            return 0
-        print(f"  ★ 派生文档检查失败（腿②）：这棵树里没有 {DERIVED_CHECKER}"
-              f" ⇒ 证明不了 {DERIVED_DOC} 是最新的 ⇒ 停手", flush=True)
-        return 2
+        return _derived_no_checker(root, "腿②")
     rc, tail = _run_step((DERIVED_CHECKER, "--check"), root)
     for line in tail.splitlines():
         print(f"  {line}", flush=True)
     if rc == 0:
         return 0
-    print(f"  ★ 派生文档检查失败（腿②/壳层）：这一笔**已经提交**，而 {DERIVED_DOC} 与现算不一致"
+    print("  ★ 派生文档检查失败（腿②/壳层）：这一笔**已经提交**，而派生文档与现算不一致"
           " —— 腿①（落地链 ⑤′.5）没跑到，多半因为这一笔改的正是它自己。", flush=True)
     fix_rc, fix_tail = _run_step((DERIVED_CHECKER,), root)
     for line in fix_tail.splitlines():
