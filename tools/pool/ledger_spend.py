@@ -27,7 +27,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from pool.cleared import Clear, hides
+
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from datetime import tzinfo
 
     TZ: tzinfo
@@ -53,6 +56,7 @@ class Entry:
     cache_write: int
     cache_read: int
     cost: float
+    model: str = ""  # 清空用量要按模型清（F44）；缺席 = ""，不判整行坏
 
 
 def _local(moment: datetime) -> datetime:
@@ -113,6 +117,7 @@ def _entry(line: str) -> Entry | None:
         cache_write=counters["cache_write"],
         cache_read=counters["cache_read"],
         cost=float(raw_cost),
+        model=raw_model if isinstance(raw_model := row.get("model"), str) else "",
     )
 
 
@@ -155,6 +160,7 @@ def sums(
     *,
     cache_reads: bool = False,
     root: Path | str | None = None,
+    clears: Sequence[Clear] | None = None,
 ) -> tuple[int, float, int]:
     """`(tokens, cost, calls)`：只算 `start <= at < end`（**左闭右开**）里该账号的行。
 
@@ -173,6 +179,8 @@ def sums(
         entry = _entry(line)
         if entry is None or entry.account != account:
             continue
+        if clears is not None and hides(clears, entry.account, entry.model, entry.at):
+            continue  # ★ 只有显式给 clears 才过滤（clears=None = magpie 的 Visit 面）
         if not low <= entry.at < high:
             continue
         tokens += entry.input_tokens + entry.output_tokens + entry.cache_write

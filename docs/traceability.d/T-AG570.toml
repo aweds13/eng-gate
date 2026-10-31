@@ -1,0 +1,30 @@
+[entries."T-AG570"]
+id = "T-AG570"
+title = "清空用量：只加一条到此为止不算的标记，账一行不动"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A357-清空用量.md",
+  "file:tools/pool/cleared.py",
+  "file:tools/pool/ledger_spend.py",
+  "file:tests/test_pool_cleared.py",
+  "file:复盘/卡/卡A357-清空用量.md",
+  "test:test_pool_cleared.py",
+  "text:tools/pool/cleared.py::CLEARED_REL: tuple[str, ...] = ",
+  "text:tools/pool/cleared.py::def read_clears(",
+  "text:tools/pool/cleared.py::def add_clear(",
+  "text:tools/pool/cleared.py::def hides(",
+  "text:tools/pool/ledger_spend.py::clears: Sequence[Clear] | None = None",
+]
+gaps = [
+  """pool 侧没有「页面」这个面：`sums(clears=…)` 今天**没有任何调用方**（`sums()` 连不带 `clears` 都没人调）⇒ 本卡交出去的是**能力**，不是**可见效果**。真要看，得等一张把 `wb_dash` / `wb_status` 接上 `pool-spend.jsonl` 的卡。
+轴不对等：magpie 的轴是 `provider + model`（网关上游），pool 的轴是 `account + model`（号）。「同一个模型在三个号上」在 magpie 是一行、在 pool 是三行 —— 判据照抄了形状，但语义不等价，这一点移植消除不了。
+alias 无对应物：magpie 的 `clearSet.alias` 让别名归并后清一个等于清另一个；pool 的模型名是字面量（`model_registry.py` 的 `alias` 是「逻辑名 → 每池 id」，与用量归并无关）⇒ 本卡不支持按别名清。
+`clearedSince()` 无对应物（magpie 用它让热力图起点不早于全清时刻）；pool 的热力图面不存在，这一支不移植。
+只在合成夹具上验过：真实 `gates/diag/pool-spend.jsonl` 今天不存在，所以「对真账跑一遍」做不到。
+毫秒 vs 微秒判不出：magpie 存 `At int64`（Unix 毫秒），Python `datetime.isoformat()` 写 6 位小数；两边都自洽，但拿 magpie 的 `settings.json` 直接喂 pool 会差一个量级 —— 本卡不处理这种跨仓搬运。
+`hides()` 的 account 轴与 Go 有一处**有意偏离**：Go `:85` 是 `m.Provider != r.Provider`（空串在 provider 轴不算通配 ⇒ 空 provider 是死标记）；本仓写成 `mark.account not in (ALL_ACCOUNT, account)`，让空串在 account 轴算「该模型的所有号」。理由是否则 `add_clear(\"\", \"m\", at)` 是一条收了参数却静默无效的空命令。要逐字一致就改一行 `mark.account != account`，钉子 8/9 不受影响。
+假牙如实申报两处：①钉子 13（「没有一处给 `sums(` 传 `clears=`」）今天是因为「没人调用」而绿，它的价值全在未来的那一次接线改动 ②判据 14 的源码扫描仍是白名单式而非证明式，间接调用（如 `getattr(ledger_spend, \"for\" + \"get\")`）咬不住。
+""",
+]

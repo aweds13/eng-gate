@@ -4919,15 +4919,16 @@ risk = "mid"
 depends = []
 
 [[cards]]
-id = "A360"
-task = "T-AG572"
-title = "什么情况不许报速度：magpie 的 DecodeWindow 与 DecodeOf 搬进 pool"
-tree = ".wt/A360"
-spec = "复盘/卡/卡A360-什么情况不许报速度.md"
+id = "A357"
+task = "T-AG570"
+title = "清空用量：只加一条到此为止不算的标记，账一行不动"
+tree = ".wt/A357"
+spec = "复盘/卡/卡A357-清空用量.md"
 files = [
-  "tools/pool/speed.py",
-  "tests/test_pool_speed_tells.py",
-  "复盘/卡/卡A360-什么情况不许报速度.md",
+  "tools/pool/cleared.py",
+  "tools/pool/ledger_spend.py",
+  "tests/test_pool_cleared.py",
+  "复盘/卡/卡A357-清空用量.md",
 ]
 status = "done"
 risk = "mid"

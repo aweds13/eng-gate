@@ -236,3 +236,8 @@ cli = "无（被 `pool.rpm` 读）"
 name = "quota_line.py"
 duty = "一行说完「现在能不能派」：问不到就打空行、星号只给最新且紧贴名字、至少 1 小时不带秒；纯函数零 IO"
 cli = "被 `pool_quota.py line` 调"
+
+[[module]]
+name = "cleared.py"
+duty = "清空用量的标记（`gates/diag/usage-cleared.json`）：清空**永不写进账**，只换读法；判不出就显出全部"
+cli = "`pool.cleared main`（子命令 list / add）"
