@@ -4951,3 +4951,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A363"
+task = "T-AG575"
+title = "谁被试过、谁真答了：路由回放要在做决定的地方落盘"
+tree = ".wt/A363"
+spec = "复盘/卡/卡A363-谁被试过谁真答了.md"
+files = [
+  "tools/pool/route_log.py",
+  "tools/pool/trae_dispatch.py",
+  "tests/test_pool_route_log.py",
+  "docs/subsystems/pool/modules.toml",
+]
+status = "done"
+risk = "mid"
+depends = []

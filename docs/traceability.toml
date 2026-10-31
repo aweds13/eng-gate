@@ -10962,3 +10962,31 @@ gaps = [
 判据 3 的占位检查放在 `startServer()` **之前**：如果放在之后，`tools/serve.py:263 pick_port()` 在端口被占时会自己往后顺延，探不到自己 ⇒ 只能放之前。
 """,
 ]
+
+[entries."T-AG575"]
+id = "T-AG575"
+title = "谁被试过、谁真答了：路由回放要在做决定的地方落盘"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A363-谁被试过谁真答了.md",
+  "file:tools/pool/route_log.py",
+  "file:tools/pool/trae_dispatch.py",
+  "file:tests/test_pool_route_log.py",
+  "file:docs/subsystems/pool/modules.toml",
+  "test:test_pool_route_log.py",
+  "text:tools/pool/route_log.py::def append_route(",
+  "text:tools/pool/route_log.py::def read_routes(",
+  "text:tools/pool/route_log.py::STATUS_QUOTA_BLOCKED = ",
+  "text:tools/pool/trae_dispatch.py::def _record_route(",
+  "text:tools/pool/trae_dispatch.py::def _route_status(",
+]
+gaps = [
+  """- `wb-route.jsonl` 会被三处 `wb-*.jsonl` 通配的读者当成一张卡（`tools/wb_dash.py:159 NON_CARD_LOGS` / `tools/pool/jobs.py:40 USAGE_LOG_RE` / `tools/wb_retention.py:164 diag.glob`）—— 本卡不改那三处，已另开卡收口。
+- `Route` 的逐字段 json tag 没核（`trace.go:34` 只读到结构体开头几行）⇒ `asked` / `tried` / `served` / `status` 是按条目清单的字段名 + pool 侧能拿到什么设计的，不是从 Go struct 逐字抄的。
+- `effort` 与 `rule` 两字段不搬：pool 的 `--effort` 是调用方给的字符串，没有「规则名」这个概念。
+- 覆盖面只有 Trae 面板那条路：`wb_dispatch --detach` 不经过 `trae_dispatch`。
+- 只在本机 win32 验过。
+""",
+]

@@ -173,6 +173,11 @@ duty = "Smart 路由：给「哪个号先上」排序（`tier` / `apply_order`�
 cli = "无（被 `wb_dispatch`、`pool.plan`、`pool.sticky` 调）"
 
 [[module]]
+name = "route_log.py"
+duty = "路由回放的**唯一写入处**：一行一轮记「谁被试过、谁真答了」，值只来自调用方传进来的事实（不读 usage 账重算）；`status` 四值闭集"
+cli = "无（被 `pool.trae_dispatch.finish` 调；`route_path` / `read_routes` 供读面）"
+
+[[module]]
 name = "rpm.py"
 duty = "每号每分钟派活**趟数**闸（`decide`）；防不了 vendor 侧 RPM 429（那个归 `pool_quota.py` 的四态）"
 cli = "无（被 `wb_dispatch` 调）"

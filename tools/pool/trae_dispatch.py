@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -55,7 +56,7 @@ from typing import TYPE_CHECKING
 # 只有 tools/pool/ 被加进去，`from pool import …` 会 ImportError）。
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from pool import jobs, registry  # noqa: E402 —— tools/ 已在 sys.path 上
+from pool import jobs, registry, route_log  # noqa: E402 —— tools/ 已在 sys.path 上
 
 if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解（ruff TCH）
     from collections.abc import Sequence
@@ -178,8 +179,15 @@ def _verdict_text(card: str, log: Path, *, exit_code: int, lines: int, has_resul
 
 def finish(*, card: str, log: Path | None, exit_code: int, root: Path,
            answer_file: Path | None = None, session_id: str = "", disconnects: int = 0,
-           reconnects: int = 0, release: bool = False, now: float | None = None) -> tuple[int, str]:
-    """写工人日志的 `assistant` + `result`，落**判决文件**；`--release` 顺手放租约。"""
+           reconnects: int = 0, release: bool = False, now: float | None = None,
+           asked: str = "", tried: Sequence[dict] = (), served: str = "",
+           route_status: str = "") -> tuple[int, str]:
+    """写工人日志的 `assistant` + `result`，落**判决文件**；`--release` 顺手放租约。
+
+    ★ 卡 A363（F39）在这里顺便落一条**路由回放**（`pool.route_log`）：谁被试过、谁真答了。
+      `asked` / `tried` / `served` 三个参数**带默认值**，老调用点一个字节不用改（`tried` 为
+      空 ⇒ 不落记录，理由见下）。`route_status` 不给就按退出码推（见 `_route_status`）。
+    """
     diag = jobs.diag_dir(root)
     log_path = Path(log) if log is not None else worker_log_for(diag, card)
     if not log_path.exists():
@@ -211,12 +219,68 @@ def finish(*, card: str, log: Path | None, exit_code: int, root: Path,
                       ).isoformat(timespec="seconds"),
                       session_id=session_id),
         encoding="utf-8", newline="\n")
+    _record_route(card=card, log_path=log_path, exit_code=exit_code, root=root,
+                  asked=asked, tried=tried, served=served,
+                  route_status=route_status, started_at=started_at)
     released = registry.release(card) if release else False
     text = (f"卡 {card} 收工入账：\n"
             f"  工人日志：{log_path.as_posix()}（{len(lines)} 行）\n"
             f"  判决：{path.as_posix()}（★ scan_jobs / wb_watch 认它）\n"
             f"  租约：{'已释放' if released else '还留着（要放就给 --release）'}")
     return 0, text
+
+
+# ================================================================ 路由回放（F39 · 卡 A363）
+
+
+def _attempt_of(log_path: Path) -> int:
+    """这一轮是第几轮 —— 从日志名取（`wb-A363.r2.jsonl` → 2；没后缀 → 1）。
+
+    ★ 与 `wb_dash._split_card` / `jobs.card_of` **同一口径**（轮次只认文件名后缀，
+      不拿 `st_ctime` 当"第几轮"：Windows 上 ctime 是创建时间、复制/覆盖会重置）。
+    """
+    hit = re.search(r"\.r(\d+)$", log_path.stem)
+    return int(hit.group(1)) if hit else 1
+
+
+def _route_status(exit_code: int, served: str) -> str:
+    """按**已有的事实**推这一轮的终态（不猜：猜不出来的那种留给调用方显式给）。
+
+    `exit_code == 7` 是 `wb_dispatch.py` 的既有口径（额度 / 白名单耗尽，界外退出）；
+    `quota_blocked`（额度挡住，压根没开工）在 `finish` 的入参里**没有对应物** ——
+    那种情况由调用方经 `route_status=` 明说，本函数不替它编。
+    """
+    if exit_code == 7:
+        return route_log.STATUS_STOPPED
+    if exit_code == 0 and served:
+        return route_log.STATUS_SERVED
+    return route_log.STATUS_ALL_FAILED
+
+
+def _record_route(*, card: str, log_path: Path, exit_code: int, root: Path, asked: str,
+                  tried: Sequence[dict], served: str, route_status: str,
+                  started_at: str) -> None:
+    """落一条路由回放 —— **在做决定的地方、用做决定时的那些值**（照 `trace.go` 包注释）。
+
+    ★ `tried` 为空 ⇒ **不落记录**：那说明这一轮没有真实的尝试顺序可记（老调用点不传）。
+      落一条空记录只是把「不知道」写成「知道」。
+    ★ 这里**不读** `gates/diag/wb-usage.jsonl` 去"补"或"对账"：那份账是每轮一行，
+      同一轮里 `m1` 挂了换 `m2` 这件事它根本记不出来 —— 照它重算就是编数（判据 5）。
+    ★ `asked` / `tried` / `served` 里**只有模型名与失败原因**，没有 prompt、回复正文或凭据
+      （判据 2）。
+    """
+    if not tried:
+        return
+    epoch: float | None = None
+    if started_at:
+        try:
+            epoch = datetime.datetime.fromisoformat(started_at).timestamp()
+        except ValueError:
+            epoch = None
+    route_log.append_route(
+        card=card, attempt=_attempt_of(log_path), asked=asked, tried=tried, served=served,
+        status=route_status or _route_status(exit_code, served), started_at=epoch, root=root)
+
 
 
 # ================================================================ status
