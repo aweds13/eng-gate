@@ -4933,3 +4933,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A356"
+task = "T-AG569"
+title = "写盘纪律：坏文件先旁存、BOM / 权限位 / 换行原样保留"
+tree = ".wt/A356"
+spec = "复盘/卡/卡A356-写盘纪律.md"
+files = [
+  "tools/pool/lastgood.py",
+  "tools/pool_accounts.py",
+  "tests/test_pool_lastgood_discipline.py",
+  "复盘/卡/卡A356-写盘纪律.md",
+]
+status = "done"
+risk = "mid"
+depends = []

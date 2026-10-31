@@ -254,11 +254,42 @@ def load_ledger(path: Path, platforms: dict | None = None, strict: bool = True) 
     return data
 
 
+def ledger_would_lose_comments(path: Path) -> list[int]:
+    """账本里哪些行是**行首注释**（`_dump_toml` 整份重生成会把这些抹掉），返回 1 起的行号。
+
+    ★ 只看**行首（允许前置空白）的 `#`**：行尾注释**不算**。`_dump_toml` 连行尾注释也会丢，
+      但那是「整份重生成」避免不了的事 —— 管不了就明说管不了（卡 A356 缺口 1），
+      不在这里假装能管（否则今天真实账本里任何一个 `key = 1  # 说明` 都会被误报成「会丢」）。
+    文件不存在 / 读不出来 ⇒ 空列表（没有会丢的东西，写盘照常）。
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    return [
+        lineno
+        for lineno, line in enumerate(text.splitlines(), start=1)
+        if line.lstrip().startswith("#")
+    ]
+
+
 def save_ledger(path: Path, data: dict) -> None:
     """原子替换写回（E48 用；E45 只读面不调它，但格式必须与读的一模一样）。
 
     `samples` 只留最近 SAMPLES_CAP 条；写坏半个文件比不写更糟 ⇒ 同目录临时文件 + os.replace。
+
+    ★ 卡 A356：写之前先看账本里有没有**行首注释** —— `_dump_toml` 是整份重生成，
+      有注释就把它抹掉。抹掉是不可逆的数据损失（账本在仓外，没有 git 能 checkout 回来），
+      所以这里**拒绝**而不是「先备份再写」：**一个字节都不写**，让人自己决定怎么搬走注释。
+      （`lastgood` 的 `.bak` 救不了这件事 —— `.bak` 也是上一次「已经没有注释」的那一份。）
     """
+    losing = ledger_would_lose_comments(path)
+    if losing:
+        shown = "、".join(str(n) for n in losing[:3])
+        raise LedgerError(
+            f"账本里有注释，`_dump_toml` 会整份重生成把它抹掉（{path}）："
+            f"行 {shown}（共 {len(losing)} 行）—— 先把注释挪走或删掉再写；**一个字节都没写**。"
+        )
     for acc in data.get("account", []):
         quota = acc.get("quota")
         if isinstance(quota, dict) and isinstance(quota.get("samples"), list):

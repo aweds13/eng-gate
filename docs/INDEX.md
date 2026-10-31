@@ -216,7 +216,7 @@
 - `docs/changelog.d/T-AG565.md`
 - `docs/changelog.d/T-AG566.md`
 - `docs/changelog.d/T-AG568.md`
-- `docs/changelog.d/T-AG570.md`
+- `docs/changelog.d/T-AG569.md`
 - `docs/changelog.d/T-AG571.md`
 - `docs/changelog.d/T-AG572.md`
 - `docs/changelog.d/T-BG001.md`
@@ -452,7 +452,7 @@
 ## 统计
 
 - **总篇数**：352
-- **总字数**：1111767 字（约 111.2 万字），中位 657 字，最长 452514 字，最短 133 字
+- **总字数**：1111293 字（约 111.1 万字），中位 657 字，最长 452342 字，最短 133 字
 - **按段**：`docs/` 15、`docs/changelog.d/` 271、`docs/contracts/` 2、`docs/decisions/` 9、`docs/implementation/` 6、`docs/intention/` 2、`docs/reference/` 1、`docs/research/` 3、`docs/specification/` 6、`docs/taste/` 1、`docs/contracts/domains/` 12、`docs/specification/domains/` 13、`docs/subsystems/ci/` 6、`docs/subsystems/pool/` 5
 - **按 mode**：tutorial 0 / howto 0 / reference 0 / explanation 0 / 未标注 352
 - **按 status**：active 0 / superseded 0 / draft 0 / 未标注 352

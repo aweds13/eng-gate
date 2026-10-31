@@ -1,0 +1,28 @@
+[entries."T-AG569"]
+id = "T-AG569"
+title = "写盘纪律：坏文件先旁存、BOM / 权限位 / 换行原样保留"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A356-写盘纪律.md",
+  "file:tools/pool/lastgood.py",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_pool_lastgood_discipline.py",
+  "file:复盘/卡/卡A356-写盘纪律.md",
+  "test:test_pool_lastgood_discipline.py",
+  "text:tools/pool/lastgood.py::def describe_bad(",
+  "text:tools/pool/lastgood.py::def keep_bad(",
+  "text:tools/pool/lastgood.py::BAD_PERM = 0o600",
+  "text:tools/pool_accounts.py::def ledger_would_lose_comments(",
+]
+gaps = [
+  """行尾注释仍然会被丢：`_dump_toml` 整份重生成时行尾注释没了，而 `ledger_would_lose_comments` 只管**行首** `#` ⇒ 今天的真账本没有行尾注释所以不流血，一旦有人加了这个洞还会在（钉子 14 的判据明确只看行首）。
+`follow_ending` 默认 `False`，而本仓文本「一律纯 CRLF」⇒ 真正的修法是先定一条仓级换行策略（像 `.gitattributes` 对 `gates/render/*.txt` 那样），再让所有写盘点跟随；本条只提供能力，不替它做决定。
+没加 fsync（`os.fsync` 在 Windows 对目录无效；现有写盘点全是 `gates/diag/` 的运行态文件）⇒ magpie 的「断电留全零文件」这个原始动机（#1505）在 pool 侧**没有被防住**。
+`target.is_symlink()` 未处理：magpie 有 `Target()` 把符号链接指向真身再写，pool 的 `write_atomic` 会**把链接替换成普通文件**；没在仓里找到用符号链接管账本的实践，也没验过 Windows 上的行为。
+只在合成夹具上验过：`describe_bad` 三支、`keep_bad` 碰撞编号、混合换行全部用 `tmp_path` 造的数据；没拿一次真实的「账本被写坏」事故复核过。
+Windows 上 `os.chmod` 只认只读位（`0o600`/`0o640` 读回 `0o666`）⇒ 钉子 8/9 在 win32 分支改断「传给 chmod 的 mode 等于原文件此刻的 `S_IMODE` 且 ≠ `DEFAULT_PERM`」，在 POSIX 上断真值。
+未移植 magpie 的「同字节就不写」（`internal/edit/file.go:1992-1997` 的 `bytes.Equal(cur, data)`）：卡规格没要求，且会让「写完的字节与 BOM 状态一致」这条判据多一条旁路。
+""",
+]
