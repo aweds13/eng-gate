@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 41 个 py（40 个模块 + `__init__.py`）、**15805 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
+`tools/pool/` = 41 个 py（40 个模块 + `__init__.py`）、**15989 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -28,7 +28,7 @@
 | `landing.py` | 2693 | 落地链八步（⓪ 回退 → ⑧ 复核落盘）：迁树 / 文书 / 门禁 / 封存 / 提交 / 合流，一笔提交的编排全在这里 | `wb_land.py` |
 | `lanes.py` | 154 | 读 `lanes.toml`：一个号同时最多几张卡（数据面；判据在 `guards.lane_guard`） | 无（被 `pool.registry` 调） |
 | `lanes.toml` | 45 | 每账号并发闸的数据：稳定 id → 同时最多几张卡（随仓走、由人改，改完不用重启） | 无（被 `pool.lanes` 读） |
-| `lastgood.py` | 171 | 写盘纪律：原子替换 + `.bak` 落后一次 + fail-closed 读；`read_strict` 从不读 `.bak`（撤过的凭据不许复活） | 无（被 `pool.registry`、`pool.task`、`pool.queue`、`pool_accounts`、`gate_pool` 调） |
+| `lastgood.py` | 355 | 写盘纪律：原子替换 + `.bak` 落后一次 + fail-closed 读；`read_strict` 从不读 `.bak`（撤过的凭据不许复活） | 无（被 `pool.registry`、`pool.task`、`pool.queue`、`pool_accounts`、`gate_pool` 调） |
 | `lease.py` | 109 | 码道派活那条路并进**同一本**租约账的命令行（不并账，守卫就瞎一半） | 本文件即入口 |
 | `ledger_spend.py` | 267 | 按账号累计花费的账（`pool-spend.jsonl`，一行一次派活）；**不内置价目表**，`cost` 由调用方给 | 无（被 `pool.limits_check` / `limits_policy` 调） |
 | `limits.py` | 132 | 限额策略的读法与「表读不出 = 拒」那条 `NotLimited`（magpie `ErrUnlimited` 移植） | 无（被 `wb_dispatch` 调） |
@@ -78,8 +78,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **15805 行** / **41 个文件**（40 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 304 张（292 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **15989 行** / **41 个文件**（40 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 305 张（294 done / 11 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 241 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |
