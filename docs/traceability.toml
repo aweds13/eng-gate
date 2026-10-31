@@ -11108,3 +11108,28 @@ gaps = [
 - 只在本机 win32 验过。
 """,
 ]
+
+[entries."T-AG579"]
+id = "T-AG579"
+title = "每落一张卡就把队列卡数写错一次：落地链得自己重算它"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E76-每落一张卡就把队列卡数写错一次.md",
+  "file:tools/pool/landing.py",
+  "file:docs/subsystems/pool/README.md",
+  "test:test_pool_landing.py",
+  "text:tools/pool/landing.py::RECOUNT_DOCS = ",
+  "text:tools/pool/landing.py::POOL_README_GEN = ",
+  "text:tools/pool/landing.py::def recount_derived(",
+  "text:tools/pool/landing.py::for _rel in recount_derived(wt):",
+]
+gaps = [
+  """- `docs/INDEX.md` 是**完全同构**的缺口，本卡不碰：它的篇数含 `docs/changelog.d/` 计数，而落地链每笔自动新增 `docs/changelog.d/{task}.md` ⇒ 每落一卡过期一次；落地链里零调用 `gen_doc_index.py`。建议另开卡。
+- `tests/test_pool_landing.py` 是**新建**文件（本仓历史上从未存在），不是「并进既有文件」。
+- `gates/diag/` 下的补丁脚本与日志被 `.gitignore` 拦住，不入库（与既有 `_rev_*.py` 同命）。
+- 云门禁那趟还有八条其它红（七条 `test_account_*` 是云机缺 `C:\\infra\\pool\\accounts.toml` 这个仓外配置；一条 `test_two_runs_at_once_do_not_collide` 是金样本宿主绑定），都不是本卡的病。
+- 只在本机 win32 验过。
+""",
+]

@@ -29,7 +29,9 @@ r"""主控的通用集成器（实现层）：把一张外包卡（工人已在�
      ★ 卡 184：`--affected` / `--changed-from` 透传给 `run_gates.py`（默认关，给了才少跑）；
      三条强制全量（碰 scripts/**/tools/**/gates/** / 空计划 / 今天没跑过全量）任何一条命中就跑全量
   ⑤′ 白名单核对（卡的文件 + 文档三件 + gates/last.json + gates/reuse.json）
-     → 落地即翻 status（卡 204 单卡 / 卡 228 批成员）→ 显式 git add
+     → 落地即翻 status（卡 204 单卡 / 卡 228 批成员）
+     → ⑤′.5 重算**现算文档**（卡 E76：翻账改了台账分布 ⇒ 队列卡数当场过期，自己重算、
+       真写盘；改了就让 README 随这一笔进提交）→ 显式 git add
      ★ 卡 228（T-G344）：翻账/暂存必须排在封存**之前** —— 封存算的才是最终树
   ⑤ --seal（封存算最终树）→ ⑤″ 兜底重封存（幂等，不重跑门禁）→ 重暂存 GATES
      （★ 全量那一趟落盘 gates/diag/_daily_full.json：今天跑过全量没有，机器可判）
@@ -90,6 +92,13 @@ GATE_ARTIFACTS = GATES
 #: 与 ⑥ 自动补片段是同一组路径）。
 RESET_FRAGMENTS = ("docs/changelog.d/{task}.md", "docs/traceability.d/{task}.toml",
                    "复盘/交接.d/{task}.md")
+
+#: 卡 E76（`T-AG579`）：落地链**自己会改**的**现算文档** —— 翻账改了台账的 done/pending
+#: 分布，而这份 README 的「队列卡数」是从台账现算的 ⇒ 必须由落地链自己重算（真写盘）。
+RECOUNT_DOCS = ("docs/subsystems/pool/README.md",)
+
+#: 重算用的生成器（相对**卡树**根；权威副本在 git 里）。**不带** `--check` 才真写盘。
+POOL_README_GEN = "scripts/gen_pool_readme.py"
 
 
 def reset_derived(wt: pathlib.Path, task: str) -> None:
@@ -232,6 +241,48 @@ def staged_and_extra(wt: pathlib.Path, allow: list[str]) -> tuple[list[str], lis
     staged = [x for x in git("diff", "--cached", "--name-only", cwd=wt).splitlines() if x.strip()]
     extra = [f for f in staged if f not in allow]
     return staged, extra
+
+
+def recount_derived(wt: pathlib.Path) -> list[str]:
+    r"""⑤′.5 重算**现算文档**（卡 E76 · `T-AG579`）：落地链自己改的东西，自己验证。
+
+    病（实测，不是推测）：⑤′ 的翻账（`flip_card_status` / `flip_batch_member_statuses`）
+    把卡从 `pending` 翻成 `done` ⇒ `docs/workbacklog.toml` 的分布变了 ⇒
+    `docs/subsystems/pool/README.md` 那句「队列卡数」**当场过期**（它是
+    `scripts/gen_pool_readme.py` 从台账**现算**的）。而那条判据
+    （`tests/test_pool_readme_counts.py` / `tests/test_pool_jobs.py`）只在**下一次**
+    有人跑门禁时才说话 —— 那时已经错了。⇒ **每落一张卡，主树 README 就错一次。**
+
+    口径（三条钉死）：
+      ★ **真写盘**：不带 `--check` 跑生成器。只跑 `--check` 然后失败 = 把活推给人，不是验证。
+      ★ **响亮失败**：生成器非零（读不出清单 / 没有可写区域 / 台账读不出来）⇒ 退 2，
+        绝不带着过期文档提交；生成器/文档不存在也退 2，**不静默跳过**。
+      ★ **唯一的跳过**：这棵树里 `RECOUNT_DOCS` 与生成器**两样都不在** ⇒ 它不是
+        本仓那种维护现算文档的树（测试假仓、老仓）⇒ 打印一行说明后返回空表。只要
+        二者有一样在，就按上面三条严格办（缺另一样 ⇒ 同样响亮退 2）。
+      ★ **返回真被写盘的那些相对路径**：调用方必须把它们补进 `allow`，否则
+        `staged_and_extra()` 会把它们判成「计划外暂存」而停手
+        （卡 E74 / A362 的落地日志里都留着这条原文）。
+
+    为什么位置是「翻账之后、暂存之前」：翻账是本笔对**台账**的最后一次改动，
+    重算必须看到翻完之后的分布；暂存必须在重算之后，写下去的 README 才进这一笔。
+    """
+    if not (wt / RECOUNT_DOCS[0]).is_file() and not (wt / POOL_README_GEN).is_file():
+        print(f"  · 重算现算文档：这棵树里既没有 {RECOUNT_DOCS[0]} 也没有"
+              f" {POOL_README_GEN} ⇒ 没有会因翻账过期的现算文档（跳过）")
+        return []
+    if not (wt / POOL_README_GEN).is_file():
+        print(f"★ 重算现算文档失败：这棵树里没有 {POOL_README_GEN}"
+              " ⇒ 证明不了 README 是最新的 ⇒ 停手")
+        sys.exit(2)
+    r = run([sys.executable, "-X", "utf8", POOL_README_GEN], cwd=wt, check=False)
+    for line in ((r.stdout or "") + (r.stderr or "")).splitlines():
+        print("  " + line)
+    if r.returncode != 0:
+        print(f"★ 重算现算文档失败（rc={r.returncode}）：{POOL_README_GEN} ⇒ 不提交")
+        sys.exit(2)
+    return [rel for rel in RECOUNT_DOCS
+            if (wt / rel).is_file() and git("status", "--porcelain", "--", rel, cwd=wt)]
 
 
 def release_lock(lock_label: str, wt: pathlib.Path, env: dict) -> None:
@@ -2438,6 +2489,17 @@ def main(argv: list[str] | None = None) -> int:
         if _verdict == "flipped" and "docs/workbacklog.toml" not in allow:
             allow.append("docs/workbacklog.toml")
         staged, extra = staged_and_extra(wt, allow)
+    # ★ 卡 E76（`T-AG579`）：⑤′.5 重算**现算文档** —— 上面刚翻完账，台账的 done/pending
+    #   分布变了 ⇒ `docs/subsystems/pool/README.md` 的「队列卡数」当场过期。那条判据只在
+    #   **下一趟**门禁才说话（那时已经错了）⇒ 落地链自己改的东西，自己在这里重算（真写盘）。
+    #   ★ 位置钉死：**翻账之后、暂存之前**，且放在批/单卡两分支**汇合之后** ——
+    #     `--commit-only` 也走这一行（它跳过 ①~⑤ 但照样翻账，判据 5）。
+    #   ★ 重算真写了盘 ⇒ 补进 allow 并重暂存，否则 `staged_and_extra()` 判「计划外暂存」停手。
+    for _rel in recount_derived(wt):
+        if _rel not in allow:
+            allow.append(_rel)
+        print(f"  ★ 重算改了它 ⇒ 随这一笔提交：{_rel}")
+    staged, extra = staged_and_extra(wt, allow)
     print("  staged =", staged)
     print("  extra  =", extra)
     if extra or not staged:

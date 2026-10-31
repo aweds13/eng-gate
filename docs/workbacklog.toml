@@ -5038,3 +5038,17 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E76"
+task = "T-AG579"
+title = "每落一张卡就把队列卡数写错一次：落地链得自己重算它"
+tree = ".wt/E76"
+spec = "复盘/卡/卡E76-每落一张卡就把队列卡数写错一次.md"
+files = [
+  "tools/pool/landing.py",
+  "docs/subsystems/pool/README.md",
+]
+status = "done"
+risk = "mid"
+depends = []
