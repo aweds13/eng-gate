@@ -4999,3 +4999,27 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E75"
+task = "T-AG577"
+title = "一份 UTF-16 的工人日志：编码要判出来，不是试出来"
+tree = ".wt/E75"
+spec = "复盘/卡/卡E75-一份UTF-16的日志.md"
+files = [
+  "tools/pool/jobs.py",
+  "tools/wb_status.py",
+  "tools/wb_diag.py",
+  "tools/pool_mcp.py",
+  "tools/wb_dispatch.py",
+  "tools/wb_watch.py",
+  "tools/pool/trae_dispatch.py",
+  "tools/pool/usage_ingest.py",
+  "tools/replay_worker_edits.py",
+  "harness/logcodec.py",
+  "harness/wb_status.py",
+  "harness/wb_diag.py",
+]
+status = "done"
+risk = "mid"
+depends = []

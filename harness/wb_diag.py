@@ -31,6 +31,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import logcodec
 import manifest
 import wb_status
 
@@ -256,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     if not path.exists():
         print(f"[FAIL] 找不到 log：{path}", file=sys.stderr)
         return 2
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    lines = logcodec.read_log_lines(path)
     diag = diagnose(lines)
     diag["log"] = str(path)
     diag["exit_code"] = args.exit_code

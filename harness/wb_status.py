@@ -30,6 +30,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import logcodec
+
 MAX_TEXT = 240          # 一句话最多显示多少字（长输出不许刷屏）
 MAX_FILE = 12           # 摘要里最多列几个文件
 
@@ -212,7 +214,7 @@ def main() -> int:
     if not path.exists():
         print(f"[FAIL] 找不到 log：{path}", file=sys.stderr)
         return 2
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    lines = logcodec.read_log_lines(path)
     timeline, summary = parse_events(lines)
 
     if args.json:

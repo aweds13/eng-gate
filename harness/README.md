@@ -23,12 +23,18 @@
 | `harness/wb_diag.py` | `tools/wb_diag.py` |
 | `harness/wb_plan.py` | `tools/wb_plan.py` |
 
-外加 `__init__.py`、`manifest.py`。复制体**不依赖 `tools/`**（卡 205 选了 ①：让这句话
+外加 `__init__.py`、`manifest.py`、`logcodec.py`。复制体**不依赖 `tools/`**（卡 205 选了 ①：让这句话
 **真的成立**）：不挂 `sys.path`、不 `from tools...`；`wb_diag` 的 `import wb_status`
 由同目录天然解析，`wb_plan` 算派活 `--cwd` 要的「主树根」也**就地**自己算
 （`git rev-parse --git-common-dir`，算不出退回本复制体所在仓根）—— 不 import
 `tools/pool/`。所以复制体跑起来只需要：**标准库 + 一份 `harness.toml` + `git`**，
 拿掉 `tools/` 后仍能跑；证据见 T-G183 台账 gaps。
+
+`harness/logcodec.py`（卡 E75）不是某个 `tools/` 文件的复制体，而是**就地实现的共用读法**：
+`tools/pool/jobs.py::read_log_lines` 在 `tools/` 里，复制体不许 import 它，于是把「按 **BOM** 判编码
+→ 剥 BOM → `splitlines()`」这份逻辑再写一遍，供本目录的 `wb_status` / `wb_diag` 共用
+（改前两处各自 `read_text(encoding="utf-8", errors="replace").splitlines()`，UTF-16 的工人日志
+被读成乱码 ⇒ 整条时间线静默消失）。**两份实现靠判据钉住，不靠约定**，见下表。
 
 冻结输入下**原件/复制体输出逐字节相同**（允许的差异逐条写明）：
 
@@ -37,6 +43,7 @@
 | `wb_plan` | 派活器脚本路径前缀：原件写死 `tools/wb_dispatch.py`，复制体读 `harness.toml` `paths.workbench` |
 | `wb_state` | 原件有「白名单对账」行（`line_roster`，惰性 import `tools/wb_dispatch` + `tools/pool.models`）；复制体按「不依赖 `tools/`」约束**不复制这一行** —— 剥掉后逐字相同 |
 | `wb_diag` / `wb_status` | 无差异 |
+| `logcodec` | 无差异；同一份输入下 `lines` 与 `tools/pool/jobs.py::read_log_lines` **逐字节相等**（覆盖 UTF-16LE-BOM / UTF-16BE-BOM / UTF-8-BOM / 纯 UTF-8 四种） |
 
 ★ 这条不变量**已装牙**（卡 205 给 `wb_plan`，卡 214 给另外三份）：`tests/`
 下的 `test_harness_manifest.py` 逐字比较两边的输出 —— 卡 203 改对了原件、复制体

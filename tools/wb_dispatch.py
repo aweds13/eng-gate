@@ -1346,7 +1346,7 @@ def status_report(card: str) -> str:
     summary: dict = {}
     alert: list[str] = []
     if newest is not None:
-        lines = newest.read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = wb_status.read_log_lines(newest)
         _, summary = wb_status.parse_events(lines)
         # ★ "收工"与面板同一口径：这张 log **自己**的判决文件，或 log 里已有 result 事件。
         #   （判决按轮落，第 1 轮的判决不代表第 2 轮也结束了。）
@@ -1629,9 +1629,8 @@ def usage_summary(card: str) -> str:
     """`--status` 的用量一行：这张卡的 + 全部卡的累计（读不出来 / 没记录 → 空串，不显示）。"""
     path = ROOT / "gates" / "diag" / "wb-usage.jsonl"
     try:
-        rows = [json.loads(ln) for ln in
-                path.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
-    except (OSError, json.JSONDecodeError):
+        rows = [json.loads(ln) for ln in wb_status.read_log_lines(path) if ln.strip()]
+    except (OSError, wb_status.UnknownLogEncodingError, json.JSONDecodeError):
         return ""
     rows = [r for r in rows if isinstance(r, dict)]
     mine = [r for r in rows if r.get("卡") == card]
@@ -1684,8 +1683,8 @@ def usage_in(model: str, start: datetime, end: datetime, *,
     tz = timezone(timedelta(hours=8))
     path = root / "gates" / "diag" / "wb-usage.jsonl"
     try:
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
+        lines = wb_status.read_log_lines(path)
+    except (OSError, wb_status.UnknownLogEncodingError):
         return 0, 0.0
 
     def number(value: object) -> int:
@@ -3885,7 +3884,7 @@ def main() -> int:
         sid = new_sid or sid
         if sid:                      # ★ 一拿到就落盘：这样中断之后 `--resume auto` 才用得上
             session_file_for(log).write_text(sid, encoding="utf-8")
-        round_lines = log_k.read_text(encoding="utf-8", errors="replace").splitlines()
+        round_lines = wb_status.read_log_lines(log_k)
         # ★ 卡 029 §2.6：用量落账（无论成败）—— 数从 CLI 的 result.usage 拿，别自己估。
         usage = result_usage(round_lines)
         for key in usage_total:
@@ -4088,7 +4087,7 @@ def main() -> int:
 
     print(f"[会话] {sid or '（没见到 session_id）'}"
           f"（落盘 {session_file_for(log).name}；续跑：--resume auto）", flush=True)
-    lines = log_k.read_text(encoding="utf-8", errors="replace").splitlines()
+    lines = wb_status.read_log_lines(log_k)
     timeline, summary = wb_status.parse_events(lines)
     for line in timeline:
         print(line)

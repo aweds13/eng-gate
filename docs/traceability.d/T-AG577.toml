@@ -1,0 +1,36 @@
+[entries."T-AG577"]
+id = "T-AG577"
+title = "一份 UTF-16 的工人日志：编码要判出来，不是试出来"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E75-一份UTF-16的日志.md",
+  "file:tools/pool/jobs.py",
+  "file:tools/wb_status.py",
+  "file:tools/wb_diag.py",
+  "file:tools/pool_mcp.py",
+  "file:tools/wb_dispatch.py",
+  "file:tools/wb_watch.py",
+  "file:tools/pool/trae_dispatch.py",
+  "file:tools/pool/usage_ingest.py",
+  "file:tools/replay_worker_edits.py",
+  "file:harness/logcodec.py",
+  "file:harness/wb_status.py",
+  "file:harness/wb_diag.py",
+  "test:test_log_codec.py",
+  "text:tools/pool/jobs.py::def log_codec(",
+  "text:tools/pool/jobs.py::def read_log_lines(",
+  "text:tools/pool/jobs.py::class UnknownLogEncodingError",
+  "text:harness/logcodec.py::def log_codec(",
+  "text:tools/wb_status.py::read_log_lines(",
+]
+gaps = [
+  """- `tools/wb_dash.py:167 _read_log_lines` 与本卡共享读法**语义相反**（前者逐行救、后者抛具名异常）；`tests/test_wb_dash.py:426` 钉的是前者的结论。本卡不改 wb_dash，也不裁决哪个对 —— 同一份坏日志在两个入口给出不同结论，这是下一张卡的事。
+- `harness/logcodec.py` 与 `tools/pool/jobs.py` 是**两份实现**（该目录规矩：不 import tools/），靠对等钉子钉住，不是靠约定。
+- `gates/diag/` 里 242 份日志实测 `utf-8-noBOM: 241` / `utf-16le-BOM: 1` —— 只有这一份是 UTF-16。本卡治「读法」，不治「为什么会写出 UTF-16」（写出方是那个第三方 CLI）。
+- `verdict.txt` / `.heartbeat.txt` / `.session.txt` 的读法本卡不查（不同读者、不同形状），只治 `.jsonl`。
+- 真日志 `gates/diag/wb-045.jsonl` 全程只读，sha256 `5e210698b446c9c3` 与开工前一致。
+- 只在本机 win32 验过。
+""",
+]

@@ -78,7 +78,12 @@ sys.path.insert(0, str(ROOT / "tools"))
 #   （本仓最忌「两份真源」：判据漂一次就会串卡 / 误判）。
 # ★ 卡 E7：判决解析 / 摘要指针 / 队列 task 字段都**复用**既有实现（别抄第二份）。
 import wb_notify  # noqa: E402 —— 判决文本 + 结束时刻 + 摘要指针的唯一实现
-from pool.jobs import card_artifacts, classify_job_state  # noqa: E402 —— 产物定位 + 三态判据
+from pool.jobs import (  # noqa: E402 —— 产物定位 + 三态判据 + 日志读法
+    UnknownLogEncodingError,
+    card_artifacts,
+    classify_job_state,
+    read_log_lines,
+)
 from pool.model_registry import dispatch_log_dirs  # noqa: E402 —— 两边日志目录唯一实现
 from pool.plan import batch_manifest_path  # noqa: E402 —— 批次预声明定位唯一实现
 from wb_plan import load_sharded_backlog  # noqa: E402 —— 队列读取唯一实现
@@ -211,8 +216,8 @@ def _verdict_log_lines(verdict: Path, diag: Path, card: str,
         card_artifacts(diag, card, _LOG_SUFFIX), since)[-1:]
     for path in reversed(paths):
         try:
-            return path.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
+            return read_log_lines(path)
+        except (OSError, UnknownLogEncodingError):
             continue
     return []
 

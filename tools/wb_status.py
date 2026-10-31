@@ -47,14 +47,22 @@ import sys
 from pathlib import Path
 
 import tomllib
+from pool.jobs import (
+    UnknownLogEncodingError,
+    parse_events,
+    read_log_lines,
+    render_json,
+    render_timeline,
+)
 from pool.jobs import clip as _clip
-from pool.jobs import parse_events, render_json, render_timeline
 from pool.jobs import tool_line as _tool_line
 from wb_queue_audit import queue_touch_marks, read_task_commits
 
 #: 逻辑层在 `pool.jobs`；这里原样转发 `parse_events`（wb_dash 用）与 `_clip` / `_tool_line`
-#: （wb_dispatch 用）。
-__all__ = ["main", "parse_events", "_clip", "_tool_line",
+#: （wb_dispatch 用）。`read_log_lines` / `UnknownLogEncodingError` 也转发一份：卡 E75 起
+#: 工人日志的读法只有 `pool.jobs` 那一份，`wb_diag` / `wb_dispatch` 经这里拿（少一层环球 import）。
+__all__ = ["main", "parse_events", "_clip", "_tool_line", "read_log_lines",
+           "UnknownLogEncodingError",
            "load_cards", "derive_status", "derived_summary", "orphan_tasks"]
 
 
@@ -198,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     if not path.exists():
         print(f"[FAIL] 找不到 log：{path}", file=sys.stderr)
         return 2
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    lines = read_log_lines(path)
     timeline, summary = parse_events(lines)
 
     if args.json:

@@ -163,6 +163,7 @@ from pool.jobs import (
     card_artifacts,
     diag_dir,
     parse_events,
+    read_log_lines,
     render_timeline,
     scan_jobs,
 )
@@ -910,7 +911,7 @@ def tool_job_status(
     log = logs[-1]
     argv = [sys.executable, "-X", "utf8", "tools/wb_status.py", log.name, "--repo"]
     command = _cmd_text(argv)
-    lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+    lines = read_log_lines(log)
     timeline, summary = parse_events(lines)
     body = render_timeline(log.name, timeline, summary, tail=0, repo=True, git_cwd=diag).strip()
     text = f"卡 {card} 的状态（job_status）—— 来自 `{command}`（cwd={diag.as_posix()}）：\n{body}"

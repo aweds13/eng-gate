@@ -107,6 +107,77 @@ def message_of(event: dict) -> tuple[dict, str | None]:
     return {}, f"  ?  message 不是对象（{type(message).__name__}）：{clip(message, 160)}"
 
 
+#: 工人日志的编码**按 BOM 判**（卡 E75）—— 顺序有意义：先 utf-16 的两个，再 utf-8 的。
+_BOM_CODECS: tuple[tuple[bytes, str], ...] = (
+    (b"\xff\xfe", "utf-16-le"),
+    (b"\xfe\xff", "utf-16-be"),
+    (b"\xef\xbb\xbf", "utf-8-sig"),
+)
+
+
+class UnknownLogEncodingError(ValueError):
+    """没有 BOM、又不像 UTF-8 的日志 —— **不猜**，让调用方看见（卡 E75 判据 4）。
+
+    今天的病是反过来的：`errors="replace"` 让解码**永不失败**，于是读错编码也没人知道，
+    2096 行乱码一路走到时间线上、`tool_calls` 静默变成 0。宁可抛，也不要静默当空。
+    ★ 要不要吞掉它由调用方决定：`usage_in()` / `usage_summary()` / `_verdict_log_lines()`
+      的契约是"读不出来就跳过、不抛"（它们的 docstring 写着），那三处显式捕获；
+      `wb_status` / `wb_diag` / `pool_mcp` / 派活器那几处**不捕获** —— 让人看见才是判据 4。
+    """
+
+
+def log_codec(data: bytes) -> str:
+    """按 **BOM** 判这份日志该用什么编码解 —— 看字节再决定，**不试**（卡 E75）。
+
+    `ff fe` ⇒ `utf-16-le`、`fe ff` ⇒ `utf-16-be`、`ef bb bf` ⇒ `utf-8-sig`、无 BOM ⇒ `utf-8`。
+
+    ★ 为什么不"先按 utf-8 读，失败再退回 utf-16"：那种写法把"这份文件到底是什么"交给运气 ——
+      带 BOM 的 UTF-16 用 `errors="replace"` 读**永远不会失败**（它只是变成一堆带 NUL 的乱码），
+      于是退回那一步永远走不到。判据 4 的"认不出时不许猜"就是这么丢的。
+    """
+    for bom, codec in _BOM_CODECS:
+        if data.startswith(bom):
+            return codec
+    if b"\x00" in data:
+        raise UnknownLogEncodingError(
+            "没有 BOM，但字节里带 NUL —— 像 UTF-16/32 又没 BOM，不猜编码"
+            f"（{len(data)} 字节）")
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise UnknownLogEncodingError(
+            f"没有 BOM，也不是合法的 UTF-8（{exc.reason} @ 第 {exc.start} 字节）—— "
+            "不猜编码：要么在源头写对，要么给这份日志补 BOM") from exc
+    return "utf-8"
+
+
+def read_log_lines(path: Path) -> list[str]:
+    """把一份工人日志读成 `lines` —— 全仓**唯一**的读法（卡 E75 判据 5）。
+
+    先读**字节**、按 BOM 判编码（见 `log_codec`），再 `splitlines()`。`parse_events()` 吃的是
+    `lines`，所以编码判错 = **整条时间线静默消失**：`gates/diag/wb-045.jsonl`（UTF-16LE 带 BOM）
+    按 UTF-8 读出来 2096 行乱码、`tool_calls` 0、`models` 空；按 BOM 读出来 122 行事件、
+    `tool_calls` 35、`models == ["glm-5.3-flash"]`。
+
+    ★ `errors="replace"` **留着**：它治的是"坏几个字节就读不下去"，不是治编码（编码由
+      `log_codec` 判）。删掉它本卡所有钉子都不变红 —— 这条实测记在卡 E75 的缺口里，
+      别以为它是本卡的判据。
+    ★ 不归并的四处（都不是工人日志，各有各的读法）：`pool/landing.py`（按 `=== … ===` 分节读
+      文档件）、`run_logged.py`（读自己刚写的 tail）、`stack.py`（读 `stack-actions.log`）、
+      `wb_brief.py`（读 markdown 规矩件）。
+    ★ `wb_dash.py::_read_log_lines` 是**另一套语义**（无 BOM 含 NUL 时逐行救、救不出就当
+      "日志不可解析"），本卡不裁决哪个对 —— 见卡 E75 缺口：同一份坏日志，`wb_dash` 会救、
+      `wb_status` 会抛 `UnknownLogEncodingError`，两个入口结论不同。
+    """
+    data = path.read_bytes()
+    codec = log_codec(data)
+    for bom, _ in _BOM_CODECS:
+        if data.startswith(bom):    # BOM 是"声明的编码"，不是正文 —— 剥掉再解，别留成 \ufeff
+            data = data[len(bom):]
+            break
+    return data.decode(codec, errors="replace").splitlines()
+
+
 def parse_events(lines: list[str]) -> tuple[list[str], dict]:
     """把 JSONL 渲染成 `(时间线, 摘要)`。认不出的行原样留着 —— 不静默丢东西。"""
     timeline: list[str] = []

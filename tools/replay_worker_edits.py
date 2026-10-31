@@ -13,6 +13,10 @@ import json
 import pathlib
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from pool.jobs import read_log_lines  # 读法唯一真源（卡 E75）；本文件先挂 tools/
+
 CARDS = {"197": ".wt/queue", "198": ".wt/reviewallow"}
 
 
@@ -20,7 +24,7 @@ def load_edits(card: str) -> list[dict]:
     """按转写记录里出现的**先后顺序**取出所有 Edit。"""
     log = pathlib.Path("gates/diag") / f"wb-{card}.jsonl"
     edits: list[dict] = []
-    for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+    for line in read_log_lines(log):
         line = line.strip()
         if not line:
             continue

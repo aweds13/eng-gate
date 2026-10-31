@@ -203,7 +203,7 @@ def finish(*, card: str, log: Path | None, exit_code: int, root: Path,
     summary = (f"面板道退出码 {exit_code}；--out {src}；断线 {disconnects}/重连 {reconnects}")
     _append(log_path, result_event(subtype, summary))
 
-    lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    lines = jobs.read_log_lines(log_path)
     _timeline, parsed = jobs.parse_events(lines)
     mine = [row for row in registry.load() if str(row.get("card")) == str(card)]
     started_at = str(mine[-1].get("at")) if mine else ""

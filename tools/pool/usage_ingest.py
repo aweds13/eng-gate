@@ -554,9 +554,11 @@ def _moment(raw: object) -> datetime | None:
 def _dispatch_tokens(model: str, start: datetime, end: datetime, root: Path) -> int:
     """只读 `wb-usage.jsonl` 的汇总 —— 与 `tools/wb_dispatch.py::usage_in()` 逐条同口径。"""
     path = root / "gates" / "diag" / "wb-usage.jsonl"
+    from . import jobs as _jobs  # 函数内相对导入：本模块只走包路径（见 tests 的口径）
+
     try:
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
+        lines = _jobs.read_log_lines(path)
+    except (OSError, _jobs.UnknownLogEncodingError):
         return 0
     total = 0
     for line in lines:

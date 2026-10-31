@@ -1,3 +1,19 @@
+`gates/diag/wb-045.jsonl` 是 **UTF-16LE 带 BOM**（首四字节 `ff fe 7b 00`，654552 B），而所有读它的人都按 UTF-8 读 —— `tools/wb_status.py:201` 的 `path.read_text(encoding="utf-8", errors="replace").splitlines()`。同一份文件、同一套 `parse_events`，两种读法的实测差：
+
+| 读法 | events | tool_calls | models |
+|---|---|---|---|
+| utf-8 + errors=replace（改前） | 2096（全是「非 JSON 行」） | **0** | **[]** |
+| utf-16（改后） | **122** | **35** | `['glm-5.3-flash']` |
+
+`errors="replace"` 在这里是**帮凶**：它让解码永不失败，于是没有任何一处会发现自己读错了编码 —— 比直接抛 `UnicodeDecodeError` 更坏。`parse_events()` 的 docstring 逐字承诺「认不出的行原样留着 —— 不静默丢东西」，它确实没丢，但它把**能认的**也当成了认不出的。
+
+⇒ 判据是**编码要判出来（看 BOM），不是试出来（失败后退回 utf-8 再试一遍）**。试出来的实现答不出「认不出时该怎么办」。`tools/pool/jobs.py` 新增共享读法 `log_codec()` / `read_log_lines()`：先读字节、按 BOM 判（`ff fe` ⇒ utf-16-le、`fe ff` ⇒ utf-16-be、`ef bb bf` ⇒ utf-8-sig、无 BOM ⇒ utf-8），认不出（无 BOM 带 NUL / 解不开 UTF-8）⇒ 抛具名 `UnknownLogEncodingError`。11 处读点归并到它。
+
+★ `harness/` 复制体按该目录的规矩（不 import `tools/`）就地实现 `harness/logcodec.py`，并用**对等钉子** `test_harness_logcodec_agrees_with_tools` 钉住两份同输入同输出（覆盖 UTF-16LE-BOM / UTF-16BE-BOM / UTF-8-BOM / 纯 UTF-8 四种 + 两边都抛那一种）。实测 m5 只改 harness 那份的 BOM 顺序 ⇒ 这条钉子单独变红。
+
+★ 如实交代一条：m6（把 `errors="replace"` 删掉）**一条钉子都没红** —— 这证明本卡治的是「编码判错」，不是「坏一行就读不下去」。
+
+★ 两套语义并存（本卡不裁决）：`tools/wb_dash.py:167` 有自己的 `_read_log_lines`（字节级容错、无 BOM 含 NUL 时逐行救），而 `tests/test_wb_dash.py:426` 钉的是「无 BOM utf-16 ⇒ 日志不可解析」—— 与本卡共享读法的「抛具名异常」结论相反。同一份坏日志在两个入口给出不同结论，本卡只保证 `wb_status`/`parse_events` 这条路是「判编码、不猜」，裁决留给下一张卡。
 `gates/diag/wb-*.jsonl` 这个通配的读者**是四个不是三个**：`tools/wb_dash.py:159` 的硬编码枚举 `NON_CARD_LOGS = frozenset 只装 wb-usage.jsonl 一个名字`、`tools/pool/jobs.py:40` 的正则 `USAGE_LOG_RE = re.compile(r"^wb-usage(\.r\d+)?\.jsonl$")`、`tools/wb_retention.py:164` 的**什么都不判**（`c.jsonl_files = sorted(diag.glob("wb-*.jsonl"))` ⇒ 旁账整本进「派活日志」名单、再往下变成「无判决欠账」）、以及卡规格没点到的 `scripts/gen_pool_readme.py:215` 的第二份字面量 `if path.name != "wb-usage.jsonl"`（README 里那句「派活日志 241 份」就是它算的）。
 
 卡 A363 刚落地的 `gates/diag/wb-route.jsonl`（F39 路由回放）正好撞进来：`wb_dash` 会把它显示成「静默 N 分钟（可能卡死）」、`wb_retention` 每次巡检报「有日志没判决」的假欠账、`gen_pool_readme` 那句人话数字会从 241 变 242。
