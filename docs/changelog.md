@@ -1,3 +1,22 @@
+卡 E76 给落地链加了第 ⑤′.5 步「重算现算文档」，判据是「**落地链自己改的东西，自己验证**」。**但 E76 自己落地那一笔没走到那一步** —— `gates/diag/land-E76.log` 原文：翻账 `[队列] 卡 E76：pending → done` 之后**直接** `staged`，没有「重算现算文档」那一行。根因：那一笔改的正是 `tools/pool/landing.py` 自己，而运行时加载的是**改动前**的代码 ⇒ ⑤′.5 整段不存在。于是 E76 落地后主树 README 又错了（`313 张（301 done / 12 pending）` vs 应为 `302 done / 11 pending`），`tests/test_pool_readme_counts.py` 在主树上实测 **1 failed, 5 passed**。
+
+这不是「忘了一次」而是**同一件事的第二次发生**，它照出一条更硬的判据：**判据不能只靠「落地链在运行时重算」，因为落地链自己就是被改的对象。**
+
+⇒ 新增独立检查器 `scripts/check_derived_docs.py`（**不含任何现算口径**，只当 `scripts/gen_pool_readme.py` 的调用方）+ **三条腿**，宿主各不相同（单笔只改其中一个时另一个还活着）：
+
+| 腿 | 位置 | 时机 | 只读/写盘 | 退码 |
+|---|---|---|---|---|
+| 前置腿 | `tools/wb_land.py` `derived_before_land()` | 开跑**前** | **只读** | 脏 ⇒ 3 |
+| 腿① | `tools/pool/landing.py` ⑤′.5 `recount_derived()` | 翻账后、暂存前（**提交前**） | 写盘 | 失败 ⇒ 2 |
+| 腿② | `tools/wb_land.py` `derived_after_land()` | `_landing.main()` 返 0（**提交已发生**） | 写盘 | 失败 ⇒ 4 + 就地修回 |
+
+三条腿都走**子进程**读磁盘当前代码，不用 import —— E76 的病根正是「运行时加载改动前代码」。
+
+★ **结构边界（可证，不是疏漏，已逐字写进 checker docstring）**：三条腿互为备份；若**一笔提交同时改两条宿主**，三条腿跑的都是改动前的代码 ⇒ 覆盖不到。**本笔恰好落在这一格** —— 所以 `docs/subsystems/pool/README.md` 必须在同一笔里重算到与台账一致，这不是顺手改，是本笔唯一能成立的**现场证据**（`16437 行 → 16451 行`，`301 done / 12 pending → 302 done / 11 pending`）。
+
+★ **腿② 的代价（如实，不是免费）**：它就地把 README 修回**工作区**，与「落地后主树 `git status --porcelain -uno` = 0 行」这条纪律冲突。前置腿是它的补丁 —— 所以三条腿必须同时存在，两条不够。
+
+反向验证 5/5（含 M1「删掉修复 ⇒ 判据 4 的钉子红」），另有一条**按设计不咬住**的对照（只改 docstring 措辞 ⇒ 退 0），证明这套机制不是「动文件就红」。
 云门禁对主树 `16561fa5` 跑了一趟，`pytest` 门 10 条红里**两条同源**：`tests/test_pool_readme_counts.py::test_real_readme_matches_recount` 与 `tests/test_pool_jobs.py::test_gen_pool_readme_check_is_green`，原文是「第 83 行：应为 312 张（301 done / 11 pending），实际 312 张（300 done / 12 pending）」。
 
 根因不是「忘了一次」而是**顺序缺陷**：`tools/pool/landing.py` 第 ⑤′ 步的翻账（`flip_card_status` / `flip_batch_member_statuses`）把卡从 `pending` 翻成 `done` ⇒ 台账的 done/pending 分布变了，而 `docs/subsystems/pool/README.md` 那句「队列卡数」是 `scripts/gen_pool_readme.py` 从台账**现算**的。落地链**从不重算它**（`grep -n "gen_pool_readme|gen_doc_index" tools/pool/landing.py gates/diag/_land_any.py` 零命中）⇒ **每落一张卡，主树的 README 就错一次**。今天没红，是因为本机那趟全量门禁跑在**翻账之前**（门禁在 ④、翻账在 ⑤′）—— 判据只在「下一次有人跑门禁」时才说话，而那时已经错了。

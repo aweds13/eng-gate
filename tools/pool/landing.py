@@ -98,7 +98,17 @@ RESET_FRAGMENTS = ("docs/changelog.d/{task}.md", "docs/traceability.d/{task}.tom
 RECOUNT_DOCS = ("docs/subsystems/pool/README.md",)
 
 #: 重算用的生成器（相对**卡树**根；权威副本在 git 里）。**不带** `--check` 才真写盘。
+#: ★ 卡 E77：本链**不再直跑它** —— ⑤′.5 改调 `DERIVED_CHECKER`（生成器的调用方，
+#:   不含任何现算口径）。保留这个常量是因为「只有它不在」仍要**响亮失败**（判据 3）。
 POOL_README_GEN = "scripts/gen_pool_readme.py"
+
+#: ★★ 卡 E77（`T-AG580`）：⑤′.5 的**独立检查器** —— 与 `wb_land.py` 壳层腿②互为备份。
+#: 为什么不能直接调 `POOL_README_GEN`：一笔提交若改的正是**本文件**（`tools/pool/landing.py`），
+#: 运行时加载的是改动前的代码，本函数整段可能**根本不存在**（卡 E76 落地时的原文：
+#: `land-E76.log` 里翻账后直接 `staged`，没有「重算现算文档」那一行）⇒ 判据不能只靠
+#: 「落地链在运行时重算」，因为落地链自己就是被改的对象。⇒ 两条腿各自以**子进程**方式
+#: 走磁盘上的当前代码，判决权仍只在 `scripts/gen_pool_readme.py`（同一份现算口径）。
+DERIVED_CHECKER = "scripts/check_derived_docs.py"
 
 
 def reset_derived(wt: pathlib.Path, task: str) -> None:
@@ -275,11 +285,15 @@ def recount_derived(wt: pathlib.Path) -> list[str]:
         print(f"★ 重算现算文档失败：这棵树里没有 {POOL_README_GEN}"
               " ⇒ 证明不了 README 是最新的 ⇒ 停手")
         sys.exit(2)
-    r = run([sys.executable, "-X", "utf8", POOL_README_GEN], cwd=wt, check=False)
+    if not (wt / DERIVED_CHECKER).is_file():
+        print(f"★ 重算现算文档失败：这棵树里没有 {DERIVED_CHECKER}"
+              " ⇒ 走不了独立检查器（**不许改回直跑生成器**：那正是卡 E76 的病） ⇒ 停手")
+        sys.exit(2)
+    r = run([sys.executable, "-X", "utf8", DERIVED_CHECKER], cwd=wt, check=False)
     for line in ((r.stdout or "") + (r.stderr or "")).splitlines():
         print("  " + line)
     if r.returncode != 0:
-        print(f"★ 重算现算文档失败（rc={r.returncode}）：{POOL_README_GEN} ⇒ 不提交")
+        print(f"★ 重算现算文档失败（rc={r.returncode}）：{DERIVED_CHECKER} ⇒ 不提交")
         sys.exit(2)
     return [rel for rel in RECOUNT_DOCS
             if (wt / rel).is_file() and git("status", "--porcelain", "--", rel, cwd=wt)]

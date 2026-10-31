@@ -5052,3 +5052,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E77"
+task = "T-AG580"
+title = "E76 修好的那件事，E76 自己落地时又犯了一次"
+tree = ".wt/E77"
+spec = "复盘/卡/卡E77-E76修好的那件事自己又犯了一次.md"
+files = [
+  "scripts/check_derived_docs.py",
+  "tools/pool/landing.py",
+  "tools/wb_land.py",
+  "docs/subsystems/pool/README.md",
+]
+status = "done"
+risk = "mid"
+depends = []

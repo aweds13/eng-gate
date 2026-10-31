@@ -114,6 +114,12 @@ _HELP_TAIL = (
 #: 落地链给 `scripts/run_gates.py` 的选测开关（与 `--select` 同一个判据，见卡 E51）。
 SELECT_ENV = "TF_SELECT"
 
+#: ★ 卡 E77（`T-AG580`）：腿② 要的三样（相对**卡树**根）。本壳只**转发**给检查器，
+#: 不含任何现算口径 —— 口径仍只在 `scripts/gen_pool_readme.py`，检查器是它的调用方。
+DERIVED_CHECKER = "scripts/check_derived_docs.py"
+DERIVED_DOC = "docs/subsystems/pool/README.md"
+DERIVED_GEN = "scripts/gen_pool_readme.py"
+
 #: `--precheck` 的 argparse 描述（help 里能看到判据在干什么）。
 _PRECHECK_DESC = (
     "落地前置快检：文书里的裸文件名 + scripts/check_layers.py + "
@@ -450,6 +456,94 @@ def _session_gate(argv: list[str]) -> tuple[int, list[str]]:
         print(f"  [窗口] {msg}")
     return 0, rest
 
+def derived_before_land(argv: list[str]) -> int:
+    """前置腿（卡 E77）：**开跑前**复核派生文档 —— **只读**，绝不写盘。
+
+    ★ 它解决的是「别在脏树上开跑」：树上已经和现算不一致 ⇒ 拒绝开跑（退 3）、一步都不动。
+      下一笔开跑时立刻拦住 E76 那种「落地后才发现脏」的局（那一笔的脏留到下一趟就被看见）。
+
+    ★ 为什么这里**不**写盘：替人改他没让你改的东西不是这条腿的职责；写盘会顺手留下未提交
+      改动，反而更脏。要修就由人（或腿① / 腿②）在明确的地方修。
+
+    ★ 位置：`guard_card_in_ledger()` 之后、`_session_gate()` 之前 —— 还没认领窗口、还没改
+      环境变量、还没动任何文件，退出去是干净的（不留窗口、不留锁、不留脏）。
+
+    ★ 结构边界（与腿①/腿② 同一条，可证）：本函数与本仓另外两条腿都走**磁盘上的当前代码**
+      （子进程调 `scripts/check_derived_docs.py`）；一笔提交若同时改这三处宿主，三条腿都走
+      改动前的代码 ⇒ 覆盖不到。不是疏漏，是结构边界。
+    """
+    tree = _argv_value(argv, "--tree") or "."
+    root = (_landing.ROOT / tree).resolve()
+    checker = root / DERIVED_CHECKER
+    if not checker.is_file():
+        if not (root / DERIVED_DOC).is_file() and not (root / DERIVED_GEN).is_file():
+            print(f"  [派生文档] 前置腿：这棵树里既没有 {DERIVED_DOC} 也没有 {DERIVED_GEN}"
+                  " ⇒ 没有会过期的派生文档（跳过）", flush=True)
+            return 0
+        print(f"  ★ 派生文档检查失败（前置腿）：这棵树里没有 {DERIVED_CHECKER}"
+              f" ⇒ 证明不了 {DERIVED_DOC} 是最新的 ⇒ 停手", flush=True)
+        return 2
+    rc, tail = _run_step((DERIVED_CHECKER, "--check"), root)
+    for line in tail.splitlines():
+        print(f"  {line}", flush=True)
+    if rc == 0:
+        return 0
+    print(f"  ★ 落地链开跑前 {DERIVED_DOC} 已与现算不一致 ⇒ 先修好再落"
+          "（`python -X utf8 scripts/check_derived_docs.py`；本腿只读，不替你改）。", flush=True)
+    return 3
+
+
+def derived_after_land(argv: list[str]) -> int:
+    """腿②（卡 E77）：`pool.landing.main()` **返回之后**再复核一遍派生文档。
+
+    ★ 为什么这一条不在落地链里：卡 E76 落地那一笔改的正是 `tools/pool/landing.py`，
+      运行时加载的是**改动前**的代码 ⇒ 落地链的 ⑤′.5 整段没跑，过期文档被一起提交了。
+      本壳不 import 任何重算逻辑，只以**子进程**方式调 `scripts/check_derived_docs.py`
+      （它自己再调生成器）⇒ 走的是磁盘上的当前代码。
+
+    ★ 触发点（与腿①不同）：只在 `_landing.main()` 返回 **0** 时才跑 —— 那一笔已经提交，
+      所以它**抓不住提交之前**；它抓的是「提交之后发现自己过期了」：响亮失败（退 4）
+      + 就地把文档修回一致 + 说明重落一条命令即可（提交内容本身就是对的，只是少了这一行）。
+
+    ★ 代价（如实：这是权衡，不是免费）：它跑在提交之后 ⇒ 就地修回只能把修好的 README
+      留在**工作区**（未提交改动）。这跟本仓那条硬纪律「落地后主树
+      `git status --porcelain -uno` 必须是 0 行」**冲突**。选它的理由只有一条：把一个
+      「已经脏了」的局变成**可见的失败 + 一条命令就能补齐**，而不是静默地把错文档留在库里。
+      真空口径上的干净要靠前置腿（`derived_before_land`，脏树上根本不开跑）。
+
+    ★ 结构边界（可证）：本函数与 `pool.landing.recount_derived()`、`derived_before_land()`
+      互为备份；一笔提交若同时改这三处宿主，三条腿都走改动前的代码 ⇒ 覆盖不到。不是疏漏，
+      是结构边界。
+    """
+    tree = _argv_value(argv, "--tree") or "."
+    root = (_landing.ROOT / tree).resolve()
+    checker = root / DERIVED_CHECKER
+    if not checker.is_file():
+        if not (root / DERIVED_DOC).is_file() and not (root / DERIVED_GEN).is_file():
+            print(f"  [派生文档] 腿②：这棵树里既没有 {DERIVED_DOC} 也没有 {DERIVED_GEN}"
+                  " ⇒ 没有会过期的派生文档（跳过）", flush=True)
+            return 0
+        print(f"  ★ 派生文档检查失败（腿②）：这棵树里没有 {DERIVED_CHECKER}"
+              f" ⇒ 证明不了 {DERIVED_DOC} 是最新的 ⇒ 停手", flush=True)
+        return 2
+    rc, tail = _run_step((DERIVED_CHECKER, "--check"), root)
+    for line in tail.splitlines():
+        print(f"  {line}", flush=True)
+    if rc == 0:
+        return 0
+    print(f"  ★ 派生文档检查失败（腿②/壳层）：这一笔**已经提交**，而 {DERIVED_DOC} 与现算不一致"
+          " —— 腿①（落地链 ⑤′.5）没跑到，多半因为这一笔改的正是它自己。", flush=True)
+    fix_rc, fix_tail = _run_step((DERIVED_CHECKER,), root)
+    for line in fix_tail.splitlines():
+        print(f"  {line}", flush=True)
+    if fix_rc == 0:
+        print("  ✓ 已就地把它修回一致（工作区里是未提交的改动）⇒ 重落一条命令把它带上即可。",
+              flush=True)
+    else:
+        print(f"  ★ 就地修回也失败了（rc={fix_rc}）⇒ 这也是一处要人看的地方。", flush=True)
+    return 4
+
+
 def main(argv: list[str] | None = None) -> int:
     """把 argv 交给 `pool.landing.main`（逻辑全在那边，本壳只多三条壳层分支）。"""
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -475,6 +569,10 @@ def main(argv: list[str] | None = None) -> int:
     rc = guard_card_in_ledger(argv)
     if rc:
         return rc
+    # ★ 卡 E77：前置腿 —— **开跑前**复核派生文档（只读）。脏树上不落地：一步都不动。
+    rc = derived_before_land(argv)
+    if rc:
+        return rc
     rc, argv = _session_gate(argv)
     if rc:
         return rc
@@ -485,13 +583,17 @@ def main(argv: list[str] | None = None) -> int:
     saved = {k: os.environ.get(k) for k in extra}
     os.environ.update(extra)
     try:
-        return _landing.main(argv)
+        rc = _landing.main(argv)
     finally:
         for key, old in saved.items():
             if old is None:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = old
+    # ★ 卡 E77：腿② 只在「这一笔落成了（rc == 0）」时才跑 —— 见 derived_after_land 的 docstring。
+    if rc == 0:
+        rc = derived_after_land(argv)
+    return rc
 
 
 if __name__ == "__main__":

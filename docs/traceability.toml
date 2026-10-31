@@ -11133,3 +11133,32 @@ gaps = [
 - 只在本机 win32 验过。
 """,
 ]
+
+[entries."T-AG580"]
+id = "T-AG580"
+title = "E76 修好的那件事，E76 自己落地时又犯了一次"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E77-E76修好的那件事自己又犯了一次.md",
+  "file:scripts/check_derived_docs.py",
+  "file:tools/pool/landing.py",
+  "file:tools/wb_land.py",
+  "file:docs/subsystems/pool/README.md",
+  "test:test_pool_landing.py",
+  "text:scripts/check_derived_docs.py::本脚本**不含任何现算口径**",
+  "text:scripts/check_derived_docs.py::结构边界（可证，不是疏漏）",
+  "text:tools/wb_land.py::def derived_before_land(",
+  "text:tools/wb_land.py::def derived_after_land(",
+  "text:tools/pool/landing.py::DERIVED_CHECKER = ",
+]
+gaps = [
+  """- **结构边界命中本笔**：本笔同时改 `tools/wb_land.py` 与 `tools/pool/landing.py` 两条宿主 ⇒ 三条腿跑的都是改动前的代码。工程缓解：这种笔落地后主树会留下未提交的 README + 退 4，重落一条命令即可。
+- **腿② 的代价**：就地修回改的是工作区，与「落地后 `-uno` = 0 行」冲突；前置腿是它的补丁，三条腿必须同时存在。
+- `tools/pool/landing.py` ⑦ 的 `scripts/audit_progress.py` 子进程 **rc 未检查**（只 print）；`.git/hooks/` 只有 `*.sample`（git hooks 没装）⇒ 这就是为什么「一笔同时改两条宿主」的盲区**in-band 修不动**。
+- `docs/INDEX.md` 是**完全同构**的缺口（E76 已实测记录），本卡不碰，另开卡。
+- `gates/diag/_rev_E77.py` 被 `.gitignore` 覆盖，变异证据只存在工作树里、不进提交（与 E66/F10/A336 同体例）。
+- 只在本机 win32 验过。
+""",
+]

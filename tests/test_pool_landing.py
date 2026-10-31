@@ -37,6 +37,10 @@ r"""钉「落地链自己改的东西，自己验证」：翻账之后必须重�
 ## 边界（如实写，未覆盖）
 
 - 不跑真全量门禁（贵且与本卡无关）；门禁整段用 `--no-gate` 跳过。
+- **腿②（卡 E77）**：`tools/wb_land.py` 壳层那一条只在 `pool.landing.main()` 返回 **0**
+  （= 已经提交）之后才跑，所以它抓的是「提交之后发现自己过期了」。它抓不住提交之前 ——
+  那是腿①的职责。两条腿各有一条 e2e 钉子；`--commit-only` 上腿①哑掉时的现场由
+  `test_shell_leg_catches_what_the_landing_leg_missed` 复现（删掉假仓库里的 ⑤′.5）。
 - 批模式（`--batch`）的重算走的是**同一行**（两分支汇合之后），本文件只钉单卡与
   `--commit-only` 两条路；批路径由 `tests/test_wb_land.py` 的批 e2e 与变异脚本覆盖。
 - 只在 Windows（本仓主力）跑过。
@@ -57,6 +61,8 @@ README_REL = "docs/subsystems/pool/README.md"
 MODULES_REL = "docs/subsystems/pool/modules.toml"
 BACKLOG_REL = "docs/workbacklog.toml"
 GEN_REL = "scripts/gen_pool_readme.py"
+#: ★ 卡 E77：两条腿共同调用的**独立检查器**（生成器的调用方，不含现算口径）。
+CHECKER_REL = "scripts/check_derived_docs.py"
 BEGIN = "<!-- pool-margin:begin -->"
 END = "<!-- pool-margin:end -->"
 
@@ -260,6 +266,9 @@ def _mk_repo(tmp_path: Path) -> Path:
     _stage_tools(repo)
     # ---- 本卡的被测面：真生成器 + 清单 + 项目书 + 队列 ----
     _write(repo, GEN_REL, (ROOT / GEN_REL).read_bytes().decode("utf-8"))
+    # ★ 卡 E77：腿① 只调独立检查器（不再直跑生成器）⇒ 假仓库里必须有它，
+    #   否则 `recount_derived()` 会走「没有检查器 ⇒ 停手」那一支（退 2）。
+    _write(repo, CHECKER_REL, (ROOT / CHECKER_REL).read_bytes().decode("utf-8"))
     _write(repo, MODULES_REL, _manifest_for(repo), crlf=True)
     _write(repo, README_REL, _README_TEMPLATE, crlf=True)
     _write(repo, BACKLOG_REL, _BACKLOG, crlf=True)
@@ -482,3 +491,191 @@ def test_readme_pins_are_not_removed_from_the_gate(tmp_path: Path) -> None:
     jobs_source = (ROOT / "tests" / "test_pool_jobs.py").read_text(encoding="utf-8")
     assert "test_gen_pool_readme_check_is_green" in jobs_source, "那条钉子在门禁里被删了"
     assert "与现算一致" in jobs_source, "那条钉子不再断言「与现算一致」"
+
+
+# ================================================================ 卡 E77：第二条腿
+#: 卡 E77（`T-AG580`）的五条钉子：判据 1（真树一致性）/ 判据 2（腿①只调检查器、检查器里
+#: 不长第二份现算口径）/ 判据 3（第二条腿不是摆设）/ 判据 4（`--commit-only` 也覆盖）/
+#: 判据 5（既有判据一条都不许削弱）。
+#: ★ 「删掉修复 ⇒ 判据 4 的钉子红」由 `gates/diag/_rev_E77.py` 的变异 #1 当场证明。
+
+
+def _run_checker(repo: Path, *args: str) -> subprocess.CompletedProcess:
+    """在树里跑**真检查器**（子进程 —— 走磁盘上的当前代码，正是卡 E76 教的那条）。"""
+    return subprocess.run(
+        [sys.executable, "-X", "utf8", CHECKER_REL, *args],
+        cwd=str(repo), env=_ENV, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=False, creationflags=_NO_WINDOW,
+    )
+
+
+def _drop_landing_leg(repo: Path) -> None:
+    """把假仓库里 `landing.py` 的 ⑤′.5 **整段删掉** —— 复现卡 E76 的现场。
+
+    E76 落地那一笔改的正是 `tools/pool/landing.py`：运行时加载的是**改动前**的代码，
+    ⑤′.5 根本不存在（`gates/diag/land-E76.log` 里翻账之后直接 `staged`）。
+    删掉之后只剩壳层的腿②站着 —— 那正是本卡要补的那条腿。
+    """
+    path = repo / "tools" / "pool" / "landing.py"
+    text = path.read_bytes().decode("utf-8").replace("\r\n", "\n")
+    old = (
+        "    for _rel in recount_derived(wt):\n"
+        "        if _rel not in allow:\n"
+        "            allow.append(_rel)\n"
+        '        print(f"  ★ 重算改了它 ⇒ 随这一笔提交：{_rel}")\n'
+    )
+    assert text.count(old) == 1, "⑤′.5 的调用点变了 ⇒ 这条钉子得跟着改"
+    path.write_bytes(text.replace(old, "    # 卡 E76 现场：⑤′.5 整段不存在。\n").encode("utf-8"))
+    # ★ 删完必须**重算**：假仓的 README 是从 `tools/pool/*.py` 现算的，少了四行就当场
+    #   过期，而新的前置腿会在开跑前把这一笔拦住（那是对的 —— 但它会挡住本用例）。
+    made = _run_gen(repo)
+    assert made.returncode == 0, _out(made)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "卡 E76 现场：⑤′.5 不见了")
+
+
+# ---------------------------------------------------------------- 判据 1
+def test_real_tree_derived_docs_are_consistent() -> None:
+    """判据 1：真树里 README 与现算一致 —— 独立检查器也要绿（不只生成器自己说绿）。"""
+    done = _run_checker(ROOT, "--check")
+    out = (done.stdout or "") + (done.stderr or "")
+    assert done.returncode == 0, out
+    assert "[OK  ] " + README_REL + " 与现算一致" in out, out
+
+
+# ---------------------------------------------------------------- 判据 2
+def test_landing_leg_delegates_to_the_independent_checker() -> None:
+    """判据 2：腿① **不许自己算**，也不许直跑生成器 —— 它只以子进程调独立检查器。"""
+    src = (TOOLS / "pool" / "landing.py").read_text(encoding="utf-8")
+    func = next(node for node in ast.parse(src).body
+                if isinstance(node, ast.FunctionDef) and node.name == "recount_derived")
+    body = ast.get_source_segment(src, func) or ""
+    assert "DERIVED_CHECKER" in body, "腿① 不再调独立检查器"
+    assert "POOL_README_GEN], cwd=wt" not in body, "腿① 又改回直跑生成器（卡 E76 的病）"
+
+    checker = (ROOT / CHECKER_REL).read_text(encoding="utf-8")
+    # 不许变成第二份判据：现算口径（数行 / 读台账 / 渲染 / 差异）一份都不许长在这里
+    for token in ("def count_lines", "def scan_pool", "def backlog_metrics",
+                  "def render_block", "DIFF_LIMIT"):
+        assert token not in checker, f"检查器里长出了第二份现算口径：{token}"
+    # 必须是**子进程**跑生成器（跑磁盘上的当前代码），不是 import 之后调函数
+    assert "subprocess.run(" in checker, "检查器不再以子进程跑生成器"
+    assert "import gen_pool_readme" not in checker, "检查器 import 了生成器（那就又回到 E76 的病）"
+
+
+# ---------------------------------------------------------------- 判据 3
+def test_shell_leg_runs_even_when_the_landing_leg_succeeded(tmp_path: Path) -> None:
+    """判据 3：腿① 绿了腿② 也照样跑 —— 输出里要能看到**腿② 自己那行**。
+
+    ★ 区分度：腿① 的写模式**不复核成功时**（只在复核失败时才 echo），所以
+      `[OK  ] … 与现算一致` 那一行只可能来自腿② 的 `--check`。
+    """
+    repo = _mk_repo(tmp_path)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--no-gate", "--no-review")
+    out = _out(done)
+
+    assert done.returncode == 0, out
+    tail = out.split("  提交：")[-1]
+    assert "[OK  ] " + README_REL + " 与现算一致" in tail, tail
+
+
+# ---------------------------------------------------------------- 判据 4
+def test_shell_leg_catches_what_the_landing_leg_missed(tmp_path: Path) -> None:
+    """判据 4（**E76 现场复现**）：腿① 哑掉时，`--commit-only` 上腿② 必须响亮失败并就地修回。
+
+    坏掉的写法（本卡开工前就是这样）：仓里没有第二条腿 ⇒ 这笔提交带着过期一行的 README
+    落地，退出码还是 0，下一趟门禁才红。
+    """
+    repo = _mk_repo(tmp_path)
+    _drop_landing_leg(repo)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--no-gate", "--commit-only", "--no-reset", "--no-review")
+    out = _out(done)
+
+    assert "①~⑤ 跳过" in out, out                        # 确认真走的是这条路
+    assert "[队列] 卡 T-G999：pending → done" in out, out
+    assert "★ 重算改了它" not in out, out                 # 腿① 真的哑了（这就是 E76）
+    assert done.returncode == 4, out                     # 腿② 抓住 ⇒ 这一轮不算数
+    assert "派生文档检查失败（腿②/壳层）" in out, out
+    assert "✓ 已就地把它修回一致" in out, out
+    # 提交里是错的（E76 那一笔），工作区里已经被腿② 修回一致（重落一条命令即可）
+    assert STALE_LINE in _head_text(repo, README_REL)
+    assert FRESH_LINE in (repo / README_REL).read_text(encoding="utf-8")
+    assert _run_gen(repo, "--check").returncode == 0
+
+
+# ---------------------------------------------------------------- 判据 3 的另一半
+def test_shell_leg_is_quiet_when_the_tree_has_no_derived_docs(tmp_path: Path) -> None:
+    """假仓容忍（E76 踩过）：两样都不在 ⇒ 安静跳过；**只缺生成器** ⇒ 响亮停手。
+
+    E76 第一版没容忍「两样都不在」，让 `tests/test_wb_land.py` 的 86 条落地钉子全红。
+    """
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    quiet = subprocess.run(
+        [sys.executable, "-X", "utf8", str(ROOT / CHECKER_REL), "--check", "--root", str(empty)],
+        cwd=str(ROOT), env=_ENV, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=False, creationflags=_NO_WINDOW,
+    )
+    quiet_out = (quiet.stdout or "") + (quiet.stderr or "")
+    assert quiet.returncode == 0, quiet_out
+    assert "既没有" in quiet_out and "跳过" in quiet_out, quiet_out
+
+    # 只缺生成器 ⇒ 证明不了 ⇒ 不许静默跳过（卡规格：重算失败不许静默）
+    half = tmp_path / "half"
+    (half / "docs" / "subsystems" / "pool").mkdir(parents=True)
+    (half / README_REL).write_text("x\n", encoding="utf-8")
+    loud = subprocess.run(
+        [sys.executable, "-X", "utf8", str(ROOT / CHECKER_REL), "--check", "--root", str(half)],
+        cwd=str(ROOT), env=_ENV, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=False, creationflags=_NO_WINDOW,
+    )
+    loud_out = (loud.stdout or "") + (loud.stderr or "")
+    assert loud.returncode == 2, loud_out
+    assert "停手" in loud_out, loud_out
+
+
+# ---------------------------------------------------------------- 判据 5
+def test_the_old_pins_and_the_generator_are_not_weakened() -> None:
+    """判据 5：既有判据一条都不许削弱 —— 生成器的现算口径与那两条钉子必须原样在。"""
+    gen = (ROOT / GEN_REL).read_text(encoding="utf-8")
+    for token in ("def count_lines", "def scan_pool", "def backlog_metrics",
+                  "def render_block", "DIFF_LIMIT = 8", "与现算一致",
+                  "与现算不一致", "没有可写的区域"):
+        assert token in gen, f"生成器的现算口径被动了：{token}"
+    pins = (ROOT / "tests" / "test_pool_readme_counts.py").read_text(encoding="utf-8")
+    for name in ("test_real_readme_matches_recount", "test_hand_edited_count_reports_line"):
+        assert name in pins, f"既有钉子被删了：{name}"
+
+
+
+# ---------------------------------------------------------------- 前置腿（卡 E77）
+def test_pre_leg_refuses_to_start_on_a_dirty_tree(tmp_path: Path) -> None:
+    r"""★ 卡 E77：前置腿 —— 树上已经不一致 ⇒ **拒绝开跑**（退 3），一步都不动、也不写盘。
+
+    这是「别在脏树上开跑」那一条：E76 的脏（提交后才发现过期）会拦在**下一笔**开跑时。
+    ★ 坏掉写法：没有这条前置腿 ⇒ 本测试退 0 ⇒ 红。
+    """
+    repo = _mk_repo(tmp_path)
+    readme = repo / README_REL
+    dirty = readme.read_bytes().replace(
+        STALE_LINE.encode("utf-8"), "99 张（0 done / 99 pending）".encode())
+    assert dirty != readme.read_bytes(), "夹具没改到那一行"
+    readme.write_bytes(dirty)
+    _git(repo, "add", "--", README_REL)
+    _git(repo, "commit", "-q", "-m", "手改成过期")
+    head_before = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    done = _wand(repo, "--no-gate", "--no-review")
+    out = _out(done)
+
+    assert done.returncode == 3, out
+    assert "落地链开跑前" in out
+    assert "先修好再落" in out
+    assert "python -X utf8 scripts/check_derived_docs.py" in out
+    assert "[队列] 卡 T-G999：pending → done" not in out
+    assert _git(repo, "rev-parse", "HEAD").stdout.strip() == head_before, "前置腿红了还往前走了"
+    assert readme.read_bytes() == dirty, "★ 前置腿写盘了 —— 它必须只读"
