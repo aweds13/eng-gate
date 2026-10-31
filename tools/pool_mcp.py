@@ -230,21 +230,90 @@ def _emit(payload: dict[str, Any]) -> None:
     buffer.flush()
 
 
-def _read_line() -> str | None:
+#: 一行协议消息的**字节上限**（卡 A362 · F7）：照 magpie `internal/gateway/mcp.go:83` 的
+#: `readMCPBody(w, r, 32<<20)`（`vision_mcp.go:34` 的 `visionMCPBody` 也是同一个值）。
+#: **只定义一次**：报错文案引这个常量，不另写字面量（抄错常量那一位就没有钉子咬了）。
+MAX_LINE_BYTES: int = 32 << 20
+
+
+class LineTooLongError(Exception):
+    """一行**长过上限**：带**实际读到的字节数**（文案由 `serve()` 组织，这里不印）。"""
+
+    def __init__(self, size: int) -> None:
+        super().__init__(size)
+        self.size = size
+
+
+#: 卡规格里的名字（`except LineTooLong`）。ruff `N818` 要求异常名带 `Error` 后缀 ⇒ 类名带后缀，
+#: 再用这个别名把卡规格的名字挂回去。**同一个类**，不是第二个类型（钉子 1 用别名捕获，删了就红）。
+LineTooLong = LineTooLongError
+
+
+def _read_line(limit: int = MAX_LINE_BYTES) -> str | None:
     """读一行协议消息（**按字节读、自己解 UTF-8**）；`None` = EOF。
 
     不用 `for line in sys.stdin`：TextIOWrapper 一遇坏字节整个流进坏状态，连**它前面**那条
     正常请求的回话都拿不到。按字节逐行读 → 坏行只坏那一行。坏字节**故意抛给调用方**
     （不该 `errors="replace"`：把乱码当合法内容比回一条错误坏得多）。
+
+    ★ 卡 A362（F7）：**一行有字节上限**（`limit`，默认 `MAX_LINE_BYTES`，照 magpie 的 32 MiB）。
+    判据不是「读满了就算长」：读满 `limit` 就停，与「这一行被切了一半」在 `readline()` 下
+    长得**一模一样** —— magpie #1766 修的就是它。所以读 `limit + 1`：多读的那 1 字节
+    **就是在问「到此为止，还是被切了」**。超限**不截断**（截断后再解 JSON 正是 #1766 的 bug），
+    而是抛给调用方，由它回一条错误、把这一行剩余字节吃完、再接着服务。
     """
     buffer = getattr(sys.stdin, "buffer", None)
     if buffer is None:  # 被换成文本流（测试里 redirect 过）
         text = sys.stdin.readline()
         return None if text == "" else str(text)
-    raw: bytes = buffer.readline()
+    # ★ 卡 A362（F7）：多读这 1 字节 —— 它就是「到此为止」与「被切了」之间唯一的信息。
+    raw: bytes = buffer.readline(limit + 1)
     if not raw:
         return None
+    body = _content_bytes(raw)
+    if len(body) > limit:
+        raise LineTooLong(len(body))
     return raw.decode("utf-8")
+
+
+def _content_bytes(raw: bytes) -> bytes:
+    """这一行**去掉行尾换行**的内容：先去掉 `\n`，它前面若有 `\r` 也去掉。
+
+    上限只数**内容**字节：行尾换行是传输分隔符，不是消息的一部分 —— 否则「正好 `limit` 字节」
+    的合法消息带一个换行就会被判成超限（两侧各错一位，`>` 与 `>=` 就分不出来了）。
+    """
+    body = raw[:-1] if raw.endswith(b"\n") else raw
+    return body[:-1] if body.endswith(b"\r") else body
+
+
+#: 吞残余的块大小（一行可以很长：按块读到行尾，不把残余整行读进内存）。
+_DRAIN_CHUNK = 1 << 16
+
+
+def _drain_line() -> int:
+    """把**当前这一行剩下的字节**吃到行尾，返回吃掉的**内容**字节数（卡 A362）。
+
+    为什么非吃不可：`_read_line` 判超限时只消费了 `limit + 1` 字节，剩下的还在流里。
+    不吃掉，残余就会被当成**下一行** —— 客户端看到的是一条莫名其妙的「不是合法 JSON」，
+    明明它只发了一条消息。
+
+    按**字节**读、**不解码**：残余里有没有坏字节，都不改变这条已经判死的行的结论
+    （解码了就可能在吞残余时抛 `UnicodeDecodeError`，把「太长」这条回话也搅坏）。
+    文本流那一支是**镜像**（测试里 redirect 过才走得到），按字符数。
+    """
+    buffer = getattr(sys.stdin, "buffer", None)
+    if buffer is None:
+        text = sys.stdin.readline()
+        return len(text[:-1]) if text.endswith("\n") else len(text)
+    total = 0
+    while True:
+        chunk = buffer.readline(_DRAIN_CHUNK)
+        if not chunk:
+            return total
+        if chunk.endswith(b"\n"):
+            chunk = chunk[:-1]
+            return total + len(chunk[:-1] if chunk.endswith(b"\r") else chunk)
+        total += len(chunk)
 
 
 # ================================================================ 工具元数据（照先例：写死在表里）
@@ -2426,6 +2495,8 @@ def serve(tail: list[str]) -> int:
     ③ ★ 卡 130：`task_claim` 会跑 5~9 分钟的门禁 ⇒ 把它交给**后台线程**，主循环**继续读**
        （只读工具照样即刻答）。它是**串行**的（一个后台 worker + FIFO），所以回话顺序对
        register/claim 这类连着来的写调用**仍是请求顺序**，不会有两条 claim 抢着写。
+    ④ ★ 卡 A362（F7）：一行**有字节上限**（`MAX_LINE_BYTES`）。超限只换**一条错误回话**
+       （-32602，文案带上实际字节数与上限）+ 把这一行剩余字节吃完，然后**接着服务**。
     """
     for token in tail:
         if token in ("-h", "--help"):
@@ -2469,6 +2540,26 @@ def serve(tail: list[str]) -> int:
     while True:
         try:
             line = _read_line()
+        except LineTooLong as exc:
+            # ★ 卡 A362（F7）：先**把这一行剩下的字节吃到行尾**，再回话 —— 否则残余会被当成
+            #   下一行（回一条「不是合法 JSON」，看上去像客户端发错了，其实是服务端没吃完）。
+            #   stdio 是长连接、没有 `Connection: close`（magpie 有，这里没有对应物）：
+            #   只回一条错误、**这一行不执行**，然后接着服务下一行。
+            total = exc.size + _drain_line()
+            _emit_locked(
+                {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {
+                        "code": JSONRPC_INVALID_PARAMS,
+                        "message": (
+                            f"这一行太长：{total} 字节，本服务一行最多 {MAX_LINE_BYTES} 字节"
+                            f"（{MAX_LINE_BYTES >> 20} MiB）；这一行没有执行，下一行照常处理。"
+                        ),
+                    },
+                }
+            )
+            continue
         except UnicodeDecodeError as exc:
             _emit_locked(
                 {

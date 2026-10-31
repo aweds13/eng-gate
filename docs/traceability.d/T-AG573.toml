@@ -1,0 +1,24 @@
+[entries."T-AG573"]
+id = "T-AG573"
+title = "MCP 那一行有多长才算太长：多读一字节才分得出结束与被切"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A362-MCP那一行有多长才算太长.md",
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp_line_cap.py",
+  "test:test_pool_mcp_line_cap.py",
+  "text:tools/pool_mcp.py::MAX_LINE_BYTES: int = ",
+  "text:tools/pool_mcp.py::class LineTooLongError",
+  "text:tools/pool_mcp.py::LineTooLong = LineTooLongError",
+  "text:tools/pool_mcp.py::def _content_bytes(",
+  "text:tools/pool_mcp.py::def _drain_line(",
+]
+gaps = [
+  """- `413` 与 `Connection: close` 在 stdio 上没有对应物：选 `JSONRPC_INVALID_PARAMS`（-32602）是判断题不是抄的；stdio 是长连接不关，所以吞残余后 `continue`。
+- 上限常量 `32 << 20` 的「抄错」这一位只有常量钉能咬，没有行为钉能咬（实测见 changelog）。
+- `_read_line` 的 `limit` 参数没有向调用方暴露（`serve()` 用默认值）⇒ `search_mcp.go:80` 的「limit 由调用方给」不抄。
+- 只在本机 win32 验过；`tests/test_subprocess_encoding.py` 另跑过 9 passed。
+""",
+]

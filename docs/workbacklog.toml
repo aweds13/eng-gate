@@ -4967,3 +4967,17 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A362"
+task = "T-AG573"
+title = "MCP 那一行有多长才算太长：多读一字节才分得出结束与被切"
+tree = ".wt/A362"
+spec = "复盘/卡/卡A362-MCP那一行有多长才算太长.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_line_cap.py",
+]
+status = "done"
+risk = "mid"
+depends = []
