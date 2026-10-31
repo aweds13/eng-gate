@@ -50,6 +50,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pool.jobs import is_card_log  # ★ 卡 E74：哪几个 `wb-*.jsonl` 不是卡 —— 全仓唯一定义
 from pool.no_window import NO_WINDOW  # ★ 卡 148：子进程一律不弹窗（flag 的唯一真源）
 
 # ================================================================ 配额阈值（卡 182 §配额）
@@ -161,7 +162,10 @@ def read_counts(root: Path) -> Counts:
         c.worktrees = sum(1 for ln in out.splitlines() if ln.strip())
     diag = root / "gates" / "diag"
     if diag.is_dir():
-        c.jsonl_files = sorted(diag.glob("wb-*.jsonl"))
+        # ★ 卡 E74：非卡旁账（`wb-usage*.jsonl` / `wb-route*.jsonl`）不是派活日志 ——
+        #   在**进列表这一处**滤掉，于是 `no_verdict_jsonl` / `no_verdict_cards` /
+        #   `archive_plan` 三处自动跟着对（判据只许一份，不许各滤一遍）。
+        c.jsonl_files = sorted(p for p in diag.glob("wb-*.jsonl") if is_card_log(p.name))
         c.verdict_files = sorted(diag.glob("wb-*.verdict.txt"))
     c.no_verdict_jsonl = [p for p in c.jsonl_files if not has_verdict(p)]
     v_cards = {card_of(p.name) for p in c.verdict_files if card_of(p.name)}

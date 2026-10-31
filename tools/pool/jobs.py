@@ -9,6 +9,7 @@ r"""作业状态 / 扫日志（从 `tools/wb_status.py` 与 `tools/pool_mcp.py` 
 | 读日志 | `parse_events`/`clip`/`tool_line`/`message_of` | 把 stream-json 渲成时间线 + 摘要 |
 | 三态判据 | `classify_job_state`/`scan_jobs` | 在跑 / 已判决 / 断了（不猜） |
 | 产物定位 | `diag_dir`/`card_artifacts`/`card_of` | 精确匹配文件名（宽 glob 会串卡） |
+| 口径 | `is_card_log`/`non_card_reason` | 哪几个 `wb-*.jsonl` **不是卡**（全仓唯一定义，卡 E74） |
 | 渲染 | `render_timeline`/`render_json`/`repo_state` | 拼成 `wb_status.py` 的那段人话 |
 
 ★ 阈值 (`STALL_SECONDS` / `HEARTBEAT_SECONDS`) 与 `tools/wb_dispatch.py` **同一口径**，由
@@ -36,8 +37,35 @@ STALL_SECONDS = 480         # 日志静默多久算"断了"（wb_dispatch.STALL_
 HEARTBEAT_SECONDS = 120     # 心跳行间隔（只在说明里引用）
 REPORT_MAX_CHARS = 4000     # `job_result` 单份原文最多显示多少字（截断要明示总长）
 
-#: 号池的用量账（不是派活日志）—— `scan_jobs` 单独标出来，不当成"在跑/断了"。
-USAGE_LOG_RE = re.compile(r"^wb-usage(\.r\d+)?\.jsonl$")
+#: `gates/diag/wb-*.jsonl` 里**不是卡**的那一族 —— **全仓唯一一份定义**（卡 E74 · T-AG576）。
+#: 写成正则而不是枚举：带轮次的变体（`wb-usage.r2.jsonl`）同办，新增一本旁账**只改这一行**。
+#: 今天两条真值：`wb-usage[.r<N>].jsonl`（派活器追加的 token 用量账，T-G137）与
+#: `wb-route.jsonl`（F39 路由回放，一行一轮，卡 A363）。
+NON_CARD_LOG_RE = re.compile(r"^wb-(?P<kind>usage|route)(?:\.r\d+)?\.jsonl$")
+
+#: 非卡日志各是哪一本账（`scan_jobs` 把这句话念出来）。★ 认不出的 kind 走通用那句 ——
+#: 所以给上面那个正则加新名字，**这里不用跟着改**（判据 6：一处加、三处生效）。
+NON_CARD_REASONS = {
+    "usage": "用量账（wb_dispatch 追加的 token 账），不是派活日志",
+    "route": "路由回放（F39 换号记录，一行一轮），不是派活日志",
+}
+
+
+def is_card_log(name: str) -> bool:
+    """`gates/diag/` 里这个文件名算不算**一张卡的派活日志** —— 判据只许一份，三处读者都问它。
+
+    `wb-001.jsonl` / `wb-B1.jsonl` / `wb-B-20261052.jsonl` / `wb-105.r2.jsonl` ⇒ True；
+    `wb-usage.jsonl` / `wb-usage.r2.jsonl` / `wb-route.jsonl` ⇒ False。
+    """
+    return NON_CARD_LOG_RE.match(name) is None
+
+
+def non_card_reason(name: str) -> str:
+    """这个名字不是卡的理由；是卡 ⇒ `""`（`scan_jobs` 用它写「非派活」那一行的 why）。"""
+    hit = NON_CARD_LOG_RE.match(name)
+    if hit is None:
+        return ""
+    return NON_CARD_REASONS.get(hit.group("kind"), f"{name} 是旁账日志，不是派活日志")
 
 
 # ================================================================ 读日志：渲染时间线 / 摘要
@@ -247,8 +275,9 @@ def scan_jobs(diag: Path, now: float | None = None) -> list[dict]:
         verdict = log.with_suffix(".verdict.txt")
         report = log.with_suffix(".report.md")
         has_verdict = verdict.exists()
-        if USAGE_LOG_RE.match(log.name):
-            state, why = "非派活", "用量账（wb_dispatch 追加的 token 账），不是派活日志"
+        reason = non_card_reason(log.name)
+        if reason:
+            state, why = "非派活", reason       # 旁账（用量 / 路由回放）不是派活
         else:
             state, why = classify_job_state(age, has_verdict)
         rows.append({

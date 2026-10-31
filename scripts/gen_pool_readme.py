@@ -205,6 +205,19 @@ def main_tree_root(tree_root: Path) -> tuple[Path, str | None]:
         return tree_root, f"解析不出主工作树（{exc.__class__.__name__}）"
 
 
+def _is_card_log(name: str) -> bool:
+    """这个 `wb-*.jsonl` 算不算一张卡的派活日志 —— 判据在 `tools/pool/jobs.py`（一份，卡 E74）。
+
+    ★ 本脚本是 `wb-*.jsonl` 的**第四个**读者（原来是 `path.name != "wb-usage.jsonl"`
+    这样一句字面量）；新增一本旁账（如 `wb-route.jsonl`）不该要改四个地方。
+    """
+    tools = str(ROOT / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    from pool.jobs import is_card_log as single_source
+    return single_source(name)
+
+
 def diag_metrics(main_root: Path) -> tuple[int, int, list[str]]:
     """批预声明份数 + 派活日志份数（都在主工作树的 `gates/diag/` 下）。"""
     diag = main_root / DIAG_REL
@@ -212,7 +225,7 @@ def diag_metrics(main_root: Path) -> tuple[int, int, list[str]]:
         return 0, 0, [f"{DIAG_REL}/ 不存在 —— 批预声明与派活日志都读成 0"]
     batch_dir = diag / "batch"
     batch = len(list(batch_dir.glob("*.toml"))) if batch_dir.is_dir() else 0
-    logs = [path for path in diag.glob("wb-*.jsonl") if path.name != "wb-usage.jsonl"]
+    logs = [path for path in diag.glob("wb-*.jsonl") if _is_card_log(path.name)]
     return batch, len(logs), []
 
 

@@ -15,8 +15,9 @@ r"""外部用量上报：整批校验 + `rid` 幂等 + 上报行不计入限额�
      **未落地，仅设计**。本模块只保留其中与传输无关的那一半：「字节数超 32 MiB」（`MAX_BODY`），
      在 `parse_batch()` 里对 `text` 的 UTF-8 字节数自己量一次。
   ② **上报行进 `gates/diag/usage-reported.jsonl`，不进 `gates/diag/wb-usage.jsonl`。**
-     后者是**派活器自己写的**账：`tools/pool/jobs.py:250` 的 `USAGE_LOG_RE` 按名字认它、
-     `tools/wt_prune.py:514` 按「累积台账，逐行追加合并、绝不许覆盖」修剪它。混进去之后
+     后者是**派活器自己写的**账：`tools/pool/jobs.py` 的 `is_card_log()` 按名字把
+     它认成旁账、`tools/wt_prune.py:514` 按「累积台账，逐行追加合并、绝不许覆盖」
+     修剪它。混进去之后
      「这一行是派活器写的还是外面报的」就永久不可判 —— 而 magpie 的设计核心恰恰是
      `source: "reported"` **单列**。所以另开一本，读端用 `merged_tokens()` 合并。
   ③ **本模块不算钱。** pool 里没有价目表（`tools/wb_dispatch.py::usage_in()` 已如实写「金额恒

@@ -1,0 +1,29 @@
+[entries."T-AG576"]
+id = "T-AG576"
+title = "哪几个 wb-jsonl 不是卡：名单只许一份"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E74-又多了一份wb-jsonl.md",
+  "file:tools/pool/jobs.py",
+  "file:tools/wb_dash.py",
+  "file:tools/wb_retention.py",
+  "file:scripts/gen_pool_readme.py",
+  "file:tools/pool/usage_ingest.py",
+  "file:tests/test_pool_jobs.py",
+  "test:test_pool_jobs.py",
+  "text:tools/pool/jobs.py::NON_CARD_LOG_RE = ",
+  "text:tools/pool/jobs.py::NON_CARD_REASONS = ",
+  "text:tools/pool/jobs.py::def is_card_log(",
+  "text:tools/pool/jobs.py::def non_card_reason(",
+  "text:tools/wb_retention.py::if is_card_log(p.name)",
+]
+gaps = [
+  """- `tools/wt_prune.py:514 USAGE_NAME = \"wb-usage.jsonl\"` 按裁定不动：那是「累积台账逐行追加合并、绝不覆盖」的语义，不是「算不算卡」，独立用途成立。
+- `tools/wb_retention.py` 的 `verdict_files`（`glob(\"wb-*.verdict.txt\")`）有同形状问题，本卡不处理（非卡日志今天不产判决文件，现在没有症状）。
+- `gates/diag/` 里别的非卡文件（`pool-sink.json` / `quota-state.json` 之类）不在 `wb-*.jsonl` 通配里，不是本卡的病。
+- `scan_jobs` 对旁账仍产出 `state=\"非派活\"` 一行（既有可观测行为，`job_list` 的「共 N 个日志」依赖它）；本卡只保证它不被**当成卡**。
+- 只在本机 win32 验过。
+""",
+]

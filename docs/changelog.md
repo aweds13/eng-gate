@@ -1,3 +1,14 @@
+`gates/diag/wb-*.jsonl` 这个通配的读者**是四个不是三个**：`tools/wb_dash.py:159` 的硬编码枚举 `NON_CARD_LOGS = frozenset 只装 wb-usage.jsonl 一个名字`、`tools/pool/jobs.py:40` 的正则 `USAGE_LOG_RE = re.compile(r"^wb-usage(\.r\d+)?\.jsonl$")`、`tools/wb_retention.py:164` 的**什么都不判**（`c.jsonl_files = sorted(diag.glob("wb-*.jsonl"))` ⇒ 旁账整本进「派活日志」名单、再往下变成「无判决欠账」）、以及卡规格没点到的 `scripts/gen_pool_readme.py:215` 的第二份字面量 `if path.name != "wb-usage.jsonl"`（README 里那句「派活日志 241 份」就是它算的）。
+
+卡 A363 刚落地的 `gates/diag/wb-route.jsonl`（F39 路由回放）正好撞进来：`wb_dash` 会把它显示成「静默 N 分钟（可能卡死）」、`wb_retention` 每次巡检报「有日志没判决」的假欠账、`gen_pool_readme` 那句人话数字会从 241 变 242。
+
+⇒ 全仓只剩**一处**定义 `tools/pool/jobs.py:40-68`：`NON_CARD_LOG_RE = re.compile(r"^wb-(?P<kind>usage|route)(?:\.r\d+)?\.jsonl$")` + `NON_CARD_REASONS` + `is_card_log(name)` + `non_card_reason(name)`。写成**正则**而不是枚举：带轮次的变体（`wb-usage.r2.jsonl`）同办，新增一本旁账**只改这一行**；认不出的 kind 走通用那句，所以给正则加新名字时 `NON_CARD_REASONS` 不用跟着改（判据 6：一处加、四处生效）。删掉了 `USAGE_LOG_RE` 与 `wb_dash.NON_CARD_LOGS` 两处旧真源。
+
+★ 本卡的判据**纠正了卡规格的清单**：卡里点名三处，判据 1 的 grep 扫出第四处（`scripts/gen_pool_readme.py:215`）。改后 `--check` 改前改后都退 0，README 的「派活日志 241 份」一字未变（`wb-route.jsonl` 今天还不存在）。
+
+★ 边界（保留不动）：`tools/wt_prune.py:514 USAGE_NAME = "wb-usage.jsonl"` 是「这份累积台账逐行追加合并、绝不覆盖」的语义，不是「算不算卡」，独立用途成立。
+
+反向验证 9/9。判据 1 的 AST 扫描器收窄了三轮（前两版会把输出人话里那句「不含 wb-usage.jsonl」误报成交付物），最终只认「拿文件名当判据」的三种形状，并带防空转断言。
 magpie 的包注释逐字：「记录发生在**做决定的地方**、用**做决定时的那几个值**、事后**不重算**」。本卡搬的就是这一句：新 `tools/pool/route_log.py` 让 `trae_dispatch.finish` 在收口处落一行结构化记录（`ask` / `tried` / `served` / `status`），判据不是「事后能不能算出来」，而是「值是不是当时传进来的」。
 
 ★ `tried` 为空**不落记录**：那一轮没有真实的尝试顺序可记，落一条空记录只是把「不知道」写成「知道」。`append_route` 本身不拒空，该不该落由调用方定 —— 本模块只保证「传什么写什么」。

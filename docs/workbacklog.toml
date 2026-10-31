@@ -4981,3 +4981,21 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E74"
+task = "T-AG576"
+title = "哪几个 wb-jsonl 不是卡：名单只许一份"
+tree = ".wt/E74"
+spec = "复盘/卡/卡E74-又多了一份wb-jsonl.md"
+files = [
+  "tools/pool/jobs.py",
+  "tools/wb_dash.py",
+  "tools/wb_retention.py",
+  "scripts/gen_pool_readme.py",
+  "tools/pool/usage_ingest.py",
+  "tests/test_pool_jobs.py",
+]
+status = "done"
+risk = "mid"
+depends = []

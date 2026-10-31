@@ -150,18 +150,21 @@ def _tree_dirs(root: Path) -> list[tuple[str, Path]]:
 _ROUND_SUFFIX = re.compile(r"^(?P<card>.+?)\.r(?P<n>\d+)$")
 
 
-# ★ T-G137（卡 046）：`gates/diag/` 里这些文件**不是卡** —— 派活器（T-G114）每棵树落一份
+# ★ T-G137（卡 046）：`gates/diag/` 里有些文件**不是卡** —— 派活器（T-G114）每棵树落一份
 #   用量账本 `wb-usage.jsonl`（只有 token 计数、没有事件流），`wb-*.jsonl` 通配会把它当成
 #   一张叫 `usage` 的假卡：账本永远没有事件流 → 永远「静默 N 分钟（可能卡死）」
 #   （9 棵树 9 行幻影，把真卡挤下去 —— 用户 2026-09-26 就是这么被吓到的）。
-#   ★ 判据收拢在这一个具名常量 + `is_card_log()`，别散落成难找的字符串；
+#   ★ 卡 E74（T-AG576）：**名单不在这里** —— 只在 `tools/pool/jobs.py` 的
+#   `NON_CARD_LOG_RE` 一处定义（`is_card_log` / `non_card_reason`），本文件只转发。
+#   新增一本旁账（如 `wb-route.jsonl`）改那一处，三处读者一起生效；在这里再抄一份
+#   就等于第二份真源（判据 1 会 grep 到）。
 #   ★ 账本不改名、`wb_dispatch.py` 的落账逻辑不动 —— 面板适配账本，不是账本适配面板。
-NON_CARD_LOGS = frozenset({"wb-usage.jsonl"})
 
 
 def is_card_log(name: str) -> bool:
-    """`gates/diag/` 里这个文件名算不算一张卡的 log —— 用量账本等非卡文件排除。"""
-    return name not in NON_CARD_LOGS
+    """`gates/diag/` 里这个文件名算不算一张卡的 log —— 判据在 `pool.jobs`（只有一份）。"""
+    from pool.jobs import is_card_log as single_source  # 名单只住在那儿，别在这儿再抄
+    return single_source(name)
 
 
 def _read_log_lines(log: Path) -> list[str]:
