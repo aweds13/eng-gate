@@ -10705,3 +10705,33 @@ gaps = [
 `id_disabled(\"\")` 在 unknown 表下回 `None`（照原件 `idOff` 第 2 步「空串 ⇒ 放行」排在第 3 步 unknown 之前）；这不是放行 —— 空 id 根本不是模型名。
 """,
 ]
+
+[entries."T-AG565"]
+id = "T-AG565"
+title = "谁先干这趟活：七种内置路由策略 + 平滑加权轮转"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A352-谁先干这趟活.md",
+  "file:tools/pool/route.py",
+  "file:tests/test_pool_route_strategies.py",
+  "file:复盘/卡/卡A352-谁先干这趟活.md",
+  "test:test_pool_route_strategies.py",
+  "text:tools/pool/route.py::BUILTIN: tuple[str, ...] = ",
+  "text:tools/pool/route.py::def rotate(",
+  "text:tools/pool/route.py::def round_pick(",
+  "text:tools/pool/route.py::def by_pace(",
+  "text:tools/pool/route.py::def fastest(",
+  "text:tools/pool/route.py::def apply_strategy(",
+]
+gaps = [
+  """`Seat.Tokens` 的「1 小时半衰期衰减」在 magpie 源码里**零命中**（只有注释）⇒ 不搬衰减，`tokens` 只是「调用方给的已衰减值」。
+`credits` 分支在 pool 侧**无输入**（号池没有「超出额度还能用赠金」这个概念）⇒ 字段在与判据在，今天没人填、只能靠单独一条补钉钉住那一级的顺序。
+`free` 在 pool 侧**无来源**（`model_registry.ModelEntry` 没有 `free` 字段）⇒ `free_first` 只对调用方传入的 `free=` 生效；要真用起来得先在注册表加一列（另一张卡）。
+`fastest` 的 `ttft`/`tps` 在 pool 侧**无测量面**（`append_usage_line` 不记首字节时间）⇒ 结构在、喂不饱。
+`Pace` 的 `band` 在 `k == 0` 时落到哪个值，是按 Go map 零值语义**推的**，不是读到某一行断言 ⇒ 标「判不出」。
+`by_pace` 对 `pace is None` 的落位是**本仓对原件的有意偏离**：magpie 的 Go map 读缺失键得 0 ⇒「不知道」会被当成「最快那一带」、与 `pace=0` 同档；判据 6 要求两者排位不同，所以在 `band` 之前插了一级「知不知情」键（不知道的排在告诉过的之后，与 `_left_key` 里 `left is None` 同族）。
+本卡只提供判据、**不接线**：`route.smart_order()` / `apply_order()` / 七种策略今天都零生产调用方（唯一 import `route` 的 `tools/pool/plan.py:524` 只用 `reset_for` / `seconds_left`）。
+""",
+]

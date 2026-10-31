@@ -55,18 +55,44 @@ import pool_quota
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from typing import Any
 
 __all__ = [
+    "ALIKE",
+    "BUILTIN",
+    "FASTEST",
+    "FREE_FIRST",
+    "FRESH_PACE",
+    "LEAST_USED",
     "LOW_SHARE",
-    "USED_SHARE",
+    "ORDERED",
+    "PACE",
+    "PACE_BAND",
+    "PROBE_EVERY",
+    "REF_TOKENS",
+    "ROTATE",
     "RouteError",
     "Seat",
+    "USED_SHARE",
+    "WEIGHTED",
     "apply_order",
+    "apply_strategy",
+    "by_pace",
+    "estimate",
+    "fastest",
+    "first",
+    "free_first",
+    "identity",
+    "least_used",
     "model_until",
+    "ordered",
     "reset_for",
+    "rotate",
+    "round_pick",
     "seconds_left",
     "smart_order",
     "tier",
+    "weighted",
 ]
 
 # 与 magpie 同名的两个阈值（`strategies.go:15-17`）。判据逐字照抄，别改数：
@@ -120,6 +146,10 @@ class Seat:
       （`// Lapse ... zero when not told. Smart goes by it when Soon ties`）。
     - `resting`：刚失败、正在休息（`// Resting: it rests after a failure now`）。
     - `left` / `left_in`：余额，`None` / `""` = 没人告诉过（`// empty when no balance was told`）。
+    - `account` / `learns` / `pace` / `weight` / `tokens` / `free` / `credits` / `ttft` / `tps`：
+      F17 追加的九个字段（`Seat` 侧与原件 `routes.go:21+` 对齐），全部带默认值。
+      口径见下面每个字段自己的行内注释 —— 特别是 `pace=None` 与 `ttft/tps=0.0`
+      都是「没告诉 / 没量过」。
     """
 
     key: str
@@ -130,6 +160,30 @@ class Seat:
     resting: bool = False
     left: float | None = None
     left_in: str = ""
+
+    # ---- F17 追加的九个字段（全部带默认值，既有构造点一个都不用改）----
+    # `account`：这个座位是账号还是 key（原件 `routes.go:21+` 的 `Account`）。
+    account: bool = False
+    # `learns`：它答完会自己报余额（原件 `Learns`）；这种号不许沉在「不知道」后面，
+    # 否则永远轮不到它、永远学不到 —— `by_pace()` 里它也不参与分带。
+    learns: bool = False
+    # `pace`：这个号每小时还剩多少份额度（原件 `Pace`，`float64`）。
+    # ★ pool 侧用 `None` 表示「没人告诉过」，**不是 0**：`0` 是「一点都不剩」，两者排位不同。
+    pace: float | None = None
+    # `weight`：加权轮转里的权重；原件取 `max(s.Weight, 1)`（`strategies.go:303`）。
+    weight: int = 1
+    # `tokens`：最近发给它的量（原件 `Tokens`）。★ 原件注释说「按 1 小时半衰期衰减」，
+    # 但 magpie 源码里 grep 不到衰减实现 ⇒ pool 侧只收「调用方给好的已衰减值」，本模块不衰减。
+    tokens: float = 0.0
+    # `free`：这个号跑这个模型不花钱（原件 `Free`）。★ pool 侧没有自动来源
+    # （`model_registry.py` 的 `ModelEntry` 没有 `free` 列），只能由调用方传。
+    free: bool = False
+    # `credits`：额度用尽后还能靠赠金继续（原件 `Credits`）。★ 同样只能由调用方传。
+    credits: bool = False
+    # `ttft` / `tps`：首字节毫秒数 / 之后每秒输出多少 token（原件 `TTFT`、`TPS`）。
+    # ★ `0.0` 在这两个字段上是「**没量过**」，不是「速度是 0」—— 见 `fastest()` 的四堆。
+    ttft: float = 0.0
+    tps: float = 0.0
 
 
 def _trunc(dt: datetime) -> datetime:
@@ -161,6 +215,369 @@ def _left_key(seat: Seat) -> tuple[object, ...]:
     if seat.left is None:
         return (1, 0.0)
     return (0, -float(seat.left))
+
+
+# ============================================================================
+# F17：七种内置路由策略（设计原件 `_ext/_port_design_wave4.md` §F17）
+#
+# 与 magpie 逐条对齐：`internal/routes/{strategies,round,fastest}.go`。每个策略都是
+# 「`Seat` 序列 → 下标排列」的纯函数；状态（rotate 的轮次、weighted 的轮转欠账、fastest 的
+# 探测计数）**一律由调用方按 pool 传进来**，本模块自己不落盘 —— 原件是进程内
+# `sync.Mutex` + map，pool 的派活一次一个进程，落盘会把「每进程重置」洗成「跨卡继承欠账」。
+# ============================================================================
+
+# 常量逐字照抄原件，一个都不许「顺手调」：
+#   FRESH_PACE ← `provider/routing.go:499`（`100 / (7 * 24.0)`）
+#   REF_TOKENS ← `fastest.go:39`、PROBE_EVERY ← `fastest.go:43`、ALIKE ← `fastest.go:47`
+#   PACE_BAND  ← `strategies.go:259` 的 `p < 0.9*top`
+FRESH_PACE: float = 100.0 / (7 * 24.0)
+REF_TOKENS: int = 200
+PROBE_EVERY: int = 5
+ALIKE: float = 1.1
+PACE_BAND: float = 0.9
+
+# 七个路由名逐字照抄 `provider/routing.go:24-38`。名字是**外部契约**（配置里写的就是这些字），
+# 不是内部别名 ⇒ 一个字母都不许改。
+ORDERED = "order"
+ROTATE = "rotate"
+LEAST_USED = "usage"
+PACE = "pace"
+WEIGHTED = "weight"
+FREE_FIRST = "free"
+FASTEST = "fast"
+
+BUILTIN: tuple[str, ...] = (ORDERED, ROTATE, LEAST_USED, PACE, WEIGHTED, FREE_FIRST, FASTEST)
+
+
+def identity(n: int) -> list[int]:
+    """`0..n-1` 的恒等排列（原件 `identity`，`strategies.go:87-93`）。`n <= 0` ⇒ `[]`。"""
+    return list(range(n)) if n > 0 else []
+
+
+def first(best: int, n: int) -> list[int]:
+    """把 `best` 提到第 0 位，其余**保列出序**（原件 `First`，`strategies.go:310-316`）。
+
+    ★ 不是旋转：`[0,1,2,3]` 提 `2` ⇒ `[2,0,1,3]`，不是 `[2,3,0,1]`。
+    `best <= 0` ⇒ 原样（原件 `if best <= 0 { return idx }`；`-1` = 一个都没挑到）。
+    """
+    idx = identity(n)
+    if best <= 0:
+        return idx
+    return [best, *idx[:best], *idx[best + 1:]]
+
+
+def round_pick(pool: str, keys: Sequence[str], weights: Sequence[int],
+               rests: Sequence[bool], *, state: dict[str, dict[str, int]]) -> int:
+    """平滑加权轮转：这次该挑谁（原件 `Round`，`round.go:27-62`）。
+
+    机制就两步（原件的全部机制）：
+    ① 每个参与者 `cur[key] += weight`，`total` = **参与者**的权重和（`rests[i]` 的不计入）；
+    ② 取 `cur` 最大者，然后 `cur[赢家] -= total` —— 减法那一步是「平滑」的全部来源，
+      少了它就退化成单调增长（`3,1` 会变成 `0,0,0,0`，而不是 `a,a,b,a`）。
+    ③ 每次先把**不在 `keys` 里的旧 `cur` 删掉**（原件 `delete(r.cur, k)`）：换了一批号之后，
+      同位置的另一个 key 不许继承上一个 key 的欠账。
+    并列取**先列出的**那一个（`>` 不是 `>=`）。全部 `rests` ⇒ `-1`（没有可挑的）。
+    ★ `state` 是 `pool → {key: cur}`，由调用方持有；本函数不落盘。
+    """
+    cur = state.setdefault(pool, {})
+    on = set(keys)
+    for gone in [key for key in cur if key not in on]:
+        del cur[gone]
+    best = -1
+    total = 0
+    for i, key in enumerate(keys):
+        if rests[i]:
+            continue
+        cur[key] = cur.get(key, 0) + weights[i]
+        total += weights[i]
+        if best < 0 or cur[key] > cur[keys[best]]:
+            best = i
+    if best < 0:
+        return -1
+    cur[keys[best]] -= total
+    return best
+
+
+def estimate(ttft: float, tps: float, mid: float) -> float:
+    """按 `REF_TOKENS` 的回复估还要多久（毫秒）（原件 `Estimate`，`fastest.go:119-128`）。
+
+    三分支逐字：`tps <= 0` ⇒ 用 `mid`（它没报速度 ⇒ 按同组的中位速度算，既不罚也不奖）；
+    `mid` 也是 0 ⇒ **只算首字节**；否则 `ttft + REF_TOKENS*1000/tps`。
+    """
+    if tps <= 0:
+        tps = mid
+    if tps <= 0:
+        return ttft
+    return ttft + REF_TOKENS * 1000 / tps
+
+
+def _by_left(seats: Sequence[Seat]) -> list[int] | None:
+    """余额位次（原件 `byLeft`，`strategies.go:42-80`）：返回每个下标的位次，小的在前。
+
+    原件要说清的两件事：
+    ① **只在 `left_in` 相同的座位之间比 `left`**：分和别的厂的分不可比，所以每种「单位」
+      只在自己那些位次上排，两种单位之间保 `before` 给的相对次序；
+    ② `left_in` 没告诉过的座位位次 = `len(seats)`（排在所有告诉过的之后）。
+    没有人告诉过余额 ⇒ `None`（原件返回 `nil`，调用方整段跳过）。
+
+    ★ 组内比余额**复用 `_left_key`**：三种比余额的策略（`least_used` / `by_pace` / 既有
+      `smart_order`）共用这一份判据，不许各写一份「谁的余额大」。
+    ★ 原件第二个参数 `before` 在两个新策略里都是 `fewerTokens`（`tokens` 小的在前），
+      所以这里就按 `tokens` 定「两种单位之间」的相对次序；`Smart` 传 `nil` 的那一份
+      已经落在 `smart_order()` 里，不走这里。
+    """
+    told = [i for i, seat in enumerate(seats) if seat.left_in]
+    if not told:
+        return None
+    told.sort(key=lambda i: seats[i].tokens)
+    slot: dict[str, list[int]] = {}
+    for pos, i in enumerate(told):
+        slot.setdefault(seats[i].left_in, []).append(pos)
+    place = [len(seats)] * len(seats)
+    for positions in slot.values():
+        ids = sorted((told[p] for p in positions), key=lambda i: _left_key(seats[i]))
+        for k, i in enumerate(ids):
+            place[i] = positions[k]
+    return place
+
+
+def ordered(seats: Sequence[Seat]) -> list[int]:
+    """按列出顺序试，第一个不行再第二个（原件 `Ordered`，`strategies.go:182`）。
+
+    原件带 `Exact: true`（不重排、只照用），语义就是恒等排列，**任何** `Seat` 取值下都成立。
+    """
+    return identity(len(seats))
+
+
+def rotate(seats: Sequence[Seat], *, pool: str, turns: dict[str, int] | None = None) -> list[int]:
+    """每个请求从上一个的下一位起转（原件 `Rotate`，`strategies.go:190-196`）。
+
+    起点 = 该 `pool` 的请求计数 `% n`，**先取模再自增**（所以同一个 pool 的第一次是恒等）。
+    计数按 pool 分开（`turns` 是 `pool → 次数`）。`n == 0` ⇒ `[]`（原件这里会除零 panic；
+    pool 侧空池就回空，不抛）。
+    ★ `turns` 由调用方持有，本函数不落盘。
+    """
+    n = len(seats)
+    if n == 0:
+        return []
+    book = {} if turns is None else turns
+    so_far = book.get(pool, 0)
+    book[pool] = so_far + 1
+    start = so_far % n
+    idx = identity(n)
+    return idx[start:] + idx[:start]
+
+
+def least_used(seats: Sequence[Seat]) -> list[int]:
+    """用得最少的先（原件 `LeastUsed`，`strategies.go:203-221`）。比较键序**逐字**是：
+
+    ① 两个都在 tier 2（用尽了）且 `credits` 不同 ⇒ **能靠赠金继续的先用**
+       （原文就这一句带 `tier`：`if ta == 2 && tb == 2 && sa.Credits != sb.Credits`）；
+    ② `used` 升序；
+    ③ `_by_left` 的组内位次（余额多的先；没告诉过的在后）；
+    ④ `tokens` 升序（原件 `fewerTokens`；本仓没有衰减，`tokens` = 调用方给的已衰减值）。
+    全程**稳定**：全打平 ⇒ 保列出序（保 prompt cache 热）。
+    """
+    place = _by_left(seats)
+
+    def key(index: int) -> tuple[int, float, int, float]:
+        seat = seats[index]
+        # ① 原件那一句只在「两个都在 tier 2」时才看 `credits`：能靠赠金继续的先用。
+        #    tier 2 以外给同一个中性值 0 —— 那些座的 `used` 一定小于任何 tier 2 的座，
+        #    所以②的 `used` 升序已经把它们分开，`credits` 不会跨界插队。
+        credits_first = 1 if tier(seat.used) == 2 and not seat.credits else 0
+        return (credits_first, seat.used,
+                place[index] if place is not None else 0, seat.tokens)
+
+    idx = identity(len(seats))
+    idx.sort(key=key)
+    return idx
+
+
+def by_pace(seats: Sequence[Seat]) -> list[int]:
+    """每小时还剩得多的先（原件 `Pace`，`strategies.go:243-295`）。
+
+    「还剩多少」= `pace`：一周的量摊到小时。它比「用得少」和「续得早」都准 —— 一个剩 3%、
+    一小时后续的号，按「续得早」会排在一个剩 90%、两小时后才续的号前面，那是错的。
+
+    分带（`PACE_BAND`）：把**参与分带的人**的 `pace` 从大到小排，`k == 0` 或
+    `p < PACE_BAND*top` 起新的一带，带号递增；同一带里的人视为一样快，按列出序保 prompt cache。
+    ★ 参与分带的只有 `tier(used) == 0 && !learns && pace is not None` 的人
+      （原件 `if tier(s.Used) == 0 && !s.Learns`；`None` 不参与）。
+    ★ `pace is None` **不许当 0**：`None` 是「不知道」，`0` 是「一点都不剩」。落位按同族规则
+      —— 不知道的排在告诉过的之后（和 `_left_key` 里 `left is None` 那条一个口径）。
+      ★ 这一条是**本仓对原件的偏离**，如实记：原件的 `band` 是 `map`，`None` 的人没进
+      `byPace` ⇒ 读缺失键得 `0`，于是「不知道」会被当成「最快那一带」，与 `0` 同档。
+      判据 6 明写两者排位必须不同 ⇒ pool 侧在 `band` 之前插一级「知不知情」，其余键序不动。
+
+    主排序键序：`tier` 升 → （tier 2 之间比 `credits`）→（tier > 0 时 `used` 升，之后直接
+    比 `tokens` —— 原件的 else-if 链在这一支不再看 `left`）→（tier == 0 时 `learns` 先、
+    `pace` 知情的先、带号升、余额位次、`tokens` 升）。
+    """
+    place = _by_left(seats)
+    pairs: list[tuple[float, int]] = []
+    for index, seat in enumerate(seats):
+        if seat.pace is None or tier(seat.used) != 0 or seat.learns:
+            continue
+        pairs.append((seat.pace, index))
+    pairs.sort(key=lambda pair: -pair[0])
+    band: dict[int, int] = {}
+    top = 0.0
+    for k, (pace, i) in enumerate(pairs):
+        if k == 0:
+            top = pace
+            continue
+        # 原件读 `band[byPace[k-1]]`，前一带若没记过，Go 的 map 零值读 0。
+        previous = band.get(pairs[k - 1][1], 0)
+        if pace < PACE_BAND * top:
+            band[i] = previous + 1
+            top = pace
+        else:
+            band[i] = previous
+
+    def key(index: int) -> tuple[int, int, float, int, int, int, int, float]:
+        seat = seats[index]
+        level = tier(seat.used)
+        if level > 0:
+            # 原件的 else-if 链：`ta == tb > 0` 且 `used` 也打平时，函数**直接落到**
+            # `return sa.Tokens < sb.Tokens`（不再看 `left`）⇒ 后四级一律给中性值。
+            credits_first = (0 if seat.credits else 1) if level == 2 else 0
+            return (level, credits_first, seat.used, 0, 0, 0, 0, seat.tokens)
+        return (level, 0, 0.0,
+                0 if seat.learns else 1,
+                0 if seat.pace is not None else 1,
+                band.get(index, 0),
+                place[index] if place is not None else 0,
+                seat.tokens)
+
+    idx = identity(len(seats))
+    idx.sort(key=key)
+    return idx
+
+
+def weighted(seats: Sequence[Seat], *, pool: str,
+             rounds: dict[str, dict[str, int]] | None = None) -> list[int]:
+    """按权重平摊，且**平滑**（原件 `Weighted`，`strategies.go:300-306`）。
+
+    = `first(round_pick(...), n)`：赢家提到第 0 位，其余保列出序（给 failover 留顺序）。
+    ★ 不是旋转：`[0,1,2]` 赢家是 1 ⇒ `[1,0,2]`，不是 `[1,2,0]`。
+    `weight` 按原件取 `max(weight, 1)`（权重 0 等于没说过）。
+    `resting` 的号本轮不参与（它的份由别人按权重分掉，回来了再拿自己的份）。
+    ★ `rounds` 由调用方持有（`pool → {key: cur}`），本函数不落盘。
+    """
+    keys = [seat.key for seat in seats]
+    weights = [max(seat.weight, 1) for seat in seats]
+    rests = [seat.resting for seat in seats]
+    picked = round_pick(pool, keys, weights, rests, state={} if rounds is None else rounds)
+    return first(picked, len(seats))
+
+
+def free_first(seats: Sequence[Seat]) -> list[int]:
+    """不花钱的先用（原件 `FreeFirst`，`strategies.go:336-346`）。
+
+    只分**两档**：`free=True` 的全部在前，其余在后；两档内部都保列出序、
+    **不做任何再排序** —— 特别是不把「快用完的免费号」推到付钱的后面：
+    免费号用完了也不花钱，没理由让位。付费档也不按 Smart 的续期权重排
+    （本路由存在的意义就是那档免费的）。
+    """
+    free = [i for i, seat in enumerate(seats) if seat.free]
+    paid = [i for i, seat in enumerate(seats) if not seat.free]
+    return free + paid
+
+
+def fastest(seats: Sequence[Seat], *, pool: str,
+            probes: dict[str, dict[str, int]] | None = None) -> list[int]:
+    """最近答得最快的先（原件 `Fastest`，`fastest.go:59-117`）。
+
+    四堆，顺序是判据的一部分：`awake + resting + spent`，其中 `awake = fast + unmeasured`。
+    分堆优先级：`resting` > `tier(used) == 2`（用尽了）> `ttft > 0`（量过）> `unmeasured`。
+    量过的按 `estimate()` 升序排，再按「一成之内算一样快」分带（`ALIKE`），带内保列出序 ——
+    否则两条差几毫秒的通道会每个请求互换位置。
+
+    ★ 没量过的不能饿死：一直排在量过的后面，它永远轮不到、永远量不到。所以当
+      `fast` 与 `unmeasured` **都非空**时，每 `PROBE_EVERY` 次把 `unmeasured` 里下一个
+      提到最前面（探测轮次 `turns` 在它们之间轮流，这样「答了但不报速」的号不会一直占着轮次），
+      然后计数归零、轮次 +1。**「先加再判」的顺序是判据的一部分**（先归零就永远到不了阈值）。
+    ★ 探测计数与轮次都由调用方持有（`probes` 是 `pool → {"n", "turns"}`），本函数不落盘。
+    """
+    state = {} if probes is None else probes
+    fast: list[int] = []
+    unmeasured: list[int] = []
+    resting: list[int] = []
+    spent: list[int] = []
+    for i, seat in enumerate(seats):
+        if seat.resting:
+            resting.append(i)
+        elif tier(seat.used) == 2:
+            spent.append(i)
+        elif seat.ttft > 0:
+            fast.append(i)
+        else:
+            unmeasured.append(i)
+    paces = sorted(seats[i].tps for i in fast if seats[i].tps > 0)
+    mid = paces[len(paces) // 2] if paces else 0.0
+    est = {i: estimate(seats[i].ttft, seats[i].tps, mid) for i in fast}
+    fast.sort(key=lambda i: est[i])
+    band: dict[int, int] = {}
+    top = 0.0
+    for k, i in enumerate(fast):
+        if k == 0:
+            band[i] = 0
+            top = est[i]
+            continue
+        # 原件 `else if band[i] = band[fast[k-1]]; est[i] > alike*top { band[i]++; top = est[i] }`
+        band[i] = band[fast[k - 1]]
+        if est[i] > ALIKE * top:
+            band[i] += 1
+            top = est[i]
+    fast.sort(key=lambda i: (band[i], i))
+    awake = fast + unmeasured
+    if fast and unmeasured:
+        book = state.setdefault(pool, {"n": 0, "turns": 0})
+        book["n"] += 1
+        if book["n"] >= PROBE_EVERY:
+            probe = unmeasured[book["turns"] % len(unmeasured)]
+            book["n"] = 0
+            book["turns"] += 1
+            awake = [probe, *[i for i in awake if i != probe]]
+    return [*awake, *resting, *spent]
+
+
+def apply_strategy(name: str, seats: Sequence[Seat], *, pool: str,
+                   state: dict[str, Any] | None = None) -> list[int]:
+    """按名字跑一个内置策略；**坏掉就 fail-open 回列出顺序，绝不抛**。
+
+    对应原件两处：`routes.Find`（`routes.go:119-131`，找不到 ⇒ `ok=false` ⇒ 调用方按列出
+    顺序试）与 `Apply`（`routes.go:143-166`，`defer recover()` 兜 panic + 长度/越界/重复检查
+    ⇒ `identity(len(seats))`）。本函数把后者的检查直接交给既有的 `apply_order()`，不重写一份。
+    ★ 这是本模块**唯一**允许吞异常的地方：排位是个优化，坏掉的排位不该让整轮派活停摆。
+    ★ `state` 一个 dict 装三种状态（`"turns"` / `"rounds"` / `"probes"`），三种都是
+      `pool → ...`；调用方跨请求传同一个 dict，轮转/探测的语义才成立。本函数不落盘。
+    """
+    n = len(seats)
+    if name not in BUILTIN:
+        return identity(n)
+    book: dict[str, Any] = {} if state is None else state
+    try:
+        # 分派走**模块级名字**（不是一张私有表）：`apply_strategy` 的 fail-open 判据
+        # 要能被「一个返回坏排列的假策略」咬住，测试只能替换本模块的公开名字。
+        if name == ORDERED:
+            got = ordered(seats)
+        elif name == ROTATE:
+            got = rotate(seats, pool=pool, turns=book.setdefault("turns", {}))
+        elif name == LEAST_USED:
+            got = least_used(seats)
+        elif name == PACE:
+            got = by_pace(seats)
+        elif name == WEIGHTED:
+            got = weighted(seats, pool=pool, rounds=book.setdefault("rounds", {}))
+        elif name == FREE_FIRST:
+            got = free_first(seats)
+        else:
+            got = fastest(seats, pool=pool, probes=book.setdefault("probes", {}))
+    except Exception:
+        return identity(n)
+    return apply_order(got, n)
 
 
 def smart_order(seats: Sequence[Seat]) -> list[int]:

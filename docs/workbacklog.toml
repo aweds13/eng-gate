@@ -4886,3 +4886,18 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A352"
+task = "T-AG565"
+title = "谁先干这趟活：七种内置路由策略 + 平滑加权轮转"
+tree = ".wt/A352"
+spec = "复盘/卡/卡A352-谁先干这趟活.md"
+files = [
+  "tools/pool/route.py",
+  "tests/test_pool_route_strategies.py",
+  "复盘/卡/卡A352-谁先干这趟活.md",
+]
+status = "done"
+risk = "mid"
+depends = []
