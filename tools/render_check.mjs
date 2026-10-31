@@ -27,7 +27,7 @@
  *     node tools/render_check.mjs --update --reason "…"   # 用当前渲染重写黄金（必须写理由）
  *     node tools/render_check.mjs --shots             # 另存 PNG 到 gates/render/shots/（不进仓库）
  *     node tools/render_check.mjs --json              # 机器可读结果
- *     node tools/render_check.mjs --port 8531 --keep   # 调试：换端口 / 跑完不杀服务
+ *     node tools/render_check.mjs --port <端口> --keep   # 调试：换端口 / 跑完不杀服务
  *
  * 退出码：0 通过 / 1 与黄金不一致或其它失败 / 2 fixture（种子数据）坏了 /
  *         3 起不了真浏览器（NOT RUN）/ 4 采集本身不确定（自检失败）。
@@ -41,7 +41,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 // 用的是同一套：一处实现、两处使用，免得两份慢慢长歪。
 import {
   CAPTURE_DAY, Cdp, FIXED_DEVICE, MASK_PATHS, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
-  bootApp, findBrowser, seedFixture, setFixtureDay, setViewport, startServer, waitHealth, waitIdle,
+  bootApp, findBrowser, portBase, portBusyReason, seedFixture, setFixtureDay, setViewport,
+  startServer, waitHealth, waitIdle,
 } from './tf_browser.mjs'
 
 const GOLDEN_DIR = join(ROOT, 'gates', 'render')
@@ -94,7 +95,7 @@ const PSEUDO_VIEWS = {
 /* ---------------------------------------------------------------- 参数 */
 
 function parseArgs(argv) {
-  const a = { update: false, shots: false, json: false, keep: false, port: 8531, reason: '', quiet: false, force: false }
+  const a = { update: false, shots: false, json: false, keep: false, port: portBase(), reason: '', quiet: false, force: false }
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]
     if (k === '--update') a.update = true
@@ -432,6 +433,19 @@ async function main() {
   //   三处必须一致 —— 只钉一处就是"服务器以为 6-15、数据按 9-25 造/浏览器以为今天"。
   setFixtureDay(CAPTURE_DAY)
   log(`[假时钟] 「今天」钉在 ${CAPTURE_DAY}（serve --today + fixture 基准日 + 浏览器 Date 垫片三处一致）`)
+  // ★ 判据 3（卡 E73）：起服务**之前**先探端口 —— 探到有人听就点名退出。
+  //   为什么必须在这里：`waitHealth()` 只问「这个端口上有服务应答吗」，它**分不清**
+  //   「我刚起的」与「并行的另一条门早跑着的」。分不清就会去 seed 别人的库 ——
+  //   那正是 `❌ fixture（种子数据）没造全 … 分组「高数」已存在` 的来源（2026-10-31 实测）。
+  //   判据原文：点名「端口 N 已被占用」+ 非零退出 + **一次 `POST /api/groups` 都不发**。
+  const busy = await portBusyReason(ARGS.port)
+  if (busy) {
+    console.log(`❌ 端口 ${ARGS.port} 已被占用（可能是并行的另一条门）：${busy}`)
+    console.log('   → 换一段端口：`TF_GATE_PORT_BASE=<BASE>` 或 `--port <别的端口>`；不去 seed 别人的服务。')
+    result.notes.push(`端口 ${ARGS.port} 已被占用`)
+    result.code = 2
+    return result
+  }
   const server = startServer(ARGS.port, { TIMEFLOW_FAKE_TODAY: CAPTURE_DAY })
   const cdpPort = ARGS.port + 1
   const profileDir = join(process.env.TEMP ?? '/tmp', `tf-render-profile-${ARGS.port}`)
@@ -440,6 +454,16 @@ async function main() {
     if (!(await waitHealth(ARGS.port))) {
       console.log('❌ 起不了后端服务：' + server.dump().slice(-600))
       result.notes.push('serve.py 没起来')
+      result.code = 2
+      return result
+    }
+    // ★ 判据 3 的第二半：健康检查通了，也不等于「应答的是我起的那个」。
+    //   我起的 serve.py 若已经退出（被别人抢先 bind 后它顺延/直接死了），能应答的必然是别人 ——
+    //   那时**不许**往下 seed（否则又是往别人的库里塞一份 fixture）。
+    if (server.child.exitCode !== null) {
+      console.log(`❌ 端口 ${ARGS.port} 已被占用（可能是并行的另一条门）：我起的 serve.py 已退出`
+        + `（exit ${server.child.exitCode}），应答健康检查的不是它。`)
+      result.notes.push(`端口 ${ARGS.port} 的应答者不是本进程起的服务`)
       result.code = 2
       return result
     }

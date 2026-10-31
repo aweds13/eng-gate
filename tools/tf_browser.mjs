@@ -12,6 +12,7 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -90,6 +91,62 @@ export function clockShimSource(day) {
   })()`
 }
 export { sleep }
+
+/* ---------------------------------------------------------------- 端口段（卡 E73） */
+
+/** 门禁端口段的基准 —— 与 `scripts/run_gates.py` 的 `port_base()` **同一把尺子**。
+ *
+ * 为什么要有（卡 E73 的根因）：这两个工具的默认端口以前写死，而门禁起跑时会把
+ * `TF_GATE_PORT_BASE` 透传成 `--port`。**门禁走的那条路一直是对的**，可**门禁之外的调用方**
+ * （`tests/test_only_selector_parity.py` 的 `run_render()`）一个 `--port` 都不传 ⇒ 全落回同一个
+ * 默认值。两条并行跑（`pytest -n 2`）时后起的那个 `waitHealth()` 立刻通（前一个已经把服务拉起来），
+ * 于是它往**别人的**服务里重复 seed ⇒ `POST /api/groups {name:'高数'}` 得 400
+ * ⇒「fixture（种子数据）没造全」⇒ 红得像真的，其实全是自己踩自己。
+ *
+ * 口径**逐字照** `run_gates.py` 的 `port_base()`（node 不许跨语言 import，所以判据重写一遍）：
+ *   · 不设 / 空串         ⇒ 8531（历史默认，逐字不变）
+ *   · 不是整数            ⇒ 8531 + **在 stderr 说一句**（不静默吞）
+ *   · 越界（1024..65500） ⇒ 8531 + 同样说一句
+ * ★ 只影响**默认值**：`--port N` 仍然逐字覆盖（两个工具里那一行一个字没动）。
+ */
+export const DEFAULT_PORT_BASE = 8531
+
+export function portBase() {
+  const raw = String(process.env.TF_GATE_PORT_BASE ?? '').trim()
+  if (!raw) return DEFAULT_PORT_BASE
+  if (!/^[0-9]+$/.test(raw)) {
+    console.error(`[WARN] TF_GATE_PORT_BASE=${raw} 不是整数 → 退回默认 ${DEFAULT_PORT_BASE}`)
+    return DEFAULT_PORT_BASE
+  }
+  const base = Number(raw)
+  if (base < 1024 || base > 65500) {
+    console.error(
+      `[WARN] TF_GATE_PORT_BASE=${base} 越界（要求 1024..65500）→ 退回默认 ${DEFAULT_PORT_BASE}`,
+    )
+    return DEFAULT_PORT_BASE
+  }
+  return base
+}
+
+/** 这个端口现在被谁占着？`null` = 空着；否则返回一句原因（判据 3 用它）。
+ *
+ * 为什么要问（卡 E73 判据 3）：`waitHealth()` 只回答「这个端口上有服务在应答」，
+ * **分不清**「我刚起的那个」与「并行的另一条门早就跑着的那个」—— 分不清就会去 seed 别人的库。
+ * 所以起服务**之前**先探一次：探到有人听，就点名退出，一次 `POST /api/groups` 都不发。
+ * 探法用 `listen()` 而不是 `connect()`：EADDRINUSE 已经说明「这个地址被别人占着」，
+ * 不必跟对方说话，更不必碰对方的数据。
+ */
+export async function portBusyReason(port, host = '127.0.0.1') {
+  return await new Promise((resolve) => {
+    const probe = createServer()
+    probe.unref()
+    probe.once('error', (e) => {
+      const code = (e && e.code) || 'UNKNOWN'
+      resolve(code === 'EADDRINUSE' ? 'EADDRINUSE' : `这个端口用不了（${code}）`)
+    })
+    probe.listen({ port, host, exclusive: true }, () => probe.close(() => resolve(null)))
+  })
+}
 
 /* ---------------------------------------------------------------- 起服务 */
 

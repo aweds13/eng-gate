@@ -19,8 +19,10 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -29,6 +31,12 @@ ROOT = Path(__file__).resolve().parent.parent
 RENDER = ROOT / "tools" / "render_check.mjs"
 FLOW = ROOT / "tools" / "ui_flow_check.mjs"
 NODE = shutil.which("node")
+# ★ 这一行拆的是**本文件本来就有的**顺序耦合，不是卡 E73 顺手加的：
+#   下面 `_golden_host_reason()` 要 `import run_gates`，而 `scripts/` 只在门禁子进程的
+#   `PYTHONPATH` 里（`run_gates.env()` 也只放 `src` + `tools/sandbox_shim`）。不挂这行，
+#   单跑本文件、或 `-n 2` 落到没被别的模块「顺手挂过」的 worker 上，必然 `ModuleNotFoundError`
+#   —— 主树同红，与本卡无关；挂了才让「这门到底过没过」的读数可信。
+sys.path.insert(0, str(ROOT / "scripts"))
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="环境里没有 node（这两道门本来就跑不了）")
 
@@ -52,10 +60,28 @@ def _src(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
+def _test_port() -> int:
+    """这条钉子自己那一段端口 —— 与门禁的 `BASE..BASE+18` **刻意错开**。
+
+    ★ 为什么（卡 E73 的根因）：以前这里一个 `--port` 都不传，于是落到
+      `tools/render_check.mjs` 的**默认值**上；`pytest -n 2` 并行时两条 worker 撞同一个端口，
+      **后起的那个** `waitHealth()` 立刻通（前一个已经把服务拉起来了），于是它往**别人的**服务里
+      重复 seed ⇒ `POST /api/groups {name:'高数'}` 得 400 ⇒「fixture（种子数据）没造全」⇒ 红得像
+      真的回归，其实全是自己踩自己。
+    ★ 为什么 +200：`scripts/run_gates.py` 的 `gate_port_set()` 占 `BASE, BASE+1, BASE+10..+18`，
+      `ui_flow` 门在 `BASE+10`；`+200` 与那两段都不交，本钉子起的服务不会撞门禁。
+    ★ 与 `TF_GATE_PORT_BASE` 同源：门禁换了端口段，钉子跟着换（不写死第二份口径）。
+    """
+    return int(os.environ.get("TF_GATE_PORT_BASE", "8531")) + 200
+
+
 def run_render(*args: str) -> subprocess.CompletedProcess[str]:
     assert NODE is not None
+    # ★ 卡 E73 判据 4：**必须**显式给 `--port` —— 不传就落回默认值（那就是本卡的病灶）。
+    #   `--port` 若与 `*args` 里别的东西冲突，`parseArgs` 是「后者覆盖前者」（顺序无关地逐项扫），
+    #   所以先给钉子自己的端口、再让调用方实参排在后面：调用方显式传的东西仍然赢。
     return subprocess.run(
-        [NODE, str(RENDER), *args],
+        [NODE, str(RENDER), "--port", str(_test_port()), *args],
         cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
     )
 

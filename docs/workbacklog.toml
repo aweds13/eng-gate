@@ -4918,3 +4918,21 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E73"
+task = "T-AG564"
+title = "两条门抢同一个端口：并行跑门时 fixture 互相踩"
+tree = ".wt/E73"
+spec = "复盘/卡/卡E73-两条门抢同一个端口.md"
+files = [
+  "tools/tf_browser.mjs",
+  "tools/render_check.mjs",
+  "tools/ui_flow_check.mjs",
+  "tests/test_only_selector_parity.py",
+  "tests/test_gate_port_isolation.py",
+  "复盘/卡/卡E73-两条门抢同一个端口.md",
+]
+status = "done"
+risk = "mid"
+depends = []

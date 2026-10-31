@@ -33,7 +33,7 @@
  *                                                  #   要么被某条流的 item 指到、要么写明
  *                                                  #   机器判不了的理由；不起浏览器
  *     node tools/ui_flow_check.mjs --json          # 机器可读结果
- *     node tools/ui_flow_check.mjs --port 8541 --keep   # 换端口 / 跑完不杀服务
+ *     node tools/ui_flow_check.mjs --port <端口> --keep   # 换端口 / 跑完不杀服务
  *
  * ★ 最小验证法则（T-G38，用户交代"别在验证上花那么多时间"之后定的）：
  *   ① **默认只跑一遍**。确定性自检（`--twice`）是"改这套流本身"时才需要的工具 ——
@@ -51,7 +51,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 import {
   Cdp, EXPORT_DIR, FETCH_WATCH, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
-  bootApp, findBrowser, iso, seedFixture, setViewport, startServer, waitApp, waitHealth, waitIdle,
+  bootApp, findBrowser, iso, portBase, portBusyReason, seedFixture, setViewport, startServer,
+  waitApp, waitHealth, waitIdle,
 } from './tf_browser.mjs'
 
 const SHOTS_DIR = join(ROOT, 'gates', 'render', 'shots')  // 证据与黄金层放一起（同样不进仓库）
@@ -103,7 +104,7 @@ function newestSyncPack() {
 /* ---------------------------------------------------------------- 参数 */
 
 function parseArgs(argv) {
-  const a = { json: false, keep: false, twice: false, quiet: false, list: false, port: 8541, only: '', coverage: false, doc: '' }
+  const a = { json: false, keep: false, twice: false, quiet: false, list: false, port: portBase() + 10, only: '', coverage: false, doc: '' }
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]
     if (k === '--json') a.json = true
@@ -1994,6 +1995,9 @@ async function runPass(pass, browserPath, resultsOut) {
   const cdpPort = serverPort + 1
   const url = `http://127.0.0.1:${serverPort}/`
   const profileDir = join(process.env.TEMP ?? '/tmp', `tf-flow-profile-${serverPort}`)
+  // ★ 判据 3（卡 E73）：同 `render_check.mjs` —— 起服务前先探端口，占着就点名退出，不 seed 别人的库。
+  const busy = await portBusyReason(serverPort)
+  if (busy) return { code: 2, note: `端口 ${serverPort} 已被占用（可能是并行的另一条门）：${busy}` }
   const server = startServer(serverPort)
   let cdp = null
   try {
