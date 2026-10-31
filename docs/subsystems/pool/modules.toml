@@ -221,3 +221,8 @@ cli = "无（被 `pool_accounts.py` 读）"
 name = "rpm.toml"
 duty = "每分钟派活闸的数据：稳定 id → 每分最多几趟（0 = 关闸，越界报 `RpmError` 不静默当 0）"
 cli = "无（被 `pool.rpm` 读）"
+
+[[module]]
+name = "quota_line.py"
+duty = "一行说完「现在能不能派」：问不到就打空行、星号只给最新且紧贴名字、至少 1 小时不带秒；纯函数零 IO"
+cli = "被 `pool_quota.py line` 调"

@@ -4901,3 +4901,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A358"
+task = "T-AG571"
+title = "一行说完「现在能不能派」，多一个字都是噪音"
+tree = ".wt/A358"
+spec = "复盘/卡/卡A358-一行说完能不能派.md"
+files = [
+  "tools/pool/quota_line.py",
+  "tools/pool_quota.py",
+  "tests/test_pool_quota_line.py",
+  "复盘/卡/卡A358-一行说完能不能派.md",
+]
+status = "done"
+risk = "mid"
+depends = []

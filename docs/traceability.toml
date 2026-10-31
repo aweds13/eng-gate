@@ -10735,3 +10735,32 @@ gaps = [
 本卡只提供判据、**不接线**：`route.smart_order()` / `apply_order()` / 七种策略今天都零生产调用方（唯一 import `route` 的 `tools/pool/plan.py:524` 只用 `reset_for` / `seconds_left`）。
 """,
 ]
+
+[entries."T-AG571"]
+id = "T-AG571"
+title = "一行说完「现在能不能派」，多一个字都是噪音"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A358-一行说完能不能派.md",
+  "file:tools/pool/quota_line.py",
+  "file:tools/pool_quota.py",
+  "file:tests/test_pool_quota_line.py",
+  "file:复盘/卡/卡A358-一行说完能不能派.md",
+  "test:test_pool_quota_line.py",
+  "text:tools/pool/quota_line.py::SEP: str = ",
+  "text:tools/pool/quota_line.py::def short_hms(",
+  "text:tools/pool/quota_line.py::def pick(",
+  "text:tools/pool/quota_line.py::def one_line(",
+  "text:tools/pool_quota.py::p_line = sub.add_parser(",
+]
+gaps = [
+  """**pool 画不出百分比**：magpie 的 `w.Used` 在 pool 侧零来源 —— 真 `gates/diag/quota-state.json` 的 18 条记录没有 `used`；仓外 `D:/repo/infra/pool/accounts.toml` 4 个号的 `[account.quota].used_percent` 全是 `None`；`tools/pool/quota_history.py:16` 自己写着「全仓零写方」⇒ 一格只能是一个态标记 + 倒计时。**这不是取舍，是没料。**
+`LastServedAt` / `Last` 无对应物：magpie 的 `*` 咬的是「这个号上次**答过话**」（`served.go:24` 的 30 天窗口），pool 只有 `recorded_at`（上次**读到额度**的时刻）。两者不是一回事（一个号可以「昨天答过话、今天没读到额度」）⇒ 星号在 pool 里该读作「最新读到的」，不是「最近答话的」，**语义已经漂了**。想真对齐得先有「谁答过话」这本账。
+`windows` 多窗结构无对应物：magpie 一个号带多个窗（`QuotaSpan`），pool 一个 (卡,模型) 只有一个 `reset_at` ⇒ magpie 的六级 switch（`Unlimited`/`Balance`/`Text`/`ResetsAt`/default）一支都用不上。`holds.Window` 与 `quota_history.QuotaPoint` 是形状对得上的两个候选，但两者都「由调用方转过来」，今天没东西产出那个形状。
+`alias` / `user` / `provider` 三个可比值无对应物：magpie 比五个串，pool 只有 `card`/`model` 两个真值 ⇒ 等比缩到三个串。
+`MAX_ONLY = 32` 是本卡新加的护栏，**没有 magpie 出处**（magpie 的 `only` 是人打的、无上限；pool 为防将来被脚本调用时 O(n·m) 扫描才加），注释里已如实标明。
+只在合成读数上验过：真 `quota-state.json` 里 18 条记录只有「一只限流」与「一堆余额耗尽」两种、且 `kind`（账本字段）与 `state`（`status()` 产出的四个中文字面量）是**两套字面量**（`\"限流\"` ≠ `\"限流中\"`）⇒ 只能用合成夹具验。
+""",
+]

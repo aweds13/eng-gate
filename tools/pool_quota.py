@@ -906,6 +906,14 @@ def main(argv: list[str] | None = None) -> int:
     p_refresh.add_argument("--now", default=None,
                            help="注入「现在」（ISO-8601；测试用，不许靠真实钟表）")
     p_refresh.add_argument("--root", default=None, help="仓库根（测试用）")
+    p_line = sub.add_parser("line", help="一行说完这些卡的额度（没有可说的就打空行）")
+    p_line.add_argument("--card", action="append", default=[], dest="only",
+                        help="卡号（可重复）")
+    p_line.add_argument("--model", action="append", default=[], dest="only",
+                        help="模型名（可重复）")
+    p_line.add_argument("--now", default=None,
+                        help="注入「现在」（ISO-8601；测试用，不许靠真实钟表）")
+    p_line.add_argument("--root", default=None, help="仓库根（测试用）")
     args = parser.parse_args(argv)
 
     root = Path(args.root) if args.root else ROOT
@@ -916,6 +924,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "wait":
         return wait_until(card=args.card, model=args.model, timeout=args.timeout,
                           quiet=args.quiet, now=args.now, root=root)
+    if args.cmd == "line":
+        # 一行版**只渲染**：四态判定仍归 status()，本分支只负责把记录读成一批态再交给它。
+        # 懒加载 + 双导入（照 `tools/pool/rpm.py:54-58` 的同款口径）：直跑脚本时
+        # `tools/` 在 sys.path 上 ⇒ 前者；被 `import tools.pool_quota` 时 ⇒ 后者。
+        try:
+            from pool.quota_line import one_line
+        except ImportError:  # pragma: no cover —— 以包形式 import 时走这边
+            from tools.pool.quota_line import one_line
+        pairs = sorted((card, model)
+                       for card, models in _load(root).get("cards", {}).items()
+                       for model in models)
+        states = [status(card=card, model=model, now=args.now, root=root)
+                  for card, model in pairs]
+        print(one_line(states, only=args.only, now=args.now))
+        return EXIT_OK
     if args.cmd == "refresh":
         out = refresh_once(card=args.card, model=args.model, now=args.now, root=root)
         if args.json:

@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 36 个 py（35 个模块 + `__init__.py`）、**14583 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
+`tools/pool/` = 37 个 py（36 个模块 + `__init__.py`）、**14808 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -43,6 +43,7 @@
 | `projects.py` | 223 | 项目索引（`infra/pool/projects.toml`）只读 + 三条硬判据：root 存在 / 两项目不撞 root / 树在白名单内 | `wb_project.py` |
 | `queue.py` | 364 | 落地合并队列：单写者段排队 + 投机预检（`gates/diag/merge-queue.json`）；投机结果**不许复用** | 无（被 `pool.landing` 调） |
 | `quota_history.py` | 369 | 额度历史曲线：留点 / 回血检测（`new_cycle`）/ 去抖 / 剪枝（magpie `quota_history.go` 移植） | 无（被 `pool_accounts.py` 调） |
+| `quota_line.py` | 225 | 一行说完「现在能不能派」：问不到就打空行、星号只给最新且紧贴名字、至少 1 小时不带秒；纯函数零 IO | 被 `pool_quota.py line` 调 |
 | `registry.py` | 377 | 租约账：`reserve` / `release` / `list_reservations` / `is_dead`，落在**主树** `gates/diag/pool-registry.json` | `wb_registry.py`、`wb_dispatch` |
 | `review.py` | 92 | 白名单越界 / 实际改动 vs 权威域（`outside_allow` / `changed_paths` / `outside_domain`）—— 全仓唯一实现 | 无（被 `wb_dispatch`、`wb_impact`、`wb_batch` 调） |
 | `route.py` | 723 | Smart 路由：给「哪个号先上」排序（`tier` / `apply_order`），只标准库 + 只读 | 无（被 `wb_dispatch`、`pool.plan`、`pool.sticky` 调） |
@@ -73,8 +74,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **14583 行** / **36 个文件**（35 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 304 张（292 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **14808 行** / **37 个文件**（36 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 305 张（293 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 241 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |
