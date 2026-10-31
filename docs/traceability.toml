@@ -10933,3 +10933,32 @@ gaps = [
 - 只在本机 win32 验过；POSIX 上 `Path.exists` 的桩行为未验。
 """,
 ]
+
+[entries."T-AG564"]
+id = "T-AG564"
+title = "两条门抢同一个端口：并行跑门时 fixture 互相踩"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E73-两条门抢同一个端口.md",
+  "file:tools/tf_browser.mjs",
+  "file:tools/render_check.mjs",
+  "file:tools/ui_flow_check.mjs",
+  "file:tests/test_only_selector_parity.py",
+  "file:tests/test_gate_port_isolation.py",
+  "file:复盘/卡/卡E73-两条门抢同一个端口.md",
+  "test:test_gate_port_isolation.py",
+  "text:tools/tf_browser.mjs::export function portBase()",
+  "text:tools/tf_browser.mjs::export const DEFAULT_PORT_BASE = 8531",
+  "text:tools/tf_browser.mjs::export async function portBusyReason(",
+  "text:tools/render_check.mjs::port: portBase(),",
+  "text:tools/ui_flow_check.mjs::port: portBase() + 10,",
+  "text:tests/test_only_selector_parity.py::def _test_port()",
+]
+gaps = [
+  """`tools/candidate_shots.mjs:37` 还有 `port: 8541` 字面量与同款撞端口路径（`:151 startServer(ARGS.port)` / `:156 waitHealth` / `:160 seedFixture(ARGS.port)` / `:152 cdpPort = ARGS.port + 2`）。`docs/traceability.toml:2851` 写明它「不是门禁，也不写任何黄金」⇒ 本卡不改、不开卡，**已知未修的同类点**。
+`--port` 之外的隔离手段（临时 profile 目录、CDP 端口）仍按 `ARGS.port` 派生，所以「同一 BASE 段的两个实例」还是会撞；本卡只保证「不同 BASE 段的树互不干扰」。
+判据 3 的占位检查放在 `startServer()` **之前**：如果放在之后，`tools/serve.py:263 pick_port()` 在端口被占时会自己往后顺延，探不到自己 ⇒ 只能放之前。
+""",
+]
