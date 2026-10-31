@@ -1,0 +1,25 @@
+[entries."T-AG574"]
+id = "T-AG574"
+title = "账号发现可关：闸在碰之前就停"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A361-账号发现可关.md",
+  "file:tools/pool_accounts.py",
+  "file:tools/pool/checkin.py",
+  "file:tests/test_pool_accounts_discovery_off.py",
+  "test:test_pool_accounts_discovery_off.py",
+  "text:tools/pool_accounts.py::class DiscoveryOffError",
+  "text:tools/pool_accounts.py::def discovery_off(",
+  "text:tools/pool/checkin.py::def _account_discovery_off(",
+  "text:tools/pool/checkin.py::def tokens_from_env(",
+]
+gaps = [
+  """- 设计原件点名 `checkin._token_from(...)`，实测在仓里不存在（`grep -rn _token_from` 零命中、`git log --all -S` 零命中）。判据落在真身 `tools/pool/checkin.py:820 tokens_from_env(platform, environ)` 上。
+- 签到侧的后果走到既有的 `uncertain`（「账本只存指针，没有凭据可发」），不是新加结论码 —— 结论码是卡 E48 的判据面，本卡不扩。
+- 比原件多做了两处同一个闸的另一道面：`probe_all` 整体早返回（闸关时连平台表都不查，否则会给 `unknown-platform`，那是「查过了」的意思）；`cmd_discover` 第一句就问闸（读 `accounts.toml` 本身就是在发现账号）。
+- `_rev_A361.py` 在 `gates/diag/` 下被 `.gitignore` 排除，与历史 `_rev_*.py` 同命，不进提交。
+- 只在本机 win32 验过；POSIX 上 `Path.exists` 的桩行为未验。
+""",
+]

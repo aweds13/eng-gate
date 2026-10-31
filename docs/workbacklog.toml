@@ -4936,3 +4936,18 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A361"
+task = "T-AG574"
+title = "账号发现可关：闸在碰之前就停"
+tree = ".wt/A361"
+spec = "复盘/卡/卡A361-账号发现可关.md"
+files = [
+  "tools/pool_accounts.py",
+  "tools/pool/checkin.py",
+  "tests/test_pool_accounts_discovery_off.py",
+]
+status = "done"
+risk = "mid"
+depends = []

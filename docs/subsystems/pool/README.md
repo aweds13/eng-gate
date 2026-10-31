@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 41 个 py（40 个模块 + `__init__.py`）、**15989 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
+`tools/pool/` = 41 个 py（40 个模块 + `__init__.py`）、**16003 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -19,7 +19,7 @@
 | `account_id.py` | 160 | 人给的名字 ↔ 账本稳定 id 的唯一映射（纯函数：吃 rows，不读文件不读环境） | 无（被 `wb_dispatch` 调） |
 | `accounts_scope.py` | 283 | 调用方名册 → 可见号的收窄：只删候选、从不加（空名单 = 不收窄） | 无（被 `pool.guards`、`pool_mcp` 调） |
 | `callers.py` | 215 | 调用方名册的只读解析：谁能花哪个号的哪些模型；撤人改成 `off = true`，不删行 | 无（被 `wb_dispatch` 调） |
-| `checkin.py` | 823 | 五个平台的签到**写动作唯一住所**：六态结论码 + 幂等 + 华为云 `SDK-HMAC-SHA256` 签名（`apply=False` 只探不领） | 无（被 `pool_accounts.py checkin` 调） |
+| `checkin.py` | 837 | 五个平台的签到**写动作唯一住所**：六态结论码 + 幂等 + 华为云 `SDK-HMAC-SHA256` 签名（`apply=False` 只探不领） | 无（被 `pool_accounts.py checkin` 调） |
 | `cleared.py` | 286 | 清空用量的标记（`gates/diag/usage-cleared.json`）：清空**永不写进账**，只换读法；判不出就显出全部 | `pool.cleared main`（子命令 list / add） |
 | `failclosed.py` | 66 | 判不出来时拒还是放：`NotServing`（遮蔽器不在就不发）与 `NotLimited`（限额拿不到就不发）两条语义 | 无 |
 | `guards.py` | 480 | 树 / 冲突域 / 门禁锁 / 日志 / 项目五条守卫，**纯函数**（吃已读好的数据回 `list[str]`，不写文件不 print） | 无（被 `wb_dispatch`、`wb_registry` 调） |
@@ -78,7 +78,7 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **15989 行** / **41 个文件**（40 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 实现体量 | **16003 行** / **41 个文件**（40 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
 | 队列卡数 | 306 张（294 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 241 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |

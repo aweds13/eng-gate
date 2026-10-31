@@ -817,7 +817,21 @@ def claim_for_platform(
         return Outcome(UNCERTAIN, message=f"网络不明：{exc}")
 
 
+def _account_discovery_off() -> bool:
+    """问一次闸（判据那一份在 `tools/pool_accounts.py`，这里只问、不重写）。
+
+    lazy import：`pool_accounts` 与 `checkin` 互相用，模块级 import 会成环。
+    """
+    try:
+        import pool_accounts
+    except ImportError:  # 以 `tools.pool.checkin` 被导入时（tools/ 不在 sys.path 上）
+        from tools import pool_accounts
+    return bool(pool_accounts.discovery_off())
+
+
 def tokens_from_env(platform: Mapping[str, object], environ: Mapping[str, str]) -> list[str]:
     """按 ``token_env``（多个用 ``/`` 分隔）取凭据，缺的位置留空串。"""
+    if _account_discovery_off():
+        return []
     names = str(platform.get("token_env") or "")
     return [environ.get(name.strip(), "") for name in names.split("/") if name.strip()]

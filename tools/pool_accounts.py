@@ -69,6 +69,39 @@ EXIT_OK, EXIT_USAGE = 0, 2
 #: 有号需要人看（uncertain/failed）—— 与「用法错」分开，脚本能分辨
 EXIT_NEEDS_HUMAN = 1
 
+#: 闸：关掉「账号发现」。照 `internal/provider/discovery.go:29` 的形状 ——
+#: magpie 那边问的是 `settings.AccountDiscoveryOff()`，pool 的设置面在号池目录，
+#: 但「关掉发现」比读号池文件更早：读 accounts.toml 就已经在发现账号了。所以只能是 env。
+ACCOUNT_DISCOVERY_ENV = "TF_NO_ACCOUNT_DISCOVERY"
+#: 只有这四个算「关」。`""`（空串等于没设）/ `"0"` / `"false"` / `"no"` / `"off"`
+#: 与认不出来的取值一律当「没关」—— 默认必须不关，写成关会让 7 个位点凭空消失。
+DISCOVERY_OFF_VALUES: frozenset[str] = frozenset({"1", "true", "yes", "on"})
+#: 闸文案：照 `discovery.go:29` 的形状，但只留一句、**不带任何路径**（判据 7）。
+DISCOVERY_OFF_MESSAGE = (
+    "account discovery is off（TF_NO_ACCOUNT_DISCOVERY 取真值 ⇒ 不碰任何账号位点）"
+)
+
+
+class DiscoveryOffError(RuntimeError):
+    """闸关掉了：不许碰任何账号位点（照 `internal/provider/discovery.go:29` 的形状）。
+
+    设计原件里叫 `DiscoveryOff`；ruff `N818` 要求异常名带 `Error` 后缀，而本卡禁令不许写
+    `# noqa`（先例 `RefreshRefused` 是靠 noqa 过的，本卡不抄）。
+    """
+
+    def __init__(self, message: str = DISCOVERY_OFF_MESSAGE) -> None:
+        super().__init__(message)
+
+
+def discovery_off() -> bool:
+    """闸：`TF_NO_ACCOUNT_DISCOVERY` 取真值 ⇒ 关掉发现。**默认不关**。
+
+    空串等于没设（与 `tools/pool/models.py` 的 `SWITCH_PATH_ENV` 同体例）。
+    判据只问一次，而且问在「碰位点」之前 —— 不是「碰了再过滤」。
+    """
+    raw = os.environ.get(ACCOUNT_DISCOVERY_ENV, "")
+    return raw.strip().lower() in DISCOVERY_OFF_VALUES
+
 
 class LedgerError(Exception):
     """账本缺失或格式不对 —— 一律退 2，不许猜。"""
@@ -690,12 +723,22 @@ DECLARED_DIRS = [
 ]
 
 
-def discover(ledger_locators: list[str], extra_dirs: list[str] | None = None) -> list[dict]:
+def discover(
+    ledger_locators: list[str],
+    extra_dirs: list[str] | None = None,
+    *,
+    root: Path | None = None,
+) -> list[dict]:
     """只 stat，绝不读内容：把「本机有的凭据位点」与「账本里登记过的」对一遍。
 
     `ledger_locators` 只放账本里真实声明过的 locator；常量清单 DECLARED_DIRS 是**待查**的位点，
     不是「已登记」—— 否则每行都会显示已登记，等于没查。
+
+    **闸关 ⇒ 直接返回 `[]`，一个位点都不 stat**（判据 1）：判据问在循环之前，所以不存在
+    「stat 了再过滤」。`root` 只给测试注入：给了就按它解析相对位点，不传就用今天的行为。
     """
+    if discovery_off():
+        return []
     declared = set(ledger_locators)
     seen: set[str] = set()
     out = []
@@ -703,7 +746,7 @@ def discover(ledger_locators: list[str], extra_dirs: list[str] | None = None) ->
         if raw in seen:
             continue
         seen.add(raw)
-        path = Path(os.path.expanduser(raw))
+        path = Path(root, raw) if root is not None else Path(os.path.expanduser(raw))
         exists = path.exists()
         row = {
             "pointer": raw,
@@ -732,7 +775,12 @@ def _count(path: Path) -> int | None:
 
 
 def _token_for(plat: dict) -> tuple[str, str]:
-    """返回 (token, 用的环境变量名)。多个用 / 分隔，取第一个非空的。"""
+    """返回 (token, 用的环境变量名)。多个用 / 分隔，取第一个非空的。
+
+    **闸关 ⇒ `("", "")`，且一个 token 变量都不读**（判据 2）：闸在循环之前问。
+    """
+    if discovery_off():
+        return "", ""
     names = [n for n in str(plat.get("token_env", "")).split("/") if n]
     for name in names:
         value = os.environ.get(name, "").strip()
@@ -788,6 +836,9 @@ def probe_account(acc: dict, plat: dict, fetch=None, offline: bool = False) -> d
     """
     fetch = fetch or _get_json
     base = {"id": acc["id"], "platform": acc["platform"]}
+    # 闸在最前面：连「state 是不是 disabled」都不问 —— 那是「已经有账号」之后的事。
+    if discovery_off():
+        return {**base, "kind": "skipped", "detail": DISCOVERY_OFF_MESSAGE}
 
     if acc["state"] in ("disabled", "expired"):
         return {**base, "kind": "skipped", "detail": f"state={acc['state']}，不探测"}
@@ -848,6 +899,19 @@ def probe_account(acc: dict, plat: dict, fetch=None, offline: bool = False) -> d
 def probe_all(
     data: dict, platforms: dict, fetch=None, offline: bool = False, platform: str | None = None
 ) -> list[dict]:
+    if discovery_off():
+        # 判据 3：闸关时**每一条都给 skipped**，而且连平台能力表都不查
+        # （`unknown-platform` 是「查过了、表里没有」，闸关时连查都不该查）。
+        return [
+            {
+                "id": acc["id"],
+                "platform": acc["platform"],
+                "kind": "skipped",
+                "detail": DISCOVERY_OFF_MESSAGE,
+            }
+            for acc in visible_accounts(data)
+            if not platform or acc["platform"] == platform
+        ]
     out = []
     for acc in visible_accounts(data):
         if platform and acc["platform"] != platform:
@@ -1057,6 +1121,12 @@ def cmd_show(args) -> int:
 
 
 def cmd_discover(args) -> int:
+    if discovery_off():
+        # 连账本都不读：读 accounts.toml 就已经在发现账号了（禁令 §2.2）。
+        if args.json:
+            print(json.dumps({"rows": []}, ensure_ascii=False, indent=2))
+        print(DISCOVERY_OFF_MESSAGE, file=sys.stderr)
+        return EXIT_OK
     ledger = find_ledger(args.ledger)
     data = load_ledger(ledger)
     declared = [
