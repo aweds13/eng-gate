@@ -1,0 +1,26 @@
+[entries."T-AG566"]
+id = "T-AG566"
+title = "禁用的模型：三种名字 × 单星号 glob × 读不到就等于全禁"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A353-禁用的模型.md",
+  "file:tools/pool/model_registry.py",
+  "file:tools/pool/model-registry.toml",
+  "file:tests/test_pool_disabled.py",
+  "file:复盘/卡/卡A353-禁用的模型.md",
+  "test:test_pool_disabled.py",
+  "text:tools/pool/model_registry.py::DISABLED_ENV: str = ",
+  "text:tools/pool/model_registry.py::def glob_match(",
+  "text:tools/pool/model_registry.py::def load_disabled(",
+  "text:tools/pool/model_registry.py::def assert_not_disabled(",
+  "text:tools/pool/model-registry.toml::禁用表",
+]
+gaps = [
+  """禁用表**没有原件上限**：`MAX_DISABLED_PATTERNS = 500` 与 `MAX_DISABLED_CHARS = 300` 是从 caller key 的白名单（`access/models.go:26/31`）借来的，**是设计决定，不是禁用表的事实**。
+`id_disabled` 只能搬 `idOff` 十步里的六步：pool 没有「组」概念，第 5–7 步（整组都被禁）无挂点。
+本卡只提供判据、**不接线**：`assert_not_disabled` 今天零生产调用方（接线是另一张卡），上线当天行为零变化。
+`id_disabled(\"\")` 在 unknown 表下回 `None`（照原件 `idOff` 第 2 步「空串 ⇒ 放行」排在第 3 步 unknown 之前）；这不是放行 —— 空 id 根本不是模型名。
+""",
+]

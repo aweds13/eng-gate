@@ -1,3 +1,4 @@
+pool 一直没有「禁用模型」这一维：`grep -n "DisabledUnknown\|disabled_unknown" tools/ scripts/` 零命中，`tools/pool/model-registry.toml` 文件头三条纪律里也没有它。本卡把 magpie 的判据整块搬过来：`glob_match` 是**自写单星号回溯**（`*` 跨斜杠、`?` 是任意单字符、`[` 是字面**不是字符类**、多星号回溯），三种名字（裸 id / `<provider>/<model>` / `LastIndex` 之后那段）分两个入口 `names_of` 与 `id_names`，`match_disabled` 返回**原样的 pattern**。核心是**「读不到 = 全禁」**：`load_disabled()` 文件不存在 ⇒ `unknown=False`（没配过 = 没禁用）；文件存在但解析失败**或形状不认识** ⇒ `unknown=True`，此时 `assert_not_disabled` 抛 `DisabledUnknownError`、**绝不放行**（隐藏是危险方向，判不出就必须拒）。顺带改掉 `_glob_re` docstring 里一条与源码不符的来处描述。
 `tools/pool/sink.py` 是按 magpie 的 sink 沉底逐字移植的（卡 A331），但它自己的文件头逐字写着「本模块不接线任何派活流程」—— 全仓零生产调用方，判据在、牙也在，派活器从来不看它。于是 `next_whitelist_model()` 走静态链序时不知道谁刚被 429 沉过，同一个刚撞限流的模型只要链序轮到就还会被再挑一次。本卡把它接进 `tools/wb_dispatch.py` 的 429 换模型那一段：探针仍挂时按 `should_sink()` 沉（key 是稳定 id + 斜杠 + 模型名），换模型前扫轮换链从下一个到末尾的整条尾巴、全沉就落进既有 exit 7 停路。`sink.py` 八个公开函数的签名与行为一字未动。
 ### 病灶
 

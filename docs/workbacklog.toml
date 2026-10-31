@@ -4870,3 +4870,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A353"
+task = "T-AG566"
+title = "禁用的模型：三种名字 × 单星号 glob × 读不到就等于全禁"
+tree = ".wt/A353"
+spec = "复盘/卡/卡A353-禁用的模型.md"
+files = [
+  "tools/pool/model_registry.py",
+  "tools/pool/model-registry.toml",
+  "tests/test_pool_disabled.py",
+  "复盘/卡/卡A353-禁用的模型.md",
+]
+status = "done"
+risk = "mid"
+depends = []

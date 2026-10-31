@@ -4,6 +4,15 @@
 #   · CodeBuddy 池的真源 = 本文件里的 [[model]] 条目（pool = "codebuddy"）
 #   · 码道池的真源 = infra/pool/models.whitelist.toml（本文件 [pool.codearts] 引用它、不复制）
 #
+# ★★ 第 4 条纪律（卡 A353 · T-AG566）：**禁用表与注册表同目录**，文件名
+#   `model-disabled.toml`（默认就落在本文件旁边），路径由环境变量 `TF_POOL_DISABLED` 覆盖。
+#   · 禁用 = **另一个维度的拒绝**，与"批准"不是一回事：「在注册表里」不等于"没被禁"；
+#     所以禁用条目**不许**写进本文件的 `[[model]]`（混在一张表里会让"批准但禁用"不可表达）。
+#   · 「读不到 ≠ 没禁用」：文件不存在 ⇒ 没禁用；文件存在但坏了/读不懂 ⇒ **不知道 ⇒ 全禁**
+#     （判据在 `tools/pool/model_registry.py::load_disabled`）。
+#   · **不许**把禁用表挂到 `gates/diag/`：那是**运行状态**（跑出来的、可清），
+#     禁用表是**配置**（由人改、随仓走）—— 性质不同，混在一起会让"清空 diag"顺手清掉配置。
+#
 # ★ 不许再有第二份可写名单（"多份真源"是本仓老坑）：
 #   wb_dispatch.py 的 MODEL_WHITELIST 常量已删，改成 PEP 562 现读本文件。
 #

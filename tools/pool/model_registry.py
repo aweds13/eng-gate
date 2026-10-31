@@ -379,10 +379,14 @@ def _glob_re(pattern: str) -> re.Pattern[str]:
     ★ 逐字照 magpie `compileGlob`（`internal/access/models.go:99-105`）：
       `regexp.MustCompile("(?is)^" + strings.Join(parts, ".*") + "$")`
       —— `*` 换成「任意长度（含斜杠）」，`(?is)` = 大小写不敏感 + `.` 也匹配换行。
-    ★ 与 magpie 的唯一差别：本实现把 `*` **之外**的字面片段 `re.escape()` 掉。
-      magpie 直接把片段拼进正则，所以 `(` / `.` 这类字符在那边是正则元字符（能编译就直接当
-      正则用、编不过就 panic）；本实现要的是「`*` 是唯一通配符」这条语义，字面片段一律按字面
-      匹配。`*` 的行为**一字不变**（跨斜杠）。
+    ★ 与 magpie `compileGlob` 的关系（卡 A353 纠正了这里一条**写错来处**的注释）：
+      `internal/access/models.go:99-105` 的 `compileGlob` **同样** `regexp.QuoteMeta` 转义
+      字面片段，两边的差别**只在 `?`** —— magpie 的 `globMatch`
+      （`internal/provider/disabled.go:105-130`）把 `?` 当「任意一个字符」，本函数的
+      `re.escape` 把它当**字面问号**。这是本模块已有的、**有意为之的更严语义**
+      （`narrow_for_caller` 只收窄不放宽），**不许**改回去。
+      ★ 要 `?` 的语义请用同文件的 `glob_match()`（照 `globMatch` 逐字）；两者**不可互换**：
+        `[` 在两边都是字面，`?` 在两边不同。
     ★ 只在 `narrow_for_caller()` 内部用 —— **不导出**，也**不许**被冲突域判据
       （`tools/pool/plan.py:64` 的 `WILDCARD_CHARS`，那里是见通配就拒）借去用：
       两处不是同一套语义，口径记录点仍是 `tools/pool/plan.py:169-179` 那段 docstring。
@@ -409,6 +413,335 @@ def _pattern_hits(pattern: str, model: str) -> bool:
     if pattern.lower() == model.lower():
         return True
     return "*" in pattern and _glob_re(pattern).match(model) is not None
+
+
+# ------------------------------------------------ 禁用表（卡 A353 · F84「禁用的模型」）
+#: 覆盖禁用表路径的环境变量（★ 与 ``REGISTRY_ENV`` 同款：只给测试与离线用）。
+DISABLED_ENV: str = "TF_POOL_DISABLED"
+#: 禁用表默认文件名 —— **与注册表同目录**（``model-registry.toml`` 旁边）。
+DISABLED_FILE: str = "model-disabled.toml"
+#: 禁用表**最多**多少条。
+#: ★ 借来的数：magpie ``internal/access/models.go:31``「A key can list at most 500 models」。
+#: ★★ **这是设计决定，不是原件事实**：禁用表自己（``internal/provider/disabled.go`` 321 行）
+#:   里**没有任何**条数上限常量（``grep -n "500\|maxItems" internal/provider/disabled.go``
+#:   零命中）。借 caller key 白名单的数是为了给禁用表一道可执行的边界，别读成"原件如此"。
+MAX_DISABLED_PATTERNS: int = 500
+#: 禁用表**单条**最长多少字符。
+#: ★ 借来的数：``internal/access/models.go:26``「A key's model is at most 300 characters」。
+#: ★★ 同上：**设计决定，不是原件事实**（原件禁用表没有长度上限）。
+MAX_DISABLED_CHARS: int = 300
+#: ``Disabled.unknown`` 时 ``model_disabled()`` / ``id_disabled()`` 的哨兵返回值。
+#: ★ 它**不是 None** —— 调用方没法把"不知道"当成"没禁用"（判据 15）。
+UNKNOWN: str = "?"
+
+
+class DisabledUnknownError(ModelRegistryError):
+    """settings 读不到且启动后一次都没读到过 —— 此时**任何**模型都可能是被禁的。
+
+    ★ 落到 pool（**一次一进程**的派活器）：原件 ``internal/provider/disabled.go:52-66`` 的
+      ``lastDisabled`` 让「读到过一次」之后还能放行**上次读到的那份**；pool 没有「上次」这张牌，
+      所以只剩「unknown ⇒ 全拒」这一半 —— 比原件**更严**。这是设计选择、不是漏搬
+      （设计原件 §F84 缺口 3）。
+    ★ 继承 `ModelRegistryError`（`:83`）：禁用表与注册表是同一个「一层统一」的配置面，
+      捕获一个 `ModelRegistryError` 就该连禁用一起兜住，调用方不会漏掉一类。
+    """
+
+
+@dataclass(frozen=True)
+class Disabled:
+    """禁用表的读数：``patterns`` + ``unknown``。
+
+    ★ ``unknown is True`` ⇒ **一个模型都不许放行**。这时 ``patterns`` 同样是空元组，但含义
+      与「文件不存在 = 没禁用」**相反**（判据 13/14）—— 两个字段并存就是为了让这两种情况在
+      类型上长得像、在含义上必须被区分：**只看 ``patterns`` 是不够的，必须看 ``unknown``**。
+    """
+    patterns: tuple[str, ...] = ()
+    unknown: bool = False
+
+
+def disabled_path(*, root: Path | None = None) -> Path:
+    """禁用表路径：``TF_POOL_DISABLED`` 覆盖 > ``root`` 给的那一层 > **与注册表同目录**。
+
+    ★ 为什么默认跟着 ``registry_path()`` 走：禁用表与注册表是**同一层**的两张表（「批准」与
+      「拒绝」两个维度，见 ``tools/pool/model-registry.toml`` 的第 4 条纪律）。把注册表指到别处
+      （``TF_MODEL_REGISTRY``，测试/离线）而禁用表还留在仓里，测试就会读到你手上真在用的那份
+      —— 「看着绿其实查了别的表」正是本仓老坑。
+    ★ ``root`` 是调用方**显式**给的目录（离线脚本），给了就落 ``root / DISABLED_FILE``。
+    ★ **绝不许**把默认位置落在 ``gates/diag/``：那是运行状态，禁用表是**配置**（由人改、随仓走）。
+    """
+    override = os.environ.get(DISABLED_ENV)
+    if override:
+        return Path(override)
+    if root is not None:
+        return Path(root) / DISABLED_FILE
+    return registry_path().parent / DISABLED_FILE
+
+
+def load_disabled(*, root: Path | None = None) -> Disabled:
+    """读禁用表 —— **「读不到 ≠ 没禁用」**（本卡的核心判据）。
+
+    四种情形**逐一**分清（判据 13/14/15）：
+
+    - 文件**不存在** ⇒ ``Disabled(patterns=(), unknown=False)``
+      （= 原件「没配过 ``DisabledModels`` = 没禁用」；这是唯一允许当"没禁用"的一支）；
+    - 文件存在但**解析失败**（读不动 / 不是合法 toml）⇒ ``unknown=True``，**不是空表**；
+    - 文件存在但**形状不认识**（没有 ``disabled`` 键、不是数组、有条目不是字符串、越过两条
+      上限）⇒ 同样 ``unknown=True``：读到了却读不懂 = 不知道（fail closed，见下）；
+    - 文件存在且合法 ⇒ ``patterns=normalize_disabled(...)`` / ``unknown=False``。
+
+    ★ 表里的形状：顶层 ``disabled = ["glm-5*", "anthropic/claude-fable-5", ...]``（通配只有
+      ``*`` 与 ``?`` 两个，三种名字见 `names_of` / `id_names`）。
+    ★ **不加缓存**（设计原件 §F84 禁令 5）：pool 一次一进程，缓存只会把「改完配置不生效」
+      变成难查的坑；原件的 ``lastDisabled`` 是常驻网关才需要的。
+    ★ **不看 ``.bak``**（照 `pool.lastgood.read_strict` 的口径，见 §F84 缺口 4）：坏就是坏 ——
+      「撤过的禁用不许复活」比「读不到就停」更要紧。**这是判断，不是原件明写**。
+    """
+    path = disabled_path(root=root)
+    if not path.exists():
+        return Disabled(patterns=(), unknown=False)
+    try:
+        text = path.read_text(encoding="utf-8")
+        data = tomllib.loads(text)
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return Disabled(patterns=(), unknown=True)
+    raw = data.get("disabled")
+    if not isinstance(raw, list):
+        return Disabled(patterns=(), unknown=True)
+    entries: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            return Disabled(patterns=(), unknown=True)
+        entries.append(item)
+    try:
+        return Disabled(patterns=normalize_disabled(entries), unknown=False)
+    except ModelRegistryError:
+        return Disabled(patterns=(), unknown=True)
+
+
+def normalize_disabled(patterns: Sequence[str]) -> tuple[str, ...]:
+    """trim、丢空、**忽略大小写**去重、**保序**、两条上限**分开**判（判据 11/12）。
+
+    ★ 逐字照 magpie ``normalDisabled``（``internal/provider/disabled.go:191-202``）：
+      ``strings.TrimSpace`` 之后丢空，``slices.ContainsFunc(out, EqualFold)`` 去重 ——
+      **保留第一次出现时的原样大小写**（原件不 ``ToLower``，返回的就是写下来的样子）。
+    ★ 两条上限**分开**抛（判据 12：不许合并成一条）：
+      条数 > `MAX_DISABLED_PATTERNS` ⇒ 说条数；单条 > `MAX_DISABLED_CHARS` ⇒ 说字符数。
+      两个数都是**借来的**（见常量注释）。越界**响亮抛**而不是静默丢 —— 丢一条 = 悄悄少禁一条。
+    """
+    if len(patterns) > MAX_DISABLED_PATTERNS:
+        raise ModelRegistryError(
+            f"禁用表最多 {MAX_DISABLED_PATTERNS} 条，实际 {len(patterns)} 条"
+            "（★ 这个上限是从 magpie access/models.go:31 借的，不是禁用表原件的事实）；"
+            "越界不静默丢：丢一条 = 悄悄少禁一条。")
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in patterns:
+        if not isinstance(item, str):
+            raise ModelRegistryError(
+                f"禁用表只收字符串，实际有 {type(item).__name__}：{item!r}")
+        pattern = item.strip()
+        if not pattern:
+            continue
+        if len(pattern) > MAX_DISABLED_CHARS:
+            raise ModelRegistryError(
+                f"禁用表单条最长 {MAX_DISABLED_CHARS} 字符，实际 {len(pattern)} 字符："
+                f"{pattern[:40]}…（★ 这个上限是从 magpie access/models.go:26 借的，"
+                "不是禁用表原件的事实）")
+        key = pattern.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(pattern)
+    return tuple(out)
+
+
+def glob_match(pattern: str, text: str) -> bool:
+    """**单星号回溯**匹配（判据 1-5）—— 逐字照 magpie ``globMatch``。
+
+    依据：``internal/provider/disabled.go:105-130``。
+
+    ★ **自己写，不许用 `fnmatch`**（禁令 3）：``fnmatch`` 的 ``[abc]`` 是**字符类**、
+      ``*`` 的语义也不与原件同族 —— 判据 2/判据 4 两条立刻红。原件的通配字符集**只有两个**：
+      ``*`` 与 ``?``；``[`` 是**字面**（钉 3 咬的就是这一点）。
+    ★ ``*`` **跨斜杠**（原件注释 ``disabled.go:101-104`` 逐字：``"/" among them (a model id
+      has slashes of its own, openrouter's anthropic/claude-fable-5, and "*fable*" must
+      cross them)``）。
+    ★ **本函数不转大小写**（判据 1）：转换在 `match_disabled` 里做，与原件 ``matchDisabled``
+      里 ``strings.ToLower`` 的位置一致 —— 所以 ``glob_match("glm*", "GLM-5")`` 是 **False**。
+    ★ ``!ContainsAny(pat, "*?")`` 那一支提前短路成 ``pat == text``（判据 5，原件同一行）。
+    """
+    if "*" not in pattern and "?" not in pattern:
+        return pattern == text
+    star = -1
+    mark = 0
+    pi = 0
+    si = 0
+    size = len(text)
+    while si < size:
+        if pi < len(pattern) and pattern[pi] == "*":
+            star, mark = pi, si
+            pi += 1
+        elif pi < len(pattern) and (pattern[pi] == "?" or pattern[pi] == text[si]):
+            pi += 1
+            si += 1
+        elif star >= 0:
+            mark += 1
+            pi, si = star + 1, mark
+        else:
+            return False
+    while pi < len(pattern) and pattern[pi] == "*":
+        pi += 1
+    return pi == len(pattern)
+
+
+def names_of(provider: str, model: str) -> tuple[str, ...]:
+    """一个 ``(provider, model)`` 对要拿去比**哪几个名字**（判据 6/7）。
+
+    ★ 逐字照 magpie ``namesOf``（``internal/provider/disabled.go:135-145``）：
+      ``model`` 先 ``TrimSpace``；① ``model`` 本身；② ``provider == ""`` 时不加，否则
+      ``provider + "/" + model``；③ ``LastIndex(model, "/")`` 之后那段（**有斜杠才加**）。
+    ★ 所以**裸名两档、带斜杠名三档**。钉 6 与钉 7 是**同一个函数、不同的输入形状** ——
+      这正是「删掉 LastIndex 那一段，钉 7 红而钉 6 仍绿」的原因（变异 5）。
+    ★ 与 `id_names` **不是同一个函数**：那边是从**一个 id** 里切 provider（判据 8）。
+    """
+    base = model.strip()
+    out: list[str] = [base]
+    if provider:
+        out.append(f"{provider}/{base}")
+    cut = base.rfind("/")
+    if cut >= 0 and cut + 1 < len(base):
+        out.append(base[cut + 1:])
+    return tuple(out)
+
+
+def id_names(model_id: str) -> tuple[str, ...]:
+    """**一个裸 id** 要拿去比哪几个名字（判据 8）—— 照 magpie ``IDDisabled`` 的三档。
+
+    依据：``internal/provider/disabled.go:173-189``。``TrimSpace`` 之后 ① ``id`` 本身；
+    ② ``LastIndex(id, "/")`` 之后那段；③ ``strings.Cut(id, "/")`` 的**第一刀之后**那段
+    （前提：切得动、且两段都非空）。
+
+    ★ 与 `names_of` 的差别是**可断言**的（钉 7 vs 钉 8）：
+      ``names_of("openrouter", "anthropic/claude-fable-5")`` 的第 2 档是
+      ``openrouter/anthropic/claude-fable-5``（**加** provider）；
+      ``id_names("openrouter/anthropic/claude-fable-5")`` 的第 3 档是
+      ``anthropic/claude-fable-5``（**切** provider）。拿错一个，钉 8 立刻红。
+    """
+    base = model_id.strip()
+    out: list[str] = [base]
+    cut = base.rfind("/")
+    if cut >= 0 and cut + 1 < len(base):
+        out.append(base[cut + 1:])
+    head, sep, rest = base.partition("/")
+    if sep and head and rest:
+        out.append(rest)
+    return tuple(out)
+
+
+def match_disabled(patterns: Sequence[str], names: Sequence[str]) -> str | None:
+    """逐个 pattern 比每个名字 ⇒ 返回**原样的 pattern**（不是小写版）；都不中 ⇒ ``None``。
+
+    ★ 逐字照 magpie ``matchDisabled``（``internal/provider/disabled.go:83-101``）：
+      ``pat`` 先 ``TrimSpace`` + ``ToLower`` **再比**（``lp``），返回的却是**原样的 ``pat``**
+      —— 理由：让人拿着这串原文直接去配置里改（判据 9 / 判据 17）。
+      ⇒ 钉 9 的输入**必须混大小写**（``"Claude-Fable*"``）：全小写的输入下「返回原样」与
+      「返回小写版」看不出差别，那条钉子就是**假牙**（变异 4）。
+    ★ 空 pattern（trim 后为空）与空名字都跳过（判据 10，与原件同）：没有这一支，
+      ``""`` 会命中"空前缀"的每一条。
+    """
+    for pattern in patterns:
+        low_pat = pattern.strip().lower()
+        if not low_pat:
+            continue
+        for name in names:
+            if not name:
+                continue
+            if glob_match(low_pat, name.lower()):
+                return pattern
+    return None
+
+
+def model_disabled(
+    provider: str, model: str, *, table: Disabled | None = None,
+) -> str | None:
+    """``(provider, model)`` 这一对是否被禁 ⇒ 命中的**原样 pattern** / `UNKNOWN` / ``None``。
+
+    ★ 判据顺序**照 magpie ``modelOff``**（``internal/gateway/disabled.go:38-46``）：
+      ① ``unknown`` ⇒ 返回 `UNKNOWN`（**非 None**，绝不放行 —— 判据 15）；
+      ② 再按 `names_of` 的三档名字去 `match_disabled`。
+      顺序本身是判据：先认「不知道」再认「匹配」；反过来就是不知道时仍去猜哪个匹配上了。
+    ★ ``table`` 给了就**不读文件**（纯函数路径，测试与干跑复用）；不给就 `load_disabled()`。
+    ★ 返回值**三态都要判**：``None`` = 没禁用；`UNKNOWN` = **不知道（当禁用处理）**；
+      其它字符串 = 命中的原样 pattern。
+    """
+    tbl = table if table is not None else load_disabled()
+    if tbl.unknown:
+        return UNKNOWN
+    return match_disabled(tbl.patterns, names_of(provider, model))
+
+
+def id_disabled(model_id: str, *, table: Disabled | None = None) -> str | None:
+    """**裸 id** 是否被禁 —— 是 ``idOff`` 十步里的**六步**，不是十步（判据 18）。
+
+    搬过来的六步（按 ``internal/gateway/disabled.go:50-88`` 的顺序）：
+    1. ``TrimSpace``；2. 空串 ⇒ ``None``；3. ``unknown`` ⇒ `UNKNOWN`（**先于**"配没配禁用"）；
+    4. 禁用表为空 ⇒ ``None``（原件 ``len(provider.DisabledModels()) == 0``）；
+    8. ``IDDisabled`` ⇒ 用 `id_names` 的三档名字 `match_disabled`；
+    10. ``BareDisabled`` —— pool 侧没有目录解析，这一档**并进了第 8 步**：`id_names` 的
+        尾段 / 第一刀之后那两档正是「resolver 认不出来时的裸 id」要用的名字。
+
+    ★ **搬不过来的四步（判据 18 要求点清）**：
+      - 第 5 步 ``GroupFor`` / 第 6 步 ``GroupDisabledOut`` / 第 7 步 ``FindGroup`` ——
+        pool **没有「路由组」这个概念**（``model-registry.toml`` 只有 ``[[model]]`` 与
+        ``[pool.*]`` 两段，没有组），**没有落点**；
+      - 第 9 步 ``Resolve`` + ``modelOff`` —— pool 没有「id 目录 / resolver」，一个 id 是裸名
+        还是 ``provider/model`` 由**池**决定（`resolve_model`），本函数不该在这里猜池。
+      ⇒ 要判「某个 model 在某池里是否被禁」请用 `model_disabled(provider, model)`（另一个入口）。
+    """
+    base = model_id.strip()
+    if not base:
+        return None
+    tbl = table if table is not None else load_disabled()
+    if tbl.unknown:
+        return UNKNOWN
+    if not tbl.patterns:
+        return None
+    return match_disabled(tbl.patterns, id_names(base))
+
+
+def _unknown_refusal(label: str) -> DisabledUnknownError:
+    """``unknown`` 表的统一拒绝理由（判据 16：两句必须在 —— 「不知道」与「不许当成没禁用」）。"""
+    return DisabledUnknownError(
+        f"模型「{label}」是不是被禁用不知道：禁用表 {disabled_path()} 读不到或读不懂。"
+        "不知道就等于可能全禁，所以一个都不许当成没禁用（unknown ≠ 空表）。"
+        "把那份表修好（或恢复）再派活。")
+
+
+def assert_not_disabled(
+    provider: str, model: str, *, table: Disabled | None = None,
+) -> None:
+    """被禁用 / 不知道 ⇒ **抛**（fail closed）；没被禁 ⇒ 安静返回（判据 15/16/17）。
+
+    ★ 两段判据顺序照 `model_disabled`：先 ``unknown``（⇒ `DisabledUnknownError`），再匹配
+      （⇒ `ModelRegistryError`，消息里给**原样的 pattern** + 被打的 id —— 判据 17）。
+    ★ **``unknown`` 时绝不放行**（禁令 4）：把 fail-closed 洗成 fail-open 只需一行，而那一行
+      会让「配置读坏了」变成「今天全放行」—— 正是原件 ``internal/provider/disabled.go:23-26``
+      要防的事（变异 6 咬的就是这一行）。
+    ★ **本卡只提供判据、不接线**（卡 A353 缺口 3）：今天**零生产调用方**，上线当天行为零变化；
+      接线是另一张卡。
+    ★ 文案照原件 ``gateway/disabled.go:20-23`` / ``:25-29`` 的**结构**（pattern + 去哪儿改 +
+      「只有经本派活器派出的请求会被拒」）；第三条（整组都被禁）**搬不过来**，pool 没有组。
+    """
+    tbl = table if table is not None else load_disabled()
+    label = f"{provider}/{model}" if provider else model
+    if tbl.unknown:
+        raise _unknown_refusal(label)
+    hit = match_disabled(tbl.patterns, names_of(provider, model))
+    if hit is not None:
+        raise ModelRegistryError(
+            f"模型「{label}」被禁用：命中禁用表 {disabled_path()} 里的模式 {hit!r}。"
+            "去那份表里删掉 / 改掉这一条才能派活（「批准」与「禁用」是两个维度："
+            "注册表里有它也不等于没被禁）。只有经本派活器派出的请求会被拒。")
 
 
 def narrow_for_caller(
@@ -636,6 +969,11 @@ __all__ = [
     "ROOT", "REGISTRY_FILE", "REGISTRY_ENV", "KNOWN_POOLS", "DEFAULT_POOL",
     "MINIMUM_RULESET_KEYS",
     "MAX_CALLER_PATTERNS", "MAX_PATTERN_CHARS", "MAX_GLOBS",
+    "Disabled", "DisabledUnknownError", "UNKNOWN",
+    "DISABLED_ENV", "DISABLED_FILE", "MAX_DISABLED_PATTERNS", "MAX_DISABLED_CHARS",
+    "disabled_path", "load_disabled", "normalize_disabled", "glob_match",
+    "names_of", "id_names", "match_disabled", "model_disabled", "id_disabled",
+    "assert_not_disabled",
     "registry_path", "load_registry", "entries_for", "resolve_model",
     "default_model_for", "rotation_chain_for", "effective_allowed_for",
     "narrow_for_caller", "clean_caller_patterns",
