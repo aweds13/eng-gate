@@ -122,6 +122,7 @@ from pool import account_id as pool_account_id  # noqa: E402 —— 名字↔号
 from pool import guards as pool_guards  # noqa: E402 —— 守卫唯一实现（pool.guards）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
 from pool import rpm as pool_rpm  # noqa: E402 —— 每分钟派活闸（卡 A340，magpie 的 MaxRPM）
+from pool import sink as pool_sink  # noqa: E402 —— 沉底（卡 A351，magpie sinkOrder）
 from pool import sticky as pool_sticky  # noqa: E402 —— 卡粘性（卡 A345，magpie affinity）
 from pool import task as pool_task  # noqa: E402 —— 批次预声明 / 状态（卡 E10：--batch）
 from pool.jobs import card_artifacts  # noqa: E402 —— 产物定位唯一实现（pool.jobs）
@@ -223,6 +224,10 @@ QUOTA_STATUS_NEEDLES = ("429", "6004", "quota")
 QUOTA_TEXT_NEEDLES = ("额度已用尽", "使用量已超出频率限制")
 DEFAULT_QUOTA_WAIT = 300         # 撞 429 → 先等 300 秒再探（用户 2026-09-26：「你先等一下」）
 DEFAULT_INPUT_BUDGET = 25_000_000  # 防空烧：单卡 input tokens 预算（实测单卡最高 18,400,724）
+# ★ 卡 A351（T-AG563）：magpie `sinks(on, routing)` 里那个 routing —— 本仓**没有**可配的 routing
+#   （magpie 的 rotate / weighted / manual 在 pool 里零命中），调用侧一律传这个常量（= Ordered）。
+#   将来有人真加 routing 配置时**改这一个常量**就够，别把字面量散回判据里。
+SINK_ROUTING = "order"
 
 
 NODE_VERSIONS_REL = r".workbuddy\binaries\node\versions"
@@ -3986,7 +3991,19 @@ def main() -> int:
                     break
                 print(f"[额度] 探测通过（{probe_why}）→ 同一模型接着干", flush=True)
             else:
+                # ★ 卡 A351（T-AG563）：探针仍挂 ⇒「这个 key 现在真的不能用」→ 沉底
+                #   （magpie `sinkOrder`；沉的是「这次撞限流的那个 key」）。
+                #   沉不沉**只问** `should_sink()`（`余额耗尽` 由它内部硬拦，调用侧不加旁路）。
+                if pool_sink.should_sink(quota.get("kind"), SINK_ROUTING):
+                    pool_sink.sink(pool_sink.key_of(account_id, model), root=ROOT)
                 nxt = next_whitelist_model(model, pool)
+                # ★ 卡 A351 判据 6：换之前先看**整条尾巴**（含 `nxt` 自己）—— 全沉过 ⇒ 置 None，
+                #   落进下面既有的停路（退出码 7）；尾巴里只要有一个没沉过，就照旧换过去。
+                tail = rotation_chain_for(pool)
+                rest = tail[tail.index(nxt):] if nxt is not None and nxt in tail else ()
+                if rest and all(pool_sink.sunk_at(pool_sink.key_of(account_id, m), root=ROOT)
+                                is not None for m in rest):
+                    nxt = None
                 if nxt is None:
                     # ★ 全挂就停（用户原话：「都有问题的话，就直接把任务停下来」）——
                     #   不是「换个模型接着干」；退出码 7，不再自动重试。

@@ -10653,3 +10653,28 @@ gaps = [
 收集条数（`pytest --collect-only`）写进文档时是快照，随用例增减而漂；钉子按「文档里那个数必须等于本趟现收的」判，因此加用例的卡要一起改文档。
 """,
 ]
+
+[entries."T-AG563"]
+id = "T-AG563"
+title = "沉底的号排在最后：magpie sinkOrder 接进 429 换模型那一段"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A351-沉底的号排在最后.md",
+  "file:tools/pool/sink.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_pool_sink_wiring.py",
+  "file:复盘/卡/卡A351-沉底的号排在最后.md",
+  "test:test_pool_sink_wiring.py",
+  "text:tools/pool/sink.py::def key_of(",
+  "text:tools/wb_dispatch.py::SINK_ROUTING = ",
+  "text:tools/wb_dispatch.py::pool_sink.should_sink(",
+  "text:tools/wb_dispatch.py::pool_sink.sunk_at(",
+]
+gaps = [
+  """『还有配额却 429』这一前提本仓仍然证明不了：pool 没有 magpie `c.full()` 的等价物（连本窗用量读数都没有），所以「该不该沉」由调用方判，`sink()` 只做记账 —— 这句话逐字保留在 `tools/pool/sink.py` 文件头。
+本仓没有可配的 `routing`：`SINK_ROUTING = \"order\"` 是模块级常量（= magpie `Ordered`），将来真加配置时只改这一个常量。
+`sunk_at()` 读的是 `gates/diag/pool-sink.json`（运行状态，gitignored），跨机不同步；本卡不把它挪进被跟踪位置。
+""",
+]

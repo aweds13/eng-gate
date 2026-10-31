@@ -17,7 +17,8 @@ r"""Sink 沉底：429 且「还有配额」的候选沉到次序末尾（卡 A33
   · 状态落 `gates/diag/pool-sink.json`（**gitignored** 的运行状态，不是台账，不许进 `docs/`）；
   · **不做 TTL / 到期自动 unsink**：magpie 的 sink 自己也不带到期时间（`unsink` 只有手动或重启
     才发生）。加 TTL 会变成另一种语义 —— 那已经是 F20 的 rest，不是本卡；
-  · 本模块**不接线**任何派活流程：`tools/wb_dispatch.py` 一行不改（那是另一张卡）；
+  · 本模块**已接线**到派活流程：`tools/wb_dispatch.py` 的 429 换模型那一段（卡 A351 · `T-AG563`）
+    在探针仍挂时按 `should_sink()` 沉、换模型前用 `sunk_at()` 扫轮换链尾巴；
   · 读改写**不做跨进程互斥**：两个进程同时沉，可能拿到同一个 `n`。这只影响它俩彼此的先后，
     不影响「沉者排在未沉者之后」这条主判据。
 """
@@ -45,6 +46,16 @@ ENV_SINK = "TF_POOL_SINK"
 #: 429 的两类，逐字取自 `tools/wb_dispatch.py::quota_error` 的 `kind` 口径。
 KIND_RATE = "限流"
 KIND_BALANCE = "余额耗尽"
+
+
+def key_of(account: str, model: str) -> str:
+    r"""两段式 sink key：`<account>/<model>`（`sunk_at()` 认的那形状；卡 A351 判据 4/5）。
+
+    `account` 传 `tools/wb_dispatch.py` 主循环那个**稳定 id**（`:3318`，不是 `--account` 收到的
+    profile 名）；没给 `--account` 时传空串 ⇒ 得 `"/<model>"`：`sunk_at()` 先按原文命中模型级
+    那条，再按 `"/"` 切出的空账号段命中账号级那条 —— 两条都查得到（不许因为账号空就静默跳过）。
+    """
+    return f"{account}/{model}"
 
 
 def _root(root: pathlib.Path | None = None) -> pathlib.Path:

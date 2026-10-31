@@ -4854,3 +4854,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A351"
+task = "T-AG563"
+title = "沉底的号排在最后：magpie sinkOrder 接进 429 换模型那一段"
+tree = ".wt/A351"
+spec = "复盘/卡/卡A351-沉底的号排在最后.md"
+files = [
+  "tools/pool/sink.py",
+  "tools/wb_dispatch.py",
+  "tests/test_pool_sink_wiring.py",
+  "复盘/卡/卡A351-沉底的号排在最后.md",
+]
+status = "done"
+risk = "mid"
+depends = []

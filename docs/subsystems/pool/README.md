@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 36 个 py（35 个模块 + `__init__.py`）、**13817 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
+`tools/pool/` = 36 个 py（35 个模块 + `__init__.py`）、**13828 行**（`wc -l tools/pool/*.py`，2026-10-31 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -48,7 +48,7 @@
 | `route.py` | 306 | Smart 路由：给「哪个号先上」排序（`tier` / `apply_order`），只标准库 + 只读 | 无（被 `wb_dispatch`、`pool.plan`、`pool.sticky` 调） |
 | `rpm.py` | 290 | 每号每分钟派活**趟数**闸（`decide`）；防不了 vendor 侧 RPM 429（那个归 `pool_quota.py` 的四态） | 无（被 `wb_dispatch` 调） |
 | `rpm.toml` | 22 | 每分钟派活闸的数据：稳定 id → 每分最多几趟（0 = 关闸，越界报 `RpmError` 不静默当 0） | 无（被 `pool.rpm` 读） |
-| `sink.py` | 227 | 429 且「还有配额」的候选沉底到次序末尾（`sink` / `unsink` / `unsink_all` / `sunk_at`，进程内状态） | 无 |
+| `sink.py` | 238 | 429 且「还有配额」的候选沉底到次序末尾（`sink` / `unsink` / `unsink_all` / `sunk_at`，进程内状态） | 无 |
 | `snapshot.py` | 104 | 零风险快照：`git stash create` 造 commit 再挂 `refs/snapshots/*`（完全不动工作区；不挂 ref 会被 gc） | 无（被 `pool.landing` 调） |
 | `stage_card.py` | 363 | 三段文书片段生成器：台账条目 + changelog + 交接 CHECKPOINT（只写片段，汇总归 `sync_docs`） | `wb_stage_card.py` |
 | `sticky.py` | 306 | 卡粘性：同一张卡第二次派活别换号（`STICK_KEEP_S` / `note` / `pick`），省重发上下文的 token | 无（被 `wb_dispatch` 调） |
@@ -73,8 +73,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **13817 行** / **36 个文件**（35 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 301 张（289 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **13828 行** / **36 个文件**（35 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 302 张（290 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 241 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |
