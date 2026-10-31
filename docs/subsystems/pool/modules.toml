@@ -183,6 +183,11 @@ duty = "零风险快照：`git stash create` 造 commit 再挂 `refs/snapshots/*
 cli = "无（被 `pool.landing` 调）"
 
 [[module]]
+name = "speed.py"
+duty = "输出速度的判据（**不是怎么算速度，是什么情况不许报**）：窗口不可测 / 末端爆发 / 推理比答案快 `THINK_PACE` 倍 / Codex 太短，一律回 `(0, 0)`"
+cli = "无（今天**零调用**：pool 不产 `ttft` / `first_text` / `flow`，接线只能接假数）"
+
+[[module]]
 name = "stage_card.py"
 duty = "三段文书片段生成器：台账条目 + changelog + 交接 CHECKPOINT（只写片段，汇总归 `sync_docs`）"
 cli = "`wb_stage_card.py`"

@@ -1,0 +1,26 @@
+[entries."T-AG572"]
+id = "T-AG572"
+title = "什么情况不许报速度：magpie 的 DecodeWindow 与 DecodeOf 搬进 pool"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A360-什么情况不许报速度.md",
+  "file:tools/pool/speed.py",
+  "file:tests/test_pool_speed_tells.py",
+  "file:复盘/卡/卡A360-什么情况不许报速度.md",
+  "test:test_pool_speed_tells.py",
+  "text:tools/pool/speed.py::MIN_DECODE_MS: int = 100",
+  "text:tools/pool/speed.py::def window(",
+  "text:tools/pool/speed.py::def tells(",
+  "text:tools/pool/speed.py::def codex_short(",
+]
+gaps = [
+  """**零生产方**：pool 今天不产 `ttft` / `first_text` / `flow`（242 份 `wb-*.jsonl` 实测无这三个键）⇒ 本模块上线当天**零调用**。判据在、数据面空。将来要真用，得先给 `append_usage_line` 加 `ttft_ms`/`first_text_ms`/`flow_ms` 三个键并让工人报 —— 那是另一张卡。
+`MinDecodeMs` / `MaxDecodeSpeed` 的注释只有一句话的解释（`usage.go:564-566`：「最快的厂商每秒几千 token，十分之一秒是流式计时能说明任何事的最小窗口」）⇒ 这两个数是**经验值**，不是从数据里推出来的。照抄而不自行调。
+**`_magpie_features.md` 的 F41 条把 Codex 阈值写错了一个数量级**（写 `1200` / `10 s`，实测 `CodexBodyTokens = 100` / `CodexWindowMs = 1000`，在 `internal/usage/ledger.go:810-811`）⇒ 本卡按**源码实测**取值，并在 changelog 里点名这处清单错误。那份清单本身没改（不在本卡域），建议另开卡。
+**判据 8 的期望值按 magpie 源码而非设计原件**：设计原件与卡规格写 `tells(200, 150, 5000, 500, 0, 100, [600]) == (50, 4400)`，但它在自己的 Go 依据下不成立两处 —— ①`usage.go:622-623` 的 `firstReasoning` 分支**只改 `start`**、不执行 `out = out - reasoning`（注释逐字 \"can time **all output** from firstReasoning\"）⇒ token 该是 `200`；②同一组入参 `w = 5000 - 600 = 4400`，`usage.go:626` 的 `flow*HeldShare < w` = `400 < 4400` 为真 ⇒ **先被末端爆发闸拦掉，真值是 (0, 0)**。实证是 magpie 自己的 live 样本 `internal/gateway/testdata/reasoning-speed-visible.json`（`out:76, reasoning:37, ms:7518, ttft_ms:6787, flow_ms:187, first_reasoning_ms:6787`）被它自己的 `internal/gateway/reasoning_speed_test.go:376` 断言为 `76 / 731`：token 是 `out` 原值，`w = 731`，且 `187*4 = 748 > 731` 恰好擦着 HeldShare 闸过去。冲突逐字写进用例 docstring，钉子名逐字保留。
+只在合成数据上验过：所有钉子都是构造出来的整数 + 一条 magpie 的 live 样本，没有拿 magpie 的 Go 测试跑一遍对账（需要 Go 环境）。
+`codex_short` 只搬了那一道闸的判据，没搬它在 `ledger.go:824` 上下文里的用法（那里还依赖 `r.codexTurn()` 的判定，pool 侧没有「这是不是 Codex 的 turn」这个概念）。
+""",
+]

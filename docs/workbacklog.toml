@@ -4919,16 +4919,15 @@ risk = "mid"
 depends = []
 
 [[cards]]
-id = "A355"
-task = "T-AG568"
-title = "按请求算结局，不按轮"
-tree = ".wt/A355"
-spec = "复盘/卡/卡A355-按请求算结局.md"
+id = "A360"
+task = "T-AG572"
+title = "什么情况不许报速度：magpie 的 DecodeWindow 与 DecodeOf 搬进 pool"
+tree = ".wt/A360"
+spec = "复盘/卡/卡A360-什么情况不许报速度.md"
 files = [
-  "tools/pool/outcomes.py",
-  "tools/wb_dispatch.py",
-  "tests/test_pool_outcomes.py",
-  "复盘/卡/卡A355-按请求算结局.md",
+  "tools/pool/speed.py",
+  "tests/test_pool_speed_tells.py",
+  "复盘/卡/卡A360-什么情况不许报速度.md",
 ]
 status = "done"
 risk = "mid"
