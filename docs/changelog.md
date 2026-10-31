@@ -1,3 +1,12 @@
+magpie 的包注释逐字：「记录发生在**做决定的地方**、用**做决定时的那几个值**、事后**不重算**」。本卡搬的就是这一句：新 `tools/pool/route_log.py` 让 `trae_dispatch.finish` 在收口处落一行结构化记录（`ask` / `tried` / `served` / `status`），判据不是「事后能不能算出来」，而是「值是不是当时传进来的」。
+
+★ `tried` 为空**不落记录**：那一轮没有真实的尝试顺序可记，落一条空记录只是把「不知道」写成「知道」。`append_route` 本身不拒空，该不该落由调用方定 —— 本模块只保证「传什么写什么」。
+
+★ `finish` 的入参里**没有任何模型名**，所以三个参数按带默认值加（`asked` / `tried` / `served`），老调用点一个字节不用改。另加第四个 `route_status`：`quota_blocked`（额度挡住没开工）在 `exit_code` 里推不出来，不给就按 `7 ⇒ stopped` / `0 且有 served ⇒ served` / 其余 `all_failed` 推 —— 不替它编。
+
+★ 缺口（如实）：`wb-route.jsonl` 会被三处按 `wb-*.jsonl` 通配的读者当成一张卡 —— `tools/wb_dash.py:159 NON_CARD_LOGS`、`tools/pool/jobs.py:40 USAGE_LOG_RE`、`tools/wb_retention.py:164` 的 `diag.glob`。后果是 `wb_dash` 把它显示成「静默 N 分钟（可能卡死）」、`wb_retention` 每次巡检报「有日志没判决」的假欠账。本卡不改这三处（越域），已另开卡收口。
+
+反向验证 6/6。最关键的 M1（事后从 `wb-usage.jsonl` 重算 `tried`）实测**只**咬 `test_recorded_where_decided`、`test_tries_follow_real_order` 照样绿 —— 设计原件预言的「只有钉子 5 能抓到」成立。
 magpie 的判据注释逐字：「**A LimitReader alone ends at the limit as if the body had, so a valid message padded past it was read as its prefix and run (#1766); one byte more tells a body that ended from one that was cut.**」——读满上限**不能下结论**，要再读 1 字节才知道「到此为止」还是「被切了」。
 
 pool 的 `tools/pool_mcp.py` 的 `_read_line()` 原本 `raw: bytes = buffer.readline()` **无上限**：一条超长行会把内存吃掉，而「读满就停」的写法（正是 #1766 修的 bug）会把一条合法消息当成它的前缀执行。本卡改成 `buffer.readline(limit + 1)` + `if len(body) > limit: raise LineTooLong(len(body))`，**不截断**、超限**不执行**、回一条 `-32602` 并把这一行剩余字节**吃到行尾**再接着服务。
