@@ -837,6 +837,95 @@ def gate_detail(out: str) -> str:
     return "\n".join(tail[-DETAIL_TAIL_LINES:])[-DETAIL_MAX_CHARS:]
 
 
+#: 卡 E72：红门要不要对每条红 nodeid 做隔离复核（默认关 —— 开了会真起 pytest 子进程）。
+FLAKE_PROBE_ENV = "TF_GATE_FLAKE_PROBE"
+
+#: 关着时 detail 第一段的标准说法（判据 4：不许静默省略）。
+FLAKE_PROBE_OFF_NOTE = "本次未做隔离复核（TF_GATE_FLAKE_PROBE=1 可开）"
+
+#: 三种隔离判定在 detail 里的前缀（卡 E72 判据 2 逐字钉死）。
+FLAKE_LABELS = {"isolated_green": "[隔离跑绿]", "reproduced": "[隔离也红]", "error": "[判不出]"}
+
+#: 一次 detail 最多复核多少条红 nodeid —— 超了写一行说明，别把入库产物撑爆。
+FLAKE_PROBE_MAX_IDS = 8
+
+
+def flake_probe_on() -> bool:
+    """`TF_GATE_FLAKE_PROBE=1` 才做隔离复核；默认关（探针会真起 pytest，很贵）。"""
+    return os.environ.get(FLAKE_PROBE_ENV, "").strip() == "1"
+
+
+_FLAKE_MODULE: object | None = None
+
+
+def _flake_module() -> object:
+    """按路径加载同目录的 `flake_probe.py`（`scripts/` 从不进 `sys.path`）。"""
+    global _FLAKE_MODULE
+    if _FLAKE_MODULE is None:
+        path = TOOL_ROOT / "scripts" / "flake_probe.py"
+        spec = importlib.util.spec_from_file_location("flake_probe_for_gates", path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"加载不了隔离复核探针：{path}")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)
+        _FLAKE_MODULE = mod
+    return _FLAKE_MODULE
+
+
+def _red_nodeids(out: str) -> list[str]:
+    """从红门输出里抽红 nodeid（去重、保序；抽不出来就是空清单）。"""
+    ids: list[str] = []
+    for failure in parse_pytest_output(out or ""):
+        nodeid = str(getattr(failure, "nodeid", "") or "").strip()
+        if nodeid and nodeid not in ids:
+            ids.append(nodeid)
+    return ids
+
+
+def flake_detail_head(out: str) -> str:
+    """卡 E72：红门 detail 的**第一段** —— 每条红 nodeid 一行隔离判定。
+
+    ★ 只加信息不改判定：`isolated_green` 也照样是红门（判据 3）。
+    """
+    if not flake_probe_on():
+        return FLAKE_PROBE_OFF_NOTE
+    nodeids = _red_nodeids(out)
+    if not nodeids:
+        return "本次未做隔离复核（输出里没解析出红 nodeid）"
+    try:
+        mod = _flake_module()
+    except (OSError, RuntimeError) as exc:
+        return f"{FLAKE_LABELS['error']} 探针加载不了：{exc}"
+    lines: list[str] = []
+    for nodeid in nodeids[:FLAKE_PROBE_MAX_IDS]:
+        try:
+            got = mod.probe([nodeid], root=ROOT, repeat=1)
+        except Exception as exc:  # 探针自己抛了 = 判不出，不许把门判成别的
+            lines.append(f"{FLAKE_LABELS['error']} {nodeid}（探针自己抛了：{exc}）")
+            continue
+        verdict = str(got.get("verdict") or "")
+        label = FLAKE_LABELS.get(verdict, FLAKE_LABELS["error"])
+        why = str(got.get("tail") or "").strip().splitlines()
+        lines.append(f"{label} {nodeid}" + (f"：{why[0]}" if verdict == "error" and why else ""))
+    rest = len(nodeids) - FLAKE_PROBE_MAX_IDS
+    if rest > 0:
+        lines.append(f"…（还有 {rest} 条红 nodeid 没复核）")
+    return "\n".join(lines)
+
+
+def gate_detail_for(out: str, name: str) -> str:
+    """红门的 `detail`：第一段放隔离判定（只对 pytest 门），后面照旧是输出尾部。"""
+    body = gate_detail(out or "")
+    if name != "pytest":
+        return body
+    head = flake_detail_head(out or "")
+    room = DETAIL_MAX_CHARS - len(head) - 1
+    if room <= 0:
+        return head[:DETAIL_MAX_CHARS]
+    return f"{head}\n{body[-room:]}" if body else head
+
+
 def _strip_green(text: str) -> str:
     """把行首的 `[OK ]` / `[OK]` 摘掉 —— 红门上不许留绿的形状（卡 E67）。"""
     for mark in ("[OK ]", "[OK]"):
@@ -1580,7 +1669,7 @@ def finish_gate(
         "seconds": round(time.time() - t0, 2),
         "summary": summarize(out or "", exit_code),
         # ★ 卡 E67：原始 traceback 要留得住 —— `mark_suspect_rows()` 只认这个字段。
-        "detail": gate_detail(out or "") if gate_failed(exit_code) else "",
+        "detail": gate_detail_for(out or "", name) if gate_failed(exit_code) else "",
     }
     if timed_out:
         item["summary"] = (

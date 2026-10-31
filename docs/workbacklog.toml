@@ -4820,3 +4820,21 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E72"
+task = "T-AG561"
+title = "门禁的假红不许靠重跑洗白：红单要带隔离复核判定"
+tree = ".wt/E72"
+spec = "复盘/卡/卡E72-门禁的假红不许靠重跑洗白.md"
+files = [
+  "scripts/flake_probe.py",
+  "scripts/run_gates.py",
+  "tests/test_flake_probe.py",
+  "skills/pipe-gate/SKILL.md",
+  "docs/subsystems/ci/README.md",
+  "复盘/卡/卡E72-门禁的假红不许靠重跑洗白.md",
+]
+status = "done"
+risk = "mid"
+depends = []

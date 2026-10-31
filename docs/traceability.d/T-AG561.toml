@@ -1,0 +1,29 @@
+[entries."T-AG561"]
+id = "T-AG561"
+title = "门禁的假红不许靠重跑洗白：红单要带隔离复核判定"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E72-门禁的假红不许靠重跑洗白.md",
+  "file:scripts/flake_probe.py",
+  "file:scripts/run_gates.py",
+  "file:tests/test_flake_probe.py",
+  "file:skills/pipe-gate/SKILL.md",
+  "file:docs/subsystems/ci/README.md",
+  "file:复盘/卡/卡E72-门禁的假红不许靠重跑洗白.md",
+  "test:test_flake_probe.py",
+  "text:scripts/flake_probe.py::REPRODUCED = ",
+  "text:scripts/flake_probe.py::def probe(",
+  "text:scripts/run_gates.py::FLAKE_PROBE_ENV = ",
+  "text:scripts/run_gates.py::FLAKE_LABELS = ",
+  "text:tests/test_flake_probe.py::def test_empty_nodeid_list_is_a_loud_error(",
+  "text:skills/pipe-gate/SKILL.md::TF_GATE_FLAKE_PROBE=1",
+]
+gaps = [
+  """- 隔离复核默认关（`TF_GATE_FLAKE_PROBE=1` 才开，会真起 pytest）；关着时门禁行为与从前逐字相同，代价是假红仍然只能靠人肉读。
+- 本卡不治 flake 本身：`tests/test_serve_port.py` 的 2 秒窗与 `tests/test_invest_axis.py` 的共享态是两条独立真缺陷，各自要一张卡。
+- 只复核前 8 条红 nodeid（`FLAKE_PROBE_MAX_IDS`），超了写一行说明 —— 红单很多时后面的判不出来。
+- 探针只认 pytest 的红单形状；`web_live` / `commands` 这类门的红没有隔离判定。
+""",
+]

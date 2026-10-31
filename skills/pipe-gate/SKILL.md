@@ -19,7 +19,7 @@ description: 判断「现在这棵树过不过门」，并读懂门禁结果（�
 ## 什么时候别用
 
 - 要验证**门本身还活着**（判据没退化成注释）：那是金丝雀自检，不是跑门。
-- 想把红改成绿：先修代码或修门；**不许**放宽判据、加豁免、手改 `gates/last.json`。
+- 想把红改成绿：先修代码或修门；**不许**放宽判据、加豁免、手改 `gates/last.json`；**也不许靠再跑一次门禁把它跑绿** —— 假红要读红门 `detail` 第一段的隔离判定，重跑不是证据。
 - 只想看「今天该做什么 / 谁在飞」：用 `pipe-workbench`。
 - 已经有一趟门禁在跑：**同一时间只跑一趟**（重活并发 = 假红的头号来源）。
 
@@ -57,6 +57,7 @@ python -X utf8 scripts/run_gates.py --seal            # 只更新 last.json 的 
 - 每道门一行（名字 / `exit_code` / 秒数）：`python -X utf8 tools/pipeline_view.py --json` 的 `gates.items`。
 - 自己动过的门（或它的输入）要 `--no-reuse` 真跑；复跑后用 `python -X utf8 tools/wb_verify.py --tree .` 看「复用 N 道」有没有降下来。
 - 红门的日志尾在 `gates/logs/<门名>.log`；跨树汇总、缺源说明用 `python -X utf8 tools/pipeline_view.py --json`（缺块给 `null` + note，不洗成空）。
+- 红门先看 `detail` 第一段的隔离判定：`[隔离跑绿]` / `[隔离也红]` / `[判不出]` —— **`[隔离跑绿]` 也不等于通过**，门照样红、退出码不改。默认关（`TF_GATE_FLAKE_PROBE=1` 才开），关着时 detail 会明写「本次未做隔离复核」；跨树读数用 `python -X utf8 tools/pipeline_view.py --json`。
 
 ## 常见错与处置
 
