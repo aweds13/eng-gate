@@ -17,6 +17,10 @@ r"""pool 的花费记账（卡 A338 · T-AG540；对等 magpie `internal/budget`
   `forget()` 同理：**删不掉判不出的东西**，判不出的行一律留着。
 
 ★ **不自动忘账**：`forget()` 只在人显式 `reset` 时调 —— 判据路径里自动忘账 = 自动松开限额。
+
+★ **有价 / 无价**：`Entry.priced` 只是这行账**有没有价**的标记（缺省 `True`，老行照样算有价），
+  钱的数仍然只有 `cost` 一个来源、仍然由调用方给。`unpriced()` 数「没有价」的行 —— 它是提问，
+  不是估算：本模块**仍然不算钱**（算术在 `tools/pool/pricing.py`，两边互不调用）。
 """
 
 from __future__ import annotations
@@ -57,6 +61,7 @@ class Entry:
     cache_read: int
     cost: float
     model: str = ""  # 清空用量要按模型清（F44）；缺席 = ""，不判整行坏
+    priced: bool = True  # 有价/无价（F42）；缺席 = True（老行都是有价的老口径）
 
 
 def _local(moment: datetime) -> datetime:
@@ -109,6 +114,9 @@ def _entry(line: str) -> Entry | None:
     raw_cost = row.get("cost", 0.0)
     if isinstance(raw_cost, bool) or not isinstance(raw_cost, int | float):
         return None
+    priced = row.get("priced", True)
+    if not isinstance(priced, bool):
+        return None
     return Entry(
         at=_local(moment),
         account=account,
@@ -118,6 +126,7 @@ def _entry(line: str) -> Entry | None:
         cache_read=counters["cache_read"],
         cost=float(raw_cost),
         model=raw_model if isinstance(raw_model := row.get("model"), str) else "",
+        priced=priced,
     )
 
 
@@ -189,6 +198,33 @@ def sums(
         cost += entry.cost
         calls += 1
     return tokens, cost, calls
+
+
+def unpriced(
+    account: str, start: datetime, end: datetime, *, root: Path | str | None = None
+) -> int:
+    """`start <= at < end`（**左闭右开**，与 `sums()` 同口径）里该账号**没有价**的行数。
+
+    「没有价」= 那一行的 `priced` 是 `False`（老行没有这个键 ⇒ 缺省 `True`，算有价）。
+    口径照 `sums()`：坏行**跳过**（不当「有价」也不当「无价」，只是不计）；文件不存在 ⇒ `0`。
+
+    ★ 只**数**，不估：本模块仍然不算钱（算术在 `tools/pool/pricing.py`）。返回 0 时调用方
+      **不许**打印 `"0 calls unpriced"` —— 一行「0 条无价」除了噪声什么都不是。
+    """
+    path = spend_path(root)
+    if not path.exists():
+        return 0
+    low = _local(start)
+    high = _local(end)
+    missing = 0
+    for line in _lines(path):
+        entry = _entry(line)
+        if entry is None or entry.account != account or entry.priced:
+            continue
+        if not low <= entry.at < high:
+            continue
+        missing += 1
+    return missing
 
 
 def audit(*, root: Path | str | None = None) -> dict[str, int]:

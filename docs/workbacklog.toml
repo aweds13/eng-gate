@@ -4888,47 +4888,16 @@ risk = "mid"
 depends = []
 
 [[cards]]
-id = "A352"
-task = "T-AG565"
-title = "谁先干这趟活：七种内置路由策略 + 平滑加权轮转"
-tree = ".wt/A352"
-spec = "复盘/卡/卡A352-谁先干这趟活.md"
+id = "A354"
+task = "T-AG567"
+title = "定价算术：十进制位移、严格大于的分档、整单按档计"
+tree = ".wt/A354"
+spec = "复盘/卡/卡A354-定价算术.md"
 files = [
-  "tools/pool/route.py",
-  "tests/test_pool_route_strategies.py",
-  "复盘/卡/卡A352-谁先干这趟活.md",
-]
-status = "done"
-risk = "mid"
-depends = []
-
-[[cards]]
-id = "A358"
-task = "T-AG571"
-title = "一行说完「现在能不能派」，多一个字都是噪音"
-tree = ".wt/A358"
-spec = "复盘/卡/卡A358-一行说完能不能派.md"
-files = [
-  "tools/pool/quota_line.py",
-  "tools/pool_quota.py",
-  "tests/test_pool_quota_line.py",
-  "复盘/卡/卡A358-一行说完能不能派.md",
-]
-status = "done"
-risk = "mid"
-depends = []
-
-[[cards]]
-id = "A357"
-task = "T-AG570"
-title = "清空用量：只加一条到此为止不算的标记，账一行不动"
-tree = ".wt/A357"
-spec = "复盘/卡/卡A357-清空用量.md"
-files = [
-  "tools/pool/cleared.py",
+  "tools/pool/pricing.py",
   "tools/pool/ledger_spend.py",
-  "tests/test_pool_cleared.py",
-  "复盘/卡/卡A357-清空用量.md",
+  "tests/test_pool_pricing.py",
+  "复盘/卡/卡A354-定价算术.md",
 ]
 status = "done"
 risk = "mid"
