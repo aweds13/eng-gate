@@ -626,6 +626,26 @@ test_model_registry.py` 79 passed（与加 docstring 前一字不差）；反向
 - `check_docs` 死指针 **145 未涨**；`docs` / `check_layers` / `audit_titles` 三门绿。
 - 旧数字零残留：`7143` 0、`17 个 py` 0、`2026-10-25` 0。
 - 全量 22 门：`ok=True`、`pytest` 全绿。
+## 2026-10-31 · 限额在派活之前真的拦了一次（F33 判据层接上第一个生产调用方）（卡 A350，T-AG562）
+
+### 病灶
+
+F33 的限额判据层（`tools/pool/limits.py` / `limits_policy.py` / `limits_check.py` / `ledger_spend.py`）四份文件直接调用方清单里**没有一个生产调用方** —— 判据只被 `tests/` 钉着，`tools/wb_dispatch.py` 从头到尾没问过一句「这个号这个窗口还允许派活吗」。也就是说：策略文件里写着「某号某个窗口最多多少 token」，派活器照样派，限额判据只是躺在库里的死代码。
+
+另一半是账本只读不写：`ledger_spend.sums()` 有调用方、`append()` 没有 ⇒ 账本里从来没有本仓自己记下的一笔使用量。
+
+### 改法
+
+`tools/wb_dispatch.py` 两处，**都在 `reserve()` 之前**：
+
+1. **占树之前问一次**：稳定 id（`account_id`）在策略里有限额时，取一次 `now`，用它同时算窗口 `limits_policy.window(limits[i], now)` 与求和 `ledger_spend.sums(...)`（**两边必须同一个 `now`**，否则窗口边界上会差一笔），再交 `limits_check.check(limits, spent=..., now=...)`。判不过就并进既有的 `problems`，走同一条 `[FAIL] 不派活 —— 前置检查没过：` 出口（退 2，**不新开退出码**）。
+2. **写回一行**：数与 `usage` 那三个计数器同源（CLI 自己报的，**不自己估**），`at` 用这一轮的**开始**时间，走 `ledger_spend.append()`。空账号（没给 `--account`）**整行不写**。
+
+### 三条如实说明
+
+- `cost` 恒写 `0.0`：vendor 自报里没有金额 ⇒ **不编乘数**。代价是「按钱限额」那一支今天实际不生效，只有 tokens 轴真在拦。这条落差写在代码注释与这里，不在代码里偷偷补一个乘数。
+- 策略文件**存在但读不懂** ⇒ `LimitError` ⇒ **拒派并说清哪一段坏了**，不许吞成「没设限额」（那是悄悄松开判据）。文件**不存在** ⇒ `load_limits()` 回 `{}` ⇒ 这一段一个副作用都没有。
+- 四个判据模块**一个字节没改**（本卡只接线）；发现的问题写进缺口，不顺手改。
 ## 2026-10-30 · 白名单里的串必须有产出方：一条死话术把整道 pytest 门判红（E68，T-AG529）
 
 `tools/pytest_select.py` 的 `KNOWN_FALLBACK_MARKS` 是**手抄**的一份话术表，而真正会生成

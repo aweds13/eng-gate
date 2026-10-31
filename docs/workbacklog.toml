@@ -4808,17 +4808,14 @@ risk = "mid"
 depends = []
 
 [[cards]]
-id = "F11"
-task = "T-AG559"
-title = "pool 项目书不许手抄体量：40 个文件 / 13817 行改成现算（F11）"
-tree = ".wt/F11"
-spec = "复盘/卡/卡F11-pool项目书自己就是过期的.md"
+id = "A350"
+task = "T-AG562"
+title = "限额要在派活之前真的拦一次：magpie 限额判据接上第一个生产调用方"
+tree = ".wt/A350"
+spec = "复盘/卡/卡A350-限额要在派活之前真的拦一次.md"
 files = [
-  "scripts/gen_pool_readme.py",
-  "docs/subsystems/pool/modules.toml",
-  "docs/subsystems/pool/README.md",
-  "tests/test_pool_readme_counts.py",
-  "复盘/卡/卡F11-pool项目书自己就是过期的.md",
+  "tools/wb_dispatch.py",
+  "tests/test_pool_limits_wiring.py",
 ]
 status = "done"
 risk = "mid"

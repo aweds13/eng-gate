@@ -3433,6 +3433,46 @@ def main() -> int:
         else:
             print(f"[账号自检] {probe_msg}", flush=True)
 
+    # ★ 卡 A350（T-AG562）：限额闸（F33 判据层第一次有生产调用方）。位置固定在
+    #   **占树之前、既有 `if problems:` 出口之前** —— 判不过就并进 problems，走同一条
+    #   `[FAIL] 不派活 —— 前置检查没过：` 出口（退 2，**不新开退出码**）。
+    #   ★ 判据 2：`limits` 的键是**稳定 id**（`account_id`，与租约 / RPM / lanes 同一个键），
+    #     不是 `args.account` 的 profile 名；`spent[i]` 的窗口用
+    #     `limits_policy.window(limits[i], now)` 算，求和使用 `ledger_spend.sums(...)`，
+    #     两边**必须同一个 `now`** —— 所以这里只取一次时间，往下传同一个对象。
+    #   ★ 判据 5：策略文件存在但读不懂 ⇒ `LimitError` ⇒ **拒派**并说清哪一段坏了，
+    #     **不许**吞成「没设限额」（那是悄悄松开判据）。
+    #   ★ 判据 4：文件不存在 ⇒ `load_limits()` 回 `{}` ⇒ 这一段一个副作用都没有。
+    if account_id:
+        from pool import ledger_spend as pool_ledger_spend
+        from pool import limits_check as pool_limits_check
+        from pool import limits_policy as pool_limits_policy
+        try:
+            limits = pool_limits_policy.load_limits().get(account_id, ())
+        except pool_limits_policy.LimitError as exc:
+            limits = ()
+            problems.append(f"限额策略读不懂 ⇒ 拒派（不许当成「没设限额」）：{exc}")
+        if limits:
+            limit_now = datetime.now(pool_limits_policy.TZ)
+            spent: dict[int, tuple[int, float]] = {}
+            try:
+                for index, limit in enumerate(limits):
+                    start, end = pool_limits_policy.window(limit, limit_now)
+                    tokens, cost, _calls = pool_ledger_spend.sums(
+                        account_id, start, end, cache_reads=limit.cache_reads, root=ROOT)
+                    spent[index] = (tokens, cost)
+                limit_verdict = pool_limits_check.check(limits, spent=spent, now=limit_now)
+            except pool_limits_policy.LimitError as exc:
+                limit_verdict = None
+                problems.append(f"限额窗口算不出来 ⇒ 拒派：{exc}")
+            if limit_verdict is not None and not limit_verdict.allowed:
+                reset_at = (limit_verdict.reset_at.isoformat()
+                            if limit_verdict.reset_at is not None else "（未知）")
+                problems.append(
+                    f"限额已满（号 {account_id}）：{limit_verdict.why}；"
+                    f"reset_at={reset_at}；retry_after_s={limit_verdict.retry_after_s}"
+                    f"（等 {limit_verdict.retry_after_s} 秒再来）⇒ 不占树、不派活")
+
     if problems:
         print("[FAIL] 不派活 —— 前置检查没过：", file=sys.stderr, flush=True)
         for item in problems:
@@ -3824,6 +3864,29 @@ def main() -> int:
         usage = result_usage(round_lines)
         for key in usage_total:
             usage_total[key] += usage[key]
+        # ★ 卡 A350（T-AG562）：限额账本写回 —— 与上一行**同一处、同一轮**：数还是 `usage`
+        #   那三个计数器（CLI 自己报的，**不自己估**），`at` 用这一轮的**开始**时间
+        #   （窗口归属才和上面 `sums()` 的口径对得上）。
+        #   ★ 走 `ledger_spend.append()`（**不许**在这里另写一份 JSONL —— 那是第二份真源）。
+        #   ★ `cost` 恒写 `0.0`：vendor 自报里没有金额 ⇒ **不编乘数**。这意味着 cost 轴今天
+        #     永远不涨，「按钱限额」那一支实际不生效（只有 tokens 轴真在拦）——这条落差
+        #     在卡的回执与变更记录里说实话，不在这里偷偷补一个乘数。
+        #   ★ 空账号（没给 `--account`）⇒ **整行不写**：否则账本里全是空账号，
+        #     按号求和 / 按号判限额的读数全被污染。
+        if account_id:
+            from pool import ledger_spend as pool_ledger_spend
+            try:
+                pool_ledger_spend.append(
+                    account_id, args.card, model,
+                    input_tokens=usage["input_tokens"],
+                    output_tokens=usage["output_tokens"],
+                    cache_read=usage["cache_read"],
+                    cost=0.0,
+                    at=datetime.fromtimestamp(attempt_started, tz=pool_ledger_spend.TZ),
+                    root=ROOT)
+            except (OSError, ValueError) as spend_exc:   # 记不下来不许影响派活
+                print(f"[账 ] 用量没记进限额账本：{spend_exc}（不影响这次派活）",
+                      file=sys.stderr, flush=True)
         append_usage_line(card=args.card, model=model, attempt=attempts,
                           started_at=attempt_started, usage=usage, code=code, reason=reason)
         # ★ 卡 A345（T-AG547）：接入点 2 —— 记下「这张卡这次是谁答的」。与用量落账**同一处**

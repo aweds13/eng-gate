@@ -1,0 +1,23 @@
+[entries."T-AG562"]
+id = "T-AG562"
+title = "限额要在派活之前真的拦一次：magpie 限额判据接上第一个生产调用方"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A350-限额要在派活之前真的拦一次.md",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_pool_limits_wiring.py",
+  "test:test_pool_limits_wiring.py",
+  "text:tools/wb_dispatch.py::limits = pool_limits_policy.load_limits().get(account_id, ())",
+  "text:tools/wb_dispatch.py::limit_verdict = pool_limits_check.check(limits, spent=spent, now=limit_now)",
+  "text:tools/wb_dispatch.py::from pool import limits_check as pool_limits_check",
+  "text:tools/wb_dispatch.py::pool_ledger_spend.append(",
+  "text:tests/test_pool_limits_wiring.py::def test_refuses_before_taking_the_tree_when_the_window_is_spent(",
+]
+gaps = [
+  """- cost 轴今天永远不涨：vendor 自报没有金额，`cost=0.0` 是「不编」的结果，不是实现遗漏。要真按钱拦，得先有可信的单价来源。
+- 限额只接了 `tools/wb_dispatch.py` 一条派活路径；`tools/pool_mcp.py` 的 MCP 派活面不走这里（同一份判据，第二个调用方是另一张卡）。
+- `limits.toml` 的账号键必须是稳定 id 才生效；策略文件用的是 profile 名时这一段会被当成「没设限额」（未知键 = 无约束）。这条缺口写进回执，不在本卡定契约。
+""",
+]
