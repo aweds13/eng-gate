@@ -3271,9 +3271,74 @@ def _account_argv(monkeypatch, *extra: str) -> None:
                         ["wb_dispatch.py", "--card", "001", "--spec", "spec.md", *extra])
 
 
+# ============================================ 卡 E80 · T-AG583：七条账号用例自带账本
+#
+# ★ 病根（已实测）：这七条 `--account` 用例以前是靠**宿主机**上那份仓外账本站着的 ——
+#   `find_ledger()` 找不到账本就 `resolve_account()` 退 2 拒派，于是云机（没有
+#   `infra/pool/accounts.toml`）整片红：`gates/diag/cloud-A354c.log` 里逐字是
+#   「账号账本读不到 … 没找到账号账本」。判据跟着宿主目录形状走，正是卡 E70 禁的那件事。
+# ★ 修法（判据 1 / 2）：**一份**最小账本 + `TF_ACCOUNTS_TOML` 指到用例自己的沙箱
+#   （`monkeypatch.setenv` 自动还原）。七条都调下面这一个 helper —— **不许**各写一份字面量。
+# ★ 不碰产品（判据 3）：`find_ledger()` / `_account_rows()` / `resolve_account()` 一字不改 ——
+#   账本真缺失时「拒派 + 点名三种修法」是**正确**行为，由
+#   `test_unresolvable_profile_refuses_and_names_it` 的 ② 那半继续钉着，别为了让门绿把它改软。
+
+#: 最小账本的稳定 id。★ 账本里**不写** `profile` 键 ⇒ 名字靠 ③ 步（`credential.locator` 末段）
+#: 解析出来，于是「③ 步只认 `kind == "dir"`」这条范畴判据在这七条上也有牙
+#: （反向变异 M4：`kind` 改成 `file` ⇒ 留痕那条
+#: `test_account_is_recorded_in_the_lease_note_and_the_log` 必红）。
+_E80_STABLE_ID = "codebuddy-demo"
+
+#: 最小账本：只含 `[[account]]` + `[account.credential]` + `[account.quota]` + `[account.health]`。
+#: ★ 为什么正好这四段：`load_ledger(strict=True)` 逐字段要 id/label/platform/state/added_at/
+#:   approved_models 与 credential 的 kind/locator；quota/health 省掉也能读，但写成账本的真实
+#:   形状，将来校验加严时不会先坏在这里。`approved_models = []` 是账本口径（空 = 这个号不许派活），
+#:   派活路径不读它 —— 三条闸在 `lanes.toml` / `rpm.toml` / 仓外 `limits.toml`。
+_E80_LEDGER_TOML = """
+[[account]]
+id = "{ident}"
+label = "沙箱里的 demo 号"
+platform = "codebuddy"
+state = "active"
+added_at = "2026-11-01"
+approved_models = []
+[account.credential]
+kind = "dir"
+locator = "~/codebuddy-accounts/{profile}"
+[account.quota]
+unit = "credits"
+source = "unknown"
+observed_at = ""
+samples = []
+[account.health]
+state = "unknown"
+consecutive_failures = 0
+"""
+
+
+def _sandbox_ledger(sandbox: Path, monkeypatch, *, profile: str = "demo",
+                    ident: str = _E80_STABLE_ID) -> Path:
+    """把账号账本钉到**本用例自己的沙箱**（返回账本路径，并设好 `TF_ACCOUNTS_TOML`）。
+
+    ★ 判据 1：藏掉仓外账本（`TF_ACCOUNTS_TOML="C:/nonexistent/accounts.toml"`）时，调了它的
+      用例仍必须全绿 —— 这是本卡唯一的验收口径。
+    ★ 判据 2：全文件**只有这一份** TOML 字面量；七条用例各写一份就一定会各自漂。
+    ★ 复用 `_use_ledger()`（卡 A344 那组的体例，定义在同一模块下面）：它一并把
+      `_approved_models_from_whitelist()` 钉成 None —— 否则账本校验会去摸宿主机的仓外白名单
+      （云机上没有那份文件，判据又会跟宿主目录形状绑定）。
+    ★ `monkeypatch.setenv` ⇒ 用例结束自动还原，既不会漏给下一条用例，也不会漏到真账本。
+    ★ 只用标准库：拼字符串就够，不新增 import（`tomllib` 是产品读账本用的，这里不需要）。
+    """
+    ledger = sandbox / "accounts.toml"
+    ledger.write_text(_E80_LEDGER_TOML.format(ident=ident, profile=profile), encoding="utf-8")
+    _use_ledger(monkeypatch, ledger)
+    return ledger
+
+
 def test_account_injects_the_profile_env_into_the_worker(
         sandbox: Path, monkeypatch, capsys) -> None:
     """① 给了 `--account` ⇒ 工人环境里**真有**那六个变量，值来自那份工具的**输出**。"""
+    _sandbox_ledger(sandbox, monkeypatch)
     vars_ = _demo_vars()
     assert set(_ACCOUNT_KEYS) <= set(vars_), "桩要覆盖那六项（判据自检）"
     stub = _account_stub(sandbox, {"demo": vars_, "other": _demo_vars()})
@@ -3307,6 +3372,7 @@ def test_without_account_the_worker_env_and_the_note_are_untouched(
 
 def test_missing_profile_refuses_and_names_it(sandbox: Path, monkeypatch, capsys) -> None:
     """③ profile 不存在 ⇒ **拒派并点名**（列出可用 profile），**一个工人都别起**。"""
+    _sandbox_ledger(sandbox, monkeypatch)
     stub = _account_stub(sandbox, {"demo": _demo_vars(), "other": _demo_vars()})
     monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
     dispatched: list[list[str]] = []
@@ -3322,6 +3388,7 @@ def test_missing_profile_refuses_and_names_it(sandbox: Path, monkeypatch, capsys
 def test_account_values_follow_the_tool_not_a_local_copy(
         sandbox: Path, monkeypatch) -> None:
     """④a **调**不是**抄**：桩换一组值 ⇒ 派活器跟着变。"""
+    _sandbox_ledger(sandbox, monkeypatch)
     stub = _account_stub(sandbox, {"demo": _demo_vars(userprofile="D:/别的号/home")})
     monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
     seen: dict = {}
@@ -3351,6 +3418,7 @@ def test_no_local_copy_of_the_profile_list_in_the_dispatcher(sandbox: Path) -> N
 def test_account_is_recorded_in_the_lease_note_and_the_log(
         sandbox: Path, monkeypatch, capsys) -> None:
     """⑤ 留痕：租约 note 与派活日志里**看得见**那个 profile 名。"""
+    _sandbox_ledger(sandbox, monkeypatch)
     stub = _account_stub(sandbox, {"demo": _demo_vars()})
     monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
     monkeypatch.setattr(wd, "run_worker", _fake_runner([]))
@@ -3358,6 +3426,11 @@ def test_account_is_recorded_in_the_lease_note_and_the_log(
     _account_argv(monkeypatch, "--account", "demo", "--execute")
     assert wd.main() == 0
     assert "account=demo" in note["note"], f"租约没记下 profile：{note.get('note')!r}"
+    # ★ 卡 E80：账本里**没有** `profile` 键 ⇒ 这个 id 只能由 ③ 步（`credential.locator`
+    #   末段）推断出来。把推断的产物钉住，判据 1 才有牙
+    #   （反向变异 M4：夹具里的 `kind` 从 `dir` 改成 `file` ⇒ ③ 步按范畴跳过 ⇒ 这里必红）。
+    assert note["account"] == _E80_STABLE_ID, (
+        f"③ 步没把 demo 解析成稳定 id：{note.get('account')!r}")
     assert "[账号]" in capsys.readouterr().out
 
 
@@ -3447,6 +3520,7 @@ def test_account_auth_uses_the_profile_env_and_model(sandbox: Path, monkeypatch)
       判 `glm-5.2` 未授权、`main()` 退 2，`assert 2 == 0`。判据本身不动，把开关**隔离**掉
       （指到不存在的路径），再显式把 `glm-5.2` 一次性授权 —— 于是「闸门放行」不再看环境脸色。
     """
+    _sandbox_ledger(sandbox, monkeypatch)
     monkeypatch.setenv("TF_MODEL_SWITCHES", str(sandbox / "absent-switches.toml"))
     monkeypatch.setattr(wd, "ONE_OFF_MODELS", ("glm-5.2",))
     stub = _account_stub(sandbox, {"demo": _demo_vars()})
@@ -3472,6 +3546,7 @@ def test_account_refuses_when_the_profile_login_fails(sandbox: Path, monkeypatch
 
     ★ F1/F3 并案：profile check 退 0 只代表目录在；"号可用"由 auth_ok 用 profile 环境发探针判。
     """
+    _sandbox_ledger(sandbox, monkeypatch)
     stub = _account_stub(sandbox, {"demo": _demo_vars()})
     monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
 
@@ -3491,6 +3566,7 @@ def test_account_refuses_when_the_profile_login_fails(sandbox: Path, monkeypatch
 def test_dispatch_probes_the_account_env_from_the_child_side(sandbox: Path, monkeypatch,
                                                              capsys) -> None:
     """F2a 生产侧读数：派活前用 worker_env 起子进程读自己的环境回话 —— 不再"自己打印自己"。"""
+    _sandbox_ledger(sandbox, monkeypatch)
     stub = _account_stub(sandbox, {"demo": _demo_vars()})
     monkeypatch.setenv("TF_ACCOUNT_SCRIPT", str(stub))
     monkeypatch.setattr(wd, "run_worker", _fake_runner([]))

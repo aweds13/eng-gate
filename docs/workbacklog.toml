@@ -5110,3 +5110,17 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E80"
+task = "T-AG583"
+title = "那七条账号用例，靠宿主机上那份仓外账本站着"
+tree = ".wt/E80"
+spec = "复盘/卡/卡E80-七条用例靠宿主机账本站着.md"
+files = [
+  "tests/test_wb_dispatch.py",
+  "复盘/卡/卡E80-七条用例靠宿主机账本站着.md",
+]
+status = "done"
+risk = "mid"
+depends = []

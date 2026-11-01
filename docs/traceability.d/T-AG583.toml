@@ -1,0 +1,21 @@
+[entries."T-AG583"]
+id = "T-AG583"
+title = "那七条账号用例，靠宿主机上那份仓外账本站着"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E80-七条用例靠宿主机账本站着.md",
+  "file:tests/test_wb_dispatch.py",
+  "file:复盘/卡/卡E80-七条用例靠宿主机账本站着.md",
+  "test:test_wb_dispatch.py",
+  "text:tests/test_wb_dispatch.py::def _sandbox_ledger(",
+  "text:tests/test_wb_dispatch.py::== _E80_STABLE_ID",
+]
+gaps = [
+  """本卡只治用例，**没有改**产品的找账本逻辑（`find_ledger()` / `_account_rows()` / `resolve_account()` 零改动）—— 账本真缺失时拒派是正确行为。
+另五个读账本的测试文件（`test_pool_account_id.py` / `test_pool_account_scope.py` / `test_pool_accounts.py` / `test_pool_due.py` / `test_pool_quota_history.py`）本来自带账本，藏账本口径下 `114 passed, 1 skipped`，不是第八条缺口。
+`infra/pool/accounts.toml` 的内容**没有**抄进仓里（夹具里只有沙箱账号 `codebuddy-demo`），也没有加进 `scripts/cloud/run_gate.sh` 的 `cfg_allow` 白名单（卡 E54 判据逐字禁止）。
+变异脚本 `gates/diag/_rev_E80.py` 落在 gitignored 目录，不进提交。
+""",
+]
