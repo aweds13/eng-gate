@@ -54,6 +54,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / "tools"
 
@@ -935,3 +937,59 @@ def test_every_leg_checks_the_index(tmp_path: Path) -> None:
     out = _out(stale)
     assert stale.returncode == 4, out
     assert INDEX_REL in out, out                            # 腿② 的不一致里点了 INDEX 的名
+
+
+# ============================================ 卡 E79（`T-AG582`）：`run()` 真会因 rc 非零停手
+
+
+def test_landing_run_exits_when_the_child_fails(tmp_path: Path) -> None:
+    """★ 落地链的 `run()` **默认 `check=True`**：子进程非零 ⇒ 打一行 + `sys.exit(2)`。
+
+    为什么钉它（卡 E79 的来路）：卡 E77 的缺口里原写「`landing.py` ⑦ 的 `audit_progress.py`
+    子进程**没查退出码**」—— **实测是假的**。`tools/pool/landing.py:201` 的
+    `def run(cmd, cwd, check: bool = True)` 在 `r.returncode != 0` 时直接 `sys.exit(2)`；
+    `:2656` 那行 `audit = run([... scripts/audit_progress.py], cwd=wt)` **没传 `check=False``。
+
+    ⇒ 这条钉子防的是「有人照着那句假缺口把 `check=False` 加回去」。
+    ★ 它跑的是**真件**（拷进假仓库的 `tools/pool/landing.py`），不是桩。
+    """
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        from pool import landing as real_landing
+    finally:
+        sys.path.pop(0)
+
+    # ① 默认（check=True）：子进程非零 ⇒ SystemExit(2)，且**不是** 0、不是别的码
+    with pytest.raises(SystemExit) as caught:
+        real_landing.run(
+            [sys.executable, "-X", "utf8", "-c", "raise SystemExit(7)"], tmp_path)
+    assert caught.value.code == 2, caught.value.code
+
+    # ①b 边界 **rc=1**：`!= 0` 与 `> 1` 在这一格分得开（变异 M4 靠它咬住）
+    with pytest.raises(SystemExit) as caught1:
+        real_landing.run(
+            [sys.executable, "-X", "utf8", "-c", "raise SystemExit(1)"], tmp_path)
+    assert caught1.value.code == 2, caught1.value.code
+
+    # ② 反证：显式 check=False ⇒ 不停手，把那条 CompletedProcess 原样交回来
+    done = real_landing.run(
+        [sys.executable, "-X", "utf8", "-c", "raise SystemExit(7)"], tmp_path, check=False)
+    assert done.returncode == 7, done.returncode
+
+    # ③ 绿的那一支照样不抛（别把 check=True 写成「非零才跑」那种反向）
+    ok = real_landing.run([sys.executable, "-X", "utf8", "-c", "pass"], tmp_path)
+    assert ok.returncode == 0, ok.returncode
+
+
+def test_the_audit_step_does_not_pass_check_false() -> None:
+    """★ ⑦ 那一步的 `run(...)` **不许**带 `check=False`（带了就等于把审计红当警告）。
+
+    这是上一条钉子的**源码侧**镜像：上一条证「`run()` 会停手」，这一条证「⑦ 那一步没关掉它」。
+    两条一起才封住「一级证据 + 二级证据」—— 只看上一条，一个 `check=False` 就能让它全绿。
+    """
+    body = (ROOT / "tools" / "pool" / "landing.py").read_text(encoding="utf-8")
+    # ★ 只认 ⑦ 那一步（不带 `--all`）—— 另一处 `_pf_run(..., "--all")` 是快预检，另一件事。
+    hits = [ln for ln in body.splitlines()
+            if "scripts/audit_progress.py" in ln and "run(" in ln and "--all" not in ln]
+    assert len(hits) == 1, hits
+    assert "check=False" not in hits[0], hits[0]

@@ -5094,3 +5094,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E79"
+task = "T-AG582"
+title = "E77 的缺口里写着一条假事实：audit 的 rc 早就查了"
+tree = ".wt/E79"
+spec = "复盘/卡/卡E79-E77的缺口里写着一条假事实.md"
+files = [
+  "tests/test_pool_landing.py",
+  "复盘/卡/卡E79-E77的缺口里写着一条假事实.md",
+  "复盘/卡/卡E77-E76修好的那件事自己又犯了一次.md",
+  "docs/traceability.d/T-AG580.toml",
+]
+status = "done"
+risk = "mid"
+depends = []

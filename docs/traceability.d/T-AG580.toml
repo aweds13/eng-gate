@@ -20,7 +20,7 @@ evidence = [
 gaps = [
   """- **结构边界命中本笔**：本笔同时改 `tools/wb_land.py` 与 `tools/pool/landing.py` 两条宿主 ⇒ 三条腿跑的都是改动前的代码。工程缓解：这种笔落地后主树会留下未提交的 README + 退 4，重落一条命令即可。
 - **腿② 的代价**：就地修回改的是工作区，与「落地后 `-uno` = 0 行」冲突；前置腿是它的补丁，三条腿必须同时存在。
-- `tools/pool/landing.py` ⑦ 的 `scripts/audit_progress.py` 子进程 **rc 未检查**（只 print）；`.git/hooks/` 只有 `*.sample`（git hooks 没装）⇒ 这就是为什么「一笔同时改两条宿主」的盲区**in-band 修不动**。
+- 5. **（2026-11-01 更正 · 卡 E79/T-AG582）本缺口原来写着「`landing.py` ⑦ 的 `audit_progress.py` 子进程没查退出码」—— 那句话**是假的，已实测推翻**。**实测**：`tools/pool/landing.py:201` 的 `def run(cmd, cwd, check: bool = True)` 在 `r.returncode != 0` 时打 `★ 命令失败（N）` 并 **`sys.exit(2)`**；`:2656` 的 `audit = run([... scripts/audit_progress.py], cwd=wt)` **没传 `check=False`** ⇒ 审计一红，落地链当场停手。复现：`python -X utf8 -c "import sys,pathlib;sys.path.insert(0,'tools');from pool import landing;landing.run([sys.executable,'-c','raise SystemExit(7)'],pathlib.Path('.'))"` ⇒ 打 `★ 命令失败（7）` 后 `SystemExit 2`。同一条缺口里的另一半是对的：`.git/hooks/` 实测只有 `*.sample`（`ls .git/hooks/ | grep -vc sample` = **0**）、`git config core.hooksPath` **未设**。⇒ 「in-band 修不动一笔同时改多条宿主的提交」这个**结论不变**，但支柱要换成 E77 已实测的那条（三条腿都走子进程读磁盘当前代码 ⇒ 改动前的代码即被加载），**不许**再拿这条假事实当旁证。
 - `docs/INDEX.md` 是**完全同构**的缺口（E76 已实测记录），本卡不碰，另开卡。
 - `gates/diag/_rev_E77.py` 被 `.gitignore` 覆盖，变异证据只存在工作树里、不进提交（与 E66/F10/A336 同体例）。
 - 只在本机 win32 验过。

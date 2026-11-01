@@ -1,0 +1,23 @@
+[entries."T-AG582"]
+id = "T-AG582"
+title = "E77 的缺口里写着一条假事实：audit 的 rc 早就查了"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E79-E77的缺口里写着一条假事实.md",
+  "file:tests/test_pool_landing.py",
+  "file:复盘/卡/卡E79-E77的缺口里写着一条假事实.md",
+  "file:复盘/卡/卡E77-E76修好的那件事自己又犯了一次.md",
+  "file:docs/traceability.d/T-AG580.toml",
+  "test:test_pool_landing.py",
+  "text:tests/test_pool_landing.py::def test_landing_run_exits_when_the_child_fails(",
+  "text:tests/test_pool_landing.py::def test_the_audit_step_does_not_pass_check_false(",
+  "text:tools/pool/landing.py::def run(cmd: list[str], cwd: pathlib.Path, check: bool = True)",
+]
+gaps = [
+  """本卡只更正文字与立钉子，**没有改** `tools/pool/landing.py` 的任何行为（它本来就是对的）。
+`.git/hooks/` 只有 `*.sample`、`core.hooksPath` 未设 —— 提交前钩子那条路确实没有，这与 ⑦ 的 rc 是两件事，本卡不碰。
+变异脚本 `gates/diag/_rev_E79.py` 落在 gitignored 目录，不进提交。
+""",
+]
