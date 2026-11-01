@@ -3431,6 +3431,16 @@ files = ["docs/research/程天学-功能架构.md", "docs/research/程天学-截
 depends = []
 risk = "low"
 status = "done"
+[[cards]]
+id = "B5"
+task = "T-BG005"
+title = "工作台面板收口：把「剩下 4 项」做完，同时给已有 7 项补上判据"
+tree = ".wt/B5"
+spec = "复盘/卡/卡B5-工作台面板收口.md"
+files = ["docs/implementation/迁移DSH-盘点表.csv"]
+depends = ["B2"]
+risk = "mid"
+status = "done"
 
 # ================================================================ 分区 D：dsmate
 # 手机上自用的 DeepSeek 聊天客户端（src/dsmate/）。文档层已落地在

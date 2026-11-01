@@ -739,6 +739,26 @@ test_model_registry.py` 79 passed（与加 docstring 前一字不差）；反向
 - `check_docs` 死指针 **145 未涨**；`docs` / `check_layers` / `audit_titles` 三门绿。
 - 旧数字零残留：`7143` 0、`17 个 py` 0、`2026-10-25` 0。
 - 全量 22 门：`ok=True`、`pytest` 全绿。
+## 2026-11-01 T-BG005 工作台面板收口：把「剩下 4 项」做完，同时给已有 7 项补上判据
+
+- 插件仓 `D:/repo/_tools/dsh-plugins` 提交 `f56ff5c`（3 files / +776 / −9）：F88 课程标签页、F77 批量下载、F84 面板折叠、F89 请求活动四项一次落地。
+- 新增 `smoke-panel4.mjs` 39 条断言（`SMOKE: PASS ✅`）与 `smoke-left-mat.mjs` 26 条（`LEFT/MAT SMOKE: PASS ✅`）；五条既有冒烟 render/quiz/wheel/thumb/edit 全 `PASS`。
+- 宿主半新增两条缝：`GET /activity`（`ACTIVITY` 环形缓冲最近 40 条，挂 `res` 的 `finish` 与 `close`，`/activity` 自己不入账）与 `POST /export-batch`（转桥 `mode:"batch"`，走 `buildBatchExportZip` 同一条路）。
+- 新增 `runDiagAsync`：`spawn` + `Promise` + 10 分钟超时。原来的 `runDiag` 是 `spawnSync`，批量导出十门课几分钟会把整个 DSH 事件循环按住。
+- ★ 一处真缺陷：三个视图（材料/活动/下载）互斥，第一版让每个按钮各自去关另外两个，实测漏了材料那处（点材料时活动面板不关）。修法：收敛成 `setView(next)`，互斥只写一遍。
+- ★ 两处判据写错（不是代码错）：F85 折叠判据用全局 `textContent`，命中了课程标签条里的课名；F87「没有写按钮」扫了全部 `<button>`，命中工具栏的画布编辑按钮。教训：**面板级断言必须限定在那一块区域里**。
+- 盘点表 `docs/implementation/迁移DSH-盘点表.csv`：C 类 11 项全部翻 `已完成`，已完成从 18 → **25**；批次列剩 `不迁 39 / 6 号批 5 / 4 号批 4 / 1 号批 3 / 7 号批 2 / 2 号批 2 / 5 号批 2 / 8 号批 2 / 3 号批 1 / 删 5`。
+- 已知缺口如实记：F21 页面增删排序没有冒烟（走工具 `openmaic_deck`，面板侧无交互 UI）；`/export-batch` 只做静态核对，真导出等 DSH 重启后做端到端。
+## 2026-11-01 T-BG003 pika 包与散落旧版的比对回填：先证明「谁是谁的新版」
+
+- 新增 `复盘/pika迁移-新旧比对.md`（787 行）：把「新版在哪、旧版在哪、谁被谁覆盖」量成一串可核对的行。规模 4071 文件 / 1.48 GB；比对单元 3771 条，其中**逐字节相同 3697**、**同路径但内容不同 74**、只在旧版有 2、新版独有 303。
+- 新增 `复盘/pika迁移-回填方案.md`（36889 B）：11 项裁决，每项写「不拍板会怎样」；外加执行顺序与回滚口径。
+- 新增 `tools/pika_migrate.py`（46661 B）：默认 dry-run，`--execute` 才动盘；删只删「新版确有此文件且内容等价」的那些，删前逐条校验 sha。
+- ★ 推翻一条原假设：用户的「层级变动」**在文件层不存在**——3771 条里剥根后相对路径**恒等 3771/3771**，「层级变了」只发生在容器层（zip 套娃 `笔记共享vault/笔记共享vault/笔记共享vault/` 与 `payload/`）。
+- ★ 推翻第二条：所谓「skill 里有本机个性化路径要回填」**不成立**。新旧两版 13 个 skill 的全部 `.md/.yaml/.json` 里，`jelly_ware` / `D:/docs` / `Hermes` / `AppData` 命中 **0**；题库根是文档默认值（`question-database.md:21`）且新旧逐字节相同。真正要修的是仓外的 `%APPDATA%` 5 份 JSON。
+- skills 包实测 **7 个**不是 6 个（多出 `compute-fleet-manager` v1.0.6，旧包 2.1.4 里没有）。
+- 一次事故的处置：旧流程对 74 条「同路径不同内容」做了覆盖。用户拍板后 `restore_accident.py --execute` **写回 73 条 / 1.3 MB**，两道独立复核对上账（`accident_state.py`：`{'untouched': 3697, 'overwritten': 74}` → `{'untouched': 3770, 'overwritten': 1}`）。剩 1 条不可恢复的是 `知识库/pika文件_Pro/笔记共享vault/.obsidian/workspace.json`（7697 → 7924 B），存的是 Obsidian 面板布局，用户在用的 `知识库/.obsidian/` 全程未被碰。
+- 用户已在三项上拍板：① 还原 73 条（已执行）② `.obsidian/` 以 `知识库\.obsidian\` 为准（10-30 那份）③ 题库尚未建，本机不适用（`D:/repo/数据/` 整个不存在）。
 ## 2026-10-31 · 限额在派活之前真的拦了一次（F33 判据层接上第一个生产调用方）（卡 A350，T-AG562）
 
 ### 病灶

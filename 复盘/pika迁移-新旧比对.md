@@ -304,7 +304,7 @@ B5 换完文件后，这个停用标记会**照旧生效** —— 如果用户�
 | `README_AGENT.md` | 5590 | 5612 | 11 | +22 |
 
 把 U+2010 全部换回 `-` 之后，这三个文件**逐字节相同**（`identical=True`）。
-其余 45 个文件（含 `src/grid_covering_lab/app.py` 3836 B、`geometry.py` 8012 B）本来就同 hash。
+其余 45 个文件（含 `D:/repo\_tools\pika-迁移\_extracted\grid-covering-lab-source\src\grid_covering_lab\app.py` 3836 B、`geometry.py` 8012 B）本来就同 hash。
 **⇒ 同一份发布的两个排版变体，不是两个版本。** 升级时以 `Tool/代码与数据/grid-covering-lab-source/` 为准即可，
 vault 里那份可以不动（它属于笔记库内部引用）。
 
@@ -557,7 +557,7 @@ state 目录 `MPK_STATE_DIR` / `LOCALAPPDATA`；`SUPPORTED_SCHEMA_VERSIONS` 与 
 3. ★ **三份 `obsidian-vault-notes` 配置哪一份是「用户的意图」。** 生效的是（5），但它指向已失效的 Hermes 路径；
    唯一路径存在的是（4）。我无法判断用户是**想**用 `.dsh/skills` 下的那份，还是想用别的。
 4. **`知识库/.mpk/root.json` 为什么不存在。** 配置声明 `knowledge_root_id = KBROOT-442OME…`，
-   `.mpk/root.json` 在 `D:/repo/.mpk/` 下有，但 `知识库/.mpk/` 下没有。不知道是漏写还是有意。
+   `D:/repo\.mpk\root.json` 在 `D:/repo/.mpk/` 下有，但 `知识库/.mpk/` 下没有。不知道是漏写还是有意。
 5. **`代码与数据` 是什么时候、为什么从 `D:/repo/代码与数据` 搬到 `Tool/代码与数据` 的。**
    搬迁已完成（旧位置不存在），但没有任何记录说明时间点。
    对执行无影响（只要根对上），所以不阻塞。

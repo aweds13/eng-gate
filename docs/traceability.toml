@@ -9735,6 +9735,22 @@ evidence = [
 ]
 gaps = "1. 教师侧/管理员侧功能只有帮助页文字依据，无教师账号、任务禁止自行登录 ⇒ 全部归 C 级并明确标注未实测。指针 docs/research/程天学-功能架构.md2. 掌握度四分类与心流 ZONE 无任何截图看到实际渲染（本样本课程教师未建知识图谱，空态原文「老师还没有建立本课程的知识图谱，暂时无法分析」）⇒ 标为「文档 + 部分 UI 印证」。指针 docs/research/程天学-功能架构.md3. 86 张 PNG（15 MB）与 _evidence.jsonl（43 条）留在仓外 D:/repo/_tools/acm/，未入本仓提交；截图索引里逐张写明「证明了什么」作为替代。指针 D:/repo/_tools/acm/analysis/截图索引.md"
 
+[entries."T-BG005"]
+id = "T-BG005"
+title = "工作台面板收口：把「剩下 4 项」做完，同时给已有 7 项补上判据"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/卡/卡B5-工作台面板收口.md",
+  "file:docs/implementation/迁移DSH-盘点表.csv",
+  "text:docs/implementation/迁移DSH-盘点表.csv::一律懒加载",
+]
+gaps = [
+  """- F21 页面增删排序**没有冒烟**：面板侧也没有交互 UI，走的是工具 `openmaic_deck`（retitle/insert/delete/reorder 四动作全在，转给仓里 `edit_deck` 同一条路）。CSV 里已如实写这个差别，不写成「与其它七项一样」。
+- `/export-batch` 只做了静态核对（`node --check` + 逐条 grep），**没跑真导出**：真导出要连库、起 tsx 子进程、打包 pptx（分钟级），且 DSH 宿主进程仍跑旧代码。等重启 DSH 后做端到端。
+- 宿主 `ACTIVITY` 是进程内状态，重启清空 —— 与 `ACTIVE` 同口径（「宁可空不猜」），所以面板上的「请求活动」看不见重启之前的事。
+"""
+]
 [entries."T-AG529"]
 id = "T-AG529"
 title = "白名单里的串必须有产出方：一条死话术把整道 pytest 门判红"

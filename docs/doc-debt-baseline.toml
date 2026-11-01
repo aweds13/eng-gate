@@ -26,8 +26,8 @@
 #   既不是还债也不是欠债，上调等于把"可漂移量"当阈值用（违背头条第 ② 条）。
 #   已知副作用：`--write-baseline` 会把 432 写回来，重刷之后要再手改回 379。
 [baseline]
-updated = "2026-10-27"
+updated = "2026-11-01"
 task = "T-AG493"
-dead_refs = 152
+dead_refs = 148
 drift = 379
 superseded = 1

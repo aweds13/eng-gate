@@ -49,4 +49,4 @@
 - 库表：`document_stages(id, name, description, interactive_mode, task_engine_mode, created_at, updated_at, folder_id, data JSONB)`、`document_scenes(stage_id, id, scene_order, data JSONB, PK(stage_id,id))`、`document_folders`；**无版本列** ⇒ 并发保护只能靠 jsonb 值本身（CAS 逐字：`` `update document_scenes set data = $1::jsonb where stage_id = $2 and id = $3 and data = $4::jsonb` ``）。
 - agent 侧工具数 **50 个**，我们新加约 20 个（`lib/practice/practice-tools.ts` 406 行 / `lib/scratch/scratch-tools.ts` 451 行 / `lib/server/agent-runtime/plan-freeze-tools.ts` 622 行 等）。
 - 上下文压缩现况（D 类已定案）：`lib/server/agent-runtime/config.ts:49` `compaction: { enabled: process.env.OPENMAIC_AGENT_COMPACTION_ENABLED === 'true', ... }`；导入点 `lib/server/agent-runtime/runner.ts:125`、调用点 `:1485`；压缩对象是 `entry-tree-storage.ts` 的 `firstKeptEntryId` + `Session.appendCompaction`。
-- `docs/` 现有 34 份 md，五层判据工具 `scripts/check-layers.py` 目前 **122 条引用 / 断链 0 处 / PASS ✅**。
+- `docs/` 现有 34 份 md，五层判据工具 `D:/repo\program\OpenMAIC\scripts\check-layers.py` 目前 **122 条引用 / 断链 0 处 / PASS ✅**。

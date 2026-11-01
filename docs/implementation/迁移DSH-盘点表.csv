@@ -5,21 +5,21 @@ F03 页列表（序/类型/标题）,页侧栏 · components/stage/scene-sidebar
 F04 单页 slide 原生渲染,编辑/播放画布 · components/edit/surfaces/slide/SlideCanvas.tsx（（见备注） 行）,A 已有,已完成,工具 openmaic_page；★ @openmaic/renderer 的 SlideCanvas({slide})，面板侧 page.content/page.type；冒烟 11 条钉住,低
 F05 当前页进对话上下文,面板选中 · openmaic-course/lib/index.js（697 行）,A 已有,已完成,工具 openmaic_active；读插件进程内 active，重启即空；面板选中走 POST /dsh-openmaic/active,低
 F06 非 slide 页只读文本,quiz/pbl/interactive · openmaic-course/lib/index.js（697 行）,A 已有,已完成,工具 openmaic_page_text；sceneText() 逐题拆 question/options/answer/analysis；不能通用 walk,低
-F07 quiz 页交互（答题/交卷/批改）,场景渲染器 · components/scene-renderers/quiz-renderer.tsx（83 行）,C 加面板,9,渲染器只有 83 行但依赖 quiz-view.tsx 与 runtime_records 写入侧,中
+F07 quiz 页交互（答题/交卷/批改）,渲染器只有 83 行但依赖 quiz-view.tsx 与 runtime_records 写入侧,C 加面板,已完成,★ 面板只**本地判分**、绝不写 runtime_records（写入是浏览器端 lib/quiz/runtime.ts 走 navigator.locks 的活，再写一份两边分叉）；判据用仓里 gradeChoiceQuestions（lib/quiz/grading.ts，esbuild alias 打进 bundle）；简答题明写「面板里不做，用 openmaic_quiz_fold 看已有记录」；smoke-quiz.mjs 11 条 + 一条「没有写库请求」,中
 F08 PBL 页渲染与操作,场景渲染器 · components/scene-renderers/pbl-renderer.tsx（541 行）,D 留原生,不迁,541 行渲染器 + lib/pbl/v2/ 五个 API 路由（evaluate/instructor/open-task/simulator/task-update）,高
 F09 interactive 页运行,场景渲染器 · components/scene-renderers/interactive-renderer.tsx（65 行）,D 留原生,不迁,InteractiveIframeHost 沙箱 + postMessage 协议；DSH 面板里跑等价于跨域沙箱,高
 F10 库内全文关键词搜索,检索 · lib/db.mjs（129 行）,A 已有,已完成,工具 openmaic_search；sc.data::text ilike，limit 20，%_ 已转义,低
 F11 本地课程库 6 万门 BM25,课程库检索 · lib/chat/pi/tools/course-search.ts（312 行）,A 已有,已完成,工具 course_search；peek/full 两档在 OpenMAIC 侧；插件只透传 query/topk,低
-F12 页缩略图导航栏,编辑外壳 · components/edit/SlideNavRail/SlideNavRail.tsx（476 行）,C 加面板,9,476 行拖拽排序 + 插入区；缩略图靠 scene-thumbnail-content.tsx,中
-F13 阅读页滚轮翻页,播放层 · lib/playback/reading-navigation.ts（127 行）,C 加面板,9,WHEEL_TURN_MIN_DELTA=12 / COOLDOWN=450ms / SCROLL_EDGE_SLACK_PX=1；零依赖,低
+F12 页缩略图导航栏,476 行拖拽排序 + 插入区；缩略图靠 scene-thumbnail-content.tsx,C 加面板,已完成,★ 新开 /thumbs 缝：SQL 只取 slide 页的 content.canvas（90 页回包 363450 B，而 scenes-full 是 1.6 MB、纯 canvas 272 KB）；用 SlideCanvas + canvasPercentage:2 自渲染；非 slide 给类型桩；有 IntersectionObserver 就懒挂（rootMargin 160px）；smoke-thumb.mjs 5 条 + /thumbs 挂了不拖垮主视图,低
+F13 阅读页滚轮翻页,WHEEL_TURN_MIN_DELTA=12 / COOLDOWN=450ms / SCROLL_EDGE_SLACK,C 加面板,已完成,★ 判据全在仓里 lib/playback/reading-navigation.ts（canTurnPageOnWheel / resolveWheelTurn / innerScrollConsumesWheel），面板只持有 lastTurnAt 并填五个布尔；内部还能滚就不抢手势；开关存 localStorage['openmaic.wheelPageTurn']；smoke-wheel.mjs 10 条,低
 F14 播放引擎（讲稿/圆桌 live）,播放层 · lib/playback/engine.ts（985 行）,D 留原生,不迁,idle→playing→paused→live 状态机，直接消费 actions，无中间编译步,高
 F15 课堂模式整页,课堂 · components/classroom/ClassroomSurface.tsx（377 行）,D 留原生,不迁,377 行 + /classroom/[id] 路由（10 行薄壳）,高
 F16 单页局部改 + CAS,写入 · openmaic-course/lib/db-write.mjs（72 行）,A 已有,已完成,工具 openmaic_patch_stage；document_scenes 无版本列 ⇒ CAS 靠 WHERE data = $base::jsonb,低
 F17 版面差集（改前判据）,写入 · openmaic-course/lib/index.js（697 行）,A 已有,已完成,工具 openmaic_patch_stage；added/removed/moved/resized/textChanged/markupChanged/restyled；默认 dryRun=true,低
-F18 可视化画布编辑（拖/改/删）,编辑画布 · components/edit/surfaces/slide/（（见备注） 行）,C 加面板,9,16 个文件：RendererEditorCanvas/ElementPickLayer/AnchoredBar×3/ColorPicker/ImagePicker/TableInsertPicker…,高
+F18 可视化画布编辑（拖/改/删）,16 个文件：RendererEditorCanvas/ElementPickLayer/AnchoredBar×3/C,C 加面板,已完成,★ 所有几何改动先攒在 editOps，一次性交 /patch；**每次都先 dryRun 看差集，人确认了才写**；move/resize 对同一元素只留最后一条；写完重读该页（否则画布还画旧几何）；smoke-edit.mjs + smoke-patch-e2e.mjs 钉住,中
 F19 quiz 表单编辑（题/选项/解析）,quiz 画布 · components/edit/surfaces/quiz/QuizForm.tsx（（见备注） 行）,D 留原生,不迁,9 个文件；quiz-edit-session.ts 是编辑会话状态，服务端无对等物,高
 F20 元素引用 / 拾取回话,元素引用 · lib/workbench/element-refs.ts（482 行）,D 留原生,不迁,482 行；把画布元素 id 塞进 composer 再发给模型，链路全是客户端状态,高
-F21 页面增 / 删 / 排序,编辑外壳 · components/edit/EditShell/EditShell.tsx（381 行）,C 加面板,9,InsertionZone + CanvasPager；写入侧对应 document_scenes.scene_order,中
+F21 页面增 / 删 / 排序,InsertionZone + CanvasPager；写入侧对应 document_scenes.scene_orde,C 加面板,已完成,★ 面板侧**没有做交互 UI**，走工具 openmaic_deck（retitle/insert/delete/reorder 四动作）—— 它转给仓里 edit_deck 同一条路（页序双写一致、计划信封编号跟着动、资产引用跟着清）；「代码在」已核，但**还没有自己的冒烟**（这是与 F07/F12/F13/F18 的差别）,中
 F22 阶段（课）增删改 / 归文件夹,课程编排 · lib/server/agent-runtime/curriculum-tools.ts（621 行）,B 加工具,6,工具 openmaic_stage_admin；对应 6 个工具：create_stage/create_folder/move_to_folder/rename_stage/list_folder_stages/read_stage_outline,中
 F23 发布 / 撤回 / 新鲜度,阶段元数据 · app/api/stages/[id]/publish/route.ts（（见备注） 行）,D 留原生,不迁,还有 unpublish/freshness/status/generation-complete 共 6 条；单机自用场景下用不到,中
 F24 agent 会话循环 + 租约恢复,运行宿主 · lib/server/agent-runtime/runner.ts（2477 行）,D 留原生,不迁,★ pi-agent-core Session + PostgreSQL 租约/event ordering/cancel/resume；DSH 有自己的 agent loop，换宿主＝重写,极高
@@ -75,17 +75,17 @@ F73 PBL v2（五条 API）,PBL · lib/pbl/v2/operations/（（见备注） 行�
 F74 圆桌讨论（多人 agent 对话）,课堂 · components/roundtable/index.tsx（（见备注） 行）,D 留原生,不迁,4 个文件 + presentation-speech-overlay；与播放引擎 live 态强绑,高
 F75 单课导出（pptx / interactive html / maic.zip）,导出 · lib/export/use-export-pptx.ts（1621 行）,B 加工具,8,工具 openmaic_export_course；★ 三个 builder 都在浏览器端（Blob + saveAs）；服务端要重做 pptxgenjs 那条，interactive/maic.zip 可直接搬,高
 F76 批量导出（多课→一个 ZIP）,导出 · lib/export/batch-export.ts（384 行）,B 加工具,8,工具 openmaic_export_batch；buildBatchExportZip() 可在 Node 跑（tsx 实测过了）；缺的是三个 builder 的服务端版本,中
-F77 批量下载对话框,导出 · components/workbench/workspace/BatchDownloadDialog.tsx（454 行）,C 加面板,9,★ 入口在课程标签页工具栏，默认是对话标签（这条曾经踩过）,中
+F77 批量下载对话框,导出 · components/workbench/workspace/BatchDownloadDialog.tsx（454 行）,C 加面板,已完成,★ 入口在课程标签页工具栏，默认是对话标签（这条曾经踩过）；面板侧已落地：宿主 POST /export-batch 转桥 mode:batch（buildBatchExportZip 同一条路）+ 面板勾课/勾三样内容/逐门回执；冒烟 smoke-panel4.mjs 39 条钉住,中
 F78 访问码（access-code）,认证 · components/access-code-guard.tsx（（见备注） 行）,E 该删,删,单机自用；DSH 自己有认证墙（签名 cookie，见结论库 1.13），两套认证并存只会打架,低
 F79 owner 身份 / 旧数据迁移绑定,身份 · app/api/identity/claim/route.ts（（见备注） 行）,D 留原生,不迁,OwnerPrincipal + withRequestOwner；★ 插件读库时目前不分 owner（单机单用户可接受，多 owner 就得补）,中
 F80 whoami 一次性诊断,诊断 · app/api/whoami/route.ts（82 行）,B 加工具,6,工具 openmaic_whoami；回显 5 个运行期目录 + planGate/selfStudy 等模块加载时求值的开关真实值,低
 F81 模型设置 / 供应商探测,设置 · components/settings/（（见备注） 行）,E 该删,删,28 个文件；模型选择在 DSH 里是 profile 的事，两处并存会互相覆盖,低
 F82 语言切换 / 主题切换 / 用量统计,设置 · components/language-switcher.tsx（（见备注） 行）,E 该删,删,DSH 有 locale 扩展点与自己的主题；用量统计是 3000 API 的概念,低
 F83 音效 / 音频指示,媒体 · components/audio/（（见备注） 行）,E 该删,删,1 个文件；随 F14 播放引擎一起走,低
-F84 三栏工作台外壳,工作台 UI · components/workbench/workspace/WorkspaceShell.tsx（1981 行）,C 加面板,9,1981 行；DSH 侧用 main 座位 + sidebar.panellist，参考 gates/diag/panel-plugin,高
-F85 左栏（课程树 / 材料库入口 / 历史）,工作台 UI · components/workbench/workspace/WorkspaceRail.tsx（2491 行）,C 加面板,9,2491 行，全仓最大的 UI 组件,高
+F84 三栏工作台外壳,工作台 UI · components/workbench/workspace/WorkspaceShell.tsx（1981 行）,C 加面板,已完成,1981 行；DSH 侧用 main 座位 + sidebar.panellist，参考 gates/diag/panel-plugin；面板侧已落地：左栏/中栏可折叠，主区永不折（与仓里「最后一个可见 pane 不能折叠」同一条理由）,高
+F85 左栏（课程树 / 材料库入口 / 历史）,2491 行，全仓最大的 UI 组件,C 加面板,已完成,★ 分组三级兜底：folderId → folder 名 → 未分组（夹具三种形状各测一遍）；组顺序 = 数据首次出现顺序（宿主 SQL 已按 f.folder_order nulls last, st.name 排好）；折叠存**已折叠**的键（空 Set = 全展开）；smoke-left-mat.mjs 26 条中的前 13 条钉住,中
 F86 对话主面板,工作台 UI · components/workbench/WorkbenchChat.tsx（1371 行）,D 留原生,不迁,★ DSH 自己有对话界面；搬过去等于把两套 chat 拼一起，不建议,极高
-F87 材料库整页,工作台 UI · components/workbench/workspace/MaterialLibraryPage.tsx（1964 行）,C 加面板,9,1964 行；材料是 F38/F39/F40 的 UI 面,高
-F88 课程标签页,工作台 UI · components/workbench/workspace/WorkspaceCourseTabs.tsx（259 行）,C 加面板,9,259 行；批量下载入口就在这,中
-F89 请求活动面板（agent 在干什么）,工作台 UI · components/workbench/workspace/WorkspaceRequestActivity.tsx（812 行）,C 加面板,9,812 行；DSH 侧对应的是会话工具卡片，可参考,高
+F87 材料库整页,1964 行；材料是 F38/F39/F40 的 UI 面,C 加面板,已完成,★ 只读：两段式（列表走宿主 fs 毫秒级，正文才起 tsx ~6.7 s）；**一律懒加载**（首屏多一条请求会污染其它冒烟记录的 calls 轨迹）；**没有写入口** —— 写入走 openmaic_materials 工具（要先在沙盒里跑、正文交回宿主校验后落盘）；取某主题失败不顶掉列表；smoke-left-mat.mjs 后 13 条钉住,中
+F88 课程标签页,工作台 UI · components/workbench/workspace/WorkspaceCourseTabs.tsx（259 行）,C 加面板,已完成,259 行；批量下载入口就在这；面板侧已落地 CourseTabs：role=tablist + ←/→ Home/End Delete + 关闭按钮 tabIndex:-1 + 关掉当前页签接管给邻页签、都没有就留空,中
+F89 请求活动面板（agent 在干什么）,工作台 UI · components/workbench/workspace/WorkspaceRequestActivity.tsx（812 行）,C 加面板,已完成,812 行；DSH 侧对应的是会话工具卡片，可参考；面板侧已落地：宿主 ACTIVITY 环形缓冲（最近 40 条）+ GET /activity，挂 res finish/close 两条，/activity 自己不入账,高
 F90 工作台会话状态存储,客户端状态 · lib/workbench/session-store.ts（2347 行）,D 留原生,不迁,★ lib/workbench/ 共 68 文件 12412 行，全是浏览器端状态；换宿主＝整层作废,极高

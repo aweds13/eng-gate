@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 r"""pika 新旧版迁移器（默认 dry-run）。
 
 用法
@@ -58,6 +57,7 @@ r"""pika 新旧版迁移器（默认 dry-run）。
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import io
 import json
@@ -73,14 +73,14 @@ from pathlib import Path
 # 一、常量：本机的真实位置（全部来自 2026-10-31 的实测，不是猜的）
 # --------------------------------------------------------------------------
 
-ROOT = Path(r"D:/repo")                      # 知识根（mpk config 的 knowledge_root）
-MIG_DIR = ROOT / "_tools" / "pika-迁移"                 # 迁移工作目录
-INVENTORY = MIG_DIR / "inventory"                       # 上一轮勘察产出的只读清单
-EXTRACTED = MIG_DIR / "_extracted"                      # 已解出的新版（仅 toolkit/gridlab 可信）
-OUTER_ZIP = Path(r"D:/downloads/pika文件_Pro.zip")           # 外层包（1.4 GB，只读）
+ROOT = Path(r"D:/repo")  # 知识根（mpk config 的 knowledge_root）
+MIG_DIR = ROOT / "_tools" / "pika-迁移"  # 迁移工作目录
+INVENTORY = MIG_DIR / "inventory"  # 上一轮勘察产出的只读清单
+EXTRACTED = MIG_DIR / "_extracted"  # 已解出的新版（仅 toolkit/gridlab 可信）
+OUTER_ZIP = Path(r"D:/downloads/pika文件_Pro.zip")  # 外层包（1.4 GB，只读）
 VAULT_ZIP = EXTRACTED / "笔记共享vault" / "__source.zip"  # 与外包内 member 逐字节相同（已实测）
 
-SKILLS_ROOT = Path.home() / ".dsh" / "skills"           # pika 6 个 skill 的实装位置
+SKILLS_ROOT = Path.home() / ".dsh" / "skills"  # pika 6 个 skill 的实装位置
 VAULT_TARGET = ROOT / "知识库" / "pika文件_Pro" / "笔记共享vault"
 GRIDLAB_TARGET = ROOT / "Tool" / "代码与数据" / "grid-covering-lab-source"
 
@@ -89,7 +89,7 @@ MEMBER_VAULT = "pika文件_Pro/笔记共享vault.zip"
 MEMBER_TOOLKIT = "pika文件_Pro/pika资料共享/AI工具/pika_math_learning_toolkit-2.1.7.zip"
 MEMBER_GRIDLAB = "pika文件_Pro/pika资料共享/代码与数据/grid-covering-lab-source.zip"
 
-VAULT_INNER_PREFIX = "笔记共享vault/笔记共享vault/"      # vault 包里的双层套娃前缀
+VAULT_INNER_PREFIX = "笔记共享vault/笔记共享vault/"  # vault 包里的双层套娃前缀
 
 CATEGORIES = ("library", "tool", "aitools", "vault", "skills", "gridlab")
 
@@ -105,28 +105,31 @@ CATEGORY_RULES = {
 }
 
 # 哪些目录名在 Windows 上是设备名（`C:/Users/example\.dsh\skills\nul` 这个 0 字节垃圾文件踩过）
-DEVICE_NAMES = {"nul", "con", "prn", "aux"} | {f"com{i}" for i in range(1, 10)} | {f"lpt{i}" for i in range(1, 10)}
+DEVICE_NAMES = (
+    {"nul", "con", "prn", "aux"}
+    | {f"com{i}" for i in range(1, 10)}
+    | {f"lpt{i}" for i in range(1, 10)}
+)
 
 
 # --------------------------------------------------------------------------
 # 二、小工具
 # --------------------------------------------------------------------------
 
+
 def utf8_stdout() -> None:
     """Windows 控制台默认 GBK，中文路径和 ✅/❌ 会炸；这里强制 UTF-8。"""
     for stream in (sys.stdout, sys.stderr):
-        try:
+        with contextlib.suppress(AttributeError, ValueError):
             stream.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
 
 
 def human(n: int) -> str:
     if n < 1024:
         return f"{n} B"
-    if n < 1024 ** 2:
+    if n < 1024**2:
         return f"{n / 1024:.1f} KB"
-    return f"{n / 1024 ** 2:.1f} MB"
+    return f"{n / 1024**2:.1f} MB"
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -153,6 +156,7 @@ def load_json(name: str):
 #   read_new(origin, zip_path) -> (bytes, locator)
 # locator 是给人看的「新版路径」，会原样打进删除理由里。
 # --------------------------------------------------------------------------
+
 
 class NewSource:
     """新版内容的只读句柄集合。全部 `'r'` 打开，任何路径都不写。"""
@@ -182,7 +186,7 @@ class NewSource:
             return self._outer.read(member), f"{OUTER_ZIP.as_posix()}!{member}"
 
         if origin == "vault":
-            rel = zip_path[len("__vault__/"):]
+            rel = zip_path[len("__vault__/") :]
             member = VAULT_INNER_PREFIX + rel
             if self._vault is not None:
                 return self._vault.read(member), f"{VAULT_ZIP.as_posix()}!{member}"
@@ -193,12 +197,12 @@ class NewSource:
             )
 
         if origin == "toolkit":
-            member = zip_path[len("__toolkit__/"):]
+            member = zip_path[len("__toolkit__/") :]
             zf = self._nested_zip(MEMBER_TOOLKIT)
             return zf.read(member), f"{OUTER_ZIP.as_posix()}!{MEMBER_TOOLKIT}!{member}"
 
         if origin == "gridlab":
-            member = zip_path[len("__gridlab__/"):]
+            member = zip_path[len("__gridlab__/") :]
             zf = self._nested_zip(MEMBER_GRIDLAB)
             return zf.read(member), f"{OUTER_ZIP.as_posix()}!{MEMBER_GRIDLAB}!{member}"
 
@@ -221,10 +225,13 @@ class NewSource:
 #   __toolkit__/payload/<skill> → C:/Users/example\.dsh\skills\<skill>
 # --------------------------------------------------------------------------
 
+
 def build_root_map() -> list[tuple[str, str]]:
     """返回 [(zip_root, old_root)]，按 root_map.json 的顺序。"""
     rows = load_json("root_map.json")
-    return [(r["zip_root"], r["old_root"]) for r in rows if r["zip_root"].startswith("pika资料共享/")]
+    return [
+        (r["zip_root"], r["old_root"]) for r in rows if r["zip_root"].startswith("pika资料共享/")
+    ]
 
 
 ROOT_MAP = build_root_map()
@@ -235,18 +242,18 @@ def target_path(origin: str, zip_path: str) -> Path:
     if origin == "outer":
         for zip_root, old_root in ROOT_MAP:
             if zip_path.startswith(zip_root + "/"):
-                return ROOT / old_root / zip_path[len(zip_root) + 1:]
+                return ROOT / old_root / zip_path[len(zip_root) + 1 :]
         raise KeyError(f"外层条目没有映射根: {zip_path}")
 
     if origin == "vault":
-        return VAULT_TARGET / zip_path[len("__vault__/"):]
+        return VAULT_TARGET / zip_path[len("__vault__/") :]
 
     if origin == "toolkit":
-        rel = zip_path[len("__toolkit__/payload/"):]
+        rel = zip_path[len("__toolkit__/payload/") :]
         return SKILLS_ROOT / rel
 
     if origin == "gridlab":
-        return GRIDLAB_TARGET / zip_path[len("__gridlab__/"):]
+        return GRIDLAB_TARGET / zip_path[len("__gridlab__/") :]
 
     raise KeyError(f"未知 origin: {origin}")
 
@@ -279,13 +286,14 @@ def category_of(row: dict) -> str | None:
 # 规矩：**验证不通过的条目不进清单**，而且要单独计数、单独打印原因。
 # --------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class DeleteItem:
-    old_abs: Path        # 要删的旧文件绝对路径
-    new_locator: str     # 新版内容在哪（zip 路径!member，给人看也给人核）
-    new_sha: str         # 上面那份新版内容的 sha256
-    old_sha: str         # 旧文件删之前的 sha256（备份阶段要复核这个）
-    size: int            # 旧文件字节数（打印用）
+    old_abs: Path  # 要删的旧文件绝对路径
+    new_locator: str  # 新版内容在哪（zip 路径!member，给人看也给人核）
+    new_sha: str  # 上面那份新版内容的 sha256
+    old_sha: str  # 旧文件删之前的 sha256（备份阶段要复核这个）
+    size: int  # 旧文件字节数（打印用）
     category: str
     zip_path: str
     origin: str
@@ -298,12 +306,12 @@ class DeleteItem:
 @dataclass
 class VerifyReport:
     manifest: list[DeleteItem] = None
-    failed: list[tuple[dict, str]] = None          # (条目, 失败原因)
-    skipped_same: int = 0                          # 新旧 sha 相同 ⇒ 不需要删除/重写
-    skipped_excluded: int = 0                      # 被 --only 排除
-    skipped_no_old: int = 0                        # 新版有、旧版没有（只需 place，不需 delete）
-    skipped_no_root: int = 0                       # 没有任何映射根的条目（安装器顶层文件等）
-    arbitration: list[dict] = None                 # 需要人裁决的「磁盘独有」项
+    failed: list[tuple[dict, str]] = None  # (条目, 失败原因)
+    skipped_same: int = 0  # 新旧 sha 相同 ⇒ 不需要删除/重写
+    skipped_excluded: int = 0  # 被 --only 排除
+    skipped_no_old: int = 0  # 新版有、旧版没有（只需 place，不需 delete）
+    skipped_no_root: int = 0  # 没有任何映射根的条目（安装器顶层文件等）
+    arbitration: list[dict] = None  # 需要人裁决的「磁盘独有」项
 
     def __post_init__(self) -> None:
         self.manifest = self.manifest or []
@@ -383,7 +391,11 @@ def verify(only: set[str] | None, mode: str) -> VerifyReport:
             if new_sha != row["new_sha"]:
                 # 清单里记的和现场算的不一致 ⇒ 说明来源被动过，整条不可信。
                 report.failed.append(
-                    (row, f"新版内容与勘察记录不符（现场 {new_sha[:12]}… ≠ 记录 {row['new_sha'][:12]}…）")
+                    (
+                        row,
+                        f"新版内容与勘察记录不符"
+                        f"（现场 {new_sha[:12]}… ≠ 记录 {row['new_sha'][:12]}…）",
+                    )
                 )
                 continue
 
@@ -398,7 +410,11 @@ def verify(only: set[str] | None, mode: str) -> VerifyReport:
                 continue
             if old_sha != row["old_sha"]:
                 report.failed.append(
-                    (row, f"旧文件已被改动（现场 {old_sha[:12]}… ≠ 记录 {row['old_sha'][:12]}…），拒绝纳入清单")
+                    (
+                        row,
+                        f"旧文件已被改动"
+                        f"（现场 {old_sha[:12]}… ≠ 记录 {row['old_sha'][:12]}…），拒绝纳入清单",
+                    )
                 )
                 continue
             size = old_abs.stat().st_size
@@ -441,14 +457,27 @@ def verify(only: set[str] | None, mode: str) -> VerifyReport:
 # --------------------------------------------------------------------------
 
 ARBITRATION_DIRS = [
-    (ROOT / "知识库" / "pika文件_Pro" / "_observer-tools", "vault",
-     "只在 D 盘有、新版没有：用户自建的观察器工具（4 文件 27 KB）"),
-    (ROOT / "知识库" / "Codex Skills", "vault",
-     "3 个 0 字节 SKILL.md 空壳之一：旧安装器留下的定位标记，删了 mpk 的 infer_vault_root 会变"),
-    (ROOT / "知识库" / ".obsidian", "vault",
-     "用户当前实际在用的 Obsidian 配置（字体 + CSS snippet + 10-30 的 workspace），新版 zip 里那份是旧快照"),
-    (ROOT / "知识库" / "pika文件_Pro" / "笔记共享vault" / "笔记共享vault", "vault",
-     "空目录残留（双层套娃留下的一层）"),
+    (
+        ROOT / "知识库" / "pika文件_Pro" / "_observer-tools",
+        "vault",
+        "只在 D 盘有、新版没有：用户自建的观察器工具（4 文件 27 KB）",
+    ),
+    (
+        ROOT / "知识库" / "Codex Skills",
+        "vault",
+        "3 个 0 字节 SKILL.md 空壳之一：旧安装器留下的定位标记，删了 mpk 的 infer_vault_root 会变",
+    ),
+    (
+        ROOT / "知识库" / ".obsidian",
+        "vault",
+        "用户当前实际在用的 Obsidian 配置（字体 + CSS snippet + 10-30 的 workspace），"
+        "新版 zip 里那份是旧快照",
+    ),
+    (
+        ROOT / "知识库" / "pika文件_Pro" / "笔记共享vault" / "笔记共享vault",
+        "vault",
+        "空目录残留（双层套娃留下的一层）",
+    ),
 ]
 
 # skills 目录下只该看这 7 个（payload 全量）。`~/.dsh/skills` 里还躺着
@@ -516,13 +545,15 @@ def collect_arbitration(only: set[str] | None, src: NewSource) -> list[dict]:
                 if str(p).casefold() in known_targets:
                     continue
                 if p.suffix in {".pyc", ".pyo"}:
-                    continue        # 生成物，不算资料
-                items.append({
-                    "path": str(p),
-                    "category": cat,
-                    "why": "磁盘上有、新版包里没有（旧版残留或用户自己放的）",
-                    "size": p.stat().st_size,
-                })
+                    continue  # 生成物，不算资料
+                items.append(
+                    {
+                        "path": str(p),
+                        "category": cat,
+                        "why": "磁盘上有、新版包里没有（旧版残留或用户自己放的）",
+                        "size": p.stat().st_size,
+                    }
+                )
 
     # (b) 结构性裁决项（目录级）
     for path, cat, why in ARBITRATION_DIRS:
@@ -544,6 +575,7 @@ def collect_arbitration(only: set[str] | None, src: NewSource) -> list[dict]:
 #      迁移场景下「跳过」等于「没备份就准备删」，绝对不能放过）
 # --------------------------------------------------------------------------
 
+
 @dataclass
 class BackupReport:
     root: Path | None = None
@@ -559,7 +591,7 @@ def backup(manifest: list[DeleteItem]) -> BackupReport:
     """把清单里每个旧文件复制到备份根，逐条核对 sha256。失败即中止（返回 failures）。"""
     stamp = time.strftime("%Y%m%d_%H%M%S")
     dst_root = MIG_DIR / f"_backup_{stamp}"
-    dst_root.mkdir(parents=True, exist_ok=False)     # 已存在就报错，不覆盖上一次备份
+    dst_root.mkdir(parents=True, exist_ok=False)  # 已存在就报错，不覆盖上一次备份
     rep = BackupReport(root=dst_root)
 
     for item in manifest:
@@ -592,6 +624,7 @@ def backup(manifest: list[DeleteItem]) -> BackupReport:
 # --------------------------------------------------------------------------
 # 八、③ delete 阶段 —— 只消费清单
 # --------------------------------------------------------------------------
+
 
 @dataclass
 class DeleteReport:
@@ -644,6 +677,7 @@ def delete(manifest: list[DeleteItem], dry_run: bool) -> DeleteReport:
 # 已存在且内容已经等于新版的，一律跳过（幂等，重复跑不会反复写盘）。
 # --------------------------------------------------------------------------
 
+
 @dataclass
 class PlaceReport:
     written: int = 0
@@ -692,7 +726,7 @@ def place(delete_items: list[DeleteItem], only: set[str] | None, dry_run: bool) 
     finally:
         src.close()
 
-    for dst, locator, data, cat in planned:
+    for dst, locator, data, _cat in planned:
         new_sha = sha256_bytes(data)
         if dst.is_file():
             try:
@@ -713,7 +747,7 @@ def place(delete_items: list[DeleteItem], only: set[str] | None, dry_run: bool) 
             dst.parent.mkdir(parents=True, exist_ok=True)
             scratch = dst.with_name(dst.name + ".pika-tmp")
             scratch.write_bytes(data)
-            os.replace(scratch, dst)          # 原子替换，半截文件不会留在盘上
+            os.replace(scratch, dst)  # 原子替换，半截文件不会留在盘上
         except OSError as exc:
             rep.failures.append(f"写入失败 {dst}: {type(exc).__name__}: {exc}")
             continue
@@ -763,7 +797,9 @@ def save_plan(manifest: list[DeleteItem], only: set[str] | None, mode: str) -> P
             for item in manifest
         ],
     }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n"
+    )
     return path
 
 
@@ -791,30 +827,49 @@ def load_plan(path: Path) -> list[DeleteItem]:
 # 十、命令行
 # --------------------------------------------------------------------------
 
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="pika 新旧版迁移器（默认 dry-run；真跑要 --execute 再加 --i-understand-delete）",
+        description=(
+            "pika 新旧版迁移器（默认 dry-run；真跑要 --execute 再加 --i-understand-delete）"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    p.add_argument("--dry-run", action="store_true",
-                   help="只打印不执行（默认就是这个；显式写出来只是为了看得清）")
-    p.add_argument("--execute", action="store_true",
-                   help="真的执行（还需同时给 --i-understand-delete）")
-    p.add_argument("--i-understand-delete", action="store_true",
-                   help="二次确认旗：我明白这一步会删除 D 盘上的旧文件")
-    p.add_argument("--only", default="",
-                   help="只跑某几类，逗号分隔：" + ",".join(CATEGORIES))
-    p.add_argument("--mode", choices=("replace-changed", "mirror"), default="replace-changed",
-                   help="replace-changed（默认）：只处理内容不同的条；mirror：连内容相同的也重建一遍")
-    p.add_argument("--place", action="store_true",
-                   help="顺带执行 ④ place 阶段（写新版内容；这一阶段不删东西）")
-    p.add_argument("--skip-backup", action="store_true",
-                   help="跳过备份（仅用于演练；真跑请不要用）")
-    p.add_argument("--explain-arbitration", action="store_true",
-                   help="只列出「需要人裁决」的项，不做任何其他事")
-    p.add_argument("--plan", default="",
-                   help="执行时消费指定的清单文件（由 dry-run 写出），而不是现场重新推导")
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只打印不执行（默认就是这个；显式写出来只是为了看得清）",
+    )
+    p.add_argument(
+        "--execute", action="store_true", help="真的执行（还需同时给 --i-understand-delete）"
+    )
+    p.add_argument(
+        "--i-understand-delete",
+        action="store_true",
+        help="二次确认旗：我明白这一步会删除 D 盘上的旧文件",
+    )
+    p.add_argument("--only", default="", help="只跑某几类，逗号分隔：" + ",".join(CATEGORIES))
+    p.add_argument(
+        "--mode",
+        choices=("replace-changed", "mirror"),
+        default="replace-changed",
+        help="replace-changed（默认）：只处理内容不同的条；mirror：连内容相同的也重建一遍",
+    )
+    p.add_argument(
+        "--place", action="store_true", help="顺带执行 ④ place 阶段（写新版内容；这一阶段不删东西）"
+    )
+    p.add_argument(
+        "--skip-backup", action="store_true", help="跳过备份（仅用于演练；真跑请不要用）"
+    )
+    p.add_argument(
+        "--explain-arbitration",
+        action="store_true",
+        help="只列出「需要人裁决」的项，不做任何其他事",
+    )
+    p.add_argument(
+        "--plan", default="", help="执行时消费指定的清单文件（由 dry-run 写出），而不是现场重新推导"
+    )
     return p.parse_args(argv)
 
 
@@ -824,7 +879,9 @@ def parse_only(raw: str) -> set[str] | None:
     want = {x.strip() for x in raw.split(",") if x.strip()}
     bad = want - set(CATEGORIES)
     if bad:
-        raise SystemExit(f"--only 里有无法识别的分类: {', '.join(sorted(bad))}\n可选: {', '.join(CATEGORIES)}")
+        raise SystemExit(
+            f"--only 里有无法识别的分类: {', '.join(sorted(bad))}\n可选: {', '.join(CATEGORIES)}"
+        )
     return want
 
 
@@ -833,7 +890,10 @@ def print_banner(args, only) -> None:
     print("pika 迁移器")
     print(f"  知识根      : {ROOT}")
     print(f"  外层包(只读): {OUTER_ZIP}")
-    print(f"  分类        : {', '.join(sorted(only)) if only else '全部（' + ', '.join(CATEGORIES) + '）'}")
+    print(
+        f"  分类        : "
+        f"{', '.join(sorted(only)) if only else '全部（' + ', '.join(CATEGORIES) + '）'}"
+    )
     print(f"  模式        : {args.mode}")
     print(f"  运行方式    : {'真跑（--execute）' if args.execute else 'dry-run（默认，不删不写）'}")
     print("=" * 78)
@@ -921,7 +981,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  验证完成，用时 {time.time() - t0:.1f}s")
 
     if not (args.execute and args.plan):
-        print(f"    进删除清单 : {len(rep.manifest)} 条 / {human(sum(i.size for i in rep.manifest))}")
+        print(
+            f"    进删除清单 : {len(rep.manifest)} 条 / {human(sum(i.size for i in rep.manifest))}"
+        )
         print(f"    内容已相同 : {rep.skipped_same} 条（无需删除、无需重写）")
         print(f"    新版独有   : {rep.skipped_no_old} 条（只需写新版，不涉及删除）")
         print(f"    无映射根   : {rep.skipped_no_root} 条（安装器顶层文件 / 包本体，本次不动）")
@@ -944,7 +1006,10 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print(f"  清单已写出：{plan_path}")
         print("  审完确认无误，可让 --execute 直接消费它：")
-        print(f"      python -X utf8 tools/pika_migrate.py --execute --i-understand-delete --plan {plan_path}")
+        print(
+            f"      python -X utf8 tools/pika_migrate.py --execute"
+            f" --i-understand-delete --plan {plan_path}"
+        )
 
     # ======================================================================
     # 到这里为止，**一个文件都还没动**。下面才是会改磁盘的三个阶段，顺序固定：
@@ -976,7 +1041,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # ---- ③ delete（dry-run 时只是打印） ----
     print()
-    print(f"[③ delete] 清单 {len(rep.manifest)} 条" + ("—— dry-run，以下只是打印" if not args.execute else ""))
+    print(
+        f"[③ delete] 清单 {len(rep.manifest)} 条"
+        + ("—— dry-run，以下只是打印" if not args.execute else "")
+    )
     drep = delete(rep.manifest, dry_run=not args.execute)
 
     # 删除阶段一旦中止，**不再继续写新版** —— 半删半写的状态最难收拾
@@ -1000,15 +1068,20 @@ def main(argv: list[str] | None = None) -> int:
     # ---- 统计 ----
     print()
     print("[统计]")
-    print(f"  会删         : {len(rep.manifest) if not args.execute else drep.deleted} 条"
-          f" / {human(sum(i.size for i in rep.manifest))}")
+    print(
+        f"  会删         : {len(rep.manifest) if not args.execute else drep.deleted} 条"
+        f" / {human(sum(i.size for i in rep.manifest))}"
+    )
     print(f"  验证失败     : {len(rep.failed)} 条")
     print(f"  跳过(已相同) : {rep.skipped_same} 条")
     print(f"  跳过(无映射根): {rep.skipped_no_root} 条")
     print(f"  待裁决       : {len(rep.arbitration)} 条（本脚本不删，用 --explain-arbitration 看）")
     if prep is not None:
-        print(f"  写新版       : {prep.written if args.execute else len(rep.manifest) + rep.skipped_no_old} 条"
-              f" / {human(prep.bytes_written)}")
+        print(
+            f"  写新版       : "
+            f"{prep.written if args.execute else len(rep.manifest) + rep.skipped_no_old} 条"
+            f" / {human(prep.bytes_written)}"
+        )
     if drep.failures:
         print("  ❌ 删除阶段中止：")
         for f in drep.failures:

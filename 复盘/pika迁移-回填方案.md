@@ -188,7 +188,7 @@
  74|     ]
 ```
 
-**新版** `.../payload/pdf-problem-search/scripts/pdf_problem_search/paths.py`（8598 B / 232 行）
+**新版** `D:/repo\_tools\pika-迁移\_extracted\pika_math_learning_toolkit-2.1.7\payload\pdf-problem-search\scripts\pdf_problem_search\paths.py`（8598 B / 232 行）
 
 ```
   3| import json                                          ← 新增
@@ -268,7 +268,7 @@
 
 ### 2.3 `manage-personal-knowledge`（v1.11.3 → v1.11.5）—— 1 行路径基准变化
 
-**旧版** `scripts/migration_check.py` L140（2.1.4 zip，10209 B / 194 行）
+**旧版** `D:/repo\_tools\pika-迁移\_extracted\pika_math_learning_toolkit-2.1.4\payload\manage-personal-knowledge\scripts\migration_check.py` L140（2.1.4 zip，10209 B / 194 行）
 ```
 140|     toolkit = vault / 'scripts/kb-migration-toolkit'
 ```
@@ -284,7 +284,7 @@
 | 实测影响 | `D:/repo\scripts\kb-migration-toolkit` 与 `D:/repo\知识库\scripts\kb-migration-toolkit` **两个都不存在** ⇒ `checks['config_tool_available']` 恒为 `False`，新旧一致 |
 
 其余 mpk 差异（`SKILL.md`、`references/root-migration.md`、`version-coupling-manifest.json`、
-`tests/test_config_discovery.py`）都是**文档与测试**更新，不含用户配置。
+`D:/repo\_tools\pika-迁移\_extracted\pika_math_learning_toolkit-2.1.4\payload\manage-personal-knowledge\tests\test_config_discovery.py`）都是**文档与测试**更新，不含用户配置。
 
 `config.py` 新旧**逐字节相同**（这是最要紧的一条）：
 `LEGACY_SCHEMA_VERSION=1`(L19)、`SCHEMA_VERSION=2`(L20)、`DEFAULT_MANIFEST_RELATIVE_PATH=".mpk/resources.jsonl"`(L22)、
@@ -336,7 +336,7 @@
 | --- | --- | --- | --- | --- |
 | `math-coach` | v1.12.1 → v1.13.0 | 10 个，新旧**同** | 无 | 无 |
 | `math-research-solve` | v3.1.11 → v3.2.8 | 3 → 6（+`LOCALAPPDATA`、`MRS_ARCHIVE_PLAYWRIGHT_MODULE`、`XDG_CACHE_HOME`，全在 `mrs_search.py` / `mrs_archive_completion.py`，**均有默认值**） | 无 | 无 |
-| `math-science-computation` | v1.11.4 → v1.12.0 | 7 → 14（+6 个 `MSC_*_ROOT` 仅在 `tests/test_job_runner.py`；+`PYTHONPATH` 在 `job_runner.py`，**均有默认值**） | 无 | 无 |
+| `math-science-computation` | v1.11.4 → v1.12.0 | 7 → 14（+6 个 `MSC_*_ROOT` 仅在 zip 内 `…/math-science-computation/tests/test_job_runner.py`（2.1.7 zip 内相对路径；本机未解出该文件）；+`PYTHONPATH` 在 `job_runner.py`，**均有默认值**） | 无 | 无 |
 
 （`compute-fleet-manager` 是全新 skill，本机没有旧版可对；其 env 为 `CODEX_SKILL_OBSERVER_CLI`、`SKILL_EVALUATION_LAB_ROOT`，均可不设。）
 
@@ -388,7 +388,7 @@
 | 活配置 A L3 `vault_root` | `D:/repo\知识库` | 索引 683 ≈ 全知识库 697−14，**它就是按整个 `知识库` 建的**；改成 `pika文件_Pro\笔记共享vault` 会让索引与现状不符 |
 | 活配置 A L4 `kb_root` | `C:/Users/example\.dsh\skills\obsidian-vault-notes\scripts\obsidian_local_kb` | 与 env 同值，指向现装位置，存在 |
 | 活配置 B L2 `knowledge_root` | `D:/repo` | 新版 pdf 的 `infer_knowledge_root()` 正是读这个键；改了就断 |
-| 活配置 B L3 `knowledge_root_id` | `KBROOT-442OME7QWTER5T5W7OO7RGNPB4` | 符合 `^KBROOT-[A-Z2-7]{26}$`；`.mpk/root.json` 与 `.mpk/resources.jsonl` 三处必须一致 |
+| 活配置 B L3 `knowledge_root_id` | `KBROOT-442OME7QWTER5T5W7OO7RGNPB4` | 符合 `^KBROOT-[A-Z2-7]{26}$`；`D:/repo\.mpk\root.json` 与 `D:/repo\.mpk\resources.jsonl` 三处必须一致 |
 | 活配置 B L13 `Library` / L17 `知识库` | 相对路径 | `sources_must_be_non_nested` 要求相对且不嵌套；实测两者都在知识根下且不互相包含 |
 | 三个死配置（§1.4） | 原样 | 被 env 压过；改了不生效，删了可能影响 mpk 的 companion 同步 |
 
@@ -509,7 +509,7 @@ python -X utf8 tools/pika_migrate.py --execute --i-understand-delete \
 ### B5 —— `知识库\Codex Skills\` 3 个 0 字节 SKILL.md 空壳
 
 - **事实**：`知识库\Codex Skills\obsidian-vault-notes\SKILL.md` 0 B、
-  `...\pdf-problem-search\SKILL.md` 0 B、`知识库\pika文件_Pro\Codex Skills\manage-personal-knowledge\SKILL.md` 0 B。
+  `…\pdf-problem-search\SKILL.md` 0 B、`D:/repo\知识库\pika文件_Pro\Codex Skills\manage-personal-knowledge\SKILL.md` 0 B。
 - **不问会怎样**：看着像垃圾，但删了 `_common.py` 的 `INFERRED_VAULT_ROOT`（判据 `(parent/"Codex Skills").exists()`）
   与 pdf 的 `infer_vault_root()` 会失去定位标记。
 - **默认选**：**保留**。
