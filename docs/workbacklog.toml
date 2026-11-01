@@ -3419,7 +3419,7 @@ spec = "复盘/卡/卡B3-pika新旧比对与回填方案.md"
 files = ["复盘/pika迁移-新旧比对.md", "复盘/pika迁移-回填方案.md", "tools/pika_migrate.py"]
 depends = []
 risk = "high"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "B4"

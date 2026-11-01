@@ -9714,11 +9714,14 @@ gaps = "1. 盘点表原 CSV 9 列与判据④要的 6 列对不上，按位置�
 id = "T-BG003"
 title = "pika 包与散落旧版的比对回填：先证明「谁是谁的新版」"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 evidence = [
+  "file:复盘/pika迁移-新旧比对.md",
+  "file:复盘/pika迁移-回填方案.md",
+  "file:tools/pika_migrate.py",
   "file:复盘/卡/卡B3-pika新旧比对与回填方案.md",
 ]
-gaps = "1. 勘察已完成（仓外 D:/repo/_tools/pika-迁移/inventory/勘察报告.md 675 行），但比对结论与回填方案这两份交付物**尚未产出**，本卡仍是 todo。指针 复盘/卡/卡B3-pika新旧比对与回填方案.md2. 11 篇 vault 笔记的三方（git/磁盘/zip）逐篇 diff **没做**，勘察报告 §6 已如实写「不知道」。指针 D:/repo/_tools/pika-迁移/inventory/勘察报告.md3. 11 项裁决待用户拍板，其中第 0 项（会复活 2 个用户主动删掉的 SVG，2.87 MB）与第 0b 项（三方不一致）必须先定。指针 复盘/卡/卡B3-pika新旧比对与回填方案.md"
+gaps = "1. 11 项裁决里用户只拍了 3 项（还原 73 条已执行 / .obsidian 以 知识库/.obsidian 为准 / 题库本机不适用），其余 8 项**未拍板、回填未执行**——本卡交的是比对与方案，不是迁移完成。指针 复盘/pika迁移-回填方案.md2. 1 条不可恢复：知识库/pika文件_Pro/笔记共享vault/.obsidian/workspace.json（7697 -> 7924 B）。它存的是 Obsidian 面板布局，下次打开该库会自动重写；用户在用的 知识库/.obsidian/ 全程未被碰。旧内容在任何副本与 git 里都没有。指针 复盘/pika迁移-新旧比对.md3. 3 个 0 字节 SKILL.md 的出处已定位（知识库/Codex Skills/ 下），但「是否还要用」未定；知识库/Jelly文件_Pro（271 文件 / 293 MB）是什么、要不要留也未定。指针 D:/repo/_tools/pika-迁移/inventory/勘察报告.md4. 「回填以 zip 为准会不会覆盖磁盘新编辑」只验到 11 篇 vault 笔记（磁盘版与 zip 版逐字节相同 11/11），全量未验。指针 复盘/pika迁移-回填方案.md"
 
 [entries."T-BG004"]
 id = "T-BG004"
