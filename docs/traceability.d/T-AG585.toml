@@ -2,11 +2,17 @@
 id = "T-AG585"
 title = "dsh-web 逐包对照那份文档该挂「已废弃」的牌子"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 owner = "controller"
 evidence = [
-  "file:复盘/卡/卡F13-dsh-web对照作废.md",
   "file:复盘/DSH插件-dsh-web逐包对照.md",
+  "file:docs/traceability.d/T-G384.toml",
+  "file:docs/subsystems/pool/README.md",
+  "text:复盘/DSH插件-dsh-web逐包对照.md::status: superseded",
+  "text:docs/traceability.d/T-G384.toml::标作废",
+  "test:test_deprecated_docs_labeled.py::test_no_new_unlabeled_declared_deprecation_in_the_repo",
+  "test:test_deprecated_docs_labeled.py::test_removing_the_label_makes_the_checker_report_it",
+  "file:复盘/卡/卡F13-dsh-web对照作废.md",
 ]
 gaps = [
   """- 立卡时未实现：`复盘/DSH插件-dsh-web逐包对照.md` 仍无 frontmatter（`复盘/` 与 `docs/` 下 frontmatter-first 文件实测 0 篇）。

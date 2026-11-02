@@ -1,3 +1,20 @@
+---
+title: DSH 插件 · dsh-web 逐包对照（卡 265 · T-G384）
+status: superseded
+supersedes: src/timeflow/core/lan.py（2026-09-23 起的局域网配对门）+ docs/subsystems/pool/README.md（现算的远端与传输面）
+---
+
+> **本文件已废弃（2026-11-02，卡 F13 / T-AG585）。**
+> 保留它只为留痕：记下 2026-10-17 当时怎么判断的。**不再作为任何结论的来源**，也不要照着它去改代码。
+> 现在以什么为准：`src/timeflow/core/lan.py` 与 `tools/pool/mcp_http.py`（代码本身）／`docs/subsystems/pool/README.md`（现算的子系统说明书）。
+>
+> 三条作废理由（都在 2026-11-02 现读过）：
+> 1. 原文四条「我们没有远程访问面」不成立 —— `src/timeflow/core/lan.py` 自 `15000b30`（2026-09-23 07:07）起就有局域网配对门（`HEADER = "X-Timeflow-Pair"`、`verify()`、`gate()`、`check_pair()`），比本文件首次入库 `f9fd1b7b`（2026-10-17 11:20）**早 24 天**；2026-11-02 又多了 `tools/pool/mcp_http.py`（`b349ac6a`）这条 Streamable HTTP 传输。
+> 2. 原文「636 行配对状态机」无出处 —— 上游 `packages/dsh-remote-web-ui/src/pairing.ts` 现读 766 行，加 `pair-grant.ts`（131）与 `pairing-access.ts`（36）共 933 行，整包没有任何一个 636 行的 `.ts`。
+> 3. 原文 16 条本仓 `路径:行号` 引用全部指错段 —— 根因是 `scripts/check_docs.py` 的 `normalize()` 只校验文件在不在、从不校验行号；因此这份文档的行号从写下的那天起就没人验过。
+>
+> 本文件的作废**不牵连**别的结论：`skills/softeng-manage/references/safety.md` 里的 HS1（`~/.dsh` 是禁区）与 AI4（外部模型用完就撤）仍然成立，它们的结论出自 `复盘/INDEX.md` §5.2，本文件只是当年的证据之一。
+
 # DSH 插件 · dsh-web 逐包对照（卡 265 · T-G384 · 树 `.wt/265`）
 
 > 原则（用户 2026-10-16 令，最高优先）：**以我们为基底，借鉴它去改造。**

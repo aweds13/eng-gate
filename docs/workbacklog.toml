@@ -5169,6 +5169,6 @@ files = [
   "tests/test_deprecated_docs_labeled.py",
   "复盘/卡/卡F13-dsh-web对照作废.md",
 ]
-status = "pending"
+status = "done"
 risk = "mid"
 depends = []

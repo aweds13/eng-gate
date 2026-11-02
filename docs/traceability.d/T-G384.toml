@@ -5,6 +5,7 @@ group = "ENGINEERING"
 status = "done"
 evidence = [
   "file:复盘/DSH插件-dsh-web逐包对照.md",
+  "text:复盘/DSH插件-dsh-web逐包对照.md::status: superseded",
 ]
-gaps = "1. dsh-web 那 11 个包逐个给了四栏（它怎么做 / 我们的对应物 / 该借哪条机制 / 不借什么），每条结论带 `文件:行号`。指针 `复盘/DSH插件-dsh-web逐包对照.md`2. 许可与出处单列一节（Apache-2.0 / MIT 分档），抄代码前必须先读。指针 `复盘/DSH插件-dsh-web逐包对照.md`3. 末尾五条改造是**提案**，每条指名落我们哪个文件、怎么验，各自要单独一张卡。指针 `复盘/DSH插件-dsh-web逐包对照.md`4. 没做到的部分如实写在边界一节（没装包、没建 `desktop-copy` profile、没改 `tools/tests/scripts`）。指针 `复盘/DSH插件-dsh-web逐包对照.md`"
+gaps = "1. dsh-web 那 11 个包逐个给了四栏（它怎么做 / 我们的对应物 / 该借哪条机制 / 不借什么），每条结论带 `文件:行号`。指针 `复盘/DSH插件-dsh-web逐包对照.md`2. 许可与出处单列一节（Apache-2.0 / MIT 分档），抄代码前必须先读。指针 `复盘/DSH插件-dsh-web逐包对照.md`3. 末尾五条改造是**提案**，每条指名落我们哪个文件、怎么验，各自要单独一张卡。指针 `复盘/DSH插件-dsh-web逐包对照.md`4. 没做到的部分如实写在边界一节（没装包、没建 `desktop-copy` profile、没改 `tools/tests/scripts`）。指针 `复盘/DSH插件-dsh-web逐包对照.md`5. 该文档自 2026-11-02 起标作废（卡 F13 / T-AG585）——四条「没有远程面」被 `src/timeflow/core/lan.py`（2026-09-23 起）证伪、`636` 无出处、本仓 16 条行号全错；保留只为留痕，现以 `src/timeflow/core/lan.py` 与 `docs/subsystems/pool/README.md` 为准。指针 `复盘/DSH插件-dsh-web逐包对照.md`"
 
