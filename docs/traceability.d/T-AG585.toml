@@ -1,0 +1,16 @@
+[entries."T-AG585"]
+id = "T-AG585"
+title = "dsh-web 逐包对照那份文档该挂「已废弃」的牌子"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡F13-dsh-web对照作废.md",
+  "file:复盘/DSH插件-dsh-web逐包对照.md",
+]
+gaps = [
+  """- 立卡时未实现：`复盘/DSH插件-dsh-web逐包对照.md` 仍无 frontmatter（`复盘/` 与 `docs/` 下 frontmatter-first 文件实测 0 篇）。
+- 本卡只标这一篇作废 + 立钉子；把行号校验接进 `check_docs`（现在 `normalize()` 不校验行号，全仓 1115 条带行号引用里 189 条明确错）是另一张卡的范围。
+- `docs/traceability.d/T-G384.toml` 只加不改：`status` 保持 `done`（那笔交付确实完成过），只补证据与缺口各一句。
+""",
+]

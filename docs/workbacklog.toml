@@ -5142,3 +5142,19 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "F13"
+task = "T-AG585"
+title = "dsh-web 逐包对照那份文档该挂「已废弃」的牌子"
+tree = ".wt/F13"
+spec = "复盘/卡/卡F13-dsh-web对照作废.md"
+files = [
+  "复盘/DSH插件-dsh-web逐包对照.md",
+  "docs/traceability.d/T-G384.toml",
+  "tests/test_deprecated_docs_labeled.py",
+  "复盘/卡/卡F13-dsh-web对照作废.md",
+]
+status = "pending"
+risk = "mid"
+depends = []

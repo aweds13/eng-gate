@@ -742,6 +742,20 @@ test_model_registry.py` 79 passed（与加 docstring 前一字不差）；反向
 ## 2026-11-02 · MCP 只能在同机 stdio 里用：给它开一条 HTTP 传输（卡 A365，T-AG584）
 
 `tools/pool_mcp.py` 原本是**纯 stdio**（全文 2762 行里 `http.server` / `HTTPServer` / `socketserver` / `BaseHTTPRequestHandler` / `socket.` 零命中）⇒ 只能被同一台机器上、由客户端起子进程的 AI 用，手机 / 平板 / 另一台电脑都接不进来。本卡开了 **Streamable HTTP** 传输：新 `tools/pool/mcp_http.py`（406 行，零依赖，只用 `http.server`）把请求体里的 JSON-RPC 交给 `tools/pool_mcp.py:2545 handle()` —— **判据一条都没重写**，`handle()` / `call_tool()` / `tool_list()` / `serve()` / `_initialize()` / `write_enabled()` 六个函数体经 AST 逐段比对**逐字未变**（本笔 +6456 字节全是新分支与 docstring）。服务端三条安全边界按 MCP [Transports 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) 的 MUST/SHOULD 落地：**Origin 校验**（白名单外 403 且请求体不执行）、**只绑回环**（`--host` 只收 `127.0.0.1` / `localhost` / `::1`，别的退 2）、**必须鉴权**（`TF_MCP_HTTP_TOKEN` 不设就拒启动，比对走 `hmac.compare_digest`，不符 401 + `WWW-Authenticate: Bearer`）。协议面：request ⇒ 200 + `application/json`（**不提供 SSE**，故 `GET`/`DELETE` ⇒ 405，`Accept` 不含两者 ⇒ 406）、notification/response ⇒ 202 且 body 空、版本头缺省按 `2025-03-26` 假定 / 非法 ⇒ 400、请求体上限**复用** `MAX_LINE_BYTES`（32 MiB，超限 413 且流不被读）、坏 body ⇒ 400 不打死服务、**无会话**（不发 `Mcp-Session-Id`，带了也不拒收）。stdio 那条路**一个字节不变**：无参数仍是 stdio，`main()` 三条既有行为逐字保留。验收：新文件 `30 passed in 10.55s`；既有七份 MCP 测试 `108 passed`；`gen_pool_readme.py --check` 与现算一致（47 个文件 / 16875 行）；`ruff check tools/ tests/` 全绿；反向变异 7/7 咬住 + 1 条对照按设计不咬（每条还原后 sha256 与入口一致，收尾 30 passed）。
+## 2026-11-02 · 立卡 F13（T-AG585）：dsh-web 逐包对照那份文档该挂「已废弃」的牌子
+
+`复盘/DSH插件-dsh-web逐包对照.md`（27098 B / 246 行）里 `:99`「远程/移动面：**没有**」、
+`:101`「我们没有远程访问面」、`:102`「636 行配对状态机服务的是一个我们没有的远程通道」、
+`:167`「无远程面」四条**从写下那天就不成立**：`src/timeflow/core/lan.py`（配对码 / 失败节流 /
+常数时间比较）首现 `15000b30` 2026-09-23 07:07，比这份文档首现 `f9fd1b7b` 2026-10-17 11:20
+**早 24 天**；「636 行」在上游 `packages/dsh-remote-web-ui/src/pairing.ts` 实测是 **766 行**
+（整包没有任何 636 行的文件）；16 条本仓 `路径:行号` 引用除 `timer.py:180` 外全部指错段，
+根因是 `scripts/check_docs.py:346 normalize()` 剥掉行号后只要文件在就算过。
+
+用户 2026-11-02 18:17 判「dsh-web 文档是废弃的了，有必要的把卡扔出去」（m77111）。
+本卡不改写那 246 行（判据 4：`git diff --numstat` 删除列必须为 0），只加
+**首行 frontmatter `status: superseded` + `supersedes:`**（`复盘/` 与 `docs/` 下**首例**）
+与一段作废横幅，并新增测试文件（名字见卡规格判据 5）钉住「解析器真吃得下」。
 ## 2026-11-01 T-BG003 pika 包与散落旧版的比对回填：先证明「谁是谁的新版」
 
 - 新增 `复盘/pika迁移-新旧比对.md`（787 行）：把「新版在哪、旧版在哪、谁被谁覆盖」量成一串可核对的行。规模 4071 文件 / 1.48 GB；比对单元 3771 条，其中**逐字节相同 3697**、**同路径但内容不同 74**、只在旧版有 2、新版独有 303。
