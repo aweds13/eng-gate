@@ -11334,3 +11334,16 @@ evidence = [
   "file:docs/traceability.d/T-BG007.toml",
 ]
 gaps = "1. 六份 PDF 里只真抽了三份（另两份仍 idle、一份 ready），「全部抽完」没有实测；抽取耗时随文件大小从 25s 到 45s，`wait` 的 40 轮上限对更大的文件可能不够。指针 `docs/implementation/迁移DSH.md`2. `search` 只在一份 8801 字符的材料上验过（命中带 snippet）；多份材料混排与 `truncated` 分支没有实测。指针 `复盘/卡/卡B7-材料工具补齐.md`3. 面板侧**没有**为这两个工具做 UI（材料库整页读的是同一批数据，但「列/读/搜/抽取」目前只能在会话里用工具）。指针 `docs/implementation/迁移DSH-盘点表.csv`"
+
+[entries."T-AG586"]
+id = "T-AG586"
+title = "台账并发隔离：立卡那一笔自己拿锁，不再靠「撞上了就有人被 reset」"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E81-台账并发隔离.md",
+]
+gaps = [
+  """- 本卡只治**单机多窗口**：锁落在 gates/diag/ledger.lock，跨机器不互斥（本仓是单机多会话，够用）；多机并发留给以后。<br>- 分片（docs/backlog 下的分区文件 + wb_plan merge --execute）**本卡不启用**：实测它对真台账0/321 块逐字节一致、316/321 张换位置，且无覆盖性守卫时「321+1」会把 154738 B 总表写成 155 B。本卡只把「写盘那一瞬间」串起来，台账形态一个字节都不动。<br>- 落地链那条写回（tools/pool/landing.py 的 flip_card_status）改成走同一把锁与同一原子写，但三态返回值（flipped/not-needed/unflippable）与日志文案**一字不动** —— 落地链对它零感知。<br>- 读者侧（tools/pool/plan.py 的 load_backlog）加 3 次短重试属**可选收紧**：本卡判据不咬它，写在这里只是让「读者被 os.replace 撞到」这条有据可查。<br>- 用户 2026-11-02 20:36 的手工 git reset --hard 是**事故现场**，不是本卡要禁止的动作；本卡只让「并发立卡/落地」不再需要靠 reset 收场。禁 reset 的纪律写在 skills 那一侧。""",
+]

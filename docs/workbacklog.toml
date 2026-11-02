@@ -5172,3 +5172,20 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "E81"
+task = "T-AG586"
+title = "台账并发隔离：立卡那一笔自己拿锁，不再靠「撞上了就有人被 reset」"
+tree = ".wt/E81"
+spec = "复盘/卡/卡E81-台账并发隔离.md"
+files = [
+  "tools/pool/ledger.py",
+  "tools/wb_card.py",
+  "tests/test_ledger_lock.py",
+  "tools/pool/landing.py",
+  "复盘/卡/卡E81-台账并发隔离.md"
+]
+status = "pending"
+risk = "mid"
+depends = []
