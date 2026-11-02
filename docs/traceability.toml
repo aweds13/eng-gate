@@ -11259,15 +11259,26 @@ gaps = [
 id = "T-AG584"
 title = "MCP 只能在同机 stdio 里用：给它开一条 HTTP 传输"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 owner = "controller"
 evidence = [
-  "file:复盘/卡/卡A365-MCP只能在同机stdio里用.md",
+  "file:tools/pool/mcp_http.py",
   "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp_http.py",
   "file:docs/subsystems/pool/modules.toml",
+  "file:复盘/卡/卡A365-MCP只能在同机stdio里用.md",
+  "test:test_pool_mcp_http.py",
+  "text:tools/pool_mcp.py::def _run_http(",
+  "text:tools/pool/mcp_http.py::def serve_http(",
+  "text:tests/test_pool_mcp_http.py::test_handle_is_injected_not_reimplemented",
 ]
 gaps = [
-  """- 立卡时未实现：`tools/pool_mcp.py` 仍只有 stdio（`http.server` / `HTTPServer` / `socketserver` / `BaseHTTPRequestHandler` / `socket.` 全文零命中）。
-- 本卡只开**传输**这一条；「怎么从公网到这台机器」不在本卡讨论（隧道 / 反代是运维层，卡里只钉「只绑回环 + 必须有 token + 校验 Origin」三条边界）。
+  """- 本卡只开**传输**这一条：`tools/pool/mcp_http.py` 把 Streamable HTTP 起起来，「怎么从公网到这台机器」不在本卡（隧道 / 反代是运维层）；卡里只钉「只绑回环 + 必须有 token + 校验 Origin」三条边界。
+- **不提供 SSE**：request 一律回 `application/json`（规范允许二者之一）；代价是服务端不能主动推、长任务只能靠轮询 `tools/call`。`GET` 因此回 405（规范：不给 SSE 就必须 405）。
+- **无会话**：不发 `Mcp-Session-Id`，也就不做「终止后 404 + 客户端重新 initialize」那一套。带了该头的请求**照样处理**（不认识 ≠ 拒收）。多客户端共享同一份只读面，本来就不需要会话。
+- **`Accept` 头缺失按 `*/*` 放行**（RFC 9110 的缺省语义），只有「带了但不含 `application/json` 也不含 `text/event-stream`」才 406。卡文只写了后半句，前半句是工人在模块 docstring 里补明并留下钉子的。
+- **不收 `Transfer-Encoding: chunked`**：没有 `Content-Length` ⇒ 411。写死上限靠的是声明值先判 413（断言 `rfile` 一次都没被读），不是「读进来再截断」。
+- 变异脚本 `gates/diag/_rev_A365.py` 与它落盘的 `_rev_A365.log` 在 `.gitignore:76 gates/diag/*` 覆盖下，**不进提交**（与本仓 E66/F10/A336 同体例）。
+- 反向变异 M2 第一趟**没咬住**（`compare_digest` 换成裸 `==` 时 30 条全绿）：原钉子只断言「密码对了能过、错了 401」，`==` 与 `compare_digest` 在这两种情形下行为相同。改成桩掉 `hmac.compare_digest` 并断言**它被调用过**之后才咬住 —— 记在这里，因为「等价的两种写法只在『被调用』这一层分得开」是本卡最值钱的一条教训。
 """,
 ]

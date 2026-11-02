@@ -62,6 +62,13 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 见 `复盘/口径坑.md` 第 27 条）。成功后写 `gates/diag/wb-<卡>.cancel.txt`（谁 / 什么时候 /
 为什么）并 `pool.registry.release(card)`。
 
+## ★★ HTTP 传输（卡 A365 · T-AG584）：远程窗口也能接
+
+`--http` 起 **Streamable HTTP**（`tools/pool/mcp_http.py`，零依赖）：请求体里的 JSON-RPC 交给
+**同一个 `handle()`**，判据一条不重写。`--host` 只收回环、必须设 `TF_MCP_HTTP_TOKEN`
+（Bearer）；Origin 白名单与请求体上限都在那一层；`GET`/`DELETE` 回 405（本服务不提供 SSE、无会话）。
+stdio 那条路**一个字节不变**（无参数仍是 stdio）。
+
 ### 六条不变量 + 一条执行口径：哪条谁判（★ 不在本模块重写任何判据）
 
 | # | 不变量 | 谁判 |
@@ -2589,6 +2596,9 @@ def _usage() -> str:
         "\n"
         "  python -X utf8 tools/pool_mcp.py          起 stdio 服务\n"
         "  python -X utf8 tools/pool_mcp.py --help\n"
+        "  python -X utf8 tools/pool_mcp.py --http --port 8765 --host 127.0.0.1\n"
+        "          起 Streamable HTTP 服务（远程用；先设 TF_MCP_HTTP_TOKEN，没设就退 2）\n"
+        "          --host 只收 127.0.0.1 / localhost / ::1（默认只绑回环）\n"
         "\n"
         "只读工具：pool_plan / job_list / job_status(card) / job_result(card) / "
         "lock_status / pool_models / quota_status(card,model) / workbench_board(section?) / "
@@ -2746,6 +2756,79 @@ def serve(tail: list[str]) -> int:
     return 0
 
 
+#: `--http` 的默认端口（与 `wb_dash.py` 的 8787 错开）。
+HTTP_DEFAULT_PORT = 8765
+
+
+def _run_http(tail: list[str]) -> int:
+    """`--http` 分支：解析 `--host` / `--port` → 读 env → 起 `pool.mcp_http`。
+
+    ★ 判据都在 `pool/mcp_http.py`（Origin / Bearer / 版本头 / 上限 / 202-405）；
+    这里只做三件事：**解析参数**、**把 env 读成值**、**把 `handle` 传进去**。
+    参数不认 / 主机不在回环集 / 没有 token ⇒ **退 2** 并印理由。
+    """
+    from pool import mcp_http  # noqa: PLC0415 —— 只有 --http 才需要它
+
+    host = mcp_http.DEFAULT_HOST
+    port = HTTP_DEFAULT_PORT
+    i = 0
+    while i < len(tail):
+        item = tail[i]
+        if item == "--http":
+            i += 1
+            continue
+        if item in ("--host", "--port"):
+            if i + 1 >= len(tail):
+                print(f"pool_mcp {item} 缺一个值", file=sys.stderr)
+                return 2
+            value = tail[i + 1]
+            if item == "--host":
+                host = value
+            else:
+                try:
+                    port = int(value)
+                except ValueError:
+                    print(f"pool_mcp --port 要整数，收到 {value!r}", file=sys.stderr)
+                    return 2
+            i += 2
+            continue
+        print(f"pool_mcp --http 不认识的参数 {item!r}（只认 --port / --host）", file=sys.stderr)
+        return 2
+    if not 0 <= port <= 65535:
+        print(f"pool_mcp --port 越界：{port}（0~65535）", file=sys.stderr)
+        return 2
+
+    token = os.environ.get(mcp_http.TOKEN_ENV, "")
+    if not token:
+        print(
+            "pool_mcp --http 需要鉴权：先设环境变量 TF_MCP_HTTP_TOKEN（一串随机字符）再起服务。\n"
+            '  PowerShell：$env:TF_MCP_HTTP_TOKEN = "<随机串>"\n'
+            "  cmd：set TF_MCP_HTTP_TOKEN=<随机串>\n"
+            "  客户端：Authorization: Bearer <同一个串>\n"
+            '  生成随机串：python -c "import secrets;print(secrets.token_urlsafe(32))"',
+            file=sys.stderr,
+        )
+        return 2
+
+    origins = mcp_http.split_origins(os.environ.get(mcp_http.ORIGINS_ENV))
+    require_origin = mcp_http.require_origin_from_env(os.environ.get(mcp_http.REQUIRE_ORIGIN_ENV))
+    try:
+        return mcp_http.serve_http(
+            handle,
+            host=host,
+            port=port,
+            token=token,
+            origins=origins,
+            max_bytes=MAX_LINE_BYTES,
+            protocols=KNOWN_PROTOCOLS,
+            require_origin=require_origin,
+            log=lambda line: print(line, file=sys.stderr, flush=True),
+        )
+    except mcp_http.ConfigError as exc:
+        print(f"pool_mcp --http 起不来：{exc}", file=sys.stderr)
+        return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     """命令入口：`--help` 给人看；其余一个参数都没有（MCP 客户端的 args 就该是空）。"""
     tail = list(sys.argv[1:] if argv is None else argv)
@@ -2754,7 +2837,9 @@ def main(argv: list[str] | None = None) -> int:
     if any(token in ("-h", "--help") for token in tail):
         print(_usage())
         return 0
-    print(f"pool_mcp 不认识的参数 {tail!r}（MCP 客户端不该传参；只有 --help）", file=sys.stderr)
+    if "--http" in tail:
+        return _run_http(tail)
+    print(f"pool_mcp 不认识的参数 {tail!r}（只认 --help 与 --http）", file=sys.stderr)
     return 2
 
 

@@ -5139,6 +5139,6 @@ files = [
   "tests/test_pool_mcp_http.py",
   "复盘/卡/卡A365-MCP只能在同机stdio里用.md",
 ]
-status = "pending"
+status = "done"
 risk = "mid"
 depends = []

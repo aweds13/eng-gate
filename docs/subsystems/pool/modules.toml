@@ -228,6 +228,11 @@ duty = "每账号并发闸的数据：稳定 id → 同时最多几张卡（随�
 cli = "无（被 `pool.lanes` 读）"
 
 [[module]]
+name = "mcp_http.py"
+duty = "MCP 的 Streamable HTTP 传输：Origin / Bearer / 版本头 / 上限 / 202-405 都在这一层；判据只在传进来的 handle 上跑，不重写方法分发"
+cli = "无（被 tools/pool_mcp.py 调）"
+
+[[module]]
 name = "model-registry.toml"
 duty = "跨池统一层：CodeBuddy 池的真源 + 码道池的引用（只引用不复制，不许有第二份可写名单）"
 cli = "无（被 `pool.model_registry` 读）"
