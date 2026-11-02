@@ -739,6 +739,21 @@ test_model_registry.py` 79 passed（与加 docstring 前一字不差）；反向
 - `check_docs` 死指针 **145 未涨**；`docs` / `check_layers` / `audit_titles` 三门绿。
 - 旧数字零残留：`7143` 0、`17 个 py` 0、`2026-10-25` 0。
 - 全量 22 门：`ok=True`、`pytest` 全绿。
+## 2026-11-02 · 立卡 A365（T-AG584）：MCP 只能在同机 stdio 里用，给它开一条 HTTP 传输
+
+`tools/pool_mcp.py` **纯 stdio** —— 全文 2762 行里 `http.server` / `HTTPServer` /
+`socketserver` / `BaseHTTPRequestHandler` / `socket.` **零命中**。后果是它只能被同一台机器上、
+由客户端起子进程的 AI 用；手机、平板、另一台电脑都接不进来。用户提「主要是我想远程操作怎么办」
+之后定案走这一条（不装 DSH 插件、不改 DSH 的绑定地址）。
+
+本仓不引第三方 MCP SDK（模块头逐字「只用标准库」），所以用 `http.server`
+（本仓有先例：`tools/wb_dash.py:50`、`:602` 默认 `--host 127.0.0.1`）。
+★ 关键机会：`tools/pool_mcp.py:2545 handle(message, *, root)` 是**与传输无关的纯函数**，
+HTTP 层只需把 body 里的 JSON 交给它、把回话写成响应 —— **判据一条都不用重写**。
+
+判据八条（判据只许一份 / Origin 校验 / 只绑回环 / 无 token 拒启动 / 202·200·405·406 三态 /
+版本头 400 / 无会话 + 32 MiB 上限 + 坏消息不打死服务 / 端口 0 的真 socket 端到端），
+交付与反向变异见 `复盘/卡/卡A365-MCP只能在同机stdio里用.md`。
 ## 2026-11-01 T-BG003 pika 包与散落旧版的比对回填：先证明「谁是谁的新版」
 
 - 新增 `复盘/pika迁移-新旧比对.md`（787 行）：把「新版在哪、旧版在哪、谁被谁覆盖」量成一串可核对的行。规模 4071 文件 / 1.48 GB；比对单元 3771 条，其中**逐字节相同 3697**、**同路径但内容不同 74**、只在旧版有 2、新版独有 303。

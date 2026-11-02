@@ -5124,3 +5124,21 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "A365"
+task = "T-AG584"
+title = "MCP 只能在同机 stdio 里用：给它开一条 HTTP 传输"
+tree = ".wt/A365"
+spec = "复盘/卡/卡A365-MCP只能在同机stdio里用.md"
+files = [
+  "tools/pool_mcp.py",
+  "tools/pool/mcp_http.py",
+  "docs/subsystems/pool/modules.toml",
+  "docs/subsystems/pool/README.md",
+  "tests/test_pool_mcp_http.py",
+  "复盘/卡/卡A365-MCP只能在同机stdio里用.md",
+]
+status = "pending"
+risk = "mid"
+depends = []

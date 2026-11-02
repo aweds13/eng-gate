@@ -11254,3 +11254,20 @@ gaps = [
 变异脚本 `gates/diag/_rev_E80.py` 落在 gitignored 目录，不进提交。
 """,
 ]
+
+[entries."T-AG584"]
+id = "T-AG584"
+title = "MCP 只能在同机 stdio 里用：给它开一条 HTTP 传输"
+group = "ENGINEERING"
+status = "todo"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A365-MCP只能在同机stdio里用.md",
+  "file:tools/pool_mcp.py",
+  "file:docs/subsystems/pool/modules.toml",
+]
+gaps = [
+  """- 立卡时未实现：`tools/pool_mcp.py` 仍只有 stdio（`http.server` / `HTTPServer` / `socketserver` / `BaseHTTPRequestHandler` / `socket.` 全文零命中）。
+- 本卡只开**传输**这一条；「怎么从公网到这台机器」不在本卡讨论（隧道 / 反代是运维层，卡里只钉「只绑回环 + 必须有 token + 校验 Origin」三条边界）。
+""",
+]
