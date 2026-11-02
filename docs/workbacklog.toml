@@ -5144,6 +5144,20 @@ risk = "mid"
 depends = []
 
 [[cards]]
+id = "B6"
+task = "T-BG006"
+title = "程天学十模块深挖 —— D 级 6 项真点下去"
+tree = ".wt/B6"
+spec = "复盘/卡/卡B6-程天学十模块深挖.md"
+files = [
+  "docs/research/程天学-功能架构.md",
+  "docs/research/程天学-截图索引.md",
+]
+status = "done"
+risk = "low"
+depends = ["B4"]
+
+[[cards]]
 id = "F13"
 task = "T-AG585"
 title = "dsh-web 逐包对照那份文档该挂「已废弃」的牌子"

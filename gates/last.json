@@ -1,13 +1,13 @@
 {
-  "rev": "95de75b8",
+  "rev": "c4d03700",
   "python": "3.14.6",
   "host": "DEV-HOST",
-  "tree": "f1b67a573425a6dea2edbf442cfc341c9bc8ccfc",
+  "tree": "acd297ee4c6a038781b4a585b872ffe39d6af598",
   "tree_scope": "worktree-minus-gates",
-  "parent": "95de75b8",
-  "branch": "card/A365",
+  "parent": "c4d03700",
+  "branch": "HEAD",
   "dirty": true,
-  "at": "2026-11-02T14:38:02",
+  "at": "2026-11-02T23:43:30",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
@@ -15,194 +15,92 @@
   "workers": 1,
   "co_tenants": {
     "collected": true,
-    "like": 21,
-    "self_pid": 36264
+    "like": 23,
+    "self_pid": 24464
   },
   "pytest_mode": "串行（worker=1）",
-  "slow_doors": [
-    {
-      "name": "pytest",
-      "seconds": 960.63
-    }
-  ],
+  "slow_doors": [],
   "gates": [
-    {
-      "name": "pytest",
-      "exit_code": 0,
-      "seconds": 960.63,
-      "summary": "4363 passed, 1 skipped, 24 deselected, 1508 warnings in 954.91s (0:15:54)",
-      "detail": ""
-    },
-    {
-      "name": "acceptance",
-      "exit_code": 0,
-      "seconds": 20.36,
-      "summary": "2 passed, 4386 deselected, 1 warning in 18.50s",
-      "detail": ""
-    },
-    {
-      "name": "pytest_chain",
-      "exit_code": 0,
-      "seconds": 194.2,
-      "summary": "22 passed, 4366 deselected, 1 warning in 192.39s (0:03:12)",
-      "detail": ""
-    },
-    {
-      "name": "ruff",
-      "exit_code": 0,
-      "seconds": 0.28,
-      "summary": "All checks passed!",
-      "detail": ""
-    },
-    {
-      "name": "mypy",
-      "exit_code": 0,
-      "seconds": 18.27,
-      "summary": "Success: no issues found in 58 source files",
-      "detail": ""
-    },
-    {
-      "name": "check_layers_selftest",
-      "exit_code": 0,
-      "seconds": 6.92,
-      "summary": "SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）",
-      "detail": ""
-    },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 6.67,
+      "seconds": 5.4,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）",
       "detail": ""
     },
     {
       "name": "invariants",
       "exit_code": 0,
-      "seconds": 0.29,
+      "seconds": 0.19,
       "summary": "[OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）",
       "detail": ""
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 0.33,
+      "seconds": 0.24,
       "summary": "OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位",
       "detail": ""
     },
     {
       "name": "docs",
       "exit_code": 0,
-      "seconds": 3.11,
+      "seconds": 6.16,
       "summary": "CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS",
       "detail": ""
     },
     {
       "name": "skills_claims",
       "exit_code": 0,
-      "seconds": 1.35,
+      "seconds": 1.28,
       "summary": "report 档读数：对不上 0 / 判不出 73 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。",
       "detail": ""
-    },
-    {
-      "name": "check_layers",
-      "exit_code": 0,
-      "seconds": 4.45,
-      "summary": "LAYER CHECKS: PASS ✅",
-      "detail": ""
-    },
-    {
-      "name": "contrast",
-      "exit_code": 0,
-      "seconds": 3.09,
-      "summary": "对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）",
-      "detail": ""
-    },
-    {
-      "name": "style",
-      "exit_code": 0,
-      "seconds": 3.08,
-      "summary": "风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）",
-      "detail": ""
-    },
-    {
-      "name": "ui_text",
-      "exit_code": 0,
-      "seconds": 3.06,
-      "summary": "[OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）",
-      "detail": ""
-    },
-    {
-      "name": "commands",
-      "exit_code": 0,
-      "seconds": 3.03,
-      "summary": "说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。",
-      "detail": ""
-    },
-    {
-      "name": "ui_dom_probe",
-      "exit_code": 0,
-      "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 fbee641f843c539a）",
-      "reused": true,
-      "inputs_hash": "fbee641f843c539a",
-      "host": "DEV-HOST"
-    },
-    {
-      "name": "proxy",
-      "exit_code": 0,
-      "seconds": 3.02,
-      "summary": "[OK  ] 5 条全新鲜（阈值 30 天）",
-      "detail": ""
-    },
-    {
-      "name": "lf1_live",
-      "exit_code": 0,
-      "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 3e06cfb0a0741f6c）",
-      "reused": true,
-      "inputs_hash": "3e06cfb0a0741f6c",
-      "host": "DEV-HOST"
-    },
-    {
-      "name": "web_live",
-      "exit_code": 0,
-      "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 b3e87d1b0300d1dc）",
-      "reused": true,
-      "inputs_hash": "b3e87d1b0300d1dc",
-      "host": "DEV-HOST"
-    },
-    {
-      "name": "render",
-      "exit_code": 0,
-      "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 736c03fa0f8982c8）",
-      "reused": true,
-      "inputs_hash": "736c03fa0f8982c8",
-      "host": "DEV-HOST"
-    },
-    {
-      "name": "ui_flow",
-      "exit_code": 0,
-      "seconds": 0,
-      "summary": "复用上次通过判定（输入未变 97fdd9d180e73073）",
-      "reused": true,
-      "inputs_hash": "97fdd9d180e73073",
-      "host": "DEV-HOST"
     }
   ],
   "not_run": [],
   "excluded": {},
-  "reused": {
-    "ui_dom_probe": "fbee641f843c539a",
-    "lf1_live": "3e06cfb0a0741f6c",
-    "web_live": "b3e87d1b0300d1dc",
-    "render": "736c03fa0f8982c8",
-    "ui_flow": "97fdd9d180e73073"
-  },
-  "untracked": [
-    "tests/test_pool_mcp_http.py",
-    "tools/pool/mcp_http.py"
+  "reused": {},
+  "untracked": [],
+  "trailer": "【必需 audit；真跑全了 audit】【只跑全了 audit 档，未跑全量】audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 73 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。",
+  "profiles_run": [
+    "audit"
   ],
-  "trailer": "pytest 4363 passed, 1 skipped, 24 deselected, 1508 warnings in 954.91s (0:15:54); acceptance 2 passed, 4386 deselected, 1 warning in 18.50s; pytest_chain 22 passed, 4366 deselected, 1 warning in 192.39s (0:03:12); ruff All checks passed!; mypy Success: no issues found in 58 source files; check_layers_selftest SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）; audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 73 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; check_layers LAYER CHECKS: PASS ✅; contrast 对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。; ui_dom_probe 复用上次通过判定（输入未变 fbee641f843c539a）; proxy [OK  ] 5 条全新鲜（阈值 30 天）; lf1_live 复用上次通过判定（输入未变 3e06cfb0a0741f6c）; web_live 复用上次通过判定（输入未变 b3e87d1b0300d1dc）; render 复用上次通过判定（输入未变 736c03fa0f8982c8）; ui_flow 复用上次通过判定（输入未变 97fdd9d180e73073）"
+  "required_profiles": [
+    "audit"
+  ],
+  "changed_paths": [
+    "docs/INDEX.md",
+    "docs/changelog.d/T-BG006.md",
+    "docs/changelog.md",
+    "docs/research/程天学-功能架构.md",
+    "docs/research/程天学-截图索引.md",
+    "docs/subsystems/pool/README.md",
+    "docs/traceability.d/T-BG006.toml",
+    "docs/traceability.toml",
+    "docs/workbacklog.toml",
+    "复盘/交接-重构进度.md",
+    "复盘/交接.d/T-BG006.md",
+    "复盘/卡/卡B6-程天学十模块深挖.md"
+  ],
+  "select": {
+    "changed": [
+      "docs/INDEX.md",
+      "docs/changelog.md",
+      "docs/research/程天学-功能架构.md",
+      "docs/research/程天学-截图索引.md",
+      "docs/subsystems/pool/README.md",
+      "docs/traceability.toml",
+      "docs/workbacklog.toml",
+      "复盘/交接-重构进度.md",
+      "docs/changelog.d/T-BG006.md",
+      "docs/traceability.d/T-BG006.toml",
+      "复盘/交接.d/T-BG006.md",
+      "复盘/卡/卡B6-程天学十模块深挖.md"
+    ],
+    "tests": [],
+    "fallback": false,
+    "reason": "只有记账/文档改动 ⇒ 没有代码用例要跑（全量仍在收口链 ④）",
+    "gates": []
+  },
+  "sealed_at": "2026-11-02T23:43:32"
 }

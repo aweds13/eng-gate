@@ -11299,3 +11299,17 @@ gaps = [
 - `docs/traceability.d/T-G384.toml` 只加不改：`status` 保持 `done`（那笔交付确实完成过），只补证据与缺口各一句。
 """,
 ]
+
+[entries."T-BG006"]
+id = "T-BG006"
+title = "docs(research): 程天学十模块深挖 —— D 级 6 项真点下去，架构图 794→960 行"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/research/程天学-功能架构.md",
+  "file:docs/research/程天学-截图索引.md",
+  "file:复盘/卡/卡B6-程天学十模块深挖.md",
+  "file:docs/changelog.d/T-BG006.md",
+  "file:docs/traceability.d/T-BG006.toml",
+]
+gaps = "1. 私有赛内页仍进不去：游客账号进了 `/contest/1302` 仍停在「需要密码」那一屏（357 字、输入框 1 个）。这是**密码门**不是登录门，没有比赛密码就到此为止。指针 `复盘/卡/卡B6-程天学十模块深挖.md`2. 教师侧整块没做（用户明确说「教师的不用理」）。游客教师 `guest_t / guest123` 在帮助页 §5.13 公开可用，将来做教师侧走它，别登真实教师号。指针 `复盘/卡/卡B6-程天学十模块深挖.md`3. CAS 校内登录试了三轮都超时（420s / `--wait 900` / `--wait 1200`），最后一次 cookies 16 条全是 `sso.tju.edu.cn` 侧，没有 `acm.tju.edu.cn` 会话也没有 `CAS_TGC` ⇒ 校内登录必须用户本人在机器前完成；本轮靠游客账号绕过去了。指针 `D:/repo/_tools/acm/login_cas.py`4. 游客账号每天凌晨 3 点把课程、作答、天梯记录恢复成初始数据 ⇒ 本轮生成的两份报告（`/ladder/report/74`、`/75`）与 23 条通知已读状态不留存，别人复现读数会不同。指针 `D:/repo/_tools/acm/analysis/d_level3.json`5. 四份深挖交付（course 858 行 / ladder 1229 行 / problem-contest 784 行 / personal-ai-help 870 行，合计 3744 行）留在仓外 `D:/repo/_tools/acm/deep/` 没入库，进正文的只是被引用到的结论；`shots_d/` 100 个文件里 55 个 `_` 前缀局部裁剪也未逐张登记。指针 `docs/research/程天学-截图索引.md`6. `/status` 页面实测只出现过 3 种状态（Accepted / Wrong Answer / Runtime Error），帮助页声明 8 种；另 5 种一次都没实测到，只能写「文档声明」不能写「实测支持」。指针 `docs/research/程天学-功能架构.md`"
