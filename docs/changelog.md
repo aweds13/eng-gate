@@ -1,3 +1,12 @@
+## 2026-11-03 T-BG007 补上 F39/F40 那 10 个「登记了没实现」的材料工具
+
+- 插件仓 `D:/repo/_tools/dsh-plugins` 提交 `5618be1`（2 files / +460）：`openmaic_material_ops`（list/read/search/extract/wait）+ `openmaic_material_folders`（list/create/rename-folder/move/rename），工具数 **27 → 29**。
+- ★ 这两条从批次 4 起就写在盘点表里，但**从没实现过**：`lib/{index.js,diag.mts,db.mjs}` 逐个 grep 全 0 命中。批次 4 当时落的是主题文件那套（`openmaic_materials`），与库里 `owner_material` 的上传材料不是一回事。
+- ★ 最实的发现：`extract_material` **只排队**。它调 `ensureOwnerMaterialExtraction(..., {fence:'background'})` 把行推到 `extracting` 就返回；真正干活的 `startOwnerMaterialExtractor()` 只在 Next 进程 `instrumentation.ts` 里起，DSH 宿主没有它 ⇒ 六份 PDF 停在 `{"status":"extracting"}` 且 `extraction_claims=0`，永远没人领。补法是桥自己调上游 `runNextOwnerMaterialExtraction(workerId, {leaseTtlMs, perOwnerLimit})`。
+- 真抽取三份读数：8801 字符 / 33.8s、396752 字符 / 25.1s、11.4MB 的 44.8s。`read` 一页 8000 字符，翻页必须带上一页 `revision`；不带是 `revision_required`（isError），变了不是 error 而是 `revision_changed`。
+- ★ 顺手修掉一个会把成功误判成失败的缺陷：上游 `lib/logger.ts` 的 `createLogger()` 走 `console.log`，写的是 **stdout**，于是桥的 stdout 变成日志行 + JSON 两行，宿主 `JSON.parse` 抛 `Expecting ',' delimiter: line 1 column 6 (char 5)` —— 抽取成功了但结果读不到。桥里把 `console.log/info/debug` 改道 stderr（不能连 `process.stdout.write` 一起改：审查两条命令要用它走行协议）。
+- 盘点表口径同步改正：B 类 21 项全部翻 `已完成`（逐个抽工具名与实际注册的 29 个比对，21/21 都在）。顺手修掉 CSV 一处结构缺陷：F85 那行「判据」里有个裸逗号没加引号，被切成 **7 列**（其余 90 行 6 列），按列读会错位；现 91 行全 6 列。
+- 未决如实记：批次 0 的「真人在面板点一页让 `openmaic_active` 有值」只有人能做（`browse_page` 对回环地址回 `blocked`）；`POST /dsh-openmaic/active` 已实测可写。
 ## 2026-11-02 · 补标题：这一堆是无日期片段被「保底接文件头」叠出来的历史（卡 B6）
 
 以下到下一个 `## 2026-` 标题之前，是 T-AG547 起 31 个**自身没有日期标题**的片段被

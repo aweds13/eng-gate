@@ -1,0 +1,13 @@
+[entries."T-BG007"]
+id = "T-BG007"
+title = "补上 F39/F40 那 10 个「登记了没实现」的材料工具"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/implementation/迁移DSH.md",
+  "file:docs/implementation/迁移DSH-盘点表.csv",
+  "file:复盘/卡/卡B7-材料工具补齐.md",
+  "file:docs/changelog.d/T-BG007.md",
+  "file:docs/traceability.d/T-BG007.toml",
+]
+gaps = "1. 六份 PDF 里只真抽了三份（另两份仍 idle、一份 ready），「全部抽完」没有实测；抽取耗时随文件大小从 25s 到 45s，`wait` 的 40 轮上限对更大的文件可能不够。指针 `docs/implementation/迁移DSH.md`2. `search` 只在一份 8801 字符的材料上验过（命中带 snippet）；多份材料混排与 `truncated` 分支没有实测。指针 `复盘/卡/卡B7-材料工具补齐.md`3. 面板侧**没有**为这两个工具做 UI（材料库整页读的是同一批数据，但「列/读/搜/抽取」目前只能在会话里用工具）。指针 `docs/implementation/迁移DSH-盘点表.csv`"

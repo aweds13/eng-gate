@@ -414,6 +414,10 @@
   （`OPENMAIC_SCRATCHPAD_DIR` 默认 `<仓库>\data\scratchpad`、`OPENMAIC_MATERIALS_DIR` 默认 `个人数据\材料清单`）。
   在 DSH 里要**先确认目录归属**再动手，别默认往插件目录写。
 
+★ **补记（2026-11-03）**：这一批当时只落了 scratch 与 materials 两件，而盘点表里同批的 `F39 openmaic_material_ops` / `F40 openmaic_material_folders` **从没实现过**（`lib/{index.js,diag.mts,db.mjs}` 逐个 grep 全 0 命中）。同日补齐，两条实测结论写在这里，免得下次又踩：
+  - `extract_material` **只排队**：它调 `ensureOwnerMaterialExtraction(..., {fence:'background'})` 把行推到 `extracting` 就返回。真正干活的是 `startOwnerMaterialExtractor()`，只在 Next 进程的 `instrumentation.ts` 里起 —— DSH 宿主没有它，于是六份 PDF 会一直停在 `{"status":"extracting"}` 且 `extraction_claims=0`、`extraction_lease_at` 空，永远没人领。补法是桥自己调上游 `runNextOwnerMaterialExtraction(workerId, {leaseTtlMs, perOwnerLimit})`。
+  - `read_material` 的正文是**分页的**：一页 8000 字符，翻页必须带上一页回的 `revision`；不带是 `isError` 的 `revision_required`，`revision` 变了则**不是** error 而是 `revision_changed`（重新从 0 读）。
+
 ### 批次 5 · 练习两件
 
 - **做什么**：`openmaic_practice_scaffold`（一页课 → 一个 VS Code 能打开的文件夹）+ `openmaic_practice_result`（读回）。
@@ -500,6 +504,9 @@
 | 7 | review_course / page_review | B | 高 | 分段覆盖到最后一页；审查失败不影响写入 |
 | 8 | export_batch / export_course | B | 高 | ZIP 顶层 N 个文件夹、每课三样产物 |
 | 9 | — | C | 高 | 点页 → 画布真渲染 → `openmaic_active` 立刻有值 |
+
+★ **批次 0–9 的落地实况（2026-11-03 核）**：A 类 14 项、B 类 21 项、C 类 11 项**全部已完成**；D 类 39 项留原生、E 类 5 项该删。`openmaic-course` 侧工具 **29 个**、`openmaic-local-capabilities` 侧 **5 个**，合计 **34**。
+唯一的未决是批次 0 的第 ① 条 —— 「真人在面板点一页让 `openmaic_active` 有值」这件事只有人能做（`browse_page` 对回环地址直接回 `blocked`）；`POST /dsh-openmaic/active` 已实测可写。
 
 ---
 
