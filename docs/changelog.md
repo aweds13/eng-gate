@@ -70,6 +70,16 @@
 失败三态写死：工具跑完但报错 ⇒ 原话 `error`；进程非零退 ⇒ 退出码 + 尾部 600 字；请求本身打不通 ⇒ 502 并带原因，**不许洗成空对象**。
 
 验收：`python -X utf8 tools/dsh_panel.py --check` 退 0（三座位、只读、失败可见、只 GET）；`tests/test_dsh_panel.py` + `tests/test_pool_dispatch_shim.py` 合跑 **176 passed**；`ruff check` 七份源全绿；反向变异 **3/3 全红**（删 `servePoolJobs(req, res);` 一处路由消失、客户端加 `setInterval` 触常驻轮询钉子、dispatch 退回 `trae_dispatch.py start` 触发假派活钉子）。
+## 2026-11-03 T-BG008 程天学的功能哪些能搬进我们自己：十域合并成一份可执行清单
+- 十份域报告（10 个 subagent 并行）全部交齐，合并成 442469 B 总报告，再据此写 `docs/research/程天学-可迁移功能报告.md`（254 行 / 18845 B，纯 LF）。
+- 一句话结论：**值得搬的只有 12 条独立规则，其中 3 条是骨架** —— 掌握度公式（加权 + 提交次数 −5%/次封顶 70% + 提示 L3 ×85%/L4 ×70% + 遗忘降到 70%）、自我评估校准（四档 25/50/75/95 + ±20pp + 门槛 8 题）、错题 1/3/7/15 四关重练；三条都**不依赖教师、不依赖课程、不依赖站点接口**。
+- 为什么是这三条：OpenMAIC 仓实测六个标识符（间隔重复 / 下次复习 / 掌握度 / 提示层级 / 天梯分）在 lib 与 dsl 包**全为空**，知识图谱与判题相关也零命中 ⇒ **纯增量不是改造**；反向 `lib/quiz/grading.ts:67` 的 `gradeChoiceQuestions()` 只给 `earned: correct ? pts : 0`，`attempt-fold.ts` 的 `everIncorrect` 头注释写着「间隔重考的候选」却没有排期算法。
+- 计数口径如实三分：十份并集 A=112/B=46/C=40（含重复）、无重叠七份 **A=61/B=27/C=17**（正文用这个）、可迁移性 5 分 30 / 4 分 40 / 3 分 28 / 2 分 15 / 1 分 6（119 行）；30 条 5 分候选去重后只剩约 12 条（**复现次数是可信度信号，不是功能数量**）。；云门禁首跑 20/22 绿，6 红里 4 条同根是 pool README 第 86/87 行现算 0/0 连带第 12/80 行日期跳（**派生现象**，由 B7 那笔修法一次消掉），另 2 条是环境红（`render` 门 `[EXCL]` 金样本机不同；`test_two_runs_at_once_do_not_collide` 正路失败实为 202 行金样本 diff，E76 同形状历史复现）。
+## 2026-11-03 T-BG007 补上 F39/F40 那 10 个「登记了没实现」的材料工具，并修掉 pool README 两行的环境依赖
+- 插件仓 `D:/repo/_tools/dsh-plugins` 提交 `5618be1`（2 files / +460）：`openmaic_material_ops`（list/read/search/extract/wait）+ `openmaic_material_folders`（list/create/rename-folder/move/rename），工具数 **27 → 29**。
+- ★ 这两条从批次 4 起就写在盘点表里，但**从没实现过**：`lib/{index.js,diag.mts,db.mjs}` 逐个 grep 全 0 命中。批次 4 当时落的是主题文件那套（`openmaic_materials`），与库里 `owner_material` 的上传材料不是一回事。
+- ★ 最实的发现：`extract_material` **只排队**（`ensureOwnerMaterialExtraction(..., {fence:'background'})` 推到 `extracting` 就返回），真正干活的 `startOwnerMaterialExtractor()` 只在 Next 的 `instrumentation.ts` 里起，DSH 宿主没有它 ⇒ 六份 PDF 停在 `extracting` 且 `extraction_claims=0`。补法是桥自己调上游 `runNextOwnerMaterialExtraction(workerId, {leaseTtlMs, perOwnerLimit})`。真抽取三份读数：8801 字符 / 33.8s、396752 字符 / 25.1s、11.4MB 的 44.8s；`read` 一页 8000 字符，翻页必须带上一页 `revision`。
+- ★ 顺带修掉 `docs/subsystems/pool/README.md` 两行的环境依赖：`gen_pool_readme.py` 新增 `unreadable_diag_rows()` / `hold_unreadable_rows()`，读到 0（云机 `git clean -xfdq` 后就是这样）时打 `[skip]` 并保留仓库那份读数、rc 仍 0；反向造有源树仍判红。
 ## 2026-11-02 · 补标题：这一堆是无日期片段被「保底接文件头」叠出来的历史（卡 B6）
 
 以下到下一个 `## 2026-` 标题之前，是 T-AG547 起 31 个**自身没有日期标题**的片段被

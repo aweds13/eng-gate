@@ -5144,6 +5144,7 @@ risk = "mid"
 depends = []
 
 [[cards]]
+
 id = "B7"
 task = "T-BG007"
 title = "补上 F39/F40 那 10 个「登记了没实现」的材料工具"
@@ -5152,6 +5153,18 @@ spec = "复盘/卡/卡B7-材料工具补齐.md"
 files = ["scripts/gen_pool_readme.py", "复盘/口径坑.md", ".gitignore"]
 depends = ["B5"]
 risk = "mid"
+status = "done"
+
+[[cards]]
+id = "B8"
+task = "T-BG008"
+title = "程天学的功能哪些能搬进我们自己：十域合并成一份可执行清单"
+tree = ".wt/B8"
+spec = "复盘/卡/卡B8-程天学可迁移功能报告.md"
+files = ["docs/research/程天学-可迁移功能报告.md"]
+depends = ["B6"]
+risk = "low"
+
 status = "done"
 
 [[cards]]
