@@ -5267,3 +5267,16 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E83"
+task = "T-AG590"
+title = "端口隔离那条钉子不该按金样本判绿"
+tree = ".wt/E83"
+spec = "复盘/卡/卡E83-端口隔离那条钉子不该按金样本判绿.md"
+files = [
+  "tests/test_gate_port_isolation.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
