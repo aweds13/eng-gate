@@ -31,6 +31,17 @@
 依据：用户 2026-11-02 20:33 问「为什么两个窗口不优先在自己卡树上干活，再合并」（m77772）、
 20:38 令「补全这个问题…自主决定怎么改最好…不计代价」（m77879）。
 卡规格 `复盘/卡/卡E81-台账并发隔离.md`（十条判据 / 五条反向变异），树 `.wt/E81`。
+## 2026-11-03 · 两条纪律进技能：主树禁 reset --hard、立卡只走 wb_card（卡 G8，T-AG589）
+
+两条纪律都是拿事故换来的，此前只活在当天会话与工具 help 里。
+
+第一条：**主树禁止 `git reset --hard`**。2026-11-02 20:36 另一会话落地失败后手工在主树 reset，把主控刚写进 `docs/workbacklog.toml` 的 F13 条目一起扫掉 ⇒ 只能重做立卡。落地链本来就有对应判据：`tools/pool/landing.py` 的主干保护（`main_tree_offenders` 第 789 行，调用与拒单在 2211–2219 行）—— 主树有未白名单的跟踪文件改动就拒，**主干只接受合并、不接受直接改**；别人的未提交改动正确处置是 `git stash push` 挪开、事后 `git apply` 精确复原。
+
+第二条：**立卡只走一个入口** `python -X utf8 tools/wb_card.py add`。卡 E81（`87f95ba5`）已把立卡收成唯一生产代码 `tools/pool/ledger.py`：`gates/diag/ledger.lock` 跨会话互斥、块级整行幂等、保字节尾部追加、`os.replace` 原子写带重试。旧脚本 `gates/diag/_add_card.py` 硬编码绝对路径、按全文子串判「已在」（注释里长得像的文本会被当成真卡 ⇒ 卡凭空丢），且住在 gitignore 里不入库。
+
+交付：`skills/pipe-card/SKILL.md` 95 → 106 行（新增「立卡：只走一个入口」一节 + 「工作区不干净」补 stash 挪开与禁 reset）、`skills/pipe-forensics/SKILL.md` 100 → 103 行（前置检查第 5 条 + 复盘缺口 LD4 + 常见错一行）、两份 `skills/pipe-card/NOTES.md` 与 `skills/pipe-forensics/NOTES.md` 各加一条带读数的失败记录。两份都在 `skills/nails/check_skills.py` 的 120 行上限内（余 14 / 17 行）。
+
+验收：`skills/nails/check_skills.py` 退 0（钉子② 绿：9 个 SKILL.md ≤120 行）；`tools/check_skills_claims.py --check --mode report` 退 0，引用 180 处 / 对得上 107 / **对不上 0** / 判不出 73（改前 178/105/0/73）；`scripts/check_docs.py --mode report` 死指针 148（+0）；反向变异 **4/4 真红**（删立卡命令行 / `--task`→`--card-task` 触发「对不上 1」/ 顶到 121 行触发「太长（121 行 > 上限 120 行）」/ 删光 forensics 的 reset 纪律），每条 finally 还原、sha256 与改动后一致。
 ## 2026-11-02 · 补标题：这一堆是无日期片段被「保底接文件头」叠出来的历史（卡 B6）
 
 以下到下一个 `## 2026-` 标题之前，是 T-AG547 起 31 个**自身没有日期标题**的片段被

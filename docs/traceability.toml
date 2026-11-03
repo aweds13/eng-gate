@@ -11359,3 +11359,25 @@ evidence = [
 gaps = [
   """- 本卡只治**单机多窗口**：锁落在 gates/diag/ledger.lock，跨机器不互斥（本仓是单机多会话，够用）；多机并发留给以后。<br>- 分片（docs/backlog 下的分区文件 + wb_plan merge --execute）**本卡不启用**：实测它对真台账0/321 块逐字节一致、316/321 张换位置，且无覆盖性守卫时「321+1」会把 154738 B 总表写成 155 B。本卡只把「写盘那一瞬间」串起来，台账形态一个字节都不动。<br>- 落地链那条写回（tools/pool/landing.py 的 flip_card_status）改成走同一把锁与同一原子写，但三态返回值（flipped/not-needed/unflippable）与日志文案**一字不动** —— 落地链对它零感知。<br>- 读者侧（tools/pool/plan.py 的 load_backlog）加 3 次短重试属**可选收紧**：本卡判据不咬它，写在这里只是让「读者被 os.replace 撞到」这条有据可查。<br>- 用户 2026-11-02 20:36 的手工 git reset --hard 是**事故现场**，不是本卡要禁止的动作；本卡只让「并发立卡/落地」不再需要靠 reset 收场。禁 reset 的纪律写在 skills 那一侧。""",
 ]
+
+[entries."T-AG589"]
+id = "T-AG589"
+title = "两条纪律进技能：主树禁 reset --hard、立卡只走 wb_card"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡G8-两条纪律进技能.md",
+  "file:skills/pipe-card/SKILL.md",
+  "file:skills/pipe-card/NOTES.md",
+  "file:skills/pipe-forensics/SKILL.md",
+  "file:skills/pipe-forensics/NOTES.md",
+  "text:skills/pipe-card/SKILL.md::wb_card.py add",
+  "text:skills/pipe-forensics/SKILL.md::reset --hard",
+]
+gaps = [
+  """- 本卡只改技能文本（`skills/` 四份），不加任何新判据 —— 删掉整个 `skills/` 目录，框架仍完整可用；两条纪律的**机器判据**分别在 `tools/pool/ledger.py`（立卡入口）与 `tools/pool/landing.py` 的主干保护（禁直接改主干）里。
+- 行数余量只剩 14 / 17 行：下次再往这两份 SKILL.md 加内容之前，先把细节挪进各自技能目录的 NOTES.md（纯文本，别加反引号，否则会被当成仓库根下的路径），否则 `skills/nails/check_skills.py` 的 120 行上限会红。
+- 纪律 ① 只禁 `reset --hard`，不禁所有 `reset`（`git reset -- paths` 撤暂存是正常动作）；纪律 ② 只管「立卡」，翻 status / 改域仍由落地链与 `tools/pool/plan.py` 的判据管。
+""",
+]

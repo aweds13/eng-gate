@@ -1,0 +1,21 @@
+[entries."T-AG589"]
+id = "T-AG589"
+title = "两条纪律进技能：主树禁 reset --hard、立卡只走 wb_card"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡G8-两条纪律进技能.md",
+  "file:skills/pipe-card/SKILL.md",
+  "file:skills/pipe-card/NOTES.md",
+  "file:skills/pipe-forensics/SKILL.md",
+  "file:skills/pipe-forensics/NOTES.md",
+  "text:skills/pipe-card/SKILL.md::wb_card.py add",
+  "text:skills/pipe-forensics/SKILL.md::reset --hard",
+]
+gaps = [
+  """- 本卡只改技能文本（`skills/` 四份），不加任何新判据 —— 删掉整个 `skills/` 目录，框架仍完整可用；两条纪律的**机器判据**分别在 `tools/pool/ledger.py`（立卡入口）与 `tools/pool/landing.py` 的主干保护（禁直接改主干）里。
+- 行数余量只剩 14 / 17 行：下次再往这两份 SKILL.md 加内容之前，先把细节挪进各自技能目录的 NOTES.md（纯文本，别加反引号，否则会被当成仓库根下的路径），否则 `skills/nails/check_skills.py` 的 120 行上限会红。
+- 纪律 ① 只禁 `reset --hard`，不禁所有 `reset`（`git reset -- paths` 撤暂存是正常动作）；纪律 ② 只管「立卡」，翻 status / 改域仍由落地链与 `tools/pool/plan.py` 的判据管。
+""",
+]
