@@ -31,12 +31,18 @@
   新稿换成六件本仓真工具（`wb_verify` / `wb_diag` / `pipeline_view` / `wb_reconcile` + 可选的 CLI `doctor`），
   `wb_` / 树相关出现 **9 次**，89 行、绿。
 
+- **主树被 reset 扫掉（2026-11-02 20:36）**：落地失败后想「清干净重来」，手工 reset --hard
+  把主控刚写进台账的 F13 条目一起扫掉 ⇒ 重做立卡。落地链本来就有主干保护
+  （`tools/pool/landing.py` 的 main_tree_offenders，第 789 行）：主树有未白名单的跟踪文件改动
+  就拒，主干只接受合并。处置别人的未提交改动用 stash 挪开 + 精确复原，不用 reset。
+
 ## 脚本接口与以后怎么改
 
 - 一屏核实：`tools/wb_verify.py --tree .`（提交骨架 / 门禁 / 封存 / 台账 / 审计 五块）。
 - 工人日志：`tools/wb_diag.py gates/diag/wb-<卡>.jsonl`（`--full` 才打全文时间线；进程退出码要另给 `--exit-code`）。
 - 六块现场：`tools/pipeline_view.py --json`（缺块给 `null` + note）。
 - 队列 vs git：`tools/wb_reconcile.py`。
+- 立卡：`tools/wb_card.py add`（锁 + 块级幂等 + 原子写；退 1 = 台账非 CRLF，退 2 = 等不到锁）。
 - **判据**：三值与空集在 `scripts/run_gates.py` 与门表；台账 / 封存在 `tools/pool/`。改判据去那里，**别改本技能**。
 - 证据落点会随工具演进（新产物目录）⇒ 改 `references/evidence-map.md` 的表，别在正文堆新路径。
 - 换 harness 要改的只许集中在 `skills/GLUE-harness.md`。

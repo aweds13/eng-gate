@@ -28,6 +28,11 @@
   新稿改成真链路：`git worktree add` → `wb_dispatch.py` → `wb_task.py claim` → `wb_stage_card.py`，
   `wb_` / 树相关出现 **14 次**，91 行、绿。
 
+- **2026-11-02 20:36 台账被 reset 扫掉**：另一会话落地失败后手工在主树跑 reset --hard，
+  把主控刚写进台账的 F13 条目一起扫掉，只能重做立卡。同一天卡 E81 把立卡收成生产代码
+  （`tools/wb_card.py add` → `tools/pool/ledger.py`：锁 + 块级幂等 + 原子写）；旧的
+  `gates/diag/_add_card.py` 住在 gitignore 里、按全文子串判「已在」，已废。
+
 ## 脚本接口与以后怎么改
 
 - 派活：`tools/wb_dispatch.py`（默认 dry-run；`--detach` 不等、`--execute` 真派；`--status` 看现场）。
