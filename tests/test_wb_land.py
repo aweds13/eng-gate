@@ -77,6 +77,13 @@ _NEW_TOOLS = (
     "tools/pytest_select.py",
     "tools/pool/__init__.py",
     "tools/pool/landing.py",
+    # ★ 卡 E81（T-AG586）：`landing.py` 的翻账改走 `pool.ledger`（锁 + 原子写）
+    #   ⇒ 沙箱少这一份，子进程一 import landing 就 ImportError（实测 13 条红）。
+    "tools/pool/ledger.py",
+    # ★ 卡 E81：`pool/ledger.py` 起要 `from pool.no_window import NO_WINDOW`
+    #   ⇒ 沙箱少这一份，`import landing` 就 `ModuleNotFoundError: No module named
+    #   'pool.no_window'`（实测 test_mixed_endings 那条「点名 C9」的用例红）。
+    "tools/pool/no_window.py",
     "tools/pool/review.py",
     "tools/wb_stage_card.py",
     "tools/pool/stage_card.py",

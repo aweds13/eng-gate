@@ -2,10 +2,22 @@
 id = "T-AG586"
 title = "台账并发隔离：立卡那一笔自己拿锁，不再靠「撞上了就有人被 reset」"
 group = "ENGINEERING"
-status = "todo"
+status = "done"
 owner = "controller"
 evidence = [
   "file:复盘/卡/卡E81-台账并发隔离.md",
+  "file:tools/pool/ledger.py",
+  "file:tools/pool/__init__.py",
+  "file:tools/wb_card.py",
+  "file:tests/test_ledger_lock.py",
+  "file:tools/pool/landing.py",
+  "file:docs/subsystems/pool/modules.toml",
+  "file:tests/test_pool_landing.py",
+  "file:tests/test_wb_land.py",
+  "test:test_ledger_lock.py::test_eight_writers_lose_nothing",
+  "test:test_ledger_lock.py::test_without_lock_loses_updates",
+  "test:test_ledger_lock.py::test_add_card_appends_only_tail",
+  "test:test_ledger_lock.py::test_production_writes_go_through_ledger_only",
 ]
 gaps = [
   """- 本卡只治**单机多窗口**：锁落在 gates/diag/ledger.lock，跨机器不互斥（本仓是单机多会话，够用）；多机并发留给以后。<br>- 分片（docs/backlog 下的分区文件 + wb_plan merge --execute）**本卡不启用**：实测它对真台账0/321 块逐字节一致、316/321 张换位置，且无覆盖性守卫时「321+1」会把 154738 B 总表写成 155 B。本卡只把「写盘那一瞬间」串起来，台账形态一个字节都不动。<br>- 落地链那条写回（tools/pool/landing.py 的 flip_card_status）改成走同一把锁与同一原子写，但三态返回值（flipped/not-needed/unflippable）与日志文案**一字不动** —— 落地链对它零感知。<br>- 读者侧（tools/pool/plan.py 的 load_backlog）加 3 次短重试属**可选收紧**：本卡判据不咬它，写在这里只是让「读者被 os.replace 撞到」这条有据可查。<br>- 用户 2026-11-02 20:36 的手工 git reset --hard 是**事故现场**，不是本卡要禁止的动作；本卡只让「并发立卡/落地」不再需要靠 reset 收场。禁 reset 的纪律写在 skills 那一侧。""",

@@ -19,6 +19,7 @@ CLI 与 MCP 共用同一批函数。
 | `pool.registry` | 作业登记：谁占了哪棵树 / 哪个冲突域（租约 JSON，卡 108 · T-G205） |
 | `pool.guards` | 三条自家守卫（树 / 冲突域 / 门禁锁）+ 日志不许覆盖（纯函数） |
 | `pool.lastgood` | 写盘纪律：原子替换 + `.bak` 落后一次写 + fail-closed 读（卡 A330） |
+| `pool.ledger` | 台账唯一的写入口：一把不看端口段的锁 + 带重试的原子写 + 只许尾部追加（卡 E81） |
 
 ★ 边界（如实写）：本包提供**登记（`pool.registry`）与守卫（`pool.guards`）**；但**不派活、
 不跑门禁、不起进程** —— 真正动手的写面（MCP 的 `pool_dispatch` / `pool_cancel`）在

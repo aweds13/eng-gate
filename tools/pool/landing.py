@@ -72,6 +72,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 import gate_verdict  # noqa: E402 —— 三把尺子共用的判据（卡 E63）
 
+from pool import ledger  # noqa: E402 —— 卡 E81：台账写盘只有一份（锁 + 原子写）
 from pool.snapshot import take_snapshot  # noqa: E402 —— 卡 192：快照挂 ref（唯一实现）
 
 TEXT = ROOT / "gates" / "diag" / "_text_{task}.md"
@@ -476,10 +477,20 @@ def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str, *,
         if status_val == "done":
             print(f"  [队列] 卡 {cid_val}：已是 done ⇒ 跳过")
             return "not-needed"
-        old_line = lines[status_idx].decode("utf-8", "replace")
-        new_line = re.sub(r'(status\s*=\s*)"[^"]*"', r'\1"done"', old_line)
-        lines[status_idx] = new_line.encode("utf-8")
-        backlog_path.write_bytes(b"".join(lines))
+        # ★ 卡 E81（T-AG586）：台账只有一份 ⇒ 拿**不看端口段**的台账锁，并用
+        #   同一个原子写（`os.replace` 带重试：Windows 上与并发读者互撞实测首试
+        #   失败 84%）。锁外已经扫过一遍；进锁后按同一套 `_scan_blocks` 重扫，
+        #   在**最新字节**上改那一行 —— 否则会拿旧行顶掉别人刚翻好的卡。
+        with ledger.Hold(ledger.lock_path(ledger.main_root(wt))):
+            fresh = _split_blocks(backlog_path.read_bytes())
+            for _s2, _e2, f2 in _scan_blocks(fresh):
+                if f2["id"] != cid_val or f2["status_idx"] is None:
+                    continue
+                cur = fresh[f2["status_idx"]].decode("utf-8", "replace")
+                fresh[f2["status_idx"]] = re.sub(
+                    r'(status\s*=\s*)"[^"]*"', r'\1"done"', cur).encode("utf-8")
+                break
+            ledger.write_atomic(backlog_path, b"".join(fresh))
         print(f"  [队列] 卡 {cid_val}：{status_val} → done"
               f"（这一笔是它的落地）")
         return "flipped"

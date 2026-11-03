@@ -256,3 +256,8 @@ cli = "被 `pool_quota.py line` 调"
 name = "cleared.py"
 duty = "清空用量的标记（`gates/diag/usage-cleared.json`）：清空**永不写进账**，只换读法；判不出就显出全部"
 cli = "`pool.cleared main`（子命令 list / add）"
+
+[[module]]
+name = "ledger.py"
+duty = "台账唯一的写入口：一把不看端口段的 gates/diag/ledger.lock 把「读字节 → 切块 → 查重 → 尾部追加 → 原子写（os.replace 带重试）→ 提交」包成短事务；只许尾部追加，已有块的字节一个不碰"
+cli = "无（被 wb_card.py 与 pool.landing 的翻账路径调）"
