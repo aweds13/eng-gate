@@ -229,6 +229,52 @@ def diag_metrics(main_root: Path) -> tuple[int, int, list[str]]:
     return batch, len(logs), []
 
 
+#: 度量表里**读主工作树 `gates/diag/` 私有状态**的那两行（其余行的源都在仓库里）。
+#: 那些文件全被 `gates/diag/*` 忽略、从不入库 ⇒ 换一台机器（云机独立 clone + `git clean -xfdq`，
+#: 或任何新克隆）读到的只会是 0，而仓库里那份 152 / 242 是真读数。0 不等于「没人派过活」，
+#: 它只说明**这台机器没有这份状态** ⇒ 这种行不参与比对（`[skip]`），也不许被重写成 0。
+DIAG_ROW_PREFIXES: dict[str, str] = {
+    "batch": "| 批预声明 |",
+    "logs": "| 派活日志 |",
+}
+
+
+def unreadable_diag_rows(batch: int, logs: int) -> tuple[str, ...]:
+    """哪几行**在这台机器上没有源**（按读数判，不看目录在不在）。
+
+    判据：读到 0 就是没有源。理由 —— 真派过活的树 `gates/diag/` 里必有 `batch/*.toml`
+    或 `wb-*.jsonl`；两者都为 0 只可能是「这份状态不在这台机器上」。
+
+    ★ 为什么不用 `gates/diag/` 目录是否存在判：云机上那个目录**是存在的**
+    （`gate_lock.py` 等被跟踪文件在里面），只是 `batch/` 与 `wb-*.jsonl` 不在 ⇒
+    用目录判会把云机当成「有源」，照样现算 0 去比 152。
+    """
+    rows: list[str] = []
+    if batch == 0:
+        rows.append(DIAG_ROW_PREFIXES["batch"])
+    if logs == 0:
+        rows.append(DIAG_ROW_PREFIXES["logs"])
+    return tuple(rows)
+
+
+def hold_unreadable_rows(
+    expected: list[str], actual: list[str], prefixes: tuple[str, ...]
+) -> list[str]:
+    """把 `expected` 里命中 `prefixes` 的行换成 `actual` 同位置的现行文本。
+
+    为什么换而不是删：`--check` 比的是「现算 vs 文件里那份」，换成文件里那份 ⇒ 不比出差异；
+    写盘路径同理 ⇒ **文件里那两行一个字都不动**（保留仓库里的真读数）。
+    `actual` 缺这一行时保留原样 —— 不猜。
+    """
+    held = list(expected)
+    for index, line in enumerate(held):
+        if not any(line.startswith(prefix) for prefix in prefixes):
+            continue
+        if index < len(actual):
+            held[index] = actual[index]
+    return held
+
+
 def backlog_metrics(root: Path, main_root: Path) -> tuple[int, int, int, list[str]]:
     """队列卡数：读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 done / pending。"""
     for base in (root, main_root):
@@ -401,12 +447,23 @@ def main(argv: list[str] | None = None) -> int:
     existing = "\n".join(actual_lines[begin + 1 : end])
     date_text = resolve_date(existing, "\n".join(template), datetime.date.today().isoformat())
     block = [line.replace(DATE_TOKEN, date_text) for line in template]
+    actual_block = actual_lines[begin + 1 : end]
+    # ★ 这台机器没有源的那两行：换成文件里现行文本 ⇒ 不比对、不被重写（见 unreadable_diag_rows）
+    held = unreadable_diag_rows(batch, logs)
+    if held:
+        block = hold_unreadable_rows(block, actual_block, held)
     expected_lines = actual_lines[: begin + 1] + block + actual_lines[end:]
     total = sum(found[name] for name in found if name.endswith(".py"))
     summary = f"{len(found)} 个文件 / {total} 行 / {date_text}"
 
     if args.check:
-        diffs = diff_lines(block, actual_lines[begin + 1 : end], offset=begin + 1)
+        for prefix in held:
+            print(
+                f"[skip] {README_REL} 的 `{prefix.strip('| ')}` 这行没判："
+                f"这台机器上 {DIAG_REL}/ 里读不到它的源（读到 0）"
+                f" —— 保留仓库里那份读数，不当 PASS"
+            )
+        diffs = diff_lines(block, actual_block, offset=begin + 1)
         if not diffs:
             print(f"[OK  ] {README_REL} 与现算一致（{summary}）")
             return 0
@@ -422,7 +479,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[OK  ] {README_REL} 已是最新，未写盘（{summary}）")
         return 0
     readme.write_bytes(data)
-    print(f"[OK  ] 写了 {README_REL}（{summary}；行尾 {newline!r}）")
+    tail = f"；{len(held)} 行无源读数原样保留" if held else ""
+    print(f"[OK  ] 写了 {README_REL}（{summary}；行尾 {newline!r}{tail}）")
     return 0
 
 

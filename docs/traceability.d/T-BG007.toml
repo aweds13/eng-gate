@@ -1,6 +1,6 @@
 [entries."T-BG007"]
 id = "T-BG007"
-title = "补上 F39/F40 那 10 个「登记了没实现」的材料工具"
+title = "fix(pool): pool README 两行去环境依赖 + 材料工具 10 个补齐（F39/F40）"
 group = "ENGINEERING"
 status = "done"
 evidence = [
@@ -9,5 +9,10 @@ evidence = [
   "file:复盘/卡/卡B7-材料工具补齐.md",
   "file:docs/changelog.d/T-BG007.md",
   "file:docs/traceability.d/T-BG007.toml",
+  "file:scripts/gen_pool_readme.py",
+  "file:.gitignore",
+  "file:复盘/口径坑.md",
+  "file:复盘/交接.d/T-BG007.md",
 ]
-gaps = "1. 六份 PDF 里只真抽了三份（另两份仍 idle、一份 ready），「全部抽完」没有实测；抽取耗时随文件大小从 25s 到 45s，`wait` 的 40 轮上限对更大的文件可能不够。指针 `docs/implementation/迁移DSH.md`2. `search` 只在一份 8801 字符的材料上验过（命中带 snippet）；多份材料混排与 `truncated` 分支没有实测。指针 `复盘/卡/卡B7-材料工具补齐.md`3. 面板侧**没有**为这两个工具做 UI（材料库整页读的是同一批数据，但「列/读/搜/抽取」目前只能在会话里用工具）。指针 `docs/implementation/迁移DSH-盘点表.csv`"
+gaps = "- **云端 `web_live` 与端口隔离这两条环境红，本卡没有修**（证据 `gates/diag/cloud-gate-B8.log` 与 `gates/diag/cloud-gate-E76.log`）：`TF_WEB_LIVE_TIMEOUT=120` 能让 `web_live` 在云机转绿（实测 exit=0 / 23.72s），但 `test_gate_port_isolation.py::test_two_runs_at_once_do_not_collide` 在 4 vCPU 云机上仍报 `[1, 1]`（历史同形 `cloud-gate-E76.log` 10181/10184）。本卡只如实登记，未放宽该测试的判据。- **`render` 门在云机是 `[EXCL]` 不是失败**（`gates/render/CAPTURED_ON.json` 记的是主机 DEV-HOST）：金样本采集自主机 DEV-HOST（`gates/render/CAPTURED_ON.json`），云机 host 是 gates-runner-host。本卡这趟改在本机跑（本机正是采集机），所以该门真跑了。- **本卡的修法只解决「无源机器」这一种情形**（`scripts/gen_pool_readme.py` 的 `diag_metrics`）：`diag_metrics` 读到 0 即判「这台机器没有 `gates/diag/` 的私有个数」⇒ `--check` 对那两行打 `[skip]` 且 rc=0；反向造有源树仍判红（没掩盖真漂移）。- **不知道**：云机 4 vCPU 上端口隔离那条到底是抢端口还是抢内存，日志只给了 `[1, 1]` 与各门退出码，没有逐进程资源读数（证据 `gates/diag/cloud-gate-B8.log`）。- **不知道**：`[EXCL] render` 那台机器之外的机器若长期跑云门禁，客户端 DOM 差异会不会累积成真红 —— 只有主机一份金样本，没有第二台机器对照（证据 `gates/render/CAPTURED_ON.json`）。- **没做**：没有把「按读数判无源」这套口径推广到 `gen_pool_readme.py` 之外的其他现算文档（INDEX 与 backlog 分布仍按本树现算，本来就不依赖 `gates/diag/`；证据 `scripts/gen_pool_readme.py`）。"
+

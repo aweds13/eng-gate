@@ -5144,6 +5144,17 @@ risk = "mid"
 depends = []
 
 [[cards]]
+id = "B7"
+task = "T-BG007"
+title = "补上 F39/F40 那 10 个「登记了没实现」的材料工具"
+tree = ".wt/B7"
+spec = "复盘/卡/卡B7-材料工具补齐.md"
+files = ["scripts/gen_pool_readme.py", "复盘/口径坑.md", ".gitignore"]
+depends = ["B5"]
+risk = "mid"
+status = "done"
+
+[[cards]]
 id = "B6"
 task = "T-BG006"
 title = "程天学十模块深挖 —— D 级 6 项真点下去"

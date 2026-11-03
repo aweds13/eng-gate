@@ -111,6 +111,15 @@ blobs/
 # E2 的产物（`tools/tia.py --plan` 落盘的那份计划表）
 gates/tia.json
 
+# 卡 B7（T-BG007）：`.tmp/` 是**临时探针目录**，从建仓起就没被 ignore 过。
+# 一直没暴露，是因为没人把 TOML 探针留在里面；2026-11-03 三门接连被它咬：
+# ① `scripts/check_toml.py` 用 `git ls-files --others --exclude-standard` 扫全仓 TOML
+#    ⇒ `.tmp/replace_probe*/x.toml` 这类故意写坏的探针把 ⓪ 预检顶红，门禁根本不开跑；
+# ② 同理任何 `git add -A` 会把 69 个探针文件一起卷进提交（本仓纪律本来就不许 `-A`）；
+# ③ `git status` 永远挂着 `?? .tmp/`，`--profiles auto` 判档时看不见干净树。
+# 与上面卡 E3 同一条口径：**残留不是改动面，只 ignore、不删**。
+.tmp/
+
 # ⑧ 复核的运行时产物（`tools/pool/landing.py` 里 `REVIEW_DIR` 的注释一直写着 gitignored，
 # 但这条规则此前并不存在 —— 于是每落一次地就多一个未跟踪 JSON，
 # 而 `scripts/check_docs.py` 的判死指针结果会随「这台机器跑过几次落地」漂 2 条。
