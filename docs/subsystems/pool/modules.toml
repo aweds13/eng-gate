@@ -261,3 +261,8 @@ cli = "`pool.cleared main`（子命令 list / add）"
 name = "ledger.py"
 duty = "台账唯一的写入口：一把不看端口段的 gates/diag/ledger.lock 把「读字节 → 切块 → 查重 → 尾部追加 → 原子写（os.replace 带重试）→ 提交」包成短事务；只许尾部追加，已有块的字节一个不碰"
 cli = "无（被 wb_card.py 与 pool.landing 的翻账路径调）"
+
+[[module]]
+name = "dispatch_shim.py"
+duty = "面板点「派活」的那一层中间壳：按卡号查规格（绝不让客户端传路径）、写死 argv 真跑一次派活器、往 `gates/diag/pool-actions.log` 追加一行痕；本壳不复制任何判据（卡号 / 域 / 树 / 干跑全在真派活器那边）"
+cli = "`python -X utf8 tools/pool/dispatch_shim.py --card <卡号> [--tree .wt/<卡>] [--dry-run]`"
