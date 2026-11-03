@@ -5189,3 +5189,20 @@ files = [
 status = "done"
 risk = "mid"
 depends = []
+
+[[cards]]
+id = "G8"
+task = "T-AG589"
+title = "两条纪律进技能：主树禁 reset --hard、立卡只走 wb_card"
+tree = ".wt/G8"
+spec = "复盘/卡/卡G8-两条纪律进技能.md"
+files = [
+  "skills/pipe-card/SKILL.md",
+  "skills/pipe-card/NOTES.md",
+  "skills/pipe-forensics/SKILL.md",
+  "skills/pipe-forensics/NOTES.md",
+  "复盘/卡/卡G8-两条纪律进技能.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
