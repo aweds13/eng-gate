@@ -42,6 +42,17 @@
 交付：`skills/pipe-card/SKILL.md` 95 → 106 行（新增「立卡：只走一个入口」一节 + 「工作区不干净」补 stash 挪开与禁 reset）、`skills/pipe-forensics/SKILL.md` 100 → 103 行（前置检查第 5 条 + 复盘缺口 LD4 + 常见错一行）、两份 `skills/pipe-card/NOTES.md` 与 `skills/pipe-forensics/NOTES.md` 各加一条带读数的失败记录。两份都在 `skills/nails/check_skills.py` 的 120 行上限内（余 14 / 17 行）。
 
 验收：`skills/nails/check_skills.py` 退 0（钉子② 绿：9 个 SKILL.md ≤120 行）；`tools/check_skills_claims.py --check --mode report` 退 0，引用 180 处 / 对得上 107 / **对不上 0** / 判不出 73（改前 178/105/0/73）；`scripts/check_docs.py --mode report` 死指针 148（+0）；反向变异 **4/4 真红**（删立卡命令行 / `--task`→`--card-task` 触发「对不上 1」/ 顶到 121 行触发「太长（121 行 > 上限 120 行）」/ 删光 forensics 的 reset 纪律），每条 finally 还原、sha256 与改动后一致。
+## 2026-11-03 · 全量门禁上云：wb_land --gate-on cloud 不再退 2（卡 E82，T-AG587）
+
+`wb_land --gate-on cloud`（默认档）此前是**死路**：`tools/gate_pool.py` 的 `SshTransport.run_gate()` 直接 `raise CloudUnreachable("…未在本卡实现（不许真连云机）…")`，落地只能靠 `--commit-only` 绕开传输层。本卡把这条路接上。
+
+**做法只有一条**：`run_gate` 是 `scripts/cloud/run_gate.sh` 的薄封装，不重写那五段。理由不是省事 —— 那个脚本把卡 E35/E49/E54/E63/E66 换来的教训写成了 26 条静态钉子（`tests/test_cloud_sync.py` 逐字读它的文本），重写等于集体作废再重踩。封装点逐条实测：argv 第 3 项是**树目录名**不是卡号（`run_gate.sh:44` 直接拼 `.wt/$card`，卡 E49 的 pass7 就是提交号必须从卡树取）、第 4 项是 `entry["port_base"]`（默认 9361 会撞 slot 4 的段）、`cwd` 是 `.git` 的父目录（脚本所有相对路径都相对调用者）、env 只给 `CLOUD_HOST` + `TF_PROJECTS_TOML`（**绝不注入 `TF_MODEL_REGISTRY`** —— 注了 `load_registry()` 找不到 `[[model]]`、5 条测试集体红）、超时下限 3600 s。
+
+同时修掉三个**到不了脚本**的先行缺陷：(A) `tools/pool/landing.py` 把 `",".join(...)` 出来的逗号串传给 `run_gates.build_jobs()`，而 `_profile_filter` 把 `str` 当**单个档** ⇒ `ValueError: 未知档：audit,lang,product` ⇒ `LookupError` ⇒ 还没出本机就退 2；改传 `tuple(need)`，档位串仍留给 trailer。(B) `expected_cloud_doors()` 原来返回「按 touched 算出的 needed 门」，而云机恒跑全量 ⇒ 门名集合比对必红；改成返回全量门名、差集非空才抛 `LookupError`。(C) `TF_GATE_CLOUD_HOST` 只能填 IP（hostname 在本机会 `gaierror`），但同一个变量又被当「期望 hostname」用，而云机 `last.json.host` 是 `socket.gethostname()` ⇒ 必然不等；拆成 `TF_GATE_CLOUD_HOST`（连接地址）与 `TF_GATE_CLOUD_EXPECT_HOST`（期望 hostname）两个参数。
+
+行为口径（写死、不留歧义）：「跑到了但门红」⇒ 正常回传 payload（`CloudResult.ok=False`，落地链打 `[红]` 退 1）；「根本没跑到」⇒ `raise CloudUnreachable` 并把退出码、段名、末 20 行原样带出。
+
+验收：新 `tests/test_ssh_transport.py` **27 passed**（全注入假 runner，单测里不起真 ssh 进程）；`tests/test_gate_pool.py` + `tests/test_wb_land_gate_on.py` 合跑 **67 passed, 1 skipped**；`ruff` 三份全绿；反向变异 **4/4 全红**（M1 把树目录名换成 `entry["card"]` ⇒ 拿到 `T-AG460`；M2 `cwd` 从主仓根换成卡树；M3 失败退出码也返回假 payload ⇒ 8 条参数化全红；M4 注入 `TF_MODEL_REGISTRY`），每条 finally 还原、`sha256 56dad4ce…` 一致。
 ## 2026-11-02 · 补标题：这一堆是无日期片段被「保底接文件头」叠出来的历史（卡 B6）
 
 以下到下一个 `## 2026-` 标题之前，是 T-AG547 起 31 个**自身没有日期标题**的片段被

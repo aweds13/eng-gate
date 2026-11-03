@@ -1,0 +1,23 @@
+[entries."T-AG587"]
+id = "T-AG587"
+title = "全量门禁上云：wb_land --gate-on cloud 不再退 2"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E82-全量门禁上云.md",
+  "file:tools/gate_pool.py",
+  "file:tools/pool/landing.py",
+  "file:tests/test_ssh_transport.py",
+  "test:test_ssh_transport.py",
+  "text:tools/gate_pool.py::RUN_GATE_MIN_TIMEOUT_S",
+  "text:tools/pool/landing.py::cloud_expect_host",
+]
+gaps = [
+  """- **整条链没在真云机端到端跑过**：27 条钉子全是假 runner 注入；真跑一趟要占云机槽 ~20 分钟，本卡只证明「参数与环境对了、失败码翻译对了、回传解析对了」。
+- 判据 ⑤ 的 `workspace_clean` 真源仍未解：云机 `C:/eng` 在 `3/5` 应用补丁后**必然脏**（四份历史样本 `dirty` 全 `true`），所以现在用「输出里有 `3/5` 以后的段横幅」当代理，并把它的事实话术写成「开跑前清树未确认」。真正的判据要么取 `2/5` clean 之后那次 `git status`，要么改成「补丁应用成功」—— 两条都没有实测样本支撑。
+- Windows `find /c /v \"\"` 的语义没验证（本机要挂 60 s 以上）；`check-product-fresh` 跨日/RTC 漂移没验证；绿产物过 `--seal` 后 `host` 是否逐字保留没验证；门数历史 19/20/21/22 之间怎么比没定。
+- 抛 `CloudUnreachable` 时 `mark_done` 不跑（`tools/gate_pool.py:800`）⇒ 队列行停 `state=\"running\"` 漏槽，这是既有不对称，本卡不修。
+- 落地后要改三处陈旧文档（本卡域外）：`docs/subsystems/ci/云门禁-可复现性清单.md:110-118` 仍写「`--gate-on cloud` 今天仍是死路」且引 `tools/gate_pool.py:576`（实为 `:654` 附近）、表里 `:410` 实为 `:425`、`tools/pool/landing.py:2451` 实为 `:2646` 附近；`docs/traceability.d/T-AG517.toml:23` 与 `docs/traceability.toml:9360` 的 gaps 里有同一段。
+""",
+]
