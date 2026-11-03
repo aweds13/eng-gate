@@ -5206,3 +5206,20 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E82"
+task = "T-AG587"
+title = "全量门禁上云：wb_land --gate-on cloud 不再退 2"
+tree = ".wt/E82"
+spec = "复盘/卡/卡E82-全量门禁上云.md"
+files = [
+  "tools/gate_pool.py",
+  "tools/pool/landing.py",
+  "tests/test_ssh_transport.py",
+  "复盘/卡/卡E82-全量门禁上云.md",
+  "docs/subsystems/ci/云门禁-可复现性清单.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
