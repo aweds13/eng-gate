@@ -1019,6 +1019,10 @@ def test_every_seam_handler_is_dispatched() -> None:
     for name in ("serveProxy", "servePoolAction"):
         assert f"function {name}(" in src, f"{name} 没有定义"
         assert f"{name}(req, res, url)" in src, f"{name} 定义了却没被分发"
+    # 卡 A366：号池三块读面（只 GET，不带 url）。
+    for name in ("servePoolDaily", "servePoolJobs", "servePoolLocks"):
+        assert f"function {name}(" in src, f"{name} 没有定义"
+        assert f"{name}(req, res);" in src, f"{name} 定义了却没被分发"
 
 
 def test_toolbox_has_workbench_tab_and_row_is_gone() -> None:
@@ -1577,3 +1581,44 @@ def test_notifications_truncation_is_explicit() -> None:
     src = dp._host_js()
     assert "rows.slice(0, 50)" in src
     assert "Math.max(0, rows.length - items.length)" in src
+
+
+# ---- 卡 A366（T-AG588）：号池面板点得动 ----
+
+def test_pool_card_number_pattern_accepts_prefixed_cards() -> None:
+    """卡 A366：卡号不再只认纯数字（D1 / E81 / C2 这类待派卡曾被 400 挡掉）。"""
+    host = dp._host_js()
+    assert r"/^[A-Za-z]{0,3}-?\d{1,4}$/" in host, "缺新的卡号正则"
+    assert r"/^\d{1,4}$/" not in host, "旧的纯数字正则会挡掉 D1 / E81"
+    assert r"/^\.wt\/[A-Za-z0-9_.-]{1,40}$/" in host, "缺树名校验"
+
+
+def test_pool_read_routes_forward_existing_tools_and_cache() -> None:
+    """卡 A366：三块读面只转发既有工具（不许面板另算阈值），且带 TTL 缓存。"""
+    host = dp._host_js()
+    for needle in (
+        "POOL_DAILY_ROUTE", "POOL_JOBS_ROUTE", "POOL_LOCKS_ROUTE",
+        "POOL_DAILY_TTL_MS = 5000", "POOL_JOBS_TTL_MS = 3000", "POOL_LOCKS_TTL_MS = 3000",
+        '"tools/wb_daily.py", "--json"', '"tools/wb_status.py", "--jobs", "--json"',
+        '"gates/diag/gate_lock.py", "status", "--json"', "cached: true",
+    ):
+        assert needle in host, needle
+
+
+def test_pool_dispatch_goes_through_run_bg_not_trae_start() -> None:
+    """卡 A366：「派活」不许再调 trae_dispatch start（它不起子进程 ⇒ 静默假成功）。"""
+    host = dp._host_js()
+    assert '"tools/run_bg.py", "run"' in host
+    assert "dispatch_shim.py" in host
+    assert '"wb_dispatch"' not in host and "wb_dispatch" not in host
+    assert '"dispatch": ["tools", "pool", "trae_dispatch.py", "start"]' not in host
+
+
+def test_pool_client_has_no_confirm_and_pages_instead_of_clipping() -> None:
+    """卡 A366：两段式确认替代 window.confirm；60 行截断改成「显示 M / 共 N + 再多看」。"""
+    client = dp.CLIENT_JS
+    assert "window.confirm" not in client, "还留着 window.confirm"
+    assert "rows.slice(0, 60)" not in client, "还留着静默 60 行截断"
+    for needle in ("data-wb-more", "显示 ", "再多看 ", "data-wb-block", "data-wb-kpi"):
+        assert needle in client, needle
+    assert "setInterval" not in client

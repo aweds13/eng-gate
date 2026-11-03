@@ -377,6 +377,12 @@ NOTIFICATIONS_ROUTE = f"{SEAM_PREFIX}/notifications"
 #: 卡 A302（T-AG416）：卡谱系树（只读）—— 转 `tools/wb_tree.py --json`。
 #: 节点 = 提交、边 = 真实父链 + 卡池显式 depends；面板只按功能区折叠展示，不写任何东西。
 CARD_TREE_ROUTE = f"{SEAM_PREFIX}/card-tree"
+#: 卡 A366（T-AG588）：号池三块只读读数 —— 今日一页 / 在飞作业 / 门禁锁。
+#: 判据全在既有工具里（`wb_daily.py --json` / `wb_status.py --jobs --json` /
+#: `gate_lock.py status --json`），面板只转发、不重算阈值、不解析人类文本。
+POOL_DAILY_ROUTE = f"{SEAM_PREFIX}/pool-daily"
+POOL_JOBS_ROUTE = f"{SEAM_PREFIX}/pool-jobs"
+POOL_LOCKS_ROUTE = f"{SEAM_PREFIX}/pool-locks"
 
 #: 卡 253：**写死**的服务白名单 —— 真源是 `tools/stack.py` 的组件表（worker 不在表里，
 #: 所以面板永远派不出工人）。`start-all` 只是 `stack.py start`（无名字）的等价动作。
@@ -638,6 +644,14 @@ const NOTIFICATIONS_REL = ["gates", "diag", "notifications.jsonl"];
 /* ★ 卡 A302（T-AG416）：卡谱系树只读路由 —— 转 tools/wb_tree.py --json。
  *   节点/边都在那边算好；本处只保证「起不来 / 非零 / 非 JSON」如实报，不返空树。 */
 const CARD_TREE_ROUTE = "__CARD_TREE_ROUTE__";
+/* ★ 卡 A366（T-AG588）：号池三块只读读数 —— 第一屏吃它们。
+ *   一律 `--json` 转发既有工具（宿主半不解析人类文本），TTL 命中带 cached:true。 */
+const POOL_DAILY_ROUTE = "__POOL_DAILY_ROUTE__";
+const POOL_JOBS_ROUTE = "__POOL_JOBS_ROUTE__";
+const POOL_LOCKS_ROUTE = "__POOL_LOCKS_ROUTE__";
+const POOL_DAILY_TTL_MS = 5000;
+const POOL_JOBS_TTL_MS = 3000;
+const POOL_LOCKS_TTL_MS = 3000;
 const ACTIONS_LOG_REL = ["gates", "diag", "stack-actions.log"];
 /* ★ 卡 253：**写死**的动作白名单（真源 = tools/stack.py 的组件表）。
  * 面板只收 {kind, name} 两个枚举值；这里不认命令字符串，没有透传口子。
@@ -1237,20 +1251,39 @@ function serveSkills(req, res) {
 
 const POOL_ACTION_ROUTE = SEAM_PREFIX + "/pool-action";
 /* ★ 卡 A284（用户令「允许我改」）：面板的**第二个写动作**——派活 / 放租约。
- *   判据没放宽：只认两个 op、只传 `--card`（正整数），argv 写死、绝不过 shell；
- *   真正的判据仍在 tools/pool/*.py 里（面板不替它们做决定）。 */
+ * ★ 卡 A366（T-AG588）：op 从 2 扩到 4，且「派活」换了语义 ——
+ *   原来调 trae_dispatch start（它自述「不起任何子进程」）⇒ 点了等于假成功、卡在待派；
+ *   现在走 run_bg 起后台 + 中间壳 dispatch_shim（真派活器的名字在禁词表里，面板不能写）。
+ *   判据都没挪到面板：卡号/冲突域/干跑仍由 wb_registry 与真派活器判。
+ *   ★ 面板**不收** spec / files：卡规格由服务端按卡号查，客户端传不进来。 */
+/* ★ 形状：argv[0] = **脚本**（相对仓库根，含子目录），其余是它的参数。
+ *   写成数组段（"tools", "pool", "x.py"）会被当成三段路径 —— 卡 A366 之前就是这么坏的。 */
 const POOL_ACTIONS = {
-  dispatch: ["tools", "pool", "trae_dispatch.py", "start"],
-  release: ["tools", "pool", "lease.py", "release"],
+  check: ["tools/wb_registry.py", "check"],
+  reserve: ["tools/pool/trae_dispatch.py", "start"],
+  /* run_bg 的 `--` 之后是**一整条命令**：给脚本路径它会当可执行文件起（WinError 193），
+   * 所以这一行必须带解释器；{python} 在 servePoolAction 里换成运行时那个。 */
+  dispatch: ["tools/run_bg.py", "run", "--log",
+    "gates/diag/wb-{card}.dispatch.log", "--", "{python}",
+    "-X", "utf8", "tools/pool/dispatch_shim.py"],
+  release: ["tools/pool/lease.py", "release"],
 };
+const POOL_ACTION_TIMEOUT_MS = {
+  check: 30000, reserve: 60000, dispatch: 20000, release: 60000,
+};
+const POOL_ACTION_OPS = Object.keys(POOL_ACTIONS);
 
 function runTool(argv, timeoutMs) {
   const root = repoRoot();
   if (!root) {
     return { ok: false, error: "没告诉我仓库根：插件行 config.root 或 DSH_WORKBENCH_ROOT。" };
   }
+  /* ★ 卡 A366：argv[0] 是**脚本**，其余是它的参数 —— 旧写法把参数也 join 进路径，
+   *   于是 trae_dispatch.py start --card D1 变成 …	rae_dispatch.py\start（exit 2），
+   *   按钮点了永远「假成功」。这里只 join 脚本那一段。 */
+  const [script, ...rest] = argv;
   const done = spawnSync(process.env.DSH_PYTHON || "python",
-    ["-X", "utf8", path.join(root, ...argv)], {
+    ["-X", "utf8", path.join(root, script), ...rest], {
       encoding: "utf8", timeout: timeoutMs, windowsHide: true,
       maxBuffer: 16 * 1024 * 1024, cwd: root,
     });
@@ -1260,6 +1293,69 @@ function runTool(argv, timeoutMs) {
   return { ok: done.status === 0, text: tail, exit: done.status };
 }
 
+/* ★ 卡 A366：读路由一律要 JSON —— 宿主半不许解析人类文本（那是第二份判据），
+ *   缺 `--json` 就去工具里加。这里只把「起不来 / 非零 / 非 JSON」三种情况如实报。 */
+function runJsonTool(argv, timeoutMs) {
+  const root = repoRoot();
+  if (!root) {
+    return { ok: false, error: "没告诉我仓库根：插件行 config.root 或 DSH_WORKBENCH_ROOT。" };
+  }
+  /* ★ 卡 A366：argv[0] 是**脚本**，其余是它的参数 —— 旧写法把参数也 join 进路径，
+   *   于是 trae_dispatch.py start --card D1 变成 …	rae_dispatch.py\start（exit 2），
+   *   按钮点了永远「假成功」。这里只 join 脚本那一段。 */
+  const [script, ...rest] = argv;
+  const done = spawnSync(process.env.DSH_PYTHON || "python",
+    ["-X", "utf8", path.join(root, script), ...rest], {
+      encoding: "utf8", timeout: timeoutMs, windowsHide: true,
+      maxBuffer: 16 * 1024 * 1024, cwd: root,
+    });
+  const output = ((done.stdout || "") + (done.stderr || "")).trim();
+  if (done.error) return { ok: false, error: `起不来：${done.error.message}` };
+  if (done.status !== 0) {
+    return { ok: false, error: `退出码 ${done.status}：${output.slice(-600)}` };
+  }
+  try {
+    const parsed = JSON.parse(output);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, error: "工具返回的不是 JSON 对象" };
+    }
+    return { ok: true, reading: parsed };
+  } catch (error) {
+    return { ok: false, error: `工具输出不是 JSON：${String(error)}` };
+  }
+}
+
+let poolReadingCache = null;
+function servePoolReading(key, ttlMs, argv, timeoutMs, res) {
+  const now = Date.now();
+  if (poolReadingCache !== null && poolReadingCache.key === key
+      && now - poolReadingCache.at < ttlMs) {
+    sendJson(res, 200, Object.assign({}, poolReadingCache.payload, { cached: true }));
+    return;
+  }
+  const answer = runJsonTool(argv, timeoutMs);
+  const payload = answer.ok
+    ? { ok: true, route: key, reading: answer.reading }
+    : { ok: false, route: key, error: answer.error };
+  if (answer.ok) poolReadingCache = { key, at: Date.now(), payload };
+  sendJson(res, answer.ok ? 200 : 502, payload);
+}
+
+function servePoolDaily(req, res) {
+  servePoolReading(POOL_DAILY_ROUTE, POOL_DAILY_TTL_MS,
+    ["tools/wb_daily.py", "--json", "--root", "."], 20000, res);
+}
+
+function servePoolJobs(req, res) {
+  servePoolReading(POOL_JOBS_ROUTE, POOL_JOBS_TTL_MS,
+    ["tools/wb_status.py", "--jobs", "--json", "--root", "."], 15000, res);
+}
+
+function servePoolLocks(req, res) {
+  servePoolReading(POOL_LOCKS_ROUTE, POOL_LOCKS_TTL_MS,
+    ["gates/diag/gate_lock.py", "status", "--json"], 15000, res);
+}
+
 function servePoolAction(req, res, url) {
   if (req.method !== "POST") {
     sendJson(res, 405, { ok: false, error: `号池动作缝只认 POST，收到 ${req.method}` });
@@ -1267,17 +1363,32 @@ function servePoolAction(req, res, url) {
   }
   const op = String(url.searchParams.get("op") || "");
   const card = String(url.searchParams.get("card") || "");
+  const tree = String(url.searchParams.get("tree") || "");
   const argv = POOL_ACTIONS[op];
   if (!argv) {
-    sendJson(res, 400, { ok: false, error: `不认识的 op：${op}（只有 dispatch / release）` });
+    sendJson(res, 400, {
+      ok: false, error: `不认识的 op：${op}（只有 ${POOL_ACTION_OPS.join(" / ")}）`,
+    });
     return;
   }
-  if (!/^\d{1,4}$/.test(card)) {
+  /* ★ 卡 A366：旧正则只认纯数字（1–4 位），只放行 142/322 张卡（D1–D8 / C1 / E81 全 400）。 */
+  if (!/^[A-Za-z]{0,3}-?\d{1,4}$/.test(card)) {
     sendJson(res, 400, { ok: false, error: `卡号不合法：${card}` });
     return;
   }
-  const timeout = op === "release" ? 60000 : 180000;
-  sendJson(res, 200, runTool([...argv, "--card", card], timeout));
+  if (tree !== "" && !/^\.wt\/[A-Za-z0-9_.-]{1,40}$/.test(tree)) {
+    sendJson(res, 400, { ok: false, error: `树不合法：${tree}` });
+    return;
+  }
+  const python = process.env.DSH_PYTHON || "python";
+  const args = argv.map((part) => String(part)
+    .replace(/\{card\}/g, card)
+    .replace(/\{python\}/g, python));
+  args.push("--card", card);
+  if (op === "dispatch" && tree !== "") args.push("--tree", tree);
+  const answer = runTool(args, POOL_ACTION_TIMEOUT_MS[op]);
+  if (op !== "check") poolReadingCache = null; /* 写动作成功与否都别让旧读数顶着 */
+  sendJson(res, 200, answer);
 }
 
 function serveSeam(req, res) {
@@ -1322,6 +1433,20 @@ function serveSeam(req, res) {
   /* ★ 卡 A302：卡谱系树（GET，只读）—— 工具箱「谱系」页吃这一条。 */
   if (url.pathname === CARD_TREE_ROUTE) {
     serveCardTree(req, res);
+    return;
+  }
+  /* ★ 卡 A366（T-AG588）：号池三块只读读数 —— 今日一页 / 在飞 / 门禁锁。
+   *   都在 GET 闸门之后；一律转发既有工具的 `--json`，面板侧不重算任何阈值。 */
+  if (url.pathname === POOL_DAILY_ROUTE) {
+    servePoolDaily(req, res);
+    return;
+  }
+  if (url.pathname === POOL_JOBS_ROUTE) {
+    servePoolJobs(req, res);
+    return;
+  }
+  if (url.pathname === POOL_LOCKS_ROUTE) {
+    servePoolLocks(req, res);
     return;
   }
   const seat = SEATS.find((row) => row.route === url.pathname);
@@ -1395,6 +1520,9 @@ def _host_js() -> str:
         .replace("__STACK_STATUS_ROUTE__", STACK_STATUS_ROUTE)
         .replace("__NOTIFICATIONS_ROUTE__", NOTIFICATIONS_ROUTE)
         .replace("__CARD_TREE_ROUTE__", CARD_TREE_ROUTE)
+        .replace("__POOL_DAILY_ROUTE__", POOL_DAILY_ROUTE)
+        .replace("__POOL_JOBS_ROUTE__", POOL_JOBS_ROUTE)
+        .replace("__POOL_LOCKS_ROUTE__", POOL_LOCKS_ROUTE)
         .replace("__PKG_NAME__", json.dumps(PACKAGE_NAME))
     )
 
@@ -1490,6 +1618,10 @@ window.__ModuleLoader__.load({
     /* 卡 253：动作缝（POST，白名单在宿主半）与服务现读（GET）。 */
     const ACTION_ROUTE = "__ACTION_ROUTE__";
     const STACK_STATUS_ROUTE = "__STACK_STATUS_ROUTE__";
+    /* 卡 A366：号池三块读面（只 GET；判据在 tools 里，面板只转发）。 */
+    const POOL_DAILY_ROUTE = "__POOL_DAILY_ROUTE__";
+    const POOL_JOBS_ROUTE = "__POOL_JOBS_ROUTE__";
+    const POOL_LOCKS_ROUTE = "__POOL_LOCKS_ROUTE__";
 
     /* ---- 卡 A309（T-AG423）· 深链：每个界面都有自己的地址 ----
      * 形状 `#/panel/<id>` —— 照 dsh-url-router 的同款（`#/panel/<panelId>` → selectPanel(id)；
@@ -2341,78 +2473,254 @@ __TARGETS__
         boardColumns(cards));
     }
 
-    function ToolboxPool() {
-      const source = useSource("/dsh-panel/workbench-board");
-      const state = source.state;
-      const [filter, setFilter] = react.useState("live");
+    /* ---- 卡 A366（T-AG588）· 号池：三块读数 + 四个动作 ----
+     * 数据全来自既有工具的 --json（pool-daily / pool-jobs / pool-locks）；
+     * 本页只把读数摊开、把点击翻成写死的 argv —— 阈值 / 冲突域 / 额度四态一概不在这里算。
+     * ★ 不做「落地」按钮（八步任一步错不可逆）；不轮询 —— useSource 打开时读一次，
+     *   只有写动作之后才补读一次（一次性 setTimeout，3 秒；卡 253 钉死常驻轮询）。 */
+
+    const POOL_ACTION_TEXT = {
+      check: "干跑", reserve: "占租约", dispatch: "派活", release: "放租约",
+    };
+    const POOL_PAGE = 60;
+    const POOL_MARK = { "在跑": "●", "断了": "▲", "已判决": "○" };
+    const poolTone = (state) => {
+      if (state === "在跑") return T.ok;
+      if (state === "断了") return T.bad;
+      return T.dim;
+    };
+    /* 状态色 + 文字双写（WCAG 1.4.1：不靠颜色单独承载信息）。 */
+    const poolState = (state) => h("span", { style: { color: poolTone(state) } },
+      String(POOL_MARK[state] || "○") + " " + String(state || "未知"));
+
+    function usePoolAction(onDone) {
+      const [phase, setPhase] = react.useState("idle");
       const [msg, setMsg] = react.useState("");
-      /* ★ 卡 A284：派活 / 放租约。先弹确认，再把宿主半回的原话贴回来。 */
-      const poolAction = (op, id) => {
-        const verb = op === "dispatch" ? "派活" : "放租约";
-        if (!window.confirm(`${verb}：卡 ${id}？`)) return;
-        const query = `op=${encodeURIComponent(op)}&card=${encodeURIComponent(id)}`;
-        fetch(`/dsh-panel/pool-action?${query}`, { method: "POST" })
+      const run = (op, card, tree) => {
+        const word = POOL_ACTION_TEXT[op] || op;
+        setPhase("starting");
+        setMsg(word + " " + card + "：已发起…");
+        const query = "op=" + encodeURIComponent(op)
+          + "&card=" + encodeURIComponent(card)
+          + (tree ? "&tree=" + encodeURIComponent(tree) : "");
+        fetch("/dsh-panel/pool-action?" + query, { method: "POST" })
           .then(readJson)
-          .then((body) => setMsg(`${verb} 卡 ${id}：${body.ok ? "成" : "败"}`
-            + (body.text ? `　${body.text}` : (body.error || ""))))
-          .catch((error) => setMsg(`${verb} 卡 ${id}：失败 ${error.message}`));
+          .then((body) => {
+            setPhase(body.ok ? "done" : "failed");
+            setMsg(word + " " + card + "：" + (body.ok ? "成" : "败")
+              + (body.text ? "　" + body.text : (body.error ? "　" + body.error : "")));
+            if (typeof onDone === "function") onDone();
+          })
+          .catch((error) => {
+            setPhase("failed");
+            setMsg(word + " " + card + "：失败 " + error.message);
+          });
       };
-      if (state.status === "skeleton") {
-        return h(LoadingSkeleton, { title: "号池", onRefresh: source.refresh });
-      }
-      const data = state.data || {};
-      const cards = (data.reading && data.reading.cards) || [];
-      const failedPick = (card) => LIVE(card) && card.status !== "pending" && !RUNNING(card);
-      const failed = state.status === "error" || data.ok === false;
-      const filters = [
-        ["live", "未收口", LIVE],
-        ["all", "全部", () => true],
-        ["done", "已完成", (card) => card.status === "done"],
-        ["failed", "失败/其它", failedPick],
-      ];
-      const picked = filters.filter(([key]) => key === filter);
-      const rows = cards.filter((picked.length ? picked[0] : filters[0])[2]);
-      const head = h("div", { style: Object.assign({}, UI.row, { padding: "8px 10px" }) },
-        h("span", { style: Object.assign({}, UI.muted, { width: "64px" }) }, "卡"),
-        h("span", { style: Object.assign({}, UI.muted, { width: "120px" }) }, "状态"),
-        h("span", { style: UI.muted }, "任务"));
-      return h("div", { "data-wb-state": failed ? "error" : "ok",
-          style: { display: "flex", flexDirection: "column", gap: "10px" } },
-        failed
-          ? h("p", { "data-wb-error": "", style: UI.error },
-              "号池读数失败（原话：" + String(state.error || data.error || "未知")
-                + "）—— 下面保留上次读数")
-          : null,
-        h("div", {
-          style: Object.assign({}, UI.card, { display: "flex", gap: "8px", flexWrap: "wrap" }),
-        },
-        filters.map(([key, label, pick]) => h("button", {
-          key, type: "button", "data-wb-filter": key,
-          style: filter === key ? UI.primary : UI.secondary,
-          onClick: () => setFilter(key),
-        }, label + "（" + String(cards.filter(pick).length) + "）"))),
-        h("div", { style: Object.assign({}, UI.card, { padding: "0", overflowX: "auto" }) },
-          head,
-          rows.slice(0, 60).map((card) => h("div", {
-            key: String(card.id), style: Object.assign({}, UI.row, { padding: "6px 10px" }),
-          },
-          h("span", { style: { width: "64px" } }, "#" + String(card.id)),
-          h("span", { style: { width: "120px" } }, String(card.status || "")),
-          textCell(card.task),
-          card.status === "pending"
-            ? h("button", { type: "button", style: UI.seg,
-                onClick: () => poolAction("dispatch", card.id) }, "派活")
-            : null,
-          RUNNING(card)
-            ? h("button", { type: "button", style: UI.seg,
-                onClick: () => poolAction("release", card.id) }, "放租约")
-            : null))),
-        h("p", { "data-wb-pool-msg": "", style: UI.muted },
-          msg !== "" ? msg
-            : "共 " + String(cards.length) + " 张；当前 "
-              + String(rows.length) + " 张（派活 / 放租约都要先弹确认）"));
+      return { phase, msg, run };
     }
 
+    /* 两段式确认：第一下上膛，3 秒内再点一下才真的派 —— 不用原生 confirm 弹窗
+     * （它挡渲染线程，也让人没法回看这一行的读数）。 */
+    function useArmed() {
+      const [armed, setArmed] = react.useState("");
+      const timer = react.useRef(null);
+      const arm = (key) => {
+        setArmed(key);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setArmed(""), 3000);
+      };
+      return { armed, arm, disarm: () => setArmed("") };
+    }
+
+    function PoolKpi(props) {
+      const cells = [
+        ["待派", props.queue, T.brand],
+        ["在飞", props.running, T.dim],
+        ["卡住", props.stuck, T.bad],
+        ["门禁", props.gates, T.dim],
+        ["签到", props.checkin, T.dim],
+      ];
+      return h("div", {
+        "data-wb-kpi": "",
+        style: { display: "flex", gap: "8px", flexWrap: "wrap" },
+      }, cells.map(([label, value, tone]) => h("div", {
+        key: label,
+        style: Object.assign({}, UI.card, { flex: "1", minWidth: "96px" }),
+      },
+        h("p", { style: UI.muted }, label),
+        h("p", { style: { color: tone, fontSize: "18px", margin: "0" } },
+          String(value === null || value === undefined ? "—" : value)))));
+    }
+
+    function PoolMore(props) {
+      return h("div", { "data-wb-more": "", style: UI.row },
+        h("span", { style: UI.muted },
+          "显示 " + String(props.shown) + " / 共 " + String(props.total)),
+        props.shown < props.total
+          ? h("button", { type: "button", style: UI.seg, onClick: props.onMore },
+              "再多看 " + String(POOL_PAGE) + " 行")
+          : null);
+    }
+
+    function PoolGatesRow(props) {
+      const locks = props.locks;
+      const busy = locks && Array.isArray(locks.ports_busy) && locks.ports_busy.length
+        ? locks.ports_busy.join(", ") : "全空";
+      return h("div", { "data-wb-block": "gates", style: UI.card },
+        h("p", { style: UI.muted },
+          "门禁锁 " + (locks ? String(locks.active) : "读不到")
+            + " / " + (locks ? String(locks.max_concurrent) : "?")
+            + "；本段端口占用：" + busy),
+        locks && locks.note ? h("p", { style: UI.muted }, String(locks.note)) : null,
+        (locks && Array.isArray(locks.locks) ? locks.locks : []).map((row) => h("div", {
+          key: String(row.file),
+          "data-wb-lock": String(row.card || ""),
+          style: UI.row,
+        },
+          h("span", { style: { width: "88px" } }, String(row.card || "—")),
+          h("span", { style: { width: "120px" } }, "已 " + String(row.age_seconds) + "s"),
+          h("span", { style: { width: "150px" } },
+            row.expired ? "★ 超过租约，可被清" : "租约内"),
+          textCell(row.holder))));
+    }
+
+    function PoolLiveRows(props) {
+      const rows = props.rows;
+      const shown = rows.slice(0, props.limit);
+      return h("div", { "data-wb-block": "live", style: UI.card },
+        h("p", { style: UI.muted },
+          "在飞 / 卡住（来自 pool-jobs）：共 " + String(rows.length) + " 条"),
+        rows.length === 0 ? h("p", { style: UI.muted }, "没有在飞作业。") : null,
+        shown.map((job) => h("div", {
+          key: String(job.log),
+          "data-wb-job": String(job.card || ""),
+          style: UI.row,
+        },
+          h("span", { style: { width: "80px" } }, "#" + String(job.card || "?")),
+          h("span", { style: { width: "104px" } }, "静默 " + String(job.age_seconds) + "s"),
+          h("span", { style: { width: "92px" } }, poolState(job.state)),
+          textCell(job.why),
+          h("button", {
+            type: "button", style: UI.seg,
+            onClick: () => props.onArm("dispatch:" + job.card, job.card),
+          }, "重派"))),
+        h(PoolMore, { shown: shown.length, total: rows.length, onMore: props.onMore }));
+    }
+
+    function PoolQueueRows(props) {
+      const rows = props.rows;
+      const shown = rows.slice(0, props.limit);
+      return h("div", { "data-wb-block": "queue", style: UI.card },
+        h("p", { style: UI.muted },
+          "待派（来自 pool-daily）：共 " + String(rows.length) + " 张"),
+        rows.length === 0 ? h("p", { style: UI.muted }, "没有待派卡。") : null,
+        shown.map((card) => h("div", {
+          key: String(card),
+          "data-wb-queue": String(card),
+          style: UI.row,
+        },
+          h("span", { style: { width: "80px" } }, "#" + String(card)),
+          h("span", { style: UI.muted }, "派活前先干跑一次（不放行就不派）"),
+          h("button", {
+            type: "button", style: UI.seg,
+            onClick: () => props.onAction("check", card),
+          }, "干跑"),
+          h("button", {
+            type: "button", style: UI.seg,
+            onClick: () => props.onArm("dispatch:" + card, card),
+          }, "派活"))),
+        h(PoolMore, { shown: shown.length, total: rows.length, onMore: props.onMore }));
+    }
+
+    function ToolboxPool() {
+      const daily = useSource("/dsh-panel/pool-daily");
+      const jobs = useSource("/dsh-panel/pool-jobs");
+      const locks = useSource("/dsh-panel/pool-locks");
+      const [filter, setFilter] = react.useState("live");
+      const [limit, setLimit] = react.useState(POOL_PAGE);
+      const armed = useArmed();
+      const refreshAll = () => {
+        void daily.refresh();
+        void jobs.refresh();
+        void locks.refresh();
+      };
+      const action = usePoolAction(refreshAll);
+      const states = [daily.state, jobs.state, locks.state];
+      const failed = states.some((row) => row.status === "error");
+      const allSkeleton = states.every((row) => row.status === "skeleton");
+      if (allSkeleton) {
+        return h(LoadingSkeleton, { title: "号池", onRefresh: refreshAll });
+      }
+      const dailyRead = (daily.state.data || {}).reading || {};
+      const jobsRead = (jobs.state.data || {}).reading || {};
+      const locksRead = (locks.state.data || {}).reading || null;
+      const queue = Array.isArray(dailyRead.to_dispatch) ? dailyRead.to_dispatch : [];
+      const jobRows = Array.isArray(jobsRead.jobs) ? jobsRead.jobs : [];
+      const running = jobRows.filter((job) => job.state === "在跑").length;
+      const stuck = jobRows.filter((job) => job.state === "断了").length;
+      const gates = dailyRead.gates || null;
+      const checkin = dailyRead.checkin || null;
+      const filters = [
+        ["live", "在飞 / 卡住", jobRows.length],
+        ["queue", "待派", queue.length],
+        ["all", "全部", jobRows.length + queue.length],
+      ];
+      const armDispatch = (key, card) => {
+        if (armed.armed === key) {
+          armed.disarm();
+          /* 永远带树：没把握 `.wt/<卡>` 在就不许派 —— 派到主树会跟别人抢同一批文件。 */
+          action.run("dispatch", card, ".wt/" + card);
+          return;
+        }
+        armed.arm(key);
+      };
+      const runOne = (op, card) => {
+        armed.disarm();
+        action.run(op, card, "");
+      };
+      const more = () => setLimit((n) => n + POOL_PAGE);
+      return h("div", {
+        "data-wb-state": failed ? "error" : "ok",
+        style: { display: "flex", flexDirection: "column", gap: "10px" },
+      },
+        failed ? h("p", { "data-wb-error": "", style: UI.error },
+          "号池读数失败（原话：" + String(daily.state.error || jobs.state.error
+            || locks.state.error || "未知") + "）—— 下面保留上次读数") : null,
+        h("p", { style: UI.muted },
+          "读数 " + hhmm(daily.state.at || jobs.state.at) + " · 打开时读一次，不轮询"),
+        h(PoolKpi, {
+          queue: queue.length,
+          running,
+          stuck,
+          gates: gates ? String(gates.ok ? "OK" : "红") + " · " + String(gates.count) : "—",
+          checkin: checkin ? String(checkin.found ? "已签到" : "没跑") : "—",
+        }),
+        h("div", {
+          style: Object.assign({}, UI.card, {
+            display: "flex", gap: "8px", flexWrap: "wrap",
+          }),
+        }, filters.map(([key, label, count]) => h("button", {
+          key,
+          type: "button",
+          "data-wb-filter": key,
+          style: filter === key ? UI.primary : UI.secondary,
+          onClick: () => { setFilter(key); armed.disarm(); },
+        }, label + "（" + String(count) + "）"))),
+        filter === "live" || filter === "all"
+          ? h(PoolLiveRows, { rows: jobRows, limit, onMore: more, onArm: armDispatch })
+          : null,
+        filter === "queue" || filter === "all"
+          ? h(PoolQueueRows, {
+              rows: queue, limit, onMore: more, onArm: armDispatch, onAction: runOne,
+            })
+          : null,
+        h(PoolGatesRow, { locks: locksRead }),
+        h("p", { "data-wb-pool-msg": "", style: UI.muted },
+          action.msg !== "" ? action.msg
+            : (armed.armed !== ""
+              ? "已经上膛：3 秒内再点一次「派活」才真的派（届时派到 .wt/<卡>）"
+              : "派活 = run_bg 起后台 + 真派活器；干跑不放行就不派；放租约只删登记，不杀工人。")));
+    }
     function ToolboxSkills() {
       const source = useSource("/dsh-panel/skills");
       const state = source.state;
@@ -2988,6 +3296,9 @@ def _client_js() -> str:
         .replace("__TARGETS__", _client_targets_js())
         .replace("__ACTION_ROUTE__", ACTION_ROUTE)
         .replace("__STACK_STATUS_ROUTE__", STACK_STATUS_ROUTE)
+        .replace("__POOL_DAILY_ROUTE__", POOL_DAILY_ROUTE)
+        .replace("__POOL_JOBS_ROUTE__", POOL_JOBS_ROUTE)
+        .replace("__POOL_LOCKS_ROUTE__", POOL_LOCKS_ROUTE)
         .replace("__HASH_PREFIX__", json.dumps(HASH_PREFIX))
         .replace("__HASH_DEFAULT_ID__", json.dumps(HASH_DEFAULT_ID))
         .replace("__HASH_PAGE_IDS__", json.dumps(list(HASH_PAGE_IDS)))
@@ -3135,19 +3446,22 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 | `icon.svg` | 包内图标（清单 `icon` 用相对路径指它；卡 244） |
 | `locale/zh.json` / `locale/en.json` | 包级显示文本（meta + 三座位的标题/说明；卡 247） |
 | `cordis.patch.yml` | 包内补丁层（`dsh.bundle.patch` 指向它；root 由 emit 写成真实绝对路径） |
-| `lib/index.js` | **宿主半**：三个只读工具 + **一条只读缝**（三条同源路由，只 GET） |
+| `lib/index.js` | **宿主半**：三个只读工具 + **一条只读缝**（座位路由 + 号池读面，只 GET） |
 | `lib/client.js` | **浏览器半**：快捷入口 + 右栏常驻页签 + 底部入口 + 内联 SVG 图标 |
 | `README.md` | 本说明 |
 
 ## 那条只读缝（宿主 → 浏览器）
 
 宿主半用 `ctx.webServer.register({ kind: "prefix", path: "/dsh-panel", handler })` 注册
-**一条只读缝**，其下三条同源路由（**只 GET、只本机、只读、不写盘、不起工人**）：
+**一条只读缝**，其下七条同源路由（**只 GET、只本机、只读、不写盘、不起工人**）：
 
     /dsh-panel/workbench-board    → tools/pipeline_view.py --json --root <root>
     /dsh-panel/zentao-gantt       → tools/zentao_gantt.py --json
     /dsh-panel/timeflow-inbox     → tools/timeflow_inbox.py --json --root <root>
     /dsh-panel/card-tree          → tools/wb_tree.py --json（卡 A302：卡谱系树，工具箱「谱系」页）
+    /dsh-panel/pool-daily         → tools/wb_daily.py --json（卡 A366：今日一页，TTL 5s）
+    /dsh-panel/pool-jobs          → tools/wb_status.py --jobs --json（卡 A366：在飞，TTL 3s）
+    /dsh-panel/pool-locks         → gates/diag/gate_lock.py status --json（卡 A366，TTL 3s）
 
 每个 handler 起对应**只读**工具（`spawnSync`、`windowsHide: true`、带超时），把它的 JSON
 **原样**回给浏览器。**缺数据**（工具不在 / 非零退出 / 超时 / 输出不是 JSON / 顶层不是对象）
@@ -3227,7 +3541,8 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 - **允许**：起/停 `tools/stack.py` 组件表里那几件**服务**（`board` / `timeflow` / `zentao` /
   `closer` / `trae`）；动作缝只收 `{kind, name}` 两个枚举值，白名单**写死**在宿主半，
   **没有透传任意命令的口子**（`rm -rf` 之类一律拒绝并点名）；
-- **仍然禁止**：派工人（`wb_dispatch`）、写仓库文件、改 `~/.dsh`、跑门禁。
+- **仍然禁止**：同步起工人、写仓库文件、改 `~/.dsh`、跑门禁；号池派活只经
+  `tools/run_bg.py run` 后台转发给 tools/pool/dispatch_shim.py（卡 A366：不许假成功）。
 
 目标页本身（wb_dash.py / serve.py / 禅道）归别的卡，本面板只**指向**它们。
 用户早先拍过：**拖动只写意图、主控执行** —— 本面板连拖动都没有，只有选中态。
@@ -3241,13 +3556,17 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 | 读 | `/dsh-panel/zentao-gantt` | GET | 禅道甘特（脚本回退视图） |
 | 读 | `/dsh-panel/timeflow-inbox` | GET | 时间流收件箱 |
 | 读 | `/dsh-panel/card-tree` | GET | 卡谱系树（`tools/wb_tree.py --json`，卡 A302） |
+| 读 | `/dsh-panel/pool-daily` | GET | 今日一页（`wb_daily.py --json`，TTL 5s，卡 A366） |
+| 读 | `/dsh-panel/pool-jobs` | GET | 在飞（`wb_status.py --jobs --json`，TTL 3s） |
+| 读 | `/dsh-panel/pool-locks` | GET | 门禁锁（`gate_lock.py status --json`，TTL 3s） |
 | 读 | `/dsh-panel/skills` | GET | 仓库 `skills/` 清单 |
 | 读 | `/dsh-panel/settings` | GET | 参数键 + 当前值 + 允许范围 |
 | 写 | `/dsh-panel/settings?<键>=<值>` | POST | 白名单键；越界 / 未知键 400 |
 |  |  |  | 落盘 `tools/settings.toml`（先 `.tmp` 再改名） |
 | 写 | `/dsh-panel/actions?kind=&name=` | POST | 服务动作 `start` / `stop` / `start-all` |
 |  |  |  | 实现：`tools/stack.py` |
-| 写 | `/dsh-panel/pool-action?op=&card=` | POST | 号池派活 `dispatch` / 回收 `release` |
+| 写 | `/dsh-panel/pool-action?op=&card=&tree=` | POST | 号池 `check` 干跑 / `reserve` 占租约 |
+|  |  |  | `dispatch` 派活（经 run_bg 后台）/ `release` 放租约 |
 | 读 | `/dsh-panel/proxy/z/zentao/…` | GET | 禅道反代（抹 `X-Frame-Options` / CSP，cookie 透传） |
 
 白名单键与范围：`tf_gate_min_free_gb`（0–64）、`gate_workers`（1–8）、`pool_concurrency`（1–8）。
@@ -3799,6 +4118,36 @@ def _check_host(source: str) -> list[str]:
         )
     if "wb_tree.py" not in source:
         problems.append("[宿主半] 没转 tools/wb_tree.py（卡 A302：不许另起一套谱系逻辑）")
+    # ---- 卡 A366（T-AG588）：号池三块读面 + 写面四个 op ----
+    for route, handler, argv_hint in (
+        ("POOL_DAILY_ROUTE", "servePoolDaily", "wb_daily.py"),
+        ("POOL_JOBS_ROUTE", "servePoolJobs", "wb_status.py"),
+        ("POOL_LOCKS_ROUTE", "servePoolLocks", "gate_lock.py"),
+    ):
+        if route not in source or f"function {handler}(" not in source:
+            problems.append(f"[宿主半] 缺号池读面（{route} + {handler}，卡 A366）")
+        # ★ 带分号：`function X(req, res) {` 本身也含 `X(req, res)`，光查子串会让
+        #   「定义了但没分发」的坑漏过去（卡 A366 反向变异 m1 实测踩到）。
+        if f"{handler}(req, res);" not in source:
+            problems.append(
+                f"[宿主半] {handler} 定义了却没被 serveSeam 分发（卡 A286 同型坑）"
+            )
+        if argv_hint not in source:
+            problems.append(
+                f"[宿主半] 号池读面没转 {argv_hint}（卡 A366：不许另起判据）"
+            )
+    for token in ("POOL_DAILY_TTL_MS", "POOL_JOBS_TTL_MS", "POOL_LOCKS_TTL_MS"):
+        if token not in source:
+            problems.append(f"[宿主半] 缺缓存上限 {token}（卡 A366：命中要标 cached）")
+    if "check:" not in source or "reserve:" not in source:
+        problems.append(
+            "[宿主半] 号池写面缺 check / reserve（卡 A366：派活前要先干跑）"
+        )
+    if "run_bg.py" not in source or "dispatch_shim.py" not in source:
+        problems.append(
+            "[宿主半] 派活没走 run_bg + dispatch_shim"
+            "（卡 A366：同步 spawn 会假成功）"
+        )
     if "start-all" not in source:
         problems.append("[宿主半] 缺「全部起」（start-all）这条白名单动作（卡 253）")
     for bad in ("shell: true", "shell:true", "exec(", "execSync"):

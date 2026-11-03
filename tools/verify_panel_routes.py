@@ -5,7 +5,10 @@
 判据（全绿才算面板宿主半真的加载了）：
 - 本机在听的 GUI 端口上，`/dsh-panel/stack-status` 返回 200 且 JSON 里 `ok == true`；
 - `/dsh-panel/skills` 返回 200 且 `items` 是列表；
-- `/dsh-panel/workbench-board` 返回 200（`ok` 字段存在）。
+- `/dsh-panel/workbench-board` 返回 200（`ok` 字段存在）；
+- `/dsh-panel/pool-daily` 返回 200 且 `reading` 里有 `to_dispatch`（卡 A366）；
+- `/dsh-panel/pool-jobs` 返回 200 且 `reading.jobs` 是列表（卡 A366）；
+- `/dsh-panel/pool-locks` 返回 200 且 `reading.locks` 是列表（卡 A366）。
 任何一条不是 200 就打印红 + 说明「宿主半没加载或路由没挂上」。
 """
 
@@ -50,10 +53,25 @@ def probe(port: int, path: str) -> tuple[int, str]:
         return 0, f"{type(error).__name__}: {error}"
 
 
+def _reading(body: str) -> dict:
+    """取转发回来的工具读数（`{ok, route, reading}`）；形状不对给空 dict。"""
+    payload = json.loads(body)
+    reading = payload.get("reading") if isinstance(payload, dict) else None
+    return reading if isinstance(reading, dict) else {}
+
+
 CHECKS = (
     ("/dsh-panel/stack-status", lambda body: json.loads(body).get("ok") is True),
     ("/dsh-panel/skills", lambda body: isinstance(json.loads(body).get("items"), list)),
     ("/dsh-panel/workbench-board", lambda body: "ok" in json.loads(body)),
+    ("/dsh-panel/pool-daily",
+     lambda body: json.loads(body).get("ok") is True and "to_dispatch" in _reading(body)),
+    ("/dsh-panel/pool-jobs",
+     lambda body: json.loads(body).get("ok") is True
+     and isinstance(_reading(body).get("jobs"), list)),
+    ("/dsh-panel/pool-locks",
+     lambda body: json.loads(body).get("ok") is True
+     and isinstance(_reading(body).get("locks"), list)),
 )
 
 

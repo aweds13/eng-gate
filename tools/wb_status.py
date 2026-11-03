@@ -28,6 +28,13 @@ r"""WorkBuddy / CodeBuddy CLI 状态器：把 stream-json 事件读成人看的�
 
     python -X utf8 tools/wb_status.py [--root <仓库根>] [--json]
 
+模式③（卡 A366 · T-AG588）：**`--jobs` ⇒ 在飞作业读数**。
+
+    python -X utf8 tools/wb_status.py --jobs [--root <仓库根>] [--json]
+
+只转发 `pool.jobs.scan_jobs`（`在跑` / `断了` / `已判决` 三态与 `STALL_SECONDS=480`
+全在那边算），本工具不重算阈值；面板 `/dsh-panel/pool-jobs` 吃这一条。
+
 口径（单一事实：账本只存计划，状态从这里算）：
   · 有 `Task: <task>` trailer 的提交 ⇒ **done**（只认 trailer 整行，不认正文提及 ——
     卡 146 被正文误报那类假阳在 trailer 口径下天然不成立）；
@@ -49,10 +56,12 @@ from pathlib import Path
 import tomllib
 from pool.jobs import (
     UnknownLogEncodingError,
+    diag_dir,
     parse_events,
     read_log_lines,
     render_json,
     render_timeline,
+    scan_jobs,
 )
 from pool.jobs import clip as _clip
 from pool.jobs import tool_line as _tool_line
@@ -162,6 +171,39 @@ def derived_summary(rows: list[dict], marks: dict[str, object],
     }
 
 
+def jobs_summary(rows: list[dict]) -> dict:
+    """按 `jobs.classify_job_state` 已算好的 `state` 计数 —— **不重算 480s 阈值**。"""
+    counts = {"total": len(rows), "running": 0, "stopped": 0, "verdict": 0, "other": 0}
+    marks = {"在跑": "running", "断了": "stopped", "已判决": "verdict"}
+    for row in rows:
+        counts[marks.get(str(row.get("state", "")), "other")] += 1
+    return counts
+
+
+def jobs_payload(root: Path) -> dict:
+    """模式③（卡 A366 · T-AG588）：在飞作业读数 —— 薄壳，判据全在 `pool.jobs.scan_jobs`。"""
+    diag = diag_dir(root)
+    rows = scan_jobs(diag)
+    return {"root": str(root), "diag": str(diag), "summary": jobs_summary(rows),
+            "jobs": rows}
+
+
+def _jobs_main(args: argparse.Namespace) -> int:
+    """`--jobs` 入口：`scan_jobs` 的读数原样给（面板 `/dsh-panel/pool-jobs` 吃这条）。"""
+    payload = jobs_payload(Path(args.root).resolve())
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    counts = payload["summary"]
+    print(f"[在飞] 共 {counts['total']} 条：在跑 {counts['running']} / "
+          f"断了 {counts['stopped']} / 已判决 {counts['verdict']} / "
+          f"其它 {counts['other']}（{payload['diag']}）")
+    for row in payload["jobs"]:
+        print(f"  · {row.get('card')} {row.get('state')} "
+              f"静默 {row.get('age_seconds')}s  {row.get('why')}")
+    return 0
+
+
 def _derived_main(args: argparse.Namespace) -> int:
     """模式②入口：派生当前仓每张卡的状态（`--root` 指定仓库根，默认当前目录）。"""
     root = Path(args.root).resolve()
@@ -197,7 +239,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="只打印机器可读摘要")
     parser.add_argument("--root", default=".",
                         help="派生模式的仓库根（默认当前目录；log 模式下忽略）")
+    parser.add_argument("--jobs", action="store_true",
+                        help="模式③：看在飞作业（pool.jobs.scan_jobs 读数；卡 A366）")
     args = parser.parse_args(argv)
+
+    if args.jobs:
+        return _jobs_main(args)
 
     if not args.log:
         return _derived_main(args)

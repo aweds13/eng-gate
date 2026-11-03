@@ -59,6 +59,7 @@ pid 立刻就"死"了，锁看着像僵尸 → 下一张卡把**正在跑门禁�
     python -P -X utf8 gates/diag/gate_lock.py release --card 057
 
     python -P -X utf8 gates/diag/gate_lock.py status   # 列出每一段的持有者与租约剩余
+    python -P -X utf8 gates/diag/gate_lock.py status --json   # 同一份读数给机器读（面板路由吃这条）
 
 ★ 一定要带 `-P`：`gates/diag/` 里若放了和标准库同名的脚本，会被当模块顶掉（铁律 24）。
 
@@ -581,40 +582,70 @@ def cmd_renew(card: str) -> int:
     return 0
 
 
-def cmd_status(stale_after: int) -> int:
-    """看锁：**列出每一段**的持有者与租约剩余（T-G169：从"只看一把"改成扫全部段）。"""
+def _status_payload(stale_after: int) -> dict:
+    """把锁读数拼成 dict（`--json` 用）—— 人读文本与 JSON 吃**同一份**数据，不各算一遍。
+
+    ★ 卡 A366（T-AG588）：面板要读「现在能不能跑门禁」，判据仍只在本文件里；
+    面板只转发，不重算陈旧阈值、不重算并发上限。
+    """
     locks = all_lock_paths()
-    if not locks:
-        print("[锁] 空着（没有任何段的锁）", flush=True)
+    rows = []
     for p in locks:
         info = _read(p)
         age = int(_age(p))
         lease = _lease_of(p, info, stale_after)
-        remain = lease - age
-        base = info.get("base", DEFAULT_PORT_BASE)
+        rows.append({
+            "file": p.name,
+            "base": info.get("base", DEFAULT_PORT_BASE),
+            "card": info.get("card"),
+            "pid": info.get("pid"),
+            "at": info.get("at"),
+            "cwd": info.get("cwd"),
+            "age_seconds": age,
+            "lease_seconds": lease,
+            "remain_seconds": lease - age,
+            "expired": age > lease,
+            "holder": liveness_text(info),
+        })
+    return {
+        "ok": True,
+        "empty": not rows,
+        "locks": rows,
+        "note": "★ 别看 pid 判活：acquire 与 run_gates 是两次进程调用，pid 正常就会是死的。",
+        "max_concurrent": max_concurrent(),
+        "active": len(_active_locks(stale_after)),
+        "port_base": segment_base(),
+        "ports_busy": _ports_busy(),
+    }
+
+
+def cmd_status(stale_after: int, as_json: bool = False) -> int:
+    """看锁：**列出每一段**的持有者与租约剩余（T-G169：从"只看一把"改成扫全部段）。"""
+    payload = _status_payload(stale_after)
+    if as_json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
+        return 0
+    if payload["empty"]:
+        print("[锁] 空着（没有任何段的锁）", flush=True)
+    for row in payload["locks"]:
         print(
-            f"[锁] 段 base={base} 文件={p.name}: card={info.get('card')}"
-            f" pid={info.get('pid')} 起于 {info.get('at')}"
-            f"（已 {age}s / 租约剩 {remain}s；"
-            f"{'★ 超过租约，可被清' if age > lease else '租约内'}）"
-            f" 持有者进程={liveness_text(info)}"
-            f" cwd={info.get('cwd')}",
+            f"[锁] 段 base={row['base']} 文件={row['file']}: card={row['card']}"
+            f" pid={row['pid']} 起于 {row['at']}"
+            f"（已 {row['age_seconds']}s / 租约剩 {row['remain_seconds']}s；"
+            f"{'★ 超过租约，可被清' if row['expired'] else '租约内'}）"
+            f" 持有者进程={row['holder']}"
+            f" cwd={row['cwd']}",
             flush=True,
         )
+    print(f"[锁] {payload['note']}", flush=True)
     print(
-        "[锁] ★ 别看 pid 判活：acquire 与 run_gates 是两次进程调用，pid 正常就会是死的。",
+        f"[锁] 全局并发上限 TF_GATE_MAX_CONCURRENT={payload['max_concurrent']}，"
+        f"当前租约内 {payload['active']} 把在跑",
         flush=True,
     )
-    active = _active_locks(stale_after)
-    limit = max_concurrent()
     print(
-        f"[锁] 全局并发上限 TF_GATE_MAX_CONCURRENT={limit}，当前租约内 {len(active)} 把在跑",
-        flush=True,
-    )
-    busy = _ports_busy()
-    print(
-        "[锁] 本段门禁端口占用（base=" + str(segment_base()) + "）："
-        + (", ".join(busy) if busy else "全空"),
+        "[锁] 本段门禁端口占用（base=" + str(payload["port_base"]) + "）："
+        + (", ".join(payload["ports_busy"]) if payload["ports_busy"] else "全空"),
         flush=True,
     )
     return 0
@@ -648,6 +679,11 @@ def main() -> int:
     n.add_argument("--card", required=True)
     s = sub.add_parser("status", help="看锁")
     s.add_argument("--stale-after", type=int, default=DEFAULT_STALE_AFTER)
+    s.add_argument(
+        "--json",
+        action="store_true",
+        help="机器读：把同一份读数打成 JSON（面板读 /dsh-panel/pool-locks 吃这条）",
+    )
     ns = ap.parse_args()
     if ns.cmd == "acquire":
         return cmd_acquire(ns.card, ns.wait, ns.stale_after, ns.grace)
@@ -655,7 +691,7 @@ def main() -> int:
         return cmd_release(ns.card, ns.force)
     if ns.cmd == "renew":
         return cmd_renew(ns.card)
-    return cmd_status(ns.stale_after)
+    return cmd_status(ns.stale_after, ns.json)
 
 
 if __name__ == "__main__":
