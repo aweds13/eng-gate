@@ -13,6 +13,8 @@
   4. 端口被占 ⇒ 点名 + 非零退出 + **一次 `POST /api/groups` 都不发**
   5. `tests/test_only_selector_parity.py::run_render()` 必须显式传 `--port`
   6. 真起两条：同端口必须红（反证）／不同端口必须都绿
+  7.（卡 E83）「金样本主机专用」只有一份判据；两条并行的红分两档，
+     「踩上了」在任何机器上都判红
 """
 
 from __future__ import annotations
@@ -83,6 +85,55 @@ def _run_render(*args: str, timeout: int = 300) -> subprocess.CompletedProcess[s
         [NODE, str(RENDER), *args], cwd=ROOT, capture_output=True, text=True,
         encoding="utf-8", errors="replace", check=False, timeout=timeout,
     )
+
+
+#: `tools/render_check.mjs` 退 1 时的原文之一（与黄金逐字节不一致）。
+GOLDEN_MISMATCH = "渲染与黄金不一致"
+#: 两条并行重复 seed 的原文话术 —— 出现它就是**真**踩踏，任何机器上都判红。
+COLLIDE_MARK = "分组「高数」已存在"
+
+
+def _golden_host_reason() -> str | None:
+    """本机是不是金样本采集机；**判据只有一份**，就是 `scripts/run_gates.py` 那一份。
+
+    ★ 卡 E83：`render` 的黄金与该机器的显示栈绑定，`scripts/run_gates.py` 早就在
+      `golden_host_reason()` 里做了这个判断，并在门表里因此记 EXCLUDED 而不是红。
+      这条钉子过去没接它，于是把「这台机器做不到」记成了回归 —— 云门禁因此整趟 ok=False。
+    """
+    import run_gates as rg
+
+    return rg.golden_host_reason("render")
+
+
+def _collide_problems(codes: list[int], outs: list[str], why: str | None) -> list[str]:
+    """把「两条并行」的读数折成**问题清单**；空清单 = 过。
+
+    `why` 是 `_golden_host_reason()` 的返回：
+
+    * `None` ⇒ 本机就是采集机 ⇒ **严格档**：两条都必须退 0，别的理由一个都不收；
+    * 非空 ⇒ 别的机器 ⇒ 金样本不一致属于已知噪声（每条要么退 0、要么失败的证据必须
+      就是它），但**说不清是金样本不一致的非零一律判红**。
+
+    任何一档下，输出里出现「踩上了」都判红 —— 不许借「这台机器金样本对不上」顺带放过真踩踏。
+    纯函数：真起浏览器那半截只负责采集 `codes` / `outs`，判定不掺现场。
+    """
+    problems: list[str] = []
+    for i, (code, out) in enumerate(zip(codes, outs, strict=False), start=1):
+        if COLLIDE_MARK in out:
+            problems.append(f"第 {i} 条踩上了并行重复 seed（{COLLIDE_MARK}）：{out[-400:]}")
+            continue
+        if code == 0:
+            continue
+        if why is None:
+            problems.append(
+                f"第 {i} 条退 {code}（本机是采集机，必须逐字节一致）：{out[-400:]}"
+            )
+            continue
+        if GOLDEN_MISMATCH not in out:
+            problems.append(
+                f"第 {i} 条退 {code}，但失败理由不是金样本不一致（{why[:40]}…）：{out[-400:]}"
+            )
+    return problems
 
 
 def _run_flow(*args: str, timeout: int = 300) -> subprocess.CompletedProcess[str]:
@@ -299,9 +350,69 @@ def test_two_runs_at_once_do_not_collide() -> None:
     ]
     outs = [pr.communicate(timeout=600)[0] or "" for pr in procs]
     codes = [pr.returncode for pr in procs]
-    assert codes == [0, 0], (
-        f"两条各自 {p1} / {p2} 并行居然有红的：{codes}\n第一条末段：{outs[0][-600:]}"
-        f"\n第二条末段：{outs[1][-600:]}"
+    why = _golden_host_reason()
+    problems = _collide_problems(codes, outs, why)
+    assert not problems, (
+        f"两条各自 {p1} / {p2} 并行出问题"
+        f"（{'本机是采集机：严格档' if why is None else why}）：\n"
+        + "\n".join(problems)
+        + f"\n第一条末段：{outs[0][-600:]}\n第二条末段：{outs[1][-600:]}"
     )
-    for out in outs:
-        assert "分组「高数」已存在" not in out, f"并行又踩上了：{out[-600:]}"
+
+# ---------------------------------------------------------------- 7（卡 E83）
+
+
+def test_collector_machine_still_requires_both_green() -> None:
+    """采集机上**一个字都不放宽**：两条都必须退 0。"""
+    problems = _collide_problems([1, 1], ["boom", "boom"], None)
+    assert len(problems) == 2, problems
+    assert _collide_problems([0, 0], ["ok", "ok"], None) == []
+
+
+def test_other_machine_allows_golden_mismatch_only() -> None:
+    """别的机器上：金样本不一致可以放过，**说不清**是它的一律不放。"""
+    why = "金样本固定在主机 A，本机是 B"
+    kept = _collide_problems([1, 1], [f"❌ {GOLDEN_MISMATCH}：1 份不同", "无输出"], why)
+    assert len(kept) == 1, kept
+    assert GOLDEN_MISMATCH not in kept[0], kept
+    assert "无输出" in kept[0], kept
+    assert _collide_problems([0, 1], ["ok", f"{GOLDEN_MISMATCH}：共 202 行差异"], why) == []
+    bad = "fixture（种子数据）没造全"
+    unclear = _collide_problems([1, 1], [bad, bad], why)
+    assert len(unclear) == 2, "说不清是金样本不一致 ⇒ 必须判红"
+
+
+def test_collision_is_red_on_every_machine() -> None:
+    """「踩上了」在任何一档下都判红 —— 这台机器的黄金对不上，也遮不住真踩踏。"""
+    out = f"[FAIL] 并行又踩上了：{COLLIDE_MARK}"
+    for why in (None, "金样本固定在主机 A，本机是 B"):
+        problems = _collide_problems([0, 0], ["ok", out], why)
+        assert problems, f"why={why!r} 时踩着并行重复 seed 居然放过"
+        assert COLLIDE_MARK in problems[0]
+
+
+def test_the_only_ruler_is_run_gates_golden_host_reason() -> None:
+    """判据只有一份：本文件不许自带第二份「哪台机器算采集机」的比较逻辑。
+
+    ★ 忌写死：被禁的字符串在**运行时拼**出来，否则这条断言会咬到自己。
+    """
+    body = Path(__file__).read_text(encoding="utf-8")
+    assert 'golden_host_reason("render")' in body, "没接上唯一那份判据"
+    forbidden = (
+        "CAPTURED" + "_ON",
+        "platform." + "node()",
+        "socket." + "gethostname",
+        "getpass." + "getuser",
+    )
+    for token in forbidden:
+        assert token not in body, f"本文件另写了第二份判据：{token}"
+
+
+def test_the_helper_delegates_and_invents_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """helper 只转发、不自造理由：run_gates 说什么它就说什么。"""
+    import run_gates as rg
+
+    monkeypatch.setattr(rg, "golden_host_reason", lambda name: f"来自 run_gates：{name}")
+    assert _golden_host_reason() == "来自 run_gates：render"
+    monkeypatch.setattr(rg, "golden_host_reason", lambda name: None)
+    assert _golden_host_reason() is None
