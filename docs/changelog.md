@@ -53,6 +53,23 @@
 行为口径（写死、不留歧义）：「跑到了但门红」⇒ 正常回传 payload（`CloudResult.ok=False`，落地链打 `[红]` 退 1）；「根本没跑到」⇒ `raise CloudUnreachable` 并把退出码、段名、末 20 行原样带出。
 
 验收：新 `tests/test_ssh_transport.py` **27 passed**（全注入假 runner，单测里不起真 ssh 进程）；`tests/test_gate_pool.py` + `tests/test_wb_land_gate_on.py` 合跑 **67 passed, 1 skipped**；`ruff` 三份全绿；反向变异 **4/4 全红**（M1 把树目录名换成 `entry["card"]` ⇒ 拿到 `T-AG460`；M2 `cwd` 从主仓根换成卡树；M3 失败退出码也返回假 payload ⇒ 8 条参数化全红；M4 注入 `TF_MODEL_REGISTRY`），每条 finally 还原、`sha256 56dad4ce…` 一致。
+## 2026-11-03 · 号池面板 P0：点了没反应改成能点、能等、能如实报（卡 A366，T-AG588）
+
+面板此前三条硬故障，都是「看起来在干活、实际什么都没发生」：
+
+① 卡号正则 `/^\d{1,4}$/` 只认纯数字，而台账里的卡号带字母前缀 ⇒ 当时带号的那 322 张里只放行 142 张（实测脚本 `gates/diag/_a366_regex_proof.py`：旧正则 142/322，新正则 `^[A-Za-z]{0,3}-?\d{1,4}$` 322/322；322 是当时台账里有号的卡，另外 3 张号还没定）。
+② 「派活」按钮调 `tools/pool/trae_dispatch.py start` —— 那个入口自述**不起任何子进程**，只 `registry.reserve` 加写一行 init 日志，所以点完永远「成功」而队列不动。
+③ 宿主半 `runTool(argv)` 写的是 `path.join(root, ...argv)`，把参数 join 进了**脚本路径** ⇒ `trae_dispatch.py start --card D1` 变成 `…\trae_dispatch.py\start\--card\D1`，`can't open file` 退 2。⇒ 真派活从来没成功过，不是「偶尔不灵」。
+
+这一卡把三条一起修，并且加了两条只读面让人能看见现场：`/dsh-panel/pool-daily`（今日一页，`tools/wb_daily.py --json`，TTL 5s）、`/dsh-panel/pool-jobs`（在飞，`tools/wb_status.py --jobs --json`，TTL 3s）、`/dsh-panel/pool-locks`（门禁锁，`gates/diag/gate_lock.py status --json`，TTL 3s）。三条都是 GET + 单槽缓存（`servePoolReading`），缓存命中回 `cached:true`，**没有常驻定时器**：写动作之后只补挂一次 3 秒 `setTimeout`（`useArmed`），用完就清。
+
+派活改走 `tools/pool/dispatch_shim.py`：面板宿主半的禁词表里有真派活器的名字，面板源码一旦出现它 `--check` 立刻红，所以中间壳负责①按卡号查规格（绝不让客户端传路径）②组 argv（写死，不过 shell）③真跑一次 ④往 `gates/diag/pool-actions.log` 追加一行痕。**壳里不复制任何判据**：卡号合法性、卡规格、冲突域、树、干跑全在真派活器那边。
+
+★ 新模块要登记职责真源：`tools/pool/` 下每多一个 py，`scripts/gen_pool_readme.py` 的两向对账就会点名「在仓里，但 `docs/subsystems/pool/modules.toml` 没写它」并退 1 ⇒ 本卡给 `dispatch_shim.py` 补了一条 `[[module]]`（name / duty / cli 三键），README 从 48 个文件 / 17330 行变成 49 个文件 / 17470 行。
+
+失败三态写死：工具跑完但报错 ⇒ 原话 `error`；进程非零退 ⇒ 退出码 + 尾部 600 字；请求本身打不通 ⇒ 502 并带原因，**不许洗成空对象**。
+
+验收：`python -X utf8 tools/dsh_panel.py --check` 退 0（三座位、只读、失败可见、只 GET）；`tests/test_dsh_panel.py` + `tests/test_pool_dispatch_shim.py` 合跑 **176 passed**；`ruff check` 七份源全绿；反向变异 **3/3 全红**（删 `servePoolJobs(req, res);` 一处路由消失、客户端加 `setInterval` 触常驻轮询钉子、dispatch 退回 `trae_dispatch.py start` 触发假派活钉子）。
 ## 2026-11-02 · 补标题：这一堆是无日期片段被「保底接文件头」叠出来的历史（卡 B6）
 
 以下到下一个 `## 2026-` 标题之前，是 T-AG547 起 31 个**自身没有日期标题**的片段被

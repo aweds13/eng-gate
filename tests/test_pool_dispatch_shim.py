@@ -12,6 +12,7 @@ if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
 from pool import dispatch_shim  # noqa: E402 - 先挂 tools/ 再 import（同仓库其余测试）
+from pool.no_window import NO_WINDOW  # noqa: E402 - 同上
 
 SHIM = TOOLS / "pool" / "dispatch_shim.py"
 
@@ -19,7 +20,8 @@ SHIM = TOOLS / "pool" / "dispatch_shim.py"
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-X", "utf8", str(SHIM), *args],
-        capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT),
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(ROOT), **NO_WINDOW,
     )
 
 

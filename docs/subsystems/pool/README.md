@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 44 个 py（43 个模块 + `__init__.py`）、**17330 行**（`wc -l tools/pool/*.py`，2026-11-04 现算）。
+`tools/pool/` = 45 个 py（44 个模块 + `__init__.py`）、**17471 行**（`wc -l tools/pool/*.py`，2026-11-04 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -21,6 +21,7 @@
 | `callers.py` | 215 | 调用方名册的只读解析：谁能花哪个号的哪些模型；撤人改成 `off = true`，不删行 | 无（被 `wb_dispatch` 调） |
 | `checkin.py` | 837 | 五个平台的签到**写动作唯一住所**：六态结论码 + 幂等 + 华为云 `SDK-HMAC-SHA256` 签名（`apply=False` 只探不领） | 无（被 `pool_accounts.py checkin` 调） |
 | `cleared.py` | 286 | 清空用量的标记（`gates/diag/usage-cleared.json`）：清空**永不写进账**，只换读法；判不出就显出全部 | `pool.cleared main`（子命令 list / add） |
+| `dispatch_shim.py` | 141 | 面板点「派活」的那一层中间壳：按卡号查规格（绝不让客户端传路径）、写死 argv 真跑一次派活器、往 `gates/diag/pool-actions.log` 追加一行痕；本壳不复制任何判据（卡号 / 域 / 树 / 干跑全在真派活器那边） | `python -X utf8 tools/pool/dispatch_shim.py --card <卡号> [--tree .wt/<卡>] [--dry-run]` |
 | `failclosed.py` | 66 | 判不出来时拒还是放：`NotServing`（遮蔽器不在就不发）与 `NotLimited`（限额拿不到就不发）两条语义 | 无 |
 | `guards.py` | 480 | 树 / 冲突域 / 门禁锁 / 日志 / 项目五条守卫，**纯函数**（吃已读好的数据回 `list[str]`，不写文件不 print） | 无（被 `wb_dispatch`、`wb_registry` 调） |
 | `holds.py` | 288 | 整窗用量的下限 + 五因估算（magpie `window_holds` 移植）：`bounds` / `holds_bounds` / `estimate` | 无 |
@@ -81,8 +82,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **17330 行** / **44 个文件**（43 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 325 张（314 done / 11 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **17471 行** / **45 个文件**（44 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 325 张（315 done / 10 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

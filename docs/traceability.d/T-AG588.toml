@@ -1,0 +1,33 @@
+[entries."T-AG588"]
+id = "T-AG588"
+title = "号池面板 P0：点了没反应改成能点、能等、能如实报"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡A366-号池面板点得动.md",
+  "file:tools/dsh_panel.py",
+  "file:tools/wb_status.py",
+  "file:gates/diag/gate_lock.py",
+  "file:tools/verify_panel_routes.py",
+  "file:tests/test_dsh_panel.py",
+  "file:tools/pool/dispatch_shim.py",
+  "file:tests/test_pool_dispatch_shim.py",
+  "file:docs/subsystems/pool/modules.toml",
+  "test:test_pool_dispatch_shim.py",
+  "text:tools/dsh_panel.py::POOL_DAILY_ROUTE",
+  "text:tools/wb_status.py::scan_jobs",
+  "text:gates/diag/gate_lock.py::status --json",
+  "text:tools/verify_panel_routes.py::/dsh-panel/pool-jobs",
+  "text:tools/pool/dispatch_shim.py::本壳不复制任何判据",
+  "text:tests/test_dsh_panel.py::POOL_DAILY_ROUTE",
+  "text:tests/test_pool_dispatch_shim.py::卡号不合法",
+  "text:docs/subsystems/pool/modules.toml::dispatch_shim.py",
+]
+gaps = [
+  """- **真人在真 DSH 里点一遍没验**：本卡只做到「宿主半 emit 到临时目录 + node 桩服务器收请求」这一层；已装副本 `~/.dsh/profiles/desktop/node_modules/dsh-client-ui-workbench-panel/lib/index.js` 是旧构建，本卡按约束**不碰 `~/.dsh`、不重启 DSH**，所以「刷新页面后新按钮长什么样」需要重启后由人确认。
+- **真派活一次也没验**：`dispatch_shim.py` 的转发路径是单测 + 干跑覆盖的；真起后台工人要占号池槽，本卡没占。`tools/pool/dispatch_shim.py` 的留痕写 `gates/diag/pool-actions.log`（gitignore），落地后第一次真人派活才会有第一条痕。
+- 新增 `tools/pool/` 模块时必须同时改 `docs/subsystems/pool/modules.toml`（否则 `scripts/gen_pool_readme.py` 两向对账退 1），这条约束散在生成器里、没有独立钉子；本卡是撞上才知道的。
+- 面板仍**不做落地、不做门禁**（第 7 节禁令）：这两件事有独立判据与独立锁，塞进面板等于把判据复制一份；`wb_status.py --jobs` 只转发 `pool.jobs.scan_jobs`，`STALL_SECONDS=480` 阈值一处没动。
+""",
+]

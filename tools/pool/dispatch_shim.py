@@ -34,6 +34,7 @@ if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
 
 from pool import plan  # noqa: E402 —— 卡规格查找的唯一实现（backlog 口径）
+from pool.no_window import NO_WINDOW  # noqa: E402 —— 子进程不弹窗（卡 159 的真仓扫描）
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CARD_RE = re.compile(r"^[A-Za-z]{0,3}-?\d{1,4}$")
@@ -128,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"[派活] card={card} spec={spec} tree={tree or '(主树)'} —— 转发真派活器", flush=True)
     try:
-        rc = subprocess.run(cmd, cwd=str(ROOT), check=False).returncode
+        rc = subprocess.run(cmd, cwd=str(ROOT), check=False, **NO_WINDOW).returncode
     except OSError as exc:
         _audit(card, tree, "FAIL", 2, f"起不来：{exc}")
         return _fail(f"真派活器起不来：{exc}")
