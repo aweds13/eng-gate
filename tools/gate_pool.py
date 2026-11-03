@@ -79,6 +79,11 @@ QUEUE_REL = ("gates", "diag", "gate-pool-queue.json")
 #: `pytest.log` 里 `N passed` 的取法（末行那种 `3303 passed, 1513 warnings in 270.28s`）。
 PASSED_MIN_RATIO = 0.95
 
+#: `run_gate.sh` 全量实测 570~1313 s（设计 §4）；超时下限一小时，**不许**更短。
+RUN_GATE_MIN_TIMEOUT_S = 3600.0
+#: 失败消息里带末尾多少行 —— 40 行输出时要能看见最后一段。
+RUN_GATE_TAIL_LINES = 20
+
 
 def slot_count(cpu_count: int, avail_gb: float) -> int:
     """槽位数 = `min(cpu // 4, (avail_gb - 3) // 4)`，**下限 1**。
@@ -440,7 +445,9 @@ def validate_cloud_return(
     ② `ok is True` 且门数/门名 == 该档应有的那一批（A327 `required_profiles()` 派生）
     ③ `host` 存在且非空（证明真在云机跑的，不是本地冒名）；给了 `expect_host` 还要一致
     ④ `pytest.log` 的 `N passed` ≥ 全量的 95%（防「跑了个子集当全量」）
-    ⑤ 云机侧 `git status --porcelain` 为空（`run_gate.sh` 的 `require_no_residue()`）
+    ⑤ 云机这一趟**开跑前**清树步确实走完（`run_gate.sh` 2/5 的 `checkout -f` +
+       `clean -xfdq`；证据是回传输出里有 3/5 以后的段横幅）。**跑后**工作区必脏
+       （补丁已应用），本判据**不**声称跑后干净。
     """
     problems: list[str] = []
     data = payload if isinstance(payload, dict) else {}
@@ -491,7 +498,7 @@ def validate_cloud_return(
 
     # ⑤ 云机工作区干净
     if workspace_clean is not True:
-        problems.append("⑤ 云机工作区不干净（git status --porcelain 非空）")
+        problems.append("⑤ 云机开跑前清树未确认（回传里没有 3/5 以后的段横幅）")
     return problems
 
 
@@ -611,6 +618,53 @@ def write_pytest_baseline(root: pathlib.Path, passed: int, *, rev: str = "") -> 
                     encoding="utf-8", newline="\n")
 
 
+# ---------------------------------------------------------------- run_gate 的失败消息
+def _output_tail(text: str, lines: int = RUN_GATE_TAIL_LINES) -> str:
+    """输出末尾 `lines` 行（空行不算；空输出给一句话，不留空串）。"""
+    rows = [line for line in str(text or "").splitlines() if line.strip()]
+    return "\n".join(rows[-lines:]) if rows else "(没有输出)"
+
+
+def _last_segment(text: str) -> str:
+    """stdout 里**最后一条** `=== N/5 …` 段横幅（脚本用它指认卡在哪一段）。"""
+    rows = [line.strip() for line in str(text or "").splitlines()
+            if line.strip().startswith("=== ") and "/5" in line]
+    return rows[-1] if rows else "(没有段横幅)"
+
+
+def _failure_text(rc: int, output: str) -> str:
+    return (f"云门禁没跑成（run_gate.sh 退 {rc}，卡在 {_last_segment(output)}）：\n"
+            f"{_output_tail(output)}")
+
+
+def _read_back(tree: pathlib.Path, rc: int,
+               output: str) -> tuple[dict, dict[str, str]]:
+    """读回传：`<tree>/gates/last.json` + `<tree>/gates/logs/*.log`。
+
+    ★ exit 9（产物陈旧）时脚本会**主动删掉** `last.json` —— 所以 rc 不是 0/1 的分支
+      根本不该走到这里；这里读不到就抛，绝不拿上一趟的残留冒充这一趟。
+    """
+    last = pathlib.Path(tree) / "gates" / "last.json"
+    try:
+        payload = json.loads(last.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise CloudUnreachable(
+            f"云门禁退 {rc} 但卡树里没有可读的 gates/last.json"
+            f"（{type(exc).__name__}: {exc}）：\n{_output_tail(output)}") from exc
+    if not isinstance(payload, dict):
+        raise CloudUnreachable(
+            f"回传的 gates/last.json 不是对象（{type(payload).__name__}）")
+    logs: dict[str, str] = {}
+    log_dir = pathlib.Path(tree) / "gates" / "logs"
+    if log_dir.is_dir():
+        for path in sorted(log_dir.glob("*.log")):
+            try:
+                logs[path.name] = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+    return payload, logs
+
+
 # ---------------------------------------------------------------- 传输（唯一碰网络的一层）
 class CloudUnreachable(RuntimeError):  # noqa: N818 —— 名字就是判据原文「云机不可达」
     """云机不可达 —— 落地链据此**退 2 并明说**，绝不回落到本机。"""
@@ -627,6 +681,10 @@ class SshTransport:
     user: str = "administrator"
     key: str = str(pathlib.Path.home() / ".ssh" / "id_ed25519_cloud")
     repo: str = "C:/eng"
+    #: 主仓根（可选注入；不给就 `git -C <tree> rev-parse --git-common-dir` 现算）。
+    main_root: pathlib.Path | str | None = None
+    #: `subprocess.run` 注入点（**只许单测**；不给就是真的 `subprocess.run`）。
+    runner: Callable[..., subprocess.CompletedProcess] | None = None
 
     def _ssh(self, *args: str, timeout: float = 30.0) -> subprocess.CompletedProcess:
         cmd = ["ssh", "-i", self.key, "-o", "BatchMode=yes",
@@ -651,17 +709,89 @@ class SshTransport:
             return False
         return done.returncode == 0
 
-    def run_gate(self, entry: dict, tree: pathlib.Path) -> dict[str, Any]:
-        """在云机上跑一趟门禁并回传 `last.json` + `gates/logs/*.log`。
+    def _run(self, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        runner = self.runner or subprocess.run
+        return runner(argv, **kwargs)
 
-        ★ 真跑法照 `scripts/cloud/run_gate.sh`（导出补丁 → 云机 `checkout -f --detach` →
-          `clean -xfdq` → 断言 `last.json` 不存在 → apply → 跑门禁 → 回传）。
-          本卡**不真连**（卡规格：云机实测由主控做）；这里只把「怎么跑」留成一条命令，
-          任何失败都按 `CloudUnreachable` 抛出（宁可退 2，不许带假绿往下走）。
+    def _main_root(self, tree: pathlib.Path) -> pathlib.Path:
+        """主仓根 = `--git-common-dir` 的父目录（worktree 共用同一个 `.git`）。"""
+        if self.main_root is not None:
+            return pathlib.Path(self.main_root)
+        done = self._run(
+            ["git", "-C", str(tree), "rev-parse", "--path-format=absolute",
+             "--git-common-dir"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        common = str(getattr(done, "stdout", "") or "").strip()
+        if int(getattr(done, "returncode", 1)) != 0 or not common:
+            raise CloudUnreachable(
+                f"算不出主仓根（git -C {tree} rev-parse 退 "
+                f"{getattr(done, 'returncode', '?')}）⇒ run_gate.sh 找不到 scripts/cloud")
+        return pathlib.Path(common).parent
+
+    def _gate_env(self) -> dict[str, str]:
+        """`run_gate.sh` 需要的环境：连接地址 + `TF_PROJECTS_TOML`；**不注入**模型注册表。"""
+        env = dict(os.environ)
+        env["CLOUD_HOST"] = f"{self.user}@{self.host}"
+        projects = str(env.get("TF_PROJECTS_TOML") or "").strip()
+        if not projects:
+            raise CloudUnreachable(
+                "没有配置 `TF_PROJECTS_TOML`（run_gate.sh 会因缺它退 2）⇒ 云门禁没跑成")
+        env["TF_PROJECTS_TOML"] = projects
+        # ★ 卡 E82：绝不把本机的模型注册表带给云机（注了会让 5 条用例集体红）。
+        env.pop("TF_MODEL_REGISTRY", None)
+        return env
+
+    def run_gate(self, entry: dict, tree: pathlib.Path) -> dict[str, Any]:
+        r"""在云机上跑一趟门禁并回传 `last.json` + `gates/logs/*.log`。
+
+        薄封装 `scripts/cloud/run_gate.sh`：**不重写**五段流程（脚本固化 26 条静态钉子）。
+
+        · argv = `bash scripts/cloud/run_gate.sh <Path(tree).name> <port_base>` ——
+          第 1 个位置参数是 `.wt` 下的**目录名**（历史卡号 ≠ 目录名），第 2 个是槽端口段；
+        · cwd = 主仓根（脚本里的 `scripts/run_gates.py`、`.wt/$card`、seed 目录都相对它）；
+        · rc 0/1 = **跑到了**（1 = 门红）⇒ 正常返回三键；rc 2..9 = 没跑成 ⇒ 抛。
+
+        ★ `workspace_clean` 的可用证据只有「脚本走到 3/5 以后」——那说明 2/5 的
+          `checkout -f` + `clean -xfdq`（开跑前清树）成功了。**跑后**工作区必脏
+          （补丁已应用），本类不声称「跑完还干净」；跑后残留仍未验证（设计 §7）。
         """
-        raise CloudUnreachable(
-            "SshTransport.run_gate 未在本卡实现（不许真连云机）："
-            "请用主控的 scripts/cloud/run_gate.sh 跑这一趟，或注入假 transport 做单测")
+        tree = pathlib.Path(tree)
+        if not str(self.host or "").strip():
+            raise CloudUnreachable(
+                "没有配置云机连接地址（SshTransport.host 为空）⇒ 云门禁没跑成")
+        port_base = str(entry.get("port_base") or "").strip()
+        if not port_base:
+            raise CloudUnreachable("entry 缺 port_base（run_gate.sh 第 2 个参数没给）")
+        env = self._gate_env()
+        root = self._main_root(tree)
+        try:
+            budget = float(entry.get("timeout") or 0.0)
+        except (TypeError, ValueError):
+            budget = 0.0
+        timeout = max(RUN_GATE_MIN_TIMEOUT_S, budget)
+        argv = ["bash", "scripts/cloud/run_gate.sh", tree.name, port_base]
+        try:
+            proc = self._run(
+                argv, cwd=str(root), env=env, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=timeout,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except subprocess.TimeoutExpired as exc:
+            raise CloudUnreachable(
+                f"云门禁超时（{timeout:.0f}s 还没回来）⇒ 云门禁没跑成") from exc
+        except OSError as exc:
+            raise CloudUnreachable(
+                f"起不了 scripts/cloud/run_gate.sh（{type(exc).__name__}: {exc}）") from exc
+
+        output = "\n".join(x for x in (proc.stdout, proc.stderr) if x)
+        rc = int(proc.returncode)
+        if rc not in (0, 1):
+            # 2..9 = 没跑成（缺配置 / 缺 seed / 应用补丁失败 / HEAD 不对 / pip / 陈旧）。
+            raise CloudUnreachable(_failure_text(rc, output))
+        payload, logs = _read_back(tree, rc, output)
+        reached_clean = any(marker in output for marker in
+                            ("=== 3/5", "=== 4/5", "=== 5/5"))
+        return {"payload": payload, "logs": logs, "workspace_clean": reached_clean}
 
 
 @dataclass
@@ -740,6 +870,7 @@ def run_cloud_gate(
     transport: Any,
     host: str,
     expected_doors: list[str] | tuple[str, ...],
+    expect_host: str = "",
     pytest_total: int,
     queue: PoolQueue,
     n_slots: int = 1,
@@ -790,7 +921,7 @@ def run_cloud_gate(
     problems = validate_cloud_return(
         payload, expected_rev=commit, expected_doors=expected_doors,
         pytest_passed=passed, pytest_total=int(pytest_total or 0),
-        workspace_clean=clean, expect_host=host)
+        workspace_clean=clean, expect_host=expect_host)
     result = CloudResult(
         ok=not problems, problems=problems, payload=payload,
         host=str(payload.get("host") or ""), pytest_passed=passed,

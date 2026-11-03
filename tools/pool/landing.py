@@ -1156,6 +1156,16 @@ def cloud_host() -> str:
     return os.environ.get("TF_GATE_CLOUD_HOST", "").strip()
 
 
+def cloud_expect_host() -> str:
+    """云机**主机名**（`TF_GATE_CLOUD_EXPECT_HOST`，与连接地址分开）。
+
+    ★ 卡 E82（`T-AG587`）：`TF_GATE_CLOUD_HOST` 只能是 IP（本机解析不了云机 hostname），
+      回传 `last.json.host` 却是云机 `socket.gethostname()` —— 拿同一个变量比 ⇒ 判据 ③
+      必红。这里只读「期望 hostname」；不给 ⇒ 空串（判据 ③ 只核非空）。
+    """
+    return os.environ.get("TF_GATE_CLOUD_EXPECT_HOST", "").strip()
+
+
 def make_cloud_transport(host: str):
     """云机传输：默认 `SshTransport`；`TF_GATE_CLOUD_FAKE=<json>` ⇒ 假回传（**只许单测**）。
 
@@ -1179,7 +1189,10 @@ def expected_cloud_doors(wt: pathlib.Path) -> tuple[list[str], str]:
     · 判据本体（`scripts/**`/`tools/**`/`gates/**`）改了 ⇒ 全量三档；
     · 有 `gates/defs/domains.py` ⇒ 按 `domains.required_profiles()` 派生（A327）；
     · 都没有（老仓 / 假仓）⇒ 全量。
-    返回 `(门名, 档位串)`：档位串给 `run_gates.py --profiles` 与 trailer 用。
+    ★ 卡 E82（`T-AG587`）：(A) `build_jobs` 只把 str 当**一个档**，逗号串会
+      `ValueError: 未知档` ⇒ 这里传 `tuple(need)`，串只留给 trailer；
+      (B) 云机 `run_gate.sh` 恒跑全量 ⇒ 返回的是**全量门名**（不是必需档子集）。
+    返回 `(全量门名, 档位串)`：档位串给 trailer / 日志用。
     """
     scripts = str(wt / "scripts")
     if scripts not in sys.path:
@@ -1187,6 +1200,7 @@ def expected_cloud_doors(wt: pathlib.Path) -> tuple[list[str], str]:
     try:
         import run_gates  # noqa: PLC0415 —— 按**这棵树**的门表现读（门数真源只有一处）
         profiles = "all"
+        need: tuple[str, ...] = ("all",)
         if (wt / "gates" / "defs" / "domains.py").is_file():
             touched = _touched_paths(wt)
             hits = _touched_judge_body(touched)
@@ -1194,14 +1208,20 @@ def expected_cloud_doors(wt: pathlib.Path) -> tuple[list[str], str]:
                 print(f"  ★ 判据本体改了（{len(hits)} 个 scripts/**/tools/**/gates/** 文件："
                       f"{hits[:5]}）⇒ 云机也跑全量三档")
             else:
-                need = run_gates.domains.required_profiles(touched)
-                profiles = ",".join(sorted(need)) or "all"
-        jobs = run_gates.build_jobs(False, False, profiles)
+                # ★ (A) 传 tuple：`build_jobs` 把 str 当「一个档」，逗号串会 `未知档`。
+                need = tuple(sorted(run_gates.domains.required_profiles(touched)))
+                profiles = ",".join(need) or "all"
+        needed = [str(name) for name, _cmd in run_gates.build_jobs(False, False, need)]
+        # ★ (B) 云机 `run_gate.sh` **恒跑全量**（不带 `--profile`）⇒ 应有门名取全量。
+        full = [str(name) for name, _cmd in run_gates.build_jobs(False, False, "all")]
     except (Exception, SystemExit) as exc:
         # ★ 门表读不到就**拿不准不放过**：import 别人的 `run_gates.py` 时，桩脚本可能在
         #   import 期就 `sys.exit`（沙箱里的桩就是这样）—— 那种树不许上云。
         raise LookupError(f"读不到这棵树的门表（{type(exc).__name__}: {exc}）") from exc
-    return [str(name) for name, _cmd in jobs], profiles
+    missing = sorted(set(needed) - set(full))
+    if missing:
+        raise LookupError(f"按档算出的门不在全量门表里：{missing} ⇒ 门表两套口径，拿不准不放过")
+    return full, profiles
 
 
 def previous_pytest_total(wt: pathlib.Path) -> tuple[int, str]:
@@ -1241,6 +1261,7 @@ def cloud_gate_step(*, a, wt: pathlib.Path, card: str) -> tuple[int, bool, str]:
               "（要本机跑请显式 `--gate-on local`）")
         return 2, False, "all"
     host = cloud_host()
+    expect_host = cloud_expect_host()
     try:
         expected, profiles = expected_cloud_doors(wt)
     except LookupError as exc:
@@ -1254,7 +1275,8 @@ def cloud_gate_step(*, a, wt: pathlib.Path, card: str) -> tuple[int, bool, str]:
         n_slots = gp.slot_count(int(os.environ.get("TF_GATE_CLOUD_CPU", "4") or 4),
                                 float(os.environ.get("TF_GATE_CLOUD_GB", "16") or 16))
     queue = gp.PoolQueue(wt / "gates" / "diag" / "gate-pool-queue.json")
-    print(f"=== ④ 云机门禁（host={host or '(未配置)'}；槽 {n_slots}；"
+    print(f"=== ④ 云机门禁（host={host or '(未配置)'}；"
+          f"期望 hostname={expect_host or '(未配置，只核非空)'}；槽 {n_slots}；"
           f"应跑 {len(expected)} 道；档位 {profiles}；基点 {commit}）===")
     print(f"  [基线] 全量用例数 = {total or '(不知道)'}"
           f"{'（' + total_src + '）' if total_src else ''}")
@@ -1263,7 +1285,8 @@ def cloud_gate_step(*, a, wt: pathlib.Path, card: str) -> tuple[int, bool, str]:
         result = gp.run_cloud_gate(
             wt=wt, card=card, task=a.task, commit=commit,
             transport=make_cloud_transport(host),
-            host=host, expected_doors=expected, pytest_total=total,
+            host=host, expect_host=expect_host, expected_doors=expected,
+            pytest_total=total,
             queue=queue, n_slots=n_slots,
             lock_dir=wt / "gates" / "diag")
     except gp.CloudUnreachable as exc:
@@ -1273,7 +1296,7 @@ def cloud_gate_step(*, a, wt: pathlib.Path, card: str) -> tuple[int, bool, str]:
     print(f"  [池] 槽 {result.slot} / 端口段 {result.port_base} / "
           f"{result.seconds:.1f}s / host={result.host or '(空)'}")
     print(f"  [回传] pytest {result.pytest_passed} passed / 全量 {result.pytest_total}；"
-          f"云机工作区{'干净' if result.workspace_clean else '**不干净**'}")
+          f"云机开跑前清树{'已确认' if result.workspace_clean else '**未确认**'}")
     if not result.ok:
         for line in result.problems:
             print(f"  [红] {line}")
