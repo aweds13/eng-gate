@@ -5223,3 +5223,23 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A366"
+task = "T-AG588"
+title = "号池面板 P0：点了没反应改成能点、能等、能如实报"
+tree = ".wt/A366"
+spec = "复盘/卡/卡A366-号池面板点得动.md"
+files = [
+  "tools/dsh_panel.py",
+  "tools/wb_status.py",
+  "gates/diag/gate_lock.py",
+  "tools/verify_panel_routes.py",
+  "tests/test_dsh_panel.py",
+  "tools/pool/dispatch_shim.py",
+  "tests/test_pool_dispatch_shim.py",
+  "复盘/卡/卡A366-号池面板点得动.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
