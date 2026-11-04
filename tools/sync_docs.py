@@ -104,7 +104,7 @@ def _rel(path: str | Path, root: Path) -> str:
 # ⇒ **再追加一块**，旧块留在汇总里。现在先按台账号找**已有的那一块**，找到就原地换。
 
 #: 台账号（`T-G123` / `T-AG456`）—— 前后不许粘字母数字，免得 `T-G12` 命中 `T-G123`。
-_ID_TOKEN_RE = re.compile(r"(?<![0-9A-Za-z-])T-(?:A?G)\d+(?![0-9])")
+_ID_TOKEN_RE = re.compile(r"(?<![0-9A-Za-z-])T-(?:[A-Z]{1,2})?\d+[a-z]?(?![0-9A-Za-z])")
 
 
 def _mentions(text: str, uid: str) -> bool:

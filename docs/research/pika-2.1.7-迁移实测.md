@@ -176,14 +176,78 @@ math/用概率计算含参数积分的极限.md（10001 B，frontmatter `tags: [
 - **两个 remotion zip 与 zip 侧逐字节相同**（`remotion-project.zip` 1815414 B、`cognitive-encoding-remotion-source.zip` 43385 B；zip 内 entries 13 / 20）⇒ **第 8 项无需动作**。
 - **vault 里的 grid-covering 副本零本机独有内容**：`…/笔记共享vault/math/代码/grid-covering-lab`（48 文件）vs `Tool/代码与数据/grid-covering-lab-source`（48 文件）= `same 45 / diff 3`；3 处差异**只是 ASCII 连字符 `-` 换成 U+2010**（18 / 11 / 3 处），把 U+2010 归一回 `-` 后**逐字节相同**；`.stego_backups` 的 3 个 `.bak` 与 Tool 版**逐字节相同 3/3**。
 
-## 7. 仍然「不知道」的
+## 7. 回收站快照：第三方交叉验证（并关闭「不知道 #1」）
 
-1. `D:/downloads/pika文件_Pro.zip` 1451498774 B / 2411 条目 vs 早前诊断记录的 `$RL9HQVI.zip` 1549 MB / 2412 条目 —— **不是同一副本**，未断言。
+★ 早前那条「磁盘上还有另一份 `pika文件_Pro.zip`」的怀疑**是我误判**，已证伪：回收站里躺着的
+是**被删掉的整个文件夹**，不是第二个 zip。
+
+| 读什么 | 读数 |
+|---|---|
+| 回收站唯一 pika 记录 | `$IFO3P23`，`$I` 元数据 `recorded size 1460747606`（1393.1 MiB）、`deleted at 2026-10-30 15:36:05 (UTC)`、`original name` = `D:/downloads\pika文件_Pro (2)` |
+| 全盘 `pika文件_Pro.zip` | 只有 **1 份**（`D:/downloads/`，1451498774 B / 2411 条目，`zipfile.namelist()` 实测） |
+| 回收站该文件夹 | 3531 文件 / 1460747606 B |
+
+把它当成「删除前快照」，对三篇争议笔记做**第三方对照**（这三个来源互相独立：回收站快照、live vault、包内 zip）：
+
+| 笔记 | 回收站快照 | live | 包内 zip |
+|---|---|---|---|
+| math/模长总和为1的n个复数中，至少能合成一个模长多大的复数.md | 8431 B `043b4cc1cfc0` | 14806 B `7a8bb3e8d695` | 13497 B `1a200a72fb19` |
+| math/一致几乎处处有界函数列算术平均值几乎处处收敛的问题.md | 8117 B `38c07c897005` | 8117 B（同） | 8118 B `a3882d5cc9a0` |
+| math/用概率计算含参数积分的极限.md | 10001 B `4efcd8312e53` | 10001 B（同） | **不存在** |
+
+**印证了 §4 的两处裁定**：
+
+- 差异 1（`一致几乎处处有界函数列…`）回收站版与 live **逐字节相同**（8117 B）⇒ 只有 zip 多那个半角空格，**留本地正确**。
+- 本地独有文件 用概率计算含参数积分的极限.md 在回收站快照里也有（10001 B 同 sha）⇒ 它是**源 vault 真有、被打包漏掉**的，不是本地孤儿；live 内对它的 wikilink 引用实测 **5 处 / 3 文件**。
+
+其它读数：
+
+- live 比快照多 2 篇（都是删除**之后**新增）：math/Kolmogorov强大数定律.md（11502 B）、math/含参数积分的概率表示与收敛.md（41916 B），mtime 均 `2026-10-31 19:53`。
+- 全量 sha256（回收站 `pika文件_Pro` 1123 文件 vs live 1129，both 1123）：`only in recycle = 0`；内容不同**只有 2 个**（`workspace.json` 7697→7924、`模长总和为1…md` 8431→14806）。
+- ★ **事故版 `workspace.json` 已救回**（7697 B / sha `c3b4564498a3`）—— 这正是早前记为「唯一不可恢复」的那个文件，现已有原件。
+
+### 7.1 回收站里还藏着一整个 `pika资料共享`（live 已完全消失）
+
+| 顶层 | 回收站 | live |
+|---|---|---|
+| `pika资料共享` | **2408** | **0** |
+| `笔记共享vault` | 1123 | 1129 |
+| `_observer-tools` | 0 | 6 |
+| `AI工具` | 0 | 2 |
+
+回收站独有 2408 个 / **1215609789 B = 1159.3 MiB**，全部在 `pika资料共享/` 下（`.pdf 2341` / `.tex 19` / `.csv 17` / `.png 8` / `.docx 7` / `.py 5` / `.doc 4` / `.zip 2` / `.md 2` / `.wl 1` / `.txt 1` / `.jpg 1`）。
+
+**全部可从 `D:/downloads/pika文件_Pro.zip` 逐字节还原**：2407 个在 zip 内有对应条目，CRC32 逐文件比对 **2407/2407 一致、0 不一致，共 1158 MiB / 24.9s**。唯一不在 zip 的 `AI工具/pika_math_learning_toolkit-2.1.4.zip`（sha `7ad8f0ee86ea6cba1408`）与 `_backup_20261104T112516/vault/AI工具/` 里那份**逐字节相同**。
+
+外层 zip 完整性：`zipfile.testzip()` → **ALL OK**（0.9s）。
+
+**与 `D:/repo/Library` 的关系**（Library 2466 文件 / 2.7 GB）：按（文件名, 大小）配对 2373，全量 sha256 **2373/2373 identical、0 different（1156 MiB / 5s）**。Library 里没有的 **35 个**：`代码与数据/` 34 个（`math_peak_age_study_public/*` 23 + `grid-covering-lab-source.zip` + `word_count.py` + `wolfram/plotRecurrence.wl` 等）+ `2.1.4.zip`。⇒ 那批 PDF 绝大部分已在 Library 里（只是目录结构不同）。
+
+**没有任何活的引用依赖它**：vault 内 .md 引用 `pika资料共享` = 0、`C:/Users/example/.dsh/skills` 内 = 0、`git ls-files '*pika资料共享*'` = 0。
+
+### 7.2 保底抽取（都在快照目录里）
+
+`D:/repo/_tools/pika-迁移/_snapshot_recycle_20261030/`，**797 文件 / 9.0 MiB**：
+
+| 内容 | 读数 |
+|---|---|
+| `笔记`（只抽 .md/`.bak`，对应删除前快照） | 741 文件 / 5207617 B |
+| `pika资料共享-文本与代码/` | 45 文件 / 634812 B（全部非 PDF 文本/代码） |
+| `pika资料共享-文本与代码/代码与数据/` | 34 文件 / 2154875 B（含 8 PNG + 17 CSV，Library 里没有） |
+| `_pre-accident-workspace.json` | 7697 B / sha `c3b4564498a3` |
+
+`MANIFEST.json`（138914 B）带逐文件 sha256 + 五个 verification 子块 + `disposition`。
+
+**处置决定：回收站原件不删**（可随时清空回收 1.4 GiB）。理由：全部内容已验证可从 zip 还原，但删回收站不可逆，按会话纪律不自动做，且 D: 还剩 93G 不紧张。
+
+## 8. 仍然「不知道」的
+
+1. ~~磁盘上是否还有第二份 `pika文件_Pro.zip`~~ —— **已关闭**，见 §7：只有一份，回收站里的是被删的文件夹。
 2. 旧 toolkit 的 `install.py` 是否真跑过 —— 没有找到运行痕迹。
 3. `_observer-tools` 那两份丢失的文件是**怎么丢的**（未跟踪 ⇒ git 里没有历史可比）。
 4. vault git 最后提交（2026-09-14）之后到底改了多少 —— 未做逐提交考古。
 
-## 8. 指针
+## 9. 指针
 
 - 备份：`D:/repo/_tools/pika-迁移/_backup_20261104T112516/`（`MANIFEST.json` 有逐文件 sha256）
 - 解包素材：`D:/repo/_tools/pika-迁移/_extracted/`（`pika_math_learning_toolkit-2.1.7` / `2.1.4` / `笔记共享vault` / `grid-covering-lab-source`）
