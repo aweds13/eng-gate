@@ -11456,3 +11456,25 @@ evidence = [
   "file:docs/traceability.d/T-BG008.toml",
 ]
 gaps = "1. 报告只给「该搬什么」与判据，**没有实现任何一条**：掌握度公式、错题四关排期、自评校准三条都还没在 OpenMAIC 仓落地，本卡只出判断。指针 `docs/research/程天学-可迁移功能报告.md`2. A/B/C 总数有**三个口径**并存（十份并集 112/46/40 含重复、无重叠七份 61/27/17、单份报告自己的数）；07 的三张表是同一批功能点的三种切法，08 的 §2.2 十八行是规则不是功能点。正文一律用 61/27/17，但引用时必须说明口径。另掌握度阈值**站点自身也有两套**（帮助页 tips 写 60%，星图着色实测 40/70）—— 报告取 60%，矛盾未在站点侧解决。指针 `docs/research/程天学-可迁移功能报告.md`3. 十份域报告（443 KB）与 534 张截图留在仓外 `D:/repo/_tools/acm/`，本仓只有结论与指针。指针 `docs/research/程天学-可迁移功能报告.md`4. 教师侧整块按用户拍板「不用理」未追；`guest_t / guest123` 虽是全站唯一免审批教师入口，但每天凌晨 3 点重置 ⇒ 只适合「读规则」。指针 `复盘/卡/卡B8-程天学可迁移功能报告.md`5. 报告 §7 列了 12 条「不知道」（状态页分页差 2 页、热力图分档阈值、ICPC 潜力分算法、OJ 绑定同步效果等），**没有一条是推断填空**。指针 `docs/research/程天学-可迁移功能报告.md`6. 云门禁有一道**环境红**不是本卡引入：`tests/test_gate_port_isolation.py::test_two_runs_at_once_do_not_collide` 报「两条各自 10572 / 10575 并行居然有红的：[1, 1]」，与 2026-11-01 的 `cloud-gate-E76.log`（10181 / 10184，同样 `[1, 1]`）同形状 ⇒ 4 vCPU 云机抢资源型。另 `render` 门在云机是 `[EXCL]`（金样本采集机是 DEV-HOST），不是失败。指针 `gates/diag/cloud-gate-B8.log`"
+
+[entries."T-AG590"]
+id = "T-AG590"
+title = "端口隔离那条钉子接上唯一的金样本主机判据"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E83-端口隔离那条钉子不该按金样本判绿.md",
+  "file:tests/test_gate_port_isolation.py",
+  "test:test_gate_port_isolation.py",
+  "text:tests/test_gate_port_isolation.py::_golden_host_reason",
+  "text:tests/test_gate_port_isolation.py::_collide_problems",
+  "text:tests/test_gate_port_isolation.py::GOLDEN_MISMATCH",
+  "text:tests/test_gate_port_isolation.py::test_collision_is_red_on_every_machine",
+]
+gaps = [
+  """- 本机（正好是采集机）只走了严格档；放宽档目前靠纯函数钉子驱动，**没在真·非采集机上端到端跑过** —— 云门禁重跑那趟才算真验。
+- `tools/render_check.mjs --update --reason` 的重绑路径没验（本卡明令不跑 `--update`）。
+- 反证那半截在云机上仍靠 render 失败才「过」（它只断言非零 + 点名端口），逻辑本身不依赖黄金，本卡没动它。
+""",
+]

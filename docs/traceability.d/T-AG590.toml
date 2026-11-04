@@ -1,0 +1,21 @@
+[entries."T-AG590"]
+id = "T-AG590"
+title = "端口隔离那条钉子接上唯一的金样本主机判据"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E83-端口隔离那条钉子不该按金样本判绿.md",
+  "file:tests/test_gate_port_isolation.py",
+  "test:test_gate_port_isolation.py",
+  "text:tests/test_gate_port_isolation.py::_golden_host_reason",
+  "text:tests/test_gate_port_isolation.py::_collide_problems",
+  "text:tests/test_gate_port_isolation.py::GOLDEN_MISMATCH",
+  "text:tests/test_gate_port_isolation.py::test_collision_is_red_on_every_machine",
+]
+gaps = [
+  """- 本机（正好是采集机）只走了严格档；放宽档目前靠纯函数钉子驱动，**没在真·非采集机上端到端跑过** —— 云门禁重跑那趟才算真验。
+- `tools/render_check.mjs --update --reason` 的重绑路径没验（本卡明令不跑 `--update`）。
+- 反证那半截在云机上仍靠 render 失败才「过」（它只断言非零 + 点名端口），逻辑本身不依赖黄金，本卡没动它。
+""",
+]

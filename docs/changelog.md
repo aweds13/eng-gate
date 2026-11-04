@@ -1,3 +1,6 @@
+## 2026-11-04 · 端口隔离那条钉子接上唯一的金样本主机判据（卡 E83，T-AG590）
+
+云门禁那趟 22 门真跑完、唯一红就是这条钉子：两条并行各自用不同端口都跑完（15.2 s / 16.1 s），却因为与黄金差 202 行被记成再不兼容。金样本与采集机显示栈绑定这件事 `scripts/run_gates.py` 早就认了（`golden_host_reason()`，并因此把 `render` 记 EXCLUDED），只差这条钉子没接。本笔接上它，并把「红」分成两档：采集机上仍严格要求两条都退 0；别的机器上只放过「失败证据就是金样本不一致」；任何一档下出现并行重复 seed 的原文都判红。反证那半截（同端口必须被拒）一字未动。
 ## 2026-11-03 T-BG007 补上 F39/F40 那 10 个「登记了没实现」的材料工具
 
 - 插件仓 `D:/repo/_tools/dsh-plugins` 提交 `5618be1`（2 files / +460）：`openmaic_material_ops`（list/read/search/extract/wait）+ `openmaic_material_folders`（list/create/rename-folder/move/rename），工具数 **27 → 29**。
