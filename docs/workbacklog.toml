@@ -5308,3 +5308,17 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E86"
+task = "T-AG593"
+title = "并发落地时两份现算文档不该让整笔停手"
+tree = ".wt/E86"
+spec = "复盘/卡/卡E86-并发落地时两份现算文档不该停手.md"
+files = [
+  "tools/pool/landing.py",
+  "tests/test_landing_derived_resolvable.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
