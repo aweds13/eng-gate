@@ -5322,3 +5322,17 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E87"
+task = "T-AG594"
+title = "交接文档里的台账分布别停在翻账前"
+tree = ".wt/E87"
+spec = "复盘/卡/卡E87-交接文档里的台账分布别停在翻账前.md"
+files = [
+  "tools/pool/landing.py",
+  "tests/test_landing_counts_refresh.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
