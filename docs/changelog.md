@@ -9,6 +9,9 @@
 装着的 7 个 pika skill 本来**就是 2.1.7 主体**（不是散落旧版），升级只需覆盖 71 个内容不同的文件 + 删 18 个 `.pyc`；复核终态 `same=466 diff=0 onlyZip=0 onlyInst=0`。
 vault 的「回填」是**空操作**（`only_zip 0`）：差异1 是 zip 在全角冒号前多一个半角空格（排版退化）⇒ 留本地；差异2 zip 是章节化重写但旧稿独有 24 行 Mathematica 核对代码 ⇒ 以 zip 为主体把代码并进附录（13497 → 14806 B）。
 `_observer-tools` 的 `hermes_observer.py` 与 `test_e2e.py` **已丢且从未入 git**，已重建并跑出 `E2E: 25/25 PASS`；★ 一处判据被我自己推翻：原判「保留 `-AsHashtable` 补丁」，实测 PS 5.1 的 `ConvertFrom-Json` 没有该参数（`NamedParameterNotFound`）⇒ 那行是上一版遗留坏行、2.1.7 恰好删掉它，已回退成 zip 原版。
+## 2026-11-04 · 读不到响应不等于服务端没回 401（卡 E85，T-AG592）
+
+云门禁那趟（卡 E84 落地后的真跑）唯一红的是 `web_live`；云机日志里 `POST /api/sync/import` 明明回了 401，判据却看到 0。病灶在 `tools/web_live_check.py` 的 `_lan_json()`：原来最后那句 `except OSError: return 0, None` 把「连上了、对端先关了连接、一个状态行都没读到」跟「请求根本没送到」混成同一个返回值，于是门报的是「没配对传不进来（401）失败」，实际是**客户端没读到响应** —— 一句会把人带到错误方向的结论。三个修法：①三态拆开，`(0, None)` 只留给真正没送到的（`ConnectionRefusedError` / `socket.gaierror` / `ENETUNREACH` / `EHOSTUNREACH`），`ConnectionResetError` / `ConnectionAbortedError` / `BrokenPipeError` / `http.client.RemoteDisconnected` 一律抛 `LiveCallError`，`.kind` 保留原始类名、消息里点明「这是没读到响应」；②只给这一类**有界重试**（`lan_retry()`，env `TF_WEB_LIVE_RETRY`，缺省 1、可置 0 关掉），**已拿到状态码的调用绝不重试**；③判据 `nopair[0] == 401` 一字不动 —— 放宽成 `in (401, 0)` 能让那趟变绿，但那等于承认「没读到响应也算服务端拒了」，门从此不再证明配对门有效。新增 10 条钉子（`tests/test_web_live_read_failure_is_not_401.py`：拒连仍是 `(0, None)` / 重置必须点名 / 重试成功且只重试 1 次 / `RETRY=0` 不重试 / 已得 401 不重试 / 收口不甩锅 / 判据不许放宽），两份既有测试（卡 E67、E71）一字未改；反向变异 6/6，C1 只改注释不咬。
 ## 2026-11-03 T-BG007 补上 F39/F40 那 10 个「登记了没实现」的材料工具
 
 - 插件仓 `D:/repo/_tools/dsh-plugins` 提交 `5618be1`（2 files / +460）：`openmaic_material_ops`（list/read/search/extract/wait）+ `openmaic_material_folders`（list/create/rename-folder/move/rename），工具数 **27 → 29**。

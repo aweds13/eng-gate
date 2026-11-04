@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
@@ -129,6 +130,18 @@ CALL_TIMEOUT_ENV = "TF_WEB_LIVE_TIMEOUT"
 #: `except (TimeoutError, socket.timeout)` 会撞 ruff UP041）。
 WAIT_TIMEOUTS: tuple[type[BaseException], ...] = (TimeoutError, socket.timeout)
 
+#: 卡 E85：**请求根本没送到**的那几个异常 —— 只有这些才算「连不上」，才返回 `(0, None)`。
+#: 其余 OS 层中断（连接被重置 / 管道断开 / 对端没等我们写完就关）一律是「连上了但没读到响应」，
+#: 必须抛 `LiveCallError` —— 否则判据 `nopair[0] == 401` 会把「没读到」说成「服务端没回 401」。
+NO_ROUTE_ERRORS: tuple[type[BaseException], ...] = (ConnectionRefusedError, socket.gaierror)
+NO_ROUTE_ERRNOS = frozenset({errno.ENETUNREACH, errno.EHOSTUNREACH})
+
+#: 卡 E85：**一个字节都没读到**时最多再打几次。默认 1 次（env 可置 0 关掉）。
+#: 只给这一类重试是安全的：本函数打的都是幂等 GET 与 `/api/sync/import`，
+#: 后者由门里那条「同一份包再传一次是幂等的」判据守着。
+DEFAULT_LAN_RETRY = 1
+LAN_RETRY_ENV = "TF_WEB_LIVE_RETRY"
+
 
 class LiveCallError(RuntimeError):
     """一次 HTTP 调用没等到结果 —— **带点名**的错误，不是裸 traceback（卡 E67）。
@@ -138,15 +151,22 @@ class LiveCallError(RuntimeError):
     **不许把它洗成通过**。
     """
 
-    def __init__(self, method: str, url: str, seconds: float, cause: BaseException) -> None:
+    def __init__(self, method: str, url: str, seconds: float, cause: BaseException,
+                 *, broken_read: bool = False) -> None:
         self.method = method
         self.url = url
         self.seconds = seconds
         self.kind = type(cause).__name__
+        self.broken_read = broken_read
         reason = getattr(cause, "reason", None) or cause
+        tail = ""
+        if broken_read:   # ★ 卡 E85：这句话是给排障的人看的，不许含糊成「没配对」
+            tail = ("；★ 这是**没读到响应**（连上了、对端先关了连接）——"
+                    "不等于服务端没回 401，也不等于配对失败")
         super().__init__(
             f"{method} {url} 等了 {seconds:g} 秒没等到（{self.kind}: {reason}）"
             f"；慢机器调大等待窗：env {CALL_TIMEOUT_ENV}=<秒>（默认 {DEFAULT_CALL_TIMEOUT:g}）"
+            f"{tail}"
         )
 
 
@@ -163,6 +183,34 @@ def call_timeout() -> float:
     except ValueError:
         return DEFAULT_CALL_TIMEOUT
     return val if val > 0 else DEFAULT_CALL_TIMEOUT
+
+
+def lan_retry() -> int:
+    """「没读到响应」时最多再打几次（卡 E85）：默认 `DEFAULT_LAN_RETRY`，env 可调。
+
+    坏值 / 负数 ⇒ 退回默认；`0` 是**合法**值（明确关掉重试）。
+    """
+    raw = os.environ.get(LAN_RETRY_ENV, "").strip()
+    if not raw:
+        return DEFAULT_LAN_RETRY
+    try:
+        val = int(raw)
+    except ValueError:
+        return DEFAULT_LAN_RETRY
+    return val if val >= 0 else DEFAULT_LAN_RETRY
+
+
+def _read_broken(exc: BaseException) -> bool:
+    """连上了、但没读到响应状态行（卡 E85）—— 与「请求根本没送到」必须分开。
+
+    `ConnectionResetError` / `ConnectionAbortedError` / `BrokenPipeError` /
+    `http.client.RemoteDisconnected` 全是 `OSError` 的子类；拒连与无路由不算。
+    """
+    if not isinstance(exc, OSError):
+        return False
+    if isinstance(exc, NO_ROUTE_ERRORS):
+        return False
+    return getattr(exc, "errno", None) not in NO_ROUTE_ERRNOS
 
 
 def mark_live_error(checks: dict[str, bool], err: LiveCallError) -> None:
@@ -821,6 +869,11 @@ def _lan_json(base: str, path: str, method: str = "GET",
 
     现在三态分明：拿到状态码 / 抛 `LiveCallError`（**等不到**，点名 endpoint 与秒数）/
     `(0, None)`（**真的连不上**：连接被拒、无路由）。等待窗与 `_json_call` 同源。
+
+    ★ 卡 E85：上面那个三态还不够 —— 「连上了但没读到状态行」原来被最后那句
+    `except OSError: return 0, None` 一起洗成「连不上」，于是门说的是「没配对传不进来（401）」
+    失败，实际是客户端没读到响应。现在这一类先**有界重试**（`lan_retry()`，默认 1 次），
+    仍不成抛 `LiveCallError`（带 `broken_read=True`），`(0, None)` 只留给真正没送到的请求。
     """
     url = f"{base}{path}"
     wait = call_timeout() if timeout is None else timeout
@@ -837,19 +890,30 @@ def _lan_json(base: str, path: str, method: str = "GET",
         except (ValueError, UnicodeDecodeError):
             return None      # 静态壳回的是 HTML —— 这一路只看状态码
 
-    try:
-        with opener.open(req, timeout=wait) as resp:
-            return resp.status, _body(resp.read())
-    except urllib.error.HTTPError as e:
-        return e.code, _body(e.read())
-    except urllib.error.URLError as e:   # ★ 卡 E71：URLError 只是**外壳**，要看 reason 是谁
-        if isinstance(e.reason, WAIT_TIMEOUTS):
+    attempts = 1 + lan_retry()
+    last: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with opener.open(req, timeout=wait) as resp:
+                return resp.status, _body(resp.read())
+        except urllib.error.HTTPError as e:
+            return e.code, _body(e.read())   # ★ 已拿到状态码 ⇒ 绝不重试
+        except urllib.error.URLError as e:   # ★ 卡 E71：URLError 只是**外壳**，要看 reason 是谁
+            if isinstance(e.reason, WAIT_TIMEOUTS):
+                raise LiveCallError(method, url, wait, e) from e
+            if not _read_broken(e.reason):
+                return 0, None   # 连接被拒 / 无路由 —— 真的连不上，由调用方决定怎么报
+            last = e.reason if isinstance(e.reason, BaseException) else e
+        except WAIT_TIMEOUTS as e:   # ★ 卡 E71：超时不再混进「连不上」
             raise LiveCallError(method, url, wait, e) from e
-        return 0, None      # 连接被拒 / 无路由 —— 真的连不上，由调用方决定怎么报
-    except WAIT_TIMEOUTS as e:   # ★ 卡 E71：超时不再混进「连不上」
-        raise LiveCallError(method, url, wait, e) from e
-    except OSError:
-        return 0, None      # 其它 OS 层错误（防火墙 / 没有局域网地址）
+        except OSError as e:
+            if not _read_broken(e):
+                return 0, None   # 拒连 / 无路由 / 没有局域网地址
+            last = e
+        if attempt < attempts:
+            print(f"  [重试] {method} {url} 没读到响应（{type(last).__name__}），再打一次")
+    assert last is not None
+    raise LiveCallError(method, url, wait, last, broken_read=True) from last
 
 
 def _free_port() -> int:

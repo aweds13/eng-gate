@@ -1,0 +1,22 @@
+[entries."T-AG592"]
+id = "T-AG592"
+title = "读不到响应不等于服务端没回 401"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E85-读不到响应不等于服务端没回401.md",
+  "file:tools/web_live_check.py",
+  "file:tests/test_web_live_read_failure_is_not_401.py",
+  "test:test_web_live_read_failure_is_not_401.py",
+  "text:tools/web_live_check.py::broken_read=True",
+  "text:tools/web_live_check.py::def lan_retry",
+  "text:tools/web_live_check.py::NO_ROUTE_ERRORS",
+  "text:tests/test_web_live_read_failure_is_not_401.py::def test_the_401_judgement_is_not_relaxed",
+]
+gaps = [
+  """云机那条红（卡 E84 那趟）**仍然复现不出来**：八个探针（本机与云机各半）里只有把 body 放大到 3.2 MB 才能稳定造出「早回 401 + 客户端还在写 body ⇒ RST」，而门里那份包只有 2917 B。本卡只保证下次发生时门**说实话**（说「没读到响应」，不再说「401 判据失败」），不保证那条红消失。
+重试只有 1 次、没有退避：连续两次都被重置时仍会以 `LiveCallError` 收场（这是有意的 —— 再多重试只会把「网络确实不稳」拖成慢失败）。
+`tests/test_web_live_lan_timeout.py`（卡 E71）里那条 `test_lan_refused_is_still_zero_and_none` 现在与 `_read_broken()` 的判据同源，但两边是各写各的断言；将来若把「什么算没送到」放宽，两处要一起改。
+""",
+]

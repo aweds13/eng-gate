@@ -11514,3 +11514,26 @@ evidence = [
   "file:docs/traceability.d/T-BG009.toml",
 ]
 gaps = "1. 有一处判据被我自己推翻并已更正：原判「保留已装侧的 `-AsHashtable` 补丁」，实测 PS 5.1 的 `ConvertFrom-Json` 没有该参数（报 `NamedParameterNotFound`）⇒ 那行是上一版遗留的坏行、2.1.7 恰好删掉了它。已回退成 zip 原版（1471 B / sha 8fd2e07c63fd50f8），两引擎复验 `PASS 10 generic cases`。指针 `docs/research/pika-2.1.7-迁移实测.md`2. silent陷阱：跑自检会重新生成 18 个 `.pyc`（13:09 那次），清理必须放在最后一次自检之后。终态残留 0。指针 `docs/research/pika-2.1.7-迁移实测.md`3. 三项仍「不知道」：`D:/downloads/pika文件_Pro.zip`（1451498774 B / 2411 条目）与早前诊断记录（1549 MB / 2412 条目）**不是同一副本**；旧 toolkit 的 `install.py` 是否真跑过；`_observer-tools` 那两份文件是怎么丢的（未跟踪 ⇒ git 无历史）。指针 `docs/research/pika-2.1.7-迁移实测.md`4. 三个已删的 0 字节 `SKILL.md` **不在备份里** ⇒ 唯一还原路径是 `git checkout`（仓 = `D:/repo`）。指针 `docs/research/pika-2.1.7-迁移实测.md`5. `_observer-tools` 至今**未进 git 跟踪**，重建的 `hermes_observer.py` 与 `test_e2e.py` 也只在工作区。指针 `docs/research/pika-2.1.7-迁移实测.md`6. `docs/research/程天学-待议清单.md` 只记名字与待决问题，**不做设计不落代码**；四项（圆桌三角色 / 教师侧监管与备课 / 做题插件 / 个人库）都等学习者拍板。指针 `docs/research/程天学-待议清单.md`"
+
+[entries."T-AG592"]
+id = "T-AG592"
+title = "读不到响应不等于服务端没回 401"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E85-读不到响应不等于服务端没回401.md",
+  "file:tools/web_live_check.py",
+  "file:tests/test_web_live_read_failure_is_not_401.py",
+  "test:test_web_live_read_failure_is_not_401.py",
+  "text:tools/web_live_check.py::broken_read=True",
+  "text:tools/web_live_check.py::def lan_retry",
+  "text:tools/web_live_check.py::NO_ROUTE_ERRORS",
+  "text:tests/test_web_live_read_failure_is_not_401.py::def test_the_401_judgement_is_not_relaxed",
+]
+gaps = [
+  """云机那条红（卡 E84 那趟）**仍然复现不出来**：八个探针（本机与云机各半）里只有把 body 放大到 3.2 MB 才能稳定造出「早回 401 + 客户端还在写 body ⇒ RST」，而门里那份包只有 2917 B。本卡只保证下次发生时门**说实话**（说「没读到响应」，不再说「401 判据失败」），不保证那条红消失。
+重试只有 1 次、没有退避：连续两次都被重置时仍会以 `LiveCallError` 收场（这是有意的 —— 再多重试只会把「网络确实不稳」拖成慢失败）。
+`tests/test_web_live_lan_timeout.py`（卡 E71）里那条 `test_lan_refused_is_still_zero_and_none` 现在与 `_read_broken()` 的判据同源，但两边是各写各的断言；将来若把「什么算没送到」放宽，两处要一起改。
+""",
+]
