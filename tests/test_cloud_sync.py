@@ -547,3 +547,111 @@ def test_run_gate_escapes_powershell_current_item_variable() -> None:
         if "$_.Name" in line and r"\$_.Name" not in line
     ]
     assert not bare, f"这些行里的 $_ 会被本地 bash 先展开：{bare[:1]}"
+# ------------------------------------------------- 卡 E84（T-AG591）：断线不许把现场一起弄丢
+def _gate_code_lines() -> list[str]:
+    """只看 `run_gate.sh` 的**可执行行**：注释里点名解释来龙去脉，不算判据本体。"""
+    return [
+        ln for ln in RUN_GATE.read_text(encoding="utf-8").splitlines()
+        if not ln.lstrip().startswith("#")
+    ]
+
+
+def _region(text: str, start: str, end: str) -> str:
+    """切出 `=== <start>` 到 `=== <end>` 之间那一段（两端横幅都算在内）。"""
+    i = text.index(start)
+    return text[i : text.index(end, i)]
+
+
+def test_run_gate_keeps_the_ssh_session_alive() -> None:
+    """判据 1：一趟门禁约 15 分钟，长连接空闲会被中间设备剪断（卡 A366 那趟本机收到 rc=255）。
+
+    ★ 实测：`SSHOPTS` 原来只有 StrictHostKeyChecking / UserKnownHostsFile / BatchMode，
+    **没有 ServerAliveInterval** ⇒ 连接被掐掉时云机上的门禁照跑，本机只看到 rc=255，
+    那 15 分钟的 stdout 谁也没去取。保活三项必须挂在**共用的 SSHOPTS** 上。
+    """
+    code = chr(10).join(_gate_code_lines())
+    assert "SSHOPTS=" in code, "要有一份共用的 SSHOPTS（不要每条命令自己拼）"
+    seg = code[code.index("SSHOPTS=") : code.index("TMP=")]
+    assert "ServerAliveInterval=30" in seg, "SSHOPTS 要每 30 s 探一次（可执行行，不是注释里写写）"
+    ve = re.search(r"ServerAliveCountMax=(\d+)", seg)
+    assert ve is not None, "要有 ServerAliveCountMax（否则一次探测丢包就判定断线）"
+    assert int(ve.group(1)) >= 6, f"容忍次数 {ve.group(1)} 太小：一趟门禁不能一丢包就断线"
+    assert "TCPKeepAlive=yes" in seg, "TCP 层也要保活"
+
+
+def test_run_gate_bounds_the_remote_gate_with_a_timeout() -> None:
+    """判据 2：4/5 必须有硬超时；秒数可由 `TF_CLOUD_GATE_TIMEOUT` 覆盖、缺省 3600；124 单独可辨。
+
+    ★ 原来那条 ssh 是裸的：云机挂死时本机就无限等（只有上层 gate_pool 的 3600 s 兜底，
+    而那层看不到 4/5 之前任何一步的现场）。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    step4 = _region(text, "=== 4/5", "=== 5/5")
+    assert "TF_CLOUD_GATE_TIMEOUT:-3600" in step4, "超时秒数要可由 env 覆盖、缺省 3600"
+    assert 'timeout "$gate_timeout" ssh' in step4, "那条 ssh 必须被 timeout 包住"
+    assert '"$rc" = "124"' in step4, "124 是 timeout 的退出码，要单独判（别混进门禁红里）"
+    assert "超时" in step4, "超时要给一句人话，不许只报退码"
+
+
+def test_the_gate_output_is_written_on_the_cloud_side_too() -> None:
+    """判据 3：4/5 的 stdout 在云机上也要落一份 —— 断线后这份还在盘上，能补取。
+
+    ★ 卡 A366 实测：4/5 只写本机 `$TMP/gate.out`，传输一断连它一起没了；
+    云机那边 22 门其实已经跑完（`C:/eng/gates/last.json` 完整）。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    step4 = _region(text, "=== 4/5", "=== 5/5")
+    assert 'remote_out="C:/eng/gates/diag/cloud-4of5-$card.log"' in step4, (
+        "云侧要有一份固定路径的输出（5/5 才知道去哪儿补取）"
+    )
+    assert "> $remote_out 2>&1" in step4, "重定向要真的挂在远端那条命令上"
+    assert step4.index("> $remote_out") > step4.index("ssh $SSHOPTS"), "重定向写在 ssh 之后"
+    ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "gates/diag/" in ignored, "云侧日志只许落在 gitignored 的 gates/diag/（不许入库）"
+
+
+def test_local_capture_is_written_before_any_scp() -> None:
+    """判据 4：ssh 一返回就把本机这一侧落盘，**早于** 5/5 的任何 scp。
+
+    ★ 卡 A366 实测：原来 `cp "$TMP/gate.out" gates/diag/cloud-gate-<卡>.log` 在 5/5 末尾，
+    传输断在 4/5 之前 ⇒ 本机只剩 1026 字节，连「这趟是断是超时」都没记下来。
+    """
+    text = RUN_GATE.read_text(encoding="utf-8")
+    step4 = _region(text, "=== 4/5", "=== 5/5")
+    assert "gates/diag/cloud-gate-$card.log" in step4, "本机现场必须落在 4/5 段里（不是 5/5）"
+    assert "# rc=$rc" in step4, "头部要记 rc 与用时（回来看才知道这趟是断线还是超时）"
+    assert 'cat "$TMP/gate.out"' in step4, "要把 ssh 抓到的输出并进那份文件"
+    step5 = text[text.index("=== 5/5") :]
+    assert 'cp "$TMP/gate.out"' not in step5, "现场的 cp 不许再留在 5/5（那会晚于 scp）"
+    assert step4.index("gates/diag/cloud-gate-$card.log") < text.index("=== 5/5"), (
+        "落盘必须早于 5/5 横幅"
+    )
+
+
+def test_step5_fetches_everything_best_effort() -> None:
+    """判据 5：三项各自 best effort，任何一项取不回都不许中断后面两项、更不许 exit。"""
+    text = RUN_GATE.read_text(encoding="utf-8")
+    step5 = text[text.index("=== 5/5") :]
+    assert "fetch()" in step5, "取回要收成一个函数（三项共用一套重试与话术）"
+    assert 'while [ "$try" -le 3 ]' in step5, "要重试（单次丢包就放弃等于没做）"
+    for what in ('"$remote_out"', '"$cloud_dir/gates/last.json"', '"$cloud_dir/gates/logs/*.log"'):
+        assert what in step5, f"5/5 必须取回 {what}"
+    assert step5.count('fetch "') >= 3, "三项都要走 fetch"
+    assert "return 0" in step5, "取不回也要正常返回（后面还有两项）"
+    head = step5.split("if ! python -X utf8 tools/gate_pool.py", 1)[0]
+    assert "exit" not in head, "取回这一段不许 exit —— 一项失败就退，等于把另外两项一起丢"
+    assert 'scp $SSHOPTS -i "$KEY" "$HOST:$cloud_dir/gates/last.json"' not in text, (
+        "原来那种直连 scp（失败即中断）已换成 fetch"
+    )
+
+
+def test_run_gate_explains_broken_connection_and_timeout() -> None:
+    """判据 6：rc=255（传输断）与 rc=124（超时）各给诊断 + 现场路径 + 怎么取回。"""
+    text = RUN_GATE.read_text(encoding="utf-8")
+    step4 = _region(text, "=== 4/5", "=== 5/5")
+    assert '"$rc" = "255"' in step4, "rc=255 要单独判（那是断线，不是门禁红）"
+    assert '"$rc" = "124"' in step4, "rc=124 要单独判（超时）"
+    blob = chr(10).join(ln for ln in step4.splitlines() if ">&2" in ln)
+    for word in ("云机", "现场", "scp"):
+        assert word in blob, f"断线/超时的提示里要有「{word}」—— 只报退码等于让人去猜"
+    assert "TF_CLOUD_GATE_TIMEOUT" in blob, "超时时要说放宽哪个变量"

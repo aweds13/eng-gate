@@ -68,7 +68,11 @@ if [ -z "${CLOUD_HOST:-}" ]; then
   exit 9
 fi
 HOST="$CLOUD_HOST"
+# ★ 卡 E84（T-AG591）：一趟门禁约 15 分钟，长连接空闲时会被中间设备剪断 ——
+#   实测 A366 那趟本机收到 rc=255，而云机上 22 门已经跑完（产物就在盘上）。
+#   ⇒ 加保活：30 s 一次探测、容忍 6 次（≈3 分钟）不发包也不判定断线。
 SSHOPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
+SSHOPTS="$SSHOPTS -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o TCPKeepAlive=yes"
 TMP="$(mktemp -d)"
 # ★ 卡 E49 pass7 实测：原来这两行按**调用者 cwd**（主仓）取提交 —— 主仓一往前走，
 #   云机就 checkout 到主仓的 HEAD，而补丁是拿**卡树**的 HEAD 做的 diff ⇒
@@ -309,17 +313,51 @@ start=$(date +%s)
 # ★ 卡 E66（T-AG526）：记下**本机**起跑时刻，供 5/5 判断产物是不是这一趟写的。
 #   不用云机时钟：云机断电重启后 RTC 不可信，而 `at` 正是云机本地时间写的。
 started_at=$(date -Iseconds)
-ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && $envset && \"C:/Program Files/Python312/python.exe\" -X utf8 scripts/run_gates.py && \"C:/Program Files/Python312/python.exe\" -X utf8 scripts/run_gates.py --seal" > "$TMP/gate.out" 2>&1
+# ★ 卡 E84（T-AG591）：4/5 的输出**先写云机盘上**再由本机取回。
+#   实测（卡 A366 那趟）：原来是 `ssh … > "$TMP/gate.out"`，连接一断（rc=255）
+#   本机只剩断点前那 1026 字节，而云机上 15 分钟的真输出与 gates/logs/*.log
+#   还在盘上没人取。改成「云机落盘 + 本机取回」后，传输断掉也还能补取。
+#   注：重定向写在 cmd 的命令组外，python 的退出码仍是这条 ssh 的退出码。
+gate_timeout="${TF_CLOUD_GATE_TIMEOUT:-3600}"
+remote_out="C:/eng/gates/diag/cloud-4of5-$card.log"
+timeout "$gate_timeout" ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir && $envset && ( \"C:/Program Files/Python312/python.exe\" -X utf8 scripts/run_gates.py && \"C:/Program Files/Python312/python.exe\" -X utf8 scripts/run_gates.py --seal ) > $remote_out 2>&1" > "$TMP/gate.out" 2>&1
 rc=$?
-echo "门禁退出码=$rc 用时=$(( $(date +%s) - start ))s"
-tail -6 "$TMP/gate.out"
+elapsed=$(( $(date +%s) - start ))
+echo "门禁退出码=$rc 用时=${elapsed}s"
 
-echo "=== 5/5 回传 gates/last.json 与日志 ==="
-mkdir -p ".wt/$card/gates/logs"
-scp $SSHOPTS -i "$KEY" "$HOST:$cloud_dir/gates/last.json" ".wt/$card/gates/last.json" >/dev/null
-scp $SSHOPTS -i "$KEY" "$HOST:$cloud_dir/gates/logs/*.log" ".wt/$card/gates/logs/" >/dev/null 2>&1
+# ★ 卡 E84：ssh 一返回就**立刻**把本机这一侧落盘（早于下面任何 scp）。
+#   传输中途断掉时，剩下的就只有这份；不许等 5/5 才写。
 mkdir -p gates/diag
-cp "$TMP/gate.out" "gates/diag/cloud-gate-$card.log"
+{
+  echo "# rc=$rc elapsed=${elapsed}s started_at=$started_at timeout=${gate_timeout}s card=$card"
+  cat "$TMP/gate.out"
+} > "gates/diag/cloud-gate-$card.log"
+tail -6 "gates/diag/cloud-gate-$card.log"
+
+if [ "$rc" = "124" ]; then
+  echo "✗ 云门禁超时（${gate_timeout}s）—— 云机可能挂住了。" >&2
+  echo "  处置：用 TF_CLOUD_GATE_TIMEOUT 放宽后重跑；云机现场见下面 5/5 的取回结果。" >&2
+elif [ "$rc" = "255" ]; then
+  echo "✗ 与云机的长连接断了（rc=255）—— 门禁**可能已在云机上跑完**，产物就在云机盘上。" >&2
+  echo "  处置：5/5 会尽力取回；取不回就手工 scp $remote_out 与 $cloud_dir/gates/。" >&2
+fi
+
+echo "=== 5/5 回传 gates/last.json 与日志（三项各自尽力，任何一项失败都不许中断其它）==="
+mkdir -p ".wt/$card/gates/logs"
+fetch() {
+  local what="$1" src="$2" dst="$3" try=1
+  while [ "$try" -le 3 ]; do
+    if scp $SSHOPTS -i "$KEY" "$HOST:$src" "$dst" >/dev/null 2>&1; then
+      return 0
+    fi
+    try=$((try + 1))
+  done
+  echo "  [取不回] $what（$src）—— 连试 3 次都没成；云机上那份还在，可手工 scp。" >&2
+  return 0
+}
+fetch "云机 4/5 输出" "$remote_out" "gates/diag/cloud-4of5-$card.log"
+fetch "gates/last.json" "$cloud_dir/gates/last.json" ".wt/$card/gates/last.json"
+fetch "门禁日志" "$cloud_dir/gates/logs/*.log" ".wt/$card/gates/logs/"
 
 # ★ 卡 E66（T-AG526）：上一趟的绿播种在云机同一个路径上，云机中途死掉时 5/5 搬回来的
 #   就是那份播种 —— 它绿、host 是云机、rev 也对得上，落地链的 ok/host/tree 三道自检全过。

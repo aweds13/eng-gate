@@ -11478,3 +11478,26 @@ gaps = [
 - 反证那半截在云机上仍靠 render 失败才「过」（它只断言非零 + 点名端口），逻辑本身不依赖黄金，本卡没动它。
 """,
 ]
+
+[entries."T-AG591"]
+id = "T-AG591"
+title = "云门禁断了不许把现场弄丢"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E84-云门禁断了不许把现场弄丢.md",
+  "file:scripts/cloud/run_gate.sh",
+  "file:tests/test_cloud_sync.py",
+  "test:test_cloud_sync.py",
+  "text:scripts/cloud/run_gate.sh::ServerAliveInterval=30",
+  "text:scripts/cloud/run_gate.sh::TF_CLOUD_GATE_TIMEOUT:-3600",
+  "text:scripts/cloud/run_gate.sh::C:/eng/gates/diag/cloud-4of5-",
+  "text:tests/test_cloud_sync.py::def test_step5_fetches_everything_best_effort",
+]
+gaps = [
+  """`fetch()` 只重试 3 次、无退避：云机网络长时间不可用时仍会「取不回」。真正的补救是 `TF_CLOUD_GATE_TIMEOUT` 之外再加一层重连，本卡只保证现场**落盘**不丢，不保证一定能取回。
+本地那份 `gates/diag/cloud-gate-<卡>.log` 落在 gitignored 的 `gates/diag/`（`.gitignore:76`），断了之后要靠人手工看；没有任何工具会自动把 rc!=0 的那份摘出来 —— 这一步留给使用者。
+`tests/test_cloud_sync.py` 入库版是纯 LF、检出后被 `core.autocrlf=true` 转成混合行尾；本卡追加的 108 行是 CRLF，所以该文件现在工作区是纯 CRLF、入库仍是 LF。`.gitattributes` 对它没有规则，下次有人整体转换行尾会得到 549 行噪声 diff。
+""",
+]
