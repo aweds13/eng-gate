@@ -5280,3 +5280,17 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E84"
+task = "T-AG591"
+title = "云门禁断了不许把现场弄丢"
+tree = ".wt/E84"
+spec = "复盘/卡/卡E84-云门禁断了不许把现场弄丢.md"
+files = [
+  "scripts/cloud/run_gate.sh",
+  "tests/test_cloud_sync.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
