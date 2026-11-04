@@ -5294,3 +5294,17 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E85"
+task = "T-AG592"
+title = "读不到响应不等于服务端没回 401"
+tree = ".wt/E85"
+spec = "复盘/卡/卡E85-读不到响应不等于服务端没回401.md"
+files = [
+  "tools/web_live_check.py",
+  "tests/test_web_live_read_failure_is_not_401.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
