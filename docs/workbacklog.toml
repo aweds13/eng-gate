@@ -5336,3 +5336,17 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E88"
+task = "T-AG595"
+title = "台账合并先做到无损"
+tree = ".wt/E88"
+spec = "复盘/卡/卡E88-台账合并先做到无损.md"
+files = [
+  "tools/wb_plan.py",
+  "tests/test_merge_is_lossless.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
