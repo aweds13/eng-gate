@@ -11501,3 +11501,16 @@ gaps = [
 `tests/test_cloud_sync.py` 入库版是纯 LF、检出后被 `core.autocrlf=true` 转成混合行尾；本卡追加的 108 行是 CRLF，所以该文件现在工作区是纯 CRLF、入库仍是 LF。`.gitattributes` 对它没有规则，下次有人整体转换行尾会得到 549 行噪声 diff。
 """,
 ]
+
+[entries."T-BG009"]
+id = "T-BG009"
+title = "docs(research): pika 2.1.7 迁移实测 —— 7 包 466 文件逐字节对齐、observer 接收端重建、vault 两处裁定"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/research/pika-2.1.7-迁移实测.md",
+  "file:docs/research/程天学-待议清单.md",
+  "file:docs/changelog.d/T-BG009.md",
+  "file:docs/traceability.d/T-BG009.toml",
+]
+gaps = "1. 有一处判据被我自己推翻并已更正：原判「保留已装侧的 `-AsHashtable` 补丁」，实测 PS 5.1 的 `ConvertFrom-Json` 没有该参数（报 `NamedParameterNotFound`）⇒ 那行是上一版遗留的坏行、2.1.7 恰好删掉了它。已回退成 zip 原版（1471 B / sha 8fd2e07c63fd50f8），两引擎复验 `PASS 10 generic cases`。指针 `docs/research/pika-2.1.7-迁移实测.md`2. silent陷阱：跑自检会重新生成 18 个 `.pyc`（13:09 那次），清理必须放在最后一次自检之后。终态残留 0。指针 `docs/research/pika-2.1.7-迁移实测.md`3. 三项仍「不知道」：`D:/downloads/pika文件_Pro.zip`（1451498774 B / 2411 条目）与早前诊断记录（1549 MB / 2412 条目）**不是同一副本**；旧 toolkit 的 `install.py` 是否真跑过；`_observer-tools` 那两份文件是怎么丢的（未跟踪 ⇒ git 无历史）。指针 `docs/research/pika-2.1.7-迁移实测.md`4. 三个已删的 0 字节 `SKILL.md` **不在备份里** ⇒ 唯一还原路径是 `git checkout`（仓 = `D:/repo`）。指针 `docs/research/pika-2.1.7-迁移实测.md`5. `_observer-tools` 至今**未进 git 跟踪**，重建的 `hermes_observer.py` 与 `test_e2e.py` 也只在工作区。指针 `docs/research/pika-2.1.7-迁移实测.md`6. `docs/research/程天学-待议清单.md` 只记名字与待决问题，**不做设计不落代码**；四项（圆桌三角色 / 教师侧监管与备课 / 做题插件 / 个人库）都等学习者拍板。指针 `docs/research/程天学-待议清单.md`"

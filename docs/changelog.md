@@ -4,6 +4,11 @@
 ## 2026-11-04 · 云门禁断了不许把现场弄丢（卡 E84，T-AG591）
 
 云门禁那 15 分钟的输出，原来只写在本机的临时文件里：`scripts/cloud/run_gate.sh:312` 那条 ssh 是裸的，输出重定向到 `$TMP/gate.out`，5/5 段才 `cp` 进 `gates/diag/cloud-gate-<卡>.log`。于是连接一断（卡 A366 那趟实测 rc=255），本机只剩断点前那 1026 字节，连「这趟是断线还是超时」都没记下来 —— 而云机上 22 门其实已经跑完，产物就在 `C:/eng/gates/` 盘上没人取。四处修法：①`SSHOPTS` 挂上 `ServerAliveInterval=30` / `ServerAliveCountMax=6` / `TCPKeepAlive=yes`，长连接不再被中间设备静默剪断；②4/5 用 `timeout "$gate_timeout"` 包壳（`TF_CLOUD_GATE_TIMEOUT` 缺省 3600），挂死可辨（rc=124）；③远端命令组外加 `> $remote_out 2>&1`，云机自己也留一份输出（cmd 的 `( … ) > file` 实测生效，python 的退出码仍是这条 ssh 的退出码）；④ssh 一返回就**立刻**写 `gates/diag/cloud-gate-<卡>.log`（头部记 `# rc= elapsed= started_at= timeout=`），**早于任何 scp**。5/5 的取回收成一个 `fetch()`（每个源重试 3 次、失败只打「取不回」并 `return 0`），三项各自尽力，任何一项取不回都不中断其它。`check-product-fresh` 判据一字未动。新增六条钉子（`tests/test_cloud_sync.py`，只取 `run_gate.sh` 的可执行行，注释里点名来历不算判据）与反向变异 6/6。
+## 2026-11-04 T-BG009 pika 2.1.7 迁移实测：7 包 466 文件逐字节对齐、observer 接收端重建、vault 两处裁定
+
+装着的 7 个 pika skill 本来**就是 2.1.7 主体**（不是散落旧版），升级只需覆盖 71 个内容不同的文件 + 删 18 个 `.pyc`；复核终态 `same=466 diff=0 onlyZip=0 onlyInst=0`。
+vault 的「回填」是**空操作**（`only_zip 0`）：差异1 是 zip 在全角冒号前多一个半角空格（排版退化）⇒ 留本地；差异2 zip 是章节化重写但旧稿独有 24 行 Mathematica 核对代码 ⇒ 以 zip 为主体把代码并进附录（13497 → 14806 B）。
+`_observer-tools` 的 `hermes_observer.py` 与 `test_e2e.py` **已丢且从未入 git**，已重建并跑出 `E2E: 25/25 PASS`；★ 一处判据被我自己推翻：原判「保留 `-AsHashtable` 补丁」，实测 PS 5.1 的 `ConvertFrom-Json` 没有该参数（`NamedParameterNotFound`）⇒ 那行是上一版遗留坏行、2.1.7 恰好删掉它，已回退成 zip 原版。
 ## 2026-11-03 T-BG007 补上 F39/F40 那 10 个「登记了没实现」的材料工具
 
 - 插件仓 `D:/repo/_tools/dsh-plugins` 提交 `5618be1`（2 files / +460）：`openmaic_material_ops`（list/read/search/extract/wait）+ `openmaic_material_folders`（list/create/rename-folder/move/rename），工具数 **27 → 29**。
