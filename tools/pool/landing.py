@@ -125,6 +125,14 @@ POOL_README_GEN = RECOUNT_GENS[0]
 #: 走磁盘上的当前代码，判决权仍只在 `scripts/gen_pool_readme.py`（同一份现算口径）。
 DERIVED_CHECKER = "scripts/check_derived_docs.py"
 
+#: ★★ 卡 E87（`T-AG594`）：交接文档里那行「台账进度：done a / …（共 N 条」的**刷数字工具**。
+#: 数哪些条目、怎么数，口径只有它一份（`docs/traceability.toml` 的 `status`）；落地链只当调用方。
+COUNTS_TOOL = "tools/sync_counts.py"
+
+#: 那行数字住在哪几份交接文档里 —— 与 `tools/sync_counts.py` 的 `HANDOFFS` **同一份清单**
+#: （这里只是「写盘前后比哪些文件脏」的取景框，不是第二份计数口径）。
+COUNTS_DOCS = ("复盘/长任务执行协议.md", "复盘/交接-重构进度.md")
+
 
 def reset_derived(wt: pathlib.Path, task: str) -> None:
     """⓪ 把上一趟残留的派生物回退到 HEAD 干净态（卡 150 · 幂等重跑）。
@@ -284,6 +292,59 @@ def staged_and_extra(wt: pathlib.Path, allow: list[str]) -> tuple[list[str], lis
     staged = [x for x in git("diff", "--cached", "--name-only", cwd=wt).splitlines() if x.strip()]
     extra = [f for f in staged if f not in allow]
     return staged, extra
+
+
+def _dirty_of(wt: pathlib.Path, rels: list[str]) -> list[str]:
+    """这棵树里 `rels` 中**现在与 HEAD 不同**的那些（`git status --porcelain` 口径）。"""
+    return [rel for rel in rels
+            if (wt / rel).is_file() and git("status", "--porcelain", "--", rel, cwd=wt)]
+
+
+def refresh_counts(wt: pathlib.Path) -> list[str]:
+    r"""⑤′.5 刷交接文档里那行「台账进度：done a / …（共 N 条」（卡 E87 · `T-AG594`）。
+
+    病（实测，不是推测）：`--commit-only` 落地把 ② `sync_docs` 与 ③ `sync_counts`
+    整段跳过（两者都在 `if not a.commit_only:` 里），可卡树里的 `docs/traceability.toml`
+    **作者早已汇总过** ⇒ 这一笔提交照样让条目 +1，而那行数字**一次都没刷** ⇒ 交接文档
+    停在落笔前的值。现场：卡 E85 落地笔 `10875e82` 写 `done=640 / 共 681`，实际
+    `641 / 682`，`scripts/audit_progress.py` 当场判红（`复盘/交接-重构进度.md 里写的
+    分布对不上台账`）。事后补一笔（`5f562922`）能擦干净，但每落一张卡就欠一格。
+
+    口径（四条钉死，与 `recount_derived` 同源）：
+      ★ **真写盘**：不带 `--check` 跑。只跑 `--check` 然后失败 = 把活推给人，不是验证。
+      ★ **刷完必须复核**：紧接着跑 `--check`，非零 ⇒ 退 2。写盘非零同样退 2 —— 两条都不许吞。
+      ★ **唯一的跳过**：这棵树里没有 `tools/sync_counts.py`（测试假仓、老仓）⇒ 打印一行
+        说明后返回空表。**不静默，也不退 2**（否则所有只拷了 landing.py 的假仓全红）。
+      ★ **返回真被写盘的那些相对路径**：它们必须补进 `allow`，否则 `staged_and_extra()`
+        把改过的文件判成「计划外暂存」而停手。**清单不靠解析它的 stdout**（那是第二份
+        口径，且桩不打印）—— 用 `git status --porcelain` 前后比，与 `recount_derived()`
+        同一把尺子。
+
+    「它会改哪些文件」只认 `tools/sync_counts.py` 自己的 `HANDOFFS` 口径；本函数只负责
+    把「写之前脏不脏」和「写之后脏不脏」比出来 —— 已经脏的（作者手上就改过的）不算本笔的账。
+
+    为什么位置是「翻账之后、暂存之前」：翻账是本笔对**台账**的最后一次改动；那行数字数的
+    是 `docs/traceability.toml`（② 汇总之后才准，而 ② 早在卡树里做完了）。放在
+    `recount_derived()` **之前**：两份现算文档（README 的「队列卡数」、`docs/INDEX.md`）
+    读的正是这行数字的同一个分布。
+    """
+    if not (wt / COUNTS_TOOL).is_file():
+        print(f"  · 刷台账分布：这棵树里没有 {COUNTS_TOOL}（跳过）")
+        return []
+    before = set(_dirty_of(wt, list(COUNTS_DOCS)))
+    wrote = run([sys.executable, "-X", "utf8", COUNTS_TOOL], cwd=wt, check=False)
+    for line in ((wrote.stdout or "") + (wrote.stderr or "")).splitlines():
+        print("  " + line)
+    if wrote.returncode != 0:
+        print(f"★ 刷台账分布失败（rc={wrote.returncode}）：{COUNTS_TOOL} ⇒ 不提交")
+        sys.exit(2)
+    again = run([sys.executable, "-X", "utf8", COUNTS_TOOL, "--check"], cwd=wt, check=False)
+    if again.returncode != 0:
+        for line in ((again.stdout or "") + (again.stderr or "")).splitlines():
+            print("  " + line)
+        print(f"★ 刷完复核仍不通过（rc={again.returncode}）：{COUNTS_TOOL} --check ⇒ 不提交")
+        sys.exit(2)
+    return [rel for rel in _dirty_of(wt, list(COUNTS_DOCS)) if rel not in before]
 
 
 def recount_derived(wt: pathlib.Path) -> list[str]:
@@ -2586,6 +2647,15 @@ def main(argv: list[str] | None = None) -> int:
     #   ★ 位置钉死：**翻账之后、暂存之前**，且放在批/单卡两分支**汇合之后** ——
     #     `--commit-only` 也走这一行（它跳过 ①~⑤ 但照样翻账，判据 5）。
     #   ★ 重算真写了盘 ⇒ 补进 allow 并重暂存，否则 `staged_and_extra()` 判「计划外暂存」停手。
+    # ★★ 卡 E87（`T-AG594`）：先刷交接文档里那行**台账分布**，再重算现算文档。
+    #   为什么必须在这里、且必须在 `recount_derived()` **之前**：`--commit-only` 跳过
+    #   ② `sync_docs` 与 ③ `sync_counts`（都在 `if not a.commit_only:` 里），可卡树里的
+    #   `docs/traceability.toml` 早已汇总 ⇒ 提交后条目 +1、那行数字没刷 ⇒ 审计当场判红
+    #   （卡 E85 落地笔 `10875e82` 的现场）。两份现算文档读的正是同一个分布，所以先刷数字。
+    for _rel in refresh_counts(wt):
+        if _rel not in allow:
+            allow.append(_rel)
+        print(f"  ★ 台账分布改了它 ⇒ 随这一笔提交：{_rel}")
     for _rel in recount_derived(wt):
         if _rel not in allow:
             allow.append(_rel)

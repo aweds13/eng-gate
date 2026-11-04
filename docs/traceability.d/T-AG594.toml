@@ -1,0 +1,20 @@
+[entries."T-AG594"]
+id = "T-AG594"
+title = "交接文档里的台账分布别停在翻账前"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E87-交接文档里的台账分布别停在翻账前.md",
+  "file:tools/pool/landing.py",
+  "test:test_landing_counts_refresh.py",
+  "text:tools/pool/landing.py::def refresh_counts(wt: pathlib.Path) -> list[str]:",
+  "text:tools/pool/landing.py::for _rel in refresh_counts(wt):",
+  "text:tools/pool/landing.py::★ 刷完复核仍不通过",
+]
+gaps = [
+  """批模式（`--batch`）走的是同一行（两分支汇合之后），本卡只钉单卡与 `--commit-only` 两条路；批路径由 `tests/test_pool_landing.py` 的批 e2e 覆盖。
+只在 Windows（本仓主力）跑过；`tools/sync_counts.py` 的 `tools/pipe_root.py` 选根在那台机器上的行为未在别的宿主验证。
+刷数字只覆盖 `tools/sync_counts.py` 的 `HANDOFFS` 两份交接文档；将来若新增第三份交接文档，要同步加进 `COUNTS_DOCS`。
+""",
+]

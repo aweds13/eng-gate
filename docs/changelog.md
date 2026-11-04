@@ -1,6 +1,29 @@
 ## 2026-11-05 · 并发落地时两份现算文档不该让整笔停手（卡 E86，T-AG593）
 
 卡 E85 第二次落地在 ff 合流前 rebase 撞上六份冲突，判据只认得「派生共享文档 + 两份门禁产物」，于是把 `docs/INDEX.md` 与 `docs/subsystems/pool/README.md` 判成「冲突里有**非派生物**（必须人来判）」并**停手**（`gates/diag/land-E85b.log:35`，退出码 3）。可这两份正是落地链自己会重算的**投影**（`RECOUNT_DOCS` ← `scripts/check_derived_docs.py`），判据早就知道答案，却让人手工做 `checkout --ours` × 5 + `--theirs` × 1 + `git add` + 三个生成器 + `rebase --continue` 才走完。修法三处：①新增 `RESOLVABLE = (*DERIVED, *RECOUNT_DOCS)`，`extra` 的过滤改用它（两张表不合并 —— `DERIVED` 的解法是「按片段重汇总」，现算文档是另一条腿「真跑生成器」，混在一起就分不清谁该跑哪个）；②两份现算文档先 `--ours` 取基线，再**真跑** `scripts/check_derived_docs.py` 写模式（子进程、cwd=卡树，不在函数里另立现算口径），并且必须排在 `sync_docs` 之后 —— 那两份是从 `docs/**` 与台账现算的，重汇总改了 `docs/changelog.md` 就会改它们的输入；③重算后必须再跑 `--check` 复核，非零就停手点名，不许吞成成功。`git add` 名单同步扩到 `RESOLVABLE ∪ GATE_ARTIFACTS`（实测：`checkout` 之后不加 `git add`，`git status` 照样 `UU`）。源码冲突仍然一律停手 —— 放宽只到投影，不外溢。新增 8 条钉子（`tests/test_landing_derived_resolvable.py`：两张表的并集与过滤点 / 两份现算文档冲突可自动解决 / 写模式→复核的顺序 / 取基线不取卡树 / 门禁产物仍取本笔 / 复核不过就停手 / 源码冲突仍点名 / 只有派生物冲突时调用序列一字不变），反向变异 5/5 + C1 只改注释不咬。
+## 2026-11-05 · 交接文档里的台账分布别停在翻账前（卡 E87，T-AG594）
+
+### 为什么
+
+`复盘/交接-重构进度.md` 里有一行「台账进度：done a / partial b / todo c / deferred d（共 N 条」，由 `tools/sync_counts.py` 刷、`scripts/audit_progress.py` 核。落地链的 ⑤′ 会把卡从 `pending` 翻成 `done`。
+
+正常路（② `tools/sync_docs.py` → ③ `tools/sync_counts.py` → ⑤′ 翻账）数字是对的。但 `--commit-only` 把 ②③ **整段跳过**（两者都在 `if not a.commit_only:` 里），而卡树里的 `docs/traceability.toml` 作者早已汇总过 ⇒ 这一笔提交照样让条目 +1、那行数字一次都没刷 ⇒ 交接文档停在落笔前的值，审计当场判红。
+
+现场（实测）：卡 E85 落地笔 `10875e82` 的交接文档写 `done=640 … 共 681 条`，同一棵树实算 `641 … 682`；`scripts/audit_progress.py --all --no-git` 报「复盘/交接-重构进度.md 里写的分布对不上台账」。事后补一笔 `5f562922` 能擦干净，但每落一张卡就欠一格。
+
+### 改了什么
+
+`tools/pool/landing.py` 新增 `COUNTS_TOOL` / `COUNTS_DOCS` 两个常量和 `refresh_counts(wt)`：在 ⑤′.5、`recount_derived()` **之前**，真写盘跑一次 `tools/sync_counts.py`，紧接着 `--check` 复核，把真被改动的文件补进 `allow`。缺工具时明说一句跳过（不静默、不退 2）。
+
+### 口径
+
+- 数哪些条目、怎么数，口径只有 `tools/sync_counts.py` 一份；落地链只当调用方。
+- 文件清单不解析它的 stdout（那是第二份口径，桩也不打印），改用 `git status --porcelain` 前后比。
+- 安静是常态：数字本来就对 ⇒ 不改字节、返回空表、不夹带文件。
+
+### 证据
+
+`tests/test_landing_counts_refresh.py` 七条钉子（刷对 / 顺序 / 安静 / 缺工具跳过 / 写盘失败停手 / 复核失败停手 / 随这一笔提交）；反向变异 M1–M5 全部咬住、C1 安静。
 ## 2026-11-04 · 端口隔离那条钉子接上唯一的金样本主机判据（卡 E83，T-AG590）
 
 云门禁那趟 22 门真跑完、唯一红就是这条钉子：两条并行各自用不同端口都跑完（15.2 s / 16.1 s），却因为与黄金差 202 行被记成再不兼容。金样本与采集机显示栈绑定这件事 `scripts/run_gates.py` 早就认了（`golden_host_reason()`，并因此把 `render` 记 EXCLUDED），只差这条钉子没接。本笔接上它，并把「红」分成两档：采集机上仍严格要求两条都退 0；别的机器上只放过「失败证据就是金样本不一致」；任何一档下出现并行重复 seed 的原文都判红。反证那半截（同端口必须被拒）一字未动。
