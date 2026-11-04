@@ -1,0 +1,22 @@
+[entries."T-AG593"]
+id = "T-AG593"
+title = "并发落地时两份现算文档不该让整笔停手"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E86-并发落地时两份现算文档不该停手.md",
+  "file:tools/pool/landing.py",
+  "file:tests/test_landing_derived_resolvable.py",
+  "test:test_landing_derived_resolvable.py",
+  "text:tools/pool/landing.py::RESOLVABLE = (*DERIVED, *RECOUNT_DOCS)",
+  "text:tools/pool/landing.py::x not in RESOLVABLE and x not in GATE_ARTIFACTS",
+  "text:tools/pool/landing.py::recount = [p for p in RECOUNT_DOCS if p in conflicted]",
+  "text:tests/test_landing_derived_resolvable.py::def test_a_conflict_on_the_two_recount_docs_is_resolved",
+]
+gaps = [
+  """放宽的边界只到「落地链自己会重算的投影」：`docs/workbacklog.toml`、`docs/partitions.toml`、任何 `tools/**` 与 `tests/**` 的冲突仍然停手。若将来再加一类自动重算的产物，必须同时加进 `RECOUNT_DOCS`（或另立一张表）并补钉子，否则又会退回「必须人来判」。
+自动解决仍是「先取基线再重算」，因此**只对投影有效**：如果某次并发把同一份投影的两笔**内容**都改了（而不是各自改不同的片段），重算结果会取生成器口径，可能吞掉另一笔的意图 —— 本卡不解决这个语义问题（现有五个投影都由片段/目录现算，不承载独立内容）。
+钉子 2–6 在 `tmp_path` 里起真仓库真造 rebase 冲突，但 `tools/sync_docs.py` 与 `scripts/check_derived_docs.py` 是桩 —— 本卡治「谁该自动解决」，不治那两个脚本内部；它们的口径由 `tests/test_pool_landing.py::test_real_tree_derived_docs_are_consistent` 单独守。
+""",
+]

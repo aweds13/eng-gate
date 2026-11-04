@@ -101,6 +101,13 @@ RESET_FRAGMENTS = ("docs/changelog.d/{task}.md", "docs/traceability.d/{task}.tom
 #: ⇒ 每落一张卡这两份都过期一次，必须由落地链自己重算（真写盘）。
 RECOUNT_DOCS = ("docs/subsystems/pool/README.md", "docs/INDEX.md")
 
+#: ★★ 卡 E86（`T-AG593`）：rebase 冲突里**机器能自己重算**的全部投影 = 派生共享文档
+#: + 现算文档。两张表各有各的取法（前者 `--ours` 再看片段重汇总，后者 `--ours` 再真跑
+#: 重算器复核），所以**不合并成一张** —— 这里只是「哪些路径可以自动解决」这一张名单。
+#: 为什么不并进 `DERIVED`：`DERIVED` 的语义是「按片段重汇总就能修好的三份」，
+#: 现算文档是另一条腿（生成器），混在一起的解法会分不清谁该跑哪个生成器。
+RESOLVABLE = (*DERIVED, *RECOUNT_DOCS)
+
 #: 重算用的生成器（相对**卡树**根；权威副本在 git 里），与 `RECOUNT_DOCS` **一一对应**。
 #: ★ 卡 E77：本链**不再直跑它们** —— ⑤′.5 改调 `DERIVED_CHECKER`（生成器的调用方，
 #:   不含任何现算口径）。保留这张表，是因为「某份文档在、它的生成器不在」仍要
@@ -179,10 +186,10 @@ def resolve_derived_conflicts(wt: pathlib.Path) -> tuple[bool, list[str]]:
                   if x.strip()]
     if not conflicted:
         return False, ["冲突表是空的，说不清发生了什么"]
-    extra = [x for x in conflicted if x not in DERIVED and x not in GATE_ARTIFACTS]
+    extra = [x for x in conflicted if x not in RESOLVABLE and x not in GATE_ARTIFACTS]
     if extra:
         return False, [f"冲突里有**非派生物**（必须人来判）：{extra}"]
-    for path in DERIVED:
+    for path in (*DERIVED, *RECOUNT_DOCS):
         if path in conflicted:
             run(["git", "checkout", "--ours", "--", path], cwd=wt)
     for path in GATE_ARTIFACTS:
@@ -194,7 +201,25 @@ def resolve_derived_conflicts(wt: pathlib.Path) -> tuple[bool, list[str]]:
     print("   ↳ 重汇总后 --check 退出码 =", chk.returncode)
     if chk.returncode != 0:
         return False, ["重汇总之后 `sync_docs.py --check` 仍不通过"]
-    add = [p for p in (*DERIVED, *GATE_ARTIFACTS) if p in conflicted]
+    # ★★ 卡 E86（`T-AG593`）：现算文档（README / `docs/INDEX.md`）也是**投影** ——
+    # 解法与上面三份同源：先取基线（`--ours`），再**真跑**落地链自己的重算器。
+    # ★ 不许在这里数行数 / 扫目录 / 数篇数：现算口径只有生成器那一份，本函数只当调用方。
+    # ★ 必须排在 `sync_docs` 之后 —— 这两份是从 `docs/**` 与台账**现算**出来的，
+    # 重汇总改了 `docs/changelog.md` 就会改它们的输入。
+    recount = [p for p in RECOUNT_DOCS if p in conflicted]
+    if recount:
+        wrote = run([sys.executable, "-X", "utf8", DERIVED_CHECKER], cwd=wt, check=False)
+        tail = ((wrote.stdout or "") + (wrote.stderr or "")).strip().splitlines()[-1:]
+        print("   ↳ 重算现算文档：", tail)
+        if wrote.returncode != 0:
+            return False, [f"重算现算文档失败"
+                           f"（{DERIVED_CHECKER} 退 {wrote.returncode}）：{recount}"]
+        again = run([sys.executable, "-X", "utf8", DERIVED_CHECKER, "--check"],
+                    cwd=wt, check=False)
+        print("   ↳ 重算后 --check 退出码 =", again.returncode)
+        if again.returncode != 0:
+            return False, [f"重算之后 {DERIVED_CHECKER} --check 仍不通过：{recount}"]
+    add = [p for p in (*RESOLVABLE, *GATE_ARTIFACTS) if p in conflicted]
     run(["git", "add", "--", *add], cwd=wt)
     return True, add
 

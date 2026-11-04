@@ -1,3 +1,6 @@
+## 2026-11-05 · 并发落地时两份现算文档不该让整笔停手（卡 E86，T-AG593）
+
+卡 E85 第二次落地在 ff 合流前 rebase 撞上六份冲突，判据只认得「派生共享文档 + 两份门禁产物」，于是把 `docs/INDEX.md` 与 `docs/subsystems/pool/README.md` 判成「冲突里有**非派生物**（必须人来判）」并**停手**（`gates/diag/land-E85b.log:35`，退出码 3）。可这两份正是落地链自己会重算的**投影**（`RECOUNT_DOCS` ← `scripts/check_derived_docs.py`），判据早就知道答案，却让人手工做 `checkout --ours` × 5 + `--theirs` × 1 + `git add` + 三个生成器 + `rebase --continue` 才走完。修法三处：①新增 `RESOLVABLE = (*DERIVED, *RECOUNT_DOCS)`，`extra` 的过滤改用它（两张表不合并 —— `DERIVED` 的解法是「按片段重汇总」，现算文档是另一条腿「真跑生成器」，混在一起就分不清谁该跑哪个）；②两份现算文档先 `--ours` 取基线，再**真跑** `scripts/check_derived_docs.py` 写模式（子进程、cwd=卡树，不在函数里另立现算口径），并且必须排在 `sync_docs` 之后 —— 那两份是从 `docs/**` 与台账现算的，重汇总改了 `docs/changelog.md` 就会改它们的输入；③重算后必须再跑 `--check` 复核，非零就停手点名，不许吞成成功。`git add` 名单同步扩到 `RESOLVABLE ∪ GATE_ARTIFACTS`（实测：`checkout` 之后不加 `git add`，`git status` 照样 `UU`）。源码冲突仍然一律停手 —— 放宽只到投影，不外溢。新增 8 条钉子（`tests/test_landing_derived_resolvable.py`：两张表的并集与过滤点 / 两份现算文档冲突可自动解决 / 写模式→复核的顺序 / 取基线不取卡树 / 门禁产物仍取本笔 / 复核不过就停手 / 源码冲突仍点名 / 只有派生物冲突时调用序列一字不变），反向变异 5/5 + C1 只改注释不咬。
 ## 2026-11-04 · 端口隔离那条钉子接上唯一的金样本主机判据（卡 E83，T-AG590）
 
 云门禁那趟 22 门真跑完、唯一红就是这条钉子：两条并行各自用不同端口都跑完（15.2 s / 16.1 s），却因为与黄金差 202 行被记成再不兼容。金样本与采集机显示栈绑定这件事 `scripts/run_gates.py` 早就认了（`golden_host_reason()`，并因此把 `render` 记 EXCLUDED），只差这条钉子没接。本笔接上它，并把「红」分成两档：采集机上仍严格要求两条都退 0；别的机器上只放过「失败证据就是金样本不一致」；任何一档下出现并行重复 seed 的原文都判红。反证那半截（同端口必须被拒）一字未动。
