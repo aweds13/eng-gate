@@ -79,6 +79,7 @@ try:  # 直接跑 `tools\wb_plan.py`：`tools/` 在 sys.path[0]（正常入口�
 except ImportError:  # `python -m tools.wb_plan`：包形态，同目录模块得带上前缀 —— 别崩
     from tools import _repo
 import tomllib
+from pool import ledger as pool_ledger  # noqa: E402 —— 块级搬运要用 blocks_of（卡 E88）
 from pool import plan as pool_plan  # noqa: E402 —— `--root` 时判据根跟着搬（卡 A306）
 from pool import registry as pool_registry  # noqa: E402 —— 主树根（树标签的锚点；卡 203）
 from pool.plan import (
@@ -203,6 +204,8 @@ def _root_for(args: argparse.Namespace) -> Path | None:
 
 PARTITIONS_REL = ("docs", "partitions.toml")
 SHARD_DIR_REL = ("docs", "backlog")
+#: 台账里一张卡的开头（与 `pool.ledger` 的 `_CARD_HEAD` 同字面）。
+_CARD_HEAD = b"[[cards]]"
 #: 卡号 = 可选的分区前缀（ASCII 大写字母）+ 数字。旧号（纯数字）没有前缀。
 CARD_ID_RE = re.compile(r"^(?P<prefix>[A-Z]*)(?P<number>\d+)$")
 
@@ -778,6 +781,112 @@ def _toml_str(value: str) -> str:
     return json.dumps(str(value), ensure_ascii=False)
 
 
+def _split_master(raw: bytes) -> tuple[bytes, list[tuple[str, bytes]]]:
+    """把总表拆成「表头 + [(卡号, 块字节)]」—— **块字节原样**（含块内 `#` 注释）。
+
+    ★ 卡 E88（T-AG595）：这是无损合并的地基。`b"".join` 拼回后与原文逐字节相等
+      （实测 333 块 / 333 个卡号 / 无卡号的块 0 个）。
+      与 `pool.ledger.blocks_of()` 同一口径（按 `[[cards]]` 行切、行带行尾）。
+    """
+    cut = raw.find(_CARD_HEAD)
+    if cut < 0:
+        return raw, []
+    header = raw[:cut]
+    pairs: list[tuple[str, bytes]] = []
+    for block in pool_ledger.blocks_of(raw):
+        card_id = pool_ledger.card_id_of(block)
+        if card_id:
+            pairs.append((card_id, b"".join(block)))
+    return header, pairs
+
+
+def _as_crlf(raw: bytes) -> bytes:
+    """把块字节规整成**纯 CRLF**（标准差分片可能是裸 LF）。"""
+    return raw.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+
+
+def _replace_reviewed(header: bytes, reviewed: str) -> bytes:
+    """只换表头里 `[base]` 段的 `reviewed = "…"` 那一行，**其余注释一字不动**。
+
+    分片的 `reviewed` 与总表不同（真有更新）时才走这里；相同 ⇒ 表头原样返回，
+    判据 2「无变化就零 diff」因此仍然成立。
+    """
+    if not reviewed:
+        return header
+    text = header.decode("utf-8")
+    new, count = re.subn(r'(?m)^reviewed\s*=\s*"[^"]*"',
+                         f'reviewed = {_toml_str(reviewed)}', text)
+    if count != 1:
+        return header
+    return new.encode("utf-8")
+
+
+def merge_lossless(
+    master_raw: bytes, shard_pairs: list[tuple[str, str, bytes]], reviewed: str = "",
+) -> tuple[bytes, list[str]]:
+    """把各分片的**块字节**拼成新总表：`(新字节, 缺的卡号)`。
+
+    · 表头 = 总表原文的表头（注释逐字保留），只有 `reviewed` 真变了才换那一行；
+    · 既有顺序 = 总表既有顺序（判据 4：既有卡相对顺序一律不动）；
+    · 每张卡的块字节**原样取自它所在的那一片**（判据 3：块内注释不蒸发）；
+    · 分片里有、总表里没有的卡号 ⇒ 追加在**末尾**，按分片读取顺序。
+    """
+    header, master_pairs = _split_master(master_raw)
+    master_ids = [card_id for card_id, _ in master_pairs]
+    by_id: dict[str, bytes] = {}
+    order: list[str] = []
+    for card_id, _shard, block in shard_pairs:
+        if card_id not in by_id:
+            order.append(card_id)
+        by_id[card_id] = block
+    missing = [card_id for card_id in master_ids if card_id not in by_id]
+    if missing:
+        return b"", missing
+    out = [_replace_reviewed(header, reviewed)]
+    seen = set(master_ids)
+    for card_id in master_ids:
+        out.append(_as_crlf(by_id[card_id]))
+    for card_id in order:
+        if card_id not in seen:
+            out.append(_as_crlf(by_id[card_id]))
+    return b"".join(out), []
+
+
+def merge_shards_lossless(
+    directory: Path | None = None,
+) -> tuple[list[tuple[str, str, bytes]], str] | None:
+    """读各分片的**块字节**：`([(卡号, 片名, 块字节)], reviewed) | None`。
+
+    没有分片 ⇒ `None`（与 `merge_shards()` 同一口径）。
+    ★ 跨片重号**不在这里判** —— 那是 `merge_shards()` 的活（判据只许一份）；这里遇到
+      重复块直接跳过，调用方一定是先过 `merge_shards()` 才进来的。
+    """
+    folder = Path(directory) if directory is not None else shard_dir()
+    shards = sorted(folder.glob("*.toml")) if folder.is_dir() else []
+    if not shards:
+        return None
+    pairs: list[tuple[str, str, bytes]] = []
+    reviewed = ""
+    seen: set[str] = set()
+    for shard in shards:
+        raw = shard.read_bytes()
+        header, shard_pairs = _split_master(raw)
+        if not reviewed:
+            reviewed = _reviewed_of(header)
+        for card_id, block in shard_pairs:
+            if card_id in seen:                     # 重号已由 merge_shards() 拦住
+                continue
+            seen.add(card_id)
+            pairs.append((card_id, shard.name, block))
+    return pairs, reviewed
+
+
+def _reviewed_of(header: bytes) -> str:
+    """从分片表头里取 `reviewed = "…"` 的值（取不到就 `""`）。"""
+    m = re.search(r'(?m)^reviewed\s*=\s*"([^"]*)"', header.decode("utf-8", "replace"))
+    return m.group(1) if m else ""
+
+
 def render_merged_toml(backlog: Backlog) -> str:
     """把（合并后的）队列渲染成**只读总表**的 TOML 文本（`merge` 用）。
 
@@ -803,7 +912,13 @@ def render_merged_toml(backlog: Backlog) -> str:
 
 
 def cmd_merge(folder: Path, out: Path, *, execute: bool) -> int:
-    """把台账**分片**合并成只读总表（`merge`）—— 默认只打印，`--execute` 才落盘。"""
+    """把台账**分片**合并成只读总表（`merge`）—— 默认只打印，`--execute` 才落盘。
+
+    ★ 卡 E88（T-AG595）：合并改成**无损**——表头注释、块内注释、既有块序一律保留，
+      只把「分片里新出现的卡」追加到末尾；落盘一律纯 CRLF。
+    ★ 覆盖性守卫：总表里有、分片里没有的卡号非空 ⇒ **不写盘**、逐个点名、退 1。
+      （今天的行为是 rc=0 把 332 张卡写成 1 张 —— 判据 1 就是为了关掉这条路。）
+    """
     try:
         merged = merge_shards(folder)
     except BacklogError as exc:
@@ -812,13 +927,32 @@ def cmd_merge(folder: Path, out: Path, *, execute: bool) -> int:
     if merged is None:
         print(f"[OK ] 没有台账分片（{folder}）—— 总表不变")
         return 0
-    text = render_merged_toml(merged)
+    lossless = merge_shards_lossless(folder)
+    assert lossless is not None                      # merge_shards 已证明有分片
+    shard_pairs, reviewed = lossless
+
+    if out.is_file():
+        master_raw = out.read_bytes()
+        payload, missing = merge_lossless(master_raw, shard_pairs, reviewed)
+        if missing:
+            print(f"[FAIL] 分片没覆盖总表：缺 {len(missing)} 张卡 —— "
+                  f"总表 {out} 一字未动", file=sys.stderr)
+            for card_id in missing:
+                print(f"       缺 {card_id}", file=sys.stderr)
+            return 1
+    else:
+        # 头一回建总表：没有可保留的表头与块序，按合并结果渲染（旧行为）。
+        payload = _as_crlf(render_merged_toml(merged).encode("utf-8"))
+        if not payload.endswith(b"\r\n"):
+            payload += b"\r\n"
+
     if not execute:
-        print(text)
+        print(payload.decode("utf-8").replace("\r\n", "\n"), end="")
         print(f"[dry ] 默认只打印；真要落盘加 --execute（写 {out}）", file=sys.stderr)
         return 0
-    out.write_text(text, encoding="utf-8", newline="\n")
-    print(f"[写 ] 合并 {len(merged.cards)} 张卡 → {out}")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(payload)
+    print(f"[写 ] 合并 {len(shard_pairs)} 张卡 → {out}")
     return 0
 
 

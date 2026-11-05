@@ -1,0 +1,22 @@
+[entries."T-AG595"]
+id = "T-AG595"
+title = "台账合并先做到无损"
+group = "ENGINEERING"
+status = "done"
+owner = "controller"
+evidence = [
+  "file:复盘/卡/卡E88-台账合并先做到无损.md",
+  "file:tools/wb_plan.py",
+  "test:test_merge_is_lossless.py",
+  "text:tools/wb_plan.py::def merge_lossless(",
+  "text:tools/wb_plan.py::分片没覆盖总表：缺",
+  "text:tools/wb_plan.py::def _split_master(raw: bytes) -> tuple[bytes, list[tuple[str, bytes]]]:",
+  "text:tests/test_merge_is_lossless.py::def test_a_round_trip_through_shards_is_byte_identical",
+]
+gaps = [
+  """分片本身仍未启用（`docs/backlog/` 不存在）：本卡只把合并做成无损，「各分区各写一片」那一步另开卡。
+`tools/pool/ledger.py` 的 `add_card()` 仍固定读写总表 —— 启用分片时要不要按分区落片，那张卡一起定。
+`render_merged_toml()` 的 docstring 仍写着「注释留在各分片里」：它现在只用于「头一回建总表」的兜底路径（没有表头可保），但那句话在分片侧仍不成立。
+本卡全量门禁首跑（BASE=12750）唯一一条红是 `tests/test_wb_land.py::test_batch_gate_empty_paths_says_cannot_verify` 抛 `PermissionError: [WinError 5]`（`subprocess.CreateProcess` 层面，不是断言失败）；单跑该条绿（40 s），同类形态在仓里另有先例（`gates/diag/gate-E53e.log:35` 的 `test_run_bg.py`）⇒ 判为进程创建偶发错，重跑一趟复核，不归因于本卡改动。
+""",
+]
