@@ -5350,3 +5350,33 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E89"
+task = "T-AG596"
+title = "启用台账分片：写侧按分区落片、读侧补齐"
+tree = ".wt/E89"
+spec = "复盘/卡/卡E89-启用台账分片.md"
+files = [
+  "tools/wb_plan.py",
+  "tools/pool/ledger.py",
+  "tools/pool/landing.py",
+  "tools/wb_card.py",
+  "tools/pipeline_view.py",
+  "scripts/gen_pool_readme.py",
+  "tools/wb_tree.py",
+  "tools/wt_prune.py",
+  "tools/wb_flow.py",
+  "tools/wb_registry.py",
+  "tools/wb_review.py",
+  "tools/wb_impact.py",
+  "tools/auto_land.py",
+  "tools/pool_mcp.py",
+  "tools/wb_queue_audit.py",
+  "tests/test_e89_shards_enabled.py",
+  "tests/test_card_specs_tracked.py",
+  "docs/backlog"
+]
+depends = []
+risk = "mid"
+status = "pending"
