@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 45 个 py（44 个模块 + `__init__.py`）、**17756 行**（`wc -l tools/pool/*.py`，2026-11-06 现算）。
+`tools/pool/` = 45 个 py（44 个模块 + `__init__.py`）、**17789 行**（`wc -l tools/pool/*.py`，2026-11-07 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -40,7 +40,7 @@
 | `mcp_http.py` | 406 | MCP 的 Streamable HTTP 传输：Origin / Bearer / 版本头 / 上限 / 202-405 都在这一层；判据只在传进来的 handle 上跑，不重写方法分发 | 无（被 tools/pool_mcp.py 调） |
 | `model-registry.toml` | 52 | 跨池统一层：CodeBuddy 池的真源 + 码道池的引用（只引用不复制，不许有第二份可写名单） | 无（被 `pool.model_registry` 读） |
 | `model_registry.py` | 982 | 一层模型注册表、按池分流：`resolve_model` / `effective_allowed_for`（裸名 vs `provider/model` 两套 id 体系） | 无（被 `wb_dispatch`、`wb_watch`、`pool.plan` 调） |
-| `models.py` | 258 | 号池模型的只读读取：批准集 ∩ 可用集；读快照（带 `at`），不联网、不写快照 | `wb_state.py`、`pool_mcp` |
+| `models.py` | 291 | 号池模型的只读读取：批准集 ∩ 可用集；读快照（带 `at`），不联网、不写快照 | `wb_state.py`、`pool_mcp` |
 | `no_window.py` | 29 | 起子进程「不弹窗」的 `CREATE_NO_WINDOW` 常量 —— 全仓唯一真源 | 无（被十几个入口 import） |
 | `outcomes.py` | 175 | 按**请求**而不是按轮算结局（magpie `Totals.count()` 移植）：`is_failed` / `is_outcome` / `request_of` / `count_requests`；只读账本，不改一个字节 | 无（被 `wb_dispatch` 的 `append_usage_line` / `usage_summary` 调） |
 | `plan.py` | 675 | 队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（`wb_plan.py` 的逻辑层，拒绝会冲突的组合） | `wb_plan.py`、`wb_batch.py` |
@@ -78,12 +78,12 @@
 > 账号账**故意在仓外**：只存凭据指针（`~/.codeartsdoer/pool.env` 之类），不存凭据本身；
 > 没有 git 兜底，所以写入一律原子替换，删号打墓碑（`tools/pool_accounts.py` 的 `save_ledger()`）。
 
-## 2. 度量（2026-11-06 现算）
+## 2. 度量（2026-11-07 现算）
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **17756 行** / **45 个文件**（44 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 334 张（324 done / 10 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **17789 行** / **45 个文件**（44 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 335 张（325 done / 10 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

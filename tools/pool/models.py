@@ -23,6 +23,7 @@ import json
 import os
 import pathlib
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -38,6 +39,22 @@ POOL_ANCHOR = ("infra", "pool", "pool_models.py")
 SWITCH_FILE_NAME = "model-switches.toml"
 #: 覆盖开关文件路径的环境变量（★ **只给测试用** —— 免得测试去改 infra 那份真文件）。
 SWITCH_PATH_ENV = "TF_MODEL_SWITCHES"
+
+
+#: 快照超过这么多小时就算**过期**（要重新探测，不许拿它当权威）。
+STALE_HOURS = 24
+
+
+def snapshot_age_hours(at: str | None, *, now: datetime | None = None) -> float | None:
+    """快照距今多少小时；读不出时间戳 ⇒ ``None``（不猜）。"""
+    if not at:
+        return None
+    try:
+        stamp = datetime.strptime(str(at).strip(), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+    base = now or datetime.now()
+    return round((base - stamp).total_seconds() / 3600.0, 1)
 
 
 def find_pool_dir(root: Path) -> Path | None:
@@ -70,6 +87,17 @@ def load_pool_models(pool: Path) -> dict[str, Any]:
         live_names = {str(k): str(v) for k, v in (snap.get("live_names") or {}).items()}
         at = snap.get("at")
     in_both = [m for m in approved if m in set(live)]
+    age = snapshot_age_hours(at)
+    # ★ 卡 320 修：`at` **有值但读不出来** ⇒ 必须算过期（否则字段说"不过期"、文案说
+    #   "当过期处理"，同一份数据两个答案）。`at` 本身为空 = 「没记录」，不等于过期。
+    unreadable = bool(at) and age is None
+    stale = unreadable or (age is not None and age > STALE_HOURS)
+    if unreadable:
+        note = "快照时间戳读不出来 ⇒ 当过期处理（先重新探测再派活）"
+    elif stale:
+        note = f"快照已过期 {age} 小时（上限 {STALE_HOURS}h）⇒ 先重新探测再派活"
+    else:
+        note = ""
     return {
         "pool_dir": pool.as_posix(),
         "whitelist": whitelist.name,
@@ -83,6 +111,11 @@ def load_pool_models(pool: Path) -> dict[str, Any]:
         "in_both": in_both,
         "approved_but_missing": [m for m in approved if m not in set(live)],
         "live_but_unapproved": [m for m in live if m not in set(approved)],
+        # ★ 快照是**静态产物**：过期就得重新探测，不许拿几天前的名单当权威（卡 320）
+        "snapshot_age_hours": age,
+        "snapshot_stale": stale,
+        "snapshot_stale_hours": STALE_HOURS,
+        "snapshot_note": note,
     }
 
 

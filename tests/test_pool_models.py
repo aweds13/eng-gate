@@ -18,7 +18,10 @@ r"""两份模型白名单的**对账判据**（卡 132 · T-G229）的测试。
 from __future__ import annotations
 
 import builtins
+import json
 import sys
+import tempfile
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -227,3 +230,70 @@ def test_load_switches_non_bool_in_subtable_names_line(tmp_path: Path, monkeypat
         models.load_switches(pool="codearts")
     message = str(excinfo.value)
     assert str(path) in message and "x" in message, message
+
+
+def test_snapshot_age_is_computed_not_guessed() -> None:
+    """快照时间戳读得出来 ⇒ 给小时数；读不出来 ⇒ None（不猜）。"""
+    from pool.models import snapshot_age_hours
+
+    now = datetime(2026, 10, 23, 18, 0, 0)
+    assert snapshot_age_hours("2026-10-23 06:00:00", now=now) == 12.0
+    assert snapshot_age_hours("坏时间戳", now=now) is None
+    assert snapshot_age_hours(None, now=now) is None
+
+
+def test_stale_snapshot_is_flagged_loudly() -> None:
+    """超过 24 小时 ⇒ `snapshot_stale` 为真且带提示语；新鲜快照不许嚷。"""
+    from pool.models import STALE_HOURS, load_pool_models
+
+    stamp = (datetime.now() - timedelta(hours=STALE_HOURS + 30)).strftime("%Y-%m-%d %H:%M:%S")
+    fresh = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with tempfile.TemporaryDirectory() as tmp:
+        pool = Path(tmp)
+        # ★ 直接写字面 TOML（`tomllib` 只有 loads 家族，没有 `dumps` —— 别绕这一圈）。
+        (pool / "models.whitelist.toml").write_text(
+            '[[approved]]\npool = "codebuddy"\nmodel = "m1"\n', encoding="utf-8"
+        )
+        for stamp_value, expect in ((stamp, True), (fresh, False)):
+            (pool / "models.live.json").write_text(
+                json.dumps({"at": stamp_value, "live": ["m1"]}), encoding="utf-8"
+            )
+            data = load_pool_models(pool)
+            assert data["snapshot_stale"] is expect, (stamp_value, data)
+            if expect:
+                assert data["snapshot_note"]
+
+
+def test_unreadable_snapshot_stamp_is_stale_not_fresh() -> None:
+    """★ 卡 320 钉子：`at` **有值但读不出来** ⇒ `snapshot_stale` 必须为真（不许字段与文案打架）。
+
+    对照：`at` **本身为空** = 「没记录」，不等于过期 ⇒ `snapshot_stale` 为假、提示语为空。
+    这两条必须一起钉住 —— 只钉坏时间戳那半，改坏了「空 ≠ 过期」不会被发现；
+    只钉空那半，改坏了「坏 ⇒ 过期」也不会被发现。
+    """
+    from pool.models import load_pool_models
+
+    with tempfile.TemporaryDirectory() as tmp:
+        pool = Path(tmp)
+        (pool / "models.whitelist.toml").write_text(
+            '[[approved]]\npool = "codebuddy"\nmodel = "m1"\n', encoding="utf-8"
+        )
+        # ① `at` 有值但读不出来 ⇒ 过期，且文案说的是「读不出来」这件事本身
+        (pool / "models.live.json").write_text(
+            json.dumps({"at": "不是时间戳", "live": ["m1"]}), encoding="utf-8"
+        )
+        bad = load_pool_models(pool)
+        assert bad["snapshot_at"] == "不是时间戳"
+        assert bad["snapshot_age_hours"] is None, "读不出来就是 None，不许猜成 0"
+        assert bad["snapshot_stale"] is True, f"坏时间戳必须算过期，实际 {bad}"
+        assert bad["snapshot_note"], "过期了就得有提示语"
+        assert "读不出来" in bad["snapshot_note"], bad["snapshot_note"]
+        # ② `at` 为空 ⇒ 没记录（不是过期）：两者不许混成同一件事
+        (pool / "models.live.json").write_text(
+            json.dumps({"live": ["m1"]}), encoding="utf-8"
+        )
+        empty = load_pool_models(pool)
+        assert empty["snapshot_at"] is None
+        assert empty["snapshot_age_hours"] is None
+        assert empty["snapshot_stale"] is False, f"没记录不等于过期，实际 {empty}"
+        assert empty["snapshot_note"] == ""

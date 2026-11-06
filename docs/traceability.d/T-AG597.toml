@@ -1,0 +1,14 @@
+[entries."T-AG597"]
+id = "T-AG597"
+title = "号池快照新鲜度判据：过期要响亮点名"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "test:test_pool_models.py::test_snapshot_age_is_computed_not_guessed",
+  "test:test_pool_models.py::test_stale_snapshot_is_flagged_loudly",
+  "test:test_pool_models.py::test_unreadable_snapshot_stamp_is_stale_not_fresh",
+  "text:tools/pool/models.py::快照时间戳读不出来 ⇒ 当过期处理",
+  "text:tools/wb_dispatch.py::def snapshot_stale_problem",
+]
+gaps = "- `snapshot_stale_hours` 只是个常量镜像（`STALE_HOURS = 24`），没有按号池分档；哪个池该容忍更长，等有实测再说，见 `tools/pool/models.py`。- 提示只落在 `preflight()` 的 stderr，派活器 `--detach` 的判决文件里不会留痕；要让「当时快照过期多久」进判决，得改判决产出方，见 `tools/wb_dispatch.py`。- 号池侧真正重新探测仍要人跑 `pool_models.py --check`（联网、写快照）；本卡只负责「别拿旧的当现在」，见 `复盘/卡/卡A320-号池快照新鲜度判据.md`。"
+

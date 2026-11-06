@@ -11618,3 +11618,17 @@ evidence = [
   "text:tools/wb_plan.py::分片没覆盖总表",
 ]
 gaps = "主树的台账**仍只有一份**（`docs/workbacklog.toml`：159793 B / 334 块，见提交 `da23f83b`）：本卡只把「写侧按分区落片、读侧认片、缺片必响」做出来，拆分动作本身留给下一张卡（要先跑 `python -X utf8 tools/wb_plan.py merge --execute` 它才变成派生物）。证据：`gates/diag/e89-split-probe.log`。`tools/seam_check.py:402` 与 `tests/test_card_specs_tracked.py:97` 仍走单文件 `load_backlog()`：前者在本卡域外，后者属于「卡规格在不在索引里」的另一条腿，两张都另开卡。`tools/wb_daily.py:61`、`tools/wb_batch.py:110`、`tools/wb_dispatch.py:2767` 写死总表但**已在调用侧认片**，本卡按卡规格「不许动」未碰；真启用分片后要复核这四个调用点的退回路径。"
+
+[entries."T-AG597"]
+id = "T-AG597"
+title = "号池快照新鲜度判据：过期要响亮点名"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "test:test_pool_models.py::test_snapshot_age_is_computed_not_guessed",
+  "test:test_pool_models.py::test_stale_snapshot_is_flagged_loudly",
+  "test:test_pool_models.py::test_unreadable_snapshot_stamp_is_stale_not_fresh",
+  "text:tools/pool/models.py::快照时间戳读不出来 ⇒ 当过期处理",
+  "text:tools/wb_dispatch.py::def snapshot_stale_problem",
+]
+gaps = "- `snapshot_stale_hours` 只是个常量镜像（`STALE_HOURS = 24`），没有按号池分档；哪个池该容忍更长，等有实测再说，见 `tools/pool/models.py`。- 提示只落在 `preflight()` 的 stderr，派活器 `--detach` 的判决文件里不会留痕；要让「当时快照过期多久」进判决，得改判决产出方，见 `tools/wb_dispatch.py`。- 号池侧真正重新探测仍要人跑 `pool_models.py --check`（联网、写快照）；本卡只负责「别拿旧的当现在」，见 `复盘/卡/卡A320-号池快照新鲜度判据.md`。"

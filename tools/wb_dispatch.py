@@ -2614,6 +2614,35 @@ def gate_min_free_gb() -> float:
         return DEFAULT_GATE_MIN_FREE_GB
 
 
+def snapshot_stale_problem() -> str:
+    """号池快照过期提示（卡 320）。
+
+    ★ 快照 `models.live.json` 是**静态产物**，不是现场读数：拿三天前的名单当权威
+    正是「未记录 ⇒ 以为没额度」的来源。这里只**响亮点名**，不拦派活 —— 真额度由
+    派活时的一次真实调用探出来（失败特征见 `infra/pool`）。
+    """
+    try:
+        from pool.models import STALE_HOURS, find_pool_dir, load_pool_models
+
+        pool_dir = find_pool_dir(ROOT)
+        if pool_dir is None:
+            return ""
+        data = load_pool_models(pool_dir)
+    except Exception:  # noqa: BLE001 —— 提示性判据，读不到就不嚷
+        return ""
+    if data.get("snapshot_stale"):
+        # ★ 卡 320：坏时间戳也会走到这里（那时 `snapshot_age_hours` 是 None）——
+        #   文案必须跟着走，否则会打出「已过期 None 小时」。
+        age = data.get("snapshot_age_hours")
+        when = f"已过期 {age} 小时" if age is not None else "时间戳读不出来"
+        return (
+            f"★★ 号池快照{when}"
+            f"（上限 {STALE_HOURS}h，快照时间 {data.get('snapshot_at')}）"
+            f"⇒ 名单只当历史；派活前先用一次真实调用探额度"
+        )
+    return ""
+
+
 def memory_gate_problem() -> str | None:
     """内存闸判据（卡 102）：可用内存 < 阈值 → 返回一句人话（**不派活**）；否则 None（放行）。
 
@@ -3016,6 +3045,10 @@ def preflight(card: str, spec: str, *, force: bool, check_auth: bool,
     stale = stale_base_problem(card, worker_cwd)
     if stale:
         problems.append(stale)
+    # ★ 卡 320：号池快照过期 ⇒ 响亮提示（不拦，快照不是现场读数）
+    snap = snapshot_stale_problem()
+    if snap:
+        print(f"  {snap}", file=sys.stderr, flush=True)
     # ★ 卡 095：端口段体检（铁律 37）—— 给了段且段内有占用就拒派；没给段则如实跳过。
     problems.extend(port_preflight(port_bases))
     # ★ 卡 102（T-G198）：内存闸 —— 派活同样吃内存，可用内存不够就不派活（同一环境变量/措辞）。

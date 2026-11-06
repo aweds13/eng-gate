@@ -3,6 +3,11 @@
 - `tools/wb_plan.py`：新增 `shard_files` / `shards_present` / `shard_file_for` / `missing_in_shards` / `shard_header`；`load_sharded_backlog()` 加**常开**覆盖守卫（缺片 ⇒ `BacklogError` 逐个点名；零卡总表不算缺卡）。
 - `tools/pool/ledger.py` `add_card()` 与 `tools/pool/landing.py` `flip_card_status()` 按 `partition_of()` 落片，查重扩到「总表 + 全部分片」；`landing.py` 的 `backlog_blocks` / `_card_files_from_backlog` / `_integrate_multi_tree` / ⑤′ 白名单全改多文件。
 - 读侧 11 处（`pipeline_view` / `gen_pool_readme` / `wb_tree` / `wt_prune` / `wb_flow` / `wb_registry` / `wb_review` / `wb_impact` / `auto_land` / `pool_mcp` / `wb_queue_audit`）改成「有片先读片，无片退回总表」；新增两份 E89 测试共 34 条，反向变异 8 条全咬住。
+## 2026-11-06 · 号池快照过期要响亮点名：年龄算出来、坏时间戳按过期、派活前提示不拦（卡 A320，T-AG597）
+- 现场：真号池快照 `at` 停在 2026-10-25，过期约 290 小时，而 `in_both` 照样把模型当「现在能用」。
+- `tools/pool/models.py`：新增 `STALE_HOURS = 24` 与 `snapshot_age_hours()`；`load_pool_models()` 追加 `snapshot_age_hours` / `snapshot_stale` / `snapshot_stale_hours` / `snapshot_note` 四键。
+- 有 `at` 但读不出来 ⇒ 按过期处理（旧写法字段说不过期、文案说当过期处理，同一份数据两个答案）。
+- `tools/wb_dispatch.py`：`snapshot_stale_problem()` 接在 `preflight()` 的 `stale_base_problem()` 之后，只打印不进 `problems` —— 快照不是现场读数，不许因此拒派活。
 ## 2026-11-05 · 并发落地时两份现算文档不该让整笔停手（卡 E86，T-AG593）
 
 卡 E85 第二次落地在 ff 合流前 rebase 撞上六份冲突，判据只认得「派生共享文档 + 两份门禁产物」，于是把 `docs/INDEX.md` 与 `docs/subsystems/pool/README.md` 判成「冲突里有**非派生物**（必须人来判）」并**停手**（`gates/diag/land-E85b.log:35`，退出码 3）。可这两份正是落地链自己会重算的**投影**（`RECOUNT_DOCS` ← `scripts/check_derived_docs.py`），判据早就知道答案，却让人手工做 `checkout --ours` × 5 + `--theirs` × 1 + `git add` + 三个生成器 + `rebase --continue` 才走完。修法三处：①新增 `RESOLVABLE = (*DERIVED, *RECOUNT_DOCS)`，`extra` 的过滤改用它（两张表不合并 —— `DERIVED` 的解法是「按片段重汇总」，现算文档是另一条腿「真跑生成器」，混在一起就分不清谁该跑哪个）；②两份现算文档先 `--ours` 取基线，再**真跑** `scripts/check_derived_docs.py` 写模式（子进程、cwd=卡树，不在函数里另立现算口径），并且必须排在 `sync_docs` 之后 —— 那两份是从 `docs/**` 与台账现算的，重汇总改了 `docs/changelog.md` 就会改它们的输入；③重算后必须再跑 `--check` 复核，非零就停手点名，不许吞成成功。`git add` 名单同步扩到 `RESOLVABLE ∪ GATE_ARTIFACTS`（实测：`checkout` 之后不加 `git add`，`git status` 照样 `UU`）。源码冲突仍然一律停手 —— 放宽只到投影，不外溢。新增 8 条钉子（`tests/test_landing_derived_resolvable.py`：两张表的并集与过滤点 / 两份现算文档冲突可自动解决 / 写模式→复核的顺序 / 取基线不取卡树 / 门禁产物仍取本笔 / 复核不过就停手 / 源码冲突仍点名 / 只有派生物冲突时调用序列一字不变），反向变异 5/5 + C1 只改注释不咬。
