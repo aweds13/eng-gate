@@ -275,17 +275,49 @@ def hold_unreadable_rows(
     return held
 
 
+def _wb_plan():
+    """`tools/wb_plan.py`（台账分片的唯一实现）—— 本脚本在 `scripts/` 下，得自己挂 path。
+
+    取不到就返 `None`：**分片口径不可用 ⇒ 退回总表**（本卡之前的行为一字不变）。
+    真仓里它总在（卡 E89 自己就改它）；假仓库/最小树里没有，那时也不该假装有分片。
+    """
+    tools = str(ROOT / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    try:
+        import wb_plan  # noqa: PLC0415 —— 只在用到分片口径时才加载
+    except ImportError:
+        return None
+    return wb_plan
+
+
+def _queue_sources(base: Path) -> list[Path]:
+    """队列的**来源文件**：有分片就只算分片（`docs/backlog/*.toml`），否则算总表。
+
+    ★ 卡 E89：分片启用后总表只是 `wb_plan.py merge` 的产物，读它会把新卡读没（静默少卡）。
+    """
+    wb = _wb_plan()
+    if wb is None:
+        return [base / BACKLOG_REL]
+    shards = wb.shard_files(base / "docs" / "backlog")
+    return shards if shards else [base / BACKLOG_REL]
+
+
 def backlog_metrics(root: Path, main_root: Path) -> tuple[int, int, int, list[str]]:
-    """队列卡数：读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 done / pending。"""
+    """队列卡数：读队列（分片优先，没有分片就是总表）的 `cards`，按 `status` 分 done / pending。"""
     for base in (root, main_root):
-        path = base / BACKLOG_REL
-        if not path.is_file():
+        paths = _queue_sources(base)
+        if not paths or not any(path.is_file() for path in paths):
             continue
-        try:
-            data = tomllib.loads(path.read_text(encoding="utf-8"))
-        except (OSError, tomllib.TOMLDecodeError) as exc:
-            return 0, 0, 0, [f"读不了 {BACKLOG_REL}：{exc}"]
-        cards = data.get("cards") or []
+        cards: list[dict] = []
+        for path in paths:
+            if not path.is_file():
+                continue
+            try:
+                data = tomllib.loads(path.read_text(encoding="utf-8"))
+            except (OSError, tomllib.TOMLDecodeError) as exc:
+                return 0, 0, 0, [f"读不了 {path.name}：{exc}"]
+            cards.extend(card for card in (data.get("cards") or []) if isinstance(card, dict))
         counter = Counter(
             str(card.get("status", "")).strip() for card in cards if isinstance(card, dict)
         )
@@ -444,14 +476,19 @@ def main(argv: list[str] | None = None) -> int:
 
     template = render_block(entries, found, batch, (cards[0], cards[1], cards[2]), logs)
     begin, end = bounds
-    existing = "\n".join(actual_lines[begin + 1 : end])
-    date_text = resolve_date(existing, "\n".join(template), datetime.date.today().isoformat())
-    block = [line.replace(DATE_TOKEN, date_text) for line in template]
     actual_block = actual_lines[begin + 1 : end]
-    # ★ 这台机器没有源的那两行：换成文件里现行文本 ⇒ 不比对、不被重写（见 unreadable_diag_rows）
+    existing = "\n".join(actual_block)
+    # ★ 先把这台机器没有源的那两行（见 unreadable_diag_rows）换成文件里现行文本，**然后**才判日期。
+    # 为什么顺序要这样：云机上模板里那两行是 0、文件里是 152 之类 ⇒ 除日期外不一致
+    # ⇒ resolve_date 误判成「内容变了」取了今天，而随后的 hold 又把那两行换回去
+    # ⇒ 唯一的差异只剩两个日期戳。换到前面 ⇒ 比对的就是**最终要写进文件的那份 template**。
     held = unreadable_diag_rows(batch, logs)
     if held:
-        block = hold_unreadable_rows(block, actual_block, held)
+        # hold 只换 line.startswith(prefix) 的行，而替换日期不改行数/行序
+        # ⇒ 对 template 做 hold 与对 block 做 hold 结果一致；此处**不再对 block 做 hold 第二次**。
+        template = hold_unreadable_rows(template, actual_block, held)
+    date_text = resolve_date(existing, "\n".join(template), datetime.date.today().isoformat())
+    block = [line.replace(DATE_TOKEN, date_text) for line in template]
     expected_lines = actual_lines[: begin + 1] + block + actual_lines[end:]
     total = sum(found[name] for name in found if name.endswith(".py"))
     summary = f"{len(found)} 个文件 / {total} 行 / {date_text}"

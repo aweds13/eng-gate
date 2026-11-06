@@ -262,14 +262,40 @@ def test_release_does_not_swallow_errors(tmp_path: pathlib.Path) -> None:
 
 
 # ================================================================ 判据 6/7：并发
-def _worker_script(repo: pathlib.Path, card: str, *, no_lock: bool) -> list[str]:
-    """子进程要跑的那段（`-c` 传进去；`no_lock=True` 时把 Hold 换成空操作）。"""
+def _clear_rendezvous(path: pathlib.Path) -> None:
+    """清掉上一轮的会合文件（同一夹具里连跑多轮时用）。"""
+    if path.is_dir():
+        for item in path.iterdir():
+            item.unlink()
+
+
+def _worker_script(repo: pathlib.Path, card: str, *, no_lock: bool,
+                   rendezvous: pathlib.Path | None = None) -> list[str]:
+    """子进程要跑的那段（`-c` 传进去）。
+
+    `no_lock=True` 时把 `Hold` 换成空操作，**并且**把 `ledger.write_atomic`
+    包成「8 个都读完旧字节才准写盘」—— 这样「8 张只落 1 张」是确定性结论，
+    不再取决于机器快慢（2026-11-06 云机 4 逻辑核连跑 3 轮一张没丢过）。
+    """
     patch = (
+        "import pathlib\n"
         "class _NoLock:\n"
         "    def __init__(self, *a, **k): pass\n"
         "    def __enter__(self): return None\n"
         "    def __exit__(self, *a): return None\n"
         "ledger.Hold = _NoLock\n"
+        "_rv = pathlib.Path(sys.argv[4])\n"
+        "_rv.mkdir(parents=True, exist_ok=True)\n"
+        "_real = ledger.write_atomic\n"
+        "def _write_after_all_read(path, data, **kw):\n"
+        "    (_rv / sys.argv[3]).write_text('1', encoding='utf-8')\n"
+        "    deadline = time.monotonic() + 120.0\n"
+        "    while len(list(_rv.iterdir())) < 8:\n"
+        "        if time.monotonic() > deadline:\n"
+        "            raise SystemExit('会合超时：只到了 %d 个' % len(list(_rv.iterdir())))\n"
+        "        time.sleep(0.005)\n"
+        "    _real(path, data, **kw)\n"
+        "ledger.write_atomic = _write_after_all_read\n"
         if no_lock else ""
     )
     code = (
@@ -282,12 +308,15 @@ def _worker_script(repo: pathlib.Path, card: str, *, no_lock: bool) -> list[str]
         "                title='并发卡', tree='.wt/' + sys.argv[3],\n"
         "                spec='x/' + sys.argv[3] + '.md', files=['t.py'], wait=120.0)\n"
     )
-    return [sys.executable, "-X", "utf8", "-c", code, str(repo), "0", card]
+    tail = [str(rendezvous)] if no_lock else []
+    return [sys.executable, "-X", "utf8", "-c", code, str(repo), "0", card, *tail]
 
 
 def _run_eight(repo: pathlib.Path, *, no_lock: bool) -> list[str]:
     cards = [f"D{i}" for i in range(8)]
-    procs = [subprocess.Popen(_worker_script(repo, c, no_lock=no_lock),
+    rendezvous = repo.parent / "rendezvous"
+    _clear_rendezvous(rendezvous)
+    procs = [subprocess.Popen(_worker_script(repo, c, no_lock=no_lock, rendezvous=rendezvous),
                               cwd=str(repo), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
              for c in cards]
     for p in procs:
@@ -310,18 +339,16 @@ def test_without_lock_loses_updates(repo: pathlib.Path) -> None:
     """判据 7（★ 反向）：拆掉锁，同一批 8 进程**必须丢 ≥1 张** —— 8/8 是锁挣来的。
 
     ★ 这条要是「也不丢」，说明判据 6 根本没在测并发（工具有没有锁都一样），
-      那 6 就只是一句空话。实测拆锁必丢 3–4 张，所以这里连跑 3 轮取「任一轮丢」
-      也算咬住（第一轮就丢是常态）。
+      那 6 就只是一句空话。
+    ★ 原本靠**墙钟竞态**必丢（本机每轮丢 3–4 张）。2026-11-06 落地卡 E89 时，
+      云机（4 逻辑核）连跑 3 轮**一张都没丢** ⇒ 假红，判据本身不可靠。
+      现改成**确定性会合**：worker 把 `write_atomic` 包成「8 个都读完旧字节才准写」，
+      于是 8 个各自写出的都只是「旧内容 + 自己那张」，最后落盘只剩一张。
+      丢卡与机器快慢无关，也不再需要连跑多轮。
     """
-    lost_somewhere = False
-    for _round in range(3):
-        ids = _run_eight(repo, no_lock=True)
-        if any(ids.count(f"D{i}") != 1 for i in range(8)):
-            lost_somewhere = True
-            break
-        # 没丢就重置台账，再来一轮
-        (repo / "docs" / "workbacklog.toml").write_bytes(CARD_BODY)
-    assert lost_somewhere, "拆了锁居然一张都没丢 —— 判据 6 的 8/8 不能证明任何东西"
+    ids = _run_eight(repo, no_lock=True)
+    lost = [f"D{i}" for i in range(8) if ids.count(f"D{i}") != 1]
+    assert lost, f"拆了锁居然一张都没丢（{ids}）—— 判据 6 的 8/8 不能证明任何东西"
 
 
 # ================================================================ 判据 8：立刻可见

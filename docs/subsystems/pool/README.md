@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 45 个 py（44 个模块 + `__init__.py`）、**17566 行**（`wc -l tools/pool/*.py`，2026-11-05 现算）。
+`tools/pool/` = 45 个 py（44 个模块 + `__init__.py`）、**17756 行**（`wc -l tools/pool/*.py`，2026-11-06 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -26,12 +26,12 @@
 | `guards.py` | 480 | 树 / 冲突域 / 门禁锁 / 日志 / 项目五条守卫，**纯函数**（吃已读好的数据回 `list[str]`，不写文件不 print） | 无（被 `wb_dispatch`、`wb_registry` 调） |
 | `holds.py` | 288 | 整窗用量的下限 + 五因估算（magpie `window_holds` 移植）：`bounds` / `holds_bounds` / `estimate` | 无 |
 | `jobs.py` | 425 | 作业日志三态判据（在跑 / 已判决 / 断了）+ 产物定位；只读、无副作用 | `wb_status.py`、`pool_mcp` 的 `job_list` / `job_status` |
-| `landing.py` | 2916 | 落地链八步（⓪ 回退 → ⑧ 复核落盘）：迁树 / 文书 / 门禁 / 封存 / 提交 / 合流，一笔提交的编排全在这里 | `wb_land.py` |
+| `landing.py` | 3004 | 落地链八步（⓪ 回退 → ⑧ 复核落盘）：迁树 / 文书 / 门禁 / 封存 / 提交 / 合流，一笔提交的编排全在这里 | `wb_land.py` |
 | `lanes.py` | 154 | 读 `lanes.toml`：一个号同时最多几张卡（数据面；判据在 `guards.lane_guard`） | 无（被 `pool.registry` 调） |
 | `lanes.toml` | 45 | 每账号并发闸的数据：稳定 id → 同时最多几张卡（随仓走、由人改，改完不用重启） | 无（被 `pool.lanes` 读） |
 | `lastgood.py` | 355 | 写盘纪律：原子替换 + `.bak` 落后一次 + fail-closed 读；`read_strict` 从不读 `.bak`（撤过的凭据不许复活） | 无（被 `pool.registry`、`pool.task`、`pool.queue`、`pool_accounts`、`gate_pool` 调） |
 | `lease.py` | 109 | 码道派活那条路并进**同一本**租约账的命令行（不并账，守卫就瞎一半） | 本文件即入口 |
-| `ledger.py` | 420 | 台账唯一的写入口：一把不看端口段的 gates/diag/ledger.lock 把「读字节 → 切块 → 查重 → 尾部追加 → 原子写（os.replace 带重试）→ 提交」包成短事务；只许尾部追加，已有块的字节一个不碰 | 无（被 wb_card.py 与 pool.landing 的翻账路径调） |
+| `ledger.py` | 508 | 台账唯一的写入口：一把不看端口段的 gates/diag/ledger.lock 把「读字节 → 切块 → 查重 → 尾部追加 → 原子写（os.replace 带重试）→ 提交」包成短事务；只许尾部追加，已有块的字节一个不碰 | 无（被 wb_card.py 与 pool.landing 的翻账路径调） |
 | `ledger_spend.py` | 267 | 按账号累计花费的账（`pool-spend.jsonl`，一行一次派活）；**不内置价目表**，`cost` 由调用方给 | 无（被 `pool.limits_check` / `limits_policy` 调） |
 | `limits.py` | 132 | 限额策略的读法与「表读不出 = 拒」那条 `NotLimited`（magpie `ErrUnlimited` 移植） | 无（被 `wb_dispatch` 调） |
 | `limits_check.py` | 136 | 派活**之前**的预算授权：这个号这个窗口还有余量吗 + `Retry-After`（`budget.Reserve` 移植） | 无 |
@@ -59,7 +59,7 @@
 | `sink.py` | 238 | 429 且「还有配额」的候选沉底到次序末尾（`sink` / `unsink` / `unsink_all` / `sunk_at`，进程内状态） | 无 |
 | `snapshot.py` | 104 | 零风险快照：`git stash create` 造 commit 再挂 `refs/snapshots/*`（完全不动工作区；不挂 ref 会被 gc） | 无（被 `pool.landing` 调） |
 | `speed.py` | 261 | 输出速度的判据（**不是怎么算速度，是什么情况不许报**）：窗口不可测 / 末端爆发 / 推理比答案快 `THINK_PACE` 倍 / Codex 太短，一律回 `(0, 0)` | 无（今天**零调用**：pool 不产 `ttft` / `first_text` / `flow`，接线只能接假数） |
-| `stage_card.py` | 363 | 三段文书片段生成器：台账条目 + changelog + 交接 CHECKPOINT（只写片段，汇总归 `sync_docs`） | `wb_stage_card.py` |
+| `stage_card.py` | 377 | 三段文书片段生成器：台账条目 + changelog + 交接 CHECKPOINT（只写片段，汇总归 `sync_docs`） | `wb_stage_card.py` |
 | `sticky.py` | 306 | 卡粘性：同一张卡第二次派活别换号（`STICK_KEEP_S` / `note` / `pick`），省重发上下文的 token | 无（被 `wb_dispatch` 调） |
 | `task.py` | 1576 | 任务栅栏：批预声明 → 每张卡交成送申请 → 集齐才收口；含自旋锁与逐卡域检查 | `wb_task.py`、`auto_land.py` |
 | `trae_dispatch.py` | 380 | 面板道（CDP 驱动 Trae）进账：一次跑落成租约 + 日志 + 判决；**刻意不接进派活** | 本文件即入口；`wb_watch.py` |
@@ -78,12 +78,12 @@
 > 账号账**故意在仓外**：只存凭据指针（`~/.codeartsdoer/pool.env` 之类），不存凭据本身；
 > 没有 git 兜底，所以写入一律原子替换，删号打墓碑（`tools/pool_accounts.py` 的 `save_ledger()`）。
 
-## 2. 度量（2026-11-05 现算）
+## 2. 度量（2026-11-06 现算）
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **17566 行** / **45 个文件**（44 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 333 张（323 done / 10 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **17756 行** / **45 个文件**（44 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 334 张（324 done / 10 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

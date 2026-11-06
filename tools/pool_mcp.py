@@ -178,6 +178,7 @@ from typing import TYPE_CHECKING
 
 import tomllib
 import wb_dispatch  # noqa: PLC0415 —— 模型白名单 / 默认模型的**唯一**真源（卡 111 §2 ⑥）
+import wb_plan  # noqa: PLC0415 —— 台账分片（卡 E89）：分片目录 / 分片读法只此一份
 from pool import accounts_scope, guards, registry, task, usage_ingest
 from pool.jobs import (
     HEARTBEAT_SECONDS,
@@ -194,7 +195,7 @@ from pool.locks import is_empty as lock_is_empty
 from pool.locks import status_argv as lock_status_argv
 from pool.models import find_pool_dir, load_pool_models
 from pool.no_window import NO_WINDOW  # ★ 卡 148：子进程一律不弹窗（flag 的唯一真源）
-from pool.plan import BacklogError, load_backlog, plan_report
+from pool.plan import BacklogError, plan_report
 
 if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解（ruff TCH）
     from typing import Any
@@ -890,7 +891,9 @@ def tool_pool_plan(
     ]
     command = _cmd_text(argv)
     try:
-        backlog = load_backlog(root / "docs" / "workbacklog.toml")
+        # 卡 E89：台账分片时读分片（总表只是合并产物）；无分片退回同一条老读法。
+        backlog = wb_plan.load_sharded_backlog(
+            root / "docs" / "workbacklog.toml", root / "docs" / "backlog")
         code, out, err = plan_report(backlog, concurrency)
     except BacklogError as exc:
         code, out, err = 2, "", f"[FAIL] {exc}\n"
@@ -1587,8 +1590,12 @@ def _backlog_for(root: Path) -> Any:
 
     ★ 为什么按 root：MCP 服务端的 root 就是主仓；测试把 root 指到临时目录时读的也是那一份，
       不与别的门共享真 backlog。解析仍是同一个 `load_backlog`（不另写一份 parser）。
+
+    卡 E89：分片在就先读分片（`docs/backlog/*.toml`），口径唯一在
+    `wb_plan.load_sharded_backlog`；没有分片就退回总表。
     """
-    return load_backlog(root / "docs" / "workbacklog.toml")
+    return wb_plan.load_sharded_backlog(
+        root / "docs" / "workbacklog.toml", root / "docs" / "backlog")
 
 
 def _how_to_pass() -> str:

@@ -95,6 +95,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import tomllib
+import wb_plan  # noqa: E402 —— 台账分片（卡 E89）：分片目录 / 分片读法只此一份
 from pool.no_window import NO_WINDOW  # noqa: E402  ★ 卡 148：子进程一律不弹窗（唯一真源）
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -357,14 +358,23 @@ def changed_files(root: Path, since: str = "") -> dict[str, list[str]]:
 
 
 def load_cards(root: Path) -> tuple[dict[str, str], dict[str, CardRec]]:
-    """读卡池：`task -> 卡号` 与 `卡号 -> 记录`。文件不在 ⇒ 两个空表（如实空着）。"""
-    path = root / "docs" / "workbacklog.toml"
-    if not path.is_file():
+    """读卡池：`task -> 卡号` 与 `卡号 -> 记录`。文件不在 ⇒ 两个空表（如实空着）。
+
+    ★ 卡 E89：有 `docs/backlog/*.toml` 分片就**只读分片**（总表是 merge 产物，可能落后）；
+      两者都没有 ⇒ 两个空表（与旧行为一致：如实空着）。
+    """
+    shards = wb_plan.shard_files(root / "docs" / "backlog")
+    files = shards or [root / "docs" / "workbacklog.toml"]
+    rows: list[dict] = []
+    for path in files:
+        if not path.is_file():
+            continue
+        rows.extend(tomllib.loads(path.read_text(encoding="utf-8")).get("cards") or [])
+    if not rows and not any(path.is_file() for path in files):
         return {}, {}
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
     by_task: dict[str, str] = {}
     by_id: dict[str, CardRec] = {}
-    for row in data.get("cards") or []:
+    for row in rows:
         card_id = str(row.get("id") or "").strip()
         if not card_id:
             continue

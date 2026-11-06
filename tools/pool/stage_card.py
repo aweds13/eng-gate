@@ -82,6 +82,20 @@ def _toml_str(value: str) -> str:
     return _json.dumps(value, ensure_ascii=False)
 
 
+#: 证据断言的种类前缀（与 `scripts/audit_progress.eval_assertion()` 认的种类**同源**）。
+#: 调用方可以自带前缀（`test:…` / `text:…` / `file:…`）；没带才补 `file:`。
+EVIDENCE_KINDS = ("file", "text", "test", "route", "table", "column", "ui")
+
+
+def _as_assertion(raw: str) -> str:
+    """把一条 `--evidence` 变成台账里的断言：**已经带种类前缀就原样保留**，否则补 `file:`。"""
+    text = _unescape_git_quoted(raw)
+    kind, sep, _rest = text.partition(":")
+    if sep and kind in EVIDENCE_KINDS:
+        return text
+    return "file:" + text
+
+
 def load(p: pathlib.Path) -> tuple[bytes, bytes]:
     raw = p.read_bytes()
     crlf = raw.count(b"\r\n")
@@ -232,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         pad = b"" if raw.endswith(nl + nl) else nl
         lines = [f'[entries."{a.id}"]', f'id = "{a.id}"', f'title = "{a.title}"',
                  f'group = "{a.group}"', 'status = "done"', "evidence = ["]
-        lines += [f"  {_toml_str('file:' + _unescape_git_quoted(e))}," for e in a.evidence]
+        lines += [f"  {_toml_str(_as_assertion(e))}," for e in a.evidence]
         lines += ["]", 'gaps = "' + quote_safe(gaps) + '"', ""]
         ledger.write_bytes(raw + pad + block(lines, nl))
         print(f"台账 {len(raw)} → {ledger.stat().st_size} 字节（{a.id}）")
@@ -311,7 +325,7 @@ def _fragments_mode(wt: pathlib.Path, a, gaps: str, cl: str, cp: str,
             carried = [str(x) for x in entry.get("evidence", [])]
         except (OSError, _tomllib.TOMLDecodeError):
             carried = []
-    fresh = ['file:' + _unescape_git_quoted(e) for e in a.evidence]
+    fresh = [_as_assertion(e) for e in a.evidence]
     seen: set[str] = set()
     merged: list[str] = []
     for item in carried + fresh:

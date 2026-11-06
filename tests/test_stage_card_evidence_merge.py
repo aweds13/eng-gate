@@ -94,3 +94,25 @@ def test_restage_does_not_duplicate_an_identical_pointer(tmp_path: Path) -> None
     second_data = tomllib.loads(path.read_text(encoding="utf-8"))
     n2 = len(second_data["entries"]["T-AG999"]["evidence"])
     assert n1 == n2, f"重复 --evidence 把条目写重了：{n1} → {n2}"
+
+
+def test_kinded_evidence_keeps_its_kind(tmp_path: Path) -> None:
+    """卡 E89 现场：`--evidence test:…` / `text:…` 不许被加成 `file:test:…`。
+
+    audit 会把 `file:test:…` 判成「文件不存在」。
+    """
+    wt = _tree(tmp_path)
+    # 合成小树里 `sync_docs` 写出来的 CRLF 纯正性过不了 stage_card 的自检 —— 与本卡判据无关
+    # （片段在自检之前就已写好），所以只看片段内容，不看退出码。
+    r = _run(wt, tmp_path, "tests/whatever.py",
+             "test:tests/whatever.py::test_x",
+             "text:tools/wb_plan.py::图案例")
+    path = wt / "docs" / "traceability.d" / "T-AG999.toml"
+    assert path.is_file(), r.stdout + r.stderr
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    got = list(data["entries"]["T-AG999"]["evidence"])
+    assert "file:tests/whatever.py" in got, f"裸路径必须仍补 file:：{got}"
+    assert "test:tests/whatever.py::test_x" in got, f"test: 被加了 file: 前缀：{got}"
+    assert "text:tools/wb_plan.py::图案例" in got, f"text: 被加了 file: 前缀：{got}"
+    bad = [x for x in got if x.startswith("file:test:") or x.startswith("file:text:")]
+    assert not bad, f"出现 file:test: / file:text: 双重前缀：{bad}"

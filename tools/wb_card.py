@@ -95,7 +95,14 @@ def _cmd_add(args: argparse.Namespace) -> int:
     if result == "already":
         print(f"[已在] 卡 {args.id} 本来就在台账里 ⇒ 没动文件")
     else:
-        print(f"[加卡] 卡 {args.id}（{args.task}）已追加到台账尾部"
+        # ★ 卡 E89：台账启用分片后，新卡落 `docs/backlog/<分区>.toml` 而不是总表尾部
+        #   —— 打印必须说实话（否则「已追加到台账尾部」会把人引到错的文件）。
+        try:
+            target = ledger.target_path(args.root, args.id)
+            where = target.relative_to(ledger.main_root(args.root)).as_posix()
+        except Exception:
+            where = "docs/workbacklog.toml"
+        print(f"[加卡] 卡 {args.id}（{args.task}）已写进 {where}"
               f"{'，并已提交' if args.commit else ''}")
     return EXIT_OK
 

@@ -123,6 +123,8 @@ __all__ = [
     "find_cycle", "greedy_pack",
     "find_landed_but_pending", "find_gate_drift", "in_flight",
     "load_backlog", "load_partitions", "load_sharded_backlog", "merge_shards",
+    "missing_in_shards", "shard_file_for", "shard_files", "shard_header",
+    "shards_present",
     "main", "partition_of", "partitions_path", "Partition", "PartitionError", "Partitions",
     "plan_batches",
     "plan_report", "render_dispatch", "render_merged_toml", "render_plan", "shard_dir",
@@ -336,18 +338,108 @@ def merge_shards(directory: Path | None = None) -> Backlog | None:
     return Backlog(reviewed=reviewed, cards=tuple(cards))
 
 
+def shard_files(directory: Path | None = None) -> list[Path]:
+    """分片目录里现存的 `*.toml`（按文件名排序）；目录不在 ⇒ 空表。"""
+    folder = Path(directory) if directory is not None else shard_dir()
+    return sorted(folder.glob("*.toml")) if folder.is_dir() else []
+
+
+def shards_present(directory: Path | None = None) -> bool:
+    """台账**是否已启用分片**（判据 1 的开关）：分片目录里有 `*.toml` ⇒ 真。"""
+    return bool(shard_files(directory))
+
+
+def shard_file_for(
+    card_id: str, directory: Path | None = None, partitions: Path | None = None,
+) -> Path | None:
+    """这张卡该落哪个分片文件（`docs/backlog/<分区>.toml`）—— 判不了 ⇒ `None`。
+
+    · 分区前缀认得出（`A261` 这种）⇒ 直接用它；
+    · 纯数字旧号 ⇒ 按 `docs/partitions.toml` 的 `[legacy]` 区间 / `default` 归片；
+    · 认不出卡号形态（如 `M-1`）或没有分区登记表 ⇒ `None`（调用方退回总表，**不猜**）。
+    """
+    folder = Path(directory) if directory is not None else shard_dir()
+    try:
+        partitions_obj = (load_partitions(partitions) if partitions is not None
+                          else load_partitions())
+    except PartitionError:
+        return None
+    try:
+        prefix = partition_of(card_id, partitions_obj)
+    except PartitionError:
+        return None
+    if not prefix:
+        return None
+    return folder / f"{prefix}.toml"
+
+
+def shard_header(reviewed: str = "") -> bytes:
+    """新建分片文件时的表头（`[base]` + `reviewed`，纯 CRLF，块前留一个空行）。
+
+    `reviewed` 空 ⇒ 写 `00000000`（`pool.plan.load_backlog` 只要求它非空）。
+    分片必须自带表头，否则 `load_backlog()` 直接抛「缺 [base] 段或 base.reviewed」。
+    """
+    base = str(reviewed or "00000000")
+    return f"[base]\nreviewed = {_toml_str(base)}\n\n".encode().replace(
+        b"\n", b"\r\n")
+
+
+def missing_in_shards(master: Backlog, merged: Backlog) -> list[str]:
+    """总表里有、分片里**没有**的卡号（按总表顺序）—— 空表 = 覆盖完整。"""
+    have = {card.id for card in merged.cards}
+    return [card.id for card in master.cards if card.id not in have]
+
+
 def load_sharded_backlog(
     path: Path | None = None, shard_directory: Path | None = None,
+    *, master: Path | str | None = "",
 ) -> Backlog:
-    """读队列：**先分片后总表**。
+    """读队列：**先分片后总表**，且分片必须**盖住总表**（否则响亮失败）。
 
     · 分片目录（默认 `docs/backlog/`）里有 `*.toml` ⇒ 合并它们；
+      ★ 卡 E89：再把合并结果与**总表**比卡号集合 —— 总表里有、分片里没有的卡
+        ⇒ 抛 `BacklogError` 并点名（缺几张、例号）。为什么必须有这一条：
+        实测只建 `A.toml` 时这里会**静默返回 226 张**（真值 333），而 `gates/defs/`
+        里没有任何一道门看队列 ⇒ 少 107 张卡**没人会红**。反向：分片里有、总表里没有
+        （刚立的新卡还没合回总表）**不算错** —— 那是切换后的正常态。
+      ★ 总表路径不存在（`tmp_path/"none.toml"` 这类夹具、独立拷贝的树）⇒ **不比**，
+        保持旧行为：`tests/test_partitions.py` 有 6 条断言靠这一点。
+      ★ `master=` 哨兵：不传（`""`）⇒ 总表就是 `path`（缺省 `docs/workbacklog.toml`）；
+        传 `None` ⇒ **明确不比**（调用者显式给了分片目录 ⇒ 覆盖由调用者负责，
+        总表在哪不归这里猜）；传路径 ⇒ 比那一份。
     · 否则退回**总表**（`path`，默认 `docs/workbacklog.toml`）—— **旧行为一字不变**。
     """
     merged = merge_shards(shard_directory)
-    if merged is not None:
+    if merged is None:
+        return load_backlog(Path(path) if path is not None else DEFAULT_BACKLOG)
+    if master is None:
         return merged
-    return load_backlog(Path(path) if path is not None else DEFAULT_BACKLOG)
+    if isinstance(master, (str, Path)) and str(master):
+        total = Path(master)
+    else:
+        total = Path(path) if path is not None else DEFAULT_BACKLOG
+    if not total.is_file():
+        return merged
+    # ★ 卡 E89：总表里**一张卡都没有**（只有 [base] 的退化表 / 夹具）⇒ 不可能有缺的卡，
+    #   不必比。这里只判「卡片数」，不吞 TOML 坏掉那一类错（那种仍由 load_backlog 响亮抛出）。
+    raw_total = total.read_bytes()
+    try:
+        rows = tomllib.loads(raw_total.decode("utf-8")).get("cards")
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError):
+        rows = None
+    if not rows:
+        return merged
+    master = load_backlog(total)
+    missing = missing_in_shards(master, merged)
+    if missing:
+        sample = "、".join(missing[:5])
+        more = f" 等 {len(missing)} 张" if len(missing) > 5 else ""
+        raise BacklogError(
+            f"分片没覆盖总表：缺 {len(missing)} 张卡（{sample}{more}）"
+            f" —— 分片目录 {Path(shard_directory) if shard_directory is not None else shard_dir()}"
+            f" 不全，总表 {total} 里有它们。先补齐分片（tools/wb_plan.py merge 看缺口），"
+            f"别在缺片的树上派活。")
+    return merged
 
 
 def cross_partition_writers(backlog: Backlog, partitions: Partitions | None) -> list[str]:
@@ -987,7 +1079,11 @@ def _load_backlog_for(args: argparse.Namespace, root: Path | None = None) -> Bac
     if args.backlog:
         return load_sharded_backlog(Path(args.backlog), shards)
     if root is None:
-        return load_sharded_backlog(shard_directory=shards)
+        # ★ 卡 E89：显式给了 `--shards` ⇒ 覆盖比对**不做**（调用者自己负责；
+        # 否则会拿本仓真总表去比别人的分片目录，`tests/test_partitions.py`
+        # 的 check 三条用例会被真仓 334 张卡咬成「缺 333 张」）。
+        return load_sharded_backlog(
+            shard_directory=shards, master=None if shards is not None else "")
     return load_sharded_backlog(root / "docs" / "workbacklog.toml",
                                 shards if shards is not None else root / "docs" / "backlog")
 

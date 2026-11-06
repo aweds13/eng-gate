@@ -17,10 +17,14 @@ r"""台账（`docs/workbacklog.toml`）的**唯一写入口** + 立卡那一笔�
 做的：把「拿锁 → 读字节 → 切块 → 查重 → 尾部追加 → 原子写（带重试）→ 放锁」
 包成约 160 ms 的短事务，并给落地链的 status 翻写提供同一个 `write_atomic`。
 
-不做的（故意的）：**台账的路径、格式、块序、字节一律不变**。
-本模块不重新渲染 TOML —— 它把新块当作字节**追加**到文件尾，
+不做的（故意的）：**块的格式、块序、字节一律不变**。
+本模块不重新渲染 TOML —— 它把新块当作字节**追加**到目标文件尾，
 所以现有所有读者（`tools/pool/plan.py` 的 `load_backlog()` 等）都不用改一行。
 这条纪律由 `tests/test_ledger_lock.py` 的逐字节前缀判据钉住。
+
+★ 卡 E89（T-AG596）：台账**启用分片**后目标文件会变 —— 新卡按分区落
+  `docs/backlog/<分区>.toml`（`wb_plan.shard_file_for()` 判），分片目录还空着
+  或卡号形态判不出分区 ⇒ 落总表（**不猜**）。判据只有一份，就在 `wb_plan` 里。
 
 ## 锁的三条纪律（缺一条就在 Windows 上漏锁）
 
@@ -52,6 +56,7 @@ import os
 import pathlib
 import re
 import subprocess
+import sys
 import time
 
 import tomllib
@@ -336,6 +341,81 @@ def write_atomic(path: pathlib.Path, data: bytes, *,
     raise LedgerError(f"原子写失败（{tries} 次）：{path}：{_err_name(last)}")
 
 
+# --------------------------------------------------------------------------- 分片路由
+_WB_PLAN: object | None = None
+
+
+def _wb_plan() -> object | None:
+    """延迟加载 `tools/wb_plan.py`（本模块不 import 它，免得成环）。
+
+    ★ `sys.modules[...]` 必须在 `exec_module()` **之前**填 —— 否则 `@dataclass`
+      求值时 `sys.modules[cls.__module__]` 是 None，报 `'NoneType' has no __dict__`
+      （`tools/wt_prune.py` 实测踩过同一条）。
+    """
+    global _WB_PLAN
+    if _WB_PLAN is not None:
+        return _WB_PLAN
+    src = pathlib.Path(__file__).resolve().parents[1] / "wb_plan.py"
+    if not src.is_file():
+        return None
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("wb_plan_under_ledger", src)
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)
+    except Exception:
+        return None
+    _WB_PLAN = mod
+    return mod
+
+
+def shard_dir(root: pathlib.Path | str | None = None) -> pathlib.Path:
+    """分片目录（`<根>/docs/backlog`）—— 只算路径，不看存在性。"""
+    return main_root(root) / "docs" / "backlog"
+
+
+def target_path(root: pathlib.Path | str | None, card_id: str) -> pathlib.Path:
+    """这张卡该写进哪个文件：分片已启用且分区判得出 ⇒ 那一片；否则总表。"""
+    base = main_root(root)
+    master = base / BACKLOG_REL
+    wb = _wb_plan()
+    if wb is None:
+        return master
+    folder = base / "docs" / "backlog"
+    try:
+        if not wb.shards_present(folder):        # 分片还没启用 ⇒ 旧行为一字不变
+            return master
+        shard = wb.shard_file_for(card_id, directory=folder)
+    except Exception:
+        return master
+    return shard if shard is not None else master
+
+
+def _peer_files(root: pathlib.Path | str | None) -> list[pathlib.Path]:
+    """查重要看的全部文件：总表 + 所有现存分片（分片启用与否都看，防同号两处）。"""
+    base = main_root(root)
+    files = [base / BACKLOG_REL]
+    wb = _wb_plan()
+    if wb is not None:
+        with contextlib.suppress(Exception):
+            files.extend(wb.shard_files(base / "docs" / "backlog"))
+    return files
+
+
+def _new_shard_header() -> bytes:
+    """新建分片文件的表头（`[base]` + `reviewed`）—— 判据只有一份，在 wb_plan 里。"""
+    wb = _wb_plan()
+    if wb is not None:
+        try:
+            return wb.shard_header()
+        except Exception:
+            pass
+    return b'[base]\r\nreviewed = "00000000"\r\n\r\n'
+
+
 # --------------------------------------------------------------------------- 立卡
 def add_card(root: pathlib.Path | str | None, *, id: str, task: str, title: str,
              tree: str, spec: str, files: list[str] | tuple[str, ...],
@@ -347,13 +427,21 @@ def add_card(root: pathlib.Path | str | None, *, id: str, task: str, title: str,
     步骤（全在锁里，约 160 ms）：
     ①读字节 ②验纯 CRLF（否则 `LedgerError`，**不写盘**）③块级查重
     ④拼块追加 ⑤验 TOML（`tomllib.loads` 失败就不 replace）⑥原子写 ⑦（可选）提交。
+
+    ★ 卡 E89：写哪个文件由 `target_path()` 决定 —— 分片启用后是新卡所属的那一片
+      （不存在就先写 `shard_header()` 再造块）；否则总表。查重**跨全部文件**
+      （总表 + 所有分片），同一张卡不许在两处各有一份。
     """
     base = main_root(root)
-    path = base / BACKLOG_REL
-    if not path.is_file():
-        raise LedgerError(f"台账不存在：{path}")
+    master = base / BACKLOG_REL
+    if not master.is_file():
+        raise LedgerError(f"台账不存在：{master}")
+    path = target_path(base, id)
     with Hold(lock_path(base), wait=wait):
-        raw = path.read_bytes()
+        for peer in _peer_files(base):
+            if peer.is_file() and peer != path and has_card(peer.read_bytes(), id):
+                return "already"
+        raw = path.read_bytes() if path.is_file() else _new_shard_header()
         bad = non_crlf_lines(raw)
         if bad:
             raise LedgerError(

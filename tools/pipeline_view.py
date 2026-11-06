@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 import tomllib
+import wb_plan  # 台账分片（卡 E89）：分片目录 / 分片读法只此一份
 
 ROOT = Path(__file__).resolve().parent.parent
 NO_WINDOW: dict[str, int] = {"creationflags": 0x08000000} if os.name == "nt" else {}
@@ -94,8 +95,10 @@ _REPORT_RE = re.compile(r"^wb-(.+?)(?:\.r\d+)?\.report\.md$")
 #   （快照 LASTGOOD_REL）；False = 静态块（一次性读数）：保留「缺什么说什么」
 #   （null + missing_note），不许一刀切改成 last-good。
 BLOCKS: tuple[dict, ...] = (
-    {"id": "cards", "source": "docs/workbacklog.toml",
-     "missing_note": "没有 docs/workbacklog.toml", "continuous": False,
+    {"id": "cards",
+     "source": "docs/workbacklog.toml 与分片 docs/backlog/*.toml",
+     "missing_note": "没有 docs/workbacklog.toml（也没有 docs/backlog/*.toml 分片）",
+     "continuous": False,
      "fields": ("cards", "cards_reviewed"),
      "row_fields": ("id", "task", "title", "tree", "spec", "files",
                     "depends", "risk", "status")},
@@ -319,43 +322,52 @@ def _run_git(*args: str, cwd: Path | None = None) -> tuple[int, str]:
 # ================================================================ 1. cards
 
 
+def _shard_dir(root: Path) -> Path:
+    """台账分片目录（`docs/backlog/`）—— 从读数根现算，不用 `wb_plan.ROOT`（它可能是别的树）。"""
+    return root.joinpath(*wb_plan.SHARD_DIR_REL)
+
+
+def _backlog_sources(root: Path) -> list[Path]:
+    """队列的**来源文件**：有分片就只算分片（与读法同口径），否则算总表。
+
+    ★ 卡 E89：缓存指纹必须跟着读法走 —— 指纹只算总表时，改分片**不重算**（静默少卡）。
+    """
+    shards = wb_plan.shard_files(_shard_dir(root))
+    return shards if shards else [root / BACKLOG_REL]
+
+
 def read_cards(root: Path) -> dict:
     """队列全貌（口径见 ``BLOCKS["cards"]``）。静态块：缺什么说什么；内容没变就走缓存。"""
-    return _cached(root, "cards", [root / BACKLOG_REL], lambda: _read_cards(root))
+    return _cached(root, "cards", _backlog_sources(root), lambda: _read_cards(root))
 
 
 def _read_cards(root: Path) -> dict:
     spec = _SRC["cards"]
-    path = root / BACKLOG_REL
-    if not path.exists():
+    shards = wb_plan.shard_files(_shard_dir(root))
+    if not shards and not (root / BACKLOG_REL).exists():
         return {"cards": None, "cards_note": spec["missing_note"],
                 "cards_source": spec["source"]}
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as exc:
+        backlog = wb_plan.load_sharded_backlog(root / BACKLOG_REL, _shard_dir(root))
+    except (OSError, tomllib.TOMLDecodeError, wb_plan.BacklogError) as exc:
         return {"cards": None, "cards_note": f"{spec['source']} 坏了：{exc}",
                 "cards_source": spec["source"]}
-    base = data.get("base")
-    reviewed = ""
-    if isinstance(base, dict):
-        reviewed = str(base.get("reviewed", "")).strip()
-    raw_cards = data.get("cards") or []
-    cards: list[dict] = []
-    for raw in raw_cards:
-        if not isinstance(raw, dict):
-            continue
-        cards.append({
-            "id": str(raw.get("id", "")).strip(),
-            "task": str(raw.get("task", "")).strip(),
-            "title": str(raw.get("title", "")).strip(),
-            "tree": str(raw.get("tree", "")).strip(),
-            "spec": str(raw.get("spec", "")).strip(),
-            "files": list(raw.get("files") or []),
-            "depends": list(raw.get("depends") or []),
-            "risk": str(raw.get("risk", "mid")).strip(),
-            "status": str(raw.get("status", "pending")).strip(),
-        })
-    return {"cards": cards, "cards_reviewed": reviewed, "cards_source": spec["source"]}
+    cards: list[dict] = [
+        {
+            "id": card.id,
+            "task": card.task,
+            "title": card.title,
+            "tree": card.tree,
+            "spec": card.spec,
+            "files": list(card.files),
+            "depends": list(card.depends),
+            "risk": card.risk,
+            "status": card.status,
+        }
+        for card in backlog.cards
+    ]
+    return {"cards": cards, "cards_reviewed": backlog.reviewed,
+            "cards_source": spec["source"]}
 
 
 # ================================================================ 2. gates

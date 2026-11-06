@@ -94,6 +94,19 @@ from pool.plan import BacklogError, load_backlog
 from pool.review import changed_paths, domain_of_manifest_text, outside_allow, outside_domain
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _wb_plan() -> object | None:
+    """`tools/wb_plan.py`（台账分片的唯一实现）—— 取不到就返 `None`。
+
+    真仓里它总在（卡 E89 自己就改它）；假仓库/最小树里没有，那时**分片口径不可用
+    ⇒ 退回总表**（本卡之前的行为一字不变）。
+    """
+    try:
+        import wb_plan  # noqa: PLC0415 —— 只在用到分片口径时才加载
+    except ImportError:
+        return None
+    return wb_plan
 TASK_RE = re.compile(r"^Task:\s*(\S+)\s*$", re.M)
 #: `Gates:` trailer 里声称"跑过门禁**且绿**"的字样 —— 真绿那一笔**必须**含其中之一（卡 133）。
 GREEN_CLAIM_RE = re.compile(r"门禁绿|全绿|seal")
@@ -658,14 +671,21 @@ def resolve_domain(card: str, task: str | None) -> tuple[list[str] | None, str]:
         names = "、".join(_rel(p) for p, _ in hits)
         return None, f"栅栏里有多个同名成员「{card}」（{names}）—— 请用 `--task` 指定任务号"
     bpath = ROOT / "docs" / "workbacklog.toml"
-    if bpath.exists():
+    shard_dir = ROOT / "docs" / "backlog"
+    wb = _wb_plan()
+    # 卡 E89：分片也算权威域 —— 只有分片、总表还没合出来时不许落到「查不到」。
+    if bpath.exists() or (wb is not None and wb.shards_present(shard_dir)):
         try:
-            backlog = load_backlog(bpath)
+            if wb is None:
+                backlog = load_backlog(bpath)
+            else:
+                backlog = wb.load_sharded_backlog(bpath, shard_dir)
         except BacklogError as exc:
             return None, f"队列读不了（{exc}），栅栏里也没有「{card}」"
         found = backlog.by_id().get(card)
         if found is not None and found.files:
-            return list(found.files), f"队列 {_rel(bpath)}（卡 {card}）"
+            where = _rel(bpath) if bpath.exists() else f"{_rel(shard_dir)}/*.toml"
+            return list(found.files), f"队列 {where}（卡 {card}）"
     return None, (f"权威域查不到「{card}」：栅栏预声明与队列都没有"
                   f"（空域会骗过一切守卫，故拒 —— 补声明，或给 `--allow` 并留痕）")
 

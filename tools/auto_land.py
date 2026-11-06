@@ -76,6 +76,7 @@ if str(_TOOLS) not in sys.path:  # 直跑脚本时 tools/ 已在 sys.path；被 
     sys.path.insert(0, str(_TOOLS))
 
 import wb_dispatch  # noqa: E402 —— 内存闸**唯一实现**（pool/guards.py 头注释点名的委托）
+import wb_plan  # noqa: E402 —— 台账分片（卡 E89）：分片目录 / 分片读法只此一份
 from pool import task as pool_task  # noqa: E402 —— 批目录 / 收件箱 / 自旋锁唯一实现
 from wb_state import NO_WINDOW  # noqa: E402 —— 起子进程不弹窗（卡 148）
 
@@ -127,16 +128,22 @@ def scan_awaiting(bdir: Path) -> list[dict]:
     return out
 
 
-def load_backlog() -> dict[str, dict]:
-    """队列 `docs/workbacklog.toml` → {纯数字卡号: 行}（树 / 台账号的确定性来源）。"""
-    root = pool_task.main_tree_root()
-    raw = (root / "docs" / "workbacklog.toml").read_text(encoding="utf-8")
-    data = tomllib.loads(raw)
+def load_backlog(root: Path | None = None) -> dict[str, dict]:
+    """队列 → {纯数字卡号: 行}（树 / 台账号的确定性来源）。
+
+    卡 E89：有分片（`docs/backlog/*.toml`）就逐个读分片，否则读总表
+    `docs/workbacklog.toml` —— 少了这一条，分片里新立的卡会被判「不在队列里」。
+    """
+    base = Path(root) if root is not None else pool_task.main_tree_root()
+    shards = wb_plan.shard_files(base / "docs" / "backlog")
+    sources = shards or [base / "docs" / "workbacklog.toml"]
     out: dict[str, dict] = {}
-    for row in data.get("cards") or []:
-        key = re.sub(r"\D", "", str(row.get("id") or ""))
-        if key:
-            out[key] = row
+    for path in sources:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        for row in data.get("cards") or []:
+            key = re.sub(r"\D", "", str(row.get("id") or ""))
+            if key:
+                out[key] = row
     return out
 
 

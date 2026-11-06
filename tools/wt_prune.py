@@ -286,16 +286,23 @@ def _load_wb_plan() -> Any:
 def backlog_pending_trees(root: Path) -> dict[str, str] | None:
     """未完工卡（`status != done`）占的树：`树路径(规范化) → "卡号(task) status"`。
 
-    ★ 不硬编码卡号：现读 `docs/workbacklog.toml`（**与 `wb_plan.py` 同一口径**）。
+    ★ 不硬编码卡号：现读 `docs/workbacklog.toml` 与 `docs/backlog/*.toml` 分片
+      （**与 `wb_plan.py` 同一口径** —— 卡 E89）。
     ★ 返回 `None` = **判不了**（backlog 存在但读坏）→ 调用方把判据 7 记成"不确定 → 保留"。
     ★ backlog 文件**不存在** = 没有任何卡占树 → 返回空字典（不是 None）。
     """
     path = root / "docs" / "workbacklog.toml"
-    if not path.exists():
-        return {}
+    shard_dir = root / "docs" / "backlog"
     try:
         wb = _load_wb_plan()
-        backlog = wb.load_backlog(path)
+        shards = wb.shard_files(shard_dir)
+    except Exception:
+        return None
+    if not shards and not path.exists():
+        return {}
+    try:
+        # ★ 卡 E89：有分片就只读分片（总表是 merge 产物）；分片没盖住总表 ⇒ 抛 ⇒ 判不了 ⇒ 保留树。
+        backlog = wb.load_sharded_backlog(path, shard_dir)
     except Exception:
         return None
     claimed: dict[str, str] = {}

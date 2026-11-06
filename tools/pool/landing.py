@@ -504,6 +504,77 @@ def lock_readout() -> list[str]:
     return lines
 
 
+# ---------------------------------------------------------------- 卡 E89：台账分片
+_WB_PLAN: object | None = None
+
+
+def _load_wb_plan() -> object | None:
+    """延迟加载 `tools/wb_plan.py`（本模块不 import 它，免得成环）。"""
+    global _WB_PLAN
+    if _WB_PLAN is not None:
+        return _WB_PLAN
+    src = ROOT / "tools" / "wb_plan.py"
+    if not src.is_file():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("wb_plan_under_landing", src)
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod          # ★ 必须在 exec_module 之前
+        spec.loader.exec_module(mod)
+    except Exception:
+        return None
+    _WB_PLAN = mod
+    return mod
+
+
+def _shard_paths(wt: pathlib.Path) -> list[pathlib.Path]:
+    """现存台账分片（`docs/backlog/*.toml`）；没有分片环境 ⇒ 空表。"""
+    wb = _load_wb_plan()
+    if wb is None:
+        return []
+    try:
+        return list(wb.shard_files(wt / "docs" / "backlog"))
+    except Exception:
+        return []
+
+
+def _queue_files(wt: pathlib.Path) -> list[tuple[str, pathlib.Path]]:
+    """队列的**全部来源文件**：分片优先，总表兜底（`[(仓库相对路径, 路径)]`）。
+
+    ★ 卡 E89：总表在启用分片后是**生成物**，新卡先出现在分片里 —— 只读总表会漏卡。
+    """
+    master = wt / "docs" / "workbacklog.toml"
+    out: list[tuple[str, pathlib.Path]] = []
+    for p in _shard_paths(wt):
+        out.append((p.relative_to(wt).as_posix(), p))
+    if master.is_file():
+        out.append(("docs/workbacklog.toml", master))
+    return out
+
+
+def _queue_rels(wt: pathlib.Path) -> list[str]:
+    """队列全部来源文件的仓库相对路径（给 `allow` 用）。"""
+    return [rel for rel, _ in _queue_files(wt)]
+
+
+def _queue_file_for(wt: pathlib.Path, card_id: str) -> pathlib.Path:
+    """这张卡的 status 该写进哪个文件：分片启用且分区判得出 ⇒ 那一片；否则总表。"""
+    master = wt / "docs" / "workbacklog.toml"
+    wb = _load_wb_plan()
+    if wb is not None:
+        try:
+            folder = wt / "docs" / "backlog"
+            if wb.shards_present(folder):
+                p = wb.shard_file_for(card_id, directory=folder)
+                if p is not None and p.is_file():
+                    return p
+        except Exception:
+            pass
+    return master
+
+
 # ---------------------------------------------------------------- 卡 204（T-G311）：落地即翻 status
 def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str, *,
                      require_task_match: bool = True) -> str:
@@ -528,7 +599,8 @@ def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str, *,
       ⇒ 打印一句并**跳过**（不许崩、不许猜、不许新建卡）。
 
     返回**三态**（卡 E61 · T-AG519：翻不动不许沉默）：
-    · `"flipped"`    真翻了（调用方应把 `docs/workbacklog.toml` 加进 `allow`）；
+    · `"flipped"`    真翻了（调用方应把**被翻的那份队列文件**加进 `allow` ——
+      ★ 卡 E89：可能是 `docs/backlog/<分区>.toml`，`_queue_rels(wt)` 给全量）；
     · `"not-needed"` 按判据本就不该翻（已是 done / 登记型提交 / 卡不存在）；
     · `"unflippable"` 该翻却翻不动（读不到 status 行）。
       ★ 为什么不能一个 `False`：原写法把「本来就不该翻」与
@@ -536,55 +608,65 @@ def flip_card_status(wt: pathlib.Path, card_id: str | None, task: str, *,
       —— E60 那次就是这样静默跳过的。
     """
     backlog_rel = "docs/workbacklog.toml"
-    backlog_path = wt / backlog_rel
-    if not backlog_path.is_file():
+    files = _queue_files(wt)
+    if not files:
         print(f"  [队列] 找不到 {backlog_rel} ⇒ 跳过翻 status")
         return "not-needed"
-    raw = backlog_path.read_bytes()
-    lines = _split_blocks(raw)
-    # ★ 卡 E1（T-AG443）：逐块解析抽成 `_scan_blocks` —— `--preflight` 的
-    #   「队列卡块有 status 行」用的是**同一套**口径（不许复制第二份，卡 E1 判据 5）。
-    for _start, _end, fields in _scan_blocks(lines):
-        cid_val = fields["id"]
-        task_val = fields["task"]
-        is_target = ((cid_val == card_id) if card_id is not None
-                     else (task_val == task))
-        if not is_target:
-            continue
-        if require_task_match and task_val != task:
-            print(f"  [队列] 卡 {cid_val}：--task={task} ≠ 卡.task={task_val}"
-                  f"（登记型提交）⇒ 不翻 status")
-            return "not-needed"
-        status_idx = fields["status_idx"]
-        status_val = fields["status"]
-        if status_idx is None or status_val is None:
-            print(f"  [队列] 卡 {cid_val}：找不到 status 行 ⇒ **翻不动**")
-            return "unflippable"
-        if status_val == "done":
-            print(f"  [队列] 卡 {cid_val}：已是 done ⇒ 跳过")
-            return "not-needed"
-        # ★ 卡 E81（T-AG586）：台账只有一份 ⇒ 拿**不看端口段**的台账锁，并用
-        #   同一个原子写（`os.replace` 带重试：Windows 上与并发读者互撞实测首试
-        #   失败 84%）。锁外已经扫过一遍；进锁后按同一套 `_scan_blocks` 重扫，
-        #   在**最新字节**上改那一行 —— 否则会拿旧行顶掉别人刚翻好的卡。
-        with ledger.Hold(ledger.lock_path(ledger.main_root(wt))):
-            fresh = _split_blocks(backlog_path.read_bytes())
-            for _s2, _e2, f2 in _scan_blocks(fresh):
-                if f2["id"] != cid_val or f2["status_idx"] is None:
-                    continue
-                cur = fresh[f2["status_idx"]].decode("utf-8", "replace")
-                fresh[f2["status_idx"]] = re.sub(
-                    r'(status\s*=\s*)"[^"]*"', r'\1"done"', cur).encode("utf-8")
+    # ★ 卡 E89：先按「分片优先 → 总表」找目标卡（分片里的新卡总表里还没有）。
+    path = wt / backlog_rel
+    fields: dict[str, object] | None = None
+    for _rel, _path in files:
+        for _start, _end, _f in _scan_blocks(_split_blocks(_path.read_bytes())):
+            _cid = _f["id"]
+            _is_target = ((_cid == card_id) if card_id is not None
+                          else (_f["task"] == task))
+            if _is_target:
+                path, fields = _path, _f
                 break
-            ledger.write_atomic(backlog_path, b"".join(fresh))
-        print(f"  [队列] 卡 {cid_val}：{status_val} → done"
-              f"（这一笔是它的落地）")
-        return "flipped"
-    if card_id is not None:
-        print(f"  [队列] 找不到卡 {card_id} ⇒ 跳过翻 status")
-    else:
-        print(f"  [队列] 找不到 task={task} 的卡 ⇒ 跳过翻 status")
-    return "not-needed"
+        if fields is not None:
+            break
+    if fields is None:
+        if card_id is not None:
+            print(f"  [队列] 找不到卡 {card_id} ⇒ 跳过翻 status")
+        else:
+            print(f"  [队列] 找不到 task={task} 的卡 ⇒ 跳过翻 status")
+        return "not-needed"
+    cid_val = fields["id"]
+    task_val = fields["task"]
+    if require_task_match and task_val != task:
+        print(f"  [队列] 卡 {cid_val}：--task={task} ≠ 卡.task={task_val}"
+              f"（登记型提交）⇒ 不翻 status")
+        return "not-needed"
+    status_idx = fields["status_idx"]
+    status_val = fields["status"]
+    if status_idx is None or status_val is None:
+        print(f"  [队列] 卡 {cid_val}：找不到 status 行 ⇒ **翻不动**")
+        return "unflippable"
+    if status_val == "done":
+        print(f"  [队列] 卡 {cid_val}：已是 done ⇒ 跳过")
+        return "not-needed"
+    # ★ 卡 E89：翻的是**这张卡所在的那一片**（分片区 + 总表两份都有的过渡期，
+    #   分片才是权威 —— 只翻总表会在下次 merge 时被分片顶回来）。
+    target = _queue_file_for(wt, str(cid_val))
+    if not target.is_file():
+        target = path
+    # ★ 卡 E81（T-AG586）：台账只有一份 ⇒ 拿**不看端口段**的台账锁，并用
+    #   同一个原子写（`os.replace` 带重试：Windows 上与并发读者互撞实测首试
+    #   失败 84%）。锁外已经扫过一遍；进锁后按同一套 `_scan_blocks` 重扫，
+    #   在**最新字节**上改那一行 —— 否则会拿旧行顶掉别人刚翻好的卡。
+    with ledger.Hold(ledger.lock_path(ledger.main_root(wt))):
+        fresh = _split_blocks(target.read_bytes())
+        for _s2, _e2, f2 in _scan_blocks(fresh):
+            if f2["id"] != cid_val or f2["status_idx"] is None:
+                continue
+            cur = fresh[f2["status_idx"]].decode("utf-8", "replace")
+            fresh[f2["status_idx"]] = re.sub(
+                r'(status\s*=\s*)"[^"]*"', r'\1"done"', cur).encode("utf-8")
+            break
+        ledger.write_atomic(target, b"".join(fresh))
+    print(f"  [队列] 卡 {cid_val}：{status_val} → done"
+          f"（{target.relative_to(wt).as_posix()}；这一笔是它的落地）")
+    return "flipped"
 
 
 # -------------------------------------------------- 卡 228（T-G344）：批模式按栅栏成员翻
@@ -1004,11 +1086,13 @@ def _scan_blocks(lines: list[bytes]) -> list[tuple[int, int, dict[str, object]]]
 
 def backlog_blocks(wt: pathlib.Path) -> list[dict[str, object]] | None:
     r"""读取卡树队列的全部卡块（**只读**）；树里没有队列 ⇒ `None`（假仓/沙箱）。"""
-    path = wt / "docs" / "workbacklog.toml"
-    if not path.is_file():
+    files = _queue_files(wt)                 # ★ 卡 E89：分片 + 总表都读
+    if not files:
         return None
-    raw = path.read_bytes()
-    return [f for _s, _e, f in _scan_blocks(_split_blocks(raw))]
+    out: list[dict[str, object]] = []
+    for _rel, path in files:
+        out.extend(f for _s, _e, f in _scan_blocks(_split_blocks(path.read_bytes())))
+    return out
 
 
 def parse_text_doc(text: pathlib.Path) -> tuple[dict[str, str], str]:
@@ -1675,48 +1759,49 @@ def _card_files_from_backlog(wt: pathlib.Path, card_id: str | None, task: str) -
     找不到 ⇒ 空列表（不崩、不猜）。
     """
     import re
-    backlog_path = wt / "docs" / "workbacklog.toml"
-    if not backlog_path.is_file():
+    files = _queue_files(wt)
+    if not files:
         return []
-    raw = backlog_path.read_bytes()
-    lines = _split_blocks(raw)
     kv = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
-    n = len(lines)
-    i = 0
-    while i < n:
-        if lines[i].decode("utf-8", "replace").strip() != "[[cards]]":
-            i += 1
-            continue
-        cid_val: str | None = None
-        task_val: str | None = None
-        files_start: int | None = None
-        j = i + 1
-        while j < n:
-            t = lines[j].decode("utf-8", "replace").strip()
-            if t == "[[cards]]" or (t.startswith("[") and not t.startswith("[[")):
-                break
-            m = kv.match(t)
-            if m:
-                if m.group(1) == "id":
-                    cid_val = m.group(2)
-                elif m.group(1) == "task":
-                    task_val = m.group(2)
-            if t.startswith("files"):
-                files_start = j
-            j += 1
-        is_target = ((cid_val == card_id) if card_id is not None
-                     else (task_val == task))
-        if is_target and files_start is not None:
-            out: list[str] = []
-            for k in range(files_start + 1, j):
-                ln = lines[k].decode("utf-8", "replace").strip()
-                if ln.startswith("]"):
+    for _rel, backlog_path in files:
+        raw = backlog_path.read_bytes()
+        lines = _split_blocks(raw)
+        n = len(lines)
+        i = 0
+        while i < n:
+            if lines[i].decode("utf-8", "replace").strip() != "[[cards]]":
+                i += 1
+                continue
+            cid_val: str | None = None
+            task_val: str | None = None
+            files_start: int | None = None
+            j = i + 1
+            while j < n:
+                t = lines[j].decode("utf-8", "replace").strip()
+                if t == "[[cards]]" or (t.startswith("[") and not t.startswith("[[")):
                     break
-                fm = re.match(r'"([^"]*)"', ln)
-                if fm:
-                    out.append(fm.group(1))
-            return out
-        i = j
+                m = kv.match(t)
+                if m:
+                    if m.group(1) == "id":
+                        cid_val = m.group(2)
+                    elif m.group(1) == "task":
+                        task_val = m.group(2)
+                if t.startswith("files"):
+                    files_start = j
+                j += 1
+            is_target = ((cid_val == card_id) if card_id is not None
+                         else (task_val == task))
+            if is_target and files_start is not None:
+                out: list[str] = []
+                for k in range(files_start + 1, j):
+                    ln = lines[k].decode("utf-8", "replace").strip()
+                    if ln.startswith("]"):
+                        break
+                    fm = re.match(r'"([^"]*)"', ln)
+                    if fm:
+                        out.append(fm.group(1))
+                return out
+            i = j
     return []
 
 
@@ -1952,37 +2037,37 @@ def _integrate_multi_tree(into_wt: pathlib.Path, batch_id: str,
         card_files_map[mid] = tuple(cfiles)
         member_by_id[mid] = m
     # 找各成员卡的 tree（从 backlog）
-    backlog_path = into_wt / "docs" / "workbacklog.toml"
-    if not backlog_path.is_file():
+    block_sources = _queue_files(into_wt)
+    if not block_sources:
         return True
     import re
-    raw = backlog_path.read_bytes()
-    lines = _split_blocks(raw)
     kv = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
     blocks: list[tuple[str, str]] = []   # backlog 里的 (卡号, 声明的树)
-    n = len(lines)
-    i = 0
-    while i < n:
-        if lines[i].decode("utf-8", "replace").strip() != "[[cards]]":
-            i += 1
-            continue
-        cid_val: str | None = None
-        tree_val: str | None = None
-        j = i + 1
-        while j < n:
-            t = lines[j].decode("utf-8", "replace").strip()
-            if t == "[[cards]]" or (t.startswith("[") and not t.startswith("[[")):
-                break
-            m2 = kv.match(t)
-            if m2:
-                if m2.group(1) == "id":
-                    cid_val = m2.group(2)
-                elif m2.group(1) == "tree":
-                    tree_val = m2.group(2)
-            j += 1
-        if cid_val and tree_val:
-            blocks.append((cid_val, tree_val))
-        i = j
+    for _rel, backlog_path in block_sources:
+        lines = _split_blocks(backlog_path.read_bytes())
+        n = len(lines)
+        i = 0
+        while i < n:
+            if lines[i].decode("utf-8", "replace").strip() != "[[cards]]":
+                i += 1
+                continue
+            cid_val: str | None = None
+            tree_val: str | None = None
+            j = i + 1
+            while j < n:
+                t = lines[j].decode("utf-8", "replace").strip()
+                if t == "[[cards]]" or (t.startswith("[") and not t.startswith("[[")):
+                    break
+                m2 = kv.match(t)
+                if m2:
+                    if m2.group(1) == "id":
+                        cid_val = m2.group(2)
+                    elif m2.group(1) == "tree":
+                        tree_val = m2.group(2)
+                j += 1
+            if cid_val and tree_val:
+                blocks.append((cid_val, tree_val))
+            i = j
 
     # ★ 卡 E13（T-AG464）：匹配**不许猜**。本函数的历史口径是「卡号里的数字相等就算同一个成员」，
     #   而 `G1` / `F1` / `E1` / `B1` / `D1` 的数字键**都是 1** ⇒ 批里只有成员 G1 时，
@@ -2629,8 +2714,9 @@ def main(argv: list[str] | None = None) -> int:
             git("reset", cwd=wt, check=False)
             return 2
         if _flipped:
-            if "docs/workbacklog.toml" not in allow:
-                allow.append("docs/workbacklog.toml")
+            for _qrel in _queue_rels(wt):        # ★ 卡 E89：翻了哪几份就带哪几份
+                if _qrel not in allow:
+                    allow.append(_qrel)
             staged, extra = staged_and_extra(wt, allow)  # 翻了账 ⇒ 重暂存、重列清单
     else:
         _verdict = flip_card_status(wt, a.card, a.task)
@@ -2638,8 +2724,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"★ 队列与台账不一致 ⇒ 停手：卡 {a.card} 该翻 status 却翻不动")
             git("reset", cwd=wt, check=False)
             return 2
-        if _verdict == "flipped" and "docs/workbacklog.toml" not in allow:
-            allow.append("docs/workbacklog.toml")
+        if _verdict == "flipped":
+            for _qrel in _queue_rels(wt):        # ★ 卡 E89：翻了哪几份就带哪几份
+                if _qrel not in allow:
+                    allow.append(_qrel)
         staged, extra = staged_and_extra(wt, allow)
     # ★ 卡 E76（`T-AG579`）：⑤′.5 重算**现算文档** —— 上面刚翻完账，台账的 done/pending
     #   分布变了 ⇒ `docs/subsystems/pool/README.md` 的「队列卡数」当场过期。那条判据只在

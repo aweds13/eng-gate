@@ -65,11 +65,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import wb_plan  # noqa: E402 —— 台账分片（卡 E89）：分片目录 / 分片读法只此一份
 from pool.no_window import NO_WINDOW  # noqa: E402 —— 子进程不弹窗的唯一真源（卡 148）
 from pool.plan import (  # noqa: E402 —— 队列解析只此一份（卡 106）
     Backlog,
     BacklogError,
-    load_backlog,
 )
 
 if TYPE_CHECKING:
@@ -79,6 +79,15 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BACKLOG = ROOT / "docs" / "workbacklog.toml"
 #: 队列文件在仓库里的相对路径 —— 簿记号口径的锚点（见模块 docstring §口径）。
 QUEUE_RELPATH = "docs/workbacklog.toml"
+
+
+def shard_relpath(queue_relpath: str = QUEUE_RELPATH) -> str:
+    """队列文件同目录下的分片目录（`docs/workbacklog.toml` ⇒ `docs/backlog`）。
+
+    卡 E89：只按路径取历史的门也得看见分片 —— 否则分片里登记的号会被当成孤儿。
+    """
+    parent, _, _ = queue_relpath.rpartition("/")
+    return f"{parent}/backlog" if parent else "backlog"
 
 EXIT_CLEAN = 0
 EXIT_FINDINGS = 1
@@ -180,7 +189,8 @@ def queue_touch_marks(repo: Path, marks: dict[str, tuple[Commit, ...]],
 
     没有 git / 队列文件从未被提交过 / 读不出 ⇒ 空集（不保护任何号，但也不会崩）。
     """
-    raw = _git(repo, "log", "--format=%H", "--", queue_relpath)
+    raw = _git(repo, "log", "--format=%H", "--", queue_relpath,
+               shard_relpath(queue_relpath))
     if raw is None:
         return set()
     touched = {line.strip() for line in raw.splitlines() if line.strip()}
@@ -291,7 +301,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        backlog = load_backlog(Path(args.backlog))
+        # 卡 E89：有分片先读分片（口径唯一在 wb_plan）；无分片退回同一条老读法。
+        backlog = wb_plan.load_sharded_backlog(
+            Path(args.backlog), Path(args.backlog).parent / "backlog")
     except BacklogError as exc:
         print(f"[FAIL] 队列读不了：{exc}", file=sys.stderr)
         return EXIT_FINDINGS

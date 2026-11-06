@@ -35,6 +35,7 @@ import subprocess
 from pathlib import Path
 
 import tomllib
+import wb_plan  # 台账分片（卡 E89）：分片目录 / 分片读法只此一份
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKLOG = ROOT / "docs" / "workbacklog.toml"
@@ -50,13 +51,15 @@ _STATUS_DONE_RE = re.compile(r'^\+status\s*=\s*"(done|failed)"')
 def _git_diff_ids(since: str) -> tuple[set[str], set[str]]:
     """窗口内 workbacklog 的 git diff 里**新增**的卡 id 与**标成 done/failed**的卡 id。
 
-    用 `git log -p --since=<窗口> -- docs/workbacklog.toml` 拿补丁，扫 `+id = "..."` 行
-    （新增条目）与 `+status = "done"/"failed"` 行（标成离开）。★ 只读 git。
+    用 `git log -p --since=<窗口> -- docs/workbacklog.toml docs/backlog` 拿补丁，扫
+    `+id = "..."` 行（新增条目）与 `+status = "done"/"failed"` 行（标成离开）。★ 只读 git。
+    ★ 卡 E89：分片启用后新卡进 `docs/backlog/*.toml` —— 历史路径必须覆盖这一层，
+      否则「到达」恒为 0（静默少记）。
     """
     try:
         out = subprocess.run(
             ["git", "-C", str(ROOT), "log", "-p", f"--since={since}",
-             "--pretty=format:%H%x1e", "--", "docs/workbacklog.toml"],
+             "--pretty=format:%H%x1e", "--", "docs/workbacklog.toml", "docs/backlog"],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             # ★ 防窗旗（卡 164）：Windows 上别弹控制台窗口（POSIX 上落到 0 = 无操作）。
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -80,13 +83,25 @@ def _git_diff_ids(since: str) -> tuple[set[str], set[str]]:
     return arrived, left
 
 
+def _queue_sources() -> list[Path]:
+    """队列的**来源文件**：`BACKLOG` 旁边有 `backlog/*.toml` 分片就只算分片（卡 E89）。
+
+    ★ 从模块级 `BACKLOG` 现推（测试会 monkeypatch 它），不另起 ROOT 常量。
+    """
+    shards = wb_plan.shard_files(BACKLOG.parent / "backlog")
+    return shards if shards else [BACKLOG]
+
+
 def load_backlog() -> list[dict]:
-    """读当前 workbacklog.toml 的全部卡（**不校验**）。读不了 ⇒ 空列表。"""
+    """读当前 workbacklog.toml（或分片）的全部卡（**不校验**）。读不了 ⇒ 空列表。"""
+    cards: list[dict] = []
     try:
-        data = tomllib.loads(BACKLOG.read_text(encoding="utf-8"))
+        for path in _queue_sources():
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            cards.extend(c for c in data.get("cards", []) if isinstance(c, dict))
     except (OSError, tomllib.TOMLDecodeError):
         return []
-    return [c for c in data.get("cards", []) if isinstance(c, dict)]
+    return cards
 
 
 def _source_of(card: dict) -> str:

@@ -11604,3 +11604,17 @@ gaps = [
 本卡全量门禁首跑（BASE=12750）唯一一条红是 `tests/test_wb_land.py::test_batch_gate_empty_paths_says_cannot_verify` 抛 `PermissionError: [WinError 5]`（`subprocess.CreateProcess` 层面，不是断言失败）；单跑该条绿（40 s），同类形态在仓里另有先例（`gates/diag/gate-E53e.log:35` 的 `test_run_bg.py`）⇒ 判为进程创建偶发错，重跑一趟复核，不归因于本卡改动。
 """,
 ]
+
+[entries."T-AG596"]
+id = "T-AG596"
+title = "台账分片启用：写侧落片、读侧认片、缺片必响"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "test:test_e89_shards_enabled.py::test_missing_shards_raise_and_name_the_gap",
+  "test:test_e89_shards_enabled.py::test_add_card_lands_in_the_partition_shard",
+  "test:test_e89_shards_enabled.py::test_real_backlog_split_then_merge_is_byte_identical",
+  "test:test_e89_readers_shard_aware.py::test_registry_files_from_backlog_sees_shard_card",
+  "text:tools/wb_plan.py::分片没覆盖总表",
+]
+gaps = "主树的台账**仍只有一份**（`docs/workbacklog.toml`：159793 B / 334 块，见提交 `da23f83b`）：本卡只把「写侧按分区落片、读侧认片、缺片必响」做出来，拆分动作本身留给下一张卡（要先跑 `python -X utf8 tools/wb_plan.py merge --execute` 它才变成派生物）。证据：`gates/diag/e89-split-probe.log`。`tools/seam_check.py:402` 与 `tests/test_card_specs_tracked.py:97` 仍走单文件 `load_backlog()`：前者在本卡域外，后者属于「卡规格在不在索引里」的另一条腿，两张都另开卡。`tools/wb_daily.py:61`、`tools/wb_batch.py:110`、`tools/wb_dispatch.py:2767` 写死总表但**已在调用侧认片**，本卡按卡规格「不许动」未碰；真启用分片后要复核这四个调用点的退回路径。"

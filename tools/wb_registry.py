@@ -10,7 +10,8 @@ r"""号池写面地基①：作业登记 CLI `tools/wb_registry.py`（卡 108 ·
     python -X utf8 tools/wb_registry.py release --card 108
 
 - `check` = **只跑守卫、不登记**（写面的"干跑"）。
-- `--files` 不给 → 按卡号从 `docs/workbacklog.toml` 查（`pool.plan.load_backlog`）；
+- `--files` 不给 → 按卡号从队列查（卡 E89：先分片 `docs/backlog/*.toml`，
+  没有分片就退回总表 `docs/workbacklog.toml` —— `wb_plan.load_sharded_backlog`）；
   ★ **查不到就拒**（"没有冲突域 ⇒ 不许派活"）—— **别猜成空域**（空域会绕过域守卫）。
 - `--tree` 不给 = 主树（`""`）。
 
@@ -23,13 +24,17 @@ import argparse
 import json
 import sys
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import wb_plan  # noqa: E402 —— 台账分片（卡 E89）：分片目录 / 分片读法只此一份
 from pool import guards, registry
-from pool.plan import BacklogError, load_backlog
+from pool.plan import BacklogError
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 class UsageError(Exception):
@@ -39,10 +44,16 @@ class UsageError(Exception):
 # ---------------------------------------------------------------- 取冲突域
 
 
-def files_from_backlog(card: str) -> list[str]:
-    """按卡号从 backlog 查冲突域；**查不到就拒** —— 不猜成空域（空域会绕过域守卫）。"""
+def files_from_backlog(card: str, root: Path | None = None) -> list[str]:
+    """按卡号从队列查冲突域；**查不到就拒** —— 不猜成空域（空域会绕过域守卫）。
+
+    卡 E89：台账已分片（`docs/backlog/*.toml`）时先读分片，口径唯一在
+    `wb_plan.load_sharded_backlog`；没有分片就退回总表 —— 旧行为一字不变。
+    """
+    base = Path(root) if root is not None else ROOT
     try:
-        backlog = load_backlog()
+        backlog = wb_plan.load_sharded_backlog(
+            base / "docs" / "workbacklog.toml", base / "docs" / "backlog")
     except BacklogError as exc:
         raise UsageError(f"读不了 backlog：{exc}") from exc
     hit = backlog.by_id().get(str(card))

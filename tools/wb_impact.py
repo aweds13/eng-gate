@@ -52,6 +52,7 @@ for _extra in (ROOT / "scripts", ROOT / "tools"):
         sys.path.insert(0, str(_extra))
 
 import run_gates as rg  # noqa: E402 —— 门 × 输入表唯一真源（只读）
+import wb_plan  # noqa: E402 —— 台账分片（卡 E89）：分片目录 / 分片读法只此一份
 from pool import review as pool_review  # noqa: E402 —— 白名单判据唯一实现
 from pool import task as pool_task  # noqa: E402 —— 任务预声明唯一真源
 
@@ -285,13 +286,26 @@ def check_domain(changed: Sequence[str], declared: Sequence[str]) -> list[str]:
 # ================================================================ 取数（--card / --task）
 
 
-def files_from_backlog(card: str) -> list[str]:
-    """`--card <卡号>`：读 `docs/workbacklog.toml` 里 `id == 卡号` 那张卡的 `files`。"""
-    path = ROOT / "docs" / "workbacklog.toml"
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
-    for c in data.get("cards", []):
-        if str(c.get("id", "")) == str(card):
-            return [str(f) for f in c.get("files", [])]
+def _queue_files(base: Path) -> list[Path]:
+    """队列的来源文件：有分片（`docs/backlog/*.toml`）就用分片，否则总表。
+
+    卡 E89：分片在就是台账的现在时；总表只是合并产物，可能还没合出来。
+    """
+    shards = wb_plan.shard_files(base / "docs" / "backlog")
+    return shards or [base / "docs" / "workbacklog.toml"]
+
+
+def files_from_backlog(card: str, root: Path | None = None) -> list[str]:
+    """`--card <卡号>`：读队列里 `id == 卡号` 那张卡的 `files`。
+
+    卡 E89：队列 = 分片 `docs/backlog/*.toml`（有分片时）或总表 `docs/workbacklog.toml`。
+    """
+    base = Path(root) if root is not None else ROOT
+    for path in _queue_files(base):
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        for c in data.get("cards", []):
+            if str(c.get("id", "")) == str(card):
+                return [str(f) for f in c.get("files", [])]
     raise UsageError(f"`docs/workbacklog.toml` 里没有卡 {card}（这张卡是不是已经移出了？）")
 
 
