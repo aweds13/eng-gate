@@ -5380,3 +5380,18 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "A320"
+task = "T-AG597"
+title = "号池快照新鲜度判据：过期要响亮点名"
+tree = ".wt/A320n"
+spec = "复盘/卡/卡A320-号池快照新鲜度判据.md"
+files = [
+  "tools/pool/models.py",
+  "tools/wb_dispatch.py",
+  "tests/test_pool_models.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
