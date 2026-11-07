@@ -5435,3 +5435,22 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E91"
+task = "T-AG599"
+title = "号池的签到与额度读数和真机对齐：三个客户端按真实形状判"
+tree = ""
+spec = "复盘/卡/卡E91-号池签到与额度对齐真机.md"
+files = [
+  "tools/pool/checkin.py",
+  "tools/pool_accounts.py",
+  "tools/pool/platforms.toml",
+  "tools/pool/sticky.py",
+  "tests/test_pool_accounts.py",
+  "tests/test_pool_checkin.py",
+  "docs/subsystems/pool/modules.toml"
+]
+depends = []
+risk = "mid"
+status = "pending"
