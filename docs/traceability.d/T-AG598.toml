@@ -1,0 +1,13 @@
+[entries."T-AG598"]
+id = "T-AG598"
+title = "门禁读数补一维：记下这一趟按哪种分片跑的"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "test:test_run_gates_payload.py::test_payload_records_pytest_dist",
+  "test:test_run_gates_payload.py::test_default_dist_is_worksteal",
+  "text:scripts/run_gates.py::def pytest_dist(",
+  "text:docs/traceability.d/T-AG484.toml::status = \"done\"",
+]
+gaps = "- `scripts/run_gates.py` 只把 `pytest_dist()` 记进 `last.json`，**没有**把「这一趟按哪种 dist 跑出来多少墙钟」写进任何产物 —— 分片策略的实测对照表（E30 判据 2）仍然缺；要拿它当调参依据，得先补`gates/diag/`之外的可入库读数。- E31 的覆盖率护栏（九条 + default/sysmon/--no-cov 三档墙钟）**整段没落**，本卡按卡规格明写不接管；那段仍以 `T-AG485` 的 `todo` 形态挂在那里（见 docs/traceability.d/T-AG485.toml）。- `docs/doc-debt-baseline.toml` 的 `drift` 一格仍是 379、实测 541 —— 它是可漂移量、不参与 ratchet，本卡不动它（上调等于把判据改软）。"
+

@@ -315,8 +315,8 @@ MAX_PYTEST_WORKERS = 8
 WORKER_MEM_GB = 0.5
 # 档口（可用内存 GB, worker 数）；**从高到低**匹配，第一条命中的就是档位。
 MEM_TIERS: tuple[tuple[float, int], ...] = ((10.0, 8), (6.0, 6), (4.0, 4), (2.5, 2))
-# 分片策略：`TF_PYTEST_DIST` 可覆盖；默认取实测最快的那一档（卡 E30 §判据 2，
-# 读数见 `gates/diag/bench-e30-summary.txt`）。
+# 分片策略：`TF_PYTEST_DIST` 可覆盖；默认取实测最快的那一档（卡 E30 §判据 2 的三档墙钟读数
+# 已并入卡 E50 的验收记录，本仓不保留单独的 bench 摘要文件）。
 DIST_MODES: tuple[str, ...] = ("load", "loadfile", "worksteal", "loadscope", "loadgroup")
 DEFAULT_PYTEST_DIST = "worksteal"
 # 锁文件里没写 `lease` 时的回退租约（与 `gates/diag/gate_lock.py` 的默认值同口径）。
@@ -2787,6 +2787,8 @@ def main() -> int:
         #   让"我手打 1 个 worker（pytest 612s 占全趟 86%）"从静默变成会被发现的事。
         #   ★ worker 数只读 `pytest_workers()` 一处（不写第二份口径）。
         "workers": pytest_workers(),
+        # ★ 卡 E30 尾巴：分片策略也要落盘 —— 光记 worker 数记不出「这一趟按哪种 dist 跑的」。
+        "pytest_dist": pytest_dist(),
         # ★ 卡 E65（T-AG524）：这趟跑的时候，同一台机上还有多少同类进程。
         #   没有它，「红门是代码错还是机器忙」在产物里分不开（判据 1）。
         "co_tenants": co_tenants,

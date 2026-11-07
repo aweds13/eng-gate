@@ -1,3 +1,9 @@
+## 2026-11-07 · 门禁读数补一维：`last.json` 记下这一趟按哪种分片跑的（卡 E90，T-AG598）
+- 卡 E30（T-AG484）已被用户 2026-10-25 裁定并入 E50（落地笔 b659e2df），本卡只收剩下的两条尾巴。
+- `scripts/run_gates.py` 的 payload 在 `"workers"` 之后补 `"pytest_dist": pytest_dist()`；同一文件里那条指向 gates/diag 下 bench-e30-summary.txt 的悬空注释改写，不再点名不存在的文件。
+- 新文件 `tests/test_run_gates_payload.py` 两条钉子：两键齐全且先后有序；`TF_PYTEST_DIST` 未设时默认仍是 worksteal。
+- `docs/traceability.d/T-AG484.toml` 由 deferred 转 done，`gaps` 追加收口段（只追加、不改既有文字），把「哪些落成了、哪些没落」写清楚。
+- `docs/doc-debt-baseline.toml` 的 `dead_refs` 按实测从 148 降到 147（新测试文件把卡 E44 里一条死指针转活了）。
 ## 2026-11-06 · 台账分片启用：写侧落片、读侧认片、缺片必响（卡 E89，T-AG596）
 台账过去只有**一份** 334 张卡的总表，多主控同时立卡/翻账只能靠一把锁串行；而一旦按分区拆成 `docs/backlog/<分区>.toml`，只建一片就会**静默少卡**（实测只建 `A.toml` 时读队列返 226 张、真值 334，22 道门没有一道看队列 ⇒ 少 108 张卡没人会红）。
 - `tools/wb_plan.py`：新增 `shard_files` / `shards_present` / `shard_file_for` / `missing_in_shards` / `shard_header`；`load_sharded_backlog()` 加**常开**覆盖守卫（缺片 ⇒ `BacklogError` 逐个点名；零卡总表不算缺卡）。

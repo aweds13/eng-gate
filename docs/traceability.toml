@@ -8750,13 +8750,13 @@ gaps = "- **`chat-icon-stop` 没有真机读数**：面板当下 30 个任务项
 id = "T-AG484"
 title = "并行度自适应与分片策略（T-AG484）"
 group = "ENGINEERING"
-status = "deferred"
+status = "done"
 evidence = [
   "file:复盘/卡/卡E30-并行度自适应与分片策略.md",
   "file:scripts/run_gates.py",
-  "file:tests/test_run_gates_workers.py",
+  "text:scripts/run_gates.py::def workers_for(",
 ]
-gaps = "- 档口阈值是拍的（10/6/4/2.5 GB），没有做过「压到换页再退档」的压力验证，见 `scripts/run_gates.py` 的 `pytest_workers()`。- 「在跑多少个 worker 就扣多少」读的是 `gates/diag/*.lock` 与队列快照，E34 落地前队列文件不存在，只能退化成看 lock，见 `gates/diag/gate_lock.py`。- 分片策略三档实测受机器负载影响，读数只在同机同时段可比，见本票 §判据 2。 ★ 2026-10-25 用户裁定：本卡并入 **E50**（并行度与门禁编排三件合一）—— 同改 `scripts/run_gates.py`，与 E32/E33 串行排队不如一张卡。判据逐字保留在 `复盘/卡/卡E50-并行度与门禁编排三件合一.md`。"
+gaps = "- 档口阈值是拍的（10/6/4/2.5 GB），没有做过「压到换页再退档」的压力验证，见 `scripts/run_gates.py` 的 `pytest_workers()`。- 「在跑多少个 worker 就扣多少」读的是 `gates/diag/*.lock` 与队列快照，E34 落地前队列文件不存在，只能退化成看 lock，见 `gates/diag/gate_lock.py`。- 分片策略三档实测受机器负载影响，读数只在同机同时段可比，见本票 §判据 2。 ★ 2026-10-25 用户裁定：本卡并入 **E50**（并行度与门禁编排三件合一）—— 同改 `scripts/run_gates.py`，与 E32/E33 串行排队不如一张卡。判据逐字保留在 `复盘/卡/卡E50-并行度与门禁编排三件合一.md`。★ 2026-11-07 收口：并行度自适应（`workers_for`/`MEM_TIERS`/`inflight_workers`/`pytest_dist`/`parallel_note`）已由 E50 落地笔 `b659e2df` 吸收；本卡只剩「payload 记 `pytest_dist`」与「清一条指向不存在 bench 文件的悬空注释」两件，已在 `tests/test_run_gates_payload.py` 钉住。原判据 2 的三档对照表与合并自 E31 的覆盖率段**没有**落，另立卡。"
 
 [entries."T-AG485"]
 id = "T-AG485"
@@ -11632,3 +11632,16 @@ evidence = [
   "text:tools/wb_dispatch.py::def snapshot_stale_problem",
 ]
 gaps = "- `snapshot_stale_hours` 只是个常量镜像（`STALE_HOURS = 24`），没有按号池分档；哪个池该容忍更长，等有实测再说，见 `tools/pool/models.py`。- 提示只落在 `preflight()` 的 stderr，派活器 `--detach` 的判决文件里不会留痕；要让「当时快照过期多久」进判决，得改判决产出方，见 `tools/wb_dispatch.py`。- 号池侧真正重新探测仍要人跑 `pool_models.py --check`（联网、写快照）；本卡只负责「别拿旧的当现在」，见 `复盘/卡/卡A320-号池快照新鲜度判据.md`。"
+
+[entries."T-AG598"]
+id = "T-AG598"
+title = "门禁读数补一维：记下这一趟按哪种分片跑的"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "test:test_run_gates_payload.py::test_payload_records_pytest_dist",
+  "test:test_run_gates_payload.py::test_default_dist_is_worksteal",
+  "text:scripts/run_gates.py::def pytest_dist(",
+  "text:docs/traceability.d/T-AG484.toml::status = \"done\"",
+]
+gaps = "- `scripts/run_gates.py` 只把 `pytest_dist()` 记进 `last.json`，**没有**把「这一趟按哪种 dist 跑出来多少墙钟」写进任何产物 —— 分片策略的实测对照表（E30 判据 2）仍然缺；要拿它当调参依据，得先补`gates/diag/`之外的可入库读数。- E31 的覆盖率护栏（九条 + default/sysmon/--no-cov 三档墙钟）**整段没落**，本卡按卡规格明写不接管；那段仍以 `T-AG485` 的 `todo` 形态挂在那里（见 docs/traceability.d/T-AG485.toml）。- `docs/doc-debt-baseline.toml` 的 `drift` 一格仍是 379、实测 541 —— 它是可漂移量、不参与 ratchet，本卡不动它（上调等于把判据改软）。"
