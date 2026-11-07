@@ -5411,3 +5411,27 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E92"
+task = "T-AG600"
+title = "云门禁泛用化：抽仓无关骨架 + 每仓一份 profile"
+tree = ".wt/E92"
+spec = "复盘/卡/卡E92-云门禁骨架与profile.md"
+files = [
+  "scripts/cloud/run_gate.sh",
+  "scripts/cloud/profile.py",
+  "scripts/cloud/profiles/engineering.toml",
+  "scripts/cloud/profiles/openmaic.toml",
+  "tests/_cloud_profile.py",
+  "tests/test_cloud_profiles.py",
+  "tests/test_cloud_sync.py",
+  "tests/test_ci_portability.py",
+  "tests/test_cloud_product_freshness.py",
+  "docs/subsystems/ci/云门禁机.md",
+  "docs/subsystems/ci/云门禁-可复现性清单.md",
+  "docs/traceability.d/T-AG591.toml"
+]
+depends = []
+risk = "mid"
+status = "pending"
