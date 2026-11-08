@@ -5470,3 +5470,15 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "G9"
+task = "T-AG602"
+title = "技能泛用化：本仓表述下沉 references，入口按页只留动作"
+tree = ""
+spec = "复盘/卡/卡G9-技能泛用化与写文档指令.md"
+files = [
+]
+depends = []
+risk = "mid"
+status = "pending"
