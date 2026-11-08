@@ -5454,3 +5454,20 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E93"
+task = "T-AG601"
+title = "复核器两类假红：短 sha 字面比 + 派生物清单漏收口链自有产物"
+tree = ".wt/E93"
+spec = "复盘/卡/卡E93-复核器假红与行尾文书.md"
+files = [
+  "tools/wb_review.py",
+  "tests/test_wb_review.py",
+  "复盘/交接.d/T-AG600.md",
+  "复盘/交接-重构进度.md",
+  "复盘/卡/卡E92-云门禁骨架与profile.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
