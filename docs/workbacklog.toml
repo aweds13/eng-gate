@@ -5465,7 +5465,6 @@ files = [
   "tools/wb_review.py",
   "tests/test_wb_review.py",
   "复盘/交接.d/T-AG600.md",
-  "复盘/交接-重构进度.md",
   "复盘/卡/卡E92-云门禁骨架与profile.md"
 ]
 depends = []
