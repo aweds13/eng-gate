@@ -11676,3 +11676,25 @@ evidence = [
   "test:test_cloud_product_freshness.py::test_run_gate_verifies_and_deletes_stale_product",
 ]
 gaps = "- `tools/gate_pool.py:733-740` 的 `_gate_env()` **无条件**要 `TF_PROJECTS_TOML`（空就抛 `CloudUnreachable`），而只有 engineering 声明了这个键 —— 第二个仓走落地链派活时会被一条自己 profile 没要求的守卫挡死（本轮已实测，未修：属落地链，不在本卡域）。- 骨架 5 处裸 `$P_XXX`（历史写法）在 `--render` 产物里不被替换，但真跑靠 dump 循环赋值，行为无差；本轮已把 `scripts/cloud/run_gate.sh` 里这 5 处统一成 `${P_XXX}`（独立复核 D5），渲染产物仍不是「可直接执行的脚本」（引号嵌套 D6，见 `scripts/cloud/profile.py` 的 `_PSLOT`）。- 播种源目录 `gates/diag/seed-<卡>` 仍由人/上一趟留好，骨架不生成 —— 换仓时得自己造一份绿的，否则 2/5 退 4（行为正确，但接入方要知道；工程侧口径见 `docs/subsystems/ci/云门禁机.md` 的 §3.2 与 `scripts/cloud/run_gate.sh` 的 2/5 段）。"
+
+[entries."T-AG599"]
+id = "T-AG599"
+title = "号池的签到与额度读数和真机对齐：三个客户端按真实形状判"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "test:test_pool_checkin.py::test_workbuddy_404_is_not_supported",
+  "test:test_pool_checkin.py::test_workbuddy_duplicate_claim_is_already_claimed_not_failed",
+  "test:test_pool_checkin.py::test_trae_business_failure_is_not_reported_as_claimed",
+  "test:test_pool_checkin.py::test_trae_busy_code_is_failed_with_message",
+  "test:test_pool_checkin.py::test_probe_mode_never_touches_the_verdict_bits",
+  "test:test_pool_accounts.py::test_meoo_real_platform_uses_its_own_amount_path",
+  "test:test_pool_accounts.py::test_meoo_credential_file_is_not_opened_when_gate_off",
+  "text:tools/pool/checkin.py::WB_UA_VERSION",
+  "text:tools/pool/checkin.py::TRAE_BUSY_CODE",
+  "text:tools/pool_accounts.py::def _amount_at_path(",
+  "text:tools/pool_accounts.py::def _token_from_file(",
+  "text:tools/pool/platforms.toml::CODEARTS_CLI_AK",
+  "text:tools/pool/sticky.py::route.py:627",
+]
+gaps = "- 三家平台的真实响应是用参考实现的存档夹具喂进去判的，**没有**本机真凭据打过的记录（本机 7 个平台 token 环境变量全空）；形状对不等于手上那个号真能领 —— 真机那一趟仍缺，判据见 `复盘/卡/卡E91-号池签到与额度对齐真机.md` 第 1 条。- 本机 codearts 的凭据文件里只有两个键，没有安全令牌那一项 ⇒ 需要安全令牌的路径仍未验证；`tools/pool/platforms.toml` 的 `token_env` 已按本机真名排在最前，但那条路径没有样本。- Meoo 凭据是 OAuth，池只读 accessToken、不刷新（`tools/pool_accounts.py` 的文件型 token 分支）⇒ 过期就只能报 uncertain，实测过期时回 401 已复现一次。- qoder 与 minimax 本机没有号 ⇒ `tools/pool/checkin.py` 里两条客户端只能靠参考实现的形状判，没有号就没有反向样本。"

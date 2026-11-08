@@ -12,7 +12,7 @@
 
 [meta]
 schema = 1
-updated_at = "2026-10-25"
+updated_at = "2026-11-08"
 note = "端点与坑来自 gates/diag/repos/ref/ 的五个参考仓存档；本机只有 codearts / codebuddy 有真号。"
 
 # ---------------------------------------------------------------- codearts（华为云码道）
@@ -24,7 +24,7 @@ auth_kind = "sdk-hmac-sha256"
 probe = "unsupported"
 verified = true
 base_urls = ["https://snap-access.cn-north-4.myhuaweicloud.com"]
-token_env = "TF_CODEARTS_AK/TF_CODEARTS_SK/TF_CODEARTS_SECURITY_TOKEN"
+token_env = "CODEARTS_CLI_AK/CODEARTS_CLI_SK/TF_CODEARTS_AK/TF_CODEARTS_SK"
 source = "github:anye-99/dsh-codearts-auth/src/codearts-credits.ts:20-60"
 local_archive = "gates/diag/repos/ref/dsh-codearts-auth/src_codearts-credits.ts"
 claim_flow = [
@@ -54,13 +54,16 @@ token_env = "TF_WORKBUDDY_TOKEN"
 source = "github:a1141171521/dsh-multi-agent-gateway/lib/adapters/buddy.js:79-80,1031,1081"
 local_archive = "gates/diag/repos/ref/dsh-multi-agent-gateway/lib_adapters_buddy.js"
 claim_flow = [
-  "GET  {base}/v2/billing/meter/checkin-activity-status  —— 状态",
+  "POST {base}/v2/billing/meter/checkin-activity-status  —— 状态（实测是 POST，body {}）",
   "POST {base}/v2/billing/meter/daily-checkin            —— 领取",
 ]
 quota_flow = "GET {base}/v2/billing/meter/get-user-resource"
 pitfalls = [
   "状态接口 404 ⇒ 判 not-supported（上游没这能力，不是故障）",
   "/v2/billing/meter/checkin-status 是占位路径，别当能力",
+  "每次调用都必须带 User-Agent: WorkBuddy/5.5.6 —— 网关认不出 UA 会回 code 10085（请求不合法），状态与领取都一样",
+  "重复领取的幂等判据是响应体 code=10001（不是 HTTP 状态码，实测是 400 + 该码）",
+  "业务码在顶层 code，载荷在 data；状态字段是 active / today_checked_in / today_credit（下划线）",
 ]
 
 # ---------------------------------------------------------------- qoder
@@ -96,7 +99,7 @@ auth_kind = "cookie"
 probe = "http"
 verified = false
 base_urls = ["https://api.trae.cn"]
-probe_url = "{base}/api/v2/pay/ide_user_ent_usage"
+probe_url = "{base}/trae/api/v2/pay/ide_user_ent_usage"
 unit = "credits"
 token_env = "TF_TRAE_TOKEN"
 source = "github:a1141171521/dsh-multi-agent-gateway/lib/vendor/trae/trae-credits.js:355,383"
@@ -106,7 +109,11 @@ claim_flow = [
   "POST {ug}/trae/api/v2/ug/checkin_credits/claim",
 ]
 quota_flow = "GET {ug}/trae/api/v2/pay/ide_user_ent_usage（单位 credits）；活动 {ug}/trae/api/v2/ug/activity/info"
-pitfalls = ["上游声明为流式客户端入口，非浏览器 UA 可能被拒；本机未真机验证"]
+pitfalls = [
+  "上游声明为流式客户端入口，非浏览器 UA 可能被拒；本机未真机验证",
+  "积分余额端点实测是 POST（body {require_usage:true, req_source:2}），而只读探测只会 GET ⇒ 探针可能恒 404，别据此判 not-supported",
+  "凭据形态是 Cloud-IDE-JWT（参考实现 src_trae-credits.ts 用 X-Cloud-IDE-Jwt 派生），不是 cookie 库",
+]
 
 # ---------------------------------------------------------------- minimax
 
@@ -171,6 +178,31 @@ quota_flow = "免费层零凭据即可用；过门三件事：stream:true + 请�
 pitfalls = [
   "上游没有签到接口（不是故障，别去猜路径）",
   "Authorization/x-opencode-request/x-opencode-project 去掉照样过，缺了那三件事才是 403",
+]
+
+# ---------------------------------------------------------------- meoo（阿里秒悟，本机实测 2026-11-08）
+
+[platform.meoo]
+label = "秒悟 Meoo（阿里，本机个人版免费层）"
+supported = "quota"
+auth_kind = "file"
+probe = "http"
+verified = true
+base_urls = ["https://meoo.com"]
+probe_url = "{base}/open/v1/cli-compat/account/points"
+amount_path = "data.account.availableBalance"
+token_env = ""
+token_file = "~/.meoo/credentials.json"
+token_key = "accessToken"
+unit = "积分"
+source = "local:npm:@aliyun-meoo/cli/dist/commands/account.js:83"
+claim_flow = []
+quota_flow = "GET {base}/open/v1/cli-compat/account/points（Authorization 头带 OAuth 令牌，读自 ~/.meoo/credentials.json 的 accessToken）⇒ data.account.availableBalance；另有 /account/entitlement 给 planCode 与 benefits"
+pitfalls = [
+  "额度真值是 data.account.availableBalance，不是 totalGranted - totalConsumed，更不是 totalGranted（后者把已用掉的也算成「还有」；本机实测 56958 / 61000 / 42）",
+  "CLI 的 OAuth 令牌只能打 /open/ 开头的接口：别的路径被 CLI 自己的 apiClient 拒成 OPENAPI_ROUTE_REQUIRED「业务 Access Token 不能调用内部接口」",
+  "accessTokenExpiresAt 是毫秒时间戳；过期就 401，本仓**不实现 refresh**（刷一次会把 CLI 自己那份 refresh token 轮换掉，见卡 A335），过期只能人重跑 meoo login",
+  "上游**没有签到接口**（全量 grep 无 check-in 子命令）；daily_login 那 2000 积分是登录即赠，不是可领动作",
 ]
 
 # ---------------------------------------------------------------- codebuddy（本机实测，参考仓无适配器）

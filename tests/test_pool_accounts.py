@@ -673,3 +673,114 @@ def test_mcp_account_status_is_offline(patched, monkeypatch):
     assert data["accounts"]
     assert "账号账本" in text
 
+
+# -------------------------------------------- ㉔ meoo：文件型凭据 + 显式额度路径
+
+
+MEOO_BODY = {
+    "success": True,
+    "data": {
+        "account": {
+            "userId": 1278407974428800,
+            "availableBalance": 56958,
+            "frozenBalance": 0,
+            "totalGranted": 61000,
+            "totalConsumed": 42,
+            "totalExpired": 4000,
+        },
+        "activeGrants": [{"sourceType": "BOOST_PACK", "totalRemainingAmount": 50000}],
+    },
+}
+
+
+def test_meoo_amount_path_beats_guessing():
+    """㉔a 真形状下「猜」不到额度，但表里写了路径就取到 —— 猜出来的错数比 0 更坏。
+
+    咬法：同一条响应，`_extract_amount`（猜）取不到真值，`_amount_at_path` 取到 56958。
+    只要有人把 `amount_path` 删掉、退回猜键名，这条就红。
+    """
+    assert pa._extract_amount(MEOO_BODY) is None  # 猜不到 availableBalance（键名不在 AMOUNT_KEYS）
+    assert pa._amount_at_path(MEOO_BODY, "data.account.availableBalance") == 56958.0
+    # 一旦有哪个键名落进 AMOUNT_KEYS（比如上游把它改叫 total），猜出来的就是
+    # 总授信 61000 而不是真值 —— 这才是「猜」的危险之处：错得像个正常读数。
+    assert pa._extract_amount({"total": 61000, "availableBalance": 56958}) == 61000.0
+
+
+def test_meoo_amount_path_missing_is_uncertain_not_zero(monkeypatch):
+    """㉔b 路径走不通 ⇒ uncertain（不是 0，也不是「猜一个」）。"""
+    monkeypatch.setenv("TF_DEMO_TOKEN", "t")
+    plat = {
+        "probe": "http",
+        "probe_url": "https://example.invalid",
+        "base_urls": ["https://example.invalid"],
+        "token_env": "TF_DEMO_TOKEN",
+        "amount_path": "data.account.availableBalance",
+    }
+    out = pa.probe_account(_acc(), plat, fetch=lambda u, t: (200, {"data": {}}, ""))
+    assert out["kind"] == "uncertain"
+    assert "data.account.availableBalance" in out["detail"]
+    assert "amount" not in out
+
+
+def test_meoo_real_platform_uses_its_own_amount_path(monkeypatch):
+    """㉔c 真能力表里 meoo 那一段要能探出 56958（桩喂真响应，不联网）。"""
+    plats = pa.load_platforms()
+    plat = plats["meoo"]
+    assert plat["amount_path"] == "data.account.availableBalance"
+    monkeypatch.setattr(pa, "_token_from_file", lambda p: ("fake-token", "桩"))
+    out = pa.probe_account(_acc("meoo"), plat, fetch=lambda u, t: (200, MEOO_BODY, ""))
+    assert out["kind"] == "ok"
+    assert out["amount"] == 56958.0
+    assert out["unit"] == "积分"
+    assert "/open/v1/cli-compat/account/points" in out["detail"]
+
+
+def test_meoo_token_comes_from_credentials_file(monkeypatch, tmp_path):
+    """㉔d 文件型凭据：值从 JSON 的 `accessToken` 读，来源说明只报位点、不报值。"""
+    cred = tmp_path / "credentials.json"
+    cred.write_text(json.dumps({"accessToken": "tok-abcdefgh", "userId": "x"}), encoding="utf-8")
+    plat = {"token_file": str(cred), "token_key": "accessToken"}
+    token, where = pa._token_for(plat)
+    assert token == "tok-abcdefgh"
+    assert "accessToken" in where
+    assert "tok-abcdefgh" not in where  # 来源说明里不许回显值
+
+
+def test_meoo_token_file_missing_reports_where(monkeypatch, tmp_path):
+    """㉔e 位点不在 / JSON 坏 / 键不在 ⇒ 都回 `("", 该去哪儿找)`，且不抛。"""
+    missing = tmp_path / "nope.json"
+    token, where = pa._token_for({"token_file": str(missing)})
+    assert token == ""
+    assert str(missing) in where
+
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    token, where = pa._token_for({"token_file": str(broken), "token_key": "accessToken"})
+    assert token == ""
+    assert "not json" not in where  # 不把文件内容带出来
+
+    no_key = tmp_path / "nokey.json"
+    no_key.write_text(json.dumps({"other": "v"}), encoding="utf-8")
+    assert pa._token_for({"token_file": str(no_key)})[0] == ""
+
+
+def test_meoo_credential_file_is_not_opened_when_gate_off(monkeypatch):
+    """㉔f 闸关 ⇒ **一个凭据文件都不开**（文件这一支必须在闸后面）。
+
+    咬法：把读文件那一支换成「被调用就炸」的桩，闸关时它一次都不该被碰。
+    """
+    monkeypatch.setenv(pa.ACCOUNT_DISCOVERY_ENV, "1")
+
+    def boom(plat):
+        raise AssertionError("闸关时不许开凭据文件")
+
+    monkeypatch.setattr(pa, "_token_from_file", boom)
+    assert pa._token_for({"token_file": "~/.meoo/credentials.json"}) == ("", "")
+
+
+def test_meoo_declared_dir_is_discoverable(monkeypatch):
+    """㉔g `~/.meoo` 进 DECLARED_DIRS ⇒ discover 会报出这个位点（不是「默默忽略」）。"""
+    monkeypatch.setenv(pa.ACCOUNT_DISCOVERY_ENV, "")
+    rows = pa.discover([])
+    pointers = [r["pointer"] for r in rows]
+    assert "~/.meoo" in pointers

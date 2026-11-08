@@ -11,7 +11,7 @@ r"""卡粘性：同一张卡第二次派活别换号（卡 A345 · `T-AG547`）�
 - `STICKS_KEPT = 512` ← `affinity.go:73` 的 `sticksKept = 512`
 - `note()` 的修剪 ← `affinity.go:287` 的 `saveSticks()`：**按 `at` 倒序**取前 `STICKS_KEPT` 条
   （不是按卡号字典序 —— 要的是「最近」，不是「最小」）
-- `stick_for()` / `note()` 的 fail-open ← `tools/pool/route.py:210 apply_order()` 的同一条纪律：
+- `stick_for()` / `note()` 的 fail-open ← `tools/pool/route.py:627 apply_order()` 的同一条纪律：
   粘性是省钱的优化，判不了就当没有，**不许**因此拦派活
 - `choose()` 的四支 ← `affinity.go:527-577` 的 `affine()` 里与 pool 对得上的那几条：
   `!had ⇒ "first"`、`at < 0 ⇒ "gone"`、`Used >= SpentShare ⇒ "spent"`、
@@ -41,7 +41,7 @@ r"""卡粘性：同一张卡第二次派活别换号（卡 A345 · `T-AG547`）�
 - **不搬四个路由态**（`strict` / `resting` / `spent` / `main`）：它们读的是
   `planned.order[i].Rest` / `Order[i].Fallback` / `SpentShareOf(p.Routing)`，pool 的
   `apply_order()` 是另一个形状。本模块只有自己的 `spent`（= `used_percent >= USED_SHARE`，
-  `USED_SHARE` 从 `tools/pool/route.py:75` **取**，不硬编码 98）。
+  `USED_SHARE` 从 `tools/pool/route.py:101` **取**，不硬编码 98）。
 - **不做跨机同步**：原件有 davsync 合并，pool 只治单机（`tools/pool/task.py` 文件头立过）。
 - **`session` 只是记事本**：记下「当时用的是哪个会话」，**不保证**下次自动 `--resume`。
 - **账本查不到就 `gone`**：`--account` 的取值口径一旦变化（例如从 profile 名改成稳定 id），
@@ -217,7 +217,7 @@ def stick_for(
     r"""这张卡上次是谁答的 —— 判不了就 `None`（fail-open，**绝不抛**）。
 
     判据 4 的四条「当没有」：过期（`now - at > STICK_KEEP_S`）/ 文件不存在 / JSON 坏 /
-    形状不对 / `account == ""`。理由同 `tools/pool/route.py:210 apply_order()`：
+    形状不对 / `account == ""`。理由同 `tools/pool/route.py:627 apply_order()`：
     粘性是省钱的优化，判不了就当没有，**不许**因此拦派活。
     """
     if not isinstance(card, str) or not card:

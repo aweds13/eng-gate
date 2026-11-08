@@ -641,47 +641,142 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
 
+WB_UA_VERSION = "5.5.6"
+
+
+def _wb_headers(token: str) -> dict[str, str]:
+    """腾讯网关按 User-Agent 认客户端：认不出就回 ``code 10085``（"请求不合法"）。
+
+    参考 magpie ``internal/provider/workbuddy.go:48-56`` —— **每一次**调用都要带，
+    chat 与 billing 一样；缺了它签到一次都领不到，而 HTTP 状态码可能仍是 200。
+    """
+    return {
+        **_bearer(token),
+        "User-Agent": f"WorkBuddy/{WB_UA_VERSION}",
+        "Content-Type": "application/json",
+    }
+
+
+def _read_opt_bool(source: Mapping[str, object], key: str) -> bool | None:
+    """三态读布尔：字段不在就返回 ``None`` —— 「不知道」不是 ``False``。"""
+    if key not in source:
+        return None
+    return _read_bool(source, key)
+
+
+def _wb_code(payload: Mapping[str, object]) -> float:
+    """腾讯系业务码在**顶层** ``code``，且可能是字符串。"""
+    return _read_num(payload, "code")
+
+
+WB_ALREADY_CLAIMED_CODE = 10001
+QODER_ACTION_CLAIM_BENEFIT = "CLAIM_BENEFIT"
+QODER_CLAIM_STATUS_CLAIMABLE = "CLAIMABLE"
+QODER_CLAIM_STATUS_CLAIMED = "CLAIMED"
+TRAE_BUSY_CODE = 9074
+
+
 def claim_workbuddy(token: str, fetcher: Fetcher, *, apply: bool = True) -> Outcome:
-    """腾讯 WorkBuddy：状态端点 404 ⇒ ``not-supported``（上游确实没这能力，不是故障）。"""
-    status, text = fetcher("GET", WORKBUDDY_BASE + WORKBUDDY_STATUS_PATH, _bearer(token), None)
+    """腾讯 WorkBuddy：状态端点 404 ⇒ ``not-supported``（上游确实没这能力，不是故障）。
+
+    ★ 两条「不这么做就永远领不到」的事实（证据见 :func:`_wb_headers` 与参考实现）：
+
+    1. **每次调用都带 ``User-Agent: WorkBuddy/<版本>``**，状态查询也不例外。
+    2. **幂等判据在响应体**：重复领取是 HTTP 400 + ``code 10001``，所以**非 2xx 也要读
+       body**；反过来 HTTP 200 也可能是业务失败（``code != 0``）。
+    """
+    headers = _wb_headers(token)
+    status, text = fetcher("POST", WORKBUDDY_BASE + WORKBUDDY_STATUS_PATH, headers, b"{}")
     early = _classify_transport(status, text)
     if early is not None:
         return early
     payload = _json_or_none(text) or {}
+    code = _wb_code(payload)
+    if code == WB_ALREADY_CLAIMED_CODE:
+        return Outcome(ALREADY_CLAIMED, message="今天已领")
+    if code != 0:
+        return Outcome(FAILED, message=f"签到状态查询失败：code={code:g}", code=int(code))
     data = _read_record(payload, "data") or payload
-    if _read_bool(data, "checked_in") or _read_bool(data, "checkedIn"):
+    if _read_opt_bool(data, "active") is False:
+        return Outcome(INACTIVE, message="签到活动当前未开启")
+    if (
+        _read_bool(data, "today_checked_in")
+        or _read_bool(data, "checked_in")
+        or _read_bool(data, "checkedIn")
+    ):
         return Outcome(ALREADY_CLAIMED, message="今天已领")
     if not apply:
         return Outcome(INACTIVE, message="今天还没领（可领）")
-    status, text = fetcher("POST", WORKBUDDY_BASE + WORKBUDDY_CLAIM_PATH, _bearer(token), b"{}")
+    status, text = fetcher("POST", WORKBUDDY_BASE + WORKBUDDY_CLAIM_PATH, headers, b"{}")
+    payload = _json_or_none(text) or {}
+    code = _wb_code(payload)
+    if code == WB_ALREADY_CLAIMED_CODE:
+        return Outcome(ALREADY_CLAIMED, message="今天已领")
     early = _classify_transport(status, text)
     if early is not None:
         return Outcome(FAILED, message=f"领取失败：{early.message}", code=early.code)
-    payload = _json_or_none(text) or {}
+    if code != 0:
+        return Outcome(FAILED, message=f"领取失败：code={code:g}", code=int(code))
     data = _read_record(payload, "data") or payload
-    credit = _read_num(data, "amount") or _read_num(data, "credit") or _read_num(data, "points")
+    credit = _read_num(data, "credit")
+    if not credit:
+        credit = _read_num(data, "amount")
+    if not credit:
+        credit = _read_num(data, "points")
     return Outcome(CLAIMED, message="领取成功", credit=credit, unit=WORKBUDDY_UNIT)
 
 
+def _qoder_campaigns(payload: Mapping[str, object]) -> list[dict[str, object]]:
+    """活动列表的根键是 **``campaigns``**（参考实现 2026-10-19 实测），不是 ``data``。"""
+    raw: object = payload.get("campaigns")
+    if not isinstance(raw, list):
+        alt = payload.get("data")
+        raw = alt if isinstance(alt, list) else payload.get("items")
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, dict)]
+
+
+def _qoder_claimable(item: Mapping[str, object]) -> bool:
+    if _read_str(item, "claimStatus").upper() == QODER_CLAIM_STATUS_CLAIMABLE:
+        return True
+    return _read_bool(item, "claimable") or _read_str(item, "status").upper() in {
+        "CLAIMABLE",
+        "AVAILABLE",
+        "ENTRY",
+    }
+
+
 def claim_qoder(token: str, fetcher: Fetcher, *, apply: bool = True) -> Outcome:
-    """qoder：``campaigns`` → ``claim``；**领取成功后列表仍非空**，不能拿空列表判已领。"""
+    """qoder：``campaigns`` → ``claim``；**领取成功后列表仍非空**，不能拿空列表判已领。
+
+    ★ ``actionType`` 过滤是承重的：``VIEW_DETAILS``（纯展示活动）也会带
+    ``claimStatus: "CLAIMED"``。不先按 ``CLAIM_BENEFIT`` 过滤，就会在一个从没领过的号上
+    谎报「今天已领」（参考实现 ``lib_vendor_qoder_qoder-credits.js:100-112``）。
+    老数据没有 ``actionType`` 时不筛 —— 那时字段本身不存在，筛了就一条都不剩。
+    """
     status, text = fetcher("GET", QODER_BASE + QODER_CAMPAIGNS_PATH, _bearer(token), None)
     early = _classify_transport(status, text)
     if early is not None:
         return early
     payload = _json_or_none(text) or {}
-    items = payload.get("data") if isinstance(payload.get("data"), list) else payload.get("items")
-    campaigns = (
-        [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
-    )
-    claimable = [
-        item
-        for item in campaigns
-        if _read_bool(item, "claimable")
-        or _read_str(item, "status").upper() in {"CLAIMABLE", "AVAILABLE", "ENTRY"}
-    ]
+    campaigns = _qoder_campaigns(payload)
+    if any(_read_str(item, "actionType") for item in campaigns):
+        benefit = [
+            item
+            for item in campaigns
+            if _read_str(item, "actionType") == QODER_ACTION_CLAIM_BENEFIT
+        ]
+        if not benefit:
+            return Outcome(INACTIVE, message="这个号没有每日领取活动")
+        campaigns = benefit
+    claimable = [item for item in campaigns if _qoder_claimable(item)]
     if not claimable:
-        if campaigns:
+        claimed = any(
+            _read_str(item, "claimStatus").upper() == QODER_CLAIM_STATUS_CLAIMED
+            for item in campaigns
+        )
+        if claimed or campaigns:
             return Outcome(ALREADY_CLAIMED, message="今天已领")
         return Outcome(INACTIVE, message="今天没有可领活动")
     if not apply:
@@ -706,15 +801,45 @@ def claim_qoder(token: str, fetcher: Fetcher, *, apply: bool = True) -> Outcome:
     return Outcome(CLAIMED, message="领取成功", credit=total, unit=QODER_UNIT)
 
 
+def _trae_code(payload: Mapping[str, object]) -> float | None:
+    """Trae 业务码，**兼容数字与字符串**：后端在部分网关上以 ``"9074"`` 回。
+
+    参考实现 ``src_trae-credits.ts:120-130`` 注释：只认数字会把失败误判成 ``code=0`` 成功。
+    字段不在 ⇒ ``0.0``（当成功，与旧数据一致）；在但不是数字 ⇒ ``-1.0``（判失败，不猜）。
+    """
+    raw = payload.get("code")
+    if isinstance(raw, bool):
+        return -1.0
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str) and raw.strip().lstrip("-").isdigit():
+        return float(raw.strip())
+    if raw is None:
+        return 0.0
+    return -1.0
+
+
 def claim_trae(token: str, fetcher: Fetcher, *, apply: bool = True) -> Outcome:
-    """Trae：cookie/bearer 两步；额度单位 credits。"""
-    status, text = fetcher("GET", TRAE_BASE + TRAE_STATUS_PATH, _bearer(token), None)
+    """Trae：两步；额度单位 credits。
+
+    ★ 判成功**只看业务码 ``code == 0``**：实测失败响应 ``{"code":9004,…}`` 与成功的形状
+    一样、HTTP 也是 200，只看 HTTP 会把失败报成「领取成功 +0」。
+    ★ claim 响应**不含积分数**（完整响应就是 ``{"code":0,"message":"success"}``），真实
+    数字只在 status 端点的 ``credits`` ⇒ 领取成功后补查一次状态
+    （参考实现 ``src_trae-credits.ts:280-296``）。
+    """
+    status, text = fetcher("POST", TRAE_BASE + TRAE_STATUS_PATH, _bearer(token), b"{}")
     early = _classify_transport(status, text)
     if early is not None:
         return early
     payload = _json_or_none(text) or {}
+    code = _trae_code(payload)
+    if code != 0:
+        return Outcome(FAILED, message=f"签到状态查询失败：code={code:g}", code=int(code))
     data = _read_record(payload, "data") or payload
-    if _read_bool(data, "claimed") or _read_bool(data, "checked_in"):
+    if _read_opt_bool(data, "enable") is False:
+        return Outcome(INACTIVE, message="签到活动当前未开启")
+    if _read_bool(data, "checked_in") or _read_bool(data, "claimed"):
         return Outcome(ALREADY_CLAIMED, message="今天已领")
     if not apply:
         return Outcome(INACTIVE, message="今天还没领（可领）")
@@ -723,8 +848,17 @@ def claim_trae(token: str, fetcher: Fetcher, *, apply: bool = True) -> Outcome:
     if early is not None:
         return Outcome(FAILED, message=f"领取失败：{early.message}", code=early.code)
     payload = _json_or_none(text) or {}
-    data = _read_record(payload, "data") or payload
-    credit = _read_num(data, "credits") or _read_num(data, "credit")
+    code = _trae_code(payload)
+    if code == TRAE_BUSY_CODE:
+        return Outcome(FAILED, message="签到人数过多，请稍后再试", code=TRAE_BUSY_CODE)
+    if code != 0:
+        return Outcome(FAILED, message=f"领取失败：code={code:g}", code=int(code))
+    # 领取成功：响应里没有积分数，补查 status 取真值（拿不到就如实记 0）
+    credit = 0.0
+    status, text = fetcher("POST", TRAE_BASE + TRAE_STATUS_PATH, _bearer(token), b"{}")
+    if 200 <= status < 300:
+        again = _json_or_none(text) or {}
+        credit = _read_num(again, "credits") or _read_num(_read_record(again, "data"), "credits")
     return Outcome(CLAIMED, message="领取成功", credit=credit, unit=TRAE_UNIT)
 
 
@@ -792,7 +926,8 @@ def claim_for_platform(
     try:
         if platform_name == "codearts":
             if len(tokens) < 2 or not tokens[0] or not tokens[1]:
-                return Outcome(UNCERTAIN, message="缺 AK/SK（设 TF_CODEARTS_AK / TF_CODEARTS_SK）")
+                env = platform.get("token_env") or "（能力表没写 token_env）"
+                return Outcome(UNCERTAIN, message=f"缺 AK/SK（要真跑请设 {env}）")
             credential = CodeArtsCredential(
                 tokens[0], tokens[1], tokens[2] if len(tokens) > 2 else ""
             )

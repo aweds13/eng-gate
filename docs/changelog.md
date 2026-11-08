@@ -3,6 +3,12 @@
 - 新增 `scripts/cloud/profile.py`（dump/list/check/render 四子命令，38 个键）与 `--render` 分支；新增第二仓 profile `scripts/cloud/profiles/openmaic.toml`，全文零本仓键值（判据 3 有钉子）。
 - 13 道横幅与步骤顺序一格未动；本仓真跑读数与改造前**逐字节同 tree**（4d32e9e01dda），22 门 ok=True / host=gates-runner-host；OpenMAIC 在云机跑出真 vitest 读数（13749 passed / 46 failed），5/5 之后「profile 的读数」真的打出五行。
 - 独立复核揪出两处真缺陷并修掉：0.4/5 的 `keep_ps` 累计值被丢弃（只剩最后一项）、`CFG_ALLOW/CFG_KEEP/SEED_FILES` 用空格拼而骨架按 RS 拆；另补 D3（播种逐件验）/D4（日志路径开跑前判）/N1（空 env 名守卫）。
+## 2026-11-08 · 号池的签到与额度读数和真机对齐（卡 E91，T-AG599）
+- 三个签到客户端按参考实现的真实形状重写判据：qoder 改读 `campaigns` 根键并先按 `actionType` 过滤；workbuddy 逐请求带 `User-Agent: WorkBuddy/5.5.6`、状态查询改 POST、业务码在顶层 `code`、重复领取的幂等判据是 `code 10001`；trae 只有 `code === 0` 才算领到，业务码兼容字符串，领取成功后补查一次 status 取积分数。
+- `--probe` 不再写 `last_checkin`（卡 E48 只授权写 `last_probe`）：探一次就把当天签到机会判成「已定案」这个缺陷钉了测试。
+- 能力表指向真位置：`[platform.trae]` 的探针补上漏掉的 `/trae` 前缀（同段别的流程都带），`[platform.codearts]` 的 `token_env` 改成本机真用的 `CODEARTS_CLI_AK`/`CODEARTS_CLI_SK`，workbuddy 段补三条坑。
+- 新平台 meoo：文件型 OAuth 取 token、额度按自己的路径读，账本多一个 `meoo-1` 并真读回 56958 积分。
+- `tools/pool/sticky.py` 三处过期行号改对（`tools/pool/route.py` 的 `apply_order` 在 627 行、`USED_SHARE` 在 101 行），`docs/subsystems/pool/modules.toml` 里 route 的调用方不再写不存在的 `wb_dispatch`。
 ## 2026-11-07 · 门禁读数补一维：`last.json` 记下这一趟按哪种分片跑的（卡 E90，T-AG598）
 - 卡 E30（T-AG484）已被用户 2026-10-25 裁定并入 E50（落地笔 b659e2df），本卡只收剩下的两条尾巴。
 - `scripts/run_gates.py` 的 payload 在 `"workers"` 之后补 `"pytest_dist": pytest_dist()`；同一文件里那条指向 gates/diag 下 bench-e30-summary.txt 的悬空注释改写，不再点名不存在的文件。

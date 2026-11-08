@@ -1,195 +1,232 @@
 {
-  "rev": "7194eaf4d6",
-  "python": "3.12.8",
-  "host": "gates-runner-host",
-  "tree": "1160927f71f56486900a93e9424ee95f4735409c",
+  "rev": "2ede0fef",
+  "python": "3.14.6",
+  "host": "DEV-HOST",
+  "tree": "8b2b31b073f4192a7777d1c1cf0a5cd67329c055",
   "tree_scope": "worktree-minus-gates",
-  "parent": "7194eaf4d6",
+  "parent": "2ede0fef",
   "branch": "HEAD",
   "dirty": true,
-  "at": "2026-11-08T08:19:32",
+  "at": "2026-11-08T12:00:16",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
   "ok": true,
-  "workers": 2,
+  "workers": 1,
   "pytest_dist": "worksteal",
   "co_tenants": {
     "collected": true,
-    "like": 1,
-    "self_pid": 2372
+    "like": 14,
+    "self_pid": 27608
   },
-  "pytest_mode": "并行（pytest-xdist，-n 2）",
+  "pytest_mode": "串行（worker=1）",
   "slow_doors": [
     {
       "name": "pytest",
-      "seconds": 950.26
+      "seconds": 1421.32
     }
   ],
   "gates": [
     {
       "name": "pytest",
       "exit_code": 0,
-      "seconds": 950.26,
-      "summary": "4508 passed, 7 skipped, 2 warnings in 943.04s (0:15:43)",
+      "seconds": 1421.32,
+      "summary": "4526 passed, 1 skipped, 24 deselected, 1513 warnings in 1415.45s (0:23:35)",
       "detail": ""
     },
     {
       "name": "acceptance",
       "exit_code": 0,
-      "seconds": 92.28,
-      "summary": "2 passed, 4537 deselected, 1 warning in 87.57s (0:01:27)",
+      "seconds": 16.6,
+      "summary": "2 passed, 4549 deselected, 1 warning in 14.78s",
       "detail": ""
     },
     {
       "name": "pytest_chain",
       "exit_code": 0,
-      "seconds": 350.19,
-      "summary": "22 passed, 4517 deselected, 1 warning in 343.80s (0:05:43)",
+      "seconds": 192.39,
+      "summary": "22 passed, 4529 deselected, 1 warning in 190.71s (0:03:10)",
       "detail": ""
     },
     {
       "name": "ruff",
       "exit_code": 0,
-      "seconds": 2.1,
+      "seconds": 0.29,
       "summary": "All checks passed!",
       "detail": ""
     },
     {
       "name": "mypy",
       "exit_code": 0,
-      "seconds": 22.58,
+      "seconds": 1.44,
       "summary": "Success: no issues found in 58 source files",
       "detail": ""
     },
     {
       "name": "check_layers_selftest",
       "exit_code": 0,
-      "seconds": 54.62,
+      "seconds": 6.89,
       "summary": "SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）",
       "detail": ""
     },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 59.39,
+      "seconds": 6.52,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）",
       "detail": ""
     },
     {
       "name": "invariants",
       "exit_code": 0,
-      "seconds": 2.2,
+      "seconds": 0.49,
       "summary": "[OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）",
       "detail": ""
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 2.24,
+      "seconds": 0.4,
       "summary": "OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位",
       "detail": ""
     },
     {
       "name": "docs",
       "exit_code": 0,
-      "seconds": 17.7,
+      "seconds": 3.12,
       "summary": "CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS",
       "detail": ""
     },
     {
       "name": "skills_claims",
       "exit_code": 0,
-      "seconds": 17.95,
+      "seconds": 1.9,
       "summary": "report 档读数：对不上 0 / 判不出 73 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。",
       "detail": ""
     },
     {
       "name": "check_layers",
       "exit_code": 0,
-      "seconds": 43.46,
+      "seconds": 5.71,
       "summary": "LAYER CHECKS: PASS ✅",
       "detail": ""
     },
     {
       "name": "contrast",
       "exit_code": 0,
-      "seconds": 22.64,
+      "seconds": 1.87,
       "summary": "对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）",
       "detail": ""
     },
     {
       "name": "style",
       "exit_code": 0,
-      "seconds": 22.8,
+      "seconds": 1.84,
       "summary": "风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）",
       "detail": ""
     },
     {
       "name": "ui_text",
       "exit_code": 0,
-      "seconds": 22.91,
+      "seconds": 1.83,
       "summary": "[OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）",
       "detail": ""
     },
     {
       "name": "commands",
       "exit_code": 0,
-      "seconds": 22.99,
+      "seconds": 1.81,
       "summary": "说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。",
       "detail": ""
     },
     {
       "name": "ui_dom_probe",
       "exit_code": 0,
-      "seconds": 23.05,
-      "summary": "✅ 假 DOM 渲染探针：14/14 个视图正常渲染，详情面板 2/2 正常，今日完成明细展开 1/1 正常，复习卡编辑态 1/1 正常，复习改判 1/1 正常，硬考核强呈现 1/1 正常，白名单勿扰 1/1 正常，状态机 2/2 正常，派生逾期 1/1 正常，尝试失败 1/1 正常，档案视图 2/2 正常，子步骤 3",
-      "detail": ""
+      "seconds": 0,
+      "summary": "复用上次通过判定（输入未变 fbee641f843c539a）",
+      "reused": true,
+      "inputs_hash": "fbee641f843c539a",
+      "host": "DEV-HOST"
     },
     {
       "name": "proxy",
       "exit_code": 0,
-      "seconds": 23.08,
+      "seconds": 1.79,
       "summary": "[OK  ] 5 条全新鲜（阈值 30 天）",
       "detail": ""
     },
     {
       "name": "lf1_live",
       "exit_code": 0,
-      "seconds": 23.11,
-      "summary": "LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）",
-      "detail": ""
+      "seconds": 0,
+      "summary": "复用上次通过判定（输入未变 3e06cfb0a0741f6c）",
+      "reused": true,
+      "inputs_hash": "3e06cfb0a0741f6c",
+      "host": "DEV-HOST"
     },
     {
       "name": "web_live",
       "exit_code": 0,
-      "seconds": 28.55,
-      "summary": "[OK ] 手机直传：认得出来源设备（ph-）",
-      "detail": ""
+      "seconds": 0,
+      "summary": "复用上次通过判定（输入未变 f2fe33ef354f4e59）",
+      "reused": true,
+      "inputs_hash": "f2fe33ef354f4e59",
+      "host": "DEV-HOST"
     },
     {
       "name": "render",
       "exit_code": 0,
       "seconds": 0,
-      "summary": "本机不跑（金样本主机专用）：金样本采集自主机 DEV-HOST（gates/render/CAPTURED_ON.json），本机是 gates-runner-host：字形度量随 Edge 版本 / 字体 / DPI 变，本机做不到逐字节比对；这道门只在采集机那台上跑",
-      "blocking": false,
-      "status": "EXCLUDED",
-      "excluded_reason": "金样本采集自主机 DEV-HOST（gates/render/CAPTURED_ON.json），本机是 gates-runner-host：字形度量随 Edge 版本 / 字体 / DPI 变，本机做不到逐字节比对；这道门只在采集机那台上跑"
+      "summary": "复用上次通过判定（输入未变 736c03fa0f8982c8）",
+      "reused": true,
+      "inputs_hash": "736c03fa0f8982c8",
+      "host": "DEV-HOST"
     },
     {
       "name": "ui_flow",
       "exit_code": 0,
-      "seconds": 432.26,
-      "summary": "[OK ] M 今天清单拖拽排序：真按住拖 → 顺序变了、刷新还在、↑↓ 也能调  13 项断言  13.4s",
-      "detail": ""
+      "seconds": 0,
+      "summary": "复用上次通过判定（输入未变 97fdd9d180e73073）",
+      "reused": true,
+      "inputs_hash": "97fdd9d180e73073",
+      "host": "DEV-HOST"
     }
   ],
   "not_run": [],
-  "excluded": {
-    "render": "金样本采集自主机 DEV-HOST（gates/render/CAPTURED_ON.json），本机是 gates-runner-host：字形度量随 Edge 版本 / 字体 / DPI 变，本机做不到逐字节比对；这道门只在采集机那台上跑"
+  "excluded": {},
+  "reused": {
+    "ui_dom_probe": "fbee641f843c539a",
+    "lf1_live": "3e06cfb0a0741f6c",
+    "web_live": "f2fe33ef354f4e59",
+    "render": "736c03fa0f8982c8",
+    "ui_flow": "97fdd9d180e73073"
   },
-  "reused": {},
   "untracked": [],
-  "trailer": "pytest 4508 passed, 7 skipped, 2 warnings in 943.04s (0:15:43); acceptance 2 passed, 4537 deselected, 1 warning in 87.57s (0:01:27); pytest_chain 22 passed, 4517 deselected, 1 warning in 343.80s (0:05:43); ruff All checks passed!; mypy Success: no issues found in 58 source files; check_layers_selftest SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）; audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 73 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; check_layers LAYER CHECKS: PASS ✅; contrast 对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。; ui_dom_probe ✅ 假 DOM 渲染探针：14/14 个视图正常渲染，详情面板 2/2 正常，今日完成明细展开 1/1 正常，复习卡编辑态 1/1 正常，复习改判 1/1 正常，硬考核强呈现 1/1 正常，白名单勿扰 1/1 正常，状态机 2/2 正常，派生逾期 1/1 正常，尝试失败 1/1 正常，档案视图 2/2 正常，子步骤 3; proxy [OK  ] 5 条全新鲜（阈值 30 天）; lf1_live LF-1 真实运行验证：PASS（主链全通过，含第 4 步前端界面）; web_live [OK ] 手机直传：认得出来源设备（ph-）; ui_flow [OK ] M 今天清单拖拽排序：真按住拖 → 顺序变了、刷新还在、↑↓ 也能调  13 项断言  13.4s; render EXCLUDED",
-  "sealed_at": "2026-11-08T08:19:53"
+  "trailer": "【选测退回全量：闸二：没有夜间全量记录（gates/diag/nightly/nightly-*.json 一份都没有） ⇒ 全量】pytest 4526 passed, 1 skipped, 24 deselected, 1513 warnings in 1415.45s (0:23:35); acceptance 2 passed, 4549 deselected, 1 warning in 14.78s; pytest_chain 22 passed, 4529 deselected, 1 warning in 190.71s (0:03:10); ruff All checks passed!; mypy Success: no issues found in 58 source files; check_layers_selftest SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）; audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 73 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; check_layers LAYER CHECKS: PASS ✅; contrast 对比度审美门 PASS（文字达标 38 / 已登记欠账 0 / 新欠账或变差 0；非文字 26 条全过 3.0（静态 16 + 悬停/选中 10）；装饰 12 条只记录；共 38 条文字组合 + 26 条非文字）; style 风格一致性体检 PASS（没有新问题；登记在案 0 条已知欠账）; ui_text [OK ] 通过（≥30 一条不多、≥20 没长、登记项都对得上）; commands 说明：MCP 那一节证明「AI 看到的工具＝这张表」—— 工具清单由 registry 现算，双向核对。; ui_dom_probe 复用上次通过判定（输入未变 fbee641f843c539a）; proxy [OK  ] 5 条全新鲜（阈值 30 天）; lf1_live 复用上次通过判定（输入未变 3e06cfb0a0741f6c）; web_live 复用上次通过判定（输入未变 f2fe33ef354f4e59）; render 复用上次通过判定（输入未变 736c03fa0f8982c8）; ui_flow 复用上次通过判定（输入未变 97fdd9d180e73073）",
+  "select": {
+    "changed": [
+      "docs/INDEX.md",
+      "docs/changelog.md",
+      "docs/subsystems/pool/README.md",
+      "docs/subsystems/pool/modules.toml",
+      "docs/traceability.toml",
+      "tests/test_pool_accounts.py",
+      "tests/test_pool_checkin.py",
+      "tools/pool/checkin.py",
+      "tools/pool/platforms.toml",
+      "tools/pool/sticky.py",
+      "tools/pool_accounts.py",
+      "复盘/交接-重构进度.md",
+      "docs/changelog.d/T-AG599.md",
+      "docs/traceability.d/T-AG599.toml",
+      "复盘/交接.d/T-AG599.md"
+    ],
+    "tests": [],
+    "fallback": true,
+    "reason": "闸二：没有夜间全量记录（gates/diag/nightly/nightly-*.json 一份都没有） ⇒ 全量",
+    "gates": [
+      "nightly"
+    ]
+  },
+  "sealed_at": "2026-11-08T12:00:20"
 }

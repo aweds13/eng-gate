@@ -720,6 +720,7 @@ DECLARED_DIRS = [
     "~/.trae",
     "~/.qoder",
     "~/minimax",
+    "~/.meoo",
 ]
 
 
@@ -774,10 +775,37 @@ def _count(path: Path) -> int | None:
 # --------------------------------------------------------------------------
 
 
-def _token_for(plat: dict) -> tuple[str, str]:
-    """返回 (token, 用的环境变量名)。多个用 / 分隔，取第一个非空的。
+def _token_from_file(plat: dict) -> tuple[str, str]:
+    """从文件型凭据里读一个 token（`token_file` + `token_key`，默认 `accessToken`）。
 
-    **闸关 ⇒ `("", "")`，且一个 token 变量都不读**（判据 2）：闸在循环之前问。
+    为什么要有这一支：meoo 的凭据是 CLI 的 OAuth 结果（`~/.meoo/credentials.json`），
+    不是环境变量 —— 而本表的铁律是「绝不放凭据」，所以只能放**位点**，值现读。
+
+    读不出来一律回 `("", "位点 + 键名")`，让调用方把「该去哪儿找」说给人听；
+    **不抛、不打印文件内容**（只报路径与键名）。
+    """
+    rel = str(plat.get("token_file") or "").strip()
+    if not rel:
+        return "", ""
+    key = str(plat.get("token_key") or "accessToken").strip() or "accessToken"
+    where = f"{rel} 的 {key}"
+    try:
+        text = Path(rel).expanduser().read_text(encoding="utf-8")
+        data = json.loads(text)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return "", where
+    if isinstance(data, dict):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip(), where
+    return "", where
+
+
+def _token_for(plat: dict) -> tuple[str, str]:
+    """返回 (token, 来源说明)。环境变量多个用 / 分隔取第一个非空的；都没有再看 `token_file`。
+
+    **闸关 ⇒ `("", "")`，且一个 token 变量都不读、一个凭据文件都不开**（判据 2）：
+    闸在循环之前问 —— 文件这一支同样在闸后面。
     """
     if discovery_off():
         return "", ""
@@ -786,6 +814,11 @@ def _token_for(plat: dict) -> tuple[str, str]:
         value = os.environ.get(name, "").strip()
         if value:
             return value, name
+    if plat.get("token_file"):
+        token, where = _token_from_file(plat)
+        if token:
+            return token, where
+        return "", where
     return "", "/".join(names)
 
 
@@ -808,6 +841,27 @@ def _get_json(url: str, token: str, timeout: float = 8.0) -> tuple[int, dict | N
 
 
 AMOUNT_KEYS = ("total", "points", "credits", "credit", "balance", "quota", "amount", "remain")
+
+
+def _amount_at_path(obj, path: str) -> float | None:
+    """按平台显式声明的点分路径取值（`amount_path = "data.account.availableBalance"`）。
+
+    为什么需要它：`_extract_amount` 是**猜**（找第一个名字像额度的键），而 meoo 的响应里
+    `totalGranted: 61000` 比真值 `availableBalance: 56958` 更容易被猜到 —— 猜错不是 0，
+    是一个**看起来合理**的错数。表里写清路径，就不猜。
+
+    路径走不通 / 取到的不是数 ⇒ None（→ uncertain，绝不回 0）。
+    """
+    cur = obj
+    for part in path.split("."):
+        if not part:
+            return None
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(part)
+    if isinstance(cur, bool) or not isinstance(cur, (int, float)):
+        return None
+    return float(cur)
 
 
 def _extract_amount(obj) -> float | None:
@@ -884,8 +938,15 @@ def probe_account(acc: dict, plat: dict, fetch=None, offline: bool = False) -> d
         return {**base, "kind": "uncertain", "detail": err or f"HTTP {status}"}
     if body is None:
         return {**base, "kind": "uncertain", "detail": err or "响应解析不了"}
-    amount = _extract_amount(body)
+    amount_path = str(plat.get("amount_path") or "").strip()
+    amount = _amount_at_path(body, amount_path) if amount_path else _extract_amount(body)
     if amount is None:
+        if amount_path:
+            return {
+                **base,
+                "kind": "uncertain",
+                "detail": f"响应里没有 {amount_path}（形状变了，别当 0）",
+            }
         return {**base, "kind": "uncertain", "detail": "响应里找不到额度字段（形状变了，别当 0）"}
     return {
         **base,
@@ -1278,18 +1339,24 @@ def run_checkin(
         }
         rows.append(row)
         stamp = _iso(now or _now())
-        _record_checkin(acc, row, stamp)
+        _record_checkin(acc, row, stamp, apply=apply)
         # 平台之间留间隔（串行、不连环打）；最后一个不空等
         if apply and index + 1 < len(todo) and spacing:
             nap(spacing)
     return rows
 
 
-def _record_checkin(acc: dict, row: dict, stamp: str) -> None:
+def _record_checkin(acc: dict, row: dict, stamp: str, *, apply: bool = True) -> None:
     """回写账本：健康态 + 额度样本。**不碰 amount**（amount 是余额，不是本次发放）。"""
     health = acc.setdefault("health", {})
     previous = health.get("last_checkin")
     health["last_probe"] = stamp
+    # ★ `--probe` 只探不领（卡 E48 §4.3）：留档 JSON 与 `last_probe` 是它许写的全部，
+    #   `last_checkin` 不在授权里。写了会把「今天问过了」烙进账本 —— `recheck_rows()`
+    #   拿 `last_checkin` 当结论码判 `due`，于是探一次就把当天真正的签到机会判成
+    #   「当日已定案」，再也不会去领。只读探针一个判断位都不许动。
+    if not apply:
+        return
     health["last_checkin"] = row["kind"]
     if row["kind"] in ("uncertain", "failed"):
         health["consecutive_failures"] = int(health.get("consecutive_failures", 0) or 0) + 1
@@ -1370,6 +1437,13 @@ def recheck_rows(
         if not kind and name in platforms and not ck.platform_supports_claim(platforms[name]):
             kind = ck.NOT_SUPPORTED
         outcome = ck.Outcome(kind) if kind else None
+        # ★ 为什么不传 `offline=`/`tries=`（两个形参在 `checkin.due_for_recheck` 上）：
+        #   本仓**不存在**「离线造成的 FAILED」。`claim_for_platform` 撞 `NetworkError`
+        #   一律出 `UNCERTAIN`（`tools/pool/checkin.py:815-817`），FAILED 只来自
+        #   「服务器答复了但内容不对」（HTTP≥400 或 JSON 形状坏）。于是这里没有任何
+        #   真实值可传 —— 传 `offline=True` 等于替上游撒一个它没说的谎，指数退避会开始
+        #   按一个**从没发生过**的状态计时（`retry_after_s(tries=9)` 与 `tries=0` 差 30 倍）。
+        #   宁可不接，也不接假数。要接的前提是先让「离线」在结论码里可表达（那是另一张卡）。
         need, why = ck.due_for_recheck(outcome, at=at, now=moment, timezone=TZ, platform=name)
         if not need:
             continue

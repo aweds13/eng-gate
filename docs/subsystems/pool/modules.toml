@@ -170,7 +170,7 @@ cli = "无（被 `wb_dispatch`、`wb_impact`、`wb_batch` 调）"
 [[module]]
 name = "route.py"
 duty = "Smart 路由：给「哪个号先上」排序（`tier` / `apply_order`），只标准库 + 只读"
-cli = "无（被 `wb_dispatch`、`pool.plan`、`pool.sticky` 调）"
+cli = "无（被 `pool.plan` 调 `reset_for`/`seconds_left`、被 `pool.sticky` 取 `USED_SHARE`；`smart_order`/`apply_strategy` 零生产调用方）"
 
 [[module]]
 name = "route_log.py"
@@ -239,7 +239,7 @@ cli = "无（被 `pool.model_registry` 读）"
 
 [[module]]
 name = "platforms.toml"
-duty = "平台能力表：八个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false`"
+duty = "平台能力表：九个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false`"
 cli = "无（被 `pool_accounts.py` 读）"
 
 [[module]]
