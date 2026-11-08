@@ -1,23 +1,19 @@
 ---
 name: pipe-init
-description: 把管线骨架（pipeline.toml + gates.d/ + 卡模板 + 台账壳 + 钉子树）铺到一个空目录。当你要在新目录起一个能直接跑门禁的项目、或把同一套骨架铺到别处做对照时用；铺什么、算不算幂等在脚手架库与门里。
+description: 把管线骨架（配置文件 + 门表分片 + 卡模板 + 台账壳 + 钉子树）铺到一个空目录。当你要在新目录起一个能直接跑门禁的项目、或把同一套骨架铺到别处做对照时用；怎么用、怎么读退出码在这里，铺什么、算不算幂等在脚手架库与门里。换一个仓只需换 references/repo-bindings.md，动作与读法不变。
 ---
 
 # pipe-init —— 铺骨架
 
 铺出来的是一个**能直接跑门禁的最小项目**，不是把当前仓库复制一份。
 
-★ **框架层 vs 本仓工作链（两条路，别混）**：
+★ **框架层 vs 工作链（两条路，别混）**：本技能给的是**框架层** —— 目标目录里有一份自己的
+`pipeline.toml`、自己的门表分片、自己的台账壳。与之相对的是**工作链**（开卡 / 建树 / 落地），
+那是另一条路、另一套入口，不是本技能。两条路的分界与「这个仓落在哪一边」，见
+[本仓绑定](references/repo-bindings.md)。
 
-| | 框架层（本技能） | 本仓工作链 |
-|---|---|---|
-| 入口 | 框架 CLI 的 `init`（下面的命令） | `python -X utf8 tools/wb_*.py` |
-| 需要什么 | 铺出来的 `pipeline.toml` + `gates.d/` | 本仓根 `scripts/run_gates.py`（门表在 `gates/defs/`，按语言/产品/契约分模块里） |
-| 用在哪 | 新目录要一套自己的门与骨架 | 在本仓内开卡 / 建树 / 落地 |
-| 谁管 | 本技能 | `pipe-new`（起链）、`pipe-card` / `pipe-gate` / `pipe-land`（日常） |
-
-本技能的 CLI 命令**只在框架层成立**：它要求目标目录里有一份 `pipeline.toml`。本仓根没有这份配置，
-所以本仓主路径上一律 `wb_*`，别把这里的命令当成本仓的门。
+本技能的 CLI 命令**只在框架层成立**：它要求目标目录里有一份 `pipeline.toml`。别把这里的命令
+当成「跑当前这个仓的门」—— 那个仓的主路径若没有那份配置，就属于工作链那一侧。
 
 ## 什么时候用
 
@@ -41,7 +37,7 @@ description: 把管线骨架（pipeline.toml + gates.d/ + 卡模板 + 台账壳 
 ## 真命令
 
 ```bash
-# 没装包时（本仓根，或把路径换成 CLI 绝对路径）
+# 命令名与参数面换仓不变；本仓里 CLI 落在哪个路径见 references/repo-bindings.md
 python -X utf8 framework/cli/main.py init --dir <目标目录>
 python -X utf8 framework/cli/main.py init --dir <目标目录> --template minimal
 python -X utf8 framework/cli/main.py init --dir <目标目录> --force      # 目标必须在仓内
@@ -68,12 +64,8 @@ python -X utf8 framework/cli/main.py --json init --dir <目标目录>
 | 退 `4`，`--force` 被拒 | 目标在仓外 | 放仓内，或去掉 `--force` 只铺空目录 |
 | 提示找不到 `pipe` 命令 | 没装包 | 用 `python -X utf8 framework/cli/main.py init …` |
 | `--json` 报 `unrecognized arguments` | 它是**全局**开关，写在子命令后面了 | 写成 `main.py --json init …` |
+| `--config` 也报 `unrecognized arguments` | 同样是**全局**参数，写在子命令后面了 | 写成 `main.py --config <toml> gate` |
 | 铺完跑门禁失败 | 没 `cd` 进铺出的目录，或模板没铺全 | `cd` 过去再跑；先看 `pipeline.toml` 在不在 |
-
-## 复盘缺口（框架两条总纲）
-
-- （缺口 FW1）事实层是唯一真源：AI 只写「做了什么」的事实回报，结论与产物由库/门产出，不许自证 —— 铺出的骨架里台账与门产物都由工具写；新接一条线时先问「事实谁发、结论谁算」。证据：`复盘/事实层架构设计复盘.md`、`复盘/第0步实施-事实层落地.md`、`复盘/框架-术语表与契约.md`
-- （缺口 FW2）框架要能整体提升为独立仓：无隐藏本地依赖，提升前先跑抽取清单，先抽后搬 —— 往骨架里加东西时别引入只在本仓成立的路径；提升动作先跑抽取清单再搬。证据：`复盘/框架-独立仓提升.md`、`复盘/卡/卡181-框架独立仓与参与管线.md`、`复盘/卡/卡178-框架骨架设计.md`
 
 ## 铺出来的是什么
 
@@ -95,4 +87,5 @@ python -X utf8 framework/cli/main.py --json init --dir <目标目录>
 3. `cd` 进目标目录后 `pipeline.toml` 在，门禁能起来。
 4. 我没在仓外 `--force`，也没把已有项目重铺。
 
-> 铺哪些文件、什么算幂等（第二次拒绝还是逐字节相同）：判据在 `framework/src/framework/scaffold.py` 与 `framework/templates/`，本技能只讲怎么用。
+> 铺哪些文件、什么算幂等（第二次拒绝还是逐字节相同）：判据在脚手架库与模板目录里，本技能只讲怎么用。
+> 本仓把脚手架库与模板放在哪、框架两条总纲缺口的证据在哪：见 [本仓绑定](references/repo-bindings.md)。

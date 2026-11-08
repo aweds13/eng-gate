@@ -20,7 +20,7 @@ evidence = [
   "file:docs/文档系统导航.md",
   "file:复盘/架构索引-分层图.md",
   "file:复盘/门禁四要素.md",
-  "text:skills/softeng-manage/SKILL.md::会 ⇒ 就地改；不会（它讲的是历史）⇒ 加注",
+  "text:skills/softeng-manage/references/repo-bindings.md::会 ⇒ 就地改；不会（它讲的是历史）⇒ 加注",
   "text:skills/README.md::2026-10-28 现读 22 道",
 ]
 gaps = [

@@ -87,7 +87,8 @@
 落地要跑全量门（8–12 分钟）。**不要**写成 `wb_land.py … | tail -3`：管道会攒到结束才吐，后台作业中途读不到任何输出，看着像卡死。一律用带日志的跑法：
 
 ```bash
-python -X utf8 tools/run_logged.py --log gates/diag/land-<卡>.log -- \n    python -X utf8 tools/wb_land.py --card <卡> ...
+python -X utf8 tools/run_logged.py --log gates/diag/land-<卡>.log -- \
+    python -X utf8 tools/wb_land.py --card <卡> ...
 ```
 
 进度看 `tail -n 20 gates/diag/land-<卡>.log`；跑前先过 `python -X utf8 tools/cmd_guard.py --cmd '<命令>'`。

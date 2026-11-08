@@ -17,7 +17,7 @@
 ## 锁与租约：四条退出路径同一处释放
 
 1. （缺口 LS1）掐工人必须还租约：正常退出 / 超时 / 强杀 / 异常四条路径都落到同一处释放，否则下一张卡撞幽灵锁。
-   操作：任何一条退出路径走完，都用 `python -X utf8 tools/pipeline_view.py --json` 的 `leases` 块确认租约已还；残留用 `python -X utf8 tools/pool/lease.py release` 还掉。
+   操作：任何一条退出路径走完，都用 `python -X utf8 tools/pipeline_view.py --json` 的 `leases` 块确认租约已还；残留用 `python -X utf8 tools/pool/lease.py release --card <卡号>` 还掉（`--card` 是必填，漏了 rc=2）。
    证据：`复盘/卡/卡141-掐工人要还租约.md`、`复盘/卡/卡163-锁与租约接线.md`、`复盘/坑总账.md`
 2. （缺口 LS2）强杀（taskkill / kill_tree）之后要清孤儿进程 + 清租约，只 kill 主干会留下占着门的子进程。
    操作：强杀后两步缺一不可：按 PID 树清孤儿进程；再核 `leases` 块确认租约已还。

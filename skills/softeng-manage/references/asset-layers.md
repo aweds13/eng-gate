@@ -26,24 +26,32 @@
 取证命令（在卡树根跑）：
 
 ```bash
-grep -rl "infra/pool" tools
-grep -rn --include=*.py --include=*.toml "infra/pool" tools
+grep -rl --include=*.py --include=*.toml "infra/pool" tools | wc -l   # 16
+grep -rn --include=*.py --include=*.toml "infra/pool" tools | wc -l   # 41
 ```
 
-源码口径：**8 个文件、20 处**。
+源码口径（**2026-11-08 实测**）：**16 个文件、41 处**。
 
 | 文件 | 处数 | 它在读什么 |
 |---|---|---|
-| `tools/wb_dispatch.py` | 6 | 派活前解析号池与项目索引 |
+| `tools/wb_dispatch.py` | 10 | 派活前解析号池与项目索引 |
+| `tools/pool_mcp.py` | 5 | MCP 面读号池快照的入口 |
+| `tools/pool_accounts.py` | 5 | 账号账本与号池目录 |
 | `tools/pool/model_registry.py` | 4 | 模型登记与白名单文件的位置 |
-| `tools/pool_mcp.py` | 3 | MCP 面读号池快照的入口 |
-| `tools/pool/model-registry.toml` | 2 | 登记表里写死的相对位置 |
 | `tools/pool/projects.py` | 2 | 从祖先逐级找项目索引 |
-| `tools/pool/__init__.py` | 1 | 包级说明与只读口径 |
+| `tools/pool/platforms.toml` | 2 | 能力表里的只读口径 |
+| `tools/pool/model-registry.toml` | 2 | 登记表里写死的相对位置 |
+| `tools/pool/callers.py` | 2 | 调用方登记 |
+| `tools/pool/accounts_scope.py` | 2 | 账本作用域 |
 | `tools/pool/models.py` | 1 | 白名单只读路径 |
+| `tools/pool/limits.py` | 1 | 限额表位置 |
 | `tools/pool/lease.py` | 1 | 租约与号池目录的关系 |
+| `tools/pool/lanes.toml` | 1 | 通道表 |
+| `tools/pool/failclosed.py` | 1 | 判不出就拒的口径 |
+| `tools/pool/account_id.py` | 1 | 账号号形校验 |
+| `tools/pool/__init__.py` | 1 | 包级说明与只读口径 |
 
-★ 计数陷阱：同一命令在**主树**跑会读到 15 个文件 —— 多出来的是 `__pycache__/*.pyc`。
+★ 计数陷阱：不带 `--include` 的 `grep -rl` 在**主树**跑会读到 29 个文件 —— 多出来的是 `__pycache__/*.pyc`。
 报数一律用 `--include=*.py --include=*.toml` 的源码口径，并把命令一起写上，否则下次没人能复现。
 
 ## 4. 三条边界（越界会怎样）

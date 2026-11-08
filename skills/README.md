@@ -87,6 +87,31 @@
 - `NOTES.md` = **人类理解版**（这一层在防哪类错误 / 失败过什么（带读数）/ 脚本接口与以后怎么改）。
   它不是判据的第二份抄写 —— 判据仍在库与门里，它只讲来历与接口。
 
+### ★ 换仓只用换一份：`references/repo-bindings.md`（2026-11-08 起）
+
+**问题**：这套技能原来只对 `program/engineering` 有效 —— 入口路径、锁文件名、`TF_*` 环境变量、
+本仓日期读数、复盘证据链，全写在 `SKILL.md` 正文里。换个仓，正文整页作废，agent 只能照抄就撞墙。
+
+**约定**（按 `docs/reference/agent-skills-spec.md` §8「稳定的写死、随环境变的留成参数」与 §9 第 ⑤ 条）：
+
+| 放哪 | 放什么 | 判据 |
+|---|---|---|
+| `SKILL.md` | **换仓不变**：动作顺序、判据入口（去哪个工具看）、读判决的方法、常见误读 | 换个仓，这一页**一个字都不用改** |
+| `references/repo-bindings.md` | **这个仓长什么样**：入口路径、命令档位、锁与租约、环境变量、超时秒数、权威文档指针、本仓现算读数、历史证据链 | 换仓只改这一份 |
+| `references/<主题>.md` | 某一类动作的长表（落地八步、输出读法、分派页…） | 与仓无关，可复用 |
+
+**硬规矩**：
+
+1. `SKILL.md` 里**不许**出现具体的 `gates/…` / `tools/…` 路径、`TF_*` 变量名、卡号、日期读数、
+   复盘文件名 —— 这些一律进 `repo-bindings.md`。命令块里用 `<门禁入口>` 这类占位，真路径给相对链接。
+2. `repo-bindings.md` 里每条读数都要**带日期**、并写清是哪条命令算出来的（数字会漂，口径不能漂）。
+3. 引用**只深一层**：`SKILL.md` → `references/xxx.md`，别写「见 references/a.md 里的 b.md」。
+4. 判据侧**不放松**：`SKILL.md` 仍要过 `skills/nails/check_skills.py` 四条（≤120 行 / 流程级小节 ≤3 /
+   「怎么读结果」每条指向真脚本 / `NOTES.md` 三节）。下沉之后这些约束反而更容易满足。
+5. 每个技能在自己 `NOTES.md` 里写一节「为什么分两页」，把搬走了什么、踩了什么坑记下来（下次别再犯）。
+
+**已完成**：九个技能全部按这个形状改过（`pipe-gate` 是样板：`SKILL.md` 87 行 + `repo-bindings.md` 97 行）。
+
 规范离线副本：`docs/reference/agent-skills-spec.md`；改技能时逐条过的自检表：
 `skills/softeng-manage/references/spec-checklist.md`。
 
@@ -94,15 +119,15 @@
 
 | skill | 覆盖的动作 | 本仓真命令 | references |
 |---|---|---|---|
-| `softeng-manage` | **总入口**：六段路由 + 六条铁律 | 只路由（细节见右列技能） | `mapping.md` · `commands.md` · `spec-checklist.md` · `doc-layers.md` · `asset-layers.md` · `grill-me.md` |
-| `pipe-card` | 开卡 / 派活 / 申报 | `tools/wb_dispatch.py` · `tools/wb_task.py` · `tools/wb_stage_card.py` | `dispatch.md` |
-| `pipe-gate` | 跑门并读懂结果 | `scripts/run_gates.py` + `tools/wb_verify.py` | `output.md` |
-| `pipe-land` | 集成与落地（八步链） | `tools/wb_land.py` · `tools/wb_verify.py` | `land-steps.md` |
-| `pipe-workbench` | 工作台四件套（读数 / 巡检 / 注入 / 面板）+ 收工看守 | `tools/pipeline_view.py` · `wb_daily.py` · `workbench_bridge.py` · `wb_dash.py` · `tools/wb_watch.py` | `tools.md` |
-| `pipe-forensics` | 出事了从证据里查 | `tools/wb_verify.py` · `wb_diag.py` · `wb_reconcile.py` | `evidence-map.md` |
-| `pipe-new` | 在本仓内从零起一条工作链 | `tools/wb_plan.py` · `tools/wb_dispatch.py` · `tools/wb_land.py` | `first-landing.md` |
-| `pipe-init` | 铺框架骨架（框架层，唯一还用 CLI 的） | 框架 CLI 的 `init` 子命令（见技能正文） | `scaffold.md` |
-| `pipe-takeover` | 接管旧项目：勘察定类 → 映射 → 接链 | `tools/wb_takeover.py` | `classify.md` · `mapping.md` · `limits.md` · `attach-to-chain.md` |
+| `softeng-manage` | **总入口**：六段路由 + 六条铁律 | 只路由（细节见右列技能） | `repo-bindings.md` · `mapping.md` · `commands.md` · `spec-checklist.md` · `doc-layers.md` · `asset-layers.md` · `grill-me.md` |
+| `pipe-card` | 开卡 / 派活 / 申报 | `tools/wb_dispatch.py` · `tools/wb_task.py` · `tools/wb_stage_card.py` | `repo-bindings.md` · `dispatch.md` |
+| `pipe-gate` | 跑门并读懂结果 | `scripts/run_gates.py` + `tools/wb_verify.py` | `repo-bindings.md` · `output.md` |
+| `pipe-land` | 集成与落地（八步链） | `tools/wb_land.py` · `tools/wb_verify.py` | `repo-bindings.md` · `land-steps.md` |
+| `pipe-workbench` | 工作台四件套（读数 / 巡检 / 注入 / 面板）+ 收工看守 | `tools/pipeline_view.py` · `wb_daily.py` · `workbench_bridge.py` · `wb_dash.py` · `tools/wb_watch.py` | `repo-bindings.md` · `tools.md` |
+| `pipe-forensics` | 出事了从证据里查 | `tools/wb_verify.py` · `wb_diag.py` · `wb_reconcile.py` | `repo-bindings.md` · `evidence-map.md` |
+| `pipe-new` | 在本仓内从零起一条工作链 | `tools/wb_plan.py` · `tools/wb_dispatch.py` · `tools/wb_land.py` | `repo-bindings.md` · `first-landing.md` |
+| `pipe-init` | 铺框架骨架（框架层，唯一还用 CLI 的） | 框架 CLI 的 `init` 子命令（见技能正文） | `repo-bindings.md` · `scaffold.md` |
+| `pipe-takeover` | 接管旧项目：勘察定类 → 映射 → 接链 | `tools/wb_takeover.py` | `repo-bindings.md` · `classify.md` · `mapping.md` · `limits.md` · `attach-to-chain.md` |
 
 `spec-grill` 不再单独立技能（卡 A305 的决定）：grill-me 是意图 / 规格 / 契约三层**共用**的
 决策方法，落成参考 `skills/softeng-manage/references/grill-me.md`，由 `softeng-manage` 按需加载；
@@ -140,7 +165,11 @@
 
 ## §6 钉子（怎么自证）
 
-两道钉子都在 `nails/`，都**只读**、可用退出码判读（`0` 绿 / `1` 红）：
+两道钉子都在 `nails/`，都**只读**、可用退出码判读：
+
+- 钉子①（`check_commands.py`）**三态**：`0` 绿 / `1` 红 / **`3` 判不出**（卡 E49 —— 找不到同版 CLI、解释器跑不了命令面）。
+  `3` **不等于红，也不等于绿**：如实写「判不出」，别改判据去凑绿。
+- 钉子②（`check_skills.py`）**两态**：`0` 绿 / `1` 红。
 
 ```bash
 python -X utf8 skills/nails/check_commands.py    # ① 引用的命令名，都能在 CLI 帮助里找到
@@ -167,7 +196,8 @@ npx -y skills-ref@latest validate ./skills/<名>  # ③ 官方校验器
 - ★ **两道钉子仍没有消费端**（2026-10-28 现读 `gates/defs/`）：`skills/nails/*` 不在门表里 ⇒
   **加严了判据，但没接线**。门表里管技能的只有 `skills_claims`（= `tools/check_skills_claims.py --check --mode report`，
   核的是「技能里引用的 `tools/` 脚本与它的 `--flag` ↔ `tools/` 源码」，**不是** nails 那两条）—— 两把尺子，别互相顶班。
-- ★ **卡 A293 的读数（2026-10-19）**：7 份 `SKILL.md` 全部 `Valid skill`；`check_skills.py` 退 0；
-  正文行数 70 / 71 / 81 / 82 / 88 / 89 / 91（逐份读数见各 `NOTES.md`）。
+- ★ **正文行数别抄表**（会漂）：现算用 `wc -l skills/*/SKILL.md`；上限判据只有 `skills/nails/check_skills.py`
+  一处（`MAX_LINES = 120`）。卡 A293（2026-10-19）那次读数是 7 份、70~91 行 —— 那是当时的读数，
+  现在已是 9 份，别当常量引用。
   卡 A304 之后是 **9 份**（新增 `pipe-new`，`pipe-takeover` 补了「接链六步」一节），当前行数以
   `python -X utf8 skills/nails/check_skills.py` 的输出为准。

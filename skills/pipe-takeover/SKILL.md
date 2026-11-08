@@ -1,6 +1,6 @@
 ---
 name: pipe-takeover
-description: 接管一个旧项目时的操作顺序：只读勘察定类（A/B/C/D）→ 出映射表 → 套限制清单 → 铺最小骨架 → 第一步验收。当用户让你「接手 / 接管」一个已存在的项目目录时用；判哪类、怎么映射的机器口径在 tools/wb_takeover.py 与 references 三张表里。
+description: 接管一个旧项目时的操作顺序：只读勘察定类（A/B/C/D）→ 出映射表 → 套限制清单 → 铺最小骨架 → 第一步验收。当用户让你「接手 / 接管」一个已存在的项目目录时用；顺序、命令形状与验收在这里，判哪类、怎么映射的机器口径在勘察器与 references 三张表里。换一个仓只需换 references/repo-bindings.md，动作与读法不变。
 ---
 
 # pipe-takeover —— 接管旧项目
@@ -13,6 +13,9 @@ description: 接管一个旧项目时的操作顺序：只读勘察定类（A/B/
 
 理由：AI 自己补出来的规格与文档大多是编的，事后无法区分「事实」与「填补」。
 
+> 本页只写**换仓不变的动作与读法**。勘察器落在哪个路径、卡登记进哪份队列、骨架铺几个文件、
+> 快照与分支怎么叫、本仓读数是多少：全在 [本仓绑定](references/repo-bindings.md)（相对链接，只深一层）。
+> 换一个仓用这套技能，**只换那一份**，别改本页。
 
 ## 什么时候用
 
@@ -27,38 +30,45 @@ description: 接管一个旧项目时的操作顺序：只读勘察定类（A/B/
 
 ## 前置检查
 
-1. 拿到目标目录的**绝对路径**；确认它不是本仓自己（本仓勘察结果应是 A）。
+1. 拿到目标目录的**绝对路径**；确认它不是**你自己这套工作链所在的仓**（对本仓跑会判 A ——
+   那是预期，不是接管对象；本仓的形态见 [本仓绑定](references/repo-bindings.md)）。
 2. 勘察器只读、零写盘、零网络、不起子进程，随时可跑、可重跑。
 3. 判哪类的逐条口径：[四类判据](references/classify.md)；产物怎么翻译：[映射表](references/mapping.md)；
    六条禁止：[限制清单](references/limits.md)。
+4. 目标目录先有入口文档（`--strict` 会把「缺入口」当判不出）；写法见 [入口文档](references/agents-md.md)。
 
 ## 真命令
 
 ```bash
+# 命令名与参数面换仓不变；本仓的确切路径见 references/repo-bindings.md
 # 只读勘察；--strict 是必须的（判据不足会退 2 —— 停手，不许猜类别）
 python -X utf8 tools/wb_takeover.py --root <目录> --strict --json
 ```
 
 ## 怎么读结果
 
-- 退 `0`，JSON 五个字段：`kind`（A/B/C/D）、`readings`（逐条读数）、`mapping_hints`（按类的映射提示）、
-  `strict_ok`、`strict_problems`；复核读数就重跑
+- 退 `0`：先看 `kind`（A/B/C/D）定类，再看 `readings` 逐条（每条形如 `{name, ok, detail}`）核理由，
+  最后看 `mapping_hints`（按类的映射提示，字符串列表）。复核读数就重跑
   `python -X utf8 tools/wb_takeover.py --root <目录> --strict --json`。
-- 退 `2` 有两种：① 目录不存在（`ok:false`）；② `--strict` 下判据不足
+- 数键对不上时先看这条：不带 `--strict` 的 JSON **恰 5 个键**（`ok` / `root` / `kind` / `readings` /
+  `mapping_hints`），`--strict` 再多 `strict_ok` / `strict_problems`。复跑
+  `python -X utf8 tools/wb_takeover.py --root <目录> --json` 逐键核。
+- 退 `2` 有两种：① 目录不存在（`ok:false` + `error`）；② `--strict` 下判据不足
   （`strict_problems` 逐条点名缺什么，如「判成 C 但目录里没有任何内容」）。
-  **第二种一律停手**：先补读数（源码/测试/CI/管线），不许猜类别往下铺骨架（判据实现见 `tools/wb_takeover.py` 的 strict_problems）。
-- `kind` 与后续动作的对应见下节；判据本身改了没有、改成什么，以 `tools/wb_takeover.py` 的输出为准，
-  不以记忆为准。
+  **第二种一律停手**：先补读数（源码/测试/CI/管线/入口文档），不许猜类别往下铺骨架
+  （判据实现在 `tools/wb_takeover.py` 的 `strict_problems`）。
+- 判据本身改了没有、改成什么，以 `tools/wb_takeover.py` 的输出为准，不以记忆为准。
 
 ## 常见错与处置
 
 | 现象 | 真因 | 处置 |
 |---|---|---|
-| 判 D | 检出别家框架标记（CLAUDE.md / .claude/ 等） | 只交勘察笔记；骨架一步都别铺 |
+| 判 D | 检出别家框架标记 | 只交勘察笔记；骨架一步都别铺 |
 | 判 C 但对方说「我们有 CI」 | 对方的 CI 形态不在已认信号清单 | 对 [四类判据](references/classify.md) 的信号表；要加新信号升级为一张卡 |
 | 想顺手把对方红了的 CI 调绿 | 违反限制清单第 3 条 | 红了是事实，写进台账 gaps；不许调 |
 | 映射表里没有对方那个产物 | 它是「不映射」的东西 | 写 `none`，不硬塞（见 [映射表](references/mapping.md)） |
 | 退 `2` | 目录不存在 / 路径打错 | 核对绝对路径再跑 |
+| `--strict` 退 `2` 说缺入口文档 | 目标目录没有 `AGENTS.md` | 先照 [入口文档](references/agents-md.md) 写一份，再重跑 |
 
 ## 按类的后续动作
 
@@ -74,19 +84,16 @@ python -X utf8 tools/wb_takeover.py --root <目录> --strict --json
 ## 接链六步（每步一条命令 + 一个验收）
 
 定类之后不要再即兴发挥，按这六步往下走；每步的完整命令、验收与「失败的先看哪」：
-
-**第 1 步之前先落入口文档**：目标目录没有 `AGENTS.md` 就先照 `skills/pipe-takeover/references/agents-md.md` 写一份——`--strict` 会把「缺入口」当判不出，没这份文档不许往下铺骨架。
+见 [接链六步细则](references/attach-to-chain.md)。
 
 | 步 | 动作 | 这一步的验收 |
 |---|---|---|
-| 1 | 只读勘察（判类 + 留 JSON） | `class` 是 A/B/C/D，`signals` 说得出理由；不写任何文件 |
+| 1 | 只读勘察（定类 + 留 JSON） | `kind` 是 A/B/C/D，`readings` 说得出理由；不写任何文件 |
 | 2 | 不动原结构（六条禁止逐条过） | `git status --porcelain` 与第 1 步逐字相同，`ls-files` 计数不变 |
-| 3 | 最小骨架（只加文件；A 类跳过、D 类不铺） | 目标目录里跑得通那道新门，产物落在 `gates/last.json` |
+| 3 | 最小骨架（只加文件；A 类跳过、D 类不铺） | 目标目录里跑得通那道新门，产物落在判决文件里 |
 | 4 | 首张卡（只加一张，四段齐） | 队列里只多一张卡，`git status` 只多骨架与这张卡 |
-| 5 | 首笔落地（先小；本仓走 `wb_land`，仓外用对方的门） | 本仓 `python -X utf8 tools/wb_verify.py --tree .` 五块无 FAIL；仓外那道门 code 为 0 |
+| 5 | 首笔落地（先小；在本仓内走落地链，仓外用对方的门） | 本仓内 `python -X utf8 tools/wb_verify.py --tree .` 五块无 FAIL；仓外那道门 code 为 0 |
 | 6 | 回滚点（起点提交 + 第一笔 + 怎么回滚） | 交接说明三样齐，别人照着能复现 |
-
-逐步细节见 `skills/pipe-takeover/references/attach-to-chain.md`。
 
 ## 自查
 
@@ -95,4 +102,5 @@ python -X utf8 tools/wb_takeover.py --root <目录> --strict --json
 3. 映射不上的产物我写了 `none`，没有硬塞进台账。
 4. 对方主干一个字没动；骨架只落在隔离层。
 
-> 判哪类、怎么映射的机器口径在 `tools/wb_takeover.py`；本技能只讲顺序与前置检查。
+> 判哪类、怎么映射的机器口径在勘察器里；本技能只讲顺序与前置检查。
+> 本仓的路径与读数见 [本仓绑定](references/repo-bindings.md)。

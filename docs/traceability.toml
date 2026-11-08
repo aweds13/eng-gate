@@ -9555,7 +9555,7 @@ evidence = [
   "file:docs/文档系统导航.md",
   "file:复盘/架构索引-分层图.md",
   "file:复盘/门禁四要素.md",
-  "text:skills/softeng-manage/SKILL.md::会 ⇒ 就地改；不会（它讲的是历史）⇒ 加注",
+  "text:skills/softeng-manage/references/repo-bindings.md::会 ⇒ 就地改；不会（它讲的是历史）⇒ 加注",
   "text:skills/README.md::2026-10-28 现读 22 道",
 ]
 gaps = [
@@ -10640,7 +10640,7 @@ evidence = [
   "text:scripts/run_gates.py::FLAKE_PROBE_ENV = ",
   "text:scripts/run_gates.py::FLAKE_LABELS = ",
   "text:tests/test_flake_probe.py::def test_empty_nodeid_list_is_a_loud_error(",
-  "text:skills/pipe-gate/SKILL.md::TF_GATE_FLAKE_PROBE=1",
+  "text:skills/pipe-gate/references/repo-bindings.md::TF_GATE_FLAKE_PROBE=1",
 ]
 gaps = [
   """- 隔离复核默认关（`TF_GATE_FLAKE_PROBE=1` 才开，会真起 pytest）；关着时门禁行为与从前逐字相同，代价是假红仍然只能靠人肉读。
@@ -11376,7 +11376,7 @@ evidence = [
   "file:skills/pipe-card/NOTES.md",
   "file:skills/pipe-forensics/SKILL.md",
   "file:skills/pipe-forensics/NOTES.md",
-  "text:skills/pipe-card/SKILL.md::wb_card.py add",
+  "text:skills/pipe-card/references/repo-bindings.md::wb_card.py add",
   "text:skills/pipe-forensics/SKILL.md::reset --hard",
 ]
 gaps = [
@@ -11698,3 +11698,30 @@ evidence = [
   "text:tools/pool/sticky.py::route.py:627",
 ]
 gaps = "- 三家平台的真实响应是用参考实现的存档夹具喂进去判的，**没有**本机真凭据打过的记录（本机 7 个平台 token 环境变量全空）；形状对不等于手上那个号真能领 —— 真机那一趟仍缺，判据见 `复盘/卡/卡E91-号池签到与额度对齐真机.md` 第 1 条。- 本机 codearts 的凭据文件里只有两个键，没有安全令牌那一项 ⇒ 需要安全令牌的路径仍未验证；`tools/pool/platforms.toml` 的 `token_env` 已按本机真名排在最前，但那条路径没有样本。- Meoo 凭据是 OAuth，池只读 accessToken、不刷新（`tools/pool_accounts.py` 的文件型 token 分支）⇒ 过期就只能报 uncertain，实测过期时回 401 已复现一次。- qoder 与 minimax 本机没有号 ⇒ `tools/pool/checkin.py` 里两条客户端只能靠参考实现的形状判，没有号就没有反向样本。"
+
+[entries."T-AG602"]
+id = "T-AG602"
+title = "技能泛用化：本仓表述下沉 references，入口按页只留动作"
+group = "skills"
+status = "done"
+evidence = [
+  "test:test_check_skills.py::test_real_repo_is_green",
+  "test:test_check_skills.py::test_result_item_without_script_is_red",
+  "test:test_check_skills.py::test_four_flows_is_red",
+  "test:test_doc_debt_ratchet.py::test_real_repo_debt_does_not_exceed_baseline",
+  "test:test_check_docs.py::test_dead_pointer_is_reported",
+  "test:test_check_docs.py::test_baseline_ratchet_only_goes_down",
+  "text:skills/nails/check_skills.py::MAX_LINES = 120",
+  "text:skills/nails/check_skills.py::READ_SECTION",
+  "text:AGENTS.md::先定层，再一次写完",
+  "text:skills/README.md::换仓只用换一份",
+  "text:skills/pipe-land/SKILL.md::八步",
+  "text:skills/pipe-card/references/dispatch.md::mid",
+  "file:skills/pipe-forensics/references/repo-bindings.md",
+  "file:skills/pipe-init/references/repo-bindings.md",
+  "file:skills/pipe-land/references/repo-bindings.md",
+  "file:skills/pipe-new/references/repo-bindings.md",
+  "file:skills/pipe-takeover/references/repo-bindings.md",
+  "file:skills/pipe-workbench/references/repo-bindings.md",
+]
+gaps = "- 换仓实测没做：九份 `skills/pipe-gate/references/repo-bindings.md` 这类绑定页里的读数都是照本仓现树抄的，没有真拿第二个仓跑过一遍 —— 「换仓只换一份」目前是结构上成立，不是验过。- 数值口径仍无机器守卫：`tools/check_skills_claims.py` 判不出 78 条（占位符形状），它核不到「门数 / 篇数 / 行数」这类会漂的数 ⇒ 陈旧陈述以后还能再长出来。- 工具侧同债不在本卡域：`tools/wb_land.py` 的 `--help` 仍写「11 条判据」（真值 12，判据真源 `tools/pool/landing.py`），本卡只改技能与入口页。- 流程数与长度只数形状：`skills/nails/check_skills.py` 只数标题条数与行数，不判「一节写得有没有用」；写得对但写得多仍可能过。- `AGENTS.md` 的四套分层只给了入口，没有守卫保证「不混用」——同一句话仍可能被两个人按两套分层各写一遍（分层入口见 `AGENTS.md` 那一节；`skills/nails/check_skills.py` 只核形状，不核分层）。"

@@ -27,7 +27,7 @@
 | `tree` | 工人树 `.wt/<id>` |
 | `files` | **域**：这张卡允许碰的文件 |
 | `depends` | 依赖的卡号（没 done 就排不出来） |
-| `risk` | low / medium / high |
+| `risk` | `low` / `mid` / `high`（默认 `mid`；**没有 `medium`** —— 真源 `tools/wb_card.py --risk` 与 `tools/pool/ledger.py`） |
 | `status` | `pending` 可派 · `done` · `failed` |
 
 ★ **`status` 行不许缺**（卡 E9）：缺了会被**默认读成 `pending`**，而落地翻状态找不到那一行就**静默跳过**
@@ -48,8 +48,11 @@ python -X utf8 tools/wb_plan.py check          # 0 = 队列合法；1 = 点名�
 
 ★ **批准集是现算的，不许凭记忆写**：真源 = `tools/pool/model-registry.toml` 里该池的条目（codebuddy 池 =
 `deepseek-v4.1-flash` 默认 / `glm-5.3-flash`）＋ 仓外开关 `infra/pool/model-switches.toml` 里打开的（只做加法）
-＋ `wb_dispatch.ONE_OFF_MODELS`（今天为空）。写错一律拒单并**原样列出允许集** —— 2026-10-28 实测那份是
-`deepseek-v4.1-flash` / `glm-5.3-flash` / `glm-5.3` / `kimi-k3-1` / `glm-5.2`；429 轮换链只走注册表那两条，不掺开关。
+＋ `wb_dispatch.ONE_OFF_MODELS`（今天为空）。写错一律拒单并**原样列出允许集**。
+★ 2026-11-08 实读：注册表 codebuddy 池**只有 2 条**（`deepseek-v4.1-flash` 默认 / `glm-5.3-flash`），
+另 3 个（`glm-5.3` / `kimi-k3-1` / `glm-5.2`）是**仓外开关**打开的 —— 「注册表 2 条」与「实际能调度 5 个」
+是两件事，别把并集当成注册表内容。429 轮换链只走注册表那两条，不掺开关。
+逐条读数与真源指针：见 [本仓绑定](repo-bindings.md) 的「模型批准集」一节。
 
 ★ **派活/落地前先过会话闸**（卡 A324）：卡归另一个对话窗口 ⇒ 退 2 并打印持有者；
 确要接手加 `--take-over`（留痕）。看谁是持有者：`python -X utf8 tools/wb_session.py --list`。
@@ -80,7 +83,7 @@ Command rejected: … Reason: Background command execution is not supported in p
 
 ## 6. 派活必带看守（卡 E7 —— 派完别再人肉轮询）
 
-★ **默认就有，不用你另起命令**：`wb_dispatch.py --execute` 起完工**自动**挂一份
+★ **默认就有，不用你另起命令**（`ensure_watch` 在 `--execute` 的两处调用点自动挂）：`wb_dispatch.py --execute` 起完工**自动**挂一份
 `tools/wb_watch.py` 盯着这张卡，出判决就落事件。派完那一屏会打一行 `[看 ] 看守已起（pid …）`；
 **没看到这行** = 看守没起来（脚本不在 / 起不来会打告警），这时才需要自己处理。
 

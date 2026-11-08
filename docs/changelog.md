@@ -9,6 +9,12 @@
 - 能力表指向真位置：`[platform.trae]` 的探针补上漏掉的 `/trae` 前缀（同段别的流程都带），`[platform.codearts]` 的 `token_env` 改成本机真用的 `CODEARTS_CLI_AK`/`CODEARTS_CLI_SK`，workbuddy 段补三条坑。
 - 新平台 meoo：文件型 OAuth 取 token、额度按自己的路径读，账本多一个 `meoo-1` 并真读回 56958 积分。
 - `tools/pool/sticky.py` 三处过期行号改对（`tools/pool/route.py` 的 `apply_order` 在 627 行、`USED_SHARE` 在 101 行），`docs/subsystems/pool/modules.toml` 里 route 的调用方不再写不存在的 `wb_dispatch`。
+## 2026-11-08 · 技能泛用化：本仓表述下沉 references，写文档先定层
+- 九个软工技能拆成两页：SKILL.md 只留换仓不变的动作与读法（仓味扫描九份全 0 命中），本仓的路径 / 环境变量 / 锁 / 读数 / 历史证据全进同目录 references 下的 repo-bindings.md；换一个仓只换那一份。
+- `AGENTS.md` 加硬指令「写 / 改文档之前先定层，再一次写完」：三问定层（哪套分层 / 事实还是过程 / 一页还是一条链）+ 写完四条命令一次跑 + 四条不许做的事（反引号点名不存在的路径、把会漂的数当常量、手改机器生成段落、在 `skills/` 里写判据）。
+- 顺手修掉实测陈旧：preflight「11 条判据」→ 12、`risk` 的 `medium` → `mid`、`wb_daily` 五分区 → 7 段、docs 五层「41 篇」→ 42、`infra/pool` 耦合「8 文件 20 处」→ 16 文件 41 处、`lease.py release` 补必填 `--card`、`--config` 必须在子命令前、`main_tree_offenders` 行号、`skills/pipe-land/references/land-steps.md` 里的字面 `\n`。
+- `skills/README.md` 记下这条约定（§2「换仓只用换一份」+ 五条硬规矩）、§3 清单九行补 repo-bindings.md、§6 钉子改成分态写（①三态 / ②两态）、§7 的旧行数表改成「现算不抄表」。
+- 台账证据同步：`docs/traceability.d/T-AG523.toml` 那条 `text:` 断言原指 `skills/softeng-manage/SKILL.md`，本卡把这句话搬进 `skills/softeng-manage/references/repo-bindings.md` ⇒ 断言改指新位置，`audit --all` 才不会红在旧锚点上。
 ## 2026-11-07 · 门禁读数补一维：`last.json` 记下这一趟按哪种分片跑的（卡 E90，T-AG598）
 - 卡 E30（T-AG484）已被用户 2026-10-25 裁定并入 E50（落地笔 b659e2df），本卡只收剩下的两条尾巴。
 - `scripts/run_gates.py` 的 payload 在 `"workers"` 之后补 `"pytest_dist": pytest_dist()`；同一文件里那条指向 gates/diag 下 bench-e30-summary.txt 的悬空注释改写，不再点名不存在的文件。

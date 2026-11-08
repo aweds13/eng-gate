@@ -10,7 +10,7 @@ evidence = [
   "file:skills/pipe-card/NOTES.md",
   "file:skills/pipe-forensics/SKILL.md",
   "file:skills/pipe-forensics/NOTES.md",
-  "text:skills/pipe-card/SKILL.md::wb_card.py add",
+  "text:skills/pipe-card/references/repo-bindings.md::wb_card.py add",
   "text:skills/pipe-forensics/SKILL.md::reset --hard",
 ]
 gaps = [

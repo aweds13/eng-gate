@@ -63,12 +63,15 @@ ls gates/diag/wb-<卡>*              # 工人的日志在不在
 它是**框架层**的入口，不是本仓工作链的入口。本仓**根目录没有 `pipeline.toml`**，所以
 `gate` / `land` 这两条在本仓主路径上用不了 —— 顺序与前置检查照技能，命令走上表 `wb_*`。
 
+★ **`--config` 是全局开关，必须写在子命令前**（写在后面 rc=2 `unrecognized arguments: --config`，
+2026-11-08 实测）。正确式：`python -X utf8 framework/cli/main.py --config <pipeline.toml> gate`。
+
 | 动作 | 本仓工作链（`wb_*`） | 框架层（薄 CLI） |
 |---|---|---|
-| 跑门 | `scripts/run_gates.py` | `gate --config <pipeline.toml>` |
-| 落地 | `tools/wb_land.py` | `land --config <pipeline.toml>` |
-| 开卡 / 申报 | 卡规格 + 队列条目 + `tools/pool_mcp.py` 写面 | `card` / `claim` |
-| 台账 / 封存 | `tools/wb_verify.py`、`tools/sync_counts.py` | `ledger` / `trace` |
-| 铺骨架 | 不走 CLI | `init --dir <目录>`（自带模板，唯一在本仓主路径还直接用的） |
+| 跑门 | `python -X utf8 scripts/run_gates.py` | `main.py --config <pipeline.toml> gate` |
+| 落地 | `python -X utf8 tools/wb_land.py` | `main.py --config <pipeline.toml> land` |
+| 开卡 / 申报 | 卡规格 + 队列条目 + `tools/pool_mcp.py` 写面 | `main.py --config <pipeline.toml> card` / `claim` |
+| 台账 / 封存 | `tools/wb_verify.py`、`tools/sync_counts.py` | `main.py --config <pipeline.toml> ledger` / `trace seal` |
+| 铺骨架 | 不走 CLI | `main.py init --dir <目录>`（自带模板，唯一在本仓主路径还直接用的） |
 
 一句话：**框架层的命令只在「铺骨架 / 有 `pipeline.toml` 的目录」里用**；本仓里一律 `wb_*`。

@@ -1,18 +1,21 @@
 ---
 name: softeng-manage
-description: 本仓（program/engineering）软件工程管理总入口——把「开卡 → 派活 → 跑门 → 落地 → 巡检 → 复盘」串成一条不发散的流程。当你要新建工作项、把活派给号池工人、判断这棵树能不能合、落地一张卡、查今天该做什么、或某道门红了要定位时用；它只做路由与铁律，细节交给六个动作技能。
+description: 软件工程管理总入口——把「开卡 → 派活 → 跑门 → 落地 → 巡检 → 复盘」串成一条不发散的流程。当你要新建工作项、把活派给号池工人、判断这棵树能不能合、落地一张卡、查今天该做什么、或某道门红了要定位时用；它只做路由与铁律，细节交给六个动作技能。换一个仓只需换 references/repo-bindings.md。
 ---
 
-# 软工管理（本仓总入口）
+# 软工管理（总入口）
 
 这是一张**路由表 + 六条铁律**。它不重复子技能的操作细节 —— 要动手就按表跳过去。
-本仓跑的是 `tools/wb_*.py` 那一套；技能文档里写的 `pipe` CLI 是框架另一条接法，
-两者顺序与前置检查一致、命令不同 —— 动作与命令的逐条对照见 [动作映射](references/mapping.md)。
+
+> 本页只写**换仓不变的东西**：六段流水线、铁律、自查。
+> **本仓的命令落在哪、读入口叫什么、哪些文档是权威、哪些数字不许引用**：全在
+> [本仓绑定](references/repo-bindings.md)（相对链接，只深一层）。换一个仓用这套技能，
+> **只换那一份**，别改本页。
 
 ## 什么时候用
 
 - 不确定「现在该走哪一步」（开卡 / 派活 / 跑门 / 落地 / 巡检 / 复盘）时。
-- 本仓命令与技能文档对不上，想知道到底敲哪条。
+- 技能文档里的命令与本仓跑得通的那条对不上，想知道到底敲哪条。
 - 要确认某条铁律（判据在哪、什么时候算落成）时。
 
 ## 什么时候别用
@@ -28,28 +31,28 @@ description: 本仓（program/engineering）软件工程管理总入口——把
 2. 工作区干净吗：`git status --porcelain -uno`（有别人的未提交改动就先停手）。
 3. 队列里这张卡长什么样：`python -X utf8 tools/pipeline_view.py --json` 的 `cards` 块。
 4. 先跑 `python -X utf8 scripts/audit_progress.py` 确认台账本身是活的（0.5 秒）。
-5. 命令对照与六段流水线细则见 [命令对照](references/commands.md)。
+5. 本仓命令对照（六段各敲哪条）与流水线细则见 [本仓绑定](references/repo-bindings.md)；
+   与框架 CLI 的逐条映射见 [动作映射](references/mapping.md)。
 
 ## 真命令
 
-| 段 | 你想要的 | 走哪个工具 | 细节 |
+| 段 | 你想要的 | 走哪个动作技能 | 本仓敲哪条 |
 |---|---|---|---|
-| ① 开卡 | 一张可派的卡 | 卡规格 + `docs/workbacklog.toml` 条目 | `pipe-card` |
-| ② 派活 | 工人在自己树里干活 | `tools/wb_dispatch.py`（或号池） | `pipe-card` |
-| ③ 跑门 | 这棵树能不能合 | `scripts/run_gates.py` + `gates/last.json` | `pipe-gate` |
-| ④ 落地 | 落成一笔 | `tools/wb_land.py` | `pipe-land` |
-| ⑤ 巡检 | 今天该做什么、谁在飞 | `tools/wb_daily.py` / `tools/pipeline_view.py` | `pipe-workbench` |
-| ⑥ 复盘 | 哪一步坏了 | `tools/wb_verify.py` / `tools/wb_diag.py` / `tools/wb_reconcile.py` | `pipe-forensics` |
+| ① 开卡 | 一张可派的卡 | `pipe-card` | 见 repo-bindings |
+| ② 派活 | 工人在自己树里干活 | `pipe-card` | 见 repo-bindings |
+| ③ 跑门 | 这棵树能不能合 | `pipe-gate` | 见 repo-bindings |
+| ④ 落地 | 落成一笔 | `pipe-land` | 见 repo-bindings |
+| ⑤ 巡检 | 今天该做什么、谁在飞 | `pipe-workbench` | 见 repo-bindings |
+| ⑥ 复盘 | 哪一步坏了 | `pipe-forensics` | 见 repo-bindings |
 
-从零起一条链，先分清两条路：
+从零起一条链，先分清两条路（这两条与仓无关）：
 
-- **框架层（要一份自己的 `pipeline.toml` + 门表 + 钉子，铺到某个目录）**：`pipe-init`。
-  它自带模板，命令与退出码见 `skills/pipe-init/SKILL.md`；这是本仓唯一还直接用框架 CLI 的地方。
-- **本仓工作链（在本仓内新开一个项目目录，队列 / 卡 / 树 / 落地走 `wb_*`）**：`pipe-new`。
+- **框架层（要一份自己的门禁配置 + 门表 + 钉子，铺到某个目录）**：`pipe-init`。它自带模板。
+- **工作链（在一个已有仓内新开一个项目目录，队列 / 卡 / 树 / 落地走自己那套工具）**：`pipe-new`。
 
 ## 怎么读结果
 
-- 「今天该做什么」：`python -X utf8 tools/wb_daily.py`（五个分区，空也要说「空」）。
+- 「今天该做什么」：`python -X utf8 tools/wb_daily.py`（分区一屏给全，空也要说「空」）。
 - 六块现场（队列 / 门禁 / 判决 / 租约 / 栅栏 / 树）：`python -X utf8 tools/pipeline_view.py --report`。
 - 「这一笔算不算落成」：`python -X utf8 tools/wb_verify.py --tree .`（五块，任一 FAIL 就先修那块）。
 - 队列与 git 对不上：`python -X utf8 tools/wb_reconcile.py`。
@@ -59,51 +62,30 @@ description: 本仓（program/engineering）软件工程管理总入口——把
 
 | 症状 | 先看 |
 |---|---|
-| 门红 | `gates/last.json` 的失败门名 → 那道门的日志 → `pipe-forensics` |
+| 门红 | 判决文件里的失败门名 → 那道门的日志 → `pipe-forensics` |
 | 落地被挡 | 申报缺证据 / 卡规格没进 git / 文书缺 `=== gaps ===` 段 |
-| 工人不动 | `gates/diag/wb-<卡>.dispatch.log` 尾部；`tools/wb_diag.py` 定位 |
-| 队列与栅栏不一致 | `tools/wb_reconcile.py` 的 stale 行 |
-| 面板 / 读数怪 | 先跑 `tools/verify_panel_routes.py`，别猜 |
-| 命令敲了没反应 | 是不是把 `pipe` CLI 当成了本仓主路径 —— 看 references 的对照表 |
-
-## 复盘缺口细则（按主题拆进 references）
-
-全量复盘入口是 `复盘/INDEX.md`（769 篇 / 58 缺口的三层索引，由 `scripts/retro/retro_index.py` 生成，§5 是缺口清单）；下面按主题给操作指针，动手前按主题读对应那份，别凭印象：
-
-- 派活（预声明 / 基点 / 白名单 / 攒批 / 增量收口）：[dispatch](references/dispatch.md)
-- 看门狗与锁租约（判活 / 掐人还租约 / 锁分把带 TTL）：[watchdog](references/watchdog.md)
-- 禁区与外部授权（宿主目录 / 外部模型用完就撤）：[safety](references/safety.md)
-- 对抗复核与长任务（反空转 / 派生物噪声 / 复核常态化）：[ai-collab](references/ai-collab.md)
-- 产品线结论（timeflow，不改本仓框架）：[product-lines](references/product-lines.md)
-- 界面判据（主题令牌 / 非文字对比度）：[ui-notes](references/ui-notes.md)
-- 技能三层与登记表（索引 / 操作 / 判据）：[skills-layers](references/skills-layers.md)
-- 文档五层（意图 / 规格 / 契约 / 实现 / 品味，各放什么、何时升级）：[doc-layers](references/doc-layers.md)
-- 资产三层（timeflow 是产品 / pool 是谁来做 / infra 是在什么机器上）：[asset-layers](references/asset-layers.md)
-- 文档口径（缺口 CF2 / CF1）：同一事实只许一处投影、第四份投影必须脚本对账。**口径漂移怎么治，按文档类型分**（2026-10-28 用户定的分工，别自己另立一套）：
-  - **reference / how-to**（读者拿它当「现在是什么」「该怎么做」）：**就地改成当前真值**。证据（为什么改、谁改的、旧值是多少）留在卡规格 + `docs/changelog.d/<台账号>.md` + 台账 `evidence`，**不进这份文档**。
-  - **explanation / 历史复盘**（讲「当时为什么这么决定」，读者要的是过程）：**加注** —— 保留原文 + 顶部加注「已被卡 N 推翻」，因为删掉原文等于毁证据。加注必须带**日期 + 推翻它的卡号 / 台账号**。
-  - 判据一句话：**这份文档的读者会拿它当「现在的事实」用吗？会 ⇒ 就地改；不会（它讲的是历史）⇒ 加注。**
-- 框架两条总纲：事实层是唯一真源、AI 只写「做了什么」的事实回报、结论与产物由库/门产出（缺口 FW1）；框架要能整体提升为独立仓、先跑抽取清单、先抽后搬（缺口 FW2）—— 操作面见 `pipe-init`。
-
-依据：`复盘/INDEX.md`（§5.2 全量清单）、`复盘/文档重整方案.md`。
+| 工人不动 | 那张卡的派活日志尾部；`python -X utf8 tools/wb_diag.py` 定位 |
+| 队列与栅栏不一致 | `python -X utf8 tools/wb_reconcile.py` 的 stale 行 |
+| 面板 / 读数怪 | 先跑 `python -X utf8 tools/verify_panel_routes.py`，别猜 |
+| 命令敲了没反应 | 是不是把框架 CLI 当成了本仓主路径 —— 看 [本仓绑定](references/repo-bindings.md) |
 
 ## 六条铁律
 
 1. **判据在库与门，不在提示词。** 技能只写「怎么用才不出错」；删掉整个 `skills/`，框架仍要完整可用。
 2. **先申报，再落地。** 没有 `success` 申报（带 `--files` 与 `--evidence`）的卡，落地会被挡住；不要绕过。
-3. **链红就停手。** 门红了先修红：不放宽判据、不加豁免、不手改 `gates/last.json`。
-4. **落地后核对封存。** `gates/last.json` 的 `ok=true` 且 `rev == HEAD^`（它封的是被落那笔的父提交）。
-5. **工人不直接合主树。** 工人在 `.wt/<卡号>`（分支 `card/<卡号>`）干活，落地由接手的会话串链。
+3. **链红就停手。** 门红了先修红：不放宽判据、不加豁免、不手改门禁判决文件。
+4. **落地后核对封存。** 判决文件的 `ok=true` 且 `rev` 是被落那笔的**父提交**。
+5. **工人不直接合主树。** 工人在自己的卡树（分支 `card/<卡号>`）干活，落地由接手的会话串链。
 6. **一卡一域。** 卡规格的 `files` 必须等于工人真正碰的文件；碰域外文件会被守卫点名拒收。
 
 ## 自查
 
 1. 我能说出这件事落在哪一段（①～⑥），以及对应哪个子技能。
-2. 我引用的每条命令都在本仓跑得通（不是照抄 `pipe` CLI 的想象命令）。
+2. 我引用的每条命令都在本仓跑得通（不是照抄框架 CLI 的想象命令）。
 3. 我没把判据抄进话里 —— 说的是「去哪个工具看」。
 4. 我报的是**这棵树**的读数（`rev` / 分支 / 树路径对得上）。
 5. 改过 `skills/**` ⇒ 跑 `python -X utf8 tools/check_skills_claims.py --check`：退 `1` 修对不上的那条，
    退 `3` 就在回报里如实写「判不出 N 条」—— `3` 不是绿。
 
-> 流水线与铁律的来历见 `NOTES.md`；技能本身的写法见 [技能自检表](references/spec-checklist.md) 与
+> 铁律的来历见 `NOTES.md`；技能本身的写法见 [技能自检表](references/spec-checklist.md) 与
 > `docs/reference/agent-skills-spec.md`。

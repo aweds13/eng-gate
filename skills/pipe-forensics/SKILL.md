@@ -1,12 +1,16 @@
 ---
 name: pipe-forensics
-description: 出事了从已落盘的证据里查——门禁产物、工人日志、封存指纹、队列与台账对账，定位是哪一步坏。当某道门红了、判决说不清、工人不动、或要复盘一次失败时用；它给查的顺序，不给你改判据的权力。
+description: 出事了从已落盘的证据里查——门禁产物、工人日志、封存指纹、队列与台账对账，定位是哪一步坏。当某道门红了、判决说不清、工人不动、或要复盘一次失败时用；它给查的顺序，不给你改判据的权力。换一个仓只需换 references/repo-bindings.md，动作与读法不变。
 ---
 
 # pipe-forensics —— 出事了从证据里查
 
 出事了（门红 / 判决说不清 / 复现不了）时，唯一可信的是**已经落盘的产物**，不是回忆。
 顺序固定：先确认「这是哪棵树的哪一笔」，再逐层往下看。
+
+> 本页只写**换仓不变的动作与读法**。证据落在哪些目录、文件名长什么样、层归属怎么分、
+> 历史证据挂在哪：全在 [本仓绑定](references/repo-bindings.md)（相对链接，只深一层）。
+> 换一个仓用这套技能，**只换那一份**，别改本页。
 
 ## 什么时候用
 
@@ -17,49 +21,43 @@ description: 出事了从已落盘的证据里查——门禁产物、工人日�
 
 ## 什么时候别用
 
-- 只想跑一次门看红没红：用 `pipe-gate`。
+- 只想跑一次门看红没红：用跑门禁那个技能。
 - 想把红改成绿而**改判据**：那是改库 / 改门，另一件事；本技能只查不改。
 - 想验证**门本身还活着**：那是金丝雀自检（它查判据有没有退化成注释），不是查你的代码。
 - 手边没有出事那棵树 / 那份产物：先拿到产物，别猜。
 
 ## 前置检查
 
-1. 知道证据落点：`gates/last.json`、`gates/logs/`、`gates/diag/`、`gates/review/`、`gates/diag/wb-<卡>.jsonl`。
+1. 知道证据落点：判决文件、逐门日志、派活侧的诊断目录、复核产物、工人逐事件日志 ——
+   本仓的确切路径见 [证据落点](references/evidence-map.md) 与 [本仓绑定](references/repo-bindings.md)。
 2. 确认**是哪棵树**：`pwd` + `git rev-parse --show-toplevel` + `git rev-parse --short HEAD`。
-3. 看一眼 `gates/last.json` 的 `rev` / `branch` —— 和你在的树对不上，读数就不能直接用。
-4. 证据落点全表见 [证据落点](references/evidence-map.md)。
-5. 台账只许走 `python -X utf8 tools/wb_card.py add`；主树**禁止 `git reset --hard`** —— 要挪开别人的未提交改动，用 `git stash push -- 路径` 挪开、事后精确复原。
+3. 看一眼判决文件的 `rev` / `branch` —— 和你在的树对不上，读数就不能直接用。
+4. 台账只许走台账工具写；主树**禁止 `git reset --hard`** —— 要挪开别人的未提交改动，
+   用 `git stash push -- 路径` 挪开、事后精确复原。
+5. ★ **先分清层**：这条链是「工作链」还是「框架层」。框架层那条自检要有配置文件才跑得起来，
+   本仓主路径上可能根本没有它 —— 硬跑只会报「配置不存在」。层归属与本仓现状见本仓绑定。
 
 ## 真命令
 
 ```bash
-# 一屏核对：提交骨架 / 门禁 / 封存 / 台账 / 审计（哪个块 FAIL 就从哪查）
-python -X utf8 tools/wb_verify.py --tree .
+# 命令名换仓不变；本仓的确切路径与参数见 references/repo-bindings.md
+<一屏核对> --tree .                       # 提交骨架 / 门禁 / 封存 / 台账 / 审计（哪块 FAIL 就从哪查）
 
-# 工人日志：哪一步失败、退出码、时间线（默认省略全文，--full 才打全）
-python -X utf8 tools/wb_diag.py gates/diag/wb-<卡号>.jsonl
-python -X utf8 tools/wb_diag.py gates/diag/wb-<卡号>.jsonl --exit-code <派活器看到的退出码>
+<工人日志读法> <卡号日志>                  # 哪一步失败、退出码、时间线（默认省略全文，--full 才打全）
+<工人日志读法> <卡号日志> --exit-code <派活器看到的退出码>
 
-# 队列 / 租约 / 门 / 判决 / 栅栏 / 树：六块一起看，缺块会给 null + note
-python -X utf8 tools/pipeline_view.py --json
+<读数入口> --json                          # 队列 / 租约 / 门 / 判决 / 栅栏 / 树：六块一起看，缺块给 null + note
 
-# 队列状态与 git 历史对账（stale-pending / stale-done）
-python -X utf8 tools/wb_reconcile.py
+<对账器>                                   # 队列状态与 git 历史对账（stale-pending / stale-done）
 ```
-
-★ 层归属：上面这些全是**本仓工作链**（`tools/wb_*.py` + 根 `scripts/run_gates.py`）。
-框架层那条「门本身还有没有牙」的自检（框架 CLI 的 `doctor`，要一份 `pipeline.toml`）不在本仓主路径上 ——
-本仓根没有 `pipeline.toml`，硬跑只会报「配置不存在」。它归框架层，命令与口径见 `skills/pipe-init/SKILL.md`，
-别拿它当本仓的门。
-
 
 ## 怎么读结果
 
 - 先看 `python -X utf8 tools/wb_verify.py --tree .`：五块里哪块 FAIL，就先修那块对应的证据，不要跳着查。
-- 门红：`gates/last.json` 里该门 `exit_code` 非 0，日志尾在 `gates/logs/<门名>.log`；跨树汇总用 `python -X utf8 tools/pipeline_view.py --json`。
-- 工人不动：`python -X utf8 tools/wb_diag.py gates/diag/wb-<卡号>.jsonl` 看最后一个事件；「反复同一条被拒命令」是 harness 不支后台执行，不是工人不行。
+- 门红：判决文件里该门 `exit_code` 非 0，日志尾在逐门日志目录；跨树汇总用 `python -X utf8 tools/pipeline_view.py --json`。
+- 工人不动：`python -X utf8 tools/wb_diag.py <工人逐事件日志>` 看最后一个事件；「反复同一条被拒命令」是 harness 不支后台执行，不是工人不行。读到一片 `UnicodeDecodeError` / 乱码，先用它确认证据文件是**按什么编码写下来的**（外部命令 stdout 走系统区域编码：用 `locale.getencoding()` 解，不许用 `getpreferredencoding(False)` —— `-X utf8` 会让它回 utf-8），别先怀疑判据。
 - 队列说不清（落了没翻 / 翻了没落）：`python -X utf8 tools/wb_reconcile.py` 的三份清单。
-- 「结论是不是这棵树的」：`gates/last.json` 的 `rev` / `branch` / `tree`，与 `python -X utf8 tools/wb_verify.py --tree .` 报的父提交对一遍。
+- 「结论是不是这棵树的」：判决文件的 `rev` / `branch` / `tree`，与 `python -X utf8 tools/wb_verify.py --tree .` 报的父提交对一遍。
 
 ## 常见错与处置
 
@@ -67,21 +65,12 @@ python -X utf8 tools/wb_reconcile.py
 |---|---|---|
 | 判决「判不了」 | 空集：一条样例都没收集到 | 补样例或修收集器；**别当绿** |
 | 判决「没跑」 | 运行时依赖缺失（node / 浏览器 / 服务） | 补依赖；回报里如实写「未跑」 |
-| 某门带复用 | 读的是缓存，不是当下重跑 | 按 `pipe-gate` 的 `--no-reuse` 重跑 |
+| 某门带复用 | 读的是缓存，不是当下重跑 | 用跑门禁那个技能的 `--no-reuse` 重跑 |
 | 复现不了 | 结论属于**另一棵树**或另一笔提交 | 用 `rev` / `branch` 对齐后再读 |
 | 工人日志一片 `UnicodeDecodeError` | 证据文件按错编码写的（PowerShell `>` 是 UTF-16） | 用 python 写证据，别用 `>` 重定向 |
 | 台账里某条证据指不到 | 指针路径不存在 / 被 gitignore | 改成真路径；被 gitignore 的产物不算证据 |
-| 主树的改动被扫掉 | 落地失败后有人想「清干净重来」跑 reset --hard | 主树有未白名单改动时落地链自己会拒（`tools/pool/landing.py` 主干保护）；别人的改动只许 stash 挪开再精确复原 |
-
-## 复盘缺口（编码 / 对账 / 证据指针 / 时钟 / 幂等 / 落地安全）
-
-- （缺口 EN2）外部命令 stdout 是系统区域编码（cp936）：用 `locale.getencoding()` 解，不许用 `getpreferredencoding(False)`（`-X utf8` 会让它回 utf-8）—— 证据文件读不出等于没留证据。证据：`复盘/口径坑.md`、`复盘/看门狗护栏补强-T-G96.md`、`复盘/看门狗误杀-T-G94.md`
-- （缺口 LD1）台账对账器只认标题 / 批次围栏 / 证据指针语法，不认「差不多」；对不上的按死账处理，不就地改数 —— 对账红了就按死账流程走，别手改数对齐。证据：`复盘/卡/卡A280-对账器认批次围栏.md`、`复盘/卡/卡A272-对账器只认标题.md`、`复盘/契约-判据对账.md`
-- （缺口 LD2）证据指针要有固定语法（`文件#段落` / `文件:行`），否则半年后没人能追回那条结论 —— 写证据指针前先看 `tools/wb_land.py --help` 的 `--evidence` 口径。证据：`复盘/证据指针语法-T-G133.md`、`复盘/卡/卡A271-补证据指针254.md`、`复盘/卡/卡A270-补证据指针.md`
-- （缺口 LD3）封存之后才翻 status：先写指纹再改状态，顺序反了就是「状态说完了、证据说没完」—— 落地链⑤在⑥之前就是这个原因，别颠倒。证据：`复盘/卡/卡228-封存后才翻status.md`、`复盘/坑总账.md`、`复盘/DSH插件-定点深读-第二批.md`
-- （缺口 LD4）主树禁 reset --hard：落地失败后手工 reset 会把主控刚写进台账的条目一起扫掉（2026-11-02 20:36，F13 条目被扫、只能重做立卡）—— 落地链自带主干保护（`tools/pool/landing.py` 的 main_tree_offenders，第 789 行；调用在 2211–2219 行：主树有未白名单的跟踪文件改动就拒，主干只接受合并、不接受直接改）；要清干净用 stash 挪开再精确复原。证据：`tools/pool/ledger.py` 头注释、`复盘/卡/卡G8-两条纪律进技能.md`
-- （缺口 DF1）跨天/时区类缺陷的根治是注入「今天」（可注入时钟），不是改判定式 —— 复现这类缺陷先找时钟注入点，别改判定式迁就。证据：`复盘/黄金跨天漂移-可注入的今天-T-G62.md`、`复盘/审计-GLM53-外包系统对抗审核.md`、`复盘/坑总账.md`
-- （缺口 DF2）幂等写库：重放同一笔不许产生第二行，判据是「再跑一次读数为 0」—— 查幂等缺陷时重放一遍，读数不变才算修住。证据：`复盘/幂等写库-T-G86.md`、`复盘/外包卡-002-修T-G79幂等写库.md`、`复盘/文档重整方案.md`
+| 主树的改动被扫掉 | 落地失败后有人想「清干净重来」跑 reset --hard | 主树有未白名单改动时落地链自己会拒（主干保护）；别人的改动只许 stash 挪开再精确复原 |
+| 查了半天发现查错层 | 拿框架层自检当本仓的门 | 先按前置检查第 5 条分层；本仓主路径跑不了的别硬跑 |
 
 ## 从证据查到真因（五步）
 
@@ -89,9 +78,9 @@ python -X utf8 tools/wb_reconcile.py
 |---|---|---|
 | ① | 是哪棵树 / 哪一笔：`rev` / `branch` / `tree` | 三处对得上，再往下 |
 | ② | 门整体：`ok` 与每道门 `exit_code` | 找到第一道红门 |
-| ③ | 该门日志尾：`gates/logs/<门名>.log` | 拿到一句真错误（不是「失败」两个字） |
+| ③ | 该门日志尾 | 拿到一句真错误（不是「失败」两个字） |
 | ④ | 这道门的输入有没有变 / 有没有被复用 | 输入变了 ⇒ 必须 `--no-reuse` 重跑 |
-| ⑤ | 台账 / 队列 / 封存是否与 git 一致 | `wb_verify` + `wb_reconcile` 都无 FAIL |
+| ⑤ | 台账 / 队列 / 封存是否与 git 一致 | 一屏核对与对账器都无 FAIL |
 
 ## 自查
 
@@ -100,4 +89,5 @@ python -X utf8 tools/wb_reconcile.py
 3. 我没为了让红变绿去改判据、加豁免、手改门产物。
 4. 边界（没做到 / 没跑 / 证据缺失）我在回报里如实写了。
 
-> 三值判决、空集不算过、复用规则：判据在 `scripts/run_gates.py` 与门表；台账与封存的判据在 `tools/pool/`。
+> 三值判决、空集不算过、复用规则：判据在门禁入口与门表；台账与封存的判据在落地那一层。
+> 删掉整个 `skills/` 目录，框架照常能用。

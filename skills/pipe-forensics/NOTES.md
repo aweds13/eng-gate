@@ -4,7 +4,7 @@
 > ★ 这里不写判据 —— 判据在门与工具里。删掉整个 `skills/`，框架仍完整可用。
 >
 > 三层：元数据 → 正文（六节 + 五步查法 + 自查，≤120 行）→ `references/`。
-> 本技能的长表在 [证据落点](references/evidence-map.md)。
+> 本技能的长表在 [证据落点](references/evidence-map.md)，本仓绑定在 [本仓绑定](references/repo-bindings.md)。
 
 ## 这一层在防哪类错误
 
@@ -33,8 +33,10 @@
 
 - **主树被 reset 扫掉（2026-11-02 20:36）**：落地失败后想「清干净重来」，手工 reset --hard
   把主控刚写进台账的 F13 条目一起扫掉 ⇒ 重做立卡。落地链本来就有主干保护
-  （`tools/pool/landing.py` 的 main_tree_offenders，第 789 行）：主树有未白名单的跟踪文件改动
-  就拒，主干只接受合并。处置别人的未提交改动用 stash 挪开 + 精确复原，不用 reset。
+  （`tools/pool/landing.py:957` `def main_tree_offenders(...)`；调用在 `tools/pool/landing.py:1673`
+  与 `:2407`）：主树有未白名单的跟踪文件改动就拒，主干只接受合并。
+  处置别人的未提交改动用 stash 挪开 + 精确复原，不用 reset。
+  > 本节 2026-11-08 更正：旧稿写「第 789 行 def、调用 2211–2219 行」，与源码不符（源码在改，行号会漂）。
 
 ## 脚本接口与以后怎么改
 
@@ -46,3 +48,17 @@
 - **判据**：三值与空集在 `scripts/run_gates.py` 与门表；台账 / 封存在 `tools/pool/`。改判据去那里，**别改本技能**。
 - 证据落点会随工具演进（新产物目录）⇒ 改 `references/evidence-map.md` 的表，别在正文堆新路径。
 - 换 harness 要改的只许集中在 `skills/GLUE-harness.md`。
+
+## ★ 为什么分「SKILL.md / references/repo-bindings.md」两页
+
+依据 `docs/reference/agent-skills-spec.md`：§5 渐进加载三层（正文每次激活都全额付钱，本仓收紧到 120 行）、
+§6 引用只深一层、§8「稳定的写死、随环境变的留成参数」、§9 第 ⑤ 条「长表下沉 references，正文给相对链接」。
+
+于是：查证顺序与五步法（换仓不变）留在 `SKILL.md`；证据落点的具体路径、四条命令的参数、
+层归属（本仓根没有 `pipeline.toml`）、复盘缺口 7 条证据链（EN2 / LD1 / LD2 / LD3 / LD4 / DF1 / DF2）
+搬到 `references/repo-bindings.md`。
+
+**改造中踩的坑（2026-11-08）**：把命令块改成 `<一屏核对> --tree .` 这类占位后，
+「怎么读结果」那几条**不能跟着占位** —— 钉子 C 要求每个 `- ` 条目里有反引号包住、真实存在、
+且落在 `tools/` `skills/` `framework/cli/` 三根之一的脚本路径。命令块用占位、读法条用真路径，
+这样既泛用又仍然可重跑。

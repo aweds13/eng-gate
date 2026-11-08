@@ -1,10 +1,9 @@
 # 接链六步：从「读别人的目录」到「自己落第一笔」
 
 > 给 `pipe-takeover` 用的按需参考。它讲**顺序与验收**，不重抄判据：
-> A/B/C/D 定类在 `skills/pipe-takeover/references/classify.md`，
-> 映射表在 `skills/pipe-takeover/references/mapping.md`，
-> 六条禁止在 `skills/pipe-takeover/references/limits.md`。
-> 本页把六步串起来，每步给一条命令与一个可复核的验收。
+> A/B/C/D 定类在 [四类判据](classify.md)，映射表在 [映射表](mapping.md)，
+> 六条禁止在 [限制清单](limits.md)。本页把六步串起来，每步给一条命令与一个可复核的验收。
+> 本仓这些命令落在哪个文件、骨架铺几个文件、卡进哪份队列：见 [本仓绑定](repo-bindings.md)。
 
 **底线**：接手是「只加文件」，不是「改造对方」。六步里任何一步要删或改对方已有文件，都停下，
 把改动降级成一张卡，等对方同意。
@@ -15,11 +14,11 @@
 cd <目录>
 git status --porcelain          # 脏不脏；脏就先记下来，别在这里开工
 git log --oneline -5
-python -X utf8 <本仓>/tools/wb_takeover.py --root <目录> --json
+python -X utf8 tools/wb_takeover.py --root <目录> --json
 ```
 
-验收：判类输出里 `class` 是 A/B/C/D 之一，且 `signals` 能说出理由（不是「看着像」）。
-命令退 2 = 目录不存在，先把路径改对。**这一步不写任何文件**；写了的唯一东西是笔记。
+验收：判类输出里 `kind` 是 A/B/C/D 之一，且 `readings` 里每条 `{name, ok, detail}` 能说出理由
+（不是「看着像」）。命令退 2 = 目录不存在，先把路径改对。**这一步不写任何文件**；写了的唯一东西是笔记。
 
 ## 第 2 步：不动原结构（把「不许碰」显式记下来）
 
@@ -27,7 +26,7 @@ python -X utf8 <本仓>/tools/wb_takeover.py --root <目录> --json
 git -C <目录> ls-files | wc -l          # 勘察前后应当一致
 ```
 
-按 `skills/pipe-takeover/references/limits.md` 的六条过一遍：主干、依赖、CI、已有测试、运行时、对方文件。
+按 [限制清单](limits.md) 的六条过一遍：主干、依赖、CI、已有测试、运行时、对方文件。
 验收：`git status --porcelain` 与第 1 步**逐字相同**；`ls-files` 计数不变。
 这一条是六步里最容易破的 —— 因为「顺手改一下」在接手时最自然。
 
@@ -42,19 +41,21 @@ git -C <目录> ls-files | wc -l          # 勘察前后应当一致
 | C（裸仓） | 铺最小骨架：骨架配置 + 队列壳 + 台账壳 + 至少一道真门 | 没有门就没有「过不过」这回事 |
 | D（别人框架） | **止步**，只出映射表 | 两套框架并存时，先问清楚谁来当门 |
 
-铺骨架用 `pipe-init` 的模板（14 个文件，只加不覆盖，幂等）；**不要** `pip install` 对方的开发依赖，
-也不要把本仓的 `wb_*` 拷进去 —— 那些工具的根写死在 `tools/` 的父目录，换个仓就跑不了。
+铺骨架用 `pipe-init` 的模板（只加不覆盖，幂等；铺出几个文件以模板目录为准）；**不要** `pip install`
+对方的开发依赖，也不要把本仓的链工具拷进去 —— 拷过去能跑与否取决于对方的**数据根**，
+不取决于目录长得像不像（工具根 / 数据根的分法见 [本仓绑定](repo-bindings.md)）。
+真要复用工具，走「对方仓设数据根」那条路，并且单独立一张卡。
 
-验收：在目标目录里跑得通那道新门，且输出落在 `gates/last.json`（或模板约定的同位置）。
+验收：在目标目录里跑得通那道新门，且判决落在模板约定的位置（本仓是 `gates/last.json`）。
 
 ## 第 4 步：首张卡（一张，不是一批）
 
 最小骨架的队列是空的。第一张卡只写**一个可复述的改动**，四段齐：问题 / 改法 / 判据 / 证据。
 落点分两种，别混：
 
-- 目标目录在**本仓内**：卡登记进 `docs/workbacklog.toml`，规格进 `复盘/卡/`，之后走 `pipe-card` / `pipe-land`。
+- 目标目录在**本仓内**：卡登记进本仓队列，规格进本仓的卡规格目录，之后走 `pipe-card` / `pipe-land`。
 - 目标目录在**本仓外**：卡登记进对方骨架的 `backlog.toml`，规格按对方的模板写；
-  框架层的命令与字段口径见 `skills/pipe-init/references/scaffold.md`（那里是唯一保留框架 CLI 的地方）。
+  框架层的命令与字段口径见 [骨架清单](../../pipe-init/references/scaffold.md)。
 
 验收：队列里**只多了一张**卡；`git status` 里只多了骨架文件与这张卡的文件。
 
@@ -62,14 +63,14 @@ git -C <目录> ls-files | wc -l          # 勘察前后应当一致
 
 ```bash
 # 目标在本仓内：走本仓八步链
-python -X utf8 tools/wb_land.py --card <号> --tree .wt/<号> --task <T-AG…> \
-    --title "<标题>" --evidence "<证据>" --allow <文件…>
+python -X utf8 tools/wb_land.py --card <号> --tree <卡树> --task <台账号> \
+    --evidence "<读数>" --allow <文件…>
 
 # 目标在仓外：用对方自己的门（一步只跑那一道门，别铺全量）
 ```
 
 验收：本仓内 `python -X utf8 tools/wb_verify.py --tree .` 五块无 FAIL；
-仓外看对方 `gates/last.json` 里这道门的 code 为 0，且 `git show --stat` 只含这一笔该带的文件。
+仓外看对方判决文件里这道门的 code 为 0，且 `git show --stat` 只含这一笔该带的文件。
 
 首笔落地失败最常见的不是技术问题，而是**范围**：把「顺手修」塞进了第一笔。
 第一笔的作用是证明链能走通，不是把活干完。

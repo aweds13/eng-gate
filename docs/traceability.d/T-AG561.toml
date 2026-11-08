@@ -18,7 +18,7 @@ evidence = [
   "text:scripts/run_gates.py::FLAKE_PROBE_ENV = ",
   "text:scripts/run_gates.py::FLAKE_LABELS = ",
   "text:tests/test_flake_probe.py::def test_empty_nodeid_list_is_a_loud_error(",
-  "text:skills/pipe-gate/SKILL.md::TF_GATE_FLAKE_PROBE=1",
+  "text:skills/pipe-gate/references/repo-bindings.md::TF_GATE_FLAKE_PROBE=1",
 ]
 gaps = [
   """- 隔离复核默认关（`TF_GATE_FLAKE_PROBE=1` 才开，会真起 pytest）；关着时门禁行为与从前逐字相同，代价是假红仍然只能靠人肉读。

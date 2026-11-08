@@ -2,6 +2,7 @@
 
 > `pipe-init/SKILL.md` 的按需参考。**清单会随模板变** —— 真源是 `framework/templates/minimal/`，
 > 别拿这份当判据；要当下的清单就跑一次 `--json`。
+> 本仓把脚手架库、模板、CLI 放在哪，见 [本仓绑定](repo-bindings.md)。
 
 ## 1. 当下的铺出清单（`minimal` 模板）
 
@@ -24,7 +25,8 @@
 | 13 | `<新仓>/tests/test_evidence.py` | 示例判据 |
 | 14 | `<新仓>/tests/test_nail_sample.py` | 钉子样例（证明门真的会咬） |
 
-`count = 14`。换模板（`--template <名>`）时清单不同 —— 以该模板的 `--json` 读数为准。
+`count = 14`（2026-11-08 复核：`git ls-files framework/templates/minimal | wc -l` ⇒ 14）。
+换模板（`--template <名>`）时清单不同 —— 以该模板的 `--json` 读数为准。
 
 ## 2. 幂等口径（怎么读，不是判据）
 
@@ -50,7 +52,12 @@
 
 ```bash
 cd <目标目录>
-python -X utf8 <本仓>/framework/cli/main.py gate --config pipeline.toml
+python -X utf8 <本仓>/framework/cli/main.py --config pipeline.toml gate
 ```
 
-`pipe gate` 需要 `pipeline.toml`；本仓根目录**没有**它，所以在新铺的目录里跑才有效。
+★ `--config` 是**全局**参数，必须写在子命令**前**。写成 `… main.py gate --config pipeline.toml`
+实测 rc=2，原文 `pipe: error: unrecognized arguments: --config pipeline.toml`。
+在目标目录里跑时也可以省略 `--config`（默认读 `./pipeline.toml` 或 `$PIPELINE_TOML`）。
+
+`pipe gate` 需要 `pipeline.toml`；本仓根目录**没有**它（在那里跑同一条命令退 `5`，原文
+`错误：配置不存在：pipeline.toml`），所以在新铺的目录里跑才有效。

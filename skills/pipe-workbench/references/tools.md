@@ -1,13 +1,14 @@
 # 工作台四件套：参数、产物、边界
 
 > `pipe-workbench/SKILL.md` 的按需参考。**判据在四个工具里**；本表只讲参数与产物。
+> 本仓的落地路径、现读取数、看守退出码与历史证据：见 [本仓绑定](repo-bindings.md)。
 
 ## 1. 四件套
 
 | # | 工具 | 干什么 | 关键参数 | 产物 / 读法 |
 |---|---|---|---|---|
 | ① | `tools/pipeline_view.py` | 六块收成一份（只读、幂等） | `--json` / `--report` / `--root` | 六块：`cards` / `gates` / `verdicts` / `leases` / `fences` / `worktrees` |
-| ② | `tools/wb_daily.py` | 今日一页：今天该做什么 | `--root` / `--json` | 五个分区（空也说「空」） |
+| ② | `tools/wb_daily.py` | 今日一页：今天该做什么 | `--root` / `--json` | **7 段**（2026-11-08 实跑读数：`[待派]` / `[在飞]` / `[批·等到提交]` / `[批·还在收集]` / `[内存]` / `[门禁]` / `[签到]`；空也说「空」）。另有条件行 `[卡池]` / `[读数]` / `[已落没翻 status]` / `[批]`，不恒在。渲染顺序见 `tools/wb_daily.py:384-402` |
 | ③ | `tools/workbench_bridge.py` | 把状态拼成给工人的一段文字 | `--card` / `--tree` / `--batch` / `--root` | 纯函数，同输入逐字节相同 |
 | ④ | `tools/wb_dash.py` | 工人状态面板（只读本地页） | `--port` / `--host` | 默认 `127.0.0.1:8787` |
 
@@ -21,6 +22,8 @@
 | `leases` | `gates/diag/pool-registry.json` |
 | `fences` | 任务栅栏的状态 |
 | `worktrees` | `git worktree` + 本仓 `.wt/*` |
+
+块 id 与源文件的那张表在 `tools/pipeline_view.py:97-125`。
 
 缺源的正确表现：**该块 `null` + `*_note` 写原因**。把缺源洗成空数组 = 把「没读到」伪装成「没有」。
 

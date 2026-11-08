@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | 「提交前一律跑全量 19 道门」 | `wb_land` 自己传 `--profiles auto`，按**改动面**算必需档；碰 `scripts/**` `tools/**` `gates/**` 仍强制全量 | **已改判** | A327（`T-G247`） | `python -X utf8 tools/wb_verify.py --tree .`（读「门禁」那行：`应有 N` 与实跑对账，`not_run` 必须 0） |
 | 「先封存再提交」与「先提交再封存」两头说法都有 | 门禁读数只认「**每笔都是封存笔**」（`last.json.rev == 父提交`）；落地链在卡树里 staging，不在主树手工折腾 | **已改判** | A324（`T-AG437`） | `python -X utf8 tools/wb_review.py --rev HEAD --allow <文件>`（读 ③″「封存树 vs 提交树：相同」那行） |
-| `--no-preflight` = 跳过预检 | 内层改名 `--skip-preflight`（跳 ③″ 快门禁预检）；`--preflight` 是**壳层只读体检**（11 条判据、零副作用）。旧写法仍收，会提示已改名 | **已改名** | G3（`T-AG458`，卡 E1 立的新义） | `python -X utf8 tools/wb_land.py --preflight --task <台账号> --allow <文件>`（0 / 1） |
+| `--no-preflight` = 跳过预检 | 内层改名 `--skip-preflight`（跳 ③″ 快门禁预检）；`--preflight` 是**壳层只读体检**（12 条判据、零副作用）。旧写法仍收，会提示已改名 | **已改名** | G3（`T-AG458`，卡 E1 立的新义） | `python -X utf8 tools/wb_land.py --preflight --task <台账号> --allow <文件>`（0 / 1） |
 | 「在 `.wt/<卡>` 里跑 `tools/*` 读到的是同一份台账」 | 台账 / 门禁产物跟**数据根**走（`PIPE_DATA` > cwd 像数据根 > `PIPE_HOME` / 工具根上一级）；门表跟**工具根**走 | **已改判** | A326（`T-AG441`） | `python -X utf8 tools/pipe_root.py --check`（0 / 2） |
 | 「卡上的活留在工作区，卡树里先提交也行」 | 卡树 HEAD **必须**是主树 HEAD 的祖先；已经在卡树提交过的走 `git -C <树> checkout <主树 HEAD>` → `cherry-pick -n <那笔>` → `reset` | **半冲突**（工具会停手并给这三步） | E6（`T-AG448`） | 落地链退出码 3 + 原话 |
 | 「台账证据只靠 `test:xxx.py::用例` 就够」 | `test:` 已剥 `::用例名`（`assertion_path`），但**同时写** `file:tests/<你的测试文件>.py` 最稳；只写 `test:` 的测试文件在反向判据里曾永不算数 | **已改判** | E21（`T-AG474`） | `python -X utf8 scripts/audit_progress.py --rev <提交>`（0 / 1） |

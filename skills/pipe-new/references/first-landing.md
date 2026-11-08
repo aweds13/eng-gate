@@ -1,13 +1,13 @@
 # 空目录的第一次落地：完整时间线 + 三个最常见的失败
 
-> 「空目录」在本仓指的是**本仓里一个还没有内容的新项目目录**，不是另一个仓。
-> 它的首笔落地仍然走本仓的文书壳与门表，所以不需要再铺 `pipeline.toml`、台账、门表 ——
-> 那些 `pipe-init` 才管，而且铺在别处。判据全在脚本里，本文件只讲顺序与现场处置。
+> 给 `pipe-new` 用的按需参考。它讲**顺序、命令形状与现场处置**，换一个仓也不必改；
+> 队列文件叫什么、卡规格落哪个目录、树前缀与分支名、工具真路径：见 [本仓绑定](repo-bindings.md)。
+> 判据全在脚本里，本文件不抄。
 
 ## 0. 前提（三条，缺一条就先补齐）
 
 1. 目录在本仓内，且已有一次提交（`git log --oneline -1 <目录>` 有输出）。
-2. 队列里有一条卡指向它（`docs/workbacklog.toml` 的 `[[cards]]`，`tree` 字段写 `.wt/<号>`）。
+2. 队列里有一条卡指向它（卡的 `tree` 字段写卡树的相对路径）。
 3. 主树工作区干净：`git status --porcelain` 为空。
 
 ## 1. 完整时间线
@@ -19,18 +19,17 @@ echo "# <项目名>" > <目录>/README.md
 git add <目录> && git commit -m "chore(<scope>): <项目名> 起目录"
 
 # ② 卡规格 + 进索引（两步不能并成一步；落地脚本只认索引）
-#    复盘/卡/卡<号>-<短名>.md：问题 / 改法 / 判据 / 证据 四段
-git add 复盘/卡/卡<号>-<短名>.md
-git ls-files --error-unmatch 复盘/卡/卡<号>-<短名>.md   # 不报错才算进索引
+#    <卡规格目录>/卡<号>-<短名>.md：问题 / 改法 / 判据 / 证据 四段
+git add <卡规格文件>
+git ls-files --error-unmatch <卡规格文件>   # 不报错才算进索引
 
 # ③ 建树（默认干跑，先把命令看一眼）
 python -X utf8 tools/wb_plan.py worktrees
 python -X utf8 tools/wb_plan.py worktrees --execute
 
 # ④ 在卡树里把 ①② 的活做完，回到主树再落地
-python -X utf8 tools/wb_land.py --card <号> --tree .wt/<号> --task <T-AG…> \
-    --title "<标题>" --evidence "<证据>" \
-    --allow <目录>/README.md <目录>/…
+python -X utf8 tools/wb_land.py --card <号> --tree <卡树> --task <台账号> \
+    --evidence "<读数>" --allow <文件…>
 
 # ⑤ 核实（五块逐块对）
 python -X utf8 tools/wb_verify.py --tree .
@@ -54,7 +53,7 @@ python -X utf8 tools/wb_verify.py --tree .
 多半是：队列里登记的卡规格没有进索引
 ```
 
-真因：只在工作区建了 `复盘/卡/卡<号>-<短名>.md`，没有 `git add`；落地的钉子只认索引里的文件。
+真因：只在工作区建了卡规格，没有 `git add`；落地的钉子只认索引里的文件。
 
 处置：`git add` 卡规格后重跑。别在没有卡规格的情况下重跑全量门禁 —— 那才是真浪费。
 
@@ -86,20 +85,20 @@ python -X utf8 tools/wb_verify.py --tree .
 或 `git checkout <旧提交> -- <文件>` 拿回来，最后 `git reset --hard` 到新基点之上重做一次提交。
 **不要**让脚本替你做 `checkout`：它判断不是祖先时宁可停下。
 
-## 3. 仓外的新仓：出口（本技能止步在这里）
+## 3. 仓外的仓：出口（本技能止步在这里）
 
-本仓所有链工具的根写死在 `tools/` 的父目录（`ROOT = Path(__file__).resolve().parent.parent`），
-没有指向别仓的参数；门表也硬编码在 `scripts/run_gates.py`。所以替**仓外另一个仓**落地，不能靠这套命令，
-只能做三件事，且都要另开卡：
+链工具以**一个数据根**为单位：`tools/` 分工具根（代码住哪，`PIPE_HOME` 可换）与数据根
+（队列 / 台账 / 门禁产物住哪，`PIPE_DATA` 可指，见 `tools/pipe_root.py`）。所以「同一个人拿同一份
+`tools/` 服务另一个仓」是支持的，但**一条命令替别仓落地**不是 —— 那是另一次部署，要另开卡：
 
-1. 把对方登记进项目索引（`infra/pool/projects.toml`，`root` / `tree_prefixes` 三条硬判据）；这一处只有用户能改。
-2. 把对方的产物映射成本仓的卡（顺序见 `skills/pipe-takeover/references/mapping.md`），卡仍落在本仓队列。
-3. 真要在对方仓交首笔：在**对方仓**里按 `pipe-init` 铺最小骨架，用对方自己的门；不要指望本仓的 `wb_land`。
+1. 把对方登记进项目索引（三条硬判据在 `tools/pool/projects.py` 里）；这一处只有用户能改。
+2. 把对方的产物映射成本仓的卡（顺序见 [映射表](../../pipe-takeover/references/mapping.md)），卡仍落本仓队列。
+3. 真要在对方仓交首笔：在**对方仓**里按 `pipe-init` 铺最小骨架，用对方自己的门；不要指望本仓的落地链。
 
 ## 4. 回滚点
 
 - 落地链在跑之前会打一个快照 ref（`refs/snapshots/…`），退 5 的那次**没有**快照 —— 所以主树别留脏改动。
-- 落地中途断了：先 `git -C .wt/<号> log --oneline -3` 看卡树到哪一步，再决定是重跑还是回滚到快照。
+- 落地中途断了：先 `git -C <卡树> log --oneline -3` 看卡树到哪一步，再决定是重跑还是回滚到快照。
 - 已经提交但门禁后发现不对：`git reset --hard <快照 ref>` 在卡树上回，主树上用 `git revert` 而不是 `reset`。
 
 > 判据与参数面在 `tools/pool/landing.py`；队列与冲突域在 `tools/wb_plan.py`；核实五块在 `tools/wb_verify.py`。

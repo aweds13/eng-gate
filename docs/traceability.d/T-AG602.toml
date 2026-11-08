@@ -1,0 +1,27 @@
+[entries."T-AG602"]
+id = "T-AG602"
+title = "技能泛用化：本仓表述下沉 references，入口按页只留动作"
+group = "skills"
+status = "done"
+evidence = [
+  "test:test_check_skills.py::test_real_repo_is_green",
+  "test:test_check_skills.py::test_result_item_without_script_is_red",
+  "test:test_check_skills.py::test_four_flows_is_red",
+  "test:test_doc_debt_ratchet.py::test_real_repo_debt_does_not_exceed_baseline",
+  "test:test_check_docs.py::test_dead_pointer_is_reported",
+  "test:test_check_docs.py::test_baseline_ratchet_only_goes_down",
+  "text:skills/nails/check_skills.py::MAX_LINES = 120",
+  "text:skills/nails/check_skills.py::READ_SECTION",
+  "text:AGENTS.md::先定层，再一次写完",
+  "text:skills/README.md::换仓只用换一份",
+  "text:skills/pipe-land/SKILL.md::八步",
+  "text:skills/pipe-card/references/dispatch.md::mid",
+  "file:skills/pipe-forensics/references/repo-bindings.md",
+  "file:skills/pipe-init/references/repo-bindings.md",
+  "file:skills/pipe-land/references/repo-bindings.md",
+  "file:skills/pipe-new/references/repo-bindings.md",
+  "file:skills/pipe-takeover/references/repo-bindings.md",
+  "file:skills/pipe-workbench/references/repo-bindings.md",
+]
+gaps = "- 换仓实测没做：九份 `skills/pipe-gate/references/repo-bindings.md` 这类绑定页里的读数都是照本仓现树抄的，没有真拿第二个仓跑过一遍 —— 「换仓只换一份」目前是结构上成立，不是验过。- 数值口径仍无机器守卫：`tools/check_skills_claims.py` 判不出 78 条（占位符形状），它核不到「门数 / 篇数 / 行数」这类会漂的数 ⇒ 陈旧陈述以后还能再长出来。- 工具侧同债不在本卡域：`tools/wb_land.py` 的 `--help` 仍写「11 条判据」（真值 12，判据真源 `tools/pool/landing.py`），本卡只改技能与入口页。- 流程数与长度只数形状：`skills/nails/check_skills.py` 只数标题条数与行数，不判「一节写得有没有用」；写得对但写得多仍可能过。- `AGENTS.md` 的四套分层只给了入口，没有守卫保证「不混用」——同一句话仍可能被两个人按两套分层各写一遍（分层入口见 `AGENTS.md` 那一节；`skills/nails/check_skills.py` 只核形状，不核分层）。"
+
