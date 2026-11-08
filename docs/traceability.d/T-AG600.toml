@@ -1,0 +1,30 @@
+[entries."T-AG600"]
+id = "T-AG600"
+title = "云门禁泛用化：抽仓无关骨架 + 每仓一份 profile"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/cloud/profile.py",
+  "file:tests/_cloud_profile.py",
+  "file:tests/test_cloud_profiles.py",
+  "text:scripts/cloud/run_gate.sh::--check-residue",
+  "text:scripts/cloud/run_gate.sh::--render",
+  "text:scripts/cloud/run_gate.sh::P_GATE_REMOTE_LOG",
+  "text:scripts/cloud/profiles/engineering.toml::gates/diag/cloud-4of5-{card}.log",
+  "text:scripts/cloud/profiles/engineering.toml::source_default",
+  "text:scripts/cloud/profiles/openmaic.toml::pnpm exec vitest run",
+  "test:test_cloud_profiles.py::test_skeleton_does_not_know_any_repo",
+  "test:test_cloud_profiles.py::test_second_profile_has_no_first_repo_keys",
+  "test:test_cloud_profiles.py::test_engineering_render_restores_the_historical_literals",
+  "test:test_cloud_profiles.py::test_render_has_no_missing_key",
+  "test:test_cloud_sync.py::test_empty_requires_env_still_guards_the_loop",
+  "test:test_cloud_sync.py::test_run_gate_keeps_the_ssh_session_alive",
+  "test:test_cloud_sync.py::test_run_gate_asserts_the_remote_tree_matches_the_target_commit",
+  "test:test_cloud_sync.py::test_step5_fetches_everything_best_effort",
+  "test:test_ci_portability.py::test_b5_run_gate_sh_is_still_syntax_valid",
+  "test:test_ci_portability.py::test_r2_local_drive_default_stays_registered_debt",
+  "test:test_ci_portability.py::test_r14_gate_runs_on_the_interpreter_that_got_the_deps",
+  "test:test_cloud_product_freshness.py::test_run_gate_verifies_and_deletes_stale_product",
+]
+gaps = "- `tools/gate_pool.py:733-740` 的 `_gate_env()` **无条件**要 `TF_PROJECTS_TOML`（空就抛 `CloudUnreachable`），而只有 engineering 声明了这个键 —— 第二个仓走落地链派活时会被一条自己 profile 没要求的守卫挡死（本轮已实测，未修：属落地链，不在本卡域）。- 骨架 5 处裸 `$P_XXX`（历史写法）在 `--render` 产物里不被替换，但真跑靠 dump 循环赋值，行为无差；本轮已把 `scripts/cloud/run_gate.sh` 里这 5 处统一成 `${P_XXX}`（独立复核 D5），渲染产物仍不是「可直接执行的脚本」（引号嵌套 D6，见 `scripts/cloud/profile.py` 的 `_PSLOT`）。- 播种源目录 `gates/diag/seed-<卡>` 仍由人/上一趟留好，骨架不生成 —— 换仓时得自己造一份绿的，否则 2/5 退 4（行为正确，但接入方要知道；工程侧口径见 `docs/subsystems/ci/云门禁机.md` 的 §3.2 与 `scripts/cloud/run_gate.sh` 的 2/5 段）。"
+

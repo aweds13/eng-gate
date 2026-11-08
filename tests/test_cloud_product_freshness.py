@@ -28,6 +28,18 @@ for _d in ("tools", "scripts"):
     if str(ROOT / _d) not in sys.path:
         sys.path.insert(0, str(ROOT / _d))
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _cloud_profile  # noqa: E402  —— 渲染 haystack：骨架 + engineering profile
+
+
+def _rendered() -> str:
+    """engineering 这趟实际会长成的脚本（骨架 + profiles/engineering.toml 的值）。
+
+    泛用化之后 engineering 的门禁命令住在 profile 里，只看骨架文本已经问不出
+    「这趟真的会跑 scripts/run_gates.py 吗」—— 那正是本文件判据 5 的问题。
+    """
+    return _cloud_profile.render("engineering")
+
 import gate_pool  # noqa: E402  —— 被测对象（sys.path 先插好了）
 
 CLI = [sys.executable, "-X", "utf8", str(ROOT / "tools" / "gate_pool.py"), "check-product-fresh"]
@@ -139,7 +151,7 @@ def test_cli_missing_product_is_not_fresh(tmp_path: Path) -> None:
 
 def test_run_gate_verifies_and_deletes_stale_product() -> None:
     """5/5 必须调核验、失败必须 `rm` 掉产物并 `exit 9` —— 删掉这段而不改测试是不行的。"""
-    script = (ROOT / "scripts" / "cloud" / "run_gate.sh").read_text(encoding="utf-8")
+    script = _rendered()
     assert "check-product-fresh" in script
     assert "--started-at \"$started_at\"" in script
     assert "--seed \"$seed_dir/last.json\"" in script
@@ -155,5 +167,5 @@ def test_run_gate_verifies_and_deletes_stale_product() -> None:
 @pytest.mark.parametrize("marker", ["check-product-fresh", "--seed \"$seed_dir/last.json\""])
 def test_script_keeps_seed_flag(marker: str) -> None:
     """播种源必须一直传进去 —— 只靠 `at` 比较挡不住「时钟回拨 / 同秒重写」。"""
-    script = (ROOT / "scripts" / "cloud" / "run_gate.sh").read_text(encoding="utf-8")
+    script = _rendered()
     assert marker in script

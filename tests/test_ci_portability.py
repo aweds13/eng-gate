@@ -13,7 +13,8 @@ r"""CI 可复现性判据（卡 E55 · 云门禁加固）。
   ⇒ 落地只能 `--commit-only`。这里钉住两半：**写得进去** 与 **没有就必拒**。
 
 **判据 B —— CI 脚本不许依赖本机私有状态。**
-  AST 扫 `scripts/cloud/**` + `scripts/run_gates.py`，禁硬编码本机盘符路径与 IP。
+  AST 扫 `scripts/cloud/**`（含 `profiles/*.toml`）+ `scripts/run_gates.py`，
+  禁硬编码本机盘符路径与 IP。
   白名单每条都写理由（见 `WHITELIST`），并且**白名单本身也被钉住**：多一条、少一条、
   理由空着，都会红 —— 否则白名单会悄悄烂成「什么都放行」。
 
@@ -44,14 +45,17 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT / "tools") not in sys.path:
-    sys.path.insert(0, str(ROOT / "tools"))
+for _p in (ROOT / "tools", Path(__file__).resolve().parent):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
+import _cloud_profile as prof  # noqa: E402 —— 测试侧读法（渲染 / 骨架 / profile）
 import gate_pool as gp  # noqa: E402
 
 RUN_GATES = ROOT / "scripts" / "run_gates.py"
 CLOUD_DIR = ROOT / "scripts" / "cloud"
 RUN_GATE_SH = CLOUD_DIR / "run_gate.sh"
+PROFILES_DIR = CLOUD_DIR / "profiles"
 
 
 # ====================================================================== 判据 A
@@ -225,6 +229,8 @@ def test_a6_landing_reads_host_field_name() -> None:
 # ====================================================================== 判据 B
 # 扫描范围：CI 会真的在**两台机器**上执行的东西
 SCAN_SUFFIXES = {".sh", ".ps1", ".py", ".bash"}
+# ★ profiles/*.toml 必须单独加：profile 化之后，仓相关的默认值（R2 那条本机 D 盘路径）
+#   从骨架搬进了 profile。只按上面四个后缀扫 ⇒ 它正好落在扫描面之外，R2 会**假绿**。
 SCAN_EXTRA = [
     ROOT / "scripts" / "run_gates.py",
     CLOUD_DIR / "pool-config" / "projects.toml.tmpl",
@@ -240,9 +246,11 @@ _PRIVATE_PATH_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
 _IP_RE = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 _LOOPBACK = {"127.0.0.1"}
 
-# 白名单：`(相对路径, 规则标签, 子串, 理由)` —— 四条**全部**命中才豁免（逐行判）。
+# 白名单：`(相对路径, 规则标签, 子串, 理由)` —— 几条**全部**命中才豁免（逐行判）。
 # 门槛：这一行必须在**云机上照样成立**，而不是「在本机上方便」。
 # 已尽力把能改的都改成不写死（见 gates/diag/_fix_run_gate_paths.py）：7 → 4 条。
+# ★ profile 化之后从骨架搬进 `profiles/*.toml` 的三条也在这里登记（不是整文件豁免：
+#   每条只钉一个子串、一行）。
 WHITELIST: tuple[tuple[str, str, str, str], ...] = (
     (
         "scripts/cloud/run_gate.sh",
@@ -258,13 +266,31 @@ WHITELIST: tuple[tuple[str, str, str, str], ...] = (
         "文件头「前提」注释里的同一条私钥路径（给人读的运行前提），同上，跑在本机侧。",
     ),
     (
-        "scripts/cloud/run_gate.sh",
+        "scripts/cloud/profiles/engineering.toml",
         "本机 D 盘",
-        'cfg_local="${TF_POOL_CFG_SOURCE_DIR:-D:/repo/infra/pool}"',
-        "⚠ **现存债，不是合理**：默认值绑死本机祖父目录（只读它、scp 它）。留着的理由："
-        "改成「从脚本位置推」会改变 Git Bash 下 /d/… vs D:/… 的取值，而本卡不许真跑云门禁"
-        "⇒ 无法端到端验证，不为好看冒断掉云门禁的险。运维一律显式给 TF_POOL_CFG_SOURCE_DIR。"
+        'source_default = "D:/repo/infra/pool"',
+        "⚠ **现存债，不是合理**：默认值绑死本机祖父目录（只读它、scp 它）。profile 化之后它"
+        "从骨架搬进了这份 profile —— 债没消失、只是换了位置，所以这里也必须登记：不登记它正好"
+        "落在扫描面之外（只扫 .sh/.ps1/.py/.bash），B1 会假绿。留着的理由：改成「从脚本位置推」"
+        "会改变 Git Bash 下 /d/… vs D:/… 的取值，而本卡不许真跑云门禁 ⇒ 无法端到端验证，"
+        "不为好看冒断掉云门禁的险。运维一律显式给 TF_POOL_CFG_SOURCE_DIR。"
         "见 docs/subsystems/ci/云门禁-可复现性清单.md §2 的 R2。",
+    ),
+    (
+        "scripts/cloud/profiles/engineering.toml",
+        "本机 D 盘",
+        'repo_root = "D:/repo/engineering"',
+        "**按设计如此**：profile 就是「每仓一份、描述这台机器上的这个仓」的那层配置"
+        "（profile.py 的 cmd_check 把 repo_root 列为必填键），值天然是本机绝对路径。"
+        "它**不会流向云机**：骨架 run_gate.sh 对 P_REPO_ROOT 零引用（grep P_REPO_ROOT 零命中）。"
+        "哪天骨架开始引用它，这条豁免必须改成「从脚本位置推」。",
+    ),
+    (
+        "scripts/cloud/profiles/openmaic.toml",
+        "本机 D 盘",
+        'repo_root = "D:/repo/program/OpenMAIC"',
+        "同上（第二仓的 profile）：只描述「openmaic 这个仓在这台机器上的位置」，"
+        "骨架不消费 P_REPO_ROOT ⇒ 不进云机脚本。它是 profile 的必填键，删不掉。",
     ),
     (
         "scripts/run_gates.py",
@@ -282,6 +308,14 @@ def _scan_targets() -> list[Path]:
         for p in sorted(CLOUD_DIR.rglob("*")):
             if p.is_file() and p.suffix in SCAN_SUFFIXES:
                 out.append(p)
+    # ★ profile 也是「CI 会真的执行的东西」：profile 的值由它填进骨架，等价于脚本的一部分。
+    #   只扫四个后缀会让仓相关的私有默认值从扫描面溜走（R2 就是这么藏进去的）。
+    if PROFILES_DIR.is_dir():
+        profiles = sorted(PROFILES_DIR.glob("*.toml"))
+        # ★ 自证：扫不到 .toml 就等于扫描面自己缩水 —— 上面那条 glob 会静默扫空，
+        #   R2 又躲回扫描面之外假装不存在。宁可在这里红，也不要 B1 假绿。
+        assert profiles, f"{_rel(PROFILES_DIR)} 下一份 profile 都没扫到 —— 扫描面缩水了"
+        out.extend(profiles)
     out.extend(p for p in SCAN_EXTRA if p.is_file())
     return [p for p in out if p.exists()]
 
@@ -447,6 +481,17 @@ def _src(p: Path) -> str:
     return p.read_bytes().decode("utf-8", "replace")
 
 
+def _rendered() -> str:
+    """engineering profile 渲染后的**平铺脚本** —— R9/R14 这类断言的 haystack。
+
+    ★ 为什么不能读 `run_gate.sh` 原件：profile 化之后，仓相关的值（解释器路径、
+      `-m pip install`、两趟 `run_gates.py` 调用）住在 `profiles/engineering.toml`，
+      骨架里只剩 `${P_…}` 槽位。对着空槽位断言，锚点必然丢 —— 断言会变成「看不到就说
+      不存在」，比红更糟。渲染产物才是 CI 真正执行的那份。
+    """
+    return prof.render("engineering")
+
+
 def _bash_step(text: str, tag: str) -> str:
     """取 `=== <tag> …` 到下一个 `=== ` 之间的片段（tag 例如 `3.5/5`）。"""
     start = text.index(f"=== {tag} ")
@@ -491,20 +536,30 @@ def test_r1_python_version_is_pinned_and_recorded() -> None:
 
 
 def test_r2_local_drive_default_stays_registered_debt() -> None:
-    """R2：`run_gate.sh` 的本机 D 盘默认值是**登记过的债**，不许悄悄消失、也不许悄悄扩散。
+    """R2：本机 D 盘默认值是**登记过的债**，不许悄悄消失、也不许悄悄扩散。
 
-    两头都要钉：
-      · 值还在 ⇒ 清单 R2 的「现状」没写错；
+    ★ profile 化之后债搬了家：`run_gate.sh` 里只剩 `${P_CFG_SOURCE_DEFAULT:-}` 这个槽位，
+      带盘符的字面住在 `scripts/cloud/profiles/engineering.toml` 的 `source_default`。
+      本用例对**新位置**钉三头：
+      · 值还在 toml 里 ⇒ 清单 R2 的「现状」没写错；
+      · 渲染之后仍落到 `cfg_local=` ⇒ 「搬进 profile」没有顺手把取值链改断；
       · 还在 `WHITELIST` 里、且理由 ≥20 字符并点名 R2 ⇒ 它没有被顺手删掉白名单
-        （删了 B1/B2 会红），也没有被扩成「整目录放行」。
+        （删了 B1/B2 会红），也没有被扩成「整文件放行」（B4b 另有反向用例）。
     """
-    text = _src(RUN_GATE_SH)
-    debt = 'cfg_local="${TF_POOL_CFG_SOURCE_DIR:-D:/repo/infra/pool}"'
-    assert debt in text, (
+    # ★ profile 化之后这条债**搬了家**：骨架里只剩一个 cfg_local= 的展开，
+    #   带盘符的字面在 profiles/engineering.toml。
+    #   所以两头都钉：值还在 toml 里、渲染后仍落到 cfg_local。
+    toml_text = _src(PROFILES_DIR / "engineering.toml")
+    debt = 'source_default = "D:/repo/infra/pool"'
+    assert debt in toml_text, (
         "R2 那行本机 D 盘默认值不见了 —— 若已真改成「从脚本位置推」，"
         "请同步删掉白名单条目并更新清单 R2"
     )
-    hits = [e for e in WHITELIST if e[0] == "scripts/cloud/run_gate.sh" and e[2] == debt]
+    assert 'cfg_local="${TF_POOL_CFG_SOURCE_DIR:-D:/repo/infra/pool}"' in _rendered(), (
+        "profile 里的 source_default 没有渲染进 cfg_local —— 债的位置对了，但取值链断了"
+    )
+    hits = [e for e in WHITELIST
+            if e[0] == "scripts/cloud/profiles/engineering.toml" and e[2] == debt]
     assert len(hits) == 1, f"R2 这条债必须在 WHITELIST 里恰好登记一次，实际 {len(hits)} 次"
     why = hits[0][3]
     assert len(why.strip()) >= 20, "R2 的白名单理由太短"
@@ -523,9 +578,11 @@ def test_r9_gate_invocation_carries_utf8_mode() -> None:
         f"run_gates.py 里只有 {n} 处 `-X utf8` —— 至少 pytest / 工具脚本 / 子进程三条链要带"
     )
 
-    step4 = _bash_step(_src(RUN_GATE_SH), "4/5")
+    # ★ haystack 是**渲染产物**：4/5 的两趟 python 由 profile 的 gate.cmd 填进骨架，
+    #   骨架里只剩 ${P_GATE_CMD} ⇒ 对原件断言等于「槽位里没有就说不存在」。
+    step4 = _bash_step(_rendered(), "4/5")
     assert step4.count("-X utf8") >= 2, (
-        "run_gate.sh 的 4/5 没给两趟 python 都带 `-X utf8`（门禁 + seal）"
+        "4/5 没给两趟 python 都带 `-X utf8`（门禁 + seal）—— 看的是渲染后的脚本"
     )
 
 
@@ -594,17 +651,22 @@ def test_r14_gate_runs_on_the_interpreter_that_got_the_deps() -> None:
     历史现场：`3.5/5` 把 `.[dev]` 装进 `"C:/Program Files/Python312/python.exe"`，
     `4/5` 却用裸 `python`（走 PATH）⇒ 门禁可能跑在没装依赖的解释器上，一片假红，
     而 `3.5/5` 看起来还是绿的。
+
+    ★ profile 化之后这两步的**整条命令**都从 profile 渲染出来（`prepare.cmd` / `gate.cmd`），
+      骨架里只剩 `${P_PREPARE_CMD}` / `${P_GATE_CMD}` 槽位。⇒ haystack 必须是渲染产物。
+      且渲染后是**普通双引号**（TOML 值直接展开，不再套一层 shell 转义），原先把引号写成
+      转义形态的正则在这里零命中 —— 那不是「锚点丢了」，是正则盯着旧的那一层。
     """
-    text = _src(RUN_GATE_SH)
+    text = _rendered()
 
     step35 = _bash_step(text, "3.5/5")
-    mm = re.search(r'\\"([A-Za-z]:/[^"\\]*python\.exe)\\"\s+-m\s+pip\s+install', step35)
+    mm = re.search(r'"([A-Za-z]:/[^"]*python\.exe)"\s+-m\s+pip\s+install', step35)
     assert mm is not None, "3.5/5 不再是「固定解释器 + -m pip install」，R14 的锚点丢了"
     installs_into = mm.group(1)
 
     step4 = _bash_step(text, "4/5")
     runners = re.findall(
-        r'\\"([A-Za-z]:/[^"\\]*python\.exe)\\"\s+-X\s+utf8\s+scripts/run_gates\.py',
+        r'"([A-Za-z]:/[^"]*python\.exe)"\s+-X\s+utf8\s+scripts/run_gates\.py',
         step4,
     )
     assert len(runners) == 2, (
@@ -615,8 +677,7 @@ def test_r14_gate_runs_on_the_interpreter_that_got_the_deps() -> None:
         "门禁会跑在没装依赖的解释器上"
     )
     assert " python -X utf8 scripts/run_gates.py" not in text, (
-        "run_gate.sh 里又出现了裸 `python -X utf8 scripts/run_gates.py`（走 PATH）—— "
-        "R14 的修复被回退了"
+        "渲染后出现了裸 `python -X utf8 scripts/run_gates.py`（走 PATH）—— R14 的修复被回退了"
     )
 
 

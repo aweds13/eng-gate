@@ -1,0 +1,90 @@
+# 云门禁 profile —— engineering 仓（pipe 框架本仓）
+#
+# 这一份**必须**与「profile 化之前 run_gate.sh 里写死的值」逐字一致：
+# 验收判据是「engineering 用新骨架跑一趟，22 门读数与现在一致」。改它 = 改判据的输入。
+# 键的语义见 scripts/cloud/profile.py 的 _flatten()。
+
+name = "engineering"
+repo_root = "D:/repo/engineering"
+cloud_dir = "C:/eng"
+branch = "line/impl-v1"
+# 卡树：本仓一张卡一棵 .wt/<卡号> 工作树，提交号与补丁都从这棵树取（卡 E49 pass7）。
+# ★ 开关的键是 card_tree（缺省 true）。.wt/<卡> 这个路径由骨架写死，不是 profile 键 ——
+#   骨架对它的用法是 git -C ".wt/$card"；在 profile 里再写一遍是死的（没人读）。
+card_tree = true
+
+# 缺了这些仓外输入就不许开跑（fail fast，退 2 / 9）。
+requires_env = ["TF_PROJECTS_TOML"]
+# 云机侧必须存在的文件（缺了退 3）。它的值是 env 变量名，运行期展开。
+required_remote = ["TF_PROJECTS_TOML"]
+
+[sync]
+# bundle = 本机 git bundle 打到云机再 fetch（原 0/5 的 if 分支）。
+mode = "bundle"
+bundle_target = "C:/inc.bundle"
+peer_fetch_from = "C:/eng"
+
+[cloud_config]
+# 仓外配置的落位约定（卡 E49）：pool 工具从 cwd 逐级向上找 infra/pool/<文件>。
+# stage_dir = 云机上的中转目录（0.35/5 把白名单推到这里）。
+stage_dir = "C:/poolcfg"
+# source_default = 本机配置源目录的默认值。
+# ★ 这里是清单 R2 那条**登记过的债**：一个带开发机盘符的绝对路径。它从骨架搬进了本 profile
+#    —— 骨架（scripts/cloud/**/*.sh）从此一条本机 D 盘路径都没有，B1/B2 可以整片扫。
+source_default = "D:/repo/infra/pool"
+dest = "C:/infra/pool"
+# ★ 卡 E54：只推白名单，不推私有账本（accounts.toml / model-switches.toml）。
+allow = ["models.whitelist.toml"]
+keep = ["projects.toml", "projects.toml.tmpl", "models.whitelist.toml"]
+# 项目索引的 root 是绝对路径，必须按云机仓库根渲染（卡 E49）。
+template = "scripts/cloud/pool-config/projects.toml.tmpl"
+placeholder = "__REPO_ROOT__"
+
+[seed]
+# ★ 卡 E49 pass8：播种目录**不能**就是回传目录（否则第二趟播的是上一趟的红读数）。
+dir_default = "gates/diag/seed-{card}"
+files = ["last.json", "reuse.json"]
+require_green = true
+
+[prepare]
+# 3.5/5：按 pyproject 的 [dev] 同步依赖、版本钉 C:/pins.txt（卡 E54）。
+cmd = '"C:/Program Files/Python312/python.exe" -m pip install --quiet -e ".[dev]" -c C:/pins.txt'
+exit_code = 8
+hint = "先跑 scripts/cloud/bootstrap.ps1 生成 C:/pins.txt，再重跑本脚本。"
+
+[gate]
+cmd = '"C:/Program Files/Python312/python.exe" -X utf8 scripts/run_gates.py && "C:/Program Files/Python312/python.exe" -X utf8 scripts/run_gates.py --seal'
+timeout_default = 3600
+# 补丁导出要排除的两件：它们是**入库**的「上一趟读数」，由 2/5 播种，不该进补丁（卡 E49 pass6）。
+patch_excludes = [":(exclude)gates/last.json", ":(exclude)gates/reuse.json"]
+# 5/5 要取回的产物：每项 "<云机路径>|<本机路径>"。{cloud_dir} / {card} 会按上下文渲染。
+artifacts = [
+  "{cloud_dir}/gates/last.json|.wt/{card}/gates/last.json",
+  "{cloud_dir}/gates/logs/*.log|.wt/{card}/gates/logs/",
+]
+
+[paths]
+# 4/5 的现场日志：远端先落盘（卡 E84：ss​h 断了产物还在），本机 ssh 一返回就落一份。
+remote_log = "{cloud_dir}/gates/diag/cloud-4of5-{card}.log"
+# 本机现场（带 `# rc=…` 头）。
+local_log = "gates/diag/cloud-gate-{card}.log"
+# 云机原件取回到本机的位置（裸输出）。★ 卡 E90：它必须与 local_log **分开** ——
+#   原来是两处都落到 cloud-gate-<卡>.log，5/5 的 scp 把头冲掉（grep -c '^# rc=' 变 0）。
+#   这里与改造前逐字一致：改造前 5/5 就是把云机那份取回 gates/diag/cloud-4of5-<卡>.log。
+remote_local_log = "gates/diag/cloud-4of5-{card}.log"
+
+[env]
+# 端口段**不是** profile 键：它由位置参数给（缺省 9361），骨架自己注入 TF_GATE_PORT_BASE。
+# 打进云机命令的变量（值取自本机 env 或 defaults）。
+forward = ["TF_PROJECTS_TOML", "TF_MODEL_WHITELIST"]
+
+[env.defaults]
+TF_WEB_LIVE_TIMEOUT = "30"
+
+
+[product]
+# ★ 卡 E66：回传的 last.json 必须自证是这一趟写的（否则删掉并退 9）。
+fresh_check = true
+# 新鲜度基准的种子固定是 <播种目录>/last.json（骨架写死），不是 profile 键。
+readout_cmd = ""
+host_check = true

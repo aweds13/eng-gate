@@ -1,0 +1,86 @@
+# 云门禁 profile —— OpenMAIC 仓（第二仓，用来证明骨架真的仓无关）
+#
+# 硬约束（验收③）：这份里不许出现任何本仓专属键 —— 池配置注入、模型白名单、
+#   engineering 的主分支名。连注释也不写（断言是按文件正文 grep 的）。
+# OpenMAIC 没有卡树、没有 pool 配置、没有 gates/last.json 这套台账；它要的只是
+#   「树上已经是目标提交 → 装依赖 → 跑 vitest → 把真读数取回来」。
+#
+# 键的语义见 scripts/cloud/profile.py 的 _flatten()；渲染结果用
+#   bash scripts/cloud/run_gate.sh --render   （带 TF_CLOUD_PROFILE=这份）
+
+name = "openmaic"
+repo_root = "D:/repo/program/OpenMAIC"
+cloud_dir = "C:/om"
+branch = "upgrade/v1.3.0"
+# 没有卡树：云机上的树由外部搬运（pack 搬运，见 gates/diag/om-cloud-bringup.md），
+# 补丁 / 播种 / HEAD 断言三步按 card_tree=false 空转。
+card_tree = false
+
+# 云机地址由骨架统一要求（CLOUD_HOST，缺了退 9）；这里没有别的仓外必填项。
+requires_env = []
+required_remote = []
+
+[sync]
+# none = 云机上那份树由外部维护，本脚本不推 bundle、也不从 peer 拉。
+mode = "none"
+
+[seed]
+# 没有「上一趟门禁读数」要播种：vitest 每次都是全量跑。
+files = []
+require_green = false
+
+[prepare]
+# node 必须 >=22.19.0（package.json engines.node），云机默认 PATH 是 v22.14.0 ⇒ 前置 node22 目录；
+# pnpm 用 corepack 装不上的那个位置改由 node22 自带的 pnpm.cmd（10.28.0，与 packageManager 一致）。
+# ★ 实测（OM1 那趟）：不带 CI 时 pnpm 会拒绝在无 TTY 下重建 node_modules ——
+#   ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY / "If you are running pnpm in CI, set the CI environment variable to true"。
+#   3.5/5 的 ssh 没有 TTY，且骨架只把 env.defaults 注入到 4/5 的门禁命令（不注入 prepare）
+#   ⇒ CI 必须在 prepare.cmd 里自己带上（与 [env.defaults] 的 CI 是两处，别只写一处）。
+# ★ 实测（OM2 那趟）：4/5 的重定向 `> <远端日志>` 由 cmd.exe 在**命令组执行前**打开文件，
+#   目录不在就立刻退出，整趟只剩一句「系统找不到指定的路径」，一行读数都没有。
+#   3.5/5 一定在 4/5 之前跑 ⇒ 建目录放这里，别放到 gate.cmd 里（那时已经晚了）。
+# ★ Git 的 bash 用绝对路径补进 PATH：仓里 12 条用例会 spawnSync("bash")，默认 PATH 里没有它，
+#   不补就会把「环境缺 bash」记成 12 条假红（实测补上后那一个文件 16 tests 全绿）。
+cmd = 'set "CI=true" && set "PATH=C:\node-v22.23.4-win-x64;C:\Program Files\Git\bin;%PATH%" && (if not exist gates\diag mkdir gates\diag) && pnpm install --frozen-lockfile'
+exit_code = 8
+hint = "装不上先看 pnpm 的报错：node 版本 / registry / 锁文件三处。"
+
+[gate]
+# 目录由 prepare 建好（见上面那条实测）；这里只补 PATH 然后跑。
+cmd = 'set "PATH=C:\node-v22.23.4-win-x64;C:\Program Files\Git\bin;%PATH%" && pnpm exec vitest run'
+timeout_default = 5400
+# 没有补丁要导出（card_tree=false）。
+patch_excludes = []
+# 5/5 要取回的产物：每项 "<云机路径>|<本机路径>"。
+# 本机落点用**带仓前缀的文件名**：工程仓那趟的日志也叫 cloud-4of5-<卡>.log，
+# 落到同一个目录里会互相覆盖（两个仓的证据不该共用一个名字）。
+artifacts = [
+  "{cloud_dir}/gates/diag/cloud-4of5-{card}.log|gates/diag/om-cloud-4of5-{card}.log",
+]
+# 上一趟 ssh 断了会留孤儿 node；对齐树之前先停掉（这里没有卡树，仍保留这步，防止占文件）。
+stale_procs = "node"
+
+[paths]
+# 4/5 的现场日志：远端先落盘（卡 E84：ssh 断了产物还在），本机 ssh 一返回就落一份。
+remote_log = "{cloud_dir}/gates/diag/cloud-4of5-{card}.log"
+local_log = "gates/diag/om-gate-{card}.log"
+# 云机原件取回位置（裸输出）：与上面那份带头的现场日志分开，别让 scp 把头冲掉。
+remote_local_log = "gates/diag/om-cloud-4of5-{card}.log"
+
+[env]
+style = "pipe"
+forward = []
+
+[env.defaults]
+CI = "1"
+
+[product]
+# 没有 last.json：读数是 vitest 的退出码 + 输出里的 Test Files / Tests 两行。
+fresh_check = false
+host_check = false
+# 读的是 5/5 从云机取回的那份**裸输出**（remote_local_log），不是 local_log ——
+#   ★ 卡 E90 之后 local_log 只有一行 `# rc=… elapsed=…` 头 + ssh 的 stderr，
+#   vitest 的真读数（Test Files / Tests / Duration）在裸输出里（OM4 实测：读 local_log 只能打出头）。
+# ★ 不用 grep 抓 Test Files：vitest 的汇总是**带 ANSI 色码**的（\e[2m Test Files \e[22m），
+#   行首锚点 / 「Tests 后紧跟数字」两种写法都抓不到（OM3 实测整段静默）。直接取末尾 12 行。
+readout_cmd = "tail -n 12 gates/diag/om-cloud-4of5-{card}.log"

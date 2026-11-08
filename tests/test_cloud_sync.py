@@ -39,7 +39,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+# tests/ 自己也挂上：`_cloud_profile` 是测试侧的读法（不是产品代码）。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import _cloud_profile  # noqa: E402 —— 渲染 haystack：骨架 + engineering profile
 from pool.no_window import NO_WINDOW  # noqa: E402 —— 先用 sys.path 把 tools/ 挂上
 
 SCRIPT_DIR = ROOT / "scripts" / "cloud"
@@ -132,6 +135,30 @@ def _bootstrap_text() -> str:
     return BOOTSTRAP.read_text(encoding="utf-8-sig")
 
 
+def _render() -> str:
+    """**engineering 这趟端到端会跑成的脚本** = 骨架 + profiles/engineering.toml（不执行、不联网）。
+
+    ★ 为什么 haystack 从 `run_gate.sh` 原文换成它：云门禁泛用化之后，engineering 的值
+    （云机目录 / 白名单 / 播种目录 / 产物路径 / 准备命令 / 退码）住在 profile 里，骨架只剩
+    `${P_CFG_ALLOW}` 这类的键名。只看骨架已经**问不出**「engineering 这趟会怎么做」了。
+    断言意图一点没变：问的还是同一件事，只是值现在必须由 profile 真的还原回脚本
+    （profile 写错 / 漏抽 ⇒ 渲染里没有那个值 ⇒ 断言红，而不是被放过）。
+
+    `_cloud_profile.render` 自带 lru_cache ⇒ 整个文件只起一次子进程（不是每个用例一次）。
+    """
+    return _cloud_profile.render("engineering")
+
+
+def _region(text: str, start: str, end: str) -> str:
+    """切出 `=== <start>` 到 `=== <end>` 之间那一段（两端横幅都算在内）。
+
+    ★ 用它代替「`text.index(横幅) + 固定字符数`」：窗口由**下一道横幅**封口，
+    后面那一步的内容不会漏进来替前面那一步作证（步与步的边界是脚本自己给的）。
+    """
+    i = text.index(start)
+    return text[i : text.index(end, i)]
+
+
 def _doc_text() -> str:
     return DOC.read_text(encoding="utf-8")
 
@@ -179,7 +206,7 @@ def test_run_gate_cleans_ignored_files() -> None:
     不带 `-x` 时上一趟的 `gates/last.json` / `gates/logs/`（都是被忽略文件）留在盘上，
     下一趟的自指钉子必红 —— 2026-10-25 实测踩过，手工换成 `-xfdq` 才干净。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     assert "git clean -xfdq" in text, "清树必须带 -x（`git clean -xfdq`）"
     # 反向：不许别处还留一条不带 -x 的清树
     offenders = [
@@ -219,10 +246,65 @@ def test_run_gate_fails_fast_without_projects_toml() -> None:
 
 
 def test_run_gate_injects_config_into_cloud_command() -> None:
-    """配置是**显式注入**到云机那条命令里的（不是靠云机的环境碰巧有）。"""
-    text = RUN_GATE.read_text(encoding="utf-8")
-    assert 'set \\"TF_PROJECTS_TOML=$projects_toml\\"' in text
+    """配置是**显式注入**到云机那条命令里的（不是靠云机的环境碰巧有）。
+
+    ★ 泛用化后「注入哪个变量」由 profile 的 requires_env 声明，骨架只留一个循环
+    `for var in ${P_REQUIRES_ENV:-}; do add_env "$var" "${!var:-}"; done`。
+    所以判据变成双向：骨架**只有这个循环**（不再有 `set \"TF_PROJECTS_TOML=…\"` 的硬编码），
+    而 engineering 的 requires_env 里确实有 TF_PROJECTS_TOML（渲染后循环就展开成它）。
+    「缺了就退 2 且一步不跑」那半条在 test_run_gate_fails_fast_without_projects_toml（同上不变）。
+    """
+    text = _render()
+    skel = _cloud_profile.skeleton()
+    assert "for var in ${P_REQUIRES_ENV:-}; do" in skel, (
+        "骨架要有一个按 profile 的 requires_env 注入的循环（不许再写死某一份配置）"
+    )
+    assert 'add_env "$var" "${!var:-}"' in skel, "循环里要真的 add_env（拼进云机那条命令）"
+    assert "for var in TF_PROJECTS_TOML; do" in text, (
+        "渲染后这个循环必须覆盖到 TF_PROJECTS_TOML（profile 说 engineering 缺它就不许跑）"
+    )
+    requires = _cloud_profile.load_profile("engineering")["requires_env"]
+    assert "TF_PROJECTS_TOML" in requires, f"engineering 的 requires_env 必须含它，实际 {requires}"
     assert "TF_MODEL_REGISTRY" in text, "模型注册表的真名是 TF_MODEL_REGISTRY（非 TF_MODELS_TOML）"
+    assert "TF_MODELS_TOML" not in text, "别把注册表叫成 TF_MODELS_TOML（没有这个名字的变量）"
+
+
+# ------------------------------------------------------------------ 空列表渲染（独立复核 N1）
+def test_empty_requires_env_still_guards_the_loop() -> None:
+    """★ 反向用例（独立复核 N1）：requires_env 为空列表时，那条守卫必须**咬住**，不是渲染好看。
+
+    openmaic 的 requires_env 是空列表，profile.py 必须把空值渲染成字面 ""（否则渲染产物过不了
+    bash -n）。于是循环变成 for var in ""; do —— 变量名是空的。这时 ${!var:-} 只会往 stderr 吐一句
+    invalid variable name 就跳过（那只是 stderr，不是错误）：if 判假、循环体跳过、脚本继续往下跑，
+    rc 仍是 0。实测形状：t1.sh: line 3: : invalid variable name，随后 rc=0。
+    ⇒ 守卫「在」但不「咬」，bash -n 也照不到。
+
+    所以这里钉两件事：
+    ① openmaic 的渲染里 [ -n "$var" ] || continue 至少出现 2 次（两处循环都守住：
+       第 99 行附近的 fail-fast 与第 156 行附近的云机侧环境注入）；
+    ② engineering 的渲染里 P_REQUIRES_ENV 仍被换成真实键名 TF_PROJECTS_TOML —— fail-fast
+       还是绑在 profile 上，没被这次改动绕过（别拿「加了守卫」换来「守卫不再看 profile」）。
+    """
+    om = _cloud_profile.render("openmaic")
+    assert 'for var in ""; do' in om, (
+        "前提变了：openmaic 的空 requires_env 没渲染成字面空串（profile.py 的渲染口径改了？）"
+    )
+    guards = om.count('[ -n "$var" ] || continue')
+    assert guards >= 2, (
+        f"openmaic 渲染里空变量名守卫只有 {guards} 处（要 >= 2："
+        "fail-fast 与云机侧环境注入各一处）。"
+        "少了那处 ⇒ ${!var:-} 对空变量名只吐一句 invalid variable name 就继续跑，"
+        "守卫在但不咬，bash -n 也照不到。"
+    )
+
+    eng = _render()
+    assert "for var in TF_PROJECTS_TOML; do" in eng, (
+        "engineering 的 requires_env 没被还原成真实键名 TF_PROJECTS_TOML"
+        " ⇒ fail-fast 脱离 profile 了"
+    )
+    assert 'for var in ""; do' not in eng, (
+        "engineering 的 requires_env 非空，不该渲染成空串"
+    )
 
 
 # ------------------------------------------------------------------ 在库里
@@ -326,8 +408,21 @@ def test_run_gate_pushes_only_the_whitelisted_config() -> None:
     实测污染：`test_pool_accounts.py` 两条「账本缺失要报错」在云机判不出来，
     `test_wb_dispatch.py::test_account_auth_uses_the_profile_env_and_model` 被判「未授权模型」。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
-    assert 'cfg_allow=(models.whitelist.toml)' in text, "白名单要写死成数组（可读、可核）"
+    text = _render()
+    skel = _cloud_profile.skeleton()
+    # 意图不变：供给面 = **一份写死的白名单**，而且它只来自 profile，骨架上不许再通配。
+    assert "cfg_allow=()" in skel and "read -r -a cfg_allow" in skel, (
+        "白名单要读成数组（可读、可核）；骨架只管读键，值由 profile 给"
+    )
+    assert "IFS=$'\\036' read -r -a cfg_allow <<< \"${P_CFG_ALLOW}\"" in skel, (
+        "cfg_allow 只能从 profile 的 cloud_config.allow 来（不许在骨架里另立一份清单）"
+    )
+    assert 'for f in "${cfg_allow[@]}"; do' in skel, "推什么必须逐项走这份白名单数组"
+    allow = _cloud_profile.load_profile("engineering")["cloud_config"]["allow"]
+    assert allow == ["models.whitelist.toml"], (
+        f"engineering 的 cloud_config.allow 只能是 models.whitelist.toml，实际 {allow}"
+    )
+    assert 'for f in "${cfg_allow[@]}"; do' in text, "渲染产物里那个白名单循环必须还在"
     assert '"$cfg_local"/*.toml' not in text, "不许再通配推 *.toml（会把 accounts.toml 推上去）"
     assert '"$cfg_local"/*.json' not in text, "不许再通配推 *.json"
     # 只看**可执行行**：注释里点名是解释来龙去脉（E54 就写在注释里），不算供给面。
@@ -339,13 +434,23 @@ def test_run_gate_pushes_only_the_whitelisted_config() -> None:
 
 
 def test_run_gate_cleans_stale_config_before_provisioning() -> None:
-    """铺配置前要先清掉上一次的旧账（否则上一趟推上去的 accounts.toml 继续污染）。"""
-    text = RUN_GATE.read_text(encoding="utf-8")
-    idx = text.index("0.4/5")
-    tail = text[idx : idx + 1200]
-    assert "Get-ChildItem" in tail and "Remove-Item" in tail, "铺之前必须先删白名单之外的文件"
-    for keep in ("projects.toml", "models.whitelist.toml"):
-        assert keep in tail, f"白名单里的 {keep} 必须保留"
+    """铺配置前要先清掉上一次的旧账（否则上一趟推上去的 accounts.toml 继续污染）。
+
+    ★ 泛用化后「保留哪几件」由 profile 的 cloud_config.keep 声明，骨架只把它拼成
+    `$keep_ps`（PowerShell `-notcontains` 的白名单）。所以判据仍是双向：
+    脚本那一步真的按 keep 白名单删（Get-ChildItem + Where-Object + Remove-Item），
+    而 engineering 的 keep 里确实有 projects.toml 与 models.whitelist.toml
+    —— 上一趟的旧账被删掉、本趟要用的配置被留下。
+    """
+    text = _render()
+    step = _region(text, "=== 0.4/5", "=== 0.45/5")
+    assert "Get-ChildItem" in step and "Remove-Item" in step, "铺之前必须先删白名单之外的文件"
+    assert "Where-Object { @($keep_ps) -notcontains \\$_.Name }" in step, (
+        "删除必须按 keep 白名单过滤（否则会把白名单里的配置一起删掉）"
+    )
+    keep = _cloud_profile.load_profile("engineering")["cloud_config"]["keep"]
+    for kept in ("projects.toml", "models.whitelist.toml"):
+        assert kept in keep, f"白名单里的 {kept} 必须保留（profile 的 cloud_config.keep 里没有它）"
 
 
 def test_run_gate_asserts_the_remote_tree_matches_the_target_commit() -> None:
@@ -354,24 +459,36 @@ def test_run_gate_asserts_the_remote_tree_matches_the_target_commit() -> None:
     实测：云机停在旧提交 `050fa3d`（trailer 还是 T-AG503）时，`test_wb_plan.py` 报
     「卡 E53：已落却仍 pending」—— 拿陈旧树判新队列，结论写进 last.json 的 rev。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     assert "2.5/5" in text, "树一致性断言要是独立一步（可见的进度条）"
-    idx = text.index("2.5/5")
-    tail = text[idx : idx + 900]
+    # 用下一道横幅封口（而不是 index + 固定字符数）：2.5/5 这一步自己的内容才作数
+    tail = _region(text, "=== 2.5/5", "=== 3/5")
     assert 'git rev-parse HEAD' in tail, "要读远端 HEAD"
     assert "exit 7" in tail, "不一致必须 fail closed（退 7），不许警告继续"
     assert text.index("2.5/5") < text.index("=== 4/5"), "断言必须在跑门禁之前"
 
 
 def test_run_gate_syncs_dev_extras_before_running_gates() -> None:
-    """每趟开跑前按 extras 同步一次依赖（已满足时只花几秒；缺件会退 8 而不是给假红）。"""
-    text = RUN_GATE.read_text(encoding="utf-8")
+    """每趟开跑前按 extras 同步一次依赖（已满足时只花几秒；缺件会退 8 而不是给假红）。
+
+    ★ 泛用化后「装什么、钉在哪」与失败码都来自 profile 的 prepare：
+    骨架只剩 `exit "$prepare_exit"`，`8` 那个字面搬进了 engineering.toml。
+    判据仍是双向：这一步真的按 `.[dev]` + `C:/pins.txt` 同步，
+    且 engineering 的 prepare.exit_code 就是 8（同步失败 = 退 8，不是给假红）。
+    """
+    text = _render()
     assert "3.5/5" in text, "依赖同步要是独立一步"
-    idx = text.index("3.5/5")
-    tail = text[idx : idx + 900]
-    assert ".[dev]" in tail, "同步要按 pyproject 的 [dev]"
-    assert "C:/pins.txt" in tail, "版本钉来自 bootstrap 落的 C:/pins.txt"
-    assert "exit 8" in tail, "同步失败必须 fail closed（退 8）"
+    step = _region(text, "=== 3.5/5", "=== 4/5")
+    assert ".[dev]" in step, "同步要按 pyproject 的 [dev]"
+    assert "C:/pins.txt" in step, "版本钉来自 bootstrap 落的 C:/pins.txt"
+    assert 'exit "$prepare_exit"' in step, "同步失败必须 fail closed（退非零），不许继续跑门禁"
+    prepare = _cloud_profile.load_profile("engineering")["prepare"]
+    assert prepare["exit_code"] == 8, (
+        f"engineering 的 prepare.exit_code 必须是 8（同步失败即退 8），实际 {prepare['exit_code']}"
+    )
+    assert ".[dev]" in prepare["cmd"] and "C:/pins.txt" in prepare["cmd"], (
+        f"profile 的 prepare.cmd 要按 extras + 版本钉装，实际 {prepare['cmd']!r}"
+    )
     assert text.index("3.5/5") < text.index("=== 4/5"), "同步必须早于跑门禁"
 
 
@@ -384,14 +501,18 @@ def test_run_gate_provisions_pool_config_for_walk_up() -> None:
     `C:/infra/pool/`。只把文件 scp 到 `C:/poolcfg/` 再靠 `TF_PROJECTS_TOML` 注入，
     救不了那些**自己 `delenv` 去测"向上找"**的用例。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     assert "C:/infra/pool" in text, "配置要铺到向上找认得的位置（C:/infra/pool）"
     assert "TF_POOL_CFG_DIR" in text, "配置源要可换（TF_POOL_CFG_DIR）"
     assert "0.4/5" in text, "铺配置必须是门禁之前的独立一步（可见的进度条）"
+    # 判据的另一半：落位由 profile 的 cloud_config.dest 给（骨架只认键，不认这个路径）
+    dest = _cloud_profile.load_profile("engineering")["cloud_config"]["dest"]
+    assert dest == "C:/infra/pool", (
+        f"engineering 的 cloud_config.dest 必须是 C:/infra/pool，实际 {dest}"
+    )
     # 铺配置那一步失败不许静默继续
-    idx = text.index("0.4/5")
-    tail = text[idx : idx + 1600]
-    assert "exit 5" in tail, "配置铺不动必须 fail fast（退非零），不许继续跑门禁"
+    step = _region(text, "=== 0.4/5", "=== 0.45/5")
+    assert "exit 5" in step, "配置铺不动必须 fail fast（退非零），不许继续跑门禁"
     # 反向：铺配置要在跑门禁（4/5）之前
     assert text.index("0.4/5") < text.index("=== 4/5"), "铺配置必须早于跑门禁"
 
@@ -414,12 +535,19 @@ def test_project_index_template_replaces_the_dev_root() -> None:
     offenders = [ln for ln in effective if "文档/jelly_ware" in ln]
     assert not offenders, f"模板的有效配置行里还留着开发机路径：{offenders}"
     # 渲染步要真去替换它，且失败要 fail fast
-    run_gate = RUN_GATE.read_text(encoding="utf-8")
+    run_gate = _render()
     assert "0.45/5" in run_gate, "渲染项目索引必须是独立一步（可见的进度条）"
-    idx = run_gate.index("0.45/5")
-    tail = run_gate[idx : idx + 1600]
-    assert "__REPO_ROOT__" in tail, "渲染步要提到占位符"
-    assert "exit 6" in tail, "渲染不了必须 fail fast"
+    step = _region(run_gate, "=== 0.45/5", "=== 0.5/5")
+    assert "__REPO_ROOT__" in step, "渲染步要提到占位符"
+    assert "exit 6" in step, "渲染不了必须 fail fast"
+    # 占位符与模板位置也由 profile 声明（骨架不许写死某份项目索引）
+    cfg = _cloud_profile.load_profile("engineering")["cloud_config"]
+    assert cfg["placeholder"] == "__REPO_ROOT__", (
+        f"engineering 的 cloud_config.placeholder 必须是 __REPO_ROOT__，实际 {cfg['placeholder']}"
+    )
+    assert cfg["template"] == "scripts/cloud/pool-config/projects.toml.tmpl", (
+        f"模板位置要由 profile 给，实际 {cfg['template']}"
+    )
 
 
 def test_step2_seeds_previous_reading_instead_of_trusting_the_commit() -> None:
@@ -429,7 +557,7 @@ def test_step2_seeds_previous_reading_instead_of_trusting_the_commit() -> None:
     恢复成提交里那份陈旧读数，被自指钉子当成「上一轮」。
     所以第二步必须**显式删**再断言不在 —— 这条钉子钉住「别退回只靠 clean」。
     """
-    script = RUN_GATE.read_text(encoding="utf-8")
+    script = _render()
     step2_start = script.index("=== 2/5")
     step3_start = script.index("=== 3/5")
     step2 = script[step2_start:step3_start]
@@ -448,10 +576,10 @@ def test_run_gate_kills_leftover_remote_processes_before_patching() -> None:
     `unable to write file ... Permission denied` —— 补丁半途而废，门禁在**坏树**上跑完，
     读数还"看起来正常"。这是把"跑了一趟"误当成"验了一趟"的典型场面。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     assert "1.5/5" in text, "清残留必须是补丁/对齐之前的独立一步（可见的进度条）"
-    idx = text.index("1.5/5")
-    tail = text[idx : idx + 1200]
+    # 用下一道横幅封口（而不是 index + 固定字符数）：1.5/5 这一步自己的内容才作数
+    tail = _region(text, "=== 1.5/5", "=== 2/5")
     assert "Stop-Process" in tail, "要真停掉残留 python 进程（Stop-Process）"
     assert "exit 4" in tail, "清不掉必须 fail fast，不许带着残留继续 apply 补丁"
     assert text.index("1.5/5") < text.index("=== 2/5"), "清残留必须早于对齐/打补丁"
@@ -465,7 +593,7 @@ def test_run_gate_checks_out_the_card_tree_commit_not_the_caller_commit() -> Non
     `git apply` 报 `patch failed: 复盘/交接-重构进度.md:3871`，门禁跑在**错的树**上，
     读数还写得挺像回事。判据：这两行必须带 `git -C`。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     head_lines = [
         ln.strip() for ln in text.splitlines() if ln.strip().startswith(("head=", "short="))
     ]
@@ -483,12 +611,27 @@ def test_run_gate_patch_excludes_the_seeded_baseline_files() -> None:
     `error: patch failed: gates/last.json:1 / patch does not apply`，
     整份补丁不生效，门禁跑在裸提交上 —— 出来 14 条红全是假红。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
+    skel = _cloud_profile.skeleton()
     assert "diff HEAD --binary" in text, "找不到导出补丁的那一行"
+    # 泛用化后排除项由 profile 的 gate.patch_excludes 给，骨架把它读成数组再拼进导出那条命令。
     assert ":(exclude)gates/last.json" in text, "补丁必须排除 gates/last.json（否则与播种冲突）"
     assert ":(exclude)gates/reuse.json" in text, "补丁必须排除 gates/reuse.json（同上）"
+    excludes = _cloud_profile.load_profile("engineering")["gate"]["patch_excludes"]
+    assert excludes == [":(exclude)gates/last.json", ":(exclude)gates/reuse.json"], (
+        f"engineering 的两条排除要按这个顺序给（读数与复用基线），实际 {excludes}"
+    )
+    assert "patch_excludes=()" in skel and "read -r -a patch_excludes" in skel, (
+        "排除项要读成数组（骨架只管读键，值由 profile 给）"
+    )
+    export_line = next(ln for ln in text.splitlines() if "diff HEAD --binary" in ln)
+    assert '${patch_excludes[@]+"${patch_excludes[@]}"}' in export_line, (
+        f"排除必须挂在导出补丁这条命令上，实际：{export_line.strip()}"
+    )
     export_at = text.index("diff HEAD --binary")
-    assert export_at < text.index(":(exclude)gates/last.json"), "排除要挂在导出补丁这条命令上"
+    assert text.index(":(exclude)gates/last.json") < export_at, (
+        "排除项要在导出补丁之前就喂进数组（导出那一刻才用得上）"
+    )
     assert export_at < text.index("=== 3/5"), "排除要在 3/5 传补丁之前生效"
 
 
@@ -498,8 +641,9 @@ def test_run_gate_seeds_from_a_read_only_dir_and_never_from_the_return_dir() -> 
     原来 `seed_dir` 默认 `.wt/<卡>/gates`，而 `5/5` 又把云机那份读数 scp 回同一个目录
     ⇒ 第二趟播的是**上一趟的红读数**，自指钉子（真 last.json 必须绿）当场判红自己。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
-    assert 'seed_dir="${TF_LAST_SEED:-gates/diag/seed-$card}"', (
+    text = _render()
+    # ★ 这条原来是死钉子（少了 `in text`，恒真）—— 补上之后它才真的盯着播种源。
+    assert 'seed_dir="${TF_LAST_SEED:-gates/diag/seed-$card}"' in text, (
         "播种源要落在 gates/diag/seed-<卡>（gitignored、只读），不许再用回传目录"
     )
     # 回传仍然落在 .wt/<卡>/gates（那是产物目录，可以被覆盖）
@@ -508,7 +652,7 @@ def test_run_gate_seeds_from_a_read_only_dir_and_never_from_the_return_dir() -> 
 
 def test_run_gate_refuses_a_red_seed_snapshot() -> None:
     """播种前必须验「这份读数是不是绿的」—— 拿红读数当上一趟，红的是判据自己。"""
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     assert "exit_code" in text and "sys.exit(4)" in text, (
         "要有绿读数校验（按 exit_code 判，不看 ok 字段的脸色）"
     )
@@ -540,7 +684,7 @@ def test_run_gate_escapes_powershell_current_item_variable() -> None:
     本地把 `$_` 换成上一条命令的最后一个参数 ⇒ 远端 PowerShell 语法错 ⇒ `0.4/5` 退 5，
     而错误信息读起来像「云机上没有配置源」（误导性极强）。判据：必须写成 `\\$_`。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     assert "$_.Name" in text, "这条钉子得有一行真的用到 PowerShell 的 $_（否则空转）"
     bare = [
         line for line in text.splitlines()
@@ -549,17 +693,14 @@ def test_run_gate_escapes_powershell_current_item_variable() -> None:
     assert not bare, f"这些行里的 $_ 会被本地 bash 先展开：{bare[:1]}"
 # ------------------------------------------------- 卡 E84（T-AG591）：断线不许把现场一起弄丢
 def _gate_code_lines() -> list[str]:
-    """只看 `run_gate.sh` 的**可执行行**：注释里点名解释来龙去脉，不算判据本体。"""
+    """只看渲染产物的**可执行行**：注释里点名解释来龙去脉，不算判据本体。
+
+    haystack 是「骨架 + engineering profile」渲染出来的那份（见 _render）。
+    """
     return [
-        ln for ln in RUN_GATE.read_text(encoding="utf-8").splitlines()
+        ln for ln in _render().splitlines()
         if not ln.lstrip().startswith("#")
     ]
-
-
-def _region(text: str, start: str, end: str) -> str:
-    """切出 `=== <start>` 到 `=== <end>` 之间那一段（两端横幅都算在内）。"""
-    i = text.index(start)
-    return text[i : text.index(end, i)]
 
 
 def test_run_gate_keeps_the_ssh_session_alive() -> None:
@@ -585,7 +726,7 @@ def test_run_gate_bounds_the_remote_gate_with_a_timeout() -> None:
     ★ 原来那条 ssh 是裸的：云机挂死时本机就无限等（只有上层 gate_pool 的 3600 s 兜底，
     而那层看不到 4/5 之前任何一步的现场）。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     step4 = _region(text, "=== 4/5", "=== 5/5")
     assert "TF_CLOUD_GATE_TIMEOUT:-3600" in step4, "超时秒数要可由 env 覆盖、缺省 3600"
     assert 'timeout "$gate_timeout" ssh' in step4, "那条 ssh 必须被 timeout 包住"
@@ -599,13 +740,21 @@ def test_the_gate_output_is_written_on_the_cloud_side_too() -> None:
     ★ 卡 A366 实测：4/5 只写本机 `$TMP/gate.out`，传输一断连它一起没了；
     云机那边 22 门其实已经跑完（`C:/eng/gates/last.json` 完整）。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     step4 = _region(text, "=== 4/5", "=== 5/5")
     assert 'remote_out="C:/eng/gates/diag/cloud-4of5-$card.log"' in step4, (
         "云侧要有一份固定路径的输出（5/5 才知道去哪儿补取）"
     )
     assert "> $remote_out 2>&1" in step4, "重定向要真的挂在远端那条命令上"
-    assert step4.index("> $remote_out") > step4.index("ssh $SSHOPTS"), "重定向写在 ssh 之后"
+    # 泛用化后远端命令先拼成 remote_cmd 再交给 ssh：重定向必须落在 remote_cmd 这一行
+    #（本地展开后就是云机那条命令）。若写到本机 ssh 的 stdout 上，断线照样只剩半份。
+    holders = [ln for ln in step4.splitlines() if "> $remote_out" in ln]
+    assert holders and all(ln.lstrip().startswith("remote_cmd=") for ln in holders), (
+        f"重定向必须写进 remote_cmd（在云机上执行），实际写在：{holders}"
+    )
+    assert step4.index("> $remote_out") < step4.index('timeout "$gate_timeout" ssh'), (
+        "重定向要先拼进远端命令，再交给 ssh"
+    )
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "gates/diag/" in ignored, "云侧日志只许落在 gitignored 的 gates/diag/（不许入库）"
 
@@ -616,7 +765,7 @@ def test_local_capture_is_written_before_any_scp() -> None:
     ★ 卡 A366 实测：原来 `cp "$TMP/gate.out" gates/diag/cloud-gate-<卡>.log` 在 5/5 末尾，
     传输断在 4/5 之前 ⇒ 本机只剩 1026 字节，连「这趟是断是超时」都没记下来。
     """
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     step4 = _region(text, "=== 4/5", "=== 5/5")
     assert "gates/diag/cloud-gate-$card.log" in step4, "本机现场必须落在 4/5 段里（不是 5/5）"
     assert "# rc=$rc" in step4, "头部要记 rc 与用时（回来看才知道这趟是断线还是超时）"
@@ -630,13 +779,32 @@ def test_local_capture_is_written_before_any_scp() -> None:
 
 def test_step5_fetches_everything_best_effort() -> None:
     """判据 5：三项各自 best effort，任何一项取不回都不许中断后面两项、更不许 exit。"""
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
+    skel = _cloud_profile.skeleton()
     step5 = text[text.index("=== 5/5") :]
     assert "fetch()" in step5, "取回要收成一个函数（三项共用一套重试与话术）"
     assert 'while [ "$try" -le 3 ]' in step5, "要重试（单次丢包就放弃等于没做）"
-    for what in ('"$remote_out"', '"$cloud_dir/gates/last.json"', '"$cloud_dir/gates/logs/*.log"'):
+    assert '"$remote_out"' in step5, "5/5 必须取回云机上那份 4/5 输出"
+    # 另外两项由 profile 的 gate.artifacts 声明（`<云机路径>|<本机落点>`），骨架只遍历数组。
+    for what in ("C:/eng/gates/last.json", "C:/eng/gates/logs/*.log"):
         assert what in step5, f"5/5 必须取回 {what}"
-    assert step5.count('fetch "') >= 3, "三项都要走 fetch"
+    artifacts = _cloud_profile.load_profile("engineering")["gate"]["artifacts"]
+    assert artifacts == [
+        "{cloud_dir}/gates/last.json|.wt/{card}/gates/last.json",
+        "{cloud_dir}/gates/logs/*.log|.wt/{card}/gates/logs/",
+    ], f"engineering 的取回清单要按这个顺序给（读数 + 日志），实际 {artifacts}"
+    assert "${P_ARTIFACTS:-}" in skel and "for art in" in skel, (
+        "产物清单要由 profile 驱动（骨架不许写死哪几件）"
+    )
+    assert 'fetch "${art%%|*}" "${art%%|*}" "${art##*|}"' in step5, (
+        "每一项产物都要走同一个 fetch（云机路径 → 本机落点）"
+    )
+    # 三项 = 显式 fetch（4/5 输出）1 处 + 产物循环体 1 处（engineering 的循环取 2 条）。
+    fetch_calls = step5.count('fetch "')
+    assert fetch_calls == 2, f"三项都要走 fetch（1 处显式 + 1 处循环体），实际 {fetch_calls} 处"
+    assert len(artifacts) == 2, (
+        f"engineering 的产物清单是两条（读数 / 日志），实际 {len(artifacts)}"
+    )
     assert "return 0" in step5, "取不回也要正常返回（后面还有两项）"
     head = step5.split("if ! python -X utf8 tools/gate_pool.py", 1)[0]
     assert "exit" not in head, "取回这一段不许 exit —— 一项失败就退，等于把另外两项一起丢"
@@ -647,7 +815,7 @@ def test_step5_fetches_everything_best_effort() -> None:
 
 def test_run_gate_explains_broken_connection_and_timeout() -> None:
     """判据 6：rc=255（传输断）与 rc=124（超时）各给诊断 + 现场路径 + 怎么取回。"""
-    text = RUN_GATE.read_text(encoding="utf-8")
+    text = _render()
     step4 = _region(text, "=== 4/5", "=== 5/5")
     assert '"$rc" = "255"' in step4, "rc=255 要单独判（那是断线，不是门禁红）"
     assert '"$rc" = "124"' in step4, "rc=124 要单独判（超时）"

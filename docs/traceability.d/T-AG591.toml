@@ -11,7 +11,8 @@ evidence = [
   "test:test_cloud_sync.py",
   "text:scripts/cloud/run_gate.sh::ServerAliveInterval=30",
   "text:scripts/cloud/run_gate.sh::TF_CLOUD_GATE_TIMEOUT:-3600",
-  "text:scripts/cloud/run_gate.sh::C:/eng/gates/diag/cloud-4of5-",
+  "text:scripts/cloud/profiles/engineering.toml::gates/diag/cloud-4of5-{card}.log",
+  "text:scripts/cloud/run_gate.sh::P_GATE_REMOTE_LOG",
   "text:tests/test_cloud_sync.py::def test_step5_fetches_everything_best_effort",
 ]
 gaps = [

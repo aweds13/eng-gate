@@ -1,3 +1,8 @@
+## 2026-11-08 · 云门禁泛用化：抽「仓无关骨架 + 每仓一份 profile」（卡 E92，T-AG600）
+- `scripts/cloud/run_gate.sh` 里 10 处本仓字面（cloud_dir / 分支 / TF_PROJECTS_TOML / 池配置 / pip -c pins / run_gates.py / 播种目录 / 卡树 / 产物路径）全部搬进 `scripts/cloud/profiles/engineering.toml`，脚本只剩「怎么跑」。
+- 新增 `scripts/cloud/profile.py`（dump/list/check/render 四子命令，38 个键）与 `--render` 分支；新增第二仓 profile `scripts/cloud/profiles/openmaic.toml`，全文零本仓键值（判据 3 有钉子）。
+- 13 道横幅与步骤顺序一格未动；本仓真跑读数与改造前**逐字节同 tree**（4d32e9e01dda），22 门 ok=True / host=gates-runner-host；OpenMAIC 在云机跑出真 vitest 读数（13749 passed / 46 failed），5/5 之后「profile 的读数」真的打出五行。
+- 独立复核揪出两处真缺陷并修掉：0.4/5 的 `keep_ps` 累计值被丢弃（只剩最后一项）、`CFG_ALLOW/CFG_KEEP/SEED_FILES` 用空格拼而骨架按 RS 拆；另补 D3（播种逐件验）/D4（日志路径开跑前判）/N1（空 env 名守卫）。
 ## 2026-11-07 · 门禁读数补一维：`last.json` 记下这一趟按哪种分片跑的（卡 E90，T-AG598）
 - 卡 E30（T-AG484）已被用户 2026-10-25 裁定并入 E50（落地笔 b659e2df），本卡只收剩下的两条尾巴。
 - `scripts/run_gates.py` 的 payload 在 `"workers"` 之后补 `"pytest_dist": pytest_dist()`；同一文件里那条指向 gates/diag 下 bench-e30-summary.txt 的悬空注释改写，不再点名不存在的文件。
