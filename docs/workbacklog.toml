@@ -5678,3 +5678,19 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E101"
+task = "T-AG610"
+title = "契约对账表装牙：表里每一格都由工具现读、漂了就红"
+tree = ".wt/E101"
+spec = "复盘/卡/卡E101-契约对账表装牙.md"
+files = [
+  "tools/contract_audit.py",
+  "tests/test_contract_doc_table.py",
+  "复盘/契约-判据对账.md",
+  "复盘/卡/卡E101-契约对账表装牙.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
