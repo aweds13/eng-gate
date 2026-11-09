@@ -11771,3 +11771,20 @@ evidence = [
   "test:test_pool_ledger_spend.py::test_append_priced_false_is_counted_by_unpriced",
 ]
 gaps = "1. 「不知道」只影响**排序**，不影响**派活**：`smart_order` / `apply_strategy` 至今零生产调用方，真派活链里没有候选号列表可排。指针 `tools/pool/route.py`2. `ledger_spend.append(priced=...)` 只做了 API 三态，**没有调用方传它** —— 生产唯一写点仍不写这个键。指针 `tools/wb_dispatch.py:3937`3. `tests/test_pool_route_strategies.py` 有 9 个座位补了显式 `used=0.0`（原本靠旧默认值隐式成立）；断言一条没改，但「旧默认值 0.0」这个隐含前提从此不再由代码担保。指针 `tests/test_pool_route_strategies.py`"
+
+[entries."T-AG605"]
+id = "T-AG605"
+title = "文档与口径收口：写文档有入口、单文件有反馈、会漂的数字删掉"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/check_docs.py",
+  "file:skills/softeng-manage/references/doc-write.md",
+  "file:AGENTS.md",
+  "file:tools/contract_audit.py",
+  "text:scripts/check_docs.py::def narrow_to_files(",
+  "test:test_check_docs.py::test_file_scope_reports_only_the_named_doc_and_goes_nonzero",
+  "test:test_check_docs.py::test_file_scope_with_no_hits_is_red_not_green",
+  "test:test_contract_audit.py::test_card_e96_cx01_judge_is_the_synthetic_one_not_the_format_checker",
+]
+gaps = "1. 「改一点看一点」只治了一半：`--file` 给的是**秒级反馈**（0.70 s vs 全仓 2.30 s），但门表里没有任何一处强制先跑它 —— 靠人记得。指针 `scripts/check_docs.py`2. `docs/INDEX.md` 的新鲜度仍挂在 pytest 那道门里（`tests/test_gen_doc_index_fresh.py`），改一行字要等全量才知道；本卡的 `--file` 只管死指针 / superseded 两腿，**不覆盖**派生文档。指针 `tests/test_gen_doc_index_fresh.py`3. 收窄读数与全仓基线的关系只解决了「不许下调」这一半：收窄读数**涨到**时只说明「这几份里有」，解释成「全仓也涨」靠的是「局部 ≤ 全仓」这条隐含前提，没有独立测试钉它。指针 `scripts/check_docs.py`"

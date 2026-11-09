@@ -14,6 +14,12 @@
 
 夹具全部在 `tmp_path` 里搭合成小树（**真实仓库一个字节都不写**），
 只有最后一条拿真仓库跑（证明它不是空转）。
+
+6. `--file`（卡 E96）：只判点名的几份 —— 收窄只作用于**逐份文档**的两腿（死指针 / superseded），
+   drift 腿不吃 docs 列表；坏单文件只报那一份、点不到任何文件 ⇒ 退 1 并明说；
+   不给 `--file` 时，行为与输出都逐字节同旧。
+   ★ 复核补的一刀：收窄读数**不许**跟全仓基线比（局部小证不了全仓清了）—— 输出里没有
+   「降到」/「可以把基线调低」，基线那几行改印「（收窄读数，不比基线）」。
 """
 
 from __future__ import annotations
@@ -855,3 +861,189 @@ def test_every_own_ext_is_justified() -> None:
     )
     stripped = sorted(set(reasons) - set(cd.OWN_EXTS))
     assert stripped == [], f"理由表里有不在 OWN_EXTS 的成员：{stripped}"
+
+
+# ------------------------------------------------- 判据 6（卡 E96）：`--file` 只判点名的几份
+def _tree_with_baseline(tmp_path: Path) -> Path:
+    """合成树 + 一份基线：`docs/ok.md` 自身合法，基线把当前读数钉成地板（ratchet 才判得出来）。"""
+    root = _tree(tmp_path)
+    (root / "docs" / "doc-debt-baseline.toml").write_text(
+        '[baseline]\nupdated = "2026-01-01"\ntask = "T-TEST"\n'
+        "dead_refs = 0\ndrift = 0\nsuperseded = 0\n",
+        encoding="utf-8",
+    )
+    assert _run(root, "report")[0] == 0, "地板没钉住 ⇒ 后面的「涨到」是假的"
+    return root
+
+
+def test_file_scope_reports_only_the_named_doc_and_goes_nonzero(tmp_path: Path) -> None:
+    """★ `--file`：坏掉的**只**出现在点名文件里 ⇒ 只看那一份时红，全仓也红；反面两棵树各一份坏。
+
+    这条钉的是**收窄**：全仓两处坏、`--file` 只点一处 ⇒ 读数必须是 1 条，且只点出那一份。
+    """
+    root = _tree_with_baseline(tmp_path)
+    (root / "docs" / "bad-a.md").write_text("看 `docs/nope-a.md`\n", encoding="utf-8")
+    (root / "docs" / "bad-b.md").write_text("看 `docs/nope-b.md`\n", encoding="utf-8")
+    report = cd.scan(root)
+    assert sorted(item.line() for item in report.dead_refs) == [
+        "docs/bad-a.md:1 → docs/nope-a.md",
+        "docs/bad-b.md:1 → docs/nope-b.md",
+    ], [item.line() for item in report.dead_refs]
+
+    code, text = _run(root, "report", only=["docs/bad-a.md"])
+    assert code == 1, text                      # 涨到 2 ⇒ 1 条（基线 0，只不许升）
+    assert "docs/bad-a.md:1 → docs/nope-a.md" in text
+    assert "nope-b.md" not in text, text        # 没点名的那一份**不许**出现在读数里
+    total = cd.scan(root).scanned["文件"]
+    assert f"[note] --file 只看 1 份（全仓 {total} 份）" in text, text
+
+    # 点的是好的那一份 ⇒ report 档退 0（没债、没超基线），且不许把别人的债算进来
+    code_ok, text_ok = _run(root, "report", only=["docs/ok.md"])
+    assert code_ok == 0, text_ok
+    assert "nope-a.md" not in text_ok and "nope-b.md" not in text_ok, text_ok
+    # ★ 未点名的那些**仍然是 skip**（本来就没判）—— 收窄不等于替它们背书
+    assert f"[note] --file 只看 1 份（全仓 {total} 份）" in text_ok, text_ok
+
+
+def test_file_scope_accepts_absolute_and_backslash_and_dedupes(tmp_path: Path) -> None:
+    """`--file` 的写法兼容：绝对路径、反斜杠、`./` 前缀、同一份点两次 ⇒ 只算一份。"""
+    root = _tree_with_baseline(tmp_path)
+    (root / "docs" / "bad.md").write_text("看 `docs/nope.md`\n", encoding="utf-8")
+    for token in (
+        str(root / "docs" / "bad.md"),
+        "docs\\bad.md",
+        "./docs/bad.md",
+    ):
+        report = cd.scan(root, only=[token])
+        assert [item.line() for item in report.dead_refs] == ["docs/bad.md:1 → docs/nope.md"], (
+            token, [item.line() for item in report.dead_refs]
+        )
+        assert report.scanned["文件"] == 1, (token, report.scanned)
+        assert any("只看 1 份（全仓" in note for note in report.notes), report.notes
+
+    twice = cd.scan(root, only=["docs/bad.md", "./docs/bad.md", str(root / "docs" / "bad.md")])
+    assert twice.scanned["文件"] == 1, twice.scanned
+    total2 = cd.scan(root).scanned["文件"]
+    assert [note for note in twice.notes if note.startswith("--file 只看")] == [
+        f"--file 只看 1 份（全仓 {total2} 份）"
+    ], twice.notes
+
+
+def test_file_scope_with_no_hits_is_red_not_green(tmp_path: Path) -> None:
+    """★ 反向钉子：`--file` 点了一个**不在扫描集里**的文件 ⇒ 退 1 且明说（空集不许当通过）。"""
+    root = _tree_with_baseline(tmp_path)
+    code, text = _run(root, "report", only=["docs/does-not-exist.md"])
+    assert code == 1, text
+    assert "给的文件一份都没在扫描集里" in text, text
+    assert "[note] --file 只看 0 份（全仓" in text, text
+    assert "docs/does-not-exist.md" in text, text     # 点名说清是哪一条没命中
+
+    # 一类"点了但没入库"的也不行
+    code2, text2 = _run(root, "report", only=[])
+    assert code2 == 1, text2
+    assert "给的文件一份都没在扫描集里" in text2, text2
+
+
+def test_no_file_flag_keeps_old_behaviour_byte_for_byte(tmp_path: Path) -> None:
+    """★「不给 `--file` 时行为与今天一致」：两棵一样的树，一次隐式一次显式，输出逐字相同。"""
+    left = _tree_with_baseline(tmp_path / "left")
+    right = _tree_with_baseline(tmp_path / "right")
+    for root in (left, right):
+        (root / "docs" / "bad.md").write_text("看 `docs/nope.md`\n", encoding="utf-8")
+
+    lines_old: list[str] = []
+    code_old = cd.main(left, "report", out=lines_old.append)
+    lines_new: list[str] = []
+    code_new = cd.main(right, "report", out=lines_new.append, only=None)
+    old_text = "\n".join(lines_old).replace(str(left), "<root>")
+    new_text = "\n".join(lines_new).replace(str(right), "<root>")
+    assert code_old == code_new == 1, (code_old, code_new)
+    assert old_text == new_text, "不给 --file 时输出变了 —— 那是回归，不是新功能"
+
+    # 老签名（不传 only）与旧调用方一致：位置参数 + 关键字参数都不受影响
+    assert cd.scan(left).counts() == cd.scan(right, only=None).counts()
+
+
+def test_file_scope_does_not_narrow_the_drift_leg(tmp_path: Path) -> None:
+    """★ drift 腿**不吃** docs 列表：`--file` 点了别的文件，drift 判据面（跳过项）不变。"""
+    root = _tree_with_baseline(tmp_path)
+    (root / "docs" / "bad.md").write_text("看 `docs/nope.md`\n", encoding="utf-8")
+    wide = cd.scan(root)
+    narrow = cd.scan(root, only=["docs/ok.md"])
+    assert len(narrow.drift) == len(wide.drift), (narrow.drift, wide.drift)
+    assert narrow.drift_judged == wide.drift_judged, (narrow.drift_judged, wide.drift_judged)
+    # 死指针这一腿确实被收窄了（证明上面那条不是因为"两条腿都没动"）
+    assert len(narrow.dead_refs) < len(wide.dead_refs), (narrow.dead_refs, wide.dead_refs)
+
+
+def _tree_with_slack(tmp_path: Path, was: int) -> Path:
+    """合成树 + 一份**比现状宽松**的基线（`was` 条地板）：这样全仓读数才判得出来「降了」。"""
+    root = _tree(tmp_path)
+    (root / "docs" / "doc-debt-baseline.toml").write_text(
+        f'[baseline]\nupdated = "2026-01-01"\ntask = "T-TEST"\n'
+        f"dead_refs = {was}\ndrift = 0\nsuperseded = 0\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_file_scope_never_compares_a_narrowed_reading_to_the_whole_repo_baseline(
+    tmp_path: Path,
+) -> None:
+    """★ 复核钉子：`--file` 只看了 N 份 ⇒ 读数**不许**跟全仓基线比，更不许教人下调基线。
+
+    反面（这就是 bug 的形状）：全仓 1 条死指针、基线记 2 条。收窄到「干净的那一份」时
+    读数 0 —— 旧代码会印 `dead_refs 从 2 降到 0（可以把基线调低到 0）`，等于把
+    「这次只看了 1 份」说成「欠账全清」，照着调低基线就把这道门拆了。
+    """
+    root = _tree_with_slack(tmp_path, 2)
+    (root / "docs" / "bad.md").write_text("看 `docs/nope.md`\n", encoding="utf-8")
+
+    # 全仓档：ratchet 照旧能判「降了」，且仍允许下调基线（这是全仓读数，说的是实话）
+    code_all, text_all = _run(root, "report")
+    assert "dead_refs 从 2 降到 1（可以把基线调低到 1）" in text_all, text_all
+    assert "CHECK_DOCS: 死指针 1（基线 2，-1）" in text_all, text_all
+
+    # 收窄档：一个字都不许提「降到 / 调低」，且明说这是收窄读数
+    code_one, text_one = _run(root, "report", only=["docs/ok.md"])
+    assert code_one == 0, text_one
+    assert "降到" not in text_one, f"收窄读数不许说「降到」：\n{text_one}"
+    assert "可以把基线调低" not in text_one, text_one
+    assert "[ratchet] 收窄读数不比基线（--file 只看了 1 份）" in text_one, text_one
+    assert "CHECK_DOCS: 死指针 0（收窄读数，不比基线）" in text_one, text_one
+    assert "CHECK_DOCS: 死指针 0（基线 2，-2）" not in text_one, text_one
+
+
+def test_file_scope_still_bites_when_the_narrowed_reading_is_over_the_baseline(
+    tmp_path: Path,
+) -> None:
+    """★ 收窄**不是**关掉 ratchet：局部超地板 ⇒ 全仓必然也超 ⇒ 照旧红、照旧说「涨到」。"""
+    root = _tree_with_baseline(tmp_path)          # 地板 0
+    (root / "docs" / "bad.md").write_text("看 `docs/nope.md`\n", encoding="utf-8")
+    code, text = _run(root, "report", only=["docs/bad.md"])
+    assert code == 1, text
+    assert "dead_refs 从 0 涨到 1（基线只能降不能升）" in text, text
+    assert "降到" not in text, text
+
+
+def test_json_output_only_grows_a_key_when_narrowed(tmp_path: Path) -> None:
+    """`--json`：收窄时多一个 `"narrowed": true`；全仓档的 JSON 一个键都不多（逐字节同旧）。"""
+    import json
+
+    root = _tree_with_baseline(tmp_path)
+    (root / "docs" / "bad.md").write_text("看 `docs/nope.md`\n", encoding="utf-8")
+    wide = cd.as_json(cd.scan(root))
+    narrow = cd.as_json(cd.scan(root, only=["docs/ok.md"]))
+    assert "narrowed" not in wide, sorted(wide)
+    assert narrow.get("narrowed") is True, sorted(narrow)
+    assert set(narrow) - set(wide) == {"narrowed"}, (sorted(narrow), sorted(wide))
+    assert json.dumps(wide, ensure_ascii=False) == json.dumps(
+        cd.as_json(cd.scan(root, only=None)), ensure_ascii=False
+    )
+
+
+def test_file_flag_is_parsed_as_repeatable() -> None:
+    """CLI 面：`--file a --file b` 收成两条（append），不给是 None（默认仍全仓）。"""
+    assert cd.parse_args([]).file is None
+    got = cd.parse_args(["--file", "docs/a.md", "--file", "docs/b.md"]).file
+    assert got == ["docs/a.md", "docs/b.md"], got

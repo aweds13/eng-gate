@@ -37,6 +37,17 @@ r"""文档门禁（卡 F3 / T-AG451）：死指针 / drift 债 / superseded 未�
    并**计数打印**（按原因分组）。`skip > 0` 时输出**不许**给干净结论（照 ADDA：
    「a green check that was structurally blind is worse than no check」）。
 
+## `--file`（卡 E96）：只判这几份
+
+`--file <路径>`（可重复；相对路径按**仓根**解释）把**逐份文档**的两腿（死指针 / superseded）
+收窄到命中文件；**drift 腿仍全量** —— 它判的是台账里的「文档 × 源文件」配对，与"这次改哪几份"无关。
+输出给一行 `[note] --file 只看 N 份（全仓 X 份）`：局部读数不许被当全仓结论。
+一条都没命中 ⇒ 退 1 并明说「给的文件一份都没在扫描集里」（判据要能证明它看得见）。
+★ ratchet 也不许拿收窄读数跟全仓基线比（卡 E96 复核）：这一档**不出**「降到 … 可以把基线调低到 N」
+（局部小证不了全仓清了），只留「涨到」（局部超过地板 ⇒ 全仓必然超）；基线那几行改印
+`（收窄读数，不比基线）`。`--file` 与 `--write-baseline` 同时给 ⇒ 直接退 1（基线是全仓读数）。
+不给 `--file` ⇒ 行为与以前**逐字节一致**。
+
 ## 基线 ratchet（`docs/doc-debt-baseline.toml`）
 
 `dead_refs` / `superseded` 记当前欠账条数，**只能降不能升**：现在比基线多 ⇒ 红
@@ -56,6 +67,8 @@ python -X utf8 scripts/check_docs.py --mode report     # 默认：只报告（�
 python -X utf8 scripts/check_docs.py --mode block      # 判出东西就非零退出（第一版**不挂**这个档）
 python -X utf8 scripts/check_docs.py --json            # 机器可读
 python -X utf8 scripts/check_docs.py --write-baseline  # 重刷基线（幂等：连跑两次字节不变）
+python -X utf8 scripts/check_docs.py --file docs/x.md # 只判这一份（死指针 / superseded）
+python -X utf8 scripts/check_docs.py --file a.md --file b.md  # 重复给；drift 腿仍全量（见下节）
 ```
 
 退出码：`0` 报告完毕 / `1` 红（基线被顶破；`block` 档下还有死指针等也算）/
@@ -251,6 +264,8 @@ class Report:
     notes: list[str] = field(default_factory=list)
     baseline: dict[str, int] = field(default_factory=dict)
     drift_judged: bool = True
+    #: 卡 E96：这次只判了 `--file` 点名的几份 ⇒ 读数**不许**跟全仓基线比（局部 ≠ 全仓）。
+    narrowed: bool = False
 
     @property
     def findings(self) -> list[Finding]:
@@ -960,14 +975,23 @@ def load_baseline(path: Path) -> tuple[dict[str, int], str]:
     return counts, ""
 
 
-def ratchet(counts: dict[str, int], baseline: dict[str, int]) -> list[str]:
-    """基线 ratchet：`dead_refs` / `superseded` **只能降不能升**。"""
+def ratchet(
+    counts: dict[str, int], baseline: dict[str, int], *, narrowed: bool = False
+) -> list[str]:
+    """基线 ratchet：`dead_refs` / `superseded` **只能降不能升**。
+
+    `narrowed`（卡 E96 复核，`--file`）时**只留「涨到」**：
+      · 收窄读数**大于**全仓地板 ⇒ 全仓必然也大于（局部 ≤ 全仓）⇒ 这个方向**可信**；
+      · 收窄读数**小于**地板只说明「点名这几份没欠那么多」，**证不了全仓清了** ——
+        照旧印「降到 … 可以把基线调低到 N」，就是把「这次只看了几份」说成「欠账全清」，
+        照着调低基线等于把这道门拆了。所以这一档**不许**出「降到」。
+    """
     out: list[str] = []
     for key in ("dead_refs", "superseded"):
         now, was = counts.get(key, 0), baseline.get(key, 0)
         if now > was:
             out.append(f"{key} 从 {was} 涨到 {now}（基线只能降不能升）")
-        elif now < was:
+        elif now < was and not narrowed:
             out.append(f"{key} 从 {was} 降到 {now}（可以把基线调低到 {now}）")
     return out
 
@@ -1042,12 +1066,51 @@ def write_baseline_file(root: Path, report: Report) -> tuple[Path, bool]:
 
 
 # --------------------------------------------------------------------------- 汇合
-def scan(root: Path) -> Report:
-    """跑完四条判据，收成一份读数（纯读：一个字节都不写）。"""
+def only_key(token: str, root: Path) -> Path:
+    """`--file` 的写法 → 绝对路径（相对路径按**仓根**解释；反斜杠 / 正斜杠 / 引号都认）。"""
+    text = str(token).strip().strip('"').strip("'")
+    path = Path(text)
+    return path if path.is_absolute() else (root / path)
+
+
+def narrow_to_files(docs: list[Path], report: Report, only: list[str], root: Path) -> list[Path]:
+    """把**逐份文档**的判据面收窄到 `--file` 命中的那几份（卡 E96）。
+
+    不在扫描集里的写法**逐个点名**，一条都没命中就**明说**（判据要能证明它看得见）。
+    ★ 只收窄死指针 / superseded 两腿；drift 腿不吃 docs，天然仍全量。
+    """
+    wanted: dict[str, str] = {}
+    for token in only:
+        key = os.path.normcase(str(only_key(token, root).resolve()))
+        wanted.setdefault(key, str(token))
+    hit = [d for d in docs if os.path.normcase(str(d.resolve())) in wanted]
+    seen = {os.path.normcase(str(d.resolve())) for d in hit}
+    report.notes.append(f"--file 只看 {len(hit)} 份（全仓 {len(docs)} 份）")
+    for key, token in sorted(wanted.items()):
+        if key not in seen:
+            report.notes.append(
+                f"--file 给的 {token} 不在扫描集里（名字不对 / 不在这三处 / 没入库）"
+            )
+    if not hit:
+        report.notes.append(
+            "--file 给的文件一份都没在扫描集里 —— 这次什么都没判，不是通过"
+        )
+    return hit
+
+
+def scan(root: Path, only: list[str] | None = None) -> Report:
+    """跑完四条判据，收成一份读数（纯读：一个字节都不写）。
+
+    `only`（卡 E96）：只判这几份文档 —— 死指针 / superseded 两腿只看命中文件，
+    **drift 腿仍全量**；不给（默认）时与老行为**逐字节一致**。
+    """
     report = Report(root=root)
     docs, dropped_docs = iter_docs_split(root)
     for path, reason in dropped_docs:
         report.skips.append(Skip(rel(path, root), "-", reason))
+    if only is not None:
+        docs = narrow_to_files(docs, report, only, root)
+        report.narrowed = True
     report.scanned["文件"] = len(docs)
     for name in SCAN_DIRS:
         report.scanned[name] = sum(1 for d in docs if rel(d, root).startswith(f"{name}/"))
@@ -1069,7 +1132,7 @@ def scan(root: Path) -> Report:
         report.skips.append(Skip(BASELINE_REL, "-", f"{why} ⇒ ratchet 判不了"))
     else:
         report.baseline = baseline
-        report.ratchet = ratchet(report.counts(), baseline)
+        report.ratchet = ratchet(report.counts(), baseline, narrowed=report.narrowed)
     return report
 
 
@@ -1108,6 +1171,9 @@ def print_report(report: Report, mode: str = "report", out=None) -> None:
             f"比没有门更糟）。")
     for note in report.notes:
         say(f"[note] {note}")
+    if report.narrowed:
+        say(f"[ratchet] 收窄读数不比基线（--file 只看了 {report.scanned.get('文件', 0)} 份）"
+            " —— 局部读数既不证明欠账清了，也不许拿来下调基线")
     for line in report.ratchet:
         say(f"[ratchet] {line}")
 
@@ -1115,6 +1181,10 @@ def print_report(report: Report, mode: str = "report", out=None) -> None:
     counts = report.counts()
     for key, label in (("dead_refs", "死指针"), ("drift", "drift"), ("superseded", "superseded")):
         now = counts[key]
+        if report.narrowed and key != "drift":
+            # 卡 E96 复核：收窄读数不是全仓读数 —— 印「-147」那种差值是假话。
+            say(f"CHECK_DOCS: {label} {now}（收窄读数，不比基线）")
+            continue
         if key in report.baseline:
             was = report.baseline[key]
             tail = " · 可漂移量，只报告" if key == "drift" else ""
@@ -1179,6 +1249,7 @@ def as_json(report: Report) -> dict:
         ],
         "ratchet": report.ratchet,
         "notes": report.notes,
+        **({"narrowed": True} if report.narrowed else {}),
     }
 
 
@@ -1208,14 +1279,20 @@ def main(
     json_out: bool = False,
     out=None,
     write_baseline: bool = False,
+    only: list[str] | None = None,
 ) -> int:
     """跑一遍；`root` 不给 = 真仓库根（自检拿合成小树喂坏样例）。
 
     `write_baseline=True` 时把当前读数写成基线后退出（`--write-baseline`）；
     ★ 幂等：同一组读数第二次跑只打印「未变」，**不重写文件**。
+    `only`（卡 E96）= `--file` 的那几份：只收窄逐份文档的判据面，drift 仍全量。
     """
     base = Path(root).resolve() if root is not None else ROOT.resolve()
-    report = scan(base)
+    if write_baseline and only is not None:
+        say = out or (lambda line: print(line, flush=True))
+        say("CHECK_DOCS: FAIL ❌（--file 与 --write-baseline 不许一起用：基线是全仓读数）")
+        return 1
+    report = scan(base, only)
     if write_baseline:
         say = out or (lambda line: print(line, flush=True))
         if not report.scanned.get("文件"):
@@ -1254,6 +1331,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                              "（幂等：连跑两次字节不变）")
     parser.add_argument("--decisions", action="store_true",
                         help="检查 docs/decisions/ 的决策记录（卡 F4；不做死指针/drift）")
+    parser.add_argument("--file", action="append", default=None, metavar="路径",
+                        help="只判这几份文档（可重复；死指针 / superseded 只看命中文件，"
+                             "drift 仍全量；一条都没命中 ⇒ 退 1）")
     parser.add_argument("--root", default=None,
                         help="查哪棵树（默认 = 本脚本所在仓库根）")
     return parser.parse_args(argv)
@@ -1657,4 +1737,5 @@ if __name__ == "__main__":
     args = parse_args()
     if args.decisions:
         sys.exit(main_decisions(["--decisions", *(["--root", args.root] if args.root else [])]))
-    sys.exit(main(args.root, args.mode, args.doctor, args.json, write_baseline=args.write_baseline))
+    sys.exit(main(args.root, args.mode, args.doctor, args.json,
+                  write_baseline=args.write_baseline, only=args.file))

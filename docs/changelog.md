@@ -14,6 +14,11 @@
 - 四个分桶策略（`smart_order` / `least_used` / `by_pace` / `fastest`）一律走 `usage_tier`：`known=False` 时 `used` 填多少都不可信，位次与那个数无关；「不知道」排在所有知道的人之后，但**不许**插到「用尽且能靠赠金继续」的前面。
 - `tools/pool/ledger_spend.py`：`append(..., priced: bool | None = None)` 三态 —— 缺省**不写键**（老行 9 键形状逐字节不变，读侧仍按 `True`），显式 `True`/`False` 才落字面值；`unpriced()` 从此数得到真「无价」。
 - 反向变异 5 条全咬住（默认值改回 0.0 ⇒ 4 红；`tier(None)` 返 0 ⇒ 1 红；`append` 写死 True ⇒ 4 红；`apply_order` 越界改抛 ⇒ 3 红；`usage_tier` 把 None 洗成 0.0 ⇒ 29 红），每次还原都核 sha256。
+## 2026-11-09 T-AG605 文档与口径收口：写文档有入口、单文件有反馈、会漂的数字删掉
+- 新建 `skills/softeng-manage/references/doc-write.md`（61 行 / 纯 CRLF）：只答四问（定层 / 改还是加注 / 引用怎么给 / 写完跑哪句），**一个判据常数都不抄**（「阈值 / 上限 / 条数」三词各 0 次）；`AGENTS.md` 路由表加一行指向它。
+- `scripts/check_docs.py` 加 `--file <路径>`（可重复，相对仓根）：死指针 / superseded 两腿收窄到命中文件，**drift 腿仍全量**；输出印「只看 N 份（全仓 X 份）」，一份都没命中 ⇒ 退 1 而不是绿。收窄读数**不许**跟全仓基线比（`Report.narrowed` + `ratchet(..., narrowed=True)` 只留「涨到」）—— 否则照旧印「可以把基线调低到 N」等于拿局部读数拆掉这道门。
+- `tools/pool_mcp.py` 五处「六个只读工具」改成「十三个（十个号池 + 三个任务）」，并在写面补 confirm 的**三种语义**（号池 = 卡号；`task_register` = TOML 的 `id`、`task_claim` = `task`、`usage_report` = 这一批的记录条数）；`tools/wb_land.py` 三处「11 条判据」改成「条数现读」。
+- CX-01 的判据换成合成形态（把门表构建链复到临时树、不带 `skills/` 再真 import 一次），**不新增门**；旧判据（只核 SKILL.md 格式）实测「绿而无证」。
 ## 2026-11-08 · 云门禁泛用化：抽「仓无关骨架 + 每仓一份 profile」（卡 E92，T-AG600）
 - `scripts/cloud/run_gate.sh` 里 10 处本仓字面（cloud_dir / 分支 / TF_PROJECTS_TOML / 池配置 / pip -c pins / run_gates.py / 播种目录 / 卡树 / 产物路径）全部搬进 `scripts/cloud/profiles/engineering.toml`，脚本只剩「怎么跑」。
 - 新增 `scripts/cloud/profile.py`（dump/list/check/render 四子命令，38 个键）与 `--render` 分支；新增第二仓 profile `scripts/cloud/profiles/openmaic.toml`，全文零本仓键值（判据 3 有钉子）。

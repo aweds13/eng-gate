@@ -18,7 +18,8 @@
                 Operating order, every session:
                 1. Read AGENTS.md in the repository root; it is the only routing entry.
 
-                2. Run `pipe doctor` to confirm the toolchain entry and the data root before doing any work.
+                2. Find the toolchain entry before doing any work: AGENTS.md names the commands this repo actually
+                  runs. Do not assume a global CLI or a pipeline config file exists -- a repo may have neither.
 
                 3. Work through the action skills: pipe-card (open a card), pipe-gate (run gates), pipe-land (land a
                    card), pipe-workbench (read the current state).

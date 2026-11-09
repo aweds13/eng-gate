@@ -94,8 +94,16 @@ CONTRACTS: list[Contract] = [
     Contract(
         cid="CX-01",
         source=("skills/README.md", "删掉整个 `skills/` 目录，框架仍然完整可用"),
-        judge=("cmd", ["python", "-X", "utf8", "skills/nails/check_skills.py"]),
-        note="skills 钉子②：SKILL.md 格式 + 卡 209 四条加严；钉子①另立 CX-02",
+        judge=(
+            "pytest",
+            "tests/test_contract_audit.py::"
+            "test_card_e96_audit_gate_table_builds_without_skills",
+        ),
+        note=(
+            "卡 E96 换成**合成形态**：把门表构建链复制到临时树、**不带 skills/** 再真 import 一次"
+            "（原先是 skills/nails/check_skills.py —— 那只核 SKILL.md 格式，证不了这句话）。"
+            "钉子见 tests/test_contract_audit.py 的同名用例；本卡不新增门"
+        ),
     ),
     Contract(
         cid="CX-02",

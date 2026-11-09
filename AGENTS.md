@@ -12,6 +12,7 @@
 |---|---|
 | **OpenMAIC 二开**（`../OpenMAIC`） | `../OpenMAIC/AGENTS.md` —— 维护手册：改哪一层、文件地图、证据命令、坑；**当前状态**看它的 §0（现状）与 §8（未决项）<br>已量的结论看 `../OpenMAIC/复盘/已结案结论.md`。★ 原「新窗口交接卡」已于 2026-10-30 拆掉，状态进了那两节 |
 | **找不到文档 / 不知道某份该不该读** | `docs/文档系统导航.md` —— 六份索引各管什么、按意图路由（改代码 / 查某张卡 / 门怎么判 / 规矩来历 / 发新功能）、哪些地方**不是权威** |
+| **我要写 / 改 / 补 文档** | `skills/softeng-manage/references/doc-write.md` —— 只答四个问题（定层 / 改还是加注 / 引用怎么给 / 写完跑哪句）；判据真源仍在 `scripts/` 与 `skills/nails/`，那页不抄 |
 | **软件工程流程**（开卡 → 派活 → 跑门 → 落地 → 巡检 → 复盘） | `skills/softeng-manage/SKILL.md` —— 六段路由 + 六条铁律；**本仓命令落在哪**看同目录 `references/repo-bindings.md` |
 | **跑门禁 / 读懂门禁结果**（退出码、未跑、复用、假红） | `skills/pipe-gate/SKILL.md` + `skills/pipe-gate/references/repo-bindings.md`（锁在哪、超时多少、档位怎么选） |
 | **审计**（台账 / 证据 / 封存 / trailer） | 判据真源只有 `scripts/audit_progress.py` 一份；怎么用看 `skills/pipe-land/SKILL.md` 的收口段与 `skills/pipe-forensics/SKILL.md` |

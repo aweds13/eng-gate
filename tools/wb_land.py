@@ -46,7 +46,8 @@ r"""主控的通用集成器 CLI `tools/wb_land.py`（卡 139 · `T-G237`）—�
     没有台账；真仓台账永远在）。`--batch` / `--precheck` 不走这条守卫。
   ★ 守卫在壳层而不在 `pool.landing`：逻辑层不在卡 A318 的 files 域里。
 ★ 卡 E1（`T-AG443`）：`--preflight` —— 落地**前**的一次零副作用只读体检：
-  把「这一趟会踩的线」**全部**说出来（不 fail-fast），11 条判据逐条 ✅/❌ + 一句怎么修，
+  把「这一趟会踩的线」**全部**说出来（不 fail-fast），**每条**判据 ✅/❌ + 一句怎么修
+  （条数**现读** `pool.landing.preflight`，别在这里写死一个数），
   0=全绿 / 1=有 ❌。判据本体在 `pool.landing.preflight`（与落地链**同一批函数**，
   不复制第二份）；本壳只做「取参数 → 转发」。`--preflight` 单独给 = 体检完就退；
   与 `--card` / `--batch` 一起给 = 体检绿后**接着落地**（体检只跑这一趟，不重复）。
@@ -103,7 +104,7 @@ STEP_TIMEOUT = 180
 _HELP_TAIL = (
     "壳层参数（不转发给落地链）：--precheck <台账号|文书路径…>  落地前置快检"
     "（文书裸文件名 + check_layers + test_check_skills；红了不进全量门禁）\n"
-    "                  --preflight  落地前置体检（11 条判据一次说全；只读；"
+    "                  --preflight  落地前置体检（判据条数现读，一次说全；只读；"
     "0=全绿 1=有 ❌）\n"
     "                  --no-select  关掉台账选测（落地链默认走选测；碰判据本体仍强制全量）",
     "★ 卡 E42：`--gate-on cloud|local`（**默认 cloud**；云机不可达 ⇒ 退 2 且"
@@ -134,7 +135,7 @@ _PRECHECK_DESC = (
     "tests/test_check_skills.py（红了不进全量门禁；只读，不写任何文件）"
 )
 
-#: `--preflight` 的 argparse 描述（卡 E1：11 条判据一次说全）。
+#: `--preflight` 的 argparse 描述（卡 E1：判据条数现读，一次说全）。
 _PREFLIGHT_DESC = (
     "落地前置体检（卡 E1）：卡树 HEAD 祖先 / 文书三段齐 / changelog 首行 / 文书预算与指针 / "
     "队列 spec 已进 git / 卡域有产物 / 主树 offender / 队列卡块 status / audit --all / "
