@@ -5754,3 +5754,28 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E105"
+task = "T-AG614"
+title = "禁用表装好了判据却没人问：三处派活入口都当它不存在"
+tree = ".wt/E105"
+spec = "复盘/卡/卡E105-禁用表接线.md"
+files = [
+  "tools/wb_dispatch.py",
+  "tools/pool/gateway.py",
+  "tools/pool_mcp.py",
+  "tools/pool/model_registry.py",
+  "tests/test_pool_disabled.py",
+  "tests/test_pool_disabled_wiring.py",
+  "tests/test_wb_dispatch.py",
+  "tests/test_pool_gateway.py",
+  "tests/test_pool_mcp_write.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡E105-禁用表接线.md"
+]
+depends = [
+  "E104"
+]
+risk = "mid"
+status = "pending"
