@@ -24,6 +24,11 @@
 - `tools/pool_accounts.py` 的 codearts 分支不再用 `unsupported` 当挡箭牌：按 `token_env` 的名字后缀分 AK / SK / security token，签名读一次 `statistics/plugin`；成功 ⇒ `ok` + `used_percent`（两位小数）+ `amount`（余额）；缺凭据 ⇒ `uncertain` 点名 `token_env`；401/403 ⇒ `failed`、404 ⇒ `not-supported`、429/5xx/网络不明 ⇒ `uncertain` 且**不重放**；读到但形状变了 ⇒ `uncertain` 不**当 0**。
 - 账本只开一格：`record_probe_result()` 只对 `kind=="ok"` 且带 `used_percent` 的行写 `[account.quota].used_percent`，其余结论**不写也不删**旧值（缺键 = 未观测）；校验与读账本共用 `_check_used_percent()`。
 - `tools/wb_dispatch.py` 的 `usage_in()` 改走 `model_aliases()` / `_matches_model()`：任一别名命中即计入、大小写不敏感、注册表读不到退回字面相等（fail-open）；真机 `glm-5.2` / `GLM-5.2` / `huaweicloud-maas/GLM-5.2` 三写法都回 143312742，此前后两者恒 0。
+## 2026-11-09 T-AG607 落地链三个结构缺口：回退名单补现算文档、门禁前重算索引、复核拿对 allow
+- `tools/pool/landing.py` 的回退名单补上 `RECOUNT_DOCS`：上一趟 ⑤′.5 留下的 `docs/subsystems/pool/README.md` / `docs/INDEX.md` 不再挡住 ① 的 `git checkout <主树 HEAD>`（E95 原文 `error: Your local changes to the following files would be overwritten by checkout`）。**没**并进 `DOCS`：汇总是链、现算是另一条链。
+- 新增 ③.5 腿（`if not a.commit_only:` 块内、③ 之后、③′ 之前）：门禁**之前**先用写模式跑一次 `scripts/check_derived_docs.py`、再 `--check` 复核；不过就退 3 并印原文末 20 行。② 生成的两份片段从此不会再让 ④ 拿到过期 INDEX（E94/E95/E96 三次同根因，每次白烧约 300 秒）。
+- 「在不在」的判据从 `recount_derived()` 抽成 `_derived_present()`，③.5 与 ⑤′.5 共用一份 —— 两处各判各的，迟早判出两个结果。
+- ⑧ 的复核实参从 `a.allow` 换成 ⑤′ 真正拿去提交的那份 `allow`：翻账卡不再每笔都报「有 1 个改动不在白名单里：`docs/workbacklog.toml`」（E97 落地现场）。
 ## 2026-11-08 · 云门禁泛用化：抽「仓无关骨架 + 每仓一份 profile」（卡 E92，T-AG600）
 - `scripts/cloud/run_gate.sh` 里 10 处本仓字面（cloud_dir / 分支 / TF_PROJECTS_TOML / 池配置 / pip -c pins / run_gates.py / 播种目录 / 卡树 / 产物路径）全部搬进 `scripts/cloud/profiles/engineering.toml`，脚本只剩「怎么跑」。
 - 新增 `scripts/cloud/profile.py`（dump/list/check/render 四子命令，38 个键）与 `--render` 分支；新增第二仓 profile `scripts/cloud/profiles/openmaic.toml`，全文零本仓键值（判据 3 有钉子）。

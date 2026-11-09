@@ -1070,11 +1070,17 @@ def test_review_step_writes_to_gates_review(tmp_path: Path) -> None:
 
 # ------------------- ⓷′ 卡 198：⑧ 复核必须带上收口链自己那份 --allow（三条钉子）
 def test_review_cmd_gets_landing_allow(tmp_path: Path) -> None:
-    """① 卡 198：⑧ 调复核的命令行确实带 `--allow`，且与收口链那份**同一次运行一致**。
+    """① 卡 198 + 卡 E98（T-AG607）缺口 C：⑧ 调复核的 `--allow` 必须就是 ⑤′
+    **真正拿去提交的那一份**（`expand_allow` 展开 + 三片段 + `DOCS` + `GATES`）。
 
     ★ 坏掉写法 A（不传）：复核 argv 里没有 `--allow` ⇒ 每笔报「没有给白名单」。
-    ★ 坏掉写法 B（另造一份 / 传展开后的提交白名单）：收到的与 wb_land 收到的不一致。
+    ★ 坏掉写法 B（传原始 `a.allow`）：与 ⑤′ 那份不一致 ⇒ 每张翻账卡都报
+      「有 1 个改动不在白名单里：['docs/workbacklog.toml']」（卡 E98 缺口 C 的现场）。
     ★ 坏掉写法 C（改成 --read-only 消红字）：有 `--read-only` 没有 `--allow`。
+
+    ★ 为什么这条钉子的字面值在卡 E98 变了：旧断言写的是 `["code", "README.md"]`，
+      即「原样传 `a.allow`」—— 那正是缺口 C 本身。现在标准改成「与提交那份一致」，
+      所以字面值跟着变成展开后的那一份；坏掉写法 B 仍然咬得住 `a.allow`。
     """
     repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_AFFECTED,
                     wb_review_body=_WB_REVIEW_ARGS)
@@ -1089,8 +1095,25 @@ def test_review_cmd_gets_landing_allow(tmp_path: Path) -> None:
     assert "--allow" in args, f"⑧ 复核命令行必须带 --allow：{args!r}"
     assert "--read-only" not in args, f"不许改成 --read-only 消红字：{args!r}"
     vals = [a for i, a in enumerate(args) if i and args[i - 1] == "--allow"]
-    assert vals == ["code", "README.md"], \
-        f"复核收到的 --allow 必须就是收口链那一份（不许另造）：{args!r}"
+    # ⑤′ 真正拿去提交的那一份 = expand_allow(a.allow) + 三片段 + DOCS + GATES
+    # （本假仓没有 docs/workbacklog.toml ⇒ 翻账后不会追加队列文件）。
+    want = {
+        "code/a.py",                          # 目录被 expand_allow 展开
+        "README.md",                          # 用户给的白名单文件
+        "docs/changelog.d/T-G999.md",         # 本台三片段
+        "docs/traceability.d/T-G999.toml",
+        "复盘/交接.d/T-G999.md",
+        "docs/traceability.toml",             # DOCS
+        "docs/changelog.md",
+        "复盘/交接-重构进度.md",
+        "gates/last.json",                    # GATES
+        "gates/reuse.json",
+    }
+    assert "code" not in vals, \
+        f"目录必须展开成文件清单（否则复核按目录名对不上任何改动）：{args!r}"
+    assert set(vals) == want, \
+        f"复核收到的 --allow 必须就是 ⑤′ 拿去提交的那一份（不许另造）：{args!r}"
+    assert len(vals) == len(set(vals)), f"--allow 不许重复：{args!r}"
     assert "--rev" in args, f"--rev 原有行为不动：{args!r}"
     cmd_line = [ln for ln in out.splitlines() if "复核命令" in ln]
     assert cmd_line and "--allow" in cmd_line[0], \

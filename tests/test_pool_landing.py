@@ -49,6 +49,7 @@ r"""钉「落地链自己改的东西，自己验证」：翻账之后必须重�
 from __future__ import annotations
 
 import ast
+import json
 import os
 import subprocess
 import sys
@@ -118,6 +119,35 @@ if "acquire" in sys.argv:
 elif "release" in sys.argv and mk.exists():
     mk.unlink()
 print("stub-gate_lock", " ".join(sys.argv[1:]))
+sys.exit(0)
+"""
+
+#: ★ 卡 E98 判据 2：门禁桩在**被调用的那一刻**先问一句「派生文档现在一致吗」，
+#: 把退出码落盘 —— 落地链若把重算留在门禁之后，这里读到的就是 1。
+#: `--seal`（⑤ 封存）不算门禁那一趟，跳过（那会儿 ⑤′ 已经重算过了）。
+_RUN_GATES_CHECKS_DERIVED = """import pathlib
+import subprocess
+import sys
+
+if "--seal" not in sys.argv:
+    check = subprocess.run(
+        [sys.executable, "-X", "utf8", "scripts/check_derived_docs.py", "--check"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace")
+    pathlib.Path("derived_rc_at_gate.txt").write_text(str(check.returncode), encoding="utf-8")
+    pathlib.Path("derived_out_at_gate.txt").write_text(
+        (check.stdout or "") + (check.stderr or ""), encoding="utf-8")
+pathlib.Path("gate_ran.marker").write_text("ran", encoding="utf-8")
+print("stub-run_gates")
+sys.exit(0)
+"""
+
+#: ★ 卡 E98 判据 3：复核桩把 argv 原样落盘（问「⑧ 拿到的是哪一份 allow」）。
+_WB_REVIEW_ARGS = """import json
+import pathlib
+import sys
+
+pathlib.Path("review_args.txt").write_text(json.dumps(sys.argv[1:]), encoding="utf-8")
+print(json.dumps({"problems": []}))
 sys.exit(0)
 """
 
@@ -251,7 +281,7 @@ def _run_index_gen(repo: Path, *args: str) -> subprocess.CompletedProcess:
     )
 
 
-def _mk_repo(tmp_path: Path) -> Path:
+def _mk_repo(tmp_path: Path, run_gates_body: str | None = None) -> Path:
     """造一个「够收口链走到 ⑥」且**现算文档自洽**的假仓库。
 
     与 `tests/test_wb_land.py::_mk_repo` 同体例，多铺这几样（本卡的被测面）：
@@ -283,7 +313,8 @@ def _mk_repo(tmp_path: Path) -> Path:
                 "scripts/audit_progress.py"):
         _write(repo, rel, _MAYBE)
     _write(repo, "gates/diag/gate_lock.py", _GATE_LOCK)
-    _write(repo, "scripts/run_gates.py", _RUN_GATES)
+    # ★ 卡 E98：允许换掉门禁桩（判据 2 要问「门禁开跑那一刻派生文档新不新」）。
+    _write(repo, "scripts/run_gates.py", run_gates_body or _RUN_GATES)
     _write(repo, "tests/test_card_specs_tracked.py", "def test_ok():\n    assert True\n")
     _stage_tools(repo)
     # ---- 本卡的被测面：真生成器 + 清单 + 项目书 + 队列 ----
@@ -998,3 +1029,153 @@ def test_the_audit_step_does_not_pass_check_false() -> None:
             if "scripts/audit_progress.py" in ln and "run(" in ln and "--all" not in ln]
     assert len(hits) == 1, hits
     assert "check=False" not in hits[0], hits[0]
+
+# ============================================ 卡 E98（`T-AG607`）：落地链三缺口
+#: 缺口 A：⓪ 的回退名单少了两份**现算文档** ⇒ 上一趟 ⑤′.5 留下的 README / INDEX
+#:         会挡住 ① 的 `git checkout <主树 HEAD>`（`gates/diag/land-E95.log` 现场原文）。
+#: 缺口 B：② 生成片段之后 `docs/INDEX.md` 必过期，而重算原来只在 ⑤′.5（④ **之后**）
+#:         ⇒ 每张卡白烧一趟约 300 秒的全量门禁（E94 / E95 / E96 三次同根因）。
+#: 缺口 C：⑧ 复核拿到的是**原始** `--allow`，不是 ⑤′ 真正拿去提交的那一份
+#:         ⇒ 每张翻账卡都报一行「有 1 个改动不在白名单里：['docs/workbacklog.toml']」。
+#: 三条钉子各咬一处；`gates/diag/_rev_E98.py` 的四条变异逐条证明它们会红。
+
+
+def _import_landing():
+    """拿**真件** `tools/pool/landing.py`（磁盘上的当前代码，不是桩）。"""
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        from pool import landing as real_landing
+    finally:
+        sys.path.pop(0)
+    return real_landing
+
+
+def _module_assign_source(name: str) -> str:
+    """模块级 `name = ...` 那一条赋值的源码（判「两份文档有没有被并成一份」）。"""
+    src = (TOOLS / "pool" / "landing.py").read_text(encoding="utf-8")
+    for node in ast.parse(src).body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == name:
+                return ast.get_source_segment(src, node) or ""
+    return ""
+
+
+def _func_source(name: str) -> str:
+    src = (TOOLS / "pool" / "landing.py").read_text(encoding="utf-8")
+    node = next((n for n in ast.parse(src).body
+                if isinstance(n, ast.FunctionDef) and n.name == name), None)
+    assert node is not None, f"`{name}()` 不见了"
+    return ast.get_source_segment(src, node) or ""
+
+
+# ---------------------------------------------------------------- 判据 1
+def test_reset_derived_rolls_back_the_recount_docs(tmp_path: Path) -> None:
+    """判据 1（缺口 A）：⓪ 的回退名单必须含**现算文档**，且不许把它们并进 `DOCS`。
+
+    坏掉的写法（本卡开工前就是这样）：名单 = `DOCS + GATES + 本台三片段`。上一趟 ⑤′.5
+    重算留下的 `docs/subsystems/pool/README.md` / `docs/INDEX.md` 于是活着进了 ①，
+    `git checkout <主树 HEAD>` 被 git 当场拒（原文 `error: Your local changes to the
+    following files would be overwritten by checkout`）⇒ 整趟落地白跑。
+
+    ★ 为什么不许并进 `DOCS`：`DOCS` 是**汇总**文档（`sync_docs.py` 的输入/输出），
+      `RECOUNT_DOCS` 是**现算**文档（生成器的输出）—— 两条链、两种回退口径，
+      混在一起就长出第二份真源。
+    """
+    # ---- 源码侧：名单里有它，且两份文档仍是两份
+    assert "RECOUNT_DOCS" in _func_source("reset_derived"), (
+        "⓪ 的回退名单又把现算文档漏了（缺口 A 复发）")
+    docs_src = _module_assign_source("DOCS")
+    assert docs_src, "找不到模块级 `DOCS = ...`"
+    for rel in (README_REL, INDEX_REL):
+        assert rel not in docs_src, f"{rel} 被并进 `DOCS` 了 —— 汇总与现算两条链不许混"
+    recount_src = _module_assign_source("RECOUNT_DOCS")
+    assert README_REL in recount_src and INDEX_REL in recount_src, recount_src
+
+    # ---- 行为侧：两份现算文档脏着 ⇒ `reset_derived()` 把它们退回 HEAD 干净态
+    repo = _mk_repo(tmp_path)
+    head_readme = _head_text(repo, README_REL)
+    head_index = _head_text(repo, INDEX_REL)
+    _write(repo, README_REL, head_readme + "上一趟 ⑤′.5 留下的垃圾行\n")
+    _write(repo, INDEX_REL, head_index + "上一趟 ⑤′.5 留下的垃圾行\n")
+    dirty = _git(repo, "status", "--porcelain").stdout
+    assert README_REL in dirty and INDEX_REL in dirty, dirty
+
+    _import_landing().reset_derived(repo, "T-G999")
+
+    left = [x for x in _git(repo, "status", "--porcelain").stdout.splitlines() if x.strip()]
+    assert left == [], f"回退之后仍然脏：{left}"
+    assert (repo / README_REL).read_text(encoding="utf-8") == head_readme
+    assert (repo / INDEX_REL).read_text(encoding="utf-8") == head_index
+
+
+# ---------------------------------------------------------------- 判据 2
+def test_derived_docs_are_refreshed_before_the_gate(tmp_path: Path) -> None:
+    """判据 2（缺口 B）：②③ 写完 `docs/**` 之后、④ 门禁开跑**之前**，现算文档得是最新的。
+
+    坏掉的写法（本卡开工前就是这样）：重算只在 ⑤′.5（提交前），而 ④ 在它之前 ⇒ 门禁
+    看到的是过期 INDEX，全量 pytest 红在 `test_real_tree_derived_docs_are_consistent`。
+
+    ★ 怎么证「门禁那一刻」：门禁桩在**被调用的那一瞬间**跑一次 `--check`，把退出码落盘
+      （`derived_rc_at_gate.txt`）。重算若留在门禁之后，这里读到的必然是 1。
+    """
+    repo = _mk_repo(tmp_path, run_gates_body=_RUN_GATES_CHECKS_DERIVED)
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--no-review")      # 不传 --no-gate：这一条必须真跑到 ④
+    out = _out(done)
+
+    at_gate = repo / "derived_rc_at_gate.txt"
+    assert at_gate.is_file(), "门禁根本没跑到（④ 没到）\n" + out
+    seen = (repo / "derived_out_at_gate.txt").read_text(encoding="utf-8", errors="replace")
+    assert at_gate.read_text(encoding="utf-8").strip() == "0", (
+        "门禁那一刻现算文档就已经过期了 ⇒ 重算还在门禁之后（缺口 B 复发）\n" + seen + out)
+
+    # ③.5 就在 ④ 之前，而且它真写了盘（不然上面那一行没法是 0）
+    assert "=== ③.5 门禁前重算现算文档" in out, out
+    assert out.index("=== ③.5") < out.index("=== ④ "), out
+    assert (repo / "docs" / "changelog.d" / "T-G999.md").is_file(), "② 没写片段"
+    assert done.returncode == 0, out
+
+
+# ---------------------------------------------------------------- 判据 3
+def test_review_step_gets_the_same_allow_as_the_commit(tmp_path: Path) -> None:
+    """判据 3（缺口 C）：⑧ 复核拿到的 `--allow` 必须就是 ⑤′ 真正拿去提交的那一份。
+
+    坏掉的写法（本卡开工前就是这样）：⑧ 传 `a.allow`（命令行原始值），而 ⑤′ 用的是
+    「展开 + 三片段 + DOCS + GATES + 翻账队列文件」那一份 ⇒ E94 / E95 / E96 / E97
+    四趟复核全报同一行：`有 1 个改动不在白名单里：['docs/workbacklog.toml']`。
+
+    ★ 这里用**翻账卡**现场（夹具里 T-G999 是 pending，落地会翻成 done）——
+      不翻账就造不出「队列文件也进了这一笔」这个现场。
+    """
+    repo = _mk_repo(tmp_path)
+    _write(repo, "tools/wb_review.py", _WB_REVIEW_ARGS)   # 复核桩：把 argv 原样落盘
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "复核桩")
+    _write(repo, "code/a.py", "X = 2\n")
+
+    done = _wand(repo, "--no-gate")      # 门禁关掉，只走 ⑤′ → ⑥ → ⑧
+    out = _out(done)
+
+    args_file = repo / "review_args.txt"
+    assert args_file.is_file(), "⑧ 没调复核\n" + out
+    args = json.loads(args_file.read_text(encoding="utf-8"))
+    assert "--read-only" not in args, "复核被改成只读口径了（那是消红字）"
+    vals = [a for i, a in enumerate(args) if i and args[i - 1] == "--allow"]
+    shown = json.dumps(vals, ensure_ascii=False)
+
+    # 缺口 C 的现场：翻账文件就在这一笔里 ⇒ 它必须出现在复核的白名单里
+    assert "docs/workbacklog.toml" in vals, (
+        "复核拿到的还是原始 --allow（缺口 C 复发）：" + shown)
+    for rel in ("code/a.py", README_REL, INDEX_REL, "docs/traceability.toml",
+                "docs/changelog.md", "复盘/交接-重构进度.md", "gates/last.json",
+                "gates/reuse.json", "docs/changelog.d/T-G999.md",
+                "docs/traceability.d/T-G999.toml", "复盘/交接.d/T-G999.md"):
+        assert rel in vals, f"复核的白名单少了 {rel}：" + shown
+    assert "code" not in vals, "目录没展开就交给了复核：" + shown
+    assert len(vals) == len(set(vals)), "复核白名单里有重复：" + shown
+    # 交叉印证：复核看到的就是这一笔**真正提交**的文件（多出来的一律不合格）
+    missing = sorted(set(_head_files(repo)) - set(vals))
+    assert missing == [], f"这一笔提交了、复核却没被允许看：{missing}"

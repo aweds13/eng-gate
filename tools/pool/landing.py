@@ -137,7 +137,15 @@ COUNTS_DOCS = ("复盘/长任务执行协议.md", "复盘/交接-重构进度.md
 def reset_derived(wt: pathlib.Path, task: str) -> None:
     """⓪ 把上一趟残留的派生物回退到 HEAD 干净态（卡 150 · 幂等重跑）。
 
-    回退名单 = 三个派生共享文档（DOCS）+ 两个门禁产物（GATES）+ 本台的三个片段。
+    回退名单 = 三个派生共享文档（DOCS）+ 两个门禁产物（GATES）
+    + 两份**现算文档**（RECOUNT_DOCS）+ 本台的三个片段。
+
+    ★ 卡 E98（`T-AG607`）缺口 A：现算文档原来**不在**名单里 ⇒ 上一趟 ⑤′.5 重算留下的
+      `docs/subsystems/pool/README.md` / `docs/INDEX.md` 会挡住 ① 的 `git checkout <主树 HEAD>`
+      （现场：`error: Your local changes to the following files would be overwritten by checkout`，
+      `gates/diag/land-E95.log`）。它们同样是「落地链自己写的东西」，同样必须回退。
+      ★ 别把它并进 `DOCS`：`DOCS` 是**汇总**文档（`sync_docs.py` 的输入/输出），
+      `RECOUNT_DOCS` 是**现算**文档（生成器的输出），两条链、两种回退口径，混了会长出第二份真源。
     ★ 名单里**只有**派生物/记账产物，**绝不**含白名单里的源文件（那是要提交的东西）。
       每一样都打印「回退了什么 + 是否真的变过」，不许静默。
     · 在 HEAD 里且有改动 ⇒ `git checkout HEAD -- <路径>`；本来就干净 ⇒ 只报一句；
@@ -153,7 +161,8 @@ def reset_derived(wt: pathlib.Path, task: str) -> None:
         first_err = ((r.stderr or "").strip().splitlines() or ["不是 git 仓"])[-1]
         print(f"  ★ 回退派生物：**拿不到 HEAD**（{first_err[:120]}）⇒ 警告并跳过，不因此停手")
         return
-    for rel in (*DOCS, *GATES, *(f.format(task=task) for f in RESET_FRAGMENTS)):
+    for rel in (*DOCS, *GATES, *RECOUNT_DOCS,
+                *(f.format(task=task) for f in RESET_FRAGMENTS)):
         st = run(["git", "-c", "core.quotepath=false", "status", "--porcelain", "--", rel],
                  cwd=wt, check=False)
         if not [x for x in (st.stdout or "").splitlines() if x.strip()]:
@@ -376,15 +385,9 @@ def recount_derived(wt: pathlib.Path) -> list[str]:
     为什么位置是「翻账之后、暂存之前」：翻账是本笔对**台账**的最后一次改动，
     重算必须看到翻完之后的分布；暂存必须在重算之后，写下去的 README 才进这一笔。
     """
-    present: list[str] = []
-    for doc, gen in zip(RECOUNT_DOCS, RECOUNT_GENS, strict=True):
-        has_doc, has_gen = (wt / doc).is_file(), (wt / gen).is_file()
-        if has_doc and not has_gen:
-            print(f"★ 重算现算文档失败：这棵树里有 {doc} 却没有 {gen}"
-                  " ⇒ 证明不了它是最新的 ⇒ 停手")
-            sys.exit(2)
-        if has_doc or has_gen:
-            present.append(doc)
+    # ★ 卡 E98：这份「在不在」的判据搬到 `_derived_present()`（与门禁前那道 ③.5 共用一份），
+    #   这里只留调用 —— 两处各判各的，迟早判出两个结果。
+    present = _derived_present(wt)
     if not present:
         print("  · 重算现算文档：这棵树里既没有 " + " / ".join(RECOUNT_DOCS)
               + " 也没有 " + " / ".join(RECOUNT_GENS)
@@ -402,6 +405,81 @@ def recount_derived(wt: pathlib.Path) -> list[str]:
         sys.exit(2)
     return [rel for rel in RECOUNT_DOCS
             if (wt / rel).is_file() and git("status", "--porcelain", "--", rel, cwd=wt)]
+
+
+def _derived_present(wt: pathlib.Path) -> list[str]:
+    r"""这棵树里**该被现算的**文档（`RECOUNT_DOCS` 里与生成器配对、至少一半在场的那几份）。
+
+    ★ 卡 E98（`T-AG607`）缺口 B：从 `recount_derived()` 里原样搬出来的**同一份判据** ——
+      只要**任何一对**里有一半在，就算「这棵树维护现算文档」（缺另一半 ⇒ 响亮退 2）；
+      两样**全都不在** ⇒ 返回空表（测试假仓 / 老仓 ⇒ 两道腿都安静跳过）。
+      ⇒ ④ 之前那道门与 ⑤′.5 那句重算，用的是**同一个**「在不在」的口径，不许各判各的。
+    """
+    present: list[str] = []
+    for doc, gen in zip(RECOUNT_DOCS, RECOUNT_GENS, strict=True):
+        has_doc, has_gen = (wt / doc).is_file(), (wt / gen).is_file()
+        if has_doc and not has_gen:
+            print(f"★ 重算现算文档失败：这棵树里有 {doc} 却没有 {gen}"
+                  " ⇒ 证明不了它是最新的 ⇒ 停手")
+            sys.exit(2)
+        if has_doc or has_gen:
+            present.append(doc)
+    return present
+
+
+def refresh_derived_before_gate(wt: pathlib.Path) -> list[str]:
+    r"""③.5 门禁**之前**把现算文档刷新一遍（卡 E98 · `T-AG607` 缺口 B）。
+
+    病（三次同根因，每次白烧一趟全量门禁）：
+      ② `wb_stage_card.py` 新增 `docs/changelog.d/{task}.md` + `docs/traceability.d/{task}.toml`，
+      ③ `sync_counts` 重写 `复盘/交接-重构进度.md` —— 二者都在 `docs/**` 下，而
+      `docs/INDEX.md` 按目录数篇数 + 算总字数的**投影** ⇒ ② 一跑完它就过期。
+      重算原来只发生在 ⑤′.5（`recount_derived`，**门禁 ④ 之后**）⇒ ④ 里那两条判据
+      （`tests/test_pool_landing.py::test_real_tree_derived_docs_are_consistent` /
+      `tests/test_gen_doc_index_fresh.py::test_the_real_index_matches_the_real_tree`）
+      拿到的必然是**过期**的 INDEX ⇒ 红。能看见这件事的两条腿都不在这个位置：
+      before_land 前置腿在 ② **之前**跑（那时还没生成片段，看不见）；
+      ⑤′.5 腿① 在 ④ **之后**跑（太晚）。
+
+    口径（三条钉死，与 `recount_derived` 同一套）：
+      ★ **真写盘 + 写后自检**：先不带 `--check` 跑 `DERIVED_CHECKER`（它自己逐目标跑生成器），
+        再带 `--check` 复核。只写不验 = 把「生成器没写对」当成没事。
+      ★ **响亮失败 ⇒ 停手退 3**：写或复核非零 ⇒ 打印原文**末 20 行** + 一句修法，
+        然后 `sys.exit(3)`。
+        绝不许带着过期文档去烧全量门禁（那正是本卡要治的那趟）。
+      ★ **唯一的跳过**：`_derived_present(wt)` 为空 ⇒ 这棵树不维护现算文档
+        （测试假仓 / 老仓）⇒ 打印一行说明后返回空表，**不因此停手**。
+
+    ★ 返回值是**真被写脏**的那些相对路径（调用方补进 `allow`）。⑤′ 之后 `recount_derived`
+      仍照跑一遍：翻账又会改台账分布 ⇒ 它那一趟不能省（本函数只治「门禁之前就过期」）。
+      两趟都幂等、都不制造空改动。
+    """
+    present = _derived_present(wt)
+    if not present:
+        print("  · 门禁前重算现算文档：这棵树里既没有 " + " / ".join(RECOUNT_DOCS)
+              + " 也没有 " + " / ".join(RECOUNT_GENS)
+              + " ⇒ 没有会因 ②③ 过期的现算文档（跳过）")
+        return []
+    if not (wt / DERIVED_CHECKER).is_file():
+        print(f"★ 门禁前重算现算文档失败：这棵树里没有 {DERIVED_CHECKER}"
+              " ⇒ 走不了独立检查器（**不许改回直跑生成器**） ⇒ 停手")
+        sys.exit(3)
+    for stage, extra_args in (("写盘", ()), ("写后自检", ("--check",))):
+        r = run([sys.executable, "-X", "utf8", DERIVED_CHECKER, *extra_args],
+                cwd=wt, check=False)
+        tail = ((r.stdout or "") + (r.stderr or "")).strip().splitlines()
+        for line in tail:
+            print("  " + line)
+        if r.returncode != 0:
+            print(f"★ 门禁前重算现算文档失败（{stage} rc={r.returncode}）："
+                  f"{DERIVED_CHECKER} {' '.join(extra_args)} ⇒ **停手**（全量门禁一步没跑）")
+            print("  原文末 20 行：")
+            for line in tail[-20:]:
+                print("    " + line)
+            print("  修法：在卡树里跑 `python -X utf8 scripts/check_derived_docs.py`（写盘），"
+                  "再跑一次 `--check`；红了照原文修，别跳过。")
+            sys.exit(3)
+    return _dirty_of(wt, list(present))
 
 
 def release_lock(lock_label: str, wt: pathlib.Path, env: dict) -> None:
@@ -2476,6 +2554,17 @@ def main(argv: list[str] | None = None) -> int:
         print((run([sys.executable, "-X", "utf8", "scripts/check_toml.py"],
                    cwd=wt).stdout or "").strip())
 
+        # ★★ 卡 E98（`T-AG607`）缺口 B：③.5 门禁**之前**刷现算文档。
+        #   病：② 生成 `docs/changelog.d/{task}.md` / `docs/traceability.d/{task}.toml`、
+        #   ③ 重写 `复盘/交接-重构进度.md` ⇒ `docs/INDEX.md`（按目录数篇数 + 算总字数）
+        #   从这一刻起**已经过期**。而重算原来只在 ⑤′.5（`recount_derived`，④ **之后**）⇒
+        #   ④ 的全量门禁拿到的必然是过期 INDEX ⇒ 每张卡白烧一趟 ~300 秒（E94/E95/E96 三次同根因）。
+        #   ★ 位置**钉死**在这里：`if not a.commit_only:` 块内、③ 之后、③′ 之前。
+        #     往前挪（② 之前）看不见片段；往后挪（门禁之后）就白烧了。
+        print("=== ③.5 门禁前重算现算文档（②③ 刚写过 docs/**）===")
+        for _rel in refresh_derived_before_gate(wt):
+            print(f"  · {_rel} —— 与 HEAD 不同 ⇒ ④ 门禁会按这一版判，⑤′ 会把它带进这一笔")
+
         if not a.no_gate and gate_on == "local":
             # ★ 2026-10-02 加（本主控**第二次**被它咬：登记了队列条目却没在门禁前
             #   `git add` 卡规格 ⇒ 白跑 9 分钟全量门禁，口径坑第 41 条）。
@@ -2964,7 +3053,12 @@ def main(argv: list[str] | None = None) -> int:
     if not a.no_review and not a.commit_only:
         print("=== ⑧ 复核落盘（gates/review/<task>.json；异步、不挡提交）===")
         new_rev = git("rev-parse", "--short", "HEAD")
-        rv_rc, rv_summary, rv_path = _run_review(a.task, new_rev, a.allow)
+        # ★ 卡 E98（`T-AG607`）缺口 C：传 ⑤′ 那份 `allow`（它才是这一笔**真正**提交的白名单：
+        #   加过 DOCS + GATES + 自动补的三片段 + 翻账改过的队列文件），不是原始 `a.allow`。
+        #   原来传 `a.allow` ⇒ 每张翻账卡复核必报「有 1 个改动不在白名单里：
+        #   ['docs/workbacklog.toml']」，而 `_run_review` 的 docstring 早就写着「原样传收口链
+        #   自己那份」⇒ 代码与判据撒谎（每张卡都要人工重跑一遍复核）。
+        rv_rc, rv_summary, rv_path = _run_review(a.task, new_rev, allow)
         print(f"  {rv_summary}")
         if rv_rc != 0:
             print("  ★ 复核有问题（不挡提交）⇒ 立卡或在文书里写明为什么不立卡")

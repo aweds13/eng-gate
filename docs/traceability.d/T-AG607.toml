@@ -1,0 +1,18 @@
+[entries."T-AG607"]
+id = "T-AG607"
+title = "落地链三缺口：回退名单补现算文档、门禁前重算索引、复核拿对allow"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "file:tests/test_pool_landing.py",
+  "file:tests/test_wb_land.py",
+  "text:tools/pool/landing.py::def refresh_derived_before_gate(wt: pathlib.Path) -> list[str]:",
+  "text:tools/pool/landing.py::def _derived_present(wt: pathlib.Path) -> list[str]:",
+  "test:test_pool_landing.py::test_reset_derived_rolls_back_the_recount_docs",
+  "test:test_pool_landing.py::test_derived_docs_are_refreshed_before_the_gate",
+  "test:test_pool_landing.py::test_review_step_gets_the_same_allow_as_the_commit",
+  "test:test_wb_land.py::test_review_cmd_gets_landing_allow",
+]
+gaps = "1. 只修了三条腿的**位置**，没修「派生文档为什么会永生」：立卡笔改 `docs/workbacklog.toml` 不走落地链 ⑤′，下一张卡的腿② 必然红（E96 落地后那次队列卡数修正就是这么补的）。2. 复核实参换了，但「`docs/workbacklog.toml` 该由谁来补进 allow」的口径之争没解决：现在靠 ⑤′ 那份 allow 顺带带上，`tools/wb_review.py` 自己仍不认台账文件。3. ③.5 每趟都真写一次盘（哪怕一个字节都没变）：一次全仓 markdown 的 rglob 只为证明「它本来就一致」，没有缓存、也没有「只有 ②③ 动过 docs/** 才跑」的门。指针 `tools/pool/landing.py`"
+
