@@ -5709,3 +5709,23 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E103"
+task = "T-AG612"
+title = "magpie的默认策略smart在pool侧调不到：路由名归一、认不出要点名"
+tree = ".wt/E103"
+spec = "复盘/卡/卡E103-路由名归一与smart可达.md"
+files = [
+  "tools/pool/route.py",
+  "tools/pool/gateway.py",
+  "tests/test_pool_route_strategies.py",
+  "tests/test_pool_gateway.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡E103-路由名归一与smart可达.md"
+]
+depends = [
+  "E102"
+]
+risk = "mid"
+status = "pending"
