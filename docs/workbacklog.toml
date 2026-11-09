@@ -5584,3 +5584,15 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "B9"
+task = "T-BG011"
+title = "把 pika 升级经验收成可复用规程，并让 L3 运行手册层第一次落地"
+tree = ""
+spec = "复盘/卡/卡B9-pika升级规程.md"
+files = ["docs/runbooks/pika-升级规程.md", "复盘/pika迁移-回填方案.md", "复盘/pika迁移-新旧比对.md"]
+depends = ["B3"]
+risk = "mid"
+status = "done"
+

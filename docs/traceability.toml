@@ -11725,3 +11725,16 @@ evidence = [
   "file:skills/pipe-workbench/references/repo-bindings.md",
 ]
 gaps = "- 换仓实测没做：九份 `skills/pipe-gate/references/repo-bindings.md` 这类绑定页里的读数都是照本仓现树抄的，没有真拿第二个仓跑过一遍 —— 「换仓只换一份」目前是结构上成立，不是验过。- 数值口径仍无机器守卫：`tools/check_skills_claims.py` 判不出 78 条（占位符形状），它核不到「门数 / 篇数 / 行数」这类会漂的数 ⇒ 陈旧陈述以后还能再长出来。- 工具侧同债不在本卡域：`tools/wb_land.py` 的 `--help` 仍写「11 条判据」（真值 12，判据真源 `tools/pool/landing.py`），本卡只改技能与入口页。- 流程数与长度只数形状：`skills/nails/check_skills.py` 只数标题条数与行数，不判「一节写得有没有用」；写得对但写得多仍可能过。- `AGENTS.md` 的四套分层只给了入口，没有守卫保证「不混用」——同一句话仍可能被两个人按两套分层各写一遍（分层入口见 `AGENTS.md` 那一节；`skills/nails/check_skills.py` 只核形状，不核分层）。"
+
+[entries."T-BG011"]
+id = "T-BG011"
+title = "docs(runbooks): pika 升级经验收成可复用规程，L3 运行手册层第一次落地"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/runbooks/pika-升级规程.md",
+  "file:复盘/卡/卡B9-pika升级规程.md",
+  "file:docs/changelog.d/T-BG011.md",
+  "file:docs/traceability.d/T-BG011.toml",
+]
+gaps = "1. 规程只覆盖 owner 级 token 链那一套抽取；classic 链退役只写了「顺序不能反」，没给逐条命令与验收读数。指针 `docs/runbooks/pika-升级规程.md`2. 第 5 步「个性化行回填」的判据是「逐行可审」，落成了人工核对表，**没有自动化测试**守着 —— 下一个人仍可能漏行。指针 `docs/runbooks/pika-升级规程.md`3. `tools/pika_migrate.py` 仍是 dry-run 脚本，没接进规程的 8 步；本卡只出规程不动工具。指针 `tools/pika_migrate.py`4. 四份旧文档按「不删，只加注记」处理，操作部分与规程正文因此各有一份投影 —— 靠旧文件头部那行注记消歧，不靠人记。指针 `复盘/pika迁移-回填方案.md`"
