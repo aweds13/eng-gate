@@ -29,6 +29,11 @@
 - 新增 ③.5 腿（`if not a.commit_only:` 块内、③ 之后、③′ 之前）：门禁**之前**先用写模式跑一次 `scripts/check_derived_docs.py`、再 `--check` 复核；不过就退 3 并印原文末 20 行。② 生成的两份片段从此不会再让 ④ 拿到过期 INDEX（E94/E95/E96 三次同根因，每次白烧约 300 秒）。
 - 「在不在」的判据从 `recount_derived()` 抽成 `_derived_present()`，③.5 与 ⑤′.5 共用一份 —— 两处各判各的，迟早判出两个结果。
 - ⑧ 的复核实参从 `a.allow` 换成 ⑤′ 真正拿去提交的那份 `allow`：翻账卡不再每笔都报「有 1 个改动不在白名单里：`docs/workbacklog.toml`」（E97 落地现场）。
+## 2026-11-09 T-AG608 无价的行不许当成花完了：写侧标 priced=False、按钱限额判不了就拒
+- `tools/wb_dispatch.py` 的用量落账补 `priced=False`：`cost` 仍写 `0.0`（vendor 不报金额、不编乘数），但这一行从此**自己说**「我没有价」—— 缺省不写键会被读侧当有价，等于把「判不了」洗成「花了 0 块」。
+- `tools/pool/limits_check.py` 的 `check()` 增 `unpriced: Mapping[int, int] | None = None`：某条 `limit.cost > 0` 而那个窗口里有没价的行 ⇒ 拒，`why` 点名「按钱那一支判不了：窗口里 N 行没有价」。缺省 `None` ⇒ 行为与卡之前逐字节相同。
+- 判不了的拒排在**已花完之后**：确定能判的结论优先于判不了（不许把「已花完」降级成「不确定」）。纯 tokens 限额（`cost == 0`）与窗口里全是旧的有价行，两条路一个字都没变。
+- `tools/wb_dispatch.py` 的限额闸在**同一个 now、同一个窗口**里算 `unpriced` 传给 `check()`：拒的时候并进既有的 `[FAIL] 不派活 —— 前置检查没过：` 出口，退 2、不占树、不新开退出码。
 ## 2026-11-08 · 云门禁泛用化：抽「仓无关骨架 + 每仓一份 profile」（卡 E92，T-AG600）
 - `scripts/cloud/run_gate.sh` 里 10 处本仓字面（cloud_dir / 分支 / TF_PROJECTS_TOML / 池配置 / pip -c pins / run_gates.py / 播种目录 / 卡树 / 产物路径）全部搬进 `scripts/cloud/profiles/engineering.toml`，脚本只剩「怎么跑」。
 - 新增 `scripts/cloud/profile.py`（dump/list/check/render 四子命令，38 个键）与 `--render` 分支；新增第二仓 profile `scripts/cloud/profiles/openmaic.toml`，全文零本仓键值（判据 3 有钉子）。

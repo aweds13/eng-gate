@@ -332,3 +332,58 @@ def test_only_the_policy_loader_is_consulted(wired: pathlib.Path, monkeypatch, c
     assert code == 2, f"新语义读不懂就拒派（旧语义会悄悄放行）：{err}"
     assert "tokens 必须是整数" in err, err
     assert dispatched == []
+
+
+# ------------------------------------------ 判据 1 / 4：无价行（卡 E99 · T-AG608）
+
+
+def _unpriced_spend(sandbox: pathlib.Path, *, account: str = "codebuddy-demo") -> pathlib.Path:
+    """往真账本里记一笔**无价**行（生产写侧的口径：cost=0.0 且 priced=False）。"""
+    from pool import ledger_spend
+
+    return ledger_spend.append(
+        account, "009", "deepseek-v4.1-flash",
+        input_tokens=10, output_tokens=0, cache_read=0, cost=0.0,
+        at=dt.datetime.now(ledger_spend.TZ), priced=False, root=sandbox)
+
+
+def test_spend_row_is_marked_unpriced(wired: pathlib.Path, monkeypatch, capsys) -> None:
+    """判据 1：生产那一行必须**自己说**「这行没有价」—— 缺省不写键 = 读成有价 = 沉默。"""
+    twd = _twd()
+    dispatched: list[list[str]] = []
+    monkeypatch.setattr(twd.wd, "run_worker",
+                        twd._fake_runner(dispatched, events=_usage_events()))
+    code, _out, _err = _run(twd, monkeypatch, capsys, "--account", "demo", "--execute")
+    assert code == 0
+    rows = _rows(_ledger(wired))
+    assert len(rows) == 1, rows
+    assert rows[0]["priced"] is False, (
+        f"vendor 不报金额 ⇒ 这一行没有价，必须写 priced=False（缺省 = 读成有价）：{rows[0]!r}")
+    assert rows[0]["cost"] == 0.0, "仍然不编乘数"
+    from pool import ledger_spend
+
+    moment = dt.datetime.now(ledger_spend.TZ)
+    start, end = moment - dt.timedelta(hours=1), moment + dt.timedelta(hours=1)
+    assert ledger_spend.unpriced("codebuddy-demo", start, end, root=wired) == 1, (
+        "无价行必须被 unpriced() 数到 —— 否则这个读数在生产里永远是 0")
+
+
+def test_cost_limit_with_unpriced_rows_refuses_before_taking_the_tree(
+        wired: pathlib.Path, monkeypatch, capsys) -> None:
+    """判据 4：按钱限额 + 窗口里有没价的行 ⇒ 派活之前就拒（退 2、不占树、不新开退出码）。"""
+    twd = _twd()
+    monkeypatch.setenv("TF_POOL_LIMITS", str(_policy(
+        wired, '[[codebuddy-demo.limit]]\nperiod = "day"\ncost = 1.5\n')))
+    _unpriced_spend(wired)
+    dispatched: list[list[str]] = []
+    monkeypatch.setattr(twd.wd, "run_worker", twd._fake_runner(dispatched))
+    lease = twd._spy_reserve(monkeypatch)
+    code, _out, err = _run(twd, monkeypatch, capsys, "--account", "demo", "--execute")
+    assert code == 2, f"按钱那一支判不了 ⇒ 拒派（沿用 2，不新开退出码）：{err}"
+    assert "[FAIL] 不派活 —— 前置检查没过：" in err, err
+    assert "限额" in err, err
+    assert "按钱" in err, f"要说明为什么判不了：{err}"
+    assert "retry_after_s=" in err, err
+    assert dispatched == [], "被闸拦下时一个工人都不能起"
+    assert lease == {}, f"拒派必须在**占树之前**：reserve 已被调用，参数 {lease}"
+    assert not (wired / "gates" / "diag" / "pool-registry.json").exists()

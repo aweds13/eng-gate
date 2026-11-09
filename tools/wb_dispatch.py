@@ -3596,13 +3596,20 @@ def main() -> int:
         if limits:
             limit_now = datetime.now(pool_limits_policy.TZ)
             spent: dict[int, tuple[int, float]] = {}
+            unpriced: dict[int, int] = {}
             try:
                 for index, limit in enumerate(limits):
                     start, end = pool_limits_policy.window(limit, limit_now)
                     tokens, cost, _calls = pool_ledger_spend.sums(
                         account_id, start, end, cache_reads=limit.cache_reads, root=ROOT)
                     spent[index] = (tokens, cost)
-                limit_verdict = pool_limits_check.check(limits, spent=spent, now=limit_now)
+                    # ★ 卡 E99：同一个窗口里「没有价」的行数 —— 有它才能说清 cost 那一支
+                    #   是「判不了」还是「真花完了」（两个读数必须同一个窗口、同一个 now）。
+                    if limit.cost > 0:
+                        unpriced[index] = pool_ledger_spend.unpriced(
+                            account_id, start, end, root=ROOT)
+                limit_verdict = pool_limits_check.check(
+                    limits, spent=spent, now=limit_now, unpriced=unpriced)
             except pool_limits_policy.LimitError as exc:
                 limit_verdict = None
                 problems.append(f"限额窗口算不出来 ⇒ 拒派：{exc}")
@@ -4009,9 +4016,12 @@ def main() -> int:
         #   那三个计数器（CLI 自己报的，**不自己估**），`at` 用这一轮的**开始**时间
         #   （窗口归属才和上面 `sums()` 的口径对得上）。
         #   ★ 走 `ledger_spend.append()`（**不许**在这里另写一份 JSONL —— 那是第二份真源）。
-        #   ★ `cost` 恒写 `0.0`：vendor 自报里没有金额 ⇒ **不编乘数**。这意味着 cost 轴今天
-        #     永远不涨，「按钱限额」那一支实际不生效（只有 tokens 轴真在拦）——这条落差
-        #     在卡的回执与变更记录里说实话，不在这里偷偷补一个乘数。
+        #   ★ `cost` 恒写 `0.0`：vendor 自报里没有金额 ⇒ **不编乘数**。所以这一行同时写
+        #     `priced=False`（卡 E99）：**这行没有价**是账本的读数，不是猜的 —— 缺省不写键
+        #     会被读侧当「有价」，等于把「判不了」洗成「花了 0 块」。
+        #   ★ 于是「按钱限额」那一支不吃沉默：窗口里有无价行 ⇒ `limits_check.check()`
+        #     第 ⑥ 条拒派（`tools/wb_dispatch.py` 占树之前），要真按钱放行得先把价补进账本。
+        #     仍然**不在这里**偷偷补一个乘数。
         #   ★ 空账号（没给 `--account`）⇒ **整行不写**：否则账本里全是空账号，
         #     按号求和 / 按号判限额的读数全被污染。
         if account_id:
@@ -4024,6 +4034,7 @@ def main() -> int:
                     cache_read=usage["cache_read"],
                     cost=0.0,
                     at=datetime.fromtimestamp(attempt_started, tz=pool_ledger_spend.TZ),
+                    priced=False,
                     root=ROOT)
             except (OSError, ValueError) as spend_exc:   # 记不下来不许影响派活
                 print(f"[账 ] 用量没记进限额账本：{spend_exc}（不影响这次派活）",

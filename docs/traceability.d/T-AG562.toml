@@ -10,7 +10,7 @@ evidence = [
   "file:tests/test_pool_limits_wiring.py",
   "test:test_pool_limits_wiring.py",
   "text:tools/wb_dispatch.py::limits = pool_limits_policy.load_limits().get(account_id, ())",
-  "text:tools/wb_dispatch.py::limit_verdict = pool_limits_check.check(limits, spent=spent, now=limit_now)",
+  "text:tools/wb_dispatch.py::limit_verdict = pool_limits_check.check(",
   "text:tools/wb_dispatch.py::from pool import limits_check as pool_limits_check",
   "text:tools/wb_dispatch.py::pool_ledger_spend.append(",
   "text:tests/test_pool_limits_wiring.py::def test_refuses_before_taking_the_tree_when_the_window_is_spent(",

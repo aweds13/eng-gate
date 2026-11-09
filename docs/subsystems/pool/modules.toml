@@ -94,12 +94,12 @@ cli = "本文件即入口"
 
 [[module]]
 name = "ledger_spend.py"
-duty = "按账号累计花费的账（`pool-spend.jsonl`，一行一次派活）；**不内置价目表**，`cost` 由调用方给"
+duty = "按账号累计花费的账（`pool-spend.jsonl`，一行一次派活）；**不内置价目表**，`cost` 由调用方给；没有价的行由写侧标 `priced=False`，`unpriced()` 数它们（提问，不是估算）"
 cli = "无（被 `pool.limits_check` / `limits_policy` 调）"
 
 [[module]]
 name = "pricing.py"
-duty = "定价算术（十进制位移 / 严格大于分档 / 整单按档 / 1 小时缓存写 2×）；**零价目表**，`Price` 一律由调用方构造"
+duty = "定价算术（十进制位移 / 严格大于分档 / 整单按档 / 1 小时缓存写 2×）；**零价目表**，`Price` 一律由调用方构造；`unpriced_calls()` 与账本的 `unpriced()` 仍是两份读数，互不调用"
 cli = "无（纯函数；今天零生产调用方）"
 
 [[module]]
@@ -109,7 +109,7 @@ cli = "无（被 `wb_dispatch` 调）"
 
 [[module]]
 name = "limits_check.py"
-duty = "派活**之前**的预算授权：这个号这个窗口还有余量吗 + `Retry-After`（`budget.Reserve` 移植）"
+duty = "派活**之前**的预算授权：这个号这个窗口还有余量吗 + `Retry-After`（`budget.Reserve` 移植）；按钱那一条遇到**没有价**的行就说「判不了」并拒，不许拿 cost=0.0 当还有余量"
 cli = "无"
 
 [[module]]

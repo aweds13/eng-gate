@@ -10608,7 +10608,7 @@ evidence = [
   "file:tests/test_pool_limits_wiring.py",
   "test:test_pool_limits_wiring.py",
   "text:tools/wb_dispatch.py::limits = pool_limits_policy.load_limits().get(account_id, ())",
-  "text:tools/wb_dispatch.py::limit_verdict = pool_limits_check.check(limits, spent=spent, now=limit_now)",
+  "text:tools/wb_dispatch.py::limit_verdict = pool_limits_check.check(",
   "text:tools/wb_dispatch.py::from pool import limits_check as pool_limits_check",
   "text:tools/wb_dispatch.py::pool_ledger_spend.append(",
   "text:tests/test_pool_limits_wiring.py::def test_refuses_before_taking_the_tree_when_the_window_is_spent(",
@@ -11827,3 +11827,21 @@ evidence = [
   "test:test_wb_land.py::test_review_cmd_gets_landing_allow",
 ]
 gaps = "1. 只修了三条腿的**位置**，没修「派生文档为什么会永生」：立卡笔改 `docs/workbacklog.toml` 不走落地链 ⑤′，下一张卡的腿② 必然红（E96 落地后那次队列卡数修正就是这么补的）。2. 复核实参换了，但「`docs/workbacklog.toml` 该由谁来补进 allow」的口径之争没解决：现在靠 ⑤′ 那份 allow 顺带带上，`tools/wb_review.py` 自己仍不认台账文件。3. ③.5 每趟都真写一次盘（哪怕一个字节都没变）：一次全仓 markdown 的 rglob 只为证明「它本来就一致」，没有缓存、也没有「只有 ②③ 动过 docs/** 才跑」的门。指针 `tools/pool/landing.py`"
+
+[entries."T-AG608"]
+id = "T-AG608"
+title = "无价的行不许当成花完了：写侧标priced=False、按钱限额判不了就拒"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/limits_check.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_pool_limits.py",
+  "file:tests/test_pool_limits_wiring.py",
+  "text:tools/pool/limits_check.py::def check(",
+  "text:tools/wb_dispatch.py::priced=False,",
+  "test:test_pool_limits.py::test_pin_24_cost_limit_with_unpriced_rows_is_refused",
+  "test:test_pool_limits_wiring.py::test_spend_row_is_marked_unpriced",
+  "test:test_pool_limits_wiring.py::test_cost_limit_with_unpriced_rows_refuses_before_taking_the_tree",
+]
+gaps = "1. 价仍然没进账本：本卡只把「判不了」说出来并在派活前停下，按钱限额从此**不会假绿**，但也**仍不能真放行**。要真按钱跑，得先有价目表或上游账单 —— 而这正是 `tools/pool/pricing.py` 与 `tools/pool/ledger_spend.py` 明令不许内置的东西。指针 `tools/pool/pricing.py`2. `tools/pool/ledger_spend.py` 的 `unpriced()` 与 `tools/pool/pricing.py` 的 `unpriced_calls()` 仍是两份读数、互不调用：今天没有调用方同时要两份，所以没合；哪天要「哪些调用没有价」就得先定谁是主语。指针 `tools/pool/ledger_spend.py`3. 喂给 `check()` 的只有条数，没有「这行有多少 token」：判不了时 `reset_at` 取的是最晚续期的窗口，不是「最早可能缓解」的窗口 —— 窗口一多，`retry_after_s` 会偏保守（偏保守不报错，但会让人多等）。指针 `tools/pool/limits_check.py`"

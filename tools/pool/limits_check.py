@@ -16,6 +16,9 @@ r"""判据面：限额要在**派活之前**拦（卡 A338 · T-AG540；移植 m
   ⑤ `binding` 三段优先级：**已花完的优先** → **续期最晚的** → `share()` 最大的。
   ★ 边界用 `>=` 不是 `>`（`st.Tokens >= l.Tokens`）：差一个 token 就放行是只在边界
     出现、人工测不出来的偏差。
+  ⑥ **判不了的按钱限额 ⇒ 拒**（卡 E99）：`limit.cost > 0` 而那个窗口里有 `unpriced`
+    行（账本里没有价的行）⇒ `used_cost` 只是**下界**，拿它跟 `limit.cost` 比等于把
+    「不知道」读成「没花钱」。这种拒排在**已花完之后**：确定能判的结论优先于判不了。
 """
 
 from __future__ import annotations
@@ -74,12 +77,19 @@ def check(
     now: datetime,
     inflight_tokens: int = 0,
     inflight_cost: float = 0.0,
+    unpriced: Mapping[int, int] | None = None,
 ) -> Verdict:
     """派活之前的判：`limits` 每一条都要有余量，任一条不够就拒。
 
     `spent[i]` 是**第 i 条** limit 在自己窗口里的 `(tokens, cost)`（调用方用
     `pool.limits_policy.window(limits[i], now)` 算窗口、用 `pool.ledger_spend.sums`
     求和后传进来；两边必须用同一个 `now`）。
+
+    `unpriced[i]` 是**同一个窗口**里「没有价」的行数（`pool.ledger_spend.unpriced`）。
+    ★ 缺省 `None` = 调用方没查过价 ⇒ 行为与卡 E99 之前**逐字节不变**（判据只看
+      `spent`）。给了数才启用第 ⑥ 条：`limit.cost > 0` 且有没价的行 ⇒ 这一条判不了 ⇒ 拒。
+      没查过价不等于「全都有价」，但**这一支只认显式给的读数** —— 把缺省当「有价」
+      是本卡要修的那个沉默，把它反过来当「无价」又是一次沉默。
     """
     if not limits:
         return Verdict(
@@ -90,14 +100,18 @@ def check(
             why="没有声明任何限额 ⇒ 永不过问（budget.go:341）",
         )
     over: list[tuple[int, float, datetime]] = []
+    unknown: list[tuple[int, float, datetime]] = []
+    unknown_rows: dict[int, int] = {}
     for index, limit in enumerate(limits):
         if not limit.limited():
             continue
         used_tokens, used_cost = spent.get(index, (0, 0.0))
         tokens_over = limit.tokens > 0 and used_tokens + inflight_tokens >= limit.tokens
         cost_over = limit.cost > 0 and used_cost + inflight_cost >= limit.cost
-        if not (tokens_over or cost_over):
-            continue
+        # ★ 第 ⑥ 条：按钱那一支**判不了**的读数（只认显式给的 unpriced；缺省 None 不算）。
+        rows = 0
+        if unpriced is not None and limit.cost > 0:
+            rows = max(int(unpriced.get(index, 0)), 0)
         _start, reset = window(limit, now)
         share_of = share(
             limit,
@@ -106,7 +120,31 @@ def check(
             inflight_tokens=inflight_tokens,
             inflight_cost=inflight_cost,
         )
+        if not (tokens_over or cost_over):
+            if rows > 0:
+                unknown.append((index, share_of, reset))
+                unknown_rows[index] = rows
+            continue
         over.append((index, share_of, reset))
+    if not over and unknown:
+        # 确定能判的一个都没有、只有判不了的 ⇒ 仍然拒，但 why 要说清是「判不了」不是「花完了」。
+        unknown_binding, unknown_share, unknown_reset = max(
+            unknown, key=lambda item: (item[2], item[1]))
+        unknown_limit = limits[unknown_binding]
+        return Verdict(
+            allowed=False,
+            binding=unknown_binding,
+            reset_at=unknown_reset,
+            retry_after_s=retry_after(unknown_reset, now),
+            why=(
+                f"按钱那一支判不了：第 {unknown_binding} 条"
+                f"（period={unknown_limit.period}，cost 上限 {unknown_limit.cost}）"
+                f"那个窗口里有 {unknown_rows[unknown_binding]} 行**没有价** ⇒ "
+                f"没价的行只能当花钱的下界，拿它当「还有余量」就是沉默 ⇒ "
+                f"派活之前就拒；窗口在 {unknown_reset.isoformat()} 续上"
+                f"（或把价补进账本再来）（share=下界 {unknown_share:.3f}）"
+            ),
+        )
     if not over:
         return Verdict(
             allowed=True,

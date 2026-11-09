@@ -484,3 +484,61 @@ def test_rev_06_retry_after_is_never_below_one_second() -> None:
         [limits_policy.Limit(period="day", tokens=1)], spent={0: (1, 0.0)}, now=NOW
     )
     assert verdict.retry_after_s == 1920
+
+
+# ============================ 判据 3：无价行不许当成花完了（卡 E99 · T-AG608）
+#
+# 背景：账本里的 cost 只有一个来源（调用方给），vendor 自报里没有金额 ⇒ 生产行全是
+# cost = 0.0 且**没有价**。于是 limit.cost > 0 的限额拿 used_cost = 0.0 去判
+# 「还有余量」，等于把「不知道」读成「没花钱」。这五条钉的是：判不了就拒；
+# 判得了的（纯 tokens / 有价行 / 已花完）一个字都不许变。
+
+
+def test_pin_22_unpriced_default_is_byte_identical() -> None:
+    """缺省 unpriced=None ⇒ 与今天逐字节相同（老调用方不受影响）。"""
+    cash = limits_policy.Limit(period="day", cost=1.5)
+    plain = limits_check.check([cash], spent={0: (0, 0.5)}, now=NOW)
+    explicit = limits_check.check([cash], spent={0: (0, 0.5)}, now=NOW, unpriced=None)
+    assert plain == explicit
+    assert (plain.allowed, plain.binding, plain.retry_after_s) == (True, None, 0)
+
+
+def test_pin_23_tokens_only_limit_never_asks_for_money() -> None:
+    """纯 tokens 限额（cost == 0）+ 一堆无价行 ⇒ 仍只按 tokens 判，不因「判不了」拒。"""
+    limit = limits_policy.Limit(period="day", tokens=100)
+    verdict = limits_check.check([limit], spent={0: (10, 0.0)}, now=NOW, unpriced={0: 99})
+    assert verdict.allowed is True
+    assert verdict.binding is None
+
+
+def test_pin_24_cost_limit_with_unpriced_rows_is_refused() -> None:
+    """cost > 0 且窗口里有 N 行没有价 ⇒ 拒，并点名「按钱那一支判不了」。"""
+    cash = limits_policy.Limit(period="day", cost=1.5)
+    verdict = limits_check.check([cash], spent={0: (0, 0.0)}, now=NOW, unpriced={0: 3})
+    assert verdict.allowed is False
+    assert verdict.binding == 0
+    assert "按钱" in verdict.why, verdict.why
+    assert "3" in verdict.why, verdict.why
+    assert verdict.retry_after_s >= 1
+    assert verdict.reset_at is not None
+
+
+def test_pin_25_priced_window_still_judges_by_money() -> None:
+    """窗口里一行无价都没有（老的有价行）⇒ 仍按 used_cost >= limit.cost 判。"""
+    cash = limits_policy.Limit(period="day", cost=1.5)
+    assert limits_check.check(
+        [cash], spent={0: (0, 1.5)}, now=NOW, unpriced={0: 0}).allowed is False
+    assert limits_check.check(
+        [cash], spent={0: (0, 1.49)}, now=NOW, unpriced={0: 0}).allowed is True
+
+
+def test_pin_26_known_over_spend_is_not_downgraded_to_unknown() -> None:
+    """已花完（确定）与判不了（不确定）同时存在 ⇒ 报确定的那条（不许降级）。"""
+    tokens_limit = limits_policy.Limit(period="day", tokens=10)
+    cash = limits_policy.Limit(period="month", cost=1.5)
+    verdict = limits_check.check(
+        [tokens_limit, cash], spent={0: (10, 0.0), 1: (0, 0.0)}, now=NOW, unpriced={1: 3})
+    assert verdict.allowed is False
+    assert verdict.binding == 0, f"确定的「已花完」优先：{verdict.why}"
+    assert "按钱" not in verdict.why, verdict.why
+    assert "tokens 10+0 >= 10" in verdict.why, verdict.why
