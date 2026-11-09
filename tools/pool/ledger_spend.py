@@ -21,6 +21,8 @@ r"""pool 的花费记账（卡 A338 · T-AG540；对等 magpie `internal/budget`
 ★ **有价 / 无价**：`Entry.priced` 只是这行账**有没有价**的标记（缺省 `True`，老行照样算有价），
   钱的数仍然只有 `cost` 一个来源、仍然由调用方给。`unpriced()` 数「没有价」的行 —— 它是提问，
   不是估算：本模块**仍然不算钱**（算术在 `tools/pool/pricing.py`，两边互不调用）。
+  写侧只有 `append(..., priced=False)` 会把这个键写下去；缺省 `priced=None`
+  **不写键**（老行形状逐字节不变）。
 """
 
 from __future__ import annotations
@@ -140,9 +142,18 @@ def append(
     cache_read: int,
     cost: float,
     at: datetime,
+    priced: bool | None = None,
     root: Path | str | None = None,
 ) -> Path:
-    """**追加**一行（永不覆盖：`open("a")`，绝不 `open("w")`）；返回写到的路径。"""
+    """**追加**一行（永不覆盖：`open("a")`，绝不 `open("w")`）；返回写到的路径。
+
+    `priced` 三态（卡 E95）：
+    - `None`（缺省）⇒ **不写这个键** —— 老行形状逐字节不变，读侧按缺省 `True` 算有价；
+    - `True` / `False` ⇒ 把字面值写进去，`unpriced()` 才数得到 `False`。
+
+    ★ 缺省必须是 `None` 而**不是** `False`：写死的 `False` 会把老调用方（没查过
+      价目表的那批）整批洗成"无价"，那是另一个方向的沉默。传 `True` 也不等于"验过价目表"。
+    """
     path = spend_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     row = {
@@ -156,6 +167,9 @@ def append(
         "cache_read": int(cache_read),
         "cost": float(cost),
     }
+    if priced is not None:
+        # 只有显式给了才写这个键：缺省行保持老形状（9 键），读侧缺省当有价。
+        row["priced"] = bool(priced)
     line = json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(line)

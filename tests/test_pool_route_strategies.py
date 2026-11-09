@@ -180,14 +180,17 @@ def test_by_pace_bands_within_a_tenth() -> None:
       `0.85 < 0.9*1.00` 为真（下一带），而 `0.85 < 0.8*1.00` 为假（同一带）。
     """
     # 先咬最锋利的一处：0.85 必须先被 0.9 判成「下一带」，才能越过列在它前面的 0.95。
-    pair = seats_of({"key": "slow", "pace": 0.85}, {"key": "fast", "pace": 0.95})
+    # ★ 显式给 used=0.0：本条比的是 pace 分带，额度得「知道」才进带
+    #   （used=None 是「不知道」，卡 E95 之后不进分带 —— 见 test_pool_route_unknown.py）。
+    pair = seats_of({"key": "slow", "pace": 0.85, "used": 0.0},
+                    {"key": "fast", "pace": 0.95, "used": 0.0})
     assert pool_route.by_pace(pair) == [1, 0]
     # 连同 0.95（两阈值都过）与 0.80（两阈值都不过）一起看整段分带。
     group = seats_of(
-        {"key": "p080", "pace": 0.80},
-        {"key": "p085", "pace": 0.85},
-        {"key": "p095", "pace": 0.95},
-        {"key": "p100", "pace": 1.00},
+        {"key": "p080", "pace": 0.80, "used": 0.0},
+        {"key": "p085", "pace": 0.85, "used": 0.0},
+        {"key": "p095", "pace": 0.95, "used": 0.0},
+        {"key": "p100", "pace": 1.00, "used": 0.0},
     )
     # 带号：1.00 与 0.95 同带（带 0），0.85 与 0.80 同带（带 1）⇒ 靠后的两个先被提上来。
     assert pool_route.by_pace(group) == [2, 3, 0, 1]
@@ -199,15 +202,19 @@ def test_by_pace_none_is_unknown_not_zero() -> None:
     ★ 池侧口径：`None` 排在「告诉过的人」之后（与 `_left_key` 里 `left is None` 同族），
       所以同一份列出序在两种取值下结果不同 —— 若把 `None` 当 0，两者就同档、退化成恒等。
     """
-    unknown = seats_of({"key": "unknown", "pace": None}, {"key": "zero", "pace": 0.0})
+    # ★ 同上：used=0.0 显式写出来（本条比的是 pace 的知不知情，额度一律「知道」）。
+    unknown = seats_of({"key": "unknown", "pace": None, "used": 0.0},
+                       {"key": "zero", "pace": 0.0, "used": 0.0})
     assert pool_route.by_pace(unknown) == [1, 0]  # 告诉过的（0.0）在前
     # 反过来的列出序：仍按「知情在前」⇒ 不是恒等。
-    swapped = seats_of({"key": "zero", "pace": 0.0}, {"key": "unknown", "pace": None})
+    swapped = seats_of({"key": "zero", "pace": 0.0, "used": 0.0},
+                       {"key": "unknown", "pace": None, "used": 0.0})
     assert pool_route.by_pace(swapped) == [0, 1]
     # `None` 不许被当成 0 参与分带：一个 None + 一个 0 与一个 0.5 的三人序里，
     # None 必须落在最后（若当 0 就会与 0.0 同带、保列出序）。
-    trio = seats_of({"key": "half", "pace": 0.5}, {"key": "unknown", "pace": None},
-                    {"key": "zero", "pace": 0.0})
+    trio = seats_of({"key": "half", "pace": 0.5, "used": 0.0},
+                    {"key": "unknown", "pace": None, "used": 0.0},
+                    {"key": "zero", "pace": 0.0, "used": 0.0})
     assert pool_route.by_pace(trio) == [0, 2, 1]
 
 

@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 46 个 py（45 个模块 + `__init__.py`）、**19009 行**（`wc -l tools/pool/*.py`，2026-11-09 现算）。
+`tools/pool/` = 46 个 py（45 个模块 + `__init__.py`）、**19095 行**（`wc -l tools/pool/*.py`，2026-11-09 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -33,7 +33,7 @@
 | `lastgood.py` | 355 | 写盘纪律：原子替换 + `.bak` 落后一次 + fail-closed 读；`read_strict` 从不读 `.bak`（撤过的凭据不许复活） | 无（被 `pool.registry`、`pool.task`、`pool.queue`、`pool_accounts`、`gate_pool` 调） |
 | `lease.py` | 109 | 码道派活那条路并进**同一本**租约账的命令行（不并账，守卫就瞎一半） | 本文件即入口 |
 | `ledger.py` | 508 | 台账唯一的写入口：一把不看端口段的 gates/diag/ledger.lock 把「读字节 → 切块 → 查重 → 尾部追加 → 原子写（os.replace 带重试）→ 提交」包成短事务；只许尾部追加，已有块的字节一个不碰 | 无（被 wb_card.py 与 pool.landing 的翻账路径调） |
-| `ledger_spend.py` | 267 | 按账号累计花费的账（`pool-spend.jsonl`，一行一次派活）；**不内置价目表**，`cost` 由调用方给 | 无（被 `pool.limits_check` / `limits_policy` 调） |
+| `ledger_spend.py` | 281 | 按账号累计花费的账（`pool-spend.jsonl`，一行一次派活）；**不内置价目表**，`cost` 由调用方给 | 无（被 `pool.limits_check` / `limits_policy` 调） |
 | `limits.py` | 132 | 限额策略的读法与「表读不出 = 拒」那条 `NotLimited`（magpie `ErrUnlimited` 移植） | 无（被 `wb_dispatch` 调） |
 | `limits_check.py` | 136 | 派活**之前**的预算授权：这个号这个窗口还有余量吗 + `Retry-After`（`budget.Reserve` 移植） | 无 |
 | `limits_policy.py` | 283 | 限额策略的窗口与 `Limit` 形状（magpie `access/limit.go` 移植）；与 `--input-budget` 熔断的语义差写在文件头 | 无 |
@@ -53,7 +53,7 @@
 | `quota_line.py` | 225 | 一行说完「现在能不能派」：问不到就打空行、星号只给最新且紧贴名字、至少 1 小时不带秒；纯函数零 IO | 被 `pool_quota.py line` 调 |
 | `registry.py` | 377 | 租约账：`reserve` / `release` / `list_reservations` / `is_dead`，落在**主树** `gates/diag/pool-registry.json` | `wb_registry.py`、`wb_dispatch` |
 | `review.py` | 92 | 白名单越界 / 实际改动 vs 权威域（`outside_allow` / `changed_paths` / `outside_domain`）—— 全仓唯一实现 | 无（被 `wb_dispatch`、`wb_impact`、`wb_batch` 调） |
-| `route.py` | 723 | Smart 路由：给「哪个号先上」排序（`tier` / `apply_order`），只标准库 + 只读 | 无（被 `pool.plan` 调 `reset_for`/`seconds_left`、被 `pool.sticky` 取 `USED_SHARE`；`smart_order`/`apply_strategy` 零生产调用方） |
+| `route.py` | 795 | Smart 路由：给「哪个号先上」排序（`tier` / `apply_order`），只标准库 + 只读 | 无（被 `pool.plan` 调 `reset_for`/`seconds_left`、被 `pool.sticky` 取 `USED_SHARE`；`smart_order`/`apply_strategy` 零生产调用方） |
 | `route_log.py` | 205 | 路由回放的**唯一写入处**：一行一轮记「谁被试过、谁真答了」，值只来自调用方传进来的事实（不读 usage 账重算）；`status` 四值闭集 | 无（被 `pool.trae_dispatch.finish` 调；`route_path` / `read_routes` 供读面） |
 | `rpm.py` | 290 | 每号每分钟派活**趟数**闸（`decide`）；防不了 vendor 侧 RPM 429（那个归 `pool_quota.py` 的四态） | 无（被 `wb_dispatch` 调） |
 | `rpm.toml` | 22 | 每分钟派活闸的数据：稳定 id → 每分最多几趟（0 = 关闸，越界报 `RpmError` 不静默当 0） | 无（被 `pool.rpm` 读） |
@@ -83,8 +83,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **19009 行** / **46 个文件**（45 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 345 张（331 done / 14 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **19095 行** / **46 个文件**（45 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 345 张（332 done / 13 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

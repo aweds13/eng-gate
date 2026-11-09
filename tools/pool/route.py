@@ -36,6 +36,9 @@ r"""Smart 路由（从 magpie 移植，卡 A329 · 台账号 T-AG531）—— �
 - 空 `soon` / 空 `lapse` / `left is None` 都是"不知道"，一律**排在知道的人之后**
   （原件 `case x.IsZero()||y.IsZero(): return y.IsZero()` 和
   `told none: after every one that did`）。
+- `used is None` 或 `known=False` 同样是「不知道」：`tier(None)` 回 `UNKNOWN_TIER`
+  （**不是 0**），四个分桶策略（`smart_order` / `least_used` / `by_pace` / `fastest`）
+  一律把这种座排在额度知道的人之后；`known=False` 时 `used` 填了多少都不可信。
 - `soon` 逐窗口比时，**前缀相同则窗口多的在前**（原件 `y.IsZero()` 那条：对方先没窗口 ⇒ 我方先）。
 - `resting` 的号沉到最后：对应原件 `Seat.Resting` 的注释 "it rests after a failure now"。
   原件 `Smart` 里并没拿 `Resting` 排位，本卡规格要求沉底 —— 只在本模块里排位，**不做持久化**。
@@ -73,6 +76,7 @@ __all__ = [
     "ROTATE",
     "RouteError",
     "Seat",
+    "UNKNOWN_TIER",
     "USED_SHARE",
     "WEIGHTED",
     "apply_order",
@@ -92,6 +96,7 @@ __all__ = [
     "seconds_left",
     "smart_order",
     "tier",
+    "usage_tier",
     "weighted",
 ]
 
@@ -99,6 +104,10 @@ __all__ = [
 #   share >= 98（`provider.SpentShare`）⇒ 用尽了；share >= 90 ⇒ 快用完了。
 LOW_SHARE = 90.0
 USED_SHARE = 98.0
+
+# `used` 的第四档：**不知道**（`used is None` 或 `known=False`）。★ 它不是 `0.0`
+# 的别名 —— 0 是「真的用了 0%」，这一档是「没量过」，排位必须不同（卡 E95 的理由）。
+UNKNOWN_TIER = 3
 
 # 比任何真实时钟都远的 aware 时间：`soon` 逐窗口比时给"窗口更少"的那方补位用。
 # 补成"永远更晚"就等于原件的 `x.IsZero() ⇒ 对方先`（前缀相同 ⇒ 窗口多的在前）。
@@ -109,15 +118,21 @@ class RouteError(Exception):
     """排序判据的输入不成立 —— 形状变了就该炸，不许猜、不许 clamp。"""
 
 
-def tier(share: float) -> int:
-    """已用份额 → 档位（0 = 还有余量，1 = 快用完，2 = 用尽了）。
+def tier(share: float | None) -> int:
+    """已用份额 → 档位（0 = 还有余量，1 = 快用完，2 = 用尽了，3 = **不知道**）。
 
     判据**逐字**是 magpie `internal/routes/strategies.go:15-29` 的
     `switch { case share >= UsedShare: return 2; case share >= LowShare: return 1 }; return 0`。
 
-    ★ `share` 不在 `[0, 100]` ⇒ `RouteError`，**绝不 clamp**：`101` 是"这个数从哪来的"，
-      不是"差一点就满"；把它压成 `100` 等于把上游的形状错误洗成一次成功派活。
+    ★ 第四档 `UNKNOWN_TIER` 是**本仓加的**：`None` = 「没量过」，它**不是** `0.0`
+      （那是「真的用了 0%」）—— 回 `0` 等于把「不知道」洗成「一点没用」，正是本卡要修的那个错。
+      `known=False` 的座由上层 `usage_tier()` 先拦成这一档：`tier()` 只看数，不问可信度。
+
+    ★ `share` 不在 `[0, 100]` ⇒ `RouteError`，**绝不 clamp**：`101` 是「这个数从哪来的」，
+      不是「差一点就满」；把它压成 `100` 等于把上游的形状错误洗成一次成功派活。
     """
+    if share is None:
+        return UNKNOWN_TIER
     if isinstance(share, bool) or not isinstance(share, (int, float)):
         raise RouteError(f"used 必须是数字（0–100），拿到 {type(share).__name__}")
     value = float(share)
@@ -139,8 +154,9 @@ class Seat:
     字段口径（照原件注释，不自己发明）：
     - `key`：号的标识（打印/定位用，不参与排序）。
     - `known`：额度**知不知道**（`// Known: its allowance is known`）。`False` ⇒ 当不知道排。
-    - `used`：已用份额 `0–100`
+    - `used`：已用份额 `0–100`；`None` = **没量过**（不是 0）
       （`// Used is the share of its allowance used that counts the model`）。
+      `known=False` 时它即便有数也**不可信** ⇒ 按「不知道」排（见 `usage_tier()`）。
     - `soon`：窗口什么时候续（`// Soon is when its windows renew, the biggest first`），可空。
     - `lapse`：`Soon` 打平时的第二判据
       （`// Lapse ... zero when not told. Smart goes by it when Soon ties`）。
@@ -154,7 +170,7 @@ class Seat:
 
     key: str
     known: bool = True
-    used: float = 0.0
+    used: float | None = None
     soon: tuple[datetime, ...] = ()
     lapse: datetime | None = None
     resting: bool = False
@@ -184,6 +200,32 @@ class Seat:
     # ★ `0.0` 在这两个字段上是「**没量过**」，不是「速度是 0」—— 见 `fastest()` 的四堆。
     ttft: float = 0.0
     tps: float = 0.0
+
+
+def usage_tier(seat: Seat) -> int:
+    """这个座**额度**的档位；`UNKNOWN_TIER` = 不知道（`used is None` 或 `known=False`）。
+
+    ★ `known=False` 保护 `used`：`Seat(known=False, used=99.0)` 不许因为 99 大就排到
+      「已知 95%」的号后面 —— 那个 99 本身就不可信（`Seat.known` 的字段注释承诺的是
+      「`False` ⇒ 当不知道排」，而改动前它只影响 `soon` 那一级）。
+    ★ 分桶函数**一律**走这里，别自己写 `tier(seat.used)` —— 漏一支就是「`known=False` 的号
+      被 `used` 的大数插队」，这是本卡最容易做错的地方。
+    """
+    if not seat.known or seat.used is None:
+        return UNKNOWN_TIER
+    return tier(seat.used)
+
+
+def _share_key(seat: Seat) -> tuple[int, int, float]:
+    """`used` 这一级的排序键：额度知道的在前（按 `used` 升），不知道的**一律**在后。
+
+    形状 `(不知道, 连数都没有, used)`：定长才能跟别的键拼进同一个元组比大小；
+    第二项让 `used is None` 沉在「档位不知道、但数还给了」的同伙之后。
+    """
+    used = 0.0 if seat.used is None else float(seat.used)
+    if usage_tier(seat) != UNKNOWN_TIER:
+        return (0, 0, used)
+    return (1, 1 if seat.used is None else 0, used)
 
 
 def _trunc(dt: datetime) -> datetime:
@@ -373,20 +415,26 @@ def least_used(seats: Sequence[Seat]) -> list[int]:
 
     ① 两个都在 tier 2（用尽了）且 `credits` 不同 ⇒ **能靠赠金继续的先用**
        （原文就这一句带 `tier`：`if ta == 2 && tb == 2 && sa.Credits != sb.Credits`）；
-    ② `used` 升序；
+    ② `used` 升序 —— ★ 额度**不知道**的座（`used is None` / `known=False`）一律排在
+       **所有知道的之后**（`_share_key`）：`known=False` 时 `used` 填多少都不可信；
     ③ `_by_left` 的组内位次（余额多的先；没告诉过的在后）；
     ④ `tokens` 升序（原件 `fewerTokens`；本仓没有衰减，`tokens` = 调用方给的已衰减值）。
     全程**稳定**：全打平 ⇒ 保列出序（保 prompt cache 热）。
     """
     place = _by_left(seats)
 
-    def key(index: int) -> tuple[int, float, int, float]:
+    def key(index: int) -> tuple[int, int, int, float, int, float]:
         seat = seats[index]
         # ① 原件那一句只在「两个都在 tier 2」时才看 `credits`：能靠赠金继续的先用。
         #    tier 2 以外给同一个中性值 0 —— 那些座的 `used` 一定小于任何 tier 2 的座，
         #    所以②的 `used` 升序已经把它们分开，`credits` 不会跨界插队。
-        credits_first = 1 if tier(seat.used) == 2 and not seat.credits else 0
-        return (credits_first, seat.used,
+        #    ★ 额度「不知道」的座给 1（与「用尽且没赠金」同值）：它不许插到
+        #      「tier 2 但能靠赠金继续」的前面（那一批是 0），也不许插到 tier 0/1 前面。
+        level = usage_tier(seat)
+        spent_but_granted = level == 2 and not seat.credits
+        credits_first = 1 if level == UNKNOWN_TIER or spent_but_granted else 0
+        # ② `_share_key`：知道的按 `used` 升序；**不知道的一律排在所有知道的之后**。
+        return (credits_first, *_share_key(seat),
                 place[index] if place is not None else 0, seat.tokens)
 
     idx = identity(len(seats))
@@ -402,22 +450,27 @@ def by_pace(seats: Sequence[Seat]) -> list[int]:
 
     分带（`PACE_BAND`）：把**参与分带的人**的 `pace` 从大到小排，`k == 0` 或
     `p < PACE_BAND*top` 起新的一带，带号递增；同一带里的人视为一样快，按列出序保 prompt cache。
-    ★ 参与分带的只有 `tier(used) == 0 && !learns && pace is not None` 的人
-      （原件 `if tier(s.Used) == 0 && !s.Learns`；`None` 不参与）。
-    ★ `pace is None` **不许当 0**：`None` 是「不知道」，`0` 是「一点都不剩」。落位按同族规则
-      —— 不知道的排在告诉过的之后（和 `_left_key` 里 `left is None` 那条一个口径）。
+    ★ 参与分带的只有 `usage_tier(seat) == 0 && !learns && pace is not None` 的人
+      （原件 `if tier(s.Used) == 0 && !s.Learns`；`None` 不参与）。额度**不知道**的座
+      （`used is None` / `known=False`）同样不参与 —— 它不是「还剩得多」，是「判不出来」；
+      这种座落在最后一档（`UNKNOWN_TIER`），排在所有知道的之后。
+    ★ `pace is None` **不许当 0**：`None` 是「不知道」，`0` 是「一点都不剩」。落位按同族
+      规则 —— 不知道的排在告诉过的之后（和 `_left_key` 里 `left is None` 那条一个口径）。
       ★ 这一条是**本仓对原件的偏离**，如实记：原件的 `band` 是 `map`，`None` 的人没进
       `byPace` ⇒ 读缺失键得 `0`，于是「不知道」会被当成「最快那一带」，与 `0` 同档。
       判据 6 明写两者排位必须不同 ⇒ pool 侧在 `band` 之前插一级「知不知情」，其余键序不动。
 
-    主排序键序：`tier` 升 → （tier 2 之间比 `credits`）→（tier > 0 时 `used` 升，之后直接
-    比 `tokens` —— 原件的 else-if 链在这一支不再看 `left`）→（tier == 0 时 `learns` 先、
-    `pace` 知情的先、带号升、余额位次、`tokens` 升）。
+    主排序键序：`usage_tier` 升（**不知道的 `UNKNOWN_TIER` 恒在最后**）→（tier 2 之间比
+    `credits`）→（tier > 0 时 `used` 升，之后直接比 `tokens` —— 原件的 else-if 链在这一支
+    不再看 `left`）→（tier == 0 时 `learns` 先、`pace` 知情的先、带号升、余额位次、
+    `tokens` 升）。
     """
     place = _by_left(seats)
     pairs: list[tuple[float, int]] = []
     for index, seat in enumerate(seats):
-        if seat.pace is None or tier(seat.used) != 0 or seat.learns:
+        # ★ 额度「不知道」的座不进分带：pace 再准也判不出它还有没有量
+        #   （原件的 `tier(s.Used) == 0` 谓词在 pool 侧换成 `usage_tier(seat) == 0`）。
+        if seat.pace is None or usage_tier(seat) != 0 or seat.learns:
             continue
         pairs.append((seat.pace, index))
     pairs.sort(key=lambda pair: -pair[0])
@@ -435,15 +488,18 @@ def by_pace(seats: Sequence[Seat]) -> list[int]:
         else:
             band[i] = previous
 
-    def key(index: int) -> tuple[int, int, float, int, int, int, int, float]:
+    def key(index: int) -> tuple[int, int, int, int, float, int, int, int, int, float]:
         seat = seats[index]
-        level = tier(seat.used)
+        level = usage_tier(seat)
+        if level == UNKNOWN_TIER:
+            # 额度不知道 ⇒ 排在所有知道的之后；同伙之间按 used（给了的话）升、没给的沉底。
+            return (level, 0, *_share_key(seat), 0, 0, 0, 0, seat.tokens)
         if level > 0:
             # 原件的 else-if 链：`ta == tb > 0` 且 `used` 也打平时，函数**直接落到**
             # `return sa.Tokens < sb.Tokens`（不再看 `left`）⇒ 后四级一律给中性值。
             credits_first = (0 if seat.credits else 1) if level == 2 else 0
-            return (level, credits_first, seat.used, 0, 0, 0, 0, seat.tokens)
-        return (level, 0, 0.0,
+            return (level, credits_first, *_share_key(seat), 0, 0, 0, 0, seat.tokens)
+        return (level, 0, 0, 0, 0.0,
                 0 if seat.learns else 1,
                 0 if seat.pace is not None else 1,
                 band.get(index, 0),
@@ -490,7 +546,9 @@ def fastest(seats: Sequence[Seat], *, pool: str,
     """最近答得最快的先（原件 `Fastest`，`fastest.go:59-117`）。
 
     四堆，顺序是判据的一部分：`awake + resting + spent`，其中 `awake = fast + unmeasured`。
-    分堆优先级：`resting` > `tier(used) == 2`（用尽了）> `ttft > 0`（量过）> `unmeasured`。
+    分堆优先级：`resting` > `usage_tier(used) == 2`（**知道**且用尽了）> `ttft > 0`（量过）>
+    `unmeasured`。★ 额度「不知道」（`used is None` / `known=False`）**不算**用尽（见
+    `usage_tier()`），也不许借速度插到知道的号前面：两堆各自把这种座沉到堆内最后。
     量过的按 `estimate()` 升序排，再按「一成之内算一样快」分带（`ALIKE`），带内保列出序 ——
     否则两条差几毫秒的通道会每个请求互换位置。
 
@@ -508,12 +566,16 @@ def fastest(seats: Sequence[Seat], *, pool: str,
     for i, seat in enumerate(seats):
         if seat.resting:
             resting.append(i)
-        elif tier(seat.used) == 2:
+        elif usage_tier(seat) == 2:  # 「用尽」只对额度**知道**的座成立；不知道的不算 spent
             spent.append(i)
         elif seat.ttft > 0:
             fast.append(i)
         else:
             unmeasured.append(i)
+    # ★ 额度「不知道」的座不许借速度插到知道的号前面：量过 / 没量过两堆内部各自把这种座
+    #   沉到堆内最后（稳定排序 ⇒ 它们彼此仍保列出序）。堆间次序不动：`resting` / `spent` 是
+    #   **已知的坏**（刚失败 / 确定用尽），仍排在 awake 之后。
+    unmeasured.sort(key=lambda i: usage_tier(seats[i]) == UNKNOWN_TIER)
     paces = sorted(seats[i].tps for i in fast if seats[i].tps > 0)
     mid = paces[len(paces) // 2] if paces else 0.0
     est = {i: estimate(seats[i].ttft, seats[i].tps, mid) for i in fast}
@@ -530,7 +592,7 @@ def fastest(seats: Sequence[Seat], *, pool: str,
         if est[i] > ALIKE * top:
             band[i] += 1
             top = est[i]
-    fast.sort(key=lambda i: (band[i], i))
+    fast.sort(key=lambda i: (usage_tier(seats[i]) == UNKNOWN_TIER, band[i], i))
     awake = fast + unmeasured
     if fast and unmeasured:
         book = state.setdefault(pool, {"n": 0, "turns": 0})
@@ -586,11 +648,13 @@ def smart_order(seats: Sequence[Seat]) -> list[int]:
     排序是**逐级稳定**的，不是拼一个大元组 —— 因为原件就是一串 `sort.SliceStable`，
     每级只在上一级打平时才起作用：
 
-    1. 分三桶：`tier(used) == 2` 进 `spent`、`== 1` 进 `low`、其余进 `fine`；
+    1. 分四桶：`usage_tier(seat) == 2` 进 `spent`、`== 1` 进 `low`、`== 0` 进 `fine`；
+       `== UNKNOWN_TIER`（`used is None` 或 `known=False`，额度**不知道**）进 `unknown`；
     2. `fine` 内部逐级稳定排序（优先级低的先排）：`left` 大的在前 → `lapse` 截时比、
        空排后 → `soon` 逐窗口截时比、空排后、窗口多的在前；
-    3. `low` 按 `used` 升序、`spent` 按 `used` 升序（原件两处都是 `Used` 升序）；
-    4. 拼成 `fine + low + spent`（tier 0 全在前、tier 2 最后）；
+    3. `low` / `spent` 按 `used` 升序（原件两处都是 `Used` 升序；`_share_key` 对
+       已知座给的正是 `(0, 0, used)`，等价）；
+    4. 拼成 `fine + low + spent + unknown`（tier 0 全在前、tier 2 其次、**不知道的最后**）；
     5. `resting` 的号**沉到最后**（稳定：两边各自的相对次序都不动）。
 
     ★ 输入顺序就是"基准顺序"：每一级都稳定 ⇒ 全程打平的那些号**保持原序**（保 prompt cache）。
@@ -603,21 +667,29 @@ def smart_order(seats: Sequence[Seat]) -> list[int]:
     fine: list[int] = []
     low: list[int] = []
     spent: list[int] = []
+    unknown: list[int] = []
     for index, seat in enumerate(seats):
-        level = tier(seat.used)
+        level = usage_tier(seat)
         if level == 2:
             spent.append(index)
         elif level == 1:
             low.append(index)
+        elif level == UNKNOWN_TIER:
+            # 额度**不知道**（used is None 或 known=False）自成一桶，排在所有知道的之后：
+            # 它不是「用了 0%」，也不能拿来跟「已经用了 95%」比大小。
+            unknown.append(index)
         else:
             fine.append(index)
     # 逐级稳定排序：**优先级低的先排**，后一级只在前一级打平时才动顺序。
     fine.sort(key=lambda i: _left_key(seats[i]))
     fine.sort(key=lambda i: _lapse_key(seats[i]))
     fine.sort(key=lambda i: _soon_key(seats[i], width))
-    low.sort(key=lambda i: seats[i].used)
-    spent.sort(key=lambda i: seats[i].used)
-    order = fine + low + spent
+    low.sort(key=lambda i: _share_key(seats[i]))
+    spent.sort(key=lambda i: _share_key(seats[i]))
+    # 「不知道」这一桶内部也有明确位次：给了数的（仍不可信，但至少能破平）在前，
+    # 连数都没有的沉底 —— 与 `least_used` 的 `_share_key` 同一口径。
+    unknown.sort(key=lambda i: _share_key(seats[i]))
+    order = fine + low + spent + unknown
     # resting 沉底（原件的 Sink 语义；只排位，不写盘）。
     awake = [i for i in order if not seats[i].resting]
     asleep = [i for i in order if seats[i].resting]

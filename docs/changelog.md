@@ -9,6 +9,11 @@
 - `tools/pool/platforms.toml` 九平台各加 `chat_urls = []`：空 = 没登记，**不是**不支持 —— 遇空表一律 403 点名，绝不从 `base_urls` 猜端点；`[meta] updated_at` 改 2026-11-09。四路由默认关：只绑回环、token 未设 ⇒ 打印并退 2 不绑端口（不复用 MCP 的 token）、`hmac.compare_digest`、Origin 白名单、请求体 32 MiB 上限。
 - 只做同协议直通：上游只流式而调用方要非流式 ⇒ 400 拒绝**不攒流**；不做协议翻译层（magpie 的 `forwardOnce` / `ir.go` / `decoderFor` 一行没搬）；不新增第二份失败分类、不新增第二本用量账、`tools/pool/route.py` 一字未动。
 - 反向变异 7 条全咬住；其中 M5 第一次**是绿的**：原用例走「全沉底」出口压根没进 `_log`，补钉子后才红。
+## 2026-11-09 T-AG604 不知道与知道分开：`Seat.used` 缺省不再是 0，四个策略统一走 `usage_tier`
+- `tools/pool/route.py`：`Seat.used: float | None = None`；新增 `UNKNOWN_TIER = 3`、`usage_tier(seat)`、`_share_key(seat)`；`tier(None)` 回「不知道」档而**不抛**，其余校验（bool / 字符串 / NaN / 越界）照旧抛 `RouteError`。
+- 四个分桶策略（`smart_order` / `least_used` / `by_pace` / `fastest`）一律走 `usage_tier`：`known=False` 时 `used` 填多少都不可信，位次与那个数无关；「不知道」排在所有知道的人之后，但**不许**插到「用尽且能靠赠金继续」的前面。
+- `tools/pool/ledger_spend.py`：`append(..., priced: bool | None = None)` 三态 —— 缺省**不写键**（老行 9 键形状逐字节不变，读侧仍按 `True`），显式 `True`/`False` 才落字面值；`unpriced()` 从此数得到真「无价」。
+- 反向变异 5 条全咬住（默认值改回 0.0 ⇒ 4 红；`tier(None)` 返 0 ⇒ 1 红；`append` 写死 True ⇒ 4 红；`apply_order` 越界改抛 ⇒ 3 红；`usage_tier` 把 None 洗成 0.0 ⇒ 29 红），每次还原都核 sha256。
 ## 2026-11-08 · 云门禁泛用化：抽「仓无关骨架 + 每仓一份 profile」（卡 E92，T-AG600）
 - `scripts/cloud/run_gate.sh` 里 10 处本仓字面（cloud_dir / 分支 / TF_PROJECTS_TOML / 池配置 / pip -c pins / run_gates.py / 播种目录 / 卡树 / 产物路径）全部搬进 `scripts/cloud/profiles/engineering.toml`，脚本只剩「怎么跑」。
 - 新增 `scripts/cloud/profile.py`（dump/list/check/render 四子命令，38 个键）与 `--render` 分支；新增第二仓 profile `scripts/cloud/profiles/openmaic.toml`，全文零本仓键值（判据 3 有钉子）。
