@@ -5779,3 +5779,20 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E106"
+task = "T-AG615"
+title = "MCP干跑面拿更窄的名单判模型：开关放行的被拒、理由还是空串、pool参数三处各说各的"
+tree = ".wt/E106"
+spec = "复盘/卡/卡E106-MCP模型闸用对名单.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_write.py",
+  "复盘/卡/卡E106-MCP模型闸用对名单.md"
+]
+depends = [
+  "E105"
+]
+risk = "mid"
+status = "pending"
