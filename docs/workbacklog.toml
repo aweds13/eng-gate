@@ -5639,3 +5639,23 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E99"
+task = "T-AG608"
+title = "无价的行不许当成花完了：写侧标 priced=False、按钱限额判不了就拒"
+tree = ".wt/E99"
+spec = "复盘/卡/卡E99-无价行不许当成花完了.md"
+files = [
+  "tools/pool/limits_check.py",
+  "tools/wb_dispatch.py",
+  "tests/test_pool_limits.py",
+  "tests/test_pool_limits_wiring.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡E99-无价行不许当成花完了.md"
+]
+depends = [
+  "E98"
+]
+risk = "mid"
+status = "pending"
