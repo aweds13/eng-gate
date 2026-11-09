@@ -4194,3 +4194,70 @@ def test_second_dispatch_reuses_account(sandbox: Path, monkeypatch, capsys) -> N
     err = capsys.readouterr().err
     assert "上次在号 demo 上答过" in err and "why=card" in err, err
     assert _read_stick(store)["account"] == "demo", "记录应被刷新成同一号"
+
+
+# ================================================ 卡 E105（T-AG614）：禁用表的**生产接线**
+#
+# 卡 A353 把 magpie 的禁用表判据搬进 `pool/model_registry.py` 时明说「零生产调用方」。
+# 接线之后：**禁用表里写一行，派活就该被拒**，而拒单仍是零副作用（不起进程、不建 log、不写判决）。
+# ★ 三条钉子都把 `TF_POOL_DISABLED` 指到 tmp —— 不读主树那份（今天存在与否都不该左右用例）。
+
+
+def _point_disabled(tmp_path: Path, body: str, monkeypatch) -> Path:  # noqa: ANN001
+    path = tmp_path / "model-disabled.toml"
+    path.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("TF_POOL_DISABLED", str(path))
+    return path
+
+
+def test_disabled_model_is_refused_with_zero_side_effects(
+        sandbox: Path, tmp_path: Path, monkeypatch, capsys) -> None:
+    """★★ 禁用表里写了这一族 ⇒ 模型闸拒单、退 2、**一个子进程都不起**。
+
+    「批准」与「禁用」是两个维度：这个模型在名单里（`model_rejected` 放行），
+    但禁用表说要停 —— 派活器必须听后者。
+    """
+    _point_switches(tmp_path, "", monkeypatch)
+    model = wd.MODEL_WHITELIST[0]
+    assert wd.model_rejected(model) == "", "样本必须先是「已批准」的，否则证明不了禁用表在起作用"
+    _point_disabled(tmp_path, 'disabled = ["deepseek*"]\n', monkeypatch)
+    record: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000", "--spec", "spec.md",
+                                      "--model", model, "--execute"])
+    assert wd.main() == 2
+    err = capsys.readouterr().err
+    assert "被禁用" in err and model in err, err
+    assert "deepseek*" in err, "拒单要点名命中禁用表里的哪一条模式"
+    assert record == [], "拒单必须零副作用（一个子进程都不许起）"
+    assert not (sandbox / "gates" / "diag" / "wb-000.jsonl").exists(), "不许建 log"
+    assert not (sandbox / "gates" / "diag" / "wb-000.verdict.txt").exists(), "不许写判决"
+
+
+def test_unknown_disabled_table_refuses_every_model(
+        sandbox: Path, tmp_path: Path, monkeypatch, capsys) -> None:
+    """★ 禁用表**读不懂** ⇒ 不知道 ≠ 空表：一个都不放行（与「文件不存在」正好相反）。"""
+    _point_switches(tmp_path, "", monkeypatch)
+    _point_disabled(tmp_path, "disabled = [\n", monkeypatch)      # 坏 TOML
+    record: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000", "--spec", "spec.md",
+                                      "--model", wd.MODEL_WHITELIST[0], "--execute"])
+    assert wd.main() == 2
+    err = capsys.readouterr().err
+    assert "不知道" in err and "禁用表" in err, err
+    assert record == [], "读不懂禁用表也不许派活"
+
+
+def test_absent_disabled_table_changes_nothing(sandbox: Path, tmp_path: Path,
+                                               monkeypatch, capsys) -> None:
+    """★ 反向钉子：禁用表**不存在** = 没有禁用 ⇒ 已批准的模型照常派出去（不是「一律拒」）。"""
+    _point_switches(tmp_path, "", monkeypatch)
+    monkeypatch.setenv("TF_POOL_DISABLED", str(tmp_path / "no-such-disabled.toml"))
+    record: list[list[str]] = []
+    monkeypatch.setattr(wd, "run_worker", _fake_runner(record))
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "000", "--spec", "spec.md",
+                                      "--model", wd.MODEL_WHITELIST[0], "--execute", "--force"])
+    assert wd.main() == 0
+    capsys.readouterr()
+    assert record, "没有禁用表就该照常派活（否则这把闸变成了「全拒」）"

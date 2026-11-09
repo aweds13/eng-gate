@@ -124,8 +124,8 @@ cli = "无（被 `pool_mcp` 调）"
 
 [[module]]
 name = "model_registry.py"
-duty = "一层模型注册表、按池分流：`resolve_model` / `effective_allowed_for`（裸名 vs `provider/model` 两套 id 体系）"
-cli = "无（被 `wb_dispatch`、`wb_watch`、`pool.plan` 调）"
+duty = "一层模型注册表、按池分流：`resolve_model` / `effective_allowed_for`（裸名 vs `provider/model` 两套 id 体系）+ 禁用表 `assert_not_disabled`（与注册表同目录的 `model-disabled.toml`；读不到≠没禁用）"
+cli = "无（被 `wb_dispatch`、`wb_watch`、`pool.plan` 调；禁用判据被 `wb_dispatch` 派活主闸、`gateway._model_block`、`pool_mcp` 干跑面三处调）"
 
 [[module]]
 name = "models.py"

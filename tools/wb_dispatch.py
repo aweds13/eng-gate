@@ -133,6 +133,7 @@ from pool.model_registry import (  # noqa: E402 —— 一层注册表 + 按池�
     PoolMismatchError,
     PoolNotWiredError,
     UnknownPoolError,
+    assert_not_disabled,
     clean_caller_patterns,
     default_model_for,
     effective_allowed_for,
@@ -3412,6 +3413,12 @@ def main() -> int:
         resolve_model(args.model, pool)                   # 跨池串用 ⇒ 拒（判据 ③）
         get_adapter(pool).assert_wired()                  # 已知但未接 ⇒ 拒（判据 ④）
         rejected = model_rejected(args.model, pool)
+        # ★ 卡 E105（T-AG614）：**禁用表**也要在这里问一句 —— 卡 A353 把 magpie 的
+        #   disabled.go 搬成了判据（assert_not_disabled），但当时零生产调用方：
+        #   用户在禁用表里写一行，一个请求都不会被拒。判据只有一份，这里只负责**问**。
+        #   命中 ⇒ ModelRegistryError（DisabledUnknownError 是它的子类）⇒ 下面既有的
+        #   except 兜住、退 2、零副作用；表不存在 ⇒ 安静放行（今天的行为一个字节不变）。
+        assert_not_disabled(pool, args.model)
     except (ModelRegistryError, PoolMismatchError, UnknownPoolError, PoolNotWiredError,
             SwitchFileError) as exc:
         # ★ 卡 138 / 卡 146 / 卡 166：开关文件 / 注册表 / 适配器坏了要**响亮地**失败并点名

@@ -481,3 +481,25 @@ def test_kill_reads_system_encoded_output_as_human_text(monkeypatch: pytest.Monk
     ok2, detail2 = pool_mcp._kill(4242)  # 没抛出来 = 过
     assert isinstance(detail2, str)
     assert "\ufffd" in detail2  # 坏字节被 replace 掉
+
+# ================================================ 卡 E105（T-AG614）：MCP 干跑面也要问禁用表
+#
+# 干跑面是「按一下先看看会发生什么」的入口 —— 它会**真起工人**，所以禁用闸必须在起进程之前。
+# ★ 仍是同一个判据（`pool.model_registry.assert_not_disabled`），不在这里另读一份表。
+
+
+def test_disabled_model_is_refused_before_spawning(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None,
+    no_spawn: list[list[str]], tmp_path: Path, monkeypatch,
+) -> None:
+    """白名单里的模型被禁用 ⇒ `isError`、点名禁用、**不派活**。"""
+    table = tmp_path / "model-disabled.toml"
+    table.write_text('disabled = ["deepseek*"]\n', encoding="utf-8")
+    monkeypatch.setenv("TF_POOL_DISABLED", str(table))
+    model = wb_dispatch.MODEL_WHITELIST[0]
+    result = pool_mcp.call_tool(
+        "pool_dispatch", _dispatch_args(model=model), root=worktree)
+    assert result is not None and result["isError"] is True
+    text = _text(result)
+    assert "禁用" in text and model in text, text
+    assert no_spawn == [], "被禁用就不许起工人"

@@ -1774,6 +1774,19 @@ def tool_pool_dispatch(
             {"card": card, "model": model, "allowed": list(wb_dispatch.MODEL_WHITELIST)},
             is_error=True,
         )
+    # ⑥a′ 卡 E105（T-AG614）：**禁用表** 也要在起工人之前问一句 —— 干跑面会真起进程，
+    #   所以禁用的模型必须在这里就拒。判据只有一份：`model_registry.assert_not_disabled`
+    #   （与 wb_dispatch 模型闸、gateway `_model_block` 共用同一份），这里不自己读表、不自己 glob。
+    #   ★ 排在白名单之后、resolve_account 之前：先答「这个模型批了吗」，再答「用户关掉了吗」，
+    #   最后才轮到「这个账号有没有更窄的白名单」—— 读不懂的号表不该盖住「这模型被禁了」。
+    try:
+        wb_dispatch.assert_not_disabled(wb_dispatch.DEFAULT_POOL, model)
+    except wb_dispatch.ModelRegistryError as exc:
+        return _result(
+            f"模型被禁用，已拒绝派活：{exc}",
+            {"card": card, "model": model, "allowed": list(wb_dispatch.MODEL_WHITELIST)},
+            is_error=True,
+        )
     # ⑥b 卡 A341（F34）第 ③ 步：caller（账号）白名单**只收窄** —— 与 wb_dispatch 的派活主路径
     #   调**同一个** `caller_model_rejected()`（判据只有一份）。池名用 DEFAULT_POOL：下面的
     #   `_dispatch_argv` 不透传 `--pool`，工人侧就是按默认池跑的，两边口径必须一致。

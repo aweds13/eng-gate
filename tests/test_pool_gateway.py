@@ -893,3 +893,49 @@ def test_gateway_ordering_still_falls_open_on_a_bad_name(env: Path) -> None:
     rows = (_row(SEAT_A), _row(SEAT_B))
     assert gateway._order(rows, "totally-bogus", pool="codebuddy") == [0, 1]
 
+
+# ================================================ 卡 E105（T-AG614）：禁用表在网关上的口径
+#
+# 原件 `_ext/magpie-main/internal/gateway/disabled.go` 逐字：「refused on every route before
+# anything is sent upstream, with a **403** in the API's own shape」。404 = 「没有这个模型」，
+# 403 = 「有，但你现在不许用」—— 禁用属于后者。
+# ★ 一律把 `TF_POOL_DISABLED` 指到 tmp，不读主树那份。
+
+
+def _point_disabled(tmp_path: Path, body: str, monkeypatch) -> Path:  # noqa: ANN001
+    path = tmp_path / "model-disabled.toml"
+    path.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("TF_POOL_DISABLED", str(path))
+    return path
+
+
+def test_disabled_model_is_403_not_404(env: Path, tmp_path: Path, monkeypatch) -> None:
+    """模型在批准集里、但被禁用表停掉 ⇒ **403** + 点名禁用，且一个字节都不出网。"""
+    _point_disabled(tmp_path, 'disabled = ["huaweicloud-maas/*"]\n', monkeypatch)
+    forward = _Forward(_ok())
+    out = _run(env, forward)
+    assert out.status == 403, f"禁用该回 403（不是 404，也不是 429）：{out.status}"
+    body = out.body.decode("utf-8")
+    assert "被禁用" in body and "huaweicloud-maas/*" in body, body
+    assert forward.calls == [], "被禁用的模型不许发上游"
+
+
+def test_unknown_disabled_table_is_403(env: Path, tmp_path: Path, monkeypatch) -> None:
+    """禁用表读不懂 ⇒ 不知道 ≠ 空表：403 + 点名「不知道」，同样一个字节都不出网。"""
+    _point_disabled(tmp_path, "disabled = [\n", monkeypatch)
+    forward = _Forward(_ok())
+    out = _run(env, forward)
+    assert out.status == 403, f"读不懂禁用表也该 403：{out.status}"
+    body = out.body.decode("utf-8")
+    assert "不知道" in body and "禁用表" in body, body
+    assert forward.calls == []
+
+
+def test_absent_disabled_table_keeps_the_gateway_green(env: Path, tmp_path: Path,
+                                                       monkeypatch) -> None:
+    """反向钉子：禁用表不存在 ⇒ 老路照走（本卡只接判据，不改数据）。"""
+    monkeypatch.setenv("TF_POOL_DISABLED", str(tmp_path / "no-such-disabled.toml"))
+    forward = _Forward(_ok())
+    out = _run(env, forward)
+    assert out.status == 200, f"没有禁用表就该照常转发：{out.status}"
+    assert forward.calls, "没有禁用表就该真发上游"

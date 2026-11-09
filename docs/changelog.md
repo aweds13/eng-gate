@@ -18,6 +18,11 @@
 - `tests/test_contract_doc_table_gate.py`（本卡新建，4 条）：门逐字进 audit 档 / 跑注册那条 argv 在真表上 rc=0 / 同一条 argv 喂一张段标题写错的表必须 rc=1 并点名条数 / 自证台账那行指向的用例真存在（同一把尺子 `defines_case`）。
 - `gates/gate-selfproof.toml` 加第 23 行（`since = "2026-11-10"`，反向用例指向上面的坏表钉子），`tests/test_gate_selfproof_product.py` 的门数闸 22 → 23、函数名去掉 `all_22_doors`（名字里带数字也是会漂的第二真源）。
 - 五份文档投影一次改完：`docs/subsystems/ci/README.md`（§1 去掉写死的 22、§2 加 `contract_doc_table` 行且「其余」保持 18）/ `docs/subsystems/ci/测试流程.md`（表一按门表顺序补行、表二补处置）/ `复盘/门禁四要素.md`（第 23 行四要素）/ 两份 repo-bindings 改「2026-11-10 现读 23 道」/ `skills/README.md` 去掉写死的门数。
+## 2026-11-10 T-AG614 禁用表装好了判据却没人问：三处派活入口都接上同一个判据
+- `tools/wb_dispatch.py` 派活主闸、`tools/pool/gateway.py::_model_block`、`tools/pool_mcp.py::tool_pool_dispatch` 三处各加一格：都只调 `tools/pool/model_registry.py` 的 `assert_not_disabled`，不自己读表、不自己 glob（卡 A353 交判据时零生产调用方，写了禁用表一个请求都不会被拒）。
+- 网关从「一律 404」改成 `_model_block` 回 `(状态码, 文案)`：禁用 / 禁用表读不懂 ⇒ **403**（原件 `internal/gateway/disabled.go` 逐字「403 in the API's own shape」），未批 / 快照过期 / 空批准集 / 找不到号池目录四支仍 404。
+- `tests/test_pool_disabled_wiring.py`（本卡新建，4 条）：三处入口各恰一次判据调用且不自己读表、`route_once` 按状态码回而不是写死 404、四支老判定仍 404、两份源文件与模块地图不再写「零生产调用方」。
+- 三份既有测试各追加禁用钉子（派活主闸 3 条含「表不存在不改行为」/ 网关 3 条 / MCP 干跑面 1 条，`no_spawn` 证明零副作用）；`docs/subsystems/pool/modules.toml` 里注册表那一条补上禁用表与三处调用方。
 ## 2026-11-09 T-BG011 把 pika 升级经验收成可复用规程，并让 L3 运行手册层第一次落地
 - 新建 `docs/runbooks/pika-升级规程.md`（九节 + 两个附录）：前置检查 → 三方比对 → 个性化行回填 → 技能替换 → 残留清理 → 验收读数 → 回滚，每步给命令形状与判据；§6 十九条坑每条带症状原文。
 - 为什么落 L3：`docs/文档架构.md:71/:86` 把 `docs/runbooks/` 列为「怎么起、怎么巡检、怎么落地」，但该目录从未存在过（`git ls-files docs/runbooks` 空）；操作规程属「动手时读」不属「回头看」，塞进 `skills/` 会把本机一次性迁移写成通用技能。

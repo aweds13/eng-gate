@@ -11927,3 +11927,26 @@ evidence = [
   "test:test_contract_doc_table_gate.py::test_the_selfproof_row_points_at_a_case_that_exists",
 ]
 gaps = "1. 门的注释里只写「反向用例在 tests/test_contract_doc_table_gate.py（名字见 gates/gate-selfproof.toml）」：具体 nodeid 仍有两处投影（自证台账 + 测试文件），本卡没有让「注释里的指向」也进判据。指针 `gates/defs/contract.py`2. 这道门只核表、不跑判据：`CONTRACTS` 里那十条 judge 命令是否仍有效，仍靠 `tools/contract_audit.py` 本体（它恒 rc=1，因为有 3 条 no_judge，进不了门）与 `tests/test_contract_audit.py` 的 12 条 —— 后者只在 lang 档的 pytest 里跑，而「只改那张表」的卡不跑 pytest。指针 `tools/contract_audit.py`3. `复盘/门禁四要素.md` 写的「23 道」是带日期的读数，还没有机器判据核它（`tests/test_run_gates_timeout.py` 只禁历史值「17 道门」）。指针 `复盘/门禁四要素.md`"
+
+[entries."T-AG614"]
+id = "T-AG614"
+title = "禁用表接进三处派活入口：网关禁用回403、MCP干跑面先问、判据只有一份"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_dispatch.py",
+  "file:tools/pool/gateway.py",
+  "file:tools/pool_mcp.py",
+  "file:tools/pool/model_registry.py",
+  "file:tests/test_pool_disabled_wiring.py",
+  "text:tools/pool/gateway.py::return 403, str(exc)",
+  "text:tools/wb_dispatch.py::assert_not_disabled(pool, args.model)",
+  "test:test_pool_disabled_wiring.py::test_every_production_entry_asks_the_same_judge",
+  "test:test_pool_disabled_wiring.py::test_gateway_forwards_the_status_code_not_a_fixed_404",
+  "test:test_pool_disabled_wiring.py::test_gateway_keeps_the_four_old_blocks_at_404",
+  "test:test_pool_disabled_wiring.py::test_docs_stop_claiming_zero_production_callers",
+  "test:test_wb_dispatch.py::test_disabled_model_is_refused_with_zero_side_effects",
+  "test:test_pool_gateway.py::test_disabled_model_is_403_not_404",
+  "test:test_pool_mcp_write.py::test_disabled_model_is_refused_before_spawning",
+]
+gaps = "1. 「用户关掉了模型」与「这个号池批没批这个模型」仍靠两张表（禁用表与号池批准集），本卡只让三处入口都**问**前一张，没做任何一致性校验：两张表互相矛盾时（禁用表放行、批准集没有）verdict 由入口各自决定，没有一份「合并口径」。指针 `tools/pool/model_registry.py`2. 网关的 403 只覆盖 `_model_block` 这一层：`route_once` 里换号 / 收窄 / RPM 那些分支回的是 403 或 404，与本卡的禁用 403 混在同一条退出路径上，网关留痕（`tools/pool/route_log.py` 写的 `wb-route.jsonl`）只有一个 status 字段，事后分不出「被禁」还是「收窄掉」—— 要分得清得给留痕加一个 reason 维度。指针 `tools/pool/gateway.py`3. MCP 干跑面的禁用判据写在 `tool_pool_dispatch` 里，`pool_cancel` / `task_claim` 等另外四个写工具没问过禁用表；它们不派活（只取消/交成），但「三处入口共用一份判据」这句话在 MCP 面只对了一半。指针 `tools/pool_mcp.py`"

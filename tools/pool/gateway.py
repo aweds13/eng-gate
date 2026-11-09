@@ -54,6 +54,7 @@ import pool_quota  # noqa: E402
 
 from pool import guards as pool_guards  # noqa: E402
 from pool import lanes as pool_lanes  # noqa: E402
+from pool import model_registry as pool_model_registry  # noqa: E402 —— 禁用表判据
 from pool import models as pool_models  # noqa: E402
 from pool import route as pool_route  # noqa: E402
 from pool import route_log as pool_route_log  # noqa: E402
@@ -319,22 +320,39 @@ def _base_root(root: Path | str | None) -> Path:
     return Path(root) if root is not None else Path(__file__).resolve().parents[2]
 
 
-def _model_block(pool: str, model: str, base: Path, *, now: dt.datetime) -> str:
-    """模型层的准入：未批 / 快照过期都**不进循环**（回了就是 404，不回 429）。"""
+def _model_block(pool: str, model: str, base: Path, *, now: dt.datetime) -> tuple[int, str]:
+    """模型层的准入 —— 返回 (HTTP 状态码, 拒单文案)；放行是 (0, "")。
+
+    ★ 卡 E105（T-AG614）之前这里只回文案、调用方一律写死 404。现在两档要分开：
+    - **404** = 「没有这个模型 / 这份清单不可信」：未批、批准集空、快照过期、找不到号池目录；
+    - **403** = 「有这个模型，但你现在不许用」：被禁用表停掉、或禁用表读不懂（不知道 ≠ 空表）。
+    口径照抄原件 _ext/magpie-main/internal/gateway/disabled.go：「refused on every route
+    before anything is sent upstream, with a 403 in the API's own shape」。
+
+    ★ 禁用判定**排在四个老判定之后**：老判定说的是「这模型在这份批准集里吗」，
+    禁用表说的是「这份批准集里的这一条，用户自己关掉了吗」—— 先答前者才谈得上后者。
+    ★ 判据只有一份：这里只调 model_registry.assert_not_disabled，不自己读表、不自己 glob。
+    """
     pool_dir = pool_models.find_pool_dir(base)
     if pool_dir is None:
-        return (f"找不到号池目录（从 {base} 逐级向上找 infra/pool/pool_models.py 都没命中）"
-                "⇒ 不猜模型清单")
+        return 404, (f"找不到号池目录（从 {base} 逐级向上找 infra/pool/pool_models.py 都没命中）"
+                     "⇒ 不猜模型清单")
     info = pool_models.load_pool_models(pool_dir)
     approved = [str(m) for m in info.get("approved") or []]
     if not approved:
-        return f"号池 {pool!r} 的批准集是空的（models.whitelist.toml 没有 approved 条目）⇒ 不派活"
+        return 404, (f"号池 {pool!r} 的批准集是空的（models.whitelist.toml 没有 approved 条目）"
+                     "⇒ 不派活")
     if model not in approved:
-        return f"模型 {model!r} 不在批准集里（已批：{', '.join(approved)}）⇒ 未批模型不许用"
+        return 404, f"模型 {model!r} 不在批准集里（已批：{', '.join(approved)}）⇒ 未批模型不许用"
     if info.get("snapshot_stale"):
         note = str(info.get("snapshot_note") or "快照过期")
-        return f"模型快照不可信：{note} ⇒ 先重新探测再派活"
-    return ""
+        return 404, f"模型快照不可信：{note} ⇒ 先重新探测再派活"
+    try:
+        pool_model_registry.assert_not_disabled(pool, model)
+    except pool_model_registry.ModelRegistryError as exc:
+        # 禁用 / 禁用表读不懂 ⇒ 403（「有，但不许用」），**在发上游之前**就拒。
+        return 403, str(exc)
+    return 0, ""
 
 
 def _ledger_rows(base: Path, ledger: Mapping[str, Any] | None) -> list[dict]:
@@ -485,9 +503,9 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
         clock = clock.replace(tzinfo=dt.timezone.utc)
     started_at = time.time()
 
-    blocked = _model_block(pool, model, base, now=clock)
+    block_status, blocked = _model_block(pool, model, base, now=clock)
     if blocked:
-        return _fail(protocol, 404, blocked)
+        return _fail(protocol, block_status, blocked)
 
     rows = _ledger_rows(base, ledger)
     cands, narrow_why = _candidates(rows, model, pool=pool, caller=caller, scopes=scopes)

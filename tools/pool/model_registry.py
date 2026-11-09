@@ -727,8 +727,11 @@ def assert_not_disabled(
     ★ **``unknown`` 时绝不放行**（禁令 4）：把 fail-closed 洗成 fail-open 只需一行，而那一行
       会让「配置读坏了」变成「今天全放行」—— 正是原件 ``internal/provider/disabled.go:23-26``
       要防的事（变异 6 咬的就是这一行）。
-    ★ **本卡只提供判据、不接线**（卡 A353 缺口 3）：今天**零生产调用方**，上线当天行为零变化；
-      接线是另一张卡。
+    ★ **生产接线**（卡 E105 · T-AG614 —— 卡 A353 当时只交判据、零调用方）：三处入口都调这一个
+      函数，判据只有一份 —— ``tools/wb_dispatch.py`` 的派活主闸（命中 ⇒ 退 2、零副作用）、
+      ``tools/pool/gateway.py`` 的 ``_model_block``（命中 ⇒ **403**，不是 404）、
+      ``tools/pool_mcp.py`` 的 ``tool_pool_dispatch`` 干跑面（命中 ⇒ ``isError``、不起工人）。
+    ★ 表不存在 ⇒ 安静放行：接线当天真机行为一个字节不变（今天没有 model-disabled.toml）。
     ★ 文案照原件 ``gateway/disabled.go:20-23`` / ``:25-29`` 的**结构**（pattern + 去哪儿改 +
       「只有经本派活器派出的请求会被拒」）；第三条（整组都被禁）**搬不过来**，pool 没有组。
     """
