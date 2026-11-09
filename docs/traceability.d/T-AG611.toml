@@ -1,0 +1,17 @@
+[entries."T-AG611"]
+id = "T-AG611"
+title = "长命令起不来要响亮：run_logged先解析argv0、批处理过cmd、解析不到回127点名"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/run_logged.py",
+  "file:tests/test_run_logged.py",
+  "text:tools/run_logged.py::def resolve_program(name: str) -> str | None:",
+  "text:tools/run_logged.py::def prepare_command(cmd: Sequence[str]) -> tuple[str | list[str], str]:",
+  "test:test_run_logged.py::test_bare_name_resolves_through_pathext",
+  "test:test_run_logged.py::test_batch_gets_a_cmd_line_and_keeps_its_arguments",
+  "test:test_run_logged.py::test_missing_program_is_loud_and_returns_127",
+  "test:test_run_logged.py::test_command_keeps_its_own_double_dash",
+]
+gaps = "1. 只解析了 argv[0]，没解析 `PATHEXT` 之外的别名（比如 PowerShell 的 `npm.ps1`、Python 的 entry-point `.exe` shim）：`shutil.which` 的选择顺序由环境决定，日志里只记「解析到了哪个文件」，不记「为什么是它」。指针 `tools/run_logged.py`2. 批处理的 `%VAR%` 仍会被 cmd 展开 —— 这是 cmd 对 `.cmd` 的固有语义，本卡没改写参数（改了才是更坏的沉默），但也没在日志里提醒这一条。指针 `tools/run_logged.py`3. 心跳只回显子进程最后一行输出、不报百分比：进度百分数是门禁自己打印的事（既有缺口，本卡未动）。指针 `tools/run_logged.py`"
+

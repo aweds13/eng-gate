@@ -11870,3 +11870,20 @@ evidence = [
   "test:test_contract_doc_table.py::test_cli_check_doc_is_green_on_the_real_table",
 ]
 gaps = "1. 读数块里那行 `分布：judge_ok … / judge_red …` 不归本卡的 `--check-doc` 核：它是**跑后**读数（要真跑 13 条判据才算得出），静态表证明不了。想核它就得让表格自检也跑一遍全量判据（那正是它要避免的事）。指针 `tools/contract_audit.py`2. 表里「反例钉子」那段只列了 ①–⑥，而 `tests/test_contract_audit.py` 真数已是 12 条、本卡又新增 21 条 —— 条数改对了，但「哪条对应哪个反例」这张对照表仍是旧的六行，没有逐条摊开。指针 `复盘/契约-判据对账.md`3. `tools/contract_audit.py` 自己**不在任何门里**（它 rc 恒非零，因为有 3 条诚实的 no_judge），所以 `--check-doc` 今天靠 `tests/test_contract_doc_table.py` 这 21 条钉子守着，不靠门表 —— 哪天有人跳过测试只跑门，表漂了照样绿。指针 `tests/test_contract_doc_table.py`"
+
+[entries."T-AG611"]
+id = "T-AG611"
+title = "长命令起不来要响亮：run_logged先解析argv0、批处理过cmd、解析不到回127点名"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/run_logged.py",
+  "file:tests/test_run_logged.py",
+  "text:tools/run_logged.py::def resolve_program(name: str) -> str | None:",
+  "text:tools/run_logged.py::def prepare_command(cmd: Sequence[str]) -> tuple[str | list[str], str]:",
+  "test:test_run_logged.py::test_bare_name_resolves_through_pathext",
+  "test:test_run_logged.py::test_batch_gets_a_cmd_line_and_keeps_its_arguments",
+  "test:test_run_logged.py::test_missing_program_is_loud_and_returns_127",
+  "test:test_run_logged.py::test_command_keeps_its_own_double_dash",
+]
+gaps = "1. 只解析了 argv[0]，没解析 `PATHEXT` 之外的别名（比如 PowerShell 的 `npm.ps1`、Python 的 entry-point `.exe` shim）：`shutil.which` 的选择顺序由环境决定，日志里只记「解析到了哪个文件」，不记「为什么是它」。指针 `tools/run_logged.py`2. 批处理的 `%VAR%` 仍会被 cmd 展开 —— 这是 cmd 对 `.cmd` 的固有语义，本卡没改写参数（改了才是更坏的沉默），但也没在日志里提醒这一条。指针 `tools/run_logged.py`3. 心跳只回显子进程最后一行输出、不报百分比：进度百分数是门禁自己打印的事（既有缺口，本卡未动）。指针 `tools/run_logged.py`"
