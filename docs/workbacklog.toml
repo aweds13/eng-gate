@@ -5562,3 +5562,25 @@ files = [
 depends = []
 risk = "high"
 status = "pending"
+
+[[cards]]
+id = "E96"
+task = "T-AG605"
+title = "文档与口径收口：写文档有入口、单文件有反馈、会漂的数字删掉"
+tree = ""
+spec = "复盘/卡/卡E96-文档与口径收口.md"
+files = [
+  "AGENTS.md",
+  "skills/softeng-manage/references/doc-write.md",
+  "scripts/check_docs.py",
+  "tests/test_check_docs.py",
+  "tools/pool_mcp.py",
+  "tools/wb_land.py",
+  "docs/presets/softeng.patch.yml",
+  "tools/contract_audit.py",
+  "tests/test_contract_audit.py",
+  "复盘/卡/卡E96-文档与口径收口.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
