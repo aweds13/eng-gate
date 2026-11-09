@@ -28,6 +28,7 @@ import contextlib
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import re
 import socket
@@ -223,19 +224,36 @@ def _check_account(
 
     # 卡 A334 · T-AG536：`used_percent` 是整窗估算的**唯一**分母（tools/pool/holds.py）。
     # 越界不是「数据脏」而是「口径坏了」：0 会让 scale 变成 100/0，>100 会估出比整窗还大的数。
-    # 只校验、不写入 —— 写入归卡 A333。
-    percent = quota.get("used_percent") if isinstance(quota, dict) else None
-    if percent is not None:
-        if isinstance(percent, bool) or not isinstance(percent, (int, float)):
-            raise LedgerError(
-                f"{where} 的 [account.quota].used_percent={percent!r} 不是数"
-                "（要么整个省掉表示「未观测」，要么填 0~100 的数）"
-            )
-        if not 0 <= percent <= 100:
-            raise LedgerError(
-                f"{where} 的 [account.quota].used_percent={percent!r} 越界"
-                "（必须在 [0, 100]：0 会让整窗估算除以零，>100 会估出比整窗还大的数）"
-            )
+    # 校验只有一份（下面那个函数），读账本与写账本共用 —— 写方只有一处：
+    # `record_probe_result()` 对 codearts 的 ok 读数写它（卡 E97）；其它平台仍无写方，
+    # 缺键仍是「未观测」。
+    if isinstance(quota, dict):
+        _check_used_percent(where, quota.get("used_percent"))
+
+
+def _check_used_percent(where: str, percent: object) -> None:
+    """`[account.quota].used_percent` 的**唯一**校验（读账本与写账本共用，卡 A334 / E97）。
+
+    `None` = 「未观测」，合法。其余必须是 0~100 的有限数：0 会让整窗估算除以零，
+    >100 会估出比整窗还大的数 —— 这不是「数据脏」，是「口径坏了」，所以抛。
+    """
+    if percent is None:
+        return
+    if isinstance(percent, bool) or not isinstance(percent, (int, float)):
+        raise LedgerError(
+            f"{where} 的 [account.quota].used_percent={percent!r} 不是数"
+            "（要么整个省掉表示「未观测」，要么填 0~100 的数）"
+        )
+    if not math.isfinite(percent):
+        raise LedgerError(
+            f"{where} 的 [account.quota].used_percent={percent!r} 不是有限数"
+            "（NaN / Infinity 都不能当读数）"
+        )
+    if not 0 <= percent <= 100:
+        raise LedgerError(
+            f"{where} 的 [account.quota].used_percent={percent!r} 越界"
+            "（必须在 [0, 100]：0 会让整窗估算除以零，>100 会估出比整窗还大的数）"
+        )
 
 
 def _approved_models_from_whitelist() -> set[str] | None:
@@ -883,11 +901,102 @@ def _extract_amount(obj) -> float | None:
     return None
 
 
+def _codearts_credential(plat: dict):
+    """从 `token_env` 取 AK/SK —— 返回 `(CodeArtsCredential, 缺凭据时该点名的名字)`。
+
+    ★ 为什么不是「取第一个非空的就完事」：`token_env` 是一条 `/` 分隔的**有序名单**
+      （`CODEARTS_CLI_AK/CODEARTS_CLI_SK/TF_CODEARTS_AK/TF_CODEARTS_SK`），位置不代表角色 ——
+      第三位 `TF_CODEARTS_AK` 又是一个 **AK**，不是 security token。所以按名字后缀分角色：
+      `*_AK` 里第一个非空的是 AK，`*_SK` 里第一个非空的是 SK，其余非空值当 security token。
+    ★ 闸：走 `checkin.tokens_from_env()`，它自己先问 `discovery_off()`（闸关 ⇒ 回空列表，
+      一个 token 变量都不读）。这里再判一次空列表 ⇒ 回「缺凭据」。
+    """
+    ck = _ck()
+    tokens = ck.tokens_from_env(plat, os.environ)
+    names = [n.strip() for n in str(plat.get("token_env") or "").split("/") if n.strip()]
+    if not tokens:
+        return None, " / ".join(names)
+    ak = sk = secret = ""
+    for name, value in zip(names, tokens, strict=True):
+        if not value:
+            continue
+        upper = name.upper()
+        if upper.endswith("_AK"):
+            ak = ak or value
+        elif upper.endswith("_SK"):
+            sk = sk or value
+        else:
+            secret = secret or value
+    if not ak or not sk:
+        return None, " / ".join(names)
+    return ck.CodeArtsCredential(ak, sk, secret), ""
+
+
+def _probe_codearts(base: dict, plat: dict, fetch=None) -> dict:
+    """codearts 的只读额度读数：用 `checkin` 的签名请求读一次 `statistics/plugin`（卡 E97）。
+
+    结论码与口径：
+    * 成功且 total 那条 metric 能算出百分比 ⇒ `ok`，带 `used_percent`（两位小数）与
+      `amount`（**余额口径** = total 那条的 `package_credit_remain`；与
+      `record_probe_result()` 的「amount 是余额」一致，不塞套餐总额）；
+    * 缺 AK/SK ⇒ `uncertain` 并点名 `token_env`（没料必须说不知道，不许给 0）；
+    * 401/403 ⇒ `failed`；404 ⇒ `not-supported`；429 / 5xx / 网络不明 ⇒ `uncertain`，
+      **不重放**（重放会把限流窗口里的猜测当成读数）；
+    * 读到了但没有 total 那条 metric（形状变了）⇒ `uncertain`，**不当 0**。
+    """
+    ck = _ck()
+    credential, need = _codearts_credential(plat)
+    if credential is None:
+        return {
+            **base,
+            "kind": "uncertain",
+            "detail": f"账本只存指针，没凭据可发；要真探请设 {need or '（该平台无 token_env）'}",
+        }
+    fetcher = fetch if fetch is not None else ck.http_fetch
+    try:
+        package, failure = ck.codearts_account(credential, fetcher)
+    except ck.NetworkError as exc:
+        return {**base, "kind": "uncertain", "detail": f"网络不明：{mask(str(exc))}（不重放）"}
+    if failure is not None:
+        status = failure.code if isinstance(failure.code, int) else 0
+        if status in (401, 403):
+            return {
+                **base,
+                "kind": "failed",
+                "detail": f"HTTP {status}：AK/SK 无效或过期（改凭据位点，别改这里）",
+            }
+        if status == 404:
+            return {**base, "kind": "not-supported", "detail": "HTTP 404：上游没这个只读端点"}
+        if status == 429 or status >= 500 or status == 0:
+            return {**base, "kind": "uncertain", "detail": f"{failure.message}（不重放）"}
+        return {**base, "kind": "uncertain", "detail": failure.message or "读数不可信"}
+    used = ck.codearts_package_used(package)
+    if used is None:
+        return {
+            **base,
+            "kind": "uncertain",
+            "detail": "响应里没有 usageTotalPackageCredit 的 used/amount（形状变了，别当 0）",
+        }
+    row = {
+        **base,
+        "kind": "ok",
+        "used_percent": round(used, 2),
+        "detail": f"读自 {ck.CODEARTS_BASE}{ck.CODEARTS_PACKAGE_PATH}",
+    }
+    remain = ck.codearts_package_remain(package)
+    if remain is not None:
+        row["amount"] = remain
+        row["unit"] = str(plat.get("unit", plat.get("quota_unit", "")) or "credits")
+    return row
+
+
 def probe_account(acc: dict, plat: dict, fetch=None, offline: bool = False) -> dict:
     """单账号只读探测。
 
     结论码只许这六个：ok / skipped / uncertain / failed / not-supported / unknown-platform。
     """
+    # codearts 那支吃 checkin 的 4 参签名 fetcher；其余平台吃 2 参的 (url, token) ⇒ 先留住原值。
+    given_fetch = fetch
     fetch = fetch or _get_json
     base = {"id": acc["id"], "platform": acc["platform"]}
     # 闸在最前面：连「state 是不是 disabled」都不问 —— 那是「已经有账号」之后的事。
@@ -908,6 +1017,8 @@ def probe_account(acc: dict, plat: dict, fetch=None, offline: bool = False) -> d
         return {**base, "kind": "uncertain", "detail": "参考实现里没有只读额度入口 ⇒ 未探测"}
     if offline:
         return {**base, "kind": "skipped", "detail": "--offline：不发网络请求"}
+    if mode == "codearts-credits":
+        return _probe_codearts(base, plat, given_fetch)
 
     token, env_name = _token_for(plat)
     if not token:
@@ -1000,12 +1111,17 @@ def probe_all(
 def record_probe_result(
     ledger_path: Path, data: dict, rows: list[dict], *, now: datetime | None = None
 ) -> None:
-    """把一次探测的结论留进账本 —— **只**写 `[account.quota]` 的 `observed_at` 与 `samples`。
+    """把一次探测的结论留进账本 —— **只**写 `[account.quota]` 的 `observed_at` / `samples` /
+    `used_percent`（最后一条只对 codearts 的 `ok` 读数，卡 E97）。
 
     ★ 不写 `state`：`STATES` 那五行（`active/limited/exhausted/expired/disabled`）是**人**判定
       的，一次探测读到的数字不许把它改掉。
     ★ 不写 `approved_models`：能不能派活是白名单的事，不是额度读数的事。
     ★ 不写 `amount`：探测读到多少就写在 `samples` 里；`amount` 是余额口径，由探针之外的人/流程填。
+    ★ `used_percent` 只对 `kind == "ok"` **且**带 `used_percent` 的行写（今天只有 codearts 会带）。
+      `failed` / `uncertain` / `skipped` / `not-supported` / 其它平台一律**不写、也不删旧值** ——
+      缺键的含义是「未观测」，抹掉旧值等于把上一次真读数也一起丢了。写前走
+      `_check_used_percent()`（与读账本同一份判据，0~100），越界就抛 `LedgerError` 且账本不落地。
     ★ `samples` 项只有 `{"at": stamp, "kind": <六结论码之一>}`，**没有 `reset_at`**；上限继续由
       `save_ledger()` 的 `SAMPLES_CAP` 截。六结论码原样落账，一条都不许压平。
     ★ `source == "unknown"` 的读数带 `amount` ⇒ 拒写并抛 `LedgerError`（照 `_check_account()` 的
@@ -1033,6 +1149,8 @@ def record_probe_result(
                 f"账号 {acc.get('id')} 的探测结论 source=unknown 却带了 amount"
                 " —— 没探测过就不许填数"
             )
+        if row.get("kind") == "ok" and "used_percent" in row:
+            _check_used_percent(f"账号 {acc.get('id')}", row.get("used_percent"))
 
     touched = False
     for acc in accounts:
@@ -1046,6 +1164,9 @@ def record_probe_result(
             quota = acc["quota"] = {}
         quota["observed_at"] = stamp
         quota.setdefault("samples", []).append({"at": stamp, "kind": row["kind"]})
+        # 只有「真读到百分比」的 ok 行才写它；其余结论不写也不删 —— 旧值仍是上一次的真读数。
+        if row.get("kind") == "ok" and "used_percent" in row:
+            quota["used_percent"] = row["used_percent"]
         touched = True
 
     note_quota_history(accounts, by_id, at=_stamp_unix(stamp))
@@ -1229,6 +1350,7 @@ def cmd_probe(args) -> int:
             ("platform", "平台"),
             ("kind", "结论"),
             ("amount", "额度"),
+            ("used_percent", "已用%"),
             ("detail", "说明"),
         ],
     )

@@ -921,3 +921,126 @@ def test_only_cmd_checkin_reaches_the_apply_path():
         )
     ]
     assert run_callers == ["cmd_checkin"], run_callers
+
+
+# ---------------------------------------------------------------- 卡 E97：额度读数只认 total
+
+
+def _metric(name: str, amount, used, remain):
+    """一条 metric 的原样形状（真机 `statistics/plugin` 的 `metrics[]` 元素）。"""
+    return {
+        "name": name,
+        "package_credit_amount": amount,
+        "package_credit_used": used,
+        "package_credit_remain": remain,
+    }
+
+
+def _package(*metrics):
+    return {"is_credit_package": True, "is_token_package": False, "metrics": list(metrics)}
+
+
+#: 2026-11-09 真机读到的六个 metric（照抄，一位小数都不改）。
+REAL_METRICS = (
+    _metric("usageDataChatMessages", None, None, None),
+    _metric("usageTokenChatMessages", None, None, None),
+    _metric("usageTotalPackageCredit", 9000.0, 4185.59, 4814.41),
+    _metric("usageBasicPackageCredit", 0, 0, 0),
+    _metric("usageOnDemandPackageCredit", 0, 0, 0),
+    _metric("usageBonusPackageCredit", 9000.0, 4185.59, 4814.41),
+)
+
+
+def test_codearts_package_used_matches_real_reading():
+    """卡 E97 ①：`usageTotalPackageCredit` 那一条 ⇒ 46.50655555555556。"""
+    assert ck.codearts_package_used(_package(*REAL_METRICS)) == pytest.approx(46.50655555555556)
+    assert ck.codearts_package_remain(_package(*REAL_METRICS)) == pytest.approx(4814.41)
+
+
+def test_codearts_package_used_never_sums_categories():
+    """卡 E97 ① 反向：三类都与 total 同值时**仍** 46.51（不是 3 倍）。
+
+    立卡时记的形状（basic / ondemand / bonus 都与 total 同值）：真照「求和」写，
+    `used` 会变成 3 × 4185.59 ⇒ 139.5%（或除以 3 倍 amount 时看着对、换个形状就错）。
+    """
+    all_same = (
+        _metric("usageTotalPackageCredit", 9000.0, 4185.59, 4814.41),
+        _metric("usageBasicPackageCredit", 9000.0, 4185.59, 4814.41),
+        _metric("usageOnDemandPackageCredit", 9000.0, 4185.59, 4814.41),
+        _metric("usageBonusPackageCredit", 9000.0, 4185.59, 4814.41),
+    )
+    assert ck.codearts_package_used(_package(*all_same)) == pytest.approx(46.50655555555556)
+    # 今日真机形状：basic / ondemand 是 0，只有 bonus 与 total 同值 ⇒ 仍 46.51。
+    # （把 bonus 那份 used 也加进来再除以 total 的 amount，就会得到 ~93% 这种假读数。）
+    assert ck.codearts_package_used(_package(*REAL_METRICS)) == pytest.approx(46.50655555555556)
+
+
+@pytest.mark.parametrize(
+    "metrics",
+    [
+        # 只有分类、没有 total：不许回退成求和 ⇒ 不知道
+        (
+            _metric("usageBasicPackageCredit", 9000.0, 4185.59, 4814.41),
+            _metric("usageBonusPackageCredit", 9000.0, 4185.59, 4814.41),
+        ),
+        # total 在，但 amount 是 0 ⇒ 除不了（真机 basic/ondemand 就是 0/0）
+        (_metric("usageTotalPackageCredit", 0, 0, 0),),
+        # used > amount：自相矛盾
+        (_metric("usageTotalPackageCredit", 100.0, 120.0, 0.0),),
+        # 负数
+        (_metric("usageTotalPackageCredit", 100.0, -1.0, 101.0),),
+        # 空串 / 缺键 / None
+        (_metric("usageTotalPackageCredit", "", "", ""),),
+        ({"name": "usageTotalPackageCredit"},),
+        (_metric("usageTotalPackageCredit", None, 1.0, 1.0),),
+        # bool 不是数（`True` 会被 Python 当 1）
+        (_metric("usageTotalPackageCredit", True, 1, 0),),
+    ],
+)
+def test_codearts_package_used_says_unknown_on_bad_shapes(metrics):
+    """卡 E97 ①：算不出来就 `None`（= 不知道），绝不回 0、绝不求和。
+
+    ★ 这里只管**百分比**。`package_credit_remain` 是另一格读数，它的合法性不依赖
+      `used / amount` 那一对（余额 0 是真读数，不是「没读到」）—— 单独钉在下面。
+    """
+    assert ck.codearts_package_used(_package(*metrics)) is None
+
+
+@pytest.mark.parametrize(
+    ("metric", "expect"),
+    [
+        (_metric("usageTotalPackageCredit", 9000.0, 4185.59, 4814.41), pytest.approx(4814.41)),
+        (_metric("usageTotalPackageCredit", 0, 0, 0), 0.0),
+        (_metric("usageTotalPackageCredit", 9000.0, 1.0, ""), None),
+        (_metric("usageTotalPackageCredit", 9000.0, 1.0, None), None),
+        (_metric("usageTotalPackageCredit", 9000.0, 1.0, True), None),
+        ({"name": "usageTotalPackageCredit"}, None),
+        # 只有分类、没有 total ⇒ 不许拿分类的余额凑数
+        (_metric("usageBonusPackageCredit", 9000.0, 4185.59, 4814.41), None),
+    ],
+)
+def test_codearts_package_remain_is_only_the_total_row(metric, expect):
+    """`amount` = total 那条的 `package_credit_remain`；读不到 ⇒ `None`（不从别处反算）。"""
+    assert ck.codearts_package_remain(_package(metric)) == expect
+
+
+@pytest.mark.parametrize("package", [None, {}, {"metrics": None}, {"metrics": {}}, "x", []])
+def test_codearts_package_used_tolerates_garbage(package):
+    assert ck.codearts_package_used(package) is None
+    assert ck.codearts_package_remain(package) is None
+
+
+def test_codearts_package_remain_is_balance_not_total():
+    """`amount` 是**余额**口径：取 `package_credit_remain`，不是套餐总额 9000。"""
+    package = _package(_metric("usageTotalPackageCredit", 9000.0, 4185.59, 4814.41))
+    assert ck.codearts_package_remain(package) == pytest.approx(4814.41)
+    assert ck.codearts_package_remain(package) != pytest.approx(9000.0)
+    # 上游没给 remain ⇒ 不知道（不从 amount - used 反算）
+    no_remain = _package(
+        {
+            "name": "usageTotalPackageCredit",
+            "package_credit_amount": 9000.0,
+            "package_credit_used": 1.0,
+        }
+    )
+    assert ck.codearts_package_remain(no_remain) is None

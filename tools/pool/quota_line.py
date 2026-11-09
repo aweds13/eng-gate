@@ -30,9 +30,10 @@ magpie 的 `internal/cli/statusline_cli.go`（全文 172 行）解决的就是�
 
 ## 缺口（如实，进 changelog 的 gaps）
 
-1. **pool 画不出百分比。** magpie 的 `w.Used`（`quotas.go:128`）在 pool 侧零来源：真
-   `gates/diag/quota-state.json` 的记录没有 `used`；仓外账本的 `used_percent` 全 `None`；
-   `tools/pool/quota_history.py:16` 自己写着「`used_percent` 全仓零写方」。⇒ 一格只能是一个态
+1. **pool 基本画不出百分比。** magpie 的 `w.Used`（`quotas.go:128`）在 pool 侧几乎零来源：真
+   `gates/diag/quota-state.json` 的记录没有 `used`；仓外账本的 `used_percent` 今天只有 codearts
+   写得进来（`tools/pool_accounts.py` 的 `record_probe_result()`，卡 E97 起的唯一写方），其它平台
+   仍无，且窗口边界仍缺（`reset` / `span` 零来源 ⇒ `holds` 仍走 `clock`）。⇒ 一格只能是一个态
    标记 + 倒计时。**这不是取舍，是没料。**
 2. **`LastServedAt` / `Last` 无对应物。** magpie 的 `*` 咬的是「这个号上次**答过话**」
    （`served.go:24` 30 天窗口）；pool 只有 `recorded_at`（上次**读到额度**的时刻）。本模块用

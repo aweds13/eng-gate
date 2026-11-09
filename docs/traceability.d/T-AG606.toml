@@ -1,0 +1,21 @@
+[entries."T-AG606"]
+id = "T-AG606"
+title = "号池额度读数接真源：codearts真读、写回只开一格、用量按别名归一"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/checkin.py",
+  "file:tools/pool_accounts.py",
+  "file:tools/wb_dispatch.py",
+  "file:tests/test_usage_in_alias.py",
+  "text:tools/pool/checkin.py::def codearts_package_used(package: Mapping[str, object] | None) -> float | None:",
+  "text:tools/wb_dispatch.py::def model_aliases(name: str) -> tuple[str, ...]:",
+  "test:test_pool_checkin.py::test_codearts_package_used_matches_real_reading",
+  "test:test_pool_checkin.py::test_codearts_package_used_never_sums_categories",
+  "test:test_pool_accounts.py::test_codearts_probe_reads_real_shape_as_ok",
+  "test:test_pool_accounts.py::test_codearts_probe_without_credentials_is_uncertain",
+  "test:test_pool_accounts.py::test_record_probe_result_writes_used_percent_for_ok",
+  "test:test_usage_in_alias.py::test_usage_in_counts_every_alias_of_the_same_model",
+]
+gaps = "1. 曲线今天仍画不出来：`used_percent` 有了写方（codearts 的 `record_probe_result()`），但四个真账号的 `[account.quota]` 仍没有窗口起止，`holds.holds_bounds()` 照样走 `HOLDS_NO_CLOCK`。接上读数不等于接上时间。指针 `tools/pool/quota_history.py`2. 只接了 codearts 一个平台：其余八个平台的 `probe` 仍是 `http` / `manual`，`used_percent` 对它们依旧「未观测」。指针 `tools/pool/platforms.toml`3. 别名归一是有意为之的窄口径：只认 `id_names` 那三档（原样 / 切第一刀后 / 最后一个斜杠后）加注册表里的同组写法，像的名字（`glm-5.3` 对 `glm-5.2`）一个都不吞。指针 `tools/wb_dispatch.py`"
+

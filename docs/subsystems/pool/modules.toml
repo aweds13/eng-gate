@@ -44,8 +44,8 @@ cli = "无（被 `wb_dispatch` 调）"
 
 [[module]]
 name = "checkin.py"
-duty = "五个平台的签到**写动作唯一住所**：六态结论码 + 幂等 + 华为云 `SDK-HMAC-SHA256` 签名（`apply=False` 只探不领）"
-cli = "无（被 `pool_accounts.py checkin` 调）"
+duty = "五个平台的签到**写动作唯一住所**：六态结论码 + 幂等 + 华为云 `SDK-HMAC-SHA256` 签名（`apply=False` 只探不领）；读侧只加一个纯函数 `codearts_package_used()` —— 只认 `usageTotalPackageCredit` 那一条算已用百分比与余额，绝不把 basic/ondemand/bonus 相加"
+cli = "无（被 `pool_accounts.py` 调：`checkin` 走签到写动作、`probe` 的 codearts 分支走额度读数）"
 
 [[module]]
 name = "failclosed.py"
@@ -244,7 +244,7 @@ cli = "无（被 `pool.model_registry` 读）"
 
 [[module]]
 name = "platforms.toml"
-duty = "平台能力表：九个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false`"
+duty = "平台能力表：九个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false`；`probe` 三个取值 http / manual / codearts-credits（后一个是签名读一次 statistics/plugin 的真读）"
 cli = "无（被 `pool_accounts.py` 读）"
 
 [[module]]

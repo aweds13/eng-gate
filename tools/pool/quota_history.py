@@ -13,10 +13,11 @@ pool 能答「这个号此刻能不能派」，答不出「它在回血还是在
 
 ## 五个缺口（如实说，不许当成已解决）
 
-1. **今天产出空曲线**：`used_percent` 全仓零写方，四个真账号的 `[account.quota]` 也没有窗口
-   起止 ⇒ 本卡落地后 `gates/diag/quota-history.json` **不会生成**。这是预期，**不许造假数据**
-   （钉子里 `test_real_ledger_produces_no_curve_today` 盯的就是这件事）。验的是判据的判别力，
-   不是「曲线真的画出来了」。
+1. **今天仍产出空曲线（写方有了，料还没有）**：`used_percent` 在今天只有一个写方 —— codearts
+   的额度读数（`tools/pool_accounts.py` 的 `record_probe_result()`，卡 E97 起），**其它平台仍无**；
+   而四个真账号的 `[account.quota]` 也没有窗口起止 ⇒ 本卡落地后 `gates/diag/quota-history.json`
+   **不会生成**。这是预期，**不许造假数据**（钉子里 `test_real_ledger_produces_no_curve_today`
+   盯的就是这件事）。验的是判据的判别力，不是「曲线真的画出来了」。
 2. `holds.estimate()` 的分母仍然缺：本模块只提供「历史点」这个容器，**不**替 `holds` 造数。
 3. 不做 magpie 的 `mergeQuotaHist`（跨机合并）：pool 没有多机共用一份曲线的场景。
 4. 不做 `SubscriptionQuota` / `LineName()` 那一层展示，也不把 `quota-state.json` 并进曲线

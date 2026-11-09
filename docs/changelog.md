@@ -19,6 +19,11 @@
 - `scripts/check_docs.py` 加 `--file <路径>`（可重复，相对仓根）：死指针 / superseded 两腿收窄到命中文件，**drift 腿仍全量**；输出印「只看 N 份（全仓 X 份）」，一份都没命中 ⇒ 退 1 而不是绿。收窄读数**不许**跟全仓基线比（`Report.narrowed` + `ratchet(..., narrowed=True)` 只留「涨到」）—— 否则照旧印「可以把基线调低到 N」等于拿局部读数拆掉这道门。
 - `tools/pool_mcp.py` 五处「六个只读工具」改成「十三个（十个号池 + 三个任务）」，并在写面补 confirm 的**三种语义**（号池 = 卡号；`task_register` = TOML 的 `id`、`task_claim` = `task`、`usage_report` = 这一批的记录条数）；`tools/wb_land.py` 三处「11 条判据」改成「条数现读」。
 - CX-01 的判据换成合成形态（把门表构建链复到临时树、不带 `skills/` 再真 import 一次），**不新增门**；旧判据（只核 SKILL.md 格式）实测「绿而无证」。
+## 2026-11-09 T-AG606 号池额度读数接真源：codearts 真读、写回账本只有一个键、用量按别名归一
+- `tools/pool/checkin.py` 加三个纯函数：`codearts_package_used()`（**只**认 `usageTotalPackageCredit` 那条，绝不把 basic/ondemand/bonus 相加 —— 真机上至少一类与 total 同值，相加等于两三倍）、`codearts_package_remain()`（余额口径）、`_read_finite()`（缺失/布尔/非有限都回 `None`，不伪装成 0）。
+- `tools/pool_accounts.py` 的 codearts 分支不再用 `unsupported` 当挡箭牌：按 `token_env` 的名字后缀分 AK / SK / security token，签名读一次 `statistics/plugin`；成功 ⇒ `ok` + `used_percent`（两位小数）+ `amount`（余额）；缺凭据 ⇒ `uncertain` 点名 `token_env`；401/403 ⇒ `failed`、404 ⇒ `not-supported`、429/5xx/网络不明 ⇒ `uncertain` 且**不重放**；读到但形状变了 ⇒ `uncertain` 不**当 0**。
+- 账本只开一格：`record_probe_result()` 只对 `kind=="ok"` 且带 `used_percent` 的行写 `[account.quota].used_percent`，其余结论**不写也不删**旧值（缺键 = 未观测）；校验与读账本共用 `_check_used_percent()`。
+- `tools/wb_dispatch.py` 的 `usage_in()` 改走 `model_aliases()` / `_matches_model()`：任一别名命中即计入、大小写不敏感、注册表读不到退回字面相等（fail-open）；真机 `glm-5.2` / `GLM-5.2` / `huaweicloud-maas/GLM-5.2` 三写法都回 143312742，此前后两者恒 0。
 ## 2026-11-08 · 云门禁泛用化：抽「仓无关骨架 + 每仓一份 profile」（卡 E92，T-AG600）
 - `scripts/cloud/run_gate.sh` 里 10 处本仓字面（cloud_dir / 分支 / TF_PROJECTS_TOML / 池配置 / pip -c pins / run_gates.py / 播种目录 / 卡树 / 产物路径）全部搬进 `scripts/cloud/profiles/engineering.toml`，脚本只剩「怎么跑」。
 - 新增 `scripts/cloud/profile.py`（dump/list/check/render 四子命令，38 个键）与 `--render` 分支；新增第二仓 profile `scripts/cloud/profiles/openmaic.toml`，全文零本仓键值（判据 3 有钉子）。

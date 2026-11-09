@@ -403,13 +403,139 @@ def test_unknown_platform_code():
     assert out[0]["kind"] == "unknown-platform"
 
 
-def test_codearts_probe_is_honest_uncertain():
+#: 2026-11-09 真机 `statistics/plugin` 的响应形状（裸对象，六个 metric 里只有 total 有用）。
+REAL_CODEARTS_PACKAGE = {
+    "start_date": "2026-11-01",
+    "end_date": "2026-11-30",
+    "is_teadmin": False,
+    "is_white_list": True,
+    "show": True,
+    "package": {"is_credit_package": True, "is_token_package": False, "status": "VALID"},
+    "metrics": [
+        {"name": "usageDataChatMessages", "package_credit_amount": None,
+         "package_credit_used": None, "package_credit_remain": None},
+        {"name": "usageTokenChatMessages", "package_credit_amount": None,
+         "package_credit_used": None, "package_credit_remain": None},
+        {"name": "usageTotalPackageCredit", "package_credit_amount": 9000.0,
+         "package_credit_used": 4185.59, "package_credit_remain": 4814.41},
+        {"name": "usageBasicPackageCredit", "package_credit_amount": 0,
+         "package_credit_used": 0, "package_credit_remain": 0},
+        {"name": "usageOnDemandPackageCredit", "package_credit_amount": 0,
+         "package_credit_used": 0, "package_credit_remain": 0},
+        {"name": "usageBonusPackageCredit", "package_credit_amount": 9000.0,
+         "package_credit_used": 4185.59, "package_credit_remain": 4814.41},
+    ],
+}
+
+
+def _codearts_env(monkeypatch):
+    """把 AK/SK 放进 `token_env` 里点名的那两个变量（真跑时由 `~/.codeartsdoer/pool.env` 提供）。"""
+    monkeypatch.setenv("CODEARTS_CLI_AK", "AKIDEXAMPLE")
+    monkeypatch.setenv("CODEARTS_CLI_SK", "secret-key")
+    monkeypatch.delenv("CODEARTS_CLI_SECRET", raising=False)
+    monkeypatch.delenv("TF_CODEARTS_AK", raising=False)
+    monkeypatch.delenv("TF_CODEARTS_SK", raising=False)
+
+
+def test_codearts_probe_reads_real_shape_as_ok(monkeypatch):
+    """卡 E97 ② 改判据：合成 fetcher 回**真形状** ⇒ `ok` + `used_percent≈46.51`。
+
+    ★ 原来这条叫 `test_codearts_probe_is_honest_uncertain`，钉的是「`probe=unsupported`
+      时永远 uncertain」。E97 把 codearts 接成真读数以后，那个断言会把**接好了**判成红。
+      但它的意图不许丢：**没料时必须说不知道** —— 同一个测试的后半段（缺凭据 ⇒
+      `uncertain` 且点名 `token_env`）继续钉这一条。
+    """
+    _codearts_env(monkeypatch)
     platforms = pa.load_platforms()
+    seen: list[dict] = []
+
+    def fetcher(method, url, headers, body):
+        seen.append({"method": method, "url": url, "headers": dict(headers or {})})
+        return 200, json.dumps(REAL_CODEARTS_PACKAGE)
+
+    out = pa.probe_account(_acc("codearts"), platforms["codearts"], fetch=fetcher)
+    assert out["kind"] == "ok", out
+    assert out["used_percent"] == 46.51
+    # amount 是**余额**口径（remain），不是套餐总额 9000
+    assert out["amount"] == 4814.41
+    assert out["unit"] == "credits"
+    # 只读：一次 GET、带签名头、不带 body
+    assert [c["method"] for c in seen] == ["GET"]
+    assert seen[0]["url"].endswith("/snap-manager/v1/statistics/plugin")
+    assert "Authorization" in seen[0]["headers"]
+    # 签名材料不许出现在 detail 里（AK/SK 一个字都不许回显）
+    assert "AKIDEXAMPLE" not in json.dumps(out, ensure_ascii=False)
+    assert "secret-key" not in json.dumps(out, ensure_ascii=False)
+
+
+def test_codearts_probe_without_credentials_is_uncertain(monkeypatch):
+    """没凭据 ⇒ `uncertain` 且点名 `token_env`（「没料必须说不知道」的原始意图）。"""
+    for name in ("CODEARTS_CLI_AK", "CODEARTS_CLI_SK", "TF_CODEARTS_AK", "TF_CODEARTS_SK"):
+        monkeypatch.delenv(name, raising=False)
+    platforms = pa.load_platforms()
+
+    def boom(method, url, headers, body):
+        raise AssertionError("没凭据不许发请求")
+
+    out = pa.probe_account(_acc("codearts"), platforms["codearts"], fetch=boom)
+    assert out["kind"] == "uncertain"
+    assert "CODEARTS_CLI_AK" in out["detail"] and "CODEARTS_CLI_SK" in out["detail"]
+
+
+@pytest.mark.parametrize(
+    ("status", "text", "expect"),
+    [
+        (401, "unauthorized", "failed"),
+        (403, "forbidden", "failed"),
+        (429, "too many", "uncertain"),
+        (500, "boom", "uncertain"),
+        (404, "gone", "not-supported"),
+    ],
+)
+def test_codearts_probe_maps_transport_codes(monkeypatch, status, text, expect):
+    """401/403 ⇒ failed；429/5xx/网络不明 ⇒ uncertain 且**不重放**；404 ⇒ not-supported。"""
+    _codearts_env(monkeypatch)
+    platforms = pa.load_platforms()
+    calls: list[str] = []
+
+    def fetcher(method, url, headers, body):
+        calls.append(url)
+        return status, text
+
+    out = pa.probe_account(_acc("codearts"), platforms["codearts"], fetch=fetcher)
+    assert out["kind"] == expect, out
+    assert len(calls) == 1, "读出坏结论也不许重放"
+    if expect == "uncertain":
+        assert "不重放" in out["detail"]
+
+
+def test_codearts_probe_network_error_is_uncertain(monkeypatch):
+    """网络不明（`NetworkError`）⇒ uncertain，不重放。"""
+    _codearts_env(monkeypatch)
+    platforms = pa.load_platforms()
+    calls: list[str] = []
+
+    def fetcher(method, url, headers, body):
+        calls.append(url)
+        raise pa._ck().NetworkError("timed out")
+
+    out = pa.probe_account(_acc("codearts"), platforms["codearts"], fetch=fetcher)
+    assert out["kind"] == "uncertain"
+    assert "不重放" in out["detail"]
+    assert len(calls) == 1
+
+
+def test_codearts_probe_shape_changed_is_uncertain(monkeypatch):
+    """读到了但没有 total 那条 metric（形状变了）⇒ uncertain，**不当 0**。"""
+    _codearts_env(monkeypatch)
+    platforms = pa.load_platforms()
+    body = dict(REAL_CODEARTS_PACKAGE, metrics=[{"name": "usageBasicPackageCredit"}])
     out = pa.probe_account(
-        _acc("codearts"), platforms["codearts"], fetch=lambda u, t: (200, {"total": 1}, "")
+        _acc("codearts"), platforms["codearts"], fetch=lambda *a: (200, json.dumps(body))
     )
     assert out["kind"] == "uncertain"
-    assert "签名" in out["detail"]
+    assert "usageTotalPackageCredit" in out["detail"]
+    assert "used_percent" not in out
 
 
 # ---------------------------------------------------------------- ⑮ 本卡不写
@@ -631,6 +757,95 @@ def test_record_probe_result_only_touches_observed_at_and_samples(patched, tmp_p
 
     # ④ 账本确实落盘了（不是只改内存）
     assert patched.read_bytes() != raw_before
+
+
+def test_record_probe_result_writes_used_percent_for_ok(patched):
+    """卡 E97 ③：`kind=="ok"` 且带 `used_percent` ⇒ 写进 `[account.quota]`，值 46.51。
+
+    ★ 为什么值当测：`used_percent` 在 E97 之前**全仓零写方**（账本里永远是「未观测」），
+      所以「写进去以后还能被 `load_ledger()` 读回来」这件事从没被验证过；写坏了账本
+      在仓外，没有 git 能 checkout 回来。
+    """
+    before = pa.load_ledger(patched)
+    stamp_now = datetime(2026, 11, 9, 12, 0, 0, tzinfo=pa.TZ)
+    rows = [
+        {
+            "id": "codearts-1",
+            "platform": "codearts",
+            "kind": "ok",
+            "used_percent": 46.51,
+            "amount": 4814.41,
+            "unit": "credits",
+        }
+    ]
+    pa.record_probe_result(patched, before, rows, now=stamp_now)
+
+    after = pa.load_ledger(patched)  # ① 写坏了这里就炸
+    quota = {a["id"]: a for a in after["account"]}["codearts-1"]["quota"]
+    assert quota["used_percent"] == 46.51
+    # ② amount 仍然不许被探测结果改写（余额归人/别的闸，E97 只开 used_percent 这一格）
+    assert quota["amount"] == 12
+
+    # ③ 再跑一次不重复长键（TOML 里同键写两遍会直接读不回来）
+    pa.record_probe_result(patched, after, rows, now=stamp_now)
+    again = pa.load_ledger(patched)
+    quota2 = {a["id"]: a for a in again["account"]}["codearts-1"]["quota"]
+    assert quota2["used_percent"] == 46.51
+    assert patched.read_text(encoding="utf-8").count("used_percent") == 1
+    # ④ samples 只按次数加，键集合不变
+    assert set(quota2) == set(quota) | {"samples", "observed_at"}
+    assert [s["kind"] for s in quota2["samples"]] == ["ok", "ok"]
+
+
+def test_record_probe_result_never_writes_or_deletes_used_percent_otherwise(patched):
+    """不确定 / 跳过 / 读坏的行 ⇒ **不写也不删**旧值（缺键仍是「未观测」）。"""
+    base = pa.load_ledger(patched)
+    stamp_now = datetime(2026, 11, 9, 12, 0, 0, tzinfo=pa.TZ)
+    # 先写一个真读数，再让后续的不确定行来「碰」它
+    pa.record_probe_result(
+        patched,
+        base,
+        [{"id": "codearts-1", "platform": "codearts", "kind": "ok", "used_percent": 46.51}],
+        now=stamp_now,
+    )
+    seeded = pa.load_ledger(patched)
+    assert {a["id"]: a for a in seeded["account"]}["codearts-1"]["quota"]["used_percent"] == 46.51
+
+    for kind in ("uncertain", "skipped", "failed", "not-supported", "unknown-platform"):
+        pa.record_probe_result(
+            patched,
+            seeded,
+            [{"id": "codearts-1", "platform": "codearts", "kind": kind, "detail": "x"}],
+            now=stamp_now,
+        )
+        kept = {a["id"]: a for a in pa.load_ledger(patched)["account"]}
+        assert kept["codearts-1"]["quota"]["used_percent"] == 46.51, f"{kind} 把旧读数删了"
+
+
+def test_record_probe_result_does_not_invent_used_percent_for_other_platforms(patched):
+    """其它平台的 ok 行（没带 used_percent）⇒ 账本里仍然**没有**这个键。"""
+    before = pa.load_ledger(patched)
+    pa.record_probe_result(
+        patched,
+        before,
+        [{"id": "wb-1", "platform": "workbuddy", "kind": "ok", "amount": 7}],
+        now=datetime(2026, 11, 9, 12, 0, 0, tzinfo=pa.TZ),
+    )
+    after = pa.load_ledger(patched)
+    assert "used_percent" not in {a["id"]: a for a in after["account"]}["wb-1"]["quota"]
+
+
+@pytest.mark.parametrize("value", [100.5, -0.5, "46.5", True, float("nan")])
+def test_record_probe_result_refuses_out_of_range_used_percent(patched, value):
+    """写前走 `_check_account()` 的范围校验：越界 / 不是数 ⇒ `LedgerError`，账本一个字节都不变。"""
+    before = pa.load_ledger(patched)
+    raw = patched.read_bytes()
+    rows = [{"id": "codearts-1", "platform": "codearts", "kind": "ok", "used_percent": value}]
+    stamp_now = datetime(2026, 11, 9, 12, 0, 0, tzinfo=pa.TZ)
+    with pytest.raises(pa.LedgerError) as ei:
+        pa.record_probe_result(patched, before, rows, now=stamp_now)
+    assert "used_percent" in str(ei.value)
+    assert patched.read_bytes() == raw
 
 
 def test_record_probe_result_refuses_unknown_source_with_amount(patched, tmp_path):

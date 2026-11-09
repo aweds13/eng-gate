@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
@@ -287,6 +288,23 @@ def _read_num(source: Mapping[str, object], key: str) -> float:
     return 0.0
 
 
+def _read_finite(source: Mapping[str, object], key: str) -> float | None:
+    """取**有限**数字；缺失/布尔/不可解析 ⇒ ``None``（不伪装成 0，0 是合法读数）。"""
+    value = source.get(key)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str) and value.strip():
+        try:
+            number = float(value)
+        except ValueError:
+            return None
+    else:
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _read_bool(source: Mapping[str, object], key: str) -> bool:
     value = source.get(key)
     if isinstance(value, bool):
@@ -472,6 +490,71 @@ def codearts_account(
         "GET", CODEARTS_BASE + CODEARTS_PACKAGE_PATH, credential, fetcher
     )
     return _codearts_unwrap(status, text)
+
+
+def _codearts_total_metric(package: Mapping[str, object] | None) -> Mapping[str, object] | None:
+    """``metrics[]`` 里 ``name == CODEARTS_TOTAL_METRIC`` 那一条 —— **只此一条**（卡 E97）。
+
+    basic / ondemand / bonus 是构成明细，真机上至少一类与 total 同值（2026-11-09 实测：
+    bonus 与 total 同为 9000 / 4185.59 / 4814.41，basic 与 ondemand 是 0）。所以百分比与
+    余额都只认 total 这一条，分类**不参与任何求和** —— 求和会把用量放大成两三倍。
+    """
+    if not isinstance(package, Mapping):
+        return None
+    metrics = package.get("metrics")
+    if not isinstance(metrics, list):
+        return None
+    for item in metrics:
+        if isinstance(item, Mapping) and item.get("name") == CODEARTS_TOTAL_METRIC:
+            return item
+    return None
+
+
+def codearts_package_used(package: Mapping[str, object] | None) -> float | None:
+    """从 ``statistics/plugin`` 的 ``metrics[]`` 读**套餐已用百分比**（纯函数，只读）。
+
+    口径（卡 E97，以真机读数为准）：
+
+    * **只认** ``usageTotalPackageCredit`` 那一条，取
+      ``package_credit_used / package_credit_amount``；两值都必须是有限数、
+      ``amount > 0``、``0 <= used <= amount``，任何一条不满足就返回 ``None``
+      （= 不知道），**不猜**。
+    * **绝不**把 basic / ondemand / bonus 相加。今日实测 basic 与 ondemand 都是 0，只有
+      bonus 与 total 同值；立卡时记的是「三类都与 total 同值」。两种形状下求和都会造数，
+      所以结论与形状无关：只认 total。参考实现（
+      ``gates/diag/repos/ref/dsh-codearts-auth/src_codearts-credits.ts`` 的
+      ``parseCreditBalance``）同样只拿 total 那一条，分类只当构成明细。
+    * 百分比没有可加的口径，所以 total 那条缺失时**不回退**到分类求和 ——
+      与「余额」的算法不同，这里回退只会造数。
+
+    返回值是**百分比**（``used / amount * 100``），真机实测 46.50655555555556。
+    """
+    item = _codearts_total_metric(package)
+    if item is None:
+        return None
+    amount = _read_finite(item, "package_credit_amount")
+    used = _read_finite(item, "package_credit_used")
+    if amount is None or used is None:
+        return None
+    if amount <= 0 or used < 0 or used > amount:
+        return None
+    return used / amount * 100.0
+
+
+def codearts_package_remain(package: Mapping[str, object] | None) -> float | None:
+    """total 那条的 ``package_credit_remain`` —— **余额口径**（卡 E97 判据 2 的 ``amount``）。
+
+    卡规格把 ``amount`` 写成「积分余额」，本仓 ``probe_account()`` 的 ``amount`` 也一直是余额口径
+    （``record_probe_result()`` 的 docstring 明写「``amount`` 是余额口径」）⇒ 取 remain，
+    **不取** ``package_credit_amount``（那是套餐总额）。
+
+    读不到 / 不是有限数 ⇒ ``None``（= 不知道）。不从 amount 与 used 反算：上游既然给了这一格，
+    就以它为准；没给就是没读到。
+    """
+    item = _codearts_total_metric(package)
+    if item is None:
+        return None
+    return _read_finite(item, "package_credit_remain")
 
 
 def codearts_activities(

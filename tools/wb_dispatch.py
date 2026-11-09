@@ -137,6 +137,8 @@ from pool.model_registry import (  # noqa: E402 —— 一层注册表 + 按池�
     default_model_for,
     effective_allowed_for,
     get_adapter,
+    id_names,
+    load_registry,
     minimum_ruleset_text,
     narrow_for_caller,
     resolve_model,
@@ -1651,6 +1653,82 @@ def usage_summary(card: str) -> str:
     return " ｜ ".join(parts)
 
 
+# ★ 卡 E97：模型名的别名表 —— 只在**第一次**调用时读盘（模块级缓存），读不到就一直是 None。
+_ALIAS_TABLE: dict[str, tuple[str, ...]] | None = None
+_ALIAS_TABLE_LOADED = False
+
+
+def _alias_table() -> dict[str, tuple[str, ...]] | None:
+    """注册表里每个模型写法的索引（小写 → 该条目的别名组）；读不到 ⇒ `None`。
+
+    ★ 只在第一次调用时读盘：`load_registry()` 之后结果就钉在模块里（真实进程里注册表
+    不会半路变）。给测试的清缓存钩子是 `reset_model_aliases()`。
+    """
+    global _ALIAS_TABLE, _ALIAS_TABLE_LOADED
+    if _ALIAS_TABLE_LOADED:
+        return _ALIAS_TABLE
+    _ALIAS_TABLE_LOADED = True
+    try:
+        entries = load_registry()
+    except (ModelRegistryError, OSError):
+        _ALIAS_TABLE = None
+        return None
+    table: dict[str, tuple[str, ...]] = {}
+    for entry in entries:
+        names = id_names(str(entry.id))
+        for alias in names:
+            key = alias.strip().lower()
+            if key and key not in table:
+                table[key] = names
+    _ALIAS_TABLE = table
+    return table
+
+
+def reset_model_aliases() -> None:
+    """清掉 `_alias_table()` 的缓存（测试用；下次调用会重新读盘）。"""
+    global _ALIAS_TABLE, _ALIAS_TABLE_LOADED
+    _ALIAS_TABLE = None
+    _ALIAS_TABLE_LOADED = False
+
+
+def model_aliases(name: str) -> tuple[str, ...]:
+    """一个模型名的全部写法：原形 + 别名（卡 E97，`usage_in()` 归一口径的唯一实现）。
+
+    三档口径**不另写一套**，直接复用 `tools/pool/model_registry.py::id_names`（原样 /
+    最后一个 `/` 之后 / 第一个 `/` 之后）；注册表读得到时再把同一个模型在表里的其它写法
+    补进来。★ **大小写不敏感**：注册表里是 `huaweicloud-maas/GLM-5.2`，而
+    `gates/diag/wb-usage.jsonl` 的 `模型` 字段写的是小写 `glm-5.2` —— 不归一就恒 0；
+    反过来 `glm-5.2` 也要能命中写成 `GLM-5.2` 的行。
+
+    注册表读不到 ⇒ 只回 `id_names(name)` 那三档（`_matches_model()` 会退回字面相等）。
+    """
+    base = str(name or "").strip()
+    if not base:
+        return ()
+    seen: list[str] = []
+    for alias in id_names(base):
+        if alias not in seen:
+            seen.append(alias)
+    table = _alias_table()
+    if table is not None:
+        for alias in list(seen):
+            for extra in table.get(alias.strip().lower(), ()):
+                if extra not in seen:
+                    seen.append(extra)
+    return tuple(seen)
+
+
+def _matches_model(row_name: object, model: str) -> bool:
+    """用量行的 `模型` 是否算这个模型：任一别名命中即算；注册表读不到 ⇒ 字面相等。"""
+    raw = str(row_name or "").strip()
+    if not raw:
+        return False
+    if _alias_table() is None:  # fail-open：注册表坏了不许一律回 0
+        return raw == model.strip()
+    wanted = {alias.lower() for alias in model_aliases(model)}
+    return raw.lower() in wanted
+
+
 def usage_in(model: str, start: datetime, end: datetime, *,
              root: Path = ROOT) -> tuple[int, float]:
     """按**模型**与时间区间 `[start, end)` 汇总 `gates/diag/wb-usage.jsonl`（卡 A334 · T-AG536）。
@@ -1675,6 +1753,11 @@ def usage_in(model: str, start: datetime, end: datetime, *,
       猜错会系统性少算或多算 ⇒ **不做减法**，原样相加并在文档里说清（这是「没核到的」一条）。
     * **金额恒 0.0**：仓里没有计价表（`model-registry.toml` 里 `price|cost|单价` 零命中），
       第二档不编单价，等有计价表再填。
+    * **模型名按别名归一（卡 E97）**：行里的 `模型` 与入参只要落在同一组别名里就算命中
+      （`model_aliases()`：`id_names` 的三档 + 注册表里的其它写法，**大小写不敏感**）。
+      为什么必须有：`wb-usage.jsonl` 写的是小写 `glm-5.2`，注册表里是
+      `huaweicloud-maas/GLM-5.2` —— 字面比就是恒 0。注册表读不到 ⇒ 退回**字面相等**
+      （fail-open：注册表坏了不许把用量一律算成 0）。别名表只在第一次调用时读盘。
     * 读不出来 / 没有这个文件 / 某行 JSON 坏 / `开始` 解不开 ⇒ **跳过或回 (0, 0.0)**，
       不猜、不抛（与 `usage_summary()` 的「读不出来就空串」同一种态度）。
     """
@@ -1712,7 +1795,7 @@ def usage_in(model: str, start: datetime, end: datetime, *,
             continue
         if not isinstance(row, dict):
             continue
-        if row.get("模型") != model:
+        if not _matches_model(row.get("模型"), model):
             continue
         verdict = f"{row.get('判决') or ''} {row.get('退出码') or ''}".lower()
         if "dry" in verdict:

@@ -21,6 +21,9 @@ r"""整窗估算与「五因」（卡 A334 · T-AG536）的判据钉子。
 | ⑦ 后三因 | `log` / `none` / `credits` 按 magpie 赋值顺序（后写覆盖先写） | 若自创优先级 |
 | ⑧ 区间读取 | `+08:00`、`[start, end)`、按模型、排除 dry run | 若按 UTC 猜或右闭 |
 | ⑨ 前挡与成功 | 无限额度 / 溢出池无名 / 家庭号 / 池不符 / 区间不含此刻 ⇒ `"-"` | 不估被判成功 |
+| ⑩ 模型名归一 | 注册表写法与日志写法算同一个模型 | 若只比字面 ⇒ 带斜杠的名字恒 0 |
+
+⑩ 的具体两种写法：注册表 `huaweicloud-maas/GLM-5.2`，日志 `glm-5.2`（大小写也不一定一样）。
 
 ★ 一条真实钟表都不碰：`read_at` / `first_log_at` / 区间端点全是写死的常数（固定 `NOW`）。
 """
@@ -277,6 +280,33 @@ def test_usage_in_reads_local_time_and_half_open_range(tmp_path):
     # 入参没时区 ⇒ 直接 TypeError（猜时区比报错糟）
     with pytest.raises(TypeError):
         wb_dispatch.usage_in("glm-5.3-flash", datetime(2026, 9, 26, 20, 0), end, root=tmp_path)
+
+
+def test_usage_in_counts_registry_name_and_log_name_as_one_model(tmp_path):
+    """⑩ 日志写小写裸名、注册表写 `provider/Model`：两种写法必须回同一份 tokens。
+
+    这是卡 E97 的真实缺口：`gates/diag/wb-usage.jsonl` 的行写 `glm-5.2`，
+    而调用方（整窗估算）拿的是注册表里的 `huaweicloud-maas/GLM-5.2` ——
+    只比字面的话分子恒 0，看上去像「这个模型没用量」。
+    """
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    rows = [
+        dict(_usage_rows()[0], **{"模型": "glm-5.2"}),  # 日志的写法（小写裸名）
+        dict(_usage_rows()[0], **{"模型": "GLM-5.2"}),  # 别人手改过的写法
+        dict(_usage_rows()[0], **{"模型": "huaweicloud-maas/GLM-5.2"}),  # 注册表的写法
+        dict(_usage_rows()[3]),  # other-model：一个 token 都不许算进来
+    ]
+    text = "\n".join(json.dumps(r, ensure_ascii=False) for r in rows)
+    (diag / "wb-usage.jsonl").write_text(f"{text}\n", encoding="utf-8")
+
+    start = datetime(2026, 9, 26, 20, 0, tzinfo=TZ)
+    end = datetime(2026, 9, 26, 22, 0, tzinfo=TZ)
+    want = (3 * 35, 0.0)
+    for name in ("glm-5.2", "GLM-5.2", "huaweicloud-maas/GLM-5.2"):
+        assert wb_dispatch.usage_in(name, start, end, root=tmp_path) == want, name
+    # 归一不是模糊匹配：名字只差一段的不算同一个模型
+    assert wb_dispatch.usage_in("glm-5.3", start, end, root=tmp_path) == (0, 0.0)
 
 
 # ---------------------------------------------------------------- ⑨ 前挡与成功
