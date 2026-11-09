@@ -1,0 +1,10 @@
+[entries."T-AG610"]
+id = "T-AG610"
+title = "契约对账表装牙：逐格现读、漂了就红、表替工具撒不了谎"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "test:test_contract_doc_table.py::test_cli_check_doc_is_green_on_the_real_table",
+]
+gaps = "1. 读数块里那行 `分布：judge_ok … / judge_red …` 不归本卡的 `--check-doc` 核：它是**跑后**读数（要真跑 13 条判据才算得出），静态表证明不了。想核它就得让表格自检也跑一遍全量判据（那正是它要避免的事）。指针 `tools/contract_audit.py`2. 表里「反例钉子」那段只列了 ①–⑥，而 `tests/test_contract_audit.py` 真数已是 12 条、本卡又新增 21 条 —— 条数改对了，但「哪条对应哪个反例」这张对照表仍是旧的六行，没有逐条摊开。指针 `复盘/契约-判据对账.md`3. `tools/contract_audit.py` 自己**不在任何门里**（它 rc 恒非零，因为有 3 条诚实的 no_judge），所以 `--check-doc` 今天靠 `tests/test_contract_doc_table.py` 这 21 条钉子守着，不靠门表 —— 哪天有人跳过测试只跑门，表漂了照样绿。指针 `tests/test_contract_doc_table.py`"
+

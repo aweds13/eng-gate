@@ -33,11 +33,31 @@ r"""契约段 ↔ 判据的对账器（卡 217 · T-G330）。
 
 ★ 不许做成「扫一遍文档就算完」：`judge:` 指到的判据**必须真能执行**，指到不存在的 ⇒ 红。
 
+## 表格自检（`--check-doc`，卡 E101 · T-AG610）
+
+`复盘/契约-判据对账.md` 那张表是**人**读的当前真值，而它以前没人守：测试只核 13 / judge_ok 10 /
+no_judge 3 三个总数，表里一格都不核（实测漂了 9 处）。`--check-doc` 把表逐格与**活体**比对，
+**不跑判据**（秒级）：
+
+- **源格** `path:line`：行号必须 == `find_clause()` 现读的行号，路径也逐字相同；
+- **原句格**：归一（去 `**` / 反引号 / 行首 `>` / 空白压一个空格）后必须是 live 原句归一后的
+  **子串**，且长度 ≥ `MIN_EXCERPT`（一个词冒充不算）；
+- **判据格**：pytest ⇒ `tests/…::case`（带 `tests/` 前缀）；cmd ⇒ argv 去掉 `python -X utf8`
+  前缀后的 join；允许「同 CX-0N」指向前一条（解析成那条的 live 值）；
+- **条数**：`### 有判据的（N 条 · judge_ok）` / `### 只有话的（M 条 · no_judge）` / 读数块首行
+  `…：K 条 ===` 分别 == 有 judge 的条数 / 有 no_judge 的条数 / `len(CONTRACTS)`。
+
+★ **不归它核的那一格**：读数块里的 `分布：judge_ok … / judge_red …` 是**跑后**读数
+（要真跑 13 条判据才算得出）—— 那是本工具默认模式的输出，不是表能静态证明的东西。
+
+退出码：全对上 0 / 有漂 1（逐条点名 CX 与行号）/ 表读不出来 2（缺段、行列数不符）。
+
 用法：
 
     python -X utf8 tools/contract_audit.py            # 对账（人读报告）
     python -X utf8 tools/contract_audit.py --json     # 结构化输出
     python -X utf8 tools/contract_audit.py --report   # 同默认（人读报告）
+    python -X utf8 tools/contract_audit.py --check-doc  # 只核对账表（不跑判据）
 """
 
 from __future__ import annotations
@@ -45,6 +65,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -63,6 +84,12 @@ NO_WINDOW: dict[str, int] = {"creationflags": 0x08000000} if os.name == "nt" els
 
 #: 跑判据的硬超时（秒）—— 防一个判据卡死把整趟对账挂死。
 JUDGE_TIMEOUT = 180.0
+
+#: 人读的那张对账表（`--check-doc` 逐格核它；口径见模块 docstring）。
+DOC_TABLE = "复盘/契约-判据对账.md"
+
+#: 原句格最短长度：短于它就算「一个词冒充原句」，不承认（卡 E101）。
+MIN_EXCERPT = 8
 
 
 # ------------------------------------------------------------------ 契约段清单
@@ -428,6 +455,253 @@ def audit(contracts: Sequence[Contract], root: Path = ROOT) -> list[ClauseResult
     return results
 
 
+# ------------------------------------------------------------------ 表格自检
+#
+# 口径只在模块 docstring 写一份（§表格自检）。这里是实现：不跑判据，只读表 + 现读源文档。
+
+
+class TableError(Exception):
+    """表本身读不出来（缺段 / 缺表头 / 行列数不符）—— 与「漂了」不是一回事。"""
+
+
+@dataclass(frozen=True)
+class TableRow:
+    """对账表里的一行（一条契约段）。"""
+
+    cid: str
+    source: str          # 反引号里的 path:line
+    excerpt: str         # 原句（节选）格
+    judge: str           # 判据格；no_judge 行是「为什么现在装不了」那一格
+    section: str         # "judge" | "no_judge"
+    line: int            # 表里的物理行号（报错点名用）
+
+
+_SECTION_RE = {
+    "judge": re.compile(r"^### 有判据的（(?P<n>\d+) 条 · judge_ok）\s*$"),
+    "no_judge": re.compile(r"^### 只有话的（(?P<n>\d+) 条 · no_judge）\s*$"),
+}
+_TOTAL_RE = re.compile(r"：\s*(?P<n>\d+)\s*条\s*===")
+_CELLS = {"judge": 5, "no_judge": 4}
+_SECTION_NAME = {"judge": "有判据的", "no_judge": "只有话的"}
+_MARKUP_RE = re.compile(r"[*`]+")
+_SPACES_RE = re.compile(r"\s+")
+
+
+def _cells(line: str) -> list[str]:
+    """把一行 markdown 表格切成格（去掉首尾那对空壳）。"""
+    body = line.strip()
+    if body.startswith("|"):
+        body = body[1:]
+    if body.endswith("|"):
+        body = body[:-1]
+    return [c.strip() for c in body.split("|")]
+
+
+def _unquote(cell: str) -> str:
+    """格子里若是整格包着反引号，就去掉它（表里的路径 / 判据名都这么写）。"""
+    s = cell.strip()
+    if len(s) >= 2 and s[0] == "`" and s[-1] == "`":
+        return s[1:-1].strip()
+    return s
+
+
+def parse_table(text: str) -> tuple[list[TableRow], dict[str, int], int]:
+    """读那张对账表。返回 (行, {段: 标题写的条数}, 读数块首行写的总条数)。
+
+    读不出来就抛 TableError（缺段 / 缺表头 / 行列数不符 / 缺读数块），**不猜**。
+    """
+    rows: list[TableRow] = []
+    counts: dict[str, int] = {}
+    total: int | None = None
+    section: str | None = None
+    header_seen = False
+    for i, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        matched = ""
+        for key, pat in _SECTION_RE.items():
+            m = pat.match(stripped)
+            if m:
+                matched = key
+                counts[key] = int(m.group("n"))
+                section = key
+                header_seen = False
+                break
+        if matched:
+            continue
+        if stripped.startswith("## "):
+            section = None
+            continue
+        if section is not None:
+            if stripped.startswith("| ID |"):
+                header_seen = True
+                continue
+            if stripped.startswith("|---"):
+                continue
+            if stripped.startswith("| CX-"):
+                if not header_seen:
+                    raise TableError(f"第 {i} 行：这张表缺表头（应有「| ID | 源 | …」）")
+                cells = _cells(stripped)
+                want = _CELLS[section]
+                if len(cells) != want:
+                    raise TableError(
+                        f"第 {i} 行：格数不对 —— 这一段应是 {want} 格，这一行切出 {len(cells)} 格"
+                    )
+                rows.append(
+                    TableRow(
+                        cid=cells[0].strip(),
+                        source=_unquote(cells[1]),
+                        excerpt=cells[2],
+                        judge=cells[3],
+                        section=section,
+                        line=i,
+                    )
+                )
+        if total is None:
+            m = _TOTAL_RE.search(stripped)
+            if m:
+                total = int(m.group("n"))
+    for key in _SECTION_RE:
+        if key not in counts:
+            raise TableError(f"缺段：找不到「### {_SECTION_NAME[key]}」这一段")
+    if total is None:
+        raise TableError("缺读数块：找不到「…：N 条 ===」那一行")
+    return rows, counts, total
+
+
+def norm_excerpt(text: str) -> str:
+    """原句归一：去 **粗体** / 反引号，去行首 >，空白压一个空格（口径见模块 docstring）。"""
+    s = _MARKUP_RE.sub("", text)
+    s = s.lstrip("> ").strip()
+    return _SPACES_RE.sub(" ", s).strip()
+
+
+def _cmd_cell(c: Contract) -> str:
+    """cmd 判据在表里应写的字样：argv 去掉 python -X utf8 前缀后 join。"""
+    argv = list(c.judge[1]) if c.judge else []
+    while len(argv) >= 3 and argv[0] == "python" and argv[1] == "-X" and argv[2] == "utf8":
+        argv = argv[3:]
+    return " ".join(argv)
+
+
+def _live_label(c: Contract) -> str:
+    """这条契约段在表里该写的判据字样（pytest 带 tests/ 前缀；cmd 去解释器前缀）。"""
+    if c.judge is None:
+        return ""
+    return c.judge[1] if c.judge[0] == "pytest" else _cmd_cell(c)
+
+
+def _say(cid: str, row: TableRow, what: str, want: str, got: str) -> str:
+    return f"{cid} 第 {row.line} 行：{what} 应为 `{want}`，实际 `{got}`"
+
+
+def check_doc(
+    doc: Path | str, contracts: Sequence[Contract], root: Path | str = ROOT
+) -> tuple[int, list[str]]:
+    """逐格核对账表与 contracts 的现读值。返回 (退出码, 问题清单)。
+
+    退出码：0 全对上 / 1 有漂（逐条点名）/ 2 表本身读不出来（缺段、行列数不符）。
+    """
+    doc_path = Path(doc)
+    root_path = Path(root)
+    try:
+        text = doc_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return 2, [f"表读不出来：{doc_path}（{exc.__class__.__name__}）"]
+    try:
+        rows, counts, total = parse_table(text)
+    except TableError as exc:
+        return 2, [str(exc)]
+
+    problems: list[str] = []
+    by_id: dict[str, list[TableRow]] = {}
+    for row in rows:
+        by_id.setdefault(row.cid, []).append(row)
+    cmap = {c.cid: c for c in contracts}
+
+    for c in contracts:
+        got_rows = by_id.get(c.cid, [])
+        if not got_rows:
+            where = _SECTION_NAME["judge" if c.judge else "no_judge"]
+            problems.append(f"{c.cid}：表里没有这一条（该在「{where}」段）")
+            continue
+        if len(got_rows) > 1:
+            at = "、".join(f"第 {r.line} 行" for r in got_rows)
+            problems.append(f"{c.cid}：表里出现了 {len(got_rows)} 次（{at}）—— 一条只许一行")
+            continue
+        row = got_rows[0]
+        want_section = "judge" if c.judge else "no_judge"
+        if row.section != want_section:
+            kind = "有判据" if c.judge else "只有话"
+            problems.append(
+                f"{c.cid} 第 {row.line} 行：段落不对 —— 它{kind}，"
+                f"却写在「{_SECTION_NAME[row.section]}」段"
+            )
+        found = find_clause(root_path / c.source[0], c.source[1])
+        if found is None:
+            problems.append(
+                f"{c.cid} 第 {row.line} 行：源锚点在 {c.source[0]} 里找不到 ⇒ 契约段本身漂了"
+            )
+            continue
+        line_no, live_text = found
+        want_src = f"{c.source[0]}:{line_no}"
+        got_src = _unquote(row.source)
+        if got_src != want_src:
+            problems.append(_say(c.cid, row, "源", want_src, got_src))
+        got_ex = norm_excerpt(row.excerpt)
+        live_ex = norm_excerpt(live_text)
+        if len(got_ex) < MIN_EXCERPT:
+            problems.append(
+                f"{c.cid} 第 {row.line} 行：原句太短（{len(got_ex)} < {MIN_EXCERPT}）"
+                f"—— 一个词冒充不了原句：「{got_ex}」"
+            )
+        elif got_ex not in live_ex:
+            problems.append(
+                f"{c.cid} 第 {row.line} 行：原句不是源文档那一行的一部分（归一后比对）"
+            )
+        got_label = _unquote(row.judge)
+        if c.judge is None:
+            continue  # 只有话：那一格是理由散文，不核
+        if got_label.startswith("同 "):
+            ref = got_label[2:].strip()
+            target = cmap.get(ref)
+            if target is None or target.judge is None:
+                problems.append(
+                    f"{c.cid} 第 {row.line} 行：判据格写「同 {ref}」，但 {ref} 不存在或没有判据"
+                )
+            elif _live_label(target) != _live_label(c):
+                problems.append(
+                    _say(
+                        c.cid,
+                        row,
+                        f"判据（「同 {ref}」指过去的那条对不上）",
+                        _live_label(c),
+                        _live_label(target),
+                    )
+                )
+            continue
+        want_label = _live_label(c)
+        if got_label != want_label:
+            problems.append(_say(c.cid, row, "判据", want_label, got_label))
+
+    for row in rows:
+        if row.cid not in cmap:
+            problems.append(f"{row.cid} 第 {row.line} 行：CONTRACTS 里没有这一条（表多写了）")
+
+    want_judge = sum(1 for c in contracts if c.judge is not None)
+    want_no = len(contracts) - want_judge
+    if counts.get("judge") != want_judge:
+        problems.append(
+            f"「有判据的」段标题写 {counts.get('judge')} 条，实际有 judge 的 {want_judge} 条"
+        )
+    if counts.get("no_judge") != want_no:
+        problems.append(
+            f"「只有话的」段标题写 {counts.get('no_judge')} 条，实际只有话的 {want_no} 条"
+        )
+    if total != len(contracts):
+        problems.append(f"读数块首行写 {total} 条，实际 CONTRACTS 有 {len(contracts)} 条")
+    return (1 if problems else 0), problems
+
+
 def _judge_label(c: Contract) -> str:
     if c.judge is None:
         return f"no_judge: {c.no_judge}"
@@ -472,13 +746,46 @@ def print_report(results: list[ClauseResult], contracts: Sequence[Contract]) -> 
         print()
 
 
+def print_doc_check(problems: list[str], doc: Path) -> None:
+    """人读的表格自检报告。"""
+    if not problems:
+        print(f"[OK ] 对账表逐格对上（{doc}：源行号 / 原句子串 / 判据标签 / 段标题条数）")
+        return
+    print(f"[FAIL] 对账表与现读值不一致（{len(problems)} 处）：", flush=True)
+    for line in problems:
+        print(f"  · {line}")
+    print("  ⇒ 改表，或改 CONTRACTS；别让表替工具撒谎。", flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="契约段 ↔ 判据的对账器：扫文档里的契约段，对每条当场跑判据贴读数"
     )
     parser.add_argument("--json", action="store_true", help="结构化输出（JSON 数组）")
     parser.add_argument("--report", action="store_true", help="人读报告（默认）")
+    parser.add_argument(
+        "--check-doc",
+        action="store_true",
+        help="只核对账表逐格（源行号 / 原句子串 / 判据标签 / 段标题条数），**不跑判据**",
+    )
+    parser.add_argument(
+        "--doc",
+        default=DOC_TABLE,
+        help=f"要对账的那份表（默认 {DOC_TABLE}；相对路径按仓库根算）",
+    )
     args = parser.parse_args(argv)
+
+    if args.check_doc:
+        doc = Path(args.doc)
+        if not doc.is_absolute():
+            doc = ROOT / doc
+        rc, problems = check_doc(doc, CONTRACTS, ROOT)
+        if args.json:
+            print(json.dumps({"ok": rc == 0, "doc": str(doc), "problems": problems},
+                             ensure_ascii=False, indent=2))
+            return rc
+        print_doc_check(problems, doc)
+        return rc
 
     results = audit(CONTRACTS, ROOT)
 
