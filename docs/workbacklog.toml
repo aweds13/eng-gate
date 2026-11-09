@@ -5527,3 +5527,38 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E95"
+task = "T-AG604"
+title = "pool 打磨：把「不知道」和「知道」分开（选号 / 无价 / 静默空域）"
+tree = ".wt/E95"
+spec = "复盘/卡/卡E95-不知道与知道分开.md"
+files = [
+  "tools/pool/route.py",
+  "tools/pool/ledger_spend.py",
+  "tests/test_pool_route_unknown.py",
+  "tests/test_pool_ledger_spend.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡E95-不知道与知道分开.md"
+]
+depends = ["E94"]
+risk = "high"
+status = "pending"
+
+[[cards]]
+id = "E94"
+task = "T-AG603"
+title = "号池网关：把登录着的号变成同协议可调用的 API（magpie 移植）"
+tree = ".wt/E94"
+spec = "复盘/卡/卡E94-号池网关同协议直通.md"
+files = [
+  "tools/pool/gateway.py",
+  "tools/pool/platforms.toml",
+  "tests/test_pool_gateway.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡E94-号池网关同协议直通.md"
+]
+depends = []
+risk = "high"
+status = "pending"
