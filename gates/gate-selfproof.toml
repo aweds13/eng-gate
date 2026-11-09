@@ -90,6 +90,12 @@ reverse_case = "tests/test_check_skills_claims.py::test_missing_tool_is_named"
 why_no_case = ""
 since = "2026-10-27"
 
+[[gate]]
+name = "contract_doc_table"
+reverse_case = "tests/test_contract_doc_table_gate.py::test_the_registered_command_bites_on_a_drifted_table"
+why_no_case = ""
+since = "2026-11-10"
+
 # ── product 档（gates/defs/product_timeflow.py）─────────────────────────────
 [[gate]]
 name = "check_layers"

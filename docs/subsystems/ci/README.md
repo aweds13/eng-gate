@@ -8,7 +8,7 @@
 
 | 件 | 位置 | 职责 |
 |---|---|---|
-| 门表 | `gates/defs/{lang_python,contract,product_timeflow}.py` | **22** 道门的**定义**（命令/超时/说明）—— 真值以 `scripts/run_gates.py` 的 `GATE_PROFILES` 为准（`lang` 6 + `audit` 5 + `product` 11，去重 **22**；2026-10-27 实测）。门数会随卡增长：卡 F6 把 `docs` 门接进 `audit` 档（20→21），本批又把 `skills_claims` 接进来（21→22） |
+| 门表 | `gates/defs/{lang_python,contract,product_timeflow}.py` | 每道门的**定义**（命令/超时/说明）—— 真值与**门数**都以 `scripts/run_gates.py` 的 `GATE_PROFILES` 为准（现读 `build_jobs()`；2026-11-10 实测 `lang` 6 + `audit` 6 + `product` 11）。门数会随卡增长：卡 F6 把 `docs` 门接进 `audit` 档（20→21），本批把 `skills_claims` 接进来（21→22），卡 E104 又把 `contract_doc_table` 接进来（22→23） |
 | 编排 | `scripts/run_gates.py` | 选档、跑门、复用、封存（`seal()`）、落 `gates/last.json` |
 | 选档 | `gates/defs/domains.py` | 改动面 → 必需档（`--profiles auto`，fail closed） |
 | 落地链 | `tools/pool/landing.py` | 八步：迁树→文书→快门禁→全量→封存→白名单提交→审计→ff→复核 |
@@ -18,7 +18,7 @@
 
 口径：**判据住代码，技能只讲顺序**。这条不变。
 
-## 2. 度量（2026-10-30 实测，全量 22 道；门数现读 `scripts/run_gates.py` 的 `build_jobs()`，由 `tests/test_ci_docs_counts.py` 与真门表对账）
+## 2. 度量（2026-10-30 实测，全量 23 道；门数现读 `scripts/run_gates.py` 的 `build_jobs()`，由 `tests/test_ci_docs_counts.py` 与真门表对账）
 
 读数取**同一趟**：`gates/last.json`（`at = 2026-10-30T21:46:41`、`rev = 2fdaba1f`、
 `tree = 72a05a17`、4 worker、`pytest 4006 passed`）。`0 s` 表示那趟**复用**上次通过判定、
@@ -32,8 +32,9 @@
 | `pytest_chain` | 177.68 s | 慢 e2e 单独一道门跑（同源） |
 | `acceptance` | 19.62 s | 验收层 2 条（同源） |
 | `mypy` | 17.36 s | `src/` 全量型检查（同源） |
+| `contract_doc_table` | 0.2 s | 契约对账表逐格核（卡 E104 起；源：本卡落地前实测 `python -X utf8 tools/contract_audit.py --check-doc` 0.15 s，进门前没有这门所以那趟 `gates/last.json` 里没有它的 `seconds`） |
 | 其余 18 道 | 合计 40.71 s | 含 5 道复用（`ui_dom_probe` / `lf1_live` / `web_live` / `render` / `ui_flow`，各 0 s）；真跑的最大 `check_layers_selftest` 7.06 s、`audit` 6.58 s、`check_layers` 4.72 s、`ruff` 0.79 s（同源） |
-| **整趟** | **670.14 s ≈ 11.2 min** | 22 道逐门 `seconds` 相加（同源） |
+| **整趟** | **670.14 s ≈ 11.2 min** | 那趟全量门逐门 `seconds` 相加（同源；`contract_doc_table` 是 2026-11-10 才加的第 23 道，只多 0.2 s，没并进这个和） |
 
 落地尝试 8 次，**5 次失败在"走到那一步才说的规矩"**（缺文书、卡树祖先、spec 未跟踪、changelog 首行、队列缺 status、ruff 未用 import）。
 

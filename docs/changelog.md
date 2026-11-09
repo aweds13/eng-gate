@@ -13,6 +13,11 @@
 - `apply_strategy()` 先用 `parse_routing` 归一，再按**规范名**分派；`smart` 从此真的走 `smart_order`（早先与空串一起静默退恒等，等于 `--routing smart` 就是按列出顺序）。`BUILTIN` 七项**一个字没动** —— smart 是默认值，不是第八个内置策略。
 - `tools/pool/gateway.py` 的启动面不再 fail-open：`build_server()` 归一失败抛既有 `ConfigError`，`main()` 归一一遍再起服务 ⇒ 名字写错**退 2、一个端口都不绑**；`--routing` 补了 help（默认 `order`、空串 = `smart`、别名见 `route.ROUTING_ALIASES`）。请求路径上的 fail-open 保持不变（策略坏了不许变 500）。
 - 文档三处投影一次改完：`docs/subsystems/pool/modules.toml` 的 route.py duty/cli 从“零生产调用方”改成真值（网关调 `apply_strategy`/`parse_routing`）、gateway.py 的 cli 补 `--routing`；README 与 INDEX 由生成器重算。
+## 2026-11-10 T-AG613 契约对账表的尺子没人跑：接成第 23 道门 contract_doc_table（audit 档、不进 fast）
+- `gates/defs/contract.py` 追加 `("contract_doc_table", [PY, "-X", "utf8", "tools/contract_audit.py", "--check-doc"])`：只核表、不跑判据（0.2 s），进 audit 档、不进 fast 档 —— 之前「只改那张表」的卡落地时六个 audit 门没有一道读它。
+- `tests/test_contract_doc_table_gate.py`（本卡新建，4 条）：门逐字进 audit 档 / 跑注册那条 argv 在真表上 rc=0 / 同一条 argv 喂一张段标题写错的表必须 rc=1 并点名条数 / 自证台账那行指向的用例真存在（同一把尺子 `defines_case`）。
+- `gates/gate-selfproof.toml` 加第 23 行（`since = "2026-11-10"`，反向用例指向上面的坏表钉子），`tests/test_gate_selfproof_product.py` 的门数闸 22 → 23、函数名去掉 `all_22_doors`（名字里带数字也是会漂的第二真源）。
+- 五份文档投影一次改完：`docs/subsystems/ci/README.md`（§1 去掉写死的 22、§2 加 `contract_doc_table` 行且「其余」保持 18）/ `docs/subsystems/ci/测试流程.md`（表一按门表顺序补行、表二补处置）/ `复盘/门禁四要素.md`（第 23 行四要素）/ 两份 repo-bindings 改「2026-11-10 现读 23 道」/ `skills/README.md` 去掉写死的门数。
 ## 2026-11-09 T-BG011 把 pika 升级经验收成可复用规程，并让 L3 运行手册层第一次落地
 - 新建 `docs/runbooks/pika-升级规程.md`（九节 + 两个附录）：前置检查 → 三方比对 → 个性化行回填 → 技能替换 → 残留清理 → 验收读数 → 回滚，每步给命令形状与判据；§6 十九条坑每条带症状原文。
 - 为什么落 L3：`docs/文档架构.md:71/:86` 把 `docs/runbooks/` 列为「怎么起、怎么巡检、怎么落地」，但该目录从未存在过（`git ls-files docs/runbooks` 空）；操作规程属「动手时读」不属「回头看」，塞进 `skills/` 会把本机一次性迁移写成通用技能。

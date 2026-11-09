@@ -287,12 +287,15 @@ def test_card_e96_audit_gate_table_builds_without_skills(tmp_path: Path) -> None
     import json
 
     payload = json.loads(out.strip().splitlines()[-1])
+    # ★ 这一串 = audit 档的**确切组成**，门表加门时要一起改（卡 E104 加了 contract_doc_table）。
+    #   故意写成字面量：它要证明的是「临时树里构建出来的就是这几道」，不是「跟门表自己比」。
     assert payload["audit"] == [
         "audit",
         "invariants",
         "audit_titles",
         "docs",
         "skills_claims",
+        "contract_doc_table",
     ], payload
     # 没串到真仓库：ROOT 解析的是那棵临时树（否则这条钉的是本仓而不是「拿掉 skills/」）
     assert Path(payload["root"]).resolve() == root.resolve(), payload

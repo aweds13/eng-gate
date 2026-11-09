@@ -13,8 +13,8 @@
 > 3. **提交闸按域要档**（卡 A327）：`gates/defs/domains.py` 一张表算必需档，
 >    `last.json` 记 `profiles_run / required_profiles`；判不出或碰判据本体（`scripts/**` `tools/**` `gates/**`）
 >    仍强制全量。缺档提交会被 `wb_review` 点名拒。
->    ★ **门数不写死**：以 `python -X utf8 scripts/run_gates.py` 落盘的 `gates/last.json` 的 `gates[]` 条数为准
->    （**2026-10-28 现读 22 道**）。门表一变，任何写死了的老数字都在说错话。
+>    ★ **门数不写死**：以 `scripts/run_gates.py` 的 `GATE_PROFILES`（或它落盘的 `gates/last.json` 的 `gates[]` 条数）为准，
+>    要写就读一次、带上日期（卡 E104 之前这里写死过「2026-10-28 现读 22 道」，门表一变它就在说错话）。
 > 4. **派活即看守**（卡 E7）：`tools/wb_dispatch.py --execute` 起完工**自动**挂一份 `tools/wb_watch.py`
 >    （默认 `--watch one`；`--watch shared` = 全局一份、引用计数归 0 写 `batch-done`）。
 >    完工信号落 `gates/diag/wb-<卡>.done` + `gates/diag/notifications.jsonl`。

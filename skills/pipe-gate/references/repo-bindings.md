@@ -18,7 +18,7 @@ python -X utf8 scripts/run_gates.py --seal            # 只更新 last.json 的 
 
 - 产物：`gates/last.json`（判决）+ `gates/logs/<门名>.log`（逐门原始输出）。
 - 本仓门数是**现算**的，真源只有一处：`scripts/run_gates.py` 落盘的 `gates/last.json` 的 `gates[]` 条数。
-  **2026-11-08 现读 22 道**。文档可以写带日期的读数，但**不许**把数字当常量引用 —— 门表一变，写死的老数字就在骗人。
+  **2026-11-10 现读 23 道**。文档可以写带日期的读数，但**不许**把数字当常量引用 —— 门表一变，写死的老数字就在骗人。
 - 档与门的对应只有一处真源：`scripts/run_gates.py` 的 `GATE_PROFILES`；成员在 `gates/defs/`
   （`lang_python.py` / `contract.py` / `product_timeflow.py`）。
 

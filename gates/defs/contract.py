@@ -25,4 +25,14 @@ GATES: list[tuple[str, list[str]]] = [
         "skills_claims",
         [PY, "-X", "utf8", "tools/check_skills_claims.py", "--check", "--mode", "report"],
     ),
+    # 契约对账表（卡 E104 / T-AG613）：`复盘/契约-判据对账.md` 那一张表逐格核
+    # 源行号 / 原句子串 / 判据标签 / 段标题条数，**不跑判据**（0.2 秒）。
+    # ★ 为什么非有它不可：只改那张表的卡，`--profiles auto` 只给 audit 档，
+    #   而其余五道门没有一道读那张表 ⇒ 表漂了当场没人拦（那张表的 21 条钉子一次都不执行）。
+    # ★ 不进 fast 档：它只有在改那张表本身时才可能漂，而那种改动已经路由到 audit 档。
+    # 反向用例在 tests/test_contract_doc_table_gate.py（名字见 gates/gate-selfproof.toml）
+    (
+        "contract_doc_table",
+        [PY, "-X", "utf8", "tools/contract_audit.py", "--check-doc"],
+    ),
 ]

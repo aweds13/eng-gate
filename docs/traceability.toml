@@ -11906,3 +11906,24 @@ evidence = [
   "test:test_pool_gateway.py::test_gateway_ordering_actually_reaches_smart",
 ]
 gaps = "1. 请求路径上仍然 fail-open：`apply_strategy` 收到不认识的名字只退恒等、不抛也不记一行。名字该不该被接受由启动面拦，但**运行中**若有人改 `_Server.routing`，静默仍可能发生。指针 `tools/pool/gateway.py`2. 名字表只覆盖 magpie 的九个值 + 本仓别名；原件 `provider.PluginRouting` 的 `<plugin>/<name>` 本仓**没有**插件路由，`parse_routing` 只“明说不支持”，不是实现。指针 `tools/pool/route.py`3. `--routing` 仍只在网关命令行上生效：`tools/wb_dispatch.py` 的派活链不走 `_order`，`smart` 对真派活**零影响**（E94「四路由默认关」的口径没动）。指针 `tools/wb_dispatch.py`"
+
+[entries."T-AG613"]
+id = "T-AG613"
+title = "契约对账表没人守：0.2秒的判据接成第23道门"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:gates/defs/contract.py",
+  "file:gates/gate-selfproof.toml",
+  "file:tests/test_contract_doc_table_gate.py",
+  "file:tests/test_contract_audit.py",
+  "file:docs/subsystems/ci/README.md",
+  "file:docs/subsystems/ci/测试流程.md",
+  "file:复盘/门禁四要素.md",
+  "text:gates/defs/contract.py::--check-doc",
+  "test:test_contract_doc_table_gate.py::test_contract_doc_table_is_registered_in_the_audit_profile",
+  "test:test_contract_doc_table_gate.py::test_the_registered_command_is_green_on_the_real_table",
+  "test:test_contract_doc_table_gate.py::test_the_registered_command_bites_on_a_drifted_table",
+  "test:test_contract_doc_table_gate.py::test_the_selfproof_row_points_at_a_case_that_exists",
+]
+gaps = "1. 门的注释里只写「反向用例在 tests/test_contract_doc_table_gate.py（名字见 gates/gate-selfproof.toml）」：具体 nodeid 仍有两处投影（自证台账 + 测试文件），本卡没有让「注释里的指向」也进判据。指针 `gates/defs/contract.py`2. 这道门只核表、不跑判据：`CONTRACTS` 里那十条 judge 命令是否仍有效，仍靠 `tools/contract_audit.py` 本体（它恒 rc=1，因为有 3 条 no_judge，进不了门）与 `tests/test_contract_audit.py` 的 12 条 —— 后者只在 lang 档的 pytest 里跑，而「只改那张表」的卡不跑 pytest。指针 `tools/contract_audit.py`3. `复盘/门禁四要素.md` 写的「23 道」是带日期的读数，还没有机器判据核它（`tests/test_run_gates_timeout.py` 只禁历史值「17 道门」）。指针 `复盘/门禁四要素.md`"

@@ -2,7 +2,7 @@
 
 ## 这个文件管什么
 
-姊妹文件 `tests/test_gate_selfproof.py` 钉的是**全 22 门**的主台账
+姊妹文件 `tests/test_gate_selfproof.py` 钉的是**全量门**的主台账
 （`gates/gate-selfproof.toml`，`schema = 1`，四字段
 `name` / `reverse_case` / `why_no_case` / `since`，
 它的 `reverse_case` 指向一条已有用例的 nodeid）。
@@ -142,17 +142,19 @@ def test_the_table_covers_exactly_the_product_doors() -> None:
     assert doors == list(PRODUCT_DOORS), "顺序也对齐，好让人两列并排读"
 
 
-def test_the_table_really_covers_all_22_doors_once_merged_with_the_main_ledger() -> None:
-    """两份表合起来必须正好是全 22 门 —— 否则「每一道门都自证过」这句话是假的。"""
+def test_the_table_really_covers_all_doors_once_merged_with_the_main_ledger() -> None:
+    """两份表合起来必须正好是全量门 —— 否则「每一道门都自证过」这句话是假的。"""
     if not MAIN_LEDGER.is_file():
-        pytest.skip(f"主台账 {MAIN_LEDGER.name} 不在，22 门全集的联合判据无从谈起")
+        pytest.skip(f"主台账 {MAIN_LEDGER.name} 不在，全量门全集的联合判据无从谈起")
     main = tomllib.loads(MAIN_LEDGER.read_text(encoding="utf-8"))["gate"]
     covered = {str(row["name"]) for row in main} | {str(row["door"]) for row in _rows()}
     assert covered == set(ALL_DOORS), (
-        f"两份表合起来并没有覆盖全 22 门；"
+        f"两份表合起来并没有覆盖全量门；"
         f"多了 {sorted(covered - set(ALL_DOORS))}，少了 {sorted(set(ALL_DOORS) - covered)}"
     )
-    assert len(ALL_DOORS) == 22, f"门表本身变了：现在是 {len(ALL_DOORS)} 道（lang+audit+product）"
+    # ★ 这个数字**故意**写着：门表变了就得有人来看一眼（卡 E104 加第 23 道时就是这次「看一眼」）。
+    #   改它之前先问：新门有没有自证台账行？没行的门等于没门。
+    assert len(ALL_DOORS) == 23, f"门表本身变了：现在是 {len(ALL_DOORS)} 道（lang+audit+product）"
 
 
 def test_every_row_carries_a_real_reading_not_a_promise() -> None:
