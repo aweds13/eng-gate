@@ -5742,6 +5742,7 @@ files = [
   "gates/gate-selfproof-product.toml",
   "tests/test_gate_selfproof_product.py",
   "tests/test_contract_doc_table_gate.py",
+  "tests/test_contract_audit.py",
   "docs/subsystems/ci/README.md",
   "docs/subsystems/ci/测试流程.md",
   "复盘/门禁四要素.md",
