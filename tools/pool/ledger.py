@@ -89,6 +89,11 @@ REPLACE_BASE_S = 0.02
 #: 台账相对主仓根的路径（只用于拼路径与提示，不参与解析）。
 BACKLOG_REL = "docs/workbacklog.toml"
 
+#: 队列卡数所在的派生文档，与它的**唯一**生成器（卡 E100）。
+#: ★ 这里不算卡数、也不解析台账：重算只走生成器一份真源。
+README_REL = "docs/subsystems/pool/README.md"
+POOL_README_GEN = "scripts/gen_pool_readme.py"
+
 _KV = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$")
 _CARD_HEAD = b"[[cards]]"
 
@@ -462,23 +467,97 @@ def add_card(root: pathlib.Path | str | None, *, id: str, task: str, title: str,
         write_atomic(path, new)
         if commit:
             _commit_backlog(base, path, id, task)
+        else:
+            print(f"  · 没带 --commit ⇒ 没叫 {POOL_README_GEN} 重算 {README_REL}"
+                  "（提交时记得一起算：队列卡数差一次重算，下一张卡的腿② 就白红一次）")
     return "added"
 
 
+def _run_gen(base: pathlib.Path, extra: tuple[str, ...]) -> int:
+    r"""跑一次队列卡数的生成器（**唯一**真源：这里不算卡数）。回退码，输出逐行带上缩进。"""
+    proc = subprocess.run(
+        [sys.executable, "-X", "utf8", POOL_README_GEN, "--root", str(base), *extra],
+        cwd=str(base), capture_output=True, text=True,
+        encoding="utf-8", errors="replace", **NO_WINDOW,
+    )
+    for line in (proc.stdout or "").splitlines():
+        if line.strip():
+            print(f"  {line}")
+    for line in (proc.stderr or "").splitlines():
+        if line.strip():
+            print(f"  {line}")
+    return proc.returncode
+
+
+def _refresh_queue_counts(base: pathlib.Path) -> str | None:
+    r"""立卡这一笔顺手重算队列卡数；返回**要一起提交**的相对路径（None = 不带）。
+
+    ★ 为什么要在这里做（卡 E100）：立卡是唯一一笔「不经落地链 ⑤′」的台账写入。
+      E98 立卡只提交了台账 ⇒ `docs/subsystems/pool/README.md` 的「队列卡数 | 345 张」
+      比台账慢一拍 ⇒ 下一张卡落地的腿② 当场报红，只好单开一笔
+      `796ea840 fix(docs): 队列卡数跟上 E98 立卡` 补上。
+
+    四条「不带」的口径，每一条都要**说出来**（静默跳过等于假装算过）：
+
+    1. 这棵树里没有生成器 / 没有 README（假仓、最小树）⇒ 只提交台账；
+    2. README **本来就**有未提交改动 ⇒ 不重算、不带上（那是别人验到一半的改动）；
+    3. 生成器自己失败 ⇒ 台账照提交（**卡不能丢**），派生文档留给下一趟；
+    4. 写完 `--check` 判不一致 ⇒ 不提交这份结果，工作区还原成原样。
+    """
+    readme = base / README_REL
+    generator = base / POOL_README_GEN
+    if not generator.is_file() or not readme.is_file():
+        missing = POOL_README_GEN if not generator.is_file() else README_REL
+        print(f"  · 立卡这一笔没带 {README_REL}：这棵树里没有 {missing}"
+              " ⇒ 只提交台账（其余由落地链 ⑤′ 重算）")
+        return None
+    dirty = _git(base, "status", "--porcelain", "--", README_REL)
+    if dirty:
+        print(f"  · 立卡这一笔没带 {README_REL}：它本来就有未提交改动"
+              f"（{dirty.splitlines()[0].strip()}）⇒ 不替别人提交、也不重算覆盖它")
+        return None
+    before = readme.read_bytes()
+    wrote = _run_gen(base, ())
+    if wrote != 0:
+        print(f"  · 立卡这一笔没带 {README_REL}：队列卡数的生成器 {POOL_README_GEN} 退 {wrote}"
+              " ⇒ 台账照提交（卡不能丢），派生文档留给下一趟")
+        readme.write_bytes(before)
+        return None
+    if readme.read_bytes() == before:
+        print(f"  · {README_REL} 已经是现算的样子（队列卡数没变）⇒ 不重复带进这一笔")
+        return None
+    checked = _run_gen(base, ("--check",))
+    if checked != 0:
+        print(f"  · 立卡这一笔没带 {README_REL}：写完 --check 判不一致（退 {checked}）"
+              " ⇒ 不提交这份重算结果，工作区还原成原样")
+        readme.write_bytes(before)
+        return None
+    print(f"  ★ {README_REL} 的队列卡数随这一笔重算（不用另开一笔补）")
+    return README_REL
+
+
 def _commit_backlog(base: pathlib.Path, path: pathlib.Path, card_id: str, task: str) -> None:
-    r"""只提交台账那一份文件（`git commit -- docs/workbacklog.toml`）。
+    r"""提交台账，并把**同一次立卡**重算出来的队列卡数一起带上（卡 E100）。
 
     ★ 提交发生在**锁里**：先放锁再提交，就会出现「台账已改、提交还没落」的
       窗口，别人在这窗口里读到的台账与 HEAD 不一致。
+
+    ★ 为什么 README 要进同一笔：队列卡数是台账的**投影**，两个提交之间必然有
+      一拍不一致 —— 落地链的腿② 正好在读那一拍。重算的判据不在这里，
+      在 `scripts/gen_pool_readme.py`（这里只负责叫它、判它自检过没过）。
     """
     rel = path.relative_to(base).as_posix()
-    add = subprocess.run(["git", "add", "--", rel], cwd=str(base), capture_output=True,
+    extra = _refresh_queue_counts(base)
+    staged = [rel, *([extra] if extra else [])]
+    add = subprocess.run(["git", "add", "--", *staged], cwd=str(base), capture_output=True,
                          text=True, encoding="utf-8", errors="replace", **NO_WINDOW)
     if add.returncode != 0:
         raise LedgerError(f"git add 失败：{(add.stderr or '').strip()}")
     msg = (f"chore(ledger): 立卡 {card_id}（{task}）\n\n"
            f"Task: {task}\nLedger: 新增 {task}（ENGINEERING/pending）\n")
-    proc = subprocess.run(["git", "commit", "-q", "-F", "-", "--", rel], cwd=str(base),
+    if extra:
+        msg += f"Docs: {extra}（队列卡数随这一笔重算）\n"
+    proc = subprocess.run(["git", "commit", "-q", "-F", "-", "--", *staged], cwd=str(base),
                           input=msg, capture_output=True, text=True,
                           encoding="utf-8", errors="replace", **NO_WINDOW)
     if proc.returncode != 0:

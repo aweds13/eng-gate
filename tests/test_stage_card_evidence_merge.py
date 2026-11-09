@@ -28,6 +28,10 @@ def _tree(tmp_path: Path) -> Path:
         "## 2026-10-01\n", encoding="utf-8", newline="\r\n")
     (wt / "复盘" / "交接-重构进度.md").write_text(
         "# 交接\n\n" + "CHECKPOINT-PLACEHOLDER\n", encoding="utf-8", newline="\r\n")
+    # ★ 卡 E100：证据指针在**写盘之前**就要按审计同一口径求值 ⇒ 这棵树必须有 tests/ 真文件
+    (wt / "tests").mkdir()
+    (wt / "tests" / "whatever.py").write_text(
+        "def test_x():\n    pass\n", encoding="utf-8", newline="\n")
     # stage_card 的片段模式会调 `tools/sync_docs.py`（相对 wt 找）⇒ 把真脚本与它的依赖铺进来
     (wt / "tools").mkdir()
     for rel in ("tools/sync_docs.py", "tools/pool/__init__.py", "tools/pool/no_window.py"):
@@ -112,7 +116,9 @@ def test_kinded_evidence_keeps_its_kind(tmp_path: Path) -> None:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     got = list(data["entries"]["T-AG999"]["evidence"])
     assert "file:tests/whatever.py" in got, f"裸路径必须仍补 file:：{got}"
-    assert "test:tests/whatever.py::test_x" in got, f"test: 被加了 file: 前缀：{got}"
+    # ★ 卡 E100（T-AG609）：`test:` 的**形态**归一到裸文件名（审计自己补 `tests/`）；
+    #   前缀本身仍必须是 `test:`，不许被加成 `file:test:`。
+    assert "test:whatever.py::test_x" in got, f"test: 被加了 file: 前缀或没归一：{got}"
     assert "text:tools/wb_plan.py::图案例" in got, f"text: 被加了 file: 前缀：{got}"
     bad = [x for x in got if x.startswith("file:test:") or x.startswith("file:text:")]
     assert not bad, f"出现 file:test: / file:text: 双重前缀：{bad}"

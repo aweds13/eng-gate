@@ -34,6 +34,11 @@
 - `tools/pool/limits_check.py` 的 `check()` 增 `unpriced: Mapping[int, int] | None = None`：某条 `limit.cost > 0` 而那个窗口里有没价的行 ⇒ 拒，`why` 点名「按钱那一支判不了：窗口里 N 行没有价」。缺省 `None` ⇒ 行为与卡之前逐字节相同。
 - 判不了的拒排在**已花完之后**：确定能判的结论优先于判不了（不许把「已花完」降级成「不确定」）。纯 tokens 限额（`cost == 0`）与窗口里全是旧的有价行，两条路一个字都没变。
 - `tools/wb_dispatch.py` 的限额闸在**同一个 now、同一个窗口**里算 `unpriced` 传给 `check()`：拒的时候并进既有的 `[FAIL] 不派活 —— 前置检查没过：` 出口，退 2、不占树、不新开退出码。
+## 2026-11-09 T-AG609 证据形态写盘前归一、立卡笔顺手重算队列卡数
+- `tools/pool/stage_card.py` 的 `_as_assertion()` 归一 `test:` 形态：剥 `./`、`tests/`、反斜杠（幂等），别的六种种类原样不动 —— 审计自己补 `tests/`，带前缀写进台账必红成 tests/tests/x.py（前缀叠两层）。
+- `tools/pool/stage_card.py` 新增 `_judge_fresh_test_pointers()`：本次新给的 `test:` 指针在**写盘之前**核文件与用例在不在，不在 ⇒ 退 4 点名；尺子复用 `tools/wb_invariants.py` 的 `case_name()` / `defines_case()`，不写第二份正则。
+- 片段里已有的 carried 指针**只归一、不判死**：那是别人正在收口的证据，判死会挡住不属于本卡的那一笔。
+- `tools/pool/ledger.py` 的 `_commit_backlog()` 立卡那一笔顺手叫 `scripts/gen_pool_readme.py` 写一遍再 `--check` 一遍，两份同笔提交（无生成器/无 README、README 本来脏、生成器失败、写完 --check 不一致 ⇒ 四种都只提交台账并**说出原因**）。
 ## 2026-11-08 · 云门禁泛用化：抽「仓无关骨架 + 每仓一份 profile」（卡 E92，T-AG600）
 - `scripts/cloud/run_gate.sh` 里 10 处本仓字面（cloud_dir / 分支 / TF_PROJECTS_TOML / 池配置 / pip -c pins / run_gates.py / 播种目录 / 卡树 / 产物路径）全部搬进 `scripts/cloud/profiles/engineering.toml`，脚本只剩「怎么跑」。
 - 新增 `scripts/cloud/profile.py`（dump/list/check/render 四子命令，38 个键）与 `--render` 分支；新增第二仓 profile `scripts/cloud/profiles/openmaic.toml`，全文零本仓键值（判据 3 有钉子）。

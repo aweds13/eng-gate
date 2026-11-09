@@ -11845,3 +11845,18 @@ evidence = [
   "test:test_pool_limits_wiring.py::test_cost_limit_with_unpriced_rows_refuses_before_taking_the_tree",
 ]
 gaps = "1. 价仍然没进账本：本卡只把「判不了」说出来并在派活前停下，按钱限额从此**不会假绿**，但也**仍不能真放行**。要真按钱跑，得先有价目表或上游账单 —— 而这正是 `tools/pool/pricing.py` 与 `tools/pool/ledger_spend.py` 明令不许内置的东西。指针 `tools/pool/pricing.py`2. `tools/pool/ledger_spend.py` 的 `unpriced()` 与 `tools/pool/pricing.py` 的 `unpriced_calls()` 仍是两份读数、互不调用：今天没有调用方同时要两份，所以没合；哪天要「哪些调用没有价」就得先定谁是主语。指针 `tools/pool/ledger_spend.py`3. 喂给 `check()` 的只有条数，没有「这行有多少 token」：判不了时 `reset_at` 取的是最晚续期的窗口，不是「最早可能缓解」的窗口 —— 窗口一多，`retry_after_s` 会偏保守（偏保守不报错，但会让人多等）。指针 `tools/pool/limits_check.py`"
+
+[entries."T-AG609"]
+id = "T-AG609"
+title = "证据形态写盘前归一、立卡笔顺手重算队列卡数"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/stage_card.py",
+  "file:tools/pool/ledger.py",
+  "test:test_stage_card_evidence_shape.py::test_test_pointer_drops_the_tests_prefix",
+  "test:test_stage_card_evidence_shape.py::test_a_missing_test_file_refuses_before_anything_is_written",
+  "test:test_ledger_queue_counts.py::test_the_queue_count_rides_along_in_the_same_commit",
+  "test:test_ledger_queue_counts.py::test_a_dirty_readme_is_not_swept_into_this_commit",
+]
+gaps = "1. 立卡笔只在**带 --commit** 时才重算队列卡数：不带 --commit 的立卡（本地攒着一起提交的那种）仍然靠人手算，工具只打一行提示。指针 `tools/pool/ledger.py`2. 只归一了 `test:` 的**文件路径**，没管用例名里的写法差异（比如 `test_x[param]` 与 `test_x`）：参数化后缀本来就由 `wb_invariants.case_name()` 剥掉，所以今天够用；但 `Class::test_x` 这种类内用例的写法仍是判死（审计也不支持，两边口径一致）。指针 `tools/pool/stage_card.py`3. 队列卡数的重算只覆盖 `docs/subsystems/pool/README.md` 一份：`docs/INDEX.md` 也会因立卡（卡规格那篇 .md 进树）而漂，但立卡笔没有重算它 —— 今天卡规格篇数变化不影响 INDEX 的篇数统计口径之外的东西，实测 401 篇没变，所以没顺手做；哪天口径收紧会先红在落地链腿②。指针 `scripts/gen_doc_index.py`"

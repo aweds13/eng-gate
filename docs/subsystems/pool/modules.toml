@@ -204,7 +204,7 @@ cli = "无（今天**零调用**：pool 不产 `ttft` / `first_text` / `flow`，
 
 [[module]]
 name = "stage_card.py"
-duty = "三段文书片段生成器：台账条目 + changelog + 交接 CHECKPOINT（只写片段，汇总归 `sync_docs`）"
+duty = "三段文书片段生成器：台账条目 + changelog + 交接 CHECKPOINT（只写片段，汇总归 `sync_docs`）；test: 证据指针写盘前先归一形态（剥 tests/ 前缀）并按 audit 同一口径核文件与用例在不在（不在 ⇒ 退 4 点名）"
 cli = "`wb_stage_card.py`"
 
 [[module]]
@@ -264,7 +264,7 @@ cli = "`pool.cleared main`（子命令 list / add）"
 
 [[module]]
 name = "ledger.py"
-duty = "台账唯一的写入口：一把不看端口段的 gates/diag/ledger.lock 把「读字节 → 切块 → 查重 → 尾部追加 → 原子写（os.replace 带重试）→ 提交」包成短事务；只许尾部追加，已有块的字节一个不碰"
+duty = "台账唯一的写入口：一把不看端口段的 gates/diag/ledger.lock 把「读字节 → 切块 → 查重 → 尾部追加 → 原子写（os.replace 带重试）→ 提交」包成短事务；只许尾部追加，已有块的字节一个不碰；提交那一笔顺手叫 gen_pool_readme.py 重算队列卡数（没生成器/README 本来就脏/生成器失败 ⇒ 只提交台账并点名）"
 cli = "无（被 wb_card.py 与 pool.landing 的翻账路径调）"
 
 [[module]]

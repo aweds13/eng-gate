@@ -88,12 +88,71 @@ EVIDENCE_KINDS = ("file", "text", "test", "route", "table", "column", "ui")
 
 
 def _as_assertion(raw: str) -> str:
-    """把一条 `--evidence` 变成台账里的断言：**已经带种类前缀就原样保留**，否则补 `file:`。"""
+    """把一条 `--evidence` 变成台账里的断言：**带种类前缀就原样保留**，否则补 `file:`。
+
+    ★ 卡 E100（T-AG609）：`test:` 的**形态**要归一成裸文件名 —— 审计自己补 `tests/`
+      （`scripts/audit_progress.py` 的 `p = ROOT / "tests" / fname`，`tools/evidence_map.py`
+      的 `"tests/" + fname` 同口径）。带 `tests/` 前缀写进台账，求值就成了 `tests/tests/x.py`，
+      **必红**，而且是到落地链 `③″` 才红（白烧一趟门禁）。实测：
+      `test:tests/test_pool_limits.py::test_pin_24`
+      ⇒ `(False, '测试文件 tests/test_pool_limits.py')`。
+    ★ 只动 `test:` —— `text:` 的图案在 `::` 之后，含斜杠很正常，抹了就是改人话。
+    """
     text = _unescape_git_quoted(raw)
-    kind, sep, _rest = text.partition(":")
-    if sep and kind in EVIDENCE_KINDS:
+    kind, sep, rest = text.partition(":")
+    if not (sep and kind in EVIDENCE_KINDS):
+        return "file:" + text
+    if kind != "test":
         return text
-    return "file:" + text
+    fname, sep2, case = rest.partition("::")
+    return "test:" + _bare_test_file(fname) + (sep2 + case if sep2 else "")
+
+
+def _bare_test_file(rest: str) -> str:
+    """`tests/test_x.py` / `./tests/test_x.py` / `tests\\test_x.py` ⇒ `test_x.py`（幂等）。"""
+    rel = rest.strip().replace("\\", "/")
+    while rel.startswith("./"):
+        rel = rel[2:]
+    if rel.startswith("tests/"):
+        rel = rel[len("tests/"):]
+    return rel.lstrip("/")
+
+
+def _judge_fresh_test_pointers(wt: pathlib.Path, raw: list[str]) -> list[str]:
+    """★ 卡 E100：本次**新给**的 `test:` 指针，在写盘**之前**就按审计同一口径求值。
+
+    为什么在写侧做：让落地链跑到 `③″` 才红，代价是 ~300 秒全量门禁（E99 首趟就是这么白跑的）。
+    判据只有两件（与 `scripts/audit_progress.eval_assertion()` 的 `test:` 分支同口径）：
+      ① 文件在不在 `{tree}/tests/<裸文件名>`；
+      ② 用例名在不在那个文件里 —— 尺子复用 `tools/wb_invariants.py::defines_case`
+         （唯一真源，不许写第二份）。
+    `test:` 只写文件、没写 `::用例` 的形态**放行**（审计也放行：它只核文件在）。
+    返回人话清单；空 = 全过。
+    """
+    bad: list[str] = []
+    for raw_item in raw:
+        item = _as_assertion(raw_item)
+        kind, _sep, rest = item.partition(":")
+        if kind != "test":
+            continue
+        fname, sep2, case = rest.partition("::")
+        path = wt / "tests" / fname
+        if not path.is_file():
+            bad.append(f"test:{fname} ⇒ {path.relative_to(wt).as_posix()} 不存在"
+                       f"（证据要指向这棵树里**真在**的测试文件）")
+            continue
+        if not sep2 or not case.strip():
+            continue
+        # ★ 尺子**惰性**导入：只有真走到「核用例名」这一步才需要它。
+        #   提前 import 会让**一条 test: 都没有**的树也要求这个模块在
+        #   （假仓实测：38 条落地钉子全炸）。
+        #   判据真源 = tools/wb_invariants.py（用例存在性的唯一实现，不许在这里写第二份）。
+        import wb_invariants as _inv
+        bare = _inv.case_name(case)
+        if not _inv.defines_case(path.read_text(encoding="utf-8", errors="replace"), bare):
+            bad.append(f"test:{fname}::{case} ⇒ 用例 {bare} 不在 {path.name} 里"
+                       f"（先把它写进测试文件，或改成真在的用例名）")
+    return bad
 
 
 def load(p: pathlib.Path) -> tuple[bytes, bytes]:
@@ -229,6 +288,18 @@ def main(argv: list[str] | None = None) -> int:
     cl = (ROOT / a.changelog_file).read_text(encoding="utf-8").strip("\n")
     cp = (ROOT / a.checkpoint_file).read_text(encoding="utf-8").strip("\n")
 
+    # ★ 卡 E100（T-AG609）：证据指针在**写盘之前**就按审计同一口径求值。
+    #   病：`--evidence test:tests/x.py::case` 写进台账，审计自己补 `tests/` ⇒ 求值成
+    #   `tests/tests/x.py` 必红，而红点落在落地链 ③″（E99 首趟白烧一趟全量门禁）。
+    #   口径：**只核本次新给的**；片段里已有人写下的（carried）只归一、不判死 ——
+    #   那是人手补的，判死会挡住别人正在收口的那一笔。
+    bad_ptr = _judge_fresh_test_pointers(wt, a.evidence)
+    if bad_ptr:
+        print("★ 证据指针写盘前就核不过 ⇒ 停手（别等落地链 ③″ 才红）：")
+        for item in bad_ptr:
+            print(f"   - {item}")
+        return 4
+
     # ★ 卡 107（B 方案）：只要 `docs/changelog.d/` 在，就走**片段模式** ——
     #   写三个片段文件、再调汇总器把共享文档拼出来；旧的"直接往共享文档里插"整段跳过。
     #   为什么：共享文档是**每笔都在同一锚点改**的那三个文件 ⇒ 并发提交必冲突（B 就是为它做的）。
@@ -322,7 +393,9 @@ def _fragments_mode(wt: pathlib.Path, a, gaps: str, cl: str, cp: str,
         try:
             old_data = _tomllib.loads(frag2.read_text(encoding="utf-8"))
             entry = old_data.get("entries", {}).get(a.id, {})
-            carried = [str(x) for x in entry.get("evidence", [])]
+            # ★ 卡 E100：carried 也过一遍形态归一（`test:tests/x.py` ⇒ `test:x.py`），
+            #   但**不判死** —— 见 main() 里那段理由。
+            carried = [_as_assertion(str(x)) for x in entry.get("evidence", [])]
         except (OSError, _tomllib.TOMLDecodeError):
             carried = []
     fresh = [_as_assertion(e) for e in a.evidence]

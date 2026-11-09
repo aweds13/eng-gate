@@ -1,0 +1,15 @@
+[entries."T-AG609"]
+id = "T-AG609"
+title = "证据形态写盘前归一、立卡笔顺手重算队列卡数"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/stage_card.py",
+  "file:tools/pool/ledger.py",
+  "test:test_stage_card_evidence_shape.py::test_test_pointer_drops_the_tests_prefix",
+  "test:test_stage_card_evidence_shape.py::test_a_missing_test_file_refuses_before_anything_is_written",
+  "test:test_ledger_queue_counts.py::test_the_queue_count_rides_along_in_the_same_commit",
+  "test:test_ledger_queue_counts.py::test_a_dirty_readme_is_not_swept_into_this_commit",
+]
+gaps = "1. 立卡笔只在**带 --commit** 时才重算队列卡数：不带 --commit 的立卡（本地攒着一起提交的那种）仍然靠人手算，工具只打一行提示。指针 `tools/pool/ledger.py`2. 只归一了 `test:` 的**文件路径**，没管用例名里的写法差异（比如 `test_x[param]` 与 `test_x`）：参数化后缀本来就由 `wb_invariants.case_name()` 剥掉，所以今天够用；但 `Class::test_x` 这种类内用例的写法仍是判死（审计也不支持，两边口径一致）。指针 `tools/pool/stage_card.py`3. 队列卡数的重算只覆盖 `docs/subsystems/pool/README.md` 一份：`docs/INDEX.md` 也会因立卡（卡规格那篇 .md 进树）而漂，但立卡笔没有重算它 —— 今天卡规格篇数变化不影响 INDEX 的篇数统计口径之外的东西，实测 401 篇没变，所以没顺手做；哪天口径收紧会先红在落地链腿②。指针 `scripts/gen_doc_index.py`"
+
