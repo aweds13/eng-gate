@@ -55,7 +55,7 @@ cli = "无"
 [[module]]
 name = "gateway.py"
 duty = "号池网关（同协议直通）：`classify` 七值失败分类（只看状态码与结构化字段，不解析文案）、`route_once` 干跑式选号/沉底/RPM/收窄/换号与 `wb-route.jsonl` 留痕、四条回环 HTTP 面（Bearer + Origin 白名单 + 32 MiB 上限）——不翻译协议、不攒流"
-cli = "`python -X utf8 tools/pool/gateway.py [--host 127.0.0.1] [--port 8766]`（要 `TF_POOL_GATEWAY_TOKEN`）"
+cli = "`python -X utf8 tools/pool/gateway.py [--host 127.0.0.1] [--port 8766] [--routing order]`（要 `TF_POOL_GATEWAY_TOKEN`；`--routing` 是**唯一**选号入口：默认 `order`，空串 = `smart`（magpie 默认值），别名见 `pool.route.ROUTING_ALIASES`；名字认不出 ⇒ 退 2、一个端口都不绑）"
 
 [[module]]
 name = "guards.py"
@@ -174,8 +174,8 @@ cli = "无（被 `wb_dispatch`、`wb_impact`、`wb_batch` 调）"
 
 [[module]]
 name = "route.py"
-duty = "Smart 路由：给「哪个号先上」排序（`tier` / `apply_order`），只标准库 + 只读"
-cli = "无（被 `pool.plan` 调 `reset_for`/`seconds_left`、被 `pool.sticky` 取 `USED_SHARE`；`smart_order`/`apply_strategy` 零生产调用方）"
+duty = "Smart 路由：给「哪个号先上」排序（`tier` / `smart_order` / `apply_order`）+ `parse_routing` 名称归一（大小写/空白/别名，空串 = `smart`，认不出抛 `RouteError`），只标准库 + 只读"
+cli = "无 CLI（被 `pool.gateway` 调 `apply_strategy` 选号、`parse_routing` 归一 `--routing`；被 `pool.plan` 调 `reset_for`/`seconds_left`、被 `pool.sticky` 取 `USED_SHARE`）"
 
 [[module]]
 name = "route_log.py"

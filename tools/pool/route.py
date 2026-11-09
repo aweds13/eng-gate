@@ -49,6 +49,7 @@ r"""Smart 路由（从 magpie 移植，卡 A329 · 台账号 T-AG531）—— �
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -73,8 +74,11 @@ __all__ = [
     "PACE_BAND",
     "PROBE_EVERY",
     "REF_TOKENS",
+    "MANUAL",
     "ROTATE",
+    "ROUTING_ALIASES",
     "RouteError",
+    "SMART",
     "Seat",
     "UNKNOWN_TIER",
     "USED_SHARE",
@@ -90,6 +94,7 @@ __all__ = [
     "least_used",
     "model_until",
     "ordered",
+    "parse_routing",
     "reset_for",
     "rotate",
     "round_pick",
@@ -289,6 +294,62 @@ FREE_FIRST = "free"
 FASTEST = "fast"
 
 BUILTIN: tuple[str, ...] = (ORDERED, ROTATE, LEAST_USED, PACE, WEIGHTED, FREE_FIRST, FASTEST)
+
+#: magpie 的**默认**策略：值就是空串（`routes.go` 里 `if routing == "" { return Smart, true }`）。
+#: ★ 它**不在** `BUILTIN` 里 —— 原件的七常量开头就写着「besides the default, smart, in order」
+#: （`provider/routing.go:22-40`）。塞进 `BUILTIN` 等于把七项外部契约改成八项（卡 E103）。
+SMART = "smart"
+
+#: 手工挑号（原件 `Manual`）：不排位 ⇒ 保持列出顺序。原件也不给它沉底（见 `pool.sink.sinks`）。
+MANUAL = "manual"
+
+#: 名称表：规范名 → 别名元组。逐字照 `internal/cli/groups_cli.go:126-146` 的
+#: `routingNames`（value, name, also）：规范名自己也算一个写法，空串是 `smart` 的**值**。
+#: ★ 这是**外部契约**（运维在命令行敲的就是这些字），少一个别名就是一条静默降级。
+ROUTING_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (SMART, ("", "default", "auto")),
+    (ORDERED, ("ordered", "in-order")),
+    (ROTATE, ("in-turn", "round-robin")),
+    (LEAST_USED, ("least-used",)),
+    (PACE, ("weekly-pace",)),
+    (WEIGHTED, ("weighted", "by-weight", "weighted-round-robin", "wrr")),
+    (FREE_FIRST, ("free-first", "freest", "no-cost")),
+    (FASTEST, ("fastest", "speed", "speed-first")),
+    (MANUAL, ("pick", "picked", "pinned")),
+)
+
+#: 原件的插件路由形态（`<plugin>/<name>`）。本仓**没有**插件路由 ⇒ 见 `parse_routing`。
+_PLUGIN_RE = re.compile(r"[A-Za-z0-9._-]+/[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def parse_routing(name: str) -> str:
+    """写法 → 规范名。对应原件 `parseRouting`（`internal/cli/groups_cli.go:155-170`）。
+
+    顺序逐字照原件：`TrimSpace` → 插件名判定 → `ToLower` → 逐条比 `value / name / also`。
+    空串 ⇒ `SMART`（原件：查表命中默认策略）。
+
+    ★ **认不出就抛 `RouteError` 并点名**，绝不静默回 `order`：原件在这里是
+      `routing %q is not one magpie has` —— 一个不认识的路由名让网关悄悄按列出顺序派活，
+      正是卡 E103 要修的那种沉默。**谁负责炸**：启动面（`pool.gateway.build_server` / `main`）；
+      请求路径上的 `apply_strategy` 仍然 fail-open（策略坏掉不该把整轮派活停摆）。
+
+    ★ `<plugin>/<name>`：原件交给插件注册表，本仓没有插件路由 ⇒ 抛 `RouteError` 并**明说**
+      「原件支持、本仓没有」，不许把它混进「未知名字」那一句里。
+    """
+    raw = "" if name is None else str(name)
+    stripped = raw.strip()
+    if _PLUGIN_RE.fullmatch(stripped):
+        raise RouteError(
+            f"路由名 {raw!r} 是插件路由（<plugin>/<name>）：原件支持，本仓**没有** ⇒ "
+            f"用内置的 {', '.join([SMART, *BUILTIN, MANUAL])}")
+    low = stripped.lower()
+    for canonical, also in ROUTING_ALIASES:
+        if low == canonical or low in also:
+            return canonical
+    raise RouteError(
+        f"路由名 {raw!r} 不认识：magpie 没有这个名字。可用的是 "
+        f"{', '.join([SMART, *BUILTIN, MANUAL])}（空串 = {SMART}，即原件默认值），"
+        f"别名见 route.ROUTING_ALIASES；写错名字不许静默退成 {ORDERED}")
 
 
 def identity(n: int) -> list[int]:
@@ -609,6 +670,11 @@ def apply_strategy(name: str, seats: Sequence[Seat], *, pool: str,
                    state: dict[str, Any] | None = None) -> list[int]:
     """按名字跑一个内置策略；**坏掉就 fail-open 回列出顺序，绝不抛**。
 
+    ★ 名字先过 `parse_routing`（卡 E103）：别名 / 大小写 / 首尾空白一律归一，
+      空串 = `SMART`（原件默认值）。早先这里对 `smart` 与空串都直接退恒等，
+      于是 `--routing smart` 静默等于「按列出顺序」；现在 `smart` 真的走 `smart_order`。
+      名字认不出 ⇒ 仍然退恒等（本函数跑在请求路径上，抛一下就是 500）。
+
     对应原件两处：`routes.Find`（`routes.go:119-131`，找不到 ⇒ `ok=false` ⇒ 调用方按列出
     顺序试）与 `Apply`（`routes.go:143-166`，`defer recover()` 兜 panic + 长度/越界/重复检查
     ⇒ `identity(len(seats))`）。本函数把后者的检查直接交给既有的 `apply_order()`，不重写一份。
@@ -617,23 +683,31 @@ def apply_strategy(name: str, seats: Sequence[Seat], *, pool: str,
       `pool → ...`；调用方跨请求传同一个 dict，轮转/探测的语义才成立。本函数不落盘。
     """
     n = len(seats)
-    if name not in BUILTIN:
+    try:
+        canonical = parse_routing(name)
+    except RouteError:
+        # ★ 请求路径上不抛：名字写坏也只是一次「没有更好的排位」，退列出顺序继续派活。
+        #   名字该不该被接受，由启动面（build_server / main）拦 —— 那里才有人看得到。
+        return identity(n)
+    if canonical == MANUAL:
         return identity(n)
     book: dict[str, Any] = {} if state is None else state
     try:
         # 分派走**模块级名字**（不是一张私有表）：`apply_strategy` 的 fail-open 判据
         # 要能被「一个返回坏排列的假策略」咬住，测试只能替换本模块的公开名字。
-        if name == ORDERED:
+        if canonical == SMART:
+            got = smart_order(seats)
+        elif canonical == ORDERED:
             got = ordered(seats)
-        elif name == ROTATE:
+        elif canonical == ROTATE:
             got = rotate(seats, pool=pool, turns=book.setdefault("turns", {}))
-        elif name == LEAST_USED:
+        elif canonical == LEAST_USED:
             got = least_used(seats)
-        elif name == PACE:
+        elif canonical == PACE:
             got = by_pace(seats)
-        elif name == WEIGHTED:
+        elif canonical == WEIGHTED:
             got = weighted(seats, pool=pool, rounds=book.setdefault("rounds", {}))
-        elif name == FREE_FIRST:
+        elif canonical == FREE_FIRST:
             got = free_first(seats)
         else:
             got = fastest(seats, pool=pool, probes=book.setdefault("probes", {}))

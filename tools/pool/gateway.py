@@ -1031,6 +1031,13 @@ def build_server(forward: Forward = forward_http, *, host: str = DEFAULT_HOST,
             "★ 不复用 TF_MCP_HTTP_TOKEN：那个口子有写权限，这个口子代所有号发请求。")
     if not max_bytes or int(max_bytes) <= 0:
         raise ConfigError(f"请求体上限必须为正数，收到 {max_bytes!r}。")
+    # ★ 卡 E103：启动面**不许 fail-open**。名字写错就在这里炸（退 2、一个端口都不绑），
+    #   而不是让运维以为在用 smart、实际上按列出顺序派活派一整晚。
+    #   归一后写进 self.routing：下游（sink / 日志）只认一种写法。
+    try:
+        routing = pool_route.parse_routing(routing)
+    except pool_route.RouteError as exc:
+        raise ConfigError(f"路由名起不来：{exc}") from None
     return _Server((check_host(host), int(port)), forward=forward, token=token,
                    origins=origins, require_origin=require_origin, max_bytes=int(max_bytes),
                    pool=pool, routing=routing, root=root, log=log)
@@ -1065,7 +1072,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--pool", default="codebuddy")
-    parser.add_argument("--routing", default="order")
+    parser.add_argument("--routing", default="order",
+                        help="选号策略：order（默认）/ smart（= 空串，magpie 默认）/"
+                             " manual / usage / pace / weight / free / fast；"
+                             "别名见 pool.route.ROUTING_ALIASES")
     parser.add_argument("--origin", action="append", default=[],
                         help="额外允许的 Origin（可重复）")
     args = parser.parse_args(argv)
@@ -1073,8 +1083,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     origins = tuple(args.origin) + split_origins(os.environ.get(ORIGINS_ENV))
     require_origin = require_origin_from_env(os.environ.get(REQUIRE_ORIGIN_ENV))
     try:
+        # ★ 卡 E103：先归一、再起服务 —— 不认识的名字在这里就退 2，**一个端口都不绑**。
+        routing = pool_route.parse_routing(args.routing)
+    except pool_route.RouteError as exc:
+        print(f"[pool-gateway] 起不来：{exc}", file=sys.stderr, flush=True)
+        return 2
+    try:
         return serve_http(host=args.host, port=args.port, token=token, origins=origins,
-                          require_origin=require_origin, pool=args.pool, routing=args.routing,
+                          require_origin=require_origin, pool=args.pool, routing=routing,
                           log=lambda line: print(line, file=sys.stderr, flush=True))
     except ConfigError as exc:
         print(f"[pool-gateway] 起不来：{exc}", file=sys.stderr, flush=True)

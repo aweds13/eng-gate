@@ -1,0 +1,19 @@
+[entries."T-AG612"]
+id = "T-AG612"
+title = "magpie的默认策略smart在pool侧调不到：路由名归一、认不出要点名"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/route.py",
+  "file:tools/pool/gateway.py",
+  "file:tests/test_pool_route_strategies.py",
+  "file:tests/test_pool_gateway.py",
+  "text:tools/pool/route.py::def parse_routing(name: str) -> str:",
+  "test:test_pool_route_strategies.py::test_parse_routing_matches_magpie_name_table",
+  "test:test_pool_route_strategies.py::test_smart_routing_actually_orders",
+  "test:test_pool_gateway.py::test_build_server_rejects_unknown_routing_with_the_name",
+  "test:test_pool_gateway.py::test_main_exits_2_without_binding_when_routing_is_unknown",
+  "test:test_pool_gateway.py::test_gateway_ordering_actually_reaches_smart",
+]
+gaps = "1. 请求路径上仍然 fail-open：`apply_strategy` 收到不认识的名字只退恒等、不抛也不记一行。名字该不该被接受由启动面拦，但**运行中**若有人改 `_Server.routing`，静默仍可能发生。指针 `tools/pool/gateway.py`2. 名字表只覆盖 magpie 的九个值 + 本仓别名；原件 `provider.PluginRouting` 的 `<plugin>/<name>` 本仓**没有**插件路由，`parse_routing` 只“明说不支持”，不是实现。指针 `tools/pool/route.py`3. `--routing` 仍只在网关命令行上生效：`tools/wb_dispatch.py` 的派活链不走 `_order`，`smart` 对真派活**零影响**（E94「四路由默认关」的口径没动）。指针 `tools/wb_dispatch.py`"
+

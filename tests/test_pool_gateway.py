@@ -817,3 +817,79 @@ def test_non_streaming_upstream_is_passed_through(start_server: Any) -> None:
     status, _, body = _request(port, "POST", "/v1/chat/completions", body={"model": MODEL})
     assert status == 200
     assert body == payload
+
+# ---------------------------------------------------------------- 路由名（卡 E103 · T-AG612）
+
+
+def test_build_server_rejects_unknown_routing_with_the_name() -> None:
+    """★ 启动面不许 fail-open：名字不认识 ⇒ 起不来，且**点名**收到的值（同原件的 parseRouting）。"""
+    with pytest.raises(gateway.ConfigError) as info:
+        gateway.build_server(host="127.0.0.1", port=0, token=TOKEN, routing="nope")
+    text = str(info.value)
+    assert "nope" in text, "要点名运维敲的那个值"
+    assert "smart" in text, "要给出可用名字（至少默认那个）"
+
+
+def test_build_server_normalizes_the_routing_name() -> None:
+    """别名/大小写/空串归一到**规范名**：同一个网关只认一种写法，日志与 sink 口径才对得上。"""
+    server = gateway.build_server(host="127.0.0.1", port=0, token=TOKEN, routing="  LEAST-USED ")
+    try:
+        assert server.routing == pool_route.LEAST_USED
+    finally:
+        server.server_close()
+    server = gateway.build_server(host="127.0.0.1", port=0, token=TOKEN, routing="")
+    try:
+        assert server.routing == pool_route.SMART, "原件默认值就是空串 = smart"
+    finally:
+        server.server_close()
+
+
+def test_main_exits_2_without_binding_when_routing_is_unknown(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """命令壳：不认识的路由名 ⇒ 退 2，**一个端口都不绑**（与「没有 token」同一条硬边界）。"""
+    monkeypatch.setenv(gateway.TOKEN_ENV, TOKEN)
+    calls: list[dict[str, Any]] = []
+
+    def _never(**kwargs: Any) -> int:
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(gateway, "serve_http", _never)
+    assert gateway.main(["--routing", "nope"]) == 2
+    assert calls == [], "既然起不来，就不许先建服务再报错"
+
+
+def test_main_passes_the_normalized_routing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """命令壳把**规范名**交给 `serve_http`（空串 ⇒ smart），别让下游各自再猜一遍。"""
+    monkeypatch.setenv(gateway.TOKEN_ENV, TOKEN)
+    seen: dict[str, Any] = {}
+
+    def _capture(**kwargs: Any) -> int:
+        seen.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(gateway, "serve_http", _capture)
+    assert gateway.main(["--routing", ""]) == 0
+    assert seen["routing"] == pool_route.SMART
+
+
+def test_gateway_ordering_actually_reaches_smart(env: Path) -> None:
+    """★ 卡 E103 的现场：`--routing smart` 曾静默等于列出顺序。
+
+    网关只做一次映射（账本行 → Seat），排位仍归 `route.apply_strategy`。
+    """
+    rows = (_row(SEAT_A), _row(SEAT_B))
+    ledger_rows = (
+        {**rows[0], "quota": {"used_percent": 95.0}},
+        {**rows[1], "quota": {"used_percent": 10.0}},
+    )
+    assert gateway._order(ledger_rows, "order", pool="codebuddy") == [0, 1]
+    assert gateway._order(ledger_rows, "smart", pool="codebuddy") == [1, 0]
+    assert gateway._order(ledger_rows, "", pool="codebuddy") == [1, 0], "空串 = 原件默认 smart"
+
+
+def test_gateway_ordering_still_falls_open_on_a_bad_name(env: Path) -> None:
+    """请求路径上**不许**抛：名字写坏也只退列出顺序（起不来的是启动面，不是每一条请求）。"""
+    rows = (_row(SEAT_A), _row(SEAT_B))
+    assert gateway._order(rows, "totally-bogus", pool="codebuddy") == [0, 1]
+

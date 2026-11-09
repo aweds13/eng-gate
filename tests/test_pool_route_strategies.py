@@ -371,10 +371,13 @@ def test_fastest_probe_gives_the_unmeasured_a_turn_every_five() -> None:
 # ---------------------------------------------------------------- 17-19. apply_strategy
 
 def test_apply_strategy_unknown_name_falls_open() -> None:
-    """名字不在 `BUILTIN` ⇒ 返回恒等且**不抛**（原件 `routes.Find` 的 `ok=false`）。"""
+    """名字不在名称表里 ⇒ 返回恒等且**不抛**（原件 `routes.Find` 的 `ok=false`）。
+
+    ★ 空串**不再是**这一档：原件 `routes.Find` 的 `if routing == "" { return Smart, true }`
+      说空串就是默认策略 smart（卡 E103）；它由 `test_smart_routing_actually_orders` 接管。
+    """
     two = plain(2)
     assert pool_route.apply_strategy("nope", two, pool="p") == [0, 1]
-    assert pool_route.apply_strategy("", two, pool="p") == [0, 1]
     assert pool_route.apply_strategy("nope", [], pool="p") == []
 
 
@@ -436,3 +439,86 @@ def test_every_strategy_returns_a_permutation_of_its_input(name: str) -> None:
     assert sorted(got) == list(range(len(tricky)))
     # 空池对每个策略都得回 []（不是抛、也不是 [0]）。
     assert pool_route.apply_strategy(name, [], pool="p", state=state) == []
+
+# -------------------------------------------------- 21-26. 名称归一（卡 E103 · T-AG612）
+
+# 源：magpie `internal/cli/groups_cli_test.go:79` 的 `parseRouting` 参数化 + 本仓多出来的几个值。
+# ★ 逐字是外部契约：表里少一个、错一个字母，运维写的那行命令就静默变成列出顺序。
+_MAGPIE_NAMES: tuple[tuple[str, str], ...] = (
+    ("", pool_route.SMART),
+    ("smart", pool_route.SMART),
+    ("SMART", pool_route.SMART),
+    ("Smart", pool_route.SMART),
+    ("  smart  ", pool_route.SMART),
+    ("default", pool_route.SMART),
+    ("auto", pool_route.SMART),
+    ("order", pool_route.ORDERED),
+    ("In-Order", pool_route.ORDERED),
+    ("ordered", pool_route.ORDERED),
+    ("rotate", pool_route.ROTATE),
+    ("round-robin", pool_route.ROTATE),
+    ("usage", pool_route.LEAST_USED),
+    ("least-used", pool_route.LEAST_USED),
+    ("pace", pool_route.PACE),
+    ("weekly-pace", pool_route.PACE),
+    ("weight", pool_route.WEIGHTED),
+    ("wrr", pool_route.WEIGHTED),
+    ("free", pool_route.FREE_FIRST),
+    ("no-cost", pool_route.FREE_FIRST),
+    ("fast", pool_route.FASTEST),
+    ("Fastest", pool_route.FASTEST),
+    ("speed", pool_route.FASTEST),
+    ("speed-first", pool_route.FASTEST),
+    ("manual", pool_route.MANUAL),
+    ("pick", pool_route.MANUAL),
+)
+
+
+@pytest.mark.parametrize(("written", "canonical"), _MAGPIE_NAMES)
+def test_parse_routing_matches_magpie_name_table(written: str, canonical: str) -> None:
+    """大小写 / 首尾空白 / 别名一律归一（原件 parseRouting：TrimSpace → ToLower → 比名字表）。"""
+    assert pool_route.parse_routing(written) == canonical
+
+
+def test_parse_routing_rejects_unknown_and_names_it() -> None:
+    """不认识就**点名**（原件：`routing %q is not one magpie has: …`），绝不静默回 order。"""
+    with pytest.raises(pool_route.RouteError) as err:
+        pool_route.parse_routing("totally-bogus")
+    msg = str(err.value)
+    assert "totally-bogus" in msg, "报错要点名收到的原值，否则运维不知道是自己写错了"
+    assert "smart" in msg, "报错要给出可用名字（至少把默认那个说清楚）"
+
+
+def test_parse_routing_says_plugins_are_not_supported() -> None:
+    """`<plugin>/<name>` 原件支持、本仓没有插件路由 ⇒ 要明说，不许当成「未知名字」吞掉。"""
+    with pytest.raises(pool_route.RouteError) as err:
+        pool_route.parse_routing("acme/least-loaded")
+    msg = str(err.value)
+    assert "acme/least-loaded" in msg
+    assert "插件" in msg, "要说清是「原件有、本仓没有」，不是「你写错了」"
+
+
+def test_builtin_still_has_no_smart() -> None:
+    """★ `smart` 是**默认值**，不是第八个内置策略：塞进 `BUILTIN` 就改了原件那份外部契约。"""
+    assert "smart" not in pool_route.BUILTIN
+    assert len(pool_route.BUILTIN) == 7
+
+
+def test_smart_routing_actually_orders() -> None:
+    """★ 卡 E103 的现场：`--routing smart` 曾经静默退化成列出顺序。
+
+    四个写法（含原件默认的空串）都必须真跑到 `smart_order`，逐字等于它。
+    """
+    seats = seats_of({"key": "spent", "used": 95.0}, {"key": "fine", "used": 10.0})
+    want = pool_route.smart_order(seats)
+    assert want == [1, 0], "前提：真 smart 会把 10% 的排到 95% 前面"
+    for written in ("smart", "", "default", "SMART"):
+        assert pool_route.apply_strategy(written, seats, pool="p") == want, written
+
+
+def test_manual_routing_keeps_the_listed_order() -> None:
+    """`manual` = 不自动排位（原件同）：恒等，且与 `sink.sinks()` 的「manual 不沉底」口径对齐。"""
+    two = plain(2)
+    assert pool_route.apply_strategy("manual", two, pool="p") == [0, 1]
+    assert pool_route.apply_strategy("pick", two, pool="p") == [0, 1]
+

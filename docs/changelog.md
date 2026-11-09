@@ -8,6 +8,11 @@
 - 批处理（`.cmd` / `.bat`）改走 `%COMSPEC% /d /s /c "<整行>"`、参数逐段自己加引号：实测 argv 列表形态下 `a&b` 会被拆成两条命令、`a^b` 会变成 `ab`；普通程序仍走 argv 列表，参数逐字节原样（`%VAR%` 不被展开）。
 - 起不来时 `main()` 回 127 并在 stdout 点名「找不到的是：<name>」，日志里也留同一行，**不打印 traceback**：127 与子进程自己的退出码分开，不再靠人猜「是慢还是没起来」。
 - `main()` 只剥开头那一个 `--`（原来 `args.cmd[1:]` 会吞掉命令自己的第一个 `--`）；心跳改成 0.2 秒步长轮询、每到 `--every` 才打一行，短命令不必等满一个周期。
+## 2026-11-10 T-AG612 magpie 的默认策略 smart 在 pool 侧调不到：名称归一 + 不认识的要说话
+- `tools/pool/route.py` 新增 `SMART`/`MANUAL`/`ROUTING_ALIASES` 与 `parse_routing()`：TrimSpace → 插件形态判定 → ToLower → 比名字表，逐字照 `internal/cli/groups_cli.go:126-170`；空串 = `smart`（原件默认值），认不出抛 `RouteError` 并点名收到的值与可用全表。
+- `apply_strategy()` 先用 `parse_routing` 归一，再按**规范名**分派；`smart` 从此真的走 `smart_order`（早先与空串一起静默退恒等，等于 `--routing smart` 就是按列出顺序）。`BUILTIN` 七项**一个字没动** —— smart 是默认值，不是第八个内置策略。
+- `tools/pool/gateway.py` 的启动面不再 fail-open：`build_server()` 归一失败抛既有 `ConfigError`，`main()` 归一一遍再起服务 ⇒ 名字写错**退 2、一个端口都不绑**；`--routing` 补了 help（默认 `order`、空串 = `smart`、别名见 `route.ROUTING_ALIASES`）。请求路径上的 fail-open 保持不变（策略坏了不许变 500）。
+- 文档三处投影一次改完：`docs/subsystems/pool/modules.toml` 的 route.py duty/cli 从“零生产调用方”改成真值（网关调 `apply_strategy`/`parse_routing`）、gateway.py 的 cli 补 `--routing`；README 与 INDEX 由生成器重算。
 ## 2026-11-09 T-BG011 把 pika 升级经验收成可复用规程，并让 L3 运行手册层第一次落地
 - 新建 `docs/runbooks/pika-升级规程.md`（九节 + 两个附录）：前置检查 → 三方比对 → 个性化行回填 → 技能替换 → 残留清理 → 验收读数 → 回滚，每步给命令形状与判据；§6 十九条坑每条带症状原文。
 - 为什么落 L3：`docs/文档架构.md:71/:86` 把 `docs/runbooks/` 列为「怎么起、怎么巡检、怎么落地」，但该目录从未存在过（`git ls-files docs/runbooks` 空）；操作规程属「动手时读」不属「回头看」，塞进 `skills/` 会把本机一次性迁移写成通用技能。
