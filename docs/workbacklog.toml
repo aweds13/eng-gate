@@ -5729,3 +5729,27 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E104"
+task = "T-AG613"
+title = "契约对账表没人守：0.2秒的判据不在任何一档门禁里"
+tree = ".wt/E104"
+spec = "复盘/卡/卡E104-契约对账表接门.md"
+files = [
+  "gates/defs/contract.py",
+  "gates/gate-selfproof.toml",
+  "gates/gate-selfproof-product.toml",
+  "tests/test_gate_selfproof_product.py",
+  "tests/test_contract_doc_table_gate.py",
+  "docs/subsystems/ci/README.md",
+  "docs/subsystems/ci/测试流程.md",
+  "复盘/门禁四要素.md",
+  "skills/README.md",
+  "skills/pipe-gate/references/repo-bindings.md",
+  "skills/softeng-manage/references/repo-bindings.md",
+  "复盘/卡/卡E104-契约对账表接门.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
