@@ -5596,3 +5596,29 @@ depends = ["B3"]
 risk = "mid"
 status = "done"
 
+[[cards]]
+id = "E97"
+task = "T-AG606"
+title = "号池额度读数接真源：codearts 真读走通、用量行按注册表归一、接上之后仍老实说不知道"
+tree = ".wt/E97"
+spec = "复盘/卡/卡E97-号池额度读数接真源.md"
+files = [
+  "tools/pool/checkin.py",
+  "tools/pool/platforms.toml",
+  "tools/pool_accounts.py",
+  "tools/wb_dispatch.py",
+  "tests/test_pool_checkin.py",
+  "tests/test_pool_accounts.py",
+  "tests/test_holds_window.py",
+  "tests/test_usage_in_alias.py",
+  "docs/subsystems/pool/modules.toml",
+  "tools/pool/quota_history.py",
+  "tools/pool/quota_line.py",
+  "复盘/卡/卡E97-号池额度读数接真源.md"
+]
+depends = [
+  "E94",
+  "E95"
+]
+risk = "mid"
+status = "pending"
