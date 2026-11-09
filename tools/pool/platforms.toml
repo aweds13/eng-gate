@@ -9,10 +9,19 @@
 #
 # 凭据来自环境变量，名字写在各段 `token_env`（多个用 / 分隔，取第一个非空的）。
 # 账本只存「位置指针」，不存明文 —— 见 复盘/卡/卡E45-账号账本与只读探测.md §4。
+#
+# 各段 `chat_urls`（卡 E94）：这个平台**可以直接转发 chat 补全请求**的端点清单，
+# 只放端点，不放凭据（凭据仍走 `token_env` / `token_file`）。
+#   * 空数组 `[]` = **没登记**这个平台的 chat 端点，**不是**「不支持」——
+#     网关遇到空表一律 403 并点名「这个平台没登记 chat 端点」，绝不退化成
+#     「拿 base_urls 随便试一个」；
+#   * 表里这些平台大多是 IDE / 面板的凭据，没有公开的 chat 补全入口，所以现在**全是空的**；
+#   * 填之前必须真机验证过（`verified = true` 且写明 `source`），
+#     否则填了也仍算 `verified = false`，网关不认。
 
 [meta]
 schema = 1
-updated_at = "2026-11-08"
+updated_at = "2026-11-09"
 note = "端点与坑来自 gates/diag/repos/ref/ 的五个参考仓存档；本机只有 codearts / codebuddy 有真号。"
 
 # ---------------------------------------------------------------- codearts（华为云码道）
@@ -24,6 +33,7 @@ auth_kind = "sdk-hmac-sha256"
 probe = "unsupported"
 verified = true
 base_urls = ["https://snap-access.cn-north-4.myhuaweicloud.com"]
+chat_urls = []  # 空 = 没登记，不是不支持（见文件头）
 token_env = "CODEARTS_CLI_AK/CODEARTS_CLI_SK/TF_CODEARTS_AK/TF_CODEARTS_SK"
 source = "github:anye-99/dsh-codearts-auth/src/codearts-credits.ts:20-60"
 local_archive = "gates/diag/repos/ref/dsh-codearts-auth/src_codearts-credits.ts"
@@ -48,6 +58,7 @@ auth_kind = "bearer"
 probe = "http"
 verified = false
 base_urls = ["https://copilot.tencent.com"]
+chat_urls = []  # 空 = 没登记，不是不支持（见文件头）
 probe_url = "{base}/v2/billing/meter/get-user-resource"
 unit = "点"
 token_env = "TF_WORKBUDDY_TOKEN"
@@ -75,6 +86,7 @@ auth_kind = "bearer"
 probe = "http"
 verified = false
 base_urls = ["https://openapi.qoder.com.cn"]
+chat_urls = []  # 空 = 没登记，不是不支持（见文件头）
 probe_url = "{base}/sash/api/v2/me/usage"
 unit = "credits"
 token_env = "TF_QODER_TOKEN"
@@ -99,6 +111,7 @@ auth_kind = "cookie"
 probe = "http"
 verified = false
 base_urls = ["https://api.trae.cn"]
+chat_urls = []  # 空 = 没登记，不是不支持（见文件头）
 probe_url = "{base}/trae/api/v2/pay/ide_user_ent_usage"
 unit = "credits"
 token_env = "TF_TRAE_TOKEN"
@@ -124,6 +137,7 @@ auth_kind = "bearer"
 probe = "http"
 verified = false
 base_urls = ["https://api.minimax.chat"]
+chat_urls = []  # 空 = 没登记，不是不支持（见文件头）
 probe_url = "{base}/minimax-cloud/api/v1/credit/details"
 unit = "积分"
 token_env = "TF_MINIMAX_TOKEN"
@@ -150,6 +164,7 @@ auth_kind = "bearer"
 probe = "manual"
 verified = false
 base_urls = []
+chat_urls = []  # 空 = 没登记，不是不支持（见文件头）
 token_env = "TF_LOBSTERAI_TOKEN"
 source = "github:anye-99/dsh-codearts-auth/src/lobsterai-credits.ts:1-30"
 local_archive = "gates/diag/repos/ref/dsh-codearts-auth/src_lobsterai-credits.ts"
@@ -170,6 +185,7 @@ auth_kind = "none"
 probe = "manual"
 verified = true
 base_urls = []
+chat_urls = []  # 空 = 没登记，不是不支持（见文件头）
 token_env = ""
 source = "github:a1141171521/dsh-multi-agent-gateway/README.md:100-119"
 local_archive = "gates/diag/repos/a1141171521_dsh-multi-agent-gateway.md"
@@ -189,6 +205,7 @@ auth_kind = "file"
 probe = "http"
 verified = true
 base_urls = ["https://meoo.com"]
+chat_urls = []  # 空 = 没登记，不是不支持（见文件头）
 probe_url = "{base}/open/v1/cli-compat/account/points"
 amount_path = "data.account.availableBalance"
 token_env = ""
@@ -214,6 +231,7 @@ auth_kind = "dir"
 probe = "manual"
 verified = true
 base_urls = []
+chat_urls = []  # 空 = 没登记，不是不支持（见文件头）
 token_env = ""
 source = "local:infra/pool/codebuddy_accounts.py:1"
 claim_flow = []

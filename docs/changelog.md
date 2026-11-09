@@ -4,6 +4,11 @@
 - 附录 A 给五份旧文档逐条去留判定（保留 / 合并进规程 / 标记过时），并点名两处与实测矛盾：`复盘/pika迁移-回填方案.md` 的「6 个已装」与「改 env 方向」，`复盘/pika迁移-新旧比对.md` 的「SKILL.md 无 version: 行」。
 - 旧的两份复盘不删，只加头部注记指向新规程 —— 它们是当时的证据，规程是现在的做法。
 - 建目录后 `check_layers.py` 从 FAIL 转 PASS（修掉 38 处反引号路径：仓外文件改带盘符绝对路径，zip payload 内部文件名去反引号）。
+## 2026-11-09 T-AG603 号池网关同协议直通：七值失败分类、干跑落账、四路由默认关
+- 新建 `tools/pool/gateway.py`（1085 行）：`classify(status, body) -> Kind` 七值闭集（只看 status 与 `error.type` / `error.code` / `reason` / `status` 四个结构化字段，**不解析 message 文案**），`Retry-After: 0` 走 `is not None` 判空；`route_once()` 干跑整链（沉底 / lane / RPM / 收窄 / 端点 / 记 `gates/diag/wb-route.jsonl`，`card` 用 `gw:<caller>`、`tried` 空不落）。
+- `tools/pool/platforms.toml` 九平台各加 `chat_urls = []`：空 = 没登记，**不是**不支持 —— 遇空表一律 403 点名，绝不从 `base_urls` 猜端点；`[meta] updated_at` 改 2026-11-09。四路由默认关：只绑回环、token 未设 ⇒ 打印并退 2 不绑端口（不复用 MCP 的 token）、`hmac.compare_digest`、Origin 白名单、请求体 32 MiB 上限。
+- 只做同协议直通：上游只流式而调用方要非流式 ⇒ 400 拒绝**不攒流**；不做协议翻译层（magpie 的 `forwardOnce` / `ir.go` / `decoderFor` 一行没搬）；不新增第二份失败分类、不新增第二本用量账、`tools/pool/route.py` 一字未动。
+- 反向变异 7 条全咬住；其中 M5 第一次**是绿的**：原用例走「全沉底」出口压根没进 `_log`，补钉子后才红。
 ## 2026-11-08 · 云门禁泛用化：抽「仓无关骨架 + 每仓一份 profile」（卡 E92，T-AG600）
 - `scripts/cloud/run_gate.sh` 里 10 处本仓字面（cloud_dir / 分支 / TF_PROJECTS_TOML / 池配置 / pip -c pins / run_gates.py / 播种目录 / 卡树 / 产物路径）全部搬进 `scripts/cloud/profiles/engineering.toml`，脚本只剩「怎么跑」。
 - 新增 `scripts/cloud/profile.py`（dump/list/check/render 四子命令，38 个键）与 `--render` 分支；新增第二仓 profile `scripts/cloud/profiles/openmaic.toml`，全文零本仓键值（判据 3 有钉子）。

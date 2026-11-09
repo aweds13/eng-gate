@@ -1,0 +1,15 @@
+[entries."T-AG603"]
+id = "T-AG603"
+title = "号池网关同协议直通：七值失败分类、干跑落账、四路由默认关"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/gateway.py",
+  "file:tests/test_pool_gateway.py",
+  "text:tools/pool/gateway.py::def classify(status: int, body: bytes | dict | None = None) -> Kind:",
+  "test:test_pool_gateway.py::test_kind_vocabulary_is_seven_values",
+  "test:test_pool_gateway.py::test_dry_run_walks_the_whole_chain",
+  "test:test_pool_gateway.py::test_streaming_upstream_non_stream_caller_is_400",
+]
+gaps = "1. 九平台 `chat_urls` 全为空数组 —— 同协议直通这一段**没有对任何真上游跑过**（`forward_http` / `resolve_token` / `_account_platform` / `_iter_stream` 四段是桩驱动验的）。指针 `tools/pool/platforms.toml`2. 网关**没接进任何命令壳**：`wb_dispatch` 仍走它自己那条路，网关只有 `main()` 入口。指针 `tools/pool/gateway.py`3. 候选排序经 `apply_strategy`（末行 `apply_order`，`tools/pool/route.py:580`），网关没直调；`used: float|None` 语义归卡 E95，本卡只做到「不知道不伪造成 0」。指针 `tools/pool/gateway.py:381`"
+

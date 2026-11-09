@@ -11738,3 +11738,18 @@ evidence = [
   "file:docs/traceability.d/T-BG011.toml",
 ]
 gaps = "1. 规程只覆盖 owner 级 token 链那一套抽取；classic 链退役只写了「顺序不能反」，没给逐条命令与验收读数。指针 `docs/runbooks/pika-升级规程.md`2. 第 5 步「个性化行回填」的判据是「逐行可审」，落成了人工核对表，**没有自动化测试**守着 —— 下一个人仍可能漏行。指针 `docs/runbooks/pika-升级规程.md`3. `tools/pika_migrate.py` 仍是 dry-run 脚本，没接进规程的 8 步；本卡只出规程不动工具。指针 `tools/pika_migrate.py`4. 四份旧文档按「不删，只加注记」处理，操作部分与规程正文因此各有一份投影 —— 靠旧文件头部那行注记消歧，不靠人记。指针 `复盘/pika迁移-回填方案.md`"
+
+[entries."T-AG603"]
+id = "T-AG603"
+title = "号池网关同协议直通：七值失败分类、干跑落账、四路由默认关"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/gateway.py",
+  "file:tests/test_pool_gateway.py",
+  "text:tools/pool/gateway.py::def classify(status: int, body: bytes | dict | None = None) -> Kind:",
+  "test:test_pool_gateway.py::test_kind_vocabulary_is_seven_values",
+  "test:test_pool_gateway.py::test_dry_run_walks_the_whole_chain",
+  "test:test_pool_gateway.py::test_streaming_upstream_non_stream_caller_is_400",
+]
+gaps = "1. 九平台 `chat_urls` 全为空数组 —— 同协议直通这一段**没有对任何真上游跑过**（`forward_http` / `resolve_token` / `_account_platform` / `_iter_stream` 四段是桩驱动验的）。指针 `tools/pool/platforms.toml`2. 网关**没接进任何命令壳**：`wb_dispatch` 仍走它自己那条路，网关只有 `main()` 入口。指针 `tools/pool/gateway.py`3. 候选排序经 `apply_strategy`（末行 `apply_order`，`tools/pool/route.py:580`），网关没直调；`used: float|None` 语义归卡 E95，本卡只做到「不知道不伪造成 0」。指针 `tools/pool/gateway.py:381`"
