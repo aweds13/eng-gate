@@ -5694,3 +5694,18 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E102"
+task = "T-AG611"
+title = "长命令起不来要响亮：run_logged先解析argv0、批处理过cmd、127点名"
+tree = ".wt/E102"
+spec = "复盘/卡/卡E102-长命令起不来要响亮.md"
+files = [
+  "tools/run_logged.py",
+  "tests/test_run_logged.py",
+  "复盘/卡/卡E102-长命令起不来要响亮.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
