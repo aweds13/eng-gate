@@ -5622,3 +5622,20 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E98"
+task = "T-AG607"
+title = "落地链的三个结构缺口：回退名单缺现算文档、②之后索引必过期、复核拿错了 allow"
+tree = ".wt/E98"
+spec = "复盘/卡/卡E98-落地链三缺口.md"
+files = [
+  "tools/pool/landing.py",
+  "tests/test_pool_landing.py",
+  "复盘/卡/卡E98-落地链三缺口.md"
+]
+depends = [
+  "E96"
+]
+risk = "mid"
+status = "pending"
