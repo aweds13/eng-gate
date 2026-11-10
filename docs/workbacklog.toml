@@ -5814,3 +5814,20 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E108"
+task = "T-AG617"
+title = "立卡笔的提交信息挂错号：Task写新台账号、没有Refs与Gates"
+tree = ".wt/E108"
+spec = "复盘/卡/卡E108-立卡笔的提交信息挂错号.md"
+files = [
+  "tools/pool/ledger.py",
+  "tests/test_ledger_queue_counts.py",
+  "复盘/卡/卡E108-立卡笔的提交信息挂错号.md"
+]
+depends = [
+  "E107"
+]
+risk = "mid"
+status = "pending"
