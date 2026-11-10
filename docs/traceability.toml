@@ -11970,3 +11970,24 @@ evidence = [
   "test:test_pool_mcp_write.py::test_docs_stop_naming_the_narrow_list_as_the_gate",
 ]
 gaps = "1. `pool` 参数还差最后一格：`registry.reserve(pool=…)` 与 `account_guard(pool=…)` 收的是 `arguments` 原值（空串就是空串），而模型闸收的是「空串⇒默认池」。今天两条路都等于默认池，但账本里「没点名」与「点名默认池」两种写法会并存 —— 要合并得给 `Registry.reserve` 定一条正规化口径。指针 `tools/pool_mcp.py`2. 拒单文案仍由 `wb_dispatch.model_rejected` 一份写死（含允许集与「默认拒绝」口径），MCP 只负责原样带回；也就是说**文案形状**没有钉子，只有「非空且点名模型」这一条。要让「拒单理由长什么样」也受保护，得把它提到一个共用常量里。指针 `tools/pool_mcp.py`3. `switch_open_models` / `effective_allowed_models` 读的是仓外开关文件（`TF_MODEL_SWITCHES` 指向的那份），坏 TOML 现在被接住并拒单，但**没有钉子**证明「坏文件时 CLI 与 MCP 都拒」—— 本卡只钉住 MCP 这一侧不崩。指针 `tests/test_pool_disabled_wiring.py` + `tools/pool/models.py`"
+
+[entries."T-AG616"]
+id = "T-AG616"
+title = "号池读面别说自己是派活允许集：快照过期要说人话、注册表坏了不许崩"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_mcp.py",
+  "file:tools/pool/gateway.py",
+  "file:docs/subsystems/pool/modules.toml",
+  "file:tests/test_pool_mcp.py",
+  "file:tests/test_pool_gateway.py",
+  "text:tools/pool_mcp.py::这不是派活允许集",
+  "text:tools/pool_mcp.py::派活允许集读不出来",
+  "test:test_pool_mcp.py::test_pool_models_does_not_call_the_intersection_a_dispatch_allow_list",
+  "test:test_pool_mcp.py::test_pool_models_reports_the_dispatch_allow_list_per_pool",
+  "test:test_pool_mcp.py::test_pool_models_says_the_snapshot_is_stale_in_the_human_text",
+  "test:test_pool_mcp.py::test_pool_models_survives_a_broken_registry",
+  "test:test_pool_gateway.py::test_seat_docstring_does_not_claim_a_raise_that_no_longer_happens",
+]
+gaps = "1. 只修了**说法**，没修**id 口径**：号池侧是 `provider/model`（如 `huaweicloud-maas/GLM-5.2`），派活器侧是裸名（`GLM-5.2`），两套名字之间没有映射 ⇒ 交集空不空与派活能不能派，仍是两件互不校验的事；今天只能靠人眼看两行字。指针 `tools/pool_mcp.py`2. 新鲜度三态只落在 pool_models 的**人话段**，别的读面（quota_status、看板）仍只在机器块里带快照时间 ⇒ 「过期」这件事在别处还是静默的；技能层 `skills/softeng-manage/references/asset-layers.md` 第 80 行还在教人「看批准集 ∩ 可用集」（不在本卡卡域，挂账）。指针 `tools/pool_mcp.py`3. 派活允许集是每次 tools/call **现算**（读注册表 + 一次性授权 + 开关文件），读不出来时如实说「读不出来」但没有「上次读到的是什么、什么时候读的」⇒ 注册表坏掉的那一刻，人只能知道现在没答案，不能知道昨天有没有答案。指针 `tools/pool_mcp.py`"

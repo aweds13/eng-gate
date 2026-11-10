@@ -403,9 +403,11 @@ def _seat(row: Mapping[str, Any]) -> pool_route.Seat:
     早先这里落的是 `0.0`，于是「没有读数」被当成「用得最少」，smart_order / least_used 会把它
     排到第一位 —— 这正是卡 E95 要修的「不知道被当成知道」；网关这一半只负责**不伪造**。
 
-    「不知道怎么排」由卡 E95 在 tools/pool/route.py 里定：当前 `route.tier()` 拿到 None 会抛
-    RouteError，`route.apply_strategy()` 的 fail-open 于是退回原列顺序。这是**已知且可接受**的
-    中间态（宁可回列出顺序，也不许拿假读数排），这里**不 catch 遮掩**、也不自己排。
+    「怎么排」由卡 E95 在 tools/pool/route.py 里定，这里**不 catch 遮掩**、也不自己排。
+    卡 E107 实测（不再复述旧行为）：`route.tier(None) == pool_route.UNKNOWN_TIER`（== 3），
+    **不抛** —— 不知道额度的座落在**最后一档**，`smart` / `usage` / `pace` / `""` 四个分桶策略
+    都把它排在所有知道的座**之后**；`order` / `rotate` / `weight` / `free` 不看额度、保列出序。
+    ⇒ 交给 `apply_strategy()` 只有这一件事：**不知道的座排在所有知道的之后**。
     """
     quota = row.get("quota") if isinstance(row.get("quota"), Mapping) else {}
     used = quota.get("used_percent") if isinstance(quota, Mapping) else None

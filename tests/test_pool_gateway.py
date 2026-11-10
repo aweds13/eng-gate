@@ -939,3 +939,38 @@ def test_absent_disabled_table_keeps_the_gateway_green(env: Path, tmp_path: Path
     out = _run(env, forward)
     assert out.status == 200, f"没有禁用表就该照常转发：{out.status}"
     assert forward.calls, "没有禁用表就该真发上游"
+
+
+# ================================================ 卡 E107（T-AG616）：_seat 的 docstring 别撒谎
+#
+# 原 docstring 说「route.tier() 拿到 None 会抛 RouteError，apply_strategy 的 fail-open
+# 于是退回原列顺序」—— 实测 route.tier(None) == UNKNOWN_TIER == 3，**不抛**；
+# 四个分桶策略（smart / usage / pace / fast）把「不知道」的座排到**所有知道的之后**。
+# 一句话：docstring 说的必须是代码做的。
+
+
+def test_seat_docstring_does_not_claim_a_raise_that_no_longer_happens() -> None:
+    """★ 判据 4：docstring 里那两句过时断言必须消失，且点明真实口径。"""
+    import inspect  # noqa: PLC0415
+
+    doc = inspect.getdoc(gateway._seat) or ""
+    assert "会抛 RouteError" not in doc, doc
+    assert "退回原列顺序" not in doc, doc
+    assert "UNKNOWN_TIER" in doc, doc
+
+
+def test_seat_hands_unknown_quota_to_route_as_unknown_tier(env: Path) -> None:
+    """★ 判据 4：docstring 说的就是代码做的 —— 网关排位与 route 直接排位逐项相等。"""
+    rows = (
+        {**_row(SEAT_A), "quota": {"used_percent": 90.0}},
+        {**_row(SEAT_B), "quota": {}},
+        {**_row("codearts-2"), "quota": {"used_percent": 10.0}},
+    )
+    seats = [gateway._seat(row) for row in rows]
+    assert pool_route.tier(None) == pool_route.UNKNOWN_TIER, "不知道的座有自己的档"
+    for name in ("smart", "usage", "pace", "fast"):
+        assert gateway._order(rows, name, pool="codebuddy") == pool_route.apply_strategy(
+            name, seats, pool="codebuddy"
+        ), name
+    # 不知道的座排最后（不是「退回原列顺序」—— 原列顺序是 [0, 1, 2]）
+    assert gateway._order(rows, "smart", pool="codebuddy") == [2, 0, 1]

@@ -23,6 +23,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -446,3 +447,146 @@ def test_sanity_now_is_time() -> None:
     diag = ROOT / "gates" / "diag"
     rows = pool_mcp.scan_jobs(diag, now=time.time())
     assert isinstance(rows, list)
+
+# ================================================ 卡 E107（T-AG616）：pool_models 的人话段
+#
+# 三条判据各钉一位：
+#   ① 「交集」不是派活允许集 —— 不许再冒充（真名单按池报，且现算比对，不写死）；
+#   ② 快照新鲜度必须出现在**人话**里（三态：过期 / 新鲜 / 没记录，不许把「没记录」说成「新鲜」）；
+#   ③ 注册表坏了，这个只读工具也不许崩（号池那几段照常给，只这一段说「读不出来」）。
+
+
+def _fake_pool_root(
+    tmp_path: Path, *, at: object = "__omit__", live: list[str] | None = None
+) -> Path:
+    """造一个够 `find_pool_dir` / `load_pool_models` 用的假号池目录。
+
+    ★ 照 tests/test_pool_lib.py 的范式：`pool_models.py` 只要存在即可。
+      `at` 传 `None` = 快照里**没有** `at` 键（没记录）；传字符串 = 写进去。
+    """
+    pool = tmp_path / "infra" / "pool"
+    pool.mkdir(parents=True, exist_ok=True)
+    (pool / "pool_models.py").write_text("", encoding="utf-8")
+    (pool / "models.whitelist.toml").write_text(
+        "[[approved]]\npool = \"codebuddy\"\nmodel = \"p/GLM-5.2\"\n",
+        encoding="utf-8",
+    )
+    snap: dict[str, Any] = {"live": live if live is not None else ["p/GLM-5.2"]}
+    if at != "__omit__" and at is not None:
+        snap["at"] = at
+    (pool / "models.live.json").write_text(json.dumps(snap), encoding="utf-8")
+    return tmp_path
+
+
+def _human(text: str) -> str:
+    """只取**人话段**（机器块之前）。拿整段判文案 = 自己骗自己：JSON 里本来就有那些字段。"""
+    return text.split(JSON_MARKER, 1)[0]
+
+
+def test_pool_models_does_not_call_the_intersection_a_dispatch_allow_list() -> None:
+    """★ 卡 E107 的现场：人话段写着「交集（真正允许派活的）」，而那句话是假的。
+
+    `in_both` 只是号池两份**静态产物**的交集；派活器判的是
+    `wb_dispatch.effective_allowed_models(pool)`（注册表该池条目 + 一次性授权 + 开关文件）。
+    两套 id 口径还不同（号池 provider/model、派活器裸名），谁也冒充不了谁。
+    """
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    assert "交集（真正允许派活的）" not in text, "这句话是假的：交集不是派活允许集"
+    assert "不是派活允许集" in _human(text), text
+    assert "effective_allowed_models" in text, "得点名真名单从哪来（判据只有一份）"
+    assert data["in_both"], "真仓今天有两个（号池批准 ∩ 号池快照）—— 一条都没有说明夹具坏了"
+
+
+def test_pool_models_reports_the_dispatch_allow_list_per_pool() -> None:
+    """派活允许集必须**按池**报，且与 wb_dispatch 现算的逐项相等（不许写死名单）。"""
+    import wb_dispatch  # noqa: PLC0415 —— tools/ 已在 sys.path 上
+    from pool.model_registry import KNOWN_POOLS  # noqa: PLC0415
+
+    text, _data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    lines = text.splitlines()
+    for pool in KNOWN_POOLS:
+        allowed = set(wb_dispatch.effective_allowed_models(pool))
+        line = next((ln for ln in lines if ln.strip().startswith("· " + pool)), None)
+        assert line is not None, "人话段里没有这个池的行：" + pool + "\n" + text
+        listed = {part.strip() for part in line.split("：", 1)[1].split("、") if part.strip()}
+        assert listed == allowed, pool + " 名单不一致：" + repr(listed) + " != " + repr(allowed)
+        assert ("未接" in line) is (not wb_dispatch.get_adapter(pool).wired), line
+
+
+def test_pool_models_says_the_snapshot_is_stale_in_the_human_text(tmp_path: Path) -> None:
+    """★ 过期 373.8 小时这件事，原来只有 JSON 块里有；人话段必须说。"""
+    stamp = (datetime.now() - timedelta(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
+    root = _fake_pool_root(tmp_path, at=stamp)
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False
+    assert data["snapshot_stale"] is True
+    human = _human(text)  # 只准人话段有：机器块里本来就有 snapshot_note，拿整段判等于没判
+    assert "已过期" in human, human
+    assert "72" in human, human
+    assert "24" in human, human
+
+
+def test_pool_models_says_fresh_without_crying_wolf(tmp_path: Path) -> None:
+    """新鲜快照要说「没过期」，且**不许**出现「已过期」（不许嚷）。"""
+    root = _fake_pool_root(tmp_path, at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False
+    assert data["snapshot_stale"] is False
+    human = _human(text)
+    assert "没过期" in human, human
+    assert "已过期" not in human, human
+
+
+def test_pool_models_says_unknown_when_the_stamp_is_missing(tmp_path: Path) -> None:
+    """★ 「没记录」不是「新鲜」：at 没有 ⇒ 说「不知道它多旧」（与卡 320 的口径一致）。"""
+    root = _fake_pool_root(tmp_path, at=None)
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False
+    assert data["snapshot_at"] is None
+    assert data["snapshot_stale"] is False, "没记录 ≠ 过期（卡 320 已定）"
+    human = _human(text)
+    assert "不知道" in human, human
+    assert "没过期" not in human, "没记录不许洗成新鲜"
+
+
+def test_pool_models_survives_a_broken_registry(tmp_path: Path, monkeypatch: Any) -> None:
+    """★ 注册表坏了：只这一段说「读不出来」，号池那几段照常给，工具**不抛**。
+
+    `effective_allowed_models` **不 fail-open**（注册表缺失即 `ModelRegistryError`）；
+    这个工具是只读面，一个坏 TOML 不许把整个 tools/call 打成异常。
+    """
+    root = _fake_pool_root(tmp_path, at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    monkeypatch.setenv("TF_MODEL_REGISTRY", str(tmp_path / "nope.toml"))
+    text, _data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False, "坏注册表是这一段没答案，不是整个工具失败"
+    assert text.strip(), "只读工具必须回非空文本"
+    assert "读不出来" in text, text
+    assert "ModelRegistryError" in text, "得点名异常（不然人只看到「读不出来」）"
+    assert "批准集" in text, "号池那几段必须照常给"
+
+
+def test_pool_models_still_writes_nothing(tmp_path: Path) -> None:
+    """★ 只读：不写快照、不联网。跑前跑后两份输入的字节与 mtime 都不许变。"""
+    root = _fake_pool_root(tmp_path, at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    pool = root / "infra" / "pool"
+    watched = (pool / "models.live.json", pool / "models.whitelist.toml")
+    before = [(f.read_bytes(), f.stat().st_mtime_ns) for f in watched]
+    pool_mcp.tool_pool_models({}, root=root)
+    after = [(f.read_bytes(), f.stat().st_mtime_ns) for f in watched]
+    assert before == after, "只读工具改了它的输入（或碰了 mtime）"
+
+
+def test_pool_models_module_duty_does_not_claim_the_intersection_is_the_allow_list() -> None:
+    """同一条口径在模块表里还有一份投影（docs/subsystems/pool/modules.toml）—— 一起改。"""
+    import tomllib  # noqa: PLC0415 —— 3.11+ 标准库
+
+    raw = (ROOT / "docs" / "subsystems" / "pool" / "modules.toml").read_bytes()
+    data = tomllib.loads(raw.decode("utf-8"))
+    by_name = {m["name"]: m for m in data["module"]}
+    duty = by_name["models.py"]["duty"]
+    assert "批准集 ∩ 可用集" not in duty, duty
+    assert "不是派活允许集" in duty, duty
+    gw_duty = by_name["gateway.py"]["duty"]
+    assert "UNKNOWN_TIER" in gw_duty, gw_duty

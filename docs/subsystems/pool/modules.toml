@@ -54,7 +54,7 @@ cli = "无"
 
 [[module]]
 name = "gateway.py"
-duty = "号池网关（同协议直通）：`classify` 七值失败分类（只看状态码与结构化字段，不解析文案）、`route_once` 干跑式选号/沉底/RPM/收窄/换号与 `wb-route.jsonl` 留痕、四条回环 HTTP 面（Bearer + Origin 白名单 + 32 MiB 上限）——不翻译协议、不攒流"
+duty = "号池网关（同协议直通）：`classify` 七值失败分类（只看状态码与结构化字段，不解析文案）、`route_once` 干跑式选号/沉底/RPM/收窄/换号与 `wb-route.jsonl` 留痕、四条回环 HTTP 面（Bearer + Origin 白名单 + 32 MiB 上限）——不翻译协议、不攒流；不知道额度的座由 `route.tier(None)=UNKNOWN_TIER` 排到最后（不是抛错退原序）"
 cli = "`python -X utf8 tools/pool/gateway.py [--host 127.0.0.1] [--port 8766] [--routing order]`（要 `TF_POOL_GATEWAY_TOKEN`；`--routing` 是**唯一**选号入口：默认 `order`，空串 = `smart`（magpie 默认值），别名见 `pool.route.ROUTING_ALIASES`；名字认不出 ⇒ 退 2、一个端口都不绑）"
 
 [[module]]
@@ -129,7 +129,7 @@ cli = "无（被 `wb_dispatch`、`wb_watch`、`pool.plan` 调；禁用判据被 
 
 [[module]]
 name = "models.py"
-duty = "号池模型的只读读取：批准集 ∩ 可用集；读快照（带 `at`），不联网、不写快照"
+duty = "号池模型的只读读取：号池批准集 ∩ 号池快照（★ 不是派活允许集）；读快照（带 `at`），不联网、不写快照"
 cli = "`wb_state.py`、`pool_mcp`"
 
 [[module]]

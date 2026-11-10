@@ -38,7 +38,7 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 | `job_status(card)` | 时间线 + 仓库状态 | **import** `tools/pool/jobs.py`（读 log + 渲染） |
 | `job_result(card)` | 判决与摘要的**原文**（截断**明示总长**） | **import** `tools/pool/jobs.py` |
 | `lock_status` | 门禁锁：哪把、谁的、租约剩多久 | `gate_lock.py status`（唯一 subprocess，见下） |
-| `pool_models` | 号池可用模型（批准 ∩ 可用） | **import** `tools/pool/models.py`（只读快照） |
+| `pool_models` | 号池批准集 ∩ 快照 + 派活允许集 | **import** `tools/pool/models.py` |
 
 ★ 卡 106（T-G202）：十三个工具的**逻辑**已收敛到 `tools/pool/` 包，CLI 与 MCP **共用同一批函数**。
 `subprocess` 只留**一处** —— `lock_status` 跑 `gate_lock.py`：那是 `gates/diag/` 下的**独立脚本**
@@ -157,6 +157,13 @@ stdio 那条路**一个字节不变**（无参数仍是 stdio）。
 - `pool_models` 读的是**快照** `models.live.json`（带 `at` 时间戳），**不是现场拉取**：
   现场拉取（`pool_models.py --check`）既要**联网**又会**写快照文件**，两样都被本卡禁止。
   所以这里只读它已经落盘的输入，并在输出里**明说**"来自快照 at=…"。
+- ★ 卡 E107：pool_models 里「交集」那段**不是**派活允许集 —— 它是号池两份静态产物的交集
+  （models.whitelist.toml ∩ models.live.json），与派活器判的那份**不是同一件事**，
+  连 id 口径都不同（号池 provider/model、派活器裸名）。真名单**按池**现算，
+  判据只有一份：wb_dispatch.effective_allowed_models(pool)；注册表坏了只让**这一段**
+  说"读不出来"，工具整体照常返回（只读面不许被一个坏 TOML 打成异常）。
+- ★ 快照新鲜度（过期 / 没过期 / **没记录**）必须出现在**人话段**：只藏在机器块
+  （--- tf-json --- 之后）里等于没说 —— MCP 客户端读的就是人话段。
 - 号池目录（`infra/pool/`）**不在本仓**（它在 `jelly_ware/` 下、跨项目复用）。本模块从
   `ROOT` 起**逐级向上**找 `<祖先>/infra/pool/pool_models.py`；找不到就如实说"没有"并列出找过哪些。
 - 传给人看/给客户端的东西只有工具；**没有** `resources` / `prompts` / `logging`（先例也一样）。
@@ -433,7 +440,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "pool_models",
-        "description": "号池可用模型：批准集 ∩ 可用集（读号池快照，只读、不联网）。",
+        "description": "号池可用模型：批准集 ∩ 快照（★ 不是派活允许集）+ 按池的派活允许集。",
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -1096,7 +1103,10 @@ def tool_lock_status(
 def tool_pool_models(
     arguments: dict[str, Any], root: Path = ROOT
 ) -> tuple[str, dict[str, Any], bool]:
-    """号池可用模型：批准集 ∩ 可用集 —— 读快照，**只读、不联网、不写快照**。"""
+    """号池可用模型：号池批准集 ∩ 快照 + 按池的派活允许集 —— 只读、不联网、不写快照。
+
+    ★ 卡 E107：前半（交集）**不是**派活允许集；真正那份按池现算，见 wb_dispatch。
+    """
     pool = find_pool_dir(root)
     if pool is None:
         searched = " 、 ".join(
@@ -1120,7 +1130,31 @@ def tool_pool_models(
         "批准集（models.whitelist.toml，只有用户能改）："
         + ("、".join(info["approved"]) if info["approved"] else "（没有批准项）"),
     ]
-    lines.append("交集（真正允许派活的）：" + ("、".join(info["in_both"]) or "（空 —— 拒绝派活）"))
+    # ★ 卡 E107：这句话原来写的是「交集（真正允许派活的）」—— 撒谎。
+    #   in_both 只是号池两份**静态产物**的交集（whitelist ∩ 快照），派活器判的是
+    #   wb_dispatch.effective_allowed_models(pool)（注册表该池条目 + 一次性授权 + 开关文件），
+    #   而且两套 id 口径不同（号池 provider/model、派活器裸名）。它谁都冒充不了 ——
+    #   最坏时它空，文案却说「拒绝派活」，而派活器那边照样能派。
+    lines.append(
+        "号池快照里「批准 ∩ 可用」："
+        + ("、".join(info["in_both"]) or "（空）")
+        + "（★ 这不是派活允许集：它是号池两份静态产物的交集，"
+        "与派活器判的那份不是同一件事，见下）"
+    )
+    # ★ 卡 E107 判据 2：新鲜度必须出现在**人话段**。三态，缺一态就是把「不知道」洗成「新鲜」。
+    age = info["snapshot_age_hours"]
+    stale_hours = info["snapshot_stale_hours"]
+    if info["snapshot_at"] is None:
+        lines.append(
+            f"快照新鲜度：不知道它多旧（{info['snapshot']} 里没有 at 时间戳）"
+            " ⇒ 不当成新鲜，也不当成过期；要派活先重新探测"
+        )
+    elif info["snapshot_stale"]:
+        lines.append(
+            f"快照新鲜度：已过期 {age} 小时（上限 {stale_hours}h）⇒ 先重新探测再派活"
+        )
+    else:
+        lines.append(f"快照新鲜度：没过期（{age} 小时前，上限 {stale_hours}h）")
     if info["approved_but_missing"]:
         lines.append("批准了但快照里没有（派它必失败）：" + "、".join(info["approved_but_missing"]))
     if info["live_but_unapproved"]:
@@ -1128,6 +1162,36 @@ def tool_pool_models(
             "服务端有但未批准（只报告，绝不自动启用 → 等你一句「批 X」）："
             + "、".join(info["live_but_unapproved"])
         )
+    # ★ 卡 E107 判据 1：真名单**按池**现算（判据只有一份，就在 wb_dispatch 里）。
+    #   不写死名单、不另造一份；注册表坏了只让**这一段**没答案（判据 3）。
+    lines.append(
+        "派活允许集（wb_dispatch.effective_allowed_models(pool)：注册表该池条目"
+        " + 一次性授权 + 开关文件里打开的；★ 这里现算，不写死）"
+    )
+    try:
+        import wb_dispatch  # noqa: PLC0415 —— tools/ 已在 sys.path 上（同一个目录）
+        from pool.model_registry import (  # noqa: PLC0415
+            DEFAULT_POOL,
+            KNOWN_POOLS,
+            get_adapter,
+        )
+
+        ordered = [DEFAULT_POOL] + [n for n in KNOWN_POOLS if n != DEFAULT_POOL]
+        allow_lines: list[str] = []
+        for name in ordered:
+            allowed = wb_dispatch.effective_allowed_models(name)
+            # ★ 未接的池如实标「未接」：名单照给（那是它的允许集），但派它会被拒。
+            #   注记放在**第一个全角冒号之前**、且自身不含全角冒号 —— 机器读这段按第一个「：」切。
+            mark = "" if get_adapter(name).wired else "（未接 ⇒ 派它会被拒）"
+            allow_lines.append(f"· {name}{mark}：" + ("、".join(allowed) or "（空 ⇒ 派什么都拒）"))
+    except Exception as exc:  # noqa: BLE001 —— 只读面：坏输入不许把整个 tools/call 打成异常
+        lines.append(f"派活允许集读不出来：{type(exc).__name__}：{exc}")
+        lines.append(
+            "  指针：注册表在 infra/pool/model-registry.toml（或用 TF_MODEL_REGISTRY 指过去）；"
+            " 读不到就不列 —— 不猜、不退回内置名单"
+        )
+    else:
+        lines.extend(allow_lines)
     return _result("\n".join(lines), info, is_error=False)
 
 
