@@ -23,6 +23,11 @@
 - 网关从「一律 404」改成 `_model_block` 回 `(状态码, 文案)`：禁用 / 禁用表读不懂 ⇒ **403**（原件 `internal/gateway/disabled.go` 逐字「403 in the API's own shape」），未批 / 快照过期 / 空批准集 / 找不到号池目录四支仍 404。
 - `tests/test_pool_disabled_wiring.py`（本卡新建，4 条）：三处入口各恰一次判据调用且不自己读表、`route_once` 按状态码回而不是写死 404、四支老判定仍 404、两份源文件与模块地图不再写「零生产调用方」。
 - 三份既有测试各追加禁用钉子（派活主闸 3 条含「表不存在不改行为」/ 网关 3 条 / MCP 干跑面 1 条，`no_spawn` 证明零副作用）；`docs/subsystems/pool/modules.toml` 里注册表那一条补上禁用表与三处调用方。
+## 2026-11-10 T-AG615 MCP 干跑面拿更窄的名单判模型：开关放行的被拒、理由还是空串
+- `tools/pool_mcp.py::tool_pool_dispatch` 的模型闸换成**与 CLI 同一份判据**：`wb_dispatch.model_rejected(model, pool)`（允许集 = `effective_allowed_models(pool)`，含一次性授权与开关文件里打开的），不再自己比只看轮换链的 `MODEL_WHITELIST`。
+- 拒单理由不再可能是空串：`rejected` 非空原样带回；`get_adapter` / `assert_wired` / `resolve_model` / `effective_allowed_models` / `assert_not_disabled` / `load_switches` 抛的任何一种都收成一句「模型闸没过，已拒绝派活：…」（坏 TOML 不许把 `tools/call` 打崩）。
+- `pool` 参数一路走到底：模型闸、`resolve_model`、caller 收窄（`caller_model_rejected(model, pool, account)`）都按它判，`_dispatch_argv` 在**非默认池**时才追加 `--pool <pool>` ⇒ 不再「判一个池、登记一个池、工人跑另一个池」；未知池 / 未接池在起进程之前就拒。
+- `tests/test_pool_mcp_write.py` 追加 12 条钉子（判据 1–4），`无 spawn` 断言证明拒单零副作用；模块 docstring 的 `--model` 说明与六条不变量表 ⑥ 改成点名 `effective_allowed_models(pool)`。
 ## 2026-11-09 T-BG011 把 pika 升级经验收成可复用规程，并让 L3 运行手册层第一次落地
 - 新建 `docs/runbooks/pika-升级规程.md`（九节 + 两个附录）：前置检查 → 三方比对 → 个性化行回填 → 技能替换 → 残留清理 → 验收读数 → 回滚，每步给命令形状与判据；§6 十九条坑每条带症状原文。
 - 为什么落 L3：`docs/文档架构.md:71/:86` 把 `docs/runbooks/` 列为「怎么起、怎么巡检、怎么落地」，但该目录从未存在过（`git ls-files docs/runbooks` 空）；操作规程属「动手时读」不属「回头看」，塞进 `skills/` 会把本机一次性迁移写成通用技能。

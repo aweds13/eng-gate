@@ -1,0 +1,20 @@
+[entries."T-AG615"]
+id = "T-AG615"
+title = "MCP干跑面拿更窄的名单判模型：开关放行的被拒、理由还是空串、pool参数三处各说各的"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp_write.py",
+  "file:复盘/卡/卡E106-MCP模型闸用对名单.md",
+  "text:tools/pool_mcp.py::def _dispatch_argv(",
+  "test:test_pool_mcp_write.py::test_switch_opened_model_passes_the_mcp_gate",
+  "test:test_pool_mcp_write.py::test_mcp_gate_and_cli_gate_agree_on_every_probe",
+  "test:test_pool_mcp_write.py::test_model_refusal_always_carries_a_reason",
+  "test:test_pool_mcp_write.py::test_pool_argument_reaches_the_worker",
+  "test:test_pool_mcp_write.py::test_unknown_pool_is_refused_before_spawning",
+  "test:test_pool_mcp_write.py::test_default_pool_argv_is_byte_identical",
+  "test:test_pool_mcp_write.py::test_docs_stop_naming_the_narrow_list_as_the_gate",
+]
+gaps = "1. `pool` 参数还差最后一格：`registry.reserve(pool=…)` 与 `account_guard(pool=…)` 收的是 `arguments` 原值（空串就是空串），而模型闸收的是「空串⇒默认池」。今天两条路都等于默认池，但账本里「没点名」与「点名默认池」两种写法会并存 —— 要合并得给 `Registry.reserve` 定一条正规化口径。指针 `tools/pool_mcp.py`2. 拒单文案仍由 `wb_dispatch.model_rejected` 一份写死（含允许集与「默认拒绝」口径），MCP 只负责原样带回；也就是说**文案形状**没有钉子，只有「非空且点名模型」这一条。要让「拒单理由长什么样」也受保护，得把它提到一个共用常量里。指针 `tools/pool_mcp.py`3. `switch_open_models` / `effective_allowed_models` 读的是仓外开关文件（`TF_MODEL_SWITCHES` 指向的那份），坏 TOML 现在被接住并拒单，但**没有钉子**证明「坏文件时 CLI 与 MCP 都拒」—— 本卡只钉住 MCP 这一侧不崩。指针 `tests/test_pool_disabled_wiring.py` + `tools/pool/models.py`"
+

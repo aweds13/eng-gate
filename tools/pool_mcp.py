@@ -58,8 +58,10 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 的关键：不能"先派活后登记"）；③ 起工人 `wb_dispatch.py … --cwd <树绝对路径> --lean --detach
 --execute`（**必须 `--detach`**：MCP 工具调用不能阻塞几十分钟）；④ 起不来就
 `pool.registry.release(...)` **回滚**并如实报错。参数**写死、不透传危险项**：不给 `--force` /
-`--allow` / `--no-preflight` / `--resume`；`--model` 只许取 `wb_dispatch.MODEL_WHITELIST` 里的值
-（不在就拒），不给用默认。
+`--allow` / `--no-preflight` / `--resume`；`--model` / `--pool` 走**与 CLI 同一份判据**：
+允许集 = `wb_dispatch.effective_allowed_models(pool)`（注册表该池条目 + 一次性授权
++ 开关文件里打开的），判定函数 = `wb_dispatch.model_rejected(model, pool)`；
+不在就拒（拒单文案原样带回），不给模型用该池默认。
 
 **`pool_cancel(card, reason?)`** —— 只取消**本机登记里那一条租约**的 pid：
 ★ 先核对身份（`tasklist /FI "PID eq <n>" /FO CSV` 的映像名必须是 `node.exe` / `python.exe`），
@@ -84,8 +86,10 @@ stdio 那条路**一个字节不变**（无参数仍是 stdio）。
 | ③ | 门禁还在跑就不动手 | `pool.guards.lock_guard` |
 | ④ | 内存闸 | **委托** `wb_dispatch.py` 的前置检查（本模块**不写**内存判据） |
 | ⑤ | 日志不许覆盖 | `pool.guards.log_guard` + **不给** `--force`（wb_dispatch 自己挑 r2） |
-| ⑥ | 模型白名单 | `wb_dispatch.MODEL_WHITELIST`（硬闸门）+ `pool.models`（批准 ∩ 可用） |
+| ⑥ | 模型白名单 | `wb_dispatch.effective_allowed_models(pool)`（硬闸门）+ `pool.models` |
 | ⑦ | `task_claim` 不许冻住 stdio（卡 130） | 本模块：子进程 + 后台线程 |
+
+★ ⑥ 的后半 `pool.models` 是号池快照的「批准 ∩ 可用」；两侧都过才放行（本模块不重写任何一侧）。
 
 ★ ⑦ 是**执行口径**（不是外部守卫）：`tool_task_claim` 把 `wb_task.py claim` 跑在**子进程**里，
 `serve` 再把它交给一个**后台 FIFO 线程** —— 主循环继续读，只读工具照样即刻答；判据仍只有一份
@@ -1622,6 +1626,7 @@ def _dispatch_argv(
     model: str,
     account: str = "",
     sticky: bool = False,
+    pool: str = "",
 ) -> list[str]:
     """给 `wb_dispatch.py` 的 argv —— **写死**，不透传危险项。
 
@@ -1630,6 +1635,9 @@ def _dispatch_argv(
       （白名单只能收窄不能放宽）；空串就不带这个参数（= 不按账号收窄）。
     ★ 卡 A345（T-AG547）：`--sticky` **要**透传 —— 粘性只在 `wb_dispatch` 那一侧生效
       （它要读 `gates/diag/pool-sticky.json` 并复查账本）；`False` 就不带 ⇒ 既有 argv 逐字不变。
+    ★ 卡 E106（T-AG615）：`--pool` **只在非默认池时才带** —— 不给 / 给默认池 ⇒ 既有工人的
+      命令行逐字不变（默认池是缺省值，写出来只是多一个 token）；给了别的已接池就必须带，
+      否则工人侧按默认池跑，于是「判一个池、登记一个池、跑另一个池」。
     ★ 卡 125：带 `--already-reserved` —— 本函数**上游**（`tool_pool_dispatch`）已经
       `registry.reserve` 过这条树；不带它会撞上 wb_dispatch 新接的 `tree_guard`（自己占的树
       被自己判"被占"）⇒ 派活必被拒。带上它 = wb_dispatch **只跳过**守卫与占/还树，别的前置照走。
@@ -1651,6 +1659,7 @@ def _dispatch_argv(
         "--detach",
         "--execute",
         "--already-reserved",
+        *(("--pool", pool) if pool and pool != wb_dispatch.DEFAULT_POOL else ()),
         *(("--account", account) if account else ()),
         *(("--sticky",) if sticky else ()),
     ]
@@ -1767,29 +1776,51 @@ def tool_pool_dispatch(
         )
     files = list(hit.files)
     spec = str(arguments.get("spec") or "").strip() or hit.spec
-    model = str(arguments.get("model") or "").strip() or wb_dispatch.DEFAULT_MODEL
-    if model not in wb_dispatch.MODEL_WHITELIST:  # ⑥ 模型白名单（硬闸门）
+    # ★ 卡 E106（T-AG615）：`pool` 一路走到底 —— 判它、登记它、工人也按它跑。
+    #   空串 = 不点名 = 默认池（与 `wb_dispatch --pool` 的缺省一致）。
+    pool = str(arguments.get("pool") or "").strip() or wb_dispatch.DEFAULT_POOL
+    model = str(arguments.get("model") or "").strip()
+    # ⑥ 模型白名单（硬闸门）—— **判据只有一份**：调 `wb_dispatch.model_rejected(model, pool)`，
+    #   即 CLI 派活主路径过的那一道。★ 不再自己比 `MODEL_WHITELIST`：那只是**轮换链**
+    #   （`rotation_chain_for(pool)`），不含一次性授权与外部开关文件里打开的模型 ⇒ 同一个模型
+    #   CLI 放得出去、MCP 却被拒（卡 E106 问题 1），而且拒单理由还是个空串（问题 2）。
+    #   顺序照 `wb_dispatch.main()` 的模型闸：先答「池认不认 / 接没接 / 注册表读不读得了」，
+    #   再答「这个模型批了吗」，最后才轮到「这个账号有没有更窄的白名单」。
+    allowed: list[str] = []
+    try:
+        wb_dispatch.get_adapter(pool)                        # 未知池 ⇒ 拒（不静默降级到别的池）
+        wb_dispatch.get_adapter(pool).assert_wired()         # 已知但未接 ⇒ 拒（码道今天就是这条）
+        if not model:
+            model = wb_dispatch.default_model_for(pool).alias  # 按池取默认（不取注册表首项）
+        wb_dispatch.resolve_model(model, pool)               # 跨池串用 ⇒ 拒
+        allowed = list(wb_dispatch.effective_allowed_models(pool))
+        rejected = wb_dispatch.model_rejected(model, pool)
+        # ⑥a′ 卡 E105（T-AG614）：**禁用表** 也要在起工人之前问一句 —— 干跑面会真起进程，
+        #   所以禁用的模型必须在这里就拒。判据只有一份：`model_registry.assert_not_disabled`
+        #   （与 wb_dispatch 模型闸、gateway `_model_block` 共用同一份），
+        #   这里不自己读表、不自己 glob。
+        if not rejected:
+            wb_dispatch.assert_not_disabled(pool, model)
+    except (wb_dispatch.ModelRegistryError, wb_dispatch.PoolMismatchError,
+            wb_dispatch.UnknownPoolError, wb_dispatch.PoolNotWiredError,
+            wb_dispatch.SwitchFileError) as exc:
+        # ★ 卡 E106 问题 4：开关文件坏了必须在这里接住 —— 一个坏 TOML 不许把 `tools/call` 打崩。
         return _result(
-            wb_dispatch.model_rejected(model),
-            {"card": card, "model": model, "allowed": list(wb_dispatch.MODEL_WHITELIST)},
+            f"模型闸没过，已拒绝派活：{exc}",
+            {"card": card, "model": model, "pool": pool, "allowed": allowed},
             is_error=True,
         )
-    # ⑥a′ 卡 E105（T-AG614）：**禁用表** 也要在起工人之前问一句 —— 干跑面会真起进程，
-    #   所以禁用的模型必须在这里就拒。判据只有一份：`model_registry.assert_not_disabled`
-    #   （与 wb_dispatch 模型闸、gateway `_model_block` 共用同一份），这里不自己读表、不自己 glob。
-    #   ★ 排在白名单之后、resolve_account 之前：先答「这个模型批了吗」，再答「用户关掉了吗」，
-    #   最后才轮到「这个账号有没有更窄的白名单」—— 读不懂的号表不该盖住「这模型被禁了」。
-    try:
-        wb_dispatch.assert_not_disabled(wb_dispatch.DEFAULT_POOL, model)
-    except wb_dispatch.ModelRegistryError as exc:
+    if rejected:
+        # 拒单文案原样带回（它是 `model_rejected` 写的，含允许集与「默认拒绝」口径）。
         return _result(
-            f"模型被禁用，已拒绝派活：{exc}",
-            {"card": card, "model": model, "allowed": list(wb_dispatch.MODEL_WHITELIST)},
+            rejected,
+            {"card": card, "model": model, "pool": pool, "allowed": allowed},
             is_error=True,
         )
     # ⑥b 卡 A341（F34）第 ③ 步：caller（账号）白名单**只收窄** —— 与 wb_dispatch 的派活主路径
-    #   调**同一个** `caller_model_rejected()`（判据只有一份）。池名用 DEFAULT_POOL：下面的
-    #   `_dispatch_argv` 不透传 `--pool`，工人侧就是按默认池跑的，两边口径必须一致。
+    #   调**同一个** `caller_model_rejected()`（判据只有一份）。★ 卡 E106：池名传 `pool`
+    #   （不再写死 DEFAULT_POOL）—— 工人侧也按同一个池跑（`_dispatch_argv` 透传 `--pool`），
+    #   三处口径才对得上。
     account = str(arguments.get("account") or "").strip()
     # ★ 卡 A344（T-AG546）：先解析再判 —— 判据 5「两处判据只有一份」。`caller_model_rejected()`
     #   的第三参是**账本稳定 id**（仓外 limits.toml 的 `[accounts."<id>"]`），而这里收到的是
@@ -1805,7 +1836,7 @@ def tool_pool_dispatch(
         )
     try:
         caller_rejected = wb_dispatch.caller_model_rejected(
-            model, wb_dispatch.DEFAULT_POOL, account_id or None)
+            model, pool, account_id or None)
     except wb_dispatch.ModelRegistryError as exc:
         return _result(
             f"账号白名单读不懂，已拒绝派活：{exc}",
@@ -1892,7 +1923,7 @@ def tool_pool_dispatch(
     # ④ 起工人（--detach：立刻返回）；起不来就回滚刚占的租约
     cwd = Path(tree) if Path(tree).is_absolute() else (main_root / tree if tree else main_root)
     argv = _dispatch_argv(card, spec, cwd, model, account,
-                          sticky=bool(arguments.get("sticky")))
+                          sticky=bool(arguments.get("sticky")), pool=pool)
     try:
         code, out, err = _spawn_worker(argv, root)
     except OSError as exc:

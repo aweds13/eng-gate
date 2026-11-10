@@ -503,3 +503,208 @@ def test_disabled_model_is_refused_before_spawning(
     text = _text(result)
     assert "禁用" in text and model in text, text
     assert no_spawn == [], "被禁用就不许起工人"
+# ================================================ 卡 E106（T-AG615）：MCP 模型闸用对名单
+#
+# 干跑面判的必须是**同一份**判据（`wb_dispatch.model_rejected`），不是只读注册表轮换链的
+# `MODEL_WHITELIST`；`pool` 参数要一路走到底（判它、登记它、工人也按它跑）；拒单必须带理由。
+
+_E106_REGISTRY = """\
+[[model]]
+alias   = "deepseek-v4.1-flash"
+pool    = "codebuddy"
+id      = "deepseek-v4.1-flash"
+default = true
+
+[[model]]
+alias   = "glm-5.3-flash"
+pool    = "codebuddy"
+id      = "glm-5.3-flash"
+default = false
+
+"""
+
+#: 非默认池的探针注册表：**只放已接的 codearts 池**（KNOWN_POOLS 只认 codebuddy / codearts，
+#: 造第三个池名会被注册表校验拒掉 —— 那不是本卡要证明的事）。
+_E106_CODEARTS_REGISTRY = """
+[[model]]
+alias   = "fake-model"
+pool    = "codearts"
+id      = "fake-model"
+default = true
+"""
+
+
+class _FakeAdapter:
+    """已接的假适配器：`assert_wired()` 一声不响（交叉「非默认池要不要透传 --pool」）。"""
+
+    def __init__(self, pool: str) -> None:
+        self.pool = pool
+
+    def assert_wired(self) -> None:
+        return None
+
+
+@pytest.fixture()
+def registry_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """把注册表指到临时文件：两条 codebuddy 条目（真名单判定，不绕过 `model_rejected`）。"""
+    path = tmp_path / "model-registry.toml"
+    path.write_text(_E106_REGISTRY, encoding="utf-8")
+    monkeypatch.setenv("TF_MODEL_REGISTRY", str(path))
+    return path
+
+
+@pytest.fixture()
+def codearts_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """临时注册表换成 codearts 池的条目 + 把该池的适配器换成「已接」的桩。
+
+    ★ 两侧一起换是**必须**的：注册表决定允许集，`get_adapter()` 决定「接没接」。
+      只换一半，探针就会得到「允许集里有、但池未接」这种自相矛盾的现场。
+      默认池两侧都不动 —— 那正是「argv 逐字不变」的对照。
+    """
+    path = tmp_path / "model-registry.toml"
+    path.write_text(_E106_CODEARTS_REGISTRY, encoding="utf-8")
+    monkeypatch.setenv("TF_MODEL_REGISTRY", str(path))
+    real = wb_dispatch.get_adapter
+    monkeypatch.setattr(
+        wb_dispatch, "get_adapter",
+        lambda pool: _FakeAdapter(pool) if pool == "codearts" else real(pool))
+    return path
+
+
+@pytest.fixture()
+def switches_on(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """开关文件：`glm-5.3 = true`（用户能在数据里打开模型 —— 这就是 MCP 今天够不着的那条路）。"""
+    path = tmp_path / "model-switches.toml"
+    path.write_text('[switch]\n"glm-5.3" = true\n', encoding="utf-8")
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    return path
+
+
+def _spy_spawn(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
+    """起工人换桩：**记录 argv** 并装作起成功（pid 4242）。"""
+    calls: list[list[str]] = []
+
+    def fake(argv: list[str], root: Path) -> tuple[int, str, str]:
+        calls.append(list(argv))
+        return 0, "[OK ] 前置检查全过 → 扔出去单独跑（pid 4242）\n", ""
+
+    monkeypatch.setattr(pool_mcp, "_spawn_worker", fake)
+    return calls
+
+
+# ---------------------------------------------------------------- 判据 1：同一份判据
+
+
+def test_switch_opened_model_passes_the_mcp_gate(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, switches_on: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """开关文件里打开的模型，MCP 也要放得过去（今天被 `MODEL_WHITELIST` 挡在外面）。"""
+    calls = _spy_spawn(monkeypatch)
+    result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(model="glm-5.3"), root=worktree)
+    assert result is not None and result["isError"] is False, _text(result)
+    assert calls, "开关放行的模型必须真的派出去（不许只回一句 ok）"
+    argv = calls[0]
+    assert argv[argv.index("--model") + 1] == "glm-5.3"
+
+
+@pytest.mark.parametrize("name", ["deepseek-v4.1-flash", "glm-5.3", "kimi-k3-1", "gpt-99"])
+def test_mcp_gate_and_cli_gate_agree_on_every_probe(
+    name: str, write_on: None, reg: Path, worktree: Path, quiet_lock: None,
+    switches_on: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """逐个探针：MCP 放行 ⟺ CLI 主闸 `model_rejected(name)` 空 ⇒ 判据只有一份。"""
+    calls = _spy_spawn(monkeypatch)
+    result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(model=name), root=worktree)
+    assert result is not None
+    passed = not result["isError"]
+    cli = wb_dispatch.model_rejected(name)
+    assert passed == (cli == ""), f"{name}：MCP {'放行' if passed else '拒'}，CLI 说 {cli!r}"
+    assert bool(calls) == passed, f"{name}：放行/拒单与「有没有起工人」必须一致"
+
+
+# ---------------------------------------------------------------- 判据 2：拒了要给理由
+
+
+@pytest.mark.parametrize(("name", "opened"), [("gpt-99", True), ("glm-5.3", False)])
+def test_model_refusal_always_carries_a_reason(
+    name: str, opened: bool, write_on: None, reg: Path, worktree: Path, quiet_lock: None,
+    no_spawn: list[list[str]], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """拒单文本必须非空且点名模型 —— 空理由就是「拒了却不说为什么」。"""
+    path = tmp_path / "sw.toml"
+    path.write_text('[switch]\n"glm-5.3" = ' + ("true" if opened else "false") + "\n",
+                    encoding="utf-8")
+    monkeypatch.setenv("TF_MODEL_SWITCHES", str(path))
+    result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(model=name), root=worktree)
+    assert result is not None and result["isError"] is True
+    # 只看 `--- tf-json ---` **之前**的人话：结构化块里本来就有 model 字段，
+    # 拿整段去 assert 等于让「一句理由都没有」蒙混过关（卡 E106 的原始 bug 长这样）。
+    prose = _text(result).split("--- tf-json ---", 1)[0].strip()
+    assert prose, f"{name}：拒了却一个字都没说（只有结构化块）"
+    assert name in prose, f"{name}：拒单文案没点名这个模型 —— {prose}"
+    assert no_spawn == []
+
+
+# ---------------------------------------------------------------- 判据 3：pool 一路走到底
+
+
+def test_unknown_pool_is_refused_before_spawning(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, no_spawn: list[list[str]]
+) -> None:
+    """`pool="nope"` ⇒ 干跑面就拒，点「未知池」，**不 spawn**。"""
+    result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(pool="nope"), root=worktree)
+    assert result is not None and result["isError"] is True
+    assert "未知池" in _text(result), _text(result)
+    assert no_spawn == []
+
+
+def test_unwired_pool_is_refused_before_spawning(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, no_spawn: list[list[str]]
+) -> None:
+    """码道池只留接口 ⇒ 点「codearts 池的调用还没接」，**不 spawn**。"""
+    result = pool_mcp.call_tool("pool_dispatch", _dispatch_args(pool="codearts"), root=worktree)
+    assert result is not None and result["isError"] is True
+    assert "codearts 池的调用还没接" in _text(result), _text(result)
+    assert no_spawn == []
+
+
+def test_pool_argument_reaches_the_worker(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None, codearts_registry: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """非默认且已接的池 ⇒ argv 必须带 `--pool <pool>`（否则工人按默认池跑，三处各说各的）。"""
+    calls = _spy_spawn(monkeypatch)
+    result = pool_mcp.call_tool(
+        "pool_dispatch", _dispatch_args(pool="codearts", model="fake-model"), root=worktree)
+    assert result is not None and result["isError"] is False, _text(result)
+    assert calls, "已接的池必须真派出去"
+    argv = calls[0]
+    assert argv[argv.index("--pool") + 1] == "codearts", " ".join(argv)
+
+
+def test_default_pool_argv_is_byte_identical(
+    write_on: None, reg: Path, worktree: Path, quiet_lock: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """不给池 / 给默认池 ⇒ argv 里不许凭空多出一参数（既有工人的命令行一字不变）。"""
+    calls = _spy_spawn(monkeypatch)
+    for extra in ({}, {"pool": wb_dispatch.DEFAULT_POOL}):
+        result = pool_mcp.call_tool(
+            "pool_dispatch", _dispatch_args(model="deepseek-v4.1-flash", **extra), root=worktree)
+        assert result is not None and result["isError"] is False, _text(result)
+        # 每一轮都先还树：上一轮真的占了租约，不还第二趟会被 `tree_guard` 咬（那不是本钉子的事）
+        pool_mcp.registry.release("111")
+    assert len(calls) == 2
+    for argv in calls:
+        assert "--pool" not in argv, " ".join(argv)
+
+
+# ---------------------------------------------------------------- 判据 4：文档不再指错真源
+
+
+def test_docs_stop_naming_the_narrow_list_as_the_gate() -> None:
+    """模块 docstring 里 `MODEL_WHITELIST` 不许再被当成模型闸；六条表 ⑥ 要点名允许集函数。"""
+    text = (ROOT / "tools" / "pool_mcp.py").read_text(encoding="utf-8")
+    assert "只许取 `wb_dispatch.MODEL_WHITELIST` 里的值" not in text
+    assert "| ⑥ | 模型白名单 | `wb_dispatch.effective_allowed_models(pool)`" in text
