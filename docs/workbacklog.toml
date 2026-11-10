@@ -5874,3 +5874,22 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E111"
+task = "T-AG620"
+title = "机器块还停在三张卡之前：判决、计数、探测命令都要进 payload"
+tree = ".wt/E111"
+spec = "复盘/卡/卡E111-机器块还停在三张卡之前.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp.py",
+  "docs/subsystems/pool/模型与号池.md",
+  "复盘/Trae-接入结论.md",
+  "复盘/卡/卡E111-机器块还停在三张卡之前.md"
+]
+depends = [
+  "E110"
+]
+risk = "mid"
+status = "pending"
