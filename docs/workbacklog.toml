@@ -5831,3 +5831,23 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E109"
+task = "T-AG618"
+title = "号池读面从不说今天派不派得出去：按批准集逐条给真判决、别名生路、对的指针"
+tree = ".wt/E109"
+spec = "复盘/卡/卡E109-号池读面从不说今天派不派得出去.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp.py",
+  "docs/subsystems/pool/modules.toml",
+  "skills/softeng-manage/references/asset-layers.md",
+  "复盘/号池MCP-使用与设计.md",
+  "复盘/卡/卡E109-号池读面从不说今天派不派得出去.md"
+]
+depends = [
+  "E107"
+]
+risk = "mid"
+status = "pending"
