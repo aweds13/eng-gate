@@ -5796,3 +5796,21 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E107"
+task = "T-AG616"
+title = "号池读面别说自己是派活允许集：快照过期要说人话、注册表坏了不许崩"
+tree = ".wt/E107"
+spec = "复盘/卡/卡E107-号池读面别说自己是派活允许集.md"
+files = [
+  "tools/pool_mcp.py",
+  "tools/pool/gateway.py",
+  "docs/subsystems/pool/modules.toml",
+  "tests/test_pool_mcp.py",
+  "tests/test_pool_gateway.py",
+  "复盘/卡/卡E107-号池读面别说自己是派活允许集.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
