@@ -974,3 +974,39 @@ def test_seat_hands_unknown_quota_to_route_as_unknown_tier(env: Path) -> None:
         ), name
     # 不知道的座排最后（不是「退回原列顺序」—— 原列顺序是 [0, 1, 2]）
     assert gateway._order(rows, "smart", pool="codebuddy") == [2, 0, 1]
+
+
+# ============================================ 卡 E110（T-AG619）：过期文案带命令、且只说一遍
+
+
+def test_stale_gateway_message_carries_the_command_once(env: Path) -> None:
+    """★ 判据 2：404 文案要带「怎么探」，且那句「先重新探测再派活」**只许出现一次**。
+
+    改前现场：models.py 的 note 里已带一遍，_model_block 又接一遍 ⇒
+    「…⇒ 先重新探测再派活 ⇒ 先重新探测再派活」。
+    """
+    _pool_dir(env, stale_at="2020-01-01 00:00:00")
+    forward = _Forward(_ok())
+    outcome = _run(env, forward)
+    assert outcome.status == 404
+    body = outcome.body.decode("utf-8")
+    assert "模型快照不可信" in body, "那四个 marker 不许丢（disabled_wiring 钉着）"
+    assert body.count("先重新探测再派活") == 1, body
+    assert "--check" in body, "过期了却不说怎么探：" + body
+    assert (env / "infra" / "pool" / "pool_models.py").as_posix() in body, body
+    assert forward.calls == []
+
+
+def test_the_snapshot_gate_really_differs_from_the_dispatcher(env: Path) -> None:
+    """★ 判据 3 的实测面：同一个过期号池，网关**拒**（404）；派活器那句自己写明「不拦」。
+
+    这条不是文案对文案：左边真调 _model_block，右边读的是派活器那句的 docstring
+    （它只往 stderr 打提示、不参与派活判决）。
+    """
+    import wb_dispatch  # noqa: PLC0415 —— tools/ 已在 sys.path 上
+
+    _pool_dir(env, stale_at="2020-01-01 00:00:00")
+    status, blocked = gateway._model_block("codebuddy", MODEL, env, now=NOW)
+    assert status == 404 and blocked, (status, blocked)
+    doc = wb_dispatch.snapshot_stale_problem.__doc__ or ""
+    assert "不拦派活" in doc, "派活器那边只提示不拦这件事，docstring 里得留着：" + doc

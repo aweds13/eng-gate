@@ -12023,3 +12023,20 @@ evidence = [
   "test:test_pool_mcp.py::test_pool_models_pointer_names_the_real_registry_path",
 ]
 gaps = "1. 判决段只在 MCP 读面上算了一遍：`python -X utf8 tools/pool_mcp.py --tool pool_models` 这类 CLI 入口与 `wb_dispatch` 自己的命令行仍不说「按原名派不出去、换别名能派」—— 同一件事在两个面各说一半。指针 `tools/pool_mcp.py`。2. 「可派别名」只给**今天**能派的写法，不给「以后能派」：`codearts` 池那条路在 `tools/pool/model_registry.py` 的 `_ADAPTERS` 里仍是 `wired=False`，等它接上（卡 166）时这段读面不会自己多出一行，得再来看一次。3. 快照新鲜度只报小时数（`已过期 377.6 小时`），不报**这批批准集是什么时候写进账本的** —— 两条批准集对应的是 2026-10-25 的快照，而批准集本身没有时间戳可查。指针 `gates/diag/_rev_E109_result.txt`。4. `.coverage.<host>.pid<N>.X<rand>x` 这类 coverage 并行数据文件全仓只有 `.gitignore` 的 `.coverage` 一条，`*.` 那一族没被忽略 —— 本卡只在测试侧把它从「只读工具新建了文件」里剔除（剔除面钉在 `tests/test_pool_mcp.py` 的 `_COVERAGE_DATA`），仓级忽略规则仍空着。指针 `tests/test_pool_mcp.py`。"
+
+[entries."T-AG619"]
+id = "T-AG619"
+title = "快照过期时把「怎么让它变新」递到手上：命令现算、脚本不在就明说、谁拦谁不拦写清"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/models.py",
+  "file:tools/pool/gateway.py",
+  "file:tools/pool_mcp.py",
+  "text:tools/pool/models.py::def probe_hint",
+  "text:tools/pool/models.py::def probe_command",
+  "test:test_pool_models.py::test_probe_hint_says_so_when_the_script_is_missing",
+  "test:test_pool_gateway.py::test_stale_gateway_message_carries_the_command_once",
+  "test:test_pool_mcp.py::test_pool_models_says_who_blocks_and_who_only_warns",
+]
+gaps = "1. 命令与路径都现算自**号池目录**，而号池目录是 `find_pool_dir()` 逐级向上猜出来的（`tools/pool/models.py` 的 `POOL_ANCHOR`）：同一台机器上若同时存在两份同名的探测脚本（比如仓里又复制一份），读面给出的那条命令指向的是**先被找到的那一份**，不是刚才读快照的那一份。指针 `tools/pool/models.py`2. `probe_hint` 只说「怎么让它变新」，不说「谁来跑、跑完快照落到哪个文件」：真跑它要联网（拉起 `codearts.sh models`，timeout 300s）并写仓外的 `models.live.json`，这两件事仓内一行都不做；读面把命令递到人手上，但「跑不跑、什么时候跑」仍是人的判断，工具不替它做。指针 `tools/pool/models.py`3. 三处读面现在共用一份 `probe_hint`，但**「过期」的判据本身仍有两份**：`models.STALE_HOURS` 只管读面与派活器提示，网关那条 404 走的也是同一个 `snapshot_stale`，可一旦有人按池改上限（比如给某个池放宽），两份就会悄悄分叉 —— 本卡没把上限改成按池配置，也没加钉子钉住「两处必须同一份上限」。指针 `tools/pool/gateway.py`"

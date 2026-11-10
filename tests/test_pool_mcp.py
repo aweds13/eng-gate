@@ -811,3 +811,44 @@ def test_pool_models_schema_and_prose_agree_on_what_it_answers() -> None:
     assert row is not None, "工具表里没有 pool_models 那一行"
     assert "按池" in row and "真判决" in row, row
     assert "（批准 ∩ 可用" not in row, row
+
+
+# ======================================== 卡 E110（T-AG619）：过期时人话段要说清怎么探、谁拒谁拦
+
+
+def test_pool_models_stale_line_says_how_to_probe(tmp_path: Path) -> None:
+    """★ 判据 2：人话段（_human）过期那一屏要带命令与现算路径。
+
+    改前：只说「已过期 72 小时 ⇒ 先重新探测再派活」，读者拿不到那条命令。
+    """
+    stamp = (datetime.now() - timedelta(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
+    root = _fake_pool_root(tmp_path, at=stamp)
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False
+    assert data["snapshot_stale"] is True
+    human = _human(text)
+    assert "已过期" in human, human
+    assert "--check" in human, "过期了却不说怎么探：" + human
+    assert (root / "infra" / "pool" / "pool_models.py").as_posix() in human, human
+
+
+def test_pool_models_missing_stamp_also_says_how_to_probe(tmp_path: Path) -> None:
+    """★ 判据 2：「没记录」那一态同样要给出探测命令（不许只说过期那半）。"""
+    root = _fake_pool_root(tmp_path, at=None)
+    text, _data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False
+    human = _human(text)
+    assert "不知道" in human, human
+    assert "--check" in human, human
+    assert (root / "infra" / "pool" / "pool_models.py").as_posix() in human, human
+
+
+def test_pool_models_says_who_blocks_and_who_only_warns(tmp_path: Path) -> None:
+    """★ 判据 3：说清「同一个过期，网关拒、派活器只提示」—— 一句，写在一处。"""
+    stamp = (datetime.now() - timedelta(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
+    root = _fake_pool_root(tmp_path, at=stamp)
+    text, _data, _is_error = pool_mcp.tool_pool_models({}, root=root)
+    human = _human(text)
+    assert "网关" in human, human
+    assert "派活器" in human, human
+    assert "不拦" in human, human

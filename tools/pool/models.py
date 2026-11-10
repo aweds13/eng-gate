@@ -44,6 +44,11 @@ SWITCH_PATH_ENV = "TF_MODEL_SWITCHES"
 #: 快照超过这么多小时就算**过期**（要重新探测，不许拿它当权威）。
 STALE_HOURS = 24
 
+#: 号池侧的探测入口（**仓外**，与号池同目录）：跑它才能把快照刷成今天。
+PROBE_SCRIPT_NAME = "pool_models.py"
+#: 探测参数（`--check` = 现拉一次并写快照；联网、写盘，两样都不在这里做）。
+PROBE_ARGS = ("--check",)
+
 
 def snapshot_age_hours(at: str | None, *, now: datetime | None = None) -> float | None:
     """快照距今多少小时；读不出时间戳 ⇒ ``None``（不猜）。"""
@@ -55,6 +60,31 @@ def snapshot_age_hours(at: str | None, *, now: datetime | None = None) -> float 
         return None
     base = now or datetime.now()
     return round((base - stamp).total_seconds() / 3600.0, 1)
+
+
+def probe_command(pool: Path) -> str | None:
+    """重新探测那条命令；目录里**没有**那份脚本 ⇒ ``None``（不造一条假命令）。
+
+    路径**现算**（号池目录可以在任何祖先层级下，写死 `infra/pool/` 换台机器就废）。
+    """
+    script = pool / PROBE_SCRIPT_NAME
+    if not script.is_file():
+        return None
+    return f"python -X utf8 {script.as_posix()} {' '.join(PROBE_ARGS)}"
+
+
+def probe_hint(pool: Path) -> str:
+    """「怎么让它变新」的一句话：有脚本给命令，没有就明说没有。
+
+    ★ 读面三处（models / gateway / pool_mcp）都调这一份，不各自拼一句。
+    """
+    cmd = probe_command(pool)
+    if cmd is None:
+        return (
+            f"重新探测：这个号池目录里没有 {PROBE_SCRIPT_NAME}"
+            " ⇒ 没有可给的命令（先把它放回来）"
+        )
+    return f"重新探测：{cmd}"
 
 
 def find_pool_dir(root: Path) -> Path | None:
@@ -93,9 +123,15 @@ def load_pool_models(pool: Path) -> dict[str, Any]:
     unreadable = bool(at) and age is None
     stale = unreadable or (age is not None and age > STALE_HOURS)
     if unreadable:
-        note = "快照时间戳读不出来 ⇒ 当过期处理（先重新探测再派活）"
+        note = (
+            "快照时间戳读不出来 ⇒ 当过期处理（先重新探测再派活）；"
+            + probe_hint(pool)
+        )
     elif stale:
-        note = f"快照已过期 {age} 小时（上限 {STALE_HOURS}h）⇒ 先重新探测再派活"
+        note = (
+            f"快照已过期 {age} 小时（上限 {STALE_HOURS}h）⇒ 先重新探测再派活；"
+            + probe_hint(pool)
+        )
     else:
         note = ""
     return {

@@ -345,8 +345,13 @@ def _model_block(pool: str, model: str, base: Path, *, now: dt.datetime) -> tupl
     if model not in approved:
         return 404, f"模型 {model!r} 不在批准集里（已批：{', '.join(approved)}）⇒ 未批模型不许用"
     if info.get("snapshot_stale"):
-        note = str(info.get("snapshot_note") or "快照过期")
-        return 404, f"模型快照不可信：{note} ⇒ 先重新探测再派活"
+        # ★ 卡 E110（T-AG619）：旧写法在这里**又**接了一遍「⇒ 先重新探测再派活」，
+        #   而 note 里本来就带着它 ⇒ 现场文案叠了两遍。现在只说一遍，并把「怎么探」
+        #   一并带出（命令与路径都在 pool_models.probe_hint 里现算，不在这里重写）。
+        note = str(info.get("snapshot_note") or "").strip()
+        if not note:
+            note = f"快照过期（{pool_models.probe_hint(pool_dir)}）"
+        return 404, f"模型快照不可信：{note}"
     try:
         pool_model_registry.assert_not_disabled(pool, model)
     except pool_model_registry.ModelRegistryError as exc:

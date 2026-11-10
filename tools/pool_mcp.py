@@ -215,7 +215,7 @@ from pool.jobs import (
 )
 from pool.locks import is_empty as lock_is_empty
 from pool.locks import status_argv as lock_status_argv
-from pool.models import find_pool_dir, load_pool_models
+from pool.models import find_pool_dir, load_pool_models, probe_hint
 from pool.no_window import NO_WINDOW  # ★ 卡 148：子进程一律不弹窗（flag 的唯一真源）
 from pool.plan import BacklogError, plan_report
 
@@ -1179,6 +1179,13 @@ def _alias_routes(name: str, pools: list[str]) -> list[str]:
     return routes
 
 
+#: ★ 卡 E110 判据 3：同一个「过期」在两处态度不同——网关硬拒、派活器只提示。
+#: 只写在读面这一处；判据本体在 tools/pool/gateway.py 与 tools/wb_dispatch.py，这里不重写。
+_WHO_BLOCKS = (
+    "  谁拦谁不拦：号池网关会拒（404，一个字节不出网）；派活器只提示不拦"
+    "（tools/wb_dispatch.py 的 snapshot_stale_problem 只往 stderr 打一行）"
+)
+
 # ================================================================ 工具 6：pool_models
 
 
@@ -1226,15 +1233,20 @@ def tool_pool_models(
     # ★ 卡 E107 判据 2：新鲜度必须出现在**人话段**。三态，缺一态就是把「不知道」洗成「新鲜」。
     age = info["snapshot_age_hours"]
     stale_hours = info["snapshot_stale_hours"]
+    # ★ 卡 E110（T-AG619）：两个「不新鲜」的态都带上 probe_hint（命令 + 现算路径）；
+    #   「谁拦谁不拦」只在 _WHO_BLOCKS 里写一份（两个不新鲜的态都要带出来）。
     if info["snapshot_at"] is None:
         lines.append(
             f"快照新鲜度：不知道它多旧（{info['snapshot']} 里没有 at 时间戳）"
-            " ⇒ 不当成新鲜，也不当成过期；要派活先重新探测"
+            f" ⇒ 不当成新鲜，也不当成过期；{probe_hint(pool)}"
         )
+        lines.append(_WHO_BLOCKS)
     elif info["snapshot_stale"]:
         lines.append(
-            f"快照新鲜度：已过期 {age} 小时（上限 {stale_hours}h）⇒ 先重新探测再派活"
+            f"快照新鲜度：已过期 {age} 小时（上限 {stale_hours}h）⇒ 先重新探测再派活；"
+            + probe_hint(pool)
         )
+        lines.append(_WHO_BLOCKS)
     else:
         lines.append(f"快照新鲜度：没过期（{age} 小时前，上限 {stale_hours}h）")
     if info["approved_but_missing"]:

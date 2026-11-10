@@ -297,3 +297,61 @@ def test_unreadable_snapshot_stamp_is_stale_not_fresh() -> None:
         assert empty["snapshot_age_hours"] is None
         assert empty["snapshot_stale"] is False, f"没记录不等于过期，实际 {empty}"
         assert empty["snapshot_note"] == ""
+
+# ========================================== 卡 E110（T-AG619）：过期要说清怎么探
+
+
+def _stale_pool(
+    tmp: Path, *, at: str, script: bool = True, subdir: str = "infra/pool"
+) -> Path:
+    """造一个号池目录（批准集 + 快照）；`script=False` ⇒ 不放那份探测脚本。"""
+    pool = tmp / subdir
+    pool.mkdir(parents=True, exist_ok=True)
+    if script:
+        (pool / "pool_models.py").write_text("", encoding="utf-8")
+    (pool / "models.whitelist.toml").write_text(
+        '[[approved]]\npool = "codebuddy"\nmodel = "m1"\n', encoding="utf-8"
+    )
+    (pool / "models.live.json").write_text(
+        json.dumps({"at": at, "live": ["m1"]}), encoding="utf-8"
+    )
+    return pool
+
+
+def test_probe_hint_computes_the_path_instead_of_hardcoding_it(tmp_path: Path) -> None:
+    """★ 判据 1：那条命令的路径必须**现算**（写死路径换台机器就废）。
+
+    写死 infra/pool/pool_models.py 也过不了：号池目录可以在任何祖先层级下。
+    """
+    pool = _stale_pool(tmp_path, at="2020-01-01 00:00:00", subdir="elsewhere/pool")
+    hint = models.probe_hint(pool)
+    assert "--check" in hint, hint
+    assert (pool / "pool_models.py").as_posix() in hint, hint
+    assert "D:" not in hint, hint
+    assert "infra/pool/pool_models.py" not in hint, "写死相对片段 = 换机器就废：" + hint
+
+
+def test_probe_hint_says_so_when_the_script_is_missing(tmp_path: Path) -> None:
+    """★ 判据 1 第二条：目录里没有那份脚本 ⇒ 明说没有，**不给**假命令。"""
+    pool = _stale_pool(tmp_path, at="2020-01-01 00:00:00", script=False)
+    assert models.probe_command(pool) is None
+    hint = models.probe_hint(pool)
+    assert "--check" not in hint, "脚本都不在，还给命令就是给假命令：" + hint
+    assert "没有" in hint, hint
+
+
+def test_stale_note_carries_the_probe_command(tmp_path: Path) -> None:
+    """★ 判据 2：过期与坏时间戳两态的 snapshot_note 都要带那条命令。"""
+    pool = _stale_pool(tmp_path, at="2020-01-01 00:00:00")
+    stale = models.load_pool_models(pool)
+    assert stale["snapshot_stale"] is True
+    assert "--check" in stale["snapshot_note"], stale["snapshot_note"]
+    assert (pool / "pool_models.py").as_posix() in stale["snapshot_note"]
+
+    (pool / "models.live.json").write_text(
+        json.dumps({"at": "不是时间戳", "live": ["m1"]}), encoding="utf-8"
+    )
+    bad = models.load_pool_models(pool)
+    assert bad["snapshot_stale"] is True
+    assert "--check" in bad["snapshot_note"], bad["snapshot_note"]
+    assert (pool / "pool_models.py").as_posix() in bad["snapshot_note"]

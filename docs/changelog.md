@@ -43,6 +43,11 @@
 - 每条带「可派别名」—— 号池写 `provider/model`、派活器写裸名，按原名逐字比必被拒；别名那一条是今天**真能派**的写法。
 - 结论行数出「批准 N 条 / 按原名今天派得出去 M 条 / 换别名能派 K 条」，全从账本与判据现算。
 - 注册表指针改成现算 `registry_path()`：它在**本仓** `tools/pool/` 下，不在仓外号池目录里 —— 老文案指错地方。
+## 2026-11-10 T-AG619 快照过期时把「怎么让它变新」递到手上：命令现算、脚本不在就明说、谁拦谁不拦写清
+- `tools/pool/models.py` 新增 `PROBE_SCRIPT_NAME` / `PROBE_ARGS` / `probe_command()` / `probe_hint()`：路径按号池目录现算（不写死 `infra/pool/`），脚本不在就返回「没有可给的命令」而不是一条假命令；`load_pool_models` 的两条过期 note 都改调它。
+- `tools/pool/gateway.py` 的 `_model_block` 不再在 note 后面**再接一遍**「⇒ 先重新探测再派活」（现场文案叠了两遍），改为原样带出 note（缺了才自己拼一句带 `probe_hint` 的），四个 marker 一个不丢。
+- `tools/pool_mcp.py` 的 `pool_models` 人话段两态（时间戳缺失 / 已过期）都带命令，并各追加一句 `_WHO_BLOCKS`：网关硬拒 404（一个字节不出网）、派活器只提示不拦。
+- 文档投影两处：`docs/subsystems/pool/modules.toml` 的 models.py duty 记下这条入口；`docs/subsystems/pool/模型与号池.md` 新增「快照过期了怎么让它变新」一段（命令只留在 `probe_hint` 一处，不抄第二份）。
 ## 2026-11-09 T-BG011 把 pika 升级经验收成可复用规程，并让 L3 运行手册层第一次落地
 - 新建 `docs/runbooks/pika-升级规程.md`（九节 + 两个附录）：前置检查 → 三方比对 → 个性化行回填 → 技能替换 → 残留清理 → 验收读数 → 回滚，每步给命令形状与判据；§6 十九条坑每条带症状原文。
 - 为什么落 L3：`docs/文档架构.md:71/:86` 把 `docs/runbooks/` 列为「怎么起、怎么巡检、怎么落地」，但该目录从未存在过（`git ls-files docs/runbooks` 空）；操作规程属「动手时读」不属「回头看」，塞进 `skills/` 会把本机一次性迁移写成通用技能。
