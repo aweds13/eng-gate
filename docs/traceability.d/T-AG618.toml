@@ -1,0 +1,15 @@
+[entries."T-AG618"]
+id = "T-AG618"
+title = "号池读面说清今天派不派得出去：逐条按池判决、给可派别名、指针现算"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp.py",
+  "text:tools/pool_mcp.py::def _dispatch_verdict",
+  "test:test_pool_mcp.py::test_pool_models_judges_every_approved_model_with_the_real_gate",
+  "test:test_pool_mcp.py::test_pool_models_offers_the_alias_that_actually_dispatches",
+  "test:test_pool_mcp.py::test_pool_models_pointer_names_the_real_registry_path",
+]
+gaps = "1. 判决段只在 MCP 读面上算了一遍：`python -X utf8 tools/pool_mcp.py --tool pool_models` 这类 CLI 入口与 `wb_dispatch` 自己的命令行仍不说「按原名派不出去、换别名能派」—— 同一件事在两个面各说一半。指针 `tools/pool_mcp.py`。2. 「可派别名」只给**今天**能派的写法，不给「以后能派」：`codearts` 池那条路在 `tools/pool/model_registry.py` 的 `_ADAPTERS` 里仍是 `wired=False`，等它接上（卡 166）时这段读面不会自己多出一行，得再来看一次。3. 快照新鲜度只报小时数（`已过期 377.6 小时`），不报**这批批准集是什么时候写进账本的** —— 两条批准集对应的是 2026-10-25 的快照，而批准集本身没有时间戳可查。指针 `gates/diag/_rev_E109_result.txt`。4. `.coverage.<host>.pid<N>.X<rand>x` 这类 coverage 并行数据文件全仓只有 `.gitignore` 的 `.coverage` 一条，`*.` 那一族没被忽略 —— 本卡只在测试侧把它从「只读工具新建了文件」里剔除（剔除面钉在 `tests/test_pool_mcp.py` 的 `_COVERAGE_DATA`），仓级忽略规则仍空着。指针 `tests/test_pool_mcp.py`。"
+

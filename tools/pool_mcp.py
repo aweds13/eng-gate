@@ -38,7 +38,7 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 | `job_status(card)` | 时间线 + 仓库状态 | **import** `tools/pool/jobs.py`（读 log + 渲染） |
 | `job_result(card)` | 判决与摘要的**原文**（截断**明示总长**） | **import** `tools/pool/jobs.py` |
 | `lock_status` | 门禁锁：哪把、谁的、租约剩多久 | `gate_lock.py status`（唯一 subprocess，见下） |
-| `pool_models` | 号池批准集 ∩ 快照 + 派活允许集 | **import** `tools/pool/models.py` |
+| `pool_models` | 批准集 ∩ 快照 + 按池允许集 + **按池判决** | **import** `tools/pool/models.py` |
 
 ★ 卡 106（T-G202）：十三个工具的**逻辑**已收敛到 `tools/pool/` 包，CLI 与 MCP **共用同一批函数**。
 `subprocess` 只留**一处** —— `lock_status` 跑 `gate_lock.py`：那是 `gates/diag/` 下的**独立脚本**
@@ -164,6 +164,11 @@ stdio 那条路**一个字节不变**（无参数仍是 stdio）。
   说"读不出来"，工具整体照常返回（只读面不许被一个坏 TOML 打成异常）。
 - ★ 快照新鲜度（过期 / 没过期 / **没记录**）必须出现在**人话段**：只藏在机器块
   （--- tf-json --- 之后）里等于没说 —— MCP 客户端读的就是人话段。
+- ★ 卡 E109（T-AG618）：**按原名过不了闸 ≠ 这条模型今天用不了**。号池批准集写的是号池 id
+  （`provider/model`），派活器写裸名；同一个模型在两套体系里名字不同，逐字比必被拒。
+  所以判决段同时给「可派别名」—— 那是今天**真能派**的写法（现算，不写死）。
+- ★ 注册表指针**现算**（`pool.model_registry.registry_path()`）：它在**本仓** `tools/pool/`
+  下，不在仓外号池目录里 —— 老文案指错了地方，照着找是白找。
 - 号池目录（`infra/pool/`）**不在本仓**（它在 `jelly_ware/` 下、跨项目复用）。本模块从
   `ROOT` 起**逐级向上**找 `<祖先>/infra/pool/pool_models.py`；找不到就如实说"没有"并列出找过哪些。
 - 传给人看/给客户端的东西只有工具；**没有** `resources` / `prompts` / `logging`（先例也一样）。
@@ -440,7 +445,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "pool_models",
-        "description": "号池可用模型：批准集 ∩ 快照（★ 不是派活允许集）+ 按池的派活允许集。",
+        "description": (
+            "号池可用模型：批准集 ∩ 快照（★ 不是派活允许集）+ 按池的派活允许集；"
+            "并逐条给出按池的真判决今天派不派得出去（含可派别名与注册表真路径）。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -1097,6 +1105,80 @@ def tool_lock_status(
     return _result(text, data, is_error=False)
 
 
+def _short_mismatch(why: str) -> str:
+    """把跨池串用那句长理由压成一句人话（原文里那句 ``--pool {belongs_to}`` 是**没被填**的模板，
+
+    照抄出来只会让人更糊涂；这里只取「属于哪个池」）。
+
+    ★ 卡 E109（T-AG618）：压短是**读面**的事，判据一个字不动 —— 原文照旧由派活器打给命令行。
+    """
+    import re  # noqa: PLC0415 —— 只在这一句上用
+
+    hit = re.search(r"属于「([^」]+)」池", why)
+    if hit:
+        return f"它属于 {hit.group(1)} 池（两套 id 不许串用）"
+    return why.splitlines()[0]
+
+
+def _dispatch_verdict(name: str, pool: str) -> tuple[str, str]:
+    """这个名字在这个池今天派不派得出去 —— 判序与 tools/wb_dispatch.py 的 main() 一字不差。
+
+    ★ 卡 E109（T-AG618）：判据只有一份，这里只负责**问**（get_adapter → resolve_model →
+      assert_wired → model_rejected → assert_not_disabled）；不另抄名单、不另写判序。
+    返回 (结论, 为什么)；「为什么」是给人看的那一句话（未接 ⇒ 适配器自己那句 note）。
+    """
+    from pool.model_registry import (  # noqa: PLC0415 —— 只在被调用时读，坏注册表不连累模块导入
+        ModelRegistryError,
+        PoolMismatchError,
+        get_adapter,
+        resolve_model,
+    )
+
+    adapter = get_adapter(pool)
+    try:
+        resolve_model(name, pool)   # 返回值不看：不在注册表 ⇒ None ⇒ 可能被开关/一次性授权放行
+    except PoolMismatchError as exc:
+        return "跨池串用", _short_mismatch(str(exc))
+    # ★ 卡 E109：这里**不许**把「不在注册表」当结论 —— 派活主闸也不这么判：
+    #   resolve_model 只用来拦跨池串用，返回值被丢掉；不在注册表的名字能不能派，
+    #   由 model_rejected 看允许集（注册表 + 一次性授权 + 开关文件）说了算。
+    if not adapter.wired:
+        return "未接", adapter.note
+    rejected = wb_dispatch.model_rejected(name, pool)
+    if rejected:
+        return "未授权", rejected.splitlines()[0]
+    try:
+        wb_dispatch.assert_not_disabled(pool, name)
+    except ModelRegistryError as exc:
+        return "判不了", str(exc).splitlines()[0]
+    return "可派", ""
+
+
+def _alias_routes(name: str, pools: list[str]) -> list[str]:
+    """同一个模型今天**换个名字**能派出去的（形如 glm-5.2（codebuddy））。
+
+    ★ 两套 id 体系（号池 provider/model、派活器裸名）对不上时，按原名过闸必被拒；
+      但同一个模型换个写法今天就能派。判「是不是同一个模型」用别名集合**相交**
+      （单向包含不可靠：id_names 只切前缀，注册表同组别名只在一边有）。
+    """
+    mine = {a.strip().lower() for a in wb_dispatch.model_aliases(name)}
+    routes: list[str] = []
+    for pool in pools:
+        try:
+            allowed = wb_dispatch.effective_allowed_models(pool)
+        except Exception:  # noqa: BLE001 —— 只读面：一个池读不出来不连累别的池
+            continue
+        for cand in allowed:
+            if cand == name:
+                continue
+            theirs = {a.strip().lower() for a in wb_dispatch.model_aliases(cand)}
+            if not (mine & theirs):
+                continue
+            if _dispatch_verdict(cand, pool)[0] == "可派":
+                routes.append(cand + "（" + pool + "）")
+    return routes
+
+
 # ================================================================ 工具 6：pool_models
 
 
@@ -1168,8 +1250,8 @@ def tool_pool_models(
         "派活允许集（wb_dispatch.effective_allowed_models(pool)：注册表该池条目"
         " + 一次性授权 + 开关文件里打开的；★ 这里现算，不写死）"
     )
+    _ordered: list[str] = []
     try:
-        import wb_dispatch  # noqa: PLC0415 —— tools/ 已在 sys.path 上（同一个目录）
         from pool.model_registry import (  # noqa: PLC0415
             DEFAULT_POOL,
             KNOWN_POOLS,
@@ -1177,6 +1259,7 @@ def tool_pool_models(
         )
 
         ordered = [DEFAULT_POOL] + [n for n in KNOWN_POOLS if n != DEFAULT_POOL]
+        _ordered = ordered
         allow_lines: list[str] = []
         for name in ordered:
             allowed = wb_dispatch.effective_allowed_models(name)
@@ -1186,12 +1269,62 @@ def tool_pool_models(
             allow_lines.append(f"· {name}{mark}：" + ("、".join(allowed) or "（空 ⇒ 派什么都拒）"))
     except Exception as exc:  # noqa: BLE001 —— 只读面：坏输入不许把整个 tools/call 打成异常
         lines.append(f"派活允许集读不出来：{type(exc).__name__}：{exc}")
+        try:
+            from pool.model_registry import registry_path  # noqa: PLC0415
+
+            _where = registry_path().as_posix()
+        except Exception:  # noqa: BLE001 —— 连路径都问不出来就如实说，不编一个
+            _where = "（问不出来：pool.model_registry.registry_path() 自己也抛了）"
+        # ★ 卡 E109（T-AG618）：这句话原来写死「注册表在 infra/pool/model-registry.toml」——
+        #   真路径是**本仓** tools/pool/model-registry.toml（registry_path() 现算），照旧文案
+        #   去仓外那个位置翻是找不到的（只读面给错指针 = 让人白找）。
         lines.append(
-            "  指针：注册表在 infra/pool/model-registry.toml（或用 TF_MODEL_REGISTRY 指过去）；"
+            f"  指针：注册表在 {_where}（或用 TF_MODEL_REGISTRY 指过去）；"
             " 读不到就不列 —— 不猜、不退回内置名单"
         )
     else:
         lines.extend(allow_lines)
+    # ★ 卡 E109（T-AG618）判据 1：批准集**逐条**给按池的真判决 —— 「今天派不派得出去」。
+    #   为什么非有不可：批准集用的是号池 id（provider/model），派活器用裸名，按原名逐字过闸
+    #   今天**一条都过不去**；只报「允许集」等于让人以为「没模型可用」。判据只有一份，
+    #   这里只负责问（_dispatch_verdict 的判序与 tools/wb_dispatch.py 的 main() 一字不差）。
+    if _ordered:
+        try:
+            lines.append("")
+            lines.append(
+                "按池判决（批准集里每一条今天派不派得出去；判序 = 派活主闸，现算不写死）："
+            )
+            judge_lines: list[str] = []
+            origin_ok = 0
+            alias_ok = 0
+            for name in info["approved"]:
+                parts: list[str] = []
+                dispatchable = False
+                for pool in _ordered:
+                    verdict, why = _dispatch_verdict(name, pool)
+                    if verdict == "可派":
+                        dispatchable = True
+                        parts.append(f"{pool} 可派")
+                    elif why:
+                        parts.append(f"{pool} {verdict}（{why}）")
+                    else:
+                        parts.append(f"{pool} {verdict}")
+                routes = _alias_routes(name, _ordered)
+                origin_ok += 1 if dispatchable else 0
+                alias_ok += 1 if routes else 0
+                route = "、".join(routes) if routes else "（没有）"
+                judge_lines.append(f"· {name} —— " + "、".join(parts) + f"｜可派别名：{route}")
+            lines.extend(judge_lines)
+            lines.append(
+                f"号池批准集 {len(info['approved'])} 条 / 按原名今天派得出去 {origin_ok} 条 / "
+                f"换别名能派 {alias_ok} 条"
+            )
+            lines.append(
+                "  （按原名派不出去 ≠ 这条模型用不了：同一个模型在两套 id 体系里名字不同 —— "
+                "号池写 provider/model、派活器写裸名。换别名那一条今天真能派。）"
+            )
+        except Exception as exc:  # noqa: BLE001 —— 只读面：一段算不出来不许把整个调用打成异常
+            lines.append(f"按池判决读不出来：{type(exc).__name__}：{exc}")
     return _result("\n".join(lines), info, is_error=False)
 
 

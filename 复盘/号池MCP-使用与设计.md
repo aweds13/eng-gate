@@ -46,7 +46,7 @@
 | `job_status(card)` | 一张卡现在到哪了：时间线 + 仓库状态 | 只读 |
 | `job_result(card)` | 那张卡的判决 / 摘要**原文**（截断会明示总长） | 只读 |
 | `lock_status` | 门禁锁：哪把、谁的、租约剩多久 | 只读 |
-| `pool_models` | 号池模型白名单（批准 ∩ 可用，**读快照、不联网**） | 只读 |
+| `pool_models` | 号池模型白名单 + **批准集逐条按池的真判决**（今天派不派得出去、被哪道闸拦、可派别名；**按池现算**，读快照、不联网） | 只读 |
 | `pool_dispatch(card, tree, …)` | **派活**：干跑守卫 → 先占树 → 起工人（`--detach`，立刻返回） | ★ 要 `confirm` = 卡号 |
 | `pool_cancel(card, reason)` | **取消**那张卡的工人（**先核对 pid 映像名**，不对就拒绝动手） | ★ 要 `confirm` = 卡号；`destructiveHint` |
 

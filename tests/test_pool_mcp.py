@@ -20,6 +20,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -129,8 +130,29 @@ def _git_status() -> set[str]:
     return {line for line in (done.stdout or "").splitlines() if line.strip()}
 
 
+# coverage 自己的数据文件（不是工具写的）：.coverage 与 .coverage.<suffix>。
+# 出处 coverage/sqldata.py::filename_suffix(True) 造的是 host.pid<pid>.X<rolls>x，
+# pytest-cov engine.py 的 data_suffix=True（中央/分布式两条路）都会落这种中间文件；
+# 合并后通常删掉，失败/中断时会残留 —— 它与「只读工具写了文件」无关
+# （卡 E109 现场：land-E109.log:160）。
+_COVERAGE_DATA = re.compile(r"^\.coverage(\..*)?$")
+
+
 def _untracked(snapshot: set[str]) -> set[str]:
-    return {ln for ln in snapshot if ln.startswith("??")}
+    """未跟踪条目，**剔除 coverage 自己的数据文件**（.coverage / .coverage.<suffix>）。
+
+    剔除面必须窄到只剩这一族 —— 别的名字照样算，见
+    test_the_readonly_snapshot_only_ignores_coverage_data_files。
+    """
+    out: set[str] = set()
+    for line in snapshot:
+        if not line.startswith("??"):
+            continue
+        rel = line[3:].strip().strip(chr(34))
+        if _COVERAGE_DATA.match(rel.rsplit("/", 1)[-1]):
+            continue
+        out.add(line)
+    return out
 
 
 def _hashes() -> dict[str, str]:
@@ -215,6 +237,22 @@ def test_nine_tools_return_and_write_nothing() -> None:
     after_hashes = _hashes()
     changed = [k for k in after_hashes if after_hashes.get(k) != before_hashes.get(k)]
     assert not changed, f"只读工具不许改动它读的真源：{changed}"
+
+
+def test_the_readonly_snapshot_only_ignores_coverage_data_files() -> None:
+    """反空转：钉子② 的剔除面必须窄到 coverage 数据文件那一族。
+
+    没有这条钉子，_untracked 可以被悄悄改成「什么都不要」，钉子② 就变成空气；
+    反过来，这一族以外的名字（含长得像的 .coverageish）必须照样算。
+    """
+    snap = {
+        "?? .coverage",
+        "?? .coverage.DEV-HOST.pid30684.XR6s7lZx.H99bHMpKZUMh",
+        "?? .coverageish",
+        "?? code/rogue.py",
+        " M tools/pool_mcp.py",
+    }
+    assert _untracked(snap) == {"?? .coverageish", "?? code/rogue.py"}
 
 
 def test_machine_block_survives_a_report_that_quotes_json(tmp_path: Path) -> None:
@@ -590,3 +628,186 @@ def test_pool_models_module_duty_does_not_claim_the_intersection_is_the_allow_li
     assert "不是派活允许集" in duty, duty
     gw_duty = by_name["gateway.py"]["duty"]
     assert "UNKNOWN_TIER" in gw_duty, gw_duty
+
+
+# ============================ 卡 E109（T-AG618）：pool_models 说清「今天派不派得出去」
+#
+# 四条判据各钉一位：
+#   ① 按批准集**逐条**给按池的真判决（判序照抄派活主闸；测试用真判据现算后比对，不另抄名单）；
+#   ② 说清「按原名派不出去 ≠ 这条模型用不了」—— 给出今天真能派的别名；
+#   ③ 结论行数出来（批准 N 条 / 按原名派得出去 M 条），N 与 M 都由数据现算，不许写死；
+#   ④ 注册表坏了时给的指针必须是**真**路径（registry_path() 现算，不是仓外那个不存在的）。
+
+
+def _verdict_line(human: str, name: str) -> str | None:
+    """判决段里这一条模型的那一行（以「· <模型> —— 」开头）。"""
+    prefix = "· " + name + " —— "
+    return next((ln for ln in human.splitlines() if ln.startswith(prefix)), None)
+
+
+def _real_verdict(name: str, pool: str) -> str:
+    """用**派活主闸那几份真判据**现算这个名字在这个池今天派不派得出去。
+
+    判据只有一份（get_adapter / resolve_model / model_rejected / assert_not_disabled 都在
+    tools/pool/ 里）—— 测试只负责**问**，不另写判序、不另抄名单。
+    """
+    import wb_dispatch  # noqa: PLC0415 —— tools/ 已在 sys.path 上
+
+    adapter = wb_dispatch.get_adapter(pool)
+    try:
+        wb_dispatch.resolve_model(name, pool)   # 返回值不看，与 main() 一致
+    except wb_dispatch.PoolMismatchError:
+        return "跨池串用"
+    if not adapter.wired:
+        return "未接"
+    if wb_dispatch.model_rejected(name, pool):
+        return "未授权"
+    try:
+        wb_dispatch.assert_not_disabled(pool, name)
+    except wb_dispatch.ModelRegistryError:
+        return "判不了"
+    return "可派"
+
+
+def _alias_paths(name: str, pools: tuple[str, ...]) -> list[str]:
+    """这条批准模型今天**换个名字**能派的去处（形如 glm-5.2（codebuddy））。"""
+    import wb_dispatch  # noqa: PLC0415
+
+    mine = {a.strip().lower() for a in wb_dispatch.model_aliases(name)}
+    out: list[str] = []
+    for pool in pools:
+        for cand in wb_dispatch.effective_allowed_models(pool):
+            if cand == name:
+                continue
+            theirs = {a.strip().lower() for a in wb_dispatch.model_aliases(cand)}
+            if not (mine & theirs):
+                continue
+            if _real_verdict(cand, pool) == "可派":
+                out.append(cand + "（" + pool + "）")
+    return out
+
+
+def test_pool_models_judges_every_approved_model_with_the_real_gate() -> None:
+    """★ 卡 E109 判据 1：批准集里每一条都要有一行**按池的真判决**，且与真判据现算一致。"""
+    from pool.model_registry import KNOWN_POOLS  # noqa: PLC0415
+
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    human = _human(text)
+    assert data["approved"], "真仓今天有批准项；一条都没有说明号池坏了（不是这条钉子的意思）"
+    for name in data["approved"]:
+        line = _verdict_line(human, name)
+        assert line is not None, "判决段里没有这一条：" + name + "\n" + human
+        for pool in KNOWN_POOLS:
+            want = pool + " " + _real_verdict(name, pool)
+            assert want in line, "「" + name + "」在 " + pool + " 池的判决与真判据不一致：" + line
+
+
+def test_pool_models_names_the_gate_that_blocks() -> None:
+    """★ 卡 E109 判据 1 后半：被哪道闸拦住就点哪道 —— 未接的池要把适配器自己那句话带出来。"""
+    import wb_dispatch  # noqa: PLC0415
+    from pool.model_registry import KNOWN_POOLS  # noqa: PLC0415
+
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    human = _human(text)
+    blocked = 0
+    for name in data["approved"]:
+        line = _verdict_line(human, name)
+        assert line is not None, human
+        for pool in KNOWN_POOLS:
+            verdict = _real_verdict(name, pool)
+            if verdict != "未接":
+                continue
+            blocked += 1
+            note = wb_dispatch.get_adapter(pool).note
+            assert note in line, "未接的那一池必须把 note 原文带出来（不然只看到「未接」）：" + line
+    assert blocked >= 1, "真仓今天 codearts 未接（卡 166）；一个都没算到说明探针坏了"
+
+
+def test_pool_models_offers_the_alias_that_actually_dispatches() -> None:
+    """★ 卡 E109 判据 2：按原名派不出去 ≠ 这条模型用不了 —— 换个名字今天就能派，必须点名。"""
+    from pool.model_registry import KNOWN_POOLS  # noqa: PLC0415
+
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    human = _human(text)
+    offered = 0
+    for name in data["approved"]:
+        line = _verdict_line(human, name)
+        assert line is not None, human
+        for path in _alias_paths(name, KNOWN_POOLS):
+            offered += 1
+            cand = path.split("（", 1)[0]
+            assert cand in line, "别名生路没点名：" + path + "\n" + line
+            assert "可派别名" in line, line
+        if not _alias_paths(name, KNOWN_POOLS):
+            assert "可派别名：（没有）" in line, "没有生路就要明说「没有」，不许留白：" + line
+    assert offered >= 1, (
+        "真仓今天至少有一条别名生路（GLM-5.2 与 glm-5.2 是同一条）；算不出来说明探针坏了"
+    )
+
+
+def test_pool_models_counts_follow_the_ledger_not_a_constant(tmp_path: Path) -> None:
+    """★ 卡 E109 判据 2 后半：判决条数跟着号池数据走 —— 换成一条批准的假号池，数就要变。"""
+    root = _fake_pool_root(tmp_path, at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False
+    human = _human(text)
+    assert len(data["approved"]) == 1, data["approved"]
+    assert "批准集 1 条" in human, human
+    assert "批准集 2 条" not in human, "数写死了（真仓今天是 2 条）：" + human
+    bullets = [ln for ln in human.splitlines() if ln.startswith("· ") and " —— " in ln]
+    assert len(bullets) == len(data["approved"]), bullets
+
+
+def test_pool_models_says_how_many_approved_names_dispatch_today() -> None:
+    """★ 卡 E109 判据 3：结论行要把数出来 —— 两个数都必须与真判据现算的结果一致。"""
+    from pool.model_registry import KNOWN_POOLS  # noqa: PLC0415
+
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    human = _human(text)
+    origin = sum(
+        1 for name in data["approved"]
+        if any(_real_verdict(name, pool) == "可派" for pool in KNOWN_POOLS)
+    )
+    alias = sum(1 for name in data["approved"] if _alias_paths(name, KNOWN_POOLS))
+    assert "按原名今天派得出去 " + str(origin) + " 条" in human, human
+    assert "换别名能派 " + str(alias) + " 条" in human, human
+
+
+def test_pool_models_pointer_names_the_real_registry_path(tmp_path: Path, monkeypatch: Any) -> None:
+    """★ 卡 E109 判据 4：注册表坏了给的指针必须是真路径（仓外 infra/pool/ 下没有这份文件）。"""
+    from pool.model_registry import registry_path  # noqa: PLC0415
+
+    root = _fake_pool_root(tmp_path, at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    monkeypatch.setenv("TF_MODEL_REGISTRY", str(tmp_path / "nope.toml"))
+    text, _data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False, "坏注册表是某几段没答案，不是整个只读工具失败"
+    assert "读不出来" in text, text
+    assert registry_path().as_posix() in text, "指针要现算（registry_path()），不是写死的：" + text
+    assert "infra/pool/model-registry.toml" not in text, "指针又指回仓外那个不存在的路径了：" + text
+
+
+def test_pool_models_schema_and_prose_agree_on_what_it_answers() -> None:
+    """★ 卡 E109 判据 5：同一条口径在 schema 与两份文档里都跟着改（一处都不许留旧说法）。"""
+    spec = next(s for s in pool_mcp.TOOL_SPECS if s["name"] == "pool_models")
+    desc = str(spec["description"])
+    assert "按池" in desc, desc
+    assert "不是派活允许集" in desc, desc
+    assert "派不派得出去" in desc, desc
+
+    asset = (ROOT / "skills" / "softeng-manage" / "references" / "asset-layers.md").read_text(
+        encoding="utf-8"
+    )
+    assert "返回的「批准集 ∩ 可用集」" not in asset, "skill 里还在拿交集当答案"
+    assert "按池现算" in asset, "skill 里得说清去看按池现算的真判决"
+
+    design = (ROOT / "复盘" / "号池MCP-使用与设计.md").read_text(encoding="utf-8")
+    row = next(
+        (ln for ln in design.splitlines() if ln.startswith("| ") and "pool_models" in ln), None
+    )
+    assert row is not None, "工具表里没有 pool_models 那一行"
+    assert "按池" in row and "真判决" in row, row
+    assert "（批准 ∩ 可用" not in row, row

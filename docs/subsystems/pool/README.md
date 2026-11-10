@@ -41,7 +41,7 @@
 | `mcp_http.py` | 406 | MCP 的 Streamable HTTP 传输：Origin / Bearer / 版本头 / 上限 / 202-405 都在这一层；判据只在传进来的 handle 上跑，不重写方法分发 | 无（被 tools/pool_mcp.py 调） |
 | `model-registry.toml` | 52 | 跨池统一层：CodeBuddy 池的真源 + 码道池的引用（只引用不复制，不许有第二份可写名单） | 无（被 `pool.model_registry` 读） |
 | `model_registry.py` | 985 | 一层模型注册表、按池分流：`resolve_model` / `effective_allowed_for`（裸名 vs `provider/model` 两套 id 体系）+ 禁用表 `assert_not_disabled`（与注册表同目录的 `model-disabled.toml`；读不到≠没禁用） | 无（被 `wb_dispatch`、`wb_watch`、`pool.plan` 调；禁用判据被 `wb_dispatch` 派活主闸、`gateway._model_block`、`pool_mcp` 干跑面三处调） |
-| `models.py` | 291 | 号池模型的只读读取：号池批准集 ∩ 号池快照（★ 不是派活允许集）；读快照（带 `at`），不联网、不写快照 | `wb_state.py`、`pool_mcp` |
+| `models.py` | 291 | 号池模型的只读读取：号池批准集 ∩ 号池快照（★ 不是派活允许集）；另给批准集逐条按池的派活真判决（可派 / 未接 / 跨池串用 / 未授权 + 今天的可派别名），判序照抄派活主闸、现算不写死；读快照（带 `at`），不联网、不写快照 | `wb_state.py`、`pool_mcp` |
 | `no_window.py` | 29 | 起子进程「不弹窗」的 `CREATE_NO_WINDOW` 常量 —— 全仓唯一真源 | 无（被十几个入口 import） |
 | `outcomes.py` | 175 | 按**请求**而不是按轮算结局（magpie `Totals.count()` 移植）：`is_failed` / `is_outcome` / `request_of` / `count_requests`；只读账本，不改一个字节 | 无（被 `wb_dispatch` 的 `append_usage_line` / `usage_summary` 调） |
 | `plan.py` | 675 | 队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（`wb_plan.py` 的逻辑层，拒绝会冲突的组合） | `wb_plan.py`、`wb_batch.py` |
@@ -84,7 +84,7 @@
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
 | 实现体量 | **19624 行** / **46 个文件**（45 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 357 张（345 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 队列卡数 | 357 张（346 done / 11 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |
