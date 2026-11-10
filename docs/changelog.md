@@ -33,6 +33,11 @@
 - 同一个人话段**按池现算**报真名单（先默认池、再其余已知池），未接的池标「（未接 ⇒ 派它会被拒）」；名单空就说「（空 ⇒ 派什么都拒）」，不写死、不另造一份。
 - 快照新鲜度必须出现在人话段，三态：已过期 N 小时（上限 M h） / 没过期 / **不知道它多旧**（没有 at 时间戳时不许洗成「新鲜」）。
 - `tools/pool/gateway.py` 的 `_seat` docstring 不再说「`route.tier()` 拿到 None 会抛 `RouteError`、于是退回原列顺序」：实测 `route.tier(None) == UNKNOWN_TIER == 3`，不知道额度的座排在所有知道的之后。
+## 2026-11-10 T-AG617 立卡笔的提交信息挂对号：Task 挂账务条目、新台账号进 Refs、Gates 如实说
+- `tools/pool/ledger.py` 的 `_commit_backlog` 不再把新台账号写进 `Task:`：改挂账务条目 `T-AG440`，新台账号进 `Refs:`（历史 34 笔立卡里 33 笔就是这个体例；审计 ⑧ 只认恰好一个**已登记**编号，新台账号落地前不在 `[entries]` 里）。
+- 新增 `_gates_line()`：读 `gates/last.json` 三态如实写 `Gates:` —— ok=True 说「沿用 <sha> 那趟全量绿」并带 `at`、ok 是别的值说「没有可用门禁产物」并声明这一笔不声称绿、文件不在/读不了说「没有门禁产物」。
+- 两个组件级常量摆在明处：`BOOKKEEPING_TASK = "T-AG440"` 与 `GATES_REL = "gates/last.json"`，docstring 写明为什么是它们、为什么不许改成「随便哪个 done 条目」。
+- `tests/test_ledger_queue_counts.py` 新增 7 条钉子（三条钉 `Task:`/`Refs:`、三条钉 `Gates:` 三态、一条拿真仓台账核常量），并把既有那条唯一断言 `body.count("Task: T-AG900")` 改成 `body.count("Refs: T-AG900")`（意图不变）。
 ## 2026-11-09 T-BG011 把 pika 升级经验收成可复用规程，并让 L3 运行手册层第一次落地
 - 新建 `docs/runbooks/pika-升级规程.md`（九节 + 两个附录）：前置检查 → 三方比对 → 个性化行回填 → 技能替换 → 残留清理 → 验收读数 → 回滚，每步给命令形状与判据；§6 十九条坑每条带症状原文。
 - 为什么落 L3：`docs/文档架构.md:71/:86` 把 `docs/runbooks/` 列为「怎么起、怎么巡检、怎么落地」，但该目录从未存在过（`git ls-files docs/runbooks` 空）；操作规程属「动手时读」不属「回头看」，塞进 `skills/` 会把本机一次性迁移写成通用技能。

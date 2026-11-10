@@ -17,6 +17,7 @@ E98 立卡（`36eb59f3`）只提交了台账，`docs/subsystems/pool/README.md` 
 
 from __future__ import annotations
 
+import json
 import pathlib
 import subprocess
 import sys
@@ -288,4 +289,86 @@ def test_the_commit_message_records_the_extra_doc(repo: pathlib.Path) -> None:
     _add(repo)
     body = _git(repo, "log", "-1", "--format=%B")
     assert README_REL in body, body
-    assert body.count("Task: T-AG900") == 1, body
+    assert body.count("Refs: T-AG900") == 1, body
+
+# ============================== 判据 1–3：立卡笔的 trailer（卡 E108 · T-AG617）
+# 立卡笔原来把**新台账号**写进 Task:（落地前它还不是台账条目 ⇒ 审计 ⑧ 判红），
+# 而且既没有 Refs: 也没有 Gates:。下面五条钉的就是这三件事；判据真源在
+# scripts/audit_progress.py 与 docs/traceability.toml，这里不另抄一份。
+BOOKKEEPING = "T-AG440"
+GATES_REL = "gates/last.json"
+
+
+def _body(repo: pathlib.Path) -> str:
+    return _git(repo, "log", "-1", "--format=%B")
+
+
+def _gate(repo: pathlib.Path, payload: object) -> None:
+    """把一份 gates/last.json 放进工作区（不提交：立卡笔只暂存台账与 README）。"""
+    (repo / "gates").mkdir(exist_ok=True)
+    (repo / GATES_REL).write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _trailer_lines(body: str, key: str) -> list[str]:
+    return [line for line in body.splitlines() if line.startswith(key + ":")]
+
+
+def test_the_ledger_commit_puts_the_bookkeeping_id_in_task(repo: pathlib.Path) -> None:
+    """判据 1：Task: 是**账务条目**，不是这张新卡的台账号。"""
+    _add(repo)
+    body = _body(repo)
+    assert _trailer_lines(body, "Task") == ["Task: " + BOOKKEEPING], body
+    assert "Task: T-AG900" not in body, body
+
+
+def test_the_bookkeeping_id_is_a_real_ledger_entry() -> None:
+    """判据 1 的另一半：那个常量在**真仓**台账里真的存在且 done（不是编的号）。"""
+    data = tomllib.loads((ROOT / "docs" / "traceability.toml").read_bytes().decode("utf-8"))
+    entries = data["entries"]
+    assert ledger.BOOKKEEPING_TASK in entries, sorted(entries)[:5]
+    assert entries[ledger.BOOKKEEPING_TASK]["status"] == "done"
+
+
+def test_the_ledger_commit_passes_the_audit_trailer_judge(repo: pathlib.Path) -> None:
+    """判据 1 的真判据：把这一笔的 Task: 喂给 audit_progress 自己的解析器，回空。"""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import audit_progress
+
+    _add(repo)
+    task = _trailer_lines(_body(repo), "Task")[0].split(":", 1)[1].strip()
+    record = "deadbee" + "\x1f" + "立卡 C2" + "\x1f" + task + "\x1e"
+    assert audit_progress.parse_task_trailers(record, {BOOKKEEPING}) == []
+
+
+def test_the_ledger_commit_names_the_new_task_in_refs(repo: pathlib.Path) -> None:
+    """判据 2：新台账号写进 Refs:，而且只有一行（读 log 的人一眼看出为哪张卡而立）。"""
+    _add(repo)
+    assert _trailer_lines(_body(repo), "Refs") == ["Refs: T-AG900"], _body(repo)
+
+
+def test_the_ledger_commit_reuses_the_last_gate_honestly(repo: pathlib.Path) -> None:
+    """判据 3 的绿灯态：last.json ok=True ⇒ 如实写「沿用 … 全量绿」并带上 at。"""
+    _gate(repo, {"ok": True, "at": "2026-11-10T11:33:10"})
+    _add(repo)
+    gates = _trailer_lines(_body(repo), "Gates")
+    assert len(gates) == 1, gates
+    assert "全量绿" in gates[0], gates
+    assert "at=2026-11-10T11:33:10" in gates[0], gates
+
+
+def test_the_gates_line_never_claims_green_when_the_gate_is_red(repo: pathlib.Path) -> None:
+    """判据 3 的红灯态：ok=False ⇒ 一个「绿」字都不许有，且要把「不」说出来。"""
+    _gate(repo, {"ok": False, "at": "2026-11-10T11:33:10"})
+    _add(repo)
+    gates = _trailer_lines(_body(repo), "Gates")
+    assert len(gates) == 1, gates
+    assert "全量绿" not in gates[0], gates
+    assert "不" in gates[0], gates
+
+
+def test_the_gates_line_says_so_when_there_is_no_artifact(repo: pathlib.Path) -> None:
+    """判据 3 的缺产物态：夹具里没有 gates/last.json ⇒ 明说没有，不许沉默也不许装绿。"""
+    _add(repo)
+    gates = _trailer_lines(_body(repo), "Gates")
+    assert len(gates) == 1, gates
+    assert "没有门禁产物" in gates[0] and "全量绿" not in gates[0], gates

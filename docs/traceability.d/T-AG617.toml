@@ -1,0 +1,17 @@
+[entries."T-AG617"]
+id = "T-AG617"
+title = "立卡笔的提交信息挂对号：Task挂账务条目、新台账号进Refs、Gates如实说"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/ledger.py",
+  "file:tests/test_ledger_queue_counts.py",
+  "text:tools/pool/ledger.py::BOOKKEEPING_TASK",
+  "text:tools/pool/ledger.py::没有门禁产物",
+  "test:test_ledger_queue_counts.py::test_the_ledger_commit_puts_the_bookkeeping_id_in_task",
+  "test:test_ledger_queue_counts.py::test_the_ledger_commit_names_the_new_task_in_refs",
+  "test:test_ledger_queue_counts.py::test_the_ledger_commit_reuses_the_last_gate_honestly",
+  "test:test_ledger_queue_counts.py::test_the_gates_line_never_claims_green_when_the_gate_is_red",
+]
+gaps = "1. 只修了**立卡笔**这一条自动提交路径：`tools/pool/ledger.py` 的 `_commit_backlog` 现在照体例写 `Task: T-AG440` + `Refs: <新台账号>` + `Gates:`，但别的自动提交路径（临时脚本、别的工具自己拼消息）仍可能把新台账号写进 `Task:`；判据 ⑧ 只在审计那一步拦，提交**前**没有人拦。指针 `tools/pool/ledger.py`2. `Gates:` 行引用的是**上一趟**落在地里的门禁产物（立卡笔不动源码，本来就没有本趟门禁），所以它说的是「沿用 … 那趟全量绿」；可是 `gates/last.json` 不记「那趟验的是哪棵树、哪个 rev」，读的人只能靠 `at` 猜。指针 `scripts/audit_progress.py`3. `BOOKKEEPING_TASK` 是一条**常量**，它指向的那条账务条目（dsmate 文档底座 + 分区 C/D 登记 + 历史 `Task:` 补记）语义上并不专为立卡而设；哪天那条被拆分或改名，常量就得跟着改，而钉子只判「存在且 done」。指针 `tools/pool/ledger.py`"
+

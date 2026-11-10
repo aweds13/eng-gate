@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import json
 import os
 import pathlib
 import re
@@ -93,6 +94,17 @@ BACKLOG_REL = "docs/workbacklog.toml"
 #: ★ 这里不算卡数、也不解析台账：重算只走生成器一份真源。
 README_REL = "docs/subsystems/pool/README.md"
 POOL_README_GEN = "scripts/gen_pool_readme.py"
+
+#: 立卡笔的 Task: 挂哪个编号（卡 E108）。
+#: ★ 立卡这一笔**不能**把新台账号写进 Task: —— 新台账号要等落地链 ⑤′ 翻账、
+#:   docs/traceability.toml 里才有这条 entry；落地前它还不是台账编号，
+#:   scripts/audit_progress.py --all 的 ⑧ 会判「不是「恰好一个台账编号」」。
+#:   历史 34 笔立卡笔全是 Task: T-AG440 + Refs: <新台账号>，这里照那个体例。
+BOOKKEEPING_TASK = "T-AG440"
+
+#: 上一趟门禁的产物。立卡笔**沿用**它的结论，如实写进 Gates:（卡 E108）。
+#: 只读、不改它；没有 / 不是绿就照实说不绿 —— 宁可难看，不许装绿。
+GATES_REL = "gates/last.json"
 
 _KV = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$")
 _CARD_HEAD = b"[[cards]]"
@@ -536,6 +548,38 @@ def _refresh_queue_counts(base: pathlib.Path) -> str | None:
     return README_REL
 
 
+def _gates_line(base: pathlib.Path) -> str:
+    r"""Gates: trailer 的三种如实说法（卡 E108）。
+
+    立卡这一笔不改源码，所以它能引用的门禁结论只有**上一趟落在地里的那一份**
+    （gates/last.json）。三种形态，一种都不许洗绿：
+
+    1. ok is True ⇒ 沿用哪一趟全量绿（带 HEAD 短 sha 与 at）；
+    2. ok 是别的值 ⇒ 明说「没有可用门禁产物」+ 实际 ok 与 at，并声明这一笔不声称绿；
+    3. 文件不在 / 读不了 / 不是对象 ⇒ 明说「没有门禁产物」。
+
+    ★ 不在这里判门禁（判据真源是 scripts/run_gates.py 与 scripts/audit_progress.py）；
+      这里只**转述**已落盘的那份结论，转述不出来就说不出来。
+    """
+    rel = base / GATES_REL
+    if not rel.is_file():
+        return f"Gates: 没有门禁产物（{GATES_REL} 不存在）；只立卡，不声称绿"
+    try:
+        data = json.loads(rel.read_bytes().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return f"Gates: 没有门禁产物（{GATES_REL} 读不出来）；只立卡，不声称绿"
+    if not isinstance(data, dict):
+        return (f"Gates: 没有门禁产物（{GATES_REL} 不是对象）；只立卡，不声称绿")
+    ok = data.get("ok")
+    at = data.get("at", "?")
+    if ok is True:
+        head = _git(base, "rev-parse", "--short", "HEAD") or "?"
+        return (f"Gates: 沿用 {head} 那趟全量绿（{GATES_REL} ok=True at={at}）；"
+                f"只立卡，不改源码")
+    return (f"Gates: 没有可用门禁产物：{GATES_REL} ok={ok!r} at={at}；"
+            f"只立卡，但这一笔**不**声称绿")
+
+
 def _commit_backlog(base: pathlib.Path, path: pathlib.Path, card_id: str, task: str) -> None:
     r"""提交台账，并把**同一次立卡**重算出来的队列卡数一起带上（卡 E100）。
 
@@ -554,7 +598,10 @@ def _commit_backlog(base: pathlib.Path, path: pathlib.Path, card_id: str, task: 
     if add.returncode != 0:
         raise LedgerError(f"git add 失败：{(add.stderr or '').strip()}")
     msg = (f"chore(ledger): 立卡 {card_id}（{task}）\n\n"
-           f"Task: {task}\nLedger: 新增 {task}（ENGINEERING/pending）\n")
+           f"Task: {BOOKKEEPING_TASK}\n"
+           f"Refs: {task}\n"
+           f"Ledger: 新增 {task}（ENGINEERING/pending）\n"
+           f"{_gates_line(base)}\n")
     if extra:
         msg += f"Docs: {extra}（队列卡数随这一笔重算）\n"
     proc = subprocess.run(["git", "commit", "-q", "-F", "-", "--", *staged], cwd=str(base),

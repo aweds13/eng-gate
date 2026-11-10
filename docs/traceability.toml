@@ -11991,3 +11991,20 @@ evidence = [
   "test:test_pool_gateway.py::test_seat_docstring_does_not_claim_a_raise_that_no_longer_happens",
 ]
 gaps = "1. 只修了**说法**，没修**id 口径**：号池侧是 `provider/model`（如 `huaweicloud-maas/GLM-5.2`），派活器侧是裸名（`GLM-5.2`），两套名字之间没有映射 ⇒ 交集空不空与派活能不能派，仍是两件互不校验的事；今天只能靠人眼看两行字。指针 `tools/pool_mcp.py`2. 新鲜度三态只落在 pool_models 的**人话段**，别的读面（quota_status、看板）仍只在机器块里带快照时间 ⇒ 「过期」这件事在别处还是静默的；技能层 `skills/softeng-manage/references/asset-layers.md` 第 80 行还在教人「看批准集 ∩ 可用集」（不在本卡卡域，挂账）。指针 `tools/pool_mcp.py`3. 派活允许集是每次 tools/call **现算**（读注册表 + 一次性授权 + 开关文件），读不出来时如实说「读不出来」但没有「上次读到的是什么、什么时候读的」⇒ 注册表坏掉的那一刻，人只能知道现在没答案，不能知道昨天有没有答案。指针 `tools/pool_mcp.py`"
+
+[entries."T-AG617"]
+id = "T-AG617"
+title = "立卡笔的提交信息挂对号：Task挂账务条目、新台账号进Refs、Gates如实说"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/ledger.py",
+  "file:tests/test_ledger_queue_counts.py",
+  "text:tools/pool/ledger.py::BOOKKEEPING_TASK",
+  "text:tools/pool/ledger.py::没有门禁产物",
+  "test:test_ledger_queue_counts.py::test_the_ledger_commit_puts_the_bookkeeping_id_in_task",
+  "test:test_ledger_queue_counts.py::test_the_ledger_commit_names_the_new_task_in_refs",
+  "test:test_ledger_queue_counts.py::test_the_ledger_commit_reuses_the_last_gate_honestly",
+  "test:test_ledger_queue_counts.py::test_the_gates_line_never_claims_green_when_the_gate_is_red",
+]
+gaps = "1. 只修了**立卡笔**这一条自动提交路径：`tools/pool/ledger.py` 的 `_commit_backlog` 现在照体例写 `Task: T-AG440` + `Refs: <新台账号>` + `Gates:`，但别的自动提交路径（临时脚本、别的工具自己拼消息）仍可能把新台账号写进 `Task:`；判据 ⑧ 只在审计那一步拦，提交**前**没有人拦。指针 `tools/pool/ledger.py`2. `Gates:` 行引用的是**上一趟**落在地里的门禁产物（立卡笔不动源码，本来就没有本趟门禁），所以它说的是「沿用 … 那趟全量绿」；可是 `gates/last.json` 不记「那趟验的是哪棵树、哪个 rev」，读的人只能靠 `at` 猜。指针 `scripts/audit_progress.py`3. `BOOKKEEPING_TASK` 是一条**常量**，它指向的那条账务条目（dsmate 文档底座 + 分区 C/D 登记 + 历史 `Task:` 补记）语义上并不专为立卡而设；哪天那条被拆分或改名，常量就得跟着改，而钉子只判「存在且 done」。指针 `tools/pool/ledger.py`"
