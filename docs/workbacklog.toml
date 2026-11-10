@@ -5851,3 +5851,26 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E110"
+task = "T-AG619"
+title = "快照过期说清怎么探：一处真源给命令、网关不叠两遍、谁拒谁提示"
+tree = ".wt/E110"
+spec = "复盘/卡/卡E110-快照过期说清怎么探.md"
+files = [
+  "tools/pool/models.py",
+  "tools/pool/gateway.py",
+  "tools/pool_mcp.py",
+  "tests/test_pool_models.py",
+  "tests/test_pool_gateway.py",
+  "tests/test_pool_mcp.py",
+  "docs/subsystems/pool/modules.toml",
+  "docs/subsystems/pool/模型与号池.md",
+  "复盘/卡/卡E110-快照过期说清怎么探.md"
+]
+depends = [
+  "E109"
+]
+risk = "mid"
+status = "pending"
