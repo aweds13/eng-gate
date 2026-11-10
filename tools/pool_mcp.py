@@ -215,7 +215,7 @@ from pool.jobs import (
 )
 from pool.locks import is_empty as lock_is_empty
 from pool.locks import status_argv as lock_status_argv
-from pool.models import find_pool_dir, load_pool_models, probe_hint
+from pool.models import find_pool_dir, load_pool_models, probe_command, probe_hint
 from pool.no_window import NO_WINDOW  # ★ 卡 148：子进程一律不弹窗（flag 的唯一真源）
 from pool.plan import BacklogError, plan_report
 
@@ -1186,6 +1186,13 @@ _WHO_BLOCKS = (
     "（tools/wb_dispatch.py 的 snapshot_stale_problem 只往 stderr 打一行）"
 )
 
+#: ★ 卡 E111 判据 2：这句注解只写一处 —— 人话段与机器块的 dispatch.note 用同一个常量。
+#: 写两处就会各漂各的（E107/E109/E110 三张卡的口径都是这么丢的）。
+_DISPATCH_NOTE = (
+    "（按原名派不出去 ≠ 这条模型用不了：同一个模型在两套 id 体系里名字不同 —— "
+    "号池写 provider/model、派活器写裸名。换别名那一条今天真能派。）"
+)
+
 # ================================================================ 工具 6：pool_models
 
 
@@ -1213,6 +1220,9 @@ def tool_pool_models(
             f"也没有 {info['snapshot']}。"
         )
         return _result(text, {"found": False, **info}, is_error=True)
+    # ★ 卡 E111 判据 5：探测命令**现算一次**，人话段两处与机器块 snapshot_probe 都用它；
+    #   各拼一句的话，机器块那份迟早和人话段那份说两样（E110 只修了人话段）。
+    probe: dict[str, Any] = {"command": probe_command(pool), "hint": probe_hint(pool)}
     lines = [
         f"号池可用模型（pool_models）—— 读 {pool.as_posix()}（★ 快照，非现场拉取；"
         f"{info['snapshot']} at={info['snapshot_at']}）",
@@ -1238,13 +1248,13 @@ def tool_pool_models(
     if info["snapshot_at"] is None:
         lines.append(
             f"快照新鲜度：不知道它多旧（{info['snapshot']} 里没有 at 时间戳）"
-            f" ⇒ 不当成新鲜，也不当成过期；{probe_hint(pool)}"
+            f" ⇒ 不当成新鲜，也不当成过期；{probe['hint']}"
         )
         lines.append(_WHO_BLOCKS)
     elif info["snapshot_stale"]:
         lines.append(
             f"快照新鲜度：已过期 {age} 小时（上限 {stale_hours}h）⇒ 先重新探测再派活；"
-            + probe_hint(pool)
+            + probe["hint"]
         )
         lines.append(_WHO_BLOCKS)
     else:
@@ -1262,6 +1272,18 @@ def tool_pool_models(
         "派活允许集（wb_dispatch.effective_allowed_models(pool)：注册表该池条目"
         " + 一次性授权 + 开关文件里打开的；★ 这里现算，不写死）"
     )
+    # ★ 卡 E111（T-AG620）判据 1：这一段先算**一份结构**（dispatch），再用它渲染人话段、
+    #   并原样塞进机器块。原来是边算边拼字符串 —— 结构只活在局部变量里，机器块拿不到，
+    #   于是人话段判完三张卡的事，机器读者一个字段都读不到（这就是本卡的现场）。
+    dispatch: dict[str, Any] = {
+        # 判不了 ⇒ None（不是 []、不是 {}：空列表读起来是「判完了，一条都没有」）
+        "verdicts": None,
+        "counts": None,
+        "allow_lists": None,
+        "pools_unwired": None,
+        "note": _DISPATCH_NOTE,
+        "error": None,
+    }
     _ordered: list[str] = []
     try:
         from pool.model_registry import (  # noqa: PLC0415
@@ -1273,14 +1295,21 @@ def tool_pool_models(
         ordered = [DEFAULT_POOL] + [n for n in KNOWN_POOLS if n != DEFAULT_POOL]
         _ordered = ordered
         allow_lines: list[str] = []
+        allow_lists: dict[str, list[str]] = {}
+        pools_unwired: list[str] = []
         for name in ordered:
             allowed = wb_dispatch.effective_allowed_models(name)
+            allow_lists[name] = list(allowed)
+            wired = get_adapter(name).wired
+            if not wired:
+                pools_unwired.append(name)
             # ★ 未接的池如实标「未接」：名单照给（那是它的允许集），但派它会被拒。
             #   注记放在**第一个全角冒号之前**、且自身不含全角冒号 —— 机器读这段按第一个「：」切。
-            mark = "" if get_adapter(name).wired else "（未接 ⇒ 派它会被拒）"
+            mark = "" if wired else "（未接 ⇒ 派它会被拒）"
             allow_lines.append(f"· {name}{mark}：" + ("、".join(allowed) or "（空 ⇒ 派什么都拒）"))
     except Exception as exc:  # noqa: BLE001 —— 只读面：坏输入不许把整个 tools/call 打成异常
         lines.append(f"派活允许集读不出来：{type(exc).__name__}：{exc}")
+        dispatch["error"] = f"{type(exc).__name__}：{exc}"
         try:
             from pool.model_registry import registry_path  # noqa: PLC0415
 
@@ -1296,6 +1325,8 @@ def tool_pool_models(
         )
     else:
         lines.extend(allow_lines)
+        dispatch["allow_lists"] = allow_lists
+        dispatch["pools_unwired"] = pools_unwired
     # ★ 卡 E109（T-AG618）判据 1：批准集**逐条**给按池的真判决 —— 「今天派不派得出去」。
     #   为什么非有不可：批准集用的是号池 id（provider/model），派活器用裸名，按原名逐字过闸
     #   今天**一条都过不去**；只报「允许集」等于让人以为「没模型可用」。判据只有一份，
@@ -1306,38 +1337,58 @@ def tool_pool_models(
             lines.append(
                 "按池判决（批准集里每一条今天派不派得出去；判序 = 派活主闸，现算不写死）："
             )
-            judge_lines: list[str] = []
-            origin_ok = 0
-            alias_ok = 0
+            judged: list[dict[str, Any]] = []
             for name in info["approved"]:
+                cells: dict[str, dict[str, str]] = {}
                 parts: list[str] = []
-                dispatchable = False
                 for pool in _ordered:
                     verdict, why = _dispatch_verdict(name, pool)
+                    cells[pool] = {"verdict": verdict, "why": why}
                     if verdict == "可派":
-                        dispatchable = True
                         parts.append(f"{pool} 可派")
                     elif why:
                         parts.append(f"{pool} {verdict}（{why}）")
                     else:
                         parts.append(f"{pool} {verdict}")
                 routes = _alias_routes(name, _ordered)
-                origin_ok += 1 if dispatchable else 0
-                alias_ok += 1 if routes else 0
+                judged.append(
+                    {
+                        "name": name,
+                        "pools": cells,
+                        "aliases": list(routes),
+                        "dispatchable": any(c["verdict"] == "可派" for c in cells.values()),
+                    }
+                )
                 route = "、".join(routes) if routes else "（没有）"
-                judge_lines.append(f"· {name} —— " + "、".join(parts) + f"｜可派别名：{route}")
-            lines.extend(judge_lines)
+                lines.append(f"· {name} —— " + "、".join(parts) + f"｜可派别名：{route}")
+            counts = {
+                "approved": len(info["approved"]),
+                "origin": sum(1 for row in judged if row["dispatchable"]),
+                "alias": sum(1 for row in judged if row["aliases"]),
+            }
             lines.append(
-                f"号池批准集 {len(info['approved'])} 条 / 按原名今天派得出去 {origin_ok} 条 / "
-                f"换别名能派 {alias_ok} 条"
+                f"号池批准集 {counts['approved']} 条 / 按原名今天派得出去 {counts['origin']} 条 / "
+                f"换别名能派 {counts['alias']} 条"
             )
-            lines.append(
-                "  （按原名派不出去 ≠ 这条模型用不了：同一个模型在两套 id 体系里名字不同 —— "
-                "号池写 provider/model、派活器写裸名。换别名那一条今天真能派。）"
-            )
+            lines.append("  " + _DISPATCH_NOTE)
+            dispatch["verdicts"] = judged
+            dispatch["counts"] = counts
         except Exception as exc:  # noqa: BLE001 —— 只读面：一段算不出来不许把整个调用打成异常
             lines.append(f"按池判决读不出来：{type(exc).__name__}：{exc}")
-    return _result("\n".join(lines), info, is_error=False)
+            dispatch["error"] = f"{type(exc).__name__}：{exc}"
+    # ★ 卡 E111 判据 2/3/5：机器块不是人话段的抄本 —— 它是同一份结构的另一处渲染。
+    #   in_both_is_a_dispatch_allow_list 恒 False：E107 的结论是**口径**问题（两套 id 体系
+    #   本来就不通用），不是「今天数据恰好空」；数据空了也不许把这个布尔翻成 True。
+    return _result(
+        "\n".join(lines),
+        {
+            **info,
+            "in_both_is_a_dispatch_allow_list": False,
+            "snapshot_probe": probe,
+            "dispatch": dispatch,
+        },
+        is_error=False,
+    )
 
 
 # ================================================================ 工具 7：quota_status（卡 201）

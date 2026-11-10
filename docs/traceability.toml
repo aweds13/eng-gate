@@ -12040,3 +12040,19 @@ evidence = [
   "test:test_pool_mcp.py::test_pool_models_says_who_blocks_and_who_only_warns",
 ]
 gaps = "1. 命令与路径都现算自**号池目录**，而号池目录是 `find_pool_dir()` 逐级向上猜出来的（`tools/pool/models.py` 的 `POOL_ANCHOR`）：同一台机器上若同时存在两份同名的探测脚本（比如仓里又复制一份），读面给出的那条命令指向的是**先被找到的那一份**，不是刚才读快照的那一份。指针 `tools/pool/models.py`2. `probe_hint` 只说「怎么让它变新」，不说「谁来跑、跑完快照落到哪个文件」：真跑它要联网（拉起 `codearts.sh models`，timeout 300s）并写仓外的 `models.live.json`，这两件事仓内一行都不做；读面把命令递到人手上，但「跑不跑、什么时候跑」仍是人的判断，工具不替它做。指针 `tools/pool/models.py`3. 三处读面现在共用一份 `probe_hint`，但**「过期」的判据本身仍有两份**：`models.STALE_HOURS` 只管读面与派活器提示，网关那条 404 走的也是同一个 `snapshot_stale`，可一旦有人按池改上限（比如给某个池放宽），两份就会悄悄分叉 —— 本卡没把上限改成按池配置，也没加钉子钉住「两处必须同一份上限」。指针 `tools/pool/gateway.py`"
+
+[entries."T-AG620"]
+id = "T-AG620"
+title = "机器块还停在三张卡之前：判决、计数、允许集、探测命令一起进payload"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp.py",
+  "text:tools/pool_mcp.py::in_both_is_a_dispatch_allow_list",
+  "text:tools/pool_mcp.py::snapshot_probe",
+  "test:test_pool_mcp.py::test_payload_carries_every_verdict_the_human_text_shows",
+  "test:test_pool_mcp.py::test_payload_verdicts_is_never_a_fake_empty_list",
+  "test:test_pool_mcp.py::test_the_doc_projections_stop_calling_the_intersection_dispatchable",
+]
+gaps = "1. 机器块里那份判决是**人话段渲染时顺手算出来的**，不是一个独立的只读查询：别的只读面想复用（比如以后让 workbench_board 也报今天派不派得出去）只能再算一遍，两处一旦分叉没人会发现 —— 本卡只保证这一处内部一致，没把判据抽成带第二个调用方的函数。指针 `tools/pool_mcp.py`2. `dispatch.allow_lists` 是 `wb_dispatch.effective_allowed_models(pool)` 的原样快照，而那份名单来自注册表与开关文件：机器读者拿到名单，读不出「这是几点算的」，两次调用之间闸变了它也不会知道。指针 `tools/pool_mcp.py`3. `in_both_is_a_dispatch_allow_list: False` 是**恒定常量**，不是从数据里推出来的：它如实否掉的是「交集 = 派活允许集」这条口径。哪天两套 id 体系真被归一（比如派活器改吃 provider/model），这个布尔会继续这么说，而没有任何东西会在那天提醒谁去改它。指针 `tools/pool_mcp.py`"

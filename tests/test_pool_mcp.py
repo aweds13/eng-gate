@@ -852,3 +852,197 @@ def test_pool_models_says_who_blocks_and_who_only_warns(tmp_path: Path) -> None:
     assert "网关" in human, human
     assert "派活器" in human, human
     assert "不拦" in human, human
+
+# ============================ 卡 E111（T-AG620）：机器块还停在三张卡之前
+#
+# 人话段在 E107 / E109 / E110 三张卡里长出了判决、计数、允许集、探测命令；
+# 机器块一直只是 load_pool_models() 的 16 个键 —— 而机器读者只读机器块，
+# 拿到的仍是那张被 E107 点名「不是派活允许集」的 in_both。
+# 这里钉的是「一份结构两处渲染」：
+#   ① 判决 / 计数 / 允许集 / 探测命令都进机器块，且与人话段同源；
+#   ② 机器块里有一句布尔否掉「in_both 是允许集」；
+#   ③ 判不了的时候三键 None（不是 []、不是 {}）—— 不许给一个看起来正常的空判决。
+
+
+def _dispatch_block(text: str) -> dict[str, Any]:
+    """机器块里的 dispatch 段（判不了时里面几个键是 None，也得取得出来）。"""
+    return _json_block(text)["dispatch"]
+
+
+def test_payload_carries_every_verdict_the_human_text_shows() -> None:
+    """★ 判据 1：机器块每条判决都要能在人话段那一行里逐字对上（池、结论、why）。"""
+    from pool.model_registry import KNOWN_POOLS  # noqa: PLC0415
+
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    judged = _dispatch_block(text)["verdicts"]
+    assert isinstance(judged, list) and judged, "机器块里没有判决，而人话段有"
+    human = _human(text)
+    assert len(judged) == len(data["approved"]), (len(judged), data["approved"])
+    for row in judged:
+        line = _verdict_line(human, row["name"])
+        assert line is not None, "人话段没有这一条：" + str(row["name"])
+        assert set(row["pools"]) == set(KNOWN_POOLS), row["pools"]
+        for pool in KNOWN_POOLS:
+            cell = row["pools"][pool]
+            assert pool + " " + cell["verdict"] in line, (
+                "机器块与文本对不上：" + pool + " " + cell["verdict"] + "\n" + line
+            )
+            if cell["why"]:
+                assert cell["why"] in line, "why 没跟在判决后面：" + cell["why"] + "\n" + line
+        assert row["dispatchable"] is any(
+            c["verdict"] == "可派" for c in row["pools"].values()
+        ), row
+
+
+def test_payload_counts_equal_the_human_counts() -> None:
+    """★ 判据 1 后半：两个计数在机器块与文本里必须是同一对数（同源，不是各算一遍）。"""
+    from pool.model_registry import KNOWN_POOLS  # noqa: PLC0415
+
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    counts = _dispatch_block(text)["counts"]
+    human = _human(text)
+    origin = sum(
+        1
+        for name in data["approved"]
+        if any(_real_verdict(name, pool) == "可派" for pool in KNOWN_POOLS)
+    )
+    alias = sum(1 for name in data["approved"] if _alias_paths(name, KNOWN_POOLS))
+    assert counts == {
+        "approved": len(data["approved"]),
+        "origin": origin,
+        "alias": alias,
+    }, counts
+    assert "按原名今天派得出去 " + str(origin) + " 条" in human, human
+    assert "换别名能派 " + str(alias) + " 条" in human, human
+
+
+def test_payload_never_claims_in_both_is_the_allow_list() -> None:
+    """★ 判据 2：布尔恒 False —— 它是口径问题，不是数据问题（数据空了也不许翻成 True）。"""
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    flag = data["in_both_is_a_dispatch_allow_list"]
+    assert isinstance(flag, bool) and flag is False, flag
+    allow = _dispatch_block(text)["allow_lists"]
+    assert allow, "允许集一个池都没有 —— 那不是「不是交集」，是没算"
+    assert allow is not data["in_both"], "允许集不许就是那份交集"
+
+
+def test_payload_note_matches_the_human_text() -> None:
+    """★ 判据 2 后半：那句注解只写一处 —— 机器块里那串必须原样出现在人话段。"""
+    text, _data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    note = _dispatch_block(text)["note"]
+    assert isinstance(note, str) and note.strip(), note
+    assert note in _human(text), "机器块那句注解在人话段里找不到（两处各写一份）：" + note
+
+
+def test_payload_lists_the_allow_set_per_pool() -> None:
+    """★ 判据 3：按池允许集进机器块，且与 wb_dispatch 现算的逐池相等（顺序也照它）。"""
+    import wb_dispatch  # noqa: PLC0415
+    from pool.model_registry import KNOWN_POOLS  # noqa: PLC0415
+
+    text, _data, is_error = pool_mcp.tool_pool_models({}, root=ROOT)
+    assert is_error is False
+    block = _dispatch_block(text)
+    assert set(block["allow_lists"]) == set(KNOWN_POOLS), block["allow_lists"]
+    for pool in KNOWN_POOLS:
+        want = list(wb_dispatch.effective_allowed_models(pool))
+        assert block["allow_lists"][pool] == want, (pool, block["allow_lists"][pool], want)
+    unwired = sorted(p for p in KNOWN_POOLS if not wb_dispatch.get_adapter(p).wired)
+    assert sorted(block["pools_unwired"]) == unwired, (
+        block["pools_unwired"],
+        unwired,
+    )
+
+
+def test_payload_allow_lists_are_not_the_intersection(tmp_path: Path) -> None:
+    """★ 判据 3 后半：假号池批准一条 p/GLM-5.2 —— 允许集是派活器现算的，两套 id 口径不同。"""
+    root = _fake_pool_root(tmp_path, at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False
+    block = _dispatch_block(text)
+    flat = {name for names in block["allow_lists"].values() for name in names}
+    assert flat, "允许集空着 —— 那不是「不是交集」，是没算"
+    assert flat != set(data["in_both"]), "两套 id 口径不同，允许集不可能等于交集：" + str(flat)
+
+
+def test_payload_says_unknown_when_the_registry_is_broken(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """★ 判据 4：判不了就说判不了 —— 三个键 None，另带一句 error；工具本身不失败。"""
+    root = _fake_pool_root(tmp_path, at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    monkeypatch.setenv("TF_MODEL_REGISTRY", str(tmp_path / "nope.toml"))
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False, "坏注册表是这几段没答案，不是整个只读工具失败"
+    block = _dispatch_block(text)
+    assert block["verdicts"] is None, block["verdicts"]
+    assert block["counts"] is None, block["counts"]
+    assert block["allow_lists"] is None, block["allow_lists"]
+    assert block["pools_unwired"] is None, block["pools_unwired"]
+    assert isinstance(block["error"], str) and block["error"].strip(), block["error"]
+    assert data["in_both_is_a_dispatch_allow_list"] is False
+    assert "读不出来" in text, "人话段那两行照旧要给"
+
+
+def test_payload_verdicts_is_never_a_fake_empty_list(tmp_path: Path, monkeypatch: Any) -> None:
+    """★ 判据 4 后半：None 不等于 [] —— 空列表读起来是「判完了，一条都没有」。"""
+    root = _fake_pool_root(tmp_path, at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    monkeypatch.setenv("TF_MODEL_REGISTRY", str(tmp_path / "nope.toml"))
+    text, _data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False
+    block = _dispatch_block(text)
+    assert not isinstance(block["verdicts"], list), "给空列表就是把判不了洗成判完了"
+    assert not isinstance(block["counts"], dict), "给空字典同上"
+    assert block["verdicts"] is None and block["counts"] is None
+
+
+def test_payload_carries_the_same_probe_command_as_the_text(tmp_path: Path) -> None:
+    """★ 判据 5：探测命令也进机器块，且与文本里那一串是**同一个值**（E110 只改了人话段）。"""
+    stamp = (datetime.now() - timedelta(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
+    root = _fake_pool_root(tmp_path, at=stamp)
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False
+    probe = data["snapshot_probe"]
+    script = (root / "infra" / "pool" / "pool_models.py").as_posix()
+    assert probe["command"] == "python -X utf8 " + script + " --check", probe
+    assert probe["hint"] == "重新探测：" + str(probe["command"]), probe
+    assert probe["command"] in _human(text), "人话段那串命令与机器块不是同一个值"
+
+
+def test_payload_probe_is_null_when_the_script_is_missing(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """★ 判据 5 后半：脚本不在 ⇒ command 是 None，hint 仍非空且不编命令。"""
+    from pool.models import find_pool_dir  # noqa: PLC0415
+
+    stamp = (datetime.now() - timedelta(hours=72)).strftime("%Y-%m-%d %H:%M:%S")
+    root = _fake_pool_root(tmp_path, at=stamp)
+    pool = find_pool_dir(root)
+    assert pool is not None, "夹具坏了：假号池目录都没找到"
+    (pool / "pool_models.py").unlink()
+    monkeypatch.setattr(pool_mcp, "find_pool_dir", lambda _root: pool)
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is False
+    probe = data["snapshot_probe"]
+    assert probe["command"] is None, probe
+    assert probe["hint"].strip(), "没有命令也要说一句（不许留白）"
+    assert "--check" not in probe["hint"], "脚本都没有，别编一条假命令：" + probe["hint"]
+    assert "--check" not in _human(text), "人话段也不许出现假命令"
+
+
+def test_the_doc_projections_stop_calling_the_intersection_dispatchable() -> None:
+    """★ 判据 6：两处投影改法不同 —— 一处就地改，一处只许加补注（逐字输出是历史）。"""
+    doc = (ROOT / "docs" / "subsystems" / "pool" / "模型与号池.md").read_bytes().decode("utf-8")
+    row = next((ln for ln in doc.splitlines() if ln.startswith("| `in_both` |")), None)
+    assert row is not None, "模型与号池.md 里没有 in_both 那一行（表被改了？）"
+    assert "真正可派" not in row, "这一行还在说交集是真正可派：" + row
+    trae = (ROOT / "复盘" / "Trae-接入结论.md").read_bytes().decode("utf-8")
+    verbatim = (
+        "pool_models    只读   号池可用模型：批准集 ∩ 可用集（读号池快照，只读、不联网）。"
+    )
+    assert verbatim in trae, "逐字输出被改了 —— 那是伪造历史，只许在它后面加补注"
+    tail = "\n".join(trae[trae.index(verbatim):].splitlines()[:40])
+    assert "E111" in tail, "逐字输出之后 40 行内要有 E111 的补注：" + tail
+    assert "2026-11-10" in tail, "补注必须带日期：" + tail

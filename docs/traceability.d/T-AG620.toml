@@ -1,0 +1,16 @@
+[entries."T-AG620"]
+id = "T-AG620"
+title = "机器块还停在三张卡之前：判决、计数、允许集、探测命令一起进payload"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp.py",
+  "text:tools/pool_mcp.py::in_both_is_a_dispatch_allow_list",
+  "text:tools/pool_mcp.py::snapshot_probe",
+  "test:test_pool_mcp.py::test_payload_carries_every_verdict_the_human_text_shows",
+  "test:test_pool_mcp.py::test_payload_verdicts_is_never_a_fake_empty_list",
+  "test:test_pool_mcp.py::test_the_doc_projections_stop_calling_the_intersection_dispatchable",
+]
+gaps = "1. 机器块里那份判决是**人话段渲染时顺手算出来的**，不是一个独立的只读查询：别的只读面想复用（比如以后让 workbench_board 也报今天派不派得出去）只能再算一遍，两处一旦分叉没人会发现 —— 本卡只保证这一处内部一致，没把判据抽成带第二个调用方的函数。指针 `tools/pool_mcp.py`2. `dispatch.allow_lists` 是 `wb_dispatch.effective_allowed_models(pool)` 的原样快照，而那份名单来自注册表与开关文件：机器读者拿到名单，读不出「这是几点算的」，两次调用之间闸变了它也不会知道。指针 `tools/pool_mcp.py`3. `in_both_is_a_dispatch_allow_list: False` 是**恒定常量**，不是从数据里推出来的：它如实否掉的是「交集 = 派活允许集」这条口径。哪天两套 id 体系真被归一（比如派活器改吃 provider/model），这个布尔会继续这么说，而没有任何东西会在那天提醒谁去改它。指针 `tools/pool_mcp.py`"
+
