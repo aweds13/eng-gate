@@ -162,8 +162,8 @@ landing.py:2355  parser.add_argument("--card", ...)   :2358 --task
    - 新增内部函数（建议 `_replay_backlog_status(wt, path, card, task) -> tuple[bool, list[str]]`），只做「认领 hunk → `--ours` → `flip_card_status` → 校验」四件事，**不新造任何翻账口径**（一律调 `flip_card_status`）；
    - 位置：现算文档重算（`:226-238`）**之前**，`git add`（`:239-241`）之前；`add` 名单加上台账那一份；
    - `:2985` 传 `a.card, a.task`。
-2. 新增 `tests/test_landing_backlog_replay.py`：真 `git init` 夹具 + 真造 rebase 冲突（照抄 `tests/test_landing_derived_resolvable.py:126-169` 的造法，`core.autocrlf=false`），覆盖判据 1–6 与反例 1/5/6/7/8。
-3. `docs/changelog.d/T-AG631.md`：记「台账重放」这条口径、为什么**不**并进 `DERIVED`、批模式为何不在范围内。
+2. 新增 tests/test_landing_backlog_replay.py（本卡同时交付这份测试，落地后才会出现在主树）：真 `git init` 夹具 + 真造 rebase 冲突（照抄 `tests/test_landing_derived_resolvable.py:126-169` 的造法，`core.autocrlf=false`），覆盖判据 1–6 与反例 1/5/6/7/8。
+3. 落地链生成的第一份片段 docs/changelog.d/T-AG631.md：记「台账重放」这条口径、为什么**不**并进 `DERIVED`、批模式为何不在范围内。
 
 ## 验收（三条，落地前自跑，零手工步骤）
 
