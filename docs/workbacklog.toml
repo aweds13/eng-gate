@@ -5914,3 +5914,21 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E113"
+task = "T-AG622"
+title = "代理指标登记表35天没重验且dispatch-rate的metric写着仓里没有的meta.json"
+tree = ".wt/E113"
+spec = "复盘/卡/卡E113-代理指标重验.md"
+files = [
+  "docs/proxy-map.toml",
+  "tests/test_proxy_audit.py",
+  "tests/test_run_gates_proxy.py",
+  "复盘/卡/卡E113-代理指标重验.md"
+]
+depends = [
+  "E112"
+]
+risk = "mid"
+status = "pending"
