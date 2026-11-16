@@ -1,0 +1,19 @@
+[entries."T-AG630"]
+id = "T-AG630"
+title = "号池账本health三键终于有写方：state按表、连败按一份口径、签到时刻另开一键"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_accounts.py",
+  "file:tests/test_pool_accounts.py",
+  "file:tests/test_pool_checkin.py",
+  "file:docs/subsystems/pool/模型与号池.md",
+  "test:test_pool_accounts.py::test_derive_health_state_is_a_table",
+  "test:test_pool_accounts.py::test_probe_writes_health_through_the_single_writer",
+  "test:test_pool_accounts.py::test_probe_does_not_forge_todays_checkin",
+  "test:test_pool_accounts.py::test_recheck_prefers_last_checkin_at",
+  "test:test_pool_accounts.py::test_health_state_is_validated_on_write",
+  "test:test_pool_checkin.py::test_probe_never_writes_the_checkin_stamp",
+]
+gaps = "- 卡规格判据 5 点名的两条 E118 钉子（test_list_json_carries_probe_verdict / test_health_state_is_never_invented）在主树跑不了：grep -rn 'health_state' tests/ tools/pool_accounts.py 零命中，它们只在 .wt/E118/tests/test_pool_accounts.py。本卡按规格写明的次序做（E118 落地后 rebase 再复跑），不动那两条。指针 tests/test_pool_accounts.py。- `_validate_ledger_toml` 现在既是读口（lastgood.read_strict 的 validate）也是写口（save_ledger 显式调一次）：加入 health.state 五值校验后，一份**已经**带着坏 state 的老账本会连读都读不了。今天仓外真账本五个号全是 unknown（合法值），所以实测不受影响；这是有意的收紧，不是副作用没看见。指针 tools/pool_accounts.py。- 判据 4 只把签到那处字面量换成 `_ck().NEEDS_HUMAN`，探测路用的是同一份；但两份代码仍各写一次 `if kind in _ck().NEEDS_HUMAN:`（一处加一、一处也加一），没有抽成公共函数 —— 抽的话要改 checkin.py 的归属，超出本卡卡域。指针 tools/pool_accounts.py。"
+

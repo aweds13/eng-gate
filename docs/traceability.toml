@@ -12217,3 +12217,22 @@ evidence = [
   "test:test_pytest_select.py::test_replay_recognises_every_real_fallback_reason",
 ]
 gaps = "- 变异 D 没按卡规格原文做（规格写「判据 4 的距离改常量 0（自欺）」）：实际跑的四条是 M-A 回退逐笔取数 / M-B log_batch 恒返回空表 / M-C log_batch 丢掉文件列表 / M-D 上界缩回 60，少了「距离改常量 0」那条。原因：把 behind 写死成 0 会让 `behind < max(REPLAY_PROBE_STEPS)` 恒真，但它同时会掩盖 M-D 的读数（两条变异咬同一个钉子），先保住「上界不够时先红」这条更值。读数见 gates/diag/_rev_E127_result.txt。- 判据 2 的计数钉子用 monkeypatch 三个 spy（log_batch / git_changed / git_task）断言 calls == {batch: 1, changed: 0, task: 0}，跑的是 replay(5, root=ROOT) —— 对着真仓跑而不是合成仓：批量取的是 `git log -z`，假仓里造不出 5 笔带 Task trailer 的历史。指针 tests/test_pytest_select.py。- `log_batch` 的解析不认的记录一律不进返回值（调用方按「批量里查不到这一笔」回落逐笔读），所以「解析器悄悄吞掉一半历史」这件事不会被回放判据发现 —— 只有逐笔比对那条钉子能抓。指针 tools/pytest_select.py。"
+
+[entries."T-AG630"]
+id = "T-AG630"
+title = "号池账本health三键终于有写方：state按表、连败按一份口径、签到时刻另开一键"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_accounts.py",
+  "file:tests/test_pool_accounts.py",
+  "file:tests/test_pool_checkin.py",
+  "file:docs/subsystems/pool/模型与号池.md",
+  "test:test_pool_accounts.py::test_derive_health_state_is_a_table",
+  "test:test_pool_accounts.py::test_probe_writes_health_through_the_single_writer",
+  "test:test_pool_accounts.py::test_probe_does_not_forge_todays_checkin",
+  "test:test_pool_accounts.py::test_recheck_prefers_last_checkin_at",
+  "test:test_pool_accounts.py::test_health_state_is_validated_on_write",
+  "test:test_pool_checkin.py::test_probe_never_writes_the_checkin_stamp",
+]
+gaps = "- 卡规格判据 5 点名的两条 E118 钉子（test_list_json_carries_probe_verdict / test_health_state_is_never_invented）在主树跑不了：grep -rn 'health_state' tests/ tools/pool_accounts.py 零命中，它们只在 .wt/E118/tests/test_pool_accounts.py。本卡按规格写明的次序做（E118 落地后 rebase 再复跑），不动那两条。指针 tests/test_pool_accounts.py。- `_validate_ledger_toml` 现在既是读口（lastgood.read_strict 的 validate）也是写口（save_ledger 显式调一次）：加入 health.state 五值校验后，一份**已经**带着坏 state 的老账本会连读都读不了。今天仓外真账本五个号全是 unknown（合法值），所以实测不受影响；这是有意的收紧，不是副作用没看见。指针 tools/pool_accounts.py。- 判据 4 只把签到那处字面量换成 `_ck().NEEDS_HUMAN`，探测路用的是同一份；但两份代码仍各写一次 `if kind in _ck().NEEDS_HUMAN:`（一处加一、一处也加一），没有抽成公共函数 —— 抽的话要改 checkin.py 的归属，超出本卡卡域。指针 tools/pool_accounts.py。"

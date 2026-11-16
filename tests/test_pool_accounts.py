@@ -708,11 +708,14 @@ def test_unknown_platform_still_listed_but_not_dispatchable(
     assert "不在 tools/pool/platforms.toml 里" in str(ei.value)
 
 
-def test_record_probe_result_only_touches_observed_at_and_samples(patched, tmp_path):
-    """⑲ `record_probe_result` 只写 `[account.quota]` 的 `observed_at` 与 `samples`。
+def test_record_probe_result_never_touches_the_verdict_bits(patched, tmp_path):
+    """⑲ `record_probe_result` 不碰**顶层**判定位：`state` / `approved_models` / `amount`。
 
     ★ 卡 A333 判据 6：`state` 是人工判定的（`STATES` 五行），`approved_models` 是派活
     白名单 —— 探测一次读数**都不许**碰它们。六结论码原样进 `samples`，一条都不许压平。
+    ★ 卡 E121 起 `record_probe_result` **也写** `[account.health]` 的三键（`state` /
+      `consecutive_failures` / `last_probe`）—— 那三个键的钉子见 ㉕a~㉕g。本条断言本体
+      一条没动；名字换成事实，免得它变成「探测什么都不写」的第二句谎。
     """
     before = pa.load_ledger(patched)
     raw_before = patched.read_bytes()
@@ -999,3 +1002,300 @@ def test_meoo_declared_dir_is_discoverable(monkeypatch):
     rows = pa.discover([])
     pointers = [r["pointer"] for r in rows]
     assert "~/.meoo" in pointers
+
+# ------------------------------------------ ㉕ 卡 E121：`[account.health]` 的写方
+
+
+def _day_at(hour: int, minute: int) -> datetime:
+    """钉子里统一的「2026-10-26 的几点」（北京时区，与账本夹具同一天）。"""
+    return datetime(2026, 10, 26, hour, minute, tzinfo=pa.TZ)
+
+
+class _FakeFetcher:
+    """按顺序回放 `(status, body)`，多问一次就炸（与 `tests/test_pool_checkin.py` 同形）。"""
+
+    def __init__(self, responses: list[tuple[int, object]]) -> None:
+        self.responses = list(responses)
+        self.calls: list[str] = []
+
+    def __call__(self, method, url, headers, body):
+        self.calls.append(url)
+        if not self.responses:
+            raise AssertionError(f"意外多出来的请求：{method} {url}")
+        status, payload = self.responses.pop(0)
+        return status, payload if isinstance(payload, str) else json.dumps(payload)
+
+
+def test_derive_health_state_is_a_table():
+    """㉕a 判据 1：`derive_health_state` 是一张**显式表**，表外一律不编 state。
+
+    咬法（变异 A）：把 `uncertain` 支改成返回 `degraded`，「没定论」就变成账本上
+    一个没人验证过的健康态 —— 这一条当场红。
+    """
+    table = [
+        ("ok", "ok"),
+        ("failed", "auth-expired"),
+        ("uncertain", None),
+        ("skipped", None),
+        ("not-supported", None),
+        ("unknown-platform", None),
+        (None, None),
+    ]
+    for kind, want in table:
+        assert pa.derive_health_state(kind) == want, f"{kind!r} 应折成 {want!r}"
+
+    # 返回值只有两种可能：None，或卡 E45 的五值之一（枚举外不许凭空出现新值）
+    allowed = {None, "ok", "degraded", "quota-exhausted", "auth-expired", "unknown"}
+    assert allowed - {None} == pa.HEALTH_STATES
+    for kind in (None, *pa._ck().KINDS, "unknown-platform", ""):
+        assert pa.derive_health_state(kind) in allowed
+
+
+def test_probe_writes_health_through_the_single_writer(patched):
+    """㉕b 判据 2：`record_probe_result` 只经 `_apply_probe_health` 写那三个键。
+
+    咬法：① 三键都要更新（`last_probe` / `state` / `consecutive_failures`）；
+    ② `revoked` / `revoked_at` 一字不动 —— 整块替换 `acc["health"]` 会把吊销标记冲掉
+    （卡 A335，`tests/test_renew_lock.py:192-193` 也钉着）；③ `quota.amount` 不动；
+    ④ 探测不许伪造签到：`last_checkin` / `last_checkin_at` 一个都不许出现。
+    """
+    data = pa.load_ledger(patched)
+    acc = {a["id"]: a for a in data["account"]}["codearts-1"]
+    acc["health"] = {
+        "state": "unknown",
+        "consecutive_failures": 7,
+        "last_probe": "2026-10-01T08:00:00+08:00",
+        "revoked": "revoked deadbeefdeadbeef",
+        "revoked_at": "2026-10-02T08:00:00+08:00",
+    }
+    pa.save_ledger(patched, data)
+
+    before = pa.load_ledger(patched)
+    pa.record_probe_result(
+        patched,
+        before,
+        [{"id": "codearts-1", "platform": "codearts", "kind": "ok", "amount": 3}],
+        now=datetime(2026, 11, 17, 10, 0, 0, tzinfo=pa.TZ),
+    )
+
+    got = {a["id"]: a for a in pa.load_ledger(patched)["account"]}["codearts-1"]
+    health = got["health"]
+    assert health["last_probe"] == "2026-11-17T10:00:00+08:00"
+    assert health["state"] == "ok"
+    assert health["consecutive_failures"] == 0
+    assert health["revoked"] == "revoked deadbeefdeadbeef"
+    assert health["revoked_at"] == "2026-10-02T08:00:00+08:00"
+    assert got["quota"]["amount"] == 12
+    assert "last_checkin" not in health and "last_checkin_at" not in health
+
+
+def test_probe_does_not_forge_todays_checkin(patched, monkeypatch):
+    """㉕c 判据 3（正面证明）：下午探一次，**不许**把上午的签到读成「刚签过」。
+
+    账本：`last_checkin = "claimed"`、`last_checkin_at = 09:00`（今天签的）、
+    `last_probe = 昨天 18:30`。15:00 探一次（`skipped`）再探一次（`ok`）——
+    探测只许推进 `last_probe`，`last_checkin_at` 必须还是 09:00；
+    15:05 跑 `recheck_rows` ⇒ 该号**不在**待复查里（`due_for_recheck` 判「当日已定案」）。
+
+    咬法：变异 C（注释掉写方）⇒ `last_probe` 停在昨天；变异 E（`at` 改回只读
+    `last_probe`）⇒ 签到时刻被读成 15:00，上午那句真签到就没了（卡 E121 问题 6）。
+    """
+    data = pa.load_ledger(patched)
+    acc = {a["id"]: a for a in data["account"]}["codearts-1"]
+    acc["health"] = {
+        "state": "ok",
+        "consecutive_failures": 0,
+        "last_checkin": "claimed",
+        "last_checkin_at": "2026-10-26T09:00:00+08:00",
+        "last_probe": "2026-10-25T18:30:46+08:00",
+    }
+    pa.save_ledger(patched, data)
+
+    for kind in ("skipped", "ok"):
+        data = pa.load_ledger(patched)
+        rows = [{"id": "codearts-1", "kind": kind}]
+        pa.record_probe_result(patched, data, rows, now=_day_at(15, 0))
+
+    after = {a["id"]: a for a in pa.load_ledger(patched)["account"]}["codearts-1"]
+    assert after["health"]["last_probe"] == "2026-10-26T15:00:00+08:00"
+    assert after["health"]["last_checkin_at"] == "2026-10-26T09:00:00+08:00"
+
+    # 15:05 复查：拿 09:00 那个时刻算 ⇒ 当日已定案（该号不出现）
+    platforms = pa.load_platforms()
+    rows = pa.recheck_rows(pa.load_ledger(patched), platforms, now=_day_at(15, 5))
+    assert "codearts-1" not in [r["id"] for r in rows], rows
+
+    # 反向：删掉新键、只留 last_probe=15:00 ⇒ 走的确实是**回落**分支（at 就是 15:00）。
+    # 直接截 `due_for_recheck` 收到的 `at`：只看结论的话，claimed + 同一天在两种时刻下
+    # 都会判「当日已定案」，分不出走的是哪一支。
+    data = pa.load_ledger(patched)
+    del {a["id"]: a for a in data["account"]}["codearts-1"]["health"]["last_checkin_at"]
+    ck = pa._ck()
+    seen: list[datetime | None] = []
+    real = ck.due_for_recheck
+
+    def spy(last, *, at, now, timezone, platform, offline=False, tries=0):
+        seen.append(at)
+        return real(
+            last,
+            at=at,
+            now=now,
+            timezone=timezone,
+            platform=platform,
+            offline=offline,
+            tries=tries,
+        )
+
+    monkeypatch.setattr(ck, "due_for_recheck", spy)
+    pa.recheck_rows(data, platforms, now=_day_at(15, 5), platform="codearts")
+    assert seen == [_day_at(15, 0)], f"回落分支应把 last_probe 当签到时刻，实际 {seen}"
+
+
+def test_recheck_prefers_last_checkin_at(patched):
+    """㉕d 判据 3：`recheck_rows` 的 at 优先 `last_checkin_at`，缺失才回落 `last_probe`。
+
+    同一份账本、同一个 `now`，只差一个新键：
+      · 有 `last_checkin_at = 09:00`（`last_probe` 被 10:50 那次探测推到 10:50）
+        ⇒ 距 11:00 已过 2 小时 ⇒ 「上午的『已签过』不可信，复查窗口到了」；
+      · 没有新键、`last_probe = 10:50` ⇒ 回落，只过 10 分钟 < `RECHECK_EVERY_S`（30 分）
+        ⇒ 「当日已定案」。
+    两边结论**必须不同** —— 只钉一边会放过「两处都读 last_probe」的写法。
+    """
+    data = pa.load_ledger(patched)
+    acc = {a["id"]: a for a in data["account"]}["codearts-1"]
+    acc["health"] = {
+        "state": "ok",
+        "consecutive_failures": 0,
+        "last_checkin": "already-claimed",
+        "last_checkin_at": "2026-10-26T09:00:00+08:00",
+        "last_probe": "2026-10-26T10:50:00+08:00",
+    }
+    platforms = pa.load_platforms()
+
+    rows = pa.recheck_rows(data, platforms, now=_day_at(11, 0), platform="codearts")
+    assert [r["id"] for r in rows] == ["codearts-1"], rows
+    assert rows[0]["why"] == "上午的「已签过」不可信，复查窗口到了"
+    assert rows[0]["provisional"] is True
+
+    del acc["health"]["last_checkin_at"]
+    rows = pa.recheck_rows(data, platforms, now=_day_at(11, 0), platform="codearts")
+    assert rows == [], rows
+
+
+def test_failure_policy_is_single(patched):
+    """㉕e 判据 4：同一个 kind，签到路与探测路给出**同一个**连败结论。
+
+    `uncertain` / `failed` / `not-supported` 三个码两条路都产得出（签到路：缺 token、
+    `code != 0`、`claim_flow` 为空；探测路直接喂 kind）。若有人在探测路重写一份失败
+    词表（比如漏掉 `uncertain`），连败读数会分叉 —— 这一条当场红。
+
+    ★ 与卡规格的一处诚实偏差：卡规格写「断言 `(state, consecutive_failures)` 完全一致」，
+      但 `_record_checkin()` **不写 `state`**（那是探测的管辖权，判据 2）。所以这里比三样：
+      ① 连败计数两条路必须相等；② 签到路不许动 `state`；③ 探测路的 `state` 必须正好是
+      `derive_health_state(kind)` 给的那一格（`None` 时不许动）。
+    """
+    cases = [
+        ("uncertain", "workbuddy", {}, [(200, {"data": {"checked_in": True}})]),
+        ("failed", "workbuddy", {"TF_WORKBUDDY_TOKEN": "t"}, [(200, {"code": 1})]),
+        ("not-supported", "opencode", {}, []),
+    ]
+    platforms = pa.load_platforms()
+    for kind, platform, environ, responses in cases:
+        text = LEDGER.replace('platform = "workbuddy"', f'platform = "{platform}"')
+        patched.write_text(text, encoding="utf-8")
+        seeded = {"state": "degraded", "consecutive_failures": 5}
+
+        # ---- 签到路
+        data = pa.load_ledger(patched)
+        acc = {a["id"]: a for a in data["account"]}["wb-1"]
+        acc["health"] = dict(seeded)
+        rows = pa.run_checkin(
+            data,
+            platforms,
+            platform=platform,
+            environ=environ,
+            fetcher=_FakeFetcher(list(responses)),
+            now=_day_at(12, 0),
+            sleep=lambda s: None,
+            spacing=0,
+        )
+        assert [r["kind"] for r in rows] == [kind], rows
+        via_checkin = (acc["health"]["state"], acc["health"]["consecutive_failures"])
+
+        # ---- 探测路
+        data = pa.load_ledger(patched)
+        acc = {a["id"]: a for a in data["account"]}["wb-1"]
+        acc["health"] = dict(seeded)
+        pa.record_probe_result(patched, data, [{"id": "wb-1", "kind": kind}], now=_day_at(12, 0))
+        health = {a["id"]: a for a in pa.load_ledger(patched)["account"]}["wb-1"]["health"]
+        via_probe = (health["state"], health["consecutive_failures"])
+
+        assert via_checkin == ("degraded", via_probe[1]), "签到路不许动 state"
+        want_state = pa.derive_health_state(kind) or "degraded"
+        assert via_probe[0] == want_state, f"{kind}：探测路的 state 应是 {want_state}"
+        assert via_probe[1] == via_checkin[1], f"{kind}：连败分叉 {via_checkin} ≠ {via_probe}"
+
+
+def test_health_state_is_validated_on_write(patched):
+    """㉕f 判据 5(a)：`health.state` 的枚举校验**在写路径上**也咬得住。
+
+    咬法：`lastgood.write_atomic()` 的 `validate` 只判**旧文件**能不能进 `.bak`
+    （`tools/pool/lastgood.py:280` 判旧、`:300` 直接 os.replace），新 payload 一次都不验。
+    若 `save_ledger()` 不自己调 `_validate_ledger_toml(payload)`，把 `state` 写成
+    `healthy` 会**顺利落盘** —— 这条断言当场红（写前后 `read_bytes()` 必须一模一样）。
+    """
+    data = pa.load_ledger(patched)
+    acc = {a["id"]: a for a in data["account"]}["codearts-1"]
+    acc["health"]["state"] = "healthy"
+    raw_before = patched.read_bytes()
+
+    with pytest.raises(pa.LedgerError) as ei:
+        pa.save_ledger(patched, data)
+    message = str(ei.value)
+    assert "codearts-1" in message, message  # 点名账号
+    assert "healthy" in message, message  # 点名坏值
+    assert "ok" in message and "auth-expired" in message, message  # 点名合法值
+    assert patched.read_bytes() == raw_before, "拒写时账本不许有半个字节的改动"
+
+    # 合法值照写；`health` 缺、`state` 缺也都合法（老账本 / 没探过的号）
+    acc["health"]["state"] = "degraded"
+    pa.save_ledger(patched, data)
+    assert "degraded" in patched.read_text(encoding="utf-8")
+    data = pa.load_ledger(patched)
+    del {a["id"]: a for a in data["account"]}["codearts-1"]["health"]["state"]
+    del {a["id"]: a for a in data["account"]}["wb-1"]["health"]
+    pa.save_ledger(patched, data)
+    pa.load_ledger(patched)  # 读回来也不许因为「缺键」而抛
+
+
+def test_read_surface_keys_unchanged(patched):
+    """㉕g 判据 5(b)：只读面的键集一个都不许动（本卡不往 `list_rows` 加 health 键）。
+
+    咬法：`health_state` / `consecutive_failures` 一旦被顺手加进 `list_rows`，
+    这条红。★ 用 `>=` 不用 `==`：另一张在飞的卡（E118）已经在 `list_rows` 里追加
+    了 `quota_kind` / `quota_at` / `health_state` / `consecutive_failures` 四个键，
+    写 `==` 会与那张卡对撞；本卡要钉的是「health 三键没有被**本卡**带进只读面」。
+    """
+    eight = {
+        "id",
+        "platform",
+        "platform_known",
+        "label",
+        "state",
+        "quota",
+        "models",
+        "credential",
+    }
+    before = pa.list_rows(pa.load_ledger(patched), None, False)
+    assert all(set(row) >= eight for row in before), [sorted(row) for row in before]
+
+    data = pa.load_ledger(patched)
+    acc = {a["id"]: a for a in data["account"]}["codearts-1"]
+    acc["health"] = {"state": "auth-expired", "consecutive_failures": 9,
+                     "last_probe": "2026-11-17T10:00:00+08:00"}
+    pa.save_ledger(patched, data)
+
+    after = pa.list_rows(pa.load_ledger(patched), None, False)
+    assert [sorted(r) for r in after] == [sorted(r) for r in before]
+    assert all(set(row) >= eight for row in after)
+    assert "auth-expired" not in json.dumps(after, ensure_ascii=False)

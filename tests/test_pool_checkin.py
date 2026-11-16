@@ -669,6 +669,82 @@ def test_probe_mode_never_touches_the_verdict_bits(tmp_path):
     assert not (acc.get("quota") or {}).get("samples")
 
 
+def test_probe_never_writes_the_checkin_stamp(tmp_path):
+    """★ `--probe` 不写 `last_checkin_at` —— 那个键只由**真签到**写（卡 E121 判据 3）。
+
+    两半各证一次，缺一半都证明不了：只测 `apply=False` 的话，一个**从来不写**该键的实现
+    也会让这条绿。所以同一份账本、同一个响应再跑一次 `apply=True`，要求它真的写出来。
+    """
+    tail = (
+        '[[account]]\n'
+        'id = "workbuddy-1"\n'
+        'label = "腾讯号"\n'
+        'platform = "workbuddy"\n'
+        'state = "active"\n'
+        'added_at = "2026-10-01"\n'
+        "approved_models = []\n"
+        "\n"
+        "[account.credential]\n"
+        'kind = "dir"\n'
+        'locator = "~/.workbuddy"\n'
+        "\n"
+        "[account.quota]\n"
+        'unit = "点"\n'
+        'source = "unknown"\n'
+        "\n"
+        "[account.health]\n"
+        'state = "unknown"\n'
+        "consecutive_failures = 3\n"
+        'last_probe = "2026-10-25T09:00:00+08:00"\n'
+        'last_checkin = "uncertain"\n'
+    )
+    path = tmp_path / "accounts.toml"
+    path.write_text(tail, encoding="utf-8")
+
+    # ① `--probe`：时刻刷新，签到两键与失败计数一个字不动
+    data = pa.load_ledger(path, PLATFORMS, strict=False)
+    acc = data["account"][-1]
+    fetcher = FakeFetcher([(200, {"data": {"checked_in": False}})])
+    rows = pa.run_checkin(
+        data,
+        PLATFORMS,
+        apply=False,
+        platform="workbuddy",
+        environ={"TF_WORKBUDDY_TOKEN": "t"},
+        fetcher=fetcher,
+        sleep=lambda s: None,
+        spacing=0,
+    )
+    health = acc["health"]
+    assert [r["kind"] for r in rows] == [ck.INACTIVE]
+    assert health["last_probe"] != "2026-10-25T09:00:00+08:00"
+    assert "last_checkin_at" not in health, "--probe 不许写签到时刻（会把当天的签到机会判成已定案）"
+    assert health["last_checkin"] == "uncertain"
+    assert health["consecutive_failures"] == 3
+
+    # ② 同一份账本 `apply=True`：签到时刻必须真写出来（否则上面那条断言证明的是「谁也不写」）
+    data2 = pa.load_ledger(path, PLATFORMS, strict=False)
+    acc2 = data2["account"][-1]
+    pa.run_checkin(
+        data2,
+        PLATFORMS,
+        apply=True,
+        platform="workbuddy",
+        environ={"TF_WORKBUDDY_TOKEN": "t"},
+        # 可领 ⇒ 真签到会再打一次领取端点；给它一个成功响应（credit 100）
+        fetcher=FakeFetcher(
+            [(200, {"data": {"checked_in": False}}), (200, {"data": {"credit": 100}})]
+        ),
+        sleep=lambda s: None,
+        spacing=0,
+    )
+    health2 = acc2["health"]
+    assert health2["last_checkin"] == ck.CLAIMED
+    assert health2["last_checkin_at"] == health2["last_probe"], (
+        "签到时刻与本次 probe 时刻是同一次 run 的同一个 stamp："
+        f'{health2.get("last_checkin_at")!r} vs {health2.get("last_probe")!r}'
+    )
+
 def test_run_checkin_unknown_platform_is_not_supported_without_calls(tmp_path):
     text = LEDGER_TEXT.replace('platform = "workbuddy"', 'platform = "nowhere"')
     path = tmp_path / "accounts.toml"

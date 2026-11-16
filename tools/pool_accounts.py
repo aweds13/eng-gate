@@ -17,7 +17,8 @@
 退出码：0 = 正常（含「未探测」）；2 = 用法/账本缺失/账本格式错。
 
 ★ 账本写入只有一处例外：`saved_refresh_failed()`（卡 A335 —— **供应商拒绝刷新**才打吊销标记，
-  其余一律一个字节都不写）；本卡的 CLI 面仍无任何写动作。
+  其余一律一个字节都不写）；`probe` **也写** —— 只写 `[account.health]` 的 `state` /
+  `consecutive_failures` / `last_probe` 三键（卡 E121），别的一个字节都不写。
 """
 
 from __future__ import annotations
@@ -63,6 +64,12 @@ ANCHOR = ("infra", "pool", "accounts.toml")
 TZ = timezone(timedelta(hours=8))
 SAMPLES_CAP = 20
 STATES = ("active", "limited", "exhausted", "expired", "disabled")
+#: `[account.health].state` 的五值（卡 E45 枚举，卡 E121 把它搬到写路径上校验）。
+#: ★ 与顶层 `STATES` **不是**一套：那五个是人判定的「这个号还能不能用」，
+#:   这五个是「最近一次探测/签到看到的健康态」。加值要同卡改本常量 + 文档三处。
+HEALTH_STATES: frozenset[str] = frozenset(
+    {"ok", "degraded", "quota-exhausted", "auth-expired", "unknown"}
+)
 CRED_KINDS = ("file", "dir", "keychain", "cookie_jar", "env", "none")
 SECRET_RE = re.compile(r"(?i)(bearer\s+)?(sk-|ak-|ghp_|xoxb-)[A-Za-z0-9_\-]{8,}")
 
@@ -346,6 +353,11 @@ def save_ledger(path: Path, data: dict) -> None:
         if isinstance(quota, dict) and isinstance(quota.get("samples"), list):
             quota["samples"] = quota["samples"][-SAMPLES_CAP:]
     payload = _dump_toml(data)
+    # ★ 卡 E121：`lastgood.write_atomic()` 的 validate 只判**旧文件**能不能进 `.bak`
+    #   （`tools/pool/lastgood.py:280` 判旧、`:300` 直接 os.replace），新 payload 一次都不验。
+    #   所以写侧在这里自己收口：坏值（如 `health.state = "healthy"`）当场抛，
+    #   `write_atomic()` 根本没被调用 ⇒ 盘上一个字节不变。
+    _validate_ledger_toml(payload)
     path.parent.mkdir(parents=True, exist_ok=True)
     # 写走 lastgood（`.bak` 落后一次写）；**读**却用 read_strict（见 load_ledger）。
     _lastgood().write_atomic(path, payload, validate=_validate_ledger_toml)
@@ -1103,6 +1115,56 @@ def probe_all(
     return out
 
 
+def derive_health_state(kind: str | None) -> str | None:
+    """一次探测的结论码 → `[account.health].state`（卡 E121 判据 1）。
+
+    **一张显式表**，不是 if 链：
+
+    | 输入 `kind` | 返回 |
+    |---|---|
+    | `ok` | `ok` |
+    | `failed` | `auth-expired` |
+    | `uncertain` / `skipped` / `not-supported` / `unknown-platform` / `None` |
+      `None`（**不编 state**）|
+
+    表外的码一律回 `None`：「没看出来」既不等于「健康」，也不等于「过期」。
+    纯函数：不读不写账本、不读钟；返回值要么是 `None`，要么落在卡 E45 的五值枚举
+    （`HEALTH_STATES`）里。
+    """
+    return {"ok": "ok", "failed": "auth-expired"}.get(kind or "")
+
+
+def _apply_probe_health(acc: dict, kind: str | None, stamp: str) -> bool:
+    """探测结论 → `[account.health]`（卡 E121 判据 2）：**唯一写这三键的地方**。
+
+    逐键写，**绝不整块替换** `acc["health"]` —— 那会冲掉 `revoked` / `revoked_at`
+    （卡 A335 的吊销标记，`tests/test_renew_lock.py:192-193` 钉着）。
+
+    三键各自独立：
+      · `last_probe` 每次都写（字面语义 = 「最后一次探测的时刻」）；
+      · `state` **只有 `derive_health_state()` 给出值时**才写 —— 其余结论一律不写（不编
+        state），旧值保留；
+      · `consecutive_failures` 与 `state` **无关**，每次都归零或 +1：口径是
+        `checkin.NEEDS_HUMAN`，与 `_record_checkin()` 同一份（判据 4，全仓不许有第二份
+        字面量）。把归零挂在 `state is None` 的早退上就是错的：`uncertain` 不给 state，
+        可它恰恰是要计连败的那一类结论。
+
+    返回「这次真写了 health 没有」（调用方拿它决定要不要落盘）。
+    """
+    health = acc.setdefault("health", {})
+    if not isinstance(health, dict):
+        health = acc["health"] = {}
+    health["last_probe"] = stamp
+    state = derive_health_state(kind)
+    if state is not None:
+        health["state"] = state
+    if kind in _ck().NEEDS_HUMAN:
+        health["consecutive_failures"] = int(health.get("consecutive_failures", 0) or 0) + 1
+    else:
+        health["consecutive_failures"] = 0
+    return True
+
+
 # --------------------------------------------------------------------------
 # 命令
 # --------------------------------------------------------------------------
@@ -1111,11 +1173,19 @@ def probe_all(
 def record_probe_result(
     ledger_path: Path, data: dict, rows: list[dict], *, now: datetime | None = None
 ) -> None:
-    """把一次探测的结论留进账本 —— **只**写 `[account.quota]` 的 `observed_at` / `samples` /
-    `used_percent`（最后一条只对 codearts 的 `ok` 读数，卡 E97）。
+    """把一次探测的结论留进账本 —— 写 `[account.quota]` 的 `observed_at` / `samples` /
+    `used_percent`（最后一条只对 codearts 的 `ok` 读数，卡 E97），以及 `[account.health]`
+    的三键（卡 E121，唯一写点 `_apply_probe_health()`）。
 
-    ★ 不写 `state`：`STATES` 那五行（`active/limited/exhausted/expired/disabled`）是**人**判定
-      的，一次探测读到的数字不许把它改掉。
+    ★ 不写**顶层** `[[account]].state`：`STATES` 那五行（`active/limited/exhausted/expired/
+      disabled`）是**人**判定「这个号还能不能用」的，一次探测读到的数字不许把它改掉。
+    ★ 写 `[account.health]` 的三键（卡 E121 判据 2，唯一写点 `_apply_probe_health()`）：
+      `last_probe`（探测时刻，每次都写）、`state`（**只按** `derive_health_state()` 的显式表写；
+      `uncertain` / `skipped` / `not-supported` / `unknown-platform` / 缺 kind 一律**不写、不编
+      state**，旧值保留）、`consecutive_failures`（口径 = `checkin.NEEDS_HUMAN`，与
+      `_record_checkin()` 同一份；**归零/加一与 state 写不写无关** —— 把归零挂在
+      `state is None` 的早退上，`uncertain` 这类「不给 state 但要计连败」的号就永远卡在旧值）。
+      `last_checkin` / `last_checkin_at` 仍只由签到写。
     ★ 不写 `approved_models`：能不能派活是白名单的事，不是额度读数的事。
     ★ 不写 `amount`：探测读到多少就写在 `samples` 里；`amount` 是余额口径，由探针之外的人/流程填。
     ★ `used_percent` 只对 `kind == "ok"` **且**带 `used_percent` 的行写（今天只有 codearts 会带）。
@@ -1167,7 +1237,8 @@ def record_probe_result(
         # 只有「真读到百分比」的 ok 行才写它；其余结论不写也不删 —— 旧值仍是上一次的真读数。
         if row.get("kind") == "ok" and "used_percent" in row:
             quota["used_percent"] = row["used_percent"]
-        touched = True
+        # 健康态三键的唯一写点（卡 E121 判据 2）；逐键写，绝不整块替换（会冲掉 revoked）。
+        touched = _apply_probe_health(acc, row["kind"], stamp) or touched
 
     note_quota_history(accounts, by_id, at=_stamp_unix(stamp))
 
@@ -1387,8 +1458,32 @@ def _lastgood():
 
 
 def _validate_ledger_toml(text: str) -> None:
-    """判「这份账本还能不能当 lastgood」：TOML 解得开就算（卡 A330）。"""
-    tomllib.loads(text)
+    """判「这份账本还能不能当 lastgood」：TOML 解得开（卡 A330），**且**每号的
+    `[account.health].state` 是卡 E45 的五值之一（卡 E121 判据 5）。
+
+    为什么校验在这里而不在 `_check_account()`：后者只在 `load_ledger()` 里跑，管不到写；
+    这一份同时是**读**（`read_strict(validate=…)`）与**写**（`save_ledger()` 显式调一次）
+    的口子 —— 写一个 `state = "healthy"` 不能顺利落盘。
+
+    `health` 缺、`state` 缺都合法（老账本 / 没探过的号）；只有「出现了且不在五值里」才抛，
+    并点名账号 id 与坏值。
+    """
+    data = tomllib.loads(text)
+    accounts = data.get("account", [])
+    if not isinstance(accounts, list):
+        return
+    for idx, acc in enumerate(accounts, start=1):
+        if not isinstance(acc, dict):
+            continue
+        health = acc.get("health")
+        if not isinstance(health, dict) or "state" not in health:
+            continue
+        state = health["state"]
+        if state in HEALTH_STATES:
+            continue
+        where = acc.get("id") or f"第 {idx} 个 [[account]]"
+        choices = "、".join(sorted(HEALTH_STATES))
+        raise LedgerError(f"账号 {where} 的 health.state={state!r} 不合法（只认 {choices}）")
 
 
 def _ck():
@@ -1480,7 +1575,15 @@ def _record_checkin(acc: dict, row: dict, stamp: str, *, apply: bool = True) -> 
     if not apply:
         return
     health["last_checkin"] = row["kind"]
-    if row["kind"] in ("uncertain", "failed"):
+    # ★ 签到时刻另开一键（卡 E121 判据 3）：`last_probe` 是「最后一次探测」的时刻，签到也刷
+    #   它，于是 `recheck_rows()` 拿 `last_probe` 当签到时刻会被下午的一次探测骗到 ——
+    #   上午 09:00 签的就被读成「刚签过」⇒ `due_for_recheck()` 判「当日已定案」。
+    #   这一行在 `--probe` 的早退**之后**，所以 `--probe` 仍然不会让账本看起来像
+    #   「今天签过」（理由同上面那四条）。
+    health["last_checkin_at"] = stamp
+    # ★ 「哪些码算失败」只有一份真源（卡 E121 判据 4）：`checkin.NEEDS_HUMAN`。
+    #   本文件不许再写第二份字面量 —— 两套词表已经漂过一次。
+    if row["kind"] in _ck().NEEDS_HUMAN:
         health["consecutive_failures"] = int(health.get("consecutive_failures", 0) or 0) + 1
     else:
         health["consecutive_failures"] = 0
@@ -1526,10 +1629,16 @@ def recheck_rows(
 
     读得懂的历史形状（账本在仓外、跨版本累计，必须容忍）：
       · `last_checkin = "claimed"` 这类**结论码字符串**（今天唯一在写的形状）⇒ 结论码有了，
-        时刻取同一行 `health["last_probe"]`（签到与探测都在那一刻写它）；
+        时刻取 `health["last_checkin_at"]`（卡 E121 起签到自己写这一键），**缺失才回落**
+        `health["last_probe"]`（老账本没有新键；兼容分支不许删）；
       · `last_checkin = "2026-10-25T18:30:46+08:00"` 这类**ISO 时刻**（老账本）⇒ 只知道
         「什么时候问过」、不知道结论 ⇒ 按 `uncertain` 算（没定论比「当成签过了」诚实）；
       · 时刻不带时区 ⇒ 按 `TZ` 解释。
+
+    ★ 为什么不能拿 `last_probe` 当签到时刻（卡 E121 判据 3）：签到**也**刷 `last_probe`
+    （`_record_checkin()`），探测同样刷它。下午探一次，上午 09:00 的签到就被读成
+    「刚签过」⇒ `due_for_recheck()` 判「当日已定案」，当天真正的复查机会就没了。
+    所以时刻分键：探测写 `last_probe`（字面语义），签到写 `last_checkin_at`。
 
     「平台压根没有签到接口」不算从没问过：能力表 `claim_flow` 为空 ⇒ 结论码补
     `not-supported`，`due_for_recheck()` 那边直接给「平台不支持签到」（不问）。
@@ -1551,7 +1660,9 @@ def recheck_rows(
             text = raw.strip()
             if text in ck.KINDS:
                 kind = text
-                at = _stamp_or_none(health.get("last_probe"))
+                at = _stamp_or_none(health.get("last_checkin_at"))
+                if at is None:  # 老账本没有新键 ⇒ 回落（兼容分支；主线仍是新键）
+                    at = _stamp_or_none(health.get("last_probe"))
             else:
                 at = _stamp_or_none(text)
                 if at is not None:
