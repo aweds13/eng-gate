@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 46 个 py（45 个模块 + `__init__.py`）、**19665 行**（`wc -l tools/pool/*.py`，2026-11-16 现算）。
+`tools/pool/` = 46 个 py（45 个模块 + `__init__.py`）、**19803 行**（`wc -l tools/pool/*.py`，2026-11-16 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -26,7 +26,7 @@
 | `gateway.py` | 1126 | 号池网关（同协议直通）：`classify` 七值失败分类（只看状态码与结构化字段，不解析文案）、`route_once` 干跑式选号/沉底/RPM/收窄/换号与 `wb-route.jsonl` 留痕、四条回环 HTTP 面（Bearer + Origin 白名单 + 32 MiB 上限）——不翻译协议、不攒流；不知道额度的座由 `route.tier(None)=UNKNOWN_TIER` 排到最后（不是抛错退原序） | `python -X utf8 tools/pool/gateway.py [--host 127.0.0.1] [--port 8766] [--routing order]`（要 `TF_POOL_GATEWAY_TOKEN`；`--routing` 是**唯一**选号入口：默认 `order`，空串 = `smart`（magpie 默认值），别名见 `pool.route.ROUTING_ALIASES`；名字认不出 ⇒ 退 2、一个端口都不绑） |
 | `guards.py` | 480 | 树 / 冲突域 / 门禁锁 / 日志 / 项目五条守卫，**纯函数**（吃已读好的数据回 `list[str]`，不写文件不 print） | 无（被 `wb_dispatch`、`wb_registry` 调） |
 | `holds.py` | 288 | 整窗用量的下限 + 五因估算（magpie `window_holds` 移植）：`bounds` / `holds_bounds` / `estimate` | 无 |
-| `jobs.py` | 425 | 作业日志三态判据（在跑 / 已判决 / 断了）+ 产物定位；只读、无副作用 | `wb_status.py`、`pool_mcp` 的 `job_list` / `job_status` |
+| `jobs.py` | 560 | 作业日志状态分桶（在跑 / 已判决 / 断了 + 历史尝试 / 已被取代 / 台账已完结 / 非派活，卡 E116） + 归属卡解析 `card_of_log` + 在飞三源 `in_flight` + 产物定位；只读、无副作用 | `wb_status.py`、`pool_mcp` 的 `job_list` / `job_status` |
 | `landing.py` | 3098 | 落地链八步（⓪ 回退 → ⑧ 复核落盘）：迁树 / 文书 / 门禁 / 封存 / 提交 / 合流，一笔提交的编排全在这里 | `wb_land.py` |
 | `lanes.py` | 154 | 读 `lanes.toml`：一个号同时最多几张卡（数据面；判据在 `guards.lane_guard`） | 无（被 `pool.registry` 调） |
 | `lanes.toml` | 45 | 每账号并发闸的数据：稳定 id → 同时最多几张卡（随仓走、由人改，改完不用重启） | 无（被 `pool.lanes` 读） |
@@ -51,7 +51,7 @@
 | `queue.py` | 364 | 落地合并队列：单写者段排队 + 投机预检（`gates/diag/merge-queue.json`）；投机结果**不许复用** | 无（被 `pool.landing` 调） |
 | `quota_history.py` | 370 | 额度历史曲线：留点 / 回血检测（`new_cycle`）/ 去抖 / 剪枝（magpie `quota_history.go` 移植） | 无（被 `pool_accounts.py` 调） |
 | `quota_line.py` | 226 | 一行说完「现在能不能派」：问不到就打空行、星号只给最新且紧贴名字、至少 1 小时不带秒；纯函数零 IO | 被 `pool_quota.py line` 调 |
-| `registry.py` | 377 | 租约账：`reserve` / `release` / `list_reservations` / `is_dead`，落在**主树** `gates/diag/pool-registry.json` | `wb_registry.py`、`wb_dispatch` |
+| `registry.py` | 380 | 租约账：`reserve` / `release` / `list_reservations` / `is_dead`，落在**主树** `gates/diag/pool-registry.json` | `wb_registry.py`、`wb_dispatch` |
 | `review.py` | 92 | 白名单越界 / 实际改动 vs 权威域（`outside_allow` / `changed_paths` / `outside_domain`）—— 全仓唯一实现 | 无（被 `wb_dispatch`、`wb_impact`、`wb_batch` 调） |
 | `route.py` | 869 | Smart 路由：给「哪个号先上」排序（`tier` / `smart_order` / `apply_order`）+ `parse_routing` 名称归一（大小写/空白/别名，空串 = `smart`，认不出抛 `RouteError`），只标准库 + 只读 | 无 CLI（被 `pool.gateway` 调 `apply_strategy` 选号、`parse_routing` 归一 `--routing`；被 `pool.plan` 调 `reset_for`/`seconds_left`、被 `pool.sticky` 取 `USED_SHARE`） |
 | `route_log.py` | 205 | 路由回放的**唯一写入处**：一行一轮记「谁被试过、谁真答了」，值只来自调用方传进来的事实（不读 usage 账重算）；`status` 四值闭集 | 无（被 `pool.trae_dispatch.finish` 调；`route_path` / `read_routes` 供读面） |
@@ -83,8 +83,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **19665 行** / **46 个文件**（45 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 363 张（351 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **19803 行** / **46 个文件**（45 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 363 张（352 done / 11 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

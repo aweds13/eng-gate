@@ -208,6 +208,7 @@ from pool.jobs import (
     STALL_SECONDS,
     card_artifacts,
     diag_dir,
+    in_flight,
     parse_events,
     read_log_lines,
     render_timeline,
@@ -397,7 +398,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "job_list",
-        "description": "扫 gates/diag/wb-*.jsonl：在跑 / 已判决 / 断了（看 mtime/大小/有无判决）。",
+        "description": "扫 gates/diag/wb-*.jsonl：在跑 / 已判决 / 断了 + 历史尝试 / 已被取代 / "
+        "台账已完结 / 非派活（看 mtime/大小/有无判决/台账）；每行末尾给在飞。",
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -408,7 +410,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "job_status",
-        "description": "一张卡现在到哪了：时间线 + 仓库状态（只读，走 wb_status.py --repo）。",
+        "description": "一张卡现在到哪了：在飞（活租约 / 判决 / 日志是否静默）+ 时间线 + 仓库状态；"
+        "没有 wb-<卡>.jsonl 时按落地链五类正式证据找（只读）。",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -943,13 +946,87 @@ def tool_pool_plan(
     return _result(text, data, is_error=False)
 
 
+# ================================================================ 卡 E116：台账与正式证据（只读）
+
+#: 没有 `wb-<卡>[.rN].jsonl` 时，正式证据按这个顺序找（**顺序写死**，与卡 E116 判据 2 一致）。
+EVIDENCE_KINDS: tuple[str, ...] = ("land", "trace_d", "changelog", "review", "trace_entry")
+
+
+def _backlog_cards(root: Path) -> dict[str, Any]:
+    """台账 `id -> Card`（`task/status` 都要用）。**读不到就回空字典，绝不抛**。
+
+    ★ `wb_plan.load_sharded_backlog` 在总表不存在时直接抛 `BacklogError`（实测原文
+    `backlog 文件不存在：…`）—— 号池工具是只读面，台账不在只该让「证据链」少几类，
+    不该让整个 `job_status` 变成一行 traceback。
+    """
+    try:
+        backlog = wb_plan.load_sharded_backlog(
+            root / "docs" / "workbacklog.toml", root / "docs" / "backlog"
+        )
+        return dict(backlog.by_id())
+    except Exception as exc:  # noqa: BLE001 —— 台账坏了/不在/格式变了，一律当「没有台账」
+        print(f"[job_status] 台账读不到，按没有台账继续：{type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        return {}
+
+
+def _rel(root: Path, path: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:  # pragma: no cover —— root 之外的路径不该出现
+        return path.as_posix()
+
+
+def _trace_entry_exists(root: Path, task: str) -> bool:
+    """`docs/traceability.toml` 里有没有 `[entries."<task>"]` 这一节（只读，不解析业务字段）。"""
+    path = root / "docs" / "traceability.toml"
+    if not path.is_file():
+        return False
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (tomllib.TOMLDecodeError, OSError):
+        return False
+    entries = data.get("entries")
+    return isinstance(entries, dict) and task in entries
+
+
+def formal_evidence(root: Path, card: str, task: str | None) -> list[dict[str, str]]:
+    """按写死的顺序找「这张卡真的干过活」的正式证据，**first-hit** 就停（卡 E116 判据 2）。
+
+    ① `gates/diag/land-<卡>[a-z]?.log` —— 只许**一位小写字母**：允许数字会串卡（实测
+    `land-E1` 会命中 E10..E19，`land-E4` 会命中 E40..E49）。这一条**不依赖台账**。
+    ② `docs/traceability.d/<task>.toml` ③ `docs/changelog.d/<task>.md` ④ `gates/review/<task>.json`
+    ⑤ `docs/traceability.toml` 的 `entries[<task>]`。
+    卡不在台账（`task is None`）⇒ 只查 ①。
+    """
+    diag = diag_dir(root)
+    if diag.is_dir():
+        pat = re.compile(rf"^land-{re.escape(card)}[a-z]?\.log$")
+        for path in sorted(diag.iterdir()):
+            if pat.match(path.name):
+                return [{"kind": "land", "path": _rel(root, path)}]
+    if not task:
+        return []
+    for kind, path in (
+        ("trace_d", root / "docs" / "traceability.d" / f"{task}.toml"),
+        ("changelog", root / "docs" / "changelog.d" / f"{task}.md"),
+        ("review", root / "gates" / "review" / f"{task}.json"),
+    ):
+        if path.is_file():
+            return [{"kind": kind, "path": _rel(root, path)}]
+    if _trace_entry_exists(root, task):
+        return [{"kind": "trace_entry", "path": "docs/traceability.toml"}]
+    return []
+
+
 # ================================================================ 工具 2：job_list
 
 
 def tool_job_list(arguments: dict[str, Any], root: Path = ROOT) -> tuple[str, dict[str, Any], bool]:
     """扫 `gates/diag/wb-*.jsonl` —— 在跑 / 已判决 / 断了（**判断依据都念出来**）。"""
     diag = diag_dir(root)
-    rows = scan_jobs(diag)
+    statuses = {cid: c.status for cid, c in _backlog_cards(root).items()}
+    rows = scan_jobs(diag, backlog=statuses)
     counts: dict[str, int] = {}
     for row in rows:
         counts[row["state"]] = counts.get(row["state"], 0) + 1
@@ -963,10 +1040,16 @@ def tool_job_list(arguments: dict[str, Any], root: Path = ROOT) -> tuple[str, di
     lines = [head]
     for row in rows:
         verdict = f"判决 {row['verdict']}" if row["has_verdict"] else "无判决"
+        if row["state"] == "非派活":
+            fly, fly_why = False, "旁账日志不是派活，没有「在飞」这回事"
+        else:
+            fly, fly_why = in_flight(diag, row["card"])
+        row["in_flight"] = fly
+        row["in_flight_why"] = fly_why
         lines.append(
             f"  · 卡 {row['card'] or '?'}  [{row['state']}]  {row['log']}"
             f"  {row['size_bytes']}B  mtime={row['mtime']}（距今 {row['age_seconds']:.0f}s）"
-            f"  {verdict}  —— {row['why']}"
+            f"  {verdict}  —— {row['why']}｜在飞：{'是' if fly else '否'}"
         )
     data = {"diag_dir": diag.as_posix(), "count": len(rows), "counts": counts, "jobs": rows}
     return _result("\n".join(lines), data, is_error=False)
@@ -992,23 +1075,69 @@ def tool_job_status(
     diag = diag_dir(root)
     logs = card_artifacts(diag, card, ".jsonl")
     if not logs:
+        # ★ 卡 E116 判据 2：没有 wb-<卡>.jsonl **不等于**「还没派过」—— 真树里 200+ 张 done 的卡
+        #   是走落地链落的（gates/diag/land-<卡>*.log / docs/traceability.d / gates/review/…）。
+        #   五类证据按写死的顺序 first-hit；台账读不到只少几类，不许抛。
+        cards = _backlog_cards(root)
+        meta = cards.get(card)
+        task = getattr(meta, "task", None)
+        evidence = formal_evidence(root, card, task)
+        fly, fly_why = in_flight(diag, card)
+        head = f"在飞：{'是' if fly else '否'} —— {fly_why}"
+        base = {
+            "card": card,
+            "found": False,
+            "log": None,
+            "diag_dir": diag.as_posix(),
+            "in_flight": fly,
+            "in_flight_why": fly_why,
+            "evidence": evidence,
+            "task": task,
+        }
+        if evidence:
+            hit = evidence[0]
+            text = (
+                head + "\n"
+                + f"没有：卡 {card} 在 {diag.as_posix()} 里没有 `wb-{card}.jsonl`（连 r2… 也没有）"
+                + "—— 但它**走的是落地链**（没有外包工人日志，卡由落地链直接提交）。"
+                + f"\n正式证据：`{hit['path']}`（{hit['kind']}）"
+            )
+            return _result(text, base, is_error=False)
+        if meta is not None and getattr(meta, "status", "") == "done":
+            text = (
+                head + "\n"
+                + f"没有：卡 {card} 在 {diag.as_posix()} 里没有 `wb-{card}.jsonl`，"
+                + "台账写 `done`，但仓里查不到五类正式证据中的任何一类"
+                + "（落地日志 / traceability.d / changelog.d / 复核 / 汇总表）"
+                + "—— 这是台账与仓对不上，不是「没派过」。"
+            )
+            return _result(text, base, is_error=True)
         text = (
-            f"没有：卡 {card} 在 {diag.as_posix()} 里没有 `wb-{card}.jsonl`"
-            f"（连 r2… 也没有）—— 还没派过，或日志不在这个树里。"
+            head + "\n"
+            + f"没有：卡 {card} 在 {diag.as_posix()} 里没有 `wb-{card}.jsonl`"
+            + "（连 r2… 也没有）—— 还没派过，或日志不在这个树里。"
         )
-        return _result(
-            text,
-            {"card": card, "found": False, "log": None, "diag_dir": diag.as_posix()},
-            is_error=True,
-        )
+        return _result(text, base, is_error=True)
     log = logs[-1]
     argv = [sys.executable, "-X", "utf8", "tools/wb_status.py", log.name, "--repo"]
     command = _cmd_text(argv)
     lines = read_log_lines(log)
     timeline, summary = parse_events(lines)
     body = render_timeline(log.name, timeline, summary, tail=0, repo=True, git_cwd=diag).strip()
-    text = f"卡 {card} 的状态（job_status）—— 来自 `{command}`（cwd={diag.as_posix()}）：\n{body}"
-    data = {"card": card, "found": True, "log": log.name, "command": command, "exit_code": 0}
+    fly, fly_why = in_flight(diag, card)
+    text = (
+        f"在飞：{'是' if fly else '否'} —— {fly_why}\n"
+        f"卡 {card} 的状态（job_status）—— 来自 `{command}`（cwd={diag.as_posix()}）：\n{body}"
+    )
+    data = {
+        "card": card,
+        "found": True,
+        "log": log.name,
+        "command": command,
+        "exit_code": 0,
+        "in_flight": fly,
+        "in_flight_why": fly_why,
+    }
     return _result(text, data, is_error=False)
 
 

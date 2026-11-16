@@ -34,6 +34,9 @@ pool 的「工人日志」口径是文件名 `gates/diag/wb-<卡>.jsonl`。按�
 from __future__ import annotations
 
 import ast
+import datetime
+import json
+import os
 import re
 import subprocess
 import sys
@@ -374,3 +377,277 @@ def test_gen_pool_readme_check_is_green() -> None:
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "与现算一致" in proc.stdout, proc.stdout
+
+
+# ================================================ 卡 E116（T-AG623）：归属卡 / 五类分桶 / 在飞
+#
+# 判据 1：每条日志给出「归属卡 + 归属类」，五类分桶与真树人口普查一致；
+# 判据 3：在飞只由三个确定性来源决定（活租约 / 判决 / 日志 mtime），绝不 pid 探活；
+# 判据 4：归类真源只有 tools/pool/jobs.py 一份。
+
+#: 卡里写死的 24 个非 canonical 日志名（不带 .jsonl）—— 真树人口普查拿它当靶子。
+VARIANT_LOGS = (
+    "wb-120.killed",
+    "wb-123.claim",
+    "wb-124.claim",
+    "wb-125.amend",
+    "wb-125.reclaim",
+    "wb-125.reclaim2",
+    "wb-141.attempt1.old",
+    "wb-141.attempt2.old",
+    "wb-141.old",
+    "wb-141.r2.old",
+    "wb-143.attempt1",
+    "wb-144.attempt1",
+    "wb-146.dead-20261017-164437",
+    "wb-147.attempt1.old",
+    "wb-147.attempt2.old",
+    "wb-147.old",
+    "wb-147.r2.old",
+    "wb-148.attempt1.old",
+    "wb-148.attempt2.old",
+    "wb-148.old",
+    "wb-148.r2.old",
+    "wb-255.dead-20261017-164119",
+    "wb-E14.trae",
+    "wb-S6.glm-掐掉的那轮",
+)
+
+#: 变体后缀的那几个记号（判据 4：它们只许活在 tools/pool/jobs.py 的判断里）。
+_VARIANT_MARKS = ("dead-", "attempt", "claim", "reclaim", ".old")
+
+
+def _stem(name: str) -> str:
+    """wb-xxx.jsonl → xxx（测试自己算，不 import 实现里的正则）。"""
+    assert name.startswith("wb-") and name.endswith(".jsonl"), name
+    return name[len("wb-"): -len(".jsonl")]
+
+
+def _is_variant_by_hand(name: str) -> bool:
+    """非 canonical 的判定 —— 测试内独立写一份（判据 1 的第 3 句要求）。"""
+    stem = _stem(name)
+    if "." not in stem:
+        return False
+    head, _dot, tail = stem.rpartition(".")
+    is_round = bool(head) and len(tail) > 1 and tail[0] == "r" and tail[1:].isdigit()
+    return not is_round
+
+
+def _marker_literals(path: Path) -> list[str]:
+    """这份源码里拿变体后缀当判据的地方 —— 注释与文档字符串不算（判据 4）。
+
+    认的形状与 _judgement_literals 同一套（比较 / 赋值 / 集合 / 正则参数），
+    因为「第二份名单」只可能长成这几种样子；文档字符串里讲口径不算判据。
+    """
+    tree = ast.parse(path.read_bytes().decode("utf-8"))
+    hits: list[str] = []
+
+    def scan(node: ast.AST, kind: str) -> None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if any(mark in node.value for mark in _VARIANT_MARKS):
+                hits.append(f"{path.name}:{getattr(node, 'lineno', '?')} {kind} {node.value!r}")
+        elif isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+            for elt in node.elts:
+                scan(elt, kind)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare):
+            for operand in [node.left, *node.comparators]:
+                scan(operand, "比较")
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            if node.value is not None:
+                scan(node.value, "赋值")
+        elif isinstance(node, ast.Set):
+            scan(node, "集合")
+        elif isinstance(node, ast.Call):
+            func = node.func
+            fname = getattr(func, "attr", getattr(func, "id", ""))
+            if fname == "compile":
+                for arg in node.args:
+                    scan(arg, "正则")
+    return hits
+
+
+def test_scan_jobs_reports_card_and_kind(tmp_path: Path) -> None:
+    """★ 判据 1：五类各一条 + 一条旁账，逐条断言 (归属卡, 归属类, 状态)。"""
+    diag = _diag(tmp_path)
+    now = 1_700_000_000.0
+    old = now - jobs.STALL_SECONDS - 60
+
+    _touch(diag / "wb-001.jsonl")                      # canonical 新鲜 → 在跑
+    _touch(diag / "wb-002.jsonl")                      # canonical 静默 → 断了
+    os.utime(diag / "wb-002.jsonl", (old, old))
+    _touch(diag / "wb-003.jsonl")                      # 有判决 → 已判决
+    _touch(diag / "wb-003.verdict.txt", "ok\n")
+    _touch(diag / "wb-004.claim.jsonl")                # 变体 → 历史尝试
+    _touch(diag / "wb-005.jsonl")                      # 老一轮，同卡 r2 已判决 → 已被取代
+    os.utime(diag / "wb-005.jsonl", (old, old))
+    _touch(diag / "wb-005.r2.jsonl")
+    _touch(diag / "wb-005.r2.verdict.txt", "ok\n")
+    _touch(diag / "wb-006.jsonl")                      # 台账 done → 台账已完结
+    os.utime(diag / "wb-006.jsonl", (old, old))
+    _touch(diag / "wb-usage.jsonl")                    # 旁账 → 非派活
+
+    rows = jobs.scan_jobs(diag, now=now, backlog={"006": "done"})
+    got = {row["log"]: (row["card"], row["card_kind"], row["state"]) for row in rows}
+    assert got == {
+        "wb-001.jsonl": ("001", "canonical", "在跑"),
+        "wb-002.jsonl": ("002", "canonical", "断了"),
+        "wb-003.jsonl": ("003", "canonical", "已判决"),
+        "wb-004.claim.jsonl": ("004", "variant", "历史尝试"),
+        "wb-005.jsonl": ("005", "canonical", "已被取代"),
+        "wb-005.r2.jsonl": ("005", "canonical", "已判决"),
+        "wb-006.jsonl": ("006", "canonical", "台账已完结"),
+        "wb-usage.jsonl": ("usage", "canonical", "非派活"),
+    }, got
+
+
+def test_variant_logs_never_take_the_card_number(tmp_path: Path) -> None:
+    """★ 判据 1 反例：变体后缀不许被吞进卡号（今天报「卡 146.dead-20261017-164437」）。"""
+    diag = _diag(tmp_path)
+    name = "wb-146.dead-20261017-164437.jsonl"
+    _touch(diag / name)
+    rows = [row for row in jobs.scan_jobs(diag, now=1_700_000_000.0) if row["log"] == name]
+    assert len(rows) == 1, rows
+    assert rows[0]["card"] == "146", rows[0]
+    assert rows[0]["card_kind"] == "variant", rows[0]
+    assert "." not in rows[0]["card"], rows[0]
+    assert jobs.card_of(diag / name) == "146"
+
+
+def test_real_diag_census_buckets() -> None:
+    """★ 判据 1 真树人口普查：三句都不许用计数（计数会随新日志漂）。
+
+    ★ 卡树里 gates/diag 只有 gate_lock.py —— 派活日志全在主树。读卡树会扫到 0 条，
+    所以这里显式走 gen_pool_readme.main_tree_root()（git-common-dir 的父目录）。
+    """
+    import wb_plan  # noqa: PLC0415 —— tools/ 已在 sys.path 上
+
+    main_root, note = gpr.main_tree_root(REPO)
+    assert note is None, f"找不到主树：{note}"
+    diag = main_root / "gates" / "diag"
+    if not diag.is_dir():  # pragma: no cover —— 真仓必有
+        pytest.skip("这棵树里没有 gates/diag")
+    backlog = wb_plan.load_sharded_backlog(
+        main_root / "docs" / "workbacklog.toml", main_root / "docs" / "backlog"
+    )
+    statuses = {cid: card.status for cid, card in backlog.by_id().items()}
+    rows = jobs.scan_jobs(diag, now=None, backlog=statuses)
+    assert rows, "gates/diag 里一份派活日志都没有 —— 扫描器在空转"
+
+    # ① 归属卡里不许有点号。
+    dotted = [row["log"] for row in rows if "." in row["card"]]
+    assert dotted == [], f"这些日志的卡号还带着变体后缀：{dotted}"
+
+    # ② 卡里写死的那 24 条，当前还在盘的每一条都归到「第一段」且是 variant。
+    on_disk = [name for name in VARIANT_LOGS if (diag / (name + ".jsonl")).exists()]
+    assert on_disk, "卡里写死的变体日志一条都不在盘上 —— 这条普查在空转"
+    by_log = {row["log"]: row for row in rows}
+    for name in on_disk:
+        row = by_log[name + ".jsonl"]
+        # name 形如 `wb-120.killed`：归属卡 = 去掉 wb- 前缀、取第一个点之前那一段。
+        assert row["card"] == name.split(".")[0].removeprefix("wb-"), (name, row)
+        assert row["card_kind"] == "variant", (name, row)
+
+    # ③ 反向：variant 行集合 == 测试内独立重算的集合（堵误判与漏判）。
+    seen = {row["log"] for row in rows if row["card_kind"] == "variant"}
+    expected = {
+        name for name in (p.name for p in diag.glob("wb-*.jsonl"))
+        if jobs.is_card_log(name) and _is_variant_by_hand(name)
+    }
+    assert seen == expected, (
+        f"只有实现说是变体：{sorted(seen - expected)}；"
+        f"只有测试说是变体：{sorted(expected - seen)}"
+    )
+
+
+def _write_registry(path: Path, card: str, now: float) -> None:
+    """手写一份登记文件（跳过 reserve 的守卫）—— 只给 in_flight 的租约源用。"""
+    stamp = datetime.datetime.fromtimestamp(now, datetime.UTC).isoformat()
+    path.write_text(
+        json.dumps([{"card": card, "task": "T-X1", "at": stamp, "ttl_seconds": 21600.0}]),
+        encoding="utf-8",
+    )
+
+
+def test_in_flight_has_three_sources_and_no_pid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ 判据 3：四个子场景（活租约 / 有判决 / 新日志 / 老日志无租约），三种来源。
+
+    并且用 ast 走代码断言没有 pid 探活（照 tests/test_pool_registry.py:353-360 的写法：
+    看代码里有没有 .kill( 调用、有没有 tasklist 字面量 —— 不看文档字符串，那里正好在讲这条禁令）。
+    """
+    now = 1_700_000_000.0
+    monkeypatch.setenv("TF_POOL_REGISTRY", str(tmp_path / "reg.json"))
+    diag = _diag(tmp_path)
+
+    # ① 活租约
+    _write_registry(tmp_path / "reg.json", "108", now)
+    flying, why = jobs.in_flight(diag, "108", now=now)
+    assert flying is True, why
+    assert "租约" in why, why
+
+    # ② 有判决（租约清空后）
+    (tmp_path / "reg.json").write_text("[]", encoding="utf-8")
+    _touch(diag / "wb-108.verdict.txt", "ok\n")
+    flying, why = jobs.in_flight(diag, "108", now=now)
+    assert flying is False, why
+    assert "判决" in why, why
+
+    # ③ 新日志
+    (diag / "wb-108.verdict.txt").unlink()
+    _touch(diag / "wb-108.jsonl")
+    os.utime(diag / "wb-108.jsonl", (now - 10.0, now - 10.0))
+    flying, why = jobs.in_flight(diag, "108", now=now)
+    assert flying is True, why
+    assert str(jobs.STALL_SECONDS) in why, why
+
+    # ④ 老日志且没有活租约
+    old = now - jobs.STALL_SECONDS - 60
+    os.utime(diag / "wb-108.jsonl", (old, old))
+    flying, why = jobs.in_flight(diag, "108", now=now)
+    assert flying is False, why
+    assert "静默" in why, why
+
+    # ★ 不许 pid 探活：代码里没有 .kill( 调用，也没有 tasklist 字面量。
+    tree = ast.parse(Path(jobs.__file__).read_text(encoding="utf-8"))
+    kills = [n for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr == "kill"]
+    assert kills == [], "jobs.py 里出现了 .kill( —— 判活不许探 pid"
+    literals = [
+        n.value for n in ast.walk(tree)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str)
+    ]
+    assert [s for s in literals if "tasklist" in s.lower()] == []
+
+
+def test_card_resolution_has_one_definition(tmp_path: Path) -> None:
+    """★ 判据 4：三个读者不许各写一份变体后缀名单；变体判定只许活在 jobs.py 里。"""
+    # ★ 防空转：扫描器先在一份故意写坏的源码上认出来，否则这条钉子可能恒真。
+    sample = tmp_path / "sample.py"
+    sample.write_text('X = ("dead-", "claim")\n', encoding="utf-8")
+    assert _marker_literals(sample) != [], "变体扫描器认不出第二份名单 —— 它在空转"
+
+    for path in OTHER_READERS:
+        offenders = _marker_literals(path)
+        assert offenders == [], f"{path.name} 又自己认了一遍变体后缀：{offenders}"
+        assert "is_card_log" in path.read_text(encoding="utf-8"), (
+            f"{path.name} 没有引用 is_card_log —— 它又自己判了一遍"
+        )
+
+    # jobs.py：含这些字面量的函数最多一个（结构判定更好 —— 那时是 0 个）。
+    src = Path(jobs.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    holders = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.Constant)
+                and isinstance(inner.value, str)
+                and any(mark in inner.value for mark in _VARIANT_MARKS)
+            ):
+                    holders.add(node.name)
+                    break
+    assert len(holders) <= 1, f"变体后缀字面量出现在这些函数里：{sorted(holders)}"

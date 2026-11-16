@@ -7,11 +7,15 @@ r"""作业状态 / 扫日志（从 `tools/wb_status.py` 与 `tools/pool_mcp.py` 
 | 组 | 函数 | 干什么 |
 |---|---|---|
 | 读日志 | `parse_events`/`clip`/`tool_line`/`message_of` | 把 stream-json 渲成时间线 + 摘要 |
-| 三态判据 | `classify_job_state`/`scan_jobs` | 在跑 / 已判决 / 断了（不猜） |
+| 状态分桶 | `classify_job_state`/`scan_jobs`/`is_dead_state` | 三态 + 五类（卡 E116） |
 | 产物定位 | `diag_dir`/`card_artifacts`/`card_of` | 精确匹配文件名（宽 glob 会串卡） |
 | 口径 | `is_card_log`/`non_card_reason` | 哪几个 `wb-*.jsonl` **不是卡**（全仓唯一定义，卡 E74） |
 | 渲染 | `render_timeline`/`render_json`/`repo_state` | 拼成 `wb_status.py` 的那段人话 |
 
+
+状态桶（卡 E116）：在跑 / 已判决 / 断了（三态，`classify_job_state`）+ 历史尝试 / 已被取代 /
+台账已完结 / 非派活（由 `scan_jobs` 的证据判出来）；`is_dead_state` 是「这一轮已经结束」的统一口径，
+`pool/registry.py` 判死租约也引用它。
 ★ 阈值 (`STALL_SECONDS` / `HEARTBEAT_SECONDS`) 与 `tools/wb_dispatch.py` **同一口径**，由
 `tests/test_pool_mcp.py::test_thresholds_match_the_dispatch_tool` 钉住（不另立一套）。
 ★ 只读：本模块不写任何文件；`repo_state()` 只跑 `git status/log` 两条**只读**命令。
@@ -27,6 +31,7 @@ from collections import Counter
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
 MAX_TEXT = 240          # 一句话最多显示多少字（长输出不许刷屏）
@@ -313,10 +318,34 @@ def card_artifacts(diag: Path, card: str, suffix: str) -> list[Path]:
                   key=lambda p: p.stat().st_mtime)
 
 
+#: 变体后缀的记号 —— **全仓只许活在这个文件里**（卡 E116 判据 4）。
+#: 别的模块要判「这是不是一轮规范日志」，只能问 `card_of_log`，不许自己再写一份名单。
+_VARIANT_MARKS = ("dead-", "claim", "reclaim", "attempt", ".old")
+
+
+def card_of_log(name: str) -> tuple[str, str]:
+    r"""`wb-*.jsonl` 的文件名 → `(归属卡, 类别)`；类别**只有** `canonical` / `variant`。
+
+    `wb-105.jsonl` / `wb-105.r2.jsonl` ⇒ `("105", "canonical")`；
+    `wb-146.dead-20261017-164437.jsonl` ⇒ `("146", "variant")`。
+    ★ 老实现（卡 E116 之前）是 `re.match(r"^wb-(.+?)(?:\.r\d+)?\.jsonl$")` —— 它把
+    `146.dead-20261017-164437` 整个当卡号念出来，job_list 今天就是这么错的。
+    """
+    if name.startswith("wb-") and name.endswith(".jsonl"):
+        stem = name[len("wb-"):-len(".jsonl")]
+    else:
+        stem = name
+    if "." not in stem:
+        return stem, "canonical"
+    head, _dot, tail = stem.rpartition(".")
+    if len(tail) > 1 and tail[0] == "r" and tail[1:].isdigit():
+        return head, "canonical"          # `105.r2` 是**同一张卡**的第二轮
+    return stem.split(".")[0], "variant"  # `.claim` / `.dead-…` / `.trae` 是历史尝试
+
+
 def card_of(log: Path) -> str:
-    """从 log 文件名取卡号（`wb-105.jsonl` / `wb-105.r2.jsonl` → `105`）；取不到 → `""`。"""
-    hit = re.match(r"^wb-(.+?)(?:\.r\d+)?\.jsonl$", log.name)
-    return hit.group(1) if hit else ""
+    """从 log 文件名取**归属卡**（`wb-105.jsonl` / `wb-105.r2.jsonl` → `105`；变体 → 第一段）。"""
+    return card_of_log(log.name)[0]
 
 
 # ================================================================ 三态判据 + 扫全部日志
@@ -331,13 +360,66 @@ def classify_job_state(age: float, has_verdict: bool) -> tuple[str, str]:
     return "断了", f"无判决，且日志已静默 {age:.0f}s > {STALL_SECONDS}s"
 
 
-def scan_jobs(diag: Path, now: float | None = None) -> list[dict]:
-    """扫 `gates/diag/wb-*.jsonl`，每条给出 mtime / 大小 / 有无判决 + 一态判断。"""
+#: 「这一轮已经结束」的状态集合。★ 全仓唯一一份：`pool/registry.py` 引用 `is_dead_state`，
+#: 不再自己写死 `("断了", "已判决")` —— 那会让「已被取代 / 台账已完结 / 历史尝试」的老租约一直显活。
+DEAD_STATES: tuple[str, ...] = ("断了", "已判决", "已被取代", "台账已完结", "历史尝试")
+
+
+def is_dead_state(state: str) -> bool:
+    """这个 state 算不算「这一轮已经结束」（死租约判据只问这一个函数）。"""
+    return state in DEAD_STATES
+
+
+def _state_of_log(
+    log: Path,
+    card: str,
+    kind: str,
+    age: float,
+    has_verdict: bool,
+    canonical: dict[str, list[Path]],
+    backlog: Mapping[str, str] | None,
+) -> tuple[str, str]:
+    """一条日志的态 —— 优先级**写死在这里**（与卡 E116 判据 1 逐条对应）：
+
+    ① `has_verdict` ⇒ 已判决；② `kind == "variant"` ⇒ 历史尝试；
+    ③ 同卡另有规范名的轮次带 `.verdict.txt` ⇒ 已被取代；
+    ④ 台账里这张卡 `status == "done"` ⇒ 台账已完结；⑤ 其余 ⇒ 交给三态判据。
+    「非派活」由 `non_card_reason` 先判，**优先于**上面五类（旁账不是卡）。
+    """
+    reason = non_card_reason(log.name)
+    if reason:
+        return "非派活", reason
+    if has_verdict:
+        return classify_job_state(age, True)
+    if kind == "variant":
+        return "历史尝试", f"这轮是历史尝试（`{log.name}` 不是 `wb-<卡>[.rN].jsonl` 这种规范名）"
+    for other in canonical.get(card, ()):
+        if other != log and other.with_suffix(".verdict.txt").exists():
+            return "已被取代", f"同卡有别的轮次已判决（`{other.name}`）"
+    if backlog is not None and backlog.get(card) == "done":
+        return "台账已完结", "台账里这张卡已经 done，日志留在盘上"
+    return classify_job_state(age, has_verdict)
+
+
+def scan_jobs(
+    diag: Path, now: float | None = None, backlog: Mapping[str, str] | None = None
+) -> list[dict]:
+    """扫 `gates/diag/wb-*.jsonl`，每条给出归属卡 / 归属类 / mtime / 大小 / 有无判决 + 一态判断。
+
+    `backlog` 是 `{卡号: status}`（判据 1 的 ④ 要靠它）。**不给就跳过那一条** —— 三态口径、
+    既有键、既有 why 文案都不变（`tests/test_pool_lib.py` 那条三键钉子就是这么活的）。
+    """
     if not diag.exists():
         return []
     now = time.time() if now is None else now
+    logs = sorted(diag.glob("wb-*.jsonl"))
+    canonical: dict[str, list[Path]] = {}
+    for log in logs:
+        _card, _kind = card_of_log(log.name)
+        if _kind == "canonical":
+            canonical.setdefault(_card, []).append(log)
     rows: list[dict] = []
-    for log in sorted(diag.glob("wb-*.jsonl")):
+    for log in logs:
         try:
             stat = log.stat()
         except OSError:  # pragma: no cover —— 边扫边被删就跳过这一条
@@ -346,13 +428,11 @@ def scan_jobs(diag: Path, now: float | None = None) -> list[dict]:
         verdict = log.with_suffix(".verdict.txt")
         report = log.with_suffix(".report.md")
         has_verdict = verdict.exists()
-        reason = non_card_reason(log.name)
-        if reason:
-            state, why = "非派活", reason       # 旁账（用量 / 路由回放）不是派活
-        else:
-            state, why = classify_job_state(age, has_verdict)
+        card, kind = card_of_log(log.name)
+        state, why = _state_of_log(log, card, kind, age, has_verdict, canonical, backlog)
         rows.append({
-            "card": card_of(log),
+            "card": card,
+            "card_kind": kind,
             "log": log.name,
             "mtime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime)),
             "age_seconds": round(age, 1),
@@ -364,6 +444,61 @@ def scan_jobs(diag: Path, now: float | None = None) -> list[dict]:
             "why": why,
         })
     return rows
+
+
+def in_flight(diag: Path, card: str, now: float | None = None) -> tuple[bool, str]:
+    """这张卡现在在不在飞 —— 三个**确定性**来源，按顺序问（卡 E116 判据 3）。
+
+    ① 活租约（`pool/registry.py` 的 `list_reservations`）⇒ 在飞；
+    ② 有判决（`.verdict.txt`）⇒ 这一轮已经结束，不在飞；
+    ③ 最新一轮日志 mtime 距今 ≤ `STALL_SECONDS` ⇒ 在飞，否则静默。
+
+    ★ 不问 pid、不 `os.kill`、不看系统进程列表、不读 watch-registry：进程号跨重启/跨机器都不可判，
+    拿它判活等于猜。租约与日志打架（活租约 + 老日志）时判在飞，但 `why` 里必须写出冲突原文 ——
+    两个源说法不一致是**读数**，不许挑一个好看的说。
+    """
+    stamp = time.time() if now is None else now
+    logs = card_artifacts(diag, card, ".jsonl")
+    newest = logs[-1] if logs else None
+    age = 0.0
+    if newest is not None:
+        try:
+            age = max(0.0, stamp - newest.stat().st_mtime)
+        except OSError:  # pragma: no cover —— 刚被删
+            newest, age = None, 0.0
+    log_note = (
+        f"最新一轮 `{newest.name}` mtime 距今 {age:.0f}s（阈值 {STALL_SECONDS}s）"
+        if newest is not None
+        else "这个树里没有它的派活日志"
+    )
+    leases: list[dict] = []
+    lease_gap = ""
+    try:
+        from pool import registry as _registry  # 延迟导入：registry 顶层 import 了本模块（会成环）
+        leases = [
+            r for r in _registry.list_reservations(now=stamp) if str(r.get("card")) == str(card)
+        ]
+    except Exception as exc:  # 登记文件坏了不该把「在飞」判成假 —— 但要说出这一源不可判
+        lease_gap = f"（登记文件读不了：{type(exc).__name__}: {exc} ⇒ 这一源不可判）"
+    if leases:
+        row = leases[0]
+        why = (
+            f"有活租约（card={row.get('card')} tree={row.get('tree', '?')} "
+            f"起点 {row.get('at') or row.get('started_at') or '?'}）；{log_note}"
+        )
+        if newest is not None and age > STALL_SECONDS:
+            why += (f" —— ★ 两源冲突：租约还在，日志却已静默 {age:.0f}s > {STALL_SECONDS}s"
+                    "（按租约判在飞；租约不会自己老实，见 registry 的 TTL）")
+        return True, why
+    verdicts = card_artifacts(diag, card, ".verdict.txt")
+    if verdicts:
+        return False, f"有判决（`{verdicts[-1].name}`）—— 这一轮已经结束；{log_note}{lease_gap}"
+    if newest is not None and age <= STALL_SECONDS:
+        return True, f"{log_note} ⇒ 没静默，且没有判决 ⇒ 在飞{lease_gap}"
+    if newest is not None:
+        return False, f"日志已静默 {age:.0f}s > {STALL_SECONDS}s，且没有活租约、没有判决{lease_gap}"
+    return False, f"没有活租约、没有判决、也没有派活日志 ⇒ 没有在飞的理由{lease_gap}"
+
 
 
 # ================================================================ 渲染：`wb_status.py` 的那段输出

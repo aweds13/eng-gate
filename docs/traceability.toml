@@ -12112,3 +12112,29 @@ evidence = [
   "test:test_pool_mcp_task.py::test_checkin_status_prose_agrees_with_what_it_reads",
 ]
 gaps = "1. 账本里的 `health.last_checkin` 是**结论码**，账本不记「这个码是什么时候得出的」——读面只能拿 `last_probe` 的时刻说「最近一次问是几号」，两个字段若被哪一次写入写歪（只更新其中一个），这里不会发现，只会照着念。指针 `tools/pool_mcp.py`2. 同一条 `health` 在 `account_status` 里另有一份渲染（额度列那句「未观测」），本卡只把 `checkin_status` 这一面改成按日期标明，两处措辞仍可能分叉；没有把它们抽成共用函数的打算，因为两处要说的不是同一件事（一处说额度，一处说签到）。指针 `tools/pool_accounts.py`3. 「今天」是拿 `_today_local()`（UTC+8）算出来的，而账本里 `last_probe` 的前 10 位是**字符串截取**：账本若换了时区，`is_today` 会静默错一天且不留痕。本卡不校验时区，只把截取结果原样交出去（`last_probe_date`），让读的人自己看得见。指针 `tools/pool_mcp.py`"
+
+[entries."T-AG623"]
+id = "T-AG623"
+title = "job_list说错话：日志分桶按证据、没日志就找落地链、两边都答在不在飞"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/jobs.py",
+  "file:tools/pool_mcp.py",
+  "file:tools/pool/registry.py",
+  "file:tests/test_pool_jobs.py",
+  "file:tests/test_pool_mcp.py",
+  "file:tests/test_pool_registry.py",
+  "test:test_pool_jobs.py::test_scan_jobs_reports_card_and_kind",
+  "test:test_pool_jobs.py::test_variant_logs_never_take_the_card_number",
+  "test:test_pool_jobs.py::test_real_diag_census_buckets",
+  "test:test_pool_jobs.py::test_in_flight_has_three_sources_and_no_pid",
+  "test:test_pool_jobs.py::test_card_resolution_has_one_definition",
+  "test:test_pool_registry.py::test_dead_states_come_from_jobs",
+  "test:test_pool_mcp.py::test_job_status_names_the_landing_path",
+  "test:test_pool_mcp.py::test_job_status_survives_a_missing_backlog",
+  "test:test_pool_mcp.py::test_job_status_says_no_formal_artifacts",
+  "test:test_pool_mcp.py::test_job_status_land_glob_does_not_cross_cards",
+  "test:test_pool_mcp.py::test_job_status_first_line_says_in_flight",
+]
+gaps = "1. `scan_jobs()` 的第五类「台账已完结」要靠调用方把 `backlog=` 传进来；今天只有 `tools/pool_mcp.py` 的 `job_list` 传了，`tools/pool/registry.py`、`tools/pool/trae_dispatch.py`、`tools/wb_status.py` 三个调用点没传 ⇒ 同一份日志在不同入口可能落进不同的桶（`断了` vs `台账已完结`）。本卡只把读面那一面统一，三个内部调用点维持原状 —— 这是已知分叉，不是没发现。指针 `tools/pool/registry.py`2. `job_status` 查正式证据时，第 ⑤ 类只读 `docs/traceability.toml` 的 `entries` 一张总表；本仓现在只有总表所以成立，将来若把它像 `docs/workbacklog.toml` 那样拆成分片，这一类会在分片仓里静默失效（其余四类不受影响）。指针 `tools/pool_mcp.py`3. `land-<card>[a-z]?.log` 这条规则按卡规格写死成「只许一位小写字母」：a→z 共 26 次落地都认，但第 27 次或有人写成 `land-E116-x.log` 就静默漏掉，退化成「查不到正式证据」。放宽会串卡（实测 `land-E1` 会命中 29 张），所以本卡选择宁可漏也不串，漏的那天靠人在日志里看见。指针 `tools/pool_mcp.py`"

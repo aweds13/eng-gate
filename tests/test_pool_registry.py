@@ -464,3 +464,22 @@ def test_cli_ttl_and_at_are_recorded(
     entry = json.loads(reg.read_text(encoding="utf-8"))[0]
     assert entry["ttl_seconds"] == 60.0
     datetime.datetime.fromisoformat(entry["at"])  # at 是合法 ISO8601
+
+
+
+def test_dead_states_come_from_jobs() -> None:
+    """★ 判据 1：「这一轮已经结束」只在 tools/pool/jobs.py 定义一次，租约判据**引用**它。
+
+    卡 E116 之前 `registry.py` 自己写死 `("断了", "已判决")` —— 于是「已被取代 / 台账已完结 /
+    历史尝试」这三种态的老租约一直显活（同一棵树永远派不进去）。这条钉子两头都咬：
+    新的三种态必须被判死，而「在跑 / 非派活」必须仍判活（不然租约一到点就被假死清掉）。
+    """
+    assert registry._DEAD_STATES == jobs.DEAD_STATES, (
+        "registry 的 _DEAD_STATES 不是引用 jobs.DEAD_STATES —— 又造了第二份名单"
+    )
+    for state in ("断了", "已判决", "已被取代", "台账已完结", "历史尝试"):
+        assert jobs.is_dead_state(state) is True, state
+        assert state in registry._DEAD_STATES, state
+    for state in ("在跑", "非派活"):
+        assert jobs.is_dead_state(state) is False, state
+        assert state not in registry._DEAD_STATES, state

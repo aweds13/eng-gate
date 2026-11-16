@@ -52,7 +52,10 @@ DEFAULT_TTL = 21600
 REGISTRY_REL = ("gates", "diag", "pool-registry.json")
 
 #: 判"断了 / 已判决"用的两态（其余态 = 还活着）。
-_DEAD_STATES = ("断了", "已判决")
+#: 「这一轮已经结束」的状态集合 —— ★ 不在这里定义，**只引用** `pool.jobs.is_dead_state` 那份。
+#: 卡 E116 之前这里写死 `("断了", "已判决")`，于是「已被取代 / 台账已完结 / 历史尝试」的老租约
+#: 一直显活（租约不释放 ⇒ 同一棵树永远派不进去）。
+_DEAD_STATES = jobs.DEAD_STATES
 
 
 class RegistryError(Exception):
@@ -209,7 +212,7 @@ def _log_dead(reservation: dict, now: float, log_base: Callable[[], Path]) -> bo
         return False
     for row in jobs.scan_jobs(log_path.parent, now=now):
         if row["log"] == log_path.name:
-            return row["state"] in _DEAD_STATES
+            return jobs.is_dead_state(row["state"])
     return False
 
 

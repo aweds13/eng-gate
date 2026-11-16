@@ -1081,3 +1081,114 @@ def test_mcp_payload_keeps_unknown_as_null(tmp_path: Path) -> None:
     assert data2["can_dispatch"] is False
     assert _json_block(text2)["can_dispatch"] is False
     assert "tools/pool_accounts.py probe" not in _human(text2)  # 确定不能派时不叫人去探
+
+
+# ========================================================== 卡 E116：判据 2/3（正式证据链 + 在飞）
+
+def _e116_backlog(root: Path, cards: list[tuple[str, str, str]]) -> Path:
+    """造一份最小台账（形状同 `tests/test_wb_daily.py:49-63`）；`cards = [(id, task, status)]`。"""
+    lines = ['[base]', 'reviewed = "abc1234"', ""]
+    for cid, task, status in cards:
+        lines += [
+            "[[cards]]",
+            f'id = "{cid}"',
+            f'task = "{task}"',
+            f'title = "样卡 {cid}"',
+            'tree = ".wt/a"',
+            'spec = "x.md"',
+            'files = ["src/a.py"]',
+            "depends = []",
+            'risk = "low"',
+            f'status = "{status}"',
+            "",
+        ]
+    path = root / "docs" / "workbacklog.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+def test_job_status_names_the_landing_path(tmp_path: Path) -> None:
+    """★ 判据 2：没有 `wb-<卡>.jsonl` 但有落地链痕迹的卡，**不许**说「还没派过」。
+
+    造的是主树今天的真实形态：卡走落地链（`gates/diag/land-X1b.log` + `gates/review/T-X1.json`），
+    台账里 status=done，从来没有 `wb-X1.jsonl`。
+    """
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    _e116_backlog(tmp_path, [("X1", "T-X1", "done")])
+    (diag / "land-X1b.log").write_text("落地日志\n", encoding="utf-8")
+    (tmp_path / "gates" / "review").mkdir(parents=True)
+    (tmp_path / "gates" / "review" / "T-X1.json").write_text("{}\n", encoding="utf-8")
+
+    text, data, is_error = pool_mcp.tool_job_status({"card": "X1"}, root=tmp_path)
+    assert "没有" in text, text
+    assert "落地链" in text, text
+    assert "land-X1b.log" in text, text
+    assert "还没派过" not in text, text
+    assert is_error is False
+    assert data["found"] is False
+    assert data["log"] is None
+    assert data["evidence"][0]["kind"] == "land"
+    assert data["evidence"][0]["path"].endswith("land-X1b.log")
+
+
+def test_job_status_survives_a_missing_backlog(tmp_path: Path) -> None:
+    """★ 判据 2：台账读不到**不许抛**（`load_sharded_backlog` 会抛 `BacklogError`）。
+
+    读不到就当没有台账，继续走 ①（落地日志）—— 这是本树今天的真实形态，不是补救。"""
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    (diag / "land-X1.log").write_text("落地日志\n", encoding="utf-8")
+    text, data, is_error = pool_mcp.tool_job_status({"card": "X1"}, root=tmp_path)
+    assert "land-X1.log" in text, text
+    assert is_error is False and data["found"] is False
+
+    empty = tmp_path / "empty"
+    (empty / "gates" / "diag").mkdir(parents=True)
+    text2, _data2, _err2 = pool_mcp.tool_job_status({"card": "X1"}, root=empty)
+    assert "没有" in text2, text2
+
+
+def test_job_status_says_no_formal_artifacts(tmp_path: Path) -> None:
+    """★ 判据 2：台账写 done、五类证据一样都没有 ⇒ **不许**说「还没派过」，也不许装没事。"""
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    _e116_backlog(tmp_path, [("X9", "T-X9", "done")])
+    text, data, is_error = pool_mcp.tool_job_status({"card": "X9"}, root=tmp_path)
+    assert "没有" in text, text
+    assert "还没派过" not in text, text
+    assert is_error is True
+    assert data["evidence"] == []
+    assert data["found"] is False
+
+
+def test_job_status_land_glob_does_not_cross_cards(tmp_path: Path) -> None:
+    """★ 判据 2：`land-<卡>[a-z]?.log` 不许串卡（`land-X10.log` / `land-X100.log` 不是 X1 的）。"""
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    _e116_backlog(tmp_path, [("X1", "T-X1", "done")])
+    for name in ("land-X10.log", "land-X100.log", "land-X11b.log"):
+        (diag / name).write_text("别人的落地日志\n", encoding="utf-8")
+    text, data, _is_error = pool_mcp.tool_job_status({"card": "X1"}, root=tmp_path)
+    assert data["evidence"] == [], data["evidence"]
+    assert "land-X10.log" not in text and "land-X100.log" not in text, text
+    assert "land-X11b.log" not in text, text
+
+
+def test_job_status_first_line_says_in_flight(tmp_path: Path) -> None:
+    """★ 判据 3：`job_status` 的**第一行**是「在飞：是/否 —— why」，`data["in_flight"]` 是真 bool。
+
+    有日志的那一支（时间线照旧走 `render_timeline`），与没有日志的那一支都要有。
+    """
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True)
+    (diag / "wb-777.jsonl").write_text('{"type":"assistant"}\n', encoding="utf-8")
+    text, data, _is_error = pool_mcp.tool_job_status({"card": "777"}, root=tmp_path)
+    first = text.splitlines()[0]
+    assert re.match(r"^在飞：(是|否)", first), first
+    assert isinstance(data["in_flight"], bool), data
+
+    text2, data2, _is_error2 = pool_mcp.tool_job_status({"card": "888"}, root=tmp_path)
+    assert re.match(r"^在飞：(是|否)", text2.splitlines()[0]), text2
+    assert data2["in_flight"] is False, data2
