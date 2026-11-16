@@ -6170,3 +6170,23 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E128"
+task = "T-AG637"
+title = "三个下游出口把死租约当活租约念"
+tree = ".wt/E128"
+spec = "复盘/卡/卡E128-三个下游出口把死租约当活租约念.md"
+files = [
+  "tools/workbench_bridge.py",
+  "tools/wb_daily.py",
+  "tools/pool_mcp.py",
+  "tests/test_workbench_bridge.py",
+  "tests/test_wb_daily.py",
+  "tests/test_pool_mcp_board.py"
+]
+depends = [
+  "E115"
+]
+risk = "mid"
+status = "pending"
