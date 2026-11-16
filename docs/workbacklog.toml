@@ -6116,7 +6116,10 @@ files = [
   "docs/decisions/0005-gate-base-drift.md"
 ]
 depends = [
-  "E115"
+  "E115",
+  "E93",
+  "E120",
+  "E122"
 ]
 risk = "mid"
 status = "pending"
@@ -6148,6 +6151,8 @@ files = [
   "docs/全局面板.md",
   "docs/decisions/0002-mcp-extension-slot.md"
 ]
-depends = []
+depends = [
+  "E118"
+]
 risk = "mid"
 status = "pending"
