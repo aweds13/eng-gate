@@ -1,0 +1,15 @@
+[entries."T-AG636"]
+id = "T-AG636"
+title = "回放判据的窗口按事件够得着：批量取数、上界300、再加一条断言上界够不够的钉子"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pytest_select.py",
+  "file:tests/test_pytest_select.py",
+  "test:test_pytest_select.py::test_log_batch_agrees_with_the_per_commit_reads",
+  "test:test_pytest_select.py::test_replay_reads_the_history_in_one_batch",
+  "test:test_pytest_select.py::test_the_probe_upper_bound_still_reaches_a_judge_body_commit",
+  "test:test_pytest_select.py::test_replay_recognises_every_real_fallback_reason",
+]
+gaps = "- 变异 D 没按卡规格原文做（规格写「判据 4 的距离改常量 0（自欺）」）：实际跑的四条是 M-A 回退逐笔取数 / M-B log_batch 恒返回空表 / M-C log_batch 丢掉文件列表 / M-D 上界缩回 60，少了「距离改常量 0」那条。原因：把 behind 写死成 0 会让 `behind < max(REPLAY_PROBE_STEPS)` 恒真，但它同时会掩盖 M-D 的读数（两条变异咬同一个钉子），先保住「上界不够时先红」这条更值。读数见 gates/diag/_rev_E127_result.txt。- 判据 2 的计数钉子用 monkeypatch 三个 spy（log_batch / git_changed / git_task）断言 calls == {batch: 1, changed: 0, task: 0}，跑的是 replay(5, root=ROOT) —— 对着真仓跑而不是合成仓：批量取的是 `git log -z`，假仓里造不出 5 笔带 Task trailer 的历史。指针 tests/test_pytest_select.py。- `log_batch` 的解析不认的记录一律不进返回值（调用方按「批量里查不到这一笔」回落逐笔读），所以「解析器悄悄吞掉一半历史」这件事不会被回放判据发现 —— 只有逐笔比对那条钉子能抓。指针 tools/pytest_select.py。"
+

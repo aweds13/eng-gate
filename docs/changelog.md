@@ -3,6 +3,11 @@
 - 新增 test_no_zero_tolerance_call_against_the_real_map：ast 扫全仓 tests/**/*.py，同一个调用里同时有 `--days` 与 `0` 却不带 `--map` ⇒ 红并点名 文件:行号
 - 自造「全部昨天验证」表的另一半原样保留，真表新鲜仍由 test_real_map_makes_the_gate_green（默认 30 天）负责
 - tools/proxy_audit.py、DEFAULT_DAYS、门命令、docs/proxy-map.toml 一个字节没改
+## 2026-11-17 T-AG636 回放判据的窗口改成按事件够得着：批量取数 + 上界 300 + 一条断言上界够不够的钉子
+- tools/pytest_select.py 新增 log_batch：一次 `git log -z --name-only --format=%x01%h%x1f%(trailers:key=Task,valueonly)` 取回每笔的 Task trailer 与改动文件，按 rev 建索引；解析不出的记录不进返回值。
+- replay() 走批量，逐笔 git_changed / git_task 只作为「批量里查不到这一笔」的回落；本仓连续 62 笔记账提交不再把回放判据撑成空转。
+- tests/test_pytest_select.py 的 REPLAY_PROBE_STEPS 从 (20,30,40,50,60) 改成 (20,40,60,80,120,200,300)：原来不敢放大是因为每笔两次子进程（replay(300) 49.7 s），现在 replay(300) 2.3 s。
+- 新增钉子 test_the_probe_upper_bound_still_reaches_a_judge_body_commit：算出最近一笔判据本体提交到 HEAD 的距离，断言它还在上界内 —— 上界不够时它先红，而不是等 `assert seen` 用「最近 60 笔一笔 fallback 都没有」这种看不出原因的话红。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

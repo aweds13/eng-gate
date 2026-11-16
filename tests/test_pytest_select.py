@@ -38,8 +38,11 @@ from pathlib import Path
 #: 回放窗口的探测序列（卡 E68 的钉子用）：从 START 起逐档放大，找到第一笔真 fallback 就停。
 #: 理由写在 `test_replay_recognises_every_real_fallback_reason` 的 docstring 里 —— 固定 20 笔
 #: 会随历史推进周期性空转（fallback 是事件、不是每笔都有）。
+#: ★ 2026-11-17（卡 E127）：上界从 60 提到 300 —— 实测第一笔真 fallback 落在第 63 笔（`b8545049`，
+#:   闸三），60 的上界让这条钉子整整一段时间在空转。窗口能放大是因为 `replay()` 改成一次
+#:   `git log` 批量取数（`tools/pytest_select.py::log_batch`）：replay(300) 从 49.7 s 降到 2.3 s。
 REPLAY_PROBE_START = 20
-REPLAY_PROBE_STEPS = (20, 30, 40, 50, 60)
+REPLAY_PROBE_STEPS = (20, 40, 60, 80, 120, 200, 300)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -479,9 +482,15 @@ def test_replay_recognises_every_real_fallback_reason() -> None:
       `test:` 指针」才发生的**事件**，不是每笔提交都有。20 笔窗口在 T-AG539（`03cd6a21`，
       实测落在第 24 位）之后整段不含任何 fallback ⇒ 原来的 `assert seen` 空转，这条钉子从
       「检查原因认不认得」退化成「检查最近 20 笔的运气」。所以改成**向大找到第一笔 fallback
-      为止**（上限 60）：覆盖面不缩（每一笔真 fallback 仍要认），也不再依赖某几笔恰好排进窗口。
-      上限 60 是代价与覆盖的折中 —— 实测 replay(60) 约 5.4 s、含 9 笔 fallback（8 笔判据本体
-      + 1 笔台账欠账），而 replay(20) 约 2.0 s。窗口再大就没必要：判据本体的改动本来就不频繁。
+      为止**：覆盖面不缩（每一笔真 fallback 仍要认），也不再依赖某几笔恰好排进窗口。
+
+    ★ 为什么上界提到 300（2026-11-17，卡 E127）：60 的上界**又一次**空转了 —— 最近 62 笔全是
+      只立卡/改台账的记账提交，第一笔真 fallback 落在第 63 笔（`b8545049`，闸三碰了
+      `gates/defs/contract.py`），而 20/30/40/50/60 五档全部 fb=0 ⇒ `assert seen` 必空。
+      原来不敢放大是因为贵：`replay()` 每笔两次子进程，replay(100) 17.7 s、replay(300) 49.7 s。
+      现在 `replay()` 走一次批量 `git log`（`log_batch`），实测 replay(20) 0.4 s / (60) 0.65 s /
+      (100) 0.74 s / (300) 2.3 s ⇒ 窗口放大到 300 的代价比原来 20 笔还低。七档阶梯 20/40/60/80/
+      120/200/300 在真历史上停在 80（第一笔 fallback 已被包含），全档实测 `ok=True`。
     """
     ps = _ps()
     used = REPLAY_PROBE_START
@@ -497,6 +506,80 @@ def test_replay_recognises_every_real_fallback_reason() -> None:
     for rev, task, reason in seen:
         assert ps._known_fallback_reason(reason), (rev, task, reason)
     assert result.ok, [(r.rev, r.reason) for r in result.rows if r.fallback]
+
+
+def test_log_batch_agrees_with_the_per_commit_reads() -> None:
+    """★ 卡 E127：批量取数只许是**加速**，不许是第二个真相源。
+
+    `replay()` 现在一次 `git log -z` 取回每笔的「改动文件 + Task trailer」（`log_batch`）。
+    这条钉子逐笔比对批量结果与原来的两条命令（`git_changed` / `git_task`）—— 只要有一笔
+    对不上，回放判据就会在**看不见的地方**换口径。取最近 5 笔（够覆盖合并/删除/改名几种
+    形态，代价 ~0.9 s）；历史太短时按实际条数比。
+    """
+    ps = _ps()
+    revs = [r for r in ps._git(["log", "--format=%h", "-5"], ROOT).splitlines() if r]
+    assert revs, "拿不到 git 历史 ⇒ 这条钉子判不了"
+    batch = ps.log_batch(len(revs), ROOT)
+    for rev in revs:
+        assert rev in batch, rev
+        task, files = batch[rev]
+        assert list(files) == ps.git_changed(rev, ROOT), rev
+        assert task == ps.git_task(rev, ROOT), rev
+
+
+def test_replay_reads_the_history_in_one_batch(monkeypatch) -> None:
+    """★ 卡 E127 判据 2：replay() 真走批量取数，逐笔读只剩兜底。
+
+    批量是**加速**手段，不是新口径 —— 但只要 replay() 又悄悄回到「每笔两次子进程」，
+    放大窗口就重新变贵，下一个人就会又一次为了省时间把上界砍回去（卡 E68 → E127 的循环）。
+    所以这里数调用次数：跑 replay(5) 时 log_batch 恰好 1 次，git_changed / git_task 0 次。
+    """
+    ps = _ps()
+    calls = {"batch": 0, "changed": 0, "task": 0}
+    real_batch, real_changed, real_task = ps.log_batch, ps.git_changed, ps.git_task
+
+    def spy_batch(count: int, root=None):
+        calls["batch"] += 1
+        return real_batch(count, root=root)
+
+    def spy_changed(rev: str, root=None):
+        calls["changed"] += 1
+        return real_changed(rev, root=root)
+
+    def spy_task(rev: str, root=None):
+        calls["task"] += 1
+        return real_task(rev, root=root)
+
+    monkeypatch.setattr(ps, "log_batch", spy_batch)
+    monkeypatch.setattr(ps, "git_changed", spy_changed)
+    monkeypatch.setattr(ps, "git_task", spy_task)
+    result = ps.replay(5, root=ROOT)
+    assert len(result.rows) == 5
+    assert calls == {"batch": 1, "changed": 0, "task": 0}, calls
+
+
+def test_the_probe_upper_bound_still_reaches_a_judge_body_commit() -> None:
+    """★ 卡 E127 判据 4：探针上界必须够得着最近一笔判据本体提交。
+
+    这条钉子是给「空转」提前报警的：test_replay_recognises_every_real_fallback_reason
+    只在**真跑完七档阶梯**之后才说「一笔 fallback 都没有」，而那时已经看不出是判据坏了
+    还是历史太干净。这里用一次 git log -- <判据本体路径> 直接量距离，上界不够就当场红，
+    并念出距离与上界 —— 卡 E68 抬上界（20→60）、卡 E127 再抬（60→300）都是被同一条钉子
+    逼出来的，两次都只能从「最近 N 笔一笔 fallback 都没有」这句话反推。
+    """
+    ps = _ps()
+    out = ps._git(
+        ["log", "--format=%h", "--", *ps.JUDGE_BODY_FILES, *ps.JUDGE_BODY_PREFIXES], ROOT
+    )
+    revs = [r for r in out.splitlines() if r.strip()]
+    assert revs, "历史里一笔判据本体提交都没有 ⇒ 这条钉子判不了（不是绿）"
+    counted = ps._git(["rev-list", "--count", f"{revs[0]}..HEAD"], ROOT).strip()
+    behind = int(counted)
+    bound = max(REPLAY_PROBE_STEPS)
+    assert behind < bound, (
+        f"最近一笔判据本体提交（{revs[0]}）在 {behind} 笔之前，已到/超出探针上界 {bound}"
+        " ⇒ 回放判据又要空转了：先把 replay() 的批量取数确认住，再放大 REPLAY_PROBE_STEPS"
+    )
 
 
 def test_dead_mark_from_card_e52_is_not_whitelisted_anymore() -> None:

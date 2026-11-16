@@ -425,6 +425,44 @@ def git_task(rev: str, root: Path | None = None) -> str:
     ).strip()
 
 
+def log_batch(count: int, root: Path | None = None) -> dict[str, tuple[str, tuple[str, ...]]]:
+    """一次 git log 取回最近 count 笔的「Task trailer + 改动文件」，按 rev 建索引。
+
+    ★ 为什么批量（卡 E127 复盘实测）：replay() 原来每笔起**两次**子进程
+      （git show --name-only + git log -1 --format=trailers）。Windows 上每次约 0.086 s，
+      300 笔 ≈ 600 次 subprocess ≈ 50 s —— 窗口稍放大就贵到没人愿意开。改成一次
+      git log -z --name-only 批量读：n=20 0.12 s / n=60 0.22 s / n=100 0.37 s / n=300 0.42 s。
+      读数与逐笔两条命令**逐笔逐字一致** —— 由 tests/test_pytest_select.py
+      的 test_log_batch_agrees_with_the_per_commit_reads 在真历史上逐笔比对（rev / 文件列表 /
+      Task trailer 三样都要相等）。
+
+    记录之间用 NUL 分隔、记录头用  标记 ⇒ 文件名里有空格/引号都不用转义。解析不出来的
+    记录**不进**返回值，调用方按「缺的那笔回落到逐笔读」处理（批量只是加速，不是新的真相源）。
+    """
+    out = _git(
+        [
+            "log",
+            "-z",
+            f"-{int(count)}",
+            "--name-only",
+            "--format=%x01%h%x1f%(trailers:key=Task,valueonly)",
+        ],
+        root,
+    )
+    rows: dict[str, tuple[str, tuple[str, ...]]] = {}
+    for chunk in out.split("\x01"):
+        if not chunk.strip():
+            continue
+        head, _, rest = chunk.partition("\n")
+        rev, _, task = head.partition("\x1f")
+        rev = rev.strip()
+        if not rev:
+            continue
+        files = tuple(p.strip() for p in rest.split("\x00") if p.strip())
+        rows[rev] = (task.strip(), files)
+    return rows
+
+
 def replay(
     count: int = 20,
     *,
@@ -443,12 +481,19 @@ def replay(
     data = ledger if ledger is not None else load_ledger(base)
     index = ledger_index(data)
     revs = [r for r in _git(["log", "--format=%h", f"-{int(count)}"], base).splitlines() if r]
+    # 提交顺序仍由上面那条 log --format=%h 定（口径不变）；批量只负责把每笔的
+    # 「改动文件 + Task trailer」一次取回。批量里查不到的（解析失败/历史太短）回落到逐笔读。
+    batch = log_batch(len(revs), base)
     rows: list[ReplayRow] = []
     for rev in revs:
-        changed = git_changed(rev, base)
+        if rev in batch:
+            task, files = batch[rev]
+            changed = list(files)
+        else:
+            changed = git_changed(rev, base)
+            task = git_task(rev, base)
         code = code_paths(changed)
         sel = select(changed, root=base, ledger=data, nightly_ok=True)
-        task = git_task(rev, base)
         expected: set[str] = set()
         if code:
             if task and task in index.entry_tests:
