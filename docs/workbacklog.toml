@@ -5932,3 +5932,23 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E116"
+task = "T-AG623"
+title = "job_list与job_status对没派过的卡和没开始的日志都说错话"
+tree = ".wt/E116"
+spec = "复盘/卡/卡E116-job_list与job_status说错话.md"
+files = [
+  "tools/pool/jobs.py",
+  "tools/pool_mcp.py",
+  "tools/pool/registry.py",
+  "tests/test_pool_jobs.py",
+  "tests/test_pool_mcp.py",
+  "tests/test_pool_registry.py"
+]
+depends = [
+  "E115"
+]
+risk = "mid"
+status = "pending"
