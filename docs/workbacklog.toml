@@ -6066,3 +6066,17 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E122"
+task = "T-AG631"
+title = "rebase撞台账冲突时自动重放本笔翻账"
+tree = ".wt/E122"
+spec = "复盘/卡/卡E122-rebase撞台账冲突时自动重放本笔翻账.md"
+files = [
+  "tools/pool/landing.py",
+  "tests/test_landing_backlog_replay.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
