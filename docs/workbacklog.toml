@@ -6037,3 +6037,16 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E126"
+task = "T-AG635"
+title = "门禁里那条钉子只在验证当天绿：真表跑零容忍必红，第二天起任何卡都落不了地"
+tree = ".wt/E126"
+spec = "复盘/卡/卡E126-门禁里那条钉子只在验证当天绿，第二天起任何卡都落不了地.md"
+files = [
+  "tests/test_run_gates_proxy.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
