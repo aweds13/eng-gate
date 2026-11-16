@@ -6156,3 +6156,17 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E127"
+task = "T-AG636"
+title = "回放判据的窗口按总提交数算必然空转"
+tree = ".wt/E127"
+spec = "复盘/卡/卡E127-回放判据的窗口按总提交数算必然空转.md"
+files = [
+  "tools/pytest_select.py",
+  "tests/test_pytest_select.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
