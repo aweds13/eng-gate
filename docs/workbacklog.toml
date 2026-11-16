@@ -5989,3 +5989,21 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E117"
+task = "T-AG627"
+title = "skills里的号池命令跑不起来而检查器只认字符串"
+tree = ".wt/E117"
+spec = "复盘/卡/卡E117-skills里的号池命令跑不起来而检查器只认字符串.md"
+files = [
+  "tools/check_skills_claims.py",
+  "tests/test_check_skills_claims.py",
+  "skills/softeng-manage/references/dispatch.md",
+  "skills/pipe-card/references/repo-bindings.md"
+]
+depends = [
+  "E113"
+]
+risk = "mid"
+status = "pending"
