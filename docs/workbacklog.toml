@@ -6135,3 +6135,19 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E125"
+task = "T-AG634"
+title = "workbench_board 的 payload 太胖"
+tree = ".wt/E125"
+spec = "复盘/卡/卡E125-workbench_board的payload太胖.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_board.py",
+  "docs/全局面板.md",
+  "docs/decisions/0002-mcp-extension-slot.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
