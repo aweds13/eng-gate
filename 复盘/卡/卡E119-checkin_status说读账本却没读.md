@@ -172,7 +172,7 @@ tests/test_renew_lock.py:263
 3. `docs/subsystems/pool/README.md:159` 表行补「+ 账本 `health.last_checkin` / `last_probe`（只读，标明哪天的结论）」半句；`tools/pool_mcp.py:2845-2846` 的 `_initialize` instructions 同句跟着改（现在只写「读当天签到留档」）。
 4. `tests/test_pool_mcp_task.py`：判据 1-5 的五条新钉子（放在卡 E48 那段 `:826` 之后、卡 A364 那段 `:884` 之前）。
 5. 变异读数落 `gates/diag/` 下（文件名 `_rev_E119_result.txt`）。
-6. 卡规格 + 三片段由落地链 ② 文档件按台账号 `T-AG623` 自动生成；**落成前它们还不存在，所以这里不写死路径**。
+6. 卡规格 + 三片段由落地链 ② 文档件按台账号 `T-AG624` 自动生成；**落成前它们还不存在，所以这里不写死路径**。
 
 ## 验收（三条，落地前自跑，零手工步骤）
 
