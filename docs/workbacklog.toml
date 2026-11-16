@@ -6021,3 +6021,19 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E118"
+task = "T-AG628"
+title = "account_status 把「探过但没探到」洗成「未观测」"
+tree = ".wt/E118"
+spec = "复盘/卡/卡E118-account_status把探过但没探到洗成未观测.md"
+files = [
+  "tools/pool_accounts.py",
+  "tools/pool_mcp.py",
+  "tests/test_pool_accounts.py",
+  "docs/subsystems/pool/模型与号池.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
