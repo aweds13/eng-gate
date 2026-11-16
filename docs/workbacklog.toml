@@ -5969,3 +5969,23 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E114"
+task = "T-AG625"
+title = "号池工作台工具读的根不是调用方给的根"
+tree = ".wt/E114"
+spec = "复盘/卡/卡E114-工具读的根不是调用方给的根.md"
+files = [
+  "tools/pipe_root.py",
+  "tools/pool/task.py",
+  "tools/pool_mcp.py",
+  "tools/pool/plan.py",
+  "tests/test_pipe_root.py",
+  "tests/test_pool_task.py",
+  "tests/test_pool_mcp_task.py",
+  "复盘/卡/卡E114-工具读的根不是调用方给的根.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
