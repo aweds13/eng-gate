@@ -6050,3 +6050,19 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E120"
+task = "T-AG629"
+title = "gate_pool 把「读不到」洗成「读到空」：队列/日志/播种源/槽位/锁 六类静默"
+tree = ".wt/E120"
+spec = "复盘/卡/卡E120-gate_pool把读不到洗成读到空.md"
+files = [
+  "tools/gate_pool.py",
+  "tests/test_gate_pool.py",
+  "tests/test_cloud_product_freshness.py",
+  "scripts/cloud/run_gate.sh"
+]
+depends = []
+risk = "mid"
+status = "pending"
