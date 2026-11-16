@@ -6080,3 +6080,21 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E121"
+task = "T-AG630"
+title = "号池账本 health 三键没有写方"
+tree = ".wt/E121"
+spec = "复盘/卡/卡E121-号池账本health三键没有写方.md"
+files = [
+  "tools/pool_accounts.py",
+  "tests/test_pool_accounts.py",
+  "tests/test_pool_checkin.py",
+  "docs/subsystems/pool/模型与号池.md"
+]
+depends = [
+  "E118"
+]
+risk = "mid"
+status = "pending"
