@@ -43,7 +43,7 @@ def _line_of(text: str, needle: str) -> int:
 def _tree(tmp_path: Path, body: str, *, tool: str = "wb_plan.py") -> Path:
     """造一棵假仓：`skills/fake/SKILL.md` + `tools/<tool>`。"""
     skill_dir = tmp_path / "skills" / "fake"
-    skill_dir.mkdir(parents=True)
+    skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / "SKILL.md").write_text(_doc(body), encoding="utf-8")
     (tmp_path / "tools").mkdir(exist_ok=True)
     (tmp_path / "tools" / tool).write_text(TOOL_SRC, encoding="utf-8")
@@ -268,3 +268,116 @@ def test_report_mode_is_still_red_on_real_drift(tmp_path, monkeypatch, capsys) -
     assert rc == 1, out  # report 只放过「判不出」，不放过「对不上」
     assert "参数不存在：--gone" in out
     assert "[FAIL]" in out, out
+
+
+# ------------------------------------------------------------------ 卡 E117：required / 子命令
+
+REQ_SRC = """import argparse
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--card", required=True)
+ap.add_argument("--model", required=True)
+ap.add_argument("--json", action="store_true")
+"""
+
+SUB_SRC = """import argparse
+
+ap = argparse.ArgumentParser()
+sub = ap.add_subparsers(dest="cmd", required=True)
+sub.add_parser("status")
+sub.add_parser("line")
+"""
+
+UNREADABLE_SRC = """import argparse
+
+FLAG = True
+ap = argparse.ArgumentParser()
+ap.add_argument("--card", required=FLAG)
+ap.add_argument("--json", action="store_true")
+"""
+
+POSITIONAL_SRC = """import argparse
+
+ap = argparse.ArgumentParser()
+ap.add_argument("command")
+ap.add_argument("--json", action="store_true")
+"""
+
+
+def _tool(tmp_path: Path, src: str, tool: str = "wb_plan.py") -> None:
+    """把夹具里的工具源码换成指定形状（`_tree` 先铺默认那份）。"""
+    (tmp_path / "tools" / tool).write_text(src, encoding="utf-8")
+
+
+def test_missing_required_flag_is_named(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """★ 卡 E117 判据 2：`required=True` 的 flag 没写 ⇒ 退 1，点名缺哪几个。
+
+    这就是卡 E117 的起因：`pool_quota.py status` 少了 `--card / --model`，
+    旧尺子只核「这个字符串在源码里出现过」，于是照样判绿。
+    """
+    body = "```bash\npython -X utf8 tools/wb_plan.py status\n```"
+    _tree(tmp_path, body)
+    _tool(tmp_path, REQ_SRC)
+    rc, out = _run(tmp_path, monkeypatch, capsys)
+    assert rc == 1, out
+    assert "缺必填参数：--card、--model" in out, out
+    # 写全了就不许再报（别把正确的判红）
+    body2 = "```bash\npython -X utf8 tools/wb_plan.py status --card x --model m\n```"
+    _tree(tmp_path, body2)
+    _tool(tmp_path, REQ_SRC)
+    rc2, out2 = _run(tmp_path, monkeypatch, capsys)
+    assert rc2 == 0, out2
+    assert "对得上 1" in out2, out2
+
+
+def test_unknown_subcommand_is_named(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """★ 卡 E117 判据 3：子命令拼错 ⇒ 退 1 点名；拼对 ⇒ 退 0。
+
+    旧尺子对「`pool_quota.py statuss`」与「`pool_quota.py status`」给的是同一个判决。
+    """
+    body = "```bash\npython -X utf8 tools/wb_plan.py statuss\n```"
+    _tree(tmp_path, body)
+    _tool(tmp_path, SUB_SRC)
+    rc, out = _run(tmp_path, monkeypatch, capsys)
+    assert rc == 1, out
+    assert "子命令不存在：statuss" in out, out
+    body2 = "```bash\npython -X utf8 tools/wb_plan.py status\n```"
+    _tree(tmp_path, body2)
+    _tool(tmp_path, SUB_SRC)
+    rc2, out2 = _run(tmp_path, monkeypatch, capsys)
+    assert rc2 == 0, out2
+
+
+def test_unreadable_required_is_not_verified(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """★ 卡 E117 判据 4：`required=` 不是字面量 ⇒ 记「判不出」，不许静默当 OK。
+
+    静默跳过长什么样已经量过：尺子不动、读数全绿 —— 那是尺子被弯了，不是判据成立。
+    """
+    body = "```bash\npython -X utf8 tools/wb_plan.py status\n```"
+    _tree(tmp_path, body)
+    _tool(tmp_path, UNREADABLE_SRC)
+    rc, out = _run(tmp_path, monkeypatch, capsys)
+    assert rc == 3, out
+    assert "判不出 1" in out, out
+    assert "取不到 required" in out, out
+    assert "[OK" not in out, out
+    # report 档：不红（rc=0）但读数照打
+    rc2, out2 = _run(tmp_path, monkeypatch, capsys, mode="report")
+    assert rc2 == 0, out2
+    assert "判不出 1" in out2, out2
+
+
+def test_positional_is_never_treated_as_required(tmp_path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """★ 卡 E117 的反例钉：位置参数**不算**必填。
+
+    原型把「位置参数（`nargs` 缺省）⇒ 必填」也算进去，真仓额外新红 27 条 ——
+    全是 `tools/pipeline_view.py --json` 这类正确写法（那个 `command` 来自它 import 的
+    `tools/wb_plan.py`，本文件的 parser 里一次都没出现）。跨文件归属一错就冤枉一片，
+    所以这支判据不做；这条钉把它钉死，别有人「顺手补全」。
+    """
+    body = "```bash\npython -X utf8 tools/wb_plan.py --json\n```"
+    _tree(tmp_path, body)
+    _tool(tmp_path, POSITIONAL_SRC)
+    rc, out = _run(tmp_path, monkeypatch, capsys)
+    assert rc == 0, out
+    assert "对得上 1" in out, out

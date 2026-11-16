@@ -60,6 +60,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import sys
@@ -100,6 +101,7 @@ class Claim:
     tool: str
     command: str
     flags: list[str] = field(default_factory=list)
+    args: str = ""
     problems: list[str] = field(default_factory=list)
     unverifiable: list[str] = field(default_factory=list)
     exempt_reason: str = ""
@@ -320,11 +322,285 @@ def scan(root: Path, exempt: dict[str, str] | None = None) -> Report:
                     tool=match.group("name"),
                     command=f"python -X utf8 tools/{match.group('name')} {args}".strip(),
                     flags=_flags_of(args),
+                    args=args,
                 )
                 _judge(claim, root, exempt, hit)
                 report.claims.append(claim)
     report.unused_exempt = sorted(set(exempt) - hit)
     return report
+
+
+# ---------------------------------------------------------------- 判据 2/3/4（卡 E117）
+
+
+@dataclass
+class ParserFacts:
+    """一支 parser 在这份源码里能判出来的东西。
+
+    ★ 只有 required=True **字面量**算必填；required=FLAG 这种取不到的进
+    unknown_required，由调用方记「判不出」—— 静默跳过就是把「没判」洗成「判过了」。
+    ★ 位置参数**不算**必填（卡 E117 实测）：真仓按位置参数算会多红 27 条正确写法，
+    例如 tools/pipeline_view.py --json —— 那个 command 来自它 import 的
+    tools/wb_plan.py，跨文件 parser 归属一错就冤枉一片。
+    ★ 必填参数要按子命令分账（sub_required）：tools/pool/task.py 里 --reason 属于 waive、
+    --to 属于 extend、--commit 属于 landed；合成一张全局表会把每条子命令都判成缺三个参数。
+    """
+
+    flags: set[str] = field(default_factory=set)
+    required: set[str] = field(default_factory=set)
+    sub_required: dict[str, set[str]] = field(default_factory=dict)
+    unknown_required: list[str] = field(default_factory=list)
+    sub_unknown: dict[str, list[str]] = field(default_factory=dict)
+    unknown_flags: bool = False
+    subcommands: set[str] | None = None
+    has_subparsers: bool = False
+
+    @property
+    def judges_anything(self) -> bool:
+        """这支 scope 里到底有没有 parser 可判（没有就别拿它判人）。"""
+        return bool(self.flags or self.required or self.has_subparsers or self.unknown_flags)
+
+    def required_for(self, subcommand: str | None) -> tuple[set[str], list[str]]:
+        """这条命令该满足的必填：子命令自己那份 + 全局那份；取不到的单独回。"""
+        need = set(self.required)
+        unknown = list(self.unknown_required)
+        if subcommand is not None and subcommand in self.sub_required:
+            need |= self.sub_required[subcommand]
+            unknown += self.sub_unknown.get(subcommand, [])
+        return need, unknown
+
+
+_SKIP_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+
+
+def _walk_ordered(node: ast.AST) -> list[ast.AST]:
+    """按源码顺序铺平：**不进**嵌套的函数/类/lambda。
+
+    ★ 分作用域是判据的一部分：把 tools/pool/task.py 里各函数复用的 p = sub.add_parser
+    合成一张表，实测会多出 181 条假红；把所有 add_parser 并进一张词表，会把
+    tools/wb_plan.py 的 22 条引用判成「子命令不存在」。顺序也是判据：
+    「p = sub.add_parser(某名字)」之后那些 p.add_argument 才属于那条子命令。
+    """
+    out: list[ast.AST] = []
+    stack: list[ast.AST] = [node]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, _SKIP_NODES) and current is not node:
+            continue
+        out.append(current)
+        stack.extend(reversed(list(ast.iter_child_nodes(current))))
+    return out
+
+
+def _literal_str(node: ast.AST | None) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _str_seq(node: ast.AST | None) -> list[str]:
+    """(“a”, “b”) / [“a”] 这种字面量序列 ⇒ 名字表；取不全就回空。"""
+    if not isinstance(node, ast.Tuple | ast.List | ast.Set):
+        return []
+    out: list[str] = []
+    for item in node.elts:
+        text = _literal_str(item)
+        if text is None:
+            return []
+        out.append(text)
+    return out
+
+
+def _keyword(call: ast.Call, name: str) -> ast.AST | None:
+    for kw in call.keywords:
+        if kw.arg == name:
+            return kw.value
+    return None
+
+
+def _add_subcommand(
+    node: ast.AST, loop_vars: dict[str, list[str]], facts: ParserFacts
+) -> str | None:
+    """读一条 sub.add_parser(...)：登记词表，并回它绑定的子命令名字（取不全 ⇒ None）。"""
+    facts.has_subparsers = True
+    names: list[str] = []
+    if isinstance(node, ast.Call) and node.args:
+        single = _literal_str(node.args[0])
+        names = [single] if single else _str_seq(node.args[0])
+        if not names and isinstance(node.args[0], ast.Name):
+            names = loop_vars.get(node.args[0].id, [])
+    if facts.subcommands is None:
+        facts.subcommands = set()
+    if not names:
+        facts.subcommands = None  # 词表取不全 ⇒ 这支 scope 不判子命令
+        return None
+    facts.subcommands |= set(names)
+    return names[0] if len(names) == 1 else None
+
+
+def _read_add_argument(call: ast.Call, facts: ParserFacts, sub: str | None) -> None:
+    """读一条 add_argument(...)：flag / 必填 / 取不到 required / 位置参数的 choices。"""
+    if not call.args:
+        facts.unknown_flags = True
+        return
+    name = _literal_str(call.args[0])
+    if name is None:
+        facts.unknown_flags = True
+        return
+    facts.flags.add(name)
+    if not name.startswith("-"):
+        choices = _str_seq(_keyword(call, "choices"))
+        if choices:
+            facts.has_subparsers = True
+            bucket = set(choices)
+            facts.subcommands = bucket if facts.subcommands is None else facts.subcommands | bucket
+        return
+    for kw in call.keywords:
+        if kw.arg != "required":
+            continue
+        if isinstance(kw.value, ast.Constant) and kw.value.value is False:
+            continue
+        mandatory = isinstance(kw.value, ast.Constant) and kw.value.value is True
+        if sub is None:
+            if mandatory:
+                facts.required.add(name)
+            else:
+                facts.unknown_required.append(name)
+        elif mandatory:
+            facts.sub_required.setdefault(sub, set()).add(name)
+        else:
+            facts.sub_unknown.setdefault(sub, []).append(name)
+
+
+def _scope_facts(stmts: list[ast.stmt]) -> ParserFacts:
+    """读一个作用域（模块体 / 某个顶层函数的 body）里的 parser 形状。"""
+    facts = ParserFacts()
+    nodes = _walk_ordered(ast.Module(body=stmts, type_ignores=[]))
+    loop_vars: dict[str, list[str]] = {}
+    sub_vars: dict[str, str] = {}
+    for node in nodes:
+        if isinstance(node, ast.For) and isinstance(node.target, ast.Name):
+            names = _str_seq(node.iter)
+            if names:
+                loop_vars[node.target.id] = names
+    for node in nodes:
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            attr = getattr(node.value.func, "attr", "")
+            if attr == "add_parser":
+                sub = _add_subcommand(node.value, loop_vars, facts)
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and sub is not None:
+                        sub_vars[target.id] = sub
+            continue
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        attr = node.func.attr
+        owner = node.func.value
+        sub = sub_vars.get(owner.id) if isinstance(owner, ast.Name) else None
+        if attr == "add_argument":
+            _read_add_argument(node, facts, sub)
+        elif attr == "add_subparsers":
+            facts.has_subparsers = True
+        elif attr == "add_parser":
+            _add_subcommand(node, loop_vars, facts)
+    return facts
+
+
+def _ordered_sources(sources: dict[Path, str], main: Path) -> list[tuple[Path, str]]:
+    """主文件在前，转发模块在后（子命令词表优先取主文件那份）。"""
+    out: list[tuple[Path, str]] = []
+    if main in sources:
+        out.append((main, sources[main]))
+    out.extend((p, s) for p, s in sources.items() if p != main)
+    return out
+
+
+def _parser_candidates(sources: dict[Path, str], main: Path) -> list[ParserFacts]:
+    """所有可判的 parser 候选：模块体 + 每个**顶层**函数各算一支。
+
+    「任一候选能接受这条命令」就算结构上站得住 —— 宁可少报，也不许冤枉正确写法。
+    ★ 主文件一支都判不出时才退到转发模块（tools/wb_task.py 自己不建 parser，
+    但它 import 了 wb_plan.py 与 pool/task.py 两支；只取第一支会把 13 条正确子命令判红）。
+    """
+    out: list[ParserFacts] = []
+    for path, src in _ordered_sources(sources, main):
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:  # 读不懂的源码不拿它判人
+            continue
+        funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)]
+        found: list[ParserFacts] = []
+        for scope in [tree.body] + [n.body for n in funcs]:
+            facts = _scope_facts(scope)
+            if facts.judges_anything:
+                found.append(facts)
+        out.extend(found)
+        if path == main:
+            continue
+    return out
+
+
+def _positionals(args: str) -> list[str]:
+    """命令里的位置 token（跳过 --flag 与它后面那个值；--flag=value 整个跳过）。"""
+    tokens = args.split()
+    out: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index].strip(chr(96) + chr(39) + chr(34))
+        index += 1
+        if token.startswith("-") and len(token) > 1:
+            if "=" not in token and index < len(tokens) and not tokens[index].startswith("-"):
+                index += 1
+            continue
+        if token:
+            out.append(token)
+    return out
+
+
+#: 这几种命令不拿 parser 判（判据 2 的四条红线）。
+_HELP_RE = re.compile(r"(?:^|\s)(?:--help|-h|--preflight|--precheck)(?:\s|$)")
+
+
+def _skip_parser_judging(claim: Claim) -> bool:
+    """裸工具名 / 问帮助 / 含占位符 ⇒ 不判必填与子命令（这些命令本来就不是要跑的那条）。"""
+    if not claim.args.strip():
+        return True
+    if _HELP_RE.search(claim.args):
+        return True
+    return PLACEHOLDER.search(claim.command) is not None
+
+
+def _judge_parsers(claim: Claim, candidates: list[ParserFacts]) -> None:
+    """判必填参数与子命令：任一候选接受就算过；全都不接受才红，全都不敢判才算判不出。"""
+    if not candidates:
+        return
+    positionals = _positionals(claim.args)
+    first = positionals[0] if positionals else None
+    missing: list[str] = []
+    unknown: list[str] = []
+    bad_sub: list[str] = []
+    for facts in candidates:
+        knows_subs = facts.has_subparsers and facts.subcommands and first is not None
+        if knows_subs and first not in facts.subcommands:
+            bad_sub.append(first)
+            continue
+        sub = first if knows_subs else None
+        need, unsure = facts.required_for(sub)
+        cand_missing = sorted(f for f in need if f not in claim.flags)
+        # ★ 判据 4：required 非字面 ⇒ 就算这条命令把那个 flag 写上了，也证明不了它还缺别的
+        #   —— 记判不出，不许因为「看起来写全了」就当判过了。
+        cand_unknown = sorted(unsure)
+        missing.extend(cand_missing)
+        unknown.extend(cand_unknown)
+        if not cand_missing and not cand_unknown:
+            return
+    if missing:
+        claim.problems.append("缺必填参数：" + "、".join(sorted(set(missing))))
+    if bad_sub:
+        claim.problems.append("子命令不存在：" + "、".join(sorted(set(bad_sub))))
+    if not missing and not bad_sub and unknown:
+        claim.unverifiable.append("取不到 required：" + "、".join(sorted(set(unknown))))
+
 
 
 def _judge(claim: Claim, root: Path, exempt: dict[str, str], hit: set[str]) -> None:
@@ -339,6 +615,8 @@ def _judge(claim: Claim, root: Path, exempt: dict[str, str], hit: set[str]) -> N
         for flag in claim.flags:
             if not any(_flag_registered(src, flag) for src in sources.values()):
                 claim.problems.append(f"参数不存在：{flag}（tools/{claim.tool} 里没注册）")
+        if not _skip_parser_judging(claim):
+            _judge_parsers(claim, _parser_candidates(sources, root / "tools" / claim.tool))
 
     marker = PLACEHOLDER.search(claim.command)
     if marker:

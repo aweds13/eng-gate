@@ -23,6 +23,11 @@
 - `tools/pool/task.py` 的相对路径分支改成按**给 git 的那个 cwd**（树根）拼，与 `tools/pool/registry.py` 对齐；`batch_dir()` / `manifest_path()` / `state_path()` / `inbox_dir()` / `pool_path()` 都收 `root=None`，`TF_BATCH_DIR` 仍排第一。
 - `tools/pool_mcp.py` 的三个任务面与 `pool_plan` 把调用方 root 传真下去：从 profile 目录拉起不再回「一个任务都没有」；`plan_report()` 判「规格读不读得到」的根也跟着 root。
 - `tool_checkin_status` 的读端落到签到写入端同一个根（`pool_accounts.DATA_ROOT`），读端与写端不再各锚一棵树；显式给别棵树时仍尊重它。
+## 2026-11-16 T-AG627 skills里的号池命令跑不起来而检查器只认字符串
+- `tools/check_skills_claims.py` 加两条尺子：缺必填参数（把 `--flag` 点名）与子命令不存在（词表来自 `add_subparsers` / `add_parser` 或 `choices=`），结论 append 进 `claim.problems`，三态与 `EXEMPT` 语义自动继承。
+- `required=` 只认字面 True；非字面进 `unknown_required` ⇒ 记「判不出」并点名哪个 flag 取不到 —— 不许因为命令里写上了它就当判过。
+- `skills/softeng-manage/references/dispatch.md` 的两条 `pool_quota.py status`（原本 rc=2，缺 `--card` / `--model`）改成 `line`，并补一条带齐必填的 `status --card … --model …` 示例。
+- `skills/pipe-card/references/repo-bindings.md:30` 从整条干命令改成字段清单（`--id` / `--task` / `--title` / `--spec` 必填）—— 「整条命令」那种形态会新增一条判不出。
 ## 2026-11-10 T-AG610 契约对账表装牙：表里每一格都由工具现读，漂了就红
 - `tools/contract_audit.py` 新增 `--check-doc`（配 `--doc`）：**不跑判据**，逐格把 `复盘/契约-判据对账.md` 与活体比对 —— 源格 `path:line` 行号、原句格是否源文档那一行的子串（归一后、长度 ≥ 8）、判据格字样（pytest 带 `tests/` 前缀、cmd 去 `python -X utf8`、允许「同 CX-0N」）、段标题与读数块写的条数。全对 0 / 有漂 1（逐条点名 CX 与行号）/ 表读不出来 2。
 - 口径只在模块 docstring 写一份（§表格自检），实现读那一份：**不许**在测试里另抄一份「表该长什么样」。

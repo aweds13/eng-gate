@@ -27,7 +27,7 @@ python -X utf8 tools/wb_batch.py plan            # 攒批（plan / make / land /
 
 ## 立卡的退码与字段
 
-- `python -X utf8 tools/wb_card.py add`：`--id` / `--task` / `--title` / `--spec` 必填，
+- 立卡子命令 `add` 的字段：`--id` / `--task` / `--title` / `--spec` 必填，
   另有 `--file` / `--depends` / `--risk {low,mid,high}`（默认 `mid`）/ `--status` / `--wait` / `--commit`。
 - **退 1** = 台账不是纯 CRLF（**不写盘**）；**退 2** = 等不到锁。两种都别手改台账对齐。
 - 属性来自生产代码：`tools/pool/ledger.py`（台账锁跨会话互斥 / 块级幂等 / 尾部按字节追加 / 原子替换带重试）。

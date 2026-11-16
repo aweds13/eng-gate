@@ -45,7 +45,7 @@
 
 1. **漏登记**：队列里没有、但卡树 / 台账里有的卡（写了卡没写预声明那一族）——读 `python -X utf8 tools/pipeline_view.py --json` 的 `cards` 块对得上对不上。
 2. **积压**：`pending` 卡住不动的卡（挂了多久、谁该派没派）——`python -X utf8 tools/wb_daily.py` 的「待派」分区。
-3. **配额**：各号池额度处在哪一态——`python -X utf8 tools/pool_quota.py status`（四态判见下文 QU2）。
+3. **配额**：各号池额度处在哪一态——`python -X utf8 tools/pool_quota.py line`（一行说完在飞卡的额度；四态判见下文 QU2）。
 
 三条不许揉成一句「巡检正常」；哪条空了就如实写「空」。证据：`复盘/卡/卡220-定时巡检让每日一批自己跑.md`、`复盘/并行与攒批模型.md`
 
@@ -74,10 +74,10 @@
 ## 额度与收口
 
 1. **额度按钟表算**（缺口 QU1）：额度按钟表算（记录时刻 vs 现在），不按「上次探测 + 固定间隔」；否则会判成「还在限流」并空转等待。
-   操作：看额度用 `python -X utf8 tools/pool_quota.py status`；别自己估间隔。
+   操作：看额度用 `python -X utf8 tools/pool_quota.py line`；要看某一张卡某一格的四态用 `status --card <卡号> --model <模型>`；别自己估间隔。
    证据：`复盘/卡/卡201-额度按钟表算.md`、`复盘/交接.d/T-G305.md`
 2. **429 要四态判**（缺口 QU2）：429/限流要四态判（限流中 / 已过期需重探 / 余额耗尽 / 未记录），不许一个「限流中」盖住全部。
-   操作：429 后先 `python -X utf8 tools/pool_quota.py status` 分清是哪一态，再决定重派 / 换号 / 停手；回报里写清是哪一态。
+   操作：429 后先 `python -X utf8 tools/pool_quota.py status --card E113 --model deepseek-v4.1-flash` 分清是哪一态，再决定重派 / 换号 / 停手；回报里写清是哪一态。
    证据：`复盘/问题清单-组5.md`、`复盘/卡/卡029-派活器三合一.md`、`复盘/派活器三合一-T-G114.md`
 3. **收口按增量门禁跑**（缺口 PO7）：收口按增量门禁跑（只跑受影响的输入面），跳过的必须记账，否则等于没跑。
    操作：收口给 `python -X utf8 tools/pool/landing.py ... --affected <路径>`；跳过的门会进 trailer 的「非全量」字样，回报照实写，别当全量读数。

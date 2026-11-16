@@ -12156,3 +12156,22 @@ evidence = [
   "test:test_pool_mcp_task.py::test_checkin_read_side_lands_on_the_write_side",
 ]
 gaps = "1. 判据 3 的分叉靠「调用方给的 root 是不是等于模块级 ROOT」来认「这就是服务端那条路」—— 这是**推定**，不是显式信号：将来任何别的入口传一个恰好等于 ROOT 的路径，读端会悄悄换根，而没有任何一行日志说明它换过。指针 `tools/pool_mcp.py`2. 只修了「读」这一半：`tools/pool/task.py` 的 `batch_dir()` 现在认 root，但 task.py 内部 6 处调用（register / claim / find_gates_for_member / draft / why 等）仍旧走默认根 —— 从卡树里跑 `task.main([「register」, …])` 仍然写主树。指针 `tools/pool/task.py`3. `tools/pool/plan.py` 只有 spec 读取跟了 root：`audit_batch_claims()`、`_fence_batch_dir()`、`find_spec()` 还只认模块级 ROOT，判据根在「批量申请审计」这条链上仍可能与调用方给的根不是同一棵。指针 `tools/pool/plan.py`"
+
+[entries."T-AG627"]
+id = "T-AG627"
+title = "skills里的号池命令跑不起来而检查器只认字符串"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/check_skills_claims.py",
+  "file:tests/test_check_skills_claims.py",
+  "file:skills/softeng-manage/references/dispatch.md",
+  "file:skills/pipe-card/references/repo-bindings.md",
+  "text:tools/check_skills_claims.py::def _judge_parsers(claim: Claim, candidates: list[ParserFacts]) -> None:",
+  "text:tools/check_skills_claims.py::def _scope_facts(stmts: list[ast.stmt]) -> ParserFacts:",
+  "test:test_check_skills_claims.py::test_missing_required_flag_is_named",
+  "test:test_check_skills_claims.py::test_unknown_subcommand_is_named",
+  "test:test_check_skills_claims.py::test_unreadable_required_is_not_verified",
+  "test:test_check_skills_claims.py::test_positional_is_never_treated_as_required",
+]
+gaps = "1. `required=` 只认字面 True，`required=FLAG` 这类一律记「判不出」（今天 78 条里的新增一条就来自这种形态）—— 它证明不了「这条命令写全了」，但也证明不了「还缺什么」，所以永远进不了 FAIL 档。指针 `tools/check_skills_claims.py`2. 子命令词表按「任一 parser 候选接受就算过」合并主文件与 import 链（IMPORT_DEPTH=2）：一个薄壳工具（`tools/wb_task.py` 转发 `tools/pool/task.py`）的子命令既可能被主文件的表放行、也可能被转发模块放行，判据宽松的那一侧说了算。指针 `tools/check_skills_claims.py`3. 位置参数一支**不做**：原型把「`nargs` 缺省 ⇒ 必填」算进去，真仓额外多红 27 条，全是 `tools/pipeline_view.py --json` 这类正确写法（那个 `command` 来自它 import 的 `tools/wb_plan.py:1054`）—— 跨文件归属修对之前不碰，本卡加了一条反例钉把它钉死。指针 `tests/test_check_skills_claims.py`"
