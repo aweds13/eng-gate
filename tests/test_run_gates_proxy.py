@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import ast
 import subprocess
 import sys
 from datetime import date, timedelta
@@ -147,19 +148,19 @@ def test_days_zero_also_turns_the_gate_red(tmp_path: Path) -> None:
     ★ 卡 E113（`T-AG622`）修正：原版拿**真登记表**跑 `--days 0`，却把「真表恰好比今天旧」
       当成了前提 —— 重验把 `last_verified` 改成今天之后，`age = 0` ⇒ `expired = False` ⇒ 门变绿，
       这条钉子自己红了（红的是钉子，不是门）。现在自造一份「全部昨天验证」的表，前提写在夹具里。
-      真表在 `--days 0` 上变绿是**对的**：今天正是它的验证日。
+
+    ★ 卡 E126（`T-AG635`）删掉后半截：E113 还留着 `rc2 == 0` 打**真登记表**跑 `--days 0`
+      的断言，而那一条只在 `last_verified == 今天` 当天成立 —— 次日 00:00 起必红
+      （实测 2026-11-17：五条全「过期 1 天」，`assert 1 == 0`）。它挡的不是一张卡：
+      每张卡落地都要烧一次全量 pytest 再红在这条与本卡无关的钉子上。
+      真表新鲜由 `test_real_map_makes_the_gate_green`（默认 30 天）负责；
+      真表的**零容忍**结论随运行日变化，不是可断言的常量 ⇒ 后半截整段删除，不改成 `--days 30`。
     """
     yesterday = (date.today() - timedelta(days=1)).isoformat()
     stale = _map_with_all_entries_dated(tmp_path, yesterday)
     rc, out = _run(_gate_command(), "--days", "0", "--map", str(stale))
     assert rc != 0, out
     assert "过期" in out, out
-
-    rc2, out2 = _run(_gate_command(), "--days", "0")
-    assert rc2 == 0, (
-        "真表今天就是验证日（last_verified = 今天）⇒ --days 0 下 age = 0 ⇒ 应当新鲜；"
-        f"若这里红了，说明真表的日期又过期了，该去重验而不是改这条钉子：\n{out2}"
-    )
 
 
 # ------------------------------------------------------------------ 反例：删表 / 坏 TOML ⇒ 红并点名
@@ -180,3 +181,37 @@ def test_broken_toml_goes_red_and_names_the_file(tmp_path: Path) -> None:
     rc, out = _run(_gate_command(), "--map", str(bad))
     assert rc != 0, out
     assert "TOML 坏了" in out and "proxy-map.toml" in out, out
+
+# ------------------------------------------ 机器钉子：不许再拿真表跑零容忍（卡 E126 · T-AG635）
+
+def test_no_zero_tolerance_call_against_the_real_map() -> None:
+    """★ 零容忍阈值（`--days 0`）只许打在**自造**登记表上（同一次调用带 `--map`）。
+
+    真表的 `last_verified` 是日期，零容忍的结论**随运行日变化** —— 今天绿、明天红。
+    卡 E113 留下的那半截就是这么长出来的：它只在验证当天成立，却写成永久断言，
+    结果次日 00:00 起每张卡落地都烧一次全量 pytest 再红在这条与本卡无关的钉子上
+    （现场 `gates/diag/land-E118.log`）。这里扫**全仓** `tests/**/*.py`（现读，不写死清单）：
+    同一个调用里同时出现字面量 `--days` 与 `0`、且**不含** `--map` ⇒ 红并点名 文件:行号。
+    """
+    offenders: list[str] = []
+    for path in sorted((ROOT / "tests").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError as exc:  # 语法坏的文件本来就该由别的门报，这里不吞
+            raise AssertionError(f"{path.relative_to(ROOT)} 解析不了：{exc}") from exc
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            vals: set[str] = set()
+            for arg in [*node.args, *(kw.value for kw in node.keywords)]:
+                for sub in ast.walk(arg):
+                    if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                        vals.add(sub.value)
+            if "--days" in vals and "0" in vals and "--map" not in vals:
+                rel = path.relative_to(ROOT)
+                offenders.append(f"{rel}:{node.lineno}")
+    assert not offenders, (
+        "零容忍（--days 0）打在了**没有 --map** 的调用上 ⇒ 那是拿真登记表断言「今天」：\n  "
+        + "\n  ".join(offenders)
+        + "\n修法：自造一份登记表并带 --map（日期由夹具控制），真表新鲜交给默认 30 天那条钉子。"
+    )

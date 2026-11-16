@@ -1,3 +1,8 @@
+## 2026-11-17 T-AG635 门禁里那条钉子只在验证当天绿：删掉真表零容忍断言，加机器钉子拦住同类
+- 删掉 test_days_zero_also_turns_the_gate_red 的后半截（拿真登记表跑 `--days 0` 断言 `rc == 0`），理由写进 docstring：真表的零容忍结论随运行日变化，不是可断言的常量
+- 新增 test_no_zero_tolerance_call_against_the_real_map：ast 扫全仓 tests/**/*.py，同一个调用里同时有 `--days` 与 `0` 却不带 `--map` ⇒ 红并点名 文件:行号
+- 自造「全部昨天验证」表的另一半原样保留，真表新鲜仍由 test_real_map_makes_the_gate_green（默认 30 天）负责
+- tools/proxy_audit.py、DEFAULT_DAYS、门命令、docs/proxy-map.toml 一个字节没改
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。
