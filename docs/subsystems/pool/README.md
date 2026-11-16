@@ -84,7 +84,7 @@
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
 | 实现体量 | **19665 行** / **46 个文件**（45 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 363 张（350 done / 13 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 队列卡数 | 363 张（351 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |
@@ -156,7 +156,7 @@ pool 只做**派活与收口**。下面三张表是全卡的主判据：写偏�
 | `tools/pool/models.py` / `model_registry.py` | `tools/wb_state.py`、`tools/wb_dispatch.py` | `wb_state.py:70`（惰性 import）、`wb_dispatch.py:123` |
 | `tools/pool/projects.py` | `tools/wb_project.py` | `wb_project.py:30` —— `from pool import projects, registry` |
 | `tools/pool/platforms.toml` / `tools/pool_accounts.py` | `tools/pool_mcp.py`（`account_status`） | `pool_mcp.py` 的 `tool_account_status()` —— `import pool_accounts`，MCP 面只读账本、不探测不联网 |
-| `tools/pool/checkin.py` / `gates/diag/checkin-<日期>.json` | `tools/pool_mcp.py`（`checkin_status`）+ `tools/wb_daily.py`（一行） | 只读**留档**：MCP 与今日一页都不触发签到、不联网；真要签得人跑 `pool_accounts.py checkin --all` |
+| `tools/pool/checkin.py` / `gates/diag/checkin-<日期>.json` | `tools/pool_mcp.py`（`checkin_status`）+ `tools/wb_daily.py`（一行） | 只读**留档** + 账本 `health.last_checkin` / `last_probe`（结论码可能是旧的，标明是哪天的，别当今天）：MCP 与今日一页都不触发签到、不联网；真要签得人跑 `pool_accounts.py checkin --all` |
 | `tools/pool/trae_dispatch.py` | **无**（刻意不接进派活，卡 218 已裁定） | 全仓 `grep -rn trae_dispatch` 只命中 `tests/test_trae_dispatch.py` |
 
 ### 表 B · pool 不做的事（每条写「归谁」+ 证据）

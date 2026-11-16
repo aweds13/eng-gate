@@ -8,6 +8,11 @@
 - `can_dispatch` 改三值：限流中 `False`（reset_at 还在未来 ⇒ 确定不能派），其余三态 `None`（不知道 —— 要探）；新增 `can_dispatch_reason` 把判词写清楚。机器块里的 `null` 不再退化成 `false`。
 - `status()` 新增 `probe` 键（command / hint / platform），平台取记录里的池名；MCP 的 description 跟着说清「命令是输出，不是入参」。四态字面量与「判据：」那一行一字未改。
 - 文档两处：`docs/subsystems/pool/模型与号池.md` 加一行操作（探哪条、写仓外账本、不改派生状态文件）；`复盘/Trae-接入结论.md` 的逐字输出块不动，只在后面加一条带日期与卡号的补注。
+## 2026-11-16 T-AG624 checkin_status 说读账本却只读留档：今天没签到时，它把 22 天前的结论码当成今天的
+- `checkin_status` 的 payload 把两件事分开：`archive` / `found` 说的是**本树留档**，新增 `ledger` / `ledger_found` / `ledger_rows` / `ledger_error` 说的是**仓外账号账本**；账本读不了只写进 `ledger_error`，不把整个读数翻成失败。
+- 每个号交 `last_checkin`（结论码）、`last_probe`（时刻）、`last_probe_date`、`is_today`（仅当 `last_probe` 的日期等于今天才是 True），人话段写「最近一次问是 <日期> · <结论码>（不是今天的结论，别当今天的）」。
+- 留档路径那一行标明「**本树**的留档；换一棵树读的是另一份」，尾句从「不联网」扩成「不触发签到、不联网、不写账本」。
+- 三处文案跟着改：`tools/pool_mcp.py` 的工具 description、`_initialize` 的 instructions、`docs/subsystems/pool/README.md` 的表行；都只陈述现在真读什么。
 ## 2026-11-10 T-AG610 契约对账表装牙：表里每一格都由工具现读，漂了就红
 - `tools/contract_audit.py` 新增 `--check-doc`（配 `--doc`）：**不跑判据**，逐格把 `复盘/契约-判据对账.md` 与活体比对 —— 源格 `path:line` 行号、原句格是否源文档那一行的子串（归一后、长度 ≥ 8）、判据格字样（pytest 带 `tests/` 前缀、cmd 去 `python -X utf8`、允许「同 CX-0N」）、段标题与读数块写的条数。全对 0 / 有漂 1（逐条点名 CX 与行号）/ 表读不出来 2。
 - 口径只在模块 docstring 写一份（§表格自检），实现读那一份：**不许**在测试里另抄一份「表该长什么样」。

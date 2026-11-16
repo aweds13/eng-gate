@@ -1,0 +1,16 @@
+[entries."T-AG624"]
+id = "T-AG624"
+title = "checkin_status说读账本却只读留档：把本树留档与账本health分开、按日期标明、今天没签到不再冒充"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp_task.py",
+  "test:test_pool_mcp_task.py::test_checkin_status_payload_separates_archive_from_ledger",
+  "test:test_pool_mcp_task.py::test_checkin_status_never_claims_today_from_a_stale_probe",
+  "test:test_pool_mcp_task.py::test_checkin_status_three_states_are_distinguishable",
+  "test:test_pool_mcp_task.py::test_checkin_status_ledger_is_injectable_and_untouched",
+  "test:test_pool_mcp_task.py::test_checkin_status_prose_agrees_with_what_it_reads",
+]
+gaps = "1. 账本里的 `health.last_checkin` 是**结论码**，账本不记「这个码是什么时候得出的」——读面只能拿 `last_probe` 的时刻说「最近一次问是几号」，两个字段若被哪一次写入写歪（只更新其中一个），这里不会发现，只会照着念。指针 `tools/pool_mcp.py`2. 同一条 `health` 在 `account_status` 里另有一份渲染（额度列那句「未观测」），本卡只把 `checkin_status` 这一面改成按日期标明，两处措辞仍可能分叉；没有把它们抽成共用函数的打算，因为两处要说的不是同一件事（一处说额度，一处说签到）。指针 `tools/pool_accounts.py`3. 「今天」是拿 `_today_local()`（UTC+8）算出来的，而账本里 `last_probe` 的前 10 位是**字符串截取**：账本若换了时区，`is_today` 会静默错一天且不留痕。本卡不校验时区，只把截取结果原样交出去（`last_probe_date`），让读的人自己看得见。指针 `tools/pool_mcp.py`"
+

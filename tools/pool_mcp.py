@@ -501,8 +501,9 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "checkin_status",
         "description": (
-            "今日签到读数（卡 E48）：读当天留档 gates/diag/checkin-<日期>.json "
-            "与账本 health.last_checkin。**永不触发签到、永不联网** —— "
+            "今日签到读数（卡 E48 / E119）：读当天留档 gates/diag/checkin-<日期>.json，"
+            "并只读仓外账本的 health.last_checkin / last_probe —— 结论码可能是旧的，"
+            "读数按 last_probe 的日期标明它是哪天的。**永不触发签到、永不联网** —— "
             "真要签得人跑 tools/pool_accounts.py checkin --all。"
         ),
         "inputSchema": {
@@ -1496,18 +1497,27 @@ def _today_local() -> str:
 def tool_checkin_status(
     arguments: dict[str, Any], root: Path = ROOT
 ) -> tuple[str, dict[str, Any], bool]:
-    """今日签到读数（卡 E48）—— **只读留档 + 账本，不联网、永不触发签到**。
+    """今日签到读数（卡 E48 / 卡 E119）—— **只读留档 + 账本，不联网、永不触发签到**。
 
     ★ 为什么不在这里顺手签一下：签到是**写动作**（会真领积分、会打上游、会被 429 咬）。
       只读入口给"今天签了没"，签不签由人开口（卡 §1 的拉取式定形）。
+    ★ 卡 E119：留档（gates/diag/checkin-<日期>.json）与账本（仓外 accounts.toml 的
+      health.last_checkin / health.last_probe）是**两件事**，payload 分开摆
+      （found 只指留档；账本另用 ledger_found / ledger_rows / ledger_error）。
+      账本里的 last_checkin 是**结论码**、不是"今天的时刻" —— 所以每行都带
+      last_probe 的日期并用 is_today 标明它是不是 date 那天的结论；
+      拿 22 天前的 uncertain 冒充今天，就是第二次撒谎。
     """
     import json  # noqa: PLC0415
+
+    import pool_accounts  # noqa: PLC0415 —— 同一个 tools/ 目录
 
     date = str(arguments.get("date") or "").strip() or _today_local()
     archive = root / _CHECKIN_DIR / f"checkin-{date}.json"
 
     payload: dict[str, Any] = {"date": date, "archive": str(archive), "found": archive.is_file()}
     lines = [f"今日签到（checkin_status）—— {date}"]
+    lines.append(f"留档路径：{archive.as_posix()}（**本树**的留档；换一棵树读的是另一份）")
     if archive.is_file():
         try:
             data = json.loads(archive.read_text(encoding="utf-8"))
@@ -1527,14 +1537,86 @@ def tool_checkin_status(
         mode = "已真签" if data.get("applied") else "只探未领"
         lines.append(
             f"小计（{mode}）："
-            + (" · ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "0 个号")
+            + (" · ".join(f"{k}={v}" for k, v in counts.items()) or "0 个号")
         )
     else:
         lines.append(f"没有留档：{archive.as_posix()}")
         lines.append(
             "今天还没跑过签到（或那天没跑）——要签就人跑 tools/pool_accounts.py checkin --all。"
         )
-    lines.append("只读读数：不触发签到、不联网。")
+
+    # ---- 账本那一段（只读；卡 E119：照 account_status 的 two-except 形状）----
+    led_path = None
+    try:
+        led_path = pool_accounts.find_ledger()
+    except pool_accounts.LedgerError:
+        for base in (root, *root.parents):
+            cand = base / "infra" / "pool" / "accounts.toml"
+            if cand.is_file():
+                led_path = cand.resolve()
+                break
+
+    led_rows: list[dict[str, Any]] = []
+    led_error = ""
+    if led_path is None:
+        led_error = (
+            "没找到账号账本：从当前目录与仓库根向上都没找到 infra/pool/accounts.toml"
+            "（账本在仓外，可用 TF_ACCOUNTS_TOML 指定）。"
+        )
+    else:
+        try:
+            led_data = pool_accounts.load_ledger(led_path)
+        except (pool_accounts.LedgerError, FileNotFoundError) as exc:
+            led_error = f"账本读不了：{exc}"
+        else:
+            for acc in pool_accounts.visible_accounts(led_data, False):
+                health = acc.get("health") or {}
+                probe = str(health.get("last_probe") or "")
+                probe_date = probe[:10] or None
+                led_rows.append(
+                    {
+                        "id": acc.get("id"),
+                        "platform": acc.get("platform"),
+                        "last_checkin": health.get("last_checkin"),
+                        "last_probe": probe,
+                        "last_probe_date": probe_date,
+                        "is_today": probe_date == date if probe_date else False,
+                    }
+                )
+
+    payload.update(
+        {
+            "ledger": str(led_path) if led_path is not None else None,
+            "ledger_found": bool(led_path is not None) and not led_error,
+            "ledger_rows": led_rows,
+            "ledger_error": led_error,
+        }
+    )
+
+    if led_error:
+        lines.append(f"账本（仓外，只读）：{led_error}")
+    else:
+        _shown = str(led_path).replace(chr(92), "/")
+        lines.append(f"账本（仓外，只读）：{_shown}")
+        if archive.is_file():
+            lines.append("留档是同日的 ⇒ 以留档为准；账本这一行只记最近一次问的结论码。")
+        for row in led_rows:
+            if row["last_probe_date"] is None:
+                lines.append(f"- {row['id']} · {row['platform']} · 没问过（账本里没有 last_probe）")
+            elif row["is_today"]:
+                lines.append(
+                    f"- {row['id']} · {row['platform']} · 最近一次问是 {row['last_probe_date']}"
+                    f"（= {date}）· {row['last_checkin']}"
+                )
+            else:
+                lines.append(
+                    f"- {row['id']} · {row['platform']} · 最近一次问是 {row['last_probe_date']}"
+                    f" · {row['last_checkin']}（不是 {date} 的结论，别当今天的）"
+                )
+        if not led_rows:
+            lines.append("（账本里一个号都没有）")
+
+    lines.append("只读读数：不触发签到、不联网、不写账本。")
     return _result(chr(10).join(lines), payload, is_error=False)
 
 
@@ -2844,7 +2926,9 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
             "workbench_board（卡 213）把 pipeline_view 的一份读数（卡 / 门禁 / 判决 / 租约 / "
             "栅栏 / 卡树六块）收成一份端到会话内 —— 不给 section 就一次看全六块，"
             "某块缺来源会如实给 null + 说明（不洗成空对象）。"
-            "account_status（卡 E45）读仓外账号账本，checkin_status（卡 E48）读当天签到留档 —— "
+            "account_status（卡 E45）读仓外账号账本；"
+            "checkin_status（卡 E48 / E119）读当天签到留档，"
+            "并只读账本的 health.last_checkin / last_probe（按 last_probe 日期标明是哪天的结论）—— "
             "两个都只读、都不联网、都**不触发**任何动作（签到要人跑 pool_accounts.py checkin）。"
             "**写工具**（pool_dispatch 派活 / pool_cancel 取消 / task_register 注册任务 / "
             "task_claim 交成送申请 / usage_report 外部用量上报）只有在**服务端**设了 "

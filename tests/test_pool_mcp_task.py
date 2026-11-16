@@ -59,6 +59,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
+import pool_accounts as pa  # noqa: E402
 import pool_mcp  # noqa: E402 —— tools/ 已在 sys.path 上
 from pool import task  # noqa: E402
 
@@ -881,6 +882,161 @@ def test_checkin_status_is_offline_and_never_writes(tmp_path, monkeypatch) -> No
     src = Path(pool_mcp.__file__).read_text(encoding="utf-8")
     for needle in ("/v1/ops/claim", "/daily-checkin", "checkin_credits/claim", "/signin/claim"):
         assert needle not in src, f"MCP 只读面里不许出现写端点：{needle}"
+# --------------------------------------- 卡 E119：checkin_status 真读账本（不再只说留档）
+
+
+def _checkin_ledger(tmp_path: Path, *, probe: str, checkin: str) -> Path:
+    body = [
+        "[[account]]",
+        'id = "trae-1"',
+        'label = "Trae 主号"',
+        'platform = "trae"',
+        'state = "active"',
+        'added_at = "2026-10-20"',
+        "approved_models = []",
+        "",
+        "[account.credential]",
+        'kind = "none"',
+        "",
+        "[account.health]",
+        'state = "unknown"',
+        f'last_probe = "{probe}"',
+        f'last_checkin = "{checkin}"',
+        "",
+    ]
+    p = tmp_path / "infra" / "pool" / "accounts.toml"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(chr(10).join(body), encoding="utf-8")
+    return p
+
+
+def _inject_ledger(monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
+    monkeypatch.delenv("TF_ACCOUNTS_TOML", raising=False)
+    monkeypatch.setattr(pa, "find_ledger", lambda explicit=None: path)
+
+
+def _checkin_archive(tmp_path: Path, date: str, *, applied: bool = False) -> Path:
+    diag = tmp_path / "gates" / "diag"
+    diag.mkdir(parents=True, exist_ok=True)
+    p = diag / f"checkin-{date}.json"
+    p.write_text(json.dumps({"date": date, "applied": applied, "results": []}), encoding="utf-8")
+    return p
+
+
+_LEDGER_KEYS = {"ledger", "ledger_found", "ledger_rows", "ledger_error"}
+_ROW_KEYS = {"id", "platform", "last_checkin", "last_probe", "last_probe_date", "is_today"}
+
+
+def test_checkin_status_payload_separates_archive_from_ledger(tmp_path, monkeypatch) -> None:
+    """判据 1：found 只指留档；账本另用四格。两件事在 payload 里永远分得开。"""
+    _inject_ledger(
+        monkeypatch,
+        _checkin_ledger(tmp_path, probe="2026-10-25T18:30:46+08:00", checkin="uncertain"),
+    )
+    _text, payload, is_error = pool_mcp.tool_checkin_status({"date": "2026-11-16"}, root=tmp_path)
+    assert is_error is False
+    assert set(payload) == {"date", "archive", "found"} | _LEDGER_KEYS, sorted(payload)
+    assert payload["found"] is False
+    assert payload["ledger_found"] is True
+    assert len(payload["ledger_rows"]) == 1
+    assert set(payload["ledger_rows"][0]) == _ROW_KEYS
+    assert payload["ledger_error"] == ""
+
+    _checkin_archive(tmp_path, "2026-11-16")
+    _text2, payload2, is_error2 = pool_mcp.tool_checkin_status(
+        {"date": "2026-11-16"}, root=tmp_path
+    )
+    assert is_error2 is False
+    assert set(payload2) == {"date", "archive", "found", "applied", "results"} | _LEDGER_KEYS
+    assert payload2["found"] is True and payload2["ledger_found"] is True
+
+
+def test_checkin_status_never_claims_today_from_a_stale_probe(tmp_path, monkeypatch) -> None:
+    """判据 2：结论码必须与 last_probe 的日期一起说；旧日期不许写成今天的结论。"""
+    _inject_ledger(
+        monkeypatch,
+        _checkin_ledger(tmp_path, probe="2026-10-25T18:30:46+08:00", checkin="uncertain"),
+    )
+    text, payload, _ = pool_mcp.tool_checkin_status({"date": "2026-11-16"}, root=tmp_path)
+    row = payload["ledger_rows"][0]
+    assert row["is_today"] is False
+    assert row["last_probe_date"] == "2026-10-25"
+    assert "2026-10-25" in text
+    assert "今天签到" not in text
+
+    _inject_ledger(
+        monkeypatch, _checkin_ledger(tmp_path, probe="2026-11-16T09:00:00+08:00", checkin="claimed")
+    )
+    _text2, payload2, _ = pool_mcp.tool_checkin_status({"date": "2026-11-16"}, root=tmp_path)
+    assert payload2["ledger_rows"][0]["is_today"] is True
+
+    _inject_ledger(monkeypatch, _checkin_ledger(tmp_path, probe="", checkin="not-supported"))
+    text3, payload3, _ = pool_mcp.tool_checkin_status({"date": "2026-11-16"}, root=tmp_path)
+    assert payload3["ledger_rows"][0]["last_probe_date"] is None
+    assert payload3["ledger_rows"][0]["is_today"] is False
+    assert "没问过" in text3
+
+
+def test_checkin_status_three_states_are_distinguishable(tmp_path, monkeypatch) -> None:
+    """判据 3：留档没有 / 账本说 X / 账本读不了，三态互不覆盖，且都不翻 is_error。"""
+
+    def _broken(explicit=None):
+        raise pa.LedgerError("没找到账号账本。三种修法任一：设 TF_ACCOUNTS_TOML=<绝对路径>")
+
+    monkeypatch.delenv("TF_ACCOUNTS_TOML", raising=False)
+    monkeypatch.setattr(pa, "find_ledger", _broken)
+
+    text, payload, is_error = pool_mcp.tool_checkin_status({"date": "2026-11-16"}, root=tmp_path)
+    assert is_error is False
+    assert payload["found"] is False and payload["ledger_found"] is False
+    assert payload["ledger_error"]
+    assert "没找到账号账本" in text
+
+    _checkin_archive(tmp_path, "2026-11-16", applied=True)
+    text2, payload2, is_error2 = pool_mcp.tool_checkin_status({"date": "2026-11-16"}, root=tmp_path)
+    assert is_error2 is False
+    assert payload2["found"] is True and payload2["ledger_found"] is False
+    assert payload2["ledger_error"]
+
+    _inject_ledger(
+        monkeypatch, _checkin_ledger(tmp_path, probe="2026-11-16T09:00:00+08:00", checkin="claimed")
+    )
+    text3, payload3, is_error3 = pool_mcp.tool_checkin_status({"date": "2026-11-16"}, root=tmp_path)
+    assert is_error3 is False
+    assert payload3["found"] is True and payload3["ledger_found"] is True
+    assert payload3["ledger_error"] == ""
+
+
+def test_checkin_status_ledger_is_injectable_and_untouched(tmp_path, monkeypatch) -> None:
+    """判据 4：账本可注入；跑完字节不变、目录无新文件；断网照常出读数。"""
+    led = _checkin_ledger(tmp_path, probe="2026-10-25T18:30:46+08:00", checkin="uncertain")
+    before = hashlib.sha256(led.read_bytes()).hexdigest()
+    names_before = sorted(p.name for p in led.parent.iterdir())
+
+    def _boom(*a, **k):  # pragma: no cover —— 被调用就说明它联网了
+        raise AssertionError("checkin_status 不许联网")
+
+    monkeypatch.setattr("urllib.request.urlopen", _boom)
+    _inject_ledger(monkeypatch, led)
+    _text, payload, is_error = pool_mcp.tool_checkin_status({"date": "2026-11-16"}, root=tmp_path)
+    assert is_error is False
+    assert payload["ledger_found"] is True
+    assert hashlib.sha256(led.read_bytes()).hexdigest() == before, "账本被写了"
+    assert sorted(p.name for p in led.parent.iterdir()) == names_before, "账本目录多了文件"
+
+
+def test_checkin_status_prose_agrees_with_what_it_reads() -> None:
+    """判据 5：description / docstring / README 表行三处同口径，都点明结论码不等于今天。"""
+    desc = next(s for s in pool_mcp.TOOL_SPECS if s["name"] == "checkin_status")["description"]
+    doc = pool_mcp.tool_checkin_status.__doc__ or ""
+    readme = (ROOT / "docs" / "subsystems" / "pool" / "README.md").read_text(encoding="utf-8")
+    rows = [ln for ln in readme.splitlines() if "checkin_status" in ln]
+    assert len(rows) == 1, rows
+    for where, blob in (("description", desc), ("docstring", doc), ("README", rows[0])):
+        assert "留档" in blob, where
+        assert "health.last_checkin" in blob, where
+        assert "last_probe" in blob, where
+
 # --------------------------------------- 卡 A364：usage_report（外部用量上报的入口）
 
 USAGE_REPORTED_REL = ("gates", "diag", "usage-reported.jsonl")
