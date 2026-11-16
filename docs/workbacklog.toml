@@ -6007,3 +6007,17 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E115"
+task = "T-AG626"
+title = "pipeline_view 的三个块把旧读数/死租约/假卡号当现状"
+tree = ".wt/E115"
+spec = "复盘/卡/卡E115-pipeline_view三个块把旧读数死租约假卡号当现状.md"
+files = [
+  "tools/pipeline_view.py",
+  "tests/test_pipeline_view.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
