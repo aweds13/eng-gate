@@ -5952,3 +5952,20 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E119"
+task = "T-AG624"
+title = "checkin_status声称读账本却没读"
+tree = ".wt/E119"
+spec = "复盘/卡/卡E119-checkin_status说读账本却没读.md"
+files = [
+  "tools/pool_mcp.py",
+  "tools/pool_accounts.py",
+  "tests/test_pool_mcp_task.py",
+  "tests/test_pool_mcp.py",
+  "docs/subsystems/pool/README.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
