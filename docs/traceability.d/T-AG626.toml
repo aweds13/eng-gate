@@ -1,0 +1,15 @@
+[entries."T-AG626"]
+id = "T-AG626"
+title = "pipeline_view三个块把旧读数死租约假卡号当现状：门禁念多久以前、租约标死、判决一卡一行"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pipeline_view.py",
+  "file:tests/test_pipeline_view.py",
+  "test:test_pipeline_view.py::test_report_gates_says_age_and_commits_behind",
+  "test:test_pipeline_view.py::test_leases_mark_dead_without_dropping",
+  "test:test_pipeline_view.py::test_verdicts_one_row_per_card_with_attempts",
+  "test:test_pipeline_view.py::test_verdicts_selected_is_latest_by_ended_at",
+]
+gaps = "1. last-good 快照仍是 **schema 1 的旧形状通道**：`_load_lastgood` 没有 schema 闸、`_save_lastgood_block` 写死 `{「schema」: 1, ...}` —— 本卡只把 `_CACHE_SCHEMA` 抬到 2（readcache 那条路），而卡规格判据 5 又禁改 last-good 三分支 ⇒ 真仓里那份 2026-11 之前写的 last-good 一旦被读到（来源坏/缺失时），三块又会回成旧字段，且没有任何一行读数说明它是旧的。指针 `tools/pipeline_view.py`2. 三个消费方的人话面还在把死租约叫「活租约」：`tools/workbench_bridge.py` 的 `_section_lease` 头写「N 条活租约」、`tools/wb_daily.py` 的 `[在飞] N 条租约`、`tools/pool_mcp.py` 的 board 段同理 —— 读数里已经有 dead 了，人话面没跟上（本卡范围明写不含这三处措辞）。指针 `tools/workbench_bridge.py`3. attempts 只认三种后缀（`r\\d+` / `killed` / `attempt\\d+`）：别的命名（例如 `wb-120.2.verdict.txt`）**不会进尝试表，也不会进卡表** —— 它会被新正则直接判为不命中而静默消失（旧正则至少会把它当成一个假卡号列出来）。真仓现在不命中 0 个文件，所以这是一条潜伏口径，不是当下漏读数。指针 `tools/pipeline_view.py`"
+

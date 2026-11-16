@@ -11,7 +11,7 @@ timeflow 视图、禅道）。按本仓教义（「四个面集中到一个点�
 1. `cards`     —— 队列全貌（来源 `docs/workbacklog.toml`）
 2. `gates`     —— 最近一次门禁（来源 `gates/last.json`）
 3. `verdicts`  —— 每张卡的判决 / 摘要（来源 `gates/diag/wb-<卡>.verdict.txt` 与 `.report.md`）
-4. `leases`    —— 活租约（来源 `gates/diag/pool-registry.json`）
+4. `leases`    —— 租约（行内 dead 标死活；来源 `gates/diag/pool-registry.json`）
 5. `fences`    —— 任务栅栏（来源 `gates/diag/batch/*.toml`）
 6. `worktrees` —— 卡树清单（来源 `git worktree list`）
 
@@ -25,7 +25,9 @@ timeflow 视图、禅道）。按本仓教义（「四个面集中到一个点�
   **不进 `--json`**（冷跑/热跑逐字节相同）。库调用方只读缓存、不写（`_REMEMBER` 才写）。
 ★ **git 只调两次**（卡 255）：`git worktree list --porcelain` + 读数根上的
   `git status --porcelain=v1 --branch`；不逐棵 worktree 起 status（其余棵的 dirty 记
-  null + 注，缺什么说什么）。调用次数写进 `--report`。
+  null + 注，缺什么说什么）。调用次数写进 `--report`。★ 卡 E115：`--report` 另外多
+  一条 `git rev-list --count` 算「落后几个提交」（墙钟与那条 git 都只进 `--report`，
+  `--json` 一个字都不许有）。
 ★ **BLOCKS 声明表是唯一口径源**（卡 249 · T-G370）：六块的块名 / 来源 / 缺源标注语 /
   字段清单都在模块级 `BLOCKS` 里，`read_*()` 与 `_report_*()` 都从它取（不许各写一份）；
   `--json` 每块带 `<块>_source` 回声、`--report` 每块头带同一句来源 —— 两个出口对得上。
@@ -53,6 +55,7 @@ import json
 import os
 import re
 import subprocess
+import time
 import tracemalloc
 from datetime import datetime
 from pathlib import Path
@@ -64,7 +67,16 @@ if TYPE_CHECKING:
 import tomllib
 import wb_plan  # 台账分片（卡 E89）：分片目录 / 分片读法只此一份
 
+#: ★ 卡 E115：判「这条租约死了没有」的判据只有一份（`tools/pool/registry.py`）——
+#: 不许在这儿抄一份；包不在 sys.path 时就如实说「判不了」（`dead=None`），不许猜。
+try:
+    from pool import registry as _pool_registry
+except ImportError:  # pragma: no cover - 工具目录不在 sys.path 的调用方
+    _pool_registry = None
+
 ROOT = Path(__file__).resolve().parent.parent
+#: 这一次读数用的根（`--report` 的 git rev-list 要在这儿跑；`--json` 不受影响）。
+_ROOT_USED: Path = ROOT
 NO_WINDOW: dict[str, int] = {"creationflags": 0x08000000} if os.name == "nt" else {}
 
 BACKLOG_REL = Path("docs") / "workbacklog.toml"
@@ -79,12 +91,20 @@ LASTGOOD_REL = DIAG_REL / "pipeline-view-lastgood.json"
 READCACHE_REL = DIAG_REL / "readcache"
 
 #: 缓存文件的格式版本：字段形状变了就抬，旧缓存自然失效（不猜旧格式）。
-_CACHE_SCHEMA = 1
+#: ★ 卡 E115 抬到 2：gates 多了 at/dirty/branch、leases 多了 dead、verdicts 多了
+#:   attempts/selected —— 旧缓存里还是老形状，不抬版本号真仓会继续读旧字段。
+_CACHE_SCHEMA = 2
 #: 算内容哈希的分块大小（流式，不把大文件整块读进内存）。
 _HASH_CHUNK = 64 * 1024
 
-_VERDICT_RE = re.compile(r"^wb-(.+?)(?:\.r\d+)?\.verdict\.txt$")
-_REPORT_RE = re.compile(r"^wb-(.+?)(?:\.r\d+)?\.report\.md$")
+#: 判决/摘要文件名 → (卡号, 尝试标记)。尝试标记只有三种写法：.r2 / .killed / .attempt1。
+#: ★ 卡 E115：旧正则的 (.+?) 会把尝试标记吞进卡号 —— 「120.killed」被当成另一张卡，
+#:   同一张卡的第二次尝试（「143.r2」）反而被同一个键覆盖掉。
+_ATT_PAT = r"(?:[.](?P<att>r[0-9]+|killed|attempt[0-9]+))?"
+_VERDICT_RE = re.compile(rf"^wb-(?P<card>[^./]+?){_ATT_PAT}[.]verdict[.]txt$")
+_REPORT_RE = re.compile(rf"^wb-(?P<card>[^./]+?){_ATT_PAT}[.]report[.]md$")
+#: 判决首行里的结束时刻（与 `tools/wb_notify.py` 的「结束于=」同一口径）。
+_ENDED_AT_RE = re.compile(r"结束于=([^ ]+)")
 
 
 # ================================================================ BLOCKS：六块声明表
@@ -105,15 +125,19 @@ BLOCKS: tuple[dict, ...] = (
     {"id": "gates", "source": "gates/last.json",
      "missing_note": "没有 gates/last.json", "continuous": True,
      "fields": ("gates",),
-     "row_fields": ("ok", "rev", "items")},
+     # ★ 卡 E115：生产者（scripts/run_gates.py）早写了 at/dirty/branch，读数器一直没搬。
+     "row_fields": ("ok", "rev", "at", "dirty", "branch", "items")},
     {"id": "verdicts", "source": "gates/diag/wb-*.verdict.txt / .report.md",
      "missing_note": "没有 gates/diag 目录", "continuous": False,
      "fields": ("verdicts",),
-     "row_fields": ("card", "has_verdict", "verdict_first_line", "has_report")},
+     # ★ 卡 E115：一卡一行 + 每次尝试一行（attempts），同卡的两次尝试不许互相覆盖。
+     "row_fields": ("card", "has_verdict", "verdict_first_line", "has_report",
+                    "attempts", "selected")},
     {"id": "leases", "source": "gates/diag/pool-registry.json",
      "missing_note": "没有 gates/diag/pool-registry.json", "continuous": True,
      "fields": ("leases",),
-     "row_fields": ("card", "tree", "files", "owner", "at", "ttl_seconds")},
+     # ★ 卡 E115：死租约不从表里抹掉，只加一列 dead（None = 判不出）。
+     "row_fields": ("card", "tree", "files", "owner", "at", "ttl_seconds", "dead")},
     {"id": "fences", "source": "gates/diag/batch/*.toml",
      "missing_note": "没有 gates/diag/batch 目录", "continuous": False,
      "fields": ("fences",),
@@ -305,6 +329,72 @@ def _first_line(path: Path) -> str:
     return line.rstrip("\r\n")
 
 
+def _parse_stamp(value: object) -> datetime | None:
+    """ISO8601 → 带时区的 datetime；认不出 → None（naive 一律按本机时区）。"""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        stamp = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return stamp if stamp.tzinfo else stamp.astimezone()
+
+
+def _empty_attempt(att: str) -> dict:
+    """一次尝试的产物读数（卡 E115：同一张卡跑过几次就几行，不许互相覆盖）。"""
+    return {"att": att, "has_verdict": False, "has_report": False,
+            "ended_at": "", "selected": False}
+
+
+def _select_attempt(attempts: list[dict]) -> str:
+    """哪一次是「现行」的：结束时刻最大的那次；认不出时刻就回落无后缀，再回落字典序最小。
+
+    ★ 卡 E115：不许按文件名排序凑合 —— 真仓里 120.killed 比 120 早、143.r2 比 143 晚；
+      判决首行的「结束于=」才是唯一能比的读数。
+    """
+    dated = [row for row in attempts if _parse_stamp(row.get("ended_at")) is not None]
+    if dated:
+        newest = max(dated, key=lambda row: (_parse_stamp(row["ended_at"]), row["att"]))
+        return str(newest["att"])
+    if any(row["att"] == "" for row in attempts):
+        return ""
+    return str(min(row["att"] for row in attempts))
+
+
+def _lease_dead(row: dict, now: float, root: Path) -> bool | None:
+    """这条租约死了没有（判据只有 tools/pool/registry.py 一份）；判不了就说 None。"""
+    if _pool_registry is None:
+        return None
+    try:
+        return bool(_pool_registry.is_dead(row, now, log_base=lambda: root))
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _age_text(at: object) -> str:
+    """gates/last.json 的 at（naive 本地时间）距今多久 —— 墙钟只进 --report。"""
+    stamp = _parse_stamp(at)
+    if stamp is None:
+        return "at 缺 / 认不出"
+    hours = (datetime.now().astimezone() - stamp).total_seconds() / 3600.0
+    if hours < 0:
+        return "0.0 小时前（at 在未来？）"
+    return f"{hours:.1f} 小时前"
+
+
+def _behind_text(rev: object) -> str:
+    """那趟门禁之后又落了几笔（git rev-list --count <rev>..HEAD）；认不出就如实说。"""
+    text = str(rev or "").strip()
+    if not text:
+        return "rev 缺"
+    rc, out = _run_git("rev-list", "--count", f"{text}..HEAD", cwd=_ROOT_USED)
+    if rc != 0:
+        return f"认不出 rev={text}"
+    count = out.strip().splitlines()[0] if out.strip() else "?"
+    return f"落后 {count} 个提交"
+
+
 # ================================================================ 子进程（只读 git）
 
 
@@ -400,7 +490,13 @@ def _read_gates(root: Path) -> dict:
                 "exit_code": g.get("exit_code"),
                 "seconds": g.get("seconds"),
             })
-        payload = {"ok": data.get("ok"), "rev": data.get("rev"), "items": items}
+        # ★ 卡 E115：生产者（scripts/run_gates.py）早写了这三项，读数器一直没搬 ——
+        #   「8 小时前那趟、跑在 card/E116 上、树是脏的」全被抹成一句 rev/ok。
+        payload = {
+            "ok": data.get("ok"), "rev": data.get("rev"),
+            "at": data.get("at"), "dirty": data.get("dirty"),
+            "branch": data.get("branch"), "items": items,
+        }
         return _continuous_out(root, "gates", payload, "", "")
     return _continuous_out(root, "gates", None, spec["missing_note"], "source_missing")
 
@@ -429,41 +525,61 @@ def _read_verdicts(root: Path, files: list[Path]) -> dict:
     if not diag.is_dir():
         return {"verdicts": [], "verdicts_note": spec["missing_note"],
                 "verdicts_source": spec["source"]}
-    found: dict[str, dict] = {}
+    # 卡号 → 尝试标记 → 这一份产物的读数（同卡的多次尝试叠在一起，不许互相覆盖）。
+    per_card: dict[str, dict[str, dict]] = {}
+    firsts: dict[tuple[str, str], str] = {}
     for entry in files:
         if not entry.is_file():
             continue
         m = _VERDICT_RE.match(entry.name)
-        if m:
-            cid = m.group(1)
-            row = found.setdefault(cid, _empty_verdict(cid))
+        is_verdict = m is not None
+        if not is_verdict:
+            m = _REPORT_RE.match(entry.name)
+        if not m:
+            continue
+        cid = m.group("card")
+        att = m.group("att") or ""
+        row = per_card.setdefault(cid, {}).setdefault(att, _empty_attempt(att))
+        if is_verdict:
             row["has_verdict"] = True
             # ★ 卡 255：只要首行 ⇒ 只读首行，不把整个判决文件读进内存。
-            row["verdict_first_line"] = _first_line(entry)
-            continue
-        m = _REPORT_RE.match(entry.name)
-        if m:
-            cid = m.group(1)
-            row = found.setdefault(cid, _empty_verdict(cid))
+            line = _first_line(entry)
+            firsts[(cid, att)] = line
+            ended = _ENDED_AT_RE.search(line)
+            row["ended_at"] = ended.group(1) if ended else ""
+        else:
             row["has_report"] = True
-    verdicts = [found[k] for k in sorted(found)]
+    verdicts: list[dict] = []
+    for cid in sorted(per_card):
+        attempts = [per_card[cid][att] for att in sorted(per_card[cid])]
+        selected = _select_attempt(attempts)
+        for row in attempts:
+            row["selected"] = row["att"] == selected
+        # 四个老字段的口径不变：仍是「这张卡」的读数（selected 那次的判决首行）。
+        first = firsts.get((cid, selected), "")
+        if not first:
+            other = next((row["att"] for row in attempts if row["has_verdict"]), "")
+            first = firsts.get((cid, other), "")
+        verdicts.append({
+            "card": cid,
+            "has_verdict": any(row["has_verdict"] for row in attempts),
+            "verdict_first_line": first,
+            "has_report": any(row["has_report"] for row in attempts),
+            "attempts": attempts,
+            "selected": selected,
+        })
     return {"verdicts": verdicts, "verdicts_source": spec["source"]}
 
-
-def _empty_verdict(cid: str) -> dict:
-    return {
-        "card": cid,
-        "has_verdict": False,
-        "verdict_first_line": "",
-        "has_report": False,
-    }
 
 
 # ================================================================ 4. leases
 
 
 def read_leases(root: Path) -> dict:
-    """活租约（口径见 ``BLOCKS["leases"]``）。连续块：失败走 STALE-WHILE-ERROR。"""
+    """租约（口径见 ``BLOCKS["leases"]``）。连续块：失败走 STALE-WHILE-ERROR。
+
+    行内 dead 标死活（True 死 / False 活 / None 判不出）；死租约仍留在表里。
+    """
     return _cached(root, "leases", [root / REGISTRY_REL], lambda: _read_leases(root))
 
 
@@ -482,6 +598,7 @@ def _read_leases(root: Path) -> dict:
         return _continuous_out(root, "leases", None,
                                f"{spec['source']} 结构不对（顶层应是数组）",
                                "source_broken")
+    now = time.time()
     leases: list[dict] = []
     for row in data:
         if not isinstance(row, dict):
@@ -493,6 +610,9 @@ def _read_leases(root: Path) -> dict:
             "owner": str(row.get("owner", "")),
             "at": str(row.get("at", "")),
             "ttl_seconds": row.get("ttl_seconds"),
+            # ★ 卡 E115：死租约**不许从表里抹掉**（抹掉就看不见「它一直没被清」），
+            #   也不许在读数侧 prune（那是 registry.prune 的职责）—— 只加一列标死活。
+            "dead": _lease_dead(row, now, root),
         })
     return _continuous_out(root, "leases", leases, "", "")
 
@@ -622,7 +742,7 @@ def build_reading(root: Path | None = None, *, remember: bool = False) -> dict:
 
     `remember=True` 才把连续块的好读数落 last-good、才写读数缓存（默认不写 ⇒ 只读 ✓）。
     """
-    global _REMEMBER, _GIT_CALLS, _CACHE_HITS, _CACHE_MISSES, _CACHE_SKIPPED
+    global _REMEMBER, _GIT_CALLS, _CACHE_HITS, _CACHE_MISSES, _CACHE_SKIPPED, _ROOT_USED
     if remember:
         _REMEMBER = True
     # ★ 卡 255：每次读数重开账（--report 报的是**这一次**调了几次 git / 命中几块）。
@@ -631,6 +751,7 @@ def build_reading(root: Path | None = None, *, remember: bool = False) -> dict:
     _CACHE_MISSES = []
     _CACHE_SKIPPED = []
     root = Path(root) if root is not None else ROOT
+    _ROOT_USED = root  # ★ 卡 E115：--report 要在这个根上算「落后几个提交」
     result: dict = {}
     for spec in BLOCKS:
         result.update(_READERS[spec["id"]](root))
@@ -671,10 +792,18 @@ def _report_gates(lines: list[str], r: dict) -> None:
         lines.append(f"[gates] {r.get('gates_note', '没有')}（来源 {src}）")
         return
     items = gates.get("items") or []
+    # ★ 卡 E115：一行 rev/ok 看不出「这是不是现在」—— 把 at 距今多久、落后几个提交念出来
+    #   （墙钟与 git rev-list 都只进 --report，--json 仍是纯读数）。
     lines.append(f"[gates] 最近一次门禁（来源 {src}）："
-                 f"rev={gates.get('rev')} ok={gates.get('ok')}  共 {len(items)} 道：")
+                 f"rev={gates.get('rev')} ok={gates.get('ok')}  共 {len(items)} 道"
+                 f"（{_age_text(gates.get('at'))}，{_behind_text(gates.get('rev'))}）：")
     for g in items:
         lines.append(f"  · {g['name']}: exit={g['exit_code']}  {g['seconds']}s")
+    # ★ 卡 E115：那趟门禁是在哪条分支上、树脏不脏，也念出来（生产者早就写了）。
+    if gates.get("branch") is not None or gates.get("dirty") is not None:
+        dirty = gates.get("dirty")
+        mark = "脏否未知" if dirty is None else ("脏" if dirty else "干净")
+        lines.append(f"  · 那趟跑在 branch={gates.get('branch') or '?'} 上，树 {mark}")
     _report_stale(lines, r, "gates")
 
 
@@ -713,6 +842,10 @@ def _report_verdicts(lines: list[str], r: dict) -> None:
             tags.append("有判决")
         if v["has_report"]:
             tags.append("有摘要")
+        attempts = v.get("attempts") or []
+        if len(attempts) > 1:
+            # ★ 卡 E115：同一张卡跑过几次就说几次，「现行」是哪一个也念出来。
+            tags.append(f"{len(attempts)} 次尝试，现行={v.get('selected') or '无后缀那次'}")
         first = v["verdict_first_line"][:60] if v["verdict_first_line"] else ""
         suffix = f"  首行：{first}" if first else ""
         lines.append(f"  · {v['card']}: {'、'.join(tags) or '无'}" + suffix)
@@ -724,10 +857,18 @@ def _report_leases(lines: list[str], r: dict) -> None:
     if leases is None:
         lines.append(f"[leases] {r.get('leases_note', '没有')}（来源 {src}）")
         return
-    lines.append(f"[leases] 租约（来源 {src}）：共 {len(leases)} 条：")
+    # ★ 卡 E115：死租约还留在表里 —— 这里必须把「其中几条已死」念出来，否则读者以为都活着。
+    dead = sum(1 for lc in leases if lc.get("dead"))
+    unknown = sum(1 for lc in leases if lc.get("dead") is None)
+    tail = f"，其中 {dead} 条已死" if dead else ""
+    if unknown:
+        tail += f"，{unknown} 条判不出"
+    lines.append(f"[leases] 租约（来源 {src}）：共 {len(leases)} 条{tail}：")
     for lc in leases:
+        mark = "  ★ 已死" if lc.get("dead") else ""
+        mark += "  （判不出）" if lc.get("dead") is None else ""
         lines.append(f"  · card={lc['card']}  tree={lc['tree']}  owner={lc['owner']}"
-                     f"  at={lc['at']}  ttl={lc['ttl_seconds']}s")
+                     f"  at={lc['at']}  ttl={lc['ttl_seconds']}s{mark}")
     _report_stale(lines, r, "leases")
 
 
@@ -768,6 +909,9 @@ def _report_worktrees(lines: list[str], r: dict) -> None:
 
 #: git 调用形状（按实际次数打印；两次是常态：worktree list + status）。
 _GIT_SHAPES = {
+    # ★ 卡 E115：--report 为了算「落后几个提交」多调一次 git rev-list ⇒ 三档也登记。
+    3: "git worktree list --porcelain + git status --porcelain=v1 --branch"
+       " + git rev-list --count（--report 算「落后几个提交」）",
     2: "git worktree list --porcelain + git status --porcelain=v1 --branch",
     1: "git worktree list --porcelain（status 未跑：list 无输出/失败）",
     0: "一次也没调",

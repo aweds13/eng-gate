@@ -28,6 +28,11 @@
 - `required=` 只认字面 True；非字面进 `unknown_required` ⇒ 记「判不出」并点名哪个 flag 取不到 —— 不许因为命令里写上了它就当判过。
 - `skills/softeng-manage/references/dispatch.md` 的两条 `pool_quota.py status`（原本 rc=2，缺 `--card` / `--model`）改成 `line`，并补一条带齐必填的 `status --card … --model …` 示例。
 - `skills/pipe-card/references/repo-bindings.md:30` 从整条干命令改成字段清单（`--id` / `--task` / `--title` / `--spec` 必填）—— 「整条命令」那种形态会新增一条判不出。
+## 2026-11-16 T-AG626 pipeline_view 的三个块：门禁念多久以前、死租约标出来、判决一卡一行
+- gates 块多搬 `at` / `dirty` / `branch` 三键（生产者 `scripts/run_gates.py` 早写了，读数器一直没搬）；`--report` 首行念「X 小时前，落后 N 个提交」并另起一行念那趟跑在哪个分支、树脏不脏 —— 墙钟与 `git rev-list` 只进 `--report`，`--json` 一个字都不加。
+- leases 每行加 `dead`（复用 `pool.registry.is_dead`，判不出给 null）；死租约**留在表里**不许过滤，人话段念「其中 M 条已死」。
+- verdicts 改成一卡一行 + `attempts[]`（att / has_verdict / has_report / ended_at / selected）：卡号不再带 `.killed` / `.r2` 后缀，`120` 与 `120.killed` 不再并列成两行；真仓从 215 行落到 212 行。
+- `_CACHE_SCHEMA` 1→2 且 `_GIT_SHAPES` 补 3 档：缓存的键只算来源文件、不含字段形状，不抬版本号就会拿旧缓存冒充新字段。
 ## 2026-11-10 T-AG610 契约对账表装牙：表里每一格都由工具现读，漂了就红
 - `tools/contract_audit.py` 新增 `--check-doc`（配 `--doc`）：**不跑判据**，逐格把 `复盘/契约-判据对账.md` 与活体比对 —— 源格 `path:line` 行号、原句格是否源文档那一行的子串（归一后、长度 ≥ 8）、判据格字样（pytest 带 `tests/` 前缀、cmd 去 `python -X utf8`、允许「同 CX-0N」）、段标题与读数块写的条数。全对 0 / 有漂 1（逐条点名 CX 与行号）/ 表读不出来 2。
 - 口径只在模块 docstring 写一份（§表格自检），实现读那一份：**不许**在测试里另抄一份「表该长什么样」。

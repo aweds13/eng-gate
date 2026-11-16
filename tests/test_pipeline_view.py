@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,12 +65,20 @@ def _write_backlog(root: Path) -> None:
         encoding="utf-8")
 
 
-def _write_gates_last(root: Path) -> None:
+def _write_gates_last(root: Path, *, rev: str = "deadbee", at: str | None = None,
+                      dirty: bool | None = None, branch: str | None = None) -> None:
+    """★ 卡 E115：at / dirty / branch 是生产者（scripts/run_gates.py）一直在写的三项。"""
     (root / "gates").mkdir(parents=True, exist_ok=True)
-    (root / "gates" / "last.json").write_text(json.dumps({
-        "ok": True, "rev": "deadbee",
-        "gates": [{"name": "pytest", "exit_code": 0, "seconds": 1.5}],
-    }, ensure_ascii=False), encoding="utf-8")
+    data: dict = {"ok": True, "rev": rev,
+                  "gates": [{"name": "pytest", "exit_code": 0, "seconds": 1.5}]}
+    if at is not None:
+        data["at"] = at
+    if dirty is not None:
+        data["dirty"] = dirty
+    if branch is not None:
+        data["branch"] = branch
+    (root / "gates" / "last.json").write_text(json.dumps(data, ensure_ascii=False),
+                                              encoding="utf-8")
 
 
 def _write_verdict(root: Path, card: str = "001", text: str = "card=001 通过\n") -> None:
@@ -78,13 +88,47 @@ def _write_verdict(root: Path, card: str = "001", text: str = "card=001 通过\n
     (diag / f"wb-{card}.report.md").write_text("# 摘要\n", encoding="utf-8")
 
 
-def _write_registry(root: Path) -> None:
+def _write_artifact(root: Path, name: str, text: str) -> None:
+    """★ 卡 E115：按**文件名**写产物（wb-120.killed.verdict.txt 这种带尝试标记的）。"""
     diag = root / "gates" / "diag"
     diag.mkdir(parents=True, exist_ok=True)
-    (diag / "pool-registry.json").write_text(json.dumps([{
-        "card": "001", "tree": ".wt/a", "files": ["src/a.py"],
-        "owner": "host:1", "at": "2026-10-13T12:00:00", "ttl_seconds": 21600.0,
-    }], ensure_ascii=False), encoding="utf-8")
+    (diag / name).write_text(text, encoding="utf-8")
+
+
+def _commit(root: Path, name: str) -> str:
+    """再落一笔提交并回它的 sha（判据 1 要「门禁 rev 落后 HEAD 几个提交」）。"""
+    (root / name).write_text(name, encoding="utf-8")
+    _git("add", name, cwd=root)
+    _git("commit", "-q", "-m", name, cwd=root)
+    done = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(root), capture_output=True,
+                          text=True, encoding="utf-8", errors="replace")
+    assert done.returncode == 0, done.stderr
+    return done.stdout.strip()
+
+
+def _now_naive_iso(hours_ago: float) -> str:
+    """gates/last.json 的 at 口径：naive 本地时间（生产者就是这么写的）。"""
+    stamp = datetime.now().astimezone() - timedelta(hours=hours_ago)
+    return stamp.replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def _registry_row(card: str, *, at: str, ttl: float | None = 21600.0,
+                  log: str | None = None) -> dict:
+    row: dict = {"card": card, "tree": f".wt/{card}", "files": ["src/a.py"],
+                 "owner": "host:1", "at": at, "ttl_seconds": ttl}
+    if log is not None:
+        row["log"] = log
+    return row
+
+
+def _write_registry(root: Path, rows: list[dict] | None = None) -> None:
+    diag = root / "gates" / "diag"
+    diag.mkdir(parents=True, exist_ok=True)
+    if rows is None:
+        rows = [{"card": "001", "tree": ".wt/a", "files": ["src/a.py"],
+                 "owner": "host:1", "at": "2026-10-13T12:00:00", "ttl_seconds": 21600.0}]
+    (diag / "pool-registry.json").write_text(json.dumps(rows, ensure_ascii=False),
+                                             encoding="utf-8")
 
 
 def _write_fence(root: Path, task_id: str = "B-TEST") -> None:
@@ -653,4 +697,141 @@ def test_git_calls_do_not_scale_with_worktrees(tmp_path: Path) -> None:
     assert extra_row["dirty"] is None, "其余树没起 git ⇒ dirty=null（未知），不许冒充 false"
     assert "worktrees_dirty_note" in r
     report = _run_cli(root, "--report")
-    assert "[git] 本次调用 2 次" in report
+    # ★ 卡 E115：--report 多一条 git rev-list（算「落后几个提交」）⇒ 这里是 3；
+    #   上面的 _GIT_CALLS == 2 一个字不动（读数本身仍只调两条 git 命令）。
+    assert "[git] 本次调用 3 次" in report
+
+
+# ---------------------------------------------------------------- 卡 E115（T-AG626）
+# ★ 口径（判据 1）：小时数与落后提交数**只许出现在 --report**；--json 里只准有 at/dirty/
+#   branch 三个静态值。拿 JSON 字段冒充「念出来了」在这三条钉子上会假绿，所以分开判。
+
+
+def test_report_gates_says_age_and_commits_behind(tmp_path: Path) -> None:
+    """判据 1：--report 的 [gates] 段念出「X 小时前」与「落后 N 个提交」，两个数都是现算的。
+
+    ★ 仓里两笔提交：gates/last.json 的 rev 指向第 1 笔 ⇒ 落后 1 个；at 是 5h30m 前。
+    """
+    root = _full_fake_repo(tmp_path)
+    first = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(root), capture_output=True,
+                           text=True, encoding="utf-8", errors="replace").stdout.strip()
+    assert _commit(root, "second.txt") != first, "第二笔提交必须换 HEAD"
+    at = _now_naive_iso(5.5)
+    _write_gates_last(root, rev=first, at=at, dirty=True, branch="card/E115")
+
+    r = pipeline_view.build_reading(root)
+    assert r["gates"]["at"] == at, "at 必须逐字搬进 --json（它是静态值，不是墙钟）"
+    assert r["gates"]["dirty"] is True
+    assert r["gates"]["branch"] == "card/E115"
+    raw = _json_bytes(r)
+    assert "小时前" not in raw and "落后" not in raw, "墙钟与 git 计数一个都不许进 --json"
+
+    report = _run_cli(root, "--report")
+    head = report.split("[gates]", 1)[1].splitlines()[0]
+    hours = re.search(r"(\d+(?:\.\d+)?)\s*小时前", head)
+    assert hours is not None, f"没念「X 小时前」：{head}"
+    assert 4.9 <= float(hours.group(1)) <= 6.1, f"小时数不是现算的：{head}"
+    behind = re.search(r"落后\s*(\d+)\s*个提交", head)
+    assert behind is not None, f"没念「落后 N 个提交」：{head}"
+    assert int(behind.group(1)) == 1, f"落后数不对：{head}"
+    assert "card/E115" in report and "树 脏" in report, "那趟跑在哪条分支、树脏不脏也要念"
+    assert "认不出 rev=" not in report, "认得出的 rev 不该报认不出"
+
+
+def test_report_gates_says_unknown_when_rev_is_unreadable(tmp_path: Path) -> None:
+    """判据 1 的失败分支：认不出的 rev 必须如实说，不许抛异常（既有夹具就是 deadbee）。"""
+    root = _full_fake_repo(tmp_path)
+    report = _run_cli(root, "--report")   # 默认夹具 rev="deadbee"
+    assert "[gates]" in report, "整份报告不许因为 git rc=128 就崩"
+    seg = report.split("[gates]", 1)[1].split("[verdicts]", 1)[0]
+    assert "认不出 rev=deadbee" in seg
+    # 只判 [gates] 段：--report 尾巴的实测账里本来就有「落后几个提交」这串字
+    assert "落后" not in seg, "认不出就不许编一个数字"
+
+
+def test_leases_mark_dead_without_dropping(tmp_path: Path) -> None:
+    """判据 2：死租约只标 dead，**不许过滤**（行数不变），也不许另写一份判据。
+
+    三条理由（写进代码注释的那三条）：过滤抹掉「曾有人占过树」的证据 / 会改既有夹具口径 /
+    落盘清死租约是 registry.prune 的职责。
+    """
+    root = _full_fake_repo(tmp_path)
+    _write_registry(root, [
+        _registry_row("901", at=_now_naive_iso(7.0)),   # 7h 前 + ttl 6h ⇒ 死
+        _registry_row("902", at=_now_naive_iso(1.0)),   # 1h 前 ⇒ 活
+    ])
+
+    r = pipeline_view.build_reading(root)
+    assert len(r["leases"]) == 2, "死的不许从表里抹掉（行数必须还是 2）"
+    dead = {row["card"]: row["dead"] for row in r["leases"]}
+    assert dead == {"901": True, "902": False}, dead
+
+    report = _run_cli(root, "--report")
+    assert "其中 1 条已死" in report, "人话段必须念出死了几条（否则读者以为都活着）"
+
+
+def test_leases_log_only_death_is_honoured(tmp_path: Path) -> None:
+    """判据 2 第二支：TTL 远没到、但日志已被判死 ⇒ 仍要点成死（这一支只有 _log_dead 能判）。"""
+    root = _full_fake_repo(tmp_path)
+    diag = root / "gates" / "diag"
+    (diag / "wb-009.jsonl").write_text("{}\n", encoding="utf-8")
+    (diag / "wb-009.verdict.txt").write_text("card=009 结束于=2026-10-01T10:00:00\n",
+                                             encoding="utf-8")
+    _write_registry(root, [
+        _registry_row("009", at=_now_naive_iso(1.0), ttl=10 ** 9,
+                      log="gates/diag/wb-009.jsonl"),
+    ])
+
+    r = pipeline_view.build_reading(root)
+    row = next(x for x in r["leases"] if x["card"] == "009")
+    assert row["ttl_seconds"] == 10 ** 9, "TTL 这一支一定判不了它（没到）"
+    assert row["dead"] is True, "日志已判死 ⇒ 必须点成死（复用 registry.is_dead，不另写判据）"
+
+
+def test_verdicts_one_row_per_card_with_attempts(tmp_path: Path) -> None:
+    """判据 3：一卡一行 + attempts —— 120 与 120.killed 不许并列成两行。"""
+    root = _full_fake_repo(tmp_path)
+    _write_artifact(root, "wb-007.verdict.txt", "card=007 结束于=2026-10-02T20:00:00\n")
+    _write_artifact(root, "wb-007.r2.verdict.txt", "card=007 结束于=2026-10-02T19:00:00\n")
+    _write_artifact(root, "wb-120.killed.verdict.txt", "card=120 结束于=2026-10-03T08:00:00\n")
+    _write_artifact(root, "wb-120.verdict.txt", "card=120 结束于=2026-10-03T09:00:00\n")
+
+    r = pipeline_view.build_reading(root)
+    rows = {row["card"]: row for row in r["verdicts"]}
+    assert set(rows) == {"001", "007", "120"}, f"不该多出带点的假卡号：{sorted(rows)}"
+    assert len({row["card"] for row in r["verdicts"]}) == len(r["verdicts"]), "一卡只许一行"
+    assert "120.killed" not in rows and "007.r2" not in rows
+    assert {a["att"] for a in rows["120"]["attempts"]} == {"", "killed"}
+    assert len(rows["007"]["attempts"]) == 2
+    assert rows["007"]["selected"] == "", "基名那次更晚（20:00 > 19:00）⇒ 现行的必须是无后缀那次"
+    assert rows["120"]["selected"] == "", "120 那次也更晚"
+    assert rows["007"]["verdict_first_line"] == "card=007 结束于=2026-10-02T20:00:00", \
+        "verdict_first_line 仍是 selected 那一次的首行（老字段语义不变）"
+    assert rows["007"]["has_verdict"] is True and rows["007"]["has_report"] is False
+
+
+def test_verdicts_selected_is_latest_by_ended_at(tmp_path: Path) -> None:
+    """判据 3 第二支：selected 按「结束于=」取最新；认不出时刻就回落，不许按文件名排序。"""
+    root = _full_fake_repo(tmp_path)
+    _write_artifact(root, "wb-008.verdict.txt", "card=008 结束于=2026-10-02T19:00:00\n")
+    _write_artifact(root, "wb-008.r2.verdict.txt", "card=008 结束于=2026-10-02T20:00:00\n")
+    _write_artifact(root, "wb-260.report.md", "# 卡 260 的交接摘要\n")   # 只有摘要、没有结束于=
+
+    r = pipeline_view.build_reading(root)
+    rows = {row["card"]: row for row in r["verdicts"]}
+    assert rows["008"]["selected"] == "r2", "r2 确实更晚 ⇒ 按文件名挑 base 是错的"
+    assert rows["260"]["selected"] == "", "认不出时刻 ⇒ 回落到唯一那个无后缀尝试"
+    assert rows["260"]["has_verdict"] is False and rows["260"]["has_report"] is True
+
+
+def test_report_verdicts_says_attempts(tmp_path: Path) -> None:
+    """判据 3 的人话面：跑过几次说几次，现行是哪一个也念出来。"""
+    root = _full_fake_repo(tmp_path)
+    _write_artifact(root, "wb-007.verdict.txt", "card=007 结束于=2026-10-02T20:00:00\n")
+    _write_artifact(root, "wb-007.killed.verdict.txt", "card=007 结束于=2026-10-02T10:00:00\n")
+
+    report = _run_cli(root, "--report")
+    seg = report.split("[verdicts]", 1)[1].split("[leases]", 1)[0]
+    assert "共 2 张卡有产物" in seg, f"一卡一行之后是 2 张（001 与 007）：{seg}"
+    assert "2 次尝试" in seg, f"007 跑过两次必须念出来：{seg}"
+    assert "现行=无后缀那次" in seg, f"现行是哪一个也要念：{seg}"
