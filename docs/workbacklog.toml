@@ -6190,3 +6190,17 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E130"
+task = "T-AG638"
+title = "checkin_status 把任意日期串当今日并拼进路径"
+tree = ".wt/E130"
+spec = "复盘/卡/卡E130-checkin_status把任意日期串当今日.md"
+files = [
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_task.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
