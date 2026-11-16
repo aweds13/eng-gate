@@ -3,6 +3,11 @@
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。
 - 新增两条钉子：`test_every_note_carries_the_reverification_reading`（每条 note 要有带日期的读数且句子里有数字 —— 只改日期过不了）与 `test_dispatch_rate_metric_points_at_the_real_logs`（metric 不许再出现 `.meta.json`、必须点名两头真日志）。
 - `test_days_zero_also_turns_the_gate_red` 改成自造「全部昨天验证」表跑 `--days 0`（真表今天是验证日，拿真表跑等于把「恰好过期」当前提），并写明真表变绿是对的。
+## 2026-11-16 T-AG621 额度四态说要「要探」却不给命令；can_dispatch 把「不知道」洗成「不能派」
+- `tools/pool_quota.py` 新增 `PROBE_SCRIPT` / `PROBE_ARGS` / `probe_command(platform=None)` / `probe_hint(platform=None)`：已过期 / 余额耗尽 / 未记录三态的人话段各多一行「要探就跑：…」，限流中不念（那态是确定不能派，不该叫人去探）。给了平台才拼 `--platform`，取不到就明说不带、跑全量。
+- `can_dispatch` 改三值：限流中 `False`（reset_at 还在未来 ⇒ 确定不能派），其余三态 `None`（不知道 —— 要探）；新增 `can_dispatch_reason` 把判词写清楚。机器块里的 `null` 不再退化成 `false`。
+- `status()` 新增 `probe` 键（command / hint / platform），平台取记录里的池名；MCP 的 description 跟着说清「命令是输出，不是入参」。四态字面量与「判据：」那一行一字未改。
+- 文档两处：`docs/subsystems/pool/模型与号池.md` 加一行操作（探哪条、写仓外账本、不改派生状态文件）；`复盘/Trae-接入结论.md` 的逐字输出块不动，只在后面加一条带日期与卡号的补注。
 ## 2026-11-10 T-AG610 契约对账表装牙：表里每一格都由工具现读，漂了就红
 - `tools/contract_audit.py` 新增 `--check-doc`（配 `--doc`）：**不跑判据**，逐格把 `复盘/契约-判据对账.md` 与活体比对 —— 源格 `path:line` 行号、原句格是否源文档那一行的子串（归一后、长度 ≥ 8）、判据格字样（pytest 带 `tests/` 前缀、cmd 去 `python -X utf8`、允许「同 CX-0N」）、段标题与读数块写的条数。全对 0 / 有漂 1（逐条点名 CX 与行号）/ 表读不出来 2。
 - 口径只在模块 docstring 写一份（§表格自检），实现读那一份：**不许**在测试里另抄一份「表该长什么样」。

@@ -10,6 +10,7 @@ r"""额度状态按钟表算（卡 201 · T-G303）的测试 —— 四态 + 反
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -59,7 +60,7 @@ def test_state_expired_requires_probe(tmp_path: Path) -> None:
     st = pool_quota.status(card=card, model=model, now=NOW, root=tmp_path)
     assert st["state"] == "已过期，需重新探测"
     assert st["expired_seconds"] > 0
-    assert st["can_dispatch"] is False
+    assert st["can_dispatch"] is None
     assert st["need_probe"] is True
     text = pool_quota.render(st)
     assert "已过期" in text
@@ -73,7 +74,7 @@ def test_state_balance_exhausted(tmp_path: Path) -> None:
     card, model = _record(tmp_path, reset_raw="解析不出来的字符串", kind="余额耗尽")
     st = pool_quota.status(card=card, model=model, now=NOW, root=tmp_path)
     assert st["state"] == "余额耗尽"
-    assert st["can_dispatch"] is False
+    assert st["can_dispatch"] is None
     assert st["need_probe"] is True
     text = pool_quota.render(st)
     assert "余额耗尽" in text
@@ -85,7 +86,7 @@ def test_state_unrecorded(tmp_path: Path) -> None:
     """四态④：没有记录 ⇒ 未记录 ⇒ 不猜（★ 不许默认当可用）。"""
     st = pool_quota.status(card="999", model="no-such-model", now=NOW, root=tmp_path)
     assert st["state"] == "未记录"
-    assert st["can_dispatch"] is False
+    assert st["can_dispatch"] is None
     assert st["need_probe"] is True
     text = pool_quota.render(st)
     assert "未记录" in text
@@ -172,3 +173,117 @@ def test_record_overwrites_same_card_model(tmp_path: Path) -> None:
     assert rec is not None
     assert rec["kind"] == "余额耗尽"  # 第二条覆盖第一条
     assert rec["reset_at"] is None
+
+
+# ==================================================== 卡 E112（T-AG621）：说要探，就得给那条命令
+
+
+def test_every_needs_probe_state_hands_out_the_command(tmp_path: Path) -> None:
+    """三态都说「要探」⇒ 人话段里必须逐字给出那条命令；限流中不许给。
+
+    ★ 卡 E112 的问题：四行里「要探」出现两次，没有一处是可执行的命令 ⇒
+      读者拿到的是一句愿望，不是一个动作。命令只有一份实现（`probe_command`），
+      render 只是把它念出来 —— 不许各拼一句。
+    """
+    cases = [
+        # (记录, 期望平台)
+        (dict(reset_raw="2026-10-12 16:52:45 UTC+8", kind="限流"), "codebuddy"),  # 已过期
+        (dict(reset_raw="解析不出来的字符串", kind="余额耗尽"), "codebuddy"),
+    ]
+    for rec, platform in cases:
+        card, model = _record(tmp_path, **rec)
+        st = pool_quota.status(card=card, model=model, now=NOW, root=tmp_path)
+        assert st["need_probe"] is True, rec
+        text = pool_quota.render(st)
+        cmd = pool_quota.probe_command(platform)
+        assert cmd in text, f"{st['state']} 的读数要人去探，却没给命令：\n{text}"
+        assert "tools/pool_accounts.py probe" in text
+
+    # 未记录态（没有记录 ⇒ 没有平台）
+    st = pool_quota.status(card="999", model="no-such-model", now=NOW, root=tmp_path)
+    assert st["need_probe"] is True
+    text = pool_quota.render(st)
+    assert pool_quota.probe_command(None) in text
+    # 不知道是哪个池 ⇒ 不许编一个平台名（hint 里说的是「不带 --platform」这件事本身）
+    assert re.search(r"--platform\s+\S", text) is None, text
+
+    # 限流中：确定不能派 ⇒ 不叫人去探（探了也不会变成能派）
+    card, model = _record(tmp_path, reset_raw="2026-10-12 23:58:00 UTC+8")
+    st = pool_quota.status(card=card, model=model, now=NOW, root=tmp_path)
+    assert st["state"] == "限流中"
+    assert "tools/pool_accounts.py probe" not in pool_quota.render(st)
+
+
+def test_probe_hint_says_what_it_does_not_do() -> None:
+    """hint 必须说清「它不改四态」—— 探会写仓外账本，quota-state.json 只由 429 派生。
+
+    ★ 反向断言比正向更要紧：一句「探完就能派活」的承诺会让读者跳过判据本身。
+    """
+    hint = pool_quota.probe_hint("codebuddy")
+    assert "quota-state.json" in hint
+    assert "未必变" in hint
+    assert "就会" not in hint  # 不许承诺「探完就会变」
+    assert "即可派活" not in hint
+    assert "就能派活" not in hint
+    assert pool_quota.probe_command("codebuddy") in hint
+
+
+def test_probe_command_carries_the_recorded_pool() -> None:
+    """给了平台才带 `--platform`；`None` 时**不带**（跑全量），不许编平台名。"""
+    cmd = pool_quota.probe_command("codebuddy")
+    assert "--platform codebuddy" in cmd
+    assert cmd.startswith("python -X utf8 ")
+    assert pool_quota.PROBE_SCRIPT in cmd
+
+    full = pool_quota.probe_command(None)
+    assert "--platform" not in full
+    assert pool_quota.PROBE_SCRIPT in full
+    assert "None" not in full  # 不许把 None 拼进命令
+
+
+def test_unrecorded_state_does_not_invent_a_platform(tmp_path: Path) -> None:
+    """未记录态没有记录 ⇒ probe["platform"] 是 None，hint 明说「不带 --platform」。"""
+    st = pool_quota.status(card="nope", model="nope", now=NOW, root=tmp_path)
+    assert st["state"] == "未记录"
+    probe = st["probe"]
+    assert probe["platform"] is None
+    assert "--platform" in probe["hint"]  # 说的是「不带 --platform」这件事本身
+    assert probe["command"] == pool_quota.probe_command(None)
+    assert probe["hint"] == pool_quota.probe_hint(None)
+
+
+def test_recorded_state_passes_its_pool_to_the_probe(tmp_path: Path) -> None:
+    """有记录 ⇒ platform 取记录里的 pool 字段（真数据今天只有 codebuddy）。"""
+    card, model = _record(tmp_path, reset_raw="2026-10-12 16:52:45 UTC+8")
+    st = pool_quota.status(card=card, model=model, now=NOW, root=tmp_path)
+    assert st["probe"]["platform"] == "codebuddy"
+    assert "--platform codebuddy" in st["probe"]["command"]
+
+
+def test_can_dispatch_none_is_not_false(tmp_path: Path) -> None:
+    """★ None is not False：Python 里两样都是假值，但判词一个是「不知道」、一个是「不能」。
+
+    ★ 卡 E112 的问题：四态恒 False ⇒ 读面把「不知道」说成「确定不能派」。
+    """
+    # 不能派：限流中（有钟表读数）
+    card, model = _record(tmp_path, reset_raw="2026-10-12 23:58:00 UTC+8")
+    st = pool_quota.status(card=card, model=model, now=NOW, root=tmp_path)
+    assert st["can_dispatch"] is False
+    assert "不知道" not in st["can_dispatch_reason"]
+    assert "确定不能派" in st["can_dispatch_reason"]
+
+    # 不知道：其余三态
+    for rec in (dict(reset_raw="2026-10-12 16:52:45 UTC+8"),
+                dict(reset_raw="解析不出来", kind="余额耗尽")):
+        card, model = _record(tmp_path, **rec)
+        st = pool_quota.status(card=card, model=model, now=NOW, root=tmp_path)
+        assert st["can_dispatch"] is None, rec
+        assert st["can_dispatch"] is not False
+        assert bool(st["can_dispatch"]) is False  # 假值 ≠ 判词
+        assert "不知道" in st["can_dispatch_reason"], rec
+        assert "确定不能派" not in st["can_dispatch_reason"]
+
+    st = pool_quota.status(card="nope", model="nope", now=NOW, root=tmp_path)
+    assert st["can_dispatch"] is None
+    assert st["can_dispatch"] is not False
+    assert "不知道" in st["can_dispatch_reason"]

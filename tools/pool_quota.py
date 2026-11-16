@@ -28,11 +28,17 @@ r"""额度状态按钟表算（卡 201 · T-G303）—— 429 不许凭记忆，
 
 ★ `--now <ISO>`：注入「现在」（测试不许靠真实钟表）。
 
+★ `can_dispatch` 三值：`限流中` ⇒ False（有钟表读数，确定不能派）；其余三态 ⇒ None
+  （「不知道」不是「不能」—— 假值相同、判词不同，`can_dispatch_reason` 把话说清）。
+
 用法：
     python -X utf8 tools/pool_quota.py status --card 201 --model deepseek-v4.1-flash
     python -X utf8 tools/pool_quota.py status --card 201 --model X --now 2026-10-12T23:28:00+08:00
     python -X utf8 tools/pool_quota.py wait --card 201 --model X --timeout 6h
     python -X utf8 tools/pool_quota.py refresh --card 201 --model X --json
+
+★ 三态（已过期 / 余额耗尽 / 未记录）说「要探」时，本模块把那条命令念出来（`probe_command`），
+  **不执行**它 —— 探测在 tools/pool_accounts.py，跑不跑是人的事。
 """
 
 from __future__ import annotations
@@ -457,6 +463,44 @@ def _rest_keys(*, reset_at: str | None, now: datetime) -> dict[str, Any]:
     return {"rest_until": st["rest_until"], "rest_by": st["by"]}
 
 
+PROBE_SCRIPT = "tools/pool_accounts.py"
+#: 探测参数（`probe` = 只读探测额度；联网、写仓外账本，两样都不在这里做）。
+PROBE_ARGS = ("probe",)
+#: 探完会怎样 —— **只讲事实，不许许诺**（探会写仓外账本的观测时刻；四态只由 429 派生）。
+PROBE_NOTE = ("它会写仓外账本的观测时刻；`gates/diag/quota-state.json` 只由 429 派生"
+              " ⇒ 探完四态未必变")
+#: 「不能派」与「不知道」两句话 —— 判词不一样，就不许共用一个 False（卡 E112）。
+CANNOT_DISPATCH_REASON = "reset_at 还在未来 ⇒ 确定不能派"
+CANNOT_SAY_REASON = "不知道 —— 要探"
+
+
+def probe_command(platform: str | None = None) -> str:
+    """重新探测那条命令；**逐字可跑**。
+
+    ★ 给了平台才带 `--platform`；`None` 时不带（跑全量）—— **不许编一个平台名**：
+      不知道是哪个号池时说「不知道」，比猜一个更像读数。
+    """
+    parts = ["python", "-X", "utf8", PROBE_SCRIPT, *PROBE_ARGS]
+    plat = (platform or "").strip()
+    if plat:
+        parts += ["--platform", plat]
+    return " ".join(parts)
+
+
+def probe_hint(platform: str | None = None) -> str:
+    """「怎么探、探完会怎样」的一句话（读面三处共用这一份，不各自拼）。"""
+    cmd = probe_command(platform)
+    if (platform or "").strip():
+        return f"要探就跑：{cmd}（{PROBE_NOTE}）"
+    return f"要探就跑：{cmd}（不知道是哪个号池 ⇒ 命令不带 --platform、跑全量；{PROBE_NOTE}）"
+
+
+def _probe_view(platform: str | None) -> dict[str, Any]:
+    """`status()` 的 `probe` 键：命令 / 一句话 / 平台（取不到就是 None，不猜）。"""
+    return {"command": probe_command(platform), "hint": probe_hint(platform),
+            "platform": platform}
+
+
 # ================================================================ 四态（每次现算）
 
 
@@ -470,11 +514,15 @@ def status(*, card: str, model: str, now: datetime | str | None = None,
     rec = read_record(card, model, root=root)
     now_dt = _resolve_now(now)
     now_iso = now_dt.isoformat()
+    platform = str((rec or {}).get("pool") or "").strip() or None
     base: dict[str, Any] = {
         "card": card, "model": model,
         "reset_at": None, "recorded_at": None, "now": now_iso,
         "remaining_seconds": None, "expired_seconds": None,
-        "can_dispatch": False, "need_probe": True,
+        # ★ 卡 E112：缺省是「不知道」（None），不是 False —— 只有限流中才翻成 False。
+        "can_dispatch": None, "need_probe": True,
+        "can_dispatch_reason": CANNOT_SAY_REASON,
+        "probe": _probe_view(platform),
         "rest_until": None, "rest_by": None,
     }
     if rec is None:
@@ -498,6 +546,8 @@ def status(*, card: str, model: str, now: datetime | str | None = None,
         return {**base, "state": "限流中", "reset_at": reset_at_raw,
                 **_rest_keys(reset_at=reset_at_raw, now=now_dt),
                 "remaining_seconds": int(diff), "need_probe": False,
+                "can_dispatch": False,
+                "can_dispatch_reason": CANNOT_DISPATCH_REASON,
                 "why": f"reset_at > now（剩余 {int(diff)} 秒）"}
     return {**base, "state": "已过期，需重新探测", "reset_at": reset_at_raw,
             **_rest_keys(reset_at=reset_at_raw, now=now_dt),
@@ -532,6 +582,10 @@ def render(st: dict[str, Any]) -> str:
     elif state == "未记录":
         lines.append("  没记录 ⇒ 不猜（★ 不许默认当可用）")
     lines.append(f"  判据：{st['why']}")
+    # ★ 卡 E112：三态都说「要探」⇒ 把那条命令念出来（限流中是确定不能派，不叫人去探）。
+    if state != "限流中":
+        probe = st.get("probe") or _probe_view(None)
+        lines.append(f"  {probe['hint']}")
     return "\n".join(lines)
 
 

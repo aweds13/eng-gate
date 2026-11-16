@@ -1046,3 +1046,38 @@ def test_the_doc_projections_stop_calling_the_intersection_dispatchable() -> Non
     tail = "\n".join(trae[trae.index(verbatim):].splitlines()[:40])
     assert "E111" in tail, "逐字输出之后 40 行内要有 E111 的补注：" + tail
     assert "2026-11-10" in tail, "补注必须带日期：" + tail
+
+
+# ==================================================== 卡 E112（T-AG621）：未知不许洗成 false
+
+
+def test_mcp_payload_keeps_unknown_as_null(tmp_path: Path) -> None:
+    """★ 未记录态的 `can_dispatch` 在 JSON 里必须是 `null`，不是 `false`。
+
+    ★ 卡 E112 的问题：四态恒 False ⇒ 机器读者拿到的是「确定不能派」，
+      而判词自己说的是「不猜（★ 不许默认当可用）」。JSON 的 null 才是「不知道」。
+    """
+    import pool_quota  # noqa: PLC0415 —— 同一个 tools/ 目录，和工具读同一份真源
+
+    # 未记录：没有那条记录
+    text, data, is_error = pool_mcp.tool_quota_status(
+        {"card": "A318", "model": "kimi-k3-1", "now": "2026-11-16T12:00:00+08:00"}, root=tmp_path
+    )
+    assert is_error is False
+    assert data["state"] == "未记录"
+    assert data["can_dispatch"] is None
+    block = _json_block(text)
+    assert block["can_dispatch"] is None, f"机器块里不许把「不知道」写成 false：{block}"
+    assert "null" in text.split(JSON_MARKER, 1)[1]
+    assert block["probe"]["command"] == pool_quota.probe_command(None)
+
+    # 限流中：有钟表读数 ⇒ false 才是对的
+    pool_quota.record(card="A318", model="kimi-k3-1", pool="codebuddy", kind="限流",
+                      reset_raw="2026-11-16 20:00:00 UTC+8", root=tmp_path)
+    text2, data2, _ = pool_mcp.tool_quota_status(
+        {"card": "A318", "model": "kimi-k3-1", "now": "2026-11-16T12:00:00+08:00"}, root=tmp_path
+    )
+    assert data2["state"] == "限流中"
+    assert data2["can_dispatch"] is False
+    assert _json_block(text2)["can_dispatch"] is False
+    assert "tools/pool_accounts.py probe" not in _human(text2)  # 确定不能派时不叫人去探

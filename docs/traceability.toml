@@ -12074,3 +12074,25 @@ evidence = [
   "text:docs/proxy-map.toml::★ 2026-11-16 重验读数：gates/last.json rev=cf928a2d",
 ]
 gaps = "1. 五条 note 的「重验读数」是**手写的一段话**，不是机器再算一遍：数字错了、或者明天就过期了，没有任何东西会响（机器只比 `last_verified` 的日期）。所以这张表的真保障仍然是「31 天之内有人手工重验」，本卡只是把「假日期」这一种偷法堵住。指针 `docs/proxy-map.toml`2. `--days 0` 那条钉子现在自造「昨天」表，但真表在 `--days 0` 上变绿**只说明今天正好是验证日** —— 它同时是一条会自己过期的断言（明天跑就红）。这不是缺陷，是设计：红了就去重验，不许改钉子。指针 `tests/test_run_gates_proxy.py`3. `dispatch-rate` 的 metric 现在点名两头的真日志，但 codearts 那头（仓外 `<号池>/logs/card-<卡>.jsonl` + `meta.json`）在本仓里**读不到**：本卡只保证「读者知道去哪儿找」，没有把仓外产物搬进来，也没接任何自动对账。指针 `docs/proxy-map.toml`"
+
+[entries."T-AG621"]
+id = "T-AG621"
+title = "额度四态说要探就给命令：can_dispatch三值、probe键进payload、文档两处投影"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_quota.py",
+  "file:tools/pool_mcp.py",
+  "file:tests/test_quota_clock.py",
+  "file:tests/test_pool_mcp.py",
+  "file:docs/subsystems/pool/模型与号池.md",
+  "file:复盘/Trae-接入结论.md",
+  "test:test_quota_clock.py::test_every_needs_probe_state_hands_out_the_command",
+  "test:test_quota_clock.py::test_probe_hint_says_what_it_does_not_do",
+  "test:test_quota_clock.py::test_probe_command_carries_the_recorded_pool",
+  "test:test_quota_clock.py::test_unrecorded_state_does_not_invent_a_platform",
+  "test:test_quota_clock.py::test_can_dispatch_none_is_not_false",
+  "test:test_pool_mcp.py::test_mcp_payload_keeps_unknown_as_null",
+  "text:tools/pool_quota.py::def probe_command(",
+]
+gaps = "1. probe_hint 里那句「探完四态未必变」是**人写的一句话**，不是从代码推的：哪天 record_probe_result 真的开始写额度状态文件，这句话会继续这么说而没有任何东西会红。指针 `tools/pool_quota.py`2. `can_dispatch=None` 只是把「不知道」说清楚，派活链**没有**任何地方读它（生产消费者仍只有 MCP payload 与 CLI 人话段）；分派侧仍走 wb_dispatch.quota_error 与 pool.route.reset_for，两张面的判词今天还没对齐 —— 属另一张卡。指针 `tools/pool_mcp.py`3. 三态那条命令是拼字符串拼出来的（PROBE_SCRIPT + probe），没有一处校验 `tools/pool_accounts.py` 真的还认 probe 子命令：子命令哪天改名，两处会同时漂而门禁不会红。指针 `tools/pool_quota.py`"

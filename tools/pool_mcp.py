@@ -462,6 +462,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "description": (
             "额度四态（卡 201）：按「记录时间 vs 现实时间」判 —— 限流中 / 已过期，"
             "需重新探测 / 余额耗尽 / 未记录。只读，当场算，不探测。"
+            "★ 后三态会给一条 `tools/pool_accounts.py probe` 命令（命令是**输出**，"
+            "不是本工具的入参）；`can_dispatch` 只有限流中才是 false，其余是 null（不知道）。"
         ),
         "inputSchema": {
             "type": "object",

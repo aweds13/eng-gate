@@ -1,0 +1,22 @@
+[entries."T-AG621"]
+id = "T-AG621"
+title = "额度四态说要探就给命令：can_dispatch三值、probe键进payload、文档两处投影"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_quota.py",
+  "file:tools/pool_mcp.py",
+  "file:tests/test_quota_clock.py",
+  "file:tests/test_pool_mcp.py",
+  "file:docs/subsystems/pool/模型与号池.md",
+  "file:复盘/Trae-接入结论.md",
+  "test:test_quota_clock.py::test_every_needs_probe_state_hands_out_the_command",
+  "test:test_quota_clock.py::test_probe_hint_says_what_it_does_not_do",
+  "test:test_quota_clock.py::test_probe_command_carries_the_recorded_pool",
+  "test:test_quota_clock.py::test_unrecorded_state_does_not_invent_a_platform",
+  "test:test_quota_clock.py::test_can_dispatch_none_is_not_false",
+  "test:test_pool_mcp.py::test_mcp_payload_keeps_unknown_as_null",
+  "text:tools/pool_quota.py::def probe_command(",
+]
+gaps = "1. probe_hint 里那句「探完四态未必变」是**人写的一句话**，不是从代码推的：哪天 record_probe_result 真的开始写额度状态文件，这句话会继续这么说而没有任何东西会红。指针 `tools/pool_quota.py`2. `can_dispatch=None` 只是把「不知道」说清楚，派活链**没有**任何地方读它（生产消费者仍只有 MCP payload 与 CLI 人话段）；分派侧仍走 wb_dispatch.quota_error 与 pool.route.reset_for，两张面的判词今天还没对齐 —— 属另一张卡。指针 `tools/pool_mcp.py`3. 三态那条命令是拼字符串拼出来的（PROBE_SCRIPT + probe），没有一处校验 `tools/pool_accounts.py` 真的还认 probe 子命令：子命令哪天改名，两处会同时漂而门禁不会红。指针 `tools/pool_quota.py`"
+
