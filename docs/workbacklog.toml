@@ -6207,3 +6207,26 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E129"
+task = "T-AG641"
+title = "号池任务面把坏状态文件洗成没有"
+tree = ".wt/E129"
+spec = "复盘/卡/卡E129-号池任务面把坏状态文件洗成没有.md"
+files = [
+  "tools/pool_mcp.py",
+  "tools/pool/task.py",
+  "tests/test_pool_mcp_task.py",
+  "tests/test_pool_task.py"
+]
+depends = [
+  "E118",
+  "E125",
+  "E128",
+  "E130",
+  "E131",
+  "E132"
+]
+risk = "mid"
+status = "pending"
