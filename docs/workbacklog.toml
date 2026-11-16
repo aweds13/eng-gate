@@ -6098,3 +6098,25 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E123"
+task = "T-AG632"
+title = "门禁跑完主树又前进时复核器怎么判"
+tree = ".wt/E123"
+spec = "复盘/卡/卡E123-门禁跑完主树又前进时复核器怎么判.md"
+files = [
+  "tools/wb_review.py",
+  "tests/test_wb_review.py",
+  "tools/wb_verify.py",
+  "tools/gate_pool.py",
+  "tools/pool/landing.py",
+  "tests/test_two_rulers.py",
+  "tests/test_wb_land.py",
+  "docs/decisions/0005-gate-base-drift.md"
+]
+depends = [
+  "E115"
+]
+risk = "mid"
+status = "pending"
