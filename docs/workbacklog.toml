@@ -5948,7 +5948,7 @@ files = [
   "tests/test_pool_registry.py"
 ]
 depends = [
-  "E115"
+  "E119"
 ]
 risk = "mid"
 status = "pending"
