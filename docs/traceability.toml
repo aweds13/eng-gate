@@ -628,7 +628,7 @@ status = "done"
 evidence = [
   "file:复盘/并发架构-T-G99.md",
   "file:tools/wb_plan.py",
-  "text:tools/pool/plan.py::def validate(backlog: Backlog) -> list[str]:",
+  "text:tools/pool/plan.py::def validate(backlog: Backlog, root: Path | None = None) -> list[str]:",
   "text:tools/pool/plan.py::def topo_layers(cards: Sequence[Card]) -> list[list[Card]]:",
   "text:tools/pool/plan.py::def greedy_pack(cards: Sequence[Card], limit: int) -> list[list[Card]]:",
   "text:tools/pool/plan.py::PROTECTED_FILES = frozenset({",
@@ -12138,3 +12138,21 @@ evidence = [
   "test:test_pool_mcp.py::test_job_status_first_line_says_in_flight",
 ]
 gaps = "1. `scan_jobs()` 的第五类「台账已完结」要靠调用方把 `backlog=` 传进来；今天只有 `tools/pool_mcp.py` 的 `job_list` 传了，`tools/pool/registry.py`、`tools/pool/trae_dispatch.py`、`tools/wb_status.py` 三个调用点没传 ⇒ 同一份日志在不同入口可能落进不同的桶（`断了` vs `台账已完结`）。本卡只把读面那一面统一，三个内部调用点维持原状 —— 这是已知分叉，不是没发现。指针 `tools/pool/registry.py`2. `job_status` 查正式证据时，第 ⑤ 类只读 `docs/traceability.toml` 的 `entries` 一张总表；本仓现在只有总表所以成立，将来若把它像 `docs/workbacklog.toml` 那样拆成分片，这一类会在分片仓里静默失效（其余四类不受影响）。指针 `tools/pool_mcp.py`3. `land-<card>[a-z]?.log` 这条规则按卡规格写死成「只许一位小写字母」：a→z 共 26 次落地都认，但第 27 次或有人写成 `land-E116-x.log` 就静默漏掉，退化成「查不到正式证据」。放宽会串卡（实测 `land-E1` 会命中 29 张），所以本卡选择宁可漏也不串，漏的那天靠人在日志里看见。指针 `tools/pool_mcp.py`"
+
+[entries."T-AG625"]
+id = "T-AG625"
+title = "工具读的根跟调用方：gates/diag不再单独算数据根、任务面与计划真用传进来的root"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pipe_root.py",
+  "file:tools/pool/task.py",
+  "file:tools/pool/plan.py",
+  "file:tools/pool_mcp.py",
+  "test:test_pipe_root.py::test_a_lone_gates_diag_is_not_a_data_root",
+  "test:test_pool_task.py::test_main_tree_root_agrees_with_registry_in_every_cwd",
+  "test:test_pool_mcp_task.py::test_task_faces_follow_the_root_they_are_given",
+  "test:test_pool_mcp_task.py::test_pool_plan_judges_with_the_root_it_was_given",
+  "test:test_pool_mcp_task.py::test_checkin_read_side_lands_on_the_write_side",
+]
+gaps = "1. 判据 3 的分叉靠「调用方给的 root 是不是等于模块级 ROOT」来认「这就是服务端那条路」—— 这是**推定**，不是显式信号：将来任何别的入口传一个恰好等于 ROOT 的路径，读端会悄悄换根，而没有任何一行日志说明它换过。指针 `tools/pool_mcp.py`2. 只修了「读」这一半：`tools/pool/task.py` 的 `batch_dir()` 现在认 root，但 task.py 内部 6 处调用（register / claim / find_gates_for_member / draft / why 等）仍旧走默认根 —— 从卡树里跑 `task.main([「register」, …])` 仍然写主树。指针 `tools/pool/task.py`3. `tools/pool/plan.py` 只有 spec 读取跟了 root：`audit_batch_claims()`、`_fence_batch_dir()`、`find_spec()` 还只认模块级 ROOT，判据根在「批量申请审计」这条链上仍可能与调用方给的根不是同一棵。指针 `tools/pool/plan.py`"

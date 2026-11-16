@@ -102,3 +102,48 @@ def test_wb_plan_reads_the_ledger_from_the_data_root(tmp_path: Path) -> None:
     # 判据：它读的是数据根的账本（只提到 ZZ1），不是工具所在仓的 200 张卡。
     assert "ZZ1" in out, out[-800:]
     assert "A272" not in out, out[-800:]
+
+
+# ------------------------------------------------ 卡 E114：什么算数据根（只认两份账本）
+
+
+def test_a_lone_gates_diag_is_not_a_data_root(tmp_path: Path, monkeypatch) -> None:
+    """★ 判据 1：只有 gates/diag 的目录**不是**数据根。
+
+    病：MARKERS 里有 gates/diag ⇒ 任何一棵带 gates/diag 的树（卡树、profile、
+    .dsh/profiles/desktop）都被当成数据根 ⇒ 工具从外面被拉起时读的是那一棵。
+    """
+    (tmp_path / "gates" / "diag").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PIPE_DATA", raising=False)
+    monkeypatch.delenv("PIPE_HOME", raising=False)
+    sys.path.insert(0, str(TOOLS))
+    try:
+        import pipe_root
+    finally:
+        sys.path.pop(0)
+    assert pipe_root._looks_like_data_root(tmp_path) is False, "只有 gates/diag 也被当成了数据根"
+    assert pipe_root.data_root() == pipe_root.home_root(), pipe_root.data_root()
+    assert pipe_root.data_root() != tmp_path.resolve()
+
+
+def test_pipe_data_beats_a_cwd_that_has_both_ledgers(tmp_path: Path, monkeypatch) -> None:
+    """★ 判据 4：cwd 造满两份账本 + gates/diag，PIPE_DATA 仍然赢；explicit 仍压过 PIPE_DATA。"""
+    cwd_tree = tmp_path / "cwd_tree"
+    _ledger(cwd_tree)
+    (cwd_tree / "docs" / "traceability.toml").write_text("", encoding="utf-8")
+    (cwd_tree / "gates" / "diag").mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(cwd_tree)
+    monkeypatch.delenv("PIPE_HOME", raising=False)
+    monkeypatch.setenv("PIPE_DATA", str(elsewhere))
+    sys.path.insert(0, str(TOOLS))
+    try:
+        import pipe_root
+    finally:
+        sys.path.pop(0)
+    assert pipe_root._looks_like_data_root(cwd_tree) is True
+    assert pipe_root.data_root() == elsewhere.resolve(), "cwd 抢了 PIPE_DATA 的位置"
+    assert pipe_root.data_root(str(tmp_path)) == tmp_path.resolve()
+    assert pipe_root.data_root(str(tmp_path)) != elsewhere.resolve()

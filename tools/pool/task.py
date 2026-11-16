@@ -127,6 +127,7 @@ def main_tree_root() -> Path:
     ★ `cwd` 必须显式给（从本文件推）：服务可能被别的程序（如 DSH 起 MCP 子进程）从仓外拉起。
     """
     tree_root = Path(__file__).resolve().parents[2]
+    git_cwd = tree_root if tree_root.is_dir() else None
     try:
         done = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
@@ -140,33 +141,45 @@ def main_tree_root() -> Path:
         raise BatchError("算不出主工作树：`git rev-parse --git-common-dir` 没回路径")
     common = Path(raw)
     if not common.is_absolute():
-        common = Path.cwd() / common
+        # ★ 卡 E114：相对路径相对的是**给 git 的那个 cwd**（git_cwd = 本文件所在的树），
+        #   不是进程 cwd。从前这里用 Path.cwd()，于是「模块住主树 + cwd 在卡树/仓外」两格
+        #   会算出进程 cwd 那棵树 —— 与 pool/registry.py 的同一个函数不一致（卡 117 在那边修过）。
+        common = (git_cwd or Path.cwd()) / common
     return common.resolve().parent
 
 
-def batch_dir() -> Path:
-    """任务目录：`TF_BATCH_DIR` 覆盖（自证要用），否则主树下 `gates/diag/batch/`。"""
+def batch_dir(root: Path | None = None) -> Path:
+    """任务目录：`TF_BATCH_DIR` 覆盖（自证要用）> 调用方给的 root（卡 E114）> 主树。
+
+    ★ 卡 E114：root 是**调用方给的根** —— 号池 MCP 可能被别的程序（DSH 起子进程）
+      从仓外拉起，那时「工具住在哪棵树」与「任务状态住在哪棵树」不是一回事。
+      从前这个函数不收参数，三条 task_* 面只回「工具根那棵树」，于是从 profile 目录
+      调用会回「一个任务都没有」（真值上百个）。**cwd 一次都不许参与**。
+      `TF_BATCH_DIR` 仍排第一：它是自证注入点，语义一个字都没动（卡 E114 不许做 ⑥）。
+    """
     override = os.environ.get("TF_BATCH_DIR", "").strip()
     if override:
         return Path(override)
+    if root is not None:
+        return Path(root) / Path(*BATCH_REL)
     return main_tree_root() / Path(*BATCH_REL)
 
 
-def manifest_path(task_id: str) -> Path:
-    return batch_dir() / f"{task_id}.toml"
+def manifest_path(task_id: str, root: Path | None = None) -> Path:
+    return batch_dir(root) / f"{task_id}.toml"
 
 
-def state_path(task_id: str) -> Path:
-    return batch_dir() / f"{task_id}.json"
+def state_path(task_id: str, root: Path | None = None) -> Path:
+    return batch_dir(root) / f"{task_id}.json"
 
 
-def inbox_dir(task_id: str) -> Path:
-    return batch_dir() / f"{task_id}.d"
+def inbox_dir(task_id: str, root: Path | None = None) -> Path:
+    return batch_dir(root) / f"{task_id}.d"
 
 
-def pool_path() -> Path:
+def pool_path(root: Path | None = None) -> Path:
     """"还没定卡的活"的登记表（可选；任务也可以直接注册成员）。"""
-    return batch_dir() / "pool.json"
+    return batch_dir(root) / "pool.json"
 
 
 def now_iso() -> str:
@@ -401,8 +414,8 @@ def _validate_manifest(man: dict, task_id: str) -> None:
             raise BatchError(f"`on_complete` 里有不认识的动作 {action!r}（只认 {ALLOWED_ACTIONS}）")
 
 
-def load_manifest(task_id: str) -> dict:
-    path = manifest_path(task_id)
+def load_manifest(task_id: str, root: Path | None = None) -> dict:
+    path = manifest_path(task_id, root)
     if not path.exists():
         raise BatchError(f"没有这个任务的预声明：{path}（先 `register`）")
     with path.open("rb") as fh:
@@ -1175,8 +1188,8 @@ def cmd_list(args: argparse.Namespace) -> int:
 # ================================================================ 待定卡的活（可选登记）
 
 
-def _load_pool() -> list[dict]:
-    path = pool_path()
+def _load_pool(root: Path | None = None) -> list[dict]:
+    path = pool_path(root)
     if not path.exists():
         return []
     text = path.read_text(encoding="utf-8")

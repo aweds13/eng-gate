@@ -687,3 +687,63 @@ def test_nail143_04_read_only_claim_is_recorded_but_not_counted(tmp_path, monkey
     assert rc == 0 and st["state"] == "awaiting-commit", \
         f"只读不通过挡了收口：rc={rc} {st['state']}"
     assert task._bad(st) == [], f"只读成员不该进『不通过挡收口』：{task._bad(st)}"
+
+
+# ------------------------------------------------ 卡 E114：根从哪来（主树 vs cwd）
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", *args],
+        cwd=str(repo),
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+def test_main_tree_root_agrees_with_registry_in_every_cwd(tmp_path: Path, monkeypatch) -> None:
+    """★ 判据 2-1：五格（模块住哪棵树 × 进程 cwd 在哪）两边必须一致。
+
+    病：task.main_tree_root() 在 --git-common-dir 回相对路径时用 Path.cwd() 拼，
+    而 registry 用「给 git 的那个 cwd」拼（卡 117）。今天只有 2 格 DIFF ——
+    只跑「模块住卡树」那几格会假绿，所以五格一起跑。
+    """
+    main = tmp_path / "main"
+    (main / "tools" / "pool").mkdir(parents=True)
+    (main / "README.md").write_text("x\n", encoding="utf-8")
+    _git(main, "init", "-q")
+    _git(main, "config", "user.email", "nail@example.invalid")
+    _git(main, "config", "user.name", "nail")
+    _git(main, "config", "commit.gpgsign", "false")
+    _git(main, "add", "-A")
+    _git(main, "commit", "-qm", "init")
+    card = tmp_path / "card"
+    _git(main, "worktree", "add", "-q", "-b", "card/x", str(card))
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.delenv("TF_BATCH_DIR", raising=False)
+    import pool.registry as registry
+
+    cells = (
+        (main, main),
+        (main, card),
+        (main, outside),
+        (card, card),
+        (card, outside),
+    )
+    want = main.resolve()
+    diffs = []
+    for mod_root, cwd in cells:
+        monkeypatch.setattr(task, "__file__", str(mod_root / "tools" / "pool" / "task.py"))
+        monkeypatch.setattr(
+            registry, "__file__", str(mod_root / "tools" / "pool" / "registry.py")
+        )
+        monkeypatch.chdir(cwd)
+        got_task = task.main_tree_root().resolve()
+        got_reg = registry.main_tree_root().resolve()
+        if got_task != got_reg or got_task != want:
+            diffs.append((mod_root.name, cwd.name, got_task.as_posix(), got_reg.as_posix()))
+    assert not diffs, diffs

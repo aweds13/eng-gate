@@ -254,7 +254,7 @@ def _rel_for_message(path: Path) -> str:
         return path.as_posix()
 
 
-def validate(backlog: Backlog) -> list[str]:
+def validate(backlog: Backlog, root: Path | None = None) -> list[str]:
     """拒单清单（空 = 这份 backlog 能用）。
 
     字段类（**所有卡都要过**）：② `files` 含受保护共享文件；④ `depends` 指向不存在的卡；
@@ -270,7 +270,10 @@ def validate(backlog: Backlog) -> list[str]:
       · **同域两卡只要**有依赖路径**就允许共存** —— `topo_layers()` 会把被依赖的放更早的层、
         `greedy_pack()` 又不跨层，所以它们**不可能同批**；从前一律拒单，装不下
         队列里的「同域串行」（例：024 与 029 都要改 `wb_dispatch.py`）。
+    ★ 卡 E114：`root` 是**调用方给的根** —— 「工具住在哪棵树」与「账本/规格住在哪棵树」不是一回事
+    （从 profile 目录拉起 MCP 时计划会 361 条全报「读不到规格」）。不给就回模块级 `ROOT`（老行为）。
     """
+    base_root = ROOT if root is None else Path(root)
     problems: list[str] = []
     cards = backlog.cards
     ids = {card.id for card in cards}
@@ -303,7 +306,7 @@ def validate(backlog: Backlog) -> list[str]:
         #   ★ `spec` 为空 ⇒ 跳过（测试夹具约定；真 backlog 的 spec 由 `load_backlog` 保证非空）。
         if not card.spec:
             continue
-        spec_path = ROOT / card.spec
+        spec_path = base_root / card.spec
         if not spec_path.exists():
             problems.append(f"卡 {card.id}：读不到规格 {card.spec}（队列指向一个没有的规格）")
         else:
@@ -659,13 +662,15 @@ def find_spec(card: str) -> str:
     return ""
 
 
-def plan_report(backlog: Backlog, limit: int = DEFAULT_CONCURRENCY) -> tuple[int, str, str]:
+def plan_report(
+    backlog: Backlog, limit: int = DEFAULT_CONCURRENCY, root: Path | None = None
+) -> tuple[int, str, str]:
     """`wb_plan.py plan` 会印什么 —— 返回 `(退出码, stdout, stderr)` 的**原样文本**（纯函数）。
 
     ★ 为什么要有它：CLI 的 `cmd_plan()` 与号池 MCP 的 `pool_plan` 工具要给出**逐字相同**的
     计划文本；把"打印字符串"抽成纯函数，两处就不会各写一份（`wb_dispatch` 那条命令拼装仍归 CLI）。
     """
-    problems = validate(backlog)
+    problems = validate(backlog, root)
     if problems:
         err = "[FAIL] backlog 不能用：\n" + "".join(f"  · {p}\n" for p in problems)
         return 1, "", err

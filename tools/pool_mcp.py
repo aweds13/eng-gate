@@ -925,7 +925,7 @@ def tool_pool_plan(
         # 卡 E89：台账分片时读分片（总表只是合并产物）；无分片退回同一条老读法。
         backlog = wb_plan.load_sharded_backlog(
             root / "docs" / "workbacklog.toml", root / "docs" / "backlog")
-        code, out, err = plan_report(backlog, concurrency)
+        code, out, err = plan_report(backlog, concurrency, root=root)
     except BacklogError as exc:
         code, out, err = 2, "", f"[FAIL] {exc}\n"
     body = (out + ("\n" + err if err.strip() else "")).strip()
@@ -1642,11 +1642,19 @@ def tool_checkin_status(
     import pool_accounts  # noqa: PLC0415 —— 同一个 tools/ 目录
 
     date = str(arguments.get("date") or "").strip() or _today_local()
-    archive = root / _CHECKIN_DIR / f"checkin-{date}.json"
+    # ★ 卡 E114：留档**读端**必须是**写端**那一棵树。写端 pool_accounts.write_checkin_archive()
+    #   恒落 pool_accounts.DATA_ROOT（即 pipe_root.data_root()）；从前读端用传进来的 root ——
+    #   而 MCP 服务端传的恒是模块级 ROOT（工具根），于是从 profile 目录拉起时两边永不相交。
+    #   调用方**显式给了另一棵树**（夹具 root=tmp_path）时仍尊重它：那是「给我哪个根就读哪个根」。
+    archive_root = root if root != ROOT else pool_accounts.DATA_ROOT
+    archive = archive_root / _CHECKIN_DIR / f"checkin-{date}.json"
 
     payload: dict[str, Any] = {"date": date, "archive": str(archive), "found": archive.is_file()}
     lines = [f"今日签到（checkin_status）—— {date}"]
-    lines.append(f"留档路径：{archive.as_posix()}（**本树**的留档；换一棵树读的是另一份）")
+    lines.append(
+        f"留档路径：{archive.as_posix()}"
+        f"（与签到写入端同一个根；换一棵树读的是另一份）"
+    )
     if archive.is_file():
         try:
             data = json.loads(archive.read_text(encoding="utf-8"))
@@ -1869,14 +1877,19 @@ def tool_workbench_board(
 #   可覆盖），不是本树 —— 与 `pool.task` 一致，不另算一份根。**一个字节都不写**。
 
 
-def _task_batch_dir() -> Path:
-    """任务目录（可能还不存在）—— 转发 `pool.task.batch_dir()`（`TF_BATCH_DIR` 覆盖）。"""
-    return task.batch_dir()
+def _task_batch_dir(root: Path | None = None) -> Path:
+    """任务目录（可能还不存在）—— 转发 `pool.task.batch_dir(root)`（`TF_BATCH_DIR` 覆盖）。
+
+    ★ 卡 E114：把**调用方给的 root** 传下去。从前这里不收参数，于是三个 `task_*` 面
+      不管调用方给哪个根，都只读「工具目录所在那棵树」—— 从 profile 目录拉起时回
+      「一个任务都没有」，而真值上百个。`TF_BATCH_DIR` 仍排第一（自证注入点，语义一字未动）。
+    """
+    return task.batch_dir(root)
 
 
-def _load_tasks() -> list[dict[str, Any]]:
+def _load_tasks(batch_root: Path | None = None) -> list[dict[str, Any]]:
     """把批目录里的任务状态都读进来（跳过 `pool.json` / 结构不对的）。**只读**。"""
-    root = _task_batch_dir()
+    root = _task_batch_dir(batch_root)
     if not root.exists():
         return []
     out: list[dict[str, Any]] = []
@@ -1897,8 +1910,8 @@ def tool_task_list(
 ) -> tuple[str, dict[str, Any], bool]:
     """所有任务一行：任务号 / 状态 / 成送申请进度 / 一句话 why（**只读**）。"""
     try:
-        root_dir = _task_batch_dir()
-        states = _load_tasks()
+        root_dir = _task_batch_dir(root)
+        states = _load_tasks(root)
     except task.BatchError as exc:
         return _result(
             f"task_list：读不了任务目录：{exc}", {"count": 0, "tasks": []}, is_error=True
@@ -1948,8 +1961,8 @@ def tool_task_status(
             is_error=True,
         )
     try:
-        root_dir = _task_batch_dir()
-        sp = task.state_path(task_id)
+        root_dir = _task_batch_dir(root)
+        sp = task.state_path(task_id, root)
     except task.BatchError as exc:
         return _result(
             f"task_status：算不出任务目录：{exc}", {"task": task_id, "found": False}, is_error=True
@@ -1963,7 +1976,7 @@ def tool_task_status(
         )
     try:
         st = task.read_json(sp)
-        man = task.load_manifest(task_id)
+        man = task.load_manifest(task_id, root)
     except task.BatchError as exc:
         return _result(
             f"task_status：读不了任务 {task_id}：{exc}",
@@ -2032,8 +2045,8 @@ def tool_task_pool(
 ) -> tuple[str, dict[str, Any], bool]:
     """待办登记表：还没定卡的活，**按层**（只读）。"""
     try:
-        root_dir = _task_batch_dir()
-        rows = task._load_pool()
+        root_dir = _task_batch_dir(root)
+        rows = task._load_pool(root)
     except task.BatchError as exc:
         return _result(
             f"task_pool：读不了待办表：{exc}",

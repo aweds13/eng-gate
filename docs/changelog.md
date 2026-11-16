@@ -18,6 +18,11 @@
 - 日志状态从三态扩到五类：已判决 / 历史尝试 / 已被取代 / 台账已完结 / 断了（另加「非派活」旁账）；真树 243 份日志里「断了」由 30 降到 3（wb-002 / wb-045 / wb-A323），其余 27 份各有确定性理由。
 - `job_status` 没有 `wb-<卡>.jsonl` 时按五类正式证据回答（落地日志 / traceability.d / changelog.d / 复核 / 汇总表），不再对走落地链的卡说「还没派过」；台账写 `done` 却五类全不中时，明说这是台账与仓对不上，不回退成「没派过」。
 - 新增 `jobs.in_flight()`：活租约 / 判决 / 日志是否静默三个确定性来源，不问 pid、不 `os.kill`、不看系统进程列表；`job_status` 第一行与 `job_list` 每行末尾都答「在飞」，租约与老日志打架时判在飞并把冲突原文写进 why。
+## 2026-11-16 T-AG625 工具读的根跟调用方：`gates/diag` 不再单独算数据根、四个面真用传进来的 root
+- `tools/pipe_root.py` 的 `MARKERS` 去掉 `gates/diag`：那个目录本机到处都是（`.dsh/profiles/<名>/gates/diag` 里只有 3 个 ACP 残留文件），单凭它判数据根会把 profile 目录认成数据根，压过「工具根」这条事实。
+- `tools/pool/task.py` 的相对路径分支改成按**给 git 的那个 cwd**（树根）拼，与 `tools/pool/registry.py` 对齐；`batch_dir()` / `manifest_path()` / `state_path()` / `inbox_dir()` / `pool_path()` 都收 `root=None`，`TF_BATCH_DIR` 仍排第一。
+- `tools/pool_mcp.py` 的三个任务面与 `pool_plan` 把调用方 root 传真下去：从 profile 目录拉起不再回「一个任务都没有」；`plan_report()` 判「规格读不读得到」的根也跟着 root。
+- `tool_checkin_status` 的读端落到签到写入端同一个根（`pool_accounts.DATA_ROOT`），读端与写端不再各锚一棵树；显式给别棵树时仍尊重它。
 ## 2026-11-10 T-AG610 契约对账表装牙：表里每一格都由工具现读，漂了就红
 - `tools/contract_audit.py` 新增 `--check-doc`（配 `--doc`）：**不跑判据**，逐格把 `复盘/契约-判据对账.md` 与活体比对 —— 源格 `path:line` 行号、原句格是否源文档那一行的子串（归一后、长度 ≥ 8）、判据格字样（pytest 带 `tests/` 前缀、cmd 去 `python -X utf8`、允许「同 CX-0N」）、段标题与读数块写的条数。全对 0 / 有漂 1（逐条点名 CX 与行号）/ 表读不出来 2。
 - 口径只在模块 docstring 写一份（§表格自检），实现读那一份：**不许**在测试里另抄一份「表该长什么样」。

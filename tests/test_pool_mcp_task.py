@@ -1317,3 +1317,125 @@ def test_usage_report_never_touches_wb_usage_jsonl(
     )
     assert _usage_ledger(root).exists()
     assert sorted(p.name for p in diag.iterdir()) == ["usage-reported.jsonl", "wb-usage.jsonl"]
+
+
+# --------------------------------------- 卡 E114：五个只读面读的是**给我的那个根**
+
+
+def _resolved(p) -> str:
+    """路径比较先规范化（mcp 回 D:/、task 回 D:\\，直接比字符串会假红）。"""
+    return Path(p).resolve().as_posix()
+
+
+def test_task_faces_follow_the_root_they_are_given(tmp_path: Path, monkeypatch) -> None:
+    """★ 判据 2-2：`root=R` ⇒ 三个任务面都读 `R/gates/diag/batch`；`TF_BATCH_DIR` 仍赢。
+
+    病：签名里有 root，函数体里 `root_dir = _task_batch_dir()` 一次都不用 ——
+    MCP 从 profile 目录被拉起时三条 task_* 面说「一个任务都没有」（真值 153 个）。
+    """
+    monkeypatch.delenv("TF_BATCH_DIR", raising=False)
+    first = tmp_path / "one"
+    second = tmp_path / "two"
+    want_first = (first / "gates" / "diag" / "batch").as_posix()
+    want_second = (second / "gates" / "diag" / "batch").as_posix()
+
+    _text, data, _err = pool_mcp.tool_task_list({}, root=first)
+    assert _resolved(data["batch_dir"]) == _resolved(want_first), data["batch_dir"]
+    _text, data, _err = pool_mcp.tool_task_list({}, root=second)
+    assert _resolved(data["batch_dir"]) == _resolved(want_second), data["batch_dir"]
+    assert _resolved(want_first) != _resolved(want_second), (
+        "两次不同 root 回同一个批目录 ⇒ root 被忽略"
+    )
+    _text, data, _err = pool_mcp.tool_task_pool({}, root=second)
+    assert _resolved(data["batch_dir"]) == _resolved(want_second), data["batch_dir"]
+    _text, data, _err = pool_mcp.tool_task_status({"task": "nope"}, root=second)
+    assert _resolved(data["batch_dir"]) == _resolved(want_second), data.get("batch_dir")
+
+    # 自证注入点（TF_BATCH_DIR）不许坏：设了就仍回它，哪怕 root 给了别的树
+    injected = tmp_path / "injected"
+    monkeypatch.setenv("TF_BATCH_DIR", str(injected))
+    _text, data, _err = pool_mcp.tool_task_list({}, root=first)
+    assert _resolved(data["batch_dir"]) == _resolved(injected), data["batch_dir"]
+
+
+def test_pool_plan_judges_with_the_root_it_was_given(tmp_path: Path, monkeypatch) -> None:
+    """★ 判据 2-3：`pool_plan` 的判据根是 `root`，不是进程 cwd。
+
+    病：账本按 root 读（对），判据走 `plan.ROOT`（导入时由 cwd 派生）⇒ 从 profile 里
+    调用回「361 行读不到规格」。这里 cwd 故意造一棵「只有 gates/diag、没有账本」的树。
+    """
+    cwd_tree = tmp_path / "profile"
+    (cwd_tree / "gates" / "diag").mkdir(parents=True)
+    repo = tmp_path / "repo"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "复盘" / "卡").mkdir(parents=True)
+    (repo / "复盘" / "卡" / "卡DEMO.md").write_text("# demo\n", encoding="utf-8")
+    (repo / "docs" / "workbacklog.toml").write_text(
+        '[base]\nreviewed = "38522420"\n'
+        '[[cards]]\nid = "DEMO"\ntask = "T-DEMO"\ntitle = "demo"\n'
+        'tree = ".wt/DEMO"\nspec = "复盘/卡/卡DEMO.md"\nfiles = ["code/a.py"]\n'
+        'risk = "low"\nstatus = "pending"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(cwd_tree)
+    assert not (cwd_tree / "docs" / "workbacklog.toml").exists()
+    text, data, _is_error = pool_mcp.tool_pool_plan({}, root=repo)
+    assert data["exit_code"] == 0, text[-1200:]
+
+
+def test_checkin_read_side_lands_on_the_write_side(tmp_path: Path) -> None:
+    """★ 判据 3：读端与写端指向**同一个文件**（两格 cwd，子进程 —— `pa.DATA_ROOT` 导入时求值）。
+
+    ① cwd = 真数据根（有 docs/workbacklog.toml）⇒ 两边都落在那棵树；
+    ② cwd = 只有 gates/diag 的目录（profile 的迷你复刻）⇒ 两边都落回工具根，都不许落在它里面。
+    """
+    real = tmp_path / "data"
+    (real / "docs").mkdir(parents=True)
+    (real / "docs" / "workbacklog.toml").write_text(
+        '[base]\nreviewed = "38522420"\n[[cards]]\nid = "D"\ntask = "T-D"\n'
+        'title = "d"\ntree = ".wt/D"\nspec = "复盘/卡/卡D.md"\nfiles = []\n',
+        encoding="utf-8",
+    )
+    profile = tmp_path / "profile"
+    (profile / "gates" / "diag").mkdir(parents=True)
+    probe = "\n".join([
+        "import sys, json",
+        "sys.path.insert(0, sys.argv[1])",
+        "import pool_mcp, pool_accounts as pa",
+        'text, data, _err = pool_mcp.tool_checkin_status({"date": "2026-01-02"})',
+        "print(json.dumps({\"archive\": str(data[\"archive\"]),",
+        "                  \"write\": str(pa._checkin_archive(\"2026-01-02\")),",
+        "                  \"data_root\": str(pa.DATA_ROOT)}))",
+    ]) + "\n"
+    script = tmp_path / "probe.py"
+    script.write_text(probe, encoding="utf-8", newline="\n")
+    env = dict(os.environ)
+    for key in ("PIPE_DATA", "PIPE_HOME", "TF_ACCOUNTS_TOML"):
+        env.pop(key, None)
+    tool_root = Path(pool_mcp.__file__).resolve().parent.parent
+    seen: dict[str, dict[str, str]] = {}
+    for label, cwd, must_be in (
+        ("real", real, real.resolve()),
+        ("profile", profile, tool_root.resolve()),
+    ):
+        run = subprocess.run(
+            [sys.executable, "-X", "utf8", str(script), str(tool_root / "tools")],
+            cwd=str(cwd),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8", errors="replace",
+            timeout=180,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        assert run.returncode == 0, run.stdout[-800:] + run.stderr[-800:]
+        got = json.loads(run.stdout.strip().splitlines()[-1])
+        seen[label] = got
+        read = Path(got["archive"]).resolve()
+        write = Path(got["write"]).resolve()
+        assert read == write, f"{label}：读端 {read} ≠ 写端 {write}"
+        assert read.parent.parent.parent.resolve() == must_be, (
+            f"{label}：落在 {read} 而不是 {must_be}"
+        )
+    assert Path(seen["real"]["data_root"]).resolve() == real.resolve()
+    assert Path(seen["profile"]["data_root"]).resolve() == tool_root.resolve()

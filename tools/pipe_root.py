@@ -6,7 +6,8 @@
 
 口径（三条，按优先级）：
 1. `PIPE_DATA`：显式指定数据根（另一个仓的绝对路径）。
-2. 当前工作目录：若它看起来像一个数据根（有 `docs/workbacklog.toml` 或 `gates/diag`），就用它。
+2. 当前工作目录：若它看起来像一个数据根（有 `docs/workbacklog.toml` 或 `docs/traceability.toml`
+   —— 两份账本各自**单独**就成立），就用它。
 3. 回落：工具所在仓（老行为，逐字不变）。
 
 工具根固定为 `tools/` 的上一级（或 `PIPE_HOME`），只用来 import 代码，不读账本。
@@ -17,7 +18,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-MARKERS = ("docs/workbacklog.toml", "docs/traceability.toml", "gates/diag")
+# ★ 卡 E114：`gates/diag` 曾经也在这里 —— 于是任何一棵「带 gates/diag 的树」都被当成数据根
+#   （卡树、`.dsh/profiles/<名>`、`.wt/*` 全中）。它只是**产物目录**，不是账本：
+#   单独存在证明不了「这棵树有账本」，于是 data_root() 会回一个连 workbacklog 都没有的目录。
+#   两份账本各自单独仍然够（tests/test_pipe_root.py:55、tests/test_sync_counts_root.py:87）。
+MARKERS = ("docs/workbacklog.toml", "docs/traceability.toml")
 
 
 def home_root() -> Path:

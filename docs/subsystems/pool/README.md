@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 46 个 py（45 个模块 + `__init__.py`）、**19803 行**（`wc -l tools/pool/*.py`，2026-11-16 现算）。
+`tools/pool/` = 46 个 py（45 个模块 + `__init__.py`）、**19821 行**（`wc -l tools/pool/*.py`，2026-11-16 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -44,7 +44,7 @@
 | `models.py` | 327 | 号池模型的只读读取：号池批准集 ∩ 号池快照（★ 不是派活允许集）；另给批准集逐条按池的派活真判决（可派 / 未接 / 跨池串用 / 未授权 + 今天的可派别名），判序照抄派活主闸、现算不写死；读快照（带 `at`），不联网、不写快照；过期时由 `probe_command` / `probe_hint` 现算出「怎么让它变新」的那条命令（脚本不在就明说没有，不给假命令），读面三处都调它不各自拼句 | `wb_state.py`、`pool_mcp` |
 | `no_window.py` | 29 | 起子进程「不弹窗」的 `CREATE_NO_WINDOW` 常量 —— 全仓唯一真源 | 无（被十几个入口 import） |
 | `outcomes.py` | 175 | 按**请求**而不是按轮算结局（magpie `Totals.count()` 移植）：`is_failed` / `is_outcome` / `request_of` / `count_requests`；只读账本，不改一个字节 | 无（被 `wb_dispatch` 的 `append_usage_line` / `usage_summary` 调） |
-| `plan.py` | 675 | 队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（`wb_plan.py` 的逻辑层，拒绝会冲突的组合） | `wb_plan.py`、`wb_batch.py` |
+| `plan.py` | 680 | 队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（`wb_plan.py` 的逻辑层，拒绝会冲突的组合） | `wb_plan.py`、`wb_batch.py` |
 | `platforms.toml` | 246 | 平台能力表：九个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false`；`probe` 三个取值 http / manual / codearts-credits（后一个是签名读一次 statistics/plugin 的真读） | 无（被 `pool_accounts.py` 读） |
 | `pricing.py` | 231 | 定价算术（十进制位移 / 严格大于分档 / 整单按档 / 1 小时缓存写 2×）；**零价目表**，`Price` 一律由调用方构造；`unpriced_calls()` 与账本的 `unpriced()` 仍是两份读数，互不调用 | 无（纯函数；今天零生产调用方） |
 | `projects.py` | 223 | 项目索引（`infra/pool/projects.toml`）只读 + 三条硬判据：root 存在 / 两项目不撞 root / 树在白名单内 | `wb_project.py` |
@@ -62,7 +62,7 @@
 | `speed.py` | 261 | 输出速度的判据（**不是怎么算速度，是什么情况不许报**）：窗口不可测 / 末端爆发 / 推理比答案快 `THINK_PACE` 倍 / Codex 太短，一律回 `(0, 0)` | 无（今天**零调用**：pool 不产 `ttft` / `first_text` / `flow`，接线只能接假数） |
 | `stage_card.py` | 450 | 三段文书片段生成器：台账条目 + changelog + 交接 CHECKPOINT（只写片段，汇总归 `sync_docs`）；test: 证据指针写盘前先归一形态（剥 tests/ 前缀）并按 audit 同一口径核文件与用例在不在（不在 ⇒ 退 4 点名） | `wb_stage_card.py` |
 | `sticky.py` | 306 | 卡粘性：同一张卡第二次派活别换号（`STICK_KEEP_S` / `note` / `pick`），省重发上下文的 token | 无（被 `wb_dispatch` 调） |
-| `task.py` | 1576 | 任务栅栏：批预声明 → 每张卡交成送申请 → 集齐才收口；含自旋锁与逐卡域检查 | `wb_task.py`、`auto_land.py` |
+| `task.py` | 1589 | 任务栅栏：批预声明 → 每张卡交成送申请 → 集齐才收口；含自旋锁与逐卡域检查 | `wb_task.py`、`auto_land.py` |
 | `trae_dispatch.py` | 380 | 面板道（CDP 驱动 Trae）进账：一次跑落成租约 + 日志 + 判决；**刻意不接进派活** | 本文件即入口；`wb_watch.py` |
 | `usage_ingest.py` | 658 | 外部用量上报：整批校验 + `rid` 幂等 + 上报行不计入限额（不经过派活器的调用也要进账） | 无 |
 
@@ -83,8 +83,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **19803 行** / **46 个文件**（45 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 364 张（352 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **19821 行** / **46 个文件**（45 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 364 张（353 done / 11 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |
