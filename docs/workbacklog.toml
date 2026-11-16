@@ -6120,3 +6120,18 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E124"
+task = "T-AG633"
+title = "对账表 CX-01 的有判据是假的"
+tree = ".wt/E124"
+spec = "复盘/卡/卡E124-对账表CX-01的有判据是假的.md"
+files = [
+  "tools/contract_audit.py",
+  "复盘/契约-判据对账.md",
+  "tests/test_contract_audit.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
