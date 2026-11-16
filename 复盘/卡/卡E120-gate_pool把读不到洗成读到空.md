@@ -235,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
 1. `tools/gate_pool.py`：新增 `GatePoolUnreadable`（或等价），改 :176-180 / :218-229 / :360-403 / :657-664 / :848-861 / :955-963 / :981-986；:941 的三元一并修（形参优先）。
 2. `tests/test_gate_pool.py` 新增判据 1/2/4/5/6 六条钉子；`tests/test_cloud_product_freshness.py` 新增判据 3 一条钉子。
 3. `scripts/cloud/run_gate.sh` 只在需要时改（若 `--seed` 读不到改退 3，确认 :533-543 的 exit 9 分支仍成立），改则在卡片 evidence 里贴一次脚本级读法。
-4. `docs/changelog.d/T-AG629.md` 与 `docs/traceability.d/T-AG629.toml` 片段（由落地链生成，本卡不手写）。
+4. 落地链生成的两份片段 —— docs/changelog.d/T-AG629.md 与 docs/traceability.d/T-AG629.toml（本卡不手写；落地链 ② 生成后它们才存在）。
 5. 一张「读不到 ≠ 读到空」的对照表进卡规格 evidence：八处逐条给改前 / 改后的返回值与打印原文。
 6. 若判据 1 选择 `lastgood` 路线，`tools/pool/lastgood.py:321-347` 的 `log=` 必须被真的传进去（先例使用者：`tools/pool/registry.py:164`、`tools/pool/quota_history.py:220`）。
 
