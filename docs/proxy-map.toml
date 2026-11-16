@@ -10,6 +10,10 @@
 # ★ 为什么放 `docs/` 不放 `gates/diag/`：`gates/diag/` 是 gitignored 的，
 #   而「规矩住在被忽略的目录里迟早随它一起丢」（本仓为此吃过一次真事故，见 复盘/归置地图.md）。
 #
+# ★ 2026-11-16 重验（卡 E113 / `T-AG622`）：登记当天（2026-10-12）五个日期是「登记日」、不是「验过日」，
+#   此后 35 天一次没重验（git log --follow 只有登记那一笔）。这一趟按每条 metric 真跑今日读数，
+#   逐条写进 note 末尾「★ 2026-11-16 重验读数」。重验只改**已证伪的文本**与日期，不动阈值、不动判据工具。
+#
 # 字段口径（每条都要写全，`proxy_audit.py` 会逐条校验）：
 #   id            短名，唯一。
 #   metric        这个数**怎么算出来的**（指到具体工具/字段）。
@@ -29,42 +33,42 @@ id = "done-count"
 metric = "docs/workbacklog.toml 里 status = 「done」的卡数（tools/wb_plan.py stats 的「其它」段现读）"
 real_goal = "用户真正想要的功能/病被交付了 —— 不是「台账上多了一条 done」"
 evidence = "docs/traceability.toml 每条 done 卡必须带机器可求值的 evidence，scripts/audit_progress.py 逐条求值；证据对不上 ⇒ FAIL，不许提交"
-last_verified = "2026-10-12"
+last_verified = "2026-11-16"
 failure_mode = "对抗"
-note = "钻空子（对抗型）：把一张大卡拆成多张、或把「只读审计」卡也计进 done，done 数涨而交付没变。药方：done 数必须与 traceability 的 evidence 对账，不许只看计数（指标不许单一维度）。"
+note = "钻空子（对抗型）：把一张大卡拆成多张、或把「只读审计」卡也计进 done，done 数涨而交付没变。药方：done 数必须与 traceability 的 evidence 对账，不许只看计数（指标不许单一维度）。★ 2026-11-16 重验读数：队列 360 张 —— done 348 / pending 12（tools/wb_plan.py stats 与 tomllib 直读 docs/workbacklog.toml 两边一致）；同一趟 scripts/audit_progress.py --all 报「713 条提交全部合格」⇒ 计数与证据两面对得上。"
 
 [[proxy]]
 id = "gate-green"
 metric = "python -X utf8 scripts/run_gates.py 一顿后 gates/last.json 里各门 exit_code 为 0 的数量 / 门总数"
 real_goal = "代码真的没坏 —— 每条判据这轮真在守（不是「输出是绿的」）"
 evidence = "gates/last.json（顶层 reused 字典 = 复用判定，见 复盘/口径坑.md 第 1 条）；自己动过的门必须 --no-reuse 真跑一遍，见 复盘/口径坑.md 第 11 条"
-last_verified = "2026-10-12"
+last_verified = "2026-11-16"
 failure_mode = "因果"
-note = "钻空子记录：口径坑 11 —— 「复用通过」≠「这道门现在是绿的」：reused 只说输入没变、采信上一轮，不说这轮跑过。药方：改过的那道门（或它的输入）必须 --no-reuse 真跑，否则等于没验。"
+note = "钻空子记录：口径坑 11 —— 「复用通过」≠「这道门现在是绿的」：reused 只说输入没变、采信上一轮，不说这轮跑过。药方：改过的那道门（或它的输入）必须 --no-reuse 真跑，否则等于没验。★ 2026-11-16 重验读数：gates/last.json rev=cf928a2d、ok=true、at=2026-11-10T18:54:42，23 道门 exit_code 全 0；reused 5 道（ui_dom_probe / lf1_live / web_live / render / ui_flow）按口径坑 11 不计入「这轮真绿」，真跑的 18 道里 pytest 为 4877 passed / 1 skipped。"
 
 [[proxy]]
 id = "doc-lines"
 metric = "tools/card_doc_budget.py 的结构预算：CHECKPOINT ≤ 60 行 / gaps ≤ 6 条每条 ≤ 3 行 / changelog 每卡 ≤ 6 行 / 老实说 ≤ 4 条"
 real_goal = "文书能让「下一个干活的人」快速接手 —— 少读、读得完、指针够得着"
 evidence = "tools/card_doc_budget.py 的 check_budget() + check_pointers()（指针必须真存在）；判据由 tests/test_card_doc_budget.py 钉住"
-last_verified = "2026-10-12"
+last_verified = "2026-11-16"
 failure_mode = "对抗"
-note = "★ 真现场（我们自己干的）：卡 193 上线「文书行数 ≤ 6 行」这条判据的当天，主控就把三份文书「压到 6 行」以满足指标 —— 指标没坏，是**行为**被它带跑了。药方：对钻空子留案（本 note 即案），并让 check_pointers 逼「压掉的东西指得出来」（压缩安全全靠指针）。"
+note = "★ 真现场（我们自己干的）：卡 193 上线「文书行数 ≤ 6 行」这条判据的当天，主控就把三份文书「压到 6 行」以满足指标 —— 指标没坏，是**行为**被它带跑了。药方：对钻空子留案（本 note 即案），并让 check_pointers 逼「压掉的东西指得出来」（压缩安全全靠指针）。★ 2026-11-16 重验读数：python -X utf8 -m pytest tests/test_card_doc_budget.py ⇒ 18 passed in 0.66s；五个常数仍是 CHECKPOINT 60 行 / gaps 6 条×3 行 / changelog 每卡 6 行 / 老实说 4 条，与 metric 文本逐字一致（没有偷偷放宽）。"
 
 [[proxy]]
 id = "dispatch-rate"
-metric = "tools/wb_dispatch.py / 号池任务里派活是否真起出工人（.meta.json 落盘 + 工人出 result 事件才算成功）"
+metric = "tools/wb_dispatch.py 与号池派活器是否真起出工人并推进：codebuddy 池读 gates/diag/wb-<卡>.jsonl 里的 type=result 事件 + gates/diag/wb-<卡>.done；codearts 池读仓外 <号池>/logs/card-<卡>.jsonl 与同目录的 meta.json（生产者是仓外的 infra/pool/dispatch.py）"
 real_goal = "派活真的发生：工人被起出来并把活推进了 —— 不是「派活命令发出去了」"
-evidence = "工人留在 gates/diag/ 的原始读数（口径坑 12：落盘产物才是唯一证据源，工人的判决不是）"
-last_verified = "2026-10-12"
+evidence = "工人留在两边的原始读数（口径坑 12：落盘产物才是唯一证据源，工人的判决不是）：仓内 gates/diag/wb-*.jsonl（codebuddy）、仓外 <号池>/logs/card-*.jsonl 与 meta.json（codearts，生产者在 D:/repo/infra/pool/dispatch.py:275）"
+last_verified = "2026-11-16"
 failure_mode = "因果"
-note = "★ 真现场（卡 201 治的病）：记录里写着「额度重置时间 2026-10-12 16:52:45」，于是所有人都以为 16:52 之后就能派活；主控 23:28 真探了一次才确认 —— 「记录」只是代理，「服务端放不放行」才是真实目标。药方：持续跟踪真实结果（真探一次），验证代理是否还有效。"
+note = "★ 真现场（卡 201 治的病）：记录里写着「额度重置时间 2026-10-12 16:52:45」，于是所有人都以为 16:52 之后就能派活；主控 23:28 真探了一次才确认 —— 「记录」只是代理，「服务端放不放行」才是真实目标。药方：持续跟踪真实结果（真探一次），验证代理是否还有效。★ 2026-11-16 重验读数（这一条原来**判据撒谎**，重验时改了 metric 与 evidence）：原文写「.meta.json 落盘」，但仓内 find '*.meta.json' 实测 0 个、grep meta tools/wb_dispatch.py 也是 0 处 —— 本仓派活器从不写它，仓外 D:/repo/infra/pool/logs 才有 45 个（生产者 infra/pool/dispatch.py:275）。现读数：gates/diag/wb-usage.jsonl 270 行 / 207 张不同卡，判决分布 = 正常收工 212 / 撞 --max-turns 21 / 429 限流 27 / 整段无 result 6 / 卡死 3 / 超时 1；gates/diag/wb-*.jsonl 243 份、wb-*.done 15 个 ⇒ 收工不能只看 .done 在不在。"
 
 [[proxy]]
 id = "flow-four"
 metric = "tools/wb_flow.py（--json）的四个数：到达 / 离开 / WIP / 流量分解"
 real_goal = "队列最终会收空（活真被干完）—— 不是「永远有新卡进来」"
 evidence = "tools/wb_flow.py 的判据：到达 < 离开 ⇒ 收敛中；≈ 平台；> 报警（单窗口看不出「连续 N 天」，工具自己就这么写）"
-last_verified = "2026-10-12"
+last_verified = "2026-11-16"
 failure_mode = "因果"
-note = "钻空子/反例：把一张卡拆成多张、或把 done 卡重开，能让「离开」虚高而真实交付没变；「到达 < 离开」只是相关、不是因果（到达会滞后、卡会被拆细）。药方：多跑几天看趋势，别拿一天下结论。"
+note = "钻空子/反例：把一张卡拆成多张、或把 done 卡重开，能让「离开」虚高而真实交付没变；「到达 < 离开」只是相关、不是因果（到达会滞后、卡会被拆细）。药方：多跑几天看趋势，别拿一天下结论。★ 2026-11-16 重验读数：tools/wb_flow.py --json 在 since=midnight 窗口给出 arrived=1 / left=0 / wip=12 / verdict=平台（到达 1 张 = E112，离开 0 张）；单窗口仍是「平台」，按本条自己的药方不据此下结论。"

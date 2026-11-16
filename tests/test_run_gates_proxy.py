@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -73,6 +73,26 @@ def _map_with_first_entry_dated(tmp_path: Path, when: str) -> Path:
     j = text.index('"', i)
     p = tmp_path / "proxy-map.toml"
     p.write_text(text[:i] + when + text[j:], encoding="utf-8")
+    return p
+
+
+def _map_with_all_entries_dated(tmp_path: Path, when: str) -> Path:
+    """把**真登记表**的**每一条** `last_verified` 都换成 `when`，落成 temp 登记表（真表不动）。
+
+    ★ 卡 E113（`T-AG622`）：`--days 0` 那条钉子要用「昨天验证过」的表 —— 拿真表跑，
+      日期一改成今天它必红（`age = 0`、`overdue = 0`、`expired = False`），那不是门坏了，
+      是钉子把「真表恰好比今天旧」当成了前提。所以这里**自造**一份表。
+    """
+    text = REAL_MAP.read_text(encoding="utf-8")
+    marker = 'last_verified = "'
+    parts = text.split(marker)
+    assert len(parts) == 6, f"真登记表应有 5 条 last_verified，实际 {len(parts) - 1} 条"
+    out = parts[0]
+    for chunk in parts[1:]:
+        j = chunk.index('"')
+        out += marker + when + chunk[j:]
+    p = tmp_path / "proxy-map-all.toml"
+    p.write_text(out, encoding="utf-8")
     return p
 
 
@@ -121,11 +141,25 @@ def test_shifted_date_goes_red_then_back_to_green(tmp_path: Path) -> None:
     assert "[OK  ]" in out2, out2
 
 
-def test_days_zero_also_turns_the_gate_red() -> None:
-    """★ 卡 §3 的「（或 `--days 0`）」：零容忍阈值下，真登记表（全部昨天验证）也必须红。"""
-    rc, out = _run(_gate_command(), "--days", "0")
+def test_days_zero_also_turns_the_gate_red(tmp_path: Path) -> None:
+    """★ 卡 §3 的「（或 `--days 0`）」：零容忍阈值下，全部昨天验证的登记表也必须红。
+
+    ★ 卡 E113（`T-AG622`）修正：原版拿**真登记表**跑 `--days 0`，却把「真表恰好比今天旧」
+      当成了前提 —— 重验把 `last_verified` 改成今天之后，`age = 0` ⇒ `expired = False` ⇒ 门变绿，
+      这条钉子自己红了（红的是钉子，不是门）。现在自造一份「全部昨天验证」的表，前提写在夹具里。
+      真表在 `--days 0` 上变绿是**对的**：今天正是它的验证日。
+    """
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    stale = _map_with_all_entries_dated(tmp_path, yesterday)
+    rc, out = _run(_gate_command(), "--days", "0", "--map", str(stale))
     assert rc != 0, out
     assert "过期" in out, out
+
+    rc2, out2 = _run(_gate_command(), "--days", "0")
+    assert rc2 == 0, (
+        "真表今天就是验证日（last_verified = 今天）⇒ --days 0 下 age = 0 ⇒ 应当新鲜；"
+        f"若这里红了，说明真表的日期又过期了，该去重验而不是改这条钉子：\n{out2}"
+    )
 
 
 # ------------------------------------------------------------------ 反例：删表 / 坏 TOML ⇒ 红并点名

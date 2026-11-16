@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -150,3 +151,47 @@ def test_report_and_json_are_readable(tmp_path, capsys) -> None:
     assert pa.main(["--json"]) == 0
     payload = capsys.readouterr().out
     assert '"count": 5' in payload and '"expired_count": 0' in payload
+
+# ---------------------------------------------------------- 卡 E113 · 重验读数（T-AG622）
+
+
+def test_every_note_carries_the_reverification_reading() -> None:
+    """★ 卡 E113 判据 1：五条 note 必须带**当天真跑过**的读数，而不只是把日期改成今天。
+
+    背景（真现场）：docs/proxy-map.toml 自登记那天（2026-10-12）起 35 天没重验，
+    五个 last_verified 一直是「登记日」。只把日期改成今天，proxy_audit.py 会照单全收
+    （它只比日期）—— 那条路等于把「有日期」当「验过」，正是这张表当初要防的病。
+
+    所以这里钉的是**文本**：每条 note 里要有一句带日期的重验读数，且句子里有具体数字。
+    """
+    entries = pa.load_map(REAL_MAP)
+    missing = [e.id for e in entries if "重验读数" not in e.note]
+    assert not missing, f"这些条目的 note 里没有重验读数（只改了日期？）：{missing}"
+    undated = [e.id for e in entries if "2026-11-16" not in e.note]
+    assert not undated, f"重验读数必须写明验证日 2026-11-16：{undated}"
+    no_number = [e.id for e in entries if not re.search(r"\d", e.note.split("重验读数", 1)[1])]
+    assert not no_number, f"重验读数里必须有具体数字（否则就是一句话，不是读数）：{no_number}"
+
+
+def test_dispatch_rate_metric_points_at_the_real_logs() -> None:
+    """★ 卡 E113 判据 2：dispatch-rate 的 metric 必须指向**仓里真在写**的日志。
+
+    原来那句写的是「.meta.json 落盘 + 工人出 result 事件」，但实测量到三件事对不上：
+    仓内 find -name '*.meta.json' 是 **0 个**、grep meta tools/wb_dispatch.py 是 **0 处**，
+    真身只有仓外号池目录的 45 个（生产者是仓外的 infra/pool/dispatch.py）。
+    ⇒ 读者按 metric 去找，在仓里一个都找不到。这条钉子把「metric 说的地方真有东西」钉住。
+    """
+    entry = {e.id: e for e in pa.load_map(REAL_MAP)}["dispatch-rate"]
+    for token in ("wb-", "card-", "result"):
+        assert token in entry.metric, f"metric 没点名两头的真日志（缺 {token}）：{entry.metric}"
+    assert ".meta.json" not in entry.metric, (
+        "metric 里又开始指 .meta.json 了 —— 本仓派活器从不写它"
+        "（grep meta tools/wb_dispatch.py 是 0 处）"
+    )
+    assert "infra/pool" in entry.evidence, (
+        ".meta.json 的真身要写进 evidence（仓外号池目录），否则读者仍会去仓里找："
+        f"{entry.evidence}"
+    )
+    assert "wb_dispatch.py" in entry.metric, (
+        "metric 应点名本仓派活器（它才是写 wb-<卡>.jsonl 的那个）"
+    )

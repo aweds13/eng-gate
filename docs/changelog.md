@@ -1,3 +1,8 @@
+## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
+- `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
+- `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。
+- 新增两条钉子：`test_every_note_carries_the_reverification_reading`（每条 note 要有带日期的读数且句子里有数字 —— 只改日期过不了）与 `test_dispatch_rate_metric_points_at_the_real_logs`（metric 不许再出现 `.meta.json`、必须点名两头真日志）。
+- `test_days_zero_also_turns_the_gate_red` 改成自造「全部昨天验证」表跑 `--days 0`（真表今天是验证日，拿真表跑等于把「恰好过期」当前提），并写明真表变绿是对的。
 ## 2026-11-10 T-AG610 契约对账表装牙：表里每一格都由工具现读，漂了就红
 - `tools/contract_audit.py` 新增 `--check-doc`（配 `--doc`）：**不跑判据**，逐格把 `复盘/契约-判据对账.md` 与活体比对 —— 源格 `path:line` 行号、原句格是否源文档那一行的子串（归一后、长度 ≥ 8）、判据格字样（pytest 带 `tests/` 前缀、cmd 去 `python -X utf8`、允许「同 CX-0N」）、段标题与读数块写的条数。全对 0 / 有漂 1（逐条点名 CX 与行号）/ 表读不出来 2。
 - 口径只在模块 docstring 写一份（§表格自检），实现读那一份：**不许**在测试里另抄一份「表该长什么样」。

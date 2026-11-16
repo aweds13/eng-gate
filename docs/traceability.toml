@@ -12056,3 +12056,21 @@ evidence = [
   "test:test_pool_mcp.py::test_the_doc_projections_stop_calling_the_intersection_dispatchable",
 ]
 gaps = "1. 机器块里那份判决是**人话段渲染时顺手算出来的**，不是一个独立的只读查询：别的只读面想复用（比如以后让 workbench_board 也报今天派不派得出去）只能再算一遍，两处一旦分叉没人会发现 —— 本卡只保证这一处内部一致，没把判据抽成带第二个调用方的函数。指针 `tools/pool_mcp.py`2. `dispatch.allow_lists` 是 `wb_dispatch.effective_allowed_models(pool)` 的原样快照，而那份名单来自注册表与开关文件：机器读者拿到名单，读不出「这是几点算的」，两次调用之间闸变了它也不会知道。指针 `tools/pool_mcp.py`3. `in_both_is_a_dispatch_allow_list: False` 是**恒定常量**，不是从数据里推出来的：它如实否掉的是「交集 = 派活允许集」这条口径。哪天两套 id 体系真被归一（比如派活器改吃 provider/model），这个布尔会继续这么说，而没有任何东西会在那天提醒谁去改它。指针 `tools/pool_mcp.py`"
+
+[entries."T-AG622"]
+id = "T-AG622"
+title = "代理指标重验：五条last_verified填真验证日、metric改指真日志、四条变异全咬住"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/proxy-map.toml",
+  "file:tests/test_proxy_audit.py",
+  "file:tests/test_run_gates_proxy.py",
+  "test:test_proxy_audit.py::test_every_note_carries_the_reverification_reading",
+  "test:test_proxy_audit.py::test_dispatch_rate_metric_points_at_the_real_logs",
+  "test:test_run_gates_proxy.py::test_real_map_makes_the_gate_green",
+  "test:test_run_gates_proxy.py::test_days_zero_also_turns_the_gate_red",
+  "text:docs/proxy-map.toml::★ 2026-11-16 重验读数：队列 360 张",
+  "text:docs/proxy-map.toml::★ 2026-11-16 重验读数：gates/last.json rev=cf928a2d",
+]
+gaps = "1. 五条 note 的「重验读数」是**手写的一段话**，不是机器再算一遍：数字错了、或者明天就过期了，没有任何东西会响（机器只比 `last_verified` 的日期）。所以这张表的真保障仍然是「31 天之内有人手工重验」，本卡只是把「假日期」这一种偷法堵住。指针 `docs/proxy-map.toml`2. `--days 0` 那条钉子现在自造「昨天」表，但真表在 `--days 0` 上变绿**只说明今天正好是验证日** —— 它同时是一条会自己过期的断言（明天跑就红）。这不是缺陷，是设计：红了就去重验，不许改钉子。指针 `tests/test_run_gates_proxy.py`3. `dispatch-rate` 的 metric 现在点名两头的真日志，但 codearts 那头（仓外 `<号池>/logs/card-<卡>.jsonl` + `meta.json`）在本仓里**读不到**：本卡只保证「读者知道去哪儿找」，没有把仓外产物搬进来，也没接任何自动对账。指针 `docs/proxy-map.toml`"
