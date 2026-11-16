@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 46 个 py（45 个模块 + `__init__.py`）、**19665 行**（`wc -l tools/pool/*.py`，2026-11-10 现算）。
+`tools/pool/` = 46 个 py（45 个模块 + `__init__.py`）、**19665 行**（`wc -l tools/pool/*.py`，2026-11-16 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -79,12 +79,12 @@
 > 账号账**故意在仓外**：只存凭据指针（`~/.codeartsdoer/pool.env` 之类），不存凭据本身；
 > 没有 git 兜底，所以写入一律原子替换，删号打墓碑（`tools/pool_accounts.py` 的 `save_ledger()`）。
 
-## 2. 度量（2026-11-10 现算）
+## 2. 度量（2026-11-16 现算）
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
 | 实现体量 | **19665 行** / **46 个文件**（45 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 359 张（348 done / 11 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 队列卡数 | 360 张（348 done / 12 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

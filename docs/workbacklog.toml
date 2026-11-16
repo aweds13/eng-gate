@@ -5893,3 +5893,24 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E112"
+task = "T-AG621"
+title = "额度四态说要探却不给命令且can_dispatch恒False"
+tree = ".wt/E112"
+spec = "复盘/卡/卡E112-额度四态说要探却不给命令.md"
+files = [
+  "tools/pool_quota.py",
+  "tools/pool_mcp.py",
+  "tests/test_quota_clock.py",
+  "tests/test_pool_mcp.py",
+  "docs/subsystems/pool/模型与号池.md",
+  "复盘/Trae-接入结论.md",
+  "复盘/卡/卡E112-额度四态说要探却不给命令.md"
+]
+depends = [
+  "E111"
+]
+risk = "mid"
+status = "pending"
