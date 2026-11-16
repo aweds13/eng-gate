@@ -6186,7 +6186,8 @@ files = [
   "tests/test_pool_mcp_board.py"
 ]
 depends = [
-  "E115"
+  "E115",
+  "E125"
 ]
 risk = "mid"
 status = "pending"
@@ -6201,6 +6202,8 @@ files = [
   "tools/pool_mcp.py",
   "tests/test_pool_mcp_task.py"
 ]
-depends = []
+depends = [
+  "E128"
+]
 risk = "mid"
 status = "pending"

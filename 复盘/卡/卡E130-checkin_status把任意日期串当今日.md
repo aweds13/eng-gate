@@ -1,6 +1,6 @@
 # 卡 E130 · checkin_status 把任意日期串当「今日」，并原样拼进留档路径
 
-> 台账号 T-AG638｜分区 E（门禁与可信度）｜树 .wt/E130｜层 判据层｜基准 9bb2f9be（立卡时主树 HEAD，2026-11-17 06:43:48 +0800）｜depends 无
+> 台账号 T-AG638｜分区 E（门禁与可信度）｜树 .wt/E130｜层 判据层｜基准 9bb2f9be（立卡时主树 HEAD，2026-11-17 06:43:48 +0800）｜depends E128（立卡后发现同一文件 tools/pool_mcp.py 有两个写者，2026-11-17 台账补 depends E128 ⇒ 串行）
 > 依据：用户 m00001「起草卡 E130 规格 —— checkin_status 把任意日期串当『今日』，并原样拼进留档路径；非法日期必须 isError=True 并在正文点名要 YYYY-MM-DD」。
 > 行号已按 2026-11-17 06:50 现场（主树 9bb2f9be，Python 3.14.6，Windows）逐条复核；本卡域是 tools/pool_mcp.py:1613-1757 这一段。
 > 全部实验在 tempfile.mkdtemp() 里做，脚本 gates/diag/_e130_probe3.py / gates/diag/_e130_probe4.py / gates/diag/_e130_final.py（未跟踪；gates/diag/* 被 .gitignore:76 忽略），未碰主树任何受保护文件；gates/diag 下真实 checkin 留档数 = 0。
@@ -70,7 +70,7 @@ n=5 date="../../../../../outside/secret"    resolve=<tmp>\outside\secret.json   
     -> 正文首行「今日签到（checkin_status）—— ../../../../../outside/secret」
 ```
 
-⇒ `checkin-` 前缀买不到安全：`...\gates\diag\checkin-..\..\..\..\..\outside\secret.json` 经 `resolve()` 之后就是 `<tmp>\outside\secret.json`。上面 n=3 / n=4 只是**恰好**没拼中 `.json` 才 found=False，不是被挡住了。
+⇒ `checkin-` 前缀买不到安全：...\gates\diag\checkin-..\..\..\..\..\outside\secret.json 经 `resolve()` 之后就是 `<tmp>\outside\secret.json`。上面 n=3 / n=4 只是**恰好**没拼中 `.json` 才 found=False，不是被挡住了。
 
 ### 问题 4 · 三处文案都在假设「给了 YYYY-MM-DD 才会拼路径」，钉子对这个洞是盲的
 
