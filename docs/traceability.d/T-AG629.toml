@@ -1,0 +1,12 @@
+[entries."T-AG629"]
+id = "T-AG629"
+title = "gate_pool把读不到洗成读到空：队列、日志、播种源、槽位、锁六类静默"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/gate_pool.py",
+  "file:tests/test_gate_pool.py",
+  "file:tests/test_cloud_product_freshness.py",
+]
+gaps = "1. `tools/pool/landing.py` 的云门禁调用点只接 `CloudUnreachable`、没接 `GatePoolUnreadable`：队列读不到时之所以仍落在「停手」分支，是因为 `run_cloud_gate` 内部转了码，不是调用方分得清。指针 `tools/pool/landing.py`2. `PoolQueue.locked()` 等满 30 s 拿不到锁**照样写**（现在只多打一行）：「无锁写」这条保底没动 —— 卡规格判据 5 只要求「还锁失败必须打印」。要改成拿不到锁就拒写是另一张卡。指针 `tools/gate_pool.py`3. 判据 1 没走 `lastgood.read_with_fallback` 路线（卡规格允许二选一）：队列读不到直接抛，没有 `.bak` 静默恢复。以后要接恢复必须带 `log=` 且恢复失败照抛，否则等于把「读不到」重新洗成「读到旧值」。指针 `tools/pool/lastgood.py`"
+

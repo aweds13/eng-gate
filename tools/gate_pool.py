@@ -14,6 +14,8 @@ r"""云侧门禁池（卡 E42 · `T-AG494`）—— 只标准库。
 3. **队列**：`gates/diag/gate-pool-queue.json`，形状对齐 `tools/pool/queue.py`
    （`{"head": …, "waiting": [...]}`）再补 `done` 与 `slots`；**单写者 + 原子替换**
    （tmp + `os.replace`），并发写不丢行。同一槽的并发提交**排队**，不并行。
+★ 卡 E120（T-AG629）：「读不到」与「读到空」必须分得开 —— 队列 / 日志 / 播种源 / 槽位 /
+  锁 六类静默都改成「说判不了并退非 0 或抛」，**不许**把读不到洗成返回空。
 4. **槽锁**：`gates/diag/gate-pool-slot<n>.lock`，语义照 `gates/diag/gate_lock.py`：
    文件 mtime 旧于 `DEFAULT_STALE_AFTER` 视为陈旧可抢，`release` 删文件。
 5. **回传校验（fail closed，五条一条都不能松）**：见 `validate_cloud_return`。
@@ -91,6 +93,9 @@ def slot_count(cpu_count: int, avail_gb: float) -> int:
     判据（卡 E42 §2.2）：4 vCPU / 15.5 GB ⇒ 1；8 vCPU / 16 GB ⇒ 2；8 vCPU / 6 GB ⇒ 1
     （内存那条把 0 压成 1 —— 一台能跑门禁的机器至少给一个槽，不给 0 等于「永远不跑」）。
     """
+    if avail_gb is None:
+        # ★ 卡 E120：判不了就明说 —— 槽位数既不是 0 也不是 1，调用方自己决定跳不跳。
+        raise ValueError("可用内存判不了（None）⇒ 槽位数算不出来：不许当 0 块，也不许当 1 槽")
     cpu_slots = int(cpu_count) // CPU_PER_SLOT
     mem_slots = int((float(avail_gb) - MIN_AVAIL_GB) // MEM_PER_SLOT_GB)
     return max(1, min(cpu_slots, mem_slots))
@@ -159,6 +164,14 @@ def _validate_queue_text(text: str) -> None:
 
 
 # ---------------------------------------------------------------- 队列（单写者 + 原子写）
+class GatePoolUnreadable(RuntimeError):  # noqa: N818 —— 名字就是判据原文「读不到」
+    """队列**读不到**（权限 / 目录冒充 / 坏 JSON）—— 与「队列是空的」不是一回事。
+
+    ★ 卡 E120：四种形态原来都洗成 _empty_state()（与真·空队列逐字相同）；
+      后果不是少印一行，是 submit 把空状态写回盘、覆盖掉还在跑的那一条。
+    """
+
+
 @dataclass
 class PoolQueue:
     """云机门禁队列（`gates/diag/gate-pool-queue.json`）。
@@ -173,10 +186,26 @@ class PoolQueue:
 
     # ······························································ 读 / 写
     def load(self) -> dict:
+        r"""读队列：**文件不存在 ⇒ 空状态**（还没人租，合法）；**读不到 / 坏 JSON ⇒ 抛**。
+
+        ★ 卡 E120：这两种原来走同一个 except (OSError, json.JSONDecodeError)，都返回
+        _empty_state() —— 与「队列真的是空的」逐字相同，调用方无从分辨，于是 submit
+        把空状态写回盘、覆盖掉还在跑的那一条（两趟占同一槽 + 同一端口段）。
+        """
         try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            text = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
             return _empty_state()
+        except OSError as exc:
+            raise GatePoolUnreadable(
+                f"队列读不到（{type(exc).__name__}: {exc}）⇒ 判不了，不许当空队列：{self.path}"
+            ) from exc
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise GatePoolUnreadable(
+                f"队列不是合法 JSON（{exc}）⇒ 判不了，不许当空队列：{self.path}"
+            ) from exc
         return _norm_state(raw)
 
     def save(self, state: dict) -> None:
@@ -209,10 +238,20 @@ class PoolQueue:
             yield
         finally:
             if fd is not None:
-                with contextlib.suppress(OSError):
+                try:
                     os.close(fd)
-                with contextlib.suppress(OSError):
+                except OSError as exc:  # 句柄关不掉要说，但别盖掉业务异常
+                    print(f"  [队列] 关锁句柄失败（{type(exc).__name__}: {exc}）：{lock}",
+                          flush=True)
+                try:
                     lock.unlink()
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    # ★ 卡 E120：原来 suppress 掉就跑 ⇒ 锁文件留着，之后 submit 等满
+                    #   LOCK_WAIT_S 再**无锁写**（P10c 实测）。还锁失败必须响。
+                    print(f"  [队列] 还锁失败（{type(exc).__name__}: {exc}）⇒ 这把锁会留在盘上，"
+                          f"下一次读改写要等满 {wait:.0f}s 才会无锁写：{lock}", flush=True)
 
     # ······························································ 槽 / 提交
     @staticmethod
@@ -224,8 +263,14 @@ class PoolQueue:
         if isinstance(head, dict) and head.get("state") == "running":
             running.append(head)
         for row in running:
-            with contextlib.suppress(TypeError, ValueError):
+            try:
                 used.add(int(row.get("slot")))
+            except (TypeError, ValueError) as exc:
+                # ★ 卡 E120：原来 suppress 掉就跳过 ⇒ 那个槽被当成空闲（可两趟同槽）。
+                raise GatePoolUnreadable(
+                    f"队列里一条 running 行的槽号读不懂（slot={row.get('slot')!r}，"
+                    f"commit={row.get('commit')!r}）⇒ 判不了哪个槽占着：不许当它没占槽"
+                ) from exc
         return used
 
     @classmethod
@@ -375,14 +420,23 @@ def acquire_slot_lock(lock_dir: pathlib.Path, slot: int, *, card: str,
     path = slot_lock_path(lock_dir, slot)
     path.parent.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
+    warned = False
     while True:
         try:
             fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
             if _lock_age(path, now) >= stale_after:
-                with contextlib.suppress(OSError):
+                try:
                     path.unlink()
-                continue
+                    continue
+                except OSError as exc:
+                    # ★ 卡 E120：原来 suppress 掉就 continue ⇒ 撞回 FileExistsError ⇒
+                    #   无出口死循环，timeout 形同不存在（P15 实测 timeout=0.5 卡了 8 s）。
+                    if not warned:
+                        warned = True
+                        print(f"  [池] 槽 {slot} 的锁陈旧（{_lock_age(path, now):.0f}s）却删不掉"
+                              f"（{type(exc).__name__}: {exc}）⇒ 判不了是谁的锁：{path}",
+                              flush=True)
             if time.time() - t0 >= float(timeout):
                 return False
             time.sleep(0.02)
@@ -393,14 +447,22 @@ def acquire_slot_lock(lock_dir: pathlib.Path, slot: int, *, card: str,
         return True
 
 
-def release_slot_lock(lock_dir: pathlib.Path, slot: int) -> bool:
-    """还槽锁（有就删）。返回是否真删到了。"""
+def release_slot_lock(lock_dir: pathlib.Path, slot: int) -> bool | str:
+    """还槽锁 —— **三态**（卡 E120）："no-lock" 本来没锁 / True 真删掉了 / False 删不掉。
+
+    ★ 原来 except OSError: return False 把「本来没锁」与「删不掉」压成同一个 False，
+      而调用方（run_cloud_gate 的 finally）连返回值都没接 ⇒ 锁可能一直留在盘上。
+    """
     path = slot_lock_path(lock_dir, slot)
     try:
         path.unlink()
-        return True
-    except OSError:
+    except FileNotFoundError:
+        return "no-lock"
+    except OSError as exc:
+        print(f"  [池] 还槽 {slot} 的锁失败（{type(exc).__name__}: {exc}）"
+              f"⇒ 这个槽在别人眼里还占着：{path}", flush=True)
         return False
+    return True
 
 
 # ---------------------------------------------------------------- 回传校验（五条）
@@ -660,8 +722,11 @@ def _read_back(tree: pathlib.Path, rc: int,
         for path in sorted(log_dir.glob("*.log")):
             try:
                 logs[path.name] = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
+            except OSError as exc:
+                # ★ 卡 E120：原来 continue ⇒ 读不到的那份静默消失，而 _write_back 见 logs
+                #   里没有它就不写也不删 ⇒ 卡树里留上一趟的旧日志冒充这一趟。
+                print(f"  [回传] 这份日志读不到（{type(exc).__name__}: {exc}）"
+                      f"⇒ 不算这一趟的产物：{path}", flush=True)
     return payload, logs
 
 
@@ -846,18 +911,33 @@ class CloudResult:
 
 
 def _write_back(wt: pathlib.Path, payload: dict, logs: dict[str, str]) -> pathlib.Path:
-    """把云机回传的 `last.json` 与 `gates/logs/*.log` 写进卡树（只读回传，不反向写云机）。"""
+    r"""把云机回传的 `last.json` 与 `gates/logs/*.log` 写进卡树（只读回传，不反向写云机）。
+
+    ★ 卡 E120：回传里**没有**的那份日志要从卡树里删掉 —— 否则上一趟的 pytest.log
+      会在原地冒充这一趟（下游 tools/pool/landing.py 与 tools/failure_group.py 正是
+      拿它当入口）。原来 if logs: 只在有回传时才建目录写，从不清理。
+    """
     gates = pathlib.Path(wt) / "gates"
     gates.mkdir(parents=True, exist_ok=True)
     target = gates / "last.json"
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                       encoding="utf-8", newline="\n")
-    if logs:
-        log_dir = gates / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        for name, text in logs.items():
-            path = log_dir / pathlib.Path(str(name)).name
-            path.write_text(str(text), encoding="utf-8", newline="\n")
+    log_dir = gates / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    keep = {pathlib.Path(str(name)).name for name in logs}
+    for old in sorted(log_dir.glob("*.log")):
+        if old.name in keep:
+            continue
+        try:
+            old.unlink()
+        except OSError as exc:
+            print(f"  [回传] 上一趟的日志删不掉（{type(exc).__name__}: {exc}）"
+                  f"⇒ 它会在原地冒充这一趟：{old}", flush=True)
+        else:
+            print(f"  [回传] 这一趟没有这份日志 ⇒ 删掉上一趟的：{old.name}", flush=True)
+    for name, text in logs.items():
+        path = log_dir / pathlib.Path(str(name)).name
+        path.write_text(str(text), encoding="utf-8", newline="\n")
     return target
 
 
@@ -893,7 +973,12 @@ def run_cloud_gate(
         raise CloudUnreachable(f"云机 {host} 不可达（TCP 22 / ssh 都没通）⇒ 未跑门禁")
 
     entry = {"task": task, "card": card, "commit": commit, "host": host}
-    row, queued = queue.submit(entry, n_slots=n_slots)
+    try:
+        row, queued = queue.submit(entry, n_slots=n_slots)
+    except GatePoolUnreadable as exc:
+        # ★ 卡 E120：队列读不到就**不许**提交（原来会拿空状态写回盘、覆盖还在跑的那条）。
+        raise CloudUnreachable(
+            f"云门禁队列读不到 ⇒ 这一趟不能跑（不许当空队列覆盖）：{exc}") from exc
     if queued:
         print(f"  [池] 槽都占着 ⇒ 排到 waiting（共 {len(queue.load()['waiting'])} 条在等）",
               flush=True)
@@ -910,7 +995,10 @@ def run_cloud_gate(
     try:
         artifacts = transport.run_gate({**row, "port_base": port_base}, pathlib.Path(wt))
     finally:
-        release_slot_lock(lock_dir, slot)
+        freed = release_slot_lock(lock_dir, slot)
+        if freed is False:
+            print(f"  [池] ★ 槽 {slot} 的锁没还掉 ⇒ 下一趟会以为它还被占着"
+                  f"（人工删掉 {slot_lock_path(lock_dir, slot)}）", flush=True)
     seconds = max(0.0, clock() - t0)
 
     payload = dict((artifacts or {}).get("payload") or {})
@@ -938,7 +1026,9 @@ def run_cloud_gate(
 
 #: `python tools/gate_pool.py status|slots` —— 只读自查（运维用；不改任何文件）。
 def main(argv: list[str] | None = None) -> int:
-    argv = list(sys.argv[1:] if argv is not None else argv)
+    # ★ 卡 E120（问题 8）：三元两支原来写反 —— 形参给了反而取 sys.argv[1:]，
+    #   没给则 list(None) 直接炸 ⇒ 进程内 main([...]) 只能拿到帮助 + rc 0。
+    argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in {"-h", "--help"}:
         print("用法：python -X utf8 tools/gate_pool.py status [--root <树>]\n"
               "  status  打印队列（head / waiting / done）与各槽端口段\n"
@@ -947,7 +1037,12 @@ def main(argv: list[str] | None = None) -> int:
     root = pathlib.Path(argv[argv.index("--root") + 1]) if "--root" in argv else None
     if argv[0] == "status":
         q = PoolQueue(_default_queue_path(root))
-        state = q.load()
+        try:
+            state = q.load()
+        except GatePoolUnreadable as exc:
+            # ★ 卡 E120：原来四形全印一份空队列 + rc 0 ⇒ 运维看不出「读不到」。
+            print(f"[读不到] {exc}", file=sys.stderr)
+            return 2
         print(json.dumps({"path": str(q.path), "head": state["head"],
                           "waiting": state["waiting"], "done": state["done"]},
                          ensure_ascii=False, indent=2))
@@ -956,11 +1051,19 @@ def main(argv: list[str] | None = None) -> int:
         cpu = os.cpu_count() or 1
         try:
             from scripts.run_gates import available_memory_gb  # noqa: PLC0415
-            avail = available_memory_gb() or 0.0
-        except Exception:  # 读不到就按 0 算（下限 1 槽，不猜）
-            avail = 0.0
-        n = slot_count(cpu, avail)
-        print(f"cpu={cpu} avail_gb={avail:.1f} ⇒ {n} 槽；端口段 {port_segments(n)}")
+            avail = available_memory_gb()
+        except Exception as exc:
+            # ★ 卡 E120：原来 or 0.0 + except 都印 0.0 —— 那是**编出来的读数**
+            #   （真·内存耗尽也是 0.0），人和机器都分不出「量不出来」。
+            print(f"cpu={cpu} avail_gb=unknown ⇒ 判不了（读不到可用内存："
+                  f"{type(exc).__name__}: {exc}）⇒ 不算槽数", file=sys.stderr)
+            return 2
+        if avail is None:
+            print(f"cpu={cpu} avail_gb=unknown ⇒ 判不了（available_memory_gb() 返回 None，"
+                  f"上游口径是「跳过这道闸」）⇒ 不算槽数", file=sys.stderr)
+            return 2
+        n = slot_count(cpu, float(avail))
+        print(f"cpu={cpu} avail_gb={float(avail):.1f} ⇒ {n} 槽；端口段 {port_segments(n)}")
         return 0
     if argv[0] == "check-product-fresh":
         # 卡 E66（T-AG526）：bash 侧只调这一支，不在 shell 里写时间比较。
@@ -982,8 +1085,12 @@ def main(argv: list[str] | None = None) -> int:
         if seed is not None:
             try:
                 seed_text = seed.read_text(encoding="utf-8")
-            except OSError:
-                seed_text = ""
+            except OSError as exc:
+                # ★ 卡 E120：原来吞成空串 ⇒ ③（与播种源逐字相同）整条短路 ⇒
+                #   **证据越不可得，结论越绿**（P3 实测 A 判 stale、B 判 fresh）。
+                print(f"[stale] 播种源读不到（{type(exc).__name__}: {exc}）"
+                      f"⇒ 判不了是不是这一趟：{seed}", file=sys.stderr)
+                return 3
         fresh, why = product_is_from_this_run(
             payload, started_at=started, shipped_text=shipped_text, seed_text=seed_text)
         if not fresh:

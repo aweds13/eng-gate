@@ -12253,3 +12253,15 @@ evidence = [
   "test:test_pool_mcp_task.py::test_checkin_status_defaults_to_utc8_today",
 ]
 gaps = "- 卡规格判据 1 写「payload 不加键」，实现的拒收分支带了 `rejected`（format / calendar）—— 判据 5 那条「精确键集」钉子只锁**成功**路径（既有 :938/:950 的形状），拒收路径本来就不是既有形状，所以加的键不撞任何断言。指针 tools/pool_mcp.py- 卡规格判据 2 写「父目录恰好等于 (root/gates/diag).resolve()」，但留档读端在 root != ROOT 时取 pool_accounts.DATA_ROOT（卡 E114 定的「读端必须是写端那一棵」）—— 钉子只能钉相对结构（父目录 == archive_root/gates/diag、文件名 == checkin-<date>.json），钉 root 字面会与 E114 的钉子互斥。指针 tools/pool_mcp.py- 写文案撞了两次 E501（f-string 一行 103 字符、schema description 一行 101 字符），最后把两处都拆成相邻字面量；判据没说文案长度，这是 ruff 逼的。指针 tools/pool_mcp.py"
+
+[entries."T-AG629"]
+id = "T-AG629"
+title = "gate_pool把读不到洗成读到空：队列、日志、播种源、槽位、锁六类静默"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/gate_pool.py",
+  "file:tests/test_gate_pool.py",
+  "file:tests/test_cloud_product_freshness.py",
+]
+gaps = "1. `tools/pool/landing.py` 的云门禁调用点只接 `CloudUnreachable`、没接 `GatePoolUnreadable`：队列读不到时之所以仍落在「停手」分支，是因为 `run_cloud_gate` 内部转了码，不是调用方分得清。指针 `tools/pool/landing.py`2. `PoolQueue.locked()` 等满 30 s 拿不到锁**照样写**（现在只多打一行）：「无锁写」这条保底没动 —— 卡规格判据 5 只要求「还锁失败必须打印」。要改成拿不到锁就拒写是另一张卡。指针 `tools/gate_pool.py`3. 判据 1 没走 `lastgood.read_with_fallback` 路线（卡规格允许二选一）：队列读不到直接抛，没有 `.bak` 静默恢复。以后要接恢复必须带 `log=` 且恢复失败照抛，否则等于把「读不到」重新洗成「读到旧值」。指针 `tools/pool/lastgood.py`"

@@ -19,6 +19,11 @@
 - 只做其中一道都会漏：正则放过 2026-02-30，fromisoformat 放过 20260102（→ 2026-01-02）与 2026-W01-1（→ 2025-12-29），实测七个串里两个被单靠 fromisoformat 的写法放行 —— 所以两条缺一不可，常量旁写了这条注释。
 - date 的 inputSchema 补 pattern ^\d{4}-\d{2}-\d{2}$，description 补一句「一律拒收、不会被拼进留档路径」；docs/subsystems/pool/README.md 的 checkin_status 表行尾巴补「非法日期拒收」—— 仍是一行。
 - 空串 / 全空白 / 缺键 / None 四种仍落到 `_today_local()`（UTC+8），今天这件事还是只有那一处真源；没有在 tools/pool_accounts.py 或 tools/pool/checkin.py 里再写一份。
+## 2026-11-17 T-AG629 gate_pool 把「读不到」洗成「读到空」的七处一起收口
+- `PoolQueue.load()` 分三支：文件不存在 ⇒ 空状态；`OSError` ⇒ 抛 `GatePoolUnreadable`（消息带 errno）；坏 JSON ⇒ 抛「不是合法 JSON」。`submit()` 读不到就拒写，盘上字节不动。
+- 锁：`acquire_slot_lock` 的陈旧锁删不掉不再死循环（timeout 真到期、返 False 并打印）；`release_slot_lock` 三态 `no-lock` / `True` / `False`；`PoolQueue.locked()` 的 finally 还锁失败改为打印。
+- 回传：`_read_back` 读不到的日志点名打印「不算这一趟的产物」，`_write_back` 删掉回传里没有的旧 `*.log` —— 上一趟的日志不许在卡树里冒充这一趟。
+- 命令行：`main('slots')` 内存读不到印 `avail_gb=unknown` 并退 2（原 `or 0.0`）；`check-product-fresh --seed` 读不到退 3 不把播种源当空串；`main(argv)` 的三元写反一并修（形参优先）。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

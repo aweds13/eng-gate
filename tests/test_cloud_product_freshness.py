@@ -146,6 +146,22 @@ def test_cli_missing_product_is_not_fresh(tmp_path: Path) -> None:
     assert rc == 3, out
 
 
+def test_cli_seed_unreadable_is_not_fresh(tmp_path: Path) -> None:
+    """卡 E120（判据 3）：播种源**读不到** ⇒ 退出码 3，不许当空串放过。
+
+    病灶：原来 except OSError: seed_text = "" ⇒ ③（与播种源逐字相同）整条短路
+    ⇒ 证据越不可得，结论越绿（同一份产物：种子读得到判 stale、读不到判 fresh）。
+    """
+    seed_dir = tmp_path / "seed_dir.json"
+    seed_dir.mkdir()  # 目录冒充文件：read_text 抛 IsADirectoryError
+    shipped = tmp_path / "last.json"
+    shipped.write_text(json.dumps(_product("2026-10-29T03:05:00"), indent=2), encoding="utf-8")
+    rc, out = _run_cli(str(shipped), "--started-at", "2026-10-29T02:00:00", "--seed", str(seed_dir))
+    assert rc == 3, out
+    assert "[fresh]" not in out
+    assert "播种源读不到" in out
+
+
 # ---------------------------------------------------------------- 判据 5（脚本级）
 
 

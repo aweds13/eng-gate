@@ -315,3 +315,163 @@ def test_pool_queue_timeout_defaults_to_thirty(tmp_path: Path) -> None:
         f"同族口径漂了：gate_pool.LOCK_WAIT_S={gp.LOCK_WAIT_S} vs "
         f"queue.LOCK_WAIT_S={mod.LOCK_WAIT_S}"
     )
+
+
+
+# ================ 卡 E120（T-AG629）：读不到 != 读到空
+# 每处都钉「改前返回什么 / 改后必须抛或退非 0」；全用 tmp_path + 独占句柄。
+
+import contextlib  # noqa: E402
+import ctypes  # noqa: E402
+import os  # noqa: E402
+
+
+@contextlib.contextmanager
+def _exclusive(path: Path):
+    """独占一个文件（Windows：别的进程 open / unlink 都拿 WinError 32）。"""
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = kernel32.CreateFileW(str(path), 0x80000000, 0, None, 3, 0x80, None)
+    if handle in (-1, None):
+        raise OSError(ctypes.get_last_error(), "CreateFileW 失败（造不出独占句柄）")
+    try:
+        yield handle
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+# ---------------------------------------------------------------- (11) 判据 1
+def test_queue_load_distinguishes_missing_from_unreadable(tmp_path: Path) -> None:
+    """不存在 ⇒ 空状态；目录冒充 / 被独占 / 坏 JSON ⇒ 抛（消息点名 errno 与「不是合法 JSON」）。"""
+    q = gp.PoolQueue(tmp_path / "queue.json")
+    assert q.load() == {"head": None, "waiting": [], "done": [], "slots": {}}
+
+    as_dir = tmp_path / "as_dir.json"
+    as_dir.mkdir()
+    with pytest.raises(gp.GatePoolUnreadable) as err:
+        gp.PoolQueue(as_dir).load()
+    assert "队列读不到" in str(err.value)
+    assert "13" in str(err.value)
+
+    good = tmp_path / "held.json"
+    good.write_text(json.dumps({"head": None, "waiting": [], "done": [], "slots": {}}),
+                    encoding="utf-8")
+    with _exclusive(good), pytest.raises(gp.GatePoolUnreadable) as err2:
+        gp.PoolQueue(good).load()
+    assert "13" in str(err2.value)
+
+    bad = tmp_path / "bad.json"
+    bad.write_text("{ 这不是 JSON", encoding="utf-8")
+    with pytest.raises(gp.GatePoolUnreadable) as err3:
+        gp.PoolQueue(bad).load()
+    assert "不是合法 JSON" in str(err3.value)
+
+
+# ---------------------------------------------------------------- (12) 判据 2
+def test_submit_refuses_when_queue_unreadable(tmp_path: Path) -> None:
+    """队列读不到 ⇒ submit 拒写，盘上原文件字节不变（不许把还在跑的那条抹掉）。"""
+    q = gp.PoolQueue(tmp_path / "queue.json")
+    q.submit({"task": "T-1", "card": "T-1", "commit": "aaa", "host": "h"}, n_slots=4)
+    before = q.path.read_bytes()
+    assert b"aaa" in before
+
+    with _exclusive(q.path), pytest.raises(gp.GatePoolUnreadable):
+        q.submit({"task": "T-2", "card": "T-2", "commit": "bbb", "host": "h"}, n_slots=4)
+    assert q.path.read_bytes() == before, "读不到时一个字节都不许动"
+
+
+# ---------------------------------------------------------------- (13) 判据 4
+def test_slots_unreadable_memory_is_not_zero(monkeypatch, capsys) -> None:
+    """量不出内存 ⇒ 印 avail_gb=unknown 并退 2，不许印 0.0（那是编出来的读数）。"""
+    import types
+
+    fake_pkg = types.ModuleType("scripts")
+    fake_mod = types.ModuleType("scripts.run_gates")
+
+    def _boom() -> float:
+        raise OSError(13, "自己造的：读不到可用内存")
+
+    fake_mod.available_memory_gb = _boom
+    fake_pkg.run_gates = fake_mod
+    monkeypatch.setitem(sys.modules, "scripts", fake_pkg)
+    monkeypatch.setitem(sys.modules, "scripts.run_gates", fake_mod)
+
+    rc = gp.main(["slots"])
+    out = capsys.readouterr()
+    both = out.out + out.err
+    assert rc == 2
+    assert "avail_gb=0.0" not in both
+    assert "unknown" in both
+    assert "判不了" in both
+
+
+def test_slot_count_none_memory_rejected() -> None:
+    """slot_count(cpu, None) 显式拒绝 —— 落到 1 槽也是编数字。"""
+    with pytest.raises(ValueError) as err:
+        gp.slot_count(8, None)
+    assert "判不了" in str(err.value)
+
+
+# ---------------------------------------------------------------- (14) 判据 5
+def test_acquire_slot_lock_times_out_on_undeletable_stale_lock(tmp_path: Path) -> None:
+    """陈旧但删不掉的锁 ⇒ timeout 必须真到期（改前是无出口死循环）。"""
+    lock_dir = tmp_path / "diag"
+    lock_dir.mkdir()
+    path = gp.slot_lock_path(lock_dir, 0)
+    path.write_text("{}", encoding="utf-8")
+    old = time.time() - 20_000.0
+    os.utime(path, (old, old))
+
+    started = time.time()
+    with _exclusive(path):
+        got = gp.acquire_slot_lock(lock_dir, 0, card="T-1", timeout=0.5)
+    elapsed = time.time() - started
+    assert got is False
+    assert elapsed < 1.5, f"timeout 没生效：卡了 {elapsed:.1f}s"
+
+
+def test_release_slot_lock_distinguishes_no_lock_from_failure(tmp_path: Path) -> None:
+    """还锁三态：本来没锁 "no-lock" / 删掉了 True / 删不掉 False。"""
+    lock_dir = tmp_path / "diag"
+    lock_dir.mkdir()
+    assert gp.release_slot_lock(lock_dir, 0) == "no-lock"
+
+    assert gp.acquire_slot_lock(lock_dir, 0, card="T-1") is True
+    assert gp.release_slot_lock(lock_dir, 0) is True
+
+    path = gp.slot_lock_path(lock_dir, 0)
+    path.write_text("{}", encoding="utf-8")
+    with _exclusive(path):
+        assert gp.release_slot_lock(lock_dir, 0) is False
+
+
+def test_locked_reports_unlock_failure(tmp_path: Path, monkeypatch, capsys) -> None:
+    """locked() 还锁失败必须打印（改前 suppress 掉就跑，锁会留在盘上）。"""
+    q = gp.PoolQueue(tmp_path / "queue.json")
+    real = Path.unlink
+
+    def boom(self, *args, **kwargs):
+        if self.name.endswith(".lock"):
+            raise PermissionError(13, "自己造的：还锁失败")
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", boom)
+    with q.locked():
+        pass
+    out = capsys.readouterr().out
+    assert "还锁失败" in out
+    assert "无锁写" in out
+
+
+# ---------------------------------------------------------------- (15) 判据 6
+def test_write_back_does_not_leave_stale_log(tmp_path: Path) -> None:
+    """回传里没有的日志 ⇒ 卡树里上一趟那份必须删掉（下游正是拿它当入口）。"""
+    old = tmp_path / "gates" / "logs" / "pytest.log"
+    old.parent.mkdir(parents=True)
+    old.write_text("上一趟的 20 passed\n", encoding="utf-8")
+
+    gp._write_back(tmp_path, {"ok": True, "rev": "abc"}, {})
+    assert not old.exists(), "上一趟的 pytest.log 还在 ⇒ 它会冒充这一趟"
+
+    gp._write_back(tmp_path, {"ok": True, "rev": "abc"},
+                   {"pytest.log": "这一趟的 3 passed\n"})
+    assert old.read_text(encoding="utf-8") == "这一趟的 3 passed\n"
