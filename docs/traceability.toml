@@ -12351,3 +12351,14 @@ evidence = [
   "file:tests/test_pool_mcp_write.py",
 ]
 gaps = "- 卡规格判据 1 / 2 给的候选字是「cp1252 取 é（U+00E9），候选还有 Ω」，我把它落成**按编码现探**：先试 é，编码编不出来或 utf-8 与它编出来一样（说明不是「utf-8 解必坏」的探针）就退 Ω，两个都不成直接 AssertionError，绝不静默退回中文原文。理由：卡规格写的是「cp1252 取 é」，但判据文本比它宽（「编码能编、utf-8 解必坏」），硬编码 é 会在别的 ANSI 页上重复本卡要修的那个病。指针 tests/test_pool_mcp_write.py- 判据 3 说「`assert probe in detail` 取代 `assert 「成功」 in detail and 「已终止」 in detail`」：替掉的只有**这一条**，紧邻的 `assert 「\\ufffd」 not in detail` 逐字保留；坏字节那半的 `_Done(b「\\xff\\xfe\\xff」.decode(...))` 换成 `_undecodable_bytes(system_enc)`，其余（`fake_bad` 的签名、`ok2` / `detail2` 的用法、「没抛出来 = 过」）一个字没动。指针 tests/test_pool_mcp_write.py- 判据 4 写的 sha256 门槛（8 位前缀）与本卡树 `tools/pool_mcp.py` 的实测值**对不上**：实测完整值存在 gates/diag/_rev_E133_result.txt 首行，卡规格那个数取自另一棵树（基线 b4a1eb1d 之前）。我按「变异前后 sha256 逐字相同」判「还原回原值」，没有硬凑卡规格那个前缀。证据 gates/diag/_rev_E133_result.txt"
+
+[entries."T-AG643"]
+id = "T-AG643"
+title = "web_live 一次没读到不再整道门红：有界重放只吃超时与断读"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/web_live_check.py",
+  "file:tests/test_web_live_json_retry.py",
+]
+gaps = "- 卡规格判据 3 只列了六个幂等写调用点（attach ×3 / ai ×2 / notify ×1），实测这六个都标了 `retry_ok=True`，但**超时那一支的可重放面比它宽**：`GET`/`HEAD` 由 `IDEMPOTENT_METHODS` 放行，不靠调用点声明；卡规格判据 2 说「超时只对判据 3 认定的幂等调用重放」，我按「幂等面 = GET/HEAD ∪ 显式声明」实现，与判据 3 末句（「重放条件 = method in (GET, HEAD) or retry_ok」）一致。指针 tools/web_live_check.py- 判据 3 说 `:283`/`:294`/`:295` 三处 attach PUT，实测 `:295` 那行（`bad_ext`）折成三行会破 ruff E501，所以按 ruff 要求折行；三处**行号**因此各自下移，语义一字没变。指针 tools/web_live_check.py- 判据 6 钉了七条，实际文件里落了 **12 条**：把「重试用尽点名 broken_read」「每次重放打一行」「零值不许再打」「HEAD 与 GET 同等可重放」「断读（连上后对端先关）也可重放」「拒连不重放」逐条拆成独立钉子，一条钉子只判一件事。卡规格列的是**最少**集合，没有软化的那条。指针 tests/test_web_live_json_retry.py"

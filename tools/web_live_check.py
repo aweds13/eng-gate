@@ -142,6 +142,21 @@ NO_ROUTE_ERRNOS = frozenset({errno.ENETUNREACH, errno.EHOSTUNREACH})
 DEFAULT_LAN_RETRY = 1
 LAN_RETRY_ENV = "TF_WEB_LIVE_RETRY"
 
+#: 卡 E134：`_json_call` 的**有界重试**。慢机器上「一次没读到」不等于服务坏了 ——
+#: GHA 的 windows runner 实测 `PUT /api/settings/ai` 客户端等 30 秒没等到，而服务端日志
+#: 是 `status 200 ms 19.4`（连接层抖动，不是业务坏）。默认重放 1 次，env 可关。
+#:
+#: ★ 不复用 `TF_WEB_LIVE_RETRY`：那个旋钮的幂等面是 `_lan_json`（只打 GET 与
+#: `POST /api/sync/import`），而 `_json_call` 的 47 个 POST 会建任务 / 建课程 ——
+#: 两者的安全前提不是一回事。写请求要调用点**显式**声明 `retry_ok=True` 才进重放面。
+DEFAULT_JSON_RETRY = 1
+JSON_RETRY_ENV = "TF_WEB_LIVE_JSON_RETRY"
+#: 上限：env 写多大都不许真的打到天荒地老（坏值 / 超大值一律夹到这个数以内）。
+JSON_RETRY_MAX = 5
+#: 判据 3：这两个方法是纯读，重放安全；其余方法（POST/PUT/PATCH/DELETE）默认**不重放**，
+#: 要调用点显式写 `retry_ok=True` 才进重放面（`POST /api/tasks` 重放一次就多建一条任务）。
+IDEMPOTENT_METHODS = frozenset({"GET", "HEAD"})
+
 
 class LiveCallError(RuntimeError):
     """一次 HTTP 调用没等到结果 —— **带点名**的错误，不是裸 traceback（卡 E67）。
@@ -200,6 +215,24 @@ def lan_retry() -> int:
     return val if val >= 0 else DEFAULT_LAN_RETRY
 
 
+def json_retry() -> int:
+    """「没读到响应」时最多再打几次（卡 E134）：默认 `DEFAULT_JSON_RETRY`，env 可调。
+
+    坏值 / 负数 ⇒ 退回默认；`0` 是**合法**值（明确关掉重试）；
+    上限 `JSON_RETRY_MAX` —— env 写多大都不许真的打到天荒地老。
+    """
+    raw = os.environ.get(JSON_RETRY_ENV, "").strip()
+    if not raw:
+        return DEFAULT_JSON_RETRY
+    try:
+        val = int(raw)
+    except ValueError:
+        return DEFAULT_JSON_RETRY
+    if val < 0:
+        return DEFAULT_JSON_RETRY
+    return min(val, JSON_RETRY_MAX)
+
+
 def _read_broken(exc: BaseException) -> bool:
     """连上了、但没读到响应状态行（卡 E85）—— 与「请求根本没送到」必须分开。
 
@@ -224,12 +257,20 @@ def mark_live_error(checks: dict[str, bool], err: LiveCallError) -> None:
 
 
 def _json_call(base: str, path: str, method: str = "GET", payload: dict | None = None,
-               headers: dict | None = None, timeout: float | None = None) -> tuple[int, object]:
+               headers: dict | None = None, timeout: float | None = None,
+               *, retry_ok: bool = False) -> tuple[int, object]:
     """打真服务的 JSON 接口，返回 (状态码, 解析结果)。
 
     ★ 卡 E67：等不到（超时 / 拒连）**不抛裸 traceback** —— 抛 `LiveCallError`，消息里
     写清哪个 endpoint、什么方法、等了多久、原始异常类型。等待窗走 `call_timeout()`
     （env `TF_WEB_LIVE_TIMEOUT` 可调），调用方也允许按次覆盖。
+
+    ★ 卡 E134：**一次没读到不等于服务坏了**（慢 runner 上实测：服务端日志
+    `PUT /api/settings/ai status 200 ms 19.4`，客户端却等 30 秒没等到响应）。
+    这里给「没读到响应」这一类**有界重放**（`json_retry()`，默认 1 次），三态照
+    `_lan_json` 的口径，但有一处**有意不同**：超时**允许重放**（`_lan_json` 的超时那一支
+    是直接抛）—— 因为它的调用面含整包体 `POST /api/sync/import`，而这里的 78 个默认
+    GET 是纯读，重放安全。写方法仍默认不重放，要调用点显式 `retry_ok=True`。
     """
     url = f"{base}{path}"
     wait = call_timeout() if timeout is None else timeout
@@ -238,13 +279,26 @@ def _json_call(base: str, path: str, method: str = "GET", payload: dict | None =
     req.add_header("Content-Type", "application/json")
     for k, v in (headers or {}).items():
         req.add_header(k, v)
-    try:
-        with urllib.request.urlopen(req, timeout=wait) as resp:
-            return resp.status, json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:  # 4xx/5xx 也要看得到状态码
-        return e.code, None
-    except OSError as e:  # ★ 卡 E67：TimeoutError / URLError 原先没人接 ⇒ 抛穿成裸 traceback
-        raise LiveCallError(method, url, wait, e) from e
+
+    replayable = method.upper() in IDEMPOTENT_METHODS or retry_ok
+    attempts = 1 + (json_retry() if replayable else 0)
+    last: OSError | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=wait) as resp:
+                return resp.status, json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:  # 4xx/5xx 也要看得到状态码
+            return e.code, None   # ★ 已拿到状态码 ⇒ 绝不重放（会把 403/404 洗成 200）
+        except OSError as e:  # ★ 卡 E67：TimeoutError / URLError 原先没人接 ⇒ 抛穿成裸 traceback
+            if not isinstance(e, WAIT_TIMEOUTS) and not _read_broken(e):
+                # 拒连 / 无路由：请求根本没送到 ⇒ 重放只是白等（与 `_lan_json` 同口径）
+                raise LiveCallError(method, url, wait, e) from e
+            last = e
+        if attempt < attempts:
+            print(f"  [重试] {method} {url} 没读到响应（{type(last).__name__}），再打一次")
+    assert last is not None
+    # 走到这里 = 每一次都是「连上了、但没读到响应」（超时 / 对端先关了）⇒ broken_read=True
+    raise LiveCallError(method, url, wait, last, broken_read=True) from last
 
 
 def live_remind_checks(base: str) -> dict[str, bool]:
@@ -280,7 +334,7 @@ def live_attach_checks(base: str, tmp: Path) -> dict[str, bool]:
     _, default_run = _json_call(
         base, "/api/attach/open", "POST", {"target": str(pdf), "dry_run": True}
     )
-    _json_call(base, "/api/settings/attach", "PUT", {"mode": "auto"})
+    _json_call(base, "/api/settings/attach", "PUT", {"mode": "auto"}, retry_ok=True)
     _, auto_run = _json_call(
         base, "/api/attach/open", "POST", {"target": str(pdf), "dry_run": True}
     )
@@ -291,8 +345,10 @@ def live_attach_checks(base: str, tmp: Path) -> dict[str, bool]:
     dir_run = _json_call(
         base, "/api/attach/open", "POST", {"target": str(folder), "dry_run": True}
     )[1]
-    bad_mode = _json_call(base, "/api/settings/attach", "PUT", {"mode": "乱写"})[0]
-    bad_ext = _json_call(base, "/api/settings/attach", "PUT", {"whitelist": [".exe"]})[0]
+    bad_mode = _json_call(base, "/api/settings/attach", "PUT", {"mode": "乱写"}, retry_ok=True)[0]
+    bad_ext = _json_call(
+        base, "/api/settings/attach", "PUT", {"whitelist": [".exe"]}, retry_ok=True
+    )[0]
     cross = _json_call(
         base, "/api/attach/open", "POST", {"target": str(pdf), "dry_run": True},
         headers={"Origin": "https://evil.example"},
@@ -397,7 +453,7 @@ def live_ai_checks(base: str) -> dict[str, bool]:
     evil = {"Origin": "https://evil.example"}
     off_read = _json_call(base, "/api/ai/tasks")[0]
     off_write = _json_call(base, "/api/ai/tasks", "POST", {"title": "x"})[0]
-    turned_on = _json_call(base, "/api/settings/ai", "PUT", {"enabled": True})[0]
+    turned_on = _json_call(base, "/api/settings/ai", "PUT", {"enabled": True}, retry_ok=True)[0]
     ping = _json_call(base, "/api/ai/ping")
     mine_code, mine = _json_call(base, "/api/tasks", "POST", {"title": "真机自检·你建的"})
     ai_code, ai = _json_call(base, "/api/ai/tasks", "POST", {"title": "真机自检·AI 建的"})
@@ -418,7 +474,7 @@ def live_ai_checks(base: str) -> dict[str, bool]:
     cross_read = _json_call(base, "/api/ai/tasks", headers=evil)[0]
     cross_write = _json_call(base, "/api/ai/tasks", "POST", {"title": "x"}, headers=evil)[0]
     facts = _json_call(base, f"/api/tasks/{ai_task.get('id')}/facts")[1] or []
-    _json_call(base, "/api/settings/ai", "PUT", {"enabled": False})
+    _json_call(base, "/api/settings/ai", "PUT", {"enabled": False}, retry_ok=True)
     after_off = _json_call(base, "/api/ai/tasks")[0]
     return {
         "AI 默认关时整组 403": off_read == 403 and off_write == 403,
@@ -649,7 +705,7 @@ def live_notify_checks(base: str) -> dict[str, bool]:
         base, "/api/notify/school", "POST", {"source": "x", "title": "y"},
         headers={"Origin": "https://evil.example"},
     )[0]
-    _json_call(base, "/api/settings/notify", "PUT", {"enabled": True})
+    _json_call(base, "/api/settings/notify", "PUT", {"enabled": True}, retry_ok=True)
     bad = _json_call(base, "/api/notify/school", "POST", {"title": "少了来源"})[0]
     first = _json_call(base, "/api/notify/school", "POST", {
         "source": "教务处网站", "title": "真机自检·期中考试安排", "external_id": "LIVE-1",

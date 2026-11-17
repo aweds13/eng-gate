@@ -48,6 +48,11 @@
 - `tests/test_pool_mcp_write.py` 新增 `_human_sample_that_survives(encoding)`：编码能编中文就用原中文串并回探针「成功」，编不了就退到「这个编码能编、utf-8 解必坏」的单字母（cp1252 取 é，候选 Ω），回 `(改造过的人话, 探针)`。
 - `tests/test_pool_mcp_write.py` 新增 `_undecodable_bytes(encoding)`：候选五条字节序列里取第一个在该编码下 `decode(errors="replace")` 真出现替换字符的（cp1252 的未定义字节是 0x81/0x8d/0x8f/0x90/0x9d，`\xff\xfe\xff` 在它下面反而是合法三字母）。
 - 行为钉子 `test_kill_reads_system_encoded_output_as_human_text` 改两处取值、断言强度不变：`assert probe in detail` 取代「成功 + 已终止」，坏字节走 `_undecodable_bytes`；`assert "\ufffd" not in detail`、「坏字节只许 replace 不许抛」两条原样留着。
+## 2026-11-17 T-AG643 `_json_call` 的「一次没读到」由有界重放吸收：状态码与拒连绝不重放，写请求要显式声明
+- `tools/web_live_check.py` 新增 `DEFAULT_JSON_RETRY = 1` / `JSON_RETRY_ENV = "TF_WEB_LIVE_JSON_RETRY"` / `JSON_RETRY_MAX = 5` / `IDEMPOTENT_METHODS = frozenset({"GET", "HEAD"})` 与 `json_retry()`（坏值、负数回默认；`0` 合法；上限夹到 5）。
+- `_json_call` 加 keyword-only `retry_ok: bool = False` 与重放循环：`HTTPError` 立即 `return e.code, None`（已拿到状态码绝不重放），拒连/无路由立即抛 `LiveCallError`（请求没送到，重放只是白等），只有超时与「连上但没读到响应」进重放面；用尽后 `broken_read=True`，每次重放打 `  [重试] {method} {url} 没读到响应（{异常类型}），再打一次`。
+- 六个幂等写调用点标 `retry_ok=True`：`PUT /api/settings/attach` ×3、`PUT /api/settings/ai` ×2、`PUT /api/settings/notify` ×1；`POST /api/tasks` / `POST /api/courses` / `POST /api/ai/tasks` / `to-review` / `PATCH` / `DELETE` 一处未标。
+- `docs/subsystems/ci/云门禁-可复现性清单.md` §2 新增 R18 行（风险「高」、修没修「✅ 本轮修」），判据列三条节点；解析器 `tests/test_ci_portability.py::test_doc_rows_are_all_machine_checkable` 仍绿（R1–R18 连号、六列、节点真实存在）。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。
