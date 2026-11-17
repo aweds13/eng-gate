@@ -44,6 +44,10 @@
 - 新判据的做法：git ls-files -c -o --exclude-standard 复制工作区里 git 看得见的整棵树（跟踪 2587 + 未跟踪 3 = 2590；只拷跟踪的那份会少一篇未跟踪片段，让 docs/INDEX.md 的篇数对不上而假红）→ rm -rf skills/ → git init → 跑 CORE 六条，任一非零或输出里出现带斜杠的 skills/ 就判红。
 - 这条判据自己也有钉子：把已知会红的 scripts/audit_progress.py --all 塞进 CORE 第七条必须报红（test_card_e124_core_probe_bites_on_a_known_red_command），判据 1 与 2 互相咬。
 - 对账表加「CX-01 的诚实边界」段并把它登记为收窄后的承诺：CORE 不含四道会因 skills/ 缺失而红的门，所以原话「完整可用」不成立，改由可复现的六条读数背书。
+## 2026-11-17 T-AG642 掐进程的测试不再假设这台机器能编中文：样例与坏字节都按控制台编码现造
+- `tests/test_pool_mcp_write.py` 新增 `_human_sample_that_survives(encoding)`：编码能编中文就用原中文串并回探针「成功」，编不了就退到「这个编码能编、utf-8 解必坏」的单字母（cp1252 取 é，候选 Ω），回 `(改造过的人话, 探针)`。
+- `tests/test_pool_mcp_write.py` 新增 `_undecodable_bytes(encoding)`：候选五条字节序列里取第一个在该编码下 `decode(errors="replace")` 真出现替换字符的（cp1252 的未定义字节是 0x81/0x8d/0x8f/0x90/0x9d，`\xff\xfe\xff` 在它下面反而是合法三字母）。
+- 行为钉子 `test_kill_reads_system_encoded_output_as_human_text` 改两处取值、断言强度不变：`assert probe in detail` 取代「成功 + 已终止」，坏字节走 `_undecodable_bytes`；`assert "\ufffd" not in detail`、「坏字节只许 replace 不许抛」两条原样留着。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

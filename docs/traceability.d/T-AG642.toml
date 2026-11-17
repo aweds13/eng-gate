@@ -1,0 +1,10 @@
+[entries."T-AG642"]
+id = "T-AG642"
+title = "掐进程的测试在cp1252控制台上必红：样例与坏字节按编码现造"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_mcp_write.py",
+]
+gaps = "- 卡规格判据 1 / 2 给的候选字是「cp1252 取 é（U+00E9），候选还有 Ω」，我把它落成**按编码现探**：先试 é，编码编不出来或 utf-8 与它编出来一样（说明不是「utf-8 解必坏」的探针）就退 Ω，两个都不成直接 AssertionError，绝不静默退回中文原文。理由：卡规格写的是「cp1252 取 é」，但判据文本比它宽（「编码能编、utf-8 解必坏」），硬编码 é 会在别的 ANSI 页上重复本卡要修的那个病。指针 tests/test_pool_mcp_write.py- 判据 3 说「`assert probe in detail` 取代 `assert 「成功」 in detail and 「已终止」 in detail`」：替掉的只有**这一条**，紧邻的 `assert 「\\ufffd」 not in detail` 逐字保留；坏字节那半的 `_Done(b「\\xff\\xfe\\xff」.decode(...))` 换成 `_undecodable_bytes(system_enc)`，其余（`fake_bad` 的签名、`ok2` / `detail2` 的用法、「没抛出来 = 过」）一个字没动。指针 tests/test_pool_mcp_write.py- 判据 4 写的 sha256 门槛（8 位前缀）与本卡树 `tools/pool_mcp.py` 的实测值**对不上**：实测完整值存在 gates/diag/_rev_E133_result.txt 首行，卡规格那个数取自另一棵树（基线 b4a1eb1d 之前）。我按「变异前后 sha256 逐字相同」判「还原回原值」，没有硬凑卡规格那个前缀。证据 gates/diag/_rev_E133_result.txt"
+

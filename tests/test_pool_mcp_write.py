@@ -424,6 +424,52 @@ def _expected_console_encoding() -> str:
     ) or "utf-8"
 
 
+def _human_sample_that_survives(encoding: str) -> tuple[str, str]:
+    """造一句**这个编码真能编出来**的「人话」，并回带一个可用于判错编码的探针字。
+
+    ★ 为什么不能把中文样例写死：github actions 的 windows-latest 控制台编码是 cp1252
+    （`locale.getencoding()` 在 windows 上回 ansi code page，且**刻意忽略** python utf-8 mode ——
+    https://docs.python.org/3/library/locale.html），中文样例串连 `human.encode(system_enc)`
+    这一行都过不去 ⇒ 判据根本走不到「解码对不对」，那是环境的先决条件不是被测对象。
+
+    编码能编中文（本机 cp936 / linux）时仍用中文原文，判据一个字不变；
+    编不了的编码退到「用这个编码能编、且用 utf-8 解必坏」的那一个字母（cp1252 取 é）。
+    两种取法下，「该用系统编码却用了 utf-8」都会把探针字变成 <ufffd> ⇒ 回归仍咬得住。
+    """
+    human = "成功: 已终止 PID 1（映像 python.exe）"
+    try:
+        human.encode(encoding)
+    except UnicodeEncodeError:
+        pass
+    else:
+        return human, "成功"
+    base = "OK: terminated PID 1 (image python.exe)"
+    for probe in ("\u00e9", "\u03a9"):  # é / Ω
+        try:
+            bad = probe.encode("utf-8") == probe.encode(encoding)
+        except UnicodeEncodeError:
+            continue
+        if bad:
+            continue
+        return base.replace("image", probe + " image"), probe
+    raise AssertionError(f"找不到 {encoding} 能编、utf-8 解会坏的样例字")
+
+
+def _undecodable_bytes(encoding: str) -> bytes:
+    """造一段**这个编码真解不开**的字节（解出来必须带替换字符）。
+
+    ★ 同 `_human_sample_that_survives`：坏字节也不能写死。`b"\xff\xfe\xff"` 在 cp1252 下
+    是合法的三个字母（cp1252 把 0xff/0xfe 都映射成字母），于是「坏字节被 replace 掉」这条
+    判据在 github actions 的 windows runner 上**永远走不到**
+    （实测：断言「替换字符 in ÿþÿ」直接红）。
+    cp1252 的未定义字节是 0x81 / 0x8d / 0x8f / 0x90 / 0x9d。
+    """
+    for bad in (b"\xff\xfe\xff", b"\x81", b"\x80\xff", b"\x90", b"\xff"):
+        if "�" in bad.decode(encoding, errors="replace"):
+            return bad
+    raise AssertionError(f"找不到 {encoding} 解不开的字节序列")
+
+
 def test_kill_and_image_decode_with_console_encoding(monkeypatch: pytest.MonkeyPatch) -> None:
     """结构性：`_kill` / `_image_name` 给 `subprocess` 的 `encoding` 是**系统区域编码**
     （★ 动态比，换台机器也成立，不是写死 cp936），且 `errors` 仍是 `"replace"`。"""
@@ -453,7 +499,7 @@ def test_kill_reads_system_encoded_output_as_human_text(monkeypatch: pytest.Monk
     """行为性：`taskkill` 吐的**系统编码**回话要能读成人话（不出替换字符 `\\ufffd`）；
     坏字节只许被 `replace` 掉，**绝不许抛**（掐进程这条路不能被解码带崩）。"""
     system_enc = _expected_console_encoding()
-    human = "成功: 已终止 PID 1（映像 python.exe）"
+    human, probe = _human_sample_that_survives(system_enc)
     good_bytes = human.encode(system_enc)
 
     class _Done:
@@ -471,11 +517,13 @@ def test_kill_reads_system_encoded_output_as_human_text(monkeypatch: pytest.Monk
     ok, detail = pool_mcp._kill(4242)
     assert ok is True
     assert "\ufffd" not in detail  # 编码对 → 没有人话被替换成 U+FFFD（utf-8 老写法会中招）
-    assert "成功" in detail and "已终止" in detail
+    assert probe in detail, detail
+
+    bad_bytes = _undecodable_bytes(system_enc)
 
     def fake_bad(argv: list[str], **kwargs: Any) -> _Done:
         # 连系统编码都解不开的坏字节 → 只能 replace 掉，不许抛。
-        return _Done(b"\xff\xfe\xff".decode(kwargs["encoding"], errors=kwargs["errors"]))
+        return _Done(bad_bytes.decode(kwargs["encoding"], errors=kwargs["errors"]))
 
     monkeypatch.setattr(pool_mcp.subprocess, "run", fake_bad)
     ok2, detail2 = pool_mcp._kill(4242)  # 没抛出来 = 过
