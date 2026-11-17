@@ -1037,6 +1037,90 @@ def test_checkin_status_prose_agrees_with_what_it_reads() -> None:
         assert "health.last_checkin" in blob, where
         assert "last_probe" in blob, where
 
+# --------------------------------------- 卡 E130：非法日期串不许当今日、不许拼进路径
+
+_MALFORMED_DATES = [
+    "2026-1-2",
+    "today",
+    "20260102",
+    "2026-W01-1",
+    "2026-01-02T00:00:00",
+    "２０２６-01-02",
+]
+_NON_CALENDAR_DATES = ["2026-02-30", "2026-13-99", "2026-02-29", "0000-01-01"]
+_PATH_LIKE_DATES = ["../x", "../../../../outside/secret", "C:/tmp/x", "a\\b"]
+
+
+def test_checkin_status_rejects_malformed_date(tmp_path) -> None:
+    """判据 1 第一批：形状不对 ⇒ isError=True + 正文点名 YYYY-MM-DD，且不往下走。"""
+    for bad in _MALFORMED_DATES:
+        text, payload, is_error = pool_mcp.tool_checkin_status({"date": bad}, root=tmp_path)
+        assert is_error is True, bad
+        assert "YYYY-MM-DD" in text, bad
+        assert "留档路径" not in text, bad
+        assert "archive" not in payload, bad
+
+
+def test_checkin_status_rejects_non_calendar_date(tmp_path) -> None:
+    """判据 1 第二批：正则全过、日历上不存在 ⇒ 只能靠 date.fromisoformat 挡。"""
+    for bad in _NON_CALENDAR_DATES:
+        text, payload, is_error = pool_mcp.tool_checkin_status({"date": bad}, root=tmp_path)
+        assert is_error is True, bad
+        assert "YYYY-MM-DD" in text, bad
+        assert "留档路径" not in text, bad
+        assert "archive" not in payload, bad
+
+
+def test_checkin_status_rejects_path_like_date(tmp_path) -> None:
+    """判据 1 第三批：带 .. / 分隔符 ⇒ 拒收，且不许 stat 到树外去。"""
+    diag = (tmp_path / "gates" / "diag").resolve()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.json").write_text(
+        json.dumps({"results": [{"id": "leak", "platform": "outside-tree"}]}),
+        encoding="utf-8",
+    )
+    for bad in _PATH_LIKE_DATES:
+        text, payload, is_error = pool_mcp.tool_checkin_status({"date": bad}, root=tmp_path)
+        assert is_error is True, bad
+        assert "YYYY-MM-DD" in text, bad
+        assert "留档路径" not in text, bad
+        assert "leak" not in text, bad
+        raw = payload.get("archive")
+        if raw is not None:
+            assert Path(raw).resolve().is_relative_to(diag), bad
+
+
+def test_checkin_status_archive_stays_inside_diag_dir(tmp_path) -> None:
+    """判据 2：合法日期才拼路径，resolve() 之后父目录恰好是 gates/diag。"""
+    diag = (tmp_path / "gates" / "diag").resolve()
+    for good in ("2026-01-02", "2024-02-29", "2026-12-31"):
+        text, payload, is_error = pool_mcp.tool_checkin_status({"date": good}, root=tmp_path)
+        assert is_error is False, good
+        archive = Path(payload["archive"]).resolve()
+        assert archive.parent == diag, good
+        assert archive.name == f"checkin-{good}.json", good
+    for bad in (*_MALFORMED_DATES, *_NON_CALENDAR_DATES, *_PATH_LIKE_DATES):
+        assert pool_mcp.tool_checkin_status({"date": bad}, root=tmp_path)[2] is True, bad
+
+
+def test_checkin_status_defaults_to_utc8_today(tmp_path) -> None:
+    """判据 3：不给 date（四种空）⇒ 仍是今天；时区口径 UTC+8 一个字都不许改。"""
+    from datetime import datetime as _dt  # noqa: PLC0415
+    from datetime import timedelta as _td  # noqa: PLC0415
+    from datetime import timezone as _tz  # noqa: PLC0415
+
+    today = pool_mcp._today_local()
+    for empty_args in ({}, {"date": ""}, {"date": "   "}, {"date": None}):
+        text, payload, is_error = pool_mcp.tool_checkin_status(empty_args, root=tmp_path)
+        assert is_error is False, empty_args
+        assert payload["date"] == today, empty_args
+    assert today == _dt.now(_tz(_td(hours=8))).strftime("%Y-%m-%d")
+    src = Path(pool_mcp.__file__).read_text(encoding="utf-8")
+    start = src.index("def _today_local")
+    body = src[start:src.index("\n\n\ndef ", start)]
+    assert "hours=8" in body
+    assert "date.today()" not in body
 # --------------------------------------- 卡 A364：usage_report（外部用量上报的入口）
 
 USAGE_REPORTED_REL = ("gates", "diag", "usage-reported.jsonl")

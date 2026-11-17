@@ -514,7 +514,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "properties": {
                 "date": {
                     "type": "string",
-                    "description": "看哪一天（YYYY-MM-DD；默认今天，本地时区）",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "description": (
+                        "看哪一天（YYYY-MM-DD；默认今天，本地时区）。形状或日历不对的串"
+                        "一律拒收（isError=true，正文点名 YYYY-MM-DD），不会被拼进留档路径。"
+                    ),
                 },
             },
             "required": [],
@@ -1615,6 +1619,11 @@ def tool_account_status(
 
 _CHECKIN_DIR = Path("gates") / "diag"
 
+# ★ 卡 E130：日期串只能长这样 —— 先看形状（fromisoformat 单独用会放行 20260102 /
+#   2026-W01-1，见卡规格问题 1），再用 date.fromisoformat 判日历上有没有这一天。
+#   两条缺一不可：只做正则会把 2026-02-30 放过去，只做 fromisoformat 会把 20260102 放过去。
+_CHECKIN_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
 
 def _today_local() -> str:
     """本地时区（UTC+8）的今天 —— 与 `tools/pool_accounts.py checkin` 的留档口径一致。"""
@@ -1642,6 +1651,26 @@ def tool_checkin_status(
     import pool_accounts  # noqa: PLC0415 —— 同一个 tools/ 目录
 
     date = str(arguments.get("date") or "").strip() or _today_local()
+    # ★ 卡 E130：date 是**用户串**，直接拼进路径等于把它当文件名用 —— 2026-11-17 实测
+    #   date="../../../../outside/secret" 真读到了树外 JSON 并渲染进正文。校验必须在拼路径
+    #   **之前**：拦下来时连 stat 都不做（payload 里没有 archive 键）。
+    #   写法上两条一起：正则管形状（挡 20260102 / 2026-W01-1 / 全角数字 / 带路径），
+    #   date.fromisoformat 管日历（挡 2026-02-30 / 2026-13-99）—— 只留一条都会漏。
+    if not _CHECKIN_DATE_RE.match(date):
+        return _result(
+            f"date 不是 YYYY-MM-DD 形状：{date!r} ⇒ 拒收"
+            "（只收四位年-两位月-两位日，例如 2026-11-17）",
+            {"date": date, "rejected": "format"},
+            is_error=True,
+        )
+    try:
+        datetime.date.fromisoformat(date)
+    except ValueError:
+        return _result(
+            f"date 不是日历上的一天：{date!r} ⇒ 拒收（要 YYYY-MM-DD，例如 2026-11-17）",
+            {"date": date, "rejected": "calendar"},
+            is_error=True,
+        )
     # ★ 卡 E114：留档**读端**必须是**写端**那一棵树。写端 pool_accounts.write_checkin_archive()
     #   恒落 pool_accounts.DATA_ROOT（即 pipe_root.data_root()）；从前读端用传进来的 root ——
     #   而 MCP 服务端传的恒是模块级 ROOT（工具根），于是从 profile 目录拉起时两边永不相交。

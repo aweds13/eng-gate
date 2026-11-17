@@ -1,0 +1,17 @@
+[entries."T-AG638"]
+id = "T-AG638"
+title = "checkin_status把任意日期串当今日：形状与日历两道校验都在拼路径之前"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp_task.py",
+  "file:docs/subsystems/pool/README.md",
+  "test:test_pool_mcp_task.py::test_checkin_status_rejects_malformed_date",
+  "test:test_pool_mcp_task.py::test_checkin_status_rejects_non_calendar_date",
+  "test:test_pool_mcp_task.py::test_checkin_status_rejects_path_like_date",
+  "test:test_pool_mcp_task.py::test_checkin_status_archive_stays_inside_diag_dir",
+  "test:test_pool_mcp_task.py::test_checkin_status_defaults_to_utc8_today",
+]
+gaps = "- 卡规格判据 1 写「payload 不加键」，实现的拒收分支带了 `rejected`（format / calendar）—— 判据 5 那条「精确键集」钉子只锁**成功**路径（既有 :938/:950 的形状），拒收路径本来就不是既有形状，所以加的键不撞任何断言。指针 tools/pool_mcp.py- 卡规格判据 2 写「父目录恰好等于 (root/gates/diag).resolve()」，但留档读端在 root != ROOT 时取 pool_accounts.DATA_ROOT（卡 E114 定的「读端必须是写端那一棵」）—— 钉子只能钉相对结构（父目录 == archive_root/gates/diag、文件名 == checkin-<date>.json），钉 root 字面会与 E114 的钉子互斥。指针 tools/pool_mcp.py- 写文案撞了两次 E501（f-string 一行 103 字符、schema description 一行 101 字符），最后把两处都拆成相邻字面量；判据没说文案长度，这是 ruff 逼的。指针 tools/pool_mcp.py"
+

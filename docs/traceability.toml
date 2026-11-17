@@ -12236,3 +12236,20 @@ evidence = [
   "test:test_pool_checkin.py::test_probe_never_writes_the_checkin_stamp",
 ]
 gaps = "- 卡规格判据 5 点名的两条 E118 钉子（test_list_json_carries_probe_verdict / test_health_state_is_never_invented）在主树跑不了：grep -rn 'health_state' tests/ tools/pool_accounts.py 零命中，它们只在 .wt/E118/tests/test_pool_accounts.py。本卡按规格写明的次序做（E118 落地后 rebase 再复跑），不动那两条。指针 tests/test_pool_accounts.py。- `_validate_ledger_toml` 现在既是读口（lastgood.read_strict 的 validate）也是写口（save_ledger 显式调一次）：加入 health.state 五值校验后，一份**已经**带着坏 state 的老账本会连读都读不了。今天仓外真账本五个号全是 unknown（合法值），所以实测不受影响；这是有意的收紧，不是副作用没看见。指针 tools/pool_accounts.py。- 判据 4 只把签到那处字面量换成 `_ck().NEEDS_HUMAN`，探测路用的是同一份；但两份代码仍各写一次 `if kind in _ck().NEEDS_HUMAN:`（一处加一、一处也加一），没有抽成公共函数 —— 抽的话要改 checkin.py 的归属，超出本卡卡域。指针 tools/pool_accounts.py。"
+
+[entries."T-AG638"]
+id = "T-AG638"
+title = "checkin_status把任意日期串当今日：形状与日历两道校验都在拼路径之前"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool_mcp.py",
+  "file:tests/test_pool_mcp_task.py",
+  "file:docs/subsystems/pool/README.md",
+  "test:test_pool_mcp_task.py::test_checkin_status_rejects_malformed_date",
+  "test:test_pool_mcp_task.py::test_checkin_status_rejects_non_calendar_date",
+  "test:test_pool_mcp_task.py::test_checkin_status_rejects_path_like_date",
+  "test:test_pool_mcp_task.py::test_checkin_status_archive_stays_inside_diag_dir",
+  "test:test_pool_mcp_task.py::test_checkin_status_defaults_to_utc8_today",
+]
+gaps = "- 卡规格判据 1 写「payload 不加键」，实现的拒收分支带了 `rejected`（format / calendar）—— 判据 5 那条「精确键集」钉子只锁**成功**路径（既有 :938/:950 的形状），拒收路径本来就不是既有形状，所以加的键不撞任何断言。指针 tools/pool_mcp.py- 卡规格判据 2 写「父目录恰好等于 (root/gates/diag).resolve()」，但留档读端在 root != ROOT 时取 pool_accounts.DATA_ROOT（卡 E114 定的「读端必须是写端那一棵」）—— 钉子只能钉相对结构（父目录 == archive_root/gates/diag、文件名 == checkin-<date>.json），钉 root 字面会与 E114 的钉子互斥。指针 tools/pool_mcp.py- 写文案撞了两次 E501（f-string 一行 103 字符、schema description 一行 101 字符），最后把两处都拆成相邻字面量；判据没说文案长度，这是 ruff 逼的。指针 tools/pool_mcp.py"

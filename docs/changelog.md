@@ -14,6 +14,11 @@
 - `last_checkin_at` 新键：签到与探测都刷 `last_probe`，下午探一次就会把上午 09:00 的签到读成「刚签过」⇒ 复查判成当日已定案；签到时刻从此单独存，`recheck_rows()` 优先它、缺失才回落 `last_probe`。
 - `save_ledger()` 写盘前自己校验 payload：`health.state` 只认卡 E45 五值，坏值当场抛且盘上字节不变（lastgood 的 validate 只判旧文件，新 payload 一次都没验过）。
 - 连败口径收口到 `tools/pool/checkin.py` 的 `NEEDS_HUMAN`，本文件不再写第二份「哪些码算失败」的字面量；只读面（list_rows / _print_table）一个字节没改。
+## 2026-11-17 T-AG638 checkin_status 不再把任意日期串当今日：形状与日历两道校验都在拼路径之前
+- tools/pool_mcp.py 的 tool_checkin_status 在 `date = … or _today_local()` 之后、`archive_root = …` 之前加了 `_CHECKIN_DATE_RE` 正则与 `datetime.date.fromisoformat` 日历两道校验，任一不过就 is_error=True 返回、payload 不带 archive 键（连 stat 都不做）。
+- 只做其中一道都会漏：正则放过 2026-02-30，fromisoformat 放过 20260102（→ 2026-01-02）与 2026-W01-1（→ 2025-12-29），实测七个串里两个被单靠 fromisoformat 的写法放行 —— 所以两条缺一不可，常量旁写了这条注释。
+- date 的 inputSchema 补 pattern ^\d{4}-\d{2}-\d{2}$，description 补一句「一律拒收、不会被拼进留档路径」；docs/subsystems/pool/README.md 的 checkin_status 表行尾巴补「非法日期拒收」—— 仍是一行。
+- 空串 / 全空白 / 缺键 / None 四种仍落到 `_today_local()`（UTC+8），今天这件事还是只有那一处真源；没有在 tools/pool_accounts.py 或 tools/pool/checkin.py 里再写一份。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。
