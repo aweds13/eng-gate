@@ -161,9 +161,60 @@ def test_classify_changes_separates_the_two_columns() -> None:
     assert outside == ["docs/rogue.md"]
 
 
+# ------------------- ③′ 卡 E93：清单扩充没有把 `docs/` 整片放行（新加的反向钉子，紧跟在 ③ 之后）
+def test_expanded_derived_list_still_refuses_a_plain_docs_file() -> None:
+    """③′ ★★ **反向钉子（卡 E93 新加，最重要的一条）**：`docs/` 下一个**既不**是收口链产物、
+    **也不**在 `--allow` 里的文件（`docs/rogue.md`）**仍然**必须被判「不在白名单里」并**点名**。
+
+    为什么要另加一条（上面 ② 那条不够）：② 的背景是**老的 8 条**清单，而这次补进来的四条里有
+    `docs/backlog/*.toml` 这种**目录 glob** —— 「清单写宽了」的典型坏法正是顺手写成 `docs/**` /
+    `docs/*`，那样整个 `docs/` 被放行、`docs/rogue.md` 不再被点名，而 ② 断言的是**老清单**里的
+    那几个名字，**照样绿**。也就是说 ② 只证明「老清单不吞 rogue」，证明不了「新清单不吞 rogue」。
+
+    ★ 变体验证（人跑，读数写在 `gates/diag/e93-derived-globs.md`）：把 `DERIVED_GLOBS` 临时**改回
+    8 条** ⇒ 本条的**前提仍在**（`docs/rogue.md` 从来不该被放行）；改宽成 `docs/**` ⇒ 本条**红**。
+    """
+    rogue = "docs/rogue.md"
+    chain = ["docs/INDEX.md", "docs/subsystems/pool/README.md", "docs/workbacklog.toml",
+             "docs/backlog/001-E.toml"]
+    # ① 它确实不在 allow 里 ⇒ 必须被点名（判据没被放松成「什么都不报」）
+    problems = wr.check_files([rogue], read_only=False, allow=["src/**"])
+    assert len(problems) == 1, problems
+    assert "不在白名单里" in problems[0] and rogue in problems[0], problems
+    # ② 真派生物**同时**在场时，只有 rogue 被点名（清单没被写成「什么都放行」）
+    mixed = wr.check_files(["src/a.py", *chain, rogue], read_only=False, allow=["src/**"])
+    assert len(mixed) == 1, mixed
+    assert rogue in mixed[0], f"越界文件没被点名：{mixed}"
+    for ok_path in chain:
+        assert ok_path not in mixed[0], f"收口链产物被误当成越界点名了：{ok_path}"
+    # ③ 拿掉 rogue ⇒ 回到绿（那四条真的生效了，不是靠 docs/** 蒙的）
+    assert wr.check_files(["src/a.py", *chain], read_only=False, allow=["src/**"]) == []
+    # ④ 边界再钉死：`docs/` 下**别的**文件名不许因这次扩充被顺手放行
+    for other in ("docs/rogue.md", "docs/notes/x.md", "docs/backlog/x.md",
+                  "docs/workbacklog.toml.bak", "docs/subsystems/pool/OTHER.md"):
+        assert wr.classify_changes([other], ["src/**"])[1] == [other], other
+
+
 def test_derived_globs_are_pinned_and_match_landing() -> None:
     """④ ★ **清单钉子**：派生物清单逐字钉住（改了它 ⇒ 这里红），且与真源
-    `tools/pool/landing.py` 的 `DOCS` / `GATES` **对齐**（那边漂了 ⇒ 这里也红）。"""
+    `tools/pool/landing.py` 的 `DOCS` / `GATES` / `RECOUNT_DOCS` **对齐**（那边漂了 ⇒ 这里也红）。
+
+    ★★ 卡 E93（T-AG601）**为什么改这份钉子** —— 理由钉在这里，别只留在 diff 里：
+      收口链（`tools/pool/landing.py`）**自己**还会造三样东西，而它们**不在** `allow` 里
+      （`--allow` 只列本卡的交付面）⇒ 每一笔都被自己的派生物判成「越界」：
+        · `docs/INDEX.md` / `docs/subsystems/pool/README.md` —— `landing.RECOUNT_DOCS`
+          （`landing.py:102`），`recount_derived()` 用 `scripts/gen_doc_index.py` /
+          `scripts/gen_pool_readme.py` **重算**（投影，不是本卡的交付面）；
+        · `docs/workbacklog.toml` —— `flip_card_status()`（`landing.py:579`）翻账时写；
+        · `docs/backlog/*.toml` —— 台账**分片**（`landing.py::_shard_paths` /
+            `ledger.target_path`），
+          分片启用后总表靠它生成（本仓 `docs/backlog/` 至今还没建）。
+      证据（实测）：`gates/review/T-AG600.json` 的 problems[1] =
+      「有 3 个改动不在白名单里：['docs/INDEX.md', 'docs/subsystems/pool/README.md',
+      'docs/workbacklog.toml']」—— 三件**全是那一笔自己的收口链产物**；全仓同型 26 条
+      （15 条是 `['docs/workbacklog.toml']`、1 条是这个三件套）。
+      ⇒ 补进清单是**修假红**、不是放松判据：上面 ③′ 的反向钉子当场证「`docs/` 没被整片放行」。
+    """
     assert wr.DERIVED_GLOBS == (
         "docs/changelog.d/*.md",
         "docs/traceability.d/*.toml",
@@ -173,10 +224,19 @@ def test_derived_globs_are_pinned_and_match_landing() -> None:
         "复盘/交接-重构进度.md",
         "gates/last.json",
         "gates/reuse.json",
+        # ↓ 卡 E93 新增四条：真源 = `landing.RECOUNT_DOCS` + `flip_card_status()` + 台账分片
+        "docs/INDEX.md",
+        "docs/subsystems/pool/README.md",
+        "docs/workbacklog.toml",
+        "docs/backlog/*.toml",
     )
     from pool import landing  # noqa: PLC0415 —— tools/ 已在 sys.path 里；landing 是清单真源
     for path in (*landing.DOCS, *landing.GATES):
         assert path in wr.DERIVED_GLOBS, f"派生物清单漏了 landing 的 {path}"
+    # ★ 卡 E93 的**对齐断言**（本卡加的）：landing 收了新的「现算文档」、复核这侧没跟 ⇒ 这里红。
+    #   宁可在这里红一次，也别让收口链每落一张卡就给自己造一条假红（T-AG600 就是这么来的）。
+    for path in landing.RECOUNT_DOCS:
+        assert path in wr.DERIVED_GLOBS, f"派生物清单漏了 landing.RECOUNT_DOCS 的 {path}"
 
 
 def _derived_repo(tmp_path: Path) -> Path:
@@ -462,6 +522,55 @@ def test_gates_trailer_truth_real_green_passes() -> None:
     """② 真绿：`ok=true` + `rev` = 父提交 + trailer 说绿 ⇒ **过**。"""
     assert wr.check_gates_trailer_truth("全量门禁绿 + seal", _payload(), "abc1234") == ([], "")
 
+
+def test_gates_trailer_truth_accepts_a_longer_short_sha_of_the_same_commit(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """②″ ★ 卡 E93：`last.json.rev` 与父提交的短 sha **位数不同**、但是同一笔提交 ⇒ 过。
+
+    ★ 实测事故（T-AG600，2026-11-08 落成那一笔）：门禁在提交**之前**跑 ⇒ `gates/last.json`
+    里写的是**父提交**的短 sha，而 git 的 `--short` 会随仓库变大而变长。
+    那一笔 `last.json.rev = "7194eaf4d6"`（10 位）、`parent_short = "7194eaf4"`（8 位），
+    两个都 `git rev-parse` 到 `7194eaf4d67b1bd9fb965081ecaab03440efb966` ——
+    真跑过门禁的一笔被自己的**位数**判成「伪造门禁结论」（gates/review/T-AG600.json）。
+    判据比的是**提交**，不是字符串（同 `check_gate_evidence` / `_resolve_commit` 的口径）。
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _run_git(repo, "init", "-q", "-b", "main")
+    _run_git(repo, "config", "user.email", "t@local")
+    _run_git(repo, "config", "user.name", "t")
+    nl = chr(10)
+    (repo / "a.txt").write_text("a" + nl, encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "seed")
+    (repo / "a.txt").write_text("b" + nl, encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "second")
+    monkeypatch.setattr(wr, "ROOT", repo)
+
+    parent_short = _run_git(repo, "rev-parse", "--short", "HEAD^").strip()
+    parent_full = _run_git(repo, "rev-parse", "HEAD^").strip()
+    longer = parent_full[:10]
+    assert longer != parent_short, "这个仓太小，8 位就是唯一前缀 —— 换不出位数差"
+
+    # ① 位数不同、同一笔 ⇒ 过（改前这里会报「伪造门禁结论」）
+    assert wr.check_gates_trailer_truth(
+        "全量门禁绿 + seal", _payload(rev=longer), parent_short,
+    ) == ([], "")
+
+    # ② 反向：解析到**别的**提交 ⇒ 仍然拒（解析不是「什么都放行」）
+    other = _run_git(repo, "rev-parse", "--short", "HEAD").strip()
+    problems, _ = wr.check_gates_trailer_truth(
+        "全量门禁绿 + seal", _payload(rev=other), parent_short,
+    )
+    assert any("伪造门禁结论" in p for p in problems), problems
+
+    # ③ 反向：解析不出来的串 ⇒ 也拒（不许因为「解析不出」就放行）
+    problems, _ = wr.check_gates_trailer_truth(
+        "全量门禁绿 + seal", _payload(rev="deadbeefdead"), parent_short,
+    )
+    assert any("伪造门禁结论" in p for p in problems), problems
 
 def test_gates_trailer_truth_real_green_that_denies_it_is_refused() -> None:
     """②' 真绿那一笔 trailer 若写"没跑门禁"：声称与事实不符 ⇒ 也拒（判据 (a) 的另一半）。"""

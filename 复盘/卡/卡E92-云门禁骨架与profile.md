@@ -76,7 +76,7 @@
 
 ## 直做
 
-`scripts/cloud/run_gate.sh` **全 CRLF**（`git ls-files --eol` = `i/-text w/crlf`，裸 LF 必须为 0）：
+`scripts/cloud/run_gate.sh` **工作区全 CRLF**（`git ls-files --eol` 的 `w/crlf`；裸 LF 必须为 0。索引侧在 T-AG600 之后是 `i/lf` —— 那是 `core.autocrlf=true` 下的正常态，与同目录 `profile.py`/`profiles/*.toml` 一致，**不是**缺陷）：
 改它一律字节级（`read_bytes` → 按 `\r\n` 切 → 断言旧锚点命中恰好一次 → 替换 → 回写），
 改完 `bash -n` + 两份 `--render` 都要复验。`tests/*.py` 是 `i/lf w/crlf`（索引 LF、工作区 CRLF），
 用 `pathlib` 的 `newline=""` 读写并按文件自身 EOL 适配，否则替换会 0 命中。

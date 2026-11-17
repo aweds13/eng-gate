@@ -390,9 +390,16 @@ PYCHECK
   # ★ 独立复核 D3：旧脚本这里验的是 last.json **与** reuse.json；
   #   泛用化时只验了 last.json，少一件也不会被发现（云机上那份陈旧 reuse.json 会被当成本轮的）。
   #   ⇒ 按 profile 声明的 seed.files 逐件验，一件都不许少（仍旧在 scp 之后验）。
+  # ★ 卡 E93 实测（泛用化后第一个跑到这里的落地：E93 二跑 rc=2「云机上没有播种成功的」）：
+  #   这两行原写法各有一个真缺陷。
+  #   ① `gates\$f`：双引号里的 `\$` 是**字面美元符** ⇒ 拼出去的是 `gates$f`，cmd 当它不存在 ⇒ 恒退 4。
+  #   ② `(if exist X (exit 0) else (exit 4)) && (if exist Y …)`：这种「命中就 exit 0」的链在 cmd 里
+  #      **第二件永远不被判**（实测第二件不存在也返回 0）⇒ 校验形同虚设。
+  #   ⇒ 改成「不存在就 exit 4」的链：存在不影响返回码、逐件都判、也不必再转义美元符。
+  #   云机三态实测（C:/eng）：两件都在=0 / 第二件缺=4 / 第一件缺=4。
   seed_exist=""
   for f in $seed_files; do
-    seed_exist="$seed_exist && (if exist gates\$f (exit 0) else (exit 4))"
+    seed_exist="$seed_exist && (if not exist gates/$f (exit 4))"
   done
   if ! ssh $SSHOPTS -i "$KEY" "$HOST" "cd $cloud_dir$seed_exist"; then
     echo "✗ 云机上没有播种成功的（$seed_files）—— 不跑门禁" >&2

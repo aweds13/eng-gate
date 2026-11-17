@@ -135,6 +135,25 @@ DERIVED_GLOBS: tuple[str, ...] = (
     "复盘/交接-重构进度.md",         # DOCS：交接 CHECKPOINT
     "gates/last.json",              # GATES：门禁结论
     "gates/reuse.json",             # GATES：复用记账
+    # ★ 卡 E93（T-AG601）：收口链**还会**造这四个 —— 上面 8 条之外的来路：
+    #   · `docs/INDEX.md` / `docs/subsystems/pool/README.md` —— `landing.RECOUNT_DOCS`
+    #     （`tools/pool/landing.py:102`），`recount_derived()` 用 `scripts/gen_doc_index.py` /
+    #     `scripts/gen_pool_readme.py` **重算**（落在盘点口径里的派生物，不是本卡的交付面）；
+    #   · `docs/workbacklog.toml` —— `flip_card_status()`（`landing.py:579`）翻账时写；
+    #   · `docs/backlog/*.toml` —— 台账**分片**（`landing.py::_shard_paths` /
+    #     `ledger.target_path`）：
+    #     分片启用后总表**靠它生成**；与 `docs/changelog.d/*.md` 同风格按目录 glob 认
+    #     （分片名里带分区，复核这侧不该逐个点名）。
+    # ★ 证据（实测，不是推测）：`gates/review/T-AG600.json` 的 problems[1] =
+    #   「有 3 个改动不在白名单里：['docs/INDEX.md', 'docs/subsystems/pool/README.md',
+    #   'docs/workbacklog.toml']」—— 那三件**正是这一笔自己的收口链产物**，却不在 `allow` 里；
+    #   全仓同型 26 条（15 条是 ['docs/workbacklog.toml']、1 条是这个三件套）。
+    # ★ 边界照旧：这里只把「收口链自己造的」认成**预期内**，不放松任何判据 ——
+    #   `docs/` 下**不是**收口链产物的（如 `docs/rogue.md`）照样报、照样红。
+    "docs/INDEX.md",                    # RECOUNT_DOCS：文档总索引（重算）
+    "docs/subsystems/pool/README.md",   # RECOUNT_DOCS：号池子系统索引（重算）
+    "docs/workbacklog.toml",            # 台账总表：flip_card_status 翻账
+    "docs/backlog/*.toml",              # 台账分片（ledger.target_path）
 )
 
 
@@ -493,7 +512,15 @@ def check_gates_trailer_truth(
     line = (gates_line or "").strip()
     ok = payload.get("ok")
     rev = payload.get("rev")
+    # ★ 卡 E93：原来只做字面量直比（rev == parent_short）。
+    #   而 git 的 --short 会随仓库变大而变长：T-AG600 实测 last.json 写
+    #   7194eaf4d6（10 位）、父提交取到 7194eaf4（8 位）——
+    #   字面不等就把**真跑过门禁**的那笔判成「伪造门禁结论」。
+    #   与同文件 check_gate_evidence 同形：先字面比（合成 sha 的用例仍可用），不等再双向解析。
     matched = ok is True and rev == parent_short
+    if not matched and ok is True:
+        sealed_rev, expected_rev = _resolve_commit(str(rev or "")), _resolve_commit(parent_short)
+        matched = bool(sealed_rev) and sealed_rev == expected_rev
     claims_green = bool(GREEN_CLAIM_RE.search(line))
     claims_no_gate = bool(NO_GATE_CLAIM_RE.search(line))
     reading = (f"`Gates:` 原文=「{line}」 / last.json ok={ok!r} rev={rev!r}"

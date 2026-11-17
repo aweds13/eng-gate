@@ -565,7 +565,18 @@ def test_step2_seeds_previous_reading_instead_of_trusting_the_commit() -> None:
     assert "last.json" in step2 and "reuse.json" in step2
     assert "scp" in step2, "播种必须是把本机那份传上去（不许沿用提交里的基线）"
     # 播种要发生在断言之前（先放再说「有」）
-    assert step2.index("scp") < step2.index("if exist gates")
+    assert step2.index("scp") < step2.index("if not exist gates")
+    # ★ 卡 E93 实测：往下这段原写法各有一个真缺陷（泛用化后第一个跑到这里的落地就红在它上面）。
+    #   ① `gates\$f`：双引号里的 `\$` 是字面美元符 ⇒ 拼出去的是 `gates$f`，cmd 当它不存在 ⇒ 恒退 4。
+    #   ② `(if exist X (exit 0) else (exit 4)) && …`：cmd 里「命中就 exit 0」的链会跳过后面所有件
+    #      （实测第二件不存在也返回 0）⇒ 校验形同虚设。
+    #   判据：文件名必须由 bash 当场展开（`/` 分隔、不许转义），且逐件判「不存在就 exit 4」。
+    assert 'seed_exist="$seed_exist && (if not exist gates/$f (exit 4))"' in step2, (
+        "验播种必须按 seed.files 逐件判「不存在就 exit 4」（卡 E93）"
+    )
+    assert "if exist gates" not in step2.replace("if not exist gates", ""), (
+        "「命中就 exit 0」的链在 cmd 里第二件永远不被判 ⇒ 校验形同虚设（卡 E93 云机三态实测）"
+    )
 
 
 def test_run_gate_kills_leftover_remote_processes_before_patching() -> None:

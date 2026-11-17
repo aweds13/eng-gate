@@ -187,6 +187,11 @@
 - 顺手修掉实测陈旧：preflight「11 条判据」→ 12、`risk` 的 `medium` → `mid`、`wb_daily` 五分区 → 7 段、docs 五层「41 篇」→ 42、`infra/pool` 耦合「8 文件 20 处」→ 16 文件 41 处、`lease.py release` 补必填 `--card`、`--config` 必须在子命令前、`main_tree_offenders` 行号、`skills/pipe-land/references/land-steps.md` 里的字面 `\n`。
 - `skills/README.md` 记下这条约定（§2「换仓只用换一份」+ 五条硬规矩）、§3 清单九行补 repo-bindings.md、§6 钉子改成分态写（①三态 / ②两态）、§7 的旧行数表改成「现算不抄表」。
 - 台账证据同步：`docs/traceability.d/T-AG523.toml` 那条 `text:` 断言原指 `skills/softeng-manage/SKILL.md`，本卡把这句话搬进 `skills/softeng-manage/references/repo-bindings.md` ⇒ 断言改指新位置，`audit --all` 才不会红在旧锚点上。
+## 2026-11-08 · 复核器两类「假红」：短 sha 字面比 + 派生物清单漏收口链自有产物（卡 E93，T-AG601）
+- `tools/wb_review.py`：`check_gates_trailer_truth()` 的 `matched` 在字面不等时改用 `_resolve_commit()` 双向解析（T-AG600 实测 `last.json.rev=7194eaf4d6`(10 位) vs 父提交 `7194eaf4`(8 位)，同一笔被判「伪造门禁结论」）；`DERIVED_GLOBS` 8 → 12 条，补 `docs/INDEX.md` / `docs/subsystems/pool/README.md`（`landing.RECOUNT_DOCS`）、`docs/workbacklog.toml`（`flip_card_status`）、`docs/backlog/*.toml`（分片）。
+- `tests/test_wb_review.py`：钉住新清单 12 条 + 新增 `landing.RECOUNT_DOCS` 对齐断言 + 新增反向钉子 `test_expanded_derived_list_still_refuses_a_plain_docs_file`（docs/rogue.md 仍被点名，docs/** 那种写宽形态会红）+ 新增短 sha 用例（10 位 rev vs 8 位 parent 过；解析到别的提交 / 解析不出的串仍拒）。
+- 三处文书的行尾句子按实测更正：`scripts/cloud/run_gate.sh` 索引侧已是 `i/lf`（工作区仍 `w/crlf`），`i/-text` 只是「无属性 + blob 含 CRLF」的推断态 ⇒ 不再写成缺陷。
+- 不动 `tools/pool/landing.py`（卡 198 口径）、不动 `check_files`/`classify_changes` 语义、不改 `.gitattributes`。
 ## 2026-11-07 · 门禁读数补一维：`last.json` 记下这一趟按哪种分片跑的（卡 E90，T-AG598）
 - 卡 E30（T-AG484）已被用户 2026-10-25 裁定并入 E50（落地笔 b659e2df），本卡只收剩下的两条尾巴。
 - `scripts/run_gates.py` 的 payload 在 `"workers"` 之后补 `"pytest_dist": pytest_dist()`；同一文件里那条指向 gates/diag 下 bench-e30-summary.txt 的悬空注释改写，不再点名不存在的文件。

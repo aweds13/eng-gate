@@ -12302,3 +12302,16 @@ evidence = [
   "file:tests/test_pool_accounts.py",
 ]
 gaps = "1. `health.state` 本身没有写方：账本里五个号全是 `unknown`，读面现在会如实念出来，但**谁把它写成 ok/unknown 之外的值**仍然没人做 —— 本卡只让读数不再撒谎，没修数据的来源。要真把「连败 1 次」降回 0，得让 `record_probe_result`（成功那一支）也写 `[account.health].state`，那是另一张卡。指针 `tools/pool_accounts.py`2. 「探过没探到」只覆盖 `list_rows` 与 `account_status` 两条路；`tools/pool/gateway.py` 的 `_ledger_rows` 与 `tools/wb_dispatch.py` 的 `ledger_accounts()` 仍读原始 dict（它们本来就不吃洗过的文本，所以没被这条谎咬到，但也没有统一的「这个号现在能不能派」判词）。指针 `tools/pool/gateway.py`3. 列宽上限从 48 抬到 64 是**按最坏判词 63 字符**算的：把连败位数取到两位、结论码取最长的 `unknown-platform` 得 63；再长（连败三位数、或单位名更长）还会被截 —— 那时是 `_print_table` 这条「固定列宽」的口径到期，不是这张卡漏改。指针 `tools/pool_accounts.py`"
+
+[entries."T-AG601"]
+id = "T-AG601"
+title = "复核器两类假红：短sha字面比与派生物清单漏收口链产物"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_review.py",
+  "file:tests/test_wb_review.py",
+  "file:scripts/cloud/run_gate.sh",
+  "file:tests/test_cloud_sync.py",
+]
+gaps = "- `docs/backlog/*.toml` 这条 glob 目前空转 —— 本仓 `docs/backlog/` 目录还不存在（`tools/pool/ledger.py::target_path` 会回退总表），它只对未来分片生效；见 `tools/wb_review.py` 的 `DERIVED_GLOBS` 注释块。- `flip_card_status()`（`tools/pool/landing.py:579`）与台账分片那两路**没有可 import 的常量**，复核侧与收口链的对齐仍靠人工维护（注释里点了行号），不像 `RECOUNT_DOCS` 那样有自动断言。- 历史产物 `gates/review/*.json` 里的同型假红**未重写**（卡域明令不许改历史 JSON）：`gates/review/T-AG600.json` 仍带那两条 problems，新口径只对今后这一笔生效。"
