@@ -1,0 +1,10 @@
+[entries."T-AG645"]
+id = "T-AG645"
+title = "状态钉子不再拿死秒数当判据：锁读数改判形状、另加ast钉子拦同类"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "test:test_wall_clock_assertions.py::test_scanner_actually_reads_the_tree",
+]
+gaps = "- 卡规格判据 2 给的正则是「`[已剩] \\d+s` 与 `\\d+s 前` 两种」；我落地时把「剩」去掉了：扫全仓实测 `tests/test_pool_patience.py` 的 `assert 「预算只剩 1s」 in err` 是判据 ⑦ 的正当读数（预算剩 1 秒就该这么说），第一版正则把它点成了 offender。现只收**时刻语**：`已 Ns`（锁/租约已持有）与 `Ns 前 / 后`。代价：`已过期 30s` 这类变体扫不到，边界写进了模块 docstring。指针 `tests/test_wall_clock_assertions.py`- 判据 3 的 M-B 写的是「把判据 2 的钉子改成恒 `assert True` ⇒ 负样例必须红」——按字面不成立：恒 True 只会让负样例**绿**，照做会把自己判成「没咬住」。我改成等价的「把 `_literal_hits` 弄瞎（保留 M-B 那个插进来的坏样本）」⇒ 负样例 ②-b 仍红。读数在指针 `gates/diag/_rev_E136_result.txt`- 判据 3 的 M-C 写的是「扫描范围收窄到单个文件 ⇒ 负样例必须红」，实测确实红，但真正咬住它的不是负样例那条而是**文件数下限** ②-a（收窄后只扫到 1 个 .py < `MIN_SCANNED_FILES=100`）。⇒ 这两条判据不是冗余的：②-a 挡「扫描器空转」，②-b 挡「正则不咬」。指针 `tests/test_wall_clock_assertions.py`"
+

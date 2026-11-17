@@ -53,6 +53,10 @@
 - `_json_call` 加 keyword-only `retry_ok: bool = False` 与重放循环：`HTTPError` 立即 `return e.code, None`（已拿到状态码绝不重放），拒连/无路由立即抛 `LiveCallError`（请求没送到，重放只是白等），只有超时与「连上但没读到响应」进重放面；用尽后 `broken_read=True`，每次重放打 `  [重试] {method} {url} 没读到响应（{异常类型}），再打一次`。
 - 六个幂等写调用点标 `retry_ok=True`：`PUT /api/settings/attach` ×3、`PUT /api/settings/ai` ×2、`PUT /api/settings/notify` ×1；`POST /api/tasks` / `POST /api/courses` / `POST /api/ai/tasks` / `to-review` / `PATCH` / `DELETE` 一处未标。
 - `docs/subsystems/ci/云门禁-可复现性清单.md` §2 新增 R18 行（风险「高」、修没修「✅ 本轮修」），判据列三条节点；解析器 `tests/test_ci_portability.py::test_doc_rows_are_all_machine_checkable` 仍绿（R1–R18 连号、六列、节点真实存在）。
+## 2026-11-17 T-AG645 状态钉子不再拿死秒数当判据：锁读数改判形状，另加一枚 ast 钉子拦住同类写法
+- `tests/test_gate_lock.py`：`test_status_names_the_holder` 里 `assert "已 0s" in out or "已 1s" in out` 改成 `assert re.search(r"已 \d+s", out)`，注释写明理由（机器一忙这条就是「已 4s」）与卡号；`import re` 进头部 import 段。断言没删、也没放宽成只看「已」一个字。
+- 新建 `tests/test_wall_clock_assertions.py`：ast 扫 `tests/**/*.py`（现读，不写死清单），凡是 `assert` 里拿「已 Ns / Ns 前」这类秒数字符串常量做 `in` / `==` / `!=` 比较的就点名 `文件:行号`；配文件数下限与自造负样例，防「扫 0 个文件也算绿」。
+- 判据只收时刻语：`预算只剩 1s` 这类正当读数不误伤（第一版正则误伤过一次，理由留在模块 docstring 与 gaps）。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

@@ -32,6 +32,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -258,6 +259,8 @@ def test_status_names_the_holder(tmp_path: Path) -> None:
     assert "LIVEOWNER" in out, out
     assert f"pid={os.getpid()}" in out, out
     assert f"段 base={BASE}" in out, out
-    assert "已 0s" in out or "已 1s" in out, out       # 已持有秒数
+    # ★ 卡 E136（T-AG645）：别拿死的秒数当判据 —— 机器一慢这条就是「已 4s」，
+    #   而钉子本来的意思只是「状态里必须有已持有秒数」。形状对就够。
+    assert re.search(r"已 \d+s", out), out           # 已持有秒数（形状，不是死数）
     assert "租约剩" in out, out                        # 剩余租约
     assert "持有者进程=活着" in out, f"没点名「进程还活着吗」：{out}"
