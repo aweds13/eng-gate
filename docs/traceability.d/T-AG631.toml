@@ -1,0 +1,11 @@
+[entries."T-AG631"]
+id = "T-AG631"
+title = "rebase撞台账冲突时自动重放本笔翻账"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "test:test_landing_backlog_replay.py",
+]
+gaps = "- 重放只认「本笔对台账恰好 -1/+1 行 status」；同提交里顺手改了同一张卡的 risk 或 spec（两行都落在同一个 hunk）就停手交人判 —— 现在没有这种提交，但攒批路径若把两个成员的翻账写进同一笔就会踩到。指针 tools/pool/landing.py:325-350- not-needed 那支只靠「重放后进库 blob sha 等于主树那版只换一行」裁决，没有单独区分「主树那侧先翻了同一张卡」与「卡树那侧本来就是 done」两类原因，日志里只印 flip 判定。指针 tools/pool/landing.py:377-387- 批模式（--batch）仍然整段停手：批成员的翻账清单要等 flip_batch_member_statuses 才知道，重放得先把它算出来才能用同一口径。指针 tools/pool/landing.py:2798-2799"
+

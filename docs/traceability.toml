@@ -12265,3 +12265,14 @@ evidence = [
   "file:tests/test_cloud_product_freshness.py",
 ]
 gaps = "1. `tools/pool/landing.py` 的云门禁调用点只接 `CloudUnreachable`、没接 `GatePoolUnreadable`：队列读不到时之所以仍落在「停手」分支，是因为 `run_cloud_gate` 内部转了码，不是调用方分得清。指针 `tools/pool/landing.py`2. `PoolQueue.locked()` 等满 30 s 拿不到锁**照样写**（现在只多打一行）：「无锁写」这条保底没动 —— 卡规格判据 5 只要求「还锁失败必须打印」。要改成拿不到锁就拒写是另一张卡。指针 `tools/gate_pool.py`3. 判据 1 没走 `lastgood.read_with_fallback` 路线（卡规格允许二选一）：队列读不到直接抛，没有 `.bak` 静默恢复。以后要接恢复必须带 `log=` 且恢复失败照抛，否则等于把「读不到」重新洗成「读到旧值」。指针 `tools/pool/lastgood.py`"
+
+[entries."T-AG631"]
+id = "T-AG631"
+title = "rebase撞台账冲突时自动重放本笔翻账"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "test:test_landing_backlog_replay.py",
+]
+gaps = "- 重放只认「本笔对台账恰好 -1/+1 行 status」；同提交里顺手改了同一张卡的 risk 或 spec（两行都落在同一个 hunk）就停手交人判 —— 现在没有这种提交，但攒批路径若把两个成员的翻账写进同一笔就会踩到。指针 tools/pool/landing.py:325-350- not-needed 那支只靠「重放后进库 blob sha 等于主树那版只换一行」裁决，没有单独区分「主树那侧先翻了同一张卡」与「卡树那侧本来就是 done」两类原因，日志里只印 flip 判定。指针 tools/pool/landing.py:377-387- 批模式（--batch）仍然整段停手：批成员的翻账清单要等 flip_batch_member_statuses 才知道，重放得先把它算出来才能用同一口径。指针 tools/pool/landing.py:2798-2799"

@@ -190,7 +190,8 @@ def is_ancestor(commit: str, maybe_descendant: str, cwd: pathlib.Path) -> bool:
     return r.returncode == 0
 
 
-def resolve_derived_conflicts(wt: pathlib.Path) -> tuple[bool, list[str]]:
+def resolve_derived_conflicts(wt: pathlib.Path, *, card: str | None = None,
+                             task: str = "") -> tuple[bool, list[str]]:
     """rebase 冲突里**只有派生物**时自动解决；返回 `(解决了吗, 解决不了的原因)`。
 
     解法（2026-10-02 卡 113 那次真冲突逼出来的）：
@@ -198,12 +199,24 @@ def resolve_derived_conflicts(wt: pathlib.Path) -> tuple[bool, list[str]]:
         也就是主树那版），再跑一遍 `tools/sync_docs.py` **按片段重汇总**把本笔那一节插回去
         （汇总器只插入、幂等）；
       · `gates/last.json` / `gates/reuse.json` ⇒ 取**本笔的**（`--theirs`）：那是这一笔门禁的产物。
+
+    ★ 卡 E122（`T-AG631`）：台账 `docs/workbacklog.toml` 里那一行 `status` 是这一笔
+    **⑤′ 自己翻的** —— 机器知道答案，不该当成「非派生物 ⇒ 必须人来判」。
+    给了 `card`（单卡路径）且台账在冲突表里 ⇒ 认领本笔那一处改动、取主树版，
+    再用 `flip_card_status` 把那一行重放上去（**翻账口径只有那一份实现**）。
+    ★ **不许**把它并进 `DERIVED` / `RESOLVABLE`：那两张表是「生成器能重算的投影」，
+    台账是唯一的权威，只能理解这一处改动、不能重算。
+    批模式（`--batch`）拿不到本笔的翻账清单 ⇒ 仍然停手（`card` 缺省即旧行为）。
     """
     conflicted = [x for x in git("diff", "--name-only", "--diff-filter=U", cwd=wt).splitlines()
                   if x.strip()]
     if not conflicted:
         return False, ["冲突表是空的，说不清发生了什么"]
-    extra = [x for x in conflicted if x not in RESOLVABLE and x not in GATE_ARTIFACTS]
+    # ★ 卡 E122：台账只在**单卡路径**、且它真在冲突表里时才进重放名单；
+    #   否则一字不变（批模式 / 老调用点 / 台账没冲突）。
+    replay = [x for x in conflicted if card and x in _queue_rels(wt)]
+    extra = [x for x in conflicted if x not in RESOLVABLE and x not in GATE_ARTIFACTS
+             and x not in replay]
     if extra:
         return False, [f"冲突里有**非派生物**（必须人来判）：{extra}"]
     for path in (*DERIVED, *RECOUNT_DOCS):
@@ -212,6 +225,17 @@ def resolve_derived_conflicts(wt: pathlib.Path) -> tuple[bool, list[str]]:
     for path in GATE_ARTIFACTS:
         if path in conflicted:
             run(["git", "checkout", "--theirs", "--", path], cwd=wt)
+    # ★ 卡 E122：台账的重放必须排在重汇总与现算文档之前 ——
+    #   README 的队列卡数是**从台账数出来的**，后重放等于拿旧台账去投影。
+    replay_add: list[str] = []
+    for rel in replay:
+        ok1, why = _replay_backlog_status(wt, rel, str(card), task)
+        print("   ↳ 重放台账那一行：", why)
+        if not ok1:
+            # ★ 还原由 _replay_backlog_status 自己做（只在它真动过现场之后）；
+            #   没动过就不去碰它 —— git checkout --merge 会把冲突标签改写成 ours/theirs。
+            return False, [why]
+        replay_add.append(rel)
     r = run([sys.executable, "-X", "utf8", "tools/sync_docs.py"], cwd=wt, check=False)
     print("   ↳ 按片段重汇总：", ((r.stdout or "") + (r.stderr or "")).strip().splitlines()[-1:])
     chk = run([sys.executable, "-X", "utf8", "tools/sync_docs.py", "--check"], cwd=wt, check=False)
@@ -236,9 +260,131 @@ def resolve_derived_conflicts(wt: pathlib.Path) -> tuple[bool, list[str]]:
         print("   ↳ 重算后 --check 退出码 =", again.returncode)
         if again.returncode != 0:
             return False, [f"重算之后 {DERIVED_CHECKER} --check 仍不通过：{recount}"]
-    add = [p for p in (*RESOLVABLE, *GATE_ARTIFACTS) if p in conflicted]
+    add = [p for p in (*RESOLVABLE, *GATE_ARTIFACTS, *replay_add) if p in conflicted]
     run(["git", "add", "--", *add], cwd=wt)
     return True, add
+
+
+# ------------------------------------------- 卡 E122（T-AG631）：重放本笔自己翻的那一行
+def _restore_conflict(wt: pathlib.Path, rel: str) -> None:
+    """把被重放动过的那份台账还原成**带冲突标记**的现场（停手时不许留半解决树）。"""
+    run(["git", "checkout", "--merge", "--", rel], cwd=wt, check=False)
+
+
+def _split_status(line: str) -> tuple[str, str, str] | None:
+    """把一行 status = "xxx" 拆成 (前, 值, 后)：line == 前 + '"' + 值 + '"' + 后。"""
+    i = line.find("status")
+    if i < 0:
+        return None
+    j = line.find('"', i)
+    if j < 0:
+        return None
+    k = line.find('"', j + 1)
+    if k < 0:
+        return None
+    return line[:j], line[j + 1:k], line[k + 1:]
+
+
+def _blob_sha(wt: pathlib.Path, data: bytes) -> str:
+    """这些字节**进库之后**的 sha（不写对象库；失败回空串 ⇒ 调用方按失败处置）。"""
+    r = subprocess.run(["git", "hash-object", "-t", "blob", "--stdin"], cwd=str(wt),
+                       input=data, capture_output=True,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if r.returncode != 0:
+        return ""
+    return r.stdout.decode("ascii", "replace").strip()
+
+
+def _worktree_blob_sha(wt: pathlib.Path, rel: str) -> str:
+    """工作区那份文件**进库之后**的 sha（--path 让 clean 过滤器（autocrlf）照常生效）。"""
+    r = subprocess.run(["git", "hash-object", f"--path={rel}", "--", rel], cwd=str(wt),
+                       capture_output=True,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if r.returncode != 0:
+        return ""
+    return r.stdout.decode("ascii", "replace").strip()
+
+
+def _replay_backlog_status(wt: pathlib.Path, rel: str, card: str,
+                           task: str) -> tuple[bool, str]:
+    """把**这一笔自己翻的那一行** status 重放到主树那版台账上。
+
+    ★ 卡 E122（T-AG631）：只做四件事 —— 认领本笔那一处改动 / 取主树那版 /
+    用 flip_card_status 翻账（翻账口径只有那一份实现，这里不另造）/ 逐字节核。
+    动过它之后任何一步不成立都**还原现场**（git checkout --merge）并说清为什么；
+    还没动过它时守卫就不过 ⇒ 现场本来就没变，不必去碰它。
+
+    ★ 卡 E122 现场（真仓第一次跑就撞上）：本仓 core.autocrlf=true —— 库里是 LF、
+    工作区是 CRLF。所以「逐字节」比的是**进库那一版**（git hash-object 算出来的），
+    不是工作区字节：后者多一层 EOL 转换，拿它比在真仓里永远不等（干跑会把真的
+    重放误判成不一致而停手）。夹具里 core.autocrlf=false 时两者本来就相同。
+
+    ★ 认领必须用 merge-base HEAD REBASE_HEAD：rebase 里 HEAD 已经是「主树那版 + 这一笔」
+    的中间态，拿 HEAD 比会把插队那笔的改动也算成本笔的。
+    """
+    base = git("merge-base", "HEAD", "REBASE_HEAD", cwd=wt, check=False)
+    if not base:
+        return False, "认不出这一笔是从哪儿分出去的（merge-base HEAD REBASE_HEAD 是空的）"
+    diff = run(["git", "diff", "-U0", base, "REBASE_HEAD", "--", rel], cwd=wt, check=False)
+    if diff.returncode != 0:
+        return False, f"读不出本笔对 {rel} 的改动（git diff 退 {diff.returncode}）"
+    minus: list[str] = []
+    plus: list[str] = []
+    for line in (diff.stdout or "").splitlines():
+        if line.startswith("---") or line.startswith("+++"):
+            continue
+        if line.startswith("-"):
+            minus.append(line[1:])
+        elif line.startswith("+"):
+            plus.append(line[1:])
+    if len(minus) != 1 or len(plus) != 1:
+        return False, (f"{rel} 在这一笔里改了不止一处（-{len(minus)} / +{len(plus)} 行）"
+                       "⇒ 认不清该重放哪儿，交给人判")
+    before = _split_status(minus[0])
+    after = _split_status(plus[0])
+    if before is None or after is None:
+        return False, f"{rel} 在这一笔里改的不是 status 那一行 ⇒ 不重放"
+    if before[0] != after[0] or before[2] != after[2]:
+        return False, f"{rel} 那一行除了 status 的值还改了别的 ⇒ 不重放"
+    if after[1] != "done":
+        return False, f'{rel} 这一笔把 status 改成了 "{after[1]}" 而不是 "done" ⇒ 不重放'
+    raw = subprocess.run(["git", "show", f":2:{rel}"], cwd=str(wt), capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if raw.returncode != 0:
+        return False, f"取不到主树那版 {rel}（git show :2: 退 {raw.returncode}）"
+    want = raw.stdout
+    lines = _split_blocks(want)
+    idx = None
+    for _s, _e, f in _scan_blocks(lines):
+        if f["id"] == card:
+            idx = f["status_idx"]
+            break
+    if idx is None:
+        return False, f"主树那版 {rel} 里找不到卡 {card} 的 status 行 ⇒ 不重放"
+    info = _split_status(lines[idx].decode("utf-8", "replace"))
+    if info is None:
+        return False, f"主树那版 {rel} 里卡 {card} 的 status 行认不出 ⇒ 不重放"
+    want_status = info[1]
+    expect = b"".join(lines[:idx]) + (info[0] + '"done"' + info[2]).encode("utf-8") \
+        + b"".join(lines[idx + 1:])
+    # ---- 认领通过，从这里开始动现场：之后任何失败都必须还原 ----
+    run(["git", "checkout", "--ours", "--", rel], cwd=wt)
+    verdict = flip_card_status(wt, card, task)
+    if verdict == "unflippable":
+        _restore_conflict(wt, rel)
+        return False, f"主树那版 {rel} 里卡 {card} 的 status 行翻不动 ⇒ 还原现场，交给人判"
+    # ★ 比「进库那一版」而不是工作区字节：本仓 core.autocrlf=true（库里 LF、工作区 CRLF）。
+    want_sha = _blob_sha(wt, expect)
+    if not want_sha:
+        _restore_conflict(wt, rel)
+        return False, f"算不出「主树那版只换卡 {card} 那一行」进库后的 sha ⇒ 还原现场，交给人判"
+    got_sha = _worktree_blob_sha(wt, rel)
+    if got_sha != want_sha:
+        _restore_conflict(wt, rel)
+        return False, (f"重放之后 {rel} 与「主树那版只换卡 {card} 那一行」不一致"
+                       f"（flip 判定 {verdict}）⇒ 还原现场，交给人判")
+    return True, (f"{rel}：主树那版 + 卡 {card} 的 status {want_status} → done"
+                  f"（flip 判定 {verdict}）")
 
 
 def run(cmd: list[str], cwd: pathlib.Path, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -2982,7 +3128,7 @@ def main(argv: list[str] | None = None) -> int:
             conflict = git("diff", "--name-only", "--diff-filter=U", cwd=wt).strip()
             print("  rebase 冲突（并发两笔都动了共享文档 / 门禁产物）：",
                   conflict.replace("\n", " · ") or "(没列出文件)")
-            ok, detail = resolve_derived_conflicts(wt)
+            ok, detail = resolve_derived_conflicts(wt, card=a.card, task=a.task)
             if not ok:
                 print("  ★★ 自动解决不了 ⇒ **停手**：", detail)
                 print("  ", (rb.stdout or "")[-400:].strip())

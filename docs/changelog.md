@@ -24,6 +24,11 @@
 - 锁：`acquire_slot_lock` 的陈旧锁删不掉不再死循环（timeout 真到期、返 False 并打印）；`release_slot_lock` 三态 `no-lock` / `True` / `False`；`PoolQueue.locked()` 的 finally 还锁失败改为打印。
 - 回传：`_read_back` 读不到的日志点名打印「不算这一趟的产物」，`_write_back` 删掉回传里没有的旧 `*.log` —— 上一趟的日志不许在卡树里冒充这一趟。
 - 命令行：`main('slots')` 内存读不到印 `avail_gb=unknown` 并退 2（原 `or 0.0`）；`check-product-fresh --seed` 读不到退 3 不把播种源当空串；`main(argv)` 的三元写反一并修（形参优先）。
+## 2026-11-17 T-AG631 rebase撞台账冲突时自动重放本笔翻账
+- resolve_derived_conflicts 加关键字参数 card/task：台账在冲突表里且是单卡路径时，认领本笔那一处改动、取主树版、用 flip_card_status 重放上去
+- 认领用 merge-base HEAD REBASE_HEAD 的 -U0 diff，必须恰好一减一增且两侧只差 status 的值、新值是 done；多了少了都停手
+- 重放结果比的是**进库那一版**（git hash-object 算出的 blob sha），不是工作区字节：本仓 core.autocrlf=true，库里 LF / 工作区 CRLF，比工作区字节会永远不等
+- 台账不进 DERIVED / RESOLVABLE：它是唯一权威，只能理解这一处改动，不能重算；批模式与老调用点一字不变
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。
