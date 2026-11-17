@@ -6256,3 +6256,22 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E132"
+task = "T-AG640"
+title = "job_list与job_status的无来源读数"
+tree = ".wt/E132"
+spec = "复盘/卡/卡E132-job_list与job_status的无来源读数.md"
+files = [
+  "tools/pool/jobs.py",
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp.py",
+  "tests/test_pool_jobs.py",
+  "docs/subsystems/pool/modules.toml"
+]
+depends = [
+  "E131"
+]
+risk = "mid"
+status = "pending"
