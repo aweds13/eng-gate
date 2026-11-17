@@ -29,10 +29,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
+
 if TYPE_CHECKING:
     from typing import Any
-
-    import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
@@ -860,7 +860,8 @@ def test_pool_models_says_who_blocks_and_who_only_warns(tmp_path: Path) -> None:
 # ============================ 卡 E111（T-AG620）：机器块还停在三张卡之前
 #
 # 人话段在 E107 / E109 / E110 三张卡里长出了判决、计数、允许集、探测命令；
-# 机器块一直只是 load_pool_models() 的 16 个键 —— 而机器读者只读机器块，
+# 机器块一直只是 load_pool_models() 的 16 个键（★ 卡 E131 起是 18 个：多了
+# whitelist_error / snapshot_error 两个「坏文件」读数）—— 而机器读者只读机器块，
 # 拿到的仍是那张被 E107 点名「不是派活允许集」的 in_both。
 # 这里钉的是「一份结构两处渲染」：
 #   ① 判决 / 计数 / 允许集 / 探测命令都进机器块，且与人话段同源；
@@ -1308,3 +1309,187 @@ def test_job_list_takes_state_from_jobs_only(
 
     # 源码半：工具里不许再出现一个硬写的态名（那等于在工具里又判了一次）。
     assert "断了" not in inspect.getsource(pool_mcp.tool_job_list)
+
+
+
+# ==================================== 卡 E131（T-AG639）：坏文件是读数，不是「没有」
+
+NOW_E131 = "2026-11-17T08:00:00+08:00"
+
+
+def _broken_pool_root(
+    tmp_path: Path, *, whitelist: str | None = None, snapshot: str | None = None
+) -> Path:
+    """假号池 + 按参数把两份文件写成坏内容（None = 保持 `_fake_pool_root` 的合法内容）。"""
+    root = _fake_pool_root(tmp_path, at=None)
+    pool = root / "infra" / "pool"
+    if whitelist is not None:
+        (pool / "models.whitelist.toml").write_text(whitelist, encoding="utf-8")
+    if snapshot is not None:
+        (pool / "models.live.json").write_text(snapshot, encoding="utf-8")
+    return root
+
+
+def test_pool_models_broken_whitelist_names_the_file(tmp_path: Path) -> None:
+    """★ 判据 1：坏 TOML 是**读数** —— 不抛、is_error=True、点名文件 + 解析错误首行。
+
+    ★ 卡 E131 的问题：`load_pool_models` 直接 `tomllib.loads` ⇒ `TOMLDecodeError` 冒到
+      `tools/call` 的兜底，整条工具变成协议层错误（-32603），人只看到「工具坏了」。
+    """
+    root = _broken_pool_root(tmp_path, whitelist='[[approved]\npool = "codebuddy"\n')
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is True, "坏文件是读数，不是「一切正常」"
+    human = _human(text)
+    assert "models.whitelist.toml" in human, human
+    assert "Expected ']]'" in human, human
+    assert data["whitelist_error"]["file"] == "models.whitelist.toml"
+    assert "Expected ']]'" in data["whitelist_error"]["error"]
+    assert data["snapshot_error"] is None, "另一份没坏就不许跟着报"
+
+
+def test_pool_models_broken_snapshot_names_the_file(tmp_path: Path) -> None:
+    """★ 判据 1：坏 JSON 同款 —— 点名 `models.live.json` 与 `Expecting value`。"""
+    root = _broken_pool_root(tmp_path, snapshot="不是 JSON")
+    text, data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is True
+    human = _human(text)
+    assert "models.live.json" in human, human
+    assert "Expecting value" in human, human
+    assert data["snapshot_error"]["file"] == "models.live.json"
+    assert "Expecting value" in data["snapshot_error"]["error"]
+    assert data["whitelist_error"] is None
+
+
+def test_pool_models_broken_is_not_the_same_as_missing(tmp_path: Path) -> None:
+    """★ 判据 1 的**分界**：坏 ≠ 缺 —— 两份人话逐字不同，is_error 也两样。
+
+    ★ 卡 E131 的第二个洞：坏文件原来与「没有这份文件」走同一条静默路径，
+      于是「读不懂」被念成「没记录」—— 人以为号池还没探测过。
+    """
+    root = _broken_pool_root(tmp_path, whitelist="[[approved]\n")
+    broken_text, broken_data, broken_err = pool_mcp.tool_pool_models({}, root=root)
+    assert broken_err is True
+    assert "坏了" in _human(broken_text), _human(broken_text)
+    assert broken_data["whitelist_exists"] is True
+
+    (root / "infra" / "pool" / "models.whitelist.toml").unlink()
+    gone_text, gone_data, gone_err = pool_mcp.tool_pool_models({}, root=root)
+    assert gone_err is False, "文件不在了只是「这条不知道」，不是工具坏了"
+    assert gone_data["whitelist_error"] is None
+    assert gone_data["whitelist_exists"] is False
+    assert "不知道它多旧" in _human(gone_text), _human(gone_text)
+    assert "不当成新鲜，也不当成过期" in _human(gone_text)
+    assert _human(broken_text) != _human(gone_text), "坏与缺不许同形"
+
+
+@pytest.mark.parametrize(
+    ("whitelist", "snapshot"),
+    [
+        ('approved = "abc"\n', '{"live": ["m1"]}'),
+        ('[[approved]]\npool = "codebuddy"\nmodel = "m1"\n', "[1, 2, 3]"),
+        ('approved = ["x"]\n', '{"live": ["m1"]}'),
+    ],
+)
+def test_pool_models_wrong_shape_is_a_reading_not_an_attribute_error(
+    tmp_path: Path, whitelist: str, snapshot: str
+) -> None:
+    """★ 判据 2：形状不对也是读数 —— 不许 `AttributeError: 'str' object has no attribute 'get'`。
+
+    ★ 卡 E131 的第三个洞：`data.get("approved")` / `snap.get("live")` 假定顶层是表/对象，
+      TOML 写 `approved = "abc"`、JSON 写成数组时当场 AttributeError，打的还是 Python 内部错。
+    """
+    root = _broken_pool_root(tmp_path, whitelist=whitelist, snapshot=snapshot)
+    text, _data, is_error = pool_mcp.tool_pool_models({}, root=root)
+    assert is_error is True
+    human = _human(text)
+    assert "结构不对" in human, human
+    assert "AttributeError" not in human, human
+
+
+def test_quota_status_broken_state_file_is_not_unrecorded(tmp_path: Path) -> None:
+    """★ 判据 3：坏 `quota-state.json` 与「未记录」必须可区分（坏 ≠ 没记过）。
+
+    ★ 卡 E131 的第四个洞：`_load` 把 `JSONDecodeError` 直接吞成 `{"cards": {}}`
+      ⇒ 坏文件与「从没记录」念出来的四态与人话**逐字相同**（P4 / P5）。
+    """
+    state = tmp_path / "gates" / "diag" / "quota-state.json"
+    state.parent.mkdir(parents=True)
+    state.write_text('{"cards": ', encoding="utf-8")
+    text, data, is_error = pool_mcp.tool_quota_status(
+        {"card": "E131", "model": "m131", "now": NOW_E131}, root=tmp_path
+    )
+    assert is_error is True
+    assert data["state"] == "未记录", "四态一个字不改（quota_line.SHORT 查表要用）"
+    assert data["state_file_broken"] is not None
+    assert data["state_file_broken"]["file"] == "gates/diag/quota-state.json"
+    human = _human(text)
+    assert "坏了" in human, human
+    assert "Expecting" in human, "要点名解析错误首行：" + human
+
+    state.unlink()
+    text2, data2, is_error2 = pool_mcp.tool_quota_status(
+        {"card": "E131", "model": "m131", "now": NOW_E131}, root=tmp_path
+    )
+    assert data2["state_file_broken"] is None
+    assert is_error2 is False, "没有这份文件只是「没记录」，不是工具坏了"
+    assert "没记录 ⇒ 不猜" in _human(text2), _human(text2)
+    assert _human(text) != _human(text2), "坏与缺不许同形"
+
+
+def test_quota_four_states_stay_verbatim(tmp_path: Path) -> None:
+    """★ 判据 3 的反面：**不许**拿「加第五态」当解法 —— 四态字面量与短标记一个都不许动。
+
+    `tools/pool/quota_line.py` 是 `tag = SHORT[st["state"]]`（查表，不是 if 链）⇒
+    多一个字面量当场 KeyError。
+    """
+    import pool_quota  # noqa: PLC0415 —— 同一个 tools/ 目录，和工具读同一份真源
+    from pool import quota_line as pool_quota_line  # noqa: PLC0415
+
+    states = {
+        pool_mcp.tool_quota_status(
+            {"card": "E131", "model": "m-none", "now": NOW_E131}, root=tmp_path
+        )[1]["state"]
+    }
+    pool_quota.record(card="E131", model="m-wait", pool="codebuddy", kind="限流",
+                      reset_raw="2026-11-17 20:00:00 UTC+8", root=tmp_path)
+    pool_quota.record(card="E131", model="m-old", pool="codebuddy", kind="限流",
+                      reset_raw="2026-11-17 01:00:00 UTC+8", root=tmp_path)
+    pool_quota.record(card="E131", model="m-broke", pool="codebuddy", kind="限流",
+                      reset_raw="不是时间", root=tmp_path)
+    for model in ("m-wait", "m-old", "m-broke"):
+        states.add(
+            pool_mcp.tool_quota_status(
+                {"card": "E131", "model": model, "now": NOW_E131}, root=tmp_path
+            )[1]["state"]
+        )
+    assert states == {"限流中", "已过期，需重新探测", "余额耗尽", "未记录"}, states
+    assert set(pool_quota_line.SHORT) == {"限流中", "已过期，需重新探测", "余额耗尽", "未记录"}
+
+
+def test_quota_status_rejects_non_iso_now(tmp_path: Path) -> None:
+    """★ 判据 4：`now` 认不出 ⇒ 点名格式、不抛（原来 `ValueError` 直冒 handle()）。"""
+    text, data, is_error = pool_mcp.tool_quota_status(
+        {"card": "E131", "model": "m131", "now": "yesterday"}, root=tmp_path
+    )
+    assert is_error is True
+    assert data["state"] is None
+    human = _human(text)
+    assert "yesterday" in human, human
+    assert "ISO-8601" in human, human
+
+
+def test_quota_cli_non_iso_now_is_usage_error(tmp_path: Path, capsys: Any) -> None:
+    """★ 判据 4 的 CLI 面：一行 stderr + 用法错退出（照 tests/test_pool_due.py:300-301）。"""
+    import pool_quota  # noqa: PLC0415
+
+    rc = pool_quota.main(
+        ["status", "--card", "E131", "--model", "m131", "--now", "yesterday",
+         "--root", str(tmp_path)]
+    )
+    captured = capsys.readouterr()
+    assert rc == pool_quota.EXIT_USAGE, rc
+    assert captured.out == "", captured.out
+    lines = captured.err.strip().splitlines()
+    assert len(lines) == 1, captured.err
+    assert "Traceback" not in captured.err
+    assert "ISO-8601" in lines[0], lines[0]

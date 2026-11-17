@@ -338,6 +338,12 @@ def _model_block(pool: str, model: str, base: Path, *, now: dt.datetime) -> tupl
         return 404, (f"找不到号池目录（从 {base} 逐级向上找 infra/pool/pool_models.py 都没命中）"
                      "⇒ 不猜模型清单")
     info = pool_models.load_pool_models(pool_dir)
+    # ★ 卡 E131 判据 5：清单**读不懂**不算「批准集是空的」—— 前者是坏文件（点名 + 首行），
+    #   后者是「用户一条都没批」。同一份坏文件原来在这里裸抛 TOMLDecodeError（H5）。
+    for key, what in (("whitelist_error", "模型清单"), ("snapshot_error", "模型快照")):
+        item = info.get(key)
+        if item is not None:
+            return 404, (f"{what}读不懂：{item['file']} 坏了 —— {item['error']} ⇒ 不派活")
     approved = [str(m) for m in info.get("approved") or []]
     if not approved:
         return 404, (f"号池 {pool!r} 的批准集是空的（models.whitelist.toml 没有 approved 条目）"
@@ -685,6 +691,15 @@ def list_models(*, root: Path | str | None = None) -> dict[str, Any]:
     if pool_dir is None:
         return {"object": "list", "data": [], "note": "找不到号池目录 ⇒ 不猜模型清单"}
     info = pool_models.load_pool_models(pool_dir)
+    # ★ 卡 E131 判据 5：坏文件是读数 —— data 空 + note 点名 + models_source_broken 带原文，
+    #   不许把 TOMLDecodeError 直接抛到 BaseHTTPRequestHandler（H4）。
+    broken = info.get("whitelist_error") or info.get("snapshot_error")
+    if broken is not None:
+        return {"object": "list", "data": [], "snapshot_at": info.get("snapshot_at"),
+                "snapshot_stale": bool(info.get("snapshot_stale")),
+                "note": (f"{broken['file']} 坏了 —— {broken['error']}"
+                         " ⇒ 模型清单读不懂，不当成空清单，也不猜"),
+                "models_source_broken": broken}
     data = [{"id": m, "object": "model", "owned_by": "pool"} for m in info.get("approved") or []]
     return {"object": "list", "data": data, "snapshot_at": info.get("snapshot_at"),
             "snapshot_stale": bool(info.get("snapshot_stale")),

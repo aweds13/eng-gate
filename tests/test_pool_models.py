@@ -17,6 +17,7 @@ r"""两份模型白名单的**对账判据**（卡 132 · T-G229）的测试。
 
 from __future__ import annotations
 
+import ast
 import builtins
 import json
 import sys
@@ -355,3 +356,59 @@ def test_stale_note_carries_the_probe_command(tmp_path: Path) -> None:
     assert bad["snapshot_stale"] is True
     assert "--check" in bad["snapshot_note"], bad["snapshot_note"]
     assert (pool / "pool_models.py").as_posix() in bad["snapshot_note"]
+
+
+# ==================================== 卡 E131（T-AG639）：坏文件那几处不许宽捕
+
+
+def _except_clauses(path: Path) -> list[str | None]:
+    """把一份源文件的 `except` 子句的异常类型逐条 unparse 成字符串（裸 except ⇒ None）。"""
+    tree = ast.parse(path.read_bytes().decode("utf-8"))
+    out: list[str | None] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ExceptHandler):
+            out.append(ast.unparse(node.type) if node.type is not None else None)
+    return out
+
+
+def test_pool_readers_never_use_bare_except(tmp_path: Path) -> None:
+    """★ 判据 7：坏文件处必须是具名异常元组，**不许** `except:` / `except Exception:`。
+
+    理由不是洁癖：宽捕会把「程序写错了」（AttributeError / TypeError / KeyError）也念成
+    「文件坏了」，于是真正的 bug 永远没人看见 —— 判据 2 的 AttributeError 就是这样被吞的。
+    """
+    for rel in ("tools/pool/models.py", "tools/pool_quota.py"):
+        clauses = _except_clauses(ROOT / rel)
+        assert None not in clauses, rel + " 里有裸 except:"
+        assert not [c for c in clauses if "Exception" in c], rel + " 里有 except Exception"
+    got = {
+        frozenset(part.strip() for part in c.strip("()").split(","))
+        for c in _except_clauses(ROOT / "tools" / "pool" / "models.py")
+        if c
+    }
+    assert frozenset({"OSError", "tomllib.TOMLDecodeError"}) in got, got
+    assert frozenset({"OSError", "json.JSONDecodeError"}) in got, got
+    quota_got = {
+        frozenset(part.strip() for part in c.strip("()").split(","))
+        for c in _except_clauses(ROOT / "tools" / "pool_quota.py")
+        if c
+    }
+    assert frozenset({"OSError", "json.JSONDecodeError"}) in quota_got, quota_got
+
+    # 同一条钉子再钉一次「不抛」：五种坏法逐个真跑 load_pool_models。
+    good_toml = '[[approved]]\npool = "codebuddy"\nmodel = "m1"\n'
+    good_json = '{"live": ["m1"], "live_names": {}, "at": ""}'
+    cases = [
+        ("坏 TOML", '[[approved]\n', good_json, "whitelist_error"),
+        ("坏 JSON", good_toml, "{bad", "snapshot_error"),
+        ("approved 是字符串", 'approved = "abc"\n', good_json, "whitelist_error"),
+        ("snapshot 是数组", good_toml, "[1, 2, 3]", "snapshot_error"),
+        ("approved 条目是字符串", 'approved = ["x"]\n', good_json, "whitelist_error"),
+    ]
+    for index, (label, whitelist, snapshot, key) in enumerate(cases):
+        pool = tmp_path / ("case" + str(index)) / "infra" / "pool"
+        pool.mkdir(parents=True, exist_ok=True)
+        (pool / "models.whitelist.toml").write_text(whitelist, encoding="utf-8")
+        (pool / "models.live.json").write_text(snapshot, encoding="utf-8")
+        info = models.load_pool_models(pool)  # 抛了就是这条钉子红
+        assert info[key] is not None, label + "：读数没留下证据"

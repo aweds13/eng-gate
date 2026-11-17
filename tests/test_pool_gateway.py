@@ -1010,3 +1010,31 @@ def test_the_snapshot_gate_really_differs_from_the_dispatcher(env: Path) -> None
     assert status == 404 and blocked, (status, blocked)
     doc = wb_dispatch.snapshot_stale_problem.__doc__ or ""
     assert "不拦派活" in doc, "派活器那边只提示不拦这件事，docstring 里得留着：" + doc
+
+
+# ========================================== 卡 E131（T-AG639）：坏清单也是读数
+
+
+def test_gateway_list_models_broken_whitelist_is_a_reading(env: Path) -> None:
+    """★ 判据 5：坏 whitelist 不许让 `/v1/models` 裸抛 —— data 空 + note 点名 + 原文旁挂。
+
+    ★ 卡 E131：`:687` 直调 `load_pool_models`，`TOMLDecodeError` 一路冒到
+      `BaseHTTPRequestHandler`（H4）—— 客户端拿到的是连接错误，不是「清单读不懂」。
+    """
+    (env / "infra" / "pool" / "models.whitelist.toml").write_text("[[approved]\n", encoding="utf-8")
+    out = gateway.list_models(root=env)
+    assert out["object"] == "list"
+    assert out["data"] == [], "读不懂就不许把「一条都没批」当成答案"
+    assert "models.whitelist.toml" in out["note"], out["note"]
+    assert out["models_source_broken"]["file"] == "models.whitelist.toml"
+    assert "Expected ']]'" in out["models_source_broken"]["error"]
+
+
+def test_gateway_model_block_broken_whitelist_is_404_named(env: Path) -> None:
+    """★ 判据 5：准入侧同源 —— 404 + 点名，人话面**不透异常类名**。"""
+    (env / "infra" / "pool" / "models.whitelist.toml").write_text("[[approved]\n", encoding="utf-8")
+    status, msg = gateway._model_block("codebuddy", MODEL, env, now=NOW)
+    assert status == 404, (status, msg)
+    assert "models.whitelist.toml" in msg, msg
+    assert "坏了" in msg, msg
+    assert "TOMLDecodeError" not in msg, "人话面不许透异常类名：" + msg

@@ -1,0 +1,16 @@
+[entries."T-AG639"]
+id = "T-AG639"
+title = "号池读面遇到文件坏了不许整条工具变协议层错误"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/models.py",
+  "file:tools/pool_quota.py",
+  "file:tools/pool_mcp.py",
+  "file:tools/pool/gateway.py",
+  "test:test_pool_models.py",
+  "test:test_pool_mcp.py",
+  "test:test_pool_gateway.py",
+]
+gaps = "- 卡规格判据 2 说 pool_quota 的坏状态文件要「点名」，我把它拆成两处：`status()` 旁挂 `state_file_broken`、`render()` 人话段打「★ 记录文件坏了」；机器块里那格是**新增键**，四态判词一字未动（653 行 `test_quota_four_states_stay_verbatim` 逐字钉住）。指针 `tools/pool_quota.py`- 判据 1 的「16 键不变」实数是**新增两键、原 16 键语义不动**（`whitelist_error` / `snapshot_error`），所以 tests/test_pool_mcp.py 里那句「16 个键」的注释改成 18（断言仍是「原有的键都在」）。指针 `tests/test_pool_mcp.py`- 判据 4 的「不许裸 except」在 Gateway 那侧只能覆盖 `docs/subsystems/pool/模型与号池.md` 里说的那份白名单的读；`_approved_of` 里对 `approved` 条目形状的判断走 `isinstance` 而不是 try，所以 ast 扫描只对两个读面源文件生效（`tools/pool/models.py` / `tools/pool_quota.py`），不含 gateway。指针 `tools/pool/gateway.py`"
+

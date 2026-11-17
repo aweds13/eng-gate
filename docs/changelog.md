@@ -34,6 +34,11 @@
 - `tools/pool_mcp.py` 的 `_backlog_cards` 改成返回 `(cards, gap)`，stderr 前缀从写死的 `[job_status]` 改成 `[job_list/job_status]`；`tool_job_list` 的 data 增 `backlog_unavailable` 并把它摆到正文首段。
 - `tool_job_status` 的有日志支删掉凭空写的 `command` 与 `exit_code`，换成 `rendered_by`（真话：进程内 import `pool.jobs.render_timeline` 渲染，没起子进程）；docstring、`tools/list` 描述与模块表同步。
 - 无日志支在台账读不到时把「还没派过」后面补上「台账读不到」这句 —— 仍是 is_error=True，三支结构不动。
+## 2026-11-17 T-AG639 号池读面遇到文件坏了不许整条工具变协议层错误：读不懂就点名交出来
+- `tools/pool/models.py` 的白名单与快照读取各包一层 `try/except (OSError, TOMLDecodeError)` 与 `(OSError, JSONDecodeError)`，形状错走 `isinstance` 断言 ⇒ 错误进 `whitelist_error` / `snapshot_error`，函数一次都不抛。
+- `tools/pool_mcp.py` 的 `tool_pool_models` 任一 error 非空即 `is_error=True` 并点名文件与首行原因，人话段写明「★ 坏文件 ≠ 没有这份文件」；`tool_quota_status` 接 `BadNowError` 与 `state_file_broken`。
+- `tools/pool_quota.py` 新增 `BadNowError`（`--now` 非 ISO ⇒ stderr 一行 + 退 2），`_load_state()` 返回 `(data, broken)`、`status()` 旁挂 `state_file_broken`、`render()` 在坏档时念「★ 记录文件坏了」。
+- `tools/pool/gateway.py` 的 `list_models` 带 `models_source_broken` 并点名，`_model_block` 读不懂白名单回 404「模型清单读不懂：<首行> ⇒ 不派活」——协议层错误不再冒充「没有这份文件」。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

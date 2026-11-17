@@ -100,22 +100,90 @@ def find_pool_dir(root: Path) -> Path | None:
     return None
 
 
+def _first_line(exc: BaseException) -> str:
+    """异常消息的**第一行**（人话面只念这一行，不透追踪栈）。"""
+    text = str(exc).strip()
+    return text.splitlines()[0] if text else type(exc).__name__
+
+
+def _file_reading(name: str, detail: str) -> dict[str, str]:
+    """一份文件「读不出来」的读数：点名哪份 + 首行原因 —— 这是**读数**，不是异常。"""
+    return {"file": name, "error": detail}
+
+
+def _approved_of(data: object) -> tuple[list[str], str | None]:
+    """从 whitelist 的解析结果取批准集；**形状不对** ⇒ 第二项是原因（★ 不抛 AttributeError）。"""
+    if not isinstance(data, dict):
+        return [], f"结构不对：顶层应是表（拿到 {type(data).__name__}）"
+    rows = data.get("approved")
+    if rows is None:
+        return [], None
+    if not isinstance(rows, list):
+        return [], f"结构不对：approved 应是数组（拿到 {type(rows).__name__}）"
+    out: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            return [], f"结构不对：approved 的条目应是表（拿到 {type(row).__name__}）"
+        name = row.get("model")
+        if name:
+            out.append(str(name))
+    return out, None
+
+
+def _snapshot_parts(snap: object) -> tuple[list[str], dict[str, str], Any, str | None]:
+    """从快照的解析结果取 (live, live_names, at)；**形状不对** ⇒ 第四项是原因（不抛）。"""
+    if not isinstance(snap, dict):
+        return [], {}, None, f"结构不对：顶层应是对象（拿到 {type(snap).__name__}）"
+    raw_live = snap.get("live")
+    if raw_live is None:
+        live: list[str] = []
+    elif isinstance(raw_live, list):
+        live = [str(m) for m in raw_live]
+    else:
+        return [], {}, None, f"结构不对：live 应是数组（拿到 {type(raw_live).__name__}）"
+    raw_names = snap.get("live_names")
+    if raw_names is None:
+        names: dict[str, str] = {}
+    elif isinstance(raw_names, dict):
+        names = {str(k): str(v) for k, v in raw_names.items()}
+    else:
+        return [], {}, None, f"结构不对：live_names 应是对象（拿到 {type(raw_names).__name__}）"
+    return live, names, snap.get("at"), None
+
+
 def load_pool_models(pool: Path) -> dict[str, Any]:
-    """读号池的**静态产物**并求交（只读；**不联网、不写快照**）。"""
+    """读号池的**静态产物**并求交（只读；**不联网、不写快照**）。
+
+    ★ 卡 E131：文件**坏了**（解析失败）或**形状不对**也是**读数** —— 收进 `whitelist_error` /
+      `snapshot_error` 两个旁挂键（None 或 `{"file": <文件名>, "error": <首行>}`）。
+      本函数**一次都不抛**：`tools/wb_state.py:75` 与 `tools/wb_dispatch.py:2714` 靠这条不崩。
+    """
     whitelist = pool / "models.whitelist.toml"
     snapshot = pool / "models.live.json"
     approved: list[str] = []
+    whitelist_error: dict[str, str] | None = None
     if whitelist.exists():
-        data = tomllib.loads(whitelist.read_text(encoding="utf-8"))
-        approved = [str(w["model"]) for w in (data.get("approved") or []) if w.get("model")]
+        try:
+            data = tomllib.loads(whitelist.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            whitelist_error = _file_reading(whitelist.name, _first_line(exc))
+        else:
+            approved, shape = _approved_of(data)
+            if shape is not None:
+                whitelist_error = _file_reading(whitelist.name, shape)
     live: list[str] = []
     live_names: dict[str, str] = {}
     at = None
+    snapshot_error: dict[str, str] | None = None
     if snapshot.exists():
-        snap = json.loads(snapshot.read_text(encoding="utf-8"))
-        live = [str(m) for m in (snap.get("live") or [])]
-        live_names = {str(k): str(v) for k, v in (snap.get("live_names") or {}).items()}
-        at = snap.get("at")
+        try:
+            snap = json.loads(snapshot.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            snapshot_error = _file_reading(snapshot.name, _first_line(exc))
+        else:
+            live, live_names, at, shape = _snapshot_parts(snap)
+            if shape is not None:
+                snapshot_error = _file_reading(snapshot.name, shape)
     in_both = [m for m in approved if m in set(live)]
     age = snapshot_age_hours(at)
     # ★ 卡 320 修：`at` **有值但读不出来** ⇒ 必须算过期（否则字段说"不过期"、文案说
@@ -138,8 +206,11 @@ def load_pool_models(pool: Path) -> dict[str, Any]:
         "pool_dir": pool.as_posix(),
         "whitelist": whitelist.name,
         "whitelist_exists": whitelist.exists(),
+        # ★ 卡 E131：坏文件是**读数**（None = 读得出来）；与「文件不存在」不同形。
+        "whitelist_error": whitelist_error,
         "snapshot": snapshot.name,
         "snapshot_exists": snapshot.exists(),
+        "snapshot_error": snapshot_error,
         "snapshot_at": at,
         "approved": approved,
         "live": live,

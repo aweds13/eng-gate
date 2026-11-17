@@ -216,12 +216,25 @@ def _to_aware(dt: datetime) -> datetime:
     return dt
 
 
+class BadNowError(ValueError):
+    """`now` 认不出（不是 ISO-8601）—— 卡 E131：点名，不许让 `ValueError` 冒到协议层。"""
+
+
 def _resolve_now(now: datetime | str | None) -> datetime:
-    """把 `now` 参数统一成 `datetime`：`None` = 真实现在（aware，本地时区）。"""
+    """把 `now` 参数统一成 `datetime`：`None` = 真实现在（aware，本地时区）。
+
+    ★ 卡 E131：认不出就抛 `BadNowError`（`ValueError` 的子类，老调用点照样接得住），
+      消息里带**原值**与「要 ISO-8601」—— `tool_quota_status` 与 `main()` 都靠它点名。
+    """
     if now is None:
         return datetime.now().astimezone()
     if isinstance(now, str):
-        return _to_aware(datetime.fromisoformat(now))
+        try:
+            return _to_aware(datetime.fromisoformat(now))
+        except ValueError as exc:
+            raise BadNowError(
+                f"--now 认不出：{now!r}（要 ISO-8601，例如 2026-11-17T08:00:00+08:00）"
+            ) from exc
     return now
 
 
@@ -232,17 +245,37 @@ def _state_path(root: Path = ROOT) -> Path:
     return root / STATE_REL
 
 
-def _load(root: Path = ROOT) -> dict[str, Any]:
+def _first_line(exc: BaseException) -> str:
+    """异常的第一行 —— 人话面只念一行，不透追踪栈。"""
+    text = str(exc).strip()
+    return text.splitlines()[0] if text else type(exc).__name__
+
+
+def _load_state(root: Path = ROOT) -> tuple[dict[str, Any], dict[str, str] | None]:
+    """读整份记录 → `(data, broken)`。
+
+    ★ 卡 E131：**坏文件是读数，不是「没有记录」**。`broken` 为 None 表示「没有这份文件」
+      或「读得懂」；坏时给 `{"file": <仓库相对路径>, "error": <解析错误首行>}`，
+      由 `status()` 旁挂成 `state_file_broken` —— 坏与缺**不许同形**。
+    """
     path = _state_path(root)
     if not path.exists():
-        return {"cards": {}}
+        return {"cards": {}}, None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {"cards": {}}
+    except (json.JSONDecodeError, OSError) as exc:
+        return {"cards": {}}, {"file": STATE_REL, "error": _first_line(exc)}
     if not isinstance(data, dict) or not isinstance(data.get("cards"), dict):
-        return {"cards": {}}
-    return data
+        return {"cards": {}}, {
+            "file": STATE_REL,
+            "error": f"结构不对：顶层应是带 cards 表的对象（拿到 {type(data).__name__}）",
+        }
+    return data, None
+
+
+def _load(root: Path = ROOT) -> dict[str, Any]:
+    """旧签名（四个调用点不动）：只回数据，坏文件当「没有」—— 要区分就调 `_load_state`。"""
+    return _load_state(root)[0]
 
 
 def _save(data: dict[str, Any], root: Path = ROOT) -> None:
@@ -511,7 +544,9 @@ def status(*, card: str, model: str, now: datetime | str | None = None,
     ★ **不许猜**：`未记录` 不当可用，`已过期` 不当可用 —— 只有 `限流中` 是确定的「不能派活」，
       其余三态都是「要探测才能确定」。
     """
-    rec = read_record(card, model, root=root)
+    data, state_file_broken = _load_state(root)
+    models_of_card = (data.get("cards") or {}).get(card)
+    rec = models_of_card.get(model) if isinstance(models_of_card, dict) else None
     now_dt = _resolve_now(now)
     now_iso = now_dt.isoformat()
     platform = str((rec or {}).get("pool") or "").strip() or None
@@ -524,8 +559,14 @@ def status(*, card: str, model: str, now: datetime | str | None = None,
         "can_dispatch_reason": CANNOT_SAY_REASON,
         "probe": _probe_view(platform),
         "rest_until": None, "rest_by": None,
+        # ★ 卡 E131：坏 state 文件是**读数**（正常 None）；`state` 仍是四态之一，一个字不改。
+        "state_file_broken": state_file_broken,
     }
     if rec is None:
+        if state_file_broken is not None:
+            return {**base, "state": "未记录",
+                    "why": (f"{state_file_broken['file']} 坏了（{state_file_broken['error']}）"
+                            " ⇒ 读不出记录，不猜（★ 不许默认当可用）")}
         return {**base, "state": "未记录",
                 "why": "没有这条记录 ⇒ 不猜（★ 不许默认当可用）"}
     recorded_at = rec.get("recorded_at")
@@ -569,6 +610,7 @@ def _hms(seconds: int | None) -> str:
 def render(st: dict[str, Any]) -> str:
     """四态的人话输出 —— 每一态都把**判据**念出来。"""
     state = st["state"]
+    broken = st.get("state_file_broken")
     lines = [f"[额度] 卡 {st['card']} · 模型 {st['model']} —— {state}"]
     if state == "限流中":
         lines.append(f"  剩余 {_hms(st['remaining_seconds'])}"
@@ -579,8 +621,11 @@ def render(st: dict[str, Any]) -> str:
         lines.append("  ★ 过期 ≠ 可用，要探")
     elif state == "余额耗尽":
         lines.append("  没有重置时间 ⇒ 不自动等，只能探")
-    elif state == "未记录":
+    elif state == "未记录" and not broken:
+        # ★ 卡 E131：坏了就不是「没记录」—— 那行只在真的查无此记录时打。
         lines.append("  没记录 ⇒ 不猜（★ 不许默认当可用）")
+    if broken:
+        lines.append(f"  ★ 记录文件坏了：{broken['file']} —— {broken['error']}")
     lines.append(f"  判据：{st['why']}")
     # ★ 卡 E112：三态都说「要探」⇒ 把那条命令念出来（限流中是确定不能派，不叫人去探）。
     if state != "限流中":
@@ -969,6 +1014,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="注入「现在」（ISO-8601；测试用，不许靠真实钟表）")
     p_line.add_argument("--root", default=None, help="仓库根（测试用）")
     args = parser.parse_args(argv)
+
+    # ★ 卡 E131：`--now` 先验一次（进任何子命令之前）—— 认不出就一行 stderr + 用法错，
+    #   不许让 `ValueError` 冒成追踪栈（先例 tools/pool_accounts.py:1768-1773）。
+    if args.now is not None:
+        try:
+            _resolve_now(args.now)
+        except BadNowError as exc:
+            print(str(exc), file=sys.stderr)
+            return EXIT_USAGE
 
     root = Path(args.root) if args.root else ROOT
     if args.cmd == "status":

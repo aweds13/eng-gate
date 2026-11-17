@@ -1386,6 +1386,31 @@ def tool_pool_models(
     # ★ 卡 E111 判据 5：探测命令**现算一次**，人话段两处与机器块 snapshot_probe 都用它；
     #   各拼一句的话，机器块那份迟早和人话段那份说两样（E110 只修了人话段）。
     probe: dict[str, Any] = {"command": probe_command(pool), "hint": probe_hint(pool)}
+    # ★ 卡 E131：**坏文件是读数，不是「没有这份文件」**。哪份坏了就点名哪份 + 解析错误首行，
+    #   整条工具给 is_error=True（判据 1/2）；形状不对走同一支（判据 2，「结构不对：…」）。
+    unreadable = [info["whitelist_error"], info["snapshot_error"]]
+    if any(item is not None for item in unreadable):
+        bad_lines = [f"号池可用模型（pool_models）—— 读 {pool.as_posix()}（读不懂 ⇒ 不猜）"]
+        for item, what in (
+            (info["whitelist_error"], "批准集"),
+            (info["snapshot_error"], "快照"),
+        ):
+            if item is None:
+                continue
+            bad_lines.append(
+                f"读不懂：{item['file']} 坏了 —— {item['error']}"
+                f" ⇒ 不知道{what}是什么，不猜（★ 坏文件 ≠ 没有这份文件；{probe['hint']}）"
+            )
+        return _result(
+            "\n".join(bad_lines),
+            {
+                **info,
+                "found": True,
+                "in_both_is_a_dispatch_allow_list": False,
+                "snapshot_probe": probe,
+            },
+            is_error=True,
+        )
     lines = [
         f"号池可用模型（pool_models）—— 读 {pool.as_posix()}（★ 快照，非现场拉取；"
         f"{info['snapshot']} at={info['snapshot_at']}）",
@@ -1574,9 +1599,15 @@ def tool_quota_status(
     if not card or not model:
         text = "quota_status：card 和 model 都要给（例如 card=201, model=deepseek-v4.1-flash）。"
         return _result(text, {"state": None, "card": card, "model": model}, is_error=True)
-    st = pool_quota.status(card=card, model=model, now=now, root=root)
+    # ★ 卡 E131 判据 4：now 认不出 ⇒ 点名格式，不许把 ValueError 冒成协议层错误（-32603）。
+    try:
+        st = pool_quota.status(card=card, model=model, now=now, root=root)
+    except pool_quota.BadNowError as exc:
+        text = f"quota_status：{exc}"
+        return _result(text, {"state": None, "card": card, "model": model}, is_error=True)
     text = pool_quota.render(st)
-    return _result(text, st, is_error=False)
+    # ★ 卡 E131 判据 3：记录文件坏了是读数 —— 与「未记录」不同形，给 is_error=True。
+    return _result(text, st, is_error=st.get("state_file_broken") is not None)
 
 
 # ============================================================ 工具 7.5：account_status（卡 E45）
