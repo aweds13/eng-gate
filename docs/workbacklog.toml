@@ -6275,3 +6275,46 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E133"
+task = "T-AG642"
+title = "掐进程的测试在cp1252控制台上必红"
+tree = ".wt/E133"
+spec = "复盘/卡/卡E133-掐进程的测试在cp1252控制台上必红.md"
+files = [
+  "tests/test_pool_mcp_write.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "E134"
+task = "T-AG643"
+title = "_json_call一次没读到就整道门红"
+tree = ".wt/E134"
+spec = "复盘/卡/卡E134-_json_call一次没读到就整道门红.md"
+files = [
+  "tools/web_live_check.py",
+  "tests/test_web_live_json_retry.py",
+  "docs/subsystems/ci/云门禁-可复现性清单.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "E135"
+task = "T-AG644"
+title = "行为流层的等待预算没有旋钮"
+tree = ".wt/E135"
+spec = "复盘/卡/卡E135-行为流层的等待预算没有旋钮.md"
+files = [
+  "tools/ui_flow_check.mjs",
+  "tools/tf_wait_budget.mjs",
+  "tests/test_ui_flow_check.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
