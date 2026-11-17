@@ -6230,3 +6230,29 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E131"
+task = "T-AG639"
+title = "号池读面遇到文件坏了不许整条工具变协议层错误"
+tree = ".wt/E131"
+spec = "复盘/卡/卡E131-号池读面遇到文件坏了不许整条工具变协议层错误.md"
+files = [
+  "tools/pool/models.py",
+  "tools/pool_quota.py",
+  "tools/pool_mcp.py",
+  "tools/pool/gateway.py",
+  "tests/test_pool_models.py",
+  "tests/test_pool_mcp.py",
+  "tests/test_pool_gateway.py",
+  "tests/test_pool_rest.py",
+  "docs/subsystems/pool/模型与号池.md"
+]
+depends = [
+  "E118",
+  "E125",
+  "E128",
+  "E130"
+]
+risk = "mid"
+status = "pending"
