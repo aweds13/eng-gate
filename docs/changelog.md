@@ -69,6 +69,11 @@
 - leases 每行加 `dead`（复用 `pool.registry.is_dead`，判不出给 null）；死租约**留在表里**不许过滤，人话段念「其中 M 条已死」。
 - verdicts 改成一卡一行 + `attempts[]`（att / has_verdict / has_report / ended_at / selected）：卡号不再带 `.killed` / `.r2` 后缀，`120` 与 `120.killed` 不再并列成两行；真仓从 215 行落到 212 行。
 - `_CACHE_SCHEMA` 1→2 且 `_GIT_SHAPES` 补 3 档：缓存的键只算来源文件、不含字段形状，不抬版本号就会拿旧缓存冒充新字段。
+## 2026-11-16 T-AG628 account_status 不再把「探过没探到」洗成「未观测」
+- 额度列分三支：有 `amount` ⇒ 念余额（一个字没改）；没 `amount` 也没 `samples` ⇒ 才是「未观测」；没 `amount` 但有 `samples` ⇒ 念末条 `kind` + `at` + 「连败 N」+ `health.state`，四个非 ok 结论码不再洗成一句。
+- `list_rows` 每行另带 `quota_kind` / `quota_at` / `health_state` / `consecutive_failures` 四个机器键：取账本原值，缺键就是 `null`（不补 `""` / `"ok"` / `0`）；既有八键与排序键 `(platform, id)` 一个没动。
+- `tool_account_status` 多一行汇总，把「探过没探到 N 个（末条结论码 …）」与「账本里从没探过 M 个」当面分开 —— 只有后者才叫「未观测」。
+- `_print_table` 的列宽上限抽成 `_COL_MAX = 64`（原 48）：最坏那条判词 63 字符，封 48 会把「健康 unknown」截成「健康 unkn」。
 ## 2026-11-10 T-AG610 契约对账表装牙：表里每一格都由工具现读，漂了就红
 - `tools/contract_audit.py` 新增 `--check-doc`（配 `--doc`）：**不跑判据**，逐格把 `复盘/契约-判据对账.md` 与活体比对 —— 源格 `path:line` 行号、原句格是否源文档那一行的子串（归一后、长度 ≥ 8）、判据格字样（pytest 带 `tests/` 前缀、cmd 去 `python -X utf8`、允许「同 CX-0N」）、段标题与读数块写的条数。全对 0 / 有漂 1（逐条点名 CX 与行号）/ 表读不出来 2。
 - 口径只在模块 docstring 写一份（§表格自检），实现读那一份：**不许**在测试里另抄一份「表该长什么样」。

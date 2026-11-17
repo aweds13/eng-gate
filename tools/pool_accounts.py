@@ -711,12 +711,51 @@ def visible_accounts(data: dict, include_deleted: bool = False) -> list[dict]:
     return out
 
 
+def _health_text(acc: dict) -> str:
+    """把账本 health 的两项念成一句话；缺哪项就不念哪项（不补默认值）。"""
+    health = acc.get("health") or {}
+    bits = []
+    fails = health.get("consecutive_failures")
+    if fails is not None:
+        bits.append(f"连败 {fails}")
+    state = health.get("state")
+    if state is not None:
+        bits.append(f"健康 {state}")
+    return "；".join(bits)
+
+
+def _last_sample(acc: dict) -> dict:
+    """账本 quota.samples 的末条；没有 / 不是 dict ⇒ 空 dict（不编）。"""
+    samples = (acc.get("quota") or {}).get("samples") or []
+    if not samples:
+        return {}
+    last = samples[-1]
+    return last if isinstance(last, dict) else {}
+
+
 def _quota_text(acc: dict) -> str:
+    """额度列的一句话 —— ★ 卡 E118：「未观测」只留给账本里**从没探过**的号。
+
+    三支，不许合并：
+      ① amount 有值 ⇒ 原样（余额口径，探针不写它）；
+      ② amount 缺、也没有 samples ⇒ 「未观测」（真没探过）；
+      ③ amount 缺、但有 samples ⇒ 念末条的结论码 + 时刻 + 连败 + health.state。
+    ★ 为什么值当改：amount 只由探针之外的人填，四个非 ok 结论码本来就不写它 ⇒
+      改之前「探过、没探到」与「从没探过」在读数上完全一样，而这两件事在派活决策上不是一回事。
+    """
     quota = acc.get("quota") or {}
     amount = quota.get("amount")
     observed = quota.get("observed_at") or ""
     if amount is None:
-        return "未观测" + (f"（{observed}）" if observed else "")
+        last = _last_sample(acc)
+        if not last:
+            return "未观测" + (f"（{observed}）" if observed else "")
+        kind = last.get("kind")
+        at = last.get("at") or ""
+        # 缺 kind 只许说缺键：编一个结论码比不念更坏（六个码里挑哪个都是假的）。
+        head = f"{kind} @{at}" if isinstance(kind, str) and kind else f"探过但没记结论码 @{at}"
+        tail = _health_text(acc)
+        return head + (f"（{tail}）" if tail else "")
     return f"{amount} {quota.get('unit', '')}".strip() + (f"（{observed}）" if observed else "")
 
 
@@ -735,6 +774,12 @@ def list_rows(data: dict, platform: str | None, include_deleted: bool) -> list[d
                 "quota": _quota_text(acc),
                 "models": [mask(m) for m in acc["approved_models"]],
                 "credential": mask(acc.get("credential", {}).get("locator", "")),
+                # ★ 卡 E118：机器面四个键 —— **取账本原值**，缺键就是 None（不补 "" / "ok" / 0）。
+                # 只加不改：上面八个键的名字、语义、排序键都不动（预算是「既有断言不改红」）。
+                "quota_kind": _last_sample(acc).get("kind"),
+                "quota_at": _last_sample(acc).get("at"),
+                "health_state": (acc.get("health") or {}).get("state"),
+                "consecutive_failures": (acc.get("health") or {}).get("consecutive_failures"),
             }
         )
     # 稳定排序：platform, id —— 读数要能直接对账（顺序随账本行序变会让人怀疑数据在变）
@@ -1303,11 +1348,17 @@ def note_quota_history(
         return None
 
 
+# 卡 E118：列宽上限。额度列改念判词后，最坏一条是
+# `unknown-platform @2026-11-16T12:57:30+08:00（连败 12；健康 unknown）` = 61 字符；
+# 原来封 48 会把它截成 `健康 unkn` —— 读的人会以为账本里就写了这半截。
+_COL_MAX = 64
+
+
 def _print_table(rows: list[dict], columns: list[tuple[str, str]]) -> None:
     widths = {key: len(title) for key, title in columns}
     for row in rows:
         for key, _ in columns:
-            widths[key] = max(widths[key], min(48, len(str(row.get(key, "")))))
+            widths[key] = max(widths[key], min(_COL_MAX, len(str(row.get(key, "")))))
     head = "  ".join(title.ljust(widths[key]) for key, title in columns)
     print(head)
     print("-" * len(head))

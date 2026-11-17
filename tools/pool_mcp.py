@@ -1627,14 +1627,31 @@ def tool_account_status(
             )
 
     lines = [f"账号账本（account_status）—— 读 {ledger.as_posix()}（★ 仓外文件，不进 git）"]
+    never: list[str] = []
+    tried: list[str] = []
     for row in rows:
         models = "、".join(row["models"]) if row["models"] else "（未批准任何模型 ⇒ 不许派活）"
         lines.append(
             f"- {row['id']} · {row['platform']} · {row['state']}"
             f" · 额度 {row['quota']} · 批准 {models}"
         )
+        (tried if row.get("quota_kind") or row.get("quota_at") else never).append(row["id"])
     if not rows:
         lines.append("（这个筛选条件下一个号都没有）")
+    if rows:
+        # ★ 卡 E118：一行汇总，把「探过没探到」与「从没探过」当面分开 ——
+        #   改之前这两件事在读数上是同一个词，而它们在派活决策上不是一回事。
+        kinds: dict[str, int] = {}
+        for row in rows:
+            kind = row.get("quota_kind")
+            label = kind if isinstance(kind, str) and kind else "探过但没记结论码"
+            if row.get("quota_kind") or row.get("quota_at"):
+                kinds[label] = kinds.get(label, 0) + 1
+        tally = "、".join(f"{k}×{n}" for k, n in sorted(kinds.items())) or "（无）"
+        lines.append(
+            f"- 读数补充：探过没探到 {len(tried)} 个（末条结论码 {tally}）；"
+            f"账本里从没探过 {len(never)} 个 —— 只有后者才叫「未观测」。"
+        )
     lines.append("只读读数，不探测；要真探额度请人手动跑 tools/pool_accounts.py probe。")
     return _result(
         "\n".join(lines), {"found": True, "ledger": str(ledger), "accounts": rows}, is_error=False

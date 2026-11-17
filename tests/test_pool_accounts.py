@@ -1275,6 +1275,11 @@ def test_read_surface_keys_unchanged(patched):
     这条红。★ 用 `>=` 不用 `==`：另一张在飞的卡（E118）已经在 `list_rows` 里追加
     了 `quota_kind` / `quota_at` / `health_state` / `consecutive_failures` 四个键，
     写 `==` 会与那张卡对撞；本卡要钉的是「health 三键没有被**本卡**带进只读面」。
+
+    ★ 卡 E118 落地后（T-AG628）：它按自己的判据确实加了 `health_state` 这一个键，
+    所以末一条断言从「整份 JSON 里不许出现 auth-expired」收紧成「**只许**出现在
+    `health_state` 那一格里，别的键一个新字都不许多说」—— 钉子的意图（health 不许
+    从这条只读面漏出去）不变，只是承认 E118 点名要的那一格。
     """
     eight = {
         "id",
@@ -1298,4 +1303,143 @@ def test_read_surface_keys_unchanged(patched):
     after = pa.list_rows(pa.load_ledger(patched), None, False)
     assert [sorted(r) for r in after] == [sorted(r) for r in before]
     assert all(set(row) >= eight for row in after)
-    assert "auth-expired" not in json.dumps(after, ensure_ascii=False)
+    spoken = [
+        {k: v for k, v in row.items() if k not in {"health_state", "consecutive_failures"}}
+        for row in after
+    ]
+    assert "auth-expired" not in json.dumps(spoken, ensure_ascii=False)
+    assert [row.get("health_state") for row in after if row.get("id") == "codearts-1"] == [
+        "auth-expired"
+    ], after
+
+
+# ------------------------------------------------------- 卡 E118：探过没探到，别洗成「未观测」
+
+KINDS = ("ok", "skipped", "uncertain", "failed", "not-supported", "unknown-platform")
+
+# 今日五号的形状（卡 E118 问题 1）：amount 全缺、samples 末条 skipped×3 + uncertain×1、
+# health.state 全 unknown。
+_PROBED_HEAD = '''
+[[account]]
+id = "{aid}"
+label = "{aid}"
+platform = "{plat}"
+state = "active"
+added_at = "2026-09-30"
+approved_models = ["{model}"]
+
+[account.credential]
+kind = "none"
+locator = ""
+
+[account.quota]
+unit = "credits"
+observed_at = "{at}"
+samples = [{{ at = "{at}", kind = "{kind}" }}]
+
+[account.health]
+state = "{health}"
+consecutive_failures = {fails}
+'''
+
+
+def _probed(aid="a-1", plat="codearts", model="huaweicloud-maas/GLM-5.2", kind="skipped",
+            at="2026-11-16T12:57:30+08:00", health="unknown", fails=1) -> str:
+    return _PROBED_HEAD.format(aid=aid, plat=plat, model=model, kind=kind, at=at,
+                              health=health, fails=fails)
+
+
+def _rows(tmp_path, text: str) -> list[dict]:
+    data = pa.load_ledger(_write(tmp_path, text))
+    return pa.list_rows(data, None, False)
+
+
+def test_unobserved_means_never_probed(patched):
+    """判据 1：「未观测」只留给账本里**从没探过**的号（卡 E118）。"""
+    data = pa.load_ledger(patched)
+    # ① 没有 samples（wb-1 连 observed_at 都没有）⇒ 恰好「未观测」，不许凭空补一对括号
+    wb = [a for a in data["account"] if a["id"] == "wb-1"][0]
+    assert pa._quota_text(wb) == "未观测"
+    # ② 有 amount 的号不进这一支
+    ca = [a for a in data["account"] if a["id"] == "codearts-1"][0]
+    assert not pa._quota_text(ca).startswith("未观测")
+    # ③ samples 末条缺 kind（照非法形状那条样本）⇒ 不抛、也不编结论码
+    shaped = data["account"][1]
+    shaped["quota"]["samples"] = [{"observed_at": "2026-11-16", "amount": 3}]
+    text = pa._quota_text(shaped)
+    assert text.startswith("探过但没记结论码")
+    for kind in KINDS:
+        assert kind not in text, (kind, text)
+
+
+def test_probe_kind_is_named_not_washed(patched, tmp_path, capsys):
+    """判据 2：探过但没探到的，判词必须说出最近一次的结论码与时刻（卡 E118）。"""
+    texts = {}
+    for kind in ("skipped", "uncertain", "failed", "not-supported"):
+        row = _rows(tmp_path, _probed(kind=kind, at="2026-11-16T13:00:08+08:00"))[0]
+        got = row["quota"]
+        assert got.startswith(kind), (kind, got)        # 以该 kind 打头
+        assert "2026-11-16T13:00:08+08:00" in got, got   # 含末条 at
+        assert "连败 1" in got, got                      # 念账本原值
+        texts[kind] = got
+    assert len(set(texts.values())) == 4, texts          # 四种不许洗成一句
+    # 今日五号的形状复刻：没有一条能叫「未观测」
+    five = (_probed(aid="c-1", kind="skipped")
+            + _probed(aid="c-2", plat="codebuddy", kind="uncertain",
+                      at="2026-11-16T13:00:08+08:00", fails=0)
+            + _probed(aid="c-3", plat="workbuddy", model="hunyuan/x")
+            + _probed(aid="c-4", plat="trae", model="trae/claude-sonnet")
+            + _probed(aid="c-5", plat="meoo", model="meoo/x", fails=0))
+    rows = _rows(tmp_path, five)
+    assert len(rows) == 5
+    for row in rows:
+        assert not row["quota"].startswith("未观测"), row
+    assert pa.main(["--ledger", str(_write(tmp_path, five)), "list", "--json"]) == pa.EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert len(payload["accounts"]) == 5
+    for row in payload["accounts"]:
+        assert not row["quota"].startswith("未观测"), row
+
+
+def test_list_json_carries_probe_verdict(patched, tmp_path):
+    """判据 3：机器块能分开四种，且只加键不改键（卡 E118）。"""
+    rows = _rows(tmp_path, _probed(kind="uncertain", fails=3))
+    row = rows[0]
+    # 既有 8 键一个不少（test_list_json_is_sorted_and_shaped 那条钉子仍绿）
+    assert set(row) >= {"id", "platform", "platform_known", "label", "state", "quota",
+                        "models", "credential"}
+    assert row["quota_kind"] == "uncertain"
+    assert row["quota_at"] == "2026-11-16T12:57:30+08:00"
+    assert row["health_state"] == "unknown"
+    assert row["consecutive_failures"] == 3
+    # 缺键 ⇒ None（不补 "" / "ok" / 0）
+    tail = "[account.health]\nstate = \"unknown\"\nconsecutive_failures = 3\n"
+    bare = _rows(tmp_path, _probed(aid="b-1", fails=3).replace(tail, ""))[0]
+    assert bare["health_state"] is None
+    assert bare["consecutive_failures"] is None
+
+
+def test_quota_text_unchanged_when_amount_present(patched):
+    """判据 4-a：amount 有值时判词逐字不变（卡 E118 不许顺手改好话）。"""
+    data = pa.load_ledger(patched)
+    ca = [a for a in data["account"] if a["id"] == "codearts-1"][0]
+    assert pa._quota_text(ca) == "12 credits（2026-10-25T09:00:00+08:00）"
+
+
+def test_health_state_is_never_invented(patched, tmp_path):
+    """判据 4-b：health.state 缺键不许编成 ok（卡 E118）。"""
+    tail = "[account.health]\nstate = \"unknown\"\nconsecutive_failures = 1\n"
+    text = _probed(aid="h-1").replace(tail, "")
+    assert "[account.health]" not in text  # 替换真命中了，否则这条断言是空的
+    rows = _rows(tmp_path, text)
+    assert rows[0]["health_state"] is None
+    assert "健康" not in rows[0]["quota"], rows[0]["quota"]
+
+
+def test_cli_list_does_not_truncate_verdict(patched, tmp_path, capsys):
+    """判据 4-c：列宽上限必须容得下最坏 61 字符那条（卡 E118）。"""
+    p = _write(tmp_path, _probed(aid="w-1", kind="unknown-platform", fails=12))
+    assert pa.main(["--ledger", str(p), "list"]) == pa.EXIT_OK
+    out = capsys.readouterr().out
+    assert "健康 unknown" in out, out      # 不是「健康 unkn」
+    assert "连败 12" in out, out
