@@ -86,7 +86,7 @@ job `133805837526` 的 `gates/enggate-logs/win-133805837526.log` 原文：
 
 ### 判据 6 · 七条新钉子
 
-新文件 `tests/test_web_live_json_retry.py`（打桩 `wlc.urllib.request.urlopen`，与既有文件同款装模块手法）：
+新文件 tests/test_web_live_json_retry.py（计划建）（打桩 `wlc.urllib.request.urlopen`，与既有文件同款装模块手法）：
 1. `test_json_retry_defaults_to_one_and_is_env_tunable` —— 不设 env ⇒ `json_retry() == 1`；`TF_WEB_LIVE_JSON_RETRY=3` ⇒ 3；`0` ⇒ 0。
 2. `test_junk_retry_value_falls_back_instead_of_going_infinite` —— `"abc"` / `"-1"` / `""` ⇒ 回 1；**上限也要有**：`"9999"` 不许真的打 9999 次（封顶写死并断言，或直接拒绝）。
 3. `test_a_status_code_is_never_retried` —— `urlopen` 恒抛 `HTTPError(404)` ⇒ `urlopen` 被调用 **1** 次、返回 `(404, None)`。
@@ -97,7 +97,7 @@ job `133805837526` 的 `gates/enggate-logs/win-133805837526.log` 原文：
 
 ### 判据 7 · 反向变异（真改、真跑、真还原 + sha256）
 
-三处各改一次，改完跑 `tests/test_web_live_json_retry.py`：
+三处各改一次，改完跑 tests/test_web_live_json_retry.py（计划建）：
 - A：把 `attempts = 1 + json_retry()` 改成 `attempts = 1` ⇒ 钉子 4 / 6 必红；
 - B：把 `except urllib.error.HTTPError` 那支挪进重试循环并重放 ⇒ 钉子 3 必红；
 - C：把 `retry_ok` 默认值改成 `True` ⇒ 钉子 5 必红。
@@ -107,7 +107,7 @@ job `133805837526` 的 `gates/enggate-logs/win-133805837526.log` 原文：
 ## 交付
 
 1. `tools/web_live_check.py`：`DEFAULT_JSON_RETRY` / `JSON_RETRY_ENV` / `json_retry()`（放在 `lan_retry()` 之后，:201 附近）、`_json_call` 加 `retry_ok` 参数与重试循环、判据 3 列的 6 个调用点标 `retry_ok=True`。
-2. `tests/test_web_live_json_retry.py`：判据 6 的七条钉子。
+2. tests/test_web_live_json_retry.py（计划建）：判据 6 的七条钉子。
 3. `docs/subsystems/` 下 web_live 那页补一句：慢机器上「一次没读到」由 `TF_WEB_LIVE_JSON_RETRY` 吸收，判据强度不变。（先 `python -X utf8 scripts/check_docs.py --mode report` 确认那页路径存在再写反引号。）
 4. 卡规格（本文件）。三片段由落地链 ② 按台账号 T-AG643 自动生成，本卡不手写。
 
