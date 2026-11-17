@@ -6318,3 +6318,17 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E136"
+task = "T-AG645"
+title = "状态钉子拿死秒数当判据：机器一忙就红，挡的是别人的落地"
+tree = ".wt/E136"
+spec = "复盘/卡/卡E136-状态钉子拿死秒数当判据.md"
+files = [
+  "tests/test_gate_lock.py",
+  "tests/test_wall_clock_assertions.py"
+]
+depends = []
+risk = "low"
+status = "pending"
