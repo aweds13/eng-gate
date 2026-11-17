@@ -12276,3 +12276,17 @@ evidence = [
   "test:test_landing_backlog_replay.py",
 ]
 gaps = "- 重放只认「本笔对台账恰好 -1/+1 行 status」；同提交里顺手改了同一张卡的 risk 或 spec（两行都落在同一个 hunk）就停手交人判 —— 现在没有这种提交，但攒批路径若把两个成员的翻账写进同一笔就会踩到。指针 tools/pool/landing.py:325-350- not-needed 那支只靠「重放后进库 blob sha 等于主树那版只换一行」裁决，没有单独区分「主树那侧先翻了同一张卡」与「卡树那侧本来就是 done」两类原因，日志里只印 flip 判定。指针 tools/pool/landing.py:377-387- 批模式（--batch）仍然整段停手：批成员的翻账清单要等 flip_batch_member_statuses 才知道，重放得先把它算出来才能用同一口径。指针 tools/pool/landing.py:2798-2799"
+
+[entries."T-AG640"]
+id = "T-AG640"
+title = "job_list与job_status的无来源读数：台账读不到就说判不了、没跑过的命令不再冒充来源"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/jobs.py",
+  "file:tools/pool_mcp.py",
+  "test:test_pool_mcp.py::test_job_list_says_backlog_unavailable",
+  "test:test_pool_mcp.py::test_job_status_payload_has_no_invented_command",
+  "test:test_pool_jobs.py::test_unjudged_state_is_not_a_dead_state",
+]
+gaps = "- 判据 1 说「新态字符串定为判不了」并让 jobs.py 末支分岔 —— 实现上 `_state_of_log` 的 `backlog_error` 也被做成 keyword-only（卡规格只写了 `scan_jobs` 的签名），因为它是同一条数据流的下一跳；两个函数都不传该参时一个字节不变。指针 `tools/pool/jobs.py`- 判据 3 要求正文不再出现 tools/wb_status.py 那串借来的命令：我删了 data 的 `command` / `exit_code` 两键、换成 `rendered_by`，但**没有**动 `read_log_lines` 与 `render_timeline` 的既有输出形状（正文主体逐字不变，只有首行那句来源改了）。指针 `tools/pool_mcp.py`- 判据 7 只允许给 tests/test_pool_mcp.py:365-390 补一份可读台账 fixture —— 我只加了 `_e116_backlog` 造的那份（至少一张卡），三条断言原文一个字没动；副作用是那条钉子的 `counts` 恒等式仍成立（判不了这一态只在台账读不到时出现）。指针 `tests/test_pool_mcp.py`"

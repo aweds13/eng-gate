@@ -34,8 +34,8 @@ r"""外包号池的 **MCP 只读面**（stdio · JSON-RPC 2.0）—— 换哪个
 | 工具 | 干什么 | 底层 |
 |---|---|---|
 | `pool_plan` | 队列与冲突域 | **import** `tools/pool/plan.py`（不再 shell 出去） |
-| `job_list` | 扫 `wb-*.jsonl` → 在跑/已判决/断了（看证据不猜） | **import** `tools/pool/jobs.py` |
-| `job_status(card)` | 时间线 + 仓库状态 | **import** `tools/pool/jobs.py`（读 log + 渲染） |
+| `job_list` | 扫 `wb-*.jsonl` → 五类态；台账读不到⇒判不了 | **import** `tools/pool/jobs.py` |
+| `job_status(card)` | 时间线 + 仓库状态 | **import** `tools/pool/jobs.py`（读 log + 进程内渲染） |
 | `job_result(card)` | 判决与摘要的**原文**（截断**明示总长**） | **import** `tools/pool/jobs.py` |
 | `lock_status` | 门禁锁：哪把、谁的、租约剩多久 | `gate_lock.py status`（唯一 subprocess，见下） |
 | `pool_models` | 批准集 ∩ 快照 + 按池允许集 + **按池判决** | **import** `tools/pool/models.py` |
@@ -399,7 +399,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "job_list",
         "description": "扫 gates/diag/wb-*.jsonl：在跑 / 已判决 / 断了 + 历史尝试 / 已被取代 / "
-        "台账已完结 / 非派活（看 mtime/大小/有无判决/台账）；每行末尾给在飞。",
+        "台账已完结 / 非派活（看 mtime/大小/有无判决/台账）；每行末尾给在飞。"
+        "台账读不到 ⇒ 判不了（这一源不可判，不是「已经结束」）。",
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -410,8 +411,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "job_status",
-        "description": "一张卡现在到哪了：在飞（活租约 / 判决 / 日志是否静默）+ 时间线 + 仓库状态；"
-        "没有 wb-<卡>.jsonl 时按落地链五类正式证据找（只读）。",
+        "description": "一张卡现在到哪了：在飞（活租约 / 判决 / 日志是否静默）+ 时间线"
+        "（进程内渲染，不起子进程）+ 仓库状态；没有 wb-<卡>.jsonl 时按落地链五类正式证据找。",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -956,22 +957,25 @@ def tool_pool_plan(
 EVIDENCE_KINDS: tuple[str, ...] = ("land", "trace_d", "changelog", "review", "trace_entry")
 
 
-def _backlog_cards(root: Path) -> dict[str, Any]:
-    """台账 `id -> Card`（`task/status` 都要用）。**读不到就回空字典，绝不抛**。
+def _backlog_cards(root: Path) -> tuple[dict[str, Any], str | None]:
+    """台账 `id -> Card` 与「读不到」的原文 —— `(cards, gap)`。**读不到就回空字典，绝不抛**。
 
     ★ `wb_plan.load_sharded_backlog` 在总表不存在时直接抛 `BacklogError`（实测原文
     `backlog 文件不存在：…`）—— 号池工具是只读面，台账不在只该让「证据链」少几类，
     不该让整个 `job_status` 变成一行 traceback。
+
+    ★ 卡 E132：**不抛 ≠ 不说**。第二个返回值 `gap` 是那句原文（形如 `BacklogError: <原文>`），
+    读得到时是 `None` —— 调用方据此把「这一源不可判」摆到正文与 data 上，而不是洗成「没有台账」。
     """
     try:
         backlog = wb_plan.load_sharded_backlog(
             root / "docs" / "workbacklog.toml", root / "docs" / "backlog"
         )
-        return dict(backlog.by_id())
-    except Exception as exc:  # noqa: BLE001 —— 台账坏了/不在/格式变了，一律当「没有台账」
-        print(f"[job_status] 台账读不到，按没有台账继续：{type(exc).__name__}: {exc}",
-              file=sys.stderr)
-        return {}
+        return dict(backlog.by_id()), None
+    except Exception as exc:  # noqa: BLE001 —— 台账坏了/不在/格式变了，都不许把工具打成 traceback
+        gap = f"{type(exc).__name__}: {exc}"
+        print(f"[job_list/job_status] 台账读不到（这一源不可判）：{gap}", file=sys.stderr)
+        return {}, gap
 
 
 def _rel(root: Path, path: Path) -> str:
@@ -1027,10 +1031,15 @@ def formal_evidence(root: Path, card: str, task: str | None) -> list[dict[str, s
 
 
 def tool_job_list(arguments: dict[str, Any], root: Path = ROOT) -> tuple[str, dict[str, Any], bool]:
-    """扫 `gates/diag/wb-*.jsonl` —— 在跑 / 已判决 / 断了（**判断依据都念出来**）。"""
+    """扫 `gates/diag/wb-*.jsonl` —— **判断依据都念出来**。
+
+    ★ 卡 E132：态名**只从 `scan_jobs` 的行里取**，这里一个都不许硬写 ——
+    硬写一个名字，等于在工具里又判了一次状态（判据 4）。
+    """
     diag = diag_dir(root)
-    statuses = {cid: c.status for cid, c in _backlog_cards(root).items()}
-    rows = scan_jobs(diag, backlog=statuses)
+    cards, backlog_gap = _backlog_cards(root)
+    statuses = {cid: c.status for cid, c in cards.items()}
+    rows = scan_jobs(diag, backlog=statuses, backlog_error=backlog_gap)
     counts: dict[str, int] = {}
     for row in rows:
         counts[row["state"]] = counts.get(row["state"], 0) + 1
@@ -1042,6 +1051,11 @@ def tool_job_list(arguments: dict[str, Any], root: Path = ROOT) -> tuple[str, di
     if not rows:
         head += "\n（一个 wb-*.jsonl 都没有 —— 我没有假装有）"
     lines = [head]
+    if backlog_gap:
+        lines.append(
+            f"台账读不到（{backlog_gap}）—— 台账那一路不可判：下面每一行的态名只按日志与判决算，"
+            "台账那一维没有结论。"
+        )
     for row in rows:
         verdict = f"判决 {row['verdict']}" if row["has_verdict"] else "无判决"
         if row["state"] == "非派活":
@@ -1055,7 +1069,13 @@ def tool_job_list(arguments: dict[str, Any], root: Path = ROOT) -> tuple[str, di
             f"  {row['size_bytes']}B  mtime={row['mtime']}（距今 {row['age_seconds']:.0f}s）"
             f"  {verdict}  —— {row['why']}｜在飞：{'是' if fly else '否'}"
         )
-    data = {"diag_dir": diag.as_posix(), "count": len(rows), "counts": counts, "jobs": rows}
+    data = {
+        "diag_dir": diag.as_posix(),
+        "count": len(rows),
+        "counts": counts,
+        "jobs": rows,
+        "backlog_unavailable": backlog_gap,
+    }
     return _result("\n".join(lines), data, is_error=False)
 
 
@@ -1065,9 +1085,11 @@ def tool_job_list(arguments: dict[str, Any], root: Path = ROOT) -> tuple[str, di
 def tool_job_status(
     arguments: dict[str, Any], root: Path = ROOT
 ) -> tuple[str, dict[str, Any], bool]:
-    """一张卡现在到哪了 —— **import** `tools/pool/jobs.py` 读 log 并渲染（不再起进程）。
+    """一张卡现在到哪了 —— **import** `tools/pool/jobs.py` 读 log 并在**进程内**渲染。
 
-    ★ `command` 字段仍给 CLI 说法；输出形状与 `wb_status.py <log> --repo` **逐字一致**。
+    ★ 这里**没有**子进程，也**没有**命令：data 里的 `rendered_by` 说的是真话
+    （在进程内 import `pool.jobs.render_timeline` 渲染），
+    不给 `command` / `exit_code` 那种没跑过的字段。
     """
     card = str(arguments.get("card") or "").strip()
     if not card:
@@ -1082,12 +1104,17 @@ def tool_job_status(
         # ★ 卡 E116 判据 2：没有 wb-<卡>.jsonl **不等于**「还没派过」—— 真树里 200+ 张 done 的卡
         #   是走落地链落的（gates/diag/land-<卡>*.log / docs/traceability.d / gates/review/…）。
         #   五类证据按写死的顺序 first-hit；台账读不到只少几类，不许抛。
-        cards = _backlog_cards(root)
+        cards, backlog_gap = _backlog_cards(root)
         meta = cards.get(card)
         task = getattr(meta, "task", None)
         evidence = formal_evidence(root, card, task)
         fly, fly_why = in_flight(diag, card)
         head = f"在飞：{'是' if fly else '否'} —— {fly_why}"
+        if backlog_gap:
+            head += (
+                f"\n台账读不到（{backlog_gap}）—— 台账那一路不可判；"
+                "下面「没有」只说日志与五类正式证据里都找不到，台账写没写过这张卡我不知道。"
+            )
         base = {
             "card": card,
             "found": False,
@@ -1097,6 +1124,7 @@ def tool_job_status(
             "in_flight_why": fly_why,
             "evidence": evidence,
             "task": task,
+            "backlog_unavailable": backlog_gap,
         }
         if evidence:
             hit = evidence[0]
@@ -1123,22 +1151,21 @@ def tool_job_status(
         )
         return _result(text, base, is_error=True)
     log = logs[-1]
-    argv = [sys.executable, "-X", "utf8", "tools/wb_status.py", log.name, "--repo"]
-    command = _cmd_text(argv)
     lines = read_log_lines(log)
     timeline, summary = parse_events(lines)
     body = render_timeline(log.name, timeline, summary, tail=0, repo=True, git_cwd=diag).strip()
     fly, fly_why = in_flight(diag, card)
+    rendered_by = "在进程内 import pool.jobs.render_timeline 渲染，没有起子进程"
     text = (
         f"在飞：{'是' if fly else '否'} —— {fly_why}\n"
-        f"卡 {card} 的状态（job_status）—— 来自 `{command}`（cwd={diag.as_posix()}）：\n{body}"
+        f"卡 {card} 的状态（job_status）—— {rendered_by}"
+        f"（log={log.name}，cwd={diag.as_posix()}）：\n{body}"
     )
     data = {
         "card": card,
         "found": True,
         "log": log.name,
-        "command": command,
-        "exit_code": 0,
+        "rendered_by": rendered_by,
         "in_flight": fly,
         "in_flight_why": fly_why,
     }

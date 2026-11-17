@@ -52,7 +52,10 @@ for _rel in ("tools", "scripts"):
 import gen_pool_readme as gpr  # noqa: E402 —— scripts/ 已在 sys.path 上
 import wb_dash  # noqa: E402 —— tools/ 已在 sys.path 上
 import wb_retention as rt  # noqa: E402
-from pool import jobs  # noqa: E402
+from pool import (  # noqa: E402
+    jobs,
+    registry,
+)
 
 #: 这四份文件里，除了 `tools/pool/jobs.py`，谁也不许自己抄一份名单。
 READERS = (
@@ -651,3 +654,59 @@ def test_card_resolution_has_one_definition(tmp_path: Path) -> None:
                     holders.add(node.name)
                     break
     assert len(holders) <= 1, f"变体后缀字面量出现在这些函数里：{sorted(holders)}"
+
+# ==================================================== 卡 E132：说不出来源的读数不许说
+
+
+def test_scan_jobs_unchanged_when_backlog_error_absent(tmp_path: Path) -> None:
+    """★ 判据 2：`backlog_error` 不传时，`scan_jobs` 的行与 why 文案**逐字不变**（11 个键）。
+
+    判据 1 加了一条「台账读不到 ⇒ 判不了」的分岔 —— 这条钉子就是那道闸：
+    分岔只许在「台账读不到」时开，平时连键的顺序都不许动。
+    """
+    diag = _diag(tmp_path)
+    now = 1_700_000_000.0
+    _touch(diag / "wb-001.jsonl")
+    rows = jobs.scan_jobs(diag, now=now)
+    assert len(rows) == 1, rows
+    row = rows[0]
+    assert list(row) == [
+        "card",
+        "card_kind",
+        "log",
+        "mtime",
+        "age_seconds",
+        "size_bytes",
+        "has_verdict",
+        "verdict",
+        "has_report",
+        "state",
+        "why",
+    ], list(row)
+
+    _state, expected_why = jobs.classify_job_state(row["age_seconds"], False)
+    assert row["state"] == "在跑", row
+    assert row["why"] == expected_why, (row["why"], expected_why)
+    assert "判不了" not in row["state"]
+
+
+def test_unjudged_state_is_not_a_dead_state(tmp_path: Path) -> None:
+    """★ 判据 5：「判不了」是**这一源不可判**，不是「这一轮已经结束」—— 它不许进 `DEAD_STATES`。
+
+    反例会长什么样：为了省事把「判不了」塞进 `DEAD_STATES`，于是台账一坏，
+    号池就认为所有在跑的工人都「已经结束」，开始发新活、判死租约。
+    """
+    assert "判不了" not in jobs.DEAD_STATES
+    assert jobs.is_dead_state("判不了") is False
+    assert registry._DEAD_STATES == jobs.DEAD_STATES
+
+    for state in ("断了", "已判决", "已被取代", "台账已完结", "历史尝试"):
+        assert jobs.is_dead_state(state) is True, state
+    for state in ("在跑", "非派活"):
+        assert jobs.is_dead_state(state) is False, state
+
+    diag = _diag(tmp_path)
+    _touch(diag / "wb-001.jsonl")
+    rows = jobs.scan_jobs(diag, now=1_700_000_000.0, backlog_error="BacklogError: 试")
+    assert [row["state"] for row in rows] == ["判不了"], rows
+    assert jobs.is_dead_state(rows[0]["state"]) is False, rows[0]

@@ -29,6 +29,11 @@
 - 认领用 merge-base HEAD REBASE_HEAD 的 -U0 diff，必须恰好一减一增且两侧只差 status 的值、新值是 done；多了少了都停手
 - 重放结果比的是**进库那一版**（git hash-object 算出的 blob sha），不是工作区字节：本仓 core.autocrlf=true，库里 LF / 工作区 CRLF，比工作区字节会永远不等
 - 台账不进 DERIVED / RESOLVABLE：它是唯一权威，只能理解这一处改动，不能重算；批模式与老调用点一字不变
+## 2026-11-17 T-AG640 job_list/job_status 的无来源读数：台账读不到就说判不了，没跑过的命令不再冒充来源
+- `tools/pool/jobs.py` 的 `scan_jobs` 与 `_state_of_log` 增 keyword-only `backlog_error`：台账读不到 ⇒ 末支产态「判不了」并在 why 里同时摆出台账原因与原始三态读数；`DEAD_STATES` 一个字不动，「判不了」不是「结束」。
+- `tools/pool_mcp.py` 的 `_backlog_cards` 改成返回 `(cards, gap)`，stderr 前缀从写死的 `[job_status]` 改成 `[job_list/job_status]`；`tool_job_list` 的 data 增 `backlog_unavailable` 并把它摆到正文首段。
+- `tool_job_status` 的有日志支删掉凭空写的 `command` 与 `exit_code`，换成 `rendered_by`（真话：进程内 import `pool.jobs.render_timeline` 渲染，没起子进程）；docstring、`tools/list` 描述与模块表同步。
+- 无日志支在台账读不到时把「还没派过」后面补上「台账读不到」这句 —— 仍是 is_error=True，三支结构不动。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

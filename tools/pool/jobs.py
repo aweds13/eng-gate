@@ -7,7 +7,7 @@ r"""作业状态 / 扫日志（从 `tools/wb_status.py` 与 `tools/pool_mcp.py` 
 | 组 | 函数 | 干什么 |
 |---|---|---|
 | 读日志 | `parse_events`/`clip`/`tool_line`/`message_of` | 把 stream-json 渲成时间线 + 摘要 |
-| 状态分桶 | `classify_job_state`/`scan_jobs`/`is_dead_state` | 三态 + 五类（卡 E116） |
+| 状态分桶 | `classify_job_state`/`scan_jobs`/`is_dead_state` | 三态 + 五类（E116）+判不了（E132） |
 | 产物定位 | `diag_dir`/`card_artifacts`/`card_of` | 精确匹配文件名（宽 glob 会串卡） |
 | 口径 | `is_card_log`/`non_card_reason` | 哪几个 `wb-*.jsonl` **不是卡**（全仓唯一定义，卡 E74） |
 | 渲染 | `render_timeline`/`render_json`/`repo_state` | 拼成 `wb_status.py` 的那段人话 |
@@ -16,6 +16,8 @@ r"""作业状态 / 扫日志（从 `tools/wb_status.py` 与 `tools/pool_mcp.py` 
 状态桶（卡 E116）：在跑 / 已判决 / 断了（三态，`classify_job_state`）+ 历史尝试 / 已被取代 /
 台账已完结 / 非派活（由 `scan_jobs` 的证据判出来）；`is_dead_state` 是「这一轮已经结束」的统一口径，
 `pool/registry.py` 判死租约也引用它。
+★ 卡 E132 再加一态：**台账读不到 ⇒ 判不了**（`scan_jobs(backlog_error=…)`）—— 那是「这一源不可判」，
+不是「这一轮已经结束」，所以它**不进** `DEAD_STATES`；判不了的那一行仍要把「三态读数是断了」念出来。
 ★ 阈值 (`STALL_SECONDS` / `HEARTBEAT_SECONDS`) 与 `tools/wb_dispatch.py` **同一口径**，由
 `tests/test_pool_mcp.py::test_thresholds_match_the_dispatch_tool` 钉住（不另立一套）。
 ★ 只读：本模块不写任何文件；`repo_state()` 只跑 `git status/log` 两条**只读**命令。
@@ -378,6 +380,8 @@ def _state_of_log(
     has_verdict: bool,
     canonical: dict[str, list[Path]],
     backlog: Mapping[str, str] | None,
+    *,
+    backlog_error: str | None = None,
 ) -> tuple[str, str]:
     """一条日志的态 —— 优先级**写死在这里**（与卡 E116 判据 1 逐条对应）：
 
@@ -385,6 +389,8 @@ def _state_of_log(
     ③ 同卡另有规范名的轮次带 `.verdict.txt` ⇒ 已被取代；
     ④ 台账里这张卡 `status == "done"` ⇒ 台账已完结；⑤ 其余 ⇒ 交给三态判据。
     「非派活」由 `non_card_reason` 先判，**优先于**上面五类（旁账不是卡）。
+    ★ 卡 E132：`backlog_error` 非空（台账读不到）⇒ 末支改判「判不了」—— 台账那一路不可判，
+    但**不许**把三态读数当结论吞掉：why 里同时写台账为什么读不到、以及原始三态读的是什么。
     """
     reason = non_card_reason(log.name)
     if reason:
@@ -398,16 +404,29 @@ def _state_of_log(
             return "已被取代", f"同卡有别的轮次已判决（`{other.name}`）"
     if backlog is not None and backlog.get(card) == "done":
         return "台账已完结", "台账里这张卡已经 done，日志留在盘上"
-    return classify_job_state(age, has_verdict)
+    state, why = classify_job_state(age, has_verdict)
+    if backlog_error:
+        return "判不了", (
+            f"台账读不到（{backlog_error}）⇒ 这一源不可判；"
+            f"原始三态读数是「{state}」（{why}），但那不是结论"
+        )
+    return state, why
 
 
 def scan_jobs(
-    diag: Path, now: float | None = None, backlog: Mapping[str, str] | None = None
+    diag: Path,
+    now: float | None = None,
+    backlog: Mapping[str, str] | None = None,
+    *,
+    backlog_error: str | None = None,
 ) -> list[dict]:
     """扫 `gates/diag/wb-*.jsonl`，每条给出归属卡 / 归属类 / mtime / 大小 / 有无判决 + 一态判断。
 
     `backlog` 是 `{卡号: status}`（判据 1 的 ④ 要靠它）。**不给就跳过那一条** —— 三态口径、
     既有键、既有 why 文案都不变（`tests/test_pool_lib.py` 那条三键钉子就是这么活的）。
+    `backlog_error` 是「台账为什么读不到」的原文（卡 E132）。**不给 ⇒ 一个字节都不变**；
+    给了 ⇒ 末支（本该交给三态判据的那一支）改判「判不了」，键仍是那 11 个，
+    只是 `state`/`why` 换了话。
     """
     if not diag.exists():
         return []
@@ -429,7 +448,9 @@ def scan_jobs(
         report = log.with_suffix(".report.md")
         has_verdict = verdict.exists()
         card, kind = card_of_log(log.name)
-        state, why = _state_of_log(log, card, kind, age, has_verdict, canonical, backlog)
+        state, why = _state_of_log(
+            log, card, kind, age, has_verdict, canonical, backlog, backlog_error=backlog_error
+        )
         rows.append({
             "card": card,
             "card_kind": kind,

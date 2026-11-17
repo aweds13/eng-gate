@@ -17,6 +17,7 @@ r"""外包号池 MCP 只读面（`tools/pool_mcp.py` · 卡 105 · 台账号 T-G
 
 from __future__ import annotations
 
+import inspect
 import io
 import json
 import os
@@ -385,6 +386,9 @@ def test_job_list_classifies_by_evidence(tmp_path: Path) -> None:
     assert rows["102"]["age_seconds"] > pool_mcp.STALL_SECONDS
     assert rows["103"]["has_verdict"] is True
 
+    # ★ 卡 E132：这棵树里没有台账 ⇒ 台账那一路「判不了」；要让这条钉子问的还是「按证据分态」，
+    #   得给它一份**读得到**的台账（挂在别的卡上，不影响 101/102/103 三行）。
+    _e116_backlog(tmp_path, [("Z9", "T-Z9", "doing")])
     text, data, _ = pool_mcp.tool_job_list({}, root=tmp_path)
     assert data["counts"] == {"在跑": 1, "断了": 1, "已判决": 1}
     assert "在跑" in text and "断了" in text and "已判决" in text
@@ -1192,3 +1196,115 @@ def test_job_status_first_line_says_in_flight(tmp_path: Path) -> None:
     text2, data2, _is_error2 = pool_mcp.tool_job_status({"card": "888"}, root=tmp_path)
     assert re.match(r"^在飞：(是|否)", text2.splitlines()[0]), text2
     assert data2["in_flight"] is False, data2
+
+# ==================================================== 卡 E132：说不出来源的读数不许说
+
+
+def _e132_diag(root: Path) -> Path:
+    """建一棵只有 `gates/diag/` 的树（**没有**台账 —— 就是「台账读不到」的现场）。"""
+    diag = root / "gates" / "diag"
+    diag.mkdir(parents=True, exist_ok=True)
+    return diag
+
+
+def test_job_list_says_backlog_unavailable(tmp_path: Path) -> None:
+    """★ 判据 1：台账读不到 ⇒ 那一行是**判不了**（这一源不可判），不是「断了」也不是「台账已完结」。
+
+    今天错在哪：`_backlog_cards` 把读不到洗成 `{}`，`scan_jobs` 只看见「没有台账」，
+    于是同一行在客户端眼里与「台账里确实没有这张卡」长得一模一样。
+    """
+    diag = _e132_diag(tmp_path)
+    now = 1_700_000_000.0
+    stale = diag / "wb-X1.jsonl"
+    stale.write_text('{"type":"assistant"}\n', encoding="utf-8")
+    old = now - pool_mcp.STALL_SECONDS - 60
+    os.utime(stale, (old, old))
+
+    text, data, is_error = pool_mcp.tool_job_list({}, root=tmp_path)
+    gap = data["backlog_unavailable"]
+    assert isinstance(gap, str) and gap and "BacklogError" in gap, gap
+    assert "台账读不到" in text, text
+    assert data["jobs"][0]["state"] == "判不了", data["jobs"][0]
+    assert data["jobs"][0]["state"] not in ("断了", "台账已完结")
+    assert data["counts"] == {"判不了": 1}, data["counts"]
+    assert is_error is False
+
+    # 侧面：台账也坏、又没有日志的那棵树里，job_status 也不许把「台账读不到」咽了
+    #   （有日志时走的是时间线支，那条支跟台账无关）。
+    nolog = _e132_diag(tmp_path / "nolog")
+    text2, _data2, _err2 = pool_mcp.tool_job_status({"card": "X1"}, root=nolog.parent)
+    assert "台账读不到" in text2, text2
+
+    # 台账读得到时，这个字段必须是 `None`（不是空串 —— 别把「没有 gap」写成「有 gap」）。
+    good = tmp_path / "good"
+    _e116_backlog(good, [("X1", "T-X1", "doing")])
+    _text3, data3, _err3 = pool_mcp.tool_job_list({}, root=good)
+    assert data3["backlog_unavailable"] is None, data3
+
+
+def test_job_list_unchanged_when_backlog_readable(tmp_path: Path) -> None:
+    """★ 判据 2：台账读得到时，job_list 的读数**一个字都不变**（复刻改判不了之前的现场）。"""
+    diag = _e132_diag(tmp_path)
+    now = 1_700_000_000.0
+    fresh = diag / "wb-101.jsonl"
+    fresh.write_text('{"type":"assistant"}\n', encoding="utf-8")
+    stale = diag / "wb-102.jsonl"
+    stale.write_text('{"type":"assistant"}\n', encoding="utf-8")
+    judged = diag / "wb-103.jsonl"
+    judged.write_text('{"type":"result"}\n', encoding="utf-8")
+    (diag / "wb-103.verdict.txt").write_text("ok\n", encoding="utf-8")
+    old = now - pool_mcp.STALL_SECONDS - 60
+    os.utime(stale, (old, old))
+    _e116_backlog(tmp_path, [("Z9", "T-Z9", "doing")])
+
+    text, data, is_error = pool_mcp.tool_job_list({}, root=tmp_path)
+    assert data["counts"] == {"在跑": 1, "断了": 1, "已判决": 1}, data["counts"]
+    assert data["backlog_unavailable"] is None
+    assert "台账读不到" not in text, text
+    assert [(row["card"], row["state"]) for row in data["jobs"]] == [
+        ("101", "在跑"),
+        ("102", "断了"),
+        ("103", "已判决"),
+    ]
+    assert is_error is False
+
+
+def test_job_status_payload_has_no_invented_command(tmp_path: Path) -> None:
+    """★ 判据 3：有日志那一支**没有** `command` / `exit_code` —— 没起过子进程，就不许给退出码。"""
+    diag = _e132_diag(tmp_path)
+    (diag / "wb-777.jsonl").write_text('{"type":"assistant"}\n', encoding="utf-8")
+
+    text, data, is_error = pool_mcp.tool_job_status({"card": "777"}, root=tmp_path)
+    assert "command" not in data and "exit_code" not in data, sorted(data)
+    assert "进程内" in data["rendered_by"], data["rendered_by"]
+    assert "render_timeline" in data["rendered_by"], data["rendered_by"]
+    assert "tools/wb_status.py" not in text, text
+    assert "进程内" in text, text
+    assert is_error is False and data["found"] is True
+
+    src = inspect.getsource(pool_mcp.tool_job_status)
+    assert "_run(" not in src
+    assert '"exit_code"' not in src
+
+
+def test_job_list_takes_state_from_jobs_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ 判据 4：态名只在 `pool.jobs` 判一次；`tool_job_list` 只负责把行里的态名念出来。"""
+    diag = _e132_diag(tmp_path)
+    (diag / "wb-901.jsonl").write_text('{"type":"assistant"}\n', encoding="utf-8")
+    # 台账读得到（挂在别的卡上）—— 否则这一行会先被「判不了」拦下，问不到三态判据。
+    _e116_backlog(tmp_path, [("Z9", "T-Z9", "doing")])
+
+    from pool import jobs  # noqa: PLC0415 —— 只在换判据时 import，别污染模块头
+
+    def fake_classify(age: float, has_verdict: bool) -> tuple[str, str]:
+        return "夹具态", "假的"
+
+    monkeypatch.setattr(jobs, "classify_job_state", fake_classify)
+    _text, data, _is_error = pool_mcp.tool_job_list({}, root=tmp_path)
+    assert data["counts"] == {"夹具态": 1}, data["counts"]
+    assert data["jobs"][0]["state"] == "夹具态", data["jobs"][0]
+
+    # 源码半：工具里不许再出现一个硬写的态名（那等于在工具里又判了一次）。
+    assert "断了" not in inspect.getsource(pool_mcp.tool_job_list)
