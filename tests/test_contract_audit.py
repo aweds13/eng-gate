@@ -11,15 +11,18 @@
 | ④ | 源文件不存在 / 锚点找不到 ⇒ 优雅处理并说清 | 坏文档让工具崩 |
 | ⑤ | ★ **反例**：判据名写错一个字 ⇒ 必须红 | 证明它真去**执行**，不是只看字符串像不像 |
 | ⑥ | ★ **真仓**对账：10 judge_ok / 3 no_judge（如实） | 美化「只有话」的条数 |
-| ⑦ | ★ E96：CX-01 的**合成判据**真能证那句话（`skills/` 有无都绿） | 只核格式 ⇒ 证不了那句话 |
+| ⑦ | ★ E96：门表构建**不读** `skills/`（`skills/` 有无都绿） | 只核格式 ⇒ 证不了那句话 |
+| ⑧ | ★ E124：删整棵 `skills/` 后六条核心命令仍绿；已知红命令必须报红 | 判据只等于 rc=0 ⇒ 假绿 |
 
 ★ 只读：这里不写真仓的 CONTRACTS（临时契约段都落在 `tmp_path`），也不跑门禁。
 """
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -302,18 +305,21 @@ def test_card_e96_audit_gate_table_builds_without_skills(tmp_path: Path) -> None
 
 
 def test_card_e96_cx01_judge_is_the_synthetic_one_not_the_format_checker() -> None:
-    """★ 卡 E96 判据 5 的**绑定钉子**：CX-01 挂的判据必须还是那条合成用例。
+    """★ 卡 E96 判据 5 的**绑定钉子**（卡 E124 改指后仍钉三件事）。
 
-    没有这一条，判据 5 就只有「用例自己绿」—— 把 `judge` 改回旧形态（只核 SKILL.md 格式）
-    照样全绿，改了个寂寞。这里钉死三件事：种类是 pytest、点的是本卡那条用例、
-    **不指向 `check_skills`**（旧形态的名字里带它）。
+    CX-01 挂的判据必须仍是一条**真跑**的用例。
+
+    没有这一条，判据格就只有「用例自己绿」—— 把 `judge` 改回旧形态（只核 SKILL.md 格式）
+    照样全绿，改了个寂寞。这里钉死三件事：种类是 pytest、点的是**那条删 skills/ 跑核心命令**的用例、
+    **不指向 `check_skills`**（旧形态的名字里带它）。卡 E124 把指针从 E96 那条合成用例
+    改指自己那条（合成树只证「门表构建不读 skills/」，证不了「删掉之后仍然可用」）。
     """
     cx = next(c for c in ca.CONTRACTS if c.cid == "CX-01")
     assert cx.judge is not None, "CX-01 不许退回只有话"
     kind, test_id = cx.judge[0], cx.judge[1]
     assert kind == "pytest", f"CX-01 判据应换成 pytest，实 {kind}"
     assert "check_skills" not in test_id, f"退回只核格式的旧判据了：{test_id}"
-    assert test_id.endswith("test_card_e96_audit_gate_table_builds_without_skills"), test_id
+    assert test_id.endswith("test_card_e124_core_skeleton_runs_without_skills"), test_id
     # 指到的用例真在这个文件里（pytest 点名收不到时会 rc=4，落成 judge_red —— 但那太晚）
     rel, _, name = test_id.partition("::")
     body = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
@@ -333,6 +339,136 @@ def test_card_e96_audit_gate_table_is_the_same_when_skills_exists(tmp_path: Path
     assert json.loads(without[1].strip().splitlines()[-1])["audit"] == json.loads(
         with_skills[1].strip().splitlines()[-1]
     )["audit"]
+
+
+# ------------------------------------------- ⑧ 卡 E124：CX-01 的真判据
+
+
+#: 门表构建（CORE 第 6 条）：把 `tools`/`scripts`/`.` 插上 `sys.path` 再 import `run_gates`。
+#: ★ 只打印门名列表：它要证的是「构建得出来、且不读 `skills/`」，不是「跟门表自己比」。
+_GATES = (
+    "import sys\n"
+    "sys.path[:0] = ['tools', 'scripts', '.']\n"
+    "import run_gates as rg\n"
+    "print([n for n, _ in rg.build_jobs(False, False, 'audit')])\n"
+)
+
+PY = sys.executable
+
+#: 删掉 `skills/` 之后必须**仍然绿、且输出里不含 `skills/`** 的六条核心命令。
+#: ★ 只收这六条：`audit` / `docs` / `contract_doc_table` / `check_layers` / `pytest` 在 G 树里是红的
+#:   （卡 E124 问题 4 的五处）—— 塞进来就等于把门焊死，那是路线 (b) 的活。
+#: ★ 判据里 `skills/` 必须带斜杠：`tools/wb_plan.py check` 在任何树里都有一行 `B-SKILLS` 批次名，
+#:   裸 `skills` 会假阳 ⇒ 那条命令因此不进 CORE。
+CORE: tuple[tuple[str, list[str]], ...] = (
+    (
+        "入口 import",
+        [PY, "-X", "utf8", "-c", "import timeflow, timeflow.app.main; print('import ok')"],
+    ),
+    ("CLI --help", [PY, "-X", "utf8", "framework/cli/main.py", "--help"]),
+    ("invariants", [PY, "-X", "utf8", "tools/wb_invariants.py", "--check"]),
+    ("audit_titles", [PY, "-X", "utf8", "scripts/audit_titles.py", "--check"]),
+    ("derived_docs", [PY, "-X", "utf8", "scripts/check_derived_docs.py", "--check"]),
+    ("门表构建", [PY, "-X", "utf8", "-c", _GATES]),
+)
+
+
+def _copy_tracked(tmp_path: Path) -> int:
+    """把**工作区里 git 看得见的**整棵树（跟踪的 + 未跟踪但不被忽略的）逐条 copyfile 到
+    tmp_path，回复制条数。
+
+    ★ 用 `git ls-files -c -o --exclude-standard`，不用 `git archive HEAD`：用例跑在工作区里，
+      archive 取不到未提交的改动。★ 为什么要带未跟踪的：落地链 ② 会先写三份未跟踪片段，
+      `docs/INDEX.md` 的篇数是按**磁盘上的文件**数的 —— 只拷跟踪的那份就少一篇，
+      于是这条钉子红在「复制不全」而不是「骨架不可用」（卡 E124 实测：421 vs 422）。
+    """
+    lst = subprocess.run(  # noqa: S603 —— argv 受控（本仓路径），非外部输入
+        ["git", "-C", str(ROOT), "ls-files", "-c", "-o", "--exclude-standard", "-z"],
+        capture_output=True,
+        check=True,
+        **NO_WINDOW,
+    )
+    rels = [b.decode("utf-8", "replace") for b in lst.stdout.split(b"\0") if b]
+    for rel in rels:
+        dst = tmp_path / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / rel, dst)
+    return len(rels)
+
+
+def _tree_without_skills(tmp_path: Path) -> Path:
+    """复制整棵被跟踪树、**先证明拷全了**再删 `skills/`、最后 git init（判据 1 / 2 共用）。"""
+    n = _copy_tracked(tmp_path)
+    assert n > 2000, f"只复制了 {n} 个被跟踪文件 —— 没拷全就证明不了那句话"
+    assert (tmp_path / "skills" / "README.md").is_file(), "拷贝里没有 skills/README.md ⇒ 先别删"
+    shutil.rmtree(tmp_path / "skills")
+    assert not (tmp_path / "skills").exists(), "skills/ 没删掉"
+    subprocess.run(  # noqa: S603 —— argv 受控（本仓路径），非外部输入
+        ["git", "-C", str(tmp_path), "init", "-q"], check=True, **NO_WINDOW
+    )
+    return tmp_path
+
+
+def _run_core(
+    root: Path, extra: tuple[tuple[str, list[str]], ...] = ()
+) -> tuple[list[str], list[tuple[str, int, int, int, int]]]:
+    """在 `root` 里逐条跑 CORE（+ `extra`），回 (bad, 读数)。
+
+    读数每条 = (名字, rc, 输出行数, 含 `skills/` 的行数, 毫秒)。
+    判定式只有两个：`rc != 0` 或输出里出现 `skills/` ⇒ 记进 bad。
+    """
+    bad: list[str] = []
+    readings: list[tuple[str, int, int, int, int]] = []
+    for name, argv in (*CORE, *extra):
+        t0 = time.perf_counter()
+        r = subprocess.run(  # noqa: S603 —— argv 受控（本仓路径），非外部输入
+            argv,
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+            **NO_WINDOW,
+        )
+        ms = int((time.perf_counter() - t0) * 1000)
+        out = (r.stdout or "") + (r.stderr or "")
+        lines = len(out.splitlines())
+        hits = [ln for ln in out.splitlines() if "skills/" in ln]
+        readings.append((name, r.returncode, lines, len(hits), ms))
+        if r.returncode != 0 or hits:
+            bad.append(
+                f"{name}: rc={r.returncode}、{lines} 行、含 skills/ 的行 {len(hits)} 条（{ms} ms）"
+            )
+    return bad, readings
+
+
+def test_card_e124_core_skeleton_runs_without_skills(tmp_path: Path) -> None:
+    """★ 卡 E124 · CX-01 的**真判据**：删掉**整棵** `skills/` 之后，
+    六条核心命令仍绿、且不提到 `skills/`。
+
+    这是 CX-01 那句话（`skills/README.md:4`）能验的最大形态：不是 9 个文件的合成树，
+    而是**整棵被跟踪树减掉 `skills/`**。★ 反例意义见下一条：同一套 harness 对一条已知红的
+    命令必须报红 —— 否则这条只是「又一个恒绿的用例」，正是本卡要揭的病（judge_ok 只等于 rc=0）。
+    """
+    root = _tree_without_skills(tmp_path)
+    bad, readings = _run_core(root)
+    assert not bad, "删掉 skills/ 之后核心骨架仍须可用：\n" + "\n".join(bad) + f"\n读数：{readings}"
+
+
+def test_card_e124_core_probe_bites_on_a_known_red_command(tmp_path: Path) -> None:
+    """★ 卡 E124 判据 2 · 判据**能咬**：同一套 harness 里塞一条已知会红的命令，必须报红。
+
+    实测依据（G 树）：`scripts/audit_progress.py --all` ⇒ `rc=1`、138 条 `[FAIL]`，
+    首条 T-AG407 断言不成立 → 文件 `skills/`…。它红是因为 `skills/` 里那些文件不在了。
+    """
+    root = _tree_without_skills(tmp_path)
+    bad, readings = _run_core(
+        root,
+        extra=(("审计", [PY, "-X", "utf8", "scripts/audit_progress.py", "--all"]),),
+    )
+    assert bad, f"这条已知会红的命令没被咬住 ⇒ 判据 1 就是恒绿：{readings}"
+    assert any("审计" in b for b in bad), f"红是红了，但没点到那一条：{bad}"
 
 
 def test_main_returns_nonzero_when_there_are_no_judge(

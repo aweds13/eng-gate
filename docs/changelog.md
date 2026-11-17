@@ -39,6 +39,11 @@
 - `tools/pool_mcp.py` 的 `tool_pool_models` 任一 error 非空即 `is_error=True` 并点名文件与首行原因，人话段写明「★ 坏文件 ≠ 没有这份文件」；`tool_quota_status` 接 `BadNowError` 与 `state_file_broken`。
 - `tools/pool_quota.py` 新增 `BadNowError`（`--now` 非 ISO ⇒ stderr 一行 + 退 2），`_load_state()` 返回 `(data, broken)`、`status()` 旁挂 `state_file_broken`、`render()` 在坏档时念「★ 记录文件坏了」。
 - `tools/pool/gateway.py` 的 `list_models` 带 `models_source_broken` 并点名，`_model_block` 读不懂白名单回 404「模型清单读不懂：<首行> ⇒ 不派活」——协议层错误不再冒充「没有这份文件」。
+## 2026-11-17 T-AG633 对账表里 CX-01 的「有判据」换成真判据：删掉整个 skills/ 之后核心骨架仍能跑，且这条判据自己会被钉子咬住
+- CX-01 的 judge 从 tests/test_contract_audit.py::test_card_e96_audit_gate_table_builds_without_skills 换成 ::test_card_e124_core_skeleton_runs_without_skills（那条旧用例只造 9 个文件的合成树、只证门表构建不读 skills/）。
+- 新判据的做法：git ls-files -c -o --exclude-standard 复制工作区里 git 看得见的整棵树（跟踪 2587 + 未跟踪 3 = 2590；只拷跟踪的那份会少一篇未跟踪片段，让 docs/INDEX.md 的篇数对不上而假红）→ rm -rf skills/ → git init → 跑 CORE 六条，任一非零或输出里出现带斜杠的 skills/ 就判红。
+- 这条判据自己也有钉子：把已知会红的 scripts/audit_progress.py --all 塞进 CORE 第七条必须报红（test_card_e124_core_probe_bites_on_a_known_red_command），判据 1 与 2 互相咬。
+- 对账表加「CX-01 的诚实边界」段并把它登记为收窄后的承诺：CORE 不含四道会因 skills/ 缺失而红的门，所以原话「完整可用」不成立，改由可复现的六条读数背书。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

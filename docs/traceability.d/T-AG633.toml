@@ -1,0 +1,10 @@
+[entries."T-AG633"]
+id = "T-AG633"
+title = "对账表CX-01的判据是假的：换成真跑核心骨架的钉子并把诚实边界写进表"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "test:test_contract_audit.py::test_card_e124_core_probe_bites_on_a_known_red_command",
+]
+gaps = "- 判据 4 的路线由 agent 拍板走 (a) 改文档口径（人未及答复：问人工具在本环境两次 120s 超时）。这条是可逆的决定，理由与建议措辞写在 复盘/卡/卡E124-对账表CX-01的有判据是假的.md:180-202。- CORE 只含六条（入口 import / CLI --help / invariants / audit_titles / derived_docs / 门表构建）。audit / docs / contract_doc_table / check_layers 这四道门在删掉 skills/ 后仍会红（五处红逐条见 gates/diag/_E124_evidence.txt），所以「框架仍然完整可用」这句原话没有被证成，本卡只是把假判据换成一个范围写得清的真判据；指针 tools/contract_audit.py:129-141。- 卡规格里两处期望值比实测大：:223/:225 把「用例条数 14」当成 passed 数（实测 13 passed + 1 deselected，-m '' 时 14 passed；grep -c '^def test_' = 14，判据一条没少）、:233 期望 check_derived_docs 四行（2 skip + 2 OK）实测只有 2 行 OK。已在卡规格 复盘/卡/卡E124-对账表CX-01的有判据是假的.md:247-267 的读数表如实记，没有回改规格正文（判据真源 tools/card_doc_budget.py:142）。"
+

@@ -124,12 +124,21 @@ CONTRACTS: list[Contract] = [
         judge=(
             "pytest",
             "tests/test_contract_audit.py::"
-            "test_card_e96_audit_gate_table_builds_without_skills",
+            "test_card_e124_core_skeleton_runs_without_skills",
         ),
         note=(
-            "卡 E96 换成**合成形态**：把门表构建链复制到临时树、**不带 skills/** 再真 import 一次"
-            "（原先是 skills/nails/check_skills.py —— 那只核 SKILL.md 格式，证不了这句话）。"
-            "钉子见 tests/test_contract_audit.py 的同名用例；本卡不新增门"
+            "卡 E124 改指**整棵树**的判据：把全部被跟踪文件复制到临时树、删掉**整棵 skills/**、"
+            "git init，再跑六条核心命令（入口 import / CLI --help / invariants / audit_titles / "
+            "derived_docs / 门表构建）—— 要求全绿且输出里不出现带斜杠的 skills/。"
+            "上一条（卡 E96 的合成 9 文件树）只证「门表构建不读 skills/」，证不了这句话；"
+            "它保留在测试文件里，作为同族的窄判据。"
+            "★ 反例对照见 tests/test_contract_audit.py::"
+            "test_card_e124_core_probe_bites_on_a_known_red_command：同一套 harness 对一条"
+            "已知会红的命令（scripts/audit_progress.py --all）必须报红，否则本条只是恒绿。"
+            "★ 诚实边界：这句话的另一半「完整可用」**不成立** —— 删掉 skills/ 后有五道门会红"
+            "（audit_progress / check_docs / contract_audit --check-doc / check_layers /"
+            " pytest 收集），"
+            "故本契约验的是「核心骨架可用」，不是「框架仍然完整可用」。"
         ),
     ),
     Contract(
