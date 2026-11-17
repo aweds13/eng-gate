@@ -1164,7 +1164,7 @@ status = "done"
 evidence = [
   "file:tools/wb_review.py",
   "file:复盘/主控复核器-T-G84.md",
-  "text:tools/wb_review.py::def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:",
+  "text:tools/wb_review.py::def check_gate_evidence(",
   "text:tools/wb_review.py::core.quotepath=false",
   "text:tools/wb_review.py::没有给白名单",
   "text:复盘/外包-卡表与规矩.md::tools/wb_review.py",
