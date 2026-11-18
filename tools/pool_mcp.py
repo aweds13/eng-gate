@@ -373,6 +373,10 @@ PIPELINE_VIEW = ROOT / "tools" / "pipeline_view.py"
 #: `workbench_board` 的六块（顺序即 `pipeline_view` 的块序）。
 WORKBENCH_SECTIONS = ("cards", "gates", "verdicts", "leases", "fences", "worktrees")
 
+#: workbench_board 的两档 payload 口径（卡 E125）：默认 summary（瘦），full 才给全明细。
+#: ★ 只许这一个开关 —— 不许再加 verbose 之类第二个口径（同一个意思只许一种说法）。
+WORKBENCH_VIEWS = ("summary", "full")
+
 #: 子进程**限时**上限（秒）：pipeline_view 要跑 `git worktree list` + 逐树 `git status`，
 #: 给足但不许无限等（超时 ⇒ 如实报错，绝不静默返空）。
 WORKBENCH_TIMEOUT = 60.0
@@ -532,6 +536,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "description": (
             "工作台一份读数（卡 213）：卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树六块"
             "收成一份（只读，走 pipeline_view.py --json，不重写判据）。"
+            "默认瘦（fields=summary）：cards 每行 files/depends 只给计数（files_n/depends_n）、"
+            "已完卡（status=done）折叠成只含 id 与 status 的骨架行（行数与顺序都不动）；"
+            "verdicts 每行 attempts 只给计数（attempts_n）；worktrees 的 path 相对读数根。"
+            "fields=full 才给全明细（与 pipeline_view 逐键相同）。"
             "section 不给=一次看全六块；某块缺来源会如实给 null + 说明。"
         ),
         "inputSchema": {
@@ -541,7 +549,16 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": "只要哪一块；不给=六块全给",
                     "enum": list(WORKBENCH_SECTIONS),
-                }
+                },
+                "fields": {
+                    "type": "string",
+                    "description": (
+                        "summary（默认）＝瘦：files/depends 只给计数、已完卡折叠成骨架行；"
+                        "full＝全明细（与 pipeline_view 逐键相同）"
+                    ),
+                    "enum": list(WORKBENCH_VIEWS),
+                    "default": "summary",
+                },
             },
             "required": [],
             "additionalProperties": False,
@@ -1875,6 +1892,77 @@ def _board_subset(reading: dict[str, Any], section: str | None) -> dict[str, Any
     return {k: v for k, v in reading.items() if k == section or k.startswith(section + "_")}
 
 
+def _board_rel(path: Any, root: Path) -> Any:
+    """卡树路径改成**相对读数根**的 posix 路径（不是字符串 / 换盘符算不出 ⇒ 原样，不编）。"""
+    if not isinstance(path, str) or not path:
+        return path
+    try:
+        rel = os.path.relpath(path, root)
+    except ValueError:  # 不同盘符：相对不了，原样给绝对路径，不编一个假的相对路径
+        return path
+    return Path(rel).as_posix()
+
+
+def _board_compact(
+    reading: dict[str, Any], fields: str, root: Path = ROOT
+) -> dict[str, Any]:
+    """把一份读数压成默认瘦的投影（卡 E125）—— **只做投影，一个读数都不重算**。
+
+    ★ 只掐三块：
+      - cards：每行 files/depends 换成 files_n/depends_n（整数＝数组长；原值不是 list ⇒ None，
+        **不许编 0**）；status=done 的行只留 {id, status}（**折叠不是过滤**：行数、id 顺序不动）；
+        顶层加 cards_done_n（派生计数一律以 <块名>_ 打头，否则 section 过滤会漏/带错）。
+      - verdicts：每行 attempts 换成 attempts_n（整数），其余键原样。
+      - worktrees：path 换成相对读数根的 posix 路径，dirty 与其它键原样。
+    ★ gates / leases / fences 三块一字不动；块本身是 None 的**原样 None**（不洗成 []/0/{}）；
+      <块>_note 一字不改。fields="full" ⇒ 原样返回（与 pipeline_view 逐键相同）。
+    """
+    if fields != "summary":
+        return reading
+    out = dict(reading)
+    cards = out.get("cards")
+    if isinstance(cards, list):
+        rows: list[Any] = []
+        done_n = 0
+        for row in cards:
+            if not isinstance(row, dict):
+                rows.append(row)
+                continue
+            if row.get("status") == "done":
+                done_n += 1
+                rows.append({k: row[k] for k in ("id", "status") if k in row})
+                continue
+            slim = {k: v for k, v in row.items() if k not in ("files", "depends")}
+            for key in ("files", "depends"):
+                val = row.get(key)
+                slim[key + "_n"] = len(val) if isinstance(val, list) else None
+            rows.append(slim)
+        out["cards"] = rows
+        out["cards_done_n"] = done_n
+    verdicts = out.get("verdicts")
+    if isinstance(verdicts, list):
+        vrows: list[Any] = []
+        for row in verdicts:
+            if not isinstance(row, dict):
+                vrows.append(row)
+                continue
+            attempts = row.get("attempts")
+            slim_v = {k: v for k, v in row.items() if k != "attempts"}
+            slim_v["attempts_n"] = len(attempts) if isinstance(attempts, list) else None
+            vrows.append(slim_v)
+        out["verdicts"] = vrows
+    worktrees = out.get("worktrees")
+    if isinstance(worktrees, list):
+        wrows: list[Any] = []
+        for row in worktrees:
+            if not isinstance(row, dict):
+                wrows.append(row)
+                continue
+            wrows.append({**row, "path": _board_rel(row.get("path"), root)})
+        out["worktrees"] = wrows
+    return out
+
+
 def _board_line(section: str, reading: dict[str, Any]) -> str:
     """一块的**人话**一行（只念数，不重算读数 —— 数都从已解析的 JSON 里取）。"""
     val = reading.get(section)
@@ -1915,6 +2003,16 @@ def tool_workbench_board(
             + "。不给 section 就一次给全。"
         )
         return _result(text, {"section": section, "reading": None}, is_error=True)
+    fields = str(arguments.get("fields") or "").strip() or "summary"
+    if fields not in WORKBENCH_VIEWS:
+        text2 = (
+            f"workbench_board：不认识的 fields={fields!r}；只有 "
+            + "、".join(WORKBENCH_VIEWS)
+            + "（summary 默认=瘦，full=全明细）。"
+        )
+        return _result(
+            text2, {"section": section, "fields": fields, "reading": None}, is_error=True
+        )
     argv = [sys.executable, "-X", "utf8", str(PIPELINE_VIEW), "--json", "--root", str(root)]
     command = _cmd_text(argv)
     code, out, err = _run_bounded(argv, root, WORKBENCH_TIMEOUT)
@@ -1963,6 +2061,7 @@ def tool_workbench_board(
             {"command": command, "exit_code": code, "section": section, "reading": None},
             is_error=True,
         )
+    reading = _board_compact(reading, fields, root)
     shown = [section] if section is not None else list(WORKBENCH_SECTIONS)
     lines = [f"工作台读数（workbench_board）—— 来自 `{command}`（卡 207 的一份读数，六块）："]
     lines += [_board_line(sec, reading) for sec in shown]
@@ -1970,6 +2069,7 @@ def tool_workbench_board(
         "command": command,
         "exit_code": 0,
         "section": section,
+        "fields": fields,
         "reading": _board_subset(reading, section),
     }
     return _result("\n".join(lines), data, is_error=False)
@@ -3201,7 +3301,10 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
             "限流中 / 已过期，需重新探测 / 余额耗尽 / 未记录，不猜、不探测。"
             "workbench_board（卡 213）把 pipeline_view 的一份读数（卡 / 门禁 / 判决 / 租约 / "
             "栅栏 / 卡树六块）收成一份端到会话内 —— 不给 section 就一次看全六块，"
-            "某块缺来源会如实给 null + 说明（不洗成空对象）。"
+            "某块缺来源会如实给 null + 说明（不洗成空对象）。默认瘦（fields=summary）："
+            "cards 每行 files/depends 只给计数（files_n/depends_n）、已完卡折叠成只含 id 与 "
+            "status 的骨架行（行数与顺序不动），verdicts 每行 attempts 只给计数（attempts_n），"
+            "卡树路径相对读数根；fields=full 才给全明细（与 pipeline_view 逐键相同）。"
             "account_status（卡 E45）读仓外账号账本；"
             "checkin_status（卡 E48 / E119）读当天签到留档，"
             "并只读账本的 health.last_checkin / last_probe（按 last_probe 日期标明是哪天的结论）—— "

@@ -77,6 +77,11 @@
 - 四处判据同源：tools/wb_review.py（check_gate_evidence / check_gates_trailer_truth）、tools/wb_verify.py（rev_ok）、tools/gate_pool.py（base_drift_category 取代 _rev_matches）、framework 镜像；「伪造门禁结论」只留给 ok 不是 true / DRIFT / 解析不出。
 - 落地链 ⑦ rebase 之后落第一现场读数 gates/diag/base_drift/<task>.json（gates_rev / rebase_before_main / rebase_after_head / rebase_after_parent / diff_paths，差异现算）；不插重跑门禁、不改 ④→⑦ 顺序。
 - 真提交读数（gates/diag/_rev_E123.py）：老版对 89cd4deb 报「门禁不是为这一笔跑的」+「伪造门禁结论」，新版 problems 为空并念出「只动了 3 个台账/派生物文件 … 结论未经复验（时间见证 …）」；判据来源 sha16 0e73d922152131e4 → 6ff5fcecb0c6ed15。
+## 2026-11-17 T-AG634 workbench_board 的默认视图改成投影：整包 223435 → 84039、section=cards 128670 → 17851
+- 新增 fields 参数（summary / full，缺省 summary）；只有 fields=full 才端全明细，此时 cards 与 pipeline_view 原样逐键相等。
+- 默认视图：done 卡折成 {id, status} 不删行、非 done 卡把 files/depends 折成 files_n/depends_n、verdicts 的 attempts 折成 attempts_n、worktrees 路径相对化；派生计数 cards_done_n 以块名前缀打头。
+- 压缩是 MCP 侧纯投影：tools/pipeline_view.py 的 BLOCKS 与 row_fields 一行未改，坏读数仍然是 null 加 note，不洗成空容器。
+- 人话段仍是六块摘要（cards 那行仍念总项数，折叠不改行数）。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

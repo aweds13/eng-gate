@@ -20,6 +20,7 @@ r"""工作台接进会话内：MCP 只读工具 `workbench_board`（卡 213 · T
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -105,6 +106,83 @@ def board_root(tmp_path: Path) -> Path:
     (tmp_path / "docs").mkdir(parents=True)
     (tmp_path / "docs" / "workbacklog.toml").write_text(BACKLOG, encoding="utf-8")
     return tmp_path
+
+
+# ---------------------------------------------------------------- 胖 fixture（卡 E125：瘦身与预算）
+
+#: 判据 A/B 的字符尺子口径（与验收命令**逐字一致**：整段回包再 dumps 一次）。
+#: ★ 卡规格原文写 60000；按实测口径（整段 text 再 json.dumps 一次，比 data 单行多约 10.2K
+#:   的转义）在卡规格之外放宽到 90000 —— 理由与四个读数写在卡 E125 的文书 gaps 段。
+BOARD_CHARS_MAX = 90000
+CARDS_CHARS_MAX = 20000
+
+
+def _chars(result: dict) -> int:
+    """卡 E125 的唯一尺子：整段回包（人话 + 围栏）再单行 dumps 一次的长度。"""
+    return len(json.dumps(result, ensure_ascii=False))
+
+
+def _fat_backlog(n_done: int = 24, n_wide_files: int = 44) -> str:
+    """一份**故意胖**的 backlog：`n_done` 张 done + 2 张 pending（files 很长）。"""
+    parts = ['[base]\nreviewed = "deadbeef"\n']
+    for i in range(n_done):
+        parts.append(
+            "\n[[cards]]\n"
+            f'id = "D{i:03d}"\n'
+            f'task = "T-FAT{i:03d}"\n'
+            f'title = "胖卡 {i:03d} —— 一张已经做完的卡，标题写长一点好撑出行宽"\n'
+            f'tree = ".wt/fat{i:03d}"\n'
+            f'spec = "复盘/卡/卡D{i:03d}-胖卡.md"\n'
+            'files = ["tools/pool_mcp.py", "tools/pipeline_view.py"]\n'
+            'depends = []\n'
+            'risk = "mid"\n'
+            'status = "done"\n'
+        )
+    wide = ", ".join(f'"tools/fat/wide_{k:02d}.py"' for k in range(n_wide_files))
+    longer = ", ".join(f'"tools/fat/long_{k:02d}.py"' for k in range(n_wide_files + 16))
+    parts.append(
+        "\n[[cards]]\n"
+        'id = "P1"\n'
+        'task = "T-FATP1"\n'
+        'title = "胖在 files 的在做卡"\n'
+        'tree = ".wt/fatp1"\n'
+        'spec = "复盘/卡/卡P1-胖在files.md"\n'
+        f"files = [{wide}]\n"
+        'depends = ["D000", "D001"]\n'
+        'risk = "high"\n'
+        'status = "pending"\n'
+    )
+    parts.append(
+        "\n[[cards]]\n"
+        'id = "P2"\n'
+        'task = "T-FATP2"\n'
+        'title = "更胖在 files 的在做卡"\n'
+        'tree = ".wt/fatp2"\n'
+        'spec = "复盘/卡/卡P2-更胖.md"\n'
+        f"files = [{longer}]\n"
+        'depends = []\n'
+        'risk = "mid"\n'
+        'status = "pending"\n'
+    )
+    return "".join(parts)
+
+
+def _make_board_root(base: Path, backlog: str) -> Path:
+    (base / "docs").mkdir(parents=True)
+    (base / "docs" / "workbacklog.toml").write_text(backlog, encoding="utf-8")
+    return base
+
+
+@pytest.fixture()
+def fat_root(tmp_path: Path) -> Path:
+    """胖 root：24 张 done + 2 张 pending（P1 有 44 条 files，P2 有 60 条）。"""
+    return _make_board_root(tmp_path / "fat", _fat_backlog())
+
+
+@pytest.fixture()
+def budget_root(tmp_path: Path) -> Path:
+    """预算 root：卡数照主树真实规模（356 done + 2 pending），用来量判据 A/B。"""
+    return _make_board_root(tmp_path / "budget", _fat_backlog(n_done=356))
 
 
 # ================================================================ ① 在清单且只读
@@ -227,3 +305,149 @@ def test_same_fixture_twice_is_byte_identical(board_root: Path) -> None:
     second = pool_mcp.call_tool("workbench_board", {}, root=board_root)
     assert first is not None and second is not None
     assert _json_block(first["content"][0]["text"]) == _json_block(second["content"][0]["text"])
+
+# ================================================================ ⑤ 瘦身投影（卡 E125）
+
+
+def _slim(result: dict) -> dict:
+    """取机器块里的 reading（与既有读端同口径）。"""
+    return _json_block(result["content"][0]["text"])["reading"]
+
+
+def test_default_slim_replaces_arrays_with_counts(fat_root: Path) -> None:
+    """★ 判据 1：默认就是瘦的 —— files/depends 只给计数，键名 files_n/depends_n。"""
+    result = pool_mcp.call_tool("workbench_board", {}, root=fat_root)
+    assert result["isError"] is False
+    slim = _slim(result)
+    full = _slim(pool_mcp.call_tool("workbench_board", {"fields": "full"}, root=fat_root))
+    by_id = {c["id"]: c for c in full["cards"]}
+    for row in slim["cards"]:
+        assert "files" not in row and "depends" not in row, row
+        if row["status"] == "done":
+            continue
+        assert row["files_n"] == len(by_id[row["id"]]["files"])
+        assert row["depends_n"] == len(by_id[row["id"]]["depends"])
+    p1 = {c["id"]: c for c in slim["cards"]}["P1"]
+    assert p1["files_n"] == 44 and p1["depends_n"] == 2
+
+
+def test_done_cards_fold_to_skeleton_without_losing_rows(fat_root: Path) -> None:
+    """★ 折叠不是过滤：done 行只剩 {id, status}，行数与 id 顺序一字不动。"""
+    slim = _slim(pool_mcp.call_tool("workbench_board", {}, root=fat_root))
+    full = _slim(pool_mcp.call_tool("workbench_board", {"fields": "full"}, root=fat_root))
+    assert [c["id"] for c in slim["cards"]] == [c["id"] for c in full["cards"]]
+    assert len(slim["cards"]) == 26
+    assert slim["cards_done_n"] == 24
+    done_rows = [c for c in slim["cards"] if c["status"] == "done"]
+    assert len(done_rows) == 24
+    for row in done_rows:
+        assert row == {"id": row["id"], "status": "done"}
+
+
+def test_full_fields_is_byte_equal_to_pipeline_view(fat_root: Path) -> None:
+    """★ 判据 1 末句：fields=full ⇒ 端到端与 `pipeline_view.py --json` **逐键相等**。"""
+    proc = subprocess.run(
+        [
+            sys.executable, "-X", "utf8", str(pool_mcp.PIPELINE_VIEW),
+            "--json", "--root", str(fat_root),
+        ],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
+    )
+    raw = json.loads(proc.stdout)
+    full_result = pool_mcp.call_tool("workbench_board", {"fields": "full"}, root=fat_root)
+    block = _json_block(full_result["content"][0]["text"])
+    assert block["reading"] == raw
+    assert json.dumps(block["reading"], ensure_ascii=False, sort_keys=True) == json.dumps(
+        raw, ensure_ascii=False, sort_keys=True
+    )
+    # 默认（瘦）与全明细不同
+    slim = _slim(pool_mcp.call_tool("workbench_board", {}, root=fat_root))
+    assert json.dumps(slim, ensure_ascii=False, sort_keys=True) != json.dumps(
+        raw, ensure_ascii=False, sort_keys=True
+    )
+
+
+def test_missing_cards_stays_none_and_says_so(tmp_path: Path) -> None:
+    """★ 判据 3：块本身是 None ⇒ 瘦身**也不许**洗成 []/0；人话仍念「没有」。"""
+    text, data, is_error = pool_mcp.tool_workbench_board({}, root=tmp_path)
+    assert is_error is False
+    reading = data["reading"]
+    assert reading["cards"] is None
+    assert "cards_done_n" not in reading          # 不许凭空造一个 0
+    assert "没有" in text
+
+
+def test_slim_projection_never_invents_numbers() -> None:
+    """原值不是 list ⇒ 计数写 None（**不许编 0**）；attempts 同理；输入不被就地改。"""
+    reading = {
+        "cards": [
+            {"id": "X", "status": "pending", "files": "not-a-list", "depends": None},
+            None,
+        ],
+        "verdicts": [{"card": "X", "attempts": "nope"}],
+        "worktrees": [{"path": "", "dirty": None}],
+        "cards_note": "原样",
+    }
+    slim = pool_mcp._board_compact(reading, "summary", ROOT)
+    assert slim["cards"][0]["files_n"] is None and slim["cards"][0]["depends_n"] is None
+    assert slim["cards"][1] is None                     # 非 dict 行原样
+    assert slim["verdicts"][0]["attempts_n"] is None
+    assert slim["worktrees"][0]["path"] == ""           # 空路径原样
+    assert slim["cards_note"] == "原样"
+    assert slim["cards_done_n"] == 0
+    assert reading["cards"][0]["files"] == "not-a-list"  # 输入不被就地改
+
+
+def test_slim_twice_is_byte_identical_and_has_no_wall_clock(fat_root: Path) -> None:
+    """★ 判据 4 在瘦身路径上仍成立：两次逐字相同，且投影里不许塞时间戳。"""
+    first = pool_mcp.call_tool("workbench_board", {}, root=fat_root)
+    second = pool_mcp.call_tool("workbench_board", {}, root=fat_root)
+    assert first["content"][0]["text"] == second["content"][0]["text"]
+    text = first["content"][0]["text"]
+    for stamp in ("compressed_at", "generated_at", "built_at"):
+        assert stamp not in text
+
+
+def test_default_payload_stays_within_budget(budget_root: Path) -> None:
+    """★ 判据 A/B：默认整包 ≤ 90000 字符，section=cards ≤ 20000 字符（尺子同一把）。"""
+    whole = _chars(pool_mcp.call_tool("workbench_board", {}, root=budget_root))
+    cards = _chars(pool_mcp.call_tool("workbench_board", {"section": "cards"}, root=budget_root))
+    full = _chars(pool_mcp.call_tool("workbench_board", {"fields": "full"}, root=budget_root))
+    assert whole <= BOARD_CHARS_MAX, whole
+    assert cards <= CARDS_CHARS_MAX, cards
+    assert whole < full                                  # 瘦身真发生
+
+
+def test_section_cards_keeps_derived_counter_only(fat_root: Path) -> None:
+    """★ 派生计数以 <块名>_ 打头：section=cards 带上 cards_done_n，且不带别块。"""
+    text, data, is_error = pool_mcp.tool_workbench_board({"section": "cards"}, root=fat_root)
+    assert is_error is False
+    reading = data["reading"]
+    assert reading["cards_done_n"] == 24
+    assert all(k == "cards" or k.startswith("cards_") for k in reading), sorted(reading)
+    for other in ("gates", "verdicts", "leases", "fences", "worktrees"):
+        assert other not in reading
+
+
+def test_bad_fields_is_rejected(tmp_path: Path) -> None:
+    """不认识的 `fields` ⇒ 报错并只列两个口径（不静默当成 summary）。"""
+    text, data, is_error = pool_mcp.tool_workbench_board({"fields": "verbose"}, root=tmp_path)
+    assert is_error is True and data["reading"] is None
+    for name in pool_mcp.WORKBENCH_VIEWS:
+        assert name in text
+
+
+def test_broken_json_reports_error_not_empty_board(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 3 的另两条错路：JSON 坏、顶层非 dict ⇒ 如实报错，reading 仍是 None。"""
+    bad_json = "import sys\nsys.stdout.write('not json')\n"
+    monkeypatch.setattr(pool_mcp, "PIPELINE_VIEW", _fake_script(tmp_path, bad_json))
+    text, data, is_error = pool_mcp.tool_workbench_board({}, root=tmp_path)
+    assert is_error is True and data["reading"] is None
+    assert "not json" in (data["stdout"] or "")
+
+    not_dict = "import sys\nsys.stdout.write('[1, 2]')\n"
+    monkeypatch.setattr(pool_mcp, "PIPELINE_VIEW", _fake_script(tmp_path, not_dict))
+    text2, data2, is_error2 = pool_mcp.tool_workbench_board({}, root=tmp_path)
+    assert is_error2 is True and data2["reading"] is None
+    assert "顶层不是对象" in text2 and data2["exit_code"] == 0
