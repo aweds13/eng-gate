@@ -54,6 +54,9 @@ import {
   bootApp, findBrowser, iso, portBase, portBusyReason, seedFixture, setViewport, startServer,
   waitApp, waitHealth, waitIdle,
 } from './tf_browser.mjs'
+// 卡 E135（T-AG644）：等待预算的旋钮。**只乘预算、不改判据** —— 三个原语的默认值、
+// 轮询粒度、「等到就绪就返回」的循环结构全部照旧（不设 env 时行为与加它之前逐字一致）。
+import { scaleMs, waitScale } from './tf_wait_budget.mjs'
 
 const SHOTS_DIR = join(ROOT, 'gates', 'render', 'shots')  // 证据与黄金层放一起（同样不进仓库）
 const TEMP_DIR = process.env.TEMP ?? process.env.TMP ?? '/tmp'
@@ -410,6 +413,7 @@ class T {
   // ★ 卡 092：默认预算 5s → 12s。满载下提示条要十几秒才出来（实测 ㉕ 就是 5s 没等到而假红）——
   // 这仍是**等到就绪就返回**的轮询，不是固定 sleep。
   async waitToast(needle, ms = 12000) {
+    ms = scaleMs(ms, waitScale())  // 卡 E135：只乘预算（×1 时等于原值）；轮询粒度与循环结构不动
     const t0 = Date.now()
     let last = ''
     while (Date.now() - t0 < ms) {
@@ -427,6 +431,7 @@ class T {
    *  满载下先出现的是前半句，那一瞬间去断言后半句**必然落空**（实测 ㉒「导入报告里写了删了几行」
    *  就是这么挂的）。判据必须**一次说完整**：等到它整条成立，或者超时后说实话。 */
   async waitToastWhere(pred, ms = 12000, step = 150) {
+    ms = scaleMs(ms, waitScale())  // 卡 E135：预算变、step（轮询粒度）不变
     const t0 = Date.now()
     let last = ''
     while (Date.now() - t0 < ms) {
@@ -440,6 +445,7 @@ class T {
 
   /** 等某个条件成立（自带轮询；用在"列表里应当多出一行"这类异步结果上）。 */
   async waitFor(fn, ms = 5000, step = 120) {
+    ms = scaleMs(ms, waitScale())  // 卡 E135：预算变、step（轮询粒度）不变
     const t0 = Date.now()
     while (Date.now() - t0 < ms) {
       if (await fn()) return true
@@ -2078,6 +2084,12 @@ async function main() {
   // ★ 最小验证法则（T-G38）：**默认一遍**。`--twice` 是"改这套流本身"时的按需工具 ——
   //   流失败只是红一下，不会污染任何持久数据；而黄金层的两遍自检是常开的（那里抖一次就会被写进黄金）。
   const passes = ARGS.twice && !ARGS.only ? 2 : 1
+  // 卡 E135 判据 4：生效的预算必须**自报**，不许悄悄变宽。不设 env（倍数 = 1）时一个字都不打 ——
+  // 默认输出零变化，否则黄金层 / 指纹类判据会被这行噪声碰。
+  const budgetScale = waitScale()
+  if (budgetScale !== 1) {
+    log(`[note] 等待预算 ×${budgetScale}（TF_UI_FLOW_WAIT_SCALE）—— 判据强度不变，只是等得更久`)
+  }
   log(`=== 行为流层：真浏览器 ${browserPath.split(/[\\/]/).pop()}，${FLOWS.length} 条流，跑 ${passes} 遍 ===`)
   if (passes === 1) {
     log('[note] 只跑了一遍（最小验证法则）—— 这一轮**没有**做"两遍指纹"自检；')

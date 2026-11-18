@@ -87,6 +87,11 @@
 - tools/wb_daily.py 的 `_fill_leases` 搬 dead 键、`_render_leases` 念「其中 M 条已死」并给死行标尾、「今天该做」按活租约判「无人占树」。
 - tools/pool_mcp.py 的 `_board_line` 给 leases 补 dead 尾巴；JSON 段一个字节不动（不在这一层重算 TTL，也不第二次读 registry）。
 - 三处都只消费 tools/pipeline_view.py 已经算好的 dead 列：`grep -n is_dead` 三个文件仍零命中。
+## 2026-11-17 T-AG644 浏览器门的等待预算有了乘数旋钮：只乘时长、不动判据、不动轮询粒度
+- 新增 `tools/tf_wait_budget.mjs`：`WAIT_SCALE_ENV = 'TF_UI_FLOW_WAIT_SCALE'` / `WAIT_SCALE_MAX = 10` / `parseWaitScale(raw)`（空、坏、NaN、<=0 ⇒ 1；>10 夹到 10）/ `waitScale()` / `scaleMs(ms, scale)`。
+- `tools/ui_flow_check.mjs` 三个等待原语函数体第一行加 `ms = scaleMs(ms, waitScale())`（`waitToast` / `waitToastWhere` / `waitFor`），26 处调用点一个没改、默认值 12000/12000/5000 一字没动、`step` 150/120 一字没动；`main()` 在 `--list`/`--coverage` 早退之后、倍数≠1 时打一行 `[note] 等待预算 ×N（TF_UI_FLOW_WAIT_SCALE）—— 判据强度不变，只是等得更久`。
+- `tests/test_ui_flow_check.py` 新增 5 条钉子（`test_wait_scale_defaults_to_one` / `test_wait_scale_env_is_honoured_and_junk_falls_back` / `test_wait_scale_is_capped_and_never_infinite` / `test_wait_primitives_scale_only_the_budget` / `test_scale_env_does_not_leak_into_the_default_output`），既有 14 条一字未改。
+- `docs/subsystems/ci/测试流程.md` §8 加一段「慢机器上浏览器门靠「抬预算」，不靠改判据（卡 E135 · T-AG644）」：写清三原语默认值、合法区间、只乘什么、倍数≠1 才自报，并明说不要用改默认值或固定 sleep 顶替。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -21,6 +22,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOL = ROOT / "tools" / "ui_flow_check.mjs"
+BUDGET = ROOT / "tools" / "tf_wait_budget.mjs"
 LIB = ROOT / "tools" / "tf_browser.mjs"
 HANDOVER = ROOT / "复盘" / "交接-重构进度.md"
 NODE = shutil.which("node")
@@ -258,3 +260,98 @@ def test_real_manual_doc_passes_forward_reconciliation() -> None:
     out = proc.stdout + proc.stderr
     assert proc.returncode == 0, out
     assert "未对账 0" in out, out
+
+# ---------------------------------------------------- 等待预算的旋钮（卡 E135 · T-AG644）
+
+
+def _budget_expr(expr: str, env: dict[str, str] | None = None) -> str:
+    """在 node 里 import **真**模块算一个表达式（不起浏览器、不起服务、不读仓里任何东西）。"""
+    assert NODE is not None
+    script = (
+        "import(" + json.dumps(BUDGET.as_uri()) + ").then((m) => {"
+        "  process.stdout.write(String(" + expr + "))"
+        "})"
+    )
+    # ★ 卡 E135 第二趟门禁实测：`env` 给了就是**整份**环境，只有不给时才继承 os.environ。
+    # 原来写 `{**os.environ, **(env or {})}` —— 那个写法**摘不掉**任何一个键（env 里缺的会被
+    # os.environ 补回来），于是「显式摘掉 TF_UI_FLOW_WAIT_SCALE 再问默认值」读到的是 shell 里的 4
+    # （`assert '4' == '1'`）。红的是这条测试自己的环境拼法，不是被测代码。
+    run_env = dict(os.environ) if env is None else dict(env)
+    proc = subprocess.run(
+        [NODE, "--input-type=module", "-e", script],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+        env=run_env,
+    )
+    assert proc.returncode == 0, proc.stderr[:500]
+    return proc.stdout.strip()
+
+
+def test_wait_scale_defaults_to_one() -> None:
+    """判据 2：不设 env 时倍数必须是 **1** —— 三个原语的默认预算与加旋钮之前逐字一致。
+
+    ★ 为什么这条要在**干净**环境里读：`os.environ` 里若已经有 `TF_UI_FLOW_WAIT_SCALE`（谁在 shell 里
+    设过），这条假红的不是代码，是环境。所以显式摘掉它再问。
+    """
+    env = {k: v for k, v in os.environ.items() if k != "TF_UI_FLOW_WAIT_SCALE"}
+    assert _budget_expr("m.waitScale()", env) == "1"
+
+
+def test_wait_scale_env_is_honoured_and_junk_falls_back() -> None:
+    """判据 1：`2.5` ⇒ 2.5；坏值 / 0 / 负数 / 空 ⇒ 1（坏值退回现状，别让整道门起不来）。"""
+    assert _budget_expr("m.parseWaitScale('2.5')") == "2.5"
+    for junk in ("abc", "0", "-3", "", "   ", "NaN", "Infinity"):
+        assert _budget_expr("m.parseWaitScale(" + json.dumps(junk) + ")") == "1", junk
+
+
+def test_wait_scale_is_capped_and_never_infinite() -> None:
+    """判据 1 的上界：999 ⇒ **10**。无边等于「永不超时」—— 那不叫放宽，叫把判据换成运气。"""
+    assert _budget_expr("m.parseWaitScale('999')") == "10"
+    assert _budget_expr("m.parseWaitScale('10')") == "10"
+    assert _budget_expr("m.scaleMs(12000, 10)") == "120000"
+    assert _budget_expr("m.scaleMs(5000, 1)") == "5000"
+
+
+def test_wait_primitives_scale_only_the_budget() -> None:
+    """判据 3：三个原语的**函数头**必须乘一次 `scaleMs(`，而 `step`（轮询粒度）与循环结构不动。
+
+    这条同时钉住卡 092 那两条钉子的前提还在（`while` 轮询 + `sleep(step)`，不是固定 sleep）。
+    """
+    src = TOOL.read_text(encoding="utf-8")
+    heads = {
+        "waitToast": "async waitToast(needle, ms = 12000) {",
+        "waitToastWhere": "async waitToastWhere(pred, ms = 12000, step = 150) {",
+        "waitFor": "async waitFor(fn, ms = 5000, step = 120) {",
+    }
+    for name, head in heads.items():
+        assert head in src, f"{name}() 的函数头被改了（默认值不许动 —— 判据 2）：{head}"
+        body = _method_body(src, name)
+        assert "scaleMs(ms, waitScale())" in body, (
+            f"{name}() 没把预算乘上旋钮 —— 慢机器上这一条仍是硬编码，旋钮对它无效"
+        )
+        assert "while (Date.now() - t0 < ms)" in body, (
+            f"{name}() 的轮询循环结构被改了（卡 092：等就绪，不是固定 sleep）"
+        )
+
+
+def test_scale_env_does_not_leak_into_the_default_output() -> None:
+    """判据 4：那行自报只在**开跑**路径上。
+
+    `--list` 这种纯输出路径，不设 env 与设 2 的 stdout 必须**逐字相同**。
+
+    （否则黄金层 / 指纹类判据会被这行噪声碰 —— 默认输出零变化是硬要求。）
+    """
+    def out(env: dict[str, str] | None) -> str:
+        assert NODE is not None
+        proc = subprocess.run(
+            [NODE, str(TOOL), "--list"],
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", check=False,
+            env={**os.environ, **(env or {})},
+        )
+        assert proc.returncode == 0, proc.stderr[:500]
+        return proc.stdout
+
+    plain = out(None)
+    scaled = out({"TF_UI_FLOW_WAIT_SCALE": "2"})
+    assert plain == scaled
+    assert "等待预算" not in plain

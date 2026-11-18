@@ -12451,3 +12451,15 @@ evidence = [
   "test:test_pool_mcp_board.py",
 ]
 gaps = "- 卡规格判据 1 要求「没有死行时 head 逐字节不变」，但既有夹具 `_lease()` 把 at 写死成 2026-10-13T12:00:00 —— E115 落地后那一行已经是死租约，`:122` 的「谁在飞：1 条活租约」会假红。处置：夹具 at 改成「60 秒前」并加 age_s 参数，断言一字不改。指针 tests/test_workbench_bridge.py- 判据 5 写「既有钉子除夹具数据外一行断言都不许改」：实际同一条夹具（活租约）撑着 `:122`、`:142-143`、`:152-153` 三处既有断言，改 at 是让它们继续成立而不是放宽。指针 tests/test_workbench_bridge.py- 真仓读数与卡规格引的 06:21 那次有差：那次 board 人话是 `leases：1 项`，现在仍是 1 项但尾巴变「（其中 1 条已死）」；桥与 daily 的读数（0 活 / 1 死 / 仍念出卡 E105）与规格预期一致。指针 gates/diag/pool-registry.json"
+
+[entries."T-AG644"]
+id = "T-AG644"
+title = "浏览器门的等待预算有了乘数旋钮：只乘时长、不动判据"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/ui_flow_check.mjs",
+  "file:tools/tf_wait_budget.mjs",
+  "file:tests/test_ui_flow_check.py",
+]
+gaps = "- 卡规格说「三个等待原语预算硬编码」，实测是四处硬编码预算加一处 step：`waitToast(ms = 12000)` / `waitToastWhere(ms = 12000, step = 150)` / `waitFor(ms = 5000, step = 120)`，外加 `waitToastWhere` 与 `waitFor` 各自的 `step` 默认值。我只乘 `ms`，`step` 一个字没动 —— 轮询粒度不变是卡规格明写的。指针 tools/ui_flow_check.mjs- 判据 1 要求「倍数区间 [1,10]」，我把它落成**上界夹死、下界拉到 1**：`parseWaitScale` 对空/坏/NaN/<=0 一律回 1（不报错、不改判据），对 >10 夹到 10。理由是「把预算调小」不是这张卡要的能力（调小等于偷偷放宽判据的对手面），而「写错值就崩掉整道门」也不是。指针 tools/tf_wait_budget.mjs- 判据 2 要求「倍数≠1 才自报一行」，我把这行放在 `--list` / `--coverage` 早退**之后**：纯输出路径（`node tools/ui_flow_check.mjs --list`）在任何 env 下 stdout 逐字相同，否则上游若有解析 `--list` 输出的脚本会被这行 note 弄坏。指针 tools/ui_flow_check.mjs"
