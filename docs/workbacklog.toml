@@ -6332,3 +6332,25 @@ files = [
 depends = []
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E139"
+task = "T-AG646"
+title = "队列短锁等不到就无锁写：改成失败关闭，os.replace的WinError5收进有界重试"
+tree = ".wt/E139"
+spec = "复盘/卡/卡E139-队列短锁等不到就无锁写.md"
+files = [
+  "tools/gate_pool.py",
+  "tools/pool/queue.py",
+  "tools/pool/lastgood.py",
+  "tests/test_gate_pool.py",
+  "tests/test_pool_queue.py",
+  "tests/test_pool_lastgood.py",
+  "复盘/卡/卡E139-队列短锁等不到就无锁写.md"
+]
+depends = [
+  "E55",
+  "E120"
+]
+risk = "mid"
+status = "pending"
