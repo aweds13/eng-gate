@@ -355,3 +355,69 @@ def test_scale_env_does_not_leak_into_the_default_output() -> None:
     scaled = out({"TF_UI_FLOW_WAIT_SCALE": "2"})
     assert plain == scaled
     assert "等待预算" not in plain
+
+# ------------------------------------------- 提示条按点击时刻取历史（卡 E140 · T-AG649）
+
+
+def test_toast_history_lives_in_the_shared_harness() -> None:
+    """判据 1：提示条历史装在**共享底座**（tools/tf_browser.mjs）里，不装在行为流工具里。
+
+    理由与 MUTATION_WATCH / FETCH_WATCH 同一条：它观察的是页面，将来渲染层要查提示条也得用同一份；
+    抄两份必然各自演化（迟早有一份是错的）。
+    """
+    lib = LIB.read_text(encoding="utf-8")
+    assert "export const TOAST_WATCH" in lib, "底座里没有 TOAST_WATCH —— 提示条历史又回到工具里了"
+    seg = lib[lib.index("export const TOAST_WATCH"):][:2400]
+    assert "window.__tftoast" in seg, "TOAST_WATCH 没把历史记到 window.__tftoast 上（等待器读不到）"
+    src = TOOL.read_text(encoding="utf-8")
+    assert "TOAST_WATCH" in src and "from './tf_browser.mjs'" in src
+    assert "export const TOAST_WATCH" not in src, "行为流工具里又自己定义了一份提示条观察器"
+
+
+def test_toast_history_is_capped() -> None:
+    """判据 1 的上界：历史**不许无限增长**（一条流跑完几十条足够；记满不封顶就是内存漏）。"""
+    lib = LIB.read_text(encoding="utf-8")
+    seg = lib[lib.index("export const TOAST_WATCH"):][:2400]
+    assert "KEEP = 200" in seg, "上限没写（KEEP）"
+    assert "splice(0" in seg, "超过上限时没有从头丢 —— 这不是封顶"
+
+
+def test_toast_waiters_consult_history_before_polling() -> None:
+    """判据 3：两个等待器**先查点击以来的历史**，再进原来的轮询循环。
+
+    病（卡 E140 实测）：提示条只活 2.2 秒，而 press() 里那句 waitIdle 地板 0.72 秒、满载 6.2 秒；
+    等 waitToast 第一次采样时提示条早消失了，于是报「提示条里是：（空）」—— 看着像「点了没反应」。
+    抬 TF_UI_FLOW_WAIT_SCALE 无效（它只乘 ms，不乘 waitIdle）：卡 E140 问题 2 已实测。
+    """
+    src = TOOL.read_text(encoding="utf-8")
+    for name in ("waitToast", "waitToastWhere"):
+        body = _method_body(src, name)
+        assert "toastSince(this.toastMark)" in body, f"{name}() 没查点击以来的提示条历史"
+        assert body.index("toastSince(") < body.index("while (Date.now() - t0 < ms)"), (
+            f"{name}() 把查历史放在轮询之后了 —— 那时提示条早就消失了（卡 E140 的病就是这个）"
+        )
+        # 卡 E135 的三条钉子照旧咬：预算仍乘一次、循环结构不动
+        assert "scaleMs(ms, waitScale())" in body
+        assert "while (Date.now() - t0 < ms)" in body
+
+
+def test_press_marks_the_click_time() -> None:
+    """判据 2：提示条窗口的起点是**点击那一刻**，不是「等待结束那一刻」。"""
+    src = TOOL.read_text(encoding="utf-8")
+    body = _method_body(src, "press")
+    assert "this.toastMark = Date.now()" in body, "press() 没在点击前记下窗口起点"
+    assert body.index("this.toastMark = Date.now()") < body.index("this.cdp.clickAt("), (
+        "窗口起点记在点击之后了 —— 点击那一瞬间弹的提示条会被当成「窗口外的」丢掉"
+    )
+    # 回车/快捷键/拖同样会弹提示条（⑬ 就是按 Enter 提交的）
+    for name in ("key", "chord", "drag"):
+        body = _method_body(src, name)
+        assert "this.toastMark = Date.now()" in body, f"{name}() 没重置提示条窗口"
+
+
+def test_toast_history_is_reinstalled_after_navigation() -> None:
+    """判据 1 的另一半：**导航之后必须重装**（页面上下文换了，观察器也就没了）。"""
+    src = TOOL.read_text(encoding="utf-8")
+    body = _method_body(src, "arm")
+    assert "TOAST_WATCH" in body, "arm() 里没装提示条历史 —— 一刷新就再也记不到了"
+    assert "MUTATION_WATCH" in body and "FETCH_WATCH" in body

@@ -584,6 +584,41 @@ export const FETCH_WATCH = `
   return true;
 })()`
 
+/* 记一条「提示条说过什么」的历史（卡 E140，T-AG649 实测）。
+   为什么必须有它：提示条只活 **2.2 秒**（`src/web/index.html` 的 `toast()` 里 `setTimeout(..., 2200)`），
+   而 `press()` 点完之后紧跟的 `waitIdle` **地板就 0.72 秒、本机实测 0.9–1.6 秒、满载 6.2 秒** ——
+   `waitToast` 是等 `press` 返回之后才第一次采样的，于是满载时读到的是 `''`，报「提示条里是：（空）」。
+   实测（同一台机器、同一条流 ⑯）：不注入延迟时绿；在 `waitToast` 开头注入 2.6 秒延迟 ⇒ 必红；
+   装上这份历史、按**点击时刻**去查 ⇒ 同样的 2.6 秒延迟下绿（`gates/diag/uif-probe3-16.log`）。
+   ★ 只记「新出现的一句」，不记每一拍：条数上限 200（一条流跑完远远用不到），不会无限长。 */
+export const TOAST_WATCH = `
+(() => {
+  if (window.__tftoast) return true;
+  const KEEP = 200;
+  window.__tftoast = [];
+  window.__tftoastOpen = false;
+  const rec = () => {
+    const b = document.getElementById('toast');
+    if (!b) { window.__tftoastOpen = false; return; }
+    const shown = b.classList.contains('show');
+    const text = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').trim();
+    if (!shown || !text) { window.__tftoastOpen = false; return; }
+    if (window.__tftoastOpen && window.__tftoast.length) {
+      const last = window.__tftoast[window.__tftoast.length - 1];
+      if (last.text === text) return;   // 同一句还亮着，别每拍记一条
+    }
+    window.__tftoast.push({ at: Date.now(), text });
+    window.__tftoastOpen = true;
+    if (window.__tftoast.length > KEEP) window.__tftoast.splice(0, window.__tftoast.length - KEEP);
+  };
+  window.__tftoastObs = new MutationObserver(rec);
+  window.__tftoastObs.observe(document.body, {
+    childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'],
+  });
+  rec();
+  return true;
+})()`
+
 /** 等**真的闲下来**：DOM 连续 `quiet` 拍不变，**并且手上没有在飞的请求**。
  *
  *  两件事必须一起判 —— 只看 DOM 会撞上"请求在路上、页面一动不动"那个空档（T-G40 的缺陷）；

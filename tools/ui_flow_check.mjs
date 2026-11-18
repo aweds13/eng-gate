@@ -50,7 +50,7 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 import {
-  Cdp, EXPORT_DIR, FETCH_WATCH, MUTATION_WATCH, ROOT, VIEWPORTS, VIEWS,
+  Cdp, EXPORT_DIR, FETCH_WATCH, MUTATION_WATCH, ROOT, TOAST_WATCH, VIEWPORTS, VIEWS,
   bootApp, findBrowser, iso, portBase, portBusyReason, seedFixture, setViewport, startServer,
   waitApp, waitHealth, waitIdle,
 } from './tf_browser.mjs'
@@ -140,6 +140,8 @@ class T {
     this.url = url
     this.vpName = vpName
     this.checks = []
+    // 卡 E140：提示条窗口的起点。还没点过任何东西时，窗口从这条流开始算。
+    this.toastMark = Date.now()
   }
 
   /* ---- 断言 ---- */
@@ -174,11 +176,13 @@ class T {
     await waitIdle(this.cdp)
   }
 
-  /** 装两个计数器：**页面还在动吗**（`MUTATION_WATCH`）与**还有没有请求在飞**（`FETCH_WATCH`）。
+  /** 装三个计数器：**页面还在动吗**（`MUTATION_WATCH`）、**还有没有请求在飞**（`FETCH_WATCH`）、
+   *  **提示条说过什么**（`TOAST_WATCH`，卡 E140）。
    *  每次导航之后都要重装（页面上下文是新的）；`bootApp` 里也会装一遍（那条路不经过这里）。 */
   async arm() {
     await this.cdp.eval(MUTATION_WATCH)
     await this.cdp.eval(FETCH_WATCH)
+    await this.cdp.eval(TOAST_WATCH)
   }
 
   /** 只看不点地重新加载（保留本机状态 —— 验"刷新后还保持着吗"要用它）。 */
@@ -256,6 +260,7 @@ class T {
     if (!got) { this.ok(`点得到：${label}`, false, `等了约${readyMs}ms，元素仍是 ${r.w}×${r.h}，点不到`); return false }
     const hit = await this.cdp.hitTest(selector, r.cx, r.cy)
     if (!hit.ok) { this.ok(`点得到：${label}（没被别的东西挡住）`, false, hit.why); return false }
+    this.toastMark = Date.now()  // 卡 E140：提示条的窗口从**点击那一刻**算，不从等待结束那一刻算
     await this.cdp.clickAt(r.cx, r.cy)
     if (quiet) await waitIdle(this.cdp)
     return true
@@ -316,6 +321,7 @@ class T {
       this.ok(`按得住起点：${fromSel}`, false, `${hit.why}（${hit.hit || '空'}）`)
       return false
     }
+    this.toastMark = Date.now()  // 卡 E140：拖也可能弹提示条，窗口同样从动作那一刻算
     await this.cdp.dragPath({ x: both.a.cx, y: both.a.cy },
       { x: both.b.cx, y: both.b.y + both.b.h * frac }, { steps })
     await waitIdle(this.cdp)
@@ -333,10 +339,18 @@ class T {
     return true
   }
 
-  async key(name) { await this.cdp.key(name); await waitIdle(this.cdp) }
+  async key(name) {
+    this.toastMark = Date.now()  // 卡 E140：回车/快捷键也会弹提示条（⑬ 就是按 Enter 提交的）
+    await this.cdp.key(name)
+    await waitIdle(this.cdp)
+  }
 
   /** 组合键（`Ctrl/⌘ + 字母`）—— T-G61 的键盘层要用它打 ⌘K。 */
-  async chord(letter, opts) { await this.cdp.chord(letter, opts); await waitIdle(this.cdp) }
+  async chord(letter, opts) {
+    this.toastMark = Date.now()  // 卡 E140：同上
+    await this.cdp.chord(letter, opts)
+    await waitIdle(this.cdp)
+  }
 
   /** 设置页分层（T-G63）：那一节默认是**折着**的 —— 先把 `set-xxx` 展开再操作。
    *  幂等（已经开着就什么都不做），所以每条流在动那一节之前调一次就行。
@@ -406,6 +420,14 @@ class T {
       return t && t.classList.contains('show') ? (t.innerText || '').replace(/\\s+/g, ' ').trim() : '' })()`)
   }
 
+  /** 卡 E140：窗口内**已经说过**的提示条（按时间正序）。
+   *  起点是**动作那一刻**（`this.toastMark`），不是「现在」—— 提示条只活 2.2 秒，
+   *  而点完之后那句 `waitIdle` 可能已经花掉 6 秒；等回来再采样，读到的永远是空。 */
+  toastSince(at) {
+    const since = Number(at || 0) - 50  // 容许 50ms 的时钟颗粒差（页面与 Node 各有自己的 Date.now）
+    return this.cdp.eval(`(() => ((window.__tftoast || []).filter((r) => r.at >= ${Number(since)})))()`)
+  }
+
   /** 等提示条里出现某句话（操作是异步的：点了之后要等后端回话）。
    *  ★ 失败时回的是**最后一句非空的**提示条，不是"最后一次采样" ——
    *  第一版回最后一次采样，而提示条 2.2 秒后就自己消失了，于是失败信息永远是『（空）』，
@@ -416,6 +438,11 @@ class T {
     ms = scaleMs(ms, waitScale())  // 卡 E135：只乘预算（×1 时等于原值）；轮询粒度与循环结构不动
     const t0 = Date.now()
     let last = ''
+    // 卡 E140：先查**点击以来**的历史（提示条 2.2 秒就消失，而 press 的 waitIdle 可能更久）
+    for (const h of (await this.toastSince(this.toastMark)) || []) {
+      if (h.text) last = h.text
+      if (h.text.includes(needle)) return { ok: true, text: h.text }
+    }
     while (Date.now() - t0 < ms) {
       const now = await this.toast()
       if (now) last = now
@@ -434,6 +461,11 @@ class T {
     ms = scaleMs(ms, waitScale())  // 卡 E135：预算变、step（轮询粒度）不变
     const t0 = Date.now()
     let last = ''
+    // 卡 E140：先查**点击以来**的历史（理由同 waitToast）
+    for (const h of (await this.toastSince(this.toastMark)) || []) {
+      if (h.text) last = h.text
+      if (h.text && pred(h.text)) return { ok: true, text: h.text }
+    }
     while (Date.now() - t0 < ms) {
       const now = await this.toast()
       if (now) last = now

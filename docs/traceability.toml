@@ -12463,3 +12463,15 @@ evidence = [
   "file:tests/test_ui_flow_check.py",
 ]
 gaps = "- 卡规格说「三个等待原语预算硬编码」，实测是四处硬编码预算加一处 step：`waitToast(ms = 12000)` / `waitToastWhere(ms = 12000, step = 150)` / `waitFor(ms = 5000, step = 120)`，外加 `waitToastWhere` 与 `waitFor` 各自的 `step` 默认值。我只乘 `ms`，`step` 一个字没动 —— 轮询粒度不变是卡规格明写的。指针 tools/ui_flow_check.mjs- 判据 1 要求「倍数区间 [1,10]」，我把它落成**上界夹死、下界拉到 1**：`parseWaitScale` 对空/坏/NaN/<=0 一律回 1（不报错、不改判据），对 >10 夹到 10。理由是「把预算调小」不是这张卡要的能力（调小等于偷偷放宽判据的对手面），而「写错值就崩掉整道门」也不是。指针 tools/tf_wait_budget.mjs- 判据 2 要求「倍数≠1 才自报一行」，我把这行放在 `--list` / `--coverage` 早退**之后**：纯输出路径（`node tools/ui_flow_check.mjs --list`）在任何 env 下 stdout 逐字相同，否则上游若有解析 `--list` 输出的脚本会被这行 note 弄坏。指针 tools/ui_flow_check.mjs"
+
+[entries."T-AG649"]
+id = "T-AG649"
+title = "提示条按点击时刻取历史：2.2秒的寿命不再决定判据读到什么"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/tf_browser.mjs",
+  "file:tools/ui_flow_check.mjs",
+  "file:tests/test_ui_flow_check.py",
+]
+gaps = "- 卡规格判据 4 说「waitToast / waitToastWhere 在轮询之前先查历史」，我把「历史」的起点定义成**发事件那一刻**（`press` / `drag` / `key` / `chord` 里 `this.toastMark = Date.now()`），不是「等待开始那一刻」。理由是实测症状本来就是「点击之后 toast 只活 2.2 秒、`waitIdle` 先跑 0.9–6.2 秒」，起点若取等待开始，历史里那条已经滚出 200 条上限时才补不回来；取发事件时刻则「点击→等空闲→再等 toast」整段都盖住。指针 tools/ui_flow_check.mjs- `toastSince(at)` 里 `const since = Number(at || 0) - 50` 的 **-50ms 容差**是为了吸收 `Date.now()` 在页面侧（`MutationObserver` 回调里记 `at`）与 Node 侧（`toastMark`）之间的时钟抖动；不给容差时实测会漏掉紧贴点击的那一条。这不是放宽判据：判据仍是「文本要么精确匹配、要么含子串」，容差只决定从历史里取哪几行。指针 tools/ui_flow_check.mjs- `TOAST_WATCH` 只保留最近 **200** 条并在窗口内幂等（`if (window.__tftoast) return true`），`__tftoastOpen` 防同一句每拍重记一次；26 条流全跑完内存里最多 200 条短字符串，不引入可观测的耗时差（全量 405.3s vs 改前 374–400s 同量级）。指针 tools/tf_browser.mjs- 反向变异只做两条（判据 6 要求的两条）：A 删掉两处「先查历史」的循环、B 把 `this.toastMark` 挪到 `clickAt` 之后。两条都必须红 —— 见 checkpoint 的 sha 记录，脚本与结果在 gates/diag/_rev_E140.py 与 gates/diag/_rev_E140_result.txt。"
