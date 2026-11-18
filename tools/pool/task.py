@@ -665,7 +665,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
                 f"{member_id} 不在这个任务的名单里（名单：{'、'.join(state['declared'])}）",
                 "★ 不在名单里的申请不算数 —— 防夹带（要加卡先改预声明并重建任务）",
             ])
-        if member_id in state["waived"]:
+        if member_id in (state.get("waived") or []):
             raise RefuseError([f"{member_id} 已被豁免，不能再交申请（要交先撤豁免）"])
 
         files = [f.strip() for f in (args.files or "").split(",") if f.strip()]
@@ -722,9 +722,16 @@ def _read_only(state: dict) -> list[str]:
 
 
 def _required(state: dict) -> list[str]:
-    """**参与放行**的成员 = 名单去掉只读成员（顺序照名单）。"""
+    """**参与放行**的成员 = 名单去掉只读成员（顺序照名单）。
+
+    ★ 卡 E129：`declared` 缺了 / 不是列表 ⇒ **抛**，不猜成空名单 ——
+    空名单等于「名单上没有卡 = 齐了」，那是把「读不懂」洗成「没事」，比崩更坏。
+    """
     ro = set(_read_only(state))
-    return [m for m in state["declared"] if m not in ro]
+    declared = state.get("declared")
+    if not isinstance(declared, list):
+        raise BatchError("结构不对：缺 declared 列表（不猜成空名单）")
+    return [m for m in declared if m not in ro]
 
 
 def _ok_required(state: dict) -> set[str]:
@@ -740,11 +747,12 @@ def _bad(state: dict) -> list[str]:
     （那正是审计的产物：发现了问题要开跟进卡，而不是卡住本批）。"""
     ro = set(_read_only(state))
     return [mid for mid, kind in (state.get("claims") or {}).items()
-            if kind == "failed" and mid not in state["waived"] and mid not in ro]
+            if kind == "failed" and mid not in (state.get("waived") or [])
+            and mid not in ro]
 
 
 def _missing(state: dict) -> str:
-    got = _ok(state) | set(state["waived"])
+    got = _ok(state) | set(state.get("waived") or [])
     return "、".join(m for m in _required(state) if m not in got)
 
 
@@ -756,12 +764,15 @@ def cmd_waive(args: argparse.Namespace) -> int:
         _enforce_deadline(state, args.task)
         if args.member not in state["declared"]:
             raise RefuseError([f"{args.member} 不在名单里（{'、'.join(state['declared'])}）"])
-        if args.member in state["waived"]:
+        if args.member in (state.get("waived") or []):
             print(f"{args.member} 早就豁免过了（幂等）")
             return 0
         if state.get("claims", {}).get(args.member) == "success":
             raise RefuseError([f"{args.member} 已经交过成功申请了，不用豁免"])
         _log_takeover(state, takeover)
+        # ★ 卡 E129：老状态没有 / 不是列表 ⇒ 先补一个列表再 append（`setdefault` 对 None 不生效）。
+        if not isinstance(state.get("waived"), list):
+            state["waived"] = []
         state["waived"].append(args.member)
         _log(state, state["state"], state["state"],
              f"★ 豁免 {args.member}（不齐放行，留痕）：{args.reason}")
@@ -824,7 +835,7 @@ def _maybe_advance(state: dict, man: dict) -> dict:
         return state
     # ★ 卡 143：只数**非只读**成员（审计型只读成员不参与放行）—— 老状态 `read_only` 缺省为空集。
     ro = set(_read_only(state))
-    got = {m for m in (_ok(state) | set(state["waived"])) if m not in ro}
+    got = {m for m in (_ok(state) | set(state.get("waived") or [])) if m not in ro}
     if len(got) < state["need"]:
         return state
     # ★ 有"不通过"的卡没处理 ⇒ 挡住（哪怕名单上别的卡都成功了）。
@@ -840,8 +851,9 @@ def _maybe_advance(state: dict, man: dict) -> dict:
     _log(state, frm, "ready",
          f"★ **集齐全部成送申请**（{len(got)}/{state['need']}）—— 最后一个投递者当场关门，"
          f"自动动作 {state['auto']}")
-    if state["waived"]:
-        _log(state, "ready", "ready", f"注意：放行时有豁免（{'、'.join(state['waived'])}）")
+    waived_now = state.get('waived') or []
+    if waived_now:
+        _log(state, "ready", "ready", f"注意：放行时有豁免（{'、'.join(waived_now)}）")
     if "gate" in state["auto"]:
         # ★ 门禁移出锁外（卡 128）：这里只记账「开始跑门禁」，subprocess 在 _finish_gate。
         state["state"] = "gating"
@@ -948,7 +960,7 @@ def render_draft(state: dict, man: dict) -> str:
                     note = f"★ **只读（审计）**（不参与放行）：{detail}"
                 rows.append(f"| {mid} | {mem.get('what', '')} | —— | {note} |")
                 continue
-            if mid in state["waived"]:
+            if mid in (state.get("waived") or []):
                 rows.append(f"| {mid} | {mem.get('what', '')} | —— | ★ **豁免**（没到） |")
                 continue
             if not inbox.exists():
@@ -966,7 +978,7 @@ def render_draft(state: dict, man: dict) -> str:
     gate = state.get("gate") or {}
     # ★ 卡 143：集齐数只数非只读成员（审计型只读成员不参与放行）。
     ro = set(_read_only(state))
-    got_n = len({m for m in (_ok(state) | set(state["waived"])) if m not in ro})
+    got_n = len({m for m in (_ok(state) | set(state.get("waived") or [])) if m not in ro})
     return (f"""# 任务 {state['id']} 文书骨架（按**层**分组）
 
 > 任务一句话：{state['why']}
@@ -1015,7 +1027,7 @@ def render_why_skeleton(state: dict, man: dict) -> str:
     return f"""# 任务 {state['id']} —— 人手补的部分（机器不会覆盖这个文件）
 
 > 成员：{'、'.join(state['declared'])} · 层：{'、'.join(state['layers'])} ·
-> 集齐 {len(_ok(state) | set(state['waived']))}/{state['need']}
+> 集齐 {len(_ok(state) | set(state.get('waived') or []))}/{state['need']}
 > ★ 骨架（枚举表）在 `{state['id']}.draft.md`，**那个会被重算**；人写的东西写这里。
 
 ## 台账编号与归类（人定）
@@ -1114,7 +1126,7 @@ def _report(state: dict) -> int:
     gate = state.get("gate") or {}
     bad = _bad(state)
     print(f"状态：**{state['state']}** · 成功申请 {len(_ok_required(state))}/{state['need']} · "
-          f"豁免 {len(state['waived'])} · 还缺 {_missing(state) or '（齐了）'}")
+          f"豁免 {len(state.get('waived') or [])} · 还缺 {_missing(state) or '（齐了）'}")
     if bad:
         print(f"★ 有卡投了**不通过**、还没处理：{'、'.join(bad)} —— 不放行（重投或豁免）")
         return 3
@@ -1146,7 +1158,7 @@ def cmd_status(args: argparse.Namespace) -> int:
                 tag = "◇只读✗"
             else:
                 tag = "◇只读…"
-        elif mid in state["waived"]:
+        elif mid in (state.get("waived") or []):
             tag = "★豁免"
         elif state.get("claims", {}).get(mid) == "success":
             tag = "✓成功申请"
@@ -1164,23 +1176,33 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
+    """列任务。★ 卡 E129：读不了的状态文件**点名念出来**，不许洗成「还没有任务」。
+
+    「（还没有任务：<root>）」只留给**真的零个**状态文件 —— 一个文件坏掉时说
+    「还没有任务」就是撒谎（文件明明在盘上）。
+    """
     root = batch_dir()
     if not root.exists():
         print(f"（还没有任务：{root}）")
         return 0
-    files = sorted(root.glob("*.json"))
+    files = [p for p in sorted(root.glob("*.json")) if p.name != "pool.json"]
+    broken: list[tuple[str, str]] = []
     shown = False
     for path in files:
-        if path.name == "pool.json":
-            continue
-        with contextlib.suppress(BatchError):
+        try:
             st = read_json(path)
-            if not isinstance(st.get("declared"), list):
-                continue
-            shown = True
-            print(f"{st['id']:<22} {st['state']:<16} "
-                  f"{len(_ok_required(st))}/{st['need']}  {st['why']}")
-    if not shown:
+        except (BatchError, OSError, UnicodeDecodeError) as exc:
+            broken.append((path.name, str(exc)))
+            continue
+        if not isinstance(st.get("declared"), list):
+            broken.append((path.name, "结构不对：缺 declared 列表（不猜成空名单）"))
+            continue
+        shown = True
+        print(f"{st['id']:<22} {st['state']:<16} "
+              f"{len(_ok_required(st))}/{st['need']}  {st['why']}")
+    for name, why in broken:
+        print(f"  ★ 读不了：{name} —— {why}")
+    if not shown and not broken:
         print(f"（还没有任务：{root}）")
     return 0
 

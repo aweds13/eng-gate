@@ -1523,3 +1523,183 @@ def test_checkin_read_side_lands_on_the_write_side(tmp_path: Path) -> None:
         )
     assert Path(seen["real"]["data_root"]).resolve() == real.resolve()
     assert Path(seen["profile"]["data_root"]).resolve() == tool_root.resolve()
+
+# ============================================ 卡 E129：读不懂的状态文件要点名，不许洗成没有
+
+# ★ 这一段的病：工具读**任务面**（task_list / task_status / wb_task list）时，
+#   一个读不懂的状态文件被 except BatchError: continue 静默丢掉 ⇒ 盘上明明有个
+#   文件，回话却说「一个任务都没有」。读不懂被洗成不存在，是**撒谎**。
+#
+#   判据 1：坏文件进 broken 通道并点名（不许当没有、不许当 isError）；
+#   判据 2：老状态缺 waived / declared 一律按缺省处理，不许 KeyError；
+#   判据 3：缺 declared 不猜成空名单（空名单 = 齐了）；
+#   判据 4：count == len(tasks)，tasks + broken == 盘上文件数；
+#   判据 5：wb_task list 也逐条念「读不了」，不冒充「还没有任务」。
+
+
+def _write_bad_state(d: Path, name: str, body: str | bytes) -> Path:
+    """往批目录里塞一个坏状态文件（d 是任务目录本身）。"""
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / name
+    if isinstance(body, bytes):
+        path.write_bytes(body)
+    else:
+        path.write_text(body, encoding="utf-8", newline="\n")
+    return path
+
+
+def _state_without(state_path: Path, *keys: str) -> dict[str, Any]:
+    """把注册好的状态文件里若干键**删掉**，模拟老形状（判据 2/3）。"""
+    raw = json.loads(state_path.read_text(encoding="utf-8"))
+    for key in keys:
+        raw.pop(key, None)
+    state_path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    return raw
+
+
+def test_task_list_names_broken_state_file(batch: Path) -> None:
+    """判据 1：一个坏 JSON 不许被洗成「一个任务都没有」—— 要点名、要能数出来。"""
+    _seed(batch)
+    _write_bad_state(batch, "T-9.json", "{断掉的 json")
+    text, data, is_error = pool_mcp.tool_task_list({})
+    assert is_error is False, text
+    assert [b["file"] for b in data["broken"]] == ["T-9.json"], data["broken"]
+    assert data["broken"][0]["error"], "点了名却没给原因"
+    assert "★ 读不了：T-9.json" in text, text
+    assert "一个任务都没有" not in text, "有文件在盘上还说没有任务"
+    assert "另有 1 个状态文件读不了" in text, text
+    assert data["count"] == 1 and data["tasks"][0]["id"] == "T-1"
+
+
+def test_task_list_broken_is_not_batch_error_only(batch: Path) -> None:
+    """判据 1：坏文件是**读数**不是报错 —— 好任务照样列出来（不许整份失败）。"""
+    _seed(batch)
+    _write_bad_state(batch, "T-8.json", "[]")
+    _write_bad_state(batch, "T-7.json", b"\xff\xfe")
+    text, data, is_error = pool_mcp.tool_task_list({})
+    assert is_error is False, text
+    names = sorted(b["file"] for b in data["broken"])
+    assert names == ["T-7.json", "T-8.json"], names
+    assert data["tasks"][0]["id"] == "T-1"
+    for item in data["broken"]:
+        assert "★ 读不了：" + item["file"] in text
+
+
+def test_task_list_broken_differs_from_no_files(batch: Path) -> None:
+    """判据 1/4：零文件与坏文件是**两种读数**（不许同一句话打发）。"""
+    empty, _, _ = pool_mcp.tool_task_list({})
+    assert "一个任务都没有" in empty
+
+    _write_bad_state(batch, "T-5.json", "not json at all")
+    text, data, _ = pool_mcp.tool_task_list({})
+    assert "一个任务都没有" not in text, text
+    assert data["count"] == 0 and len(data["broken"]) == 1
+    assert "（共 0 个任务，另有 1 个状态文件读不了）" in text, text
+
+
+def test_task_list_description_mentions_unreadable() -> None:
+    """判据 1：工具说明书也得说它会点名读不了的文件（否则别的窗口不知道有这个读数）。"""
+    spec = next(s for s in pool_mcp.TASK_TOOL_SPECS if s["name"] == "task_list")
+    desc = spec["description"]
+    assert "读不了" in desc, desc
+    assert "点名" in desc, desc
+
+
+def test_task_list_count_reconciles_with_broken(batch: Path) -> None:
+    """判据 4：count 只数读得懂的那些；tasks + broken 必须等于盘上的 .json 数。"""
+    _seed(batch)
+    _write_bad_state(batch, "T-4.json", "{}")
+    _write_bad_state(batch, "T-3.json", "{\"id\": \"T-3\"}")
+    _write_bad_state(batch, "pool.json", "{\"pool\": []}")
+    _, data, _ = pool_mcp.tool_task_list({})
+    on_disk = [p.name for p in batch.glob("*.json") if p.name != "pool.json"]
+    assert len(data["tasks"]) == data["count"], data
+    assert data["count"] + len(data["broken"]) == len(on_disk), (data, on_disk)
+    assert sorted(b["file"] for b in data["broken"]) == ["T-3.json", "T-4.json"]
+
+
+def test_task_list_missing_declared_is_named_not_dropped(batch: Path) -> None:
+    """判据 3：缺 declared 报「结构不对」，**不许**当成空名单 / 当成不存在。"""
+    _seed(batch)
+    _write_bad_state(batch, "T-2.json", "{\"id\": \"T-2\", \"state\": \"collecting\"}")
+    text, data, _ = pool_mcp.tool_task_list({})
+    item = next(b for b in data["broken"] if b["file"] == "T-2.json")
+    assert "结构不对" in item["error"] and "declared" in item["error"], item
+    assert "★ 读不了：T-2.json" in text
+
+
+def test_task_list_tolerates_state_without_waived(batch: Path) -> None:
+    """判据 2：老状态没有 waived 键 ⇒ 当空列表，不许 KeyError。"""
+    _seed(batch)
+    _state_without(task.state_path("T-1"), "waived")
+    text, data, is_error = pool_mcp.tool_task_list({})
+    assert is_error is False, text
+    assert data["tasks"][0]["waived"] == []
+    assert data["tasks"][0]["missing"], "名单没交齐 ⇒ 还缺不算空"
+
+
+def test_task_status_tolerates_state_without_waived(batch: Path) -> None:
+    """判据 2：task_status 也读同一个老状态 —— 缺 waived 不许崩。"""
+    _seed(batch)
+    _state_without(task.state_path("T-1"), "waived")
+    text, data, is_error = pool_mcp.tool_task_status({"task": "T-1"})
+    assert is_error is False, text
+    assert data["waived"] == []
+    assert data["members"] and data["members"][0]["waived"] is False
+
+
+def test_helpers_tolerate_state_without_waived() -> None:
+    """判据 2：帮手函数自己也扛得住（_missing / _bad / _report 的裸下标已收掉）。"""
+    state = {
+        "id": "T-old", "declared": ["卡A", "卡B"], "need": 2, "read_only": [],
+        "state": "collecting", "claims": {"卡A": "failed"}, "auto": [], "gate": None,
+    }
+    assert task._missing(state) == "卡A、卡B"
+    assert task._bad(state) == ["卡A"]
+    state["waived"] = None
+    assert task._missing(state) == "卡A、卡B"
+    assert task._bad(state) == ["卡A"]
+    task._report(state)
+
+
+def test_task_helpers_refuse_state_without_declared() -> None:
+    """判据 3：_required 缺 declared ⇒ 抛 BatchError，**不许**回空列表。"""
+    for broken_state in ({"id": "T", "need": 0}, {"id": "T", "declared": None}):
+        with pytest.raises(task.BatchError) as caught:
+            task._required(broken_state)
+        assert "declared" in str(caught.value), str(caught.value)
+
+
+def test_task_status_refuses_state_without_declared(batch: Path) -> None:
+    """判据 3：task_status 遇到缺名单的状态 ⇒ 明说读不了（不造假详情）。"""
+    _seed(batch)
+    _state_without(task.state_path("T-1"), "declared")
+    text, data, is_error = pool_mcp.tool_task_status({"task": "T-1"})
+    assert is_error is True, text
+    assert "declared" in text, text
+    assert "members" not in data, data
+
+
+def test_wb_task_list_says_unreadable_not_missing(
+    batch: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """判据 5：wb_task list（CLI 人话）也逐条念「读不了」。"""
+    assert task.main(["list"]) == 0
+    assert "（还没有任务" in capsys.readouterr().out
+
+    _write_bad_state(batch, "T-1.json", "{坏的")
+    assert task.main(["list"]) == 0
+    out = capsys.readouterr().out
+    assert "★ 读不了：T-1.json" in out, out
+    assert "（还没有任务" not in out, out
+
+
+def test_broken_reading_keeps_stdout_json_block(batch: Path) -> None:
+    """判据 7：有坏文件时，走 MCP 那条路也解得开机器块，且 broken 在里面。"""
+    _seed(batch)
+    _write_bad_state(batch, "T-9.json", "{断掉的 json")
+    result = pool_mcp.call_tool("task_list", {})
+    assert result is not None
+    block = _json_block(_text(result))
+    assert block["count"] == 1 and block["tasks"][0]["id"] == "T-1"
+    assert [b["file"] for b in block["broken"]] == ["T-9.json"]

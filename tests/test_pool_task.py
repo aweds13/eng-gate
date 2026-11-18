@@ -747,3 +747,23 @@ def test_main_tree_root_agrees_with_registry_in_every_cwd(tmp_path: Path, monkey
         if got_task != got_reg or got_task != want:
             diffs.append((mod_root.name, cwd.name, got_task.as_posix(), got_reg.as_posix()))
     assert not diffs, diffs
+
+
+def test_old_shape_state_runs_through_cli(tmp_path, monkeypatch, capsys):
+    """判据 7：老形状状态（没有 waived / 没有 read_only）走 CLI 不许 KeyError。"""
+    monkeypatch.setenv("TF_BATCH_DIR", str(tmp_path / "batch"))
+    body = _manifest("T-OLD", [("卡A", ["tools/a/*"]), ("卡B", ["tools/b/*"])])
+    _register(tmp_path, "T-OLD", body)
+    sp = task.state_path("T-OLD")
+    raw = json.loads(sp.read_text(encoding="utf-8"))
+    for key in ("waived", "read_only"):
+        raw.pop(key, None)
+    sp.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+    assert task.main(["status", "T-OLD"]) == 0
+    assert "豁免 0" in capsys.readouterr().out
+    assert task.main(["advance", "T-OLD"]) == 0
+    capsys.readouterr()
+    rc = task.main(["claim", "T-OLD", "卡A", "--evidence", "ok", "--files", "tools/a/x.py"])
+    assert rc == 0, capsys.readouterr().err
+    assert task.main(["status", "T-OLD"]) == 0

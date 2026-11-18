@@ -555,8 +555,8 @@ TASK_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "task_list",
         "description": (
-            "任务栅栏现状：所有任务一行（任务号 / 状态 / 成送申请进度 / 一句话 why）。"
-            "只读，不要 env。"
+            "任务栅栏现状：所有任务一行（任务号 / 状态 / 成送申请进度 / 一句话 why）；"
+            "读不了的状态文件单独点名（不许洗成没有）。只读，不要 env。"
         ),
         "inputSchema": {
             "type": "object",
@@ -1991,43 +1991,63 @@ def _task_batch_dir(root: Path | None = None) -> Path:
     return task.batch_dir(root)
 
 
-def _load_tasks(batch_root: Path | None = None) -> list[dict[str, Any]]:
-    """把批目录里的任务状态都读进来（跳过 `pool.json` / 结构不对的）。**只读**。"""
+def _load_tasks(
+    batch_root: Path | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """把批目录里的任务状态都读（跳过 `pool.json`）。**只读**。
+
+    ★ 卡 E129：返回 `(states, broken)` —— 读不了的**点名交出来**，不许静默丢掉。
+    丢掉就等于「盘上没这个文件」，而那正是本卡要修的病（读不懂被洗成不存在）。
+    broken 每条是 `{"file": "<名>.json", "error": "<原因>"}`；目录冒充、非 UTF-8、
+    坏 JSON、缺 declared 都进 broken。
+    """
     root = _task_batch_dir(batch_root)
     if not root.exists():
-        return []
+        return [], []
     out: list[dict[str, Any]] = []
+    broken: list[dict[str, Any]] = []
     for path in sorted(root.glob("*.json")):
         if path.name == "pool.json":
             continue
         try:
             st = task.read_json(path)
-        except task.BatchError:
+        except (task.BatchError, OSError, UnicodeDecodeError) as exc:
+            broken.append({"file": path.name, "error": str(exc)})
             continue
-        if isinstance(st.get("declared"), list):
-            out.append(st)
-    return out
+        if not isinstance(st.get("declared"), list):
+            broken.append(
+                {"file": path.name, "error": "结构不对：缺 declared 列表（不猜成空名单）"}
+            )
+            continue
+        out.append(st)
+    return out, broken
 
 
 def tool_task_list(
     arguments: dict[str, Any], root: Path = ROOT
 ) -> tuple[str, dict[str, Any], bool]:
-    """所有任务一行：任务号 / 状态 / 成送申请进度 / 一句话 why（**只读**）。"""
+    """所有任务一行：任务号 / 状态 / 成送申请进度 / 一句话 why（**只读**）。
+
+    ★ 卡 E129：读不了的状态文件**点名念出来**（`broken` 通道），计数与盘上的文件对得上。
+    """
     try:
         root_dir = _task_batch_dir(root)
-        states = _load_tasks(root)
+        states, broken = _load_tasks(root)
     except task.BatchError as exc:
         return _result(
-            f"task_list：读不了任务目录：{exc}", {"count": 0, "tasks": []}, is_error=True
+            f"task_list：读不了任务目录：{exc}",
+            {"count": 0, "tasks": [], "broken": []},
+            is_error=True,
         )
     head = f"任务栅栏（task_list）—— 读 {root_dir.as_posix()}"
-    if not states:
+    if not states and not broken:
         return _result(
             head + "\n（一个任务都没有）",
-            {"batch_dir": root_dir.as_posix(), "count": 0, "tasks": []},
+            {"batch_dir": root_dir.as_posix(), "count": 0, "tasks": [], "broken": []},
             is_error=False,
         )
-    lines = [head + f"（共 {len(states)} 个任务）"]
+    tail = f"，另有 {len(broken)} 个状态文件读不了" if broken else ""
+    lines = [head + f"（共 {len(states)} 个任务{tail}）"]
     rows: list[dict[str, Any]] = []
     for st in states:
         ok = task._ok(st)
@@ -2049,7 +2069,14 @@ def tool_task_list(
             f"  · {st.get('id')}  [{st.get('state')}]  成送申请 {len(ok)}/{st.get('need')}"
             f"{extra}  还缺：{missing or '（齐了）'}  —— {st.get('why')}"
         )
-    data = {"batch_dir": root_dir.as_posix(), "count": len(states), "tasks": rows}
+    for item in broken:
+        lines.append(f"  ★ 读不了：{item['file']} —— {item['error']}")
+    data = {
+        "batch_dir": root_dir.as_posix(),
+        "count": len(states),
+        "tasks": rows,
+        "broken": broken,
+    }
     return _result("\n".join(lines), data, is_error=False)
 
 
@@ -2080,6 +2107,9 @@ def tool_task_status(
         )
     try:
         st = task.read_json(sp)
+        if not isinstance(st.get("declared"), list):
+            # ★ 卡 E129：缺名单就**说清读不了**，不猜成空名单（空名单 = 齐了 = 撒谎）。
+            raise task.BatchError("结构不对：缺 declared 列表（不猜成空名单）")
         man = task.load_manifest(task_id, root)
     except task.BatchError as exc:
         return _result(

@@ -1,0 +1,10 @@
+[entries."T-AG641"]
+id = "T-AG641"
+title = "号池任务面把坏状态文件洗成没有：读不懂的点名交出来、计数与盘上对得上、老形状不再KeyError"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_task.py",
+]
+gaps = "- 卡规格判据 2 说 waived「13 处」读取点：实数是 **13 处读取 + 1 处写回**（写回在 tools/pool/task.py 的 claim 段，缺键时先补 `state[「waived」] = []` 再 append）；另有 2 处在**文书骨架模板**里（`豁免 {len(state.get('waived') or [])}` 与 `集齐 …` 那两行），也一并按 `or []` 收口，所以改动的字面比「13 处」多两行。指针 `tools/pool/task.py`- 判据 3 要求缺 declared 时 task_status 抛 `BatchError(「结构不对：缺 declared 列表（不猜成空名单）」)` 并被既有 except 兜住：实测兜住它的是 `tool_task_status` 自己那层 `except task.BatchError`，所以**报错文案进了 is_error 人话**，不是机器块；钉子 accordingly 只判人话 + 不判 payload 键（与判据 1 的 broken 通道分开）。指针 `tools/pool_mcp.py`- 判据 5 的「（还没有任务：…）」我实现成 `if not shown and not broken`：目录存在但全是坏文件时**不念**这句（原来会念）。这条判据的反面（目录不存在）仍保留一句。指针 `tools/pool/task.py`"
+
