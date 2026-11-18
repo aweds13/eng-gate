@@ -6397,3 +6397,19 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E140"
+task = "T-AG649"
+title = "提示条只活2.2秒而观测开始得太晚"
+tree = ".wt/E140"
+spec = "复盘/卡/卡E140-提示条只活2.2秒而观测开始得太晚.md"
+files = [
+  "tools/tf_browser.mjs",
+  "tools/ui_flow_check.mjs",
+  "tests/test_ui_flow_check.py",
+  "docs/subsystems/ci/测试流程.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
