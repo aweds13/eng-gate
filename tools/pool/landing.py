@@ -25,7 +25,8 @@ r"""主控的通用集成器（实现层）：把一张外包卡（工人已在�
   ③′ fail-fast 钉子（卡规格都要在索引里）→ ③″ 快门禁预检（卡 226/236：run_gates.py
      --fast，十几秒，不落盘；★ 次序钉死：参数互斥检查最先（非法退 6，不碰预检）
      → ③′ → ③″ → ④ 全量；预检红退 7，`--no-preflight` 可跳过）
-  ④ 拿门禁锁（段由 --port-base 给）→ 跑门禁（★ 带 1800s 硬超时）→ 红了就 release + 退出
+  ④ 拿门禁锁（段由 --port-base 给）→ 跑门禁（★ 带硬超时：缺省 1800s、
+     认 TF_GATE_TIMEOUT_S）→ 红了就 release + 退出
      ★ 卡 184：`--affected` / `--changed-from` 透传给 `run_gates.py`（默认关，给了才少跑）；
      三条强制全量（碰 scripts/**/tools/**/gates/** / 空计划 / 今天没跑过全量）任何一条命中就跑全量
   ⑤′ 白名单核对（卡的文件 + 文档三件 + gates/last.json + gates/reuse.json）
@@ -263,6 +264,79 @@ def resolve_derived_conflicts(wt: pathlib.Path, *, card: str | None = None,
     add = [p for p in (*RESOLVABLE, *GATE_ARTIFACTS, *replay_add) if p in conflicted]
     run(["git", "add", "--", *add], cwd=wt)
     return True, add
+
+
+def _rebase_dirty_rels(wt: pathlib.Path) -> list[str]:
+    """工作区 / 索引里**还没进这一笔**的已跟踪文件（仓库相对路径，卡 E138）。
+
+    ★ 为什么不列未跟踪文件（实测）：git rebase --continue 只在**已跟踪**文件脏时
+      拒跑（它报 You must edit all merge conflicts and then mark them as resolved
+      using git add）；纯未跟踪（??）文件它照走 —— 列进来只会让名单变长，还会把
+      本笔之外的新文件 staged 进这一笔。
+    ★ 也不列两种行：(a) **只有索引变了**（XY 的第二个字符是空格，已 staged）= 它已经
+      是这一笔的一部分，不用补 add（列进来只会把「补了几个」的读数说大）；(b) **还没解
+      的冲突**（UU / AA / DD 等等）= 现场还带着冲突标记，谁 add 谁就等于把标记提交进这一笔。
+    """
+    raw = run(["git", "-c", "core.quotepath=false", "status", "--porcelain", "-uall",
+               "--no-renames"], cwd=wt, check=False).stdout or ""
+    out: list[str] = []
+    for line in raw.splitlines():
+        if len(line) < 4:
+            continue
+        xy = line[:2]
+        if "?" in xy or "U" in xy or xy in ("AA", "DD"):
+            continue
+        if xy[1] == " ":
+            continue
+        out.append(line[3:].split(" -> ")[-1].strip().strip('"'))
+    return out
+
+
+def _continue_rebase_after_resolve(wt: pathlib.Path,
+                                   *, task: str) -> tuple[int, list[str]]:
+    """⑦ rebase --continue：失败就先按白名单补一次 add、**只重试一次**（卡 E138）。
+
+    返回 (退出码, 本次补 add 的仓库相对路径清单)；0 = rebase 真走完了。
+    ★ 白名单只有**既有的三张表**（RESOLVABLE / GATE_ARTIFACTS / _queue_rels）——
+      这里不写第二份路径字面量。白名单外的脏文件一个都不 add：那是本笔之外的改动，
+      吞进来就是把人的东西混进这一笔（git add -A 那种顺手正是本卡要防的）。
+    ★ 只重试一次，不是循环：真冲突时死循环比停手更糟。
+    """
+
+    def _cont():
+        return subprocess.run(["git", "rebase", "--continue"], cwd=str(wt),
+                              capture_output=True, text=True, encoding="utf-8",
+                              errors="replace",
+                              env={**os.environ, "GIT_EDITOR": "true"})
+
+    cont = _cont()
+    if cont.returncode == 0:
+        return 0, []
+    print("  ★ rebase --continue 失败 ⇒ 先补 add 再重试一次：")
+    print("  ", (cont.stdout or "")[-400:].strip())
+    print("  ", (cont.stderr or "")[-400:].strip())
+    allow = [*RESOLVABLE, *GATE_ARTIFACTS, *_queue_rels(wt)]
+    dirty = _rebase_dirty_rels(wt)
+    hit = [p for p in dirty if p in allow]
+    extra = [p for p in dirty if p not in allow]
+    if extra:
+        print("  ↳ 白名单外的脏文件：" + " · ".join(extra))
+        print("    不 add：那是本笔之外的改动，吞进来就是把人的东西混进这一笔")
+    if hit:
+        add_r = run(["git", "add", "--", *hit], cwd=wt, check=False)
+        if add_r.returncode != 0:
+            print("  ↳ 补 add 非零（rc=" + str(add_r.returncode) + "）："
+                  + (add_r.stderr or "").strip()[-300:])
+    print("  ↳ 补 add：" + str(len(hit)) + " 个：" + (" · ".join(hit) or "(空)"))
+    again = _cont()
+    print("  ↳ 重试退出码 = " + str(again.returncode))
+    if again.returncode != 0:
+        print("  ★ 重试一次仍失败 ⇒ 停手：" + task + " 得人来判这场冲突")
+        print("  ", (again.stdout or "")[-400:].strip())
+        print("  ", (again.stderr or "")[-400:].strip())
+        return 3, hit
+    print("  ★ 重试后 rebase 成功（本笔补 add 了 " + str(len(hit)) + " 个派生文件）")
+    return 0, hit
 
 
 # ------------------------------------------- 卡 E122（T-AG631）：重放本笔自己翻的那一行
@@ -1610,6 +1684,29 @@ def cloud_expect_host() -> str:
     return os.environ.get("TF_GATE_CLOUD_EXPECT_HOST", "").strip()
 
 
+def _gate_timeout_s() -> float:
+    """门禁硬超时（秒）：TF_GATE_TIMEOUT_S 是**唯一**来源，缺省 1800（卡 E138）。
+
+    ★ 非法（非数字 / ≤0 / nan·inf）⇒ 打印一行**点名那个值**再回落 1800：不退出
+      （一个拼错的 env 不该让整趟落地在 ④ 之前炸掉），也不静默（日志里得看得见）。
+    ★ 只在这里读一次环境变量：打印与 subprocess.run 用的是同一个读数。
+    """
+    raw = os.environ.get("TF_GATE_TIMEOUT_S", "").strip()
+    if not raw:
+        return 1800.0
+    try:
+        val = float(raw)
+    except ValueError:
+        print("  ★ TF_GATE_TIMEOUT_S=" + repr(raw) + " 不是数字 ⇒ 回落缺省 1800s",
+              flush=True)
+        return 1800.0
+    if not (val > 0 and val < float("inf")):
+        print("  ★ TF_GATE_TIMEOUT_S=" + repr(raw) + " 不是正的有限秒数 ⇒ 回落缺省 1800s",
+              flush=True)
+        return 1800.0
+    return val
+
+
 def make_cloud_transport(host: str):
     """云机传输：默认 `SshTransport`；`TF_GATE_CLOUD_FAKE=<json>` ⇒ 假回传（**只许单测**）。
 
@@ -2862,7 +2959,9 @@ def main(argv: list[str] | None = None) -> int:
                     auto_profiles = True
             if force_full_reason:
                 print(f"  ★ 强制全量（不传 --affected）：{force_full_reason}")
-            print(f"=== ④ 锁（段 {a.port_base}）→ 门禁（硬超时 1800s；"
+            # ★ 卡 E138：超时只算一次（打印与 subprocess.run 用同一个读数）。
+            gate_timeout = _gate_timeout_s()
+            print(f"=== ④ 锁（段 {a.port_base}）→ 门禁（硬超时 {gate_timeout:g}s；"
                   f"{'增量' if incremental_run else '全量'}）===")
             # ★ 卡 E16（T-AG467）：拿锁改成**流式**（`acquire_gate_lock`）—— `gate_lock`
             #   每 60s 的「等门禁锁 Ns…」必须出现在落地日志里；`capture_output` 会全吞掉。
@@ -2884,7 +2983,7 @@ def main(argv: list[str] | None = None) -> int:
                                    encoding="utf-8", errors="replace",
                                    creationflags=getattr(__import__("subprocess"),
                                                          "CREATE_NO_WINDOW", 0),
-                                   timeout=1800)
+                                   timeout=gate_timeout)
                 out, rc = (r.stdout or ""), r.returncode
             except subprocess.TimeoutExpired as exc:   # ★ 门禁卡死：硬超时当红，别把锁留着
                 out = (exc.stdout or b"").decode("utf-8", "replace") \
@@ -2916,6 +3015,12 @@ def main(argv: list[str] | None = None) -> int:
                                capture_output=True, text=True,
                                encoding="utf-8", errors="replace",
                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),)
+                if rc == 124:
+                    print(f"★ 这次是**超时**掐的（不是判据红）：等了 {gate_timeout:g}s 没跑完。")
+                    print("  门禁锁**已经释放**（上面那条 gate_lock.py release 真跑过了），"
+                          "不用手工放。")
+                    print(f"  想再跑就把它调大：设 TF_GATE_TIMEOUT_S={gate_timeout * 2:g}"
+                          f"（现在是 {gate_timeout:g}）再跑同一张卡。")
                 return 1
             # ★ 卡 E63（T-AG521）判据 3/4/5：`rc == 0` 只说明**子进程退 0**，不是判据 ——
             #   产物自己写着「哪台机器跑的 / 哪些门没跑 / 哪些是复用的」，只信 rc 就是
@@ -3184,14 +3289,9 @@ def main(argv: list[str] | None = None) -> int:
                 print("  ", (rb.stdout or "")[-400:].strip())
                 print("  ", (rb.stderr or "")[-400:].strip())
                 return 3
-            cont = subprocess.run(["git", "rebase", "--continue"], cwd=str(wt),
-                                  capture_output=True, text=True, encoding="utf-8",
-                                  errors="replace",
-                                  env={**os.environ, "GIT_EDITOR": "true"})
-            if cont.returncode != 0:
+            cont_rc, cont_added = _continue_rebase_after_resolve(wt, task=a.task)
+            if cont_rc != 0:
                 print("  ★★ `rebase --continue` 也失败 ⇒ **停手**：")
-                print("  ", (cont.stdout or "")[-400:].strip())
-                print("  ", (cont.stderr or "")[-400:].strip())
                 # ★ 卡 E5 判据 4：自动 rebase（含派生物自动解决）一次仍失败 ⇒ **出队 + 需人工**
                 if not a.no_gate and not a.commit_only:
                     from pool import queue as _mq
@@ -3203,6 +3303,9 @@ def main(argv: list[str] | None = None) -> int:
                   "门禁产物取本笔的")
             print("    ★ 注意：那三个文档是**门禁之后**才重汇总的"
                   "（并行落地的有意宽松 —— 见卡 115 的口径）")
+            if cont_added:
+                print("    ★ 另外，rebase --continue 前白名单补 add 过 "
+                      + str(len(cont_added)) + " 个：" + " · ".join(cont_added))
         new = git("rev-parse", "HEAD", cwd=wt)
         print("  rebase 后 HEAD =", git("rev-parse", "--short", "HEAD", cwd=wt))
         # ★ 卡 E123（T-AG632）：rebase 之后落**门禁基点读数**（第一现场）——

@@ -3,6 +3,11 @@
 - 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。
 - lastgood.write_atomic 的两处 os.replace（.bak 那一份 + 正式文件那一次）走 _replace_retry：REPLACE_TRIES=5 / REPLACE_BASE_S=0.02，只对 PermissionError 重试、tries<=1 退化成单次尝试，用完抛 LastgoodError「原子写失败（N 次）」+ 路径 + 最后一次 errno 名。
 - 钉子：test_locked_timeout_fails_closed / test_locked_permission_error_is_busy_not_crash / test_locked_permission_error_branch_still_sleeps / test_locked_short_timeout_fails_closed（原 test_locked_short_timeout_still_gives_up 改写改名）/ test_two_families_agree_on_give_up + test_two_families_do_not_import_each_other / test_pool_lastgood 三条；test_concurrent_submits_lose_no_rows 补 errs 收集（线程里的异常原来只表现成「丢了行」）。
+## 2026-11-18 T-AG647 落地链的两个自停手出口：门禁硬超时认环境变量、rebase --continue 失败先补白名单再重试一次
+- ④ 的硬超时不再写死 1800：TF_GATE_TIMEOUT_S 是唯一来源（缺省 1800），非法值点名后回落；打印与 subprocess.run 用同一个读数（_gate_timeout_s 只读一次）；被超时掐掉（rc=124）时多打三句人话 —— 这是超时不是判据红、锁已经释放、想再跑就把 env 调大（给的是具体数），退出码仍是 1。
+- ⑦ 的 rebase --continue 不再一次失败就出队：先按三张既有表（RESOLVABLE / GATE_ARTIFACTS / _queue_rels）补一次 git add、只重试一次（_continue_rebase_after_resolve）；白名单外的脏文件点名但不 add；二次失败才停手，退出码仍是 3。
+- _rebase_dirty_rels 只列**已跟踪**且「索引没变」、且不是冲突态（?/U/AA/DD）的文件：纯未跟踪文件 git rebase --continue 本来就照走，列进来只会把本笔之外的新文件吞进这一笔。
+- 钉子四条 + 一条时问口径：test_a_dirty_recount_doc_is_added_and_the_continue_retried / test_a_dirty_file_outside_the_whitelist_is_not_added / test_the_continue_is_retried_exactly_once_then_stops / test_only_the_whitelisted_one_is_added_when_both_kinds_are_dirty；超时四条 test_gate_timeout_defaults_to_1800 / test_gate_timeout_reads_the_env / test_gate_timeout_bad_value_is_named_and_falls_back / test_the_gate_timeout_value_is_read_once_and_reaches_the_child。
 ## 2026-11-17 T-AG635 门禁里那条钉子只在验证当天绿：删掉真表零容忍断言，加机器钉子拦住同类
 - 删掉 test_days_zero_also_turns_the_gate_red 的后半截（拿真登记表跑 `--days 0` 断言 `rc == 0`），理由写进 docstring：真表的零容忍结论随运行日变化，不是可断言的常量
 - 新增 test_no_zero_tolerance_call_against_the_real_map：ast 扫全仓 tests/**/*.py，同一个调用里同时有 `--days` 与 `0` 却不带 `--map` ⇒ 红并点名 文件:行号

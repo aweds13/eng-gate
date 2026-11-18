@@ -1179,3 +1179,45 @@ def test_review_step_gets_the_same_allow_as_the_commit(tmp_path: Path) -> None:
     # 交叉印证：复核看到的就是这一笔**真正提交**的文件（多出来的一律不合格）
     missing = sorted(set(_head_files(repo)) - set(vals))
     assert missing == [], f"这一笔提交了、复核却没被允许看：{missing}"
+# ---------------------------------------------------------------- 卡 E138（T-AG647）判据 1
+def test_gate_timeout_defaults_to_1800(monkeypatch) -> None:
+    """判据 1：没设 `TF_GATE_TIMEOUT_S` ⇒ 1800 秒（缺省不许被悄悄改大/改小）。
+
+    ★ 直调纯函数，不起子进程：这一条查的是「缺省读数」，不是门禁本身。
+    """
+    monkeypatch.delenv("TF_GATE_TIMEOUT_S", raising=False)
+    assert _import_landing()._gate_timeout_s() == 1800.0
+
+
+def test_gate_timeout_reads_the_env(monkeypatch) -> None:
+    """判据 1：设了 `TF_GATE_TIMEOUT_S=60` ⇒ 就是 60（环境变量是**唯一**来源）。"""
+    monkeypatch.setenv("TF_GATE_TIMEOUT_S", "60")
+    assert _import_landing()._gate_timeout_s() == 60.0
+
+
+def test_gate_timeout_bad_value_is_named_and_falls_back(monkeypatch, capsys) -> None:
+    """判据 1：非法值（`abc`）⇒ 回落 1800，而且**打印里点名那个值**（不许静默）。
+
+    坏掉的写法：`os.environ.get(...) or 1800` —— `abc` 会 `ValueError` 当场炸；
+    `except: pass` 则是静默回落，日志里查不出是谁把 env 拼错了。
+    """
+    monkeypatch.setenv("TF_GATE_TIMEOUT_S", "abc")
+    assert _import_landing()._gate_timeout_s() == 1800.0
+    printed = capsys.readouterr().out
+    assert "abc" in printed, "非法值没被点名，日志里查不出是哪个值：" + printed
+
+
+
+def test_the_gate_timeout_value_is_read_once_and_reaches_the_child() -> None:
+    """判据 1：④ 的 `subprocess.run` 用的是**那个读数**，不是又一次读环境变量 / 又一次写死。
+
+    ★ 为什么要有这条（卡 E138 的反向变异 A 就是打这里）：`_gate_timeout_s()` 自己的三条用例
+      全绿，不代表调用点接上了 —— 把 `timeout=gate_timeout` 改回 `timeout=1800`，纯函数那三条
+      一个都不会红（它们不碰 main()）。所以这里**读真源码**钉两件事：
+      · 取值一次、存进变量（`gate_timeout = _gate_timeout_s()`）—— 打印与子进程同一个读数；
+      · 子进程那一行写的是 `timeout=gate_timeout`，且全文件没有第二个 `timeout=1800`。
+    """
+    src = (TOOLS / "pool" / "landing.py").read_text(encoding="utf-8")
+    assert "gate_timeout = _gate_timeout_s()" in src, "④ 没有把超时读数存进变量（读数可能被读两次）"
+    assert "timeout=gate_timeout" in src, "④ 的 subprocess.run 没用那个读数（又写死了一遍超时）"
+    assert "timeout=1800" not in src, "文件里还有第二处写死的超时（第二份真源）"

@@ -305,3 +305,93 @@ def test_the_existing_paths_are_untouched_when_only_derived_conflict(
     assert len(git_add) == 1 and git_add[0][2] == "--"
     # 这两份现算文档**不在冲突表里** ⇒ 不许多加（`add` 只取交集，不是整张 RESOLVABLE）
     assert list(git_add[0][3:]) == [*landing.DERIVED, *landing.GATE_ARTIFACTS]
+# ================================================================ 卡 E138（T-AG647）判据 2
+def test_a_dirty_recount_doc_is_added_and_the_continue_retried(tmp_path: Path) -> None:
+    """E138 现场：冲突都解完、只脏一份白名单里的派生文档 ⇒ 补 add 之后 rebase 走完。
+
+    坏掉的写法（本卡开工前就是这样）：`git rebase --continue` 一次非零就出队 —— 可它
+    只是拒跑（原文 `You must edit all merge conflicts and then mark them as resolved
+    using git add`），把那一份派生文档 `git add` 掉它就走完了。
+    """
+    repo = _conflicted_repo(tmp_path)
+    ok, detail = landing.resolve_derived_conflicts(repo)
+    assert ok is True, detail
+    assert _unmerged(repo) == [], "夹具：冲突没解完"
+    # 门禁之后重算又把这份现算文档写脏了一次（卡 115 的有意宽松：它本来就晚于门禁）
+    _write(repo, README_REL, _read(repo, README_REL) + "重算又写了一遍\n")
+    assert " M " + README_REL in _porcelain(repo).replace("MM", " M"), _porcelain(repo)
+
+    rc, added = landing._continue_rebase_after_resolve(repo, task="T-AG647")
+
+    assert rc == 0, f"补 add 之后 rebase 应该走完，rc={rc}\n{_porcelain(repo)}"
+    assert added == [README_REL], added
+    assert _git(repo, "status", "--porcelain").stdout.strip() == "", _porcelain(repo)
+
+
+def test_a_dirty_file_outside_the_whitelist_is_not_added(tmp_path: Path, capsys) -> None:
+    """白名单外的脏文件一个都不 add：点名、不吞、仍停手（return 3）。
+
+    ★ 夹具用**已跟踪**的文件（`tools/pool/landing.py`）：未跟踪的那份实测不挡
+      `rebase --continue`，拿它当现场是假现场。
+    """
+    repo = _conflicted_repo(tmp_path)
+    ok, detail = landing.resolve_derived_conflicts(repo)
+    assert ok is True, detail
+    _write(repo, CODE_REL, _read(repo, CODE_REL) + "Y = 1  # 人手里的改动\n")
+    before = _porcelain(repo)
+    assert CODE_REL in before, before
+
+    rc, added = landing._continue_rebase_after_resolve(repo, task="T-AG647")
+
+    assert rc == 3, f"白名单外的脏文件必须仍停手，实得 rc={rc}\n{capsys.readouterr().out}"
+    assert added == [], added
+    after = _porcelain(repo)
+    assert "M  " + CODE_REL not in after, f"白名单外的文件被 add 了：{after}"
+    printed = capsys.readouterr().out
+    assert CODE_REL in printed, "没点名那个白名单外的脏文件：" + printed
+    assert "不 add" in printed, printed
+
+
+def test_the_continue_is_retried_exactly_once_then_stops(tmp_path: Path, capsys) -> None:
+    """两次 `--continue` 都失败 ⇒ 恰好重试一次、返 3、三行留痕都在。
+
+    ★ 现场：冲突表里还有源码（`also_code=True` 解不了）—— 补 add 也救不了，
+      这时**只许重试一次**，第二次失败就停手（死循环比停手更糟）。
+    """
+    repo = _conflicted_repo(tmp_path, also_code=True)
+    ok, _detail = landing.resolve_derived_conflicts(repo)
+    assert ok is False, "夹具：源码冲突不该被自动解决"
+
+    rc, added = landing._continue_rebase_after_resolve(repo, task="T-AG647")
+
+    assert rc == 3, rc
+    assert added == [], added
+    printed = capsys.readouterr().out
+    assert printed.count("↳ 重试退出码 = ") == 1, "重试次数不是一次：" + printed
+    assert "★ rebase --continue 失败 ⇒ 先补 add 再重试一次：" in printed, printed
+    assert "↳ 补 add：" in printed, printed
+    assert _unmerged(repo), "停手时不许把冲突现场抹掉"
+
+
+def test_only_the_whitelisted_one_is_added_when_both_kinds_are_dirty(
+        tmp_path: Path, capsys) -> None:
+    """白名单内 + 白名单外**同时**脏 ⇒ 只 add 白名单里那份（M-D 打的就是这里）。
+
+    ★ 为什么还差这一条（实测）：只脏**一份**白名单外的文件时，`hit` 是空的，
+      补 add 那行**根本不会执行** —— 于是 `git add -A` 那种改法照样绿，反向变异
+      M-D 咬不住。把两份放一起，「加错了就多 stage 一份」才是可观察的。
+    """
+    repo = _conflicted_repo(tmp_path)
+    ok, detail = landing.resolve_derived_conflicts(repo)
+    assert ok is True, detail
+    _write(repo, README_REL, _read(repo, README_REL) + "重算又写了一遍\n")
+    _write(repo, CODE_REL, _read(repo, CODE_REL) + "Y = 1  # 人手里的改动\n")
+    assert CODE_REL in _porcelain(repo), _porcelain(repo)
+
+    rc, added = landing._continue_rebase_after_resolve(repo, task="T-AG647")
+
+    assert added == [README_REL], added
+    after = _porcelain(repo)
+    assert "M  " + CODE_REL not in after, "白名单外的文件被 add 了（git add -A 那种顺手）：" + after
+    assert CODE_REL in capsys.readouterr().out, "白名单外的脏文件没被点名"
+    assert rc == 3, f"白名单外的脏文件仍在，rebase 不该走完，实得 rc={rc}\n{after}"

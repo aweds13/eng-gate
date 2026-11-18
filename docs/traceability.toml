@@ -12413,3 +12413,15 @@ evidence = [
   "test:test_pool_lastgood_discipline.py",
 ]
 gaps = "1. 两族的「等不到」都没有调用方接住：tools/pool/landing.py 的 cloud_gate_step 只 catch gp.CloudUnreachable，而 PoolQueue.locked 现在抛 GatePoolBusy ⇒ 云机模式下列队短锁被占会抛未捕获异常（本地 --gate-on local 不走 submit，不受影响）。指针 tools/pool/landing.py2. 重试不是零失败：20000 B 文件 + 1 个并发读者时无重试首试失败 103/200，tries=5/base=0.02 后仍 3/60；读者 2 个、tries=10/base=0.05 仍 64/120 失败。本卡只承诺「有界重试 + 仍失败才抛且文案说清」。指针 tools/pool/lastgood.py3. 读→改→写仍不是 CAS（没有版本号、没有 merge by key）；load() 两侧口径仍不一致（gate_pool 抛 GatePoolUnreadable、queue.py 静默回 _empty，属卡 E120）；两条锁文件名仍不同（merge-queue.lock / gate-pool-queue.json.lock）。指针 tools/pool/queue.py"
+
+[entries."T-AG647"]
+id = "T-AG647"
+title = "落地链的两个自停手出口：门禁超时只剩一个来源、rebase续跑先补add再重试一次"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/landing.py",
+  "test:test_pool_landing.py",
+  "test:test_landing_derived_resolvable.py",
+]
+gaps = "1. 超时只治了**本机**那一趟：云机模式的硬超时在 tools/gate_pool.py:834-846 另有一套（RUN_GATE_MIN_TIMEOUT_S 与 entry 自己的 budget），本卡没接过去 —— 云那侧的超时仍是它自己的口径，两处读数不互通。指针 tools/gate_pool.py2. 补 add 只重试**一次**、且只认三张既有表（RESOLVABLE / GATE_ARTIFACTS / _queue_rels）：真冲突（同一段代码两边都改）仍然停手出队交人 —— 这是有意的边界，不是漏。白名单外的脏文件只点名、不 add。指针 tools/pool/landing.py3. TF_GATE_TIMEOUT_S 非法（非数字 / ≤0 / nan·inf）只打印一行点名并回落 1800，**不退出**：一个拼错的 env 不该让整趟落地在 ④ 之前炸掉；代价是「设了却没生效」只能靠日志里那行看见。指针 tools/pool/landing.py"
