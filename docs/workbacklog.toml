@@ -6350,7 +6350,8 @@ files = [
 ]
 depends = [
   "E55",
-  "E120"
+  "E120",
+  "E123"
 ]
 risk = "mid"
 status = "pending"
