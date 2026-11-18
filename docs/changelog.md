@@ -82,6 +82,11 @@
 - 默认视图：done 卡折成 {id, status} 不删行、非 done 卡把 files/depends 折成 files_n/depends_n、verdicts 的 attempts 折成 attempts_n、worktrees 路径相对化；派生计数 cards_done_n 以块名前缀打头。
 - 压缩是 MCP 侧纯投影：tools/pipeline_view.py 的 BLOCKS 与 row_fields 一行未改，坏读数仍然是 null 加 note，不洗成空容器。
 - 人话段仍是六块摘要（cards 那行仍念总项数，折叠不改行数）。
+## 2026-11-17 T-AG637 三个下游出口开始消费 dead 列：死租约仍念出来，但不再冒充占用者
+- tools/workbench_bridge.py 新增 `_dead_split` 与 `_lease_mark`：谁在飞只数活的、死行仍列出并标「★ 已死」；「我的域」的 others 与按树判两支都按 dead 过滤，dead 为 None 保守当活并标「（判不出）」。
+- tools/wb_daily.py 的 `_fill_leases` 搬 dead 键、`_render_leases` 念「其中 M 条已死」并给死行标尾、「今天该做」按活租约判「无人占树」。
+- tools/pool_mcp.py 的 `_board_line` 给 leases 补 dead 尾巴；JSON 段一个字节不动（不在这一层重算 TTL，也不第二次读 registry）。
+- 三处都只消费 tools/pipeline_view.py 已经算好的 dead 列：`grep -n is_dead` 三个文件仍零命中。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

@@ -19,6 +19,7 @@ r"""工作台接进会话内：MCP 只读工具 `workbench_board`（卡 213 · T
 
 from __future__ import annotations
 
+import datetime
 import json
 import subprocess
 import sys
@@ -451,3 +452,35 @@ def test_broken_json_reports_error_not_empty_board(
     text2, data2, is_error2 = pool_mcp.tool_workbench_board({}, root=tmp_path)
     assert is_error2 is True and data2["reading"] is None
     assert "顶层不是对象" in text2 and data2["exit_code"] == 0
+
+
+def _write_lease_registry(root: Path, *, age_s: float) -> None:
+    """一条租约，at 相对当前时间（age_s 大于 TTL ⇒ 死行）。"""
+    diag = root / "gates" / "diag"
+    diag.mkdir(parents=True, exist_ok=True)
+    at = (datetime.datetime.now() - datetime.timedelta(seconds=age_s)).isoformat(timespec="seconds")
+    (diag / "pool-registry.json").write_text(
+        json.dumps([{"card": "E105", "tree": ".wt/E105", "files": ["tools/pool_mcp.py"],
+                     "owner": "host:1", "at": at, "ttl_seconds": 21600.0}],
+                   ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def test_board_line_says_how_many_leases_are_dead(board_root: Path) -> None:
+    """★ 判据 4：leases 那一行念「其中 M 条已死」，JSON 段一个字节不动（dead 本来就在里面）。"""
+    _write_lease_registry(board_root, age_s=100000.0)
+    text, _data, is_error = pool_mcp.tool_workbench_board({}, root=board_root)
+    assert is_error is False
+    assert "leases：1 项（其中 1 条已死）" in text
+    assert _json_block(text)["reading"]["leases"][0]["dead"] is True
+
+
+def test_board_line_stays_quiet_when_no_lease_is_dead(board_root: Path) -> None:
+    """没有死行 ⇒ 那一行一个字都不加（既有断言「N 项」因此仍成立）。"""
+    _write_lease_registry(board_root, age_s=60.0)
+    text, _data, is_error = pool_mcp.tool_workbench_board({}, root=board_root)
+    assert is_error is False
+    assert "leases：1 项" in text
+    assert "已死" not in text
+

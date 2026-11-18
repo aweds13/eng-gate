@@ -79,6 +79,26 @@ def _lease_rows(reading: dict) -> list[dict] | None:
 # ================================================================ 六段（每段可省略并说明）
 
 
+def _dead_split(rows: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+    """把租约行按 dead 列分三组：活的 / 死的 / 判不出的。
+
+    ★ 读数只有一份（tools/pipeline_view.py 的 dead 列，卡 E115）—— 这里**不重算** TTL、不读日志。
+    ★ dead 是 None（判不出）同时算进「活」：认不出来就**保守当活**
+      （与 tools/pool/guards.py 的派活守卫同口径）。
+    """
+    live = [lc for lc in rows if not lc.get("dead")]
+    dead = [lc for lc in rows if lc.get("dead")]
+    unknown = [lc for lc in rows if lc.get("dead") is None]
+    return live, dead, unknown
+
+
+def _lease_mark(lc: dict) -> str:
+    """行尾的死活标记（字面量与 tools/pipeline_view.py 的租约报告一致）。"""
+    if lc.get("dead") is None:
+        return "  （判不出）"
+    return "  ★ 已死" if lc.get("dead") else ""
+
+
 def _section_card(reading: dict, card: str) -> list[str]:
     """① 我在哪张卡。"""
     head = "我在哪张卡："
@@ -95,18 +115,24 @@ def _section_card(reading: dict, card: str) -> list[str]:
 
 
 def _section_lease(reading: dict, card: str, tree: str) -> list[str]:
-    """② 谁在飞（活租约）。"""
+    """② 谁在飞（租约；**行内** dead 标死活 —— 死的不抹掉，活的不冒充）。"""
     head = "谁在飞："
     rows = _lease_rows(reading)
     if rows is None:
         return [f"{head}{OMIT}{reading.get('leases_note', '读不到租约')} —— 不许编"]
     if not rows:
         return [f"{head}没有活租约（来源 {LEASE_SRC}；缺 / 空同义）⇒ 现在没有别人占树"]
-    out = [f"{head}{len(rows)} 条活租约（来源 {LEASE_SRC}）："]
-    for lc in rows:
+    live, dead, unknown = _dead_split(rows)
+    tail = f"，其中 {len(dead)} 条已死" if dead else ""
+    if unknown:
+        tail += f"，{len(unknown)} 条判不出"
+    out = [f"{head}{len(live)} 条活租约{tail}（来源 {LEASE_SRC}）："]
+    # ★ 先念活、后念死；两组各自保序（_lease_rows 已按 (card, tree, owner) 排好）。
+    for lc in (*live, *dead):
         mine = " ★本卡" if str(lc.get("card", "")) == str(card) and card else ""
         out.append(f"  · 卡 {lc['card']} @ 树 {lc['tree'] or '（主树）'}"
-                   f"  owner={lc['owner']}  at={lc['at']}  ttl={lc['ttl_seconds']}s{mine}")
+                   f"  owner={lc['owner']}  at={lc['at']}  ttl={lc['ttl_seconds']}s"
+                   f"{mine}{_lease_mark(lc)}")
     return out
 
 
@@ -118,22 +144,25 @@ def _section_conflict(reading: dict, card: str, tree: str) -> list[str]:
         return [f"{head}{OMIT}{reading.get('leases_note', '读不到租约')} —— 不许编"]
     row, why = _find_card(reading, card)
     mine = list(row.get("files") or []) if row is not None else []
-    others = [lc for lc in rows if str(lc.get("card", "")) != str(card)]
+    live, _dead, _unknown = _dead_split(rows)
+    # ★ 死租约不是占用者；判不出的保守当活（并在行尾标「（判不出）」）。
+    others = [lc for lc in live if str(lc.get("card", "")) != str(card)]
     hits: list[str] = []
     if mine:
         for lc in others:
             shared = sorted(set(mine) & set(lc.get("files") or []))
             if shared:
                 where = lc["tree"] or "（主树）"
-                hits.append(f"卡 {lc['card']} @ {where} 占着 {'、'.join(shared)}")
+                hits.append(f"卡 {lc['card']} @ {where} 占着 {'、'.join(shared)}"
+                            f"{_lease_mark(lc)}")
     elif tree:
         for lc in others:
             if str(lc.get("tree", "")) == str(tree):
-                hits.append(f"卡 {lc['card']} 占着我这棵树 {tree}")
+                hits.append(f"卡 {lc['card']} 占着我这棵树 {tree}{_lease_mark(lc)}")
         if not hits:
             mine_note = "本卡自己占着" if any(
                 str(lc.get("card", "")) == str(card) and str(lc.get("tree", "")) == str(tree)
-                for lc in rows) else "没人占"
+                for lc in live) else "没人占"
             return [f"{head}没有 ★ 按**树**判（域查不到：{why}）；我的树 {tree}：{mine_note}"]
     else:
         return [f"{head}{OMIT}域与树都查不到（{why}）—— 不许编"]

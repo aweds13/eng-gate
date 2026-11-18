@@ -11,6 +11,7 @@ r"""`tools/workbench_bridge.py`（卡 224 · T-G338）的测试 —— 工作台
 from __future__ import annotations
 
 import copy
+import datetime
 import json
 import subprocess
 import sys
@@ -74,9 +75,18 @@ def _write_verdict(root: Path, card: str = "001") -> None:
     (diag / f"wb-{card}.report.md").write_text("# 摘要\n", encoding="utf-8")
 
 
-def _lease(card: str, tree: str, files: list[str], owner: str = "host:1") -> dict:
+def _lease(card: str, tree: str, files: list[str], owner: str = "host:1",
+           *, age_s: float = 60.0, dead: bool | None = False) -> dict:
+    """一条租约行。
+
+    ★ 卡 E128：at 不再写死一个常量日期 —— 写死的那天迟早会过期，夹具就从「活租约」悄悄变成
+      「死租约」，断言却还念「1 条活租约」。这里默认「一分钟前」，age_s 调大就能造死行
+      （TTL 仍是 21600s）。dead 是 pipeline_view 会算出来的列，这里只在**手工喂读数**的
+      用例里显式给（走真读数的用例由 pipeline_view 自己算）。
+    """
+    at = (datetime.datetime.now() - datetime.timedelta(seconds=age_s)).isoformat(timespec="seconds")
     return {"card": card, "tree": tree, "files": files, "owner": owner,
-            "at": "2026-10-13T12:00:00", "ttl_seconds": 21600.0}
+            "at": at, "ttl_seconds": 21600.0, "dead": dead}
 
 
 def _write_registry(root: Path, rows: list[dict]) -> None:
@@ -255,3 +265,52 @@ def test_reordering_semantically_same_reading_does_not_change_bytes(tmp_path: Pa
     b = workbench_bridge.render(shuffled, card="001", tree=".wt/a", batch="B-TEST")
 
     assert a == b, "同一输入（只换了顺序）两次不同 ⇒ 不幂等"
+
+
+# ---------------------------------------------------------------- 5. 死租约（卡 E128）
+
+
+def test_bridge_names_dead_leases_without_hiding_them(tmp_path: Path) -> None:
+    """死的租约**仍要念出来**（抹掉就看不见「它一直没被清」），但头上的数只数活的。"""
+    root = _full_fake_repo(tmp_path)
+    _write_registry(root, [_lease("001", ".wt/a", ["src/a.py"], age_s=100000.0)])
+    text = workbench_bridge.bridge_text(card="001", tree=".wt/a", root=root)
+    assert "谁在飞：0 条活租约，其中 1 条已死" in text
+    assert "卡 001 @ 树 .wt/a" in text          # ★ 死的也念（不许从表里抹掉）
+    assert "★ 已死" in text                      # ★ 行尾标死活
+
+
+def test_a_dead_lease_is_not_a_domain_occupier(tmp_path: Path) -> None:
+    """★ 判据 2：死租约踩到我的域 ⇒ **不算**占用者（否则每天都报「★ 有」这种幽灵冲突）。"""
+    root = _full_fake_repo(tmp_path)
+    _write_registry(root, [
+        _lease("001", ".wt/a", ["src/a.py"], owner="host:1"),
+        _lease("099", ".wt/b", ["src/a.py", "src/z.py"], owner="host:2", age_s=100000.0),
+    ])
+    text = workbench_bridge.bridge_text(card="001", tree=".wt/a", root=root)
+    assert "我的域有没有被别人占：没有" in text
+    assert "占着 src/a.py" not in text
+    assert "谁在飞：1 条活租约，其中 1 条已死" in text
+
+
+def test_a_dead_lease_does_not_hold_my_tree(tmp_path: Path) -> None:
+    """按**树**判那一支同样要把死行摘出去（两支都得改，漏一支就还是幽灵占树）。"""
+    root = _full_fake_repo(tmp_path)
+    _write_backlog(root, card_id="777")       # 队列里没有 001 ⇒ 域查不到，退回按树判
+    _write_registry(root, [_lease("099", ".wt/a", ["src/z.py"], age_s=100000.0)])
+    text = workbench_bridge.bridge_text(card="001", tree=".wt/a", root=root)
+    assert "我的树 .wt/a：没人占" in text
+
+
+def test_unknown_dead_is_conservatively_live(tmp_path: Path) -> None:
+    """dead 是 None（判不出）⇒ 保守当活并标「（判不出）」—— 判不出不许当死，也不许不吭声。"""
+    root = _full_fake_repo(tmp_path)
+    reading = workbench_bridge.collect_reading(root)
+    reading["leases"] = [{
+        "card": "099", "tree": ".wt/b", "files": ["src/a.py"], "owner": "host:2",
+        "at": "2026-10-13T12:00:00", "ttl_seconds": 21600.0, "dead": None,
+    }]
+    text = workbench_bridge.render(reading, card="001", tree=".wt/a")
+    assert "1 条判不出" in text
+    assert "卡 099 @ .wt/b 占着 src/a.py" in text     # 保守当活
+    assert "（判不出）" in text

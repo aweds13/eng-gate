@@ -1,0 +1,15 @@
+[entries."T-AG637"]
+id = "T-AG637"
+title = "三个下游出口开始消费dead列：死租约仍念出来但不再冒充占用者"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/workbench_bridge.py",
+  "file:tools/wb_daily.py",
+  "file:tools/pool_mcp.py",
+  "test:test_workbench_bridge.py",
+  "test:test_wb_daily.py",
+  "test:test_pool_mcp_board.py",
+]
+gaps = "- 卡规格判据 1 要求「没有死行时 head 逐字节不变」，但既有夹具 `_lease()` 把 at 写死成 2026-10-13T12:00:00 —— E115 落地后那一行已经是死租约，`:122` 的「谁在飞：1 条活租约」会假红。处置：夹具 at 改成「60 秒前」并加 age_s 参数，断言一字不改。指针 tests/test_workbench_bridge.py- 判据 5 写「既有钉子除夹具数据外一行断言都不许改」：实际同一条夹具（活租约）撑着 `:122`、`:142-143`、`:152-153` 三处既有断言，改 at 是让它们继续成立而不是放宽。指针 tests/test_workbench_bridge.py- 真仓读数与卡规格引的 06:21 那次有差：那次 board 人话是 `leases：1 项`，现在仍是 1 项但尾巴变「（其中 1 条已死）」；桥与 daily 的读数（0 活 / 1 死 / 仍念出卡 E105）与规格预期一致。指针 gates/diag/pool-registry.json"
+

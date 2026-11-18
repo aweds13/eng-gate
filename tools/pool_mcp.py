@@ -1973,6 +1973,14 @@ def _board_line(section: str, reading: dict[str, Any]) -> str:
         extra = ""
         if section == "fences" and reading.get("fences_broken"):
             extra = f"（另有坏文件 {len(reading['fences_broken'])} 个）"
+        elif section == "leases":
+            # ★ 卡 E128：dead 列就在这份 JSON 里（卡 E115 算好的）—— 这里只念数，不重算 TTL。
+            dead = sum(1 for lc in val if isinstance(lc, dict) and lc.get("dead"))
+            unknown = sum(1 for lc in val if isinstance(lc, dict) and lc.get("dead") is None)
+            bits = ([f"其中 {dead} 条已死"] if dead else []) + (
+                [f"{unknown} 条判不出"] if unknown else [])
+            if bits:
+                extra = "（" + "，".join(bits) + "）"
         tail = f" —— {note}" if note else ""
         return f"  · {section}：{len(val)} 项{extra}{tail}"
     if section == "gates" and isinstance(val, dict):

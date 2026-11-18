@@ -323,6 +323,7 @@ def _fill_leases(page: dict, reading: dict, root: Path) -> None:
             "owner": str(lc.get("owner", "")),
             "at": str(lc.get("at", "")),
             "ttl_seconds": lc.get("ttl_seconds"),
+            "dead": lc.get("dead"),
         }
         for lc in leases
     ]
@@ -373,7 +374,8 @@ def _todo(page: dict) -> list[str]:
     if todo_le and not waiting and not stale:
         out.append(f"没有批等着收口 ⇒ 队列里 {len(todo_le)} 张可接着派")
     leases = page.get("leases")
-    if leases is not None and not leases and todo_le:
+    live = None if leases is None else [lc for lc in leases if not lc.get("dead")]
+    if live is not None and not live and todo_le:
         out.append("当前没有租约在飞 ⇒ 无人占树，可直接派活")
     return out
 
@@ -421,11 +423,25 @@ def _render_leases(lines: list[str], page: dict) -> None:
         lines.append(f"[在飞] ★ 读不到：{page.get('leases_note') or '没有读数'}")
         return
     tail = f"（{page['leases_note']}）" if page.get("leases_note") else ""
-    lines.append(f"[在飞] {len(leases)} 条租约{tail}（来源 gates/diag/pool-registry.json）：")
+    live = [lc for lc in leases if not lc.get("dead")]
+    dead = [lc for lc in leases if lc.get("dead")]
+    unknown = [lc for lc in leases if lc.get("dead") is None]
+    notes: list[str] = []
+    if dead:
+        notes.append(f"其中 {len(dead)} 条已死")
+    if unknown:
+        notes.append(f"{len(unknown)} 条判不出")
+    if notes:
+        # ★ 有死行才改措辞：没有死行时这一行与卡 E115 之前逐字节相同。
+        lines.append(f"[在飞] {len(live)} 条活租约，{'，'.join(notes)}{tail}"
+                     f"（来源 gates/diag/pool-registry.json）：")
+    else:
+        lines.append(f"[在飞] {len(leases)} 条租约{tail}（来源 gates/diag/pool-registry.json）：")
     for lc in leases:
+        mark = "  （判不出）" if lc.get("dead") is None else ("  ★ 已死" if lc.get("dead") else "")
         lines.append(
             f"  · 卡 {lc['card'] or '?'} → {lc['tree'] or '(不明)'}"
-            f"  owner={lc['owner']}  at={lc['at']}  ttl={lc['ttl_seconds']}s"
+            f"  owner={lc['owner']}  at={lc['at']}  ttl={lc['ttl_seconds']}s{mark}"
         )
 
 

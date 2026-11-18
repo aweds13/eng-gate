@@ -10,6 +10,7 @@ r"""`tools/wb_daily.py`（卡 220 · T-G334）的测试 —— 「今天的一�
 
 from __future__ import annotations
 
+import datetime
 import json
 import subprocess
 import sys
@@ -89,7 +90,11 @@ def _write_registry(root: Path) -> None:
                     "tree": ".wt/a",
                     "files": ["src/a.py"],
                     "owner": "host:1",
-                    "at": "2026-10-13T12:00:00",
+                    # ★ 卡 E128：写死的日期迟早过期，夹具就从「活租约」悄悄变成「死租约」。
+                    #   这里用「一分钟前」，TTL 仍是 21600s。
+                    "at": (
+                        datetime.datetime.now() - datetime.timedelta(minutes=1)
+                    ).isoformat(timespec="seconds"),
                     "ttl_seconds": 21600.0,
                 }
             ],
@@ -430,3 +435,54 @@ def test_checkin_line_is_honest_about_broken_archive(tmp_path: Path) -> None:
     page = wb_daily.build_page(root)
     assert page["checkin"]["found"] is False
     assert "留档读不了" in wb_daily.render(page)
+
+
+def _write_registry_at(root: Path, *, age_s: float) -> None:
+    """一条租约，at 相对当前时间（age_s 大于 TTL ⇒ 死行）。"""
+    diag = root / "gates" / "diag"
+    diag.mkdir(parents=True, exist_ok=True)
+    at = (datetime.datetime.now() - datetime.timedelta(seconds=age_s)).isoformat(timespec="seconds")
+    (diag / "pool-registry.json").write_text(
+        json.dumps([{"card": "001", "tree": ".wt/a", "files": ["src/a.py"],
+                     "owner": "host:1", "at": at, "ttl_seconds": 21600.0}],
+                   ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def test_leases_line_counts_dead_rows(tmp_path: Path) -> None:
+    """★ 判据 3：[在飞] 只数活的 + 念「其中 M 条已死」，死行行尾标「★ 已死」。"""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_repo(root)
+    _write_gates_last(root)
+    _write_registry_at(root, age_s=100000.0)
+    page = wb_daily.build_page(root)
+    assert page["leases"][0]["dead"] is True       # ★ dead 从读数搬过来，不是重算的
+    text = wb_daily.render(page)
+    assert "[在飞] 0 条活租约，其中 1 条已死" in text
+    assert "★ 已死" in text
+
+
+def test_todo_says_nobody_holds_the_tree_even_with_dead_rows(tmp_path: Path) -> None:
+    """★ 判据 3 的另一半：盘上只剩死行时，「今天该做」必须敢说「无人占树」。"""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_repo(root)
+    _write_gates_last(root)
+    _write_registry_at(root, age_s=100000.0)
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "workbacklog.toml").write_text(
+        '[base]\nreviewed = "abc1234"\n\n'
+        '[[cards]]\nid = "001"\ntask = "T-G1"\ntitle = "样卡一"\n'
+        'tree = ".wt/a"\nspec = "x.md"\nfiles = ["src/a.py"]\ndepends = []\n'
+        'risk = "low"\nstatus = "pending"\n',
+        encoding="utf-8",
+    )
+    page = wb_daily.build_page(root)
+    assert "当前没有租约在飞 ⇒ 无人占树，可直接派活" in page["todo"]
+
+    # 反过来：活的租约占着树 ⇒ 这句提示一个字都不许出（那是骗人「可以派活」）。
+    _write_registry_at(root, age_s=60.0)
+    again = wb_daily.build_page(root)
+    assert "当前没有租约在飞 ⇒ 无人占树，可直接派活" not in again["todo"]
