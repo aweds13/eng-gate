@@ -6355,3 +6355,19 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E138"
+task = "T-AG647"
+title = "落地链的两个自停手出口：门禁硬超时写死、rebase一次失败就出队"
+tree = ".wt/E138"
+spec = "复盘/卡/卡E138-落地链的两个自停手出口.md"
+files = [
+  "tools/pool/landing.py",
+  "tests/test_pool_landing.py",
+  "tests/test_landing_derived_resolvable.py",
+  "复盘/卡/卡E138-落地链的两个自停手出口.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
