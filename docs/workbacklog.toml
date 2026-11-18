@@ -6368,6 +6368,8 @@ files = [
   "tests/test_landing_derived_resolvable.py",
   "复盘/卡/卡E138-落地链的两个自停手出口.md"
 ]
-depends = []
+depends = [
+  "E123",
+]
 risk = "mid"
 status = "pending"
