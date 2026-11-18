@@ -62,6 +62,11 @@
 - `tools/pool_mcp.py` 的 `tool_task_list` payload 恒带 `broken`，头行加「，另有 N 个状态文件读不了」，末尾逐条念「★ 读不了：<名> —— <原因>」；空态条件是「既没有任务也没有坏文件」。
 - `tools/pool/task.py` 的 `cmd_list` 同样收 broken 通道逐条点名，「（还没有任务：<root>）」只留给真的零个文件；`_required` / `_bad` / `_missing` 与 13 处 waived 读取全改 `(state.get("waived") or [])`，写回处缺键先补列表。
 - 老形状状态（没有 waived / read_only）走 `wb_task status/advance/claim` 不再 KeyError；缺 declared 走 `BatchError` 而不是当空名单（空名单 = 齐了 = 撒谎）。
+## 2026-11-17 T-AG632 门禁跑完主树又前进：复核器改判「基线前移（只差台账）」，不再一律喊伪造
+- 新增唯一一份派生物差异分类器 tools/gate_base.py：门禁读数 rev 是父提交的真祖先、且两者之间只动了台账族文件 ⇒ LEDGER_ONLY（读数进 note，不当伪造），动了源码 ⇒ DRIFT；台账族前缀从 gates/defs/domains.py 的 REQUIRED_PROFILES 反推（只 allow {audit} 的前缀），不抄第二张表。
+- 四处判据同源：tools/wb_review.py（check_gate_evidence / check_gates_trailer_truth）、tools/wb_verify.py（rev_ok）、tools/gate_pool.py（base_drift_category 取代 _rev_matches）、framework 镜像；「伪造门禁结论」只留给 ok 不是 true / DRIFT / 解析不出。
+- 落地链 ⑦ rebase 之后落第一现场读数 gates/diag/base_drift/<task>.json（gates_rev / rebase_before_main / rebase_after_head / rebase_after_parent / diff_paths，差异现算）；不插重跑门禁、不改 ④→⑦ 顺序。
+- 真提交读数（gates/diag/_rev_E123.py）：老版对 89cd4deb 报「门禁不是为这一笔跑的」+「伪造门禁结论」，新版 problems 为空并念出「只动了 3 个台账/派生物文件 … 结论未经复验（时间见证 …）」；判据来源 sha16 0e73d922152131e4 → 6ff5fcecb0c6ed15。
 ## 2026-11-16 T-AG622 代理指标登记表 35 天没重验；dispatch-rate 的 metric 指向仓里根本没有的 .meta.json
 - `docs/proxy-map.toml`：五条 `last_verified` 全部改成真验证日 2026-11-16，每条 note 追加一段带具体数字的「重验读数」（队列 360 张 / 23 道门 18 真跑 / 18 passed / 270 行派活日志 / arrived 1-wip 12），文件头写明「登记日 ≠ 验过日」这段来由。
 - `dispatch-rate` 的 metric 从「.meta.json 落盘」改成点名两头真日志（仓内 `gates/diag/wb-<卡>.jsonl` 的 `type=result` + `wb-<卡>.done`；仓外号池目录的 `card-<卡>.jsonl` 与 `meta.json`，生产者在 `D:/repo/infra/pool/dispatch.py:275`），evidence 同步写清「仓内 0 个」。

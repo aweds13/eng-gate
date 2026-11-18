@@ -251,6 +251,7 @@ _EXIT_CODE_RULERS = {
     "tools/wb_verify.py": ("check_gates()", "独立复算器"),
     "framework/src/framework/review.py": ("check_full_gate_run()", "framework 侧的同一判据"),
     "scripts/cloud/run_gate.sh": ("播种判定", "云机起不起得来的头一道闸"),
+    "tools/gate_base.py": ("gate_base_drift(", "派生物差异分类器（卡 E123：门禁基点 vs 父提交）"),
 }
 
 
@@ -563,3 +564,90 @@ def test_the_real_reading_needs_a_not_run_gate_to_prove_anything() -> None:
         f"软行居然算通过了（卡 E63 判据 ④：门行自己写着未验证）—— {verdict}"
     )
     assert "web_live" in " ".join(verdict.problems), verdict.problems
+
+
+# --------------------------------------------------- 五：门禁基点差异分类器（卡 E123）
+
+def test_base_drift_classifier_has_one_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 卡 E123 判据 5：同一 payload + 同一父提交 ⇒ **四处同分类**。
+
+    分类器只写在 `tools/gate_base.py` 一份；复核器（`wb_review`）、独立复算器
+    （`wb_verify`）、云侧回传校验（`gate_pool`）都调这一份；`framework` 是纯库
+    （不 import 本仓模块）只能做镜像 —— 这条钉子钉的就是「镜像必须说同一句话」：
+    同一份注入 ⇒ 同一个分类（LEDGER_ONLY / DRIFT 各测一遍）。
+    """
+    sys.path.insert(0, str(ROOT / "tools"))
+    sys.path.insert(0, str(ROOT / "framework" / "src"))
+    import gate_base as gb  # noqa: PLC0415
+    import gate_pool as gp  # noqa: PLC0415
+    import wb_review as wr  # noqa: PLC0415
+
+    from framework import review as fr  # noqa: PLC0415
+    from tools import wb_verify as wv  # noqa: PLC0415
+
+    payload = {
+        "rev": "aaaaaaa",
+        "ok": True,
+        "sealed_at": "2099-01-01T00:00:00",
+        "gates": [{"name": "pytest", "exit_code": 0}],
+    }
+    parent = "bbbbbbb"
+    resolved = {"aaaaaaa": "a" * 40, "bbbbbbb": "b" * 40}
+    common = {
+        "resolve": lambda short: resolved.get(str(short), ""),
+        "ancestor": lambda a, b: True,
+        "commit_time": lambda rev: "2098-01-01T00:00:00+00:00",
+    }
+    cases = [
+        ("只动台账", {**common, "diff": lambda a, b: ["docs/workbacklog.toml"]}, gb.LEDGER_ONLY),
+        ("动了源码", {**common, "diff": lambda a, b: ["docs/workbacklog.toml", "tools/foo.py"]},
+         gb.DRIFT),
+    ]
+
+    def _wb_verify_state(prov: dict) -> str:
+        """让 **真函数** `wb_verify.check_gates` 自己说话（只换它的 git 口，不改判据）。"""
+        body = json.dumps(payload, ensure_ascii=False)
+
+        def _fake_git(tree: Path, *args: str) -> str:
+            if args[:2] == ("show", "HEAD:gates/last.json"):
+                return body
+            if args[:1] == ("rev-parse",):
+                return resolved.get(str(args[-1]).removesuffix("^{commit}"), "")
+            if args[:1] == ("show",):
+                return str(prov["commit_time"](args[-1]))
+            return ""
+
+        def _fake_run(cmd: list[str], cwd: Path) -> tuple[int, str]:
+            if "merge-base" in cmd:
+                return 0, ""
+            if "diff" in cmd:
+                return 0, "\n".join(prov["diff"](cmd[-2], cmd[-1]))
+            return 0, ""
+
+        seen: dict[str, list[str]] = {"bad": [], "info": []}
+        screen = type("S", (), {
+            "bad": lambda self, msg: seen["bad"].append(msg),
+            "info": lambda self, msg: seen["info"].append(msg),
+            "ok": lambda self, msg: None,
+        })()
+        monkeypatch.setattr(wv, "_git", _fake_git)
+        monkeypatch.setattr(wv, "_run", _fake_run)
+        wv.check_gates(screen, ROOT, parent)
+        if any("rev != 父提交" in m for m in seen["bad"]):
+            return gb.DRIFT
+        if any("门禁基点" in m for m in seen["info"]):
+            return gb.LEDGER_ONLY
+        return gb.MATCH
+
+    for label, prov, want in cases:
+        got = {
+            "wrap_review": wr.gate_base_drift(
+                payload["rev"], parent, sealed_at=payload["sealed_at"], **prov)[0],
+            "wb_verify": _wb_verify_state(prov),
+            "gate_pool": gp.base_drift_category(
+                payload["rev"], parent, payload, **prov)[0],
+            "framework": fr.gate_base_drift(
+                payload["rev"], parent, sealed_at=payload["sealed_at"],
+                is_ledger=gb.is_ledger_path, **prov)[0],
+        }
+        assert set(got.values()) == {want}, f"[{label}] 四处分类不一致：{got}（应全为 {want}）"

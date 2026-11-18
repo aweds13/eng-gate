@@ -1120,6 +1120,56 @@ def _run_review(task: str, rev: str, allow: list[str]) -> tuple[int, str, pathli
     summary = (f"exit={r.returncode}，problems={'?' if n_problems < 0 else n_problems}"
                f"，落盘 {review_file}")
     return r.returncode, summary, review_file
+def record_base_drift(
+    task: str, *, wt: pathlib.Path, rebase_before_main: str,
+) -> pathlib.Path | None:
+    r"""⑦ rebase 之后落**第一现场读数**：`gates/diag/base_drift/<task>.json`（卡 E123）。
+
+    记的是「门禁是在哪个提交上跑的（`gates_rev`）→ rebase 之后这一笔的父提交是谁
+    （`rebase_after_parent`）→ 这两者之间 git 现算出来的差异文件」。复核器
+    （`tools/wb_review.py`）**优先读这份读数**：它比事后拿 `last.json` 反推更可信
+    （落地当场知道门禁基点与 rebase 后的父提交各是哪个提交）。
+
+    ★ 只补账，不改顺序、不重跑门禁（判据 6）。
+    ★ 读不到 `gates/last.json` 的 `rev` 就退回 rebase 前的主树 HEAD —— 那正是门禁基点
+      的下界；拿不准时读数记下来，由复核器判，不在这里替它下结论。
+    """
+    head = git("rev-parse", "HEAD", cwd=wt).strip()
+    parent = git("rev-parse", "HEAD^", cwd=wt).strip()
+    gates_rev = ""
+    try:
+        raw = (wt / "gates" / "last.json").read_text(encoding="utf-8", errors="replace")
+        gates_rev = str((json.loads(raw) or {}).get("rev") or "").strip()
+    except (OSError, json.JSONDecodeError, AttributeError):
+        gates_rev = ""
+    if not gates_rev:
+        gates_rev = str(rebase_before_main or "").strip()
+    paths: list[str] = []
+    if gates_rev and parent:
+        paths = [p.strip() for p in
+                 git("diff", "--name-only", gates_rev, parent, cwd=wt).splitlines() if p.strip()]
+    out_dir = ROOT / "gates" / "diag" / "base_drift"
+    out = out_dir / f"{task}.json"
+    body = {
+        "gates_rev": gates_rev,
+        "rebase_before_main": str(rebase_before_main or "").strip(),
+        "rebase_after_head": head,
+        "rebase_after_parent": parent,
+        "diff_paths": paths,
+    }
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(body, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8", newline="\n")
+    except OSError as exc:  # 读数落不下不挡落地（它是证据，不是判据）
+        print(f"  ★ 门禁基点读数没落下（{type(exc).__name__}: {exc}）—— 复核时按自己算")
+        return None
+    print(f"  门禁基点读数：{out.relative_to(ROOT)}"
+          f"（gates_rev={gates_rev[:12] or '(空)'} → 父提交 {parent[:12] or '(空)'}，"
+          f"差异 {len(paths)} 个文件）")
+    return out
+
+
 def _renewer_loop(lock_label: str, wt: pathlib.Path, env: dict,
                   stop: threading.Event, interval: float) -> None:
     r"""后台续租门禁锁（卡 163 INV-28）—— 定期调 `gate_lock.py renew`，直到 `stop` 被设。
@@ -3155,6 +3205,9 @@ def main(argv: list[str] | None = None) -> int:
                   "（并行落地的有意宽松 —— 见卡 115 的口径）")
         new = git("rev-parse", "HEAD", cwd=wt)
         print("  rebase 后 HEAD =", git("rev-parse", "--short", "HEAD", cwd=wt))
+        # ★ 卡 E123（T-AG632）：rebase 之后落**门禁基点读数**（第一现场）——
+        #   只补账，不插步骤、不重跑门禁（判据 6）。
+        record_base_drift(a.task, wt=wt, rebase_before_main=main_now)
     # ★ 2026-10-02 修：原来这里只打印 `git()` 的 stdout（= `Updating …`），
     #   而 git **把真原因写在 stderr**
     #   ⇒ 卡 114 那次 ff 失败时只看到一行 "Updating 93c79ae..5fac774"，真原因

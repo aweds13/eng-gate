@@ -1,0 +1,15 @@
+[entries."T-AG632"]
+id = "T-AG632"
+title = "门禁跑完主树又前进时复核器怎么判：判词三支与门禁基点分开"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_review.py",
+  "file:tools/gate_base.py",
+  "file:tools/wb_verify.py",
+  "file:tools/gate_pool.py",
+  "file:tools/pool/landing.py",
+  "test:test_wb_review.py",
+]
+gaps = "- framework/src/framework/review.py 那份 gate_base_drift 是**镜像**不是调用：该文件自述「纯库：不 print、不 sys.exit、不读全局状态、不 import 本仓模块」⇒ 规格允许的「import 或镜像」取了后者，一致性靠 tests/test_two_rulers.py::test_base_drift_classifier_has_one_source 与 framework/tests/test_meta_verification.py::test_framework_mirrors_gate_base_classifier 钉住，不靠结构强制。指针 framework/src/framework/review.py- LEDGER_ONLY 多加了一道**见证**闸（第一现场读数 gates/diag/base_drift/<task>.json，或 sealed_at 不早于父提交提交时刻），没有见证退回 DRIFT —— 规格只写「真祖先 + 差异全台账」，但既有钉子 tests/test_wb_review.py:733-749（本卡明写不许改）要求 HEAD~2 vs HEAD^ 只差一个台账文件也必须报「不是为这一笔跑的」，不加见证闸那条会红。指针 tools/gate_base.py- 云侧只有 MATCH 放行：tools/gate_pool.py 的 validate_cloud_return 对 LEDGER_ONLY 仍记红，只把读数写进文案 —— 云机上没有落地链的第一现场读数可读，宁红不漏。指针 tools/gate_pool.py- 决策记录编号写成 0009 而不是规格写的 0005：0005 已被 0005-tool-root-vs-data-root.md 占用，按 docs/decisions/README.md「新记录取当前最大号 + 1」。指针 docs/decisions/0009-gate-base-drift.md"
+

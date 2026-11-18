@@ -43,9 +43,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 try:  # `tools/` 在 sys.path 上时（脚本与多数钉子）直接导入
+    import gate_base  # 派生物差异分类器（卡 E123：MATCH / LEDGER_ONLY / DRIFT，全仓只此一份）
     import gate_verdict  # 三把尺子共用的判据（卡 E63：零门 / 未验证 / 复用来源）
 except ModuleNotFoundError:  # pragma: no cover —— 被当包导入时（`from tools import gate_pool`）
-    from tools import gate_verdict  # type: ignore[no-redef]
+    from tools import (
+        gate_base,  # type: ignore[no-redef]
+        gate_verdict,  # type: ignore[no-redef]
+    )
 
 try:  # ★ 写盘纪律（卡 A330）：同上 —— `tools/` 在 sys.path 上时 `pool` 可导；落地桩里退回包路径
     from pool import lastgood
@@ -466,12 +470,27 @@ def release_slot_lock(lock_dir: pathlib.Path, slot: int) -> bool | str:
 
 
 # ---------------------------------------------------------------- 回传校验（五条）
-def _rev_matches(got: str, want: str) -> bool:
-    """`rev` 与期望父提交比 —— 短 sha 对全长 / 全长对短 sha 都算对上（反之不算）。"""
-    a, b = str(got), str(want)
-    if not a or not b:
-        return False
-    return a == b or a.startswith(b) or b.startswith(a)
+def base_drift_category(
+    payload_rev: str,
+    expected_rev: str,
+    payload: dict | None = None,
+    *,
+    root: pathlib.Path | str | None = None,
+    **providers: object,
+) -> tuple[str, list[str], str]:
+    """① rev 这一条与复核侧**共用**分类器（`tools/gate_base.py`，卡 E123）。
+
+    云侧口径比本机严：**只有 MATCH 放行**。LEDGER_ONLY（基点是真祖先、只差台账）也照记
+    —— 云机跑的必须是这一笔的父提交；读数写清差在哪、为什么不算。
+    """
+    data = payload if isinstance(payload, dict) else {}
+    taken: dict[str, object] = dict(gate_base.providers(root)) if root is not None else {}
+    taken.update(providers)
+    return gate_base.gate_base_drift(
+        str(payload_rev or ""), str(expected_rev or ""),
+        sealed_at=str(data.get("sealed_at") or ""
+        ), **taken,  # type: ignore[arg-type]
+    )
 
 
 def parse_pytest_passed(log_text: str) -> int:
@@ -498,6 +517,7 @@ def validate_cloud_return(
     pytest_total: int,
     workspace_clean: bool,
     expect_host: str = "",
+    **rev_providers: object,
 ) -> list[str]:
     r"""云机 `last.json` 回传的**五条 fail-closed 校验**（卡 E42 §2.3 逐条）。
 
@@ -514,11 +534,12 @@ def validate_cloud_return(
     problems: list[str] = []
     data = payload if isinstance(payload, dict) else {}
 
-    # ① rev == 父提交
+    # ① rev == 父提交（分类器只放行 MATCH；LEDGER_ONLY 也记，但把读数说清楚）
     got_rev = str(data.get("rev") or "")
-    if not _rev_matches(got_rev, expected_rev):
+    state, _rows, reading = base_drift_category(got_rev, expected_rev, data, **rev_providers)
+    if state != gate_base.MATCH:
         problems.append(f"① rev 对不上：last.json.rev={got_rev or '(空)'}"
-                        f" ≠ 期望父提交 {expected_rev or '(空)'}")
+                        f" ≠ 期望父提交 {expected_rev or '(空)'} —— {reading}")
 
     # ② ok + 门数/门名
     want = [str(x) for x in expected_doors]
@@ -1009,7 +1030,8 @@ def run_cloud_gate(
     problems = validate_cloud_return(
         payload, expected_rev=commit, expected_doors=expected_doors,
         pytest_passed=passed, pytest_total=int(pytest_total or 0),
-        workspace_clean=clean, expect_host=expect_host)
+        workspace_clean=clean, expect_host=expect_host,
+        root=pathlib.Path(wt))
     result = CloudResult(
         ok=not problems, problems=problems, payload=payload,
         host=str(payload.get("host") or ""), pytest_passed=passed,

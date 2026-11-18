@@ -69,7 +69,7 @@ python -X utf8 scripts/run_gates.py --profile product # timeflow 产品门（五
   （见 `SKILL.md`「前置检查」），绿了也要确认绿在这棵树。证据：`复盘/门禁假绿-PYTHONPATH-T-G157.md`、
   `复盘/功能验收机器化-T-G34.md`、`复盘/门禁改进清单.md`
 - （缺口 JU1）旧判决不许冒充当前状态：`gates/last.json` 必须带 base/rev，读的人先核它是不是这一轮的 ——
-  用 `python -X utf8 tools/wb_verify.py --tree .` 对 `rev` 与父提交。证据：`复盘/卡/卡156-旧判决冒充当前状态.md`、
+  用 `python -X utf8 tools/wb_verify.py --tree .` 对 `rev` 与父提交（差在台账笔不算冒充，读数会标「未复验」）。证据：`复盘/卡/卡156-旧判决冒充当前状态.md`、
   `复盘/问题清单-组3.md`、`复盘/卡/卡164-观测面与通则.md`
 - （缺口 JU2）判决文案要分真因（门没挡住 / 挡住了但不是这条 / 输入没给），否则读判决的人永远在猜 ——
   写判决时三选一写清；读判决时先分真因再动手。证据：`复盘/卡/卡156-旧判决冒充当前状态.md`、

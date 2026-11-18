@@ -57,7 +57,7 @@ description: 出事了从已落盘的证据里查——门禁产物、工人日�
 - 门红：判决文件里该门 `exit_code` 非 0，日志尾在逐门日志目录；跨树汇总用 `python -X utf8 tools/pipeline_view.py --json`。
 - 工人不动：`python -X utf8 tools/wb_diag.py <工人逐事件日志>` 看最后一个事件；「反复同一条被拒命令」是 harness 不支后台执行，不是工人不行。读到一片 `UnicodeDecodeError` / 乱码，先用它确认证据文件是**按什么编码写下来的**（外部命令 stdout 走系统区域编码：用 `locale.getencoding()` 解，不许用 `getpreferredencoding(False)` —— `-X utf8` 会让它回 utf-8），别先怀疑判据。
 - 队列说不清（落了没翻 / 翻了没落）：`python -X utf8 tools/wb_reconcile.py` 的三份清单。
-- 「结论是不是这棵树的」：判决文件的 `rev` / `branch` / `tree`，与 `python -X utf8 tools/wb_verify.py --tree .` 报的父提交对一遍。
+- 「结论是不是这棵树的」：判决文件的 `rev` / `branch` / `tree`，与 `python -X utf8 tools/wb_verify.py --tree .` 报的父提交对一遍。差的是台账笔（`rev` 是父提交的真祖先、差异只在台账）不算冒充 —— 读数会写「未复验」，别据此判假绿。
 
 ## 常见错与处置
 

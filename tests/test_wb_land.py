@@ -108,6 +108,9 @@ _NEW_TOOLS = (
     # ★ 卡 E63（T-AG521）：`landing.py` 起把门禁产物再判一遍（`import gate_verdict`）
     #   ⇒ 沙箱少这一份，`--preflight` 一 import 就 ModuleNotFoundError（实测）。
     "tools/gate_verdict.py",
+    # ★ 卡 E123（T-AG632）：`landing.py` / `gate_pool.py` 都要 `import gate_base`
+    #   （门禁基点漂移分类器，全仓只此一份）⇒ 沙箱少这一份就 ModuleNotFoundError。
+    "tools/gate_base.py",
 )
 
 _TEXT = """=== gaps ===
@@ -2787,3 +2790,66 @@ def test_join_queue_reruns_speculative_preflight_when_main_moved(
     assert rc == 0, out
     assert "投机预检作废" in out, out
     assert len(calls) == 1, f"投机预检没重跑（结果被复用了）：{calls}"
+
+
+def test_landing_records_base_drift_after_rebase(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """★ 卡 E123 判据 6：⑦ rebase 之后**落门禁基点读数**（只补账，不重跑门禁）。
+
+    造一次「主树前进两笔」：门禁在 G 上跑（卡树里的 `gates/last.json` 记着 `rev=G`），
+    之后主树又落下两笔（一笔台账、一笔源码），卡树 rebase 上来 ⇒ 这一笔的父提交 = 主树新
+    HEAD。读数要落在 `gates/diag/base_drift/<task>.json`，五个字段齐，`diff_paths` 由
+    `git diff --name-only <gates_rev> <新 HEAD>^` **现算**。
+
+    ★ 不断言「门禁重跑」—— 判据明写不许插重跑；也不断言这笔记账会不会把复核判红（那是
+      复核器的判据，另有钉子）。
+    """
+    repo = _mk_repo(tmp_path)
+    pen = _mk_pen(repo)
+    base = _git(repo, "rev-parse", "--short", "HEAD").stdout.strip()
+    # 门禁是在 `base` 上跑的（卡树里那份产物这么写着）
+    _write(pen, "gates/last.json", json.dumps({"rev": base, "ok": True}) + "\n")
+    # 主树前进两笔：一笔只动台账，一笔动源码
+    _write(repo, "docs/workbacklog.toml", "[cards]\n")
+    _git(repo, "add", "--", "docs/workbacklog.toml")
+    _git(repo, "commit", "-q", "-m", "docs(ledger): 台账前进一笔")
+    _write(repo, "code/b.py", "Y = 2\n")
+    _git(repo, "add", "--", "code/b.py")
+    _git(repo, "commit", "-q", "-m", "feat: 源码前进一笔")
+    main_tip = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    # 卡树提交 → rebase 到主树新 HEAD（= 收口链 ⑦ 那一步）
+    _git(pen, "add", "-A")
+    _git(pen, "commit", "-q", "-m", "feat: 这一笔")
+    rebased = _git(pen, "rebase", main_tip)
+    assert rebased.returncode == 0, rebased.stderr
+    parent = _git(pen, "rev-parse", "HEAD^").stdout.strip()
+    assert parent == main_tip
+
+    mod = _load_landing()
+    monkeypatch.setattr(mod, "ROOT", repo)
+    out = mod.record_base_drift("T-G999", wt=pen, rebase_before_main=main_tip)
+
+    assert out is not None, "门禁基点读数没落下"
+    path = repo / "gates" / "diag" / "base_drift" / "T-G999.json"
+    assert path.is_file(), f"读数没落在约定位置：{path}"
+    body = json.loads(path.read_text(encoding="utf-8"))
+    assert set(body) == {
+        "gates_rev", "rebase_before_main", "rebase_after_head",
+        "rebase_after_parent", "diff_paths",
+    }, body
+    assert body["gates_rev"] == base
+    assert body["rebase_before_main"] == main_tip
+    assert body["rebase_after_head"] == _git(pen, "rev-parse", "HEAD").stdout.strip()
+    assert body["rebase_after_parent"] == parent
+    assert sorted(body["diff_paths"]) == ["code/b.py", "docs/workbacklog.toml"], body
+
+
+def test_record_base_drift_is_called_after_rebase_and_before_ff() -> None:
+    """★ 判据 6 的顺序钉（源级）：落读数在「rebase 后 HEAD」之后、「merge --ff-only」之前。"""
+    text = (TOOLS / "pool" / "landing.py").read_text(encoding="utf-8").replace("\r\n", "\n")
+    call = text.find("record_base_drift(a.task, wt=wt, rebase_before_main=main_now)")
+    rebase = text.find('print("  rebase 后 HEAD ="')
+    ff = text.find('"merge", "--ff-only"')
+    assert call > 0 and rebase > 0 and ff > 0, (call, rebase, ff)
+    assert rebase < call < ff, f"落读数的位置不对：rebase={rebase} call={call} ff={ff}"

@@ -285,3 +285,50 @@ def test_g10_nail_affected_block_is_red_with_original():
     assert r.landed is False
     joined = " ".join(r.problems)
     assert "affected" in joined and "部分跑" in joined
+
+
+
+# ===========================================================================
+# G10 · 门禁基点差异分类器（卡 E123）：镜像必须与 tools/gate_base.py 同分类
+# ===========================================================================
+
+def test_framework_mirrors_gate_base_classifier() -> None:
+    """★ 卡 E123 判据 5 的 framework 侧镜像钉：同一份注入 ⇒ 同一个分类。
+
+    `framework/src/framework/review.py` 是**纯库**（不 import 本仓模块、不跑子进程），
+    所以 `gate_base_drift` 在那里是一份**镜像**，台账族名单由调用方注入。镜像与原件的
+    一致性没有编译器管，只能钉：同一 payload + 同一父提交 + 同一份注入 ⇒ 两边同分类，
+    读数里那几句关键词也一致（LEDGER_ONLY 必须带「未经复验」）。
+    """
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    tools = str(root / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gate_base as gb  # noqa: PLC0415 —— 按需导入，不在模块顶部污染
+    from framework import review as fr  # noqa: PLC0415
+
+    resolved = {"aaaaaaa": "a" * 40, "bbbbbbb": "b" * 40}
+    common = {
+        "resolve": lambda short: resolved.get(str(short), ""),
+        "ancestor": lambda a, b: True,
+        "commit_time": lambda rev: "2098-01-01T00:00:00+00:00",
+    }
+    cases = [
+        ("只动台账", {**common, "diff": lambda a, b: ["docs/workbacklog.toml"]}, "LEDGER_ONLY"),
+        ("动了源码", {**common, "diff": lambda a, b: ["tools/foo.py"]}, "DRIFT"),
+        ("不是真祖先", {**common, "ancestor": lambda a, b: False,
+                    "diff": lambda a, b: ["docs/workbacklog.toml"]}, "DRIFT"),
+        ("差异取不到", {**common, "diff": lambda a, b: None}, "DRIFT"),
+    ]
+    for label, prov, want in cases:
+        mine = gb.gate_base_drift(
+            "aaaaaaa", "bbbbbbb", sealed_at="2099-01-01T00:00:00", **prov)
+        mirror = fr.gate_base_drift(
+            "aaaaaaa", "bbbbbbb", sealed_at="2099-01-01T00:00:00",
+            is_ledger=gb.is_ledger_path, **prov)
+        assert mirror[0] == mine[0] == want, f"[{label}] 镜像与原件的分类不一致：{mine} vs {mirror}"
+        if want == "LEDGER_ONLY":
+            assert "未经复验" in mine[2] and "未经复验" in mirror[2], (mine[2], mirror[2])

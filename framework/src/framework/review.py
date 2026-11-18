@@ -24,6 +24,7 @@ from __future__ import annotations
 import fnmatch
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import tomllib
@@ -111,22 +112,167 @@ def check_trailers(body: str) -> tuple[list[str], dict[str, str]]:
 
 
 # ---------------------------------------------------------------------------
+# 检查面 ③-基点：门禁基点与父提交差在哪（卡 E123；判据与 `tools/gate_base.py` 同源）
+# ---------------------------------------------------------------------------
+#: 三档（与 `tools/gate_base.py` 逐字同名）。
+_GATE_MATCH = "MATCH"
+_GATE_LEDGER_ONLY = "LEDGER_ONLY"
+_GATE_DRIFT = "DRIFT"
+
+
+def _gate_same_commit(a: str, b: str) -> bool:
+    a, b = str(a or "").strip(), str(b or "").strip()
+    return bool(a) and bool(b) and (a == b or a.startswith(b) or b.startswith(a))
+
+
+def _gate_naive(ts: str) -> "datetime | None":
+    text = str(ts or "").strip()
+    if not text:
+        return None
+    try:
+        got = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return got.replace(tzinfo=None)
+
+
+def gate_base_drift(
+    payload_rev: str,
+    parent_short: str,
+    *,
+    resolve: "Callable[[str], str] | None" = None,
+    ancestor: "Callable[[str, str], bool | None] | None" = None,
+    diff: "Callable[[str, str], list[str] | None] | None" = None,
+    commit_time: "Callable[[str], str] | None" = None,
+    recorded: "Callable[[str, str], dict | None] | None" = None,
+    sealed_at: str = "",
+    is_ledger: "Callable[[str], bool] | None" = None,
+) -> tuple[str, list[str], str]:
+    """判「门禁基点」与「父提交」差在哪 ⇒ (分类, 差异文件, 读数)。
+
+    ★ 这是 `tools/gate_base.gate_base_drift` 的**镜像**（本模块是纯库：不 import 本仓
+    模块、不跑子进程）。两条纪律钉着它：
+
+    - 台账族名单**不在这里**：由调用方注入 `is_ledger`（本仓传
+      `gate_base.is_ledger_path`，那份是从 `gates/defs/domains.py` 反推的）；
+    - 没有注入 `is_ledger` ⇒ 判不出「只动台账」⇒ 一律 DRIFT（拿不准就红）。
+
+    两侧必须说同一句话 —— 一致性由 `tests/test_two_rulers.py` 的
+    `test_base_drift_classifier_has_one_source` 钉住（同一 payload + 同一父提交 +
+    同一注入 ⇒ 四处同分类）。
+    """
+    raw = str(payload_rev or "").strip()
+    parent = str(parent_short or "").strip()
+
+    if raw and raw == parent:  # 字面量相同：合成 sha / 仓外树都靠它
+        return _GATE_MATCH, [], ""
+    if not raw or not parent:
+        return _GATE_DRIFT, [], (
+            f"门禁基点 {raw or '(空)'} 与父提交 {parent or '(空)'}："
+            "提交对不上，也解析不出差异 ⇒ 按 DRIFT（拿不准就红）"
+        )
+    if resolve is None or ancestor is None or diff is None:
+        return _GATE_DRIFT, [], (
+            "这一档没有可用的 git 取数（分类器只认解析后的提交）⇒ 按 DRIFT（拿不准就红）"
+        )
+
+    a = str(resolve(raw) or "").strip()
+    b = str(resolve(parent) or "").strip()
+    if not a or not b:
+        return _GATE_DRIFT, [], (
+            f"提交解析不出（last.json.rev={raw!r} 解析={a[:8] or '解析不出'}，"
+            f"父提交 {parent!r} 解析={b[:8] or '解析不出'}；合成 sha / 浅克隆 / 仓外树）"
+            " ⇒ 按 DRIFT，不许当「没改」"
+        )
+    if _gate_same_commit(a, b):
+        return _GATE_MATCH, [], ""
+
+    seen = ancestor(a, b)
+    if seen is not True:
+        return _GATE_DRIFT, [], (
+            f"last.json.rev={raw}（解析={a[:8]}）不是父提交 {parent}（解析={b[:8]}）"
+            "的真祖先 ⇒ 按 DRIFT（一次门禁跑完提交两笔？第二笔没验过）"
+        )
+
+    rows = diff(a, b)
+    if rows is None:
+        return _GATE_DRIFT, [], (
+            f"门禁基点 {raw}（解析={a[:8]}）与父提交 {parent}（解析={b[:8]}）"
+            "之间的差异取不到 ⇒ 按 DRIFT（不许把「查不到」当「没改」）"
+        )
+
+    if is_ledger is None:
+        return _GATE_DRIFT, rows, (
+            f"门禁基点 {raw}（解析={a[:8]}）与父提交 {parent}（解析={b[:8]}）之间有差异，"
+            "但这一档没拿到「哪些路径算台账」的名单 ⇒ 按 DRIFT（拿不准就红）"
+        )
+
+    off = [p for p in rows if not is_ledger(p)]
+    if off:
+        return _GATE_DRIFT, rows, (
+            f"门禁基点 {raw}（解析={a[:8]}）与父提交 {parent}（解析={b[:8]}）之间改了源码："
+            f"{'；'.join(off)} ⇒ 必须重跑门禁"
+        )
+
+    text_rows = "、".join(rows) if rows else "一个都没动"
+    head = (
+        f"last.json.rev={raw} 是父提交 {parent} 的真祖先；"
+        f"{raw}..{parent} 只动了 {len(rows)} 个台账/派生物文件（{text_rows}）；"
+        "pytest / docs 属「永远跑」⇒ 结论未经复验"
+    )
+
+    rec = recorded(a, b) if recorded is not None else None
+    if rec:
+        where = str(rec.get("_path") or "").strip()
+        tail = f"（第一现场读数：{where}）" if where else "（第一现场读数：gates/diag/base_drift/）"
+        return _GATE_LEDGER_ONLY, rows, head + tail
+
+    sealed = _gate_naive(sealed_at)
+    if sealed is not None and commit_time is not None:
+        born = _gate_naive(str(commit_time(b) or ""))
+        if born is not None and born <= sealed:
+            return _GATE_LEDGER_ONLY, rows, (
+                head + f"（时间见证：父提交提交于 {born.isoformat()}，门禁封存于 {sealed.isoformat()}）"
+            )
+
+    return _GATE_DRIFT, rows, (
+        head + "；但既没有第一现场读数（gates/diag/base_drift/），也没有时间见证"
+        "（产物里的 sealed_at 不早于父提交的提交时刻）⇒ 按 DRIFT（拿不准就红）"
+    )
+
+
+def gate_base_is_red(category: str) -> bool:
+    """只有 MATCH / LEDGER_ONLY 不算红 —— 其余（含未知值）一律算红。"""
+    return str(category) not in (_GATE_MATCH, _GATE_LEDGER_ONLY)
+
+
+# ---------------------------------------------------------------------------
 # 检查面 ③：门禁是不是为这一笔跑的（抽空 `wb_review.check_gate_evidence`）
 # ---------------------------------------------------------------------------
 
 
-def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
-    """门禁是不是**为这一笔**跑的 —— `rev` 必须等于这一笔的父提交。
+def check_gate_evidence(
+    payload: dict, parent_short: str, *, gate_providers: dict | None = None,
+) -> list[str]:
+    """门禁是不是**为这一笔**跑的 —— `rev` 要等于父提交，**或**只差台账（卡 E123）。
 
     ★ G10 反例钉子②：rev 对不上 ⇒ 红（一次门禁跑完提交两笔，第二笔没验过）。
+    ★ 卡 E123：真祖先 + 差异只在台账 ⇒ 不红，但也**不是绿**（结论未经复验）；分成三档
+      由 `gate_base_drift` 判，判据与 `tools/gate_base.py` 同源（同一份名单由调用方注入）。
     """
     problems: list[str] = []
     if payload.get("ok") is not True:
         problems.append(f"gates/last.json 的 ok 不是 true：{payload.get('ok')!r}")
-    if payload.get("rev") != parent_short:
+    providers = dict(gate_providers or {})
+    state, _rows, reading = gate_base_drift(
+        str(payload.get("rev") or ""), parent_short,
+        sealed_at=str(payload.get("sealed_at") or ""), **providers,
+    )
+    if gate_base_is_red(state):
         problems.append(
             f"门禁不是为这一笔跑的：last.json 的 rev={payload.get('rev')!r}，"
             f"而这一笔的父提交是 {parent_short!r}（★ 一次门禁跑完提交两笔？第二笔没验过）"
+            f" —— {reading}"
         )
     # ★ T-AG518：口径必须与门禁 gates_ok() 一致（只数阻断门）：
     #   NOT RUN 不是 PASS，但也不是红。
@@ -227,17 +373,23 @@ _NO_GATE_CLAIM_RE = re.compile(r"没跑|未跑|no-gate|commit-only|复用|跳过
 
 def check_gates_trailer_truth(
     gates_line: str, payload: dict, parent_short: str,
+    *, gate_providers: dict | None = None,
 ) -> tuple[list[str], str]:
     """`Gates:` trailer 的**真伪**：拿 trailer 内容与 `gates/last.json` 的实际结论对账。
 
-    (a) 真绿（ok 且 rev 对得上）⇒ trailer 必须声称跑过门禁；
-    (b) 非真绿 ⇒ trailer 不许声称「全量门禁绿 + seal」（伪造）；
+    (a) 真绿（ok 且基点是父提交**或只差台账**）⇒ trailer 必须声称跑过门禁；
+    (b) 非真绿（ok 不是 true / 基点是 DRIFT / 解析不出）⇒ 不许声称「全量门禁绿 + seal」；
     (c) 主动披露「没跑门禁」⇒ 放行但标一行（不许当门禁绿混过去）。
+    ★ 卡 E123：只看台账那一档要留读数（结论未复验），不当伪造。
     """
     line = (gates_line or "").strip()
     ok = payload.get("ok")
     rev = payload.get("rev")
-    matched = ok is True and rev == parent_short
+    state, _rows, base_reading = gate_base_drift(
+        str(rev or ""), parent_short, sealed_at=str(payload.get("sealed_at") or ""),
+        **(gate_providers or {}),
+    )
+    matched = ok is True and not gate_base_is_red(state)
     claims_green = bool(_GREEN_CLAIM_RE.search(line))
     claims_no_gate = bool(_NO_GATE_CLAIM_RE.search(line))
     reading = (f"`Gates:` 原文=「{line}」 / last.json ok={ok!r} rev={rev!r}"
@@ -249,6 +401,8 @@ def check_gates_trailer_truth(
         return [f"{reading} —— last.json 不是这一笔的门禁结论，trailer 却声称"
                 f"「全量门禁绿 + seal」：伪造门禁结论"], ""
     if matched:
+        if state == _GATE_LEDGER_ONLY:
+            return [], f"这一笔的门禁结论**未复验** —— {base_reading}"
         return [], ""
     why = ("（trailer 已披露，放行）" if claims_no_gate
            else "（trailer 未主动披露「没跑门禁」—— 如实标一行，不当门禁绿）")

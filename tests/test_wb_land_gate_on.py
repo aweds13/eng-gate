@@ -84,6 +84,8 @@ def _cloud_repo(tmp_path: Path) -> Path:
     """假仓库 + 云门禁池 + 带门表的门禁桩（`gates/**` 产物按真仓口径忽略）。"""
     repo = _wand_mod._mk_repo(tmp_path, run_gates_body=_STUB_RUN_GATES)
     (repo / "tools" / "gate_pool.py").write_bytes((TOOLS / "gate_pool.py").read_bytes())
+    # ★ 卡 E123：`gate_pool.py` 现在 `import gate_base`（门禁基点漂移分类器）⇒ 沙箱也要有
+    (repo / "tools" / "gate_base.py").write_bytes((TOOLS / "gate_base.py").read_bytes())
     gi = repo / ".gitignore"
     gi.write_text(gi.read_text(encoding="utf-8") + _GITIGNORE_EXTRA, encoding="utf-8")
     _wand_mod._git(repo, "add", "-A")

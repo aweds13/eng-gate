@@ -1070,3 +1070,122 @@ def test_real_last_json_reads_the_same_way_on_both_sides() -> None:
         f"复核={review_side}。门列表="
         f"{[(g.get('name'), g.get('exit_code'), g.get('blocking')) for g in payload['gates']]}"
     )
+
+
+# ------------------------------------------------- 卡 E123（T-AG632）：基线前移
+#
+# 现场（卡规格 §1）：门禁在 R=f833d006 跑，主树又插进两笔台账提交，这一笔的父提交
+# 变成 P=ebd39871 ⇒ 旧判据报「一次门禁跑完提交两笔？第二笔没验过」，红对了、理由错了。
+# 新判据分三档（分类器只有一份：tools/gate_base.py）：MATCH / LEDGER_ONLY / DRIFT。
+
+
+def _base_drift_repo(tmp_path: Path, *, skip_path: str) -> tuple[Path, str, str]:
+    """造一棵「门禁在 A 跑、主树又前进一笔到 B、这一笔 C 的父提交是 B」的仓。
+
+    返回 (仓, 门禁基点 A 的短 sha, 父提交 B 的短 sha)。skip_path 决定 B 那一笔改了什么：
+    台账族（docs/…）⇒ 基点是真祖先且只动台账；源码（tools/…）⇒ 必须重跑门禁。
+    """
+    repo = tmp_path / "repo"
+    for rel in ("src", "docs", "tools", "gates"):
+        (repo / rel).mkdir(parents=True)
+    (repo / "src" / "a.py").write_text("a\n", encoding="utf-8")
+    _run_git(repo, "init", "-q", "-b", "main")
+    _run_git(repo, "config", "user.email", "t@local")
+    _run_git(repo, "config", "user.name", "t")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "A: 门禁就是在这跑的")
+    base = _run_git(repo, "rev-parse", "--short", "HEAD").strip()
+    target = repo / skip_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("x\n", encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "B: 主树又前进一笔（只动台账 / 或动源码）")
+    parent = _run_git(repo, "rev-parse", "--short", "HEAD").strip()
+    payload = {
+        "rev": base,
+        "ok": True,
+        "docs_sync_ok": True,
+        "docs_sync_missing": [],
+        "sealed_at": "2099-01-01T00:00:00",
+        "gates": [{"name": "pytest", "exit_code": 0}],
+    }
+    (repo / "gates" / "last.json").write_text(json.dumps(payload), encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "C: 这一笔（父提交是 B）")
+    return repo, base, parent
+
+
+def _base_drift_payload(repo: Path) -> dict:
+    return json.loads((repo / "gates" / "last.json").read_text(encoding="utf-8"))
+
+
+def test_base_drift_ledger_only_is_not_red(tmp_path: Path, monkeypatch) -> None:
+    """判据 1：基点只落后**台账** ⇒ 不再报「不是为这一笔跑的」，但读数必须说明「未复验」。"""
+    repo, _base, parent = _base_drift_repo(tmp_path, skip_path="docs/workbacklog.toml")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    payload = _base_drift_payload(repo)
+    notes: list[str] = []
+    problems = wr.check_gate_evidence(payload, parent, notes=notes)
+    assert not any("门禁不是为这一笔跑的" in p for p in problems), problems
+    # 读数只许进 note：进了 problems 就等于「台账-only 也判红」（反向变异 A 咬这条）
+    assert not any("真祖先" in p or "台账/派生物文件" in p for p in problems), problems
+    joined = "\n".join(notes)
+    assert "真祖先" in joined, joined
+    assert "台账/派生物文件" in joined, joined
+    assert "docs/workbacklog.toml" in joined, joined
+    assert "未经复验" in joined, joined
+    state, rows, _reading = wr.gate_base_drift(
+        payload["rev"], parent, sealed_at=payload["sealed_at"], root=repo
+    )
+    assert state == wr.LEDGER_ONLY, (state, rows)
+    assert rows == ["docs/workbacklog.toml"], rows
+
+
+def test_base_drift_touching_source_is_still_red(tmp_path: Path, monkeypatch) -> None:
+    """判据 2：基点与父提交之间改了**源码** ⇒ 仍红，且逐条点出改了什么、必须重跑。"""
+    repo, _base, parent = _base_drift_repo(tmp_path, skip_path="tools/foo.py")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    payload = _base_drift_payload(repo)
+    problems = wr.check_gate_evidence(payload, parent)
+    joined = "；".join(problems)
+    assert any("必须重跑门禁" in p for p in problems), joined
+    assert "tools/foo.py" in joined, joined
+    assert any("门禁不是为这一笔跑的" in p for p in problems), joined
+    state, _rows, _reading = wr.gate_base_drift(payload["rev"], parent, root=repo)
+    assert state == wr.DRIFT, state
+
+
+def test_base_drift_unresolvable_stays_red(tmp_path: Path, monkeypatch) -> None:
+    """判据 3：解析不出一律 DRIFT（否决权）—— 不许把「查不到差异」当成「没改」。"""
+    repo, _base, parent = _base_drift_repo(tmp_path, skip_path="docs/workbacklog.toml")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    payload = {**_base_drift_payload(repo), "rev": "deadbee"}
+    problems = wr.check_gate_evidence(payload, parent)
+    assert any("门禁不是为这一笔跑的" in p for p in problems), problems
+
+    state, _rows, reading = wr.gate_base_drift("deadbee", "beef123", root=repo)
+    assert state == wr.DRIFT, (state, reading)
+    assert "解析不出" in reading, reading
+
+    # 真祖先前移但**没有见证**（没有落地读数、sealed_at 也没有）⇒ 仍 DRIFT
+    payload_no_witness = {k: v for k, v in _base_drift_payload(repo).items() if k != "sealed_at"}
+    state2, _rows2, reading2 = wr.gate_base_drift(payload_no_witness["rev"], parent, root=repo)
+    assert state2 == wr.DRIFT, (state2, reading2)
+    assert "见证" in reading2, reading2
+
+
+def test_base_drift_ledger_only_trailer_note_not_forgery(tmp_path: Path, monkeypatch) -> None:
+    """判据 4：trailer 走同一个分类器 —— 台账-only 不是伪造，但必须留下「未复验」。"""
+    repo, _base, parent = _base_drift_repo(tmp_path, skip_path="docs/workbacklog.toml")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    payload = _base_drift_payload(repo)
+    problems, note = wr.check_gates_trailer_truth("全量门禁绿 + seal", payload, parent)
+    assert problems == [], problems
+    assert "未经复验" in note, note
+    assert "伪造门禁结论" not in note, note
+
+    # 对照：真造假仍红（ok 不是 true）
+    forged, _n1 = wr.check_gates_trailer_truth(
+        "全量门禁绿 + seal", {**payload, "ok": False}, parent
+    )
+    assert any("伪造门禁结论" in p for p in forged), forged

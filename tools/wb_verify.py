@@ -42,6 +42,51 @@ from pathlib import Path
 TRAILER_KEYS = ("Task", "Refs", "Ledger", "Gates")
 
 
+def _gate_base():
+    """分类器的唯一实现（`tools/gate_base.py`，卡 E123）—— 取不到就返 None（调用方按红处理）。"""
+    try:
+        import gate_base  # noqa: PLC0415 —— 与 gate_verdict 同路：按 tools/ 现读
+    except ModuleNotFoundError:
+        here = str(Path(__file__).resolve().parent)
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        try:
+            import gate_base  # noqa: PLC0415,F811
+        except ModuleNotFoundError:
+            return None
+    return gate_base
+
+
+def _base_providers(tree: Path, gate_base: object) -> dict:
+    """取数全部跑在 `--tree` 上（`_git`/`_run` 是模块级的，桩换得掉）。"""
+
+    def _resolve(short: str) -> str:
+        return _git(tree, "rev-parse", "--verify", str(short) + "^{commit}").strip()
+
+    def _ancestor(a: str, b: str) -> bool | None:
+        rc, _out = _run(
+            ["git", "-c", "core.quotepath=false", "merge-base", "--is-ancestor", a, b], tree
+        )
+        return True if rc == 0 else (False if rc == 1 else None)
+
+    def _diff(a: str, b: str) -> list[str] | None:
+        rc, out = _run(["git", "-c", "core.quotepath=false", "diff", "--name-only", a, b], tree)
+        if rc != 0:
+            return None
+        return [ln.strip() for ln in out.splitlines() if ln.strip()]
+
+    def _ctime(rev: str) -> str:
+        return _git(tree, "show", "-s", "--format=%cI", str(rev)).strip()
+
+    return {
+        "resolve": _resolve,
+        "ancestor": _ancestor,
+        "diff": _diff,
+        "commit_time": _ctime,
+        "recorded": lambda a, b: gate_base.find_record(tree, a, b),  # type: ignore[attr-defined]
+    }
+
+
 def _expected_scope(tree: Path) -> str:
     """封存指纹口径自述值的**唯一真源**（T-G179 / 卡 160）：`run_gates.TREE_SCOPE`（现读）。
 
@@ -223,10 +268,20 @@ def check_gates(s: Screen, tree: Path, parent: str) -> None:
     #   判据改成「把两侧对齐到短的那一方再比」：任一方是另一方的前缀就算同一次提交；
     #   但两侧都短于 `MIN_SHA_LEN` 时判不成立 —— 太短没有分辨率，宁可红。
     rev_short = rev[:len(parent)] if parent else rev
-    _pair = (rev_short, parent)
-    rev_ok = bool(rev) and bool(parent) and min(len(rev_short), len(parent)) >= MIN_SHA_LEN and (
-        parent.startswith(rev_short) or rev_short.startswith(parent)
-    )
+    # ★ 卡 E123（T-AG632）：rev 判据不再自己算 —— 调**同一份**分类器（`tools/gate_base.py`），
+    #   三档 MATCH / LEDGER_ONLY / DRIFT。基点是真祖先且只差台账 ⇒ 不算红，但读数要打出来
+    #   （结论未经复验）；其余（源码差异 / 非祖先 / 解析不出）仍红，文案保留原句。
+    _gb = _gate_base()
+    if _gb is None:
+        state, base_reading = "DRIFT", "分类器不可用（tools/gate_base.py 取不到）—— 拿不准不放过"
+        rev_ok = False
+    else:
+        state, _rows, base_reading = _gb.gate_base_drift(
+            rev, parent,
+            sealed_at=str(payload.get("sealed_at") or ""),
+            **_base_providers(tree, _gb),
+        )
+        rev_ok = bool(rev) and bool(parent) and not _gb.category_is_red(state)
     # ★ 门数**从门表现读**（不是写死 17）—— 见 `expected_gate_names()`。
     # ★ 分档（卡 E24）：`profiles_run` 说这一趟只跑了哪几档，期望集合就按那几档算；
     #   字段缺失（旧笔）⇒ 仍按全量 19 道核。
@@ -257,7 +312,11 @@ def check_gates(s: Screen, tree: Path, parent: str) -> None:
     else:
         problems.extend(str(x) for x in _verdict.problems)
     if not rev_ok:
-        problems.append("rev != 父提交（一次门禁跑完提交两笔？第二笔没验过）")
+        problems.append(
+            "rev != 父提交（一次门禁跑完提交两笔？第二笔没验过）—— " + base_reading
+        )
+    elif state == "LEDGER_ONLY":
+        s.info(f"门禁基点：{base_reading}")
     if not expected:
         problems.append(f"读不到应有的门数（{source}）—— 拿不准不放过")
     elif missing or extra:

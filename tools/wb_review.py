@@ -89,6 +89,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import gate_base
 import tomllib
 from pool.plan import BacklogError, load_backlog
 from pool.review import changed_paths, domain_of_manifest_text, outside_allow, outside_domain
@@ -211,8 +212,40 @@ def _resolve_commit(short: str) -> str:
     return done.stdout.strip() if done.returncode == 0 else ""
 
 
-def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
-    """③ 门禁是不是**为这一笔**跑的 —— `rev` 必须等于这一笔的父提交。"""
+# ★ 卡 E123（T-AG632）：门禁基点与父提交差在哪 —— **分类器只有一份**（`tools/gate_base.py`），
+#   复核器这两处（③ 与 ⓖ）都调它；另三处（`wb_verify` / `gate_pool` / `framework`）也调同一份。
+MATCH = gate_base.MATCH
+LEDGER_ONLY = gate_base.LEDGER_ONLY
+DRIFT = gate_base.DRIFT
+
+
+def gate_base_drift(
+    payload_rev: str,
+    parent_short: str,
+    *,
+    sealed_at: str = "",
+    root: Path | str | None = None,
+    **providers: object,
+) -> tuple[str, list[str], str]:
+    """分类器这一侧的口子：取数默认跑在 `ROOT` 上（测试与别的树可传 `root` 或直接注入）。
+
+    返回 `(分类, 差异文件, 读数)` —— 分类 ∈ `MATCH` / `LEDGER_ONLY` / `DRIFT`。
+    """
+    base = Path(root) if root is not None else ROOT
+    taken: dict[str, object] = dict(gate_base.providers(base))
+    taken.update(providers)
+    return gate_base.gate_base_drift(payload_rev, parent_short, sealed_at=sealed_at, **taken)  # type: ignore[arg-type]
+
+
+def check_gate_evidence(
+    payload: dict, parent_short: str, notes: list[str] | None = None
+) -> list[str]:
+    """③ 门禁是不是**为这一笔**跑的 —— 三档：同提交 / 基点是真祖先且只差台账 / 其余。
+
+    ★ 卡 E123：`rev` 落后**台账**几笔（现场 89cd4deb：门禁在 f833d006 跑、父提交 ebd39871）
+      不再报「门禁不是为这一笔跑的」；但结论**未经复验**（pytest / docs 属永远跑），
+      读数进 `notes`（CLI 落到 `gate_base_drift_note`）—— 如实标注，不是放行。
+    """
     problems: list[str] = []
     # ★ A324：封存里记了 `profile`（≠ all）⇒ 这是**只跑了一档**，不能当提交闸用。
     #   这条堵的是「挑一档跑绿冒充全量」—— 档位是给人做内循环的，不是给提交用的。
@@ -245,18 +278,18 @@ def check_gate_evidence(payload: dict, parent_short: str) -> list[str]:
                     )
     if payload.get("ok") is not True:
         problems.append(f"gates/last.json 的 ok 不是 true：{payload.get('ok')!r}")
-    raw_rev = str(payload.get("rev") or "")
-    same = raw_rev == parent_short  # 字面量相同就直接过（也要让合成 sha 的用例可用）
-    sealed = expected = ""
-    if not same:
-        sealed = _resolve_commit(raw_rev)
-        expected = _resolve_commit(parent_short)
-        same = bool(sealed) and sealed == expected
-    if not same:
+    state, _rows, reading = gate_base_drift(
+        str(payload.get("rev") or ""), parent_short,
+        sealed_at=str(payload.get("sealed_at") or ""))
+    if state == LEDGER_ONLY:
+        if notes is not None:
+            notes.append(reading)
+    elif gate_base.category_is_red(state):
+        # ★ 判据 2：升级文案（逐条点出改了哪些源码）+ **保留**原句作兜底。
         problems.append(
             f"门禁不是为这一笔跑的：last.json 的 rev={payload.get('rev')!r}"
-            f"（解析={sealed[:8] or '解析不出'}），而这一笔的父提交是 {parent_short!r}"
-            f"（解析={expected[:8] or '解析不出'}）（★ 一次门禁跑完提交两笔？第二笔没验过）"
+            f"，而这一笔的父提交是 {parent_short!r}"
+            f"（★ 一次门禁跑完提交两笔？第二笔没验过）—— {reading}"
         )
     if payload.get("docs_sync_ok") is not True or payload.get("docs_sync_missing"):
         problems.append(
@@ -499,10 +532,11 @@ def check_gates_trailer_truth(
     `gates/last.json` 的**实际结论**对账。
 
     判据（照卡写，别自己发明方向）：
-      (a) `last.json.ok==true` 且 `rev==父提交`（这一笔真跑过全量门禁）⇒ trailer **必须**
-          声称跑过门禁（含「门禁绿」/「全绿」/「seal」这类字样），否则 ⇒ 拒（声称与事实不符）；
-      (b) `ok==false`，**或** `rev!=父提交` ⇒ trailer **不许**声称"全量门禁绿 + seal"，
-          否则 ⇒ 拒（这就是"伪造门禁结论"的机器版）；
+      (a) `last.json.ok==true` 且基点是父提交（或只差台账，见 `gate_base_drift`）
+          ⇒ trailer **必须**声称跑过门禁（含「门禁绿」/「全绿」/「seal」这类字样），
+          否则 ⇒ 拒（声称与事实不符）；
+      (b) `ok==false`，**或**基点是 DRIFT（源码差异 / 非祖先 / 解析不出）⇒ trailer **不许**
+          声称"全量门禁绿 + seal"，否则 ⇒ 拒（这就是"伪造门禁结论"的机器版）；
       (c) `--no-gate` / `--commit-only` 形态：trailer 主动披露"没跑门禁"（或"复用已绿的那一趟"）
           ⇒ **放行**，但如实标一行「这一笔**没有**本轮门禁结论」，并且进 `--json` ——
           **不许**把它当成"门禁绿"混过去。
@@ -512,15 +546,10 @@ def check_gates_trailer_truth(
     line = (gates_line or "").strip()
     ok = payload.get("ok")
     rev = payload.get("rev")
-    # ★ 卡 E93：原来只做字面量直比（rev == parent_short）。
-    #   而 git 的 --short 会随仓库变大而变长：T-AG600 实测 last.json 写
-    #   7194eaf4d6（10 位）、父提交取到 7194eaf4（8 位）——
-    #   字面不等就把**真跑过门禁**的那笔判成「伪造门禁结论」。
-    #   与同文件 check_gate_evidence 同形：先字面比（合成 sha 的用例仍可用），不等再双向解析。
-    matched = ok is True and rev == parent_short
-    if not matched and ok is True:
-        sealed_rev, expected_rev = _resolve_commit(str(rev or "")), _resolve_commit(parent_short)
-        matched = bool(sealed_rev) and sealed_rev == expected_rev
+    # ★ 卡 E123 判据 4：与 ③ **同源**（同一个分类器），不再比字面量。
+    state, _rows, base_reading = gate_base_drift(
+        str(rev or ""), parent_short, sealed_at=str(payload.get("sealed_at") or ""))
+    matched = ok is True and not gate_base.category_is_red(state)
     claims_green = bool(GREEN_CLAIM_RE.search(line))
     claims_no_gate = bool(NO_GATE_CLAIM_RE.search(line))
     reading = (f"`Gates:` 原文=「{line}」 / last.json ok={ok!r} rev={rev!r}"
@@ -532,6 +561,9 @@ def check_gates_trailer_truth(
         return [f"{reading} —— last.json 不是这一笔的门禁结论，trailer 却声称"
                 f"「全量门禁绿 + seal」：伪造门禁结论"], ""
     if matched:
+        if state == LEDGER_ONLY:
+            # 台账前移：不是伪造，但**不许**空手说「全量门禁绿」。
+            return [], f"这一笔的门禁结论**未复验** —— {base_reading}"
         return [], ""
     why = ("（--no-gate / --commit-only 形态：trailer 已披露，放行）" if claims_no_gate
            else "（trailer 未主动披露「没跑门禁」—— 如实标一行，不当门禁绿）")
@@ -810,7 +842,9 @@ def main(argv: list[str] | None = None) -> int:
     except json.JSONDecodeError:
         payload = {}
         problems.append("这一笔里没有 gates/last.json（门禁产物没跟着提交）")
-    problems += check_gate_evidence(payload, parent)
+    gate_notes: list[str] = []
+    problems += check_gate_evidence(payload, parent, notes=gate_notes)
+    gate_base_note = "；".join(gate_notes)
     full_gate_problems, full_gate_note, full_gate_reading = check_full_gate_run(payload)
     problems += full_gate_problems
     seal_problems, seal_note, seal_reading = check_seal_tree(payload, sha)
@@ -834,6 +868,7 @@ def main(argv: list[str] | None = None) -> int:
         "derived_files": derived_files, "outside_files": outside_files,
         "gates_ok": payload.get("ok"), "gates_rev": payload.get("rev"),
         "gates_trailer": trailers.get("Gates"),
+        "gate_base_drift_note": gate_base_note,
         "gates_trailer_note": truth_note,
         "no_round_gate_verdict": bool(truth_note),
         "full_gate_reading": full_gate_reading,
@@ -855,6 +890,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  ② trailer：{trailers.get('Task', '(缺)')}")
     print(f"  ③ 门禁：ok={payload.get('ok')} rev={payload.get('rev')}"
           f"（这一笔的父提交 {parent}）+ {len(payload.get('gates', []))} 道门")
+    if gate_base_note:
+        print(f"     ★ 门禁基点（不判红，但结论未复验）：{gate_base_note}")
     print(f"  ③′ 全量门禁（门数 / affected 标记）：{full_gate_reading}")
     if full_gate_note:
         print(f"     ★ 标注（不判红）：{full_gate_note}")
