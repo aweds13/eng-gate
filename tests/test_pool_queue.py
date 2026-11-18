@@ -219,21 +219,134 @@ def test_locked_default_waits_for_a_slow_holder(q) -> None:
     assert waited >= 0.8, f"没等到持锁者：只等了 {waited:.3f}s"
 
 
-def test_locked_short_timeout_still_gives_up(q) -> None:
-    """显式给短 `timeout` ⇒ 该放弃就放弃（等待窗口可调，不是写死）。
+def test_locked_short_timeout_fails_closed(q) -> None:
+    """显式给短 `timeout` ⇒ 到期就抛 `QueueBusy`，**不**绕过去无锁写（窗口仍可调）。
 
-    反向：把 `timeout` 参数改成忽略入参 ⇒ 这条红。
+    ★ 卡 E139 改写了这条（原名 `test_locked_short_timeout_still_gives_up`）：改前它断言
+      `0.04 <= spent < 3.0` 之后 `with` 正常退出 —— 把「等不到就往下写」当成契约
+      （卡 E139 缺口 6）。钉子要守的**还是**「短的 timeout 真的生效」，但生效的结局是
+      失败关闭：队列文件一个字节都不许动。
+
+    反向：把 `_locked` 到期分支的 `raise QueueBusy(...)` 换回 `break` ⇒ 这条红
+    （变异 D 的 queue 那一半）。
     """
     import time as _time
 
-    lock = q.state_path().with_suffix(".lock")
-    lock.parent.mkdir(parents=True, exist_ok=True)
+    state = q.state_path()
+    state.parent.mkdir(parents=True, exist_ok=True)
+    before = state.read_bytes() if state.exists() else None
+    lock = state.with_suffix(".lock")
     lock.write_text("holder", encoding="utf-8")
     try:
         t0 = _time.time()
-        with q._locked(timeout=0.05):
+        with pytest.raises(q.QueueBusy) as err, q._locked(timeout=0.05):
             pass
         spent = _time.time() - t0
-        assert 0.04 <= spent < 3.0, f"短的 timeout 没生效：等了 {spent:.3f}s"
     finally:
         lock.unlink(missing_ok=True)
+    assert 0.04 <= spent < 3.0, f"短的 timeout 没生效：等了 {spent:.3f}s"
+    message = str(err.value)
+    assert "等了 0.05s" in message, f"文案缺「等了多久」（必须来自实参）：{message}"
+    assert str(lock) in message, f"文案缺锁文件完整路径：{message}"
+    assert "holder" in message, f"文案没点名持有者（锁文件里写的是 holder）：{message}"
+    assert before is None or state.read_bytes() == before, "等不到锁却写了队列文件 ⇒ 还是「无锁写」"
+
+
+
+# ------------------------------------------------ 卡 E139（`T-AG646`）：两族同一个结局
+def _two_families(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
+    """造两族的「锁被占住 + `timeout=0.0`」现场，各回一份读数（判据 4 用）。
+
+    ★ 两族**各定义各的异常**（`GatePoolBusy` / `QueueBusy`），所以这里回的是
+      「异常元组」而不是一个类：钉子里用 `pytest.raises((子类, 基类))` 同时咬住
+      「抛的是它」与「它挂在自家基类下面」。
+    ★ 两族的**锁文件名不同**（`merge-queue.lock` vs `gate-pool-queue.json.lock`）——
+      卡 E139 明确保留这个差异，所以两边各算各的锁路径，不许互相借用。
+    """
+    import sys as _sys
+
+    root = Path(__file__).resolve().parents[1]
+    if str(root / "tools") not in _sys.path:
+        _sys.path.insert(0, str(root / "tools"))
+    import gate_pool as _gp
+
+    queue_mod = _load_queue()
+
+    gp_state = tmp_path / "gate-pool-queue.json"
+    gp_queue = _gp.PoolQueue(gp_state, timeout=0.0)
+    gp_queue.save({"head": None, "waiting": [], "done": [], "slots": {}})
+    gp_before = gp_state.read_bytes()
+    gp_lock = gp_state.with_suffix(gp_state.suffix + ".lock")
+
+    monkeypatch.setenv("TF_MERGE_QUEUE", str(tmp_path / "merge-queue.json"))
+    monkeypatch.setenv("TF_QUEUE_POLL", "0.01")
+    q_state = queue_mod.state_path()
+    q_state.parent.mkdir(parents=True, exist_ok=True)
+    q_before = q_state.read_bytes() if q_state.exists() else None
+    q_lock = q_state.with_suffix(".lock")
+
+    return {
+        "gate_pool": {
+            "enter": gp_queue.locked,
+            "lock": gp_lock,
+            "before": gp_before,
+            "state": gp_state,
+            "errors": (_gp.GatePoolBusy, _gp.GatePoolError),
+        },
+        "queue": {
+            "enter": lambda: queue_mod._locked(timeout=0.0),
+            "lock": q_lock,
+            "before": q_before,
+            "state": q_state,
+            "errors": (queue_mod.QueueBusy, queue_mod.QueueError),
+        },
+    }
+
+
+@pytest.mark.parametrize("family", ["gate_pool", "queue"])
+def test_two_families_agree_on_give_up(family, tmp_path, monkeypatch) -> None:
+    """★ 判据 4：`PoolQueue.locked` 与 `pool/queue.py::_locked` 在「等不到」上是**同一种结局**。
+
+    两边都：抛自家 `*Busy`（继承自家基类）、文案含锁路径、队列文件一个字节不动、不往下写。
+    ★ 反向：只把 gate_pool 改成失败关闭、`queue.py` 保留 `break` ⇒ 这条的 `queue`
+      那一半红（变异 D）—— 一颗钉子咬两边就是为此。
+    """
+    families = _two_families(tmp_path, monkeypatch)
+    case = families[family]
+    lock = case["lock"]
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(f"{os.getpid()}@fake-host", encoding="utf-8")
+    try:
+        with pytest.raises(case["errors"]) as err, case["enter"]():
+            pass
+    finally:
+        lock.unlink(missing_ok=True)
+    message = str(err.value)
+    assert str(lock) in message, f"{family} 的文案没点名锁文件：{message}"
+    assert "等了 0s" in message, f"{family} 的文案没写等了多久：{message}"
+    assert "fake-host" in message, f"{family} 的文案没说谁可能还持着：{message}"
+    if case["before"] is not None:
+        assert case["state"].read_bytes() == case["before"], f"{family} 等不到锁却写了队列文件"
+
+
+def test_two_families_do_not_import_each_other() -> None:
+    """★ 判据 4 的另一半：两族只对齐口径，**不许**互相 import（改一处就悄悄改到另一处）。
+
+    ★ 反向：在 `tools/pool/queue.py` 里 `import gate_pool` 然后直接复用 `GatePoolBusy`
+      ⇒ 这条红。两族该各自演化（锁文件名、轮询间隔本来就不同）。
+    ★ 判据是「有没有这句 import」，**不是**「文件里出没出现这串字符」—— 注释与 docstring
+      里点名路径是允许的（它们正是用来解释两族关系的）。
+    """
+    import ast as _ast
+
+    root = Path(__file__).resolve().parents[1]
+    tree = _ast.parse((root / "tools" / "pool" / "queue.py").read_text(encoding="utf-8"))
+    names: list[str] = []
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Import):
+            names += [alias.name for alias in node.names]
+        elif isinstance(node, _ast.ImportFrom):
+            names.append(node.module or "")
+            names += [alias.name for alias in node.names]
+    offenders = [n for n in names if n == "gate_pool" or n.endswith(".gate_pool")]
+    assert not offenders, f"tools/pool/queue.py 反向 import 了 gate_pool：{offenders}"

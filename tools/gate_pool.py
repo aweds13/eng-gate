@@ -167,12 +167,57 @@ def _validate_queue_text(text: str) -> None:
         raise ValueError("队列快照顶层应是对象")
 
 
+def _write_holder(fd: int) -> None:
+    """把「谁持着锁」写进锁文件（`<pid>@<host>`）—— 只为「等不到」的文案能点名。
+
+    ★ 写不进去不算失败：锁已经建成了，「有人占着」的判据是文件存在，不是内容。
+    """
+    with contextlib.suppress(OSError):
+        os.write(fd, f"{os.getpid()}@{socket.gethostname()}".encode())
+
+
+def _lock_holder(lock: pathlib.Path) -> str:
+    """锁文件里写的持有者；读不到 / 没写 ⇒ 明说读不到（不许猜，也不许省掉这一段）。
+
+    ★ 与 `tools/pool/ledger.py:37-40`「不读别人的锁文件内容」的差别是时点：这里只在
+      已经放弃之后读一次（不再重试、不再动这个文件），最坏只是读到空或抛 OSError。
+    """
+    try:
+        text = lock.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError as exc:
+        return f"读不到持有者（{type(exc).__name__}）"
+    if not text:
+        return "读不到持有者（锁文件里没写）"
+    return f"持有者 {text}"
+
+
 # ---------------------------------------------------------------- 队列（单写者 + 原子写）
-class GatePoolUnreadable(RuntimeError):  # noqa: N818 —— 名字就是判据原文「读不到」
+class GatePoolError(RuntimeError):
+    """门禁池操作的失败基类 —— 「读不到」与「等不到锁」同族，但不许互相冒充。
+
+    ★ 卡 E139：两族异常都从这里派生，钉子里用元组断言就能同时咬住「同一族」这件事。
+    """
+
+
+class GatePoolUnreadable(GatePoolError):  # noqa: N818 —— 名字就是判据原文「读不到」
     """队列**读不到**（权限 / 目录冒充 / 坏 JSON）—— 与「队列是空的」不是一回事。
 
     ★ 卡 E120：四种形态原来都洗成 _empty_state()（与真·空队列逐字相同）；
       后果不是少印一行，是 submit 把空状态写回盘、覆盖掉还在跑的那一条。
+    """
+
+
+class GatePoolBusy(GatePoolError):  # noqa: N818 —— 名字就是判据原文「等不到」
+    """队列短锁等不到（到期，或建锁一直被拒）—— 失败关闭，绝不绕过去无锁写。
+
+    ★ 卡 E139：改前 `locked()` 等满就 `break` 出去照样读改写 ⇒ 后写者整份盖掉先写者。
+      实测 `PoolQueue(path, timeout=0.0)` + 12 线程 x 5 轮 = 60 次 submit 只剩 5 行；
+      全量门禁里红成「丢了行：只看到 [...]」（`gates/diag/land-E128g.log`）。
+    ★ 本卡推翻 卡 E55 `复盘/卡/卡E55-门禁池队列锁等待过紧.md:48-49` 那条
+      「不许把『等不到就往下写』改成『等不到就抛异常』」：记账队列一旦被并发写坏，
+      记账本身就是错的。
+    ★ 文案三要素（缺一即红）：等了多久（数值来自实参，不硬编码）/ 锁文件完整路径 /
+      谁可能还持着（锁文件里的 `pid@host`；读不到就明说读不到）。
     """
 
 
@@ -220,10 +265,17 @@ class PoolQueue:
 
     @contextlib.contextmanager
     def locked(self, timeout: float | None = None):
-        """读改写期间的短锁（`<队列>.lock`，`O_CREAT|O_EXCL`）；超时照样往下写。
+        """读改写期间的短锁（`<队列>.lock`，`O_CREAT|O_EXCL`）；等不到就失败关闭。
 
         与 `tools/pool/queue.py::_locked` 同一套语义：这把锁保护的是「读 → 改 → 写回」
         这几毫秒，**不是**门禁锁。
+
+        ★ 卡 E139（推翻 E55 的「等满就往下写」）：到期仍建不出锁 ⇒ 抛 `GatePoolBusy`，
+        一个字节都不写。改前是 `break` 出去照样读改写，实测 `timeout=0.0` 下 12 线程
+        并发 submit 只剩 1 行 —— 后写者把先写者的行整份盖掉。
+        ★ 建锁的 `PermissionError` 与 `FileExistsError` 走同一条路：Windows 上持有者
+        正在 `unlink()` 的那一瞬，`O_CREAT|O_EXCL` 撞的是 `PermissionError
+        [WinError 5]`（锁文件 churn 3 秒里实测 2.46%），语义与「有人占着」相同。
         """
         lock = self.path.with_suffix(self.path.suffix + ".lock")
         lock.parent.mkdir(parents=True, exist_ok=True)
@@ -233,10 +285,16 @@ class PoolQueue:
         while True:
             try:
                 fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                _write_holder(fd)  # 建锁之后才知道是谁 —— 只给「等不到」的文案用，不抛
                 break
-            except FileExistsError:
+            except (FileExistsError, PermissionError) as exc:
+                # ★ 卡 E139：PermissionError 不是「坏了」，是「这一刻有人占着」（见 docstring）。
                 if time.time() - t0 >= wait:
-                    break
+                    raise GatePoolBusy(
+                        f"等不到队列短锁（等了 {wait:g}s）：{lock}；{_lock_holder(lock)}。"
+                        f"最后一次建锁失败（{type(exc).__name__}: {exc}）。"
+                        "别绕过去无锁写 —— 稍后重试，或先查清谁占着这把锁。"
+                    ) from exc
                 time.sleep(0.02)
         try:
             yield
@@ -255,7 +313,8 @@ class PoolQueue:
                     # ★ 卡 E120：原来 suppress 掉就跑 ⇒ 锁文件留着，之后 submit 等满
                     #   LOCK_WAIT_S 再**无锁写**（P10c 实测）。还锁失败必须响。
                     print(f"  [队列] 还锁失败（{type(exc).__name__}: {exc}）⇒ 这把锁会留在盘上，"
-                          f"下一次读改写要等满 {wait:.0f}s 才会无锁写：{lock}", flush=True)
+                          f"下一次读改写要等满 {wait:.0f}s，仍拿不到就失败关闭"
+                          f"（不再无锁写）：{lock}", flush=True)
 
     # ······························································ 槽 / 提交
     @staticmethod

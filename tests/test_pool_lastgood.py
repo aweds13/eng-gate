@@ -18,6 +18,8 @@ r"""写盘纪律（卡 A330 · `T-AG532`）：`tools/pool/lastgood.py` + 五处�
 | ⑨ 账本不许复活 | 正式文件坏、`.bak` 好 ⇒ `load_ledger` **必须抛** | 若从 `.bak` 读回旧凭据 |
 | ⑩ 队列快照往返 | `_save` 两次 ⇒ 文件新、`.bak` 旧、`load()` 读到新的 | 若漏了 `.bak` |
 | ⑪ target 缺失也能救 | 正式文件**不存在**、`.bak` 好 ⇒ 恢复 | 若「target 存在才读 `.bak`」 |
+| ⑫ `os.replace` 有界重试 | 首调 `PermissionError` ⇒ 重试成功（两处都咬） | 只给一处加重试 |
+| ⑬ 重试用完要说清 | 一直抛 ⇒ 抛「原子写失败（N 次）」、不留 `*.tmp` | 若吞掉 / 留渣 |
 
 ★ 导入口径照既有测试：把 `tools/` 挂上 `sys.path` 再 `import`；全程 `tmp_path`，不碰真仓。
 """
@@ -25,6 +27,7 @@ r"""写盘纪律（卡 A330 · `T-AG532`）：`tools/pool/lastgood.py` + 五处�
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -223,3 +226,130 @@ def test_queue_save_and_load_roundtrip_with_bak(tmp_path, monkeypatch):
     assert json.loads(bak.read_text(encoding="utf-8"))["waiting"] == [
         {"task": "T-A", "tree": ".wt/a"}]
     assert list(tmp_path.glob("*.tmp")) == []
+
+
+
+# ===================================================== 判据 3：`os.replace` 有界重试（卡 E139）
+
+
+def _flaky_replace(monkeypatch: pytest.MonkeyPatch, *, only: Path) -> dict:
+    """只让**目标等于 `only`** 的那次 `os.replace` 先失败一次，其余照常。
+
+    ★ 为什么要「只挑一处」：`write_atomic` 一次调用里有**两处** `os.replace`
+      （`.bak` 那一份拷贝 + 正式文件那一次，卡 E139 缺口 4 实测两处都在抛），
+      不区分就分不清红的是哪一处 —— 而判据 3 要的正是「两处都咬」。
+    """
+    real = os.replace
+    calls = {"n": 0}
+
+    def flaky(src, dst) -> None:
+        if Path(dst) == only:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise PermissionError(13, "被并发读者占着 [WinError 5]")
+        real(src, dst)
+
+    monkeypatch.setattr(os, "replace", flaky)
+    return calls
+
+
+def test_write_atomic_retries_after_permission_error(tmp_path, monkeypatch):
+    """判据 3（正式文件那一次）：首次 `os.replace(tmp, target)` 抛 `PermissionError` ⇒ 重试后成功。
+
+    ★ 为什么要它：20000 B 队列文件带 1 个并发读者时，`os.replace` 实测 **103/200** 次抛
+      `PermissionError [WinError 5]`；不重试就等于「写着写着偶尔抛」，而这抛在读改写锁里，
+      会把这一趟 `submit` 连同锁一起带走（缺口 4）。
+    反向：把 `:366` 的 `_replace_retry` 换回裸 `os.replace` ⇒ 这条红（变异 B）。
+    """
+    target = tmp_path / "reg.json"
+    body_a = json.dumps(GOOD_A, ensure_ascii=False) + "\n"
+    body_b = json.dumps(GOOD_B, ensure_ascii=False) + "\n"
+    lastgood.write_atomic(target, body_a, validate=_need_list)
+
+    calls = _flaky_replace(monkeypatch, only=target)
+    lastgood.write_atomic(target, body_b, validate=_need_list)
+    assert calls["n"] == 2, f"正式文件那一处没有重试：只试了 {calls['n']} 次"
+    assert target.read_text(encoding="utf-8") == body_b
+    assert lastgood.backup_path(target).read_text(encoding="utf-8") == body_a
+
+
+def test_copy_bytes_atomic_retries_bak_replace(tmp_path, monkeypatch):
+    """判据 3（`.bak` 那一份）：`_copy_bytes_atomic` 里的 `os.replace` 也要重试。
+
+    ★ 卡 E139 缺口 4 实测：12 线程压测里 **21 次** `PermissionError` 落在
+      `lastgood.py:131 _copy_bytes_atomic`（走 `write_atomic:281`），另外 15 次落在正式文件那一处。
+      只给正式文件加重试会漏掉这 21 次 —— 而它一抛，`write_atomic` 连正式文件都没写到。
+    反向：只撤 `_copy_bytes_atomic` 这一处（正式文件那处保留）⇒ 这条红（变异 C）。
+    """
+    target = tmp_path / "reg.json"
+    body_a = json.dumps(GOOD_A, ensure_ascii=False) + "\n"
+    body_b = json.dumps(GOOD_B, ensure_ascii=False) + "\n"
+    lastgood.write_atomic(target, body_a, validate=_need_list)
+
+    bak = lastgood.backup_path(target)
+    calls = _flaky_replace(monkeypatch, only=bak)
+    lastgood.write_atomic(target, body_b, validate=_need_list)
+    assert calls["n"] == 2, f".bak 那一处没有重试：只试了 {calls['n']} 次"
+    assert bak.read_text(encoding="utf-8") == body_a, ".bak 落后一次写"
+    assert target.read_text(encoding="utf-8") == body_b
+
+
+def test_write_atomic_gives_up_after_all_tries(tmp_path, monkeypatch):
+    """判据 3（放弃路径）：重试全失败 ⇒ 抛 `LastgoodError`「原子写失败（N 次）」且**不留临时文件**。
+
+    照 `tests/test_ledger_lock.py:434-447` 的形状；`tries=3, base=0.001` 让放弃路径跑得快。
+    """
+    target = tmp_path / "reg.json"
+    body_a = json.dumps(GOOD_A, ensure_ascii=False) + "\n"
+    lastgood.write_atomic(target, body_a, validate=_need_list)
+    before = target.read_bytes()
+
+    def always(*_a):
+        raise PermissionError(13, "一直占着")
+
+    monkeypatch.setattr(os, "replace", always)
+    with pytest.raises(lastgood.LastgoodError, match="原子写失败"):
+        lastgood.write_atomic(target, json.dumps(GOOD_B) + "\n", validate=_need_list,
+                              tries=3, base=0.001)
+    assert target.read_bytes() == before, "放弃了还把正式文件改了"
+    assert list(tmp_path.glob(".*.tmp")) == [], "失败后没清临时文件"
+
+
+def test_replace_retry_tries_one_is_single_attempt(tmp_path, monkeypatch):
+    """`tries <= 1` 必须退化成**单次尝试**（反向变异 F 靠它把重试整个撤掉）。
+
+    ★ 这不是实现细节：`tries` 是个入口参数，`range(max(1, tries))` 写错成 `range(tries)`
+      时 `tries=0` 会一次都不试、直接抛「失败 0 次」—— 消息在撒谎。
+    ★ `tries=1` 与 `tries=0` 都必须恰好试**一次**（`max(1, tries)` 的两个入口）。
+    """
+    for tries in (0, 1):
+        src = tmp_path / f"src-{tries}.bin"
+        src.write_bytes(b"x")
+        calls = {"n": 0}
+
+        def always(_src, _dst, _calls=calls) -> None:
+            _calls["n"] += 1
+            raise PermissionError(13, "一直占着")
+
+        monkeypatch.setattr(os, "replace", always)
+        with pytest.raises(lastgood.LastgoodError, match="原子写失败（1 次）"):
+            lastgood._replace_retry(src, tmp_path / f"dst-{tries}.json", tries=tries, base=0.001)
+        assert calls["n"] == 1, f"tries={tries} 试了 {calls['n']} 次（应恰好 1 次）"
+
+
+def test_replace_retry_reports_tries_count(tmp_path, monkeypatch):
+    """放弃时的文案要说出**试了几次**（「原子写失败（3 次）」），不许写死成常量。"""
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"x")
+    target = tmp_path / "t.json"
+
+    def always(*_a):
+        raise PermissionError(13, "一直占着")
+
+    monkeypatch.setattr(os, "replace", always)
+    with pytest.raises(lastgood.LastgoodError) as err:
+        lastgood._replace_retry(src, target, tries=1, base=0.001)
+    assert "原子写失败（1 次）" in str(err.value), str(err.value)
+    with pytest.raises(lastgood.LastgoodError) as err:
+        lastgood._replace_retry(src, target, tries=2, base=0.001)
+    assert "原子写失败（2 次）" in str(err.value), str(err.value)

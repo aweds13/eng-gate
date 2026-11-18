@@ -14,6 +14,9 @@ r"""云侧门禁池的钉子（卡 E42 · `T-AG494` 判据 1 至少 10 条）。
 | ⑧ | 槽锁：抢两次第二次 False；陈旧锁可抢；release 后能再抢 | 不加锁 = 两趟同槽并行 |
 | ⑨ | `run_cloud_gate`：不可达 ⇒ 抛错；可达 ⇒ 写回 `last.json` + `done` 行 | 不可达静默继续 = 假绿 |
 | ⑩ | `Gates-on:` 行与实际一致（`cloud@<host>` / `local`） | 写死 `local` ⇒ 云那趟的 trailer 撒谎 |
+| ⑪ | 锁等待窗口两处同值且 >= 30 s（卡 E55） | 写死 10 s / 两处漂了 ⇒ 12 线程抢锁被饿穿 |
+| ⑫ | 锁**等不到** ⇒ 抛 `GatePoolBusy`，队列文件不动（E139） | 等满 `break` 照样写 |
+| ⑬ | `PermissionError` 与「锁已存在」同路（E139） | 只接 `FileExistsError` |
 
 ★ 全部用**假 transport / 假回传数据**，不连任何云机（卡规格：云机实测由主控做）。
 """
@@ -91,9 +94,17 @@ def test_concurrent_submits_lose_no_rows(tmp_path: Path) -> None:
     n = 12
     start = threading.Barrier(n)
 
+    errs: list[BaseException] = []
+
     def worker(index: int) -> None:
         start.wait()
-        gp.PoolQueue(path).submit({"task": f"T-{index}", "commit": f"c{index:02d}"}, n_slots=6)
+        # ★ 卡 E139 判据 5：线程里的异常**必须收集**。改前它在这里throw 就只是「行没写进去」，
+        #   症状永远是「丢了行」，看不见 PermissionError 才是真凶（缺口 5）。
+        try:
+            gp.PoolQueue(path).submit(
+                {"task": f"T-{index}", "commit": f"c{index:02d}"}, n_slots=6)
+        except BaseException as exc:  # noqa: BLE001 —— 收集，不吞：末尾断言空
+            errs.append(exc)
 
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(n)]
     for t in threads:
@@ -101,6 +112,7 @@ def test_concurrent_submits_lose_no_rows(tmp_path: Path) -> None:
     for t in threads:
         t.join()
 
+    assert not errs, f"线程里抛了 {len(errs)} 次：{errs[:3]}"
     state = gp.PoolQueue(path).load()
     rows = ([state["head"]] if state["head"] else []) + state["waiting"]
     commits = {str(r.get("commit")) for r in rows}
@@ -475,3 +487,99 @@ def test_write_back_does_not_leave_stale_log(tmp_path: Path) -> None:
     gp._write_back(tmp_path, {"ok": True, "rev": "abc"},
                    {"pytest.log": "这一趟的 3 passed\n"})
     assert old.read_text(encoding="utf-8") == "这一趟的 3 passed\n"
+
+
+# ================ 卡 E139（`T-AG646`）：等不到就失败关闭 + `os.open` 的 WinError 5
+# 两族（`PoolQueue.locked` / `pool/queue.py::_locked`）改前都是「等满就 break 照样写」，
+# 后果是后写者整份盖掉先写者；这里是门禁池这一半的钉子。
+
+
+# ---------------------------------------------------------------- ⑫ 判据 1
+def test_locked_timeout_fails_closed(tmp_path: Path) -> None:
+    """短锁等不到 ⇒ 抛 `GatePoolBusy`，文案三要素齐全，队列文件**一个字节都不动**。
+
+    ★ 反向：把到期分支的 `raise` 换回 `break`（无锁写）⇒ 这条红（变异 A）。
+    """
+    q = gp.PoolQueue(tmp_path / "queue.json", timeout=0.0)
+    q.save({"head": None, "waiting": [], "done": [], "slots": {}})
+    before = q.path.read_bytes()
+    lock = q.path.with_suffix(q.path.suffix + ".lock")
+    lock.write_text(f"{os.getpid()}@fake-host", encoding="utf-8")
+    try:
+        with pytest.raises(gp.GatePoolBusy) as err:
+            q.submit({"task": "T-1", "commit": "c00"}, n_slots=1)
+    finally:
+        lock.unlink(missing_ok=True)
+    message = str(err.value)
+    assert "等了 0s" in message, f"文案缺「等了多久」（数值必须来自实参）：{message}"
+    assert str(lock) in message, f"文案缺锁文件完整路径：{message}"
+    assert "fake-host" in message, f"文案缺「谁可能还持着」：{message}"
+    assert q.path.read_bytes() == before, "等不到锁却改了队列文件 ⇒ 还是「无锁写」"
+
+
+# ---------------------------------------------------------------- ⑬ 判据 2
+def test_locked_permission_error_is_busy_not_crash(tmp_path: Path, monkeypatch) -> None:
+    """建锁撞 `PermissionError`（Windows 的 `O_CREAT|O_EXCL` 实测会这样）⇒ 与「有人占着」同路。
+
+    第一次拒了就重试成功 ⇒ `submit` 正常完成、行写进去；一直拒 ⇒ 抛 `GatePoolBusy` 且点名锁路径。
+    ★ 反向：`except` 改回只接 `FileExistsError` ⇒ 这条红（变异 E）。
+    """
+    q = gp.PoolQueue(tmp_path / "queue.json")
+    real_open = os.open
+    seen = {"lock_attempts": 0}
+
+    def flaky(path, flags, mode=0o777):
+        if str(path).endswith(".lock"):
+            seen["lock_attempts"] += 1
+            if seen["lock_attempts"] == 1:
+                raise PermissionError(13, "Permission denied")
+        return real_open(path, flags, mode)
+
+    monkeypatch.setattr(os, "open", flaky)
+    row, queued = q.submit({"task": "T-1", "commit": "c00"}, n_slots=1)
+    assert row["commit"] == "c00" and queued is False
+    assert seen["lock_attempts"] == 2, f"第一次 PermissionError 之后没重试：{seen}"
+    state = q.load()
+    rows = ([state["head"]] if state["head"] else []) + state["waiting"]
+    assert [r.get("commit") for r in rows] == ["c00"], "行没写进去"
+
+    # 一直拒 ⇒ 失败关闭（不是 Crash），文案带锁路径
+    monkeypatch.setattr(os, "open", real_open)
+    q2 = gp.PoolQueue(tmp_path / "queue2.json", timeout=0.0)
+    lock = q2.path.with_suffix(q2.path.suffix + ".lock")
+
+    def always(path, flags, mode=0o777):
+        if str(path).endswith(".lock"):
+            raise PermissionError(13, "Permission denied")
+        return real_open(path, flags, mode)
+
+    monkeypatch.setattr(os, "open", always)
+    with pytest.raises(gp.GatePoolBusy) as err:
+        q2.submit({"task": "T-2", "commit": "c01"}, n_slots=1)
+    assert str(lock) in str(err.value), str(err.value)
+
+
+def test_locked_permission_error_branch_still_sleeps(tmp_path: Path, monkeypatch) -> None:
+    """`PermissionError` 分支不许热转：轮询间隔还在，重试次数有界（判据 2 的失败分支）。
+
+    ★ 热转的症状：`timeout=0.05` 里能撞几千次 `os.open`，把 CPU 烧满还拖慢持锁者。
+    """
+    q = gp.PoolQueue(tmp_path / "queue.json", timeout=0.05)
+    lock = q.path.with_suffix(q.path.suffix + ".lock")
+    lock.write_text("holder", encoding="utf-8")
+    real_open = os.open
+    attempts = {"n": 0}
+
+    def counting(path, flags, mode=0o777):
+        if str(path).endswith(".lock"):
+            attempts["n"] += 1
+            raise PermissionError(13, "Permission denied")
+        return real_open(path, flags, mode)
+
+    monkeypatch.setattr(os, "open", counting)
+    try:
+        with pytest.raises(gp.GatePoolBusy):
+            q.submit({"task": "T-1", "commit": "c00"}, n_slots=1)
+    finally:
+        lock.unlink(missing_ok=True)
+    assert 2 <= attempts["n"] <= 10, f"PermissionError 分支在热转：0.05 s 里试了 {attempts['n']} 次"

@@ -36,6 +36,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import socket
 import time
 
 #: `lastgood` 的模块句柄（懒加载；`None` = 还没加载过）。
@@ -98,6 +99,42 @@ def _poll_interval() -> float:
         return DEFAULT_POLL
 
 
+class QueueError(RuntimeError):
+    """合并队列操作的失败基类（本模块自己一份 —— 不许反向 import `gate_pool`）。"""
+
+
+class QueueBusy(QueueError):  # noqa: N818 —— 名字就是判据原文「等不到」
+    """队列短锁等不到 —— 失败关闭，绝不绕过去无锁写（卡 E139）。
+
+    ★ 卡 E139 推翻 卡 E55 `复盘/卡/卡E55-门禁池队列锁等待过紧.md:48-49` 的原话
+      「不许把『等不到就往下写』改成『等不到就抛异常』（记账队列不许变成闸）」：
+      实测 `timeout=0.0` 下 10 轮 10 轮丢行 —— 记账队列被并发写坏，记账本身就是错的。
+    ★ 与 `tools/gate_pool.py::GatePoolBusy` 同一种结局（都抛、都失败关闭、都不写），
+      但各定义各的异常：两族只对齐口径，不互相 import（钉子
+      `test_two_families_agree_on_give_up` 用元组断言咬这一条）。
+    """
+
+
+def _write_holder(fd: int) -> None:
+    """把「谁持着锁」写进锁文件（`<pid>@<host>`）—— 只为「等不到」的文案能点名。
+
+    ★ 写不进去不算失败：锁已经建成了，「有人占着」的判据是文件存在，不是内容。
+    """
+    with contextlib.suppress(OSError):
+        os.write(fd, f"{os.getpid()}@{socket.gethostname()}".encode())
+
+
+def _lock_holder(lock: pathlib.Path) -> str:
+    """锁文件里写的持有者；读不到 / 没写 ⇒ 明说读不到（不许猜，也不许省掉这一段）。"""
+    try:
+        text = lock.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError as exc:
+        return f"读不到持有者（{type(exc).__name__}）"
+    if not text:
+        return "读不到持有者（锁文件里没写）"
+    return f"持有者 {text}"
+
+
 def _now() -> str:
     return datetime.datetime.now().isoformat(timespec="seconds")
 
@@ -144,9 +181,14 @@ def _locked(root: pathlib.Path | None = None, timeout: float = LOCK_WAIT_S):
 
     ★ 这**不是**门禁锁（那把保护的是端口/内存，粒度是「整趟门禁」）；这把只保护
       「读队列 → 改 → 写回」这几毫秒，**不许**拿它当单写者的判据（单写者看 `head`）。
-      超时（`LOCK_WAIT_S`）⇒ 照样往下写（队列是**记账**，不是闸：卡 E5 要防的是白跑，
-      不是数据一致性）。等待窗口从 10 s 放宽到 30 s 是卡 E55：10 s 在满载机器上被
-      调度饥饿打穿过，等满就无锁写、把行盖掉。
+    ★ 卡 E139：等不到 ⇒ 抛 `QueueBusy`，一个字节都不写。改前是 `break` 出去照样写
+      —— E55 `:48-49` 那句「队列是**记账**，不是闸：卡 E5 要防的是白跑，不是数据一致性」
+      **被本卡推翻**：记账队列被并发写坏，记账本身就是错的。等待窗口仍是 `LOCK_WAIT_S`
+      （E55 定的 30 s，与 `tools/gate_pool.py::LOCK_WAIT_S` 同值，钉子
+      `test_queue_lock_wait_defaults_agree` 守着）。
+    ★ 建锁的 `PermissionError` 与 `FileExistsError` 走同一条路：Windows 上持有者正在
+      `unlink()` 的那一瞬撞的是 `PermissionError [WinError 5]`，语义与「有人占着」
+      相同（卡 E139 判据 2 的同族要求）。
     """
     lock = state_path(root).with_suffix(".lock")
     lock.parent.mkdir(parents=True, exist_ok=True)
@@ -155,10 +197,16 @@ def _locked(root: pathlib.Path | None = None, timeout: float = LOCK_WAIT_S):
     while True:
         try:
             fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            _write_holder(fd)  # 建锁之后才知道是谁 —— 只给「等不到」的文案用，不抛
             break
-        except FileExistsError:
+        except (FileExistsError, PermissionError) as exc:
+            # ★ 卡 E139：PermissionError 不是「坏了」，是「这一刻有人占着」（见 docstring）。
             if time.time() - t0 >= timeout:
-                break
+                raise QueueBusy(
+                    f"等不到合并队列短锁（等了 {timeout:g}s）：{lock}；{_lock_holder(lock)}。"
+                    f"最后一次建锁失败（{type(exc).__name__}: {exc}）。"
+                    "别绕过去无锁写 —— 稍后重试，或先查清谁占着这把锁。"
+                ) from exc
             time.sleep(0.05)
     try:
         yield

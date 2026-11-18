@@ -1,3 +1,8 @@
+## 2026-11-18 T-AG646 队列短锁等不到就无锁写：改成失败关闭、两处 os.replace 有界重试
+- 两条同族实现（gate_pool.PoolQueue.locked 与 pool/queue.py::_locked）的「等满等待窗口就 break 出去照样读改写」取消：到期仍建不出锁 ⇒ 抛自家 GatePoolBusy / QueueBusy，一个字节都不写（推翻卡 E55 的「记账队列不许变成闸」；实测 timeout=0.0 下 12 线程并发 submit 只剩 1 行）。
+- 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。
+- lastgood.write_atomic 的两处 os.replace（.bak 那一份 + 正式文件那一次）走 _replace_retry：REPLACE_TRIES=5 / REPLACE_BASE_S=0.02，只对 PermissionError 重试、tries<=1 退化成单次尝试，用完抛 LastgoodError「原子写失败（N 次）」+ 路径 + 最后一次 errno 名。
+- 钉子：test_locked_timeout_fails_closed / test_locked_permission_error_is_busy_not_crash / test_locked_permission_error_branch_still_sleeps / test_locked_short_timeout_fails_closed（原 test_locked_short_timeout_still_gives_up 改写改名）/ test_two_families_agree_on_give_up + test_two_families_do_not_import_each_other / test_pool_lastgood 三条；test_concurrent_submits_lose_no_rows 补 errs 收集（线程里的异常原来只表现成「丢了行」）。
 ## 2026-11-17 T-AG635 门禁里那条钉子只在验证当天绿：删掉真表零容忍断言，加机器钉子拦住同类
 - 删掉 test_days_zero_also_turns_the_gate_red 的后半截（拿真登记表跑 `--days 0` 断言 `rc == 0`），理由写进 docstring：真表的零容忍结论随运行日变化，不是可断言的常量
 - 新增 test_no_zero_tolerance_call_against_the_real_map：ast 扫全仓 tests/**/*.py，同一个调用里同时有 `--days` 与 `0` 却不带 `--map` ⇒ 红并点名 文件:行号

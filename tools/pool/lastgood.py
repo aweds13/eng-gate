@@ -10,8 +10,9 @@ r"""写盘纪律（卡 A330 · `T-AG532`）：原子替换 + `.bak` 落后一次
   冷启动读不了正式文件就读 `.bak`；**恢复必须记日志**。
 - `read_strict` ← F77 的 `caller-keys.json` 纪律
   「撤过的凭据不许复活」的文件**从不**读 `.bak`，读不了就拒（fail-closed）。
-- （**本卡不动**）多进程互斥 ← `internal/filelock` 的 `Mutex` / `Wait`
-  pool 现在是 `O_CREAT|O_EXCL` 自旋锁、**等满照样往下写**；改它要动并发语义，另开一张卡。
+- （**卡 E139 已改**）多进程互斥 ← `internal/filelock` 的 `Mutex` / `Wait`
+  pool 是 `O_CREAT|O_EXCL` 自旋锁；**等不到就失败关闭**（`GatePoolBusy` /
+  `QueueBusy`），不再「等满照样往下写」（卡 E139 推翻 E55 `:48-49` 那条禁令）。
 
 ## 为什么单独一个模块
 
@@ -50,9 +51,11 @@ r"""写盘纪律（卡 A330 · `T-AG532`）：原子替换 + `.bak` 落后一次
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 import stat
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -80,6 +83,30 @@ MAX_BAD_NAMES = 1000
 
 #: UTF-8 BOM（`file.go:58-77` 的 `bom`）。
 BOM = b"\xef\xbb\xbf"
+
+#: `os.replace` 的有界重试次数与退避基数（第 i 次等 `REPLACE_BASE_S * (i + 1)` 秒）。
+#: ★ 卡 E139：口径照抄 `tools/pool/ledger.py:87-91`。Windows 上 `os.replace` 与并发读者
+#: 互撞抛 `PermissionError [WinError 5]` —— 实测 20000 B 队列文件带 1 个并发读者时
+#: **103/200** 次首试失败。重试**不是零失败**（读者 2 个、`tries=10` 时仍 64/120 失败）。
+REPLACE_TRIES = 5
+REPLACE_BASE_S = 0.02
+
+
+class LastgoodError(RuntimeError):
+    """写盘失败（有界重试都试过了）—— 消息带「原子写失败（N 次）」+ 路径 + errno 名。"""
+
+
+def _err_name(exc: BaseException | None) -> str:
+    """异常的可读名（Windows 错误码翻成符号名，便于日志里认）—— 照 `ledger.py:624-635`。"""
+    if exc is None:
+        return "?"
+    code = getattr(exc, "winerror", None) or getattr(exc, "errno", None)
+    if code is None:
+        return type(exc).__name__
+    try:
+        return f"{type(exc).__name__}({errno.errorcode.get(int(code), code)})"
+    except (ValueError, TypeError):
+        return type(exc).__name__
 
 
 def backup_path(target: Path) -> Path:
@@ -122,13 +149,44 @@ def _is_good(target: Path, validate: Callable[[str], None] | None) -> bool:
     return True
 
 
-def _copy_bytes_atomic(source: Path, target: Path) -> None:
-    """把 `source` 的字节整份顶成 `target`：先写 tmp 再 `os.replace`（不许半个 `.bak`）。"""
+def _replace_retry(tmp: Path, target: Path, *,
+                   tries: int = REPLACE_TRIES,
+                   base: float = REPLACE_BASE_S) -> None:
+    """`os.replace(tmp, target)` 的**有界**重试（照 `tools/pool/ledger.py:335-358` 的口径）。
+
+    ★ 为什么要重试：Windows 上 `os.replace` 与并发读者互撞，实测 20000 B 队列文件带
+      1 个并发读者时 **103/200** 次抛 `PermissionError [WinError 5]`。不重试就等于
+      「写着写着偶尔抛异常」，而抛在读改写锁里会把这一趟一起带走。
+    ★ 只对 `PermissionError` 重试；别的 `OSError` 立刻抛（盘满了重试也没用）。
+    ★ `tries <= 1` ⇒ 单次尝试（反向变异靠它把重试撤掉，判据 3 的钉子咬这一条）。
+    ★ 重试**不是零失败**：读者 2 个、`tries=10/base=0.05` 时实测仍 64/120 失败 ——
+      这里只承诺「有界重试 + 仍失败才抛且文案说清」，**不**承诺以后再也不会抛。
+    """
+    last: BaseException | None = None
+    for i in range(max(1, tries)):
+        try:
+            os.replace(tmp, target)
+            return
+        except PermissionError as exc:  # 只在 Windows 上与并发读者 / 杀软相撞
+            last = exc
+            if i + 1 < tries:
+                time.sleep(base * (i + 1))
+    raise LastgoodError(f"原子写失败（{max(1, tries)} 次）：{target}：{_err_name(last)}")
+
+
+def _copy_bytes_atomic(source: Path, target: Path, *,
+                       tries: int = REPLACE_TRIES,
+                       base: float = REPLACE_BASE_S) -> None:
+    """把 `source` 的字节整份顶成 `target`：先写 tmp 再 `os.replace`（不许半个 `.bak`）。
+
+    ★ 卡 E139：`os.replace` 走 `_replace_retry` —— 实测 `timeout=0.0` 的 12 线程压测里，
+      这一处独占 21/37 次 `PermissionError`（只给正式文件那处加重试会漏掉它）。
+    """
     raw = source.read_bytes()
     tmp = _tmp_path(target)
     with _unlink_on_error(tmp):
         tmp.write_bytes(raw)
-        os.replace(tmp, target)
+        _replace_retry(tmp, target, tries=tries, base=base)
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +316,8 @@ def write_atomic(
     keep_bom: bool = True,
     keep_mode: bool = True,
     follow_ending: bool = False,
+    tries: int = REPLACE_TRIES,
+    base: float = REPLACE_BASE_S,
 ) -> None:
     """原子写：①旧的好就顶成 `.bak`、坏的旁存成 `.bad-*` ②写 tmp ③`os.replace`。
 
@@ -272,13 +332,19 @@ def write_atomic(
     - `follow_ending=False`：**默认不跟**原文件的换行（本仓还没定仓级换行策略，见卡 A356 缺口 2）；
       传 `True` 且原文件是**纯 CRLF** ⇒ 用 `"\\r\\n"`，否则仍用调用方给的 `newline`
       （照 `text.go:109-115` 的 `joinLinesLike`）。
+
+    `tries` / `base`（卡 E139）：`os.replace` 的有界重试，照 `tools/pool/ledger.py` 的口径 ——
+    只对 `PermissionError` 重试，其它 `OSError` 立刻抛，`tries <= 1` ⇒ 单次尝试。两处
+    `os.replace`（`.bak` 那一份拷贝 + 正式文件这一次）都走它。重试用完仍失败 ⇒ 抛
+    `LastgoodError`（消息是「原子写失败（N 次）」+ 路径 + 最后一次的 errno 名），
+    tmp 由 `_unlink_on_error` 清掉。★ 重试**不是零失败**，见 `_replace_retry` 的 docstring。
     """
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     existed = target.exists()
     if existed:
         if _is_good(target, validate):
-            _copy_bytes_atomic(target, backup_path(target))
+            _copy_bytes_atomic(target, backup_path(target), tries=tries, base=base)
         else:
             # ★ 坏的先旁存（`.bak` 原样不动）。`keep_bad` 自己吞异常，这里再兜一层
             # 「读原字节就失败了」——旁存不了也**不许**挡住写盘。
@@ -297,7 +363,7 @@ def write_atomic(
             fh.write(text)
         if keep_mode and mode is not None:
             os.chmod(tmp, mode)
-        os.replace(tmp, target)
+        _replace_retry(tmp, target, tries=tries, base=base)
 
 
 def _read_checked(target: Path, validate: Callable[[str], None]) -> str:

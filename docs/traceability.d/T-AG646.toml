@@ -1,0 +1,16 @@
+[entries."T-AG646"]
+id = "T-AG646"
+title = "队列短锁等不到就无锁写：改成失败关闭、两处os.replace有界重试"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/gate_pool.py",
+  "file:tools/pool/queue.py",
+  "file:tools/pool/lastgood.py",
+  "test:test_gate_pool.py",
+  "test:test_pool_queue.py",
+  "test:test_pool_lastgood.py",
+  "test:test_pool_lastgood_discipline.py",
+]
+gaps = "1. 两族的「等不到」都没有调用方接住：tools/pool/landing.py 的 cloud_gate_step 只 catch gp.CloudUnreachable，而 PoolQueue.locked 现在抛 GatePoolBusy ⇒ 云机模式下列队短锁被占会抛未捕获异常（本地 --gate-on local 不走 submit，不受影响）。指针 tools/pool/landing.py2. 重试不是零失败：20000 B 文件 + 1 个并发读者时无重试首试失败 103/200，tries=5/base=0.02 后仍 3/60；读者 2 个、tries=10/base=0.05 仍 64/120 失败。本卡只承诺「有界重试 + 仍失败才抛且文案说清」。指针 tools/pool/lastgood.py3. 读→改→写仍不是 CAS（没有版本号、没有 merge by key）；load() 两侧口径仍不一致（gate_pool 抛 GatePoolUnreadable、queue.py 静默回 _empty，属卡 E120）；两条锁文件名仍不同（merge-queue.lock / gate-pool-queue.json.lock）。指针 tools/pool/queue.py"
+
