@@ -6413,3 +6413,19 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E141"
+task = "T-AG650"
+title = "配对门拒绝得太快：Windows客户端拿到的是10053不是401"
+tree = ".wt/E141"
+spec = "复盘/卡/卡E141-配对门拒绝得太快：Windows客户端拿到的是10053不是401.md"
+files = [
+  "src/timeflow/api/app.py",
+  "tests/test_lan_gate_drains_before_refusing.py",
+  "docs/contracts/domains/F9-storage-sync.md",
+  "tests/test_web_live_read_failure_is_not_401.py"
+]
+depends = []
+risk = "mid"
+status = "pending"
