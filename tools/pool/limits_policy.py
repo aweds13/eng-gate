@@ -65,6 +65,11 @@ COST_ROUND = 4
 #: `Limit` 认的键 —— 多一个少一个都抛（少一个可能悄悄变成默认值，那就是松开判据）。
 _FIELDS: tuple[str, ...] = ("period", "days", "hours", "tokens", "cost", "cache_reads", "since")
 
+#: 顶层这个键**不是**账号的限额段，是 **F34（卡 A341）** 的模型白名单段
+#: （`[accounts."<id>"].models`，读方 `pool.limits.load_limits()` /
+#: `wb_dispatch.caller_model_patterns()`）。`load_limits()` 按名字跳过它 —— **只**这一个键。
+ACCOUNTS_KEY = "accounts"
+
 
 class LimitError(ValueError):
     """限额数据说不清 —— **抛**，不许跳过坏条目继续用剩下的（跳过 = 悄悄松开判据）。"""
@@ -224,12 +229,18 @@ def window(limit: Limit, now: datetime) -> tuple[datetime, datetime]:
 
 
 def _rows(account: str, section: object) -> tuple[Mapping[str, object], ...]:
-    """一个账号的限额段：`[[账号.limit]]` 数组表，或 `[账号] limit = [...]`（两者解析结果同形）。"""
+    """一个账号的限额段：`[[账号.limit]]` 数组表，或 `[账号] limit = [...]`（两者解析结果同形）。
+
+    ★ 顶层 `accounts` **不是**账号的限额段：它是 **F34（卡 A341）** 的模型白名单段
+      （`[accounts."<id>"].models`），由 `load_limits()` 按名字跳过（见 `_check_accounts()`）。
+      跳过的只有那一个键 —— 别的多出来的键照旧抛（判据 5 的 pin_19 靠这条守住）。
+    """
     if isinstance(section, dict):
         extra = tuple(sorted(str(key) for key in section if key != "limit"))
         if extra:
             raise LimitError(
-                f"账号 {account} 的段里有不认识的键：{'、'.join(extra)}（只认 limit）"
+                f"账号 {account} 的段里有不认识的键：{'、'.join(extra)}（只认 limit；"
+                "模型白名单不在账号的限额段里 —— 那是 F34/卡 A341 的 [accounts.\"<id>\"].models）"
             )
         if "limit" not in section:
             raise LimitError(f"账号 {account} 的段里没有 limit 数组")
@@ -246,6 +257,49 @@ def _rows(account: str, section: object) -> tuple[Mapping[str, object], ...]:
     return tuple(rows)
 
 
+def _check_accounts(table: Mapping[str, object]) -> None:
+    """顶层 `accounts` 是 **F34（卡 A341）** 的模型白名单段，不是账号的限额段。
+
+    形状裁决 (b)（卡 A367 / T-AG652）：同一份 `limits.toml` 两份 reader —— 限额段留在顶层
+    （`[[<id>.limit]]`），`[accounts."<id>"]` 只放 `models`（读方
+    `wb_dispatch.caller_model_patterns()`）。本函数只做一件事：**逐段确认那一侧没有被拿来
+    写限额**，然后让 `load_limits()` 按名字跳过它。
+
+    为什么不是「不认识的键就当没看见」：放行那一侧等于让「限额段里混着别的东西」变正常态，
+    下一份坏文件就再也判不出来了（判据 5 的 pin_19 正是靠「多一个键就抛」守住的）。
+
+    - `accounts` 不是表（例如 `accounts = 1`、`[[accounts]]`）⇒ 抛：那一侧读不懂，
+      而「读不懂」在本模块一律是**拒**，不是「没设限额」；
+    - 某段不是表，或段里出现 `limit`（= 裁决 (a) 那个形状），或 `models` 与别的键混着
+      ⇒ 抛，并在文案里点名它属于哪一侧 —— 让人知道该改哪儿，而不是猜；
+    - 段里只有 `models`（或那一段是空表）⇒ 放行。
+    """
+    if ACCOUNTS_KEY not in table:
+        return
+    side = table[ACCOUNTS_KEY]
+    if not isinstance(side, dict):
+        raise LimitError(
+            f"{ACCOUNTS_KEY} 必须是表（F34/卡 A341 的模型白名单段 [accounts.\"<id>\"].models），"
+            f"收到 {type(side).__name__} —— 读不懂就抛，不许当成「没写」"
+        )
+    for account, section in side.items():
+        if not isinstance(section, dict):
+            raise LimitError(
+                f"{ACCOUNTS_KEY}.{account} 必须是表（只放 models），收到 {type(section).__name__}"
+            )
+        if "limit" in section:
+            raise LimitError(
+                f"{ACCOUNTS_KEY}.{account} 里有 limit —— 那是裁决 (a) 那个形状，本仓选的是 (b)："
+                "限额写在顶层 [[<id>.limit]]，[accounts.<id>] 只放 models（F34/卡 A341）"
+            )
+        extra = tuple(sorted(str(key) for key in section if key != "models"))
+        if extra:
+            raise LimitError(
+                f"{ACCOUNTS_KEY}.{account} 的段里除了 models 还有：{'、'.join(extra)}；"
+                "这一侧只认 models（限额请写顶层 [[<id>.limit]]）"
+            )
+
+
 def load_limits(path: Path | str | None = None) -> dict[str, tuple[Limit, ...]]:
     """读策略文件：`{账号: (Limit, ...)}`。
 
@@ -257,6 +311,11 @@ def load_limits(path: Path | str | None = None) -> dict[str, tuple[Limit, ...]]:
 
     默认路径跟 `pool.limits.limits_path()` 走（`TF_POOL_LIMITS` 覆盖 > 号池目录下的
     `limits.toml`）—— 位址只由那一处决定，本模块不另发明一份。
+
+    ★ **一份文件两个形状**（形状裁决 (b)，卡 A367 / T-AG652）：顶层每个键是一个账号的**限额段**；
+    顶层 `accounts` 是 **F34（卡 A341）** 的模型白名单段（`[accounts."<id>"].models`），
+    本函数**按名字跳过**它（`_check_accounts()` 先逐段确认那一侧没被拿来写限额；
+    写进去了 / 混了别的键 / 那一侧读不懂 ⇒ 抛）。跳过的**只有** `accounts` 这一个键。
     """
     target = Path(path) if path is not None else _legacy_limits.limits_path()
     if not target.exists():
@@ -269,8 +328,11 @@ def load_limits(path: Path | str | None = None) -> dict[str, tuple[Limit, ...]]:
         raw = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise LimitError(f"策略文件不是合法 TOML：{target}（{exc}）") from exc
+    _check_accounts(raw)
     out: dict[str, tuple[Limit, ...]] = {}
     for account, section in raw.items():
+        if account == ACCOUNTS_KEY:
+            continue  # F34/卡 A341 的模型白名单段，不是限额（_check_accounts 已验过那一侧）
         rows = _rows(account, section)
         if len(rows) > MAX_LIMITS:
             raise LimitError(

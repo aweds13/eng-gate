@@ -118,6 +118,11 @@ duty = "限额策略的窗口与 `Limit` 形状（magpie `access/limit.go` 移�
 cli = "无"
 
 [[module]]
+name = "limits.example.toml"
+duty = "限额文件的仓内模板（全注释 + 一条注释掉的样例）：读者照着它写本机那份；生产读的是仓外 infra/pool/limits.toml，不是它，本文件里不许出现会真拦人的限额"
+cli = "无（示例文件；不被生产读取）"
+
+[[module]]
 name = "locks.py"
 duty = "门禁锁的只读封装：`status_argv` / `parse_entries`（拿/放/续租仍归 `gates/diag/gate_lock.py`）"
 cli = "无（被 `pool_mcp` 调）"

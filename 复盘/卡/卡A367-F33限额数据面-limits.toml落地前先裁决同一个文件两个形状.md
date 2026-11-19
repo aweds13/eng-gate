@@ -157,3 +157,18 @@ python -X utf8 gates/diag/_rev_A367.py      # 末行：「结论：N/N 条全部
 - **未坐实**：F33 原文（`D:/repo/program/_ext/_magpie_features.md:296-302`）里的 `budget.counts(r) = !r.IsRejected() && !r.IsReported() && r.Computer == ""`（拒绝的与外部自报的都不计数）在 pool 侧没有对应维 —— `tools/pool/ledger_spend.py:11-12` 只抄了 tokens 口径（`tokens = input + output + cache_write`，默认不含 `cache_read`）。本卡**不开这一支**，写在这里备查。
 - **未坐实**：`assert_serving()` 今天零生产调用方。本卡要不要接、接在哪一步（它会不会与 `wb_dispatch.py:3600-3602` 的「读不懂 ⇒ 拒派」重叠）—— 若接，必须先说清谁是谁的上位。
 - **未坐实**：若选裁决 (a)，`limits.load_limits()` 的返回形状会是 `{"accounts": {...}, 账号: 段}` 的混合体（实测今天已经是这样）。这个混合体是不是 F34 想要的，要在 A341 的规格里核一次（本文只核到 `:470` 的 `table.get("accounts")`）。
+
+## 落地回执（T-AG652，2026-11-19）
+
+裁决三条照做，未推翻：① 生产数据文件位址仍是仓外那份，代码一行没动（今天仍 `exists=False`，这正是判据 3① 的正常态）；② 仓内只交模板 `tools/pool/limits.example.toml`（50 行全注释，无一行生效 toml，未写任何真会拦人的限额）；③ 形状取 **(b)**：顶层仍是账号的限额段，`[accounts."<id>"]` 只放 F34 的 models；④ `assert_serving()` 仍零生产调用方，本卡没接。
+
+改动（只动卡域五个文件里的四个）：新增 `tools/pool/limits.example.toml`（50 行）、`tests/test_pool_limits_data.py`（292 行，11 个测试）；改 `tools/pool/limits_policy.py`（283 → 345 行，git diff --numstat 报 +64/−2，只动 `_rows()` / `load_limits()` 的取数路径与两处 docstring，判据语义未动）；`tools/pool/limits.py` 未改 —— 变异脚本 M3 证明它仍必须是「吞成 {}」那一侧。
+
+(b) 的实现口径：`load_limits()` 先跑新加的 `_check_accounts(raw)`，再在循环里 `if account == ACCOUNTS_KEY: continue`。`_check_accounts` 四支都抛 `LimitError`：accounts 不是表 / 某段不是表 / 某段里出现 `limit`（= 裁决 (a) 那个形状，文案点名「本仓选的是 (b)」）/ 某段除 `models` 还有别的键。所以「跳过 accounts」不等于「什么都收」—— 只有那一个键、且只放 models 才过。
+
+读数（`.wt/A367` 实跑）：四文件 pytest `64 passed`；ruff 三文件 `All checks passed!`；变异脚本 4/4 咬住、末行「结论：4/4 条全部咬住，收尾绿。」、还原后 sha 与基线一致。
+
+★ 两条既有门会红，都不在本卡域，留给落地人裁决：
+
+1. 新增 `tools/pool/limits.example.toml` 让 `scripts/gen_pool_readme.py --check` 退 1（文案：「在仓里，但 `docs/subsystems/pool/modules.toml` 没写它」）。而 `docs/workbacklog.toml` 里本卡的 files 域没有 modules.toml 也没生成出来的 README —— 落地链 ③.5 会因此 `sys.exit(3)`。两条路：把它加进本卡域（连带重跑生成器），或另开一张卡。
+2. 本文件 :125 交付段点名的 changelog 片段不在卡域 files 里，`scripts/check_docs.py` 会把它报成一条死指针；落地链第 ② 步会自动补这份片段，按「域外不改」本卡没写它。

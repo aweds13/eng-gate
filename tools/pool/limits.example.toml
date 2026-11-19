@@ -1,0 +1,50 @@
+# 限额策略表（**示例模板**；判据层 卡 A338 / T-AG540，数据面落地 卡 A367 / T-AG652）
+#
+# ★ 这个文件不是生产读到的那一份。生产读的那份在**仓外**：
+#     D:/repo/infra/pool/limits.toml
+#   位址只由 tools/pool/limits.py::limits_path() 一处决定（TF_POOL_LIMITS 覆盖 > 号池目录下的
+#   limits.toml > 仓根下同路径）。本模板放在仓里只为让人**看见形状**，没有任何代码读它。
+#
+# 用途：同一个号在这个周期里还能花多少（magpie 的 Limit / Reserve）—— 派活**之前**就拒，带 Retry-After。
+#       与 --input-budget 不是一回事：那个是跑起来才 break 的熔断，这个是派活前的授权。
+# 铁律：键用账本的**稳定 id**（tools/pool_accounts.py:320 list_rows 的那个 id），不是 email、
+#       也不是 profile 名 —— 写错名字 = 对那个号**不生效**（不报错、也不拦人）。
+#       不在本表里的号 = 没设限额（= 今天的行为；不是「无限」，也不是「拒」）。
+# 边界：一个账号最多 5 条（MAX_LIMITS，limits_policy.py:56）；days ≤ 3650（MAX_DAYS:58）；
+#       hours ≤ 8760（MAX_HOURS:60）；period 只认 day / week / month / days / hours。
+#       坏 TOML / 某条越界 / 段里多一个键 ⇒ 抛 LimitError，**绝不跳过坏条目继续用剩下的**
+#       （跳过 = 悄悄松开判据）；文件不存在 ⇒ {}（判据 8）。
+#
+# ★ 一份文件两个形状（形状裁决 (b)，卡 A367 / T-AG652）
+#   同一份 limits.toml 有两份 reader：本卡的限额（pool.limits_policy）与模型白名单（pool.limits，
+#   卡 A341 的 wb_dispatch.caller_model_patterns()）。所以：
+#     顶层每个键        = 一个账号的**限额段**（限额，本卡）
+#     [accounts."<id>"]  = **F34（卡 A341）** 的段，只放 models（模型白名单）
+#   limits_policy 读到顶层 accounts 键**按名字跳过**它（不是「不认识的键就当没看见」：
+#   账号段里多一个键照样抛）。谁把 limit 写进 [accounts."<id>"]（裁决 (a) 那个形状），
+#   它**抛** —— 放行等于让「限额段里混着别的东西」变正常态，以后就再也判不出坏文件了。
+#
+# 正文今天为空 ⇒ 没设任何限额 ⇒ 派活行为与卡 A338 之前逐字节不变。
+
+
+# ---- 限额段（F33，本卡）：按需启用，键写账本稳定 id ----
+# [[codearts-1.limit]]
+# period = "month"
+# tokens = 200_000_000   # 与 cost 至少一个 > 0；两个都 0 = 这条不生效（等于没写）
+# cost = 0.0
+#
+# [[codearts-1.limit]]
+# period = "day"
+# tokens = 10_000_000
+# cache_reads = true      # 命中缓存的那部分算不算进 tokens（默认不算）
+#
+# [[codearts-1.limit]]
+# period = "hours"        # days / hours 是「从 since 起算」的滚动窗口，必须给 since
+# hours = 8
+# tokens = 5_000_000
+# since = 2026-11-01T00:00:00+08:00
+
+
+# ---- 模型白名单段（F34 / 卡 A341）：同一条文件里的另一套键，只放 models ----
+# [accounts."codearts-1"]
+# models = ["deepseek-*", "gpt-*"]

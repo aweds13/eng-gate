@@ -36,6 +36,11 @@
 - `tools/pool/gateway.py`：`_window()`/`_windows()` 把账本行的 `[account.quota].windows` 读成 `holds.Window`；`_seat(row, model="", *, now=None)` 有窗口数据时改由 `holds.pick()` 定量，`pick()` 回 None ⇒ `known=False, used=None`（**不许落成 0.0**）；`_order()` 与 `route_once()` 把 model / clock 传下去，`route.apply_strategy` 的签名与 fail-open 一字未动。
 - 钉子 9 条：`tests/test_holds_window.py` 追加 7 条（子串不是前缀 / 双边小写 / 只取算这个模型的窗口 / 过期归零 / 没窗口是不知道不是 0 / aside 不进账号级），`tests/test_pool_route.py` 追加 2 条（不相关窗口不许把座抬进 tier 2、无窗口数据时逐位等于改造前），现有 12 条一字未改。
 - 卡规格 `复盘/卡/卡A368-F24窗口维度的模型过滤-只有计该模型的窗口才采信配额.md` 追加「落地时实测与口径」小节：判据 5 选 (b) 的理由、实现落点、变异 M2 的落点差异、真数据恒放行的事实，判据原文未改。
+## 2026-11-19 T-AG652 F33 限额数据面：仓内只交模板，形状裁决取 (b)，两份 reader 仍各读各的
+- `tools/pool/limits_policy.py`：新增 `ACCOUNTS_KEY` 与 `_check_accounts(raw)`（accounts 不是表 / 某段不是表 / 某段出现 `limit` / 某段除 `models` 还有别的键 —— 四支都抛 `LimitError`，文案点名「本仓选的是 (b)」），`load_limits()` 里 `if account == ACCOUNTS_KEY: continue`；只动取数路径与两处 docstring，判据语义未动。
+- 新增 `tools/pool/limits.example.toml`（50 行全注释 + 一条注释掉的样例）：给读者一个能进 git、能被 `load_limits` 真读的体例范本；生产读的是仓外那份，本文件里不许出现会真拦人的限额。
+- 新增 `tests/test_pool_limits_data.py` 11 条：位址逐字相等且不随 cwd 变 / 两份 reader 吃同一份文件 / 旧形状在改过那一侧必须抛 / `accounts` 键在 docstring 与错误文案里被点名 / 文件不存在回空表 / 坏 TOML 抛且 `LimitError` / 示例文件真读不抛 / 上限边界照旧。
+- `tools/pool/limits.py` 一行未改：变异 M3 证明它仍必须是「吞成 `{}`」那一侧，两份 reader 不许合并。
 ## 2026-11-18 T-AG646 队列短锁等不到就无锁写：改成失败关闭、两处 os.replace 有界重试
 - 两条同族实现（gate_pool.PoolQueue.locked 与 pool/queue.py::_locked）的「等满等待窗口就 break 出去照样读改写」取消：到期仍建不出锁 ⇒ 抛自家 GatePoolBusy / QueueBusy，一个字节都不写（推翻卡 E55 的「记账队列不许变成闸」；实测 timeout=0.0 下 12 线程并发 submit 只剩 1 行）。
 - 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。

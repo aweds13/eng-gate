@@ -1,0 +1,18 @@
+[entries."T-AG652"]
+id = "T-AG652"
+title = "F33限额数据面：仓内只交模板、形状裁决取(b)、两份reader各读各的"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/limits.example.toml",
+  "file:tools/pool/limits_policy.py",
+  "file:tests/test_pool_limits_data.py",
+  "text:tools/pool/limits_policy.py::def _check_accounts(table: Mapping[str, object]) -> None:",
+  "text:tools/pool/limits_policy.py::ACCOUNTS_KEY = \"accounts\"",
+  "test:test_pool_limits_data.py::test_both_readers_accept_one_file",
+  "test:test_pool_limits_data.py::test_old_shape_is_refused_by_the_changed_side",
+  "test:test_pool_limits_data.py::test_data_file_parses",
+  "test:test_pool_limits_data.py::test_missing_file_is_empty_not_refuse",
+]
+gaps = "1. 判据 1 的「位址唯一」只钉了算出来的路径，没钉「仓外那份文件今天不存在」这件事本身：`limits.limits_path()` 回仓外那份 limits.toml（与 accounts.toml 同目录，路径由 pool_dir 现算；该文件今天 exists=False） ⇒ 生产仍空转，这是裁决 ① 的正常态而非缺陷。指针 tools/pool/limits.py2. 缺口 3 的 `assert_serving()` 仍零生产调用方，本卡按裁决 ④ 不接；它若将来接线，会与 `wb_dispatch.py:3600-3602` 的「读不懂 ⇒ 拒派」撞同一档判据，归属未定。指针 tools/pool/limits_policy.py3. 形状裁决 (b) 让 `load_limits()` 的返回成了 `{账号: 段} ∪ {「accounts」: {「models」}}` 的混合体；今天只有 `pool.limits.load_limits()` 会读到它，但 F34（A341）将来若改成另取一个入口，这个混合体就成了第二处投影。指针 docs/subsystems/pool/modules.toml"
+
