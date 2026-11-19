@@ -81,7 +81,7 @@ magpie 收 JSON-RPC batch：`search_mcp.go:80-124` 里 `batch := len(body) > 0 &
 
 ### 判据 1 · 未挂载的路径 404，且 handle 一次都不执行
 
-- **怎么证明**：新建 `tests/test_pool_mcp_http_paths.py`（体例照 `tests/test_pool_mcp_http.py`：真 socket + `_Stub` 记调用 + `_free_port`，**不桩 http.server**，见该文件 `:1-4` 的文件头与 `:41-50` 的 `_Stub`），写 `test_unmounted_path_is_404_and_never_executes`：`POST /mcp/magpie/not-mine` ⇒ `assert response.status == 404` 且 `assert stub.calls == []`。
+- **怎么证明**：新建 tests/test_pool_mcp_http_paths.py（体例照 `tests/test_pool_mcp_http.py`：真 socket + `_Stub` 记调用 + `_free_port`，**不桩 http.server**，见该文件 `:1-4` 的文件头与 `:41-50` 的 `_Stub`），写 `test_unmounted_path_is_404_and_never_executes`：`POST /mcp/magpie/not-mine` ⇒ `assert response.status == 404` 且 `assert stub.calls == []`。
 - **今天的反证**：同一枪现在返回 **200** 并把这笔交给了 handle（见「缺口 B 面」实测第 1 行）⇒ 新钉子必须有咬。
 - 404 的判法要**先路径后方法**（与 `tools/pool/gateway.py:1086` 在 `:1092` 之前同序）：未挂载路径不论 GET/POST 都是 404。
 
@@ -132,12 +132,12 @@ magpie 收 JSON-RPC batch：`search_mcp.go:80-124` 里 `batch := len(body) > 0 &
 
 - `tools/pool/mcp_http.py` —— 加三样，别的一个字节不动：①模块级 `DEFAULT_PATH = "/"` 与「路径 → 上限」的冻结表；②`build_server` / `serve_http` 各加一个 keyword-only `mounts: Mapping[str, int] | None = None`（`None` ⇒ `{"/": max_bytes}`，保住既有 25 条用例）；③`do_POST` / `do_GET` / `do_DELETE` / `do_PUT` / `do_PATCH` 起手先 `path = urlsplit(self.path).path.rstrip("/") or "/"`，未挂载 ⇒ 404（**在方法判定之前**，同 `tools/pool/gateway.py:1086` 的次序），`max_bytes` 改成该路径自己的数。**不动** `:165-190` 的 `_send`/`_fail`、`:119-139` 的 `read_body`、`:216-268` 的六道闸文案（Origin / Bearer / Accept / 版本 / 411 / 413 / UTF-8 / JSON / 非对象）、`:269-284` 的 202/200。
 - `tools/pool_mcp.py` —— 只改 `:3606-3615` 那一次调用：传 `mounts={"/": MAX_LINE_BYTES}`。`MAX_LINE_BYTES`（`:284`）与 `tool_list()`（`:615-620`）**一个字不改**。
-- `tests/test_pool_mcp_http_paths.py`（新建）—— 判据 1、2、3（新增那条）、4（单元素那半）、5（`<<` 那半）、6；文件头照 `tests/test_pool_mcp_http.py:1-4` 的「★ 全部走**真 socket**…不桩 http.server」体例写一段「## 钉什么」表格。
+- tests/test_pool_mcp_http_paths.py（新建）—— 判据 1、2、3（新增那条）、4（单元素那半）、5（`<<` 那半）、6；文件头照 `tests/test_pool_mcp_http.py:1-4` 的「★ 全部走**真 socket**…不桩 http.server」体例写一段「## 钉什么」表格。
 - `复盘/卡/卡A378-F59三个自带MCP-server-按路径挂载.md`（计划建）—— 由本草稿转正（文件名立卡时定）。
-- `docs/changelog.d/T-AG666.md`（计划建）—— 落地时按真台账号改名。
+- docs/changelog.d/T-AG666.md（计划建）—— 落地时按真台账号改名。
 
 > **卡域里不列** `tools/pool/gateway.py`、`docs/subsystems/pool/modules.toml`、`docs/subsystems/pool/README.md`：`gateway.py` 只是**读**的范本（一行不改）；`modules.toml:245-248` 的 duty 逐字「MCP 的 Streamable HTTP 传输：Origin / Bearer / 版本头 / 上限 / 202-405 都在这一层；判据只在传进来的 handle 上跑，不重写方法分发」在加路径表之后**仍然成立**（上限仍在这一层，只是从「一个」变「按路径」），所以不改它、也就不会触发 README 重生成。本卡**不新增** `tools/pool/*.py`，因此 `modules.toml` 也不需要有新条目（新增才会有：`scripts/gen_pool_readme.py:27-29`「仓里有、清单里没有的模块 ⇒ 退 1 并**点名**」）。
-> `docs/traceability.d/T-AG666.toml` 不进卡域：A365 的 `files` 六条里没有它（`docs/workbacklog.toml:5134-5141`），形状照 `docs/traceability.d/T-AG584.toml` 落地时补。汇总 `docs/traceability.toml` 在 `tools/pool/plan.py:46-53` 的 PROTECTED_FILES 里，**不许碰**。
+> docs/traceability.d/T-AG666.toml 不进卡域：A365 的 `files` 六条里没有它（`docs/workbacklog.toml:5134-5141`），形状照 `docs/traceability.d/T-AG584.toml` 落地时补。汇总 `docs/traceability.toml` 在 `tools/pool/plan.py:46-53` 的 PROTECTED_FILES 里，**不许碰**。
 
 ## 验收（可直接跑）
 

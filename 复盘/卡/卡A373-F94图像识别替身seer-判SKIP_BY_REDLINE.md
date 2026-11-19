@@ -157,7 +157,7 @@ SKIP 不能只活在 gitignore 的 gates/diag/ 里（docs/subsystems/pool/README
 - `tests/test_model_registry.py` —— 新建 `test_model_entry_has_no_modality_dimension()`（七字段集合 + 真表无模态属性），放文件末尾、沿用该文件「## 钉什么」的 docstring 体例。
 - `docs/subsystems/pool/README.md` —— 表 B 加第 8 行（不做 / 归谁 / 证据三列齐全，证据必须是真路径）。只在 pool-margin 标记**之外**（:92 之后）改，标记内 (:11-92) 一个字节不动。
 - `复盘/卡/卡A373-F94图像识别替身seer-判SKIP_BY_REDLINE.md`（计划建）—— 由本草稿转正；抬头台账号替换为真号、树名替换为 .wt/A373、基准换成立卡时主树 HEAD。
-- `docs/changelog.d/T-AG661.md`（计划建）—— 落地时按台账号改名，写「F94 判不移植 + 表 B 第 8 行 + 五条判据」。
+- docs/changelog.d/T-AG661.md（计划建）—— 落地时按台账号改名，写「F94 判不移植 + 表 B 第 8 行 + 五条判据」。
 
 > **卡域里不列 `tools/pool/gateway.py` 与 `tools/pool/model_registry.py`**：本卡产品码一个字不改（判据 1~4 全是「现状已成立、只要钉住」）。这正是这条 SKIP 的分量所在 —— 如果哪天有人要动这两个文件，那是另一张卡，得先把「为什么不移植」这篇推翻。
 

@@ -209,7 +209,7 @@ python -X utf8 gates/diag/_rev_A376.py      # 末行：「结论：4/4 条全部
 - **E94**（`tools/pool/gateway.py` 原始卡）：建立了 `ALLOWED_HOSTS` / `check_host` / Bearer / Origin / 32 MiB 上限。本卡只补「集合与路径不许被放宽」的哨兵。
 - **E103**（启动面不许 fail-open）：`build_server` 的 `token` 为空即抛 `ConfigError`（`:1224-1230`）、`RouteError` 即退 2（`:1285-1289`）。本卡的判据 4/6 与它同向，不重复钉它的文案。
 - **E143 / A372**（pending，`files` 与本卡精确相交）：本卡不改 `gateway.py`，只加测试 ⇒ 冲突域相交但可共存（`plan.py:262-272` 的依赖路径）。
-- **F37**（同批起草）：`/v1/magpie/*` 三条 404 的读数两卡共用，但断言分居两个文件（本卡在 `tests/test_pool_gateway.py`，F37 在 `tests/test_magpie_diag_scope.py`），互不 import。
+- **F37**（同批起草）：`/v1/magpie/*` 三条 404 的读数两卡共用，但断言分居两个文件（本卡在 `tests/test_pool_gateway.py`，F37 在 tests/test_magpie_diag_scope.py），互不 import。
 
 ## 未坐实项（草稿如实标注，别当成结论）
 

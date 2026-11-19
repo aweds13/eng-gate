@@ -19,9 +19,9 @@ magpie 的 `web_fetch` 不是一个「下载网页」的小工具，它是一条
 
 | 层 | 原件 | 管什么 | 本卡 |
 |---|---|---|---|
-| 1. 判地址 | `internal/netguard/netguard.go` | 只说「这个 IP 在不在公网」，**不解析名字**（`:1-5` 包注释逐字 `It judges addresses only; each caller decides what to do with a name's answers (pin them, or hand a proxy the name).`） | 移植成 `tools/pool/netguard.py` 的 `public()` / `fake_ip()` / `loon_paired()` |
+| 1. 判地址 | `internal/netguard/netguard.go` | 只说「这个 IP 在不在公网」，**不解析名字**（`:1-5` 包注释逐字 `It judges addresses only; each caller decides what to do with a name's answers (pin them, or hand a proxy the name).`） | 移植成 tools/pool/netguard.py 的 `public()` / `fake_ip()` / `loon_paired()` |
 | 2. 真拦 | `internal/gateway/image_fetch_guard.go` 的 `publicClient` | 解析 → 每个地址都查 → 钉住第一个 → socket 连接时**再查一次** → 至多 5 次重定向 | 只移植「**每一跳都查**、至多 5 跳」的形状；socket 钉地址**不移植**（未坐实项 3） |
-| 3. 取页与呈现 | `internal/gateway/search_fetch.go` | 30 秒 / 5 MiB / charset 解码 / HTML→Markdown / 按字符窗口分段 | 移植成 `tools/pool/web_fetch.py`（出网由**注入的** fetcher 承担） |
+| 3. 取页与呈现 | `internal/gateway/search_fetch.go` | 30 秒 / 5 MiB / charset 解码 / HTML→Markdown / 按字符窗口分段 | 移植成 tools/pool/web_fetch.py（出网由**注入的** fetcher 承担） |
 
 第三层的关键常量（`search_fetch.go:36-46` 逐字，缩进省略）：
 
@@ -173,9 +173,9 @@ def files_intersect(a: Card, b: Card) -> set[str]:
 
 ### 判据 1 · 地址判词：十四个前缀 + NAT64/6to4 递归 + 映射地址，一个都不许漏
 
-**要什么**：`tools/pool/netguard.py` 提供三个纯函数 —— `public(addr: str) -> bool`、`fake_ip(addr: str) -> bool`、`loon_paired(addr: str, answers: Sequence[str]) -> bool`。`public()` 逐条照 `netguard.go:46-68`：先 `unmap`（`::ffff:127.0.0.1` 当 `127.0.0.1`），再八连判（无效 / 回环 / 私有 / 未指定 / link-local 单播 / link-local 组播 / 接口本地组播 / 组播），再 `SPECIAL_NETS` 十四个前缀，最后 IPv6 的 NAT64（`64:ff9b::/96` 取第 12-15 字节）与 6to4（`2002::/16` 取第 2-5 字节）**递归**判内嵌 v4。`fake_ip()` 照 `:78`（`198.18.0.0/15`）；`loon_paired()` 照 `:85-96`（`fd27:712::/96` 且内嵌 v4 在 `answers` 里）。
+**要什么**：tools/pool/netguard.py 提供三个纯函数 —— `public(addr: str) -> bool`、`fake_ip(addr: str) -> bool`、`loon_paired(addr: str, answers: Sequence[str]) -> bool`。`public()` 逐条照 `netguard.go:46-68`：先 `unmap`（`::ffff:127.0.0.1` 当 `127.0.0.1`），再八连判（无效 / 回环 / 私有 / 未指定 / link-local 单播 / link-local 组播 / 接口本地组播 / 组播），再 `SPECIAL_NETS` 十四个前缀，最后 IPv6 的 NAT64（`64:ff9b::/96` 取第 12-15 字节）与 6to4（`2002::/16` 取第 2-5 字节）**递归**判内嵌 v4。`fake_ip()` 照 `:78`（`198.18.0.0/15`）；`loon_paired()` 照 `:85-96`（`fd27:712::/96` 且内嵌 v4 在 `answers` 里）。
 
-**怎么证明**：新建 `tests/test_pool_netguard.py`，表驱动 ——
+**怎么证明**：新建 tests/test_pool_netguard.py，表驱动 ——
 
 (a) **24 行必 false**：`127.0.0.1`、`10.0.0.1`、`172.16.0.1`、`192.168.1.1`、`169.254.169.254`、`100.64.0.1`、`0.0.0.0`、`192.0.0.8`、`192.0.2.5`、`198.18.0.1`、`198.19.255.255`、`198.51.100.7`、`203.0.113.9`、`240.0.0.1`、`::1`、`::ffff:127.0.0.1`、`64:ff9b::7f00:1`、`64:ff9b:1::1`、`2002:7f00:1::`、`fec0::1`、`100::1`、`2001::1`、`2001:db8::1`、`fd27:712::1`。
 (b) **6 行必 true**：`8.8.8.8`、`1.1.1.1`、`198.17.255.255`、`2606:4700::1111`、`2002:808:808::`（6to4 里的 8.8.8.8）、`64:ff9b::808:808`（NAT64 里的 8.8.8.8）。
@@ -183,20 +183,20 @@ def files_intersect(a: Card, b: Card) -> set[str]:
 (d) `fake_ip("198.18.0.1")` 与 `fake_ip("198.19.255.255")` 为真；`"198.17.255.255"` 与 `"198.20.0.1"` 为假。
 (e) `loon_paired("fd27:712::7f00:1", ["127.0.0.1"])` 真；给 `["127.0.0.2"]` 或 `[]` 假。
 
-**钉子落点**：新建 `tests/test_pool_netguard.py`（本仓无同名文件；现 55 份 `test_pool_*.py` 里零冲突）。体例照 `tests/test_pool_sticky.py:1-26` 的模块 docstring「①-⑥ 每条写怎么坏掉会红」。
+**钉子落点**：新建 tests/test_pool_netguard.py（本仓无同名文件；现 55 份 `test_pool_*.py` 里零冲突）。体例照 `tests/test_pool_sticky.py:1-26` 的模块 docstring「①-⑥ 每条写怎么坏掉会红」。
 
 ### 判据 2 · 三分类 + 按 charset 解码：GBK 页要出中文，未知 charset 不许崩
 
-**要什么**：`tools/pool/web_fetch.py` 提供 `kind_of(media_type: str) -> str`（`"html"` / `"text"` / `""`，逐条照 `search_fetch.go:190-200`：`text/html` 与 `application/xhtml+xml` 是 html；前缀 `text/`、`application/json`、`application/xml`、后缀 `+json` / `+xml`、`application/javascript`、`application/x-ndjson` 是 text；其余 `""`）与 `to_text(body: bytes, content_type: str, kind: str, base: str) -> tuple[str, str]`（回 `(title, text)`，逐条照 `:203-217`：先按 `content-type` 的 `charset` 解码，**解码器建不起来就退回裸字节**；text 类标题为空 + 非法 UTF-8 替换；html 类交 `html_to_markdown`）。
+**要什么**：tools/pool/web_fetch.py 提供 `kind_of(media_type: str) -> str`（`"html"` / `"text"` / `""`，逐条照 `search_fetch.go:190-200`：`text/html` 与 `application/xhtml+xml` 是 html；前缀 `text/`、`application/json`、`application/xml`、后缀 `+json` / `+xml`、`application/javascript`、`application/x-ndjson` 是 text；其余 `""`）与 `to_text(body: bytes, content_type: str, kind: str, base: str) -> tuple[str, str]`（回 `(title, text)`，逐条照 `:203-217`：先按 `content-type` 的 `charset` 解码，**解码器建不起来就退回裸字节**；text 类标题为空 + 非法 UTF-8 替换；html 类交 `html_to_markdown`）。
 
-**怎么证明**：新建 `tests/test_pool_web_fetch.py` ——
+**怎么证明**：新建 tests/test_pool_web_fetch.py ——
 
 (a) `kind_of` 十行表：`text/html` / `application/xhtml+xml` / `text/plain` / `text/csv` / `application/json` / `application/activity+json` / `application/xml` / `application/javascript` / `image/png`→`""` / `""`→`""`；
 (b) **GBK**：把「中文」按 GBK 编码 + `content-type: text/html; charset=gbk` ⇒ 输出里含「中文」、不含「锟斤拷」、且**不含 U+FFFD 替换符**；
 (c) **未知 charset**（`charset=x-user-defined`）⇒ 不抛，返回字符串（内容可以乱，但不许崩）；
 (d) `body` 含非法 UTF-8 字节 + `kind == "text"` ⇒ 出现 U+FFFD 替换符而不是异常。
 
-**钉子落点**：新建 `tests/test_pool_web_fetch.py`。★ 不许用 `charset_normalizer` 兜底 —— 它**本机装着**（本轮 `importlib.util.find_spec` 实测命中 `requests` / `httpx` / `charset_normalizer`），但 `pyproject.toml:10-14` 的 `dependencies` 只有 `fastapi` / `uvicorn[standard]` / `pydantic>=2` ⇒ 用了就是隐式依赖，CI 机器上没有。
+**钉子落点**：新建 tests/test_pool_web_fetch.py。★ 不许用 `charset_normalizer` 兜底 —— 它**本机装着**（本轮 `importlib.util.find_spec` 实测命中 `requests` / `httpx` / `charset_normalizer`），但 `pyproject.toml:10-14` 的 `dependencies` 只有 `fastapi` / `uvicorn[standard]` / `pydantic>=2` ⇒ 用了就是隐式依赖，CI 机器上没有。
 
 ### 判据 3 · HTML→Markdown 六件事 + `done()` 的空壳行清理
 
@@ -206,10 +206,10 @@ def files_intersect(a: Card, b: Card) -> set[str]:
 (2) `:357-362` `h1..h6` ⇒ `"#" * n + " "`；
 (3) `:363-385` `li` ⇒ 缩进 `"  " * (len(lists) - 1)` + 有序 `"N. "` / 无序 `"- "`；
 (4) `:386-394` `pre` ⇒ 三反引号围栏，`:395-406` `code` 在 `pre` 内不再加反引号；
-(5) `:413-439` `a` ⇒ 用 `base` 解析且 scheme 必须是 http/https 才写 `[text](绝对URL)`；`href` 空 / 以 `#` 开头 / 在 `pre` 内 ⇒ 只写文字；**只有空文本的链接（图标）整段丢掉**；
+(5) `:413-439` `a` ⇒ 用 `base` 解析且 scheme 必须是 http/https 才写 `[text](… 目标地址 …)`；`href` 空 / 以 `#` 开头 / 在 `pre` 内 ⇒ 只写文字；**只有空文本的链接（图标）整段丢掉**；
 (6) `:458-479` `done()` ⇒ 行尾空白裁掉、`"-"` / `">"` 空壳行清空、连续空行压成一行、末尾 `TrimSpace`。
 
-**怎么证明**：`tests/test_pool_web_fetch.py` —— 一段手写 HTML（含 `<h1>`、嵌套 `<ul><li>`、`<pre><code>`、相对链接 `<a href="/x">`、`javascript:` 链接、纯图标 `<a href="/i"><img></a>`、`<script>` 与 `<div hidden>`、`<blockquote>`）⇒ 逐条断言：`"# 标题"` 在输出里；二级列表行以 `"  - "` 开头；围栏 `"```"` 出现两次且 `<code>` 内文不被单反引号包裹；相对链接变成 `(http://example.com/x)`；`javascript:` 与图标链接**不出现** `](`；`script` 内容与 `hidden` 内容**整段不出现**；输出**不含连续两个空行**；`done()` 对「a / - / > / b」四行（`"-"` 与 `">"` 是空壳行）把两行清成空行。
+**怎么证明**：tests/test_pool_web_fetch.py —— 一段手写 HTML（含 `<h1>`、嵌套 `<ul><li>`、`<pre><code>`、相对链接 `<a href="/x">`、`javascript:` 链接、纯图标 `<a href="/i"><img></a>`、`<script>` 与 `<div hidden>`、`<blockquote>`）⇒ 逐条断言：`"# 标题"` 在输出里；二级列表行以 `"  - "` 开头；围栏 `"```"` 出现两次且 `<code>` 内文不被单反引号包裹；相对链接变成 `(http://example.com/x)`；`javascript:` 与图标链接**不出现** `](`；`script` 内容与 `hidden` 内容**整段不出现**；输出**不含连续两个空行**；`done()` 对「a / - / > / b」四行（`"-"` 与 `">"` 是空壳行）把两行清成空行。
 
 **钉子落点**：同上。
 
@@ -217,7 +217,7 @@ def files_intersect(a: Card, b: Card) -> set[str]:
 
 **要什么**：`split_part(final_url: str, title: str, text: str, offset: int = 0, max_chars: int = 0) -> str`，逐条照 `search_fetch.go:100-122` 与 `:78-82`：`limit = max_chars if max_chars > 0 else 20000`，再 `limit = min(limit, 100000)`；首行 `"URL: <final>"`、次行 `"Title: <title>"`（title 空则不写）；`offset >= len(runes)` 时 —— 空页 ⇒ `"(the page has no text)"`，否则 ⇒ `"(the page has %d characters, none from offset %d)"`；还有余量 ⇒ 末尾追加 `[%d more characters: call web_fetch with offset=%d to read on]`（前面**两个换行**）。
 
-**怎么证明**：`tests/test_pool_web_fetch.py` ——
+**怎么证明**：tests/test_pool_web_fetch.py ——
 
 (a) 30000 字的 ASCII 页 + 默认参数 ⇒ 正文恰好 `20000` 字、末行提示逐字 `[10000 more characters: call web_fetch with offset=20000 to read on]`；
 (b) `max_chars=999999` ⇒ 实际按 `100000`；
@@ -234,7 +234,7 @@ def files_intersect(a: Card, b: Card) -> set[str]:
 
 规则逐条：(1) 空 url ⇒ `web_fetch needs a url`；scheme 非 http/https 或 host 空 ⇒ `web_fetch reads only http:// and https:// URLs, not ` + 原样 url；`offset < 0` ⇒ `offset can't be negative`（`search_fetch.go:69/73/76`）。(2) **每一跳**都用 `netguard.public()` 判 `resolve()` 回来的**每一个**地址（有一个不公共就拒），并把这批地址钉住给 `fetch`。(3) 重定向**自己跟**，至多 `WEB_FETCH_REDIRECTS = 5` 跳，超出 ⇒ `it redirects more than 5 times`；第 n 跳指向私有地址 ⇒ 与第 1 跳**同一条**私有地址错误。(4) `WEB_FETCH_TIMEOUT_S = 30.0` 原样传给 `fetch`；`WEB_FETCH_READ = 5 << 20` 是读回字节上限（超了按 `:160` 的 `io.LimitReader` 口径截断，不报错）。(5) `status >= 400` ⇒ `the site answered ` + 状态行（如 `the site answered 404 Not Found`）；`kind_of(mt) == ""` ⇒ `it is image/png, not a page of text` 形状；私有地址 ⇒ `it is at a private address (this computer, its network, or a name that resolves to one), which web_fetch doesn't read`。
 
-**怎么证明**：`tests/test_pool_web_fetch.py` —— 全部用桩，**零网络**：
+**怎么证明**：tests/test_pool_web_fetch.py —— 全部用桩，**零网络**：
 
 (a) `fetch` 桩记录收到的 `(url, timeout)` ⇒ 断言 `timeout == 30.0`；
 (b) `resolve` 桩对 `127.0.0.1` 回 `["127.0.0.1"]` ⇒ 抛 `FetchError` 且 `str(exc)` **逐字**等于那句私有地址文案；
@@ -245,7 +245,7 @@ def files_intersect(a: Card, b: Card) -> set[str]:
 (g) `fetch` 桩收到的字节上限参数是 `5 << 20`，或由桩回 6 MiB 内容、断言交给 `to_text` 的字节数被截到 `WEB_FETCH_READ`；
 (h) **没实现的那条要钉成空位**：`inspect.getsource(web_fetch.fetch_page)` 里不出现 `budget` / `reserve` 字样 —— magpie `search_fetch.go:83` 的 `budget.Reserve(access.Caller(r.Context()), int64(len(raw)), "", limitClock())` 在本仓没有对应物（缺口 4），「没实现」必须是**可核的缺席**，不许悄悄缺席。
 
-**钉子落点**：`tests/test_pool_web_fetch.py` + 一条模块头断言照 `tests/test_pool_rest.py:323-333` 的体例（把模块源码按「第一个空行」与「`ROOT = Path`」切两刀，切出来的头部里不许出现 `import urllib` / `import socket` / `import requests` / `import httpx`）。
+**钉子落点**：tests/test_pool_web_fetch.py + 一条模块头断言照 `tests/test_pool_rest.py:323-333` 的体例（把模块源码按「第一个空行」与「`ROOT = Path`」切两刀，切出来的头部里不许出现 `import urllib` / `import socket` / `import requests` / `import httpx`）。
 
 ### 判据 6 · 反向变异 ≥3 条（每条真改真跑真复原）+ 一条只改注释的安静对照
 
@@ -253,9 +253,9 @@ def files_intersect(a: Card, b: Card) -> set[str]:
 
 | # | 改哪一行（锚点原文） | 哪条判据该红 |
 |---|---|---|
-| M1 | `tools/pool/netguard.py` 的 `SPECIAL_NETS` 表里删掉 `"100.64.0.0/10"` 那一行 | 判据 1(a) 的 `100.64.0.1` 行 ⇒ 红（CGNAT 被当公网） |
-| M2 | `tools/pool/netguard.py` 的 `public()` 里把 NAT64 那条递归 `return public(_v4(addr, 12))` 改成 `return True` | 判据 1(a) 的 `64:ff9b::7f00:1` 行 + 判据 1(c) 的交叉断言 ⇒ 红 |
-| M3 | `tools/pool/web_fetch.py` 的 `split_part` 里 `end = min(offset + limit, len(runes))` 改成 `end = min(offset + limit, len(text))`（按字节切） | 判据 4(f) 的中文页 ⇒ 红（切出半个字 / U+FFFD 出现） |
+| M1 | tools/pool/netguard.py 的 `SPECIAL_NETS` 表里删掉 `"100.64.0.0/10"` 那一行 | 判据 1(a) 的 `100.64.0.1` 行 ⇒ 红（CGNAT 被当公网） |
+| M2 | tools/pool/netguard.py 的 `public()` 里把 NAT64 那条递归 `return public(_v4(addr, 12))` 改成 `return True` | 判据 1(a) 的 `64:ff9b::7f00:1` 行 + 判据 1(c) 的交叉断言 ⇒ 红 |
+| M3 | tools/pool/web_fetch.py 的 `split_part` 里 `end = min(offset + limit, len(runes))` 改成 `end = min(offset + limit, len(text))`（按字节切） | 判据 4(f) 的中文页 ⇒ 红（切出半个字 / U+FFFD 出现） |
 | M4（安静对照） | **只改注释**：把 `# 按 rune 切，不按字节切` 这句中文注释换个说法，**不改任何代码** | 六条判据**全绿**（若有一条红，说明有判据在咬注释而不是咬行为 —— 那是坏钉子） |
 
 **怎么证明**：脚本逐条 `shutil.copyfile` 备份 → `src.replace(锚点, 改写, 1)` → 断言替换**恰好发生一次**（`assert src.count(锚点) == 1`；替换 0 次说明锚点漂了，必须报红而不是静默通过）→ 跑对应 `pytest` 选测 → `assert rc != 0` → 复原 → 最后跑一遍全绿 → 打印结论行。
@@ -264,12 +264,12 @@ def files_intersect(a: Card, b: Card) -> set[str]:
 
 | 文件 | 性质 | 说明 |
 |---|---|---|
-| `tools/pool/netguard.py` | **新增** | 三个纯函数 `public()` / `fake_ip()` / `loon_paired()` + `SPECIAL_NETS` 十四项 + 三个前缀常量。**不解析名字、不出网、不读盘、不读钟、不 print**（`netguard.go:1-5` 的边界） |
-| `tools/pool/web_fetch.py` | **新增** | `kind_of` / `to_text` / `html_to_markdown` / `split_part` / `fetch_page` + 五个常量（30.0 / 5 MiB / 20000 / 100000 / 5 跳）。**不 import urllib / socket / requests / httpx**：出网与解析都由注入的 `fetch` / `resolve` 承担 |
-| `tests/test_pool_netguard.py` | **新增** | 判据 1 的钉子（表驱动 + 交叉断言） |
-| `tests/test_pool_web_fetch.py` | **新增** | 判据 2-5 的钉子（全桩化，零网络零落盘） |
+| tools/pool/netguard.py | **新增** | 三个纯函数 `public()` / `fake_ip()` / `loon_paired()` + `SPECIAL_NETS` 十四项 + 三个前缀常量。**不解析名字、不出网、不读盘、不读钟、不 print**（`netguard.go:1-5` 的边界） |
+| tools/pool/web_fetch.py | **新增** | `kind_of` / `to_text` / `html_to_markdown` / `split_part` / `fetch_page` + 五个常量（30.0 / 5 MiB / 20000 / 100000 / 5 跳）。**不 import urllib / socket / requests / httpx**：出网与解析都由注入的 `fetch` / `resolve` 承担 |
+| tests/test_pool_netguard.py | **新增** | 判据 1 的钉子（表驱动 + 交叉断言） |
+| tests/test_pool_web_fetch.py | **新增** | 判据 2-5 的钉子（全桩化，零网络零落盘） |
 | `docs/subsystems/pool/modules.toml` | 改 | 追加**两条** `[[module]]`（`netguard.py` / `web_fetch.py`）：`name` + `duty` + `cli` 三键缺一 `scripts/gen_pool_readme.py --check` 就退 1（`:102-106` 会 glob `tools/pool/*.py`） |
-| `复盘/卡/卡F58-web_fetch-只读公共地址.md` | **新增** | 本卡规格落成正式件（文件名随立卡人定） |
+| 复盘/卡/卡F58-web_fetch-只读公共地址.md | **新增** | 本卡规格落成正式件（文件名随立卡人定） |
 
 ★ **不碰**：`tools/pool_mcp.py`、`tools/pool/mcp_http.py`、`tools/pool/gateway.py`、`tools/pool/checkin.py`、`tools/pool/callers.py`、`tools/pool/limits.py`、`tools/pool/limits_check.py`、`src/timeflow/core/lan.py`。理由不是洁癖 —— `tools/pool/plan.py:170-180` 的 `files_intersect()` 是**精确字符串集合相交**，碰了 A372 / A368 / E143 的文件就会与它们串批（`:257-275`）。
 

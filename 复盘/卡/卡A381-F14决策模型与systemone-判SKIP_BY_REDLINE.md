@@ -102,7 +102,7 @@ E143 立过体例：不移植也要在**生产码的 docstring** 里留一段 `F
 
 ### 判据 1 · 端点不存在要钉在**真服务**上：`POST /v1/systemone` 与 `POST /v1/decide` 都 404，且文案只点四条
 
-新建 `tests/test_pool_no_systemone.py`（体例照 `tests/test_pool_gateway.py:686-696` 的 `start_server` + `_request` 形状，但**夹具自带**：`tmp_path` + `gateway.build_server(token=..., host="127.0.0.1", port=0, root=tmp)` + daemon 线程 + `shutdown/server_close/join(5)`）。断言四件：
+新建 tests/test_pool_no_systemone.py（体例照 `tests/test_pool_gateway.py:686-696` 的 `start_server` + `_request` 形状，但**夹具自带**：`tmp_path` + `gateway.build_server(token=..., host="127.0.0.1", port=0, root=tmp)` + daemon 线程 + `shutdown/server_close/join(5)`）。断言四件：
 
 1. `POST /v1/systemone` ⇒ `status == 404`；
 2. body 里 `json.loads(...)["error"]["type"] == "not_found_error"`；
@@ -133,7 +133,7 @@ E143 立过体例：不移植也要在**生产码的 docstring** 里留一段 `F
 
 - **怎么证明**：同 pytest；在 `tools/pool/route.py` 末尾加一行 `def classify_intent(text): return None` ⇒ 第 4 条红；把字面 `systemone` 塞进 `tools/pool/gateway.py` 的注释 ⇒ 第 1 条红（判据 2 也红，双咬，正确）。
 
-### 判据 4 · ADR `docs/decisions/0011-no-systemone.md` 存在且过机器检查
+### 判据 4 · ADR docs/decisions/0011-no-systemone.md 存在且过机器检查
 
 断言三件：
 
@@ -177,8 +177,8 @@ E143 立过体例：不移植也要在**生产码的 docstring** 里留一段 `F
 
 | 文件 | 动作 | 内容 |
 |---|---|---|
-| `docs/decisions/0011-no-systemone.md` | 新建 | ADR：`# 0011 不移植 magpie 的决策模型与 /v1/systemone` / `Status: Accepted` / `Date:` / `Supersedes:`（空）/ `Superseded-by:`（空）/ `来源:`（台账 + 本卡 + 判定表 :22 与本卡对它的更正）/ 四节：背景与问题（三条红线 + 零命中读数）/ 候选方案（A 真移植、B 只搬分组 failover、C 不移植只钉证据 —— 各写代价）/ 决定（选 C，因为 A 破两条明文边界、B 没有输入）/ 把握程度（`medium —— 依据是本仓六条 grep 读数与两条源码边界，但 magpie 侧只读源码、没在真 decision 号上跑过`） |
-| `tests/test_pool_no_systemone.py` | 新建 | 判据 1–5 的 5~8 条 `def test_`；模块 docstring 分「病 / 判据 / 为什么零命中扫描只到生产码」三节（体例照 `tests/test_no_window.py`） |
+| docs/decisions/0011-no-systemone.md | 新建 | ADR：`# 0011 不移植 magpie 的决策模型与 /v1/systemone` / `Status: Accepted` / `Date:` / `Supersedes:`（空）/ `Superseded-by:`（空）/ `来源:`（台账 + 本卡 + 判定表 :22 与本卡对它的更正）/ 四节：背景与问题（三条红线 + 零命中读数）/ 候选方案（A 真移植、B 只搬分组 failover、C 不移植只钉证据 —— 各写代价）/ 决定（选 C，因为 A 破两条明文边界、B 没有输入）/ 把握程度（`medium —— 依据是本仓六条 grep 读数与两条源码边界，但 magpie 侧只读源码、没在真 decision 号上跑过`） |
+| tests/test_pool_no_systemone.py | 新建 | 判据 1–5 的 5~8 条 `def test_`；模块 docstring 分「病 / 判据 / 为什么零命中扫描只到生产码」三节（体例照 `tests/test_no_window.py`） |
 | `docs/subsystems/pool/模型与号池.md` | 改（只追加 `## 8.`） | 「## 8. 决策模型 / System One：不移植（卡 A381）」，体例照 :165-167 |
 | `docs/subsystems/pool/README.md` | 改（表 B 加一行，标记之外） | 第 8 行：不做「决策模型路由 / System One」，归「本仓不做」，证据指 ADR + 测试 |
 | `复盘/卡/卡A381-F14决策模型与systemone-判SKIP_BY_REDLINE.md` | 新建 | 立卡后把本草稿搬成正式卡规格 |
@@ -201,7 +201,7 @@ python -X utf8 gates/diag/_rev_F14.py
 
 - 新增 ADR 会让 `docs/INDEX.md` 的篇数从 11 → 12（今天 :26 `| `docs/decisions/` | 11 | 0 | 11 |`、:450 `**`docs/decisions/`（11 篇）**`），**不要手改** —— 落地链自己跑 `scripts/gen_doc_index.py`（`tools/pool/landing.py:98-103` 逐字「落地链**自己会改**的**现算文档**」+ `RECOUNT_DOCS / RECOUNT_GENS` 一一对应）。单独跑 `gen_doc_index.py --check` 会红，那是预期的。
 - `scripts/check_docs.py --mode report` 的 `drift` 一项今天就是 `+168` 超额（基线 379），只报告不判红；本卡不负责清它。
-- `scripts/check_layers.py` 今天 RC=0（`LAYER CHECKS: PASS ✅`）。★ 若在 tracked 文档里写了**未建**路径的反引号会红它 —— `docs/decisions/0011-no-systemone.md` 与 `tests/test_pool_no_systemone.py` 是**本卡要建**的，写反引号安全；ADR 里若要提别的未建物，写「（计划建）」或去反引号。
+- `scripts/check_layers.py` 今天 RC=0（`LAYER CHECKS: PASS ✅`）。★ 若在 tracked 文档里写了**未建**路径的反引号会红它 —— docs/decisions/0011-no-systemone.md 与 tests/test_pool_no_systemone.py 是**本卡要建**的，写反引号安全；ADR 里若要提别的未建物，写「（计划建）」或去反引号。
 
 ## 不许做
 

@@ -58,7 +58,7 @@ grep -nE  'subprocess|Popen'  tools/pool/mcp_http.py src/timeflow/mcp/server.py 
 
 ## 判据（五条，逐条给「怎么证明」）
 
-全部落在**新建**的 `tests/test_pool_mcp_no_hub.py`（今天不存在：`ls tests/test_pool_mcp_no_hub.py` 报 No such file or directory；`git ls-files tests | grep -i mcp` 八份里也没有它 —— test_mcp_client_independent.py、test_mcp_line.py、test_pool_mcp.py、test_pool_mcp_board.py、test_pool_mcp_http.py、test_pool_mcp_line_cap.py、test_pool_mcp_task.py、test_pool_mcp_write.py）。体例照 `tests/test_pool_rest.py:303-320` 的**反向钉子**：一张 `FORBIDDEN_* = (...)` 词表 + `inspect.getsource(...)` 逐个扫，docstring 写明「★ 反向钉子：…，这条必须变红。」（那一处逐字：`#: status() 里**不许**出现的字样 —— 它是「读记录 + 读钟表」的函数，零网络零等待。` 与 `assert hits == [], f"status() 里出现了网络/等待：{hits}"`）
+全部落在**新建**的 tests/test_pool_mcp_no_hub.py（今天不存在：`ls tests/test_pool_mcp_no_hub.py` 报 No such file or directory；`git ls-files tests | grep -i mcp` 八份里也没有它 —— test_mcp_client_independent.py、test_mcp_line.py、test_pool_mcp.py、test_pool_mcp_board.py、test_pool_mcp_http.py、test_pool_mcp_line_cap.py、test_pool_mcp_task.py、test_pool_mcp_write.py）。体例照 `tests/test_pool_rest.py:303-320` 的**反向钉子**：一张 `FORBIDDEN_* = (...)` 词表 + `inspect.getsource(...)` 逐个扫，docstring 写明「★ 反向钉子：…，这条必须变红。」（那一处逐字：`#: status() 里**不许**出现的字样 —— 它是「读记录 + 读钟表」的函数，零网络零等待。` 与 `assert hits == [], f"status() 里出现了网络/等待：{hits}"`）
 
 ### 判据 1 · hub 这个概念在本仓源码里零命中（反向钉子）
 
@@ -107,9 +107,9 @@ grep -nE  'subprocess|Popen'  tools/pool/mcp_http.py src/timeflow/mcp/server.py 
 
 ## 交付（逐文件）
 
-- `tests/test_pool_mcp_no_hub.py`（**新建**）—— 五条判据全在这个文件里；文件头写一段「钉哪一位」表格（体例照 `tests/test_pool_gateway.py:1-32` 的头注释：r""" 里一张 `| 钉子 | 钉哪一位 |` 表 + 末段「★ 全部用桩：…**一个字节都不出网**」），docstring 第一句写明「★ 本文件钉的是**不移植**：F60 判 SKIP_NOT_APPLICABLE」，并注明五条全是反向钉子。
+- tests/test_pool_mcp_no_hub.py（**新建**）—— 五条判据全在这个文件里；文件头写一段「钉哪一位」表格（体例照 `tests/test_pool_gateway.py:1-32` 的头注释：r""" 里一张 `| 钉子 | 钉哪一位 |` 表 + 末段「★ 全部用桩：…**一个字节都不出网**」），docstring 第一句写明「★ 本文件钉的是**不移植**：F60 判 SKIP_NOT_APPLICABLE」，并注明五条全是反向钉子。
 - `复盘/卡/卡A379-F60-MCP-hub-判SKIP_NOT_APPLICABLE.md`（计划建）—— 由本草稿转正（文件名立卡时定）；抬头把 `T-AG667` / `.wt/A379` 换成真号、基准换成立卡时主树 HEAD。
-- `docs/changelog.d/T-AG667.md`（计划建）—— 落地时按真台账号改名（`ls docs/changelog.d` 今天 365 份，命名形如 `T-AG385.md`），写「F60 判不移植 + 五条反向钉子」。
+- docs/changelog.d/T-AG667.md（计划建）—— 落地时按真台账号改名（`ls docs/changelog.d` 今天 365 份，命名形如 `T-AG385.md`），写「F60 判不移植 + 五条反向钉子」。
 
 > **卡域里不列** `tools/pool_mcp.py`、`tools/pool/mcp_http.py`、`src/timeflow/mcp/server.py`、`docs/subsystems/pool/README.md`、`docs/subsystems/pool/modules.toml`：本卡**产品码一个字不改**（五条判据全是「现状已成立、只要钉住」）。
 > **README 表 B 那一行归 A373**：`复盘/卡/卡A373-F94图像识别替身seer-判SKIP_BY_REDLINE.md` 的交付段已声明「表 B 加第 8 行」（表 B 今天七行，第 7 行在 `docs/subsystems/pool/README.md:174`）并把它列进自己的域。本卡**不碰 README**，避免两卡同一行打架（`tools/pool/plan.py:60-64` 是精确字符串相交，同一路径进两张卡就会被冲突域拦下）。
@@ -138,7 +138,7 @@ python -X utf8 gates/diag/_rev_F60.py
 
 ## 不许做
 
-1. **不许实现 hub**：不新建 `tools/pool/mcp_hub.py`、不在 `tools/pool/mcp_http.py` 里加 `{agent}` 路由、不加 `<server>__<tool>` 命名 —— 本卡的全部意思是**不做**。
+1. **不许实现 hub**：不新建 tools/pool/mcp_hub.py、不在 `tools/pool/mcp_http.py` 里加 `{agent}` 路由、不加 `<server>__<tool>` 命名 —— 本卡的全部意思是**不做**。
 2. **不许在 MCP 面起子进程**：`tools/pool/mcp_http.py` 与 `src/timeflow/mcp/server.py` 里 `subprocess|Popen` 今天 **0 命中**（判据 3 咬着），加一行就红。号池侧那 20 处既有 subprocess 是 CLI 用途，**本卡一个都不动、也不许拿它们当 hub 的起点**。
 3. **不许写 agent 配置文件、不许产 deeplink**：`mcpServers|mcp_servers|cursor://|vscode:mcp` 今天在 `src/` 与 `tools/` 都 0 命中（判据 5）；同族判定见 `gates/diag/_magpie_scope.md:12`、`:69`、`:83`。
 4. **不许碰** `tools/pool/plan.py:46-53` 列出的六份 PROTECTED_FILES（docs/traceability.toml、docs/changelog.md、复盘/交接-重构进度.md、复盘/新窗口交接卡.md、gates/last.json、gates/reuse.json）；卡域 `files` 不许写通配（`:60-64`、`:285-291`）。
@@ -157,6 +157,6 @@ python -X utf8 gates/diag/_rev_F60.py
 
 - **未坐实**：`_magpie_features.md:514` 说的「5 个 agent」这个数字 —— 我没有在 magpie 源码里数出是哪五个，也没有逐行读 `internal/library/mcp.go` 的写出逻辑（只读了 `:33`、`:530`、`:557` 三行）。SKIP 的结论**不依赖**这个数字（它论证的是「本仓没有配置写入层」，而不是「agent 少于 5 个」），但引用这个数字时要知道它是功能清单的话、不是源码读数。
 - **未坐实**：hub 的 per-agent 可见性（`Tools(ctx, agent string)` 与「Library 关掉的不列」）我只读到接口签名（`hub_mcp.go:43-60`）与功能清单的判据行（`_magpie_features.md:517`），**没有**逐行读它的实现，所以「per-agent 需要一层开关配置」这句是从签名推的。
-- **未取证**：`tests/test_pool_mcp_no_hub.py` 这个文件名今天不存在（`ls` 报 No such file；`git ls-files tests | grep -i mcp` 八份里也没有 `test_no_hub*`）；若立卡时发现同名/近名文件已存在，按既有文件合并，别硬建第二个。
+- **未取证**：tests/test_pool_mcp_no_hub.py 这个文件名今天不存在（`ls` 报 No such file；`git ls-files tests | grep -i mcp` 八份里也没有 `test_no_hub*`）；若立卡时发现同名/近名文件已存在，按既有文件合并，别硬建第二个。
 - **未取证**：判据 5 里那条 `assert "mcpServers" not in .../modules.toml` 今天为真（`grep` 0 命中），但我**没有**逐条读那 52 条 `[[module]]` 的 duty 文本（`grep -c "\[\[module\]\]" docs/subsystems/pool/modules.toml` = 52，`dce8d904` 实读）；若立卡时发现某条 duty 里出现该词，按「只钉代码不钉文档」把那条断言缩到 `src/ 与 tools/` 的 `*.py`。
 - **未坐实**：`gates/diag/_magpie_scope.md:68` 那条 PORT|no 是普查时的粗判；本卡改判 SKIP_NOT_APPLICABLE 的理由写在「结论」三条里，但**改判定表本身不是本卡的活**（那张表未跟踪、也没有门咬它）—— 立卡后应把 `:68` 那一行同步改掉，否则两张纸会漂。

@@ -63,7 +63,7 @@ magpie 的七类里，`skills` / `memory`（CLAUDE.md / AGENTS.md 这类 instruc
 
 ### 判据 1 · 分段口径钉死：四类、顺序、≥24 项折叠、估算公式与 magpie 同口径
 
-库 `tools/pool/prompt_parts.py` 暴露两个名字：
+库 tools/pool/prompt_parts.py 暴露两个名字：
 
 ~~~python
 def tokens_of(text: str) -> int: ...
@@ -75,13 +75,13 @@ def parts_of(protocol: str, body: bytes) -> list[dict] | None: ...
 - 每段 `items` 最多 24 项（`prompt.go:73-74` `const promptItems = 24`），按 token 降序；超出的**合并成一项** `{"name": "（其余 N 项）", "tag": "rest", "n": N, "tokens": 和}`。
 - 坏输入（`protocol` 不是 `chat` / `messages`、body 不是 JSON 对象、JSON 坏）⇒ 返回 `None`。
 
-- **怎么证明**：新增 `tests/test_pool_prompt_parts.py`（体例照 `tests/test_pool_pricing.py:1-30`：模块 docstring 写「本卡 N 条钉子」+ `ROOT = Path(__file__).resolve().parent.parent` + `sys.path.insert(0, str(ROOT / "tools"))` + `importlib.import_module("pool.prompt_parts")`）。至少四条：① `tokens_of("abcd") == 1` 与 `tokens_of("中文") == 2`（ASCII 四字符一 token / CJK 一字一 token，两边都钉）；② 用一份含 `system` + `tools` + `role:"tool"` + 用户轮次的合成 body，断言 `[p["kind"] for p in parts] == ["system", "tools", "results", "chat"]`；③ 造 30 个工具的 `tools`，断言 `len(parts[1]["items"]) == 24` 且最后一项 `tag == "rest"`、`n == 7`（24 项 + 1 项汇总）；④ `parts_of("chat", b"not json") is None` 与 `parts_of("gemini", b"{}") is None`。
+- **怎么证明**：新增 tests/test_pool_prompt_parts.py（体例照 `tests/test_pool_pricing.py:1-30`：模块 docstring 写「本卡 N 条钉子」+ `ROOT = Path(__file__).resolve().parent.parent` + `sys.path.insert(0, str(ROOT / "tools"))` + `importlib.import_module("pool.prompt_parts")`）。至少四条：① `tokens_of("abcd") == 1` 与 `tokens_of("中文") == 2`（ASCII 四字符一 token / CJK 一字一 token，两边都钉）；② 用一份含 `system` + `tools` + `role:"tool"` + 用户轮次的合成 body，断言 `[p["kind"] for p in parts] == ["system", "tools", "results", "chat"]`；③ 造 30 个工具的 `tools`，断言 `len(parts[1]["items"]) == 24` 且最后一项 `tag == "rest"`、`n == 7`（24 项 + 1 项汇总）；④ `parts_of("chat", b"not json") is None` 与 `parts_of("gemini", b"{}") is None`。
 
 ### 判据 2 · **正文一个字都不进账**（哨兵串实测，照既有 判据 2 的体例）
 
 - `parts_of` 只从 body 里取 **名字**（工具名、JSON 顶层键名、`"turn 3"` 这种轮次标签）与**大小**；不取任何自由文本。
 
-- **怎么证明**：照 `tests/test_pool_route_log.py:44` 的哨兵体例（`SECRET = "<SECRET-2f9a>"`）+ `:103` `test_no_prompt_no_secret` + `:116-117` 两条断言（`assert SECRET not in raw` / `assert SECRET not in path.read_text(encoding="utf-8")`）。本卡在 `tests/test_pool_prompt_parts.py` 里加一条对称的：把 `SECRET` 放进 `messages[0]["content"]` 与 `tools[0]["description"]`，再 `json.dumps(parts_of(...))`，断言 `SECRET not in 序列化结果`；同时**反向自证**（照 `:119-120` 的写法）断 `SECRET in body_text` —— 证明哨兵确实在输入里，否则这条钉子会假绿。
+- **怎么证明**：照 `tests/test_pool_route_log.py:44` 的哨兵体例（`SECRET = "<SECRET-2f9a>"`）+ `:103` `test_no_prompt_no_secret` + `:116-117` 两条断言（`assert SECRET not in raw` / `assert SECRET not in path.read_text(encoding="utf-8")`）。本卡在 tests/test_pool_prompt_parts.py 里加一条对称的：把 `SECRET` 放进 `messages[0]["content"]` 与 `tools[0]["description"]`，再 `json.dumps(parts_of(...))`，断言 `SECRET not in 序列化结果`；同时**反向自证**（照 `:119-120` 的写法）断 `SECRET in body_text` —— 证明哨兵确实在输入里，否则这条钉子会假绿。
 
 ### 判据 3 · 账里多一个行级键 `parts`；说不出来就是 `null`（不是 `[]`、不是 0）
 
@@ -101,7 +101,7 @@ def parts_of(protocol: str, body: bytes) -> list[dict] | None: ...
 
 - 正向：`parts_of` 是纯函数，调完不持有任何东西；`gateway.py` 里不出现新的模块级可变容器（`grep -n 'prompt_parts' tools/pool/gateway.py` 只允许出现在 `import` 与 `_log` 的调用处）。
 
-- **怎么证明**：在 `tests/test_pool_prompt_parts.py` 里用 AST 扫 `tools/pool/prompt_parts.py`（体例照 `tests/test_pool_gateway.py:571-584` 的 `ast.parse` 钉）：断言模块 `tree.body` 里**没有** `Assign` 到模块级 `list` / `dict` / `deque`（即没有缓存容器），且**没有** `import threading` / `import time`（不做定时器、不做环形缓冲 —— 与 `gateway.py:11` 同一条纪律）。再在 `tests/test_pool_gateway.py` 里断 `gateway._log(...)` 签名**不含** `body` 参数（参数名集合与今天逐字相同，只多不换成 body：这条用 `inspect.signature` 断）。
+- **怎么证明**：在 tests/test_pool_prompt_parts.py 里用 AST 扫 tools/pool/prompt_parts.py（体例照 `tests/test_pool_gateway.py:571-584` 的 `ast.parse` 钉）：断言模块 `tree.body` 里**没有** `Assign` 到模块级 `list` / `dict` / `deque`（即没有缓存容器），且**没有** `import threading` / `import time`（不做定时器、不做环形缓冲 —— 与 `gateway.py:11` 同一条纪律）。再在 `tests/test_pool_gateway.py` 里断 `gateway._log(...)` 签名**不含** `body` 参数（参数名集合与今天逐字相同，只多不换成 body：这条用 `inspect.signature` 断）。
 
 ### 判据 6 · 反向变异 ≥3 条（每条真改真跑真复原，`sha256` 自证）
 
@@ -121,10 +121,10 @@ def parts_of(protocol: str, body: bytes) -> list[dict] | None: ...
 
 | 文件 | 做什么 | 今天存在吗 |
 |---|---|---|
-| `tools/pool/prompt_parts.py` | 新建。`tokens_of` / `parts_of` 两个纯函数 + 模块 docstring 写明「只认四类」「只留名字与大小」「估算不是分词器」「七类里三类的缺席理由」 | **不存在**（`import pool.prompt_parts` ⇒ ModuleNotFoundError） |
+| tools/pool/prompt_parts.py | 新建。`tokens_of` / `parts_of` 两个纯函数 + 模块 docstring 写明「只认四类」「只留名字与大小」「估算不是分词器」「七类里三类的缺席理由」 | **不存在**（`import pool.prompt_parts` ⇒ ModuleNotFoundError） |
 | `tools/pool/gateway.py` | 只在 `_log()`（`:590-598`）里加一段 `parts = prompt_parts.parts_of(protocol, body)` 并透传；**不改** `PATHS` / `_dispatch` / `_post` / `_get` / `Reply` / `Attempt` 任何一行 | 存在，1300 行；**本卡与 A372 同域**（靠 depends 排批） |
 | `tools/pool/route_log.py` | `append_route()` 加关键字参数 `parts`（加在末尾）+ row 加第九键；三条校验、八键名字与顺序、`_one_try()` 一个字不动 | 存在，205 行 |
-| `tests/test_pool_prompt_parts.py` | 新建。判据 1 / 2 / 5 的钉子（分段口径、哨兵串、无缓存 AST 钉） | **不存在** |
+| tests/test_pool_prompt_parts.py | 新建。判据 1 / 2 / 5 的钉子（分段口径、哨兵串、无缓存 AST 钉） | **不存在** |
 | `tests/test_pool_gateway.py` | 判据 3 / 4 的钉子（行级 `parts`、`null` 口径、只读面读回、`inspect.signature` 断 `_log`）——**只加新 `def test_`，既有 72 条一条不动** | 存在，1150 行；**与 A372 同域** |
 | `docs/subsystems/pool/modules.toml` | 给新模块加一条 `[[module]]`（`name = "prompt_parts.py"`、`duty`、`cli = "无"`）—— 不加的话 `scripts/gen_pool_readme.py --check` 会退 1 并点名（生成器判据：仓里有、清单没有 ⇒ 退 1） | 存在；**与 A371 / A372 同域** |
 | `复盘/卡/卡A380-F96Context页分段账-只留名字与大小不搬面板与读回原文.md` | 本卡规格（落地时把「草稿」改成实测读数） | 本文件 |
@@ -142,7 +142,7 @@ python -X utf8 gates/diag/_rev_A380.py
 ~~~
 
 - 第一条必须**全绿**；`-o addopts= --no-cov` 不能省（`pyproject.toml:51` 的 `addopts` 带 `--cov-fail-under=70`）。基线（今天，`dce8d904`）：`tests/test_pool_route_log.py` 9 passed、`tests/test_pool_gateway.py` 72 条全绿。
-- 第二条：`ruff` 不许有新增告警（`tools/pool/prompt_parts.py` 是新文件，`F401` / `E501` 一类都要自己先清）。
+- 第二条：`ruff` 不许有新增告警（tools/pool/prompt_parts.py 是新文件，`F401` / `E501` 一类都要自己先清）。
 - 第三条：加 `[[module]]` 之后必须退 0；**不加就退 1 并点名** —— 这条既是验收也是判据（生成器自己会咬）。
 
 ## 不许做
@@ -168,4 +168,4 @@ python -X utf8 gates/diag/_rev_A380.py
 1. **`magpie` 七类里 `skills` / `memory` / `files` 的切法没有再逐行读**（`prompt.go:246` `skillsApart` / `:357` `memoryTag` / `:379` `splitMemory` / `:414` `skillsList` / `:420` `splitSkills` 只读了签名与位置，没读体）。本卡**不移植**这三类，所以不影响判据；但如果将来有人要搬，必须回去把这几段读完。
 2. **`promptItems = 24` 之外还有没有第二层折叠**（例如 `Prompt.Turns` 与 `PartChat` 的 `items` 关系）未取证；判据 1 的 ③ 只钉 `24` 这一条。
 3. **估的 `tokens_of` 与真分词器的偏差有多大**未量（本仓没有分词器，`gateway.py:16-17` 的 F86 ③ 已把这条写成「不移植」理由）。本卡**不**承诺精度，只承诺**口径可复算**。
-4. **`route_once` 之外还有没有别的调用方会传 `body`**：今天只有 `gateway.py:1134-1138` 一处（`tests` 里另有若干），`grep` 已核；但 A372 落地后 `tools/pool/search.py` 可能成为第二个调用方 —— **未坐实**，落地前按当时 HEAD 重核。
+4. **`route_once` 之外还有没有别的调用方会传 `body`**：今天只有 `gateway.py:1134-1138` 一处（`tests` 里另有若干），`grep` 已核；但 A372 落地后 tools/pool/search.py 可能成为第二个调用方 —— **未坐实**，落地前按当时 HEAD 重核。

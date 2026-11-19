@@ -124,7 +124,7 @@ def _platform_endpoints() -> dict[str, list[str]]:
 
 `tools/pool/platforms.toml` 新增**恰好一段** `[platform.remote-magpie]`，必须同时满足：`remote = true`、`auth_kind = "bearer"`、`token_env` 非空、`base_urls = []`、`chat_urls` **恰好一条**且 `gateway.endpoint_protocol(那条) == "chat"`、`source` 匹配既有正则（`tests/test_pool_accounts.py:666` 用的 `^(github:[\w.-]+/[\w.-]+/\S+:\S+|local:\S+:\d+)$`）、`verified = true`。其余九段**一个字节都不许动**（`chat_urls` 仍为 `[]`，仍无 `remote` 键）。
 
-**怎么证明**：新建 `tests/test_pool_gateway_remote.py::test_remote_platform_is_registered_explicitly`，体例照 `tests/test_pool_gateway.py:233-241`（读真文件 + `tomllib`，不桩）：
+**怎么证明**：新建 本卡新建的测试文件里那条 test_remote_platform_is_registered_explicitly，体例照 `tests/test_pool_gateway.py:233-241`（读真文件 + `tomllib`，不桩）：
 
 ```python
 data = tomllib.loads((ROOT / "tools" / "pool" / "platforms.toml").read_text(encoding="utf-8"))
@@ -239,12 +239,12 @@ grep -n "sk-magpie\|X-Magpie-\|compare_digest\|chmod" tools/pool/gateway.py tool
 
 - `tools/pool/platforms.toml` —— 加 `[platform.remote-magpie]` 一段（判据 1 的八个字段）；文件头 `:13-20` 补两句：「`remote = true` 是什么意思」「为什么一个远端段只许一条 `chat_urls`」；`[meta] updated_at` 改当天。
 - `tools/pool/gateway.py` —— ① `forward_http` 的连接层失败文案带 `urlsplit(url).netloc`（判据 3a，锚点 `:832`）；② 新增 `_remote_platforms() -> frozenset[str]`（读 platforms.toml 的 `remote` 布尔，体例照 `_platform_endpoints()` `:680-687`）；③ `route_once` 加一个默认 `None` 的关键字参数 `remote: Collection[str] | None = None`（None ⇒ 现读文件，与 `endpoints` 同体例），命中「远端 + 连接层失败」时 `break`；④ 导出新名字时同步 `__all__`（`:71-78`）。
-- `tests/test_pool_gateway_remote.py`（新建）—— 判据 1/2/3/4/5 的钉子；全用桩 + 回环 socket，**出网零字节**（体例照 `tests/test_pool_gateway.py:30`「★ 全部用桩 … 一个字节都不出网」）。
+- tests/test_pool_gateway_remote.py（新建）—— 判据 1/2/3/4/5 的钉子；全用桩 + 回环 socket，**出网零字节**（体例照 `tests/test_pool_gateway.py:30`「★ 全部用桩 … 一个字节都不出网」）。
 - `tests/test_pool_gateway.py` —— **只改一处**：`test_platform_table_chat_urls_all_empty`（`:233-241`）的 `assert len(platforms) == 9` → `== 10`，并把 `:234` docstring 与文件头钉子表 `:12` 那句「九平台 … 全空」改成「除远端段外全空」。其余钉子**一个字都不许动**。
 - `docs/subsystems/pool/modules.toml` —— `:247` 的 duty「九个平台的端点」→「十个平台（含一个远端 magpie）」；`:57` 的 `gateway.py` duty 补一句「远端平台的连接层失败不换号、文案带机器」。
 - `docs/subsystems/pool/README.md` —— **只许**由 `python -X utf8 scripts/gen_pool_readme.py` 重写（`<!-- pool-margin:begin -->` 与 `<!-- pool-margin:end -->` 之间），**不许手改**。
 - `复盘/卡/卡A375-F82远端provider显式登记.md` —— 本卡规格（本草稿转正）。
-- `docs/changelog.d/T-AG663.md` —— 一条。
+- docs/changelog.d/T-AG663.md —— 一条。
 - `docs/workbacklog.toml` —— `[[cards]]` 条目（id/task/title/tree/spec/files/depends/risk/status，体例照 `:6476` 的 A368）。
 
 卡域 `files`（精确字符串，供 `docs/workbacklog.toml`；`tools/pool/plan.py:284-291` 拒通配、按精确字符串相交判冲突）：
