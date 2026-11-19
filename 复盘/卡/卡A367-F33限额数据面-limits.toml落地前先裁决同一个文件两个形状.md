@@ -77,7 +77,7 @@ pool.limits_policy.load_limits(p) -> RAISED LimitError 账号 accounts 的段里
 ## 立卡人裁决（2026-11-19 立卡时定，实现者按此做；要推翻必须另开卡）
 
 - **数据文件位址**：仓外 `D:/repo/infra/pool/limits.toml`（今天 `limits.limits_path()` 算出来的就是它，不改代码）。理由：`:44` 注释明写「与 `accounts.toml` 同目录」，`assert_serving()`/`limits_policy` 三处默认值都指向它；改仓内要同时改 `limits_path()` 第三段并证明 `pool_dir()` 为 None 时的回落，**收益只有「文件进 git」，代价是把两份 reader 的默认值再分叉一次**。
-- **仓内交付面**：新增 `tools/pool/limits.example.toml` —— 判据 4 的「体例」需要一个**可进 git、可被 `load_limits` 真读**的模板；它是**示例**（全注释 + 一条注释掉的样例），不是会被生产读到的那份。生产读那份在仓外，本卡不写任何真会拦人的限额。
+- **仓内交付面**：新增 tools/pool/limits.example.toml（计划建） —— 判据 4 的「体例」需要一个**可进 git、可被 `load_limits` 真读**的模板；它是**示例**（全注释 + 一条注释掉的样例），不是会被生产读到的那份。生产读那份在仓外，本卡不写任何真会拦人的限额。
 - **形状裁决 = (b)**：顶层保留账号段（`[[<id>.limit]]` 形状不动，`tests/test_pool_limits.py` 的 40+ 条 pins 一字不改），`accounts` 表**只**放 `models`；`limits_policy._rows()` 显式跳过 `accounts` 键，**并在 docstring 与错误文案里点名它是 F34 的段**。
   为什么不是 (a)：`_rows()` 的白名单要放行 `models`，等于让「限额段里混着别的东西」变成正常态 —— 下一份坏文件就再也判不出来了（判据 5 的 pin_19 正是靠「多一个键就抛」守住的）。(b) 把两份数据放在两个**名字不同**的表里，谁是谁一眼可见，坏文件仍然会抛。
 - **缺口 3（`assert_serving()` 要不要接）**：本卡**不接**，只在卡规格与 changelog 里点名它仍零生产调用方。理由：接它就得先裁决「它和 `wb_dispatch.py:3600-3602` 的『读不懂 ⇒ 拒派』谁在上位」，那是另一张卡的判据。
@@ -88,7 +88,7 @@ pool.limits_policy.load_limits(p) -> RAISED LimitError 账号 accounts 的段里
 
 选定一个位址写进卡规格。候选：仓外 `D:/repo/infra/pool/limits.toml`（与 `accounts.toml` 同目录，符合 `limits.py:44` 的注释）；若选仓内，则**必须同时**改 `limits_path()` 的第三段，并证明 `pool_dir()` 返回 `None` 时能回落到仓内。
 
-**怎么证明**：新增 `tests/test_pool_limits_data.py::test_limits_path_is_the_one_we_document` —— 不设 env 时 `limits_path()` 的返回值**逐字等于**卡规格里写的那条路径；再加一条 `test_pool_dir_does_not_follow_cwd` 的对照（体例照抄 `tests/test_pool_callers.py:278-289`：换 cwd 后结果不变）。
+**怎么证明**：新增 tests/test_pool_limits_data.py（计划建）::test_limits_path_is_the_one_we_document —— 不设 env 时 `limits_path()` 的返回值**逐字等于**卡规格里写的那条路径；再加一条 `test_pool_dir_does_not_follow_cwd` 的对照（体例照抄 `tests/test_pool_callers.py:278-289`：换 cwd 后结果不变）。
 
 ### 判据 2 · 两份 reader 的顶层形状裁决（缺口 2）
 
@@ -121,8 +121,8 @@ pool.limits_policy.load_limits(p) -> RAISED LimitError 账号 accounts 的段里
 
 - 数据文件一份（位址按判据 1）。默认交付是**空表 + 注释示例**，不是一条真会拦人的限额。
 - 若裁决动了 reader：`tools/pool/limits_policy.py`（**只动 `_rows()` / `load_limits()` 的取数路径，判据语义不动**）或 `tools/pool/limits.py`（仅当选 (a) 的保留声明位）。
-- `tests/test_pool_limits_data.py`（新）。
-- `复盘/卡/卡A367-…….md`（本文件落地）+ `docs/changelog.d/T-AG652.md`（写清「limits.toml 从今天起存在」与裁决结果）。
+- tests/test_pool_limits_data.py（计划建）（新）。
+- `复盘/卡/卡A367-…….md`（本文件落地）+ docs/changelog.d/T-AG652.md（计划建）（写清「limits.toml 从今天起存在」与裁决结果）。
 
 ## 验收
 

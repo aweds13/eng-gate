@@ -42,7 +42,7 @@
 
 ### 判据 1 · 三件脚本进库，且命名与职责一一对应
 
-`scripts/cloud/gha/build_snapshot.py`（构建 + 冒烟 + 推送）、`scripts/cloud/gha/adapter.py`（runner 侧的适配器）、`scripts/cloud/gha/conftest_shim.txt`（覆盖率选项垫片）三份都在 `git ls-files` 里，且 `build_snapshot.py --help` 能跑（`--stage` / `--dest` / `--remote` 三个选项在）。
+scripts/cloud/gha/build_snapshot.py（计划建）（构建 + 冒烟 + 推送）、scripts/cloud/gha/adapter.py（计划建）（runner 侧的适配器）、scripts/cloud/gha/conftest_shim.txt（计划建）（覆盖率选项垫片）三份都在 `git ls-files` 里，且 `build_snapshot.py --help` 能跑（`--stage` / `--dest` / `--remote` 三个选项在）。
 
 ### 判据 2 · 零本机路径、零硬编码 IP
 
@@ -50,7 +50,7 @@
 
 ### 判据 3 · 退出码仍然可区分，并且有判据钉住
 
-`tests/test_gha_cloud_gate.py` 对每个失败码断言一次：源文件里有 `exit_code("XXX", 3)` 之类的**可读常量表**（`EXIT_*`），并逐条对应到真实 `sys.exit()` 调用点；同时断言 `2`（缺环境）、`3`、`4`、`5`、`6` 五个值互不相同。
+tests/test_gha_cloud_gate.py（计划建） 对每个失败码断言一次：源文件里有 `exit_code("XXX", 3)` 之类的**可读常量表**（`EXIT_*`），并逐条对应到真实 `sys.exit()` 调用点；同时断言 `2`（缺环境）、`3`、`4`、`5`、`6` 五个值互不相同。
 
 ### 判据 4 · 适配器在本机是惰性的（收集得到、不干活）
 
@@ -62,7 +62,7 @@
 
 ### 判据 6 · 文档改口，且是对的改口
 
-`docs/subsystems/ci/GitHub-Actions-云门禁.md` 存在，写明：外部 runner + 判据仍在仓内、冻结 workflow 为什么不能改（token 无 workflow scope）、`tests/test_windows_autostart_e2e.py` 这个文件名为什么不能改、23 门真读数（带 `源：`）、以及**它服务的是 engineering**（OpenMAIC 走另外一条）。`README.md:78` 那条边界改成「外部 runner 可以，判据必须在仓内」，并链到新文档。
+docs/subsystems/ci/GitHub-Actions-云门禁.md（计划建） 存在，写明：外部 runner + 判据仍在仓内、冻结 workflow 为什么不能改（token 无 workflow scope）、tests/test_windows_autostart_e2e.py（计划建） 这个文件名为什么不能改、23 门真读数（带 `源：`）、以及**它服务的是 engineering**（OpenMAIC 走另外一条）。`README.md:78` 那条边界改成「外部 runner 可以，判据必须在仓内」，并链到新文档。
 
 ### 判据 7 · 派生文档跟着重算
 
@@ -70,11 +70,11 @@
 
 ## 交付
 
-1. `scripts/cloud/gha/build_snapshot.py`：由 `gha_eng_build4.py` 改写（删 `IPS`/`net()`/本机 `ROOT`/`C:/Users` 私钥；`ROOT` 走 `git rev-parse --show-toplevel`；`--dest`/`--remote`/`--stub`/`--adapter`/`--conftest-shim`/`--stage` 五个参数 + 环境变量兜底；失败码表提成模块常量）。
-2. `scripts/cloud/gha/adapter.py`：由 `gha_shim_autostart.py` 改写（docstring 改口；其余逐字保留——它是**在 runner 上真跑过 23 门全绿**的那一份）。
-3. `scripts/cloud/gha/conftest_shim.txt`：原样搬（2003 B，逐字节）。
-4. `tests/test_gha_cloud_gate.py`：判据 1/3/4/5 的钉子。
-5. `docs/subsystems/ci/GitHub-Actions-云门禁.md`（新）+ `docs/subsystems/ci/README.md` §6 改口。
+1. scripts/cloud/gha/build_snapshot.py（计划建）：由 `gha_eng_build4.py` 改写（删 `IPS`/`net()`/本机 `ROOT`/`C:/Users` 私钥；`ROOT` 走 `git rev-parse --show-toplevel`；`--dest`/`--remote`/`--stub`/`--adapter`/`--conftest-shim`/`--stage` 五个参数 + 环境变量兜底；失败码表提成模块常量）。
+2. scripts/cloud/gha/adapter.py（计划建）：由 `gha_shim_autostart.py` 改写（docstring 改口；其余逐字保留——它是**在 runner 上真跑过 23 门全绿**的那一份）。
+3. scripts/cloud/gha/conftest_shim.txt（计划建）：原样搬（2003 B，逐字节）。
+4. tests/test_gha_cloud_gate.py（计划建）：判据 1/3/4/5 的钉子。
+5. docs/subsystems/ci/GitHub-Actions-云门禁.md（计划建）（新）+ `docs/subsystems/ci/README.md` §6 改口。
 6. `docs/INDEX.md` 与清单块（派生，落地链 ⓪ 重算）。
 
 ## 验收（4 条，落地前自跑）
@@ -89,7 +89,7 @@
 
 ## 不许做
 
-- 不许改 `tests/test_windows_autostart_e2e.py` 这个名字（冻结 workflow 的最后一个步骤写死它；本 token 无 workflow scope，改不了 workflow）。
+- 不许改 tests/test_windows_autostart_e2e.py（计划建） 这个名字（冻结 workflow 的最后一个步骤写死它；本 token 无 workflow scope，改不了 workflow）。
 - 不许往 `tests/test_ci_portability.py:WHITELIST` 里加条目来绕判据 2。
 - 不许动 `gates/diag/_tmp/` 下的原件（它们是已经跑绿过的那一份；搬库是**复制+改造**，不是剪切）。
 - 不许把适配器的 `pip install` 清单改成不钉版本（`scripts/cloud/bootstrap.ps1:50-62` 那十一条是一路试出来的）。

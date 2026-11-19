@@ -89,7 +89,7 @@ def record(*, card: str, model: str, pool: str, kind: str,
 ## 立卡人裁决（2026-11-19 立卡时定，实现者按此做；要推翻必须另开卡）
 
 - **未坐实项 1（500 换不换号）= 只在搜索路径不换**：`tools/pool/gateway.py:599` 的聊天路径一个字节不动（`tests/test_pool_gateway.py` 既有换号用例全绿），搜索路径新增「非拒绝就地结束」这一档。
-- **未坐实项 2（vendor 表落哪）= 单开 `tools/pool/search-vendors.toml`**，不改 `tools/pool/platforms.toml` 的 9 段既有内容。理由：platforms 的 schema 是 `base_urls` / `chat_urls` / `token_env`，搜索 vendor 要的是 `base` + key 是否必需 + 哪些状态码算「余额耗尽」；塞进去要扩 schema 又要动既有段（本卡「不许碰既有段」），而单开一份表可以直接照 `tools/pool/rpm.toml` / `tools/pool/model-registry.toml` 的体例。
+- **未坐实项 2（vendor 表落哪）= 单开 tools/pool/search-vendors.toml（计划建）**，不改 `tools/pool/platforms.toml` 的 9 段既有内容。理由：platforms 的 schema 是 `base_urls` / `chat_urls` / `token_env`，搜索 vendor 要的是 `base` + key 是否必需 + 哪些状态码算「余额耗尽」；塞进去要扩 schema 又要动既有段（本卡「不许碰既有段」），而单开一份表可以直接照 `tools/pool/rpm.toml` / `tools/pool/model-registry.toml` 的体例。
 - **未坐实项 3（每个 key 只占搜索时间的 1/4）= 本卡不做**：本仓没有任何「一次搜索耗时」的落点（`Attempt.started_at` 只记开始），要做得先加计时，另开卡。原文保留在「未坐实项」备查。
 - **未坐实项 4（Tavily `/usage` 读取）= 另开卡**：它要一个带缓存的 HTTP 读取器，与判据 6「只编排」冲突。
 - **未坐实项 5（判据 1 的端到端怎么做）= 不改 `route_once` 签名**：给 `_Server` 加一个 `turns` 属性、`_order` 加关键字参数 `turns: dict | None = None`，`route_once` 从 `self.turns` 取。这样 `tests/test_pool_gateway.py` 现有 67 条调用点一个都不动，(a)(b) 两条钉子都能落。
@@ -108,25 +108,25 @@ def record(*, card: str, model: str, pool: str, kind: str,
 
 **要什么**：同一个 `model` 下两个不同的 key 各自被拒后，**两条 rest 同时存在**、各自带自己的 `until`，且「现在哪些 key 在 rest」这个读数能一次取全。键必须是 `vendor + sha256(key)[:8]` 这种**不含明文**的形状（照 `search_keys.go:41-44`）。
 
-**怎么证明**：`tests/test_pool_search_keys.py`（新建）—— (a) 两条记录写同一 model、不同 key，`read` 回两条，`len(records) == 2`；(b) 落盘文件里 `grep` 不到明文 key（把 key 设成 `tvly-` + 20 位可识别串，断言该串**不出现在任何落盘字节里**）；(c) 旧签名 `pool_quota.record(card, model, pool, kind, reset_raw)` 仍可用且行为不变（向后兼容钉子，`tests/test_pool_rest.py:264` 那批调用点一条都不改）。
+**怎么证明**：tests/test_pool_search_keys.py（计划建）（新建）—— (a) 两条记录写同一 model、不同 key，`read` 回两条，`len(records) == 2`；(b) 落盘文件里 `grep` 不到明文 key（把 key 设成 `tvly-` + 20 位可识别串，断言该串**不出现在任何落盘字节里**）；(c) 旧签名 `pool_quota.record(card, model, pool, kind, reset_raw)` 仍可用且行为不变（向后兼容钉子，`tests/test_pool_rest.py:264` 那批调用点一条都不改）。
 
-**钉子落点**：新建 `tests/test_pool_search_keys.py` + 既有 `tests/test_pool_rest.py` 21 条不许改。
+**钉子落点**：新建 tests/test_pool_search_keys.py（计划建） + 既有 `tests/test_pool_rest.py` 21 条不许改。
 
 ### 判据 3 · 搜索档 rest 数字逐条对上 F56
 
 **要什么**：新增一个「搜索档」的取值路径 —— 401/403 ⇒ 600s（`by="turned-away"`）、402 与 tavily 的 432/433 ⇒ 3600s（`by="out-of-credit"`）、限流有 Retry-After ⇒ `min(max(w,30),600)`、无 Retry-After ⇒ 60s。**既有四真值一个数都不改。**
 
-**怎么证明**：`tests/test_pool_search_keys.py` 表驱动 8 行（401/403/402/429+RA=10s/429+RA=90s/429+RA=3600s/429 无 RA/tavily-433），逐行断言 `seconds` 与 `by`；再加一条「旧路径不变」：`rest_after(why="credit", ...)` 仍是 1800、`why="auth"` 仍是 60 起指数。反向：把 `rateLimitRestMin` 的 30s 下界删掉 ⇒ 表里的 `429+RA=10s` 那一行红。
+**怎么证明**：tests/test_pool_search_keys.py（计划建） 表驱动 8 行（401/403/402/429+RA=10s/429+RA=90s/429+RA=3600s/429 无 RA/tavily-433），逐行断言 `seconds` 与 `by`；再加一条「旧路径不变」：`rest_after(why="credit", ...)` 仍是 1800、`why="auth"` 仍是 60 起指数。反向：把 `rateLimitRestMin` 的 30s 下界删掉 ⇒ 表里的 `429+RA=10s` 那一行红。
 
-**钉子落点**：`tests/test_pool_search_keys.py` 新建；`tests/test_pool_rest.py` 只许**增**不许改。
+**钉子落点**：tests/test_pool_search_keys.py（计划建） 新建；`tests/test_pool_rest.py` 只许**增**不许改。
 
 ### 判据 4 · 「只有被拒才换下一个」是显式的一档，不是沉默的副作用
 
 **要什么**：搜索路径上，非拒绝类错误（500 / 超时 / other）⇒ **就地结束**，且这一点可读地记下来（例如 `Outcome` 上带 `stop_reason`，或 rest 记录里带 `by="not-refused"`）。**聊天路径的现有语义不许被这一条改掉**（500 今天换号，钉子在 `tests/test_pool_gateway.py`）。
 
-**怎么证明**：`tests/test_pool_search_keys.py` 两条对照 —— (a) 搜索路径：第一个 key 回 500 ⇒ `attempts` 长度 1、`forward` 只被调用一次；(b) 聊天路径：同一个 500 ⇒ `attempts` 长度 2（今天的语义原样）。反向：把搜索路径的 break 改成 continue ⇒ (a) 红。
+**怎么证明**：tests/test_pool_search_keys.py（计划建） 两条对照 —— (a) 搜索路径：第一个 key 回 500 ⇒ `attempts` 长度 1、`forward` 只被调用一次；(b) 聊天路径：同一个 500 ⇒ `attempts` 长度 2（今天的语义原样）。反向：把搜索路径的 break 改成 continue ⇒ (a) 红。
 
-**钉子落点**：`tests/test_pool_search_keys.py` 新建 + `tests/test_pool_gateway.py` 既有换号用例全部保持绿。
+**钉子落点**：tests/test_pool_search_keys.py（计划建） 新建 + `tests/test_pool_gateway.py` 既有换号用例全部保持绿。
 
 ### 判据 5 · key 在日志/错误里打码成 `tvly-…abcd`
 
@@ -134,11 +134,11 @@ def record(*, card: str, model: str, pool: str, kind: str,
 
 **怎么证明**：单测 4 行 —— `tvly-abcdefghijklmnop` ⇒ `tvly-…mnop`；`tvly-short` ⇒ 走 `mask()`；`sk-abcdefgh12345678` ⇒ `***`；错误串里 `keyLabel` 风格 `"key 2 (tvly-…mnop)"` 断言原文里**不含**完整 key。反向：把长度阈值从 16 改成 4 ⇒ 第 2 行红。
 
-**钉子落点**：新建 `tests/test_pool_search_keys.py`（或并入 `tests/test_pool_accounts.py`，现 67 条，只许增）。
+**钉子落点**：新建 tests/test_pool_search_keys.py（计划建）（或并入 `tests/test_pool_accounts.py`，现 67 条，只许增）。
 
 ### 判据 6 · 搜索 vendor 对象复用既有四件套，不复制第二份判据
 
-**要什么**：`tools/pool/search.py` 只做「vendor 表 + key 串解析 + 把拒绝翻译成 pool 的七值」三件事；轮换调 `route.rotate`、rest 调 `pool_quota.rest_after` 的搜索档、沉底调 `pool_sink`、打码调 `pool_accounts`。**不许**在 `search.py` 里出现第二份 rest 数字表、第二份分类正则。
+**要什么**：tools/pool/search.py（计划建） 只做「vendor 表 + key 串解析 + 把拒绝翻译成 pool 的七值」三件事；轮换调 `route.rotate`、rest 调 `pool_quota.rest_after` 的搜索档、沉底调 `pool_sink`、打码调 `pool_accounts`。**不许**在 `search.py` 里出现第二份 rest 数字表、第二份分类正则。
 
 **怎么证明**：(a) `python -X utf8 scripts/gen_pool_readme.py --check` 退 0（新模块已进 `docs/subsystems/pool/modules.toml`，现 50 条 `[[module]]`，生成器 :27-28 明写「仓里有、清单里没有 ⇒ 退 1 并点名」）；(b) `grep -n 'sha256\|hexdigest' tools/pool/search.py` 零命中（哈希只许在判据 2 那个落点里出现一次）；(c) `grep -n '600\|3600\|1800' tools/pool/search.py` 不许出现字面量 —— 数字只能来自 `pool_quota`。反向：把 `search.py` 里手抄一份 `600` ⇒ (c) 红。
 
@@ -148,15 +148,15 @@ def record(*, card: str, model: str, pool: str, kind: str,
 
 | 文件 | 性质 | 说明 |
 |---|---|---|
-| `tools/pool/search.py` | 新增 | 搜索 vendor 表 + key 串解析 + 拒绝→七值；只编排、不复制判据 |
+| tools/pool/search.py（计划建） | 新增 | 搜索 vendor 表 + key 串解析 + 拒绝→七值；只编排、不复制判据 |
 | `tools/pool/route.py` | 改 | `rotate` 的计数由调用方显式传入（今天已有 `turns` 参数，只是没人传；本卡只补「谁会传」与一处 `resting` 的标注位）|
 | `tools/pool/gateway.py` | 改 | `_order` / `route_once` / `_Server` 透传 `turns`；搜索路径的「非拒绝就停」那一档 |
 | `tools/pool_quota.py` | 改 | `record` 增 account/vendor 维度的可选键（旧签名不变）；`rest_after` 增搜索档（既有数字不动）|
 | `tools/pool_accounts.py` | 改 | 新增 `mask_search_key`（既有 `mask` / `mask_token` 不动）|
-| `tests/test_pool_search_keys.py` | 新增 | 判据 2/3/4/5 的钉子 |
+| tests/test_pool_search_keys.py（计划建） | 新增 | 判据 2/3/4/5 的钉子 |
 | `tests/test_pool_gateway.py` | 改（只增）| 判据 1 的钉子 |
 | `docs/subsystems/pool/modules.toml` | 改 | 新增 `search.py` 一条 `[[module]]` |
-| `tools/pool/search-vendors.toml` | 新增 | 搜索 vendor 表（裁决 2：单开一份，不塞 `tools/pool/platforms.toml`）|
+| tools/pool/search-vendors.toml（计划建） | 新增 | 搜索 vendor 表（裁决 2：单开一份，不塞 `tools/pool/platforms.toml`）|
 | `复盘/卡/卡A372-F56搜索API多key轮换-被拒才换下一个与各自rest.md` | 新增 | 本卡规格落地后的正式件 |
 
 **不许碰**：`docs/subsystems/pool/README.md` 的生成区（`<!-- pool-margin:begin -->` 第 11 行 ~ `<!-- pool-margin:end -->` 第 92 行由 `scripts/gen_pool_readme.py` 生成）、`tools/pool/platforms.toml` 的 9 段既有内容（只许**追加**搜索 vendor 段，不许改既有段）、仓外 `accounts.toml`。
@@ -183,7 +183,7 @@ python -X utf8 scripts/gen_pool_readme.py --check
 - **不许**改 `pool_quota.py:90-99` 那十一个常量里的任何一个数（`CREDIT_REST_S` / `QUOTA_REST_S` / `LONGEST_RETRY_S` / `LONGEST_RATE_REST_S` / `COOLDOWN_S` …）—— 它们是 F20 的判据，有 `tests/test_pool_rest.py` 21 条钉着。搜索档只能是**新参数**。
 - **不许**改 `pool_quota.record` 的**既有签名**（`card/model/pool/kind/reset_raw`）的语义；`tools/wb_dispatch.py:4110`、`tools/pool/gateway.py:590` 两个生产调用点必须原样能跑。
 - **不许**改 `pool_accounts.mask()` / `mask_token()` 的既有行为（`tests/test_renew_lock.py:203-231`）。新打码是**另一个函数**。
-- **不许**在 `tools/pool/search.py` 里复制第二份 rest 数字表或第二份失败分类正则 —— 判据只许一份真源（`gateway.classify` :177 七值、`pool_quota.rest_after` :399）。
+- **不许**在 tools/pool/search.py（计划建） 里复制第二份 rest 数字表或第二份失败分类正则 —— 判据只许一份真源（`gateway.classify` :177 七值、`pool_quota.rest_after` :399）。
 - **不许**把搜索 key 的明文写进任何落盘文件、日志、错误体；键一律 `vendor + sha256[:8]`。
 - **不许**手改 `docs/subsystems/pool/README.md` 的生成区，也不许手改 `docs/INDEX.md` / `复盘/INDEX.md`。
 - **不许**动 `tools/pool/outcomes.py` 的七值台账口径（它**不是**失败分类器，`OUTCOME_TRIES` :59 / `OUTCOME_HANDED_ON` :61 / `OUTCOME_STOP` :63 是台账读数桶）。
@@ -202,7 +202,7 @@ python -X utf8 scripts/gen_pool_readme.py --check
 ## 未坐实项（草稿如实标注，别当成结论）
 
 1. **「500 就不换号」要不要同时改聊天路径** —— F56 只描述搜索。本卡默认**只在搜索路径**加这一档，聊天路径保持今天语义（`gateway.py:599` 不动）。这条需要立卡人拍板；若拍「两条都要」，判据 4 的反向钉子要拆成两条。
-2. **搜索 vendor 表要不要落到 `platforms.toml`** 还是单开 `tools/pool/search_vendors.toml` —— 前者复用 `load_platforms()`（`pool_accounts.py:167`）但要扩 schema，后者干净但多一份表。草稿倾向后者（`platforms.toml` 的字段是 `base_urls` / `chat_urls` / `token_env`，搜索 vendor 只需要 `base` + 是否 `KeyOptional`）。**未拍板。**
+2. **搜索 vendor 表要不要落到 `platforms.toml`** 还是单开 tools/pool/search_vendors.toml（计划建） —— 前者复用 `load_platforms()`（`pool_accounts.py:167`）但要扩 schema，后者干净但多一份表。草稿倾向后者（`platforms.toml` 的字段是 `base_urls` / `chat_urls` / `token_env`，搜索 vendor 只需要 `base` + 是否 `KeyOptional`）。**未拍板。**
 3. **「每个 key 用搜索时间的 1/4」这条判据没写进本卡** —— 它需要「一次搜索耗时」的读数，pool 今天没有任何计时落点（`Attempt.started_at` 只记开始）。要不要为它单开一张卡，未定。
 4. **Tavily `/usage` 读取（2 分钟缓存、10 次/10 分钟限速）没写进本卡** —— 它需要一个带缓存的 HTTP 读取器，本仓没有现成件；属 F56 的 `search_quota.go` 那一半，判据 6 的「只编排」原则下应另开一张卡。
 5. **判据 1 的 (b) 端到端那条**依赖 `_Forward` 假上游与 `build_server` 现成（`tests/test_pool_gateway.py` 里已有 `start_server` fixture），但 `route_once` 目前拿不到 `turns`，改签名会碰 `tests/test_pool_gateway.py` 里 67 条的所有调用点 —— 若 pytest 改造成本过高，退一步只做 (a) 纯函数级钉子 + 一条 `_Server` 属性断言。**未定。**
