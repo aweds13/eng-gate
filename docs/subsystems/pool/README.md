@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 49 个 py（48 个模块 + `__init__.py`）、**22175 行**（`wc -l tools/pool/*.py`，2026-11-20 现算）。
+`tools/pool/` = 51 个 py（50 个模块 + `__init__.py`）、**23062 行**（`wc -l tools/pool/*.py`，2026-11-20 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -45,6 +45,7 @@
 | `model-registry.toml` | 63 | 跨池统一层：CodeBuddy 池的真源 + 码道池的引用（只引用不复制，不许有第二份可写名单） | 无（被 `pool.model_registry` 读） |
 | `model_registry.py` | 1017 | 一层模型注册表、按池分流：`resolve_model` / `effective_allowed_for`（裸名 vs `provider/model` 两套 id 体系）+ 禁用表 `assert_not_disabled`（与注册表同目录的 `model-disabled.toml`；读不到≠没禁用） | 无（被 `wb_dispatch`、`wb_watch`、`pool.plan` 调；禁用判据被 `wb_dispatch` 派活主闸、`gateway._model_block`、`pool_mcp` 干跑面三处调） |
 | `models.py` | 398 | 号池模型的只读读取：号池批准集 ∩ 号池快照（★ 不是派活允许集）；另给批准集逐条按池的派活真判决（可派 / 未接 / 跨池串用 / 未授权 + 今天的可派别名），判序照抄派活主闸、现算不写死；读快照（带 `at`），不联网、不写快照；过期时由 `probe_command` / `probe_hint` 现算出「怎么让它变新」的那条命令（脚本不在就明说没有，不给假命令），读面三处都调它不各自拼句 | `wb_state.py`、`pool_mcp` |
+| `netguard.py` | 192 | 地址判词：`public()` 自己算「这条地址能不能去」，不借标准库 `ipaddress` 的 `is_global`（它会放过 CGNAT `100.64.0.0/10` / NAT64 `64:ff9b::/96` / deprecated site-local `fec0::/10`）；`fake_ip()` / `loon_paired()` 只是判词，**不放行**；不解析名字、不出网、不读盘、不读钟、不 print | 无（纯函数；被 `pool.web_fetch` 与后续卡引用） |
 | `no_window.py` | 29 | 起子进程「不弹窗」的 `CREATE_NO_WINDOW` 常量 —— 全仓唯一真源 | 无（被十几个入口 import） |
 | `outcomes.py` | 175 | 按**请求**而不是按轮算结局（magpie `Totals.count()` 移植）：`is_failed` / `is_outcome` / `request_of` / `count_requests`；只读账本，不改一个字节 | 无（被 `wb_dispatch` 的 `append_usage_line` / `usage_summary` 调） |
 | `plan.py` | 680 | 队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（`wb_plan.py` 的逻辑层，拒绝会冲突的组合） | `wb_plan.py`、`wb_batch.py` |
@@ -69,6 +70,7 @@
 | `trae_dispatch.py` | 380 | 面板道（CDP 驱动 Trae）进账：一次跑落成租约 + 日志 + 判决；**刻意不接进派活** | 本文件即入口；`wb_watch.py` |
 | `usage_ingest.py` | 658 | 外部用量上报：整批校验 + `rid` 幂等 + 上报行不计入限额（不经过派活器的调用也要进账） | 无 |
 | `warmup.py` | 555 | 窗口登记：`window_of_row` / `register` / `window_running` / `due` —— 判「该不该 warm」（magpie `F28` 的**判据**，不移植节拍）；登记表 `gates/diag/warm-window.json`（派生、可重建），**零请求、零定时器** | `python -X utf8 tools/pool/warmup.py`（子命令 due / warm / register / status） |
+| `web_fetch.py` | 695 | 按用户给的 URL 取一页并折成文本：三分类（html / text / 拒收）、HTML 变 Markdown 六件事、按 rune 切的字符窗口（默认 20000 / 上限 100000）；出网与解析全部由注入的 `fetch` / `resolve` 承担，**本模块零出网库**，每跳重定向都重新判地址 | 无（判据在 `tests/test_pool_web_fetch.py`；未接生产路径，接面是另一张卡） |
 
 两张**账**分开住，这是理解本子系统的关键：
 
@@ -87,8 +89,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **22175 行** / **49 个文件**（48 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 410 张（389 done / 21 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **23062 行** / **51 个文件**（50 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 410 张（390 done / 20 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

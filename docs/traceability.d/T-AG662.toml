@@ -1,0 +1,17 @@
+[entries."T-AG662"]
+id = "T-AG662"
+title = "F58web_fetch：只读公共地址、按charset转Markdown、按字符窗口分段"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/netguard.py",
+  "file:tools/pool/web_fetch.py",
+  "file:tests/test_pool_netguard.py",
+  "file:tests/test_pool_web_fetch.py",
+  "test:test_pool_netguard.py::test_public_rejects_internal_addresses",
+  "test:test_pool_netguard.py::test_reverse_assertion_against_ipaddress",
+  "test:test_pool_web_fetch.py::test_window_cuts_by_rune_not_by_byte",
+  "test:test_pool_web_fetch.py::test_private_address_message_is_verbatim",
+]
+gaps = "1. 真 HTTP 客户端没写：30 秒超时与 5 MiB 读上限在「注入 fetcher」形态下只是常量传递，真实网络与大页下的行为未验；卡片规格判据 5 只要求常量传递，本卡照做。指针 tools/pool/web_fetch.py2. HTML 解析用标准库 html.parser 自建简易流式树，不与 Go 的 x/net/html 逐字节相同 —— 对齐的只是卡规格列的六件事与 done() 那套行为。指针 tools/pool/web_fetch.py3. fake-IP / Loon 只移植判词，没移植放行路径；socket 层钉地址那层没移植（本仓不出网，无处可验）。指针 tools/pool/netguard.py4. 不接 MCP 工具面：tools/pool_mcp.py 里 13 处 openWorldHint 全 False，加出网工具与该声明冲突；接面另开卡。指针 tools/pool/netguard.py"
+

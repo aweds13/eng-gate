@@ -8,6 +8,11 @@
 - 产品码 tools/pool/gateway.py 一个字节都没改（sha256 前 16 位 c570cc73dd127def / 63858 字节 / 1300 行纯 CRLF）。
 - 反向禁令落成钉子：伪造 Host + 六类转发头都拿不到任何额外东西（同一轮先后取 body 字节相等、forward 桩 0 调用）。
 - 判 SKIP 的四子项（CIDR / TRUST_PROXY / 转发头 / TLS）各有一条「零命中」钉子，将来谁接进来会当场红。
+## 2026-11-20 T-AG662 F58 web_fetch：只读公共地址、按 charset 转 Markdown、按字符窗口分段
+- 新增 tools/pool/netguard.py（192 行）：public() / fake_ip() / loon_paired() + SPECIAL_NETS 十四项，自己算地址判词 —— 标准库会放过 CGNAT 100.64.0.0/10、NAT64 64:ff9b::/96、fec0::/10。
+- 新增 tools/pool/web_fetch.py（695 行）：kind_of / to_text / html_to_markdown / split_part / fetch_page，五个常量 30.0 / 5 MiB / 20000 / 100000 / 5 跳；零出网（不 import urllib / socket / requests / httpx）。
+- split_part 按字符切，不按 UTF-8 字节切：40000 个「中」+ offset=19999 + max_chars=2 ⇒ 两个完整「中」，无 U+FFFD。
+- 新增 tests/test_pool_netguard.py（201 行 42 测）+ tests/test_pool_web_fetch.py（454 行 48 测）；modules.toml 追加两条职责。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。

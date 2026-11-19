@@ -291,3 +291,12 @@ cli = "`python -X utf8 tools/pool/dispatch_shim.py --card <卡号> [--tree .wt/<
 name = "accounts_import.py"
 duty = "账号导入：认别的工具导出的凭据文件（CliProxyAPI / Codex auth.json / Claude .credentials.json / Sub2API accounts[] / codexbar / 裸 refresh token 行文），归一成账本行再生成计划 —— 源文件只读、不联网不探测、认不出的条目逐条点名（仍进表）、默认只算不写，写只走 save_ledger 的注释闸与原子写"
 cli = "python -X utf8 tools/pool_accounts.py import --agent codex/claude/antigravity --platform <能力表里的平台> [--yes] <文件>..."
+[[module]]
+name = "netguard.py"
+duty = "地址判词：`public()` 自己算「这条地址能不能去」，不借标准库 `ipaddress` 的 `is_global`（它会放过 CGNAT `100.64.0.0/10` / NAT64 `64:ff9b::/96` / deprecated site-local `fec0::/10`）；`fake_ip()` / `loon_paired()` 只是判词，**不放行**；不解析名字、不出网、不读盘、不读钟、不 print"
+cli = "无（纯函数；被 `pool.web_fetch` 与后续卡引用）"
+
+[[module]]
+name = "web_fetch.py"
+duty = "按用户给的 URL 取一页并折成文本：三分类（html / text / 拒收）、HTML 变 Markdown 六件事、按 rune 切的字符窗口（默认 20000 / 上限 100000）；出网与解析全部由注入的 `fetch` / `resolve` 承担，**本模块零出网库**，每跳重定向都重新判地址"
+cli = "无（判据在 `tests/test_pool_web_fetch.py`；未接生产路径，接面是另一张卡）"
