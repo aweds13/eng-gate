@@ -74,7 +74,7 @@
 1. `scripts/cloud/gha/build_snapshot.py`：`main()` 加 `MISSING_DEST` 前置判；`do_smoke()` 三段判非 0 退 `EXIT_SNAPSHOT`；头部退出码注释同步。
 2. `tests/test_gha_cloud_gate.py`：加判据 3 的两条用例；`test_each_failure_has_a_readable_tag` 的标签集加 `MISSING_DEST` / `SMOKE_FAILED`。
 3. `docs/subsystems/ci/GitHub-Actions-云门禁.md`：§5 两行、§6 换 v18 读数、新增 §8 讲 OpenMAIC 那条腿。
-4. 文书片段（`docs/changelog.d/T-AG660.md` / `docs/traceability.d/T-AG660.toml` / `复盘/交接.d/T-AG660.md`）由 `tools/wb_stage_card.py` 生成，**不许手写**。
+4. 文书片段（docs/changelog.d/T-AG660.md / docs/traceability.d/T-AG660.toml / 复盘/交接.d/T-AG660.md，落地时由 tools/wb_stage_card.py 现生成）由 `tools/wb_stage_card.py` 生成，**不许手写**。
 
 ## 验收（4 条，落地前自跑）
 
@@ -90,7 +90,7 @@
 
 - 不许把 `do_smoke()` 的红改成「只警告」或加 `--allow-smoke-red` 之类的开关来绕判据 2。
 - 不许给 `EXIT_*` 加新值（五个码是 `tests/test_gha_cloud_gate.py` 钉住的形状）；不要拿 `run_gate.sh` 的 2/9/4/5/7 往这里套（两套失败面不同，文档 §5 末尾已经写明）。
-- 不许在本卡的文书里用反引号写「快照内路径」（如 `tests/test_windows_autostart_e2e.py`）或 `gates/enggate-logs/…` —— E144 因此吃过一次死指针 148 > 147；要写就写不带反引号的说明。
+- 不许在本卡的文书里用反引号写「快照内路径」（如快照内那个 autostart 端到端测试的文件名）或 gates/enggate-logs 下的日志 —— E144 因此吃过一次死指针 148 > 147；要写就写不带反引号的说明。
 - 不许改 `scripts/cloud/gha/adapter.py`（它是 runner 上真跑过 23 门全绿的那一份）。
 - 不许为了写 §8 去动 om-gate 仓（本卡只写本仓文书；om-gate 侧的证据已存在 `gates/diag/_tmp/om-shard-*.log`）。
 
