@@ -6640,3 +6640,20 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E145"
+task = "T-AG660"
+title = "快照构建器收两个口子：不存在的 dest 干净退 2、冒烟红了真退 5（并把 GHA 真读数与 OpenMAIC 那条腿写进文书）"
+tree = ".wt/E145"
+spec = "复盘/卡/卡E145-快照构建器收两个口子与GHA读数回写.md"
+files = [
+  "scripts/cloud/gha/build_snapshot.py",
+  "tests/test_gha_cloud_gate.py",
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "docs/INDEX.md",
+  "复盘/卡/卡E145-快照构建器收两个口子与GHA读数回写.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
