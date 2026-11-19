@@ -56,6 +56,7 @@ from pool import (  # noqa: E402
     accounts_scope,
     gateway,  # tools/ 已在 sys.path 上
 )
+from pool import model_registry as pool_model_registry  # noqa: E402
 from pool import route as pool_route  # noqa: E402
 from pool import sink as pool_sink  # noqa: E402
 from pool.no_window import NO_WINDOW  # noqa: E402 —— 起子进程必须带（卡 148）
@@ -1038,3 +1039,112 @@ def test_gateway_model_block_broken_whitelist_is_404_named(env: Path) -> None:
     assert "models.whitelist.toml" in msg, msg
     assert "坏了" in msg, msg
     assert "TOMLDecodeError" not in msg, "人话面不许透异常类名：" + msg
+
+
+
+# ========================================== 卡 E143（F86 ①）：/v1/models 发布窗口读数
+def _point_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, models: str) -> Path:
+    """把注册表指到 tmp 里那份（判据自带条目，不读宿主上那份真注册表）。"""
+    path = tmp_path / "model-registry.toml"
+    path.write_text(models, encoding="utf-8")
+    monkeypatch.setenv("TF_MODEL_REGISTRY", str(path))
+    return path
+
+
+def _one_model(name: str, *, extra: str = "") -> str:
+    """造一条 codebuddy 条目（alias == id == name）；extra 是额外的窗口行。"""
+    return (
+        "[[model]]" + chr(10) +
+        f'alias = "{name}"' + chr(10) +
+        'pool = "codebuddy"' + chr(10) +
+        f'id = "{name}"' + chr(10) +
+        "default = true" + chr(10) +
+        extra
+    )
+
+
+def test_list_models_publishes_window_readings(
+        env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 3（F86 ①）：注册表里填了窗口 ⇒ 每条 data 原样念出来，limits_source = registry。
+
+    ★ 「知道」就念知道的：context_window / max_output_tokens 是注册表里那两个数，
+      不许被网关再加工（不是 95%、不是减一个余量 —— 那是**读数的消费者**的事）。
+    """
+    _pool_dir(env, approved=("deepseek-v4.1-flash",))
+    _point_registry(tmp_path, monkeypatch, _one_model(
+        "deepseek-v4.1-flash",
+        extra="context_window = 1000000" + chr(10) + "max_output = 32000" + chr(10)))
+    out = gateway.list_models(root=env)
+    assert [item["id"] for item in out["data"]] == ["deepseek-v4.1-flash"]
+    item = out["data"][0]
+    assert item["context_window"] == 1000000, item
+    assert item["max_output_tokens"] == 32000, item
+    assert item["limits_source"] == "registry", item
+    assert item["object"] == "model" and item["owned_by"] == "pool", item
+    assert "0 条模型的窗口未知" in out["note"], out["note"]
+
+
+def test_list_models_unknown_window_is_null_not_zero(
+        env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 3（F86 ①）：**不知道就说不知道** —— context_window 是 null，不是 0。
+
+    ★ 0 是一个**读数**（一点都装不下），null 是「没人量过」。两者混起来，
+      下游会把「没量过」当成「装不下」⇒ 全拒。回复上限照 UNKNOWN_MAX_OUTPUT 发，
+      并明说 limits_source = unknown（那是读数，不是缺陷）。
+    """
+    _pool_dir(env, approved=("deepseek-v4.1-flash",))
+    _point_registry(tmp_path, monkeypatch, _one_model("deepseek-v4.1-flash"))
+    out = gateway.list_models(root=env)
+    item = out["data"][0]
+    assert item["context_window"] is None, item
+    # ★ 钉住**读数本身**（16 KiB 这么写，本文件也不许出现那个字面量）：
+    #   拿常量比自己会永远绿 —— 常量被改成 0 也照样过，那就不是判据。
+    assert item["max_output_tokens"] == 16 << 10, item
+    assert pool_model_registry.UNKNOWN_MAX_OUTPUT == 16 << 10
+    assert item["limits_source"] == "unknown", item
+    assert "1 条模型的窗口未知" in out["note"], out["note"]
+    assert str(16 << 10) in out["note"], out["note"]
+
+
+def test_list_models_zero_window_is_a_reading(
+        env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 1 的读数面：0 是合法读数 ⇒ context_window 念 0（不是 null）。"""
+    _pool_dir(env, approved=("deepseek-v4.1-flash",))
+    _point_registry(tmp_path, monkeypatch, _one_model(
+        "deepseek-v4.1-flash", extra="context_window = 0" + chr(10)))
+    item = gateway.list_models(root=env)["data"][0]
+    assert item["context_window"] == 0, item
+    assert item["limits_source"] == "registry", item
+    assert item["max_output_tokens"] == pool_model_registry.UNKNOWN_MAX_OUTPUT, item
+
+
+def test_broken_registry_does_not_break_models_face(
+        env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 注册表坏掉 ⇒ 窗口这一维退化成「不知道」，/v1/models 照旧发布清单。
+
+    ★ 清单的真源是批准集，不是注册表：注册表坏了该让**派活**拒绝，不该让只读读面 500
+      （那会把「注册表写歪了」读成「网关坏了」）。
+    """
+    _pool_dir(env, approved=("deepseek-v4.1-flash",))
+    _point_registry(tmp_path, monkeypatch, "this is not = valid = toml =" + chr(10))
+    item = gateway.list_models(root=env)["data"][0]
+    assert item["id"] == "deepseek-v4.1-flash", item
+    assert item["context_window"] is None, item
+    assert item["limits_source"] == "unknown", item
+
+
+def test_http_models_face_carries_window_readings(
+        start_server: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 3 的 HTTP 面：真起服务、真 GET /v1/models，六键一个不少。"""
+    _point_registry(tmp_path, monkeypatch, _one_model(
+        MODEL, extra="context_window = 1000000" + chr(10) + "max_output = 32000" + chr(10)))
+    port = start_server(_Stub(_ok()))
+    status, _, body = _request(port, "GET", "/v1/models")
+    assert status == 200
+    data = json.loads(body)
+    assert [item["id"] for item in data["data"]] == [MODEL]
+    item = data["data"][0]
+    assert item["context_window"] == 1000000, item
+    assert item["max_output_tokens"] == 32000, item
+    assert item["limits_source"] == "registry", item
+    assert "条模型的窗口未知" in data["note"], data["note"]

@@ -20,6 +20,11 @@
 - `tools/wb_review.py` 两个出口接上它：③″ 封存树差异走 `check_seal_tree(found=…)`、Gates 声称走 `check_gates_trailer_truth(found=…)`；漂移时只留痕（verdict JSON 新增 `waived_basis`，非漂移显式 null），TRUE_MISMATCH 保留「伪造门禁结论」原文案。
 - audit 三条：`audit_verdict(rev)` 把被判的那一笔传给 `--rev`；结论只看退出码（不再全文搜「审计通过」）；没过时不再叠一条「有豁免项」的二次计数；`scripts/audit_progress.py` 对非 HEAD 的 rev 用 `git show <rev>:gates/last.json` 取产物。
 - `tools/pool/landing.py` ⑧ 步把 `waived_basis` 读出来打印（门禁跑在哪、父提交走到哪、中间几笔、几条差异全由中间带入）；钉子 12 条（9 条在 `tests/test_wb_review.py`、1 条在 `tests/test_audit_tightening.py`、1 条 xfail strict 的 framework 同源闹钟）。
+## 2026-11-19 T-AG657 F86 窗口与回复上限：把「不知道」发布成可核元数据，95% 迁移判不移植
+- `tools/pool/model_registry.py`：`ModelEntry` 增 `context_window` / `max_output` 两个可选字段（**缺席 = 不知道 = None**，0 是合法读数），`_window_field()` 严格解析（负数 / bool / 字符串 / 浮点 ⇒ `ModelRegistryError` 点名第几条），`UNKNOWN_MAX_OUTPUT = 16384` 定为全仓唯一字面量。
+- `tools/pool/gateway.py` 的 `list_models()` 每条 data 由三键扩成六键：`context_window`（未知就是 JSON null，不许填 128k/200k 这类看着合理的数）、`max_output_tokens`（未知按 16384 发）、`limits_source`（`registry` / `unknown`）；顶层 note 追加「有 N 条模型的窗口未知」。
+- 注册表与文档同步：`tools/pool/model-registry.toml` 文件头写清「留空 = 不知道，不许抄 16384 冒充已知」，`docs/subsystems/pool/模型与号池.md` 新增「窗口 / 回复上限」一节并把 95% 迁移的不移植理由写死；`tools/pool/model_registry.py` / `tools/pool/gateway.py` 两处 docstring 留 F86 ③ 的判据。
+- 钉子 8 条（`tests/test_model_registry.py` 3 条 + `tests/test_pool_gateway.py` 5 条）钉住四格真值表（缺席 / 0 / 负数 / bool）、唯一常量、坏注册表不让 `/v1/models` 崩、HTTP 面同样带三键。
 ## 2026-11-18 T-AG646 队列短锁等不到就无锁写：改成失败关闭、两处 os.replace 有界重试
 - 两条同族实现（gate_pool.PoolQueue.locked 与 pool/queue.py::_locked）的「等满等待窗口就 break 出去照样读改写」取消：到期仍建不出锁 ⇒ 抛自家 GatePoolBusy / QueueBusy，一个字节都不写（推翻卡 E55 的「记账队列不许变成闸」；实测 timeout=0.0 下 12 线程并发 submit 只剩 1 行）。
 - 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。

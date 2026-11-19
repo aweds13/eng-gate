@@ -403,3 +403,118 @@ def test_one_default_per_pool(tmp_path, monkeypatch) -> None:  # noqa: ANN001
     ), monkeypatch)
     with pytest.raises(ModelRegistryError, match="多条 default"):
         load_registry()
+
+
+# ---------------------------------------------------------------- 卡 E143（F86 ①）：窗口字段
+def test_window_fields_knownness(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """窗口两字段：**缺席 = 不知道（None）**，0 是合法读数，填了就是那个数。
+
+    ★ 三件事别混（卡 E143 判据 1）：不知道 / 0（一点都装不下）/ 非法（注册表坏）。
+      码道派生条目**没有**窗口信息 ⇒ 也是 None（不许从别处「补」一个数进来）。
+      ★ 四格逐一断言（缺席 ⇒ None、0 ⇒ 0、-1 ⇒ 抛、true ⇒ 抛且文案含条目序号）：
+      只测真注册表那一格的话，解析判据等于没测 —— 真注册表今天恰好全是缺席。
+    """
+    entries = load_registry()
+    codebuddy = [e for e in entries if e.pool == "codebuddy"]
+    assert codebuddy, "真注册表里得有一条 codebuddy（否则这条测的是空气）"
+    for entry in codebuddy:
+        assert entry.context_window is None, f"{entry.alias} 今天是「不知道」，不许填数"
+        assert entry.max_output is None, f"{entry.alias} 今天是「不知道」，不许填数"
+    for entry in entries:
+        if entry.pool != "codebuddy":
+            assert entry.context_window is None, "码道派生条目没有窗口信息 ⇒ None"
+            assert entry.max_output is None, "码道派生条目没有窗口信息 ⇒ None"
+
+    def _one(extra: str) -> None:
+        _write_registry(tmp_path, (
+            '[[model]]' + chr(10) +
+            'alias = "m1"' + chr(10) +
+            'pool = "codebuddy"' + chr(10) +
+            'id = "deepseek-v4.1-flash"' + chr(10) +
+            'default = true' + chr(10) +
+            extra
+        ), monkeypatch)
+
+    _point_whitelist(tmp_path, monkeypatch)
+    # ① 缺席 ⇒ None（不知道）：两列都读成 None，谁也不许被补成 0
+    _one("")
+    (only,) = load_registry()
+    assert only.context_window is None, only
+    assert only.max_output is None, only
+    # ② 0 ⇒ 0（一点都装不下，那是一个读数）
+    _one("context_window = 0" + chr(10) + "max_output = 0" + chr(10))
+    (zero,) = load_registry()
+    assert zero.context_window == 0, zero
+    assert zero.max_output == 0, zero
+    # ③ -1 ⇒ 注册表坏，点名第几条
+    _one("context_window = -1" + chr(10))
+    with pytest.raises(ModelRegistryError) as caught:
+        load_registry()
+    assert "第 1 条" in str(caught.value), str(caught.value)
+    # ④ true ⇒ 注册表坏（bool 是 int 的子类，不先判掉会被当成 1 收下）
+    _one("context_window = true" + chr(10))
+    with pytest.raises(ModelRegistryError) as caught:
+        load_registry()
+    assert "第 1 条" in str(caught.value), str(caught.value)
+
+
+def test_window_field_must_be_integer_not_string(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """★ 窗口字段只收**非负整数**：负数 / bool / 字符串「64k」/ 浮点 ⇒ 注册表坏，点名第几条。
+
+    ★ 为什么这条钉得这么死："64k" 这种写法"看着像知道"，收下就变成一个只有天知道的数
+      ⇒ 宁可拒绝派活。true 是 int 的子类，不先判掉会被当成 1。
+    """
+    _point_whitelist(tmp_path, monkeypatch)
+    table = [
+        ("-1", -1, "int"),
+        ("true", True, "bool"),
+        ('"64k"', "64k", "str"),
+        ("1.5", 1.5, "float"),
+    ]
+    for literal, value, type_name in table:
+        _write_registry(tmp_path, (
+            '[[model]]' + chr(10) +
+            'alias = "m1"' + chr(10) +
+            'pool = "codebuddy"' + chr(10) +
+            'id = "deepseek-v4.1-flash"' + chr(10) +
+            'default = true' + chr(10) +
+            f'context_window = {literal}' + chr(10)
+        ), monkeypatch)
+        with pytest.raises(ModelRegistryError) as caught:
+            load_registry()
+        message = str(caught.value)
+        assert "第 1 条" in message, message
+        assert "context_window" in message, message
+        assert "非负整数" in message, message
+        assert type_name in message, f"要点名实际类型 {type_name}：" + message
+        assert repr(value) in message, "要点名实际值：" + message
+    # max_output 走同一条判据（不是只判了 context_window）
+    _write_registry(tmp_path, (
+        '[[model]]' + chr(10) +
+        'alias = "m1"' + chr(10) +
+        'pool = "codebuddy"' + chr(10) +
+        'id = "deepseek-v4.1-flash"' + chr(10) +
+        'default = true' + chr(10) +
+        'max_output = -5' + chr(10)
+    ), monkeypatch)
+    with pytest.raises(ModelRegistryError, match="max_output"):
+        load_registry()
+
+
+def test_unknown_max_output_has_exactly_one_definition() -> None:
+    """★ 「未知按多少发」只有一处字面量：tools/pool/model_registry.py。
+
+    网关 / 注册表 toml / 测试里都不许抄第二份 —— 抄了就会漂：改一处忘一处，
+    读数从此对不上。这条是 grep 的机器版（人跑的同一条命令进卡规格的验收）。
+    """
+    literal = str(16 << 10)  # 16 KiB —— 本文件也不许出现那个字面量
+    where: set[str] = set()
+    for path in (ROOT / "tools").rglob("*.py"):
+        if literal in path.read_text(encoding="utf-8"):
+            where.add(path.relative_to(ROOT).as_posix())
+    allowed = {"tools/pool/model_registry.py"}
+    assert where <= allowed, f"这个未知上限只许住注册表模块，实际：{sorted(where)}"
+    assert where, "定义处本身丢了 ⇒ 常量被删了而没人注意"
+    toml = (ROOT / "tools" / "pool" / "model-registry.toml").read_text(encoding="utf-8")
+    assert toml.count(literal) == 0, "toml 里不许抄这个数冒充「已知」"
+    assert mr.UNKNOWN_MAX_OUTPUT == 16 << 10, "常量值就是它（改它等于改全仓的未知口径）"

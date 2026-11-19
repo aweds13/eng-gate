@@ -23,11 +23,22 @@
 #   default 是否该池默认（布尔；每池至多一条 default = true）
 #   note    备注
 #
+# ★ 卡 E143（F86 ①）：还可以写两个**可选**窗口字段 —— 不写就是「不知道」：
+#   context_window  上下文窗口（token）；**留空 = 不知道**，/v1/models 里发 null
+#   max_output      回复上限（token）；**留空 = 不知道**，网关按 model_registry.UNKNOWN_MAX_OUTPUT 发
+#   两者的解析判据在 tools/pool/model_registry.py::_window_field：
+#   缺席 ⇒ None（不知道）/ 0 ⇒ 合法读数（一点都装不下）/ 负数 / true / "64k" / 1.5 ⇒ 注册表坏、点名第几条。
+#   ★ **不许**为了某个模型在本文件里抄一份那个上限值冒充「已知」（那是把「不知道」伪装成「知道」）：
+#     未知上限只有一处字面量，住 tools/pool/model_registry.py 的 UNKNOWN_MAX_OUTPUT。
+#
 # 顺序 = 429 轮换序（只对 CodeBuddy 池有意义；码道池不参与轮换）。
 
 # ---------------------------------------------------------------- CodeBuddy 池（今天在用的）
 # id 是裸名；顺序 = 429 轮换序（① 默认 → ② ① 被限流时的替补）
 # ★ 卡 166 判据 ⑥：本段与卡 166 之前的 MODEL_WHITELIST 逐字相同（行为不变）。
+# ★ 卡 E143：这两个模型真实的窗口 / 回复上限**今天没有可信来源**（仓里零命中，
+#   仓外 CLI --help 也没有这两项）⇒ context_window / max_output 两条**都留空 = 不知道**。
+#   要填必须给可核出处（厂商文档链接 + 日期）并写进该条的 note —— 别凭印象填。
 [[model]]
 alias   = "deepseek-v4.1-flash"
 pool    = "codebuddy"

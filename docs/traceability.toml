@@ -12520,3 +12520,24 @@ evidence = [
   "test:test_wb_review.py::test_audit_verdict_ignores_pass_string_in_trailer",
 ]
 gaps = "1. `framework/src/framework/review.py` 这一版没接线（纯库，不 import 本仓模块、不跑子进程）：只留 `# TODO(E137)` 与 xfail strict 钉子，它仍把 BASIS_DRIFT 算红，比真源严一档 —— 严不是错，但两处口径不再是同一份。指针 framework/src/framework/review.py2. 旧三档分类器 `gate_base_drift` 与旧文案「一次门禁跑完提交两笔？第二笔没验过」仍在四处（tools/gate_base.py:222、tools/wb_verify.py:316 与 framework 两份），本卡只让**新**两档接管 ③③′ 两个出口，旧出口一字未动。指针 tools/gate_base.py3. `basis_check` 的取数器缺省绑真仓 ROOT：在别的树里调它必须 monkeypatch ROOT 或传 providers，否则恒回 None（判不了 ⇒ 退回旧口径，不会误判绿）—— 这是新钉子的前提。指针 tools/wb_review.py"
+
+[entries."T-AG657"]
+id = "T-AG657"
+title = "上下文窗口读数进模型清单：未知就说未知、回复上限按16384发"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/model_registry.py",
+  "file:tools/pool/gateway.py",
+  "file:tools/pool/model-registry.toml",
+  "file:docs/subsystems/pool/模型与号池.md",
+  "file:tests/test_model_registry.py",
+  "file:tests/test_pool_gateway.py",
+  "text:tools/pool/model_registry.py::UNKNOWN_MAX_OUTPUT = 16384",
+  "text:tools/pool/gateway.py::def _models_note(base: str, unknown: int) -> str:",
+  "test:test_pool_gateway.py::test_list_models_unknown_window_is_null_not_zero",
+  "test:test_pool_gateway.py::test_list_models_publishes_window_readings",
+  "test:test_model_registry.py::test_window_fields_knownness",
+  "test:test_model_registry.py::test_unknown_max_output_has_exactly_one_definition",
+]
+gaps = "1. `gates/diag/_magpie_scope.md` 的 F86 行仍是 `PORT | no`（规格原本要求落地时改成 partial）：该文件在 `.gitignore` 的 `gates/diag/*` 里、也不在本卡卡域，本卡只能把「该移的移了」这件事留在这里。指针 gates/diag/_magpie_scope.md2. `16384` 与「95% 那条迁移判不移植」沿用 magpie 文档口径，没在 magpie 源码里核过常量：本仓这一侧可核的只有「这个数全仓只出现一次」（`tools/pool/model_registry.py:86`）。指针 tools/pool/model_registry.py3. 两个池今天都必然发 `limits_source: 「unknown」`：仓外的 models.whitelist.toml（D:/repo/infra/pool/）没有窗口键，而卡规格禁止改仓外文件；这是**读数正确**而不是缺陷 —— 一旦谁补了来源，`limits_source` 才会变成 `registry`。指针 tools/pool/model-registry.toml"

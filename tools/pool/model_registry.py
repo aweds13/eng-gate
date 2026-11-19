@@ -37,6 +37,9 @@ id 是**裸名**（``deepseek-v4.1-flash`` / ``glm-5.3-flash``）⇒ 合并后�
   注册表引用它（``[pool.codearts].source``），加载时读它派生码道条目。
 - 迁移期间 CodeBuddy 池**行为不变**是硬要求（判据 ⑥）⇒ 注册表 codebuddy 段与旧
   ``MODEL_WHITELIST`` 逐字相同；``models.whitelist.toml`` 找不到/坏掉**不阻止** codebuddy 派活。
+
+F86 ③ 不移植（卡 E143）：pool 的候选池是同一个模型的多个号，窗口是模型属性不是号属性 ⇒
+换号装不下还是装不下（见 gateway.py:184 / :597）。按 95% 挑号需要 token 计数，本仓没有分词器。
 """
 
 from __future__ import annotations
@@ -77,6 +80,10 @@ CODEARTS_SOURCE_ENV = "TF_MODEL_WHITELIST"
 KNOWN_POOLS: tuple[str, ...] = ("codebuddy", "codearts")
 #: 默认池（今天在用的；``--pool`` 缺省取它）。
 DEFAULT_POOL = "codebuddy"
+
+#: 谁都不知道回复上限时按它发（F86：**没人知道的上限不等于无限**）。
+#: ★ 卡 E143：这个数只许在本文件里出现一次 —— 网关 / 注册表 / 测试都不许抄第二份。
+UNKNOWN_MAX_OUTPUT = 16384
 
 
 # ---------------------------------------------------------------- 异常
@@ -127,12 +134,19 @@ class PoolNotWiredError(RuntimeError):
 # ---------------------------------------------------------------- 注册表条目
 @dataclass(frozen=True)
 class ModelEntry:
-    """一条注册表记录：``alias / pool / id / default / note``。"""
+    """一条注册表记录：``alias / pool / id / default / note`` + 两个**可选**窗口字段。
+
+    ★ 卡 E143（F86）：``context_window`` / ``max_output`` **缺字段 = 不知道（None）**，不是 0。
+      0 是合法读数（一点都装不下），所以「不知道」必须占自己那一格 —— 两个都带默认值，
+      既有构造点（码道派生条目）一行都不用改。
+    """
     alias: str
     pool: str
     id: str
     default: bool
     note: str = ""
+    context_window: int | None = None
+    max_output: int | None = None
 
 
 def registry_path() -> Path:
@@ -149,6 +163,22 @@ def _codearts_source_path() -> Path | None:
     if override:
         return Path(override)
     return None
+
+
+def _window_field(path: Path, index: int, entry: dict[str, Any], key: str) -> int | None:
+    """取一个窗口字段：**缺席 ⇒ None（不知道）**；其余必须是**非负整数**。
+
+    ★ 卡 E143：三件事别混 —— 缺席（不知道）/ 0（知道，且一点都装不下）/ 非法（注册表坏）。
+      bool 是 int 的子类，所以 ``true`` 要**先**判掉，否则会被当成 1 悄悄收下。
+    """
+    if key not in entry:
+        return None
+    value = entry[key]
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ModelRegistryError(
+            f"注册表坏：{path} 第 {index} 条 [[model]] 的 {key} 必须是非负整数，"
+            f"实际是 {type(value).__name__}（{value!r}）")
+    return value
 
 
 def _parse_model_entries(path: Path, data: dict[str, Any]) -> list[ModelEntry]:
@@ -184,6 +214,8 @@ def _parse_model_entries(path: Path, data: dict[str, Any]) -> list[ModelEntry]:
             alias=alias, pool=pool, id=ident,
             default=bool(entry.get("default", False)),
             note=str(entry.get("note", "")),
+            context_window=_window_field(path, index, entry, "context_window"),
+            max_output=_window_field(path, index, entry, "max_output"),
         ))
     return out
 
@@ -970,7 +1002,7 @@ __all__ = [
     "ModelEntry", "ModelRegistryError", "PoolMismatchError", "UnknownPoolError",
     "PoolNotWiredError", "PoolAdapter",
     "ROOT", "REGISTRY_FILE", "REGISTRY_ENV", "KNOWN_POOLS", "DEFAULT_POOL",
-    "MINIMUM_RULESET_KEYS",
+    "MINIMUM_RULESET_KEYS", "UNKNOWN_MAX_OUTPUT",
     "MAX_CALLER_PATTERNS", "MAX_PATTERN_CHARS", "MAX_GLOBS",
     "Disabled", "DisabledUnknownError", "UNKNOWN",
     "DISABLED_ENV", "DISABLED_FILE", "MAX_DISABLED_PATTERNS", "MAX_DISABLED_CHARS",

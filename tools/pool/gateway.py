@@ -13,6 +13,9 @@
    guards.lane_guard，收窄问 guards.account_guard，定序问 route.apply_strategy
    （它末行就是 route.apply_order）。
 
+F86 ③ 不移植（卡 E143）：pool 的候选池是同一个模型的多个号，窗口是模型属性不是号属性 ⇒
+换号装不下还是装不下（见 gateway.py:184 / :597）。按 95% 挑号需要 token 计数，本仓没有分词器。
+
 ★ 这里的 classify() 与 pool_quota.classify() **不是一回事**，两处都在仓里、都要留着：
   · pool_quota.classify(status, body: str) 五值（credit/quota/rate/other/auth），照 magpie
     routing.go:391-444，**看自由文案的正则** —— 它要解「429 的正文里说没说余额没了」。
@@ -684,8 +687,41 @@ def _platform_endpoints() -> dict[str, list[str]]:
     return out
 
 
+def _window_entries() -> list[pool_model_registry.ModelEntry]:
+    """读注册表拿窗口字段；**注册表读不出来就当成「一条都不知道」**（不抛）。
+
+    ★ 卡 E143：/v1/models 是只读读数面，注册表坏了不该让整条路径 500 —— 窗口这一维
+      退化成「不知道」，模型清单本身照旧发布（清单的真源不是注册表）。
+    """
+    try:
+        return pool_model_registry.load_registry()
+    except pool_model_registry.ModelRegistryError:
+        return []
+
+
+def _window_of(name: str, entries: Sequence[pool_model_registry.ModelEntry],
+               ) -> pool_model_registry.ModelEntry | None:
+    """按 alias / id 找那一条（码道条目 alias == id；CodeBuddy 两列今天也相同）。"""
+    for entry in entries:
+        if entry.alias == name or entry.id == name:
+            return entry
+    return None
+
+
+def _models_note(base: str, unknown: int) -> str:
+    """顶层 note + 「有 N 条模型的窗口未知」（N 也照说 —— 0 是读数，不是省略）。"""
+    tail = (f"有 {unknown} 条模型的窗口未知（context_window = null，"
+            f"回复上限按 {pool_model_registry.UNKNOWN_MAX_OUTPUT} 发）")
+    return f"{base}；{tail}" if base else tail
+
+
 def list_models(*, root: Path | str | None = None) -> dict[str, Any]:
-    """GET /v1/models 的数据：批准集（唯一权威）+ 快照状态。**不联网、不写快照。**"""
+    """GET /v1/models 的数据：批准集（唯一权威）+ 快照状态 + 窗口读数。**不联网、不写快照。**
+
+    ★ 卡 E143（F86 ①）：每条 data 带 context_window / max_output_tokens / limits_source。
+      不知道就是 null + 按 UNKNOWN_MAX_OUTPUT（model_registry 那一处）发；
+      **不许**填一个「看着合理」的数（128k / 200k / 1m）。
+    """
     base = _base_root(root)
     pool_dir = pool_models.find_pool_dir(base)
     if pool_dir is None:
@@ -700,10 +736,26 @@ def list_models(*, root: Path | str | None = None) -> dict[str, Any]:
                 "note": (f"{broken['file']} 坏了 —— {broken['error']}"
                          " ⇒ 模型清单读不懂，不当成空清单，也不猜"),
                 "models_source_broken": broken}
-    data = [{"id": m, "object": "model", "owned_by": "pool"} for m in info.get("approved") or []]
+    entries = _window_entries()
+    data: list[dict[str, Any]] = []
+    unknown = 0
+    for name in info.get("approved") or []:
+        entry = _window_of(str(name), entries)
+        context_window = entry.context_window if entry is not None else None
+        max_output = entry.max_output if entry is not None else None
+        if context_window is None:
+            unknown += 1
+        data.append({
+            "id": str(name), "object": "model", "owned_by": "pool",
+            "context_window": context_window,   # None = 不知道（JSON null，不填假数）
+            "max_output_tokens": (max_output if max_output is not None
+                                  else pool_model_registry.UNKNOWN_MAX_OUTPUT),
+            "limits_source": ("registry" if (context_window is not None
+                                             or max_output is not None) else "unknown"),
+        })
     return {"object": "list", "data": data, "snapshot_at": info.get("snapshot_at"),
             "snapshot_stale": bool(info.get("snapshot_stale")),
-            "note": str(info.get("snapshot_note") or "")}
+            "note": _models_note(str(info.get("snapshot_note") or ""), unknown)}
 
 
 # ------------------------------------------------- 真实转发（今天走不到：chat_urls 全空）
