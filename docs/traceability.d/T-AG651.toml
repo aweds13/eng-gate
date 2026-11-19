@@ -1,0 +1,13 @@
+[entries."T-AG651"]
+id = "T-AG651"
+title = "画完再聚焦：切今日页与把光标送进输入框先等画完再下手"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:src/web/index.html",
+  "file:tools/ui_flow_check.mjs",
+  "file:tests/test_web_frontend.py",
+  "file:tests/test_ui_flow_check.py",
+]
+gaps = "- 卡规格判据 1 建议的实现拆成三件（`pendingFocus` / `focusAfterPaint(sel)` / `flushPendingFocus()`），我把**执行点**放在 `render()` 的 `paint` 里而不是 `view()` 里：因为整块重写 `#main` 的是 `renderToday` / `renderTasks` 自己（`m.innerHTML=`），`view()` 返回时新 DOM 还没出现。`view()` 只负责**登记**要聚焦到哪儿（`focusAfterPaint`），谁换的 DOM 谁在换完之后 flush。指针 src/web/index.html- `paint` 从 `w=>{...}` 改成 `async w=>{... await w(m); if(mySeq===renderSeq)flushPendingFocus()}`：**`w` 可能是 async**（`renderToday` 先 `await Promise.all([...10 个 api])` 才 `m.innerHTML=`），不 await 就还是在**旧 DOM** 上聚焦，随后整块重写把焦点节点销毁 ⇒ 焦点落回 body。这一条是反向变异逼出来的：不加 await 时流 K 仍绿而变异不红，加了才红。指针 src/web/index.html- 四处入口（`paletteNewTask` / `guideStart` / `addTask` / `addTaskHere`）统一改成「登记 + 交回 render」，其中 `paletteNewTask` 顺带删掉了原来那段 `setInterval(...,50)` 最多 20 拍的轮询 —— 那是页内在「猜 DOM 什么时候出现」，与本次「谁换 DOM 谁 flush」是同一个问题的两种错解。全文件 `setInterval` 只剩 3 处（右栏计时器 tick ×2、跨端同步 `FOCUS_POLL_MS`），页内猜 DOM 的那一处已绝迹。指针 src/web/index.html- 流 K 新增的 ⑦′ 步必须先 `document.activeElement.blur()` 再跑命令：⑦ 刚把焦点送进 `#newTitle`，不挪走的话 ⑦′ 是**恒真断言** —— 反向变异第一趟就是这么被蒙过去的（删掉 flush，流 K 仍 39 项全绿）。指针 tools/ui_flow_check.mjs- 判据 5 的 pytest 钉子按字面切片（`html.split(「const paint=async w=>{」,1)`），锚点与实现绑死：改 `paint` 的写法必须同时改钉子，这正是要的（防止「改了实现忘了判据」）。指针 tests/test_web_frontend.py"
+

@@ -9,6 +9,12 @@
 - `tests/test_lan_gate_drains_before_refusing.py`（新文件，4 条）：① 未配对的分块上传必须**先读完 10 块**再回 401 且 detail 含「配对」；② 配对过的上传仍收到整个 body（`totals.inserted == 1`）；③ 锁定期仍是 429 且同样 drain（`set(got.json()) == {'detail'}`、含「秒再试」）；④ 真 uvicorn 上慢速裸 socket 拿到 401 而不是连接中止。
 - `docs/contracts/domains/F9-storage-sync.md`：边界段加一条「拒绝（401/429）之前先有界读完请求体再关连接（卡 E141）」，写清 RFC 依据、`_drain_request_body()` 的实现口径、「只改连接怎么关，不改判定」，并指向判据文件。
 - `tests/test_web_live_read_failure_is_not_401.py`：只把文件头那条描述的时态改成「那一刻**还没读**请求体就回 401 并关连接（这条机制本身的修法见卡 E141）」，8 条断言一字未动。
+## 2026-11-19 T-AG651 画完再聚焦：切今日页与把光标送进输入框先等画完再下手
+- 新增 `src/web/index.html` 的 `pendingFocus` / `focusAfterPaint(sel)` / `flushPendingFocus()` 三件；`render()` 的 `paint` 改成 `async w=>{...await w(m);if(mySeq===renderSeq)flushPendingFocus()}` —— 先等 renderer 把 `#main` **画完**，再在新 DOM 上聚焦。
+- 四处入口统一改法：`paletteNewTask()`（删掉 `setInterval(...,50)` 最多 20 拍的轮询）、`guideStart()`、`addTask()`、`addTaskHere()` 都只登记 `focusAfterPaint('#newTitle'|'#allTitle')`，把「什么时候聚焦」交回 render。
+- `tools/ui_flow_check.mjs` 流 K 增 ⑦′：「前态**已经是今日页**」时再走同一条命令，且先把焦点 blur 掉再跑（否则是恒真断言）。流 K 从 34/38 项断言变成 **39 项**。
+- `tests/test_web_frontend.py` 判据 5 换新：`paletteNewTask` / `guideStart` / `addTask` / `addTaskHere` 不许出现 `.focus()` 与 `setInterval`，必须出现 `focusAfterPaint`；`paint` 里 `await w(m)` 必须先于 `flushPendingFocus()`。`tests/test_ui_flow_check.py` 新增 `test_flow_k_covers_the_already_on_today_case`（24→25 条）。
+- 文档六处补真值：`docs/specification/nonfunctional.md` 的「34 项断言」改成 39 并注明算它的命令；`docs/changelog.md` / `复盘/交接-重构进度.md` / `复盘/新窗口交接卡.md` / `复盘/视觉线地图.md` / `复盘/键盘附加层-命令面板-T-G61.md` 各加一行注说明 34 是 T-G61 当时读数。
 ## 2026-11-18 T-AG646 队列短锁等不到就无锁写：改成失败关闭、两处 os.replace 有界重试
 - 两条同族实现（gate_pool.PoolQueue.locked 与 pool/queue.py::_locked）的「等满等待窗口就 break 出去照样读改写」取消：到期仍建不出锁 ⇒ 抛自家 GatePoolBusy / QueueBusy，一个字节都不写（推翻卡 E55 的「记账队列不许变成闸」；实测 timeout=0.0 下 12 线程并发 submit 只剩 1 行）。
 - 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。

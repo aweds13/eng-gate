@@ -421,3 +421,25 @@ def test_toast_history_is_reinstalled_after_navigation() -> None:
     body = _method_body(src, "arm")
     assert "TOAST_WATCH" in body, "arm() 里没装提示条历史 —— 一刷新就再也记不到了"
     assert "MUTATION_WATCH" in body and "FETCH_WATCH" in body
+
+
+def test_flow_k_covers_the_already_on_today_case() -> None:
+    """卡 E142：流 K 第⑦′步 —— **前态已经是今日页**时再走同一条命令，光标仍要留在输入框里。
+
+    为什么单独钉这一步：原来只有⑦（前态=设置页），而真出问题的是「今日页 → 今日页」那条路 ——
+    旧实现里 #newTitle 本来就在，轮询第一拍就 focus，紧接着 renderToday 的 m.innerHTML= 把节点换掉。
+    少了这一步，流 K 会在本机恒绿而病灶还在（GHA v16 就是这么红的）。
+    """
+    src = TOOL.read_text(encoding="utf-8")
+    body = src.split("id: 'K',", 1)[1].split("\n  },\n})", 1)[0]
+    assert body.count("activeElement()") >= 2, "流 K 里只剩一次 activeElement() —— ⑦′ 那步被删了"
+    # ⑦′ 那一段从它自己的注释起、到它那条断言止（不能拿第一个 activeElement() 当起点：
+    # 那是②「焦点落在过滤框里」，与⑦′隔着整整五步）
+    marker = body.index("前态**已经是今日页**")
+    last = body.rindex("activeElement()")
+    seg = body[marker:last + 160]
+    # ⑦′ 必须先把焦点**挪走**再跑命令：否则上一步残留的焦点会让这条断言恒真
+    # （反向变异 2026-11-19 就是这么被蒙过去一整趟的 —— 删掉 flush 那一下，流 K 仍然是绿的）
+    assert ".blur()" in seg, "⑦′ 没先把焦点挪走 —— 这一步会变成恒真断言（蒙自己）"
+    assert seg.index("blur()") < seg.index("chord('k')"), "blur 跑在命令之后了，等于没挪"
+    assert "input#newTitle" in seg, "⑦′ 断言的不是 #newTitle"

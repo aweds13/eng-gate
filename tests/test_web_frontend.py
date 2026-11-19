@@ -2003,9 +2003,35 @@ def test_command_palette_is_an_additive_keyboard_layer() -> None:
     # ⑥ 过滤走 input 事件（中文输入法选字不发 keydown —— 只有这条路抓得到）
     assert "addEventListener('input'" in html, "过滤没挂 input 事件（中文输入会筛不出来）"
     # ⑦ 「新建任务」不造第二个创建路径：切到今天 + 聚焦那个输入框（OP-1 的入口本来就是它）
+    #    卡 E142：意图从「别另写创建路径」扩到「别另有聚焦时机」——
+    #    原来这条函数自己拿 setInterval 轮询猜 #newTitle 出没出来（50ms×20），
+    #    前态=今日页时第一拍就聚焦、紧接着 renderToday 的 m.innerHTML= 把节点换掉 ⇒ 焦点落到 body。
     fn = html.split("function paletteNewTask(){", 1)[1].split("\n}", 1)[0]
-    assert "view('today')" in fn and "getElementById('newTitle')" in fn, "它自己另写了一条创建路径"
+    assert "view('today')" in fn, "它自己另写了一条创建路径"
     assert "/api/tasks" not in fn, "命令面板里的「新建任务」不该自己打接口"
+    assert "focusAfterPaint" in fn, "它没走「画完再聚焦」那一条路（卡 E142）"
+    assert "setInterval" not in fn, "又回去用轮询猜 DOM 了（卡 E142：只许一个聚焦时机）"
+    #    而且不许有别的入口各写一种时机：三处同款都改成设置 pending
+    other_entries = (
+        "function guideStart(){",
+        "async function addTask(){",
+        "async function addTaskHere(){",
+    )
+    for opener in other_entries:
+        body = html.split(opener, 1)[1].split("\n}", 1)[0]
+        assert "focusAfterPaint" in body, f"{opener} 没走「画完再聚焦」（卡 E142）"
+        assert "setInterval" not in body, f"{opener} 里有轮询"
+        assert ".focus()" not in body, f"{opener} 里还自己调 focus() —— 那一下在重画之前，白聚焦"
+    #    兑现点只有一个，且在 paint 里 w(m) **之后**（w 里有 renderToday 的 m.innerHTML=）
+    paint = html.split("const paint=async w=>{", 1)[1].split("};", 1)[0]
+    assert "flushPendingFocus()" in paint, "paint 里没在画完之后兑现聚焦"
+    assert "await w(m)" in paint, (
+        "paint 没 await w —— renderToday/renderTasks 是 async，w(m) 只是起了个头，"
+        "m.innerHTML= 要等它 resolve；不 await 就还是在旧 DOM 上聚焦（卡 E142 实测）"
+    )
+    assert paint.index("await w(m)") < paint.index("flushPendingFocus()"), (
+        "flush 跑在 w(m) 之前 —— 那还是「重画之前聚焦」（卡 E142 的病就是这个）"
+    )
     # ⑧ 面板跑命令一律**复用 ACTIONS**（不是第二套实现）
     run = html.split("async function runCommand(cmd){", 1)[1].split("\n}", 1)[0]
     assert "ACTIONS[cmd.action]" in run, "面板没有复用动作注册表"

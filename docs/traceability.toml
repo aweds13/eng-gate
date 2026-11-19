@@ -12486,3 +12486,16 @@ evidence = [
   "file:tests/test_lan_gate_drains_before_refusing.py",
 ]
 gaps = "- 卡规格判据 1 说「拒绝之前要有界地读完请求体」，我把上限定成 `LAN_DRAIN_SECONDS = 2.0`（模块常量，不是 env 旋钮）：够读完一个 3 KB 的手机包，又不给慢客户端开出无限长的保持连接。之所以不做成 env，是因为判据 5 要求「判定、状态码、detail 一个字都不许变」，多一个旋钮就多一条行为分支；2.0 秒是 `_drain_request_body(request, timeout: float = LAN_DRAIN_SECONDS)` 的默认参数，测试可以显式传更小的值。指针 src/timeflow/api/app.py- `_DRAIN_METHODS = frozenset({「POST」, 「PUT」, 「PATCH」, 「DELETE」})` —— 只对**带体**的方法 drain，GET/HEAD 直接 return。理由是 RFC 9112 §9.6 关心的是「服务端先关连接、客户端还在发体」，GET 没有体可发，多读一次反而要等一个永不到来的 EOF（实测 GET 上 `request.stream()` 会等到超时才退出）。指针 src/timeflow/api/app.py- `_drain_request_body` 里 `except Exception: return`（带 `# noqa: BLE001`）不是吞错：drain 是**尽力而为**的收尾动作，读不动（客户端已经断了 / 超时）不该把 401 变成 500 —— 判据 3 要求拒绝的状态码与 detail 不变。超时用 `asyncio.wait_for` 包住整个 `async for`，不是每块单独计时，所以最坏情况就是从进函数起 2.0 秒。指针 src/timeflow/api/app.py- 只改了 `lan_gate` 的**拒绝分支**（`if not decision[「ok」]:` 之内），放行分支 `return await call_next(request)` 一个字没动 —— 判据 4 的 `test_paired_upload_still_receives_the_whole_body` 咬的就是这条：配对过的上传仍由下游路由自己读完整个 body（`totals.inserted == 1`）。指针 src/timeflow/api/app.py- 反向变异只做一条（判据 6 要求的那一条）：删掉 `await _drain_request_body(request)` 这一行，跑新测试的 3 条非 socket 用例 ⇒ 必须红。结果见 checkpoint，脚本与结果在 gates/diag/_rev_E141.py 与 gates/diag/_rev_E141_result.txt。- 老实说：`test_a_slow_body_on_the_lan_address_gets_401_not_a_reset` 是唯一用真 uvicorn + 裸 socket 的用例，它先 `bind((host, 0))` 拿一个能对外监听的地址，拿不到局域网地址时 `pytest.skip` —— 在只有回环的机器上这条**会跳过而不是变红**，这是有意的（判据 7 说「不许因为环境缺就把它改成假绿」，跳过有 `pytest.skip` 明示原因，不算假绿）。这条用例本身在 tests/test_lan_gate_drains_before_refusing.py。"
+
+[entries."T-AG651"]
+id = "T-AG651"
+title = "画完再聚焦：切今日页与把光标送进输入框先等画完再下手"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:src/web/index.html",
+  "file:tools/ui_flow_check.mjs",
+  "file:tests/test_web_frontend.py",
+  "file:tests/test_ui_flow_check.py",
+]
+gaps = "- 卡规格判据 1 建议的实现拆成三件（`pendingFocus` / `focusAfterPaint(sel)` / `flushPendingFocus()`），我把**执行点**放在 `render()` 的 `paint` 里而不是 `view()` 里：因为整块重写 `#main` 的是 `renderToday` / `renderTasks` 自己（`m.innerHTML=`），`view()` 返回时新 DOM 还没出现。`view()` 只负责**登记**要聚焦到哪儿（`focusAfterPaint`），谁换的 DOM 谁在换完之后 flush。指针 src/web/index.html- `paint` 从 `w=>{...}` 改成 `async w=>{... await w(m); if(mySeq===renderSeq)flushPendingFocus()}`：**`w` 可能是 async**（`renderToday` 先 `await Promise.all([...10 个 api])` 才 `m.innerHTML=`），不 await 就还是在**旧 DOM** 上聚焦，随后整块重写把焦点节点销毁 ⇒ 焦点落回 body。这一条是反向变异逼出来的：不加 await 时流 K 仍绿而变异不红，加了才红。指针 src/web/index.html- 四处入口（`paletteNewTask` / `guideStart` / `addTask` / `addTaskHere`）统一改成「登记 + 交回 render」，其中 `paletteNewTask` 顺带删掉了原来那段 `setInterval(...,50)` 最多 20 拍的轮询 —— 那是页内在「猜 DOM 什么时候出现」，与本次「谁换 DOM 谁 flush」是同一个问题的两种错解。全文件 `setInterval` 只剩 3 处（右栏计时器 tick ×2、跨端同步 `FOCUS_POLL_MS`），页内猜 DOM 的那一处已绝迹。指针 src/web/index.html- 流 K 新增的 ⑦′ 步必须先 `document.activeElement.blur()` 再跑命令：⑦ 刚把焦点送进 `#newTitle`，不挪走的话 ⑦′ 是**恒真断言** —— 反向变异第一趟就是这么被蒙过去的（删掉 flush，流 K 仍 39 项全绿）。指针 tools/ui_flow_check.mjs- 判据 5 的 pytest 钉子按字面切片（`html.split(「const paint=async w=>{」,1)`），锚点与实现绑死：改 `paint` 的写法必须同时改钉子，这正是要的（防止「改了实现忘了判据」）。指针 tests/test_web_frontend.py"

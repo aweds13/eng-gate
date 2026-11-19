@@ -1393,6 +1393,16 @@ flow({
     t.eq('跑完自己关掉', await t.attr('#palette', 'hidden'), '')
     t.eq('光标落进了今日页那个输入框', await t.cdp.activeElement(), 'input#newTitle')
 
+    // ⑦′ 前态**已经是今日页**、且焦点不在那个输入框上，再走同一条命令（卡 E142）：
+    //     这才是真出问题的那条路 —— 旧实现里今日页的 #newTitle 本来就在，轮询第一拍就 focus 了，
+    //     紧接着 renderToday 的 m.innerHTML= 把那个节点整块换掉，焦点掉到 body。
+    //     上面⑦的前态是设置页，碰巧绿；而先 blur 掉，是为了让这条断言咬住「是这条命令送进去的」，
+    //     而不是被上一步残留在输入框里的焦点蒙过去（这一下要是没有，反向变异根本不会红）。
+    await t.cdp.eval('(() => { const a = document.activeElement; if (a && a.blur) a.blur(); return true })()')
+    await t.chord('k')
+    await t.key('Enter')
+    t.eq('前态已是今日页时，光标一样留在那个输入框', await t.cdp.activeElement(), 'input#newTitle')
+
     // ⑧ Esc：关掉最上面那一层。两条都验 —— 面板，以及**一直关不掉的模态**
     //    （模态的注释里写着"可键盘"，但从 R2 建起来到这次之前，Esc 对它没有任何作用）
     await t.chord('k')

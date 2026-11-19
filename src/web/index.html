@@ -111,6 +111,10 @@ let groupCache=[];           // 分组列表缓存（渲染任务详情的"所�
 let cardMore={};             // 哪张卡上的「…」菜单是展开的（T-G63；切视图即清空）
 let setOpen={};              // 设置页哪些节是展开的（T-G63；切视图即清空）
 let setSummary={};           // 设置页每节的「现状」摘要（渲染时按当前配置算出来，T-G63）
+// 「画完再聚焦」（卡 E142）：谁要焦点、要哪个元素，**写在重画之前、兑现于重画之后**。
+// 为什么必须有这一格：renderToday 末尾是 m.innerHTML= 整块换掉 #main（:2610），
+// 旧节点上的 focus() 会随旧 DOM 一起消失 —— 先 focus 后重画 = 焦点落到 body。
+let pendingFocus=null;        // null 或选择器串（如 '#newTitle'）；由 flushPendingFocus 兑现
 let courseCache=[];          // 课程列表缓存（任务编辑里的"所属课程"下拉 + 学业页关联任务用）
 // 合法视图名（render 的白名单：写错的视图名会被立刻发现，而不是静默空屏）
 const VIEWS=['today','tasks','important','planned','flagged','focus','stats','habit','academic','review','memo','team','setting','offline'];
@@ -1158,17 +1162,26 @@ async function runCommand(cmd){
   if(!fn){console.warn('命令表里的动作没注册:',cmd.action);return}
   await fn(el);
 }
+/* 「画完再聚焦」（卡 E142）：聚焦这件事**只有一个时机** —— 这次渲染真的把 DOM 写完了。
+ *  改前是四处各写一种猜测：paletteNewTask 用 50ms×20 轮询猜 DOM 出没出来，
+ *  guideStart 一次性取节点，addTask/addTaskHere 先 focus 再 view（先聚焦后重画 = 白聚焦）。
+ *  现在统一成：入口只**记一个愿望**（focusAfterPaint），由 flushPendingFocus 在 paint 之后兑现。
+ *  不用 setTimeout(0) / requestAnimationFrame：那是「猜画完了」，而这里的「画完了」是已知事件。 */
+function focusAfterPaint(sel){pendingFocus=sel||null}
+/** 兑现上面那个愿望。**只该被 paint 里的 w(m) 之后调用**（见 render 的 paint）；
+ *  元素还没出现就作废（不轮询、不留到下一次渲染 —— 下一次渲染的焦点归下一次的入口说）。 */
+function flushPendingFocus(){
+  const sel=pendingFocus;if(!sel)return;
+  pendingFocus=null;
+  let i=null;
+  try{i=document.querySelector(sel)}catch(e){return}   // 选择器写坏不炸整页
+  if(i&&i.focus)i.focus();
+}
 /** 「新建任务」这一条**不造第二个创建路径**：切到今日页、把光标放进那个输入框，
- *  剩下的（写标题、回车）与鼠标走的是同一处 —— OP-1 的入口本来就写着那个输入框。
- *  为什么要轮询：`view()` 要先等一次 `/api/config` 才画，画之前 `#newTitle` 还不存在。 */
+ *  剩下的（写标题、回车）与鼠标走的是同一处 —— OP-1 的入口本来就写着那个输入框。 */
 function paletteNewTask(){
+  focusAfterPaint('#newTitle');
   view('today');
-  let n=0;
-  const timer=setInterval(()=>{
-    const i=document.getElementById('newTitle');
-    if(i){i.focus();clearInterval(timer);return}
-    if(++n>20)clearInterval(timer);              // 1 秒还不出来就放弃（不无限轮询）
-  },50);
 }
 /* 过滤必须走 `input` 事件：中文输入法选字时不发 keydown，最终文本只在 input/change 上。
    这是全页唯一一个"直接挂在元素上"的监听（其余全走事件委托），因为它只服务这一个输入框。 */
@@ -1234,7 +1247,12 @@ async function render(name){
     // 没选过时**不再把配置默认写成内联**（T-G163）：内联 `--accent` 的优先级高于
     // [data-theme="dark"]，暗色的 --accent 永远不生效（探针 60 处「没跟着主题变」的主因）。
     // 默认值由 app.css 令牌承担（亮色同值，亮色视觉零变化）；用户真选过才写内联。
-    const paint=w=>{if(mySeq===renderSeq)w(m)};
+    // 「画完再聚焦」（卡 E142）：flush 必须在 w(m) **之后** —— w 里有 renderToday 的 m.innerHTML= 整块重写，
+    // 在那之前聚焦，节点马上就要被换掉（焦点会掉到 body）。
+    // 卡 E142：`w` 可能是 async（renderToday/renderTasks 都要先 await 一批 api）——
+    // 那一下的 `w(m)` 只是**起了个头**，`m.innerHTML=` 要等它 resolve 之后才发生。
+    // 所以这里必须 await：不 await 就会在旧 DOM 还在时聚焦，随后整块重写把焦点换掉（落回 body）。
+    const paint=async w=>{if(mySeq!==renderSeq)return;await w(m);if(mySeq===renderSeq)flushPendingFocus()};
     if(name==='today')return paint(renderToday);
     if(name==='tasks')return paint(renderTasks);
     if(name==='important'||name==='planned'||name==='flagged')return paint(m=>renderSmart(m,name));
@@ -2123,7 +2141,8 @@ async function addTask(){
     o=>offlineQueueNewTask(o,{title,due_date:due,is_myday:myday}),
     '连不上电脑：这一条先存在手机上');
   if(!r)return;
-  titleEl.value='';document.getElementById('newDue').value='';titleEl.focus();
+  titleEl.value='';document.getElementById('newDue').value='';
+  focusAfterPaint('#newTitle');    // 卡 E142：view() 会整块重画今日页（renderToday 的 m.innerHTML=），
   if(!r.queued)toast(myday?'已加入今天':'已记入任务（未进 My Day）');
   view(current);
 }
@@ -2184,7 +2203,8 @@ async function addTaskHere(){
   const title=(titleEl.value||'').trim();if(!title)return;
   const due=document.getElementById('allDue').value||null;
   await api('/api/tasks',{method:'POST',body:JSON.stringify({title,due_date:due,is_myday:false})});
-  titleEl.value='';document.getElementById('allDue').value='';titleEl.focus();
+  titleEl.value='';document.getElementById('allDue').value='';
+  focusAfterPaint('#allTitle');    // 卡 E142：同上 —— 重画之后才聚焦
   toast('已加入全部任务（未进今天）');view(current);
 }
 
@@ -4132,8 +4152,9 @@ function guideCard(){
 }
 function guideFinish(){guideDone=true;try{localStorage.setItem(GUIDE_KEY,'done')}catch(e){}}
 function guideStart(){
-  guideFinish();view('today');
-  const i=document.getElementById('newTitle');if(i)i.focus();
+  guideFinish();
+  focusAfterPaint('#newTitle');   // 卡 E142：与 paletteNewTask 走同一条路（画完再聚焦）
+  view('today');
 }
 function guideReplay(){
   guideDone=false;try{localStorage.removeItem(GUIDE_KEY)}catch(e){}
