@@ -6585,3 +6585,35 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A372"
+task = "T-AG658"
+title = "F56搜索API多key轮换：被拒才换下一个，各自rest"
+tree = ".wt/A372"
+spec = "复盘/卡/卡A372-F56搜索API多key轮换-被拒才换下一个与各自rest.md"
+files = [
+  "tools/pool/search.py",
+  "tools/pool/search-vendors.toml",
+  "tools/pool/route.py",
+  "tools/pool/gateway.py",
+  "tools/pool_quota.py",
+  "tools/pool_accounts.py",
+  "tests/test_pool_search_keys.py",
+  "tests/test_pool_gateway.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡A372-F56搜索API多key轮换-被拒才换下一个与各自rest.md"
+]
+depends = [
+  "E94",
+  "E103",
+  "E131",
+  "A332",
+  "A351",
+  "A368",
+  "A370",
+  "A371",
+  "E143"
+]
+risk = "mid"
+status = "pending"
