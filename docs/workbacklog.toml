@@ -6429,3 +6429,22 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E142"
+task = "T-AG651"
+title = "画完再聚焦：切今日页与把光标送进输入框被写了三处，且都在重写之前下手"
+tree = ".wt/E142"
+spec = "复盘/卡/卡E142-画完再聚焦：切今日页与把光标送进输入框被写了三处.md"
+files = [
+  "src/web/index.html",
+  "tools/ui_flow_check.mjs",
+  "tests/test_web_frontend.py",
+  "tests/test_ui_flow_check.py",
+  "docs/specification/nonfunctional.md",
+  "复盘/视觉线地图.md",
+  "复盘/键盘附加层-命令面板-T-G61.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
