@@ -101,4 +101,4 @@ docs/subsystems/ci/GitHub-Actions-云门禁.md（计划建） 存在，写明：
 - `net()` 是死代码：`grep -n 'net('` 只命中 `:37`。
 - `tests/test_ci_portability.py` 当前基线 **20 passed (1.79s)**。
 - `docs/subsystems/ci/` 现有六份，`docs/INDEX.md:36` 是 `| docs/subsystems/ci/ | 6 | 0 | 6 |`。
-- 23 门真读数（`gates/enggate-logs/win-135331686931.reading.json`）：`ok=True / host=runnervmm7ud1 / rev=cdb2c0fa / n_gates=23 / not_run=[] / workers=4`。
+- 23 门真读数（不入库的读数产物 gates/enggate-logs/win-135331686931.reading.json）：`ok=True / host=runnervmm7ud1 / rev=cdb2c0fa / n_gates=23 / not_run=[] / workers=4`。
