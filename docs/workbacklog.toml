@@ -6858,3 +6858,41 @@ depends = [
 ]
 risk = "low"
 status = "pending"
+
+[[cards]]
+id = "A382"
+task = "T-AG670"
+title = "F48会话身份：只认宿主注入的指纹、绝不编id"
+tree = ".wt/A382"
+spec = "复盘/卡/卡A382-F48会话身份-只认宿主注入的指纹绝不编id.md"
+files = [
+  "tests/test_pool_session_identity.py",
+  "tests/test_pool_route_log.py",
+  "tests/test_wb_dispatch.py",
+  "docs/subsystems/pool/派活口径.md",
+  "复盘/卡/卡A382-F48会话身份-只认宿主注入的指纹绝不编id.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "A384"
+task = "T-AG672"
+title = "F10 previous_response_id：判SKIP_BY_REDLINE，只钉同协议直通原样透传"
+tree = ".wt/A384"
+spec = "复盘/卡/卡A384-F10-previous_response_id不移植只钉原样透传.md"
+files = [
+  "tests/test_pool_gateway.py",
+  "docs/subsystems/pool/模型与号池.md",
+  "复盘/卡/卡A384-F10-previous_response_id不移植只钉原样透传.md"
+]
+depends = [
+  "A372",
+  "A373",
+  "A375",
+  "A380",
+  "A381"
+]
+risk = "mid"
+status = "pending"
