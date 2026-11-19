@@ -6460,6 +6460,7 @@ spec = "复盘/卡/卡A367-F33限额数据面-limits.toml落地前先裁决同�
 files = [
   "tools/pool/limits.example.toml",
   "tools/pool/limits_policy.py",
+  "docs/subsystems/pool/modules.toml",
   "tools/pool/limits.py",
   "tests/test_pool_limits_data.py",
   "复盘/卡/卡A367-F33限额数据面-limits.toml落地前先裁决同一个文件两个形状.md"
@@ -6536,7 +6537,8 @@ depends = [
   "E97",
   "E121",
   "A334",
-  "A346"
+  "A346",
+  "A367",
 ]
 risk = "mid"
 status = "pending"
@@ -6563,7 +6565,8 @@ depends = [
   "A344",
   "E121",
   "A335",
-  "A370"
+  "A370",
+  "A367",
 ]
 risk = "mid"
 status = "pending"
@@ -6614,7 +6617,8 @@ depends = [
   "A368",
   "A370",
   "A371",
-  "E143"
+  "E143",
+  "A367",
 ]
 risk = "mid"
 status = "pending"
