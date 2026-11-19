@@ -6515,3 +6515,27 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A370"
+task = "T-AG655"
+title = "F28窗口登记：把窗口登记下来，不按点启窗"
+tree = ".wt/A370"
+spec = "复盘/卡/卡A370-F28窗口登记-本仓要的不是按点启窗是把窗口登记下来.md"
+files = [
+  "tools/pool/warmup.py",
+  "tools/pool/platforms.toml",
+  "tools/pool_accounts.py",
+  "tests/test_pool_warmup.py",
+  "tests/test_pool_accounts.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡A370-F28窗口登记-本仓要的不是按点启窗是把窗口登记下来.md"
+]
+depends = [
+  "E97",
+  "E121",
+  "A334",
+  "A346"
+]
+risk = "mid"
+status = "pending"
