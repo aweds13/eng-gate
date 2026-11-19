@@ -6731,3 +6731,130 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A376"
+task = "T-AG664"
+title = "F36网络准入与转发头：搬的是'不许放开'，不是 lanGuard"
+tree = ".wt/A376"
+spec = "复盘/卡/卡A376-F36网络准入与转发头-搬的是不许放开不是lanGuard.md"
+files = [
+  "tests/test_pool_gateway.py",
+  "复盘/卡/卡A376-F36网络准入与转发头-搬的是不许放开不是lanGuard.md"
+]
+depends = [
+  "E94",
+  "E103",
+  "E143",
+  "A372",
+  "A373",
+  "A375",
+]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A377"
+task = "T-AG665"
+title = "F37诊断三件套：Go 运行时资产不移植，池侧等价读数钉住"
+tree = ".wt/A377"
+spec = "复盘/卡/卡A377-F37诊断三件套-Go运行时资产不移植与池侧等价读数.md"
+files = [
+  "tests/test_magpie_diag_scope.py",
+  "复盘/卡/卡A377-F37诊断三件套-Go运行时资产不移植与池侧等价读数.md"
+]
+depends = [
+  "E94",
+  "E115",
+  "A369"
+]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A378"
+task = "T-AG666"
+title = "F59三个自带MCP server：按路径挂载，每路径各自一个上限"
+tree = ".wt/A378"
+spec = "复盘/卡/卡A378-F59三个自带MCP-server-按路径挂载.md"
+files = [
+  "tools/pool/mcp_http.py",
+  "tools/pool_mcp.py",
+  "tests/test_pool_mcp_http_paths.py",
+  "复盘/卡/卡A378-F59三个自带MCP-server-按路径挂载.md"
+]
+depends = [
+  "A365",
+  "A362",
+  "E143"
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "A379"
+task = "T-AG667"
+title = "F60 MCP hub：判 SKIP_NOT_APPLICABLE，五条反向钉子"
+tree = ".wt/A379"
+spec = "复盘/卡/卡A379-F60-MCP-hub-判SKIP_NOT_APPLICABLE.md"
+files = [
+  "tests/test_pool_mcp_no_hub.py",
+  "复盘/卡/卡A379-F60-MCP-hub-判SKIP_NOT_APPLICABLE.md"
+]
+depends = [
+  "A378",
+  "A365"
+]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A380"
+task = "T-AG668"
+title = "F96 Context 页分段账：只留名字与大小，不搬面板与读回原文"
+tree = ".wt/A380"
+spec = "复盘/卡/卡A380-F96Context页分段账-只留名字与大小不搬面板与读回原文.md"
+files = [
+  "tools/pool/prompt_parts.py",
+  "tools/pool/gateway.py",
+  "tools/pool/route_log.py",
+  "tests/test_pool_prompt_parts.py",
+  "tests/test_pool_gateway.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡A380-F96Context页分段账-只留名字与大小不搬面板与读回原文.md"
+]
+depends = [
+  "A371",
+  "A372",
+  "A363",
+  "E143",
+  "A373",
+  "A374",
+  "A375",
+  "A376",
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "A381"
+task = "T-AG669"
+title = "F14决策模型与 systemone：判 SKIP_BY_REDLINE，落成 ADR 与反向钉子"
+tree = ".wt/A381"
+spec = "复盘/卡/卡A381-F14决策模型与systemone-判SKIP_BY_REDLINE.md"
+files = [
+  "docs/decisions/0011-no-systemone.md",
+  "tests/test_pool_no_systemone.py",
+  "docs/subsystems/pool/模型与号池.md",
+  "docs/subsystems/pool/README.md",
+  "复盘/卡/卡A381-F14决策模型与systemone-判SKIP_BY_REDLINE.md"
+]
+depends = [
+  "E94",
+  "E143",
+  "A363",
+  "A373",
+  "A375",
+]
+risk = "low"
+status = "pending"
