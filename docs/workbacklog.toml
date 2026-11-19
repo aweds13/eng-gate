@@ -6657,3 +6657,72 @@ files = [
 depends = []
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A373"
+task = "T-AG661"
+title = "F94图像识别替身seer：判SKIP_BY_REDLINE并钉住"
+tree = ".wt/A373"
+spec = "复盘/卡/卡A373-F94图像识别替身seer-判SKIP_BY_REDLINE.md"
+files = [
+  "tests/test_pool_gateway.py",
+  "tests/test_model_registry.py",
+  "docs/subsystems/pool/README.md",
+  "docs/changelog.d/T-AG661.md",
+  "复盘/卡/卡A373-F94图像识别替身seer-判SKIP_BY_REDLINE.md"
+]
+depends = [
+  "E94",
+  "A362",
+  "E143"
+]
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A374"
+task = "T-AG662"
+title = "F58-web_fetch：只读公共地址、按charset转Markdown、按字符窗口分段"
+tree = ".wt/A374"
+spec = "复盘/卡/卡A374-F58-web_fetch只读公共地址.md"
+files = [
+  "tools/pool/netguard.py",
+  "tools/pool/web_fetch.py",
+  "tests/test_pool_netguard.py",
+  "tests/test_pool_web_fetch.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡A374-F58-web_fetch只读公共地址.md"
+]
+depends = [
+  "A338",
+  "A348",
+  "A365",
+  "A367",
+  "A370",
+  "A371",
+  "A372"
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "A375"
+task = "T-AG663"
+title = "F82远端provider显式登记：一个地址一段，连不上就点名那台机器"
+tree = ".wt/A375"
+spec = "复盘/卡/卡A375-F82远端provider显式登记.md"
+files = [
+  "tools/pool/platforms.toml",
+  "tools/pool/gateway.py",
+  "tests/test_pool_gateway.py",
+  "tests/test_pool_gateway_remote.py",
+  "docs/subsystems/pool/modules.toml",
+  "docs/subsystems/pool/README.md",
+  "复盘/卡/卡A375-F82远端provider显式登记.md"
+]
+depends = [
+  "E94",
+  "A348"
+]
+risk = "mid"
+status = "pending"
