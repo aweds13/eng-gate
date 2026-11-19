@@ -17,10 +17,11 @@
 
 退出码（`tests/test_gha_cloud_gate.py` 逐条钉住，五个值互不相同）：
   0  成功
-  2  缺配置：远端没给 / GIT_SSH_COMMAND 没给 / 适配器或垫片文件不存在
+  2  缺配置：远端没给 / GIT_SSH_COMMAND 没给 / 适配器或垫片文件不存在 / 快照目录不存在
   3  取不回历史或 workflow（bundle / fetch / checkout .github 失败）
   4  提交失败
-  5  快照前置不成立（conftest 已有 pytest_addoption / 台账已豁免 / 缺证据文件）
+  5  快照前置不成立（conftest 已有 pytest_addoption / 台账已豁免 / 缺证据文件），
+     或冒烟三段有任一段红（SMOKE1/2/3 非 0 ⇒ 冒烟红了就不许当绿）
   6  号池桩不成立，或提交后的判据红 ⇒ 拒绝推送
 """
 import argparse
@@ -318,23 +319,38 @@ def do_smoke(a):
     shim._ensure_diag_fixtures()
     env = smoke_env(dst)
 
+    # 三段都先打完自己的读数再判：日志要留得住哪一段红、红在哪几行，
+    # 但**判据是退出码**——一段红就不许把这一趟当绿（卡 E145 问题 2：这里以前
+    # 只 log 不 exit，dest 指错地方时三段全红、脚本还退 0）。
+    red = []
+
     log("=== SMOKE 1: targeted pytest ===")
     p = sh([sys.executable, "-X", "utf8", "-m", "pytest", "-q", "-o", "addopts=",
             "-p", "no:cacheprovider"] + SMOKE_TARGETS, cwd=dst, quiet=True, env=env)
     log("SMOKE1_RC", None if p is None else p.returncode)
     log("SMOKE1_OUT", ((p.stdout or "") + (p.stderr or ""))[-6000:])
+    if p is None or p.returncode != 0:
+        red.append("SMOKE1")
 
     log("=== SMOKE 2: ruff ===")
     p = sh([sys.executable, "-X", "utf8", "-m", "ruff", "check"] + RUFF_PATHS,
            cwd=dst, quiet=True, env=env)
     log("SMOKE2_RC", None if p is None else p.returncode)
     log("SMOKE2_OUT", ((p.stdout or "") + (p.stderr or ""))[-2000:])
+    if p is None or p.returncode != 0:
+        red.append("SMOKE2")
 
     log("=== SMOKE 3: check_docs ===")
     p = sh([sys.executable, "-X", "utf8", "scripts/check_docs.py", "--mode", "report"],
            cwd=dst, quiet=True, env=env)
     log("SMOKE3_RC", None if p is None else p.returncode)
     log("SMOKE3_OUT", ((p.stdout or "") + (p.stderr or ""))[-1500:])
+    if p is None or p.returncode != 0:
+        red.append("SMOKE3")
+
+    if red:
+        log("SMOKE_FAILED", ",".join(red), "-> refuse to report green")
+        sys.exit(EXIT_SNAPSHOT)
 
 
 def do_push(a):
@@ -431,6 +447,12 @@ def main(argv=None):
             log("MISSING_" + label.upper(), path)
             return EXIT_CONFIG
     os.makedirs(a.tmp, exist_ok=True)
+    # 除 build 之外的每个 stage 都**在已有的快照目录上干活**（smoke 还会往
+    # <dest>/../infra/pool 造桩、往 <dest>/gates/diag 写 fixture）。目录不在还往下走，
+    # 只会得到 traceback（push）或三段全红的假绿（smoke）——卡 E145 问题 1/2 实测。
+    if a.stage != "build" and not os.path.isdir(a.dest):
+        log("MISSING_DEST", a.dest)
+        return EXIT_CONFIG
     log("root:", a.root)
     log("dest:", a.dest)
     log("remote:", a.remote)

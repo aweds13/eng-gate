@@ -1,0 +1,12 @@
+[entries."T-AG660"]
+id = "T-AG660"
+title = "快照构建器收两个口子：不存在的 dest 干净退 2、冒烟红了真退 5（并把 GHA 真读数与 OpenMAIC 那条腿写进文书）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/cloud/gha/build_snapshot.py",
+  "file:tests/test_gha_cloud_gate.py",
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+]
+gaps = "1. 冒烟段的三段顺序仍是 pytest → ruff → check_docs，**第一段红也不短路**：三段都会跑完再统一退 5。好处是一次把三段读数都留在日志里，代价是冒烟红时要多等后两段的耗时。指针 `scripts/cloud/gha/build_snapshot.py`2. `SMOKE_FAILED` 这条路径只在本机用假 `sh()`（`returncode=1`）验过，没有在 runner 上真红一次（那要故意推一趟坏的上去）。可复用的一手证据仍是 GHA 那两趟真读数。指针 `tests/test_gha_cloud_gate.py`3. 新增的 §8 引的是 OpenMAIC 镜像仓 2026-11-16 那趟四分片读数；om-gate 之后那批 push 触发的 run 全 failure 或被并发 cancel 顶替，没有更新的汇总可引 —— 所以「第二仓」这条腿的证据是**当时那一趟**，不是现在。指针 `docs/subsystems/ci/GitHub-Actions-云门禁.md`"
+

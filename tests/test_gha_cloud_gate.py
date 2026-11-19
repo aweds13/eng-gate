@@ -14,6 +14,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 GHA = ROOT / "scripts" / "cloud" / "gha"
 BUILD = GHA / "build_snapshot.py"
@@ -124,8 +126,65 @@ def test_each_failure_has_a_readable_tag():
         "MISSING_EVIDENCE_FILE",
         "MISSING_POOL_STUB",
         "POOL_STUB_INCOMPLETE",
+        # 卡 E145：两个缺口收口后新出现的两句 —— 缺快照目录、冒烟红了。
+        "MISSING_DEST",
+        "SMOKE_FAILED",
     ):
         assert tag in src, f"源码里没有失败标签 {tag} —— 换了码却没人看得懂"
+
+
+def test_missing_dest_fails_fast_with_config_code(tmp_path):
+    """判据 1：快照目录不存在 ⇒ 退 2 + MISSING_DEST，**不是** traceback（卡 E145 问题 1）。"""
+    dest = tmp_path / "no-such-snapshot"
+    env = dict(os.environ)
+    env["GHA_REMOTE"] = "git@example.invalid:someone/repo.git"
+    env["GIT_SSH_COMMAND"] = "ssh -i /dev/null"
+    p = _run([sys.executable, "-X", "utf8", str(BUILD), "--stage", "smoke",
+              "--dest", str(dest), "--tmp", str(tmp_path / "tmp")], env=env)
+    assert p.returncode == 2, (
+        f"缺快照目录却退了 {p.returncode}（2 才是「环境没准备好」）：\n"
+        + (p.stdout + p.stderr)[-2000:]
+    )
+    assert "MISSING_DEST" in p.stdout, "退 2 了但没说缺的是哪一样：" + p.stdout[-800:]
+    assert "Traceback" not in p.stderr, "还是抛了栈 —— 调用方分不清是环境问题还是脚本坏了"
+    assert not dest.exists(), "判完还顺手造了目录"
+
+
+def test_smoke_red_is_not_green(tmp_path, capsys):
+    """判据 2：冒烟任一段红 ⇒ 退 5（EXIT_SNAPSHOT），不许退 0（卡 E145 问题 2）。"""
+    import types
+
+    mod = _load(BUILD, "gha_build_snapshot_for_smoke_red")
+    dest = tmp_path / "snapshot"
+    dest.mkdir()
+    args = types.SimpleNamespace(dest=str(dest), adapter=str(ADAPTER))
+
+    class _Red:
+        returncode = 1
+        stdout = ""
+        stderr = ""
+
+    real_sh = mod.sh
+    mod.sh = lambda *a, **kw: _Red()
+    try:
+        with pytest.raises(SystemExit) as ei:
+            mod.do_smoke(args)
+        assert ei.value.code == mod.EXIT_SNAPSHOT, (
+            f"冒烟红了却退 {ei.value.code}（该退 {mod.EXIT_SNAPSHOT}）"
+        )
+        out = capsys.readouterr().out
+        assert "SMOKE_FAILED" in out, "退 5 了但日志里没有 SMOKE_FAILED：" + out[-800:]
+
+        # 正面控制：三段全绿时**不许**退（否则这条判据会退化成「永远退 5」）
+        class _Green:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        mod.sh = lambda *a, **kw: _Green()
+        mod.do_smoke(args)   # 没有 SystemExit 就是通过
+    finally:
+        mod.sh = real_sh
 
 
 def test_adapter_is_inert_on_a_local_machine(tmp_path):

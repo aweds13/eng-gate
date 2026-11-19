@@ -66,6 +66,10 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --stage all
 ```
 
 `--stage` 四选：`build` / `smoke` / `push` / `all`。三段各自能单跑，`all` 是串起来。
+除 `build` 之外的每一段都**在已有的快照目录上干活**（`smoke` 还会往 `<快照的父目录>/infra/pool` 造桩、
+往 `<快照>/gates/diag` 写 fixture）⇒ 目录不在就**先退 2**（`MISSING_DEST`），不往下走：
+以前这里不判，`push` 会甩一个 `NotADirectoryError: [WinError 267]` 的栈、`smoke` 更糟 ——
+三段全红却退 0（卡 E145 实测）。
 
 **build —— 造一棵能推的快照树**（默认落在 `gates/diag/_tmp/enggate`，被 `.gitignore` 挡住）：
 
@@ -88,6 +92,9 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --stage all
 **smoke —— 推之前先在本机把最容易被快照形状弄红的那批判据跑一遍**：18 条定向 pytest + `ruff check` 六目录 +
 `scripts/check_docs.py --mode report`。冒烟必须**复刻适配器在 runner 上做的事**（同一个 `_ensure_pool_stub()` /
 `_ensure_diag_fixtures()` 函数，`importlib` 直接 import 适配器本身）—— 抄一份逻辑就会各自漂。
+三段**任一段非 0 就退 5**（`SMOKE_FAILED`）：以前只把 `SMOKE*_RC` 打进日志、函数照常返回，
+于是「本机冒烟红、快照照样推上去」可以无声发生（卡 E145 实测：`--stage smoke` 指到不存在的目录时
+三段全红、脚本退 0）。
 
 **push —— 提交 + 再跑两条提交后判据 + `push --force`**：commit message 必须带合规的 `Task:` trailer
 （审计门 ⑧ 与 `tools/pytest_select.py` 都读它，缺了会报「没有 Task: trailer」并把 task 读成 `\x00`）；
@@ -118,10 +125,10 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --stage all
 | 码 | 常量 | 含义 | 典型日志记号 |
 |---|---|---|---|
 | 0 | `EXIT_OK` | 跑完了 | `BUILD_DONE` |
-| 2 | `EXIT_CONFIG` | 缺配置：没给远端 / 没给 `GIT_SSH_COMMAND` / 适配器或垫片文件不在 | `MISSING_REMOTE` / `MISSING_GIT_SSH_COMMAND` / `MISSING_ADAPTER` |
+| 2 | `EXIT_CONFIG` | 缺配置：没给远端 / 没给 `GIT_SSH_COMMAND` / 适配器或垫片文件不在 / 快照目录不在 | `MISSING_REMOTE` / `MISSING_GIT_SSH_COMMAND` / `MISSING_ADAPTER` / `MISSING_DEST` |
 | 3 | `EXIT_HISTORY` | 历史或 workflow 拿不到（bundle / fetch / `.github` checkout） | `BUNDLE_FAILED` / `FETCH_FAILED` / `WORKFLOW_CHECKOUT_FAILED` |
 | 4 | `EXIT_COMMIT` | 本地提交失败 | `COMMIT_FAILED` |
-| 5 | `EXIT_SNAPSHOT` | 快照形状不对（垫片撞车 / 豁免块已在 / 证据文件不在） | `CONFTEST_ALREADY_HAS_ADDOPTION` / `LEDGER_ALREADY_EXEMPT` / `MISSING_EVIDENCE_FILE` |
+| 5 | `EXIT_SNAPSHOT` | 快照形状不对（垫片撞车 / 豁免块已在 / 证据文件不在），或冒烟有红色 | `CONFTEST_ALREADY_HAS_ADDOPTION` / `LEDGER_ALREADY_EXEMPT` / `MISSING_EVIDENCE_FILE` / `SMOKE_FAILED` |
 | 6 | `EXIT_POOL` | 号池桩不对，或仓内混进了 `infra/`，或推前判据红 / 推失败 | `MISSING_POOL_STUB` / `POOL_STUB_INCOMPLETE` / `INFRA_INSIDE_SNAPSHOT` / `SMOKE4_FAILED` / `PUSH_FAILED` |
 
 ★ 与 `scripts/cloud/run_gate.sh` 的 2/9/4/5/7 **不通用**：那套是「租 ECS」的失败面（缺仓外配置 / 缺云机 / 播种对齐 /
@@ -129,31 +136,39 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --stage all
 
 ## 6. 真读数（2026-11-19）
 
-镜像仓 `aweds13/eng-gate` 上真跑过一次，job `135331686931`（run `44456198821`，head `cdb2c0fa`）：
+镜像仓 `aweds13/eng-gate` 上真跑过**两**趟：先 job `135331686931`（run `44456198821`，head `cdb2c0fa`），
+再 job `135640738507`（run `44547171433`，head `14220c7c` —— 这一趟的树是**仓里这份构建器**造的，
+即 `scripts/cloud/gha/build_snapshot.py --stage all` 的产物）。两趟结论相同：23 门、`not_run` 空、全绿。
+
+第二趟的读数原文（源：job `135640738507` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON，
+本机落盘在 gates/enggate-logs 下的 win-135640738507.reading.json，不进仓）：
 
 ```
-ok=True  host=runnervmm7ud1  rev=cdb2c0fa  branch=main  n_gates=23  not_run=[]  workers=4  python=3.12.10
+ok=True  host=runnervmm7ud1  rev=14220c7c  branch=main  n_gates=23  not_run=[]  at=2026-11-19T15:07:35
+py=3.12.10  workers=4  bad=[]
 ```
 
-逐门耗时（秒）—— 源：job 135331686931 的读数文件（`gates/enggate-logs/` 下 `win-135331686931.reading.json`，本机留档不进仓）的 `gates[].seconds`，全部 `exit_code=0`：
+逐门耗时（秒）。源：同一份读数的 `gates[].seconds`，全部 `exit_code=0`：
 
 | 门 | 秒 | 门 | 秒 |
 |---|---|---|---|
-| `pytest` | 821.79 | `web_live` | 64.15 |
-| `ui_flow` | 565.44 | `ui_dom_probe` | 47.85 |
-| `pytest_chain` | 429.41 | `commands` | 47.67 |
-| `acceptance` | 75.22 | `ui_text` | 47.47 |
-| `audit` | 75.31 | `style` | 47.28 |
-| `check_layers` | 71.68 | `contrast` | 47.08 |
-| `check_layers_selftest` | 71.21 | `skills_claims` | 46.84 |
-| `mypy` | 27.30 | `proxy` | 48.04 |
-| `contract_doc_table` | 27.63 | `lf1_live` | 48.40 |
-| `docs` | 23.53 | `ruff` | 5.43 |
-| `invariants` | 5.84 | `audit_titles` | 6.14 |
-| `render` | 0（复用） | | |
+| `pytest` | 1256.27 | `ui_dom_probe` | 96.19 |
+| `pytest_chain` | 884.91 | `proxy` | 96.76 |
+| `ui_flow` | 787.57 | `commands` | 95.85 |
+| `acceptance` | 157.29 | `ui_text` | 95.54 |
+| `check_layers_selftest` | 151.62 | `style` | 95.21 |
+| `audit` | 148.73 | `contrast` | 94.90 |
+| `check_layers` | 137.99 | `skills_claims` | 94.45 |
+| `web_live` | 132.38 | `lf1_live` | 97.14 |
+| `docs` | 52.87 | `mypy` | 50.26 |
+| `contract_doc_table` | 53.14 | `audit_titles` | 8.79 |
+| `invariants` | 8.09 | `ruff` | 7.56 |
+| `render` | 0（本机专用，复用） | | |
 
-同源求和 **2650.71 s ≈ 44.2 min**；job 从 checkout 到结束 **≈ 14.7 min**（源：同一份 job 日志首尾时间戳
-`04:08:09` → `04:22:52`）—— 逐门 `seconds` 是**墙钟相加**，4 worker 并行下不等于总时长，别拿它当 SLA。
+同源求和 **4603.51 s ≈ 76.7 min**；job 从起跑到结束 **1343 s ≈ 22.4 min**（源：GitHub Actions job 接口的
+`started_at 2026-11-19T14:45:18Z` / `completed_at 2026-11-19T15:07:41Z`）—— 逐门 `seconds` 是**墙钟相加**，
+4 worker 并行下远大于总时长，别拿它当 SLA。两趟差这么多是 **runner 负载差**，不是判据变严：
+同一套门、同一份 `run_gates.py`，`pytest` 这一道从 821.79 s 涨到 1256.27 s。
 
 ## 7. 已知边界 / 债
 
@@ -168,4 +183,39 @@ ok=True  host=runnervmm7ud1  rev=cdb2c0fa  branch=main  n_gates=23  not_run=[]  
    `datetime.date.today()` ⇒ 不钉就会让快照里 README 的日期与 runner 现算差一天，连带一批 pytest 红。
 5. **仓外号池桩每次现造**：它是零凭据的合成件，只为了让「号池目录在哪」这类判据有东西可读；
    它证明不了真号池能派活。
+
+## 8. 第二仓（OpenMAIC）那条腿：真读数在，但**不是**这份脚本造的
+
+任务书的验收里有一条是「OpenMAIC 仓能在云上跑出真的 vitest 读数」。这条腿今天的实际情况：
+
+**有真读数**（源：镜像仓 `aweds13/om-gate` 的 run `43902435671`，head `19b46314`，
+2026-11-16 四个 `Unit Tests (N/4)` 作业的日志汇总）：
+
+| 分片 | Test Files | Tests | Duration |
+|---|---|---|---|
+| 1/4 | 4 failed / 277 passed / 17 skipped (298) | 14 failed / 3535 passed / 195 skipped (3744) | 144.13 s |
+| 2/4 | 285 passed / 12 skipped (297) | 3483 passed / 80 skipped (3563) | 189.25 s |
+| 3/4 | 5 failed / 284 passed / 8 skipped (297) | 8 failed / 3586 passed / 87 skipped (3681) | 224.03 s |
+| 4/4 | 5 failed / 287 passed / 5 skipped (297) | 42 failed / 4123 passed / 86 skipped (4251) | 220.66 s |
+| 合计 | 14 failed / 1133 passed / 42 skipped | 64 failed / 14727 passed / 448 skipped | 四片相加 ≈ 778 s |
+
+**但它是 OpenMAIC 自己的 `ci.yml` 跑的**，不是本仓这份构建器：那次是把 OpenMAIC 树原样推上 om-gate、
+由它仓里那份完整的 workflow（`--shard=N/4`、`setup-workspace` 复合 action、node 22）跑出来的。
+本仓 `scripts/cloud/gha/` 下**只有 engineering 的构建器**（快照形状、适配器文件名、号池桩、23 道门全是
+engineering 的），没有任何一行认识 vitest。
+
+两条腿要分清：
+
+| | 租 ECS（`run_gate.sh`） | 租 runner（本页） |
+|---|---|---|
+| 是否已经两仓通用 | **是**：`scripts/cloud/profiles/engineering.toml` 与 `openmaic.toml` 两份，骨架同一份 | **否**：只有 engineering 的构建器 |
+| 证据 | `tests/test_cloud_profiles.py`（骨架里不许出现 engineering 字面、第二份 profile 禁 5 个专属键、渲染无缺键） | 本页 §6（engineering 两趟）+ 本节（OpenMAIC 是它自己的 CI 跑的） |
+
+要把这条腿也做成通用，缺的是**一个 `--repo` 化的构建器**：快照从哪个仓取、适配器叫什么名字、
+开跑前装什么、跑什么命令、产物在哪 —— 这些在这条路上今天全是硬编码，等价于 ECS 那条路的
+`profiles/<仓>.toml`。另外 om-gate **没有** eng-gate 那种「workflow 被冻结、推不上去」的约束
+（它那份 `ci.yml` 是可以改的），所以第二仓的适配层不需要绕 workflow scope，形状可以不一样。
+
+**别把这一节读成「已经通用」**：工程上成立的只有「判据仍在仓内、runner 只在外面跑」这一条原则两仓共享；
+脚本层面，今天是一仓一份。
 
