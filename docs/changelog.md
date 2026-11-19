@@ -3,6 +3,12 @@
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。
 - `tests/test_ui_flow_check.py` 新增 5 条钉子（`test_toast_watch_is_armed_with_the_other_counters` / `test_toast_mark_is_set_before_the_event_goes_out` / `test_toast_waiters_consult_history_before_polling` / `test_toast_since_applies_a_small_tolerance` / `test_toast_history_is_bounded`），既有 19 条一字未改；合计 24 条。
 - `docs/subsystems/ci/测试流程.md` §8 之后加一条：「提示条按『点击那一刻』取历史」—— 写清 `toast()` 只活 2.2 秒、`waitIdle` 0.9–6.2 秒、为什么必须在发事件前记 `toastMark`、为什么不许把 `waitIdle` 改短或给 toast 加固定 sleep。
+## 2026-11-19 T-AG650 配对门拒绝得太快：Windows 客户端拿到的是 10053 不是 401
+- `src/timeflow/api/app.py`：新增 `import asyncio`、`LAN_DRAIN_SECONDS = 2.0`、`_DRAIN_METHODS`（POST/PUT/PATCH/DELETE）与 `async def _drain_request_body(request, timeout=LAN_DRAIN_SECONDS)`；`lan_gate` 的拒绝分支在 `return JSONResponse(...)` **之前** `await _drain_request_body(request)`。判定、状态码、detail 一个字未改（sha256 改前=改后 `c15b8816…`）。
+- 依据 RFC 9112 §9.6：服务端在客户端还没发完请求体时就关连接，客户端看到的是连接被中止（Windows 上是 `WinError 10053`）而不是那个 401。drain 是分块丢弃（不缓存、不落盘），上限 2.0 秒，读不动就放弃（拒绝的状态码不受影响）。
+- `tests/test_lan_gate_drains_before_refusing.py`（新文件，4 条）：① 未配对的分块上传必须**先读完 10 块**再回 401 且 detail 含「配对」；② 配对过的上传仍收到整个 body（`totals.inserted == 1`）；③ 锁定期仍是 429 且同样 drain（`set(got.json()) == {'detail'}`、含「秒再试」）；④ 真 uvicorn 上慢速裸 socket 拿到 401 而不是连接中止。
+- `docs/contracts/domains/F9-storage-sync.md`：边界段加一条「拒绝（401/429）之前先有界读完请求体再关连接（卡 E141）」，写清 RFC 依据、`_drain_request_body()` 的实现口径、「只改连接怎么关，不改判定」，并指向判据文件。
+- `tests/test_web_live_read_failure_is_not_401.py`：只把文件头那条描述的时态改成「那一刻**还没读**请求体就回 401 并关连接（这条机制本身的修法见卡 E141）」，8 条断言一字未动。
 ## 2026-11-18 T-AG646 队列短锁等不到就无锁写：改成失败关闭、两处 os.replace 有界重试
 - 两条同族实现（gate_pool.PoolQueue.locked 与 pool/queue.py::_locked）的「等满等待窗口就 break 出去照样读改写」取消：到期仍建不出锁 ⇒ 抛自家 GatePoolBusy / QueueBusy，一个字节都不写（推翻卡 E55 的「记账队列不许变成闸」；实测 timeout=0.0 下 12 线程并发 submit 只剩 1 行）。
 - 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。

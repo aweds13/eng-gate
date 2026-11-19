@@ -121,6 +121,12 @@
   - 失败节流：连续错 20 次锁 5 分钟（按来源），防 6 位数字被慢慢试；
   - 配对过的设备 = **当作本机页面**（那道 origin 守卫防的是跨站，不是"你的另一台设备"）；
   - 这条路上是**明文 HTTP**：配对码防的是"随手连一下"，不是同 WiFi 抓包 —— 不装作它是加密。
+  - ★ **拒绝（401 / 429）之前先有界地读完请求体，再关连接**（卡 E141）。理由在传输层：
+    HTTP/1.1 规范（RFC 9112「连接管理」）写得很直白 —— 服务端立即 close，客户端可能读不到最后那行
+    响应；若客户端此时还在发 body，TCP 栈会回 RST，客户端拿到的是 `WinError 10053` 而不是我们的 401。
+    实现是 `src/timeflow/api/app.py` 的 `_drain_request_body()`（**分块丢弃、不缓存**，上限
+    `LAN_DRAIN_SECONDS`），**只改连接怎么关，不改判定**：状态码、`detail` 一字不变，放行分支不 drain。
+    判据在 `../../../tests/test_lan_gate_drains_before_refusing.py`；复盘（含 RFC 原文与四组探针读数）见卡 E141 规格。
 - **实现（T-G10b，2026-09-23）**：判定在一处 `src/timeflow/core/lan.py`（纯函数，可真值表测）；
   中间件 `lan_gate` 在 `src/timeflow/api/app.py`；启动方 `tools/serve.py` / `app/main.py` 与
   "绑哪个地址"是**同一个决定**。测试：`../../../tests/test_lan_pairing_line.py`（20 条）、

@@ -12475,3 +12475,14 @@ evidence = [
   "file:tests/test_ui_flow_check.py",
 ]
 gaps = "- 卡规格判据 4 说「waitToast / waitToastWhere 在轮询之前先查历史」，我把「历史」的起点定义成**发事件那一刻**（`press` / `drag` / `key` / `chord` 里 `this.toastMark = Date.now()`），不是「等待开始那一刻」。理由是实测症状本来就是「点击之后 toast 只活 2.2 秒、`waitIdle` 先跑 0.9–6.2 秒」，起点若取等待开始，历史里那条已经滚出 200 条上限时才补不回来；取发事件时刻则「点击→等空闲→再等 toast」整段都盖住。指针 tools/ui_flow_check.mjs- `toastSince(at)` 里 `const since = Number(at || 0) - 50` 的 **-50ms 容差**是为了吸收 `Date.now()` 在页面侧（`MutationObserver` 回调里记 `at`）与 Node 侧（`toastMark`）之间的时钟抖动；不给容差时实测会漏掉紧贴点击的那一条。这不是放宽判据：判据仍是「文本要么精确匹配、要么含子串」，容差只决定从历史里取哪几行。指针 tools/ui_flow_check.mjs- `TOAST_WATCH` 只保留最近 **200** 条并在窗口内幂等（`if (window.__tftoast) return true`），`__tftoastOpen` 防同一句每拍重记一次；26 条流全跑完内存里最多 200 条短字符串，不引入可观测的耗时差（全量 405.3s vs 改前 374–400s 同量级）。指针 tools/tf_browser.mjs- 反向变异只做两条（判据 6 要求的两条）：A 删掉两处「先查历史」的循环、B 把 `this.toastMark` 挪到 `clickAt` 之后。两条都必须红 —— 见 checkpoint 的 sha 记录，脚本与结果在 gates/diag/_rev_E140.py 与 gates/diag/_rev_E140_result.txt。"
+
+[entries."T-AG650"]
+id = "T-AG650"
+title = "配对门拒绝得太快：Windows客户端拿到的是10053不是401"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:src/timeflow/api/app.py",
+  "file:tests/test_lan_gate_drains_before_refusing.py",
+]
+gaps = "- 卡规格判据 1 说「拒绝之前要有界地读完请求体」，我把上限定成 `LAN_DRAIN_SECONDS = 2.0`（模块常量，不是 env 旋钮）：够读完一个 3 KB 的手机包，又不给慢客户端开出无限长的保持连接。之所以不做成 env，是因为判据 5 要求「判定、状态码、detail 一个字都不许变」，多一个旋钮就多一条行为分支；2.0 秒是 `_drain_request_body(request, timeout: float = LAN_DRAIN_SECONDS)` 的默认参数，测试可以显式传更小的值。指针 src/timeflow/api/app.py- `_DRAIN_METHODS = frozenset({「POST」, 「PUT」, 「PATCH」, 「DELETE」})` —— 只对**带体**的方法 drain，GET/HEAD 直接 return。理由是 RFC 9112 §9.6 关心的是「服务端先关连接、客户端还在发体」，GET 没有体可发，多读一次反而要等一个永不到来的 EOF（实测 GET 上 `request.stream()` 会等到超时才退出）。指针 src/timeflow/api/app.py- `_drain_request_body` 里 `except Exception: return`（带 `# noqa: BLE001`）不是吞错：drain 是**尽力而为**的收尾动作，读不动（客户端已经断了 / 超时）不该把 401 变成 500 —— 判据 3 要求拒绝的状态码与 detail 不变。超时用 `asyncio.wait_for` 包住整个 `async for`，不是每块单独计时，所以最坏情况就是从进函数起 2.0 秒。指针 src/timeflow/api/app.py- 只改了 `lan_gate` 的**拒绝分支**（`if not decision[「ok」]:` 之内），放行分支 `return await call_next(request)` 一个字没动 —— 判据 4 的 `test_paired_upload_still_receives_the_whole_body` 咬的就是这条：配对过的上传仍由下游路由自己读完整个 body（`totals.inserted == 1`）。指针 src/timeflow/api/app.py- 反向变异只做一条（判据 6 要求的那一条）：删掉 `await _drain_request_body(request)` 这一行，跑新测试的 3 条非 socket 用例 ⇒ 必须红。结果见 checkpoint，脚本与结果在 gates/diag/_rev_E141.py 与 gates/diag/_rev_E141_result.txt。- 老实说：`test_a_slow_body_on_the_lan_address_gets_401_not_a_reset` 是唯一用真 uvicorn + 裸 socket 的用例，它先 `bind((host, 0))` 拿一个能对外监听的地址，拿不到局域网地址时 `pytest.skip` —— 在只有回环的机器上这条**会跳过而不是变红**，这是有意的（判据 7 说「不许因为环境缺就把它改成假绿」，跳过有 `pytest.skip` 明示原因，不算假绿）。这条用例本身在 tests/test_lan_gate_drains_before_refusing.py。"

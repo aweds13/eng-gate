@@ -6,7 +6,8 @@
 `[FAIL] 手机直传：没配对传不进来（401）`——听起来像「服务端没给 401」，
 可服务端那一刻**确实回了 401**（`.wt/E84/gates/logs/web_live.log` 有
 `"path":"/api/sync/import","status":401`）。真因在客户端：服务端中间件
-（`src/timeflow/api/app.py:303`）不读请求体就回 401 并关连接，客户端撞
+（`src/timeflow/api/app.py:303`）那一刻**还没读请求体**就回 401 并关连接（这条机制本身的修法
+见卡 E141：拒绝之前先有界地读完再关），客户端撞
 `ConnectionResetError`，而 `tools/web_live_check.py:851` 的
 `except OSError: return 0, None` 把「连上了但没读到响应」洗成了「连不上」，
 判据 `nopair[0] == 401` 只看到 0。

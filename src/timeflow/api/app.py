@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 if TYPE_CHECKING:
     import sqlite3
 
+import asyncio
 import time
 from dataclasses import asdict
 from datetime import datetime
@@ -46,6 +47,32 @@ from timeflow.core.review.review import delete_item as review_delete_item
 from timeflow.core.tasks.manager import MydayConflictError
 from timeflow.storage import backup as backup_mod
 from timeflow.storage import db
+
+# 卡 E141：拒绝之前先把请求体**有界地**读完再关连接。
+# 为什么（RFC 9112「连接管理」）：服务端立即 close 会让客户端读不到最后那行响应；
+# 若客户端此时还在发 body，TCP 栈会回 RST，客户端拿到 WinError 10053 而不是我们的 401/429。
+# 实测（真 app + 裸 socket 慢速分块上传）：不 drain 必现 10053；分块 drain 后稳定拿到 401。
+# 上限的理由：服务端没有 body 尺寸上限，无界等待会把卡住的客户端变成挂住的请求。
+LAN_DRAIN_SECONDS = 2.0
+_DRAIN_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+async def _drain_request_body(request: Request, timeout: float = LAN_DRAIN_SECONDS) -> None:
+    """分块丢弃请求体（**不缓存进内存**），带**有界超时**；任何异常都吞掉。
+
+    只影响「连接怎么关」，不影响判定：调用方拿到异常也照原来的分支返回。
+    """
+    if request.method not in _DRAIN_METHODS:
+        return
+
+    async def _eat() -> None:
+        async for _ in request.stream():
+            pass
+
+    try:
+        await asyncio.wait_for(_eat(), timeout)
+    except Exception:  # noqa: BLE001 —— 客户端半路断开/超时都只意味着「body 到此为止」
+        return
 
 
 class TaskIn(BaseModel):
@@ -315,6 +342,9 @@ def create_app(
                 conn, host, request.url.path, lan_mod.read_code_from(request)
             )
             if not decision["ok"]:
+                # 卡 E141：先有界地读完请求体再拒 —— 否则客户端可能在收尾前就被 RST 打断，
+                # 读到的是 WinError 10053（「连接被本机中止」）而不是这里的 401/429。判定不变。
+                await _drain_request_body(request)
                 return JSONResponse(
                     {"detail": str(decision.get("detail") or "")},
                     status_code=int(decision["status"]),
