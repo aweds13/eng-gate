@@ -6566,3 +6566,22 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E143"
+task = "T-AG657"
+title = "F86窗口与回复上限：发布成可核元数据，95%迁移判不移植"
+tree = ".wt/E143"
+spec = "复盘/卡/卡E143-F86上下文窗口与回复上限-窗口读数发布成可核元数据.md"
+files = [
+  "tools/pool/model_registry.py",
+  "tools/pool/model-registry.toml",
+  "tools/pool/gateway.py",
+  "tests/test_model_registry.py",
+  "tests/test_pool_gateway.py",
+  "docs/subsystems/pool/模型与号池.md",
+  "复盘/卡/卡E143-F86上下文窗口与回复上限-窗口读数发布成可核元数据.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
