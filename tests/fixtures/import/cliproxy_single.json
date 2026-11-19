@@ -1,0 +1,8 @@
+{
+  "type": "codex",
+  "id_token": "sk-TESTTOKEN0001a2b3c4d5e6f708192a3b4c",
+  "access_token": "sk-TESTTOKEN0001a2b3c4d5e6f708192a3b4c",
+  "refresh_token": "sk-TESTTOKEN0001a2b3c4d5e6f708192a3b4c",
+  "account_id": "acct-0001",
+  "email": "cliproxy@example.invalid"
+}

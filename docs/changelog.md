@@ -46,6 +46,11 @@
 - `tools/pool_accounts.py`（1980→2104）加两处取数（`_value_at_path` / `_window_of_payload`）与两处校验（`_check_window_keys` / `_parse_reset_strict`），`probe_account()` 与 `record_probe_result()` 三处接线；既有键语义一字未动。另加一个分家判据 `_carries_ledger_window()`：曲线那一侧的 `resets_at`（unix 秒整数）不当账本窗口。
 - `tools/pool/platforms.toml` 加 `reset_path` / `window_hours` 两键的口径注释（同进同出、缺一不落账、没有兜底常量），今天九个平台都没填；`docs/subsystems/pool/modules.toml` 登记 `tools/pool/warmup.py` 一条职责。
 - 新增 `tests/test_pool_warmup.py` 28 条 + `tests/test_pool_accounts.py` 4 条：窗口两键必须成对、跨度不许默认、同日同刻幂等、due 只回三值、CLI 未知必退 3。
+## 2026-11-19 T-AG656 F30 账号导入：多工具格式读得懂就读，读不懂的点名交出来
+- 新增 `tools/pool/accounts_import.py`（549 行）：源格式识别（CliProxy 单条 / Codex auth.json / Claude .credentials.json / Sub2API accounts[] / 裸 token 行）+ 条目归一 + 计划生成 + 写前闸；无网络、无直接写文件，写只走 `save_ledger()`。
+- `tools/pool_accounts.py`（1980→2007）只做三处接线：`build_parser()` 的 `import` 子命令、`_import_cmd` 薄壳、`main()` 的 handlers 项；既有函数一个都没重排。
+- 账本里只放 `locator` 路径与 `credential.fingerprint`（sha256 前 32 位），token 明文永不落账；指纹命中的条目报 `exists` 走人，不覆盖已有账号。
+- 新增 `tests/test_pool_accounts_import.py` 13 条 + `tests/fixtures/import/` 五份假样本；`docs/subsystems/pool/modules.toml` 登记 `tools/pool/accounts_import.py` 一条职责。
 ## 2026-11-18 T-AG646 队列短锁等不到就无锁写：改成失败关闭、两处 os.replace 有界重试
 - 两条同族实现（gate_pool.PoolQueue.locked 与 pool/queue.py::_locked）的「等满等待窗口就 break 出去照样读改写」取消：到期仍建不出锁 ⇒ 抛自家 GatePoolBusy / QueueBusy，一个字节都不写（推翻卡 E55 的「记账队列不许变成闸」；实测 timeout=0.0 下 12 线程并发 submit 只剩 1 行）。
 - 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。

@@ -1,0 +1,22 @@
+[entries."T-AG656"]
+id = "T-AG656"
+title = "F30账号导入：多工具格式读得懂就读，读不懂的点名交出来"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/accounts_import.py",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_pool_accounts_import.py",
+  "file:tests/fixtures/import/bare_tokens.txt",
+  "file:tests/fixtures/import/claude_credentials.json",
+  "file:tests/fixtures/import/cliproxy_single.json",
+  "file:tests/fixtures/import/codex_auth.json",
+  "file:tests/fixtures/import/sub2api_accounts.json",
+  "text:tools/pool/accounts_import.py::def plan_entries(",
+  "text:tools/pool/accounts_import.py::def cmd_import(args) -> int:",
+  "test:test_pool_accounts_import.py::test_one_bad_entry_does_not_abort",
+  "test:test_pool_accounts_import.py::test_existing_account_not_overwritten",
+  "test:test_pool_accounts_import.py::test_import_never_clobbers_comments",
+]
+gaps = "1. 仓外那份账号账本（与限额文件同目录，路径由 `tools/pool/limits.py:50` 的 `pool_dir()` 现算；本仓看不到它）的第 126/127/128 行还是行首 `# touched` 注释：今天任何导入写路径照样会停在 `save_ledger()` 的注释闸上并念出行号 —— 这是判据 3 要的行为，不是缺陷；清注释是人的动作或另一张卡。指针 `tools/pool/accounts_import.py`2. 真实世界的导出文件没验过：五份样本全是自造的假串（token 一律 `sk-TESTTOKEN…`），所以「认得出 CliProxy / Codex auth.json / Claude .credentials.json / Sub2API / 裸 token 行」只在本仓样本上成立；`antigravity` 只做到 CLI 认名字给明确结果，没有格式解析。指针 `tools/pool/accounts_import.py`3. 「不联网」这条只做了静态与哨兵证明（源里 `_get_json` / `urllib` / `socket` 命中 0、`probe_account` / `_token_for` 不存在），没有真网络拦截；判据 8 的写前闸靠 `save_ledger()` 自己那道注释闸兜。指针 `tests/test_pool_accounts_import.py`"
+

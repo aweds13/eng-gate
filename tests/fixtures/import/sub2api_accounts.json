@@ -1,0 +1,14 @@
+{
+  "accounts": [
+    {
+      "name": "sub2api@example.invalid",
+      "platform": "openai",
+      "type": "oauth",
+      "credentials": {
+        "access_token": "sk-TESTTOKEN0004d5e6f708192a3b4c5d6e7f",
+        "refresh_token": "sk-TESTTOKEN0004d5e6f708192a3b4c5d6e7f",
+        "chatgpt_account_id": "acct-0004"
+      }
+    }
+  ]
+}

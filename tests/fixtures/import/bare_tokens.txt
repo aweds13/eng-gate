@@ -1,0 +1,4 @@
+# 一行一个 refresh token（空行与 # 开头的行会被跳过）
+sk-TESTTOKEN0005e6f708192a3b4c5d6e7f8a
+
+sk-TESTTOKEN0006f708192a3b4c5d6e7f8a9b

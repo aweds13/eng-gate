@@ -2089,7 +2089,33 @@ def build_parser() -> argparse.ArgumentParser:
     p_due.add_argument("--json", action="store_true")
     p_due.add_argument("--now", default=None, help="注入『现在』（ISO-8601；测试不许靠真实钟表）")
     p_due.add_argument("--platform")
+    p_imp = sub.add_parser(
+        "import", help="导入别的工具导出的凭据文件（只登记、不探测；默认只算不写）"
+    )
+    p_imp.add_argument(
+        "--agent",
+        required=True,
+        help="源工具：codex / claude / antigravity（factory 明确拒绝，指向 accounts add）",
+    )
+    p_imp.add_argument("files", nargs="+", help="凭据文件：JSON，或一行一个 refresh token")
+    p_imp.add_argument(
+        "--platform", help="这批凭据写进哪个平台的账本行（必须已在 platforms.toml 里）"
+    )
+    p_imp.add_argument(
+        "--dry-run", action="store_true", help="只算不写（默认就是这个；写出来更明白）"
+    )
+    p_imp.add_argument("--yes", action="store_true", help="真写账本（没有它一个字节都不动）")
+    p_imp.add_argument("--ledger", default=argparse.SUPPRESS, help="账本路径（同全局 --ledger）")
     return ap
+
+
+def _import_cmd(args) -> int:
+    """`import` 子命令的接线：实现全在 tools/pool/accounts_import.py（卡 A371）。"""
+    try:
+        from pool import accounts_import
+    except ImportError:  # pragma: no cover - 只在以 tools.* 包导入时走到
+        from tools.pool import accounts_import
+    return accounts_import.cmd_import(args)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2103,6 +2129,7 @@ def main(argv: list[str] | None = None) -> int:
         "probe": cmd_probe,
         "checkin": cmd_checkin,
         "due": cmd_due,
+        "import": _import_cmd,
     }
     handler = handlers.get(args.cmd or "")
     if handler is None:

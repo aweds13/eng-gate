@@ -281,3 +281,8 @@ cli = "无（被 wb_card.py 与 pool.landing 的翻账路径调）"
 name = "dispatch_shim.py"
 duty = "面板点「派活」的那一层中间壳：按卡号查规格（绝不让客户端传路径）、写死 argv 真跑一次派活器、往 `gates/diag/pool-actions.log` 追加一行痕；本壳不复制任何判据（卡号 / 域 / 树 / 干跑全在真派活器那边）"
 cli = "`python -X utf8 tools/pool/dispatch_shim.py --card <卡号> [--tree .wt/<卡>] [--dry-run]`"
+
+[[module]]
+name = "accounts_import.py"
+duty = "账号导入：认别的工具导出的凭据文件（CliProxyAPI / Codex auth.json / Claude .credentials.json / Sub2API accounts[] / codexbar / 裸 refresh token 行文），归一成账本行再生成计划 —— 源文件只读、不联网不探测、认不出的条目逐条点名（仍进表）、默认只算不写，写只走 save_ledger 的注释闸与原子写"
+cli = "python -X utf8 tools/pool_accounts.py import --agent codex/claude/antigravity --platform <能力表里的平台> [--yes] <文件>..."

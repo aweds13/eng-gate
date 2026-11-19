@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 47 个 py（46 个模块 + `__init__.py`）、**21297 行**（`wc -l tools/pool/*.py`，2026-11-20 现算）。
+`tools/pool/` = 48 个 py（47 个模块 + `__init__.py`）、**21846 行**（`wc -l tools/pool/*.py`，2026-11-20 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -17,6 +17,7 @@
 |---|---|---|---|
 | `__init__.py` | 27 | 包说明与模块地图；只解释分工，不放判据 | 无 |
 | `account_id.py` | 160 | 人给的名字 ↔ 账本稳定 id 的唯一映射（纯函数：吃 rows，不读文件不读环境） | 无（被 `wb_dispatch` 调） |
+| `accounts_import.py` | 549 | 账号导入：认别的工具导出的凭据文件（CliProxyAPI / Codex auth.json / Claude .credentials.json / Sub2API accounts[] / codexbar / 裸 refresh token 行文），归一成账本行再生成计划 —— 源文件只读、不联网不探测、认不出的条目逐条点名（仍进表）、默认只算不写，写只走 save_ledger 的注释闸与原子写 | python -X utf8 tools/pool_accounts.py import --agent codex/claude/antigravity --platform <能力表里的平台> [--yes] <文件>... |
 | `accounts_scope.py` | 283 | 调用方名册 → 可见号的收窄：只删候选、从不加（空名单 = 不收窄） | 无（被 `pool.guards`、`pool_mcp` 调） |
 | `callers.py` | 215 | 调用方名册的只读解析：谁能花哪个号的哪些模型；撤人改成 `off = true`，不删行 | 无（被 `wb_dispatch` 调） |
 | `checkin.py` | 1055 | 五个平台的签到**写动作唯一住所**：六态结论码 + 幂等 + 华为云 `SDK-HMAC-SHA256` 签名（`apply=False` 只探不领）；读侧只加一个纯函数 `codearts_package_used()` —— 只认 `usageTotalPackageCredit` 那一条算已用百分比与余额，绝不把 basic/ondemand/bonus 相加 | 无（被 `pool_accounts.py` 调：`checkin` 走签到写动作、`probe` 的 codearts 分支走额度读数） |
@@ -85,8 +86,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **21297 行** / **47 个文件**（46 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 408 张（385 done / 23 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **21846 行** / **48 个文件**（47 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 408 张（386 done / 22 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

@@ -1,0 +1,10 @@
+{
+  "OPENAI_API_KEY": null,
+  "tokens": {
+    "id_token": "sk-TESTTOKEN0002b3c4d5e6f708192a3b4c5d",
+    "access_token": "sk-TESTTOKEN0002b3c4d5e6f708192a3b4c5d",
+    "refresh_token": "sk-TESTTOKEN0002b3c4d5e6f708192a3b4c5d",
+    "account_id": "acct-0002"
+  },
+  "last_refresh": "2026-11-01T00:00:00Z"
+}
