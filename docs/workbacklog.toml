@@ -6450,3 +6450,24 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "A367"
+task = "T-AG652"
+title = "F33限额数据面：limits.toml一份文件两个形状先裁决，仓内交可读模板"
+tree = ".wt/A367"
+spec = "复盘/卡/卡A367-F33限额数据面-limits.toml落地前先裁决同一个文件两个形状.md"
+files = [
+  "tools/pool/limits.example.toml",
+  "tools/pool/limits_policy.py",
+  "tools/pool/limits.py",
+  "tests/test_pool_limits_data.py",
+  "复盘/卡/卡A367-F33限额数据面-limits.toml落地前先裁决同一个文件两个形状.md"
+]
+depends = [
+  "A338",
+  "A341",
+  "A350"
+]
+risk = "mid"
+status = "pending"
