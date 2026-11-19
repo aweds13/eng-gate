@@ -6617,3 +6617,21 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E144"
+task = "T-AG659"
+title = "GitHub Actions 云门禁进仓：三件只在 gates/diag/_tmp 里活着的脚本搬成库里的源码"
+tree = ".wt/E144"
+spec = "复盘/卡/卡E144-GitHub-Actions云门禁进仓：三件脚本从-gitignore-搬成库里的源码.md"
+files = [
+  "scripts/cloud/gha/build_snapshot.py",
+  "scripts/cloud/gha/adapter.py",
+  "scripts/cloud/gha/conftest_shim.txt",
+  "tests/test_gha_cloud_gate.py",
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "docs/subsystems/ci/README.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
