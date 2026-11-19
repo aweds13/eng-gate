@@ -6806,7 +6806,7 @@ depends = [
   "A365"
 ]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A380"

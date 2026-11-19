@@ -18,6 +18,10 @@
 - 产品码 tools/pool/gateway.py / tools/pipeline_view.py / tools/pool/jobs.py 一字节未动（sha16 c570cc73dd127def / 373032f24d5a4214 / 36ae6c631c581089 与基线逐字相同）。
 - pprof / goroutine / faulthandler / cProfile / _current_frames / threading.enumerate 在 tools/ 与 scripts/ 零命中，钉子把这个空白钉住。
 - 顺带补上一条真空白：`[mem]` 只进 --report 这条纪律原来零测试覆盖（grep [mem]|tracemalloc tests/ = 0）。
+## 2026-11-20 T-AG667 F60 MCP hub 判不移植：五条反向钉子把「hub 的前提不在」钉住
+- 新建 `tests/test_pool_mcp_no_hub.py`（169 行，五个测试）：判据 1 扫 tools/ src/ scripts/ 的 *.py 与文件名里的 MCPHub|mcp_hub|hubSep|hubIdle；判据 2 用 inspect.signature 读 build_server 与 serve_http 的形参表并断言没有 HubMCPPath；判据 3 只扫 tools/pool/mcp_http.py 与 src/timeflow/mcp/server.py 的源码，不扫 tools/pool_mcp.py（它今天 20 处都是正当 CLI 子进程）；判据 4 扫 tools/ src/ 的 idle 回收定时器；判据 5 扫 mcpServers|mcp_servers|cursor://|vscode:mcp 并覆盖 docs/subsystems/pool/modules.toml。
+- 不移植有据可查：这四个 hub 词在 tools/ src/ scripts/ 是 0 命中、Timer 族在 tools/ src/ 是 0 命中、subprocess|Popen 在 MCP 面两份文件是 0 命中、agent 配置/deeplink 四词在 src/ tools/ tests/ 是 0 命中。
+- 产品码一个字节没改（tools/pool/mcp_http.py、tools/pool_mcp.py、src/timeflow/mcp/server.py 的 git diff 为空）；不改 README 表 B（那一行归 A373）、不改 docs/subsystems/pool/modules.toml。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。

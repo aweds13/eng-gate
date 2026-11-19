@@ -160,3 +160,20 @@ python -X utf8 gates/diag/_rev_F60.py
 - **未取证**：tests/test_pool_mcp_no_hub.py 这个文件名今天不存在（`ls` 报 No such file；`git ls-files tests | grep -i mcp` 八份里也没有 `test_no_hub*`）；若立卡时发现同名/近名文件已存在，按既有文件合并，别硬建第二个。
 - **未取证**：判据 5 里那条 `assert "mcpServers" not in .../modules.toml` 今天为真（`grep` 0 命中），但我**没有**逐条读那 52 条 `[[module]]` 的 duty 文本（`grep -c "\[\[module\]\]" docs/subsystems/pool/modules.toml` = 52，`dce8d904` 实读）；若立卡时发现某条 duty 里出现该词，按「只钉代码不钉文档」把那条断言缩到 `src/ 与 tools/` 的 `*.py`。
 - **未坐实**：`gates/diag/_magpie_scope.md:68` 那条 PORT|no 是普查时的粗判；本卡改判 SKIP_NOT_APPLICABLE 的理由写在「结论」三条里，但**改判定表本身不是本卡的活**（那张表未跟踪、也没有门咬它）—— 立卡后应把 `:68` 那一行同步改掉，否则两张纸会漂。
+
+## 落地时实测与口径（2026-11-20，本卡自己；读数都在 `.wt/A379` 里真跑，不是估的）
+
+> 这一段是落地后追加的实测记录（体例同卡 E125 的「落地时的两处调整」）；上面判据原文一字未改。
+
+- **判据 1 的词表带词边界，验收 grep 要排除钉子文件自己**：`tests/test_pool_mcp_no_hub.py` 自己就写着这四个词（词表在 `:44`、两处 docstring 在 `:49`/`:81`），所以规格验收里那条 `grep -rnE 'MCPHub|mcp_hub|hubSep|hubIdle' tools/ src/ scripts/ tests/` 按字面跑会**自撞 3 条**。实读：整根跑 3 条命中**全在新文件里**，**排除钉子文件后 0 命中**（`grep … | grep -v test_pool_mcp_no_hub.py` 退 1）。判据 1 的扫描根是 `tools/ src/ scripts/`、**不含 `tests/`**，所以这条钉子本身不受影响 —— `__pycache__` 里的 `.pyc` 二进制命中同理（`_py_files()` 跳过 `__pycache__`）。
+- **M1 用了规格「或」里的后一半**：规格写「加 `MCPHUB = "hub"`（或 `class MCPHub: ...`）」；判据 1 的词表**大小写敏感**，全大写的 `MCPHUB` 咬不住，故变异用括号里的写法（`MCPHub = "hub"` 与 `class MCPHub` 词形状相同）。这是与规格字面的唯一偏差，读数照抄在 `gates/diag/_rev_379_result.txt`。
+- **实现落点**：五条判据全在新建的 `tests/test_pool_mcp_no_hub.py`（169 行）—— `test_no_hub_concept_in_sources` / `test_transport_has_no_agent_dimension` / `test_mcp_face_never_spawns_a_process` / `test_no_idle_reclaim_timer` / `test_no_agent_config_writer`。判据 1 扫 `tools/ src/ scripts/` 的 `*.py` 并对**文件名**也扫一遍；判据 2 用 `inspect.signature` 读 `build_server` 与 `serve_http` 的形参表，另加 `not hasattr(mcp_http, "HubMCPPath")`；判据 3 取 `inspect.getsource(mcp_http)` + `src/timeflow/mcp/server.py` 两处源码（**不扫 `tools/pool_mcp.py`**，它今天 20 处正当 CLI 子进程）；判据 4 扫 `tools/ src/`；判据 5 扫 `tools/ src/` 并另加 `docs/subsystems/pool/modules.toml` 不含 `mcpServers`。
+- **变异落点**（脚本在主树 `gates/diag/_rev_379.py`，**不在卡树**；结果落 `gates/diag/_rev_379_result.txt`；★ 验收 `:128` 写的是 _rev_F60.py —— 那个名字今天不存在，按「一卡一脚本」实际命名为 _rev_379.py，体例同 `gates/diag/_rev_E98.py`）：M1 `tools/pool_mcp.py` 加 `MCPHub` 常量 ⇒ 咬住 `test_no_hub_concept_in_sources`；M2 `tools/pool/mcp_http.py` 的 `build_server` 加 `agent: str = ""` ⇒ 咬住 `test_transport_has_no_agent_dimension`；M3 `tools/pool/mcp_http.py` 顶部 `import subprocess` ⇒ 咬住 `test_mcp_face_never_spawns_a_process`；M4 `src/timeflow/mcp/server.py` 写一行 `threading.Timer(1.0, lambda: None)` ⇒ 咬住 `test_no_idle_reclaim_timer`；N1 只改 `tools/pool_mcp.py:283` 那句注释的措辞 ⇒ 五条全绿（安静对照未响，是对的）。每条都真改→真跑→`try/finally` 真还原→`sha256[:16]` 核对；三份被改文件复原后分别是 `28b3f8db34dbb849`、`9e4ea2721f3b2818`、`e2607526e99cbfbb`，钉子文件 `6b3ede3c5af81286`。
+- **实测读数**（全部实跑，原样）：
+  - `python -X utf8 -m pytest tests/test_pool_mcp_no_hub.py -q -o addopts= --no-cov -p no:xdist` ⇒ `5 passed in 2.76s`，exit 0。
+  - `python -X utf8 -m ruff check tests/test_pool_mcp_no_hub.py` ⇒ `All checks passed!`，exit 0。
+  - `python -X utf8 scripts/gen_pool_readme.py --check` ⇒ `[OK  ] docs/subsystems/pool/README.md 与现算一致（52 个文件 / 21297 行 / 2026-11-20）`，exit 0。
+  - 判据 4、5 的 grep 各自 exit 1（0 命中）；判据 1 的那条 grep 排除钉子文件后 exit 1。
+  - `python -X utf8 gates/diag/_rev_379.py` ⇒ 末行「结论：4/4 条全部咬住，收尾绿。」，exit 0。
+- **第二份「计划建」的现实**：`docs/changelog.d/T-AG667.md` 本卡**没有**产出（试写过一份，`tools/sync_docs.py --check` 当场红：`[FAIL] … docs/changelog.d/T-AG667.md 的内容没在 docs/changelog.md 里`，已撤）。它**不在** `docs/workbacklog.toml` 的 A379 `files` 两项里（那两项是钉子文件与本规格）—— changelog 片段由落地链 ② 生成（`tools/pool/stage_card.py:303-306` 的片段模式、`tools/pool/landing.py:95` 的 `RESET_FRAGMENTS` ⓪ 步先删卡树里的新片段），手写一份只会让全量门的 `docs_fragments_problems()`（`scripts/run_gates.py:1152`）红。
+- **未做**：`gates/diag/_magpie_scope.md:68` 那行仍写着 PORT（改判定表不是本卡的活，见上面「未坐实项」最后一条）；`docs/subsystems/pool/README.md` 表 B 那一行归 A373，本卡一字未碰。

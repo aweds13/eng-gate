@@ -1,0 +1,14 @@
+[entries."T-AG667"]
+id = "T-AG667"
+title = "F60 MCP hub：判SKIP_NOT_APPLICABLE，五条反向钉子"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_mcp_no_hub.py",
+  "test:test_pool_mcp_no_hub.py::test_no_hub_concept_in_sources",
+  "test:test_pool_mcp_no_hub.py::test_mcp_face_never_spawns_a_process",
+  "test:test_pool_mcp_no_hub.py::test_no_idle_reclaim_timer",
+  "file:复盘/卡/卡A379-F60-MCP-hub-判SKIP_NOT_APPLICABLE.md",
+]
+gaps = "1. 判据 1 的验收 grep 按字面跑会**自撞钉子文件自己**：那四个词就写在 `tests/test_pool_mcp_no_hub.py` 的 :44 词表与 :49/:81 两处 docstring 里；判据本身的扫描根是 tools/ src/ scripts/、不含 tests/，排除钉子文件后 0 命中。指针 tests/test_pool_mcp_no_hub.py2. 规格的变异 M1 写「加 MCPHUB = 「hub」（或 class MCPHub）」；判据词表大小写敏感，全大写 MCPHUB 咬不住，变异用了括号里的 MCPHub 写法。这是与规格字面的唯一偏差。指针 gates/diag/_rev_379.py3. changelog 片段不由本卡产出：手写一份 `docs/changelog.d/T-AG667.md` 会让 `tools/sync_docs.py --check` 当场红（全量门在 scripts/run_gates.py:1152 的 docs_fragments_problems 里无条件跑它），片段由落地链 ② 生成。指针 tools/pool/stage_card.py4. `gates/diag/_magpie_scope.md`:68 那行仍写 PORT —— 改判定表不是本卡（A379）的活，两张纸暂时漂着。"
+
