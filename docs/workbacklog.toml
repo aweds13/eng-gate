@@ -6539,3 +6539,30 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A371"
+task = "T-AG656"
+title = "F30账号导入多工具格式：读不懂的点名交出来，不联网不直写"
+tree = ".wt/A371"
+spec = "复盘/卡/卡A371-F30账号导入多工具格式-读不懂的点名交出来.md"
+files = [
+  "tools/pool/accounts_import.py",
+  "tools/pool_accounts.py",
+  "docs/subsystems/pool/modules.toml",
+  "tests/test_pool_accounts_import.py",
+  "tests/fixtures/import/cliproxy_single.json",
+  "tests/fixtures/import/codex_auth.json",
+  "tests/fixtures/import/claude_credentials.json",
+  "tests/fixtures/import/sub2api_accounts.json",
+  "tests/fixtures/import/bare_tokens.txt",
+  "复盘/卡/卡A371-F30账号导入多工具格式-读不懂的点名交出来.md"
+]
+depends = [
+  "A344",
+  "E121",
+  "A335",
+  "A370"
+]
+risk = "mid"
+status = "pending"
