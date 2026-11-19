@@ -267,3 +267,203 @@ def gate_base_drift(
 def category_is_red(category: str) -> bool:
     """只有 MATCH / LEDGER_ONLY 不算红 —— 其余（含未知值）一律算红。"""
     return str(category) not in (MATCH, LEDGER_ONLY)
+
+
+BASIS_DRIFT = "BASIS_DRIFT"
+TRUE_MISMATCH = "TRUE_MISMATCH"
+
+_BASIS_DEFAULT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def required_profiles_of(paths: list[str]) -> frozenset[str]:
+    """这条路径清单要跑哪些档 —— 现读 gates/defs/domains.py；读不到就 **fail closed 全档**。
+
+    ★ 卡 E137 判据 1 的硬边界要的是「档表真源」而不是抄一份常量：档表一改，这里必须跟着变。
+    """
+    try:
+        try:
+            from gates.defs import domains
+        except ModuleNotFoundError:
+            root = str(_BASIS_DEFAULT_ROOT)
+            if root not in sys.path:
+                sys.path.insert(0, root)
+            from gates.defs import domains
+        got = domains.required_profiles(list(paths))
+    except Exception:  # noqa: BLE001 —— 读不到档表就拿不准，全档最严
+        return frozenset({"lang", "audit", "product"})
+    return frozenset(str(x) for x in got)
+
+
+def _basis_norm(path: object) -> str:
+    return str(path or "").replace("\\", "/").lstrip("./")
+
+
+def basis_providers(root: Path | str | None = None) -> dict[str, object]:
+    """gate_basis_verdict 的默认取数器（git 只读 + 现算封存树 + 现读档表）。"""
+    base = Path(root) if root is not None else _BASIS_DEFAULT_ROOT
+    out: dict[str, object] = dict(providers(base))
+
+    def _kind(name: str) -> str:
+        if not name:
+            return ""
+        rc, text = _git(base, "cat-file", "-t", str(name))
+        return text.strip() if rc == 0 else ""
+
+    def _count(old: str, new: str) -> int | None:
+        if not old or not new:
+            return None
+        rc, text = _git(base, "rev-list", "--count", f"{old}..{new}")
+        if rc != 0:
+            return None
+        try:
+            return int(text.strip())
+        except ValueError:
+            return None
+
+    def _trees(old: str, new: str) -> list[str] | None:
+        if not old or not new:
+            return None
+        rc, text = _git(base, "diff", "--name-only", str(old), str(new))
+        if rc != 0:
+            return None
+        return [ln for ln in text.splitlines() if ln.strip()]
+
+    def _without_gates(rev: str) -> str:
+        try:
+            scripts = str(base / "scripts")
+            if scripts not in sys.path:
+                sys.path.insert(0, scripts)
+            import run_gates as _rg  # noqa: PLC0415 —— 现读，免得 tools/ 反依赖 scripts/
+
+            return _rg.tree_without_gates(base, str(rev)) or ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    out["object_kind"] = _kind
+    out["count_between"] = _count
+    out["diff_trees"] = _trees
+    out["tree_without_gates"] = _without_gates
+    out["required_profiles"] = required_profiles_of
+    return out
+
+
+def gate_basis_verdict(
+    payload_rev: str,
+    parent_short: str,
+    recorded_tree: str,
+    commit_sha: str,
+    files: list[str],
+    *,
+    root: Path | str | None = None,
+    **providers_in: object,
+) -> tuple[str, list[str], str]:
+    """判「封存树 vs 本笔提交树」的差异该算谁的 ⇒ (档, 差异路径, 读数)。
+
+    ★ 卡 E137：对不上不等于「伪造」。两档 ——
+      * ``BASIS_DRIFT``：门禁基点真落后了（真祖先），差异全由中间提交带入、且只落台账/文档档
+        ⇒ 结论**未经复验**（如实留痕，不判红）；
+      * ``TRUE_MISMATCH``：其余一切（不是祖先 / 差异里有本笔自己改的 / 无法解释 / 落被测代码档 /
+        封存树不在对象库 / 拿不到差异）⇒ 照红、点名路径。
+
+    四个必要条件缺一即 ``TRUE_MISMATCH``（拿不准就红）。本函数**只判定**：不 print、不 sys.exit。
+    """
+    taken: dict[str, object] = basis_providers(root)
+    taken.update(providers_in)
+    resolve = taken.get("resolve")
+    ancestor = taken.get("ancestor")
+    diff_trees = taken.get("diff_trees")
+    diff_range = taken.get("diff_range") or taken.get("diff")
+    count_between = taken.get("count_between")
+    object_kind = taken.get("object_kind")
+    tree_without_gates = taken.get("tree_without_gates")
+    required_profiles = taken.get("required_profiles") or required_profiles_of
+
+    raw = str(payload_rev or "")
+    parent = str(parent_short or "")
+    files_n = [_basis_norm(f) for f in (files or [])]
+
+    a = str(resolve(raw) or "") if callable(resolve) else ""
+    b = str(resolve(parent) or "") if callable(resolve) else ""
+    if not a or not b:
+        return TRUE_MISMATCH, [], (
+            f"门禁 rev={raw!r}（解析={a[:8] or '失败'}）与本笔父提交 {parent!r}"
+            f"（解析={b[:8] or '失败'}）不是两个都解析得出的提交 —— 没法证明是同一条基点"
+            " ⇒ 拿不准不放过"
+        )
+
+    same = _same_commit(a, b)
+    seen = True if same else (ancestor(a, b) if callable(ancestor) else None)
+    if seen is not True:
+        return TRUE_MISMATCH, [], (
+            f"门禁跑在 {raw}（解析={a[:8]}），而本笔父提交是 {parent}（解析={b[:8]}）"
+            " —— 前者**不是**后者的祖先：门禁结论没有复验过，不能当本笔证据"
+        )
+
+    middle = 0 if same else (count_between(a, b) if callable(count_between) else None)
+    middle_n = "?" if middle is None else str(middle)
+
+    kind = str(object_kind(recorded_tree) or "") if callable(object_kind) else ""
+    if not str(recorded_tree or "") or kind != "tree":
+        return TRUE_MISMATCH, [], (
+            f"封存树 {str(recorded_tree or '(空)')[:12]} 不在对象库里"
+            f"（cat-file 给 {kind or '失败'}）—— 旧口径产物（tree 没进对象库），封存树核不了"
+            " —— 拿不准不放过"
+        )
+
+    if not commit_sha:
+        return TRUE_MISMATCH, [], "没给本笔提交，判不出差异该算谁的：拿不准不放过"
+    calc = str(tree_without_gates(str(commit_sha)) or "") if callable(tree_without_gates) else ""
+    if not calc:
+        return TRUE_MISMATCH, [], (
+            f"复算本笔提交 {str(commit_sha)[:12]} 去 gates/** 的 tree 失败：拿不准不放过"
+        )
+    rows = diff_trees(str(recorded_tree), calc) if callable(diff_trees) else None
+    if rows is None:
+        return TRUE_MISMATCH, [], (
+            "封存树与本笔提交树差在哪取不到（git diff 没回东西）—— 拿不准不放过"
+        )
+    diff = [str(p) for p in rows if str(p).strip()]
+
+    if not diff:
+        return BASIS_DRIFT, [], (
+            f"门禁跑在 {raw}，本笔父提交已前进到 {parent}（中间 {middle_n} 笔）；"
+            "封存树 = 本笔提交树（内容未变）—— 门禁结论**未经复验**，但没有内容差异"
+        )
+
+    mid_rows = diff_range(a, b) if callable(diff_range) else None
+    mid_set = {_basis_norm(p) for p in (mid_rows or [])}
+    diff_n = [_basis_norm(p) for p in diff]
+
+    mine_only = [p for p in diff if _basis_norm(p) in files_n and _basis_norm(p) not in mid_set]
+    if mine_only:
+        return TRUE_MISMATCH, mine_only, (
+            f"封存树 vs 本笔提交树差 {len(diff)} 条，其中 {len(mine_only)} 条"
+            f"是**封存之后本笔自己改的**"
+            f"（不在中间提交 {raw}..{parent} 里）：{mine_only[:6]} —— 门禁没见过这些内容 ⇒ 照红"
+        )
+    explained = set(mid_set) | set(files_n)
+    unexplained = [p for p in diff if _basis_norm(p) not in explained]
+    if unexplained:
+        return TRUE_MISMATCH, unexplained, (
+            f"封存树 vs 本笔提交树差 {len(diff)} 条，其中 {len(unexplained)} 条**无法解释**"
+            f"（既不是中间提交 {raw}..{parent} 带入的、也不在本笔改动里）：{unexplained[:6]}"
+            " —— 拿不准不放过"
+        )
+
+    profiles = sorted(str(x) for x in required_profiles(diff_n))
+    hit = sorted(set(profiles) & {"lang", "product"})
+    if hit:
+        return TRUE_MISMATCH, diff, (
+            f"门禁跑在 {raw}，本笔父提交已前进到 {parent}（中间 {middle_n} 笔），"
+            f"差异 {len(diff)} 条"
+            f"**落在被测代码档（{'/'.join(hit)}）** —— 门禁没为这些文件跑过：{diff[:6]} ⇒ 照红"
+        )
+    return BASIS_DRIFT, diff, (
+        f"门禁跑在 {raw}，本笔父提交已前进到 {parent}（中间 {middle_n} 笔），差异 {len(diff)} 条"
+        f"全由中间提交带入，只落 {'/'.join(profiles)} 档 —— 门禁结论**未经复验**"
+    )
+
+
+def basis_is_red(tier: str) -> bool:
+    """只有 BASIS_DRIFT 不算红 —— 其余（含未知值）一律算红。"""
+    return str(tier) != BASIS_DRIFT

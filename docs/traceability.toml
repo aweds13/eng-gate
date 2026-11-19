@@ -12499,3 +12499,24 @@ evidence = [
   "file:tests/test_ui_flow_check.py",
 ]
 gaps = "- 卡规格判据 1 建议的实现拆成三件（`pendingFocus` / `focusAfterPaint(sel)` / `flushPendingFocus()`），我把**执行点**放在 `render()` 的 `paint` 里而不是 `view()` 里：因为整块重写 `#main` 的是 `renderToday` / `renderTasks` 自己（`m.innerHTML=`），`view()` 返回时新 DOM 还没出现。`view()` 只负责**登记**要聚焦到哪儿（`focusAfterPaint`），谁换的 DOM 谁在换完之后 flush。指针 src/web/index.html- `paint` 从 `w=>{...}` 改成 `async w=>{... await w(m); if(mySeq===renderSeq)flushPendingFocus()}`：**`w` 可能是 async**（`renderToday` 先 `await Promise.all([...10 个 api])` 才 `m.innerHTML=`），不 await 就还是在**旧 DOM** 上聚焦，随后整块重写把焦点节点销毁 ⇒ 焦点落回 body。这一条是反向变异逼出来的：不加 await 时流 K 仍绿而变异不红，加了才红。指针 src/web/index.html- 四处入口（`paletteNewTask` / `guideStart` / `addTask` / `addTaskHere`）统一改成「登记 + 交回 render」，其中 `paletteNewTask` 顺带删掉了原来那段 `setInterval(...,50)` 最多 20 拍的轮询 —— 那是页内在「猜 DOM 什么时候出现」，与本次「谁换 DOM 谁 flush」是同一个问题的两种错解。全文件 `setInterval` 只剩 3 处（右栏计时器 tick ×2、跨端同步 `FOCUS_POLL_MS`），页内猜 DOM 的那一处已绝迹。指针 src/web/index.html- 流 K 新增的 ⑦′ 步必须先 `document.activeElement.blur()` 再跑命令：⑦ 刚把焦点送进 `#newTitle`，不挪走的话 ⑦′ 是**恒真断言** —— 反向变异第一趟就是这么被蒙过去的（删掉 flush，流 K 仍 39 项全绿）。指针 tools/ui_flow_check.mjs- 判据 5 的 pytest 钉子按字面切片（`html.split(「const paint=async w=>{」,1)`），锚点与实现绑死：改 `paint` 的写法必须同时改钉子，这正是要的（防止「改了实现忘了判据」）。指针 tests/test_web_frontend.py"
+
+[entries."T-AG648"]
+id = "T-AG648"
+title = "门禁基点漂移不再一律当伪造：按差在哪分两档、判不了仍照红"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/gate_base.py",
+  "file:tools/wb_review.py",
+  "file:scripts/audit_progress.py",
+  "file:tools/pool/landing.py",
+  "file:docs/decisions/0010-gate-basis-drift.md",
+  "text:tools/gate_base.py::def gate_basis_verdict(",
+  "test:test_wb_review.py::test_basis_drift_classifies_one_middle_commit",
+  "test:test_wb_review.py::test_true_mismatch_still_red_when_files_changed_after_seal",
+  "test:test_wb_review.py::test_lang_tier_drift_is_still_red",
+  "test:test_wb_review.py::test_basis_drift_is_traced_not_silently_green",
+  "test:test_audit_tightening.py::test_gate_payload_reads_the_reviewed_commit_not_head",
+  "test:test_wb_review.py::test_audit_verdict_ignores_pass_string_in_trailer",
+]
+gaps = "1. `framework/src/framework/review.py` 这一版没接线（纯库，不 import 本仓模块、不跑子进程）：只留 `# TODO(E137)` 与 xfail strict 钉子，它仍把 BASIS_DRIFT 算红，比真源严一档 —— 严不是错，但两处口径不再是同一份。指针 framework/src/framework/review.py2. 旧三档分类器 `gate_base_drift` 与旧文案「一次门禁跑完提交两笔？第二笔没验过」仍在四处（tools/gate_base.py:222、tools/wb_verify.py:316 与 framework 两份），本卡只让**新**两档接管 ③③′ 两个出口，旧出口一字未动。指针 tools/gate_base.py3. `basis_check` 的取数器缺省绑真仓 ROOT：在别的树里调它必须 monkeypatch ROOT 或传 providers，否则恒回 None（判不了 ⇒ 退回旧口径，不会误判绿）—— 这是新钉子的前提。指针 tools/wb_review.py"

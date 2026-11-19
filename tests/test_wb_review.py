@@ -1189,3 +1189,244 @@ def test_base_drift_ledger_only_trailer_note_not_forgery(tmp_path: Path, monkeyp
         "全量门禁绿 + seal", {**payload, "ok": False}, parent
     )
     assert any("伪造门禁结论" in p for p in forged), forged
+
+# ------------------------------------------------- 卡 E137（T-AG648）：两档
+#
+# 现场：门禁在 R 跑、主树又插进一笔台账提交、这一笔父提交变成 P ⇒ 封存树与本笔提交树
+# 不相等。旧判据只会说「封存之后又动了文件？」与「伪造门禁结论」—— 红对了、罪名错了。
+# 新判据按**差在哪**分两档（唯一真源 tools/gate_base.py::gate_basis_verdict）：
+#   BASIS_DRIFT   —— 真祖先 / 差异全由中间提交带入 / 只落台账文档档 / 封存树在对象库 ⇒ 只留痕
+#   TRUE_MISMATCH —— 其余一切（不是祖先 / 本笔封存后又改 / 无法解释 / 落被测代码档）⇒ 照红
+
+
+def _basis_repo(
+    tmp_path: Path, *, mid_path: str = "docs/workbacklog.toml", mine_path: str = "",
+) -> tuple[Path, dict, str, str, list[str]]:
+    """A 门禁跑在这 → B 改 mid_path → C 本笔（带 gates/last.json，可再改 mine_path）。
+
+    返回 (仓, last.json 的内容, 本笔短 sha, 父提交短 sha, 本笔改的文件)。
+    ``tree`` 写的是 A 那一笔**去掉 gates/** 的冻结树（真产物才这么写）。
+    """
+    repo = tmp_path / "repo"
+    for rel in ("src", "docs", "tools", "gates"):
+        (repo / rel).mkdir(parents=True)
+    (repo / "src" / "a.py").write_text("a\n", encoding="utf-8")
+    _run_git(repo, "init", "-q", "-b", "main")
+    _run_git(repo, "config", "user.email", "t@local")
+    _run_git(repo, "config", "user.name", "t")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "A: 门禁就是在这跑的")
+    base = _run_git(repo, "rev-parse", "--short", "HEAD").strip()
+    sealed = rg.tree_without_gates(repo, "HEAD")
+    assert sealed, "夹具前提：A 那一笔的冻结树要算得出来"
+    (repo / mid_path).parent.mkdir(parents=True, exist_ok=True)
+    (repo / mid_path).write_text("x\n", encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "B: 主树又前进一笔")
+    parent = _run_git(repo, "rev-parse", "--short", "HEAD").strip()
+    payload = {
+        "rev": base,
+        "ok": True,
+        "docs_sync_ok": True,
+        "docs_sync_missing": [],
+        "tree_scope": "worktree-minus-gates",
+        "tree": sealed,
+        "sealed_at": "2099-01-01T00:00:00",
+        "gates": [{"name": "pytest", "exit_code": 0}],
+    }
+    (repo / "gates" / "last.json").write_text(json.dumps(payload), encoding="utf-8")
+    if mine_path:
+        (repo / mine_path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / mine_path).write_text("late\n", encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "C: 这一笔（父提交是 B）")
+    sha = _run_git(repo, "rev-parse", "--short", "HEAD").strip()
+    files = [
+        f for f in _run_git(repo, "show", "--name-only", "--format=", sha).splitlines()
+        if f.strip()
+    ]
+    return repo, payload, sha, parent, files
+
+
+def test_basis_drift_classifies_one_middle_commit(tmp_path: Path, monkeypatch) -> None:
+    """判据 1：真祖先 + 差异全由中间提交带入 + 只落 audit 档 ⇒ BASIS_DRIFT 且点名路径。"""
+    repo, payload, sha, parent, files = _basis_repo(tmp_path)
+    monkeypatch.setattr(wr, "ROOT", repo)
+    verdict = wr.basis_check(payload, sha, parent, files)
+    assert verdict is not None, "真产物 + 真祖先，判不出就是漏判"
+    assert verdict["tier"] == wr.BASIS_DRIFT, verdict
+    assert verdict["rows"] == ["docs/workbacklog.toml"], verdict
+    assert "全由中间提交带入" in verdict["reading"], verdict["reading"]
+    assert "未经复验" in verdict["reading"], verdict["reading"]
+    record = verdict["record"]
+    assert record and record["middle_commits"] == 1, record
+    assert record["profiles_affected"] == ["audit"], record
+    assert record["gates_rev"] == payload["rev"], record
+
+
+def test_true_mismatch_still_red_when_files_changed_after_seal(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """判据 1：差异里有**封存之后本笔自己改的** ⇒ TRUE_MISMATCH（漂移不能拿来自证清白）。"""
+    repo, payload, sha, parent, files = _basis_repo(tmp_path, mine_path="src/late.py")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    verdict = wr.basis_check(payload, sha, parent, files)
+    assert verdict is not None, verdict
+    assert verdict["tier"] == wr.TRUE_MISMATCH, verdict
+    assert "src/late.py" in verdict["rows"], verdict
+    assert "封存之后本笔自己改的" in verdict["reading"], verdict["reading"]
+    assert verdict["record"] is None, "非漂移不给留痕记录（不然等于放行）"
+
+
+def test_true_mismatch_when_not_an_ancestor(tmp_path: Path, monkeypatch) -> None:
+    """判据 1：基点**不是**父提交的祖先 ⇒ TRUE_MISMATCH（旁支提交不能当本笔证据）。"""
+    repo, payload, sha, parent, files = _basis_repo(tmp_path)
+    monkeypatch.setattr(wr, "ROOT", repo)
+    _run_git(repo, "checkout", "-q", "-b", "side", payload["rev"])
+    (repo / "src" / "side.py").write_text("side\n", encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "旁支")
+    side = _run_git(repo, "rev-parse", "--short", "HEAD").strip()
+    _run_git(repo, "checkout", "-q", "main")
+    verdict = wr.basis_check({**payload, "rev": side}, sha, parent, files)
+    assert verdict is not None, verdict
+    assert verdict["tier"] == wr.TRUE_MISMATCH, verdict
+    assert "后者的祖先" in verdict["reading"], verdict["reading"]
+
+
+def test_lang_tier_drift_is_still_red(tmp_path: Path, monkeypatch) -> None:
+    """判据 1 硬边界：差异落在**被测代码档**（src/）⇒ 一律 TRUE_MISMATCH，漂移不外溢。"""
+    repo, payload, sha, parent, files = _basis_repo(tmp_path, mid_path="src/extra.py")
+    monkeypatch.setattr(wr, "ROOT", repo)
+    verdict = wr.basis_check(payload, sha, parent, files)
+    assert verdict is not None, verdict
+    assert verdict["tier"] == wr.TRUE_MISMATCH, verdict
+    assert "被测代码档" in verdict["reading"], verdict["reading"]
+    assert verdict["rows"] == ["src/extra.py"], verdict
+
+
+def test_basis_drift_is_traced_not_silently_green(
+    tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    """判据 3：漂移**只留痕** —— 封存/真伪两档都不判红，但读数必须说「未经复验」；
+    且 `--json` 的 ``waived_basis`` 键在没有漂移时也必须存在（值为 null）。"""
+    repo, payload, sha, parent, files = _basis_repo(tmp_path)
+    monkeypatch.setattr(wr, "ROOT", repo)
+    seal_problems, seal_note, _reading = wr.check_seal_tree(payload, sha)
+    assert seal_problems == [], seal_problems
+    assert "未经复验" in seal_note, seal_note
+    assert "封存之后又动了文件" not in seal_note, "罪名还挂在旧口径上"
+    truth_problems, truth_note = wr.check_gates_trailer_truth("全量门禁绿 + seal", payload, parent)
+    assert truth_problems == [], truth_problems
+    assert "未复验" in truth_note, truth_note
+    assert "伪造门禁结论" not in truth_note, "漂移不是伪造"
+
+    monkeypatch.setattr(wr, "audit_verdict", lambda: ([], "审计通过 ✅"))
+    wr.main(["--rev", "HEAD", "--branch", "main", "--allow", "**", "--dirty-ok", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert isinstance(data.get("waived_basis"), dict), data.get("waived_basis")
+    assert data["waived_basis"]["diff_paths"] == ["docs/workbacklog.toml"], data["waived_basis"]
+
+    # 没有漂移的那一笔（rev == 父提交、last.json 里没有 tree）⇒ 键在、值为 null
+    # 另一个仓（同一 tmp_path 下再建一个会撞 src/ 已存在）
+    clean = _rev_repo(tmp_path / "clean", last_ok=True,
+                      gates_line="全量门禁绿 + seal", tree_scope=True)
+    monkeypatch.setattr(wr, "ROOT", clean)
+    wr.main(["--rev", "HEAD", "--branch", "main", "--allow", "**", "--dirty-ok", "--json"])
+    data2 = json.loads(capsys.readouterr().out)
+    assert "waived_basis" in data2 and data2["waived_basis"] is None, data2.get("waived_basis")
+
+
+def test_audit_failure_is_not_double_counted() -> None:
+    """判据 4：audit 没过就**只报一条** —— 不许再叠「有豁免项」的二次计数
+    （两句话指同一份输出，读者会以为有两个毛病）。"""
+    body = "审计未通过：2 项失败（0 项已豁免）\n[FAIL] ③ 声称 = 证据\n[FAIL] ⑤ 门禁产物"
+    problems = wr.audit_verdict_from_output(1, body)
+    assert len(problems) == 1, problems
+    assert "audit 没过" in problems[0], problems
+    assert "audit 里有豁免项" not in problems[0], "二次计数又回来了"
+    assert "0 项已豁免" in problems[0], "审计原文的尾巴要如实带出来"
+
+
+def test_audit_verdict_passes_rev_and_reads_exit_code_only(monkeypatch) -> None:
+    """判据 4：审的必须是**这一笔**（带 `--rev <sha>`），且判绿只由退出码决定。"""
+    seen: list[list[str]] = []
+
+    class _Done:
+        def __init__(self, code: int, out: str) -> None:
+            self.returncode, self.stdout, self.stderr = code, out, ""
+
+    def _fake(cmd: list[str], **_kw: object) -> _Done:
+        seen.append(cmd)
+        # 正文里出现「审计通过 ✅」这四个字，但退出码 1 ⇒ 不许判绿（旧口径会判绿）
+        return _Done(1, "审计通过 ✅（豁免 0 项已知欠账）")
+
+    monkeypatch.setattr(wr.subprocess, "run", _fake)
+    problems, line = wr.audit_verdict("abc123")
+    assert problems, "退出码 1 却没报问题"
+    assert line == "审计**未通过**", line
+    argv = seen[0]
+    assert "--rev" in argv, argv
+    assert argv[argv.index("--rev") + 1] == "abc123", argv
+
+    seen.clear()
+    green = "审计通过 ✅（豁免 0 项已知欠账）"
+    monkeypatch.setattr(
+        wr.subprocess,
+        "run",
+        lambda cmd, **_kw: (seen.append(cmd), _Done(0, green))[1],
+    )
+    problems2, line2 = wr.audit_verdict()
+    assert problems2 == [], problems2
+    assert line2 == "审计通过 ✅", line2
+    assert "--rev" not in seen[0], "没给 rev 就不许凭空加一个"
+
+
+# ------------------------------------------------- 判据 5：同判据同源（framework 镜像）
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=('卡 E137：framework/src/framework/review.py 是纯库，这一版没接线'
+            '（见那里的 TODO(E137)）—— 它仍把 BASIS_DRIFT 当红；'
+            '接完线 XPASS 会报错逼人删掉这条 xfail'),
+)
+def test_framework_review_has_the_same_basis_ruler() -> None:
+    """判据 5：同一套判据在 framework 那份镜像里也必须说同一句话。
+
+    唯一真源是 tools/gate_base.py::gate_basis_verdict（经 tools/wb_review.py 转发）：
+    BASIS_DRIFT（差异全由中间提交带入、不落被测代码档）⇒ **不红**。
+    framework 是纯库（不 import 本仓模块），这一版没接线 ⇒ 它会判红 —— 这条 xfail 是
+    闹钟：接线完成的那天它 XPASS，strict 会直接报错，逼人删掉 xfail。
+    """
+    sys.path.insert(0, str(ROOT / "framework" / "src"))
+    from framework import review as fr  # noqa: PLC0415
+
+    assert wr.gate_base.BASIS_DRIFT == "BASIS_DRIFT"
+    assert wr.basis_is_red(wr.gate_base.BASIS_DRIFT) is False
+    assert fr.gate_base_is_red("BASIS_DRIFT") is False, (
+        "framework 的镜像仍把 BASIS_DRIFT 算红（比真源严一档）—— 见那里的 TODO(E137)"
+    )
+
+
+
+def test_audit_verdict_ignores_pass_string_in_trailer(monkeypatch) -> None:
+    """判据 4（缺口 4e）：正文里写着「审计通过」也不算绿 —— 结论只由退出码决定。
+
+    audit 自己的输出会把 Gates: trailer 回显进来；trailer 里写过「审计通过」四个字，
+    旧口径用全文子串匹配就会判绿。这里让正文同时含「审计通过 ✅」与「Gates: 全量门禁绿」、
+    退出码却是 1 ⇒ 必须判「审计**未通过**」且有红。
+    """
+    class _Done:
+        def __init__(self, code: int, out: str) -> None:
+            self.returncode, self.stdout, self.stderr = code, out, ""
+
+    body = chr(10).join([
+        "审计通过 ✅（豁免 0 项已知欠账）",
+        "Gates: 全量门禁绿 + seal",
+        "[FAIL] ③ 声称 = 证据",
+    ])
+    monkeypatch.setattr(wr.subprocess, "run", lambda cmd, **_kw: _Done(1, body))
+    problems, line = wr.audit_verdict("abc123")
+    assert problems, "正文写着审计通过、退出码却是 1 —— 不许判绿"
+    assert line == "审计**未通过**", line
+

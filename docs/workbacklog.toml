@@ -6382,13 +6382,15 @@ tree = ".wt/E137"
 spec = "复盘/卡/卡E137-复核器把基点漂移判成伪造门禁.md"
 files = [
   "tools/wb_review.py",
+  "tools/gate_base.py",
   "scripts/audit_progress.py",
   "tools/pool/landing.py",
   "tests/test_wb_review.py",
   "tests/test_audit_tightening.py",
   "tests/test_two_rulers.py",
+  "tests/test_no_window.py",
   "framework/src/framework/review.py",
-  "docs/decisions/0009-gate-basis-drift.md",
+  "docs/decisions/0010-gate-basis-drift.md",
   "复盘/卡/卡E137-复核器把基点漂移判成伪造门禁.md"
 ]
 depends = [
@@ -6396,7 +6398,7 @@ depends = [
   "E138"
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "E140"

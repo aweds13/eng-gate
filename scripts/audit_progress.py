@@ -678,6 +678,34 @@ def check_seal_untracked(repo: Path = ROOT, gates_path: Path | None = None) -> l
     return fails
 
 
+def gate_payload(rev: str) -> tuple[dict, str]:
+    """取「被对账那一笔」的门禁产物 —— **卡 E137**（缺口 4b：判错对象）。
+
+    原来只读盘上那份 GATES：复核器拿 HEAD 的产物去判**别的提交**，
+    at/rev 整段错位，于是把「门禁跑在别的基点」误报成「沿用了旧产物」。
+
+    ★ 默认行为一字不改：--rev 就是 HEAD（含工作区模式）⇒ 仍读盘上那份
+      —— 门禁必须在提交**之前**跑，产物先落盘、再随提交进去。
+    ★ 给了别的 --rev ⇒ 取 git show <rev>:gates/last.json（那一笔提交里的那份）。
+
+    返回 (payload, 错误行)：错误行非空 = 取不到（调用方照旧判红，不静默放过）。
+    """
+    head = git("rev-parse", "HEAD")
+    target = git("rev-parse", "--verify", f"{rev}^{{commit}}")
+    if not target or not head or target == head:
+        if not GATES.exists():
+            return {}, "没有 gates/last.json（门禁未落盘）"
+        return json.loads(GATES.read_text(encoding="utf-8")), ""
+    body = git("show", f"{target}:gates/last.json")
+    if not body:
+        return {}, f"{rev}（{target[:8]}）里没有 gates/last.json（门禁产物没跟着提交）"
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return {}, f"{rev}（{target[:8]}）里的 gates/last.json 解析不了（不是真产物）"
+    return payload, ""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rev", default="HEAD")
@@ -764,10 +792,10 @@ def main() -> int:
                 print(f"  {OK} 这一笔的 {len(files)} 个改动全部有台账证据指针或豁免清单背书")
             git_fails.extend(claimed_fails)
             if meta["Task"]:
-                if not GATES.exists():
-                    git_fails.append("没有 gates/last.json（门禁未落盘）")
+                gate, gate_err = gate_payload(rev)
+                if gate_err:
+                    git_fails.append(gate_err)
                 else:
-                    gate = json.loads(GATES.read_text(encoding="utf-8"))
                     # 为什么不用 rev/tree 校验（三个坑都实测踩过）：
                     #  ① tree 自指：产物自己在那棵树里，写入哈希会让树变化 → 永不相等；
                     #  ② rev 时序：门禁必须**提交前**跑，那时新提交还不存在 → rev 必然落后一次；

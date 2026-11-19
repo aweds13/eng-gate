@@ -1,0 +1,21 @@
+[entries."T-AG648"]
+id = "T-AG648"
+title = "门禁基点漂移不再一律当伪造：按差在哪分两档、判不了仍照红"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/gate_base.py",
+  "file:tools/wb_review.py",
+  "file:scripts/audit_progress.py",
+  "file:tools/pool/landing.py",
+  "file:docs/decisions/0010-gate-basis-drift.md",
+  "text:tools/gate_base.py::def gate_basis_verdict(",
+  "test:test_wb_review.py::test_basis_drift_classifies_one_middle_commit",
+  "test:test_wb_review.py::test_true_mismatch_still_red_when_files_changed_after_seal",
+  "test:test_wb_review.py::test_lang_tier_drift_is_still_red",
+  "test:test_wb_review.py::test_basis_drift_is_traced_not_silently_green",
+  "test:test_audit_tightening.py::test_gate_payload_reads_the_reviewed_commit_not_head",
+  "test:test_wb_review.py::test_audit_verdict_ignores_pass_string_in_trailer",
+]
+gaps = "1. `framework/src/framework/review.py` 这一版没接线（纯库，不 import 本仓模块、不跑子进程）：只留 `# TODO(E137)` 与 xfail strict 钉子，它仍把 BASIS_DRIFT 算红，比真源严一档 —— 严不是错，但两处口径不再是同一份。指针 framework/src/framework/review.py2. 旧三档分类器 `gate_base_drift` 与旧文案「一次门禁跑完提交两笔？第二笔没验过」仍在四处（tools/gate_base.py:222、tools/wb_verify.py:316 与 framework 两份），本卡只让**新**两档接管 ③③′ 两个出口，旧出口一字未动。指针 tools/gate_base.py3. `basis_check` 的取数器缺省绑真仓 ROOT：在别的树里调它必须 monkeypatch ROOT 或传 providers，否则恒回 None（判不了 ⇒ 退回旧口径，不会误判绿）—— 这是新钉子的前提。指针 tools/wb_review.py"
+

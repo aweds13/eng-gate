@@ -1186,13 +1186,25 @@ def _run_review(task: str, rev: str, allow: list[str]) -> tuple[int, str, pathli
     body = (r.stdout or "").strip()
     review_file.write_text(body or "{}\n", encoding="utf-8", newline="\n")
     n_problems = -1
+    waived_basis = None
     try:
         verdict = json.loads(body) if body else {}
         n_problems = len(verdict.get("problems", []))
+        waived_basis = verdict.get("waived_basis")
     except json.JSONDecodeError:
         n_problems = -1
     summary = (f"exit={r.returncode}，problems={'?' if n_problems < 0 else n_problems}"
                f"，落盘 {review_file}")
+    # ★ 卡 E137：基点漂移不许静默绿 —— 复核器留了痕（waived_basis），⑧ 步必须说出来。
+    if isinstance(waived_basis, dict):
+        _paths = waived_basis.get("diff_paths") or []
+        _g = str(waived_basis.get("gates_rev") or "")[:8]
+        _p = str(waived_basis.get("parent") or "")[:8]
+        _n = waived_basis.get("middle_commits")
+        summary += (
+            f"\n  ★ 基点漂移（未复验）：门禁跑在 {_g}，父提交已前进到 {_p}"
+            f"（中间 {_n} 笔），差异 {len(_paths)} 条全由中间提交带入；门禁结论**未经复验**"
+        )
     return r.returncode, summary, review_file
 def record_base_drift(
     task: str, *, wt: pathlib.Path, rebase_before_main: str,

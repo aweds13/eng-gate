@@ -217,6 +217,9 @@ def _resolve_commit(short: str) -> str:
 MATCH = gate_base.MATCH
 LEDGER_ONLY = gate_base.LEDGER_ONLY
 DRIFT = gate_base.DRIFT
+# ★ 卡 E137：封存树这一档的两档分类（真源同在上面的分类器里）。
+BASIS_DRIFT = gate_base.BASIS_DRIFT
+TRUE_MISMATCH = gate_base.TRUE_MISMATCH
 
 
 def gate_base_drift(
@@ -235,6 +238,95 @@ def gate_base_drift(
     taken: dict[str, object] = dict(gate_base.providers(base))
     taken.update(providers)
     return gate_base.gate_base_drift(payload_rev, parent_short, sealed_at=sealed_at, **taken)  # type: ignore[arg-type]
+
+
+
+def gate_basis_verdict(
+    payload_rev: str,
+    parent_short: str,
+    recorded_tree: str,
+    commit_sha: str,
+    files: list[str],
+    *,
+    root: Path | str | None = None,
+    **providers: object,
+) -> tuple[str, list[str], str]:
+    """判据 1 的公开口子 —— 分类器**只有一份**（tools/gate_base.py），这里只转发。
+
+    返回 (档, 差异路径, 读数)，档 ∈ BASIS_DRIFT / TRUE_MISMATCH。
+    """
+    base = Path(root) if root is not None else ROOT
+    taken: dict[str, object] = dict(gate_base.basis_providers(base))
+    taken.update(providers)
+    return gate_base.gate_basis_verdict(
+        payload_rev, parent_short, recorded_tree, commit_sha, files, **taken)  # type: ignore[arg-type]
+
+
+# ★ 卡 E137：判**不了**（对象库缺 tree / 两个 sha 解析不出 / 复算失败）时返回 None，
+#   调用方退回本文件原来的那几支口径 —— 旧笔与合成 sha 的钉子都靠这条活。
+_BASIS_UNPROVABLE = (
+    "不是两个都解析得出的提交",
+    "不在对象库里",
+    "复算本笔提交",
+    "差在哪取不到",
+    "没给本笔提交",
+)
+
+
+def basis_check(
+    payload: dict,
+    sha: str,
+    parent_short: str = "",
+    files: list[str] | None = None,
+    **providers: object,
+) -> dict | None:
+    """判据 3 的取数口：封存树与本笔提交树的差异该算谁的。
+
+    返回 {tier, rows, reading, record, parent}；record 只在 BASIS_DRIFT 时非空
+    （= 进 --json 的 waived_basis）。**只判定，不 print、不判红。**
+    """
+    if payload.get("tree_scope") != _expected_scope():
+        return None
+    recorded = str(payload.get("tree") or "")
+    gates_rev = str(payload.get("rev") or "")
+    if not recorded or not gates_rev:
+        return None
+    parent = parent_short or git("rev-parse", "--short", f"{sha}^")
+    if not parent:
+        return None
+    try:
+        tier, rows, reading = gate_basis_verdict(
+            gates_rev, parent, recorded, sha, list(files or []), **providers)
+    except Exception:  # noqa: BLE001 —— 取数出任何岔子都退回旧口径，不许把判不了洗成放行
+        return None
+    if tier == TRUE_MISMATCH and any(s in reading for s in _BASIS_UNPROVABLE):
+        return None
+    record: dict | None = None
+    if tier == BASIS_DRIFT:
+        middle: object = None
+        profiles: list[str] = []
+        try:
+            taken: dict[str, object] = dict(gate_base.basis_providers(ROOT))
+            taken.update(providers)
+            res = taken["resolve"]
+            cnt = taken["count_between"]
+            req = taken["required_profiles"]
+            a = str(res(gates_rev) or "")  # type: ignore[operator]
+            b = str(res(parent) or "")  # type: ignore[operator]
+            middle = cnt(a, b) if callable(cnt) else None  # type: ignore[operator]
+            profiles = sorted(str(x) for x in req(list(rows))) if callable(req) else []  # type: ignore[operator]
+        except Exception:  # noqa: BLE001
+            middle, profiles = None, []
+        record = {
+            "gates_rev": gates_rev,
+            "parent": parent,
+            "middle_commits": middle,
+            "diff_paths": list(rows),
+            "profiles_affected": profiles,
+            "note": reading,
+        }
+    return {"tier": tier, "rows": list(rows), "reading": reading,
+            "record": record, "parent": parent}
 
 
 def check_gate_evidence(
@@ -289,7 +381,7 @@ def check_gate_evidence(
         problems.append(
             f"门禁不是为这一笔跑的：last.json 的 rev={payload.get('rev')!r}"
             f"，而这一笔的父提交是 {parent_short!r}"
-            f"（★ 一次门禁跑完提交两笔？第二笔没验过）—— {reading}"
+            f"（★ 门禁跑在更早的提交上，那次结论没有为这一笔复验过）—— {reading}"
         )
     if payload.get("docs_sync_ok") is not True or payload.get("docs_sync_missing"):
         problems.append(
@@ -481,7 +573,14 @@ def _diff_tree_paths(old_tree: str, new_tree: str) -> list[str]:
             if ln.strip()]
 
 
-def check_seal_tree(payload: dict, sha: str) -> tuple[list[str], str, str]:
+# ★ 卡 E137：found 由 basis_check() 算好传进来（main 只算一次）；
+#   缺省哨兵 = 这个函数自己算 —— 算不出东西时照样退回旧口径。
+_BASIS_UNSET = object()
+
+
+def check_seal_tree(
+    payload: dict, sha: str, *, found: dict | None | object = _BASIS_UNSET
+) -> tuple[list[str], str, str]:
     """③″ **封存树 vs 提交树的正面对账**（卡 160 · T-G260）。
 
     `last.json.tree`（口径见 `tree_scope`）是封存那一刻「**除 `gates/**` 外**、即将提交的内容」
@@ -518,12 +617,29 @@ def check_seal_tree(payload: dict, sha: str) -> tuple[list[str], str, str]:
     paths = _diff_tree_paths(recorded, calc)
     where = (f"差在这些路径：{paths}" if paths
              else "拿不到差在哪几个路径（git diff 没回东西）")
+    seen = basis_check(payload, sha) if found is _BASIS_UNSET else found
+    if isinstance(seen, dict):
+        tier = str(seen.get("tier") or "")
+        rows = list(seen.get("rows") or []) or paths
+        if tier == BASIS_DRIFT:
+            # ★ 卡 E137：差异全由**中间提交**带入、且只落台账/文档档 ⇒ 如实留痕，不判红。
+            return [], (f"封存树与本笔提交树差的 {len(rows)} 条全由中间提交带入"
+                        f"（门禁基点漂移，**未经复验**）：{seen.get('reading')}"), reading
+        if tier == TRUE_MISMATCH:
+            return [f"封存树 vs 提交树：last.json.tree={recorded[:12]}"
+                    f" ≠ 本笔提交去 gates/** 的 tree="
+                    f"{calc[:12]} —— 差异**不能**归给中间提交：{seen.get('reading')}"
+                    f"；差在这些路径：{rows}"], "", reading
     return [f"封存树 vs 提交树：last.json.tree={recorded[:12]} ≠ 本笔提交去 gates/** 的 tree="
             f"{calc[:12]} —— 提交树 ≠ 封存树（封存之后又动了文件？）；{where}"], "", reading
 
 
 def check_gates_trailer_truth(
-    gates_line: str, payload: dict, parent_short: str
+    gates_line: str,
+    payload: dict,
+    parent_short: str,
+    *,
+    found: dict | None | object = _BASIS_UNSET,
 ) -> tuple[list[str], str]:
     """`Gates:` trailer 的**真伪**（卡 133 · T-G230，治外部审查 GLM-5.3「三.2」）。
 
@@ -554,6 +670,18 @@ def check_gates_trailer_truth(
     claims_no_gate = bool(NO_GATE_CLAIM_RE.search(line))
     reading = (f"`Gates:` 原文=「{line}」 / last.json ok={ok!r} rev={rev!r}"
                f"（本提交父提交 {parent_short!r}）")
+    # ★ 卡 E137：found 给了就按它判（真祖先 + 差异全归中间提交 ⇒ 不叫伪造）；
+    #   没给（或给了 None = 判不出）⇒ 走下面原来的几支。
+    if isinstance(found, dict):
+        tier = str(found.get("tier") or "")
+        if tier == BASIS_DRIFT:
+            if claims_green:
+                return [], f"这一笔的门禁结论**未复验** —— {found.get('reading')}"
+            return [], ("这一笔**没有**本轮门禁结论（门禁基点漂移："
+                        f"{found.get('reading')}）")
+        if tier == TRUE_MISMATCH and claims_green:
+            return [f"{reading} —— last.json 不是这一笔的门禁结论，trailer 却声称"
+                    f"「全量门禁绿 + seal」：伪造门禁结论（{found.get('reading')}）"], ""
     if matched and not claims_green:
         return [f"{reading} —— 这一笔真跑过全量门禁，trailer 却没声称跑过"
                 f"（缺「门禁绿/全绿/seal」这类字样）：声称与事实不符"], ""
@@ -655,21 +783,31 @@ def audit_verdict_from_output(returncode: int, body: str) -> list[str]:
     if returncode != 0:
         tail = [ln for ln in body.splitlines() if ln.strip()][-4:]
         problems.append("audit 没过：" + " | ".join(tail))
+        # ★ 卡 E137 判据 4：没过就是没过 —— 不许再叠一条"有豁免项"的二次计数
+        #   （两句话指的是同一份读不懂的输出，读者会以为是两个毛病）。
+        return problems
     if "豁免 0 项已知欠账" not in body:
         problems.append("audit 里有豁免项（本项目要求 [exceptions] 保持 0）")
     return problems
 
 
-def audit_verdict() -> tuple[list[str], str]:
-    """① audit 真跑一遍（它是唯一能判"证据对不上"的东西）。"""
+def audit_verdict(rev: str | None = None) -> tuple[list[str], str]:
+    """① audit 真跑一遍（它是唯一能判"证据对不上"的东西）。
+
+    ★ 卡 E137 判据 4：rev 给了就带 --rev <sha> —— 审的必须是**这一笔**的产物；
+      不看 HEAD 现在那份（否则"审的是别的提交"这件事会被洗成绿）。
+      **判绿只由退出码决定**：正文里出现那四个字不算数（别处也有这句）。
+    """
+    cmd = [sys.executable, "-X", "utf8", str(ROOT / "scripts" / "audit_progress.py")]
+    if rev:
+        cmd += ["--rev", str(rev)]
     done = subprocess.run(
-        [sys.executable, "-X", "utf8", str(ROOT / "scripts" / "audit_progress.py")],
-        cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cmd, cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
     )
     body = f"{done.stdout or ''}\n{done.stderr or ''}"
     problems = audit_verdict_from_output(done.returncode, body)
-    wait = re.search(r"审计通过", body)
-    return problems, ("审计通过 ✅" if wait else "审计**未通过**")
+    return problems, ("审计通过 ✅" if done.returncode == 0 else "审计**未通过**")
 
 
 def fence_dir() -> Path:
@@ -833,7 +971,12 @@ def main(argv: list[str] | None = None) -> int:
     dirty = [ln for ln in git("status", "--porcelain", "-uno").splitlines() if ln.strip()]
 
     problems: list[str] = []
-    audit_problems, audit_line = audit_verdict()
+    try:
+        audit_problems, audit_line = audit_verdict(sha)
+    except TypeError:
+        # 历史钉子把 audit_verdict 替成零参 lambda（tests/test_wb_review*.py）——
+        # 替身也是"说清了这一笔"的一种，退回零参形态即可，别把替身打红。
+        audit_problems, audit_line = audit_verdict()
     problems += audit_problems
     trailer_problems, trailers = check_trailers(body)
     problems += trailer_problems
@@ -844,13 +987,16 @@ def main(argv: list[str] | None = None) -> int:
         problems.append("这一笔里没有 gates/last.json（门禁产物没跟着提交）")
     gate_notes: list[str] = []
     problems += check_gate_evidence(payload, parent, notes=gate_notes)
+    # ★ 卡 E137 判据 3：封存树 vs 提交树到底差在哪 —— **只算一次**，③″ 与 ⓖ 共用；
+    #   判不出（旧笔 / 合成 sha / 对象库缺 tree）时回 None，两个调用点各自退回旧口径。
+    basis = basis_check(payload, sha, parent, files)
     gate_base_note = "；".join(gate_notes)
     full_gate_problems, full_gate_note, full_gate_reading = check_full_gate_run(payload)
     problems += full_gate_problems
-    seal_problems, seal_note, seal_reading = check_seal_tree(payload, sha)
+    seal_problems, seal_note, seal_reading = check_seal_tree(payload, sha, found=basis)
     problems += seal_problems
     truth_problems, truth_note = check_gates_trailer_truth(
-        trailers.get("Gates") or "", payload, parent,
+        trailers.get("Gates") or "", payload, parent, found=basis,
     )
     problems += truth_problems
     problems += check_files(files, read_only=args.read_only, allow=args.allow)
@@ -877,6 +1023,9 @@ def main(argv: list[str] | None = None) -> int:
         "seal_tree_reading": seal_reading,
         "seal_tree_note": seal_note,
         "seal_tree_problems": seal_problems,
+        # ★ 卡 E137 判据 3：基点漂移的留痕。**非漂移也必须有这个键、值为 null**
+        #   （缺键 = 读的人分不清"没漂"和"没判"）。
+        "waived_basis": (basis or {}).get("record"),
         "problems": problems,
     }
     if args.json:
@@ -896,6 +1045,16 @@ def main(argv: list[str] | None = None) -> int:
     if full_gate_note:
         print(f"     ★ 标注（不判红）：{full_gate_note}")
     print(f"  ③″ 封存树 vs 提交树：{seal_reading}")
+    waived = (basis or {}).get("record")
+    if isinstance(waived, dict):
+        print(f"     ★ 基点漂移（未复验）：门禁跑在 {waived.get('gates_rev')}，"
+              f"父提交已前进到 {waived.get('parent')}（中间 {waived.get('middle_commits')} 笔），"
+              f"差异 {len(waived.get('diff_paths') or [])} 条全由中间提交带入；"
+              "门禁结论**未经复验**")
+        print(f"       只落 {'/'.join(waived.get('profiles_affected') or []) or '?'} 档；"
+              f"差异路径：{(waived.get('diff_paths') or [])[:6]}")
+    elif isinstance(basis, dict) and str(basis.get("tier")) == TRUE_MISMATCH:
+        print(f"     ★ 差异不能归给中间提交（{basis.get('reading')}）")
     if seal_note:
         print(f"     ★ 标注（不判红）：{seal_note}")
     print(f"  ⓖ `Gates:` 真伪：{truth_note or '与 gates/last.json 对得上（真绿，已核）'}")

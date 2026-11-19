@@ -241,6 +241,13 @@ def gate_base_drift(
     )
 
 
+# TODO(E137): 卡 E137 把「门禁基点漂移」分成了两档 —— BASIS_DRIFT 留痕、TRUE_MISMATCH 照红。
+#   唯一真源是 tools/gate_base.py::gate_basis_verdict（经 tools/wb_review.py 转发）。
+#   本模块是**纯库**（不 import 本仓模块、不跑子进程），这一版没接线 ⇒ 这里的
+#   gate_base_is_red(BASIS_DRIFT) 仍把漂移算红，比真源严一档。失败钉子钉住这件事：
+#   tests/test_wb_review.py::test_framework_review_has_the_same_basis_ruler（xfail strict）。
+#   接线时：把三档判据搬进来（或改成吃调用方注入的判据函数），再删掉那条 xfail
+#   （XPASS 会自己报错逼人删）。
 def gate_base_is_red(category: str) -> bool:
     """只有 MATCH / LEDGER_ONLY 不算红 —— 其余（含未知值）一律算红。"""
     return str(category) not in (_GATE_MATCH, _GATE_LEDGER_ONLY)

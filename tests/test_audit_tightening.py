@@ -311,3 +311,48 @@ def test_gitignored_evidence_is_not_a_missing_file() -> None:
     assert not ok, f"跟踪文件缺了必须红：{desc}"
     ok, _desc = ap.eval_assertion("file:tools/stack.py")
     assert ok, "真存在的文件照旧通过"
+
+
+# ------------------------------------------------- 门禁产物取哪一份（卡 E137 判据 4）
+
+def test_gate_payload_reads_the_reviewed_commit_not_head(monkeypatch, tmp_path) -> None:
+    """★ 卡 E137 判据 4：审的是**被复核那一笔**，产物就得取那一笔里的。
+
+    旧口径只读盘上 GATES ⇒ 拿 HEAD 的产物去判别的提交（at/rev 整段错位），
+    把「门禁跑在别的基点」误报成「沿用了旧产物」。默认行为（--rev 就是 HEAD）
+    必须一字不改：门禁在提交**之前**跑，产物先落盘再随提交进去。
+    """
+    disk = tmp_path / "last.json"
+    disk.write_text('{"rev": "HEADREV", "ok": true}', encoding="utf-8")
+    monkeypatch.setattr(ap, "GATES", disk)
+
+    seen: list[tuple[str, ...]] = []
+
+    def _fake_git(*args: str) -> str:
+        seen.append(args)
+        if args[:2] == ("rev-parse", "HEAD"):
+            return "a" * 40
+        if args[0] == "rev-parse" and args[1] == "--verify":
+            return "b" * 40 if args[2].startswith("other") else "a" * 40
+        if args[0] == "show":
+            return '{"rev": "OTHERREV", "ok": true}'
+        raise AssertionError(args)
+
+    monkeypatch.setattr(ap, "git", _fake_git)
+
+    # HEAD ⇒ 盘上那份（默认行为不变）
+    payload, err = ap.gate_payload("HEAD")
+    assert err == "", err
+    assert payload["rev"] == "HEADREV", payload
+
+    # 别的提交 ⇒ 提交里那份，不许拿盘上的冒充
+    payload2, err2 = ap.gate_payload("other123")
+    assert err2 == "", err2
+    assert payload2["rev"] == "OTHERREV", payload2
+    assert any(a[:2] == ("show", "b" * 40 + ":gates/last.json") for a in seen), seen
+
+    # 那一笔里没有产物 ⇒ 点名报错，不许静默退回盘上那份
+    monkeypatch.setattr(ap, "git", lambda *a: "" if a[0] == "show" else _fake_git(*a))
+    payload3, err3 = ap.gate_payload("other123")
+    assert payload3 == {}, payload3
+    assert "没有 gates/last.json" in err3, err3
