@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import pool_quota  # noqa: E402
+from pool import gateway as pool_gateway  # noqa: E402 —— 窗口维度的模型过滤（卡 A368）
 from pool import model_registry as pool_model_registry  # noqa: E402
 from pool import plan as pool_plan  # noqa: E402
 from pool import route as pool_route  # noqa: E402
@@ -284,3 +285,74 @@ def test_plan_batches_still_enforces_the_three_safety_rules(tmp_path: Path) -> N
     )
     batches = pool_plan.plan_batches(backlog, 5, now=NOW, root=tmp_path)
     assert [[card.id for card in batch] for batch in batches] == [["A"], ["B", "C"]]
+
+
+# ------------------------------------------------ 窗口维度模型过滤（卡 A368 判据 2）
+
+
+def test_a_window_that_does_not_count_the_model_cannot_raise_its_tier() -> None:
+    """判据 2：**别的模型的窗口不许把这个座抬进 tier 2**。
+
+    构造：两个座。
+      · `only-opus`：唯一的窗口只计 opus，写着 used=100；
+      · `both`：opus 100 + sonnet 12 两个窗。
+    请求模型是 `claude-sonnet-4` ⇒ 第一座「这个模型没有窗口读数」= **不知道**（不是 0%，
+    也不是 100%），第二座采信 12%。断言走 `route.usage_tier()`（route.py:210），
+    **不比排序结果** —— 排序是派生量，钉在派生量上等于没钉判据。
+
+    ★ **数据从哪来（判据 2 要求的事实说明）**：今天的仓外账本 `infra/pool/accounts.toml`
+    的 `[account.quota]` 只有 unit / source / observed_at / samples，**没有 per-window 段**，
+    `_candidates()` 也不会去编一个 ⇒ 真数据上 `_seat()` 走 `used_percent` 老路，本判据
+    **恒放行**。所以只能在构造用例上验证；本卡不去仓外账本编 per-window cap（卡规格明写）。
+    """
+    end = T + dt.timedelta(hours=5)
+    only_opus = {
+        "id": "only-opus",
+        "quota": {"used_percent": 100.0, "windows": [
+            {"model": "opus", "used": 100.0, "resets_at": end},
+        ]},
+    }
+    both = {
+        "id": "both",
+        "quota": {"used_percent": 12.0, "windows": [
+            {"model": "opus", "used": 100.0, "resets_at": end},
+            {"model": "sonnet", "used": 12.0, "resets_at": end},
+        ]},
+    }
+
+    seat = pool_gateway._seat(only_opus, "claude-sonnet-4", now=T)
+    # 100% 来自一个不算 sonnet 的窗 ⇒ 不许是 tier 2；这里是「不知道」：
+    assert seat.known is False and seat.used is None
+    assert pool_route.usage_tier(seat) == pool_route.UNKNOWN_TIER
+    assert pool_route.usage_tier(seat) != 2
+    # 对照：要是照抄 used_percent（本卡之前的行为），这一座会被抬进 tier 2 ——
+    # 这正是本卡要挡的那件事。
+    assert pool_route.tier(only_opus["quota"]["used_percent"]) == 2
+
+    # 同一个号，窗口里有一个算 sonnet 的 ⇒ 采信它（12%），不是最大的 100%
+    seat = pool_gateway._seat(both, "claude-sonnet-4", now=T)
+    assert seat.known is True and seat.used == 12.0
+    assert pool_route.usage_tier(seat) == 0
+    # 反过来问 opus：采信 100% ⇒ tier 2（过滤是双向的，不是一律放行）
+    seat = pool_gateway._seat(both, "claude-opus-4", now=T)
+    assert seat.known is True and seat.used == 100.0
+    assert pool_route.usage_tier(seat) == 2
+
+
+def test_seat_without_window_data_is_bit_for_bit_the_old_reading() -> None:
+    """没有 `quota.windows` 段（**今天真数据的全部情形**）⇒ `_seat()` 逐位等价本卡之前。
+
+    这条是回归护栏：窗口过滤只在「有窗口数据」时生效，否则一个字节都不许动
+    （`tests/test_pool_gateway.py` 的五条钉子钉的是同一件事，这里从 route 侧再钉一次）。
+    """
+    rows = [
+        {"id": "a", "quota": {"used_percent": 90.0}},
+        {"id": "b", "quota": {}},
+        {"id": "c", "quota": {"used_percent": 10.0}},
+        {"id": "d"},
+    ]
+    for row in rows:
+        for model in ("claude-sonnet-4", ""):
+            seat = pool_gateway._seat(row, model, now=T)
+            old = pool_gateway._seat(row)
+            assert (seat.key, seat.known, seat.used) == (old.key, old.known, old.used)

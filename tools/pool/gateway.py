@@ -56,6 +56,7 @@ import pool_accounts  # noqa: E402 —— tools/ 已在 sys.path 上
 import pool_quota  # noqa: E402
 
 from pool import guards as pool_guards  # noqa: E402
+from pool import holds as pool_holds  # noqa: E402 —— 窗口维度的模型过滤（卡 A368）
 from pool import lanes as pool_lanes  # noqa: E402
 from pool import model_registry as pool_model_registry  # noqa: E402 —— 禁用表判据
 from pool import models as pool_models  # noqa: E402
@@ -410,7 +411,78 @@ def _candidates(rows: Sequence[Mapping[str, Any]], model: str, *, pool: str, cal
     return keep, why
 
 
-def _seat(row: Mapping[str, Any]) -> pool_route.Seat:
+def _window(raw: Mapping[str, Any]) -> pool_holds.Window | None:
+    """账本里**一个**按窗口的额度段 → `holds.Window`。读不懂就回 `None`（跳过这窗）。
+
+    形状照 `holds.Window`（models 那份容器的字段名），因为它是本仓唯一的窗口容器
+    （卡 A334）。`resets_at` 收 `datetime` 或账本里常见的 ISO 字符串 —— 后者走
+    `pool_quota.parse_reset()`，**不另立第二个重置时间解析**（route.py:28 的纪律）。
+
+    `used` 是 bool / 非数 ⇒ `None`：一个读不懂用量的窗口不能被当成「用满了」或「用空了」。
+    """
+    used = raw.get("used")
+    if used is not None and (isinstance(used, bool) or not isinstance(used, (int, float))):
+        return None
+    resets = raw.get("resets_at")
+    if isinstance(resets, str):
+        resets_at = pool_quota.parse_reset(resets)
+    elif isinstance(resets, dt.datetime):
+        resets_at = resets
+    else:
+        resets_at = None
+    raw_span = raw.get("span_s")
+    span_s = (
+        int(raw_span)
+        if isinstance(raw_span, (int, float)) and not isinstance(raw_span, bool)
+        else 0
+    )
+    raw_secs = raw.get("reset_secs")
+    reset_secs = (
+        float(raw_secs)
+        if isinstance(raw_secs, (int, float)) and not isinstance(raw_secs, bool)
+        else 0.0
+    )
+    return pool_holds.Window(
+        model=str(raw.get("model") or ""),
+        span_s=span_s,
+        used=None if used is None else float(used),
+        resets_at=resets_at,
+        reset_secs=reset_secs,
+        aside=bool(raw.get("aside")),
+        unlimited=bool(raw.get("unlimited")),
+        pool=str(raw.get("pool") or ""),
+        family=str(raw.get("family") or ""),
+    )
+
+
+def _windows(row: Mapping[str, Any]) -> list[pool_holds.Window]:
+    """账本行的 `[account.quota].windows` → 窗口列表（没有这一段就回空表）。
+
+    ★ **数据从哪来（判据 2 要求的事实说明）**：今天的仓外账本
+    `infra/pool/accounts.toml` 的 `[account.quota]` 只有 unit / source / observed_at /
+    samples，**没有 per-window 段**，所以真数据上这里永远回空表 ⇒ `_seat()` 走老路、
+    窗口过滤在全放行状态下什么都不改。本卡只让「有窗口数据时」的判定正确，
+    不编造 per-window cap（卡规格「不许做」明写）。
+
+    非 list / 空 list / 每项都读不懂 ⇒ 空表（不是「有窗口但都是空的」）。
+    """
+    quota = row.get("quota") if isinstance(row.get("quota"), Mapping) else {}
+    raw = quota.get("windows") if isinstance(quota, Mapping) else None
+    if not isinstance(raw, (list, tuple)):
+        return []
+    out: list[pool_holds.Window] = []
+    for item in raw:
+        if not isinstance(item, Mapping):
+            continue
+        one = _window(item)
+        if one is not None:
+            out.append(one)
+    return out
+
+
+def _seat(
+    row: Mapping[str, Any], model: str = "", *, now: dt.datetime | None = None
+) -> pool_route.Seat:
     """账本行 → 一个排序座位。★ **不知道就说不知道**，不伪造成 0%。
 
     账本里 `[account.quota].used_percent` 缺失 / 不是数值 / 是 bool ⇒ `known=False, used=None`。
@@ -422,17 +494,52 @@ def _seat(row: Mapping[str, Any]) -> pool_route.Seat:
     **不抛** —— 不知道额度的座落在**最后一档**，`smart` / `usage` / `pace` / `""` 四个分桶策略
     都把它排在所有知道的座**之后**；`order` / `rotate` / `weight` / `free` 不看额度、保列出序。
     ⇒ 交给 `apply_strategy()` 只有这一件事：**不知道的座排在所有知道的之后**。
+
+    ## 窗口维度的模型过滤（卡 A368，判据 2）
+
+    给了 `model` 且这一行**有** `quota.windows` 时，用量改由 `holds.pick()` 定：只在
+    「算这个模型的账」的窗口里取最大（`applies()`），**别的模型的窗口不许抬这个模型的
+    用量** —— 一个只计 opus 的窗写着 100%，请求 sonnet 时它既不是 100% 也不是 0%，
+    而是**这个模型没有窗口读数**。
+
+    ★ 「没有窗口」（`pick()` 回 `None`）**不等于** `used=0.0`：回 `known=False, used=None`
+    ⇒ `UNKNOWN_TIER` ⇒ 排在所有知道的座之后。落成 0.0 就是拿「没测过」冒充「用得最少」，
+    正是本函数上面那段在防的事。
+
+    ★ 没有 `quota.windows` 段（今天真数据的**全部**情形）⇒ 逐位走老路读
+    `used_percent`，行为与本卡之前**一字不差**（`tests/test_pool_gateway.py` 五条钉子钉着）。
     """
     quota = row.get("quota") if isinstance(row.get("quota"), Mapping) else {}
-    used = quota.get("used_percent") if isinstance(quota, Mapping) else None
     key = str(row.get("id") or "")
+    windows = _windows(row) if model else []
+    if windows:
+        clock = now if now is not None else dt.datetime.now(dt.timezone.utc)
+        if clock.tzinfo is None:
+            clock = clock.replace(tzinfo=dt.timezone.utc)
+        best = pool_holds.pick(windows, model, now=clock)
+        if best is None or best.used is None:
+            # 找不到算这个模型账的窗口 ⇒ 不知道，**不是** 0%。
+            return pool_route.Seat(key=key, account=True, known=False, used=None)
+        return pool_route.Seat(key=key, account=True, known=True, used=float(best.used))
+    used = quota.get("used_percent") if isinstance(quota, Mapping) else None
     if isinstance(used, bool) or not isinstance(used, (int, float)):
         return pool_route.Seat(key=key, account=True, known=False, used=None)
     return pool_route.Seat(key=key, account=True, known=True, used=float(used))
 
 
-def _order(cands: Sequence[Mapping[str, Any]], routing: str, *, pool: str) -> list[int]:
-    seats = [_seat(row) for row in cands]
+def _order(
+    cands: Sequence[Mapping[str, Any]],
+    routing: str,
+    *,
+    pool: str,
+    model: str = "",
+    now: dt.datetime | None = None,
+) -> list[int]:
+    """候选行 → 送出顺序（下标）。`model` 只用于窗口维度的模型过滤（卡 A368）。
+
+    不给 `model` ⇒ `_seat()` 不碰窗口，逐位等价于本卡之前（向后兼容既有调用点）。
+    """
+    seats = [_seat(row, model, now=now) for row in cands]
     # apply_strategy 的末行就是 route.apply_order（route.py:580）—— 顺序护栏在那一份里，
     # 这里**不重写**：越界/重复/非整数一律退回原列顺序，永不抛（策略写坏也不许 500）。
     return pool_route.apply_strategy(routing, seats, pool=pool)
@@ -541,7 +648,7 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
     endpoint_missing: list[str] = []
     earliest: dt.datetime | None = None
 
-    for idx in _order(cands, routing, pool=pool):
+    for idx in _order(cands, routing, pool=pool, model=model, now=clock):
         row = cands[idx]
         seat = str(row.get("id") or "")
         platform = str(row.get("platform") or "")

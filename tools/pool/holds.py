@@ -18,6 +18,22 @@ pool 现在能答「这个号此刻是什么态」（`tools/pool_quota.py` 的�
 在调用方（`[account.quota].used_percent` 的**写入**归卡 A333）。所以这里没有任何 IO，
 测试可以把 `read_at` / `now` 全钉成常数，一条真实钟表都不用碰。
 
+## 卡 A368 追加：窗口维度的模型过滤
+
+一张账本行上可以挂**多个**窗口（opus 一个、sonnet 一个、全局一个）。判据只有一条：
+**只有「算这个模型的账」的窗口才许抬这个模型的用量**（magpie `Limit.applies`
+`internal/provider/routing.go:294-296`）。
+
+| 卡规格 | magpie 出处 | 这里 |
+|---|---|---|
+| 判据 1（全计 / 子串） | `routing.go:294-296` | `applies()`：`""` 全计，否则**子串** |
+| 判据 1（取哪一个） | 同文件 `:302-314` | `pick()`：只在 `applies` 真时取 `used` 最大 |
+| 判据 1 ③（账号级） | `account_caps.go:344-356` | `account_cap_holds()`：aside / 具名窗不参与 |
+| 判据 3（缺窗口） | 本仓 E95 / E107 | `pick()` 回 `None`，**不是** `used=0.0` |
+
+★ `pick()` 照收 `aside` 窗（原件 `Allowance.For` 也不过滤它）；aside 只在**账号级 cap**
+里被跳过，那条判据在 `account_cap_holds()` 里、与 `pick()` 分开写。
+★ 三个函数同样是纯判定：不读钟（`now` 是入参）、不读文件、不写、不 print。
 ## 用法
 
     from pool.holds import Window, estimate
@@ -43,12 +59,12 @@ from __future__ import annotations
 
 import calendar
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
 
 #: 判据下限：窗口的「已用比例」低于这个百分数就**不估**（`internal/provider/window_holds.go:40`）。
 #: 原文注释逐字：「the least share used a window's whole is reckoned from: below it a percent
@@ -267,6 +283,98 @@ def estimate(
                          why_text=why_text(cause)))
     return out
 
+def applies(window: Window, model: str) -> bool:
+    r"""这个窗口**算不算**这个模型的账（判据 1，照 magpie `Limit.applies`
+    `internal/provider/routing.go:294-296` 逐字）。
+
+    原文：`return (l.Model == "" || strings.Contains(model, l.Model)) && …`
+    ⇒ 窗口的 `model` 是**空串 = 谁都用它 = 全计**；否则是**子串**匹配（`"opus"` 命中
+    `"claude-opus-4"`），**不是前缀、不是 glob**：改成前缀，`"xopus-1"` 就不再命中。
+
+    ★ 与 Go 的一处必要差异：原件 `Allowance.For` 先把 `model = strings.ToLower(model)`
+    再比；Go 的 `strings.Contains` 区分大小写，所以**两边都小写化**才是原件的语义
+    （否则账本里写 `Opus` 的窗口永远不命中 `claude-opus-4`）。窗口名是常量，这里一并
+    小写它 —— 效果与原件一致，且不必假设账本的大小写。
+
+    纯判定：不读钟、不读文件、不 print。
+    """
+    want = window.model.lower()
+    if not want:
+        return True
+    return want in model.lower()
+
+
+def pick(windows: Sequence[Window], model: str, *, now: datetime) -> Window | None:
+    r"""这些窗口里**此刻该采信哪一个**（判据 1，照 magpie `Allowance.For`
+    `internal/provider/routing.go:302-314`）。
+
+    三件事按原件的顺序：
+    ① 只看 `applies(w, model)` 为真的窗口 —— 别的模型的窗口**根本不许抬这个模型的用量**；
+    ② 已过重置时间的先归零（`if !l.Resets.IsZero() && !l.Resets.After(now)` ⇒
+       `Used, Resets = 0, time.Time{}`）：不归零的话，一个半小时前就该重置的 100% 会永远
+       压着这个模型；
+    ③ `used = max(used, w.used)` 逐窗取大 —— 不是「取最新那条」，是**取最高那条**。
+
+    ★ `aside` 窗在这里**照收**：原件 `Allowance.For` 并不过滤 `Aside`；aside 只在
+    `account_caps.go:349` 的账号级 cap 判定里被跳过（见 `account_cap_holds()`）。
+    ★ **一个 `applies` 为真的窗口都没有 ⇒ 回 `None`（不知道）** —— 调用方不许把它读成
+    `used=0.0`，那会把「没有这个模型的窗口」排成「用得最少」。
+    ★ 并列（`used` 相同）的定盘：取 `resets_at` **更晚**的（`None` 视为最晚），再相同取
+    列表里靠前的。原件 `max` 对并列不表态，这条只为让结果可复现、可写钉子。
+    """
+    best: Window | None = None
+    best_used = -math.inf
+    for w in windows:
+        if not applies(w, model):
+            continue
+        used = w.used
+        if used is None or not math.isfinite(used):
+            continue
+        resets = w.resets_at
+        if resets is not None and not resets > now:
+            used, resets = 0.0, None  # ② 过期窗口归零（原件把 Used 写回 0）
+        if used > best_used:
+            best, best_used = replace(w, used=used, resets_at=resets), used
+        elif used == best_used and best is not None and _later(resets, best.resets_at):
+            best = replace(w, used=used, resets_at=resets)
+    return best
+
+
+def _later(one: datetime | None, other: datetime | None) -> bool:
+    """`one` 是否比 `other` 更晚（`None` 视为最晚 —— 没有重置时间 = 说不准何时松）。"""
+    if one is None:
+        return other is not None
+    if other is None:
+        return False
+    return one > other
+
+
+def account_cap_holds(w: Window, share: float | None) -> bool:
+    r"""这个窗口**算不算**账号级 cap 的账（判据 1 ③，照 magpie `capReached`
+    `internal/provider/account_caps.go:344-356` 逐字）。
+
+    原文：`if share <= 0 || w.Aside || w.Model != "" || w.Used < float64(share) { continue }`
+    ⇒ 参与账号级判定必须同时满足：① 有正的 `share`；② **不是 aside**；③ **`model` 为空**
+    （只计某个模型的窗口不参与账号级）；④ `used` 够得着 `share`。
+
+    这是「aside 窗在账号级判定里被跳过」的**唯一**出处：`pick()` 照收 aside（原件也收），
+    但把 `pick()` 的结果当账号级 cap 用时，aside 窗得先被这条挡掉。三条件分开写、
+    一条都不许合并 —— 合并了就说不清是哪个条件在挡。
+
+    `share is None` / 非数 / `<= 0` ⇒ 不判（不参与）。纯判定，不读钟。
+    """
+    if share is None or isinstance(share, bool) or not isinstance(share, (int, float)):
+        return False
+    if not share > 0:
+        return False
+    if w.aside:
+        return False
+    if w.model != "":
+        return False
+    if w.used is None or not math.isfinite(w.used):
+        return False
+    return w.used >= float(share)
+
 
 __all__ = [
     "HOLDS_BEFORE_LOG",
@@ -281,8 +389,11 @@ __all__ = [
     "MONTH_SPAN_S",
     "Holds",
     "Window",
+    "account_cap_holds",
+    "applies",
     "bounds",
     "estimate",
     "holds_bounds",
+    "pick",
     "why_text",
 ]

@@ -1,0 +1,20 @@
+[entries."T-AG653"]
+id = "T-AG653"
+title = "窗口维度的模型过滤：只有计这个模型的窗口才算它的用量、没窗口就说不知道"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/holds.py",
+  "file:tools/pool/gateway.py",
+  "file:tests/test_holds_window.py",
+  "file:tests/test_pool_route.py",
+  "text:tools/pool/holds.py::def applies(window: Window, model: str) -> bool:",
+  "text:tools/pool/holds.py::def pick(windows: Sequence[Window], model: str, *, now: datetime) -> Window | None:",
+  "test:test_holds_window.py::test_applies_is_substring_not_prefix",
+  "test:test_holds_window.py::test_pick_skips_windows_that_do_not_count_this_model",
+  "test:test_holds_window.py::test_no_window_for_model_is_unknown_not_zero",
+  "test:test_holds_window.py::test_account_cap_skips_aside_and_model_windows",
+  "test:test_pool_route.py::test_a_window_that_does_not_count_the_model_cannot_raise_its_tier",
+]
+gaps = "1. 判据 5 选了 (b)：本卡**不产生** QuotaWindow，缺口 5 原样保留；但 (b) 要求写进 changelog 片段的那一句话，本卡自己没写 —— 该片段由落地链 ⑤′ 的 RESET_FRAGMENTS 生成，不在本卡 files 域。原话留在卡规格「落地时实测与口径」段。指针 tools/pool/quota_history.py 与 复盘/卡/卡A368-F24窗口维度的模型过滤-只有计该模型的窗口才采信配额.md2. 判据 2 在真数据上**恒放行**：仓外账本 D:/repo/infra/pool/accounts.toml 的 [account.quota] 只有 unit / source / observed_at / samples，没有 per-window 段 ⇒ `_windows()` 恒回空表，只有构造用例能验证那条钉子；`_windows()` 的 docstring 已逐字写明「数据从哪来」。指针 tools/pool/gateway.py3. 判据 6 的 M2 落点与规格字面略有出入：原件里「aside 不进账号级」属 account_caps.go:349（账号级），而 `pick()` 照 Allowance.For 本身不过滤 Aside ⇒ 变异打在 `account_cap_holds()` 上，已在卡规格追加段记明。指针 tools/pool/holds.py"
+

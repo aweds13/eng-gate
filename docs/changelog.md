@@ -31,6 +31,11 @@
 - `scripts/cloud/gha/conftest_shim.txt`（新增，43 行）：逐字节搬，sha256 与原件相等。pytest-cov 在盘上就立刻返回，不在才注册六个同名占位。
 - `tests/test_gha_cloud_gate.py`（新增，12 条）：三件进 git / `--help` 三个开关 / 文件钉名 / 零本机字面（注释也算）/ 白名单未扩 / 五码互异 / 八标签 / 本机惰性 / 防递归 / 桩住仓外 / fixture 三份 / 垫片只注册 cov 占位。
 - `docs/subsystems/ci/GitHub-Actions-云门禁.md`（新增，171 行，七节）：外部 runner 可以租、判据不许搬出去；两条路分工；workflow 为什么改不了；三段逐步；两块垫片；退出码表；真读数与已知边界。`docs/subsystems/ci/README.md` §6 边界那条「不引入外部 CI 服务」改成「外部 runner 可以租（链到新文档），判据必须留在仓内」；`docs/INDEX.md` 重算（ci 6 → 7 篇，448 篇）。
+## 2026-11-19 T-AG653 F24 窗口维度的模型过滤：只有计这个模型的窗口才算它的用量，没窗口就说不知道
+- `tools/pool/holds.py`：新增 `applies()`（子串匹配 + 双边小写化，照 magpie routing.go:294-296）/`pick()`（只在算这个模型的窗口里取 used 最大、过期窗口归零、并列取 resets 更晚）/`account_cap_holds()`（照 account_caps.go:349 四条件挡 Aside 与 per-model 窗），四个函数都是纯判定：不读钟、不读文件、不写、不 print。
+- `tools/pool/gateway.py`：`_window()`/`_windows()` 把账本行的 `[account.quota].windows` 读成 `holds.Window`；`_seat(row, model="", *, now=None)` 有窗口数据时改由 `holds.pick()` 定量，`pick()` 回 None ⇒ `known=False, used=None`（**不许落成 0.0**）；`_order()` 与 `route_once()` 把 model / clock 传下去，`route.apply_strategy` 的签名与 fail-open 一字未动。
+- 钉子 9 条：`tests/test_holds_window.py` 追加 7 条（子串不是前缀 / 双边小写 / 只取算这个模型的窗口 / 过期归零 / 没窗口是不知道不是 0 / aside 不进账号级），`tests/test_pool_route.py` 追加 2 条（不相关窗口不许把座抬进 tier 2、无窗口数据时逐位等于改造前），现有 12 条一字未改。
+- 卡规格 `复盘/卡/卡A368-F24窗口维度的模型过滤-只有计该模型的窗口才采信配额.md` 追加「落地时实测与口径」小节：判据 5 选 (b) 的理由、实现落点、变异 M2 的落点差异、真数据恒放行的事实，判据原文未改。
 ## 2026-11-18 T-AG646 队列短锁等不到就无锁写：改成失败关闭、两处 os.replace 有界重试
 - 两条同族实现（gate_pool.PoolQueue.locked 与 pool/queue.py::_locked）的「等满等待窗口就 break 出去照样读改写」取消：到期仍建不出锁 ⇒ 抛自家 GatePoolBusy / QueueBusy，一个字节都不写（推翻卡 E55 的「记账队列不许变成闸」；实测 timeout=0.0 下 12 线程并发 submit 只剩 1 行）。
 - 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。

@@ -12554,3 +12554,23 @@ evidence = [
   "file:tests/test_gha_cloud_gate.py",
 ]
 gaps = "- 三件源里两件是复制改造、一件是逐字节原样搬：`scripts/cloud/gha/conftest_shim.txt` 的 sha256 `d0553fb4a509d5aace269f0b2ac9905ded9b1b36c6b39724d57746e1f6330b92` 与原 `gates/diag/_tmp/gha_conftest_shim.txt` **完全相等**（`sha256sum` 当场比过）；`adapter.py` 只改文件头 docstring（把「只存在于 GHA 快照、不进主树」改成三节说明），正文逐字未动。指针 scripts/cloud/gha/conftest_shim.txt- `build_snapshot.py` 相对旧构建器**删**了三处：`ROOT` 的本机盘符（改 `git_toplevel()` 走 `git -C <start> rev-parse --show-toplevel`，兜底向上找 4 层）、`IPS`/`GH_IP`/`net()` 整段死代码（旧文件 `grep -n 'net('` 只命中定义、从未调用）、`GIT_SSH` 默认串里的本机私钥（改读 env `GIT_SSH_COMMAND`，缺 ⇒ `MISSING_GIT_SSH_COMMAND` 退 2，远端缺 ⇒ `MISSING_REMOTE` 退 2）。指针 scripts/cloud/gha/build_snapshot.py- 判据 2 的扫描面比 `tests/test_ci_portability.py` **更严**：那份跳过整行注释，这份**注释行也算**（`test_no_private_paths_or_ips_under_gha`），所以新文件里连注释都不许出现盘符/用户目录/裸私钥/IP。另外单独一条 `test_portability_whitelist_was_not_extended_for_gha` 直接断言 `tests/test_ci_portability.py` 源码里不含 `scripts/cloud/gha` —— 堵死「加白名单绕判据」这条路。指针 tests/test_gha_cloud_gate.py- 五码互异用的是源码级断言而不是跑起来试：`test_exit_codes_are_five_distinct_values` 断言 `len({EXIT_CONFIG, EXIT_HISTORY, EXIT_COMMIT, EXIT_SNAPSHOT, EXIT_POOL}) == 5` 且每码在源码里能找到对应的 `sys.exit(EXIT_*)`；`test_each_failure_has_a_readable_tag` 再钉 8 个标签各自出现在源码里（标签是本卡新加的，旧构建器只打裸码）。指针 scripts/cloud/gha/build_snapshot.py- 新旧编号**故意不通用**：这条路 0/2/3/4/5/6，`scripts/cloud/run_gate.sh` 那条 2/9/4/5/7。两者都叫「退出码」，但一个判的是「快照造不出来 / 提交不了 / 桩不齐」，一个判的是「仓外配置 / 云机 / 播种 / 补丁 / 树陈旧」—— 同名不同义会误导下一个人，所以文档 §5 明写了「不通用」。指针 docs/subsystems/ci/GitHub-Actions-云门禁.md- 老实说：`adapter.py` 里 `STUB` 的 `accounts.toml` 仍是**零凭据桩**（只写 `kind=「file」` + `locator`），所以这条路能证明「23 道门在干净 windows-latest 上跑得绿」，**不能**证明真号池能派活 —— 那条另有 `tests/test_pool_accounts.py::test_ledger_lives_outside_tool_root` 在管。指针 tests/test_gha_cloud_gate.py"
+
+[entries."T-AG653"]
+id = "T-AG653"
+title = "窗口维度的模型过滤：只有计这个模型的窗口才算它的用量、没窗口就说不知道"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/holds.py",
+  "file:tools/pool/gateway.py",
+  "file:tests/test_holds_window.py",
+  "file:tests/test_pool_route.py",
+  "text:tools/pool/holds.py::def applies(window: Window, model: str) -> bool:",
+  "text:tools/pool/holds.py::def pick(windows: Sequence[Window], model: str, *, now: datetime) -> Window | None:",
+  "test:test_holds_window.py::test_applies_is_substring_not_prefix",
+  "test:test_holds_window.py::test_pick_skips_windows_that_do_not_count_this_model",
+  "test:test_holds_window.py::test_no_window_for_model_is_unknown_not_zero",
+  "test:test_holds_window.py::test_account_cap_skips_aside_and_model_windows",
+  "test:test_pool_route.py::test_a_window_that_does_not_count_the_model_cannot_raise_its_tier",
+]
+gaps = "1. 判据 5 选了 (b)：本卡**不产生** QuotaWindow，缺口 5 原样保留；但 (b) 要求写进 changelog 片段的那一句话，本卡自己没写 —— 该片段由落地链 ⑤′ 的 RESET_FRAGMENTS 生成，不在本卡 files 域。原话留在卡规格「落地时实测与口径」段。指针 tools/pool/quota_history.py 与 复盘/卡/卡A368-F24窗口维度的模型过滤-只有计该模型的窗口才采信配额.md2. 判据 2 在真数据上**恒放行**：仓外账本 D:/repo/infra/pool/accounts.toml 的 [account.quota] 只有 unit / source / observed_at / samples，没有 per-window 段 ⇒ `_windows()` 恒回空表，只有构造用例能验证那条钉子；`_windows()` 的 docstring 已逐字写明「数据从哪来」。指针 tools/pool/gateway.py3. 判据 6 的 M2 落点与规格字面略有出入：原件里「aside 不进账号级」属 account_caps.go:349（账号级），而 `pick()` 照 Allowance.For 本身不过滤 Aside ⇒ 变异打在 `account_cap_holds()` 上，已在卡规格追加段记明。指针 tools/pool/holds.py"

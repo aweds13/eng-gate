@@ -341,3 +341,98 @@ def test_holds_ok_and_the_front_gates():
     assert holds.holds_bounds(
         holds.Window(span_s=span, used=40.0, resets_at=end, aside=True, pool="p-a"), NOW
     )[2] == holds.HOLDS_OK
+
+
+# ---------------------------------------------------------------- ⑩ 窗口维度的模型过滤（卡 A368）
+
+
+def test_applies_empty_model_counts_every_model():
+    """判据 1 ①：`model=""` 的窗口对**任何**模型都成立（照 routing.go:294-296 的
+    `l.Model == "" || strings.Contains(...)`）。
+    """
+    everywhere = holds.Window(used=40.0)
+    for name in ("claude-opus-4", "claude-sonnet-4", "", "GLM-5.2"):
+        assert holds.applies(everywhere, name) is True, name
+
+
+def test_applies_is_substring_not_prefix():
+    """判据 1 ②④：`model="opus"` 对 `claude-opus-4` 真、对 `claude-sonnet-4` 假；
+    且 `xopus-1` **也**真 —— 原件是**子串**（`strings.Contains`），不是前缀、不是 glob。
+    「改成前缀匹配 ⇒ 对 xopus-1 的断言必须红」就是这一条。
+    """
+    only_opus = holds.Window(model="opus", used=100.0)
+    assert holds.applies(only_opus, "claude-opus-4") is True
+    assert holds.applies(only_opus, "claude-sonnet-4") is False
+    # 子串 vs 前缀的分界：只有子串会命中这一条
+    assert holds.applies(only_opus, "xopus-1") is True
+
+
+def test_applies_lowercases_both_sides_like_magpie():
+    """原件 `Allowance.For` 先 `strings.ToLower(model)` 再 `strings.Contains`
+    （Go 的 Contains 区分大小写）⇒ 两边小写化才是原件语义，不是本仓的额外发明。
+    """
+    assert holds.applies(holds.Window(model="Opus", used=1.0), "claude-opus-4") is True
+    assert holds.applies(holds.Window(model="opus", used=1.0), "Claude-Opus-4") is True
+
+
+def test_pick_skips_windows_that_do_not_count_this_model():
+    """判据 1 主断言：请求 sonnet 时，一个只计 opus 的 100% 窗**不许**抬用量 ——
+    采信的是 sonnet 那个窗的 12%，不是 100%（也不是 0%）。
+    """
+    end = NOW + timedelta(hours=5)
+    windows = [
+        holds.Window(model="opus", used=100.0, resets_at=end),
+        holds.Window(model="sonnet", used=12.0, resets_at=end),
+    ]
+    got = holds.pick(windows, "claude-sonnet-4", now=NOW)
+    assert got is not None and got.used == 12.0
+    # 反过来问 opus：采信 100%
+    got = holds.pick(windows, "claude-opus-4", now=NOW)
+    assert got is not None and got.used == 100.0
+
+
+def test_pick_zeroes_a_window_past_its_reset():
+    """照 routing.go:302-314：`!Resets.IsZero() && !Resets.After(now)` ⇒ 用量归零。
+    不归零的话，早该松掉的 100% 会永远压着这个模型。
+    """
+    stale = holds.Window(used=100.0, resets_at=NOW - timedelta(hours=1))
+    got = holds.pick([stale], "claude-opus-4", now=NOW)
+    assert got is not None and got.used == 0.0
+    assert got.resets_at is None
+    # 边界：resets_at == now 也算过期（`!After(now)`）
+    edge = holds.Window(used=100.0, resets_at=NOW)
+    got = holds.pick([edge], "claude-opus-4", now=NOW)
+    assert got is not None and got.used == 0.0
+
+
+def test_no_window_for_model_is_unknown_not_zero():
+    """判据 3：找不到 `applies` 为真的窗口 ⇒ `pick()` 回 `None`（**不知道**）。
+
+    调用方不许把它读成 `used=0.0` —— 0.0 会被排成「用得最少」，正好排到第一位。
+    这里同时钉住「空表」与「有窗但都不算这个模型」两种情形。
+    """
+    assert holds.pick([], "claude-sonnet-4", now=NOW) is None
+    only_opus = [holds.Window(model="opus", used=100.0)]
+    assert holds.pick(only_opus, "claude-sonnet-4", now=NOW) is None
+    # 读不懂用量的窗也不算「0%」
+    assert holds.pick([holds.Window(used=None)], "claude-sonnet-4", now=NOW) is None
+
+
+def test_account_cap_skips_aside_and_model_windows():
+    """判据 1 ③：照 `account_caps.go:344-356` 的
+    `if share <= 0 || w.Aside || w.Model != "" || w.Used < float64(share) { continue }`
+    —— 四个条件逐个断言，一条都不许合并。
+    """
+    share = 90.0
+    full = holds.Window(used=95.0)
+    assert holds.account_cap_holds(full, share) is True
+    # ① share <= 0（含 None / 非数）⇒ 不参与
+    for bad in (0.0, -1.0, None):
+        assert holds.account_cap_holds(full, bad) is False, bad
+    # ② aside 窗：不参与账号级（pick() 照收，这一条才挡它）
+    assert holds.account_cap_holds(holds.Window(used=95.0, aside=True), share) is False
+    # ③ 只计某个模型的窗：不参与账号级
+    assert holds.account_cap_holds(holds.Window(model="opus", used=95.0), share) is False
+    # ④ used < share ⇒ 没到顶
+    assert holds.account_cap_holds(holds.Window(used=89.9), share) is False
+    assert holds.account_cap_holds(holds.Window(used=90.0), share) is True
