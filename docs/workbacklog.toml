@@ -6493,3 +6493,25 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A369"
+task = "T-AG654"
+title = "F26整窗用量估算接进派活面：没料就说得出为什么，不许估0"
+tree = ".wt/A369"
+spec = "复盘/卡/卡A369-F26整窗用量估算接进派活面-没料就说得出为什么不许估0.md"
+files = [
+  "tools/pool/holds_wiring.py",
+  "tools/pipeline_view.py",
+  "tools/wb_dispatch.py",
+  "tests/test_holds_wiring.py",
+  "tests/test_pipeline_view_holds.py",
+  "复盘/卡/卡A369-F26整窗用量估算接进派活面-没料就说得出为什么不许估0.md"
+]
+depends = [
+  "A334",
+  "A346",
+  "A350"
+]
+risk = "mid"
+status = "pending"
