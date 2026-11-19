@@ -6674,7 +6674,8 @@ files = [
 depends = [
   "E94",
   "A362",
-  "E143"
+  "E143",
+  "A372",
 ]
 risk = "low"
 status = "pending"
@@ -6722,7 +6723,11 @@ files = [
 ]
 depends = [
   "E94",
-  "A348"
+  "A348",
+  "A371",
+  "A372",
+  "A373",
+  "A374",
 ]
 risk = "mid"
 status = "pending"
