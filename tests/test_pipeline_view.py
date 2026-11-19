@@ -1,7 +1,7 @@
 r"""`tools/pipeline_view.py`（卡 207 · T-G316）的测试 —— 一份只读读数。
 
 为什么值当测：这个工具是「四个面集中到一个点」的那个**点** —— 判错的代价是口径漂
-（同一件事各读各的）。所以六块各钉一条（字段名就是卡上写的那套），外加四条反例
+（同一件事各读各的）。所以七块各钉一条（字段名就是卡上写的那套），外加四条反例
 （缺 `last.json` / 缺租约 / 坏栅栏 / 空判决）与幂等。
 
 ★ 只造**纯数据**（`tmp_path` 下的最小假仓），**不连网、不碰真仓**。
@@ -9,6 +9,9 @@ r"""`tools/pipeline_view.py`（卡 207 · T-G316）的测试 —— 一份只读
   STALE-WHILE-ERROR（last-good + error_code + stale_for_s）与坏态幂等反例。
 ★ 卡 255（T-G376）追加：内容哈希缓存（命中不重算 / 改一个字节就重算 / 坏源不被缓存
   掩盖）、冷跑热跑逐字节幂等、git 调用次数不随卡树数量增长（固定 2 次）。
+★ 卡 A369（T-AG654）追加：BLOCKS 从六块变**七块**（新增 holds —— 整窗用量估算）。
+  本文件只改「六块 → 七块」这一处投影；第七块自己的判据在
+  `tests/test_pipeline_view_holds.py`，不在这里。
 """
 
 from __future__ import annotations
@@ -153,11 +156,11 @@ def _full_fake_repo(tmp_path: Path) -> Path:
     return root
 
 
-# ------------------------------------------------------------------ 1. 六块都读得出来
+# ---------------------------- 1. 七块都读得出来（holds 见 test_pipeline_view_holds.py）
 
 
-def test_six_blocks_all_present(tmp_path: Path) -> None:
-    """最小假仓 ⇒ 六块都读得出来，且字段名就是卡上写的那套。"""
+def test_seven_blocks_all_present(tmp_path: Path) -> None:
+    """最小假仓 ⇒ 七块都读得出来，且字段名就是卡上写的那套。"""
     root = _full_fake_repo(tmp_path)
     r = pipeline_view.build_reading(root)
 
@@ -357,14 +360,15 @@ def test_broken_gates_last_is_null_with_note(tmp_path: Path) -> None:
     assert "gates_note" in r
 
 
-# ------------------------------------------------------------------ 9. report 有六块
+# ------------------------------------------------------------------ 9. report 有七块
 
 
-def test_report_has_six_blocks(tmp_path: Path) -> None:
-    """--report 输出六块都在，且能看出各自的来源。"""
+def test_report_has_seven_blocks(tmp_path: Path) -> None:
+    """--report 输出七块都在，且能看出各自的来源。"""
     root = _full_fake_repo(tmp_path)
     out = _run_cli(root, "--report")
-    for tag in ("[cards]", "[gates]", "[verdicts]", "[leases]", "[fences]", "[worktrees]"):
+    for tag in ("[cards]", "[gates]", "[verdicts]", "[leases]", "[fences]",
+                "[worktrees]", "[holds]"):
         assert tag in out, f"报告里缺 {tag}"
     assert "docs/workbacklog.toml" in out
     assert "gates/last.json" in out
@@ -398,16 +402,18 @@ def _run_cli(root: Path, flag: str) -> str:
     ).stdout
 
 
-def test_blocks_table_declares_six_blocks() -> None:
-    """声明表六块齐全；每块都有 id/来源/缺源标注语/字段清单；连续块只有 gates+leases。"""
+def test_blocks_table_declares_seven_blocks() -> None:
+    """声明表七块齐全（卡 A369 加 holds）；连续块仍只有 gates+leases。"""
     ids = [b["id"] for b in pipeline_view.BLOCKS]
-    assert ids == ["cards", "gates", "verdicts", "leases", "fences", "worktrees"]
+    assert ids == ["cards", "gates", "verdicts", "leases", "fences", "worktrees",
+                   "holds"]
     for b in pipeline_view.BLOCKS:
         for key in ("id", "source", "missing_note", "continuous", "fields", "row_fields"):
             assert key in b and b[key] != "", f"BLOCKS[{b.get('id')}] 缺 {key}"
         assert isinstance(b["fields"], tuple) and b["fields"]
         assert isinstance(b["row_fields"], tuple) and b["row_fields"]
-    # 静态块与连续块的分界：continuous=True 的只有 gates / leases
+    # 静态块与连续块的分界：continuous=True 的只有 gates / leases（holds 是静态块 ——
+    # 账本读不到时不许拿上一份好读数冒充「现在的整窗」）
     cont = [b["id"] for b in pipeline_view.BLOCKS if b["continuous"]]
     assert cont == ["gates", "leases"]
 

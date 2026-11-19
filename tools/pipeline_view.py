@@ -6,7 +6,7 @@ timeflow 视图、禅道）。按本仓教义（「四个面集中到一个点�
 `wb_state.py` 读 HEAD/锁/进程、`wb_dash.py` 读 `wb-*.jsonl`、`wb_flow.py` 读队列算流量、
 `pool_mcp.py` 读队列+判决+租约）—— **没有任何一处把它们收成一份**。本工具就是那一份。
 
-一条命令产出一份结构化读数（`--json` 给机器、`--report` 给人读）。**六块**，每块都写清来源：
+一条命令产出一份结构化读数（`--json` 给机器、`--report` 给人读）。**七块**，每块都写清来源：
 
 1. `cards`     —— 队列全貌（来源 `docs/workbacklog.toml`）
 2. `gates`     —— 最近一次门禁（来源 `gates/last.json`）
@@ -14,6 +14,8 @@ timeflow 视图、禅道）。按本仓教义（「四个面集中到一个点�
 4. `leases`    —— 租约（行内 dead 标死活；来源 `gates/diag/pool-registry.json`）
 5. `fences`    —— 任务栅栏（来源 `gates/diag/batch/*.toml`）
 6. `worktrees` —— 卡树清单（来源 `git worktree list`）
+7. `holds`     —— 整窗用量估算（来源账号账本 `infra/pool/accounts.toml`，经
+   `tools/pool/holds_wiring.py`）
 
 ★ **只读**：不杀进程、不占端口、不调 git 的写命令；写的只有两样（都在 gitignore 的
   `gates/diag/` 区）：连续块的 last-good 快照（`pipeline-view-lastgood.json`，卡 249）
@@ -28,7 +30,7 @@ timeflow 视图、禅道）。按本仓教义（「四个面集中到一个点�
   null + 注，缺什么说什么）。调用次数写进 `--report`。★ 卡 E115：`--report` 另外多
   一条 `git rev-list --count` 算「落后几个提交」（墙钟与那条 git 都只进 `--report`，
   `--json` 一个字都不许有）。
-★ **BLOCKS 声明表是唯一口径源**（卡 249 · T-G370）：六块的块名 / 来源 / 缺源标注语 /
+★ **BLOCKS 声明表是唯一口径源**（卡 249 · T-G370）：七块的块名 / 来源 / 缺源标注语 /
   字段清单都在模块级 `BLOCKS` 里，`read_*()` 与 `_report_*()` 都从它取（不许各写一份）；
   `--json` 每块带 `<块>_source` 回声、`--report` 每块头带同一句来源 —— 两个出口对得上。
 ★ **连续块 vs 静态块**：`BLOCKS` 里 `continuous=True` 的只有 `gates` / `leases` ——
@@ -74,6 +76,14 @@ try:
 except ImportError:  # pragma: no cover - 工具目录不在 sys.path 的调用方
     _pool_registry = None
 
+#: ★ 卡 A369（T-AG654）：整窗用量估算的**唯一**搬运层（账本 → 窗口 → 判据）。
+#:   `tools/pool/holds.py` 是判据层（本文件与它都不许再抄一遍算式）；本文件只负责
+#:   把它摆成第七块读数。包不在 sys.path 时如实说「读不了」，不许猜。
+try:
+    from pool import holds_wiring as _holds_wiring
+except ImportError:  # pragma: no cover - 工具目录不在 sys.path 的调用方
+    _holds_wiring = None
+
 ROOT = Path(__file__).resolve().parent.parent
 #: 这一次读数用的根（`--report` 的 git rev-list 要在这儿跑；`--json` 不受影响）。
 _ROOT_USED: Path = ROOT
@@ -97,6 +107,11 @@ _CACHE_SCHEMA = 2
 #: 算内容哈希的分块大小（流式，不把大文件整块读进内存）。
 _HASH_CHUNK = 64 * 1024
 
+#: ★ 卡 A369：账本读不到时第七块的说法。与 `tools/pool/holds_wiring.py` 的
+#:   `MISSING_LEDGER_NOTE` **逐字同一句**（`tests/test_pipeline_view_holds.py` 钉这个
+#:   等式，免得两处各说各的）。
+HOLDS_MISSING_NOTE = "没有账号账本（infra/pool/accounts.toml 或 TF_ACCOUNTS_TOML）"
+
 #: 判决/摘要文件名 → (卡号, 尝试标记)。尝试标记只有三种写法：.r2 / .killed / .attempt1。
 #: ★ 卡 E115：旧正则的 (.+?) 会把尝试标记吞进卡号 —— 「120.killed」被当成另一张卡，
 #:   同一张卡的第二次尝试（「143.r2」）反而被同一个键覆盖掉。
@@ -107,7 +122,7 @@ _REPORT_RE = re.compile(rf"^wb-(?P<card>[^./]+?){_ATT_PAT}[.]report[.]md$")
 _ENDED_AT_RE = re.compile(r"结束于=([^ ]+)")
 
 
-# ================================================================ BLOCKS：六块声明表
+# ================================================================ BLOCKS：七块声明表
 # ★ 唯一口径源（卡 249 · T-G370）：read_*() 与 _report_*() 都从这张表取
 #   （块名、来源、缺源标注语、字段清单）—— 不许再各写一份。
 #   --json 的 <块>_source 回声与 --report 每块头的「来源 …」都出自这里。
@@ -146,6 +161,16 @@ BLOCKS: tuple[dict, ...] = (
      "missing_note": "git worktree list 没有输出", "continuous": False,
      "fields": ("worktrees",),
      "row_fields": ("path", "head", "branch", "dirty")},
+    # ★ 卡 A369（T-AG654）：整窗用量估算。**为什么不进 continuous**：它不是「监测
+    #   一块连续的东西」，而是账本每行的一次换算 —— 账本读不到时就得说「没有账本」，
+    #   不许拿上一份好读数冒充「现在的整窗」。
+    {"id": "holds", "source": "infra/pool/accounts.toml 经 tools/pool/holds_wiring.py",
+     "missing_note": HOLDS_MISSING_NOTE, "continuous": False,
+     "fields": ("holds",),
+     # ★ 卡 A369：why 是判据层的**原串**（"-" / "low" / "log" / "none" / "credits" /
+     #   ""），why_text 是人话 —— 两个都要在，否则「估不出来」变成沉默。
+     "row_fields": ("account", "platform", "model", "used_percent", "why",
+                    "why_text", "tokens", "cost", "priced", "since")},
 )
 
 _SRC: dict[str, dict] = {b["id"]: b for b in BLOCKS}
@@ -728,17 +753,48 @@ def _status_dirty(out: str) -> bool:
     return any(line.strip() and not line.startswith("## ") for line in out.splitlines())
 
 
+# ================================================================ 7. holds
+
+
+def read_holds(root: Path) -> dict:
+    """整窗用量估算（口径见 ``BLOCKS["holds"]``）。静态块，**不走读数缓存**。
+
+    ★ 卡 A369：算式与五因顺序**一个字都不在这里** —— 全在 `tools/pool/holds.py`；
+      账本 → 窗口的搬运只有 `tools/pool/holds_wiring.py` 一份。本函数只做三件事：
+      调它、把三种结局分开说（账本读不到 / 一个号都没有 / 账本坏了）、保证**不抛**。
+    ★ 坏账本（used_percent 越界 / 重复 id / TOML 坏）**不是**「没有读数」：读数面
+      仍要出得来（`--json` / `--report` 不许抛），但必须点出原文 —— 不许静默成 null。
+    """
+    spec = _SRC["holds"]
+    if _holds_wiring is None:  # pragma: no cover - 工具目录不在 sys.path 的调用方
+        return {"holds": None, "holds_note": spec["missing_note"],
+                "holds_source": spec["source"]}
+    try:
+        reading = _holds_wiring.read_holds(root)
+    except Exception as exc:  # 缺什么说什么：坏账本也要出得来，不许把读数带崩
+        return {"holds": None, "holds_note": f"账号账本读不了：{exc}",
+                "holds_source": spec["source"]}
+    if reading.rows is None:
+        return {"holds": None, "holds_note": reading.note or spec["missing_note"],
+                "holds_source": spec["source"]}
+    result: dict = {"holds": reading.rows, "holds_source": spec["source"]}
+    if reading.note:
+        result["holds_note"] = reading.note
+    return result
+
+
 # ================================================================ 汇总
 
 
 _READERS: dict[str, object] = {
     "cards": read_cards, "gates": read_gates, "verdicts": read_verdicts,
     "leases": read_leases, "fences": read_fences, "worktrees": read_worktrees,
+    "holds": read_holds,
 }
 
 
 def build_reading(root: Path | None = None, *, remember: bool = False) -> dict:
-    """一份读数：六块（块的顺序与口径都来自 BLOCKS 声明表，不许另立一份）。
+    """一份读数：七块（块的顺序与口径都来自 BLOCKS 声明表，不许另立一份）。
 
     `remember=True` 才把连续块的好读数落 last-good、才写读数缓存（默认不写 ⇒ 只读 ✓）。
     """
@@ -769,6 +825,7 @@ def _report(reading: dict) -> str:
     _report_leases(lines, reading)
     _report_fences(lines, reading)
     _report_worktrees(lines, reading)
+    _report_holds(lines, reading)
     return "\n".join(lines)
 
 
@@ -905,6 +962,29 @@ def _report_worktrees(lines: list[str], r: dict) -> None:
         lines.append(f"  ★ {note}")
 
 
+def _report_holds(lines: list[str], r: dict) -> None:
+    """第七块：整窗用量估算 —— **估不出来也要把理由念出来**（卡 A369 的核心）。"""
+    holds = r.get("holds")
+    src = _SRC["holds"]["source"]
+    if holds is None:
+        lines.append(f"[holds] {r.get('holds_note', '没有')}（来源 {src}）")
+        return
+    live = sum(1 for h in holds if not h.get("why"))
+    lines.append(f"[holds] 整窗用量估算（来源 {src}）：共 {len(holds)} 个号，"
+                 f"其中 {live} 个估出来了：")
+    for h in holds:
+        why = h.get("why") or "(估出来了)"
+        lines.append(f"  · {h['account']}（{h['platform']}）"
+                     f"model={h['model'] or '(没有批准模型)'}  used={h['used_percent']}"
+                     f"  why={why}  tokens={h['tokens']}  cost={h['cost']}"
+                     f"  priced={h['priced']}")
+        if h.get("why_text"):
+            lines.append(f"    ★ {h['why_text']}")
+    note = r.get("holds_note")
+    if note:
+        lines.append(f"  ★ {note}")
+
+
 # ================================================================ 性能账（只进 --report）
 
 #: git 调用形状（按实际次数打印；两次是常态：worktree list + status）。
@@ -944,7 +1024,7 @@ def _report_perf() -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="一份读数：六块收成一份（只读，缺什么说什么、幂等）")
+        description="一份读数：七块收成一份（只读，缺什么说什么、幂等）")
     parser.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
     parser.add_argument("--report", action="store_true", help="输出人读报告")
     parser.add_argument("--root", default="", help="仓库根（默认本文件推出来）")

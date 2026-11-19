@@ -12631,3 +12631,23 @@ evidence = [
   "test:test_pool_accounts_import.py::test_import_never_clobbers_comments",
 ]
 gaps = "1. 仓外那份账号账本（与限额文件同目录，路径由 `tools/pool/limits.py:50` 的 `pool_dir()` 现算；本仓看不到它）的第 126/127/128 行还是行首 `# touched` 注释：今天任何导入写路径照样会停在 `save_ledger()` 的注释闸上并念出行号 —— 这是判据 3 要的行为，不是缺陷；清注释是人的动作或另一张卡。指针 `tools/pool/accounts_import.py`2. 真实世界的导出文件没验过：五份样本全是自造的假串（token 一律 `sk-TESTTOKEN…`），所以「认得出 CliProxy / Codex auth.json / Claude .credentials.json / Sub2API / 裸 token 行」只在本仓样本上成立；`antigravity` 只做到 CLI 认名字给明确结果，没有格式解析。指针 `tools/pool/accounts_import.py`3. 「不联网」这条只做了静态与哨兵证明（源里 `_get_json` / `urllib` / `socket` 命中 0、`probe_account` / `_token_for` 不存在），没有真网络拦截；判据 8 的写前闸靠 `save_ledger()` 自己那道注释闸兜。指针 `tests/test_pool_accounts_import.py`"
+
+[entries."T-AG654"]
+id = "T-AG654"
+title = "F26整窗用量估算接进派活面：没料就说得出为什么，不许估0"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/holds_wiring.py",
+  "file:tools/pipeline_view.py",
+  "file:tools/wb_dispatch.py",
+  "text:tools/pool/holds_wiring.py::def read_holds(root: Path, *, now: datetime | None = None,",
+  "text:tools/wb_dispatch.py::def usage_first_at(*, root: Path = ROOT) -> datetime | None:",
+  "test:test_holds_wiring.py::test_missing_used_is_dash_not_zero",
+  "test:test_holds_wiring.py::test_wb_dispatch_holds_never_refuses_without_data",
+  "test:test_holds_wiring.py::test_numerator_equals_usage_in_on_the_same_log",
+  "test:test_pipeline_view_holds.py::test_pipeline_view_holds_rows_carry_reason",
+  "file:tests/test_holds_wiring.py",
+  "file:tests/test_pipeline_view_holds.py",
+]
+gaps = "1. 拒绝分支没接：本卡只有「留痕不拒派」这一档，`[整窗]` 段一个 problems.append 都没有 —— 要真拒派得先把整窗上限写进限额文件（F33 的裁决，不在本卡）。指针 `tools/wb_dispatch.py`2. 下游仍只说六块：`tools/pool_mcp.py` 的 WORKBENCH_SECTIONS、面板 `tools/dsh_panel.py` 两处、skills 与两个日报工具都硬写六项且不在卡域 ⇒ MCP 面与面板看不到 holds 块。指针 `tools/pipeline_view.py`3. 窗口边界零来源：真账本 reset_at / span_days 一个都没有，本卡没去读窗口历史推边界 ⇒ 将来写出 used_percent 也会落到「区间不含此刻」这一支。指针 `tools/pool/holds_wiring.py`"

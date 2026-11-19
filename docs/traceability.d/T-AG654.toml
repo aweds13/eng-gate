@@ -1,0 +1,20 @@
+[entries."T-AG654"]
+id = "T-AG654"
+title = "F26整窗用量估算接进派活面：没料就说得出为什么，不许估0"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/holds_wiring.py",
+  "file:tools/pipeline_view.py",
+  "file:tools/wb_dispatch.py",
+  "text:tools/pool/holds_wiring.py::def read_holds(root: Path, *, now: datetime | None = None,",
+  "text:tools/wb_dispatch.py::def usage_first_at(*, root: Path = ROOT) -> datetime | None:",
+  "test:test_holds_wiring.py::test_missing_used_is_dash_not_zero",
+  "test:test_holds_wiring.py::test_wb_dispatch_holds_never_refuses_without_data",
+  "test:test_holds_wiring.py::test_numerator_equals_usage_in_on_the_same_log",
+  "test:test_pipeline_view_holds.py::test_pipeline_view_holds_rows_carry_reason",
+  "file:tests/test_holds_wiring.py",
+  "file:tests/test_pipeline_view_holds.py",
+]
+gaps = "1. 拒绝分支没接：本卡只有「留痕不拒派」这一档，`[整窗]` 段一个 problems.append 都没有 —— 要真拒派得先把整窗上限写进限额文件（F33 的裁决，不在本卡）。指针 `tools/wb_dispatch.py`2. 下游仍只说六块：`tools/pool_mcp.py` 的 WORKBENCH_SECTIONS、面板 `tools/dsh_panel.py` 两处、skills 与两个日报工具都硬写六项且不在卡域 ⇒ MCP 面与面板看不到 holds 块。指针 `tools/pipeline_view.py`3. 窗口边界零来源：真账本 reset_at / span_days 一个都没有，本卡没去读窗口历史推边界 ⇒ 将来写出 used_percent 也会落到「区间不含此刻」这一支。指针 `tools/pool/holds_wiring.py`"
+

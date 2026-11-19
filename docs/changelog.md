@@ -51,6 +51,11 @@
 - `tools/pool_accounts.py`（1980→2007）只做三处接线：`build_parser()` 的 `import` 子命令、`_import_cmd` 薄壳、`main()` 的 handlers 项；既有函数一个都没重排。
 - 账本里只放 `locator` 路径与 `credential.fingerprint`（sha256 前 32 位），token 明文永不落账；指纹命中的条目报 `exists` 走人，不覆盖已有账号。
 - 新增 `tests/test_pool_accounts_import.py` 13 条 + `tests/fixtures/import/` 五份假样本；`docs/subsystems/pool/modules.toml` 登记 `tools/pool/accounts_import.py` 一条职责。
+## 2026-11-19 T-AG654 F26 整窗用量估算接进派活面：没料就说得出为什么，不许估 0
+- 新薄层 `tools/pool/holds_wiring.py`（329 行）：账本 `[[account]]` → holds.Window → holds.estimate()，零网络、零 sleep、不写盘、不写账本；没料时 why 原串 + why_text 人话。
+- `tools/pipeline_view.py` 加第七块 holds（BLOCKS + _READERS + _report_holds 三处同步，HOLDS_MISSING_NOTE 与薄层常量逐字相等）。
+- `tools/wb_dispatch.py` 新增 usage_first_at()（同一份用量日志、同一时区与跳过规则取最早「开始」），并在限额闸之后、if problems 之前加一段只留痕的 `[整窗]` 打印。
+- 新增 `tests/test_holds_wiring.py` 8 条 + `tests/test_pipeline_view_holds.py` 7 条；`tests/test_pipeline_view.py` 只改「六块→七块」。
 ## 2026-11-18 T-AG646 队列短锁等不到就无锁写：改成失败关闭、两处 os.replace 有界重试
 - 两条同族实现（gate_pool.PoolQueue.locked 与 pool/queue.py::_locked）的「等满等待窗口就 break 出去照样读改写」取消：到期仍建不出锁 ⇒ 抛自家 GatePoolBusy / QueueBusy，一个字节都不写（推翻卡 E55 的「记账队列不许变成闸」；实测 timeout=0.0 下 12 线程并发 submit 只剩 1 行）。
 - 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。

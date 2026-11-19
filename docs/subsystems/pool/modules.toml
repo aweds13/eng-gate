@@ -68,6 +68,11 @@ duty = "整窗用量的下限 + 五因估算（magpie `window_holds` 移植）�
 cli = "无"
 
 [[module]]
+name = "holds_wiring.py"
+duty = "把判据层 holds（整窗下限 + 五因估算）接到生产读面：账本行 → holds.Window → holds.estimate()，零网络、零 sleep、不写盘、不写账本；没料时 why 原串 + why_text 人话（卡 A369）"
+cli = "无"
+
+[[module]]
 name = "jobs.py"
 duty = "作业日志状态分桶（在跑 / 已判决 / 断了 + 历史尝试 / 已被取代 / 台账已完结 / 非派活，卡 E116；台账读不到 ⇒ 判不了，卡 E132 —— 这一源不可判、不是结束） + 归属卡解析 `card_of_log` + 在飞三源 `in_flight` + 产物定位；只读、无副作用"
 cli = "`wb_status.py`、`pool_mcp` 的 `job_list` / `job_status`"

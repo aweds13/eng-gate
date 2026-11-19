@@ -1812,6 +1812,55 @@ def usage_in(model: str, start: datetime, end: datetime, *,
     return tokens, 0.0
 
 
+def usage_first_at(*, root: Path = ROOT) -> datetime | None:
+    """gates/diag/wb-usage.jsonl 里**最早**一条可用记录的 开始（卡 A369 · T-AG654）。
+
+    为什么要有它：tools/pool/holds.py::estimate() 的 log 因要比较「窗口起点 vs 日
+    志起点」—— 日志起点晚于窗口起点，这一窗的记录就不全，按它放大等于**少算**。
+    没有起点就传 None，让判据层自己判「不估」。
+
+    口径与 usage_in() **同一套**（不是第二份判据，只是同一份日志的另一个投影）：
+
+    * **时区钉死 +08:00**：行里的 开始 是秒级无时区本地串，按 UTC+8 补 tzinfo。
+    * **dry run 不算**：判决 / 退出码 里带 dry 的行跳过（它没真路由过）。
+    * 空行 / 坏 JSON / 非对象 / 开始 解不开 ⇒ **跳过**；一条都没读出来 / 没有这个
+      文件 ⇒ None（「起点未知」，**不许**拿「此刻」或某个默认日期顶上）。
+    * 只读一次盘、只扫一遍；不写、不 sleep、不联网。
+    """
+    from datetime import timedelta, timezone  # 与 usage_in() 同一个时区口径
+
+    tz = timezone(timedelta(hours=8))
+    path = root / "gates" / "diag" / "wb-usage.jsonl"
+    try:
+        lines = wb_status.read_log_lines(path)
+    except (OSError, wb_status.UnknownLogEncodingError):
+        return None
+
+    first: datetime | None = None
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        verdict = f"{row.get('判决') or ''} {row.get('退出码') or ''}".lower()
+        if "dry" in verdict:
+            continue
+        raw_start = row.get("开始")
+        if not isinstance(raw_start, str) or not raw_start:
+            continue
+        try:
+            began = datetime.fromisoformat(raw_start).replace(tzinfo=tz)
+        except ValueError:
+            continue
+        if first is None or began < first:
+            first = began
+    return first
+
+
 # ============================================ 429 / 额度三拍（卡 029 §2.5）：等 → 按序换 → 全挂就停
 
 def quota_error(lines: list[str]) -> dict | None:
@@ -3627,6 +3676,47 @@ def main() -> int:
                     f"限额已满（号 {account_id}）：{limit_verdict.why}；"
                     f"reset_at={reset_at}；retry_after_s={limit_verdict.retry_after_s}"
                     f"（等 {limit_verdict.retry_after_s} 秒再来）⇒ 不占树、不派活")
+
+    # ★ 卡 A369（T-AG654）：整窗用量估算接进派活面（F26 的最后一米）。位置固定在
+    #   **占树之前、既有 if problems: 出口之前** —— 与上面的 A350 限额闸同一段，
+    #   拒派仍然只走下面那条既有出口（退 2，**不新开退出码、不新开拒派理由**）。
+    #   ★ 这一档**只留痕**：没料（why == "-"，即已用比例 / 窗口边界读不出来）⇒
+    #     打印一行 [整窗] 把理由念出来，**不拒派**（理由与 tools/pool/sticky.py
+    #     的「读数缺失不许变成停机」同）；账本读不了同理 —— 缺读数不等于号坏了。
+    #   ★ 拒绝分支**未接**（卡 A369「未坐实项」第三条）：要拒得先有一个**显式上限**，
+    #     而那要动 limits.toml 的形状（与 F33 的裁决纠缠）—— 本卡不搅进来。
+    #   ★ 判据一个字都没在这里新开：why / tokens / why_text 全部来自
+    #     tools/pool/holds.py，账本→窗口的搬运只有 tools/pool/holds_wiring.py 一份。
+    if account_id:
+        from pool import holds_wiring as pool_holds_wiring
+
+        try:
+            holds_reading = pool_holds_wiring.read_holds(ROOT)
+            if holds_reading.rows is None:
+                print(f"[整窗] 不估（没有账本读数）：{holds_reading.note}", flush=True)
+            else:
+                hold_row = next(
+                    (
+                        row
+                        for row in holds_reading.rows
+                        if str(row.get("account") or "") == account_id
+                    ),
+                    None,
+                )
+                if hold_row is None:
+                    print(f"[整窗] 不估：账本里没有号 {account_id} 的窗口读数", flush=True)
+                else:
+                    why = hold_row.get("why") or "(估出来了)"
+                    print(
+                        f"[整窗] 号 {account_id}：why={why} "
+                        f"tokens={hold_row.get('tokens')} "
+                        f"cost={hold_row.get('cost')} "
+                        f"priced={hold_row.get('priced')}"
+                        f" —— {hold_row.get('why_text')}",
+                        flush=True,
+                    )
+        except (pool_accounts.LedgerError, OSError, ValueError) as exc:
+            print(f"[整窗] 不估：账本读不了（{exc}）", flush=True)
 
     if problems:
         print("[FAIL] 不派活 —— 前置检查没过：", file=sys.stderr, flush=True)
