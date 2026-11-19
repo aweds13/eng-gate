@@ -25,6 +25,12 @@
 - `tools/pool/gateway.py` 的 `list_models()` 每条 data 由三键扩成六键：`context_window`（未知就是 JSON null，不许填 128k/200k 这类看着合理的数）、`max_output_tokens`（未知按 16384 发）、`limits_source`（`registry` / `unknown`）；顶层 note 追加「有 N 条模型的窗口未知」。
 - 注册表与文档同步：`tools/pool/model-registry.toml` 文件头写清「留空 = 不知道，不许抄 16384 冒充已知」，`docs/subsystems/pool/模型与号池.md` 新增「窗口 / 回复上限」一节并把 95% 迁移的不移植理由写死；`tools/pool/model_registry.py` / `tools/pool/gateway.py` 两处 docstring 留 F86 ③ 的判据。
 - 钉子 8 条（`tests/test_model_registry.py` 3 条 + `tests/test_pool_gateway.py` 5 条）钉住四格真值表（缺席 / 0 / 负数 / bool）、唯一常量、坏注册表不让 `/v1/models` 崩、HTTP 面同样带三键。
+## 2026-11-19 T-AG659 GitHub Actions 云门禁进仓：三件只在 gates/diag/_tmp 里活着的脚本搬成库里的源码
+- `scripts/cloud/gha/build_snapshot.py`（新增，448 行）：`--stage {all,build,smoke,push}` 三段编排；`ROOT` 走 `git rev-parse --show-toplevel`，远端走 `--remote`/`GHA_REMOTE`、私钥走 `GIT_SSH_COMMAND`，缺任一个退 2 并点名；退出码提成 `EXIT_OK/EXIT_CONFIG/EXIT_HISTORY/EXIT_COMMIT/EXIT_SNAPSHOT/EXIT_POOL` 六个模块常量。
+- `scripts/cloud/gha/adapter.py`（新增，590 行）：runner 侧适配器，装成快照里的 tests/test_windows_autostart_e2e.py（快照内路径，本仓没有这个文件）。正文逐字沿用旧件，只重写文件头 docstring（是什么 / 为什么钉这个文件名 / 两条防呆）。文件名叫什么都不改的理由：冻结 workflow 最后一步写死了它。
+- `scripts/cloud/gha/conftest_shim.txt`（新增，43 行）：逐字节搬，sha256 与原件相等。pytest-cov 在盘上就立刻返回，不在才注册六个同名占位。
+- `tests/test_gha_cloud_gate.py`（新增，12 条）：三件进 git / `--help` 三个开关 / 文件钉名 / 零本机字面（注释也算）/ 白名单未扩 / 五码互异 / 八标签 / 本机惰性 / 防递归 / 桩住仓外 / fixture 三份 / 垫片只注册 cov 占位。
+- `docs/subsystems/ci/GitHub-Actions-云门禁.md`（新增，171 行，七节）：外部 runner 可以租、判据不许搬出去；两条路分工；workflow 为什么改不了；三段逐步；两块垫片；退出码表；真读数与已知边界。`docs/subsystems/ci/README.md` §6 边界那条「不引入外部 CI 服务」改成「外部 runner 可以租（链到新文档），判据必须留在仓内」；`docs/INDEX.md` 重算（ci 6 → 7 篇，448 篇）。
 ## 2026-11-18 T-AG646 队列短锁等不到就无锁写：改成失败关闭、两处 os.replace 有界重试
 - 两条同族实现（gate_pool.PoolQueue.locked 与 pool/queue.py::_locked）的「等满等待窗口就 break 出去照样读改写」取消：到期仍建不出锁 ⇒ 抛自家 GatePoolBusy / QueueBusy，一个字节都不写（推翻卡 E55 的「记账队列不许变成闸」；实测 timeout=0.0 下 12 线程并发 submit 只剩 1 行）。
 - 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。

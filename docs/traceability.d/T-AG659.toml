@@ -1,0 +1,13 @@
+[entries."T-AG659"]
+id = "T-AG659"
+title = "GitHub Actions 云门禁进仓：三件只在 gates/diag/_tmp 里活着的脚本搬成库里的源码"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/cloud/gha/build_snapshot.py",
+  "file:scripts/cloud/gha/adapter.py",
+  "file:scripts/cloud/gha/conftest_shim.txt",
+  "file:tests/test_gha_cloud_gate.py",
+]
+gaps = "- 三件源里两件是复制改造、一件是逐字节原样搬：`scripts/cloud/gha/conftest_shim.txt` 的 sha256 `d0553fb4a509d5aace269f0b2ac9905ded9b1b36c6b39724d57746e1f6330b92` 与原 `gates/diag/_tmp/gha_conftest_shim.txt` **完全相等**（`sha256sum` 当场比过）；`adapter.py` 只改文件头 docstring（把「只存在于 GHA 快照、不进主树」改成三节说明），正文逐字未动。指针 scripts/cloud/gha/conftest_shim.txt- `build_snapshot.py` 相对旧构建器**删**了三处：`ROOT` 的本机盘符（改 `git_toplevel()` 走 `git -C <start> rev-parse --show-toplevel`，兜底向上找 4 层）、`IPS`/`GH_IP`/`net()` 整段死代码（旧文件 `grep -n 'net('` 只命中定义、从未调用）、`GIT_SSH` 默认串里的本机私钥（改读 env `GIT_SSH_COMMAND`，缺 ⇒ `MISSING_GIT_SSH_COMMAND` 退 2，远端缺 ⇒ `MISSING_REMOTE` 退 2）。指针 scripts/cloud/gha/build_snapshot.py- 判据 2 的扫描面比 `tests/test_ci_portability.py` **更严**：那份跳过整行注释，这份**注释行也算**（`test_no_private_paths_or_ips_under_gha`），所以新文件里连注释都不许出现盘符/用户目录/裸私钥/IP。另外单独一条 `test_portability_whitelist_was_not_extended_for_gha` 直接断言 `tests/test_ci_portability.py` 源码里不含 `scripts/cloud/gha` —— 堵死「加白名单绕判据」这条路。指针 tests/test_gha_cloud_gate.py- 五码互异用的是源码级断言而不是跑起来试：`test_exit_codes_are_five_distinct_values` 断言 `len({EXIT_CONFIG, EXIT_HISTORY, EXIT_COMMIT, EXIT_SNAPSHOT, EXIT_POOL}) == 5` 且每码在源码里能找到对应的 `sys.exit(EXIT_*)`；`test_each_failure_has_a_readable_tag` 再钉 8 个标签各自出现在源码里（标签是本卡新加的，旧构建器只打裸码）。指针 scripts/cloud/gha/build_snapshot.py- 新旧编号**故意不通用**：这条路 0/2/3/4/5/6，`scripts/cloud/run_gate.sh` 那条 2/9/4/5/7。两者都叫「退出码」，但一个判的是「快照造不出来 / 提交不了 / 桩不齐」，一个判的是「仓外配置 / 云机 / 播种 / 补丁 / 树陈旧」—— 同名不同义会误导下一个人，所以文档 §5 明写了「不通用」。指针 docs/subsystems/ci/GitHub-Actions-云门禁.md- 老实说：`adapter.py` 里 `STUB` 的 `accounts.toml` 仍是**零凭据桩**（只写 `kind=「file」` + `locator`），所以这条路能证明「23 道门在干净 windows-latest 上跑得绿」，**不能**证明真号池能派活 —— 那条另有 `tests/test_pool_accounts.py::test_ledger_lives_outside_tool_root` 在管。指针 tests/test_gha_cloud_gate.py"
+

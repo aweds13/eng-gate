@@ -75,4 +75,4 @@
 
 - 不把 CI 代码搬到新目录：`gates/`、`scripts/run_gates.py`、`tools/pool/landing.py` 就地演进（搬家的成本远大于收益，且会让 200+ 处引用失效）。
 - 不改判据强度（宁可多跑，不许漏跑）——只改**什么时候说**和**选哪些测**。
-- 不引入外部 CI 服务：这套的价值是"判据在仓内、可读可改"。
+- 外部 runner 可以租（GitHub Actions 那条见 [GitHub-Actions-云门禁.md](GitHub-Actions-云门禁.md)），判据必须留在仓内：这套的价值是"判据在仓内、可读可改"。
