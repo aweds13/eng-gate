@@ -219,4 +219,51 @@ python -X utf8 gates/diag/_rev_A376.py      # 末行：「结论：4/4 条全部
 4. **magpie 原件里 `allow.go` 的 CIDR 语义没有逐条对照**（如「空列表 = 全放」`allow.go:35`）。因为本仓判定该子项 SKIP，所以只引了常量行与函数名，没做行为级比对。
 5. **端口冲突面未扫全**：只确认 8766 不在 `gate_lock.GATE_PORTS` 里、不在 `stack.py` 里；`8766` 是否与用户本机其他常驻服务撞车，**未取证**（那属于运行期事实，写进卡里会过期）。
 
-（草稿：只读勘察产物，未落盘入库。写入者 T-AG664 待填。）
+## 落地回执（T-AG664，2026-11-20）
+
+裁决：**六条判据全部照做，没有一条改判 SKIP**；判据 2 实测成立（伪造 `Host` 与六个转发头的组合下，`GET /v1/models` 的答复逐字节不变，`stub.calls == []`）。`tools/pool/gateway.py` 一个字节没动：基线 sha256 前 16 位 `c570cc73dd127def`（63858 B，1300 行，纯 CRLF），变异脚本每轮 try/finally 还原后复核同一值。
+
+改动（卡域是 `docs/workbacklog.toml:6741-6744` 登记的两个文件，两个都动了）：
+
+| 文件 | 变化 |
+|---|---|
+| `tests/test_pool_gateway.py` | 1150 → 1302 行，`git diff --numstat` 报 `152 0`（纯增无删）。文件头钉子表 `:29` 加一行；文件尾新增一节「F36：网络准入（卡 A376）」——两个模块级 helper（`_gateway_source()` 读源码并 `ast.parse`、`_string_constants(tree)` 收集全部 `ast.Constant` 里的 str，含 docstring）+ **七条** `def test_f36_*`。既有测试、既有夹具默认参数一个字符没改 |
+| 本规格 | 只把 `:222` 的草稿脚注换成这一节 |
+
+七条 vs 规格「六条」：判据 3 按规格自己要求的「分两条」写成了两个函数（`Origin: null` 与 `OPTIONS 501` 各自起服务、各自断言），所以函数数是 7、判据数仍是 6。
+
+### 六条判据的钉法（行号为改后文件）
+
+1. `test_f36_allowed_hosts_is_exactly_three`（`:1169`）——`sorted(gateway.ALLOWED_HOSTS) == ["127.0.0.1", "::1", "localhost"]`；AST 全量字符串常量里 `"0.0.0.0"` 与 `"::"` 都**整串**不出现；源码里没有 `TF_POOL_GATEWAY_HOST`。
+2. `test_f36_host_and_forward_headers_change_nothing`（`:1186`）——先 `GET /v1/models` 记 `body0`（200）；`Host: evil.example` ⇒ 200 且 `body == body0`；再叠 `Forwarded` / `X-Forwarded-For` / `X-Real-IP` / `Cf-Connecting-IP` / `True-Client-IP` / `Tailscale-User-Login` ⇒ 仍 200 且 `body == body0`；`stub.calls == []`。
+3. `test_f36_origin_null_and_localhost_subdomain_still_refused`（`:1214`）——`Origin: null` ⇒ 403 且体内含 `permission_error`；`http://a.localhost` ⇒ 403；对照 `http://127.0.0.1:<port>` ⇒ 200；`stub.calls == []`。`test_f36_options_and_put_stay_unavailable`（`:1235`）——`OPTIONS` ⇒ 501、无 `Allow` 头、体内不含 `/v1/`；`PUT` ⇒ 405 且 `Allow == "GET, POST"`。
+4. `test_f36_paths_table_is_exactly_four`（`:1252`）——`sorted(gateway.PATHS) == ["/v1/chat/completions", "/v1/messages", "/v1/models", "/v1/pool/routes"]`；AST 里以 `/v1/magpie/` 开头的常量为空；带合法 Bearer 的 `/v1/magpie/heap`、`/v1/magpie/cpu?seconds=30`、`/v1/magpie/goroutines` ⇒ 全 404 且含 `not_found_error`；`/v1/models` 去 token ⇒ 401（反证）。
+5. `test_f36_no_transport_layer_switches`（`:1273`）——AST 导入表与 `{"ssl", "socket"}` 不相交；字符串常量转小写后不含 `x-forwarded-for` / `x-real-ip` / `cf-connecting-ip` / `tailscale-user-login` / `trust_proxy` / `cidr` / `allow_ips` / `certfile`。
+6. `test_f36_port_8766_is_declared_once_and_not_orchestrated`（`:1290`）——`DEFAULT_PORT == 8766`、`DEFAULT_HOST == "127.0.0.1"`、`source.count("8766") == 1`；`"gateway" not in tools/stack.py` 源码；`"8766" not in gates/diag/gate_lock.py` 源码。
+
+### 读数（`.wt/A376` 实跑，Python 3.14.6）
+
+```
+python -X utf8 -m pytest tests/test_pool_gateway.py -k "f36 or http_only_four_paths or requires_bearer_token or origin_whitelist or check_host_rejects or build_server_requires_token" -q -o addopts= --no-cov -p no:xdist
+  ⇒ 17 passed, 86 deselected in 6.01s
+python -X utf8 -m pytest tests/test_pool_gateway.py -q -o addopts= --no-cov -p no:xdist
+  ⇒ 103 passed in 16.64s
+python -X utf8 -m ruff check tests/test_pool_gateway.py
+  ⇒ All checks passed!
+python -X utf8 gates/diag/_rev_376.py     # 主树脚本，cwd=主树
+  ⇒ 基线 17 passed；M1/M2/M3/M4b/M5 五条咬住；M4（等价变异）与 Q（只改注释）不咬住；还原后 sha 一致
+     末行「结论：5/5 条全部咬住，收尾绿。」
+```
+
+每条变异咬住的是哪个测试（原样）：M1 `ALLOWED_HOSTS` 加 `"0.0.0.0"` ⇒ `test_check_host_rejects_non_loopback[0.0.0.0]` + `test_f36_allowed_hosts_is_exactly_three`（2 failed）；M2 `if not origin_allowed(...)` 前加 `False and` ⇒ `test_http_origin_whitelist` + `test_f36_origin_null_and_localhost_subdomain_still_refused`（2 failed）；M3 `PATHS` 追加 `/v1/magpie/heap` ⇒ `test_f36_paths_table_is_exactly_four`（1 failed）；M4b `do_PUT` 换 `self._dispatch("POST")` ⇒ `test_f36_options_and_put_stay_unavailable`（1 failed）；M5 `_Handler` 补 `do_OPTIONS` ⇒ `test_f36_options_and_put_stay_unavailable`（1 failed）。
+
+### 诚实边界（做不到 / 判不了 / 与规格有出入）
+
+1. **变异脚本文件名**：用户口径给的是 `gates/diag/_rev_376.py` / `_rev_376_result.txt`，规格 `:165` / `:191` 写的是 `_rev_A376.py`。实跑的是前者；两个文件都在主树 `gates/diag/`，被 `.gitignore:76` 忽略，不进卡域。
+2. **规格的 M4 是等价变异，实跑没咬住**：`self._dispatch("PUT")` 落到 `:1096-1097` 的「方法不符 ⇒ `_method_not_allowed()`」，405 与 `Allow` 一字不差，观测不到。这不是判据弱，是变异本身不改行为。为让「至少 4 条真变异」成立，另加 M4b（换 `_dispatch("POST")`，会先过 `PATH` 再卡方法）与 M5（补 `do_OPTIONS`），真变异共 5 条。
+3. **判据 1 的 `"0.0.0.0"` 只能钉整串相等**：`check_host` 的 docstring（`:969`）与报错文案（`:974`）本来就含「不给 0.0.0.0 开口子」。若按「字符串里不含该串」写会恒红。同理 `"::"` 只能撞整串（`"::1"` 存在，`"::"` 不存在）。
+4. **钉子表那行因 ruff `line-length = 100` 砍到 65 字符**，没能把「OPTIONS 仍 501」写进去（只剩「集合恰三值、路径恰四键、Host 与转发头不改答复、`null` 仍 403」）。钉子本体在 `:1235`，钉子表只是索引。
+5. **规格 `:189` 的「既有 10 条 + 新增 6 条」与实测 17 条对不上**：既有 10（`test_check_host_rejects_non_loopback` 六个参数 + 四条）+ 新增 7，合计 17。`86 deselected` 是全文件 103 条减这 17 条。
+6. **未坐实项五条（`:214-220`）一条都没消**：`serve_http` 的监听日志未验；`*.localhost` 只测了 `http://a.localhost`，`http://localhost.evil.test` 这类未测；IPv6 面（`--host ::1`）未测；magpie `allow.go` 的 CIDR 语义未逐条对照；8766 是否与用户本机其它常驻服务撞车未取证。
+7. **没有跑全量门禁**（`scripts/run_gates.py` 由落地人跑）。本卡只跑了上面四条命令。
+8. **本文件 `:180` 说的 `docs/changelog.d/` 与 `docs/traceability.d/` 片段不在卡域 `files` 里**，本卡没写；若 `scripts/check_docs.py` 因此报死指针，按卡 A367 先例由落地链补。

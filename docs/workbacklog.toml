@@ -6751,7 +6751,7 @@ depends = [
   "A375",
 ]
 risk = "low"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A377"

@@ -26,6 +26,7 @@ r"""号池网关（`tools/pool/gateway.py`，卡 E94 · T-AG603）的测试 —�
 | `test_streaming_upstream_non_stream_caller_is_400` | 上游只流式 + 调用方非流式 ⇒ 400（不攒流） |
 | `test_streaming_is_forwarded_byte_for_byte` | SSE 逐字节转发、不解析、不改写 |
 | `test_chat_path_never_uses_messages_endpoint` | 只做同协议直通 |
+| `test_f36_*`（六条） | F36：集合恰三值、路径恰四键、Host 与转发头不改答复、`null` 仍 403 |
 
 ★ 全部用桩：`forward` 是注入的，`ledger` / `endpoints` / `rpm_limits` / `stamps` 都是参数，
   号池目录造在 `tmp_path` 里 —— **一个字节都不出网**，也不往真的 `gates/diag/` 写。
@@ -1148,3 +1149,154 @@ def test_http_models_face_carries_window_readings(
     assert item["max_output_tokens"] == 32000, item
     assert item["limits_source"] == "registry", item
     assert "条模型的窗口未知" in data["note"], data["note"]
+
+
+# ================================================================ F36：网络准入（卡 A376）
+
+
+def _gateway_source() -> tuple[str, ast.Module]:
+    """`tools/pool/gateway.py` 的源码与语法树 —— AST 判据一律从这一处取。"""
+    source = (ROOT / "tools" / "pool" / "gateway.py").read_text(encoding="utf-8")
+    return source, ast.parse(source)
+
+
+def _string_constants(tree: ast.Module) -> list[str]:
+    """全部 `ast.Constant` 里的 `str`（**含 docstring**）。"""
+    return [node.value for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+
+
+def test_f36_allowed_hosts_is_exactly_three() -> None:
+    """★ 判据 1：`ALLOWED_HOSTS` 恰好三个回环值，且源码里没有第二个 host 来源。
+
+    ★ 钉的是**集合本身**，不是「坏值被收」—— 后者既有 `test_check_host_rejects_non_loopback`
+      已经管了，往集合里加第四个值它照样全绿。
+    """
+    assert sorted(gateway.ALLOWED_HOSTS) == ["127.0.0.1", "::1", "localhost"]
+    source, tree = _gateway_source()
+    constants = _string_constants(tree)
+    # 整串相等（不是子串）：报错文案里本来就有「不给 0.0.0.0 开口子」这句话
+    # （:969 docstring / :974 ConfigError 文案），子串判据一落地就是假红。
+    # 这里挡的是「有人写 if host == "0.0.0.0" 放行」——那必然留下一个整串相等的常量。
+    assert "0.0.0.0" not in constants, [c for c in constants if "0.0.0.0" in c]
+    assert "::" not in constants, [c for c in constants if c.strip() == "::"]
+    assert "TF_POOL_GATEWAY_HOST" not in source
+
+
+def test_f36_host_and_forward_headers_change_nothing(start_server: Any) -> None:
+    """★ 判据 2：伪造 `Host` + 六个转发头拿不到任何额外东西（答复逐字节不变）。
+
+    ★ 今天源码一次都不读 `Host`，六个转发头也零命中 —— 这是「安全靠没写」。
+      下一个人为了打日志顺手读 `Host` 做分支时，这条该红。
+    """
+    stub = _Stub(_ok())
+    port = start_server(stub)
+    status, _, body0 = _request(port, "GET", "/v1/models")
+    assert status == 200
+    status, _, body = _request(port, "GET", "/v1/models", headers={"Host": "evil.example"})
+    assert status == 200
+    assert body == body0, "伪造 Host 改动了答复"
+    forwarded = {
+        "Host": "evil.example",
+        "Forwarded": "for=10.0.0.1",
+        "X-Forwarded-For": "10.0.0.1",
+        "X-Real-IP": "10.0.0.1",
+        "Cf-Connecting-IP": "10.0.0.1",
+        "True-Client-IP": "10.0.0.1",
+        "Tailscale-User-Login": "evil@example.test",
+    }
+    status, _, body = _request(port, "GET", "/v1/models", headers=forwarded)
+    assert status == 200
+    assert body == body0, "转发头改动了答复"
+    assert stub.calls == []
+
+
+def test_f36_origin_null_and_localhost_subdomain_still_refused(start_server: Any) -> None:
+    """★ 判据 3 上半：magpie 点名的两个形状（`Origin: null` / `*.localhost`）仍然 403。
+
+    ★ 只钉 `http://a.localhost` 这一个具体值（卡规格「未坐实项 2」：别的形状没扫过），
+      别把它读成「所有 localhost 子域都被挡」。
+    """
+    stub = _Stub(_ok())
+    port = start_server(stub)
+    status, _, body = _request(port, "GET", "/v1/models", headers={"Origin": "null"})
+    assert status == 403
+    assert b"permission_error" in body, body
+    status, _, _ = _request(port, "GET", "/v1/models",
+                            headers={"Origin": "http://a.localhost"})
+    assert status == 403
+    # 对照：不是把 Origin 一刀切 —— 本机回环 Origin 放行。
+    status, _, _ = _request(port, "GET", "/v1/models",
+                            headers={"Origin": f"http://127.0.0.1:{port}"})
+    assert status == 200
+    assert stub.calls == []
+
+
+def test_f36_options_and_put_stay_unavailable(start_server: Any) -> None:
+    """★ 判据 3 下半：`OPTIONS` 仍然 501（没有 `do_OPTIONS`），`PUT` 仍然 405 + `Allow`。
+
+    ★ 补一个 `do_OPTIONS` 去过 CORS 预检，这条就该红：预检在客户端解决，不在服务面开端。
+    """
+    stub = _Stub(_ok())
+    port = start_server(stub)
+    status, headers, body = _request(port, "OPTIONS", "/v1/chat/completions")
+    assert status == 501, "补了 do_OPTIONS 就该红"
+    assert _header(headers, "Allow") is None
+    assert b"/v1/" not in body, body
+    status, headers, _ = _request(port, "PUT", "/v1/chat/completions")
+    assert status == 405
+    assert _header(headers, "Allow") == "GET, POST"
+    assert stub.calls == []
+
+
+def test_f36_paths_table_is_exactly_four(start_server: Any) -> None:
+    """★ 判据 4：路径表恰好四键，且没有任何 `/v1/magpie/` 前缀的常量。
+
+    ★ `test_http_only_four_paths` 只验了三条具体反例，集合本身没人管 —— 加第五键它照样绿。
+    """
+    assert sorted(gateway.PATHS) == ["/v1/chat/completions", "/v1/messages",
+                                     "/v1/models", "/v1/pool/routes"]
+    _, tree = _gateway_source()
+    constants = _string_constants(tree)
+    assert [c for c in constants if c.startswith("/v1/magpie/")] == []
+    stub = _Stub(_ok())
+    port = start_server(stub)
+    for path in ("/v1/magpie/heap", "/v1/magpie/cpu?seconds=30", "/v1/magpie/goroutines"):
+        status, _, body = _request(port, "GET", path)
+        assert status == 404, path
+        assert b"not_found_error" in body, (path, body)
+    # 反证：那三条 404 不是鉴权挡的 —— 同一个服务面上，去掉 token 的 /v1/models 是 401。
+    assert _request(port, "GET", "/v1/models", token=None)[0] == 401
+    assert stub.calls == []
+
+
+def test_f36_no_transport_layer_switches() -> None:
+    """★ 判据 5：源码里没有任何传输层 / 准入层开关（纯 AST + 文本，不起服务、不联网）。"""
+    _, tree = _gateway_source()
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+    assert imported.isdisjoint({"ssl", "socket"}), sorted(imported)
+    constants = [c.lower() for c in _string_constants(tree)]
+    needles = ("x-forwarded-for", "x-real-ip", "cf-connecting-ip", "tailscale-user-login",
+               "trust_proxy", "cidr", "allow_ips", "certfile")
+    hits = {needle: [c for c in constants if needle in c] for needle in needles}
+    assert not any(hits.values()), {key: value for key, value in hits.items() if value}
+
+
+def test_f36_port_8766_is_declared_once_and_not_orchestrated() -> None:
+    """★ 判据 6：端口与接线现状被记着 —— 8766 只在这里声明一次，且没人编排它。
+
+    ★ 「以为 stack.py 会起它」是空想：网关今天只能手工 `python tools/pool/gateway.py` 起。
+    """
+    assert gateway.DEFAULT_PORT == 8766
+    assert gateway.DEFAULT_HOST == "127.0.0.1"
+    source, _ = _gateway_source()
+    assert source.count("8766") == 1, "端口被写在了第二处：改这条断言前先想清楚谁才是真源"
+    stack = (ROOT / "tools" / "stack.py").read_text(encoding="utf-8")
+    assert "gateway" not in stack, "网关被编排进 stack.py 了：先重取读数，再改这条"
+    lock = (ROOT / "gates" / "diag" / "gate_lock.py").read_text(encoding="utf-8")
+    assert "8766" not in lock, "8766 进了门禁端口表：两个东西会抢同一个端口"

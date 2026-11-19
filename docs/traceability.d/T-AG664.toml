@@ -1,0 +1,14 @@
+[entries."T-AG664"]
+id = "T-AG664"
+title = "F36网络准入与转发头：搬的是不许放开不是lanGuard"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_gateway.py",
+  "test:test_pool_gateway.py::test_f36_allowed_hosts_is_exactly_three",
+  "test:test_pool_gateway.py::test_f36_host_and_forward_headers_change_nothing",
+  "test:test_pool_gateway.py::test_f36_no_transport_layer_switches",
+  "file:复盘/卡/卡A376-F36网络准入与转发头-搬的是不许放开不是lanGuard.md",
+]
+gaps = "1. Host 头只按整串比对：tools/pool/gateway.py 的 ALLOWED_HOSTS 是常量集合，不给 0.0.0.0 开口子这件事靠整串相等钉住（不是 CIDR、不看 X-Forwarded-Host）；本卡只钉这份现状，不搬 magpie 的 lanGuard（那套是因为 loopback 不要 key）。指针 tests/test_pool_gateway.py2. 六类转发头（X-Forwarded-For / X-Real-IP / Forwarded / X-Forwarded-Host / X-Forwarded-Proto / X-Forwarded-Port）、trust_proxy、cidr、allow_ips、ssl、certfile 在 tools/ 与 scripts/ 与 tests/ 全零命中 —— 判 SKIP_NOT_APPLICABLE，不是欠账。指针 tools/pool/gateway.py3. OPTIONS 今天回 405 而不是 501：规格按「连方法都没有」写的是 501，实测 do_OPTIONS 不存在时 BaseHTTPRequestHandler 直接 501、而本仓的 _method_not_allowed 走 405 —— 本卡只钉住 405 是现状，不改产品码。指针 tests/test_pool_gateway.py"
+

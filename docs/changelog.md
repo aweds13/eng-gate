@@ -3,6 +3,11 @@
 - 同文件 `do_smoke()`：三段各自判非 0（含进程没起来），任一段红就 `log('SMOKE_FAILED', …)` + `sys.exit(EXIT_SNAPSHOT)`（5）；以前只把 `SMOKE*_RC` 打进日志、函数照常返回 ⇒ 冒烟红也退 0。五个码仍是 0/2/3/4/5/6，没加新值。
 - `tests/test_gha_cloud_gate.py`（206→265，12→14 条）：新增 `test_missing_dest_fails_fast_with_config_code`（真进程断言 rc=2 + `MISSING_DEST` + 无 `Traceback` + 不顺手造目录）与 `test_smoke_red_is_not_green`（假 `sh()` 返回 1 ⇒ 必抛 `SystemExit(5)`，三段全 0 时不许退）；标签集加 `MISSING_DEST` / `SMOKE_FAILED`。
 - `docs/subsystems/ci/GitHub-Actions-云门禁.md`（171→221）：§3 补 dest 前置判与冒烟退 5；§5 两行加新标签；§6 换成 v18 真读数（job 135640738507 / 23 门全绿 / 逐门秒数 / 同源求和 4603.51 s / job 墙钟 1343 s）；新增 §8 讲 OpenMAIC 那条腿。`docs/INDEX.md` 字数随这一篇重算。
+## 2026-11-20 T-AG664 F36 网络准入与转发头：搬的是「不许放开」，不是 lanGuard
+- tests/test_pool_gateway.py 追加 7 条钉子（1150→1302）：ALLOWED_HOSTS 整串相等、伪造 Host 不额外放行、Origin 白名单先判、六类转发头全仓零命中、PATHS 仍四值、PUT 仍 405、OPTIONS 仍 405。
+- 产品码 tools/pool/gateway.py 一个字节都没改（sha256 前 16 位 c570cc73dd127def / 63858 字节 / 1300 行纯 CRLF）。
+- 反向禁令落成钉子：伪造 Host + 六类转发头都拿不到任何额外东西（同一轮先后取 body 字节相等、forward 桩 0 调用）。
+- 判 SKIP 的四子项（CIDR / TRUST_PROXY / 转发头 / TLS）各有一条「零命中」钉子，将来谁接进来会当场红。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。
