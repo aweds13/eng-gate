@@ -6471,3 +6471,25 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A368"
+task = "T-AG653"
+title = "F24窗口维度的模型过滤：只在该窗口会计该模型时才采信配额"
+tree = ".wt/A368"
+spec = "复盘/卡/卡A368-F24窗口维度的模型过滤-只有计该模型的窗口才采信配额.md"
+files = [
+  "tools/pool/holds.py",
+  "tools/pool/gateway.py",
+  "tests/test_holds_window.py",
+  "tests/test_pool_route.py",
+  "复盘/卡/卡A368-F24窗口维度的模型过滤-只有计该模型的窗口才采信配额.md"
+]
+depends = [
+  "A332",
+  "A334",
+  "A346",
+  "E143"
+]
+risk = "mid"
+status = "pending"
